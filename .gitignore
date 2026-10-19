@@ -1,0 +1,10 @@
+# Godot
+.godot/
+*.import.tmp
+/build/
+/export/
+*.apk
+*.aab
+# локальные хвосты
+.DS_Store
+Thumbs.db

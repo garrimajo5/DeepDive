@@ -1,0 +1,561 @@
+<title>Нижний Свет</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: судовой журнал экспедиции — иллюминатор-герой, далее разделы как отсеки батискафа, приборные шкалы как структура */
+:root{
+  --abyss:#06141c;        /* фон: вода на глубине */
+  --hull:#0c222d;         /* поверхность отсека */
+  --hull-2:#123240;
+  --rib:#1f4655;          /* линии, шпангоуты */
+  --ink:#d8e8ea;          /* основной текст */
+  --ink-dim:#86a3aa;
+  --glow:#5ef2d6;         /* биолюминесценция */
+  --sodium:#ffb259;       /* натриевые лампы приборов */
+  --alarm:#ff5d6c;
+  --f-display:"Unbounded","Arial Black",system-ui,sans-serif;
+  --f-body:"Golos Text","Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{background:var(--abyss);color:var(--ink)}
+body{font-family:var(--f-body);font-size:16px;line-height:1.6;margin:0}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--abyss)}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.1}
+h2{font-size:clamp(26px,3.6vw,40px);font-weight:600;letter-spacing:-.01em}
+h3{font-size:18px;font-weight:600}
+p{margin:0}
+.lede{color:var(--ink-dim);max-width:62ch}
+.tag{font-family:var(--f-mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--sodium)}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+a{color:var(--glow)}
+:focus-visible{outline:2px solid var(--sodium);outline-offset:3px}
+
+/* ---------- HERO ---------- */
+.hero{padding-block:48px 24px;display:grid;grid-template-columns:1.05fr 1fr;gap:40px;align-items:center}
+.hero h1{font-size:clamp(44px,7.5vw,96px);font-weight:800;letter-spacing:-.03em;line-height:.95}
+.hero h1 span{display:block;color:var(--glow);text-shadow:0 0 30px rgba(94,242,214,.35)}
+.hero .copy{display:grid;gap:22px;min-width:0}
+.hero .pitch{font-size:19px;max-width:44ch}
+.facts{display:flex;flex-wrap:wrap;gap:8px}
+.facts span{font-family:var(--f-mono);font-size:12px;border:1px solid var(--rib);padding:6px 10px;border-radius:2px;color:var(--ink-dim)}
+.port{position:relative;aspect-ratio:1;max-width:100%;width:100%;border-radius:50%;
+  background:radial-gradient(circle,#0000 64%,#22414d 64.5%,#3a5f6b 67%,#16313b 70%,#0a1c24 74%,#0000 74.5%);}
+.port canvas{position:absolute;inset:4%;width:92%;height:92%;border-radius:50%;display:block}
+.port .rivets{position:absolute;inset:0;pointer-events:none}
+.hud{position:absolute;left:50%;bottom:16%;transform:translateX(-50%);display:flex;gap:14px;font-family:var(--f-mono);font-size:11px;color:var(--sodium);
+  background:rgba(6,20,28,.6);padding:6px 10px;border:1px solid rgba(255,178,89,.35);white-space:nowrap}
+.hud b{color:var(--ink);font-weight:600}
+
+/* ---------- SECTIONS ---------- */
+section{padding-block:72px;border-top:1px solid var(--rib)}
+.sec-head{display:grid;gap:14px;margin-bottom:36px}
+
+/* Core loop */
+.loop{display:grid;grid-template-columns:repeat(5,1fr);gap:0;counter-reset:s;border:1px solid var(--rib)}
+.loop li{list-style:none;padding:20px 18px;border-right:1px solid var(--rib);display:grid;gap:8px;align-content:start;min-width:0}
+.loop li:last-child{border-right:0}
+.loop li .mono{color:var(--glow);font-size:12px}
+.loop li p{color:var(--ink-dim);font-size:14px}
+.loop ol{margin:0;padding:0}
+
+/* Roles */
+.roles{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.role{background:var(--hull);border:1px solid var(--rib);padding:22px;display:grid;gap:12px;align-content:start;min-width:0}
+.role .ico{width:44px;height:44px}
+.role p{font-size:14px;color:var(--ink-dim)}
+.role dl{margin:0;display:grid;gap:6px;font-size:13px}
+.role dt{font-family:var(--f-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--sodium)}
+.role dd{margin:0 0 6px}
+
+/* AR tech */
+.tech{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:start}
+.tech .text{display:grid;gap:18px;min-width:0}
+.steps{display:grid;gap:14px;margin:0;padding:0;list-style:none}
+.steps li{display:grid;grid-template-columns:34px 1fr;gap:12px}
+.steps li .n{font-family:var(--f-mono);color:var(--glow);font-size:13px;padding-top:2px}
+.steps li b{display:block;font-weight:600}
+.steps li span{color:var(--ink-dim);font-size:14px}
+.diagram{background:var(--hull);border:1px solid var(--rib);padding:16px;overflow-x:auto}
+.diagram svg{display:block;width:100%;min-width:420px;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-size:12px;color:var(--ink-dim);font-family:var(--f-mono)}
+.legend i{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:-1px}
+
+/* Platforms table */
+.tbl{overflow-x:auto;border:1px solid var(--rib);margin-top:32px}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}
+th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--rib);vertical-align:top}
+th{font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--sodium);font-weight:600;background:var(--hull)}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:600;white-space:nowrap}
+
+/* Depth map */
+.depth{display:grid;grid-template-columns:90px 1fr;gap:0}
+.scale{position:relative;border-right:2px solid var(--rib)}
+.zones{display:grid}
+.zone{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:24px;padding:26px 0 26px 28px;position:relative;border-bottom:1px dashed var(--rib)}
+.zone:last-child{border-bottom:0}
+.zone::before{content:"";position:absolute;left:-7px;top:32px;width:12px;height:12px;border-radius:50%;background:var(--abyss);border:2px solid var(--zc)}
+.zone .d{position:absolute;left:-98px;top:26px;width:82px;text-align:right;font-family:var(--f-mono);font-size:12px;color:var(--ink-dim)}
+.zone h3{color:var(--zc)}
+.zone .sub{font-size:14px;color:var(--ink-dim);margin-top:6px}
+.zone ul{margin:0;padding-left:18px;font-size:14px;display:grid;gap:4px}
+.zone ul li::marker{color:var(--zc)}
+.zone .k{font-family:var(--f-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:6px}
+
+/* Bestiary */
+.beasts{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.beast{border:1px solid var(--rib);background:linear-gradient(180deg,var(--hull),var(--abyss));display:grid;grid-template-rows:auto 1fr;min-width:0}
+.beast canvas{width:100%;aspect-ratio:16/9;display:block;border-bottom:1px solid var(--rib);max-width:100%}
+.beast .b{padding:18px;display:grid;gap:8px;align-content:start}
+.beast .meta{display:flex;justify-content:space-between;gap:8px;font-family:var(--f-mono);font-size:11px;color:var(--ink-dim)}
+.threat{color:var(--tc);letter-spacing:.08em}
+.beast p{font-size:14px;color:var(--ink-dim)}
+.beast .counter{font-size:13px;color:var(--ink)}
+.beast .counter b{color:var(--glow);font-weight:600}
+
+/* Challenges */
+.events{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.event{border:1px solid var(--rib);padding:22px;display:grid;gap:10px;min-width:0}
+.event.crit{border-left:3px solid var(--alarm)}
+.event.warn{border-left:3px solid var(--sodium)}
+.event .who{display:flex;flex-wrap:wrap;gap:6px}
+.event .who span{font-family:var(--f-mono);font-size:11px;padding:3px 8px;background:var(--hull-2);color:var(--ink)}
+.event p{font-size:14px;color:var(--ink-dim)}
+
+/* Power panel demo */
+.panel{display:grid;grid-template-columns:1.2fr 1fr;gap:32px;background:var(--hull);border:1px solid var(--rib);padding:28px}
+.sliders{display:grid;gap:18px;min-width:0}
+.sl{display:grid;gap:6px}
+.sl label{display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:13px}
+.sl label span{color:var(--sodium)}
+input[type=range]{width:100%;accent-color:var(--sodium)}
+.budget{font-family:var(--f-mono);font-size:13px;color:var(--ink-dim)}
+.budget b{color:var(--ink)}
+.budget.over b{color:var(--alarm)}
+.readout{display:grid;gap:12px;align-content:start;min-width:0}
+.gauge{display:grid;gap:4px}
+.gauge .top{display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:12px;color:var(--ink-dim)}
+.bar{height:8px;background:var(--abyss);border:1px solid var(--rib);position:relative;overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--glow);transition:width .4s}
+.bar i.lo{background:var(--alarm)} .bar i.mid{background:var(--sodium)}
+.verdict{font-size:14px;padding:12px 14px;border:1px dashed var(--rib);color:var(--ink)}
+
+/* Roadmap */
+.road{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.road div{border-top:2px solid var(--glow);padding-top:14px;display:grid;gap:8px;align-content:start;min-width:0}
+.road div:nth-child(n+2){border-top-color:var(--rib)}
+.road ul{margin:0;padding-left:18px;font-size:14px;color:var(--ink-dim);display:grid;gap:4px}
+.risks{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px}
+.risk{background:var(--hull);padding:18px;display:grid;gap:8px;border:1px solid var(--rib);min-width:0}
+.risk p{font-size:14px;color:var(--ink-dim)}
+footer{padding-block:40px 60px;border-top:1px solid var(--rib);color:var(--ink-dim);font-size:13px;font-family:var(--f-mono)}
+
+@media (max-width:980px){
+  .hero,.tech,.panel{grid-template-columns:1fr}
+  .roles{grid-template-columns:repeat(2,1fr)}
+  .loop{grid-template-columns:1fr}
+  .loop li{border-right:0;border-bottom:1px solid var(--rib)}
+  .loop li:last-child{border-bottom:0}
+  .beasts{grid-template-columns:repeat(2,1fr)}
+  .road,.risks{grid-template-columns:repeat(2,1fr)}
+  .port{max-width:520px;margin:0 auto}
+}
+@media (max-width:620px){
+  .roles,.beasts,.events,.road,.risks{grid-template-columns:1fr}
+  .zone{grid-template-columns:1fr;gap:12px}
+  .depth{grid-template-columns:64px 1fr}
+  .zone .d{left:-70px;width:58px;font-size:11px}
+  section{padding-block:52px}
+  .hud{font-size:10px;gap:8px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="copy">
+      <div class="tag">Концепт · кооп AR/VR · 2–5 игроков</div>
+      <h1>Нижний <span>Свет</span></h1>
+      <p class="pitch">Ваша комната становится мостиком батискафа «Ковчег-7». Вы с друзьями погружаетесь в океан под ледяной коркой чужой планеты и держите корабль живым, пока снаружи проплывает то, чему ещё нет названия.</p>
+      <p class="lede">Каждый игрок видит общий корабль со своего устройства: телефон, планшет или VR-шлем. Управление распределено по ролям, и ни один человек не видит всей картины. Выжить можно, только разговаривая друг с другом.</p>
+      <div class="facts"><span>Планета Талассия-IV</span><span>Сессия 35–50 мин</span><span>Кросс-плей телефон + VR</span><span>Одна комната или удалённо</span></div>
+    </div>
+    <div class="port" aria-label="Вид из иллюминатора батискафа: светящиеся медузы и силуэт крупного существа">
+      <canvas id="sea"></canvas>
+      <svg class="rivets" viewBox="0 0 100 100" aria-hidden="true" id="rivets"></svg>
+      <div class="hud"><span>ГЛУБ <b id="dep">0412</b> м</span><span>ДАВЛ <b id="pre">41.6</b> атм</span><span>O₂ <b id="oxy">87</b>%</span></div>
+    </div>
+  </header>
+</div>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="tag">Игровой цикл</div>
+      <h2>Одно погружение — один забег</h2>
+      <p class="lede">Партия устроена как рогалик: экипаж спускается слой за слоем, на каждом слое случаются события, и с каждым метром ставки выше. Подъём наверх — тоже испытание: забрать образцы и не потерять корабль.</p>
+    </div>
+    <ol class="loop">
+      <li><span class="mono">Шаг 1 · Брифинг</span><h3>Выбор курса</h3><p>На голостоле — сонарная карта слоя. Экипаж выбирает маршрут: короткий и опасный или длинный и голодный по ресурсам.</p></li>
+      <li><span class="mono">Шаг 2 · Спуск</span><h3>Переход</h3><p>Пилот ведёт корабль через теснины, остальные следят за давлением и шумом. Шум привлекает фауну.</p></li>
+      <li><span class="mono">Шаг 3 · Событие</span><h3>Испытание</h3><p>Пробоина, атака, сонарная тьма, отказ реактора. У каждой роли — своя часть решения.</p></li>
+      <li><span class="mono">Шаг 4 · Находка</span><h3>Образцы и детали</h3><p>Манипулятором собирают организмы и обломки. Это валюта для апгрейдов и сюжетные зацепки.</p></li>
+      <li><span class="mono">Шаг 5 · Решение</span><h3>Глубже или наверх</h3><p>Голосование экипажа. Наверх — сохранить добычу. Глубже — шанс на редкое, но корабль уже потрёпан.</p></li>
+    </ol>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="tag">Экипаж</div>
+      <h2>Четыре поста, ни один не справится один</h2>
+      <p class="lede">Асимметрия информации — главный двигатель коопа. Сонарщик видит карту, но не видит иллюминаторов. Инженер видит энергосеть, но не знает, что приближается. Пилот смотрит наружу почти вслепую. Пятый игрок берёт роль Биолога или дублирует инженера.</p>
+    </div>
+    <div class="roles">
+      <article class="role">
+        <svg class="ico" viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="17" fill="none" stroke="#5ef2d6" stroke-width="2"/><circle cx="22" cy="22" r="4" fill="#5ef2d6"/><path d="M22 5v8M22 31v8M5 22h8M31 22h8" stroke="#5ef2d6" stroke-width="2"/></svg>
+        <h3>Пилот</h3>
+        <p>Ведёт корабль по рельефу и уходит от хищников. Видит только носовые иллюминаторы и прожектор.</p>
+        <dl><dt>В AR/VR</dt><dd>Штурвал и рычаг балласта на реальном столе. В VR — руки на виртуальных рычагах, на телефоне — наклон устройства.</dd><dt>Зависит от</dt><dd>Подсказок сонарщика и мощности двигателей от инженера.</dd></dl>
+      </article>
+      <article class="role">
+        <svg class="ico" viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="17" fill="none" stroke="#ffb259" stroke-width="2"/><circle cx="22" cy="22" r="10" fill="none" stroke="#ffb259" stroke-width="1.5" opacity=".6"/><path d="M22 22 36 12" stroke="#ffb259" stroke-width="2"/><circle cx="30" cy="26" r="2.5" fill="#ff5d6c"/></svg>
+        <h3>Сонарщик</h3>
+        <p>Единственный, кто видит карту слоя, течения и сигнатуры существ. Пингует сонаром, рискуя выдать корабль.</p>
+        <dl><dt>В AR/VR</dt><dd>Голографический стол в центре комнаты. Вращает рельеф руками, ставит метки, видимые пилоту.</dd><dt>Зависит от</dt><dd>Энергии на сонар и описаний того, что видят другие в иллюминаторах.</dd></dl>
+      </article>
+      <article class="role">
+        <svg class="ico" viewBox="0 0 44 44" aria-hidden="true"><path d="M8 30 22 8l14 22z" fill="none" stroke="#5ef2d6" stroke-width="2"/><path d="M22 16v7M22 26v2" stroke="#5ef2d6" stroke-width="2.5"/><path d="M4 36h36" stroke="#5ef2d6" stroke-width="2"/></svg>
+        <h3>Инженер</h3>
+        <p>Делит энергию реактора, латает пробоины, перекрывает отсеки. Его решения определяют, на что у экипажа есть силы.</p>
+        <dl><dt>В AR/VR</dt><dd>Щиток на реальной стене, перебор кабелей руками, мини-игра на сварку по шву пробоины.</dd><dt>Зависит от</dt><dd>Того, кто скажет, что приоритетнее прямо сейчас.</dd></dl>
+      </article>
+      <article class="role">
+        <svg class="ico" viewBox="0 0 44 44" aria-hidden="true"><path d="M12 30c0-10 4-18 10-18s10 8 10 18" fill="none" stroke="#ffb259" stroke-width="2"/><path d="M14 30c1 5 2 7 2 9M20 30c0 4 0 7-1 9M26 30c0 4 1 7 2 9M31 30c-1 5-2 7-2 9" stroke="#ffb259" stroke-width="1.6" fill="none"/></svg>
+        <h3>Биолог-оружейник</h3>
+        <p>Изучает существ, подбирает приманки и отпугиватели, управляет манипулятором и импульсной пушкой.</p>
+        <dl><dt>В AR/VR</dt><dd>Бортовой иллюминатор-сканер. Рассматривает существо, отмечает уязвимые зоны для всех.</dd><dt>Зависит от</dt><dd>Пилота, чтобы подвести корабль ближе, и инженера для заряда пушки.</dd></dl>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="tag">Как это работает технически</div>
+      <h2>Комната превращается в мостик</h2>
+    </div>
+    <div class="tech">
+      <div class="text">
+        <p class="lede">Ключевая идея: корабль привязан к реальному пространству. Стол становится голостолом, стены — переборками с иллюминаторами, а люди физически ходят между постами. Это делает кооп телесным: чтобы помочь инженеру, нужно встать и подойти к его щитку.</p>
+        <ol class="steps">
+          <li><span class="n">01</span><div><b>Сканирование комнаты</b><span>Хост сканирует пол, стол и стены (ARKit / ARCore plane detection, Quest Scene API). Игра выбирает раскладку мостика под размер комнаты: от 2×2 м до 5×4 м.</span></div></li>
+          <li><span class="n">02</span><div><b>Общий якорь</b><span>Остальные игроки наводят устройство на тот же стол или QR-маркер. Через общие пространственные якоря (Shared Spatial Anchors / Cloud Anchors) все видят корабль в одной точке.</span></div></li>
+          <li><span class="n">03</span><div><b>Подмена стен</b><span>В VR и на Quest 3 работает passthrough: реальные стены видны, а поверх них — иллюминаторы. На телефоне иллюминатор — это окно в океан, куда игрок смотрит экраном.</span></div></li>
+          <li><span class="n">04</span><div><b>Синхронизация</b><span>Хост авторитетен: держит симуляцию корабля, ИИ существ и события. Клиенты шлют ввод. Состояние корабля маленькое, задержки до 150 мс игра прощает.</span></div></li>
+          <li><span class="n">05</span><div><b>Удалённый игрок</b><span>Если друг не в комнате, он подключается как «аватар-голограмма» в стандартном мостике. Его пост переносится в виртуальный угол комнаты хоста.</span></div></li>
+        </ol>
+      </div>
+      <div>
+        <div class="diagram">
+          <svg viewBox="0 0 520 420" role="img" aria-label="Схема комнаты-мостика: голостол в центре, посты по стенам, иллюминаторы">
+            <rect x="20" y="20" width="480" height="360" fill="#0a1c24" stroke="#1f4655" stroke-width="2"/>
+            <!-- portholes on walls -->
+            <g fill="#06141c" stroke="#5ef2d6" stroke-width="2">
+              <circle cx="190" cy="20" r="16"/><circle cx="260" cy="20" r="20"/><circle cx="330" cy="20" r="16"/>
+              <circle cx="20" cy="200" r="14"/><circle cx="500" cy="200" r="14"/>
+            </g>
+            <text x="260" y="58" fill="#86a3aa" font-family="JetBrains Mono,monospace" font-size="11" text-anchor="middle">НОСОВЫЕ ИЛЛЮМИНАТОРЫ</text>
+            <!-- table -->
+            <rect x="200" y="160" width="120" height="80" rx="6" fill="#123240" stroke="#ffb259" stroke-width="2"/>
+            <text x="260" y="196" fill="#ffb259" font-family="JetBrains Mono,monospace" font-size="11" text-anchor="middle">ГОЛОСТОЛ</text>
+            <text x="260" y="212" fill="#86a3aa" font-family="JetBrains Mono,monospace" font-size="10" text-anchor="middle">реальный стол = якорь</text>
+            <!-- stations -->
+            <g font-family="Golos Text,sans-serif" font-size="13" font-weight="600">
+              <rect x="215" y="76" width="90" height="34" fill="#0c222d" stroke="#5ef2d6"/><text x="260" y="98" fill="#d8e8ea" text-anchor="middle">Пилот</text>
+              <rect x="215" y="262" width="90" height="34" fill="#0c222d" stroke="#ffb259"/><text x="260" y="284" fill="#d8e8ea" text-anchor="middle">Сонарщик</text>
+              <rect x="40" y="290" width="110" height="60" fill="#0c222d" stroke="#ff5d6c"/><text x="95" y="316" fill="#d8e8ea" text-anchor="middle">Инженер</text><text x="95" y="334" fill="#86a3aa" font-size="10" font-weight="400" text-anchor="middle" font-family="JetBrains Mono,monospace">щиток на стене</text>
+              <rect x="370" y="290" width="110" height="60" fill="#0c222d" stroke="#5ef2d6"/><text x="425" y="316" fill="#d8e8ea" text-anchor="middle">Биолог</text><text x="425" y="334" fill="#86a3aa" font-size="10" font-weight="400" text-anchor="middle" font-family="JetBrains Mono,monospace">бортовой сканер</text>
+            </g>
+            <!-- walk paths -->
+            <g stroke="#86a3aa" stroke-dasharray="4 5" fill="none" stroke-width="1.4">
+              <path d="M150 320 C 190 320, 200 280, 215 279"/>
+              <path d="M370 320 C 330 320, 320 280, 305 279"/>
+              <path d="M150 300 C 170 220, 190 140, 215 100"/>
+            </g>
+            <text x="20" y="404" fill="#86a3aa" font-family="JetBrains Mono,monospace" font-size="11">Пример: комната 4 × 3 м, вид сверху</text>
+            <text x="500" y="404" fill="#86a3aa" font-family="JetBrains Mono,monospace" font-size="11" text-anchor="end">--- маршруты между постами</text>
+          </svg>
+        </div>
+        <div class="legend"><span><i style="background:#5ef2d6"></i>смотрит наружу</span><span><i style="background:#ffb259"></i>карта и сонар</span><span><i style="background:#ff5d6c"></i>системы корабля</span></div>
+      </div>
+    </div>
+
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Устройство</th><th>Как выглядит мир</th><th>Управление</th><th>Лучшие роли</th></tr></thead>
+        <tbody>
+          <tr><td>Телефон</td><td>Экран — окно в корабль. Подносишь к стене и видишь иллюминатор с океаном.</td><td>Тап, свайп, наклон, физическое перемещение по комнате</td><td>Сонарщик, Биолог</td></tr>
+          <tr><td>Планшет</td><td>То же, но крупнее. Удобен как «пульт», лежащий на столе.</td><td>Мультитач, удержание двумя руками</td><td>Сонарщик, Инженер</td></tr>
+          <tr><td>VR / MR-шлем</td><td>Полное погружение. Passthrough: реальная комната с виртуальными иллюминаторами и приборами.</td><td>Руки или контроллеры: рычаги, кабели, сварка</td><td>Пилот, Инженер</td></tr>
+          <tr><td>Удалённо (ПК/шлем)</td><td>Стандартный виртуальный мостик, остальные игроки видны как голограммы.</td><td>Мышь или контроллеры</td><td>Любая</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="tag">Мир · Талассия-IV</div>
+      <h2>Пять слоёв неизведанного</h2>
+      <p class="lede">Под ледяной коркой толщиной 4 км — глобальный океан, нагреваемый приливами газового гиганта. Каждый слой меняет освещение, звук, давление и правила выживания. Генерация процедурная, но опорные точки сюжета фиксированы.</p>
+    </div>
+    <div class="depth">
+      <div class="scale" aria-hidden="true"></div>
+      <div class="zones">
+        <div class="zone" style="--zc:#7fe7ff"><span class="d">0–300 м</span>
+          <div><h3>Подлёдный сад</h3><p class="sub">Голубой свет сквозь трещины во льду. Свисающие с потолка «сталактиты» из живых водорослей.</p></div>
+          <div><div class="k">Испытания</div><ul><li>Обучающий слой, мягкие события</li><li>Ледяные глыбы, срывающиеся сверху</li><li>Стайки любопытных светляков-рыб, сбивающих сонар</li></ul></div></div>
+        <div class="zone" style="--zc:#5ef2d6"><span class="d">300–1500 м</span>
+          <div><h3>Кристальный лес</h3><p class="sub">Колонны минералов растут вокруг гидротермальных жил и звенят от течений.</p></div>
+          <div><div class="k">Испытания</div><ul><li>Узкие проходы, точное пилотирование</li><li>Резонанс: громкие звуки раскалывают кристаллы</li><li>Первые хищники-засадчики</li></ul></div></div>
+        <div class="zone" style="--zc:#ffb259"><span class="d">1,5–4 км</span>
+          <div><h3>Поющие каньоны</h3><p class="sub">Тьма. Гигантские существа общаются инфразвуком, корпус гудит от их голосов.</p></div>
+          <div><div class="k">Испытания</div><ul><li>Сонарная тьма: карта гаснет</li><li>Течения сносят корабль</li><li>Нужно расшифровать «песни», чтобы не попасть на тропу левиафана</li></ul></div></div>
+        <div class="zone" style="--zc:#c79bff"><span class="d">4–9 км</span>
+          <div><h3>Город раковин</h3><p class="sub">Руины, похожие на гигантские спиральные раковины. Создано не природой.</p></div>
+          <div><div class="k">Испытания</div><ul><li>Внутренние лабиринты, отсеки без связи</li><li>Существа-хранители, реагирующие на свет</li><li>Головоломки на всех игроков одновременно</li></ul></div></div>
+        <div class="zone" style="--zc:#ff5d6c"><span class="d">9 км +</span>
+          <div><h3>Сердце</h3><p class="sub">Термальное ядро. Вода светится сама. Что-то огромное дышит внизу.</p></div>
+          <div><div class="k">Испытания</div><ul><li>Давление на пределе: корпус трещит постоянно</li><li>Финальное событие с полным экипажем</li><li>Решение, от которого зависит концовка кампании</li></ul></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="tag">Бестиарий</div>
+      <h2>Кто живёт в темноте</h2>
+      <p class="lede">У каждого существа есть поведение, которое можно изучить и использовать. Опасные чаще всего опасны не зубами, а тем, что ломают корабельные системы.</p>
+    </div>
+    <div class="beasts">
+      <article class="beast"><canvas data-beast="jelly" width="480" height="270"></canvas><div class="b">
+        <div class="meta"><span>Подлёдный сад</span><span class="threat" style="--tc:#5ef2d6">УГРОЗА ▮▯▯▯</span></div>
+        <h3>Фонарная вуаль</h3><p>Колония медуз размером с автобус. Безвредна, но мигает в ритме сонара и копирует его сигналы.</p>
+        <p class="counter"><b>Польза:</b> если пройти под ней, хищники теряют корабль из виду.</p></div></article>
+      <article class="beast"><canvas data-beast="eel" width="480" height="270"></canvas><div class="b">
+        <div class="meta"><span>Кристальный лес</span><span class="threat" style="--tc:#ffb259">УГРОЗА ▮▮▯▯</span></div>
+        <h3>Стеклоуст</h3><p>Прозрачный угорь-засадчик. Обвивает корпус и выпивает электричество через присоски.</p>
+        <p class="counter"><b>Контрмера:</b> инженер даёт разряд по корпусу, пока пилот держит курс.</p></div></article>
+      <article class="beast"><canvas data-beast="swarm" width="480" height="270"></canvas><div class="b">
+        <div class="meta"><span>Кристальный лес</span><span class="threat" style="--tc:#ffb259">УГРОЗА ▮▮▯▯</span></div>
+        <h3>Рой точильщиков</h3><p>Тысячи мелких ракообразных, слетающихся на тепло. Грызут уплотнители иллюминаторов.</p>
+        <p class="counter"><b>Контрмера:</b> отключить обогрев и замёрзнуть вместе — кислород падает быстрее.</p></div></article>
+      <article class="beast"><canvas data-beast="mimic" width="480" height="270"></canvas><div class="b">
+        <div class="meta"><span>Поющие каньоны</span><span class="threat" style="--tc:#ff5d6c">УГРОЗА ▮▮▮▯</span></div>
+        <h3>Эхоловец</h3><p>Повторяет звуки корабля и голоса экипажа по внутренней связи. Учится на ваших разговорах.</p>
+        <p class="counter"><b>Контрмера:</b> условленные кодовые слова. Игра записывает фразы игроков и подмешивает их.</p></div></article>
+      <article class="beast"><canvas data-beast="leviathan" width="480" height="270"></canvas><div class="b">
+        <div class="meta"><span>Поющие каньоны</span><span class="threat" style="--tc:#ff5d6c">УГРОЗА ▮▮▮▮</span></div>
+        <h3>Левиафан-кит</h3><p>Длиной около 400 м. Не охотится на корабль, но не замечает его. Встреча с ним — стихийное бедствие.</p>
+        <p class="counter"><b>Контрмера:</b> сонарщик расшифровывает песню и предсказывает курс. Иногда его можно оседлать в течении.</p></div></article>
+      <article class="beast"><canvas data-beast="warden" width="480" height="270"></canvas><div class="b">
+        <div class="meta"><span>Город раковин</span><span class="threat" style="--tc:#c79bff">УГРОЗА ?</span></div>
+        <h3>Хранитель</h3><p>Существо из множества светящихся глаз в спиральном панцире. Реагирует на свет прожекторов как на язык.</p>
+        <p class="counter"><b>Загадка:</b> правильная последовательность вспышек открывает проход. Ошибка — включает защиту руин.</p></div></article>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="tag">Испытания</div>
+      <h2>События, где нужен весь экипаж</h2>
+      <p class="lede">Каждое событие проектируется так, чтобы информация была у одного, а действие — у другого. Метки показывают, какие посты участвуют.</p>
+    </div>
+    <div class="events">
+      <article class="event crit"><h3>Пробоина в кормовом отсеке</h3><div class="who"><span>Инженер</span><span>Пилот</span><span>любой свободный</span></div>
+        <p>Вода прибывает, давление в отсеке растёт. Инженер варит шов (жест по траектории трещины), второй игрок держит заплатку руками в AR, пилот поднимается выше, чтобы снизить давление. Затянули — отсек затоплен навсегда.</p></article>
+      <article class="event warn"><h3>Сонарная тьма</h3><div class="who"><span>Сонарщик</span><span>Пилот</span><span>Биолог</span></div>
+        <p>Облако ила глушит сонар. Карта пропадает. Сонарщик помнит рельеф и подсказывает по памяти, биолог светит прожектором в бортовой иллюминатор и описывает, что видит.</p></article>
+      <article class="event crit"><h3>Перегрев реактора</h3><div class="who"><span>Инженер</span><span>все</span></div>
+        <p>Каждый пост сообщает, сколько энергии ему жизненно нужно. Инженер урезает до безопасного уровня. Кто-то останется без сил: без сонара, двигателя или обогрева.</p></article>
+      <article class="event warn"><h3>Чужой голос в эфире</h3><div class="who"><span>все</span></div>
+        <p>Эхоловец говорит голосом одного из игроков и отдаёт приказ. Экипаж должен проверить его кодовым словом, пока корабль не выполнил команду.</p></article>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="tag">Попробуйте пост инженера</div>
+      <h2>Распределите энергию реактора</h2>
+      <p class="lede">Пример механики. Реактор даёт 100 единиц. Впереди — каньон со стеклоустом. Сдвиньте ползунки и посмотрите, переживёт ли экипаж следующий переход.</p>
+    </div>
+    <div class="panel">
+      <div class="sliders">
+        <div class="sl"><label for="p-eng">Двигатели <span id="v-eng">30</span></label><input type="range" id="p-eng" min="0" max="60" value="30"></div>
+        <div class="sl"><label for="p-son">Сонар <span id="v-son">20</span></label><input type="range" id="p-son" min="0" max="60" value="20"></div>
+        <div class="sl"><label for="p-life">Жизнеобеспечение <span id="v-life">25</span></label><input type="range" id="p-life" min="0" max="60" value="25"></div>
+        <div class="sl"><label for="p-hull">Разряд по корпусу <span id="v-hull">15</span></label><input type="range" id="p-hull" min="0" max="60" value="15"></div>
+        <div class="sl"><label for="p-lamp">Прожекторы <span id="v-lamp">10</span></label><input type="range" id="p-lamp" min="0" max="60" value="10"></div>
+        <div class="budget mono" id="budget">Использовано: <b>100</b> / 100</div>
+      </div>
+      <div class="readout">
+        <div class="gauge"><div class="top"><span>Скорость прохода</span><span id="g1t"></span></div><div class="bar"><i id="g1"></i></div></div>
+        <div class="gauge"><div class="top"><span>Видимость рельефа</span><span id="g2t"></span></div><div class="bar"><i id="g2"></i></div></div>
+        <div class="gauge"><div class="top"><span>Кислород к выходу</span><span id="g3t"></span></div><div class="bar"><i id="g3"></i></div></div>
+        <div class="gauge"><div class="top"><span>Защита от стеклоуста</span><span id="g4t"></span></div><div class="bar"><i id="g4"></i></div></div>
+        <div class="gauge"><div class="top"><span>Скрытность</span><span id="g5t"></span></div><div class="bar"><i id="g5"></i></div></div>
+        <p class="verdict" id="verdict"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="tag">Реализация</div>
+      <h2>Путь от прототипа до релиза</h2>
+      <p class="lede">Движок: Unity 6 + AR Foundation (iOS/Android) и Meta XR SDK для Quest 3. Сеть: Netcode for GameObjects или Photon Fusion с авторитетным хостом. Голос: Vivox или Photon Voice, он нужен и для механики эхоловца.</p>
+    </div>
+    <div class="road">
+      <div><span class="tag">Месяцы 1–3</span><h3>Прототип</h3><ul><li>Мостик на столе, общий якорь для 2 телефонов</li><li>Пилот и инженер, одно событие (пробоина)</li><li>Серая графика, проверка, весело ли</li></ul></div>
+      <div><span class="tag">Месяцы 4–8</span><h3>Вертикальный срез</h3><ul><li>4 роли, слой «Кристальный лес»</li><li>Quest 3 + телефоны в одной сессии</li><li>3 существа с ИИ, звуковой дизайн</li></ul></div>
+      <div><span class="tag">Месяцы 9–14</span><h3>Контент</h3><ul><li>5 слоёв, процедурные маршруты</li><li>Апгрейды корабля между забегами</li><li>Удалённые игроки-голограммы</li></ul></div>
+      <div><span class="tag">Месяцы 15–18</span><h3>Ранний доступ</h3><ul><li>Сюжетная кампания из 3 экспедиций</li><li>Режим «одна VR-гарнитура + телефоны»</li><li>Тесты на разных комнатах</li></ul></div>
+    </div>
+    <div class="risks">
+      <div class="risk"><h3>Укачивание</h3><p>Мостик неподвижен относительно комнаты, движется только мир за иллюминаторами. Игрок стоит на месте, поэтому дискомфорта почти нет.</p></div>
+      <div class="risk"><h3>Безопасность в комнате</h3><p>Посты ставятся только в свободных зонах после сканирования. В VR — граница Guardian, на телефоне — предупреждение при приближении к мебели.</p></div>
+      <div class="risk"><h3>Дрейф трекинга</h3><p>Периодическая переякорка по столу. Если устройство потеряло якорь, игрок на 3 секунды видит «помехи на линзе», а не сломанную сцену.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer><div class="wrap">«Нижний Свет» · игровой концепт · все названия существ и мира вымышлены</div></footer>
+
+<script>
+(function(){
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* rivets on porthole */
+const rv=document.getElementById('rivets');
+for(let i=0;i<16;i++){const a=i/16*Math.PI*2;const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+ c.setAttribute('cx',50+Math.cos(a)*35.5);c.setAttribute('cy',50+Math.sin(a)*35.5);c.setAttribute('r',.9);c.setAttribute('fill','#5b7f8a');rv.appendChild(c);}
+
+/* hero sea */
+const cv=document.getElementById('sea'),ctx=cv.getContext('2d');
+let W,H,dpr;
+function size(){dpr=Math.min(devicePixelRatio||1,2);const r=cv.getBoundingClientRect();W=r.width;H=r.height;cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);}
+size();addEventListener('resize',size);
+const snow=Array.from({length:120},()=>({x:Math.random(),y:Math.random(),s:Math.random()*1.6+.3,v:Math.random()*.0006+.0002}));
+const jellies=Array.from({length:6},(_,i)=>({x:Math.random(),y:Math.random(),r:12+Math.random()*22,ph:Math.random()*6,hue:i%2?172:290,sp:.00008+Math.random()*.0001}));
+let t=0;
+function jelly(j,time){
+  const x=j.x*W,y=j.y*H,r=j.r*(W/420),pulse=Math.sin(time*.002+j.ph)*.12+1;
+  const g=ctx.createRadialGradient(x,y,0,x,y,r*2.4);g.addColorStop(0,`hsla(${j.hue},90%,70%,.35)`);g.addColorStop(1,`hsla(${j.hue},90%,60%,0)`);
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r*2.4,0,7);ctx.fill();
+  ctx.fillStyle=`hsla(${j.hue},90%,80%,.55)`;ctx.beginPath();ctx.ellipse(x,y,r*pulse,r*.7/pulse,0,Math.PI,0);ctx.fill();
+  ctx.strokeStyle=`hsla(${j.hue},90%,75%,.35)`;ctx.lineWidth=1;
+  for(let k=0;k<5;k++){ctx.beginPath();const sx=x-r*.7+k*r*.35;ctx.moveTo(sx,y);
+    for(let s=1;s<8;s++)ctx.lineTo(sx+Math.sin(time*.003+s*.8+k)*3,y+s*r*.32);ctx.stroke();}
+}
+function leviathan(time){
+  const p=((time*.00004)%1.6)-.3; const x=W*(1.2-p*1.0),y=H*.62; const L=W*1.1;
+  ctx.fillStyle='rgba(2,10,14,.85)';ctx.beginPath();
+  ctx.moveTo(x,y);
+  for(let i=0;i<=30;i++){const u=i/30;ctx.lineTo(x+u*L,y-Math.sin(u*Math.PI)*H*.13+Math.sin(time*.001+u*4)*4);}
+  for(let i=30;i>=0;i--){const u=i/30;ctx.lineTo(x+u*L,y+Math.sin(u*Math.PI)*H*.09+Math.sin(time*.001+u*4)*4);}
+  ctx.fill();
+  for(let i=1;i<9;i++){const u=i/10;ctx.fillStyle='rgba(255,178,89,.55)';ctx.beginPath();ctx.arc(x+u*L,y+H*.02+Math.sin(time*.001+u*4)*4,1.6,0,7);ctx.fill();}
+}
+function frame(now){
+  t=now||0;
+  const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#0f4a5c');g.addColorStop(.55,'#082733');g.addColorStop(1,'#030c11');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  for(let i=0;i<5;i++){const x=W*(.15+i*.18)+Math.sin(t*.0003+i)*20;const gr=ctx.createLinearGradient(x,0,x+40,H*.8);
+    gr.addColorStop(0,'rgba(140,230,240,.10)');gr.addColorStop(1,'rgba(140,230,240,0)');ctx.fillStyle=gr;
+    ctx.beginPath();ctx.moveTo(x-10,0);ctx.lineTo(x+30,0);ctx.lineTo(x+90,H*.85);ctx.lineTo(x+20,H*.85);ctx.fill();}
+  ctx.restore();
+  leviathan(t);
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  jellies.forEach(j=>{j.y-=j.sp*16;if(j.y<-.15){j.y=1.15;j.x=Math.random();}jelly(j,t);});
+  ctx.restore();
+  ctx.fillStyle='rgba(220,240,240,.6)';
+  snow.forEach(s=>{s.y+=s.v*16;s.x+=Math.sin(t*.0005+s.y*10)*.0003;if(s.y>1)s.y=0;ctx.fillRect(s.x*W,s.y*H,s.s,s.s);});
+  const v=ctx.createRadialGradient(W/2,H/2,W*.3,W/2,H/2,W*.52);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.65)');ctx.fillStyle=v;ctx.fillRect(0,0,W,H);
+  if(!reduce)requestAnimationFrame(frame);
+}
+frame(0);
+/* hud */
+let depth=412;
+setInterval(()=>{if(reduce)return;depth+=Math.round(Math.random()*3);document.getElementById('dep').textContent=String(depth).padStart(4,'0');
+ document.getElementById('pre').textContent=(1+depth/10.2*0.98).toFixed(1);},900);
+
+/* bestiary */
+const draw={
+ jelly(c,x,w,h,T){const cx=w/2,cy=h*.42;c.globalCompositeOperation='lighter';
+   for(let r=5;r>0;r--){c.fillStyle=`rgba(94,242,214,${.06*r})`;c.beginPath();c.ellipse(cx,cy,w*.08*r,h*.05*r,0,Math.PI,0);c.fill();}
+   c.strokeStyle='rgba(199,155,255,.5)';for(let k=0;k<18;k++){c.beginPath();const sx=cx-w*.36+k*w*.04;c.moveTo(sx,cy);for(let s=1;s<14;s++)c.lineTo(sx+Math.sin(T*.002+s*.6+k)*5,cy+s*h*.04);c.stroke();}},
+ eel(c,x,w,h,T){c.lineCap='round';for(let pass=0;pass<2;pass++){c.strokeStyle=pass?'rgba(216,232,234,.85)':'rgba(94,242,214,.2)';c.lineWidth=pass?2:14;c.beginPath();
+   for(let i=0;i<=60;i++){const u=i/60;const px=w*.08+u*w*.84,py=h*.5+Math.sin(u*9+T*.003)*h*.2*(1-u*.4);i?c.lineTo(px,py):c.moveTo(px,py);}c.stroke();}
+   c.fillStyle='#ffb259';for(let i=1;i<12;i++){const u=i/12;c.beginPath();c.arc(w*.08+u*w*.84,h*.5+Math.sin(u*9+T*.003)*h*.2*(1-u*.4)+6,2,0,7);c.fill();}
+   c.fillStyle='#ff5d6c';c.beginPath();c.arc(w*.08,h*.5+Math.sin(T*.003)*h*.2,4,0,7);c.fill();},
+ swarm(c,x,w,h,T){c.fillStyle='rgba(255,178,89,.85)';for(let i=0;i<260;i++){const a=i*2.399+T*.0006,r=Math.sqrt(i)*w*.022*(1+.1*Math.sin(T*.002+i));c.fillRect(w/2+Math.cos(a)*r*1.6,h/2+Math.sin(a)*r,2,2);}
+   c.strokeStyle='rgba(94,242,214,.6)';c.lineWidth=3;c.beginPath();c.arc(w/2,h/2,h*.18,0,7);c.stroke();},
+ mimic(c,x,w,h,T){c.strokeStyle='rgba(255,93,108,.7)';c.lineWidth=1.5;for(let r=0;r<6;r++){const R=((T*.04+r*30)%180);c.globalAlpha=1-R/180;c.beginPath();c.arc(w*.5,h*.55,R,Math.PI*1.05,Math.PI*1.95);c.stroke();}
+   c.globalAlpha=1;c.fillStyle='#020a0e';c.beginPath();c.ellipse(w*.5,h*.62,w*.14,h*.1,0,0,7);c.fill();
+   c.fillStyle='#ff5d6c';c.beginPath();c.arc(w*.45,h*.6,3,0,7);c.arc(w*.55,h*.6,3,0,7);c.fill();
+   c.strokeStyle='rgba(216,232,234,.6)';c.lineWidth=1;c.beginPath();for(let i=0;i<80;i++){const px=w*.1+i*w*.01;c.lineTo(px,h*.25+Math.sin(i*.9+T*.01)*Math.sin(i*.13)*14);}c.stroke();},
+ leviathan(c,x,w,h,T){c.fillStyle='#020a0e';c.beginPath();const y=h*.55,off=Math.sin(T*.0008)*10;c.moveTo(-10,y+off);
+   for(let i=0;i<=40;i++){const u=i/40;c.lineTo(-10+u*w*1.2,y-Math.sin(u*Math.PI)*h*.3+off);}for(let i=40;i>=0;i--){const u=i/40;c.lineTo(-10+u*w*1.2,y+Math.sin(u*Math.PI)*h*.2+off);}c.fill();
+   c.fillStyle='rgba(255,178,89,.7)';for(let i=1;i<14;i++){c.beginPath();c.arc(i*w/13,y+h*.06+off,1.8,0,7);c.fill();}
+   c.fillStyle='rgba(216,232,234,.8)';c.beginPath();c.arc(w*.82,h*.88,2.5,0,7);c.fill();
+   c.font='10px JetBrains Mono, monospace';c.fillStyle='rgba(134,163,170,.9)';c.fillText('← батискаф, в масштабе',w*.84,h*.9);},
+ warden(c,x,w,h,T){const cx=w/2,cy=h/2;c.strokeStyle='rgba(199,155,255,.6)';c.lineWidth=2;c.beginPath();
+   for(let i=0;i<220;i++){const a=i*.09,r=2+a*5.2;c.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r*.85);}c.stroke();
+   for(let i=0;i<14;i++){const a=i*1.1+.5,r=14+i*7;const on=Math.sin(T*.003+i*1.7)>.2;c.fillStyle=on?'#5ef2d6':'rgba(94,242,214,.2)';c.beginPath();c.arc(cx+Math.cos(a)*r,cy+Math.sin(a)*r*.85,3.2,0,7);c.fill();}}
+};
+const bcs=[...document.querySelectorAll('canvas[data-beast]')];
+function beasts(T){bcs.forEach(cv=>{const c=cv.getContext('2d'),w=cv.width,h=cv.height;c.globalCompositeOperation='source-over';c.globalAlpha=1;
+  const g=c.createLinearGradient(0,0,0,h);g.addColorStop(0,'#0c2a36');g.addColorStop(1,'#04111a');c.fillStyle=g;c.fillRect(0,0,w,h);
+  c.fillStyle='rgba(216,232,234,.25)';for(let i=0;i<40;i++)c.fillRect((i*97)%w,((i*53)+T*.01*(1+i%3))%h,1,1);
+  draw[cv.dataset.beast](c,0,w,h,T);c.globalCompositeOperation='source-over';});
+  if(!reduce)requestAnimationFrame(beasts);}
+beasts(0);
+
+/* power panel */
+const keys=['eng','son','life','hull','lamp'];
+function clamp(v){return Math.max(0,Math.min(100,v));}
+function setBar(id,v){const el=document.getElementById(id);el.style.width=v+'%';el.className=v<35?'lo':v<60?'mid':'';document.getElementById(id+'t').textContent=Math.round(v)+'%';}
+function upd(){const v={};keys.forEach(k=>{v[k]=+document.getElementById('p-'+k).value;document.getElementById('v-'+k).textContent=v[k];});
+  const sum=keys.reduce((a,k)=>a+v[k],0);const b=document.getElementById('budget');b.innerHTML='Использовано: <b>'+sum+'</b> / 100'+(sum>100?' · реактор перегревается':'');b.classList.toggle('over',sum>100);
+  const over=Math.max(0,sum-100)*1.5;
+  const speed=clamp(v.eng*2-over),vis=clamp(v.son*2.2+v.lamp*1.5-over),oxy=clamp(30+v.life*2.4+speed*.25-over),def=clamp(v.hull*4-over),stealth=clamp(100-v.son*1.2-v.lamp*2.5-v.eng*.6);
+  setBar('g1',speed);setBar('g2',vis);setBar('g3',oxy);setBar('g4',def);setBar('g5',stealth);
+  let msg;
+  if(sum>100)msg='Реактор уходит в аварийный сброс. Все системы теряют мощность, корабль дрейфует в каньон вслепую.';
+  else if(oxy<40)msg='Переход займёт слишком долго: кислород закончится до выхода из каньона.';
+  else if(vis<30)msg='Пилот летит вслепую между кристаллами. Высокий шанс пробоины.';
+  else if(def<30&&stealth<55)msg='Стеклоуст заметит корабль и присосётся. Защиты не хватит, двигатели обесточатся.';
+  else if(def<30)msg='Корабль тихий и, возможно, проскочит. Но если стеклоуст атакует, отбиться нечем.';
+  else msg='Экипаж проходит каньон. Запас по кислороду есть, засаду удаётся отбить.';
+  document.getElementById('verdict').textContent=msg;}
+keys.forEach(k=>document.getElementById('p-'+k).addEventListener('input',upd));upd();
+})();
+</script>
