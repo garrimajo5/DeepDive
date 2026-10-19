@@ -63,7 +63,7 @@ func test_scene_status_and_messages() -> void:
 	ok(line.contains("За штурвалом") and line.contains("курс 0°") and line.contains("до дна") and line.contains("Вы за штурвалом"), line)
 	main.toggle_light()
 	main.step(0.1)
-	ok(Status.join(main.status_parts()).ends_with("прожектор выкл · течение на ЮВ 0,3 м/с · Прожектор погашен"), Status.join(main.status_parts()))
+	ok(Status.join(main.status_parts()).contains("прожектор выкл · реактор 100/100 · течение на ЮВ 0,3 м/с · Прожектор погашен"), Status.join(main.status_parts()))
 	main.stand_up()
 	main.step(0.1)
 	ok(not main.message.visible() or main.message.text != Main.SAT_MSG, "после «Встать» «Вы за штурвалом» не висит")

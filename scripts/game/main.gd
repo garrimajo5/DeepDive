@@ -7,6 +7,10 @@ var walker := Deck.Walker.new()
 var pilot := Deck.Pilot.new()
 var posts: Array[Deck.Post] = Deck.posts()
 var helm := Helm.Ship.new()
+var reactor := Reactor.new()
+var power := Reactor.Console.new()   ## выбор на пульте энергии
+var at_power := false              ## игрок у пульта энергии: крестовина правит доли
+var power_panel: PowerPanel
 var current := Helm.SeaCurrent.new()
 
 var ocean: OceanView
@@ -58,9 +62,13 @@ func _ready() -> void:
 	hint.add_theme_constant_override("line_spacing", -2)
 	ui.add_child(hint)
 	current.changed.connect(func(_i: int) -> void: say("Течение сменилось"))
+	power_panel = PowerPanel.new()
+	power_panel.name = "Пульт энергии"
+	ui.add_child(power_panel)
 	overlay = TouchOverlay.new()
 	overlay.name = "Управление"
 	ui.add_child(overlay)
+	reactor.message.connect(func(title: String, _text: String) -> void: say(title))
 	_place_ship()
 	_place_camera()
 	if QaRunner.pending():
@@ -104,6 +112,14 @@ func step(dt: float) -> void:
 		walker.look(overlay.look_points())
 		if r.action_pressed:
 			stand_up()
+	elif at_power:
+		helm.in_thrust = 0.0
+		helm.in_turn = 0.0
+		helm.in_vert = 0.0
+		walker.look(overlay.look_points())
+		power.nav(reactor, r.move, dt)
+		if r.action_pressed:
+			close_power()
 	else:
 		helm.in_thrust = 0.0
 		helm.in_turn = 0.0
@@ -114,7 +130,11 @@ func step(dt: float) -> void:
 		if post and r.action_pressed:
 			use_post(post.id)
 	current.update(dt)
-	helm.update(dt, 1.0, current.vel())
+	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
+	helm.update(dt, reactor.k(Reactor.Sys.ENGINES), current.vel())
+	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP))
+	for i in Reactor.Sys.size():
+		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	message.update(dt)
 	_place_ship()
 	_place_camera()
@@ -132,16 +152,29 @@ func use_post(id: String) -> void:
 		"helm":
 			sit_at_helm()
 		"energy":
-			say("Энергия: двигатели, сонар, жизнь, разряд, прожектор")
+			open_power()
 		"scanner":
 			say("Сканер: рядом никого")
 		"hatch":
 			say("Люк в коридор задраен")
 
 
+## Встать к пульту энергии: взгляд на пульт, крестовина правит доли, кнопка — закрыть.
+func open_power() -> void:
+	at_power = true
+	walker.yaw = PI / 2.0   # пульт на левом борту (−X)
+	walker.pitch = -0.3
+	power_panel.show_for(reactor, power)
+
+
+func close_power() -> void:
+	at_power = false
+	power_panel.visible = false
+
+
 func toggle_light() -> void:
 	light_on = not light_on
-	searchlight.apply(light_on, 1.0)
+	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP))
 	overlay.set_light(light_on)
 	say("Прожектор включён" if light_on else "Прожектор погашен")
 
@@ -178,6 +211,8 @@ func _place_camera() -> void:
 func _update_ui() -> void:
 	if pilot.seated:
 		overlay.set_action_label("Встать")
+	elif at_power:
+		overlay.set_action_label("Закрыть")
 	else:
 		var post := Deck.nearest(posts, walker.x, walker.z)
 		overlay.set_action_label(POST_BUTTON.get(post.id, "") if post else "")
@@ -191,6 +226,8 @@ func _update_ui() -> void:
 ## Части строки состояния: где игрок, глубина, ход, у штурвала — до дна, курс и прожектор, течение, пост рядом, сообщение.
 func status_parts() -> Array:
 	var parts: Array = []
+	if not reactor.alert().is_empty():
+		parts.append(reactor.alert())
 	parts.append("За штурвалом" if pilot.seated else "Мостик")
 	parts.append("глубина %d м" % roundi(helm.depth()))
 	parts.append("ход %s м/с" % _num(helm.speed))
@@ -198,8 +235,10 @@ func status_parts() -> Array:
 		parts.append("до дна %d м" % roundi(helm.pos.y - Seabed.height(helm.pos.x, helm.pos.z)))
 		parts.append("курс %d°" % Status.course_deg(helm.yaw))
 		parts.append("прожектор %s" % ("вкл" if light_on else "выкл"))
+	if reactor.alert().is_empty():
+		parts.append("реактор %d/%d" % [reactor.used(), reactor.limit()])
 	parts.append("течение на %s %s м/с" % [Status.rumb(current.vel()), _num(Helm.SeaCurrent.SPEED)])
-	if not pilot.seated:
+	if not pilot.seated and not at_power:
 		var post := Deck.nearest(posts, walker.x, walker.z)
 		if post:
 			parts.append(post.label)
@@ -218,6 +257,13 @@ func debug_setup(kv: Dictionary) -> void:
 		sit_at_helm()
 	if kv.get("light", "1") == "0":
 		toggle_light()
+	if kv.get("power", "0") == "1":  # у пульта энергии
+		walker.x = -3.9
+		walker.z = -2.0
+		open_power()
+	if kv.has("hot"):  # hot=1 — перегрев (для снимка табло)
+		reactor.start_hot(false)
+		reactor.heat = float(kv["hot"])
 	if kv.has("ship"):  # ship=x,y,z — поставить корабль (y — высота, глубина со знаком минус)
 		var p: PackedFloat64Array = kv["ship"].split_floats(",")
 		helm.pos = Vector3(p[0], p[1], p[2])
