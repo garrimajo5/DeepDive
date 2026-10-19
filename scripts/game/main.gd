@@ -34,6 +34,8 @@ var ship: Node3D            ## корабль: всё, что движется �
 var bridge: BridgeView
 var rooms: RoomsView
 var searchlight: SearchlightView
+var hull: HullView          ## корпус снаружи (HullPlan), роторы и рули — по hull_motion
+var hull_motion := HullMesh.Motion.new()
 var light_on := true        ## прожектор включён (кнопка «Свет» за штурвалом)
 var camera: Camera3D
 var overlay: TouchOverlay
@@ -82,6 +84,9 @@ func _ready() -> void:
 	searchlight = SearchlightView.new()
 	searchlight.name = "Прожектор"
 	ship.add_child(searchlight)
+	hull = HullView.new()
+	hull.name = "Корпус"
+	ship.add_child(hull)
 	camera = Camera3D.new()
 	camera.name = "Глаза"
 	camera.fov = Deck.FOV
@@ -193,6 +198,7 @@ func step(dt: float) -> void:
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
 	engine.update(dt, reactor, hold_valve or debug_vent)
 	helm.update(dt, reactor.k(Reactor.Sys.ENGINES), current.vel())
+	hull_motion.update(dt, helm.in_thrust, helm.in_vert, reactor.k(Reactor.Sys.ENGINES))
 	helm.speed = vitals.scrape(helm.bump / maxf(dt, 1e-4), helm.speed)
 	if vitals.update(dt, helm.in_thrust, helm.in_vert, Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP)), reactor.k(Reactor.Sys.LIFE)):
 		light_on = false
@@ -370,6 +376,7 @@ func stand_up() -> void:
 func _place_ship() -> void:
 	ship.position = helm.pos
 	ship.rotation = Vector3(0.0, helm.yaw, 0.0)
+	hull.apply(hull_motion)
 	bridge.set_wheel_turn(helm.turn)
 	ocean.apply_water(env, helm.depth(), helm.pos)
 
@@ -488,6 +495,16 @@ func debug_setup(kv: Dictionary) -> void:
 			helm.in_vert = float(kv.get("vert", "0"))
 			current.update(dt)
 			helm.update(dt, 1.0, current.vel())
+			hull_motion.update(dt, helm.in_thrust, helm.in_vert, 1.0)
 		_place_ship()
 		_place_camera()
 		_update_ui()
+	if kv.has("view"):  # view=x,y,z — камера снаружи в осях корабля, смотрит на середину корпуса (снимок корпуса)
+		var v: PackedFloat64Array = kv["view"].split_floats(",")
+		var out := Camera3D.new()
+		out.fov = Deck.FOV
+		out.far = 400.0
+		add_child(out)
+		out.global_position = ship.to_global(Vector3(v[0], v[1], v[2]))
+		out.look_at(ship.to_global(Vector3(0.0, HullPlan.CENTER_Y, 10.0)))
+		out.make_current()
