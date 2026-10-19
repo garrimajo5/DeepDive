@@ -20,9 +20,11 @@
   `hash_noise.gd` (шум как `G.noise`/`G.fbm`), `seabed.gd` (рельеф `W.height`, цвет дна, вода по глубине),
   `helm.gd` (ход корабля `Helm.Ship`, течение `Helm.SeaCurrent`), `deck.gd` (палуба, посты, игрок `Deck.Walker`),
   `touch.gd` (раскладка, крестовина, разбор касаний), `bridge_plan.gd` (оболочка мостика по ART-002),
-  `bridge_props.gd` (места моделей художника на мостике).
+  `bridge_props.gd` (места моделей художника на мостике), `searchlight.gd` (прожектор: числа, луч до дна, меш конуса),
+  `texture_glow.gd` (маска голубых огней), `qa_script.gd` (сценарий тестера).
 - `scripts/game/` — узлы: `main.gd` (сборка сцены, шаг игры `step(dt)`, пилот), `bridge_view.gd` (оболочка, стекло, модели,
-  колесо `set_wheel_turn`), `ocean_view.gd` (дно, лёд, морской снег, вода по глубине `apply_water`), `touch_overlay.gd`.
+  колесо `set_wheel_turn`), `ocean_view.gd` (дно, лёд, морской снег, вода по глубине `apply_water`), `searchlight_view.gd` (свет и конус луча,
+  `apply(on, k)`), `touch_overlay.gd`, `qa_runner.gd`. Шейдеры — `shaders/`.
 - Слои света: отмель — слой 1 (`OceanView.LAYER_WORLD`, свет сквозь лёд), корабль изнутри — слой 2 (`LAYER_SHIP`, только
   плафоны). Новые детали корабля ставить на слой 2, иначе их осветит «солнце» сквозь потолок.
 - Сценовые тесты двигают игру через `main.step(dt)` с ровным шагом: в headless кадры идут без пауз, на `await frames` время почти не идёт.

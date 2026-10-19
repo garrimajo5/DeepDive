@@ -12,6 +12,8 @@ var current := Helm.SeaCurrent.new()
 var ocean: OceanView
 var ship: Node3D            ## корабль: всё, что движется вместе с ним
 var bridge: BridgeView
+var searchlight: SearchlightView
+var light_on := true        ## прожектор включён (кнопка «Свет» за штурвалом)
 var camera: Camera3D
 var overlay: TouchOverlay
 var hint: Label
@@ -31,6 +33,9 @@ func _ready() -> void:
 	bridge = BridgeView.new()
 	bridge.name = "Мостик"
 	ship.add_child(bridge)
+	searchlight = SearchlightView.new()
+	searchlight.name = "Прожектор"
+	ship.add_child(searchlight)
 	camera = Camera3D.new()
 	camera.name = "Глаза"
 	camera.fov = Deck.FOV
@@ -88,6 +93,8 @@ func step(dt: float) -> void:
 		helm.in_thrust = r.move.y
 		helm.in_turn = r.move.x
 		helm.in_vert = r.vert()
+		if r.light_pressed:
+			toggle_light()
 		walker.look(overlay.look_points())
 		if r.action_pressed:
 			stand_up()
@@ -106,6 +113,12 @@ func step(dt: float) -> void:
 	_place_camera()
 	_update_ui()
 	r.end_frame()
+
+
+func toggle_light() -> void:
+	light_on = not light_on
+	searchlight.apply(light_on, 1.0)
+	overlay.set_light(light_on)
 
 
 func sit_at_helm() -> void:
@@ -145,6 +158,12 @@ func _update_ui() -> void:
 func debug_setup(kv: Dictionary) -> void:
 	if kv.get("pilot", "0") == "1":
 		sit_at_helm()
+	if kv.get("light", "1") == "0":
+		toggle_light()
+	if kv.has("ship"):  # ship=x,y,z — поставить корабль (y — высота, глубина со знаком минус)
+		var p: PackedFloat64Array = kv["ship"].split_floats(",")
+		helm.pos = Vector3(p[0], p[1], p[2])
+		_place_ship()
 	if kv.has("secs"):
 		var secs := float(kv["secs"])
 		var dt := 1.0 / 30.0

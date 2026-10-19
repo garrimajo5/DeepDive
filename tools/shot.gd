@@ -2,7 +2,8 @@ extends SceneTree
 ## Скриншот главной сцены без телефона.
 ## xvfb-run -a godot --path . --rendering-driver opengl3 --resolution 1600x720 -s tools/shot.gd -- out.png [ключ=значение ...]
 ## Ключи: x, z, yaw, pitch — игрок на палубе (yaw в градусах, 0 — к носу); frames — сколько кадров ждать;
-## pilot=1 — сесть за штурвал; thrust, turn, vert — ввод пилота; secs — сколько секунд вести корабль до снимка.
+## pilot=1 — сесть за штурвал; thrust, turn, vert — ввод пилота; secs — сколько секунд вести корабль до снимка;
+## light=0 — погасить прожектор; ship=x,y,z — поставить корабль (например ship=200,-80,0 — глубокий склон на востоке).
 
 
 func _initialize() -> void:
