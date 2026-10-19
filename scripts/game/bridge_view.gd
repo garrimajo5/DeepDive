@@ -10,6 +10,7 @@ var wheel_mount: Node3D  ## узел штурвала (наклон к пило�
 var wheel: Node3D
 var sliders: Array[Node3D] = []   ## ползунки пульта энергии: двигатели, сонар, жизнь, разряд, прожектор
 var hatch_door: Node3D
+var zap_lever: Node3D      ## рычаг разряда на левом борту: ось и рукоять
 var hatch_wheel: Node3D
 
 
@@ -40,6 +41,7 @@ func _ready() -> void:
 		sliders.append(s)
 		light_texture(s)
 		set_slider(i, 0.5)
+	_add_zap_lever()
 	hatch_door = _add_model(BridgeProps.Prop.new(BridgeProps.HATCH_DOOR, "Створка люка", BridgeProps.HATCH_DOOR_OFFSET),
 		props[BridgeProps.HATCH_FRAME])
 	hatch_wheel = _add_model(BridgeProps.Prop.new(BridgeProps.HATCH_WHEEL, "Колесо люка", BridgeProps.HATCH_WHEEL_OFFSET),
@@ -68,6 +70,49 @@ func set_slider(i: int, share: float) -> void:
 func set_hatch(offset: float) -> void:
 	hatch_door.position.x = BridgeProps.HATCH_DOOR_OFFSET.x + offset
 	hatch_wheel.rotation_degrees.z = -offset / ShipLayout.Door.SLIDE * 540.0
+
+
+## Рычаг разряда: щиток на борту, ось и рукоять с голубым набалдашником (своей модели нет — простые формы).
+func _add_zap_lever() -> void:
+	var plate := MeshInstance3D.new()
+	plate.name = "Щиток разряда"
+	var pm := BoxMesh.new()
+	pm.size = Vector3(0.06, 0.5, 0.4)
+	plate.mesh = pm
+	plate.material_override = material(BridgePlan.Paint.SEAM)
+	plate.position = Zap.LEVER_POS + Vector3(-0.08, 0, 0)
+	plate.layers = OceanView.LAYER_SHIP
+	add_child(plate)
+	zap_lever = Node3D.new()
+	zap_lever.name = "Рычаг разряда"
+	zap_lever.position = Zap.LEVER_POS
+	add_child(zap_lever)
+	var arm := MeshInstance3D.new()
+	var am := BoxMesh.new()
+	am.size = Vector3(0.05, 0.36, 0.05)
+	arm.mesh = am
+	arm.material_override = material(BridgePlan.Paint.METAL)
+	arm.position = Vector3(0, 0.15, 0)
+	arm.layers = OceanView.LAYER_SHIP
+	zap_lever.add_child(arm)
+	var knob := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 0.045
+	sm.height = 0.09
+	knob.mesh = sm
+	var km := StandardMaterial3D.new()
+	km.albedo_color = Color("67DDEB")
+	km.emission_enabled = true
+	km.emission = Color("67DDEB")
+	knob.material_override = km
+	knob.position = Vector3(0, 0.34, 0)
+	knob.layers = OceanView.LAYER_SHIP
+	zap_lever.add_child(knob)
+
+
+## Рычаг опущен, пока мигает разряд (в браузере — S.lever.rotation.z = −0,9).
+func set_zap_lever(down: bool) -> void:
+	zap_lever.rotation.x = 0.9 if down else 0.0
 
 
 ## Поворот колеса вслед за штурвалом: turn −1…1 (вправо — по часовой, если смотреть из кресла).
