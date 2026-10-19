@@ -7,12 +7,16 @@ class_name Searchlight
 ## Прожектор в осях корабля: под носом, перед носовым окном.
 const LAMP := Vector3(0.0, 0.8, -6.8)
 const COLOR := Color("e6fbff")
-const ENERGY := 2.2
+## Ярче, чем в браузере (2,2 — у тестера пятна не было видно, #47): отмель под льдом светлая, свет складывается
+## с рассеянным, а дальше 40 м его наполовину съедает туман.
+const ENERGY := 10.0
+const SPOT_EDGE := 0.7                     ## SpotLight3D.spot_angle_attenuation: край конуса гаснет мягко
 const ATTENUATION := 0.15                  ## SpotLight3D.spot_attenuation: свет почти не слабеет до конца дальности
 const BASE_RANGE := 120.0
 const HALF_ANGLE := 0.45                   ## рад
-const AIM_DOWN := 10.8                     ## прицел относительно прожектора: (0, −10, −40) − LAMP
-const AIM_AHEAD := 33.2
+## Наклон вниз 14°, а не 18° браузера (прицел (0, −10, −40)): из кресла пилота кромка пульта — ≈ 15° ниже
+## горизонта, и при 18° середина пятна пряталась под ними (#47).
+const PITCH := 14.0
 const BEAM_LENGTH := 55.0
 const BEAM_TIP := 0.3
 const BEAM_END := 13.0
@@ -21,9 +25,9 @@ const BUTTON_ON := Color(1.0, 0.74, 0.32, 0.9)      ## янтарь
 const BUTTON_OFF := Color(0.75, 0.95, 1.0, 0.3)
 
 
-## Наклон луча вниз от горизонта, градусы (≈ 18°).
+## Наклон луча вниз от горизонта, градусы.
 static func pitch_deg() -> float:
-	return rad_to_deg(atan2(AIM_DOWN, AIM_AHEAD))
+	return PITCH
 
 
 ## Половина угла конуса для SpotLight3D.spot_angle, градусы (≈ 25,8°).
