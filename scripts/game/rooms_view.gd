@@ -8,7 +8,7 @@ var doors: Array[Node3D] = []      ## створки люков 2…4 (у пер
 var reactor_rod: MeshInstance3D
 var _rod_mat: StandardMaterial3D
 var reactor_light: OmniLight3D
-var airlock_cover: MeshInstance3D   ## крышка нижнего шлюза (пока диск; модель — MOD-010, issue #20)
+var airlock_cover: MeshInstance3D   ## крышка нижнего шлюза (пока диск; модель MOD-010 — models/lyuk-tryuma-kryshka.glb)
 var valve_wheel: Node3D            ## маховик вентиля сброса пара (MOD-009), крутится по x
 var panel_lid: Node3D              ## крышка щитка «Аварийный сброс» (MOD-009), откидывается по z
 var steam: CPUParticles3D          ## пар из вентиля
