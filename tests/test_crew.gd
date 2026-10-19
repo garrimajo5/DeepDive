@@ -96,15 +96,41 @@ func test_own_figure_hides_head() -> void:
 	ok(own.has("arm_l") and own.has("hand_r") and not own.has("head"), "в кресле видны руки на штурвале")
 
 
+func test_bow_moves_eye_forward_when_looking_down() -> void:
+	## #49: взгляд вниз наклоняет голову — глаз уходит вперёд, чтобы видеть свои ноги, а не макушки бёдер.
+	eq(Deck.Walker.bow(0.0, 0.0), Vector3.ZERO, "взгляд прямо — без наклона")
+	eq(Deck.Walker.bow(0.5, 0.0), Vector3.ZERO, "взгляд вверх — без наклона")
+	var b := Deck.Walker.bow(-Deck.Walker.MAX_PITCH, 0.0)
+	ok(b.z < -0.2 and absf(b.x) < 1e-6, "вниз: глаз вперёд к носу (%.2f)" % b.z)
+	ok(b.y < 0.0 and b.y > -0.1, "и чуть ниже (%.2f)" % b.y)
+	var side := Deck.Walker.bow(-1.0, PI / 2.0)
+	ok(side.x < -0.15, "лицом к левому борту — вперёд по −X")
+	var m := Crew.Member.new()
+	m.follow(0.0, -3.0, 0.0, false, 0.0, 0.1, -1.2)
+	var w := Deck.Walker.new()
+	w.z = -3.0
+	w.pitch = -1.2
+	near(m.eye().distance_to(Deck.Pilot.new().eye(w)), 0.0, 1e-6, "глаз фигуры = камера")
+
+
+func test_idle_hands_in_front_of_thighs() -> void:
+	var m := Crew.Member.new()
+	m.follow(0.0, 0.0, 0.0, false, 0.0, 0.1)
+	var j := m.joints()
+	for k in ["l", "r"]:
+		ok(j["hand_" + k].z < j["hip_" + k].z - 0.12, "кисть перед бедром (%.2f)" % (j["hip_" + k].z - j["hand_" + k].z))
+
+
 func test_snapshot_round_trip() -> void:
 	var a := Crew.Member.new(Crew.Role.ENGINEER, "Вера")
-	a.follow(0.0, 0.0, 0.3, false, 0.0, 1.0 / 30.0)
+	a.follow(0.0, 0.0, 0.3, false, 0.0, 1.0 / 30.0, -0.7)
 	for i in 7:
-		a.follow(a.x, a.z - 0.08, 0.3, false, 0.0, 1.0 / 30.0)
+		a.follow(a.x, a.z - 0.08, 0.3, false, 0.0, 1.0 / 30.0, -0.7)
 	var b := Crew.Member.new()
 	b.apply(a.snapshot())
 	eq(b.role, Crew.Role.ENGINEER, "роль")
 	eq(b.name, "Вера", "имя")
+	near(b.pitch, -0.7, 1e-6, "наклон головы")
 	var pa := a.parts()
 	var pb := b.parts()
 	for k in pa:

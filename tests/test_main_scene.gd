@@ -26,7 +26,7 @@ func test_pad_walks_forward() -> void:
 	await frames(20)
 	r.end(1)
 	ok(main.walker.z < z0 - 0.1, "прошли к носу")
-	near(main.camera.position.z, main.walker.z, 1e-4, "камера за игроком")
+	near(main.camera.position.z, main.pilot.eye(main.walker).z, 1e-4, "камера за игроком")
 
 
 func test_swipe_turns_camera() -> void:

@@ -26,6 +26,19 @@ func test_own_figure_follows_player() -> void:
 	ok(_shown(0, "head") == null, "свою голову не видно")
 
 
+func test_look_down_sees_own_legs_and_hands() -> void:
+	## #49: стоя взгляд вниз на 70° (как шаг 06b сценария тестера) — в кадре свои ступни и обе кисти.
+	main.walker.reset()
+	main.walker.pitch = deg_to_rad(-70.0)
+	main.step(1.0 / 30.0)
+	near(main.camera.position.distance_to(main.me.eye()), 0.0, 1e-4, "камера в глазах фигуры")
+	var to_world: Transform3D = main.crew_view.global_transform
+	for part in ["foot_l", "foot_r", "hand_l", "hand_r"]:
+		var t: Transform3D = _shown(0, part)
+		ok(main.camera.is_position_in_frustum(to_world * t.origin), "в кадре: " + part)
+	main.walker.reset()
+
+
 func test_seated_hands_on_wheel_in_scene() -> void:
 	main.sit_at_helm()
 	main.helm.turn = 0.0

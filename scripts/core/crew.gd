@@ -35,6 +35,8 @@ const EYE_UP := Deck.Walker.EYE - HIP  ## от таза до глаз
 const STRIDE := 1.3
 const LEG_SWING := 0.45
 const ARM_SWING := 0.35
+## Стоя локоть согнут: предплечье вперёд на 0,5 рад от вертикали, кисти перед бёдрами.
+const IDLE_FOREARM := 0.5
 ## Сидя: наклон к штурвалу; таз — seat_hip() (над сиденьем кресла ~0,5 м).
 const SEAT_LEAN := 0.44  ## рад (≈25°)
 ## Хват колеса: точки на ободе ±55° от верха, радиус обода 0,25 м (MOD-002 Ø 0,55). Руки идут за колесом
@@ -116,6 +118,7 @@ class Member:
 	var x := 0.0
 	var z := 0.0
 	var yaw := 0.0
+	var pitch := 0.0  ## взгляд вверх/вниз, как Deck.Walker.pitch (стоя голова наклоняется — Walker.bow)
 	var seated := false
 	var wheel_turn := 0.0
 	var phase := 0.0  ## фаза шага, рад
@@ -127,13 +130,14 @@ class Member:
 		name = n if n != "" else ROLE_NAMES[r]
 
 	## Шаг позы: место и курс игрока; шаг ног — по пройденному пути.
-	func follow(px: float, pz: float, pyaw: float, is_seated: bool, turn: float, dt: float) -> void:
+	func follow(px: float, pz: float, pyaw: float, is_seated: bool, turn: float, dt: float, ppitch: float = 0.0) -> void:
 		var p := Vector2(px, pz)
 		var moved := 0.0 if _last == Vector2.INF or is_seated != seated else p.distance_to(_last)
 		_last = p
 		x = px
 		z = pz
 		yaw = pyaw
+		pitch = ppitch
 		seated = is_seated
 		wheel_turn = turn
 		phase = wrapf(phase + moved / STRIDE * TAU, 0.0, TAU)
@@ -146,7 +150,7 @@ class Member:
 	func eye() -> Vector3:
 		if seated:
 			return Vector3(0.0, Deck.SEAT_EYE, Deck.SEAT_Z)
-		return Vector3(x, Deck.Walker.EYE, z)
+		return Vector3(x, Deck.Walker.EYE, z) + Deck.Walker.bow(pitch, yaw)
 
 	## Суставы в осях корабля: hip, neck, head, shoulder_l/r, elbow_l/r, wrist_l/r, hand_l/r, knee_l/r, ankle_l/r, toe_l/r.
 	func joints() -> Dictionary:
@@ -205,7 +209,8 @@ class Member:
 				var ah := -sin(ph) * ARM_SWING * swing
 				var adir := Vector3.DOWN * cos(ah) + fwd * sin(ah) + right * (0.08 * s)
 				var elbow := sh + adir.normalized() * UPPER_ARM
-				var fa := ah + 0.15 + 0.25 * swing
+				## Предплечье чуть вперёд (кисти перед бёдрами — их видно взглядом вниз, #49), на ходу — сильнее.
+				var fa := ah + IDLE_FOREARM + 0.1 * swing
 				var wrist := elbow + (Vector3.DOWN * cos(fa) + fwd * sin(fa)).normalized() * FOREARM
 				j["elbow_" + k] = elbow
 				j["wrist_" + k] = wrist
@@ -246,7 +251,7 @@ class Member:
 
 	## Снимок для сети: всё, что нужно клиенту, чтобы поставить фигуру.
 	func snapshot() -> Dictionary:
-		return {"role": role, "name": name, "x": x, "z": z, "yaw": yaw, "seated": seated,
+		return {"role": role, "name": name, "x": x, "z": z, "yaw": yaw, "pitch": pitch, "seated": seated,
 			"turn": wheel_turn, "phase": phase, "swing": swing}
 
 	func apply(s: Dictionary) -> void:
@@ -255,6 +260,7 @@ class Member:
 		x = float(s.get("x", x))
 		z = float(s.get("z", z))
 		yaw = float(s.get("yaw", yaw))
+		pitch = float(s.get("pitch", pitch))
 		seated = bool(s.get("seated", seated))
 		wheel_turn = float(s.get("turn", wheel_turn))
 		phase = float(s.get("phase", phase))

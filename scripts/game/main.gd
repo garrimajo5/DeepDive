@@ -216,7 +216,7 @@ func step(dt: float) -> void:
 	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0)
 	rooms.apply(layout, reactor, airlock, engine)
 	message.update(dt)
-	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt)
+	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt, walker.pitch)
 	crew_view.apply()
 	_place_ship()
 	_place_camera()

@@ -89,6 +89,10 @@ class Walker:
 	const EYE := 1.65
 	const MAX_PITCH := 1.45
 	const LOOK_SENS := 0.0055  ## радиан на «точку» экрана (1/160 дюйма), как в браузере
+	## Наклон головы: взгляд вниз поворачивает голову на шее, глаз уходит вперёд и чуть вниз — так стоя видно
+	## свои ноги и руки перед собой, а не макушки бёдер прямо под камерой (issue #49).
+	const BOW_FWD := 0.22
+	const BOW_DOWN := 0.07
 
 	var x := 0.0
 	var z := STAND_Z
@@ -104,6 +108,12 @@ class Walker:
 
 	func forward() -> Vector2:
 		return Vector2(-sin(yaw), -cos(yaw))
+
+	## Смещение глаза от наклона головы (оси корабля): только при взгляде вниз, 0 при взгляде прямо и вверх.
+	static func bow(p_pitch: float, p_yaw: float) -> Vector3:
+		var a := maxf(0.0, -p_pitch)
+		var f := BOW_FWD * sin(a)
+		return Vector3(-sin(p_yaw) * f, -BOW_DOWN * (1.0 - cos(a)), -cos(p_yaw) * f)
 
 	func right() -> Vector2:
 		return Vector2(cos(yaw), -sin(yaw))
@@ -142,4 +152,4 @@ class Pilot:
 	func eye(w: Walker) -> Vector3:
 		if seated:
 			return Vector3(0.0, SEAT_EYE, SEAT_Z)
-		return Vector3(w.x, Walker.EYE, w.z)
+		return Vector3(w.x, Walker.EYE, w.z) + Walker.bow(w.pitch, w.yaw)
