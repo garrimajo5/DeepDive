@@ -7,9 +7,18 @@ const BRIDGE_MIN := Vector2(-5.0, -6.0)  ## (x, z)
 const BRIDGE_MAX := Vector2(5.0, 2.0)
 const CEILING := 3.2
 const NOSE_INNER := -5.9
+## Пилот в кресле: глаз над сиденьем, взгляд прямо на нос (в кадре рама окна и штурвал).
+const SEAT_Z := -4.3
+const SEAT_EYE := 1.62
+## Встав из кресла, игрок оказывается за ним, лицом к носу, как на старте (замечание тестера в pogrujenie).
+const STAND_Z := -3.0
+## Угол обзора по вертикали, как в браузере (js/game.js): 72° в альбомной.
+const FOV := 72.0
 
-## Препятствия на полу мостика: центр (x, z) и радиус. Голостол сонара — круг ~1,2 м.
-const OBSTACLES: Array = [[Vector2(0.0, -1.2), 0.75]]
+## Препятствия на полу мостика: центр (x, z) и радиус. Голостол сонара (Ø 2,2 м внизу, сужается кверху) и кресло пилота.
+const OBSTACLES: Array = [[Vector2(0.0, -1.2), 0.75], [Vector2(0.0, -3.95), 0.4]]
+## Пульт пилота со штурвалом у носовой стены: x −1,3…1,3, от стены до z −5,1 (колесо на z −5,25).
+const CONSOLE_RECT := Rect2(-1.3, -6.0, 2.6, 0.9)
 
 
 ## Пост кнопки действия: точка на полу, радиус, подпись.
@@ -34,12 +43,14 @@ static func can_stand(x: float, z: float, radius: float = Walker.RADIUS) -> bool
 	for o in OBSTACLES:
 		if Vector2(x, z).distance_to(o[0]) < float(o[1]) + radius:
 			return false
+	if CONSOLE_RECT.grow(radius).has_point(Vector2(x, z)):
+		return false
 	return true
 
 
-## Посты мостика. Штурвал: стоя у кресла пилота.
+## Посты мостика. Штурвал: подойти к креслу пилота.
 static func posts() -> Array[Post]:
-	return [Post.new("helm", Vector2(0.0, -3.6), 1.0, "Штурвал")]
+	return [Post.new("helm", Vector2(0.0, SEAT_Z), 1.7, "Сесть за штурвал")]
 
 
 ## Ближайший пост, в радиус которого попал игрок, или null.
@@ -64,14 +75,14 @@ class Walker:
 	const LOOK_SENS := 0.0055  ## радиан на «точку» экрана (1/160 дюйма), как в браузере
 
 	var x := 0.0
-	var z := -3.0
+	var z := STAND_Z
 	var yaw := 0.0
 	var pitch := -0.08
 	var stand: Callable = Deck.can_stand
 
 	func reset() -> void:
 		x = 0.0
-		z = -3.0
+		z = STAND_Z
 		yaw = 0.0
 		pitch = -0.08
 
@@ -96,3 +107,23 @@ class Walker:
 	func look(d: Vector2) -> void:
 		yaw = wrapf(yaw - d.x * LOOK_SENS, -PI, PI)
 		pitch = clampf(pitch - d.y * LOOK_SENS, -MAX_PITCH, MAX_PITCH)
+
+
+## Кто за штурвалом. Сесть — взгляд прямо на нос; встать — за креслом, лицом к носу.
+class Pilot:
+	var seated := false
+
+	func sit(w: Walker) -> void:
+		seated = true
+		w.yaw = 0.0
+		w.pitch = 0.0
+
+	func stand(w: Walker) -> void:
+		seated = false
+		w.reset()
+
+	## Глаз игрока в осях корабля.
+	func eye(w: Walker) -> Vector3:
+		if seated:
+			return Vector3(0.0, SEAT_EYE, SEAT_Z)
+		return Vector3(w.x, Walker.EYE, w.z)

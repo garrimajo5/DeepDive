@@ -35,5 +35,7 @@ func _go() -> void:
 	await RenderingServer.frame_post_draw
 	var img := root.get_texture().get_image()
 	img.save_png(out)
-	print("SHOT ", out, " ", img.get_size())
+	print("SHOT ", out, " ", img.get_size(), " вызовов отрисовки: ",
+		Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
+		", примитивов: ", Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
 	quit(0)
