@@ -6,6 +6,7 @@ extends Node3D
 var walker := Deck.Walker.new()
 var pilot := Deck.Pilot.new()
 var layout := ShipLayout.new()
+var airlock := Airlock.new()
 var posts: Array[Deck.Post] = []
 var helm := Helm.Ship.new()
 var reactor := Reactor.new()
@@ -108,6 +109,7 @@ func _ready() -> void:
 	overlay.name = "Управление"
 	ui.add_child(overlay)
 	reactor.message.connect(func(title: String, _text: String) -> void: say(title))
+	airlock.message.connect(say)
 	_place_ship()
 	_place_camera()
 	if QaRunner.pending():
@@ -170,9 +172,12 @@ func step(dt: float) -> void:
 		if post and r.action_pressed:
 			use_post(post.id)
 	layout.update(dt)
+	airlock.update(dt)
 	for p in posts:
 		if p.id.begins_with("door"):
 			p.label = "Закрыть люк" if layout.doors[int(p.id.substr(4))].open else "Открыть люк"
+		elif p.id == "airlock":
+			p.label = airlock.label()
 	current.update(dt)
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
 	helm.update(dt, reactor.k(Reactor.Sys.ENGINES), current.vel())
@@ -197,7 +202,7 @@ func step(dt: float) -> void:
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	bridge.set_hatch(layout.doors[0].offset())
 	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0)
-	rooms.apply(layout, reactor)
+	rooms.apply(layout, reactor, airlock)
 	message.update(dt)
 	_place_ship()
 	_place_camera()
@@ -206,7 +211,7 @@ func step(dt: float) -> void:
 
 
 ## Короткая подпись на кнопке действия у поста.
-const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер", "sonar": "Сонар", "zap": "Разряд"}
+const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер", "sonar": "Сонар", "zap": "Разряд", "airlock": "Шлюз"}
 
 
 ## Кнопка действия у поста.
@@ -220,6 +225,8 @@ func use_post(id: String) -> void:
 			ping_sonar()
 		"zap":
 			fire_zap()
+		"airlock":
+			airlock.toggle()
 		"scanner":
 			say("Сканер: рядом никого")
 		_ when id.begins_with("door"):
@@ -395,6 +402,8 @@ func status_parts() -> Array:
 	if reactor.alert().is_empty():
 		parts.append("реактор %d/%d" % [reactor.used(), reactor.limit()])
 	parts.append("течение на %s %s м/с" % [Status.rumb(current.vel()), _num(Helm.SeaCurrent.SPEED)])
+	if not airlock.closed():
+		parts.append("шлюз открыт" if airlock.fully_open() else "шлюз в движении")
 	if not pilot.seated and not at_power:
 		var post := Deck.nearest(posts, walker.x, walker.z)
 		if post:
@@ -426,6 +435,10 @@ func debug_setup(kv: Dictionary) -> void:
 			EcoLink.near("veil", "вуаль", helm.pos + Vector3(10, 0, 60), helm.pos)], helm.pos)
 		time += float(kv.get("age", "1.0"))
 		sonar_view.show_state(sonar, helm.pos, helm.yaw, time, true)
+	if kv.get("lock", "0") == "1":  # открытый шлюз трюма
+		airlock.open = true
+		airlock.t = 1.0
+		rooms.apply(layout, reactor, airlock)
 	if kv.has("hot"):  # hot=1 — перегрев (для снимка табло)
 		reactor.start_hot(false)
 		reactor.heat = float(kv["hot"])
