@@ -16,6 +16,7 @@ var camera: Camera3D
 var overlay: TouchOverlay
 var hint: Label
 var env: Environment
+var qa: QaRunner           ## прогон сценария тестера, если он есть (docs/QA.md)
 
 
 func _ready() -> void:
@@ -51,6 +52,17 @@ func _ready() -> void:
 	ui.add_child(overlay)
 	_place_ship()
 	_place_camera()
+	if QaRunner.pending():
+		start_qa()
+
+
+## Запустить сценарий тестера: из user://qa/scenario.json или из текста (тесты).
+func start_qa(text: String = "") -> QaRunner:
+	qa = QaRunner.new()
+	qa.name = "Сценарий тестера"
+	add_child(qa)
+	qa.start(self, text)
+	return qa
 
 
 func _build_world() -> void:
@@ -69,6 +81,8 @@ func _process(dt: float) -> void:
 
 ## Один шаг игры: ввод, игрок, корабль, вода. Вынесен из _process для тестов.
 func step(dt: float) -> void:
+	if qa:
+		qa.tick(dt)
 	var r := overlay.router
 	if pilot.seated:
 		helm.in_thrust = r.move.y

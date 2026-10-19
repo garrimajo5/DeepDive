@@ -1,73 +1,90 @@
-# Прогон сборки на эмуляторе: скачать APK из релиза apk-latest, поставить, снять скриншоты и лог.
-# Пишет результат в D:\AI\qa-build\run\ и печатает итог. Отчёт пишет Claude по docs/QA.md.
-# Собирать APK локально не нужно: проверяем ровно тот файл, что собрал CI из main.
-# Скрипт лежит в main (tools/qa/) и меняется вместе с игрой: перед запуском обнови клон — git -C D:\AI\DeepDive pull.
-param([switch]$Force)
+# Прогон сценария тестера (tools/qa/scenario.json): игра сама проходит шаги, снимает скриншоты и пишет лог.
+# Результат — в D:\AI\qa-build\run\ (скриншоты *.png, log.txt, logcat.txt), итог печатается в конце.
+# Отчёт по результату пишет Claude по docs/QA.md. Перед запуском обнови клон: git -C D:\AI\DeepDive pull.
+#
+#   run-qa.ps1          — APK из релиза apk-latest на эмуляторе Pixel_8 (ровно то, что собрал CI из main)
+#   run-qa.ps1 -Pc      — та же игра из клона в Godot на этом компьютере (D:\Godot), без эмулятора: быстро
+#                         проверить сценарий и картинку; телефонное (касания, частоту кадров) смотреть на эмуляторе
+#   -Force              — прогнать APK, даже если коммит тот же; -Scenario <файл> — свой сценарий
+param([switch]$Pc, [switch]$Force, [string]$Scenario)
 $ErrorActionPreference = 'Continue'
-$repo  = 'garrimajo5/DeepDive'
+$repo  = 'D:\AI\DeepDive'
 $out   = 'D:\AI\qa-build'
 $run   = "$out\run"
-$sdk   = "$env:LOCALAPPDATA\Android\Sdk"
-$adb   = "$sdk\platform-tools\adb.exe"
 $app   = 'com.garrimajo5.deepdive'
 $apk   = "$out\DeepDive.apk"
-
+if (-not $Scenario) { $Scenario = "$repo\tools\qa\scenario.json" }
 New-Item -ItemType Directory -Force $out | Out-Null
+Remove-Item -Recurse -Force $run -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force $run | Out-Null
 
-# Какой коммит в релизе: заметка релиза «APK из main, коммит abc1234: …»
-$rel = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/tags/apk-latest" -Headers @{ 'User-Agent' = 'run-qa' }
+# Сценарий + шаг «закрыть игру» в конце
+$steps = Get-Content $Scenario -Raw -Encoding utf8 | ConvertFrom-Json
+$steps = @($steps) + [pscustomobject]@{ do = 'quit' }
+$tmp = "$out\scenario.json"
+[IO.File]::WriteAllText($tmp, ($steps | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding $false))
+
+if ($Pc) {
+  # ---- Godot на этом компьютере ----
+  $godot = Get-ChildItem 'D:\Godot' -Recurse -Filter 'Godot*.exe' | Where-Object Name -notmatch 'console' | Select -First 1
+  if (-not $godot) { Write-Output 'NO_GODOT: не нашёл Godot*.exe в D:\Godot'; exit 1 }
+  $user = "$env:APPDATA\Godot\app_userdata\Погружение\qa"
+  New-Item -ItemType Directory -Force $user | Out-Null
+  Copy-Item $tmp "$user\scenario.json" -Force
+  $head = (git -C $repo rev-parse --short HEAD).Trim()
+  & $godot.FullName --path $repo --import --headless | Out-Null
+  $p = Start-Process $godot.FullName -ArgumentList '--path', $repo, '--resolution', '2400x1080' -PassThru
+  if (-not $p.WaitForExit(180000)) { $p.Kill(); Write-Output 'TIMEOUT: сценарий не закончился за 3 минуты' }
+  Copy-Item "$user\out\*" $run -Force
+  $done = Test-Path "$run\done.txt"
+  Write-Output "PC $head $($godot.Name) done=$done"
+  Write-Output 'log:'; Get-Content "$run\log.txt" -Encoding utf8
+  Write-Output "files: $run"
+  exit 0
+}
+
+# ---- Эмулятор и APK из релиза ----
+$sdk = "$env:LOCALAPPDATA\Android\Sdk"
+$adb = "$sdk\platform-tools\adb.exe"
+$rel = Invoke-RestMethod 'https://api.github.com/repos/garrimajo5/DeepDive/releases/tags/apk-latest' -Headers @{ 'User-Agent' = 'run-qa' }
 $head = if ($rel.body -match 'коммит ([0-9a-f]{7})') { $Matches[1] } else { $rel.published_at }
 $last = if (Test-Path "$out\last-commit.txt") { (Get-Content "$out\last-commit.txt").Trim() } else { '' }
 if ($head -eq $last -and -not $Force) { Write-Output "NO_CHANGES $head"; exit 0 }
 $asset = $rel.assets | Where-Object name -eq 'DeepDive.apk' | Select -First 1
 Invoke-WebRequest $asset.browser_download_url -OutFile $apk -Headers @{ 'User-Agent' = 'run-qa' }
-$range = if ($last) { "$last...$head" } else { '' }
-$newCommits = if ($range) {
-  (Invoke-RestMethod "https://api.github.com/repos/$repo/compare/$range" -Headers @{ 'User-Agent' = 'run-qa' }).commits |
-    ForEach-Object { "$($_.sha.Substring(0,7)) $(($_.commit.message -split "`n")[0])" }
-} else { $rel.body }
 
-Remove-Item -Recurse -Force $run -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force $run | Out-Null
-
-# Эмулятор
 if (-not ((& $adb devices) -match 'emulator-\d+\s+device')) {
-  Start-Process "$sdk\emulator\emulator.exe" -ArgumentList '-avd','Pixel_8' -WindowStyle Minimized
+  Start-Process "$sdk\emulator\emulator.exe" -ArgumentList '-avd', 'Pixel_8' -WindowStyle Minimized
   & $adb wait-for-device
   for ($i = 0; $i -lt 60; $i++) { if ((& $adb shell getprop sys.boot_completed).Trim() -eq '1') { break }; Start-Sleep 5 }
 }
-
-# Установка и запуск. Подпись отладочная и одна на все сборки (android/debug.keystore), -r ставит поверх.
 $inst = ''
 for ($i = 0; $i -lt 3; $i++) { $inst = (& $adb install -r $apk 2>&1 | Out-String); if ($inst -match 'Success') { break }; Start-Sleep 10 }
 if ($inst -notmatch 'Success') { Write-Output "INSTALL_FAILED $head"; $inst; exit 1 }
+
+# Сценарий — в user:// игры (files/qa/). APK отладочный, поэтому run-as работает.
 & $adb shell am force-stop $app
+& $adb push $tmp /data/local/tmp/qa-scenario.json | Out-Null
+& $adb shell "run-as $app sh -c 'mkdir -p files/qa && rm -rf files/qa/out && cp /data/local/tmp/qa-scenario.json files/qa/scenario.json'"
 & $adb logcat -c
 & $adb shell monkey -p $app -c android.intent.category.LAUNCHER 1 | Out-Null
-Start-Sleep 15
-
-# Экран Pixel 8 в альбомной: 2400 × 1080. Крестовина — центр (270, 810), радиус 205; кнопка действия — (2181, 810).
-function Shot($name) { cmd /c "`"$adb`" exec-out screencap -p > `"$run\$name.png`"" }
-Shot '01-start'
-& $adb shell input swipe 1200 500 1500 500 600; Start-Sleep 1; Shot '02-swipe-right'
-& $adb shell input swipe 1500 500 1200 500 600; Start-Sleep 1
-& $adb shell input tap 2181 810; Start-Sleep 2; Shot '03-action'
-& $adb shell input swipe 270 670 270 670 4000; Start-Sleep 1; Shot '04-forward'
-& $adb shell input tap 2181 810; Start-Sleep 2; Shot '05-action-again'
-Start-Sleep 3
-$appPid = (& $adb shell pidof $app).Trim()
-$alive = [bool]$appPid
+$done = $false
+for ($i = 0; $i -lt 90; $i++) {
+  Start-Sleep 2
+  if ((& $adb shell "run-as $app ls files/qa/out/done.txt" 2>&1) -match 'done.txt$') { $done = $true; break }
+}
+Start-Sleep 2
+$names = (& $adb shell "run-as $app ls files/qa/out") -split "`r?`n" | Where-Object { $_ -match '\.(png|txt)$' }
+foreach ($n in $names) { cmd /c "`"$adb`" exec-out run-as $app cat files/qa/out/$n > `"$run\$n`"" }
 & $adb logcat -d | Set-Content "$run\logcat.txt" -Encoding utf8
-if ($alive) { & $adb logcat -d --pid=$appPid | Set-Content "$run\app.txt" -Encoding utf8 } else { Copy-Item "$run\logcat.txt" "$run\app.txt" }
-$errs = Select-String -Path "$run\app.txt" -Pattern ' E godot|SCRIPT ERROR|AndroidRuntime|FATAL' | ForEach-Object { ($_.Line -split ': ', 2)[1] } |
-  Where-Object { $_ -and $_ -notmatch '^\s*$' } |
+$errs = Select-String -Path "$run\logcat.txt" -Pattern ' E godot|SCRIPT ERROR|AndroidRuntime|FATAL' |
+  ForEach-Object { ($_.Line -split ': ', 2)[1] } | Where-Object { $_ -and $_ -notmatch '^\s*$' } |
   Group-Object | Sort Count -Descending | ForEach-Object { "$($_.Count)x $($_.Name)" }
 
 Set-Content "$out\last-commit.txt" $head
-Write-Output "OK $head"
+Write-Output "OK $head done=$done"
 Write-Output "release: $($rel.body)"
 Write-Output "previous tested: $last"
-Write-Output "commits since previous:"; $newCommits
-Write-Output "app alive after test: $alive"
-Write-Output "errors:"; $errs | Select -First 30
+Write-Output 'log:'; if (Test-Path "$run\log.txt") { Get-Content "$run\log.txt" -Encoding utf8 }
+Write-Output 'errors:'; $errs | Select -First 30
 Write-Output "files: $run"
