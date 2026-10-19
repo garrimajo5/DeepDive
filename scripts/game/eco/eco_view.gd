@@ -6,6 +6,9 @@ extends Node3D
 
 ## Мир экосистемы: зерно 20261018, подшаги ≤ 0,05 с.
 var world := EcoWorld.new()
+## Светляки-полосники: шесть стай у кораллов и их MultiMesh.
+var fish: EcoFish
+var fish_view: FishView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир.
 var ground: Callable:
@@ -14,8 +17,15 @@ var ground: Callable:
 		world.ground = value
 
 
+func _init() -> void:
+	fish = world.add(EcoFish.new()) as EcoFish
+	fish_view = FishView.new(fish)
+	add_child(fish_view)
+
+
 ## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
 func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	world.ship = ship
 	world.step(dt)
+	fish_view.sync(world.time)
 	return world.take_link()
