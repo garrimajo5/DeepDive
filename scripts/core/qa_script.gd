@@ -7,12 +7,13 @@ extends RefCounted
 ##   {"do": "press", "what": "action"}               — нажать и отпустить (action, up, down, light)
 ##   {"do": "hold", "what": "pad", "dir": [0, 1], "s": 5} — держать (pad — с направлением [вправо, вперёд])
 ##   {"do": "swipe", "dx": 300, "dy": 0, "s": 0.6}   — свайп обзора, смещение в пикселях вьюпорта
-##   {"do": "goto", "x": -2.2, "z": 17.2, "yaw": 90}  — перейти на палубе (дальние отсеки без ходьбы; yaw в градусах)
+##   {"do": "goto", "x": -2.2, "z": 17.2, "yaw": 90}  — перейти на палубе (дальние отсеки без ходьбы; yaw в градусах,
+##                                                     "pitch" — наклон взгляда в градусах, вниз — минус; без него не меняется)
 ##   {"do": "hot", "heat": 80}                       — перегреть реактор (проверить вентиль и щиток машинного)
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°], ["hot", heat], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
 const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad"]
@@ -107,7 +108,10 @@ func _begin(st: Dictionary, out: Array) -> void:
 		"shot":
 			out.append(["shot", str(st.get("name", "shot-%02d" % (index + 1)))])
 		"goto":
-			out.append(["goto", float(st.get("x", 0.0)), float(st.get("z", 0.0)), float(st.get("yaw", 0.0))])
+			var g := ["goto", float(st.get("x", 0.0)), float(st.get("z", 0.0)), float(st.get("yaw", 0.0))]
+			if st.has("pitch"):
+				g.append(float(st["pitch"]))
+			out.append(g)
 		"hot":
 			out.append(["hot", float(st.get("heat", 80.0))])
 		"log":
