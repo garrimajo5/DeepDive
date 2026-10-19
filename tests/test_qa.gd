@@ -47,9 +47,12 @@ func test_scene_runs_scenario() -> void:
 	eq(qa.script_q.errors.size(), 0, "сценарий из tools/qa без ошибок")
 	var z0 := main.helm.pos.z
 	var sat := false
+	var holo_seen := -1  ## #48: в момент импульса голостол в кадре (1) или нет (0)
 	for i in 1500:  # 50 с игры
 		main.step(1.0 / 30.0)
 		sat = sat or main.pilot.seated
+		if holo_seen < 0 and main.sonar.ping_time > 0.0:
+			holo_seen = 1 if main.camera.is_position_in_frustum(main.sonar_view.global_position) else 0
 		if qa.script_q.finished:
 			break
 	ok(qa.script_q.finished, "сценарий дошёл до конца")
@@ -65,6 +68,8 @@ func test_scene_runs_scenario() -> void:
 	ok(not main.at_power, "и закрыли")
 	eq(main.reactor.share[Reactor.Sys.ENGINES], 25, "на пульте сняли 5 с двигателей")
 	ok(main.sonar.ping_time > 0.0, "у голостола дали импульс сонара")
+	eq(holo_seen, 1, "при импульсе голограмма в кадре (#48)")
+	ok(not log.contains("курс -"), "курс в логе — как на приборах, без минуса (#48)")
 	ok(main.zap.last > 0.0, "у рычага дали разряд")
 	ok(log.contains("вентиль: пар, реактор остывает | "), "в машинном держали вентиль")
 	ok(main.reactor.scram > 0.0 and log.contains("аварийный сброс щитком | ") and log.contains("° сброс"),

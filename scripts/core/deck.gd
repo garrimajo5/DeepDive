@@ -69,6 +69,12 @@ static func posts() -> Array[Post]:
 	]
 
 
+## Курс взгляда (как Walker.yaw) из точки from на точку to на палубе (x, z).
+static func yaw_to(from: Vector2, to: Vector2) -> float:
+	var d := to - from
+	return atan2(-d.x, -d.y)
+
+
 ## Ближайший пост, в радиус которого попал игрок, или null.
 static func nearest(posts_list: Array[Post], x: float, z: float) -> Post:
 	var best: Post = null

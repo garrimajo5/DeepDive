@@ -107,3 +107,32 @@ func test_water_darkens_with_depth() -> void:
 	await frames(1)
 	ok(main.env.background_color.v < c1.v, "в глубине вода темнее")
 	ok(main.env.fog_enabled, "туман включён")
+
+
+func test_sonar_post_looks_at_holo() -> void:
+	## #48: у голостола «Сонар» поворачивает взгляд на голограмму, откуда бы ни подошёл.
+	for at in [Vector2(1.5, -1.2), Vector2(-1.5, -1.0), Vector2(0.4, 0.2)]:
+		main.walker.reset()
+		main.walker.x = at.x
+		main.walker.z = at.y
+		main.walker.yaw = PI   # спиной к носу
+		main.use_post("sonar")
+		main.step(1.0 / 30.0)
+		var holo: Vector3 = main.sonar_view.global_position
+		ok(main.camera.is_position_in_frustum(holo), "голограмма в кадре из (%.1f, %.1f)" % [at.x, at.y])
+		var to := (holo - main.camera.global_position).normalized()
+		ok(to.dot(-main.camera.global_basis.z) > 0.97, "и посередине кадра")
+	main.walker.reset()
+
+
+func test_zap_post_looks_at_lever() -> void:
+	main.walker.reset()
+	main.walker.x = Zap.POST_AT.x + 0.3
+	main.walker.z = Zap.POST_AT.y + 0.4
+	main.walker.yaw = 0.0
+	main.use_post("zap")
+	main.step(1.0 / 30.0)
+	var lever: Vector3 = main.ship.global_transform * Zap.LEVER_POS
+	var to := (lever - main.camera.global_position).normalized()
+	ok(to.dot(-main.camera.global_basis.z) > 0.97, "рычаг разряда посередине кадра")
+	main.walker.reset()

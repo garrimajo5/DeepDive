@@ -237,8 +237,10 @@ func use_post(id: String) -> void:
 		"energy":
 			open_power()
 		"sonar":
+			look_at_point(Vector3(0.0, SonarView.TOP_Y, BridgeProps.TABLE_Z))
 			ping_sonar()
 		"zap":
+			look_at_point(Zap.LEVER_POS)
 			fire_zap()
 		"airlock":
 			airlock.toggle()
@@ -280,6 +282,14 @@ func say(msg: String) -> void:
 
 
 ## Импульс сонара: сила — доля «Сонар»; существ в этот же шаг сообщит живой мир (EcoLink.NEAR).
+## Взгляд на то, чем пользуешься (#48), как у пульта энергии: голограмма сонара, рычаг разряда. p — оси корабля.
+func look_at_point(p: Vector3) -> void:
+	var me_at := Vector2(walker.x, walker.z)
+	var to := Vector2(p.x, p.z)
+	walker.yaw = Deck.yaw_to(me_at, to)
+	walker.pitch = atan2(p.y - Deck.Walker.EYE, maxf(me_at.distance_to(to), 0.3))
+
+
 func ping_sonar() -> void:
 	if reactor.k(Reactor.Sys.SONAR) > 0.0 and sonar.can_ping(time) and vitals.energy < Vitals.SONAR_COST:
 		say("Мало энергии: для импульса нужно %d единиц" % int(Vitals.SONAR_COST))
