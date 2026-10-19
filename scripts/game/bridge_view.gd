@@ -1,16 +1,34 @@
 class_name BridgeView
 extends Node3D
-## Рисует оболочку мостика из BridgePlan: все бруски одной краски — одна поверхность меша,
-## на весь мостик один MeshInstance3D (5 поверхностей, 5 вызовов отрисовки). Плафоны светятся.
+## Рисует мостик: оболочку из BridgePlan (бруски одной краски — одна поверхность меша, на всю оболочку
+## один MeshInstance3D), стекло носового окна и модели художника из BridgeProps (GLB прямо из models/).
+## Всё на слое корабля: свет сквозь лёд его не освещает, только плафоны.
 
 var mesh_instance: MeshInstance3D
+var props := {}        ## имя модели → узел
+var wheel_mount: Node3D  ## узел штурвала (наклон к пилоту), колесо — его дочерняя модель
+var wheel: Node3D
 
 
 func _ready() -> void:
 	mesh_instance = MeshInstance3D.new()
 	mesh_instance.name = "Оболочка"
 	mesh_instance.mesh = build_mesh()
+	mesh_instance.layers = OceanView.LAYER_SHIP
 	add_child(mesh_instance)
+	_add_glass()
+	for p in BridgeProps.fixed():
+		props[p.model] = _add_model(p, self)
+	wheel_mount = Node3D.new()
+	wheel_mount.name = "Штурвал"
+	wheel_mount.position = BridgeProps.wheel().pos
+	wheel_mount.rotation_degrees.x = BridgeProps.WHEEL_TILT
+	add_child(wheel_mount)
+	var wp := BridgeProps.wheel()
+	wp.pos = Vector3.ZERO
+	wheel = _add_model(wp, wheel_mount)
+	props[BridgeProps.WHEEL] = wheel
+	_light_screens(props[BridgeProps.SCREENS])
 	# тёплый свет плафонов: две лампы под потолком вдоль мостика
 	for z in [-3.5, 0.0]:
 		var l := OmniLight3D.new()
@@ -18,7 +36,55 @@ func _ready() -> void:
 		l.light_energy = 0.9
 		l.omni_range = 7.5
 		l.position = Vector3(0, 2.8, z)
+		l.light_cull_mask = OceanView.LAYER_SHIP
 		add_child(l)
+
+
+## Поворот колеса вслед за штурвалом: turn −1…1 (вправо — по часовой, если смотреть из кресла).
+func set_wheel_turn(turn: float) -> void:
+	if wheel:
+		wheel.rotation_degrees.z = -turn * BridgeProps.WHEEL_TURN_DEG
+
+
+func _add_model(p: BridgeProps.Prop, parent: Node3D) -> Node3D:
+	var scene: PackedScene = load(p.path())
+	var n: Node3D = scene.instantiate()
+	n.name = p.label
+	n.position = p.pos
+	n.scale = p.scale
+	parent.add_child(n)
+	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).layers = OceanView.LAYER_SHIP
+	return n
+
+
+## Экраны пульта светятся ровным голубым (пока на них ничего не рисуем).
+func _light_screens(n: Node3D) -> void:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = BridgeProps.SCREEN_GLOW
+	m.emission_enabled = true
+	m.emission = BridgeProps.SCREEN_GLOW
+	m.emission_energy_multiplier = 1.1
+	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).material_override = m
+
+
+## Стекло носового окна: едва заметный бирюзовый отлив, чтобы было видно, что окно застеклено.
+func _add_glass() -> void:
+	var g := MeshInstance3D.new()
+	g.name = "Стекло окна"
+	var q := QuadMesh.new()
+	q.size = Vector2(2 * BridgePlan.WINDOW_HALF, BridgePlan.WINDOW_TOP - BridgePlan.WINDOW_BOTTOM)
+	g.mesh = q
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.6, 0.85, 0.9, 0.07)
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	g.material_override = m
+	g.position = Vector3(0, (BridgePlan.WINDOW_TOP + BridgePlan.WINDOW_BOTTOM) / 2.0, BridgePlan.NOSE_INNER - 0.05)
+	g.layers = OceanView.LAYER_SHIP
+	add_child(g)
 
 
 static func build_mesh() -> ArrayMesh:
