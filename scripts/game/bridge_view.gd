@@ -8,6 +8,9 @@ var mesh_instance: MeshInstance3D
 var props := {}        ## имя модели → узел
 var wheel_mount: Node3D  ## узел штурвала (наклон к пилоту), колесо — его дочерняя модель
 var wheel: Node3D
+var sliders: Array[Node3D] = []   ## ползунки пульта энергии: двигатели, сонар, жизнь, разряд, прожектор
+var hatch_door: Node3D
+var hatch_wheel: Node3D
 
 
 func _ready() -> void:
@@ -29,6 +32,18 @@ func _ready() -> void:
 	wheel = _add_model(wp, wheel_mount)
 	props[BridgeProps.WHEEL] = wheel
 	_light_screens(props[BridgeProps.SCREENS])
+	for p in BridgeProps.side_props():
+		props[p.model] = _add_model(p, self)
+	var panel: Node3D = props[BridgeProps.ENERGY]
+	for i in BridgeProps.SLIDER_X.size():
+		var s := _add_model(BridgeProps.Prop.new(BridgeProps.SLIDER, "Ползунок %d" % (i + 1), Vector3.ZERO), panel)
+		sliders.append(s)
+		light_texture(s)
+		set_slider(i, 0.5)
+	hatch_door = _add_model(BridgeProps.Prop.new(BridgeProps.HATCH_DOOR, "Створка люка", BridgeProps.HATCH_DOOR_OFFSET),
+		props[BridgeProps.HATCH_FRAME])
+	hatch_wheel = _add_model(BridgeProps.Prop.new(BridgeProps.HATCH_WHEEL, "Колесо люка", BridgeProps.HATCH_WHEEL_OFFSET),
+		hatch_door)
 	for name in props:
 		if TextureGlow.MODELS.has(name):
 			light_texture(props[name])
@@ -43,6 +58,12 @@ func _ready() -> void:
 		add_child(l)
 
 
+## Ползунок i пульта энергии на долю share 0…1 (паз наклонён: ползунок идёт по лицу пульта).
+func set_slider(i: int, share: float) -> void:
+	var y := BridgeProps.slider_y(share)
+	sliders[i].position = Vector3(BridgeProps.SLIDER_X[i], y, BridgeProps.slider_z(y))
+
+
 ## Поворот колеса вслед за штурвалом: turn −1…1 (вправо — по часовой, если смотреть из кресла).
 func set_wheel_turn(turn: float) -> void:
 	if wheel:
@@ -55,6 +76,7 @@ func _add_model(p: BridgeProps.Prop, parent: Node3D) -> Node3D:
 	n.name = p.label
 	n.position = p.pos
 	n.scale = p.scale
+	n.rotation_degrees.y = p.rot_y
 	parent.add_child(n)
 	for mi in n.find_children("*", "MeshInstance3D", true, false):
 		(mi as MeshInstance3D).layers = OceanView.LAYER_SHIP

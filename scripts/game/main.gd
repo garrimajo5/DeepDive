@@ -111,8 +111,8 @@ func step(dt: float) -> void:
 		walker.look(overlay.look_points())
 		walker.walk(Vector2(r.move), dt)
 		var post := Deck.nearest(posts, walker.x, walker.z)
-		if post and r.action_pressed and post.id == "helm":
-			sit_at_helm()
+		if post and r.action_pressed:
+			use_post(post.id)
 	current.update(dt)
 	helm.update(dt, 1.0, current.vel())
 	message.update(dt)
@@ -120,6 +120,23 @@ func step(dt: float) -> void:
 	_place_camera()
 	_update_ui()
 	r.end_frame()
+
+
+## Короткая подпись на кнопке действия у поста.
+const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер", "hatch": "Люк"}
+
+
+## Кнопка действия у поста.
+func use_post(id: String) -> void:
+	match id:
+		"helm":
+			sit_at_helm()
+		"energy":
+			say("Энергия: двигатели, сонар, жизнь, разряд, прожектор")
+		"scanner":
+			say("Сканер: рядом никого")
+		"hatch":
+			say("Люк в коридор задраен")
 
 
 func toggle_light() -> void:
@@ -163,7 +180,7 @@ func _update_ui() -> void:
 		overlay.set_action_label("Встать")
 	else:
 		var post := Deck.nearest(posts, walker.x, walker.z)
-		overlay.set_action_label("Штурвал" if post else "")
+		overlay.set_action_label(POST_BUTTON.get(post.id, "") if post else "")
 	var font := hint.get_theme_font("font")
 	var fs := hint.get_theme_font_size("font_size")
 	var width := minf(900.0, get_viewport().get_visible_rect().size.x - 48.0)
