@@ -16,7 +16,9 @@ var searchlight: SearchlightView
 var light_on := true        ## прожектор включён (кнопка «Свет» за штурвалом)
 var camera: Camera3D
 var overlay: TouchOverlay
-var hint: Label
+var hint: Label            ## строка состояния на приборах (Status), по строкам экрана
+var message := Status.Message.new()
+const SAT_MSG := "Вы за штурвалом"
 var env: Environment
 var qa: QaRunner           ## прогон сценария тестера, если он есть (docs/QA.md)
 
@@ -47,11 +49,15 @@ func _ready() -> void:
 	ui.name = "Интерфейс"
 	add_child(ui)
 	hint = Label.new()
-	hint.position = Vector2(24, 16)
-	hint.add_theme_font_size_override("font_size", 26)
+	hint.name = "Приборы"
+	hint.position = Vector2(24, 14)
+	hint.add_theme_font_size_override("font_size", 24)
+	hint.add_theme_color_override("font_color", Color(0.75, 0.95, 1.0))
 	hint.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
 	hint.add_theme_constant_override("outline_size", 6)
+	hint.add_theme_constant_override("line_spacing", -2)
 	ui.add_child(hint)
+	current.changed.connect(func(_i: int) -> void: say("Течение сменилось"))
 	overlay = TouchOverlay.new()
 	overlay.name = "Управление"
 	ui.add_child(overlay)
@@ -109,6 +115,7 @@ func step(dt: float) -> void:
 			sit_at_helm()
 	current.update(dt)
 	helm.update(dt, 1.0, current.vel())
+	message.update(dt)
 	_place_ship()
 	_place_camera()
 	_update_ui()
@@ -119,16 +126,24 @@ func toggle_light() -> void:
 	light_on = not light_on
 	searchlight.apply(light_on, 1.0)
 	overlay.set_light(light_on)
+	say("Прожектор включён" if light_on else "Прожектор погашен")
+
+
+## Сообщение на приборах, гаснет через 4,2 с.
+func say(msg: String) -> void:
+	message.say(msg)
 
 
 func sit_at_helm() -> void:
 	pilot.sit(walker)
 	overlay.set_pilot(true)
+	say(SAT_MSG)
 
 
 func stand_up() -> void:
 	pilot.stand(walker)
 	overlay.set_pilot(false)
+	message.clear(SAT_MSG)
 
 
 func _place_ship() -> void:
@@ -146,12 +161,38 @@ func _place_camera() -> void:
 func _update_ui() -> void:
 	if pilot.seated:
 		overlay.set_action_label("Встать")
-		var below := helm.pos.y - Seabed.height(helm.pos.x, helm.pos.z)
-		hint.text = "За штурвалом · глубина %d м · ход %.1f м/с · до дна %d м" % [roundi(helm.depth()), helm.speed, roundi(below)]
 	else:
 		var post := Deck.nearest(posts, walker.x, walker.z)
 		overlay.set_action_label("Штурвал" if post else "")
-		hint.text = post.label if post else "Мостик · глубина %d м" % roundi(helm.depth())
+	var font := hint.get_theme_font("font")
+	var fs := hint.get_theme_font_size("font_size")
+	var width := minf(900.0, get_viewport().get_visible_rect().size.x - 48.0)
+	hint.text = "\n".join(Status.lines(status_parts(),
+		func(t: String) -> float: return font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x, width))
+
+
+## Части строки состояния: где игрок, глубина, ход, у штурвала — до дна, курс и прожектор, течение, пост рядом, сообщение.
+func status_parts() -> Array:
+	var parts: Array = []
+	parts.append("За штурвалом" if pilot.seated else "Мостик")
+	parts.append("глубина %d м" % roundi(helm.depth()))
+	parts.append("ход %s м/с" % _num(helm.speed))
+	if pilot.seated:
+		parts.append("до дна %d м" % roundi(helm.pos.y - Seabed.height(helm.pos.x, helm.pos.z)))
+		parts.append("курс %d°" % Status.course_deg(helm.yaw))
+		parts.append("прожектор %s" % ("вкл" if light_on else "выкл"))
+	parts.append("течение на %s %s м/с" % [Status.rumb(current.vel()), _num(Helm.SeaCurrent.SPEED)])
+	if not pilot.seated:
+		var post := Deck.nearest(posts, walker.x, walker.z)
+		if post:
+			parts.append(post.label)
+	if message.visible():
+		parts.append(message.text)
+	return parts
+
+
+static func _num(v: float) -> String:
+	return ("%.1f" % v).replace(".", ",")
 
 
 ## Для tools/shot.gd: сесть за штурвал и провести корабль перед снимком (ключи pilot, thrust, turn, vert, secs).
