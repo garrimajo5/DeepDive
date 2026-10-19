@@ -11,4 +11,4 @@
 - Мир и бестиарий: `docs/context.txt`, `docs/bestiary.md`; концепт-арт: `docs/concept-art/`.
 - Художник (Codex): `AGENTS.md`, `art/ARTIST.md`, заказы — `art/REQUESTS.md`.
 - Запуск тестов: `godot --headless --path . --import && godot --headless --path . -s tests/run.gd`.
-- Прежние версии: Unity — `garrimajo5/pogrujenie` (заморожен), браузерный прототип — `archive/web/`.
+- Прежние версии (браузерный прототип и Unity) — в замороженном репозитории `garrimajo5/pogrujenie`.

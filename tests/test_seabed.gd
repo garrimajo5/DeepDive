@@ -1,5 +1,5 @@
 extends TestCase
-## Шум и рельеф совпадают с браузерной версией: числа сняты из archive/web/js (node, util.js и world.js).
+## Шум и рельеф совпадают с браузерной версией: числа сняты из js/ прототипа (node, util.js и world.js).
 
 
 func test_noise_as_browser() -> void:

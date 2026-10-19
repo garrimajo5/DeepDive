@@ -1,5 +1,5 @@
 class_name Helm
-## Ход «Ковчега-7» (archive/web/js/ship.js, S.update) и течение отмели (js/creatures.js, currentUpdate).
+## Ход «Ковчега-7» (js/ship.js, S.update) и течение отмели (js/creatures.js, currentUpdate).
 ## Оси Godot: нос корабля смотрит в (−sin yaw, 0, −cos yaw), как узел с rotation.y = yaw;
 ## yaw растёт — поворот влево. Поворот штурвала вправо (turn > 0) уменьшает yaw.
 

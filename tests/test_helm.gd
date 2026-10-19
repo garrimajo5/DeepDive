@@ -1,5 +1,5 @@
 extends TestCase
-## Ход корабля и течение (archive/web/js/ship.js, creatures.js).
+## Ход корабля и течение (js/ship.js, creatures.js).
 
 
 func _run(ship: Helm.Ship, secs: float, k: float = 1.0, cur: Vector3 = Vector3.ZERO) -> void:
