@@ -23,7 +23,7 @@ const WHEEL_HALF_DEPTH := 0.083
 const STAND_SCALE_Y := WHEEL_Y / SHAFT_Y
 const STAND_Z := WHEEL_Z - WHEEL_HALF_DEPTH - SHAFT_FRONT
 
-const CHAIR_Z := -3.95
+const CHAIR_Z := Deck.CHAIR_Z
 const TABLE_Z := -1.2
 
 ## Пульт MOD-004: 2,5 × 1,42 × 0,65 м вплотную к носовой стене. Окно в игре начинается с 0,8 м, поэтому пульт ниже
