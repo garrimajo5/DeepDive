@@ -36,6 +36,7 @@ Main (main.gd)                    — шаг игры, пилот, посты, �
 │  ├─ Отсеки (RoomsView)           — коридор…трюм, люки, реактор                       [слой 2]
 │  ├─ Экипаж (CrewView)            — фигуры экипажа, у каждого один MultiMesh           [слой 2]
 │  ├─ Прожектор (SearchlightView)  — свет на отмель и конус луча                       [слой 1]
+│  ├─ Корпус (HullView)            — корпус снаружи по HullPlan, роторы и рули          [слой 1]
 │  └─ Глаза (Camera3D)
 └─ Интерфейс (CanvasLayer)        — приборы, пульт энергии, экранное управление
 ```
@@ -57,6 +58,7 @@ Main (main.gd)                    — шаг игры, пилот, посты, �
 | Экипаж (фигуры игроков) | `crew.gd` | `crew_view.gd` | А |
 | Мостик и модели | `bridge_plan.gd`, `bridge_props.gd` | `bridge_view.gd` | А |
 | Реактор и энергия | `reactor.gd`, `engine_room.gd` | `power_panel.gd`, `rooms_view.gd` | А |
+| Корпус снаружи | `hull_plan.gd`, `hull_mesh.gd` | `hull_view.gd` | А |
 | Прожектор | `searchlight.gd` | `searchlight_view.gd`, `shaders/beam.gdshader` | А |
 | Приборы | `status.gd` | `main.gd` | А |
 | Ввод | `touch.gd` | `touch_overlay.gd` | А |
