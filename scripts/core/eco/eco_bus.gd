@@ -2,7 +2,7 @@ class_name EcoBus
 extends RefCounted
 ## Шина событий экосистемы (E.emit в js/creatures.js, Unity `Core/EcoEvents.cs`): существа шлют, мир забирает раз в шаг
 ## (handleEvents в js/game.js). Сигнал emitted приходит сразу — так виды узнают друг о друге без прямых ссылок.
-## Проверка ключа вида и «наблюдение для журнала» придут с реестром видов (species.gd).
+## Ключ вида проверяется по реестру Species: неизвестный вид — предупреждение, событие не отправляется.
 
 ## Дальше этого от корабля события не видны экипажу (80 м, как в браузере).
 const HEARING := 80.0
@@ -29,11 +29,19 @@ class Event:
 	func text() -> String:
 		return String(message.call()) if message.is_valid() else ""
 
+	## Наблюдение для журнала: у вида есть заметка с ключом note (IsObservation). Иначе — только сигнал другим видам.
+	func is_observation() -> bool:
+		return Species.is_observation(species, note)
+
 
 var pending: Array[Event] = []
 
 
+## Отправить событие; null — нет такого вида в реестре (ошибка в коде вида, событие выброшено).
 func emit(species: String, note: String, pos: Vector3, message: Callable = Callable()) -> Event:
+	if not Species.has(species):
+		push_warning("EcoBus: нет вида «%s»" % species)
+		return null
 	var ev := Event.new(species, note, pos, message)
 	pending.append(ev)
 	emitted.emit(ev)

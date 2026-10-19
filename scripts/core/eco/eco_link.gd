@@ -28,9 +28,9 @@ class ShipState:
 ##     (0,12 — укус серпохвоста, как −12 % в браузере; 0,03 — щипок)
 ## {"type": DRAIN, "by": "Стеклоуст", "units": float}                      — тянет заряд корабля, ед./с, пока
 ##     событие приходит каждый шаг (батарея 0…100, восполняется 1,1 ед./с; стеклоуст — 3,2)
-## {"type": NEAR, "species": "serpohvost", "name": "серпохвост", "dist": м, "pos": Vector3} — заметное существо рядом.
+## {"type": NEAR, "species": "pred", "name": "серпохвост", "dist": м, "pos": Vector3} — заметное существо рядом.
 ##     В шаг с ShipState.sonar_ping мир шлёт NEAR для каждого заметного существа ближе sonar_range — это отметки сонара
-##     (species — ключ вида, цвет отметки — Sonar.color_of). Сканер берёт ближайшее NEAR.
+##     (species — ключ вида из Species, name — Species.called, цвет отметки — Sonar.color_of). Сканер берёт ближайшее NEAR.
 ## {"type": MESSAGE, "text": "…"}                                         — строка на приборы как есть
 const HIT := "hit"
 const DRAIN := "drain"

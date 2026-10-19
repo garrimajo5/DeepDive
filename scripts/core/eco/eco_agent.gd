@@ -41,8 +41,12 @@ var target: EcoAgent:
 var _target: WeakRef
 
 
+## Неизвестный вид (нет в Species) — предупреждение, существо сразу неживое: мир его не двигает.
 func _init(species_id: String, pos: Vector3) -> void:
 	species = species_id
+	if not Species.has(species_id):
+		push_warning("EcoAgent: нет вида «%s»" % species_id)
+		alive = false
 	p = pos
 	home = pos
 	goal = pos
