@@ -1,5 +1,5 @@
 class_name HashNoise
-## Шум как в браузерной версии (archive/web/js/util.js: G.noise, G.fbm): тот же хеш на целочисленной
+## Шум как в браузерной версии (js/util.js: G.noise, G.fbm): тот же хеш на целочисленной
 ## решётке и те же числа до знаков после запятой. Оси Godot совпадают с браузерными (three.js), x не меняет знак.
 
 const MASK := 0xFFFFFFFF

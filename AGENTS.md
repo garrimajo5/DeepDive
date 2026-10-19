@@ -11,4 +11,4 @@
 1. `git fetch origin main art/concepts`, перейди на ветку `art/concepts` (если её нет — создай от `origin/main`).
 2. Возьми первый заказ со статусом «заказано» или «правки» из `origin/main:art/REQUESTS.md`.
 3. Нарисуй, сложи в `art/<номер>-<кратко>/` вместе с `notes.md`, закоммить и запушь только в `art/concepts`.
-4. В `main`, `docs/`, `archive/`, `scripts/`, `scenes/`, `models/` и в чужие ветки ничего не пиши, PR не открывай.
+4. В `main`, `docs/`, `scripts/`, `scenes/`, `models/` и в чужие ветки ничего не пиши, PR не открывай.
