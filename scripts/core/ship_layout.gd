@@ -86,7 +86,7 @@ func can_stand(x: float, z: float, r: float = Deck.Walker.RADIUS) -> bool:
 			if absf(z - d.z) < 0.6 and d.passable():
 				ok = true
 				break
-	if not ok:
+	if not ok or Airlock.in_hole(x, z, r):
 		return false
 	return Vector2(x, z).distance_to(Vector2(REACTOR_POS.x, REACTOR_POS.z)) >= REACTOR_R + r
 
@@ -107,7 +107,10 @@ static func parts() -> Array[BridgePlan.Part]:
 		var len := z1 - z0
 		var zc := (z0 + z1) / 2.0
 		var name: String = ROOM_NAMES[room]
-		add.call("Пол: " + name, BridgePlan.Paint.DECK, Vector3(2 * hw, 0.1, len), Vector3(0, -0.05, zc))
+		if room == Room.CARGO:
+			_cargo_floor(p, hw)
+		else:
+			add.call("Пол: " + name, BridgePlan.Paint.DECK, Vector3(2 * hw, 0.1, len), Vector3(0, -0.05, zc))
 		add.call("Потолок: " + name, BridgePlan.Paint.SEAM, Vector3(2 * hw, 0.1, len), Vector3(0, h + 0.05, zc))
 		for s in [-1.0, 1.0]:
 			if room == Room.LAB:
@@ -132,6 +135,27 @@ static func parts() -> Array[BridgePlan.Part]:
 	var cargo: Array = ROOMS[Room.CARGO]
 	add.call("Корма", M, Vector3(2 * float(cargo[2]), cargo[3], 0.2), Vector3(0, float(cargo[3]) / 2.0, 24.0))
 	return p
+
+
+## Пол трюма вокруг проёма шлюза, светлая кромка проёма и тёмная шахта до крышки.
+static func _cargo_floor(p: Array[BridgePlan.Part], hw: float) -> void:
+	var a: Array = ROOMS[Room.CARGO]
+	var z0: float = a[0]
+	var z1: float = a[1]
+	var hz0 := Airlock.Z - Airlock.HOLE / 2.0
+	var hz1 := Airlock.Z + Airlock.HOLE / 2.0
+	var hh := Airlock.HOLE / 2.0
+	var D := BridgePlan.Paint.DECK
+	p.append(BridgePlan.Part.new("Пол трюма у машинного", D, Vector3(2 * hw, 0.1, hz0 - z0), Vector3(0, -0.05, (z0 + hz0) / 2.0)))
+	p.append(BridgePlan.Part.new("Пол трюма у кормы", D, Vector3(2 * hw, 0.1, z1 - hz1), Vector3(0, -0.05, (hz1 + z1) / 2.0)))
+	for s in [-1.0, 1.0]:
+		p.append(BridgePlan.Part.new("Пол трюма у борта", D, Vector3(hw - hh, 0.1, Airlock.HOLE), Vector3(s * (hw + hh) / 2.0, -0.05, Airlock.Z)))
+		var rim := 0.12
+		p.append(BridgePlan.Part.new("Кромка проёма шлюза", BridgePlan.Paint.METAL, Vector3(Airlock.HOLE + 2 * rim, 0.03, rim), Vector3(0, 0.015, Airlock.Z + s * (hh + rim / 2.0))))
+		p.append(BridgePlan.Part.new("Кромка проёма шлюза", BridgePlan.Paint.METAL, Vector3(rim, 0.03, Airlock.HOLE), Vector3(s * (hh + rim / 2.0), 0.015, Airlock.Z)))
+		var d := Airlock.SHAFT_DEPTH
+		p.append(BridgePlan.Part.new("Шахта шлюза", BridgePlan.Paint.SHADOW, Vector3(Airlock.HOLE + 0.2, d, 0.1), Vector3(0, -d / 2.0, Airlock.Z + s * (hh + 0.05))))
+		p.append(BridgePlan.Part.new("Шахта шлюза", BridgePlan.Paint.SHADOW, Vector3(0.1, d, Airlock.HOLE), Vector3(s * (hh + 0.05), -d / 2.0, Airlock.Z)))
 
 
 static func _bulkhead(p: Array[BridgePlan.Part], z: float, hw: float, h: float) -> void:

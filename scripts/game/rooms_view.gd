@@ -8,6 +8,7 @@ var doors: Array[Node3D] = []      ## створки люков 2…4 (у пер
 var reactor_rod: MeshInstance3D
 var _rod_mat: StandardMaterial3D
 var reactor_light: OmniLight3D
+var airlock_cover: MeshInstance3D   ## крышка нижнего шлюза (пока диск; модель — MOD-010, issue #20)
 
 
 func _ready() -> void:
@@ -39,6 +40,17 @@ func _ready() -> void:
 		add_child(d)
 		doors.append(d)
 	_add_reactor()
+	airlock_cover = MeshInstance3D.new()
+	airlock_cover.name = "Крышка шлюза"
+	var cm := CylinderMesh.new()
+	cm.top_radius = Airlock.RADIUS
+	cm.bottom_radius = Airlock.RADIUS
+	cm.height = Airlock.THICK
+	airlock_cover.mesh = cm
+	var lm := BridgeView.material(BridgePlan.Paint.METAL)
+	airlock_cover.material_override = lm
+	airlock_cover.layers = OceanView.LAYER_SHIP | OceanView.LAYER_WORLD
+	add_child(airlock_cover)
 
 
 func _add_reactor() -> void:
@@ -65,8 +77,10 @@ func _add_reactor() -> void:
 	root.add_child(reactor_light)
 
 
-## Створки люков и цвет реактора — каждый кадр.
-func apply(layout: ShipLayout, r: Reactor) -> void:
+## Створки люков, крышка шлюза и цвет реактора — каждый кадр.
+func apply(layout: ShipLayout, r: Reactor, lock: Airlock = null) -> void:
+	if lock:
+		airlock_cover.transform = lock.cover_pose()
 	for i in doors.size():
 		doors[i].position.x = layout.doors[i + 1].offset()
 	var c := ShipLayout.rod_color(r)
