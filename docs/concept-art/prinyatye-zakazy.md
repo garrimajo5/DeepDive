@@ -215,3 +215,11 @@ y — высота, лёд на y = 0, метры. Упоминания Unity о
 **Принято 20.10.2026** (PR #64, папка `art/MOD-012-ekipazh`): две GLB со skin и 24 костями, 7 899 и 7 981 треугольник,
 рост 1,8 м, A-поза — `models/ekipazh-muzhchina.glb`, `ekipazh-zhenshchina.glb`; кости и привязка — `ekipazh.md`,
 раздел MOD-012; превью — `ekipazh-modeli.png`. Ставит в сцену задача «Модель в сцене вместо капсул».
+
+## MOD-013 Пробоина — обшивка, заплатка, шов, резак — принято
+- Исходник: ART-013, `proboina-stadii.png`, решения — `proboina.md`.
+
+**Принято 20.10.2026** (PR #66, папка `art/MOD-013-proboina`): четыре GLB — обшивка с отверстием 1 089, заплатка 168,
+шов 256 (emission #F18A3D), резак 779 треугольников — `models/proboina-obshivka.glb`, `proboina-zaplatka.glb`,
+`proboina-shov.glb`, `rezak.glb`; pivot, точка искр и привязка — `proboina.md`, раздел MOD-013; превью —
+`proboina-modeli.png`. Ставит в сцену задача «Событие „пробоина“».
