@@ -3,7 +3,7 @@ extends TestCase
 
 
 func test_numbers_as_browser() -> void:
-	near(Searchlight.pitch_deg(), 18.0, 0.1, "вниз на 18°")
+	near(Searchlight.pitch_deg(), 14.0, 0.1, "вниз на 14° (#47: при 18° пятно под пультом)")
 	near(Searchlight.spot_angle_deg() * 2.0, 51.57, 0.05, "раскрытие ≈ 52°")
 	near(Searchlight.range_m(1.0), 120.0, 1e-6, "120 м при штатной доле")
 	near(Searchlight.range_m(0.04), 60.0, 1e-6, "при малой доле не меньше половины")
@@ -52,4 +52,51 @@ func test_light_button_toggles() -> void:
 	main.step(0.1)
 	ok(sl.spot.visible and main.overlay.light_on, "и снова зажигает")
 	var dir := -sl.spot.global_transform.basis.z
-	ok(dir.y < -0.25 and dir.z < -0.9, "луч вперёд и вниз: %s" % str(dir))
+	ok(dir.y < -0.2 and dir.z < -0.9, "луч вперёд и вниз: %s" % str(dir))
+
+
+## Самая высокая точка модели перед глазами: наименьший угол ниже горизонта до её вершин, градусы.
+func _top_angle(eye: Vector3, node: Node) -> float:
+	var best := INF
+	for mi in node.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		for si in m.mesh.get_surface_count():
+			for v in m.mesh.surface_get_arrays(si)[Mesh.ARRAY_VERTEX]:
+				var w: Vector3 = m.global_transform * v
+				var ahead := eye.z - w.z   # нос корабля в −Z, корабль на курсе 0
+				if ahead > 0.05:
+					best = minf(best, rad_to_deg(atan2(eye.y - w.y, ahead)))
+	return best
+
+
+func test_spot_seen_over_console() -> void:
+	# #47: на 29 м, до дна ≈ 13 м пятна из кресла не было видно — середина луча уходила под колесо и пульт
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.sit_at_helm()
+	main.helm.pos = Vector3(0.0, -29.0, 95.0)
+	main._place_ship()
+	main._place_camera()
+	await frames(1)
+	var sl := main.searchlight
+	var lamp := sl.global_position
+	var dir := -sl.spot.global_transform.basis.z
+	var hit := Vector3.INF
+	var t := 0.5
+	while t < Searchlight.BASE_RANGE:
+		var q := lamp + dir * t
+		if q.y <= Seabed.height(q.x, q.z):
+			hit = q
+			break
+		t += 0.5
+	ok(hit != Vector3.INF, "середина луча достаёт дна")
+	ok(t < 70.0, "пятно ближе 70 м (дальше его съедает туман): %.0f м" % t)
+	var eye := main.camera.global_position
+	var spot := rad_to_deg(atan2(eye.y - hit.y, eye.z - hit.z))
+	var console := _top_angle(eye, main.bridge.props[BridgeProps.CONSOLE])
+	var wheel := _top_angle(eye, main.bridge.props[BridgeProps.WHEEL])
+	ok(spot < console - 0.5, "середина пятна над кромкой пульта: %.1f° ниже горизонта, пульт — %.1f°" % [spot, console])
+	ok(spot + Searchlight.spot_angle_deg() * 0.5 > wheel,
+		"под колесом прячется только середина конуса: колесо %.1f°" % wheel)
+	ok(sl.spot.light_energy >= 8.0 and sl.spot.spot_angle_attenuation <= 1.0, "свет ярче рассеянного, край мягкий")
