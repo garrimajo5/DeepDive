@@ -4,12 +4,13 @@ extends TestCase
 
 func test_posts_reachable_and_apart() -> void:
 	var posts := Deck.posts()
+	var ship := ShipLayout.new()
 	for p in posts:
 		var reach := false
 		for i in 16:  # есть где встать в радиусе поста
 			var a := TAU * i / 16.0
 			var q := p.at + Vector2(cos(a), sin(a)) * p.r * 0.8
-			if Deck.can_stand(q.x, q.y) and Deck.nearest(posts, q.x, q.y) == p:
+			if ship.can_stand(q.x, q.y) and Deck.nearest(posts, q.x, q.y) == p:
 				reach = true
 		ok(reach, "к посту «%s» можно подойти" % p.label)
 		eq(Deck.nearest(posts, p.at.x, p.at.y).id, p.id, "в центре поста «%s» — он сам" % p.label)
