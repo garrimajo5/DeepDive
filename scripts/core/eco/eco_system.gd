@@ -12,3 +12,13 @@ func reset(_world: EcoWorld) -> void:
 ## Шаг на dt секунд (не больше EcoWorld.MAX_STEP).
 func step(_world: EcoWorld, _dt: float) -> void:
 	pass
+
+
+## Импульс сонара корабля из точки pos (E.onPing) — мир зовёт в начале шага, где ShipState.sonar_ping.
+func on_ping(_world: EcoWorld, _pos: Vector3) -> void:
+	pass
+
+
+## Разряд по корпусу радиусом radius м вокруг корабля (E.onZap) — в начале шага, где ShipState.zap.
+func on_zap(_world: EcoWorld, _radius: float) -> void:
+	pass

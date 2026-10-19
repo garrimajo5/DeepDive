@@ -223,3 +223,11 @@ y — высота, лёд на y = 0, метры. Упоминания Unity о
 шов 256 (emission #F18A3D), резак 779 треугольников — `models/proboina-obshivka.glb`, `proboina-zaplatka.glb`,
 `proboina-shov.glb`, `rezak.glb`; pivot, точка искр и привязка — `proboina.md`, раздел MOD-013; превью —
 `proboina-modeli.png`. Ставит в сцену задача «Событие „пробоина“».
+
+## MOD-011 Серпохвост — принято
+- Исходник: ART-003, `serpohvost-rakursy.jpg`, числа — `serpohvost.md`.
+
+**Принято 20.10.2026** (PR #59, папка `art/MOD-011-serpohvost`): три GLB — тело 3 988, хвост со серпом 986,
+нижняя челюсть 745 треугольников; в игре — `models/serpohvost-telo.glb`, `serpohvost-hvost.glb`,
+`serpohvost-chelyust.glb`. Стыки и оси (хвост ±35° по Y, челюсть до −35° по X) — `serpohvost.md`, раздел MOD-011;
+превью — `serpohvost-modeli.png`. Ставит в сцену задача потока Б «Серпохвосты».
