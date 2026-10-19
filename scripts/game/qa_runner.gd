@@ -86,8 +86,8 @@ func _point(what: String, dir: Vector2) -> Vector2:
 ## Состояние игры одной строкой для лога.
 func state() -> String:
 	var h := main.helm
-	return "t %.1f с · %s · глубина %.1f м · ход %.2f м/с · курс %.0f° · корабль (%.1f, %.1f, %.1f) · игрок (%.2f, %.2f) · %d кадр/с" % [
-		time, "за штурвалом" if main.pilot.seated else "на ногах", h.depth(), h.speed, rad_to_deg(h.yaw),
+	return "t %.1f с · %s · свет %s · глубина %.1f м · ход %.2f м/с · курс %.0f° · корабль (%.1f, %.1f, %.1f) · игрок (%.2f, %.2f) · %d кадр/с" % [
+		time, "за штурвалом" if main.pilot.seated else "на ногах", "вкл" if main.light_on else "выкл", h.depth(), h.speed, rad_to_deg(h.yaw),
 		h.pos.x, h.pos.y, h.pos.z, main.walker.x, main.walker.z, Engine.get_frames_per_second()]
 
 

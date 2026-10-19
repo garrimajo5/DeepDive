@@ -4,6 +4,7 @@ extends Control
 ## Касания разбирает Touch.Router; на компьютере мышь работает как палец (emulate_touch_from_mouse).
 
 var router := Touch.Router.new()
+var light_on := true     ## прожектор горит: кнопка «Свет» янтарная
 var action_label := ""   ## подпись на кнопке действия («Штурвал», «Встать»); пусто — кнопка тусклая
 ## Сколько «точек» экрана (1/160 дюйма) в одном пикселе вьюпорта — для чувствительности свайпа.
 var points_per_px := 1.0
@@ -58,6 +59,12 @@ func set_pilot(on: bool) -> void:
 		queue_redraw()
 
 
+func set_light(on: bool) -> void:
+	if light_on != on:
+		light_on = on
+		queue_redraw()
+
+
 func set_action_label(text: String) -> void:
 	if action_label != text:
 		action_label = text
@@ -90,14 +97,21 @@ func _draw() -> void:
 	if not action_label.is_empty():
 		_text(font, l.action.c, action_label, l.action.r * 0.32)
 	if router.pilot_buttons:
-		for b in [[l.up, "Всплыть", router.vert() == 1], [l.down, "Вниз", router.vert() == -1], [l.light, "Свет", false]]:
+		for b in [[l.up, "Всплыть", router.vert() == 1], [l.down, "Вниз", router.vert() == -1]]:
 			var c: Touch.Circle = b[0]
 			draw_circle(c.c, c.r, Color(0.6, 0.85, 0.95, 0.3 if b[2] else 0.12))
 			draw_arc(c.c, c.r, 0, TAU, 32, line, 2.0)
 			_text(font, c.c, b[1], c.r * 0.36)
+		# «Свет»: горит — полный янтарный круг, погашен — тусклое кольцо
+		if light_on:
+			draw_circle(l.light.c, l.light.r, Searchlight.BUTTON_ON)
+		else:
+			draw_arc(l.light.c, l.light.r, 0, TAU, 32, Searchlight.BUTTON_OFF, 3.0)
+		_text(font, l.light.c, Searchlight.button_label(light_on), l.light.r * 0.3,
+			Color(0.1, 0.07, 0.02, 0.95) if light_on else Color(1, 1, 1, 0.75))
 
 
-func _text(font: Font, at: Vector2, text: String, px: float) -> void:
+func _text(font: Font, at: Vector2, text: String, px: float, color: Color = Color(1, 1, 1, 0.9)) -> void:
 	var fs := int(maxf(px, 10.0))
 	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	draw_string(font, at + Vector2(-w / 2.0, fs * 0.35), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1, 0.9))
+	draw_string(font, at + Vector2(-w / 2.0, fs * 0.35), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)

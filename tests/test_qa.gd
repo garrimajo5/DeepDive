@@ -59,3 +59,5 @@ func test_scene_runs_scenario() -> void:
 	ok(FileAccess.file_exists(QaRunner.OUT + "/done.txt"), "done.txt записан")
 	var log := FileAccess.get_file_as_string(QaRunner.OUT + "/log.txt")
 	ok(log.contains("сел за штурвал") and log.contains("за штурвалом"), "в логе есть состояние за штурвалом")
+	ok(log.contains("прожектор погашен | ") and log.contains("свет выкл"), "по сценарию гасили прожектор")
+	ok(main.light_on, "и зажгли снова")
