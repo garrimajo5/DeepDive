@@ -209,6 +209,13 @@ y — высота, лёд на y = 0, метры. Упоминания Unity о
 `docs/concept-art/razryad-mostik.jpg`, `razryad-shchitok.png`, решения — `razryad.md`: щиток 0,45 × 0,6 × 0,1 м,
 рычаг по оси Z ±25°, шкала готовности гаснет на откате. Модель — MOD-014 (#63).
 
+## MOD-012 Член экипажа — базовая форма, мужчина и женщина — принято
+- Исходник: ART-014, `ekipazh-muzhskoy.jpg`, `ekipazh-zhenskiy.jpg`, решения — `ekipazh.md`.
+
+**Принято 20.10.2026** (PR #64, папка `art/MOD-012-ekipazh`): две GLB со skin и 24 костями, 7 899 и 7 981 треугольник,
+рост 1,8 м, A-поза — `models/ekipazh-muzhchina.glb`, `ekipazh-zhenshchina.glb`; кости и привязка — `ekipazh.md`,
+раздел MOD-012; превью — `ekipazh-modeli.png`. Ставит в сцену задача «Модель в сцене вместо капсул».
+
 ## MOD-011 Серпохвост — принято
 - Исходник: ART-003, `serpohvost-rakursy.jpg`, числа — `serpohvost.md`.
 
