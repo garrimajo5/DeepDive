@@ -66,6 +66,10 @@ class Ship:
 	var in_thrust := 0.0
 	var in_turn := 0.0
 	var in_vert := 0.0
+	## На сколько метров дно подняло корабль в последнем шаге (для удара о дно — Vitals.scrape): только подъём самого
+	## дна под кораблём, пока корабль на нём лежит; спуск на дно по кнопке «Вниз» ударом не считается.
+	var bump := 0.0
+	var _last_floor := -INF
 	## Высота дна под (x, z); корабль держится на CLEARANCE выше. Пустой Callable — дна нет.
 	var ground: Callable
 
@@ -74,6 +78,7 @@ class Ship:
 
 	func reset() -> void:
 		pos = START
+		_last_floor = -INF
 		yaw = 0.0
 		speed = 0.0
 		vy = 0.0
@@ -107,7 +112,10 @@ class Ship:
 		var floor_y := DEEP
 		if ground.is_valid():
 			floor_y = maxf(floor_y, float(ground.call(pos.x, pos.z)) + CLEARANCE)
+		bump = 0.0
 		if pos.y < floor_y:
+			bump = maxf(0.0, floor_y - _last_floor) if _last_floor > -INF else 0.0
 			pos.y = minf(floor_y, CEILING)
 			if vy < 0.0:
 				vy = 0.0
+		_last_floor = floor_y

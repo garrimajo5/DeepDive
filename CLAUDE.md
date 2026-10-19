@@ -28,7 +28,8 @@
   `ship_layout.gd` — отсеки за мостиком (z 2…24), люки `ShipLayout.Door`, `can_stand` для всего корабля (мостик — `Deck`),
   геометрия `parts()`; рисует `scripts/game/rooms_view.gd` (там же реактор). `hull_plan.gd` — корпус снаружи по ART-001
   (28 деталей, `inside`/`inside_world`), рисовать — задача «Корпус снаружи в сцене». `sonar.gd` — импульс, дальность,
-  отметки из `EcoLink.NEAR`, карта рельефа; голограмма — `scripts/game/sonar_view.gd` + `shaders/sonar_holo.gdshader`. Сообщение на приборах — `main.say(текст)`, части строки — `main.status_parts()`.
+  отметки из `EcoLink.NEAR`, карта рельефа; голограмма — `scripts/game/sonar_view.gd` + `shaders/sonar_holo.gdshader`.
+  `vitals.gd` — корпус и заряд корабля (`main.vitals`: `hit`, `spend`, `scrape`), то, что тратит заряд, берёт его через `spend`. Сообщение на приборах — `main.say(текст)`, части строки — `main.status_parts()`.
 - `scripts/game/` — узлы: `main.gd` (сборка сцены, шаг игры `step(dt)`, пилот), `bridge_view.gd` (оболочка, стекло, модели,
   колесо `set_wheel_turn`), `ocean_view.gd` (дно, лёд, морской снег, вода по глубине `apply_water`), `searchlight_view.gd` (свет и конус луча,
   `apply(on, k)`), `touch_overlay.gd`, `qa_runner.gd`. Шейдеры — `shaders/`.
