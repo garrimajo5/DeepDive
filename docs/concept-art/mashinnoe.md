@@ -45,3 +45,13 @@
 Встроенный imagegen, стилевой референс — принятый mostik-vid-ot-vhoda.jpg. Затем приведение к форматам, размерный план и подписи средствами Pillow по инструкции ARTIST.md. Meshy не использовался, кредиты Meshy не расходовались.
 Промпт сцены: engine room6×5.5×3.2m, view from laboratory toward cargo, single glass reactor with0.64m luminous rod and1.24m shroud, three cooling rings at0.55/1.55/2.55, amber-orange overheating with steam, clear walkways, wall valve and covered emergency box, two ceiling lamps, warm ochre stylized3D matching bridge, no energy console.
 Промпт листа: dark concept sheet, dimensioned top-down plan, identical reactor in cyan normal / amber overheating / dark shutdown, valve, covered emergency box and cooling-ring details, Russian labels, human scale. Генерированный план заменён точной размерной схемой.
+
+## Модель реактора — MOD-008 (принято 19.10.2026, #18, issue #3)
+- `models/reaktor-osnova.glb` (основание 1,9 × 1,9 × 0,35 м и крышка 1,3 × 1,3 × 0,3 м под потолком, 1 524 треугольника),
+  `models/reaktor-kozhuh.glb` (стекло Ø 1,24 м и три кольца на y 0,55 / 1,55 / 2,55, 2 115), `models/reaktor-sterzhen.glb`
+  (Ø 0,64 × 2,5 м, y 0,35…2,85, 222). Общий pivot — центр основания на полу: все три ставить в одну точку (0, 0, 17,2).
+- Свечение и прозрачность — в GLB: голубые индикаторы основы и колец светятся сами, стекло — отдельный прозрачный
+  материал (alpha 0,14) в сетке кожуха, стержень — нейтральный светлый с emission.
+- Состояние реактора красит только стержень: дублировать его материал и менять `albedo_color`/`emission` — норма #6FE3FF,
+  нагрев и перегрев — по `mashinnoe-peregrev.jpg`, аварийный сброс — emission выключить и затемнить. Кожух не тонировать.
+- Проверено рендером в Godot (Compatibility): части совмещаются без сдвигов, стекло видно сквозь кольца, огни горят.
