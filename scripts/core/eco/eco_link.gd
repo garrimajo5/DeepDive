@@ -26,7 +26,9 @@ class ShipState:
 ## ---- События мира → корабль ----
 ## {"type": HIT, "by": "Серпохвост", "damage": 0…1, "at": Vector3}         — удар по корпусу
 ## {"type": DRAIN, "by": "Стеклоуст", "units": float}                      — тянет энергию (единицы реактора в секунду)
-## {"type": NEAR, "species": "serpohvost", "name": "серпохвост", "dist": м} — заметное существо рядом (для приборов и сонара)
+## {"type": NEAR, "species": "serpohvost", "name": "серпохвост", "dist": м, "pos": Vector3} — заметное существо рядом.
+##     В шаг с ShipState.sonar_ping мир шлёт NEAR для каждого заметного существа ближе sonar_range — это отметки сонара
+##     (species — ключ вида, цвет отметки — Sonar.color_of). Сканер берёт ближайшее NEAR.
 ## {"type": MESSAGE, "text": "…"}                                         — строка на приборы как есть
 const HIT := "hit"
 const DRAIN := "drain"
@@ -36,6 +38,10 @@ const MESSAGE := "message"
 
 static func hit(by: String, damage: float, at: Vector3) -> Dictionary:
 	return {"type": HIT, "by": by, "damage": clampf(damage, 0.0, 1.0), "at": at}
+
+
+static func near(species: String, name: String, pos: Vector3, ship_pos: Vector3) -> Dictionary:
+	return {"type": NEAR, "species": species, "name": name, "pos": pos, "dist": pos.distance_to(ship_pos)}
 
 
 static func message(text: String) -> Dictionary:
