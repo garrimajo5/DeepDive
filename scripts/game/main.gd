@@ -15,6 +15,8 @@ var power_panel: PowerPanel
 var current := Helm.SeaCurrent.new()
 
 var ocean: OceanView
+var eco: EcoView            ## живой мир отмели (поток Б), связь — EcoLink
+var eco_ship := EcoLink.ShipState.new()
 var ship: Node3D            ## корабль: всё, что движется вместе с ним
 var bridge: BridgeView
 var rooms: RoomsView
@@ -34,6 +36,10 @@ func _ready() -> void:
 	ocean = OceanView.new()
 	ocean.name = "Отмель"
 	add_child(ocean)
+	eco = EcoView.new()
+	eco.name = "Живой мир"
+	eco.ground = Seabed.height
+	add_child(eco)
 	helm.ground = Seabed.height
 	ship = Node3D.new()
 	ship.name = "Корабль"
@@ -146,6 +152,7 @@ func step(dt: float) -> void:
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
 	helm.update(dt, reactor.k(Reactor.Sys.ENGINES), current.vel())
 	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP))
+	_step_eco(dt)
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	bridge.set_hatch(layout.doors[0].offset())
@@ -198,6 +205,30 @@ func toggle_light() -> void:
 ## Сообщение на приборах, гаснет через 4,2 с.
 func say(msg: String) -> void:
 	message.say(msg)
+
+
+## Шаг живого мира: корабль отдаёт своё состояние, получает события (EcoLink) и решает, что с ними делать.
+func _step_eco(dt: float) -> void:
+	var s := eco_ship
+	s.pos = helm.pos
+	s.yaw = helm.yaw
+	s.speed = helm.speed
+	s.light_on = Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP))
+	s.light_range = Searchlight.range_m(reactor.k(Reactor.Sys.LAMP)) if s.light_on else 0.0
+	s.hull_noise = clampf(absf(helm.speed) / 6.7, 0.0, 1.0)
+	for e in eco.step(dt, s):
+		on_eco_event(e)
+	s.sonar_ping = false
+	s.zap = false
+
+
+## Событие живого мира (EcoLink). Пока — на приборы; урон корпусу и тревога — задачи потока А.
+func on_eco_event(e: Dictionary) -> void:
+	match e.get("type", ""):
+		EcoLink.HIT:
+			say("Удар по корпусу: %s" % e.get("by", "?"))
+		EcoLink.MESSAGE:
+			say(str(e.get("text", "")))
 
 
 func sit_at_helm() -> void:
