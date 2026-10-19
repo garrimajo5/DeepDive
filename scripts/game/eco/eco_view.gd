@@ -14,6 +14,9 @@ var moss: EcoMoss
 var moss_view: MossView
 var grazers: EcoGrazer
 var grazer_view: GrazerView
+## Серпохвосты: три хищника, охотятся на светляков и бросаются на корабль (EcoLink.HIT); модели MOD-011.
+var preds: EcoPred
+var pred_view: PredView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -33,6 +36,9 @@ func _init() -> void:
 	grazers = world.add(EcoGrazer.new(moss)) as EcoGrazer
 	grazer_view = GrazerView.new(grazers)
 	add_child(grazer_view)
+	preds = world.add(EcoPred.new(fish)) as EcoPred
+	pred_view = PredView.new(preds)
+	add_child(pred_view)
 	_rebuild_moss()
 
 
@@ -51,5 +57,6 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	world.step(dt)
 	fish_view.sync(world.time)
 	grazer_view.sync(world.time)
+	pred_view.sync(world.time, ship.pos)
 	moss_view.sync()
 	return world.take_link()

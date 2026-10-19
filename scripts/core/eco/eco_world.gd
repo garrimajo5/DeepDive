@@ -6,6 +6,8 @@ extends RefCounted
 ## кораблю события take_link() (EcoLink).
 
 const MAX_STEP := 0.05
+## Радиус разряда, если корабль его не сообщил (м): 20 при полной доле реактора, как Zap.BASE_RADIUS.
+const ZAP_RADIUS := 20.0
 
 var seed_value: int
 var random: EcoRandom
@@ -65,12 +67,19 @@ func reset(world_seed: int = -1) -> void:
 		s.reset(self)
 
 
-## Шаг мира на dt секунд, дробится на подшаги ≤ MAX_STEP. Импульс сонара корабля отмечается в начале шага.
+## Шаг мира на dt секунд, дробится на подшаги ≤ MAX_STEP. Импульс сонара и разряд корабля модули узнают в начале
+## шага (on_ping, on_zap) — один раз, сколько бы ни было подшагов.
 func step(dt: float) -> void:
 	if dt <= 0.0:
 		return
 	if ship.sonar_ping:
 		last_ping = time
+		for s in systems:
+			s.on_ping(self, ship.pos)
+	if ship.zap:
+		var r := ship.zap_radius if ship.zap_radius > 0.0 else ZAP_RADIUS
+		for s in systems:
+			s.on_zap(self, r)
 	var n := maxi(1, int(ceil(dt / MAX_STEP - 1e-4)))
 	var h := dt / n
 	for i in n:

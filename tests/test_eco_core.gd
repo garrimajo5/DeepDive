@@ -141,16 +141,19 @@ func test_state_timer_expires() -> void:
 class Toy:
 	extends EcoSystem
 	var caught := 0
+	## Свои существа: в мире сцены рядом живут настоящие виды, их учебная связь не двигает.
+	var mine: Array[EcoAgent] = []
 
 	func reset(w: EcoWorld) -> void:
 		caught = 0
+		mine.clear()
 		var r := EcoWorld.seeded_for(1234)
 		for i in 6:
-			w.spawn("grazer", Vector3(r.range_f(-20, 20), -20, r.range_f(-20, 20)))
-		w.spawn("pred", Vector3(0, -15, 40))
+			mine.append(w.spawn("grazer", Vector3(r.range_f(-20, 20), -20, r.range_f(-20, 20))))
+		mine.append(w.spawn("pred", Vector3(0, -15, 40)))
 
 	func step(w: EcoWorld, dt: float) -> void:
-		for a in w.agents:
+		for a in mine:
 			if not a.alive:
 				continue
 			if a.species == "pred":
@@ -160,7 +163,7 @@ class Toy:
 
 	func _pred(w: EcoWorld, p: EcoAgent, dt: float) -> void:
 		if p.state != EcoAgent.State.HUNT:
-			var prey := w.nearest("grazer", p.p, 15.0, func(g: EcoAgent): return g.state != EcoAgent.State.HIDE)
+			var prey := w.nearest("grazer", p.p, 15.0, func(g: EcoAgent): return g.state != EcoAgent.State.HIDE and mine.has(g))
 			if prey != null:
 				p.set_state(EcoAgent.State.HUNT, 10.0, prey)
 				w.emit("pred", "catch", p.p, func(): return "Хищник охотится")
@@ -181,7 +184,7 @@ class Toy:
 			p.set_state(EcoAgent.State.GRAZE)
 
 	func _grazer(w: EcoWorld, g: EcoAgent, dt: float) -> void:
-		var pred := w.nearest("pred", g.p, 8.0)
+		var pred := w.nearest("pred", g.p, 8.0, func(q: EcoAgent): return mine.has(q))
 		match g.state:
 			EcoAgent.State.GRAZE:
 				if pred != null:
