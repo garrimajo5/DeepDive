@@ -23,7 +23,9 @@
   `bridge_props.gd` (места моделей художника на мостике), `searchlight.gd` (прожектор: числа, луч до дна, меш конуса),
   `texture_glow.gd` (маска голубых огней), `qa_script.gd` (сценарий тестера), `status.gd` (строка состояния
   по строкам экрана, сообщения на 4,2 с, румбы), `reactor.gd` (доли энергии `Reactor.k(Sys…)` — сила систем, перегрев,
-  сброс; `Reactor.Console` — выбор на пульте). Новая система корабля берёт силу из `main.reactor.k(...)`. Сообщение на приборах — `main.say(текст)`, части строки — `main.status_parts()`.
+  сброс; `Reactor.Console` — выбор на пульте). Новая система корабля берёт силу из `main.reactor.k(...)`.
+  `ship_layout.gd` — отсеки за мостиком (z 2…24), люки `ShipLayout.Door`, `can_stand` для всего корабля (мостик — `Deck`),
+  геометрия `parts()`; рисует `scripts/game/rooms_view.gd` (там же реактор). Сообщение на приборах — `main.say(текст)`, части строки — `main.status_parts()`.
 - `scripts/game/` — узлы: `main.gd` (сборка сцены, шаг игры `step(dt)`, пилот), `bridge_view.gd` (оболочка, стекло, модели,
   колесо `set_wheel_turn`), `ocean_view.gd` (дно, лёд, морской снег, вода по глубине `apply_water`), `searchlight_view.gd` (свет и конус луча,
   `apply(on, k)`), `touch_overlay.gd`, `qa_runner.gd`. Шейдеры — `shaders/`.
