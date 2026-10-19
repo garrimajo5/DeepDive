@@ -27,7 +27,8 @@
   сброс; `Reactor.Console` — выбор на пульте). Новая система корабля берёт силу из `main.reactor.k(...)`.
   `ship_layout.gd` — отсеки за мостиком (z 2…24), люки `ShipLayout.Door`, `can_stand` для всего корабля (мостик — `Deck`),
   геометрия `parts()`; рисует `scripts/game/rooms_view.gd` (там же реактор). `hull_plan.gd` — корпус снаружи по ART-001
-  (28 деталей, `inside`/`inside_world`), рисовать — задача «Корпус снаружи в сцене». `sonar.gd` — импульс, дальность,
+  (28 деталей, `inside`/`inside_world`); меши по краскам и движение роторов и рулей — `hull_mesh.gd` (`HullMesh.Motion`),
+  рисует `scripts/game/hull_view.gd` (`main.hull`, слой 1). `sonar.gd` — импульс, дальность,
   отметки из `EcoLink.NEAR`, карта рельефа; голограмма — `scripts/game/sonar_view.gd` + `shaders/sonar_holo.gdshader`.
   `crew.gd` — член экипажа (`Crew.Member`: поза стоя, на ходу и в кресле, руки на штурвале, снимок для сети;
   `main.me` — свой игрок, `main.crew` — все), рисует `scripts/game/crew_view.gd`. `engine_room.gd` — вентиль сброса пара (удержание, `main.engine`) и щиток «Аварийный сброс» в машинном. `airlock.gd` — нижний шлюз трюма (крышка `cover_pose`, проём `in_hole`). `zap.gd` — разряд по корпусу (рычаг `Zap.LEVER_POS`, `main.fire_zap()`). `vitals.gd` — корпус и заряд корабля (`main.vitals`: `hit`, `spend`, `scrape`), то, что тратит заряд, берёт его через `spend`. Сообщение на приборах — `main.say(текст)`, части строки — `main.status_parts()`.
