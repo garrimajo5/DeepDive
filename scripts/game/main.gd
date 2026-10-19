@@ -10,6 +10,8 @@ var posts: Array[Deck.Post] = []
 var helm := Helm.Ship.new()
 var reactor := Reactor.new()
 var sonar := Sonar.new()
+var vitals := Vitals.new()   ## корпус и заряд корабля
+var hit_flash: ColorRect
 var sonar_view: SonarView
 var time := 0.0             ## секунды игры (для сонара и событий)
 var power := Reactor.Console.new()   ## выбор на пульте энергии
@@ -85,6 +87,14 @@ func _ready() -> void:
 	power_panel = PowerPanel.new()
 	power_panel.name = "Пульт энергии"
 	ui.add_child(power_panel)
+	hit_flash = ColorRect.new()
+	hit_flash.name = "Вспышка удара"
+	hit_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hit_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hit_flash.color = Color(1.0, 0.36, 0.42, 0.0)
+	ui.add_child(hit_flash)
+	vitals.hit_taken.connect(_on_hit)
+	vitals.destroyed.connect(_on_destroyed)
 	overlay = TouchOverlay.new()
 	overlay.name = "Управление"
 	ui.add_child(overlay)
@@ -157,7 +167,13 @@ func step(dt: float) -> void:
 	current.update(dt)
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
 	helm.update(dt, reactor.k(Reactor.Sys.ENGINES), current.vel())
+	helm.speed = vitals.scrape(helm.bump / maxf(dt, 1e-4), helm.speed)
+	if vitals.update(dt, helm.in_thrust, helm.in_vert, Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP)), reactor.k(Reactor.Sys.LIFE)):
+		light_on = false
+		overlay.set_light(false)
+		say("Прожектор погас: не хватает энергии")
 	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP))
+	hit_flash.color.a = vitals.flash * 0.35
 	_step_eco(dt)
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
@@ -205,6 +221,9 @@ func close_power() -> void:
 
 
 func toggle_light() -> void:
+	if not light_on and vitals.energy < 3.0:
+		say("Мало энергии: прожектор не включить")
+		return
 	light_on = not light_on
 	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP))
 	overlay.set_light(light_on)
@@ -218,8 +237,12 @@ func say(msg: String) -> void:
 
 ## Импульс сонара: сила — доля «Сонар»; существ в этот же шаг сообщит живой мир (EcoLink.NEAR).
 func ping_sonar() -> void:
+	if reactor.k(Reactor.Sys.SONAR) > 0.0 and sonar.can_ping(time) and vitals.energy < Vitals.SONAR_COST:
+		say("Мало энергии: для импульса нужно %d единиц" % int(Vitals.SONAR_COST))
+		return
 	var msg := sonar.ping(time, reactor.k(Reactor.Sys.SONAR))
 	if msg == "Сонар: импульс":
+		vitals.spend(Vitals.SONAR_COST)
 		eco_ship.sonar_ping = true
 		eco_ship.sonar_range = sonar.range_m
 	if not msg.is_empty():
@@ -249,9 +272,34 @@ func _step_eco(dt: float) -> void:
 func on_eco_event(e: Dictionary) -> void:
 	match e.get("type", ""):
 		EcoLink.HIT:
-			say("Удар по корпусу: %s" % e.get("by", "?"))
+			vitals.hit(roundi(float(e.get("damage", 0.0)) * 100.0), str(e.get("by", "")))
+		EcoLink.DRAIN:
+			vitals.drain_ext += float(e.get("units", 0.0))
 		EcoLink.MESSAGE:
 			say(str(e.get("text", "")))
+
+
+func _on_hit(percent: int, kind: String) -> void:
+	if kind == "scrape":
+		say("Удар о дно: корпус −%d%%" % percent)
+	elif kind.is_empty():
+		say("Удар по корпусу: −%d%%" % percent)
+	else:
+		say("%s бьёт по корпусу: −%d%%" % [kind, percent])
+
+
+## Корпус разрушен: забег проигран. Пока забега нет — подъём к старту с целым корпусом (как restart в браузере).
+func _on_destroyed() -> void:
+	if pilot.seated:
+		stand_up()
+	if at_power:
+		close_power()
+	helm.reset()
+	vitals.reset()
+	walker.reset()
+	light_on = true
+	overlay.set_light(true)
+	say("Корпус разрушен. Ковчег поднят к началу спуска")
 
 
 func sit_at_helm() -> void:
@@ -275,6 +323,9 @@ func _place_ship() -> void:
 
 func _place_camera() -> void:
 	camera.position = pilot.eye(walker)
+	if vitals.shake > 0.0:   # тряска после удара: детерминированная, затухает за 0,6 с
+		var a := vitals.shake / 0.6 * 0.04
+		camera.position += Vector3(sin(time * 61.0) * a, sin(time * 47.0 + 1.3) * a, 0.0)
 	camera.rotation = Vector3(walker.pitch, walker.yaw, 0.0)
 
 
@@ -301,9 +352,13 @@ func status_parts() -> Array:
 	var parts: Array = []
 	if not reactor.alert().is_empty():
 		parts.append(reactor.alert())
+	if reactor.alert().is_empty() and not vitals.warning().is_empty():
+		parts.append(vitals.warning())
 	parts.append("За штурвалом" if pilot.seated else ShipLayout.ROOM_NAMES[ShipLayout.room_at(walker.z)])
 	parts.append("глубина %d м" % roundi(helm.depth()))
 	parts.append("ход %s м/с" % _num(helm.speed))
+	parts.append("корпус %d%%" % roundi(vitals.hull))
+	parts.append("энергия %d" % floori(vitals.energy))
 	if pilot.seated:
 		parts.append("до дна %d м" % roundi(helm.pos.y - Seabed.height(helm.pos.x, helm.pos.z)))
 		parts.append("курс %d°" % Status.course_deg(helm.yaw))
