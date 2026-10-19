@@ -5,6 +5,9 @@ extends Node3D
 
 var walker := Deck.Walker.new()
 var pilot := Deck.Pilot.new()
+var me := Crew.Member.new(Crew.Role.PILOT)   ## свой игрок как фигура (видят другие и он сам)
+var crew: Array = [me]                       ## экипаж на борту; позже — игроки по сети
+var crew_view: CrewView
 var layout := ShipLayout.new()
 var airlock := Airlock.new()
 var posts: Array[Deck.Post] = []
@@ -67,6 +70,9 @@ func _ready() -> void:
 	rooms = RoomsView.new()
 	rooms.name = "Отсеки"
 	ship.add_child(rooms)
+	crew_view = CrewView.new()
+	ship.add_child(crew_view)
+	crew_view.set_members(crew, me)
 	walker.stand = layout.can_stand
 	posts = Deck.posts()
 	for i in layout.doors.size():
@@ -204,6 +210,8 @@ func step(dt: float) -> void:
 	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0)
 	rooms.apply(layout, reactor, airlock)
 	message.update(dt)
+	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt)
+	crew_view.apply()
 	_place_ship()
 	_place_camera()
 	_update_ui()
@@ -439,6 +447,18 @@ func debug_setup(kv: Dictionary) -> void:
 		airlock.open = true
 		airlock.t = 1.0
 		rooms.apply(layout, reactor, airlock)
+	if kv.has("mate"):  # mate=x,z,курс°[,роль 0…3] — ещё один член экипажа стоит на палубе; mate=helm — сидит за штурвалом
+		var mate := Crew.Member.new(Crew.Role.SONAR)
+		if kv["mate"] == "helm":
+			mate.follow(0.0, Deck.SEAT_Z, 0.0, true, 0.0, 0.1)
+		else:
+			var m: PackedFloat64Array = kv["mate"].split_floats(",")
+			if m.size() > 3:
+				mate.role = int(m[3])
+			mate.follow(m[0], m[1], deg_to_rad(m[2]) if m.size() > 2 else 0.0, false, 0.0, 0.1)
+		crew.append(mate)
+		crew_view.set_members(crew, me)
+		crew_view.apply()
 	if kv.has("hot"):  # hot=1 — перегрев (для снимка табло)
 		reactor.start_hot(false)
 		reactor.heat = float(kv["hot"])
