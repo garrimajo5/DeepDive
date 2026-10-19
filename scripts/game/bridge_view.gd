@@ -29,6 +29,9 @@ func _ready() -> void:
 	wheel = _add_model(wp, wheel_mount)
 	props[BridgeProps.WHEEL] = wheel
 	_light_screens(props[BridgeProps.SCREENS])
+	for name in props:
+		if TextureGlow.MODELS.has(name):
+			light_texture(props[name])
 	# тёплый свет плафонов: две лампы под потолком вдоль мостика
 	for z in [-3.5, 0.0]:
 		var l := OmniLight3D.new()
@@ -56,6 +59,25 @@ func _add_model(p: BridgeProps.Prop, parent: Node3D) -> Node3D:
 	for mi in n.find_children("*", "MeshInstance3D", true, false):
 		(mi as MeshInstance3D).layers = OceanView.LAYER_SHIP
 	return n
+
+
+const GLOW_SHADER := preload("res://shaders/tex_glow.gdshader")
+
+
+## Голубые места текстуры модели светятся (TextureGlow): материал из GLB заменяется шейдером с той же текстурой.
+static func light_texture(n: Node3D) -> void:
+	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		var src := m.get_active_material(0) as BaseMaterial3D
+		if src == null or src.albedo_texture == null:
+			continue
+		var sm := ShaderMaterial.new()
+		sm.shader = GLOW_SHADER
+		sm.set_shader_parameter("albedo_tex", src.albedo_texture)
+		sm.set_shader_parameter("mask_tex", src.albedo_texture)
+		sm.set_shader_parameter("roughness", src.roughness)
+		sm.set_shader_parameter("metallic", src.metallic)
+		m.material_override = sm
 
 
 ## Экраны пульта светятся ровным голубым (пока на них ничего не рисуем).
