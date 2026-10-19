@@ -18,7 +18,7 @@ var ship := EcoLink.ShipState.new()
 var last_ping := -99.0
 ## Высота дна в (x, z) — Seabed.height; пустой — дна нет.
 var ground: Callable
-## Просканирован ли вид (для названий в сообщениях); пустой — ничего не просканировано.
+## Просканирован ли вид: (species: String) -> bool, для названий в сообщениях (nm); пустой — ничего не просканировано.
 var scanned: Callable
 ## Секунды с последнего сброса.
 var time := 0.0
@@ -88,7 +88,11 @@ func run(seconds: float, dt: float = MAX_STEP) -> void:
 		step(dt)
 
 
+## Новое существо в мире; null — нет такого вида в реестре.
 func spawn(species: String, pos: Vector3) -> EcoAgent:
+	if not Species.has(species):
+		push_warning("EcoWorld: нет вида «%s»" % species)
+		return null
 	var a := EcoAgent.new(species, pos)
 	agents.append(a)
 	return a
@@ -116,7 +120,12 @@ func nearest(species: String, pos: Vector3, max_dist: float = INF, filter: Calla
 	return best
 
 
-## Отправить событие экосистемы (E.emit).
+## Название вида для сообщений (G.nm): настоящее, если вид просканирован (scanned), иначе описательное.
+func nm(species: String, c: Species.Case = Species.Case.NOM) -> String:
+	return Species.called(species, c, scanned.is_valid() and bool(scanned.call(species)))
+
+
+## Отправить событие экосистемы (E.emit); null — нет такого вида.
 func emit(species: String, note: String, pos: Vector3, message: Callable = Callable()) -> EcoBus.Event:
 	return bus.emit(species, note, pos, message)
 
