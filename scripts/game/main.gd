@@ -9,6 +9,9 @@ var layout := ShipLayout.new()
 var posts: Array[Deck.Post] = []
 var helm := Helm.Ship.new()
 var reactor := Reactor.new()
+var sonar := Sonar.new()
+var sonar_view: SonarView
+var time := 0.0             ## секунды игры (для сонара и событий)
 var power := Reactor.Console.new()   ## выбор на пульте энергии
 var at_power := false              ## игрок у пульта энергии: крестовина правит доли
 var power_panel: PowerPanel
@@ -47,13 +50,15 @@ func _ready() -> void:
 	bridge = BridgeView.new()
 	bridge.name = "Мостик"
 	ship.add_child(bridge)
+	sonar_view = SonarView.new()
+	bridge.add_child(sonar_view)
 	rooms = RoomsView.new()
 	rooms.name = "Отсеки"
 	ship.add_child(rooms)
 	walker.stand = layout.can_stand
 	posts = Deck.posts()
 	for i in layout.doors.size():
-		posts.append(Deck.Post.new("door%d" % i, Vector2(0.0, ShipLayout.DOOR_Z[i]), 1.5, "Открыть люк"))
+		posts.append(Deck.Post.new("door%d" % i, Vector2(0.0, ShipLayout.DOOR_Z[i]), 1.2, "Открыть люк"))
 	searchlight = SearchlightView.new()
 	searchlight.name = "Прожектор"
 	ship.add_child(searchlight)
@@ -115,6 +120,7 @@ func _process(dt: float) -> void:
 
 ## Один шаг игры: ввод, игрок, корабль, вода. Вынесен из _process для тестов.
 func step(dt: float) -> void:
+	time += dt
 	if qa:
 		qa.tick(dt)
 	var r := overlay.router
@@ -156,6 +162,7 @@ func step(dt: float) -> void:
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	bridge.set_hatch(layout.doors[0].offset())
+	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0)
 	rooms.apply(layout, reactor)
 	message.update(dt)
 	_place_ship()
@@ -165,7 +172,7 @@ func step(dt: float) -> void:
 
 
 ## Короткая подпись на кнопке действия у поста.
-const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер"}
+const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер", "sonar": "Сонар"}
 
 
 ## Кнопка действия у поста.
@@ -175,6 +182,8 @@ func use_post(id: String) -> void:
 			sit_at_helm()
 		"energy":
 			open_power()
+		"sonar":
+			ping_sonar()
 		"scanner":
 			say("Сканер: рядом никого")
 		_ when id.begins_with("door"):
@@ -207,6 +216,16 @@ func say(msg: String) -> void:
 	message.say(msg)
 
 
+## Импульс сонара: сила — доля «Сонар»; существ в этот же шаг сообщит живой мир (EcoLink.NEAR).
+func ping_sonar() -> void:
+	var msg := sonar.ping(time, reactor.k(Reactor.Sys.SONAR))
+	if msg == "Сонар: импульс":
+		eco_ship.sonar_ping = true
+		eco_ship.sonar_range = sonar.range_m
+	if not msg.is_empty():
+		say(msg)
+
+
 ## Шаг живого мира: корабль отдаёт своё состояние, получает события (EcoLink) и решает, что с ними делать.
 func _step_eco(dt: float) -> void:
 	var s := eco_ship
@@ -216,7 +235,11 @@ func _step_eco(dt: float) -> void:
 	s.light_on = Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP))
 	s.light_range = Searchlight.range_m(reactor.k(Reactor.Sys.LAMP)) if s.light_on else 0.0
 	s.hull_noise = clampf(absf(helm.speed) / 6.7, 0.0, 1.0)
-	for e in eco.step(dt, s):
+	var events := eco.step(dt, s)
+	if s.sonar_ping:
+		sonar.take_contacts(events, helm.pos)
+		say("Сонар: контактов %d" % sonar.blips.size())
+	for e in events:
 		on_eco_event(e)
 	s.sonar_ping = false
 	s.zap = false
@@ -311,6 +334,14 @@ func debug_setup(kv: Dictionary) -> void:
 		walker.x = -3.9
 		walker.z = -2.0
 		open_power()
+	if kv.get("ping", "0") == "1":  # импульс сонара с тремя пробными отметками (живого мира ещё нет)
+		sonar.ping(time, 1.0)
+		sonar.take_contacts([
+			EcoLink.near("serpohvost", "серпохвост", helm.pos + Vector3(35, 0, -40), helm.pos),
+			EcoLink.near("svetlyak", "светляк", helm.pos + Vector3(-50, 0, -20), helm.pos),
+			EcoLink.near("veil", "вуаль", helm.pos + Vector3(10, 0, 60), helm.pos)], helm.pos)
+		time += float(kv.get("age", "1.0"))
+		sonar_view.show_state(sonar, helm.pos, helm.yaw, time, true)
 	if kv.has("hot"):  # hot=1 — перегрев (для снимка табло)
 		reactor.start_hot(false)
 		reactor.heat = float(kv["hot"])

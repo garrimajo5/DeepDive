@@ -38,5 +38,10 @@
   {"do": "shot", "name": "08-power"},
   {"do": "log", "note": "пульт энергии"},
   {"do": "press", "what": "action"},
-  {"do": "wait", "s": 0.5}
+  {"do": "wait", "s": 0.5},
+  {"do": "hold", "what": "pad", "dir": [0, -1], "s": 1.2},
+  {"do": "press", "what": "action"},
+  {"do": "wait", "s": 1},
+  {"do": "shot", "name": "09-sonar"},
+  {"do": "log", "note": "сонар"}
 ]
