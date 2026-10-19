@@ -89,9 +89,11 @@ const ENERGY_POS := Vector3(-WALL_X, 0.0, SIDE_Z)
 const ENERGY_ROT := -90.0
 const ENERGY_DEPTH := 0.4
 ## Ползунки на пульте (в осях пульта): пять пазов по x, ход по y; лицо наклонено — z следует за y.
-const SLIDER_X: Array[float] = [-0.34, -0.17, 0.0, 0.17, 0.34]
-const SLIDER_Y_MIN := 0.85
-const SLIDER_Y_MAX := 1.15
+## Порядок как у пиктограмм на модели слева направо (двигатели, сонар, жизнь, разряд, прожектор): модель смотрит в −Z,
+## поэтому левый для смотрящего паз — это +x модели.
+const SLIDER_X: Array[float] = [0.34, 0.17, 0.0, -0.17, -0.34]
+const SLIDER_Y_MIN := 0.72   ## паз на модели — примерно y 0,62…1,37
+const SLIDER_Y_MAX := 1.28
 ## Сканер: лицом в −X, задняя плоскость x = 0, 0,45 × 1,9 × 1,0 м.
 const SCANNER_POS := Vector3(WALL_X, 0.0, SIDE_Z)
 const SCANNER_DEPTH := 0.45

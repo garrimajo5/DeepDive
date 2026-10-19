@@ -42,6 +42,9 @@ func test_scene_side_models_and_posts() -> void:
 	ok(face.x > 0.99, "пульт энергии смотрит в отсек (+X): %s" % str(face))
 	b.set_slider(0, 1.0)
 	ok(b.sliders[0].position.y > b.sliders[1].position.y, "ползунок двигается")
+	# двигатели — левый паз для того, кто стоит лицом к пульту (как пиктограмма вентилятора на модели)
+	var cam_right := Vector3(0, 0, -1)   # смотрим на пульт с отсека (в −X): правая рука — к −Z
+	ok(b.sliders[0].global_position.dot(cam_right) < b.sliders[4].global_position.dot(cam_right), "двигатели левее прожектора")
 	ok(b.hatch_wheel.get_parent() == b.hatch_door, "колесо на створке люка")
 	main.walker.x = -3.9
 	main.walker.z = -2.0
@@ -49,7 +52,11 @@ func test_scene_side_models_and_posts() -> void:
 	r.begin(1, r.layout.action.c)
 	r.end(1)
 	main.step(0.1)
-	ok(main.message.text.begins_with("Энергия"), "у пульта — про энергию: %s" % main.message.text)
+	ok(main.at_power and main.power_panel.visible, "у пульта открылся пульт энергии")
+	r.begin(5, r.layout.action.c)
+	r.end(5)
+	main.step(0.1)
+	ok(not main.at_power and not main.power_panel.visible, "кнопка закрывает пульт")
 	main.walker.x = 0.0
 	main.walker.z = 1.4
 	r.begin(2, r.layout.action.c)

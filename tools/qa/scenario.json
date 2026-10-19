@@ -29,5 +29,14 @@
   {"do": "log", "note": "встал"},
   {"do": "hold", "what": "pad", "dir": [0, -1], "s": 2},
   {"do": "shot", "name": "07-walk-back"},
-  {"do": "log", "note": "прошёл назад"}
+  {"do": "log", "note": "прошёл назад"},
+  {"do": "hold", "what": "pad", "dir": [-1, 0], "s": 1.6},
+  {"do": "press", "what": "action"},
+  {"do": "wait", "s": 0.5},
+  {"do": "hold", "what": "pad", "dir": [-1, 0], "s": 0.3},
+  {"do": "wait", "s": 0.5},
+  {"do": "shot", "name": "08-power"},
+  {"do": "log", "note": "пульт энергии"},
+  {"do": "press", "what": "action"},
+  {"do": "wait", "s": 0.5}
 ]

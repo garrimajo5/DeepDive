@@ -61,3 +61,6 @@ func test_scene_runs_scenario() -> void:
 	ok(log.contains("сел за штурвал") and log.contains("за штурвалом"), "в логе есть состояние за штурвалом")
 	ok(log.contains("прожектор погашен | ") and log.contains("свет выкл"), "по сценарию гасили прожектор")
 	ok(main.light_on, "и зажгли снова")
+	ok(log.contains("пульт энергии | ") and log.contains("у пульта энергии"), "по сценарию открывали пульт энергии")
+	ok(not main.at_power, "и закрыли")
+	eq(main.reactor.share[Reactor.Sys.ENGINES], 25, "на пульте сняли 5 с двигателей")
