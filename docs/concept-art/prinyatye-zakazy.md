@@ -215,3 +215,11 @@ y — высота, лёд на y = 0, метры. Упоминания Unity о
 **Принято 20.10.2026** (PR #64, папка `art/MOD-012-ekipazh`): две GLB со skin и 24 костями, 7 899 и 7 981 треугольник,
 рост 1,8 м, A-поза — `models/ekipazh-muzhchina.glb`, `ekipazh-zhenshchina.glb`; кости и привязка — `ekipazh.md`,
 раздел MOD-012; превью — `ekipazh-modeli.png`. Ставит в сцену задача «Модель в сцене вместо капсул».
+
+## MOD-011 Серпохвост — принято
+- Исходник: ART-003, `serpohvost-rakursy.jpg`, числа — `serpohvost.md`.
+
+**Принято 20.10.2026** (PR #59, папка `art/MOD-011-serpohvost`): три GLB — тело 3 988, хвост со серпом 986,
+нижняя челюсть 745 треугольников; в игре — `models/serpohvost-telo.glb`, `serpohvost-hvost.glb`,
+`serpohvost-chelyust.glb`. Стыки и оси (хвост ±35° по Y, челюсть до −35° по X) — `serpohvost.md`, раздел MOD-011;
+превью — `serpohvost-modeli.png`. Ставит в сцену задача потока Б «Серпохвосты».
