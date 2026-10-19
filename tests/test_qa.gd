@@ -51,16 +51,23 @@ func test_scene_runs_scenario() -> void:
 	var zap_seen := false
 	var shots := 0
 	var table: Node3D = main.bridge.props[BridgeProps.TABLE]
+	var legs_seen := false
 	for i in 1500:  # 50 с игры
 		# снимок берёт уже нарисованный кадр — камеру до шага, в котором он снят
 		var cam := main.camera
 		var table_vis := cam.is_position_in_frustum(table.global_position + table.global_basis.y * 0.9)
 		var zap_vis := cam.is_position_in_frustum(main.ship.to_global(Zap.LEVER_POS))
+		var j: Dictionary = main.me.joints()
+		var legs_vis := true
+		for k in ["toe_l", "toe_r", "hand_l", "hand_r"]:
+			legs_vis = legs_vis and cam.is_position_in_frustum(main.ship.to_global(j[k]))
 		main.step(1.0 / 30.0)
 		sat = sat or main.pilot.seated
 		for k in range(shots, qa.log_lines.size()):   # #48: на 09-sonar в кадре голостол, на 10-zap — рычаг
 			if qa.log_lines[k].begins_with("скриншот 09-sonar"):
 				table_seen = table_vis
+			if qa.log_lines[k].begins_with("скриншот 06b-own-legs"):
+				legs_seen = legs_vis
 			if qa.log_lines[k].begins_with("скриншот 10-zap"):
 				zap_seen = zap_vis
 		shots = qa.log_lines.size()
@@ -82,6 +89,7 @@ func test_scene_runs_scenario() -> void:
 	ok(main.zap.last > 0.0, "у рычага дали разряд")
 	ok(table_seen, "на снимке 09-sonar голостол в кадре (#48)")
 	ok(zap_seen, "на снимке 10-zap рычаг в кадре")
+	ok(legs_seen, "на снимке 06b-own-legs в кадре свои ступни и кисти (#49)")
 	ok(log.contains("курс %d°" % Status.course_deg(main.helm.yaw)), "курс в логе — как на приборах, без минуса (#48)")
 	ok(log.contains("вентиль: пар, реактор остывает | "), "в машинном держали вентиль")
 	ok(main.reactor.scram > 0.0 and log.contains("аварийный сброс щитком | ") and log.contains("° сброс"),
