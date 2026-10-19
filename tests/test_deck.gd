@@ -46,7 +46,7 @@ func test_helm_post_near_chair() -> void:
 	var posts := Deck.posts()
 	var p := Deck.nearest(posts, 0, Deck.STAND_Z)
 	ok(p != null and p.id == "helm", "у кресла — штурвал")
-	ok(Deck.nearest(posts, 0, 1.5) == null, "у люка поста нет")
+	ok(Deck.nearest(posts, 0, -0.2) == null, "посреди мостика поста нет")
 	ok(Deck.can_stand(p.at.x, p.at.y + p.r * 0.8), "к посту можно подойти")
 	eq(p.label, "Сесть за штурвал", "подпись")
 

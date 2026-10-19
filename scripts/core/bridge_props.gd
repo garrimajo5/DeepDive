@@ -45,12 +45,14 @@ class Prop:
 	var label: String
 	var pos: Vector3
 	var scale: Vector3
+	var rot_y := 0.0   ## поворот вокруг вертикали, градусы
 
-	func _init(m: String, l: String, p: Vector3, s: Vector3 = Vector3.ONE) -> void:
+	func _init(m: String, l: String, p: Vector3, s: Vector3 = Vector3.ONE, ry: float = 0.0) -> void:
 		model = m
 		label = l
 		pos = p
 		scale = s
+		rot_y = ry
 
 	func path() -> String:
 		return "res://models/%s.glb" % model
@@ -69,3 +71,49 @@ static func fixed() -> Array[Prop]:
 
 static func wheel() -> Prop:
 	return Prop.new(WHEEL, "Колесо штурвала", Vector3(0, WHEEL_Y, WHEEL_Z))
+
+
+## ---- Бортовые посты: MOD-005…007 (docs/concept-art/modeli-bortovye-posty.md) ----
+const ENERGY := "pult-energii"
+const SLIDER := "polzunok"
+const SCANNER := "skaner-biologa"
+const HATCH_FRAME := "lyuk-rama"
+const HATCH_DOOR := "lyuk-stvorka"
+const HATCH_WHEEL := "lyuk-koleso"
+
+## Пульт энергии на левом борту и сканер на правом — между рёбрами бортов z −2,75 и −1,25 (пульт шириной 1,2 м).
+const SIDE_Z := -2.0
+const WALL_X := 4.9
+## Пульт энергии: модель лицом в −Z, задняя плоскость z = 0; поворот −90° — лицом в отсек (+X). 1,2 × 1,6 × 0,4 м.
+const ENERGY_POS := Vector3(-WALL_X, 0.0, SIDE_Z)
+const ENERGY_ROT := -90.0
+const ENERGY_DEPTH := 0.4
+## Ползунки на пульте (в осях пульта): пять пазов по x, ход по y; лицо наклонено — z следует за y.
+const SLIDER_X: Array[float] = [-0.34, -0.17, 0.0, 0.17, 0.34]
+const SLIDER_Y_MIN := 0.85
+const SLIDER_Y_MAX := 1.15
+## Сканер: лицом в −X, задняя плоскость x = 0, 0,45 × 1,9 × 1,0 м.
+const SCANNER_POS := Vector3(WALL_X, 0.0, SIDE_Z)
+const SCANNER_DEPTH := 0.45
+## Люк в кормовой переборке: рама лицом в мостик (−Z), проём 1,4 × 2,1 м; створка за рамой, колесо на створке.
+const HATCH_POS := Vector3(0.0, 0.0, 2.0)
+const HATCH_DOOR_OFFSET := Vector3(0.0, -0.10, 0.14)
+const HATCH_WHEEL_OFFSET := Vector3(0.0, 1.15, -0.10)
+
+
+## Ползунок пульта: z паза на высоте y (лицо пульта наклонено: на высоте 0,75 м — 0,35 м от стены, выше — ближе).
+static func slider_z(y: float) -> float:
+	return -0.35 + 0.103 * (y - 0.75)
+
+
+## Высота ползунка по доле 0…1.
+static func slider_y(share: float) -> float:
+	return lerpf(SLIDER_Y_MIN, SLIDER_Y_MAX, clampf(share, 0.0, 1.0))
+
+
+static func side_props() -> Array[Prop]:
+	return [
+		Prop.new(ENERGY, "Пульт энергии", ENERGY_POS, Vector3.ONE, ENERGY_ROT),
+		Prop.new(SCANNER, "Сканер биолога", SCANNER_POS),
+		Prop.new(HATCH_FRAME, "Люк в коридор", HATCH_POS),
+	]

@@ -44,9 +44,14 @@ func test_action_label_at_helm() -> void:
 	main.walker.z = Deck.STAND_Z
 	await frames(1)
 	eq(main.overlay.action_label, "Штурвал", "у кресла кнопка — штурвал")
-	main.walker.z = 1.0
+	main.walker.x = 2.0
+	main.walker.z = 0.0
 	await frames(1)
-	eq(main.overlay.action_label, "", "у люка кнопка пустая")
+	eq(main.overlay.action_label, "", "посреди мостика кнопка пустая")
+	main.walker.x = 0.0
+	main.walker.z = 1.5
+	await frames(1)
+	eq(main.overlay.action_label, "Люк", "у кормы — люк")
 
 
 func test_models_on_bridge() -> void:

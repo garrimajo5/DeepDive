@@ -27,7 +27,7 @@ const SLOPE_DEPTH := 1.0
 const LAMP_Z: Array[float] = [-5.0, -3.5, -2.0, -0.5, 1.0]
 const LAMP_Y := 2.35
 const RIB_Z: Array[float] = [-4.25, -2.75, -1.25, 0.25]
-const HATCH_HALF := 0.6      ## люк в коридор: проём 1,2 × 2,1 м
+const HATCH_HALF := 0.7      ## люк в коридор: проём 1,4 × 2,1 м — как у рамы MOD-006
 const HATCH_H := 2.1
 
 
@@ -101,7 +101,6 @@ static func parts() -> Array[Part]:
 		add.call("Корма", Paint.METAL, Vector3(sw, CEILING, 0.2), Vector3(s * (HATCH_HALF + sw / 2.0), CEILING / 2.0, STERN + 0.1))
 	add.call("Корма: над люком", Paint.METAL, Vector3(2 * HATCH_HALF, CEILING - HATCH_H, 0.2),
 		Vector3(0, (CEILING + HATCH_H) / 2.0, STERN + 0.1))
-	add.call("Люк", Paint.SEAM, Vector3(2 * HATCH_HALF, HATCH_H, 0.08), Vector3(0, HATCH_H / 2.0, STERN + 0.12))
 	# рёбра бортов и плафоны с подложкой
 	for s in [-1.0, 1.0]:
 		for z in RIB_Z:

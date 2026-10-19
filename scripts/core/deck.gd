@@ -17,8 +17,11 @@ const FOV := 72.0
 
 ## Препятствия на полу мостика: центр (x, z) и радиус. Голостол сонара (Ø 2,2 м внизу, сужается кверху) и кресло пилота.
 const OBSTACLES: Array = [[Vector2(0.0, -1.2), 0.75], [Vector2(0.0, -3.95), 0.4]]
-## Пульт пилота со штурвалом у носовой стены: x −1,3…1,3, от стены до z −5,1 (колесо на z −5,25).
+## Прямоугольники на полу (x, z, ширина, глубина): пульт пилота со штурвалом у носовой стены (до z −5,1, колесо на −5,25),
+## пульт энергии у левого борта и сканер у правого (BridgeProps.SIDE_Z, ширина 1,2 и 1,0 м).
 const CONSOLE_RECT := Rect2(-1.3, -6.0, 2.6, 0.9)
+const ENERGY_RECT := Rect2(-5.0, -2.6, 0.5, 1.2)
+const SCANNER_RECT := Rect2(4.45, -2.5, 0.55, 1.0)
 
 
 ## Пост кнопки действия: точка на полу, радиус, подпись.
@@ -43,14 +46,20 @@ static func can_stand(x: float, z: float, radius: float = Walker.RADIUS) -> bool
 	for o in OBSTACLES:
 		if Vector2(x, z).distance_to(o[0]) < float(o[1]) + radius:
 			return false
-	if CONSOLE_RECT.grow(radius).has_point(Vector2(x, z)):
-		return false
+	for r in [CONSOLE_RECT, ENERGY_RECT, SCANNER_RECT]:
+		if r.grow(radius).has_point(Vector2(x, z)):
+			return false
 	return true
 
 
 ## Посты мостика. Штурвал: подойти к креслу пилота.
 static func posts() -> Array[Post]:
-	return [Post.new("helm", Vector2(0.0, SEAT_Z), 1.7, "Сесть за штурвал")]
+	return [
+		Post.new("helm", Vector2(0.0, SEAT_Z), 1.7, "Сесть за штурвал"),
+		Post.new("energy", Vector2(-3.9, -2.0), 1.0, "Пульт энергии"),
+		Post.new("scanner", Vector2(3.85, -2.0), 1.0, "Сканер"),
+		Post.new("hatch", Vector2(0.0, 1.2), 0.9, "Люк в коридор"),
+	]
 
 
 ## Ближайший пост, в радиус которого попал игрок, или null.
