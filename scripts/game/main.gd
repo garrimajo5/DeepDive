@@ -11,6 +11,8 @@ var helm := Helm.Ship.new()
 var reactor := Reactor.new()
 var sonar := Sonar.new()
 var vitals := Vitals.new()   ## корпус и заряд корабля
+var zap := Zap.new()
+var zap_light: OmniLight3D   ## вспышка разряда вокруг корпуса (за бортом)
 var hit_flash: ColorRect
 var sonar_view: SonarView
 var time := 0.0             ## секунды игры (для сонара и событий)
@@ -52,6 +54,13 @@ func _ready() -> void:
 	bridge = BridgeView.new()
 	bridge.name = "Мостик"
 	ship.add_child(bridge)
+	zap_light = OmniLight3D.new()
+	zap_light.name = "Вспышка разряда"
+	zap_light.light_color = Color("5ef2d6")
+	zap_light.light_cull_mask = OceanView.LAYER_WORLD
+	zap_light.position = Vector3(0, 1.6, 8)
+	zap_light.visible = false
+	ship.add_child(zap_light)
 	sonar_view = SonarView.new()
 	bridge.add_child(sonar_view)
 	rooms = RoomsView.new()
@@ -173,7 +182,16 @@ func step(dt: float) -> void:
 		overlay.set_light(false)
 		say("Прожектор погас: не хватает энергии")
 	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP))
-	hit_flash.color.a = vitals.flash * 0.35
+	zap.update(dt)
+	if zap.flicker > 0.0:
+		hit_flash.color = Color(0.37, 0.95, 0.84, zap.flicker / Zap.FLICKER * 0.4)
+		zap_light.visible = true
+		zap_light.omni_range = zap.radius
+		zap_light.light_energy = 4.0 * zap.flicker / Zap.FLICKER
+	else:
+		hit_flash.color = Color(1.0, 0.36, 0.42, vitals.flash * 0.35)
+		zap_light.visible = false
+	bridge.set_zap_lever(zap.flicker > 0.0)
 	_step_eco(dt)
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
@@ -188,7 +206,7 @@ func step(dt: float) -> void:
 
 
 ## Короткая подпись на кнопке действия у поста.
-const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер", "sonar": "Сонар"}
+const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер", "sonar": "Сонар", "zap": "Разряд"}
 
 
 ## Кнопка действия у поста.
@@ -200,6 +218,8 @@ func use_post(id: String) -> void:
 			open_power()
 		"sonar":
 			ping_sonar()
+		"zap":
+			fire_zap()
 		"scanner":
 			say("Сканер: рядом никого")
 		_ when id.begins_with("door"):
@@ -247,6 +267,15 @@ func ping_sonar() -> void:
 		eco_ship.sonar_range = sonar.range_m
 	if not msg.is_empty():
 		say(msg)
+
+
+## Разряд по корпусу: живой мир узнаёт о нём в этот же шаг (ShipState.zap, zap_radius).
+func fire_zap() -> void:
+	var msg := zap.fire(time, reactor.k(Reactor.Sys.ZAP), vitals)
+	if zap.fired_at(time):
+		eco_ship.zap = true
+		eco_ship.zap_radius = zap.radius
+	say(msg)
 
 
 ## Шаг живого мира: корабль отдаёт своё состояние, получает события (EcoLink) и решает, что с ними делать.
