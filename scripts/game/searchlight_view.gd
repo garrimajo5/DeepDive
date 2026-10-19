@@ -20,7 +20,7 @@ func _ready() -> void:
 	# затухание по расстоянию слабое, как у луча в браузере: в Godot 1,0 — почти обратный квадрат,
 	# и на 20 м до дна прожектор становился невидим (у тестера в pogrujenie — «луча на дне не видно»)
 	spot.spot_attenuation = Searchlight.ATTENUATION
-	spot.spot_angle_attenuation = 1.5
+	spot.spot_angle_attenuation = Searchlight.SPOT_EDGE
 	spot.light_cull_mask = OceanView.LAYER_WORLD
 	add_child(spot)
 	beam = MeshInstance3D.new()
