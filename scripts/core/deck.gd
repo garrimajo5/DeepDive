@@ -58,7 +58,6 @@ static func posts() -> Array[Post]:
 		Post.new("helm", Vector2(0.0, SEAT_Z), 1.7, "Сесть за штурвал"),
 		Post.new("energy", Vector2(-3.9, -2.0), 1.0, "Пульт энергии"),
 		Post.new("scanner", Vector2(3.85, -2.0), 1.0, "Сканер"),
-		Post.new("hatch", Vector2(0.0, 1.2), 0.9, "Люк в коридор"),
 	]
 
 

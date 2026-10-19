@@ -62,4 +62,4 @@ func test_scene_side_models_and_posts() -> void:
 	r.begin(2, r.layout.action.c)
 	r.end(2)
 	main.step(0.1)
-	eq(main.message.text, "Люк в коридор задраен", "люк пока задраен")
+	ok(main.layout.doors[0].open, "кнопка у люка открывает его")

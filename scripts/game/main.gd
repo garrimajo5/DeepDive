@@ -5,7 +5,8 @@ extends Node3D
 
 var walker := Deck.Walker.new()
 var pilot := Deck.Pilot.new()
-var posts: Array[Deck.Post] = Deck.posts()
+var layout := ShipLayout.new()
+var posts: Array[Deck.Post] = []
 var helm := Helm.Ship.new()
 var reactor := Reactor.new()
 var power := Reactor.Console.new()   ## выбор на пульте энергии
@@ -16,6 +17,7 @@ var current := Helm.SeaCurrent.new()
 var ocean: OceanView
 var ship: Node3D            ## корабль: всё, что движется вместе с ним
 var bridge: BridgeView
+var rooms: RoomsView
 var searchlight: SearchlightView
 var light_on := true        ## прожектор включён (кнопка «Свет» за штурвалом)
 var camera: Camera3D
@@ -39,6 +41,13 @@ func _ready() -> void:
 	bridge = BridgeView.new()
 	bridge.name = "Мостик"
 	ship.add_child(bridge)
+	rooms = RoomsView.new()
+	rooms.name = "Отсеки"
+	ship.add_child(rooms)
+	walker.stand = layout.can_stand
+	posts = Deck.posts()
+	for i in layout.doors.size():
+		posts.append(Deck.Post.new("door%d" % i, Vector2(0.0, ShipLayout.DOOR_Z[i]), 1.5, "Открыть люк"))
 	searchlight = SearchlightView.new()
 	searchlight.name = "Прожектор"
 	ship.add_child(searchlight)
@@ -129,12 +138,18 @@ func step(dt: float) -> void:
 		var post := Deck.nearest(posts, walker.x, walker.z)
 		if post and r.action_pressed:
 			use_post(post.id)
+	layout.update(dt)
+	for p in posts:
+		if p.id.begins_with("door"):
+			p.label = "Закрыть люк" if layout.doors[int(p.id.substr(4))].open else "Открыть люк"
 	current.update(dt)
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
 	helm.update(dt, reactor.k(Reactor.Sys.ENGINES), current.vel())
 	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP))
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
+	bridge.set_hatch(layout.doors[0].offset())
+	rooms.apply(layout, reactor)
 	message.update(dt)
 	_place_ship()
 	_place_camera()
@@ -143,7 +158,7 @@ func step(dt: float) -> void:
 
 
 ## Короткая подпись на кнопке действия у поста.
-const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер", "hatch": "Люк"}
+const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер"}
 
 
 ## Кнопка действия у поста.
@@ -155,8 +170,9 @@ func use_post(id: String) -> void:
 			open_power()
 		"scanner":
 			say("Сканер: рядом никого")
-		"hatch":
-			say("Люк в коридор задраен")
+		_ when id.begins_with("door"):
+			var d: ShipLayout.Door = layout.doors[int(id.substr(4))]
+			d.open = not d.open
 
 
 ## Встать к пульту энергии: взгляд на пульт, крестовина правит доли, кнопка — закрыть.
@@ -215,7 +231,10 @@ func _update_ui() -> void:
 		overlay.set_action_label("Закрыть")
 	else:
 		var post := Deck.nearest(posts, walker.x, walker.z)
-		overlay.set_action_label(POST_BUTTON.get(post.id, "") if post else "")
+		var label := ""
+		if post:
+			label = POST_BUTTON.get(post.id, "Люк" if post.id.begins_with("door") else "")
+		overlay.set_action_label(label)
 	var font := hint.get_theme_font("font")
 	var fs := hint.get_theme_font_size("font_size")
 	var width := minf(900.0, get_viewport().get_visible_rect().size.x - 48.0)
@@ -228,7 +247,7 @@ func status_parts() -> Array:
 	var parts: Array = []
 	if not reactor.alert().is_empty():
 		parts.append(reactor.alert())
-	parts.append("За штурвалом" if pilot.seated else "Мостик")
+	parts.append("За штурвалом" if pilot.seated else ShipLayout.ROOM_NAMES[ShipLayout.room_at(walker.z)])
 	parts.append("глубина %d м" % roundi(helm.depth()))
 	parts.append("ход %s м/с" % _num(helm.speed))
 	if pilot.seated:

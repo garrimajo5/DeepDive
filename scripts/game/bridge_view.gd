@@ -64,6 +64,12 @@ func set_slider(i: int, share: float) -> void:
 	sliders[i].position = Vector3(BridgeProps.SLIDER_X[i], y, BridgeProps.slider_z(y))
 
 
+## Створка люка в коридор отъезжает вбок на offset м; колесо крутится, пока створка не тронулась.
+func set_hatch(offset: float) -> void:
+	hatch_door.position.x = BridgeProps.HATCH_DOOR_OFFSET.x + offset
+	hatch_wheel.rotation_degrees.z = -offset / ShipLayout.Door.SLIDE * 540.0
+
+
 ## Поворот колеса вслед за штурвалом: turn −1…1 (вправо — по часовой, если смотреть из кресла).
 func set_wheel_turn(turn: float) -> void:
 	if wheel:
@@ -131,9 +137,9 @@ func _add_glass() -> void:
 	add_child(g)
 
 
-static func build_mesh() -> ArrayMesh:
+static func build_mesh(parts: Array[BridgePlan.Part] = BridgePlan.parts()) -> ArrayMesh:
 	var by_paint := {}
-	for part in BridgePlan.parts():
+	for part in parts:
 		if not by_paint.has(part.paint):
 			var st := SurfaceTool.new()
 			st.begin(Mesh.PRIMITIVE_TRIANGLES)
