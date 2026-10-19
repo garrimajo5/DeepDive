@@ -6,8 +6,10 @@
 - Заказы художнику и ошибки тестера — в GitHub Issues, работа приходит короткими PR (без долгоживущих веток):
   `art/ARTIST.md` (с требованиями к GLB для Godot), `AGENTS.md`, `docs/QA.md`, скрипты тестера в `tools/qa/`.
   `art/REQUESTS.md` убран: принятые заказы — `docs/concept-art/prinyatye-zakazy.md`, открытые — issues #3–#5.
-  Приняты работы, сданные в старую ветку `art/concepts`: ART-003 серпохвост, ART-004 флора, ART-005 карта отмели,
-  ART-007 эхоловец (остальные — ниже, по итогам приёмки).
+  Приняты все работы, сданные в старую ветку `art/concepts` (issues #6–#15): ART-003 серпохвост, ART-004 флора,
+  ART-005 карта отмели (места — `karta-otmeli-mesta.json`), ART-007 эхоловец, ART-009 лаборатория, ART-010 трюм,
+  ART-012 Чёрный курильщик; модели MOD-005 пульт энергии, MOD-006 люк, MOD-007 сканер — в `models/`,
+  как ставить — `docs/concept-art/modeli-bortovye-posty.md`.
 - Чистка после перехода: убраны браузерный прототип `archive/web/`, AR-страница `docs/concept.html` и макет
   `docs/kovcheg-bridge-v0.html`; `docs/context.txt` и `docs/plan.md` переписаны под Godot и Android без AR и VR.
 - Проба: на мостике модели художника MOD-001…004 прямо из GLB (кресло, голостол, стойка и колесо штурвала, пульт
