@@ -9,6 +9,6 @@
 
 - Правила разработки: `CLAUDE.md`, план: `ROADMAP.md`, изменения: `CHANGELOG.md`.
 - Мир и бестиарий: `docs/context.txt`, `docs/bestiary.md`; концепт-арт: `docs/concept-art/`.
-- Художник (Codex): `AGENTS.md`, `art/ARTIST.md`, заказы — `art/REQUESTS.md`.
+- Заказы художнику и ошибки — GitHub Issues. Художник (Codex): `AGENTS.md`, `art/ARTIST.md`; тестер: `docs/QA.md`.
 - Запуск тестов: `godot --headless --path . --import && godot --headless --path . -s tests/run.gd`.
 - Прежние версии (браузерный прототип и Unity) — в замороженном репозитории `garrimajo5/pogrujenie`.

@@ -3,6 +3,11 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-10-19
+- Заказы художнику и ошибки тестера — в GitHub Issues, работа приходит короткими PR (без долгоживущих веток):
+  `art/ARTIST.md` (с требованиями к GLB для Godot), `AGENTS.md`, `docs/QA.md`, скрипты тестера в `tools/qa/`.
+  `art/REQUESTS.md` убран: принятые заказы — `docs/concept-art/prinyatye-zakazy.md`, открытые — issues #3–#5.
+  Приняты работы, сданные в старую ветку `art/concepts`: ART-003 серпохвост, ART-004 флора, ART-005 карта отмели,
+  ART-007 эхоловец (остальные — ниже, по итогам приёмки).
 - Чистка после перехода: убраны браузерный прототип `archive/web/`, AR-страница `docs/concept.html` и макет
   `docs/kovcheg-bridge-v0.html`; `docs/context.txt` и `docs/plan.md` переписаны под Godot и Android без AR и VR.
 - Проба: на мостике модели художника MOD-001…004 прямо из GLB (кресло, голостол, стойка и колесо штурвала, пульт
