@@ -1,0 +1,73 @@
+extends TestCase
+## Строка состояния на приборах: раскладка по строкам, сообщения, румбы.
+
+var by_len := func(s: String) -> float: return float(s.length())
+
+
+func test_parts_wrap_whole() -> void:
+	var l := Status.lines(["Трюм", "глубина 20 м", "шлюз открыт", "образцов в трюме 3"], by_len, 30)
+	eq(l.size(), 3, "три строки")
+	eq(l[0], "Трюм · глубина 20 м", "склеены, пока помещаются")
+	eq(l[1], "шлюз открыт", "часть не рвётся посередине")
+	for line in l:
+		ok(line.length() <= 30 or not line.contains(Status.SEPARATOR), "строка в ширину: %s" % line)
+
+
+func test_repeat_part_skipped() -> void:
+	eq(Status.join(["Трюм", "шлюз открыт", "Шлюз открыт", "", "  "]), "Трюм · шлюз открыт", "повтор и пустые не пишутся")
+
+
+func test_long_part_stands_alone() -> void:
+	var l := Status.lines(["А", "очень длинная часть строки состояния", "Б"], by_len, 10)
+	eq(l, PackedStringArray(["А", "очень длинная часть строки состояния", "Б"]), "длинная часть — своя строка")
+
+
+func test_message_fades_after_4_2_s() -> void:
+	var m := Status.Message.new()
+	m.say("Прожектор погашен")
+	m.update(4.1)
+	ok(m.visible(), "ещё видно через 4,1 с")
+	m.update(0.2)
+	ok(not m.visible(), "погасло после 4,2 с")
+
+
+func test_clear_only_own_message() -> void:
+	var m := Status.Message.new()
+	m.say("Вы за штурвалом")
+	m.clear("Вы за штурвалом")
+	ok(not m.visible(), "своё гасится сразу")
+	m.say("Течение сменилось")
+	m.clear("Вы за штурвалом")
+	eq(m.text, "Течение сменилось", "чужое не трогаем")
+
+
+func test_rumbs_and_course() -> void:
+	eq(Status.rumb(Vector3(0, 0, -1)), "С", "к −Z — север")
+	eq(Status.rumb(Vector3(1, 0, 0)), "В", "+X — восток")
+	eq(Status.rumb(Vector3(-1, 0, 1)), "ЮЗ", "юго-запад")
+	eq(Status.course_deg(0.0), 0, "нос на север")
+	eq(Status.course_deg(-PI / 2), 90, "повернули вправо — восток")
+
+
+func test_scene_status_and_messages() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.step(0.1)
+	var line := Status.join(main.status_parts())
+	ok(line.begins_with("Мостик · глубина 20 м"), "на ногах: %s" % line)
+	ok(line.contains("Сесть за штурвал"), "у кресла — подсказка поста")
+	main.sit_at_helm()
+	main.step(0.1)
+	line = Status.join(main.status_parts())
+	ok(line.contains("За штурвалом") and line.contains("курс 0°") and line.contains("до дна") and line.contains("Вы за штурвалом"), line)
+	main.toggle_light()
+	main.step(0.1)
+	ok(Status.join(main.status_parts()).ends_with("прожектор выкл · течение на ЮВ 0,3 м/с · Прожектор погашен"), Status.join(main.status_parts()))
+	main.stand_up()
+	main.step(0.1)
+	ok(not main.message.visible() or main.message.text != Main.SAT_MSG, "после «Встать» «Вы за штурвалом» не висит")
+	for i in 50:
+		main.step(0.1)
+	ok(not main.message.visible(), "сообщение погасло")
+	ok(main.hint.text.contains("глубина"), "на экране приборы")
