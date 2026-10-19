@@ -16,6 +16,8 @@ var reactor := Reactor.new()
 var sonar := Sonar.new()
 var vitals := Vitals.new()   ## корпус и заряд корабля
 var zap := Zap.new()
+var engine := EngineRoom.new()   ## машинное: вентиль сброса пара и щиток «Аварийный сброс»
+var debug_vent := false          ## снимок: вентиль держат без пальца
 var zap_light: OmniLight3D   ## вспышка разряда вокруг корпуса (за бортом)
 var hit_flash: ColorRect
 var sonar_view: SonarView
@@ -116,6 +118,7 @@ func _ready() -> void:
 	ui.add_child(overlay)
 	reactor.message.connect(func(title: String, _text: String) -> void: say(title))
 	airlock.message.connect(say)
+	engine.message.connect(say)
 	_place_ship()
 	_place_camera()
 	if QaRunner.pending():
@@ -151,6 +154,7 @@ func step(dt: float) -> void:
 	if qa:
 		qa.tick(dt)
 	var r := overlay.router
+	var hold_valve := false
 	if pilot.seated:
 		helm.in_thrust = r.move.y
 		helm.in_turn = r.move.x
@@ -177,6 +181,7 @@ func step(dt: float) -> void:
 		var post := Deck.nearest(posts, walker.x, walker.z)
 		if post and r.action_pressed:
 			use_post(post.id)
+		hold_valve = post != null and post.id == "valve" and r.action_down
 	layout.update(dt)
 	airlock.update(dt)
 	for p in posts:
@@ -186,6 +191,7 @@ func step(dt: float) -> void:
 			p.label = airlock.label()
 	current.update(dt)
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
+	engine.update(dt, reactor, hold_valve or debug_vent)
 	helm.update(dt, reactor.k(Reactor.Sys.ENGINES), current.vel())
 	helm.speed = vitals.scrape(helm.bump / maxf(dt, 1e-4), helm.speed)
 	if vitals.update(dt, helm.in_thrust, helm.in_vert, Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP)), reactor.k(Reactor.Sys.LIFE)):
@@ -208,7 +214,7 @@ func step(dt: float) -> void:
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	bridge.set_hatch(layout.doors[0].offset())
 	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0)
-	rooms.apply(layout, reactor, airlock)
+	rooms.apply(layout, reactor, airlock, engine)
 	message.update(dt)
 	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt)
 	crew_view.apply()
@@ -219,7 +225,8 @@ func step(dt: float) -> void:
 
 
 ## Короткая подпись на кнопке действия у поста.
-const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер", "sonar": "Сонар", "zap": "Разряд", "airlock": "Шлюз"}
+const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер", "sonar": "Сонар", "zap": "Разряд", "airlock": "Шлюз",
+	"valve": "Вентиль", "scram": "Сброс"}
 
 
 ## Кнопка действия у поста.
@@ -235,6 +242,8 @@ func use_post(id: String) -> void:
 			fire_zap()
 		"airlock":
 			airlock.toggle()
+		"scram":
+			engine.press(reactor)
 		"scanner":
 			say("Сканер: рядом никого")
 		_ when id.begins_with("door"):
@@ -301,7 +310,7 @@ func _step_eco(dt: float) -> void:
 	s.speed = helm.speed
 	s.light_on = Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP))
 	s.light_range = Searchlight.range_m(reactor.k(Reactor.Sys.LAMP)) if s.light_on else 0.0
-	s.hull_noise = clampf(absf(helm.speed) / 6.7, 0.0, 1.0)
+	s.hull_noise = engine.noise(clampf(absf(helm.speed) / 6.7, 0.0, 1.0))
 	var events := eco.step(dt, s)
 	if s.sonar_ping:
 		sonar.take_contacts(events, helm.pos)
@@ -462,6 +471,10 @@ func debug_setup(kv: Dictionary) -> void:
 	if kv.has("hot"):  # hot=1 — перегрев (для снимка табло)
 		reactor.start_hot(false)
 		reactor.heat = float(kv["hot"])
+	if kv.get("steam", "0") == "1":  # пар из вентиля и открытая крышка щитка (для снимка машинного)
+		debug_vent = true
+		engine.pressed = 30.0
+		engine.lid = 1.0
 	if kv.has("ship"):  # ship=x,y,z — поставить корабль (y — высота, глубина со знаком минус)
 		var p: PackedFloat64Array = kv["ship"].split_floats(",")
 		helm.pos = Vector3(p[0], p[1], p[2])

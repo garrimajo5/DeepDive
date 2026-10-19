@@ -30,7 +30,7 @@
   (28 деталей, `inside`/`inside_world`), рисовать — задача «Корпус снаружи в сцене». `sonar.gd` — импульс, дальность,
   отметки из `EcoLink.NEAR`, карта рельефа; голограмма — `scripts/game/sonar_view.gd` + `shaders/sonar_holo.gdshader`.
   `crew.gd` — член экипажа (`Crew.Member`: поза стоя, на ходу и в кресле, руки на штурвале, снимок для сети;
-  `main.me` — свой игрок, `main.crew` — все), рисует `scripts/game/crew_view.gd`. `airlock.gd` — нижний шлюз трюма (крышка `cover_pose`, проём `in_hole`). `zap.gd` — разряд по корпусу (рычаг `Zap.LEVER_POS`, `main.fire_zap()`). `vitals.gd` — корпус и заряд корабля (`main.vitals`: `hit`, `spend`, `scrape`), то, что тратит заряд, берёт его через `spend`. Сообщение на приборах — `main.say(текст)`, части строки — `main.status_parts()`.
+  `main.me` — свой игрок, `main.crew` — все), рисует `scripts/game/crew_view.gd`. `engine_room.gd` — вентиль сброса пара (удержание, `main.engine`) и щиток «Аварийный сброс» в машинном. `engine_room.gd` — вентиль сброса пара (удержание, `main.engine`) и щиток «Аварийный сброс» в машинном. `airlock.gd` — нижний шлюз трюма (крышка `cover_pose`, проём `in_hole`). `zap.gd` — разряд по корпусу (рычаг `Zap.LEVER_POS`, `main.fire_zap()`). `vitals.gd` — корпус и заряд корабля (`main.vitals`: `hit`, `spend`, `scrape`), то, что тратит заряд, берёт его через `spend`. Сообщение на приборах — `main.say(текст)`, части строки — `main.status_parts()`.
 - `scripts/game/` — узлы: `main.gd` (сборка сцены, шаг игры `step(dt)`, пилот), `bridge_view.gd` (оболочка, стекло, модели,
   колесо `set_wheel_turn`), `ocean_view.gd` (дно, лёд, морской снег, вода по глубине `apply_water`), `searchlight_view.gd` (свет и конус луча,
   `apply(on, k)`), `touch_overlay.gd`, `qa_runner.gd`. Шейдеры — `shaders/`.

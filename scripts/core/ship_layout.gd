@@ -86,7 +86,7 @@ func can_stand(x: float, z: float, r: float = Deck.Walker.RADIUS) -> bool:
 			if absf(z - d.z) < 0.6 and d.passable():
 				ok = true
 				break
-	if not ok or Airlock.in_hole(x, z, r):
+	if not ok or Airlock.in_hole(x, z, r) or EngineRoom.blocks(x, z, r):
 		return false
 	return Vector2(x, z).distance_to(Vector2(REACTOR_POS.x, REACTOR_POS.z)) >= REACTOR_R + r
 

@@ -56,7 +56,7 @@ Main (main.gd)                    — шаг игры, пилот, посты, �
 | Палуба, посты, игрок | `deck.gd`, `ship_layout.gd` | `main.gd`, `rooms_view.gd` | А |
 | Экипаж (фигуры игроков) | `crew.gd` | `crew_view.gd` | А |
 | Мостик и модели | `bridge_plan.gd`, `bridge_props.gd` | `bridge_view.gd` | А |
-| Реактор и энергия | `reactor.gd` | `power_panel.gd` | А |
+| Реактор и энергия | `reactor.gd`, `engine_room.gd` | `power_panel.gd`, `rooms_view.gd` | А |
 | Прожектор | `searchlight.gd` | `searchlight_view.gd`, `shaders/beam.gdshader` | А |
 | Приборы | `status.gd` | `main.gd` | А |
 | Ввод | `touch.gd` | `touch_overlay.gd` | А |
