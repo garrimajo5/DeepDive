@@ -32,6 +32,7 @@ var hot_time := 0.0
 var scram := 0.0
 var next_hot := FIRST_HOT
 var vent_cd := 0.0
+var restart_heat := 50.0   ## нагрев после пуска: 50° после срыва, меньше — после ручного сброса (EngineRoom)
 
 ## Сообщение для приборов: заголовок и пояснение.
 signal message(title: String, text: String)
@@ -45,6 +46,7 @@ func reset() -> void:
 	scram = 0.0
 	next_hot = FIRST_HOT
 	vent_cd = 0.0
+	restart_heat = 50.0
 
 
 func used() -> int:
@@ -101,7 +103,8 @@ func update(dt: float, at_vent: bool) -> void:
 		scram -= dt
 		if scram <= 0.0:
 			scram = 0.0
-			heat = 50.0
+			heat = restart_heat
+			restart_heat = 50.0
 			message.emit("Реактор перезапущен", "Системы снова под напряжением.")
 	if not hot:
 		next_hot -= dt
@@ -124,6 +127,13 @@ func update(dt: float, at_vent: bool) -> void:
 		hot = false
 		next_hot = PERIOD
 		message.emit("Реактор остыл", "Можно снова раздать все 100 единиц.")
+
+
+## Ручной сброс щитком в машинном: обесточить на secs, после пуска — нагрев restart.
+func manual_scram(secs: float, restart: float) -> void:
+	scram = secs
+	restart_heat = restart
+	message.emit("Аварийный сброс реактора", "Реактор заглушён вручную на %d секунд." % int(secs))
 
 
 ## Табло тревоги: пусто, если всё спокойно.

@@ -64,6 +64,8 @@ static func posts() -> Array[Post]:
 		Post.new("sonar", Vector2(0.0, -1.2), 1.7, "Сонар: импульс"),
 		Post.new("zap", Zap.POST_AT, 0.9, "Разряд по корпусу"),
 		Post.new("airlock", Airlock.POST_AT, Airlock.POST_R, "Открыть шлюз"),
+		Post.new("valve", EngineRoom.VALVE_POST, EngineRoom.POST_R, "Вентиль: держать — сброс пара"),
+		Post.new("scram", EngineRoom.PANEL_POST, EngineRoom.POST_R, "Щиток: заглушить реактор"),
 	]
 
 

@@ -47,7 +47,7 @@ func test_scene_runs_scenario() -> void:
 	eq(qa.script_q.errors.size(), 0, "сценарий из tools/qa без ошибок")
 	var z0 := main.helm.pos.z
 	var sat := false
-	for i in 1200:  # 40 с игры
+	for i in 1500:  # 50 с игры
 		main.step(1.0 / 30.0)
 		sat = sat or main.pilot.seated
 		if qa.script_q.finished:
@@ -66,3 +66,14 @@ func test_scene_runs_scenario() -> void:
 	eq(main.reactor.share[Reactor.Sys.ENGINES], 25, "на пульте сняли 5 с двигателей")
 	ok(main.sonar.ping_time > 0.0, "у голостола дали импульс сонара")
 	ok(main.zap.last > 0.0, "у рычага дали разряд")
+	ok(log.contains("вентиль: пар, реактор остывает | "), "в машинном держали вентиль")
+	ok(main.reactor.scram > 0.0 and log.contains("аварийный сброс щитком | ") and log.contains("° сброс"),
+		"щитком заглушили реактор")
+
+
+func test_goto_and_hot_steps() -> void:
+	var q := QaScript.parse('[{"do": "goto", "x": 2.2, "z": 17.2, "yaw": -90}, {"do": "hot", "heat": 75}]')
+	eq(q.errors.size(), 0, "шаги понятны")
+	var out := q.advance(0.1)
+	eq(out[0], ["goto", 2.2, 17.2, -90.0], "переход")
+	eq(out[1], ["hot", 75.0], "перегрев")

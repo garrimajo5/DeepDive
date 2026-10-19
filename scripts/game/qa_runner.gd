@@ -57,6 +57,17 @@ func tick(dt: float) -> void:
 				r.end(c[1])
 			"shot":
 				_shot(c[1])
+			"goto":
+				if main.pilot.seated:
+					main.stand_up()
+				if main.at_power:
+					main.close_power()
+				main.walker.x = c[1]
+				main.walker.z = c[2]
+				main.walker.yaw = deg_to_rad(c[3])
+			"hot":
+				main.reactor.start_hot(false)
+				main.reactor.heat = c[1]
 			"log":
 				_log("%s | %s" % [c[1], state()])
 			"quit":
@@ -88,7 +99,7 @@ func state() -> String:
 	var h := main.helm
 	return "t %.1f с · %s · свет %s · глубина %.1f м · ход %.2f м/с · курс %.0f° · корабль (%.1f, %.1f, %.1f) · игрок (%.2f, %.2f) · реактор %s · %d кадр/с" % [
 		time, "за штурвалом" if main.pilot.seated else ("у пульта энергии" if main.at_power else "на ногах"), "вкл" if main.light_on else "выкл", h.depth(), h.speed, rad_to_deg(h.yaw),
-		h.pos.x, h.pos.y, h.pos.z, main.walker.x, main.walker.z, str(main.reactor.share), Engine.get_frames_per_second()]
+		h.pos.x, h.pos.y, h.pos.z, main.walker.x, main.walker.z, "%s %d°%s" % [str(main.reactor.share), roundi(main.reactor.heat), " сброс" if main.reactor.scram > 0.0 else ""], Engine.get_frames_per_second()]
 
 
 func _shot(name: String) -> void:
