@@ -1,4 +1,4 @@
-# Сдать отчёт тестера: ветка qa/<папка> от свежего main, отчёт и скриншоты (JPEG до ~300 КБ) в qa/<папка>/, пуш и PR.
+﻿# Сдать отчёт тестера: ветка qa/<папка> от свежего main, отчёт и скриншоты (JPEG до ~300 КБ) в qa/<папка>/, пуш и PR.
 # Использование: publish-qa.ps1 -Folder <ГГГГ-ММ-ДД-ЧЧММ-что> -Message "<сообщение коммита>" [-Shots 01-start,04-forward]
 # report.md должен уже лежать в D:\AI\DeepDive\qa\<Folder>\report.md. Скриншоты берутся из D:\AI\qa-build\run\.
 param([Parameter(Mandatory)][string]$Folder, [Parameter(Mandatory)][string]$Message, [string[]]$Shots)
