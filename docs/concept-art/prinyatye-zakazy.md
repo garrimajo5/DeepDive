@@ -246,3 +246,11 @@ y — высота, лёд на y = 0, метры. Упоминания Unity о
 emission), стекло 96 (alpha 0,2), стойка журнала 976, экран 2 треугольника с UV 0…1 — `models/kolba-tumba.glb`,
 `kolba-steklo.glb`, `zhurnal-stoyka.glb`, `zhurnal-ekran.glb`; места и оси — `laboratoriya.md`, раздел MOD-015;
 превью — `laboratoriya-modeli.png`. Ставит в сцену задача «Лаборатория по ART-009».
+
+## MOD-017 Трюм — стеллаж и банка образца — принято
+- Исходник: ART-010, `tryum-plan.png`, числа — `tryum.md`.
+
+**Принято 20.10.2026** (PR #122, папка `art/MOD-017-stellazh`): три GLB — стеллаж 984, банка 324 (огонёк — маска
+emission), стекло банки 64 (alpha 0,25) — `models/stellazh-tryuma.glb`, `banka-obraztsa.glb`, `banka-steklo.glb`;
+места, ячейки и оси — `tryum.md`, раздел MOD-017; превью — `tryum-stellazh-modeli.png`. Ставит в сцену задача
+«Полки на 24 образца».
