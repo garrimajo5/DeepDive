@@ -238,3 +238,11 @@ y — высота, лёд на y = 0, метры. Упоминания Unity о
 **Принято 20.10.2026** (PR #73, папка `art/MOD-014-razryad`): две GLB — щиток 1 124 (шкала — маска emission),
 рычаг 620 треугольников — `models/razryad-shchitok.glb`, `razryad-rychag.glb`; места и ход — `razryad.md`,
 раздел MOD-014; превью — `razryad-modeli.png`. Ставит в сцену задача «Рычаг разряда по концепту ART-015».
+
+## MOD-015 Лаборатория — колба на тумбе и стойка журнала — принято
+- Исходник: ART-009, `laboratoriya-plan.png`, решения — `laboratoriya.md`.
+
+**Принято 20.10.2026** (PR #81, папка `art/MOD-015-laboratoriya`): четыре GLB — тумба колбы 1 192 (ободки — маска
+emission), стекло 96 (alpha 0,2), стойка журнала 976, экран 2 треугольника с UV 0…1 — `models/kolba-tumba.glb`,
+`kolba-steklo.glb`, `zhurnal-stoyka.glb`, `zhurnal-ekran.glb`; места и оси — `laboratoriya.md`, раздел MOD-015;
+превью — `laboratoriya-modeli.png`. Ставит в сцену задача «Лаборатория по ART-009».
