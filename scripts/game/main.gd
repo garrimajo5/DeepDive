@@ -54,6 +54,7 @@ var press_t := 0.0
 var power_panel: PowerPanel
 var at_vote := false               ## игрок решает у голостола «глубже или наверх» (или смотрит итог)
 var vote_panel: VotePanel
+var route_card: RouteCard   ## карточка выбранного маршрута над голостолом (ART-016)
 var current := Helm.SeaCurrent.new()
 
 var ocean: OceanView
@@ -175,6 +176,9 @@ func _ready() -> void:
 	vote_panel = VotePanel.new()
 	vote_panel.name = "Решение экипажа"
 	ui.add_child(vote_panel)
+	route_card = RouteCard.new()
+	route_card.name = "Карточка маршрута"
+	ui.add_child(route_card)
 	hit_flash = ColorRect.new()
 	hit_flash.name = "Вспышка удара"
 	hit_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -515,6 +519,7 @@ func step(dt: float) -> void:
 	crew_view.apply()
 	_place_ship()
 	_place_camera()
+	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
 	_update_ui()
 	_warm_frame()
 	r.end_frame()

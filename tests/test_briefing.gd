@@ -111,3 +111,58 @@ func test_scene_icons() -> void:
 	near(sv.icons[3].pixel_size * 256.0, Briefing.ICON_SIZE, 1e-6, "размер на столе")
 	main.queue_free()
 	await frames(1)
+
+
+func test_card_lines() -> void:
+	eq(Briefing.card_lines(-1).size(), 0, "маршрут не выбран — карточки нет")
+	var l := Briefing.card_lines(0)
+	eq(l[0], "Рифовый сад", "название")
+	eq(l.slice(1, 4), ["1  Каменный цветок", "4  Кости левиафана", "5  Световой колодец"], "места по порядку с номерами карты")
+	eq(l[4], "Риск: много серпохвостов", "одна строка риска — последняя")
+	eq(Briefing.card_lines(1).size(), 4, "«Тёплые трубы»: два места")
+	eq(Briefing.RISK_COLOR, Color("F1A23D"), "риск янтарным, как в ART-016")
+
+
+func test_card_rect() -> void:
+	var scr := Vector2(1600, 720)
+	var sz := Vector2(300, 170)
+	var r := Briefing.card_rect(Vector2(1000, 240), sz, scr)
+	eq(r.position, Vector2(1000 + Briefing.CARD_GAP, 155), "справа от точки, по её высоте")
+	r = Briefing.card_rect(Vector2(1500, 240), sz, scr)
+	ok(r.end.x <= scr.x - Briefing.CARD_RIGHT_FREE, "не заходит на кнопку действия")
+	r = Briefing.card_rect(Vector2(500, 20), sz, scr)
+	eq(r.position.y, Briefing.CARD_TOP_FREE, "не закрывает строки приборов")
+	r = Briefing.card_rect(Vector2(500, 710), sz, scr)
+	eq(r.end.y, scr.y - Briefing.CARD_MARGIN, "не уходит под нижний край")
+	r = Briefing.card_rect(Vector2(-400, 300), sz, scr)
+	eq(r.position.x, Briefing.CARD_MARGIN, "не уходит за левый край")
+
+
+func test_scene_route_card() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.step(0.3)
+	ok(not main.route_card.visible, "у входа карточки нет")
+	main.walker.x = Main.ROUTE_POST.x
+	main.walker.z = Main.ROUTE_POST.y
+	main.walker.yaw = PI / 2   # лицом к голостолу (−X)
+	main.walker.pitch = -0.5
+	main.run.choose(2)
+	main.step(0.3)
+	main.step(0.05)
+	ok(main.route_card.visible, "у поста «Маршрут» — карточка выбранного маршрута")
+	eq(main.route_card.lines[0], "Край отмели")
+	near(main.route_card.alpha, 1.0, 1e-5, "переход закончен — карточка непрозрачна")
+	var scr := main.get_viewport().get_visible_rect().size
+	ok(Rect2(Vector2.ZERO, scr).encloses(main.route_card.rect), "карточка на экране")
+	main.walker.yaw = -PI / 2   # отвернулся — точка привязки за спиной
+	main.step(0.05)
+	ok(not main.route_card.visible, "точка за спиной — карточки нет")
+	main.walker.yaw = PI / 2
+	main.complete_route()
+	main.use_post("route")   # голосование — брифинг гаснет
+	main.step(0.3)
+	ok(not main.route_card.visible, "в голосовании карточки нет")
+	main.queue_free()
+	await frames(1)
