@@ -11,8 +11,25 @@ const LAYER_SHIP := 2
 ## Нашивка роли на левом плече (ART-014: роль узнают по снаряжению, цвет — тонкая метка).
 const PATCH_SIZE := Vector3(0.012, 0.07, 0.06)
 ## Свой игрок стоя: модель на 15 см позади камеры (`Crew.Member.back`) — взгляд вниз видит грудь и живот снаружи,
-## как глазами, а не изнутри куртки; с руками на посте тоже (кисти в точке хвата). Сидя и при сварке — на месте.
+## как глазами, а не изнутри куртки; с руками на посте тоже (кисти в точке хвата). Сидя и при сварке — на месте;
+## взглядом вниз — дальше (own_back).
 const OWN_BACK := 0.15
+## Свой игрок стоя смотрит вниз круче этого (рад, pitch < 0) — меш без груди (`CrewRig.HIDE_TORSO`): видны пояс, ноги
+## и ступни, а не грудь вплотную (issue #108). Выше порога грудь в кадр не попадает.
+const LEGS_PITCH := -0.6
+## Чем круче взгляд вниз, тем дальше фигура позади глаза — как голова, вынесенная вперёд: до DOWN_BACK (м) при
+## DOWN_PITCH; иначе пояс у самой камеры заслоняет ступни.
+const DOWN_BACK := 0.38
+const DOWN_PITCH := -1.3
+
+
+## Насколько своя фигура стоя позади глаза при наклоне взгляда pitch (рад): OWN_BACK, вниз — плавно до DOWN_BACK.
+## Руки на посте — OWN_BACK: фигура не отъезжает от пульта (наклон к нему не растёт), грудь с руками видна.
+static func own_back(look_pitch: float, holding: bool = false) -> float:
+	if holding:
+		return OWN_BACK
+	var t := clampf((LEGS_PITCH - look_pitch) / (LEGS_PITCH - DOWN_PITCH), 0.0, 1.0)
+	return lerpf(OWN_BACK, DOWN_BACK, t * t * (3.0 - 2.0 * t))
 
 var members: Array = []  ## Crew.Member
 var local: Crew.Member  ## свой игрок (без головы)
@@ -26,10 +43,11 @@ var gear: Array = []  ## снаряжение роли у каждой фигу�
 var gear_roles: Array[int] = []  ## роль, под которую надето снаряжение (-1 — ещё нет)
 ## Что нарисовано у каждой фигуры: сустав → точка в осях корабля (по костям модели; скрытых нет) — для тестов и сети.
 var shown: Array = []
+var pitch := 0.0  ## наклон взгляда своего игрока (рад, вниз < 0) — ставит Main перед apply()
 var _rest := {}  ## внешность → CrewRig.Rest
 var _own_mat := {}  ## внешность → материал своего игрока: с отсечением задних граней (не видно изнанки у камеры)
 var _scenes := {}  ## внешность → PackedScene модели (держим загруженной: новая фигура не грузит её заново)
-var _meshes := {}  ## внешность → меши [целый, для своего игрока — без головы и верха груди]
+var _meshes := {}  ## внешность → меши [целый, свой — без головы и верха груди, свой стоя взглядом вниз — без груди]
 
 
 ## Список экипажа; local — тот, чьими глазами смотрит камера.
@@ -79,7 +97,8 @@ func _build(i: int, look: int) -> void:
 		if mat is BaseMaterial3D:
 			(mat as BaseMaterial3D).cull_mode = BaseMaterial3D.CULL_BACK
 		_own_mat[look] = mat
-		_meshes[look] = [mi.mesh, cut_mesh(mi.mesh, mi.skin, sk, CrewRig.HIDE_HEAD + CrewRig.HIDE_CHEST, 0.15)]
+		_meshes[look] = [mi.mesh, cut_mesh(mi.mesh, mi.skin, sk, CrewRig.HIDE_HEAD + CrewRig.HIDE_CHEST, 0.15),
+			cut_mesh(mi.mesh, mi.skin, sk, CrewRig.HIDE_HEAD + CrewRig.HIDE_TORSO, 0.15)]
 	var att := BoneAttachment3D.new()
 	att.bone_name = "LeftArm"
 	sk.add_child(att)
@@ -175,6 +194,14 @@ static func _to_ship_layer(n: Node) -> void:
 		(m as MeshInstance3D).layers = LAYER_SHIP
 
 
+## Какой меш у фигуры: 0 — целый (другие), 1 — свой без головы и верха груди, 2 — свой стоя взглядом вниз, без груди
+## (сидя, на сварке и с руками на посте — 1: руки держатся за плечи).
+static func mesh_kind(m: Crew.Member, own: bool, look_pitch: float) -> int:
+	if not own:
+		return 0
+	return 2 if not m.seated and not m.welding() and not m.holding() and look_pitch < LEGS_PITCH else 1
+
+
 func apply() -> void:
 	for i in members.size():
 		var m: Crew.Member = members[i]
@@ -189,7 +216,8 @@ func apply() -> void:
 			sk.set_bone_pose_position(b, lp.origin)
 			sk.set_bone_pose_rotation(b, lp.basis.get_rotation_quaternion())
 		figures[i].position = Vector3.ZERO   # свой игрок стоя позади камеры — Crew.Member.back
-		meshes[i].mesh = _meshes[looks[i]][1 if own else 0]
+		var kind := mesh_kind(m, own, pitch)
+		meshes[i].mesh = _meshes[looks[i]][kind]
 		meshes[i].material_override = _own_mat[looks[i]] if own else null
 		patches[i].visible = not own  # своя нашивка у самой камеры
 		_dress(i, m.role)

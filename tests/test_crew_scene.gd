@@ -173,3 +173,44 @@ func test_scram_body_behind_camera() -> void:
 	ok(ahead < -0.08, "плечи позади камеры (%.3f м)" % ahead)
 	var hand: Vector3 = _shown(0, "hand_r")
 	ok(hand.distance_to(CrewHands.SCRAM_GRIP) < 0.08, "кисть на крышке (%.3f м)" % hand.distance_to(CrewHands.SCRAM_GRIP))
+
+
+## По issue #108: стоя взглядом вниз видны свои ноги и ступни — груди у камеры нет, фигура дальше позади глаза.
+func test_look_down_sees_feet() -> void:
+	main.walker.x = 0.0
+	main.walker.z = -3.0
+	main.walker.yaw = 0.0
+	main.walker.pitch = -0.1
+	main.step(1.0 / 30.0)
+	var cv := main.crew_view
+	eq(CrewView.mesh_kind(main.me, true, main.walker.pitch), 1, "взгляд вперёд — меш с грудью")
+	main.walker.pitch = -1.4
+	for i in 3:
+		main.step(1.0 / 30.0)
+	eq(CrewView.mesh_kind(main.me, true, main.walker.pitch), 2, "взгляд вниз — меш без груди")
+	ok(cv.meshes[0].mesh == cv._meshes[cv.looks[0]][2], "на фигуре — меш без груди")
+	near(main.me.back, CrewView.DOWN_BACK, 1e-4, "фигура дальше позади глаза")
+	var cam: Transform3D = main.camera.transform
+	var hip: Vector3 = _shown(0, "hip")
+	var fwd: Vector3 = main.me.joints()["fwd"]
+	for k in ["toe_l", "toe_r"]:
+		var toe: Vector3 = _shown(0, k)
+		var loc := cam.affine_inverse() * toe
+		ok(loc.z < 0.0 and absf(rad_to_deg(atan2(loc.y, -loc.z))) < Deck.FOV * 0.5, "%s в кадре" % k)
+		## Луч к носку проходит перед поясом, а не сквозь него.
+		var t := (cam.origin.y - hip.y) / (cam.origin.y - toe.y)
+		var p := cam.origin.lerp(toe, t)
+		ok((p - hip).dot(fwd) > 0.2, "%s: луч на %.2f м перед поясом" % [k, (p - hip).dot(fwd)])
+	main.sit_at_helm()
+	main.step(1.0 / 30.0)
+	eq(CrewView.mesh_kind(main.me, true, main.walker.pitch), 1, "сидя — с грудью")
+	main.stand_up()
+
+
+func test_own_back_by_pitch() -> void:
+	near(CrewView.own_back(0.0), CrewView.OWN_BACK, 1e-6, "взгляд вперёд — как было")
+	near(CrewView.own_back(CrewView.LEGS_PITCH), CrewView.OWN_BACK, 1e-6, "с порога — плавно")
+	near(CrewView.own_back(-1.45), CrewView.DOWN_BACK, 1e-6, "до конца вниз")
+	var a := CrewView.own_back(-0.9)
+	ok(a > CrewView.OWN_BACK and a < CrewView.DOWN_BACK, "посередине — между")
+	near(CrewView.own_back(-1.45, true), CrewView.OWN_BACK, 1e-6, "руки на посте — не отъезжает от пульта")
