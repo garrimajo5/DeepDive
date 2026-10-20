@@ -199,19 +199,21 @@ static func _set_mode(pr: Pred, m: Mode, t: float) -> void:
 			pr.agent.state = EcoAgent.State.GRAZE
 
 
-## Манит ли корабль: свет или недавний сонар ближе 32 м (заражённого пиявником — 48 м), шум двигателей ближе 24 м
+## Манит ли корабль: свет или недавний сонар ближе 32 м (заражённого пиявником — 48 м; с каждым спуском «глубже» —
+## дальше, × ShipState.pred_k()), шум двигателей ближе 24 м
 ## (если его не глушит трубный орган). Корабль в чернилах подушечника не манит вовсе (!E.shipHidden).
 func lured(world: EcoWorld, pr: Pred, d_ship: float) -> bool:
 	if ship_hidden(world):
 		return false
 	var s := world.ship
-	var seen := d_ship < reach(pr) and (s.light_on or world.time - world.last_ping < PING_MEMORY)
+	var seen := d_ship < reach(pr, s.pred_k()) and (s.light_on or world.time - world.last_ping < PING_MEMORY)
 	return seen or hears_ship(world, pr, d_ship)
 
 
-## С какого расстояния видит свет и сонар корабля: заражённый пиявником — издалека.
-static func reach(pr: Pred) -> float:
-	return EcoLeech.REACH if pr.leech else REACH
+## С какого расстояния видит свет и сонар корабля: заражённый пиявником — издалека; глубже — чутьё острее
+## (pred_k — ShipState.pred_k(), js: (pr.leech ? 48 : 32) * G.Run.predK()).
+static func reach(pr: Pred, pred_k := 1.0) -> float:
+	return (EcoLeech.REACH if pr.leech else REACH) * pred_k
 
 
 ## Спрятан ли корабль от хищников (E.shipHidden): в облаке чернил подушечника.
@@ -416,7 +418,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 ## к кораблю, без паузы после укуса, плывёт к кораблю проверить (25 с); наблюдение «betray» — раз в 30 с на хищника.
 ## Корабль в чернилах подушечника вспышка не выдаёт.
 func _step_flare(world: EcoWorld, pr: Pred, d_ship: float) -> void:
-	if not raduzh.flare_seen(d_ship, reach(pr)) or ship_hidden(world) or pr.cooldown > 0.0:
+	if not raduzh.flare_seen(d_ship, reach(pr, world.ship.pred_k())) or ship_hidden(world) or pr.cooldown > 0.0:
 		return
 	if pr.mode != Mode.PATROL and pr.mode != Mode.INVESTIGATE:
 		return

@@ -85,6 +85,34 @@ func test_light_lures_closer_than_32() -> void:
 	ok(ev[0].is_observation(), "заметка журнала «идёт на таран, если горит прожектор»")
 
 
+## Глубже — чутьё острее (js/creatures.js:275, R.predK): на третьем спуске (dive = 2) свет виден с 32 × 1,3 = 41,6 м.
+func test_deeper_dive_sees_light_farther() -> void:
+	var w := _alone()
+	var pr := _ready_pred(w, 38.0)
+	w.ship.light_on = true
+	_step(w)
+	eq(pr.mode, EcoPred.Mode.PATROL, "первый спуск: за 38 м свет не видит")
+
+	w = _alone()
+	w.ship.dive = 2
+	pr = _ready_pred(w, 38.0)
+	w.ship.light_on = true
+	_step(w)
+	eq(pr.mode, EcoPred.Mode.CHARGE, "dive = 2: свет за 38 м — бросок")
+
+	w = _alone()
+	w.ship.dive = 2
+	pr = _ready_pred(w, 43.0)
+	w.ship.light_on = true
+	_step(w)
+	eq(pr.mode, EcoPred.Mode.PATROL, "дальше 41,6 м и на третьем спуске не видит")
+
+	near(EcoPred.reach(pr, w.ship.pred_k()), 32.0 * 1.3, 1e-4)
+	pr.leech = true
+	near(EcoPred.reach(pr, w.ship.pred_k()), 48.0 * 1.3, 1e-4, "заражённый пиявником — 48 × predK")
+	eq(EcoPred.reach(pr), 48.0, "без множителя — как раньше")
+
+
 func test_dark_and_quiet_no_attack() -> void:
 	var w := _alone()
 	var pr := _ready_pred(w, 15.0)
