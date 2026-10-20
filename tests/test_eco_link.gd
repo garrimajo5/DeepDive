@@ -252,3 +252,56 @@ func test_dive_sharpens_predators() -> void:
 	near(fake.got.pred_k(), 1.15, 1e-6, "хищники чутче на 15 %")
 	main.queue_free()
 	await frames(1)
+
+
+## Кража образцов скальником (#201): мир видит захват лебёдки и может сорвать образец с захвата и бросить.
+func test_claw_steal_and_drop() -> void:
+	eq([EcoLink.CLAW_IDLE, EcoLink.CLAW_REACH, EcoLink.CLAW_BACK],
+		[Samples.State.IDLE, Samples.State.REACH, Samples.State.BACK], "состояния захвата совпадают с Samples.State")
+	eq(EcoLink.steal("Скальник", 4), {"type": EcoLink.STEAL, "by": "Скальник", "sample": 4})
+	eq(EcoLink.drop(4, Vector3(1, 2, 3)), {"type": EcoLink.DROP, "sample": 4, "at": Vector3(1, 2, 3)})
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var fake := FakeEco.new()
+	main.eco.queue_free()
+	main.eco = fake
+	main.add_child(fake)
+	main.park_over_sample(8)
+	main.step(0.05)
+	eq(fake.got.claw_state, EcoLink.CLAW_IDLE, "захват в покое")
+	eq(fake.got.claw_sample, -1)
+	var xf := Samples.ship_xform(main.helm.pos, main.helm.yaw)
+	ok(fake.got.claw.distance_to(xf * Samples.REST) < 1e-3, "захват в трюме над шлюзом")
+	var lock := Samples.lock_point(xf)
+	for i in 10:
+		main.samples.hold(lock, 0.05)
+		main.step(0.05)
+	eq(fake.got.claw_state, EcoLink.CLAW_REACH, "тянется")
+	eq(fake.got.claw_sample, 8, "к образцу 8")
+	eq(fake.got.claw_target, main.samples.all[8].pos, "где лежит цель")
+	ok(fake.got.claw.y < lock.y, "захват ниже шлюза")
+	fake.send = [EcoLink.steal("Скальник", 8)]
+	main.step(0.05)
+	eq(main.samples.state, Samples.State.REACH, "пока тянется — не сорвать")
+	for i in 30:
+		main.samples.hold(lock, 0.05)
+		main.step(0.05)
+		if main.samples.state == Samples.State.BACK:
+			break
+	main.step(0.05)
+	eq(fake.got.claw_state, EcoLink.CLAW_BACK, "поднимает")
+	fake.send = [EcoLink.steal("Скальник", 8)]
+	main.step(0.05)
+	eq(main.samples.state, Samples.State.IDLE, "сорван — захват пуст")
+	ok(main.message.text.begins_with("Образец украден: Скальник"), "сообщение на приборах")
+	for i in 40:
+		main.step(0.05)
+	eq(main.samples.cargo.size(), 0, "в трюм не лёг")
+	var at := main.samples.all[8].pos + Vector3(3, 0, 0)
+	fake.send = [EcoLink.drop(8, at)]
+	main.step(0.05)
+	ok(not main.samples.all[8].taken, "брошен — снова на дне")
+	near(main.samples.all[8].pos.x, at.x, 1e-5, "там, где бросил")
+	main.queue_free()
+	await frames(1)
