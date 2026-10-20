@@ -19,6 +19,7 @@ const SCRAPE_LIFT := 1.5     ## дно поднимает корабль быс�
 const HIT_COOLDOWN := 1.2
 const LOW_ENERGY := 15.0
 const LOW_HULL := 25.0
+const DRAIN_HOLD := 0.5      ## тревога о присоске держится столько секунд после последнего EcoLink.DRAIN
 
 var hull := MAX
 var energy := MAX
@@ -26,6 +27,8 @@ var hit_cd := 0.0
 var shake := 0.0       ## тряска камеры после удара, с
 var flash := 0.0       ## красная вспышка экрана после удара, 0…1
 var drain_ext := 0.0   ## внешний расход в этот шаг (присоски), ед./с
+var drain_by := ""     ## кто последним тянул заряд («Стеклоуст»)
+var drain_left := 0.0  ## сколько ещё держать тревогу о присоске, с
 
 signal hit_taken(percent: int, kind: String)
 signal destroyed
@@ -38,6 +41,8 @@ func reset() -> void:
 	shake = 0.0
 	flash = 0.0
 	drain_ext = 0.0
+	drain_by = ""
+	drain_left = 0.0
 
 
 func lost() -> bool:
@@ -50,6 +55,7 @@ func update(dt: float, thrust: float, vert: float, light: bool, k_life: float) -
 	var drain := absf(thrust) * DRAIN_THRUST + absf(vert) * DRAIN_VERT + (DRAIN_LIGHT if light else 0.0) + drain_ext
 	energy = clampf(energy + (REGEN - drain) * dt, 0.0, MAX)
 	drain_ext = 0.0
+	drain_left = maxf(0.0, drain_left - dt)
 	if hull > 0.0 and hull < MAX:
 		hull = minf(MAX, hull + dt * REPAIR * k_life)
 	hit_cd -= dt
@@ -79,6 +85,22 @@ func scrape(lift: float, speed: float) -> float:
 		hit(roundi(absf(speed) * 1.4), "scrape")
 		return speed * -0.25
 	return speed
+
+
+## Существо тянет заряд (EcoLink.DRAIN): units ед./с уйдут в следующем шаге, тревога держится DRAIN_HOLD с.
+func drain(by: String, units: float) -> void:
+	if units <= 0.0:
+		return
+	drain_ext += units
+	drain_by = by
+	drain_left = DRAIN_HOLD
+
+
+## Тревога для приборов, пока на корпусе присоска (js/game.js: «Стеклоуст на корпусе пьёт энергию…»); пусто — нет.
+func drain_alarm() -> String:
+	if drain_left <= 0.0:
+		return ""
+	return "%s на корпусе пьёт энергию. Разряд — рычаг у левого борта" % (drain_by if drain_by != "" else "Существо")
 
 
 ## Потратить заряд; false — не хватает.
