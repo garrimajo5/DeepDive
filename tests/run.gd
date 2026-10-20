@@ -29,6 +29,7 @@ class ErrorTrap:
 
 
 func _initialize() -> void:
+	SaveGame.default_path = ""   # не читать и не писать сохранение игрока
 	_run.call_deferred()
 
 

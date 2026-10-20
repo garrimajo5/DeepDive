@@ -18,6 +18,7 @@ var vitals := Vitals.new()   ## корпус и заряд корабля
 var zap := Zap.new()
 var samples := Samples.new()   ## образцы на дне и лебёдка трюма
 var samples_view: SamplesView
+var save := SaveGame.new()     ## груз трюма и поднятые образцы в user:// (js/save.js)
 var engine := EngineRoom.new()   ## машинное: вентиль сброса пара и щиток «Аварийный сброс»
 var debug_vent := false          ## снимок: вентиль держат без пальца
 var debug_winch := false         ## снимок: кнопку у лебёдки держат без пальца
@@ -137,6 +138,10 @@ func _ready() -> void:
 	airlock.message.connect(say)
 	samples.message.connect(say)
 	engine.message.connect(say)
+	if QaRunner.pending():   # прогон тестера — всегда с чистого трюма и без записи
+		save.path = ""
+	save.load_into(samples)
+	samples.changed.connect(save.mark)
 	_place_ship()
 	_place_camera()
 	if QaRunner.pending():
@@ -160,6 +165,12 @@ func _build_world() -> void:
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
+
+
+## Игру сворачивают или закрывают — несохранённое записать сразу.
+func _notification(what: int) -> void:
+	if what in [NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_APPLICATION_FOCUS_OUT]:
+		save.flush(samples)
 
 
 func _process(dt: float) -> void:
@@ -209,6 +220,7 @@ func step(dt: float) -> void:
 		samples.hold(Samples.lock_point(ship_xf), dt)
 	samples.update(dt)
 	samples_view.sync()
+	save.tick(dt, samples)
 	for p in posts:
 		if p.id.begins_with("door"):
 			p.label = "Закрыть люк" if layout.doors[int(p.id.substr(4))].open else "Открыть люк"
