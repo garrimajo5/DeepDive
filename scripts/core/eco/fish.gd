@@ -24,6 +24,11 @@ const CALM_SPEED := 2.4
 const MIN_SPEED := 0.5
 ## Запас до корпуса корабля, м (S.pushOut(f.p, 0.3)).
 const HULL_GAP := 0.3
+## Стая дальше FAR от корабля (в тумане, плотность ≥ 0,0135 — видна на четверть) ходит реже: шагом FAR_STEP
+## (= EcoWorld.MAX_STEP, при 60 к/с — каждый третий кадр), набирая пропущенное время. Дальние стаи сдвинуты
+## по фазе, чтобы не считались в одном кадре.
+const FAR := 100.0
+const FAR_STEP := 0.05
 
 ## Дома стай: шесть мест кораллов (W.coralSpots), ближайших к (0, 55) и разнесённых больше чем на 35 м, плюс 1,5 м
 ## вверх — числа браузерной версии (в Unity x со знаком минус). Дом на 3,5 м над дном (Seabed.height).
@@ -66,7 +71,14 @@ class Shoal:
 	## Угроза — корабль, а не хищник: домой не уходят.
 	var threat_is_ship := false
 	var color := Color.WHITE
+	## Набранное время дальней стаи (с), ещё не прошагнутое.
+	var lag := 0.0
 	var members: Array = []  ## Array[Fish]
+	## Места и жизнь рыбок стаи по Fish.slot на начало шага стаи и расталкивание каждой (sep): пары соседей
+	## считаются один раз (22 × 21 / 2), без обхода объектов.
+	var pos := PackedVector3Array()
+	var live := PackedByteArray()
+	var sep := PackedVector3Array()
 
 
 ## Рыбка: существо мира и её место в стае.
@@ -81,6 +93,8 @@ class Fish:
 			_shoal = weakref(value) if value else null
 	## Номер среди всех рыбок (место в MultiMesh).
 	var index := 0
+	## Номер в стае (Shoal.pos, Shoal.live).
+	var slot := 0
 	## Фаза покачивания.
 	var phase := 0.0
 	## Яркость цвета стаи, 0,75–1,15.
@@ -92,6 +106,8 @@ var shoals: Array[Shoal] = []
 var all: Array[Fish] = []
 
 var _rnd: EcoRandom
+## Живые хищники на этом шаге: один обход мира на все стаи.
+var _preds: Array[EcoAgent] = []
 
 
 ## Своё зерно стай: от зерна мира, чтобы другой мир был другим, а остальные виды не сдвигались.
@@ -111,6 +127,7 @@ func reset(world: EcoWorld) -> void:
 		sh.goal = h
 		sh.center = h
 		sh.color = COLORS[si % COLORS.size()]
+		sh.lag = (si % 3) * FAR_STEP / 3.0
 		shoals.append(sh)
 		for k in PER_SHOAL:
 			var p := h + Vector3(_rnd.range_f(-3, 3), _rnd.range_f(0, 3), _rnd.range_f(-3, 3))
@@ -122,11 +139,15 @@ func reset(world: EcoWorld) -> void:
 			f.agent = a
 			f.shoal = sh
 			f.index = all.size()
+			f.slot = sh.members.size()
 			f.phase = _rnd.range_f(0, 6)
 			f.bright = _rnd.range_f(0.75, 1.15)
 			all.append(f)
 			sh.members.append(f)
 		sh.alive = PER_SHOAL
+		sh.pos.resize(PER_SHOAL)
+		sh.live.resize(PER_SHOAL)
+		sh.sep.resize(PER_SHOAL)
 
 
 ## Съесть рыбку: пропадает на 25–40 с, потом появляется у дома стаи.
@@ -153,11 +174,27 @@ func nearest_fish(pos: Vector3, radius: float, skip: Callable = Callable()) -> F
 
 
 func step(world: EcoWorld, dt: float) -> void:
-	for sh in shoals:
-		_step_shoal(world, sh, dt)
+	_preds.clear()
+	for a in world.agents:
+		if a.alive and a.species == "pred":
+			_preds.append(a)
 	var t := world.time
-	for f in all:
-		_step_fish(world, f, dt, t)
+	# дальше этого (в квадрате) от корабля корпус рыбку не достанет — EcoHull не зовём
+	var hull_r2 := (EcoHull.BOUND + HULL_GAP) * (EcoHull.BOUND + HULL_GAP)
+	for sh in shoals:
+		var h := dt
+		if sh.center.distance_to(world.ship.pos) > FAR:
+			sh.lag += dt
+			if sh.lag < FAR_STEP - 1e-6:
+				continue
+			h = sh.lag
+			sh.lag = 0.0
+		elif sh.lag > 0.0:
+			h += sh.lag  # стая подошла: догоняет набранное
+			sh.lag = 0.0
+		_step_shoal(world, sh, h)
+		for f: Fish in sh.members:
+			_step_fish(world, f, h, t, world.ground, hull_r2)
 
 
 func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
@@ -165,11 +202,15 @@ func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
 	var v := Vector3.ZERO
 	var n := 0
 	for f: Fish in sh.members:
-		if f.agent.alive:
-			c += f.agent.p
-			v += f.agent.v
+		var a := f.agent
+		sh.pos[f.slot] = a.p
+		sh.live[f.slot] = 1 if a.alive else 0
+		if a.alive:
+			c += a.p
+			v += a.v
 			n += 1
 	sh.alive = n
+	sh.sep = _separation(sh.pos, sh.live)
 	if n > 0:
 		sh.center = c / n
 		sh.velocity = v / n
@@ -192,9 +233,7 @@ func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
 	sh.has_threat = false
 	sh.threat_is_ship = false
 	var best := PRED_ALARM
-	for a in world.agents:
-		if not a.alive or a.species != "pred":
-			continue
+	for a in _preds:
 		var d := a.p.distance_to(sh.center)
 		if d < best:
 			best = d
@@ -222,7 +261,7 @@ static func _flee_text(world: EcoWorld) -> Callable:
 		return "%s: стая уходит в кораллы — рядом хищник" % Species.cap(name)
 
 
-func _step_fish(world: EcoWorld, f: Fish, dt: float, t: float) -> void:
+func _step_fish(world: EcoWorld, f: Fish, dt: float, t: float, ground: Callable, hull_r2: float) -> void:
 	var a := f.agent
 	var sh := f.shoal
 	if not a.alive:
@@ -231,42 +270,68 @@ func _step_fish(world: EcoWorld, f: Fish, dt: float, t: float) -> void:
 		a.alive = true
 		a.p = sh.home + Vector3(_rnd.range_f(-2, 2), _rnd.range_f(0, 2), _rnd.range_f(-2, 2))
 		a.v = Vector3(0, 0.2, 0)
+	# место и скорость — в локальных, обратно в агента один раз (свойство объекта на каждое чтение дороже)
+	var p := a.p
+	var v := a.v
 	var alarm := sh.alarm > 0.0
-	var acc := (sh.center - a.p) * 0.5 + (sh.velocity - a.v) * 0.6
+	var acc := (sh.center - p) * 0.5 + (sh.velocity - v) * 0.6
 	var goal := sh.home if alarm and not sh.threat_is_ship else sh.goal
-	acc += (goal - a.p).limit_length(8.0) * (1.2 if alarm else 0.35)
-	for o: Fish in sh.members:
-		if o == f or not o.agent.alive:
-			continue
-		var dp := a.p - o.agent.p
-		var d2 := dp.length_squared()
-		if d2 < 0.6 and d2 > 1e-5:
-			acc += dp * (1.8 / (d2 + 0.05))
+	acc += (goal - p).limit_length(8.0) * (1.2 if alarm else 0.35)
+	acc += sh.sep[f.slot]
 	if sh.has_threat:
-		var away := a.p - sh.threat
+		var away := p - sh.threat
 		var d := away.length()
 		if d < 14.0 and d > 0.01:
 			acc += away * ((10.0 * (1.0 - d / 14.0) + 2.0) / d)
-	acc += Vector3(sin(t * 1.7 + f.phase) * 0.6, sin(t * 1.3 + f.phase * 2.0) * 0.3, cos(t * 1.5 + f.phase) * 0.6)
-	var has_ground := world.ground.is_valid()
-	var h: float = world.ground.call(a.p.x, a.p.z) if has_ground else 0.0
-	if has_ground and a.p.y < h + 1.2:
-		acc.y += (h + 1.2 - a.p.y) * 6.0
-	if a.p.y > -3.0:
+	var ph := f.phase
+	acc += Vector3(sin(t * 1.7 + ph) * 0.6, sin(t * 1.3 + ph * 2.0) * 0.3, cos(t * 1.5 + ph) * 0.6)
+	var has_ground := ground.is_valid()
+	var h := a.ground_y(ground) if has_ground else 0.0
+	if has_ground and p.y < h + 1.2:
+		acc.y += (h + 1.2 - p.y) * 6.0
+	if p.y > -3.0:
 		acc.y -= 4.0
 
-	a.v += acc * dt
-	var hide := alarm and a.p.distance_to(sh.home) < 4.0
+	v += acc * dt
+	var hide := alarm and p.distance_squared_to(sh.home) < 16.0
 	var max_s := HIDE_SPEED if hide else (ALARM_SPEED if alarm else CALM_SPEED)
-	var sp := a.v.length()
+	var sp := v.length()
 	if sp > max_s:
-		a.v *= max_s / sp
+		v *= max_s / sp
 	elif sp < MIN_SPEED:
-		a.v *= MIN_SPEED / (sp + 1e-3)
-	a.p += a.v * dt
-	world.push_out(a, HULL_GAP) # сквозь корпус не проплывают
-	if has_ground and a.p.y < h + a.clearance:
-		a.p.y = h + a.clearance
-	a.p.x = clampf(a.p.x, -EcoAgent.EDGE, EcoAgent.EDGE)
-	a.p.z = clampf(a.p.z, -EcoAgent.EDGE, EcoAgent.EDGE)
+		v *= MIN_SPEED / (sp + 1e-3)
+	p += v * dt
+	a.p = p
+	a.v = v
+	if p.distance_squared_to(world.ship.pos) < hull_r2 and world.push_out(a, HULL_GAP): # сквозь корпус не проплывают
+		p = a.p
+	if has_ground and p.y < h + a.clearance:
+		p.y = h + a.clearance
+	p.x = clampf(p.x, -EcoAgent.EDGE, EcoAgent.EDGE)
+	p.z = clampf(p.z, -EcoAgent.EDGE, EcoAgent.EDGE)
+	a.p = p
 	a.state = EcoAgent.State.HIDE if hide else (EcoAgent.State.FLEE if alarm else EcoAgent.State.GRAZE)
+
+
+## Не толкаться: живые соседи ближе √0,6 м отталкивают друг друга (сила 1,8 / (d² + 0,05) по разнице мест).
+## pos, live — места и жизнь рыбок стаи; возвращает толчок каждой.
+static func _separation(pos: PackedVector3Array, live: PackedByteArray) -> PackedVector3Array:
+	var n := pos.size()
+	var out := PackedVector3Array()
+	out.resize(n)
+	for i in n:
+		if live[i] == 0:
+			continue
+		var pi := pos[i]
+		var ai := out[i]
+		for j in range(i + 1, n):
+			if live[j] == 0:
+				continue
+			var dp := pi - pos[j]
+			var d2 := dp.length_squared()
+			if d2 < 0.6 and d2 > 1e-5:
+				var push := dp * (1.8 / (d2 + 0.05))
+				ai += push
+				out[j] -= push
+		out[i] = ai
+	return out

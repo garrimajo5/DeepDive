@@ -40,6 +40,15 @@ var target: EcoAgent:
 
 var _target: WeakRef
 
+## Высота дна под существом запоминается: дно пересчитывается (ground.call — fbm Seabed.height, дорого), только когда
+## существо отплыло дальше GROUND_STEP по горизонтали или сменился сам ground. Сетка дна в сцене — 5 м, отличие ≤ 0,15 м.
+## Для мелких и многочисленных (светляки); confine смотрит дно точно — серпохвост не уходит под него ни на сантиметр.
+const GROUND_STEP := 0.25
+var _gx := INF
+var _gz := INF
+var _gh := 0.0
+var _gcall: Callable
+
 
 ## Неизвестный вид (нет в Species) — предупреждение, существо сразу неживое: мир его не двигает.
 func _init(species_id: String, pos: Vector3) -> void:
@@ -102,6 +111,19 @@ func drive(want: Vector3, dt: float, ground: Callable = Callable()) -> void:
 	v = v.lerp(want, minf(1.0, dt * agility))
 	p += v * dt
 	confine(ground)
+
+
+## Высота дна под существом (ground — (x, z) -> float, должен быть задан): из запомненной, пока не отплыло
+## дальше GROUND_STEP.
+func ground_y(ground: Callable) -> float:
+	var dx := p.x - _gx
+	var dz := p.z - _gz
+	if dx * dx + dz * dz > GROUND_STEP * GROUND_STEP or ground != _gcall:
+		_gx = p.x
+		_gz = p.z
+		_gh = ground.call(p.x, p.z)
+		_gcall = ground
+	return _gh
 
 
 ## Не под дном, не выше потолка, не за краем отмели (как после шага серпохвоста).
