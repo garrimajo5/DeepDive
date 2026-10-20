@@ -10,6 +10,8 @@ const SEAM_COLOR := Color("f18a3d")
 const SPARK_COLOR := Color("d5e4e8")
 const ALARM_ENERGY := 1.6
 const HOLE_COLOR := Color("0b1c24")
+const SIREN_DB := -16.0      ## сирена тише струи: слышно, но не оглушает (js/audio.js: 0,05 при общей 0,7)
+const JET_DB := -4.0
 const LIFT := 0.012          ## обшивка чуть над поверхностью борта, чтобы не мерцала с ним
 
 var breach: Breach
@@ -24,6 +26,8 @@ var splash: CPUParticles3D   ## брызги там, где струя бьёт 
 var weld_light: OmniLight3D
 var water: MeshInstance3D
 var alarm: OmniLight3D
+var siren: AudioStreamPlayer       ## сирена на весь корабль, пока пробоина открыта (Synth.siren)
+var jet_sound: AudioStreamPlayer3D ## шум струи из отверстия (Synth.jet)
 var _shown: Breach.Spot = null
 
 
@@ -129,6 +133,19 @@ func _ready() -> void:
 	water.layers = OceanView.LAYER_SHIP
 	water.visible = false
 	add_child(water)
+	siren = AudioStreamPlayer.new()
+	siren.name = "Сирена"
+	siren.stream = Synth.siren()
+	siren.volume_db = SIREN_DB
+	add_child(siren)
+	jet_sound = AudioStreamPlayer3D.new()
+	jet_sound.name = "Шум струи"
+	jet_sound.stream = Synth.jet()
+	jet_sound.volume_db = JET_DB
+	jet_sound.unit_size = 2.5
+	jet_sound.max_distance = 18.0
+	jet_sound.position = Vector3(0, 0, 0.1)
+	spot_node.add_child(jet_sound)
 	alarm = OmniLight3D.new()
 	alarm.name = "Тревога"
 	alarm.light_color = ALARM_COLOR
@@ -182,6 +199,14 @@ static func seam_glow(b: Breach) -> float:
 	return 1.6 * (b.weld if b.active else b.seam_heat)
 
 
+## Включить или выключить петлю, не перезапуская уже играющую.
+static func _play(p: Node, on: bool) -> void:
+	if on and not p.playing:
+		p.play()
+	elif not on and p.playing:
+		p.stop()
+
+
 ## Брызги в осях узла пробоины (+Z — внутрь отсека): где струя падает на воду, высота — уровень воды.
 static func splash_local(s: Breach.Spot, water_h: float) -> Vector3:
 	return Vector3(0.0, water_h - s.p.y, Breach.jet_reach(s, water_h) - LIFT)
@@ -191,6 +216,8 @@ static func splash_local(s: Breach.Spot, water_h: float) -> Vector3:
 func apply() -> void:
 	var s := breach.last
 	spot_node.visible = s != null
+	_play(siren, breach.active != null)
+	_play(jet_sound, breach.active != null)
 	if s == null:
 		water.visible = false
 		alarm.visible = false
