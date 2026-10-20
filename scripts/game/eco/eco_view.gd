@@ -62,6 +62,9 @@ var skalnik_view: SkalnikView
 ## Монетники: три стайки над пятнами мха у старта, рассыпаются от сонара; глазуны в песке хватают их снизу.
 var coins: EcoCoins
 var coins_view: CoinsView
+## Чёрный курильщик (место 2, ART-012): трубы на дне, светящиеся жерла, столб пузырей до льда, марево.
+var vent: EcoVent
+var vent_view: VentView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -82,6 +85,7 @@ var ground: Callable:
 		_rebuild_hvaten()
 		_rebuild_kelp()
 		_rebuild_coins()
+		_rebuild_vent()
 
 
 func _init() -> void:
@@ -121,6 +125,7 @@ func _init() -> void:
 	coins = world.add(EcoCoins.new(moss, preds)) as EcoCoins
 	coins.bladders = bladders
 	bladders.coins = coins
+	vent = world.add(EcoVent.new()) as EcoVent
 	_rebuild_moss()
 	_rebuild_coral()
 	_rebuild_ferns()
@@ -133,6 +138,7 @@ func _init() -> void:
 	_rebuild_hvaten()
 	_rebuild_kelp()
 	_rebuild_coins()
+	_rebuild_vent()
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -253,6 +259,15 @@ func _rebuild_coins() -> void:
 		coins_view.free()
 	coins_view = CoinsView.new(coins)
 	add_child(coins_view)
+
+
+## Чёрный курильщик по дну мира (трубы встают на дно, пузыри — от жерл; дальше движутся в шейдере).
+func _rebuild_vent() -> void:
+	if vent_view:
+		remove_child(vent_view)
+		vent_view.free()
+	vent_view = VentView.new(vent)
+	add_child(vent_view)
 
 
 ## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
