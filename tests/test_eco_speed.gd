@@ -132,6 +132,23 @@ func test_hull_bound_covers_hull() -> void:
 		eq(EcoHull.push_out(ship + Vector3(EcoHull.BOUND + 1.0, 0, 0), ship, yaw, 0.3), [], "вдали — пусто")
 
 
+## Мерка скорости машины: 40 раз толчки соседей в стае из 22 рыбок (чистый GDScript, как шаг мира); на ПК ≈ 0,6 мс.
+const REF_PC_MS := 0.6
+
+
+static func _ref_ms() -> float:
+	var r := EcoRandom.new(7)
+	var pos := PackedVector3Array()
+	var live := PackedByteArray()
+	for i in 22:
+		pos.append(Vector3(r.range_f(-1.5, 1.5), r.range_f(-1, 1), r.range_f(-1.5, 1.5)))
+		live.append(1)
+	var t0 := Time.get_ticks_usec()
+	for i in 40:
+		EcoFish._separation(pos, live)
+	return (Time.get_ticks_usec() - t0) / 1000.0
+
+
 func test_view_step_fits_frame() -> void:
 	var view := EcoView.new()
 	tree.root.add_child(view)
@@ -140,16 +157,110 @@ func test_view_step_fits_frame() -> void:
 	ship.pos = Helm.Ship.START
 	for i in 30:
 		view.step(1.0 / 60.0, ship)
-	# лучшее из пяти замеров по 60 кадров: на ПК было 3,2 мс, стало ≈ 0,95; со стеклоустами 1,4, после #133 — 1,1; с радужниками и огнёвками 1,3, дальние стаи
-	# радужников через кадр — 1,2;
-	# запас на медленную машину CI (там примерно в полтора раза дольше)
+	# лучшее из пяти замеров по 60 кадров: на ПК было 3,2 мс, стало ≈ 0,95; со стеклоустами 1,4, после #133 — 1,1;
+	# с радужниками, огнёвками и хватнями 1,47; дальние хватни, средние стаи радужников и стоящие стаи светляков
+	# не переписываются каждый кадр — 1,29 (issue #133, второй раз).
+	# Порог 2 мс — для машины не медленнее ПК; медленная машина CI (в полтора раза и больше) или занятая облачная
+	# сессия получает порог по мерке скорости, замеренной между теми же кадрами: тест ловит рост шага, а не железо.
 	var best := INF
+	var ref := INF
 	for k in 5:
+		ref = minf(ref, _ref_ms())
 		var t0 := Time.get_ticks_usec()
 		for i in 60:
 			view.step(1.0 / 60.0, ship)
 		best = minf(best, (Time.get_ticks_usec() - t0) / 60.0 / 1000.0)
-	ok(best < 2.0, "шаг живого мира %.2f мс (< 2 мс)" % best)
+	var slow := maxf(1.0, ref / REF_PC_MS)
+	var limit := 2.0 * slow
+	ok(best < limit, "шаг живого мира %.2f мс (< %.2f мс; машина медленнее ПК в %.2f раза)" % [best, limit, slow])
+	view.queue_free()
+	await frames(1)
+
+
+## Дальний хватень вне луча переписывается раз в три кадра, близкий и освещённый — каждый (issue #133).
+func test_far_hvaten_synced_every_third_frame() -> void:
+	var hv := EcoHvaten.Anemone.new()
+	hv.index = 2
+	hv.base = Vector3(0, -30, 0)
+	var far := Vector3(HvatenView.FAR + 5.0, -30, 0)
+	var hits := 0
+	for f in 30:
+		if HvatenView.due(hv, far, f):
+			hits += 1
+	eq(hits, 10, "дальний — раз в три кадра")
+	for f in 3:
+		ok(HvatenView.due(hv, Vector3(10, -30, 0), f), "близкий — каждый кадр")
+	hv.lit = true
+	for f in 3:
+		ok(HvatenView.due(hv, far, f), "в луче — каждый кадр")
+
+
+func test_view_skips_far_hvaten() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Vector3(500, 0, 500)
+	var hvv := view.hvaten_view
+	var writes := 0
+	for f in 30:
+		hvv.tent_buffer[3] = 1234.0
+		view.step(1.0 / 60.0, ship)
+		if hvv.tent_buffer[3] != 1234.0:
+			writes += 1
+	eq(writes, 10, "хватень 0 вдали переписан 10 раз за 30 кадров")
+	view.queue_free()
+	await frames(1)
+
+
+## Средняя стая радужников (между MID и FAR) — через кадр.
+func test_mid_raduzh_swarm_synced_every_second_frame() -> void:
+	var sw := EcoRaduzh.Swarm.new()
+	sw.index = 0
+	sw.c = Vector3(0, -30, 0)
+	var mid := Vector3((RaduzhView.MID + RaduzhView.FAR) * 0.5, -30, 0)
+	var hits := 0
+	for f in 30:
+		if RaduzhView.due(sw, mid, f):
+			hits += 1
+	eq(hits, 15, "средняя — через кадр")
+
+
+## Стоящая (дальняя, копит время) стая светляков в буфере не переписывается, но съеденная рыбка гаснет сразу;
+## шагнувшая — как EcoFishLook (issue #133).
+func test_fish_view_keeps_waiting_shoals() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Vector3(500, 0, 500)
+	view.step(1.0 / 60.0, ship)
+	var fv := view.fish_view
+	var waiting: EcoFish.Shoal = null
+	for sh in view.fish.shoals:
+		if sh.lag > 0.0:
+			waiting = sh
+			break
+	if not ok(waiting != null, "есть стая, которая в этом кадре стоит"):
+		view.queue_free()
+		return
+	var f0 := waiting.members[0] as EcoFish.Fish
+	var f1 := waiting.members[1] as EcoFish.Fish
+	fv.buffer[f0.index * FishView.STRIDE + 3] = 1234.0
+	view.fish.kill(f1)
+	fv.sync(view.world.time)
+	eq(fv.buffer[f0.index * FishView.STRIDE + 3], 1234.0, "стоящая стая не переписана")
+	near(FishView.transform_at(fv.buffer, f1.index).basis.x.length(), 0.0, 1e-9, "съеденная погасла сразу")
+	var full := FishView.pack(view.fish, view.world.time)
+	for sh in view.fish.shoals:
+		if sh.lag > 0.0:
+			continue
+		for f: EcoFish.Fish in sh.members:
+			var i := f.index * FishView.STRIDE
+			for c in FishView.STRIDE:
+				if not ok(absf(fv.buffer[i + c] - full[i + c]) < 1e-6, "шагнувшая стая — как pack"):
+					view.queue_free()
+					return
 	view.queue_free()
 	await frames(1)
 
