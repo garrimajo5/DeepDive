@@ -39,6 +39,8 @@ var sonar_view: SonarView
 var time := 0.0             ## секунды игры (для сонара и событий)
 var power := Reactor.Console.new()   ## выбор на пульте энергии
 var at_power := false              ## игрок у пульта энергии: крестовина правит доли
+var press_post := ""               ## пост, у которого только что нажали кнопку (руки на нём CrewHands.PRESS с)
+var press_t := 0.0
 var power_panel: PowerPanel
 var current := Helm.SeaCurrent.new()
 
@@ -281,6 +283,7 @@ func step(dt: float) -> void:
 		say("Прожектор погас: не хватает энергии")
 	vitals.hull = breach.update(dt, reactor.k(Reactor.Sys.LIFE), vitals.hull)
 	breach_view.apply()
+	_hands(dt, hold_valve, hold_winch, hold_scan)
 	if breach.welding and breach.active:   # свой игрок варит: резак в руке, щиток опущен
 		me.weld(breach.active.p, breach.active.n)
 	else:
@@ -323,8 +326,37 @@ const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "sca
 	"valve": "Вентиль", "scram": "Сброс", "breach": "Сварка", "journal": "Журнал"}
 
 
+## Руки своего игрока на посте (CrewHands): у пульта энергии, пока держит вентиль, лебёдку или сканер; после
+## нажатия у голостола, рычага и щитка — ещё CrewHands.PRESS секунд.
+func _hands(dt: float, valve: bool, winch: bool, scan: bool) -> void:
+	press_t = maxf(press_t - dt, 0.0)
+	var g := CrewHands.none()
+	if pilot.seated:
+		pass
+	elif at_power:
+		g = CrewHands.energy(power.sel, reactor.share[power.sel] / float(Reactor.MAX))
+	elif valve:
+		g = CrewHands.valve()
+	elif winch:
+		g = CrewHands.winch(walker.x, walker.z)
+	elif scan:
+		g = CrewHands.scanner()
+	elif press_t > 0.0:
+		match press_post:
+			"sonar":
+				g = CrewHands.table(walker.x, walker.z)
+			"zap":
+				g = CrewHands.lever(zap.lever_deg(time))
+			"scram":
+				g = CrewHands.scram()
+	me.hold(g[0], g[1])
+
+
 ## Кнопка действия у поста.
 func use_post(id: String) -> void:
+	if id in ["sonar", "zap", "scram"]:
+		press_post = id
+		press_t = CrewHands.PRESS
 	match id:
 		"helm":
 			sit_at_helm()

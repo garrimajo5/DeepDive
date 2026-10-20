@@ -1,0 +1,72 @@
+extends TestCase
+## Руки на постах (CrewHands): пульт энергии, голостол, рычаг разряда, вентиль, лебёдка, сканер, щиток;
+## фигура тянется к точкам хвата, в снимке для сети руки передаются.
+
+
+func _stand(x: float, z: float, yaw: float, g: Array[Vector3]) -> Dictionary:
+	var m := Crew.Member.new()
+	m.hold(g[0], g[1])
+	m.follow(x, z, yaw, false, 0.0, 0.1)
+	return m.joints()
+
+
+func _hand(j: Dictionary, k: String) -> Vector3:
+	return (j["wrist_" + k] + j["hand_" + k]) * 0.5
+
+
+func test_energy_hand_on_selected_slider() -> void:
+	var g := CrewHands.energy(0, 0.3)
+	ok(g[0].x > -4.7 and g[0].x < -4.4 and g[0].y > 0.6 and g[0].y < 1.4, "ползунок двигателей на пульте: %s" % g[0])
+	ok(g[0].z > g[1].z, "двигатели — левый для смотрящего паз (к корме, +z), левой рукой")
+	var g4 := CrewHands.energy(4, 0.3)
+	ok(g4[1].z < g4[0].z, "прожектор — правый паз, правой рукой")
+	ok(CrewHands.energy(0, 1.0)[0].y > g[0].y + 0.3, "рука идёт за ползунком вверх")
+	var j := _stand(-3.9, -2.0, PI / 2.0, g)
+	ok(_hand(j, "l").distance_to(g[0]) < 0.06, "левая кисть на ползунке (%.3f)" % _hand(j, "l").distance_to(g[0]))
+	ok(_hand(j, "r").distance_to(g[1]) < 0.06, "правая — на крае пульта")
+
+
+func test_table_hands_face_player() -> void:
+	var g := CrewHands.table(0.0, 0.4)
+	for h in g:
+		ok(h.z > BridgeProps.TABLE_Z + 0.9 and absf(h.y - CrewHands.TABLE_Y) < 1e-4, "ладонь на ближнем крае стола: %s" % h)
+	ok(g[0].x < g[1].x, "лицом к носу: левая рука — к левому борту")
+	var j := _stand(0.0, 0.4, 0.0, g)
+	ok(_hand(j, "r").distance_to(g[1]) < 0.06, "дотянулся до края")
+
+
+func test_lever_follows_angle() -> void:
+	var up := CrewHands.lever(Zap.LEVER_UP)[1]
+	var down := CrewHands.lever(Zap.LEVER_DOWN)[1]
+	ok(up.y > Zap.LEVER_POS.y + 0.05 and down.y < Zap.LEVER_POS.y - 0.05, "набалдашник вверху и внизу")
+	ok(up.x > Zap.LEVER_POS.x, "рукоять — в отсек")
+	ok(not CrewHands.lever(0.0)[0].is_finite(), "левая рука свободна")
+	var j := _stand(Zap.POST_AT.x, Zap.POST_AT.y, PI / 2.0, CrewHands.lever(Zap.LEVER_DOWN))
+	ok(_hand(j, "r").distance_to(down) < 0.08, "правая на рычаге (%.3f)" % _hand(j, "r").distance_to(down))
+
+
+func test_engine_room_and_hold_posts() -> void:
+	var v := CrewHands.valve()
+	ok(v[0].distance_to(EngineRoom.VALVE_WHEEL) < 0.25 and v[1].distance_to(EngineRoom.VALVE_WHEEL) < 0.25, "руки на колесе вентиля")
+	var w := CrewHands.winch(-0.6, 22.2)
+	for h in w:
+		near(Vector2(h.x, h.z).distance_to(Vector2(Samples.BASE.x, Samples.BASE.z)), Samples.COLUMN_R + 0.04, 0.03, "на опоре лебёдки")
+		ok(h.z < Samples.BASE.z, "со стороны игрока")
+	var s := CrewHands.scanner()
+	ok(s[0].z < s[1].z and s[0].x < BridgeProps.SCANNER_POS.x, "ладони на раме сканера")
+	ok(not CrewHands.scram()[0].is_finite() and CrewHands.scram()[1].is_finite(), "щиток — правой рукой")
+
+
+func test_free_hands_swing_and_snapshot() -> void:
+	var m := Crew.Member.new()
+	m.follow(0.0, 0.0, 0.0, false, 0.0, 0.1)
+	var free_hand: Vector3 = m.joints()["hand_l"]
+	m.hold(Vector3.INF, Vector3(0.3, 1.2, -0.5))
+	ok(m.holding(), "держит правой")
+	near(m.joints()["hand_l"].distance_to(free_hand), 0.0, 1e-5, "левая висит как раньше")
+	var b := Crew.Member.new()
+	b.apply(JSON.parse_string(JSON.stringify(m.snapshot())))
+	ok(not b.hands[0].is_finite() and b.hands[1].is_equal_approx(m.hands[1]), "руки — в снимке через JSON")
+	m.hold()
+	b.apply(m.snapshot())
+	ok(not b.holding(), "отпустил — и в снимке")

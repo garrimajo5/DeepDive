@@ -46,6 +46,8 @@ const GRIP_FOLLOW_DEG := 35.0
 ## При сварке правая рука держит резак так, чтобы сопло было в 6 см от шва; не дотянуться — рука вытянута к нему.
 const TORCH_NOZZLE := Vector3(0.0, 0.1766, -0.1428)
 const TORCH_GAP := 0.06
+## Руки на посте далеко: фигура наклоняется к нему (от таза), не больше LEAN_MAX рад.
+const LEAN_MAX := 0.75
 ## Шов ниже плеча: при сварке фигура приседает (таз ниже, колени вперёд), чтобы рука доставала. Не больше CROUCH_MAX.
 const CROUCH_MAX := 0.3
 const CROUCH_ARM_DROP := 0.35  ## на сколько хват может быть ниже плеча без приседа
@@ -115,6 +117,15 @@ static func bone(a: Vector3, b: Vector3, w: float, d: float, fwd: Vector3 = Vect
 	return Transform3D(Basis(x * w, y * len, z * d), (a + b) * 0.5)
 
 
+## Точка для снимка: [x, y, z] или [] (INF — нет точки), и обратно.
+static func _v3(p: Vector3) -> Array:
+	return [p.x, p.y, p.z] if p.is_finite() else []
+
+
+static func _from3(a: Array) -> Vector3:
+	return Vector3(a[0], a[1], a[2]) if a.size() == 3 else Vector3.INF
+
+
 ## Член экипажа: место (ступни, оси корабля), курс, поза и фаза шага.
 class Member:
 	extends RefCounted
@@ -128,6 +139,7 @@ class Member:
 	var wheel_turn := 0.0
 	var weld_at := Vector3.INF  ## точка сварки (пробоина, оси корабля) — правая рука с резаком к ней; INF — не варит
 	var weld_n := Vector3.ZERO  ## нормаль борта в точке сварки (внутрь отсека)
+	var hands: Array[Vector3] = [Vector3.INF, Vector3.INF]  ## руки на посте [левая, правая] (CrewHands); INF — свободна
 	var phase := 0.0  ## фаза шага, рад
 	var swing := 0.0  ## 0 — стоит, 1 — идёт полным ходом
 	var _last := Vector2.INF
@@ -160,6 +172,14 @@ class Member:
 	func weld(p: Vector3, n: Vector3 = Vector3.ZERO) -> void:
 		weld_at = p
 		weld_n = n
+
+	## Руки на посте: точки хвата [левая, правая] в осях корабля (CrewHands), INF — рука свободна.
+	func hold(l: Vector3 = Vector3.INF, r: Vector3 = Vector3.INF) -> void:
+		hands = [l, r]
+
+	## Держит ли что-то хоть одной рукой (пост или резак).
+	func holding() -> bool:
+		return welding() or hands[0].is_finite() or hands[1].is_finite()
 
 	## Насколько присесть при сварке (м): шов ниже плеча стоя больше чем на CROUCH_ARM_DROP.
 	func crouch() -> float:
@@ -209,6 +229,8 @@ class Member:
 			right = Vector3(cos(yaw), 0.0, -sin(yaw))
 			hip = Vector3(x, HIP - 0.03 * swing * absf(cos(phase)) - crouch(), z)
 			up = Vector3.UP
+			if not welding() and holding():   # руки на посте: наклон к нему, пока не достанет
+				up = Basis(Vector3.UP.cross(fwd).normalized(), _lean(hip, fwd, right)) * Vector3.UP
 		j["hip"] = hip
 		var neck := hip + up * TORSO
 		j["neck"] = neck
@@ -249,6 +271,9 @@ class Member:
 				if side == 1 and welding():
 					_reach(j, k, sh, torch_grip(), right * s)
 					continue
+				if hands[side].is_finite():
+					_reach(j, k, sh, hands[side], right * s)
+					continue
 				## Рука качается против ноги своей стороны, локоть чуть согнут.
 				var ah := -sin(ph) * ARM_SWING * swing
 				var adir := Vector3.DOWN * cos(ah) + fwd * sin(ah) + right * (0.08 * s)
@@ -261,6 +286,24 @@ class Member:
 		j["fwd"] = fwd
 		j["up"] = up
 		return j
+
+	## Наклон к посту (рад): самый малый, при котором обе руки достают до точек хвата, не больше LEAN_MAX.
+	func _lean(hip: Vector3, fwd: Vector3, right: Vector3) -> float:
+		var axis := Vector3.UP.cross(fwd).normalized()
+		var reach := UPPER_ARM + FOREARM + HAND * 0.5 - 0.02
+		var a := 0.0
+		while a < LEAN_MAX:
+			var up := Basis(axis, a) * Vector3.UP
+			var neck := hip + up * TORSO - up * 0.04
+			var fits := true
+			for side in 2:
+				if hands[side].is_finite():
+					var sh := neck + right * (SHOULDER_HALF * (-1.0 if side == 0 else 1.0))
+					fits = fits and sh.distance_to(hands[side]) <= reach
+			if fits:
+				return a
+			a += 0.05
+		return LEAN_MAX
 
 	## Рука k от плеча sh к точке хвата grip (середина кисти); локоть — вниз и наружу (out).
 	func _reach(j: Dictionary, k: String, sh: Vector3, grip: Vector3, out: Vector3) -> void:
@@ -305,7 +348,8 @@ class Member:
 	func snapshot() -> Dictionary:
 		return {"role": role, "name": name, "look": look, "x": x, "z": z, "yaw": yaw, "seated": seated,
 			"turn": wheel_turn, "phase": phase, "swing": swing,
-			"weld": [weld_at.x, weld_at.y, weld_at.z, weld_n.x, weld_n.y, weld_n.z] if weld_at.is_finite() else []}
+			"weld": [weld_at.x, weld_at.y, weld_at.z, weld_n.x, weld_n.y, weld_n.z] if weld_at.is_finite() else [],
+			"hand_l": Crew._v3(hands[0]), "hand_r": Crew._v3(hands[1])}
 
 	func apply(s: Dictionary) -> void:
 		role = int(s.get("role", role))
@@ -323,4 +367,5 @@ class Member:
 			weld(Vector3(w[0], w[1], w[2]), Vector3(w[3], w[4], w[5]))
 		else:
 			weld(Vector3.INF)
+		hold(Crew._from3(s.get("hand_l", [])), Crew._from3(s.get("hand_r", [])))
 		_last = Vector2(x, z)
