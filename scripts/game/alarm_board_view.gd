@@ -13,6 +13,9 @@ var face: MeshInstance3D
 var mat: ShaderMaterial
 var levels: Array[Vector2] = []   ## последние уровни полей (AlarmBoard.levels)
 var _words: SubViewport
+var hint: MeshInstance3D          ## янтарная рамка у поста главной тревоги (AlarmBoard.hint), 1 вызов отрисовки
+var hint_mat: StandardMaterial3D
+var _hint_key := ""
 
 
 func _ready() -> void:
@@ -70,17 +73,62 @@ func _ready() -> void:
 	face.layers = OceanView.LAYER_SHIP
 	face.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(face)
+
+	hint = MeshInstance3D.new()
+	hint.name = "Подсказка: рамка у поста"
+	hint_mat = StandardMaterial3D.new()
+	hint_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	hint_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	hint_mat.albedo_color = AlarmBoard.WORD_ON
+	hint.material_override = hint_mat
+	hint.layers = OceanView.LAYER_SHIP
+	hint.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	hint.visible = false
+	add_child(hint)
 	show_alarms([false, false, false, false, false], 0.0)
 
 
 ## Состояние полей: on — активные тревоги по порядку AlarmBoard.Field, t — время игры (мигание главной).
-func show_alarms(on: Array[bool], t: float) -> void:
+## breach_spot — открытая пробоина (к ней ведёт рамка, если главная тревога — пробоина).
+func show_alarms(on: Array[bool], t: float, breach_spot: Breach.Spot = null) -> void:
 	levels = AlarmBoard.levels(on, t)
 	if mat:
 		var arr := PackedVector2Array()
 		for v in levels:
 			arr.append(v)
 		mat.set_shader_parameter("lv", arr)
+	if hint:
+		_show_hint(AlarmBoard.hint(AlarmBoard.main_field(on), breach_spot), AlarmBoard.hint_glow(on, t))
+
+
+func _show_hint(h: AlarmBoard.Hint, glow: float) -> void:
+	hint.visible = h != null
+	if h == null:
+		return
+	var key := "%s %s" % [h.size, h.normal]
+	if key != _hint_key:
+		_hint_key = key
+		hint.mesh = build_hint(h.size)
+	var z := h.normal
+	var up := Vector3.UP
+	hint.transform = Transform3D(Basis(up.cross(z).normalized(), up, z), h.center)
+	hint_mat.albedo_color = Color(AlarmBoard.WORD_ON * glow, 1.0)
+
+
+## Рамка подсказки в своих осях: 4 бруска в плоскости XY (лицо +Z, материал без отсечения граней).
+static func build_hint(size: Vector2) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for bar in AlarmBoard.hint_bars(size):
+		var c: Vector2 = bar[0]
+		var hs: Vector2 = bar[1] * 0.5
+		var a := Vector3(c.x - hs.x, c.y - hs.y, 0.0)
+		var b := Vector3(c.x + hs.x, c.y - hs.y, 0.0)
+		var d := Vector3(c.x + hs.x, c.y + hs.y, 0.0)
+		var e := Vector3(c.x - hs.x, c.y + hs.y, 0.0)
+		for v in [a, d, b, a, e, d]:
+			st.add_vertex(v)
+	return st.commit()
 
 
 static func build_frame() -> ArrayMesh:

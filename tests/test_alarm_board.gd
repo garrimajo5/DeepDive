@@ -71,3 +71,57 @@ func test_scene_board() -> void:
 	eq(lv[AlarmBoard.Field.HEAT].x, 0.0)
 	main.queue_free()
 	await frames(1)
+
+
+func test_hint_targets() -> void:
+	eq(AlarmBoard.hint(-1, null), null, "тревог нет — рамки нет")
+	var z := AlarmBoard.hint(AlarmBoard.Field.DRAIN, null)
+	near(z.center.z, Zap.PANEL_POS.z, 1e-6, "стеклоуст — щиток разряда")
+	ok(z.center.x > Zap.PANEL_POS.x and z.normal == Vector3.RIGHT, "перед щитком, лицом в мостик")
+	ok(z.size.x > 0.45 and z.size.y > 0.6, "рамка шире щитка")
+	var e := AlarmBoard.hint(AlarmBoard.Field.CHARGE, null)
+	near(e.center.z, BridgeProps.ENERGY_POS.z, 1e-6, "мало заряда — пульт энергии")
+	var h := AlarmBoard.hint(AlarmBoard.Field.HEAT, null)
+	ok(h.normal == Vector3.FORWARD and h.center.z < BridgeProps.HATCH_POS.z, "перегрев — кормовой люк мостика")
+	ok(h.center.z > ShipLayout.DOOR_Z[0] - 0.5, "не сквозь борт в машинное")
+	var w := AlarmBoard.hint(AlarmBoard.Field.SILT, null)
+	near(w.center.z, BridgeProps.WHEEL_Z + 0.2, 1e-6, "ил — штурвал")
+	eq(AlarmBoard.hint(AlarmBoard.Field.BREACH, null), null, "вода после заплатки — рамки нет")
+	var s: Breach.Spot = Breach.spots()[2]
+	var b := AlarmBoard.hint(AlarmBoard.Field.BREACH, s)
+	ok(b.center.distance_to(s.p) < 0.05 and b.normal == s.n, "пробоина — место сварки")
+
+
+func test_hint_glow_and_bars() -> void:
+	var none: Array[bool] = [false, false, false, false, false]
+	eq(AlarmBoard.hint_glow(none, 0.2), 0.0)
+	var on: Array[bool] = [false, true, false, false, true]
+	eq(AlarmBoard.hint_glow(on, 0.2), 1.0, "углы главной горят — рамка ярко")
+	eq(AlarmBoard.hint_glow(on, 0.7), AlarmBoard.HINT_DIM, "углы погашены — рамка тускло, но видна")
+	var bars := AlarmBoard.hint_bars(Vector2(1.0, 2.0))
+	eq(bars.size(), 4)
+	near(bars[0][0].y + bars[0][1].y * 0.5, 1.0, 1e-6, "внешняя кромка — по размеру")
+	near(bars[3][0].x + bars[3][1].x * 0.5, 0.5, 1e-6)
+
+
+func test_scene_hint() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.step(0.1)
+	var hint := main.alarm_board.hint
+	ok(not hint.visible, "тревог нет — рамки нет")
+	eq(hint.layers, OceanView.LAYER_SHIP, "слой корабля")
+	main.open_breach(1)
+	main.vitals.energy = 5.0
+	main.step(0.1)
+	ok(hint.visible, "рамка у пробоины")
+	ok(hint.global_position.distance_to(main.ship.to_global(main.breach.active.p)) < 0.1, "у места сварки в коридоре")
+	main.breach.active = null
+	main.breach.water = 0.0
+	main.step(0.1)
+	ok(hint.global_position.distance_to(main.ship.to_global(AlarmBoard.hint(AlarmBoard.Field.CHARGE, null).center)) < 0.01,
+		"заплата — рамка переходит к пульту энергии")
+	ok(hint.global_transform.basis.z.dot(main.ship.global_transform.basis.x) > 0.99, "лицом в мостик")
+	main.queue_free()
+	await frames(1)
