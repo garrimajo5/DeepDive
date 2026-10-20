@@ -11,7 +11,8 @@ extends EcoSystem
 ## отпугивает тех, кто ближе радиуса разряда. В гуле трубного органа (EcoOrgan) двигатели не слышно; в чернилах
 ## подушечника (EcoCushion) хищник теряет светляка и корабль. Пиявник (EcoLeech, поле leeches) делает хищника
 ## медленнее и злее и гонит на станцию чистки (режим CLEAN). Вспышка радужников (EcoRaduzh, поле raduzh) зовёт
-## хищника издалека. Сквозь корпус не проходят (EcoWorld.push_out). Вуали
+## хищника издалека. У станции чистки (EcoOgnevka, поле ognevka) хищник бросает охоту, корабль там в укрытии.
+## Сквозь корпус не проходят (EcoWorld.push_out). Вуали
 ## и укрытия стай придут со своими видами.
 
 const ID := "pred"
@@ -84,6 +85,8 @@ class Pred:
 	## Пауза сообщения «заметил вспышку радужников» (flareCd).
 	var flare_cd := 0.0
 	var station := -1
+	## Пауза сообщений перемирия и укрытия у станции чистки (truceCd).
+	var truce_cd := 0.0
 
 
 var all: Array[Pred] = []
@@ -97,6 +100,8 @@ var cushions: EcoCushion
 var leeches: EcoLeech
 ## Радужники: их вспышка в луче выдаёт корабль издалека (null — радужников нет).
 var raduzh: EcoRaduzh
+## Огнёвки: у станции чистки перемирие, корабль у станции в укрытии (null — огнёвок нет; ставит EcoOgnevka.new).
+var ognevka: EcoOgnevka
 
 var _rnd: EcoRandom
 
@@ -214,6 +219,11 @@ func ship_hidden(world: EcoWorld) -> bool:
 	return cushions != null and cushions.ship_ink(world) != null
 
 
+## Корабль в укрытии у станции чистки огнёвок (E.shipSheltered): ближе 18 м к вершине огнецвета.
+func ship_sheltered(world: EcoWorld) -> bool:
+	return ognevka != null and ognevka.shelter(world.ship.pos) != null
+
+
 ## Слышит ли двигатели корабля (hearsShip): ближе 24 м и быстрее 3 м/с, если корабль не в гуле трубного органа.
 ## Гул спрятал корабль от патрулирующего или проверяющего звук хищника — наблюдение органа «mask».
 func hears_ship(world: EcoWorld, pr: Pred, d_ship: float) -> bool:
@@ -264,14 +274,21 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 	pr.cooldown -= dt
 	pr.angry_cd -= dt
 	pr.flare_cd -= dt
+	pr.truce_cd -= dt
 	var ship := world.ship.pos
 	var d_ship := a.distance_to(ship)
 	var at_station := leeches.near_station(a.p) != null if leeches else false
 	var lure := lured(world, pr, d_ship)  # и голодного, и сытого: гул органа прячет корабль от каждого
+	var sheltered := ship_sheltered(world)
 	var can_attack := pr.cooldown <= 0.0 and pr.hunger > (EcoLeech.ATTACK_HUNGER if pr.leech else ATTACK_HUNGER) \
-		and lure and not at_station
-	if raduzh:
+		and lure and not at_station and not sheltered
+	if raduzh and not sheltered:
 		_step_flare(world, pr, d_ship)
+	if lure and sheltered and pr.cooldown <= 0.0 and pr.truce_cd <= 0.0 \
+			and (pr.mode == Mode.PATROL or pr.mode == Mode.INVESTIGATE):
+		pr.truce_cd = EcoOgnevka.TRUCE_CD
+		pr.cooldown = maxf(pr.cooldown, EcoOgnevka.SHELTER_PAUSE)
+		ognevka.sheltered(world, a.p, false)
 	if leeches:
 		_step_leech(world, pr, dt, can_attack, d_ship, at_station)
 
@@ -292,7 +309,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 				var gy := minf(_floor(world, gx, gz, GOAL_CEILING - 14.0) + _rnd.range_f(4, 14), GOAL_CEILING)
 				a.goal = Vector3(gx, gy, gz)
 			if pr.hunger > HUNT_HUNGER and fish and not at_station:
-				var f := fish.nearest_fish(a.p, HUNT_RADIUS, _in_ink if cushions and cushions.any_ink() else Callable())
+				var f := fish.nearest_fish(a.p, HUNT_RADIUS, _hidden_fish())
 				if f:
 					_set_mode(pr, Mode.HUNT, 12.0)
 					pr.prey = f
@@ -304,6 +321,12 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 			if pr.prey == null or not pr.prey.agent.alive or a.expired():
 				_set_mode(pr, Mode.PATROL, 0.0)
 				pr.prey = null
+			elif ognevka and (at_station or leeches.near_station(pr.prey.agent.p)):  # у станции чистки перемирие
+				_set_mode(pr, Mode.PATROL, _rnd.range_f(4, 8))
+				pr.prey = null
+				if pr.truce_cd <= 0.0:
+					pr.truce_cd = EcoOgnevka.TRUCE_CD
+					ognevka.truce(world, a.p)
 			else:
 				var cu := cushions.ink_at(pr.prey.agent.p) if cushions else null
 				if cu:  # светляк скрылся в чернилах подушечника
@@ -336,7 +359,16 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 		Mode.CHARGE:
 			speed = CHARGE_SPEED
 			a.goal = ship
-			if ship_hidden(world):  # корабль в чернилах подушечника — хищник его потерял
+			if sheltered:  # корабль у станции чистки — хищник отворачивает
+				_set_mode(pr, Mode.RETREAT, EcoOgnevka.TURN_AWAY_TIME)
+				pr.cooldown = maxf(pr.cooldown, EcoOgnevka.TURN_AWAY_PAUSE)
+				var g := a.p + Vector3(_rnd.range_f(-40, 40), 4.0, _rnd.range_f(-40, 40))
+				g.y = minf(g.y, GOAL_CEILING)
+				a.goal = g
+				if pr.truce_cd <= 0.0:
+					pr.truce_cd = EcoOgnevka.TRUCE_CD
+					ognevka.sheltered(world, a.p, true)
+			elif ship_hidden(world):  # корабль в чернилах подушечника — хищник его потерял
 				_set_mode(pr, Mode.RETREAT, 10.0)
 				var g := a.p + Vector3(_rnd.range_f(-40, 40), 5.0, _rnd.range_f(-40, 40))
 				g.y = minf(g.y, GOAL_CEILING)
@@ -476,6 +508,16 @@ static func _clean_text(world: EcoWorld) -> Callable:
 		var pred := w.nm(ID) if w else Species.called(ID)
 		var leech := w.nm(EcoLeech.ID, Species.Case.GEN) if w else Species.called(EcoLeech.ID, Species.Case.GEN)
 		return "%s на станции чистки: его очистили от %s" % [Species.cap(pred), leech]
+
+
+## Каких светляков хищник не ловит: в чернилах подушечника и у станции чистки (nearestFish пропускает nearStation).
+func _hidden_fish() -> Callable:
+	var ink := cushions != null and cushions.any_ink()
+	var truce := ognevka != null and leeches != null and not leeches.stations.is_empty()
+	if not ink and not truce:
+		return Callable()
+	return func(f: EcoFish.Fish) -> bool:
+		return (ink and _in_ink(f)) or (truce and leeches.near_station(f.agent.p) != null)
 
 
 ## Светляк в чернилах подушечника — хищник его не видит.

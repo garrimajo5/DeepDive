@@ -44,6 +44,9 @@ var eel_view: EelView
 ## Радужники: три стаи гребневиков, вспыхивают в луче прожектора — вспышка зовёт серпохвостов издалека.
 var raduzh: EcoRaduzh
 var raduzh_view: RaduzhView
+## Огнёвки: рачки-чистильщики на станциях чистки, у станции — перемирие и укрытие корабля.
+var ognevka: EcoOgnevka
+var ognevka_view: OgnevkaView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -60,6 +63,7 @@ var ground: Callable:
 		_rebuild_cushions()
 		_rebuild_eels()
 		_rebuild_raduzh()
+		_rebuild_ognevka()
 
 
 func _init() -> void:
@@ -81,6 +85,7 @@ func _init() -> void:
 	fans = world.add(EcoFan.new(current)) as EcoFan
 	fan_view = FanView.new(fans)
 	add_child(fan_view)
+	ognevka = world.add(EcoOgnevka.new(leeches, fans)) as EcoOgnevka
 	ferns = world.add(EcoFern.new(fish)) as EcoFern
 	bladders = world.add(EcoBladder.new(fish)) as EcoBladder
 	organs = world.add(EcoOrgan.new()) as EcoOrgan
@@ -98,6 +103,7 @@ func _init() -> void:
 	_rebuild_cushions()
 	_rebuild_eels()
 	_rebuild_raduzh()
+	_rebuild_ognevka()
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -172,6 +178,15 @@ func _rebuild_raduzh() -> void:
 	add_child(raduzh_view)
 
 
+## Огнёвки по станциям мира (число рачков — по станциям после сброса).
+func _rebuild_ognevka() -> void:
+	if ognevka_view:
+		remove_child(ognevka_view)
+		ognevka_view.free()
+	ognevka_view = OgnevkaView.new(ognevka)
+	add_child(ognevka_view)
+
+
 ## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
 func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	world.ship = ship
@@ -188,4 +203,5 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	cushion_view.sync(world.time)
 	eel_view.sync(world.time)
 	raduzh_view.sync(world.time, ship.pos, ship.yaw)
+	ognevka_view.sync()
 	return world.take_link()
