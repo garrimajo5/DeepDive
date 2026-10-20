@@ -136,6 +136,7 @@ func test_scene_eco_hits_and_drain() -> void:
 	var line := Status.join(main.status_parts())
 	ok(line.begins_with("Стеклоуст на корпусе пьёт энергию"), "тревога первой: " + line)
 	ok(main.drain_sound.playing, "шипит тревога присоски")
+	eq(main.drain_hisses, 2, "шаги по 1 с: шипит сразу и на втором шаге")
 	var seen := {}
 	for i in 18:   # 3 с: плафоны мостика и отсеков и прожектор мигают вместе
 		fake.send = [{"type": EcoLink.DRAIN, "by": "Стеклоуст", "units": 3.2}]
@@ -145,6 +146,7 @@ func test_scene_eco_hits_and_drain() -> void:
 		near(main.searchlight.spot.light_energy, Searchlight.ENERGY * k, 1e-5, "прожектор вместе с плафонами")
 		seen[snappedf(k, 0.01)] = true
 	ok(seen.has(1.0) and seen.has(Vitals.FLICKER_DIM), "свет то горит, то проваливается: %s" % [seen.keys()])
+	eq(main.drain_hisses, 4, "ещё 3 с — два шипения через 1,6 с, а не каждый шаг")
 	main.step(0.3)
 	main.step(0.3)
 	ok(not Status.join(main.status_parts()).contains("Стеклоуст"), "отпустил — тревога погасла")
@@ -188,3 +190,21 @@ func test_diving_onto_flat_bottom_is_not_a_hit() -> void:
 	for i in 600:
 		main.step(1.0 / 30.0)
 	near(main.vitals.hull, 100.0, 1e-6, "полный ход и «Вниз» до ровного дна — корпус цел")
+
+
+func test_hiss_every_period() -> void:   # шипение присоски раз в 1,6 с, пока тревога горит (#163)
+	var v := Vitals.new()
+	ok(not v.hiss(0.1), "нет присоски — тихо")
+	var n := 0
+	for i in 50:   # 5 с с присоской
+		v.drain("Стеклоуст", 3.2)
+		v.update(0.1, 0.0, 0.0, false, 1.0)
+		if v.hiss(0.1):
+			n += 1
+	eq(n, 4, "сразу и через 1,6 / 3,2 / 4,8 с")
+	for i in 10:
+		v.update(0.1, 0.0, 0.0, false, 1.0)
+		v.hiss(0.1)
+	v.drain("Стеклоуст", 3.2)
+	v.update(0.1, 0.0, 0.0, false, 1.0)
+	ok(v.hiss(0.1), "снова присосался — шипит сразу")
