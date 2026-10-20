@@ -162,7 +162,8 @@ jobs:
             build/export.log
           if-no-files-found: warn
       - name: Выложить в релиз apk-latest
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        # Пуш в main или ручной запуск на main (тестер пересобирает apk-latest кнопкой Run workflow).
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
