@@ -8,6 +8,8 @@ var doors: Array[Node3D] = []      ## створки люков 2…4 (у пер
 var reactor_rod: MeshInstance3D
 var _rod_mat: StandardMaterial3D
 var reactor_light: OmniLight3D
+var lamps: Array[OmniLight3D] = []  ## плафоны отсеков (мигают — set_lamps)
+const LAMP_ENERGY := 0.8
 var airlock_cover: Node3D          ## крышка нижнего шлюза: узел в центре крышки (Airlock.cover_pose), модель MOD-010 внутри
 var winch_drum: Node3D             ## барабан лебёдки (MOD-010), крутится по x
 var winch_hook: Node3D             ## захват на тросе, pivot — крепление троса
@@ -39,11 +41,12 @@ func _ready() -> void:
 		var l := OmniLight3D.new()
 		l.name = "Свет: " + ShipLayout.ROOM_NAMES[room]
 		l.light_color = BridgePlan.COLORS[BridgePlan.Paint.PLAFOND]
-		l.light_energy = 0.8
+		l.light_energy = LAMP_ENERGY
 		l.omni_range = maxf(float(a[1]) - float(a[0]), float(a[2]) * 2.0) * 0.9
 		l.position = Vector3(0, float(a[3]) - 0.4, (float(a[0]) + float(a[1])) / 2.0)
 		l.light_cull_mask = OceanView.LAYER_SHIP
 		add_child(l)
+		lamps.append(l)
 	var door_mat := BridgeView.material(BridgePlan.Paint.SEAM)
 	for i in range(1, ShipLayout.DOOR_Z.size()):
 		var d := MeshInstance3D.new()
@@ -90,6 +93,12 @@ func _add_reactor() -> void:
 	reactor_light.omni_range = 4.5
 	reactor_light.light_cull_mask = OceanView.LAYER_SHIP
 	root.add_child(reactor_light)
+
+
+## Плафоны отсеков × k (мигание, Vitals.lamp_k). Свет реактора и тревоги пробоины не мигают.
+func set_lamps(k: float) -> void:
+	for l in lamps:
+		l.light_energy = LAMP_ENERGY * k
 
 
 func _model(file: String, pos: Vector3, parent: Node3D = null) -> Node3D:
