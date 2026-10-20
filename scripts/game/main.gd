@@ -27,6 +27,8 @@ var debug_weld := false        ## снимок: сварку держат без
 var save := SaveGame.new()     ## груз трюма, поднятые образцы и изученные виды в user:// (js/save.js)
 var scanner := Scanner.new()   ## сканер биолога: цели от живого мира, изученные виды
 var at_scanner := false        ## игрок у поста «Сканер»: мир шлёт цели (ShipState.scan_range)
+var near_post := ""            ## пост рядом с игроком на ногах (id), "" — нет или игрок занят постом
+var brief := Briefing.Fade.new()  ## голограмма брифинга у поста «Маршрут» (ART-016)
 var journal_page := 0          ## страница журнала лаборатории: 0 — сводка, дальше карточки видов (Lab.page_lines)
 var engine := EngineRoom.new()   ## машинное: вентиль сброса пара и щиток «Аварийный сброс»
 var debug_vent := false          ## снимок: вентиль держат без пальца
@@ -373,6 +375,7 @@ func step(dt: float) -> void:
 	var hold_weld := false
 	var hold_scan := false
 	at_scanner = false
+	near_post = ""
 	flyby.update(0.0 if warm.active() else dt)   # облёт ждёт конца прогрева шейдеров (под шторкой)
 	if flyby.kind == Flyby.Kind.START:   # облёт в начале забега: касание — к мостику, ввод этого кадра не идёт в игру
 		helm.in_thrust = 0.0
@@ -422,6 +425,7 @@ func step(dt: float) -> void:
 		hold_winch = post != null and post.id == "winch" and r.action_down
 		hold_weld = post != null and post.id == "breach" and r.action_down
 		at_scanner = post != null and post.id == "scanner"
+		near_post = post.id if post else ""
 		hold_scan = at_scanner and r.action_down
 	layout.update(dt)
 	airlock.update(dt)
@@ -496,6 +500,7 @@ func step(dt: float) -> void:
 	bridge.set_hatch(layout.doors[0].offset())
 	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0, silt.noise(time))
 	sonar_view.show_waypoint(run.waypoint())
+	sonar_view.show_briefing(brief.update(dt, Briefing.wanted(near_post, at_vote, run.ended)), run, helm.pos)
 	rooms.apply(layout, reactor, airlock, engine)
 	var carry_c: Color = Samples.COLORS[samples.target.kind] if samples.target else Color.WHITE
 	rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(), carry_c)

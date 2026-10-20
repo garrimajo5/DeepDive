@@ -1,11 +1,13 @@
 class_name SonarView
 extends MeshInstance3D
 ## Голограмма сонара над голостолом: круг Ø 2,04 м на столе (шейдер shaders/sonar_holo.gdshader),
-## карта рельефа — Sonar.bathymetry() один раз при запуске.
+## карта рельефа — Sonar.bathymetry() один раз при запуске. У поста «Маршрут» сонар сменяет карта брифинга
+## (Briefing, ART-016): места с номерами (Label3D над столом) и линии маршрутов — show_briefing.
 
 const TOP_Y := 0.93   ## над краем корпуса голостола (0,9 м)
 
 var mat: ShaderMaterial
+var numbers: Array[Label3D] = []   ## номера мест брифинга, порядок — Briefing.ORDER
 static var _map: ImageTexture
 
 
@@ -24,6 +26,40 @@ func _ready() -> void:
 	material_override = mat
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	layers = OceanView.LAYER_SHIP
+	var segs := Briefing.segments()
+	var a := PackedVector4Array()
+	var info := PackedVector2Array()
+	for g in segs:
+		a.append(Vector4(g["a"].x, g["a"].y, g["b"].x, g["b"].y))
+		info.append(Vector2(g["route"], g["start"]))
+	a.resize(Briefing.MAX_SEGS)
+	info.resize(Briefing.MAX_SEGS)
+	mat.set_shader_parameter("segs", a)
+	mat.set_shader_parameter("seg_info", info)
+	mat.set_shader_parameter("seg_count", segs.size())
+	mat.set_shader_parameter("brief_scale", Briefing.SCALE)
+	mat.set_shader_parameter("brief_side", Briefing.SIDE)
+	var pts := PackedVector2Array()
+	for k in Briefing.ORDER:
+		var t := Briefing.table_xz(Run.place_xz(k))
+		pts.append(t)
+		var l := Label3D.new()
+		l.name = "Место %d" % Briefing.NUMBERS[k]
+		l.text = str(Briefing.NUMBERS[k])
+		l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		l.shaded = false
+		l.double_sided = true
+		l.font_size = 48
+		l.outline_size = 10
+		l.pixel_size = 0.0016
+		l.modulate = Color("#D5E4E8")
+		l.outline_modulate = Color("#0B1C24")
+		l.position = Vector3(t.x + 0.035, 0.05, t.y - 0.03)
+		l.layers = OceanView.LAYER_SHIP
+		l.visible = false
+		add_child(l)
+		numbers.append(l)
+	mat.set_shader_parameter("places", pts)
 
 
 ## Каждый кадр: где корабль, сколько прошло с импульса, отметки.
@@ -58,3 +94,29 @@ func show_waypoint(xz: Vector2) -> void:
 	mat.set_shader_parameter("wp_on", 1.0 if on else 0.0)
 	if on:
 		mat.set_shader_parameter("wp_xz", xz)
+
+
+## Брифинг: k — доля перехода 0…1 (Briefing.Fade), маршрут и пройденные точки — из Run, корабль — где он сейчас.
+func show_briefing(k: float, run: Run, ship_pos: Vector3) -> void:
+	mat.set_shader_parameter("brief_k", k)
+	for l in numbers:
+		l.visible = k > 0.0
+		l.modulate.a = k
+		l.outline_modulate.a = k
+	if k <= 0.0:
+		return
+	mat.set_shader_parameter("sel_route", run.route)
+	mat.set_shader_parameter("route_len", maxf(Briefing.route_length(run.route), 0.01) if run.route >= 0 else 1.0)
+	mat.set_shader_parameter("ship_t", Briefing.table_xz(Vector2(ship_pos.x, ship_pos.z)))
+	mat.set_shader_parameter("place_state", place_states(run))
+
+
+## Состояние мест для шейдера, порядок — Briefing.ORDER: 0 — не на маршруте, 1 — на маршруте, 2 — пройдено,
+## 3 — следующая точка.
+static func place_states(run: Run) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	var on: Array = Run.ROUTES[run.route]["places"] if run.route >= 0 else []
+	var next := run.next_key()
+	for k in Briefing.ORDER:
+		out.append(3.0 if k == next else 2.0 if run.visited.has(k) else 1.0 if on.has(k) else 0.0)
+	return out

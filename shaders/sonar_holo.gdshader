@@ -18,11 +18,79 @@ uniform float noise = 0.0;    // помехи (сонарная тьма): ря�
 uniform float time = 0.0;
 uniform vec2 wp_xz = vec2(0.0);  // точка маршрута (Run.waypoint), x, z мира
 uniform float wp_on = 0.0;
+// брифинг (Briefing, ART-016): карта всей отмели над столом, места и маршруты; brief_k — доля перехода 0…1
+uniform float brief_k = 0.0;
+uniform float brief_scale = 0.0016143;  // Briefing.SCALE: м стола на м мира
+uniform float brief_side = 1.13;
+uniform vec4 segs[8];         // концы отрезков маршрутов на столе: a.x, a.z, b.x, b.z (м)
+uniform vec2 seg_info[8];     // индекс маршрута, путь от начала маршрута до a (м)
+uniform int seg_count = 0;
+uniform int sel_route = -1;
+uniform float route_len = 1.0;
+uniform vec2 places[6];       // места на столе (м)
+uniform float place_state[6]; // 0 — не на маршруте, 1 — на маршруте, 2 — пройдено, 3 — следующая точка
+uniform vec2 ship_t = vec2(0.0);  // корабль на столе (м)
 
 varying vec2 local;
 
 void vertex() {
 	local = VERTEX.xz / disc_r;   // −1…1: x вправо (+X корабля), y к корме (+Z корабля)
+}
+
+// карта брифинга: lm — точка стола, м (x вправо, y к корме)
+vec3 briefing(vec2 lm, float c, float s) {
+	vec3 holo = vec3(0.404, 0.867, 0.922);   // #67DDEB
+	vec3 soft = vec3(0.604, 0.851, 0.910);   // #9AD9E8
+	vec3 pick = vec3(0.835, 0.894, 0.910);   // #D5E4E8
+	vec3 col = vec3(0.004, 0.035, 0.047);
+	float half_side = brief_side * 0.5;
+	if (abs(lm.x) < half_side && abs(lm.y) < half_side)
+		col = texture(map_tex, lm / brief_scale / map_size + 0.5).rgb * 0.26;
+	float edge = max(abs(lm.x), abs(lm.y));
+	col += soft * 0.22 * step(abs(edge - half_side), 0.003);
+	float scan = fract(time * 0.22) * half_side * 1.42;   // сканирующее кольцо
+	col += holo * 0.14 * step(abs(length(lm) - scan), 0.004) * step(edge, half_side);
+	for (int i = 0; i < 8; i++) {
+		if (i >= seg_count) break;
+		vec2 a = segs[i].xy, b = segs[i].zw;
+		vec2 ab = b - a;
+		float len = max(length(ab), 1e-4);
+		float t = clamp(dot(lm - a, ab) / (len * len), 0.0, 1.0);
+		float d = length(lm - a - ab * t);
+		float along = seg_info[i].y + t * len;
+		int route = int(seg_info[i].x + 0.5);
+		bool sel = route == sel_route;
+		float w = sel ? 0.007 : 0.0045;
+		float m;
+		if (route == 2) {   // точки
+			float q = (fract(along / 0.024) - 0.5) * 0.024;
+			m = step(length(vec2(q, d)), w * 1.25);
+		} else {
+			m = step(d, w) * (route == 1 ? step(fract(along / 0.05), 0.62) : 1.0);
+		}
+		vec3 lc = sel ? pick : holo * 0.5;
+		if (sel) {
+			float run_at = fract(time * 0.3) * route_len;   // бегущая подсветка вдоль выбранного маршрута
+			lc += pick * 0.8 * exp(-pow((along - run_at) / 0.035, 2.0));
+		}
+		col = mix(col, lc, m);
+	}
+	for (int i = 0; i < 6; i++) {
+		float d = length(lm - places[i]);
+		float st = place_state[i];
+		vec3 pc = st > 0.5 ? pick : soft * 0.55;
+		float ring = step(abs(d - 0.024), 0.004);
+		float dot_in = step(d, 0.009) + (st > 1.5 && st < 2.5 ? step(d, 0.02) * 0.6 : 0.0);
+		col = max(col, pc * min(1.0, ring + dot_in));
+		if (st > 2.5) {   // следующая точка: импульс
+			float pr = 0.03 + fract(time * 1.2) * 0.03;
+			col = max(col, pick * (1.0 - fract(time * 1.2)) * step(abs(d - pr), 0.003));
+		}
+	}
+	vec2 dd = lm - ship_t;   // корабль — треугольник носом по курсу
+	vec2 p = vec2(dd.x * c - dd.y * s, dd.x * s + dd.y * c) / 0.45;
+	if (p.y > -0.075 && p.y < 0.055 && abs(p.x) < (p.y + 0.075) * 0.35) col = holo;
+	return col;
 }
 
 void fragment() {
@@ -63,5 +131,7 @@ void fragment() {
 	}
 	// корабль в центре — треугольник носом вверх (к −Z, local.y < 0)
 	if (local.y > -0.075 && local.y < 0.055 && abs(local.x) < (local.y + 0.075) * 0.35) col = teal;
+	if (brief_k > 0.0)
+		col = mix(col, briefing(local * disc_r, c, s), brief_k);
 	ALBEDO = col * brightness;
 }
