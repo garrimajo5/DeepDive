@@ -902,9 +902,14 @@ func open_silt() -> void:
 
 
 ## Ещё один член экипажа на палубе (снимки и сценарий тестера, пока нет сети): место, курс (рад), роль, внешность.
+## Стоящего не ставим в мебель: место внутри голостола или пульта сдвигается к ближайшему свободному (issue #156).
 func add_mate(x: float, z: float, yaw: float, role: int, look: int, seated: bool = false) -> Crew.Member:
 	var mate := Crew.Member.new(role)
 	mate.look = look
+	if not seated:
+		var p := layout.free_spot(x, z)
+		x = p.x
+		z = p.y
 	mate.follow(x, z, yaw, seated, 0.0, 0.1)
 	crew.append(mate)
 	crew_view.set_members(crew, me)

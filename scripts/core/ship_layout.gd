@@ -72,6 +72,21 @@ static func room_at(z: float) -> int:
 	return Room.CARGO
 
 
+## Ближайшая к (x, z) точка, где можно стоять (can_stand): сама точка, если свободна, иначе — по кольцам наружу
+## (шаг STEP_FREE, 24 направления, до 3 м). Не нашлось — (x, z) как есть.
+const STEP_FREE := 0.05
+func free_spot(x: float, z: float, r: float = Deck.Walker.RADIUS) -> Vector2:
+	if can_stand(x, z, r):
+		return Vector2(x, z)
+	for k in range(1, int(3.0 / STEP_FREE) + 1):
+		var d := k * STEP_FREE
+		for a in 24:
+			var ang := TAU * a / 24.0
+			var p := Vector2(x + cos(ang) * d, z + sin(ang) * d)
+			if can_stand(p.x, p.y, r):
+				return p
+	return Vector2(x, z)
+
 ## Можно ли стоять в точке: мостик (Deck), отсеки, проёмы открытых люков; без реактора.
 func can_stand(x: float, z: float, r: float = Deck.Walker.RADIUS) -> bool:
 	var ok := Deck.can_stand(x, z, r)
