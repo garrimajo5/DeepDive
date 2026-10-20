@@ -137,3 +137,21 @@ func test_drain_step() -> void:   # issue #131: тревога о стеклоу
 	var q := QaScript.parse('[{"do": "drain", "s": 2.5}]')
 	eq(q.errors.size(), 0, "шаг drain известен")
 	eq(q.advance(0.1)[0], ["drain", 2.5], "стеклоуст на корпусе 2,5 с")
+
+
+## issue #158: снимок полок трюма смотрел на правый стеллаж, а первая банка встаёт на левый.
+func test_shelves_shot_sees_first_jar() -> void:
+	var steps: Array = JSON.parse_string(FileAccess.get_file_as_string("res://tools/qa/scenario.json"))
+	var at := {}
+	for st in steps:
+		if st["do"] == "goto":
+			at = st
+		if st["do"] == "shot" and st["name"] == "14b-hold-shelves":
+			break
+	ok(not at.is_empty(), "перед снимком полок — goto")
+	var yaw := deg_to_rad(float(at["yaw"]))
+	var fwd := Vector2(-sin(yaw), -cos(yaw))
+	var jar: Vector3 = HoldShelves.cells()[0]
+	var to := Vector2(jar.x - float(at["x"]), jar.z - float(at["z"]))
+	ok(rad_to_deg(fwd.angle_to(to)) < 25.0, "первая банка перед камерой: %.0f°" % rad_to_deg(absf(fwd.angle_to(to))))
+	ok(ShipLayout.new().can_stand(float(at["x"]), float(at["z"])), "тестер стоит на полу")
