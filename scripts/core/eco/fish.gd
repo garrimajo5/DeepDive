@@ -29,6 +29,10 @@ const HULL_GAP := 0.3
 ## по фазе, чтобы не считались в одном кадре.
 const FAR := 100.0
 const FAR_STEP := 0.05
+## Стая дальше MID (но ближе FAR) ходит через кадр — шагом MID_STEP, набирая пропущенное (issue #133): рыбка
+## в 50 м — пара точек на экране, сдвиг на 4 см за кадр не виден.
+const MID := 50.0
+const MID_STEP := 1.0 / 30.0
 
 ## Дома стай: шесть мест кораллов (W.coralSpots), ближайших к (0, 55) и разнесённых больше чем на 35 м, плюс 1,5 м
 ## вверх — числа браузерной версии (в Unity x со знаком минус). Дом на 3,5 м над дном (Seabed.height).
@@ -190,9 +194,10 @@ func step(world: EcoWorld, dt: float) -> void:
 	var hull_r2 := (EcoHull.BOUND + HULL_GAP) * (EcoHull.BOUND + HULL_GAP)
 	for sh in shoals:
 		var h := dt
-		if sh.center.distance_to(world.ship.pos) > FAR:
+		var d := sh.center.distance_to(world.ship.pos)
+		if d > MID:
 			sh.lag += dt
-			if sh.lag < FAR_STEP - 1e-6:
+			if sh.lag < (FAR_STEP if d > FAR else MID_STEP) - 1e-6:
 				continue
 			h = sh.lag
 			sh.lag = 0.0

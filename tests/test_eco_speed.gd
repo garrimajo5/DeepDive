@@ -140,7 +140,8 @@ func test_view_step_fits_frame() -> void:
 	ship.pos = Helm.Ship.START
 	for i in 30:
 		view.step(1.0 / 60.0, ship)
-	# лучшее из пяти замеров по 60 кадров: на ПК было 3,2 мс, стало ≈ 0,95; запас на медленную машину CI
+	# лучшее из пяти замеров по 60 кадров: на ПК было 3,2 мс, стало ≈ 0,95; со стеклоустами 1,4, после #133 — 1,1;
+	# запас на медленную машину CI (там примерно в полтора раза дольше)
 	var best := INF
 	for k in 5:
 		var t0 := Time.get_ticks_usec()
@@ -148,5 +149,56 @@ func test_view_step_fits_frame() -> void:
 			view.step(1.0 / 60.0, ship)
 		best = minf(best, (Time.get_ticks_usec() - t0) / 60.0 / 1000.0)
 	ok(best < 2.0, "шаг живого мира %.2f мс (< 2 мс)" % best)
+	view.queue_free()
+	await frames(1)
+
+
+func test_mid_shoal_steps_every_second_frame() -> void:
+	var w := _world(EcoFish.HOMES[0] + Vector3(0, 0, 70))  # стая 0 — между MID и FAR
+	var sh := (w.systems[0] as EcoFish).shoals[0]
+	var d := sh.center.distance_to(w.ship.pos)
+	ok(d > EcoFish.MID and d < EcoFish.FAR, "стая в средней дали: %.0f м" % d)
+	var moves := 0
+	for i in 300:
+		var before := (sh.members[0] as EcoFish.Fish).agent.p
+		w.step(1.0 / 60.0)
+		if (sh.members[0] as EcoFish.Fish).agent.p != before:
+			moves += 1
+	ok(moves >= 149 and moves <= 151, "шагов %d из 300 кадров (через кадр)" % moves)
+
+
+## Нераскрытая пузырчатка и подушка без чернил буфер облака не переписывают (issue #133); лопнула — пишется.
+func test_quiet_clouds_skip_buffers() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Vector3(500, 0, 500)
+	view.step(1.0 / 60.0, ship)
+	var bv := view.bladder_view
+	var bl := view.bladders.bushes[0]
+	var si := bl.index * EcoBladder.SPORES * BladderView.STRIDE_C
+	bv.spore_buffer[si + 3] = 42.0
+	var cv := view.cushion_view
+	var cu := view.cushions.cushions[0]
+	var ci := cu.index * EcoCushion.INK_N * CushionView.STRIDE_C
+	cv.ink_buffer[ci + 3] = 42.0
+	view.step(1.0 / 60.0, ship)
+	eq(bv.spore_buffer[si + 3], 42.0, "споры спрятаны — буфер не переписан")
+	eq(cv.ink_buffer[ci + 3], 42.0, "чернил нет — буфер не переписан")
+	view.bladders.pop(view.world, bl, false)
+	view.cushions.squeeze(view.world, cu, true)
+	view.world.run(0.5)
+	view.step(1.0 / 60.0, ship)
+	ok(bv.spore_buffer[si + 3] != 42.0, "лопнула — споры пишутся")
+	ok(cv.ink_buffer[ci + 3] != 42.0, "чернила — облако пишется")
+	near(BladderView.transform_at(bv.spore_buffer, bl.index * EcoBladder.SPORES).basis.x.length(), 1.0, 1e-6)
+	bl.life = 0.0
+	cu.ink = 0.0
+	view.step(1.0 / 60.0, ship)
+	near(BladderView.transform_at(bv.spore_buffer, bl.index * EcoBladder.SPORES).basis.x.length(), 0.0, 1e-6,
+		"облако ушло — споры снова спрятаны")
+	near(CushionView.transform_at(cv.ink_buffer, cu.index * EcoCushion.INK_N).basis.get_scale().x, 0.0, 1e-6,
+		"чернила ушли — пятна спрятаны")
 	view.queue_free()
 	await frames(1)
