@@ -41,6 +41,9 @@ var cushion_view: CushionView
 ## Стеклоусты: три логова в расщелинах, бросок на скребунов и светляков, присоска на стекле носа — тянет заряд.
 var eels: EcoEel
 var eel_view: EelView
+## Радужники: три стаи гребневиков, вспыхивают в луче прожектора — вспышка зовёт серпохвостов издалека.
+var raduzh: EcoRaduzh
+var raduzh_view: RaduzhView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -56,6 +59,7 @@ var ground: Callable:
 		_rebuild_organs()
 		_rebuild_cushions()
 		_rebuild_eels()
+		_rebuild_raduzh()
 
 
 func _init() -> void:
@@ -84,6 +88,8 @@ func _init() -> void:
 	cushions = world.add(EcoCushion.new(fish)) as EcoCushion
 	preds.cushions = cushions
 	eels = world.add(EcoEel.new(grazers, fish)) as EcoEel
+	raduzh = world.add(EcoRaduzh.new()) as EcoRaduzh
+	preds.raduzh = raduzh
 	_rebuild_moss()
 	_rebuild_coral()
 	_rebuild_ferns()
@@ -91,6 +97,7 @@ func _init() -> void:
 	_rebuild_organs()
 	_rebuild_cushions()
 	_rebuild_eels()
+	_rebuild_raduzh()
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -156,6 +163,15 @@ func _rebuild_eels() -> void:
 	add_child(eel_view)
 
 
+## Радужники по дну мира (стаи встают на 9 м над дном при сбросе мира).
+func _rebuild_raduzh() -> void:
+	if raduzh_view:
+		remove_child(raduzh_view)
+		raduzh_view.free()
+	raduzh_view = RaduzhView.new(raduzh)
+	add_child(raduzh_view)
+
+
 ## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
 func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	world.ship = ship
@@ -171,4 +187,5 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	bladder_view.sync(world.time)
 	cushion_view.sync(world.time)
 	eel_view.sync(world.time)
+	raduzh_view.sync(world.time, ship.pos, ship.yaw)
 	return world.take_link()
