@@ -101,6 +101,9 @@ func test_scene_bite_breach_weld() -> void:
 	ok(main.breach_view.spot_node.visible and main.breach_view.spray.emitting, "струя бьёт")
 	ok(main.breach_view.water.visible, "на полу вода")
 	ok(main.breach_view.alarm.visible, "тревога")
+	ok(main.breach_view.siren.playing and main.breach_view.jet_sound.playing, "воет сирена, шумит струя")
+	ok(main.breach_view.jet_sound.global_position.distance_to(main.breach_view.spot_node.global_position) < 0.2,
+		"шум — из пробоины")
 	ok(main.status_parts()[0].begins_with("ПРОБОИНА · МОСТИК"), "первая часть строки — пробоина: %s" % main.status_parts()[0])
 	var s: Breach.Spot = main.breach.all[0]
 	var t := main.breach_view.spot_node.global_transform
@@ -125,6 +128,7 @@ func test_scene_bite_breach_weld() -> void:
 	ok(main.breach.active == null, "заварено")
 	ok(not main.breach_view.spray.emitting and not main.breach_view.sparks.emitting, "струя и искры погасли")
 	ok(not main.breach_view.splash.emitting, "брызг нет")
+	ok(not main.breach_view.siren.playing and not main.breach_view.jet_sound.playing, "сирена и струя смолкли")
 	ok(not main.me.welding() and not main.crew_view.torches[0].visible and not main.visor.visible,
 		"заварил — резак убран, щиток поднят")
 	ok(main.breach_view._seam_mat.emission_energy_multiplier > 1.0, "шов горит")
