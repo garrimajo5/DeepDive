@@ -83,18 +83,51 @@ var buffer := PackedFloat32Array()
 const STRIDE := 20
 
 
-## Буфер MultiMesh (TRANSFORM_3D + custom data) для всех рыбок в момент t.
+## Буфер MultiMesh (TRANSFORM_3D + custom data) для всех рыбок в момент t. Те же числа, что EcoFishLook.basis
+## и EcoFishLook.stripe, но без вызовов на каждую рыбку (132 за кадр): цвет и тревога — по стае, basis — на месте.
 static func pack(system: EcoFish, t: float) -> PackedFloat32Array:
 	var out := PackedFloat32Array()
 	out.resize(system.all.size() * STRIDE)
-	for f in system.all:
-		var b := EcoFishLook.basis(f, t)
-		var o := f.agent.p
-		var c := EcoFishLook.stripe(f)
-		var i := f.index * STRIDE
-		var row := [b.x.x, b.y.x, b.z.x, o.x, b.x.y, b.y.y, b.z.y, o.y, b.x.z, b.y.z, b.z.z, o.z, 1.0, 1.0, 1.0, 1.0, c.r, c.g, c.b, 1.0]
-		for k in STRIDE:
-			out[i + k] = row[k]
+	for sh in system.shoals:
+		var glow := EcoFishLook.ALARM_GLOW if sh.alarm > 0.0 else 1.0
+		var col := sh.color
+		for f: EcoFish.Fish in sh.members:
+			var a := f.agent
+			var i := f.index * STRIDE
+			var o := a.p
+			out[i + 3] = o.x
+			out[i + 7] = o.y
+			out[i + 11] = o.z
+			out[i + 12] = 1.0
+			out[i + 13] = 1.0
+			out[i + 14] = 1.0
+			out[i + 15] = 1.0
+			var k := f.bright * glow
+			out[i + 16] = col.r * k
+			out[i + 17] = col.g * k
+			out[i + 18] = col.b * k
+			out[i + 19] = 1.0
+			if not a.alive:
+				continue # съеденная — нулевой basis (буфер уже в нулях)
+			# EcoFishLook.forward: нос по скорости с вилянием вокруг вертикали
+			var v := a.v
+			var dir := v.normalized() if v.length_squared() > 1e-8 else Vector3(0, 0, 1)
+			var w := sin(t * EcoFishLook.WIGGLE_RATE + f.phase) * EcoFishLook.WIGGLE
+			var cw := cos(w)
+			var sw := sin(w)
+			var fw := Vector3(dir.x * cw + dir.z * sw, dir.y, -dir.x * sw + dir.z * cw)
+			var side := Vector3(fw.z, 0, -fw.x)
+			side = side.normalized() if side.length() > 1e-4 else Vector3(1, 0, 0)
+			var up := fw.cross(side)
+			out[i] = side.x
+			out[i + 1] = up.x
+			out[i + 2] = fw.x
+			out[i + 4] = side.y
+			out[i + 5] = up.y
+			out[i + 6] = fw.y
+			out[i + 8] = side.z
+			out[i + 9] = up.z
+			out[i + 10] = fw.z
 	return out
 
 
