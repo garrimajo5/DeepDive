@@ -17,6 +17,14 @@ const ORDER: Array[String] = ["flower", "geyser", "shell", "bones", "well", "dro
 ## нижним краем на точке места, высота на столе, м. Места не на выбранном маршруте — тусклее.
 const ICON_SIZE := 0.13
 const ICON_DIM := 0.6
+## Карточка выбранного маршрута (ART-016): экранная надпись у каждого игрока своя, привязана к точке над правым
+## (от поста «Маршрут») краем карты — сбоку и чуть выше, не закрывает точки. Точка — в осях голограммы (SonarView).
+const CARD_ANCHOR := Vector3(0.0, 0.3, -0.62)
+const CARD_GAP := 16.0          ## от точки привязки до левого края карточки, px
+const CARD_MARGIN := 24.0       ## от краёв экрана, px
+const CARD_TOP_FREE := 150.0    ## сверху — строки приборов, px
+const CARD_RIGHT_FREE := 240.0  ## справа — кнопка действия, px
+const RISK_COLOR := Color("F1A23D")   ## риск — янтарный
 
 
 static func icon_path(key: String) -> String:
@@ -26,6 +34,29 @@ static func icon_path(key: String) -> String:
 ## Яркость иконки по состоянию места (SonarView.place_states): 0 — не на маршруте — тусклая.
 static func icon_alpha(state: float) -> float:
 	return ICON_DIM if state < 0.5 else 1.0
+
+
+## Строки карточки маршрута i: название, места по порядку с номерами карты, риск. Маршрут не выбран — пусто.
+static func card_lines(i: int) -> Array[String]:
+	var out: Array[String] = []
+	if i < 0 or i >= Run.ROUTES.size():
+		return out
+	var r: Dictionary = Run.ROUTES[i]
+	out.append(r["name"])
+	for k in r["places"]:
+		out.append("%d  %s" % [NUMBERS[k], Run.place_name(k)])
+	out.append("Риск: " + r["risk"])
+	return out
+
+
+## Где карточка размера size на экране screen, если точка привязки видна в anchor: справа от точки, по её высоте,
+## но внутри экрана — ниже строк приборов и левее кнопки действия.
+static func card_rect(anchor: Vector2, size: Vector2, screen: Vector2) -> Rect2:
+	var x := anchor.x + CARD_GAP
+	var y := anchor.y - size.y * 0.5
+	x = clampf(x, CARD_MARGIN, maxf(CARD_MARGIN, screen.x - CARD_RIGHT_FREE - size.x))
+	y = clampf(y, CARD_TOP_FREE, maxf(CARD_TOP_FREE, screen.y - CARD_MARGIN - size.y))
+	return Rect2(Vector2(x, y), size)
 
 
 ## Тип линии маршрута по индексу в Run.ROUTES: 0 — сплошная, 1 — длинный пунктир, 2 — точки.
