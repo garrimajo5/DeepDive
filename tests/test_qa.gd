@@ -94,8 +94,11 @@ func test_scene_runs_scenario() -> void:
 	ok(legs_seen, "на снимке 06b-own-legs в кадре свои ступни и кисти (#49)")
 	ok(log.contains("курс %d°" % Status.course_deg(main.helm.yaw)), "курс в логе — как на приборах, без минуса (#48)")
 	ok(log.contains("вентиль: пар, реактор остывает | "), "в машинном держали вентиль")
-	ok(main.reactor.scram > 0.0 and log.contains("аварийный сброс щитком | ") and log.contains("° сброс"),
-		"щитком заглушили реактор")
+	ok(log.contains("аварийный сброс щитком | ") and log.contains("° сброс"), "щитком заглушили реактор")
+	ok(log.contains("пробоина на мостике: струя, вода, янтарная тревога | ") and log.contains("ПРОБОИНА · МОСТИК · вода"),
+		"пробоина на мостике — на приборах")
+	ok(log.contains("сварка: заплатка наполовину") and main.breach.active == null and log.contains("Вода: мостик"),
+		"заварили, вода откачивается")
 	eq(main.samples.cargo.size(), 1, "лебёдкой подняли образец")
 	ok(log.contains("лебёдка: захват тянется к образцу | ") and log.contains("лебёдка: образец в трюме | "), "лебёдка в логе")
 

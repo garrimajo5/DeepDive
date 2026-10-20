@@ -75,5 +75,16 @@
   {"do": "hold", "what": "action", "s": 0.8},
   {"do": "wait", "s": 1.6},
   {"do": "shot", "name": "14-winch-cargo"},
-  {"do": "log", "note": "лебёдка: образец в трюме"}
+  {"do": "log", "note": "лебёдка: образец в трюме"},
+  {"do": "breach", "n": 0},
+  {"do": "wait", "s": 3},
+  {"do": "shot", "name": "15-breach"},
+  {"do": "log", "note": "пробоина на мостике: струя, вода, янтарная тревога"},
+  {"do": "hold", "what": "action", "s": 1.8},
+  {"do": "shot", "name": "16-breach-weld"},
+  {"do": "log", "note": "сварка: заплатка наполовину, искры"},
+  {"do": "hold", "what": "action", "s": 2.2},
+  {"do": "wait", "s": 0.5},
+  {"do": "shot", "name": "17-breach-sealed"},
+  {"do": "log", "note": "шов заварен и остывает, насосы откачивают воду"}
 ]

@@ -11,12 +11,14 @@ extends RefCounted
 ##                                                     "pitch" — наклон взгляда в градусах, вниз — минус; без него не меняется)
 ##   {"do": "hot", "heat": 80}                       — перегреть реактор (проверить вентиль и щиток машинного)
 ##   {"do": "sample", "n": 8}                       — поставить корабль над образцом n (шлюз в 8 м над ним, корабль стоит)
+##   {"do": "breach", "n": 0}                       — пробоина в месте n (0 мостик, 1 коридор, 2 лаборатория, 3 машинное),
+##                                                     игрок встаёт у неё лицом к борту
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
-const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "log", "quit"]
+const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad"]
 const PRESS_TIME := 0.15   ## сколько держать кнопку при «press», с
 const FINGER := 900        ## номер пальца для касаний сценария (не пересекается с настоящими)
@@ -117,6 +119,8 @@ func _begin(st: Dictionary, out: Array) -> void:
 			out.append(["hot", float(st.get("heat", 80.0))])
 		"sample":
 			out.append(["sample", int(st.get("n", 0))])
+		"breach":
+			out.append(["breach", int(st.get("n", 0))])
 		"log":
 			out.append(["log", str(st.get("note", ""))])
 		"quit":

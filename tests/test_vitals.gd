@@ -78,6 +78,7 @@ func test_scene_eco_hits_and_drain() -> void:
 	main.eco.queue_free()
 	main.eco = fake
 	main.add_child(fake)
+	main.breach.cd = Breach.COOLDOWN   # без пробоины: она — в test_breach
 	fake.send = [EcoLink.hit("Серпохвост", 0.12, main.helm.pos)]
 	main.step(0.1)
 	near(main.vitals.hull, 88.0, 0.05, "укус −12 %")
