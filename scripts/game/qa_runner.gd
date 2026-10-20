@@ -74,6 +74,8 @@ func tick(dt: float) -> void:
 				main.park_over_sample(c[1])
 			"breach":
 				main.open_breach(c[1])
+			"mate":
+				main.add_mate(c[1], c[2], deg_to_rad(c[3]), clampi(c[4], 0, 3), clampi(c[5], 0, 1))
 			"log":
 				_log("%s | %s" % [c[1], state()])
 			"quit":

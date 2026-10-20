@@ -117,3 +117,9 @@ func test_goto_and_hot_steps() -> void:
 	eq(out[1], ["hot", 75.0], "перегрев")
 	var q2 := QaScript.parse('[{"do": "goto", "x": 0.9, "z": 0.0, "yaw": 37, "pitch": -35}]')
 	eq(q2.advance(0.1)[0], ["goto", 0.9, 0.0, 37.0, -35.0], "переход с наклоном взгляда")
+
+
+func test_mate_step() -> void:
+	var q := QaScript.parse('[{"do": "mate", "x": 0.2, "z": -2.6, "yaw": 60, "role": 2, "look": 1}]')
+	eq(q.errors.size(), 0, "шаг mate известен")
+	eq(q.advance(0.1)[0], ["mate", 0.2, -2.6, 60.0, 2, 1], "член экипажа: место, курс, роль, внешность")

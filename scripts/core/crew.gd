@@ -1,6 +1,6 @@
 class_name Crew
 ## Экипаж: член экипажа как фигура из частей, которую видят другие и сам игрок (свои руки и ноги — взглядом вниз).
-## Пока модели нет (концепт ART-014), фигура — капсулы по суставам; поза считается здесь, без узлов:
+## Поза считается здесь, без узлов (модель MOD-012 её повторяет — `CrewRig`; `parts()` — та же поза капсулами):
 ## стоит, идёт (шаг ног и рук), сидит в кресле пилота с руками на колесе штурвала (руки идут за поворотом колеса).
 ## Всё в осях корабля, метры; рост 1,8 м, глаза на высоте Deck.Walker.EYE.
 ## Для коопа: у каждого игрока свой `Member`, хост шлёт клиентам `snapshot()`, клиенты ставят `apply()`.
@@ -120,6 +120,7 @@ class Member:
 	extends RefCounted
 	var role := Role.PILOT
 	var name := ""
+	var look := 0  ## внешность: 0 — мужская модель, 1 — женская (CrewRig.MODELS); выбирает игрок
 	var x := 0.0
 	var z := 0.0
 	var yaw := 0.0
@@ -190,7 +191,8 @@ class Member:
 			return Vector3(0.0, Deck.SEAT_EYE, Deck.SEAT_Z)
 		return Vector3(x, Deck.Walker.EYE, z)
 
-	## Суставы в осях корабля: hip, neck, head, shoulder_l/r, elbow_l/r, wrist_l/r, hand_l/r, knee_l/r, ankle_l/r, toe_l/r.
+	## Суставы в осях корабля: hip, neck, head, shoulder_l/r, elbow_l/r, wrist_l/r, hand_l/r, knee_l/r, ankle_l/r, toe_l/r;
+	## grip_l/r — точка хвата, если рука тянется к ней (штурвал, резак).
 	func joints() -> Dictionary:
 		var j := {}
 		var fwd: Vector3
@@ -267,6 +269,7 @@ class Member:
 		var wrist: Vector3 = arm[0] + (arm[1] - arm[0]).normalized() * FOREARM
 		j["wrist_" + k] = wrist
 		j["hand_" + k] = wrist + (arm[1] - arm[0]).normalized() * HAND
+		j["grip_" + k] = grip  ## куда тянется кисть (модель с другими длинами рук приходит сюда, CrewRig)
 
 	## Части фигуры: имя → Transform3D единичной капсулы. own — свой игрок: без головы (камера в ней), а стоя ещё
 	## без туловища, таза и плеч, чтобы взгляд вниз видел ноги, а не грудь вплотную; сидя видны руки на штурвале.
@@ -300,13 +303,14 @@ class Member:
 
 	## Снимок для сети: всё, что нужно клиенту, чтобы поставить фигуру.
 	func snapshot() -> Dictionary:
-		return {"role": role, "name": name, "x": x, "z": z, "yaw": yaw, "seated": seated,
+		return {"role": role, "name": name, "look": look, "x": x, "z": z, "yaw": yaw, "seated": seated,
 			"turn": wheel_turn, "phase": phase, "swing": swing,
 			"weld": [weld_at.x, weld_at.y, weld_at.z, weld_n.x, weld_n.y, weld_n.z] if weld_at.is_finite() else []}
 
 	func apply(s: Dictionary) -> void:
 		role = int(s.get("role", role))
 		name = str(s.get("name", name))
+		look = int(s.get("look", look))
 		x = float(s.get("x", x))
 		z = float(s.get("z", z))
 		yaw = float(s.get("yaw", yaw))

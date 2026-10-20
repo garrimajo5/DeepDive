@@ -584,6 +584,17 @@ static func _num(v: float) -> String:
 	return ("%.1f" % v).replace(".", ",")
 
 
+## Ещё один член экипажа на палубе (снимки и сценарий тестера, пока нет сети): место, курс (рад), роль, внешность.
+func add_mate(x: float, z: float, yaw: float, role: int, look: int, seated: bool = false) -> Crew.Member:
+	var mate := Crew.Member.new(role)
+	mate.look = look
+	mate.follow(x, z, yaw, seated, 0.0, 0.1)
+	crew.append(mate)
+	crew_view.set_members(crew, me)
+	crew_view.apply()
+	return mate
+
+
 ## Для tools/shot.gd: сесть за штурвал и провести корабль перед снимком (ключи pilot, thrust, turn, vert, secs).
 func debug_setup(kv: Dictionary) -> void:
 	if kv.get("pilot", "0") == "1":
@@ -608,18 +619,13 @@ func debug_setup(kv: Dictionary) -> void:
 		airlock.open = true
 		airlock.t = 1.0
 		rooms.apply(layout, reactor, airlock)
-	if kv.has("mate"):  # mate=x,z,курс°[,роль 0…3] — ещё один член экипажа стоит на палубе; mate=helm — сидит за штурвалом
-		var mate := Crew.Member.new(Crew.Role.SONAR)
+	if kv.has("mate"):  # mate=x,z,курс°[,роль 0…3[,внешность 0…1]] — ещё один член экипажа стоит на палубе; mate=helm — сидит за штурвалом
 		if kv["mate"] == "helm":
-			mate.follow(0.0, Deck.SEAT_Z, 0.0, true, 0.0, 0.1)
+			add_mate(0.0, Deck.SEAT_Z, 0.0, Crew.Role.SONAR, 0, true)
 		else:
 			var m: PackedFloat64Array = kv["mate"].split_floats(",")
-			if m.size() > 3:
-				mate.role = int(m[3])
-			mate.follow(m[0], m[1], deg_to_rad(m[2]) if m.size() > 2 else 0.0, false, 0.0, 0.1)
-		crew.append(mate)
-		crew_view.set_members(crew, me)
-		crew_view.apply()
+			add_mate(m[0], m[1], deg_to_rad(m[2]) if m.size() > 2 else 0.0, int(m[3]) if m.size() > 3 else Crew.Role.SONAR,
+				int(m[4]) if m.size() > 4 else 1)
 	if kv.has("hot"):  # hot=1 — перегрев (для снимка табло)
 		reactor.start_hot(false)
 		reactor.heat = float(kv["hot"])
