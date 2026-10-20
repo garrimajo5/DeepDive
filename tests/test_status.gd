@@ -85,3 +85,18 @@ func test_scene_status_and_messages() -> void:
 		main.step(0.1)
 	ok(not main.message.visible(), "сообщение погасло")
 	ok(main.hint.text.contains("глубина"), "на экране приборы")
+
+
+## По issue #139: строки на приборах на тёмной полупрозрачной подложке — читаются поверх белых плафонов.
+func test_hint_has_backing() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.step(0.1)
+	var sb := main.hint.get_theme_stylebox("normal") as StyleBoxFlat
+	ok(sb != null, "у строк есть подложка")
+	ok(sb.bg_color.a >= 0.4 and sb.bg_color.a < 0.8 and sb.bg_color.get_luminance() < 0.15, "тёмная полупрозрачная: %s" % sb.bg_color)
+	ok(sb.content_margin_left >= 6.0, "текст не у края подложки")
+	near(main.hint.position.x + sb.content_margin_left, 24.0, 0.5, "текст на прежнем месте")
+	main.queue_free()
+	await frames(1)

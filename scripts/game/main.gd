@@ -149,7 +149,8 @@ func _ready() -> void:
 	add_child(ui)
 	hint = Label.new()
 	hint.name = "Приборы"
-	hint.position = Vector2(24, 14)
+	hint.position = Vector2(24, 14) - Vector2(HINT_PAD, HINT_PAD * 0.5)
+	hint.add_theme_stylebox_override("normal", hint_backing())   # подложка: строки читаются поверх светлых плафонов (#139)
 	hint.add_theme_font_size_override("font_size", 24)
 	hint.add_theme_color_override("font_color", Color(0.75, 0.95, 1.0))
 	hint.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
@@ -457,6 +458,23 @@ func step(dt: float) -> void:
 	_update_ui()
 	_warm_frame()
 	r.end_frame()
+
+
+## Подложка строк на приборах: тёмная полупрозрачная плашка с отступом HINT_PAD — белые плафоны потолка не съедают
+## белый текст (issue #139), дно и лёд за ней видно.
+const HINT_PAD := 10.0
+const HINT_BACKING := Color(0.02, 0.06, 0.08, 0.55)
+
+
+static func hint_backing() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = HINT_BACKING
+	sb.set_corner_radius_all(8)
+	sb.content_margin_left = HINT_PAD
+	sb.content_margin_right = HINT_PAD
+	sb.content_margin_top = HINT_PAD * 0.5
+	sb.content_margin_bottom = HINT_PAD * 0.5
+	return sb
 
 
 ## Короткая подпись на кнопке действия у поста.
