@@ -62,6 +62,8 @@ func tick(dt: float) -> void:
 					main.stand_up()
 				if main.at_power:
 					main.close_power()
+				if main.at_vote:
+					main.close_vote()
 				main.walker.x = c[1]
 				main.walker.z = c[2]
 				main.walker.yaw = deg_to_rad(c[3])
@@ -74,6 +76,8 @@ func tick(dt: float) -> void:
 				main.park_over_sample(c[1])
 			"breach":
 				main.open_breach(c[1])
+			"route":
+				main.complete_route()
 			"silt":
 				if c[1]:
 					main.open_silt()
@@ -112,7 +116,21 @@ func state() -> String:
 	var h := main.helm
 	return "t %.1f с · %s · свет %s · глубина %.1f м · ход %.2f м/с · курс %d° · корабль (%.1f, %.1f, %.1f) · игрок (%.2f, %.2f) · реактор %s · %d кадр/с" % [
 		time, "за штурвалом" if main.pilot.seated else ("у пульта энергии" if main.at_power else "на ногах"), "вкл" if main.light_on else "выкл", h.depth(), h.speed, Status.course_deg(h.yaw),
-		h.pos.x, h.pos.y, h.pos.z, main.walker.x, main.walker.z, "%s %d°%s" % [str(main.reactor.share), roundi(main.reactor.heat), " сброс" if main.reactor.scram > 0.0 else ""], Engine.get_frames_per_second()] + ("" if main.breach.status().is_empty() else " · " + main.breach.status())
+		h.pos.x, h.pos.y, h.pos.z, main.walker.x, main.walker.z, "%s %d°%s" % [str(main.reactor.share), roundi(main.reactor.heat), " сброс" if main.reactor.scram > 0.0 else ""], Engine.get_frames_per_second()] + ("" if main.breach.status().is_empty() else " · " + main.breach.status()) \
+		+ _run_state()
+
+
+## Забег в логе: спуск, маршрут, решение у голостола.
+func _run_state() -> String:
+	var r := main.run
+	if r.route < 0 and r.depth == 0:
+		return ""
+	var s := " · спуск %d" % (r.depth + 1)
+	if r.route >= 0:
+		s += " · " + r.status(main.helm.pos.x, main.helm.pos.z)
+	if main.at_vote:
+		s += " · итог забега" if r.ended else " · решение у голостола"
+	return s
 
 
 func _shot(name: String) -> void:

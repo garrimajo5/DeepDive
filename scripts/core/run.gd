@@ -25,6 +25,12 @@ const ROUTES: Array = [
 var route := -1           ## индекс в ROUTES, −1 — маршрут не выбран
 var visited: Array[String] = []
 var done := false
+var depth := 0            ## сколько раз экипаж решил «глубже»: 0 — первый спуск
+var routes := 0           ## маршрутов пройдено за забег
+var ended := false        ## решили «наверх»: забег окончен, на экране итог
+var score := 0
+var start := {}           ## счётчики в начале забега: t, груз, виды, пробоины
+var _vote_held := true    ## голосование ждёт, пока отпустят крестовину
 
 
 static func place_name(key: String) -> String:
@@ -35,8 +41,22 @@ static func place_xz(key: String) -> Vector2:
 	return PLACES[key][1]
 
 
+## Новый забег: маршрута нет, первый спуск, счётчики с нуля (t — время игры, остальное — как у Run.tally).
+func begin(t: float, cargo_n: int, species_n: int, breaches_n: int) -> void:
+	route = -1
+	visited.clear()
+	done = false
+	depth = 0
+	routes = 0
+	ended = false
+	score = 0
+	start = {"t": t, "cargo": cargo_n, "species": species_n, "breaches": breaches_n}
+
+
 ## Подпись поста у голостола.
 func label() -> String:
+	if done:
+		return "Глубже или наверх?"
 	return "Маршрут: выбрать" if route < 0 else "Маршрут: сменить"
 
 
@@ -85,6 +105,7 @@ func update(x: float, z: float) -> String:
 		if n != "":
 			return "Точка маршрута пройдена: %s. Дальше — %s" % [place_name(k), place_name(n)]
 		done = true
+		routes += 1
 		return "Маршрут «%s» пройден: глубже или наверх?" % r["name"]
 	return ""
 
@@ -99,3 +120,63 @@ func status(x: float, z: float) -> String:
 	var n := next_key()
 	return "%s %d/%d: %s %d м" % [r["name"], visited.size(), r["places"].size(), place_name(n),
 		roundi(Vector2(x, z).distance_to(place_xz(n)))]
+
+
+## Мнения ролей перед решением (js/run.js R.opinions): [кто, наверх?, почему]. Решает игрок, мнения — подсказка.
+static func opinions(hull: float, energy: float, hot: bool, in_silt: bool, cargo_n: int) -> Array:
+	return [
+		["Пилот", hull < 50.0, "корпус %d%% — второй такой удар не выдержим" % roundi(hull) if hull < 50.0
+			else "корабль слушается, можно идти дальше"],
+		["Инженер", energy < 40.0 or hot, "реактор перегрет" if hot
+			else "энергии %d — не хватит на обратный путь" % floori(energy) if energy < 40.0 else "реактор в норме"],
+		["Сонарщик", in_silt, "вокруг ил, мы слепые" if in_silt else "сонар чистый"],
+		["Биолог", cargo_n >= 4, "в трюме %d образцов — пора их довезти" % cargo_n if cargo_n >= 4
+			else "образцов мало, внизу их больше"],
+	]
+
+
+## Открыть голосование: первое нажатие крестовины после того, как её отпустят.
+func open_vote() -> void:
+	_vote_held = true
+
+
+## Крестовина в голосовании (m.y = 1 — вверх): "up", "deep" или "".
+func vote_nav(m: Vector2i) -> String:
+	if m.y == 0:
+		_vote_held = false
+		return ""
+	if _vote_held:
+		return ""
+	_vote_held = true
+	return "up" if m.y > 0 else "deep"
+
+
+## «Глубже»: следующий спуск, маршрут выбирать заново. Возвращает сообщение.
+func go_deeper() -> String:
+	depth += 1
+	route = -1
+	visited.clear()
+	done = false
+	return "Глубже: %d-й спуск. Новый маршрут — у голостола" % (depth + 1)
+
+
+## «Наверх»: забег окончен, считаем очки (js/run.js R.finish). Строки итога — results().
+func finish(t: float, cargo_n: int, species_n: int, breaches_n: int, hull: float) -> Array:
+	ended = true
+	var rows := results(t, cargo_n, species_n, breaches_n, hull)
+	score = maxi(0, species_n - int(start.get("species", 0))) * 10 + maxi(0, cargo_n - int(start.get("cargo", 0))) * 5 \
+		+ routes * 20 + depth * 25 + roundi(hull / 10.0)
+	return rows
+
+
+## Итог забега: [название, значение].
+func results(t: float, cargo_n: int, species_n: int, breaches_n: int, hull: float) -> Array:
+	return [
+		["Время под водой", "%d мин" % maxi(0, roundi((t - float(start.get("t", 0.0))) / 60.0))],
+		["Спусков", str(depth + 1)],
+		["Маршрутов пройдено", str(routes)],
+		["Новых видов в журнале", str(maxi(0, species_n - int(start.get("species", 0))))],
+		["Образцов поднято", str(maxi(0, cargo_n - int(start.get("cargo", 0))))],
+		["Пробоин", str(maxi(0, breaches_n - int(start.get("breaches", 0))))],
+		["Корпус на финише", "%d%%" % roundi(hull)],
+	]

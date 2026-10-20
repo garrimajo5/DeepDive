@@ -45,6 +45,8 @@ var at_power := false              ## игрок у пульта энергии:
 var press_post := ""               ## пост, у которого только что нажали кнопку (руки на нём CrewHands.PRESS с)
 var press_t := 0.0
 var power_panel: PowerPanel
+var at_vote := false               ## игрок решает у голостола «глубже или наверх» (или смотрит итог)
+var vote_panel: VotePanel
 var current := Helm.SeaCurrent.new()
 
 var ocean: OceanView
@@ -143,6 +145,9 @@ func _ready() -> void:
 	power_panel = PowerPanel.new()
 	power_panel.name = "Пульт энергии"
 	ui.add_child(power_panel)
+	vote_panel = VotePanel.new()
+	vote_panel.name = "Решение экипажа"
+	ui.add_child(vote_panel)
 	hit_flash = ColorRect.new()
 	hit_flash.name = "Вспышка удара"
 	hit_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -169,6 +174,7 @@ func _ready() -> void:
 	if QaRunner.pending():   # прогон тестера — всегда с чистого трюма и без записи
 		save.path = ""
 	save.load_into(samples, scanner)
+	_begin_run()
 	samples.changed.connect(save.mark)
 	scanner.changed.connect(save.mark)
 	scanner.message.connect(say)
@@ -235,6 +241,16 @@ func step(dt: float) -> void:
 		power.nav(reactor, r.move, dt)
 		if r.action_pressed:
 			close_power()
+	elif at_vote:
+		helm.in_thrust = 0.0
+		helm.in_turn = 0.0
+		helm.in_vert = 0.0
+		walker.look(overlay.look_points())
+		var choice := "" if run.ended else run.vote_nav(r.move)
+		if choice != "":
+			decide(choice)
+		if r.action_pressed:
+			close_vote()
 	else:
 		helm.in_thrust = 0.0
 		helm.in_turn = 0.0
@@ -384,7 +400,10 @@ func use_post(id: String) -> void:
 		"sonar":
 			ping_sonar()
 		"route":
-			say(run.cycle())
+			if run.done:
+				open_vote()
+			else:
+				say(run.cycle())
 		"zap":
 			fire_zap()
 		"airlock":
@@ -464,6 +483,15 @@ func toggle_light() -> void:
 ## Сообщение на приборах, гаснет через 4,2 с.
 func say(msg: String) -> void:
 	message.say(msg)
+
+
+## Пройти выбранный маршрут разом (или первый, если не выбран): сценарий тестера и снимки.
+func complete_route() -> void:
+	if run.route < 0:
+		run.choose(0)
+	for k in Run.ROUTES[run.route]["places"]:
+		var p := Run.place_xz(k)
+		say(run.update(p.x, p.y))
 
 
 ## Импульс сонара: сила — доля «Сонар»; существ в этот же шаг сообщит живой мир (EcoLink.NEAR).
@@ -551,6 +579,15 @@ func _on_destroyed() -> void:
 		stand_up()
 	if at_power:
 		close_power()
+	say("Корпус разрушен. Ковчег поднят к началу спуска")
+	_restart()
+
+
+## Корабль у начала спуска, целый и заряженный, забег с нуля (корпус разрушен или новый забег после итога).
+func _restart() -> void:
+	if at_vote:
+		at_vote = false
+		vote_panel.visible = false
 	helm.reset()
 	vitals.reset()
 	breach.reset()
@@ -558,7 +595,39 @@ func _on_destroyed() -> void:
 	walker.reset()
 	light_on = true
 	overlay.set_light(true)
-	say("Корпус разрушен. Ковчег поднят к началу спуска")
+	_begin_run()
+
+
+func _begin_run() -> void:
+	run.begin(time, samples.cargo.size(), scanner.scanned.size(), breach.count)
+
+
+## У голостола после пройденного маршрута: мнения ролей, крестовина — решение, кнопка — отложить.
+func open_vote() -> void:
+	at_vote = true
+	run.open_vote()
+	vote_panel.show_vote(run.depth, Run.opinions(vitals.hull, vitals.energy, reactor.hot, silt.inside != null,
+		samples.cargo.size()))
+
+
+func close_vote() -> void:
+	at_vote = false
+	vote_panel.visible = false
+	if run.ended:
+		_restart()
+		say("Новый забег: Ковчег у начала спуска")
+
+
+## Решение экипажа: "deep" — следующий спуск, "up" — итог забега на экране.
+func decide(choice: String) -> void:
+	if choice == "deep":
+		at_vote = false
+		vote_panel.visible = false
+		say(run.go_deeper())
+		return
+	var rows := run.finish(time, samples.cargo.size(), scanner.scanned.size(), breach.count, vitals.hull)
+	vote_panel.show_results(rows, run.score)
+	say("Экипаж поднялся наверх: очки %d" % run.score)
 
 
 func sit_at_helm() -> void:
@@ -594,6 +663,8 @@ func _update_ui() -> void:
 		overlay.set_action_label("Встать")
 	elif at_power:
 		overlay.set_action_label("Закрыть")
+	elif at_vote:
+		overlay.set_action_label("Дальше" if run.ended else "Позже")
 	else:
 		var post := Deck.nearest(posts, walker.x, walker.z)
 		var label := ""
@@ -628,7 +699,7 @@ func status_parts() -> Array:
 	parts.append("течение на %s %s м/с" % [Status.rumb(current.vel()), _num(Helm.SeaCurrent.SPEED)])
 	if not airlock.closed():
 		parts.append("шлюз открыт" if airlock.fully_open() else "шлюз в движении")
-	if not pilot.seated and not at_power:
+	if not pilot.seated and not at_power and not at_vote:
 		var post := Deck.nearest(posts, walker.x, walker.z)
 		if post:
 			parts.append(post.label)
@@ -731,6 +802,11 @@ func debug_setup(kv: Dictionary) -> void:
 			scanner.scanned[id] = true
 	if kv.has("route"):   # маршрут n (0…2) выбран у голостола
 		run.choose(int(kv["route"]))
+	if kv.get("vote", "") in ["1", "up"]:   # маршрут пройден, решение у голостола; vote=up — итог забега
+		complete_route()
+		open_vote()
+		if kv["vote"] == "up":
+			decide("up")
 	if kv.has("journal"):
 		journal_page = clampi(int(kv["journal"]), 0, Lab.pages(scanner) - 1)
 		rooms.set_lab(Lab.contents(samples.cargo), Lab.page_lines(samples, scanner, journal_page), time)
