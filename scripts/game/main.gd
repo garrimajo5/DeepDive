@@ -18,6 +18,10 @@ var vitals := Vitals.new()   ## корпус и заряд корабля
 var zap := Zap.new()
 var samples := Samples.new()   ## образцы на дне и лебёдка трюма
 var samples_view: SamplesView
+var breach := Breach.new()     ## событие «пробоина»: струя, вода, сварка удержанием
+var breach_view: BreachView
+var debug_weld := false        ## снимок: сварку держат без пальца
+var save := SaveGame.new()     ## груз трюма и поднятые образцы в user:// (js/save.js)
 var engine := EngineRoom.new()   ## машинное: вентиль сброса пара и щиток «Аварийный сброс»
 var debug_vent := false          ## снимок: вентиль держат без пальца
 var debug_winch := false         ## снимок: кнопку у лебёдки держат без пальца
@@ -85,12 +89,15 @@ func _ready() -> void:
 	rooms = RoomsView.new()
 	rooms.name = "Отсеки"
 	ship.add_child(rooms)
+	breach_view = BreachView.new(breach)
+	ship.add_child(breach_view)
 	crew_view = CrewView.new()
 	ship.add_child(crew_view)
 	crew_view.set_members(crew, me)
 	walker.stand = layout.can_stand
 	posts = Deck.posts()
 	posts.append(Deck.Post.new("winch", Samples.POST_AT, Samples.POST_R, "Лебёдка"))
+	posts.append(Deck.Post.new("breach", breach.post_at(), Breach.POST_R, "Сварка"))
 	for i in layout.doors.size():
 		posts.append(Deck.Post.new("door%d" % i, Vector2(0.0, ShipLayout.DOOR_Z[i]), 1.2, "Открыть люк"))
 	searchlight = SearchlightView.new()
@@ -137,6 +144,11 @@ func _ready() -> void:
 	airlock.message.connect(say)
 	samples.message.connect(say)
 	engine.message.connect(say)
+	breach.message.connect(say)
+	if QaRunner.pending():   # прогон тестера — всегда с чистого трюма и без записи
+		save.path = ""
+	save.load_into(samples)
+	samples.changed.connect(save.mark)
 	_place_ship()
 	_place_camera()
 	if QaRunner.pending():
@@ -162,6 +174,12 @@ func _build_world() -> void:
 	add_child(we)
 
 
+## Игру сворачивают или закрывают — несохранённое записать сразу.
+func _notification(what: int) -> void:
+	if what in [NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_APPLICATION_FOCUS_OUT]:
+		save.flush(samples)
+
+
 func _process(dt: float) -> void:
 	step(dt)
 
@@ -174,6 +192,7 @@ func step(dt: float) -> void:
 	var r := overlay.router
 	var hold_valve := false
 	var hold_winch := false
+	var hold_weld := false
 	if pilot.seated:
 		helm.in_thrust = r.move.y
 		helm.in_turn = r.move.x
@@ -196,12 +215,14 @@ func step(dt: float) -> void:
 		helm.in_turn = 0.0
 		helm.in_vert = 0.0
 		walker.look(overlay.look_points())
+		walker.speed_k = breach.slow(ShipLayout.room_at(walker.z))
 		walker.walk(Vector2(r.move), dt)
 		var post := Deck.nearest(posts, walker.x, walker.z)
 		if post and r.action_pressed:
 			use_post(post.id)
 		hold_valve = post != null and post.id == "valve" and r.action_down
 		hold_winch = post != null and post.id == "winch" and r.action_down
+		hold_weld = post != null and post.id == "breach" and r.action_down
 	layout.update(dt)
 	airlock.update(dt)
 	var ship_xf := Samples.ship_xform(helm.pos, helm.yaw)
@@ -209,6 +230,9 @@ func step(dt: float) -> void:
 		samples.hold(Samples.lock_point(ship_xf), dt)
 	samples.update(dt)
 	samples_view.sync()
+	save.tick(dt, samples)
+	if hold_weld or debug_weld:
+		breach.hold(dt)
 	for p in posts:
 		if p.id.begins_with("door"):
 			p.label = "Закрыть люк" if layout.doors[int(p.id.substr(4))].open else "Открыть люк"
@@ -216,6 +240,9 @@ func step(dt: float) -> void:
 			p.label = airlock.label()
 		elif p.id == "winch":
 			p.label = samples.label()
+		elif p.id == "breach":
+			p.at = breach.post_at()
+			p.label = breach.label()
 	current.update(dt)
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
 	engine.update(dt, reactor, hold_valve or debug_vent)
@@ -226,6 +253,9 @@ func step(dt: float) -> void:
 		light_on = false
 		overlay.set_light(false)
 		say("Прожектор погас: не хватает энергии")
+	vitals.hull = breach.update(dt, reactor.k(Reactor.Sys.LIFE), vitals.hull)
+	breach_view.apply()
+	breach.end_step()
 	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP))
 	zap.update(dt)
 	zap_warm = maxi(0, zap_warm - 1)
@@ -257,7 +287,7 @@ func step(dt: float) -> void:
 
 ## Короткая подпись на кнопке действия у поста.
 const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер", "sonar": "Сонар", "zap": "Разряд", "airlock": "Шлюз", "winch": "Лебёдка",
-	"valve": "Вентиль", "scram": "Сброс"}
+	"valve": "Вентиль", "scram": "Сброс", "breach": "Сварка"}
 
 
 ## Кнопка действия у поста.
@@ -287,6 +317,22 @@ func use_post(id: String) -> void:
 		_ when id.begins_with("door"):
 			var d: ShipLayout.Door = layout.doors[int(id.substr(4))]
 			d.open = not d.open
+
+
+## Открыть пробоину в месте n и поставить игрока у неё лицом к борту (сценарий тестера, снимки).
+func open_breach(n: int) -> void:
+	var s: Breach.Spot = breach.all[clampi(n, 0, breach.all.size() - 1)]
+	breach.cd = 0.0
+	if breach.active:
+		breach.active = null
+	breach.start(s)
+	if pilot.seated:
+		stand_up()
+	walker.x = s.at.x
+	walker.z = s.at.y
+	walker.yaw = atan2(s.n.x, s.n.z)
+	walker.pitch = atan2(s.p.y - Deck.Walker.EYE, Vector2(s.p.x, s.p.z).distance_to(s.at))   # взгляд на пробоину
+	breach_view.apply()
 
 
 ## Поставить корабль над образцом n: шлюз в 8 м над ним, корабль стоит, шлюз открыт (сценарий тестера, снимки).
@@ -383,6 +429,8 @@ func on_eco_event(e: Dictionary) -> void:
 
 
 func _on_hit(percent: int, kind: String) -> void:
+	if breach.on_hit(percent, vitals.hull):
+		return   # о пробоине скажет Breach
 	if kind == "scrape":
 		say("Удар о дно: корпус −%d%%" % percent)
 	elif kind.is_empty():
@@ -399,6 +447,7 @@ func _on_destroyed() -> void:
 		close_power()
 	helm.reset()
 	vitals.reset()
+	breach.reset()
 	walker.reset()
 	light_on = true
 	overlay.set_light(true)
@@ -454,6 +503,8 @@ func _update_ui() -> void:
 ## Части строки состояния: где игрок, глубина, ход, у штурвала — до дна, курс и прожектор, течение, пост рядом, сообщение.
 func status_parts() -> Array:
 	var parts: Array = []
+	if not breach.status().is_empty():
+		parts.append(breach.status())
 	if not reactor.alert().is_empty():
 		parts.append(reactor.alert())
 	if reactor.alert().is_empty() and not vitals.warning().is_empty():
@@ -541,6 +592,19 @@ func debug_setup(kv: Dictionary) -> void:
 			held -= 0.05
 		rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(),
 			Samples.COLORS[samples.target.kind] if samples.target else Color.WHITE)
+	if kv.has("breach"):  # breach=n — пробоина в месте n (0 мостик, 1 коридор, 2 лаборатория, 3 машинное), игрок у неё;
+		# weld=<доля> — шов заварен на долю (1 — заварен, шов горячий); water=<м> — вода на полу
+		open_breach(int(kv["breach"]))
+		var w := float(kv.get("weld", "0"))
+		if w >= 1.0:
+			breach.hold(1.0 / Breach.WELD_RATE)
+		elif w > 0.0:
+			breach.weld = w
+			debug_weld = true
+		if kv.has("water"):
+			breach.water = float(kv["water"])
+		breach.time = 0.25
+		breach_view.apply()
 	if kv.has("ship"):  # ship=x,y,z — поставить корабль (y — высота, глубина со знаком минус)
 		var p: PackedFloat64Array = kv["ship"].split_floats(",")
 		helm.pos = Vector3(p[0], p[1], p[2])

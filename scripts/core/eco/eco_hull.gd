@@ -8,6 +8,8 @@ const CENTER := Vector3(0, HullPlan.CENTER_Y, 9)
 const REACH := 22.0
 ## Сколько раз выталкивать подряд: на стыке деталей точка может попасть из одной в другую (как в js — 4).
 const TRIES := 4
+## Дальше этого от точки корабля корпус не достать ни при каком курсе (REACH + |CENTER|).
+const BOUND := REACH + 9.5
 
 static var _inflated := {}
 
@@ -114,6 +116,9 @@ static func push_local(l: Vector3, r: float) -> Array:
 ## Вытолкнуть точку мира p из корпуса корабля с запасом r (S.pushOut). Пусто — точка снаружи, ничего не делали;
 ## иначе [новая точка мира, нормаль корпуса в мире].
 static func push_out(p: Vector3, ship_pos: Vector3, yaw: float, r: float) -> Array:
+	var far := BOUND + r
+	if p.distance_squared_to(ship_pos) > far * far:
+		return [] # дальше корпуса при любом курсе — без поворота в оси корабля
 	var res := push_local(to_ship(p, ship_pos, yaw), r)
 	if res.is_empty():
 		return res

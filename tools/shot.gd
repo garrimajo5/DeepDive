@@ -3,10 +3,11 @@ extends SceneTree
 ## xvfb-run -a godot --path . --rendering-driver opengl3 --resolution 1600x720 -s tools/shot.gd -- out.png [ключ=значение ...]
 ## Ключи: x, z, yaw, pitch — игрок на палубе (yaw в градусах, 0 — к носу); frames — сколько кадров ждать;
 ## pilot=1 — сесть за штурвал; thrust, turn, vert — ввод пилота; secs — сколько секунд вести корабль до снимка;
-## light=0 — погасить прожектор; lock=1 — шлюз трюма открыт; zap=1 — разряд (рычаг внизу, шкала погашена); ping=1 — импульс сонара с пробными отметками (age=<с> после импульса); power=1 — встать к пульту энергии; hot=<градусы> — перегрев реактора; ship=x,y,z — поставить корабль (например ship=200,-80,0 — глубокий склон на востоке); view=x,y,z — камера снаружи в осях корабля (корпус). mate=x,z,курс[,роль] — ещё один член экипажа на палубе (mate=helm — за штурвалом).
+## light=0 — погасить прожектор; lock=1 — шлюз трюма открыт; zap=1 — разряд (рычаг внизу, шкала погашена); ping=1 — импульс сонара с пробными отметками (age=<с> после импульса); power=1 — встать к пульту энергии; hot=<градусы> — перегрев реактора; ship=x,y,z — поставить корабль (например ship=200,-80,0 — глубокий склон на востоке); view=x,y,z — камера снаружи в осях корабля (корпус). mate=x,z,курс[,роль] — ещё один член экипажа на палубе (mate=helm — за штурвалом). save=<путь> — груз и поднятые образцы из файла сохранения. breach=n — пробоина в месте n (0 мостик … 3 машинное), weld=<доля>, water=<м>.
 
 
 func _initialize() -> void:
+	SaveGame.default_path = ""   # не читать и не писать сохранение игрока
 	_go.call_deferred()
 
 
@@ -23,6 +24,10 @@ func _go() -> void:
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	await process_frame
+	if kv.has("save"):  # save=<путь> — груз и поднятые образцы из файла сохранения (как при запуске игры)
+		var sg := SaveGame.new()
+		sg.path = kv["save"]
+		print("сохранение: ", sg.load_into(main.samples))
 	if main.has_method("debug_setup"):
 		await main.debug_setup(kv)
 	var w = main.get("walker")

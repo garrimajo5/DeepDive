@@ -130,6 +130,13 @@ func nearest_grazer(pos: Vector3, radius: float) -> Grazer:
 	return best
 
 
+## Живые скребуны видны сонару и сканеру.
+func targets(_world: EcoWorld, out: Array[Dictionary]) -> void:
+	for g in all:
+		if g.agent.alive:
+			out.append(EcoWorld.target(ID, g.agent.p, 1.4))
+
+
 func step(world: EcoWorld, dt: float) -> void:
 	for g in all:
 		_step_grazer(world, g, dt)

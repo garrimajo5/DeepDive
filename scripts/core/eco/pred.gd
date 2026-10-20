@@ -149,6 +149,13 @@ func on_zap(world: EcoWorld, radius: float = ZAP_RADIUS) -> void:
 		world.emit(ID, "zap", a.p, _text(world, "Разряд отпугнул %s", Species.Case.ACC, false))
 
 
+## Каждый серпохвост виден сонару и сканеру.
+func targets(_world: EcoWorld, out: Array[Dictionary]) -> void:
+	for pr in all:
+		if pr.agent.alive:
+			out.append(EcoWorld.target(ID, pr.agent.p, 2.5))
+
+
 func step(world: EcoWorld, dt: float) -> void:
 	for pr in all:
 		_step_pred(world, pr, dt)
