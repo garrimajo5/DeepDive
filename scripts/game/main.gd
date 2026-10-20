@@ -19,6 +19,10 @@ var zap := Zap.new()
 var engine := EngineRoom.new()   ## машинное: вентиль сброса пара и щиток «Аварийный сброс»
 var debug_vent := false          ## снимок: вентиль держат без пальца
 var zap_light: OmniLight3D   ## вспышка разряда вокруг корпуса (за бортом)
+## Первые кадры вспышка горит почти без света: шейдеры дна и корпуса со светом от неё собираются при старте,
+## а не в момент первого разряда (issue #50: 10 к/с на разряде).
+const ZAP_WARM_STEPS := 3
+var zap_warm := ZAP_WARM_STEPS
 var hit_flash: ColorRect
 var sonar_view: SonarView
 var time := 0.0             ## секунды игры (для сонара и событий)
@@ -67,7 +71,8 @@ func _ready() -> void:
 	zap_light.light_color = Color("5ef2d6")
 	zap_light.light_cull_mask = OceanView.LAYER_WORLD
 	zap_light.position = Vector3(0, 1.6, 8)
-	zap_light.visible = false
+	zap_light.omni_range = Zap.BASE_RADIUS
+	zap_light.light_energy = 0.001
 	ship.add_child(zap_light)
 	sonar_view = SonarView.new()
 	bridge.add_child(sonar_view)
@@ -206,6 +211,7 @@ func step(dt: float) -> void:
 		say("Прожектор погас: не хватает энергии")
 	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP))
 	zap.update(dt)
+	zap_warm = maxi(0, zap_warm - 1)
 	if zap.flicker > 0.0:
 		hit_flash.color = Color(0.37, 0.95, 0.84, zap.flicker / Zap.FLICKER * 0.4)
 		zap_light.visible = true
@@ -213,7 +219,7 @@ func step(dt: float) -> void:
 		zap_light.light_energy = 4.0 * zap.flicker / Zap.FLICKER
 	else:
 		hit_flash.color = Color(1.0, 0.36, 0.42, vitals.flash * 0.35)
-		zap_light.visible = false
+		zap_light.visible = zap_warm > 0
 	bridge.set_zap_lever(zap.flicker > 0.0)
 	_step_eco(dt)
 	for i in Reactor.Sys.size():
