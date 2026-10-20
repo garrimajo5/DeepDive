@@ -6,6 +6,8 @@ extends RefCounted
 ## камера за несколько кадров оглядывает корабль из центра мостика (взгляды VIEWS), скрытые детали корабля на эти
 ## кадры показаны, вспышка разряда горит на наибольший радиус, а последние взгляды — с погашенным прожектором.
 ## Сцену собирает Main (`main.warm`, `Main.warming()`); тесты и снимки без прогрева — `Warmup.enabled = false`.
+## Issue #159: ещё кадры камерой с борта (точки облёта OUTSIDE — корпус и дно снаружи), на время прогрева выпущены
+## частицы корабля (пар вентиля, струя и искры пробоины) и показаны скрытые панели интерфейса (решение экипажа).
 
 static var enabled := true
 
@@ -18,6 +20,8 @@ const VIEWS := [
 	[0.0, -60.0, true], [180.0, -60.0, true], [0.0, 50.0, true], [180.0, 50.0, true],
 	[0.0, -8.0, false], [90.0, -8.0, false], [180.0, -8.0, false], [270.0, -8.0, false],
 ]
+## Кадры снаружи после взглядов с мостика: точки облёта `Flyby.START_PATH`, камера с борта смотрит на корпус.
+const OUTSIDE := [0, 2]
 ## Члены экипажа на время прогрева — каждая внешность CrewRig.MODELS перед глазами (x, z на палубе).
 const MATE_AT := [Vector2(-0.6, -3.6), Vector2(0.6, -3.6)]
 
@@ -26,11 +30,21 @@ var i := 0
 
 func _init() -> void:
 	if not enabled:
-		i = VIEWS.size()
+		i = frames()
+
+
+## Всего кадров прогрева: взгляды с мостика и снаружи.
+static func frames() -> int:
+	return VIEWS.size() + OUTSIDE.size()
 
 
 func active() -> bool:
-	return i < VIEWS.size()
+	return i < frames()
+
+
+## Точка облёта (`Flyby.START_PATH`) для кадра снаружи; -1 — кадр с мостика или прогрев кончился.
+func outside() -> int:
+	return OUTSIDE[i - VIEWS.size()] if active() and i >= VIEWS.size() else -1
 
 
 ## Курс камеры (радианы) в текущем взгляде.
@@ -44,7 +58,7 @@ func pitch() -> float:
 
 ## Прожектор в этом кадре прогрева (без прогрева — как в игре).
 func lamp() -> bool:
-	return not active() or VIEWS[i][2]
+	return not active() or i >= VIEWS.size() or VIEWS[i][2]
 
 
 ## Кадр показан — следующий взгляд. Возвращает true, когда прогрев только что кончился.
@@ -57,7 +71,7 @@ func advance() -> bool:
 
 ## Доля прогрева 0…1 — для шторки.
 func progress() -> float:
-	return clampf(float(i) / VIEWS.size(), 0.0, 1.0)
+	return clampf(float(i) / frames(), 0.0, 1.0)
 
 
 ## Наибольший радиус разряда: доля «Разряд» на пределе Reactor.MAX.
