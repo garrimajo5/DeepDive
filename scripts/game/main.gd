@@ -827,6 +827,10 @@ func open_vote() -> void:
 	var ops := Run.opinions(vitals.hull, vitals.energy, reactor.hot, silt.inside != null, samples.cargo.size())
 	votes = VoteHolo.votes(ops)
 	vote_panel.show_vote(run.depth, ops)
+	if not pilot.seated:   # взгляд с карты брифинга — на поля голосования (#193)
+		var v := VoteHolo.look(Vector3(walker.x, Deck.Walker.EYE, walker.z), sonar_view.position)
+		walker.yaw = v.x
+		walker.pitch = v.y
 
 
 func close_vote() -> void:
