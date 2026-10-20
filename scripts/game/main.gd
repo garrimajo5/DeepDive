@@ -28,6 +28,7 @@ var save := SaveGame.new()     ## груз трюма, поднятые обра
 var scanner := Scanner.new()   ## сканер биолога: цели от живого мира, изученные виды
 var at_scanner := false        ## игрок у поста «Сканер»: мир шлёт цели (ShipState.scan_range)
 var near_post := ""            ## пост рядом с игроком на ногах (id), "" — нет или игрок занят постом
+var _noclip_return := Vector2.ZERO  ## куда вернуть игрока при выходе из noclip (где включил)
 var brief := Briefing.Fade.new()  ## голограмма брифинга у поста «Маршрут» (ART-016)
 var vote_fade := Briefing.Fade.new()  ## голосование на голограмме (VoteHolo)
 var votes := {}                   ## голоса ролей в открытом голосовании (VoteHolo.votes)
@@ -385,6 +386,8 @@ func step(dt: float) -> void:
 	if qa:
 		qa.tick(dt)
 	var r := overlay.router
+	if r.noclip_pressed:
+		_toggle_noclip()
 	var hold_valve := false
 	var hold_winch := false
 	var hold_weld := false
@@ -399,6 +402,12 @@ func step(dt: float) -> void:
 		if r.touching() or r.action_pressed:
 			flyby.stop()
 			message.clear(Flyby.START_MSG)
+	elif walker.noclip:   # тестовый полёт: крестовина ведёт по взгляду сквозь корпус, посты не трогаем
+		helm.in_thrust = 0.0
+		helm.in_turn = 0.0
+		helm.in_vert = 0.0
+		walker.look(overlay.look_points())
+		walker.walk(Vector2(r.move), dt)
 	elif pilot.seated:
 		helm.in_thrust = r.move.y
 		helm.in_turn = r.move.x
@@ -883,6 +892,30 @@ func stand_up() -> void:
 	pilot.stand(walker)
 	overlay.set_pilot(false)
 	message.clear(SAT_MSG)
+
+
+## Тестовая кнопка noclip: вкл — игрок летит сквозь корпус смотреть живой мир; выкл — назад на пол, где включил.
+func _toggle_noclip() -> void:
+	if walker.noclip:
+		walker.noclip = false
+		var p := layout.free_spot(_noclip_return.x, _noclip_return.y)
+		walker.x = p.x
+		walker.z = p.y
+		walker.y = Deck.Walker.EYE
+		say("noclip выкл")
+	else:
+		if pilot.seated:
+			stand_up()
+		if at_power:
+			close_power()
+		if at_vote:   # выходим из голосования без перезапуска забега
+			at_vote = false
+			vote_panel.visible = false
+		_noclip_return = Vector2(walker.x, walker.z)
+		walker.noclip = true
+		walker.y = Deck.Walker.EYE
+		say("noclip вкл — крестовина ведёт по взгляду, можно выйти с корабля")
+	overlay.set_noclip(walker.noclip)
 
 
 func _place_ship() -> void:

@@ -15,6 +15,7 @@ class Layout:
 	var up := Circle.new()
 	var down := Circle.new()
 	var light := Circle.new()
+	var noclip := Circle.new()  ## тестовая кнопка «noclip» в правом верхнем углу
 
 	func compute(safe: Rect2) -> void:
 		var s := minf(safe.size.x, safe.size.y)
@@ -22,6 +23,8 @@ class Layout:
 		var pr := s * PAD_SHARE
 		var ar := s * ACTION_SHARE
 		var bottom := safe.position.y + safe.size.y
+		var tr := s * 0.05
+		noclip = Circle.new(Vector2(safe.position.x + safe.size.x - m - tr, safe.position.y + m + tr), tr)
 		pad = Circle.new(Vector2(safe.position.x + m + pr, bottom - m - pr), pr)
 		# кнопка действия чуть выше нижнего края — там её удобнее достать большим пальцем
 		action = Circle.new(Vector2(safe.position.x + safe.size.x - m - ar * 1.3, bottom - m - pr), ar)
@@ -66,7 +69,7 @@ static func dpad(d: Vector2, radius: float) -> Vector2i:
 ## Разбор касаний: палец на крестовине ведёт игрока (можно вести по кругу и за край), на кнопке — держит её,
 ## остальные — обзор свайпом. Пальцы работают одновременно.
 class Router:
-	enum Role { PAD, ACTION, LOOK, UP, DOWN, LIGHT }
+	enum Role { PAD, ACTION, LOOK, UP, DOWN, LIGHT, NOCLIP }
 
 	var layout := Layout.new()
 	var pilot_buttons := false  ## за штурвалом работают «Всплыть», «Вниз», «Свет»
@@ -74,6 +77,7 @@ class Router:
 	var action_down := false
 	var action_pressed := false  ## нажали в этом кадре
 	var light_pressed := false
+	var noclip_pressed := false  ## нажали тестовую кнопку noclip в этом кадре
 	var look := Vector2.ZERO     ## смещение пальцев обзора за кадр, px
 	var _fingers := {}           ## id → [Role, последняя точка]
 
@@ -92,6 +96,8 @@ class Router:
 			role = Role.PAD
 		elif layout.action.has(p):
 			role = Role.ACTION
+		elif layout.noclip.has(p):   # тестовая кнопка всегда доступна
+			role = Role.NOCLIP
 		elif pilot_buttons and layout.up.has(p):
 			role = Role.UP
 		elif pilot_buttons and layout.down.has(p):
@@ -104,6 +110,8 @@ class Router:
 			action_pressed = true
 		if role == Role.LIGHT:
 			light_pressed = true
+		if role == Role.NOCLIP:
+			noclip_pressed = true
 		_apply(id, p)
 
 	func moved(id: int, p: Vector2) -> void:
@@ -124,6 +132,7 @@ class Router:
 		look = Vector2.ZERO
 		action_pressed = false
 		light_pressed = false
+		noclip_pressed = false
 
 	## Касается ли экрана хоть один палец.
 	func touching() -> bool:

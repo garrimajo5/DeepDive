@@ -6,6 +6,7 @@ extends Control
 var router := Touch.Router.new()
 var light_on := true     ## прожектор горит: кнопка «Свет» янтарная
 var action_label := ""   ## подпись на кнопке действия («Штурвал», «Встать»); пусто — кнопка тусклая
+var noclip_on := false   ## тестовый режим noclip включён: кнопка подсвечена
 ## Сколько «точек» экрана (1/160 дюйма) в одном пикселе вьюпорта — для чувствительности свайпа.
 var points_per_px := 1.0
 
@@ -71,6 +72,12 @@ func set_action_label(text: String) -> void:
 		queue_redraw()
 
 
+func set_noclip(on: bool) -> void:
+	if noclip_on != on:
+		noclip_on = on
+		queue_redraw()
+
+
 func _draw() -> void:
 	var l := router.layout
 	var font := get_theme_default_font()
@@ -96,6 +103,12 @@ func _draw() -> void:
 	draw_arc(l.action.c, l.action.r, 0, TAU, 40, line, 2.0)
 	if not action_label.is_empty():
 		_text(font, l.action.c, action_label, l.action.r * 0.32)
+	# тестовая кнопка noclip (правый верхний угол): включена — янтарная заливка, иначе тусклое кольцо
+	if noclip_on:
+		draw_circle(l.noclip.c, l.noclip.r, Color(1.0, 0.75, 0.2, 0.5))
+	draw_arc(l.noclip.c, l.noclip.r, 0, TAU, 32, line, 2.0)
+	_text(font, l.noclip.c, "noclip", l.noclip.r * 0.42,
+		Color(0.1, 0.07, 0.02, 0.95) if noclip_on else Color(1, 1, 1, 0.7))
 	if router.pilot_buttons:
 		for b in [[l.up, "Всплыть", router.vert() == 1], [l.down, "Вниз", router.vert() == -1]]:
 			var c: Touch.Circle = b[0]
