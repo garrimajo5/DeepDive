@@ -13,6 +13,21 @@ const MAX_SEGS := 8            ## столько отрезков держит �
 ## Номера мест — по таблице ART-016.
 const NUMBERS := {"flower": 1, "geyser": 2, "shell": 3, "bones": 4, "well": 5, "drop": 6}
 const ORDER: Array[String] = ["flower", "geyser", "shell", "bones", "well", "drop"]
+## Иконки мест (ART-005, `docs/concept-art/ikonka-*.png`, в игре — `textures/places/<ключ>.png`): билборд стоит
+## нижним краем на точке места, высота на столе, м. Места не на выбранном маршруте — тусклее.
+const ICON_SIZE := 0.13
+const ICON_DIM := 0.6
+
+
+static func icon_path(key: String) -> String:
+	return "res://textures/places/%s.png" % key
+
+
+## Яркость иконки по состоянию места (SonarView.place_states): 0 — не на маршруте — тусклая.
+static func icon_alpha(state: float) -> float:
+	return ICON_DIM if state < 0.5 else 1.0
+
+
 ## Тип линии маршрута по индексу в Run.ROUTES: 0 — сплошная, 1 — длинный пунктир, 2 — точки.
 enum Dash { SOLID, LONG, DOTS }
 
