@@ -24,6 +24,37 @@ const LIMBS := [
 	["LeftUpLeg", "LeftLeg", "LeftFoot", "hip_l", "knee_l", "ankle_l", "leg"],
 	["RightUpLeg", "RightLeg", "RightFoot", "hip_r", "knee_r", "ankle_r", "leg"],
 ]
+## Снаряжение ролей MOD-016 (`docs/concept-art/ekipazh.md`): GLB → [кость, точка крепления в осях модели в A-позе, м].
+## Одинаково у мужской и женской моделей; в осях кости деталь стоит по `gear_xform`.
+const GEAR := {
+	"gear-garnitura": ["Head", Vector3(0.0, 1.67, 0.0)],
+	"gear-planshet": ["LeftHand", Vector3(-0.365, 1.0, -0.14)],
+	"gear-planshet-ekran": ["LeftHand", Vector3(-0.365, 1.0, -0.14)],
+	"gear-fartuk": ["Spine01", Vector3(0.0, 1.3, 0.0)],
+	"gear-shchitok": ["Head", Vector3(0.0, 1.7, -0.075)],
+	"gear-tunika": ["Spine01", Vector3(0.0, 1.3, 0.0)],
+	"gear-proby": ["Hips", Vector3(0.0, 1.03, 0.0)],
+}
+## Что носит роль (Crew.Role): пилот — гарнитура, сонарщик — гарнитура и планшет, инженер — фартук и щиток,
+## биолог — туника и пробы.
+const ROLE_GEAR := [
+	["gear-garnitura"],
+	["gear-garnitura", "gear-planshet", "gear-planshet-ekran"],
+	["gear-fartuk", "gear-shchitok"],
+	["gear-tunika", "gear-proby"],
+]
+## Свой игрок не видит снаряжения на голове и груди (камера в голове, грудь отрезана), пробы на поясе и планшет — видит.
+const GEAR_OWN_HIDDEN := ["gear-garnitura", "gear-shchitok", "gear-fartuk", "gear-tunika"]
+## Щиток поднят — поворот вокруг своей оси X (рад); на сварке опущен (0).
+const VISOR_UP := 105.0 * PI / 180.0
+
+
+## Деталь снаряжения в осях своей кости: rest кости⁻¹ × сдвиг в точку крепления (A-поза модели).
+static func gear_xform(rest: Rest, gear: String) -> Transform3D:
+	var g: Array = GEAR[gear]
+	return rest.global[rest.idx(g[0])].affine_inverse() * Transform3D(Basis.IDENTITY, g[1])
+
+
 ## Ключица тянется к цели, если рука не достаёт (руки модели короче, чем у `Crew`): не больше CLAVICLE_MAX рад.
 const CLAVICLE_MAX := 0.7
 ## Сидя грудь наклонена к штурвалу ещё на столько (рад): иначе короткие руки модели не достают обода.
