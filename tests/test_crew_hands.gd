@@ -70,3 +70,27 @@ func test_free_hands_swing_and_snapshot() -> void:
 	m.hold()
 	b.apply(m.snapshot())
 	ok(not b.holding(), "отпустил — и в снимке")
+
+
+## Плавный наклон своего игрока: к посту не быстрее LEAN_RATE, глаз сдвигается вместе с головой.
+func test_smooth_lean_and_eye() -> void:
+	var m := Crew.Member.new()
+	m.smooth_lean = true
+	m.follow(0.0, 0.0, 0.0, false, 0.0, 0.1)
+	m.hold(Vector3(-0.2, 0.9, -1.0), Vector3(0.2, 0.9, -1.0))
+	var want := m.lean_target()
+	ok(want > 0.3, "до стола надо наклониться (%.2f рад)" % want)
+	eq(m.eye_offset(), Vector3.ZERO, "сразу не наклонился")
+	m.ease_lean(0.05)
+	near(m.lean, Crew.LEAN_RATE * 0.05, 1e-5, "наклон растёт плавно")
+	for i in 20:
+		m.ease_lean(0.05)
+	near(m.lean, want, 1e-5, "дотянулся")
+	var j := m.joints()
+	var eye := m.eye() + m.eye_offset()
+	ok(eye.distance_to(j["head"] + (j["fwd"] as Vector3) * 0.04) < 1e-4, "глаз в голове")
+	ok(eye.z < -0.2 and eye.y < Deck.Walker.EYE, "глаз впереди и ниже")
+	m.hold()
+	for i in 20:
+		m.ease_lean(0.05)
+	eq(m.eye_offset(), Vector3.ZERO, "выпрямился")
