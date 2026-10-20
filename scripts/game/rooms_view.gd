@@ -21,6 +21,11 @@ var _button_mat: StandardMaterial3D
 var lab_samples: Array[MeshInstance3D] = []   ## образцы в колбах (Lab.contents), светятся цветом вида
 var journal_text: Label3D          ## экран стойки журнала (Lab.journal_lines)
 var _lab_kinds: Array[int] = []
+## Полки трюма (MOD-017, HoldShelves): банки — металл и стекло — и образцы в них, по MultiMesh на всё (3 вызова).
+var shelf_jars: MultiMeshInstance3D
+var shelf_glass: MultiMeshInstance3D
+var shelf_samples: MultiMeshInstance3D
+var _shelf_kinds: Array[int] = []
 
 
 func _ready() -> void:
@@ -59,6 +64,7 @@ func _ready() -> void:
 	var lid := _model("lyuk-tryuma-kryshka", Vector3(0, 0, -Airlock.RADIUS), airlock_cover)   # pivot модели — на петле
 	_set_layers(lid, OceanView.LAYER_SHIP | OceanView.LAYER_WORLD)
 	_add_winch()
+	_add_shelves()
 	_add_lab()
 
 
@@ -150,6 +156,78 @@ static func _turn_to(dir: Vector3) -> Quaternion:
 	if dir.is_equal_approx(Vector3.DOWN):
 		return Quaternion.IDENTITY
 	return Quaternion(Vector3.DOWN, dir)
+
+
+## Полки трюма (MOD-017, tryum.md): стеллаж у каждого борта; банки с образцами груза — в ячейках HoldShelves.cells().
+func _add_shelves() -> void:
+	for side in HoldShelves.RACKS.size():
+		var rack := _model("stellazh-tryuma", HoldShelves.RACKS[side])
+		rack.name = "Стеллаж %s" % ["левый", "правый"][side]
+		rack.rotation.y = HoldShelves.rack_yaw(side)
+	shelf_jars = _multi("banka-obraztsa", "Банки на полках")
+	shelf_glass = _multi("banka-steklo", "Стекло банок")
+	var cm := CylinderMesh.new()
+	cm.top_radius = HoldShelves.SAMPLE_R
+	cm.bottom_radius = HoldShelves.SAMPLE_R
+	cm.height = HoldShelves.SAMPLE_Y1 - HoldShelves.SAMPLE_Y0
+	cm.radial_segments = 10
+	cm.rings = 1
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED   # образец светится цветом вида, как в колбах
+	mat.vertex_color_use_as_albedo = true
+	cm.material = mat
+	shelf_samples = _multi_mesh(cm, "Образцы на полках", true)
+	var cells := HoldShelves.cells()
+	for mm in [shelf_jars, shelf_glass, shelf_samples]:
+		for i in HoldShelves.CAPACITY:
+			var lift := (HoldShelves.SAMPLE_Y0 + HoldShelves.SAMPLE_Y1) / 2.0 if mm == shelf_samples else 0.0
+			mm.multimesh.set_instance_transform(i, Transform3D(Basis.IDENTITY, cells[i] + Vector3(0, lift, 0)))
+	set_shelves([])
+
+
+## MultiMesh на CAPACITY ячеек из первой сетки модели file (материалы модели).
+func _multi(file: String, label: String) -> MultiMeshInstance3D:
+	var n: Node3D = load("res://models/%s.glb" % file).instantiate()
+	var mi: MeshInstance3D = n.find_children("*", "MeshInstance3D", true, false)[0]
+	var mm := _multi_mesh(mi.mesh, label, false)
+	n.free()
+	return mm
+
+
+func _multi_mesh(mesh: Mesh, label: String, colors: bool) -> MultiMeshInstance3D:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = colors
+	mm.mesh = mesh
+	mm.instance_count = HoldShelves.CAPACITY
+	var node := MultiMeshInstance3D.new()
+	node.name = label
+	node.multimesh = mm
+	node.layers = OceanView.LAYER_SHIP
+	add_child(node)
+	return node
+
+
+## Банки на полках: виды по ячейкам (HoldShelves.contents), заполнены первые — пустые ячейки пустые.
+func set_shelves(kinds: Array[int]) -> void:
+	if kinds == _shelf_kinds:
+		return
+	_shelf_kinds = kinds.duplicate()
+	var n := 0
+	for i in kinds.size():
+		if kinds[i] < 0:
+			break
+		shelf_samples.multimesh.set_instance_color(i, Samples.COLORS[kinds[i]])
+		n += 1
+	for mm in [shelf_jars, shelf_glass, shelf_samples]:
+		# пусто — узел скрыт со всеми банками: прогрев шейдеров (Main._warm_show) покажет его на кадр целиком
+		mm.multimesh.visible_instance_count = n if n > 0 else -1
+		mm.visible = n > 0
+
+
+## Что стоит на полках: вид в каждой ячейке HoldShelves.cells() (−1 — пусто).
+func shown_shelves() -> Array[int]:
+	return _shelf_kinds
 
 
 ## Лаборатория (MOD-015, laboratoriya.md): три тумбы со стеклом, в колбах — образцы груза; стойка журнала с экраном.

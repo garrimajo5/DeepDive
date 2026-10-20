@@ -87,7 +87,7 @@ func can_stand(x: float, z: float, r: float = Deck.Walker.RADIUS) -> bool:
 				ok = true
 				break
 	if not ok or Airlock.in_hole(x, z, r) or EngineRoom.blocks(x, z, r) or Samples.blocks(x, z, r) \
-			or Lab.blocks(x, z, r):
+			or Lab.blocks(x, z, r) or HoldShelves.blocks(x, z, r):
 		return false
 	return Vector2(x, z).distance_to(Vector2(REACTOR_POS.x, REACTOR_POS.z)) >= REACTOR_R + r
 
