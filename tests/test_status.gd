@@ -17,9 +17,23 @@ func test_repeat_part_skipped() -> void:
 	eq(Status.join(["Трюм", "шлюз открыт", "Шлюз открыт", "", "  "]), "Трюм · шлюз открыт", "повтор и пустые не пишутся")
 
 
-func test_long_part_stands_alone() -> void:
-	var l := Status.lines(["А", "очень длинная часть строки состояния", "Б"], by_len, 10)
-	eq(l, PackedStringArray(["А", "очень длинная часть строки состояния", "Б"]), "длинная часть — своя строка")
+## По issue #138: часть шире строки (карточка вида из журнала) переносится по словам, а не уходит за край.
+func test_long_part_wraps_by_words() -> void:
+	var l := Status.lines(["А", "очень длинная часть строки состояния", "Б"], by_len, 14)
+	eq(l, PackedStringArray(["А", "очень длинная", "часть строки", "состояния · Б"]), "по словам, хвост склеен со следующей")
+	for line in l:
+		ok(line.length() <= 14, "в ширину: %s" % line)
+	eq(Status.lines(["сверхдлинноеслово"], by_len, 5), PackedStringArray(["сверхдлинноеслово"]), "слово шире строки — одно")
+
+
+func test_wrap_limited_with_ellipsis() -> void:
+	var text := "раз два три четыре пять шесть семь восемь девять десять"
+	var w := Status.wrap_words(text, by_len, 10)
+	eq(w.size(), Status.PART_LINES, "не больше %d строк" % Status.PART_LINES)
+	ok(w[w.size() - 1].ends_with("…"), "обрезано многоточием: %s" % w[w.size() - 1])
+	for line in w:
+		ok(line.length() <= 10, "в ширину: %s" % line)
+	eq(Status.wrap_words("раз два", by_len, 10), PackedStringArray(["раз два"]), "короткое — как есть")
 
 
 func test_message_fades_after_4_2_s() -> void:
@@ -71,3 +85,18 @@ func test_scene_status_and_messages() -> void:
 		main.step(0.1)
 	ok(not main.message.visible(), "сообщение погасло")
 	ok(main.hint.text.contains("глубина"), "на экране приборы")
+
+
+## По issue #139: строки на приборах на тёмной полупрозрачной подложке — читаются поверх белых плафонов.
+func test_hint_has_backing() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.step(0.1)
+	var sb := main.hint.get_theme_stylebox("normal") as StyleBoxFlat
+	ok(sb != null, "у строк есть подложка")
+	ok(sb.bg_color.a >= 0.4 and sb.bg_color.a < 0.8 and sb.bg_color.get_luminance() < 0.15, "тёмная полупрозрачная: %s" % sb.bg_color)
+	ok(sb.content_margin_left >= 6.0, "текст не у края подложки")
+	near(main.hint.position.x + sb.content_margin_left, 24.0, 0.5, "текст на прежнем месте")
+	main.queue_free()
+	await frames(1)
