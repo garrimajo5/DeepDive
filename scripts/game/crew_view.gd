@@ -10,7 +10,7 @@ const LAYER_SHIP := 2
 ## Нашивка роли на левом плече (ART-014: роль узнают по снаряжению, цвет — тонкая метка).
 const PATCH_SIZE := Vector3(0.012, 0.07, 0.06)
 ## Свой игрок стоя: модель на 15 см позади камеры — взгляд вниз видит грудь и живот снаружи, как глазами,
-## а не изнутри куртки. Сидя и при сварке — на месте (руки на штурвале и резаке).
+## а не изнутри куртки. Сидя, при сварке и с руками на посте — на месте (кисти там, где хват).
 const OWN_BACK := 0.15
 
 var members: Array = []  ## Crew.Member
@@ -157,7 +157,7 @@ func apply() -> void:
 			var lp: Transform3D = g[b] if p < 0 else g[p].affine_inverse() * g[b]
 			sk.set_bone_pose_position(b, lp.origin)
 			sk.set_bone_pose_rotation(b, lp.basis.get_rotation_quaternion())
-		var back := own and not m.seated and not m.welding()
+		var back := own and not m.seated and not m.holding()
 		figures[i].position = -(j["fwd"] as Vector3) * OWN_BACK if back else Vector3.ZERO
 		meshes[i].mesh = _meshes[looks[i]][1 if own else 0]
 		meshes[i].material_override = _own_mat[looks[i]] if own else null
