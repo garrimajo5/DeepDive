@@ -149,3 +149,31 @@ func test_scene_winch() -> void:
 	ok(main.rooms.winch_hook.position.is_equal_approx(Samples.REST) and not main.rooms.winch_carry.visible, "захват вернулся")
 	main.queue_free()
 	await frames(1)
+
+
+func test_steal_and_drop() -> void:   # скальник срывает образец с захвата и бросает (EcoLink.STEAL/DROP, #201)
+	var s := Samples.new(_flat)
+	var lock: Vector3 = s.all[8].pos + Vector3(0, 6, 0)
+	ok(not s.steal(8), "захват в покое — красть нечего")
+	for i in 29:
+		s.hold(lock, 0.05)
+		s.update(0.05)
+	eq(s.state, Samples.State.BACK, "поднимает")
+	ok(not s.steal(3), "другой образец — не тот, что на захвате")
+	var v := s.version
+	ok(s.steal(8), "сорван на подъёме")
+	eq(s.state, Samples.State.IDLE, "захват пуст")
+	ok(s.target == null and s.reach_k() == 0.0, "захват в трюме")
+	ok(s.all[8].taken and s.stolen.has(8), "на дне его нет — унесён")
+	ok(s.version > v, "дно перерисуется")
+	for i in 40:
+		s.update(0.05)
+	eq(s.cargo.size(), 0, "в груз не лёг")
+	ok(not s.got.has(8), "не в списке поднятых")
+	ok(not s.drop(2, Vector3.ZERO), "не унесённый — не трогаем")
+	ok(s.drop(8, Vector3(5, -99, 7)), "брошен у норы")
+	ok(not s.all[8].taken and not s.stolen.has(8), "снова лежит на дне")
+	near(s.all[8].pos.distance_to(Vector3(5, -40 + 0.15, 7)), 0.0, 1e-5, "в точке броска, над дном")
+	eq(s.find(s.all[8].pos + Vector3(0, 6, 0)), s.all[8], "его можно поднять заново")
+	s.reset()
+	near(s.all[8].pos.x, Samples.PLACES[8][1], 1e-4, "сброс — на прежнем месте")

@@ -753,6 +753,11 @@ func _step_eco(dt: float) -> void:
 	s.hull_noise = engine.noise(clampf(absf(helm.speed) / 6.7, 0.0, 1.0))
 	s.scan_range = Scanner.RANGE if at_scanner else 0.0
 	s.dive = run.depth
+	var xf := Samples.ship_xform(helm.pos, helm.yaw)
+	s.claw = samples.hook_world(xf)
+	s.claw_state = samples.state   # Samples.State совпадает с EcoLink.CLAW_*
+	s.claw_target = samples.target.pos if samples.target else Vector3.ZERO
+	s.claw_sample = samples.target.i if samples.target else -1
 	var events := eco.step(dt, s)
 	scanner.take(events if at_scanner else [])
 	if s.sonar_ping and not sonar.jammed:
@@ -773,6 +778,11 @@ func on_eco_event(e: Dictionary) -> void:
 			vitals.drain(str(e.get("by", "")), float(e.get("units", 0.0)))
 		EcoLink.MESSAGE:
 			say(str(e.get("text", "")))
+		EcoLink.STEAL:   # образец сорван с захвата (M.steal в js/manip.js)
+			if samples.steal(int(e.get("sample", -1))):
+				say("Образец украден: %s выхватил его из захвата и уносит в нору" % str(e.get("by", "Кто-то")))
+		EcoLink.DROP:   # унесённый образец снова на дне (M.drop)
+			samples.drop(int(e.get("sample", -1)), e.get("at", Vector3.ZERO))
 		EcoLink.OBSERVE:   # наблюдение в журнал (handleEvents в js/game.js)
 			var sp := str(e.get("species", ""))
 			var fresh := scanner.observe(sp, str(e.get("note", "")))

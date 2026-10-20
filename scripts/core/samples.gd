@@ -57,6 +57,8 @@ var state := State.IDLE
 var target: Sample = null
 var progress := 0.0            ## захват 0…1 за GRAB_TIME удержания
 var version := 0               ## растёт при каждом изменении того, что лежит на дне (для перерисовки)
+var stolen := {}               ## номера образцов, сорванных с захвата (EcoLink.STEAL): не на дне и не в грузе
+var _ground: Callable
 var _back := 0.0
 var _holding := false
 
@@ -67,11 +69,17 @@ signal changed                 ## груз или поднятые образц�
 func _init(ground: Callable = Callable()) -> void:
 	if not ground.is_valid():
 		ground = Seabed.height
+	_ground = ground
 	for n in PLACES.size():
-		var p: Array = PLACES[n]
-		var x: float = p[1]
-		var z: float = p[2]
-		all.append(Sample.new(n, p[0], Vector3(x, float(ground.call(x, z)) + float(p[3]), z)))
+		all.append(Sample.new(n, PLACES[n][0], _home(n)))
+
+
+## Где образец n лежит с начала (PLACES).
+func _home(n: int) -> Vector3:
+	var p: Array = PLACES[n]
+	var x: float = p[1]
+	var z: float = p[2]
+	return Vector3(x, float(_ground.call(x, z)) + float(p[3]), z)
 
 
 ## Корабль в мире: позиция и курс (как узел «Корабль»: rotation.y = yaw).
@@ -192,6 +200,8 @@ func why_not(lock_open: bool, lock: Vector3) -> String:
 func reset() -> void:
 	for s in all:
 		s.taken = false
+		s.pos = _home(s.i)
+	stolen.clear()
 	cargo.clear()
 	got.clear()
 	state = State.IDLE
@@ -208,6 +218,8 @@ func reset() -> void:
 func restore(got_list: Array, cargo_list: Array) -> void:
 	for s in all:
 		s.taken = false
+		s.pos = _home(s.i)
+	stolen.clear()
 	cargo.clear()
 	got.clear()
 	state = State.IDLE
@@ -232,6 +244,37 @@ func restore(got_list: Array, cargo_list: Array) -> void:
 			got[n] = true
 		cargo.append([k, n if n >= 0 else -1])
 	version += 1
+
+
+## Захват (крепление троса) в мире — для живого мира (EcoLink.ShipState.claw).
+func hook_world(ship: Transform3D) -> Vector3:
+	return ship * hook_local(ship)
+
+
+## Образец n сорван с захвата на подъёме (EcoLink.STEAL, js/manip.js M.steal): захват пуст, образец не в груз,
+## на дне его нет. false — захват не поднимает этот образец (событие опоздало).
+func steal(n: int) -> bool:
+	if state != State.BACK or target == null or target.i != n:
+		return false
+	stolen[n] = true
+	state = State.IDLE
+	target = null
+	progress = 0.0
+	_back = 0.0
+	version += 1
+	return true
+
+
+## Унесённый образец n брошен в точке at (EcoLink.DROP, M.drop): снова лежит на дне, 0,15 м над ним.
+func drop(n: int, at: Vector3) -> bool:
+	if not stolen.has(n):
+		return false
+	stolen.erase(n)
+	var s := all[n]
+	s.taken = false
+	s.pos = Vector3(at.x, float(_ground.call(at.x, at.z)) + 0.15, at.z)
+	version += 1
+	return true
 
 
 ## Колонна опоры лебёдки на полу трюма.
