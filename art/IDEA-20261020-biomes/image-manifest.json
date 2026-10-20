@@ -1,0 +1,101 @@
+[
+  {
+    "file": "01-upper-ocean.jpg",
+    "source": "exec-879f7326-f41c-42dc-b786-37751448d6a5.png",
+    "brief": "Верхний океан: Подлёдный сад, рассольные котловины, дрейфующие сады",
+    "bytes": 766053,
+    "dimensions": [
+      1774,
+      887
+    ],
+    "sha256": "1a0ffb8054084617c4a9a735ea8ab629c53e027f12fecc878f323e694eb6fb8c"
+  },
+  {
+    "file": "02-deep-biomes.jpg",
+    "source": "exec-89dc3f77-dac3-4fab-962a-ac52896f5358.png",
+    "brief": "Четыре глубинных биома: лес, каньоны, город, Сердце",
+    "bytes": 809333,
+    "dimensions": [
+      1672,
+      941
+    ],
+    "sha256": "d0619b48e64b33a5429c4e21dcef170d9b597a8e3a0c924fbb1ec72e5a51f262"
+  },
+  {
+    "file": "03-form-directions.jpg",
+    "source": "exec-91dbcd9a-6035-4f6b-afe8-2dc8ea66527a.png",
+    "brief": "Гротовик, голоцвет, звукоглот: мембраны, минералы, колонии",
+    "bytes": 676943,
+    "dimensions": [
+      1536,
+      1024
+    ],
+    "sha256": "6e53afb2ee840054ddb7db51ce0996dc81dc303ddf10f202dc8dc9ecf39d2bd0"
+  },
+  {
+    "file": "04-garden-variants.jpg",
+    "source": "exec-b6854406-30f4-40e4-81fe-6a98928ae2ea.png",
+    "brief": "Хватень, кольчужник, ленточник: варианты А/Б",
+    "bytes": 619630,
+    "dimensions": [
+      1536,
+      1024
+    ],
+    "sha256": "78c4ed597bea5145c8cda076e5feb867cdbd7d77dec45bf87467e0bc4c5f7918"
+  },
+  {
+    "file": "05-ice-flora.jpg",
+    "source": "exec-9f38eed5-21f9-4254-a64d-54411c7ea8f4.png",
+    "brief": "Бахрома, пузырная лоза, солнечный парус: варианты А/Б",
+    "bytes": 775646,
+    "dimensions": [
+      1536,
+      1024
+    ],
+    "sha256": "edf27bd9c3c3b73fca88bf0f291f780f57c8186293bb4472c5c1e3b307c2d973"
+  },
+  {
+    "file": "06-new-life.jpg",
+    "source": "exec-87caa47c-dc20-458c-88d0-767f63d63616.png",
+    "brief": "Выворотень, переливник, трёхход: варианты А/Б",
+    "bytes": 706251,
+    "dimensions": [
+      1536,
+      1024
+    ],
+    "sha256": "7c923328c421b46ca19df3aab0182f23577c7e799afa2ea786817bca26bef43c"
+  },
+  {
+    "file": "07-transition-species.jpg",
+    "source": "exec-fca58b29-c041-4806-95b5-ad146c09b5a9.png",
+    "brief": "Солеплёнка, пороговик, Линялый сад, переплёт",
+    "bytes": 764367,
+    "dimensions": [
+      1536,
+      1024
+    ],
+    "sha256": "ac2548d3684a22029de79d435428dda43c89df9f95dc8f2e0af991c794e88cf0"
+  },
+  {
+    "file": "08-deep-species.jpg",
+    "source": "exec-cc759503-d1b6-4751-917e-b03c451e991a.png",
+    "brief": "Шовник, илоплёт, створчатник, жилопас",
+    "bytes": 826218,
+    "dimensions": [
+      1536,
+      1024
+    ],
+    "sha256": "55e8d36a01dd3919fc8750d222b74e7ee5b2a1e90c6e63fe9770f853ab7f3038"
+  },
+  {
+    "file": "09-leviathans.jpg",
+    "source": "exec-a19c3555-de0a-42b7-aac3-db1f9afdf943.png",
+    "brief": "Ледосвод, Пласторез, Сборщик, Пустотник, Створень, Глубинный венец",
+    "bytes": 820432,
+    "dimensions": [
+      1536,
+      1024
+    ],
+    "sha256": "53b99990336b33596716ff102f6ed8be5e051ca3fe5af29f7a14bd03e0d56ada"
+  }
+]
