@@ -450,8 +450,10 @@ func step(dt: float) -> void:
 	rooms.set_lab(Lab.contents(samples.cargo), Lab.page_lines(samples, scanner, journal_page), time)
 	bridge.set_scanner_screen(scanner.screen_lines())
 	message.update(dt)
+	me.back = CrewView.own_back(walker.pitch, me.holding())   # взгляд вниз — фигура дальше позади глаза, видны ступни (#108)
 	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt)
 	me.ease_lean(dt)
+	crew_view.pitch = walker.pitch
 	crew_view.apply()
 	_place_ship()
 	_place_camera()

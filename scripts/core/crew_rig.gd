@@ -17,6 +17,8 @@ const GRIP := 0.08
 const HIDE_HEAD := ["neck", "Head", "head_end", "headfront"]
 ## И верх груди: сидя наклон к штурвалу подносит его к камере.
 const HIDE_CHEST := ["Spine"]
+## Стоя взгляд вниз (issue #108): ещё без груди и ключиц — грудь у самой камеры не заслоняет ноги и ступни.
+const HIDE_TORSO := ["Spine", "Spine01", "LeftShoulder", "RightShoulder"]
 ## Конечности: кость начала, середины, конца → суставы фигуры; куда сустав смотрит в покое (локоть назад, колено вперёд).
 const LIMBS := [
 	["LeftArm", "LeftForeArm", "LeftHand", "shoulder_l", "elbow_l", "wrist_l", "arm"],

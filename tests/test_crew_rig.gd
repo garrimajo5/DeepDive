@@ -103,3 +103,25 @@ func test_own_mesh_cut() -> void:
 		top = maxf(top, verts[k].y)
 	ok(top < 1.62, "выше шеи ничего не осталось (%.2f м)" % top)
 	root.free()
+
+
+## По issue #108: меш для взгляда вниз — без груди и ключиц, но с поясом, ногами и руками.
+func test_own_mesh_no_torso() -> void:
+	var root: Node = load(CrewRig.MODELS[0]).instantiate()
+	var sk: Skeleton3D = root.find_children("*", "Skeleton3D", true, false)[0]
+	var mi: MeshInstance3D = sk.find_children("*", "MeshInstance3D", true, false)[0]
+	var chest := CrewView.cut_mesh(mi.mesh, mi.skin, sk, CrewRig.HIDE_HEAD + CrewRig.HIDE_CHEST, 0.15)
+	var legs := CrewView.cut_mesh(mi.mesh, mi.skin, sk, CrewRig.HIDE_HEAD + CrewRig.HIDE_TORSO, 0.15)
+	var arr := legs.surface_get_arrays(0)
+	var n := (arr[Mesh.ARRAY_INDEX] as PackedInt32Array).size()
+	ok(n < (chest.surface_get_arrays(0)[Mesh.ARRAY_INDEX] as PackedInt32Array).size(), "меньше, чем с грудью")
+	var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var low := INF
+	var mid_top := 0.0  ## выше всего у середины тела (|x| < 0,15): грудь срезана
+	for k in (arr[Mesh.ARRAY_INDEX] as PackedInt32Array):
+		low = minf(low, verts[k].y)
+		if absf(verts[k].x) < 0.15:
+			mid_top = maxf(mid_top, verts[k].y)
+	ok(low < 0.05, "ступни на месте (%.2f м)" % low)
+	ok(mid_top < 1.3, "груди нет (%.2f м)" % mid_top)
+	root.free()
