@@ -193,13 +193,16 @@ func send(event: Dictionary) -> void:
 	_link.append(event)
 
 
-## Забрать события для корабля: прямые (удар, энергия, рядом) и тексты событий шины, которые экипаж слышит
-## (не дальше EcoBus.HEARING от корабля) — как EcoLink.MESSAGE. Очереди очищаются.
+## Забрать события для корабля: прямые (удар, энергия, рядом) и события шины, которые экипаж слышит
+## (не дальше EcoBus.HEARING от корабля): с заметкой вида — EcoLink.OBSERVE вместе с текстом (handleEvents
+## в js/game.js: текст и наблюдение одним событием), остальные с текстом — EcoLink.MESSAGE. Очереди очищаются.
 func take_link() -> Array[Dictionary]:
 	var out := _link.duplicate()
 	_link.clear()
 	for ev in bus.take_near(ship.pos):
 		var t := ev.text()
-		if t != "":
+		if ev.is_observation():
+			out.append(EcoLink.observe(ev.species, ev.note, t))
+		elif t != "":
 			out.append(EcoLink.message(t))
 	return out

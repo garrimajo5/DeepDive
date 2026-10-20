@@ -63,6 +63,21 @@ func test_observe_to_journal() -> void:
 	await frames(1)
 
 
+func test_live_world_observation_reaches_journal() -> void:
+	# По issue #92: событие шины с заметкой вида рядом с кораблём приходит как OBSERVE и пишется в журнал.
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var w: EcoWorld = main.eco.world
+	w.emit("fish", "flee", main.helm.pos + Vector3(0, 0, 20), func(): return "Стая уходит в кораллы")
+	w.emit("fish", "flee", main.helm.pos + Vector3(0, 0, 500), func(): return "далеко")
+	main.step(0.05)
+	eq(main.scanner.seen_of("fish"), ["flee"] as Array[String], "наблюдение из живого мира в журнале")
+	eq(main.message.text, "Стая уходит в кораллы", "текст события на приборах")
+	main.queue_free()
+	await frames(1)
+
+
 func test_hit_clamped() -> void:
 	near(EcoLink.hit("x", 3.0, Vector3.ZERO)["damage"], 1.0, 1e-9, "урон 0…1")
 
