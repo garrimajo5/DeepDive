@@ -13,14 +13,15 @@ extends RefCounted
 ##   {"do": "sample", "n": 8}                       — поставить корабль над образцом n (шлюз в 8 м над ним, корабль стоит)
 ##   {"do": "breach", "n": 0}                       — пробоина в месте n (0 мостик, 1 коридор, 2 лаборатория, 3 машинное),
 ##                                                     игрок встаёт у неё лицом к борту
+##   {"do": "silt"}                                  — облако ила вокруг корабля (сонарная тьма); "on": false — убрать ил
 ##   {"do": "mate", "x": -1, "z": -2.5, "yaw": 90, "role": 2, "look": 1} — ещё один член экипажа на палубе (роль 0…3,
 ##                                                     внешность 0 — мужская модель, 1 — женская)
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look], ["silt", on], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
-const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "log", "quit"]
+const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "silt", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad"]
 const PRESS_TIME := 0.15   ## сколько держать кнопку при «press», с
 const FINGER := 900        ## номер пальца для касаний сценария (не пересекается с настоящими)
@@ -123,6 +124,8 @@ func _begin(st: Dictionary, out: Array) -> void:
 			out.append(["sample", int(st.get("n", 0))])
 		"breach":
 			out.append(["breach", int(st.get("n", 0))])
+		"silt":
+			out.append(["silt", bool(st.get("on", true))])
 		"mate":
 			out.append(["mate", float(st.get("x", 0.0)), float(st.get("z", 0.0)), float(st.get("yaw", 0.0)),
 				int(st.get("role", 1)), int(st.get("look", 1))])

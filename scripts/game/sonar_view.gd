@@ -27,7 +27,10 @@ func _ready() -> void:
 
 
 ## Каждый кадр: где корабль, сколько прошло с импульса, отметки.
-func show_state(s: Sonar, ship_pos: Vector3, yaw: float, t: float, powered: bool) -> void:
+## noise — помехи 0…1 (сонарная тьма, Silt.noise).
+func show_state(s: Sonar, ship_pos: Vector3, yaw: float, t: float, powered: bool, noise: float = 0.0) -> void:
+	mat.set_shader_parameter("noise", noise)
+	mat.set_shader_parameter("time", t)
 	mat.set_shader_parameter("ship_xz", Vector2(ship_pos.x, ship_pos.z))
 	mat.set_shader_parameter("ship_yaw", yaw)
 	mat.set_shader_parameter("range_m", s.range_m)

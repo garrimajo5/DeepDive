@@ -59,6 +59,7 @@ Main (main.gd)                    — шаг игры, пилот, посты, �
 | Мостик и модели | `bridge_plan.gd`, `bridge_props.gd` | `bridge_view.gd` | А |
 | Реактор и энергия | `reactor.gd`, `engine_room.gd` | `power_panel.gd`, `rooms_view.gd` | А |
 | Пробоина (событие) | `breach.gd` | `breach_view.gd` | А |
+| Сонарная тьма (событие) | `silt.gd` | `silt_view.gd`, помехи `sonar_view.gd`, муть `ocean_view.gd` | А |
 | Корпус снаружи | `hull_plan.gd`, `hull_mesh.gd` | `hull_view.gd` | А |
 | Прожектор | `searchlight.gd` | `searchlight_view.gd`, `shaders/beam.gdshader` | А |
 | Сканер биолога | `scanner.gd` | `bridge_view.gd` (экран) | А |

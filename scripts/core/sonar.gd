@@ -16,6 +16,7 @@ const MAP_N := 256
 var ping_time := -99.0
 var range_m := BASE_RANGE
 var blips: Array[Dictionary] = []   ## {"pos": Vector3, "species": String, "color": Color}
+var jammed := false  ## импульс завяз в иле (Silt): отметок нет до следующего импульса
 
 
 static func range_for(k: float) -> float:
@@ -35,11 +36,14 @@ func ping(t: float, k: float) -> String:
 	ping_time = t
 	range_m = range_for(k)
 	blips.clear()
+	jammed = false
 	return "Сонар: импульс"
 
 
 ## Отметки из событий живого мира: только NEAR ближе дальности, не больше MAX_BLIPS (ближние первыми).
 func take_contacts(events: Array, ship_pos: Vector3) -> void:
+	if jammed:
+		return
 	var found: Array[Dictionary] = []
 	for e in events:
 		if e.get("type", "") != EcoLink.NEAR or not e.has("pos") or not bool(e.get("sonar", true)):

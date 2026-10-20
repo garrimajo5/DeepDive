@@ -39,12 +39,13 @@ func _ready() -> void:
 
 
 ## Включён ли и сколько энергии (доля «Прожектор» реактора, 1 — штатно).
-func apply(is_on: bool, k: float) -> void:
+## reach — доля длины луча (ил рассеивает свет, Silt.beam_k).
+func apply(is_on: bool, k: float, reach: float = 1.0) -> void:
 	on = is_on
 	var lit := Searchlight.lit(is_on, k)
 	spot.visible = lit
 	beam.visible = lit
 	if lit:
 		var s := Searchlight.scale(k)
-		spot.spot_range = Searchlight.range_m(k)
-		beam.scale = Vector3(s, s, s)
+		spot.spot_range = Searchlight.range_m(k) * reach
+		beam.scale = Vector3(s, s, s) * reach

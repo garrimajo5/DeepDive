@@ -40,6 +40,15 @@ static func join(parts: Array) -> String:
 	return SEPARATOR.join(lines(parts, func(_s: String) -> float: return 0.0, INF))
 
 
+## Табло тревог — одна строка: первая непустая по важности (пробоина, реактор, сонарная тьма, заряд), как #alert
+## в js/silt.js — пробоина и реактор важнее ила.
+static func alarm(by_priority: Array) -> String:
+	for a in by_priority:
+		if not str(a).is_empty():
+			return str(a)
+	return ""
+
+
 ## Румб направления в мире (x, z): «С» — к −Z.
 static func rumb(dir: Vector3) -> String:
 	if Vector2(dir.x, dir.z).length() < 1e-6:
