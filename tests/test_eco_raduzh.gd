@@ -295,6 +295,7 @@ func test_view_two_multimeshes() -> void:
 	var ship := EcoLink.ShipState.new()
 	ship.pos = FAR
 	view.step(0.05, ship)
+	rv.sync(view.world.time, FAR, 0.0, true)  # дальние стаи переписываются через кадр — здесь все сразу
 	var sw := view.raduzh.swarms[2]
 	var j := 2 * EcoRaduzh.PER_SWARM + 4
 	near(RaduzhView.origin_at(rv.body_buffer, j).distance_to(EcoRaduzh.member_pos(sw, 4, view.world.time)), 0.0, 1e-4,

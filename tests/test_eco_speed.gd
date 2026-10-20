@@ -140,7 +140,8 @@ func test_view_step_fits_frame() -> void:
 	ship.pos = Helm.Ship.START
 	for i in 30:
 		view.step(1.0 / 60.0, ship)
-	# лучшее из пяти замеров по 60 кадров: на ПК было 3,2 мс, стало ≈ 0,95; со стеклоустами 1,4, после #133 — 1,1;
+	# лучшее из пяти замеров по 60 кадров: на ПК было 3,2 мс, стало ≈ 0,95; со стеклоустами 1,4, после #133 — 1,1; с радужниками и огнёвками 1,3, дальние стаи
+	# радужников через кадр — 1,2;
 	# запас на медленную машину CI (там примерно в полтора раза дольше)
 	var best := INF
 	for k in 5:
@@ -202,3 +203,20 @@ func test_quiet_clouds_skip_buffers() -> void:
 		"чернила ушли — пятна спрятаны")
 	view.queue_free()
 	await frames(1)
+
+
+func test_far_raduzh_swarm_synced_every_third_frame() -> void:
+	var sw := EcoRaduzh.Swarm.new()
+	sw.index = 1
+	sw.c = Vector3(0, -30, 0)
+	var far := Vector3(RaduzhView.FAR + 10.0, -30, 0)
+	var hits := 0
+	for f in 30:
+		if RaduzhView.due(sw, far, f):
+			hits += 1
+	eq(hits, 10, "дальняя тёмная стая — раз в три кадра")
+	for f in 3:
+		ok(RaduzhView.due(sw, Vector3(10, -30, 0), f), "близкая — каждый кадр")
+	sw.glow = 0.3
+	for f in 3:
+		ok(RaduzhView.due(sw, far, f), "вспыхнувшая — каждый кадр")
