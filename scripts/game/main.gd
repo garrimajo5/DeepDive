@@ -33,6 +33,7 @@ var debug_vent := false          ## снимок: вентиль держат б
 var debug_winch := false         ## снимок: кнопку у лебёдки держат без пальца
 var zap_light: OmniLight3D   ## вспышка разряда вокруг корпуса (за бортом)
 var drain_sound: AudioStreamPlayer   ## шипение тревоги, пока на корпусе присоска (Synth.latch)
+var drain_hisses := 0                ## сколько раз шипела тревога присоски (для тестов)
 ## Прогрев шейдеров при старте (Warmup, issue #50): шторка, камера оглядывает корабль, скрытое показано на кадр.
 var warm := Warmup.new()
 var curtain: Control
@@ -259,13 +260,18 @@ func _warm_frame() -> void:
 	_warm_drawn = true
 
 
-## Свет мигает, пока на корпусе присоска и после разряда (Vitals.lamp_k); тревога присоски шипит раз в 1,6 с.
-func _flicker() -> void:
+## Свет мигает, пока на корпусе присоска и после разряда (Vitals.lamp_k); тревога присоски шипит раз в 1,6 с
+## (Vitals.hiss — короткий звук без петли, issue #163).
+func _flicker(dt: float) -> void:
 	var k := vitals.lamp_k(time, zap.flicker > 0.0)
 	bridge.set_lamps(k)
 	rooms.set_lamps(k)
 	searchlight.set_flicker(k)
-	BreachView._play(drain_sound, vitals.drain_left > 0.0)
+	if vitals.hiss(dt):
+		drain_sound.play()
+		drain_hisses += 1
+	elif vitals.drain_left <= 0.0 and drain_sound.playing:
+		drain_sound.stop()
 
 
 ## Показать на кадр скрытые узлы под root (запомнить, чтобы вернуть).
@@ -455,7 +461,7 @@ func step(dt: float) -> void:
 		zap_light.visible = false
 	bridge.set_zap_lever(zap.lever_deg(time), zap.ready(time))
 	_step_eco(dt)
-	_flicker()
+	_flicker(dt)
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	bridge.set_hatch(layout.doors[0].offset())
@@ -692,6 +698,7 @@ func _step_eco(dt: float) -> void:
 	s.light_range = Searchlight.range_m(reactor.k(Reactor.Sys.LAMP)) * silt.beam_k() if s.light_on else 0.0
 	s.hull_noise = engine.noise(clampf(absf(helm.speed) / 6.7, 0.0, 1.0))
 	s.scan_range = Scanner.RANGE if at_scanner else 0.0
+	s.dive = run.depth
 	var events := eco.step(dt, s)
 	scanner.take(events if at_scanner else [])
 	if s.sonar_ping and not sonar.jammed:

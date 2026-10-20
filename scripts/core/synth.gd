@@ -17,7 +17,8 @@ const JET_LP := 1800.0
 const JET_HP := 250.0
 ## Тревога «присоска на корпусе» (A.alarmCue('latch') раз в 1,6 с из js/soundscape.js): шипение 0,25 с — белый шум
 ## через верхний фильтр (Q 2), срез скользит 4000 → 2500 Гц, нарастание 0,02 с и экспоненциальный спад.
-## Петля LATCH_PERIOD: в начале шипение, дальше тишина — играет, пока тревога горит.
+## Звук без петли длиной LATCH_LEN; раз в LATCH_PERIOD его перезапускает корабль (Vitals.hiss), пока тревога горит.
+## Прежняя петля 1,6 с с тишиной роняла игру на Android в потоке звука (issue #163).
 const LATCH_PERIOD := 1.6
 const LATCH_LEN := 0.25
 const LATCH_F0 := 4000.0
@@ -71,14 +72,14 @@ static func jet() -> AudioStreamWAV:
 
 static func latch() -> AudioStreamWAV:
 	if not _cache.has("latch"):
-		_cache["latch"] = loop(latch_samples())
+		_cache["latch"] = once(latch_samples())
 	return _cache["latch"]
 
 
-## Шипение присоски: LATCH_PERIOD с, звук только первые LATCH_LEN с (биквад верхних частот RBJ со скользящим срезом).
+## Шипение присоски: LATCH_LEN с (биквад верхних частот RBJ со скользящим срезом), без тишины после.
 static func latch_samples(rate: int = RATE, seed: int = 11) -> PackedFloat32Array:
-	var n := int(round(LATCH_PERIOD * rate))
 	var m := int(LATCH_LEN * rate)
+	var n := m
 	var out := PackedFloat32Array()
 	out.resize(n)
 	var rng := RandomNumberGenerator.new()
@@ -133,6 +134,14 @@ static func jet_samples(rate: int = RATE, seed: int = 7) -> PackedFloat32Array:
 		var k := float(i) / fade
 		out[i] = raw[n + i] * (1.0 - k) + raw[i] * k
 	return normalized(out)
+
+
+## Звук на один раз (без петли): 16 бит, моно, пик — PEAK от полной шкалы.
+static func once(samples: PackedFloat32Array, rate: int = RATE) -> AudioStreamWAV:
+	var w := loop(samples, rate)
+	w.loop_mode = AudioStreamWAV.LOOP_DISABLED
+	w.loop_end = 0
+	return w
 
 
 ## Привести пик к 1.

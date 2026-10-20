@@ -34,6 +34,7 @@ var flash := 0.0       ## красная вспышка экрана после 
 var drain_ext := 0.0   ## внешний расход в этот шаг (присоски), ед./с
 var drain_by := ""     ## кто последним тянул заряд («Стеклоуст»)
 var drain_left := 0.0  ## сколько ещё держать тревогу о присоске, с
+var hiss_left := 0.0   ## до следующего шипения тревоги присоски, с (Vitals.hiss)
 
 signal hit_taken(percent: int, kind: String)
 signal destroyed
@@ -48,6 +49,7 @@ func reset() -> void:
 	drain_ext = 0.0
 	drain_by = ""
 	drain_left = 0.0
+	hiss_left = 0.0
 
 
 func lost() -> bool:
@@ -106,6 +108,19 @@ func drain_alarm() -> String:
 	if drain_left <= 0.0:
 		return ""
 	return "%s на корпусе пьёт энергию. Разряд — рычаг у левого борта" % (drain_by if drain_by != "" else "Существо")
+
+
+## Шипение тревоги присоски (A.alarmCue('latch') раз в Synth.LATCH_PERIOD): true — в этот шаг запустить звук.
+## Первое — сразу, как тревога загорелась; погасла — отсчёт с начала.
+func hiss(dt: float) -> bool:
+	if drain_left <= 0.0:
+		hiss_left = 0.0
+		return false
+	hiss_left -= dt
+	if hiss_left > 0.0:
+		return false
+	hiss_left = maxf(hiss_left + Synth.LATCH_PERIOD, 0.0)
+	return true
 
 
 ## Множитель плафонов и прожектора в момент time: 1 — ровный свет, FLICKER_DIM — провал.
