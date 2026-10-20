@@ -247,6 +247,14 @@ emission), стекло 96 (alpha 0,2), стойка журнала 976, экр�
 `kolba-steklo.glb`, `zhurnal-stoyka.glb`, `zhurnal-ekran.glb`; места и оси — `laboratoriya.md`, раздел MOD-015;
 превью — `laboratoriya-modeli.png`. Ставит в сцену задача «Лаборатория по ART-009».
 
+## MOD-016 Снаряжение ролей — принято
+- Исходник: ART-014, `ekipazh-pilot.jpg`, `ekipazh-inzhener.jpg`, `ekipazh-biolog.jpg`, модели MOD-012.
+
+**Принято 20.10.2026** (PR #112, папка `art/MOD-016-snaryazhenie`): семь GLB — гарнитура 400, планшет 260 и экран 2,
+фартук 280, щиток 494, туника 528, пояс с пробами 471 треугольник — `models/gear-*.glb`; крепление по pivot (матрицы
+`bindings.json` в осях Blender не годятся) — `ekipazh.md`, раздел MOD-016; превью — `ekipazh-snaryazhenie*.png`.
+Ставит на фигуры задача «Снаряжение ролей по ART-014».
+
 ## MOD-017 Трюм — стеллаж и банка образца — принято
 - Исходник: ART-010, `tryum-plan.png`, числа — `tryum.md`.
 
