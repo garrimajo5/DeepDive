@@ -110,3 +110,39 @@ func test_snapshot_round_trip() -> void:
 	for k in pa:
 		ok(pa[k].is_equal_approx(pb[k]), "поза %s совпадает" % k)
 	eq(Crew.part_color("torso", Crew.Role.ENGINEER), Crew.ROLE_COLORS[Crew.Role.ENGINEER], "цвет роли на груди")
+
+
+func test_welding_arm_holds_torch() -> void:
+	var m := Crew.Member.new(Crew.Role.ENGINEER)
+	var s: Breach.Spot = Breach.spots()[0]
+	var at := Vector2(s.p.x + 0.55, s.p.z)   # вплотную: дотянуться можно
+	m.follow(at.x, at.y, atan2(s.n.x, s.n.z), false, 0.0, 0.1)
+	var j0 := m.joints()
+	var free_l: Vector3 = j0["hand_l"] - j0["shoulder_l"]
+	ok(not m.welding(), "без сварки резака нет")
+	m.weld(s.p, s.n)
+	ok(m.welding(), "варит")
+	var t := m.torch_xform()
+	var nozzle := t * Crew.TORCH_NOZZLE
+	near(nozzle.distance_to(s.p), Crew.TORCH_GAP, 0.02, "сопло у шва")
+	ok((t.basis * Vector3.FORWARD).dot(-s.n) > 0.99, "сопло смотрит в борт")
+	var jw := m.joints()
+	ok((jw["hand_l"] - jw["shoulder_l"]).is_equal_approx(free_l), "левая рука как была")
+	ok(m.crouch() > 0.1 and m.crouch() <= Crew.CROUCH_MAX, "шов на 1 м — присел (%.2f)" % m.crouch())
+	near(jw["hip"].y, Crew.HIP - m.crouch(), 1e-4, "таз ниже")
+	for k in ["l", "r"]:
+		ok(jw["ankle_" + k].y > 0.0 and jw["ankle_" + k].y < 0.12, "присед: ступня %s на полу" % k)
+		ok((jw["knee_" + k] - jw["hip_" + k]).dot(jw["fwd"]) > 0.1, "колено %s вперёд" % k)
+	m.follow(s.at.x + 0.5, s.at.y, atan2(s.n.x, s.n.z), false, 0.0, 0.1)   # далеко — рука вытянута к шву
+	var j := m.joints()
+	near(j["shoulder_r"].distance_to(j["wrist_r"]), Crew.UPPER_ARM + Crew.FOREARM, 0.02, "рука вытянута")
+	ok(m.torch_xform().origin.distance_to(s.p) < j["shoulder_r"].distance_to(s.p), "резак ближе к шву, чем плечо")
+	var other := Crew.Member.new()
+	other.apply(m.snapshot())
+	ok(other.welding() and other.torch_xform().is_equal_approx(m.torch_xform()), "сварка — в снимке для сети")
+	m.weld(Vector3.INF)
+	other.apply(m.snapshot())
+	ok(not other.welding(), "закончил — в снимке без резака")
+	m.weld(s.p, s.n)
+	m.follow(0.0, Deck.SEAT_Z, 0.0, true, 0.0, 0.1)
+	ok(not m.welding(), "в кресле не варят")

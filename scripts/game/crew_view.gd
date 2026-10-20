@@ -9,6 +9,7 @@ const LAYER_SHIP := 2
 var members: Array = []  ## Crew.Member
 var local: Crew.Member  ## свой игрок (без головы)
 var figures: Array[MultiMeshInstance3D] = []
+var torches: Array[Node3D] = []  ## резак MOD-013 у каждой фигуры: виден, пока она варит
 var shown: Array = []  ## что нарисовано у каждой фигуры: имя части → Transform3D (для тестов и сети)
 var _mesh: CapsuleMesh
 var _material: StandardMaterial3D
@@ -42,8 +43,16 @@ func set_members(list: Array, me: Crew.Member) -> void:
 		mi.layers = LAYER_SHIP
 		add_child(mi)
 		figures.append(mi)
+		var t: Node3D = load("res://models/rezak.glb").instantiate()
+		t.name = "Резак"
+		t.visible = false
+		for m in t.find_children("*", "MeshInstance3D", true, false):
+			(m as MeshInstance3D).layers = LAYER_SHIP
+		add_child(t)
+		torches.append(t)
 	for i in figures.size():
 		figures[i].visible = i < members.size()
+		torches[i].visible = false
 		if i < members.size():
 			figures[i].name = "Фигура %s" % members[i].name
 
@@ -56,6 +65,9 @@ func apply() -> void:
 		if shown.size() <= i:
 			shown.resize(i + 1)
 		shown[i] = parts
+		torches[i].visible = m.welding()
+		if torches[i].visible:
+			torches[i].transform = m.torch_xform()
 		var mm := figures[i].multimesh
 		for n in Crew.ORDER.size():
 			var key: String = Crew.ORDER[n]

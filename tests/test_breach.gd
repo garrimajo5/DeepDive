@@ -114,6 +114,9 @@ func test_scene_bite_breach_weld() -> void:
 	for i in 20:
 		main.step(0.1)
 	ok(main.breach_view.sparks.emitting, "искры")
+	ok(main.me.welding() and main.crew_view.torches[0].visible, "резак в правой руке")
+	ok(main.visor.visible, "щиток опущен — экран затемнён")
+	ok(main.breach_view.splash.emitting, "брызги там, где струя бьёт в воду")
 	ok(main.breach_view.patch.scale.x > 0.4 and main.breach_view.patch.scale.x < 0.7, "заплатка наполовину: %.2f" % main.breach_view.patch.scale.x)
 	for i in 20:
 		main.step(0.1)
@@ -121,6 +124,9 @@ func test_scene_bite_breach_weld() -> void:
 	main.step(0.1)
 	ok(main.breach.active == null, "заварено")
 	ok(not main.breach_view.spray.emitting and not main.breach_view.sparks.emitting, "струя и искры погасли")
+	ok(not main.breach_view.splash.emitting, "брызг нет")
+	ok(not main.me.welding() and not main.crew_view.torches[0].visible and not main.visor.visible,
+		"заварил — резак убран, щиток поднят")
 	ok(main.breach_view._seam_mat.emission_energy_multiplier > 1.0, "шов горит")
 	ok(main.breach_view.water.visible, "вода ещё стоит")
 	main.queue_free()
@@ -156,3 +162,19 @@ func test_destroyed_clears_breach() -> void:
 	ok(not main.breach_view.spot_node.visible, "обшивки не видно")
 	main.queue_free()
 	await frames(1)
+
+
+func test_jet_lands_inside_room() -> void:
+	for s in Breach.spots():
+		var dry := Breach.jet_reach(s, 0.0)
+		var wet := Breach.jet_reach(s, Breach.WATER_MAX)
+		ok(dry > 0.5, "%s: струя бьёт в отсек (%.2f м)" % [s.name, dry])
+		ok(wet <= dry + 1e-6, "%s: вода выше — струя падает ближе" % s.name)
+		var hit := Vector2(s.p.x, s.p.z) + Vector2(s.n.x, s.n.z) * dry
+		ok(s.floor.has_point(hit), "%s: брызги на полу своего отсека" % s.name)
+	var b := Breach.spots()[0]   # мостик широкий: струя не долетает до правого борта
+	var d := Vector3(0.0, Breach.JET_UP, 1.0).normalized() * Breach.JET_V
+	var t := Breach.jet_reach(b, 0.0) / d.z
+	near(b.p.y + d.y * t - Breach.JET_G * 0.5 * t * t, 0.0, 1e-4, "мостик: точка падения — на полу")
+	var sp := BreachView.splash_local(b, 0.2)
+	near(sp.y, 0.2 - b.p.y, 1e-6, "брызги на уровне воды")

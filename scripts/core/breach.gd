@@ -19,6 +19,13 @@ const SEAM_COOL := 4.0        ## с — шов остывает после св�
 const SLOW_WATER := 0.2       ## вода выше — идти тяжелее
 const SLOW := 0.55
 const POST_R := 1.0
+## Щиток сварщика (ART-014, `ekipazh-inzhener.jpg`): свой игрок, пока варит, смотрит сквозь опущенный щиток —
+## экран затемнён цветом тени #0B1C24, искры и свет сварки сквозь него видны.
+const VISOR := Color(0.043, 0.11, 0.141, 0.6)
+## Струя (BreachView): из отверстия по нормали со скоростью JET_V, чуть вверх (JET_UP), падает с ускорением JET_G.
+const JET_V := 3.6
+const JET_UP := 0.15
+const JET_G := 6.0
 
 ## Место пробоины в осях корабля: точка на внутренней поверхности борта (y = 1 м), нормаль внутрь отсека,
 ## где стоять со сваркой, имя для приборов и пол отсека, который заливает (x0, z0, x1, z1).
@@ -166,6 +173,28 @@ func status() -> String:
 	if water_spot and water > 0.005:
 		return "Вода: %s %d см" % [water_spot.name, roundi(water * 100.0)]
 	return ""
+
+
+## Куда бьёт струя: расстояние от борта по нормали (м) до точки, где она падает на воду (или на пол), не дальше
+## противоположной стены отсека. Там — брызги у кромки воды.
+static func jet_reach(s: Spot, water_h: float) -> float:
+	var d := Vector3(0.0, JET_UP, 1.0).normalized() * JET_V
+	var drop := s.p.y - water_h
+	var t := (d.y + sqrt(d.y * d.y + 2.0 * JET_G * drop)) / JET_G
+	return minf(d.z * t, _across(s) - 0.15)
+
+
+## Ширина отсека от точки пробоины по нормали до противоположной кромки пола.
+static func _across(s: Spot) -> float:
+	var f := s.floor
+	var n := Vector2(s.n.x, s.n.z)
+	var p := Vector2(s.p.x, s.p.z)
+	var best := 100.0
+	if absf(n.x) > 1e-4:
+		best = minf(best, ((f.end.x if n.x > 0.0 else f.position.x) - p.x) / n.x)
+	if absf(n.y) > 1e-4:
+		best = minf(best, ((f.end.y if n.y > 0.0 else f.position.y) - p.y) / n.y)
+	return best
 
 
 ## Подпись на кнопке у пробоины.

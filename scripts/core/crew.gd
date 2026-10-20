@@ -42,6 +42,13 @@ const SEAT_LEAN := 0.44  ## рад (≈25°)
 const RIM := 0.25
 const GRIP_DEG := 55.0
 const GRIP_FOLLOW_DEG := 35.0
+## Резак MOD-013 (`models/rezak.glb`, docs/concept-art/proboina.md): pivot в хвате, сопло — (0; 0,177; −0,143) от него.
+## При сварке правая рука держит резак так, чтобы сопло было в 6 см от шва; не дотянуться — рука вытянута к нему.
+const TORCH_NOZZLE := Vector3(0.0, 0.1766, -0.1428)
+const TORCH_GAP := 0.06
+## Шов ниже плеча: при сварке фигура приседает (таз ниже, колени вперёд), чтобы рука доставала. Не больше CROUCH_MAX.
+const CROUCH_MAX := 0.3
+const CROUCH_ARM_DROP := 0.35  ## на сколько хват может быть ниже плеча без приседа
 
 ## Части фигуры в порядке экземпляров MultiMesh (голова и визор — 2 и 3: свой игрок их не рисует).
 const ORDER := ["torso", "pelvis", "head", "visor", "arm_l", "arm_r", "fore_l", "fore_r", "hand_l", "hand_r",
@@ -118,6 +125,8 @@ class Member:
 	var yaw := 0.0
 	var seated := false
 	var wheel_turn := 0.0
+	var weld_at := Vector3.INF  ## точка сварки (пробоина, оси корабля) — правая рука с резаком к ней; INF — не варит
+	var weld_n := Vector3.ZERO  ## нормаль борта в точке сварки (внутрь отсека)
 	var phase := 0.0  ## фаза шага, рад
 	var swing := 0.0  ## 0 — стоит, 1 — идёт полным ходом
 	var _last := Vector2.INF
@@ -142,6 +151,39 @@ class Member:
 		if swing < 0.02 and want == 0.0:
 			phase = move_toward(phase, PI if phase > PI * 0.5 and phase < PI * 1.5 else (0.0 if phase < PI else TAU), dt * 4.0)
 
+	## Варит ли: правая рука с резаком у шва.
+	func welding() -> bool:
+		return weld_at.is_finite() and not seated
+
+	## Начать или кончить сварку: точка шва p и нормаль n борта (внутрь отсека); p = INF — убрать резак.
+	func weld(p: Vector3, n: Vector3 = Vector3.ZERO) -> void:
+		weld_at = p
+		weld_n = n
+
+	## Насколько присесть при сварке (м): шов ниже плеча стоя больше чем на CROUCH_ARM_DROP.
+	func crouch() -> float:
+		if not welding():
+			return 0.0
+		var sh_y := HIP + TORSO - 0.04
+		return clampf(sh_y - torch_grip().y - CROUCH_ARM_DROP, 0.0, CROUCH_MAX)
+
+	## Куда сопло смотрит при сварке — в борт, по горизонтали.
+	func torch_dir() -> Vector3:
+		var d := -weld_n
+		d.y = 0.0
+		return d.normalized() if d.length() > 1e-4 else Vector3.FORWARD
+
+	## Где хват резака, если сопло у шва (без учёта длины руки).
+	func torch_grip() -> Vector3:
+		var b := Basis.looking_at(torch_dir(), Vector3.UP)
+		return weld_at - torch_dir() * TORCH_GAP - b * TORCH_NOZZLE
+
+	## Резак в правой руке: начало — хват (середина кисти), −Z — к борту, Y — вверх. Только когда варит.
+	func torch_xform() -> Transform3D:
+		var j := joints()
+		var grip: Vector3 = (j["wrist_r"] + j["hand_r"]) * 0.5
+		return Transform3D(Basis.looking_at(torch_dir(), Vector3.UP), grip)
+
 	## Глаз фигуры в осях корабля (у своего игрока совпадает с камерой).
 	func eye() -> Vector3:
 		if seated:
@@ -163,7 +205,7 @@ class Member:
 		else:
 			fwd = Vector3(-sin(yaw), 0.0, -cos(yaw))
 			right = Vector3(cos(yaw), 0.0, -sin(yaw))
-			hip = Vector3(x, HIP - 0.03 * swing * absf(cos(phase)), z)
+			hip = Vector3(x, HIP - 0.03 * swing * absf(cos(phase)) - crouch(), z)
 			up = Vector3.UP
 		j["hip"] = hip
 		var neck := hip + up * TORSO
@@ -177,12 +219,7 @@ class Member:
 			var hp := hip + right * (HIP_HALF * s)
 			j["hip_" + k] = hp
 			if seated:
-				var grip: Vector3 = Crew.wheel_grips(wheel_turn)[side]
-				var arm := Crew.two_bone(sh, grip, UPPER_ARM, FOREARM + HAND * 0.5, Vector3.DOWN + right * s * 0.6)
-				j["elbow_" + k] = arm[0]
-				var wrist: Vector3 = arm[0] + (arm[1] - arm[0]).normalized() * FOREARM
-				j["wrist_" + k] = wrist
-				j["hand_" + k] = wrist + (arm[1] - arm[0]).normalized() * HAND
+				_reach(j, k, sh, Crew.wheel_grips(wheel_turn)[side], right * s)
 				## Сидя: бедро вперёд чуть вниз, голень вниз и вперёд, ступня на подножке.
 				var knee := hp + (fwd * cos(0.12) + Vector3.DOWN * sin(0.12)) * THIGH
 				var ankle := knee + (Vector3.DOWN * cos(0.35) + fwd * sin(0.35)) * SHIN
@@ -190,17 +227,26 @@ class Member:
 				j["ankle_" + k] = ankle
 				j["toe_" + k] = ankle + fwd * 0.16 + Vector3.DOWN * 0.04
 			else:
-				## Нога: бедро качается вперёд-назад, колено сгибается, когда нога идёт вперёд.
 				var ph := phase + (0.0 if side == 0 else PI)
-				var th := sin(ph) * LEG_SWING * swing
-				var bend := maxf(0.0, cos(ph)) * 0.9 * swing + 0.04
-				var tdir := Vector3.DOWN * cos(th) + fwd * sin(th)
-				var knee := hp + tdir * THIGH
-				var sa := th - bend
-				var ankle := knee + (Vector3.DOWN * cos(sa) + fwd * sin(sa)) * SHIN
-				j["knee_" + k] = knee
-				j["ankle_" + k] = ankle
-				j["toe_" + k] = ankle + fwd * 0.16 + Vector3.DOWN * 0.03
+				if welding() and crouch() > 0.0:   # присед у шва: ступня на полу под бедром, колено вперёд
+					var leg := Crew.two_bone(hp, Vector3(hp.x, 0.08, hp.z) + fwd * 0.08, THIGH, SHIN, fwd)
+					j["knee_" + k] = leg[0]
+					j["ankle_" + k] = leg[1]
+					j["toe_" + k] = leg[1] + fwd * 0.16 + Vector3.DOWN * 0.05
+				else:
+					## Нога: бедро качается вперёд-назад, колено сгибается, когда нога идёт вперёд.
+					var th := sin(ph) * LEG_SWING * swing
+					var bend := maxf(0.0, cos(ph)) * 0.9 * swing + 0.04
+					var tdir := Vector3.DOWN * cos(th) + fwd * sin(th)
+					var knee := hp + tdir * THIGH
+					var sa := th - bend
+					var ankle := knee + (Vector3.DOWN * cos(sa) + fwd * sin(sa)) * SHIN
+					j["knee_" + k] = knee
+					j["ankle_" + k] = ankle
+					j["toe_" + k] = ankle + fwd * 0.16 + Vector3.DOWN * 0.03
+				if side == 1 and welding():
+					_reach(j, k, sh, torch_grip(), right * s)
+					continue
 				## Рука качается против ноги своей стороны, локоть чуть согнут.
 				var ah := -sin(ph) * ARM_SWING * swing
 				var adir := Vector3.DOWN * cos(ah) + fwd * sin(ah) + right * (0.08 * s)
@@ -213,6 +259,14 @@ class Member:
 		j["fwd"] = fwd
 		j["up"] = up
 		return j
+
+	## Рука k от плеча sh к точке хвата grip (середина кисти); локоть — вниз и наружу (out).
+	func _reach(j: Dictionary, k: String, sh: Vector3, grip: Vector3, out: Vector3) -> void:
+		var arm := Crew.two_bone(sh, grip, UPPER_ARM, FOREARM + HAND * 0.5, Vector3.DOWN + out * 0.6)
+		j["elbow_" + k] = arm[0]
+		var wrist: Vector3 = arm[0] + (arm[1] - arm[0]).normalized() * FOREARM
+		j["wrist_" + k] = wrist
+		j["hand_" + k] = wrist + (arm[1] - arm[0]).normalized() * HAND
 
 	## Части фигуры: имя → Transform3D единичной капсулы. own — свой игрок: без головы (камера в ней), а стоя ещё
 	## без туловища, таза и плеч, чтобы взгляд вниз видел ноги, а не грудь вплотную; сидя видны руки на штурвале.
@@ -247,7 +301,8 @@ class Member:
 	## Снимок для сети: всё, что нужно клиенту, чтобы поставить фигуру.
 	func snapshot() -> Dictionary:
 		return {"role": role, "name": name, "x": x, "z": z, "yaw": yaw, "seated": seated,
-			"turn": wheel_turn, "phase": phase, "swing": swing}
+			"turn": wheel_turn, "phase": phase, "swing": swing,
+			"weld": [weld_at.x, weld_at.y, weld_at.z, weld_n.x, weld_n.y, weld_n.z] if weld_at.is_finite() else []}
 
 	func apply(s: Dictionary) -> void:
 		role = int(s.get("role", role))
@@ -259,4 +314,9 @@ class Member:
 		wheel_turn = float(s.get("turn", wheel_turn))
 		phase = float(s.get("phase", phase))
 		swing = float(s.get("swing", swing))
+		var w: Array = s.get("weld", [])
+		if w.size() == 6:
+			weld(Vector3(w[0], w[1], w[2]), Vector3(w[3], w[4], w[5]))
+		else:
+			weld(Vector3.INF)
 		_last = Vector2(x, z)
