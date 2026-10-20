@@ -255,6 +255,14 @@ emission), стекло 96 (alpha 0,2), стойка журнала 976, экр�
 `bindings.json` в осях Blender не годятся) — `ekipazh.md`, раздел MOD-016; превью — `ekipazh-snaryazhenie*.png`.
 Ставит на фигуры задача «Снаряжение ролей по ART-014».
 
+## MOD-017 Трюм — стеллаж и банка образца — принято
+- Исходник: ART-010, `tryum-plan.png`, числа — `tryum.md`.
+
+**Принято 20.10.2026** (PR #122, папка `art/MOD-017-stellazh`): три GLB — стеллаж 984, банка 324 (огонёк — маска
+emission), стекло банки 64 (alpha 0,25) — `models/stellazh-tryuma.glb`, `banka-obraztsa.glb`, `banka-steklo.glb`;
+места, ячейки и оси — `tryum.md`, раздел MOD-017; превью — `tryum-stellazh-modeli.png`. Ставит в сцену задача
+«Полки на 24 образца».
+
 ## ART-016 Брифинг и голосование на голостоле — принято
 - Исходник: ART-002, голостол MOD-002, карта ART-005 (`karta-otmeli.md`), логика `js/run.js`.
 
