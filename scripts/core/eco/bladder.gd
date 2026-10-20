@@ -5,7 +5,8 @@ extends EcoSystem
 ## (в браузере — у стай монетников, а они стоят у тех же пятен: initCoins берёт три ближайших пятна не ближе 25 м
 ## друг к другу), в 4,5 м от середины пятна. Луковицы зреют 70 с и лопаются облаком светящихся спор на 12 с;
 ## спелее 0,6 — лопаются и от корабля, проходящего над кустом на ходу. На споры слетаются спокойные стаи светляков
-## ближе 35 м. Наблюдения журнала: «pop» (лопнули), «feed» (рыбы у спор ближе 6 м, раз в 60 с). Заметна сонару и сканеру.
+## ближе 35 м и монетники своей стайки (EcoCoins). Наблюдения журнала: «pop» (лопнули), «feed» (рыбы у спор
+## ближе 6 м, раз в 60 с). Заметна сонару и сканеру.
 
 const ID := "bladder"
 ## Кустов — по пятнам мха у старта; стеблей на куст и спор в облаке (PZ_STEMS, PZ_SPORE_N).
@@ -58,6 +59,15 @@ class Bush:
 var bushes: Array[Bush] = []
 ## Стаи, что слетаются на споры (null — некого звать).
 var fish: EcoFish
+## Монетники: стайка i кормится на спорах куста i (EcoCoins.bladders) — тоже «слетаются рыбы». Слабая ссылка:
+## монетники держат пузырчатку, обратная сильная ссылка — цикл RefCounted и утечка при выходе.
+var coins: EcoCoins:
+	get:
+		return _coins.get_ref() if _coins else null
+	set(value):
+		_coins = weakref(value) if value else null
+
+var _coins: WeakRef
 
 var _spots: Array[Vector3]
 
@@ -71,19 +81,7 @@ func _init(prey_fish: EcoFish = null, spots: Array[Vector3] = []) -> void:
 ## Три пятна мха, ближайших к старту корабля, не ближе PICK_GAP друг к другу (initCoins), и куст i — в OFFSET м
 ## от пятна под углом i · 1,9 + 2,6 (initBladders). y — пятна; на дно куст встаёт при сбросе.
 static func default_spots() -> Array[Vector3]:
-	var s0 := Helm.Ship.START
-	var sorted := EcoMoss.SPOTS.duplicate()
-	sorted.sort_custom(func(a: Vector3, b: Vector3) -> bool:
-		return Vector2(a.x - s0.x, a.z - s0.z).length() < Vector2(b.x - s0.x, b.z - s0.z).length())
-	var picks: Array[Vector3] = []
-	for p: Vector3 in sorted:
-		if picks.size() >= BUSHES:
-			break
-		var far := true
-		for q in picks:
-			far = far and Vector2(q.x - p.x, q.z - p.z).length() > PICK_GAP
-		if far:
-			picks.append(p)
+	var picks := EcoCoins.default_spots()
 	var out: Array[Vector3] = []
 	for i in picks.size():
 		var a := i * 1.9 + 2.6
@@ -130,7 +128,7 @@ func step(world: EcoWorld, dt: float) -> void:
 		bl.feed_cd -= dt
 		if bl.life > 0.0:
 			bl.life = maxf(0.0, bl.life - dt)
-			if fish:
+			if fish or _coins:
 				_call_shoals(world, bl)
 		else:
 			bl.ripe = minf(1.0, bl.ripe + dt / RIPEN)
@@ -150,8 +148,9 @@ func pop(world: EcoWorld, bl: Bush, by_ship: bool) -> void:
 
 ## Споры манят спокойные стаи (не в тревоге, от трёх рыбок) ближе CALL_R.
 func _call_shoals(world: EcoWorld, bl: Bush) -> void:
-	var came := false
-	for sh in fish.shoals:
+	var c := coins
+	var came := c != null and c.came_to(bl.index)
+	for sh in (fish.shoals if fish else []):
 		if sh.alarm > 0.0 or sh.alive < 3:
 			continue
 		var d := sh.center.distance_to(bl.cloud)
