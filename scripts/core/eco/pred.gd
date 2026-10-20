@@ -8,7 +8,7 @@ extends EcoSystem
 ## и без паузы — бросок на корабль (9,5 м/с, до 10 с) с событием «ship», «ping» или «hear». Ближе 8,5 м к кораблю или 1,2 м к корпусу (EcoHull) — укус:
 ## EcoLink.HIT с уроном 0,12 (что он делает с кораблём — решает корабль), хищник уходит на 60 м и 25 с не нападает.
 ## Сонар (ShipState.sonar_ping → on_ping) зовёт хищников ближе 150 м проверить звук, разряд (ShipState.zap → on_zap)
-## отпугивает тех, кто ближе радиуса разряда. Сквозь корпус не проходят (EcoWorld.push_out). Пиявники, станции чистки, вуали и укрытия стай придут со своими видами.
+## отпугивает тех, кто ближе радиуса разряда. В гуле трубного органа (EcoOrgan) двигатели не слышно. Сквозь корпус не проходят (EcoWorld.push_out). Пиявники, станции чистки, вуали и укрытия стай придут со своими видами.
 
 const ID := "pred"
 
@@ -78,6 +78,8 @@ class Pred:
 var all: Array[Pred] = []
 ## Светляки, на которых охотится; null — охотиться не на кого.
 var fish: EcoFish
+## Трубные органы: в их гуле двигатели корабля не слышно (null — органов нет).
+var organs: EcoOrgan
 
 var _rnd: EcoRandom
 
@@ -175,12 +177,24 @@ static func _set_mode(pr: Pred, m: Mode, t: float) -> void:
 			pr.agent.state = EcoAgent.State.GRAZE
 
 
-## Манит ли корабль: свет или недавний сонар ближе 32 м, шум двигателей ближе 24 м.
-static func lured(world: EcoWorld, d_ship: float) -> bool:
+## Манит ли корабль: свет или недавний сонар ближе 32 м, шум двигателей ближе 24 м (если его не глушит трубный орган).
+func lured(world: EcoWorld, pr: Pred, d_ship: float) -> bool:
 	var s := world.ship
 	var seen := d_ship < REACH and (s.light_on or world.time - world.last_ping < PING_MEMORY)
-	var heard := d_ship < HEAR_RADIUS and absf(s.speed) > HEAR_SPEED
-	return seen or heard
+	return seen or hears_ship(world, pr, d_ship)
+
+
+## Слышит ли двигатели корабля (hearsShip): ближе 24 м и быстрее 3 м/с, если корабль не в гуле трубного органа.
+## Гул спрятал корабль от патрулирующего или проверяющего звук хищника — наблюдение органа «mask».
+func hears_ship(world: EcoWorld, pr: Pred, d_ship: float) -> bool:
+	if d_ship >= HEAR_RADIUS or absf(world.ship.speed) <= HEAR_SPEED:
+		return false
+	if organs:
+		var og := organs.masking(world)
+		if og:
+			organs.masked(world, og, pr.mode == Mode.PATROL or pr.mode == Mode.INVESTIGATE)
+			return false
+	return true
 
 
 ## Текст события собирается в момент показа (вид мог быть уже просканирован). Мир — слабой ссылкой и без self:
@@ -215,7 +229,8 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 	pr.cooldown -= dt
 	var ship := world.ship.pos
 	var d_ship := a.distance_to(ship)
-	var can_attack := pr.cooldown <= 0.0 and pr.hunger > ATTACK_HUNGER and lured(world, d_ship)
+	var lure := lured(world, pr, d_ship)  # и голодного, и сытого: гул органа прячет корабль от каждого
+	var can_attack := pr.cooldown <= 0.0 and pr.hunger > ATTACK_HUNGER and lure
 
 	var speed := PATROL_SPEED
 	match pr.mode:
