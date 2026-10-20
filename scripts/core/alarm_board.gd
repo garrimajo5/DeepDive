@@ -97,3 +97,73 @@ static func face_rect() -> Array:
 static func u_of(x: float) -> float:
 	var r: Vector2 = face_rect()[1]
 	return (x - CENTER.x + r.x * 0.5) / r.x
+
+
+## Подсказка к посту главной тревоги (ART-025, «таблица тревога → пост»): одна янтарная рамка у поста, который
+## снимает главную тревогу. Стеклоуст — щиток разряда (`Zap.PANEL_POS`), мало заряда — пульт энергии, пробоина —
+## место сварки (`Breach.active`; вода после заплатки откачивается сама — рамки нет), перегрев — кормовой люк мостика
+## (вентиль в машинном, сквозь борт не указываем), ил — штурвал. Рамка в плоскости XY своих осей, лицом в normal.
+class Hint:
+	var center := Vector3.ZERO
+	var size := Vector2.ZERO     ## ширина и высота по внешней кромке, м
+	var normal := Vector3.BACK   ## куда смотрит рамка (в отсек)
+
+	func _init(c: Vector3, s: Vector2, n: Vector3) -> void:
+		center = c
+		size = s
+		normal = n
+
+
+const HINT_BAR := 0.035     ## ширина бруска рамки, м
+const HINT_GAP := 0.03      ## рамка перед поверхностью, м
+const HINT_DIM := 0.35      ## яркость рамки, пока углы главной тревоги погашены (рамку видно всегда)
+## Щиток разряда 0,45 × 0,60 м, лицо в +X (`razryad.md`); пульт энергии 1,2 × 1,6 м у стены x −4,9 (`BridgeProps`).
+const HINT_ZAP_SIZE := Vector2(0.65, 0.80)
+const HINT_ENERGY_SIZE := Vector2(1.40, 1.75)
+const HINT_ENERGY_GAP := 0.1   ## перед рёбрами борта (выступают на 0,08 м у z −2,75 и −1,25)
+const HINT_HATCH_SIZE := Vector2(2.0, 2.45)   ## проём люка 1,4 × 2,1 м, рама модели — до 1,8 м
+const HINT_HATCH_GAP := 0.05
+const HINT_WHEEL_SIZE := Vector2(0.95, 0.85)
+const HINT_BREACH_SIZE := Vector2(1.0, 1.0)
+
+
+## Рамка для главного поля main (−1 — нет тревог) или null. breach_spot — открытая пробоина (`Breach.active`).
+static func hint(main: int, breach_spot: Breach.Spot) -> Hint:
+	match main:
+		Field.BREACH:
+			if breach_spot == null:
+				return null
+			return Hint.new(breach_spot.p + breach_spot.n * HINT_GAP, HINT_BREACH_SIZE, breach_spot.n)
+		Field.DRAIN:
+			return Hint.new(Vector3(Zap.PANEL_POS.x + HINT_GAP, 1.17, Zap.PANEL_POS.z), HINT_ZAP_SIZE, Vector3.RIGHT)
+		Field.HEAT:
+			var h := BridgeProps.HATCH_POS
+			return Hint.new(Vector3(h.x, HINT_HATCH_SIZE.y * 0.5, h.z - HINT_HATCH_GAP), HINT_HATCH_SIZE, Vector3.FORWARD)
+		Field.SILT:
+			return Hint.new(Vector3(0.0, BridgeProps.WHEEL_Y, BridgeProps.WHEEL_Z + 0.2), HINT_WHEEL_SIZE, Vector3.BACK)
+		Field.CHARGE:
+			var e := BridgeProps.ENERGY_POS
+			return Hint.new(Vector3(e.x + HINT_ENERGY_GAP, 0.05 + HINT_ENERGY_SIZE.y * 0.5, e.z), HINT_ENERGY_SIZE,
+				Vector3.RIGHT)
+	return null
+
+
+## Яркость рамки 0…1: в такт углам главного поля (`levels`), погашенные углы — HINT_DIM.
+static func hint_glow(on: Array[bool], t: float) -> float:
+	var m := main_field(on)
+	if m < 0:
+		return 0.0
+	return 1.0 if levels(on, t)[m].y > 0.5 else HINT_DIM
+
+
+## Бруски рамки в её осях (x вправо, y вверх, лицо +Z): 4 прямоугольника [центр, размер] по внешней кромке size.
+static func hint_bars(size: Vector2) -> Array:
+	var b := HINT_BAR
+	var hw := size.x * 0.5
+	var hh := size.y * 0.5
+	return [
+		[Vector2(0.0, hh - b * 0.5), Vector2(size.x, b)],
+		[Vector2(0.0, -hh + b * 0.5), Vector2(size.x, b)],
+		[Vector2(-hw + b * 0.5, 0.0), Vector2(b, size.y - 2.0 * b)],
+		[Vector2(hw - b * 0.5, 0.0), Vector2(b, size.y - 2.0 * b)],
+	]
