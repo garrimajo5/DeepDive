@@ -60,11 +60,12 @@ func test_model_replaces_capsules() -> void:
 	ok(_tris(cv.meshes[0]) < _tris(cv.meshes[1]) * 0.9, "свой игрок — без головы (%d треуг.)" % _tris(cv.meshes[0]))
 	ok(cv.meshes[0].material_override != null and cv.meshes[1].material_override == null, "свой — с отсечением граней")
 	ok(cv.patches[1].visible and not cv.patches[0].visible, "нашивка роли — у других")
-	var back: Vector3 = cv.figures[0].position
-	near(back.dot(main.me.joints()["fwd"]), -CrewView.OWN_BACK, 1e-4, "стоя своя модель чуть позади камеры")
+	var j := main.me.joints()
+	var hip: Vector3 = _shown(0, "hip")
+	near((hip - main.camera.position).dot(j["fwd"]), -CrewView.OWN_BACK, 1e-3, "стоя своя модель чуть позади камеры")
 	main.sit_at_helm()
 	main.step(1.0 / 30.0)
-	eq(cv.figures[0].position, Vector3.ZERO, "сидя — на месте, руки на штурвале")
+	eq(main.me.joints()["hip"], Crew.seat_hip(), "сидя — на месте, руки на штурвале")
 	main.stand_up()
 
 
@@ -79,7 +80,6 @@ func test_hands_on_posts_in_scene() -> void:
 	ok(main.me.hands[1].is_equal_approx(g[1]), "у пульта: правая на ползунке прожектора")
 	var hand: Vector3 = main.crew_view.shown[0]["hand_r"]
 	ok(hand.distance_to(g[1]) < 0.08, "модель дотянулась до ползунка (%.3f м)" % hand.distance_to(g[1]))
-	eq(main.crew_view.figures[0].position, Vector3.ZERO, "с руками на посте модель не сдвинута назад")
 	main.close_power()
 	main.step(1.0 / 30.0)
 	ok(not main.me.holding(), "отошёл от пульта — руки свободны")
@@ -103,7 +103,7 @@ func test_camera_follows_lean_at_table() -> void:
 		main.step(1.0 / 30.0)
 	ok(main.me.lean > 0.1, "наклон к столу (%.2f рад)" % main.me.lean)
 	var j := main.me.joints()
-	var head: Vector3 = j["head"] + (j["fwd"] as Vector3) * 0.04
+	var head: Vector3 = j["head"] + (j["fwd"] as Vector3) * (0.04 + main.me.back)   # фигура позади глаза
 	ok(main.camera.position.distance_to(head) < 0.01, "камера в голове (%.3f м)" % main.camera.position.distance_to(head))
 	for i in int(CrewHands.PRESS * 30.0) + 10:
 		main.step(1.0 / 30.0)
@@ -117,7 +117,8 @@ func test_power_steps_to_panel() -> void:
 	main.walker.z = -2.3
 	main.open_power()
 	var post: Deck.Post = Deck.posts().filter(func(p): return p.id == "energy")[0]
-	eq(Vector2(main.walker.x, main.walker.z), post.at, "встал к пульту")
+	eq(Vector2(main.walker.x, main.walker.z), Main.POWER_STAND, "встал к пульту")
+	ok(Main.POWER_STAND.distance_to(post.at) < post.r, "в радиусе поста")
 	near(main.walker.pitch, Main.POWER_PITCH, 1e-6, "взгляд на ползунки")
 	main.power.sel = 0
 	for i in 15:
@@ -153,3 +154,22 @@ func test_role_gear() -> void:
 	eq(main.crew_view.gear[i].keys(), CrewRig.ROLE_GEAR[Crew.Role.BIOLOGIST], "сменил роль — туника и пробы")
 	var own: Dictionary = main.crew_view.gear[main.crew.find(main.me)]
 	ok(not (own["gear-garnitura"] as Node3D).visible, "своя гарнитура не видна (камера в голове)")
+
+
+## По issue #137: у щитка «Аварийный сброс» игрок встаёт к нему, плечи позади камеры (камера не внутри груди —
+## не видно изнанки обрезанного меша), правая кисть на крышке.
+func test_scram_body_behind_camera() -> void:
+	main.walker.x = EngineRoom.PANEL_POST.x - 0.1
+	main.walker.z = EngineRoom.PANEL_POST.y + 0.3
+	main.use_post("scram")
+	for i in 10:
+		main.step(1.0 / 30.0)
+	eq(Vector2(main.walker.x, main.walker.z), Main.SCRAM_STAND, "встал к щитку")
+	ok(main.layout.can_stand(main.walker.x, main.walker.z), "место у щитка свободно")
+	var fwd: Vector3 = main.me.joints()["fwd"]
+	near(fwd.x, 1.0, 1e-4, "лицом к щитку (+X)")
+	var sh: Vector3 = (_shown(0, "shoulder_l") + _shown(0, "shoulder_r")) * 0.5
+	var ahead := (sh - main.camera.position).dot(fwd)
+	ok(ahead < -0.08, "плечи позади камеры (%.3f м)" % ahead)
+	var hand: Vector3 = _shown(0, "hand_r")
+	ok(hand.distance_to(CrewHands.SCRAM_GRIP) < 0.08, "кисть на крышке (%.3f м)" % hand.distance_to(CrewHands.SCRAM_GRIP))

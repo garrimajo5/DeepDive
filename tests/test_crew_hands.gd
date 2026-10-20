@@ -94,3 +94,29 @@ func test_smooth_lean_and_eye() -> void:
 	for i in 20:
 		m.ease_lean(0.05)
 	eq(m.eye_offset(), Vector3.ZERO, "выпрямился")
+
+
+## По issue #137: своя фигура стоя позади глаза (back) и с руками на посте — кисти всё равно в точках хвата.
+func test_own_back_still_reaches_posts() -> void:
+	var cases := [
+		[Main.POWER_STAND, PI / 2.0, CrewHands.energy(0, 0.3)],
+		[Vector2(0.0, 0.4), 0.0, CrewHands.table(0.0, 0.4)],
+		[Main.ZAP_STAND, PI / 2.0, CrewHands.lever(Zap.LEVER_DOWN)],
+		[Main.ZAP_STAND, PI / 2.0, CrewHands.lever(Zap.LEVER_UP)],
+		[EngineRoom.VALVE_POST, PI / 2.0, CrewHands.valve()],
+		[Main.SCRAM_STAND, -PI / 2.0, CrewHands.scram()],
+	]
+	for c in cases:
+		var m := Crew.Member.new()
+		m.back = CrewView.OWN_BACK
+		var g: Array[Vector3] = c[2]
+		m.hold(g[0], g[1])
+		m.follow(c[0].x, c[0].y, c[1], false, 0.0, 0.1)
+		ok(m.lean_target() < Crew.LEAN_MAX, "%s: наклон %.2f рад" % [c[0], m.lean_target()])
+		var j := m.joints()
+		for side in 2:
+			if g[side].is_finite():
+				var d := _hand(j, "l" if side == 0 else "r").distance_to(g[side])
+				ok(d < 0.08, "%s: кисть на хвате (%.3f м)" % [c[0], d])
+		var eye := m.eye() + m.eye_offset()
+		near((eye - j["head"]).dot(j["fwd"]), 0.04 + CrewView.OWN_BACK, 1e-4, "%s: голова позади глаза" % c[0])

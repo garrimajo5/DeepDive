@@ -3,15 +3,15 @@ extends Node3D
 ## Фигуры экипажа на корабле: модель MOD-012 (мужская или женская, `Crew.Member.look`), позу считает
 ## `Crew.Member.joints()`, на скелет её переносит `CrewRig.pose`. Один skinned-меш на фигуру — один вызов отрисовки.
 ## Свой игрок — копия меша без головы и верха груди (`cut_mesh`: камера в голове, наклон к штурвалу подносит грудь
-## к камере), задние грани отсечены; стоя модель чуть позади камеры (OWN_BACK). Цвет роли — нашивка на левом плече,
+## к камере), задние грани отсечены; стоя модель чуть позади камеры (OWN_BACK → `Crew.Member.back`). Цвет роли — нашивка на левом плече,
 ## роль видна по снаряжению MOD-016 (`_dress`: детали на костях, щиток поднят и опущен на сварке).
 ## Узел живёт в осях корабля, слой света 2 (только плафоны корабля).
 
 const LAYER_SHIP := 2
 ## Нашивка роли на левом плече (ART-014: роль узнают по снаряжению, цвет — тонкая метка).
 const PATCH_SIZE := Vector3(0.012, 0.07, 0.06)
-## Свой игрок стоя: модель на 15 см позади камеры — взгляд вниз видит грудь и живот снаружи, как глазами,
-## а не изнутри куртки. Сидя, при сварке и с руками на посте — на месте (кисти там, где хват).
+## Свой игрок стоя: модель на 15 см позади камеры (`Crew.Member.back`) — взгляд вниз видит грудь и живот снаружи,
+## как глазами, а не изнутри куртки; с руками на посте тоже (кисти в точке хвата). Сидя и при сварке — на месте.
 const OWN_BACK := 0.15
 
 var members: Array = []  ## Crew.Member
@@ -188,8 +188,7 @@ func apply() -> void:
 			var lp: Transform3D = g[b] if p < 0 else g[p].affine_inverse() * g[b]
 			sk.set_bone_pose_position(b, lp.origin)
 			sk.set_bone_pose_rotation(b, lp.basis.get_rotation_quaternion())
-		var back := own and not m.seated and not m.holding()
-		figures[i].position = -(j["fwd"] as Vector3) * OWN_BACK if back else Vector3.ZERO
+		figures[i].position = Vector3.ZERO   # свой игрок стоя позади камеры — Crew.Member.back
 		meshes[i].mesh = _meshes[looks[i]][1 if own else 0]
 		meshes[i].material_override = _own_mat[looks[i]] if own else null
 		patches[i].visible = not own  # своя нашивка у самой камеры
