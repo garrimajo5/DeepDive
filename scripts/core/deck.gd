@@ -90,11 +90,13 @@ class Walker:
 	const EYE := 1.65
 	const MAX_PITCH := 1.45
 	const LOOK_SENS := 0.0055  ## радиан на «точку» экрана (1/160 дюйма), как в браузере
+	## Взгляд на старте чуть вверх: от входа на мостик табло тревог (AlarmBoard) целиком ниже плашки приборов (#218).
+	const START_PITCH := 0.03
 
 	var x := 0.0
 	var z := STAND_Z
 	var yaw := 0.0
-	var pitch := -0.08
+	var pitch := START_PITCH
 	var stand: Callable = Deck.can_stand
 	## Тестовый режим: игрок летит сквозь переборки и выходит с корабля смотреть живой мир (кнопка noclip).
 	var noclip := false
@@ -104,7 +106,7 @@ class Walker:
 		x = 0.0
 		z = STAND_Z
 		yaw = 0.0
-		pitch = -0.08
+		pitch = START_PITCH
 		y = EYE
 
 	func forward() -> Vector2:
