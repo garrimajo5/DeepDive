@@ -227,3 +227,28 @@ func test_near_reaches_sonar_table() -> void:
 	ok(kinds.has("fish") and kinds.has("pred"), "стаи и серпохвост на сонаре")
 	main.queue_free()
 	await frames(1)
+
+
+## Чутьё хищников растёт с каждым спуском (js/run.js R.predK): мир узнаёт номер спуска из ShipState.dive.
+func test_dive_sharpens_predators() -> void:
+	var s := EcoLink.ShipState.new()
+	eq(s.dive, 0, "первый спуск")
+	near(s.pred_k(), 1.0, 1e-6, "первый спуск — обычное чутьё")
+	s.dive = 2
+	near(s.pred_k(), 1.3, 1e-6, "третий спуск — +30 %")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var fake := FakeEco.new()
+	main.eco.queue_free()
+	main.eco = fake
+	main.add_child(fake)
+	main.step(0.1)
+	eq(fake.got.dive, 0, "мир знает: первый спуск")
+	main.complete_route()
+	main.decide("deep")
+	main.step(0.1)
+	eq(fake.got.dive, 1, "решили «глубже» — мир знает: второй спуск")
+	near(fake.got.pred_k(), 1.15, 1e-6, "хищники чутче на 15 %")
+	main.queue_free()
+	await frames(1)

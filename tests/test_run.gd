@@ -98,7 +98,7 @@ func test_vote_and_finish() -> void:
 	eq(run.update(162.0, -36.0), "Маршрут «Тёплые трубы» пройден: глубже или наверх?")
 	eq(run.routes, 1)
 	eq(run.label(), "Глубже или наверх?")
-	eq(run.go_deeper(), "Глубже: 2-й спуск. Новый маршрут — у голостола")
+	eq(run.go_deeper(), "Глубже: 2-й спуск, хищники чутче на 15 %. Маршрут — у голостола")
 	ok(run.route == -1 and not run.done, "маршрут выбирать заново")
 	var rows := run.finish(100.0 + 7.0 * 60.0, 4, 5, 2, 64.0)
 	ok(run.ended, "забег окончен")

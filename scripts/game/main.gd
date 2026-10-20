@@ -692,6 +692,7 @@ func _step_eco(dt: float) -> void:
 	s.light_range = Searchlight.range_m(reactor.k(Reactor.Sys.LAMP)) * silt.beam_k() if s.light_on else 0.0
 	s.hull_noise = engine.noise(clampf(absf(helm.speed) / 6.7, 0.0, 1.0))
 	s.scan_range = Scanner.RANGE if at_scanner else 0.0
+	s.dive = run.depth
 	var events := eco.step(dt, s)
 	scanner.take(events if at_scanner else [])
 	if s.sonar_ping and not sonar.jammed:
