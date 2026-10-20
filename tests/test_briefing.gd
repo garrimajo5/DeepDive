@@ -79,3 +79,35 @@ func test_scene_briefing_at_route_post() -> void:
 	eq(mat.get_shader_parameter("brief_k"), 0.0, "в голосовании брифинг гаснет")
 	main.queue_free()
 	await frames(1)
+
+
+func test_icons() -> void:
+	for k in Briefing.ORDER:
+		var tex: Texture2D = load(Briefing.icon_path(k))
+		ok(tex != null, "иконка места %s есть в игре" % k)
+		if tex:
+			eq(tex.get_size(), Vector2(256, 256), "иконка %s — 256 × 256 (ART-005)" % k)
+	eq(Briefing.icon_alpha(0.0), Briefing.ICON_DIM, "место не на маршруте — тусклое")
+	eq(Briefing.icon_alpha(3.0), 1.0, "следующая точка — ярко")
+
+
+func test_scene_icons() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var sv := main.sonar_view
+	eq(sv.icons.size(), 6, "шесть иконок мест")
+	ok(not sv.icons[0].visible, "вне брифинга иконки скрыты")
+	main.walker.x = Main.ROUTE_POST.x
+	main.walker.z = Main.ROUTE_POST.y
+	main.use_post("route")   # «Рифовый сад»: 1 → 4 → 5
+	main.step(0.3)
+	ok(sv.icons[0].visible, "у поста «Маршрут» иконки видны")
+	eq(sv.icons[0].modulate.a, 1.0, "место маршрута — ярко")
+	near(sv.icons[1].modulate.a, Briefing.ICON_DIM, 1e-5, "курильщик не на маршруте — тусклый")
+	var t := Briefing.table_xz(Run.place_xz("bones"))
+	near(sv.icons[3].position.x, t.x, 1e-5, "иконка стоит на точке места")
+	near(sv.icons[3].position.z, t.y, 1e-5)
+	near(sv.icons[3].pixel_size * 256.0, Briefing.ICON_SIZE, 1e-6, "размер на столе")
+	main.queue_free()
+	await frames(1)

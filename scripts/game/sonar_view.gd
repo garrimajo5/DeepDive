@@ -8,6 +8,7 @@ const TOP_Y := 0.93   ## над краем корпуса голостола (0,
 
 var mat: ShaderMaterial
 var numbers: Array[Label3D] = []   ## номера мест брифинга, порядок — Briefing.ORDER
+var icons: Array[Sprite3D] = []    ## иконки мест брифинга (textures/places), порядок — Briefing.ORDER
 static var _map: ImageTexture
 
 
@@ -54,11 +55,26 @@ func _ready() -> void:
 		l.pixel_size = 0.0016
 		l.modulate = Color("#D5E4E8")
 		l.outline_modulate = Color("#0B1C24")
-		l.position = Vector3(t.x + 0.035, 0.05, t.y - 0.03)
+		l.position = Vector3(t.x, Briefing.ICON_SIZE * 1.12, t.y)
 		l.layers = OceanView.LAYER_SHIP
 		l.visible = false
 		add_child(l)
 		numbers.append(l)
+		var ic := Sprite3D.new()
+		ic.name = "Иконка %d" % Briefing.NUMBERS[k]
+		ic.texture = load(Briefing.icon_path(k))
+		ic.pixel_size = Briefing.ICON_SIZE / float(ic.texture.get_height())
+		ic.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
+		ic.shaded = false
+		ic.double_sided = true
+		ic.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
+		ic.centered = true
+		ic.position = Vector3(t.x, Briefing.ICON_SIZE * 0.5 + 0.004, t.y)
+		ic.layers = OceanView.LAYER_SHIP
+		ic.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		ic.visible = false
+		add_child(ic)
+		icons.append(ic)
 	mat.set_shader_parameter("places", pts)
 
 
@@ -99,16 +115,19 @@ func show_waypoint(xz: Vector2) -> void:
 ## Брифинг: k — доля перехода 0…1 (Briefing.Fade), маршрут и пройденные точки — из Run, корабль — где он сейчас.
 func show_briefing(k: float, run: Run, ship_pos: Vector3) -> void:
 	mat.set_shader_parameter("brief_k", k)
-	for l in numbers:
-		l.visible = k > 0.0
-		l.modulate.a = k
-		l.outline_modulate.a = k
+	var st := place_states(run)
+	for i in numbers.size():
+		numbers[i].visible = k > 0.0
+		numbers[i].modulate.a = k
+		numbers[i].outline_modulate.a = k
+		icons[i].visible = k > 0.0
+		icons[i].modulate = Color(1, 1, 1, k * Briefing.icon_alpha(st[i]))
 	if k <= 0.0:
 		return
 	mat.set_shader_parameter("sel_route", run.route)
 	mat.set_shader_parameter("route_len", maxf(Briefing.route_length(run.route), 0.01) if run.route >= 0 else 1.0)
 	mat.set_shader_parameter("ship_t", Briefing.table_xz(Vector2(ship_pos.x, ship_pos.z)))
-	mat.set_shader_parameter("place_state", place_states(run))
+	mat.set_shader_parameter("place_state", st)
 
 
 ## Состояние мест для шейдера, порядок — Briefing.ORDER: 0 — не на маршруте, 1 — на маршруте, 2 — пройдено,
