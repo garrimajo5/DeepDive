@@ -448,6 +448,7 @@ func step(dt: float) -> void:
 	var carry_c: Color = Samples.COLORS[samples.target.kind] if samples.target else Color.WHITE
 	rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(), carry_c)
 	rooms.set_lab(Lab.contents(samples.cargo), Lab.page_lines(samples, scanner, journal_page), time)
+	rooms.set_shelves(HoldShelves.contents(samples.cargo))
 	bridge.set_scanner_screen(scanner.screen_lines())
 	message.update(dt)
 	me.back = CrewView.own_back(walker.pitch, me.holding())   # взгляд вниз — фигура дальше позади глаза, видны ступни (#108)
