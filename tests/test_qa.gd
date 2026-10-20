@@ -137,3 +137,26 @@ func test_drain_step() -> void:   # issue #131: тревога о стеклоу
 	var q := QaScript.parse('[{"do": "drain", "s": 2.5}]')
 	eq(q.errors.size(), 0, "шаг drain известен")
 	eq(q.advance(0.1)[0], ["drain", 2.5], "стеклоуст на корпусе 2,5 с")
+
+
+func test_fps_skips_shot_frame() -> void:   # issue #169: кадр скриншота не роняет средние кадр/с
+	var r := QaRunner.new()
+	var t := 1000000
+	r._measure(t)                 # первый кадр после старта не считается
+	for i in 30:                  # 30 кадров по 20 мс = 50 к/с
+		t += 20000
+		r._measure(t)
+	eq(r.fps(), 50, "свои кадр/с: 30 кадров по 20 мс")
+	eq(roundi(r.worst_ms), 20, "худший кадр 20 мс")
+	r.worst_ms = 0.0              # как после _shot: сброс и пропуск кадра снимка
+	r.frames = 0
+	r.frames_us = 0
+	r._skip_frame = true
+	t += 900000                   # сам снимок — 0,9 с
+	r._measure(t)
+	for i in 10:
+		t += 20000
+		r._measure(t)
+	eq(r.fps(), 50, "0,9 с снимка не считаются: 50 к/с, а не 10")
+	eq(roundi(r.worst_ms), 20, "худший кадр без снимка")
+	r.free()
