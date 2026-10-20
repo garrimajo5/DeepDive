@@ -62,6 +62,10 @@ var hull: HullView          ## корпус снаружи (HullPlan), рото�
 var hull_motion := HullMesh.Motion.new()
 var light_on := true        ## прожектор включён (кнопка «Свет» за штурвалом)
 var camera: Camera3D
+## Облёт с борта в начале забега (тесты и снимки выключают: tests/run.gd, tools/shot.gd).
+static var intro := true
+var flyby := Flyby.new()   ## камера с борта: облёт в начале забега, вид при всплытии
+var flyby_cam: Camera3D
 var overlay: TouchOverlay
 var hint: Label            ## строка состояния на приборах (Status), по строкам экрана
 var message := Status.Message.new()
@@ -133,6 +137,12 @@ func _ready() -> void:
 	ship.add_child(camera)
 	camera.make_current()
 	me.smooth_lean = true   # камера в голове: наклон к посту плавный
+	flyby_cam = Camera3D.new()
+	flyby_cam.name = "Камера с борта"
+	flyby_cam.fov = Deck.FOV
+	flyby_cam.near = 0.2
+	flyby_cam.far = 400.0
+	ship.add_child(flyby_cam)
 	var ui := CanvasLayer.new()
 	ui.name = "Интерфейс"
 	add_child(ui)
@@ -228,6 +238,8 @@ func _warm_frame() -> void:
 		return
 	camera.position = Warmup.EYE
 	camera.rotation = Vector3(warm.pitch(), warm.yaw(), 0.0)
+	if not camera.current:   # облёт с борта ждёт: прогрев смотрит глазами на мостике
+		camera.make_current()
 	for root: Node in [ship, ocean, silt_view, samples_view]:
 		_warm_show(root)
 	zap_light.visible = true
@@ -308,7 +320,15 @@ func step(dt: float) -> void:
 	var hold_weld := false
 	var hold_scan := false
 	at_scanner = false
-	if pilot.seated:
+	flyby.update(0.0 if warm.active() else dt)   # облёт ждёт конца прогрева шейдеров (под шторкой)
+	if flyby.kind == Flyby.Kind.START:   # облёт в начале забега: касание — к мостику, ввод этого кадра не идёт в игру
+		helm.in_thrust = 0.0
+		helm.in_turn = 0.0
+		helm.in_vert = 0.0
+		if r.touching() or r.action_pressed:
+			flyby.stop()
+			message.clear(Flyby.START_MSG)
+	elif pilot.seated:
 		helm.in_thrust = r.move.y
 		helm.in_turn = r.move.x
 		helm.in_vert = r.vert()
@@ -691,6 +711,9 @@ func _restart() -> void:
 
 func _begin_run() -> void:
 	run.begin(time, samples.cargo.size(), scanner.scanned.size(), breach.count)
+	if intro:
+		flyby.start(Flyby.Kind.START)   # облёт корабля с борта, затем — глаза на мостике
+		say(Flyby.START_MSG)
 
 
 ## У голостола после пройденного маршрута: мнения ролей, крестовина — решение, кнопка — отложить.
@@ -718,6 +741,7 @@ func decide(choice: String) -> void:
 		return
 	var rows := run.finish(time, samples.cargo.size(), scanner.scanned.size(), breach.count, vitals.hull)
 	vote_panel.show_results(rows, run.score)
+	flyby.start(Flyby.Kind.SURFACE)   # вид с борта, пока на экране итог
 	say("Экипаж поднялся наверх: очки %d" % run.score)
 
 
@@ -742,6 +766,12 @@ func _place_ship() -> void:
 
 
 func _place_camera() -> void:
+	if flyby.active():
+		flyby_cam.transform = flyby.pose()
+		if not flyby_cam.current:
+			flyby_cam.make_current()
+	elif flyby_cam.current:   # облёт кончился — глаза на мостике
+		camera.make_current()
 	camera.position = pilot.eye(walker) + me.eye_offset()   # наклон к посту — камера в голове
 	if vitals.shake > 0.0:   # тряска после удара: детерминированная, затухает за 0,6 с
 		var a := vitals.shake / 0.6 * 0.04
@@ -826,6 +856,8 @@ func add_mate(x: float, z: float, yaw: float, role: int, look: int, seated: bool
 
 ## Для tools/shot.gd: сесть за штурвал и провести корабль перед снимком (ключи pilot, thrust, turn, vert, secs).
 func debug_setup(kv: Dictionary) -> void:
+	flyby.stop()   # снимки — с мостика; flyby=start|surface — вид с борта (age=<с> от начала)
+	message.clear(Flyby.START_MSG)
 	if kv.get("pilot", "0") == "1":
 		sit_at_helm()
 	if kv.get("light", "1") == "0":
@@ -931,6 +963,10 @@ func debug_setup(kv: Dictionary) -> void:
 		_place_ship()
 		_place_camera()
 		_update_ui()
+	if kv.has("flyby"):
+		flyby.start(Flyby.Kind.SURFACE if kv["flyby"] == "surface" else Flyby.Kind.START)
+		flyby.update(float(kv.get("age", "2.0")))
+		_place_camera()
 	if kv.has("view"):  # view=x,y,z — камера снаружи в осях корабля, смотрит на середину корпуса (снимок корпуса)
 		var v: PackedFloat64Array = kv["view"].split_floats(",")
 		var out := Camera3D.new()

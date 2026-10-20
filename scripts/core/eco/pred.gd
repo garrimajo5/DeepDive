@@ -8,7 +8,8 @@ extends EcoSystem
 ## и без паузы — бросок на корабль (9,5 м/с, до 10 с) с событием «ship», «ping» или «hear». Ближе 8,5 м к кораблю или 1,2 м к корпусу (EcoHull) — укус:
 ## EcoLink.HIT с уроном 0,12 (что он делает с кораблём — решает корабль), хищник уходит на 60 м и 25 с не нападает.
 ## Сонар (ShipState.sonar_ping → on_ping) зовёт хищников ближе 150 м проверить звук, разряд (ShipState.zap → on_zap)
-## отпугивает тех, кто ближе радиуса разряда. В гуле трубного органа (EcoOrgan) двигатели не слышно. Сквозь корпус не проходят (EcoWorld.push_out). Пиявники, станции чистки, вуали и укрытия стай придут со своими видами.
+## отпугивает тех, кто ближе радиуса разряда. В гуле трубного органа (EcoOrgan) двигатели не слышно; в чернилах
+## подушечника (EcoCushion) хищник теряет светляка и корабль. Сквозь корпус не проходят (EcoWorld.push_out). Пиявники, станции чистки, вуали и укрытия стай придут со своими видами.
 
 const ID := "pred"
 
@@ -80,6 +81,8 @@ var all: Array[Pred] = []
 var fish: EcoFish
 ## Трубные органы: в их гуле двигатели корабля не слышно (null — органов нет).
 var organs: EcoOrgan
+## Подушечники: в их чернилах не видно ни светляков, ни корабля (null — подушечников нет).
+var cushions: EcoCushion
 
 var _rnd: EcoRandom
 
@@ -178,10 +181,18 @@ static func _set_mode(pr: Pred, m: Mode, t: float) -> void:
 
 
 ## Манит ли корабль: свет или недавний сонар ближе 32 м, шум двигателей ближе 24 м (если его не глушит трубный орган).
+## Корабль в чернилах подушечника не манит вовсе (!E.shipHidden).
 func lured(world: EcoWorld, pr: Pred, d_ship: float) -> bool:
+	if ship_hidden(world):
+		return false
 	var s := world.ship
 	var seen := d_ship < REACH and (s.light_on or world.time - world.last_ping < PING_MEMORY)
 	return seen or hears_ship(world, pr, d_ship)
+
+
+## Спрятан ли корабль от хищников (E.shipHidden): в облаке чернил подушечника.
+func ship_hidden(world: EcoWorld) -> bool:
+	return cushions != null and cushions.ship_ink(world) != null
 
 
 ## Слышит ли двигатели корабля (hearsShip): ближе 24 м и быстрее 3 м/с, если корабль не в гуле трубного органа.
@@ -249,7 +260,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 				var gy := minf(_floor(world, gx, gz, GOAL_CEILING - 14.0) + _rnd.range_f(4, 14), GOAL_CEILING)
 				a.goal = Vector3(gx, gy, gz)
 			if pr.hunger > HUNT_HUNGER and fish:
-				var f := fish.nearest_fish(a.p, HUNT_RADIUS)
+				var f := fish.nearest_fish(a.p, HUNT_RADIUS, _in_ink if cushions and cushions.any_ink() else Callable())
 				if f:
 					_set_mode(pr, Mode.HUNT, 12.0)
 					pr.prey = f
@@ -262,15 +273,21 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 				_set_mode(pr, Mode.PATROL, 0.0)
 				pr.prey = null
 			else:
-				a.goal = pr.prey.agent.p + pr.prey.agent.v * 0.4
-				if a.distance_to(pr.prey.agent.p) < CATCH_DIST:
-					fish.kill(pr.prey)
-					pr.hunger = 0.0
+				var cu := cushions.ink_at(pr.prey.agent.p) if cushions else null
+				if cu:  # светляк скрылся в чернилах подушечника
+					_set_mode(pr, Mode.PATROL, _rnd.range_f(4, 8))
 					pr.prey = null
-					_set_mode(pr, Mode.EAT, 5.0)
-					world.emit(ID, "catch", a.p, _catch_text(world))
-				elif can_attack and pr.hunger > HUNT_TO_SHIP_HUNGER:
-					_start_charge(world, pr)
+					cushions.hid_fish(world, cu)
+				else:
+					a.goal = pr.prey.agent.p + pr.prey.agent.v * 0.4
+					if a.distance_to(pr.prey.agent.p) < CATCH_DIST:
+						fish.kill(pr.prey)
+						pr.hunger = 0.0
+						pr.prey = null
+						_set_mode(pr, Mode.EAT, 5.0)
+						world.emit(ID, "catch", a.p, _catch_text(world))
+					elif can_attack and pr.hunger > HUNT_TO_SHIP_HUNGER:
+						_start_charge(world, pr)
 
 		Mode.EAT:
 			speed = EAT_SPEED
@@ -287,7 +304,13 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 		Mode.CHARGE:
 			speed = CHARGE_SPEED
 			a.goal = ship
-			if d_ship < BITE_DIST or world.touches_ship(a.p, BITE_REACH):
+			if ship_hidden(world):  # корабль в чернилах подушечника — хищник его потерял
+				_set_mode(pr, Mode.RETREAT, 10.0)
+				var g := a.p + Vector3(_rnd.range_f(-40, 40), 5.0, _rnd.range_f(-40, 40))
+				g.y = minf(g.y, GOAL_CEILING)
+				a.goal = g
+				cushions.hid_ship(world, a.p)
+			elif d_ship < BITE_DIST or world.touches_ship(a.p, BITE_REACH):
 				world.hit_ship(Species.cap(world.nm(ID)), BITE_DAMAGE, a.p)
 				world.emit(ID, "bite", a.p, _text(world, "%s укусил корпус"))
 				pr.bit_at = world.time
@@ -315,6 +338,11 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 	a.agility = 1.6 if pr.mode == Mode.HUNT or pr.mode == Mode.CHARGE else 1.1
 	a.drive(want, dt, world.ground)
 	world.push_out(a, HULL_GAP) # корпус не пускает внутрь
+
+
+## Светляк в чернилах подушечника — хищник его не видит.
+func _in_ink(f: EcoFish.Fish) -> bool:
+	return cushions != null and cushions.ink_at(f.agent.p) != null
 
 
 static func _catch_text(world: EcoWorld) -> Callable:

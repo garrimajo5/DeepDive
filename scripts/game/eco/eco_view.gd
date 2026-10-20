@@ -32,6 +32,9 @@ var bladder_view: BladderView
 ## Трубные органы: две губки, в их гуле серпохвост не слышит двигателей корабля.
 var organs: EcoOrgan
 var organ_view: OrganView
+## Подушечники: две подушки у стай светляков, от касания — облако чернил, в нём серпохвост теряет стаю и корабль.
+var cushions: EcoCushion
+var cushion_view: CushionView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -45,6 +48,7 @@ var ground: Callable:
 		_rebuild_ferns()
 		_rebuild_bladders()
 		_rebuild_organs()
+		_rebuild_cushions()
 
 
 func _init() -> void:
@@ -67,11 +71,14 @@ func _init() -> void:
 	bladders = world.add(EcoBladder.new(fish)) as EcoBladder
 	organs = world.add(EcoOrgan.new()) as EcoOrgan
 	preds.organs = organs
+	cushions = world.add(EcoCushion.new(fish)) as EcoCushion
+	preds.cushions = cushions
 	_rebuild_moss()
 	_rebuild_coral()
 	_rebuild_ferns()
 	_rebuild_bladders()
 	_rebuild_organs()
+	_rebuild_cushions()
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -119,6 +126,15 @@ func _rebuild_organs() -> void:
 	add_child(organ_view)
 
 
+## Подушечники по дну мира (подушки встают на дно при сбросе мира).
+func _rebuild_cushions() -> void:
+	if cushion_view:
+		remove_child(cushion_view)
+		cushion_view.free()
+	cushion_view = CushionView.new(cushions)
+	add_child(cushion_view)
+
+
 ## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
 func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	world.ship = ship
@@ -131,4 +147,5 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	fan_view.sync(world.time)
 	fern_view.sync(world.time)
 	bladder_view.sync(world.time)
+	cushion_view.sync(world.time)
 	return world.take_link()

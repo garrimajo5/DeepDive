@@ -125,6 +125,10 @@ class Router:
 		action_pressed = false
 		light_pressed = false
 
+	## Касается ли экрана хоть один палец.
+	func touching() -> bool:
+		return not _fingers.is_empty()
+
 	func clear() -> void:
 		_fingers.clear()
 		move = Vector2i.ZERO
