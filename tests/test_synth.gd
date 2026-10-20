@@ -77,11 +77,8 @@ func test_loop_stream() -> void:
 func test_latch_hiss() -> void:   # A.alarmCue('latch'): шипение 0,25 с раз в 1,6 с, верхние частоты
 	var s := Synth.latch_samples()
 	var r := Synth.RATE
-	eq(s.size(), int(round(Synth.LATCH_PERIOD * r)), "петля — период тревоги 1,6 с")
-	var tail := 0.0
-	for i in range(int(Synth.LATCH_LEN * r), s.size()):
-		tail = maxf(tail, absf(s[i]))
-	eq(tail, 0.0, "после шипения — тишина до следующего")
+	eq(s.size(), int(Synth.LATCH_LEN * r), "только шипение 0,25 с, без тишины")
+	eq(Synth.latch().loop_mode, AudioStreamWAV.LOOP_DISABLED, "без петли: на Android петля роняла игру (#163)")
 	ok(_rms(s, int(0.02 * r), int(0.08 * r)) > 0.15, "в начале громко")
 	ok(_rms(s, int(0.2 * r), int(0.25 * r)) < _rms(s, int(0.02 * r), int(0.08 * r)) * 0.2, "к концу затихает")
 	ok(_freq(s, 0, int(0.15 * r)) > 2000.0, "шипение высокое (%d Гц)" % int(_freq(s, 0, int(0.15 * r))))
