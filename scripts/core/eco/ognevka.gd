@@ -48,6 +48,9 @@ var fans: EcoFan
 var fan_cd := 0.0
 
 var _rnd: EcoRandom
+## Веерник каждой станции (null — нет), находится при сбросе; чётность шага — рачки шагают через раз, половинами.
+var _fan_of: Array[EcoFan.Fan] = []
+var _half := 0
 
 
 ## leeches — станции чистки (EcoLeech, подключён раньше); ставит preds.ognevka = self у его хищников.
@@ -67,6 +70,10 @@ func reset(world: EcoWorld) -> void:
 	_rnd = EcoWorld.seeded_for(seed_for(world.seed_value))
 	shrimp.clear()
 	fan_cd = 0.0
+	_half = 0
+	_fan_of.clear()
+	for st in leeches.stations:
+		_fan_of.append(_find_fan(st))
 	for st in leeches.stations:
 		for k in PER_STATION:
 			var s := Shrimp.new()
@@ -76,6 +83,11 @@ func reset(world: EcoWorld) -> void:
 			s.h = _rnd.range_f(-0.6, 0.8)
 			s.p = st.top
 			shrimp.append(s)
+
+
+## Чётность рачков, шагнувших в последнем шаге (для вида: переписать только их).
+func moved_half() -> int:
+	return _half
 
 
 ## Станция, у которой корабль в укрытии (ближе 18 м к вершине), или null.
@@ -88,6 +100,10 @@ func shelter(pos: Vector3) -> EcoLeech.Station:
 
 ## Веерник станции (ближе 10 м к подножию огнецвета) или null.
 func fan_at(st: EcoLeech.Station) -> EcoFan.Fan:
+	return _fan_of[st.index] if st.index < _fan_of.size() else null
+
+
+func _find_fan(st: EcoLeech.Station) -> EcoFan.Fan:
 	if fans == null:
 		return null
 	var base := st.top - Vector3(0, EcoLeech.TOP, 0)
@@ -100,7 +116,9 @@ func fan_at(st: EcoLeech.Station) -> EcoFan.Fan:
 func step(world: EcoWorld, dt: float) -> void:
 	var t := world.time
 	var ps := leeches.preds()
-	for k in shrimp.size():
+	_half ^= 1
+	var sdt := dt * 2.0  # каждый рачок шагает через шаг мира: половина за шаг (бюджет кадра, issue #77)
+	for k in range(_half, shrimp.size(), 2):
 		var s := shrimp[k]
 		var st := leeches.stations[s.station]
 		var a := t * SPIN + s.phase
@@ -114,7 +132,7 @@ func step(world: EcoWorld, dt: float) -> void:
 		else:
 			goal = st.top + Vector3(cos(a) * s.r, s.h + sin(t * 3 + s.phase) * 0.15, sin(a) * s.r)
 		var was := s.p
-		s.p = s.p.lerp(goal, minf(1.0, dt * FOLLOW))
+		s.p = s.p.lerp(goal, minf(1.0, sdt * FOLLOW))
 		var d := s.p - was
 		s.dir = d.normalized() if d.length_squared() > 1e-8 else Vector3(cos(a + PI / 2), 0, sin(a + PI / 2))
 	fan_cd -= dt

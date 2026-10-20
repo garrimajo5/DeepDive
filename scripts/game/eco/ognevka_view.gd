@@ -28,7 +28,7 @@ func _init(system: EcoOgnevka) -> void:
 	mesh.multimesh = mm
 	mesh.custom_aabb = AABB(Vector3(-400, -200, -400), Vector3(800, 400, 800))
 	add_child(mesh)
-	sync()
+	sync(true)
 
 
 static func build() -> CapsuleMesh:
@@ -44,20 +44,28 @@ static func build() -> CapsuleMesh:
 	return m
 
 
-## Капсула вдоль хода рачка (ось капсулы — Y меша — повёрнута в направление dir).
+## Капсула вдоль хода рачка: ось капсулы (Y меша) — по направлению dir.
 static func place(s: EcoOgnevka.Shrimp) -> Transform3D:
-	var d := s.dir
-	var up := Vector3.UP if absf(d.y) < 0.99 else Vector3.RIGHT
-	return Transform3D(Basis.looking_at(d, up) * Basis(Vector3.RIGHT, PI / 2), s.p)
+	var y := s.dir
+	var x := y.cross(Vector3.UP)
+	if x.length_squared() < 1e-6:
+		x = Vector3.RIGHT
+	x = x.normalized()
+	return Transform3D(Basis(x, y, x.cross(y)), s.p)
 
 
-func sync() -> void:
+## Переписывает только рачков, шагнувших в этом шаге мира (EcoOgnevka шагает их половинами); all — всех.
+func sync(all := false) -> void:
 	var mm := mesh.multimesh
 	var n := mini(ognevka.shrimp.size(), mm.instance_count)
-	placed.resize(n)
-	_buffer.resize(mm.instance_count * 12)
-	_buffer.fill(0.0)
-	for i in n:
+	if placed.size() != n or _buffer.size() != mm.instance_count * 12:
+		placed.resize(n)
+		_buffer.resize(mm.instance_count * 12)
+		_buffer.fill(0.0)
+		all = true
+	var from := 0 if all else ognevka.moved_half()
+	var stride := 1 if all else 2
+	for i in range(from, n, stride):
 		var x := place(ognevka.shrimp[i])
 		placed[i] = x
 		var b := x.basis

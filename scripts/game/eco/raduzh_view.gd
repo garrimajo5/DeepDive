@@ -113,11 +113,24 @@ static func build_halo() -> QuadMesh:
 
 
 ## Расставить гребневиков в момент t (время мира); корпус корабля — в ship_pos с курсом ship_yaw.
-func sync(t: float, ship_pos: Vector3, ship_yaw: float) -> void:
+## Стая дальше FAR от корабля без вспышки переписывается раз в FAR_EVERY кадров, стаи — вразнобой (бюджет кадра,
+## issue #77/#133: дальних в тумане не разглядеть).
+const FAR := EcoFish.FAR
+const FAR_EVERY := 3
+
+var _frame := 0
+
+
+## all — переписать все стаи сразу.
+func sync(t: float, ship_pos: Vector3, ship_yaw: float, all := false) -> void:
 	var n := bodies.multimesh.instance_count
+	var full := all or body_buffer.size() != n * STRIDE_C
 	body_buffer.resize(n * STRIDE_C)
 	halo_buffer.resize(n * STRIDE_C)
+	_frame += 1
 	for sw in raduzh.swarms:
+		if not full and not due(sw, ship_pos, _frame):
+			continue
 		var gg := sw.glow * sw.glow * HALO_K
 		for k in EcoRaduzh.PER_SWARM:
 			var j := (sw.index * EcoRaduzh.PER_SWARM + k) * STRIDE_C
@@ -133,6 +146,11 @@ func sync(t: float, ship_pos: Vector3, ship_yaw: float) -> void:
 			_color(halo_buffer, j + STRIDE, c * gg)
 	bodies.multimesh.buffer = body_buffer
 	halos.multimesh.buffer = halo_buffer
+
+
+## Переписать ли стаю в этом кадре: близкая или вспыхнувшая — всегда, дальняя — в свой кадр из трёх.
+static func due(sw: EcoRaduzh.Swarm, ship_pos: Vector3, frame: int) -> bool:
+	return sw.glow > 0.0 or sw.c.distance_to(ship_pos) < FAR or (frame + sw.index) % FAR_EVERY == 0
 
 
 static func _put(buf: PackedFloat32Array, i: int, b: Basis, o: Vector3) -> void:
