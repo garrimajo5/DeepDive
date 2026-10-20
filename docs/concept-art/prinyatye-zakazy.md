@@ -231,3 +231,10 @@ y — высота, лёд на y = 0, метры. Упоминания Unity о
 нижняя челюсть 745 треугольников; в игре — `models/serpohvost-telo.glb`, `serpohvost-hvost.glb`,
 `serpohvost-chelyust.glb`. Стыки и оси (хвост ±35° по Y, челюсть до −35° по X) — `serpohvost.md`, раздел MOD-011;
 превью — `serpohvost-modeli.png`. Ставит в сцену задача потока Б «Серпохвосты».
+
+## MOD-014 Щиток и рычаг разряда — принято
+- Исходник: ART-015, `razryad-shchitok.png`, решения — `razryad.md`.
+
+**Принято 20.10.2026** (PR #73, папка `art/MOD-014-razryad`): две GLB — щиток 1 124 (шкала — маска emission),
+рычаг 620 треугольников — `models/razryad-shchitok.glb`, `razryad-rychag.glb`; места и ход — `razryad.md`,
+раздел MOD-014; превью — `razryad-modeli.png`. Ставит в сцену задача «Рычаг разряда по концепту ART-015».
