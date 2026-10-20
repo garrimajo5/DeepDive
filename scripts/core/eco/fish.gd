@@ -22,6 +22,8 @@ const HIDE_SPEED := 1.0
 const ALARM_SPEED := 6.5
 const CALM_SPEED := 2.4
 const MIN_SPEED := 0.5
+## Запас до корпуса корабля, м (S.pushOut(f.p, 0.3)).
+const HULL_GAP := 0.3
 
 ## Дома стай: шесть мест кораллов (W.coralSpots), ближайших к (0, 55) и разнесённых больше чем на 35 м, плюс 1,5 м
 ## вверх — числа браузерной версии (в Unity x со знаком минус). Дом на 3,5 м над дном (Seabed.height).
@@ -262,6 +264,7 @@ func _step_fish(world: EcoWorld, f: Fish, dt: float, t: float) -> void:
 	elif sp < MIN_SPEED:
 		a.v *= MIN_SPEED / (sp + 1e-3)
 	a.p += a.v * dt
+	world.push_out(a, HULL_GAP) # сквозь корпус не проплывают
 	if has_ground and a.p.y < h + a.clearance:
 		a.p.y = h + a.clearance
 	a.p.x = clampf(a.p.x, -EcoAgent.EDGE, EcoAgent.EDGE)
