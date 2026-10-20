@@ -1,0 +1,147 @@
+class_name CushionView
+extends Node3D
+## Подушечник в сцене (initCushions в js/creatures.js; ART-004): подушки — один MultiMesh из полусферы 1,1 × 0,75 × 1 м
+## с бархатными полипами (цвет по высоте: розовые у дна, светлее к макушке, слабое своё свечение #1a0a14), сжатая
+## подушка ниже и уже. Облака чернил — второй MultiMesh из плоских тёмных пятен 2,4 м лицом к камере (смешивание
+## по прозрачности, без записи глубины): тёмно-синие, тают последние 2 с. Стоит на слое отмели (OceanView.LAYER_WORLD).
+
+const INK_SHADER := """
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+varying vec4 tint;
+void vertex() {
+	tint = COLOR;
+	// пятно лицом к камере: размер — из масштаба экземпляра
+	float s = length(MODEL_MATRIX[0].xyz);
+	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * s, INV_VIEW_MATRIX[1] * s, INV_VIEW_MATRIX[2] * s,
+		MODEL_MATRIX[3]);
+}
+void fragment() {
+	float d = length(UV - vec2(0.5)) * 2.0;
+	float a = clamp(1.0 - d, 0.0, 1.0);
+	ALBEDO = tint.rgb;
+	ALPHA = tint.a * a * a;
+}
+"""
+
+## Подушка: полусфера радиуса 1 м, сплюснутая по ширине и высоте (g.scale(1.1, 0.75, 1)).
+const SHAPE := Vector3(1.1, 0.75, 1.0)
+const SEGMENTS := 14
+const RINGS := 4
+const GLOW := Color("1a0a14")
+## Пятно чернил 2,4 м, цвет (0,05, 0,04, 0,12) и непрозрачность 0,85 — как точки в браузере.
+const INK_SIZE := 2.4
+const INK := Color(0.05, 0.04, 0.12)
+const INK_ALPHA := 0.85
+## Чисел на экземпляр: transform 3 × 4, у чернил ещё цвет (4).
+const STRIDE := 12
+const STRIDE_C := 16
+
+var cushions: EcoCushion
+var pads: MultiMeshInstance3D
+var ink: MultiMeshInstance3D
+## Последние буферы подушек и чернил (для тестов).
+var pad_buffer := PackedFloat32Array()
+var ink_buffer := PackedFloat32Array()
+
+
+func _init(system: EcoCushion) -> void:
+	cushions = system
+	name = "Подушечник"
+	var n := cushions.cushions.size()
+	pads = _instance("Подушки", build_pad(), n, false)
+	ink = _instance("Чернила", build_ink(), n * EcoCushion.INK_N, true)
+	sync(0.0)
+
+
+func _instance(n: String, mesh: Mesh, count: int, colors: bool) -> MultiMeshInstance3D:
+	var mi := MultiMeshInstance3D.new()
+	mi.name = n
+	mi.layers = OceanView.LAYER_WORLD
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = colors
+	mm.mesh = mesh
+	mm.instance_count = count
+	mi.multimesh = mm
+	mi.custom_aabb = AABB(Vector3(-400, -200, -400), Vector3(800, 400, 800))
+	add_child(mi)
+	return mi
+
+
+## Полусфера подушки с цветом вершин по высоте (0,85 − 0,2y, 0,45 + 0,25y, 0,6 + 0,3y; y — высота сферы до сплющивания).
+static func build_pad() -> ArrayMesh:
+	var sm := SphereMesh.new()
+	sm.radius = 1.0
+	sm.height = 1.0
+	sm.is_hemisphere = true
+	sm.radial_segments = SEGMENTS
+	sm.rings = RINGS
+	var arr := sm.get_mesh_arrays()
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var nr: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+	var col := PackedColorArray()
+	for i in v.size():
+		var y := clampf(v[i].y, 0.0, 1.0)
+		col.append(Color(0.85 - y * 0.2, 0.45 + y * 0.25, 0.6 + y * 0.3))
+		v[i] = v[i] * SHAPE
+		nr[i] = (nr[i] / SHAPE).normalized()
+	arr[Mesh.ARRAY_VERTEX] = v
+	arr[Mesh.ARRAY_NORMAL] = nr
+	arr[Mesh.ARRAY_COLOR] = col
+	arr[Mesh.ARRAY_TANGENT] = null
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.roughness = 0.95
+	mat.emission_enabled = true
+	mat.emission = GLOW
+	m.surface_set_material(0, mat)
+	return m
+
+
+static func build_ink() -> QuadMesh:
+	var m := QuadMesh.new()
+	m.size = Vector2.ONE * INK_SIZE
+	var mat := ShaderMaterial.new()
+	var sh := Shader.new()
+	sh.code = INK_SHADER
+	mat.shader = sh
+	m.material = mat
+	return m
+
+
+## Расставить подушки и облака в момент t (время мира).
+func sync(t: float) -> void:
+	pad_buffer.resize(pads.multimesh.instance_count * STRIDE)
+	ink_buffer.resize(ink.multimesh.instance_count * STRIDE_C)
+	for cu in cushions.cushions:
+		var b := Basis(Vector3.UP, float(cu.index)) * Basis.from_scale(EcoCushion.squash(cu))
+		_put(pad_buffer, cu.index * STRIDE, Transform3D(b, cu.base))
+		var c := Color(INK.r, INK.g, INK.b, INK_ALPHA * EcoCushion.ink_fade(cu))
+		for j in EcoCushion.INK_N:
+			var i := (cu.index * EcoCushion.INK_N + j) * STRIDE_C
+			if cu.inked():
+				_put(ink_buffer, i, Transform3D(Basis.IDENTITY, EcoCushion.ink_point(cu, j, t)))
+			else:
+				_put(ink_buffer, i, Transform3D(Basis.from_scale(Vector3.ZERO), cu.ink_c))
+			ink_buffer[i + 12] = c.r; ink_buffer[i + 13] = c.g; ink_buffer[i + 14] = c.b; ink_buffer[i + 15] = c.a
+	pads.multimesh.buffer = pad_buffer
+	ink.multimesh.buffer = ink_buffer
+
+
+static func _put(buf: PackedFloat32Array, i: int, tr: Transform3D) -> void:
+	var b := tr.basis
+	var o := tr.origin
+	buf[i] = b.x.x; buf[i + 1] = b.y.x; buf[i + 2] = b.z.x; buf[i + 3] = o.x
+	buf[i + 4] = b.x.y; buf[i + 5] = b.y.y; buf[i + 6] = b.z.y; buf[i + 7] = o.y
+	buf[i + 8] = b.x.z; buf[i + 9] = b.y.z; buf[i + 10] = b.z.z; buf[i + 11] = o.z
+
+
+## Расстановка экземпляра n из буфера с шагом stride.
+static func transform_at(buf: PackedFloat32Array, n: int, stride: int = STRIDE_C) -> Transform3D:
+	var i := n * stride
+	return Transform3D(Vector3(buf[i], buf[i + 4], buf[i + 8]), Vector3(buf[i + 1], buf[i + 5], buf[i + 9]),
+		Vector3(buf[i + 2], buf[i + 6], buf[i + 10]), Vector3(buf[i + 3], buf[i + 7], buf[i + 11]))
