@@ -66,3 +66,27 @@ func test_model_replaces_capsules() -> void:
 	main.step(1.0 / 30.0)
 	eq(cv.figures[0].position, Vector3.ZERO, "сидя — на месте, руки на штурвале")
 	main.stand_up()
+
+
+func test_hands_on_posts_in_scene() -> void:
+	main.walker.x = -3.9
+	main.walker.z = -2.0
+	main.open_power()
+	main.power.sel = 4
+	main.step(1.0 / 30.0)
+	var g := CrewHands.energy(4, main.reactor.share[4] / float(Reactor.MAX))
+	ok(main.me.hands[1].is_equal_approx(g[1]), "у пульта: правая на ползунке прожектора")
+	var hand: Vector3 = main.crew_view.shown[0]["hand_r"]
+	ok(hand.distance_to(g[1]) < 0.08, "модель дотянулась до ползунка (%.3f м)" % hand.distance_to(g[1]))
+	eq(main.crew_view.figures[0].position, Vector3.ZERO, "с руками на посте модель не сдвинута назад")
+	main.close_power()
+	main.step(1.0 / 30.0)
+	ok(not main.me.holding(), "отошёл от пульта — руки свободны")
+	main.walker.x = 0.0
+	main.walker.z = 0.5
+	main.use_post("sonar")
+	main.step(1.0 / 30.0)
+	ok(main.me.hands[0].is_finite() and main.me.hands[0].z > BridgeProps.TABLE_Z, "импульс — ладони на голостоле")
+	for i in int(CrewHands.PRESS * 30.0) + 2:
+		main.step(1.0 / 30.0)
+	ok(not main.me.holding(), "через %.1f с руки свободны" % CrewHands.PRESS)
