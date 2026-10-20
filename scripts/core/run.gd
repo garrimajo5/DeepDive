@@ -157,7 +157,8 @@ func go_deeper() -> String:
 	route = -1
 	visited.clear()
 	done = false
-	return "Глубже: %d-й спуск. Новый маршрут — у голостола" % (depth + 1)
+	return "Глубже: %d-й спуск, хищники чутче на %d %%. Маршрут — у голостола" % [depth + 1,
+		roundi(depth * EcoLink.PRED_PER_DIVE * 100.0)]
 
 
 ## «Наверх»: забег окончен, считаем очки (js/run.js R.finish). Строки итога — results().
