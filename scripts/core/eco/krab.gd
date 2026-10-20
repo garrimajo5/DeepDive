@@ -6,7 +6,7 @@ extends EcoSystem
 ## и «armor») и вплетает две иглы в панцирь (до 10), потом возвращается в нору. Потому возле норы ленточник
 ## остаётся густым. Корабль ближе 12 м к норе — краб встаёт у входа и поднимает клешни (наблюдение «guard»
 ## раз в 40 с), ближе 7 м — раз в 8 с зажимает корпус (EcoLink.HIT 0,03); дальше 14 м — уходит в нору.
-## Скальник (будущий модуль) пугает краба — scared: не выходит на охоту и удирает в нору бегом.
+## Скальник (EcoSkalnik) пугает краба — scared: не выходит на охоту и удирает в нору бегом.
 
 const ID := "krab"
 ## Нора — у этой рощи ленточника (G2 − 1: вторая), отступ от края рощи наружу.
@@ -199,12 +199,12 @@ func targets(_world: EcoWorld, out: Array[Dictionary]) -> void:
 		out.append(EcoWorld.target(ID, crab.pos, 0.9))
 
 
-## Напугать краба на seconds секунд (скальник): бросает охоту и удирает в нору.
+## Напугать краба на seconds секунд (скальник): бросает охоту (и недоколотого ежа) и удирает в нору.
 func scare(seconds: float) -> void:
 	if crab == null:
 		return
 	crab.scared = maxf(crab.scared, seconds)
-	if crab.state == State.HUNT:
+	if crab.state == State.HUNT or crab.state == State.CRACK:
 		crab.state = State.HOME
 		crab.target = -1
 
