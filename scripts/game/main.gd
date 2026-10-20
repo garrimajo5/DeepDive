@@ -40,6 +40,7 @@ var curtain: Control
 var _warm_drawn := false            ## прошлый шаг показал взгляд прогрева
 var _warm_shown: Array[Node] = []   ## что прогрев показал на кадр — вернуть скрытым
 var _warm_mates: Array = []         ## члены экипажа на время прогрева (каждая внешность)
+var _warm_emit: Array = []          ## частицы, выпущенные прогревом: [узел, прежний preprocess]
 var hit_flash: ColorRect
 var visor: ColorRect          ## щиток сварщика: затемнение, пока свой игрок варит (Breach.VISOR)
 var sonar_view: SonarView
@@ -239,18 +240,45 @@ func _begin_warmup() -> void:
 	for look in CrewRig.MODELS.size():
 		var at: Vector2 = Warmup.MATE_AT[look % Warmup.MATE_AT.size()]
 		_warm_mates.append(add_mate(at.x, at.y, PI, Crew.Role.PILOT, look))
+	_warm_particles(true)
 	_warm_frame()
+
+
+## Частицы корабля (пар вентиля, струя, брызги и искры пробоины) на время прогрева выпущены сразу (preprocess) —
+## их шейдер собирается под шторкой, а не при первом сбросе пара (issue #159). Конец прогрева — снова пусто.
+func _warm_particles(on: bool) -> void:
+	if on:
+		for p: CPUParticles3D in ship.find_children("*", "CPUParticles3D", true, false):
+			if not p.emitting:
+				_warm_emit.append([p, p.preprocess])
+				p.preprocess = p.lifetime
+				p.restart()
+		return
+	for e in _warm_emit:
+		var p: CPUParticles3D = e[0]
+		if is_instance_valid(p):
+			p.preprocess = e[1]
+			p.restart()
+			p.emitting = false
+	_warm_emit.clear()
 
 
 ## Конец шага: пока идёт прогрев — взгляд камеры, скрытые детали корабля на кадр, вспышка разряда, прожектор.
 func _warm_frame() -> void:
 	if not warm.active():
 		return
-	camera.position = Warmup.EYE
-	camera.rotation = Vector3(warm.pitch(), warm.yaw(), 0.0)
-	if not camera.current:   # облёт с борта ждёт: прогрев смотрит глазами на мостике
-		camera.make_current()
-	for root: Node in [ship, ocean, silt_view, samples_view]:
+	var k := warm.outside()
+	if k >= 0:   # кадр снаружи: камера с борта в точке облёта смотрит на корпус (облёт ещё ждёт)
+		var p: Vector3 = Flyby.START_PATH[k]
+		flyby_cam.transform = Transform3D(Basis.looking_at(Flyby.LOOK_AT - p), p)
+		if not flyby_cam.current:
+			flyby_cam.make_current()
+	else:
+		camera.position = Warmup.EYE
+		camera.rotation = Vector3(warm.pitch(), warm.yaw(), 0.0)
+		if not camera.current:   # облёт с борта ждёт: прогрев смотрит глазами на мостике
+			camera.make_current()
+	for root: Node in [ship, ocean, silt_view, samples_view, vote_panel.get_parent()]:
 		_warm_show(root)
 	zap_light.visible = true
 	zap_light.omni_range = Warmup.zap_radius()
@@ -297,6 +325,7 @@ func _warm_restore() -> void:
 			crew.erase(m)
 		_warm_mates.clear()
 		crew_view.set_members(crew, me)
+		_warm_particles(false)
 		curtain.get_parent().queue_free()
 		curtain = null
 		zap_light.visible = false
