@@ -10,7 +10,8 @@ extends EcoSystem
 ## Сонар (ShipState.sonar_ping → on_ping) зовёт хищников ближе 150 м проверить звук, разряд (ShipState.zap → on_zap)
 ## отпугивает тех, кто ближе радиуса разряда. В гуле трубного органа (EcoOrgan) двигатели не слышно; в чернилах
 ## подушечника (EcoCushion) хищник теряет светляка и корабль. Пиявник (EcoLeech, поле leeches) делает хищника
-## медленнее и злее и гонит на станцию чистки (режим CLEAN). Сквозь корпус не проходят (EcoWorld.push_out). Вуали
+## медленнее и злее и гонит на станцию чистки (режим CLEAN). Вспышка радужников (EcoRaduzh, поле raduzh) зовёт
+## хищника издалека. Сквозь корпус не проходят (EcoWorld.push_out). Вуали
 ## и укрытия стай придут со своими видами.
 
 const ID := "pred"
@@ -80,6 +81,8 @@ class Pred:
 	var leech := false
 	var leech_cd := 0.0
 	var angry_cd := 0.0
+	## Пауза сообщения «заметил вспышку радужников» (flareCd).
+	var flare_cd := 0.0
 	var station := -1
 
 
@@ -92,6 +95,8 @@ var organs: EcoOrgan
 var cushions: EcoCushion
 ## Пиявники и станции чистки (null — пиявников нет; ставит EcoLeech.new).
 var leeches: EcoLeech
+## Радужники: их вспышка в луче выдаёт корабль издалека (null — радужников нет).
+var raduzh: EcoRaduzh
 
 var _rnd: EcoRandom
 
@@ -258,12 +263,15 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 	pr.hunger = minf(1.0, pr.hunger + dt * rate)
 	pr.cooldown -= dt
 	pr.angry_cd -= dt
+	pr.flare_cd -= dt
 	var ship := world.ship.pos
 	var d_ship := a.distance_to(ship)
 	var at_station := leeches.near_station(a.p) != null if leeches else false
 	var lure := lured(world, pr, d_ship)  # и голодного, и сытого: гул органа прячет корабль от каждого
 	var can_attack := pr.cooldown <= 0.0 and pr.hunger > (EcoLeech.ATTACK_HUNGER if pr.leech else ATTACK_HUNGER) \
 		and lure and not at_station
+	if raduzh:
+		_step_flare(world, pr, d_ship)
 	if leeches:
 		_step_leech(world, pr, dt, can_attack, d_ship, at_station)
 
@@ -370,6 +378,31 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 	a.agility = 1.6 if pr.mode == Mode.HUNT or pr.mode == Mode.CHARGE else 1.1
 	a.drive(want, dt, world.ground)
 	world.push_out(a, HULL_GAP) # корпус не пускает внутрь
+
+
+## Вспышка радужников видна издалека: патрульный или проверяющий звук хищник дальше своего чутья, но ближе 110 м
+## к кораблю, без паузы после укуса, плывёт к кораблю проверить (25 с); наблюдение «betray» — раз в 30 с на хищника.
+## Корабль в чернилах подушечника вспышка не выдаёт.
+func _step_flare(world: EcoWorld, pr: Pred, d_ship: float) -> void:
+	if not raduzh.flare_seen(d_ship, reach(pr)) or ship_hidden(world) or pr.cooldown > 0.0:
+		return
+	if pr.mode != Mode.PATROL and pr.mode != Mode.INVESTIGATE:
+		return
+	_set_mode(pr, Mode.INVESTIGATE, 25.0)
+	pr.agent.goal = world.ship.pos
+	if pr.flare_cd <= 0.0:
+		pr.flare_cd = EcoRaduzh.FLARE_CD
+		world.emit(EcoRaduzh.ID, "betray", pr.agent.p, _flare_text(world))
+
+
+## «Серпохвост заметил вспышку радужников и плывёт к кораблю» — оба названия в момент показа.
+static func _flare_text(world: EcoWorld) -> Callable:
+	var wr: WeakRef = weakref(world)
+	return func() -> String:
+		var w: EcoWorld = wr.get_ref()
+		var p := w.nm(ID) if w else Species.called(ID)
+		var r := w.nm(EcoRaduzh.ID, Species.Case.GEN) if w else Species.called(EcoRaduzh.ID, Species.Case.GEN)
+		return "%s заметил вспышку %s и плывёт к кораблю" % [Species.cap(p), r]
 
 
 ## Пиявник: злость издалека, заражение здорового (не у станции), сытый заражённый плывёт на чистку.
