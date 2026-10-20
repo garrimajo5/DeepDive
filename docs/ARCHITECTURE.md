@@ -58,6 +58,7 @@ Main (main.gd)                    — шаг игры, пилот, посты, �
 | Экипаж (фигуры игроков) | `crew.gd` | `crew_view.gd` | А |
 | Мостик и модели | `bridge_plan.gd`, `bridge_props.gd` | `bridge_view.gd` | А |
 | Реактор и энергия | `reactor.gd`, `engine_room.gd` | `power_panel.gd`, `rooms_view.gd` | А |
+| Пробоина (событие) | `breach.gd` | `breach_view.gd` | А |
 | Корпус снаружи | `hull_plan.gd`, `hull_mesh.gd` | `hull_view.gd` | А |
 | Прожектор | `searchlight.gd` | `searchlight_view.gd`, `shaders/beam.gdshader` | А |
 | Приборы | `status.gd` | `main.gd` | А |

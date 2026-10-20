@@ -109,11 +109,13 @@ class Walker:
 		return Vector2(cos(yaw), -sin(yaw))
 
 	## Крестовина: m.y — вперёд/назад, m.x — вправо/влево. Вдоль стены скользит по одной оси.
+	var speed_k := 1.0   ## множитель шага (вода по щиколотку — Breach.slow)
+
 	func walk(m: Vector2, dt: float) -> void:
 		if m.length() <= 0.0:
 			return
 		m = m.normalized()
-		var d := (forward() * m.y + right() * m.x) * SPEED * dt
+		var d := (forward() * m.y + right() * m.x) * SPEED * speed_k * dt
 		if stand.call(x + d.x, z):
 			x += d.x
 		if stand.call(x, z + d.y):
