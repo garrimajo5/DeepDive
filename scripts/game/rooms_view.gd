@@ -21,6 +21,7 @@ var panel_lid: Node3D              ## крышка щитка «Аварийны
 var steam: CPUParticles3D          ## пар из вентиля
 var _button_mat: StandardMaterial3D
 var lab_samples: Array[MeshInstance3D] = []   ## образцы в колбах (Lab.contents), светятся цветом вида
+const JOURNAL_TEXT := Color("67DDEB")
 var journal_text: Label3D          ## экран стойки журнала (Lab.journal_lines)
 var _lab_kinds: Array[int] = []
 ## Полки трюма (MOD-017, HoldShelves): банки — металл и стекло — и образцы в них, по MultiMesh на всё (3 вызова).
@@ -96,6 +97,11 @@ func _add_reactor() -> void:
 
 
 ## Плафоны отсеков × k (мигание, Vitals.lamp_k). Свет реактора и тревоги пробоины не мигают.
+## Яркость экрана журнала при помехах (Vitals.screen_k).
+func set_journal_k(k: float) -> void:
+	journal_text.modulate = Color(JOURNAL_TEXT.r * k, JOURNAL_TEXT.g * k, JOURNAL_TEXT.b * k)
+
+
 func set_lamps(k: float) -> void:
 	for l in lamps:
 		l.light_energy = LAMP_ENERGY * k
@@ -270,7 +276,7 @@ func _add_lab() -> void:
 	journal_text.font_size = 26   # 8 строк сводки и карточка вида с заметкой помещаются на экран
 	journal_text.outline_size = 0
 	journal_text.pixel_size = 0.0016
-	journal_text.modulate = Color("67DDEB")
+	journal_text.modulate = JOURNAL_TEXT
 	journal_text.shaded = false
 	journal_text.double_sided = false
 	journal_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT

@@ -309,6 +309,9 @@ func _flicker(dt: float) -> void:
 	bridge.set_lamps(k)
 	rooms.set_lamps(k)
 	searchlight.set_flicker(k)
+	bridge.set_screens(Vector3(vitals.screen_k(time, Vitals.Screen.HELM_L), vitals.screen_k(time, Vitals.Screen.HELM_C),
+		vitals.screen_k(time, Vitals.Screen.HELM_R)), vitals.screen_k(time, Vitals.Screen.SCANNER))
+	rooms.set_journal_k(vitals.screen_k(time, Vitals.Screen.JOURNAL))   # помехи экранов при стеклоусте (ART-025)
 	if vitals.hiss(dt):
 		drain_sound.play()
 		drain_hisses += 1
