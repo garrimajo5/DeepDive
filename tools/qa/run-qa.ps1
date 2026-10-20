@@ -5,8 +5,10 @@
 #   run-qa.ps1          — APK из релиза apk-latest на эмуляторе Pixel_8 (ровно то, что собрал CI из main)
 #   run-qa.ps1 -Pc      — та же игра из клона в Godot на этом компьютере (D:\Godot), без эмулятора: быстро
 #                         проверить сценарий и картинку; телефонное (касания, частоту кадров) смотреть на эмуляторе
+#   -Pr <номер>         — проверить фикс из открытой PR ДО слияния: берёт APK из артефакта deepdive-apk
+#                         последнего прогона CI этой PR (нужен gh), ставит на эмулятор и гоняет сценарий
 #   -Force              — прогнать APK, даже если коммит тот же; -Scenario <файл> — свой сценарий
-param([switch]$Pc, [switch]$Force, [string]$Scenario)
+param([switch]$Pc, [switch]$Force, [string]$Scenario, [int]$Pr)
 $ErrorActionPreference = 'Continue'
 $repo  = 'D:\AI\DeepDive'
 $out   = 'D:\AI\qa-build'
@@ -43,15 +45,30 @@ if ($Pc) {
   exit 0
 }
 
-# ---- Эмулятор и APK из релиза ----
+# ---- Эмулятор; APK из релиза apk-latest, с -Pr — из артефакта прогона PR ----
 $sdk = "$env:LOCALAPPDATA\Android\Sdk"
 $adb = "$sdk\platform-tools\adb.exe"
-$rel = Invoke-RestMethod 'https://api.github.com/repos/garrimajo5/DeepDive/releases/tags/apk-latest' -Headers @{ 'User-Agent' = 'run-qa' }
-$head = if ($rel.body -match 'коммит ([0-9a-f]{7})') { $Matches[1] } else { $rel.published_at }
-$last = if (Test-Path "$out\last-commit.txt") { (Get-Content "$out\last-commit.txt").Trim() } else { '' }
-if ($head -eq $last -and -not $Force) { Write-Output "NO_CHANGES $head"; exit 0 }
-$asset = $rel.assets | Where-Object name -eq 'DeepDive.apk' | Select -First 1
-Invoke-WebRequest $asset.browser_download_url -OutFile $apk -Headers @{ 'User-Agent' = 'run-qa' }
+if ($Pr) {
+  # APK из артефакта deepdive-apk последнего прогона CI этой PR (REST, чтобы не зависеть от GraphQL)
+  $sha = (gh api "repos/garrimajo5/DeepDive/pulls/$Pr" --jq '.head.sha').Trim()
+  if (-not $sha) { Write-Output "NO_PR #$Pr"; exit 1 }
+  $rid = (gh api "repos/garrimajo5/DeepDive/actions/runs?head_sha=$sha&per_page=1" --jq '.workflow_runs[0].id').Trim()
+  if (-not $rid) { Write-Output "NO_RUN: для PR #$Pr ($($sha.Substring(0,7))) прогона CI ещё нет"; exit 1 }
+  $dir = "$out\pr$Pr"
+  Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
+  gh run download $rid -n deepdive-apk -D $dir
+  if (-not (Test-Path "$dir\DeepDive.apk")) { Write-Output "NO_ARTIFACT: в прогоне PR #$Pr нет deepdive-apk (сборка APK не шла — в PR нет кода?)"; exit 1 }
+  $apk = "$dir\DeepDive.apk"
+  $head = "PR#$Pr $($sha.Substring(0,7))"
+} else {
+  # APK из релиза apk-latest (то, что собрал CI из main)
+  $rel = Invoke-RestMethod 'https://api.github.com/repos/garrimajo5/DeepDive/releases/tags/apk-latest' -Headers @{ 'User-Agent' = 'run-qa' }
+  $head = if ($rel.body -match 'коммит ([0-9a-f]{7})') { $Matches[1] } else { $rel.published_at }
+  $last = if (Test-Path "$out\last-commit.txt") { (Get-Content "$out\last-commit.txt").Trim() } else { '' }
+  if ($head -eq $last -and -not $Force) { Write-Output "NO_CHANGES $head"; exit 0 }
+  $asset = $rel.assets | Where-Object name -eq 'DeepDive.apk' | Select -First 1
+  Invoke-WebRequest $asset.browser_download_url -OutFile $apk -Headers @{ 'User-Agent' = 'run-qa' }
+}
 
 if (-not ((& $adb devices) -match 'emulator-\d+\s+device')) {
   Start-Process "$sdk\emulator\emulator.exe" -ArgumentList '-avd', 'Pixel_8' -WindowStyle Minimized
@@ -81,10 +98,13 @@ $errs = Select-String -Path "$run\logcat.txt" -Pattern ' E godot|SCRIPT ERROR|An
   ForEach-Object { ($_.Line -split ': ', 2)[1] } | Where-Object { $_ -and $_ -notmatch '^\s*$' } |
   Group-Object | Sort Count -Descending | ForEach-Object { "$($_.Count)x $($_.Name)" }
 
-Set-Content "$out\last-commit.txt" $head
+if (-not $Pr) { Set-Content "$out\last-commit.txt" $head }
 Write-Output "OK $head done=$done"
-Write-Output "release: $($rel.body)"
-Write-Output "previous tested: $last"
+if ($Pr) { Write-Output "PR: #$Pr (артефакт прогона CI, не релиз)" }
+else {
+  Write-Output "release: $($rel.body)"
+  Write-Output "previous tested: $last"
+}
 Write-Output 'log:'; if (Test-Path "$run\log.txt") { Get-Content "$run\log.txt" -Encoding utf8 }
 Write-Output 'errors:'; $errs | Select -First 30
 Write-Output "files: $run"
