@@ -1,0 +1,62 @@
+[
+  {
+    "file": "ikonka-obrazcy.png",
+    "bytes": 6728,
+    "alpha_bbox": [
+      33,
+      44,
+      223,
+      209
+    ],
+    "alpha_centroid": [
+      127.68221035223719,
+      127.15659725110429
+    ],
+    "visible_RGB": "#67DDEB"
+  },
+  {
+    "file": "ikonka-vidy.png",
+    "bytes": 4658,
+    "alpha_bbox": [
+      33,
+      61,
+      223,
+      198
+    ],
+    "alpha_centroid": [
+      127.45427605120982,
+      127.15003040730089
+    ],
+    "visible_RGB": "#67DDEB"
+  },
+  {
+    "file": "ikonka-mesta.png",
+    "bytes": 4616,
+    "alpha_bbox": [
+      51,
+      40,
+      205,
+      230
+    ],
+    "alpha_centroid": [
+      127.86066909575317,
+      127.98536073285857
+    ],
+    "visible_RGB": "#67DDEB"
+  },
+  {
+    "file": "ikonka-proboiny.png",
+    "bytes": 5664,
+    "alpha_bbox": [
+      28,
+      72,
+      218,
+      216
+    ],
+    "alpha_centroid": [
+      127.54899244704562,
+      127.19721056034977
+    ],
+    "visible_RGB": "#67DDEB"
+  }
+]
