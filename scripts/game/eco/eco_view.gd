@@ -56,6 +56,9 @@ var kelp_view: KelpView
 ## Кольчужник: нора у второй рощи, раскалывает шипоежей, иглы — в панцирь; щиплет корабль у норы.
 var krab: EcoKrab
 var krab_view: KrabView
+## Скальник: живой камень у норы кольчужника, в луче меняет цвет, гоняет краба, разглядывает тихий корабль.
+var skalnik: EcoSkalnik
+var skalnik_view: SkalnikView
 ## Монетники: три стайки над пятнами мха у старта, рассыпаются от сонара; глазуны в песке хватают их снизу.
 var coins: EcoCoins
 var coins_view: CoinsView
@@ -114,6 +117,7 @@ func _init() -> void:
 	kelp = world.add(EcoKelp.new(fish)) as EcoKelp
 	preds.kelp = kelp
 	krab = world.add(EcoKrab.new(kelp)) as EcoKrab
+	skalnik = world.add(EcoSkalnik.new(krab)) as EcoSkalnik
 	coins = world.add(EcoCoins.new(moss, preds)) as EcoCoins
 	coins.bladders = bladders
 	bladders.coins = coins
@@ -234,6 +238,12 @@ func _rebuild_kelp() -> void:
 		krab_view.free()
 	krab_view = KrabView.new(krab)
 	add_child(krab_view)
+	# скальник живёт у норы — встаёт заново вместе с ней
+	if skalnik_view:
+		remove_child(skalnik_view)
+		skalnik_view.free()
+	skalnik_view = SkalnikView.new(skalnik)
+	add_child(skalnik_view)
 
 
 ## Монетники и глазуны по дну мира (глазуны лежат на дне и встают заново вместе с ним).
@@ -265,5 +275,6 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	hvaten_view.sync(world.time, ship.pos, false)
 	kelp_view.sync(world.time)
 	krab_view.sync(world.time)
+	skalnik_view.sync(world.time, ship.pos)
 	coins_view.sync(world.time)
 	return world.take_link()
