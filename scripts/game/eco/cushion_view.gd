@@ -43,6 +43,8 @@ var ink: MultiMeshInstance3D
 ## Последние буферы подушек и чернил (для тестов).
 var pad_buffer := PackedFloat32Array()
 var ink_buffer := PackedFloat32Array()
+## Подушки, чьё облако в буфере ещё видно: без чернил буфер облака не пишется и не грузится заново (issue #133).
+var _ink_shown := PackedByteArray()
 
 
 func _init(system: EcoCushion) -> void:
@@ -116,20 +118,29 @@ static func build_ink() -> QuadMesh:
 ## Расставить подушки и облака в момент t (время мира).
 func sync(t: float) -> void:
 	pad_buffer.resize(pads.multimesh.instance_count * STRIDE)
+	var fresh := ink_buffer.size() != ink.multimesh.instance_count * STRIDE_C
 	ink_buffer.resize(ink.multimesh.instance_count * STRIDE_C)
+	_ink_shown.resize(cushions.cushions.size())
+	var ink_changed := fresh
 	for cu in cushions.cushions:
 		var b := Basis(Vector3.UP, float(cu.index)) * Basis.from_scale(EcoCushion.squash(cu))
 		_put(pad_buffer, cu.index * STRIDE, Transform3D(b, cu.base))
+		var inked := cu.inked()
+		if not inked and not fresh and _ink_shown[cu.index] == 0:
+			continue
+		ink_changed = true
+		_ink_shown[cu.index] = 1 if inked else 0
 		var c := Color(INK.r, INK.g, INK.b, INK_ALPHA * EcoCushion.ink_fade(cu))
 		for j in EcoCushion.INK_N:
 			var i := (cu.index * EcoCushion.INK_N + j) * STRIDE_C
-			if cu.inked():
+			if inked:
 				_put(ink_buffer, i, Transform3D(Basis.IDENTITY, EcoCushion.ink_point(cu, j, t)))
 			else:
 				_put(ink_buffer, i, Transform3D(Basis.from_scale(Vector3.ZERO), cu.ink_c))
 			ink_buffer[i + 12] = c.r; ink_buffer[i + 13] = c.g; ink_buffer[i + 14] = c.b; ink_buffer[i + 15] = c.a
 	pads.multimesh.buffer = pad_buffer
-	ink.multimesh.buffer = ink_buffer
+	if ink_changed:
+		ink.multimesh.buffer = ink_buffer
 
 
 static func _put(buf: PackedFloat32Array, i: int, tr: Transform3D) -> void:
