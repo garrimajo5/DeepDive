@@ -4,7 +4,7 @@
 Прежние варианты (браузерный прототип и Unity) лежат в замороженном репозитории `garrimajo5/pogrujenie`: оттуда берём решения
 и числа, но не код один в один. `js/…` в комментариях — файлы браузерного прототипа (`archive/web/js/…` в pogrujenie),
 `Core/…cs` — Unity-версия там же. Клонировать при переносе: `git clone --depth 1 https://github.com/garrimajo5/pogrujenie`.
-Контекст: `docs/context.txt`, бестиарий на 100 видов: `docs/bestiary.md`, концепт-арт: `docs/concept-art/`,
+Мир (утверждён владельцем, главный источник по лору): `docs/world.md`. Контекст: `docs/context.txt`, бестиарий на 100 видов: `docs/bestiary.md`, концепт-арт: `docs/concept-art/`,
 заказы художнику и ошибки — GitHub Issues, план: `ROADMAP.md`, поэтапный план игры: `docs/plan.md`.
 
 ## Правила
