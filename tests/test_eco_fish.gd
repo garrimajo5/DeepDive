@@ -182,8 +182,9 @@ func test_flee_message_reaches_ship_nearby() -> void:
 	w.spawn("pred", sh.center + Vector3(4, 0, 0))
 	w.step(0.05)
 	var link := w.take_link()
-	eq(link.size(), 1, "одно сообщение")
-	eq(link[0]["type"], EcoLink.MESSAGE)
+	eq(link.size(), 1, "одно событие: наблюдение и текст вместе")
+	eq(link[0]["type"], EcoLink.OBSERVE)
+	eq([link[0]["species"], link[0]["note"]], ["fish", "flee"], "заметка журнала")
 	eq(link[0]["text"], "Мелкая рыба: стая уходит в кораллы — рядом хищник")
 
 

@@ -33,7 +33,7 @@ func _sys(w: EcoWorld, cls: Variant) -> Variant:
 func _texts(events: Array[Dictionary]) -> Array[String]:
 	var out: Array[String] = []
 	for e in events:
-		if e["type"] == EcoLink.MESSAGE:
+		if (e["type"] == EcoLink.MESSAGE or e["type"] == EcoLink.OBSERVE) and e["text"] != "":
 			out.append(e["text"])
 	return out
 
