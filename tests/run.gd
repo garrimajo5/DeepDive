@@ -30,6 +30,7 @@ class ErrorTrap:
 
 func _initialize() -> void:
 	SaveGame.default_path = ""   # не читать и не писать сохранение игрока
+	Main.intro = false   # без облёта с борта в начале забега (его проверяет test_flyby)
 	_run.call_deferred()
 
 
