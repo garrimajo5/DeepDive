@@ -136,6 +136,33 @@ static func flicker_k(time: float) -> float:
 	return FLICKER_DIM if HashNoise.hash2(floori(time * FLICKER_HZ), 487) < FLICKER_CHANCE else 1.0
 
 
+## Помехи вторичных экранов, пока стеклоуст на корпусе (ART-025, `tablo-trevog.md`): у каждого экрана свой период
+## 0,8…1,4 с и своя фаза — провалы несинхронные; провал JAM_DROP с, яркость экрана JAM_DIM. Табло тревог, строка
+## состояния (курс) и шкала готовности разряда не гаснут — их сюда не подключаем.
+enum Screen { HELM_L, HELM_C, HELM_R, SCANNER, JOURNAL }
+const JAM_MIN := 0.8
+const JAM_MAX := 1.4
+const JAM_DROP := 0.15
+const JAM_DIM := 0.08
+
+
+## Период провалов экрана i, с.
+static func jam_period(i: int) -> float:
+	return lerpf(JAM_MIN, JAM_MAX, HashNoise.hash2(i, 911))
+
+
+## Яркость экрана i в момент time при помехах: JAM_DIM в первые JAM_DROP с каждого своего периода, иначе 1.
+static func jam_k(time: float, i: int) -> float:
+	var p := jam_period(i)
+	var u := time / p + HashNoise.hash2(i, 377)
+	return JAM_DIM if (u - floorf(u)) * p < JAM_DROP else 1.0
+
+
+## Яркость экрана i: помехи только пока присоска на корпусе (drain_left), иначе 1.
+func screen_k(time: float, i: int) -> float:
+	return jam_k(time, i) if drain_left > 0.0 else 1.0
+
+
 ## Потратить заряд; false — не хватает.
 func spend(units: float) -> bool:
 	if energy < units:
