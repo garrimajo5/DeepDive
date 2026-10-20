@@ -25,6 +25,8 @@ func _go() -> void:
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	await process_frame
+	while main.has_method("warming") and main.warming():   # прогрев шейдеров под шторкой (Warmup)
+		await process_frame
 	if kv.has("save"):  # save=<путь> — груз и поднятые образцы из файла сохранения (как при запуске игры)
 		var sg := SaveGame.new()
 		sg.path = kv["save"]
