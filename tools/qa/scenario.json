@@ -1,5 +1,8 @@
 [
-  {"do": "wait", "s": 3},
+  {"do": "wait", "s": 2},
+  {"do": "shot", "name": "00-flyby"},
+  {"do": "log", "note": "облёт корабля с борта в начале забега"},
+  {"do": "wait", "s": 4.5},
   {"do": "shot", "name": "01-start"},
   {"do": "log", "note": "старт"},
   {"do": "swipe", "dx": 300, "dy": 0, "s": 0.6},
