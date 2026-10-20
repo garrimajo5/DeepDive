@@ -65,6 +65,9 @@ var coins_view: CoinsView
 ## Чёрный курильщик (место 2, ART-012): трубы на дне, светящиеся жерла, столб пузырей до льда, марево.
 var vent: EcoVent
 var vent_view: VentView
+## Каменный цветок (место 1): коралл-исполин 28 м, светящиеся кончики мерцают волной снизу вверх.
+var flower: EcoFlower
+var flower_view: FlowerView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -86,6 +89,7 @@ var ground: Callable:
 		_rebuild_kelp()
 		_rebuild_coins()
 		_rebuild_vent()
+		_rebuild_flower()
 
 
 func _init() -> void:
@@ -126,6 +130,7 @@ func _init() -> void:
 	coins.bladders = bladders
 	bladders.coins = coins
 	vent = world.add(EcoVent.new()) as EcoVent
+	flower = world.add(EcoFlower.new()) as EcoFlower
 	_rebuild_moss()
 	_rebuild_coral()
 	_rebuild_ferns()
@@ -139,6 +144,7 @@ func _init() -> void:
 	_rebuild_kelp()
 	_rebuild_coins()
 	_rebuild_vent()
+	_rebuild_flower()
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -268,6 +274,15 @@ func _rebuild_vent() -> void:
 		vent_view.free()
 	vent_view = VentView.new(vent)
 	add_child(vent_view)
+
+
+## Каменный цветок по дну мира (ветви встают на дно, кончики мерцают в шейдере).
+func _rebuild_flower() -> void:
+	if flower_view:
+		remove_child(flower_view)
+		flower_view.free()
+	flower_view = FlowerView.new(flower)
+	add_child(flower_view)
 
 
 ## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
