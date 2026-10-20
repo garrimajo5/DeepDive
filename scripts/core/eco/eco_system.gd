@@ -22,3 +22,8 @@ func on_ping(_world: EcoWorld, _pos: Vector3) -> void:
 ## Разряд по корпусу радиусом radius м вокруг корабля (E.onZap) — в начале шага, где ShipState.zap.
 func on_zap(_world: EcoWorld, _radius: float) -> void:
 	pass
+
+
+## Заметные существа модуля для сонара и сканера (E.scanTargets): добавить в out по EcoWorld.target(…) на каждое.
+func targets(_world: EcoWorld, _out: Array[Dictionary]) -> void:
+	pass
