@@ -262,3 +262,11 @@ emission), стекло 96 (alpha 0,2), стойка журнала 976, экр�
 emission), стекло банки 64 (alpha 0,25) — `models/stellazh-tryuma.glb`, `banka-obraztsa.glb`, `banka-steklo.glb`;
 места, ячейки и оси — `tryum.md`, раздел MOD-017; превью — `tryum-stellazh-modeli.png`. Ставит в сцену задача
 «Полки на 24 образца».
+
+## ART-016 Брифинг и голосование на голостоле — принято
+- Исходник: ART-002, голостол MOD-002, карта ART-005 (`karta-otmeli.md`), логика `js/run.js`.
+
+**Принято 20.10.2026** (PR #128, ветка `art/ART-016-brifing`): сцена и лист — `golostol-brifing-mostik.jpg`,
+`golostol-sostoyaniya.png`; решения — `golostol-brifing.md`: проекция Ø 1,6 м, y 1,1…1,9, карта 1,13 / 700, три типа
+линий маршрутов, карточка — экранная надпись, голосование с метками ролей, итог из четырёх строк. Цвет инженера — ждёт
+владельца.
