@@ -146,6 +146,16 @@ func hit_ship(by: String, damage: float, at: Vector3) -> void:
 	_link.append(last_hit)
 
 
+## Корпус корабля не пускает существо внутрь (S.pushOut): место наружу с запасом r, скорость внутрь гасится.
+func push_out(a: EcoAgent, r: float) -> bool:
+	return EcoHull.push_agent(a, ship.pos, ship.yaw, r)
+
+
+## Точка ближе r к корпусу корабля (S.hullDist(p) < r).
+func touches_ship(p: Vector3, r: float = 0.0) -> bool:
+	return EcoHull.touches(p, ship.pos, ship.yaw, r)
+
+
 ## Любое другое событие для корабля (EcoLink.near, DRAIN, …).
 func send(event: Dictionary) -> void:
 	_link.append(event)
