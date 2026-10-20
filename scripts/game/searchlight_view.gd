@@ -49,3 +49,8 @@ func apply(is_on: bool, k: float, reach: float = 1.0) -> void:
 		var s := Searchlight.scale(k)
 		spot.spot_range = Searchlight.range_m(k) * reach
 		beam.scale = Vector3(s, s, s) * reach
+
+
+## Прожектор мигает вместе с плафонами (js/ship.js: spot.intensity × fl): свет × k, конус луча не трогаем.
+func set_flicker(k: float) -> void:
+	spot.light_energy = Searchlight.ENERGY * k

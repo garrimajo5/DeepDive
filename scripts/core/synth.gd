@@ -15,6 +15,14 @@ const SIREN_LEN := TAU / 3.0
 const JET_LEN := 2.0
 const JET_LP := 1800.0
 const JET_HP := 250.0
+## Тревога «присоска на корпусе» (A.alarmCue('latch') раз в 1,6 с из js/soundscape.js): шипение 0,25 с — белый шум
+## через верхний фильтр (Q 2), срез скользит 4000 → 2500 Гц, нарастание 0,02 с и экспоненциальный спад.
+## Петля LATCH_PERIOD: в начале шипение, дальше тишина — играет, пока тревога горит.
+const LATCH_PERIOD := 1.6
+const LATCH_LEN := 0.25
+const LATCH_F0 := 4000.0
+const LATCH_F1 := 2500.0
+const LATCH_Q := 2.0
 const PEAK := 0.8   ## доля от полной шкалы 16 бит
 
 
@@ -59,6 +67,44 @@ static func jet() -> AudioStreamWAV:
 	if not _cache.has("jet"):
 		_cache["jet"] = loop(jet_samples())
 	return _cache["jet"]
+
+
+static func latch() -> AudioStreamWAV:
+	if not _cache.has("latch"):
+		_cache["latch"] = loop(latch_samples())
+	return _cache["latch"]
+
+
+## Шипение присоски: LATCH_PERIOD с, звук только первые LATCH_LEN с (биквад верхних частот RBJ со скользящим срезом).
+static func latch_samples(rate: int = RATE, seed: int = 11) -> PackedFloat32Array:
+	var n := int(round(LATCH_PERIOD * rate))
+	var m := int(LATCH_LEN * rate)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var x1 := 0.0
+	var x2 := 0.0
+	var y1 := 0.0
+	var y2 := 0.0
+	var lo := 0.0001
+	for i in m:
+		var t := float(i) / rate
+		var f := LATCH_F0 * pow(LATCH_F1 / LATCH_F0, t / LATCH_LEN)
+		var w := TAU * f / rate
+		var al := sin(w) / (2.0 * LATCH_Q)
+		var cw := cos(w)
+		var a0 := 1.0 + al
+		var x := rng.randf_range(-1.0, 1.0)
+		var y := ((1.0 + cw) / 2.0 * x - (1.0 + cw) * x1 + (1.0 + cw) / 2.0 * x2 + 2.0 * cw * y1 - (1.0 - al) * y2) / a0
+		x2 = x1
+		x1 = x
+		y2 = y1
+		y1 = y
+		# громкость: 0,0001 → 1 за 0,02 с, затем → 0,0001 к концу (экспоненты, как exponentialRampToValueAtTime)
+		var g: float = lo * pow(1.0 / lo, t / 0.02) if t < 0.02 else pow(lo, (t - 0.02) / (LATCH_LEN - 0.02))
+		out[i] = y * g
+	return normalized(out)
 
 
 ## Струя: полосовой шум на JET_LEN, края петли сшиты перекрёстным затуханием 0,1 с.

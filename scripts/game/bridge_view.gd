@@ -14,6 +14,8 @@ var zap_lever: Node3D      ## рычаг разряда на левом борт
 var zap_panel: Node3D      ## щиток разряда (MOD-014)
 var zap_scale_mat: BaseMaterial3D   ## материал щитка со шкалой готовности (свечение гаснет на откат)
 var hatch_wheel: Node3D
+var lamps: Array[OmniLight3D] = []  ## плафоны мостика (мигают — set_lamps)
+const LAMP_ENERGY := 0.9
 var scanner_text: Label3D          ## экран сканера биолога (Scanner.screen_lines)
 
 
@@ -57,11 +59,18 @@ func _ready() -> void:
 	for z in [-3.5, 0.0]:
 		var l := OmniLight3D.new()
 		l.light_color = BridgePlan.COLORS[BridgePlan.Paint.PLAFOND]
-		l.light_energy = 0.9
+		l.light_energy = LAMP_ENERGY
 		l.omni_range = 7.5
 		l.position = Vector3(0, 2.8, z)
 		l.light_cull_mask = OceanView.LAYER_SHIP
 		add_child(l)
+		lamps.append(l)
+
+
+## Плафоны мостика × k (мигание, Vitals.lamp_k).
+func set_lamps(k: float) -> void:
+	for l in lamps:
+		l.light_energy = LAMP_ENERGY * k
 
 
 ## Ползунок i пульта энергии на долю share 0…1 (паз наклонён: ползунок идёт по лицу пульта).
