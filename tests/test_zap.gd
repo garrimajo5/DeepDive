@@ -51,12 +51,20 @@ func test_scene_lever() -> void:
 	ok(fake.zapped, "живой мир узнал о разряде")
 	near(fake.radius, 20.0, 1e-6, "радиус 20 м")
 	ok(not main.eco_ship.zap, "разряд — один шаг")
-	ok(main.bridge.zap_lever.rotation.x > 0.5, "рычаг опущен")
+	near(main.bridge.zap_lever.rotation_degrees.z, Zap.LEVER_DOWN, 1e-3, "рычаг опущен на −25°")
+	eq(main.bridge.zap_scale_mat.emission_energy_multiplier, 0.0, "шкала готовности погасла")
 	ok(main.zap_light.visible, "вспышка за бортом")
 	near(main.vitals.energy, 100.0 - 15.0, 0.5, "заряд потрачен")
 	for i in 10:
 		main.step(0.1)
-	ok(main.bridge.zap_lever.rotation.x == 0.0 and not main.zap_light.visible, "через секунду всё вернулось")
+	ok(not main.zap_light.visible, "через секунду вспышки нет")
+	var mid := main.bridge.zap_lever.rotation_degrees.z
+	ok(mid > Zap.LEVER_DOWN and mid < Zap.LEVER_UP, "рычаг поднимается: %.1f°" % mid)
+	eq(main.bridge.zap_scale_mat.emission_energy_multiplier, 0.0, "откат — шкала не горит")
+	for i in 10:
+		main.step(0.1)
+	near(main.bridge.zap_lever.rotation_degrees.z, Zap.LEVER_UP, 1e-3, "через 2 с взведён")
+	eq(main.bridge.zap_scale_mat.emission_energy_multiplier, 1.0, "шкала горит — готов")
 
 
 ## Issue #50: первый разряд не должен собирать шейдеры — вспышка горит почти без света первые шаги после старта.
@@ -72,3 +80,17 @@ func test_scene_light_warmup() -> void:
 	ok(not main.zap_light.visible, "после прогрева погашена")
 	main.queue_free()
 	await frames(1)
+
+
+func test_lever_travel() -> void:
+	var z := Zap.new()
+	var v := Vitals.new()
+	ok(z.ready(0.0), "в начале готов")
+	eq(z.lever_deg(0.0), Zap.LEVER_UP, "взведён")
+	z.fire(10.0, 1.0, v)
+	ok(not z.ready(10.0) and not z.ready(11.9), "откат 2 с")
+	ok(z.ready(12.0), "готов снова")
+	eq(z.lever_deg(10.0), Zap.LEVER_DOWN, "в момент разряда внизу")
+	eq(z.lever_deg(10.7), Zap.LEVER_DOWN, "пока мигает свет — внизу")
+	near(z.lever_deg(11.4), 0.0, 1e-3, "на полпути отката — горизонтально")
+	eq(z.lever_deg(12.0), Zap.LEVER_UP, "к концу отката взведён")

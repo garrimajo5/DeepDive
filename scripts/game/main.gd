@@ -237,7 +237,7 @@ func step(dt: float) -> void:
 	else:
 		hit_flash.color = Color(1.0, 0.36, 0.42, vitals.flash * 0.35)
 		zap_light.visible = zap_warm > 0
-	bridge.set_zap_lever(zap.flicker > 0.0)
+	bridge.set_zap_lever(zap.lever_deg(time), zap.ready(time))
 	_step_eco(dt)
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
@@ -503,6 +503,8 @@ func debug_setup(kv: Dictionary) -> void:
 			EcoLink.near("veil", "вуаль", helm.pos + Vector3(10, 0, 60), helm.pos)], helm.pos)
 		time += float(kv.get("age", "1.0"))
 		sonar_view.show_state(sonar, helm.pos, helm.yaw, time, true)
+	if kv.get("zap", "0") == "1":  # разряд: рычаг внизу, шкала готовности погашена
+		fire_zap()
 	if kv.get("lock", "0") == "1":  # открытый шлюз трюма
 		airlock.open = true
 		airlock.t = 1.0

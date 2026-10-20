@@ -10,7 +10,9 @@ var wheel_mount: Node3D  ## узел штурвала (наклон к пило�
 var wheel: Node3D
 var sliders: Array[Node3D] = []   ## ползунки пульта энергии: двигатели, сонар, жизнь, разряд, прожектор
 var hatch_door: Node3D
-var zap_lever: Node3D      ## рычаг разряда на левом борту: ось и рукоять
+var zap_lever: Node3D      ## рычаг разряда на левом борту (MOD-014), pivot на оси Z
+var zap_panel: Node3D      ## щиток разряда (MOD-014)
+var zap_scale_mat: BaseMaterial3D   ## материал щитка со шкалой готовности (свечение гаснет на откат)
 var hatch_wheel: Node3D
 
 
@@ -73,46 +75,24 @@ func set_hatch(offset: float) -> void:
 
 
 ## Рычаг разряда: щиток на борту, ось и рукоять с голубым набалдашником (своей модели нет — простые формы).
+## Щиток и рычаг разряда — модели MOD-014 (razryad.md): щиток на стене левого борта, рычаг на своей оси Z.
+## Шкала готовности — маска свечения материала щитка: гаснет на откат (энергия свечения 0, без смены шейдера).
 func _add_zap_lever() -> void:
-	var plate := MeshInstance3D.new()
-	plate.name = "Щиток разряда"
-	var pm := BoxMesh.new()
-	pm.size = Vector3(0.06, 0.5, 0.4)
-	plate.mesh = pm
-	plate.material_override = material(BridgePlan.Paint.SEAM)
-	plate.position = Zap.LEVER_POS + Vector3(-0.08, 0, 0)
-	plate.layers = OceanView.LAYER_SHIP
-	add_child(plate)
-	zap_lever = Node3D.new()
-	zap_lever.name = "Рычаг разряда"
-	zap_lever.position = Zap.LEVER_POS
-	add_child(zap_lever)
-	var arm := MeshInstance3D.new()
-	var am := BoxMesh.new()
-	am.size = Vector3(0.05, 0.36, 0.05)
-	arm.mesh = am
-	arm.material_override = material(BridgePlan.Paint.METAL)
-	arm.position = Vector3(0, 0.15, 0)
-	arm.layers = OceanView.LAYER_SHIP
-	zap_lever.add_child(arm)
-	var knob := MeshInstance3D.new()
-	var sm := SphereMesh.new()
-	sm.radius = 0.045
-	sm.height = 0.09
-	knob.mesh = sm
-	var km := StandardMaterial3D.new()
-	km.albedo_color = Color("67DDEB")
-	km.emission_enabled = true
-	km.emission = Color("67DDEB")
-	knob.material_override = km
-	knob.position = Vector3(0, 0.34, 0)
-	knob.layers = OceanView.LAYER_SHIP
-	zap_lever.add_child(knob)
+	zap_panel = _add_model(BridgeProps.Prop.new("razryad-shchitok", "Щиток разряда", Zap.PANEL_POS), self)
+	for mi in zap_panel.find_children("*", "MeshInstance3D", true, false):
+		var src := (mi as MeshInstance3D).get_active_material(0) as BaseMaterial3D
+		if src and src.emission_enabled:
+			zap_scale_mat = src.duplicate() as BaseMaterial3D
+			(mi as MeshInstance3D).material_override = zap_scale_mat
+	zap_lever = _add_model(BridgeProps.Prop.new("razryad-rychag", "Рычаг разряда", Zap.LEVER_POS), self)
+	set_zap_lever(Zap.LEVER_UP, true)
 
 
-## Рычаг опущен, пока мигает разряд (в браузере — S.lever.rotation.z = −0,9).
-func set_zap_lever(down: bool) -> void:
-	zap_lever.rotation.x = 0.9 if down else 0.0
+## Рычаг на угол deg (rotation.z: +25° взведён, −25° разряд); ready — шкала готовности горит.
+func set_zap_lever(deg: float, ready: bool) -> void:
+	zap_lever.rotation_degrees.z = deg
+	if zap_scale_mat:
+		zap_scale_mat.emission_energy_multiplier = 1.0 if ready else 0.0
 
 
 ## Поворот колеса вслед за штурвалом: turn −1…1 (вправо — по часовой, если смотреть из кресла).
