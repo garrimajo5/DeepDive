@@ -17,6 +17,12 @@ var grazer_view: GrazerView
 ## Серпохвосты: три хищника, охотятся на светляков и бросаются на корабль (EcoLink.HIT); модели MOD-011.
 var preds: EcoPred
 var pred_view: PredView
+## Флора (ART-004): течение мира, огнецвет (три куста, кончики гаснут от шума) и веерники поперёк течения.
+var current: EcoCurrent
+var coral: EcoCoral
+var coral_view: CoralView
+var fans: EcoFan
+var fan_view: FanView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -26,6 +32,7 @@ var ground: Callable:
 		world.ground = value
 		world.reset()
 		_rebuild_moss()
+		_rebuild_coral()
 
 
 func _init() -> void:
@@ -39,7 +46,13 @@ func _init() -> void:
 	preds = world.add(EcoPred.new(fish)) as EcoPred
 	pred_view = PredView.new(preds)
 	add_child(pred_view)
+	current = world.add(EcoCurrent.new()) as EcoCurrent
+	coral = world.add(EcoCoral.new()) as EcoCoral
+	fans = world.add(EcoFan.new(current)) as EcoFan
+	fan_view = FanView.new(fans)
+	add_child(fan_view)
 	_rebuild_moss()
+	_rebuild_coral()
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -51,6 +64,15 @@ func _rebuild_moss() -> void:
 	add_child(moss_view)
 
 
+## Меш огнецвета по дну мира (кусты встают на дно при сбросе мира).
+func _rebuild_coral() -> void:
+	if coral_view:
+		remove_child(coral_view)
+		coral_view.free()
+	coral_view = CoralView.new(coral)
+	add_child(coral_view)
+
+
 ## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
 func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	world.ship = ship
@@ -59,4 +81,6 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	grazer_view.sync(world.time)
 	pred_view.sync(world.time, ship.pos)
 	moss_view.sync()
+	coral_view.sync()
+	fan_view.sync(world.time)
 	return world.take_link()
