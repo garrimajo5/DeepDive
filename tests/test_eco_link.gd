@@ -78,6 +78,30 @@ func test_live_world_observation_reaches_journal() -> void:
 	await frames(1)
 
 
+func test_eel_drain_reaches_battery() -> void:
+	# Стеклоуст на стекле: мир шлёт одно EcoLink.DRAIN 3,2 ед./с за шаг, корабль тянет заряд на 3,2 · dt больше.
+	near(EcoLink.drain("Стеклоуст", -1.0)["units"], 0.0, 1e-9, "не отрицательный")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.vitals.energy = 50.0
+	for i in 20:
+		main.step(0.1)
+	var free_loss := 50.0 - main.vitals.energy
+	var eels: EcoEel = main.eco.eels
+	var e := eels.eels[0]
+	e.mode = EcoEel.Mode.LATCHED
+	eels.latched = e
+	main.step(0.1)   # корабль берёт расход из событий прошлого шага
+	main.vitals.energy = 50.0
+	for i in 20:
+		main.step(0.1)
+	var loss := 50.0 - main.vitals.energy
+	near(loss - free_loss, EcoEel.DRAIN * 2.0, 0.05, "за 2 с — на 6,4 единицы больше")
+	main.queue_free()
+	await frames(1)
+
+
 func test_hit_clamped() -> void:
 	near(EcoLink.hit("x", 3.0, Vector3.ZERO)["damage"], 1.0, 1e-9, "урон 0…1")
 
