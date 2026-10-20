@@ -3,6 +3,8 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-10-20
+- Принят концепт ART-017: карта Чаши — вид сверху, разрез с пятью слоями и узлами, вид с гребня
+  (`docs/concept-art/chasha.md`).
 - Принят концепт ART-016: брифинг, голосование и итог забега на голостоле (`docs/concept-art/golostol-brifing.md`).
 - Приняты модели трюма MOD-017: стеллаж на 12 ячеек для каждого борта и банка образца со стеклом и голубым огоньком
   (`models/stellazh-tryuma.glb`, `banka-obraztsa.glb`, `banka-steklo.glb`; места — `docs/concept-art/tryum.md`).
