@@ -56,9 +56,52 @@ static func mark_pos(choice: String, i: int, n: int) -> Vector3:
 	return p
 
 
-## Показывать ли голосование: решение открыто и забег не окончен (итог — следующая часть).
+## Показывать ли голосование: решение открыто и забег не окончен (после «наверх» — итог, result_wanted).
 static func wanted(at_vote: bool, ended: bool) -> bool:
 	return at_vote and not ended
+
+
+## Итог на голограмме (лист ART-016, «Итог»): тёмная подложка над столом, заголовок «ЗАБЕГ ЗАВЕРШЁН» и четыре строки —
+## Образцы / Виды / Места / Пробоины (Run.summary). Подложка поворачивается к глазам смотрящего (board_yaw), итог
+## статичен. Числа — в осях подложки: x вправо, y вверх от плоскости голограммы, лицом к +Z.
+const BOARD_Y := 0.56      ## центр подложки над голограммой, м (над полом 1,16…1,82 м — в высоте проекции)
+const BOARD_W := 0.84
+const BOARD_H := 0.66
+const BOARD_PAD := 0.06    ## от края подложки до текста
+const TITLE := "ЗАБЕГ ЗАВЕРШЁН"
+const TITLE_DY := 0.24     ## заголовок над центром подложки
+const ROW_TOP := 0.11      ## первая строка над центром
+const ROW_STEP := 0.11     ## между строками
+const LINE_W := 0.004      ## толщина рамки и разделителей
+
+
+## Показывать ли итог: решение принято «наверх», панель итога открыта.
+static func result_wanted(at_vote: bool, ended: bool) -> bool:
+	return at_vote and ended
+
+
+## Высота i-й строки итога от центра подложки.
+static func row_y(i: int) -> float:
+	return ROW_TOP - ROW_STEP * i
+
+
+## Поворот подложки вокруг y, чтобы её лицо (+Z) смотрело на глаз eye (в осях голограммы).
+static func board_yaw(eye: Vector3) -> float:
+	var d := Vector2(eye.x, eye.z)
+	return 0.0 if d.length() < 1e-4 else atan2(d.x, d.y)
+
+
+## Прямоугольники рамки и разделителей между строками (rows строк) в плоскости подложки: [центр, размер].
+static func board_lines(rows: int) -> Array:
+	var w := BOARD_W
+	var h := BOARD_H
+	var out := [
+		[Vector2(0, h / 2), Vector2(w, LINE_W)], [Vector2(0, -h / 2), Vector2(w, LINE_W)],
+		[Vector2(-w / 2, 0), Vector2(LINE_W, h)], [Vector2(w / 2, 0), Vector2(LINE_W, h)],
+	]
+	for i in rows - 1:
+		out.append([Vector2(0, (row_y(i) + row_y(i + 1)) * 0.5), Vector2(w - BOARD_PAD * 2, LINE_W * 0.5)])
+	return out
 
 
 ## Контур стрелки в плоскости (x вправо, y вверх), высота h, острие вниз (down) или вверх; по часовой стрелке.
