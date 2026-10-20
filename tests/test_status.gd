@@ -17,9 +17,23 @@ func test_repeat_part_skipped() -> void:
 	eq(Status.join(["Трюм", "шлюз открыт", "Шлюз открыт", "", "  "]), "Трюм · шлюз открыт", "повтор и пустые не пишутся")
 
 
-func test_long_part_stands_alone() -> void:
-	var l := Status.lines(["А", "очень длинная часть строки состояния", "Б"], by_len, 10)
-	eq(l, PackedStringArray(["А", "очень длинная часть строки состояния", "Б"]), "длинная часть — своя строка")
+## По issue #138: часть шире строки (карточка вида из журнала) переносится по словам, а не уходит за край.
+func test_long_part_wraps_by_words() -> void:
+	var l := Status.lines(["А", "очень длинная часть строки состояния", "Б"], by_len, 14)
+	eq(l, PackedStringArray(["А", "очень длинная", "часть строки", "состояния · Б"]), "по словам, хвост склеен со следующей")
+	for line in l:
+		ok(line.length() <= 14, "в ширину: %s" % line)
+	eq(Status.lines(["сверхдлинноеслово"], by_len, 5), PackedStringArray(["сверхдлинноеслово"]), "слово шире строки — одно")
+
+
+func test_wrap_limited_with_ellipsis() -> void:
+	var text := "раз два три четыре пять шесть семь восемь девять десять"
+	var w := Status.wrap_words(text, by_len, 10)
+	eq(w.size(), Status.PART_LINES, "не больше %d строк" % Status.PART_LINES)
+	ok(w[w.size() - 1].ends_with("…"), "обрезано многоточием: %s" % w[w.size() - 1])
+	for line in w:
+		ok(line.length() <= 10, "в ширину: %s" % line)
+	eq(Status.wrap_words("раз два", by_len, 10), PackedStringArray(["раз два"]), "короткое — как есть")
 
 
 func test_message_fades_after_4_2_s() -> void:

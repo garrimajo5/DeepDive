@@ -6,12 +6,15 @@ const SEPARATOR := " · "
 const MESSAGE_SECONDS := 4.2
 ## Румбы: север — нос карты (−Z), восток — +X.
 const RUMBS: Array[String] = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"]
+## Сколько строк самое большее у одной длинной части (описание вида из журнала); дальше — «…».
+const PART_LINES := 4
 
 
 ## Разложить части по строкам ширины width; measure — ширина текста (в сцене — шрифт, в тестах — число букв).
 ## Части склеиваются через « · », часть не рвётся посередине, а переходит на следующую строку целиком;
-## повтор той же части (без учёта регистра) не пишется. Часть шире строки стоит одна.
-## (Отчёт тестера в pogrujenie: в трюме строка не помещалась, конец обрезался.)
+## повтор той же части (без учёта регистра) не пишется. Часть шире строки переносится по словам (`wrap_words`), не больше
+## PART_LINES строк. (Отчёт тестера в pogrujenie: в трюме строка не помещалась, конец обрезался; issue #138 — карточка
+## вида из журнала уходила за правый край.)
 static func lines(parts: Array, measure: Callable, width: float) -> PackedStringArray:
 	var out := PackedStringArray()
 	var seen := {}
@@ -21,6 +24,14 @@ static func lines(parts: Array, measure: Callable, width: float) -> PackedString
 		if p.is_empty() or seen.has(p.to_lower()):
 			continue
 		seen[p.to_lower()] = true
+		if float(measure.call(p)) > width:   # часть шире строки — по словам, хвост остаётся для следующих частей
+			if not cur.is_empty():
+				out.append(cur)
+			var w := wrap_words(p, measure, width)
+			for i in w.size() - 1:
+				out.append(w[i])
+			cur = w[w.size() - 1]
+			continue
 		if cur.is_empty():
 			cur = p
 			continue
@@ -32,6 +43,29 @@ static func lines(parts: Array, measure: Callable, width: float) -> PackedString
 			cur = p
 	if not cur.is_empty():
 		out.append(cur)
+	return out
+
+
+## Текст по словам в строки ширины width, не больше PART_LINES; не влезло — последняя строка кончается «…».
+## Слово шире строки стоит одно.
+static func wrap_words(text: String, measure: Callable, width: float) -> PackedStringArray:
+	var out := PackedStringArray()
+	var cur := ""
+	for word in text.split(" ", false):
+		var joined := word if cur.is_empty() else cur + " " + word
+		if cur.is_empty() or float(measure.call(joined)) <= width:
+			cur = joined
+		else:
+			out.append(cur)
+			cur = word
+	if not cur.is_empty():
+		out.append(cur)
+	if out.size() > PART_LINES:
+		var last := out[PART_LINES - 1]
+		while last.contains(" ") and float(measure.call(last + "…")) > width:
+			last = last.substr(0, last.rfind(" "))
+		out.resize(PART_LINES)
+		out[PART_LINES - 1] = last.rstrip(" ,.;:—") + "…"
 	return out
 
 
