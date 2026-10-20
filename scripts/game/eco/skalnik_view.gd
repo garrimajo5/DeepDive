@@ -3,12 +3,16 @@ extends Node3D
 ## Скальник в сцене (initSkalnik, skRender в js/creatures.js): мантия-эллипсоид с двумя рогами и глазами — один
 ## гранёный меш, восемь щупалец по шесть шаров — MultiMesh. Цвет общий: камень #4f4a5c, без маскировки — кожа
 ## #b8553c и слабое свечение. Щупальца колышутся, у камня поджаты (0,55), на ходу тянутся за телом и ложатся
-## на дно. Вдали (дальше FAR от корабля) неподвижный камень щупальца не переписывает. Два вызова отрисовки,
+## на дно. Вдали (дальше FAR от корабля) неподвижный камень щупальца не переписывает. Украденный образец —
+## светящийся октаэдр 0,22 м над мантией между рогами (carryM), виден, только пока несёт. Два вызова отрисовки (с добычей — три),
 ## слой отмели (OceanView.LAYER_WORLD).
 
 const ROCK := Color("4f4a5c")
 const SKIN := Color("b8553c")
 const GLOW := Color(0.12, 0.03, 0.02)
+## Добыча: цвет и высота над скальником.
+const CARRY := Color("9dffd0")   # светится, как камешки образцов на дне
+const CARRY_UP := 1.2
 const ARMS := 8
 const SEG := 6
 const STRIDE := 12
@@ -19,6 +23,8 @@ var skalnik: EcoSkalnik
 var body: MeshInstance3D
 var arms: MultiMeshInstance3D
 var material: StandardMaterial3D
+## Украденный образец в щупальцах.
+var carry: MeshInstance3D
 ## Сколько раз переписаны щупальца (тесты).
 var arm_writes := 0
 ## Сколько раз мерили дно под щупальцами (дорого: Seabed.height — шум).
@@ -61,6 +67,17 @@ func _init(system: EcoSkalnik) -> void:
 	mm.instance_count = ARMS * SEG
 	arms.multimesh = mm
 	add_child(arms)
+	carry = MeshInstance3D.new()
+	carry.name = "Добыча"
+	carry.mesh = build_carry()
+	carry.layers = OceanView.LAYER_WORLD
+	carry.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var cm := StandardMaterial3D.new()
+	cm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	cm.albedo_color = CARRY
+	carry.material_override = cm
+	carry.visible = false
+	add_child(carry)
 	_buf.resize(ARMS * SEG * STRIDE)
 	visible = skalnik.octo != null
 	sync(0.0, Vector3(INF, INF, INF), true)
@@ -77,6 +94,9 @@ func sync(t: float, ship: Vector3, force := false) -> void:
 	if sk == null:
 		return
 	body.transform = Transform3D(Basis(Vector3.UP, atan2(sk.dir.x, sk.dir.z)), sk.pos)
+	carry.visible = sk.loot >= 0
+	if carry.visible:
+		carry.transform = Transform3D(Basis(Vector3.UP, t * 1.5), sk.pos + Vector3(0, CARRY_UP, 0))
 	if absf(sk.camo - _camo) > 0.002:
 		_camo = sk.camo
 		material.albedo_color = skin_color(sk.camo)
@@ -162,3 +182,16 @@ static func _horn(st: SurfaceTool, at: Vector3, tilt: float) -> void:
 	for k in 5:
 		KrabView._tri(st, ring[k], ring[(k + 1) % 5], tip, Color.WHITE, mid)
 		KrabView._tri(st, ring[(k + 1) % 5], ring[k], base, Color.WHITE, mid)
+
+
+## Октаэдр 0,22 м (OctahedronGeometry(0.22) в браузере) — камешек в щупальцах.
+static func build_carry() -> ArrayMesh:
+	var st := KrabView._begin()
+	var r := 0.22
+	var v: Array[Vector3] = [Vector3(r, 0, 0), Vector3(0, 0, r), Vector3(-r, 0, 0), Vector3(0, 0, -r)]
+	var top := Vector3(0, r, 0)
+	var bot := Vector3(0, -r, 0)
+	for k in 4:
+		KrabView._tri(st, v[k], v[(k + 1) % 4], top, Color.WHITE, Vector3.ZERO)
+		KrabView._tri(st, v[(k + 1) % 4], v[k], bot, Color.WHITE, Vector3.ZERO)
+	return st.commit()

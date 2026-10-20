@@ -305,3 +305,40 @@ func test_claw_steal_and_drop() -> void:
 	near(main.samples.all[8].pos.x, at.x, 1e-5, "там, где бросил")
 	main.queue_free()
 	await frames(1)
+
+
+## Сквозь связь (#201): настоящий скальник у образца 8 срывает его с поднимающегося захвата, уносит и бросает
+## у дома — лебёдка пустеет, в груз образец не ложится, потом снова лежит на дне.
+func test_skalnik_steals_from_real_winch() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.park_over_sample(8)
+	var smp: Samples.Sample = main.samples.all[8]
+	var sk: EcoSkalnik.Octo = main.eco.skalnik.octo
+	ok(sk != null, "скальник в мире")
+	sk.home = smp.pos + Vector3(4, 0, 0)
+	sk.home.y = Seabed.height(sk.home.x, sk.home.z)
+	sk.pos = sk.home
+	sk.cur_cd = 999.0   # не отвлекаться на тихий корабль
+	var lock := Samples.lock_point(Samples.ship_xform(main.helm.pos, main.helm.yaw))
+	var stolen := false
+	for i in 400:
+		if main.samples.state != Samples.State.IDLE or i == 0:
+			main.samples.hold(lock, 0.05)
+		main.step(0.05)
+		if main.samples.stolen.has(8):
+			stolen = true
+			break
+	ok(stolen, "образец сорван с захвата (состояние скальника %d)" % sk.state)
+	eq(main.samples.state, Samples.State.IDLE, "захват пуст")
+	eq(main.samples.cargo.size(), 0, "в груз не лёг")
+	for i in 300:
+		main.step(0.05)
+		if not main.samples.stolen.has(8):
+			break
+	ok(not main.samples.stolen.has(8), "брошен")
+	ok(not smp.taken, "снова на дне")
+	near(Vector2(smp.pos.x, smp.pos.z).distance_to(Vector2(sk.home.x, sk.home.z)), EcoSkalnik.STASH, 1e-3, "у дома")
+	main.queue_free()
+	await frames(1)
