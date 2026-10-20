@@ -34,6 +34,25 @@ func test_layout() -> void:
 	ok(not VoteHolo.wanted(false, false))
 
 
+func test_result_layout() -> void:
+	ok(VoteHolo.result_wanted(true, true), "после «наверх» — итог")
+	ok(not VoteHolo.result_wanted(true, false), "в голосовании итога нет")
+	ok(not VoteHolo.result_wanted(false, true), "итог закрыт — подложки нет")
+	var top := SonarView.TOP_Y + VoteHolo.BOARD_Y + VoteHolo.BOARD_H * 0.5
+	var bottom := SonarView.TOP_Y + VoteHolo.BOARD_Y - VoteHolo.BOARD_H * 0.5
+	ok(bottom > 1.1 and top < 1.9, "подложка в высоте проекции 1,1…1,9 м над полом: %.2f…%.2f" % [bottom, top])
+	ok(VoteHolo.TITLE_DY < VoteHolo.BOARD_H * 0.5 and VoteHolo.TITLE_DY > VoteHolo.row_y(0), "заголовок над строками")
+	ok(VoteHolo.row_y(3) - 0.04 > -VoteHolo.BOARD_H * 0.5, "четыре строки на подложке")
+	eq(VoteHolo.board_lines(4).size(), 4 + 3, "рамка и три разделителя")
+	var sep: Array = VoteHolo.board_lines(4)[4]
+	near(sep[0].y, (VoteHolo.row_y(0) + VoteHolo.row_y(1)) * 0.5, 1e-6, "разделитель — между строками")
+	# лицо подложки (+Z) смотрит на глаз
+	for eye: Vector3 in [Vector3(1.5, 0.6, 0.0), Vector3(0.0, 0.6, 1.0), Vector3(-1.0, 0.6, -1.0)]:
+		var face := Basis(Vector3.UP, VoteHolo.board_yaw(eye)) * Vector3.BACK
+		near(face.angle_to(Vector3(eye.x, 0.0, eye.z)), 0.0, 1e-4, "подложка к глазу %s" % eye)
+	eq(VoteHolo.board_yaw(Vector3(0, 1, 0)), 0.0, "глаз над центром — без поворота")
+
+
 func test_arrow_and_ring() -> void:
 	var down := VoteHolo.arrow_outline(0.2, true)
 	var up := VoteHolo.arrow_outline(0.2, false)
@@ -78,9 +97,52 @@ func test_scene_vote_on_table() -> void:
 	eq((m0[1] as Label3D).text, "И", "буква роли")
 	eq((m0[0] as Sprite3D).modulate.r, Crew.role_color(Crew.Role.ENGINEER).r, "кружок — цвета роли")
 	ok(not (up["marks"][1][0] as Sprite3D).visible, "лишние метки скрыты")
+	ok(not sv.vote.board.visible, "в голосовании итога нет")
 	main.decide("deep")
 	main.step(0.3)
 	ok(not sv.vote.visible, "решили — поля гаснут")
+	eq(sv.mat.get_shader_parameter("dim"), 0.0)
+	main.queue_free()
+	await frames(1)
+
+
+func test_scene_result_on_table() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var sv := main.sonar_view
+	main.walker.x = Main.ROUTE_POST.x
+	main.walker.z = Main.ROUTE_POST.y
+	main.use_post("route")
+	main.complete_route()       # «Рифовый сад»: три места
+	main.breach.count += 1      # пробоина за забег
+	main.use_post("route")
+	main.step(0.3)
+	main.decide("up")
+	main.flyby.stop()
+	main.step(0.3)
+	var board := sv.vote.board
+	ok(board.visible and sv.vote.visible, "наверх — итог над столом")
+	near(sv.mat.get_shader_parameter("dim"), VoteHolo.DIM_SONAR, 1e-5, "рельеф погас")
+	ok(not (sv.vote.fields["up"]["disc"] as Node3D).visible, "поля голосования спрятаны")
+	ok(not (sv.vote.fields["up"]["marks"][0][0] as Sprite3D).visible, "метки спрятаны")
+	var names := []
+	var vals := []
+	for r: Array in sv.vote.board_rows:
+		names.append((r[0] as Label3D).text)
+		vals.append((r[1] as Label3D).text)
+	eq(names, ["Образцы", "Виды", "Места", "Пробоины"], "четыре строки ART-016")
+	eq(vals[2], "3", "пройдено три места")
+	eq(vals[3], "1", "одна пробоина")
+	# подложка смотрит на глаза игрока у поста «Маршрут»
+	var eye := board.to_local(main.camera.global_position)
+	ok(eye.z > 0.0 and absf(eye.x) < 0.05, "лицом к игроку: %s" % eye)
+	eq(main.vote_panel.rows.size(), 4, "на панели — подробности без строк голограммы")
+	eq(main.vote_panel.rows[0][0], "Время под водой")
+	main.close_vote()           # кнопка — новый забег
+	for i in 10:
+		main.step(0.1)
+	ok(not board.visible and not sv.vote.visible, "новый забег — итог погас")
 	eq(sv.mat.get_shader_parameter("dim"), 0.0)
 	main.queue_free()
 	await frames(1)

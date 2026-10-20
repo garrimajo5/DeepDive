@@ -109,8 +109,31 @@ func test_vote_and_finish() -> void:
 	eq(rows[5], ["Пробоин", "1"])
 	eq(rows[6], ["Корпус на финише", "64%"])
 	eq(run.score, 2 * 10 + 2 * 5 + 20 + 25 + 6, "очки как в js/run.js без мест и улучшений")
+	eq(run.summary(4, 5, 2), [["Образцы", "2"], ["Виды", "2"], ["Места", "2"], ["Пробоины", "1"]],
+		"итог на голограмме: четыре строки за забег, места — «Тёплые трубы»")
+	var d := Run.detail(rows)
+	eq(d.size(), 4, "на панели — время, спуски, маршруты, корпус")
+	eq(d[3], ["Корпус на финише", "64%"])
 	run.begin(0.0, 0, 0, 0)
 	ok(run.depth == 0 and run.routes == 0 and not run.ended and run.route == -1, "новый забег с нуля")
+	eq(run.seen.size(), 0, "места нового забега — с нуля")
+
+
+func test_places_seen_once() -> void:
+	var run := Run.new()
+	run.begin(0.0, 0, 0, 0)
+	run.choose(0)   # «Рифовый сад»: цветок, кости, колодец
+	for k in Run.ROUTES[0]["places"]:
+		var p := Run.place_xz(k)
+		run.update(p.x, p.y)
+	eq(run.seen.size(), 3)
+	run.go_deeper()
+	run.choose(2)   # «Край отмели»: колодец уже был
+	for k in Run.ROUTES[2]["places"]:
+		var p := Run.place_xz(k)
+		run.update(p.x, p.y)
+	eq(run.seen.size(), 4, "колодец второй раз не считается")
+	eq(run.summary(0, 0, 0)[2], ["Места", "4"])
 
 
 func test_scene_vote() -> void:
