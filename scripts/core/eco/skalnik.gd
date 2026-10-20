@@ -6,7 +6,9 @@ extends EcoSystem
 ## 2,5 м от норы: краба с бедным панцирем (меньше 7 игл) загоняет в нору бегом («hunt», EcoKrab.scare 6 с),
 ## от краба в броне отступает («armor»); снова — через 60 с. Любопытен: к неподвижному кораблю с погашенным
 ## светом ближе 25 м подплывает к самому стеклу («curious», раз в 60 с), свет или ход больше 1,5 м/с спугивают.
-## Кража образцов с манипулятора («thief», «drop») — следующая подзадача, со связью с кораблём через EcoLink.
+## Вор: захват лебёдки (ShipState.claw*) тянется к образцу ближе 12 м от дома — скальник бросается к захвату (5 м/с)
+## и на подъёме (CLAW_BACK) в 2,2 м срывает образец (EcoLink.STEAL, «thief»), уносит домой (2,2 м/с) и бросает
+## в 1,2 м от дома (EcoLink.DROP). Разряд по корпусу ближе его радиуса — бросает добычу там, где он («drop»).
 
 const ID := "skalnik"
 ## Дом — сбоку от норы кольчужника на 7 м (поперёк выхода из норы).
@@ -41,8 +43,17 @@ const MIMIC_CD := 40.0
 ## Размер для обхода корпуса и прицела.
 const PAD := 0.5
 const R := 1.0
+## Вор (SK_THIEF_R, thief/loot в skUpdate): цель захвата ближе 12 м к дому; к захвату 5 м/с, хватает за 2,2 м
+## (щупальца длинные); с добычей домой 2,2 м/с, дома ближе 0,6 м — бросает в 1,2 м от дома. Разряд — 30 с покоя.
+const THIEF_R := 12.0
+const THIEF_SPEED := 5.0
+const GRAB := 2.2
+const LOOT_SPEED := 2.2
+const LOOT_HOME := 0.6
+const STASH := 1.2
+const ZAP_CD := 30.0
 
-enum State { ROCK, STALK, CURIOUS, BACK }
+enum State { ROCK, STALK, CURIOUS, BACK, THIEF, LOOT }
 
 
 ## Сам скальник.
@@ -63,6 +74,8 @@ class Octo:
 	var mimic_cd := 0.0
 	## Уже сообщил, что разглядывает корабль (в этот раз).
 	var seen := false
+	## Украденный образец (номер Samples.all), −1 — ничего не несёт.
+	var loot := -1
 
 
 ## Скальник; null — кольчужника нет.
@@ -167,6 +180,32 @@ func step(world: EcoWorld, dt: float) -> void:
 			if sk.pos.distance_to(sk.home) < HOME_DIST:
 				sk.state = State.ROCK
 				sk.pos = sk.home
+		State.THIEF:
+			speed = THIEF_SPEED
+			if s.claw_state == EcoLink.CLAW_IDLE:
+				sk.state = State.BACK
+			else:
+				goal = s.claw
+				if sk.pos.distance_to(goal) < GRAB and s.claw_state == EcoLink.CLAW_BACK and s.claw_sample >= 0:
+					sk.loot = s.claw_sample
+					world.send(EcoLink.steal(Species.cap(world.nm(ID)), sk.loot))
+					sk.state = State.LOOT
+					sk.reveal = REVEAL
+					world.emit(ID, "thief", sk.pos, _thief_text(world))
+		State.LOOT:
+			speed = LOOT_SPEED
+			if sk.pos.distance_to(sk.home) < LOOT_HOME:
+				sk.state = State.ROCK
+				sk.pos = sk.home
+				speed = 0.0
+				if sk.loot >= 0:
+					world.send(EcoLink.drop(sk.loot, stash_point(sk.home, sk.loot)))
+					sk.loot = -1
+	# Захват тянется за образцом недалеко от дома — скальник бросается его обчистить.
+	if sk.state == State.ROCK and (s.claw_state == EcoLink.CLAW_REACH or s.claw_state == EcoLink.CLAW_BACK) \
+			and s.claw_sample >= 0 and s.claw_target.distance_to(sk.home) < THIEF_R:
+		sk.state = State.THIEF
+		sk.reveal = SPOOKED
 	if speed > 0.0:
 		var to := EcoHull.detour(sk.pos, goal, s.pos, s.yaw, PAD) - sk.pos
 		var d := to.length()
@@ -194,6 +233,27 @@ func step(world: EcoWorld, dt: float) -> void:
 		sk.vel = Vector3.ZERO
 	var want := 1.0 if sk.state == State.ROCK and sk.reveal <= 0.0 else 0.0
 	sk.camo += (want - sk.camo) * minf(1.0, dt * (0.5 if want > 0.0 else 4.0))
+
+
+## Разряд по корпусу (E.onZap): вор или несущий добычу ближе радиуса разряда бросает образец там, где он, и уходит.
+func on_zap(world: EcoWorld, radius: float) -> void:
+	var sk := octo
+	if sk == null or (sk.state != State.THIEF and sk.state != State.LOOT):
+		return
+	if sk.pos.distance_to(world.ship.pos) >= radius:
+		return
+	if sk.loot >= 0:
+		world.send(EcoLink.drop(sk.loot, sk.pos))
+		sk.loot = -1
+		world.emit(ID, "drop", sk.pos, _drop_text(world))
+	sk.state = State.BACK
+	sk.cd = ZAP_CD
+	sk.reveal = SPOOKED
+
+
+## Куда бросает добычу дома: в 1,2 м от дома, направление — по номеру образца (как в браузере, cos i, sin i).
+static func stash_point(home: Vector3, sample: int) -> Vector3:
+	return home + Vector3(cos(sample), 0.0, sin(sample)) * STASH
 
 
 ## Замаскированного нет ни на сонаре, ни в прицеле (E.scanTargets: hidden и noSonar).
@@ -245,3 +305,19 @@ static func _curious_text(world: EcoWorld) -> Callable:
 		var w: EcoWorld = wr.get_ref()
 		var sk := w.nm(ID) if w else Species.called(ID)
 		return "%s подплыл к самому стеклу и разглядывает корабль" % Species.cap(sk)
+
+
+static func _thief_text(world: EcoWorld) -> Callable:
+	var wr: WeakRef = weakref(world)
+	return func() -> String:
+		var w: EcoWorld = wr.get_ref()
+		var sk := w.nm(ID) if w else Species.called(ID)
+		return "%s стащил образец с захвата и уносит его к себе" % Species.cap(sk)
+
+
+static func _drop_text(world: EcoWorld) -> Callable:
+	var wr: WeakRef = weakref(world)
+	return func() -> String:
+		var w: EcoWorld = wr.get_ref()
+		var sk := w.nm(ID, Species.Case.ACC) if w else Species.called(ID, Species.Case.ACC)
+		return "Разряд спугнул %s: он бросил образец" % sk

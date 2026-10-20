@@ -260,6 +260,153 @@ func test_reset_back_to_rock() -> void:
 	near(again.camo, 1.0, 1e-6)
 
 
+# ---------- Кража образцов ----------
+
+## Захват лебёдки тянется к образцу sample, лежащему в off от дома; корабль над целью, на ходу 1 м/с
+## (не тихий — скальнику не до любопытства); захват — в 1,5 м над целью.
+func _claw(w: EcoWorld, off: Vector3, sample := 5, state := EcoLink.CLAW_REACH) -> void:
+	var home := _sk(w).octo.home
+	var target := home + off
+	w.ship.pos = target + Vector3(0, 7, 0)
+	w.ship.yaw = 0.0
+	w.ship.speed = 1.0
+	w.ship.light_on = false
+	w.ship.claw_state = state
+	w.ship.claw_sample = sample
+	w.ship.claw_target = target
+	w.ship.claw = target + Vector3(0, 1.5, 0)
+
+
+func _link_of(events: Array[Dictionary], type: String) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for ev in events:
+		if ev.get("type", "") == type:
+			out.append(ev)
+	return out
+
+
+func test_thief_steals_on_lift_and_stashes_at_home() -> void:
+	var w := _world()
+	var sk := _sk(w).octo
+	_claw(w, Vector3(4, 0, 0))
+	w.step(0.05)
+	eq(sk.state, EcoSkalnik.State.THIEF, "захват тянется у норы — бросается")
+	w.run(2.0)
+	eq(_link_of(w.take_link(), EcoLink.STEAL).size(), 0, "пока захват тянется — не срывает")
+	ok(sk.pos.distance_to(w.ship.claw) < EcoSkalnik.GRAB, "ждёт у захвата")
+	ok(sk.camo < 0.5, "сбросил маскировку")
+	w.ship.claw_state = EcoLink.CLAW_BACK
+	w.step(0.05)
+	var steal := _link_of(w.take_link(), EcoLink.STEAL)
+	eq(steal.size(), 1, "на подъёме сорвал")
+	eq(steal[0].get("sample"), 5)
+	eq(steal[0].get("by"), "Живой камень", "имя — как его знает экипаж")
+	eq(sk.state, EcoSkalnik.State.LOOT)
+	eq(sk.loot, 5)
+	eq(_notes(w, "thief").size(), 0, "наблюдение ушло с take_link")
+	w.ship.claw_state = EcoLink.CLAW_IDLE
+	w.ship.claw_sample = -1
+	var drops: Array[Dictionary] = []
+	for i in 200:
+		w.step(0.05)
+		drops.append_array(_link_of(w.take_link(), EcoLink.DROP))
+		if sk.state == EcoSkalnik.State.ROCK:
+			break
+	eq(sk.state, EcoSkalnik.State.ROCK, "унёс домой")
+	eq(drops.size(), 1, "бросил один раз")
+	eq(drops[0].get("sample"), 5)
+	ok((drops[0].get("at") as Vector3).is_equal_approx(EcoSkalnik.stash_point(sk.home, 5)), "в 1,2 м от дома")
+	near(EcoSkalnik.stash_point(sk.home, 5).distance_to(sk.home), EcoSkalnik.STASH, 1e-5)
+	eq(sk.loot, -1)
+
+
+func test_thief_observation_heard() -> void:
+	var w := _world()
+	_claw(w, Vector3(4, 0, 0), 2, EcoLink.CLAW_BACK)
+	var notes: Array[String] = []
+	for i in 60:
+		w.step(0.05)
+		for ev in w.take_link():
+			if ev.get("type", "") == EcoLink.OBSERVE and ev.get("species", "") == EcoSkalnik.ID:
+				notes.append(str(ev.get("note", "")))
+		if _sk(w).octo.state == EcoSkalnik.State.LOOT:
+			break
+	ok("thief" in notes, "наблюдение «thief»: %s" % [notes])
+
+
+func test_no_theft_far_from_home() -> void:
+	var w := _world()
+	var sk := _sk(w).octo
+	_claw(w, Vector3(EcoSkalnik.THIEF_R + 1.0, 0, 0), 5, EcoLink.CLAW_BACK)
+	w.run(3.0)
+	eq(sk.state, EcoSkalnik.State.ROCK, "цель дальше 12 м — сидит")
+	eq(_link_of(w.take_link(), EcoLink.STEAL).size(), 0)
+	_claw(w, Vector3(4, 0, 0), -1, EcoLink.CLAW_REACH)
+	w.run(1.0)
+	eq(sk.state, EcoSkalnik.State.ROCK, "захват без цели — не интересен")
+
+
+func test_claw_back_in_hold_calls_off_thief() -> void:
+	var w := _world()
+	var sk := _sk(w).octo
+	_claw(w, Vector3(4, 0, 0))
+	w.run(0.5)
+	eq(sk.state, EcoSkalnik.State.THIEF)
+	w.ship.claw_state = EcoLink.CLAW_IDLE
+	w.ship.claw_sample = -1
+	w.step(0.05)
+	eq(sk.state, EcoSkalnik.State.BACK, "захват убран — домой")
+	eq(_link_of(w.take_link(), EcoLink.STEAL).size(), 0)
+
+
+func test_zap_makes_him_drop_loot() -> void:
+	var w := _world()
+	var sk := _sk(w).octo
+	_claw(w, Vector3(4, 0, 0), 7, EcoLink.CLAW_BACK)
+	for i in 60:
+		w.step(0.05)
+		if sk.state == EcoSkalnik.State.LOOT:
+			break
+	eq(sk.state, EcoSkalnik.State.LOOT)
+	w.ship.claw_state = EcoLink.CLAW_IDLE
+	w.ship.claw_sample = -1
+	w.step(0.05)
+	w.take_link()
+	# разряд дальше радиуса — не слышит
+	w.ship.zap = true
+	w.ship.zap_radius = sk.pos.distance_to(w.ship.pos) - 0.5
+	w.step(0.05)
+	w.ship.zap = false
+	eq(sk.state, EcoSkalnik.State.LOOT, "разряд не достал")
+	eq(_link_of(w.take_link(), EcoLink.DROP).size(), 0)
+	w.ship.zap = true
+	w.ship.zap_radius = 20.0
+	var at := sk.pos
+	w.step(0.05)
+	w.ship.zap = false
+	eq(_notes(w, "drop").size(), 1, "наблюдение «drop»")
+	var drops := _link_of(w.take_link(), EcoLink.DROP)
+	eq(drops.size(), 1, "бросил образец")
+	eq(drops[0].get("sample"), 7)
+	ok((drops[0].get("at") as Vector3).distance_to(at) < 0.5, "там, где был")
+	eq(sk.loot, -1)
+	eq(sk.state, EcoSkalnik.State.BACK)
+	near(sk.cd, EcoSkalnik.ZAP_CD - 0.05, 0.06, "30 с покоя")
+	w.run(30.0)
+	eq(_link_of(w.take_link(), EcoLink.DROP).size(), 0, "дома второй раз не бросает")
+
+
+func test_zap_ignored_by_plain_rock() -> void:
+	var w := _world()
+	var sk := _sk(w).octo
+	_ship_facing_home(w, 5.0)
+	w.ship.speed = 1.0
+	w.ship.zap = true
+	w.step(0.05)
+	eq(sk.state, EcoSkalnik.State.ROCK)
+	eq(_notes(w, "drop").size(), 0)
+
+
 # ---------- Сцена ----------
 
 func test_view_two_draws_color_follows_camo() -> void:
@@ -292,12 +439,25 @@ func test_view_two_draws_color_follows_camo() -> void:
 	# щупальца на дне, не ниже
 	for i in v.arms.multimesh.instance_count:
 		ok(v.arms.multimesh.get_instance_transform(i).origin.y >= FLAT + 0.05)
+	ok(not v.carry.visible, "без добычи камешка нет")
+	s.octo.loot = 3
+	v.sync(2.5, FAR)
+	ok(v.carry.visible, "несёт образец")
+	ok(v.carry.global_position.is_equal_approx(s.octo.pos + Vector3(0, SkalnikView.CARRY_UP, 0)), "над мантией")
+	eq(v.carry.layers, OceanView.LAYER_WORLD)
+	s.octo.loot = -1
+	v.sync(3.0, FAR)
+	ok(not v.carry.visible)
 	v.queue_free()
 	await frames(1)
 
 
 func test_body_faces_outward() -> void:
-	var m := SkalnikView.build_body()
+	for m in [SkalnikView.build_body(), SkalnikView.build_carry()]:
+		_faces_out(m)
+
+
+func _faces_out(m: ArrayMesh) -> void:
 	var arr := m.surface_get_arrays(0)
 	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
 	var n: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
