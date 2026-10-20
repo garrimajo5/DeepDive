@@ -172,6 +172,11 @@ func test_scene_vote() -> void:
 	eq(main.vote_panel.sub, "Очки экспедиции: %d" % main.run.score)
 	eq(main.overlay.action_label, "Дальше")
 	main.helm.pos = Vector3(100.0, -30.0, 0.0)
+	r.begin(2, r.layout.action.c)   # первое нажатие — с вида с борта к итогу на мостике
+	main.step(1.0 / 30.0)
+	r.end(2)
+	main.step(1.0 / 30.0)
+	ok(main.run.ended and not main.flyby.active(), "вид с борта пропущен, итог открыт")
 	r.begin(2, r.layout.action.c)
 	main.step(1.0 / 30.0)
 	r.end(2)

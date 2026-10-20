@@ -35,13 +35,17 @@ func test_start_path_and_end() -> void:
 	ok(not f.active(), "через %.0f с облёт кончился сам" % Flyby.START_S)
 
 
-func test_surface_holds_last_point() -> void:
+func test_surface_holds_then_ends() -> void:
 	var f := Flyby.new()
 	f.start(Flyby.Kind.SURFACE)
-	f.update(Flyby.SURFACE_S + 5.0)
-	ok(f.active(), "вид при всплытии держится")
+	f.update(Flyby.SURFACE_S + Flyby.SURFACE_HOLD * 0.5)
+	ok(f.active(), "вид при всплытии стоит в последней точке")
 	ok(f.pose().origin.is_equal_approx(Flyby.SURFACE_PATH[2]), "в последней точке")
 	ok(f.pose().origin.y < Flyby.LOOK_AT.y + Flyby.SURFACE_LOOK_UP, "снизу вверх — к свету льда")
+	f.update(Flyby.SURFACE_HOLD)
+	ok(not f.active(), "вид при всплытии кончился сам (issue #209)")
+	ok(Flyby.SURFACE_S + Flyby.SURFACE_HOLD < 9.0, "кончается раньше снимка 22-itog тестера (10 с)")
+	f.start(Flyby.Kind.SURFACE)
 	f.stop()
 	ok(not f.active(), "stop — облёта нет")
 
@@ -79,7 +83,33 @@ func test_scene_intro_ends_and_surface_view() -> void:
 	ok(main.flyby.kind == Flyby.Kind.SURFACE and main.flyby_cam.current, "наверх — вид с борта при всплытии")
 	for i in 30:
 		main.step(1.0 / 30.0)
-	ok(main.flyby.active(), "пока открыт итог — вид держится")
+	ok(main.flyby.active(), "сначала — вид с борта")
+	for i in int((Flyby.SURFACE_S + Flyby.SURFACE_HOLD) * 30.0):
+		main.step(1.0 / 30.0)
+	ok(not main.flyby.active() and main.camera.current, "вид с борта кончился сам — глаза на мостике (issue #209)")
+	ok(main.run.ended, "забег ещё на итоге")
 	main.close_vote()
 	main.step(1.0 / 30.0)
 	ok(main.flyby.kind == Flyby.Kind.START, "новый забег — снова облёт")
+
+
+func test_scene_surface_skipped_by_action() -> void:
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.walker.x = Main.ROUTE_POST.x
+	main.walker.z = Main.ROUTE_POST.y
+	main.use_post("route")
+	main.complete_route()
+	main.use_post("route")
+	main.step(1.0 / 30.0)
+	main.decide("up")
+	main.step(1.0 / 30.0)
+	ok(main.flyby.kind == Flyby.Kind.SURFACE, "наверх — вид с борта")
+	var r := main.overlay.router
+	r.action_pressed = true
+	main.step(1.0 / 30.0)
+	ok(not main.flyby.active() and main.camera.current, "кнопка — к итогу на мостике")
+	ok(main.run.ended and main.at_vote, "первое нажатие не начинает новый забег")
+	main.step(0.3)
+	ok(main.sonar_view.vote.board.visible, "итог на голограмме над столом")
