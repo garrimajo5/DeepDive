@@ -50,6 +50,7 @@ var _warm_emit: Array = []          ## частицы, выпущенные пр
 var hit_flash: ColorRect
 var visor: ColorRect          ## щиток сварщика: затемнение, пока свой игрок варит (Breach.VISOR)
 var sonar_view: SonarView
+var alarm_board: AlarmBoardView   ## табло тревог над носовым окном (ART-025)
 var time := 0.0             ## секунды игры (для сонара и событий)
 var power := Reactor.Console.new()   ## выбор на пульте энергии
 var at_power := false              ## игрок у пульта энергии: крестовина правит доли
@@ -123,6 +124,9 @@ func _ready() -> void:
 	add_child(drain_sound)
 	sonar_view = SonarView.new()
 	bridge.add_child(sonar_view)
+	alarm_board = AlarmBoardView.new()
+	alarm_board.name = "Табло тревог"
+	bridge.add_child(alarm_board)
 	rooms = RoomsView.new()
 	rooms.name = "Отсеки"
 	ship.add_child(rooms)
@@ -508,6 +512,7 @@ func step(dt: float) -> void:
 	bridge.set_hatch(layout.doors[0].offset())
 	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0, silt.noise(time))
 	sonar_view.show_waypoint(run.waypoint())
+	alarm_board.show_alarms(alarms_on(), time)
 	sonar_view.show_briefing(brief.update(dt, Briefing.wanted(near_post, at_vote, run.ended)), run, helm.pos)
 	sonar_view.show_vote(vote_fade.update(dt, VoteHolo.wanted(at_vote, run.ended)), votes)
 	sonar_view.show_result(result_fade.update(dt, VoteHolo.result_wanted(at_vote, run.ended)), result_rows,
@@ -907,6 +912,12 @@ func _update_ui() -> void:
 	var width := minf(900.0, get_viewport().get_visible_rect().size.x - 48.0)
 	hint.text = "\n".join(Status.lines(status_parts(),
 		func(t: String) -> float: return font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x, width))
+
+
+## Активные поля табло тревог (AlarmBoard.Field) — из тех же строк, что тревога в строке состояния.
+func alarms_on() -> Array[bool]:
+	return AlarmBoard.active(breach.status(), vitals.drain_alarm(), reactor.alert(), silt.alarm(),
+		vitals.energy < Vitals.LOW_ENERGY)
 
 
 ## Части строки состояния: где игрок, глубина, ход, у штурвала — до дна, курс и прожектор, течение, пост рядом, сообщение.
