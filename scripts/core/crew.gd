@@ -48,6 +48,8 @@ const TORCH_NOZZLE := Vector3(0.0, 0.1766, -0.1428)
 const TORCH_GAP := 0.06
 ## Руки на посте далеко: фигура наклоняется к нему (от таза), не больше LEAN_MAX рад.
 const LEAN_MAX := 0.75
+## Свой игрок наклоняется плавно (рад/с): камера в голове идёт за наклоном (`eye_offset`), рывок на 0,4 м мешал бы.
+const LEAN_RATE := 3.0
 ## Шов ниже плеча: при сварке фигура приседает (таз ниже, колени вперёд), чтобы рука доставала. Не больше CROUCH_MAX.
 const CROUCH_MAX := 0.3
 const CROUCH_ARM_DROP := 0.35  ## на сколько хват может быть ниже плеча без приседа
@@ -141,6 +143,9 @@ class Member:
 	var weld_n := Vector3.ZERO  ## нормаль борта в точке сварки (внутрь отсека)
 	var hands: Array[Vector3] = [Vector3.INF, Vector3.INF]  ## руки на посте [левая, правая] (CrewHands); INF — свободна
 	var phase := 0.0  ## фаза шага, рад
+	## Плавный наклон к посту (свой игрок): joints() берёт `lean`, который ведёт ease_lean(dt); иначе — сразу.
+	var smooth_lean := false
+	var lean := 0.0  ## текущий наклон к посту, рад (при smooth_lean)
 	var swing := 0.0  ## 0 — стоит, 1 — идёт полным ходом
 	var _last := Vector2.INF
 
@@ -229,8 +234,9 @@ class Member:
 			right = Vector3(cos(yaw), 0.0, -sin(yaw))
 			hip = Vector3(x, HIP - 0.03 * swing * absf(cos(phase)) - crouch(), z)
 			up = Vector3.UP
-			if not welding() and holding():   # руки на посте: наклон к нему, пока не достанет
-				up = Basis(Vector3.UP.cross(fwd).normalized(), _lean(hip, fwd, right)) * Vector3.UP
+			var a := _lean_now(hip, fwd, right)
+			if a > 0.0:   # руки на посте: наклон к нему, пока не достанет
+				up = Basis(Vector3.UP.cross(fwd).normalized(), a) * Vector3.UP
 		j["hip"] = hip
 		var neck := hip + up * TORSO
 		j["neck"] = neck
@@ -286,6 +292,36 @@ class Member:
 		j["fwd"] = fwd
 		j["up"] = up
 		return j
+
+	## Наклон к посту сейчас (рад): плавный `lean` или сразу нужный.
+	func _lean_now(hip: Vector3, fwd: Vector3, right: Vector3) -> float:
+		if seated or welding():
+			return 0.0
+		if smooth_lean:
+			return lean
+		return _lean(hip, fwd, right) if holding() else 0.0
+
+	## Сколько нужно наклониться к посту, на котором руки (рад); 0 — руки свободны, сидит или варит.
+	func lean_target() -> float:
+		if seated or welding() or not holding():
+			return 0.0
+		var fwd := Vector3(-sin(yaw), 0.0, -cos(yaw))
+		var right := Vector3(cos(yaw), 0.0, -sin(yaw))
+		return _lean(Vector3(x, HIP, z), fwd, right)
+
+	## Шаг плавного наклона: к lean_target() не быстрее LEAN_RATE.
+	func ease_lean(dt: float) -> void:
+		lean = move_toward(lean, lean_target(), LEAN_RATE * dt)
+
+	## Насколько глаз сдвинут наклоном к посту (оси корабля): камера своего игрока идёт за головой, иначе
+	## наклонённая грудь и плечи оказываются под камерой и видны изнутри (issue #106, #107).
+	func eye_offset() -> Vector3:
+		var fwd := Vector3(-sin(yaw), 0.0, -cos(yaw))
+		var a := _lean_now(Vector3(x, HIP, z), fwd, Vector3(cos(yaw), 0.0, -sin(yaw)))
+		if a <= 0.0:
+			return Vector3.ZERO
+		var up := Basis(Vector3.UP.cross(fwd).normalized(), a) * Vector3.UP
+		return (up - Vector3.UP) * EYE_UP
 
 	## Наклон к посту (рад): самый малый, при котором обе руки достают до точек хвата, не больше LEAN_MAX.
 	func _lean(hip: Vector3, fwd: Vector3, right: Vector3) -> float:
