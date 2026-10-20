@@ -41,6 +41,9 @@ var spores: MultiMeshInstance3D
 ## Последние буферы луковиц и спор (для тестов).
 var bulb_buffer := PackedFloat32Array()
 var spore_buffer := PackedFloat32Array()
+## Кусты, чьи споры в буфере ещё видны (облако было на прошлом кадре): нераскрытые кусты буфер спор не пишут
+## и не грузят заново (issue #133).
+var _spores_shown := PackedByteArray()
 
 
 func _init(system: EcoBladder) -> void:
@@ -125,7 +128,10 @@ static func build_spore() -> QuadMesh:
 ## Расставить луковицы и споры в момент t (время мира).
 func sync(t: float) -> void:
 	bulb_buffer.resize(bulbs.multimesh.instance_count * STRIDE_C)
+	var fresh := spore_buffer.size() != spores.multimesh.instance_count * STRIDE_C
 	spore_buffer.resize(spores.multimesh.instance_count * STRIDE_C)
+	_spores_shown.resize(bladders.bushes.size())
+	var spores_changed := fresh
 	for bl in bladders.bushes:
 		var r := EcoBladder.bulb_size(bl)
 		var c := EcoBladder.bulb_color(bl)
@@ -133,16 +139,22 @@ func sync(t: float) -> void:
 			var i := (bl.index * EcoBladder.STEMS + k) * STRIDE_C
 			_put(bulb_buffer, i, Transform3D(Basis.from_scale(Vector3.ONE * r), EcoBladder.bulb(bl, k, t)))
 			_color(bulb_buffer, i + STRIDE, c)
+		var popped := bl.popped()
+		if not popped and not fresh and _spores_shown[bl.index] == 0:
+			continue
+		spores_changed = true
+		_spores_shown[bl.index] = 1 if popped else 0
 		var g := EcoBladder.spore_glow(bl)
 		for j in EcoBladder.SPORES:
 			var i := (bl.index * EcoBladder.SPORES + j) * STRIDE_C
-			if bl.popped():
+			if popped:
 				_put(spore_buffer, i, Transform3D(Basis.IDENTITY, EcoBladder.spore(bl, j, t)))
 			else:
 				_put(spore_buffer, i, Transform3D(Basis.from_scale(Vector3.ZERO), bl.cloud))
 			_color(spore_buffer, i + STRIDE, SPORE * g)
 	bulbs.multimesh.buffer = bulb_buffer
-	spores.multimesh.buffer = spore_buffer
+	if spores_changed:
+		spores.multimesh.buffer = spore_buffer
 
 
 ## Базис, что ставит единичный стебель (ось +Y, середина в нуле) от основания по вектору up.
