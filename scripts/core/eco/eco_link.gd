@@ -39,10 +39,15 @@ class ShipState:
 ##     кроме спрятавшихся, — у них "scan": true; события идут ближние первыми. Одно существо — одно событие,
 ##     даже если оно и для сонара, и для сканера; сонар берёт только "sonar": true.
 ## {"type": MESSAGE, "text": "…"}                                         — строка на приборы как есть
+## {"type": OBSERVE, "species": "fish", "note": "flee", "text": "…"}      — наблюдение для журнала (handleEvents
+##     в js/game.js): событие шины EcoBus с заметкой вида (Species.is_observation) не дальше EcoBus.HEARING от корабля.
+##     text — строка на приборы ("" — без текста); корабль показывает её сам, как MESSAGE, а у нового наблюдения
+##     без текста — «Новое наблюдение: …». Отдельный MESSAGE для того же события мир не шлёт.
 const HIT := "hit"
 const DRAIN := "drain"
 const NEAR := "near"
 const MESSAGE := "message"
+const OBSERVE := "observe"
 
 
 static func hit(by: String, damage: float, at: Vector3) -> Dictionary:
@@ -57,3 +62,7 @@ static func near(species: String, name: String, pos: Vector3, ship_pos: Vector3,
 
 static func message(text: String) -> Dictionary:
 	return {"type": MESSAGE, "text": text}
+
+
+static func observe(species: String, note: String, text: String = "") -> Dictionary:
+	return {"type": OBSERVE, "species": species, "note": note, "text": text}

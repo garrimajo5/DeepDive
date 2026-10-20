@@ -24,6 +24,7 @@ var debug_weld := false        ## снимок: сварку держат без
 var save := SaveGame.new()     ## груз трюма, поднятые образцы и изученные виды в user:// (js/save.js)
 var scanner := Scanner.new()   ## сканер биолога: цели от живого мира, изученные виды
 var at_scanner := false        ## игрок у поста «Сканер»: мир шлёт цели (ShipState.scan_range)
+var journal_page := 0          ## страница журнала лаборатории: 0 — сводка, дальше карточки видов (Lab.page_lines)
 var engine := EngineRoom.new()   ## машинное: вентиль сброса пара и щиток «Аварийный сброс»
 var debug_vent := false          ## снимок: вентиль держат без пальца
 var debug_winch := false         ## снимок: кнопку у лебёдки держат без пальца
@@ -293,7 +294,7 @@ func step(dt: float) -> void:
 	rooms.apply(layout, reactor, airlock, engine)
 	var carry_c: Color = Samples.COLORS[samples.target.kind] if samples.target else Color.WHITE
 	rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(), carry_c)
-	rooms.set_lab(Lab.contents(samples.cargo), Lab.journal_lines(samples, scanner.scanned.size()), time)
+	rooms.set_lab(Lab.contents(samples.cargo), Lab.page_lines(samples, scanner, journal_page), time)
 	bridge.set_scanner_screen(scanner.screen_lines())
 	message.update(dt)
 	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt)
@@ -333,8 +334,9 @@ func use_post(id: String) -> void:
 			engine.press(reactor)
 		"scanner":
 			scanner.press()
-		"journal":
-			say(Lab.journal_info(samples))
+		"journal":   # листать: сводка → карточки видов → сводка
+			journal_page = (journal_page + 1) % Lab.pages(scanner)
+			say(Lab.journal_info(samples) if journal_page == 0 else Lab.card_info(scanner, Lab.cards(scanner)[journal_page - 1]))
 		_ when id.begins_with("flask"):
 			say(Lab.flask_info(samples.cargo, int(id.substr(5))))
 		_ when id.begins_with("door"):
@@ -451,6 +453,14 @@ func on_eco_event(e: Dictionary) -> void:
 			vitals.drain_ext += float(e.get("units", 0.0))
 		EcoLink.MESSAGE:
 			say(str(e.get("text", "")))
+		EcoLink.OBSERVE:   # наблюдение в журнал (handleEvents в js/game.js)
+			var sp := str(e.get("species", ""))
+			var fresh := scanner.observe(sp, str(e.get("note", "")))
+			var text := str(e.get("text", ""))
+			if text != "":
+				say(text)
+			elif fresh:
+				say("Новое наблюдение: %s" % Species.called(sp, Species.Case.NOM, scanner.is_scanned(sp)))
 
 
 func _on_hit(percent: int, kind: String) -> void:
@@ -621,7 +631,19 @@ func debug_setup(kv: Dictionary) -> void:
 		samples.cargo.clear()
 		for k in kv["cargo"].split(",", false):
 			samples.cargo.append([clampi(int(k), 0, Samples.NAMES.size() - 1), -1])
-		rooms.set_lab(Lab.contents(samples.cargo), Lab.journal_lines(samples, scanner.scanned.size()), time)
+		rooms.set_lab(Lab.contents(samples.cargo), Lab.page_lines(samples, scanner, journal_page), time)
+	if kv.has("observe"):  # observe=fish:flee,pred:ping — наблюдения в журнале; scanned=fish,pred — изученные виды;
+		# journal=n — страница журнала (0 — сводка)
+		for pair in kv["observe"].split(",", false):
+			var kn: PackedStringArray = pair.split(":")
+			if kn.size() == 2:
+				scanner.observe(kn[0], kn[1])
+	if kv.has("scanned"):
+		for id in kv["scanned"].split(",", false):
+			scanner.scanned[id] = true
+	if kv.has("journal"):
+		journal_page = clampi(int(kv["journal"]), 0, Lab.pages(scanner) - 1)
+		rooms.set_lab(Lab.contents(samples.cargo), Lab.page_lines(samples, scanner, journal_page), time)
 	if kv.has("breach"):  # breach=n — пробоина в месте n (0 мостик, 1 коридор, 2 лаборатория, 3 машинное), игрок у неё;
 		# weld=<доля> — шов заварен на долю (1 — заварен, шов горячий); water=<м> — вода на полу
 		open_breach(int(kv["breach"]))

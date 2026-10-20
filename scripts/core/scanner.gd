@@ -6,13 +6,15 @@ extends RefCounted
 ## выбор сканера. Удержание кнопки 1,5 с — вид изучен («Новый вид: …»), записан в журнал экспедиции и в сохранение;
 ## отпустил раньше — прогресс спадает вдвое быстрее. Пока прогресс есть, прицел держит сканируемый вид, даже если
 ## ближе подплыл другой (issue #90). Изученная цель — нажатие показывает сведения о виде.
-## Наблюдения (заметки журнала по событиям) — позже.
+## Наблюдения — заметки журнала вида (`Species.Info.notes`) по событиям мира рядом (`EcoLink.OBSERVE`): `seen`,
+## записываются и до сканирования, в журнале и сохранении (`seen` в формате js/save.js).
 
 const RANGE := 80.0          ## дальность прицела, м (как в браузере)
 const SCAN_TIME := 1.5       ## удержание до записи вида, с
 const DECAY := 2.0           ## спад прогресса без удержания, доля в с
 
 var scanned := {}            ## изученные виды: ключ Species → true
+var seen := {}               ## наблюдения: ключ Species → [ключ заметки, …] в порядке, как увидели
 var targets: Array[Dictionary] = []   ## NEAR с "scan": true этого шага, ближние первыми
 var target: Dictionary = {}  ## текущая цель ({} — никого)
 var key := ""                ## вид, который сканируется
@@ -82,6 +84,27 @@ func update(dt: float) -> void:
 	_holding = false
 
 
+## Наблюдение вида рядом с кораблём; true — новое (записать в сохранение). Ключ, которого нет у вида, — не наблюдение.
+func observe(species: String, note: String) -> bool:
+	if not Species.is_observation(species, note):
+		return false
+	var got: Array = seen.get(species, [])
+	if got.has(note):
+		return false
+	got.append(note)
+	seen[species] = got
+	changed.emit()
+	return true
+
+
+## Наблюдения вида по порядку записи.
+func seen_of(species: String) -> Array[String]:
+	var out: Array[String] = []
+	for n in seen.get(species, []):
+		out.append(n)
+	return out
+
+
 ## Нажатие у поста: подсказка или сведения об изученном виде.
 func press() -> void:
 	if target.is_empty():
@@ -136,12 +159,23 @@ func list() -> Array[String]:
 	return out
 
 
-## Из сохранения: известные реестру виды.
-func restore(ids: Array) -> void:
+## Из сохранения: известные реестру виды и их наблюдения (seen: ключ вида → [ключ заметки, …]; чужие ключи пропускаются).
+func restore(ids: Array, notes: Dictionary = {}) -> void:
 	scanned.clear()
+	seen.clear()
 	for id in ids:
 		if Species.has(str(id)):
 			scanned[str(id)] = true
+	for id in notes:
+		var info := Species.info(str(id))
+		if info == null or not (notes[id] is Array):
+			continue
+		var got: Array = []
+		for n in notes[id]:
+			if info.has_note(str(n)) and not got.has(str(n)):
+				got.append(str(n))
+		if not got.is_empty():
+			seen[str(id)] = got
 	target = {}
 	key = ""
 	progress = 0.0
