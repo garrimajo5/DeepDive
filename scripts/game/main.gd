@@ -433,7 +433,9 @@ func step(dt: float) -> void:
 		var choice := "" if run.ended else run.vote_nav(r.move)
 		if choice != "":
 			decide(choice)
-		if r.action_pressed:
+		if r.action_pressed and flyby.kind == Flyby.Kind.SURFACE:
+			flyby.stop()   # вид с борта при всплытии: кнопка — к итогу на голограмме, новый забег — следующим нажатием
+		elif r.action_pressed:
 			close_vote()
 	else:
 		helm.in_thrust = 0.0
@@ -878,7 +880,7 @@ func decide(choice: String) -> void:
 	var rows := run.finish(time, samples.cargo.size(), scanner.scanned.size(), breach.count, vitals.hull)
 	result_rows = run.summary(samples.cargo.size(), scanner.scanned.size(), breach.count)
 	vote_panel.show_results(Run.detail(rows), run.score)
-	flyby.start(Flyby.Kind.SURFACE)   # вид с борта, пока на экране итог
+	flyby.start(Flyby.Kind.SURFACE)   # вид с борта при всплытии, затем — итог на голограмме
 	say("Экипаж поднялся наверх: очки %d" % run.score)
 
 

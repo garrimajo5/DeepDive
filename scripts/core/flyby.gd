@@ -10,8 +10,10 @@ enum Kind { NONE, START, SURFACE }
 const START_S := 6.0
 ## Ключевые точки облёта (оси корабля, м): нос слева впереди → левый борт → корма слева сверху. Корпус ~37 м.
 const START_PATH := [Vector3(-26.0, 4.0, -30.0), Vector3(-32.0, 7.0, 6.0), Vector3(-20.0, 11.0, 38.0)]
-## Всплытие: камера под левым бортом поднимается вместе с кораблём к свету льда; держится, пока открыт итог забега.
-const SURFACE_S := 8.0
+## Всплытие: камера под левым бортом поднимается вместе с кораблём к свету льда, стоит в последней точке SURFACE_HOLD
+## и кончается сама — глаза на мостике, итог на голограмме над голостолом (issue #209). Кнопка действия пропускает.
+const SURFACE_S := 6.0
+const SURFACE_HOLD := 1.5
 const SURFACE_PATH := [Vector3(-24.0, -10.0, 20.0), Vector3(-28.0, -4.0, 6.0), Vector3(-30.0, 2.0, -6.0)]
 ## Куда смотрит камера: середина корпуса; при всплытии — выше, к кораблю на фоне льда.
 const LOOK_AT := Vector3(0.0, HullPlan.CENTER_Y, HullPlan.BODY_Z)
@@ -42,12 +44,17 @@ func length() -> float:
 	return START_S if kind == Kind.START else SURFACE_S
 
 
-## Шаг: облёт в начале забега кончается сам, вид при всплытии держится в последней точке (до stop()).
+## Сколько всего длится вид, с: облёт в начале — путь, всплытие — путь и стоянка в последней точке.
+func duration() -> float:
+	return START_S if kind == Kind.START else SURFACE_S + SURFACE_HOLD
+
+
+## Шаг: облёт кончается сам — в начале забега после пути, при всплытии после стоянки в последней точке.
 func update(dt: float) -> void:
 	if not active():
 		return
-	t = minf(t + dt, length())
-	if kind == Kind.START and t >= START_S:
+	t += dt
+	if t >= duration():
 		stop()
 
 
