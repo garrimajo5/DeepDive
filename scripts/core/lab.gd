@@ -3,7 +3,7 @@ extends RefCounted
 ## Лаборатория по ART-009 и моделям MOD-015 (`docs/concept-art/laboratoriya.md`): три колбы на тумбах и стойка журнала.
 ## Как в браузерной версии (js/ship.js, S.showTubes): в колбах — три последних образца из груза трюма, колба i —
 ## i-й из последних трёх; поднял лебёдкой — образец сам появляется в колбе. Пост «Колба» — что в ней; пост «Журнал» —
-## сводка экспедиции на экране стойки. Записи о видах в журнал — задача «Сканер биолога» (ждёт реестр видов потока Б).
+## сводка экспедиции на экране стойки (изученные виды — от сканера биолога, `Scanner`).
 ## Оси корабля; отсек x −4…4, z 8…14 (`ShipLayout.ROOMS`).
 
 ## Центры тумб колб на полу (x, z): две у левого борта у кормы, третья у правого у носа.
@@ -46,9 +46,11 @@ static func flask_info(cargo: Array, n: int) -> String:
 	return "Колба %d: %s" % [n + 1, Samples.NAMES[k].to_lower()]
 
 
-## Строки экрана журнала: заголовок, груз, поднято со дна, по видам образцов.
-static func journal_lines(s: Samples) -> PackedStringArray:
+## Строки экрана журнала: заголовок, изучено видов (species < 0 — не писать), груз, поднято со дна, по видам образцов.
+static func journal_lines(s: Samples, species: int = -1) -> PackedStringArray:
 	var lines := PackedStringArray(["ЖУРНАЛ ЭКСПЕДИЦИИ"])
+	if species >= 0:
+		lines.append("Видов изучено: %d из %d" % [species, Species.count()])
 	lines.append("Образцов в трюме: %d" % s.cargo.size())
 	lines.append("Поднято со дна: %d из %d" % [s.got.size(), s.all.size()])
 	var count := []

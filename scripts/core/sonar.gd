@@ -42,8 +42,8 @@ func ping(t: float, k: float) -> String:
 func take_contacts(events: Array, ship_pos: Vector3) -> void:
 	var found: Array[Dictionary] = []
 	for e in events:
-		if e.get("type", "") != EcoLink.NEAR or not e.has("pos"):
-			continue
+		if e.get("type", "") != EcoLink.NEAR or not e.has("pos") or not bool(e.get("sonar", true)):
+			continue   # цели только для сканера (issue #85) сонар не видит
 		var p: Vector3 = e["pos"]
 		if Vector2(p.x - ship_pos.x, p.z - ship_pos.z).length() > range_m:
 			continue
