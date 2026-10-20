@@ -3,7 +3,8 @@ extends Node3D
 ## Фигуры экипажа на корабле: модель MOD-012 (мужская или женская, `Crew.Member.look`), позу считает
 ## `Crew.Member.joints()`, на скелет её переносит `CrewRig.pose`. Один skinned-меш на фигуру — один вызов отрисовки.
 ## Свой игрок — копия меша без головы и верха груди (`cut_mesh`: камера в голове, наклон к штурвалу подносит грудь
-## к камере), задние грани отсечены; стоя модель чуть позади камеры (OWN_BACK). Цвет роли — нашивка на левом плече.
+## к камере), задние грани отсечены; стоя модель чуть позади камеры (OWN_BACK). Цвет роли — нашивка на левом плече,
+## роль видна по снаряжению MOD-016 (`_dress`: детали на костях, щиток поднят и опущен на сварке).
 ## Узел живёт в осях корабля, слой света 2 (только плафоны корабля).
 
 const LAYER_SHIP := 2
@@ -21,6 +22,8 @@ var meshes: Array[MeshInstance3D] = []
 var patches: Array[MeshInstance3D] = []
 var torches: Array[Node3D] = []  ## резак MOD-013 у каждой фигуры: виден, пока она варит
 var looks: Array[int] = []  ## внешность, с которой собрана фигура
+var gear: Array = []  ## снаряжение роли у каждой фигуры: имя GLB → узел детали (CrewRig.GEAR)
+var gear_roles: Array[int] = []  ## роль, под которую надето снаряжение (-1 — ещё нет)
 ## Что нарисовано у каждой фигуры: сустав → точка в осях корабля (по костям модели; скрытых нет) — для тестов и сети.
 var shown: Array = []
 var _rest := {}  ## внешность → CrewRig.Rest
@@ -39,6 +42,8 @@ func set_members(list: Array, me: Crew.Member) -> void:
 		meshes.append(null)
 		patches.append(null)
 		looks.append(-1)
+		gear.append({})
+		gear_roles.append(-1)
 		var t: Node3D = load("res://models/rezak.glb").instantiate()
 		t.name = "Резак"
 		t.visible = false
@@ -92,6 +97,29 @@ func _build(i: int, look: int) -> void:
 	meshes[i] = mi
 	patches[i] = patch
 	looks[i] = look
+	gear[i] = {}
+	gear_roles[i] = -1
+
+
+## Снаряжение роли на фигуре i (MOD-016): каждая деталь — BoneAttachment3D на своей кости, слой 2.
+func _dress(i: int, role: int) -> void:
+	if gear_roles[i] == role:
+		return
+	for n in gear[i].values():
+		(n as Node).get_parent().queue_free()
+	gear[i] = {}
+	var rest: CrewRig.Rest = _rest[looks[i]]
+	for g in CrewRig.ROLE_GEAR[clampi(role, 0, CrewRig.ROLE_GEAR.size() - 1)]:
+		var att := BoneAttachment3D.new()
+		att.bone_name = CrewRig.GEAR[g][0]
+		skeletons[i].add_child(att)
+		var node: Node3D = load("res://models/%s.glb" % g).instantiate()
+		node.name = g
+		node.transform = CrewRig.gear_xform(rest, g)
+		_to_ship_layer(node)
+		att.add_child(node)
+		gear[i][g] = node
+	gear_roles[i] = role
 
 
 ## Покой скелета для CrewRig.
@@ -165,6 +193,13 @@ func apply() -> void:
 		meshes[i].mesh = _meshes[looks[i]][1 if own else 0]
 		meshes[i].material_override = _own_mat[looks[i]] if own else null
 		patches[i].visible = not own  # своя нашивка у самой камеры
+		_dress(i, m.role)
+		for gn in gear[i]:
+			var node: Node3D = gear[i][gn]
+			node.visible = not (own and gn in CrewRig.GEAR_OWN_HIDDEN)
+			if gn == "gear-shchitok":   # щиток поднят, на сварке опущен
+				var x0 := CrewRig.gear_xform(_rest[looks[i]], gn)
+				node.transform = x0 if m.welding() else x0 * Transform3D(Basis(Vector3.RIGHT, CrewRig.VISOR_UP), Vector3.ZERO)
 		(patches[i].mesh.material as StandardMaterial3D).albedo_color = Crew.role_color(m.role)
 		var rest: CrewRig.Rest = _rest[looks[i]]
 		var at := {}
