@@ -16,6 +16,8 @@ uniform vec3 blip_cols[32];
 uniform float brightness = 1.0;
 uniform float noise = 0.0;    // помехи (сонарная тьма): рябь вместо карты и отметок
 uniform float time = 0.0;
+uniform vec2 wp_xz = vec2(0.0);  // точка маршрута (Run.waypoint), x, z мира
+uniform float wp_on = 0.0;
 
 varying vec2 local;
 
@@ -49,6 +51,15 @@ void fragment() {
 		vec2 cell = floor(local * 70.0);
 		float n = fract(sin(dot(cell, vec2(12.9898, 78.233)) + floor(time * 12.0) * 3.7) * 43758.5453);
 		col = mix(col, vec3(0.008, 0.07, 0.094), noise * 0.8) + teal * noise * 0.45 * step(0.82, n) * n;
+	}
+	if (wp_on > 0.5) {   // точка маршрута: светлое кольцо, дальше дальности — на краю круга в её сторону
+		vec2 d = wp_xz - ship_xz;
+		vec2 lp = vec2(d.x * c - d.y * s, d.x * s + d.y * c) / range_m;
+		float far = step(0.9, length(lp));
+		lp *= mix(1.0, 0.9 / max(length(lp), 1e-4), far);
+		float ring = step(abs(length(local - lp) - 0.07), 0.018) + step(length(local - lp), 0.022);
+		float pulse = 0.65 + 0.35 * sin(time * 4.0);
+		col = mix(col, vec3(0.84, 0.89, 0.91), ring * pulse);
 	}
 	// корабль в центре — треугольник носом вверх (к −Z, local.y < 0)
 	if (local.y > -0.075 && local.y < 0.055 && abs(local.x) < (local.y + 0.075) * 0.35) col = teal;
