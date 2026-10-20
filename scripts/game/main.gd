@@ -137,6 +137,7 @@ func _ready() -> void:
 	ship.add_child(camera)
 	camera.make_current()
 	me.smooth_lean = true   # камера в голове: наклон к посту плавный
+	me.back = CrewView.OWN_BACK   # стоя своя фигура чуть позади камеры
 	flyby_cam = Camera3D.new()
 	flyby_cam.name = "Камера с борта"
 	flyby_cam.fov = Deck.FOV
@@ -462,8 +463,14 @@ func step(dt: float) -> void:
 const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер", "sonar": "Сонар", "zap": "Разряд", "airlock": "Шлюз", "winch": "Лебёдка",
 	"valve": "Вентиль", "scram": "Сброс", "breach": "Сварка", "journal": "Журнал", "route": "Маршрут"}
 ## Где встать у пульта энергии (у поста «energy») и куда смотреть, рад: ниже — ползунки и рука на выбранном.
-const POWER_STAND := Vector2(-3.9, -2.0)
-const POWER_PITCH := -0.6
+const POWER_STAND := Vector2(-4.05, -2.0)
+const POWER_PITCH := -0.8
+## Где встать у щитка «Аварийный сброс»: правое плечо напротив крышки, фигура позади камеры (Crew.Member.back)
+## достаёт рукой без наклона и поворота ключицы (issue #137).
+const SCRAM_STAND := Vector2(2.35, 17.0)
+## Где встать у рычага разряда: своя фигура позади камеры (Crew.Member.back) — из середины поста пришлось бы
+## наклониться до предела.
+const ZAP_STAND := Vector2(-4.05, -0.5)
 ## Пост «Маршрут» — у правого борта голостола (с остальных сторон стол — сонар).
 const ROUTE_POST := Vector2(1.5, BridgeProps.TABLE_Z)
 const ROUTE_POST_R := 0.6
@@ -513,6 +520,9 @@ func use_post(id: String) -> void:
 			else:
 				say(run.cycle())
 		"zap":
+			walker.x = ZAP_STAND.x   # шаг к рычагу (#137)
+			walker.z = ZAP_STAND.y
+			walker.yaw = PI / 2.0   # рычаг на левом борту (−X)
 			fire_zap()
 		"airlock":
 			if samples.state != Samples.State.IDLE:
@@ -524,6 +534,9 @@ func use_post(id: String) -> void:
 			if why != "":
 				say(why)
 		"scram":
+			walker.x = SCRAM_STAND.x   # шаг к щитку (#137)
+			walker.z = SCRAM_STAND.y
+			walker.yaw = -PI / 2.0   # щиток на правом борту (+X)
 			engine.press(reactor)
 		"scanner":
 			scanner.press()
@@ -950,6 +963,13 @@ func debug_setup(kv: Dictionary) -> void:
 		var p: PackedFloat64Array = kv["ship"].split_floats(",")
 		helm.pos = Vector3(p[0], p[1], p[2])
 		_place_ship()
+	if kv.has("use"):  # use=<пост> — встать (x, z, yaw) и нажать кнопку действия у поста, шаг игры 0,3 с — снимок
+		walker.x = float(kv.get("x", str(walker.x)))
+		walker.z = float(kv.get("z", str(walker.z)))
+		walker.yaw = deg_to_rad(float(kv.get("yaw", "0")))
+		use_post(kv["use"])
+		for i in 9:
+			step(1.0 / 30.0)
 	if kv.has("secs"):
 		var secs := float(kv["secs"])
 		var dt := 1.0 / 30.0
