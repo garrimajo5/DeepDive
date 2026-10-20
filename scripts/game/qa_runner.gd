@@ -22,6 +22,7 @@ var _last_us := 0
 var _skip_frame := true
 var _warm_frames := 0   ## кадры прогрева шейдеров при старте (Warmup) — в лог, когда он кончится
 var _warm_from_us := 0
+var drain_left := 0.0   ## шаг «drain»: столько секунд ещё слать в игру EcoLink.DRAIN от стеклоуста
 
 
 ## Есть ли сценарий для этого запуска.
@@ -99,6 +100,8 @@ func tick(dt: float) -> void:
 					main.open_silt()
 				else:
 					main.silt.reset()
+			"drain":
+				drain_left = c[1]
 			"mate":
 				main.add_mate(c[1], c[2], deg_to_rad(c[3]), clampi(c[4], 0, 3), clampi(c[5], 0, 1))
 			"log":
@@ -108,6 +111,9 @@ func tick(dt: float) -> void:
 				main.get_tree().quit()
 			"done":
 				_finish()
+	if drain_left > 0.0:   # как присосавшийся стеклоуст: 3,2 ед./с (js/creatures.js), пока не истечёт шаг
+		drain_left -= dt
+		main.on_eco_event(EcoLink.drain("Стеклоуст", 3.2))
 
 
 ## Учесть кадр, начавшийся в момент now_us (мкс).
