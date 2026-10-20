@@ -19,6 +19,8 @@ var zap := Zap.new()
 var samples := Samples.new()   ## образцы на дне и лебёдка трюма
 var samples_view: SamplesView
 var breach := Breach.new()     ## событие «пробоина»: струя, вода, сварка удержанием
+var silt := Silt.new()         ## событие «сонарная тьма»: облака ила (на дне от удара, у Края отмели — оползни)
+var silt_view: SiltView
 var breach_view: BreachView
 var debug_weld := false        ## снимок: сварку держат без пальца
 var save := SaveGame.new()     ## груз трюма, поднятые образцы и изученные виды в user:// (js/save.js)
@@ -68,6 +70,8 @@ func _ready() -> void:
 	ocean = OceanView.new()
 	ocean.name = "Отмель"
 	add_child(ocean)
+	silt_view = SiltView.new()
+	add_child(silt_view)
 	eco = EcoView.new()
 	eco.name = "Живой мир"
 	eco.ground = Seabed.height
@@ -272,6 +276,10 @@ func step(dt: float) -> void:
 		elif p.id.begins_with("flask"):
 			p.label = Lab.flask_label(samples.cargo, int(p.id.substr(5)))
 	current.update(dt)
+	var silt_msg := silt.update(dt, helm.pos, current.vel())
+	if not silt_msg.is_empty():
+		say(silt_msg)
+	silt_view.apply(silt, time, helm.pos, helm.yaw)
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
 	engine.update(dt, reactor, hold_valve or debug_vent)
 	helm.update(dt, reactor.k(Reactor.Sys.ENGINES), current.vel())
@@ -290,7 +298,7 @@ func step(dt: float) -> void:
 		me.weld(Vector3.INF)
 	visor.visible = me.welding()
 	breach.end_step()
-	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP))
+	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP), silt.beam_k())
 	zap.update(dt)
 	zap_warm = maxi(0, zap_warm - 1)
 	if zap.flicker > 0.0:
@@ -306,7 +314,7 @@ func step(dt: float) -> void:
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	bridge.set_hatch(layout.doors[0].offset())
-	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0)
+	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0, silt.noise(time))
 	rooms.apply(layout, reactor, airlock, engine)
 	var carry_c: Color = Samples.COLORS[samples.target.kind] if samples.target else Color.WHITE
 	rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(), carry_c)
@@ -453,8 +461,11 @@ func ping_sonar() -> void:
 	var msg := sonar.ping(time, reactor.k(Reactor.Sys.SONAR))
 	if msg == "Сонар: импульс":
 		vitals.spend(Vitals.SONAR_COST)
-		eco_ship.sonar_ping = true
+		eco_ship.sonar_ping = true   # существа слышат импульс и в иле
 		eco_ship.sonar_range = sonar.range_m
+		if silt.jam_ping(time):
+			sonar.jammed = true
+			msg = Silt.JAM_MSG
 	if not msg.is_empty():
 		say(msg)
 
@@ -475,12 +486,12 @@ func _step_eco(dt: float) -> void:
 	s.yaw = helm.yaw
 	s.speed = helm.speed
 	s.light_on = Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP))
-	s.light_range = Searchlight.range_m(reactor.k(Reactor.Sys.LAMP)) if s.light_on else 0.0
+	s.light_range = Searchlight.range_m(reactor.k(Reactor.Sys.LAMP)) * silt.beam_k() if s.light_on else 0.0
 	s.hull_noise = engine.noise(clampf(absf(helm.speed) / 6.7, 0.0, 1.0))
 	s.scan_range = Scanner.RANGE if at_scanner else 0.0
 	var events := eco.step(dt, s)
 	scanner.take(events if at_scanner else [])
-	if s.sonar_ping:
+	if s.sonar_ping and not sonar.jammed:
 		sonar.take_contacts(events, helm.pos)
 		say("Сонар: контактов %d" % sonar.blips.size())
 	for e in events:
@@ -509,6 +520,8 @@ func on_eco_event(e: Dictionary) -> void:
 
 
 func _on_hit(percent: int, kind: String) -> void:
+	if kind == "scrape":   # удар о дно поднимает ил
+		silt.on_scrape(helm.pos, Seabed.height(helm.pos.x, helm.pos.z))
 	if breach.on_hit(percent, vitals.hull):
 		return   # о пробоине скажет Breach
 	if kind == "scrape":
@@ -528,6 +541,7 @@ func _on_destroyed() -> void:
 	helm.reset()
 	vitals.reset()
 	breach.reset()
+	silt.reset()
 	walker.reset()
 	light_on = true
 	overlay.set_light(true)
@@ -551,7 +565,7 @@ func _place_ship() -> void:
 	ship.rotation = Vector3(0.0, helm.yaw, 0.0)
 	hull.apply(hull_motion)
 	bridge.set_wheel_turn(helm.turn)
-	ocean.apply_water(env, helm.depth(), helm.pos)
+	ocean.apply_water(env, helm.depth(), helm.pos, silt.k)
 
 
 func _place_camera() -> void:
@@ -583,12 +597,9 @@ func _update_ui() -> void:
 ## Части строки состояния: где игрок, глубина, ход, у штурвала — до дна, курс и прожектор, течение, пост рядом, сообщение.
 func status_parts() -> Array:
 	var parts: Array = []
-	if not breach.status().is_empty():
-		parts.append(breach.status())
-	if not reactor.alert().is_empty():
-		parts.append(reactor.alert())
-	if reactor.alert().is_empty() and not vitals.warning().is_empty():
-		parts.append(vitals.warning())
+	var alarm := Status.alarm([breach.status(), reactor.alert(), silt.alarm(), vitals.warning()])
+	if not alarm.is_empty():
+		parts.append(alarm)
 	parts.append("За штурвалом" if pilot.seated else ShipLayout.ROOM_NAMES[ShipLayout.room_at(walker.z)])
 	parts.append("глубина %d м" % roundi(helm.depth()))
 	parts.append("ход %s м/с" % _num(helm.speed))
@@ -614,6 +625,16 @@ func status_parts() -> Array:
 
 static func _num(v: float) -> String:
 	return ("%.1f" % v).replace(".", ",")
+
+
+## Облако ила вокруг корабля, как от удара о дно (сценарий тестера, снимки).
+func open_silt() -> void:
+	var cl := silt.spawn(helm.pos, Silt.SCRAPE_R, Silt.SCRAPE_LIFE, "scrape")
+	cl.life = Silt.SCRAPE_LIFE - 3.0   # уже густое
+	silt.update(0.0, helm.pos, Vector3.ZERO)
+	silt.k = 1.0
+	silt_view.apply(silt, time, helm.pos, helm.yaw)
+	_place_ship()
 
 
 ## Ещё один член экипажа на палубе (снимки и сценарий тестера, пока нет сети): место, курс (рад), роль, внешность.
@@ -658,6 +679,8 @@ func debug_setup(kv: Dictionary) -> void:
 			var m: PackedFloat64Array = kv["mate"].split_floats(",")
 			add_mate(m[0], m[1], deg_to_rad(m[2]) if m.size() > 2 else 0.0, int(m[3]) if m.size() > 3 else Crew.Role.SONAR,
 				int(m[4]) if m.size() > 4 else 1)
+	if kv.get("silt", "0") == "1":  # silt=1 — корабль в облаке ила (снимок сонарной тьмы); с ping=1 — импульс завяз
+		open_silt()
 	if kv.has("hot"):  # hot=1 — перегрев (для снимка табло)
 		reactor.start_hot(false)
 		reactor.heat = float(kv["hot"])

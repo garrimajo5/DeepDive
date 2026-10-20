@@ -14,6 +14,8 @@ uniform int blip_count = 0;
 uniform vec4 blips[32];       // x, z мира, размер (м на голограмме, доля радиуса), яркость
 uniform vec3 blip_cols[32];
 uniform float brightness = 1.0;
+uniform float noise = 0.0;    // помехи (сонарная тьма): рябь вместо карты и отметок
+uniform float time = 0.0;
 
 varying vec2 local;
 
@@ -42,6 +44,11 @@ void fragment() {
 		vec2 d = blips[i].xy - w;
 		float k = 1.0 - smoothstep(0.6, 1.0, length(d) / (blips[i].z * range_m));
 		col = mix(col, blip_cols[i], k * blips[i].w);
+	}
+	if (noise > 0.0) {   // ил: карта гаснет, по столу бежит рябь
+		vec2 cell = floor(local * 70.0);
+		float n = fract(sin(dot(cell, vec2(12.9898, 78.233)) + floor(time * 12.0) * 3.7) * 43758.5453);
+		col = mix(col, vec3(0.008, 0.07, 0.094), noise * 0.8) + teal * noise * 0.45 * step(0.82, n) * n;
 	}
 	// корабль в центре — треугольник носом вверх (к −Z, local.y < 0)
 	if (local.y > -0.075 && local.y < 0.055 && abs(local.x) < (local.y + 0.075) * 0.35) col = teal;
