@@ -1,31 +1,31 @@
 class_name CrewView
 extends Node3D
-## Фигуры экипажа на корабле (заглушка до модели по ART-014): у каждого члена экипажа — один MultiMesh из капсул,
-## один вызов отрисовки. Поза — `Crew.Member.parts()`. Свой игрок рисуется без головы: камера стоит в ней.
+## Фигуры экипажа на корабле: модель MOD-012 (мужская или женская, `Crew.Member.look`), позу считает
+## `Crew.Member.joints()`, на скелет её переносит `CrewRig.pose`. Один skinned-меш на фигуру — один вызов отрисовки.
+## Свой игрок — копия меша без головы и верха груди (`cut_mesh`: камера в голове, наклон к штурвалу подносит грудь
+## к камере), задние грани отсечены; стоя модель чуть позади камеры (OWN_BACK). Цвет роли — нашивка на левом плече.
 ## Узел живёт в осях корабля, слой света 2 (только плафоны корабля).
 
 const LAYER_SHIP := 2
+## Нашивка роли на левом плече (ART-014: роль узнают по снаряжению, цвет — тонкая метка).
+const PATCH_SIZE := Vector3(0.012, 0.07, 0.06)
+## Свой игрок стоя: модель на 15 см позади камеры — взгляд вниз видит грудь и живот снаружи, как глазами,
+## а не изнутри куртки. Сидя и при сварке — на месте (руки на штурвале и резаке).
+const OWN_BACK := 0.15
 
 var members: Array = []  ## Crew.Member
 var local: Crew.Member  ## свой игрок (без головы)
-var figures: Array[MultiMeshInstance3D] = []
+var figures: Array[Node3D] = []  ## корень модели у каждой фигуры
+var skeletons: Array[Skeleton3D] = []
+var meshes: Array[MeshInstance3D] = []
+var patches: Array[MeshInstance3D] = []
 var torches: Array[Node3D] = []  ## резак MOD-013 у каждой фигуры: виден, пока она варит
-var shown: Array = []  ## что нарисовано у каждой фигуры: имя части → Transform3D (для тестов и сети)
-var _mesh: CapsuleMesh
-var _material: StandardMaterial3D
-
-
-func _init() -> void:
-	name = "Экипаж"
-	_mesh = CapsuleMesh.new()
-	_mesh.radius = 0.5
-	_mesh.height = 1.0
-	_mesh.radial_segments = 10
-	_mesh.rings = 3
-	_material = StandardMaterial3D.new()
-	_material.vertex_color_use_as_albedo = true
-	_material.roughness = 0.75
-	_mesh.material = _material
+var looks: Array[int] = []  ## внешность, с которой собрана фигура
+## Что нарисовано у каждой фигуры: сустав → точка в осях корабля (по костям модели; скрытых нет) — для тестов и сети.
+var shown: Array = []
+var _rest := {}  ## внешность → CrewRig.Rest
+var _own_mat := {}  ## внешность → материал своего игрока: с отсечением задних граней (не видно изнанки у камеры)
+var _meshes := {}  ## внешность → меши [целый, для своего игрока — без головы и верха груди]
 
 
 ## Список экипажа; local — тот, чьими глазами смотрит камера.
@@ -33,46 +33,154 @@ func set_members(list: Array, me: Crew.Member) -> void:
 	members = list
 	local = me
 	while figures.size() < members.size():
-		var mm := MultiMesh.new()
-		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.use_colors = true
-		mm.mesh = _mesh
-		mm.instance_count = Crew.ORDER.size()
-		var mi := MultiMeshInstance3D.new()
-		mi.multimesh = mm
-		mi.layers = LAYER_SHIP
-		add_child(mi)
-		figures.append(mi)
+		figures.append(null)
+		skeletons.append(null)
+		meshes.append(null)
+		patches.append(null)
+		looks.append(-1)
 		var t: Node3D = load("res://models/rezak.glb").instantiate()
 		t.name = "Резак"
 		t.visible = false
-		for m in t.find_children("*", "MeshInstance3D", true, false):
-			(m as MeshInstance3D).layers = LAYER_SHIP
+		_to_ship_layer(t)
 		add_child(t)
 		torches.append(t)
 	for i in figures.size():
-		figures[i].visible = i < members.size()
-		torches[i].visible = false
 		if i < members.size():
+			_build(i, members[i].look)
 			figures[i].name = "Фигура %s" % members[i].name
+		if figures[i] != null:
+			figures[i].visible = i < members.size()
+		torches[i].visible = false
+
+
+## Модель фигуры i нужной внешности (пересобирается, если внешность сменилась).
+func _build(i: int, look: int) -> void:
+	look = clampi(look, 0, CrewRig.MODELS.size() - 1)
+	if looks[i] == look and figures[i] != null:
+		return
+	if figures[i] != null:
+		figures[i].queue_free()
+	var root: Node3D = load(CrewRig.MODELS[look]).instantiate()
+	_to_ship_layer(root)
+	add_child(root)
+	var sk: Skeleton3D = root.find_children("*", "Skeleton3D", true, false)[0]
+	var mi: MeshInstance3D = sk.find_children("*", "MeshInstance3D", true, false)[0]
+	if not _rest.has(look):
+		_rest[look] = rest_of(sk)
+		var mat: Material = mi.mesh.surface_get_material(0).duplicate()
+		if mat is BaseMaterial3D:
+			(mat as BaseMaterial3D).cull_mode = BaseMaterial3D.CULL_BACK
+		_own_mat[look] = mat
+		_meshes[look] = [mi.mesh, cut_mesh(mi.mesh, mi.skin, sk, CrewRig.HIDE_HEAD + CrewRig.HIDE_CHEST, 0.15)]
+	var att := BoneAttachment3D.new()
+	att.bone_name = "LeftArm"
+	sk.add_child(att)
+	var patch := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = PATCH_SIZE
+	var mat := StandardMaterial3D.new()
+	mat.roughness = 0.6
+	box.material = mat
+	patch.mesh = box
+	patch.layers = LAYER_SHIP
+	att.add_child(patch)
+	figures[i] = root
+	skeletons[i] = sk
+	meshes[i] = mi
+	patches[i] = patch
+	looks[i] = look
+
+
+## Покой скелета для CrewRig.
+static func rest_of(sk: Skeleton3D) -> CrewRig.Rest:
+	var names := PackedStringArray()
+	var parents := PackedInt32Array()
+	var local_rest: Array[Transform3D] = []
+	for b in sk.get_bone_count():
+		names.append(sk.get_bone_name(b))
+		parents.append(sk.get_bone_parent(b))
+		local_rest.append(sk.get_bone_rest(b))
+	return CrewRig.Rest.new(names, parents, local_rest)
+
+
+## Копия меша без треугольников, вершины которых больше чем наполовину держат кости hide (свой игрок не видит
+## свою голову и грудь). Кости не трогаем: сжатые кости тянули бы за собой соседние вершины.
+static func cut_mesh(mesh: Mesh, skin: Skin, sk: Skeleton3D, hide: Array, limit: float = 0.5) -> ArrayMesh:
+	var hidden := {}
+	for b in skin.get_bind_count():
+		var bone := skin.get_bind_bone(b)
+		var n: String = skin.get_bind_name(b) if bone < 0 else sk.get_bone_name(bone)
+		if n in hide:
+			hidden[b] = true
+	var out := ArrayMesh.new()
+	for si in mesh.get_surface_count():
+		var arr := mesh.surface_get_arrays(si)
+		var bones: PackedInt32Array = arr[Mesh.ARRAY_BONES]
+		var weights: PackedFloat32Array = arr[Mesh.ARRAY_WEIGHTS]
+		var nv: int = (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+		var per := bones.size() / maxi(nv, 1)
+		var gone := PackedByteArray()
+		gone.resize(nv)
+		for v in nv:
+			var w := 0.0
+			for k in per:
+				if hidden.has(bones[v * per + k]):
+					w += weights[v * per + k]
+			gone[v] = 1 if w > limit else 0
+		var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+		var keep := PackedInt32Array()
+		for t in range(0, idx.size(), 3):
+			if gone[idx[t]] == 0 and gone[idx[t + 1]] == 0 and gone[idx[t + 2]] == 0:
+				keep.append_array([idx[t], idx[t + 1], idx[t + 2]])
+		arr[Mesh.ARRAY_INDEX] = keep
+		var flags := Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS if per == 8 else 0
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr, [], {}, flags)
+		out.surface_set_material(si, mesh.surface_get_material(si))
+	return out
+
+
+static func _to_ship_layer(n: Node) -> void:
+	for m in n.find_children("*", "MeshInstance3D", true, false):
+		(m as MeshInstance3D).layers = LAYER_SHIP
 
 
 func apply() -> void:
 	for i in members.size():
 		var m: Crew.Member = members[i]
+		_build(i, m.look)
 		var own: bool = m == local
-		var parts := m.parts(own)
+		var j := m.joints()
+		var g := CrewRig.pose(_rest[looks[i]], j, CrewRig.SEAT_BEND if m.seated else 0.0)
+		var sk := skeletons[i]
+		for b in g.size():
+			var p := sk.get_bone_parent(b)
+			var lp: Transform3D = g[b] if p < 0 else g[p].affine_inverse() * g[b]
+			sk.set_bone_pose_position(b, lp.origin)
+			sk.set_bone_pose_rotation(b, lp.basis.get_rotation_quaternion())
+		var back := own and not m.seated and not m.welding()
+		figures[i].position = -(j["fwd"] as Vector3) * OWN_BACK if back else Vector3.ZERO
+		meshes[i].mesh = _meshes[looks[i]][1 if own else 0]
+		meshes[i].material_override = _own_mat[looks[i]] if own else null
+		patches[i].visible = not own  # своя нашивка у самой камеры
+		(patches[i].mesh.material as StandardMaterial3D).albedo_color = Crew.role_color(m.role)
+		var rest: CrewRig.Rest = _rest[looks[i]]
+		var at := {}
+		for pair in [["hip", "Hips"], ["neck", "neck"], ["shoulder_l", "LeftArm"],
+				["shoulder_r", "RightArm"], ["elbow_l", "LeftForeArm"], ["elbow_r", "RightForeArm"],
+				["wrist_l", "LeftHand"], ["wrist_r", "RightHand"], ["knee_l", "LeftLeg"], ["knee_r", "RightLeg"],
+				["ankle_l", "LeftFoot"], ["ankle_r", "RightFoot"], ["toe_l", "LeftToeBase"], ["toe_r", "RightToeBase"]]:
+			var bn: String = pair[1]
+			if own and (bn in CrewRig.HIDE_HEAD or bn in CrewRig.HIDE_CHEST):
+				continue
+			at[pair[0]] = g[rest.idx(bn)].origin + figures[i].position
+		if not own:  # середина головы — между основанием и макушкой
+			at["head"] = (g[rest.idx("Head")].origin + g[rest.idx("head_end")].origin) * 0.5
+		for k in ["l", "r"]:  # середина кисти — для хвата
+			at["hand_" + k] = g[rest.idx("LeftHand" if k == "l" else "RightHand")] * Vector3(0.0, CrewRig.GRIP, 0.0) \
+				+ figures[i].position
 		if shown.size() <= i:
 			shown.resize(i + 1)
-		shown[i] = parts
+		shown[i] = at
 		torches[i].visible = m.welding()
 		if torches[i].visible:
 			torches[i].transform = m.torch_xform()
-		var mm := figures[i].multimesh
-		for n in Crew.ORDER.size():
-			var key: String = Crew.ORDER[n]
-			if parts.has(key):
-				mm.set_instance_transform(n, parts[key])
-				mm.set_instance_color(n, Crew.part_color(key, m.role))
-			else:
-				mm.set_instance_transform(n, Transform3D(Basis.from_scale(Vector3.ZERO), Vector3.ZERO))

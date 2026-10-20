@@ -98,6 +98,7 @@ func test_own_figure_hides_head() -> void:
 
 func test_snapshot_round_trip() -> void:
 	var a := Crew.Member.new(Crew.Role.ENGINEER, "Вера")
+	a.look = 1
 	a.follow(0.0, 0.0, 0.3, false, 0.0, 1.0 / 30.0)
 	for i in 7:
 		a.follow(a.x, a.z - 0.08, 0.3, false, 0.0, 1.0 / 30.0)
@@ -105,6 +106,7 @@ func test_snapshot_round_trip() -> void:
 	b.apply(a.snapshot())
 	eq(b.role, Crew.Role.ENGINEER, "роль")
 	eq(b.name, "Вера", "имя")
+	eq(b.look, 1, "внешность")
 	var pa := a.parts()
 	var pb := b.parts()
 	for k in pa:

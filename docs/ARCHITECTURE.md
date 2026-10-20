@@ -34,7 +34,7 @@ Main (main.gd)                    — шаг игры, пилот, посты, �
 ├─ Корабль (Node3D по Helm.Ship)
 │  ├─ Мостик (BridgeView)          — оболочка, модели, ползунки, люк                   [слой 2]
 │  ├─ Отсеки (RoomsView)           — коридор…трюм, люки, реактор                       [слой 2]
-│  ├─ Экипаж (CrewView)            — фигуры экипажа, у каждого один MultiMesh           [слой 2]
+│  ├─ Экипаж (CrewView)            — фигуры экипажа, модели MOD-012 по CrewRig          [слой 2]
 │  ├─ Прожектор (SearchlightView)  — свет на отмель и конус луча                       [слой 1]
 │  ├─ Корпус (HullView)            — корпус снаружи по HullPlan, роторы и рули          [слой 1]
 │  └─ Глаза (Camera3D)
@@ -55,7 +55,7 @@ Main (main.gd)                    — шаг игры, пилот, посты, �
 |---|---|---|---|
 | Ход и течение | `helm.gd` | `main.gd` | А |
 | Палуба, посты, игрок | `deck.gd`, `ship_layout.gd` | `main.gd`, `rooms_view.gd` | А |
-| Экипаж (фигуры игроков) | `crew.gd` | `crew_view.gd` | А |
+| Экипаж (фигуры игроков) | `crew.gd`, `crew_rig.gd` | `crew_view.gd` | А |
 | Мостик и модели | `bridge_plan.gd`, `bridge_props.gd` | `bridge_view.gd` | А |
 | Реактор и энергия | `reactor.gd`, `engine_room.gd` | `power_panel.gd`, `rooms_view.gd` | А |
 | Пробоина (событие) | `breach.gd` | `breach_view.gd` | А |
