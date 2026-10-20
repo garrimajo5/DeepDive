@@ -15,6 +15,13 @@ var log_lines: PackedStringArray = []
 var time := 0.0
 var shots: Array[String] = []
 var _look_at := Vector2.ZERO
+## Худший кадр (настоящее время между шагами, мс) с прошлого скриншота: средние кадр/с прячут разовый провал
+## (issue #50 — сборка шейдеров при первом показе). Кадр сразу после скриншота не считаем — его тормозит сам снимок.
+var worst_ms := 0.0
+var _last_us := 0
+var _skip_frame := true
+var _warm_frames := 0   ## кадры прогрева шейдеров при старте (Warmup) — в лог, когда он кончится
+var _warm_from_us := 0
 
 
 ## Есть ли сценарий для этого запуска.
@@ -29,6 +36,7 @@ func start(m: Main, text: String = "") -> void:
 		text = FileAccess.get_file_as_string(SCENARIO)
 		DirAccess.rename_absolute(SCENARIO, DIR + "/scenario.last.json")
 	script_q = QaScript.parse(text)
+	_warm_from_us = Time.get_ticks_usec()
 	DirAccess.make_dir_recursive_absolute(OUT)
 	for f in DirAccess.get_files_at(OUT):
 		DirAccess.remove_absolute(OUT + "/" + f)
@@ -42,7 +50,15 @@ func start(m: Main, text: String = "") -> void:
 func tick(dt: float) -> void:
 	if script_q == null or script_q.finished:
 		return
+	if main.warming():   # прогрев шейдеров при старте: шаги сценария ждут, кадры не считаем
+		_warm_frames += 1
+		_skip_frame = true
+		return
+	if _warm_frames > 0:
+		_log("прогрев шейдеров: %d кадров, %d мс" % [_warm_frames, (Time.get_ticks_usec() - _warm_from_us) / 1000])
+		_warm_frames = -1
 	time += dt
+	_measure(Time.get_ticks_usec())
 	var r := main.overlay.router
 	for c in script_q.advance(dt):
 		match c[0]:
@@ -94,6 +110,14 @@ func tick(dt: float) -> void:
 				_finish()
 
 
+## Учесть кадр, начавшийся в момент now_us (мкс).
+func _measure(now_us: int) -> void:
+	if not _skip_frame and _last_us > 0:
+		worst_ms = maxf(worst_ms, (now_us - _last_us) / 1000.0)
+	_skip_frame = false
+	_last_us = now_us
+
+
 ## Точка экрана для кнопки сценария по текущей раскладке (координаты не зашиты в сценарий).
 func _point(what: String, dir: Vector2) -> Vector2:
 	var l := main.overlay.router.layout
@@ -116,7 +140,7 @@ func state() -> String:
 	var h := main.helm
 	return "t %.1f с · %s · свет %s · глубина %.1f м · ход %.2f м/с · курс %d° · корабль (%.1f, %.1f, %.1f) · игрок (%.2f, %.2f) · реактор %s · %d кадр/с" % [
 		time, "за штурвалом" if main.pilot.seated else ("у пульта энергии" if main.at_power else "на ногах"), "вкл" if main.light_on else "выкл", h.depth(), h.speed, Status.course_deg(h.yaw),
-		h.pos.x, h.pos.y, h.pos.z, main.walker.x, main.walker.z, "%s %d°%s" % [str(main.reactor.share), roundi(main.reactor.heat), " сброс" if main.reactor.scram > 0.0 else ""], Engine.get_frames_per_second()] + ("" if main.breach.status().is_empty() else " · " + main.breach.status()) \
+		h.pos.x, h.pos.y, h.pos.z, main.walker.x, main.walker.z, "%s %d°%s" % [str(main.reactor.share), roundi(main.reactor.heat), " сброс" if main.reactor.scram > 0.0 else ""], Engine.get_frames_per_second()] + (" · худший кадр %d мс" % roundi(worst_ms) if worst_ms > 0.0 else "") + ("" if main.breach.status().is_empty() else " · " + main.breach.status()) \
 		+ _run_state()
 
 
@@ -143,6 +167,8 @@ func _shot(name: String) -> void:
 	img.save_png("%s/%s.png" % [OUT, name])
 	shots.append(name)
 	_log("скриншот %s | %s" % [name, state()])
+	worst_ms = 0.0
+	_skip_frame = true
 
 
 func _log(line: String) -> void:

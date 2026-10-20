@@ -28,6 +28,7 @@ var gear_roles: Array[int] = []  ## роль, под которую надето
 var shown: Array = []
 var _rest := {}  ## внешность → CrewRig.Rest
 var _own_mat := {}  ## внешность → материал своего игрока: с отсечением задних граней (не видно изнанки у камеры)
+var _scenes := {}  ## внешность → PackedScene модели (держим загруженной: новая фигура не грузит её заново)
 var _meshes := {}  ## внешность → меши [целый, для своего игрока — без головы и верха груди]
 
 
@@ -65,7 +66,9 @@ func _build(i: int, look: int) -> void:
 		return
 	if figures[i] != null:
 		figures[i].queue_free()
-	var root: Node3D = load(CrewRig.MODELS[look]).instantiate()
+	if not _scenes.has(look):
+		_scenes[look] = load(CrewRig.MODELS[look])
+	var root: Node3D = _scenes[look].instantiate()
 	_to_ship_layer(root)
 	add_child(root)
 	var sk: Skeleton3D = root.find_children("*", "Skeleton3D", true, false)[0]

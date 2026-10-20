@@ -67,17 +67,13 @@ func test_scene_lever() -> void:
 	eq(main.bridge.zap_scale_mat.emission_energy_multiplier, 1.0, "шкала горит — готов")
 
 
-## Issue #50: первый разряд не должен собирать шейдеры — вспышка горит почти без света первые шаги после старта.
-func test_scene_light_warmup() -> void:
+## Issue #50: без прогрева (тесты) вспышка при старте погашена; прогрев вспышки — test_warmup.
+func test_scene_light_off_without_warmup() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
-	ok(main.zap_light.visible, "при старте вспышка включена — шейдеры со светом соберутся сразу")
-	ok(main.zap_light.light_energy < 0.01, "но почти без света")
-	near(main.zap_light.omni_range, Zap.BASE_RADIUS, 1e-6, "на весь радиус разряда")
+	ok(not main.warming(), "в тестах прогрева нет")
+	ok(not main.zap_light.visible, "вспышка погашена")
 	ok(main.zap_light.light_cull_mask == OceanView.LAYER_WORLD, "светит только за бортом")
-	for i in Main.ZAP_WARM_STEPS:
-		main.step(1.0 / 60.0)
-	ok(not main.zap_light.visible, "после прогрева погашена")
 	main.queue_free()
 	await frames(1)
 
