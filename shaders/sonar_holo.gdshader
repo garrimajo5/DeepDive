@@ -19,6 +19,7 @@ uniform float time = 0.0;
 uniform vec2 wp_xz = vec2(0.0);  // точка маршрута (Run.waypoint), x, z мира
 uniform float wp_on = 0.0;
 // брифинг (Briefing, ART-016): карта всей отмели над столом, места и маршруты; brief_k — доля перехода 0…1
+uniform float dim = 0.0;      // голосование над столом: рельеф гаснет (VoteHolo.DIM_SONAR)
 uniform float brief_k = 0.0;
 uniform float brief_scale = 0.0016143;  // Briefing.SCALE: м стола на м мира
 uniform float brief_side = 1.13;
@@ -133,5 +134,5 @@ void fragment() {
 	if (local.y > -0.075 && local.y < 0.055 && abs(local.x) < (local.y + 0.075) * 0.35) col = teal;
 	if (brief_k > 0.0)
 		col = mix(col, briefing(local * disc_r, c, s), brief_k);
-	ALBEDO = col * brightness;
+	ALBEDO = col * brightness * (1.0 - dim);
 }
