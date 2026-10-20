@@ -71,3 +71,22 @@ func test_scene_warmup() -> void:
 	ok(qa.log_lines[1].begins_with("прогрев шейдеров: %d кадров" % (Warmup.VIEWS.size() - 1)), "в логе тестера: %s" % qa.log_lines[1])
 	main.queue_free()
 	await frames(1)
+
+
+## Облёт с борта в начале забега ждёт конца прогрева: под шторкой смотрят глаза на мостике.
+func test_scene_flyby_waits() -> void:
+	Warmup.enabled = true
+	Main.intro = true
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	Warmup.enabled = false
+	Main.intro = false
+	for i in Warmup.VIEWS.size() - 1:
+		main.step(0.5)
+		ok(main.camera.current, "кадр %d прогрева — камера мостика" % i)
+	near(main.flyby.t, 0.0, 1e-9, "облёт не начался")
+	main.step(0.5)
+	ok(not main.warming() and main.flyby.active(), "прогрев кончился — облёт")
+	ok(main.flyby_cam.current, "камера с борта")
+	main.queue_free()
+	await frames(1)
