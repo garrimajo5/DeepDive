@@ -8,7 +8,12 @@ var doors: Array[Node3D] = []      ## створки люков 2…4 (у пер
 var reactor_rod: MeshInstance3D
 var _rod_mat: StandardMaterial3D
 var reactor_light: OmniLight3D
-var airlock_cover: MeshInstance3D   ## крышка нижнего шлюза (пока диск; модель MOD-010 — models/lyuk-tryuma-kryshka.glb)
+var airlock_cover: Node3D          ## крышка нижнего шлюза: узел в центре крышки (Airlock.cover_pose), модель MOD-010 внутри
+var winch_drum: Node3D             ## барабан лебёдки (MOD-010), крутится по x
+var winch_hook: Node3D             ## захват на тросе, pivot — крепление троса
+var winch_cable: MeshInstance3D    ## трос от барабана до захвата
+var winch_carry: MeshInstance3D    ## образец под захватом при подъёме
+var _carry_mat: StandardMaterial3D
 var valve_wheel: Node3D            ## маховик вентиля сброса пара (MOD-009), крутится по x
 var panel_lid: Node3D              ## крышка щитка «Аварийный сброс» (MOD-009), откидывается по z
 var steam: CPUParticles3D          ## пар из вентиля
@@ -45,17 +50,12 @@ func _ready() -> void:
 		doors.append(d)
 	_add_reactor()
 	_add_engine_room()
-	airlock_cover = MeshInstance3D.new()
+	airlock_cover = Node3D.new()
 	airlock_cover.name = "Крышка шлюза"
-	var cm := CylinderMesh.new()
-	cm.top_radius = Airlock.RADIUS
-	cm.bottom_radius = Airlock.RADIUS
-	cm.height = Airlock.THICK
-	airlock_cover.mesh = cm
-	var lm := BridgeView.material(BridgePlan.Paint.METAL)
-	airlock_cover.material_override = lm
-	airlock_cover.layers = OceanView.LAYER_SHIP | OceanView.LAYER_WORLD
 	add_child(airlock_cover)
+	var lid := _model("lyuk-tryuma-kryshka", Vector3(0, 0, -Airlock.RADIUS), airlock_cover)   # pivot модели — на петле
+	_set_layers(lid, OceanView.LAYER_SHIP | OceanView.LAYER_WORLD)
+	_add_winch()
 
 
 func _add_reactor() -> void:
@@ -82,14 +82,70 @@ func _add_reactor() -> void:
 	root.add_child(reactor_light)
 
 
-func _model(file: String, pos: Vector3) -> Node3D:
+func _model(file: String, pos: Vector3, parent: Node3D = null) -> Node3D:
 	var n: Node3D = load("res://models/%s.glb" % file).instantiate()
 	n.name = file
 	n.position = pos
-	add_child(n)
-	for mi in n.find_children("*", "MeshInstance3D", true, false):
-		(mi as MeshInstance3D).layers = OceanView.LAYER_SHIP
+	(parent if parent else self).add_child(n)
+	_set_layers(n, OceanView.LAYER_SHIP)
 	return n
+
+
+static func _set_layers(n: Node3D, layers: int) -> void:
+	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).layers = layers
+
+
+## Лебёдка трюма (MOD-010, tryum.md): опора у кормовой кромки проёма, барабан над центром проёма, трос и захват.
+## Захват и трос уходят за борт — видны и снаружи (слои корабля и отмели).
+func _add_winch() -> void:
+	_model("lebedka-opora", Samples.BASE)
+	winch_drum = _model("lebedka-baraban", Samples.DRUM)
+	winch_hook = _model("lebedka-zahvat", Samples.REST)
+	_set_layers(winch_hook, OceanView.LAYER_SHIP | OceanView.LAYER_WORLD)
+	winch_cable = MeshInstance3D.new()
+	winch_cable.name = "Трос лебёдки"
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.012
+	cm.bottom_radius = 0.012
+	cm.height = 1.0
+	cm.radial_segments = 6
+	cm.rings = 1
+	winch_cable.mesh = cm
+	winch_cable.material_override = BridgeView.material(BridgePlan.Paint.SHADOW)
+	winch_cable.layers = OceanView.LAYER_SHIP | OceanView.LAYER_WORLD
+	add_child(winch_cable)
+	winch_carry = MeshInstance3D.new()
+	winch_carry.name = "Образец в захвате"
+	winch_carry.mesh = SamplesView.gem_mesh(0.2)
+	_carry_mat = StandardMaterial3D.new()
+	_carry_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	winch_carry.material_override = _carry_mat
+	winch_carry.layers = OceanView.LAYER_SHIP | OceanView.LAYER_WORLD
+	winch_carry.visible = false
+	add_child(winch_carry)
+	set_winch(Samples.REST, false, Color.WHITE)
+
+
+## Захват в точке hook (оси корабля); carrying — под ним висит образец цвета c.
+func set_winch(hook: Vector3, carrying: bool, c: Color) -> void:
+	winch_hook.position = hook
+	var top := Samples.DRUM + Vector3(0, -Samples.DRUM_R, 0)
+	var d := hook - top
+	var len := maxf(d.length(), 0.01)
+	winch_cable.position = top + d / 2.0
+	winch_cable.basis = Basis(_turn_to(d / len)).scaled(Vector3(1, len, 1))
+	winch_drum.rotation.x = len / Samples.DRUM_R
+	winch_carry.visible = carrying
+	winch_carry.position = hook + Vector3(0, -0.85, 0)
+	_carry_mat.albedo_color = c
+
+
+## Поворот оси цилиндра (y) вдоль dir; трос всегда идёт вниз, поэтому считаем от −y (цилиндр симметричен).
+static func _turn_to(dir: Vector3) -> Quaternion:
+	if dir.is_equal_approx(Vector3.DOWN):
+		return Quaternion.IDENTITY
+	return Quaternion(Vector3.DOWN, dir)
 
 
 ## Машинное (MOD-009): вентиль на левой стене, щиток на правой; пар — частицы у маховика.

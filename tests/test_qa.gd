@@ -46,6 +46,7 @@ func test_scene_runs_scenario() -> void:
 	var qa := main.start_qa(FileAccess.get_file_as_string("res://tools/qa/scenario.json"))
 	eq(qa.script_q.errors.size(), 0, "сценарий из tools/qa без ошибок")
 	var z0 := main.helm.pos.z
+	var ahead := 0.0   # дальше всего ушли вперёд (шаг sample потом ставит корабль над образцом)
 	var sat := false
 	var table_seen := false
 	var zap_seen := false
@@ -63,6 +64,7 @@ func test_scene_runs_scenario() -> void:
 			legs_vis = legs_vis and cam.is_position_in_frustum(main.ship.to_global(j[k]))
 		main.step(1.0 / 30.0)
 		sat = sat or main.pilot.seated
+		ahead = maxf(ahead, z0 - main.helm.pos.z)
 		for k in range(shots, qa.log_lines.size()):   # #48: на 09-sonar в кадре голостол, на 10-zap — рычаг
 			if qa.log_lines[k].begins_with("скриншот 09-sonar"):
 				table_seen = table_vis
@@ -76,7 +78,7 @@ func test_scene_runs_scenario() -> void:
 	ok(qa.script_q.finished, "сценарий дошёл до конца")
 	ok(sat, "по сценарию садились за штурвал")
 	ok(not main.pilot.seated, "и встали")
-	ok(main.helm.pos.z < z0 - 20.0, "корабль прошёл вперёд: %.1f м" % (z0 - main.helm.pos.z))
+	ok(ahead > 20.0, "корабль прошёл вперёд: %.1f м" % ahead)
 	ok(FileAccess.file_exists(QaRunner.OUT + "/done.txt"), "done.txt записан")
 	var log := FileAccess.get_file_as_string(QaRunner.OUT + "/log.txt")
 	ok(log.contains("сел за штурвал") and log.contains("за штурвалом"), "в логе есть состояние за штурвалом")
@@ -94,6 +96,14 @@ func test_scene_runs_scenario() -> void:
 	ok(log.contains("вентиль: пар, реактор остывает | "), "в машинном держали вентиль")
 	ok(main.reactor.scram > 0.0 and log.contains("аварийный сброс щитком | ") and log.contains("° сброс"),
 		"щитком заглушили реактор")
+	eq(main.samples.cargo.size(), 1, "лебёдкой подняли образец")
+	ok(log.contains("лебёдка: захват тянется к образцу | ") and log.contains("лебёдка: образец в трюме | "), "лебёдка в логе")
+
+
+func test_sample_step() -> void:
+	var q := QaScript.parse('[{"do": "sample", "n": 8}]')
+	eq(q.errors.size(), 0, "шаг sample известен")
+	eq(q.advance(0.1)[0], ["sample", 8], "корабль над образцом 8")
 
 
 func test_goto_and_hot_steps() -> void:

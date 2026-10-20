@@ -70,6 +70,8 @@ func tick(dt: float) -> void:
 			"hot":
 				main.reactor.start_hot(false)
 				main.reactor.heat = c[1]
+			"sample":
+				main.park_over_sample(c[1])
 			"log":
 				_log("%s | %s" % [c[1], state()])
 			"quit":
