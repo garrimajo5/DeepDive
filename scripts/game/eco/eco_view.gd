@@ -29,6 +29,9 @@ var fern_view: FernView
 ## Пузырчатка-фонарь: три куста у пятен мха, луковицы зреют и лопаются облаком спор, на споры слетаются стаи.
 var bladders: EcoBladder
 var bladder_view: BladderView
+## Трубные органы: две губки, в их гуле серпохвост не слышит двигателей корабля.
+var organs: EcoOrgan
+var organ_view: OrganView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -41,6 +44,7 @@ var ground: Callable:
 		_rebuild_coral()
 		_rebuild_ferns()
 		_rebuild_bladders()
+		_rebuild_organs()
 
 
 func _init() -> void:
@@ -61,10 +65,13 @@ func _init() -> void:
 	add_child(fan_view)
 	ferns = world.add(EcoFern.new(fish)) as EcoFern
 	bladders = world.add(EcoBladder.new(fish)) as EcoBladder
+	organs = world.add(EcoOrgan.new()) as EcoOrgan
+	preds.organs = organs
 	_rebuild_moss()
 	_rebuild_coral()
 	_rebuild_ferns()
 	_rebuild_bladders()
+	_rebuild_organs()
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -101,6 +108,15 @@ func _rebuild_bladders() -> void:
 		bladder_view.free()
 	bladder_view = BladderView.new(bladders)
 	add_child(bladder_view)
+
+
+## Трубные органы по дну мира (меш собирается один раз).
+func _rebuild_organs() -> void:
+	if organ_view:
+		remove_child(organ_view)
+		organ_view.free()
+	organ_view = OrganView.new(organs)
+	add_child(organ_view)
 
 
 ## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
