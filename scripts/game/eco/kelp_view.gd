@@ -1,0 +1,207 @@
+class_name KelpView
+extends Node3D
+## Ленточник и шипоежи в сцене (initKelp, setKelp, urchinRender в js/creatures.js): три MultiMesh — ленты (полоса
+## 0,45 × 1 м в 7 отрезков, видна с обеих сторон, качается в шейдере как G.sway с размахом 0,9; цвет экземпляра — от
+## голого стебля к зелени по густоте, слабое своё свечение #0b1a10), тела ежей (икосаэдр 0,2 м, #3a1f4a, свечение
+## #12061a) и иглы (18 игл по 0,32 м со светящимися голубыми кончиками, без освещения). Ленты переписываются, только
+## когда ёж их объел или они отросли (EcoKelp.dirty). Стоит на слое отмели (OceanView.LAYER_WORLD).
+
+const KELP_SHADER := """
+shader_type spatial;
+render_mode cull_disabled;
+uniform vec3 glow : source_color;
+varying vec3 tint;
+void vertex() {
+	tint = COLOR.rgb;
+	float ph = MODEL_MATRIX[3].x * 0.23 + MODEL_MATRIX[3].z * 0.19;
+	float k = clamp(VERTEX.y, 0.0, 1.0);
+	VERTEX.x += sin(TIME * 1.2 + ph + VERTEX.y * 2.0) * k * k * 0.9;
+	VERTEX.z += cos(TIME * 0.9 + ph * 1.3) * k * k * 0.54;
+}
+void fragment() {
+	ALBEDO = tint;
+	EMISSION = glow;
+	ROUGHNESS = 0.9;
+}
+"""
+
+const KELP_GLOW := Color("0b1a10")
+const SEGMENTS := 7
+const BODY := Color("3a1f4a")
+const BODY_GLOW := Color("12061a")
+## Иглы ежа (spineGeo(18, 0.32, …, 0.18)): основание и кончик.
+const SPINES := 18
+const SPINE_LEN := 0.32
+const SPINE_R := 0.18
+const SPINE_BASE := Color(0.25, 0.12, 0.35)
+const SPINE_TIP := Color(0.55, 0.95, 1.0)
+## Чисел на экземпляр: transform 3 × 4, у лент ещё цвет (4).
+const STRIDE := 12
+const STRIDE_C := 16
+
+var kelp: EcoKelp
+var stalks: MultiMeshInstance3D
+var bodies: MultiMeshInstance3D
+var spines: MultiMeshInstance3D
+## Последние буферы лент и ежей (для тестов).
+var stalk_buffer := PackedFloat32Array()
+var urchin_buffer := PackedFloat32Array()
+## Сколько раз переписан буфер лент (для тестов: без перемен — не переписывается).
+var stalk_writes := 0
+
+
+func _init(system: EcoKelp) -> void:
+	kelp = system
+	name = "Ленточник"
+	stalks = _instance("Ленты", build_stalk(), kelp.groves.size() * EcoKelp.KELP_N, true)
+	bodies = _instance("Шипоежи", build_body(), kelp.urchins.size(), false)
+	spines = _instance("Иглы", build_spines(), kelp.urchins.size(), false)
+	kelp.dirty = true
+	sync(0.0)
+
+
+func _instance(n: String, mesh: Mesh, count: int, colors: bool) -> MultiMeshInstance3D:
+	var mi := MultiMeshInstance3D.new()
+	mi.name = n
+	mi.layers = OceanView.LAYER_WORLD
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = colors
+	mm.mesh = mesh
+	mm.instance_count = count
+	mi.multimesh = mm
+	mi.custom_aabb = AABB(Vector3(-400, -200, -400), Vector3(800, 400, 800))
+	add_child(mi)
+	return mi
+
+
+## Полоса ленты: ширина EcoKelp.WIDTH (экземпляр сужает её по густоте), высота 1 от основания, нормаль +Z.
+static func build_stalk() -> ArrayMesh:
+	var w := EcoKelp.WIDTH / 2.0
+	var v := PackedVector3Array()
+	var nr := PackedVector3Array()
+	var uv := PackedVector2Array()
+	var idx := PackedInt32Array()
+	for k in SEGMENTS + 1:
+		var y := float(k) / SEGMENTS
+		v.append_array([Vector3(-w, y, 0), Vector3(w, y, 0)])
+		nr.append_array([Vector3.BACK, Vector3.BACK])
+		uv.append_array([Vector2(0, 1 - y), Vector2(1, 1 - y)])
+	for k in SEGMENTS:
+		var a := k * 2
+		# лицом к +Z: обход по часовой, если смотреть с +Z
+		idx.append_array([a, a + 2, a + 1, a + 1, a + 2, a + 3])
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = v
+	arr[Mesh.ARRAY_NORMAL] = nr
+	arr[Mesh.ARRAY_TEX_UV] = uv
+	arr[Mesh.ARRAY_INDEX] = idx
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	var mat := ShaderMaterial.new()
+	var sh := Shader.new()
+	sh.code = KELP_SHADER
+	mat.shader = sh
+	mat.set_shader_parameter("glow", KELP_GLOW)
+	m.surface_set_material(0, mat)
+	return m
+
+
+static func build_body() -> SphereMesh:
+	var m := SphereMesh.new()
+	m.radius = 0.2
+	m.height = 0.4
+	m.radial_segments = 8
+	m.rings = 4
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = BODY
+	mat.roughness = 0.9
+	mat.emission_enabled = true
+	mat.emission = BODY_GLOW
+	m.material = mat
+	return m
+
+
+## Иглы ежа одним мешем: 18 четырёхгранных конусов по спирали (угол 2,39996), от экватора чуть вниз и вверх,
+## на конце — светящийся кончик (spineGeo).
+static func build_spines() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for k in SPINES:
+		var y := 1.0 - (k + 0.5) / SPINES * 1.2
+		var rr := sqrt(maxf(0.0, 1.0 - y * y))
+		var a := k * 2.39996
+		var dir := Vector3(cos(a) * rr, maxf(y, -0.15), sin(a) * rr).normalized()
+		var side := dir.cross(Vector3.UP if absf(dir.y) < 0.9 else Vector3.RIGHT).normalized()
+		var up := side.cross(dir)
+		var base := dir * SPINE_R * 0.8
+		var tip := dir * (SPINE_R * 0.8 + SPINE_LEN)
+		var ring: Array[Vector3] = []
+		for j in 4:
+			var t := j * TAU / 4.0
+			ring.append(base + (side * cos(t) + up * sin(t)) * 0.02)
+		for j in 4:
+			var p0 := ring[j]
+			var p1 := ring[(j + 1) % 4]
+			_tri(st, [p0, p1, tip], [SPINE_BASE, SPINE_BASE, SPINE_TIP])
+		# кончик — маленький ромб 3 см
+		var e := 0.03
+		var c := tip
+		var pts: Array[Vector3] = [c + side * e, c + up * e, c - side * e, c - up * e]
+		for j in 4:
+			_tri(st, [pts[j], pts[(j + 1) % 4], c + dir * e], [SPINE_TIP, SPINE_TIP, SPINE_TIP])
+			_tri(st, [pts[(j + 1) % 4], pts[j], c - dir * e], [SPINE_TIP, SPINE_TIP, SPINE_TIP])
+	var m := st.commit()
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.vertex_color_use_as_albedo = true
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.surface_set_material(0, mat)
+	return m
+
+
+static func _tri(st: SurfaceTool, p: Array[Vector3], c: Array[Color]) -> void:
+	for i in 3:
+		st.set_color(c[i])
+		st.add_vertex(p[i])
+
+
+## Расставить ленты (если менялись) и ежей в момент t (время мира).
+func sync(t: float) -> void:
+	if kelp.dirty:
+		kelp.dirty = false
+		stalk_buffer.resize(stalks.multimesh.instance_count * STRIDE_C)
+		for gr in kelp.groves:
+			for k in gr.stalks.size():
+				var s := gr.stalks[k]
+				s.drawn = s.f
+				var i := (gr.index * EcoKelp.KELP_N + k) * STRIDE_C
+				_put(stalk_buffer, i, Transform3D(EcoKelp.stalk_basis(s), s.pos))
+				var c := EcoKelp.stalk_color(s)
+				stalk_buffer[i + 12] = c.r; stalk_buffer[i + 13] = c.g; stalk_buffer[i + 14] = c.b; stalk_buffer[i + 15] = 1.0
+		stalks.multimesh.buffer = stalk_buffer
+		stalk_writes += 1
+	urchin_buffer.resize(kelp.urchins.size() * STRIDE)
+	for u in kelp.urchins:
+		var tr := Transform3D(EcoKelp.urchin_basis(u, t), u.pos) if u.alive \
+			else Transform3D(Basis.from_scale(Vector3.ZERO), Vector3(0, -999, 0))
+		_put(urchin_buffer, u.index * STRIDE, tr)
+	bodies.multimesh.buffer = urchin_buffer
+	spines.multimesh.buffer = urchin_buffer
+
+
+static func _put(buf: PackedFloat32Array, i: int, tr: Transform3D) -> void:
+	var b := tr.basis
+	var o := tr.origin
+	buf[i] = b.x.x; buf[i + 1] = b.y.x; buf[i + 2] = b.z.x; buf[i + 3] = o.x
+	buf[i + 4] = b.x.y; buf[i + 5] = b.y.y; buf[i + 6] = b.z.y; buf[i + 7] = o.y
+	buf[i + 8] = b.x.z; buf[i + 9] = b.y.z; buf[i + 10] = b.z.z; buf[i + 11] = o.z
+
+
+## Расстановка экземпляра n из буфера с шагом stride.
+static func transform_at(buf: PackedFloat32Array, n: int, stride: int = STRIDE_C) -> Transform3D:
+	var i := n * stride
+	return Transform3D(Vector3(buf[i], buf[i + 4], buf[i + 8]), Vector3(buf[i + 1], buf[i + 5], buf[i + 9]),
+		Vector3(buf[i + 2], buf[i + 6], buf[i + 10]), Vector3(buf[i + 3], buf[i + 7], buf[i + 11]))

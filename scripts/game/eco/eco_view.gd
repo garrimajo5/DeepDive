@@ -50,6 +50,15 @@ var ognevka_view: OgnevkaView
 ## Хватни у стай светляков 0…3 и пестрянки в их щупальцах: подманивают стаю, ловят светляков в темноте.
 var hvaten: EcoHvaten
 var hvaten_view: HvatenView
+## Ленточник у стай светляков 1 и 2 и шипоежи, что его объедают: в густой роще хищник теряет напуганную стаю.
+var kelp: EcoKelp
+var kelp_view: KelpView
+## Кольчужник: нора у второй рощи, раскалывает шипоежей, иглы — в панцирь; щиплет корабль у норы.
+var krab: EcoKrab
+var krab_view: KrabView
+## Монетники: три стайки над пятнами мха у старта, рассыпаются от сонара; глазуны в песке хватают их снизу.
+var coins: EcoCoins
+var coins_view: CoinsView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -68,6 +77,8 @@ var ground: Callable:
 		_rebuild_raduzh()
 		_rebuild_ognevka()
 		_rebuild_hvaten()
+		_rebuild_kelp()
+		_rebuild_coins()
 
 
 func _init() -> void:
@@ -100,6 +111,12 @@ func _init() -> void:
 	raduzh = world.add(EcoRaduzh.new()) as EcoRaduzh
 	preds.raduzh = raduzh
 	hvaten = world.add(EcoHvaten.new(fish)) as EcoHvaten
+	kelp = world.add(EcoKelp.new(fish)) as EcoKelp
+	preds.kelp = kelp
+	krab = world.add(EcoKrab.new(kelp)) as EcoKrab
+	coins = world.add(EcoCoins.new(moss, preds)) as EcoCoins
+	coins.bladders = bladders
+	bladders.coins = coins
 	_rebuild_moss()
 	_rebuild_coral()
 	_rebuild_ferns()
@@ -110,6 +127,8 @@ func _init() -> void:
 	_rebuild_raduzh()
 	_rebuild_ognevka()
 	_rebuild_hvaten()
+	_rebuild_kelp()
+	_rebuild_coins()
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -202,6 +221,30 @@ func _rebuild_hvaten() -> void:
 	add_child(hvaten_view)
 
 
+## Ленточник и шипоежи по дну мира (ленты встают на дно при сбросе мира).
+func _rebuild_kelp() -> void:
+	if kelp_view:
+		remove_child(kelp_view)
+		kelp_view.free()
+	kelp_view = KelpView.new(kelp)
+	add_child(kelp_view)
+	# нора кольчужника — у рощи, встаёт на дно заново вместе с ней
+	if krab_view:
+		remove_child(krab_view)
+		krab_view.free()
+	krab_view = KrabView.new(krab)
+	add_child(krab_view)
+
+
+## Монетники и глазуны по дну мира (глазуны лежат на дне и встают заново вместе с ним).
+func _rebuild_coins() -> void:
+	if coins_view:
+		remove_child(coins_view)
+		coins_view.free()
+	coins_view = CoinsView.new(coins)
+	add_child(coins_view)
+
+
 ## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
 func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	world.ship = ship
@@ -220,4 +263,7 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	raduzh_view.sync(world.time, ship.pos, ship.yaw)
 	ognevka_view.sync()
 	hvaten_view.sync(world.time, ship.pos, false)
+	kelp_view.sync(world.time)
+	krab_view.sync(world.time)
+	coins_view.sync(world.time)
 	return world.take_link()
