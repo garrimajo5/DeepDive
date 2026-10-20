@@ -23,6 +23,9 @@ var coral: EcoCoral
 var coral_view: CoralView
 var fans: EcoFan
 var fan_view: FanView
+## Волнолист: две куртины по четыре куста, раскрываются в луче прожектора, моллюски зовут стаи.
+var ferns: EcoFern
+var fern_view: FernView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -33,6 +36,7 @@ var ground: Callable:
 		world.reset()
 		_rebuild_moss()
 		_rebuild_coral()
+		_rebuild_ferns()
 
 
 func _init() -> void:
@@ -51,8 +55,10 @@ func _init() -> void:
 	fans = world.add(EcoFan.new(current)) as EcoFan
 	fan_view = FanView.new(fans)
 	add_child(fan_view)
+	ferns = world.add(EcoFern.new(fish)) as EcoFern
 	_rebuild_moss()
 	_rebuild_coral()
+	_rebuild_ferns()
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -73,6 +79,15 @@ func _rebuild_coral() -> void:
 	add_child(coral_view)
 
 
+## Волнолист по дну мира (моллюски лежат на дне и ставятся один раз).
+func _rebuild_ferns() -> void:
+	if fern_view:
+		remove_child(fern_view)
+		fern_view.free()
+	fern_view = FernView.new(ferns, world.ground)
+	add_child(fern_view)
+
+
 ## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
 func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	world.ship = ship
@@ -83,4 +98,5 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	moss_view.sync()
 	coral_view.sync()
 	fan_view.sync(world.time)
+	fern_view.sync(world.time)
 	return world.take_link()

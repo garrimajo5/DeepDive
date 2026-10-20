@@ -8,6 +8,11 @@ extends RefCounted
 const MAX_STEP := 0.05
 ## Радиус разряда, если корабль его не сообщил (м): 20 при полной доле реактора, как Zap.BASE_RADIUS.
 const ZAP_RADIUS := 20.0
+## Луч прожектора для существ (inBeam в js/creatures.js): конус с полууглом 0,5 рад из-под носа (Searchlight.LAMP)
+## вниз на Searchlight.PITCH — как видимый свет в сцене; длина 45 м при полной доле «Прожектор» и растёт как
+## дальность света (ShipState.light_range / Searchlight.BASE_RANGE, т. е. как √доли).
+const BEAM_R := 45.0
+const BEAM_ANG := 0.5
 
 var seed_value: int
 var random: EcoRandom
@@ -121,6 +126,25 @@ func _send_near() -> void:
 			found.append(EcoLink.near(t["species"], nm(t["species"]), p, sp, t["r"], on_sonar, on_scan))
 	found.sort_custom(func(a, b): return a["dist"] < b["dist"])
 	_link.append_array(found)
+
+
+## Освещает ли прожектор корабля точку p (E.inBeam): свет включён, точка ближе длины луча и внутри конуса.
+func in_beam(p: Vector3) -> bool:
+	return beam_hits(ship, p)
+
+
+static func beam_hits(s: EcoLink.ShipState, p: Vector3) -> bool:
+	if not s.light_on:
+		return false
+	var turn := Basis(Vector3.UP, s.yaw)
+	var d := p - (s.pos + turn * Searchlight.LAMP)
+	var dist := d.length()
+	var reach := BEAM_R * (s.light_range / Searchlight.BASE_RANGE if s.light_range > 0.0 else 1.0)
+	if dist > reach or dist < 0.01:
+		return false
+	var down := deg_to_rad(Searchlight.PITCH)
+	var dir := turn * Vector3(0.0, -sin(down), -cos(down))
+	return d.dot(dir) / dist > cos(BEAM_ANG)
 
 
 ## Прогнать мир seconds секунд шагами dt (для тестов).
