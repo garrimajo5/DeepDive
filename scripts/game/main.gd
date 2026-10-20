@@ -16,8 +16,11 @@ var reactor := Reactor.new()
 var sonar := Sonar.new()
 var vitals := Vitals.new()   ## корпус и заряд корабля
 var zap := Zap.new()
+var samples := Samples.new()   ## образцы на дне и лебёдка трюма
+var samples_view: SamplesView
 var engine := EngineRoom.new()   ## машинное: вентиль сброса пара и щиток «Аварийный сброс»
 var debug_vent := false          ## снимок: вентиль держат без пальца
+var debug_winch := false         ## снимок: кнопку у лебёдки держат без пальца
 var zap_light: OmniLight3D   ## вспышка разряда вокруг корпуса (за бортом)
 ## Первые кадры вспышка горит почти без света: шейдеры дна и корпуса со светом от неё собираются при старте,
 ## а не в момент первого разряда (issue #50: 10 к/с на разряде).
@@ -59,6 +62,9 @@ func _ready() -> void:
 	eco.name = "Живой мир"
 	eco.ground = Seabed.height
 	add_child(eco)
+	samples_view = SamplesView.new(samples)
+	samples_view.name = "Образцы"
+	add_child(samples_view)
 	helm.ground = Seabed.height
 	ship = Node3D.new()
 	ship.name = "Корабль"
@@ -84,6 +90,7 @@ func _ready() -> void:
 	crew_view.set_members(crew, me)
 	walker.stand = layout.can_stand
 	posts = Deck.posts()
+	posts.append(Deck.Post.new("winch", Samples.POST_AT, Samples.POST_R, "Лебёдка"))
 	for i in layout.doors.size():
 		posts.append(Deck.Post.new("door%d" % i, Vector2(0.0, ShipLayout.DOOR_Z[i]), 1.2, "Открыть люк"))
 	searchlight = SearchlightView.new()
@@ -128,6 +135,7 @@ func _ready() -> void:
 	ui.add_child(overlay)
 	reactor.message.connect(func(title: String, _text: String) -> void: say(title))
 	airlock.message.connect(say)
+	samples.message.connect(say)
 	engine.message.connect(say)
 	_place_ship()
 	_place_camera()
@@ -165,6 +173,7 @@ func step(dt: float) -> void:
 		qa.tick(dt)
 	var r := overlay.router
 	var hold_valve := false
+	var hold_winch := false
 	if pilot.seated:
 		helm.in_thrust = r.move.y
 		helm.in_turn = r.move.x
@@ -192,13 +201,21 @@ func step(dt: float) -> void:
 		if post and r.action_pressed:
 			use_post(post.id)
 		hold_valve = post != null and post.id == "valve" and r.action_down
+		hold_winch = post != null and post.id == "winch" and r.action_down
 	layout.update(dt)
 	airlock.update(dt)
+	var ship_xf := Samples.ship_xform(helm.pos, helm.yaw)
+	if (hold_winch or debug_winch) and airlock.fully_open():
+		samples.hold(Samples.lock_point(ship_xf), dt)
+	samples.update(dt)
+	samples_view.sync()
 	for p in posts:
 		if p.id.begins_with("door"):
 			p.label = "Закрыть люк" if layout.doors[int(p.id.substr(4))].open else "Открыть люк"
 		elif p.id == "airlock":
 			p.label = airlock.label()
+		elif p.id == "winch":
+			p.label = samples.label()
 	current.update(dt)
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
 	engine.update(dt, reactor, hold_valve or debug_vent)
@@ -227,6 +244,8 @@ func step(dt: float) -> void:
 	bridge.set_hatch(layout.doors[0].offset())
 	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0)
 	rooms.apply(layout, reactor, airlock, engine)
+	var carry_c: Color = Samples.COLORS[samples.target.kind] if samples.target else Color.WHITE
+	rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(), carry_c)
 	message.update(dt)
 	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt)
 	crew_view.apply()
@@ -237,7 +256,7 @@ func step(dt: float) -> void:
 
 
 ## Короткая подпись на кнопке действия у поста.
-const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер", "sonar": "Сонар", "zap": "Разряд", "airlock": "Шлюз",
+const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер", "sonar": "Сонар", "zap": "Разряд", "airlock": "Шлюз", "winch": "Лебёдка",
 	"valve": "Вентиль", "scram": "Сброс"}
 
 
@@ -253,7 +272,14 @@ func use_post(id: String) -> void:
 		"zap":
 			fire_zap()
 		"airlock":
-			airlock.toggle()
+			if samples.state != Samples.State.IDLE:
+				say("Захват за бортом — шлюз не закрыть")
+			else:
+				airlock.toggle()
+		"winch":
+			var why := samples.why_not(airlock.fully_open(), Samples.lock_point(Samples.ship_xform(helm.pos, helm.yaw)))
+			if why != "":
+				say(why)
 		"scram":
 			engine.press(reactor)
 		"scanner":
@@ -261,6 +287,18 @@ func use_post(id: String) -> void:
 		_ when id.begins_with("door"):
 			var d: ShipLayout.Door = layout.doors[int(id.substr(4))]
 			d.open = not d.open
+
+
+## Поставить корабль над образцом n: шлюз в 8 м над ним, корабль стоит, шлюз открыт (сценарий тестера, снимки).
+func park_over_sample(n: int) -> void:
+	var smp: Samples.Sample = samples.all[clampi(n, 0, samples.all.size() - 1)]
+	helm.speed = 0.0
+	helm.vy = 0.0
+	helm.pos = smp.pos + Vector3(0.0, 8.0 - Airlock.Y, 0.0) - Basis(Vector3.UP, helm.yaw) * Vector3(0.0, 0.0, Airlock.Z)
+	airlock.open = true
+	airlock.t = 1.0
+	rooms.apply(layout, reactor, airlock, engine)
+	_place_ship()
 
 
 ## Встать к пульту энергии: взгляд на пульт, крестовина правит доли, кнопка — закрыть.
@@ -488,6 +526,19 @@ func debug_setup(kv: Dictionary) -> void:
 		debug_vent = true
 		engine.pressed = 30.0
 		engine.lid = 1.0
+	if kv.has("sample"):  # sample=n — корабль над образцом n, шлюз открыт; grab=<с> — столько держать кнопку у лебёдки
+		park_over_sample(int(kv["sample"]))
+		walker.x = Samples.POST_AT.x - 0.7
+		walker.z = Samples.POST_AT.y + 0.3
+		var lock := Samples.lock_point(Samples.ship_xform(helm.pos, helm.yaw))
+		var held := float(kv.get("grab", "0"))
+		debug_winch = held > 0.0 and held < Samples.GRAB_TIME
+		while held > 0.0:
+			samples.hold(lock, 0.05)
+			samples.update(0.05)
+			held -= 0.05
+		rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(),
+			Samples.COLORS[samples.target.kind] if samples.target else Color.WHITE)
 	if kv.has("ship"):  # ship=x,y,z — поставить корабль (y — высота, глубина со знаком минус)
 		var p: PackedFloat64Array = kv["ship"].split_floats(",")
 		helm.pos = Vector3(p[0], p[1], p[2])
