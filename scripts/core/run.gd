@@ -24,6 +24,7 @@ const ROUTES: Array = [
 
 var route := -1           ## индекс в ROUTES, −1 — маршрут не выбран
 var visited: Array[String] = []
+var seen: Array[String] = []   ## места, пройденные за забег (без повторов) — строка «Места» итога
 var done := false
 var depth := 0            ## сколько раз экипаж решил «глубже»: 0 — первый спуск
 var routes := 0           ## маршрутов пройдено за забег
@@ -45,6 +46,7 @@ static func place_xz(key: String) -> Vector2:
 func begin(t: float, cargo_n: int, species_n: int, breaches_n: int) -> void:
 	route = -1
 	visited.clear()
+	seen.clear()
 	done = false
 	depth = 0
 	routes = 0
@@ -101,6 +103,8 @@ func update(x: float, z: float) -> String:
 		if visited.has(k) or Vector2(x, z).distance_to(place_xz(k)) >= float(PLACES[k][2]):
 			continue
 		visited.append(k)
+		if not seen.has(k):
+			seen.append(k)
 		var n := next_key()
 		if n != "":
 			return "Точка маршрута пройдена: %s. Дальше — %s" % [place_name(k), place_name(n)]
@@ -168,6 +172,26 @@ func finish(t: float, cargo_n: int, species_n: int, breaches_n: int, hull: float
 	score = maxi(0, species_n - int(start.get("species", 0))) * 10 + maxi(0, cargo_n - int(start.get("cargo", 0))) * 5 \
 		+ routes * 20 + depth * 25 + roundi(hull / 10.0)
 	return rows
+
+
+## Итог на голограмме (ART-016): четыре строки [название, значение] — Образцы / Виды / Места / Пробоины за забег.
+func summary(cargo_n: int, species_n: int, breaches_n: int) -> Array:
+	return [
+		["Образцы", str(maxi(0, cargo_n - int(start.get("cargo", 0))))],
+		["Виды", str(maxi(0, species_n - int(start.get("species", 0))))],
+		["Места", str(seen.size())],
+		["Пробоины", str(maxi(0, breaches_n - int(start.get("breaches", 0))))],
+	]
+
+
+## Подробный итог на панели — results() без строк, что уже есть на голограмме (summary): время, спуски, маршруты,
+## корпус.
+static func detail(rows: Array) -> Array:
+	var out := []
+	for r in rows:
+		if not (r[0] in ["Новых видов в журнале", "Образцов поднято", "Пробоин"]):
+			out.append(r)
+	return out
 
 
 ## Итог забега: [название, значение].

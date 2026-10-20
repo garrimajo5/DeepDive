@@ -31,6 +31,8 @@ var near_post := ""            ## пост рядом с игроком на н�
 var brief := Briefing.Fade.new()  ## голограмма брифинга у поста «Маршрут» (ART-016)
 var vote_fade := Briefing.Fade.new()  ## голосование на голограмме (VoteHolo)
 var votes := {}                   ## голоса ролей в открытом голосовании (VoteHolo.votes)
+var result_fade := Briefing.Fade.new()  ## итог забега на голограмме (VoteHolo.result_wanted)
+var result_rows: Array = []      ## четыре строки итога на голограмме (Run.summary)
 var journal_page := 0          ## страница журнала лаборатории: 0 — сводка, дальше карточки видов (Lab.page_lines)
 var engine := EngineRoom.new()   ## машинное: вентиль сброса пара и щиток «Аварийный сброс»
 var debug_vent := false          ## снимок: вентиль держат без пальца
@@ -508,6 +510,8 @@ func step(dt: float) -> void:
 	sonar_view.show_waypoint(run.waypoint())
 	sonar_view.show_briefing(brief.update(dt, Briefing.wanted(near_post, at_vote, run.ended)), run, helm.pos)
 	sonar_view.show_vote(vote_fade.update(dt, VoteHolo.wanted(at_vote, run.ended)), votes)
+	sonar_view.show_result(result_fade.update(dt, VoteHolo.result_wanted(at_vote, run.ended)), result_rows,
+		camera.global_position)
 	rooms.apply(layout, reactor, airlock, engine)
 	var carry_c: Color = Samples.COLORS[samples.target.kind] if samples.target else Color.WHITE
 	rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(), carry_c)
@@ -841,7 +845,8 @@ func decide(choice: String) -> void:
 		say(run.go_deeper())
 		return
 	var rows := run.finish(time, samples.cargo.size(), scanner.scanned.size(), breach.count, vitals.hull)
-	vote_panel.show_results(rows, run.score)
+	result_rows = run.summary(samples.cargo.size(), scanner.scanned.size(), breach.count)
+	vote_panel.show_results(Run.detail(rows), run.score)
 	flyby.start(Flyby.Kind.SURFACE)   # вид с борта, пока на экране итог
 	say("Экипаж поднялся наверх: очки %d" % run.score)
 
@@ -1036,6 +1041,8 @@ func debug_setup(kv: Dictionary) -> void:
 		open_vote()
 		if kv["vote"] == "up":
 			decide("up")
+			if not kv.has("flyby"):
+				flyby.stop()   # снимок итога — с мостика: итог на голограмме над столом
 	if kv.has("journal"):
 		journal_page = clampi(int(kv["journal"]), 0, Lab.pages(scanner) - 1)
 		rooms.set_lab(Lab.contents(samples.cargo), Lab.page_lines(samples, scanner, journal_page), time)
