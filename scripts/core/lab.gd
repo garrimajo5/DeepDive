@@ -3,7 +3,9 @@ extends RefCounted
 ## Лаборатория по ART-009 и моделям MOD-015 (`docs/concept-art/laboratoriya.md`): три колбы на тумбах и стойка журнала.
 ## Как в браузерной версии (js/ship.js, S.showTubes): в колбах — три последних образца из груза трюма, колба i —
 ## i-й из последних трёх; поднял лебёдкой — образец сам появляется в колбе. Пост «Колба» — что в ней; пост «Журнал» —
-## сводка экспедиции на экране стойки (изученные виды — от сканера биолога, `Scanner`).
+## сводка экспедиции на экране стойки (изученные виды — от сканера биолога, `Scanner`). Нажатия «Журнал» листают
+## страницы: сводка, затем карточки видов (изученные или с наблюдениями, порядок журнала), снова сводка
+## (renderJournal в js/game.js: имя, наблюдения «n из m»).
 ## Оси корабля; отсек x −4…4, z 8…14 (`ShipLayout.ROOMS`).
 
 ## Центры тумб колб на полу (x, z): две у левого борта у кормы, третья у правого у носа.
@@ -64,6 +66,53 @@ static func journal_lines(s: Samples, species: int = -1) -> PackedStringArray:
 	if s.cargo.is_empty():
 		lines.append("Образцов пока нет")
 	return lines
+
+
+const CARD_NOTES := 1                ## на карточке — последняя заметка (больше не помещается на экран)
+
+
+## Виды с карточкой в журнале: изучены сканером или есть наблюдения; порядок журнала (Species.ids).
+static func cards(sc: Scanner) -> Array[String]:
+	var out: Array[String] = []
+	for id in Species.ids():
+		if sc.is_scanned(id) or sc.seen.has(id):
+			out.append(id)
+	return out
+
+
+## Страниц журнала: сводка и карточки.
+static func pages(sc: Scanner) -> int:
+	return 1 + cards(sc).size()
+
+
+## Строки карточки вида: номер карточки, имя (до сканирования — «Неизвестный вид»), счёт и последние наблюдения.
+static func card_lines(sc: Scanner, id: String, n: int, total: int) -> PackedStringArray:
+	var info := Species.info(id)
+	var lines := PackedStringArray(["ЖУРНАЛ · ВИД %d ИЗ %d" % [n, total]])
+	lines.append(info.name if sc.is_scanned(id) else "Неизвестный вид: %s" % info.unom)
+	var got := sc.seen_of(id)
+	lines.append("Наблюдений %d из %d" % [got.size(), info.notes.size()])
+	for k in got.slice(maxi(0, got.size() - CARD_NOTES)):
+		lines.append("· " + info.note(k))
+	if got.is_empty():
+		lines.append("Наблюдения пишутся, когда вид рядом с кораблём")
+	return lines
+
+
+## Сообщение при открытии карточки: сведения об изученном виде или подсказка.
+static func card_info(sc: Scanner, id: String) -> String:
+	var info := Species.info(id)
+	if sc.is_scanned(id):
+		return "%s: %s" % [info.name, info.desc]
+	return "Неизвестный вид: изучите его сканером на мостике"
+
+
+## Экран журнала на странице page (0 — сводка); страница за краем — сводка.
+static func page_lines(s: Samples, sc: Scanner, page: int) -> PackedStringArray:
+	var ids := cards(sc)
+	if page <= 0 or page > ids.size():
+		return journal_lines(s, sc.scanned.size())
+	return card_lines(sc, ids[page - 1], page, ids.size())
 
 
 ## Сообщение по кнопке у журнала.

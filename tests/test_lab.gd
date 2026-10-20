@@ -44,6 +44,32 @@ func test_obstacles_and_posts() -> void:
 	eq(near1.id, "flask0", "у первой колбы — пост первой")
 
 
+func test_species_cards() -> void:
+	var s := Samples.new(func(_x: float, _z: float) -> float: return -60.0)
+	var sc := Scanner.new()
+	eq(Lab.pages(sc), 1, "без видов — только сводка")
+	eq(Lab.page_lines(s, sc, 1)[0], "ЖУРНАЛ ЭКСПЕДИЦИИ", "страница за краем — сводка")
+	sc.observe("pred", "ping")
+	sc.scanned["fish"] = true
+	eq(Lab.cards(sc), ["fish", "pred"] as Array[String], "карточки по порядку журнала")
+	var fish := Lab.page_lines(s, sc, 1)
+	eq(fish[0], "ЖУРНАЛ · ВИД 1 ИЗ 2", "номер карточки")
+	eq(fish[1], "Светляк-полосник", "изучен — имя")
+	eq(fish[2], "Наблюдений 0 из 3", "счёт заметок")
+	eq(fish[3], "Наблюдения пишутся, когда вид рядом с кораблём", "подсказка без наблюдений")
+	var pred := Lab.page_lines(s, sc, 2)
+	eq(pred[1], "Неизвестный вид: крупный хищник", "до сканирования — описательно")
+	eq(pred[3], "· Слышит сонар и плывёт проверить источник звука.", "заметка")
+	sc.observe("pred", "catch")
+	sc.observe("pred", "zap")
+	pred = Lab.page_lines(s, sc, 2)
+	eq(pred.size(), 3 + Lab.CARD_NOTES, "только последняя заметка")
+	eq(pred[2], "Наблюдений 3 из 6", "счёт")
+	eq(pred[-1], "· Разряд по корпусу отпугивает его.", "последняя — внизу")
+	ok(Lab.card_info(sc, "fish").begins_with("Светляк-полосник: Мелкая рыба"), "сведения изученного")
+	eq(Lab.card_info(sc, "pred"), "Неизвестный вид: изучите его сканером на мостике", "подсказка")
+
+
 func test_scene_flasks_and_journal() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
@@ -73,5 +99,15 @@ func test_scene_flasks_and_journal() -> void:
 	main.step(1.0 / 30.0)
 	eq(main.message.text, "Журнал: образцов 1, видов образцов 1 из 4", "сводка журнала")
 	ok(main.rooms.journal_text.text.contains("Ветка огнецвета — 1"), "экран журнала: %s" % main.rooms.journal_text.text)
+	main.scanner.observe("pred", "ping")
+	for want in ["Неизвестный вид: изучите его сканером на мостике", "Журнал: образцов 1, видов образцов 1 из 4"]:
+		r.begin(5, r.layout.action.c)
+		main.step(1.0 / 30.0)
+		r.end(5)
+		main.step(1.0 / 30.0)
+		eq(main.message.text, want, "листать журнал")
+		if main.journal_page == 1:
+			ok(main.rooms.journal_text.text.contains("Наблюдений 1 из 6"), "карточка: %s" % main.rooms.journal_text.text)
+	eq(main.journal_page, 0, "снова сводка")
 	main.queue_free()
 	await frames(1)

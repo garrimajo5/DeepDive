@@ -102,6 +102,33 @@ func test_save_species() -> void:
 	eq(back.scanned.size(), 0, "без видов — ничего не изучено")
 
 
+func test_observations_and_save() -> void:
+	var s := Scanner.new()
+	var changes := [0]
+	s.changed.connect(func() -> void: changes[0] += 1)
+	ok(s.observe("pred", "ping"), "новое наблюдение")
+	ok(not s.observe("pred", "ping"), "повтор — не новое")
+	ok(not s.observe("pred", "nope"), "нет такой заметки — не наблюдение")
+	ok(not s.observe("nobody", "ping"), "нет такого вида")
+	ok(s.observe("pred", "catch"), "второе")
+	eq(s.seen_of("pred"), ["ping", "catch"] as Array[String], "в порядке, как увидели")
+	eq(changes[0], 2, "сохранить — только новые")
+	var smp := Samples.new(func(_x: float, _z: float) -> float: return -60.0)
+	var snap := SaveGame.snapshot(smp, s)
+	eq(snap["species"]["pred"], {"scanned": false, "seen": ["ping", "catch"]}, "seen в формате js/save.js")
+	var data: Variant = JSON.parse_string(JSON.stringify(snap))
+	data["species"]["fish"] = {"scanned": true, "seen": ["flee", "nope", "flee", 5]}
+	data["species"]["grazer"] = {"seen": "graze"}
+	var back := Scanner.new()
+	ok(SaveGame.apply(data, smp, back), "читается")
+	eq(back.seen_of("pred"), ["ping", "catch"] as Array[String], "наблюдения вернулись")
+	eq(back.seen_of("fish"), ["flee"] as Array[String], "чужие ключи и повторы пропущены")
+	ok(not back.seen.has("grazer"), "seen не массив — пропущен")
+	ok(back.is_scanned("fish"), "изучен")
+	back.restore([])
+	ok(back.seen.is_empty(), "restore без наблюдений — пусто")
+
+
 func test_sonar_skips_scan_only() -> void:
 	var so := Sonar.new()
 	so.ping(0.0, 1.0)

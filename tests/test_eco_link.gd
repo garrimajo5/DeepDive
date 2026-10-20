@@ -36,6 +36,33 @@ func test_ship_state_and_events() -> void:
 	ok(main.eco.get_parent() == main, "мир — в сцене мира, не в корабле")
 
 
+func test_observe_to_journal() -> void:
+	# EcoLink.OBSERVE: наблюдение в журнал (handleEvents в js/game.js), текст — на приборы.
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var fake := FakeEco.new()
+	main.eco.queue_free()
+	main.eco = fake
+	main.add_child(fake)
+	fake.send = [EcoLink.observe("fish", "flee")]
+	main.step(0.1)
+	eq(main.scanner.seen_of("fish"), ["flee"] as Array[String], "наблюдение записано")
+	eq(main.message.text, "Новое наблюдение: мелкая рыба", "новое без текста — подпись")
+	main.say("—")
+	fake.send = [EcoLink.observe("fish", "flee"), EcoLink.observe("fish", "nope")]
+	main.step(0.1)
+	eq(main.message.text, "—", "повтор и чужой ключ — молча")
+	eq(main.scanner.seen_of("fish").size(), 1, "повтор не пишется")
+	main.scanner.scanned["pred"] = true
+	fake.send = [EcoLink.observe("pred", "ping", "Серпохвост плывёт на звук сонара")]
+	main.step(0.1)
+	eq(main.message.text, "Серпохвост плывёт на звук сонара", "текст события — как MESSAGE")
+	eq(main.scanner.seen_of("pred"), ["ping"] as Array[String], "и в журнал")
+	main.queue_free()
+	await frames(1)
+
+
 func test_hit_clamped() -> void:
 	near(EcoLink.hit("x", 3.0, Vector3.ZERO)["damage"], 1.0, 1e-9, "урон 0…1")
 

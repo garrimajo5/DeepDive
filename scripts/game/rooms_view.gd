@@ -180,7 +180,7 @@ func _add_lab() -> void:
 	journal_text = Label3D.new()
 	journal_text.name = "Экран журнала"
 	journal_text.layers = OceanView.LAYER_SHIP
-	journal_text.font_size = 34
+	journal_text.font_size = 26   # 8 строк сводки и карточка вида с заметкой помещаются на экран
 	journal_text.outline_size = 0
 	journal_text.pixel_size = 0.0016
 	journal_text.modulate = Color("67DDEB")

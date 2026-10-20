@@ -2,7 +2,7 @@ class_name SaveGame
 extends RefCounted
 ## Сохранение экспедиции в user:// (как js/save.js): груз трюма, номера поднятых со дна образцов, изученные виды.
 ## Формат файла — JSON, совместимый с браузерным: {"v": 1, "cargo": [{"kind": "moss", "i": 3}, …], "got": [3, …],
-## "species": {"fish": {"scanned": true, "seen": []}, …}} (i = null — образец не со дна; seen — наблюдения, позже). Запись не чаще раза в секунду после изменений и сразу, когда игру сворачивают.
+## "species": {"fish": {"scanned": true, "seen": []}, …}} (i = null — образец не со дна; seen — ключи наблюдений вида, `Scanner.seen`). Запись не чаще раза в секунду после изменений и сразу, когда игру сворачивают.
 ## Файл недоступен или испорчен — игра просто не сохраняет и начинает с чистого трюма.
 
 const PATH := "user://save.json"
@@ -30,7 +30,7 @@ static func snapshot(samples: Samples, scanner: Scanner = null) -> Dictionary:
 	if scanner:
 		var species := {}
 		for id in Species.ids():
-			species[id] = {"scanned": scanner.is_scanned(id), "seen": []}
+			species[id] = {"scanned": scanner.is_scanned(id), "seen": scanner.seen_of(id)}
 		out["species"] = species
 	return out
 
@@ -55,13 +55,18 @@ static func apply(data: Variant, samples: Samples, scanner: Scanner = null) -> b
 	samples.restore(raw_got if raw_got is Array else [], cargo)
 	if scanner:
 		var ids: Array = []
+		var notes := {}
 		var raw_species: Variant = data.get("species", {})
 		if raw_species is Dictionary:
 			for id in raw_species:
 				var sp: Variant = raw_species[id]
-				if sp is Dictionary and bool(sp.get("scanned", false)):
+				if not (sp is Dictionary):
+					continue
+				if bool(sp.get("scanned", false)):
 					ids.append(id)
-		scanner.restore(ids)
+				if sp.get("seen") is Array:
+					notes[id] = sp["seen"]
+		scanner.restore(ids, notes)
 	return true
 
 
