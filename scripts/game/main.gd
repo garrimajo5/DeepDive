@@ -512,7 +512,7 @@ func step(dt: float) -> void:
 	bridge.set_hatch(layout.doors[0].offset())
 	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0, silt.noise(time))
 	sonar_view.show_waypoint(run.waypoint())
-	alarm_board.show_alarms(alarms_on(), time)
+	alarm_board.show_alarms(alarms_on(), time, breach.active)
 	sonar_view.show_briefing(brief.update(dt, Briefing.wanted(near_post, at_vote, run.ended)), run, helm.pos)
 	sonar_view.show_vote(vote_fade.update(dt, VoteHolo.wanted(at_vote, run.ended)), votes)
 	sonar_view.show_result(result_fade.update(dt, VoteHolo.result_wanted(at_vote, run.ended)), result_rows,
@@ -1018,6 +1018,11 @@ func debug_setup(kv: Dictionary) -> void:
 	if kv.has("hot"):  # hot=1 — перегрев (для снимка табло)
 		reactor.start_hot(false)
 		reactor.heat = float(kv["hot"])
+	if kv.has("energy"):  # energy=<ед.> — заряд корабля (меньше 20 — «МАЛО ЗАРЯДА» на табло)
+		vitals.energy = float(kv["energy"])
+	if kv.get("drain", "0") == "1":  # drain=1 — стеклоуст на корпусе (табло и рамка у щитка разряда)
+		vitals.drain("Стеклоуст", 0.01)
+		vitals.drain_left = 60.0
 	if kv.get("steam", "0") == "1":  # пар из вентиля и открытая крышка щитка (для снимка машинного)
 		debug_vent = true
 		engine.pressed = 30.0
