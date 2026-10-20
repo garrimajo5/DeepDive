@@ -294,3 +294,11 @@ emission), стекло банки 64 (alpha 0,25) — `models/stellazh-tryuma.g
 `skladchatye-arkhitektura.png`, `skladchatye-proshloe-i-seychas.jpg`; решения — `skladchatye-arkhitektura.md`: размеры
 дуг, насестов, клапана Ø 3 м, письма 1,2 × 0,8 м, водовода Ø 18 м и лаза 2,2 м; у архитектуры нет emission. Ритм клапана —
 предложение, не утверждённая загадка. Модели — после ART-020.
+
+## ART-020 Пять узлов лаборатории — принято
+- Исходник: ART-017 (`chasha.md`), ART-019 (`skladchatye-arkhitektura.md`), `warden.jpg`, `heart.jpg`, `crystal.jpg`.
+
+**Принято 20.10.2026** (PR #152, ветка `art/ART-020-uzly`): пять эскизов — `uzel-terrasa-vrat.jpg`,
+`uzel-regulyator-polya.jpg`, `uzel-servisnyy.jpg`, `uzel-arkhiv-rodstva.jpg`, `uzel-serdtse.jpg`; решения —
+`uzly-laboratorii.md`: у каждого узла свой слой, силуэт и видимая заранее опасность; архитектура не светится; кристаллы
+регулятора в игре непрозрачные; Дышащий только частью. Габариты узлов — предложения, ждут владельца. Модели — позже.
