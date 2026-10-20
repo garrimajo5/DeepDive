@@ -29,6 +29,8 @@ var scanner := Scanner.new()   ## сканер биолога: цели от ж�
 var at_scanner := false        ## игрок у поста «Сканер»: мир шлёт цели (ShipState.scan_range)
 var near_post := ""            ## пост рядом с игроком на ногах (id), "" — нет или игрок занят постом
 var brief := Briefing.Fade.new()  ## голограмма брифинга у поста «Маршрут» (ART-016)
+var vote_fade := Briefing.Fade.new()  ## голосование на голограмме (VoteHolo)
+var votes := {}                   ## голоса ролей в открытом голосовании (VoteHolo.votes)
 var journal_page := 0          ## страница журнала лаборатории: 0 — сводка, дальше карточки видов (Lab.page_lines)
 var engine := EngineRoom.new()   ## машинное: вентиль сброса пара и щиток «Аварийный сброс»
 var debug_vent := false          ## снимок: вентиль держат без пальца
@@ -505,6 +507,7 @@ func step(dt: float) -> void:
 	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0, silt.noise(time))
 	sonar_view.show_waypoint(run.waypoint())
 	sonar_view.show_briefing(brief.update(dt, Briefing.wanted(near_post, at_vote, run.ended)), run, helm.pos)
+	sonar_view.show_vote(vote_fade.update(dt, VoteHolo.wanted(at_vote, run.ended)), votes)
 	rooms.apply(layout, reactor, airlock, engine)
 	var carry_c: Color = Samples.COLORS[samples.target.kind] if samples.target else Color.WHITE
 	rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(), carry_c)
@@ -817,8 +820,9 @@ func _begin_run() -> void:
 func open_vote() -> void:
 	at_vote = true
 	run.open_vote()
-	vote_panel.show_vote(run.depth, Run.opinions(vitals.hull, vitals.energy, reactor.hot, silt.inside != null,
-		samples.cargo.size()))
+	var ops := Run.opinions(vitals.hull, vitals.energy, reactor.hot, silt.inside != null, samples.cargo.size())
+	votes = VoteHolo.votes(ops)
+	vote_panel.show_vote(run.depth, ops)
 
 
 func close_vote() -> void:

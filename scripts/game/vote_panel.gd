@@ -2,7 +2,8 @@ class_name VotePanel
 extends Control
 ## Решение экипажа на экране (js/run.js, панели #vote и #results): после пройденного маршрута — «глубже или наверх»
 ## с мнениями ролей (Run.opinions), после «наверх» — итог забега и очки. Открыт, пока игрок решает у голостола
-## (Main.at_vote). Голограмма решения по ART-016 — позже.
+## (Main.at_vote). В голосовании поля и метки ролей — на голограмме (VoteView), панель — справа, сбоку от стола:
+## доводы ролей и подсказка крестовины. Итог на голограмме — позже.
 
 const TEAL := Color(0.75, 0.95, 1.0)
 const DIM := Color(0.6, 0.75, 0.8)
@@ -42,9 +43,13 @@ func show_results(lines: Array, score: int) -> void:
 	queue_redraw()
 
 
-## Прямоугольник панели: по центру, ниже четырёх строк приборов.
+## Прямоугольник панели: итог — по центру, ниже четырёх строк приборов; голосование — справа, над кнопкой действия,
+## чтобы не закрывать поля голосования над столом.
 func box() -> Rect2:
 	var vis := get_viewport_rect().size
+	if not results:
+		var vw := minf(470.0, vis.x * 0.3)
+		return Rect2(vis.x - vw - 24.0, vis.y * 0.21, vw, minf(300.0, vis.y * 0.42))
 	var w := minf(640.0, vis.x * 0.44)
 	var h := minf(400.0, vis.y * 0.56)
 	return Rect2((vis.x - w) * 0.5, vis.y * 0.22, w, h)
@@ -57,10 +62,11 @@ func _draw() -> void:
 	draw_rect(b, Color(0.4, 0.86, 0.92, 0.6), false, 2.0)
 	var pad := b.size.x * 0.05
 	var x := b.position.x + pad
-	_text(font, Vector2(x, b.position.y + 42.0), title, 27, TEAL)
-	_text(font, Vector2(x, b.position.y + 72.0), sub, 19, UP if results else DIM)
-	var top := b.position.y + 90.0
-	var row_h := (b.end.y - 44.0 - top) / maxf(1.0, rows.size())
+	var head := 1.0 if results else 0.8
+	_text(font, Vector2(x, b.position.y + 42.0 * head), title, 27 if results else 24, TEAL)
+	_text(font, Vector2(x, b.position.y + 72.0 * head), sub, 19 if results else 17, UP if results else DIM)
+	var top := b.position.y + 90.0 * head
+	var row_h := (b.end.y - (44.0 if results else 34.0) - top) / maxf(1.0, rows.size())
 	for i in rows.size():
 		var r: Array = rows[i]
 		var y := top + row_h * i
@@ -70,9 +76,9 @@ func _draw() -> void:
 				160.0, 21, TEAL)
 		else:
 			var up: bool = r[1]
-			_text(font, Vector2(x, y + row_h * 0.42), "%s: %s" % [r[0], "наверх" if up else "глубже"], 21, UP if up else DEEP)
-			_text(font, Vector2(x, y + row_h * 0.82), str(r[2]), 16, DIM)
-	_text(font, Vector2(x, b.end.y - 14.0), foot, 15, DIM)
+			_text(font, Vector2(x, y + row_h * 0.45), "%s: %s" % [r[0], "наверх" if up else "глубже"], 19, UP if up else DEEP)
+			_text(font, Vector2(x, y + row_h * 0.9), str(r[2]), 15, DIM)
+	_text(font, Vector2(x, b.end.y - (14.0 if results else 10.0)), foot, 15, DIM)
 
 
 func _text(font: Font, at: Vector2, t: String, size_px: int, c: Color) -> void:

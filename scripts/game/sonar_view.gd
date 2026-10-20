@@ -2,13 +2,15 @@ class_name SonarView
 extends MeshInstance3D
 ## Голограмма сонара над голостолом: круг Ø 2,04 м на столе (шейдер shaders/sonar_holo.gdshader),
 ## карта рельефа — Sonar.bathymetry() один раз при запуске. У поста «Маршрут» сонар сменяет карта брифинга
-## (Briefing, ART-016): места с номерами (Label3D над столом) и линии маршрутов — show_briefing.
+## (Briefing, ART-016): места с номерами (Label3D над столом) и линии маршрутов — show_briefing. В голосовании «глубже или
+## наверх» рельеф гаснет, над столом — поля голосования (VoteView, show_vote).
 
 const TOP_Y := 0.93   ## над краем корпуса голостола (0,9 м)
 
 var mat: ShaderMaterial
 var numbers: Array[Label3D] = []   ## номера мест брифинга, порядок — Briefing.ORDER
 var icons: Array[Sprite3D] = []    ## иконки мест брифинга (textures/places), порядок — Briefing.ORDER
+var vote: VoteView                 ## поля голосования над столом (ART-016)
 static var _map: ImageTexture
 
 
@@ -76,6 +78,14 @@ func _ready() -> void:
 		add_child(ic)
 		icons.append(ic)
 	mat.set_shader_parameter("places", pts)
+	vote = VoteView.new()
+	add_child(vote)
+
+
+## Голосование: k — доля перехода 0…1, votes — VoteHolo.votes. Рельеф сонара гаснет на VoteHolo.DIM_SONAR.
+func show_vote(k: float, votes: Dictionary) -> void:
+	mat.set_shader_parameter("dim", k * VoteHolo.DIM_SONAR)
+	vote.show_vote(k, votes)
 
 
 ## Каждый кадр: где корабль, сколько прошло с импульса, отметки.
