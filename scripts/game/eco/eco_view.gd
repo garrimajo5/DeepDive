@@ -53,6 +53,9 @@ var hvaten_view: HvatenView
 ## Ленточник у стай светляков 1 и 2 и шипоежи, что его объедают: в густой роще хищник теряет напуганную стаю.
 var kelp: EcoKelp
 var kelp_view: KelpView
+## Кольчужник: нора у второй рощи, раскалывает шипоежей, иглы — в панцирь; щиплет корабль у норы.
+var krab: EcoKrab
+var krab_view: KrabView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -106,6 +109,7 @@ func _init() -> void:
 	hvaten = world.add(EcoHvaten.new(fish)) as EcoHvaten
 	kelp = world.add(EcoKelp.new(fish)) as EcoKelp
 	preds.kelp = kelp
+	krab = world.add(EcoKrab.new(kelp)) as EcoKrab
 	_rebuild_moss()
 	_rebuild_coral()
 	_rebuild_ferns()
@@ -216,6 +220,12 @@ func _rebuild_kelp() -> void:
 		kelp_view.free()
 	kelp_view = KelpView.new(kelp)
 	add_child(kelp_view)
+	# нора кольчужника — у рощи, встаёт на дно заново вместе с ней
+	if krab_view:
+		remove_child(krab_view)
+		krab_view.free()
+	krab_view = KrabView.new(krab)
+	add_child(krab_view)
 
 
 ## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
@@ -237,4 +247,5 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	ognevka_view.sync()
 	hvaten_view.sync(world.time, ship.pos, false)
 	kelp_view.sync(world.time)
+	krab_view.sync(world.time)
 	return world.take_link()
