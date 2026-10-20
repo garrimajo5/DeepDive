@@ -155,3 +155,26 @@ func test_shelves_shot_sees_first_jar() -> void:
 	var to := Vector2(jar.x - float(at["x"]), jar.z - float(at["z"]))
 	ok(rad_to_deg(fwd.angle_to(to)) < 25.0, "первая банка перед камерой: %.0f°" % rad_to_deg(absf(fwd.angle_to(to))))
 	ok(ShipLayout.new().can_stand(float(at["x"]), float(at["z"])), "тестер стоит на полу")
+
+
+func test_fps_skips_shot_frame() -> void:   # issue #169: кадр скриншота не роняет средние кадр/с
+	var r := QaRunner.new()
+	var t := 1000000
+	r._measure(t)                 # первый кадр после старта не считается
+	for i in 30:                  # 30 кадров по 20 мс = 50 к/с
+		t += 20000
+		r._measure(t)
+	eq(r.fps(), 50, "свои кадр/с: 30 кадров по 20 мс")
+	eq(roundi(r.worst_ms), 20, "худший кадр 20 мс")
+	r.worst_ms = 0.0              # как после _shot: сброс и пропуск кадра снимка
+	r.frames = 0
+	r.frames_us = 0
+	r._skip_frame = true
+	t += 900000                   # сам снимок — 0,9 с
+	r._measure(t)
+	for i in 10:
+		t += 20000
+		r._measure(t)
+	eq(r.fps(), 50, "0,9 с снимка не считаются: 50 к/с, а не 10")
+	eq(roundi(r.worst_ms), 20, "худший кадр без снимка")
+	r.free()
