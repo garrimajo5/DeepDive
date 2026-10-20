@@ -52,6 +52,45 @@ static func touches(p: Vector3, ship_pos: Vector3, yaw: float, r: float = 0.0) -
 	return _part_at(l, r) != null
 
 
+## Обход корпуса (S.detour в js/ship.js): путь от p к goal (мир) проходит сквозь корпус, раздутый на r, — вернуть
+## промежуточную точку сбоку от корабля (со стороны p, на 6 м вперёд или назад к цели, не дальше её); иначе goal.
+## Последние 2 м пути не проверяются: цель может лежать у самой обшивки (нос у стекла).
+static func detour(p: Vector3, goal: Vector3, ship_pos: Vector3, yaw: float, r: float) -> Vector3:
+	if p.distance_squared_to(ship_pos) > DETOUR_NEAR * DETOUR_NEAR:
+		return goal
+	var a := to_ship(p, ship_pos, yaw)
+	var b := to_ship(goal, ship_pos, yaw)
+	if not segment_hits(a, b, r):
+		return goal
+	var side := -1.0 if a.x < 0.0 else 1.0
+	var fwd := b.z < a.z
+	var z := a.z + (-6.0 if fwd else 6.0)
+	if (z < b.z) if fwd else (z > b.z):
+		z = b.z + (-1.0 if fwd else 1.0)
+	return Vector3(side * (DETOUR_SIDE + r), a.y, z).rotated(Vector3.UP, yaw) + ship_pos
+
+
+## Дальше этого от точки корабля (м) обход не нужен; сбоку обходим на DETOUR_SIDE + r от оси (нос 13,6 м шириной + 0,6).
+const DETOUR_NEAR := 40.0
+const DETOUR_SIDE := HullPlan.NOSE_W / 2.0 + 0.6
+
+
+## Задевает ли отрезок a → b (оси корабля) корпус, раздутый на r: точки через 0,5 м, без последних 2 м.
+static func segment_hits(a: Vector3, b: Vector3, r: float) -> bool:
+	var d := b - a
+	var reach := d.length() - 2.0
+	if reach <= 0.0:
+		return false
+	var dir := d.normalized()
+	var s := 0.0
+	while s <= reach:
+		var l := a + dir * s
+		if l.distance_to(CENTER) <= REACH + r and _part_at(l, r) != null:
+			return true
+		s += 0.5
+	return false
+
+
 ## Наружу из детали в осях корабля: градиент её единичной формы, повёрнутый обратно (по осям — делённый на размер).
 static func _normal(part: HullPlan.Part, l: Vector3) -> Vector3:
 	var u := part.to_local(l)

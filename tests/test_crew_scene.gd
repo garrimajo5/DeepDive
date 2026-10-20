@@ -126,3 +126,30 @@ func test_power_steps_to_panel() -> void:
 	var hand: Vector3 = main.crew_view.shown[0]["hand_l"]
 	ok(hand.distance_to(g[0]) < 0.08, "левая на ползунке двигателей (%.3f м)" % hand.distance_to(g[0]))
 	main.close_power()
+
+
+## Снаряжение ролей MOD-016: роль видна по деталям, свой игрок не видит их на голове и груди, щиток — на сварке.
+func test_role_gear() -> void:
+	var mate := main.add_mate(0.0, -4.6, PI, Crew.Role.ENGINEER, 0)
+	main.step(1.0 / 30.0)
+	var i := main.crew.find(mate)
+	var g: Dictionary = main.crew_view.gear[i]
+	eq(g.keys(), CrewRig.ROLE_GEAR[Crew.Role.ENGINEER], "инженер — фартук и щиток")
+	for n in g.values():
+		ok((n as Node3D).is_visible_in_tree(), "%s видна" % n.name)
+		for mi in (n as Node).find_children("*", "MeshInstance3D", true, false):
+			eq((mi as MeshInstance3D).layers, 2, "%s на слое корабля" % n.name)
+	var visor: Node3D = g["gear-shchitok"]
+	var head: Vector3 = main.crew_view.shown[i]["head"]
+	var at := main.crew_view.to_local(visor.global_position)
+	ok(at.distance_to(head) < 0.3, "щиток у головы (%.2f м)" % at.distance_to(head))
+	var up := visor.transform
+	mate.weld(Vector3(0.0, 1.2, -6.0), Vector3.BACK)
+	main.step(1.0 / 30.0)
+	ok(not visor.transform.is_equal_approx(up), "на сварке щиток опущен")
+	mate.weld(Vector3.INF)
+	mate.role = Crew.Role.BIOLOGIST
+	main.step(1.0 / 30.0)
+	eq(main.crew_view.gear[i].keys(), CrewRig.ROLE_GEAR[Crew.Role.BIOLOGIST], "сменил роль — туника и пробы")
+	var own: Dictionary = main.crew_view.gear[main.crew.find(main.me)]
+	ok(not (own["gear-garnitura"] as Node3D).visible, "своя гарнитура не видна (камера в голове)")

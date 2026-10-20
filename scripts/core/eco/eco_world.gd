@@ -36,6 +36,8 @@ var hits := 0
 var last_hit: Dictionary = {}
 
 var _link: Array[Dictionary] = []
+## Кто тянет заряд корабля в этот шаг: имя → ед./с (drain). Одно событие DRAIN на источник в конце шага.
+var _drain := {}
 
 
 func _init(world_seed: int = EcoRandom.WORLD_SEED) -> void:
@@ -62,6 +64,7 @@ func reset(world_seed: int = -1) -> void:
 	random = EcoRandom.new(seed_value)
 	bus.clear()
 	_link.clear()
+	_drain.clear()
 	agents.clear()
 	time = 0.0
 	steps = 0
@@ -94,6 +97,9 @@ func step(dt: float) -> void:
 			a.tick(h)
 		for s in systems:
 			s.step(self, h)
+	for by in _drain:
+		_link.append(EcoLink.drain(by, _drain[by]))
+	_drain.clear()
 	if ship.sonar_ping or ship.scan_range > 0.0:
 		_send_near()
 
@@ -210,6 +216,12 @@ func push_out(a: EcoAgent, r: float) -> bool:
 ## Точка ближе r к корпусу корабля (S.hullDist(p) < r).
 func touches_ship(p: Vector3, r: float = 0.0) -> bool:
 	return EcoHull.touches(p, ship.pos, ship.yaw, r)
+
+
+## Существо тянет заряд корабля units ед./с в этот шаг (стеклоуст на стекле). Модули зовут каждый подшаг, а корабль
+## получает одно событие EcoLink.DRAIN на источник за весь шаг: units — скорость, корабль сам умножает на своё dt.
+func drain(by: String, units: float) -> void:
+	_drain[by] = maxf(float(_drain.get(by, 0.0)), units)
 
 
 ## Любое другое событие для корабля (EcoLink.near, DRAIN, …).
