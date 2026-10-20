@@ -14,6 +14,7 @@ var zap_lever: Node3D      ## рычаг разряда на левом борт
 var zap_panel: Node3D      ## щиток разряда (MOD-014)
 var zap_scale_mat: BaseMaterial3D   ## материал щитка со шкалой готовности (свечение гаснет на откат)
 var hatch_wheel: Node3D
+var scanner_text: Label3D          ## экран сканера биолога (Scanner.screen_lines)
 
 
 func _ready() -> void:
@@ -44,6 +45,7 @@ func _ready() -> void:
 		light_texture(s)
 		set_slider(i, 0.5)
 	_add_zap_lever()
+	_add_scanner_screen()
 	hatch_door = _add_model(BridgeProps.Prop.new(BridgeProps.HATCH_DOOR, "Створка люка", BridgeProps.HATCH_DOOR_OFFSET),
 		props[BridgeProps.HATCH_FRAME])
 	hatch_wheel = _add_model(BridgeProps.Prop.new(BridgeProps.HATCH_WHEEL, "Колесо люка", BridgeProps.HATCH_WHEEL_OFFSET),
@@ -99,6 +101,33 @@ func set_zap_lever(deg: float, ready: bool) -> void:
 func set_wheel_turn(turn: float) -> void:
 	if wheel:
 		wheel.rotation_degrees.z = -turn * BridgeProps.WHEEL_TURN_DEG
+
+
+## Текст на экране сканера: лицом в −X (к мостику), текст вправо — к +Z.
+func _add_scanner_screen() -> void:
+	scanner_text = Label3D.new()
+	scanner_text.name = "Экран сканера"
+	scanner_text.layers = OceanView.LAYER_SHIP
+	scanner_text.font_size = 34
+	scanner_text.outline_size = 0
+	scanner_text.pixel_size = 0.0014
+	scanner_text.modulate = Color("67DDEB")
+	scanner_text.shaded = false
+	scanner_text.double_sided = false
+	scanner_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	scanner_text.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	scanner_text.width = BridgeProps.SCANNER_SCREEN_SIZE.x / scanner_text.pixel_size - 30.0
+	scanner_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var top := BridgeProps.SCANNER_SCREEN + Vector3(-0.005, BridgeProps.SCANNER_SCREEN_SIZE.y / 2.0 - 0.12, 0.0)
+	scanner_text.transform = Transform3D(Basis(Vector3(0, 0, 1), Vector3.UP, Vector3(-1, 0, 0)), top)
+	props[BridgeProps.SCANNER].add_child(scanner_text)
+
+
+## Строки экрана сканера; меняет текст, только если он другой.
+func set_scanner_screen(lines: PackedStringArray) -> void:
+	var text := "\n".join(lines)
+	if scanner_text.text != text:
+		scanner_text.text = text
 
 
 func _add_model(p: BridgeProps.Prop, parent: Node3D) -> Node3D:

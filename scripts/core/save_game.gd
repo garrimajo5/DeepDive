@@ -1,8 +1,8 @@
 class_name SaveGame
 extends RefCounted
-## Сохранение экспедиции в user:// (как js/save.js): пока — груз трюма и номера поднятых со дна образцов.
-## Формат файла — JSON, совместимый с браузерным: {"v": 1, "cargo": [{"kind": "moss", "i": 3}, …], "got": [3, …]}
-## (i = null — образец не со дна). Запись не чаще раза в секунду после изменений и сразу, когда игру сворачивают.
+## Сохранение экспедиции в user:// (как js/save.js): груз трюма, номера поднятых со дна образцов, изученные виды.
+## Формат файла — JSON, совместимый с браузерным: {"v": 1, "cargo": [{"kind": "moss", "i": 3}, …], "got": [3, …],
+## "species": {"fish": {"scanned": true, "seen": []}, …}} (i = null — образец не со дна; seen — наблюдения, позже). Запись не чаще раза в секунду после изменений и сразу, когда игру сворачивают.
 ## Файл недоступен или испорчен — игра просто не сохраняет и начинает с чистого трюма.
 
 const PATH := "user://save.json"
@@ -20,17 +20,23 @@ var timer := 0.0
 
 
 ## Снимок того, что сохраняется.
-static func snapshot(samples: Samples) -> Dictionary:
+static func snapshot(samples: Samples, scanner: Scanner = null) -> Dictionary:
 	var cargo: Array = []
 	for c in samples.cargo:
 		cargo.append({"kind": KINDS[int(c[0])], "i": int(c[1]) if int(c[1]) >= 0 else null})
 	var got: Array = samples.got.keys()
 	got.sort()
-	return {"v": VERSION, "cargo": cargo, "got": got}
+	var out := {"v": VERSION, "cargo": cargo, "got": got}
+	if scanner:
+		var species := {}
+		for id in Species.ids():
+			species[id] = {"scanned": scanner.is_scanned(id), "seen": []}
+		out["species"] = species
+	return out
 
 
 ## Вернуть снимок в игру; false — не наш формат (тогда ничего не меняется).
-static func apply(data: Variant, samples: Samples) -> bool:
+static func apply(data: Variant, samples: Samples, scanner: Scanner = null) -> bool:
 	if not (data is Dictionary) or int(data.get("v", 0)) != VERSION:
 		return false
 	var cargo: Array = []
@@ -47,6 +53,15 @@ static func apply(data: Variant, samples: Samples) -> bool:
 			cargo.append([k, n])
 	var raw_got: Variant = data.get("got", [])
 	samples.restore(raw_got if raw_got is Array else [], cargo)
+	if scanner:
+		var ids: Array = []
+		var raw_species: Variant = data.get("species", {})
+		if raw_species is Dictionary:
+			for id in raw_species:
+				var sp: Variant = raw_species[id]
+				if sp is Dictionary and bool(sp.get("scanned", false)):
+					ids.append(id)
+		scanner.restore(ids)
 	return true
 
 
@@ -60,21 +75,21 @@ func mark() -> void:
 
 
 ## Кадр игры: пора ли записать.
-func tick(dt: float, samples: Samples) -> void:
+func tick(dt: float, samples: Samples, scanner: Scanner = null) -> void:
 	if not dirty:
 		return
 	timer += dt
 	if timer >= DELAY:
-		save(samples)
+		save(samples, scanner)
 
 
 ## Записать сейчас, если есть что (игру сворачивают или закрывают).
-func flush(samples: Samples) -> void:
+func flush(samples: Samples, scanner: Scanner = null) -> void:
 	if dirty:
-		save(samples)
+		save(samples, scanner)
 
 
-func save(samples: Samples) -> bool:
+func save(samples: Samples, scanner: Scanner = null) -> bool:
 	dirty = false
 	timer = 0.0
 	if not enabled():
@@ -82,19 +97,19 @@ func save(samples: Samples) -> bool:
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
 		return false
-	f.store_string(JSON.stringify(snapshot(samples)))
+	f.store_string(JSON.stringify(snapshot(samples, scanner)))
 	f.close()
 	return true
 
 
 ## Прочитать файл и вернуть его в игру; false — файла нет, он испорчен или сохранение выключено.
-func load_into(samples: Samples) -> bool:
+func load_into(samples: Samples, scanner: Scanner = null) -> bool:
 	if not enabled() or not FileAccess.file_exists(path):
 		return false
 	var json := JSON.new()
 	if json.parse(FileAccess.get_file_as_string(path)) != OK:
 		return false
-	return apply(json.data, samples)
+	return apply(json.data, samples, scanner)
 
 
 ## Стереть сохранение (новая экспедиция).

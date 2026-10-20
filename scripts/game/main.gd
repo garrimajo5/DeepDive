@@ -21,7 +21,9 @@ var samples_view: SamplesView
 var breach := Breach.new()     ## событие «пробоина»: струя, вода, сварка удержанием
 var breach_view: BreachView
 var debug_weld := false        ## снимок: сварку держат без пальца
-var save := SaveGame.new()     ## груз трюма и поднятые образцы в user:// (js/save.js)
+var save := SaveGame.new()     ## груз трюма, поднятые образцы и изученные виды в user:// (js/save.js)
+var scanner := Scanner.new()   ## сканер биолога: цели от живого мира, изученные виды
+var at_scanner := false        ## игрок у поста «Сканер»: мир шлёт цели (ShipState.scan_range)
 var engine := EngineRoom.new()   ## машинное: вентиль сброса пара и щиток «Аварийный сброс»
 var debug_vent := false          ## снимок: вентиль держат без пальца
 var debug_winch := false         ## снимок: кнопку у лебёдки держат без пальца
@@ -65,6 +67,7 @@ func _ready() -> void:
 	eco = EcoView.new()
 	eco.name = "Живой мир"
 	eco.ground = Seabed.height
+	eco.world.scanned = scanner.is_scanned
 	add_child(eco)
 	samples_view = SamplesView.new(samples)
 	samples_view.name = "Образцы"
@@ -148,8 +151,10 @@ func _ready() -> void:
 	breach.message.connect(say)
 	if QaRunner.pending():   # прогон тестера — всегда с чистого трюма и без записи
 		save.path = ""
-	save.load_into(samples)
+	save.load_into(samples, scanner)
 	samples.changed.connect(save.mark)
+	scanner.changed.connect(save.mark)
+	scanner.message.connect(say)
 	_place_ship()
 	_place_camera()
 	if QaRunner.pending():
@@ -178,7 +183,7 @@ func _build_world() -> void:
 ## Игру сворачивают или закрывают — несохранённое записать сразу.
 func _notification(what: int) -> void:
 	if what in [NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_APPLICATION_FOCUS_OUT]:
-		save.flush(samples)
+		save.flush(samples, scanner)
 
 
 func _process(dt: float) -> void:
@@ -194,6 +199,8 @@ func step(dt: float) -> void:
 	var hold_valve := false
 	var hold_winch := false
 	var hold_weld := false
+	var hold_scan := false
+	at_scanner = false
 	if pilot.seated:
 		helm.in_thrust = r.move.y
 		helm.in_turn = r.move.x
@@ -224,6 +231,8 @@ func step(dt: float) -> void:
 		hold_valve = post != null and post.id == "valve" and r.action_down
 		hold_winch = post != null and post.id == "winch" and r.action_down
 		hold_weld = post != null and post.id == "breach" and r.action_down
+		at_scanner = post != null and post.id == "scanner"
+		hold_scan = at_scanner and r.action_down
 	layout.update(dt)
 	airlock.update(dt)
 	var ship_xf := Samples.ship_xform(helm.pos, helm.yaw)
@@ -231,7 +240,10 @@ func step(dt: float) -> void:
 		samples.hold(Samples.lock_point(ship_xf), dt)
 	samples.update(dt)
 	samples_view.sync()
-	save.tick(dt, samples)
+	save.tick(dt, samples, scanner)
+	if hold_scan:
+		scanner.hold(dt)
+	scanner.update(dt)
 	if hold_weld or debug_weld:
 		breach.hold(dt)
 	for p in posts:
@@ -244,6 +256,8 @@ func step(dt: float) -> void:
 		elif p.id == "breach":
 			p.at = breach.post_at()
 			p.label = breach.label()
+		elif p.id == "scanner":
+			p.label = scanner.label()
 		elif p.id.begins_with("flask"):
 			p.label = Lab.flask_label(samples.cargo, int(p.id.substr(5)))
 	current.update(dt)
@@ -279,7 +293,8 @@ func step(dt: float) -> void:
 	rooms.apply(layout, reactor, airlock, engine)
 	var carry_c: Color = Samples.COLORS[samples.target.kind] if samples.target else Color.WHITE
 	rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(), carry_c)
-	rooms.set_lab(Lab.contents(samples.cargo), Lab.journal_lines(samples), time)
+	rooms.set_lab(Lab.contents(samples.cargo), Lab.journal_lines(samples, scanner.scanned.size()), time)
+	bridge.set_scanner_screen(scanner.screen_lines())
 	message.update(dt)
 	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt)
 	crew_view.apply()
@@ -317,7 +332,7 @@ func use_post(id: String) -> void:
 		"scram":
 			engine.press(reactor)
 		"scanner":
-			say("Сканер: рядом никого")
+			scanner.press()
 		"journal":
 			say(Lab.journal_info(samples))
 		_ when id.begins_with("flask"):
@@ -415,7 +430,9 @@ func _step_eco(dt: float) -> void:
 	s.light_on = Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP))
 	s.light_range = Searchlight.range_m(reactor.k(Reactor.Sys.LAMP)) if s.light_on else 0.0
 	s.hull_noise = engine.noise(clampf(absf(helm.speed) / 6.7, 0.0, 1.0))
+	s.scan_range = Scanner.RANGE if at_scanner else 0.0
 	var events := eco.step(dt, s)
+	scanner.take(events if at_scanner else [])
 	if s.sonar_ping:
 		sonar.take_contacts(events, helm.pos)
 		say("Сонар: контактов %d" % sonar.blips.size())
@@ -604,7 +621,7 @@ func debug_setup(kv: Dictionary) -> void:
 		samples.cargo.clear()
 		for k in kv["cargo"].split(",", false):
 			samples.cargo.append([clampi(int(k), 0, Samples.NAMES.size() - 1), -1])
-		rooms.set_lab(Lab.contents(samples.cargo), Lab.journal_lines(samples), time)
+		rooms.set_lab(Lab.contents(samples.cargo), Lab.journal_lines(samples, scanner.scanned.size()), time)
 	if kv.has("breach"):  # breach=n — пробоина в месте n (0 мостик, 1 коридор, 2 лаборатория, 3 машинное), игрок у неё;
 		# weld=<доля> — шов заварен на долю (1 — заварен, шов горячий); water=<м> — вода на полу
 		open_breach(int(kv["breach"]))

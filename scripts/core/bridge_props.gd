@@ -97,6 +97,9 @@ const SLIDER_Y_MAX := 1.28
 ## Сканер: лицом в −X, задняя плоскость x = 0, 0,45 × 1,9 × 1,0 м.
 const SCANNER_POS := Vector3(WALL_X, 0.0, SIDE_Z)
 const SCANNER_DEPTH := 0.45
+## Экран сканера в осях модели (MOD-007): плоскость лицом в −X, y 0,40…1,72, z ±0,37; текст рисует игра.
+const SCANNER_SCREEN := Vector3(-0.39, 1.06, 0.0)
+const SCANNER_SCREEN_SIZE := Vector2(0.74, 1.32)
 ## Люк в кормовой переборке: рама лицом в мостик (−Z), проём 1,4 × 2,1 м; створка за рамой, колесо на створке.
 const HATCH_POS := Vector3(0.0, 0.0, 2.0)
 const HATCH_DOOR_OFFSET := Vector3(0.0, -0.10, 0.14)
