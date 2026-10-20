@@ -57,6 +57,7 @@ func _ready() -> void:
 		l.font_size = 48
 		l.outline_size = 10
 		l.pixel_size = 0.0016
+		l.offset = Briefing.number_shift(k) / l.pixel_size   # сдвиг по экрану (#194)
 		l.modulate = Color("#D5E4E8")
 		l.outline_modulate = Color("#0B1C24")
 		l.position = Vector3(t.x, Briefing.ICON_SIZE * 1.12, t.y)

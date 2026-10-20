@@ -166,3 +166,43 @@ func test_scene_route_card() -> void:
 	ok(not main.route_card.visible, "в голосовании карточки нет")
 	main.queue_free()
 	await frames(1)
+
+
+## Прямоугольник билборда на экране: центр c (мир), полуразмеры h (м) по осям камеры.
+func _screen_rect(cam: Camera3D, c: Vector3, h: Vector2) -> Rect2:
+	var a := cam.unproject_position(c - cam.global_basis.x * h.x - cam.global_basis.y * h.y)
+	var b := cam.unproject_position(c + cam.global_basis.x * h.x + cam.global_basis.y * h.y)
+	return Rect2(Vector2(minf(a.x, b.x), minf(a.y, b.y)), (b - a).abs())
+
+
+## #194: с точки сценария 09c-route номер «1» ложился на иконку места 3 (и «3» — на иконку 1).
+func test_scene_numbers_clear_of_icons() -> void:
+	var was := tree.root.size
+	tree.root.size = Vector2i(1600, 720)
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.walker.x = 1.6
+	main.walker.z = -1.2
+	main.walker.yaw = PI / 2.0
+	main.walker.pitch = deg_to_rad(-38.0)
+	main.run.choose(0)
+	main.step(0.5)
+	await frames(1)
+	var cam := main.get_viewport().get_camera_3d()
+	var sv := main.sonar_view
+	var num := {}
+	var ico := {}
+	for i in Briefing.ORDER.size():
+		var k := Briefing.ORDER[i]
+		var l := sv.numbers[i]
+		var c := l.global_position + (cam.global_basis.x * l.offset.x + cam.global_basis.y * l.offset.y) * l.pixel_size
+		num[k] = _screen_rect(cam, c, Vector2(0.4, 0.5) * l.font_size * l.pixel_size * 0.6)
+		ico[k] = _screen_rect(cam, sv.icons[i].global_position, Vector2.ONE * Briefing.ICON_SIZE * 0.35)
+	for pair in [["flower", "shell"], ["shell", "flower"]]:
+		ok(not num[pair[0]].intersects(ico[pair[1]]), "номер %d не на иконке %d: %s / %s" % [Briefing.NUMBERS[pair[0]],
+			Briefing.NUMBERS[pair[1]], num[pair[0]], ico[pair[1]]])
+	ok(not num["flower"].grow(4.0).intersects(num["shell"]), "номера 1 и 3 не теснятся")
+	main.queue_free()
+	tree.root.size = was
+	await frames(1)

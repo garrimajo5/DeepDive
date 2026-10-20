@@ -146,3 +146,46 @@ func test_scene_result_on_table() -> void:
 	eq(sv.mat.get_shader_parameter("dim"), 0.0)
 	main.queue_free()
 	await frames(1)
+
+
+func test_look_up_to_fields() -> void:
+	var c := Vector3(0.0, 0.93, -1.2)
+	var v := VoteHolo.look(Vector3(1.5, Deck.Walker.EYE, -1.2), c)
+	near(v.x, PI / 2.0, 1e-5, "с поста «Маршрут» — лицом к −X")
+	ok(v.y < 0.0 and v.y > -0.3, "взгляд чуть вниз, к середине раскладки: %.2f" % v.y)
+	near(VoteHolo.look(Vector3(0.0, 1.0, 0.0), c).x, 0.0, 1e-5, "стол к носу — yaw 0")
+
+
+## #193: с точки сценария 09d-vote (у поста «Маршрут», взгляд на карту −38°) поля, метки и счёт были вне кадра.
+func test_scene_vote_in_frame() -> void:
+	var was := tree.root.size
+	tree.root.size = Vector2i(1600, 720)   # экран телефона (в headless окно другое)
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.walker.x = 1.6
+	main.walker.z = -1.2
+	main.walker.yaw = PI / 2.0
+	main.walker.pitch = deg_to_rad(-38.0)
+	main.step(0.1)
+	main.complete_route()
+	main.use_post("route")
+	ok(main.at_vote, "маршрут пройден — голосование")
+	main.step(0.5)
+	await frames(1)
+	var cam := main.get_viewport().get_camera_3d()
+	var scr := main.get_viewport().get_visible_rect().size
+	var top := scr.y * 0.25   # выше — строки приборов
+	for choice in VoteHolo.CHOICES:
+		var f: Dictionary = main.sonar_view.vote.fields[choice]
+		for key in ["word", "count"]:
+			var n: Node3D = f[key]
+			ok(not cam.is_position_behind(n.global_position), "%s %s перед камерой" % [choice, key])
+			var p := cam.unproject_position(n.global_position)
+			ok(p.y > top and p.y < scr.y and p.x > 0.0 and p.x < scr.x,
+				"%s %s в кадре ниже строк приборов: %s" % [choice, key, p])
+		var mark: Node3D = f["marks"][0][0]
+		ok(cam.unproject_position(mark.global_position).y > top, "%s: метки ролей не на строках приборов" % choice)
+	main.queue_free()
+	tree.root.size = was
+	await frames(1)

@@ -56,6 +56,17 @@ static func mark_pos(choice: String, i: int, n: int) -> Vector3:
 	return p
 
 
+## Взгляд на голосование (#193): с поста «Маршрут» игрок смотрит вниз на карту брифинга (~−38°), а поля стоят
+## выше — при открытии решения взгляд поднимается к полям. center — центр
+## голограммы в осях корабля, eye — глаз. Возвращает (yaw, pitch) как у Deck.Walker: yaw 0 — к −Z.
+const LOOK_Y := (WORD_Y + DISC_Y) * 0.5   ## середина экрана — между подписью и диском: подпись ниже строк приборов
+
+
+static func look(eye: Vector3, center: Vector3) -> Vector2:
+	var d := center + Vector3(0.0, LOOK_Y, 0.0) - eye
+	return Vector2(atan2(-d.x, -d.z), atan2(d.y, Vector2(d.x, d.z).length()))
+
+
 ## Показывать ли голосование: решение открыто и забег не окончен (после «наверх» — итог, result_wanted).
 static func wanted(at_vote: bool, ended: bool) -> bool:
 	return at_vote and not ended
