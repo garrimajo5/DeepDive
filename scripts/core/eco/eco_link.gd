@@ -17,6 +17,7 @@ class ShipState:
 	var zap := false             ## в этот шаг был разряд по корпусу
 	var zap_radius := 0.0        ## радиус разряда, м
 	var hull_noise := 0.0        ## шум корабля 0…1 (ход, двигатели) — существа слышат
+	var scan_range := 0.0        ## сканер биолога включён: дальность прицела, м (80 как в браузере); 0 — выключен
 
 	## Нос корабля в мире.
 	func nose() -> Vector3:
@@ -28,9 +29,15 @@ class ShipState:
 ##     (0,12 — укус серпохвоста, как −12 % в браузере; 0,03 — щипок)
 ## {"type": DRAIN, "by": "Стеклоуст", "units": float}                      — тянет заряд корабля, ед./с, пока
 ##     событие приходит каждый шаг (батарея 0…100, восполняется 1,1 ед./с; стеклоуст — 3,2)
-## {"type": NEAR, "species": "pred", "name": "серпохвост", "dist": м, "pos": Vector3} — заметное существо рядом.
-##     В шаг с ShipState.sonar_ping мир шлёт NEAR для каждого заметного существа ближе sonar_range — это отметки сонара
-##     (species — ключ вида из Species, name — Species.called, цвет отметки — Sonar.color_of). Сканер берёт ближайшее NEAR.
+## {"type": NEAR, "species": "pred", "name": "серпохвост", "dist": м, "pos": Vector3, "r": м, "sonar": bool, "scan": bool}
+##     — заметное существо рядом (E.scanTargets). species — ключ вида из Species, name — Species.called (настоящее
+##     имя, если вид просканирован), dist — до центра корабля, r — размер цели для прицела сканера (м).
+##     Сонар: в шаг с ShipState.sonar_ping мир шлёт NEAR для каждого заметного сонару существа ближе sonar_range
+##     по горизонтали, у них "sonar": true — это отметки (цвет — Sonar.color_of). Кого сонар не видит (глазун,
+##     присоска, скальник в маске), приходит только сканеру.
+##     Сканер: пока ShipState.scan_range > 0, мир каждый шаг шлёт NEAR для каждого существа ближе scan_range,
+##     кроме спрятавшихся, — у них "scan": true; события идут ближние первыми. Одно существо — одно событие,
+##     даже если оно и для сонара, и для сканера; сонар берёт только "sonar": true.
 ## {"type": MESSAGE, "text": "…"}                                         — строка на приборы как есть
 const HIT := "hit"
 const DRAIN := "drain"
@@ -42,8 +49,10 @@ static func hit(by: String, damage: float, at: Vector3) -> Dictionary:
 	return {"type": HIT, "by": by, "damage": clampf(damage, 0.0, 1.0), "at": at}
 
 
-static func near(species: String, name: String, pos: Vector3, ship_pos: Vector3) -> Dictionary:
-	return {"type": NEAR, "species": species, "name": name, "pos": pos, "dist": pos.distance_to(ship_pos)}
+static func near(species: String, name: String, pos: Vector3, ship_pos: Vector3, r: float = 1.0,
+		sonar: bool = true, scan: bool = false) -> Dictionary:
+	return {"type": NEAR, "species": species, "name": name, "pos": pos, "dist": pos.distance_to(ship_pos), "r": r,
+		"sonar": sonar, "scan": scan}
 
 
 static func message(text: String) -> Dictionary:

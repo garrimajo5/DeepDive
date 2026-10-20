@@ -173,6 +173,13 @@ func nearest_fish(pos: Vector3, radius: float, skip: Callable = Callable()) -> F
 	return best
 
 
+## Для сонара и сканера стая — одна отметка в центре, если в ней не меньше трёх живых рыбок (sh.n >= 3).
+func targets(_world: EcoWorld, out: Array[Dictionary]) -> void:
+	for sh in shoals:
+		if sh.alive >= 3:
+			out.append(EcoWorld.target(ID, sh.center, 2.5))
+
+
 func step(world: EcoWorld, dt: float) -> void:
 	_preds.clear()
 	for a in world.agents:

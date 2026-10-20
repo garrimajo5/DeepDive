@@ -89,6 +89,38 @@ func step(dt: float) -> void:
 			a.tick(h)
 		for s in systems:
 			s.step(self, h)
+	if ship.sonar_ping or ship.scan_range > 0.0:
+		_send_near()
+
+
+## Цель для сонара и сканера (элемент E.scanTargets): вид, где, размер для прицела r (м); sonar — видна ли сонару,
+## hidden — спряталась (замаскированное существо не берётся в прицел).
+static func target(species: String, pos: Vector3, r: float, sonar: bool = true, hidden: bool = false) -> Dictionary:
+	return {"species": species, "pos": pos, "r": r, "sonar": sonar, "hidden": hidden}
+
+
+## Все заметные существа мира от модулей по порядку (E.scanTargets).
+func scan_targets() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for s in systems:
+		s.targets(self, out)
+	return out
+
+
+## NEAR для корабля в конце шага: отметки сонара (импульс в этот шаг, по горизонтали ближе sonar_range — как
+## So.blips в js/sonar.js) и цели сканера (ближе scan_range, не спрятавшиеся). Ближние первыми.
+func _send_near() -> void:
+	var sp := ship.pos
+	var found: Array[Dictionary] = []
+	for t in scan_targets():
+		var p: Vector3 = t["pos"]
+		var on_sonar: bool = ship.sonar_ping and t["sonar"] \
+				and Vector2(p.x - sp.x, p.z - sp.z).length() < ship.sonar_range
+		var on_scan: bool = ship.scan_range > 0.0 and not t["hidden"] and p.distance_to(sp) <= ship.scan_range
+		if on_sonar or on_scan:
+			found.append(EcoLink.near(t["species"], nm(t["species"]), p, sp, t["r"], on_sonar, on_scan))
+	found.sort_custom(func(a, b): return a["dist"] < b["dist"])
+	_link.append_array(found)
 
 
 ## Прогнать мир seconds секунд шагами dt (для тестов).
