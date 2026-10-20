@@ -85,6 +85,7 @@ static func nearest(posts_list: Array[Post], x: float, z: float) -> Post:
 ## Взгляд вверх — pitch > 0.
 class Walker:
 	const SPEED := 2.4
+	const FLY_SPEED := 7.0   ## noclip: быстрее шага, чтобы долетать до дна и обратно
 	const RADIUS := 0.35
 	const EYE := 1.65
 	const MAX_PITCH := 1.45
@@ -95,12 +96,16 @@ class Walker:
 	var yaw := 0.0
 	var pitch := -0.08
 	var stand: Callable = Deck.can_stand
+	## Тестовый режим: игрок летит сквозь переборки и выходит с корабля смотреть живой мир (кнопка noclip).
+	var noclip := false
+	var y := EYE          ## высота глаза в noclip (вне noclip глаз на EYE)
 
 	func reset() -> void:
 		x = 0.0
 		z = STAND_Z
 		yaw = 0.0
 		pitch = -0.08
+		y = EYE
 
 	func forward() -> Vector2:
 		return Vector2(-sin(yaw), -cos(yaw))
@@ -108,10 +113,17 @@ class Walker:
 	func right() -> Vector2:
 		return Vector2(cos(yaw), -sin(yaw))
 
+	## Направление взгляда в 3D (с наклоном): pitch вверх (> 0) — вверх по y.
+	func forward3() -> Vector3:
+		return Vector3(-sin(yaw) * cos(pitch), sin(pitch), -cos(yaw) * cos(pitch))
+
 	## Крестовина: m.y — вперёд/назад, m.x — вправо/влево. Вдоль стены скользит по одной оси.
 	var speed_k := 1.0   ## множитель шага (вода по щиколотку — Breach.slow)
 
 	func walk(m: Vector2, dt: float) -> void:
+		if noclip:
+			fly(m, dt)
+			return
 		if m.length() <= 0.0:
 			return
 		m = m.normalized()
@@ -120,6 +132,17 @@ class Walker:
 			x += d.x
 		if stand.call(x, z + d.y):
 			z += d.y
+
+	## noclip-полёт: m.y — по взгляду (с наклоном вверх/вниз), m.x — строго вбок. Без проверки стен.
+	func fly(m: Vector2, dt: float) -> void:
+		if m.length() <= 0.0:
+			return
+		m = m.normalized()
+		var rt := right()
+		var d := (forward3() * m.y + Vector3(rt.x, 0.0, rt.y) * m.x) * FLY_SPEED * dt
+		x += d.x
+		y += d.y
+		z += d.z
 
 	## Свайп в «точках» экрана: палец вправо — поворот вправо, палец вверх (dy < 0) — взгляд вверх.
 	func look(d: Vector2) -> void:
@@ -142,6 +165,8 @@ class Pilot:
 
 	## Глаз игрока в осях корабля.
 	func eye(w: Walker) -> Vector3:
+		if w.noclip:
+			return Vector3(w.x, w.y, w.z)
 		if seated:
 			return Vector3(0.0, SEAT_EYE, SEAT_Z)
 		return Vector3(w.x, Walker.EYE, w.z)
