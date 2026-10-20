@@ -15,8 +15,53 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # PR и пуши без кода (черновики художника art/, отчёты тестера qa/, *.md, картинки и html в docs/) тесты и APK пропускают.
+  # Пропущенный job GitHub считает успехом, поэтому такая PR сразу готова к слиянию. Ручной запуск гоняет всё.
+  changes:
+    name: Что изменилось
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.files.outputs.code }}
+    steps:
+      - name: Есть ли изменения кода
+        id: files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename')
+          elif [ "$EVENT" = "push" ] && [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            files=$(gh api "repos/$REPO/compare/$BEFORE...$SHA" --jq '.files[].filename')
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"; echo "Ручной запуск — проверяем всё"; exit 0
+          fi
+          code=false
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            case "$f" in
+              art/*|qa/*|*.md|docs/*.png|docs/*.jpg|docs/*.jpeg|docs/*.webp|docs/*.html) echo "  не код: $f" ;;
+              *) echo "  код:    $f"; code=true ;;
+            esac
+          done <<< "$files"
+          # compare отдаёт не больше 300 файлов: на огромном пуше лучше проверить всё
+          [ "$(printf '%s\n' "$files" | grep -c .)" -ge 300 ] && code=true
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "Изменения кода: $code"
+
   tests:
     name: Тесты
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
