@@ -131,3 +131,9 @@ func test_silt_step() -> void:
 	var out := q.advance(0.1)
 	eq(out[0], ["silt", true], "ил вокруг корабля")
 	eq(out[1], ["silt", false], "убрать ил")
+
+
+func test_drain_step() -> void:   # issue #131: тревога о стеклоусте видна в прогоне тестера
+	var q := QaScript.parse('[{"do": "drain", "s": 2.5}]')
+	eq(q.errors.size(), 0, "шаг drain известен")
+	eq(q.advance(0.1)[0], ["drain", 2.5], "стеклоуст на корпусе 2,5 с")
