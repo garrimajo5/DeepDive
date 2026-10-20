@@ -113,10 +113,12 @@ static func build_halo() -> QuadMesh:
 
 
 ## Расставить гребневиков в момент t (время мира); корпус корабля — в ship_pos с курсом ship_yaw.
-## Стая дальше FAR от корабля без вспышки переписывается раз в FAR_EVERY кадров, стаи — вразнобой (бюджет кадра,
-## issue #77/#133: дальних в тумане не разглядеть).
+## Стая дальше FAR от корабля без вспышки переписывается раз в FAR_EVERY кадров, дальше MID — через кадр, стаи —
+## вразнобой (бюджет кадра, issue #77/#133: дальних в тумане не разглядеть, за 50 м гребневики гаснут к FADE_FAR).
 const FAR := EcoFish.FAR
 const FAR_EVERY := 3
+const MID := EcoFish.MID
+const MID_EVERY := 2
 
 var _frame := 0
 
@@ -148,9 +150,15 @@ func sync(t: float, ship_pos: Vector3, ship_yaw: float, all := false) -> void:
 	halos.multimesh.buffer = halo_buffer
 
 
-## Переписать ли стаю в этом кадре: близкая или вспыхнувшая — всегда, дальняя — в свой кадр из трёх.
+## Переписать ли стаю в этом кадре: близкая или вспыхнувшая — всегда, средняя — через кадр, дальняя — в свой кадр
+## из трёх.
 static func due(sw: EcoRaduzh.Swarm, ship_pos: Vector3, frame: int) -> bool:
-	return sw.glow > 0.0 or sw.c.distance_to(ship_pos) < FAR or (frame + sw.index) % FAR_EVERY == 0
+	if sw.glow > 0.0:
+		return true
+	var d := sw.c.distance_to(ship_pos)
+	if d < MID:
+		return true
+	return (frame + sw.index) % (MID_EVERY if d < FAR else FAR_EVERY) == 0
 
 
 static func _put(buf: PackedFloat32Array, i: int, b: Basis, o: Vector3) -> void:

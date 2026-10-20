@@ -219,5 +219,5 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	eel_view.sync(world.time)
 	raduzh_view.sync(world.time, ship.pos, ship.yaw)
 	ognevka_view.sync()
-	hvaten_view.sync(world.time)
+	hvaten_view.sync(world.time, ship.pos, false)
 	return world.take_link()

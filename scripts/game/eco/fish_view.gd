@@ -72,7 +72,10 @@ static func build_mesh() -> ArrayMesh:
 
 ## Расставить рыбок по миру в момент t (время мира): один буфер MultiMesh за раз.
 func sync(t: float) -> void:
-	buffer = pack(fish, t)
+	if buffer.size() != fish.all.size() * STRIDE:
+		buffer = pack(fish, t)
+	else:
+		fill(buffer, fish, t, true)
 	multimesh.buffer = buffer
 
 
@@ -88,7 +91,21 @@ const STRIDE := 20
 static func pack(system: EcoFish, t: float) -> PackedFloat32Array:
 	var out := PackedFloat32Array()
 	out.resize(system.all.size() * STRIDE)
+	fill(out, system, t, false)
+	return out
+
+
+## Переписать буфер out (размер — на всех рыбок). moved_only — только стаи, шагнувшие в этом кадре: дальняя стая
+## копит время (lag > 0) и стоит на месте — её рыбки остаются как были, только съеденные гаснут (issue #133).
+static func fill(out: PackedFloat32Array, system: EcoFish, t: float, moved_only: bool) -> void:
 	for sh in system.shoals:
+		if moved_only and sh.lag > 0.0:
+			for f: EcoFish.Fish in sh.members:
+				if not f.agent.alive:
+					var j := f.index * STRIDE
+					for c in [0, 1, 2, 4, 5, 6, 8, 9, 10]:
+						out[j + c] = 0.0
+			continue
 		var glow := EcoFishLook.ALARM_GLOW if sh.alarm > 0.0 else 1.0
 		var col := sh.color
 		for f: EcoFish.Fish in sh.members:
@@ -108,7 +125,9 @@ static func pack(system: EcoFish, t: float) -> PackedFloat32Array:
 			out[i + 18] = col.b * k
 			out[i + 19] = 1.0
 			if not a.alive:
-				continue # съеденная — нулевой basis (буфер уже в нулях)
+				for c in [0, 1, 2, 4, 5, 6, 8, 9, 10]:
+					out[i + c] = 0.0  # съеденная — нулевой basis
+				continue
 			# EcoFishLook.forward: нос по скорости с вилянием вокруг вертикали
 			var v := a.v
 			var dir := v.normalized() if v.length_squared() > 1e-8 else Vector3(0, 0, 1)
@@ -128,7 +147,6 @@ static func pack(system: EcoFish, t: float) -> PackedFloat32Array:
 			out[i + 8] = side.z
 			out[i + 9] = up.z
 			out[i + 10] = fw.z
-	return out
 
 
 ## Расстановка рыбки n из буфера.

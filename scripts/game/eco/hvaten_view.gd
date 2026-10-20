@@ -135,9 +135,20 @@ static func _add_cylinder(st: SurfaceTool, top: float, bottom: float, h: float, 
 		st.add_vertex(v[i] + Vector3(0, mid, 0))
 
 
-## Расставить щупальца и пестрянок в момент t (время мира).
-func sync(t: float) -> void:
+## Хватень дальше FAR от корабля не в луче переписывается раз в FAR_EVERY кадров, хватни — вразнобой (бюджет кадра,
+## issue #133: метровые щупальца за 50 м в темноте не разглядеть).
+const FAR := EcoFish.MID
+const FAR_EVERY := 3
+
+var _frame := 0
+
+
+## Расставить щупальца и пестрянок в момент t (время мира); all — переписать всех хватней сразу.
+func sync(t: float, ship_pos := Vector3.ZERO, all := true) -> void:
+	_frame += 1
 	for hv in hvaten.anemones:
+		if not all and not due(hv, ship_pos, _frame):
+			continue
 		for k in EcoHvaten.TENT:
 			_put(tent_buffer, (hv.index * EcoHvaten.TENT + k) * STRIDE, EcoHvaten.tentacle(hv, k, t))
 		for k in EcoHvaten.PESTR_N:
@@ -146,6 +157,11 @@ func sync(t: float) -> void:
 			_put(pestr_buffer, (hv.index * EcoHvaten.PESTR_N + k) * STRIDE_C, tr)
 	tents.multimesh.buffer = tent_buffer
 	pestr.multimesh.buffer = pestr_buffer
+
+
+## Переписать ли хватня в этом кадре: близкий или в луче — всегда, дальний — в свой кадр из трёх.
+static func due(hv: EcoHvaten.Anemone, ship_pos: Vector3, frame: int) -> bool:
+	return hv.lit or hv.base.distance_squared_to(ship_pos) < FAR * FAR or (frame + hv.index) % FAR_EVERY == 0
 
 
 static func _put(buf: PackedFloat32Array, i: int, tr: Transform3D) -> void:
