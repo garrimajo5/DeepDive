@@ -23,6 +23,9 @@ var coral: EcoCoral
 var coral_view: CoralView
 var fans: EcoFan
 var fan_view: FanView
+## Пиявники на жабрах серпохвостов и станции чистки на вершинах огнецвета.
+var leeches: EcoLeech
+var leech_view: LeechView
 ## Волнолист: две куртины по четыре куста, раскрываются в луче прожектора, моллюски зовут стаи.
 var ferns: EcoFern
 var fern_view: FernView
@@ -68,6 +71,9 @@ func _init() -> void:
 	add_child(pred_view)
 	current = world.add(EcoCurrent.new()) as EcoCurrent
 	coral = world.add(EcoCoral.new()) as EcoCoral
+	leeches = world.add(EcoLeech.new(preds, coral)) as EcoLeech
+	leech_view = LeechView.new(leeches)
+	add_child(leech_view)
 	fans = world.add(EcoFan.new(current)) as EcoFan
 	fan_view = FanView.new(fans)
 	add_child(fan_view)
@@ -157,6 +163,7 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	fish_view.sync(world.time)
 	grazer_view.sync(world.time)
 	pred_view.sync(world.time, ship.pos)
+	leech_view.sync(world.time)
 	moss_view.sync()
 	coral_view.sync()
 	fan_view.sync(world.time)

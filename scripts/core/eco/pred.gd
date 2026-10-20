@@ -9,7 +9,9 @@ extends EcoSystem
 ## EcoLink.HIT с уроном 0,12 (что он делает с кораблём — решает корабль), хищник уходит на 60 м и 25 с не нападает.
 ## Сонар (ShipState.sonar_ping → on_ping) зовёт хищников ближе 150 м проверить звук, разряд (ShipState.zap → on_zap)
 ## отпугивает тех, кто ближе радиуса разряда. В гуле трубного органа (EcoOrgan) двигатели не слышно; в чернилах
-## подушечника (EcoCushion) хищник теряет светляка и корабль. Сквозь корпус не проходят (EcoWorld.push_out). Пиявники, станции чистки, вуали и укрытия стай придут со своими видами.
+## подушечника (EcoCushion) хищник теряет светляка и корабль. Пиявник (EcoLeech, поле leeches) делает хищника
+## медленнее и злее и гонит на станцию чистки (режим CLEAN). Сквозь корпус не проходят (EcoWorld.push_out). Вуали
+## и укрытия стай придут со своими видами.
 
 const ID := "pred"
 
@@ -55,7 +57,7 @@ const HULL_GAP := 0.7
 const BITE_REACH := 1.2
 
 ## Режим хищника (pr.state в браузере); общее EcoAgent.State — у его существа.
-enum Mode { PATROL, HUNT, EAT, INVESTIGATE, CHARGE, RETREAT, FLEE }
+enum Mode { PATROL, HUNT, EAT, INVESTIGATE, CHARGE, RETREAT, FLEE, CLEAN }
 
 
 ## Серпохвост: существо мира, режим, голод, пауза перед нападением и добыча.
@@ -74,6 +76,11 @@ class Pred:
 	var start := Vector3.ZERO
 	## Время мира последнего укуса (для удара серпом в виде); −99 — не кусал.
 	var bit_at := -99.0
+	## Пиявник на жабрах (EcoLeech); секунд до заражения; пауза наблюдения «angry»; станция чистки (−1 — не плывёт).
+	var leech := false
+	var leech_cd := 0.0
+	var angry_cd := 0.0
+	var station := -1
 
 
 var all: Array[Pred] = []
@@ -83,6 +90,8 @@ var fish: EcoFish
 var organs: EcoOrgan
 ## Подушечники: в их чернилах не видно ни светляков, ни корабля (null — подушечников нет).
 var cushions: EcoCushion
+## Пиявники и станции чистки (null — пиявников нет; ставит EcoLeech.new).
+var leeches: EcoLeech
 
 var _rnd: EcoRandom
 
@@ -172,7 +181,7 @@ static func _set_mode(pr: Pred, m: Mode, t: float) -> void:
 	match m:
 		Mode.HUNT, Mode.CHARGE:
 			pr.agent.state = EcoAgent.State.HUNT
-		Mode.INVESTIGATE:
+		Mode.INVESTIGATE, Mode.CLEAN:
 			pr.agent.state = EcoAgent.State.SEEK
 		Mode.RETREAT, Mode.FLEE:
 			pr.agent.state = EcoAgent.State.FLEE
@@ -180,14 +189,19 @@ static func _set_mode(pr: Pred, m: Mode, t: float) -> void:
 			pr.agent.state = EcoAgent.State.GRAZE
 
 
-## Манит ли корабль: свет или недавний сонар ближе 32 м, шум двигателей ближе 24 м (если его не глушит трубный орган).
-## Корабль в чернилах подушечника не манит вовсе (!E.shipHidden).
+## Манит ли корабль: свет или недавний сонар ближе 32 м (заражённого пиявником — 48 м), шум двигателей ближе 24 м
+## (если его не глушит трубный орган). Корабль в чернилах подушечника не манит вовсе (!E.shipHidden).
 func lured(world: EcoWorld, pr: Pred, d_ship: float) -> bool:
 	if ship_hidden(world):
 		return false
 	var s := world.ship
-	var seen := d_ship < REACH and (s.light_on or world.time - world.last_ping < PING_MEMORY)
+	var seen := d_ship < reach(pr) and (s.light_on or world.time - world.last_ping < PING_MEMORY)
 	return seen or hears_ship(world, pr, d_ship)
+
+
+## С какого расстояния видит свет и сонар корабля: заражённый пиявником — издалека.
+static func reach(pr: Pred) -> float:
+	return EcoLeech.REACH if pr.leech else REACH
 
 
 ## Спрятан ли корабль от хищников (E.shipHidden): в облаке чернил подушечника.
@@ -236,12 +250,22 @@ static func _floor(world: EcoWorld, x: float, z: float, fallback: float) -> floa
 
 func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 	var a := pr.agent
-	pr.hunger = minf(1.0, pr.hunger + dt * HUNGER_RATE)
+	var rate := HUNGER_RATE
+	if pr.mode == Mode.CLEAN:
+		rate = EcoLeech.CLEAN_HUNGER_RATE
+	elif pr.leech:
+		rate = EcoLeech.HUNGER_RATE
+	pr.hunger = minf(1.0, pr.hunger + dt * rate)
 	pr.cooldown -= dt
+	pr.angry_cd -= dt
 	var ship := world.ship.pos
 	var d_ship := a.distance_to(ship)
+	var at_station := leeches.near_station(a.p) != null if leeches else false
 	var lure := lured(world, pr, d_ship)  # и голодного, и сытого: гул органа прячет корабль от каждого
-	var can_attack := pr.cooldown <= 0.0 and pr.hunger > ATTACK_HUNGER and lure
+	var can_attack := pr.cooldown <= 0.0 and pr.hunger > (EcoLeech.ATTACK_HUNGER if pr.leech else ATTACK_HUNGER) \
+		and lure and not at_station
+	if leeches:
+		_step_leech(world, pr, dt, can_attack, d_ship, at_station)
 
 	var speed := PATROL_SPEED
 	match pr.mode:
@@ -259,7 +283,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 					gz = _rnd.range_f(-170, 150)
 				var gy := minf(_floor(world, gx, gz, GOAL_CEILING - 14.0) + _rnd.range_f(4, 14), GOAL_CEILING)
 				a.goal = Vector3(gx, gy, gz)
-			if pr.hunger > HUNT_HUNGER and fish:
+			if pr.hunger > HUNT_HUNGER and fish and not at_station:
 				var f := fish.nearest_fish(a.p, HUNT_RADIUS, _in_ink if cushions and cushions.any_ink() else Callable())
 				if f:
 					_set_mode(pr, Mode.HUNT, 12.0)
@@ -332,12 +356,93 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 			if a.expired():
 				_set_mode(pr, Mode.PATROL, 0.0)
 
+		Mode.CLEAN:
+			speed = _step_clean(world, pr, dt)
+			if pr.mode == Mode.CLEAN and can_attack and pr.hunger > HUNT_TO_SHIP_HUNGER:
+				_start_charge(world, pr)
+
+	if pr.leech and pr.mode != Mode.CLEAN:
+		speed *= EcoLeech.SLOW  # пиявник замедляет хищника
+
 	# прямо к цели с постоянной скоростью; в охоте и броске поворачивает резче
 	var d := a.goal - a.p
 	var want := d.normalized() * speed if d.length_squared() > 1e-4 else d
 	a.agility = 1.6 if pr.mode == Mode.HUNT or pr.mode == Mode.CHARGE else 1.1
 	a.drive(want, dt, world.ground)
 	world.push_out(a, HULL_GAP) # корпус не пускает внутрь
+
+
+## Пиявник: злость издалека, заражение здорового (не у станции), сытый заражённый плывёт на чистку.
+func _step_leech(world: EcoWorld, pr: Pred, dt: float, can_attack: bool, d_ship: float, at_station: bool) -> void:
+	if pr.leech and can_attack and d_ship > REACH and pr.angry_cd <= 0.0:
+		pr.angry_cd = EcoLeech.ANGRY_CD
+		world.emit(EcoLeech.ID, "angry", pr.agent.p, _angry_text(world))
+	if not pr.leech:
+		pr.leech_cd -= dt
+		if pr.leech_cd <= 0.0 and not at_station:
+			pr.leech = true
+			world.emit(EcoLeech.ID, "infest", pr.agent.p, _infest_text(world))
+	elif pr.station < 0 and pr.hunger < EcoLeech.SEEK_HUNGER and (pr.mode == Mode.PATROL or pr.mode == Mode.EAT):
+		var st := leeches.nearest_station(pr.agent.p)
+		if st:
+			pr.station = st.index
+			_set_mode(pr, Mode.CLEAN, EcoLeech.CLEAN_TIME)
+			pr.agent.goal = st.top
+
+
+## Чистка: к вершине огнецвета, ближе 4 м — стоит, огнёвки работают 6 с и снимают пиявника. Возвращает скорость.
+func _step_clean(world: EcoWorld, pr: Pred, dt: float) -> float:
+	var a := pr.agent
+	var st: EcoLeech.Station = leeches.stations[pr.station] if pr.station >= 0 and pr.station < leeches.stations.size() else null
+	if st == null or not pr.leech:
+		pr.station = -1
+		_set_mode(pr, Mode.PATROL, 0.0)
+		return PATROL_SPEED
+	var d := a.distance_to(st.top)
+	a.goal = st.top
+	if d < EcoLeech.CLEAN_R:
+		st.busy = pr.index
+		st.work += dt
+	if st.work >= EcoLeech.CLEAN_WORK:
+		st.work = 0.0
+		st.busy = -1
+		pr.leech = false
+		pr.station = -1
+		pr.leech_cd = leeches.next_cd()
+		pr.hunger = minf(pr.hunger, 0.3)
+		_set_mode(pr, Mode.PATROL, _rnd.range_f(4, 8))
+		world.emit("ognevka", "clean", st.top, _clean_text(world))
+		world.emit(EcoLeech.ID, "cleaned", st.top)
+	elif a.expired() or pr.hunger > EcoLeech.GIVE_UP_HUNGER:
+		pr.station = -1
+		_set_mode(pr, Mode.PATROL, 0.0)
+	return EcoLeech.CLEAN_SLOW if d < EcoLeech.CLEAN_R else EcoLeech.CLEAN_SPEED
+
+
+static func _infest_text(world: EcoWorld) -> Callable:
+	var wr: WeakRef = weakref(world)
+	return func() -> String:
+		var w: EcoWorld = wr.get_ref()
+		var leech := w.nm(EcoLeech.ID) if w else Species.called(EcoLeech.ID)
+		var pred := w.nm(ID, Species.Case.GEN) if w else Species.called(ID, Species.Case.GEN)
+		return "%s присосался к жабрам %s" % [Species.cap(leech), pred]
+
+
+static func _angry_text(world: EcoWorld) -> Callable:
+	var wr: WeakRef = weakref(world)
+	return func() -> String:
+		var w: EcoWorld = wr.get_ref()
+		var pred := w.nm(ID) if w else Species.called(ID)
+		return "Заражённый %s злее обычного и замечает корабль издалека" % pred
+
+
+static func _clean_text(world: EcoWorld) -> Callable:
+	var wr: WeakRef = weakref(world)
+	return func() -> String:
+		var w: EcoWorld = wr.get_ref()
+		var pred := w.nm(ID) if w else Species.called(ID)
+		var leech := w.nm(EcoLeech.ID, Species.Case.GEN) if w else Species.called(EcoLeech.ID, Species.Case.GEN)
+		return "%s на станции чистки: его очистили от %s" % [Species.cap(pred), leech]
 
 
 ## Светляк в чернилах подушечника — хищник его не видит.
