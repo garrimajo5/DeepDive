@@ -30,6 +30,18 @@ func test_order_and_timing() -> void:
 	ok(q.finished, "сценарий закончен")
 
 
+func test_shot_after_goto_waits_frame() -> void:   # issue #216: 09g-tablo снимал кадр до перехода
+	var q := QaScript.parse('[{"do":"wait","s":0.1},{"do":"goto","x":0,"z":1.5,"yaw":0},{"do":"shot","name":"g"},{"do":"log","note":"x"},{"do":"goto","x":1,"z":1,"yaw":0},{"do":"wait","s":1}]')
+	var first := q.advance(0.15)
+	eq(first.map(func(c): return c[0]), ["goto"], "сначала только переход — кадр с новым местом")
+	var second := q.advance(0.05)
+	eq(second[0], ["shot", "g"], "снимок в следующем шаге")
+	eq(second.map(func(c): return c[0]), ["shot", "log", "goto"], "дальше по порядку")
+	var r := QaScript.parse('[{"do":"hold","what":"action","s":0.2},{"do":"shot","name":"h"}]')
+	var held := _run_all(r, 0.3)
+	eq(held.map(func(c): return c[0]), ["begin", "end", "shot", "done"], "после удержания снимок сразу — пар ещё в кадре")
+
+
 func test_swipe_moves_full_distance() -> void:
 	var q := QaScript.parse('[{"do":"swipe","dx":300,"dy":-40,"s":0.5}]')
 	var sum := Vector2.ZERO

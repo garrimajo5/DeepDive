@@ -73,6 +73,22 @@ func test_scene_board() -> void:
 	await frames(1)
 
 
+func test_board_below_status_at_start() -> void:   # issue #218: верх табло на старте под плашкой приборов
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.step(0.1)
+	await frames(1)
+	var cam := main.get_viewport().get_camera_3d()
+	var top := cam.global_transform.affine_inverse() * main.ship.to_global(AlarmBoard.CENTER + Vector3(0.0, AlarmBoard.SIZE.y * 0.5, 0.0))
+	var h := 720.0   # экран телефона в альбомной: высота вьюпорта 720 (project.godot), fov камеры — по высоте
+	var y := h * 0.5 - h * 0.5 * (top.y / -top.z) / tan(deg_to_rad(cam.fov) * 0.5)
+	var plate := main.hint.position.y + main.hint.get_line_height() * 4 + Main.HINT_PAD   # четыре строки: сообщение и приборы
+	ok(y > plate, "верх табло (%.0f) ниже плашки приборов в четыре строки (%.0f)" % [y, plate])
+	main.queue_free()
+	await frames(1)
+
+
 func test_hint_targets() -> void:
 	eq(AlarmBoard.hint(-1, null), null, "тревог нет — рамки нет")
 	var z := AlarmBoard.hint(AlarmBoard.Field.DRAIN, null)
