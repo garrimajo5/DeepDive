@@ -146,6 +146,9 @@ class Member:
 	## Плавный наклон к посту (свой игрок): joints() берёт `lean`, который ведёт ease_lean(dt); иначе — сразу.
 	var smooth_lean := false
 	var lean := 0.0  ## текущий наклон к посту, рад (при smooth_lean)
+	## Свой игрок: стоя фигура на столько позади глаза (м) — камера не внутри груди и не видит изнанку обрезанного
+	## меша, в том числе с руками на посте (issue #137). Сидя и при сварке — 0.
+	var back := 0.0
 	var swing := 0.0  ## 0 — стоит, 1 — идёт полным ходом
 	var _last := Vector2.INF
 
@@ -232,7 +235,7 @@ class Member:
 		else:
 			fwd = Vector3(-sin(yaw), 0.0, -cos(yaw))
 			right = Vector3(cos(yaw), 0.0, -sin(yaw))
-			hip = Vector3(x, HIP - 0.03 * swing * absf(cos(phase)) - crouch(), z)
+			hip = Vector3(x, HIP - 0.03 * swing * absf(cos(phase)) - crouch(), z) - fwd * _back()
 			up = Vector3.UP
 			var a := _lean_now(hip, fwd, right)
 			if a > 0.0:   # руки на посте: наклон к нему, пока не достанет
@@ -307,7 +310,11 @@ class Member:
 			return 0.0
 		var fwd := Vector3(-sin(yaw), 0.0, -cos(yaw))
 		var right := Vector3(cos(yaw), 0.0, -sin(yaw))
-		return _lean(Vector3(x, HIP, z), fwd, right)
+		return _lean(Vector3(x, HIP, z) - fwd * _back(), fwd, right)
+
+	## Насколько фигура позади глаза сейчас (м): стоя и не варит — back.
+	func _back() -> float:
+		return 0.0 if seated or welding() else back
 
 	## Шаг плавного наклона: к lean_target() не быстрее LEAN_RATE.
 	func ease_lean(dt: float) -> void:
@@ -317,7 +324,7 @@ class Member:
 	## наклонённая грудь и плечи оказываются под камерой и видны изнутри (issue #106, #107).
 	func eye_offset() -> Vector3:
 		var fwd := Vector3(-sin(yaw), 0.0, -cos(yaw))
-		var a := _lean_now(Vector3(x, HIP, z), fwd, Vector3(cos(yaw), 0.0, -sin(yaw)))
+		var a := _lean_now(Vector3(x, HIP, z) - fwd * _back(), fwd, Vector3(cos(yaw), 0.0, -sin(yaw)))
 		if a <= 0.0:
 			return Vector3.ZERO
 		var up := Basis(Vector3.UP.cross(fwd).normalized(), a) * Vector3.UP
