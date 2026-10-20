@@ -54,6 +54,10 @@ static func hit(by: String, damage: float, at: Vector3) -> Dictionary:
 	return {"type": HIT, "by": by, "damage": clampf(damage, 0.0, 1.0), "at": at}
 
 
+static func drain(by: String, units: float) -> Dictionary:
+	return {"type": DRAIN, "by": by, "units": maxf(units, 0.0)}
+
+
 static func near(species: String, name: String, pos: Vector3, ship_pos: Vector3, r: float = 1.0,
 		sonar: bool = true, scan: bool = false) -> Dictionary:
 	return {"type": NEAR, "species": species, "name": name, "pos": pos, "dist": pos.distance_to(ship_pos), "r": r,
