@@ -86,5 +86,17 @@
   {"do": "hold", "what": "action", "s": 2.2},
   {"do": "wait", "s": 0.5},
   {"do": "shot", "name": "17-breach-sealed"},
-  {"do": "log", "note": "шов заварен и остывает, насосы откачивают воду"}
+  {"do": "log", "note": "шов заварен и остывает, насосы откачивают воду"},
+  {"do": "goto", "x": -1.0, "z": 11.0, "yaw": 135, "pitch": -12},
+  {"do": "wait", "s": 0.3},
+  {"do": "shot", "name": "18-lab-flasks"},
+  {"do": "goto", "x": -2.9, "z": 12.4, "yaw": 150, "pitch": -10},
+  {"do": "press", "what": "action"},
+  {"do": "wait", "s": 0.5},
+  {"do": "log", "note": "лаборатория: образец из трюма в колбе 1, кнопка «Колба»"},
+  {"do": "goto", "x": 2.0, "z": 12.75, "yaw": -90, "pitch": -30},
+  {"do": "press", "what": "action"},
+  {"do": "wait", "s": 0.5},
+  {"do": "shot", "name": "19-lab-journal"},
+  {"do": "log", "note": "журнал: сводка на экране стойки"}
 ]

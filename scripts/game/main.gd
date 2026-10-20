@@ -98,6 +98,7 @@ func _ready() -> void:
 	posts = Deck.posts()
 	posts.append(Deck.Post.new("winch", Samples.POST_AT, Samples.POST_R, "Лебёдка"))
 	posts.append(Deck.Post.new("breach", breach.post_at(), Breach.POST_R, "Сварка"))
+	posts.append_array(Lab.posts())
 	for i in layout.doors.size():
 		posts.append(Deck.Post.new("door%d" % i, Vector2(0.0, ShipLayout.DOOR_Z[i]), 1.2, "Открыть люк"))
 	searchlight = SearchlightView.new()
@@ -243,6 +244,8 @@ func step(dt: float) -> void:
 		elif p.id == "breach":
 			p.at = breach.post_at()
 			p.label = breach.label()
+		elif p.id.begins_with("flask"):
+			p.label = Lab.flask_label(samples.cargo, int(p.id.substr(5)))
 	current.update(dt)
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
 	engine.update(dt, reactor, hold_valve or debug_vent)
@@ -276,6 +279,7 @@ func step(dt: float) -> void:
 	rooms.apply(layout, reactor, airlock, engine)
 	var carry_c: Color = Samples.COLORS[samples.target.kind] if samples.target else Color.WHITE
 	rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(), carry_c)
+	rooms.set_lab(Lab.contents(samples.cargo), Lab.journal_lines(samples), time)
 	message.update(dt)
 	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt)
 	crew_view.apply()
@@ -287,7 +291,7 @@ func step(dt: float) -> void:
 
 ## Короткая подпись на кнопке действия у поста.
 const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер", "sonar": "Сонар", "zap": "Разряд", "airlock": "Шлюз", "winch": "Лебёдка",
-	"valve": "Вентиль", "scram": "Сброс", "breach": "Сварка"}
+	"valve": "Вентиль", "scram": "Сброс", "breach": "Сварка", "journal": "Журнал"}
 
 
 ## Кнопка действия у поста.
@@ -314,6 +318,10 @@ func use_post(id: String) -> void:
 			engine.press(reactor)
 		"scanner":
 			say("Сканер: рядом никого")
+		"journal":
+			say(Lab.journal_info(samples))
+		_ when id.begins_with("flask"):
+			say(Lab.flask_info(samples.cargo, int(id.substr(5))))
 		_ when id.begins_with("door"):
 			var d: ShipLayout.Door = layout.doors[int(id.substr(4))]
 			d.open = not d.open
@@ -491,7 +499,7 @@ func _update_ui() -> void:
 		var post := Deck.nearest(posts, walker.x, walker.z)
 		var label := ""
 		if post:
-			label = POST_BUTTON.get(post.id, "Люк" if post.id.begins_with("door") else "")
+			label = POST_BUTTON.get(post.id, "Люк" if post.id.begins_with("door") else "Колба" if post.id.begins_with("flask") else "")
 		overlay.set_action_label(label)
 	var font := hint.get_theme_font("font")
 	var fs := hint.get_theme_font_size("font_size")
@@ -592,6 +600,11 @@ func debug_setup(kv: Dictionary) -> void:
 			held -= 0.05
 		rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(),
 			Samples.COLORS[samples.target.kind] if samples.target else Color.WHITE)
+	if kv.has("cargo"):  # cargo=0,2,1 — виды образцов в трюме (и в колбах лаборатории)
+		samples.cargo.clear()
+		for k in kv["cargo"].split(",", false):
+			samples.cargo.append([clampi(int(k), 0, Samples.NAMES.size() - 1), -1])
+		rooms.set_lab(Lab.contents(samples.cargo), Lab.journal_lines(samples), time)
 	if kv.has("breach"):  # breach=n — пробоина в месте n (0 мостик, 1 коридор, 2 лаборатория, 3 машинное), игрок у неё;
 		# weld=<доля> — шов заварен на долю (1 — заварен, шов горячий); water=<м> — вода на полу
 		open_breach(int(kv["breach"]))

@@ -18,6 +18,9 @@ var valve_wheel: Node3D            ## маховик вентиля сброса
 var panel_lid: Node3D              ## крышка щитка «Аварийный сброс» (MOD-009), откидывается по z
 var steam: CPUParticles3D          ## пар из вентиля
 var _button_mat: StandardMaterial3D
+var lab_samples: Array[MeshInstance3D] = []   ## образцы в колбах (Lab.contents), светятся цветом вида
+var journal_text: Label3D          ## экран стойки журнала (Lab.journal_lines)
+var _lab_kinds: Array[int] = []
 
 
 func _ready() -> void:
@@ -56,6 +59,7 @@ func _ready() -> void:
 	var lid := _model("lyuk-tryuma-kryshka", Vector3(0, 0, -Airlock.RADIUS), airlock_cover)   # pivot модели — на петле
 	_set_layers(lid, OceanView.LAYER_SHIP | OceanView.LAYER_WORLD)
 	_add_winch()
+	_add_lab()
 
 
 func _add_reactor() -> void:
@@ -146,6 +150,72 @@ static func _turn_to(dir: Vector3) -> Quaternion:
 	if dir.is_equal_approx(Vector3.DOWN):
 		return Quaternion.IDENTITY
 	return Quaternion(Vector3.DOWN, dir)
+
+
+## Лаборатория (MOD-015, laboratoriya.md): три тумбы со стеклом, в колбах — образцы груза; стойка журнала с экраном.
+func _add_lab() -> void:
+	for i in Lab.FLASKS.size():
+		var f: Vector2 = Lab.FLASKS[i]
+		var base := _model("kolba-tumba", Vector3(f.x, 0.0, f.y))
+		base.name = "Колба %d" % (i + 1)
+		_model("kolba-steklo", Vector3(0.0, Lab.GLASS_Y, 0.0), base)
+		var orb := MeshInstance3D.new()
+		orb.name = "Образец в колбе %d" % (i + 1)
+		orb.mesh = SamplesView.gem_mesh(0.16)
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED   # образец светится своим цветом
+		orb.material_override = m
+		orb.layers = OceanView.LAYER_SHIP
+		orb.position = Vector3(f.x, Lab.SAMPLE_Y, f.y)
+		orb.visible = false
+		add_child(orb)
+		lab_samples.append(orb)
+	var stand := _model("zhurnal-stoyka", Vector3(Lab.JOURNAL.x, 0.0, Lab.JOURNAL.y))
+	var screen := _model("zhurnal-ekran", Vector3.ZERO, stand)
+	var sm := StandardMaterial3D.new()
+	sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	sm.albedo_color = Color("071820")
+	for mi in screen.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).material_override = sm
+	journal_text = Label3D.new()
+	journal_text.name = "Экран журнала"
+	journal_text.layers = OceanView.LAYER_SHIP
+	journal_text.font_size = 34
+	journal_text.outline_size = 0
+	journal_text.pixel_size = 0.0016
+	journal_text.modulate = Color("67DDEB")
+	journal_text.shaded = false
+	journal_text.double_sided = false
+	journal_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	journal_text.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	journal_text.width = Lab.SCREEN_SIZE.x / journal_text.pixel_size - 40.0
+	journal_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	# экран смотрит к −X и вверх: текст вправо — к +Z, вверх — к верхней кромке экрана
+	var n := Lab.SCREEN_NORMAL
+	var right := Vector3(0, 0, 1)
+	var up := n.cross(right)
+	var top_left := Lab.SCREEN_CENTER - right * (Lab.SCREEN_SIZE.x / 2.0 - 0.03) + up * (Lab.SCREEN_SIZE.y / 2.0 - 0.03)
+	journal_text.transform = Transform3D(Basis(right, up, n), top_left + n * 0.004)
+	stand.add_child(journal_text)
+	set_lab([-1, -1, -1], PackedStringArray(), 0.0)
+
+
+## Образцы в колбах (виды или −1) и текст журнала; t — время для покачивания.
+func set_lab(kinds: Array, lines: PackedStringArray, t: float) -> void:
+	for i in lab_samples.size():
+		var k: int = kinds[i] if i < kinds.size() else -1
+		var orb := lab_samples[i]
+		orb.visible = k >= 0
+		if k >= 0:
+			var c: Color = Samples.COLORS[k]
+			var m := orb.material_override as StandardMaterial3D
+			m.albedo_color = c
+			var f: Vector2 = Lab.FLASKS[i]
+			orb.position = Vector3(f.x, Lab.SAMPLE_Y + Lab.bob(t, i), f.y)
+			orb.rotation.y = t * 0.4 + float(i)
+	var text := "\n".join(lines)
+	if journal_text.text != text:
+		journal_text.text = text
 
 
 ## Машинное (MOD-009): вентиль на левой стене, щиток на правой; пар — частицы у маховика.
