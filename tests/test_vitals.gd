@@ -24,6 +24,25 @@ func test_drain_from_creatures() -> void:
 	near(v.energy, 100.0 - 2.1 + 1.1, 1e-4, "отпустил — расход пропал")
 
 
+func test_drain_alarm() -> void:   # issue #131: пока тянет заряд — тревога с подсказкой про рычаг
+	var v := Vitals.new()
+	eq(v.drain_alarm(), "", "без присоски тихо")
+	v.drain("Стеклоуст", 0.0)
+	eq(v.drain_alarm(), "", "нулевой расход — не тревога")
+	v.drain("Стеклоуст", 3.2)
+	eq(v.drain_alarm(), "Стеклоуст на корпусе пьёт энергию. Разряд — рычаг у левого борта", "тревога")
+	v.update(0.3, 0.0, 0.0, false, 1.0)
+	ok(v.drain_alarm() != "", "держится между событиями")
+	v.drain("Стеклоуст", 3.2)
+	v.update(0.3, 0.0, 0.0, false, 1.0)
+	ok(v.drain_alarm() != "", "новое событие продлевает")
+	v.update(0.3, 0.0, 0.0, false, 1.0)
+	eq(v.drain_alarm(), "", "сбросили — гаснет через полсекунды")
+	v.drain("Стеклоуст", 3.2)
+	v.reset()
+	eq(v.drain_alarm(), "", "новый спуск — без тревоги")
+
+
 func test_hits_repair_and_destroy() -> void:
 	var v := Vitals.new()
 	var lost := [false]
@@ -85,10 +104,15 @@ func test_scene_eco_hits_and_drain() -> void:
 	eq(main.message.text, "Серпохвост бьёт по корпусу: −12%", "на приборах")
 	ok(Status.join(main.status_parts()).contains("корпус 88%"), Status.join(main.status_parts()))
 	var e0 := main.vitals.energy
-	fake.send = [{"type": EcoLink.DRAIN, "by": "Стеклоуст", "units": 3.2}]
-	main.step(1.0)
-	main.step(1.0)   # расход из событий учитывается в следующем шаге
-	ok(main.vitals.energy < e0, "стеклоуст тянет заряд")
+	for i in 2:   # мир шлёт DRAIN каждый шаг, пока присоска на стекле; расход учитывается в следующем шаге
+		fake.send = [{"type": EcoLink.DRAIN, "by": "Стеклоуст", "units": 3.2}]
+		main.step(1.0)
+	ok(main.vitals.energy < e0 - 1.0, "стеклоуст тянет заряд")
+	var line := Status.join(main.status_parts())
+	ok(line.begins_with("Стеклоуст на корпусе пьёт энергию"), "тревога первой: " + line)
+	main.step(0.3)
+	main.step(0.3)
+	ok(not Status.join(main.status_parts()).contains("Стеклоуст"), "отпустил — тревога погасла")
 	fake.send = [EcoLink.hit("Серпохвост", 1.0, main.helm.pos)]
 	main.step(0.1)
 	near(main.vitals.hull, 100.0, 1e-6, "разрушен — корабль поднят с целым корпусом")

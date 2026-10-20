@@ -658,7 +658,7 @@ func on_eco_event(e: Dictionary) -> void:
 		EcoLink.HIT:
 			vitals.hit(roundi(float(e.get("damage", 0.0)) * 100.0), str(e.get("by", "")))
 		EcoLink.DRAIN:
-			vitals.drain_ext += float(e.get("units", 0.0))
+			vitals.drain(str(e.get("by", "")), float(e.get("units", 0.0)))
 		EcoLink.MESSAGE:
 			say(str(e.get("text", "")))
 		EcoLink.OBSERVE:   # наблюдение в журнал (handleEvents в js/game.js)
@@ -802,7 +802,7 @@ func _update_ui() -> void:
 ## Части строки состояния: где игрок, глубина, ход, у штурвала — до дна, курс и прожектор, течение, пост рядом, сообщение.
 func status_parts() -> Array:
 	var parts: Array = []
-	var alarm := Status.alarm([breach.status(), reactor.alert(), silt.alarm(), vitals.warning()])
+	var alarm := Status.alarm([breach.status(), vitals.drain_alarm(), reactor.alert(), silt.alarm(), vitals.warning()])
 	if not alarm.is_empty():
 		parts.append(alarm)
 	parts.append("За штурвалом" if pilot.seated else ShipLayout.ROOM_NAMES[ShipLayout.room_at(walker.z)])

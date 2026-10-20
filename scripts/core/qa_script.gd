@@ -15,14 +15,16 @@ extends RefCounted
 ##                                                     игрок встаёт у неё лицом к борту
 ##   {"do": "route"}                                 — пройти выбранный маршрут разом (нет — первый): «глубже или наверх»
 ##   {"do": "silt"}                                  — облако ила вокруг корабля (сонарная тьма); "on": false — убрать ил
+##   {"do": "drain", "s": 4}                        — стеклоуст «на корпусе» s секунд: мир будто шлёт EcoLink.DRAIN
+##                                                     (тревога и расход заряда без самого существа)
 ##   {"do": "mate", "x": -1, "z": -2.5, "yaw": 90, "role": 2, "look": 1} — ещё один член экипажа на палубе (роль 0…3,
 ##                                                     внешность 0 — мужская модель, 1 — женская)
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look], ["silt", on], ["route"], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look], ["silt", on], ["drain", s], ["route"], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
-const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "silt", "route", "log", "quit"]
+const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "silt", "drain", "route", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad"]
 const PRESS_TIME := 0.15   ## сколько держать кнопку при «press», с
 const FINGER := 900        ## номер пальца для касаний сценария (не пересекается с настоящими)
@@ -127,6 +129,8 @@ func _begin(st: Dictionary, out: Array) -> void:
 			out.append(["breach", int(st.get("n", 0))])
 		"silt":
 			out.append(["silt", bool(st.get("on", true))])
+		"drain":
+			out.append(["drain", float(st.get("s", 4.0))])
 		"route":
 			out.append(["route"])
 		"mate":
