@@ -73,7 +73,8 @@ func test_hands_on_posts_in_scene() -> void:
 	main.walker.z = -2.0
 	main.open_power()
 	main.power.sel = 4
-	main.step(1.0 / 30.0)
+	for i in 10:   # наклон к пульту плавный
+		main.step(1.0 / 30.0)
 	var g := CrewHands.energy(4, main.reactor.share[4] / float(Reactor.MAX))
 	ok(main.me.hands[1].is_equal_approx(g[1]), "у пульта: правая на ползунке прожектора")
 	var hand: Vector3 = main.crew_view.shown[0]["hand_r"]
@@ -90,3 +91,38 @@ func test_hands_on_posts_in_scene() -> void:
 	for i in int(CrewHands.PRESS * 30.0) + 2:
 		main.step(1.0 / 30.0)
 	ok(not main.me.holding(), "через %.1f с руки свободны" % CrewHands.PRESS)
+
+
+## По issue #106: наклон к голостолу — камера идёт за головой, а не остаётся над спиной (лоскуты меша у камеры).
+func test_camera_follows_lean_at_table() -> void:
+	main.walker.x = 0.0
+	main.walker.z = 0.5
+	main.walker.yaw = 0.0
+	main.use_post("sonar")
+	for i in 10:
+		main.step(1.0 / 30.0)
+	ok(main.me.lean > 0.1, "наклон к столу (%.2f рад)" % main.me.lean)
+	var j := main.me.joints()
+	var head: Vector3 = j["head"] + (j["fwd"] as Vector3) * 0.04
+	ok(main.camera.position.distance_to(head) < 0.01, "камера в голове (%.3f м)" % main.camera.position.distance_to(head))
+	for i in int(CrewHands.PRESS * 30.0) + 10:
+		main.step(1.0 / 30.0)
+	eq(main.me.lean, 0.0, "руки свободны — выпрямился")
+	near(main.camera.position.y, Deck.Walker.EYE, 1e-4, "камера на прежней высоте")
+
+
+## По issue #107: у пульта энергии игрок встаёт к нему и смотрит на ползунки — ближняя рука на выбранном.
+func test_power_steps_to_panel() -> void:
+	main.walker.x = -3.4   # край радиуса поста
+	main.walker.z = -2.3
+	main.open_power()
+	var post: Deck.Post = Deck.posts().filter(func(p): return p.id == "energy")[0]
+	eq(Vector2(main.walker.x, main.walker.z), post.at, "встал к пульту")
+	near(main.walker.pitch, Main.POWER_PITCH, 1e-6, "взгляд на ползунки")
+	main.power.sel = 0
+	for i in 15:
+		main.step(1.0 / 30.0)
+	var g := CrewHands.energy(0, main.reactor.share[0] / float(Reactor.MAX))
+	var hand: Vector3 = main.crew_view.shown[0]["hand_l"]
+	ok(hand.distance_to(g[0]) < 0.08, "левая на ползунке двигателей (%.3f м)" % hand.distance_to(g[0]))
+	main.close_power()
