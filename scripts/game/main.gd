@@ -129,6 +129,7 @@ func _ready() -> void:
 	camera.far = 400.0
 	ship.add_child(camera)
 	camera.make_current()
+	me.smooth_lean = true   # камера в голове: наклон к посту плавный
 	var ui := CanvasLayer.new()
 	ui.name = "Интерфейс"
 	add_child(ui)
@@ -346,6 +347,7 @@ func step(dt: float) -> void:
 	bridge.set_scanner_screen(scanner.screen_lines())
 	message.update(dt)
 	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt)
+	me.ease_lean(dt)
 	crew_view.apply()
 	_place_ship()
 	_place_camera()
@@ -356,6 +358,9 @@ func step(dt: float) -> void:
 ## Короткая подпись на кнопке действия у поста.
 const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер", "sonar": "Сонар", "zap": "Разряд", "airlock": "Шлюз", "winch": "Лебёдка",
 	"valve": "Вентиль", "scram": "Сброс", "breach": "Сварка", "journal": "Журнал", "route": "Маршрут"}
+## Где встать у пульта энергии (у поста «energy») и куда смотреть, рад: ниже — ползунки и рука на выбранном.
+const POWER_STAND := Vector2(-3.9, -2.0)
+const POWER_PITCH := -0.6
 ## Пост «Маршрут» — у правого борта голостола (с остальных сторон стол — сонар).
 const ROUTE_POST := Vector2(1.5, BridgeProps.TABLE_Z)
 const ROUTE_POST_R := 0.6
@@ -460,8 +465,11 @@ func park_over_sample(n: int) -> void:
 ## Встать к пульту энергии: взгляд на пульт, крестовина правит доли, кнопка — закрыть.
 func open_power() -> void:
 	at_power = true
+	var at: Vector2 = POWER_STAND   # шаг к пульту: из радиуса поста руки не достали бы до ползунков (#107)
+	walker.x = at.x
+	walker.z = at.y
 	walker.yaw = PI / 2.0   # пульт на левом борту (−X)
-	walker.pitch = -0.3
+	walker.pitch = POWER_PITCH   # взгляд на ползунки: рука на выбранном видна
 	power_panel.show_for(reactor, power)
 
 
@@ -651,7 +659,7 @@ func _place_ship() -> void:
 
 
 func _place_camera() -> void:
-	camera.position = pilot.eye(walker)
+	camera.position = pilot.eye(walker) + me.eye_offset()   # наклон к посту — камера в голове
 	if vitals.shake > 0.0:   # тряска после удара: детерминированная, затухает за 0,6 с
 		var a := vitals.shake / 0.6 * 0.04
 		camera.position += Vector3(sin(time * 61.0) * a, sin(time * 47.0 + 1.3) * a, 0.0)

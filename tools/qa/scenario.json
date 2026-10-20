@@ -75,7 +75,7 @@
   {"do": "hold", "what": "pad", "dir": [0, -1], "s": 0.3},
   {"do": "wait", "s": 0.3},
   {"do": "log", "note": "решили глубже: второй спуск, маршрут заново"},
-  {"do": "goto", "x": -3.9, "z": -0.5, "yaw": 90, "pitch": -10},
+  {"do": "goto", "x": -3.9, "z": -0.5, "yaw": 90, "pitch": -30},
   {"do": "press", "what": "action"},
   {"do": "wait", "s": 0.3},
   {"do": "shot", "name": "10-zap"},
