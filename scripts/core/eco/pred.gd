@@ -12,6 +12,7 @@ extends EcoSystem
 ## подушечника (EcoCushion) хищник теряет светляка и корабль. Пиявник (EcoLeech, поле leeches) делает хищника
 ## медленнее и злее и гонит на станцию чистки (режим CLEAN). Вспышка радужников (EcoRaduzh, поле raduzh) зовёт
 ## хищника издалека. У станции чистки (EcoOgnevka, поле ognevka) хищник бросает охоту, корабль там в укрытии.
+## В густом ленточнике (EcoKelp, поле kelp) хищник теряет напуганную стаю.
 ## Сквозь корпус не проходят (EcoWorld.push_out). Вуали
 ## и укрытия стай придут со своими видами.
 
@@ -96,6 +97,8 @@ var fish: EcoFish
 var organs: EcoOrgan
 ## Подушечники: в их чернилах не видно ни светляков, ни корабля (null — подушечников нет).
 var cushions: EcoCushion
+## Ленточник: в густой роще хищник теряет напуганную стаю (null — ленточника нет).
+var kelp: EcoKelp
 ## Пиявники и станции чистки (null — пиявников нет; ставит EcoLeech.new).
 var leeches: EcoLeech
 ## Радужники: их вспышка в луче выдаёт корабль издалека (null — радужников нет).
@@ -330,19 +333,27 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 					pr.truce_cd = EcoOgnevka.TRUCE_CD
 					ognevka.truce(world, a.p)
 			else:
-				var cu := cushions.ink_at(pr.prey.agent.p) if cushions else null
-				if cu:  # светляк скрылся в чернилах подушечника
+				var gr := kelp.shelter(pr.prey) if kelp else null
+				var cu := cushions.ink_at(pr.prey.agent.p) if cushions and gr == null else null
+				if gr:  # стая нырнула в густой ленточник
+					_set_mode(pr, Mode.PATROL, _rnd.range_f(4, 8))
+					pr.prey = null
+					kelp.hid_fish(world, gr)
+				elif cu:  # светляк скрылся в чернилах подушечника
 					_set_mode(pr, Mode.PATROL, _rnd.range_f(4, 8))
 					pr.prey = null
 					cushions.hid_fish(world, cu)
 				else:
 					a.goal = pr.prey.agent.p + pr.prey.agent.v * 0.4
 					if a.distance_to(pr.prey.agent.p) < CATCH_DIST:
+						var caught := pr.prey.agent.p
 						fish.kill(pr.prey)
 						pr.hunger = 0.0
 						pr.prey = null
 						_set_mode(pr, Mode.EAT, 5.0)
 						world.emit(ID, "catch", a.p, _catch_text(world))
+						if kelp:
+							kelp.caught_at(world, caught)
 					elif can_attack and pr.hunger > HUNT_TO_SHIP_HUNGER:
 						_start_charge(world, pr)
 
@@ -512,14 +523,17 @@ static func _clean_text(world: EcoWorld) -> Callable:
 		return "%s на станции чистки: его очистили от %s" % [Species.cap(pred), leech]
 
 
-## Каких светляков хищник не ловит: в чернилах подушечника и у станции чистки (nearestFish пропускает nearStation).
+## Каких светляков хищник не ловит: у станции чистки, в густом ленточнике (EcoKelp) и в чернилах подушечника
+## (nearestFish пропускает nearStation, kelpShelter, inkAt).
 func _hidden_fish() -> Callable:
 	var ink := cushions != null and cushions.any_ink()
 	var truce := ognevka != null and leeches != null and not leeches.stations.is_empty()
-	if not ink and not truce:
+	var grove := kelp != null and not kelp.groves.is_empty()
+	if not ink and not truce and not grove:
 		return Callable()
 	return func(f: EcoFish.Fish) -> bool:
-		return (ink and _in_ink(f)) or (truce and leeches.near_station(f.agent.p) != null)
+		return (truce and leeches.near_station(f.agent.p) != null) or (grove and kelp.shelter(f) != null) \
+			or (ink and _in_ink(f))
 
 
 ## Светляк в чернилах подушечника — хищник его не видит.
