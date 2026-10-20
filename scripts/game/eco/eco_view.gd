@@ -35,6 +35,9 @@ var organ_view: OrganView
 ## Подушечники: две подушки у стай светляков, от касания — облако чернил, в нём серпохвост теряет стаю и корабль.
 var cushions: EcoCushion
 var cushion_view: CushionView
+## Стеклоусты: три логова в расщелинах, бросок на скребунов и светляков, присоска на стекле носа — тянет заряд.
+var eels: EcoEel
+var eel_view: EelView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -49,6 +52,7 @@ var ground: Callable:
 		_rebuild_bladders()
 		_rebuild_organs()
 		_rebuild_cushions()
+		_rebuild_eels()
 
 
 func _init() -> void:
@@ -73,12 +77,14 @@ func _init() -> void:
 	preds.organs = organs
 	cushions = world.add(EcoCushion.new(fish)) as EcoCushion
 	preds.cushions = cushions
+	eels = world.add(EcoEel.new(grazers, fish)) as EcoEel
 	_rebuild_moss()
 	_rebuild_coral()
 	_rebuild_ferns()
 	_rebuild_bladders()
 	_rebuild_organs()
 	_rebuild_cushions()
+	_rebuild_eels()
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -135,6 +141,15 @@ func _rebuild_cushions() -> void:
 	add_child(cushion_view)
 
 
+## Стеклоусты по дну мира (камни логов ставятся один раз).
+func _rebuild_eels() -> void:
+	if eel_view:
+		remove_child(eel_view)
+		eel_view.free()
+	eel_view = EelView.new(eels)
+	add_child(eel_view)
+
+
 ## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
 func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	world.ship = ship
@@ -148,4 +163,5 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	fern_view.sync(world.time)
 	bladder_view.sync(world.time)
 	cushion_view.sync(world.time)
+	eel_view.sync(world.time)
 	return world.take_link()
