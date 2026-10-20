@@ -208,3 +208,65 @@ func test_hiss_every_period() -> void:   # шипение присоски ра�
 	v.drain("Стеклоуст", 3.2)
 	v.update(0.1, 0.0, 0.0, false, 1.0)
 	ok(v.hiss(0.1), "снова присосался — шипит сразу")
+
+
+func test_screen_jam() -> void:   # помехи вторичных экранов при стеклоусте (ART-025)
+	var v := Vitals.new()
+	for i in Vitals.Screen.size():
+		var p := Vitals.jam_period(i)
+		ok(p >= Vitals.JAM_MIN and p <= Vitals.JAM_MAX, "период провалов 0,8…1,4 с")
+		eq(v.screen_k(0.37 * i, i), 1.0, "без присоски экраны ровные")
+	v.drain("Стеклоуст", 1.0)
+	var dt := 0.01
+	var first: Array[float] = []
+	for i in Vitals.Screen.size():
+		var drops := 0
+		var start := -1.0
+		var was := false
+		for n in 1000:   # 10 с
+			var dark := Vitals.jam_k(n * dt, i) < 1.0
+			if dark and not was:
+				drops += 1
+				if start < 0.0:
+					start = n * dt
+			was = dark
+		ok(drops >= 7 and drops <= 13, "провал раз в 0,8…1,4 с (за 10 с: %d)" % drops)
+		first.append(start)
+	var same := 0
+	for i in range(1, first.size()):
+		if absf(first[i] - first[0]) < Vitals.JAM_DROP:
+			same += 1
+	ok(same < first.size() - 1, "провалы несинхронные")
+	var dim := 0
+	for n in 200:
+		if v.screen_k(n * 0.01, Vitals.Screen.SCANNER) < 1.0:
+			dim += 1
+	ok(dim > 0, "при присоске экран сканера проваливается")
+	near(Vitals.JAM_DIM, 0.08, 1e-6)
+
+
+func test_scene_screen_jam() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.step(0.1)
+	eq(main.bridge.screens_mat.get_shader_parameter("k"), Vector3.ONE, "без присоски экраны пульта ровные")
+	var dark_helm := false
+	var dark_scan := false
+	var dark_journal := false
+	for n in 60:
+		main.vitals.drain("Стеклоуст", 0.01)
+		main.step(1.0 / 30.0)
+		var k: Vector3 = main.bridge.screens_mat.get_shader_parameter("k")
+		dark_helm = dark_helm or k.x < 1.0 or k.y < 1.0 or k.z < 1.0
+		dark_scan = dark_scan or main.bridge.scanner_text.modulate.g < BridgeView.SCANNER_TEXT.g
+		dark_journal = dark_journal or main.rooms.journal_text.modulate.g < RoomsView.JOURNAL_TEXT.g
+		eq(main.alarm_board.levels[AlarmBoard.Field.DRAIN].x, 1.0, "буквы тревоги на табло не гаснут")
+	ok(dark_helm and dark_scan and dark_journal, "за 2 с провалились экраны пульта, сканера и журнала")
+	main.vitals.drain_left = 0.0
+	main.step(0.1)
+	main.step(0.1)
+	eq(main.bridge.screens_mat.get_shader_parameter("k"), Vector3.ONE, "присоска отпала — экраны ровные")
+	eq(main.bridge.scanner_text.modulate, BridgeView.SCANNER_TEXT)
+	main.queue_free()
+	await frames(1)

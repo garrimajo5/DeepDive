@@ -16,6 +16,8 @@ var zap_scale_mat: BaseMaterial3D   ## материал щитка со шкал
 var hatch_wheel: Node3D
 var lamps: Array[OmniLight3D] = []  ## плафоны мостика (мигают — set_lamps)
 const LAMP_ENERGY := 0.9
+var screens_mat: ShaderMaterial    ## экраны пульта пилота (помехи — set_screens)
+const SCANNER_TEXT := Color("67DDEB")
 var scanner_text: Label3D          ## экран сканера биолога (Scanner.screen_lines)
 
 
@@ -120,7 +122,7 @@ func _add_scanner_screen() -> void:
 	scanner_text.font_size = 34
 	scanner_text.outline_size = 0
 	scanner_text.pixel_size = 0.0014
-	scanner_text.modulate = Color("67DDEB")
+	scanner_text.modulate = SCANNER_TEXT
 	scanner_text.shaded = false
 	scanner_text.double_sided = false
 	scanner_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -171,15 +173,20 @@ static func light_texture(n: Node3D) -> void:
 		m.material_override = sm
 
 
-## Экраны пульта светятся ровным голубым (пока на них ничего не рисуем).
+## Экраны пульта светятся ровным голубым (пока на них ничего не рисуем); три экрана — своя яркость у каждого
+## (`shaders/console_screens.gdshader`, помехи — `set_screens`).
 func _light_screens(n: Node3D) -> void:
-	var m := StandardMaterial3D.new()
-	m.albedo_color = BridgeProps.SCREEN_GLOW
-	m.emission_enabled = true
-	m.emission = BridgeProps.SCREEN_GLOW
-	m.emission_energy_multiplier = 1.1
+	screens_mat = ShaderMaterial.new()
+	screens_mat.shader = load("res://shaders/console_screens.gdshader")
+	screens_mat.set_shader_parameter("glow", BridgeProps.SCREEN_GLOW)
 	for mi in n.find_children("*", "MeshInstance3D", true, false):
-		(mi as MeshInstance3D).material_override = m
+		(mi as MeshInstance3D).material_override = screens_mat
+
+
+## Яркость экранов при помехах (Vitals.screen_k): три экрана пульта пилота слева направо и экран сканера.
+func set_screens(helm: Vector3, scanner: float) -> void:
+	screens_mat.set_shader_parameter("k", helm)
+	scanner_text.modulate = Color(SCANNER_TEXT.r * scanner, SCANNER_TEXT.g * scanner, SCANNER_TEXT.b * scanner)
 
 
 ## Стекло носового окна: едва заметный бирюзовый отлив, чтобы было видно, что окно застеклено.
