@@ -21,6 +21,7 @@ var samples_view: SamplesView
 var breach := Breach.new()     ## событие «пробоина»: струя, вода, сварка удержанием
 var silt := Silt.new()         ## событие «сонарная тьма»: облака ила (на дне от удара, у Края отмели — оползни)
 var silt_view: SiltView
+var run := Run.new()           ## маршрут забега: выбор у голостола, точки по местам отмели
 var breach_view: BreachView
 var debug_weld := false        ## снимок: сварку держат без пальца
 var save := SaveGame.new()     ## груз трюма, поднятые образцы и изученные виды в user:// (js/save.js)
@@ -109,6 +110,7 @@ func _ready() -> void:
 	posts = Deck.posts()
 	posts.append(Deck.Post.new("winch", Samples.POST_AT, Samples.POST_R, "Лебёдка"))
 	posts.append(Deck.Post.new("breach", breach.post_at(), Breach.POST_R, "Сварка"))
+	posts.append(Deck.Post.new("route", ROUTE_POST, ROUTE_POST_R, run.label()))
 	posts.append_array(Lab.posts())
 	for i in layout.doors.size():
 		posts.append(Deck.Post.new("door%d" % i, Vector2(0.0, ShipLayout.DOOR_Z[i]), 1.2, "Открыть люк"))
@@ -273,6 +275,8 @@ func step(dt: float) -> void:
 			p.label = breach.label()
 		elif p.id == "scanner":
 			p.label = scanner.label()
+		elif p.id == "route":
+			p.label = run.label()
 		elif p.id.begins_with("flask"):
 			p.label = Lab.flask_label(samples.cargo, int(p.id.substr(5)))
 	current.update(dt)
@@ -280,6 +284,9 @@ func step(dt: float) -> void:
 	if not silt_msg.is_empty():
 		say(silt_msg)
 	silt_view.apply(silt, time, helm.pos, helm.yaw)
+	var run_msg := run.update(helm.pos.x, helm.pos.z)
+	if not run_msg.is_empty():
+		say(run_msg)
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
 	engine.update(dt, reactor, hold_valve or debug_vent)
 	helm.update(dt, reactor.k(Reactor.Sys.ENGINES), current.vel())
@@ -315,6 +322,7 @@ func step(dt: float) -> void:
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	bridge.set_hatch(layout.doors[0].offset())
 	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0, silt.noise(time))
+	sonar_view.show_waypoint(run.waypoint())
 	rooms.apply(layout, reactor, airlock, engine)
 	var carry_c: Color = Samples.COLORS[samples.target.kind] if samples.target else Color.WHITE
 	rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(), carry_c)
@@ -331,7 +339,10 @@ func step(dt: float) -> void:
 
 ## Короткая подпись на кнопке действия у поста.
 const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер", "sonar": "Сонар", "zap": "Разряд", "airlock": "Шлюз", "winch": "Лебёдка",
-	"valve": "Вентиль", "scram": "Сброс", "breach": "Сварка", "journal": "Журнал"}
+	"valve": "Вентиль", "scram": "Сброс", "breach": "Сварка", "journal": "Журнал", "route": "Маршрут"}
+## Пост «Маршрут» — у правого борта голостола (с остальных сторон стол — сонар).
+const ROUTE_POST := Vector2(1.5, BridgeProps.TABLE_Z)
+const ROUTE_POST_R := 0.6
 
 
 ## Руки своего игрока на посте (CrewHands): у пульта энергии, пока держит вентиль, лебёдку или сканер; после
@@ -351,7 +362,7 @@ func _hands(dt: float, valve: bool, winch: bool, scan: bool) -> void:
 		g = CrewHands.scanner()
 	elif press_t > 0.0:
 		match press_post:
-			"sonar":
+			"sonar", "route":
 				g = CrewHands.table(walker.x, walker.z)
 			"zap":
 				g = CrewHands.lever(zap.lever_deg(time))
@@ -362,7 +373,7 @@ func _hands(dt: float, valve: bool, winch: bool, scan: bool) -> void:
 
 ## Кнопка действия у поста.
 func use_post(id: String) -> void:
-	if id in ["sonar", "zap", "scram"]:
+	if id in ["sonar", "zap", "scram", "route"]:
 		press_post = id
 		press_t = CrewHands.PRESS
 	match id:
@@ -372,6 +383,8 @@ func use_post(id: String) -> void:
 			open_power()
 		"sonar":
 			ping_sonar()
+		"route":
+			say(run.cycle())
 		"zap":
 			fire_zap()
 		"airlock":
@@ -609,6 +622,7 @@ func status_parts() -> Array:
 		parts.append("до дна %d м" % roundi(helm.pos.y - Seabed.height(helm.pos.x, helm.pos.z)))
 		parts.append("курс %d°" % Status.course_deg(helm.yaw))
 		parts.append("прожектор %s" % ("вкл" if light_on else "выкл"))
+	parts.append(run.status(helm.pos.x, helm.pos.z))
 	if reactor.alert().is_empty():
 		parts.append("реактор %d/%d" % [reactor.used(), reactor.limit()])
 	parts.append("течение на %s %s м/с" % [Status.rumb(current.vel()), _num(Helm.SeaCurrent.SPEED)])
@@ -715,6 +729,8 @@ func debug_setup(kv: Dictionary) -> void:
 	if kv.has("scanned"):
 		for id in kv["scanned"].split(",", false):
 			scanner.scanned[id] = true
+	if kv.has("route"):   # маршрут n (0…2) выбран у голостола
+		run.choose(int(kv["route"]))
 	if kv.has("journal"):
 		journal_page = clampi(int(kv["journal"]), 0, Lab.pages(scanner) - 1)
 		rooms.set_lab(Lab.contents(samples.cargo), Lab.page_lines(samples, scanner, journal_page), time)

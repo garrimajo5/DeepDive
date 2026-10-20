@@ -49,3 +49,12 @@ func show_state(s: Sonar, ship_pos: Vector3, yaw: float, t: float, powered: bool
 	mat.set_shader_parameter("blip_count", s.blips.size())
 	mat.set_shader_parameter("blips", data)
 	mat.set_shader_parameter("blip_cols", cols)
+
+
+## Точка маршрута (Run.waypoint): кольцо на карте, за краем дальности — на краю круга в её сторону.
+## Vector2.INF — точки нет.
+func show_waypoint(xz: Vector2) -> void:
+	var on := xz.is_finite()
+	mat.set_shader_parameter("wp_on", 1.0 if on else 0.0)
+	if on:
+		mat.set_shader_parameter("wp_xz", xz)
