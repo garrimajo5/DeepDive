@@ -34,6 +34,7 @@ var zap_light: OmniLight3D   ## вспышка разряда вокруг ко�
 const ZAP_WARM_STEPS := 3
 var zap_warm := ZAP_WARM_STEPS
 var hit_flash: ColorRect
+var visor: ColorRect          ## щиток сварщика: затемнение, пока свой игрок варит (Breach.VISOR)
 var sonar_view: SonarView
 var time := 0.0             ## секунды игры (для сонара и событий)
 var power := Reactor.Console.new()   ## выбор на пульте энергии
@@ -140,6 +141,13 @@ func _ready() -> void:
 	hit_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hit_flash.color = Color(1.0, 0.36, 0.42, 0.0)
 	ui.add_child(hit_flash)
+	visor = ColorRect.new()
+	visor.name = "Щиток сварщика"
+	visor.set_anchors_preset(Control.PRESET_FULL_RECT)
+	visor.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	visor.color = Breach.VISOR
+	visor.visible = false
+	ui.add_child(visor)
 	vitals.hit_taken.connect(_on_hit)
 	vitals.destroyed.connect(_on_destroyed)
 	overlay = TouchOverlay.new()
@@ -273,6 +281,11 @@ func step(dt: float) -> void:
 		say("Прожектор погас: не хватает энергии")
 	vitals.hull = breach.update(dt, reactor.k(Reactor.Sys.LIFE), vitals.hull)
 	breach_view.apply()
+	if breach.welding and breach.active:   # свой игрок варит: резак в руке, щиток опущен
+		me.weld(breach.active.p, breach.active.n)
+	else:
+		me.weld(Vector3.INF)
+	visor.visible = me.welding()
 	breach.end_step()
 	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP))
 	zap.update(dt)

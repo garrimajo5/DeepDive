@@ -20,6 +20,7 @@ var seam: Node3D             ## шов
 var _seam_mat: StandardMaterial3D
 var spray: CPUParticles3D
 var sparks: CPUParticles3D
+var splash: CPUParticles3D   ## брызги там, где струя бьёт в воду
 var weld_light: OmniLight3D
 var water: MeshInstance3D
 var alarm: OmniLight3D
@@ -64,17 +65,34 @@ func _ready() -> void:
 	spray.amount = 96
 	spray.lifetime = 0.9
 	spray.position = Vector3(0, 0, 0.05)
-	spray.direction = Vector3(0, 0.15, 1)
+	spray.direction = Vector3(0, Breach.JET_UP, 1)
 	spray.spread = 12.0
-	spray.initial_velocity_min = 3.0
-	spray.initial_velocity_max = 4.2
-	spray.gravity = Vector3(0, -6.0, 0)
+	spray.initial_velocity_min = Breach.JET_V - 0.6
+	spray.initial_velocity_max = Breach.JET_V + 0.6
+	spray.gravity = Vector3(0, -Breach.JET_G, 0)
 	spray.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
 	spray.emission_box_extents = Vector3(0.15, 0.06, 0.0)
 	spray.scale_amount_min = 0.5
 	spray.scale_amount_max = 1.0
 	spray.mesh = _dot_mesh(0.03, Color(0.62, 0.9, 0.94, 0.85), false)
 	spot_node.add_child(spray)
+	splash = CPUParticles3D.new()
+	splash.name = "Брызги"
+	splash.layers = OceanView.LAYER_SHIP
+	splash.emitting = false
+	splash.amount = 48
+	splash.lifetime = 0.5
+	splash.direction = Vector3(0, 1, 0)
+	splash.spread = 40.0
+	splash.initial_velocity_min = 0.8
+	splash.initial_velocity_max = 1.8
+	splash.gravity = Vector3(0, -9.0, 0)
+	splash.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	splash.emission_box_extents = Vector3(0.25, 0.0, 0.2)
+	splash.scale_amount_min = 0.6
+	splash.scale_amount_max = 1.2
+	splash.mesh = _dot_mesh(0.035, Color(0.835, 0.894, 0.91, 0.8), false)   # пена #D5E4E8
+	spot_node.add_child(splash)
 	sparks = CPUParticles3D.new()
 	sparks.name = "Искры сварки"
 	sparks.layers = OceanView.LAYER_SHIP
@@ -164,6 +182,11 @@ static func seam_glow(b: Breach) -> float:
 	return 1.6 * (b.weld if b.active else b.seam_heat)
 
 
+## Брызги в осях узла пробоины (+Z — внутрь отсека): где струя падает на воду, высота — уровень воды.
+static func splash_local(s: Breach.Spot, water_h: float) -> Vector3:
+	return Vector3(0.0, water_h - s.p.y, Breach.jet_reach(s, water_h) - LIFT)
+
+
 ## Расставить по состоянию Breach (каждый шаг).
 func apply() -> void:
 	var s := breach.last
@@ -181,6 +204,9 @@ func apply() -> void:
 	seam.visible = patch.visible
 	_seam_mat.emission_energy_multiplier = seam_glow(breach)
 	spray.emitting = breach.active != null
+	splash.emitting = spray.emitting
+	if splash.emitting:
+		splash.position = splash_local(s, breach.water)
 	sparks.emitting = breach.welding
 	weld_light.visible = breach.welding
 	weld_light.light_energy = 1.5 + 0.8 * sin(breach.time * 53.0)
