@@ -46,6 +46,18 @@ func test_mate_visible_whole() -> void:
 	near(_shown(1, "head").y, Deck.Walker.EYE, 0.05, "на высоте роста")
 
 
+func test_mate_not_inside_table() -> void:   # issue #156: сценарий ставил второго в голостол (0,4; −1,6)
+	ok(not main.layout.can_stand(0.4, -1.6), "место из сценария — внутри голостола")
+	var m := main.add_mate(0.4, -1.6, PI / 2.0, Crew.Role.BIOLOGIST, 0)
+	ok(main.layout.can_stand(m.x, m.z), "стоит на полу у стола: (%.2f; %.2f)" % [m.x, m.z])
+	ok(Vector2(m.x, m.z).distance_to(Vector2(0.4, -1.6)) < 0.8, "рядом с указанным местом")
+	ok(Vector2(m.x, m.z).distance_to(Deck.OBSTACLES[0][0]) > 0.9, "снаружи стола")
+	var free := main.add_mate(0.2, -2.6, 0.0, Crew.Role.ENGINEER, 1)
+	eq(Vector2(free.x, free.z), Vector2(0.2, -2.6), "свободное место не трогаем")
+	var seat := main.add_mate(0.0, Deck.SEAT_Z, 0.0, Crew.Role.SONAR, 0, true)
+	eq(seat.z, Deck.SEAT_Z, "в кресле — как есть")
+
+
 func _tris(mi: MeshInstance3D) -> int:
 	return (mi.mesh.surface_get_arrays(0)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
 
