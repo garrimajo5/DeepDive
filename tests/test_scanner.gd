@@ -55,6 +55,36 @@ func test_hold_scans_and_decays() -> void:
 	eq(said[-1], "Сканер: рядом никого ближе 80 м", "никого")
 
 
+func test_hold_keeps_target_when_nearest_changes() -> void:
+	# issue #90: стая подплыла ближе посреди удержания — прицел остаётся на сканируемом виде.
+	var s := Scanner.new()
+	s.take([_near("fan", 26.6), _near("fish", 27.5)])
+	eq(s.target["species"], "fan", "ближний — веерник")
+	for i in 5:
+		s.hold(0.1)
+		s.update(0.1)
+		s.take([_near("fish", 26.0 - i), _near("fan", 26.6)])
+	eq(s.target["species"], "fan", "прицел не перескочил на стаю")
+	for i in 11:
+		s.hold(0.1)
+		s.update(0.1)
+		s.take([_near("fish", 20.0), _near("fan", 26.6)])
+	ok(s.is_scanned("fan"), "веерник изучен")
+	ok(not s.is_scanned("fish"), "стая не изучена")
+	eq(s.target["species"], "fish", "после — следующая неизученная")
+	s.take([_near("fish", 20.0)])
+	for i in 3:
+		s.hold(0.1)
+		s.update(0.1)
+		s.take([_near("fan", 5.0), _near("fish", 20.0)])
+	eq(s.target["species"], "fish", "изученный вид ближе — прицел на стае")
+	for i in 10:
+		s.update(0.1)
+		s.take([_near("grazer", 3.0), _near("fish", 20.0)])
+	eq(s.key, "", "отпустил — прогресс спал")
+	eq(s.target["species"], "grazer", "без скана — снова ближайшая неизученная")
+
+
 func test_save_species() -> void:
 	var smp := Samples.new(func(_x: float, _z: float) -> float: return -60.0)
 	var s := Scanner.new()
