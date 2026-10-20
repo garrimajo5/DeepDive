@@ -5,10 +5,10 @@ extends EcoSystem
 ## охота на ближайшего светляка не дальше 50 м (7,6 м/с, 12 с), поймал ближе 1,6 м — рыбка съедена (EcoFish.kill),
 ## событие «catch», 5 с ест.
 ## Корабль манит: прожектор или сонар (последние 12 с) ближе 32 м, шум двигателей быстрее 3 м/с ближе 24 м. Голоднее 0,2
-## и без паузы — бросок на корабль (9,5 м/с, до 10 с) с событием «ship», «ping» или «hear». Ближе 8,5 м к кораблю — укус:
+## и без паузы — бросок на корабль (9,5 м/с, до 10 с) с событием «ship», «ping» или «hear». Ближе 8,5 м к кораблю или 1,2 м к корпусу (EcoHull) — укус:
 ## EcoLink.HIT с уроном 0,12 (что он делает с кораблём — решает корабль), хищник уходит на 60 м и 25 с не нападает.
 ## Сонар (ShipState.sonar_ping → on_ping) зовёт хищников ближе 150 м проверить звук, разряд (ShipState.zap → on_zap)
-## отпугивает тех, кто ближе радиуса разряда. Пиявники, станции чистки, вуали и укрытия стай придут со своими видами.
+## отпугивает тех, кто ближе радиуса разряда. Сквозь корпус не проходят (EcoWorld.push_out). Пиявники, станции чистки, вуали и укрытия стай придут со своими видами.
 
 const ID := "pred"
 
@@ -49,6 +49,9 @@ const BITE_COOLDOWN := 25.0
 const ZAP_RADIUS := EcoWorld.ZAP_RADIUS
 ## Потолок цели и места появления (м).
 const GOAL_CEILING := -6.0
+## Запас до корпуса корабля, м (S.pushOut(pr.p, 0.7)), и до какого зазора дотягивается укусом (hullDist < 1,2).
+const HULL_GAP := 0.7
+const BITE_REACH := 1.2
 
 ## Режим хищника (pr.state в браузере); общее EcoAgent.State — у его существа.
 enum Mode { PATROL, HUNT, EAT, INVESTIGATE, CHARGE, RETREAT, FLEE }
@@ -262,7 +265,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 		Mode.CHARGE:
 			speed = CHARGE_SPEED
 			a.goal = ship
-			if d_ship < BITE_DIST:
+			if d_ship < BITE_DIST or world.touches_ship(a.p, BITE_REACH):
 				world.hit_ship(Species.cap(world.nm(ID)), BITE_DAMAGE, a.p)
 				world.emit(ID, "bite", a.p, _text(world, "%s укусил корпус"))
 				pr.bit_at = world.time
@@ -289,6 +292,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 	var want := d.normalized() * speed if d.length_squared() > 1e-4 else d
 	a.agility = 1.6 if pr.mode == Mode.HUNT or pr.mode == Mode.CHARGE else 1.1
 	a.drive(want, dt, world.ground)
+	world.push_out(a, HULL_GAP) # корпус не пускает внутрь
 
 
 static func _catch_text(world: EcoWorld) -> Callable:
