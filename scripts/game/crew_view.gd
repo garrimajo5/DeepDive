@@ -134,7 +134,7 @@ func _dress(i: int, role: int) -> void:
 		skeletons[i].add_child(att)
 		var node: Node3D = load("res://models/%s.glb" % g).instantiate()
 		node.name = g
-		node.transform = CrewRig.gear_xform(rest, g)
+		node.transform = CrewRig.gear_xform(rest, g, looks[i])
 		_to_ship_layer(node)
 		att.add_child(node)
 		gear[i][g] = node
@@ -225,8 +225,7 @@ func apply() -> void:
 			var node: Node3D = gear[i][gn]
 			node.visible = not (own and gn in CrewRig.GEAR_OWN_HIDDEN)
 			if gn == "gear-shchitok":   # щиток поднят, на сварке опущен
-				var x0 := CrewRig.gear_xform(_rest[looks[i]], gn)
-				node.transform = x0 if m.welding() else x0 * Transform3D(Basis(Vector3.RIGHT, CrewRig.VISOR_UP), Vector3.ZERO)
+				node.transform = CrewRig.visor_xform(_rest[looks[i]], looks[i], not m.welding())
 		(patches[i].mesh.material as StandardMaterial3D).albedo_color = Crew.role_color(m.role)
 		var rest: CrewRig.Rest = _rest[looks[i]]
 		var at := {}

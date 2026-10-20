@@ -47,14 +47,38 @@ const ROLE_GEAR := [
 ]
 ## Свой игрок не видит снаряжения на голове и груди (камера в голове, грудь отрезана), пробы на поясе и планшет — видит.
 const GEAR_OWN_HIDDEN := ["gear-garnitura", "gear-shchitok", "gear-fartuk", "gear-tunika"]
-## Щиток поднят — поворот вокруг своей оси X (рад); на сварке опущен (0).
-const VISOR_UP := 105.0 * PI / 180.0
+## Подгонка жёстких деталей к телу (issue #157): по pivot фартук и туника шире и глубже торса (лямки дугами над плечами,
+## панели отстоят), поднятый щиток висит над головой. Внешность → деталь → [масштаб, сдвиг] в осях детали, м.
+## Числа подобраны по мешам стоя (зазор до тела ≈ 1–2 см, без пролезания), проверка — `test_crew_gear`.
+const GEAR_FIT := [
+	{"gear-fartuk": [Vector3(0.73, 0.89, 0.84), Vector3(0.0, 0.0, -0.01)],
+		"gear-tunika": [Vector3(0.70, 0.99, 0.87), Vector3(0.0, 0.033, 0.0)]},
+	{"gear-fartuk": [Vector3(0.78, 0.87, 0.77), Vector3(0.0, -0.047, 0.0)],
+		"gear-tunika": [Vector3(0.75, 0.93, 0.74), Vector3(0.0, 0.032, 0.01)]},
+]
+## Щиток поднят — поворот вокруг своей оси X (градусы), сдвиг к макушке и масштаб — по внешности; на сварке опущен
+## (по pivot, как на примерке MOD-016).
+const VISOR_UP := [[114.0, Vector3(0.0, -0.063, 0.097), 0.85], [88.0, Vector3(0.0, -0.044, 0.114), 0.86]]
 
 
-## Деталь снаряжения в осях своей кости: rest кости⁻¹ × сдвиг в точку крепления (A-поза модели).
-static func gear_xform(rest: Rest, gear: String) -> Transform3D:
+## Деталь снаряжения в осях своей кости: rest кости⁻¹ × сдвиг в точку крепления (A-поза модели) × подгонка
+## к телу внешности look (GEAR_FIT; look < 0 — без подгонки).
+static func gear_xform(rest: Rest, gear: String, look: int = -1) -> Transform3D:
 	var g: Array = GEAR[gear]
-	return rest.global[rest.idx(g[0])].affine_inverse() * Transform3D(Basis.IDENTITY, g[1])
+	var x := rest.global[rest.idx(g[0])].affine_inverse() * Transform3D(Basis.IDENTITY, g[1])
+	if look >= 0 and GEAR_FIT[look].has(gear):
+		var f: Array = GEAR_FIT[look][gear]
+		x = x * Transform3D(Basis.from_scale(f[0]), f[1])
+	return x
+
+
+## Щиток в осях кости головы: поднят — лежит на макушке (VISOR_UP), опущен (сварка) — по pivot.
+static func visor_xform(rest: Rest, look: int, up: bool) -> Transform3D:
+	var x := gear_xform(rest, "gear-shchitok")
+	if not up:
+		return x
+	var v: Array = VISOR_UP[look]
+	return x * Transform3D(Basis(Vector3.RIGHT, deg_to_rad(v[0])).scaled(Vector3.ONE * v[2]), v[1])
 
 
 ## Ключица тянется к цели, если рука не достаёт (руки модели короче, чем у `Crew`): не больше CLAVICLE_MAX рад.
