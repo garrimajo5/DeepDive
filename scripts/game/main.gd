@@ -32,6 +32,7 @@ var engine := EngineRoom.new()   ## машинное: вентиль сброс�
 var debug_vent := false          ## снимок: вентиль держат без пальца
 var debug_winch := false         ## снимок: кнопку у лебёдки держат без пальца
 var zap_light: OmniLight3D   ## вспышка разряда вокруг корпуса (за бортом)
+var drain_sound: AudioStreamPlayer   ## шипение тревоги, пока на корпусе присоска (Synth.latch)
 ## Прогрев шейдеров при старте (Warmup, issue #50): шторка, камера оглядывает корабль, скрытое показано на кадр.
 var warm := Warmup.new()
 var curtain: Control
@@ -70,6 +71,7 @@ var overlay: TouchOverlay
 var hint: Label            ## строка состояния на приборах (Status), по строкам экрана
 var message := Status.Message.new()
 const SAT_MSG := "Вы за штурвалом"
+const DRAIN_DB := -12.0   ## шипение присоски: js/audio.js 0,12 против 0,05 у сирены (−16 дБ)
 var env: Environment
 var qa: QaRunner           ## прогон сценария тестера, если он есть (docs/QA.md)
 
@@ -105,6 +107,11 @@ func _ready() -> void:
 	zap_light.light_energy = 0.001
 	zap_light.visible = false
 	ship.add_child(zap_light)
+	drain_sound = AudioStreamPlayer.new()
+	drain_sound.name = "Тревога присоски"
+	drain_sound.stream = Synth.latch()
+	drain_sound.volume_db = DRAIN_DB
+	add_child(drain_sound)
 	sonar_view = SonarView.new()
 	bridge.add_child(sonar_view)
 	rooms = RoomsView.new()
@@ -250,6 +257,15 @@ func _warm_frame() -> void:
 	if not warm.lamp():
 		searchlight.apply(false, 0.0)
 	_warm_drawn = true
+
+
+## Свет мигает, пока на корпусе присоска и после разряда (Vitals.lamp_k); тревога присоски шипит раз в 1,6 с.
+func _flicker() -> void:
+	var k := vitals.lamp_k(time, zap.flicker > 0.0)
+	bridge.set_lamps(k)
+	rooms.set_lamps(k)
+	searchlight.set_flicker(k)
+	BreachView._play(drain_sound, vitals.drain_left > 0.0)
 
 
 ## Показать на кадр скрытые узлы под root (запомнить, чтобы вернуть).
@@ -439,6 +455,7 @@ func step(dt: float) -> void:
 		zap_light.visible = false
 	bridge.set_zap_lever(zap.lever_deg(time), zap.ready(time))
 	_step_eco(dt)
+	_flicker()
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	bridge.set_hatch(layout.doors[0].offset())

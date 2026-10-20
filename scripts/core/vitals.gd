@@ -20,6 +20,11 @@ const HIT_COOLDOWN := 1.2
 const LOW_ENERGY := 15.0
 const LOW_HULL := 25.0
 const DRAIN_HOLD := 0.5      ## тревога о присоске держится столько секунд после последнего EcoLink.DRAIN
+## Мигание света, пока на корпусе присоска или после разряда (js/ship.js: каждый кадр с вероятностью 0,25 свет × 0,15).
+## Здесь — ровными долями по 1/6 с и детерминированно (хеш доли): не чаще 3 вспышек в секунду, без случайности в тестах.
+const FLICKER_HZ := 6.0
+const FLICKER_DIM := 0.15
+const FLICKER_CHANCE := 0.25
 
 var hull := MAX
 var energy := MAX
@@ -101,6 +106,19 @@ func drain_alarm() -> String:
 	if drain_left <= 0.0:
 		return ""
 	return "%s на корпусе пьёт энергию. Разряд — рычаг у левого борта" % (drain_by if drain_by != "" else "Существо")
+
+
+## Множитель плафонов и прожектора в момент time: 1 — ровный свет, FLICKER_DIM — провал.
+## Мигает, пока на корпусе присоска (drain_left) или extra (разряд, Zap.flicker).
+func lamp_k(time: float, extra: bool = false) -> float:
+	if drain_left <= 0.0 and not extra:
+		return 1.0
+	return flicker_k(time)
+
+
+## Мигание без условий: доля времени floor(time × FLICKER_HZ) тёмная с вероятностью FLICKER_CHANCE.
+static func flicker_k(time: float) -> float:
+	return FLICKER_DIM if HashNoise.hash2(floori(time * FLICKER_HZ), 487) < FLICKER_CHANCE else 1.0
 
 
 ## Потратить заряд; false — не хватает.

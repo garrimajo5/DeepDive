@@ -43,6 +43,31 @@ func test_drain_alarm() -> void:   # issue #131: пока тянет заряд 
 	eq(v.drain_alarm(), "", "новый спуск — без тревоги")
 
 
+func test_lamp_flicker() -> void:   # js/ship.js: пока присоска на корпусе, свет × 0,15 в четверти кадров
+	var v := Vitals.new()
+	for i in 60:
+		eq(v.lamp_k(i * 0.37), 1.0, "без присоски свет ровный")
+	v.drain("Стеклоуст", 3.2)
+	var dim := 0
+	var n := 600
+	for i in n:
+		var t := i / Vitals.FLICKER_HZ + 0.05
+		var k := v.lamp_k(t)
+		ok(k == 1.0 or k == Vitals.FLICKER_DIM, "только ровно или провал")
+		eq(v.lamp_k(t + 0.1), k, "в пределах доли 1/6 с свет не меняется")
+		if k < 1.0:
+			dim += 1
+	near(float(dim) / n, Vitals.FLICKER_CHANCE, 0.06, "провалов около четверти (%d из %d)" % [dim, n])
+	ok(Vitals.FLICKER_HZ / 2.0 <= 3.0, "не чаще 3 вспышек в секунду")
+	v.update(0.6, 0.0, 0.0, false, 1.0)
+	var flick := 0
+	for i in 60:
+		eq(v.lamp_k(i * 0.37), 1.0, "отпустил — свет ровный")
+		if v.lamp_k(i * 0.37, true) < 1.0:
+			flick += 1
+	ok(flick > 0, "после разряда (extra) тоже мигает")
+
+
 func test_hits_repair_and_destroy() -> void:
 	var v := Vitals.new()
 	var lost := [false]
@@ -110,9 +135,21 @@ func test_scene_eco_hits_and_drain() -> void:
 	ok(main.vitals.energy < e0 - 1.0, "стеклоуст тянет заряд")
 	var line := Status.join(main.status_parts())
 	ok(line.begins_with("Стеклоуст на корпусе пьёт энергию"), "тревога первой: " + line)
+	ok(main.drain_sound.playing, "шипит тревога присоски")
+	var seen := {}
+	for i in 18:   # 3 с: плафоны мостика и отсеков и прожектор мигают вместе
+		fake.send = [{"type": EcoLink.DRAIN, "by": "Стеклоуст", "units": 3.2}]
+		main.step(1.0 / Vitals.FLICKER_HZ)
+		var k: float = main.bridge.lamps[0].light_energy / BridgeView.LAMP_ENERGY
+		near(main.rooms.lamps[0].light_energy, RoomsView.LAMP_ENERGY * k, 1e-5, "отсеки вместе с мостиком")
+		near(main.searchlight.spot.light_energy, Searchlight.ENERGY * k, 1e-5, "прожектор вместе с плафонами")
+		seen[snappedf(k, 0.01)] = true
+	ok(seen.has(1.0) and seen.has(Vitals.FLICKER_DIM), "свет то горит, то проваливается: %s" % [seen.keys()])
 	main.step(0.3)
 	main.step(0.3)
 	ok(not Status.join(main.status_parts()).contains("Стеклоуст"), "отпустил — тревога погасла")
+	ok(not main.drain_sound.playing, "шипение смолкло")
+	near(main.bridge.lamps[1].light_energy, BridgeView.LAMP_ENERGY, 1e-6, "свет снова ровный")
 	fake.send = [EcoLink.hit("Серпохвост", 1.0, main.helm.pos)]
 	main.step(0.1)
 	near(main.vitals.hull, 100.0, 1e-6, "разрушен — корабль поднят с целым корпусом")

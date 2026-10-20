@@ -72,3 +72,18 @@ func test_loop_stream() -> void:
 	for i in w.data.size() / 2:
 		hi = maxi(hi, absi(w.data.decode_s16(i * 2)))
 	ok(hi <= int(32767 * Synth.PEAK) + 1 and hi > 20000, "пик %d — с запасом от полной шкалы" % hi)
+
+
+func test_latch_hiss() -> void:   # A.alarmCue('latch'): шипение 0,25 с раз в 1,6 с, верхние частоты
+	var s := Synth.latch_samples()
+	var r := Synth.RATE
+	eq(s.size(), int(round(Synth.LATCH_PERIOD * r)), "петля — период тревоги 1,6 с")
+	var tail := 0.0
+	for i in range(int(Synth.LATCH_LEN * r), s.size()):
+		tail = maxf(tail, absf(s[i]))
+	eq(tail, 0.0, "после шипения — тишина до следующего")
+	ok(_rms(s, int(0.02 * r), int(0.08 * r)) > 0.15, "в начале громко")
+	ok(_rms(s, int(0.2 * r), int(0.25 * r)) < _rms(s, int(0.02 * r), int(0.08 * r)) * 0.2, "к концу затихает")
+	ok(_freq(s, 0, int(0.15 * r)) > 2000.0, "шипение высокое (%d Гц)" % int(_freq(s, 0, int(0.15 * r))))
+	eq(Synth.latch_samples(), s, "детерминированно")
+	ok(Synth.latch() == Synth.latch(), "собирается один раз")
