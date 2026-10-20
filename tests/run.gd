@@ -30,6 +30,7 @@ class ErrorTrap:
 
 func _initialize() -> void:
 	SaveGame.default_path = ""   # не читать и не писать сохранение игрока
+	Warmup.enabled = false       # без прогрева шейдеров: сценовые тесты считают шаги с первого (test_warmup включает)
 	_run.call_deferred()
 
 

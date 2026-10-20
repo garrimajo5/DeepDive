@@ -32,10 +32,12 @@ var engine := EngineRoom.new()   ## машинное: вентиль сброс�
 var debug_vent := false          ## снимок: вентиль держат без пальца
 var debug_winch := false         ## снимок: кнопку у лебёдки держат без пальца
 var zap_light: OmniLight3D   ## вспышка разряда вокруг корпуса (за бортом)
-## Первые кадры вспышка горит почти без света: шейдеры дна и корпуса со светом от неё собираются при старте,
-## а не в момент первого разряда (issue #50: 10 к/с на разряде).
-const ZAP_WARM_STEPS := 3
-var zap_warm := ZAP_WARM_STEPS
+## Прогрев шейдеров при старте (Warmup, issue #50): шторка, камера оглядывает корабль, скрытое показано на кадр.
+var warm := Warmup.new()
+var curtain: Control
+var _warm_drawn := false            ## прошлый шаг показал взгляд прогрева
+var _warm_shown: Array[Node] = []   ## что прогрев показал на кадр — вернуть скрытым
+var _warm_mates: Array = []         ## члены экипажа на время прогрева (каждая внешность)
 var hit_flash: ColorRect
 var visor: ColorRect          ## щиток сварщика: затемнение, пока свой игрок варит (Breach.VISOR)
 var sonar_view: SonarView
@@ -97,6 +99,7 @@ func _ready() -> void:
 	zap_light.position = Vector3(0, 1.6, 8)
 	zap_light.omni_range = Zap.BASE_RADIUS
 	zap_light.light_energy = 0.001
+	zap_light.visible = false
 	ship.add_child(zap_light)
 	sonar_view = SonarView.new()
 	bridge.add_child(sonar_view)
@@ -181,8 +184,87 @@ func _ready() -> void:
 	scanner.message.connect(say)
 	_place_ship()
 	_place_camera()
+	_begin_warmup()
 	if QaRunner.pending():
 		start_qa()
+
+
+## Идёт прогрев шейдеров: экран под шторкой, сценарий тестера ждёт.
+func warming() -> bool:
+	return warm.active()
+
+
+## Шторка и члены экипажа каждой внешности на время прогрева (Warmup).
+func _begin_warmup() -> void:
+	if not warm.active():
+		return
+	var layer := CanvasLayer.new()
+	layer.name = "Шторка"
+	layer.layer = 100
+	add_child(layer)
+	var bg := ColorRect.new()
+	bg.name = "Шторка"
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0.02, 0.05, 0.08)
+	layer.add_child(bg)
+	var title := Label.new()
+	title.text = "Погружение…"
+	title.set_anchors_preset(Control.PRESET_FULL_RECT)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 40)
+	title.add_theme_color_override("font_color", Color(0.75, 0.95, 1.0))
+	bg.add_child(title)
+	curtain = bg
+	for look in CrewRig.MODELS.size():
+		var at: Vector2 = Warmup.MATE_AT[look % Warmup.MATE_AT.size()]
+		_warm_mates.append(add_mate(at.x, at.y, PI, Crew.Role.PILOT, look))
+	_warm_frame()
+
+
+## Конец шага: пока идёт прогрев — взгляд камеры, скрытые детали корабля на кадр, вспышка разряда, прожектор.
+func _warm_frame() -> void:
+	if not warm.active():
+		return
+	camera.position = Warmup.EYE
+	camera.rotation = Vector3(warm.pitch(), warm.yaw(), 0.0)
+	for root: Node in [ship, ocean, silt_view, samples_view]:
+		_warm_show(root)
+	zap_light.visible = true
+	zap_light.omni_range = Warmup.zap_radius()
+	zap_light.light_energy = 0.001
+	if not warm.lamp():
+		searchlight.apply(false, 0.0)
+	_warm_drawn = true
+
+
+## Показать на кадр скрытые узлы под root (запомнить, чтобы вернуть).
+func _warm_show(root: Node) -> void:
+	for n in root.get_children(true):
+		if (n is Node3D or n is CanvasItem) and not n.visible:
+			n.visible = true
+			_warm_shown.append(n)
+		_warm_show(n)
+
+
+## Начало шага: вернуть скрытым показанное прогревом; кадр прогрева показан — следующий взгляд.
+func _warm_restore() -> void:
+	for n in _warm_shown:
+		if is_instance_valid(n):
+			n.visible = false
+	_warm_shown.clear()
+	if not _warm_drawn:
+		return
+	_warm_drawn = false
+	if warm.advance():
+		for m in _warm_mates:
+			crew.erase(m)
+		_warm_mates.clear()
+		crew_view.set_members(crew, me)
+		curtain.get_parent().queue_free()
+		curtain = null
+		zap_light.visible = false
+		_place_camera()
 
 
 ## Запустить сценарий тестера: из user://qa/scenario.json или из текста (тесты).
@@ -216,6 +298,7 @@ func _process(dt: float) -> void:
 
 ## Один шаг игры: ввод, игрок, корабль, вода. Вынесен из _process для тестов.
 func step(dt: float) -> void:
+	_warm_restore()
 	time += dt
 	if qa:
 		qa.tick(dt)
@@ -324,7 +407,6 @@ func step(dt: float) -> void:
 	breach.end_step()
 	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP), silt.beam_k())
 	zap.update(dt)
-	zap_warm = maxi(0, zap_warm - 1)
 	if zap.flicker > 0.0:
 		hit_flash.color = Color(0.37, 0.95, 0.84, zap.flicker / Zap.FLICKER * 0.4)
 		zap_light.visible = true
@@ -332,7 +414,7 @@ func step(dt: float) -> void:
 		zap_light.light_energy = 4.0 * zap.flicker / Zap.FLICKER
 	else:
 		hit_flash.color = Color(1.0, 0.36, 0.42, vitals.flash * 0.35)
-		zap_light.visible = zap_warm > 0
+		zap_light.visible = false
 	bridge.set_zap_lever(zap.lever_deg(time), zap.ready(time))
 	_step_eco(dt)
 	for i in Reactor.Sys.size():
@@ -352,6 +434,7 @@ func step(dt: float) -> void:
 	_place_ship()
 	_place_camera()
 	_update_ui()
+	_warm_frame()
 	r.end_frame()
 
 
