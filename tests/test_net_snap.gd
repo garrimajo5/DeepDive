@@ -178,3 +178,57 @@ func test_events_bad_data_ignored() -> void:   # испорченный паке
 	NetSnap.apply_events({"b": PackedFloat32Array([1, 2]), "s": PackedFloat32Array([0, 0, 0, 1]), "n": "x"}, b, s, 0.0)
 	ok(b.active == b.all[2], "пробоина та же")
 	eq(s.clouds.size(), 1, "облако то же")
+
+
+func test_run_round_trip() -> void:   # маршрут, голосование и итог хоста — у клиента такие же
+	var run := Run.new()
+	run.begin(0.0, 0, 0, 0)
+	run.choose(1)
+	run.update(Run.place_xz("geyser").x, Run.place_xz("geyser").y)
+	run.depth = 2
+	var ops := Run.opinions(40.0, 80.0, false, false, 1)
+	var st: Dictionary = bytes_to_var(var_to_bytes(NetSnap.run_state(run, {"deep": [0, 3], "up": [2]}, 12, 0.4,
+		"голосов 2 из 3 · 12 с", ops, [], [])))
+	var my := Run.new()
+	var got := NetSnap.apply_run(st, my)
+	eq(my.route, 1, "маршрут «Тёплые трубы»")
+	eq(my.visited, ["geyser"], "пройден курильщик")
+	eq(my.seen, ["geyser"])
+	eq(my.depth, 2)
+	ok(not my.done and not my.ended)
+	eq(my.waypoint(), Run.place_xz("shell"), "следующая точка — раковина")
+	eq(got["marks"], {"deep": [0, 3], "up": [2]}, "метки голосов")
+	eq(got["secs"], 12)
+	near(got["frac"], 0.4, 1e-4)
+	eq(got["tally"], "голосов 2 из 3 · 12 с")
+	eq(got["ops"], [], "мнения — только когда решают")
+	run.update(Run.place_xz("shell").x, Run.place_xz("shell").y)
+	ok(run.done, "маршрут пройден")
+	got = NetSnap.apply_run(NetSnap.run_state(run, {}, -1, -1.0, "", ops, [], []), my)
+	ok(my.done, "решают")
+	eq(got["ops"], ops, "мнения ролей")
+	eq(got["secs"], -1, "таймера нет")
+	run.finish(600.0, 3, 2, 1, 70.0)
+	var rows := run.summary(3, 2, 1)
+	var detail := Run.detail(run.results(600.0, 3, 2, 1, 70.0))
+	got = NetSnap.apply_run(NetSnap.run_state(run, {}, -1, -1.0, "", [], rows, detail), my)
+	ok(my.ended, "наверх")
+	eq(my.score, run.score, "очки")
+	eq(got["rows"], rows, "итог на голограмме")
+	eq(got["detail"], detail, "итог на панели")
+	ok(NetSnap.bytes({"ev": NetSnap.run_state(run, {}, -1, -1.0, "", [], rows, detail)}) < NetSnap.MAX_BYTES,
+		"итог влезает в пакет")
+
+
+func test_run_bad_data_ignored() -> void:   # испорченный маршрут не ломает свой
+	var my := Run.new()
+	my.choose(2)
+	eq(NetSnap.apply_run({"ru": PackedInt32Array([0, 1])}, my), {}, "короткий — мимо")
+	eq(NetSnap.apply_run("x", my), {})
+	eq(my.route, 2, "маршрут тот же")
+	var st := NetSnap.run_state(Run.new(), {}, -1, -1.0, "", [], [], [])
+	st["ru"][0] = 99
+	st["rv"] = PackedByteArray([200, 4])
+	NetSnap.apply_run(st, my)
+	eq(my.route, -1, "чужой номер маршрута — без маршрута")
+	eq(my.visited, ["well"], "чужой номер места пропущен")

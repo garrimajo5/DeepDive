@@ -139,7 +139,8 @@ static func parts() -> Array[BridgePlan.Part]:
 				add.call("Борт у кормы", M, Vector3(0.2, w.size.y, z1 - we), Vector3(s * hw, w.position.y + w.size.y / 2.0, (we + z1) / 2.0))
 			else:
 				add.call("Борт: " + name, M, Vector3(0.2, h, len), Vector3(s * hw, h / 2.0, zc))
-		add.call("Лампа: " + name, BridgePlan.Paint.PLAFOND, Vector3(0.15, 0.03, len - 0.6), Vector3(0, h - 0.02, zc))
+		if room != Room.LAB:   # в лаборатории светильник — кольцо MOD-020 (RoomsView, Lab.RING), полоса прошла бы сквозь него
+			add.call("Лампа: " + name, BridgePlan.Paint.PLAFOND, Vector3(0.15, 0.03, len - 0.6), Vector3(0, h - 0.02, zc))
 	# переборки между отсеками (у мостика — своя кормовая стена в BridgePlan): шире из двух отсеков и выше из двух
 	for i in range(1, DOOR_Z.size()):
 		var z: float = DOOR_Z[i]
