@@ -35,6 +35,7 @@ var _noclip_return := Vector2.ZERO  ## куда вернуть игрока пр
 var brief := Briefing.Fade.new()  ## голограмма брифинга у поста «Маршрут» (ART-016)
 var vote_fade := Briefing.Fade.new()  ## голосование на голограмме (VoteHolo)
 var votes := {}                   ## голоса ролей в открытом голосовании (VoteHolo.votes)
+var ballot := Ballot.new()        ## голоса игроков у голостола (кооп): решение большинством, таймер
 var result_fade := Briefing.Fade.new()  ## итог забега на голограмме (VoteHolo.result_wanted)
 var result_rows: Array = []      ## четыре строки итога на голограмме (Run.summary)
 var journal_page := 0          ## страница журнала лаборатории: 0 — сводка, дальше карточки видов (Lab.page_lines)
@@ -440,7 +441,7 @@ func step(dt: float) -> void:
 		walker.look(overlay.look_points())
 		var choice := "" if run.ended else run.vote_nav(r.move)
 		if choice != "":
-			decide(choice)
+			ballot.cast(me.get_instance_id(), me.role, choice)   # решает _tick_vote: один у стола — сразу
 		if r.action_pressed and flyby.kind == Flyby.Kind.SURFACE:
 			flyby.stop()   # вид с борта при всплытии: кнопка — к итогу на голограмме, новый забег — следующим нажатием
 		elif r.action_pressed:
@@ -512,6 +513,7 @@ func step(dt: float) -> void:
 	vitals.hull = breach.update(dt, reactor.k(Reactor.Sys.LIFE), vitals.hull)
 	breach_view.apply()
 	_drive_mates(dt)
+	_tick_vote(dt)
 	_hands(dt, hold_valve, hold_winch, hold_scan)
 	if breach.welding and breach.active:   # свой игрок варит: резак в руке, щиток опущен
 		me.weld(breach.active.p, breach.active.n)
@@ -537,7 +539,7 @@ func step(dt: float) -> void:
 	sonar_view.show_waypoint(run.waypoint())
 	alarm_board.show_alarms(alarms_on(), time, breach.active)
 	sonar_view.show_briefing(brief.update(dt, Briefing.wanted(near_post, at_vote, run.ended)), run, helm.pos)
-	sonar_view.show_vote(vote_fade.update(dt, VoteHolo.wanted(at_vote, run.ended)), votes)
+	sonar_view.show_vote(vote_fade.update(dt, VoteHolo.wanted(at_vote, run.ended)), vote_marks())
 	sonar_view.show_result(result_fade.update(dt, VoteHolo.result_wanted(at_vote, run.ended)), result_rows,
 		camera.global_position)
 	rooms.apply(layout, reactor, airlock, engine)
@@ -640,7 +642,10 @@ func use_post(id: String) -> void:
 		"sonar":
 			ping_sonar()
 		"route":
-			if run.done:
+			if run.ended:   # итог, решённый без своего игрока
+				at_vote = true
+				vote_panel.visible = true
+			elif run.done:
 				open_vote()
 			else:
 				say(run.cycle())
@@ -845,6 +850,10 @@ func _on_destroyed() -> void:
 
 ## Корабль у начала спуска, целый и заряженный, забег с нуля (корпус разрушен или новый забег после итога).
 func _restart() -> void:
+	ballot.clear()
+	for m: Crew.Member in crew:
+		if m != me:
+			m.at_vote = false
 	if at_vote:
 		at_vote = false
 		vote_panel.visible = false
@@ -888,14 +897,18 @@ func close_vote() -> void:
 
 ## Решение экипажа: "deep" — следующий спуск, "up" — итог забега на экране.
 func decide(choice: String) -> void:
+	ballot.clear()
+	vote_panel.set_tally("")
 	if choice == "deep":
-		at_vote = false
+		for m: Crew.Member in crew:   # все у стола отходят: маршрут выбирать заново
+			m.at_vote = false
 		vote_panel.visible = false
 		say(run.go_deeper())
 		return
 	var rows := run.finish(time, samples.cargo.size(), scanner.scanned.size(), breach.count, vitals.hull)
 	result_rows = run.summary(samples.cargo.size(), scanner.scanned.size(), breach.count)
 	vote_panel.show_results(Run.detail(rows), run.score)
+	vote_panel.visible = at_vote   # решили товарищи, пока свой у другого поста: итог — у голостола
 	flyby.start(Flyby.Kind.SURFACE)   # вид с борта при всплытии, затем — итог на голограмме
 	say("Экипаж поднялся наверх: очки %d" % run.score)
 
@@ -1031,12 +1044,45 @@ func open_silt() -> void:
 
 
 ## Другие члены экипажа идут своим ходоком по своему вводу (`Member.pad`; позже — по сети). Ввод с экрана — только `me`.
+## Голосование у голостола: голоса тех, кто у стола (Ballot), решение — большинством или по таймеру.
+func _tick_vote(dt: float) -> void:
+	if not run.done or run.ended:
+		ballot.clear()
+		return
+	var ids := vote_ids()
+	var choice := ballot.update(dt, ids)
+	if ids.size() > 1:
+		vote_panel.set_tally(ballot.tally(ids.size()))
+	elif vote_panel.tally != "":
+		vote_panel.set_tally("")
+	if choice != "":
+		decide(choice)
+
+
+## Кто голосует: члены экипажа у голостола (id — get_instance_id).
+func vote_ids() -> Array:
+	var out := []
+	for m: Crew.Member in crew:
+		if m.at_vote:
+			out.append(m.get_instance_id())
+	return out
+
+
+## Метки на голограмме: у стола двое и больше — голоса игроков цветами ролей, один — мнения ролей.
+func vote_marks() -> Dictionary:
+	return ballot.marks() if vote_ids().size() > 1 else votes
+
+
 func _drive_mates(dt: float) -> void:
 	for m: Crew.Member in crew:
 		if m != me:
 			if m.pad.action:
 				m.pad.action = false
 				mate_action(m)
+			if m.at_vote and run.done and not run.ended:   # голос своей крестовиной
+				var c := ballot.nav(m.get_instance_id(), m.pad.move, true)
+				if c != "":
+					ballot.cast(m.get_instance_id(), m.role, c)
 			m.drive(dt, breach.slow(ShipLayout.room_at(m.walker.z)))
 
 
@@ -1174,6 +1220,12 @@ func debug_setup(kv: Dictionary) -> void:
 			decide("up")
 			if not kv.has("flyby"):
 				flyby.stop()   # снимок итога — с мостика: итог на голограмме над столом
+	if kv.get("vote", "") == "coop":   # двое у стола: товарищи (mate=…) голосуют, свой — «глубже», решение ждёт их
+		complete_route()
+		open_vote()
+		for m: Crew.Member in crew:
+			m.at_vote = true
+		ballot.cast(me.get_instance_id(), me.role, "deep")
 	if kv.has("journal"):
 		journal_page = clampi(int(kv["journal"]), 0, Lab.pages(scanner) - 1)
 		rooms.set_lab(Lab.contents(samples.cargo), Lab.page_lines(samples, scanner, journal_page), time)
