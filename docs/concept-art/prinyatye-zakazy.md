@@ -427,3 +427,11 @@ emission), стекло банки 64 (alpha 0,25) — `models/stellazh-tryuma.g
 **Принято 21.10.2026** (PR #291, ветка `art/ART-035-znachok`): `icons/znachok-512.png`, `-192.png`, адаптивные слои
 `znachok-perednij-432.png` / `znachok-fon-432.png`, лист `znachok-proverka.png`; решения — `znachok.md`. Подключены
 в `export_presets.cfg` (`launcher_icons/*`) и `config/icon`; заглушка `icon.svg` удалена.
+
+## ART-036 «Корпус разрушен» — принято
+- Исходник: ART-002 (`mostik.md`), ART-022 (`mertvyy-mostik.jpg`), ART-025 (`tablo-trevog.md`), ART-034 (`zastavka.md`).
+
+**Принято 21.10.2026** (PR #294, ветка `art/ART-036-korpus-razrushen`): кадр `korpus-razrushen.jpg`, лист слоёв
+`korpus-razrushen-sloi.png`, шаги `korpus-razrushen-shagi.png`, рабочая текстура `korpus-razrushen-treshchiny.png`
+(1024×512); решения — `korpus-razrushen.md`: шторка 3,5 с поверх живой сцены, трещины сверху, виньетка, янтарный
+заголовок, `_restart` под сплошной шторкой в конце. Встройка — задача ROADMAP потока А.
