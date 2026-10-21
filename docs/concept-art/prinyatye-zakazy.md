@@ -343,3 +343,10 @@ emission), стекло банки 64 (alpha 0,25) — `models/stellazh-tryuma.g
 размещения `tablo-trevog-list.png`; решения — `tablo-trevog.md`: блок 7,2 × 0,25 × 0,08 м над носовым окном
 (y 2,55…2,80, перекрытие 7,9 %), пять полей в строку, погашено / горит / мигает (углы, 1 Гц), подсказка — рамка
 у поста главной тревоги. Меш — в коде, атлас надписей — MOD-019 (#198). Из кресла пилота табло вне прямого взгляда.
+
+## ART-026 Иконки строк итога — принято
+- Исходник: ART-016 (`golostol-brifing.md`, `golostol-sostoyaniya.png`), иконки мест ART-005 (`karta-otmeli.md`).
+
+**Принято 21.10.2026** (PR #220, ветка `art/ART-026-ikonki-itoga`): `itog-obrazcy.png`, `itog-vidy.png`,
+`itog-mesta.png`, `itog-proboiny.png` (256² RGBA, одноцветные #67DDEB), лист `itog-ikonki-list.png`; решения —
+`itog-ikonki.md`: слева от строк итога на голограмме, в игре — `textures/summary/<ключ>.png`, статичны.
