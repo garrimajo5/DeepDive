@@ -435,3 +435,11 @@ emission), стекло банки 64 (alpha 0,25) — `models/stellazh-tryuma.g
 `korpus-razrushen-sloi.png`, шаги `korpus-razrushen-shagi.png`, рабочая текстура `korpus-razrushen-treshchiny.png`
 (1024×512); решения — `korpus-razrushen.md`: шторка 3,5 с поверх живой сцены, трещины сверху, виньетка, янтарный
 заголовок, `_restart` под сплошной шторкой в конце. Встройка — задача ROADMAP потока А.
+
+## ART-037 Главное меню, пауза и настройки — принято
+- Исходник: ART-034 (`zastavka.md`), ART-028 (`sbor-ekipazha.md`), ART-026 (`itog-ikonki.md`).
+
+**Принято 21.10.2026** (PR #302, ветка `art/ART-037-menyu`): `menyu.png`, `menyu-pauza.png`, `menyu-nastrojki.png`,
+лист `menyu-sostoyaniya.png`; решения — `menyu.md`: меню на фоне заставки, пауза и настройки поверх затемнённой
+сцены, подтверждения с выделенным «Нет», «Меню забега» в коопе (у гостя «Покинуть экипаж»). Встройка — задача
+ROADMAP потока А.
