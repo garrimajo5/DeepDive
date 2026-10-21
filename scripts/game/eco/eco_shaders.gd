@@ -3,8 +3,8 @@ extends RefCounted
 ## Общие шейдеры живого мира (issue #279). Рендерер Compatibility на каждый новый шейдер собирает ~5 программ — это
 ## секунды прогрева на телефоне при первом запуске. Поэтому одинаковый код — один ресурс `Shader` (`shader(code)`),
 ## а похожие материалы видов и мест — один общий код с числами в uniform: камень с обрастанием (`STONE`), мох
-## пятнами (`MOSS`), прозрачное без света (`MIST`), светлая точка лицом к камере со сложением цвета (`SPOT`), растения
-## со светом (`PLANT`). Новый материал мира — сначала сюда.
+## пятнами (`MOSS`), прозрачное без света (`MIST`), светлая точка лицом к камере со сложением цвета (`SPOT`, облако
+## планктона — `cloud`), растения со светом (`PLANT`). Новый материал мира — сначала сюда.
 ## Сколько шейдеров у мира — `tools/shaders.gd`, потолок — `tests/test_eco_shaders.gd`.
 
 ## Камень с обрастанием #67DDEB в альфе цвета вершины: раковина древних, кости левиафана, край отмели, порода
@@ -59,13 +59,45 @@ shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
 uniform float fade_far = 60.0;
 uniform float halo = 0.0;
+// cloud — облако планктона (PlanktonView): место клетки — дом + дрейф облака + покачивание по времени мира now,
+// INSTANCE_CUSTOM = (фаза облака, номер клетки, время вспышки); клетки выталкиваются из коробки корпуса корабля.
+uniform bool cloud = false;
+uniform float now = 0.0;
+uniform vec3 ship_pos = vec3(0.0, 1e6, 0.0);
+uniform float ship_yaw = 0.0;
+uniform vec3 box_min = vec3(0.0);
+uniform vec3 box_max = vec3(0.0);
 varying vec3 tint;
 void vertex() {
-	float far = length((VIEW_MATRIX * vec4(MODEL_MATRIX[3].xyz, 1.0)).xyz);
-	tint = COLOR.rgb * clamp(1.0 - far / fade_far, 0.0, 1.0);
+	vec3 o = MODEL_MATRIX[3].xyz;
+	vec3 col = COLOR.rgb;
+	if (cloud) {
+		float ph = INSTANCE_CUSTOM.x;
+		float k = INSTANCE_CUSTOM.y;
+		float w = now * 0.3 + k;
+		o += vec3(sin(now * 0.03 + ph) * 6.0, sin(now * 0.17 + ph), cos(now * 0.025 + ph) * 6.0);
+		o += vec3(sin(w) * 0.4, sin(w * 1.3) * 0.25, cos(w * 0.9) * 0.4);
+		vec3 d = o - ship_pos;
+		float cy = cos(ship_yaw), sy = sin(ship_yaw);
+		vec3 l = vec3(d.x * cy - d.z * sy, d.y, d.x * sy + d.z * cy);
+		vec3 lo = l - box_min, hi = box_max - l;
+		if (min(min(lo.x, hi.x), min(min(lo.y, hi.y), min(lo.z, hi.z))) > 0.0) {
+			// внутри корпуса — к ближней стенке (S.pushOut)
+			vec3 pen = min(lo, hi);
+			if (pen.x <= pen.y && pen.x <= pen.z) l.x = lo.x < hi.x ? box_min.x - 0.2 : box_max.x + 0.2;
+			else if (pen.y <= pen.z) l.y = lo.y < hi.y ? box_min.y - 0.2 : box_max.y + 0.2;
+			else l.z = lo.z < hi.z ? box_min.z - 0.2 : box_max.z + 0.2;
+			o = ship_pos + vec3(l.x * cy + l.z * sy, l.y, -l.x * sy + l.z * cy);
+		}
+		float g = clamp(1.0 - (now - INSTANCE_CUSTOM.z) * 0.45, 0.0, 1.0);
+		float b = 0.05 + 0.03 * sin(now * 1.1 + k * 1.7);
+		col = vec3(b * 0.4 + g * 0.35, b + g, b * 1.1 + g * 0.85);
+	}
+	float far = length((VIEW_MATRIX * vec4(o, 1.0)).xyz);
+	tint = col * clamp(1.0 - far / fade_far, 0.0, 1.0);
 	float s = length(MODEL_MATRIX[0].xyz);
 	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * s, INV_VIEW_MATRIX[1] * s, INV_VIEW_MATRIX[2] * s,
-		MODEL_MATRIX[3]);
+		vec4(o, 1.0));
 }
 void fragment() {
 	float d = clamp(length(UV - vec2(0.5)) * 2.0, 0.0, 1.0);
