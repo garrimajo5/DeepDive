@@ -68,6 +68,9 @@ var ray_view: RayView
 ## Присоски: по три на спине ледокрыла, перебираются на корпус, тормозят корабль, отпугивают стеклоуста.
 var remoras: EcoRemora
 var remora_view: RemoraView
+## Мерцающий планктон: четыре светящихся облака, вспыхивают от быстрого — след корабля выдаёт его серпохвосту.
+var plankton: EcoPlankton
+var plankton_view: PlanktonView
 ## Фонарные вуали: две колонии медуз дрейфуют над рифом, жалят светляков, под куполом серпохвост теряет корабль.
 var veils: EcoVeil
 var veil_view: VeilView
@@ -118,6 +121,7 @@ var ground: Callable:
 		_rebuild_bones()
 		_rebuild_well()
 		_rebuild_drop()
+		_rebuild_plankton()
 
 
 func _init() -> void:
@@ -173,6 +177,8 @@ func _init() -> void:
 	eels.remoras = remoras
 	remora_view = RemoraView.new(remoras)
 	add_child(remora_view)
+	plankton = world.add(EcoPlankton.new(preds, rays)) as EcoPlankton
+	preds.plankton = plankton
 	vent = world.add(EcoVent.new()) as EcoVent
 	flower = world.add(EcoFlower.new()) as EcoFlower
 	shell = world.add(EcoShell.new()) as EcoShell
@@ -197,6 +203,7 @@ func _init() -> void:
 	_rebuild_bones()
 	_rebuild_well()
 	_rebuild_drop()
+	_rebuild_plankton()
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -372,6 +379,15 @@ func _rebuild_drop() -> void:
 	add_child(drop_view)
 
 
+## Планктон по дну мира (облака встают на 10 м над дном при сбросе мира).
+func _rebuild_plankton() -> void:
+	if plankton_view:
+		remove_child(plankton_view)
+		plankton_view.free()
+	plankton_view = PlanktonView.new(plankton)
+	add_child(plankton_view)
+
+
 ## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
 func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	world.ship = ship
@@ -402,4 +418,5 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	remora_view.sync(world.time)
 	veil_view.sync(world.time, ship.pos)
 	grot_view.sync(world.time, ship.pos)
+	plankton_view.sync(world.time, ship.pos, ship.yaw)
 	return world.take_link()
