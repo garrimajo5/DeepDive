@@ -221,6 +221,28 @@ func test_worst_frame_names_step() -> void:   # issue #217: в логе видн
 	t += 20000
 	r._measure(t)
 	eq(roundi(r.worst_ms), 700, "худший кадр 700 мс")
-	ok(r.worst_at.begins_with("шаг 2 press, отрисовка "), "худший кадр отнесён к шагу press: " + r.worst_at)
+	ok(r.worst_at.begins_with("шаг 2 press, код "), "худший кадр отнесён к шагу press: " + r.worst_at)
+	ok(r.worst_at.contains(" мс, отрисовка "), "и код, и отрисовка: " + r.worst_at)
 	ok(r.worst_text().contains("худший кадр 700 мс (шаг 2 press"), "и попал в строку состояния")
+	r.free()
+
+
+func test_worst_note_code_and_gpu() -> void:   # issue #217, #281: отрисовка мала — код это или видеокарта
+	eq(QaRunner.worst_note("шаг 54 press", 7.2, 5.4, 0.0), "шаг 54 press, код 5 мс, отрисовка 7 мс", "без замера видеокарты")
+	eq(QaRunner.worst_note("шаг 54 press", 7.2, 5.4, 731.0), "шаг 54 press, код 5 мс, отрисовка 7 мс, видеокарта 731 мс",
+		"видеокарта — когда драйвер замеряет")
+	eq(QaRunner.worst_note("", 3.0), "отрисовка 3 мс", "без шага и кода — как раньше")
+
+
+func test_fps_few_frames_without_shot() -> void:   # issue #281: 0,3 с после снимка — 2 кадра, а не среднее движка со снимком
+	var r := QaRunner.new()
+	var t := 1000000
+	r._skip_frame = true
+	r._measure(t)
+	t += 170000
+	r._measure(t)
+	t += 170000
+	r._measure(t)
+	eq(r.frames, 2, "два своих кадра")
+	eq(r.fps(), 6, "6 к/с по своим кадрам по 170 мс")
 	r.free()
