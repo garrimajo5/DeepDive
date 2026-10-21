@@ -18,6 +18,10 @@ var _look_at := Vector2.ZERO
 ## Худший кадр (настоящее время между шагами, мс) с прошлого скриншота: средние кадр/с прячут разовый провал
 ## (issue #50 — сборка шейдеров при первом показе). Кадр сразу после скриншота не считаем — его тормозит сам снимок.
 var worst_ms := 0.0
+## Где был худший кадр (issue #217): шаг сценария и сколько из кадра заняла отрисовка на процессоре (сборка шейдеров
+## и выгрузка мешей идут здесь) — отличить её от тяжёлого кода (отрисовка мала, кадр долгий).
+var worst_at := ""
+var _step_label := ""
 var _last_us := 0
 var _skip_frame := true
 ## Кадры и их время (мкс) с прошлого скриншота — без кадра снимка и прогрева (issue #169): среднее движка
@@ -43,6 +47,7 @@ func start(m: Main, text: String = "") -> void:
 		text = FileAccess.get_file_as_string(SCENARIO)
 		DirAccess.rename_absolute(SCENARIO, DIR + "/scenario.last.json")
 	script_q = QaScript.parse(text)
+	RenderingServer.viewport_set_measure_render_time(main.get_viewport().get_viewport_rid(), true)   # для worst_at
 	_warm_from_us = Time.get_ticks_usec()
 	DirAccess.make_dir_recursive_absolute(OUT)
 	for f in DirAccess.get_files_at(OUT):
@@ -131,6 +136,7 @@ func tick(dt: float) -> void:
 				main.get_tree().quit()
 			"done":
 				_finish()
+	_step_label = step_label(script_q)   # этот кадр рисуется на этом шаге — к нему и отнесём его время
 	if drain_left > 0.0:   # как присосавшийся стеклоуст: 3,2 ед./с (js/creatures.js), пока не истечёт шаг
 		drain_left -= dt
 		main.on_eco_event(EcoLink.drain("Стеклоуст", 3.2))
@@ -139,7 +145,10 @@ func tick(dt: float) -> void:
 ## Учесть кадр, начавшийся в момент now_us (мкс).
 func _measure(now_us: int) -> void:
 	if not _skip_frame and _last_us > 0:
-		worst_ms = maxf(worst_ms, (now_us - _last_us) / 1000.0)
+		var ms := (now_us - _last_us) / 1000.0
+		if ms > worst_ms:
+			worst_ms = ms
+			worst_at = worst_note(_step_label, render_ms())
 		frames += 1
 		frames_us += now_us - _last_us
 	_skip_frame = false
@@ -175,8 +184,35 @@ func state() -> String:
 	var h := main.helm
 	return "t %.1f с · %s · свет %s · глубина %.1f м · ход %.2f м/с · курс %d° · корабль (%.1f, %.1f, %.1f) · игрок (%.2f, %.2f) · реактор %s · %d кадр/с" % [
 		time, "за штурвалом" if main.pilot.seated else ("у пульта энергии" if main.at_power else "на ногах"), "вкл" if main.light_on else "выкл", h.depth(), h.speed, Status.course_deg(h.yaw),
-		h.pos.x, h.pos.y, h.pos.z, main.walker.x, main.walker.z, "%s %d°%s" % [str(main.reactor.share), roundi(main.reactor.heat), " сброс" if main.reactor.scram > 0.0 else ""], fps()] + (" · худший кадр %d мс" % roundi(worst_ms) if worst_ms > 0.0 else "") + ("" if main.breach.status().is_empty() else " · " + main.breach.status()) \
+		h.pos.x, h.pos.y, h.pos.z, main.walker.x, main.walker.z, "%s %d°%s" % [str(main.reactor.share), roundi(main.reactor.heat), " сброс" if main.reactor.scram > 0.0 else ""], fps()] + worst_text() + ("" if main.breach.status().is_empty() else " · " + main.breach.status()) \
 		+ _run_state()
+
+
+## Худший кадр с прошлого скриншота для строки состояния: « · худший кадр 726 мс (шаг 53 press, логика 9 мс)».
+func worst_text() -> String:
+	return " · худший кадр %d мс (%s)" % [roundi(worst_ms), worst_at] if worst_ms > 0.0 else ""
+
+
+## Подпись к худшему кадру: шаг и время отрисовки на процессоре, мс.
+static func worst_note(step: String, draw_ms: float) -> String:
+	var d := "отрисовка %d мс" % roundi(draw_ms)
+	return step + ", " + d if not step.is_empty() else d
+
+
+## Отрисовка последнего кадра на процессоре, мс (замер включает `start`).
+func render_ms() -> float:
+	if main == null or not main.is_inside_tree():
+		return 0.0
+	return RenderingServer.viewport_get_measured_render_time_cpu(main.get_viewport().get_viewport_rid()) \
+		+ RenderingServer.get_frame_setup_time_cpu()
+
+
+## Шаг сценария, который сейчас идёт: «шаг 53 press».
+static func step_label(q: QaScript) -> String:
+	if q == null or q.steps.is_empty():
+		return ""
+	var i := mini(q.index, q.steps.size() - 1)
+	return "шаг %d %s" % [i + 1, str((q.steps[i] as Dictionary).get("do", "?"))]
 
 
 ## Забег в логе: спуск, маршрут, решение у голостола.
@@ -203,6 +239,7 @@ func _shot(name: String) -> void:
 	shots.append(name)
 	_log("скриншот %s | %s" % [name, state()])
 	worst_ms = 0.0
+	worst_at = ""
 	frames = 0
 	frames_us = 0
 	_skip_frame = true
