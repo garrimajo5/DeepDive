@@ -148,7 +148,7 @@ func _measure(now_us: int) -> void:
 		var ms := (now_us - _last_us) / 1000.0
 		if ms > worst_ms:
 			worst_ms = ms
-			worst_at = worst_note(_step_label, render_ms())
+			worst_at = worst_note(_step_label, render_ms(), code_ms(), gpu_ms())
 		frames += 1
 		frames_us += now_us - _last_us
 	_skip_frame = false
@@ -172,9 +172,10 @@ func _point(what: String, dir: Vector2) -> Vector2:
 	return main.get_viewport().get_visible_rect().get_center()
 
 
-## Средние кадр/с с прошлого скриншота по своим замерам; пока кадров мало — среднее движка.
+## Средние кадр/с с прошлого скриншота по своим замерам. Среднее движка — только когда своих кадров нет: оно за секунду
+## считает и сам снимок (issue #281: «14b-hold-shelves» через 0,3 с после снимка — 4 к/с при худшем кадре 172 мс).
 func fps() -> int:
-	if frames < 5 or frames_us <= 0:
+	if frames < 1 or frames_us <= 0:
 		return roundi(Engine.get_frames_per_second())
 	return roundi(frames * 1000000.0 / frames_us)
 
@@ -193,18 +194,36 @@ func worst_text() -> String:
 	return " · худший кадр %d мс (%s)" % [roundi(worst_ms), worst_at] if worst_ms > 0.0 else ""
 
 
-## Подпись к худшему кадру: шаг и время отрисовки на процессоре, мс.
-static func worst_note(step: String, draw_ms: float) -> String:
+## Подпись к худшему кадру: шаг, код (шаг игры `Main.step` с живым миром), отрисовка на процессоре и, если драйвер умеет
+## замерять, на видеокарте, мс (issue #217, #281). Код и отрисовка малы, а кадр долгий — ждали видеокарту или драйвер.
+static func worst_note(step: String, draw_ms: float, code: float = -1.0, gpu: float = 0.0) -> String:
 	var d := "отрисовка %d мс" % roundi(draw_ms)
+	if code >= 0.0:
+		d = "код %d мс, %s" % [roundi(code), d]
+	if gpu > 0.0:
+		d += ", видеокарта %d мс" % roundi(gpu)
 	return step + ", " + d if not step.is_empty() else d
 
 
-## Отрисовка последнего кадра на процессоре, мс (замер включает `start`).
+## Отрисовка прошлого кадра на процессоре, мс.
 func render_ms() -> float:
 	if main == null or not main.is_inside_tree():
 		return 0.0
 	return RenderingServer.viewport_get_measured_render_time_cpu(main.get_viewport().get_viewport_rid()) \
 		+ RenderingServer.get_frame_setup_time_cpu()
+
+
+## Код прошлого кадра: шаг игры `Main.step` (корабль, живой мир, виды), мс. Performance.TIME_PROCESS не годится —
+## в него входит и отрисовка, и он обновляется не каждый кадр.
+func code_ms() -> float:
+	return main.step_ms if main != null else 0.0
+
+
+## Отрисовка прошлого кадра на видеокарте, мс (0 — драйвер не замеряет).
+func gpu_ms() -> float:
+	if main == null or not main.is_inside_tree():
+		return 0.0
+	return RenderingServer.viewport_get_measured_render_time_gpu(main.get_viewport().get_viewport_rid())
 
 
 ## Шаг сценария, который сейчас идёт: «шаг 53 press».
