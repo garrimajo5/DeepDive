@@ -114,9 +114,10 @@ func _ready() -> void:
 	zap_light.light_color = Color("5ef2d6")
 	zap_light.light_cull_mask = OceanView.LAYER_WORLD
 	zap_light.position = Vector3(0, 1.6, 8)
-	zap_light.omni_range = Zap.BASE_RADIUS
-	zap_light.light_energy = 0.001
-	zap_light.visible = false
+	# вспышка всегда в сцене на наибольший радиус и почти без энергии: набор огней на предметах отмели не меняется
+	# при разряде — шейдеры не собираются заново (issue #159)
+	zap_light.omni_range = Warmup.zap_radius()
+	zap_light.light_energy = Searchlight.DARK
 	ship.add_child(zap_light)
 	drain_sound = AudioStreamPlayer.new()
 	drain_sound.name = "Тревога присоски"
@@ -297,11 +298,6 @@ func _warm_frame() -> void:
 			camera.make_current()
 	for root: Node in [ship, ocean, silt_view, samples_view, vote_panel.get_parent()]:
 		_warm_show(root)
-	zap_light.visible = true
-	zap_light.omni_range = Warmup.zap_radius()
-	zap_light.light_energy = 0.001
-	if not warm.lamp():
-		searchlight.apply(false, 0.0)
 	_warm_drawn = true
 
 
@@ -348,7 +344,6 @@ func _warm_restore() -> void:
 		_warm_particles(false)
 		curtain.get_parent().queue_free()
 		curtain = null
-		zap_light.visible = false
 		_place_camera()
 
 
@@ -514,12 +509,10 @@ func step(dt: float) -> void:
 	zap.update(dt)
 	if zap.flicker > 0.0:
 		hit_flash.color = Color(0.37, 0.95, 0.84, zap.flicker / Zap.FLICKER * 0.4)
-		zap_light.visible = true
-		zap_light.omni_range = zap.radius
-		zap_light.light_energy = 4.0 * zap.flicker / Zap.FLICKER
+		zap_light.light_energy = Zap.flash_energy(zap.flicker)
 	else:
 		hit_flash.color = Color(1.0, 0.36, 0.42, vitals.flash * 0.35)
-		zap_light.visible = false
+		zap_light.light_energy = Searchlight.DARK
 	bridge.set_zap_lever(zap.lever_deg(time), zap.ready(time))
 	_step_eco(dt)
 	_flicker(dt)
