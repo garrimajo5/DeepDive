@@ -134,6 +134,12 @@ func test_scene_result_on_table() -> void:
 	eq(names, ["Образцы", "Виды", "Места", "Пробоины"], "четыре строки ART-016")
 	eq(vals[2], "3", "пройдено три места")
 	eq(vals[3], "1", "одна пробоина")
+	for r: Array in sv.vote.board_rows:   # иконки ART-026 слева от строк, текстура по названию
+		var ic: Sprite3D = r[2]
+		ok(ic.is_visible_in_tree() and ic.texture != null, "иконка у строки «%s»" % (r[0] as Label3D).text)
+		eq(ic.texture.resource_path, VoteHolo.summary_icon((r[0] as Label3D).text), "своя иконка")
+		ok(ic.position.x < (r[0] as Label3D).position.x, "иконка левее названия")
+		near(ic.modulate.a, 1.0, 1e-5, "итог открыт — иконка горит")
 	# подложка смотрит на глаза игрока у поста «Маршрут»
 	var eye := board.to_local(main.camera.global_position)
 	ok(eye.z > 0.0 and absf(eye.x) < 0.05, "лицом к игроку: %s" % eye)
@@ -146,6 +152,22 @@ func test_scene_result_on_table() -> void:
 	eq(sv.mat.get_shader_parameter("dim"), 0.0)
 	main.queue_free()
 	await frames(1)
+
+
+## ART-026: иконки строк итога — файлы в textures/summary, у каждой строки Run.summary своя, все в левом поле подложки.
+func test_summary_icons() -> void:
+	var run := Run.new()
+	var seen := {}
+	for r: Array in run.summary(0, 0, 0):
+		var path := VoteHolo.summary_icon(r[0])
+		ok(ResourceLoader.exists(path), "иконка строки «%s»: %s" % [r[0], path])
+		seen[path] = true
+	eq(seen.size(), 4, "четыре разные иконки")
+	eq(VoteHolo.summary_icon("Время под водой"), "", "у строк панели иконок нет")
+	var left := -VoteHolo.BOARD_W * 0.5
+	near(VoteHolo.icon_x() - VoteHolo.ICON_SIZE * 0.5 - left, VoteHolo.BOARD_PAD, 1e-6, "иконка у левого поля")
+	ok(VoteHolo.name_x() > VoteHolo.icon_x() + VoteHolo.ICON_SIZE * 0.5, "название правее иконки")
+	ok(VoteHolo.ICON_SIZE < VoteHolo.ROW_STEP, "иконка не залезает на соседние строки")
 
 
 func test_look_up_to_fields() -> void:

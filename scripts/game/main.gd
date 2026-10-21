@@ -466,6 +466,8 @@ func step(dt: float) -> void:
 	for p in posts:
 		if p.id.begins_with("door"):
 			p.label = "Закрыть люк" if layout.doors[int(p.id.substr(4))].open else "Открыть люк"
+		elif Crew.BUSY.has(p.id):   # пост одного человека: занят другим — так и пишем в строке
+			p.label = Crew.BUSY[p.id] if Crew.holder(crew, me, p.id) else POST_FREE[p.id]
 		elif p.id == "airlock":
 			p.label = airlock.label()
 		elif p.id == "winch":
@@ -535,6 +537,7 @@ func step(dt: float) -> void:
 	message.update(dt)
 	me.back = CrewView.own_back(walker.pitch, me.holding())   # взгляд вниз — фигура дальше позади глаза, видны ступни (#108)
 	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt)
+	me.post = "helm" if pilot.seated else "energy" if at_power else ""
 	me.ease_lean(dt)
 	crew_view.pitch = walker.pitch
 	crew_view.apply()
@@ -566,6 +569,8 @@ static func hint_backing() -> StyleBoxFlat:
 ## Короткая подпись на кнопке действия у поста.
 const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер", "sonar": "Сонар", "zap": "Разряд", "airlock": "Шлюз", "winch": "Лебёдка",
 	"valve": "Вентиль", "scram": "Сброс", "breach": "Сварка", "journal": "Журнал", "route": "Маршрут"}
+## Подписи постов одного человека (Crew.BUSY), когда они свободны, — как в Deck.posts().
+const POST_FREE := {"helm": "Сесть за штурвал", "energy": "Пульт энергии"}
 ## Где встать у пульта энергии (у поста «energy») и куда смотреть, рад: ниже — ползунки и рука на выбранном.
 const POWER_STAND := Vector2(-4.05, -2.0)
 const POWER_PITCH := -0.8
@@ -608,6 +613,10 @@ func _hands(dt: float, valve: bool, winch: bool, scan: bool) -> void:
 
 ## Кнопка действия у поста.
 func use_post(id: String) -> void:
+	var other := Crew.holder(crew, me, id)
+	if other:   # пост держит другой член экипажа
+		say(Crew.busy_text(id, other))
+		return
 	if id in ["sonar", "zap", "scram", "route"]:
 		press_post = id
 		press_t = CrewHands.PRESS
@@ -949,6 +958,8 @@ func _update_ui() -> void:
 		var label := ""
 		if post:
 			label = POST_BUTTON.get(post.id, "Люк" if post.id.begins_with("door") else "Колба" if post.id.begins_with("flask") else "")
+			if Crew.holder(crew, me, post.id):
+				label = "Занято"
 		overlay.set_action_label(label)
 	var font := hint.get_theme_font("font")
 	var fs := hint.get_theme_font_size("font_size")
@@ -1017,6 +1028,7 @@ func add_mate(x: float, z: float, yaw: float, role: int, look: int, seated: bool
 		x = p.x
 		z = p.y
 	mate.follow(x, z, yaw, seated, 0.0, 0.1)
+	mate.post = "helm" if seated else ""
 	crew.append(mate)
 	crew_view.set_members(crew, me)
 	crew_view.apply()
