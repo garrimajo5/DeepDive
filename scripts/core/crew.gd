@@ -154,11 +154,13 @@ class Pad:
 	var move := Vector2.ZERO   ## крестовина: y — вперёд, x — вправо (как TouchRouter.move)
 	var look := Vector2.ZERO   ## свайп за кадр в «точках» экрана; съедается шагом
 	var left := INF            ## сколько секунд ещё держать move (сценарий); INF — пока не сменят
+	var action := false        ## кнопка действия нажата в этом кадре; съедается шагом (`Main._drive_mates`)
 
 	func clear() -> void:
 		move = Vector2.ZERO
 		look = Vector2.ZERO
 		left = INF
+		action = false
 
 
 ## Член экипажа: место (ступни, оси корабля), курс, поза и фаза шага.
@@ -170,7 +172,15 @@ class Member:
 	var x := 0.0
 	var z := 0.0
 	var yaw := 0.0
-	var seated := false
+	## Свои посты (основа для сети): за штурвалом — `pilot.seated` (он же `seated`), у пульта энергии, у голостола.
+	var pilot := Deck.Pilot.new()
+	var seated: bool:
+		get:
+			return pilot.seated
+		set(v):
+			pilot.seated = v
+	var at_power := false  ## у пульта энергии: крестовина правит доли
+	var at_vote := false   ## у голостола решает «глубже или наверх» (или смотрит итог)
 	var post := ""  ## пост, который держит (Crew.BUSY): "helm" за штурвалом, "energy" у пульта; "" — никакой
 	var wheel_turn := 0.0
 	var weld_at := Vector3.INF  ## точка сварки (пробоина, оси корабля) — правая рука с резаком к ней; INF — не варит
@@ -217,12 +227,33 @@ class Member:
 		_last = Vector2.INF
 		follow(px, pz, pyaw, is_seated, wheel_turn, 0.1)
 
+	## Занят постом: за штурвалом, у пульта или у голостола — крестовина не ведёт ходока.
+	func busy() -> bool:
+		return seated or at_power or at_vote
+
+	## Пост, который держит один человек (Crew.BUSY), — по своим флагам.
+	func sync_post() -> void:
+		post = "helm" if seated else "energy" if at_power else ""
+
+	## Сесть за штурвал / встать за креслом (свой ходок).
+	func sit() -> void:
+		pilot.sit(walker)
+		follow(walker.x, walker.z, walker.yaw, true, wheel_turn, 0.1)
+		sync_post()
+
+	func stand() -> void:
+		pilot.stand(walker)
+		_last = Vector2.INF
+		follow(walker.x, walker.z, walker.yaw, false, wheel_turn, 0.1)
+		sync_post()
+
 	## Шаг по своему вводу (`pad`): свайп поворачивает, крестовина ведёт ходока (стоя), фигура идёт за ним.
-	## speed_k — множитель шага (вода в отсеке). Сидящий не ходит.
+	## speed_k — множитель шага (вода в отсеке). Занятый постом не ходит.
 	func drive(dt: float, speed_k: float = 1.0) -> void:
 		walker.look(pad.look)
 		pad.look = Vector2.ZERO
-		if seated:
+		if busy():
+			sync_post()
 			return
 		walker.speed_k = speed_k
 		walker.walk(pad.move, dt)

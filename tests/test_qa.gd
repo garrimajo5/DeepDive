@@ -141,6 +141,12 @@ func test_mate_step() -> void:
 	eq(q3.advance(0.1)[0].slice(7), [0.0, 1.0, 1.5], "идёт своим вводом: крестовина и секунды")
 
 
+func test_act_step() -> void:   # товарищ жмёт свою кнопку действия
+	var q := QaScript.parse('[{"do": "act"}]')
+	eq(q.errors.size(), 0, "шаг act известен")
+	eq(q.advance(0.1)[0], ["act"], "команда сцене")
+
+
 func test_silt_step() -> void:
 	var q := QaScript.parse('[{"do": "silt"}, {"do": "silt", "on": false}]')
 	eq(q.errors.size(), 0, "шаг silt известен")
