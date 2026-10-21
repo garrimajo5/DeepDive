@@ -1,6 +1,7 @@
 extends TestCase
-## Каменный цветок (js/world.js, место 1 карты отмели): место с карты, коралл 28 м стоит на дне, крона не задевает
-## логово стеклоуста и огнецвет, ветвление как в браузере, кончики мерцают, меш — один вызов отрисовки, грани наружу.
+## Каменный цветок (место 1 карты отмели, концепт ART-027): место с карты, коралл 28 м стоит на дне, крона Ø 26 м
+## не задевает логово стеклоуста и огнецвет, три ветви × четыре вилки = 48 кончиков, середина кроны выше краёв,
+## кончики мерцают волной снизу вверх (6 с, 15…100 %), цоколь твёрдый, меш — один вызов отрисовки, грани наружу.
 
 const FLAT := -40.0
 
@@ -36,34 +37,66 @@ func test_giant_on_ground() -> void:
 	var trunk := fl.branches[0]
 	eq(trunk.depth, 0, "первая ветвь — ствол")
 	ok(trunk.p0.y < y0, "ствол уходит в дно")
-	ok(trunk.r0 > 1.2 and trunk.r0 < 2.5, "ствол толщиной около 3,4 м: r = %f" % trunk.r0)
+	near(trunk.r0 * 2.0, 3.5, 1e-4, "ствол у дна Ø 3,5 м")
+	ok(trunk.p1.y - y0 > 6.0 and trunk.p1.y - y0 < 11.5, "первая вилка на 7–11 м: %f" % (trunk.p1.y - y0))
 	for b in fl.branches:
-		ok(Vector2(b.p1.x - fl.base.x, b.p1.z - fl.base.z).length() <= EcoFlower.SPREAD + 1e-3, "крона не шире 11 м")
+		ok(Vector2(b.p1.x - fl.base.x, b.p1.z - fl.base.z).length() <= EcoFlower.SPREAD + 1e-3, "крона не шире Ø 26 м")
 		ok(b.p1.y > y0, "ветви над дном")
 	for i in fl.tips.size():
 		ok(Vector2(fl.tips[i].x - fl.base.x, fl.tips[i].z - fl.base.z).length() + fl.tip_r[i] <= EcoFlower.SPREAD + 1e-3,
 			"кончик в кроне")
+	var reach := 0.0
+	for i in fl.tips.size():
+		var e := fl.tip_end(i)
+		reach = maxf(reach, Vector2(e.x - fl.base.x, e.z - fl.base.z).length())
+	ok(reach > EcoFlower.SPREAD - 1.5, "крона раскрыта почти на Ø 26 м: радиус %f" % reach)
 	# соседи: логово стеклоуста (62; −45) и огнецвет (54,88; −68,69) — дальше кроны
 	for xz in [EcoEel.LAIRS[2], EcoCoral.BASES[2]]:
 		ok(Vector2(xz.x - fl.base.x, xz.y - fl.base.z).length() > EcoFlower.SPREAD + 6.0, "сосед %s не в кроне" % xz)
 
 
-func test_branching_like_browser() -> void:
+func test_branching_by_concept() -> void:
 	var fl := _flower(_flat)
-	var by_depth := [0, 0, 0, 0, 0]
+	var by_depth := [0, 0, 0, 0, 0, 0]
 	for b in fl.branches:
 		by_depth[b.depth] += 1
 		ok(b.r1 < b.r0, "ветвь сужается")
-	eq(by_depth[0], 1, "один ствол")
-	for d in range(1, 5):
-		ok(by_depth[d] >= by_depth[d - 1] * 2 and by_depth[d] <= by_depth[d - 1] * 3, "ярус %d делится на 2–3" % d)
-	eq(fl.tips.size(), by_depth[4], "кончики — на концах последнего яруса")
-	ok(fl.tips.size() >= 16, "кончиков много: %d" % fl.tips.size())
+	eq(by_depth, [1, 3, 6, 12, 24, 48], "ствол, три ветви, четыре вилки надвое")
+	eq(fl.tips.size(), 48, "48 кончиков на концах последнего яруса")
+	# чаша: внутренняя половина кончиков (ближе к оси) выше наружной
+	var dist := []
+	for i in fl.tips.size():
+		dist.append(Vector2(fl.tips[i].x - fl.base.x, fl.tips[i].z - fl.base.z).length())
+	var sorted := dist.duplicate()
+	sorted.sort()
+	var med: float = sorted[24]
+	var inner := 0.0
+	var outer := 0.0
+	for i in fl.tips.size():
+		if dist[i] < med:
+			inner += fl.tips[i].y / 24.0
+		else:
+			outer += fl.tips[i].y / 24.0
+	ok(inner > outer + 1.0, "середина кроны выше краёв: %f и %f" % [inner, outer])
+	for i in fl.tips.size():
+		ok(fl.tip_dir[i].y > 0.3, "кончик смотрит вверх")
 	# форма своя — не зависит от зерна мира
 	var w := EcoWorld.new(777)
 	w.ground = _flat
 	var other := w.add(EcoFlower.new()) as EcoFlower
 	eq(other.tips, fl.tips, "форма одна при любом зерне мира")
+
+
+func test_plinth() -> void:
+	var fl := _flower(_flat)
+	ok(fl.stones.size() >= 8 and fl.tubes.size() >= 8 and fl.tubes.size() <= 12, "цоколь: камни и 8–12 трубочек")
+	for st in fl.stones:
+		ok(Vector2(st.c.x - fl.base.x, st.c.z - fl.base.z).length() + st.r <= EcoFlower.PLINTH_R + 1e-3, "камень в цоколе Ø 8 м")
+		ok(st.c.y < FLAT and st.c.y + st.h <= FLAT + EcoFlower.PLINTH_H + 1e-3, "камень на дне, не выше 1,5 м")
+	var st0 := fl.stones[0]
+	ok(fl.solid(st0.c + Vector3(0, st0.h - 0.2, 0)), "камень цоколя твёрдый")
+	var t0 := fl.tubes[0]
+	ok(fl.solid((t0.p0 + t0.p1) * 0.5), "трубочка твёрдая")
 
 
 func test_solid_trunk_and_water_around() -> void:
@@ -79,13 +112,14 @@ func test_tips_shimmer_wave() -> void:
 	var fl := _flower(_flat)
 	var lo := 1.0
 	var hi := 0.0
-	for k in 80:
-		var g := EcoFlower.glow(fl.tip_phase[0], k * 0.1)
+	for k in 600:
+		var g := EcoFlower.glow(fl.tip_phase[0], k * 0.01)
 		lo = minf(lo, g)
 		hi = maxf(hi, g)
-	ok(lo > 0.5, "кончик не гаснет: %f" % lo)
-	ok(hi - lo > 0.3, "мерцает: %f…%f" % [lo, hi])
-	# волна вверх: у верхних кончиков фаза отстаёт
+	near(lo, 0.15, 0.01, "кончик не гаснет: минимум 15 %")
+	near(hi, 1.0, 0.01, "максимум 100 %")
+	near(EcoFlower.glow(0.7, 1.3), EcoFlower.glow(0.7, 7.3), 1e-5, "период 6 с")
+	# волна вверх: верхний кончик загорается на 2 с позже нижнего
 	var top_i := 0
 	var low_i := 0
 	for i in fl.tips.size():
@@ -93,7 +127,8 @@ func test_tips_shimmer_wave() -> void:
 			top_i = i
 		if fl.tips[i].y < fl.tips[low_i].y:
 			low_i = i
-	ok(fl.tip_phase[top_i] < fl.tip_phase[low_i], "волна идёт снизу вверх")
+	var lag := (fl.tip_phase[low_i] - fl.tip_phase[top_i]) / EcoFlower.GLOW_RATE
+	near(lag, 2.0, 0.35, "волна снизу вверх за 2 с: %f" % lag)
 
 
 func test_view_one_mesh_faces_out() -> void:
@@ -102,15 +137,15 @@ func test_view_one_mesh_faces_out() -> void:
 	tree.root.add_child(v)
 	await frames(1)
 	eq(v.mesh.get_surface_count(), 1, "один вызов отрисовки")
-	ok(v.tris > 1000 and v.tris < 12000, "треугольников в бюджете: %d" % v.tris)
+	ok(v.tris > 1000 and v.tris <= 8000, "треугольников в бюджете ART-027 (≤ 8 тыс.): %d" % v.tris)
 	eq(v.layers, OceanView.LAYER_WORLD, "слой отмели")
-	# грань смотрит наружу от оси своей ветви: проверим ствол (ниже его верха ветвей нет)
-	var trunk_top := fl.branches[0].p1.y - 1.0
+	# грань смотрит наружу от оси своей ветви: проверим ствол выше цоколя и ниже начала ветвей
+	var trunk_top := fl.branches[0].p1.y - 2.0
 	var outward := 0
 	var total := 0
 	for i in range(0, v.verts.size(), 3):
 		var c := (v.verts[i] + v.verts[i + 1] + v.verts[i + 2]) / 3.0
-		if c.y < trunk_top:
+		if c.y < trunk_top and c.y > fl.base.y + 2.0 and Vector2(c.x - fl.base.x, c.z - fl.base.z).length() < 2.1:
 			total += 1
 			var cr := (v.verts[i + 1] - v.verts[i]).cross(v.verts[i + 2] - v.verts[i])
 			var out := Vector3(c.x - fl.base.x, 0, c.z - fl.base.z)
