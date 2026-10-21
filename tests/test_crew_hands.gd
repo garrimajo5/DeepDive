@@ -120,3 +120,11 @@ func test_own_back_still_reaches_posts() -> void:
 				ok(d < 0.08, "%s: кисть на хвате (%.3f м)" % [c[0], d])
 		var eye := m.eye() + m.eye_offset()
 		near((eye - j["head"]).dot(j["fwd"]), 0.04 + CrewView.OWN_BACK, 1e-4, "%s: голова позади глаза" % c[0])
+
+
+func test_press_lets_go_when_walked_away() -> void:   # issue #349
+	var at := Vector2(0.9, 0.0)
+	ok(CrewHands.pressing(0.5, at, at), "нажал и стоит — руки на посте")
+	ok(CrewHands.pressing(0.5, at, at + Vector2(0.3, 0.0)), "шагнул у стола — держит")
+	ok(not CrewHands.pressing(0.5, at, Vector2(0.0, -3.0)), "ушёл к окну — отпустил")
+	ok(not CrewHands.pressing(0.0, at, at), "время вышло — отпустил")

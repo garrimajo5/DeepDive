@@ -8,6 +8,13 @@ class_name CrewHands
 const FREE := Vector3.INF
 ## Сколько держать руки на посте после нажатия (импульс сонара, разряд, щиток), с.
 const PRESS := 0.9
+## Отошёл от места нажатия дальше LEAVE (м) — руки отпускают пост сразу, а не тянутся к нему через мостик (#349).
+const LEAVE := 0.5
+
+
+## Держать ли ещё руки на посте после нажатия: время не вышло и игрок не ушёл с места нажатия.
+static func pressing(left: float, pressed_at: Vector2, at: Vector2) -> bool:
+	return left > 0.0 and pressed_at.distance_to(at) <= LEAVE
 ## Голостол: край корпуса — радиус 1,1 м на высоте 0,9 м; ладони чуть внутрь края, на ширине плеч.
 const TABLE_R := 1.0
 const TABLE_Y := 0.92
