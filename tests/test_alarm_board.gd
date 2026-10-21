@@ -141,3 +141,37 @@ func test_scene_hint() -> void:
 	ok(hint.global_transform.basis.z.dot(main.ship.global_transform.basis.x) > 0.99, "лицом в мостик")
 	main.queue_free()
 	await frames(1)
+
+
+## issue #349: нажал сонар, сразу перешёл к окну — фигура не тянется руками к столу через мостик, глаз не опущен
+## поклоном, и табло к 0,3 с снова под плашкой приборов (как в шаге 09b2-silt-okno сценария тестера).
+func test_board_after_leaving_sonar() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.step(0.1)
+	var w := main.walker
+	w.x = 0.9
+	w.z = 0.0
+	w.yaw = deg_to_rad(37.0)
+	w.pitch = deg_to_rad(-35.0)
+	main.use_post("sonar")
+	main.step(0.2)
+	ok(main.me.holding(), "руки на голостоле")
+	w.x = 0.0
+	w.z = -3.0
+	w.yaw = 0.0
+	w.pitch = Deck.Walker.START_PITCH
+	main.step(0.1)
+	ok(not main.me.holding(), "отошёл от сонара — руки отпустили стол")
+	main.step(0.1)
+	main.step(0.1)
+	await frames(1)
+	near(main.me.lean, 0.0, 1e-6, "поклон к столу прошёл")
+	var cam := main.get_viewport().get_camera_3d()
+	var top := cam.global_transform.affine_inverse() * main.ship.to_global(AlarmBoard.CENTER + Vector3(0.0, AlarmBoard.SIZE.y * 0.5, 0.0))
+	var y := 360.0 - 360.0 * (top.y / -top.z) / tan(deg_to_rad(cam.fov) * 0.5)
+	var plate := main.hint.position.y + main.hint.get_line_height() * 4 + Main.HINT_PAD
+	ok(y > plate, "верх табло (%.0f) ниже плашки приборов в четыре строки (%.0f)" % [y, plate])
+	main.queue_free()
+	await frames(1)

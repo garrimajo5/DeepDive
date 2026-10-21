@@ -54,6 +54,10 @@ func test_scene_side_models_and_posts() -> void:
 	r.end(1)
 	main.step(0.1)
 	ok(main.at_power and main.power_panel.visible, "у пульта открылся пульт энергии")
+	var box: Rect2 = main.power_panel.box()   # #349: панель не под тестовой кнопкой noclip и не под кнопкой действия
+	for c: Touch.Circle in [r.layout.noclip, r.layout.action]:
+		ok(not box.intersects(NameTag.circle_rect(c.c, c.r)), "панель %s не задевает кнопку у %s" % [box, c.c])
+	ok(box.size.y > 300.0, "пять строк помещаются: %.0f px" % box.size.y)
 	r.begin(5, r.layout.action.c)
 	r.end(5)
 	main.step(0.1)

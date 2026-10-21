@@ -67,6 +67,7 @@ var at_power: bool:               ## игрок у пульта энергии: 
 		me.at_power = v
 var press_post := ""               ## пост, у которого только что нажали кнопку (руки на нём CrewHands.PRESS с)
 var press_t := 0.0
+var press_at := Vector2.ZERO        ## где стоял игрок при нажатии: ушёл дальше CrewHands.LEAVE — руки отпускают пост
 var power_panel: PowerPanel
 var at_vote: bool:                ## игрок решает у голостола «глубже или наверх» (или смотрит итог; `me.at_vote`)
 	get:
@@ -236,6 +237,7 @@ func _ready() -> void:
 	overlay = TouchOverlay.new()
 	overlay.name = "Управление"
 	ui.add_child(overlay)
+	power_panel.layout = overlay.router.layout   # панель пульта не ложится под noclip и кнопку действия (#349)
 	reactor.message.connect(func(title: String, _text: String) -> void: say(title))
 	airlock.message.connect(say)
 	samples.message.connect(say)
@@ -631,6 +633,8 @@ const ROUTE_POST_R := 0.6
 ## нажатия у голостола, рычага и щитка — ещё CrewHands.PRESS секунд.
 func _hands(dt: float, valve: bool, winch: bool, scan: bool) -> void:
 	press_t = maxf(press_t - dt, 0.0)
+	if not CrewHands.pressing(press_t, press_at, Vector2(walker.x, walker.z)):
+		press_t = 0.0   # отошёл от поста — руки не тянутся к нему через мостик, фигура не кланяется (#349)
 	var g := CrewHands.none()
 	if pilot.seated:
 		pass
@@ -706,6 +710,7 @@ func use_post(id: String) -> void:
 		_ when id.begins_with("door"):
 			var d: ShipLayout.Door = layout.doors[int(id.substr(4))]
 			d.open = not d.open
+	press_at = Vector2(walker.x, walker.z)   # после шага к рычагу или щитку
 
 
 ## Открыть пробоину в месте n и поставить игрока у неё лицом к борту (сценарий тестера, снимки).

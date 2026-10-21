@@ -8,6 +8,8 @@ const FOOT := "крестовина: вверх-вниз — система, в�
 
 var reactor: Reactor
 var panel: Reactor.Console
+## Раскладка кнопок (Touch.Layout): панель встаёт ниже кнопки noclip и выше кнопки действия (#349). null — без неё.
+var layout: Touch.Layout
 
 
 func _ready() -> void:
@@ -33,7 +35,12 @@ func box() -> Rect2:
 	var vis := get_viewport_rect().size
 	var w := minf(560.0, vis.x * 0.36)
 	var h := minf(400.0, vis.y * 0.5)
-	return Rect2(vis.x - w - vis.y * 0.04, vis.y * 0.13, w, h)
+	var top := vis.y * 0.13
+	if layout:
+		var gap := vis.y * 0.012
+		top = maxf(top, layout.noclip.c.y + layout.noclip.r + gap)
+		h = minf(h, layout.action.c.y - layout.action.r - gap - top)
+	return Rect2(vis.x - w - vis.y * 0.04, top, w, h)
 
 
 func _draw() -> void:
@@ -45,18 +52,18 @@ func _draw() -> void:
 	var hot := reactor.hot or reactor.scram > 0.0
 	draw_rect(b, Color(1.0, 0.7, 0.3, 0.9) if hot else Color(0.4, 0.86, 0.92, 0.6), false, 2.0)
 	var pad := b.size.x * 0.05
-	var y := b.position.y + 44.0
+	var y := b.position.y + 38.0
 	_text(font, Vector2(b.position.x + pad, y), "Пульт энергии", 26, Color(0.75, 0.95, 1.0))
-	var row_h := (b.size.y - 120.0) / Reactor.Sys.size()
+	var row_h := (b.size.y - 104.0) / Reactor.Sys.size()
 	for i in Reactor.Sys.size():
-		var top := b.position.y + 62.0 + row_h * i
+		var top := b.position.y + 50.0 + row_h * i
 		var on := i == panel.sel
 		if on:
 			draw_rect(Rect2(b.position.x + 6, top, b.size.x - 12, row_h - 4), Color(0.4, 0.86, 0.92, 0.16))
 		var v := reactor.share[i]
 		var col := Color(0.55, 0.62, 0.65) if v == 0 else Color(0.9, 0.97, 1.0)
-		_text(font, Vector2(b.position.x + pad, top + row_h * 0.45), Reactor.NAMES[i], 21, col)
-		_text(font, Vector2(b.position.x + pad, top + row_h * 0.8), Reactor.HINTS[i], 15, Color(0.6, 0.75, 0.8))
+		_text(font, Vector2(b.position.x + pad, top + row_h * 0.42), Reactor.NAMES[i], 21, col)
+		_text(font, Vector2(b.position.x + pad, top + row_h * 0.84), Reactor.HINTS[i], 15, Color(0.6, 0.75, 0.8))
 		var bar := Rect2(b.position.x + b.size.x * 0.5, top + row_h * 0.35, b.size.x * 0.32, row_h * 0.3)
 		draw_rect(bar, Color(0.1, 0.2, 0.24))
 		draw_rect(Rect2(bar.position, Vector2(bar.size.x * v / float(Reactor.MAX), bar.size.y)), Color("67DDEB"))
