@@ -1,0 +1,45 @@
+extends TestCase
+## Разные шейдеры сцены (issue #159): на каждый новый шейдер Compatibility при первом показе собирает ~5 программ,
+## это секунды прогрева на телефоне. Свои материалы корабля делят шейдеры по образцам ShaderKey.glass / flakes.
+
+## Сколько разных шейдеров у корабля (без живого мира) — потолок. Вырос — проверить, нельзя ли взять образец.
+const SHIP_BUDGET := 30
+
+
+func test_same_flags_same_key() -> void:
+	eq(ShaderKey.of(ShaderKey.glass(Color.RED)), ShaderKey.of(ShaderKey.glass(Color(0, 1, 0, 0.1))), "цвет не меняет шейдер")
+	ok(ShaderKey.of(ShaderKey.glass(Color.RED)) != ShaderKey.of(ShaderKey.flakes(Color.RED)), "билборд — другой шейдер")
+	var m := ShaderKey.glass(Color.RED)
+	m.cull_mode = BaseMaterial3D.CULL_BACK
+	ok(ShaderKey.of(m) != ShaderKey.of(ShaderKey.glass(Color.RED)), "отсечение граней — другой шейдер")
+	eq(ShaderKey.of(null), "", "нет материала")
+
+
+func _find(keys: Dictionary, who: String) -> String:
+	for k in keys:
+		if who in keys[k]:
+			return k
+	return ""
+
+
+func test_scene_ship_shares_shaders() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.open_silt()
+	main.open_breach(0)
+	main.step(0.1)
+	var keys := ShaderKey.collect(main, main.eco)
+	var snow := _find(keys, "Морской снег")
+	ok(snow != "", "морской снег найден")
+	eq(_find(keys, "Ил"), snow, "ил и морской снег — один шейдер")
+	var glass := _find(keys, "Стекло окна")
+	ok(glass != "", "стекло окна найдено")
+	eq(_find(keys, "Струя"), glass, "брызги пробоины и стекло окна — один шейдер")
+	eq(_find(keys, "Подложка итога"), glass, "подложка итога и стекло окна — один шейдер")
+	eq(_find(keys, "Экран сканера"), _find(keys, "Заголовок итога"), "подписи сканера и итога — один материал")
+	eq(_find(keys, "Место 1"), _find(keys, "Иконка 1"), "номера мест и их иконки — один материал")
+	ok(keys.size() <= SHIP_BUDGET, "шейдеров корабля %d ≤ %d" % [keys.size(), SHIP_BUDGET])
+	print("  шейдеров корабля: %d" % keys.size())
+	main.queue_free()
+	await frames(1)

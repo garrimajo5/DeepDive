@@ -74,12 +74,7 @@ func _make_snow() -> CPUParticles3D:
 	p.scale_amount_max = 1.2
 	var mesh := QuadMesh.new()
 	mesh.size = Vector2(0.06, 0.06)
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	mat.albedo_color = Color(0.85, 0.95, 1.0, 0.55)
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mesh.material = mat
+	mesh.material = ShaderKey.flakes(Color(0.85, 0.95, 1.0, 0.55))   # шейдер общий с илом (issue #159)
 	p.mesh = mesh
 	p.layers = LAYER_WORLD
 	return p
