@@ -19,6 +19,10 @@ const JOURNAL_RECT := Rect2(2.6, 12.26, 0.6, 0.98)
 const SCREEN_CENTER := Vector3(0.0, 1.125, 0.0)          ## в осях стойки
 const SCREEN_NORMAL := Vector3(-0.5, 0.8660254, 0.0)
 const SCREEN_SIZE := Vector2(0.9, 0.5)
+## Кольцо-светильник MOD-020 (`laboratoriya.md`): pivot — центр верхней плоскости, вплотную к потолку отсека
+## (`ShipLayout.ROOMS` — 3,4 м; в концепте 3,45), над серединой отсека; Ø 3,2 м, высота 0,2 м.
+const RING := Vector3(0.0, 3.4, 11.0)
+const RING_D := 3.2
 ## Посты: у колбы — вокруг тумбы, у журнала — со стороны прохода.
 const FLASK_POST_R := 1.1
 const JOURNAL_POST := Vector2(2.1, 12.75)
