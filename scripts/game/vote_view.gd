@@ -6,6 +6,10 @@ extends Node3D
 ## После «наверх» — итог: подложка с заголовком и четырьмя строками лицом к смотрящему (show_result).
 
 var fields := {}          ## choice → {"disc", "beam", "arrow", "word", "count", "marks": [[Sprite3D, Label3D]…]}
+var timer: Node3D        ## кольцо таймера между полями (VoteHolo.RING_*): подложка, дуга, секунды
+var timer_arc: MeshInstance3D
+var timer_label: Label3D
+var _arc_segs := -1
 var board: Node3D        ## итог забега над столом (VoteHolo.BOARD_*)
 var board_rows: Array = []   ## [[Label3D название, Label3D значение, Sprite3D иконка ART-026]…]
 var _mats: Array[StandardMaterial3D] = []
@@ -75,8 +79,34 @@ func _ready() -> void:
 			marks.append([s, l])
 		f["marks"] = marks
 		fields[choice] = f
+	_build_timer()
 	_build_board()
 	visible = false
+
+
+func _build_timer() -> void:
+	timer = Node3D.new()
+	timer.name = "Таймер голосования"
+	timer.position = Vector3(0, VoteHolo.RING_Y, 0)
+	add_child(timer)
+	var back := MeshInstance3D.new()
+	back.mesh = _arc_mesh(VoteHolo.RING_SEGS)
+	var bm := _holo_mat(VoteHolo.RING_BACK_A)
+	bm.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+	back.material_override = bm
+	_put(timer, back, "Кольцо таймера")
+	timer_arc = MeshInstance3D.new()
+	timer_arc.mesh = _arc_mesh(VoteHolo.RING_SEGS)
+	_arc_segs = VoteHolo.RING_SEGS
+	var am := _holo_mat(0.95)
+	am.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+	am.render_priority = 1
+	timer_arc.material_override = am
+	_put(timer, timer_arc, "Дуга таймера")
+	timer_label = _label(VoteHolo.timer_text(0), 40, Vector3.ZERO)
+	timer_label.render_priority = 2
+	_put(timer, timer_label, "Секунды таймера")
+	timer.visible = false
 
 
 func _build_board() -> void:
@@ -168,6 +198,7 @@ func show_result(k: float, rows: Array, eye: Vector3) -> void:
 			(f[key] as Node3D).visible = false
 		for m: Array in f["marks"]:
 			(m[0] as Sprite3D).visible = false
+	timer.visible = false
 	board.rotation.y = VoteHolo.board_yaw(eye)
 	for m in _board_mats:
 		m.albedo_color.a = m.get_meta("a") * k
@@ -186,14 +217,23 @@ func show_result(k: float, rows: Array, eye: Vector3) -> void:
 		ic.modulate = Color(1, 1, 1, k)   # цвет — в самой текстуре (#67DDEB), гаснет с подложкой
 
 
-## k — доля перехода (Briefing.Fade), votes — VoteHolo.votes(Run.opinions(...)).
-func show_vote(k: float, votes: Dictionary) -> void:
+## k — доля перехода (Briefing.Fade), votes — VoteHolo.votes(Run.opinions(...)); seconds и frac — таймер Ballot
+## (seconds() и fraction(); -1 — таймера нет, кольцо скрыто).
+func show_vote(k: float, votes: Dictionary, seconds: int = -1, frac: float = -1.0) -> void:
 	visible = k > 0.0 or board.visible
 	if k <= 0.0:
+		timer.visible = false
 		return
 	for f: Dictionary in fields.values():
 		for key in ["disc", "beam", "arrow", "word", "count"]:
 			(f[key] as Node3D).visible = true
+	timer.visible = VoteHolo.timer_wanted(seconds)
+	if timer.visible:
+		timer_label.text = VoteHolo.timer_text(seconds)
+		var n := VoteHolo.ring_segs(frac)
+		if n != _arc_segs:   # меш дуги — только когда меняется число сегментов (48 за весь таймер)
+			_arc_segs = n
+			timer_arc.mesh = _arc_mesh(n) if n > 0 else null
 	for m in _mats:
 		m.albedo_color.a = m.get_meta("a") * k
 	for l in _labels:
@@ -277,6 +317,16 @@ static func _arrow_mesh(down: bool) -> ArrayMesh:
 	var arr := []
 	arr.resize(Mesh.ARRAY_MAX)
 	arr[Mesh.ARRAY_VERTEX] = v
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	return m
+
+
+## Дуга кольца таймера из segs сегментов (VoteHolo.ring_arc) в плоскости XY; билборд поворачивает её к камере.
+static func _arc_mesh(segs: int) -> ArrayMesh:
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = VoteHolo.ring_arc(segs)
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	return m
