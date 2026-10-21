@@ -53,11 +53,12 @@ func test_scene_lever() -> void:
 	ok(not main.eco_ship.zap, "разряд — один шаг")
 	near(main.bridge.zap_lever.rotation_degrees.z, Zap.LEVER_DOWN, 1e-3, "рычаг опущен на −25°")
 	eq(main.bridge.zap_scale_mat.emission_energy_multiplier, 0.0, "шкала готовности погасла")
-	ok(main.zap_light.visible, "вспышка за бортом")
+	ok(main.zap_light.light_energy > 1.0, "вспышка за бортом")
 	near(main.vitals.energy, 100.0 - 15.0, 0.5, "заряд потрачен")
 	for i in 10:
 		main.step(0.1)
-	ok(not main.zap_light.visible, "через секунду вспышки нет")
+	ok(main.zap_light.light_energy < 0.01, "через секунду вспышки нет")
+	ok(main.zap_light.visible and main.zap_light.omni_range > 79.0, "свет вспышки остаётся в сцене на весь радиус (issue #159)")
 	var mid := main.bridge.zap_lever.rotation_degrees.z
 	ok(mid > Zap.LEVER_DOWN and mid < Zap.LEVER_UP, "рычаг поднимается: %.1f°" % mid)
 	eq(main.bridge.zap_scale_mat.emission_energy_multiplier, 0.0, "откат — шкала не горит")
@@ -72,7 +73,7 @@ func test_scene_light_off_without_warmup() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	ok(not main.warming(), "в тестах прогрева нет")
-	ok(not main.zap_light.visible, "вспышка погашена")
+	ok(main.zap_light.light_energy < 0.01, "вспышка погашена")
 	ok(main.zap_light.light_cull_mask == OceanView.LAYER_WORLD, "светит только за бортом")
 	main.queue_free()
 	await frames(1)
