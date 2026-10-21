@@ -98,7 +98,7 @@ func test_scene_warmup() -> void:
 	Warmup.enabled = false
 	ok(main.warming(), "при старте идёт прогрев")
 	ok(main.curtain != null and main.curtain.visible, "экран под шторкой")
-	eq(main.crew.size(), 1 + CrewRig.MODELS.size(), "каждая внешность экипажа в кадре")
+	eq(main.crew.size(), 1 + 2 * CrewRig.MODELS.size(), "каждая внешность экипажа в кадре — и материалом своего игрока")
 	var qa := main.start_qa('[{"do": "wait", "s": 1}, {"do": "log", "note": "прогрев"}]')
 	var torch: Node3D = main.crew_view.torches[0]
 	var yaws := {}
@@ -146,6 +146,38 @@ func test_scene_warmup() -> void:
 	ok(qa.log_lines[1].begins_with("прогрев шейдеров: %d кадров" % (Warmup.frames() - 1)), "в логе тестера: %s" % qa.log_lines[1])
 	ok(qa.log_lines[2].begins_with("прогрев по кадрам, мс: ") and qa.log_lines[2].contains("худший — кадр"),
 		"в логе тестера время каждого кадра прогрева: %s" % qa.log_lines[2])
+	main.queue_free()
+	await frames(1)
+
+
+## Issue #217: свой игрок нарисован отдельным материалом (`CrewView._own_mat`, отсечение граней — свой шейдер), а видно
+## его только взглядом вниз у поста: без прогрева шейдер собирался при первом нажатии у пульта энергии.
+func test_scene_warmup_own_material() -> void:
+	Warmup.enabled = true
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	Warmup.enabled = false
+	var cv: CrewView = main.crew_view
+	var own_key := ShaderKey.of(cv._own_mat[main.me.look])
+	var keys := {}
+	for m in cv._own_mat.values():
+		keys[ShaderKey.of(m)] = true
+	for k in keys:
+		var shown := false
+		for i in cv.members.size():
+			if cv.members[i] == main.me or ShaderKey.of(cv.meshes[i].material_override) != k:
+				continue
+			var at: Vector3 = cv.to_global(cv.shown[i]["hip"])
+			if main.camera.is_position_in_frustum(at):
+				shown = true
+		ok(shown, "фигура с материалом своего игрока в первом кадре прогрева: %s" % k)
+	ok(own_key in keys, "ключ своего игрока среди прогретых")
+	for i in Warmup.frames():
+		main.step(1.0 / 60.0)
+	ok(not main.warming(), "прогрев кончился")
+	eq(cv.as_own, [], "временные фигуры своим материалом ушли")
+	main.step(1.0 / 60.0)
+	eq(cv.meshes[0].material_override, cv._own_mat[main.me.look], "свой игрок — своим материалом")
 	main.queue_free()
 	await frames(1)
 

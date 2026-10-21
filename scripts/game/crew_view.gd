@@ -43,6 +43,9 @@ var gear: Array = []  ## снаряжение роли у каждой фигу�
 var gear_roles: Array[int] = []  ## роль, под которую надето снаряжение (-1 — ещё нет)
 ## Что нарисовано у каждой фигуры: сустав → точка в осях корабля (по костям модели; скрытых нет) — для тестов и сети.
 var shown: Array = []
+## Фигуры, нарисованные материалом своего игрока (прогрев, #217): `_own_mat` с отсечением граней — отдельный шейдер,
+## его видно только взглядом вниз у поста (руки на пульте энергии) — без прогрева он собирался при первом нажатии.
+var as_own: Array = []
 var pitch := 0.0  ## наклон взгляда своего игрока (рад, вниз < 0) — ставит Main перед apply()
 var _rest := {}  ## внешность → CrewRig.Rest
 var _own_mat := {}  ## внешность → материал своего игрока: с отсечением задних граней (не видно изнанки у камеры)
@@ -216,9 +219,10 @@ func apply() -> void:
 			sk.set_bone_pose_position(b, lp.origin)
 			sk.set_bone_pose_rotation(b, lp.basis.get_rotation_quaternion())
 		figures[i].position = Vector3.ZERO   # свой игрок стоя позади камеры — Crew.Member.back
-		var kind := mesh_kind(m, own, pitch)
+		var like_own: bool = own or m in as_own
+		var kind := 1 if like_own and not own else mesh_kind(m, own, pitch)
 		meshes[i].mesh = _meshes[looks[i]][kind]
-		meshes[i].material_override = _own_mat[looks[i]] if own else null
+		meshes[i].material_override = _own_mat[looks[i]] if like_own else null
 		patches[i].visible = not own  # своя нашивка у самой камеры
 		_dress(i, m.role)
 		for gn in gear[i]:
