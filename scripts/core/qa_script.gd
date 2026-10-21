@@ -18,11 +18,12 @@ extends RefCounted
 ##   {"do": "drain", "s": 4}                        — стеклоуст «на корпусе» s секунд: мир будто шлёт EcoLink.DRAIN
 ##                                                     (тревога и расход заряда без самого существа)
 ##   {"do": "mate", "x": -1, "z": -2.5, "yaw": 90, "role": 2, "look": 1} — ещё один член экипажа на палубе (роль 0…3,
-##                                                     внешность 0 — мужская модель, 1 — женская)
+##                                                     внешность 0 — мужская модель, 1 — женская;
+##                                                     "seated": true — сидит за штурвалом, x/z/yaw не нужны)
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look], ["silt", on], ["drain", s], ["route"], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated], ["silt", on], ["drain", s], ["route"], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
 const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "silt", "drain", "route", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad"]
@@ -148,7 +149,7 @@ func _begin(st: Dictionary, out: Array) -> void:
 			out.append(["route"])
 		"mate":
 			out.append(["mate", float(st.get("x", 0.0)), float(st.get("z", 0.0)), float(st.get("yaw", 0.0)),
-				int(st.get("role", 1)), int(st.get("look", 1))])
+				int(st.get("role", 1)), int(st.get("look", 1)), bool(st.get("seated", false))])
 		"log":
 			out.append(["log", str(st.get("note", ""))])
 		"quit":
