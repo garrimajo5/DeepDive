@@ -1,7 +1,7 @@
 class_name EcoFish
 extends EcoSystem
 ## Светляки-полосники (initFish/updateFish в js/creatures.js, Unity `Core/EcoFish.cs`): шесть стай по 22 рыбки у кораллов
-## рифа и ещё две — у кроны Каменного цветка (ART-027). Стая бродит у дома, держится вместе (к центру, в ногу,
+## рифа, ещё две — у кроны Каменного цветка (ART-027) и молодь (14 мелких) в клетке Костей левиафана. Стая бродит у дома, держится вместе (к центру, в ногу,
 ## не толкаясь), рыбки не опускаются на дно и не поднимаются ко льду. Серпохвост ближе 16 м — тревога: стая уходит к дому в кораллы и там прячется (медленно, ≤ 1 м/с), событие
 ## «flee» раз в 30 с. Корабль ближе 11 м на ходу быстрее 1,2 м/с пугает без события: рыбки шарахаются, но домой не уходят.
 ## Хищники берут рыбок через nearest_fish и kill; съеденная появляется у дома через 25–40 с.
@@ -59,6 +59,24 @@ const CROWN_FLOOR := -40.0
 ## За одну смену цели стая у кроны сдвигается по кругу на столько (рад).
 const CROWN_DRIFT := Vector2(0.4, 1.1)
 
+## Молодь в клетке Костей левиафана (EcoBones, ART-030: «между рёбрами прячется молодь») — после стай кроны.
+## Мелкие светляки (JUV_SIZE от взрослых, JUV_PER в стае) бродят внутри чистого прохода клетки: цель — в CAGE_X
+## от оси и CAGE_Z вдоль неё, на CAGE_LIFT над дном (проход 14 × 7 м, рёбра в 8,45 м от оси — цель их не задевает),
+## мягкие стенки (cage_push) не дают уплыть из прохода;
+## в тревоге прячутся в середине клетки на CAGE_HIDE над дном. Случай — свой, стаи рифа и кроны не сдвигаются.
+const CAGE_SHOALS := 1
+const JUV_PER := 14
+const JUV_SIZE := 0.55
+const CAGE_X := 4.0
+const CAGE_Z := 11.0
+const CAGE_LIFT := Vector2(1.5, 4.5)
+const CAGE_HIDE := 2.5
+## Мягкие стенки клетки: дальше CAGE_WALL от оси вбок и CAGE_END вдоль малька тянет обратно в проход (рёбра — в 8,45 м).
+const CAGE_WALL := 5.0
+const CAGE_END := 12.5
+## Дно клетки без дна в мире (тесты без Seabed), м — как EcoBones.floor_y.
+const CAGE_FLOOR := -46.0
+
 ## Цвет полос стаи: по концепту ART-011 стаи светятся в голубой гамме (#67DDEB, #6FE3FF и близкие оттенки).
 ## У каждой рыбки своя яркость Fish.bright.
 const COLORS: Array[Color] = [
@@ -80,6 +98,9 @@ class Shoal:
 	var crown := false
 	var axis := Vector3.ZERO
 	var turn := 1.0
+	## Молодь в клетке костей: frame — оси клетки (EcoBones: +Z к голове), начало — центр клетки на высоте 0.
+	var cage := false
+	var frame := Transform3D.IDENTITY
 	## Случай стаи: у стай рифа — общий, у стай кроны — свой (стаи рифа ведут себя как до них).
 	var rnd: EcoRandom
 	## Секунды тревоги (стая уходит домой или шарахается).
@@ -122,6 +143,8 @@ class Fish:
 	var phase := 0.0
 	## Яркость цвета стаи, 0,75–1,15.
 	var bright := 1.0
+	## Размер от взрослой рыбки: 1 — взрослая, JUV_SIZE — молодь.
+	var size := 1.0
 	var _shoal: WeakRef
 
 
@@ -133,6 +156,11 @@ var _rnd: EcoRandom
 var _preds: Array[EcoAgent] = []
 
 
+## Всех рыбок: стаи рифа и кроны по PER_SHOAL и молодь в костях по JUV_PER.
+static func total() -> int:
+	return PER_SHOAL * (HOMES.size() + CROWN_SHOALS) + JUV_PER * CAGE_SHOALS
+
+
 ## Своё зерно стай: от зерна мира, чтобы другой мир был другим, а остальные виды не сдвигались.
 static func seed_for(world_seed: int) -> int:
 	return (world_seed * 31 + 7001) & 0xFFFFFFFF
@@ -141,23 +169,35 @@ static func seed_for(world_seed: int) -> int:
 func reset(world: EcoWorld) -> void:
 	_rnd = EcoWorld.seeded_for(seed_for(world.seed_value))
 	var crown_rnd := EcoWorld.seeded_for(seed_for(world.seed_value) ^ 0x5F3C)
+	var cage_rnd := EcoWorld.seeded_for(seed_for(world.seed_value) ^ 0x0B0E)
 	shoals.clear()
 	all.clear()
 	var foot := Vector3(EcoFlower.CENTER.x, CROWN_FLOOR, EcoFlower.CENTER.y)
 	if world.ground.is_valid():
 		foot.y = world.ground.call(foot.x, foot.z)
-	for si in HOMES.size() + CROWN_SHOALS:
+	var reef_crown := HOMES.size() + CROWN_SHOALS
+	for si in reef_crown + CAGE_SHOALS:
 		var sh := Shoal.new()
 		sh.rnd = _rnd
 		var h: Vector3
+		var count := PER_SHOAL
+		var size := 1.0
 		if si < HOMES.size():
 			h = HOMES[si]
-		else:
+		elif si < reef_crown:
 			sh.crown = true
 			sh.rnd = crown_rnd
 			sh.axis = foot
 			sh.turn = 1.0 if (si - HOMES.size()) % 2 == 0 else -1.0
 			h = foot + Vector3(0, CROWN_HIDE, 0)
+		else:
+			sh.cage = true
+			sh.rnd = cage_rnd
+			sh.frame = cage_frame()
+			h = sh.frame.origin
+			h.y = cage_floor(world.ground, h.x, h.z) + CAGE_HIDE
+			count = JUV_PER
+			size = JUV_SIZE
 		sh.index = si
 		sh.home = h
 		sh.goal = h
@@ -170,11 +210,13 @@ func reset(world: EcoWorld) -> void:
 		sh.color = COLORS[si % COLORS.size()]
 		sh.lag = (si % 3) * FAR_STEP / 3.0
 		shoals.append(sh)
-		for k in PER_SHOAL:
-			var p := sh.center + Vector3(sh.rnd.range_f(-3, 3), sh.rnd.range_f(0, 3), sh.rnd.range_f(-3, 3))
+		var spread := 1.5 if sh.cage else 3.0
+		for k in count:
+			var p := sh.center + Vector3(sh.rnd.range_f(-spread, spread), sh.rnd.range_f(0, spread),
+				sh.rnd.range_f(-spread, spread))
 			var a := world.spawn(ID, p)
 			a.home = h
-			a.clearance = 0.4
+			a.clearance = 0.4 * size
 			a.v = Vector3(sh.rnd.range_f(-1, 1), 0, sh.rnd.range_f(-1, 1))
 			var f := Fish.new()
 			f.agent = a
@@ -183,12 +225,30 @@ func reset(world: EcoWorld) -> void:
 			f.slot = sh.members.size()
 			f.phase = sh.rnd.range_f(0, 6)
 			f.bright = sh.rnd.range_f(0.75, 1.15)
+			f.size = size
 			all.append(f)
 			sh.members.append(f)
-		sh.alive = PER_SHOAL
-		sh.pos.resize(PER_SHOAL)
-		sh.live.resize(PER_SHOAL)
-		sh.sep.resize(PER_SHOAL)
+		sh.alive = count
+		sh.pos.resize(count)
+		sh.live.resize(count)
+		sh.sep.resize(count)
+
+
+## Оси клетки костей (как EcoBones: +Z — к голове), начало — центр клетки на высоте 0.
+static func cage_frame() -> Transform3D:
+	return Transform3D(EcoBones.make_basis(EcoBones.CENTER), Vector3(EcoBones.CENTER.x, 0.0, EcoBones.CENTER.y))
+
+
+## Дно в клетке: Seabed мира, без него — CAGE_FLOOR.
+static func cage_floor(ground: Callable, x: float, z: float) -> float:
+	return float(ground.call(x, z)) if ground.is_valid() else CAGE_FLOOR
+
+
+## Следующая цель молоди: внутри прохода клетки (в CAGE_X от оси, в CAGE_Z вдоль), на CAGE_LIFT над дном.
+static func cage_goal(sh: Shoal, rnd: EcoRandom, ground: Callable) -> Vector3:
+	var g := sh.frame * Vector3(rnd.range_f(-CAGE_X, CAGE_X), 0.0, rnd.range_f(-CAGE_Z, CAGE_Z))
+	g.y = cage_floor(ground, g.x, g.z) + rnd.range_f(CAGE_LIFT.x, CAGE_LIFT.y)
+	return g
 
 
 ## Съесть рыбку: пропадает на 25–40 с, потом появляется у дома стаи.
@@ -273,6 +333,9 @@ func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
 	if sh.goal_timer <= 0.0 and sh.crown:
 		sh.goal_timer = sh.rnd.range_f(6, 12)
 		sh.goal = crown_goal(sh, sh.rnd)
+	elif sh.goal_timer <= 0.0 and sh.cage:
+		sh.goal_timer = sh.rnd.range_f(4, 9)
+		sh.goal = cage_goal(sh, sh.rnd, world.ground)
 	elif sh.goal_timer <= 0.0:
 		sh.goal_timer = sh.rnd.range_f(6, 12)
 		var r := sh.range_m
@@ -312,6 +375,21 @@ static func crown_goal(sh: Shoal, rnd: EcoRandom) -> Vector3:
 	return Vector3(sh.axis.x + cos(ang) * r, y, sh.axis.z + sin(ang) * r)
 
 
+## Толчок малька обратно в проход клетки: за CAGE_WALL вбок и за CAGE_END вдоль — пружина 6 м/с² на метр.
+static func cage_push(frame: Transform3D, p: Vector3) -> Vector3:
+	var off := p - frame.origin
+	var bx := frame.basis.x
+	var bz := frame.basis.z
+	var x := off.dot(bx)
+	var z := off.dot(bz)
+	var acc := Vector3.ZERO
+	if absf(x) > CAGE_WALL:
+		acc -= bx * (signf(x) * (absf(x) - CAGE_WALL) * 6.0)
+	if absf(z) > CAGE_END:
+		acc -= bz * (signf(z) * (absf(z) - CAGE_END) * 6.0)
+	return acc
+
+
 ## Текст «стая уходит» собирается в момент показа (вид мог быть уже просканирован). Мир — слабой ссылкой
 ## и без self: событие лежит в шине мира, сильная ссылка замкнула бы круг и мир не освободился бы.
 static func _flee_text(world: EcoWorld) -> Callable:
@@ -344,12 +422,15 @@ func _step_fish(world: EcoWorld, f: Fish, dt: float, t: float, ground: Callable,
 		var d := away.length()
 		if d < 14.0 and d > 0.01:
 			acc += away * ((10.0 * (1.0 - d / 14.0) + 2.0) / d)
+	if sh.cage:
+		acc += cage_push(sh.frame, p)
 	var ph := f.phase
 	acc += Vector3(sin(t * 1.7 + ph) * 0.6, sin(t * 1.3 + ph * 2.0) * 0.3, cos(t * 1.5 + ph) * 0.6)
 	var has_ground := ground.is_valid()
 	var h := a.ground_y(ground) if has_ground else 0.0
-	if has_ground and p.y < h + 1.2:
-		acc.y += (h + 1.2 - p.y) * 6.0
+	var low := 1.2 * f.size
+	if has_ground and p.y < h + low:
+		acc.y += (h + low - p.y) * 6.0
 	if p.y > -3.0:
 		acc.y -= 4.0
 

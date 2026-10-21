@@ -1,6 +1,6 @@
 class_name FishView
 extends MultiMeshInstance3D
-## Светляки-полосники в сцене: все 132 рыбки — один MultiMesh (один вызов отрисовки). Форма — EcoFishLook, место
+## Светляки-полосники в сцене: все рыбки (стаи рифа, кроны и молодь в костях) — один MultiMesh (один вызов отрисовки). Форма — EcoFishLook, место
 ## и курс каждой рыбки — EcoFishLook.basis, цвет полос — EcoFishLook.stripe в INSTANCE_CUSTOM. Краска вершины лежит
 ## в цвете вершины (r: 0 — тело, 1 — полоса, FIN_GLOW — конец хвоста): тело тёмное и освещается, полосы светятся сами.
 ## Стоит на слое отмели (OceanView.LAYER_WORLD).
@@ -138,6 +138,11 @@ static func fill(out: PackedFloat32Array, system: EcoFish, t: float, moved_only:
 			var side := Vector3(fw.z, 0, -fw.x)
 			side = side.normalized() if side.length() > 1e-4 else Vector3(1, 0, 0)
 			var up := fw.cross(side)
+			var sz := f.size  # молодь мельче
+			if sz != 1.0:
+				fw *= sz
+				side *= sz
+				up *= sz
 			out[i] = side.x
 			out[i + 1] = up.x
 			out[i + 2] = fw.x

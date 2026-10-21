@@ -45,6 +45,8 @@ var rib_tris := 0
 var skull_tris := 0
 
 var _col := PackedColorArray()
+## Мох у ног рёбер — свой меш пятен (EcoBones.moss), один вызов отрисовки.
+var moss_view: MossView
 
 
 func _init(system: EcoBones) -> void:
@@ -77,6 +79,10 @@ func _init(system: EcoBones) -> void:
 	m.surface_set_material(0, mat)
 	mesh = m
 	tris = verts.size() / 3
+	if bones.moss:
+		moss_view = MossView.new(bones.moss, bones.ground)
+		moss_view.name = "Мох на костях"
+		add_child(moss_view)
 
 
 static func _hash(i: int, j: int) -> float:
