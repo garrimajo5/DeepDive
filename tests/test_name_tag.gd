@@ -99,15 +99,15 @@ func test_depth_and_spread_rules() -> void:
 	ok(not NameTag.visible_at(1.5, -1.0), "за камерой — скрыта")
 	ok(NameTag.visible_at(3.0, 2.5), "впереди — видна")
 	var rs := [Rect2(100, 100, 200, 50), Rect2(150, 110, 200, 50), Rect2(600, 100, 200, 50), Rect2(160, 105, 200, 50)]
-	var sh := NameTag.spread(rs)
-	eq(sh[0], Vector2.ZERO, "ближняя на месте")
-	ok(sh[1].y <= -55.0 and sh[1].x == 0.0, "задевающая поднята над ближней (%s)" % sh[1])
-	eq(sh[2], Vector2.ZERO, "в стороне — на месте")
-	ok(sh[3].y >= -50.0 * NameTag.MAX_UP - 0.5, "третья не выше MAX_UP — не в потолок (%s)" % sh[3])
-	for i in rs.size():
+	var lift := NameTag.spread(rs)
+	eq(lift[0], 0.0, "ближняя на месте")
+	ok(lift[1] >= 60.0 and lift[1] <= 50.0 * NameTag.MAX_UP + 0.5, "задевающая поднята над ближней (%s)" % lift[1])
+	eq(lift[2], 0.0, "в стороне — на месте")
+	eq(lift[3], NameTag.HIDDEN, "третья в ряд не помещается (потолок) — скрыта, только вверх (ART-033)")
+	for i in 3:
 		for j in i:
-			ok(not Rect2(rs[i].position + sh[i], rs[i].size).intersects(Rect2(rs[j].position + sh[j], rs[j].size)),
-				"%d и %d не перекрываются" % [i, j])
+			ok(not Rect2(rs[i].position - Vector2(0, lift[i]), rs[i].size).intersects(
+				Rect2(rs[j].position - Vector2(0, lift[j]), rs[j].size)), "%d и %d не перекрываются" % [i, j])
 
 
 ## #319: товарищ сбоку вплотную — плашка не больше 96 px (при 1080), а не в треть экрана.
@@ -141,4 +141,4 @@ func test_close_mates_no_overlap() -> void:
 	var ra := _screen_rect(ia)
 	var rb := _screen_rect(ib)
 	ok(not ra.intersects(rb), "не перекрываются: %s и %s" % [ra, rb])
-	ok(rb.position.y < ra.position.y or absf(rb.position.x - ra.position.x) > 1.0, "дальняя сдвинута, ближняя на месте")
+	ok(rb.position.y < ra.position.y, "дальняя поднята над ближней")
