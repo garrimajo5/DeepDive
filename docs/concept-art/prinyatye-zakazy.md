@@ -420,3 +420,10 @@ emission), стекло банки 64 (alpha 0,25) — `models/stellazh-tryuma.g
 **Принято 21.10.2026** (PR #285, ветка `art/MOD-020-kolco-svetilnik`): `models/kolco-svetilnik.glb` (1 416 треуг.,
 Ø 3,2 × 0,2 м, pivot — центр верха), превью `kolco-svetilnik.png`; решения — `laboratoriya.md` (раздел MOD-020).
 Ставится в (0; 3,45; 11), светится только нижняя вставка. Встройка — задача ROADMAP потока А.
+
+## ART-035 Значок игры — принято
+- Исходник: ART-001 (`kovcheg-7.md`), ART-034 (`zastavka.md`).
+
+**Принято 21.10.2026** (PR #291, ветка `art/ART-035-znachok`): `icons/znachok-512.png`, `-192.png`, адаптивные слои
+`znachok-perednij-432.png` / `znachok-fon-432.png`, лист `znachok-proverka.png`; решения — `znachok.md`. Подключены
+в `export_presets.cfg` (`launcher_icons/*`) и `config/icon`; заглушка `icon.svg` удалена.
