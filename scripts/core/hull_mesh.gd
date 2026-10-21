@@ -12,6 +12,36 @@ const LENS_GLOW := 1.0
 const LOCK_GLOW := 0.45
 
 
+## Обшивка ART-024 (`docs/concept-art/obshivka.md`): плитка 2 × 2 м трипланарно в осях корабля, швы по маске
+## темнее и с блеском, обрастание на нижней половине по локальной высоте. Числа — те же, что в шейдере
+## `shaders/hull_plating.gdshader` (их туда передаёт HullView).
+const PLATE_TILE := 2.0
+const PLATE_TEX := "res://textures/hull/%s.png"   ## tsvet, maska, obrastanie
+const SEAM_DARK := 0.7          ## множитель цвета на шве (маска 255): швы читаются с 30 м
+const STAIN_DARK := 0.95        ## пятна и подтёки (маска 128)
+const GROWTH_MAX := 0.65
+const GROWTH_FROM := 0.15       ## h, где обрастание начинает спадать
+const GROWTH_TO := 0.5          ## h, где его уже нет
+## Низ и высота корпуса для локальной высоты h: от киля основного объёма до верха носовой оболочки.
+const KEEL_Y := HullPlan.CENTER_Y - HullPlan.NOSE_H * 0.5
+const HULL_H := HullPlan.NOSE_H
+
+
+## Краска под обшивкой: металл корпуса. Швы-кольца, окна, линза, шлюз — своим цветом.
+static func plated(paint: int) -> bool:
+	return paint == HullPlan.Paint.METAL
+
+
+## Локальная высота точки корпуса (оси корабля): 0 у киля, 1 у верха.
+static func local_height(y: float) -> float:
+	return clampf((y - KEEL_Y) / HULL_H, 0.0, 1.0)
+
+
+## Вес обрастания по локальной высоте (заметки художника ART-024): 0.65 · (1 − smoothstep(0.15, 0.50, h)).
+static func growth(h: float) -> float:
+	return GROWTH_MAX * (1.0 - smoothstep(GROWTH_FROM, GROWTH_TO, h))
+
+
 ## Детали, которые рисует корпус: все, кроме крышки шлюза.
 static func drawn(part: HullPlan.Part) -> bool:
 	return part.piece != HullPlan.Piece.AIRLOCK

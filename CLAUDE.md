@@ -27,7 +27,8 @@
   сброс; `Reactor.Console` — выбор на пульте). Новая система корабля берёт силу из `main.reactor.k(...)`.
   `ship_layout.gd` — отсеки за мостиком (z 2…24), люки `ShipLayout.Door`, `can_stand` для всего корабля (мостик — `Deck`),
   геометрия `parts()`; рисует `scripts/game/rooms_view.gd` (там же реактор). `hull_plan.gd` — корпус снаружи по ART-001
-  (28 деталей, `inside`/`inside_world`); меши по краскам и движение роторов и рулей — `hull_mesh.gd` (`HullMesh.Motion`),
+  (28 деталей, `inside`/`inside_world`); меши по краскам и движение роторов и рулей — `hull_mesh.gd` (`HullMesh.Motion`; обшивка ART-024 — `HullMesh.plated`/`growth`,
+  карты `textures/hull/`, шейдер `shaders/hull_plating.gdshader`),
   рисует `scripts/game/hull_view.gd` (`main.hull`, слой 1). `sonar.gd` — импульс, дальность,
   отметки из `EcoLink.NEAR`, карта рельефа; голограмма — `scripts/game/sonar_view.gd` + `shaders/sonar_holo.gdshader`.
   `crew.gd` — член экипажа (`Crew.Member`: поза стоя, на ходу и в кресле, руки на штурвале, резак при сварке `weld`, наклон к посту `lean` (`ease_lean`; камера за головой — `eye_offset`; своя фигура стоя позади глаза — `back`, взглядом вниз — дальше, `CrewView.own_back`, меш без груди `CrewView.mesh_kind`; места у постов `Main.*_STAND`), снимок для сети; пост одного человека — `Crew.BUSY`/`Crew.holder`, `Crew.Member.post` («Штурвал занят»);
