@@ -7,6 +7,8 @@ extends Node3D
 var spot: SpotLight3D
 var beam: MeshInstance3D
 var on := true
+var lit := true        ## свет горит: без него у света энергия Searchlight.DARK, но сам SpotLight3D в сцене (issue #159)
+var flicker := 1.0     ## мигание вместе с плафонами (set_flicker)
 
 
 func _ready() -> void:
@@ -42,9 +44,13 @@ func _ready() -> void:
 ## reach — доля длины луча (ил рассеивает свет, Silt.beam_k).
 func apply(is_on: bool, k: float, reach: float = 1.0) -> void:
 	on = is_on
-	var lit := Searchlight.lit(is_on, k)
-	spot.visible = lit
+	lit = Searchlight.lit(is_on, k)
+	# Свет не прячем, а гасим энергией: Compatibility собирает шейдер каждого материала отдельно для «есть прожектор»
+	# и «нет прожектора» (набор огней на предмете). Спрятанный свет — второй набор: на телефоне сборка шейдеров при
+	# гашении прожектора и лишние кадры прогрева на старте (issue #159). С энергией DARK набор огней один.
+	spot.visible = true
 	beam.visible = lit
+	_energy()
 	if lit:
 		var s := Searchlight.scale(k)
 		spot.spot_range = Searchlight.range_m(k) * reach
@@ -53,4 +59,9 @@ func apply(is_on: bool, k: float, reach: float = 1.0) -> void:
 
 ## Прожектор мигает вместе с плафонами (js/ship.js: spot.intensity × fl): свет × k, конус луча не трогаем.
 func set_flicker(k: float) -> void:
-	spot.light_energy = Searchlight.ENERGY * k
+	flicker = k
+	_energy()
+
+
+func _energy() -> void:
+	spot.light_energy = Searchlight.ENERGY * flicker if lit else Searchlight.DARK

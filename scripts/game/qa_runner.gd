@@ -26,6 +26,8 @@ var frames := 0
 var frames_us := 0
 var _warm_frames := 0   ## кадры прогрева шейдеров при старте (Warmup) — в лог, когда он кончится
 var _warm_from_us := 0
+var _warm_last_us := 0
+var _warm_ms: Array[int] = []   ## длительность каждого кадра прогрева, мс (issue #159: какой взгляд дорогой)
 var drain_left := 0.0   ## шаг «drain»: столько секунд ещё слать в игру EcoLink.DRAIN от стеклоуста
 
 
@@ -57,10 +59,14 @@ func tick(dt: float) -> void:
 		return
 	if main.warming():   # прогрев шейдеров при старте: шаги сценария ждут, кадры не считаем
 		_warm_frames += 1
+		_warm_tick(Time.get_ticks_usec())
 		_skip_frame = true
 		return
 	if _warm_frames > 0:
-		_log("прогрев шейдеров: %d кадров, %d мс" % [_warm_frames, (Time.get_ticks_usec() - _warm_from_us) / 1000])
+		var now := Time.get_ticks_usec()
+		_warm_tick(now)
+		_log("прогрев шейдеров: %d кадров, %d мс" % [_warm_frames, (now - _warm_from_us) / 1000])
+		_log("прогрев по кадрам, мс: " + warm_line(_warm_ms))
 		_warm_frames = -1
 	time += dt
 	_measure(Time.get_ticks_usec())
@@ -190,6 +196,25 @@ func _shot(name: String) -> void:
 	frames = 0
 	frames_us = 0
 	_skip_frame = true
+
+
+## Отметка кадра прогрева: сколько прошло с прошлой (первая — от начала сценария).
+func _warm_tick(now_us: int) -> void:
+	_warm_ms.append((now_us - (_warm_last_us if _warm_last_us > 0 else _warm_from_us)) / 1000)
+	_warm_last_us = now_us
+
+
+## Строка лога «по кадрам»: длительности через запятую, самый долгий кадр — номером (с нуля) в конце.
+static func warm_line(ms: Array[int]) -> String:
+	if ms.is_empty():
+		return "—"
+	var worst := 0
+	var parts := PackedStringArray()
+	for k in ms.size():
+		parts.append(str(ms[k]))
+		if ms[k] > ms[worst]:
+			worst = k
+	return "%s; худший — кадр %d" % [", ".join(parts), worst]
 
 
 func _log(line: String) -> void:
