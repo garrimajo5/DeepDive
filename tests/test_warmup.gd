@@ -45,9 +45,21 @@ func test_post_views() -> void:
 ## Строка лога «по кадрам» (issue #159): тестер видит, какой взгляд прогрева дорогой.
 func test_warm_line() -> void:
 	var ms: Array[int] = [20, 24800, 7300, 400]
-	eq(QaRunner.warm_line(ms), "20, 24800, 7300, 400; худший — кадр 1")
+	eq(QaRunner.warm_line(ms), "до первого кадра 20; кадры: 24800, 7300, 400; худший — кадр 1 из 3")
 	var none: Array[int] = []
 	eq(QaRunner.warm_line(none), "—")
+	var one: Array[int] = [85]
+	eq(QaRunner.warm_line(one), "до первого кадра 85")
+
+
+## Чисел кадров в строке «по кадрам» столько же, сколько в заголовке «N кадров» (отчёт qa/2026-10-21-2310:
+## 15 чисел при 14 кадрах — первое число было сборкой сцены до прогрева).
+func test_warm_line_matches_header() -> void:
+	var ms: Array[int] = [85, 34687, 7481, 933, 37, 1335, 36, 28, 30, 25, 25, 25, 30, 25, 24]
+	var line := QaRunner.warm_line(ms)
+	var frames := line.split("кадры: ")[1].split(";")[0].split(", ")
+	eq(frames.size(), 14, "14 кадров — 14 чисел")
+	ok(line.ends_with("худший — кадр 1 из 14"), line)
 
 
 ## Вспышка разряда гаснет энергией к концу мигания; погашенный свет — Searchlight.DARK, не 0 (issue #159).

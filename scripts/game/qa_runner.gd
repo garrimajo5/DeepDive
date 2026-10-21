@@ -270,17 +270,22 @@ func _warm_tick(now_us: int) -> void:
 	_warm_last_us = now_us
 
 
-## Строка лога «по кадрам»: длительности через запятую, самый долгий кадр — номером (с нуля) в конце.
+## Строка лога «по кадрам»: ms[0] — от запуска сценария до первого кадра прогрева (сборка сцены, не кадр), дальше —
+## кадры прогрева с единицы; самый долгий — номером в конце. Так чисел кадров столько же, сколько в заголовке
+## «прогрев шейдеров: N кадров» (отчёт qa/2026-10-21-2310: 15 чисел при 14 кадрах).
 static func warm_line(ms: Array[int]) -> String:
 	if ms.is_empty():
 		return "—"
-	var worst := 0
+	var head := "до первого кадра %d" % ms[0]
+	if ms.size() < 2:
+		return head
+	var worst := 1
 	var parts := PackedStringArray()
-	for k in ms.size():
+	for k in range(1, ms.size()):
 		parts.append(str(ms[k]))
 		if ms[k] > ms[worst]:
 			worst = k
-	return "%s; худший — кадр %d" % [", ".join(parts), worst]
+	return "%s; кадры: %s; худший — кадр %d из %d" % [head, ", ".join(parts), worst, ms.size() - 1]
 
 
 func _log(line: String) -> void:
