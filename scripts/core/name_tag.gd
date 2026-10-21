@@ -67,47 +67,32 @@ static func visible_at(d: float, depth: float) -> bool:
 	return shown(d) and depth >= MIN_DEPTH
 
 
-## Разнести таблички, стоящие рядом на экране (#320): rects — прямоугольники плашек на экране (px, y вниз)
-## в порядке от ближней к дальней. Ближняя остаётся на месте; следующая, если задевает уже поставленную, встаёт
-## над ней, слева или справа (с зазором GAP высоты) — куда ближе к своему месту. Вверх — не выше MAX_UP высот
-## (иначе упрётся в потолок отсека). Возвращает сдвиг каждой, px (x вправо, y вниз).
+## Разнести таблички, стоящие рядом на экране (#320, правила ART-033): rects — прямоугольники плашек на экране
+## (px, y вниз) от ближней к дальней. Ближняя на месте; следующая, если задевает уже поставленную, поднимается над
+## ней с зазором GAP высоты — только вверх (не на лицо и не на голостол) и не выше MAX_UP высот (иначе упрётся в
+## потолок отсека); не помещается — скрыта (HIDDEN). Возвращает подъём каждой, px (≥ 0), или HIDDEN.
 const MAX_UP := 1.5
+const HIDDEN := -1.0
 static func spread(rects: Array) -> Array:
 	var placed: Array[Rect2] = []
 	var out: Array = []
 	for r: Rect2 in rects:
 		var cur := r
-		for _step in 8:
-			var hit := -1
-			for k in placed.size():
-				if cur.intersects(placed[k]):
-					hit = k
+		var ok := true
+		var moved := true
+		while moved and ok:
+			moved = false
+			for p in placed:
+				if cur.intersects(p):
+					cur.position.y = p.position.y - cur.size.y * (1.0 + GAP)
+					moved = true
+					ok = r.position.y - cur.position.y <= MAX_UP * r.size.y + 0.5
 					break
-			if hit < 0:
-				break
-			var p := placed[hit]
-			var g := GAP * r.size.y
-			var cands: Array[Rect2] = []
-			var up := Rect2(Vector2(cur.position.x, p.position.y - cur.size.y - g), cur.size)
-			if r.position.y - up.position.y <= MAX_UP * r.size.y + 0.5:
-				cands.append(up)
-			cands.append(Rect2(Vector2(p.position.x - cur.size.x - g, cur.position.y), cur.size))
-			cands.append(Rect2(Vector2(p.end.x + g, cur.position.y), cur.size))
-			var best := cands[0]
-			var best_cost := INF
-			for c in cands:
-				var free := true
-				for q in placed:
-					if c.intersects(q):
-						free = false
-						break
-				var cost := c.position.distance_to(r.position) + (0.0 if free else 1e6)
-				if cost < best_cost:
-					best_cost = cost
-					best = c
-			cur = best
-		placed.append(cur)
-		out.append(cur.position - r.position)
+		if ok:
+			placed.append(cur)
+			out.append(r.position.y - cur.position.y)
+		else:
+			out.append(HIDDEN)
 	return out
 
 
