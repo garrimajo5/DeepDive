@@ -1,18 +1,16 @@
 class_name AlarmBoardView
 extends Node3D
 ## Табло тревог над носовым окном мостика (ART-025, AlarmBoard): рама, разделители и кронштейны — один меш
-## с цветом вершин (1 вызов отрисовки), лицо — квад с шейдером `shaders/alarm_board.gdshader` (1 вызов). Надписи
-## пока рисуются шрифтом игры один раз в текстуру (SubViewport); атлас художника — MOD-019 (#198).
+## с цветом вершин (1 вызов отрисовки), лицо — квад с шейдером `shaders/alarm_board.gdshader` (1 вызов). Надписи —
+## атлас MOD-019 (#198) `textures/tablo/trevogi-slova.png`: буквы (класс 255) — покрытие, углы рисует шейдер.
 ## Слой 2 (LAYER_SHIP): корабль изнутри.
 
-const TEX_SIZE := Vector2i(3072, 64)   ## шире лица в 1,5 раза по x: на табло буквы сжаты, как узкий шрифт ART-025
-const FONT_SIZE := 56
+const WORDS_TEX := "res://textures/tablo/trevogi-slova.png"   ## атлас надписей MOD-019: буквы 255, углы 128, фон 0
 
 var frame: MeshInstance3D
 var face: MeshInstance3D
 var mat: ShaderMaterial
 var levels: Array[Vector2] = []   ## последние уровни полей (AlarmBoard.levels)
-var _words: SubViewport
 var hint: MeshInstance3D          ## янтарная рамка у поста главной тревоги (AlarmBoard.hint), 1 вызов отрисовки
 var hint_mat: StandardMaterial3D
 var _hint_key := ""
@@ -30,27 +28,7 @@ func _ready() -> void:
 	frame.layers = OceanView.LAYER_SHIP
 	add_child(frame)
 
-	_words = SubViewport.new()
-	_words.name = "Табло: надписи"
-	_words.size = TEX_SIZE
-	_words.transparent_bg = true
-	_words.disable_3d = true
-	_words.render_target_update_mode = SubViewport.UPDATE_ONCE
-	add_child(_words)
 	var r: Vector2 = AlarmBoard.face_rect()[1]
-	for i in AlarmBoard.WORDS.size():
-		var s := AlarmBoard.field_span(i)
-		var l := Label.new()
-		l.text = AlarmBoard.WORDS[i]
-		l.add_theme_font_size_override("font_size", FONT_SIZE)
-		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		var x0 := AlarmBoard.u_of(s.x) * TEX_SIZE.x
-		var x1 := AlarmBoard.u_of(s.y) * TEX_SIZE.x
-		l.position = Vector2(x0, 0)
-		l.size = Vector2(x1 - x0, TEX_SIZE.y)
-		_words.add_child(l)
-
 	face = MeshInstance3D.new()
 	face.name = "Табло: лицо"
 	var q := QuadMesh.new()
@@ -59,7 +37,7 @@ func _ready() -> void:
 	face.position = AlarmBoard.face_rect()[0] + Vector3(0, 0, 0.001)
 	mat = ShaderMaterial.new()
 	mat.shader = load("res://shaders/alarm_board.gdshader")
-	mat.set_shader_parameter("words", _words.get_texture())
+	mat.set_shader_parameter("words", load(WORDS_TEX))
 	var edges := PackedFloat32Array()
 	for i in AlarmBoard.WORDS.size():
 		edges.append(AlarmBoard.u_of(AlarmBoard.field_span(i).x))

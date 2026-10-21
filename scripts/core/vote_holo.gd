@@ -84,6 +84,10 @@ const TITLE_DY := 0.24     ## заголовок над центром подл�
 const ROW_TOP := 0.11      ## первая строка над центром
 const ROW_STEP := 0.11     ## между строками
 const LINE_W := 0.004      ## толщина рамки и разделителей
+## Иконки строк итога ART-026 (docs/concept-art/itog-ikonki.md): слева от названия, статичны, плоские #67DDEB.
+const ICON_SIZE := 0.09    ## сторона иконки, м (чуть меньше шага строк ROW_STEP)
+const ICON_GAP := 0.015    ## от иконки до названия, м
+const SUMMARY_ICONS := {"Образцы": "obrazcy", "Виды": "vidy", "Места": "mesta", "Пробоины": "proboiny"}
 
 
 ## Показывать ли итог: решение принято «наверх», панель итога открыта.
@@ -94,6 +98,21 @@ static func result_wanted(at_vote: bool, ended: bool) -> bool:
 ## Высота i-й строки итога от центра подложки.
 static func row_y(i: int) -> float:
 	return ROW_TOP - ROW_STEP * i
+
+
+## Иконка строки итога по её названию (Run.summary); "" — у строки иконки нет.
+static func summary_icon(title: String) -> String:
+	return "res://textures/summary/%s.png" % SUMMARY_ICONS[title] if SUMMARY_ICONS.has(title) else ""
+
+
+## Центр иконки строки по x (от центра подложки): у левого поля.
+static func icon_x() -> float:
+	return -BOARD_W * 0.5 + BOARD_PAD + ICON_SIZE * 0.5
+
+
+## Левый край названия строки по x: правее иконки.
+static func name_x() -> float:
+	return -BOARD_W * 0.5 + BOARD_PAD + ICON_SIZE + ICON_GAP
 
 
 ## Поворот подложки вокруг y, чтобы её лицо (+Z) смотрело на глаз eye (в осях голограммы).
