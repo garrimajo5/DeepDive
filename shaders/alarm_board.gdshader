@@ -4,7 +4,7 @@ shader_type spatial;
 // буквы и светящиеся углы, мигает — гаснут только углы. Без освещения: табло светит само.
 render_mode unshaded, cull_back;
 
-uniform sampler2D words : source_color, filter_linear_mipmap;
+uniform sampler2D words : filter_linear;   // атлас MOD-019: буквы = 1, углы = 0.5, фон = 0 (данные, без mipmap)
 uniform float edges[6];          // границы полей по u (0…1), слева направо
 uniform vec2 lv[5];              // (буквы, углы) 0…1
 uniform vec2 face_size = vec2(7.15, 0.2);   // м — для толщины углов
@@ -20,7 +20,8 @@ void fragment() {
 		if (uv.x >= edges[i]) { f = i; }
 	}
 	vec2 l = lv[f];
-	float a = texture(words, uv).a;
+	// покрытие — только класс букв (255); углы (128) исключаем, их рисуем геометрией ниже
+	float a = smoothstep(0.6, 0.9, texture(words, uv).r);
 	vec3 col = back;
 	col = mix(col, mix(word_off, word_on * glow, l.x), a);
 	// углы поля: уголки длиной 0,08 м и толщиной 0,012 м у краёв поля
