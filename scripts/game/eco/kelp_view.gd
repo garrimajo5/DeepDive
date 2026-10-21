@@ -4,26 +4,8 @@ extends Node3D
 ## 0,45 × 1 м в 7 отрезков, видна с обеих сторон, качается в шейдере как G.sway с размахом 0,9; цвет экземпляра — от
 ## голого стебля к зелени по густоте, слабое своё свечение #0b1a10), тела ежей (икосаэдр 0,2 м, #3a1f4a, свечение
 ## #12061a) и иглы (18 игл по 0,32 м со светящимися голубыми кончиками, без освещения). Ленты переписываются, только
-## когда ёж их объел или они отросли (EcoKelp.dirty). Стоит на слое отмели (OceanView.LAYER_WORLD).
-
-const KELP_SHADER := """
-shader_type spatial;
-render_mode cull_disabled;
-uniform vec3 glow : source_color;
-varying vec3 tint;
-void vertex() {
-	tint = COLOR.rgb;
-	float ph = MODEL_MATRIX[3].x * 0.23 + MODEL_MATRIX[3].z * 0.19;
-	float k = clamp(VERTEX.y, 0.0, 1.0);
-	VERTEX.x += sin(TIME * 1.2 + ph + VERTEX.y * 2.0) * k * k * 0.9;
-	VERTEX.z += cos(TIME * 0.9 + ph * 1.3) * k * k * 0.54;
-}
-void fragment() {
-	ALBEDO = tint;
-	EMISSION = glow;
-	ROUGHNESS = 0.9;
-}
-"""
+## когда ёж их объел или они отросли (EcoKelp.dirty). Ленты — общий шейдер растений (EcoShaders.PLANT).
+## Стоит на слое отмели (OceanView.LAYER_WORLD).
 
 const KELP_GLOW := Color("0b1a10")
 const SEGMENTS := 7
@@ -100,11 +82,15 @@ static func build_stalk() -> ArrayMesh:
 	arr[Mesh.ARRAY_INDEX] = idx
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
-	var mat := ShaderMaterial.new()
-	mat.shader = EcoShaders.shader(KELP_SHADER)
-	mat.set_shader_parameter("glow", KELP_GLOW)
-	m.surface_set_material(0, mat)
+	m.surface_set_material(0, EcoShaders.plant(EcoShaders.Plant.KELP, {"rough": 0.9,
+		"glow": _linear(KELP_GLOW)}))
 	return m
+
+
+## Цвет из sRGB в линейный (свечение в общем шейдере растений — без source_color).
+static func _linear(c: Color) -> Vector3:
+	var l := c.srgb_to_linear()
+	return Vector3(l.r, l.g, l.b)
 
 
 static func build_body() -> SphereMesh:

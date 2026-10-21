@@ -1,48 +1,10 @@
 class_name FanView
 extends MultiMeshInstance3D
 ## Веерники в сцене: все — один MultiMesh из одного прямоугольника 2,6 × 3 м (два треугольника), кружево ветвей
-## рисует шейдер (как fanTex в js/creatures.js: ствол, 13 лучей веером и дуги между ними; остальное отброшено).
+## рисует общий шейдер растений (EcoShaders.PLANT, как fanTex в js/creatures.js: ствол, 13 лучей веером и дуги
+## между ними; остальное отброшено).
 ## Своего света нет: светлые края — отражённый свет (ART-004, #68E6DC). Плоскость повёрнута навстречу потоку
 ## (EcoFan.basis), видна с обеих сторон. Стоит на слое отмели (OceanView.LAYER_WORLD).
-
-const SHADER := """
-shader_type spatial;
-render_mode cull_disabled;
-uniform vec3 rib_color : source_color;
-uniform vec3 edge_color : source_color;
-uniform vec2 size;
-void fragment() {
-	// метры от подножия: x вправо, y вверх; лучи расходятся из точки на высоте 0,35 м
-	vec2 p = vec2((UV.x - 0.5) * size.x, (1.0 - UV.y) * size.y);
-	vec2 o = vec2(0.0, 0.35);
-	vec2 d = p - o;
-	float r = length(d);
-	float a = atan(d.x, max(d.y, 1e-4));
-	float w = 0.0;
-	// ствол
-	if (p.y < o.y + 0.05) {
-		w = step(abs(p.x), 0.09);
-	}
-	// лучи: 13 от −1,25 до 1,25 рад, тоньше к краю
-	float k = (a + 1.25) / 2.5 * 12.0;
-	float ray = abs(k - round(k)) * 2.5 / 12.0 * r;
-	if (d.y > 0.0 && abs(a) < 1.3) {
-		w = max(w, step(ray, 0.05 - r * 0.008));
-		// дуги-эллипсы между лучами
-		float e = length(vec2(d.x / 0.55, d.y / 0.95));
-		float ring = abs(fract(e / 0.22) - 0.5) * 0.22;
-		w = max(w, step(ring, 0.024) * step(0.3, e));
-		// край веера — эллипс
-		w *= step(e, 2.6);
-	}
-	if (w < 0.5) {
-		discard;
-	}
-	float edge = smoothstep(1.6, 2.6, length(vec2(d.x / 0.55, d.y / 0.95)));
-	ALBEDO = mix(rib_color, edge_color, edge);
-	ROUGHNESS = 0.6;
-}
-"""
 
 const RIB := Color("1f8796")
 const EDGE := Color("68E6DC")
@@ -80,12 +42,8 @@ static func build_mesh() -> ArrayMesh:
 	arrays[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 2, 1, 0, 3, 2])
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	var mat := ShaderMaterial.new()
-	mat.shader = EcoShaders.shader(SHADER)
-	mat.set_shader_parameter("rib_color", RIB)
-	mat.set_shader_parameter("edge_color", EDGE)
-	mat.set_shader_parameter("size", Vector2(EcoFan.WIDTH, EcoFan.HEIGHT))
-	mesh.surface_set_material(0, mat)
+	mesh.surface_set_material(0, EcoShaders.plant(EcoShaders.Plant.FAN, {"paint": RIB, "edge": EDGE, "rough": 0.6,
+		"size": Vector2(EcoFan.WIDTH, EcoFan.HEIGHT)}))
 	return mesh
 
 

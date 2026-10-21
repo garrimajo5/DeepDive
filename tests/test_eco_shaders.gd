@@ -3,7 +3,7 @@ extends TestCase
 ## Одинаковый код — один ресурс, похожие материалы мест и видов — общий код EcoShaders с числами в uniform.
 
 ## Сколько разных шейдеров у живого мира — потолок. Вырос — проверить, нельзя ли взять общий из EcoShaders.
-const ECO_BUDGET := 25
+const ECO_BUDGET := 22
 
 
 func test_same_code_same_shader() -> void:
@@ -29,6 +29,20 @@ func test_mist_modes() -> void:
 		ok(EcoShaders.MIST.contains("mode == %d" % m), "ветка режима %d" % m)
 	ok(not EcoShaders.MIST.contains("mode == %d" % EcoShaders.Mist.COLUMN), "столб — последняя ветка")
 	ok(EcoShaders.MIST.contains("depth_draw_never") and EcoShaders.MIST.contains("unshaded"), "без света и глубины")
+
+
+func test_plant_modes() -> void:
+	var a := EcoShaders.plant(EcoShaders.Plant.KELP)
+	var b := EcoShaders.plant(EcoShaders.Plant.ORGAN, {"shade": 0.45, "spec": 0.1})
+	eq(a.shader, b.shader, "лента и орган — один шейдер")
+	eq(int(b.get_shader_parameter("mode")), EcoShaders.Plant.ORGAN, "что рисовать — в uniform")
+	near(float(b.get_shader_parameter("shade")), 0.45, 1e-6, "числа вида — в uniform")
+	# режимы шейдера совпадают с enum: качается только лента, у листа и веера — свои ветки, остальное — цвет вершины
+	eq(EcoShaders.Plant.KELP, 0, "лента — режим 0 (качание)")
+	ok(EcoShaders.PLANT.contains("mode == %d" % EcoShaders.Plant.LEAF), "ветка листа")
+	ok(EcoShaders.PLANT.contains("mode == %d" % EcoShaders.Plant.FAN), "ветка веера")
+	ok(not EcoShaders.PLANT.contains("mode == %d" % EcoShaders.Plant.ORGAN), "орган — последняя ветка")
+	ok(EcoShaders.PLANT.contains("cull_disabled") and not EcoShaders.PLANT.contains("unshaded"), "со светом, обе стороны")
 
 
 func test_moss_glow_padded() -> void:
@@ -79,6 +93,11 @@ func test_scene_world_shares_shaders() -> void:
 	eq(_find(ev.find_child("Вуали", true, false), "Щупальца"), mist, "щупальца вуали и купола — один шейдер")
 	for who in ["Чернила", "Пузыри", "Марево", "Трещина во льду", "Столб света"]:
 		eq(_find(ev, who), mist, "%s и купола — один шейдер прозрачного" % who)
+	var plant := _find(ev, "Листья")
+	ok(plant != "", "листья найдены")
+	for who in ["Веерники", "Трубный орган"]:
+		eq(_find(ev, who), plant, "%s и листья — один шейдер растений" % who)
+	eq(ShaderKey.of(ev.kelp_view.stalks.multimesh.mesh.surface_get_material(0)), plant, "ленты и листья — один шейдер растений")
 	var rock := ev.vent_view.rock.mesh.surface_get_material(0) as ShaderMaterial
 	eq(float(rock.get_shader_parameter("flicker")), 1.0, "жерла курильщика мерцают")
 	ok(keys.size() <= ECO_BUDGET, "шейдеров мира %d ≤ %d" % [keys.size(), ECO_BUDGET])

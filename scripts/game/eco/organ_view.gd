@@ -2,26 +2,18 @@ class_name OrganView
 extends MeshInstance3D
 ## Трубные органы в сцене (organGeo в js/creatures.js; ART-004): все губки — один меш (один вызов отрисовки).
 ## Труба — открытый усечённый конус (10 граней, видна с обеих сторон), у устья светлый обод-кольцо. Трубы через одну
-## #9a7f6a и #6f5b4c, обод #ffd9a0; губка чуть тлеет тёплым (EcoOrgan.glow — в шейдере по TIME).
+## #9a7f6a и #6f5b4c, обод #ffd9a0; губка чуть тлеет тёплым (EcoOrgan.glow — в общем шейдере растений
+## EcoShaders.PLANT по TIME).
 ## Стоит на слое отмели (OceanView.LAYER_WORLD).
-
-const SHADER := """
-shader_type spatial;
-render_mode cull_disabled;
-uniform float paint_k;
-void fragment() {
-	ALBEDO = COLOR.rgb * paint_k;
-	ROUGHNESS = 1.0;
-	SPECULAR = 0.1;
-	EMISSION = vec3(0.1 + 0.05 * sin(TIME * 1.7), 0.06, 0.03);
-}
-"""
 
 const LIGHT := Color("9a7f6a")
 const DARK := Color("6f5b4c")
 const RIM := Color("ffd9a0")
 ## Краска гуще: при ярком свете сквозь лёд светлая губка выгорает в белый (как у огнецвета).
 const PAINT_K := 0.45
+## Тление губки (линейный цвет): GLOW + GLOW_WAVE · sin(TIME · 1,7).
+const GLOW := Vector3(0.1, 0.06, 0.03)
+const GLOW_WAVE := Vector3(0.05, 0.0, 0.0)
 ## Граней у трубы, у обода — 10 × 4 (CylinderGeometry(…, 10), TorusGeometry(0,32, 0,05, 4, 10)).
 const SIDES := 10
 const RIM_TUBE := 0.05
@@ -57,10 +49,8 @@ func _init(system: EcoOrgan) -> void:
 		arrays[Mesh.ARRAY_COLOR] = _col
 		arrays[Mesh.ARRAY_INDEX] = _idx
 		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-		var mat := ShaderMaterial.new()
-		mat.shader = EcoShaders.shader(SHADER)
-		mat.set_shader_parameter("paint_k", PAINT_K)
-		m.surface_set_material(0, mat)
+		m.surface_set_material(0, EcoShaders.plant(EcoShaders.Plant.ORGAN, {"shade": PAINT_K, "rough": 1.0,
+			"spec": 0.1, "glow": GLOW, "glow_wave": GLOW_WAVE}))
 	mesh = m
 	tris = _idx.size() / 3
 
