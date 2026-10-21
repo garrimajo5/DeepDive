@@ -18,7 +18,7 @@ func _ready() -> void:
 	var mesh := ArrayMesh.new()
 	for paint in HullMesh.paints():
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, HullMesh.paint_builder(paint).arrays())
-		mesh.surface_set_material(mesh.get_surface_count() - 1, material(paint))
+		mesh.surface_set_material(mesh.get_surface_count() - 1, body_material(paint))
 	body.mesh = mesh
 	_setup(body)
 	add_child(body)
@@ -45,6 +45,33 @@ func _ready() -> void:
 func _setup(mi: MeshInstance3D) -> void:
 	mi.layers = OceanView.LAYER_WORLD
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+## Металл неподвижного корпуса — обшивка ART-024 (шейдер `hull_plating`): плитка в осях корабля, обрастание по высоте.
+## Роторы и рули (свои оси, без обрастания) и прочие краски — однотонные.
+static func plating() -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = load("res://shaders/hull_plating.gdshader")
+	m.set_shader_parameter("color_tex", load(HullMesh.PLATE_TEX % "tsvet"))
+	m.set_shader_parameter("mask_tex", load(HullMesh.PLATE_TEX % "maska"))
+	m.set_shader_parameter("growth_tex", load(HullMesh.PLATE_TEX % "obrastanie"))
+	m.set_shader_parameter("tile", HullMesh.PLATE_TILE)
+	m.set_shader_parameter("seam_dark", HullMesh.SEAM_DARK)
+	m.set_shader_parameter("stain_dark", HullMesh.STAIN_DARK)
+	m.set_shader_parameter("keel_y", HullMesh.KEEL_Y)
+	m.set_shader_parameter("hull_h", HullMesh.HULL_H)
+	m.set_shader_parameter("growth_max", HullMesh.GROWTH_MAX)
+	m.set_shader_parameter("growth_from", HullMesh.GROWTH_FROM)
+	m.set_shader_parameter("growth_to", HullMesh.GROWTH_TO)
+	return m
+
+
+func body_material(paint: int) -> Material:
+	if HullMesh.plated(paint):
+		if not _mats.has(-1):
+			_mats[-1] = plating()
+		return _mats[-1]
+	return material(paint)
 
 
 func material(paint: int) -> StandardMaterial3D:
