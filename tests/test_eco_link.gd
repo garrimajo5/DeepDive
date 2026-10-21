@@ -102,6 +102,36 @@ func test_eel_drain_reaches_battery() -> void:
 	await frames(1)
 
 
+func test_remora_drag_event() -> void:
+	# Присоски на корпусе: мир шлёт одно EcoLink.DRAG за шаг — сколько их и добавку к сопротивлению воды (+0,025
+	# за каждую, js/ship.js); корабль прибавляет k к Helm.Ship.DRAG, пока событие приходит (поток А, issue).
+	var d := EcoLink.drag("Присоска", -2, -1.0)
+	eq(d["type"], EcoLink.DRAG)
+	eq(d["count"], 0, "не отрицательное число")
+	near(d["k"], 0.0, 1e-9, "не отрицательная добавка")
+	var view := EcoView.new()
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Vector3(400, -30, 400)
+	var drags := func(events: Array[Dictionary]) -> Array[Dictionary]:
+		var out: Array[Dictionary] = []
+		for e in events:
+			if e["type"] == EcoLink.DRAG:
+				out.append(e)
+		return out
+	eq((drags.call(view.step(0.1, ship)) as Array).size(), 0, "прилипалы на скатах — тормоза нет")
+	for k in 2:
+		view.remoras.remoras[k].mode = EcoRemora.Mode.HULL
+		view.remoras.remoras[k].slot = k
+	var got: Array = drags.call(view.step(0.1, ship))
+	eq(got.size(), 1, "одно событие за шаг из двух подшагов")
+	eq(got[0]["by"], "Присоска")
+	eq(got[0]["count"], 2)
+	near(got[0]["k"], 0.05, 1e-6, "две прилипалы — +0,05")
+	ship.zap = true
+	eq((drags.call(view.step(0.1, ship)) as Array).size(), 0, "разряд сбросил — тормоза нет")
+	view.free()
+
+
 func test_hit_clamped() -> void:
 	near(EcoLink.hit("x", 3.0, Vector3.ZERO)["damage"], 1.0, 1e-9, "урон 0…1")
 

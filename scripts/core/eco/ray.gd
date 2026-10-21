@@ -6,7 +6,7 @@ extends EcoSystem
 ## Раз в 14–22 с скат зовёт ближайшую свободную стаю светляков рифа (ближе 45 м): стая 18 с держится
 ## в 12 м за ним и на 3 м ниже (EcoFish.Shoal.follow), наблюдение «follow». Раз в 14–23 с ближайший скат
 ## (ближе 160 м) поёт — 3–5 низких нот, слева или справа от корабля (song: для звука); ближе 110 м — наблюдение «song».
-## Заметен сонару и сканеру. Присоски на спинах скатов — своей задачей.
+## Заметен сонару и сканеру. На спинах катаются присоски (EcoRemora).
 
 const ID := "ray"
 ## Круги скатов: центр (высота — средняя глубина), радиус и скорость (м/с) — числа браузера.
@@ -38,6 +38,8 @@ const SONG_FIRST := 8.0
 const SCALE: Array[float] = [110.0, 123.5, 146.8, 164.8, 196.0, 220.0]
 ## Размер цели сонара и сканера (r: 7).
 const TARGET_R := 7.0
+## Крен ската (rotateZ(−0,22)), рад.
+const BANK := 0.22
 
 
 ## Ледокрыл.
@@ -177,6 +179,14 @@ func _sing(world: EcoWorld) -> void:
 		var at := s.pos + (best.p - s.pos).limit_length(EcoBus.HEARING - 1.0)
 		var side := "слева" if pan < -0.3 else ("справа" if pan > 0.3 else "рядом")
 		world.emit(ID, "song", at, _text(world, "%s поёт где-то " + side + " — низкий голос слышен сквозь корпус"))
+
+
+## Место ската в мире: +Z — по курсу, крен BANK в повороте (как меш RayView). По нему же сидят присоски на спине.
+static func xform(ry: Ray) -> Transform3D:
+	var fwd := ry.dir if ry.dir.length_squared() > 1e-6 else Vector3.BACK
+	var b := Basis.looking_at(-fwd, Vector3.UP)  # looking_at смотрит в −Z: меш смотрит носом в +Z
+	b = b * Basis(Vector3.BACK, -BANK)
+	return Transform3D(b, ry.p)
 
 
 ## Каждый скат виден сонару и сканеру.

@@ -49,6 +49,9 @@ const PRED_PER_DIVE := 0.15
 ##     (0,12 — укус серпохвоста, как −12 % в браузере; 0,03 — щипок)
 ## {"type": DRAIN, "by": "Стеклоуст", "units": float}                      — тянет заряд корабля, ед./с, пока
 ##     событие приходит каждый шаг (батарея 0…100, восполняется 1,1 ед./с; стеклоуст — 3,2)
+## {"type": DRAG, "by": "Присоска", "count": n, "k": float}                — существа на корпусе тормозят корабль:
+##     k — добавка к сопротивлению воды (Helm.Ship.DRAG 0,45 + k; присоска — 0,025 каждая, js/ship.js), count — сколько
+##     их на корпусе. Пока событие приходит каждый шаг; нет события — тормоза нет.
 ## {"type": NEAR, "species": "pred", "name": "серпохвост", "dist": м, "pos": Vector3, "r": м, "sonar": bool, "scan": bool}
 ##     — заметное существо рядом (E.scanTargets). species — ключ вида из Species, name — Species.called (настоящее
 ##     имя, если вид просканирован), dist — до центра корабля, r — размер цели для прицела сканера (м).
@@ -72,6 +75,7 @@ const PRED_PER_DIVE := 0.15
 const HIT := "hit"
 const DRAIN := "drain"
 const NEAR := "near"
+const DRAG := "drag"
 const MESSAGE := "message"
 const OBSERVE := "observe"
 const STEAL := "steal"
@@ -84,6 +88,10 @@ static func hit(by: String, damage: float, at: Vector3) -> Dictionary:
 
 static func drain(by: String, units: float) -> Dictionary:
 	return {"type": DRAIN, "by": by, "units": maxf(units, 0.0)}
+
+
+static func drag(by: String, count: int, k: float) -> Dictionary:
+	return {"type": DRAG, "by": by, "count": maxi(count, 0), "k": maxf(k, 0.0)}
 
 
 static func near(species: String, name: String, pos: Vector3, ship_pos: Vector3, r: float = 1.0,

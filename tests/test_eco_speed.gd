@@ -159,7 +159,8 @@ func test_view_step_fits_frame() -> void:
 		view.step(1.0 / 60.0, ship)
 	# лучшее из пяти замеров по 60 кадров: на ПК было 3,2 мс, стало ≈ 0,95; со стеклоустами 1,4, после #133 — 1,1;
 	# с радужниками, огнёвками и хватнями 1,47; дальние хватни, средние стаи радужников и стоящие стаи светляков
-	# не переписываются каждый кадр — 1,29 (issue #133, второй раз).
+	# не переписываются каждый кадр — 1,29 (issue #133, второй раз). С ледокрылами и присосками шаг снова упёрся
+	# в порог; скребуны и ежи, что едят на месте, больше не считают дно каждый подшаг (issue #133, третий раз).
 	# Порог 2 мс — для машины не медленнее ПК; медленная машина CI (в полтора раза и больше) или занятая облачная
 	# сессия получает порог по мерке скорости, замеренной между теми же кадрами: тест ловит рост шага, а не железо.
 	var best := INF
@@ -331,3 +332,50 @@ func test_far_raduzh_swarm_synced_every_third_frame() -> void:
 	sw.glow = 0.3
 	for f in 3:
 		ok(RaduzhView.due(sw, far, f), "вспыхнувшая — каждый кадр")
+
+
+## Скребун, что ест мох на месте, не пересчитывает дно (шум fbm) каждый подшаг (issue #133, третий раз).
+func test_grazing_grazer_skips_ground() -> void:
+	var calls := [0]
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float:
+		calls[0] += 1
+		return -30.0
+	var moss := w.add(EcoMoss.new()) as EcoMoss
+	var gz := w.add(EcoGrazer.new(moss)) as EcoGrazer
+	for g in gz.all:
+		g.agent.set_state(EcoAgent.State.GRAZE, 100.0)
+		g.patch = moss.patches[0]
+		g.patch.food = 1.0
+	calls[0] = 0
+	w.step(0.05)
+	eq(calls[0], 0, "все едят на месте — дно не считают")
+	gz.all[0].agent.set_state(EcoAgent.State.SEEK)
+	gz.all[0].agent.p = moss.patches[0].pos + Vector3(10, 0, 0)
+	w.step(0.05)
+	eq(calls[0], 1, "идущий — считает")
+
+
+## Ёж у ленты ест на месте и тоже не пересчитывает дно (issue #133, третий раз).
+func test_eating_urchin_skips_ground() -> void:
+	var calls := [0]
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float:
+		calls[0] += 1
+		return -30.0
+	var fish := w.add(EcoFish.new()) as EcoFish
+	var kelp := w.add(EcoKelp.new(fish)) as EcoKelp
+	w.systems.erase(fish)   # рощи — у стай; сами светляки дно считают, здесь их шаг не нужен
+	ok(not kelp.urchins.is_empty())
+	for u in kelp.urchins:
+		kelp.kill(u, 1e9)
+	var u := kelp.urchins[0]
+	u.alive = true
+	u.goal = 0
+	var s := kelp.groves[u.grove].stalks[0]
+	s.f = 1.0
+	s.eater = u.index
+	u.pos = Vector3(s.pos.x, u.pos.y, s.pos.z)
+	calls[0] = 0
+	w.step(0.05)
+	eq(calls[0], 0, "ёж ест на месте — дно не считает")

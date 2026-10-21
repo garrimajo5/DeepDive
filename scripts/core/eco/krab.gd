@@ -189,7 +189,7 @@ func step(world: EcoWorld, dt: float) -> void:
 			cr.pos += to * (minf(dist, speed * dt) / dist)
 			if cr.state != State.GUARD:
 				cr.dir = cr.dir.lerp(to / dist, minf(1.0, dt * 4.0)).normalized()
-	cr.pos.y = _floor(world, cr.pos.x, cr.pos.z, cr.pos.y)
+			cr.pos.y = _floor(world, cr.pos.x, cr.pos.z, cr.pos.y)   # стоящему — дно то же (issue #133)
 	cr.raise += (raise - cr.raise) * minf(1.0, dt * 5.0)
 
 

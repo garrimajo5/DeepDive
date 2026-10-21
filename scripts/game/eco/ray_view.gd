@@ -45,7 +45,7 @@ const SPOT_R := 0.12
 const SPOT := Color("9ffcff")
 ## Цвет тела (#a8cfe0) и крен в повороте (rotateZ(−0,22)).
 const BODY := Color("a8cfe0")
-const BANK := 0.22
+const BANK := EcoRay.BANK
 
 var rays: EcoRay
 ## Вершины и треугольники меша одного ската (для тестов).
@@ -106,10 +106,7 @@ func sync() -> void:
 
 ## Место ската: +Z меша — по курсу, крен BANK.
 static func xform(ry: EcoRay.Ray) -> Transform3D:
-	var fwd := ry.dir if ry.dir.length_squared() > 1e-6 else Vector3.BACK
-	var b := Basis.looking_at(-fwd, Vector3.UP)  # looking_at смотрит в −Z: меш смотрит носом в +Z
-	b = b * Basis(Vector3.BACK, -BANK)
-	return Transform3D(b, ry.p)
+	return EcoRay.xform(ry)
 
 
 ## Пластина тела (rayGeo): x сужается к носу и хвосту, горб посередине, края светлее, концы крыльев назад (SWEEP).
