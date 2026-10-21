@@ -11,14 +11,17 @@ var tags: Array[Node3D] = []    ## корень таблички на каждо
 var plates: Array[Sprite3D] = []
 var letters: Array[Label3D] = []
 var names: Array[Label3D] = []
+var widths: Array[float] = []  ## ширина плашки в высотах
 var keys: Array[String] = []     ## роль и имя, под которые собрана плашка
 
 
 ## Поставить таблички: crew — весь экипаж, me — свой (без таблички), cam — камера, которой смотрим
-## (не камера мостика — облёт с борта, таблички скрыты).
+## (не камера мостика — облёт с борта, таблички скрыты). Размер — по глубине взгляда (#319), плашка параллельна
+## экрану; рядом стоящие разнесены по высоте, ближняя на месте (#320).
 func show_tags(crew: Array, me: Crew.Member, view: CrewView, cam: Camera3D, own_cam: Camera3D) -> void:
 	while tags.size() < crew.size():
 		_add()
+	var shown: Array = []   # [индекс, расстояние, точка над макушкой, высота в мире]
 	for i in tags.size():
 		var t := tags[i]
 		t.visible = false
@@ -32,13 +35,32 @@ func show_tags(crew: Array, me: Crew.Member, view: CrewView, cam: Camera3D, own_
 		var head: Vector3 = sk.global_transform * (sk.get_bone_global_pose(top).origin if top >= 0 else Vector3(0, 1.8, 0))
 		var anchor := head + Vector3.UP * NameTag.LIFT
 		var d := cam.global_position.distance_to(anchor)
-		if not NameTag.shown(d):
+		var depth := -(cam.global_transform.affine_inverse() * anchor).z
+		if not NameTag.visible_at(d, depth):
 			continue
 		_build(i, m)
-		var h := NameTag.world_height(d, cam.fov)
-		var to_cam := cam.global_position - anchor
-		var ang := atan2(to_cam.x, to_cam.z)
-		t.global_transform = Transform3D(Basis(Vector3.UP, ang).scaled(Vector3.ONE * h), anchor + Vector3.UP * h * 0.5)
+		shown.append([i, d, anchor, NameTag.world_height(d, cam.fov, depth)])
+	shown.sort_custom(func(a, b): return a[1] < b[1])
+	var bz := cam.global_basis.z
+	var ang := atan2(bz.x, bz.z)   # плашка параллельна экрану (поворот только вокруг вертикали)
+	var vp_h := cam.get_viewport().get_visible_rect().size.y
+	var rects: Array = []
+	for s in shown:
+		var hp: float = NameTag.px(s[1]) * vp_h / NameTag.REF_H
+		var c := cam.unproject_position(s[2] + Vector3.UP * s[3] * 0.5)
+		var w: float = widths[s[0]] * hp
+		rects.append(Rect2(c.x - w * 0.5, c.y - hp * 0.5, w, hp))
+	var shift := NameTag.spread(rects)
+	var right := Vector3(cos(ang), 0.0, -sin(ang))   # вправо по экрану
+	for k in shown.size():
+		var i: int = shown[k][0]
+		var d: float = shown[k][1]
+		var h: float = shown[k][3]
+		var px_m: float = h / rects[k].size.y   # метров на пиксель экрана у этой плашки
+		var off: Vector2 = shift[k]
+		var t := tags[i]
+		t.global_transform = Transform3D(Basis(Vector3.UP, ang).scaled(Vector3.ONE * h),
+				shown[k][2] + Vector3.UP * (h * 0.5 - off.y * px_m) + right * off.x * px_m)
 		var a := NameTag.alpha(d)
 		plates[i].modulate = Color(1, 1, 1, a)
 		letters[i].modulate = Color(NameTag.TEXT, a)
@@ -71,6 +93,7 @@ func _add() -> void:
 	letters.append(l)
 	names.append(n)
 	keys.append("")
+	widths.append(NameTag.MIN_W)
 
 
 func _flags(g: GeometryInstance3D) -> void:
@@ -103,6 +126,7 @@ func _build(i: int, m: Crew.Member) -> void:
 	var font := ThemeDB.fallback_font
 	var tw := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_PX).x * NameTag.NAME_EM / FONT_PX
 	var w := NameTag.width(tw)
+	widths[i] = w
 	var img := NameTag.plate_image(w, NameTag.ring_color(m.role))
 	plates[i].texture = ImageTexture.create_from_image(img)
 	plates[i].pixel_size = 1.0 / NameTag.TEX_H

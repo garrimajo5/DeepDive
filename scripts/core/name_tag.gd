@@ -10,6 +10,8 @@ const REF_H := 1080.0       ## высота окна, для которой за
 const NEAR := 2.0           ## до этого расстояния — самая крупная
 const FADE_FROM := 10.0     ## отсюда гаснет
 const HIDE_AT := 12.0       ## дальше не видна
+const MIN_DEPTH := 0.6     ## ближе к плоскости камеры — скрыта (товарищ вплотную, #319)
+const GAP := 0.12           ## зазор между табличками рядом стоящих, высот плашки (#320)
 const LETTERS := ["П", "С", "И", "Б"]   ## буква роли: роль видна не только цветом (Crew.Role)
 
 ## Плашка в высотах: кружок роли слева, имя после него, ширина по имени до MAX_W.
@@ -53,8 +55,60 @@ static func shown(d: float) -> bool:
 
 
 ## Высота плашки в мире, м: на расстоянии d при вертикальном угле обзора fov_deg занимает px(d) из REF_H.
-static func world_height(d: float, fov_deg: float) -> float:
-	return 2.0 * d * tan(deg_to_rad(fov_deg) * 0.5) * px(d) / REF_H
+## depth — глубина по оси взгляда (по ней перспектива меряет размер на экране); сбоку она меньше расстояния,
+## и плашка по расстоянию выходила больше 96 px — у края экрана в треть его высоты (#319). Без depth — d.
+static func world_height(d: float, fov_deg: float, depth: float = -1.0) -> float:
+	var z := d if depth < 0.0 else depth
+	return 2.0 * z * tan(deg_to_rad(fov_deg) * 0.5) * px(d) / REF_H
+
+
+## Видна ли табличка: дальше HIDE_AT — нет, ближе MIN_DEPTH к плоскости камеры (или за ней) — нет.
+static func visible_at(d: float, depth: float) -> bool:
+	return shown(d) and depth >= MIN_DEPTH
+
+
+## Разнести таблички, стоящие рядом на экране (#320): rects — прямоугольники плашек на экране (px, y вниз)
+## в порядке от ближней к дальней. Ближняя остаётся на месте; следующая, если задевает уже поставленную, встаёт
+## над ней, слева или справа (с зазором GAP высоты) — куда ближе к своему месту. Вверх — не выше MAX_UP высот
+## (иначе упрётся в потолок отсека). Возвращает сдвиг каждой, px (x вправо, y вниз).
+const MAX_UP := 1.5
+static func spread(rects: Array) -> Array:
+	var placed: Array[Rect2] = []
+	var out: Array = []
+	for r: Rect2 in rects:
+		var cur := r
+		for _step in 8:
+			var hit := -1
+			for k in placed.size():
+				if cur.intersects(placed[k]):
+					hit = k
+					break
+			if hit < 0:
+				break
+			var p := placed[hit]
+			var g := GAP * r.size.y
+			var cands: Array[Rect2] = []
+			var up := Rect2(Vector2(cur.position.x, p.position.y - cur.size.y - g), cur.size)
+			if r.position.y - up.position.y <= MAX_UP * r.size.y + 0.5:
+				cands.append(up)
+			cands.append(Rect2(Vector2(p.position.x - cur.size.x - g, cur.position.y), cur.size))
+			cands.append(Rect2(Vector2(p.end.x + g, cur.position.y), cur.size))
+			var best := cands[0]
+			var best_cost := INF
+			for c in cands:
+				var free := true
+				for q in placed:
+					if c.intersects(q):
+						free = false
+						break
+				var cost := c.position.distance_to(r.position) + (0.0 if free else 1e6)
+				if cost < best_cost:
+					best_cost = cost
+					best = c
+			cur = best
+		placed.append(cur)
+		out.append(cur.position - r.position)
+	return out
 
 
 ## Имя на плашке: до MAX_LEN букв, длиннее — многоточие; пустое — название роли.
