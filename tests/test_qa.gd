@@ -202,3 +202,25 @@ func test_fps_skips_shot_frame() -> void:   # issue #169: кадр скринш�
 	eq(r.fps(), 50, "0,9 с снимка не считаются: 50 к/с, а не 10")
 	eq(roundi(r.worst_ms), 20, "худший кадр без снимка")
 	r.free()
+
+
+func test_worst_frame_names_step() -> void:   # issue #217: в логе видно, на каком шаге худший кадр
+	var r := QaRunner.new()
+	r.script_q = QaScript.parse('[{"do": "wait", "s": 1}, {"do": "press", "what": "action"}, {"do": "wait", "s": 1}]')
+	r.script_q.index = 1
+	eq(QaRunner.step_label(r.script_q), "шаг 2 press", "подпись шага с единицы")
+	var t := 1000000
+	r._measure(t)
+	r._step_label = "шаг 1 wait"
+	t += 20000
+	r._measure(t)
+	r._step_label = "шаг 2 press"
+	t += 700000                   # рывок на кадре шага press
+	r._measure(t)
+	r._step_label = "шаг 3 wait"
+	t += 20000
+	r._measure(t)
+	eq(roundi(r.worst_ms), 700, "худший кадр 700 мс")
+	ok(r.worst_at.begins_with("шаг 2 press, отрисовка "), "худший кадр отнесён к шагу press: " + r.worst_at)
+	ok(r.worst_text().contains("худший кадр 700 мс (шаг 2 press"), "и попал в строку состояния")
+	r.free()
