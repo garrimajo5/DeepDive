@@ -52,3 +52,14 @@ func test_water_darker_with_depth() -> void:
 	ok(Seabed.Water.fog_density(90.0) > Seabed.Water.fog_density(5.0), "туман гуще")
 	near(Seabed.Water.k(5.0), 0.0, 1e-9, "у льда k = 0")
 	near(Seabed.Water.k(120.0), 1.0, 1e-9, "в глубине k = 1")
+
+
+func test_seabed_uses_detail_shader() -> void:
+	var ov := OceanView.new()
+	tree.root.add_child(ov)
+	await frames(1)
+	var mat := ov.seabed.mesh.surface_get_material(0)
+	ok(mat is ShaderMaterial, "материал дна — шейдер детализации, не плоский цвет вершин")
+	if mat is ShaderMaterial and (mat as ShaderMaterial).shader:
+		ok((mat as ShaderMaterial).shader.code.contains("Дно отмели"), "назначен шейдер дна")
+	ov.queue_free()

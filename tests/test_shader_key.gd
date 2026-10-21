@@ -3,7 +3,7 @@ extends TestCase
 ## это секунды прогрева на телефоне. Свои материалы корабля делят шейдеры по образцам ShaderKey.glass / flakes.
 
 ## Сколько разных шейдеров у корабля (без живого мира) — потолок. Вырос — проверить, нельзя ли взять образец.
-const SHIP_BUDGET := 26
+const SHIP_BUDGET := 27   # +1: процедурный шейдер дна `shaders/seabed.gdshader` (образцом glass/flakes не заменить; дно видно с кадра 1 — прогревается само)
 
 
 func test_same_flags_same_key() -> void:
