@@ -278,7 +278,7 @@ func _add_lab() -> void:
 	journal_text.pixel_size = 0.0016
 	journal_text.modulate = JOURNAL_TEXT
 	journal_text.shaded = false
-	journal_text.double_sided = false
+	journal_text.double_sided = true   # материал общий с подписями (issue #159)
 	journal_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	journal_text.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	journal_text.width = Lab.SCREEN_SIZE.x / journal_text.pixel_size - 40.0

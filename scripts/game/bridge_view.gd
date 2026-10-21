@@ -124,7 +124,7 @@ func _add_scanner_screen() -> void:
 	scanner_text.pixel_size = 0.0014
 	scanner_text.modulate = SCANNER_TEXT
 	scanner_text.shaded = false
-	scanner_text.double_sided = false
+	scanner_text.double_sided = true   # материал общий с подписями голограммы (issue #159)
 	scanner_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	scanner_text.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	scanner_text.width = BridgeProps.SCANNER_SCREEN_SIZE.x / scanner_text.pixel_size - 30.0
@@ -196,12 +196,7 @@ func _add_glass() -> void:
 	var q := QuadMesh.new()
 	q.size = Vector2(2 * BridgePlan.WINDOW_HALF, BridgePlan.WINDOW_TOP - BridgePlan.WINDOW_BOTTOM)
 	g.mesh = q
-	var m := StandardMaterial3D.new()
-	m.albedo_color = Color(0.6, 0.85, 0.9, 0.07)
-	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.cull_mode = BaseMaterial3D.CULL_DISABLED
-	g.material_override = m
+	g.material_override = ShaderKey.glass(Color(0.6, 0.85, 0.9, 0.07))   # шейдер общий с подложками (issue #159)
 	g.position = Vector3(0, (BridgePlan.WINDOW_TOP + BridgePlan.WINDOW_BOTTOM) / 2.0, BridgePlan.NOSE_INNER - 0.05)
 	g.layers = OceanView.LAYER_SHIP
 	add_child(g)

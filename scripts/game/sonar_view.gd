@@ -51,7 +51,7 @@ func _ready() -> void:
 		var l := Label3D.new()
 		l.name = "Место %d" % Briefing.NUMBERS[k]
 		l.text = str(Briefing.NUMBERS[k])
-		l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		l.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y   # как иконки мест; материал общий с подписями (issue #159)
 		l.shaded = false
 		l.double_sided = true
 		l.font_size = 48

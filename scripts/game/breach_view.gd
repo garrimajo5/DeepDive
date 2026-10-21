@@ -171,10 +171,10 @@ static func _dot_mesh(size: float, c: Color, glow: bool) -> Mesh:
 	m.radial_segments = 4
 	m.rings = 2
 	var mat := StandardMaterial3D.new()
+	if c.a < 1.0:
+		mat = ShaderKey.glass(c)   # брызги: шейдер общий со стеклом окна (issue #159)
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.albedo_color = c
-	if c.a < 1.0:
-		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	if glow:
 		mat.emission_enabled = true
 		mat.emission = c

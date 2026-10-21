@@ -26,13 +26,7 @@ func _init() -> void:
 		offsets.append(Vector3(cos(a) * rr, y * 0.45, sin(a) * rr) * pow(r, 1.0 / 3.0))
 	var q := QuadMesh.new()
 	q.size = Vector2(FLAKE, FLAKE)
-	_mat = StandardMaterial3D.new()
-	_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	_mat.billboard_keep_scale = true
-	_mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
-	_mat.albedo_color = Color(Silt.COLOR.darkened(0.35), OPACITY)
+	_mat = ShaderKey.flakes(Color(Silt.COLOR.darkened(0.35), OPACITY))   # шейдер общий с морским снегом (issue #159)
 	q.material = _mat
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
