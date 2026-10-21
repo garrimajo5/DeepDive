@@ -350,3 +350,11 @@ emission), стекло банки 64 (alpha 0,25) — `models/stellazh-tryuma.g
 **Принято 21.10.2026** (PR #220, ветка `art/ART-026-ikonki-itoga`): `itog-obrazcy.png`, `itog-vidy.png`,
 `itog-mesta.png`, `itog-proboiny.png` (256² RGBA, одноцветные #67DDEB), лист `itog-ikonki-list.png`; решения —
 `itog-ikonki.md`: слева от строк итога на голограмме, в игре — `textures/summary/<ключ>.png`, статичны.
+
+## ART-027 Каменный цветок — принято
+- Исходник: иконка места ART-005 (`karta-otmeli.md`, `ikonka-kamennyy-tsvetok.png`), ART-001, ART-011, ART-004.
+
+**Принято 21.10.2026** (PR #227, ветка `art/206-kamennyy-tsvetok`): сцена `kamennyy-tsvetok-podhod.jpg`, лист
+`kamennyy-tsvetok-list.png`, схема габаритов `kamennyy-tsvetok-gabarity.png`; решения — `kamennyy-tsvetok.md`:
+28 м над дном, крона Ø 26 м, ствол Ø 3,5 м, три ветви × четыре вилки = 48 кончиков #FFD6EC на ветвях #D06A94,
+мерцание 6 с волной снизу вверх. Форма — процедурно в `flower.gd`, один вызов отрисовки; корабль в листе — 32 м.
