@@ -95,6 +95,10 @@ var well_view: WellView
 ## Край отмели (место 6, ART-032): скальные клинья вдоль бровки, шрам оползня с осыпью, трещины на площадке.
 var drop: EcoDrop
 var drop_view: DropView
+## Эхоловец (ART-007): засадчик с ушами-воронками лежит у Костей левиафана, уши поворачивает на корабль,
+## затаившегося выдаёт только импульс сонара.
+var echo: EcoEcho
+var echo_view: EchoView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -185,6 +189,9 @@ func _init() -> void:
 	bones = world.add(EcoBones.new()) as EcoBones
 	well = world.add(EcoWell.new()) as EcoWell
 	drop = world.add(EcoDrop.new()) as EcoDrop
+	echo = world.add(EcoEcho.new(bones)) as EcoEcho
+	echo_view = EchoView.new(echo)
+	add_child(echo_view)
 	_rebuild_moss()
 	_rebuild_coral()
 	_rebuild_ferns()
@@ -419,4 +426,5 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	veil_view.sync(world.time, ship.pos)
 	grot_view.sync(world.time, ship.pos)
 	plankton_view.sync(world.time, ship.pos, ship.yaw)
+	echo_view.sync(world.time, ship.pos)
 	return world.take_link()
