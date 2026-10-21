@@ -137,6 +137,8 @@ func test_mate_step() -> void:
 	eq(q.advance(0.1)[0], ["mate", 0.2, -2.6, 60.0, 2, 1, false], "член экипажа: место, курс, роль, внешность")
 	var q2 := QaScript.parse('[{"do": "mate", "seated": true, "role": 1}]')
 	eq(q2.advance(0.1)[0][6], true, "член экипажа за штурвалом")
+	var q3 := QaScript.parse('[{"do": "mate", "x": 1.5, "z": 0.5, "role": 2, "walk": [0, 1, 1.5]}]')
+	eq(q3.advance(0.1)[0].slice(7), [0.0, 1.0, 1.5], "идёт своим вводом: крестовина и секунды")
 
 
 func test_silt_step() -> void:

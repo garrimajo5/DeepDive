@@ -3,9 +3,9 @@ extends Node3D
 ## Сцена собирается из кода: отмель, корабль с мостиком, игрок на палубе или за штурвалом, экранное управление.
 ## Мир неподвижен, корабль (узел «Корабль») движется по Helm.Ship; камера — глаза игрока в осях корабля.
 
-var walker := Deck.Walker.new()
-var pilot := Deck.Pilot.new()
 var me := Crew.Member.new(Crew.Role.PILOT)   ## свой игрок как фигура (видят другие и он сам)
+var walker: Deck.Walker = me.walker          ## свой ходок; у других членов экипажа — свой (`Member.walker`)
+var pilot := Deck.Pilot.new()
 var crew: Array = [me]                       ## экипаж на борту; позже — игроки по сети
 var crew_view: CrewView
 var layout := ShipLayout.new()
@@ -500,6 +500,7 @@ func step(dt: float) -> void:
 		say("Прожектор погас: не хватает энергии")
 	vitals.hull = breach.update(dt, reactor.k(Reactor.Sys.LIFE), vitals.hull)
 	breach_view.apply()
+	_drive_mates(dt)
 	_hands(dt, hold_valve, hold_winch, hold_scan)
 	if breach.welding and breach.active:   # свой игрок варит: резак в руке, щиток опущен
 		me.weld(breach.active.p, breach.active.n)
@@ -1018,16 +1019,24 @@ func open_silt() -> void:
 	_place_ship()
 
 
+## Другие члены экипажа идут своим ходоком по своему вводу (`Member.pad`; позже — по сети). Ввод с экрана — только `me`.
+func _drive_mates(dt: float) -> void:
+	for m: Crew.Member in crew:
+		if m != me:
+			m.drive(dt, breach.slow(ShipLayout.room_at(m.walker.z)))
+
+
 ## Ещё один член экипажа на палубе (снимки и сценарий тестера, пока нет сети): место, курс (рад), роль, внешность.
 ## Стоящего не ставим в мебель: место внутри голостола или пульта сдвигается к ближайшему свободному (issue #156).
 func add_mate(x: float, z: float, yaw: float, role: int, look: int, seated: bool = false) -> Crew.Member:
 	var mate := Crew.Member.new(role)
 	mate.look = look
+	mate.walker.stand = layout.can_stand
 	if not seated:
 		var p := layout.free_spot(x, z)
 		x = p.x
 		z = p.y
-	mate.follow(x, z, yaw, seated, 0.0, 0.1)
+	mate.place(x, z, yaw, seated)
 	mate.post = "helm" if seated else ""
 	crew.append(mate)
 	crew_view.set_members(crew, me)

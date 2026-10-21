@@ -58,6 +58,26 @@ func test_mate_not_inside_table() -> void:   # issue #156: сценарий ст
 	eq(seat.z, Deck.SEAT_Z, "в кресле — как есть")
 
 
+func test_screen_input_only_to_own() -> void:   # ввод с экрана — своему, у другого свой ввод
+	var m := main.add_mate(1.5, 0.5, 0.0, Crew.Role.ENGINEER, 0)
+	eq(m.walker.stand, main.layout.can_stand, "ходок товарища знает весь корабль")
+	var me0 := Vector2(main.walker.x, main.walker.z)
+	main.overlay.router.move = Vector2i(0, 1)
+	for i in 20:
+		main.step(1.0 / 30.0)
+	main.overlay.router.move = Vector2i.ZERO
+	ok(Vector2(main.walker.x, main.walker.z).distance_to(me0) > 0.3, "свой игрок пошёл")
+	eq(Vector2(m.x, m.z), Vector2(1.5, 0.5), "товарищ стоит")
+	me0 = Vector2(main.walker.x, main.walker.z)
+	m.pad.move = Vector2(0.0, 1.0)
+	for i in 20:
+		main.step(1.0 / 30.0)
+	ok(m.z < 0.0, "товарищ идёт своим вводом (z %.2f)" % m.z)
+	ok(main.crew_view.shown[1]["hip"].z < 0.2, "его фигура в сцене тоже")
+	eq(Vector2(main.walker.x, main.walker.z), me0, "свой игрок стоит")
+	m.pad.clear()
+
+
 func _tris(mi: MeshInstance3D) -> int:
 	return (mi.mesh.surface_get_arrays(0)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
 

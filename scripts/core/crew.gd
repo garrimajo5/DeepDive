@@ -147,6 +147,20 @@ static func _from3(a: Array) -> Vector3:
 	return Vector3(a[0], a[1], a[2]) if a.size() == 3 else Vector3.INF
 
 
+## Ввод одного члена экипажа: крестовина, свайп, кнопка действия. Свой игрок получает его с экрана, другие —
+## по сети (пока — сценарий тестера и тесты). Ввод одного не двигает других.
+class Pad:
+	extends RefCounted
+	var move := Vector2.ZERO   ## крестовина: y — вперёд, x — вправо (как TouchRouter.move)
+	var look := Vector2.ZERO   ## свайп за кадр в «точках» экрана; съедается шагом
+	var left := INF            ## сколько секунд ещё держать move (сценарий); INF — пока не сменят
+
+	func clear() -> void:
+		move = Vector2.ZERO
+		look = Vector2.ZERO
+		left = INF
+
+
 ## Член экипажа: место (ступни, оси корабля), курс, поза и фаза шага.
 class Member:
 	extends RefCounted
@@ -171,6 +185,9 @@ class Member:
 	var back := 0.0
 	var swing := 0.0  ## 0 — стоит, 1 — идёт полным ходом
 	var _last := Vector2.INF
+	## Свой ходок и свой ввод: у каждого члена экипажа (основа для сети). Свой игрок — `main.walker` это `me.walker`.
+	var walker := Deck.Walker.new()
+	var pad := Pad.new()
 
 	func _init(r: int = Role.PILOT, n: String = "") -> void:
 		role = r
@@ -191,6 +208,29 @@ class Member:
 		swing = move_toward(swing, want, dt * 6.0)
 		if swing < 0.02 and want == 0.0:
 			phase = move_toward(phase, PI if phase > PI * 0.5 and phase < PI * 1.5 else (0.0 if phase < PI else TAU), dt * 4.0)
+
+	## Поставить на палубу: ходок и фигура в точке (x, z) с курсом yaw; сидящий — за штурвалом.
+	func place(px: float, pz: float, pyaw: float, is_seated: bool = false) -> void:
+		walker.x = px
+		walker.z = pz
+		walker.yaw = pyaw
+		_last = Vector2.INF
+		follow(px, pz, pyaw, is_seated, wheel_turn, 0.1)
+
+	## Шаг по своему вводу (`pad`): свайп поворачивает, крестовина ведёт ходока (стоя), фигура идёт за ним.
+	## speed_k — множитель шага (вода в отсеке). Сидящий не ходит.
+	func drive(dt: float, speed_k: float = 1.0) -> void:
+		walker.look(pad.look)
+		pad.look = Vector2.ZERO
+		if seated:
+			return
+		walker.speed_k = speed_k
+		walker.walk(pad.move, dt)
+		if pad.left < INF:
+			pad.left -= dt
+			if pad.left <= 0.0:
+				pad.clear()
+		follow(walker.x, walker.z, walker.yaw, false, wheel_turn, dt)
 
 	## Варит ли: правая рука с резаком у шва.
 	func welding() -> bool:
@@ -433,3 +473,6 @@ class Member:
 			weld(Vector3.INF)
 		hold(Crew._from3(s.get("hand_l", [])), Crew._from3(s.get("hand_r", [])))
 		_last = Vector2(x, z)
+		walker.x = x   # ходок там же, где фигура: следующий drive идёт от места из снимка
+		walker.z = z
+		walker.yaw = yaw
