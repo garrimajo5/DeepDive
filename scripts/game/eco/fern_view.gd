@@ -2,22 +2,8 @@ class_name FernView
 extends Node3D
 ## Волнолист в сцене: все листья — один MultiMesh из одного листа-пера (12 треугольников, загнут наружу), моллюски
 ## у подножий — второй MultiMesh из полусферы (initFerns в js/creatures.js). Цвет листа #3D9D91, края и кончик
-## светлее (#68E6DC, ART-004) — отражённый свет, своей эмиссии нет; виден с обеих сторон. Стоит на слое отмели
-## (OceanView.LAYER_WORLD). Моллюски не двигаются — расставлены один раз.
-
-const LEAF_SHADER := """
-shader_type spatial;
-render_mode cull_disabled;
-uniform vec3 leaf_color : source_color;
-uniform vec3 edge_color : source_color;
-void fragment() {
-	// UV.x поперёк листа (0,5 — жилка), UV.y — от кончика (0) к основанию (1)
-	float edge = smoothstep(0.25, 0.5, abs(UV.x - 0.5)) * 0.8 + smoothstep(0.45, 0.0, UV.y) * 0.5;
-	float vein = 1.0 - smoothstep(0.0, 0.04, abs(UV.x - 0.5));
-	ALBEDO = mix(leaf_color, edge_color, clamp(edge + vein * 0.3, 0.0, 1.0)) * mix(0.55, 1.0, 1.0 - UV.y * 0.6);
-	ROUGHNESS = 0.7;
-}
-"""
+## светлее (#68E6DC, ART-004) — отражённый свет, своей эмиссии нет; виден с обеих сторон;
+## лист — общий шейдер растений (EcoShaders.PLANT). Стоит на слое отмели (OceanView.LAYER_WORLD). Моллюски не двигаются — расставлены один раз.
 
 const LEAF := Color("3D9D91")
 const EDGE := Color("68E6DC")
@@ -94,11 +80,7 @@ static func build_leaf() -> ArrayMesh:
 	arrays[Mesh.ARRAY_INDEX] = idx
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	var mat := ShaderMaterial.new()
-	mat.shader = EcoShaders.shader(LEAF_SHADER)
-	mat.set_shader_parameter("leaf_color", LEAF)
-	mat.set_shader_parameter("edge_color", EDGE)
-	mesh.surface_set_material(0, mat)
+	mesh.surface_set_material(0, EcoShaders.plant(EcoShaders.Plant.LEAF, {"paint": LEAF, "edge": EDGE, "rough": 0.7}))
 	return mesh
 
 
