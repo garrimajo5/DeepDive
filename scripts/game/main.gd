@@ -103,6 +103,9 @@ var net_client: NetLink.Client   ## клиент сетевого забега (
 var net_seq := -1            ## номер последнего применённого кадра хоста
 var net_smooth := NetSmooth.new()   ## клиент: корабль и фигуры между кадрами хоста — плавно, с отставанием DELAY
 var net_pad := Crew.Pad.new()   ## свой ввод клиента: копится за кадр и уходит хосту (`Client.send_pad`)
+var news := []                ## хост: последнее сообщение события [номер, текст] — едет гостям в кадрах NetSnap.NEWS_TIME
+var news_age := 99.0
+var net_news := 0             ## клиент: номер последнего показанного сообщения события хоста
 const NET_SPAWN := Vector3(0.0, 1.0, 0.0)   ## гость встаёт на мостике: x, z, курс
 
 
@@ -230,7 +233,7 @@ func _ready() -> void:
 	airlock.message.connect(say)
 	samples.message.connect(say)
 	engine.message.connect(say)
-	breach.message.connect(say)
+	breach.message.connect(announce)
 	if QaRunner.pending():   # прогон тестера — всегда с чистого трюма и без записи
 		save.path = ""
 	save.load_into(samples, scanner)
@@ -513,11 +516,11 @@ func step(dt: float) -> void:
 	current.update(dt)
 	var silt_msg := silt.update(dt, helm.pos, current.vel())
 	if not silt_msg.is_empty():
-		say(silt_msg)
+		announce(silt_msg)
 	silt_view.apply(silt, time, helm.pos, helm.yaw)
 	var run_msg := run.update(helm.pos.x, helm.pos.z)
 	if not run_msg.is_empty():
-		say(run_msg)
+		announce(run_msg)
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
 	engine.update(dt, reactor, hold_valve or debug_vent)
 	helm.update(dt, reactor.k(Reactor.Sys.ENGINES), current.vel())
@@ -757,6 +760,14 @@ func toggle_light() -> void:
 ## Сообщение на приборах, гаснет через 4,2 с.
 func say(msg: String) -> void:
 	message.say(msg)
+
+
+## Сообщение события для всего экипажа (пробоина, ил, маршрут): на своих приборах и у гостей — по кадру хоста.
+## Своё («Вы за штурвалом») — `say`, гостям оно не уходит.
+func announce(msg: String) -> void:
+	say(msg)
+	news = [(news[0] + 1) if news.size() == 2 else 1, msg]
+	news_age = 0.0
 
 
 ## Пройти выбранный маршрут разом (или первый, если не выбран): сценарий тестера и снимки.
@@ -1199,8 +1210,11 @@ func _net_poll() -> void:
 
 ## Кадр гостям раз в NetSnap.SEND_DT — после шага, как его видит хост.
 func _net_send(dt: float) -> void:
+	news_age += dt
 	if net_host and net_host.due(dt):
-		net_host.send_frame(NetSnap.frame(net_host.seq, time, helm, reactor, vitals, light_on, crew))
+		var welding := crew.any(func(m: Crew.Member) -> bool: return m.welding())
+		var ev := NetSnap.events(breach, silt, time, welding, news if news_age < NetSnap.NEWS_TIME else [])
+		net_host.send_frame(NetSnap.frame(net_host.seq, time, helm, reactor, vitals, light_on, crew, ev))
 
 
 ## Войти в сетевой забег хоста по адресу в локальной сети: шаг корабля считает хост, здесь — свой ввод хосту
@@ -1212,6 +1226,7 @@ func join_game(address: String, port: int = NetLink.PORT, player: String = "", r
 		net_client = null
 		return err
 	net_seq = -1
+	net_news = 0
 	net_smooth = NetSmooth.new()
 	net_pad.clear()
 	flyby.stop()   # клиент входит в идущий забег — облёта нет
@@ -1243,6 +1258,11 @@ func _client_step(dt: float) -> void:
 		_leave_net()
 	hull_motion.update(dt, helm.in_thrust, helm.in_vert, reactor.k(Reactor.Sys.ENGINES))
 	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP), silt.beam_k())
+	breach.time += dt   # пульс тревоги и свет сварки — своим временем, состояние — из кадра
+	breach_view.apply()
+	silt_view.apply(silt, time, helm.pos, helm.yaw)
+	visor.visible = me.welding()
+	alarm_board.show_alarms(alarms_on(), time, breach.active)
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	overlay.set_pilot(pilot.seated)
@@ -1267,6 +1287,10 @@ func _client_frame(f: Dictionary) -> void:
 	net_seq = NetSnap.apply_frame(f, net_seq, helm, reactor, vitals, crew)
 	if net_seq != seq:
 		net_smooth.push(float(f.get("t", 0.0)), helm.pos, helm.yaw, crew)
+		var ev := NetSnap.apply_events(f.get("ev", {}), breach, silt, time)
+		if ev.size() == 2 and ev[0] > net_news:   # сообщение события хоста — один раз
+			net_news = ev[0]
+			say(ev[1])
 	light_on = bool(f.get("light", light_on))
 	overlay.set_light(light_on)
 	var i := net_client.me

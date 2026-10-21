@@ -13,6 +13,7 @@ var h_helm := Helm.Ship.new()
 var h_reactor := Reactor.new()
 var h_vitals := Vitals.new()
 var h_crew: Array = []
+var h_ev := {}   ## события в кадре хоста (NetSnap.events)
 
 
 func before() -> void:
@@ -53,7 +54,7 @@ func _host_tick(send := true) -> void:
 			h_crew.append(m)
 			guest.index = 1
 	if send and host.due(DT):
-		host.send_frame(NetSnap.frame(host.seq, 0.0, h_helm, h_reactor, h_vitals, false, h_crew))
+		host.send_frame(NetSnap.frame(host.seq, 0.0, h_helm, h_reactor, h_vitals, false, h_crew, h_ev))
 
 
 ## Шаги хоста и клиента, пока cond не true (до 3 с настоящего времени).
@@ -159,3 +160,39 @@ func test_ship_moves_smoothly_between_frames() -> void:
 	ok(n > 80)
 	ok(worst < v * d * 1.8, "шаг корабля у клиента %.3f м за кадр (ход %.3f)" % [worst, v * d])
 	ok(main.helm.pos.distance_to(h_helm.pos) < v * 0.5, "отстаёт не больше полсекунды хода")
+
+
+## Пробоина и ил у хоста — у клиента по кадру: тревога, вода в отсеке, облако вокруг корабля, сообщение один раз.
+func test_events_from_host_frame() -> void:
+	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
+	ok(main.breach.active == null and main.silt.clouds.is_empty(), "событий нет")
+	var b := Breach.new()
+	b.start(b.all[1])
+	b.water = 0.2
+	var sl := Silt.new()
+	sl.spawn(h_helm.pos, Silt.SCRAPE_R, Silt.SCRAPE_LIFE, "scrape")
+	sl.inside = sl.clouds[0]
+	sl.k = 1.0
+	h_ev = NetSnap.events(b, sl, 0.0, false, [7, "Пробоина: коридор — держите «Сварка» у пробоины"])
+	ok(_pump(func() -> bool: return main.breach.active != null), "пробоина пришла кадром")
+	ok(main.breach.active == main.breach.all[1], "та же — в коридоре")
+	near(main.breach.water, 0.2, 0.001, "вода в отсеке")
+	ok(main.breach_view.water.visible, "вода видна")
+	ok(main.breach_view.alarm.visible, "тревога горит")
+	ok(main.alarms_on()[0], "табло: пробоина")
+	ok(main.silt.inside != null, "корабль в облаке ила")
+	near(main.silt.k, 1.0, 0.001)
+	ok(main.alarms_on()[3], "табло: сонарная тьма")
+	ok(main.message.text.begins_with("Пробоина: коридор"), "сообщение события на приборах")
+	main.message.say("своё")
+	var seq := main.net_seq
+	ok(_pump(func() -> bool: return main.net_seq > seq + 3), "ещё кадры с тем же сообщением")
+	eq(main.message.text, "своё", "сообщение события показано один раз")
+	b.hold(10.0)   # хост заварил, облако осело
+	sl.clouds.clear()
+	sl.inside = null
+	sl.k = 0.0
+	h_ev = NetSnap.events(b, sl, 0.0, false)
+	ok(_pump(func() -> bool: return main.breach.active == null), "шов заварен у хоста — и у клиента")
+	ok(main.silt.clouds.is_empty() and main.silt.inside == null, "ила нет")
+	ok(not main.breach_view.alarm.visible, "тревога погасла")

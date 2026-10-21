@@ -148,17 +148,24 @@ class Host:
 		seq += 1
 		return true
 
-	## Кадр всем гостям на палубе; каждому — его место в экипаже `me`.
+	## Кадр всем гостям на палубе; каждому — его место в экипаже `me`. События кадра («ev», `NetSnap.events`) идут
+	## следом отдельным пакетом с тем же номером: вместе с четырьмя игроками они не влезли бы в один UDP-пакет.
 	func send_frame(f: Dictionary) -> void:
 		if peer == null:
 			return
+		var ev: Dictionary = f.get("ev", {})
+		f.erase("ev")
 		for g: Guest in guests.values():
 			if g.index < 0:
 				continue
 			f["me"] = g.index
 			NetLink._put(peer, g.id, NetLink.CH_FRAME, false, {"k": "f", "f": f})
+			if not ev.is_empty():
+				NetLink._put(peer, g.id, NetLink.CH_FRAME, false, {"k": "e", "seq": f.get("seq", -1), "e": ev})
 			sent += 1
 		f.erase("me")
+		if not ev.is_empty():
+			f["ev"] = ev
 
 
 class Client:
@@ -175,6 +182,8 @@ class Client:
 	var _info := {}
 	var _wait := 0.0
 	var _seq := -1
+	var _ev := {}          ## события, пришедшие отдельным пакетом, — к следующему отданному кадру
+	var _ev_seq := -1
 
 	## Подключиться к хосту по адресу в локальной сети.
 	func join(address: String, port: int = NetLink.PORT, name: String = "", role: int = 0, look: int = 0) -> Error:
@@ -189,6 +198,8 @@ class Client:
 		why = ""
 		_wait = 0.0
 		_seq = -1
+		_ev = {}
+		_ev_seq = -1
 		peer.peer_connected.connect(func(pid: int) -> void:
 			if pid == 1:
 				NetLink._put(peer, 1, NetLink.CH_CTRL, true, _info))
@@ -226,8 +237,16 @@ class Client:
 						_seq = s
 						newest = f
 						got += 1
+				"e":   # события — полное состояние, не приращение: потерянный пакет заменит следующий
+					var es := int(msg.get("seq", -1))
+					if state == NetLink.State.JOINED and es > _ev_seq and msg.get("e") is Dictionary:
+						_ev_seq = es
+						_ev = msg["e"]
 		if not newest.is_empty():
 			me = int(newest.get("me", me))
+			if not _ev.is_empty():
+				newest["ev"] = _ev
+				_ev = {}
 		if state == NetLink.State.CONNECTING:
 			_wait += dt
 			if _wait > NetLink.TIMEOUT:
