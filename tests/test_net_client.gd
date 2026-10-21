@@ -196,3 +196,35 @@ func test_events_from_host_frame() -> void:
 	ok(_pump(func() -> bool: return main.breach.active == null), "шов заварен у хоста — и у клиента")
 	ok(main.silt.clouds.is_empty() and main.silt.inside == null, "ила нет")
 	ok(not main.breach_view.alarm.visible, "тревога погасла")
+
+
+func test_route_vote_and_result_from_host() -> void:   # маршрут, голосование и итог хоста — у гостя на голостоле
+	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
+	var run := Run.new()
+	run.begin(0.0, 0, 0, 0)
+	run.choose(2)
+	h_ev = NetSnap.events(Breach.new(), Silt.new(), 0.0, false)
+	h_ev["r"] = NetSnap.run_state(run, {}, -1, -1.0, "", [], [], [])
+	ok(_pump(func() -> bool: return main.run.route == 2), "маршрут хоста — «Край отмели»")
+	eq(main.run.waypoint(), Run.place_xz("well"), "точка на голостоле — колодец")
+	for k in Run.ROUTES[2]["places"]:
+		run.update(Run.place_xz(k).x, Run.place_xz(k).y)
+	var ops := Run.opinions(30.0, 80.0, false, false, 0)
+	(h_crew[1] as Crew.Member).at_vote = true   # гость у голостола
+	h_ev["r"] = NetSnap.run_state(run, {"deep": [Crew.Role.PILOT], "up": [Crew.Role.BIOLOGIST]}, 9, 0.6,
+		"голосов 2 из 2 · 9 с", ops, [], [])
+	ok(_pump(func() -> bool: return main.at_vote and main.sonar_view.vote.visible), "гость у стола — поля голосования")
+	ok(main.run.done and not main.run.ended, "решают")
+	eq(main.votes, {"deep": [Crew.Role.PILOT], "up": [Crew.Role.BIOLOGIST]}, "метки голосов хоста")
+	ok(main.vote_panel.visible and not main.vote_panel.results, "панель голосования")
+	eq(main.vote_panel.rows, ops, "мнения ролей хоста")
+	eq(main.vote_panel.tally, "голосов 2 из 2 · 9 с", "счёт и таймер")
+	run.finish(300.0, 2, 1, 0, 30.0)
+	var rows := run.summary(2, 1, 0)
+	h_ev["r"] = NetSnap.run_state(run, {}, -1, -1.0, "", [], rows, Run.detail(run.results(300.0, 2, 1, 0, 30.0)))
+	ok(_pump(func() -> bool: return main.vote_panel.results), "наверх — итог на панели")
+	ok(main.run.ended)
+	eq(main.result_rows, rows, "итог на голограмме — как у хоста")
+	ok(_pump(func() -> bool: return main.sonar_view.vote.board.visible), "итог над столом")
+	(h_crew[1] as Crew.Member).at_vote = false
+	ok(_pump(func() -> bool: return not main.vote_panel.visible), "отошёл от стола — панели нет")
