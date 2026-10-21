@@ -1413,10 +1413,11 @@ func debug_setup(kv: Dictionary) -> void:
 	if kv.has("mate"):  # mate=x,z,курс°[,роль 0…3[,внешность 0…1]] — ещё один член экипажа стоит на палубе; mate=helm — сидит за штурвалом
 		if kv["mate"] == "helm":
 			add_mate(0.0, Deck.SEAT_Z, 0.0, Crew.Role.SONAR, 0, true)
-		else:
-			var m: PackedFloat64Array = kv["mate"].split_floats(",")
-			add_mate(m[0], m[1], deg_to_rad(m[2]) if m.size() > 2 else 0.0, int(m[3]) if m.size() > 3 else Crew.Role.SONAR,
-				int(m[4]) if m.size() > 4 else 1)
+		else:  # несколько — через «;»
+			for one: String in kv["mate"].split(";"):
+				var m: PackedFloat64Array = one.split_floats(",")
+				add_mate(m[0], m[1], deg_to_rad(m[2]) if m.size() > 2 else 0.0, int(m[3]) if m.size() > 3 else Crew.Role.SONAR,
+					int(m[4]) if m.size() > 4 else 1)
 	if kv.get("silt", "0") == "1":  # silt=1 — корабль в облаке ила (снимок сонарной тьмы); с ping=1 — импульс завяз
 		open_silt()
 	if kv.has("hot"):  # hot=1 — перегрев (для снимка табло)
