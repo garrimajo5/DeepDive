@@ -133,3 +133,29 @@ func test_lost_host_continues_alone() -> void:
 	for i in 10:
 		main.step(DT)
 	ok(main.helm.pos.distance_to(p) > 0.01, "корабль снова считает свой шаг")
+
+
+## Хост ведёт корабль и шлёт кадры со своим временем: у клиента корабль идёт ровно, без шага в 20 раз в секунду.
+func test_ship_moves_smoothly_between_frames() -> void:
+	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
+	var t := 0.0
+	var last := Vector3.INF
+	var worst := 0.0
+	var n := 0
+	var v := 6.0
+	var d := 1.0 / 60.0   # экран 60 к/с: кадр хоста — раз в три шага экрана
+	for i in 150:
+		_host_tick(false)
+		t += d
+		h_helm.pos.z -= v * d
+		if host.due(d):
+			host.send_frame(NetSnap.frame(host.seq, t, h_helm, h_reactor, h_vitals, false, h_crew))
+		main.step(d)
+		if i > 50 and last != Vector3.INF:
+			worst = maxf(worst, last.distance_to(main.helm.pos))
+			n += 1
+		last = main.helm.pos
+		OS.delay_msec(2)
+	ok(n > 80)
+	ok(worst < v * d * 1.8, "шаг корабля у клиента %.3f м за кадр (ход %.3f)" % [worst, v * d])
+	ok(main.helm.pos.distance_to(h_helm.pos) < v * 0.5, "отстаёт не больше полсекунды хода")

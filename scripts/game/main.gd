@@ -101,6 +101,7 @@ var net_host: NetLink.Host   ## хост сетевого забега (`host_ga
 var net_mates := {}          ## peer id гостя → его член экипажа (Crew.Member)
 var net_client: NetLink.Client   ## клиент сетевого забега (`join_game`): шаг корабля не считает, применяет кадры хоста
 var net_seq := -1            ## номер последнего применённого кадра хоста
+var net_smooth := NetSmooth.new()   ## клиент: корабль и фигуры между кадрами хоста — плавно, с отставанием DELAY
 var net_pad := Crew.Pad.new()   ## свой ввод клиента: копится за кадр и уходит хосту (`Client.send_pad`)
 const NET_SPAWN := Vector3(0.0, 1.0, 0.0)   ## гость встаёт на мостике: x, z, курс
 
@@ -1211,6 +1212,7 @@ func join_game(address: String, port: int = NetLink.PORT, player: String = "", r
 		net_client = null
 		return err
 	net_seq = -1
+	net_smooth = NetSmooth.new()
 	net_pad.clear()
 	flyby.stop()   # клиент входит в идущий забег — облёта нет
 	message.clear(Flyby.START_MSG)
@@ -1233,6 +1235,8 @@ func _client_step(dt: float) -> void:
 	var f := net_client.poll(dt)
 	if not f.is_empty():
 		_client_frame(f)
+	net_smooth.step(dt)
+	net_smooth.apply(helm, crew, me)   # показ чуть позади свежего кадра: между кадрами — плавно
 	if net_client.state != was:
 		say(net_client.label())
 	if net_client.state == NetLink.State.REFUSED or net_client.state == NetLink.State.LOST:
@@ -1259,7 +1263,10 @@ func _client_frame(f: Dictionary) -> void:
 	var yaw := walker.yaw
 	var was_busy := me.busy()
 	var n := crew.size()
+	var seq := net_seq
 	net_seq = NetSnap.apply_frame(f, net_seq, helm, reactor, vitals, crew)
+	if net_seq != seq:
+		net_smooth.push(float(f.get("t", 0.0)), helm.pos, helm.yaw, crew)
 	light_on = bool(f.get("light", light_on))
 	overlay.set_light(light_on)
 	var i := net_client.me
