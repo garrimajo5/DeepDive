@@ -96,6 +96,23 @@ static func spread(rects: Array) -> Array:
 	return out
 
 
+## Табличка не ложится на интерфейс (#319): целиком в кадре (screen) и не задевает кнопки и открытые панели
+## (blocks — прямоугольники экрана). Иначе скрыта: 3D-плашка под полупрозрачной кнопкой или панелью выглядит
+## поверх неё (кнопка noclip у края, панель итога — отчёт qa/2026-10-21-2350).
+static func clear_of(r: Rect2, screen: Rect2, blocks: Array) -> bool:
+	if not screen.encloses(r):
+		return false
+	for b: Rect2 in blocks:
+		if b.intersects(r):
+			return false
+	return true
+
+
+## Прямоугольник экрана вокруг круглой кнопки (Touch.Circle).
+static func circle_rect(c: Vector2, radius: float) -> Rect2:
+	return Rect2(c - Vector2(radius, radius), Vector2(radius, radius) * 2.0)
+
+
 ## Имя на плашке: до MAX_LEN букв, длиннее — многоточие; пустое — название роли.
 static func label(name: String, role: int) -> String:
 	var n := name.strip_edges()

@@ -114,8 +114,8 @@ func test_depth_and_spread_rules() -> void:
 func test_side_mate_not_huge() -> void:
 	main.walker.x = 0.0
 	main.walker.z = 0.0
-	main.walker.yaw = 0.0
-	var mate := main.add_mate(1.1, -1.0, PI, Crew.Role.BIOLOGIST, 1)
+	main.walker.yaw = -0.6   # повернулся к товарищу справа: плашка целиком в кадре (окно тестов квадратное)
+	var mate := main.add_mate(1.1, -1.3, PI, Crew.Role.BIOLOGIST, 1)
 	mate.name = "Биолог"
 	main.step(1.0 / 30.0)
 	var i := main.crew.find(mate)
@@ -142,3 +142,47 @@ func test_close_mates_no_overlap() -> void:
 	var rb := _screen_rect(ib)
 	ok(not ra.intersects(rb), "не перекрываются: %s и %s" % [ra, rb])
 	ok(rb.position.y < ra.position.y, "дальняя поднята над ближней")
+
+
+## #319: табличка целиком в кадре и не на кнопках и открытых панелях — иначе скрыта.
+func test_clear_of() -> void:
+	var screen := Rect2(0, 0, 1600, 720)
+	ok(NameTag.clear_of(Rect2(700, 200, 200, 50), screen, []), "в кадре, ничего рядом — видна")
+	ok(not NameTag.clear_of(Rect2(1500, 10, 200, 50), screen, []), "за правым краем — скрыта")
+	ok(not NameTag.clear_of(Rect2(700, -10, 200, 50), screen, []), "за верхним краем — скрыта")
+	var noclip := NameTag.circle_rect(Vector2(1520, 80), 36.0)
+	eq(noclip, Rect2(1484, 44, 72, 72))
+	ok(not NameTag.clear_of(Rect2(1400, 60, 120, 40), screen, [noclip]), "на кнопке noclip — скрыта")
+	ok(NameTag.clear_of(Rect2(1200, 60, 120, 40), screen, [noclip]), "рядом с кнопкой — видна")
+
+
+## #319 (отчёт qa/2026-10-21-2350, 22-itog): открытая панель справа — табличка, попавшая на неё, скрыта; видимые
+## таблички не задевают ни кнопок, ни панели и целиком в кадре.
+func test_tag_not_over_panel() -> void:
+	main.walker.x = 0.0
+	main.walker.z = 2.0
+	main.walker.yaw = 0.0
+	main.walker.pitch = 0.0
+	var mate := main.add_mate(0.0, -2.0, PI, Crew.Role.BIOLOGIST, 1)
+	mate.name = "Биолог"
+	var i := main.crew.find(mate)
+	var screen := main.get_viewport().get_visible_rect()
+	var hidden_by_panel := 0
+	for k in 13:
+		var x := -2.4 + 0.4 * k
+		main.vote_panel.visible = false
+		mate.place(x, -1.0, PI)
+		main.step(1.0 / 30.0)
+		var free := main.name_tags.tags[i].visible
+		main.vote_panel.visible = true
+		main.step(1.0 / 30.0)
+		var t := main.name_tags.tags[i]
+		if free and not t.visible:
+			hidden_by_panel += 1
+		if t.visible:
+			var r := _screen_rect(i)
+			ok(screen.grow(1.0).encloses(r), "x %.1f: целиком в кадре %s" % [x, r])
+			for b: Rect2 in main.tag_blocks():
+				ok(not b.intersects(r.grow(-1.0)), "x %.1f: табличка %s не на %s" % [x, r, b])
+	main.vote_panel.visible = false
+	ok(hidden_by_panel > 0, "хотя бы раз табличка попала на панель и скрыта")

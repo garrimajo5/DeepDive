@@ -17,8 +17,9 @@ var keys: Array[String] = []     ## роль и имя, под которые с
 
 ## Поставить таблички: crew — весь экипаж, me — свой (без таблички), cam — камера, которой смотрим
 ## (не камера мостика — облёт с борта, таблички скрыты). Размер — по глубине взгляда (#319), плашка параллельна
-## экрану; рядом стоящие разнесены вверх, ближняя на месте, не поместилась — скрыта (#320).
-func show_tags(crew: Array, me: Crew.Member, view: CrewView, cam: Camera3D, own_cam: Camera3D) -> void:
+## экрану; рядом стоящие разнесены вверх, ближняя на месте, не поместилась — скрыта (#320); вылезла за край экрана
+## или легла на кнопку или панель (blocks — прямоугольники экрана) — скрыта (#319).
+func show_tags(crew: Array, me: Crew.Member, view: CrewView, cam: Camera3D, own_cam: Camera3D, blocks: Array = []) -> void:
 	while tags.size() < crew.size():
 		_add()
 	var shown: Array = []   # [индекс, расстояние, точка над макушкой, высота в мире]
@@ -43,7 +44,8 @@ func show_tags(crew: Array, me: Crew.Member, view: CrewView, cam: Camera3D, own_
 	shown.sort_custom(func(a, b): return a[1] < b[1])
 	var bz := cam.global_basis.z
 	var ang := atan2(bz.x, bz.z)   # плашка параллельна экрану (поворот только вокруг вертикали)
-	var vp_h := cam.get_viewport().get_visible_rect().size.y
+	var screen := cam.get_viewport().get_visible_rect()
+	var vp_h := screen.size.y
 	var rects: Array = []
 	for s in shown:
 		var hp: float = NameTag.px(s[1]) * vp_h / NameTag.REF_H
@@ -57,6 +59,10 @@ func show_tags(crew: Array, me: Crew.Member, view: CrewView, cam: Camera3D, own_
 		var h: float = shown[k][3]
 		if lift[k] == NameTag.HIDDEN:
 			continue   # не поместилась над ближней — скрыта (ART-033)
+		var r: Rect2 = rects[k]
+		r.position.y -= lift[k]
+		if not NameTag.clear_of(r, screen, blocks):
+			continue   # за краем экрана или на кнопке и панели (#319)
 		var up: float = lift[k] * h / rects[k].size.y   # пиксели экрана → метры у этой плашки
 		var t := tags[i]
 		t.global_transform = Transform3D(Basis(Vector3.UP, ang).scaled(Vector3.ONE * h),
