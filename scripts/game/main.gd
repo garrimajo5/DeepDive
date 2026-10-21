@@ -38,6 +38,7 @@ var votes := {}                   ## голоса ролей в открытом
 var ballot := Ballot.new()        ## голоса игроков у голостола (кооп): решение большинством, таймер
 var result_fade := Briefing.Fade.new()  ## итог забега на голограмме (VoteHolo.result_wanted)
 var result_rows: Array = []      ## четыре строки итога на голограмме (Run.summary)
+var result_detail: Array = []    ## итог на панели (Run.detail) — гостям в кадре
 var journal_page := 0          ## страница журнала лаборатории: 0 — сводка, дальше карточки видов (Lab.page_lines)
 var engine := EngineRoom.new()   ## машинное: вентиль сброса пара и щиток «Аварийный сброс»
 var debug_vent := false          ## снимок: вентиль держат без пальца
@@ -106,6 +107,7 @@ var net_smooth := NetSmooth.new()   ## клиент: корабль и фигу�
 var net_pad := Crew.Pad.new()   ## свой ввод клиента: копится за кадр и уходит хосту (`Client.send_pad`)
 var news := []                ## хост: последнее сообщение события [номер, текст] — едет гостям в кадрах NetSnap.NEWS_TIME
 var news_age := 99.0
+var net_vote := {"secs": -1, "frac": -1.0, "tally": "", "ops": []}   ## клиент: таймер, счёт и мнения голосования хоста
 var net_news := 0             ## клиент: номер последнего показанного сообщения события хоста
 const NET_SPAWN := Vector3(0.0, 1.0, 0.0)   ## гость встаёт на мостике: x, z, курс
 
@@ -675,7 +677,7 @@ func use_post(id: String) -> void:
 			elif run.done:
 				open_vote()
 			else:
-				say(run.cycle())
+				announce(run.cycle())   # маршрут выбран — гостям тоже
 		"zap":
 			walker.x = ZAP_STAND.x   # шаг к рычагу (#137)
 			walker.z = ZAP_STAND.y
@@ -940,14 +942,15 @@ func decide(choice: String) -> void:
 		for m: Crew.Member in crew:   # все у стола отходят: маршрут выбирать заново
 			m.at_vote = false
 		vote_panel.visible = false
-		say(run.go_deeper())
+		announce(run.go_deeper())   # гостям — тоже
 		return
 	var rows := run.finish(time, samples.cargo.size(), scanner.scanned.size(), breach.count, vitals.hull)
 	result_rows = run.summary(samples.cargo.size(), scanner.scanned.size(), breach.count)
-	vote_panel.show_results(Run.detail(rows), run.score)
+	result_detail = Run.detail(rows)
+	vote_panel.show_results(result_detail, run.score)
 	vote_panel.visible = at_vote   # решили товарищи, пока свой у другого поста: итог — у голостола
 	flyby.start(Flyby.Kind.SURFACE)   # вид с борта при всплытии, затем — итог на голограмме
-	say("Экипаж поднялся наверх: очки %d" % run.score)
+	announce("Экипаж поднялся наверх: очки %d" % run.score)
 
 
 func sit_at_helm() -> void:
@@ -1169,7 +1172,8 @@ func mate_action(m: Crew.Member) -> String:
 			m.walker.yaw = PI / 2.0
 			m.place(m.walker.x, m.walker.z, m.walker.yaw)
 		"route":
-			if not run.done:
+			if not run.done:   # маршрут не пройден: кнопка у поста «Маршрут» листает маршруты — у всех
+				announce(run.cycle())
 				return ""
 			m.at_vote = true
 		_:
@@ -1220,7 +1224,20 @@ func _net_send(dt: float) -> void:
 	if net_host and net_host.due(dt):
 		var welding := crew.any(func(m: Crew.Member) -> bool: return m.welding())
 		var ev := NetSnap.events(breach, silt, time, welding, news if news_age < NetSnap.NEWS_TIME else [])
+		ev["r"] = _net_run()
 		net_host.send_frame(NetSnap.frame(net_host.seq, time, helm, reactor, vitals, light_on, crew, ev))
+
+
+## Маршрут, голосование и итог для гостей (NetSnap.run_state): мнения ролей — по кораблю сейчас; метки — голоса
+## у стола, а если голосует один — мнения ролей, как у своего игрока у стола.
+func _net_run() -> Dictionary:
+	var ops := []
+	if run.done and not run.ended:
+		ops = Run.opinions(vitals.hull, vitals.energy, reactor.hot, silt.inside != null, samples.cargo.size())
+	var coop := vote_ids().size() > 1
+	var marks: Dictionary = vote_marks() if coop or at_vote else VoteHolo.votes(ops)
+	return NetSnap.run_state(run, marks, ballot.seconds() if coop else -1, ballot.fraction() if coop else -1.0,
+		vote_panel.tally, ops, result_rows, result_detail)
 
 
 ## Войти в сетевой забег хоста по адресу в локальной сети: шаг корабля считает хост, здесь — свой ввод хосту
@@ -1233,6 +1250,7 @@ func join_game(address: String, port: int = NetLink.PORT, player: String = "", r
 		return err
 	net_seq = -1
 	net_news = 0
+	net_vote = {"secs": -1, "frac": -1.0, "tally": "", "ops": []}
 	net_smooth = NetSmooth.new()
 	net_pad.clear()
 	flyby.stop()   # клиент входит в идущий забег — облёта нет
@@ -1269,6 +1287,7 @@ func _client_step(dt: float) -> void:
 	silt_view.apply(silt, time, helm.pos, helm.yaw)
 	visor.visible = me.welding()
 	alarm_board.show_alarms(alarms_on(), time, breach.active)
+	_client_run_view(dt)
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	overlay.set_pilot(pilot.seated)
@@ -1278,9 +1297,32 @@ func _client_step(dt: float) -> void:
 	crew_view.apply()
 	_place_ship()
 	_place_camera()
+	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
 	_update_ui()
 	_warm_frame()
 	r.end_frame()
+
+
+## Клиент: маршрут, голосование и итог по кадру хоста (`run` уже как у хоста) — точка и брифинг на голостоле, поля
+## голосования с метками и таймером, итог над столом, панель у стола.
+func _client_run_view(dt: float) -> void:
+	near_post = ""
+	if not me.busy():
+		var post := Deck.nearest(posts, walker.x, walker.z)
+		near_post = post.id if post else ""
+	sonar_view.show_waypoint(run.waypoint())
+	sonar_view.show_briefing(brief.update(dt, Briefing.wanted(near_post, at_vote, run.ended)), run, helm.pos)
+	sonar_view.show_vote(vote_fade.update(dt, VoteHolo.wanted(at_vote, run.ended)), votes, int(net_vote["secs"]),
+		float(net_vote["frac"]))
+	sonar_view.show_result(result_fade.update(dt, VoteHolo.result_wanted(at_vote, run.ended)), result_rows,
+		camera.global_position)
+	if not at_vote:
+		vote_panel.visible = false
+	elif run.ended:
+		vote_panel.show_results(result_detail, run.score)
+	else:
+		vote_panel.show_vote(run.depth, net_vote["ops"])
+		vote_panel.set_tally(net_vote["tally"])
 
 
 ## Кадр хоста: корабль, реактор, корпус, свет, экипаж. Свой игрок — место `me` в кадре; его курс остаётся своим
@@ -1297,6 +1339,13 @@ func _client_frame(f: Dictionary) -> void:
 		if ev.size() == 2 and ev[0] > net_news:   # сообщение события хоста — один раз
 			net_news = ev[0]
 			say(ev[1])
+		var evd: Variant = f.get("ev", {})
+		var rs := NetSnap.apply_run(evd.get("r") if evd is Dictionary else null, run)
+		if not rs.is_empty():   # маршрут хоста уже в run; метки, таймер и итог — для показа
+			votes = rs["marks"]
+			result_rows = rs["rows"]
+			result_detail = rs["detail"]
+			net_vote = rs
 	light_on = bool(f.get("light", light_on))
 	overlay.set_light(light_on)
 	var i := net_client.me
