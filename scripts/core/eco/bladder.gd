@@ -151,7 +151,7 @@ func _call_shoals(world: EcoWorld, bl: Bush) -> void:
 	var c := coins
 	var came := c != null and c.came_to(bl.index)
 	for sh in (fish.shoals if fish else []):
-		if sh.alarm > 0.0 or sh.alive < 3 or sh.leader():
+		if sh.riding or sh.alarm > 0.0 or sh.alive < 3 or sh.leader():
 			continue
 		var d := sh.center.distance_to(bl.cloud)
 		if d < CALL_R:

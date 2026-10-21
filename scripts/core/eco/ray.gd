@@ -142,7 +142,7 @@ func _lead(world: EcoWorld, ry: Ray) -> void:
 	var best: EcoFish.Shoal = null
 	var bd := LEAD_R
 	for sh in _fish.shoals:
-		if sh.crown or sh.cage or sh.leader():
+		if sh.crown or sh.cage or sh.riding or sh.leader():
 			continue
 		var d := sh.center.distance_to(ry.p)
 		if d < bd:
