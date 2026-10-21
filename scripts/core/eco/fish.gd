@@ -27,6 +27,9 @@ const HULL_GAP := 0.3
 ## Стая за ледокрылом: цель — в LEAD_BEHIND позади него и LEAD_BELOW ниже (sh.follow в js).
 const LEAD_BEHIND := 12.0
 const LEAD_BELOW := 3.0
+## Стая ближе r + VEIL_PAD к фонарной вуали по горизонтали (центр стаи; рыбки — в пределах 14 м от дома) — рыбки
+## обходят купол и могут попасть под щупальца (EcoVeil.fish_push).
+const VEIL_PAD := EcoVeil.FISH_PAD + 20.0
 ## Стая дальше FAR от корабля (в тумане, плотность ≥ 0,0135 — видна на четверть) ходит реже: шагом FAR_STEP
 ## (= EcoWorld.MAX_STEP, при 60 к/с — каждый третий кадр), набирая пропущенное время. Дальние стаи сдвинуты
 ## по фазе, чтобы не считались в одном кадре.
@@ -124,6 +127,8 @@ class Shoal:
 	## Ведущий — слабой ссылкой (у него свои поля p и dir).
 	var lead_t := 0.0
 	var _lead: WeakRef
+	## Стая у фонарной вуали (EcoVeil): только у таких рыбки обходят купол и попадают под щупальца.
+	var near_veil := false
 	var members: Array = []  ## Array[Fish]
 	## Места и жизнь рыбок стаи по Fish.slot на начало шага стаи и расталкивание каждой (sep): пары соседей
 	## считаются один раз (22 × 21 / 2), без обхода объектов.
@@ -168,6 +173,9 @@ class Fish:
 
 var shoals: Array[Shoal] = []
 var all: Array[Fish] = []
+
+## Фонарные вуали: светляки их обходят, под куполом вуаль жалит (null — вуалей нет).
+var veils: EcoVeil
 
 var _rnd: EcoRandom
 ## Живые хищники на этом шаге: один обход мира на все стаи.
@@ -338,6 +346,7 @@ func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
 			n += 1
 	sh.alive = n
 	sh.sep = _separation(sh.pos, sh.live)
+	sh.near_veil = veils != null and veils.near_any(sh.center, VEIL_PAD)
 	if n > 0:
 		sh.center = c / n
 		sh.velocity = v / n
@@ -444,6 +453,12 @@ func _step_fish(world: EcoWorld, f: Fish, dt: float, t: float, ground: Callable,
 		var d := away.length()
 		if d < 14.0 and d > 0.01:
 			acc += away * ((10.0 * (1.0 - d / 14.0) + 2.0) / d)
+	if sh.near_veil:
+		var stung := []
+		acc += veils.fish_push(world, p, dt, stung)
+		if not stung.is_empty():  # вуаль ужалила — рыбка съедена
+			kill(f)
+			return
 	if sh.cage:
 		acc += cage_push(sh.frame, p)
 	var ph := f.phase

@@ -68,6 +68,9 @@ var ray_view: RayView
 ## Присоски: по три на спине ледокрыла, перебираются на корпус, тормозят корабль, отпугивают стеклоуста.
 var remoras: EcoRemora
 var remora_view: RemoraView
+## Фонарные вуали: две колонии медуз дрейфуют над рифом, жалят светляков, под куполом серпохвост теряет корабль.
+var veils: EcoVeil
+var veil_view: VeilView
 ## Чёрный курильщик (место 2, ART-012): трубы на дне, светящиеся жерла, столб пузырей до льда, марево.
 var vent: EcoVent
 var vent_view: VentView
@@ -140,6 +143,11 @@ func _init() -> void:
 	preds.organs = organs
 	cushions = world.add(EcoCushion.new(fish)) as EcoCushion
 	preds.cushions = cushions
+	veils = world.add(EcoVeil.new()) as EcoVeil
+	fish.veils = veils
+	preds.veils = veils
+	veil_view = VeilView.new(veils)
+	add_child(veil_view)
 	eels = world.add(EcoEel.new(grazers, fish)) as EcoEel
 	raduzh = world.add(EcoRaduzh.new()) as EcoRaduzh
 	preds.raduzh = raduzh
@@ -385,4 +393,5 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	coins_view.sync(world.time)
 	ray_view.sync()
 	remora_view.sync(world.time)
+	veil_view.sync(world.time, ship.pos)
 	return world.take_link()
