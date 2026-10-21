@@ -153,12 +153,14 @@ static func _graze_text(world: EcoWorld) -> Callable:
 
 func _step_grazer(world: EcoWorld, g: Grazer, dt: float) -> void:
 	var a := g.agent
+	var moved := false
 	if not a.alive:
 		if a.timer > 0.0 or moss.patches.is_empty():
 			return
 		var pt: EcoMoss.Patch = _rnd.pick(moss.patches)
 		a.p = Vector3(pt.pos.x + _rnd.range_f(-3, 3), pt.pos.y, pt.pos.z + _rnd.range_f(-3, 3))
 		a.alive = true
+		moved = true
 		g.patch = _pick_patch(g)
 		a.set_state(EcoAgent.State.SEEK)
 	g.graze_cd -= dt
@@ -184,11 +186,14 @@ func _step_grazer(world: EcoWorld, g: Grazer, dt: float) -> void:
 			g.dir += da * minf(1.0, dt * TURN_RATE)
 			a.v = Vector3(sin(g.dir) * WALK_SPEED, 0, cos(g.dir) * WALK_SPEED)
 			a.p = Vector3(a.p.x + a.v.x * dt, a.p.y, a.p.z + a.v.z * dt)
+			moved = true
 	else:
 		EcoMoss.eat(g.patch, dt * EAT_RATE)
 		if a.expired() or g.patch.food < LEAVE:
 			g.patch = _pick_patch(g)
 			a.set_state(EcoAgent.State.SEEK)
+	if not moved:
+		return   # стоит (ест или только что дошёл): дно под ним то же — шум fbm не пересчитываем (issue #133)
 	a.p.x = clampf(a.p.x, -EcoAgent.EDGE, EcoAgent.EDGE)
 	a.p.z = clampf(a.p.z, -EcoAgent.EDGE, EcoAgent.EDGE)
 	a.p.y = _ground_y(world, a.p.x, a.p.z, g.patch.pos.y if g.patch else a.p.y - LIFT)

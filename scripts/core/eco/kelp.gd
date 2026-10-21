@@ -244,7 +244,8 @@ func _step_urchin(world: EcoWorld, u: Urchin, dt: float) -> void:
 			world.emit(ID, "graze", u.pos, _graze_text(world) if say else Callable())
 	elif dist > 0.05:
 		u.pos += d * (minf(dist, speed * dt) / dist)
-	u.pos.y = _floor(u.pos.x, u.pos.z, u.pos.y - UP) + UP
+		# высоту дна — только когда ёж сдвинулся: дно — шум fbm, стоящему ежу пересчитывать нечего (issue #133)
+		u.pos.y = _floor(u.pos.x, u.pos.z, u.pos.y - UP) + UP
 
 
 ## Съесть ежа (кольчужник): пропадает на respawn секунд, лента свободна.

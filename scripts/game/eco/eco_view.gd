@@ -65,6 +65,9 @@ var coins_view: CoinsView
 ## Ледокрылы: два гигантских ската кружат подо льдом, водят стаи светляков, поют; над кораблём проходят поверху.
 var rays: EcoRay
 var ray_view: RayView
+## Присоски: по три на спине ледокрыла, перебираются на корпус, тормозят корабль, отпугивают стеклоуста.
+var remoras: EcoRemora
+var remora_view: RemoraView
 ## Чёрный курильщик (место 2, ART-012): трубы на дне, светящиеся жерла, столб пузырей до льда, марево.
 var vent: EcoVent
 var vent_view: VentView
@@ -151,6 +154,10 @@ func _init() -> void:
 	rays = world.add(EcoRay.new(fish)) as EcoRay
 	ray_view = RayView.new(rays)
 	add_child(ray_view)
+	remoras = world.add(EcoRemora.new(rays)) as EcoRemora
+	eels.remoras = remoras
+	remora_view = RemoraView.new(remoras)
+	add_child(remora_view)
 	vent = world.add(EcoVent.new()) as EcoVent
 	flower = world.add(EcoFlower.new()) as EcoFlower
 	shell = world.add(EcoShell.new()) as EcoShell
@@ -377,4 +384,5 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	skalnik_view.sync(world.time, ship.pos)
 	coins_view.sync(world.time)
 	ray_view.sync()
+	remora_view.sync(world.time)
 	return world.take_link()

@@ -6,7 +6,7 @@ extends EcoSystem
 ## добыча съедена (наблюдение «eelcatch»). Корабль носом ближе 28 м к устью — плывёт к носу в обход корпуса (10 м/с,
 ## 6 с) и присасывается снаружи к панорамному стеклу (наблюдение «latch»): пока висит — тянет заряд корабля,
 ## EcoLink.DRAIN 3,2 ед./с. Разряд по корпусу сбрасывает его (наблюдение «zap»), он уходит в логово.
-## Заметен сонару и сканеру.
+## На корпусе прилипалы (EcoRemora) — к кораблю не плывёт. Заметен сонару и сканеру.
 
 const ID := "eel"
 ## Логова (x, z) из js/world.js; устье — на 1,1 м над дном и на 0,3 м наружу.
@@ -43,6 +43,8 @@ const CD_MISS := 8.0
 const CD_FED := 25.0
 const CD_SHIP := 15.0
 const CD_ZAP := 40.0
+## На корпусе прилипалы (EcoRemora.on_hull) — к кораблю не плывёт, снова глянет через 15 с.
+const CD_REMORA := 15.0
 ## Тянет заряд корабля, пока висит на стекле (ед./с, ship.js: drain += 3,2).
 const DRAIN := 3.2
 ## Нос для стеклоуста в осях корабля: середина панорамного стекла (HullPlan: стекло 9 × 2 м на срезе носа z = −7,2,
@@ -89,6 +91,8 @@ class Eel:
 
 
 var eels: Array[Eel] = []
+## Прилипалы на корпусе (E.hullRemoras): пока они там, стеклоуст на корабль не садится. null — прилипал нет.
+var remoras: EcoRemora
 ## Кто висит на стекле (E.latched); null — никого.
 var latched: Eel
 ## Добыча: скребуны и светляки мира (null — нет такой добычи).
@@ -212,8 +216,12 @@ func _look_around(world: EcoWorld, e: Eel, dt: float) -> void:
 		_set_mode(e, Mode.STRIKE)
 		e.timer = STRIKE_TIME
 	elif latched == null and front(world.ship).distance_to(e.lair) < SHIP_R and _rnd.next() < dt * SHIP_CHANCE:
-		_set_mode(e, Mode.TO_SHIP)
-		e.timer = TO_SHIP_TIME
+		if remoras and remoras.on_hull > 0:   # на корпусе уже прилипалы — не садится
+			e.cd = CD_REMORA
+			remoras.scare_eel(world, e.lair)
+		else:
+			_set_mode(e, Mode.TO_SHIP)
+			e.timer = TO_SHIP_TIME
 
 
 func _prey_agent(e: Eel) -> EcoAgent:
