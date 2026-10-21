@@ -13,8 +13,8 @@ extends EcoSystem
 ## медленнее и злее и гонит на станцию чистки (режим CLEAN). Вспышка радужников (EcoRaduzh, поле raduzh) зовёт
 ## хищника издалека. У станции чистки (EcoOgnevka, поле ognevka) хищник бросает охоту, корабль там в укрытии.
 ## В густом ленточнике (EcoKelp, поле kelp) хищник теряет напуганную стаю.
-## Сквозь корпус не проходят (EcoWorld.push_out). Вуали
-## и укрытия стай придут со своими видами.
+## Фонарные вуали (EcoVeil, поле veils) обходит стороной, корабль под куполом вуали теряет.
+## Сквозь корпус не проходят (EcoWorld.push_out).
 
 const ID := "pred"
 
@@ -88,6 +88,8 @@ class Pred:
 	var station := -1
 	## Пауза сообщений перемирия и укрытия у станции чистки (truceCd).
 	var truce_cd := 0.0
+	## Пауза наблюдения «обходит вуаль» (avoidCd).
+	var avoid_cd := 0.0
 
 
 var all: Array[Pred] = []
@@ -105,6 +107,8 @@ var leeches: EcoLeech
 var raduzh: EcoRaduzh
 ## Огнёвки: у станции чистки перемирие, корабль у станции в укрытии (null — огнёвок нет; ставит EcoOgnevka.new).
 var ognevka: EcoOgnevka
+## Фонарные вуали: хищник их обходит, корабль под куполом спрятан (null — вуалей нет).
+var veils: EcoVeil
 
 var _rnd: EcoRandom
 
@@ -219,9 +223,9 @@ static func reach(pr: Pred, pred_k := 1.0) -> float:
 	return (EcoLeech.REACH if pr.leech else REACH) * pred_k
 
 
-## Спрятан ли корабль от хищников (E.shipHidden): в облаке чернил подушечника.
+## Спрятан ли корабль от хищников (E.shipHidden): в облаке чернил подушечника или под куполом фонарной вуали.
 func ship_hidden(world: EcoWorld) -> bool:
-	return cushions != null and cushions.ship_ink(world) != null
+	return (cushions != null and cushions.ship_ink(world) != null) or (veils != null and veils.ship_under(world) != null)
 
 
 ## Корабль в укрытии у станции чистки огнёвок (E.shipSheltered): ближе 18 м к вершине огнецвета.
@@ -280,6 +284,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 	pr.angry_cd -= dt
 	pr.flare_cd -= dt
 	pr.truce_cd -= dt
+	pr.avoid_cd -= dt
 	var ship := world.ship.pos
 	var d_ship := a.distance_to(ship)
 	var at_station := leeches.near_station(a.p) != null if leeches else false
@@ -386,7 +391,10 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 				var g := a.p + Vector3(_rnd.range_f(-40, 40), 5.0, _rnd.range_f(-40, 40))
 				g.y = minf(g.y, GOAL_CEILING)
 				a.goal = g
-				cushions.hid_ship(world, a.p)
+				if cushions != null and cushions.ship_ink(world) != null:
+					cushions.hid_ship(world, a.p)
+				else:  # под куполом вуали
+					veils.hid_ship(world, a.p)
 			elif d_ship < BITE_DIST or world.touches_ship(a.p, BITE_REACH):
 				world.hit_ship(Species.cap(world.nm(ID)), BITE_DAMAGE, a.p)
 				world.emit(ID, "bite", a.p, _text(world, "%s укусил корпус"))
@@ -420,6 +428,13 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 	# прямо к цели с постоянной скоростью; в охоте и броске поворачивает резче
 	var d := a.goal - a.p
 	var want := d.normalized() * speed if d.length_squared() > 1e-4 else d
+	if veils:  # фонарные вуали обходит стороной
+		var push := veils.pred_push(a.p)
+		if push != Vector3.ZERO:
+			want += push
+			if pr.avoid_cd <= 0.0:
+				pr.avoid_cd = EcoVeil.AVOID_CD
+				veils.avoided(world, a.p)
 	a.agility = 1.6 if pr.mode == Mode.HUNT or pr.mode == Mode.CHARGE else 1.1
 	a.drive(want, dt, world.ground)
 	world.push_out(a, HULL_GAP) # корпус не пускает внутрь
