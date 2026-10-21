@@ -77,6 +77,7 @@ var current := Helm.SeaCurrent.new()
 
 var ocean: OceanView
 var eco: EcoView            ## живой мир отмели (поток Б), связь — EcoLink
+var step_ms := 0.0          ## сколько занял прошлый шаг игры (код), мс — для лога тестера (issue #217)
 var eco_ship := EcoLink.ShipState.new()
 var ship: Node3D            ## корабль: всё, что движется вместе с ним
 var bridge: BridgeView
@@ -400,7 +401,9 @@ func _notification(what: int) -> void:
 
 
 func _process(dt: float) -> void:
+	var t0 := Time.get_ticks_usec()
 	step(dt)
+	step_ms = (Time.get_ticks_usec() - t0) / 1000.0
 
 
 ## Один шаг игры: ввод, игрок, корабль, вода. Вынесен из _process для тестов.
