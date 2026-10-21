@@ -25,6 +25,12 @@ static func radius_for(k: float) -> float:
 	return BASE_RADIUS * k
 
 
+## Энергия света вспышки при оставшемся мигании flicker (FLICKER → 0): 4 на пике, к концу гаснет.
+## Сам свет всегда в сцене на наибольший радиус (Main.zap_light, issue #159); вне вспышки — Searchlight.DARK.
+static func flash_energy(fl: float) -> float:
+	return 4.0 * clampf(fl / FLICKER, 0.0, 1.0)
+
+
 ## Разряд в момент t при силе k и заряде vitals. Возвращает текст для приборов; разряд был, если fired() == true.
 func fire(t: float, k: float, vitals: Vitals) -> String:
 	if k <= 0.0:
