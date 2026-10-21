@@ -58,3 +58,13 @@ func test_nav_per_voter() -> void:
 	eq(b.nav(1, Vector2(0, -1)), "deep", "вниз — глубже")
 	eq(b.nav(1, Vector2(0, -1)), "", "один голос за нажатие")
 	eq(b.nav(2, Vector2(0, 1)), "up", "у второго своя крестовина")
+
+
+func test_fraction_for_ring() -> void:
+	var b := Ballot.new()
+	eq(b.fraction(), -1.0, "без голосов кольца нет")
+	b.cast(1, Crew.Role.PILOT, "deep")
+	near(b.fraction(), 1.0, 1e-6, "первый голос — полное кольцо")
+	b.update(Ballot.TIME * 0.25, [1, 2])
+	near(b.fraction(), 0.75, 1e-5, "четверть времени прошла — дуга на три четверти")
+	eq(b.seconds(), ceili(Ballot.TIME * 0.75))

@@ -3,7 +3,8 @@ extends RefCounted
 ## Голосование на голограмме над голостолом (ART-016, лист `golostol-sostoyaniya.png`, «Голосование»): пока экипаж
 ## решает «глубже или наверх», рельеф сонара гаснет, над столом — два поля: «ГЛУБЖЕ» (стрелка вниз) и «НАВЕРХ»
 ## (стрелка вверх). Под полем — метки голосов: кружок цвета роли с буквой (`Crew.ROLE_COLORS`) и счёт.
-## В одиночной игре голоса ролей — их мнения (`Run.opinions`), решает игрок; таймер — с сетью (этап «Кооп»).
+## В одиночной игре голоса ролей — их мнения (`Run.opinions`), решает игрок; у стола двое и больше — голоса игроков
+## (`Ballot`), между полями кольцо таймера с секундами: убывающая дуга от верха по часовой стрелке.
 ## Здесь — числа и раскладка без узлов, в осях голограммы (`SonarView`: центр стола, y — от её плоскости);
 ## рисует `scripts/game/vote_view.gd`.
 
@@ -25,6 +26,47 @@ const WORDS := {"deep": "ГЛУБЖЕ", "up": "НАВЕРХ"}
 const HOLO := Color("67DDEB")
 const TEXT := Color("D5E4E8")
 const BACK := Color("0B1C24")
+
+
+## Кольцо таймера (лист ART-016: «12 с» в кольце над стрелками): между полями, на высоте стрелок, лицом к смотрящему.
+const RING_Y := 0.79       ## центр кольца над плоскостью голограммы, м
+const RING_R := 0.085      ## радиус по середине обода, м
+const RING_W := 0.014      ## ширина обода, м
+const RING_SEGS := 48      ## сегментов полного кольца
+const RING_BACK_A := 0.18  ## прозрачность подложки кольца (вся окружность), дуга — ярко
+
+
+## Показывать ли кольцо таймера: голосование видно и таймер идёт (Ballot.seconds() >= 0).
+static func timer_wanted(seconds: int) -> bool:
+	return seconds >= 0
+
+
+## Подпись в кольце: «12 с».
+static func timer_text(seconds: int) -> String:
+	return "%d с" % seconds
+
+
+## Сколько сегментов дуги гореть при доле времени frac 0…1 (вверх: остаток виден, пока есть время).
+static func ring_segs(frac: float) -> int:
+	return 0 if frac <= 0.0 else clampi(ceili(clampf(frac, 0.0, 1.0) * RING_SEGS), 1, RING_SEGS)
+
+
+## Треугольники дуги из segs сегментов в плоскости XY (x вправо, y вверх): от верха (12 часов) по часовой стрелке —
+## убывая, дуга отступает к верху против часовой (как на листе). Лицевая сторона — к +Z.
+static func ring_arc(segs: int, r: float = RING_R, w: float = RING_W) -> PackedVector3Array:
+	var v := PackedVector3Array()
+	var step := TAU / RING_SEGS
+	for i in segs:
+		var t0 := i * step
+		var t1 := (i + 1) * step
+		var d0 := Vector3(sin(t0), cos(t0), 0.0)
+		var d1 := Vector3(sin(t1), cos(t1), 0.0)
+		var o0 := d0 * (r + w * 0.5)
+		var i0 := d0 * (r - w * 0.5)
+		var o1 := d1 * (r + w * 0.5)
+		var i1 := d1 * (r - w * 0.5)
+		v.append_array([i0, o0, o1, i0, o1, i1])
+	return v
 
 
 ## Центр поля choice ("deep" | "up") в осях голограммы, на высоте h.

@@ -86,10 +86,11 @@ func _ready() -> void:
 
 
 ## Голосование: k — доля перехода 0…1, votes — VoteHolo.votes. Рельеф сонара гаснет на VoteHolo.DIM_SONAR.
-func show_vote(k: float, votes: Dictionary) -> void:
+## seconds и frac — таймер голосования (Ballot.seconds/fraction; -1 — нет, кольцо скрыто).
+func show_vote(k: float, votes: Dictionary, seconds: int = -1, frac: float = -1.0) -> void:
 	_vote_k = k
 	mat.set_shader_parameter("dim", maxf(_vote_k, _result_k) * VoteHolo.DIM_SONAR)
-	vote.show_vote(k, votes)
+	vote.show_vote(k, votes, seconds, frac)
 
 
 ## Итог забега над столом (после «наверх»): k — доля перехода, rows — Run.summary, eye — глаз в глобальных осях.

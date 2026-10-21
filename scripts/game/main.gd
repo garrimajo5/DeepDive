@@ -539,7 +539,9 @@ func step(dt: float) -> void:
 	sonar_view.show_waypoint(run.waypoint())
 	alarm_board.show_alarms(alarms_on(), time, breach.active)
 	sonar_view.show_briefing(brief.update(dt, Briefing.wanted(near_post, at_vote, run.ended)), run, helm.pos)
-	sonar_view.show_vote(vote_fade.update(dt, VoteHolo.wanted(at_vote, run.ended)), vote_marks())
+	var coop := vote_ids().size() > 1   # таймер — только у голосов игроков (Ballot), в одиночной игре его нет
+	sonar_view.show_vote(vote_fade.update(dt, VoteHolo.wanted(at_vote, run.ended)), vote_marks(),
+		ballot.seconds() if coop else -1, ballot.fraction() if coop else -1.0)
 	sonar_view.show_result(result_fade.update(dt, VoteHolo.result_wanted(at_vote, run.ended)), result_rows,
 		camera.global_position)
 	rooms.apply(layout, reactor, airlock, engine)

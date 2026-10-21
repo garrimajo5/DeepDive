@@ -211,3 +211,73 @@ func test_scene_vote_in_frame() -> void:
 	main.queue_free()
 	tree.root.size = was
 	await frames(1)
+
+
+func test_timer_ring_layout() -> void:
+	ok(not VoteHolo.timer_wanted(-1), "таймер не идёт — кольца нет")
+	ok(VoteHolo.timer_wanted(0))
+	eq(VoteHolo.timer_text(12), "12 с", "как на листе ART-016")
+	eq(VoteHolo.ring_segs(1.0), VoteHolo.RING_SEGS, "полное кольцо")
+	eq(VoteHolo.ring_segs(0.0), 0, "время вышло — дуги нет")
+	eq(VoteHolo.ring_segs(0.001), 1, "пока есть время — дуга видна")
+	eq(VoteHolo.ring_segs(0.5), VoteHolo.RING_SEGS / 2)
+	var v := VoteHolo.ring_arc(VoteHolo.RING_SEGS / 4)
+	eq(v.size(), VoteHolo.RING_SEGS / 4 * 6, "два треугольника на сегмент")
+	near(v[1].x, 0.0, 1e-6, "дуга начинается сверху")
+	ok(v[1].y > 0.0)
+	var last := v[v.size() - 2]
+	ok(last.x > 0.05 and absf(last.y) < 1e-4, "четверть — по часовой до трёх часов: %s" % last)
+	# лицевая сторона к +Z: (b − a) × (c − a) смотрит внутрь (−Z) — обход по часовой, если смотреть на кольцо
+	ok((v[1] - v[0]).cross(v[2] - v[0]).z < 0.0, "обход по часовой стрелке")
+	# между полями: кольцо не залезает на стрелки, в высоте проекции, над стрелками и дисками
+	ok(VoteHolo.RING_R + VoteHolo.RING_W < VoteHolo.SPREAD - VoteHolo.ARROW_H * 0.31, "кольцо между стрелками")
+	ok(VoteHolo.RING_Y - VoteHolo.RING_R > VoteHolo.DISC_Y, "над дисками полей")
+	ok(SonarView.TOP_Y + VoteHolo.RING_Y + VoteHolo.RING_R < 1.9, "в высоте проекции")
+
+
+func test_scene_timer_ring() -> void:
+	var was := tree.root.size
+	tree.root.size = Vector2i(1600, 720)
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.walker.x = 1.6
+	main.walker.z = -1.2
+	main.walker.yaw = PI / 2.0
+	main.walker.pitch = deg_to_rad(-38.0)
+	main.step(0.1)
+	main.complete_route()
+	main.use_post("route")
+	ok(main.at_vote)
+	main.step(0.5)
+	var vv := main.sonar_view.vote
+	ok(vv.visible and not vv.timer.visible, "один у стола — таймера нет (решает сразу)")
+	var mate := main.add_mate(1.85, -0.75, PI / 2.0, Crew.Role.BIOLOGIST, 0)
+	mate.pad.action = true
+	main.step(0.1)
+	ok(mate.at_vote, "биолог встал к голосованию")
+	main.step(0.3)
+	ok(not vv.timer.visible, "голосов нет — таймер не идёт")
+	main.ballot.cast(main.me.get_instance_id(), main.me.role, "deep")
+	main.step(0.1)
+	ok(vv.timer.visible, "первый голос — кольцо таймера над столом")
+	eq(vv.timer_label.text, VoteHolo.timer_text(main.ballot.seconds()))
+	var full := (vv.timer_arc.mesh as ArrayMesh).surface_get_array_len(0)
+	for i in 50:
+		main.step(0.1)
+	ok(main.ballot.seconds() < int(Ballot.TIME), "секунды идут")
+	eq(vv.timer_label.text, VoteHolo.timer_text(main.ballot.seconds()), "подпись — секунды Ballot")
+	var now := (vv.timer_arc.mesh as ArrayMesh).surface_get_array_len(0)
+	ok(now < full, "дуга убывает: %d < %d" % [now, full])
+	await frames(1)
+	var cam := main.get_viewport().get_camera_3d()
+	var scr := main.get_viewport().get_visible_rect().size
+	var p := cam.unproject_position(vv.timer.global_position + Vector3(0, VoteHolo.RING_R, 0))
+	ok(not cam.is_position_behind(vv.timer.global_position), "кольцо перед камерой")
+	ok(p.y > scr.y * 0.25 and p.x > 0.0 and p.x < scr.x, "верх кольца в кадре ниже строк приборов: %s" % p)
+	main.decide("deep")
+	main.step(0.3)
+	ok(not vv.timer.visible, "решили — кольца нет")
+	main.queue_free()
+	tree.root.size = was
+	await frames(1)
