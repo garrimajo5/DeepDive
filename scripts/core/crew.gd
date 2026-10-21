@@ -162,6 +162,17 @@ class Pad:
 		left = INF
 		action = false
 
+	## Ввод для сети: клиент шлёт хосту каждый кадр (свайп и нажатие копятся до отправки).
+	func snapshot() -> Dictionary:
+		return {"mx": move.x, "my": move.y, "lx": look.x, "ly": look.y, "act": action}
+
+	## Хост принимает ввод клиента: крестовина — как есть, свайп и нажатие — добавляются до шага.
+	func apply(s: Dictionary) -> void:
+		move = Vector2(float(s.get("mx", 0.0)), float(s.get("my", 0.0))).limit_length(1.0)
+		look += Vector2(float(s.get("lx", 0.0)), float(s.get("ly", 0.0)))
+		action = action or bool(s.get("act", false))
+		left = INF
+
 
 ## Член экипажа: место (ступни, оси корабля), курс, поза и фаза шага.
 class Member:
@@ -481,7 +492,7 @@ class Member:
 	## Снимок для сети: всё, что нужно клиенту, чтобы поставить фигуру.
 	func snapshot() -> Dictionary:
 		return {"role": role, "name": name, "look": look, "x": x, "z": z, "yaw": yaw, "seated": seated,
-			"turn": wheel_turn, "phase": phase, "swing": swing, "post": post,
+			"turn": wheel_turn, "phase": phase, "swing": swing, "post": post, "power": at_power, "vote": at_vote,
 			"weld": [weld_at.x, weld_at.y, weld_at.z, weld_n.x, weld_n.y, weld_n.z] if weld_at.is_finite() else [],
 			"hand_l": Crew._v3(hands[0]), "hand_r": Crew._v3(hands[1])}
 
@@ -494,6 +505,8 @@ class Member:
 		yaw = float(s.get("yaw", yaw))
 		seated = bool(s.get("seated", seated))
 		post = str(s.get("post", post))
+		at_power = bool(s.get("power", at_power))
+		at_vote = bool(s.get("vote", at_vote))
 		wheel_turn = float(s.get("turn", wheel_turn))
 		phase = float(s.get("phase", phase))
 		swing = float(s.get("swing", swing))
