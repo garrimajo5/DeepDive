@@ -85,9 +85,7 @@ func _init(system: EcoFlower) -> void:
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	var mat := ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = SHADER
-	mat.shader = sh
+	mat.shader = EcoShaders.shader(SHADER)
 	mat.set_shader_parameter("tip_glow", TIP_GLOW)
 	mat.set_shader_parameter("body_glow", BODY_GLOW)
 	mat.set_shader_parameter("glow_mid", EcoFlower.GLOW_MID)

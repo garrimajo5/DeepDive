@@ -6,22 +6,10 @@ extends MeshInstance3D
 ## грани (камень). Светится только редкое обрастание #67DDEB — альфа вершинного цвета в том же материале;
 ## скале — слабая подсветка FILL, чтобы кромка читалась в мути. Без источников света, слой отмели.
 
-const SHADER := """
-shader_type spatial;
-render_mode cull_back;
-uniform vec3 growth : source_color;
-const float FILL = 0.22;
-varying float lit;
-void vertex() {
-	lit = COLOR.a;
-}
-void fragment() {
-	ALBEDO = COLOR.rgb * (1.0 - lit * 0.5);
-	ROUGHNESS = 0.95;
-	SPECULAR = 0.15;
-	EMISSION = growth * lit * 1.4 + COLOR.rgb * (1.0 - lit) * FILL;
-}
-"""
+## Подсветка камня, шероховатость и блик — в общем шейдере камня (EcoShaders.STONE).
+const FILL := 0.22
+const ROUGH := 0.95
+const SPEC := 0.15
 
 ## Палитра художника (kray-otmeli.md).
 const ROCK := Color("294956")
@@ -78,12 +66,7 @@ func _init(system: EcoDrop) -> void:
 	arrays[Mesh.ARRAY_COLOR] = _col
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	var mat := ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = SHADER
-	mat.shader = sh
-	mat.set_shader_parameter("growth", GROWTH)
-	m.surface_set_material(0, mat)
+	m.surface_set_material(0, EcoShaders.stone(GROWTH, FILL, ROUGH, SPEC))
 	mesh = m
 	tris = verts.size() / 3
 

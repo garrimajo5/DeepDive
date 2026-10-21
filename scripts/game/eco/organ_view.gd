@@ -58,9 +58,7 @@ func _init(system: EcoOrgan) -> void:
 		arrays[Mesh.ARRAY_INDEX] = _idx
 		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 		var mat := ShaderMaterial.new()
-		var sh := Shader.new()
-		sh.code = SHADER
-		mat.shader = sh
+		mat.shader = EcoShaders.shader(SHADER)
 		mat.set_shader_parameter("paint_k", PAINT_K)
 		m.surface_set_material(0, mat)
 	mesh = m

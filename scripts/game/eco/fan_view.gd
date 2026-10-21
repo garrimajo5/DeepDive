@@ -81,9 +81,7 @@ static func build_mesh() -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	var mat := ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = SHADER
-	mat.shader = sh
+	mat.shader = EcoShaders.shader(SHADER)
 	mat.set_shader_parameter("rib_color", RIB)
 	mat.set_shader_parameter("edge_color", EDGE)
 	mat.set_shader_parameter("size", Vector2(EcoFan.WIDTH, EcoFan.HEIGHT))

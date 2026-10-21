@@ -95,9 +95,7 @@ static func build_leaf() -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	var mat := ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = LEAF_SHADER
-	mat.shader = sh
+	mat.shader = EcoShaders.shader(LEAF_SHADER)
 	mat.set_shader_parameter("leaf_color", LEAF)
 	mat.set_shader_parameter("edge_color", EDGE)
 	mesh.surface_set_material(0, mat)

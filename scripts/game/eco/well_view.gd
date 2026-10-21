@@ -79,9 +79,7 @@ func _instance(title: String, m: ArrayMesh, code: String) -> MeshInstance3D:
 	mi.layers = OceanView.LAYER_WORLD
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mat := ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = code
-	mat.shader = sh
+	mat.shader = EcoShaders.shader(code)
 	mat.set_shader_parameter("pulse", EcoWell.PULSE)
 	mat.set_shader_parameter("period", EcoWell.PERIOD)
 	m.surface_set_material(0, mat)

@@ -6,22 +6,10 @@ extends MeshInstance3D
 ## кустики обрастания #67DDEB в бороздах и у дна — альфа вершинного цвета в том же материале; камню —
 ## слабая подсветка FILL, чтобы светлый минерал читался в мути отмели. Без источников света, слой отмели.
 
-const SHADER := """
-shader_type spatial;
-render_mode cull_back;
-uniform vec3 growth : source_color;
-const float FILL = 0.3;
-varying float lit;
-void vertex() {
-	lit = COLOR.a;
-}
-void fragment() {
-	ALBEDO = COLOR.rgb * (1.0 - lit * 0.5);
-	ROUGHNESS = 0.92;
-	SPECULAR = 0.2;
-	EMISSION = growth * lit * 1.4 + COLOR.rgb * (1.0 - lit) * FILL;
-}
-"""
+## Подсветка камня, шероховатость и блик — в общем шейдере камня (EcoShaders.STONE).
+const FILL := 0.3
+const ROUGH := 0.92
+const SPEC := 0.2
 
 ## Палитра художника (rakovina-drevnih.md).
 const MINERAL := Color("82979c")
@@ -73,12 +61,7 @@ func _init(system: EcoShell) -> void:
 	arrays[Mesh.ARRAY_COLOR] = _col
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	var mat := ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = SHADER
-	mat.shader = sh
-	mat.set_shader_parameter("growth", GROWTH)
-	m.surface_set_material(0, mat)
+	m.surface_set_material(0, EcoShaders.stone(GROWTH, FILL, ROUGH, SPEC))
 	mesh = m
 	tris = verts.size() / 3
 

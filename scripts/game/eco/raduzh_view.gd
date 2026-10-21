@@ -22,26 +22,6 @@ void fragment() {
 }
 """
 
-const HALO_SHADER := """
-shader_type spatial;
-render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
-uniform float fade_far = 70.0;
-varying vec3 tint;
-void vertex() {
-	float far = length((VIEW_MATRIX * vec4(MODEL_MATRIX[3].xyz, 1.0)).xyz);
-	tint = COLOR.rgb * clamp(1.0 - far / fade_far, 0.0, 1.0);
-	float s = length(MODEL_MATRIX[0].xyz);
-	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * s, INV_VIEW_MATRIX[1] * s, INV_VIEW_MATRIX[2] * s,
-		MODEL_MATRIX[3]);
-}
-void fragment() {
-	// мягкое пятно: 1 в центре, 0,45 на трети радиуса, 0 на краю (glowTex в браузере)
-	float d = clamp(length(UV - vec2(0.5)) * 2.0, 0.0, 1.0);
-	float a = d < 0.35 ? mix(1.0, 0.45, d / 0.35) : mix(0.45, 0.0, (d - 0.35) / 0.65);
-	ALBEDO = tint * a;
-}
-"""
-
 ## Тело гребневика — сфера радиуса 1, сплющенная до 0,16 × 0,24 × 0,16 м (7 × 5 сегментов, как в браузере).
 const BODY := Vector3(0.16, 0.24, 0.16)
 const HALO_SIZE := 1.1
@@ -88,9 +68,7 @@ func _instance(n: String, mesh: Mesh, count: int) -> MultiMeshInstance3D:
 
 static func _material(code: String) -> ShaderMaterial:
 	var mat := ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = code
-	mat.shader = sh
+	mat.shader = EcoShaders.shader(code)
 	mat.set_shader_parameter("fade_far", FADE_FAR)
 	return mat
 
@@ -108,7 +86,8 @@ static func build_body() -> SphereMesh:
 static func build_halo() -> QuadMesh:
 	var m := QuadMesh.new()
 	m.size = Vector2.ONE * HALO_SIZE
-	m.material = _material(HALO_SHADER)
+	m.material = _material(EcoShaders.SPOT)
+	(m.material as ShaderMaterial).set_shader_parameter("halo", 1.0)
 	return m
 
 

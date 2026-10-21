@@ -163,7 +163,7 @@ func test_matte_only_growth_glows() -> void:
 	ok(share > 0.03 and share < 0.12, "светится только обрастание: %f" % share)
 	for t in v.rib_tris:
 		ok(v._col[t * 3].a == 0.0, "кость не светится")
-	ok(not v.mesh.surface_get_material(0).shader.code.contains("TIME"), "скелет статичен, без мигания")
+	eq(float(v.mesh.surface_get_material(0).get_shader_parameter("flicker")), 0.0, "скелет статичен, без мигания")
 	v.free()
 
 
