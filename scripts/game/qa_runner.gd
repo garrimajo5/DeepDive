@@ -113,7 +113,10 @@ func tick(dt: float) -> void:
 			"drain":
 				drain_left = c[1]
 			"mate":
-				main.add_mate(c[1], c[2], deg_to_rad(c[3]), clampi(c[4], 0, 3), clampi(c[5], 0, 1))
+				if c[6]:   # за штурвалом
+					main.add_mate(0.0, Deck.SEAT_Z, 0.0, clampi(c[4], 0, 3), clampi(c[5], 0, 1), true)
+				else:
+					main.add_mate(c[1], c[2], deg_to_rad(c[3]), clampi(c[4], 0, 3), clampi(c[5], 0, 1))
 			"log":
 				_log("%s | %s" % [c[1], state()])
 			"quit":

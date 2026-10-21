@@ -226,3 +226,26 @@ func test_own_back_by_pitch() -> void:
 	var a := CrewView.own_back(-0.9)
 	ok(a > CrewView.OWN_BACK and a < CrewView.DOWN_BACK, "посередине — между")
 	near(CrewView.own_back(-1.45, true), CrewView.OWN_BACK, 1e-6, "руки на посте — не отъезжает от пульта")
+
+
+func test_helm_busy_for_second() -> void:   # ROADMAP «Кооп»: занятый пост не даёт сесть второму
+	var mate := main.add_mate(0.0, Deck.SEAT_Z, 0.0, Crew.Role.SONAR, 0, true)
+	eq(mate.post, "helm", "второй держит штурвал")
+	main.walker.x = 0.6
+	main.walker.z = Deck.CHAIR_Z + 0.9
+	main.step(1.0 / 30.0)
+	eq(main.overlay.action_label, "Занято", "на кнопке — «Занято»")
+	ok(main.status_parts().has("Штурвал занят"), "в строке состояния — «Штурвал занят»")
+	main.use_post("helm")
+	ok(not main.pilot.seated, "свой игрок не сел во второе кресло")
+	eq(main.message.text, "Штурвал занят: Сонарщик", "на приборах — кто держит")
+	mate.follow(0.6, Deck.CHAIR_Z + 1.5, 0.0, false, 0.0, 0.1)
+	mate.post = ""
+	main.step(1.0 / 30.0)
+	eq(main.overlay.action_label, "Штурвал", "встал — пост свободен")
+	ok(main.status_parts().has("Сесть за штурвал"), "в строке — снова «Сесть за штурвал»")
+	main.use_post("helm")
+	ok(main.pilot.seated, "теперь сел")
+	main.step(1.0 / 30.0)
+	eq(main.me.post, "helm", "свой игрок держит штурвал")
+	eq(Crew.holder(main.crew, mate, "helm"), main.me, "для второго штурвал занят")
