@@ -112,6 +112,8 @@ var ognevka: EcoOgnevka
 var veils: EcoVeil
 ## Гротовик: в рифе на его спине прячется своя стая (null — гротовика нет).
 var grot: EcoGrot
+## Мерцающий планктон: светящийся след выдаёт корабль даже без прожектора (null — планктона нет).
+var plankton: EcoPlankton
 
 var _rnd: EcoRandom
 
@@ -209,14 +211,15 @@ static func _set_mode(pr: Pred, m: Mode, t: float) -> void:
 			pr.agent.state = EcoAgent.State.GRAZE
 
 
-## Манит ли корабль: свет или недавний сонар ближе 32 м (заражённого пиявником — 48 м; с каждым спуском «глубже» —
-## дальше, × ShipState.pred_k()), шум двигателей ближе 24 м
+## Манит ли корабль: свет, недавний сонар или светящийся след планктона (EcoPlankton) ближе 32 м (заражённого
+## пиявником — 48 м; с каждым спуском «глубже» — дальше, × ShipState.pred_k()), шум двигателей ближе 24 м
 ## (если его не глушит трубный орган). Корабль в чернилах подушечника не манит вовсе (!E.shipHidden).
 func lured(world: EcoWorld, pr: Pred, d_ship: float) -> bool:
 	if ship_hidden(world):
 		return false
 	var s := world.ship
-	var seen := d_ship < reach(pr, s.pred_k()) and (s.light_on or world.time - world.last_ping < PING_MEMORY)
+	var seen := d_ship < reach(pr, s.pred_k()) and (s.light_on or world.time - world.last_ping < PING_MEMORY \
+		or (plankton != null and plankton.betrays()))
 	return seen or hears_ship(world, pr, d_ship)
 
 
@@ -267,8 +270,20 @@ func _start_charge(world: EcoWorld, pr: Pred) -> void:
 		world.emit(ID, "ship", at, _text(world, "%s разворачивается к кораблю — его привлёк свет"))
 	elif world.time - world.last_ping < PING_MEMORY:
 		world.emit(ID, "ping", at, _text(world, "%s разворачивается к кораблю — его привлёк сонар"))
+	elif plankton != null and plankton.betrays():
+		world.emit(EcoPlankton.ID, "betray", at, _wake_text(world))
 	else:
 		world.emit(ID, "hear", at, _text(world, "%s услышал двигатели и разворачивается к кораблю"))
+
+
+## «Серпохвост заметил светящийся след мерцающего планктона…» — названия собираются в момент показа.
+static func _wake_text(world: EcoWorld) -> Callable:
+	var wr: WeakRef = weakref(world)
+	return func() -> String:
+		var w: EcoWorld = wr.get_ref()
+		var p := w.nm(ID) if w else Species.called(ID)
+		var c := w.nm(EcoPlankton.ID, Species.Case.GEN) if w else Species.called(EcoPlankton.ID, Species.Case.GEN)
+		return "%s заметил светящийся след %s и разворачивается к кораблю" % [Species.cap(p), c]
 
 
 static func _floor(world: EcoWorld, x: float, z: float, fallback: float) -> float:
