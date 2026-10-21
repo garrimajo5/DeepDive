@@ -83,7 +83,7 @@ func _make_snow() -> CPUParticles3D:
 ## Вода по глубине: цвет и плотность тумана, рассеянный свет, свет сквозь лёд. around — где корабль.
 ## silt — корабль в облаке ила 0…1 (Silt.k): вода бурая и мутная.
 func apply_water(env: Environment, depth: float, around: Vector3, silt: float = 0.0) -> void:
-	var fog := Seabed.Water.fog_color(depth).lerp(Silt.COLOR, 0.6 * silt)
+	var fog := Seabed.Water.fog_color(depth).lerp(Silt.FAR_COLOR, 0.75 * silt)   # серо-зелёная муть (ART-048)
 	env.background_color = fog
 	env.fog_enabled = true
 	env.fog_mode = Environment.FOG_MODE_EXPONENTIAL

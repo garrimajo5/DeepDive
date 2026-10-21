@@ -89,8 +89,11 @@ static func glass(c: Color) -> StandardMaterial3D:
 
 
 ## Хлопья: прозрачный билборд без света, размер частицы сохраняется. Морской снег, ил.
-static func flakes(c: Color) -> StandardMaterial3D:
+## mask — маска карточки (ил, ART-048: рваные пятна); без неё — круглая точка (морской снег). Текстура есть всегда,
+## чтобы снег и ил оставались одним шейдером.
+static func flakes(c: Color, mask: Texture2D = null) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
+	m.albedo_texture = mask if mask else dot()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
@@ -98,3 +101,18 @@ static func flakes(c: Color) -> StandardMaterial3D:
 	m.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
 	m.albedo_color = c
 	return m
+
+
+static var _dot: ImageTexture
+
+
+## Круглая мягкая точка 16×16 для мелких хлопьев.
+static func dot() -> ImageTexture:
+	if _dot == null:
+		var img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
+		for y in 16:
+			for x in 16:
+				var d := Vector2(x + 0.5 - 8.0, y + 0.5 - 8.0).length() / 8.0
+				img.set_pixel(x, y, Color(1, 1, 1, clampf((1.0 - d) * 2.5, 0.0, 1.0)))
+		_dot = ImageTexture.create_from_image(img)
+	return _dot
