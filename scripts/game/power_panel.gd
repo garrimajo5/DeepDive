@@ -3,6 +3,9 @@ extends Control
 ## Пульт энергии на экране (js/power.js, панель #power): пять систем с полосками долей, выбранная подсвечена,
 ## внизу резерв или перегрев. Открыт, пока игрок у пульта энергии (Main.at_power).
 
+## Подсказка внизу словами: стрелок ▲▼◀▶ нет в шрифте игры — их искал бы системный шрифт телефона (рывок, #217).
+const FOOT := "крестовина: вверх-вниз — система, вбок — −/+5 · кнопка — закрыть"
+
 var reactor: Reactor
 var panel: Reactor.Console
 
@@ -64,7 +67,7 @@ func _draw() -> void:
 	elif reactor.hot:
 		foot = "Перегрев %d° · безопасно %d, сейчас %d" % [roundi(reactor.heat), Reactor.SAFE, reactor.used()]
 	_text(font, Vector2(b.position.x + pad, b.end.y - 34), foot, 19, Color(1.0, 0.74, 0.32) if hot else Color(0.75, 0.95, 1.0))
-	_text(font, Vector2(b.position.x + pad, b.end.y - 10), "▲▼ — система · ◀▶ — −/+5 · кнопка — закрыть", 14, Color(0.6, 0.75, 0.8))
+	_text(font, Vector2(b.position.x + pad, b.end.y - 10), FOOT, 14, Color(0.6, 0.75, 0.8))
 
 
 func _text(font: Font, at: Vector2, t: String, size_px: int, c: Color) -> void:

@@ -25,7 +25,7 @@ func test_cycle_and_progress() -> void:
 	eq(run.label(), "Маршрут: выбрать")
 	var msg := run.cycle()
 	eq(run.route, 0, "первое нажатие — первый маршрут")
-	ok(msg.begins_with("Маршрут «Рифовый сад»: Каменный цветок → Кости левиафана → Световой колодец"), msg)
+	ok(msg.begins_with("Маршрут «Рифовый сад»: Каменный цветок, Кости левиафана, Световой колодец"), msg)
 	ok(msg.ends_with("много серпохвостов"), "строка риска")
 	eq(run.label(), "Маршрут: сменить")
 	eq(run.waypoint(), Run.place_xz("flower"), "первая точка на голостоле")

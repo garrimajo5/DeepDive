@@ -75,7 +75,7 @@ func choose(i: int) -> String:
 	var names := PackedStringArray()
 	for k in r["places"]:
 		names.append(place_name(k))
-	return "Маршрут «%s»: %s; %s" % [r["name"], " → ".join(names), r["risk"]]
+	return "Маршрут «%s»: %s; %s" % [r["name"], ", ".join(names), r["risk"]]
 
 
 ## Ключ следующей непройденной точки или "".
