@@ -217,3 +217,26 @@ func test_due_at_30_fps_sends_20_per_second() -> void:
 	eq(n, 20, "кадров за секунду при 60 к/с")
 	eq(h.due(0.5), true, "долгий кадр — один кадр")
 	eq(h.due(0.01), false, "без пачки догоняющих")
+
+
+## События идут отдельным пакетом за кадром и приезжают к клиенту в кадре («ev»); у хоста кадр не испорчен.
+func test_events_ride_with_frame() -> void:
+	var h := _host()
+	var c := _client()
+	ok(_pump(func() -> bool: return c.joined() and not events.is_empty()), "на борту")
+	(events[0]["guest"] as NetLink.Guest).index = 0
+	var b := Breach.new()
+	b.start(b.all[2])
+	var ev := NetSnap.events(b, Silt.new(), 0.0, false, [3, "Пробоина: лаборатория"])
+	var f := NetSnap.frame(1, 0.0, Helm.Ship.new(), Reactor.new(), Vitals.new(), true, [Crew.Member.new()], ev)
+	h.send_frame(f)
+	ok(f.get("ev") == ev, "кадр хоста с событиями как был")
+	ok(_pump(func() -> bool: return c.has_meta("f") and (c.get_meta("f") as Dictionary).has("ev")), "события дошли с кадром")
+	var got: Dictionary = c.get_meta("f")
+	var my := Breach.new()
+	eq(NetSnap.apply_events(got["ev"], my, Silt.new(), 0.0), [3, "Пробоина: лаборатория"])
+	ok(my.active == my.all[2], "пробоина в лаборатории")
+	c.remove_meta("f")
+	h.send_frame(NetSnap.frame(2, 0.0, Helm.Ship.new(), Reactor.new(), Vitals.new(), true, [Crew.Member.new()]))
+	ok(_pump(func() -> bool: return c.has_meta("f")), "кадр без событий")
+	ok(not (c.get_meta("f") as Dictionary).has("ev"), "старые события второй раз не приходят")

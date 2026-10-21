@@ -90,11 +90,30 @@ func test_crew_shrinks() -> void:
 	eq(crew.size(), 2, "ушедшие игроки убраны")
 
 
+## Самый тяжёлый кадр: четыре игрока, открытая пробоина, три облака ила и длинное сообщение события.
+func _busy_events() -> Dictionary:
+	var b := Breach.new()
+	b.start(b.all[3])
+	b.hold(1.0)
+	b.update(5.0, 1.0, 80.0)
+	var s := Silt.new()
+	for i in Silt.MAX_CLOUDS:
+		s.spawn(Vector3(10.0 * i, -50.0, 3.0), Silt.SLIDE_R, Silt.SLIDE_LIFE, "slide")
+	s.inside = s.clouds[1]
+	s.k = 0.6
+	s.jam_t = 98.5
+	return NetSnap.events(b, s, 100.0, true, [12, Silt.ENTER_MSG])
+
+
 func test_frame_fits_packet() -> void:
 	var h := _host()
-	var f := NetSnap.frame(123456, 3600.0, h.helm, h.r, h.v, true, h.crew)
+	var f := NetSnap.frame(123456, 3600.0, h.helm, h.r, h.v, true, h.crew, _busy_events())
+	var ev: Dictionary = f["ev"]
+	f.erase("ev")   # события NetLink шлёт следом отдельным пакетом
 	var n := NetSnap.bytes(f)
 	ok(n <= NetSnap.MAX_BYTES, "кадр с четырьмя игроками — %d байт, не больше %d" % [n, NetSnap.MAX_BYTES])
+	n = NetSnap.bytes(ev)
+	ok(n <= NetSnap.MAX_BYTES / 2, "события — %d байт" % n)
 
 
 func test_pad_round_trip() -> void:   # ввод клиента у хоста: крестовина, свайп копится, нажатие не теряется
@@ -121,3 +140,41 @@ func test_pad_vert_and_light() -> void:   # за штурвалом: «ввер�
 	ok(host.light, "«Свет» из первого пакета не стёрт вторым")
 	host.apply({"v": 5})
 	eq(host.vert, 1, "не больше 1")
+
+
+func test_events_round_trip() -> void:   # пробоина и ил хоста — у клиента такие же
+	var ev: Dictionary = bytes_to_var(var_to_bytes(_busy_events()))
+	var b := Breach.new()
+	var s := Silt.new()
+	var n := NetSnap.apply_events(ev, b, s, 10.0)
+	ok(b.active == b.all[3] and b.last == b.all[3] and b.water_spot == b.all[3], "пробоина в машинном")
+	eq(b.count, 1)
+	near(b.weld, Breach.WELD_RATE, 1e-4, "шов прирос")
+	near(b.water, 5.0 * Breach.WATER_RISE, 1e-4, "вода")
+	ok(b.welding, "варят")
+	eq(s.clouds.size(), Silt.MAX_CLOUDS, "три облака")
+	ok(s.inside == s.clouds[1], "корабль во втором")
+	ok(s.clouds[2].c.distance_to(Vector3(20.0, -50.0, 3.0)) < 1e-3, "место облака")
+	near(s.clouds[0].r, Silt.SLIDE_R, 1e-4)
+	near(s.k, 0.6, 1e-4)
+	near(s.noise(10.0), 1.0, 1e-4, "импульс завяз 1,5 с назад по часам хоста — помехи и на своих часах")
+	near(s.noise(10.0 + Silt.JAM_TIME), 0.6, 1e-4, "помехи кончились — осталась муть")
+	eq(n, [12, Silt.ENTER_MSG], "сообщение события")
+	var closed := Breach.new()
+	closed.start(closed.all[0])
+	closed.hold(10.0)
+	n = NetSnap.apply_events(NetSnap.events(closed, Silt.new(), 0.0, false), b, s, 0.0)
+	ok(b.active == null and b.last == b.all[0], "заварено, шов — на мостике")
+	ok(not b.welding)
+	ok(s.clouds.is_empty() and s.inside == null, "ил осел")
+	eq(n, [], "без сообщения")
+
+
+func test_events_bad_data_ignored() -> void:   # испорченный пакет событий не ломает пробоину и ил
+	var b := Breach.new()
+	b.start(b.all[2])
+	var s := Silt.new()
+	s.spawn(Vector3.ZERO, 5.0, 10.0, "scrape")
+	NetSnap.apply_events({"b": PackedFloat32Array([1, 2]), "s": PackedFloat32Array([0, 0, 0, 1]), "n": "x"}, b, s, 0.0)
+	ok(b.active == b.all[2], "пробоина та же")
+	eq(s.clouds.size(), 1, "облако то же")

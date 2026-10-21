@@ -5,7 +5,8 @@ class_name NetSnap
 
 const SEND_DT := 0.05          ## хост шлёт кадр 20 раз в секунду
 const MAX_BYTES := 1200        ## кадр с четырьмя членами экипажа влезает в один UDP-пакет (MTU 1280 с запасом)
-const VERSION := 2             ## формат кадра и ввода; клиент другой версии не подключается (2 — «вверх/вниз» и «Свет» в Pad)
+const VERSION := 3             ## формат кадра и ввода; клиент другой версии не подключается (3 — события «ev» в кадре)
+const NEWS_TIME := 1.0         ## сообщение события едет в кадрах столько секунд (20 кадров — потеря всех почти исключена)
 
 
 ## Корабль: место, курс, ход и ввод пилота (клиент рисует роторы и рули так же, как хост).
@@ -56,12 +57,70 @@ static func apply_vitals(s: Dictionary, v: Vitals) -> void:
 
 
 ## Кадр хоста: номер, время игры, корабль, реактор, корпус, свет, экипаж (по порядку `crew`).
-static func frame(seq: int, time: float, helm: Helm.Ship, r: Reactor, v: Vitals, light_on: bool, crew: Array) -> Dictionary:
+## События — `events(...)` (пробоина, ил, сообщение), пустой словарь — без событий.
+static func frame(seq: int, time: float, helm: Helm.Ship, r: Reactor, v: Vitals, light_on: bool, crew: Array,
+		ev: Dictionary = {}) -> Dictionary:
 	var members: Array = []
 	for m: Crew.Member in crew:
 		members.append(pack_member(m.snapshot()))
-	return {"v": VERSION, "seq": seq, "t": time, "ship": ship(helm), "reactor": reactor(r), "vitals": vitals(v),
+	var f := {"v": VERSION, "seq": seq, "t": time, "ship": ship(helm), "reactor": reactor(r), "vitals": vitals(v),
 		"light": light_on, "crew": members}
+	if not ev.is_empty():
+		f["ev"] = ev
+	return f
+
+
+## События корабля в кадре: пробоина (места — номерами `Breach.all`), облака ила, свежее сообщение события
+## `news` = [номер, текст] (пустой — нет). welding — варит ли кто-то из экипажа (у хоста `breach.welding`
+## к отправке уже сброшен `end_step`). t — время хоста: помехи сонара едут возрастом, а не моментом.
+static func events(b: Breach, s: Silt, t: float, welding: bool, news: Array = []) -> Dictionary:
+	var bf := PackedFloat32Array([b.all.find(b.active), b.all.find(b.last), b.all.find(b.water_spot), b.count,
+		b.weld, b.water, b.seam_heat, 1.0 if welding else 0.0])
+	var sf := PackedFloat32Array([s.k, minf(t - s.jam_t, 99.0), s.clouds.find(s.inside)])
+	for cl in s.clouds:
+		sf.append_array([cl.c.x, cl.c.y, cl.c.z, cl.r, cl.life, cl.max_life])
+	var ev := {"b": bf, "s": sf}
+	if news.size() == 2:
+		ev["n"] = news
+	return ev
+
+
+## Клиент ставит события кадра в свои пробоину и ил (t — своё время: помехи сонара — от него). Возвращает
+## сообщение события [номер, текст] или пустой массив.
+static func apply_events(ev: Dictionary, b: Breach, s: Silt, t: float) -> Array:
+	var bf: Variant = ev.get("b")
+	if bf is PackedFloat32Array and bf.size() == 8:
+		b.active = _spot(b, bf[0])
+		b.last = _spot(b, bf[1])
+		b.water_spot = _spot(b, bf[2])
+		b.count = int(bf[3])
+		b.weld = clampf(bf[4], 0.0, 1.0)
+		b.water = clampf(bf[5], 0.0, Breach.WATER_MAX)
+		b.seam_heat = clampf(bf[6], 0.0, 1.0)
+		b.welding = bf[7] > 0.5 and b.active != null
+	var sf: Variant = ev.get("s")
+	if sf is PackedFloat32Array and sf.size() >= 3 and (sf.size() - 3) % 6 == 0:
+		s.clouds.clear()
+		for i in range(3, sf.size(), 6):
+			var cl := Silt.Cloud.new()
+			cl.c = Vector3(sf[i], sf[i + 1], sf[i + 2])
+			cl.r = sf[i + 3]
+			cl.life = sf[i + 4]
+			cl.max_life = sf[i + 5]
+			s.clouds.append(cl)
+		s.k = clampf(sf[0], 0.0, 1.0)
+		s.jam_t = t - sf[1]
+		var ins := int(sf[2])
+		s.inside = s.clouds[ins] if ins >= 0 and ins < s.clouds.size() else null
+	var n: Variant = ev.get("n")
+	if n is Array and n.size() == 2:
+		return [int(n[0]), str(n[1])]
+	return []
+
+
+static func _spot(b: Breach, i: float) -> Breach.Spot:
+	var k := int(i)
+	return b.all[k] if k >= 0 and k < b.all.size() else null
 
 
 ## Клиент принимает кадр: корабль, реактор, корпус — как у хоста; экипаж — по порядку (недостающих добавляет,
