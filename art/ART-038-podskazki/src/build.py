@@ -43,5 +43,3 @@ sheet.quantize(colors=256,method=Image.Quantize.MEDIANCUT).save(O/'podskazki-lis
 # Aspect adaptation must relayout the HUD, not crop controls. QA 20:9 at phone-sized raster.
 if len(sys.argv)>2:frames[0].resize((1200,540),Image.Resampling.LANCZOS).save(Path(sys.argv[2])/'phone.png')
 print([(p.name,p.stat().st_size) for p in O.iterdir() if p.suffix in ['.png','.jpg']])
-
-
