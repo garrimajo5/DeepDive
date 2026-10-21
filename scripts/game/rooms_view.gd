@@ -22,6 +22,8 @@ var steam: CPUParticles3D          ## пар из вентиля
 var _button_mat: StandardMaterial3D
 var lab_samples: Array[MeshInstance3D] = []   ## образцы в колбах (Lab.contents), светятся цветом вида
 const JOURNAL_TEXT := Color("67DDEB")
+var lab_ring: Node3D               ## кольцо-светильник на потолке лаборатории (MOD-020), вставка мигает с плафонами
+var _ring_mats: Array[BaseMaterial3D] = []
 var journal_text: Label3D          ## экран стойки журнала (Lab.journal_lines)
 var _lab_kinds: Array[int] = []
 ## Полки трюма (MOD-017, HoldShelves): банки — металл и стекло — и образцы в них, по MultiMesh на всё (3 вызова).
@@ -105,6 +107,8 @@ func set_journal_k(k: float) -> void:
 func set_lamps(k: float) -> void:
 	for l in lamps:
 		l.light_energy = LAMP_ENERGY * k
+	for m in _ring_mats:   # голубая вставка кольца гаснет и мигает вместе с плафонами
+		m.emission_energy_multiplier = k
 
 
 func _model(file: String, pos: Vector3, parent: Node3D = null) -> Node3D:
@@ -263,6 +267,14 @@ func _add_lab() -> void:
 		orb.visible = false
 		add_child(orb)
 		lab_samples.append(orb)
+	lab_ring = _model("kolco-svetilnik", Lab.RING)
+	lab_ring.name = "Кольцо-светильник"
+	for mi: MeshInstance3D in lab_ring.find_children("*", "MeshInstance3D", true, false):
+		var mat := mi.mesh.surface_get_material(0)
+		if mat is BaseMaterial3D:   # своя копия: яркость вставки — по плафонам (set_lamps)
+			var own := (mat as BaseMaterial3D).duplicate() as BaseMaterial3D
+			mi.material_override = own
+			_ring_mats.append(own)
 	var stand := _model("zhurnal-stoyka", Vector3(Lab.JOURNAL.x, 0.0, Lab.JOURNAL.y))
 	var screen := _model("zhurnal-ekran", Vector3.ZERO, stand)
 	var sm := StandardMaterial3D.new()
