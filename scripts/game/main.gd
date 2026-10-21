@@ -48,7 +48,7 @@ var drain_sound: AudioStreamPlayer   ## шипение тревоги, пока 
 var drain_hisses := 0                ## сколько раз шипела тревога присоски (для тестов)
 ## Прогрев шейдеров при старте (Warmup, issue #50): шторка, камера оглядывает корабль, скрытое показано на кадр.
 var warm := Warmup.new()
-var curtain: Control
+var curtain: WarmSplash   ## заставка прогрева (ART-034), после прогрева — null
 var _warm_drawn := false            ## прошлый шаг показал взгляд прогрева
 var _warm_shown: Array[Node] = []   ## что прогрев показал на кадр — вернуть скрытым
 var _warm_mates: Array = []         ## члены экипажа на время прогрева (каждая внешность)
@@ -256,28 +256,12 @@ func warming() -> bool:
 	return warm.active()
 
 
-## Шторка и члены экипажа каждой внешности на время прогрева (Warmup).
+## Заставка (WarmSplash, ART-034) и члены экипажа каждой внешности на время прогрева (Warmup).
 func _begin_warmup() -> void:
 	if not warm.active():
 		return
-	var layer := CanvasLayer.new()
-	layer.name = "Шторка"
-	layer.layer = 100
-	add_child(layer)
-	var bg := ColorRect.new()
-	bg.name = "Шторка"
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.02, 0.05, 0.08)
-	layer.add_child(bg)
-	var title := Label.new()
-	title.text = "Погружение…"
-	title.set_anchors_preset(Control.PRESET_FULL_RECT)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 40)
-	title.add_theme_color_override("font_color", Color(0.75, 0.95, 1.0))
-	bg.add_child(title)
-	curtain = bg
+	curtain = WarmSplash.new()   # заставка ART-034: фон, полоса по доле прогрева, подсказки
+	add_child(curtain)
 	for look in CrewRig.MODELS.size():
 		var at: Vector2 = Warmup.MATE_AT[look % Warmup.MATE_AT.size()]
 		_warm_mates.append(add_mate(at.x, at.y, PI, Crew.Role.PILOT, look))
@@ -361,13 +345,16 @@ func _warm_restore() -> void:
 	if not _warm_drawn:
 		return
 	_warm_drawn = false
-	if warm.advance():
+	var done := warm.advance()
+	if curtain:
+		curtain.set_progress(warm.progress())
+	if done:
 		for m in _warm_mates:
 			crew.erase(m)
 		_warm_mates.clear()
 		crew_view.set_members(crew, me)
 		_warm_particles(false)
-		curtain.get_parent().queue_free()
+		curtain.queue_free()   # вместе с текстурой фона
 		curtain = null
 		_place_camera()
 
