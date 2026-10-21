@@ -3,7 +3,8 @@ extends RefCounted
 ## Общие шейдеры живого мира (issue #279). Рендерер Compatibility на каждый новый шейдер собирает ~5 программ — это
 ## секунды прогрева на телефоне при первом запуске. Поэтому одинаковый код — один ресурс `Shader` (`shader(code)`),
 ## а похожие материалы видов и мест — один общий код с числами в uniform: камень с обрастанием (`STONE`), мох
-## пятнами (`MOSS`), прозрачное без света (`MIST`), светлая точка лицом к камере со сложением цвета (`SPOT`). Новый материал мира — сначала сюда.
+## пятнами (`MOSS`), прозрачное без света (`MIST`), светлая точка лицом к камере со сложением цвета (`SPOT`), растения
+## со светом (`PLANT`). Новый материал мира — сначала сюда.
 ## Сколько шейдеров у мира — `tools/shaders.gd`, потолок — `tests/test_eco_shaders.gd`.
 
 ## Камень с обрастанием #67DDEB в альфе цвета вершины: раковина древних, кости левиафана, край отмели, порода
@@ -173,6 +174,75 @@ void fragment() {
 }
 """
 
+## Растения на дне со светом (обе стороны): ленты ленточника, листья волнолиста, кружево веерника, трубы органа. Что
+## рисовать — `mode` (Plant), краски и числа каждого вида — в своих uniform; формулы — прежние формулы видов.
+## Общее: шероховатость `rough`, блик `spec`, своё свечение `glow` (линейный цвет) плюс волна `glow_wave` · sin(TIME · 1,7).
+enum Plant { KELP, LEAF, FAN, ORGAN }
+const PLANT := """
+shader_type spatial;
+render_mode cull_disabled;
+uniform int mode = 0;
+uniform vec3 paint : source_color = vec3(1.0);
+uniform vec3 edge : source_color = vec3(1.0);
+// веерник: размер прямоугольника, м
+uniform vec2 size = vec2(1.0);
+// лента и орган: цвет экземпляра или вершины, гуще в shade раз
+uniform float shade = 1.0;
+uniform float rough = 0.9;
+uniform float spec = 0.5;
+uniform vec3 glow = vec3(0.0);
+uniform vec3 glow_wave = vec3(0.0);
+void vertex() {
+	if (mode == 0) {
+		// лента качается как G.sway: размах 0,9 к верху, фаза — от места экземпляра
+		float ph = MODEL_MATRIX[3].x * 0.23 + MODEL_MATRIX[3].z * 0.19;
+		float k = clamp(VERTEX.y, 0.0, 1.0);
+		VERTEX.x += sin(TIME * 1.2 + ph + VERTEX.y * 2.0) * k * k * 0.9;
+		VERTEX.z += cos(TIME * 0.9 + ph * 1.3) * k * k * 0.54;
+	}
+}
+void fragment() {
+	if (mode == 1) {
+		// лист: UV.x поперёк (0,5 — жилка), UV.y — от кончика (0) к основанию (1)
+		float e = smoothstep(0.25, 0.5, abs(UV.x - 0.5)) * 0.8 + smoothstep(0.45, 0.0, UV.y) * 0.5;
+		float vein = 1.0 - smoothstep(0.0, 0.04, abs(UV.x - 0.5));
+		ALBEDO = mix(paint, edge, clamp(e + vein * 0.3, 0.0, 1.0)) * mix(0.55, 1.0, 1.0 - UV.y * 0.6);
+	} else if (mode == 2) {
+		// веерник (fanTex): метры от подножия, лучи расходятся из точки на высоте 0,35 м
+		vec2 p = vec2((UV.x - 0.5) * size.x, (1.0 - UV.y) * size.y);
+		vec2 d = p - vec2(0.0, 0.35);
+		float r = length(d);
+		float a = atan(d.x, max(d.y, 1e-4));
+		float w = 0.0;
+		// ствол
+		if (p.y < 0.4) {
+			w = step(abs(p.x), 0.09);
+		}
+		float el = length(vec2(d.x / 0.55, d.y / 0.95));
+		// лучи: 13 от −1,25 до 1,25 рад, тоньше к краю; дуги-эллипсы между ними; край веера — эллипс
+		float k = (a + 1.25) / 2.5 * 12.0;
+		float ray = abs(k - round(k)) * 2.5 / 12.0 * r;
+		if (d.y > 0.0 && abs(a) < 1.3) {
+			w = max(w, step(ray, 0.05 - r * 0.008));
+			float ring = abs(fract(el / 0.22) - 0.5) * 0.22;
+			w = max(w, step(ring, 0.024) * step(0.3, el));
+			w *= step(el, 2.6);
+		}
+		if (w < 0.5) {
+			discard;
+		}
+		ALBEDO = mix(paint, edge, smoothstep(1.6, 2.6, el));
+	} else {
+		// лента (цвет экземпляра) и труба органа (цвет вершины)
+		ALBEDO = COLOR.rgb * shade;
+	}
+	ROUGHNESS = rough;
+	SPECULAR = spec;
+	EMISSION = glow + glow_wave * sin(TIME * 1.7);
+}
+"""
+
+
 ## Код → слабая ссылка на Shader: пока его держит хоть один материал, тот же код получает тот же ресурс. Слабая —
 ## чтобы при выходе не оставалось ресурсов в статике.
 static var _made := {}
@@ -217,5 +287,12 @@ static func moss_glow(glows: PackedFloat32Array) -> PackedFloat32Array:
 ## Прозрачное без света (MIST): что рисовать — kind, числа вида — params.
 static func mist(kind: Mist, params: Dictionary = {}) -> ShaderMaterial:
 	var mat := material(MIST, params)
+	mat.set_shader_parameter("mode", int(kind))
+	return mat
+
+
+## Растение со светом (PLANT): что рисовать — kind, числа вида — params.
+static func plant(kind: Plant, params: Dictionary = {}) -> ShaderMaterial:
+	var mat := material(PLANT, params)
 	mat.set_shader_parameter("mode", int(kind))
 	return mat
