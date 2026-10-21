@@ -76,6 +76,11 @@ const TUFTS_RIB := 2
 const TUFT_EVERY := 3
 const TUFTS_SKULL := 8
 const TUFT_H := 0.4
+## Мох у рёбер (ART-030: «рёбра обросли мхом»): пятна светящегося мха EcoMoss у ног рёбер — пары MOSS_PAIRS,
+## сторона чередуется; середина пятна на MOSS_IN ближе к оси, чем нога, — пятно обнимает ногу и заходит в проход
+## (мох плоский, по дну, проходу не мешает). Мох свой у костей: скребуны рифа его не объедают.
+const MOSS_PAIRS: Array[int] = [1, 2, 3, 4, 5, 6]
+const MOSS_IN := 1.2
 ## Препятствие для проверок: радиус от центра клетки, м (вся фигура с хвостом и черепом).
 const OBSTACLE_R := 26.0
 ## Зерно формы — своё, не мира.
@@ -109,6 +114,8 @@ var tuft_n := PackedVector3Array()
 var cap_a := PackedVector3Array()
 var cap_b := PackedVector3Array()
 var cap_r := PackedFloat32Array()
+## Мох у ног рёбер (свои пятна, MossView рисует их у BonesView).
+var moss: EcoMoss
 
 var _center: Vector2
 var _skull_inv := Transform3D.IDENTITY
@@ -122,6 +129,26 @@ func _init(center: Vector2 = CENTER) -> void:
 func reset(world: EcoWorld) -> void:
 	ground = world.ground
 	_build()
+	moss = EcoMoss.new(moss_spots())
+	moss.reset(world)
+
+
+func step(world: EcoWorld, dt: float) -> void:
+	if moss:
+		moss.step(world, dt)
+
+
+## Места пятен мха (мир, y — дно): у ноги ребра пары MOSS_PAIRS[i], сторона чередуется (чётные — слева).
+func moss_spots() -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for i in MOSS_PAIRS.size():
+		var k := MOSS_PAIRS[i]
+		var foot := rib_point(k * 2 + i % 2, 0)
+		var x := foot.x - signf(foot.x) * MOSS_IN
+		var w := to_world(Vector3(x, 0.0, rib_z[k]))
+		w.y = floor_y(w.x, w.z)
+		out.append(w)
+	return out
 
 
 ## Точек на осевой линии ребра: нога в дне + дуга.

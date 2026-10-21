@@ -216,3 +216,31 @@ func test_in_eco_view() -> void:
 	ok(ev.bones != null and ev.bones_view != null, "кости в живом мире")
 	ok(ev.bones_view.tris > 0, "меш собран по дну мира")
 	ev.free()
+
+
+## «Рёбра обросли мхом» (ART-030): шесть пятен светящегося мха у ног рёбер, по дну, свои у костей — пятна рифа
+## (еда скребунов) не меняются; в сцене — свой меш мха, один вызов отрисовки.
+func test_moss_at_rib_feet() -> void:
+	var b := _bones(Seabed.height)
+	ok(b.moss != null, "у костей свой мох")
+	eq(b.moss.patches.size(), EcoBones.MOSS_PAIRS.size(), "шесть пятен")
+	var sides := [0, 0]
+	for i in b.moss.patches.size():
+		var p := b.moss.patches[i]
+		var k := EcoBones.MOSS_PAIRS[i]
+		var foot := b.to_world(b.rib_point(k * 2 + i % 2, 0))
+		near(Vector2(p.pos.x - foot.x, p.pos.z - foot.z).length(), EcoBones.MOSS_IN, 0.15, "пятно у ноги ребра %d" % k)
+		near(p.pos.y, Seabed.height(p.pos.x, p.pos.z), 1e-3, "пятно на дне")
+		var q := b.to_local(p.pos)
+		ok(absf(q.x) < EcoBones.HALF_W and absf(q.x) > EcoBones.PASS_W * 0.5 - EcoMoss.RADIUS, "заходит в проход от ноги")
+		sides[0 if q.x < 0.0 else 1] += 1
+		ok(p.food >= 0.6 and p.glow() > 0.6, "мох светится")
+	eq(sides, [3, 3], "по три пятна с каждой стороны")
+	var ev := EcoView.new()
+	ev.ground = Seabed.height
+	eq(ev.moss.patches.size(), 22, "пятна рифа — прежние 22, скребуны их не делят с костями")
+	var mv := ev.bones_view.moss_view
+	ok(mv != null and mv.get_parent() == ev.bones_view, "мох на костях — в сцене")
+	eq(mv.look.verts.size(), EcoBones.MOSS_PAIRS.size() * EcoMossLook.VERTS_PER_PATCH, "один меш на все пятна")
+	eq(mv.layers, OceanView.LAYER_WORLD, "слой отмели")
+	ev.free()
