@@ -1,0 +1,58 @@
+[
+  {
+    "set": "validation-game-poses.json",
+    "name": "gear-fartuk-m",
+    "before_pairs": 238,
+    "after_pairs": 57,
+    "max_vertex_distance_m": 0.03463262319564819
+  },
+  {
+    "set": "validation-game-poses.json",
+    "name": "gear-fartuk-zh",
+    "before_pairs": 60,
+    "after_pairs": 29,
+    "max_vertex_distance_m": 0.037981078028678894
+  },
+  {
+    "set": "validation-game-poses.json",
+    "name": "gear-tunika-m",
+    "before_pairs": 627,
+    "after_pairs": 388,
+    "max_vertex_distance_m": 0.039473436772823334
+  },
+  {
+    "set": "validation-game-poses.json",
+    "name": "gear-tunika-zh",
+    "before_pairs": 1029,
+    "after_pairs": 365,
+    "max_vertex_distance_m": 0.039422936737537384
+  },
+  {
+    "set": "validation-dense-game.json",
+    "name": "gear-fartuk-m",
+    "before_pairs": 1289,
+    "after_pairs": 263,
+    "max_vertex_distance_m": 0.03463262319564819
+  },
+  {
+    "set": "validation-dense-game.json",
+    "name": "gear-fartuk-zh",
+    "before_pairs": 417,
+    "after_pairs": 95,
+    "max_vertex_distance_m": 0.037981078028678894
+  },
+  {
+    "set": "validation-dense-game.json",
+    "name": "gear-tunika-m",
+    "before_pairs": 2460,
+    "after_pairs": 1317,
+    "max_vertex_distance_m": 0.03949277475476265
+  },
+  {
+    "set": "validation-dense-game.json",
+    "name": "gear-tunika-zh",
+    "before_pairs": 3829,
+    "after_pairs": 1210,
+    "max_vertex_distance_m": 0.039422936737537384
+  }
+]
