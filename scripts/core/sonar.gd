@@ -14,6 +14,7 @@ const MAP_SIZE := 700.0
 const MAP_N := 256
 
 var ping_time := -99.0
+var blip_time := -99.0  ## когда сняты нынешние отметки (завязший импульс их не обновляет)
 var range_m := BASE_RANGE
 var blips: Array[Dictionary] = []   ## {"pos": Vector3, "species": String, "color": Color}
 var jammed := false  ## импульс завяз в иле (Silt): отметок нет до следующего импульса
@@ -28,15 +29,19 @@ func can_ping(t: float) -> bool:
 
 
 ## Импульс в момент t при силе сонара k. Возвращает текст для приборов.
-func ping(t: float, k: float) -> String:
+## jam — корабль в иле (Silt, ART-048): импульс вязнет — новых отметок нет, старые гаснут, как гасли (не прыгают).
+func ping(t: float, k: float, jam: bool = false) -> String:
 	if k <= 0.0:
 		return "Сонар обесточен"
 	if not can_ping(t):
 		return ""
 	ping_time = t
+	jammed = jam
+	if jam:
+		return "Сонар: импульс"
 	range_m = range_for(k)
+	blip_time = t
 	blips.clear()
-	jammed = false
 	return "Сонар: импульс"
 
 
@@ -56,9 +61,9 @@ func take_contacts(events: Array, ship_pos: Vector3) -> void:
 	blips.append_array(found.slice(0, MAX_BLIPS - blips.size()))
 
 
-## Насколько видны отметки: 1 сразу после импульса, к 12 с — 0.
+## Насколько видны отметки: 1 сразу после импульса, к 12 с — 0 (считается от импульса, который их снял).
 func blip_alpha(t: float) -> float:
-	return maxf(0.0, 1.0 - (t - ping_time) / BLIP_TIME)
+	return maxf(0.0, 1.0 - (t - blip_time) / BLIP_TIME)
 
 
 ## Цвет отметки по виду, как в js/sonar.js: хищники и паразиты — красные, остальные — по своим цветам, прочие — жёлтые.

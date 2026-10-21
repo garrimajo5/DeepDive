@@ -17,9 +17,18 @@ const DROP := Vector2(215.0, 90.0)
 ## Облако несёт течением в 1,3 раза быстрее воды и опускает на 5 см/с.
 const DRIFT := 1.3
 const SINK := 0.05
-## В облаке: луч прожектора × (1 − 0,55·k), муть воды — к бурому цвету ила.
+## В облаке: луч прожектора × (1 − 0,55·k), муть воды — к тёмному илу.
 const BEAM_K := 0.45
-const COLOR := Color(0.42, 0.35, 0.27)
+## Палитра ила по ART-048 (`sonarnaya-tma.md`): серо-зелёный, не бурый и не белый; хлопья не светятся.
+const COLOR := Color("#45584F")       ## тёмный ил
+const FLAKE_COLOR := Color("#728479") ## средние хлопья
+const EDGE_COLOR := Color("#A0AEA0")  ## края хлопьев в луче
+const FAR_COLOR := Color("#55665D")   ## дальняя взвесь: к ней мутнеет вода (OceanView.apply_water)
+## Карточка хлопьев (SiltView.FLAKE, м) и пятна в её маске: поперечник 0,10–0,40 м, рваные края.
+const CARD := 1.6
+const SPOTS := 9
+const SPOT_MIN := 0.10
+const SPOT_MAX := 0.40
 ## Помехи на голостоле после импульса в иле, с.
 const JAM_TIME := 4.0
 const ALARM := "СОНАРНАЯ ТЬМА · ОБЛАКО ИЛА"
@@ -144,3 +153,53 @@ func max_density() -> float:
 	for cl in clouds:
 		m = maxf(m, cl.density())
 	return m
+
+
+## Пятна в маске карточки (ART-048): {"c": Vector2 центр в долях карточки 0…1, "d": поперечник, м, "far": дальняя
+## взвесь — темнее, "seed"}. Детерминированно; пятна не вылезают за край карточки.
+static func flake_spots() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for i in SPOTS:
+		var h1 := _hash(i * 3.1 + 0.7)
+		var h2 := _hash(i * 7.7 + 1.3)
+		var h3 := _hash(i * 5.3 + 2.9)
+		var d := lerpf(SPOT_MIN, SPOT_MAX, pow(h3, 1.6))   # мелких больше
+		var m := (d * 0.5 * 1.45) / CARD + 0.02            # поля с запасом на рваный край
+		out.append({"c": Vector2(lerpf(m, 1.0 - m, h1), lerpf(m, 1.0 - m, h2)), "d": d, "far": i % 3 == 2, "seed": i})
+	return out
+
+
+## Маска карточки n×n: рваные пятна (край — неровный радиус и дыры от шума), середина — средний тон, кромка — светлее
+## (края в луче), дальние пятна — тусклее. Альфа — сама маска, вне пятен прозрачно.
+static func flake_image(n: int = 128) -> Image:
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	img.fill(Color(FLAKE_COLOR, 0.0))
+	for sp in flake_spots():
+		var c: Vector2 = sp["c"] * n
+		var rad: float = sp["d"] * 0.5 / CARD * n
+		var sd: float = sp["seed"]
+		var base: Color = FAR_COLOR if sp["far"] else FLAKE_COLOR
+		var reach := int(ceilf(rad * 1.5)) + 1
+		for y in range(maxi(0, int(c.y) - reach), mini(n, int(c.y) + reach + 1)):
+			for x in range(maxi(0, int(c.x) - reach), mini(n, int(c.x) + reach + 1)):
+				var v := Vector2(x + 0.5, y + 0.5) - c
+				var th := atan2(v.y, v.x)
+				var edge := rad * (1.0 + 0.3 * sin(th * 3.0 + sd * 1.7) + 0.18 * sin(th * 5.0 + sd * 2.3)
+						+ 0.1 * sin(th * 9.0 + sd))
+				var q := v.length() / maxf(edge, 0.5)
+				if q >= 1.0:
+					continue
+				var hole := HashNoise.fbm(x * 0.21 + sd * 13.0, y * 0.21 - sd * 7.0, 3)
+				var a := (1.0 - smoothstep(0.7, 1.0, q)) * smoothstep(0.3, 0.55, hole + 0.25 * (1.0 - q))
+				if a <= 0.0:
+					continue
+				var col := base.lerp(EDGE_COLOR, 0.0 if sp["far"] else smoothstep(0.55, 0.95, q) * 0.8)
+				var old := img.get_pixel(x, y)
+				if a > old.a:
+					img.set_pixel(x, y, Color(col, a))
+	return img
+
+
+static func _hash(v: float) -> float:
+	var u := sin(v * 12.9898) * 43758.5453
+	return u - floorf(u)

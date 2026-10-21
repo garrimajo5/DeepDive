@@ -105,6 +105,8 @@ func show_result(k: float, rows: Array, eye: Vector3) -> void:
 ## noise — помехи 0…1 (сонарная тьма, Silt.noise).
 func show_state(s: Sonar, ship_pos: Vector3, yaw: float, t: float, powered: bool, noise: float = 0.0) -> void:
 	mat.set_shader_parameter("noise", noise)
+	mat.set_shader_parameter("jam", 1.0 if s.jammed else 0.0)
+	mat.set_shader_parameter("jam_time", Silt.JAM_TIME)
 	mat.set_shader_parameter("time", t)
 	mat.set_shader_parameter("ship_xz", Vector2(ship_pos.x, ship_pos.z))
 	mat.set_shader_parameter("ship_yaw", yaw)

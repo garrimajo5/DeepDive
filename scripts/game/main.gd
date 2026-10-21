@@ -789,13 +789,12 @@ func ping_sonar() -> void:
 	if reactor.k(Reactor.Sys.SONAR) > 0.0 and sonar.can_ping(time) and vitals.energy < Vitals.SONAR_COST:
 		say("Мало энергии: для импульса нужно %d единиц" % int(Vitals.SONAR_COST))
 		return
-	var msg := sonar.ping(time, reactor.k(Reactor.Sys.SONAR))
+	var msg := sonar.ping(time, reactor.k(Reactor.Sys.SONAR), silt.inside != null)
 	if msg == "Сонар: импульс":
 		vitals.spend(Vitals.SONAR_COST)
 		eco_ship.sonar_ping = true   # существа слышат импульс и в иле
-		eco_ship.sonar_range = sonar.range_m
+		eco_ship.sonar_range = Sonar.range_for(reactor.k(Reactor.Sys.SONAR))
 		if silt.jam_ping(time):
-			sonar.jammed = true
 			msg = Silt.JAM_MSG
 	if not msg.is_empty():
 		say(msg)
@@ -1443,7 +1442,11 @@ func debug_setup(kv: Dictionary) -> void:
 				add_mate(m[0], m[1], deg_to_rad(m[2]) if m.size() > 2 else 0.0, int(m[3]) if m.size() > 3 else Crew.Role.SONAR,
 					int(m[4]) if m.size() > 4 else 1)
 	if kv.get("silt", "0") == "1":  # silt=1 — корабль в облаке ила (снимок сонарной тьмы); с ping=1 — импульс завяз
-		open_silt()
+		open_silt()   # (jam_age=<с> — сколько прошло с завязшего импульса, ART-048)
+		if kv.get("ping", "0") == "1":
+			sonar.ping(time, 1.0, true)
+			silt.jam_ping(time)
+			time += float(kv.get("jam_age", "0.4"))
 	if kv.has("hot"):  # hot=1 — перегрев (для снимка табло)
 		reactor.start_hot(false)
 		reactor.heat = float(kv["hot"])

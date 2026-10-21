@@ -14,7 +14,9 @@ uniform int blip_count = 0;
 uniform vec4 blips[32];       // x, z мира, размер (м на голограмме, доля радиуса), яркость
 uniform vec3 blip_cols[32];
 uniform float brightness = 1.0;
-uniform float noise = 0.0;    // помехи (сонарная тьма): рябь вместо карты и отметок
+uniform float noise = 0.0;    // помехи (сонарная тьма): карта гаснет, по столу рябь
+uniform float jam = 0.0;      // последний импульс завяз в иле (Sonar.jammed): кольцо тормозит у трети радиуса и рвётся
+uniform float jam_time = 4.0; // Silt.JAM_TIME: столько держится сильный след завязшего импульса
 uniform float time = 0.0;
 uniform vec2 wp_xz = vec2(0.0);  // точка маршрута (Run.waypoint), x, z мира
 uniform float wp_on = 0.0;
@@ -106,20 +108,33 @@ void fragment() {
 	if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0)
 		col = texture(map_tex, uv).rgb * 0.45 * (0.3 + 0.7 * max(0.0, 1.0 - ping_age / 12.0));
 	vec3 teal = vec3(0.37, 0.95, 0.84);
+	if (noise > 0.0) {   // ил (ART-048): карта гаснет, по столу плавные полосы ряби — без мельтешения
+		float th = atan(local.x, local.y);
+		float strong = jam * (1.0 - smoothstep(jam_time - 1.0, jam_time, ping_age));
+		float band = 0.5 + 0.5 * sin(r * 34.0 - time * 1.2 + 0.5 * sin(th * 3.0 + time * 0.3));
+		col = mix(col, vec3(0.008, 0.07, 0.094), noise * 0.8);
+		col += teal * (0.025 * noise + 0.07 * strong) * smoothstep(0.7, 1.0, band) * (1.0 - r * 0.6);
+	}
 	col += teal * 0.18 * (step(abs(r - 0.33), 0.006) + step(abs(r - 0.66), 0.006));
 	col += teal * 0.5 * step(0.985, r);
-	if (ping_age < 2.5)
+	if (jam > 0.5) {
+		// завязший импульс: за 0,4 с доходит до трети радиуса, тормозит, рвётся на 4 неровные дуги
+		// и к ~1,1 с распадается в рябь — знак, а не дальность
+		float a = ping_age;
+		float rr = 0.34 * (1.0 - pow(1.0 - min(a / 0.42, 1.0), 2.0));
+		float th = atan(local.x, local.y);
+		float tear = smoothstep(0.3, 0.6, a);
+		float arcs = 0.5 + 0.5 * sin(th * 4.0 + 1.2 * sin(th * 2.0 + 0.7));
+		float fade = 1.0 - smoothstep(0.42, 1.15, a);
+		float wdt = 0.018 + 0.03 * smoothstep(0.42, 1.15, a);
+		col += teal * 0.6 * fade * step(abs(r - rr), wdt) * mix(1.0, step(0.3, arcs), tear);
+	} else if (ping_age < 2.5)
 		col += teal * 0.6 * (1.0 - ping_age / 2.5) * step(abs(r - ping_age / 2.2), 0.02);
 	for (int i = 0; i < 32; i++) {
 		if (i >= blip_count) break;
 		vec2 d = blips[i].xy - w;
 		float k = 1.0 - smoothstep(0.6, 1.0, length(d) / (blips[i].z * range_m));
 		col = mix(col, blip_cols[i], k * blips[i].w);
-	}
-	if (noise > 0.0) {   // ил: карта гаснет, по столу бежит рябь
-		vec2 cell = floor(local * 70.0);
-		float n = fract(sin(dot(cell, vec2(12.9898, 78.233)) + floor(time * 12.0) * 3.7) * 43758.5453);
-		col = mix(col, vec3(0.008, 0.07, 0.094), noise * 0.8) + teal * noise * 0.45 * step(0.82, n) * n;
 	}
 	if (wp_on > 0.5) {   // точка маршрута: светлое кольцо, дальше дальности — на краю круга в её сторону
 		vec2 d = wp_xz - ship_xz;
