@@ -14,6 +14,7 @@ extends EcoSystem
 ## хищника издалека. У станции чистки (EcoOgnevka, поле ognevka) хищник бросает охоту, корабль там в укрытии.
 ## В густом ленточнике (EcoKelp, поле kelp) хищник теряет напуганную стаю.
 ## Фонарные вуали (EcoVeil, поле veils) обходит стороной, корабль под куполом вуали теряет.
+## Напуганную стаю в рифе на спине гротовика (EcoGrot, поле grot) теряет.
 ## Сквозь корпус не проходят (EcoWorld.push_out).
 
 const ID := "pred"
@@ -109,6 +110,8 @@ var raduzh: EcoRaduzh
 var ognevka: EcoOgnevka
 ## Фонарные вуали: хищник их обходит, корабль под куполом спрятан (null — вуалей нет).
 var veils: EcoVeil
+## Гротовик: в рифе на его спине прячется своя стая (null — гротовика нет).
+var grot: EcoGrot
 
 var _rnd: EcoRandom
 
@@ -340,6 +343,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 			else:
 				var gr := kelp.shelter(pr.prey) if kelp else null
 				var cu := cushions.ink_at(pr.prey.agent.p) if cushions and gr == null else null
+				var gt := grot.shelter(pr.prey) if grot and gr == null and cu == null else null
 				if gr:  # стая нырнула в густой ленточник
 					_set_mode(pr, Mode.PATROL, _rnd.range_f(4, 8))
 					pr.prey = null
@@ -348,6 +352,10 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 					_set_mode(pr, Mode.PATROL, _rnd.range_f(4, 8))
 					pr.prey = null
 					cushions.hid_fish(world, cu)
+				elif gt:  # стая нырнула в риф на спине гротовика
+					_set_mode(pr, Mode.PATROL, _rnd.range_f(4, 8))
+					pr.prey = null
+					grot.hid_fish(world)
 				else:
 					a.goal = pr.prey.agent.p + pr.prey.agent.v * 0.4
 					if a.distance_to(pr.prey.agent.p) < CATCH_DIST:
@@ -538,17 +546,18 @@ static func _clean_text(world: EcoWorld) -> Callable:
 		return "%s на станции чистки: его очистили от %s" % [Species.cap(pred), leech]
 
 
-## Каких светляков хищник не ловит: у станции чистки, в густом ленточнике (EcoKelp) и в чернилах подушечника
-## (nearestFish пропускает nearStation, kelpShelter, inkAt).
+## Каких светляков хищник не ловит: у станции чистки, в густом ленточнике (EcoKelp), в рифе гротовика (EcoGrot)
+## и в чернилах подушечника (nearestFish пропускает nearStation, kelpShelter, grotShelter, inkAt).
 func _hidden_fish() -> Callable:
 	var ink := cushions != null and cushions.any_ink()
 	var truce := ognevka != null and leeches != null and not leeches.stations.is_empty()
 	var grove := kelp != null and not kelp.groves.is_empty()
-	if not ink and not truce and not grove:
+	var reef := grot != null and grot.shoal != null and grot.shoal.alarm > 0.0
+	if not ink and not truce and not grove and not reef:
 		return Callable()
 	return func(f: EcoFish.Fish) -> bool:
 		return (truce and leeches.near_station(f.agent.p) != null) or (grove and kelp.shelter(f) != null) \
-			or (ink and _in_ink(f))
+			or (reef and grot.shelter(f) != null) or (ink and _in_ink(f))
 
 
 ## Светляк в чернилах подушечника — хищник его не видит.

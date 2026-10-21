@@ -246,7 +246,8 @@ func test_near_reaches_sonar_table() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
-	main.helm.pos = Vector3(0, -20, 60)
+	# у стаи 1 и первого серпохвоста: голостол держит 32 ближних отметки, серпохвост должен попасть в них
+	main.helm.pos = Vector3(-40, -20, 30)
 	main.step(0.1)
 	main.ping_sonar()
 	main.step(0.1)

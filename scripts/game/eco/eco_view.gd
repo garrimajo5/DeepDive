@@ -71,6 +71,9 @@ var remora_view: RemoraView
 ## Фонарные вуали: две колонии медуз дрейфуют над рифом, жалят светляков, под куполом серпохвост теряет корабль.
 var veils: EcoVeil
 var veil_view: VeilView
+## Гротовик: панцирное существо с рифом на спине бредёт по отмели, в рифе живёт и прячется шестая стая светляков.
+var grot: EcoGrot
+var grot_view: GrotView
 ## Чёрный курильщик (место 2, ART-012): трубы на дне, светящиеся жерла, столб пузырей до льда, марево.
 var vent: EcoVent
 var vent_view: VentView
@@ -148,6 +151,10 @@ func _init() -> void:
 	preds.veils = veils
 	veil_view = VeilView.new(veils)
 	add_child(veil_view)
+	grot = world.add(EcoGrot.new(fish)) as EcoGrot
+	preds.grot = grot
+	grot_view = GrotView.new(grot)
+	add_child(grot_view)
 	eels = world.add(EcoEel.new(grazers, fish)) as EcoEel
 	raduzh = world.add(EcoRaduzh.new()) as EcoRaduzh
 	preds.raduzh = raduzh
@@ -394,4 +401,5 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	ray_view.sync()
 	remora_view.sync(world.time)
 	veil_view.sync(world.time, ship.pos)
+	grot_view.sync(world.time, ship.pos)
 	return world.take_link()
