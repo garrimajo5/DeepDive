@@ -147,3 +147,32 @@ func test_guest_at_power_moves_shares() -> void:
 		client.poll(DT)
 		OS.delay_msec(2)
 	ok(main.reactor.share != before, "доли реактора правит крестовина гостя (%s → %s)" % [before, main.reactor.share])
+
+
+func test_guest_picks_route_and_gets_vote() -> void:   # кнопка гостя у поста «Маршрут» листает маршрут, кадр везёт его
+	ok(_pump(func() -> bool: return main.crew.size() == 2), "гость на палубе")
+	var m: Crew.Member = main.crew[1]
+	m.place(Main.ROUTE_POST.x, Main.ROUTE_POST.y, 0.0)
+	m.walker.x = Main.ROUTE_POST.x
+	m.walker.z = Main.ROUTE_POST.y
+	var pad := Crew.Pad.new()
+	pad.action = true
+	client.send_pad(pad)
+	ok(_pump(func() -> bool: return main.run.route == 0), "маршрут выбрал гость")
+	ok(not m.busy(), "маршрут не пройден — к столу не встал")
+	var my := Run.new()
+	ok(_pump(func() -> bool:
+		var ev: Variant = frame.get("ev", {})
+		return ev is Dictionary and not NetSnap.apply_run(ev.get("r"), my).is_empty() and my.route == 0),
+		"маршрут хоста — в кадре гостю")
+	main.complete_route()
+	pad = Crew.Pad.new()
+	pad.action = true
+	client.send_pad(pad)
+	ok(_pump(func() -> bool: return m.at_vote), "маршрут пройден — гость у стола")
+	var got := [{}]   # лямбда меняет содержимое, не саму переменную
+	ok(_pump(func() -> bool:
+		var ev: Variant = frame.get("ev", {})
+		got[0] = NetSnap.apply_run(ev.get("r") if ev is Dictionary else null, my)
+		return my.done and not got[0].is_empty() and not got[0]["ops"].is_empty()), "мнения ролей — гостю")
+	eq(got[0]["marks"], VoteHolo.votes(got[0]["ops"]), "голосует один — метки по мнениям ролей")

@@ -5,7 +5,7 @@ class_name NetSnap
 
 const SEND_DT := 0.05          ## хост шлёт кадр 20 раз в секунду
 const MAX_BYTES := 1200        ## кадр с четырьмя членами экипажа влезает в один UDP-пакет (MTU 1280 с запасом)
-const VERSION := 3             ## формат кадра и ввода; клиент другой версии не подключается (3 — события «ev» в кадре)
+const VERSION := 4             ## формат кадра и ввода; клиент другой версии не подключается (4 — маршрут и голосование «r»)
 const NEWS_TIME := 1.0         ## сообщение события едет в кадрах столько секунд (20 кадров — потеря всех почти исключена)
 
 
@@ -116,6 +116,83 @@ static func apply_events(ev: Dictionary, b: Breach, s: Silt, t: float) -> Array:
 	if n is Array and n.size() == 2:
 		return [int(n[0]), str(n[1])]
 	return []
+
+
+## Маршрут, голосование и итог для клиента (кладётся в события: `events(...)["r"]`). marks — метки голограммы
+## {"deep": [роль…], "up": [роль…]} (`Main.vote_marks`), secs/frac — таймер кооп-голосования (−1 — не идёт), tally —
+## строка счёта панели; ops — мнения ролей (`Run.opinions`, пока решают), rows — итог на голограмме (`Run.summary`),
+## detail — итог на панели (`Run.detail`) — только после «наверх».
+static func run_state(run: Run, marks: Dictionary, secs: int, frac: float, tally: String, ops: Array, rows: Array,
+		detail: Array) -> Dictionary:
+	var keys := Run.PLACES.keys()   # места — номерами по порядку Run.PLACES
+	var vis := PackedByteArray()
+	for k in run.visited:
+		vis.append(keys.find(k))
+	var seen := PackedByteArray()
+	for k in run.seen:
+		seen.append(keys.find(k))
+	var r := {"ru": PackedInt32Array([run.route, 1 if run.done else 0, run.depth, run.routes, 1 if run.ended else 0,
+		run.score, secs]), "rf": frac, "rv": vis, "rs": seen,
+		"vm": [PackedByteArray(marks.get("deep", [])), PackedByteArray(marks.get("up", []))]}
+	if tally != "":
+		r["ta"] = tally
+	if run.done and not run.ended:
+		r["op"] = ops
+	if run.ended:
+		r["rr"] = rows
+		r["rd"] = detail
+	return r
+
+
+## Клиент ставит маршрут хоста в свой Run и возвращает остальное для показа: {"marks", "secs", "frac", "tally",
+## "ops", "rows", "detail"}. Испорченные данные — пустой словарь, Run не тронут.
+static func apply_run(r: Variant, run: Run) -> Dictionary:
+	if not r is Dictionary:
+		return {}
+	var ru: Variant = r.get("ru")
+	var vm: Variant = r.get("vm")
+	if not (ru is PackedInt32Array and ru.size() == 7 and r.get("rv") is PackedByteArray
+			and r.get("rs") is PackedByteArray and vm is Array and vm.size() == 2
+			and vm[0] is PackedByteArray and vm[1] is PackedByteArray):
+		return {}
+	run.route = ru[0] if ru[0] >= 0 and ru[0] < Run.ROUTES.size() else -1
+	run.done = ru[1] == 1
+	run.depth = maxi(0, ru[2])
+	run.routes = maxi(0, ru[3])
+	run.ended = ru[4] == 1
+	run.score = ru[5]
+	run.visited.assign(_keys(r["rv"]))
+	run.seen.assign(_keys(r["rs"]))
+	var marks := {"deep": _roles(vm[0]), "up": _roles(vm[1])}
+	return {"marks": marks, "secs": ru[6], "frac": float(r.get("rf", -1.0)), "tally": str(r.get("ta", "")),
+		"ops": _rows(r.get("op"), 3), "rows": _rows(r.get("rr"), 2), "detail": _rows(r.get("rd"), 2)}
+
+
+static func _keys(a: PackedByteArray) -> Array:
+	var keys := Run.PLACES.keys()
+	var out := []
+	for i in a:
+		if i < keys.size():
+			out.append(keys[i])
+	return out
+
+
+static func _roles(a: PackedByteArray) -> Array:
+	var out := []
+	for i in a:
+		if i < Crew.ROLE_NAMES.size():
+			out.append(int(i))
+	return out
+
+
+## Строки из пакета: массив массивов длины n, иначе пусто.
+static func _rows(a: Variant, n: int) -> Array:
+	if not a is Array:
+		return []
+	for row: Variant in a:
+		if not (row is Array and row.size() == n):
+			return []
+	return a
 
 
 static func _spot(b: Breach, i: float) -> Breach.Spot:
