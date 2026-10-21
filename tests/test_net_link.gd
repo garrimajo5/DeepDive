@@ -201,3 +201,19 @@ func test_decode_garbage() -> void:
 	eq(NetLink.decode(PackedByteArray([1, 2, 3, 4, 5, 6, 7, 8])), {}, "мусор")
 	eq(NetLink.decode(var_to_bytes([1, 2])), {}, "не словарь")
 	eq(NetLink.decode(NetLink.encode({"k": "pad"})), {"k": "pad"})
+
+
+func test_due_at_30_fps_sends_20_per_second() -> void:
+	var h := NetLink.Host.new()
+	var n := 0
+	for i in 30:
+		if h.due(1.0 / 30.0):
+			n += 1
+	eq(n, 20, "кадров за секунду при 30 к/с")
+	n = 0
+	for i in 60:
+		if h.due(1.0 / 60.0):
+			n += 1
+	eq(n, 20, "кадров за секунду при 60 к/с")
+	eq(h.due(0.5), true, "долгий кадр — один кадр")
+	eq(h.due(0.01), false, "без пачки догоняющих")

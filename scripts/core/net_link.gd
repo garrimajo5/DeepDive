@@ -138,7 +138,9 @@ class Host:
 		_acc += dt
 		if _acc + 1e-6 < NetSnap.SEND_DT:
 			return false
-		_acc = fmod(_acc, NetSnap.SEND_DT) if _acc < NetSnap.SEND_DT * 3.0 else 0.0
+		_acc = maxf(_acc - NetSnap.SEND_DT, 0.0)
+		if _acc >= NetSnap.SEND_DT:   # долгий кадр — не догоняем пачкой кадров
+			_acc = 0.0
 		seq += 1
 		return true
 
