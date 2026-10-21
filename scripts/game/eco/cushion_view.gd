@@ -3,26 +3,7 @@ extends Node3D
 ## Подушечник в сцене (initCushions в js/creatures.js; ART-004): подушки — один MultiMesh из полусферы 1,1 × 0,75 × 1 м
 ## с бархатными полипами (цвет по высоте: розовые у дна, светлее к макушке, слабое своё свечение #1a0a14), сжатая
 ## подушка ниже и уже. Облака чернил — второй MultiMesh из плоских тёмных пятен 2,4 м лицом к камере (смешивание
-## по прозрачности, без записи глубины): тёмно-синие, тают последние 2 с. Стоит на слое отмели (OceanView.LAYER_WORLD).
-
-const INK_SHADER := """
-shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
-varying vec4 tint;
-void vertex() {
-	tint = COLOR;
-	// пятно лицом к камере: размер — из масштаба экземпляра
-	float s = length(MODEL_MATRIX[0].xyz);
-	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * s, INV_VIEW_MATRIX[1] * s, INV_VIEW_MATRIX[2] * s,
-		MODEL_MATRIX[3]);
-}
-void fragment() {
-	float d = length(UV - vec2(0.5)) * 2.0;
-	float a = clamp(1.0 - d, 0.0, 1.0);
-	ALBEDO = tint.rgb;
-	ALPHA = tint.a * a * a;
-}
-"""
+## по прозрачности, без записи глубины, общий шейдер EcoShaders.MIST): тёмно-синие, тают последние 2 с. Стоит на слое отмели (OceanView.LAYER_WORLD).
 
 ## Подушка: полусфера радиуса 1 м, сплюснутая по ширине и высоте (g.scale(1.1, 0.75, 1)).
 const SHAPE := Vector3(1.1, 0.75, 1.0)
@@ -107,9 +88,7 @@ static func build_pad() -> ArrayMesh:
 static func build_ink() -> QuadMesh:
 	var m := QuadMesh.new()
 	m.size = Vector2.ONE * INK_SIZE
-	var mat := ShaderMaterial.new()
-	mat.shader = EcoShaders.shader(INK_SHADER)
-	m.material = mat
+	m.material = EcoShaders.mist(EcoShaders.Mist.INK)
 	return m
 
 

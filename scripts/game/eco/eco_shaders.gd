@@ -3,7 +3,7 @@ extends RefCounted
 ## Общие шейдеры живого мира (issue #279). Рендерер Compatibility на каждый новый шейдер собирает ~5 программ — это
 ## секунды прогрева на телефоне при первом запуске. Поэтому одинаковый код — один ресурс `Shader` (`shader(code)`),
 ## а похожие материалы видов и мест — один общий код с числами в uniform: камень с обрастанием (`STONE`), мох
-## пятнами (`MOSS`), светлая точка лицом к камере со сложением цвета (`SPOT`). Новый материал мира — сначала сюда.
+## пятнами (`MOSS`), прозрачное без света (`MIST`), светлая точка лицом к камере со сложением цвета (`SPOT`). Новый материал мира — сначала сюда.
 ## Сколько шейдеров у мира — `tools/shaders.gd`, потолок — `tests/test_eco_shaders.gd`.
 
 ## Камень с обрастанием #67DDEB в альфе цвета вершины: раковина древних, кости левиафана, край отмели, порода
@@ -74,6 +74,105 @@ void fragment() {
 }
 """
 
+## Прозрачное без света (смешение по альфе, без записи глубины, обе стороны): один код на купола и щупальца вуалей,
+## чернила подушечника, пузыри и марево курильщика, трещину и столб света колодца. Что рисовать — `mode` (Mist), числа
+## каждого вида — в своих uniform; формулы — прежние формулы видов. Ветка по uniform одна на весь вызов отрисовки.
+enum Mist { BELL, TENTACLE, INK, BUBBLE, HAZE, CRACK, COLUMN }
+const MIST := """
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+uniform int mode = 0;
+uniform vec4 tint : source_color = vec4(1.0);
+// щупальца: время и пульс купола
+uniform float t = 0.0;
+uniform float swell = 1.0;
+// пузыри
+uniform float drift = 0.0;
+uniform float size_low = 0.1;
+uniform float size_high = 0.2;
+// марево
+uniform vec3 water : source_color;
+uniform vec3 heat : source_color;
+// колодец: дыхание яркости и плотность столба
+uniform float pulse = 0.0;
+uniform float period = 10.0;
+uniform float strength = 1.0;
+varying vec4 tone;
+varying float fade;
+varying vec3 wp;
+void vertex() {
+	tone = COLOR;
+	fade = 1.0;
+	wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	if (mode == 1) {
+		// щупальца вуали (EcoVeil.tentacle_point): в VERTEX — точка без колыхания, в UV — (щупальце k, точка j)
+		float k = UV.x;
+		float j = UV.y;
+		vec3 p = vec3(VERTEX.x * swell, VERTEX.y, VERTEX.z * swell);
+		if (j > 0.5) {
+			p.x += sin(t * 0.9 + (j - 1.0) * 0.45 + k) * j * 0.12;
+			p.z += cos(t * 0.7 + (j - 1.0) * 0.4 + k * 1.3) * j * 0.12;
+		}
+		VERTEX = p;
+	} else if (mode == 2) {
+		// чернила: пятно лицом к камере, размер — из масштаба экземпляра
+		float s = length(MODEL_MATRIX[0].xyz);
+		MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * s, INV_VIEW_MATRIX[1] * s, INV_VIEW_MATRIX[2] * s,
+			MODEL_MATRIX[3]);
+	} else if (mode == 3) {
+		// EcoVent.bubble_pos: скорость, фаза, высота столба, своё число — в INSTANCE_CUSTOM, выход — в экземпляре
+		float h = INSTANCE_CUSTOM.b;
+		float f = fract(INSTANCE_CUSTOM.g + TIME * INSTANCE_CUSTOM.r / h);
+		float sd = INSTANCE_CUSTOM.a * 6.2831853;
+		vec3 o = MODEL_MATRIX[3].xyz;
+		vec3 p = vec3(o.x + sin(TIME * 0.9 + sd) * drift * f, o.y + f * h, o.z + cos(TIME * 0.7 + sd) * drift * f);
+		float size = mix(size_low, size_high, f);
+		fade = 0.85 * (1.0 - 0.6 * f) * smoothstep(0.0, 0.03, f) * (1.0 - smoothstep(0.9, 1.0, f));
+		MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * size, INV_VIEW_MATRIX[1] * size,
+			INV_VIEW_MATRIX[2] * size, vec4(p, 1.0));
+	}
+}
+void fragment() {
+	float d = length(UV - vec2(0.5)) * 2.0;
+	float k = 1.0 + pulse * sin(TAU * TIME / period);
+	if (mode == 0) {
+		// купол: кромка ярче — по углу к взгляду
+		float edge = 1.0 - abs(dot(normalize(NORMAL), normalize(VIEW)));
+		ALBEDO = tone.rgb;
+		ALPHA = clamp(tone.a * (0.55 + 1.3 * edge * edge), 0.0, 1.0);
+	} else if (mode == 1) {
+		ALBEDO = tint.rgb;
+		ALPHA = tint.a;
+	} else if (mode == 2) {
+		float a = clamp(1.0 - d, 0.0, 1.0);
+		ALBEDO = tone.rgb;
+		ALPHA = tone.a * a * a;
+	} else if (mode == 3) {
+		// пузырь: светлый ободок и прозрачная середина
+		float ring = (1.0 - smoothstep(0.8, 1.0, d)) * (0.35 + 0.65 * smoothstep(0.45, 0.9, d));
+		ALBEDO = tint.rgb;
+		ALPHA = fade * ring;
+	} else if (mode == 4) {
+		// марево: шум из синусов бежит вверх, слабеет вверх и к краям полосы
+		float v = 1.0 - UV.y;
+		float n = 0.5 + 0.25 * sin(UV.x * 9.0 + UV.y * 23.0 - TIME * 1.3) + 0.25 * sin(UV.x * 17.0 - UV.y * 41.0 - TIME * 2.1);
+		float side = smoothstep(0.0, 0.3, UV.x) * smoothstep(1.0, 0.7, UV.x);
+		ALBEDO = mix(water, heat, 0.35 * (1.0 - v));
+		ALPHA = 0.11 * n * side * pow(1.0 - v, 1.4) * smoothstep(0.0, 0.04, v);
+	} else if (mode == 5) {
+		// трещина: светлые полосы медленно ползут вдоль неё
+		float dr = 0.94 + 0.06 * sin(TIME * 0.35 + dot(wp.xz, vec2(0.45, 0.2)));
+		ALBEDO = tone.rgb * k * dr;
+		ALPHA = clamp(tone.a, 0.0, 1.0);
+	} else {
+		// столб света: грань под острым углом к взгляду почти прозрачна, без яркого контура
+		float face = abs(dot(normalize(NORMAL), normalize(VIEW)));
+		ALBEDO = tone.rgb * k;
+		ALPHA = clamp(tone.a * face * face * strength * k, 0.0, 1.0);
+	}
+}
+"""
+
 ## Код → слабая ссылка на Shader: пока его держит хоть один материал, тот же код получает тот же ресурс. Слабая —
 ## чтобы при выходе не оставалось ресурсов в статике.
 static var _made := {}
@@ -113,3 +212,10 @@ static func moss_glow(glows: PackedFloat32Array) -> PackedFloat32Array:
 	for i in range(glows.size(), MOSS_MAX):
 		out[i] = 0.0
 	return out
+
+
+## Прозрачное без света (MIST): что рисовать — kind, числа вида — params.
+static func mist(kind: Mist, params: Dictionary = {}) -> ShaderMaterial:
+	var mat := material(MIST, params)
+	mat.set_shader_parameter("mode", int(kind))
+	return mat
