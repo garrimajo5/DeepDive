@@ -71,6 +71,9 @@ var flower_view: FlowerView
 ## Раковина древних (место 3): спираль Складчатых на дне, кольца знаков на витках загораются по очереди.
 var shell: EcoShell
 var shell_view: ShellView
+## Кости левиафана (место 4, ART-030): клетка из 8 пар рёбер с проходом 14 × 7 м, хвост вбок, череп сбоку.
+var bones: EcoBones
+var bones_view: BonesView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -94,6 +97,7 @@ var ground: Callable:
 		_rebuild_vent()
 		_rebuild_flower()
 		_rebuild_shell()
+		_rebuild_bones()
 
 
 func _init() -> void:
@@ -136,6 +140,7 @@ func _init() -> void:
 	vent = world.add(EcoVent.new()) as EcoVent
 	flower = world.add(EcoFlower.new()) as EcoFlower
 	shell = world.add(EcoShell.new()) as EcoShell
+	bones = world.add(EcoBones.new()) as EcoBones
 	_rebuild_moss()
 	_rebuild_coral()
 	_rebuild_ferns()
@@ -151,6 +156,7 @@ func _init() -> void:
 	_rebuild_vent()
 	_rebuild_flower()
 	_rebuild_shell()
+	_rebuild_bones()
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -298,6 +304,15 @@ func _rebuild_shell() -> void:
 		shell_view.free()
 	shell_view = ShellView.new(shell)
 	add_child(shell_view)
+
+
+## Меш костей левиафана по дну мира (рёбра и череп встают на дно при сбросе мира).
+func _rebuild_bones() -> void:
+	if bones_view:
+		remove_child(bones_view)
+		bones_view.free()
+	bones_view = BonesView.new(bones)
+	add_child(bones_view)
 
 
 ## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
