@@ -99,6 +99,7 @@ func test_own_figure_hides_head() -> void:
 func test_snapshot_round_trip() -> void:
 	var a := Crew.Member.new(Crew.Role.ENGINEER, "Вера")
 	a.look = 1
+	a.post = "energy"
 	a.follow(0.0, 0.0, 0.3, false, 0.0, 1.0 / 30.0)
 	for i in 7:
 		a.follow(a.x, a.z - 0.08, 0.3, false, 0.0, 1.0 / 30.0)
@@ -107,6 +108,7 @@ func test_snapshot_round_trip() -> void:
 	eq(b.role, Crew.Role.ENGINEER, "роль")
 	eq(b.name, "Вера", "имя")
 	eq(b.look, 1, "внешность")
+	eq(b.post, "energy", "занятый пост — в снимке")
 	var pa := a.parts()
 	var pb := b.parts()
 	for k in pa:
@@ -148,3 +150,18 @@ func test_welding_arm_holds_torch() -> void:
 	m.weld(s.p, s.n)
 	m.follow(0.0, Deck.SEAT_Z, 0.0, true, 0.0, 0.1)
 	ok(not m.welding(), "в кресле не варят")
+
+
+func test_busy_posts() -> void:
+	var me := Crew.Member.new(Crew.Role.PILOT)
+	var sonar := Crew.Member.new(Crew.Role.SONAR)
+	var crew := [me, sonar]
+	eq(Crew.holder(crew, me, "helm"), null, "штурвал свободен")
+	sonar.follow(0.0, Deck.SEAT_Z, 0.0, true, 0.0, 0.1)
+	eq(Crew.holder(crew, me, "helm"), sonar, "другой сидит за штурвалом — занят")
+	eq(Crew.busy_text("helm", sonar), "Штурвал занят: Сонарщик", "строка на приборах")
+	eq(Crew.holder(crew, sonar, "helm"), null, "себе свой пост не занят")
+	sonar.post = "energy"
+	eq(Crew.holder(crew, me, "energy"), sonar, "пульт энергии держит другой")
+	eq(Crew.holder(crew, me, "sonar"), null, "сонар — общий пост, не занимается")
+	eq(Crew.holder([me], me, "helm"), null, "один на борту — всё свободно")
