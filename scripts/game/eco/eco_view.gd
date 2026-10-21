@@ -68,6 +68,9 @@ var vent_view: VentView
 ## Каменный цветок (место 1): коралл-исполин 28 м, светящиеся кончики мерцают волной снизу вверх.
 var flower: EcoFlower
 var flower_view: FlowerView
+## Раковина древних (место 3): спираль Складчатых на дне, кольца знаков на витках загораются по очереди.
+var shell: EcoShell
+var shell_view: ShellView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -90,6 +93,7 @@ var ground: Callable:
 		_rebuild_coins()
 		_rebuild_vent()
 		_rebuild_flower()
+		_rebuild_shell()
 
 
 func _init() -> void:
@@ -131,6 +135,7 @@ func _init() -> void:
 	bladders.coins = coins
 	vent = world.add(EcoVent.new()) as EcoVent
 	flower = world.add(EcoFlower.new()) as EcoFlower
+	shell = world.add(EcoShell.new()) as EcoShell
 	_rebuild_moss()
 	_rebuild_coral()
 	_rebuild_ferns()
@@ -145,6 +150,7 @@ func _init() -> void:
 	_rebuild_coins()
 	_rebuild_vent()
 	_rebuild_flower()
+	_rebuild_shell()
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -283,6 +289,15 @@ func _rebuild_flower() -> void:
 		flower_view.free()
 	flower_view = FlowerView.new(flower)
 	add_child(flower_view)
+
+
+## Меш раковины древних по дну мира (раковина встаёт на дно при сбросе мира).
+func _rebuild_shell() -> void:
+	if shell_view:
+		remove_child(shell_view)
+		shell_view.free()
+	shell_view = ShellView.new(shell)
+	add_child(shell_view)
 
 
 ## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
