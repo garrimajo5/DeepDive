@@ -99,6 +99,9 @@ var env: Environment
 var qa: QaRunner           ## прогон сценария тестера, если он есть (docs/QA.md)
 var net_host: NetLink.Host   ## хост сетевого забега (`host_game`); null — игра без сети
 var net_mates := {}          ## peer id гостя → его член экипажа (Crew.Member)
+var net_client: NetLink.Client   ## клиент сетевого забега (`join_game`): шаг корабля не считает, применяет кадры хоста
+var net_seq := -1            ## номер последнего применённого кадра хоста
+var net_pad := Crew.Pad.new()   ## свой ввод клиента: копится за кадр и уходит хосту (`Client.send_pad`)
 const NET_SPAWN := Vector3(0.0, 1.0, 0.0)   ## гость встаёт на мостике: x, z, курс
 
 
@@ -385,8 +388,11 @@ func _build_world() -> void:
 func _notification(what: int) -> void:
 	if what in [NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_APPLICATION_FOCUS_OUT]:
 		save.flush(samples, scanner)
-	elif what == NOTIFICATION_EXIT_TREE and net_host:
-		net_host.stop()
+	elif what == NOTIFICATION_EXIT_TREE:
+		if net_host:
+			net_host.stop()
+		if net_client:
+			net_client.stop()
 
 
 func _process(dt: float) -> void:
@@ -399,6 +405,9 @@ func step(dt: float) -> void:
 	time += dt
 	if qa:
 		qa.tick(dt)
+	if net_client:   # клиент: корабль, реактор и экипаж — из кадров хоста
+		_client_step(dt)
+		return
 	_net_poll()
 	var r := overlay.router
 	if r.noclip_pressed:
@@ -1168,6 +1177,88 @@ func _net_poll() -> void:
 func _net_send(dt: float) -> void:
 	if net_host and net_host.due(dt):
 		net_host.send_frame(NetSnap.frame(net_host.seq, time, helm, reactor, vitals, light_on, crew))
+
+
+## Войти в сетевой забег хоста по адресу в локальной сети: шаг корабля считает хост, здесь — свой ввод хосту
+## (`net_pad` → `Client.send_pad`) и кадры хоста в корабль, реактор, корпус и экипаж; свой игрок — `crew[client.me]`.
+func join_game(address: String, port: int = NetLink.PORT, player: String = "", role: int = Crew.Role.PILOT, look: int = 0) -> Error:
+	net_client = NetLink.Client.new()
+	var err := net_client.join(address, port, player, role, look)
+	if err != OK:
+		net_client = null
+		return err
+	net_seq = -1
+	net_pad.clear()
+	flyby.stop()   # клиент входит в идущий забег — облёта нет
+	message.clear(Flyby.START_MSG)
+	say(net_client.label())
+	return OK
+
+
+## Шаг клиента: ввод с экрана — хосту, свежий кадр — в корабль и экипаж, дальше только картинка (без шага корабля).
+func _client_step(dt: float) -> void:
+	var r := overlay.router
+	var lk := overlay.look_points()
+	walker.look(lk)   # взгляд сразу свой: курс хост подтвердит кадром, наклон хосту не нужен
+	net_pad.move = Vector2(r.move)
+	net_pad.look += lk
+	net_pad.action = net_pad.action or r.action_pressed
+	var was := net_client.state
+	net_client.send_pad(net_pad)
+	var f := net_client.poll(dt)
+	if not f.is_empty():
+		_client_frame(f)
+	if net_client.state != was:
+		say(net_client.label())
+	if net_client.state == NetLink.State.REFUSED or net_client.state == NetLink.State.LOST:
+		_leave_net()
+	hull_motion.update(dt, helm.in_thrust, helm.in_vert, reactor.k(Reactor.Sys.ENGINES))
+	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP), silt.beam_k())
+	for i in Reactor.Sys.size():
+		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
+	overlay.set_pilot(pilot.seated)
+	message.update(dt)
+	me.back = CrewView.own_back(walker.pitch, me.holding())
+	crew_view.pitch = walker.pitch
+	crew_view.apply()
+	_place_ship()
+	_place_camera()
+	_update_ui()
+	_warm_frame()
+	r.end_frame()
+
+
+## Кадр хоста: корабль, реактор, корпус, свет, экипаж. Свой игрок — место `me` в кадре; его курс остаётся своим
+## (свайп уже повернул камеру), пока он не сел за пост или не встал — тогда курс хоста.
+func _client_frame(f: Dictionary) -> void:
+	var yaw := walker.yaw
+	var was_busy := me.busy()
+	var n := crew.size()
+	net_seq = NetSnap.apply_frame(f, net_seq, helm, reactor, vitals, crew)
+	light_on = bool(f.get("light", light_on))
+	var i := net_client.me
+	var mine: Crew.Member = crew[i] if i >= 0 and i < crew.size() else me
+	if mine != me or crew.size() != n:
+		var moved := mine != me
+		me = mine
+		walker = me.walker
+		crew_view.set_members(crew, me)
+		if moved:
+			walker.pitch = 0.0
+			return
+	if me.busy() == was_busy:
+		walker.yaw = yaw
+		me.yaw = yaw
+	elif me.busy():
+		walker.pitch = 0.0
+
+
+## Связь с хостом кончилась (отказ или потеря): дальше одиночная игра с тем, что было в последнем кадре.
+func _leave_net() -> void:
+	net_client.stop()
+	net_client = null
+	crew = [me]
+	crew_view.set_members(crew, me)
 
 
 ## Ещё один член экипажа на палубе (снимки и сценарий тестера, пока нет сети): место, курс (рад), роль, внешность.
