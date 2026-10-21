@@ -62,6 +62,9 @@ var skalnik_view: SkalnikView
 ## Монетники: три стайки над пятнами мха у старта, рассыпаются от сонара; глазуны в песке хватают их снизу.
 var coins: EcoCoins
 var coins_view: CoinsView
+## Ледокрылы: два гигантских ската кружат подо льдом, водят стаи светляков, поют; над кораблём проходят поверху.
+var rays: EcoRay
+var ray_view: RayView
 ## Чёрный курильщик (место 2, ART-012): трубы на дне, светящиеся жерла, столб пузырей до льда, марево.
 var vent: EcoVent
 var vent_view: VentView
@@ -145,6 +148,9 @@ func _init() -> void:
 	coins = world.add(EcoCoins.new(moss, preds)) as EcoCoins
 	coins.bladders = bladders
 	bladders.coins = coins
+	rays = world.add(EcoRay.new(fish)) as EcoRay
+	ray_view = RayView.new(rays)
+	add_child(ray_view)
 	vent = world.add(EcoVent.new()) as EcoVent
 	flower = world.add(EcoFlower.new()) as EcoFlower
 	shell = world.add(EcoShell.new()) as EcoShell
@@ -370,4 +376,5 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	krab_view.sync(world.time)
 	skalnik_view.sync(world.time, ship.pos)
 	coins_view.sync(world.time)
+	ray_view.sync()
 	return world.take_link()

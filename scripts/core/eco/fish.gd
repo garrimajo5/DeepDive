@@ -24,6 +24,9 @@ const CALM_SPEED := 2.4
 const MIN_SPEED := 0.5
 ## Запас до корпуса корабля, м (S.pushOut(f.p, 0.3)).
 const HULL_GAP := 0.3
+## Стая за ледокрылом: цель — в LEAD_BEHIND позади него и LEAD_BELOW ниже (sh.follow в js).
+const LEAD_BEHIND := 12.0
+const LEAD_BELOW := 3.0
 ## Стая дальше FAR от корабля (в тумане, плотность ≥ 0,0135 — видна на четверть) ходит реже: шагом FAR_STEP
 ## (= EcoWorld.MAX_STEP, при 60 к/с — каждый третий кадр), набирая пропущенное время. Дальние стаи сдвинуты
 ## по фазе, чтобы не считались в одном кадре.
@@ -117,12 +120,27 @@ class Shoal:
 	var color := Color.WHITE
 	## Набранное время дальней стаи (с), ещё не прошагнутое.
 	var lag := 0.0
+	## Ведёт ледокрыл (EcoRay, sh.follow в js): стая держится в LEAD_BEHIND за ним и LEAD_BELOW ниже, пока lead_t > 0.
+	## Ведущий — слабой ссылкой (у него свои поля p и dir).
+	var lead_t := 0.0
+	var _lead: WeakRef
 	var members: Array = []  ## Array[Fish]
 	## Места и жизнь рыбок стаи по Fish.slot на начало шага стаи и расталкивание каждой (sep): пары соседей
 	## считаются один раз (22 × 21 / 2), без обхода объектов.
 	var pos := PackedVector3Array()
 	var live := PackedByteArray()
 	var sep := PackedVector3Array()
+
+	## Кто ведёт стаю сейчас (объект с полями p и dir) или null.
+	func leader() -> Object:
+		if lead_t <= 0.0 or _lead == null:
+			return null
+		return _lead.get_ref()
+
+	## Стаю повёл ведущий на seconds секунд.
+	func follow(who: Object, seconds: float) -> void:
+		_lead = weakref(who) if who else null
+		lead_t = seconds if who else 0.0
 
 
 ## Рыбка: существо мира и её место в стае.
@@ -329,8 +347,12 @@ func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
 	sh.alarm = maxf(0.0, sh.alarm - dt)
 	sh.flee_cd -= dt
 	sh.goal_timer -= dt
+	sh.lead_t = maxf(0.0, sh.lead_t - dt)
+	var lead := sh.leader()
 
-	if sh.goal_timer <= 0.0 and sh.crown:
+	if lead:
+		sh.goal = lead.p - lead.dir * LEAD_BEHIND + Vector3(0, -LEAD_BELOW, 0)
+	elif sh.goal_timer <= 0.0 and sh.crown:
 		sh.goal_timer = sh.rnd.range_f(6, 12)
 		sh.goal = crown_goal(sh, sh.rnd)
 	elif sh.goal_timer <= 0.0 and sh.cage:
