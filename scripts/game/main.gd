@@ -11,6 +11,7 @@ var pilot: Deck.Pilot:
 		return me.pilot
 var crew: Array = [me]                       ## экипаж на борту; позже — игроки по сети
 var crew_view: CrewView
+var name_tags: NameTagView  ## таблички игроков над фигурами (ART-033, NameTag)
 var layout := ShipLayout.new()
 var airlock := Airlock.new()
 var posts: Array[Deck.Post] = []
@@ -162,6 +163,9 @@ func _ready() -> void:
 	crew_view = CrewView.new()
 	ship.add_child(crew_view)
 	crew_view.set_members(crew, me)
+	name_tags = NameTagView.new()
+	name_tags.name = "Таблички экипажа"
+	ship.add_child(name_tags)
 	walker.stand = layout.can_stand
 	posts = Deck.posts()
 	posts.append(Deck.Post.new("winch", Samples.POST_AT, Samples.POST_R, "Лебёдка"))
@@ -573,6 +577,7 @@ func step(dt: float) -> void:
 	_place_ship()
 	_place_camera()
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
+	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera)
 	_update_ui()
 	_warm_frame()
 	_net_send(dt)
@@ -1285,6 +1290,7 @@ func _client_step(dt: float) -> void:
 	_place_ship()
 	_place_camera()
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
+	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera)
 	_update_ui()
 	_warm_frame()
 	r.end_frame()
