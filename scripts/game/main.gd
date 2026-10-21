@@ -282,7 +282,7 @@ func _begin_warmup() -> void:
 		var at: Vector2 = Warmup.MATE_AT[look % Warmup.MATE_AT.size()]
 		_warm_mates.append(add_mate(at.x, at.y, PI, Crew.Role.PILOT, look))
 	_warm_particles(true)
-	power_panel.reactor = reactor   # пульт энергии рисует строки под шторкой: шрифты всех размеров и ▲▼◀▶ (#217)
+	power_panel.reactor = reactor   # пульт энергии рисует строки под шторкой: шрифты всех размеров (#217)
 	power_panel.panel = power
 	_warm_frame()
 
