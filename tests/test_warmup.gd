@@ -66,9 +66,13 @@ func test_scene_warmup() -> void:
 	var steam: CPUParticles3D = main.rooms.steam
 	ok(steam.emitting and main.breach_view.spray.emitting, "частицы корабля выпущены на прогрев")
 	var outside := 0
+	near(main.curtain.progress, 0.0, 1e-9, "заставка с 0 %")
+	var prev := 0.0
 	for i in Warmup.frames() - 1:   # первый взгляд показан при старте, дальше по кадру на взгляд
 		main.step(1.0 / 60.0)
 		ok(main.warming(), "кадр %d — ещё прогрев" % i)
+		ok(main.curtain.progress > prev, "полоса заставки растёт по кадрам прогрева (ART-034)")
+		prev = main.curtain.progress
 		ok(main.vote_panel.visible, "панель решения экипажа под шторкой")
 		ok(main.power_panel.visible and main.power_panel.reactor != null, "пульт энергии рисуется под шторкой (#217)")
 		if main.warm.outside() >= 0:
