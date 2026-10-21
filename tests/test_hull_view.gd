@@ -120,3 +120,50 @@ func test_scene_hull() -> void:
 
 func hull_rotor_turns(main: Main) -> bool:
 	return main.hull_motion.spin > 0.5
+
+
+func test_plating_numbers() -> void:
+	# обшивка ART-024: обрастание по локальной высоте (заметки художника), 0 у киля — 1 у верха
+	near(HullMesh.local_height(HullMesh.KEEL_Y), 0.0, 1e-6, "киль — h = 0")
+	near(HullMesh.local_height(HullMesh.KEEL_Y + HullMesh.HULL_H), 1.0, 1e-6, "верх — h = 1")
+	eq(HullMesh.local_height(-50.0), 0.0, "ниже киля h не уходит в минус")
+	near(HullMesh.growth(0.0), 0.65, 1e-6, "у киля обрастание 0,65")
+	near(HullMesh.growth(HullMesh.GROWTH_TO), 0.0, 1e-6, "с середины корпуса обрастания нет")
+	var last := 1.0
+	var down := true
+	for i in 21:
+		var g := HullMesh.growth(i / 20.0)
+		down = down and g <= last + 1e-6
+		last = g
+	ok(down, "обрастание не растёт с высотой")
+	ok(HullMesh.growth(HullMesh.local_height(HullPlan.CENTER_Y)) < 0.01, "у окон (ось корабля) — чистый металл")
+	ok(HullMesh.plated(HullPlan.Paint.METAL), "металл — под обшивкой")
+	for p in [HullPlan.Paint.SEAM, HullPlan.Paint.WINDOW, HullPlan.Paint.LENS, HullPlan.Paint.LOCK]:
+		ok(not HullMesh.plated(p), "краска %d — своим цветом" % p)
+	for k in ["tsvet", "maska", "obrastanie"]:
+		var t: Texture2D = load(HullMesh.PLATE_TEX % k)
+		ok(t != null and t.get_width() == 1024, "карта %s 1024²" % k)
+
+
+func test_scene_plating() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var mesh: ArrayMesh = main.hull.body.mesh
+	var plated := 0
+	for i in mesh.get_surface_count():
+		var paint: int = HullMesh.paints()[i]
+		var m := mesh.surface_get_material(i)
+		if HullMesh.plated(paint):
+			plated += 1
+			ok(m is ShaderMaterial, "металл корпуса — шейдер обшивки")
+			var sm := m as ShaderMaterial
+			ok(sm.get_shader_parameter("color_tex") is Texture2D and sm.get_shader_parameter("mask_tex") is Texture2D
+				and sm.get_shader_parameter("growth_tex") is Texture2D, "три карты ART-024 в материале")
+			near(sm.get_shader_parameter("tile"), HullMesh.PLATE_TILE, 1e-6, "плитка 2 м")
+			near(sm.get_shader_parameter("keel_y"), HullMesh.KEEL_Y, 1e-6, "киль из HullMesh")
+		else:
+			ok(m is StandardMaterial3D, "краска %d — однотонный материал" % paint)
+	eq(plated, 1, "одна поверхность обшивки — без новых вызовов отрисовки")
+	for r in main.hull.rotors + main.hull.rudders:
+		ok(r.mesh.surface_get_material(0) is StandardMaterial3D, "%s: без обрастания и плитки (свои оси)" % r.name)

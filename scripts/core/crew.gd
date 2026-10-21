@@ -54,6 +54,25 @@ const LEAN_RATE := 3.0
 const CROUCH_MAX := 0.3
 const CROUCH_ARM_DROP := 0.35  ## на сколько хват может быть ниже плеча без приседа
 
+## Посты, за которыми стоит один человек: второй не сядет и не встанет («Штурвал занят»). Остальные — для всех.
+const BUSY := {"helm": "Штурвал занят", "energy": "Пульт энергии занят"}
+
+
+## Кто из других членов экипажа держит пост id (за штурвалом — сидящий); null — пост свободен или общий.
+static func holder(crew: Array, me: Member, id: String) -> Member:
+	if not BUSY.has(id):
+		return null
+	for m: Member in crew:
+		if m != me and (m.post == id or (id == "helm" and m.seated)):
+			return m
+	return null
+
+
+## Строка на приборах, когда пост занят: «Штурвал занят: Сонарщик».
+static func busy_text(id: String, other: Member) -> String:
+	return "%s: %s" % [BUSY.get(id, "Занято"), other.name]
+
+
 ## Части фигуры в порядке экземпляров MultiMesh (голова и визор — 2 и 3: свой игрок их не рисует).
 const ORDER := ["torso", "pelvis", "head", "visor", "arm_l", "arm_r", "fore_l", "fore_r", "hand_l", "hand_r",
 	"thigh_l", "thigh_r", "shin_l", "shin_r", "foot_l", "foot_r"]
@@ -138,6 +157,7 @@ class Member:
 	var z := 0.0
 	var yaw := 0.0
 	var seated := false
+	var post := ""  ## пост, который держит (Crew.BUSY): "helm" за штурвалом, "energy" у пульта; "" — никакой
 	var wheel_turn := 0.0
 	var weld_at := Vector3.INF  ## точка сварки (пробоина, оси корабля) — правая рука с резаком к ней; INF — не варит
 	var weld_n := Vector3.ZERO  ## нормаль борта в точке сварки (внутрь отсека)
@@ -390,7 +410,7 @@ class Member:
 	## Снимок для сети: всё, что нужно клиенту, чтобы поставить фигуру.
 	func snapshot() -> Dictionary:
 		return {"role": role, "name": name, "look": look, "x": x, "z": z, "yaw": yaw, "seated": seated,
-			"turn": wheel_turn, "phase": phase, "swing": swing,
+			"turn": wheel_turn, "phase": phase, "swing": swing, "post": post,
 			"weld": [weld_at.x, weld_at.y, weld_at.z, weld_n.x, weld_n.y, weld_n.z] if weld_at.is_finite() else [],
 			"hand_l": Crew._v3(hands[0]), "hand_r": Crew._v3(hands[1])}
 
@@ -402,6 +422,7 @@ class Member:
 		z = float(s.get("z", z))
 		yaw = float(s.get("yaw", yaw))
 		seated = bool(s.get("seated", seated))
+		post = str(s.get("post", post))
 		wheel_turn = float(s.get("turn", wheel_turn))
 		phase = float(s.get("phase", phase))
 		swing = float(s.get("swing", swing))
