@@ -101,9 +101,7 @@ static func build_stalk() -> ArrayMesh:
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	var mat := ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = KELP_SHADER
-	mat.shader = sh
+	mat.shader = EcoShaders.shader(KELP_SHADER)
 	mat.set_shader_parameter("glow", KELP_GLOW)
 	m.surface_set_material(0, mat)
 	return m

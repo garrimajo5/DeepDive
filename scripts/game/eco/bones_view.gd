@@ -6,22 +6,10 @@ extends MeshInstance3D
 ## цвета в том же материале; кости — подсветка FILL (выше, чем у раковины: отвесные рёбра в тени от света сверху), чтобы светлый известняк читался в мути отмели.
 ## Без источников света, слой отмели.
 
-const SHADER := """
-shader_type spatial;
-render_mode cull_back;
-uniform vec3 growth : source_color;
-const float FILL = 0.45;
-varying float lit;
-void vertex() {
-	lit = COLOR.a;
-}
-void fragment() {
-	ALBEDO = COLOR.rgb * (1.0 - lit * 0.5);
-	ROUGHNESS = 0.95;
-	SPECULAR = 0.15;
-	EMISSION = growth * lit * 1.4 + COLOR.rgb * (1.0 - lit) * FILL;
-}
-"""
+## Подсветка камня, шероховатость и блик — в общем шейдере камня (EcoShaders.STONE).
+const FILL := 0.45
+const ROUGH := 0.95
+const SPEC := 0.15
 
 ## Палитра художника (kosti-leviafana.md).
 const LIME := Color("b7c4c3")
@@ -71,12 +59,7 @@ func _init(system: EcoBones) -> void:
 	arrays[Mesh.ARRAY_COLOR] = _col
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	var mat := ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = SHADER
-	mat.shader = sh
-	mat.set_shader_parameter("growth", GROWTH)
-	m.surface_set_material(0, mat)
+	m.surface_set_material(0, EcoShaders.stone(GROWTH, FILL, ROUGH, SPEC))
 	mesh = m
 	tris = verts.size() / 3
 	if bones.moss:

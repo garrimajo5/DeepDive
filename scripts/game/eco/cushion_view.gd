@@ -108,9 +108,7 @@ static func build_ink() -> QuadMesh:
 	var m := QuadMesh.new()
 	m.size = Vector2.ONE * INK_SIZE
 	var mat := ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = INK_SHADER
-	mat.shader = sh
+	mat.shader = EcoShaders.shader(INK_SHADER)
 	m.material = mat
 	return m
 
