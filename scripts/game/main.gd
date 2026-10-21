@@ -386,6 +386,13 @@ func _build_world() -> void:
 	env.background_mode = Environment.BG_COLOR
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	# Свечение биолюминесценции (Forward Mobile): цветут только яркие места (огни текстур #67DDEB, вспышки)
+	env.glow_enabled = true
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
+	env.glow_hdr_threshold = 0.95
+	env.glow_intensity = 0.85
+	env.glow_bloom = 0.15
+	env.glow_strength = 1.1
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
