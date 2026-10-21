@@ -526,7 +526,8 @@ func step(dt: float) -> void:
 	helm.update(dt, reactor.k(Reactor.Sys.ENGINES), current.vel())
 	hull_motion.update(dt, helm.in_thrust, helm.in_vert, reactor.k(Reactor.Sys.ENGINES))
 	helm.speed = vitals.scrape(helm.bump / maxf(dt, 1e-4), helm.speed)
-	if vitals.update(dt, helm.in_thrust, helm.in_vert, Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP)), reactor.k(Reactor.Sys.LIFE)):
+	if vitals.update(dt, helm.in_thrust, helm.in_vert, Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP)),
+			0.0 if run.ended else reactor.k(Reactor.Sys.LIFE)):   # на итоге корпус не чинится — как на панели (#266)
 		light_on = false
 		overlay.set_light(false)
 		say("Прожектор погас: не хватает энергии")
@@ -892,6 +893,8 @@ func _restart() -> void:
 	vitals.reset()
 	breach.reset()
 	silt.reset()
+	reactor.reset()   # сброс, перегрев и доли — как на старте (#265)
+	airlock.reset()
 	walker.reset()
 	light_on = true
 	overlay.set_light(true)
