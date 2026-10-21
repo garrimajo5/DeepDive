@@ -420,3 +420,11 @@ emission), стекло банки 64 (alpha 0,25) — `models/stellazh-tryuma.g
 **Принято 21.10.2026** (PR #285, ветка `art/MOD-020-kolco-svetilnik`): `models/kolco-svetilnik.glb` (1 416 треуг.,
 Ø 3,2 × 0,2 м, pivot — центр верха), превью `kolco-svetilnik.png`; решения — `laboratoriya.md` (раздел MOD-020).
 Ставится в (0; 3,45; 11), светится только нижняя вставка. Встройка — задача ROADMAP потока А.
+
+## ART-036 «Корпус разрушен» — принято
+- Исходник: ART-002 (`mostik.md`), ART-022 (`mertvyy-mostik.jpg`), ART-025 (`tablo-trevog.md`), ART-034 (`zastavka.md`).
+
+**Принято 21.10.2026** (PR #294, ветка `art/ART-036-korpus-razrushen`): кадр `korpus-razrushen.jpg`, лист слоёв
+`korpus-razrushen-sloi.png`, шаги `korpus-razrushen-shagi.png`, рабочая текстура `korpus-razrushen-treshchiny.png`
+(1024×512); решения — `korpus-razrushen.md`: шторка 3,5 с поверх живой сцены, трещины сверху, виньетка, янтарный
+заголовок, `_restart` под сплошной шторкой в конце. Встройка — задача ROADMAP потока А.
