@@ -59,6 +59,7 @@ func test_scene_warmup() -> void:
 		main.step(1.0 / 60.0)
 		ok(main.warming(), "кадр %d — ещё прогрев" % i)
 		ok(main.vote_panel.visible, "панель решения экипажа под шторкой")
+		ok(main.power_panel.visible and main.power_panel.reactor != null, "пульт энергии рисуется под шторкой (#217)")
 		if main.warm.outside() >= 0:
 			outside += 1
 			ok(main.flyby_cam.current, "кадр снаружи — камера с борта")
@@ -77,6 +78,7 @@ func test_scene_warmup() -> void:
 	ok(not steam.emitting and not main.breach_view.spray.emitting, "частицы снова не идут")
 	near(steam.preprocess, 0.0, 1e-9, "preprocess пара вернулся")
 	ok(not main.vote_panel.visible, "панель решения снова скрыта")
+	ok(not main.power_panel.visible, "пульт энергии снова скрыт")
 	ok(main.camera.current, "глаза на мостике")
 	ok(yaws.size() >= 6, "камера обошла круг: %s" % str(yaws.keys()))
 	ok(lamp_off_seen, "был кадр без прожектора")
