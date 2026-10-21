@@ -8,19 +8,6 @@ extends Node3D
 ## (процессор их не трогает). «Марево» — три вертикальные полупрозрачные полосы с бегущим вверх шумом над главным
 ## жерлом. Без источника света: OmniLight в Compatibility перерисовал бы дно ещё раз. Слой отмели (LAYER_WORLD).
 
-const ROCK_SHADER := """
-shader_type spatial;
-render_mode cull_back;
-uniform vec3 heat : source_color;
-void fragment() {
-	float f = 0.8 + 0.1 * sin(TIME * 2.3) + 0.06 * sin(TIME * 5.7 + 1.3) + 0.04 * sin(TIME * 13.1 + 0.4);
-	ALBEDO = COLOR.rgb * (1.0 - COLOR.a);
-	ROUGHNESS = 0.95;
-	SPECULAR = 0.15;
-	EMISSION = heat * COLOR.a * f * 1.6;
-}
-"""
-
 const BUBBLE_SHADER := """
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
@@ -135,7 +122,8 @@ func _build_rock() -> void:
 	arrays[Mesh.ARRAY_COLOR] = _col
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	m.surface_set_material(0, _material(ROCK_SHADER, {"heat": HEAT}))
+	m.surface_set_material(0, EcoShaders.material(EcoShaders.STONE, {"growth": HEAT, "fill": 0.0, "glow_k": 1.6, "cut": 1.0,
+		"rough": 0.95, "spec": 0.15, "flicker": 1.0}))
 	rock = MeshInstance3D.new()
 	rock.name = "Порода"
 	rock.mesh = m
@@ -345,9 +333,7 @@ func _setup(g: GeometryInstance3D) -> void:
 
 static func _material(code: String, params: Dictionary) -> ShaderMaterial:
 	var mat := ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = code
-	mat.shader = sh
+	mat.shader = EcoShaders.shader(code)
 	for k in params:
 		mat.set_shader_parameter(k, params[k])
 	return mat

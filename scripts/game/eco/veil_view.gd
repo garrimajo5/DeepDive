@@ -142,9 +142,7 @@ func _layer(gi: GeometryInstance3D) -> void:
 
 static func _material(code: String, params: Dictionary) -> ShaderMaterial:
 	var mat := ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = code
-	mat.shader = sh
+	mat.shader = EcoShaders.shader(code)
 	for k in params:
 		mat.set_shader_parameter(k, params[k])
 	return mat

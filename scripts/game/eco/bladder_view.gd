@@ -5,26 +5,6 @@ extends Node3D
 ## MultiMesh из плоских светящихся точек лицом к камере (сложение цвета, без записи глубины). Сок и споры —
 ## зелёные (#8EE87E), своя эмиссия; стебли #3f7a5a. Стоит на слое отмели (OceanView.LAYER_WORLD).
 
-const SPORE_SHADER := """
-shader_type spatial;
-render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
-varying vec3 tint;
-void vertex() {
-	// туман для точек выключен (иначе сложение светит квадратом) — гаснут сами к 60 м
-	float far = length((VIEW_MATRIX * vec4(MODEL_MATRIX[3].xyz, 1.0)).xyz);
-	tint = COLOR.rgb * clamp(1.0 - far / 60.0, 0.0, 1.0);
-	// точка лицом к камере: размер — из масштаба экземпляра
-	float s = length(MODEL_MATRIX[0].xyz);
-	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * s, INV_VIEW_MATRIX[1] * s, INV_VIEW_MATRIX[2] * s,
-		MODEL_MATRIX[3]);
-}
-void fragment() {
-	float d = length(UV - vec2(0.5)) * 2.0;
-	float a = clamp(1.0 - d, 0.0, 1.0);
-	ALBEDO = tint * a * a;
-}
-"""
-
 const STEM := Color("3f7a5a")
 ## Луковица — сфера 0,16 м, вытянутая в 1,3 раза; спора — точка 0,35 м (в браузере 0,5 с ореолом — здесь ореол внутри точки).
 const BULB_R := 0.16
@@ -118,9 +98,8 @@ static func build_spore() -> QuadMesh:
 	var m := QuadMesh.new()
 	m.size = Vector2.ONE * SPORE_SIZE
 	var mat := ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = SPORE_SHADER
-	mat.shader = sh
+	mat.shader = EcoShaders.shader(EcoShaders.SPOT)
+	mat.set_shader_parameter("fade_far", 60.0)
 	m.material = mat
 	return m
 

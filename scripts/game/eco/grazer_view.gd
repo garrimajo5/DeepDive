@@ -81,9 +81,7 @@ static func build_mesh() -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	var mat := ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = SHADER
-	mat.shader = sh
+	mat.shader = EcoShaders.shader(SHADER)
 	mat.set_shader_parameter("swing", EcoGrazerLook.SWING)
 	mat.set_shader_parameter("step_lift", EcoGrazerLook.STEP_LIFT)
 	mesh.surface_set_material(0, mat)

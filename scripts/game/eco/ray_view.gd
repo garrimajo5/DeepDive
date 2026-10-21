@@ -78,9 +78,7 @@ func _init(system: EcoRay) -> void:
 	arrays[Mesh.ARRAY_INDEX] = _idx
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	var mat := ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = SHADER
-	mat.shader = sh
+	mat.shader = EcoShaders.shader(SHADER)
 	m.surface_set_material(0, mat)
 	tris = _idx.size() / 3
 	var mm := MultiMesh.new()

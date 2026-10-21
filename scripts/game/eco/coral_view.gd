@@ -77,9 +77,7 @@ func _init(system: EcoCoral) -> void:
 		arrays[Mesh.ARRAY_INDEX] = idx
 		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 		_mat = ShaderMaterial.new()
-		var sh := Shader.new()
-		sh.code = SHADER % maxi(1, coral.bushes.size())
-		_mat.shader = sh
+		_mat.shader = EcoShaders.shader(SHADER % maxi(1, coral.bushes.size()))
 		_mat.set_shader_parameter("tip_paint", TIP_PAINT)
 		_mat.set_shader_parameter("tip_glow", TIP_GLOW)
 		_mat.set_shader_parameter("dark_color", EcoCoralLook.BODY)
