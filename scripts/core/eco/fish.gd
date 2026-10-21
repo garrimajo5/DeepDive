@@ -1,8 +1,8 @@
 class_name EcoFish
 extends EcoSystem
 ## Светляки-полосники (initFish/updateFish в js/creatures.js, Unity `Core/EcoFish.cs`): шесть стай по 22 рыбки у кораллов
-## рифа. Стая бродит у дома, держится вместе (к центру, в ногу, не толкаясь), рыбки не опускаются на дно и не поднимаются
-## ко льду. Серпохвост ближе 16 м — тревога: стая уходит к дому в кораллы и там прячется (медленно, ≤ 1 м/с), событие
+## рифа и ещё две — у кроны Каменного цветка (ART-027). Стая бродит у дома, держится вместе (к центру, в ногу,
+## не толкаясь), рыбки не опускаются на дно и не поднимаются ко льду. Серпохвост ближе 16 м — тревога: стая уходит к дому в кораллы и там прячется (медленно, ≤ 1 м/с), событие
 ## «flee» раз в 30 с. Корабль ближе 11 м на ходу быстрее 1,2 м/с пугает без события: рыбки шарахаются, но домой не уходят.
 ## Хищники берут рыбок через nearest_fish и kill; съеденная появляется у дома через 25–40 с.
 
@@ -46,6 +46,19 @@ const HOMES: Array[Vector3] = [
 	Vector3(76.8304, -31.1474, 52.3365),
 ]
 
+## Стаи у кроны Каменного цветка (EcoFlower.CENTER, ART-027) — после шести стай рифа, чтобы номера тех не сдвинулись.
+## Кружат вокруг кроны снаружи кольцом CROWN_RING (крона — Ø 26 м, на кольце ветвей нет) на высоте CROWN_LIFT над
+## подножием, каждая в свою сторону; в тревоге прячутся в чашу кроны — дом на оси на CROWN_HIDE над подножием
+## (ось в чаше свободна, вокруг — светящиеся кончики на 4–11 м от оси, 15–27 м над подножием).
+const CROWN_SHOALS := 2
+const CROWN_RING := Vector2(15.0, 19.0)
+const CROWN_LIFT := Vector2(14.0, 27.0)
+const CROWN_HIDE := 20.0
+## Подножие цветка без дна в мире (тесты без Seabed), м.
+const CROWN_FLOOR := -40.0
+## За одну смену цели стая у кроны сдвигается по кругу на столько (рад).
+const CROWN_DRIFT := Vector2(0.4, 1.1)
+
 ## Цвет полос стаи: по концепту ART-011 стаи светятся в голубой гамме (#67DDEB, #6FE3FF и близкие оттенки).
 ## У каждой рыбки своя яркость Fish.bright.
 const COLORS: Array[Color] = [
@@ -63,6 +76,12 @@ class Shoal:
 	var velocity := Vector3.ZERO
 	## Радиус блуждания вокруг дома (м).
 	var range_m := 14.0
+	## Стая у кроны цветка: кружит вокруг оси axis (подножие цветка) по кольцу CROWN_RING; turn — сторона (±1).
+	var crown := false
+	var axis := Vector3.ZERO
+	var turn := 1.0
+	## Случай стаи: у стай рифа — общий, у стай кроны — свой (стаи рифа ведут себя как до них).
+	var rnd: EcoRandom
 	## Секунды тревоги (стая уходит домой или шарахается).
 	var alarm := 0.0
 	var flee_cd := 0.0
@@ -121,31 +140,49 @@ static func seed_for(world_seed: int) -> int:
 
 func reset(world: EcoWorld) -> void:
 	_rnd = EcoWorld.seeded_for(seed_for(world.seed_value))
+	var crown_rnd := EcoWorld.seeded_for(seed_for(world.seed_value) ^ 0x5F3C)
 	shoals.clear()
 	all.clear()
-	for si in HOMES.size():
-		var h := HOMES[si]
+	var foot := Vector3(EcoFlower.CENTER.x, CROWN_FLOOR, EcoFlower.CENTER.y)
+	if world.ground.is_valid():
+		foot.y = world.ground.call(foot.x, foot.z)
+	for si in HOMES.size() + CROWN_SHOALS:
 		var sh := Shoal.new()
+		sh.rnd = _rnd
+		var h: Vector3
+		if si < HOMES.size():
+			h = HOMES[si]
+		else:
+			sh.crown = true
+			sh.rnd = crown_rnd
+			sh.axis = foot
+			sh.turn = 1.0 if (si - HOMES.size()) % 2 == 0 else -1.0
+			h = foot + Vector3(0, CROWN_HIDE, 0)
 		sh.index = si
 		sh.home = h
 		sh.goal = h
 		sh.center = h
+		if sh.crown:  # стаи у кроны начинают снаружи, на кольце с разных сторон
+			var a0 := PI * (si - HOMES.size()) + 0.6
+			var r0 := (CROWN_RING.x + CROWN_RING.y) * 0.5
+			sh.center = foot + Vector3(cos(a0) * r0, CROWN_HIDE, sin(a0) * r0)
+			sh.goal = sh.center
 		sh.color = COLORS[si % COLORS.size()]
 		sh.lag = (si % 3) * FAR_STEP / 3.0
 		shoals.append(sh)
 		for k in PER_SHOAL:
-			var p := h + Vector3(_rnd.range_f(-3, 3), _rnd.range_f(0, 3), _rnd.range_f(-3, 3))
+			var p := sh.center + Vector3(sh.rnd.range_f(-3, 3), sh.rnd.range_f(0, 3), sh.rnd.range_f(-3, 3))
 			var a := world.spawn(ID, p)
 			a.home = h
 			a.clearance = 0.4
-			a.v = Vector3(_rnd.range_f(-1, 1), 0, _rnd.range_f(-1, 1))
+			a.v = Vector3(sh.rnd.range_f(-1, 1), 0, sh.rnd.range_f(-1, 1))
 			var f := Fish.new()
 			f.agent = a
 			f.shoal = sh
 			f.index = all.size()
 			f.slot = sh.members.size()
-			f.phase = _rnd.range_f(0, 6)
-			f.bright = _rnd.range_f(0.75, 1.15)
+			f.phase = sh.rnd.range_f(0, 6)
+			f.bright = sh.rnd.range_f(0.75, 1.15)
 			all.append(f)
 			sh.members.append(f)
 		sh.alive = PER_SHOAL
@@ -160,7 +197,7 @@ func kill(f: Fish) -> void:
 		return
 	f.agent.alive = false
 	f.agent.v = Vector3.ZERO
-	f.agent.timer = _rnd.range_f(25, 40)
+	f.agent.timer = f.shoal.rnd.range_f(25, 40)
 
 
 ## Ближайшая живая рыбка не дальше radius; skip — (Fish) -> bool, кого не видно (в укрытии). null — никого.
@@ -233,12 +270,15 @@ func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
 	sh.flee_cd -= dt
 	sh.goal_timer -= dt
 
-	if sh.goal_timer <= 0.0:
-		sh.goal_timer = _rnd.range_f(6, 12)
+	if sh.goal_timer <= 0.0 and sh.crown:
+		sh.goal_timer = sh.rnd.range_f(6, 12)
+		sh.goal = crown_goal(sh, sh.rnd)
+	elif sh.goal_timer <= 0.0:
+		sh.goal_timer = sh.rnd.range_f(6, 12)
 		var r := sh.range_m
-		var gx := sh.home.x + _rnd.range_f(-r, r)
-		var gz := sh.home.z + _rnd.range_f(-r, r)
-		var lift := _rnd.range_f(2, 7)
+		var gx := sh.home.x + sh.rnd.range_f(-r, r)
+		var gz := sh.home.z + sh.rnd.range_f(-r, r)
+		var lift := sh.rnd.range_f(2, 7)
 		var gy: float = world.ground.call(gx, gz) if world.ground.is_valid() else sh.home.y - 3.5
 		sh.goal = Vector3(gx, minf(gy + lift, -4.0), gz)
 
@@ -263,6 +303,15 @@ func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
 		sh.alarm = maxf(sh.alarm, 1.5)
 
 
+## Следующая цель стаи у кроны: дальше по кругу от нынешнего центра стаи в свою сторону, на кольце вокруг кроны.
+static func crown_goal(sh: Shoal, rnd: EcoRandom) -> Vector3:
+	var off := sh.center - sh.axis
+	var ang := atan2(off.z, off.x) + sh.turn * rnd.range_f(CROWN_DRIFT.x, CROWN_DRIFT.y)
+	var r := rnd.range_f(CROWN_RING.x, CROWN_RING.y)
+	var y := minf(sh.axis.y + rnd.range_f(CROWN_LIFT.x, CROWN_LIFT.y), -4.0)
+	return Vector3(sh.axis.x + cos(ang) * r, y, sh.axis.z + sin(ang) * r)
+
+
 ## Текст «стая уходит» собирается в момент показа (вид мог быть уже просканирован). Мир — слабой ссылкой
 ## и без self: событие лежит в шине мира, сильная ссылка замкнула бы круг и мир не освободился бы.
 static func _flee_text(world: EcoWorld) -> Callable:
@@ -280,7 +329,7 @@ func _step_fish(world: EcoWorld, f: Fish, dt: float, t: float, ground: Callable,
 		if a.timer > 0.0:
 			return
 		a.alive = true
-		a.p = sh.home + Vector3(_rnd.range_f(-2, 2), _rnd.range_f(0, 2), _rnd.range_f(-2, 2))
+		a.p = sh.home + Vector3(sh.rnd.range_f(-2, 2), sh.rnd.range_f(0, 2), sh.rnd.range_f(-2, 2))
 		a.v = Vector3(0, 0.2, 0)
 	# место и скорость — в локальных, обратно в агента один раз (свойство объекта на каждое чтение дороже)
 	var p := a.p
