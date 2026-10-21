@@ -77,6 +77,9 @@ var bones_view: BonesView
 ## Световой колодец (место 5, ART-031): трещина во льду, наклонный столб солнечного света, пятно мха на дне.
 var well: EcoWell
 var well_view: WellView
+## Край отмели (место 6, ART-032): скальные клинья вдоль бровки, шрам оползня с осыпью, трещины на площадке.
+var drop: EcoDrop
+var drop_view: DropView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -102,6 +105,7 @@ var ground: Callable:
 		_rebuild_shell()
 		_rebuild_bones()
 		_rebuild_well()
+		_rebuild_drop()
 
 
 func _init() -> void:
@@ -146,6 +150,7 @@ func _init() -> void:
 	shell = world.add(EcoShell.new()) as EcoShell
 	bones = world.add(EcoBones.new()) as EcoBones
 	well = world.add(EcoWell.new()) as EcoWell
+	drop = world.add(EcoDrop.new()) as EcoDrop
 	_rebuild_moss()
 	_rebuild_coral()
 	_rebuild_ferns()
@@ -163,6 +168,7 @@ func _init() -> void:
 	_rebuild_shell()
 	_rebuild_bones()
 	_rebuild_well()
+	_rebuild_drop()
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -328,6 +334,14 @@ func _rebuild_well() -> void:
 		well_view.free()
 	well_view = WellView.new(well)
 	add_child(well_view)
+
+
+func _rebuild_drop() -> void:
+	if drop_view:
+		remove_child(drop_view)
+		drop_view.free()
+	drop_view = DropView.new(drop)
+	add_child(drop_view)
 
 
 ## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
