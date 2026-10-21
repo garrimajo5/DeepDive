@@ -3,6 +3,10 @@ extends TestCase
 ## от хищника и корабля, форма рыбки по ART-011, курс и цвет стаи, один MultiMesh в сцене.
 
 
+## Всех рыбок: шесть стай рифа и две у кроны Каменного цветка по 22.
+const ALL := EcoFish.PER_SHOAL * (6 + EcoFish.CROWN_SHOALS)
+
+
 func _world(world_seed: int = EcoRandom.WORLD_SEED) -> EcoWorld:
 	var w := EcoWorld.new(world_seed)
 	w.ground = Seabed.height
@@ -34,21 +38,24 @@ func _flat(a: Vector3, b: Vector3) -> float:
 func test_six_shoals_of_22_at_corals() -> void:
 	var w := _world()
 	var fish := _fish(w)
-	eq(fish.shoals.size(), 6, "шесть стай")
-	eq(fish.all.size(), 132, "132 рыбки")
-	eq(w.count("fish"), 132, "все в мире")
+	eq(fish.shoals.size(), 8, "шесть стай рифа и две у кроны")
+	eq(fish.all.size(), 176, "176 рыбок")
+	eq(w.count("fish"), 176, "все в мире")
 	near(fish.shoals[0].home.x, 15.375, 0.01, "дом первой стаи — как в браузере")
 	near(fish.shoals[0].home.z, 75.99, 0.01)
 	for i in fish.all.size():
 		var f := fish.all[i]
 		eq(f.index, i, "номер рыбки")
 		eq(f.agent.species, "fish")
+		if f.shoal.crown:
+			continue  # стаи у кроны — test_crown_shoals_circle_flower
 		var d := f.agent.p - f.shoal.home
 		if not ok(absf(d.x) <= 3.0 and d.y >= 0.0 and d.y <= 3.0 and absf(d.z) <= 3.0, "рыбка у дома: %s" % d):
 			return
 		ok(f.bright >= 0.75 and f.bright <= 1.15, "яркость 0,75…1,15")
 	for sh in fish.shoals:
-		near(sh.home.y - Seabed.height(sh.home.x, sh.home.z), 3.5, 0.25, "дом стаи на 3,5 м над дном")
+		if not sh.crown:
+			near(sh.home.y - Seabed.height(sh.home.x, sh.home.z), 3.5, 0.25, "дом стаи на 3,5 м над дном")
 
 
 func test_shoal_roams_near_home_and_keeps_together() -> void:
@@ -105,6 +112,75 @@ func test_predator_sends_shoal_home_to_hide() -> void:
 	eq(sh.alarm, 0.0, "тревога прошла")
 
 
+## Стаи у кроны Каменного цветка (ART-027): кружат снаружи кроны, каждая в свою сторону, сквозь ветви почти не ходят.
+func test_crown_shoals_circle_flower() -> void:
+	var w := _world()
+	var fish := _fish(w)
+	var flower := w.add(EcoFlower.new()) as EcoFlower
+	var foot := Vector3(EcoFlower.CENTER.x, Seabed.height(EcoFlower.CENTER.x, EcoFlower.CENTER.y), EcoFlower.CENTER.y)
+	var crown: Array[EcoFish.Shoal] = []
+	for sh in fish.shoals:
+		if sh.crown:
+			crown.append(sh)
+	eq(crown.size(), EcoFish.CROWN_SHOALS, "две стаи у кроны")
+	eq(fish.shoals[6], crown[0], "после шести стай рифа — их номера не сдвинулись")
+	ok(crown[0].turn * crown[1].turn < 0.0, "кружат в разные стороны")
+	for sh in crown:
+		near(sh.home.distance_to(foot + Vector3(0, EcoFish.CROWN_HIDE, 0)), 0.0, 1e-3, "дом — в чаше на оси")
+		ok(not flower.solid(sh.home), "в доме ветвей нет")
+		ok(_flat(sh.center, foot) > EcoFlower.SPREAD, "начинают снаружи кроны")
+	var turned: Array[float] = [0.0, 0.0]
+	var last: Array[float] = []
+	for sh in crown:
+		last.append(atan2(sh.center.z - foot.z, sh.center.x - foot.x))
+	var samples := 0
+	var inside := 0
+	for s in 360:
+		w.run(0.5)
+		for i in crown.size():
+			var sh := crown[i]
+			eq(sh.alarm, 0.0, "без угроз спокойны")
+			var r := _flat(sh.center, foot)
+			var h := sh.center.y - foot.y
+			if not ok(r > 12.0 and r < 23.0 and h > 11.0 and h < 32.0,
+					"стая %d у кроны снаружи: r=%.1f, h=%.1f" % [sh.index, r, h]):
+				return
+			var a := atan2(sh.center.z - foot.z, sh.center.x - foot.x)
+			turned[i] += wrapf(a - last[i], -PI, PI)
+			last[i] = a
+			for f: EcoFish.Fish in sh.members:
+				samples += 1
+				if flower.solid(f.agent.p):
+					inside += 1
+	for i in crown.size():
+		ok(turned[i] * crown[i].turn > TAU, "стая %d обошла крону в свою сторону: %.1f рад" % [i, turned[i]])
+	ok(inside < samples * 0.01, "сквозь ветви почти не плывут: %d из %d" % [inside, samples])
+
+
+func test_crown_shoal_hides_in_chalice() -> void:
+	var w := _world()
+	var fish := _fish(w)
+	var flower := w.add(EcoFlower.new()) as EcoFlower
+	var sh := fish.shoals[6]
+	w.run(10.0)
+	var pred := w.spawn("pred", sh.center)
+	for s in 30:  # хищник гонит стаю снаружи, со стороны от кроны
+		var out := Vector3(sh.center.x - sh.home.x, 0, sh.center.z - sh.home.z)
+		if out.length() > 6.0:  # у чаши хищник остаётся снаружи кроны
+			pred.p = sh.center + out.normalized() * 5.0
+		w.run(0.5)
+	ok(_mean_to(sh, sh.home) < 5.0, "стая ушла в чашу кроны: %.1f м" % _mean_to(sh, sh.home))
+	var hiding := 0
+	var inside := 0
+	for f: EcoFish.Fish in sh.members:
+		if f.agent.state == EcoAgent.State.HIDE:
+			hiding += 1
+		if flower.solid(f.agent.p):
+			inside += 1
+	ok(hiding >= 15, "прячутся почти все: %d" % hiding)
+	ok(inside <= 1, "в чаше, а не в ветвях: %d" % inside)
+
+
 func test_ship_under_way_scares_without_message() -> void:
 	var w := _world()
 	var fish := _fish(w)
@@ -132,14 +208,14 @@ func test_eaten_fish_returns_home() -> void:
 	var at := f.agent.p
 	fish.kill(f)
 	ok(not f.agent.alive, "съедена")
-	eq(w.count("fish"), 131)
+	eq(w.count("fish"), ALL - 1)
 	ok(fish.nearest_fish(at, 50.0) != f, "съеденную не ловят")
 	ok(fish.nearest_fish(at, 50.0, func(_x: EcoFish.Fish) -> bool: return true) == null, "все в укрытии — ловить некого")
 	w.run(24.0)
 	ok(not f.agent.alive, "не раньше 25 с")
 	w.run(16.5)
 	ok(f.agent.alive, "вернулась")
-	eq(w.count("fish"), 132)
+	eq(w.count("fish"), ALL)
 	ok(f.agent.p.distance_to(f.shoal.home) < 32.0, "вернулась к своей стае")
 
 
@@ -160,7 +236,7 @@ func test_same_seed_same_shoals() -> void:
 	eq(_snapshot(_fish(a)), _snapshot(_fish(b)), "одно зерно — одни стаи")
 	ok(_snapshot(_fish(a)) != _snapshot(_fish(c)), "другое зерно — другие")
 	a.reset()
-	eq(_fish(a).all.size(), 132)
+	eq(_fish(a).all.size(), ALL)
 	a.run(10.0)
 	eq(_snapshot(_fish(b)), _snapshot(_fish(a)), "сброс возвращает стаи в начало")
 
@@ -318,7 +394,7 @@ func test_stripes_shoal_colour_body_dark() -> void:
 	var fish := _fish(w)
 	for s in fish.shoals.size():
 		var f: EcoFish.Fish = fish.shoals[s].members[0]
-		var c := EcoFish.COLORS[s]
+		var c := EcoFish.COLORS[s % EcoFish.COLORS.size()]
 		ok(c.b > c.r, "полосы в голубой гамме: синего больше красного")
 		var st := EcoFishLook.stripe(f)
 		near(st.r, c.r * f.bright, 1e-4)
@@ -359,7 +435,7 @@ func test_view_one_multimesh_follows_world() -> void:
 	await frames(1)
 	var fv := view.fish_view
 	ok(fv != null and fv.get_parent() == view, "светляки — в живом мире")
-	eq(fv.multimesh.instance_count, 132, "один MultiMesh на всех")
+	eq(fv.multimesh.instance_count, ALL, "один MultiMesh на всех")
 	eq(fv.layers, OceanView.LAYER_WORLD, "слой отмели")
 	var ship := EcoLink.ShipState.new()
 	ship.pos = Vector3(500, 0, 500)
@@ -369,7 +445,7 @@ func test_view_one_multimesh_follows_world() -> void:
 	var tr := FishView.transform_at(fv.buffer, f.index)
 	ok(tr.origin.distance_to(f.agent.p) < 1e-3, "место рыбки — из мира")
 	_close(EcoFishLook.forward(f, view.world.time), tr.basis * Vector3(0, 0, 1), "нос по курсу")
-	ok(fv.buffer.size() == 132 * FishView.STRIDE, "буфер на всех рыбок")
+	ok(fv.buffer.size() == ALL * FishView.STRIDE, "буфер на всех рыбок")
 	var c := FishView.stripe_at(fv.buffer, f.index)
 	near(c.g, EcoFishLook.stripe(f).g, 1e-3, "цвет полос стаи")
 	view.fish.kill(f)
