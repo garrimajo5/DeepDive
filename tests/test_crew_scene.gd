@@ -269,3 +269,90 @@ func test_helm_busy_for_second() -> void:   # ROADMAP «Кооп»: заняты
 	main.step(1.0 / 30.0)
 	eq(main.me.post, "helm", "свой игрок держит штурвал")
 	eq(Crew.holder(main.crew, mate, "helm"), main.me, "для второго штурвал занят")
+
+
+func test_posts_are_member_state() -> void:   # ROADMAP «Кооп»: посты у каждого свои — состояние Member, не main
+	ok(main.pilot == main.me.pilot, "штурвал своего игрока — его Member")
+	main.open_power()
+	ok(main.me.at_power, "у пульта — флаг своего Member")
+	main.close_power()
+	var m := main.add_mate(1.5, 0.5, 0.0, Crew.Role.ENGINEER, 0)
+	ok(m.pilot != main.me.pilot, "у товарища свой штурвальный флаг")
+	main.sit_at_helm()
+	ok(main.me.seated and not m.seated, "сел свой — товарищ стоит")
+	main.stand_up()
+
+
+func test_mate_action_sits_and_stands() -> void:   # кнопка действия товарища садит его за штурвал и поднимает
+	var m := main.add_mate(0.6, Deck.CHAIR_Z + 0.9, 0.0, Crew.Role.SONAR, 1)
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(m.seated, "товарищ сел за штурвал своей кнопкой")
+	eq(m.post, "helm", "держит штурвал")
+	ok(not m.pad.action, "нажатие съедено")
+	ok(not main.pilot.seated, "свой игрок не сел")
+	m.pad.move = Vector2(0.0, 1.0)
+	var z0 := m.walker.z
+	for i in 10:
+		main.step(1.0 / 30.0)
+	eq(m.walker.z, z0, "сидящий не ходит крестовиной")
+	m.pad.clear()
+	main.walker.x = 0.6
+	main.walker.z = Deck.CHAIR_Z + 0.9
+	main.use_post("helm")
+	ok(not main.pilot.seated, "свой игрок не сел в занятое кресло")
+	eq(main.message.text, "Штурвал занят: Сонарщик", "на приборах — кто держит")
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(not m.seated, "товарищ встал")
+	eq(m.post, "", "штурвал свободен")
+	main.use_post("helm")
+	ok(main.pilot.seated, "теперь сел свой")
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(not m.seated, "в занятое кресло товарищ не садится")
+
+
+func test_mate_action_power() -> void:   # товарищ у пульта энергии: держит пост, свой игрок к пульту не встаёт
+	var m := main.add_mate(-3.5, -2.0, PI / 2.0, Crew.Role.ENGINEER, 0)
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(m.at_power, "инженер у пульта")
+	eq(m.post, "energy", "держит пульт")
+	near(m.walker.x, Main.POWER_STAND.x, 0.01, "шагнул к ползункам")
+	ok(not main.at_power, "свой игрок не у пульта")
+	m.pad.move = Vector2(0.0, 1.0)
+	for i in 10:
+		main.step(1.0 / 30.0)
+	near(m.walker.z, Main.POWER_STAND.y, 0.01, "у пульта крестовина не ведёт ходока")
+	m.pad.clear()
+	main.walker.x = -3.3
+	main.walker.z = -1.5
+	main.step(1.0 / 30.0)
+	eq(main.overlay.action_label, "Занято", "на кнопке — «Занято»")
+	main.use_post("energy")
+	ok(not main.at_power, "свой игрок не встал к занятому пульту")
+	eq(main.message.text, "Пульт энергии занят: Инженер", "на приборах — кто держит")
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(not m.at_power, "инженер отошёл")
+	main.use_post("energy")
+	ok(main.at_power, "теперь у пульта свой")
+	main.close_power()
+
+
+func test_mate_action_vote() -> void:   # у голостола товарищ встаёт к голосованию только после маршрута
+	var m := main.add_mate(Main.ROUTE_POST.x + 0.3, Main.ROUTE_POST.y + 0.3, 0.0, Crew.Role.BIOLOGIST, 1)
+	m.walker.x = Main.ROUTE_POST.x + 0.2
+	m.walker.z = Main.ROUTE_POST.y + 0.2
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(not m.at_vote, "маршрут не пройден — голосовать рано")
+	main.complete_route()
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(m.at_vote, "товарищ у голосования")
+	ok(not main.at_vote, "свой игрок — нет")
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(not m.at_vote, "кнопка — отойти")

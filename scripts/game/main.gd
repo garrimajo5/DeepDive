@@ -5,7 +5,10 @@ extends Node3D
 
 var me := Crew.Member.new(Crew.Role.PILOT)   ## свой игрок как фигура (видят другие и он сам)
 var walker: Deck.Walker = me.walker          ## свой ходок; у других членов экипажа — свой (`Member.walker`)
-var pilot := Deck.Pilot.new()
+## Посты своего игрока — его состояние (`Crew.Member`), у товарищей — свои: за штурвалом, у пульта, у голостола.
+var pilot: Deck.Pilot:
+	get:
+		return me.pilot
 var crew: Array = [me]                       ## экипаж на борту; позже — игроки по сети
 var crew_view: CrewView
 var layout := ShipLayout.new()
@@ -54,11 +57,19 @@ var sonar_view: SonarView
 var alarm_board: AlarmBoardView   ## табло тревог над носовым окном (ART-025)
 var time := 0.0             ## секунды игры (для сонара и событий)
 var power := Reactor.Console.new()   ## выбор на пульте энергии
-var at_power := false              ## игрок у пульта энергии: крестовина правит доли
+var at_power: bool:               ## игрок у пульта энергии: крестовина правит доли (`me.at_power`)
+	get:
+		return me.at_power
+	set(v):
+		me.at_power = v
 var press_post := ""               ## пост, у которого только что нажали кнопку (руки на нём CrewHands.PRESS с)
 var press_t := 0.0
 var power_panel: PowerPanel
-var at_vote := false               ## игрок решает у голостола «глубже или наверх» (или смотрит итог)
+var at_vote: bool:                ## игрок решает у голостола «глубже или наверх» (или смотрит итог; `me.at_vote`)
+	get:
+		return me.at_vote
+	set(v):
+		me.at_vote = v
 var vote_panel: VotePanel
 var route_card: RouteCard   ## карточка выбранного маршрута над голостолом (ART-016)
 var current := Helm.SeaCurrent.new()
@@ -538,7 +549,7 @@ func step(dt: float) -> void:
 	message.update(dt)
 	me.back = CrewView.own_back(walker.pitch, me.holding())   # взгляд вниз — фигура дальше позади глаза, видны ступни (#108)
 	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt)
-	me.post = "helm" if pilot.seated else "energy" if at_power else ""
+	me.sync_post()
 	me.ease_lean(dt)
 	crew_view.pitch = walker.pitch
 	crew_view.apply()
@@ -1023,7 +1034,43 @@ func open_silt() -> void:
 func _drive_mates(dt: float) -> void:
 	for m: Crew.Member in crew:
 		if m != me:
+			if m.pad.action:
+				m.pad.action = false
+				mate_action(m)
 			m.drive(dt, breach.slow(ShipLayout.room_at(m.walker.z)))
+
+
+## Кнопка действия товарища (`Pad.action`): занятый постом встаёт; стоящий у штурвала садится, у пульта энергии
+## встаёт к ползункам, у голостола после маршрута — к голосованию. Пост, который держит другой, не берёт.
+## Возвращает пост, за который встал или сел ("" — встал с поста или рядом нечего взять).
+func mate_action(m: Crew.Member) -> String:
+	if m.busy():
+		if m.seated:
+			m.stand()
+		m.at_power = false
+		m.at_vote = false
+		m.sync_post()
+		return ""
+	var post := Deck.nearest(posts, m.walker.x, m.walker.z)
+	if post == null or Crew.holder(crew, m, post.id):
+		return ""
+	match post.id:
+		"helm":
+			m.sit()
+		"energy":
+			m.at_power = true
+			m.walker.x = POWER_STAND.x
+			m.walker.z = POWER_STAND.y
+			m.walker.yaw = PI / 2.0
+			m.place(m.walker.x, m.walker.z, m.walker.yaw)
+		"route":
+			if not run.done:
+				return ""
+			m.at_vote = true
+		_:
+			return ""
+	m.sync_post()
+	return post.id
 
 
 ## Ещё один член экипажа на палубе (снимки и сценарий тестера, пока нет сети): место, курс (рад), роль, внешность.
@@ -1037,7 +1084,7 @@ func add_mate(x: float, z: float, yaw: float, role: int, look: int, seated: bool
 		x = p.x
 		z = p.y
 	mate.place(x, z, yaw, seated)
-	mate.post = "helm" if seated else ""
+	mate.sync_post()
 	crew.append(mate)
 	crew_view.set_members(crew, me)
 	crew_view.apply()
