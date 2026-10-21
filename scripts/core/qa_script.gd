@@ -28,6 +28,9 @@ const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample
 const BUTTONS := ["action", "up", "down", "light", "pad"]
 const PRESS_TIME := 0.15   ## сколько держать кнопку при «press», с
 const FINGER := 900        ## номер пальца для касаний сценария (не пересекается с настоящими)
+## После этих команд скриншот ждёт следующего шага: снимок берёт уже нарисованный кадр, и без кадра между ними
+## на картинке было бы старое место (issue #216: 09g-tablo сразу после goto повторял 09e-eel-alarm).
+const NEEDS_FRAME := ["goto", "sample", "breach", "mate", "route", "silt", "hot"]
 
 var steps: Array = []
 var errors: Array[String] = []
@@ -81,6 +84,8 @@ func advance(dt: float) -> Array:
 		var st: Dictionary = steps[index]
 		var dur := duration(st)
 		if not _started:
+			if st["do"] == "shot" and _changed(out):
+				return out   # снимок — в следующем шаге, после кадра с новым местом
 			_started = true
 			elapsed = 0.0
 			_begin(st, out)
@@ -103,6 +108,14 @@ func advance(dt: float) -> Array:
 	finished = true
 	out.append(["done"])
 	return out
+
+
+## В этом шаге уже есть команда, после которой нужен новый кадр.
+static func _changed(out: Array) -> bool:
+	for c in out:
+		if c[0] in NEEDS_FRAME:
+			return true
+	return false
 
 
 func _begin(st: Dictionary, out: Array) -> void:
