@@ -269,6 +269,12 @@ func _begin_warmup() -> void:
 	for look in CrewRig.MODELS.size():
 		var at: Vector2 = Warmup.MATE_AT[look % Warmup.MATE_AT.size()]
 		_warm_mates.append(add_mate(at.x, at.y, PI, Crew.Role.PILOT, look))
+	for look in CrewRig.MODELS.size():   # и материалом своего игрока: свои руки у пульта энергии (#217)
+		var at: Vector2 = Warmup.OWN_AT[look % Warmup.OWN_AT.size()]
+		var m := add_mate(at.x, at.y, PI, Crew.Role.PILOT, look)
+		_warm_mates.append(m)
+		crew_view.as_own.append(m)
+	crew_view.apply()
 	_warm_particles(true)
 	power_panel.reactor = reactor   # пульт энергии рисует строки под шторкой: шрифты всех размеров (#217)
 	power_panel.panel = power
@@ -356,6 +362,7 @@ func _warm_restore() -> void:
 		for m in _warm_mates:
 			crew.erase(m)
 		_warm_mates.clear()
+		crew_view.as_own.clear()
 		crew_view.set_members(crew, me)
 		_warm_particles(false)
 		curtain.queue_free()   # вместе с текстурой фона
