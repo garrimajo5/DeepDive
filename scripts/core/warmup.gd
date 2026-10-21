@@ -19,6 +19,14 @@ const VIEWS := [
 	[0.0, -8.0], [60.0, -8.0], [120.0, -8.0], [180.0, -8.0], [240.0, -8.0], [300.0, -8.0],
 	[0.0, -60.0], [180.0, -60.0], [0.0, 50.0], [180.0, 50.0],
 ]
+## Issue #217: рывок при первом нажатии у пульта энергии — камера впервые вплотную к пульту и взглядом вниз (мелкие
+## уровни текстур, ближние детали). Кадры глазами у постов: [x, y, z, курс°, наклон°] в осях корабля —
+## у пульта энергии (Main.POWER_STAND, Main.POWER_PITCH), за штурвалом сидя (Deck.SEAT_EYE), у сканера.
+const POSTS := [
+	[-4.05, Deck.Walker.EYE, -2.0, 90.0, -45.84],
+	[0.0, Deck.SEAT_EYE, Deck.SEAT_Z, 0.0, -20.0],
+	[3.85, Deck.Walker.EYE, -2.0, -90.0, -30.0],
+]
 ## Кадры снаружи после взглядов с мостика: точки облёта `Flyby.START_PATH`, камера с борта смотрит на корпус.
 const OUTSIDE := [0, 2]
 ## Члены экипажа на время прогрева — каждая внешность CrewRig.MODELS перед глазами (x, z на палубе).
@@ -32,9 +40,13 @@ func _init() -> void:
 		i = frames()
 
 
-## Всего кадров прогрева: взгляды с мостика и снаружи.
+## Всего кадров прогрева: взгляды из центра мостика, у постов и снаружи.
 static func frames() -> int:
-	return VIEWS.size() + OUTSIDE.size()
+	return _inside() + OUTSIDE.size()
+
+
+static func _inside() -> int:
+	return VIEWS.size() + POSTS.size()
 
 
 func active() -> bool:
@@ -43,16 +55,30 @@ func active() -> bool:
 
 ## Точка облёта (`Flyby.START_PATH`) для кадра снаружи; -1 — кадр с мостика или прогрев кончился.
 func outside() -> int:
-	return OUTSIDE[i - VIEWS.size()] if active() and i >= VIEWS.size() else -1
+	return OUTSIDE[i - _inside()] if active() and i >= _inside() else -1
+
+
+## Взгляд с мостика текущего кадра: [x, y, z, курс°, наклон°].
+func _view() -> Array:
+	var k := mini(i, _inside() - 1)
+	if k < VIEWS.size():
+		return [EYE.x, EYE.y, EYE.z, VIEWS[k][0], VIEWS[k][1]]
+	return POSTS[k - VIEWS.size()]
+
+
+## Где глаза камеры в текущем взгляде (оси корабля): центр мостика или место у поста.
+func eye() -> Vector3:
+	var v := _view()
+	return Vector3(v[0], v[1], v[2])
 
 
 ## Курс камеры (радианы) в текущем взгляде.
 func yaw() -> float:
-	return deg_to_rad(VIEWS[mini(i, VIEWS.size() - 1)][0])
+	return deg_to_rad(_view()[3])
 
 
 func pitch() -> float:
-	return deg_to_rad(VIEWS[mini(i, VIEWS.size() - 1)][1])
+	return deg_to_rad(_view()[4])
 
 
 ## Кадр показан — следующий взгляд. Возвращает true, когда прогрев только что кончился.

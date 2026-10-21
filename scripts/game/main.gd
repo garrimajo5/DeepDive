@@ -305,7 +305,7 @@ func _warm_frame() -> void:
 		if not flyby_cam.current:
 			flyby_cam.make_current()
 	else:
-		camera.position = Warmup.EYE
+		camera.position = warm.eye()   # центр мостика или место у поста (#217)
 		camera.rotation = Vector3(warm.pitch(), warm.yaw(), 0.0)
 		if not camera.current:   # облёт с борта ждёт: прогрев смотрит глазами на мостике
 			camera.make_current()

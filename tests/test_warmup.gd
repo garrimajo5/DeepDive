@@ -10,9 +10,36 @@ func test_views_cover_circle() -> void:
 			yaws[int(v[0]) % 360] = true
 	for y in range(0, 360, 60):
 		ok(yaws.has(y), "взгляд на курс %d°" % y)
-	ok(Warmup.frames() <= 12, "кадров прогрева немного: %d (issue #159)" % Warmup.frames())
+	ok(Warmup.frames() <= 15, "кадров прогрева немного: %d (issue #159)" % Warmup.frames())
 	ok(Deck.FOV > 60.0, "шаг 60° не оставляет щелей при поле зрения %.0f°" % Deck.FOV)
 	near(Warmup.zap_radius(), 80.0, 1e-6, "разряд на пределе доли: 60 / 15 × 20 м")
+
+
+## Issue #217: рывок при первом нажатии у пульта — прогрев смотрит и глазами у пульта (место и наклон, как после
+## нажатия), за штурвалом сидя и у сканера.
+func test_post_views() -> void:
+	var power := false
+	var seat := false
+	for v in Warmup.POSTS:
+		var at := Vector3(v[0], v[1], v[2])
+		if at.distance_to(Vector3(Main.POWER_STAND.x, Deck.Walker.EYE, Main.POWER_STAND.y)) < 1e-4 \
+				and absf(deg_to_rad(v[4]) - Main.POWER_PITCH) < 0.01 and absf(deg_to_rad(v[3]) - PI / 2.0) < 1e-4:
+			power = true
+		if at.distance_to(Vector3(0.0, Deck.SEAT_EYE, Deck.SEAT_Z)) < 1e-4:
+			seat = true
+		ok(Deck.can_stand(v[0], v[2]) or v[1] == Deck.SEAT_EYE, "глаза у поста %s на палубе" % str(at))
+	ok(power, "взгляд у пульта энергии, как после нажатия")
+	ok(seat, "взгляд за штурвалом сидя")
+	Warmup.enabled = true
+	var w := Warmup.new()
+	Warmup.enabled = false
+	var eyes := []
+	while w.outside() < 0 and w.active():
+		eyes.append(w.eye())
+		w.advance()
+	eq(eyes.size(), Warmup.VIEWS.size() + Warmup.POSTS.size(), "взгляды с мостика: из центра и у постов")
+	eq(eyes[0], Warmup.EYE, "сначала из центра")
+	eq(eyes[-1], Vector3(Warmup.POSTS[-1][0], Warmup.POSTS[-1][1], Warmup.POSTS[-1][2]), "потом у постов")
 
 
 ## Строка лога «по кадрам» (issue #159): тестер видит, какой взгляд прогрева дорогой.
@@ -80,7 +107,7 @@ func test_scene_warmup() -> void:
 			ok(main.flyby_cam.current, "кадр снаружи — камера с борта")
 			ok(main.flyby_cam.global_position.distance_to(main.ship.global_position) > 20.0, "камера вне корпуса")
 			continue
-		near(main.camera.position.distance_to(Warmup.EYE), 0.0, 1e-6, "камера в центре мостика")
+		near(main.camera.position.distance_to(main.warm.eye()), 0.0, 1e-6, "камера в центре мостика или у поста")
 		yaws[roundi(rad_to_deg(main.camera.rotation.y))] = true
 		ok(torch.visible, "скрытый резак показан на кадр")
 		ok(main.zap_light.visible and main.zap_light.omni_range > 79.0, "вспышка разряда в сцене на весь радиус")
