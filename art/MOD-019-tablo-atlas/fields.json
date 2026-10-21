@@ -1,0 +1,86 @@
+{
+  "size": [
+    2048,
+    256
+  ],
+  "font": "DejaVuSansCondensed-Bold.ttf",
+  "font_size_before_y_stretch": 35,
+  "ink_height_px": 143,
+  "fields": [
+    {
+      "text": "ПРОБОИНА",
+      "x_start": 0,
+      "x_end_exclusive": 299,
+      "width_px": 299,
+      "width_m": 1.05,
+      "uv_min": 0.0,
+      "uv_max": 0.14599609375,
+      "ink_rect": [
+        47,
+        56,
+        251,
+        199
+      ]
+    },
+    {
+      "text": "СТЕКЛОУСТ НА КОРПУСЕ",
+      "x_start": 299,
+      "x_end_exclusive": 939,
+      "width_px": 640,
+      "width_m": 2.25,
+      "uv_min": 0.14599609375,
+      "uv_max": 0.45849609375,
+      "ink_rect": [
+        391,
+        56,
+        847,
+        199
+      ]
+    },
+    {
+      "text": "ПЕРЕГРЕВ",
+      "x_start": 939,
+      "x_end_exclusive": 1266,
+      "width_px": 327,
+      "width_m": 1.15,
+      "uv_min": 0.45849609375,
+      "uv_max": 0.6181640625,
+      "ink_rect": [
+        1011,
+        56,
+        1193,
+        199
+      ]
+    },
+    {
+      "text": "ИЛ — СОНАР СЛЕП",
+      "x_start": 1266,
+      "x_end_exclusive": 1735,
+      "width_px": 469,
+      "width_m": 1.65,
+      "uv_min": 0.6181640625,
+      "uv_max": 0.84716796875,
+      "ink_rect": [
+        1332,
+        56,
+        1669,
+        199
+      ]
+    },
+    {
+      "text": "МАЛО ЗАРЯДА",
+      "x_start": 1735,
+      "x_end_exclusive": 2048,
+      "width_px": 313,
+      "width_m": 1.1,
+      "uv_min": 0.84716796875,
+      "uv_max": 1.0,
+      "ink_rect": [
+        1759,
+        56,
+        2024,
+        199
+      ]
+    }
+  ]
+}
