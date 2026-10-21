@@ -108,3 +108,16 @@ func test_pad_round_trip() -> void:   # ввод клиента у хоста: �
 	near(host.move.length(), 1.0, 1e-5, "крестовина не больше 1")
 	eq(host.look, Vector2(4.0, -2.0), "свайп двух пакетов сложен")
 	ok(host.action, "нажатие из первого пакета не стёрто вторым")
+
+
+func test_pad_vert_and_light() -> void:   # за штурвалом: «вверх/вниз» как есть, «Свет» не теряется
+	var p := Crew.Pad.new()
+	p.vert = -1
+	p.light = true
+	var host := Crew.Pad.new()
+	host.apply(p.snapshot())
+	host.apply({"mx": 0.0, "my": 0.0, "v": 1, "light": false})
+	eq(host.vert, 1, "«вверх/вниз» — из последнего пакета")
+	ok(host.light, "«Свет» из первого пакета не стёрт вторым")
+	host.apply({"v": 5})
+	eq(host.vert, 1, "не больше 1")

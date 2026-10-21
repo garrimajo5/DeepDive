@@ -155,22 +155,28 @@ class Pad:
 	var look := Vector2.ZERO   ## свайп за кадр в «точках» экрана; съедается шагом
 	var left := INF            ## сколько секунд ещё держать move (сценарий); INF — пока не сменят
 	var action := false        ## кнопка действия нажата в этом кадре; съедается шагом (`Main._drive_mates`)
+	var vert := 0              ## за штурвалом: «Всплыть» 1, «Вниз» −1 (как TouchRouter.vert)
+	var light := false         ## за штурвалом нажали «Свет» в этом кадре; съедается шагом (`Main._mate_posts`)
 
 	func clear() -> void:
 		move = Vector2.ZERO
 		look = Vector2.ZERO
 		left = INF
 		action = false
+		vert = 0
+		light = false
 
-	## Ввод для сети: клиент шлёт хосту каждый кадр (свайп и нажатие копятся до отправки).
+	## Ввод для сети: клиент шлёт хосту каждый кадр (свайп и нажатия копятся до отправки).
 	func snapshot() -> Dictionary:
-		return {"mx": move.x, "my": move.y, "lx": look.x, "ly": look.y, "act": action}
+		return {"mx": move.x, "my": move.y, "lx": look.x, "ly": look.y, "act": action, "v": vert, "light": light}
 
-	## Хост принимает ввод клиента: крестовина — как есть, свайп и нажатие — добавляются до шага.
+	## Хост принимает ввод клиента: крестовина и «вверх/вниз» — как есть, свайп и нажатия — добавляются до шага.
 	func apply(s: Dictionary) -> void:
 		move = Vector2(float(s.get("mx", 0.0)), float(s.get("my", 0.0))).limit_length(1.0)
 		look += Vector2(float(s.get("lx", 0.0)), float(s.get("ly", 0.0)))
 		action = action or bool(s.get("act", false))
+		vert = clampi(int(s.get("v", 0)), -1, 1)
+		light = light or bool(s.get("light", false))
 		left = INF
 
 

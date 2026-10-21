@@ -89,3 +89,61 @@ func test_guest_leaves() -> void:
 	ok(main.crew[0] == main.me, "остался свой игрок")
 	eq(main.net_mates.size(), 0)
 	ok(not main.crew_view.figures[1].visible, "фигура гостя скрыта")
+
+
+## Гость на посту правит кораблём (по сети): за штурвалом — ход, руль, «Вниз», «Свет»; у пульта — доли энергии.
+func _seat_guest(x: float, z: float) -> Crew.Member:
+	ok(_pump(func() -> bool: return main.crew.size() == 2), "гость на палубе")
+	var m: Crew.Member = main.crew[1]
+	m.place(x, z, 0.0)
+	m.walker.x = x
+	m.walker.z = z
+	var pad := Crew.Pad.new()
+	pad.action = true
+	client.send_pad(pad)
+	ok(_pump(func() -> bool: return m.busy()), "гость встал к посту своей кнопкой")
+	return m
+
+
+func test_guest_at_helm_drives_ship() -> void:
+	var m := _seat_guest(0.0, Deck.CHAIR_Z)
+	ok(m.seated, "сел за штурвал")
+	var pad := Crew.Pad.new()
+	pad.move = Vector2(1.0, 1.0)   # по диагонали: у хоста ход и руль полные, как у своей крестовины
+	pad.vert = -1
+	var z0 := main.helm.pos
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < 3000 and main.helm.speed < 0.5:
+		client.send_pad(pad)
+		main.step(DT)
+		client.poll(DT)
+		OS.delay_msec(2)
+	near(main.helm.in_thrust, 1.0, 1e-5, "ход — крестовина гостя")
+	near(main.helm.in_turn, 1.0, 1e-5, "руль — крестовина гостя")
+	near(main.helm.in_vert, -1.0, 1e-5, "«Вниз» гостя")
+	ok(main.helm.speed > 0.5, "корабль пошёл (%.2f м/с)" % main.helm.speed)
+	ok(main.helm.pos.distance_to(z0) > 0.01, "сдвинулся")
+	var lit := main.light_on
+	pad.light = true
+	client.send_pad(pad)
+	ok(_pump(func() -> bool: return main.light_on != lit), "«Свет» гостя переключил прожектор")
+	for i in 10:
+		client.send_pad(pad)   # без нового нажатия свет не мигает
+		main.step(DT)
+		client.poll(DT)
+	ok(main.light_on != lit, "одно нажатие — одно переключение")
+
+
+func test_guest_at_power_moves_shares() -> void:
+	var m := _seat_guest(Main.POWER_STAND.x, Main.POWER_STAND.y)
+	ok(m.at_power, "у пульта энергии")
+	var before := main.reactor.share.duplicate()
+	var pad := Crew.Pad.new()
+	pad.move = Vector2(-1.0, 0.0)   # влево — снять у выбранной системы
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < 3000 and main.reactor.share == before:
+		client.send_pad(pad)
+		main.step(DT)
+		client.poll(DT)
+		OS.delay_msec(2)
+	ok(main.reactor.share != before, "доли реактора правит крестовина гостя (%s → %s)" % [before, main.reactor.share])
