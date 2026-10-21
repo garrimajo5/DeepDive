@@ -17,7 +17,7 @@ var keys: Array[String] = []     ## роль и имя, под которые с
 
 ## Поставить таблички: crew — весь экипаж, me — свой (без таблички), cam — камера, которой смотрим
 ## (не камера мостика — облёт с борта, таблички скрыты). Размер — по глубине взгляда (#319), плашка параллельна
-## экрану; рядом стоящие разнесены по высоте, ближняя на месте (#320).
+## экрану; рядом стоящие разнесены вверх, ближняя на месте, не поместилась — скрыта (#320).
 func show_tags(crew: Array, me: Crew.Member, view: CrewView, cam: Camera3D, own_cam: Camera3D) -> void:
 	while tags.size() < crew.size():
 		_add()
@@ -50,17 +50,17 @@ func show_tags(crew: Array, me: Crew.Member, view: CrewView, cam: Camera3D, own_
 		var c := cam.unproject_position(s[2] + Vector3.UP * s[3] * 0.5)
 		var w: float = widths[s[0]] * hp
 		rects.append(Rect2(c.x - w * 0.5, c.y - hp * 0.5, w, hp))
-	var shift := NameTag.spread(rects)
-	var right := Vector3(cos(ang), 0.0, -sin(ang))   # вправо по экрану
+	var lift := NameTag.spread(rects)
 	for k in shown.size():
 		var i: int = shown[k][0]
 		var d: float = shown[k][1]
 		var h: float = shown[k][3]
-		var px_m: float = h / rects[k].size.y   # метров на пиксель экрана у этой плашки
-		var off: Vector2 = shift[k]
+		if lift[k] == NameTag.HIDDEN:
+			continue   # не поместилась над ближней — скрыта (ART-033)
+		var up: float = lift[k] * h / rects[k].size.y   # пиксели экрана → метры у этой плашки
 		var t := tags[i]
 		t.global_transform = Transform3D(Basis(Vector3.UP, ang).scaled(Vector3.ONE * h),
-				shown[k][2] + Vector3.UP * (h * 0.5 - off.y * px_m) + right * off.x * px_m)
+				shown[k][2] + Vector3.UP * (h * 0.5 + up))
 		var a := NameTag.alpha(d)
 		plates[i].modulate = Color(1, 1, 1, a)
 		letters[i].modulate = Color(NameTag.TEXT, a)
