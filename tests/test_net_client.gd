@@ -106,6 +106,8 @@ func test_screen_input_reaches_host() -> void:
 	main.overlay.router.move = Vector2i.ZERO
 	main.overlay.router.action_pressed = true
 	ok(_pump(func() -> bool: return guest.pad.action), "нажатие у хоста")
+	main.overlay.router.light_pressed = true
+	ok(_pump(func() -> bool: return guest.pad.light), "«Свет» у хоста")
 
 
 func test_own_yaw_stays_local_until_post() -> void:

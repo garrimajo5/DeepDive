@@ -4,7 +4,7 @@ class_name NetLink
 ## клиентов (`Crew.Pad`) и раз в `NetSnap.SEND_DT` шлёт каждому кадр `NetSnap.frame` с его местом в экипаже `me`;
 ## клиент (`Client`) шага корабля не считает — шлёт свой ввод и применяет кадр (`NetSnap.apply_frame`).
 ##
-## Сообщения: клиент → хост `join` (версия, имя, роль, внешность; надёжно) и `pad` (ввод, счётчик нажатий `n`;
+## Сообщения: клиент → хост `join` (версия, имя, роль, внешность; надёжно) и `pad` (ввод, счётчики нажатий `n`, «Свет» `nl`;
 ## по порядку, без повторов — счётчик не теряет нажатие при потере пакета); хост → клиент `hello` / `no`
 ## (надёжно) и `f` — кадр (по порядку, без повторов: старый не придёт после нового).
 
@@ -50,6 +50,7 @@ class Guest:
 	var pad := Crew.Pad.new()   ## ввод клиента: Main ставит его члену экипажа (`Member.pad`)
 	var index := -1        ## место в `main.crew` — уходит клиенту в кадре (`me`); −1 — ещё не на палубе
 	var acts := 0          ## последний принятый счётчик нажатий
+	var lights := 0        ## последний принятый счётчик нажатий «Свет»
 
 
 class Host:
@@ -103,6 +104,9 @@ class Host:
 						var n := int(msg.get("n", g.acts))
 						s["act"] = n > g.acts   # нажатие — по счётчику: потерянный пакет его не съест, повтор не удвоит
 						g.acts = maxi(g.acts, n)
+						var nl := int(msg.get("nl", g.lights))
+						s["light"] = nl > g.lights
+						g.lights = maxi(g.lights, nl)
 						g.pad.apply(s)
 		for id in _left:
 			var g: Guest = guests.get(id)
@@ -166,6 +170,7 @@ class Client:
 	var me := -1           ## своё место в экипаже хоста — из последнего кадра
 	var version := NetSnap.VERSION   ## версия кадра; тест подменяет
 	var acts := 0          ## счётчик нажатий кнопки действия
+	var lights := 0        ## счётчик нажатий «Свет»
 	var got := 0           ## кадров принято
 	var _info := {}
 	var _wait := 0.0
@@ -245,11 +250,15 @@ class Client:
 			return
 		if pad.action:
 			acts += 1
+		if pad.light:
+			lights += 1
 		var s := pad.snapshot()
 		s.erase("act")
-		NetLink._put(peer, 1, NetLink.CH_PAD, false, {"k": "pad", "pad": s, "n": acts})
+		s.erase("light")
+		NetLink._put(peer, 1, NetLink.CH_PAD, false, {"k": "pad", "pad": s, "n": acts, "nl": lights})
 		pad.look = Vector2.ZERO
 		pad.action = false
+		pad.light = false
 
 	## Строка для экрана подключения.
 	func label() -> String:

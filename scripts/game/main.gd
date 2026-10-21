@@ -477,6 +477,7 @@ func step(dt: float) -> void:
 		at_scanner = post != null and post.id == "scanner"
 		near_post = post.id if post else ""
 		hold_scan = at_scanner and r.action_down
+	_mate_posts(dt)
 	layout.update(dt)
 	airlock.update(dt)
 	var ship_xf := Samples.ship_xform(helm.pos, helm.yaw)
@@ -1091,6 +1092,26 @@ func vote_marks() -> Dictionary:
 	return ballot.marks() if vote_ids().size() > 1 else votes
 
 
+## Товарищ на посту правит кораблём своим вводом (`Member.pad`, гость по сети — тоже): за штурвалом — ход, руль,
+## «Всплыть/Вниз» и «Свет», у пульта энергии — доли реактора. Пост держит один человек (Crew.BUSY): свой ввод
+## тогда штурвал не трогает.
+func _mate_posts(dt: float) -> void:
+	for m: Crew.Member in crew:
+		if m == me:
+			continue
+		var mv := Vector2i(roundi(m.pad.move.x), roundi(m.pad.move.y))   # крестовина 8 направлений, как у своего
+		if m.seated and not pilot.seated:
+			helm.in_thrust = mv.y
+			helm.in_turn = mv.x
+			helm.in_vert = m.pad.vert
+			m.wheel_turn = helm.turn
+			if m.pad.light:
+				toggle_light()
+		elif m.at_power and not at_power:
+			power.nav(reactor, mv, dt)
+		m.pad.light = false
+
+
 func _drive_mates(dt: float) -> void:
 	for m: Crew.Member in crew:
 		if m != me:
@@ -1118,6 +1139,8 @@ func mate_action(m: Crew.Member) -> String:
 	var post := Deck.nearest(posts, m.walker.x, m.walker.z)
 	if post == null or Crew.holder(crew, m, post.id):
 		return ""
+	m.pad.move = Vector2.ZERO   # крестовина, которой шёл к посту, не ведёт корабль (гость пришлёт новую)
+	m.pad.left = INF
 	match post.id:
 		"helm":
 			m.sit()
@@ -1203,6 +1226,8 @@ func _client_step(dt: float) -> void:
 	net_pad.move = Vector2(r.move)
 	net_pad.look += lk
 	net_pad.action = net_pad.action or r.action_pressed
+	net_pad.vert = r.vert()
+	net_pad.light = net_pad.light or r.light_pressed
 	var was := net_client.state
 	net_client.send_pad(net_pad)
 	var f := net_client.poll(dt)
@@ -1236,6 +1261,7 @@ func _client_frame(f: Dictionary) -> void:
 	var n := crew.size()
 	net_seq = NetSnap.apply_frame(f, net_seq, helm, reactor, vitals, crew)
 	light_on = bool(f.get("light", light_on))
+	overlay.set_light(light_on)
 	var i := net_client.me
 	var mine: Crew.Member = crew[i] if i >= 0 and i < crew.size() else me
 	if mine != me or crew.size() != n:
