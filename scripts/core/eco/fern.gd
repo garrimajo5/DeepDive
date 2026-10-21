@@ -126,7 +126,7 @@ func step(world: EcoWorld, dt: float) -> void:
 func _call_shoals(world: EcoWorld, fe: Fern) -> void:
 	var came := false
 	for sh in fish.shoals:
-		if sh.alarm > 0.0 or sh.alive < 3:
+		if sh.alarm > 0.0 or sh.alive < 3 or sh.leader():
 			continue
 		var d := sh.center.distance_to(fe.top)
 		if d < CALL_R:

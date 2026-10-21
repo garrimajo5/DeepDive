@@ -204,7 +204,7 @@ func _lure(world: EcoWorld, hv: Anemone, dt: float) -> void:
 		var bd := LURE_R
 		for sh in fish.shoals:
 			var d := sh.center.distance_to(hv.top)
-			if sh.alive >= 3 and sh.alarm <= 0.0 and d < bd:
+			if sh.alive >= 3 and sh.alarm <= 0.0 and not sh.leader() and d < bd:
 				bd = d
 				best = sh
 		hv.lure_cd = _rnd.range_f(LURE_CD_MIN, LURE_CD_MAX)
@@ -215,7 +215,7 @@ func _lure(world: EcoWorld, hv: Anemone, dt: float) -> void:
 				[[PESTR, Species.Case.NOM], [EcoFish.ID, Species.Case.ACC]]))
 	if hv.lure:
 		hv.lure_t -= dt
-		if hv.lure_t <= 0.0 or hv.lure.alarm > 0.0:
+		if hv.lure_t <= 0.0 or hv.lure.alarm > 0.0 or hv.lure.leader():
 			hv.lure = null
 		else:
 			hv.lure.goal = hv.top + Vector3(0, LURE_UP, 0)
