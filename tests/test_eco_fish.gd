@@ -3,8 +3,8 @@ extends TestCase
 ## от хищника и корабля, форма рыбки по ART-011, курс и цвет стаи, один MultiMesh в сцене.
 
 
-## Всех рыбок: шесть стай рифа и две у кроны Каменного цветка по 22.
-const ALL := EcoFish.PER_SHOAL * (6 + EcoFish.CROWN_SHOALS)
+## Всех рыбок: шесть стай рифа и две у кроны Каменного цветка по 22, молодь в костях — 14.
+const ALL := EcoFish.PER_SHOAL * (6 + EcoFish.CROWN_SHOALS) + EcoFish.JUV_PER
 
 
 func _world(world_seed: int = EcoRandom.WORLD_SEED) -> EcoWorld:
@@ -38,23 +38,24 @@ func _flat(a: Vector3, b: Vector3) -> float:
 func test_six_shoals_of_22_at_corals() -> void:
 	var w := _world()
 	var fish := _fish(w)
-	eq(fish.shoals.size(), 8, "шесть стай рифа и две у кроны")
-	eq(fish.all.size(), 176, "176 рыбок")
-	eq(w.count("fish"), 176, "все в мире")
+	eq(fish.shoals.size(), 9, "шесть стай рифа, две у кроны и молодь в костях")
+	eq(fish.all.size(), 190, "190 рыбок")
+	eq(EcoFish.total(), 190)
+	eq(w.count("fish"), 190, "все в мире")
 	near(fish.shoals[0].home.x, 15.375, 0.01, "дом первой стаи — как в браузере")
 	near(fish.shoals[0].home.z, 75.99, 0.01)
 	for i in fish.all.size():
 		var f := fish.all[i]
 		eq(f.index, i, "номер рыбки")
 		eq(f.agent.species, "fish")
-		if f.shoal.crown:
-			continue  # стаи у кроны — test_crown_shoals_circle_flower
+		if f.shoal.crown or f.shoal.cage:
+			continue  # стаи у кроны — test_crown_shoals_circle_flower, молодь — test_young_hide_between_ribs
 		var d := f.agent.p - f.shoal.home
 		if not ok(absf(d.x) <= 3.0 and d.y >= 0.0 and d.y <= 3.0 and absf(d.z) <= 3.0, "рыбка у дома: %s" % d):
 			return
 		ok(f.bright >= 0.75 and f.bright <= 1.15, "яркость 0,75…1,15")
 	for sh in fish.shoals:
-		if not sh.crown:
+		if not sh.crown and not sh.cage:
 			near(sh.home.y - Seabed.height(sh.home.x, sh.home.z), 3.5, 0.25, "дом стаи на 3,5 м над дном")
 
 
@@ -64,7 +65,7 @@ func test_shoal_roams_near_home_and_keeps_together() -> void:
 	for s in 6:
 		w.run(30.0)
 		for sh in fish.shoals:
-			eq(sh.alive, EcoFish.PER_SHOAL, "все живы")
+			eq(sh.alive, sh.members.size(), "все живы")
 			eq(sh.alarm, 0.0, "без угроз тревоги нет")
 			for f: EcoFish.Fish in sh.members:
 				var p := f.agent.p
@@ -454,3 +455,43 @@ func test_view_one_multimesh_follows_world() -> void:
 		"съеденная стянута в точку")
 	view.queue_free()
 	await frames(1)
+
+
+## «Между рёбрами прячется молодь» (ART-030): стайка мелких светляков бродит внутри чистого прохода клетки
+## Костей левиафана, в кость не заходит, от хищника прячется в середине клетки.
+func test_young_hide_between_ribs() -> void:
+	var w := _world()
+	var fish := _fish(w)
+	var bones := w.add(EcoBones.new()) as EcoBones
+	var sh: EcoFish.Shoal = fish.shoals[8]
+	ok(sh.cage and not sh.crown, "девятая стая — молодь в костях, номера прежних не сдвинулись")
+	eq(sh.members.size(), EcoFish.JUV_PER, "14 мальков")
+	for f: EcoFish.Fish in sh.members:
+		near(f.size, EcoFish.JUV_SIZE, 1e-6, "мельче взрослых")
+		near(EcoFishLook.basis(f, 0.0).x.length(), EcoFish.JUV_SIZE, 1e-4, "и в форме")
+	var hl := bones.to_local(sh.home)
+	ok(absf(hl.x) < 0.01 and absf(hl.z) < 0.01, "дом — в середине клетки")
+	ok(not bones.solid(sh.home), "в доме костей нет")
+	var samples := 0
+	var in_bone := 0
+	var halves := [0, 0]
+	for s in 240:
+		w.run(0.5)
+		var c := bones.to_local(sh.center)
+		if not ok(absf(c.x) < EcoBones.PASS_W * 0.5 and absf(c.z) < EcoBones.CAGE_LEN * 0.5 + 1.0
+				and c.y > bones.floor_y(sh.center.x, sh.center.z) and c.y < bones.pass_floor(c.z) + EcoBones.PASS_H,
+				"%d с: стая в проходе клетки (%s)" % [s / 2, c]):
+			return
+		halves[0 if c.z < 0.0 else 1] += 1
+		for f: EcoFish.Fish in sh.members:
+			samples += 1
+			if bones.solid(f.agent.p):
+				in_bone += 1
+	ok(halves[0] > 20 and halves[1] > 20, "бродит по всей клетке: %s" % [halves])
+	ok(in_bone * 100 <= samples, "сквозь кость почти не плывут: %d из %d" % [in_bone, samples])
+	eq(sh.alarm, 0.0, "без угроз спокойна")
+	var pred := w.spawn("pred", sh.center + Vector3(6, 0, 0))
+	w.run(8.0)
+	ok(sh.alarm > 0.0, "хищник рядом — тревога")
+	ok(_mean_to(sh, sh.home) < 4.0, "прячется в середине клетки")
+	pred.alive = false

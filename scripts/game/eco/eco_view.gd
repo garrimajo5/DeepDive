@@ -324,6 +324,8 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	pred_view.sync(world.time, ship.pos)
 	leech_view.sync(world.time)
 	moss_view.sync()
+	if bones_view.moss_view:
+		bones_view.moss_view.sync()
 	coral_view.sync()
 	fan_view.sync(world.time)
 	fern_view.sync(world.time)
