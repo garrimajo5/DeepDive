@@ -577,7 +577,7 @@ func step(dt: float) -> void:
 	_place_ship()
 	_place_camera()
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
-	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera)
+	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks())
 	_update_ui()
 	_warm_frame()
 	_net_send(dt)
@@ -1025,6 +1025,23 @@ func _update_ui() -> void:
 		func(t: String) -> float: return font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x, width))
 
 
+## Где на экране интерфейс, на который не ложится табличка товарища (#319): кнопки и открытые панели.
+func tag_blocks() -> Array:
+	var l := overlay.router.layout
+	var out: Array = []
+	var buttons: Array = [l.noclip, l.pad, l.action]
+	if overlay.router.pilot_buttons:
+		buttons.append_array([l.up, l.down, l.light])
+	for c: Touch.Circle in buttons:
+		out.append(NameTag.circle_rect(c.c, c.r))
+	for p: Control in [vote_panel, power_panel]:
+		if p.visible:
+			out.append(p.call("box"))
+	if route_card.visible:
+		out.append(route_card.rect)
+	return out
+
+
 ## Активные поля табло тревог (AlarmBoard.Field) — из тех же строк, что тревога в строке состояния.
 func alarms_on() -> Array[bool]:
 	return AlarmBoard.active(breach.status(), vitals.drain_alarm(), reactor.alert(), silt.alarm(),
@@ -1290,7 +1307,7 @@ func _client_step(dt: float) -> void:
 	_place_ship()
 	_place_camera()
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
-	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera)
+	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks())
 	_update_ui()
 	_warm_frame()
 	r.end_frame()
