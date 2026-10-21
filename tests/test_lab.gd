@@ -111,3 +111,39 @@ func test_scene_flasks_and_journal() -> void:
 	eq(main.journal_page, 0, "снова сводка")
 	main.queue_free()
 	await frames(1)
+
+
+func test_scene_ceiling_ring() -> void:   # кольцо-светильник MOD-020 под потолком лаборатории, вставка мигает с плафонами
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var ring: Node3D = main.rooms.lab_ring
+	ok(ring != null and ring.visible, "кольцо на месте")
+	var ceil: float = ShipLayout.ROOMS[ShipLayout.Room.LAB][3]
+	near(Lab.RING.y, ceil, 1e-4, "вплотную к потолку отсека")
+	var mi: MeshInstance3D = ring.find_children("*", "MeshInstance3D", true, false)[0]
+	var box := mi.global_transform * mi.get_aabb()
+	var ship_box: AABB = main.rooms.global_transform.affine_inverse() * box
+	near(ship_box.size.x, Lab.RING_D, 0.05, "Ø 3,2 м")
+	near(ship_box.size.z, Lab.RING_D, 0.05)
+	ok(ship_box.size.y <= 0.25, "высота ≤ 0,25 м")
+	near(ship_box.end.y, ceil, 0.02, "верх — у потолка")
+	near(ship_box.get_center().z, 11.0, 0.05, "над серединой отсека")
+	ok(ship_box.position.y > 3.0, "над головой, не мешает пройти")
+	eq(mi.layers, OceanView.LAYER_SHIP, "слой корабля: солнце сквозь потолок не светит")
+	var mat := mi.material_override as BaseMaterial3D
+	ok(mat != null and mat.emission_enabled, "вставка светится")
+	main.rooms.set_lamps(0.2)
+	near(mat.emission_energy_multiplier, 0.2, 1e-4, "мигание плафонов — и у кольца")
+	main.rooms.set_lamps(1.0)
+	near(mat.emission_energy_multiplier, 1.0, 1e-4)
+	main.queue_free()
+	await frames(1)
+
+
+func test_no_strip_lamp_through_ring() -> void:   # полоса плафона лаборатории не проходит сквозь кольцо
+	var names := []
+	for p in ShipLayout.parts():
+		names.append(p.name)
+	ok(not names.any(func(n: String) -> bool: return n.contains("Лампа: Лаборатория")), "в лаборатории полосы нет")
+	ok(names.any(func(n: String) -> bool: return n.contains("Лампа: Коридор")), "в коридоре — есть")
