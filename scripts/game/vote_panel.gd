@@ -30,7 +30,7 @@ func show_vote(depth: int, opinions: Array) -> void:
 	title = "Глубже или наверх?"
 	sub = "Первый спуск" if depth == 0 else "Сейчас %d-й спуск" % (depth + 1)
 	rows = opinions
-	foot = "▲ — наверх · ▼ — глубже · кнопка — позже"
+	foot = "вверх — наверх · вниз — глубже · кнопка — позже"   # без ▲▼ (#217)
 	visible = true
 	queue_redraw()
 
