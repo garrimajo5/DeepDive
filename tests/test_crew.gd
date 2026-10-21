@@ -116,6 +116,58 @@ func test_snapshot_round_trip() -> void:
 	eq(Crew.part_color("torso", Crew.Role.ENGINEER), Crew.ROLE_COLORS[Crew.Role.ENGINEER], "цвет роли на груди")
 
 
+func test_pad_drives_only_own_walker() -> void:   # у каждого свой ходок и ввод: основа для сети
+	var a := Crew.Member.new(Crew.Role.PILOT)
+	var b := Crew.Member.new(Crew.Role.ENGINEER)
+	a.place(-2.5, 1.0, 0.0)   # путь к носу свободен (голостол — x ±0,75)
+	b.place(2.0, 1.0, 0.0)
+	ok(a.walker != b.walker and a.pad != b.pad, "ходок и ввод — у каждого свои")
+	a.pad.move = Vector2(0.0, 1.0)
+	a.pad.look = Vector2(40.0, 0.0)
+	for i in 30:
+		a.drive(1.0 / 30.0)
+		b.drive(1.0 / 30.0)
+	ok(a.z < 0.0, "a ушёл вперёд (z %.2f)" % a.z)
+	near(a.yaw, -40.0 * Deck.Walker.LOOK_SENS, 1e-4, "свайп повернул a один раз")
+	ok(a.swing > 0.5, "фигура a шагает")
+	eq(Vector2(b.x, b.z), Vector2(2.0, 1.0), "b стоит: чужой ввод его не двигает")
+	eq(b.yaw, 0.0, "b не повернулся")
+	near(a.x, a.walker.x, 1e-6, "фигура идёт за своим ходоком")
+
+
+func test_pad_walk_for_seconds() -> void:
+	var m := Crew.Member.new()
+	m.place(-2.5, 1.0, 0.0)
+	m.pad.move = Vector2(0.0, 1.0)
+	m.pad.left = 0.5
+	for i in 30:
+		m.drive(1.0 / 30.0)
+	near(1.0 - m.z, Deck.Walker.SPEED * 0.5, 0.1, "шёл полсекунды")
+	eq(m.pad.move, Vector2.ZERO, "потом встал")
+
+
+func test_pad_respects_walls_and_seat() -> void:
+	var m := Crew.Member.new()
+	m.place(0.0, 1.0, PI)   # лицом к корме, стена мостика на z 2 (Deck.can_stand)
+	m.pad.move = Vector2(0.0, 1.0)
+	for i in 60:
+		m.drive(1.0 / 30.0)
+	ok(m.z <= Deck.BRIDGE_MAX.y - Deck.Walker.RADIUS + 1e-4, "в стену не прошёл (z %.2f)" % m.z)
+	var s := Crew.Member.new()
+	s.place(0.0, Deck.SEAT_Z, 0.0, true)
+	s.pad.move = Vector2(0.0, 1.0)
+	s.drive(1.0)
+	ok(s.seated and s.z == Deck.SEAT_Z, "сидящий не ходит")
+
+
+func test_apply_moves_walker() -> void:
+	var a := Crew.Member.new()
+	a.place(1.0, -2.0, 0.5)
+	var b := Crew.Member.new()
+	b.apply(a.snapshot())
+	eq(Vector3(b.walker.x, b.walker.z, b.walker.yaw), Vector3(1.0, -2.0, 0.5), "ходок — с места из снимка")
+
+
 func test_welding_arm_holds_torch() -> void:
 	var m := Crew.Member.new(Crew.Role.ENGINEER)
 	var s: Breach.Spot = Breach.spots()[0]

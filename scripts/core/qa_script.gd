@@ -19,11 +19,12 @@ extends RefCounted
 ##                                                     (тревога и расход заряда без самого существа)
 ##   {"do": "mate", "x": -1, "z": -2.5, "yaw": 90, "role": 2, "look": 1} — ещё один член экипажа на палубе (роль 0…3,
 ##                                                     внешность 0 — мужская модель, 1 — женская;
-##                                                     "seated": true — сидит за штурвалом, x/z/yaw не нужны)
+##                                                     "seated": true — сидит за штурвалом, x/z/yaw не нужны;
+##                                                     "walk": [0, 1, 1.5] — идёт своим вводом: крестовина, секунды)
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated], ["silt", on], ["drain", s], ["route"], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["route"], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
 const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "silt", "drain", "route", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad"]
@@ -150,6 +151,9 @@ func _begin(st: Dictionary, out: Array) -> void:
 		"mate":
 			out.append(["mate", float(st.get("x", 0.0)), float(st.get("z", 0.0)), float(st.get("yaw", 0.0)),
 				int(st.get("role", 1)), int(st.get("look", 1)), bool(st.get("seated", false))])
+			var w: Array = st.get("walk", [])
+			if w.size() == 3:   # идёт своим вводом: крестовина (x вправо, y вперёд) столько секунд
+				out[-1].append_array([float(w[0]), float(w[1]), float(w[2])])
 		"log":
 			out.append(["log", str(st.get("note", ""))])
 		"quit":
