@@ -4,23 +4,10 @@ extends Node3D
 ## вызова отрисовки. Купола — MultiMesh из полусферы: наружный голубой купол 6 м (#7ff5ff, 0,22), розовое ядро 0,6 r
 ## (#ff8ae0, 0,28) и девять колокольчиков по кругу (#bff8ff, 0,35); все пульсируют, кромка купола ярче (по краю
 ## прозрачности). Кромка — 48 огоньков-точек лицом к камере (#cffcff), мерцают. Щупальца — 40 нитей по 10 звеньев
-## одним мешем линий (#ff9ae6, 0,6): колышутся в шейдере по той же формуле, что EcoVeil.tentacle_point. Всё без света,
+## одним мешем линий (#ff9ae6, 0,6): колышутся в шейдере по той же формуле, что EcoVeil.tentacle_point. Купола и щупальца — общий
+## шейдер прозрачного (EcoShaders.MIST). Всё без света,
 ## прозрачное, без записи глубины, на слое отмели (OceanView.LAYER_WORLD). Дальше FAR от корабля вуаль не видна в мути —
 ## узел прячется и не пересчитывается.
-
-const BELL_SHADER := """
-shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
-varying vec4 tint;
-void vertex() {
-	tint = COLOR;
-}
-void fragment() {
-	float edge = 1.0 - abs(dot(normalize(NORMAL), normalize(VIEW)));
-	ALBEDO = tint.rgb;
-	ALPHA = clamp(tint.a * (0.55 + 1.3 * edge * edge), 0.0, 1.0);
-}
-"""
 
 const RIM_SHADER := """
 shader_type spatial;
@@ -36,29 +23,6 @@ void fragment() {
 	float a = clamp(1.0 - d, 0.0, 1.0);
 	ALBEDO = tint.rgb;
 	ALPHA = tint.a * a;
-}
-"""
-
-## Щупальца: в VERTEX — точка без колыхания и пульса, в UV — (номер щупальца k, номер точки j).
-const TENTACLE_SHADER := """
-shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
-uniform vec4 tint : source_color = vec4(1.0, 0.6, 0.9, 0.6);
-uniform float t = 0.0;
-uniform float pulse = 1.0;
-void vertex() {
-	float k = UV.x;
-	float j = UV.y;
-	vec3 p = vec3(VERTEX.x * pulse, VERTEX.y, VERTEX.z * pulse);
-	if (j > 0.5) {
-		p.x += sin(t * 0.9 + (j - 1.0) * 0.45 + k) * j * 0.12;
-		p.z += cos(t * 0.7 + (j - 1.0) * 0.4 + k * 1.3) * j * 0.12;
-	}
-	VERTEX = p;
-}
-void fragment() {
-	ALBEDO = tint.rgb;
-	ALPHA = tint.a;
 }
 """
 
@@ -128,7 +92,7 @@ func _init(system: EcoVeil) -> void:
 		tm.name = "Щупальца"
 		_layer(tm)
 		tm.mesh = build_tentacles(vl)
-		tm.material_override = _material(TENTACLE_SHADER, {"tint": TENTACLE})
+		tm.material_override = EcoShaders.mist(EcoShaders.Mist.TENTACLE, {"tint": TENTACLE})
 		tm.custom_aabb = AABB(Vector3(-8, -EcoVeil.LEN - 2, -8), Vector3(16, EcoVeil.LEN + 3, 16))
 		g.add_child(tm)
 		tentacles.append(tm)
@@ -160,7 +124,7 @@ static func build_bell() -> ArrayMesh:
 	arr[Mesh.ARRAY_TANGENT] = null
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
-	m.surface_set_material(0, _material(BELL_SHADER, {}))
+	m.surface_set_material(0, EcoShaders.mist(EcoShaders.Mist.BELL))
 	return m
 
 
@@ -241,7 +205,7 @@ func sync(t: float, ship: Vector3) -> void:
 		rm.set_shader_parameter("tint", Color(RIM.r, RIM.g, RIM.b, EcoVeil.rim_glow(vl, t)))
 		var tmat := tentacles[vl.index].material_override as ShaderMaterial
 		tmat.set_shader_parameter("t", t)
-		tmat.set_shader_parameter("pulse", s.x)
+		tmat.set_shader_parameter("swell", s.x)
 
 
 static func _put(buf: PackedFloat32Array, n: int, b: Basis, o: Vector3, c: Color) -> void:

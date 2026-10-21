@@ -3,7 +3,7 @@ extends TestCase
 ## Одинаковый код — один ресурс, похожие материалы мест и видов — общий код EcoShaders с числами в uniform.
 
 ## Сколько разных шейдеров у живого мира — потолок. Вырос — проверить, нельзя ли взять общий из EcoShaders.
-const ECO_BUDGET := 31
+const ECO_BUDGET := 25
 
 
 func test_same_code_same_shader() -> void:
@@ -15,6 +15,20 @@ func test_same_code_same_shader() -> void:
 	eq(m1.shader, m2.shader, "камни с разными числами — один шейдер")
 	near(float(m2.get_shader_parameter("fill")), 0.45, 1e-6, "подсветка — в uniform")
 	eq(float(m1.get_shader_parameter("flicker")), 0.0, "камень по умолчанию не мерцает")
+
+
+func test_mist_modes() -> void:
+	var a := EcoShaders.mist(EcoShaders.Mist.BELL)
+	var b := EcoShaders.mist(EcoShaders.Mist.COLUMN, {"strength": 0.45})
+	eq(a.shader, b.shader, "купол и столб света — один шейдер")
+	eq(int(a.get_shader_parameter("mode")), EcoShaders.Mist.BELL, "что рисовать — в uniform")
+	eq(int(b.get_shader_parameter("mode")), EcoShaders.Mist.COLUMN, "столб — свой режим")
+	near(float(b.get_shader_parameter("strength")), 0.45, 1e-6, "числа вида — в uniform")
+	# режимы шейдера совпадают с enum: ветки mode == 1…5, остальное — столб
+	for m in range(1, EcoShaders.Mist.COLUMN):
+		ok(EcoShaders.MIST.contains("mode == %d" % m), "ветка режима %d" % m)
+	ok(not EcoShaders.MIST.contains("mode == %d" % EcoShaders.Mist.COLUMN), "столб — последняя ветка")
+	ok(EcoShaders.MIST.contains("depth_draw_never") and EcoShaders.MIST.contains("unshaded"), "без света и глубины")
 
 
 func test_moss_glow_padded() -> void:
@@ -60,6 +74,11 @@ func test_scene_world_shares_shaders() -> void:
 		if "Кромка" in keys[k]:
 			rims += 1
 	eq(rims, 1, "кромки двух вуалей — один шейдер")
+	var mist := _find(ev, "Купола")
+	ok(mist != "", "купола найдены")
+	eq(_find(ev.find_child("Вуали", true, false), "Щупальца"), mist, "щупальца вуали и купола — один шейдер")
+	for who in ["Чернила", "Пузыри", "Марево", "Трещина во льду", "Столб света"]:
+		eq(_find(ev, who), mist, "%s и купола — один шейдер прозрачного" % who)
 	var rock := ev.vent_view.rock.mesh.surface_get_material(0) as ShaderMaterial
 	eq(float(rock.get_shader_parameter("flicker")), 1.0, "жерла курильщика мерцают")
 	ok(keys.size() <= ECO_BUDGET, "шейдеров мира %d ≤ %d" % [keys.size(), ECO_BUDGET])

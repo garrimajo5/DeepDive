@@ -4,40 +4,8 @@ extends Node3D
 ## лицом вниз), столб света — одна открытая наклонная оболочка от трещины до дна без торцов, мягкая альфа по краю
 ## (по углу к взгляду) и к низу, тёплая сердцевина #F4E9CF у льда переходит в #9AD9E8 у дна; пятно мха — свой
 ## MossView. Три вызова отрисовки, без источников света и объёмного тумана; яркость дышит ± 5 % за 10 с в шейдере.
+## Трещина и столб — общий шейдер прозрачного без света (EcoShaders.MIST).
 ## Слой отмели.
-
-const CRACK_SHADER := """
-shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_never, cull_back, shadows_disabled;
-uniform float pulse;
-uniform float period;
-varying vec3 wp;
-void vertex() {
-	wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-}
-void fragment() {
-	float k = 1.0 + pulse * sin(TAU * TIME / period);
-	// маска медленно дрейфует: светлые полосы ползут вдоль трещины
-	float drift = 0.94 + 0.06 * sin(TIME * 0.35 + dot(wp.xz, vec2(0.45, 0.2)));
-	ALBEDO = COLOR.rgb * k * drift;
-	ALPHA = clamp(COLOR.a, 0.0, 1.0);
-}
-"""
-
-const COLUMN_SHADER := """
-shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
-uniform float pulse;
-uniform float period;
-uniform float strength;
-void fragment() {
-	float k = 1.0 + pulse * sin(TAU * TIME / period);
-	// мягкий край: грань под острым углом к взгляду почти прозрачна, без яркого контура
-	float face = abs(dot(normalize(NORMAL), normalize(VIEW)));
-	ALBEDO = COLOR.rgb * k;
-	ALPHA = clamp(COLOR.a * face * face * strength * k, 0.0, 1.0);
-}
-"""
 
 ## Палитра художника (svetovoy-kolodets.md).
 const CORE := Color("f4e9cf")
@@ -64,8 +32,8 @@ func _init(system: EcoWell) -> void:
 	name = "Световой колодец"
 	if well.moss == null:
 		return
-	crack = _instance("Трещина во льду", _crack_mesh(), CRACK_SHADER)
-	column = _instance("Столб света", _column_mesh(), COLUMN_SHADER)
+	crack = _instance("Трещина во льду", _crack_mesh(), EcoShaders.Mist.CRACK)
+	column = _instance("Столб света", _column_mesh(), EcoShaders.Mist.COLUMN)
 	(column.mesh.surface_get_material(0) as ShaderMaterial).set_shader_parameter("strength", STRENGTH)
 	tris = (crack_verts.size() + column_verts.size()) / 3
 	moss_view = MossView.new(well.moss, well.ground)
@@ -73,15 +41,12 @@ func _init(system: EcoWell) -> void:
 	add_child(moss_view)
 
 
-func _instance(title: String, m: ArrayMesh, code: String) -> MeshInstance3D:
+func _instance(title: String, m: ArrayMesh, kind: EcoShaders.Mist) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.name = title
 	mi.layers = OceanView.LAYER_WORLD
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mat := ShaderMaterial.new()
-	mat.shader = EcoShaders.shader(code)
-	mat.set_shader_parameter("pulse", EcoWell.PULSE)
-	mat.set_shader_parameter("period", EcoWell.PERIOD)
+	var mat := EcoShaders.mist(kind, {"pulse": EcoWell.PULSE, "period": EcoWell.PERIOD})
 	m.surface_set_material(0, mat)
 	mi.mesh = m
 	add_child(mi)

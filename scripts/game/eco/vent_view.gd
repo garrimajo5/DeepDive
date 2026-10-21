@@ -6,51 +6,7 @@ extends Node3D
 ## Кромки жерл и верх просвета светятся #FF8A3C с мерцанием (EcoVent.flicker — в шейдере по TIME), порода #3A2A2E
 ## не светится. «Пузыри» — MultiMesh квадратов лицом к камере, движутся в шейдере по формуле EcoVent.bubble_pos
 ## (процессор их не трогает). «Марево» — три вертикальные полупрозрачные полосы с бегущим вверх шумом над главным
-## жерлом. Без источника света: OmniLight в Compatibility перерисовал бы дно ещё раз. Слой отмели (LAYER_WORLD).
-
-const BUBBLE_SHADER := """
-shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
-uniform vec3 tint : source_color;
-uniform float drift;
-uniform float size_low;
-uniform float size_high;
-varying float alpha;
-void vertex() {
-	// EcoVent.bubble_pos: скорость, фаза, высота столба, своё число — в INSTANCE_CUSTOM, точка выхода — в экземпляре
-	float h = INSTANCE_CUSTOM.b;
-	float f = fract(INSTANCE_CUSTOM.g + TIME * INSTANCE_CUSTOM.r / h);
-	float s = INSTANCE_CUSTOM.a * 6.2831853;
-	vec3 o = MODEL_MATRIX[3].xyz;
-	vec3 p = vec3(o.x + sin(TIME * 0.9 + s) * drift * f, o.y + f * h, o.z + cos(TIME * 0.7 + s) * drift * f);
-	float size = mix(size_low, size_high, f);
-	alpha = 0.85 * (1.0 - 0.6 * f) * smoothstep(0.0, 0.03, f) * (1.0 - smoothstep(0.9, 1.0, f));
-	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * size, INV_VIEW_MATRIX[1] * size,
-		INV_VIEW_MATRIX[2] * size, vec4(p, 1.0));
-}
-void fragment() {
-	float d = length(UV - vec2(0.5)) * 2.0;
-	// пузырь: светлый ободок и прозрачная середина
-	float ring = (1.0 - smoothstep(0.8, 1.0, d)) * (0.35 + 0.65 * smoothstep(0.45, 0.9, d));
-	ALBEDO = tint;
-	ALPHA = alpha * ring;
-}
-"""
-
-const HAZE_SHADER := """
-shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
-uniform vec3 water : source_color;
-uniform vec3 heat : source_color;
-void fragment() {
-	// мягкая взвесь: шум из синусов бежит вверх, слабеет вверх и к краям полосы
-	float v = 1.0 - UV.y;
-	float n = 0.5 + 0.25 * sin(UV.x * 9.0 + UV.y * 23.0 - TIME * 1.3) + 0.25 * sin(UV.x * 17.0 - UV.y * 41.0 - TIME * 2.1);
-	float edge = smoothstep(0.0, 0.3, UV.x) * smoothstep(1.0, 0.7, UV.x);
-	ALBEDO = mix(water, heat, 0.35 * (1.0 - v));
-	ALPHA = 0.11 * n * edge * pow(1.0 - v, 1.4) * smoothstep(0.0, 0.04, v);
-}
-"""
+## жерлом. Пузыри и марево — общий шейдер прозрачного без света (EcoShaders.MIST). Без источника света: OmniLight в Compatibility перерисовал бы дно ещё раз. Слой отмели (LAYER_WORLD).
 
 const ROCK := Color("3a2a2e")
 const MINERAL := Color("c5bfa7")
@@ -270,7 +226,7 @@ func _tri_c(a: Vector3, b: Vector3, c: Vector3, out: Vector3, paints: Array, glo
 func _build_bubbles() -> void:
 	var quad := QuadMesh.new()
 	quad.size = Vector2.ONE
-	quad.material = _material(BUBBLE_SHADER, {"tint": BUBBLE, "drift": EcoVent.DRIFT,
+	quad.material = EcoShaders.mist(EcoShaders.Mist.BUBBLE, {"tint": BUBBLE, "drift": EcoVent.DRIFT,
 		"size_low": EcoVent.SIZE_LOW, "size_high": EcoVent.SIZE_HIGH})
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -317,7 +273,7 @@ func _build_haze() -> void:
 	arrays[Mesh.ARRAY_INDEX] = idx
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	mesh.surface_set_material(0, _material(HAZE_SHADER, {"water": WATER, "heat": HEAT}))
+	mesh.surface_set_material(0, EcoShaders.mist(EcoShaders.Mist.HAZE, {"water": WATER, "heat": HEAT}))
 	haze = MeshInstance3D.new()
 	haze.name = "Марево"
 	haze.mesh = mesh
@@ -329,11 +285,3 @@ func _setup(g: GeometryInstance3D) -> void:
 	g.layers = OceanView.LAYER_WORLD
 	g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(g)
-
-
-static func _material(code: String, params: Dictionary) -> ShaderMaterial:
-	var mat := ShaderMaterial.new()
-	mat.shader = EcoShaders.shader(code)
-	for k in params:
-		mat.set_shader_parameter(k, params[k])
-	return mat
