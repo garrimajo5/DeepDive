@@ -17,9 +17,8 @@ func _ready() -> void:
 	seabed.name = "Дно"
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, Seabed.build_arrays())
-	var m := StandardMaterial3D.new()
-	m.vertex_color_use_as_albedo = true
-	m.roughness = 0.95
+	var m := ShaderMaterial.new()   # цвет вершин + процедурная детализация дна (shaders/seabed.gdshader)
+	m.shader = load("res://shaders/seabed.gdshader")
 	mesh.surface_set_material(0, m)
 	seabed.mesh = mesh
 	seabed.layers = LAYER_WORLD
