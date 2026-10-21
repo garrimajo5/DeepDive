@@ -97,6 +97,9 @@ const SAT_MSG := "Вы за штурвалом"
 const DRAIN_DB := -12.0   ## шипение присоски: js/audio.js 0,12 против 0,05 у сирены (−16 дБ)
 var env: Environment
 var qa: QaRunner           ## прогон сценария тестера, если он есть (docs/QA.md)
+var net_host: NetLink.Host   ## хост сетевого забега (`host_game`); null — игра без сети
+var net_mates := {}          ## peer id гостя → его член экипажа (Crew.Member)
+const NET_SPAWN := Vector3(0.0, 1.0, 0.0)   ## гость встаёт на мостике: x, z, курс
 
 
 func _ready() -> void:
@@ -382,6 +385,8 @@ func _build_world() -> void:
 func _notification(what: int) -> void:
 	if what in [NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_APPLICATION_FOCUS_OUT]:
 		save.flush(samples, scanner)
+	elif what == NOTIFICATION_EXIT_TREE and net_host:
+		net_host.stop()
 
 
 func _process(dt: float) -> void:
@@ -394,6 +399,7 @@ func step(dt: float) -> void:
 	time += dt
 	if qa:
 		qa.tick(dt)
+	_net_poll()
 	var r := overlay.router
 	if r.noclip_pressed:
 		_toggle_noclip()
@@ -562,6 +568,7 @@ func step(dt: float) -> void:
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
 	_update_ui()
 	_warm_frame()
+	_net_send(dt)
 	r.end_frame()
 
 
@@ -1119,6 +1126,48 @@ func mate_action(m: Crew.Member) -> String:
 			return ""
 	m.sync_post()
 	return post.id
+
+
+## Открыть сетевой забег хостом (NetLink): телефоны по локальной сети встают членами экипажа, их ввод — `Member.pad`.
+func host_game(port: int = NetLink.PORT) -> Error:
+	net_host = NetLink.Host.new()
+	var err := net_host.start(port)
+	if err != OK:
+		net_host = null
+	return err
+
+
+## Гости хоста: пришёл — член экипажа своей роли и внешности с вводом гостя, ушёл — убрать с палубы.
+func _net_poll() -> void:
+	if net_host == null:
+		return
+	var changed := false
+	for e: Dictionary in net_host.poll():
+		var g: NetLink.Guest = e["guest"]
+		if e["k"] == "join":
+			var m := add_mate(NET_SPAWN.x, NET_SPAWN.y, NET_SPAWN.z, g.role, g.look)
+			if g.name != "":
+				m.name = g.name
+			m.pad = g.pad
+			net_mates[g.id] = m
+			say("На борту: %s" % m.name)
+		else:
+			var m: Crew.Member = net_mates.get(g.id)
+			net_mates.erase(g.id)
+			if m:
+				crew.erase(m)
+				say("Ушёл с борта: %s" % m.name)
+		changed = true
+	if changed:
+		crew_view.set_members(crew, me)
+		for id: int in net_mates:
+			(net_host.guests[id] as NetLink.Guest).index = crew.find(net_mates[id])
+
+
+## Кадр гостям раз в NetSnap.SEND_DT — после шага, как его видит хост.
+func _net_send(dt: float) -> void:
+	if net_host and net_host.due(dt):
+		net_host.send_frame(NetSnap.frame(net_host.seq, time, helm, reactor, vitals, light_on, crew))
 
 
 ## Ещё один член экипажа на палубе (снимки и сценарий тестера, пока нет сети): место, курс (рад), роль, внешность.
