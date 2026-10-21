@@ -54,6 +54,25 @@ const LEAN_RATE := 3.0
 const CROUCH_MAX := 0.3
 const CROUCH_ARM_DROP := 0.35  ## на сколько хват может быть ниже плеча без приседа
 
+## Посты, за которыми стоит один человек: второй не сядет и не встанет («Штурвал занят»). Остальные — для всех.
+const BUSY := {"helm": "Штурвал занят", "energy": "Пульт энергии занят"}
+
+
+## Кто из других членов экипажа держит пост id (за штурвалом — сидящий); null — пост свободен или общий.
+static func holder(crew: Array, me: Member, id: String) -> Member:
+	if not BUSY.has(id):
+		return null
+	for m: Member in crew:
+		if m != me and (m.post == id or (id == "helm" and m.seated)):
+			return m
+	return null
+
+
+## Строка на приборах, когда пост занят: «Штурвал занят: Сонарщик».
+static func busy_text(id: String, other: Member) -> String:
+	return "%s: %s" % [BUSY.get(id, "Занято"), other.name]
+
+
 ## Части фигуры в порядке экземпляров MultiMesh (голова и визор — 2 и 3: свой игрок их не рисует).
 const ORDER := ["torso", "pelvis", "head", "visor", "arm_l", "arm_r", "fore_l", "fore_r", "hand_l", "hand_r",
 	"thigh_l", "thigh_r", "shin_l", "shin_r", "foot_l", "foot_r"]
@@ -128,6 +147,39 @@ static func _from3(a: Array) -> Vector3:
 	return Vector3(a[0], a[1], a[2]) if a.size() == 3 else Vector3.INF
 
 
+## Ввод одного члена экипажа: крестовина, свайп, кнопка действия. Свой игрок получает его с экрана, другие —
+## по сети (пока — сценарий тестера и тесты). Ввод одного не двигает других.
+class Pad:
+	extends RefCounted
+	var move := Vector2.ZERO   ## крестовина: y — вперёд, x — вправо (как TouchRouter.move)
+	var look := Vector2.ZERO   ## свайп за кадр в «точках» экрана; съедается шагом
+	var left := INF            ## сколько секунд ещё держать move (сценарий); INF — пока не сменят
+	var action := false        ## кнопка действия нажата в этом кадре; съедается шагом (`Main._drive_mates`)
+	var vert := 0              ## за штурвалом: «Всплыть» 1, «Вниз» −1 (как TouchRouter.vert)
+	var light := false         ## за штурвалом нажали «Свет» в этом кадре; съедается шагом (`Main._mate_posts`)
+
+	func clear() -> void:
+		move = Vector2.ZERO
+		look = Vector2.ZERO
+		left = INF
+		action = false
+		vert = 0
+		light = false
+
+	## Ввод для сети: клиент шлёт хосту каждый кадр (свайп и нажатия копятся до отправки).
+	func snapshot() -> Dictionary:
+		return {"mx": move.x, "my": move.y, "lx": look.x, "ly": look.y, "act": action, "v": vert, "light": light}
+
+	## Хост принимает ввод клиента: крестовина и «вверх/вниз» — как есть, свайп и нажатия — добавляются до шага.
+	func apply(s: Dictionary) -> void:
+		move = Vector2(float(s.get("mx", 0.0)), float(s.get("my", 0.0))).limit_length(1.0)
+		look += Vector2(float(s.get("lx", 0.0)), float(s.get("ly", 0.0)))
+		action = action or bool(s.get("act", false))
+		vert = clampi(int(s.get("v", 0)), -1, 1)
+		light = light or bool(s.get("light", false))
+		left = INF
+
+
 ## Член экипажа: место (ступни, оси корабля), курс, поза и фаза шага.
 class Member:
 	extends RefCounted
@@ -137,7 +189,16 @@ class Member:
 	var x := 0.0
 	var z := 0.0
 	var yaw := 0.0
-	var seated := false
+	## Свои посты (основа для сети): за штурвалом — `pilot.seated` (он же `seated`), у пульта энергии, у голостола.
+	var pilot := Deck.Pilot.new()
+	var seated: bool:
+		get:
+			return pilot.seated
+		set(v):
+			pilot.seated = v
+	var at_power := false  ## у пульта энергии: крестовина правит доли
+	var at_vote := false   ## у голостола решает «глубже или наверх» (или смотрит итог)
+	var post := ""  ## пост, который держит (Crew.BUSY): "helm" за штурвалом, "energy" у пульта; "" — никакой
 	var wheel_turn := 0.0
 	var weld_at := Vector3.INF  ## точка сварки (пробоина, оси корабля) — правая рука с резаком к ней; INF — не варит
 	var weld_n := Vector3.ZERO  ## нормаль борта в точке сварки (внутрь отсека)
@@ -151,6 +212,9 @@ class Member:
 	var back := 0.0
 	var swing := 0.0  ## 0 — стоит, 1 — идёт полным ходом
 	var _last := Vector2.INF
+	## Свой ходок и свой ввод: у каждого члена экипажа (основа для сети). Свой игрок — `main.walker` это `me.walker`.
+	var walker := Deck.Walker.new()
+	var pad := Pad.new()
 
 	func _init(r: int = Role.PILOT, n: String = "") -> void:
 		role = r
@@ -171,6 +235,50 @@ class Member:
 		swing = move_toward(swing, want, dt * 6.0)
 		if swing < 0.02 and want == 0.0:
 			phase = move_toward(phase, PI if phase > PI * 0.5 and phase < PI * 1.5 else (0.0 if phase < PI else TAU), dt * 4.0)
+
+	## Поставить на палубу: ходок и фигура в точке (x, z) с курсом yaw; сидящий — за штурвалом.
+	func place(px: float, pz: float, pyaw: float, is_seated: bool = false) -> void:
+		walker.x = px
+		walker.z = pz
+		walker.yaw = pyaw
+		_last = Vector2.INF
+		follow(px, pz, pyaw, is_seated, wheel_turn, 0.1)
+
+	## Занят постом: за штурвалом, у пульта или у голостола — крестовина не ведёт ходока.
+	func busy() -> bool:
+		return seated or at_power or at_vote
+
+	## Пост, который держит один человек (Crew.BUSY), — по своим флагам.
+	func sync_post() -> void:
+		post = "helm" if seated else "energy" if at_power else ""
+
+	## Сесть за штурвал / встать за креслом (свой ходок).
+	func sit() -> void:
+		pilot.sit(walker)
+		follow(walker.x, walker.z, walker.yaw, true, wheel_turn, 0.1)
+		sync_post()
+
+	func stand() -> void:
+		pilot.stand(walker)
+		_last = Vector2.INF
+		follow(walker.x, walker.z, walker.yaw, false, wheel_turn, 0.1)
+		sync_post()
+
+	## Шаг по своему вводу (`pad`): свайп поворачивает, крестовина ведёт ходока (стоя), фигура идёт за ним.
+	## speed_k — множитель шага (вода в отсеке). Занятый постом не ходит.
+	func drive(dt: float, speed_k: float = 1.0) -> void:
+		walker.look(pad.look)
+		pad.look = Vector2.ZERO
+		if busy():
+			sync_post()
+			return
+		walker.speed_k = speed_k
+		walker.walk(pad.move, dt)
+		if pad.left < INF:
+			pad.left -= dt
+			if pad.left <= 0.0:
+				pad.clear()
+		follow(walker.x, walker.z, walker.yaw, false, wheel_turn, dt)
 
 	## Варит ли: правая рука с резаком у шва.
 	func welding() -> bool:
@@ -390,7 +498,7 @@ class Member:
 	## Снимок для сети: всё, что нужно клиенту, чтобы поставить фигуру.
 	func snapshot() -> Dictionary:
 		return {"role": role, "name": name, "look": look, "x": x, "z": z, "yaw": yaw, "seated": seated,
-			"turn": wheel_turn, "phase": phase, "swing": swing,
+			"turn": wheel_turn, "phase": phase, "swing": swing, "post": post, "power": at_power, "vote": at_vote,
 			"weld": [weld_at.x, weld_at.y, weld_at.z, weld_n.x, weld_n.y, weld_n.z] if weld_at.is_finite() else [],
 			"hand_l": Crew._v3(hands[0]), "hand_r": Crew._v3(hands[1])}
 
@@ -402,6 +510,9 @@ class Member:
 		z = float(s.get("z", z))
 		yaw = float(s.get("yaw", yaw))
 		seated = bool(s.get("seated", seated))
+		post = str(s.get("post", post))
+		at_power = bool(s.get("power", at_power))
+		at_vote = bool(s.get("vote", at_vote))
 		wheel_turn = float(s.get("turn", wheel_turn))
 		phase = float(s.get("phase", phase))
 		swing = float(s.get("swing", swing))
@@ -412,3 +523,6 @@ class Member:
 			weld(Vector3.INF)
 		hold(Crew._from3(s.get("hand_l", [])), Crew._from3(s.get("hand_r", [])))
 		_last = Vector2(x, z)
+		walker.x = x   # ходок там же, где фигура: следующий drive идёт от места из снимка
+		walker.z = z
+		walker.yaw = yaw

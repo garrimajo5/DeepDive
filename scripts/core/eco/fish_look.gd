@@ -143,7 +143,7 @@ static func forward(f: EcoFish.Fish, t: float) -> Vector3:
 	return Vector3(dir.x * cw + dir.z * sw, dir.y, -dir.x * sw + dir.z * cw)
 
 
-## Расстановка рыбки в мире: столбцы — бок, спина, нос формы. Съеденная — нулевой basis (стянута в точку).
+## Расстановка рыбки в мире: столбцы — бок, спина, нос формы (× размер рыбки: молодь мельче). Съеденная — нулевой basis (стянута в точку).
 static func basis(f: EcoFish.Fish, t: float) -> Basis:
 	if not f.agent.alive:
 		return Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO)
@@ -152,7 +152,7 @@ static func basis(f: EcoFish.Fish, t: float) -> Basis:
 	var side := Vector3(fw.z, 0, -fw.x)
 	side = side.normalized() if side.length() > 1e-4 else Vector3(1, 0, 0)
 	var up := fw.cross(side)
-	return Basis(side, up, fw)
+	return Basis(side * f.size, up * f.size, fw * f.size)
 
 
 ## Место вершины i формы для рыбки в момент t (то, что нарисует MultiMesh).

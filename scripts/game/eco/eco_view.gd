@@ -62,6 +62,9 @@ var skalnik_view: SkalnikView
 ## Монетники: три стайки над пятнами мха у старта, рассыпаются от сонара; глазуны в песке хватают их снизу.
 var coins: EcoCoins
 var coins_view: CoinsView
+## Ледокрылы: два гигантских ската кружат подо льдом, водят стаи светляков, поют; над кораблём проходят поверху.
+var rays: EcoRay
+var ray_view: RayView
 ## Чёрный курильщик (место 2, ART-012): трубы на дне, светящиеся жерла, столб пузырей до льда, марево.
 var vent: EcoVent
 var vent_view: VentView
@@ -71,6 +74,15 @@ var flower_view: FlowerView
 ## Раковина древних (место 3): спираль Складчатых на дне, кольца знаков на витках загораются по очереди.
 var shell: EcoShell
 var shell_view: ShellView
+## Кости левиафана (место 4, ART-030): клетка из 8 пар рёбер с проходом 14 × 7 м, хвост вбок, череп сбоку.
+var bones: EcoBones
+var bones_view: BonesView
+## Световой колодец (место 5, ART-031): трещина во льду, наклонный столб солнечного света, пятно мха на дне.
+var well: EcoWell
+var well_view: WellView
+## Край отмели (место 6, ART-032): скальные клинья вдоль бровки, шрам оползня с осыпью, трещины на площадке.
+var drop: EcoDrop
+var drop_view: DropView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -94,6 +106,9 @@ var ground: Callable:
 		_rebuild_vent()
 		_rebuild_flower()
 		_rebuild_shell()
+		_rebuild_bones()
+		_rebuild_well()
+		_rebuild_drop()
 
 
 func _init() -> void:
@@ -133,9 +148,15 @@ func _init() -> void:
 	coins = world.add(EcoCoins.new(moss, preds)) as EcoCoins
 	coins.bladders = bladders
 	bladders.coins = coins
+	rays = world.add(EcoRay.new(fish)) as EcoRay
+	ray_view = RayView.new(rays)
+	add_child(ray_view)
 	vent = world.add(EcoVent.new()) as EcoVent
 	flower = world.add(EcoFlower.new()) as EcoFlower
 	shell = world.add(EcoShell.new()) as EcoShell
+	bones = world.add(EcoBones.new()) as EcoBones
+	well = world.add(EcoWell.new()) as EcoWell
+	drop = world.add(EcoDrop.new()) as EcoDrop
 	_rebuild_moss()
 	_rebuild_coral()
 	_rebuild_ferns()
@@ -151,6 +172,9 @@ func _init() -> void:
 	_rebuild_vent()
 	_rebuild_flower()
 	_rebuild_shell()
+	_rebuild_bones()
+	_rebuild_well()
+	_rebuild_drop()
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -300,6 +324,32 @@ func _rebuild_shell() -> void:
 	add_child(shell_view)
 
 
+## Меш костей левиафана по дну мира (рёбра и череп встают на дно при сбросе мира).
+func _rebuild_bones() -> void:
+	if bones_view:
+		remove_child(bones_view)
+		bones_view.free()
+	bones_view = BonesView.new(bones)
+	add_child(bones_view)
+
+
+## Световой колодец по дну мира (столб встаёт от льда до дна, мох — на дно при сбросе мира).
+func _rebuild_well() -> void:
+	if well_view:
+		remove_child(well_view)
+		well_view.free()
+	well_view = WellView.new(well)
+	add_child(well_view)
+
+
+func _rebuild_drop() -> void:
+	if drop_view:
+		remove_child(drop_view)
+		drop_view.free()
+	drop_view = DropView.new(drop)
+	add_child(drop_view)
+
+
 ## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
 func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	world.ship = ship
@@ -309,6 +359,10 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	pred_view.sync(world.time, ship.pos)
 	leech_view.sync(world.time)
 	moss_view.sync()
+	if bones_view.moss_view:
+		bones_view.moss_view.sync()
+	if well_view.moss_view:
+		well_view.moss_view.sync()
 	coral_view.sync()
 	fan_view.sync(world.time)
 	fern_view.sync(world.time)
@@ -322,4 +376,5 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	krab_view.sync(world.time)
 	skalnik_view.sync(world.time, ship.pos)
 	coins_view.sync(world.time)
+	ray_view.sync()
 	return world.take_link()

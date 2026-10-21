@@ -16,6 +16,7 @@ var sub := ""
 var rows: Array = []     ## голосование: [кто, наверх?, почему]; итог: [название, значение]
 var results := false
 var foot := ""
+var tally := ""         ## кооп: «голосов 1 из 2 · 12 с» (Ballot.tally) — после строки спуска
 
 
 func _ready() -> void:
@@ -31,6 +32,11 @@ func show_vote(depth: int, opinions: Array) -> void:
 	rows = opinions
 	foot = "▲ — наверх · ▼ — глубже · кнопка — позже"
 	visible = true
+	queue_redraw()
+
+
+func set_tally(t: String) -> void:
+	tally = t
 	queue_redraw()
 
 
@@ -61,7 +67,8 @@ func _draw() -> void:
 	var x := b.position.x + pad
 	var head := 1.0 if results else 0.8
 	_text(font, Vector2(x, b.position.y + 42.0 * head), title, 27 if results else 24, TEAL)
-	_text(font, Vector2(x, b.position.y + 72.0 * head), sub, 19 if results else 17, UP if results else DIM)
+	var line := sub if results or tally == "" else "%s · %s" % [sub, tally]
+	_text(font, Vector2(x, b.position.y + 72.0 * head), line, 19 if results else 17, UP if results else DIM)
 	var top := b.position.y + 90.0 * head
 	var row_h := (b.end.y - (44.0 if results else 34.0) - top) / maxf(1.0, rows.size())
 	for i in rows.size():

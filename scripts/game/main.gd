@@ -3,9 +3,12 @@ extends Node3D
 ## Сцена собирается из кода: отмель, корабль с мостиком, игрок на палубе или за штурвалом, экранное управление.
 ## Мир неподвижен, корабль (узел «Корабль») движется по Helm.Ship; камера — глаза игрока в осях корабля.
 
-var walker := Deck.Walker.new()
-var pilot := Deck.Pilot.new()
 var me := Crew.Member.new(Crew.Role.PILOT)   ## свой игрок как фигура (видят другие и он сам)
+var walker: Deck.Walker = me.walker          ## свой ходок; у других членов экипажа — свой (`Member.walker`)
+## Посты своего игрока — его состояние (`Crew.Member`), у товарищей — свои: за штурвалом, у пульта, у голостола.
+var pilot: Deck.Pilot:
+	get:
+		return me.pilot
 var crew: Array = [me]                       ## экипаж на борту; позже — игроки по сети
 var crew_view: CrewView
 var layout := ShipLayout.new()
@@ -32,6 +35,7 @@ var _noclip_return := Vector2.ZERO  ## куда вернуть игрока пр
 var brief := Briefing.Fade.new()  ## голограмма брифинга у поста «Маршрут» (ART-016)
 var vote_fade := Briefing.Fade.new()  ## голосование на голограмме (VoteHolo)
 var votes := {}                   ## голоса ролей в открытом голосовании (VoteHolo.votes)
+var ballot := Ballot.new()        ## голоса игроков у голостола (кооп): решение большинством, таймер
 var result_fade := Briefing.Fade.new()  ## итог забега на голограмме (VoteHolo.result_wanted)
 var result_rows: Array = []      ## четыре строки итога на голограмме (Run.summary)
 var journal_page := 0          ## страница журнала лаборатории: 0 — сводка, дальше карточки видов (Lab.page_lines)
@@ -54,11 +58,19 @@ var sonar_view: SonarView
 var alarm_board: AlarmBoardView   ## табло тревог над носовым окном (ART-025)
 var time := 0.0             ## секунды игры (для сонара и событий)
 var power := Reactor.Console.new()   ## выбор на пульте энергии
-var at_power := false              ## игрок у пульта энергии: крестовина правит доли
+var at_power: bool:               ## игрок у пульта энергии: крестовина правит доли (`me.at_power`)
+	get:
+		return me.at_power
+	set(v):
+		me.at_power = v
 var press_post := ""               ## пост, у которого только что нажали кнопку (руки на нём CrewHands.PRESS с)
 var press_t := 0.0
 var power_panel: PowerPanel
-var at_vote := false               ## игрок решает у голостола «глубже или наверх» (или смотрит итог)
+var at_vote: bool:                ## игрок решает у голостола «глубже или наверх» (или смотрит итог; `me.at_vote`)
+	get:
+		return me.at_vote
+	set(v):
+		me.at_vote = v
 var vote_panel: VotePanel
 var route_card: RouteCard   ## карточка выбранного маршрута над голостолом (ART-016)
 var current := Helm.SeaCurrent.new()
@@ -85,6 +97,16 @@ const SAT_MSG := "Вы за штурвалом"
 const DRAIN_DB := -12.0   ## шипение присоски: js/audio.js 0,12 против 0,05 у сирены (−16 дБ)
 var env: Environment
 var qa: QaRunner           ## прогон сценария тестера, если он есть (docs/QA.md)
+var net_host: NetLink.Host   ## хост сетевого забега (`host_game`); null — игра без сети
+var net_mates := {}          ## peer id гостя → его член экипажа (Crew.Member)
+var net_client: NetLink.Client   ## клиент сетевого забега (`join_game`): шаг корабля не считает, применяет кадры хоста
+var net_seq := -1            ## номер последнего применённого кадра хоста
+var net_smooth := NetSmooth.new()   ## клиент: корабль и фигуры между кадрами хоста — плавно, с отставанием DELAY
+var net_pad := Crew.Pad.new()   ## свой ввод клиента: копится за кадр и уходит хосту (`Client.send_pad`)
+var news := []                ## хост: последнее сообщение события [номер, текст] — едет гостям в кадрах NetSnap.NEWS_TIME
+var news_age := 99.0
+var net_news := 0             ## клиент: номер последнего показанного сообщения события хоста
+const NET_SPAWN := Vector3(0.0, 1.0, 0.0)   ## гость встаёт на мостике: x, z, курс
 
 
 func _ready() -> void:
@@ -211,7 +233,7 @@ func _ready() -> void:
 	airlock.message.connect(say)
 	samples.message.connect(say)
 	engine.message.connect(say)
-	breach.message.connect(say)
+	breach.message.connect(announce)
 	if QaRunner.pending():   # прогон тестера — всегда с чистого трюма и без записи
 		save.path = ""
 	save.load_into(samples, scanner)
@@ -370,6 +392,11 @@ func _build_world() -> void:
 func _notification(what: int) -> void:
 	if what in [NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_APPLICATION_FOCUS_OUT]:
 		save.flush(samples, scanner)
+	elif what == NOTIFICATION_EXIT_TREE:
+		if net_host:
+			net_host.stop()
+		if net_client:
+			net_client.stop()
 
 
 func _process(dt: float) -> void:
@@ -382,6 +409,10 @@ func step(dt: float) -> void:
 	time += dt
 	if qa:
 		qa.tick(dt)
+	if net_client:   # клиент: корабль, реактор и экипаж — из кадров хоста
+		_client_step(dt)
+		return
+	_net_poll()
 	var r := overlay.router
 	if r.noclip_pressed:
 		_toggle_noclip()
@@ -429,7 +460,7 @@ func step(dt: float) -> void:
 		walker.look(overlay.look_points())
 		var choice := "" if run.ended else run.vote_nav(r.move)
 		if choice != "":
-			decide(choice)
+			ballot.cast(me.get_instance_id(), me.role, choice)   # решает _tick_vote: один у стола — сразу
 		if r.action_pressed and flyby.kind == Flyby.Kind.SURFACE:
 			flyby.stop()   # вид с борта при всплытии: кнопка — к итогу на голограмме, новый забег — следующим нажатием
 		elif r.action_pressed:
@@ -450,6 +481,7 @@ func step(dt: float) -> void:
 		at_scanner = post != null and post.id == "scanner"
 		near_post = post.id if post else ""
 		hold_scan = at_scanner and r.action_down
+	_mate_posts(dt)
 	layout.update(dt)
 	airlock.update(dt)
 	var ship_xf := Samples.ship_xform(helm.pos, helm.yaw)
@@ -466,6 +498,8 @@ func step(dt: float) -> void:
 	for p in posts:
 		if p.id.begins_with("door"):
 			p.label = "Закрыть люк" if layout.doors[int(p.id.substr(4))].open else "Открыть люк"
+		elif Crew.BUSY.has(p.id):   # пост одного человека: занят другим — так и пишем в строке
+			p.label = Crew.BUSY[p.id] if Crew.holder(crew, me, p.id) else POST_FREE[p.id]
 		elif p.id == "airlock":
 			p.label = airlock.label()
 		elif p.id == "winch":
@@ -482,11 +516,11 @@ func step(dt: float) -> void:
 	current.update(dt)
 	var silt_msg := silt.update(dt, helm.pos, current.vel())
 	if not silt_msg.is_empty():
-		say(silt_msg)
+		announce(silt_msg)
 	silt_view.apply(silt, time, helm.pos, helm.yaw)
 	var run_msg := run.update(helm.pos.x, helm.pos.z)
 	if not run_msg.is_empty():
-		say(run_msg)
+		announce(run_msg)
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
 	engine.update(dt, reactor, hold_valve or debug_vent)
 	helm.update(dt, reactor.k(Reactor.Sys.ENGINES), current.vel())
@@ -498,6 +532,8 @@ func step(dt: float) -> void:
 		say("Прожектор погас: не хватает энергии")
 	vitals.hull = breach.update(dt, reactor.k(Reactor.Sys.LIFE), vitals.hull)
 	breach_view.apply()
+	_drive_mates(dt)
+	_tick_vote(dt)
 	_hands(dt, hold_valve, hold_winch, hold_scan)
 	if breach.welding and breach.active:   # свой игрок варит: резак в руке, щиток опущен
 		me.weld(breach.active.p, breach.active.n)
@@ -523,7 +559,9 @@ func step(dt: float) -> void:
 	sonar_view.show_waypoint(run.waypoint())
 	alarm_board.show_alarms(alarms_on(), time, breach.active)
 	sonar_view.show_briefing(brief.update(dt, Briefing.wanted(near_post, at_vote, run.ended)), run, helm.pos)
-	sonar_view.show_vote(vote_fade.update(dt, VoteHolo.wanted(at_vote, run.ended)), votes)
+	var coop := vote_ids().size() > 1   # таймер — только у голосов игроков (Ballot), в одиночной игре его нет
+	sonar_view.show_vote(vote_fade.update(dt, VoteHolo.wanted(at_vote, run.ended)), vote_marks(),
+		ballot.seconds() if coop else -1, ballot.fraction() if coop else -1.0)
 	sonar_view.show_result(result_fade.update(dt, VoteHolo.result_wanted(at_vote, run.ended)), result_rows,
 		camera.global_position)
 	rooms.apply(layout, reactor, airlock, engine)
@@ -535,6 +573,7 @@ func step(dt: float) -> void:
 	message.update(dt)
 	me.back = CrewView.own_back(walker.pitch, me.holding())   # взгляд вниз — фигура дальше позади глаза, видны ступни (#108)
 	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt)
+	me.sync_post()
 	me.ease_lean(dt)
 	crew_view.pitch = walker.pitch
 	crew_view.apply()
@@ -543,6 +582,7 @@ func step(dt: float) -> void:
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
 	_update_ui()
 	_warm_frame()
+	_net_send(dt)
 	r.end_frame()
 
 
@@ -566,6 +606,8 @@ static func hint_backing() -> StyleBoxFlat:
 ## Короткая подпись на кнопке действия у поста.
 const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "scanner": "Сканер", "sonar": "Сонар", "zap": "Разряд", "airlock": "Шлюз", "winch": "Лебёдка",
 	"valve": "Вентиль", "scram": "Сброс", "breach": "Сварка", "journal": "Журнал", "route": "Маршрут"}
+## Подписи постов одного человека (Crew.BUSY), когда они свободны, — как в Deck.posts().
+const POST_FREE := {"helm": "Сесть за штурвал", "energy": "Пульт энергии"}
 ## Где встать у пульта энергии (у поста «energy») и куда смотреть, рад: ниже — ползунки и рука на выбранном.
 const POWER_STAND := Vector2(-4.05, -2.0)
 const POWER_PITCH := -0.8
@@ -608,6 +650,10 @@ func _hands(dt: float, valve: bool, winch: bool, scan: bool) -> void:
 
 ## Кнопка действия у поста.
 func use_post(id: String) -> void:
+	var other := Crew.holder(crew, me, id)
+	if other:   # пост держит другой член экипажа
+		say(Crew.busy_text(id, other))
+		return
 	if id in ["sonar", "zap", "scram", "route"]:
 		press_post = id
 		press_t = CrewHands.PRESS
@@ -619,7 +665,10 @@ func use_post(id: String) -> void:
 		"sonar":
 			ping_sonar()
 		"route":
-			if run.done:
+			if run.ended:   # итог, решённый без своего игрока
+				at_vote = true
+				vote_panel.visible = true
+			elif run.done:
 				open_vote()
 			else:
 				say(run.cycle())
@@ -711,6 +760,14 @@ func toggle_light() -> void:
 ## Сообщение на приборах, гаснет через 4,2 с.
 func say(msg: String) -> void:
 	message.say(msg)
+
+
+## Сообщение события для всего экипажа (пробоина, ил, маршрут): на своих приборах и у гостей — по кадру хоста.
+## Своё («Вы за штурвалом») — `say`, гостям оно не уходит.
+func announce(msg: String) -> void:
+	say(msg)
+	news = [(news[0] + 1) if news.size() == 2 else 1, msg]
+	news_age = 0.0
 
 
 ## Пройти выбранный маршрут разом (или первый, если не выбран): сценарий тестера и снимки.
@@ -824,6 +881,10 @@ func _on_destroyed() -> void:
 
 ## Корабль у начала спуска, целый и заряженный, забег с нуля (корпус разрушен или новый забег после итога).
 func _restart() -> void:
+	ballot.clear()
+	for m: Crew.Member in crew:
+		if m != me:
+			m.at_vote = false
 	if at_vote:
 		at_vote = false
 		vote_panel.visible = false
@@ -867,14 +928,18 @@ func close_vote() -> void:
 
 ## Решение экипажа: "deep" — следующий спуск, "up" — итог забега на экране.
 func decide(choice: String) -> void:
+	ballot.clear()
+	vote_panel.set_tally("")
 	if choice == "deep":
-		at_vote = false
+		for m: Crew.Member in crew:   # все у стола отходят: маршрут выбирать заново
+			m.at_vote = false
 		vote_panel.visible = false
 		say(run.go_deeper())
 		return
 	var rows := run.finish(time, samples.cargo.size(), scanner.scanned.size(), breach.count, vitals.hull)
 	result_rows = run.summary(samples.cargo.size(), scanner.scanned.size(), breach.count)
 	vote_panel.show_results(Run.detail(rows), run.score)
+	vote_panel.visible = at_vote   # решили товарищи, пока свой у другого поста: итог — у голостола
 	flyby.start(Flyby.Kind.SURFACE)   # вид с борта при всплытии, затем — итог на голограмме
 	say("Экипаж поднялся наверх: очки %d" % run.score)
 
@@ -949,6 +1014,8 @@ func _update_ui() -> void:
 		var label := ""
 		if post:
 			label = POST_BUTTON.get(post.id, "Люк" if post.id.begins_with("door") else "Колба" if post.id.begins_with("flask") else "")
+			if Crew.holder(crew, me, post.id):
+				label = "Занято"
 		overlay.set_action_label(label)
 	var font := hint.get_theme_font("font")
 	var fs := hint.get_theme_font_size("font_size")
@@ -1007,16 +1074,262 @@ func open_silt() -> void:
 	_place_ship()
 
 
+## Другие члены экипажа идут своим ходоком по своему вводу (`Member.pad`; позже — по сети). Ввод с экрана — только `me`.
+## Голосование у голостола: голоса тех, кто у стола (Ballot), решение — большинством или по таймеру.
+func _tick_vote(dt: float) -> void:
+	if not run.done or run.ended:
+		ballot.clear()
+		return
+	var ids := vote_ids()
+	var choice := ballot.update(dt, ids)
+	if ids.size() > 1:
+		vote_panel.set_tally(ballot.tally(ids.size()))
+	elif vote_panel.tally != "":
+		vote_panel.set_tally("")
+	if choice != "":
+		decide(choice)
+
+
+## Кто голосует: члены экипажа у голостола (id — get_instance_id).
+func vote_ids() -> Array:
+	var out := []
+	for m: Crew.Member in crew:
+		if m.at_vote:
+			out.append(m.get_instance_id())
+	return out
+
+
+## Метки на голограмме: у стола двое и больше — голоса игроков цветами ролей, один — мнения ролей.
+func vote_marks() -> Dictionary:
+	return ballot.marks() if vote_ids().size() > 1 else votes
+
+
+## Товарищ на посту правит кораблём своим вводом (`Member.pad`, гость по сети — тоже): за штурвалом — ход, руль,
+## «Всплыть/Вниз» и «Свет», у пульта энергии — доли реактора. Пост держит один человек (Crew.BUSY): свой ввод
+## тогда штурвал не трогает.
+func _mate_posts(dt: float) -> void:
+	for m: Crew.Member in crew:
+		if m == me:
+			continue
+		var mv := Vector2i(roundi(m.pad.move.x), roundi(m.pad.move.y))   # крестовина 8 направлений, как у своего
+		if m.seated and not pilot.seated:
+			helm.in_thrust = mv.y
+			helm.in_turn = mv.x
+			helm.in_vert = m.pad.vert
+			m.wheel_turn = helm.turn
+			if m.pad.light:
+				toggle_light()
+		elif m.at_power and not at_power:
+			power.nav(reactor, mv, dt)
+		m.pad.light = false
+
+
+func _drive_mates(dt: float) -> void:
+	for m: Crew.Member in crew:
+		if m != me:
+			if m.pad.action:
+				m.pad.action = false
+				mate_action(m)
+			if m.at_vote and run.done and not run.ended:   # голос своей крестовиной
+				var c := ballot.nav(m.get_instance_id(), m.pad.move, true)
+				if c != "":
+					ballot.cast(m.get_instance_id(), m.role, c)
+			m.drive(dt, breach.slow(ShipLayout.room_at(m.walker.z)))
+
+
+## Кнопка действия товарища (`Pad.action`): занятый постом встаёт; стоящий у штурвала садится, у пульта энергии
+## встаёт к ползункам, у голостола после маршрута — к голосованию. Пост, который держит другой, не берёт.
+## Возвращает пост, за который встал или сел ("" — встал с поста или рядом нечего взять).
+func mate_action(m: Crew.Member) -> String:
+	if m.busy():
+		if m.seated:
+			m.stand()
+		m.at_power = false
+		m.at_vote = false
+		m.sync_post()
+		return ""
+	var post := Deck.nearest(posts, m.walker.x, m.walker.z)
+	if post == null or Crew.holder(crew, m, post.id):
+		return ""
+	m.pad.move = Vector2.ZERO   # крестовина, которой шёл к посту, не ведёт корабль (гость пришлёт новую)
+	m.pad.left = INF
+	match post.id:
+		"helm":
+			m.sit()
+		"energy":
+			m.at_power = true
+			m.walker.x = POWER_STAND.x
+			m.walker.z = POWER_STAND.y
+			m.walker.yaw = PI / 2.0
+			m.place(m.walker.x, m.walker.z, m.walker.yaw)
+		"route":
+			if not run.done:
+				return ""
+			m.at_vote = true
+		_:
+			return ""
+	m.sync_post()
+	return post.id
+
+
+## Открыть сетевой забег хостом (NetLink): телефоны по локальной сети встают членами экипажа, их ввод — `Member.pad`.
+func host_game(port: int = NetLink.PORT) -> Error:
+	net_host = NetLink.Host.new()
+	var err := net_host.start(port)
+	if err != OK:
+		net_host = null
+	return err
+
+
+## Гости хоста: пришёл — член экипажа своей роли и внешности с вводом гостя, ушёл — убрать с палубы.
+func _net_poll() -> void:
+	if net_host == null:
+		return
+	var changed := false
+	for e: Dictionary in net_host.poll():
+		var g: NetLink.Guest = e["guest"]
+		if e["k"] == "join":
+			var m := add_mate(NET_SPAWN.x, NET_SPAWN.y, NET_SPAWN.z, g.role, g.look)
+			if g.name != "":
+				m.name = g.name
+			m.pad = g.pad
+			net_mates[g.id] = m
+			say("На борту: %s" % m.name)
+		else:
+			var m: Crew.Member = net_mates.get(g.id)
+			net_mates.erase(g.id)
+			if m:
+				crew.erase(m)
+				say("Ушёл с борта: %s" % m.name)
+		changed = true
+	if changed:
+		crew_view.set_members(crew, me)
+		for id: int in net_mates:
+			(net_host.guests[id] as NetLink.Guest).index = crew.find(net_mates[id])
+
+
+## Кадр гостям раз в NetSnap.SEND_DT — после шага, как его видит хост.
+func _net_send(dt: float) -> void:
+	news_age += dt
+	if net_host and net_host.due(dt):
+		var welding := crew.any(func(m: Crew.Member) -> bool: return m.welding())
+		var ev := NetSnap.events(breach, silt, time, welding, news if news_age < NetSnap.NEWS_TIME else [])
+		net_host.send_frame(NetSnap.frame(net_host.seq, time, helm, reactor, vitals, light_on, crew, ev))
+
+
+## Войти в сетевой забег хоста по адресу в локальной сети: шаг корабля считает хост, здесь — свой ввод хосту
+## (`net_pad` → `Client.send_pad`) и кадры хоста в корабль, реактор, корпус и экипаж; свой игрок — `crew[client.me]`.
+func join_game(address: String, port: int = NetLink.PORT, player: String = "", role: int = Crew.Role.PILOT, look: int = 0) -> Error:
+	net_client = NetLink.Client.new()
+	var err := net_client.join(address, port, player, role, look)
+	if err != OK:
+		net_client = null
+		return err
+	net_seq = -1
+	net_news = 0
+	net_smooth = NetSmooth.new()
+	net_pad.clear()
+	flyby.stop()   # клиент входит в идущий забег — облёта нет
+	message.clear(Flyby.START_MSG)
+	say(net_client.label())
+	return OK
+
+
+## Шаг клиента: ввод с экрана — хосту, свежий кадр — в корабль и экипаж, дальше только картинка (без шага корабля).
+func _client_step(dt: float) -> void:
+	var r := overlay.router
+	var lk := overlay.look_points()
+	walker.look(lk)   # взгляд сразу свой: курс хост подтвердит кадром, наклон хосту не нужен
+	net_pad.move = Vector2(r.move)
+	net_pad.look += lk
+	net_pad.action = net_pad.action or r.action_pressed
+	net_pad.vert = r.vert()
+	net_pad.light = net_pad.light or r.light_pressed
+	var was := net_client.state
+	net_client.send_pad(net_pad)
+	var f := net_client.poll(dt)
+	if not f.is_empty():
+		_client_frame(f)
+	net_smooth.step(dt)
+	net_smooth.apply(helm, crew, me)   # показ чуть позади свежего кадра: между кадрами — плавно
+	if net_client.state != was:
+		say(net_client.label())
+	if net_client.state == NetLink.State.REFUSED or net_client.state == NetLink.State.LOST:
+		_leave_net()
+	hull_motion.update(dt, helm.in_thrust, helm.in_vert, reactor.k(Reactor.Sys.ENGINES))
+	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP), silt.beam_k())
+	breach.time += dt   # пульс тревоги и свет сварки — своим временем, состояние — из кадра
+	breach_view.apply()
+	silt_view.apply(silt, time, helm.pos, helm.yaw)
+	visor.visible = me.welding()
+	alarm_board.show_alarms(alarms_on(), time, breach.active)
+	for i in Reactor.Sys.size():
+		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
+	overlay.set_pilot(pilot.seated)
+	message.update(dt)
+	me.back = CrewView.own_back(walker.pitch, me.holding())
+	crew_view.pitch = walker.pitch
+	crew_view.apply()
+	_place_ship()
+	_place_camera()
+	_update_ui()
+	_warm_frame()
+	r.end_frame()
+
+
+## Кадр хоста: корабль, реактор, корпус, свет, экипаж. Свой игрок — место `me` в кадре; его курс остаётся своим
+## (свайп уже повернул камеру), пока он не сел за пост или не встал — тогда курс хоста.
+func _client_frame(f: Dictionary) -> void:
+	var yaw := walker.yaw
+	var was_busy := me.busy()
+	var n := crew.size()
+	var seq := net_seq
+	net_seq = NetSnap.apply_frame(f, net_seq, helm, reactor, vitals, crew)
+	if net_seq != seq:
+		net_smooth.push(float(f.get("t", 0.0)), helm.pos, helm.yaw, crew)
+		var ev := NetSnap.apply_events(f.get("ev", {}), breach, silt, time)
+		if ev.size() == 2 and ev[0] > net_news:   # сообщение события хоста — один раз
+			net_news = ev[0]
+			say(ev[1])
+	light_on = bool(f.get("light", light_on))
+	overlay.set_light(light_on)
+	var i := net_client.me
+	var mine: Crew.Member = crew[i] if i >= 0 and i < crew.size() else me
+	if mine != me or crew.size() != n:
+		var moved := mine != me
+		me = mine
+		walker = me.walker
+		crew_view.set_members(crew, me)
+		if moved:
+			walker.pitch = 0.0
+			return
+	if me.busy() == was_busy:
+		walker.yaw = yaw
+		me.yaw = yaw
+	elif me.busy():
+		walker.pitch = 0.0
+
+
+## Связь с хостом кончилась (отказ или потеря): дальше одиночная игра с тем, что было в последнем кадре.
+func _leave_net() -> void:
+	net_client.stop()
+	net_client = null
+	crew = [me]
+	crew_view.set_members(crew, me)
+
+
 ## Ещё один член экипажа на палубе (снимки и сценарий тестера, пока нет сети): место, курс (рад), роль, внешность.
 ## Стоящего не ставим в мебель: место внутри голостола или пульта сдвигается к ближайшему свободному (issue #156).
 func add_mate(x: float, z: float, yaw: float, role: int, look: int, seated: bool = false) -> Crew.Member:
 	var mate := Crew.Member.new(role)
 	mate.look = look
+	mate.walker.stand = layout.can_stand
 	if not seated:
 		var p := layout.free_spot(x, z)
 		x = p.x
 		z = p.y
-	mate.follow(x, z, yaw, seated, 0.0, 0.1)
+	mate.place(x, z, yaw, seated)
+	mate.sync_post()
 	crew.append(mate)
 	crew_view.set_members(crew, me)
 	crew_view.apply()
@@ -1106,6 +1419,12 @@ func debug_setup(kv: Dictionary) -> void:
 			decide("up")
 			if not kv.has("flyby"):
 				flyby.stop()   # снимок итога — с мостика: итог на голограмме над столом
+	if kv.get("vote", "") == "coop":   # двое у стола: товарищи (mate=…) голосуют, свой — «глубже», решение ждёт их
+		complete_route()
+		open_vote()
+		for m: Crew.Member in crew:
+			m.at_vote = true
+		ballot.cast(me.get_instance_id(), me.role, "deep")
 	if kv.has("journal"):
 		journal_page = clampi(int(kv["journal"]), 0, Lab.pages(scanner) - 1)
 		rooms.set_lab(Lab.contents(samples.cargo), Lab.page_lines(samples, scanner, journal_page), time)

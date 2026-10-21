@@ -337,7 +337,7 @@ func test_hungry_catches_fish() -> void:
 	var ev := _notes(w, "catch")
 	eq(ev.size(), 1, "поймал рыбку за минуту")
 	eq(ev[0].text(), "Крупный хищник поймал мелкую рыбу")
-	eq(w.count("fish"), EcoFish.PER_SHOAL * EcoFish.HOMES.size() - 1, "рыбка съедена")
+	eq(w.count("fish"), EcoFish.total() - 1, "рыбка съедена")
 	eq(pr.mode, EcoPred.Mode.EAT)
 	near(pr.hunger, 0.0, 1e-5, "наелся")
 	ok(pr.prey == null)

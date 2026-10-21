@@ -58,6 +58,26 @@ func test_mate_not_inside_table() -> void:   # issue #156: сценарий ст
 	eq(seat.z, Deck.SEAT_Z, "в кресле — как есть")
 
 
+func test_screen_input_only_to_own() -> void:   # ввод с экрана — своему, у другого свой ввод
+	var m := main.add_mate(1.5, 0.5, 0.0, Crew.Role.ENGINEER, 0)
+	eq(m.walker.stand, main.layout.can_stand, "ходок товарища знает весь корабль")
+	var me0 := Vector2(main.walker.x, main.walker.z)
+	main.overlay.router.move = Vector2i(0, 1)
+	for i in 20:
+		main.step(1.0 / 30.0)
+	main.overlay.router.move = Vector2i.ZERO
+	ok(Vector2(main.walker.x, main.walker.z).distance_to(me0) > 0.3, "свой игрок пошёл")
+	eq(Vector2(m.x, m.z), Vector2(1.5, 0.5), "товарищ стоит")
+	me0 = Vector2(main.walker.x, main.walker.z)
+	m.pad.move = Vector2(0.0, 1.0)
+	for i in 20:
+		main.step(1.0 / 30.0)
+	ok(m.z < 0.0, "товарищ идёт своим вводом (z %.2f)" % m.z)
+	ok(main.crew_view.shown[1]["hip"].z < 0.2, "его фигура в сцене тоже")
+	eq(Vector2(main.walker.x, main.walker.z), me0, "свой игрок стоит")
+	m.pad.clear()
+
+
 func _tris(mi: MeshInstance3D) -> int:
 	return (mi.mesh.surface_get_arrays(0)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
 
@@ -226,3 +246,165 @@ func test_own_back_by_pitch() -> void:
 	var a := CrewView.own_back(-0.9)
 	ok(a > CrewView.OWN_BACK and a < CrewView.DOWN_BACK, "посередине — между")
 	near(CrewView.own_back(-1.45, true), CrewView.OWN_BACK, 1e-6, "руки на посте — не отъезжает от пульта")
+
+
+func test_helm_busy_for_second() -> void:   # ROADMAP «Кооп»: занятый пост не даёт сесть второму
+	var mate := main.add_mate(0.0, Deck.SEAT_Z, 0.0, Crew.Role.SONAR, 0, true)
+	eq(mate.post, "helm", "второй держит штурвал")
+	main.walker.x = 0.6
+	main.walker.z = Deck.CHAIR_Z + 0.9
+	main.step(1.0 / 30.0)
+	eq(main.overlay.action_label, "Занято", "на кнопке — «Занято»")
+	ok(main.status_parts().has("Штурвал занят"), "в строке состояния — «Штурвал занят»")
+	main.use_post("helm")
+	ok(not main.pilot.seated, "свой игрок не сел во второе кресло")
+	eq(main.message.text, "Штурвал занят: Сонарщик", "на приборах — кто держит")
+	mate.follow(0.6, Deck.CHAIR_Z + 1.5, 0.0, false, 0.0, 0.1)
+	mate.post = ""
+	main.step(1.0 / 30.0)
+	eq(main.overlay.action_label, "Штурвал", "встал — пост свободен")
+	ok(main.status_parts().has("Сесть за штурвал"), "в строке — снова «Сесть за штурвал»")
+	main.use_post("helm")
+	ok(main.pilot.seated, "теперь сел")
+	main.step(1.0 / 30.0)
+	eq(main.me.post, "helm", "свой игрок держит штурвал")
+	eq(Crew.holder(main.crew, mate, "helm"), main.me, "для второго штурвал занят")
+
+
+func test_posts_are_member_state() -> void:   # ROADMAP «Кооп»: посты у каждого свои — состояние Member, не main
+	ok(main.pilot == main.me.pilot, "штурвал своего игрока — его Member")
+	main.open_power()
+	ok(main.me.at_power, "у пульта — флаг своего Member")
+	main.close_power()
+	var m := main.add_mate(1.5, 0.5, 0.0, Crew.Role.ENGINEER, 0)
+	ok(m.pilot != main.me.pilot, "у товарища свой штурвальный флаг")
+	main.sit_at_helm()
+	ok(main.me.seated and not m.seated, "сел свой — товарищ стоит")
+	main.stand_up()
+
+
+func test_mate_action_sits_and_stands() -> void:   # кнопка действия товарища садит его за штурвал и поднимает
+	var m := main.add_mate(0.6, Deck.CHAIR_Z + 0.9, 0.0, Crew.Role.SONAR, 1)
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(m.seated, "товарищ сел за штурвал своей кнопкой")
+	eq(m.post, "helm", "держит штурвал")
+	ok(not m.pad.action, "нажатие съедено")
+	ok(not main.pilot.seated, "свой игрок не сел")
+	m.pad.move = Vector2(0.0, 1.0)
+	var z0 := m.walker.z
+	for i in 10:
+		main.step(1.0 / 30.0)
+	eq(m.walker.z, z0, "сидящий не ходит крестовиной")
+	m.pad.clear()
+	main.walker.x = 0.6
+	main.walker.z = Deck.CHAIR_Z + 0.9
+	main.use_post("helm")
+	ok(not main.pilot.seated, "свой игрок не сел в занятое кресло")
+	eq(main.message.text, "Штурвал занят: Сонарщик", "на приборах — кто держит")
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(not m.seated, "товарищ встал")
+	eq(m.post, "", "штурвал свободен")
+	main.use_post("helm")
+	ok(main.pilot.seated, "теперь сел свой")
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(not m.seated, "в занятое кресло товарищ не садится")
+
+
+func test_mate_action_power() -> void:   # товарищ у пульта энергии: держит пост, свой игрок к пульту не встаёт
+	var m := main.add_mate(-3.5, -2.0, PI / 2.0, Crew.Role.ENGINEER, 0)
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(m.at_power, "инженер у пульта")
+	eq(m.post, "energy", "держит пульт")
+	near(m.walker.x, Main.POWER_STAND.x, 0.01, "шагнул к ползункам")
+	ok(not main.at_power, "свой игрок не у пульта")
+	m.pad.move = Vector2(0.0, 1.0)
+	for i in 10:
+		main.step(1.0 / 30.0)
+	near(m.walker.z, Main.POWER_STAND.y, 0.01, "у пульта крестовина не ведёт ходока")
+	m.pad.clear()
+	main.walker.x = -3.3
+	main.walker.z = -1.5
+	main.step(1.0 / 30.0)
+	eq(main.overlay.action_label, "Занято", "на кнопке — «Занято»")
+	main.use_post("energy")
+	ok(not main.at_power, "свой игрок не встал к занятому пульту")
+	eq(main.message.text, "Пульт энергии занят: Инженер", "на приборах — кто держит")
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(not m.at_power, "инженер отошёл")
+	main.use_post("energy")
+	ok(main.at_power, "теперь у пульта свой")
+	main.close_power()
+
+
+func test_mate_action_vote() -> void:   # у голостола товарищ встаёт к голосованию только после маршрута
+	var m := main.add_mate(Main.ROUTE_POST.x + 0.3, Main.ROUTE_POST.y + 0.3, 0.0, Crew.Role.BIOLOGIST, 1)
+	m.walker.x = Main.ROUTE_POST.x + 0.2
+	m.walker.z = Main.ROUTE_POST.y + 0.2
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(not m.at_vote, "маршрут не пройден — голосовать рано")
+	main.complete_route()
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(m.at_vote, "товарищ у голосования")
+	ok(not main.at_vote, "свой игрок — нет")
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(not m.at_vote, "кнопка — отойти")
+
+
+func test_coop_vote_majority() -> void:   # двое у голостола: метки — голоса игроков, решение ждёт второго
+	main.walker.x = Main.ROUTE_POST.x
+	main.walker.z = Main.ROUTE_POST.y
+	main.complete_route()
+	var m := main.add_mate(Main.ROUTE_POST.x + 0.2, Main.ROUTE_POST.y + 0.2, 0.0, Crew.Role.BIOLOGIST, 1)
+	m.walker.x = Main.ROUTE_POST.x + 0.2
+	m.walker.z = Main.ROUTE_POST.y + 0.2
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(m.at_vote, "биолог у стола")
+	main.use_post("route")
+	ok(main.at_vote, "свой у стола")
+	main.ballot.cast(main.me.get_instance_id(), main.me.role, "deep")   # своя крестовина — Run.vote_nav
+	main.step(1.0 / 30.0)
+	ok(main.at_vote and not main.run.ended, "один голос из двух — ждём")
+	eq(main.vote_marks(), {"deep": [main.me.role], "up": []}, "метка — свой голос цветом роли")
+	ok(main.vote_panel.tally.begins_with("голосов 1 из 2"), "счёт на панели: " + main.vote_panel.tally)
+	var depth := main.run.depth
+	m.pad.move = Vector2(0, -1)   # своя крестовина биолога
+	main.step(1.0 / 30.0)
+	eq(main.run.depth, depth + 1, "оба за «глубже» — следующий спуск")
+	ok(not main.at_vote and not m.at_vote, "все отошли от стола")
+	eq(main.vote_panel.tally, "")
+
+
+func test_coop_vote_timer_up() -> void:   # второй молчит — по таймеру решает поданный голос
+	main.walker.x = Main.ROUTE_POST.x
+	main.walker.z = Main.ROUTE_POST.y
+	main.complete_route()
+	var m := main.add_mate(Main.ROUTE_POST.x + 0.2, Main.ROUTE_POST.y + 0.2, 0.0, Crew.Role.ENGINEER, 0)
+	m.walker.x = Main.ROUTE_POST.x + 0.2
+	m.walker.z = Main.ROUTE_POST.y + 0.2
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	main.use_post("route")
+	m.pad.move = Vector2.ZERO
+	main.step(1.0 / 30.0)
+	m.pad.move = Vector2(0, 1)
+	main.step(1.0 / 30.0)
+	eq(main.vote_marks(), {"deep": [], "up": [Crew.Role.ENGINEER]}, "инженер за «наверх»")
+	for i in int(Ballot.TIME * 2.0) - 1:
+		main.step(0.5)
+		ok(not main.run.ended, "до конца таймера не решено")
+		if main.run.ended:
+			break
+	main.step(0.5)
+	main.step(0.5)
+	ok(main.run.ended, "время вышло — наверх")
+	ok(main.at_vote, "свой у стола видит итог")
+	main.close_vote()

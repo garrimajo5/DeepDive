@@ -113,7 +113,17 @@ func tick(dt: float) -> void:
 			"drain":
 				drain_left = c[1]
 			"mate":
-				main.add_mate(c[1], c[2], deg_to_rad(c[3]), clampi(c[4], 0, 3), clampi(c[5], 0, 1))
+				var mate: Crew.Member
+				if c[6]:   # за штурвалом
+					mate = main.add_mate(0.0, Deck.SEAT_Z, 0.0, clampi(c[4], 0, 3), clampi(c[5], 0, 1), true)
+				else:
+					mate = main.add_mate(c[1], c[2], deg_to_rad(c[3]), clampi(c[4], 0, 3), clampi(c[5], 0, 1))
+				if c.size() > 9:   # идёт своим вводом (Crew.Pad), свой игрок стоит
+					mate.pad.move = Vector2(c[7], c[8])
+					mate.pad.left = c[9]
+			"act":   # последний товарищ жмёт кнопку действия (свой ввод, Main._drive_mates)
+				if main.crew.size() > 1:
+					(main.crew[-1] as Crew.Member).pad.action = true
 			"log":
 				_log("%s | %s" % [c[1], state()])
 			"quit":
