@@ -7,7 +7,7 @@ extends Node3D
 
 var fields := {}          ## choice → {"disc", "beam", "arrow", "word", "count", "marks": [[Sprite3D, Label3D]…]}
 var board: Node3D        ## итог забега над столом (VoteHolo.BOARD_*)
-var board_rows: Array = []   ## [[Label3D название, Label3D значение]…]
+var board_rows: Array = []   ## [[Label3D название, Label3D значение, Sprite3D иконка ART-026]…]
 var _mats: Array[StandardMaterial3D] = []
 var _labels: Array[Label3D] = []
 var _board_mats: Array[StandardMaterial3D] = []
@@ -108,16 +108,30 @@ func _build_board() -> void:
 	_put(board, title, "Заголовок итога")
 	var x := VoteHolo.BOARD_W * 0.5 - VoteHolo.BOARD_PAD
 	for i in 4:
-		var n := _label("", 40, Vector3(-x, VoteHolo.row_y(i), 0.002))
+		var n := _label("", 40, Vector3(VoteHolo.name_x(), VoteHolo.row_y(i), 0.002))
 		n.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		var v := _label("", 52, Vector3(x, VoteHolo.row_y(i), 0.002))
 		v.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		for l: Label3D in [n, v]:
 			l.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 			l.render_priority = 2
+		var ic := Sprite3D.new()   # иконка строки ART-026: текстура по названию строки (show_result)
+		ic.pixel_size = VoteHolo.ICON_SIZE / 256.0
+		ic.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+		ic.shaded = false
+		ic.double_sided = true
+		ic.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
+		ic.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		ic.render_priority = 2
+		ic.layers = OceanView.LAYER_SHIP
+		ic.position = Vector3(VoteHolo.icon_x(), VoteHolo.row_y(i), 0.002)
+		var row: String = VoteHolo.SUMMARY_ICONS.keys()[i]   # заранее — прогрев шейдеров видит иконку с текстурой
+		ic.texture = load(VoteHolo.summary_icon(row))
+		ic.set_meta("path", VoteHolo.summary_icon(row))
 		_put(board, n, "Строка итога %d" % i)
 		_put(board, v, "Число итога %d" % i)
-		board_rows.append([n, v])
+		_put(board, ic, "Иконка итога %d" % i)
+		board_rows.append([n, v, ic])
 	var beam := MeshInstance3D.new()
 	var cm := CylinderMesh.new()
 	cm.top_radius = VoteHolo.BOARD_W * 0.35
@@ -164,6 +178,12 @@ func show_result(k: float, rows: Array, eye: Vector3) -> void:
 		var r: Array = rows[i] if i < rows.size() else ["", ""]
 		(board_rows[i][0] as Label3D).text = str(r[0])
 		(board_rows[i][1] as Label3D).text = str(r[1])
+		var ic: Sprite3D = board_rows[i][2]
+		var path := VoteHolo.summary_icon(str(r[0]))
+		if ic.get_meta("path", "") != path:
+			ic.texture = load(path) if path != "" else null
+			ic.set_meta("path", path)
+		ic.modulate = Color(1, 1, 1, k)   # цвет — в самой текстуре (#67DDEB), гаснет с подложкой
 
 
 ## k — доля перехода (Briefing.Fade), votes — VoteHolo.votes(Run.opinions(...)).
