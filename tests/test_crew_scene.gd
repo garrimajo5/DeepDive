@@ -356,3 +356,55 @@ func test_mate_action_vote() -> void:   # у голостола товарищ �
 	m.pad.action = true
 	main.step(1.0 / 30.0)
 	ok(not m.at_vote, "кнопка — отойти")
+
+
+func test_coop_vote_majority() -> void:   # двое у голостола: метки — голоса игроков, решение ждёт второго
+	main.walker.x = Main.ROUTE_POST.x
+	main.walker.z = Main.ROUTE_POST.y
+	main.complete_route()
+	var m := main.add_mate(Main.ROUTE_POST.x + 0.2, Main.ROUTE_POST.y + 0.2, 0.0, Crew.Role.BIOLOGIST, 1)
+	m.walker.x = Main.ROUTE_POST.x + 0.2
+	m.walker.z = Main.ROUTE_POST.y + 0.2
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(m.at_vote, "биолог у стола")
+	main.use_post("route")
+	ok(main.at_vote, "свой у стола")
+	main.ballot.cast(main.me.get_instance_id(), main.me.role, "deep")   # своя крестовина — Run.vote_nav
+	main.step(1.0 / 30.0)
+	ok(main.at_vote and not main.run.ended, "один голос из двух — ждём")
+	eq(main.vote_marks(), {"deep": [main.me.role], "up": []}, "метка — свой голос цветом роли")
+	ok(main.vote_panel.tally.begins_with("голосов 1 из 2"), "счёт на панели: " + main.vote_panel.tally)
+	var depth := main.run.depth
+	m.pad.move = Vector2(0, -1)   # своя крестовина биолога
+	main.step(1.0 / 30.0)
+	eq(main.run.depth, depth + 1, "оба за «глубже» — следующий спуск")
+	ok(not main.at_vote and not m.at_vote, "все отошли от стола")
+	eq(main.vote_panel.tally, "")
+
+
+func test_coop_vote_timer_up() -> void:   # второй молчит — по таймеру решает поданный голос
+	main.walker.x = Main.ROUTE_POST.x
+	main.walker.z = Main.ROUTE_POST.y
+	main.complete_route()
+	var m := main.add_mate(Main.ROUTE_POST.x + 0.2, Main.ROUTE_POST.y + 0.2, 0.0, Crew.Role.ENGINEER, 0)
+	m.walker.x = Main.ROUTE_POST.x + 0.2
+	m.walker.z = Main.ROUTE_POST.y + 0.2
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	main.use_post("route")
+	m.pad.move = Vector2.ZERO
+	main.step(1.0 / 30.0)
+	m.pad.move = Vector2(0, 1)
+	main.step(1.0 / 30.0)
+	eq(main.vote_marks(), {"deep": [], "up": [Crew.Role.ENGINEER]}, "инженер за «наверх»")
+	for i in int(Ballot.TIME * 2.0) - 1:
+		main.step(0.5)
+		ok(not main.run.ended, "до конца таймера не решено")
+		if main.run.ended:
+			break
+	main.step(0.5)
+	main.step(0.5)
+	ok(main.run.ended, "время вышло — наверх")
+	ok(main.at_vote, "свой у стола видит итог")
+	main.close_vote()
