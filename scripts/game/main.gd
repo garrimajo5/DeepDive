@@ -454,8 +454,9 @@ func step(dt: float) -> void:
 	if net_client:   # клиент: корабль, реактор и экипаж — из кадров хоста
 		_client_step(dt)
 		return
-	_net_poll()
+	_net_poll(dt)
 	var r := overlay.router
+	_mark_presses(r, dt)
 	if r.noclip_pressed:
 		_toggle_noclip()
 	var hold_valve := false
@@ -623,7 +624,7 @@ func step(dt: float) -> void:
 	_place_ship()
 	_place_camera()
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
-	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks())
+	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt)
 	_update_ui()
 	_warm_frame()
 	_net_send(dt)
@@ -1203,6 +1204,15 @@ func _drive_mates(dt: float) -> void:
 			m.drive(dt, breach.slow(ShipLayout.room_at(m.walker.z)))
 
 
+## Кто нажал кнопку в этом кадре (действие или «Свет»; свой — с экрана, товарищ — `Pad`): табличка над ним
+## «нажимает» (ART-033, `Member.pressed`). До того, как шаг съест нажатия.
+func _mark_presses(r: Touch.Router, dt: float) -> void:
+	for m: Crew.Member in crew:
+		m.tick_press(dt)
+		if (r.action_pressed or r.light_pressed) if m == me else (m.pad.action or m.pad.light):
+			m.pressed()
+
+
 ## Кнопка действия товарища (`Pad.action`): занятый постом встаёт; стоящий у штурвала садится, у пульта энергии
 ## встаёт к ползункам, у голостола после маршрута — к голосованию. Пост, который держит другой, не берёт.
 ## Возвращает пост, за который встал или сел ("" — встал с поста или рядом нечего взять).
@@ -1249,11 +1259,11 @@ func host_game(port: int = NetLink.PORT) -> Error:
 
 
 ## Гости хоста: пришёл — член экипажа своей роли и внешности с вводом гостя, ушёл — убрать с палубы.
-func _net_poll() -> void:
+func _net_poll(dt: float = 0.0) -> void:
 	if net_host == null:
 		return
 	var changed := false
-	for e: Dictionary in net_host.poll():
+	for e: Dictionary in net_host.poll(dt):
 		var g: NetLink.Guest = e["guest"]
 		if e["k"] == "join":
 			var m := add_mate(NET_SPAWN.x, NET_SPAWN.y, NET_SPAWN.z, g.role, g.look)
@@ -1269,6 +1279,8 @@ func _net_poll() -> void:
 				crew.erase(m)
 				say("Ушёл с борта: %s" % m.name)
 		changed = true
+	for id: int in net_mates:   # гость без ввода дольше NetLink.LOST_AFTER — табличка «Нет связи»
+		(net_mates[id] as Crew.Member).lost = (net_host.guests[id] as NetLink.Guest).lost()
 	if changed:
 		crew_view.set_members(crew, me)
 		for id: int in net_mates:
@@ -1331,6 +1343,9 @@ func _client_step(dt: float) -> void:
 	var f := net_client.poll(dt)
 	if not f.is_empty():
 		_client_frame(f)
+	if net_client.lost():   # кадры хоста не идут — у товарищей «Нет связи», пока не придёт кадр
+		for m: Crew.Member in crew:
+			m.lost = m != me
 	net_smooth.step(dt)
 	net_smooth.apply(helm, crew, me)   # показ чуть позади свежего кадра: между кадрами — плавно
 	if net_client.state != was:
@@ -1355,7 +1370,7 @@ func _client_step(dt: float) -> void:
 	_place_ship()
 	_place_camera()
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
-	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks())
+	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt)
 	_update_ui()
 	_warm_frame()
 	r.end_frame()
@@ -1483,6 +1498,12 @@ func debug_setup(kv: Dictionary) -> void:
 				var m: PackedFloat64Array = one.split_floats(",")
 				add_mate(m[0], m[1], deg_to_rad(m[2]) if m.size() > 2 else 0.0, int(m[3]) if m.size() > 3 else Crew.Role.SONAR,
 					int(m[4]) if m.size() > 4 else 1)
+		if kv.has("tag"):  # tag=a;l;- — состояния табличек товарищей по порядку (ART-033): a — нажимает, l — нет связи
+			var st: PackedStringArray = kv["tag"].split(";")
+			for k in mini(st.size(), crew.size() - 1):
+				var mm: Crew.Member = crew[k + 1]
+				mm.press = -1e3 if st[k] == "a" else INF   # на время снимка
+				mm.lost = st[k] == "l"
 	if kv.get("silt", "0") == "1":  # silt=1 — корабль в облаке ила (снимок сонарной тьмы); с ping=1 — импульс завяз
 		open_silt()   # (jam_age=<с> — сколько прошло с завязшего импульса, ART-048)
 		if kv.get("ping", "0") == "1":

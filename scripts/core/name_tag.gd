@@ -20,6 +20,7 @@ const CIRCLE_R := 0.36
 const RING := 0.07          ## толщина кольца кружка
 const NAME_X := 0.98        ## имя начинается отсюда
 const PAD_R := 0.32         ## поле справа от имени
+const STROKES_W := 0.5     ## место справа под три штриха «нажимает» (ART-033)
 const MIN_W := 2.4
 const MAX_W := 7.0
 const BORDER := 0.045       ## контур плашки
@@ -32,6 +33,17 @@ const BACK := Color("0B1C24")
 const BACK_A := 0.9
 const TEXT := Color("D5E4E8")
 const EDGE := Color("9AD9E8")
+const ACTIVE := Color("67DDEB")   ## «нажимает»: контур ярче и три штриха
+const DIM := Color("78949D")      ## «Нет связи»: имя, буква, кружок и контур приглушены
+const FADE_T := 0.15              ## «нажимает» входит и выходит за столько секунд, без мигания
+const LOST_TEXT := "Нет связи"
+const STATUS_EM := 0.3            ## кегль строки «Нет связи», высот плашки
+const LOST_NAME_Y := 0.17         ## имя без связи выше середины, строка состояния — ниже
+const LOST_STATUS_Y := -0.27
+## Три штриха «нажимает»: центры от правого края плашки и высоты, в высотах плашки.
+const STROKE_X := [0.52, 0.38, 0.24]
+const STROKE_H := [0.3, 0.52, 0.4]
+const STROKE_T := 0.055
 ## Цвет кружка роли по ART-033 (sbor-ekipazha.md): инженер нейтральный (#129), без красного.
 const ROLE_RING := [Color("E39E38"), Color("45C2CC"), Color("D5E4E8"), Color("73BD5C")]
 
@@ -131,12 +143,24 @@ static func ring_color(role: int) -> Color:
 
 ## Ширина плашки (в высотах) для имени шириной text_w высот.
 static func width(text_w: float) -> float:
-	return clampf(NAME_X + text_w + PAD_R, MIN_W, MAX_W)
+	return clampf(NAME_X + text_w + STROKES_W + PAD_R, MIN_W, MAX_W)
 
 
 ## Центр имени по X от середины плашки ширины w (имя шириной text_w — от NAME_X).
 static func name_x(w: float, text_w: float) -> float:
-	return -w * 0.5 + NAME_X + minf(text_w, w - NAME_X - PAD_R) * 0.5
+	return -w * 0.5 + NAME_X + minf(text_w, w - NAME_X - PAD_R - STROKES_W) * 0.5
+
+
+## Яркость «нажимает» за шаг dt: к 1, пока активен, к 0 после — за FADE_T, ровно, без мигания.
+static func glow_step(level: float, active: bool, dt: float) -> float:
+	return move_toward(level, 1.0 if active else 0.0, dt / FADE_T)
+
+
+## Цвета таблички: [контур, кружок роли, буква и имя]; без связи — всё приглушено (#78949D), красного нет.
+static func colors(role: int, lost: bool) -> Array:
+	if lost:
+		return [DIM, DIM, DIM]
+	return [EDGE, ring_color(role), TEXT]
 
 
 static func letter_x(w: float) -> float:
@@ -144,7 +168,7 @@ static func letter_x(w: float) -> float:
 
 
 ## Текстура плашки: скруглённый фон, контур, кольцо роли слева (буква и имя — подписи поверх). w — ширина в высотах.
-static func plate_image(w: float, ring: Color) -> Image:
+static func plate_image(w: float, ring: Color, edge: Color = EDGE) -> Image:
 	var h := TEX_H
 	var wp := roundi(w * h)
 	var img := Image.create_empty(wp, h, false, Image.FORMAT_RGBA8)
@@ -161,13 +185,39 @@ static func plate_image(w: float, ring: Color) -> Image:
 			var cover := clampf(0.5 - d, 0.0, 1.0)
 			var c := Color(BACK, BACK_A)
 			if d > -bw:
-				c = c.lerp(Color(EDGE, 1.0), clampf(d + bw + 0.5, 0.0, 1.0))
+				c = c.lerp(Color(edge, 1.0), clampf(d + bw + 0.5, 0.0, 1.0))
 			var dc := absf(p.distance_to(Vector2(cx, cy)) - CIRCLE_R * h)
 			var k := clampf(RING * h * 0.5 + 0.5 - dc, 0.0, 1.0)
 			if k > 0.0:
 				c = c.lerp(Color(ring, 1.0), k)
 			c.a *= cover
 			img.set_pixel(x, y, c)
+	return img
+
+
+## Слой «нажимает» поверх плашки: яркий контур #67DDEB (толще обычного) и три вертикальных штриха у правого края;
+## остальное прозрачно. Прозрачность слоя — яркость `glow_step`.
+static func glow_image(w: float) -> Image:
+	var h := TEX_H
+	var wp := roundi(w * h)
+	var img := Image.create_empty(wp, h, false, Image.FORMAT_RGBA8)
+	var r := CORNER * h
+	var bw := BORDER * h * 1.8
+	for y in h:
+		for x in wp:
+			var p := Vector2(x + 0.5, y + 0.5)
+			var d := _round_rect(p, Vector2(wp, h), r)
+			if d > 0.5:
+				continue
+			var k := clampf(d + bw + 0.5, 0.0, 1.0) * clampf(0.5 - d, 0.0, 1.0)
+			for i in STROKE_X.size():
+				var sx: float = wp - float(STROKE_X[i]) * h
+				var hy: float = float(STROKE_H[i]) * h * 0.5
+				var dx := absf(p.x - sx) - STROKE_T * h * 0.5
+				var dy := absf(p.y - h * 0.5) - hy
+				k = maxf(k, clampf(0.5 - maxf(dx, dy), 0.0, 1.0))
+			if k > 0.0:
+				img.set_pixel(x, y, Color(ACTIVE, k))
 	return img
 
 

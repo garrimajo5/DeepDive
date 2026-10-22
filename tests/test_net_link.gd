@@ -240,3 +240,21 @@ func test_events_ride_with_frame() -> void:
 	h.send_frame(NetSnap.frame(2, 0.0, Helm.Ship.new(), Reactor.new(), Vitals.new(), true, [Crew.Member.new()]))
 	ok(_pump(func() -> bool: return c.has_meta("f")), "кадр без событий")
 	ok(not (c.get_meta("f") as Dictionary).has("ev"), "старые события второй раз не приходят")
+
+
+func test_quiet_guest_and_host_lost() -> void:   # «Нет связи» на табличке (ART-033): по тишине в канале
+	var h := _host()
+	var c := _client()
+	ok(_pump(func() -> bool: return c.joined() and not events.is_empty()), "на борту")
+	var g: NetLink.Guest = events[0]["guest"]
+	ok(not g.lost(), "только что пришёл — на связи")
+	h.poll(NetLink.LOST_AFTER + 0.1)
+	ok(g.lost(), "без ввода дольше LOST_AFTER — «Нет связи»")
+	c.send_pad(Crew.Pad.new())
+	ok(_pump(func() -> bool: return not g.lost()), "ввод пришёл — снова на связи")
+	ok(not c.lost(), "у гостя кадров ещё не ждали")
+	c.poll(NetLink.LOST_AFTER + 0.1)
+	ok(c.lost(), "кадры хоста не идут — у гостя «Нет связи»")
+	g.index = 0
+	h.send_frame({"v": NetSnap.VERSION, "seq": 1})
+	ok(_pump(func() -> bool: return not c.lost()), "кадр пришёл — связь есть")
