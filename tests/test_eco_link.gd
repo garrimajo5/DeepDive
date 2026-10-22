@@ -430,3 +430,40 @@ func test_pack_near_for_guest() -> void:   # существа рядом для 
 	var xa := x.spawn("fish", Vector3.ZERO)
 	eq(EcoLink.apply_near(x.agents, d), 0, "чужой вид и номер за концом списка пропускаются")
 	eq(xa.p, Vector3.ZERO)
+
+
+func _moss_world() -> EcoWorld:   # мир с мхом трёх видов: общий (с монетками на нём), у рёбер и у колодца
+	var w := EcoWorld.new()
+	var m := w.add(EcoMoss.new()) as EcoMoss
+	w.add(EcoCoins.new(m))
+	w.add(EcoBones.new())
+	w.add(EcoWell.new())
+	return w
+
+
+func test_moss_rides_to_guest() -> void:   # еда пятен мха рядом с кораблём едет гостю вместе с существами
+	var h := _moss_world()
+	var all := EcoLink.mosses(h.systems)
+	eq(all.size(), 3, "общий мох, у рёбер и у колодца — без повтора общего у монеток")
+	var spot: EcoMoss.Patch = all[0].patches[0]
+	spot.food = 0.1   # объели у хоста
+	var fish := h.spawn("fish", spot.pos + Vector3(1, 2, 0))
+	var d := EcoLink.pack_world(h.agents, h.systems, spot.pos)
+	var g := _moss_world()
+	g.spawn("fish", Vector3.ZERO)
+	var gs: EcoMoss.Patch = EcoLink.mosses(g.systems)[0].patches[0]
+	ok(gs.food > 0.5, "у гостя мох свой — не объеден")
+	ok(EcoLink.apply_world(g.agents, g.systems, d) >= 1, "пятно поставлено")
+	near(gs.food, 0.1, 1e-4, "еда как у хоста")
+	near(EcoMoss.glow_of(gs.food), spot.glow(), 1e-4, "свет пятна как у хоста")
+	eq(g.agents[0].p, fish.p, "существа рядом по-прежнему ставятся")
+	# мох вдали не едет; пакет без мха (старый) — только существа
+	var far := EcoLink.pack_world(h.agents, h.systems, Vector3(5000, 0, 5000))
+	ok(not far.has(float(EcoLink.NET_MOSS)), "вдали мха нет")
+	eq(EcoLink.apply_world(g.agents, g.systems, EcoLink.pack_near(h.agents, spot.pos)), 0, "старый пакет — без мха")
+	# мох у рёбер тоже едет
+	var bp: EcoMoss.Patch = all[1].patches[0]
+	bp.food = 0.0
+	var gb: EcoMoss.Patch = EcoLink.mosses(g.systems)[1].patches[0]
+	EcoLink.apply_world(g.agents, g.systems, EcoLink.pack_world(h.agents, h.systems, bp.pos))
+	near(gb.food, 0.0, 1e-4, "мох у рёбер как у хоста")
