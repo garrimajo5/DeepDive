@@ -17,6 +17,7 @@ extends RefCounted
 ##   {"do": "silt"}                                  — облако ила вокруг корабля (сонарная тьма); "on": false — убрать ил
 ##   {"do": "drain", "s": 4}                        — стеклоуст «на корпусе» s секунд: мир будто шлёт EcoLink.DRAIN
 ##                                                     (тревога и расход заряда без самого существа)
+##   {"do": "hull", "pct": 30}                       — прочность корпуса, % (следы повреждений ART-049 снаружи)
 ##   {"do": "mate", "x": -1, "z": -2.5, "yaw": 90, "role": 2, "look": 1} — ещё один член экипажа на палубе (роль 0…3,
 ##                                                     внешность 0 — мужская модель, 1 — женская;
 ##                                                     "seated": true — сидит за штурвалом, x/z/yaw не нужны;
@@ -26,9 +27,9 @@ extends RefCounted
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["route"], ["act"], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["route"], ["act"], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
-const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "silt", "drain", "route", "log", "quit"]
+const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "silt", "drain", "hull", "route", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad"]
 const PRESS_TIME := 0.15   ## сколько держать кнопку при «press», с
 const FINGER := 900        ## номер пальца для касаний сценария (не пересекается с настоящими)
@@ -148,6 +149,8 @@ func _begin(st: Dictionary, out: Array) -> void:
 			out.append(["silt", bool(st.get("on", true))])
 		"drain":
 			out.append(["drain", float(st.get("s", 4.0))])
+		"hull":
+			out.append(["hull", clampf(float(st.get("pct", 100.0)), 0.0, 100.0)])
 		"route":
 			out.append(["route"])
 		"act":

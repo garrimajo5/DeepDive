@@ -42,7 +42,7 @@
   сброс; `Reactor.Console` — выбор на пульте). Новая система корабля берёт силу из `main.reactor.k(...)`.
   `ship_layout.gd` — отсеки за мостиком (z 2…24), люки `ShipLayout.Door`, `can_stand` для всего корабля (мостик — `Deck`),
   геометрия `parts()`; рисует `scripts/game/rooms_view.gd` (там же реактор). `hull_plan.gd` — корпус снаружи по ART-001
-  (28 деталей, `inside`/`inside_world`); меши по краскам и движение роторов и рулей — `hull_mesh.gd` (`HullMesh.Motion`; обшивка ART-024 — `HullMesh.plated`/`growth`,
+  (28 деталей, `inside`/`inside_world`); меши по краскам и движение роторов и рулей — `hull_mesh.gd` (`HullMesh.Motion`; обшивка ART-024 — `HullMesh.plated`/`growth`, следы повреждений ART-049 по `Vitals.hull` — `HullMesh.wear`, `HullView.set_hull`,
   карты `textures/hull/`, шейдер `shaders/hull_plating.gdshader`),
   рисует `scripts/game/hull_view.gd` (`main.hull`, слой 1). `sonar.gd` — импульс, дальность,
   отметки из `EcoLink.NEAR`, карта рельефа; голограмма — `scripts/game/sonar_view.gd` + `shaders/sonar_holo.gdshader`.

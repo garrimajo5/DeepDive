@@ -167,3 +167,63 @@ func test_scene_plating() -> void:
 	eq(plated, 1, "одна поверхность обшивки — без новых вызовов отрисовки")
 	for r in main.hull.rotors + main.hull.rudders:
 		ok(r.mesh.surface_get_material(0) is StandardMaterial3D, "%s: без обрастания и плитки (свои оси)" % r.name)
+
+
+func test_damage_numbers() -> void:
+	# следы ART-049: потеря корпуса 0…1, след виден при d > 0 и d ≥ порога (как в шейдере)
+	near(HullMesh.wear(100.0), 0.0, 1e-6, "целый корпус — потерь нет")
+	near(HullMesh.wear(70.0), 0.3, 1e-6)
+	near(HullMesh.wear(0.0), 1.0, 1e-6)
+	eq(HullMesh.wear(130.0), 0.0, "сверх 100 % — не в минус")
+	ok(not HullMesh.damage_shown(0.0, 0.0), "при целом корпусе нет даже следов с порогом 0")
+	ok(HullMesh.damage_shown(0.3, 0.0), "след с порогом 0 — с первых потерь")
+	ok(not HullMesh.damage_shown(0.99, 1.0), "последний порог — только при нулевой прочности")
+	ok(HullMesh.damage_shown(1.0, 1.0))
+
+
+## Доля площади плитки под видимыми следами (альфа > 0,1) при прочности `hull`, по картам из textures/hull.
+func _damage_area(col: Image, lvl: Image, hull: float) -> float:
+	var d := HullMesh.wear(hull)
+	var n := 0
+	var all := 0
+	for y in range(0, 1024, 4):
+		for x in range(0, 1024, 4):
+			all += 1
+			if col.get_pixel(x, y).a > 0.1 and HullMesh.damage_shown(d, lvl.get_pixel(x, y).r):
+				n += 1
+	return n / float(all)
+
+
+func test_damage_maps() -> void:
+	var ct: Texture2D = load(HullMesh.DAMAGE_TEX % "povrezhdeniya")
+	var lt: Texture2D = load(HullMesh.DAMAGE_TEX % "povrezhdeniya-uroven")
+	ok(ct != null and ct.get_width() == 1024 and ct.get_height() == 1024, "цвет следов 1024²")
+	ok(lt != null and lt.get_width() == 1024 and lt.get_height() == 1024, "порог 1024²")
+	var lvl := lt.get_image()
+	ok(not lvl.is_compressed(), "порог без потерного сжатия — назначенные пороги целы")
+	ok(not lvl.has_mipmaps(), "порог без mipmap — соседние пороги не смешиваются")
+	var col := Image.load_from_file(ProjectSettings.globalize_path(HullMesh.DAMAGE_TEX % "povrezhdeniya"))
+	ok(col.detect_alpha() != Image.ALPHA_NONE, "у цвета следов есть прозрачность")
+	var a100 := _damage_area(col, lvl, 100.0)
+	var a70 := _damage_area(col, lvl, 70.0)
+	var a40 := _damage_area(col, lvl, 40.0)
+	var a15 := _damage_area(col, lvl, 15.0)
+	eq(a100, 0.0, "при 100 % следов нет")
+	ok(a70 > 0.08 and a70 < a40 and a40 < a15, "следы растут с потерей: %.3f < %.3f < %.3f" % [a70, a40, a15])
+	ok(a15 < 0.45, "при 15 %% следы не сплошные — обшивка читается (%.3f)" % a15)
+
+
+func test_scene_damage_follows_hull() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var sm: ShaderMaterial = main.hull.body_material(HullPlan.Paint.METAL)
+	ok(sm.get_shader_parameter("damage_tex") is Texture2D and sm.get_shader_parameter("damage_lvl") is Texture2D,
+		"две карты ART-049 в материале обшивки")
+	near(sm.get_shader_parameter("wear"), 0.0, 1e-6, "в начале корпус целый — следов нет")
+	main.vitals.hull = 40.0
+	main.step(1.0 / 30.0)
+	near(sm.get_shader_parameter("wear"), HullMesh.wear(main.vitals.hull), 1e-3, "следы по прочности корпуса")
+	ok(float(sm.get_shader_parameter("wear")) > 0.55, "при 40 % — потеря около 0,6")
+	main.queue_free()
+	await frames(1)

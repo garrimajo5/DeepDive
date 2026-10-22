@@ -1051,6 +1051,7 @@ func _place_ship() -> void:
 	ship.position = helm.pos
 	ship.rotation = Vector3(0.0, helm.yaw, 0.0)
 	hull.apply(hull_motion)
+	hull.set_hull(vitals.hull)   # следы повреждений ART-049
 	bridge.set_wheel_turn(helm.turn)
 	ocean.apply_water(env, helm.depth(), helm.pos, silt.k)
 
@@ -1628,6 +1629,8 @@ func debug_setup(kv: Dictionary) -> void:
 	if kv.has("hot"):  # hot=1 — перегрев (для снимка табло)
 		reactor.start_hot(false)
 		reactor.heat = float(kv["hot"])
+	if kv.has("hull"):  # hull=<%> — прочность корпуса (следы повреждений ART-049 снаружи)
+		vitals.hull = float(kv["hull"])
 	if kv.has("energy"):  # energy=<ед.> — заряд корабля (меньше 20 — «МАЛО ЗАРЯДА» на табло)
 		vitals.energy = float(kv["energy"])
 	if kv.get("drain", "0") == "1":  # drain=1 — стеклоуст на корпусе (табло и рамка у щитка разряда)
