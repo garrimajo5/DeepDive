@@ -9,6 +9,8 @@ const LAYER_SHIP := 2    ## слой корабля изнутри: только
 var seabed: MeshInstance3D
 var seabed_mat: ShaderMaterial   # материал дна: каустики и свет по глубине задаём отсюда
 var ice: MeshInstance3D
+var ice_mat: ShaderMaterial   # лёд ART-056: свечение, контраст и нормали по глубине — из apply_water
+var ice_relief := true         # «Экономно» — без нормалей льда (set_relief)
 var sun: DirectionalLight3D
 var snow: CPUParticles3D
 var shafts: MultiMeshInstance3D   # лучи сквозь трещины льда (ART-052)
@@ -30,19 +32,26 @@ func _ready() -> void:
 	seabed.layers = LAYER_WORLD
 	add_child(seabed)
 
-	# лёд: плоскость на y = 0 лицом вниз, светится рассеянным светом сверху
+	# лёд: плоскость на y = 0 лицом вниз; карты, трещины и свечение по ART-056 (IceSheet, shaders/ice.gdshader)
 	ice = MeshInstance3D.new()
 	ice.name = "Лёд"
 	var q := PlaneMesh.new()
 	q.size = Vector2(Seabed.SIZE, Seabed.SIZE)
 	q.flip_faces = true
 	ice.mesh = q
-	var im := StandardMaterial3D.new()
-	im.albedo_color = Color("86BCCB")
-	im.emission_enabled = true
-	im.emission = Color("9AD9E8")
-	im.emission_energy_multiplier = 0.35
-	im.roughness = 0.4
+	var im := ShaderMaterial.new()
+	im.shader = load("res://shaders/ice.gdshader")
+	im.set_shader_parameter("color_tex", load("res://textures/ice/tsvet.png"))
+	im.set_shader_parameter("normal_tex", load("res://textures/ice/normali.png"))
+	im.set_shader_parameter("crack_tex", load("res://textures/ice/treshchiny.png"))
+	im.set_shader_parameter("glow_color", IceSheet.GLOW_COLOR)
+	im.set_shader_parameter("tile", IceSheet.TILE)
+	im.set_shader_parameter("glow_base", IceSheet.GLOW_BASE)
+	im.set_shader_parameter("glow_crack", IceSheet.GLOW_CRACK)
+	im.set_shader_parameter("roughness", IceSheet.ROUGHNESS)
+	im.set_shader_parameter("gate_scale", IceSheet.GATE_SCALE)
+	im.set_shader_parameter("gate_edge", IceSheet.GATE_EDGE)
+	ice_mat = im
 	ice.material_override = im
 	ice.position.y = Seabed.ICE_Y
 	ice.layers = LAYER_WORLD
@@ -161,3 +170,14 @@ func apply_water(env: Environment, depth: float, around: Vector3, silt: float = 
 	# Каустики на дне гаснут по глубине (меньше света сквозь лёд) и в облаке ила (свет рассеивается).
 	seabed_mat.set_shader_parameter("light", clampf(Seabed.Water.sun(depth) * (1.0 - 0.85 * silt), 0.0, 1.0))
 	snow.position = around
+	ice_mat.set_shader_parameter("water", fog)
+	ice_mat.set_shader_parameter("glow_k", exp(-maxf(depth, 0.0) / IceSheet.GLOW_DEPTH))
+	ice_mat.set_shader_parameter("contrast", IceSheet.contrast(depth))
+	ice_mat.set_shader_parameter("relief", IceSheet.relief(depth) if ice_relief else 0.0)
+
+
+## «Экономно» (ART-044): лёд без выборки нормалей, цвет и маска трещин остаются.
+func set_relief(on: bool) -> void:
+	ice_relief = on
+	if not on:
+		ice_mat.set_shader_parameter("relief", 0.0)
