@@ -10,6 +10,25 @@ var _rod_mat: StandardMaterial3D
 var reactor_light: OmniLight3D
 var lamps: Array[OmniLight3D] = []  ## плафоны отсеков (мигают — set_lamps)
 const LAMP_ENERGY := 0.8
+## Материалы машинного и трюма ART-055 (`otseki-materialy.md`), карты `textures/rooms/<имя>-*.png`, запись — как
+## `BridgeView.KITS`: [имя, сила нормалей, шероховатость, металл «Экономно», z от, z до]. Машинное z 14…19,5 (side),
+## трюм 19,5…24 и корма (aft), общий потолок обоих (down, у стен — низ перемычек над люками). Коридор и лаборатория —
+## заливкой (своих карт нет). Переборка между отсеками — по стороне грани: z грани внутри отсека. Кромка шлюза
+## (METAL, грань вверх) — заливкой, skip_up.
+const KIT_DIR := "res://textures/rooms/"
+const KITS := {
+	BridgePlan.Paint.DECK: {
+		"side": ["mash-pol", 0.6, 0.8, 0.15, 14.0, 19.5],
+		"aft": ["tryum-pol", 0.6, 0.8, 0.15, 19.5, 24.2],
+	},
+	BridgePlan.Paint.METAL: {
+		"side": ["mash-stena", 0.65, 0.8, 0.15, 14.0, 19.5],
+		"aft": ["tryum-stena", 0.65, 0.8, 0.15, 19.5, 24.2],
+		"down": ["otsek-potolok", 0.6, 0.8, 0.15, 14.0, 24.2],
+		"skip_up": true,
+	},
+	BridgePlan.Paint.SEAM: {"down": ["otsek-potolok", 0.6, 0.8, 0.15, 14.0, 24.2]},
+}
 var airlock_cover: Node3D          ## крышка нижнего шлюза: узел в центре крышки (Airlock.cover_pose), модель MOD-010 внутри
 var winch_drum: Node3D             ## барабан лебёдки (MOD-010), крутится по x
 var winch_hook: Node3D             ## захват на тросе, pivot — крепление троса
@@ -36,7 +55,7 @@ var _shelf_kinds: Array[int] = []
 func _ready() -> void:
 	mesh_instance = MeshInstance3D.new()
 	mesh_instance.name = "Отсеки"
-	mesh_instance.mesh = BridgeView.build_mesh(ShipLayout.parts())
+	mesh_instance.mesh = BridgeView.build_mesh(ShipLayout.parts(), KITS, KIT_DIR)
 	mesh_instance.layers = OceanView.LAYER_SHIP
 	add_child(mesh_instance)
 	for room in ShipLayout.ROOMS:
@@ -100,6 +119,14 @@ func _add_reactor() -> void:
 
 ## Плафоны отсеков × k (мигание, Vitals.lamp_k). Свет реактора и тревоги пробоины не мигают.
 ## Яркость экрана журнала при помехах (Vitals.screen_k).
+## «Экономно» (ART-044): false — карты нормалей и ORM отсеков не читаются, цвет остаётся (ключ снимка relief=0).
+func set_relief(on: bool) -> void:
+	for i in mesh_instance.mesh.get_surface_count():
+		var m := mesh_instance.mesh.surface_get_material(i) as ShaderMaterial
+		if m:
+			m.set_shader_parameter("relief", on)
+
+
 func set_journal_k(k: float) -> void:
 	journal_text.modulate = Color(JOURNAL_TEXT.r * k, JOURNAL_TEXT.g * k, JOURNAL_TEXT.b * k)
 

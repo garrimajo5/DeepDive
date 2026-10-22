@@ -151,8 +151,9 @@
 - [x] Материалы мостика по ART-054 (принято, `mostik-materialy.md`): метровые UV и касательные оболочки `BridgeView`,
   цвет/нормали/ORM в `Paint.DECK`/`METAL`/`SEAM` без новых вызовов, скос потолка по нормали грани; на «Экономно» без нормалей
   (`BridgeView.KITS`, `planar_uv`, шейдер `ship_surface.gdshader`, `set_relief`; карты `textures/bridge/`)
-- [ ] Материалы машинного и трюма по ART-055 (принято, `otseki-materialy.md`): метровые UV и касательные `RoomsView` (общие
+- [x] Материалы машинного и трюма по ART-055 (принято, `otseki-materialy.md`): метровые UV и касательные `RoomsView` (общие
   с ART-054), комплект по z внутри `Paint.DECK`/`METAL`/`SEAM` без новых вызовов; на «Экономно» без нормалей и ORM
+  (`RoomsView.KITS`, отрезки `*_z` и комплект `aft_*` в `ship_surface.gdshader`, `set_relief`; карты `textures/rooms/`)
 - [ ] Лучи сквозь трещины льда по ART-052 (принято, `luchi.md`): аддитивные шахты-конусы одним MultiMesh в `OceanView`,
   маска и шум ART-052, сила по глубине фрагмента, гаснут вдали, у дна и у Края; этап 2 `grafika-plan.md`
 - [ ] Лёд снизу по ART-056 (принято, `led-snizu.md`): цвет/нормали/маска трещин в материал «Льда» по `world.xz / 16`, маска

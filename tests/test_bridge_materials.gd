@@ -25,7 +25,7 @@ func _surface(mesh: ArrayMesh, paint: int) -> int:
 
 func test_kits_on_bridge_only() -> void:
 	var plain := BridgeView.build_mesh(BridgePlan.parts())
-	var kits := BridgeView.build_mesh(BridgePlan.parts(), true)
+	var kits := BridgeView.build_mesh(BridgePlan.parts(), BridgeView.KITS)
 	eq(kits.get_surface_count(), plain.get_surface_count(), "поверхностей (вызовов) не больше")
 	for paint in [BridgePlan.Paint.DECK, BridgePlan.Paint.METAL, BridgePlan.Paint.SEAM]:
 		var i := _surface(kits, paint)
@@ -50,7 +50,7 @@ func test_kits_on_bridge_only() -> void:
 
 
 func test_metric_uv_and_tangents() -> void:
-	var mesh := BridgeView.build_mesh(BridgePlan.parts(), true)
+	var mesh := BridgeView.build_mesh(BridgePlan.parts(), BridgeView.KITS)
 	var a := mesh.surface_get_arrays(_surface(mesh, BridgePlan.Paint.DECK))
 	var pos: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
 	var nor: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
