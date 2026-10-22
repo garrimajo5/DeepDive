@@ -399,6 +399,22 @@ func _rebuild_plankton() -> void:
 func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	world.ship = ship
 	world.step(dt)
+	_sync(ship)
+	return world.take_link()
+
+
+## Шаг мира у гостя сетевого забега: мир идёт сам (стебли, огни, стаи между кадрами), события — не кораблю (их
+## разбирает хост); near — существа рядом из свежего кадра хоста (`EcoLink.pack_near`), пустой — кадра не было.
+func step_client(dt: float, ship: EcoLink.ShipState, near: PackedFloat32Array = PackedFloat32Array()) -> void:
+	world.ship = ship
+	world.step(dt)
+	world.take_link()
+	if not near.is_empty():
+		EcoLink.apply_near(world.agents, near)
+	_sync(ship)
+
+
+func _sync(ship: EcoLink.ShipState) -> void:
 	fish_view.sync(world.time)
 	grazer_view.sync(world.time)
 	pred_view.sync(world.time, ship.pos)
@@ -427,4 +443,3 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	grot_view.sync(world.time, ship.pos)
 	plankton_view.sync(world.time, ship.pos, ship.yaw)
 	echo_view.sync(world.time, ship.pos)
-	return world.take_link()

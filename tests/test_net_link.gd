@@ -258,3 +258,24 @@ func test_quiet_guest_and_host_lost() -> void:   # «Нет связи» на т
 	g.index = 0
 	h.send_frame({"v": NetSnap.VERSION, "seq": 1})
 	ok(_pump(func() -> bool: return not c.lost()), "кадр пришёл — связь есть")
+
+
+func test_creatures_ride_with_frame() -> void:   # существа рядом («eco», EcoLink.pack_near) — отдельным пакетом
+	var h := _host()
+	var c := _client()
+	ok(_pump(func() -> bool: return c.joined() and not events.is_empty()), "на борту")
+	(events[0]["guest"] as NetLink.Guest).index = 0
+	var w := EcoWorld.new()
+	var a := w.spawn("pred", Vector3(3, -30, 4))
+	a.v = Vector3(1, 0, 2)
+	var eco := EcoLink.pack_near(w.agents, Vector3.ZERO)
+	var f := NetSnap.frame(1, 0.0, Helm.Ship.new(), Reactor.new(), Vitals.new(), true, [Crew.Member.new()])
+	f["eco"] = eco
+	h.send_frame(f)
+	ok(f.get("eco") == eco, "кадр хоста с существами как был")
+	ok(_pump(func() -> bool: return c.has_meta("f") and (c.get_meta("f") as Dictionary).has("eco")), "существа дошли")
+	ok((c.get_meta("f") as Dictionary)["eco"] == eco, "числа те же")
+	c.remove_meta("f")
+	h.send_frame(NetSnap.frame(2, 0.0, Helm.Ship.new(), Reactor.new(), Vitals.new(), true, [Crew.Member.new()]))
+	ok(_pump(func() -> bool: return c.has_meta("f")), "кадр без существ")
+	ok(not (c.get_meta("f") as Dictionary).has("eco"), "старые существа второй раз не приходят")

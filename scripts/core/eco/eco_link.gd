@@ -114,3 +114,50 @@ static func steal(by: String, sample: int) -> Dictionary:
 
 static func drop(sample: int, at: Vector3) -> Dictionary:
 	return {"type": DROP, "sample": sample, "at": at}
+
+
+## Существа рядом для гостя сетевого забега (кадр хоста): мир у гостя идёт сам, а подвижные существа (`EcoWorld.agents`)
+## ближе NET_R к кораблю хост шлёт как есть — гость ставит их на место (`apply_near`). Порядок `agents` одинаков
+## у хоста и гостя: существа создаются при сбросе мира по зерну. На существо NET_STRIDE чисел: номер в `agents`,
+## код (вид `Species.index_of` × 16 + состояние `EcoAgent.State` + 8, если неживое), место, скорость.
+## Ближние первыми, не больше NET_MAX — пакет ~0,8 КБ.
+const NET_R := 70.0
+const NET_MAX := 24
+const NET_STRIDE := 8
+
+
+static func pack_near(agents: Array[EcoAgent], center: Vector3, radius: float = NET_R,
+		limit: int = NET_MAX) -> PackedFloat32Array:
+	var near: Array = []
+	for i in agents.size():
+		var d := agents[i].p.distance_squared_to(center)
+		if d <= radius * radius:
+			near.append([d, i])
+	near.sort_custom(func(a, b): return a[0] < b[0])
+	var out := PackedFloat32Array()
+	for k in mini(near.size(), limit):
+		var i: int = near[k][1]
+		var a := agents[i]
+		var code := Species.index_of(a.species) * 16 + int(a.state) + (0 if a.alive else 8)
+		out.append_array([i, code, a.p.x, a.p.y, a.p.z, a.v.x, a.v.y, a.v.z])
+	return out
+
+
+## Поставить существ гостя по кадру хоста (`pack_near`). Существо с другим видом на этом номере (миры разошлись)
+## и номер за концом списка пропускаются. Возвращает, сколько существ поставлено.
+static func apply_near(agents: Array[EcoAgent], data: PackedFloat32Array) -> int:
+	var n := 0
+	for k in range(0, data.size() - NET_STRIDE + 1, NET_STRIDE):
+		var i := int(data[k])
+		var code := int(data[k + 1])
+		if i < 0 or i >= agents.size():
+			continue
+		var a := agents[i]
+		if Species.index_of(a.species) != code >> 4:
+			continue
+		a.state = (code & 7) as EcoAgent.State
+		a.alive = code & 8 == 0
+		a.p = Vector3(data[k + 2], data[k + 3], data[k + 4])
+		a.v = Vector3(data[k + 5], data[k + 6], data[k + 7])
+		n += 1
+	return n

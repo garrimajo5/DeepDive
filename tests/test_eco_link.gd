@@ -373,3 +373,34 @@ func test_skalnik_steals_from_real_winch() -> void:
 	near(Vector2(smp.pos.x, smp.pos.z).distance_to(Vector2(sk.home.x, sk.home.z)), EcoSkalnik.STASH, 1e-3, "у дома")
 	main.queue_free()
 	await frames(1)
+
+
+func test_pack_near_for_guest() -> void:   # существа рядом для гостя сетевого забега: ближние первыми, в радиусе
+	var w := EcoWorld.new()
+	var far := w.spawn("pred", Vector3(200, -30, 0))
+	var a := w.spawn("pred", Vector3(10, -30, 0))
+	var b := w.spawn("fish", Vector3(2, -30, 0))
+	a.v = Vector3(1, 2, 3)
+	a.set_state(EcoAgent.State.HUNT)
+	b.alive = false
+	var d := EcoLink.pack_near(w.agents, Vector3(0, -30, 0))
+	eq(d.size(), 2 * EcoLink.NET_STRIDE, "дальний не едет")
+	eq(int(d[0]), 2, "ближний первым")
+	eq(int(d[EcoLink.NET_STRIDE]), 1)
+	eq(EcoLink.pack_near(w.agents, Vector3(0, -30, 0), EcoLink.NET_R, 1).size(), EcoLink.NET_STRIDE, "не больше limit")
+	# мир гостя: те же существа, но в других местах
+	var g := EcoWorld.new()
+	g.spawn("pred", far.p)
+	var ga := g.spawn("pred", Vector3.ZERO)
+	var gb := g.spawn("fish", Vector3.ZERO)
+	eq(EcoLink.apply_near(g.agents, d), 2, "оба поставлены")
+	eq(ga.p, a.p, "место как у хоста")
+	eq(ga.v, a.v, "скорость как у хоста")
+	eq(ga.state, EcoAgent.State.HUNT, "состояние как у хоста")
+	ok(ga.alive and not gb.alive, "неживое неживым")
+	# миры разошлись: на номере другой вид — не трогаем
+	var x := EcoWorld.new()
+	x.spawn("pred", far.p)
+	var xa := x.spawn("fish", Vector3.ZERO)
+	eq(EcoLink.apply_near(x.agents, d), 0, "чужой вид и номер за концом списка пропускаются")
+	eq(xa.p, Vector3.ZERO)

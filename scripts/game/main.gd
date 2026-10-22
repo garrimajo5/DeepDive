@@ -1294,7 +1294,9 @@ func _net_send(dt: float) -> void:
 		var welding := crew.any(func(m: Crew.Member) -> bool: return m.welding())
 		var ev := NetSnap.events(breach, silt, time, welding, news if news_age < NetSnap.NEWS_TIME else [])
 		ev["r"] = _net_run()
-		net_host.send_frame(NetSnap.frame(net_host.seq, time, helm, reactor, vitals, light_on, crew, ev))
+		var f := NetSnap.frame(net_host.seq, time, helm, reactor, vitals, light_on, crew, ev)
+		f["eco"] = EcoLink.pack_near(eco.world.agents, helm.pos)   # существа рядом — гостям отдельным пакетом
+		net_host.send_frame(f)
 
 
 ## Маршрут, голосование и итог для гостей (NetSnap.run_state): мнения ролей — по кораблю сейчас; метки — голоса
@@ -1341,8 +1343,10 @@ func _client_step(dt: float) -> void:
 	var was := net_client.state
 	net_client.send_pad(net_pad)
 	var f := net_client.poll(dt)
+	var near := PackedFloat32Array()
 	if not f.is_empty():
 		_client_frame(f)
+		near = f.get("eco", near)
 	if net_client.lost():   # кадры хоста не идут — у товарищей «Нет связи», пока не придёт кадр
 		for m: Crew.Member in crew:
 			m.lost = m != me
@@ -1357,6 +1361,7 @@ func _client_step(dt: float) -> void:
 	breach.time += dt   # пульс тревоги и свет сварки — своим временем, состояние — из кадра
 	breach_view.apply()
 	silt_view.apply(silt, time, helm.pos, helm.yaw)
+	_client_eco(dt, near)
 	visor.visible = me.welding()
 	alarm_board.show_alarms(alarms_on(), time, breach.active)
 	_client_run_view(dt)
@@ -1374,6 +1379,19 @@ func _client_step(dt: float) -> void:
 	_update_ui()
 	_warm_frame()
 	r.end_frame()
+
+
+## Клиент: живой мир идёт сам, существа рядом встают по кадру хоста (`EcoView.step_client`). Удары, присоски и
+## сообщения мира разбирает хост — у гостя мир событий кораблю не шлёт.
+func _client_eco(dt: float, near: PackedFloat32Array) -> void:
+	var s := eco_ship
+	s.pos = helm.pos
+	s.yaw = helm.yaw
+	s.speed = helm.speed
+	s.light_on = Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP))
+	s.light_range = Searchlight.range_m(reactor.k(Reactor.Sys.LAMP)) * silt.beam_k() if s.light_on else 0.0
+	s.dive = run.depth
+	eco.step_client(dt, s, near)
 
 
 ## Клиент: маршрут, голосование и итог по кадру хоста (`run` уже как у хоста) — точка и брифинг на голостоле, поля
