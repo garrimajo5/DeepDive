@@ -132,6 +132,32 @@ func test_remora_drag_event() -> void:
 	view.free()
 
 
+func test_remora_drag_slows_ship() -> void:   # issue #270: корабль принимает EcoLink.DRAG
+	var h := Helm.Ship.new()
+	h.extra_drag = 0.05
+	h.in_thrust = 1.0
+	for i in 600:
+		h.update(1.0 / 30.0)
+	near(h.speed, Helm.Ship.FORWARD / (Helm.Ship.DRAG + 0.05), 0.02, "две присоски — предельный ход ниже")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.on_eco_event(EcoLink.drag("Присоска", 2, 0.05))
+	near(main.helm.extra_drag, 0.05, 1e-9, "событие — добавка к сопротивлению")
+	main.helm.pos = Vector3(400, -30, 400)
+	main.step(1.0 / 30.0)
+	near(main.helm.extra_drag, 0.0, 1e-9, "шаг мира без события — тормоза нет")
+	for k in 2:
+		main.eco.remoras.remoras[k].mode = EcoRemora.Mode.HULL
+		main.eco.remoras.remoras[k].slot = k
+	main.step(1.0 / 30.0)
+	near(main.helm.extra_drag, 0.05, 1e-6, "две присоски на корпусе — +0,05 к сопротивлению")
+	main.helm.reset()
+	near(main.helm.extra_drag, 0.0, 1e-9, "новый забег — без тормоза")
+	main.queue_free()
+	await frames(1)
+
+
 func test_hit_clamped() -> void:
 	near(EcoLink.hit("x", 3.0, Vector3.ZERO)["damage"], 1.0, 1e-9, "урон 0…1")
 
