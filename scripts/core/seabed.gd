@@ -88,23 +88,58 @@ static func build_arrays(segments: int = SEGMENTS, size: float = SIZE) -> Array:
 	return arr
 
 
-## Вода по глубине (updateEnv в js/game.js): у льда бирюзовая, к 95 м тёмная, туман гуще.
+## Вода по глубине по ART-059 (`docs/concept-art/voda-glubina.md`, ключи `voda-glubina.json`): конечные значения
+## тумана, рассеянного света, солнца сквозь лёд и экспозиции ACES — `OceanView.apply_water` ставит их как есть.
+## Между ключами — линейно (цвет — в линейном свете), ниже 120 м — как на 120 м.
 class Water:
-	const SHALLOW := Color8(0x1a, 0x66, 0x76)
-	const DEEP := Color8(0x04, 0x1a, 0x22)
+	## [глубина, цвет тумана, плотность, рассеянный, солнце, экспозиция]
+	const KEYS := [
+		[0.0, Color8(0x3A, 0x81, 0x90), 0.008, 0.70, 0.65, 0.84],
+		[5.0, Color8(0x2E, 0x76, 0x87), 0.009, 0.64, 0.60, 0.85],
+		[8.0, Color8(0x28, 0x6B, 0x80), 0.010, 0.58, 0.52, 0.86],
+		[15.0, Color8(0x20, 0x53, 0x6F), 0.0115, 0.43, 0.39, 0.885],
+		[20.0, Color8(0x1A, 0x46, 0x67), 0.013, 0.36, 0.31, 0.90],
+		[30.0, Color8(0x14, 0x37, 0x53), 0.0155, 0.25, 0.18, 0.92],
+		[45.0, Color8(0x0D, 0x29, 0x43), 0.018, 0.16, 0.085, 0.94],
+		[60.0, Color8(0x09, 0x1E, 0x34), 0.0195, 0.10, 0.04, 0.955],
+		[90.0, Color8(0x05, 0x13, 0x1F), 0.022, 0.045, 0.012, 0.98],
+		[120.0, Color8(0x04, 0x0D, 0x17), 0.0235, 0.025, 0.005, 0.98],
+	]
 
-	## 0 у льда (до 8 м), 1 на глубине 95 м и ниже.
+	## 0 у льда (до 8 м), 1 на глубине 95 м и ниже (каустики дна, прежняя кривая).
 	static func k(depth: float) -> float:
 		return HashNoise.smooth(8.0, 95.0, depth)
 
+	## Ключ и доля до следующего: [i, t].
+	static func _at(depth: float) -> Array:
+		var d := clampf(depth, KEYS[0][0], KEYS[KEYS.size() - 1][0])
+		for i in KEYS.size() - 1:
+			if d <= KEYS[i + 1][0]:
+				return [i, (d - KEYS[i][0]) / (KEYS[i + 1][0] - KEYS[i][0])]
+		return [KEYS.size() - 2, 1.0]
+
+	static func _num(depth: float, col: int) -> float:
+		var a := _at(depth)
+		return lerpf(KEYS[a[0]][col], KEYS[a[0] + 1][col], a[1])
+
 	static func fog_density(depth: float) -> float:
-		return 0.015 + 0.01 * k(depth)
+		return _num(depth, 2)
 
 	static func ambient(depth: float) -> float:
-		return 0.95 - 0.55 * k(depth)
+		return _num(depth, 3)
 
 	static func sun(depth: float) -> float:
-		return 0.55 - 0.4 * k(depth)
+		return _num(depth, 4)
+
+	static func exposure(depth: float) -> float:
+		return _num(depth, 5)
 
 	static func fog_color(depth: float) -> Color:
-		return SHALLOW.lerp(DEEP, k(depth))
+		var a := _at(depth)
+		var c0: Color = KEYS[a[0]][1]
+		var c1: Color = KEYS[a[0] + 1][1]
+		return c0.srgb_to_linear().lerp(c1.srgb_to_linear(), a[1]).linear_to_srgb()
+
+	## Свет каустик на дне — прежняя кривая (ART-059: лучи и каустики не усиливать и не ослаблять заново).
+	static func caustic(depth: float) -> float:
+		return 0.55 - 0.4 * k(depth)

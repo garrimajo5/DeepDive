@@ -196,14 +196,16 @@ func apply_water(env: Environment, depth: float, around: Vector3, silt: float = 
 	env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
 	env.fog_light_color = fog
 	env.fog_light_energy = 1.0
-	env.fog_density = Seabed.Water.fog_density(depth) * 0.9 + 0.03 * silt
+	# ART-059: конечные значения таблицы `Seabed.Water` — без прежних множителей 0,9 / 0,7 / 1,2
+	env.fog_density = Seabed.Water.fog_density(depth) + 0.03 * silt
 	shafts_mat.set_shader_parameter("fog_density", env.fog_density)
 	env.fog_sky_affect = 0.0
 	env.ambient_light_color = Color(0.55, 0.75, 0.8)
-	env.ambient_light_energy = Seabed.Water.ambient(depth) * 0.7
-	sun.light_energy = Seabed.Water.sun(depth) * 1.2
+	env.ambient_light_energy = Seabed.Water.ambient(depth)
+	env.tonemap_exposure = Seabed.Water.exposure(depth)
+	sun.light_energy = Seabed.Water.sun(depth)
 	# Каустики на дне гаснут по глубине (меньше света сквозь лёд) и в облаке ила (свет рассеивается).
-	seabed_mat.set_shader_parameter("light", clampf(Seabed.Water.sun(depth) * (1.0 - 0.85 * silt), 0.0, 1.0))
+	seabed_mat.set_shader_parameter("light", clampf(Seabed.Water.caustic(depth) * (1.0 - 0.85 * silt), 0.0, 1.0))
 	snow.position = around
 	ice_mat.set_shader_parameter("water", fog)
 	ice_mat.set_shader_parameter("glow_k", exp(-maxf(depth, 0.0) / IceSheet.GLOW_DEPTH))
