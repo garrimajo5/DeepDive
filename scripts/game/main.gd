@@ -1089,7 +1089,8 @@ func _update_ui() -> void:
 	var width := minf(900.0, get_viewport().get_visible_rect().size.x - 48.0)
 	hint.text = "\n".join(Status.lines(status_parts(),
 		func(t: String) -> float: return font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x, width))
-	var plate := Rect2(HINT_POS, hint.get_combined_minimum_size())
+	hint.reset_size()   # Label сам растёт, но не ужимается: после длинного сообщения плашка оставалась высокой
+	var plate := Rect2(HINT_POS, hint.size)
 	hint.position.y = AlarmBoard.status_y(plate, board_screen_rect())   # плашка под табло, а не поверх (#376)
 
 
@@ -1097,7 +1098,7 @@ func _update_ui() -> void:
 func status_rect() -> Rect2:
 	if hint == null or not hint.is_visible_in_tree() or hint.text.is_empty():
 		return Rect2()
-	return Rect2(hint.position, hint.get_combined_minimum_size())
+	return Rect2(hint.position, hint.size)
 
 
 ## Табло тревог на экране (AlarmBoard.screen_rect); пусто, если его нет в кадре.
