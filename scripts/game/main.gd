@@ -79,6 +79,7 @@ var vote_panel: VotePanel
 var route_card: RouteCard   ## карточка выбранного маршрута над голостолом (ART-016)
 var drop := NetDrop.new()   ## гость потерял хоста (ART-043): диалог, окно переподключения, «Играть одному»
 var drop_panel: DropPanel
+var notice := HostNotice.new()   ## у хоста: «Игорь отключился» / «Игорь вернулся» (ART-043), рисует drop_panel
 var current := Helm.SeaCurrent.new()
 
 var ocean: OceanView
@@ -1302,6 +1303,9 @@ func host_game(port: int = NetLink.PORT) -> Error:
 
 ## Гости хоста: пришёл — член экипажа своей роли и внешности с вводом гостя, ушёл — убрать с палубы.
 func _net_poll(dt: float = 0.0) -> void:
+	if notice.active():
+		notice.update(dt)
+		drop_panel.show_notice(notice)
 	if net_host == null:
 		return
 	var changed := false
@@ -1313,13 +1317,13 @@ func _net_poll(dt: float = 0.0) -> void:
 				m.name = g.name
 			m.pad = g.pad
 			net_mates[g.id] = m
-			say("На борту: %s" % m.name)
+			if not notice.joined(m.name, m.look == 1):
+				say("На борту: %s" % m.name)
 		else:
 			var m: Crew.Member = net_mates.get(g.id)
 			net_mates.erase(g.id)
 			if m:
-				crew.erase(m)
-				say("Ушёл с борта: %s" % m.name)
+				mate_gone(m)
 		changed = true
 	for id: int in net_mates:   # гость без ввода дольше NetLink.LOST_AFTER — табличка «Нет связи»
 		var g: NetLink.Guest = net_host.guests.get(id)   # хост закрыт — гостей уже нет, а фигуры ещё на палубе
@@ -1328,6 +1332,14 @@ func _net_poll(dt: float = 0.0) -> void:
 		crew_view.set_members(crew, me)
 		for id: int in net_mates:
 			(net_host.guests[id] as NetLink.Guest).index = crew.find(net_mates[id])
+
+
+## Товарищ ушёл с борта (гость отключился): убрать с палубы, его пост свободен; у хоста — «… отключился» (ART-043).
+func mate_gone(m: Crew.Member) -> void:
+	notice.left(m.name, m.busy(), m.look == 1)
+	crew.erase(m)
+	crew_view.set_members(crew, me)
+	drop_panel.show_notice(notice)
 
 
 ## Кадр гостям раз в NetSnap.SEND_DT — после шага, как его видит хост.
@@ -1621,6 +1633,8 @@ func debug_setup(kv: Dictionary) -> void:
 				var mm: Crew.Member = crew[k + 1]
 				mm.press = -1e3 if st[k] == "a" else INF   # на время снимка
 				mm.lost = st[k] == "l"
+		if kv.get("gone", "0") == "1":  # gone=1 — последний товарищ отключился: у хоста плашка ART-043
+			mate_gone(crew[-1])
 	if kv.get("silt", "0") == "1":  # silt=1 — корабль в облаке ила (снимок сонарной тьмы); с ping=1 — импульс завяз
 		open_silt()   # (jam_age=<с> — сколько прошло с завязшего импульса, ART-048)
 		if kv.get("ping", "0") == "1":
