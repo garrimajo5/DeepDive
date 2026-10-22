@@ -1,0 +1,42 @@
+{
+  "01-pod-ledom.jpg": {
+    "size": [
+      1600,
+      900
+    ],
+    "bytes": 327206,
+    "sha256": "4179e946295b9b80e949d16d1dee205a653a36e9a5389aec21f28aac1795f748"
+  },
+  "02-razmernyy-list.png": {
+    "size": [
+      2048,
+      1152
+    ],
+    "bytes": 111522,
+    "sha256": "63c3764c9d26ee1cd44fdd216c5ab7aa973d7e0d8ec17e7125e164bfa6073312"
+  },
+  "03-forma-i-anatomiya.png": {
+    "size": [
+      2048,
+      1152
+    ],
+    "bytes": 1189099,
+    "sha256": "d6221691fe4e689d85c3464b76c106fce35065021b08968171878ef45e34a37c"
+  },
+  "source\\formy.jpg": {
+    "size": [
+      1672,
+      941
+    ],
+    "bytes": 222714,
+    "sha256": "9a70e0e381ad53be792487c0a1aa3ae49d86959b4c5196704ef783b69c01f502"
+  },
+  "source\\scena.jpg": {
+    "size": [
+      1600,
+      900
+    ],
+    "bytes": 327206,
+    "sha256": "4179e946295b9b80e949d16d1dee205a653a36e9a5389aec21f28aac1795f748"
+  }
+}
