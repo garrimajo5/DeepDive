@@ -143,3 +143,64 @@ class Water:
 	## Свет каустик на дне — прежняя кривая (ART-059: лучи и каустики не усиливать и не ослаблять заново).
 	static func caustic(depth: float) -> float:
 		return 0.55 - 0.4 * k(depth)
+
+
+## Грунты дна по ART-060 (`docs/concept-art/dno-grunty.md`): песок, ил и галька — карты 2 × 2 м поверх `color_at`
+## в материале дна (`shaders/seabed.gdshader`, один вызов). Веса грунтов, затухания и базис нормалей — здесь;
+## шейдер считает то же тем же хешем, что `HashNoise` (до точности float).
+class Ground:
+	const TEX := "res://textures/dno/%s-%s.png"   ## грунт (pesok, il, galka), карта (tsvet, normali, orm)
+	const KINDS := ["pesok", "il", "galka"]
+	const MAPS := ["tsvet", "normali", "orm"]
+	const TILE := 2.0                              ## плитка, м: uv = world.xz / TILE
+	const OFFSET := [Vector2(0.0, 0.0), Vector2(0.37, 0.71), Vector2(0.63, 0.19)]   ## свой сдвиг UV у грунта
+	const NORMAL_K := [0.42, 0.25, 0.55]           ## сила нормалей: песок, ил, галька
+	const NORMAL_FADE := Vector2(8.0, 35.0)        ## нормали гаснут, м от камеры
+	const COLOR_FADE := Vector2(12.0, 55.0)        ## цвет деталей гаснет, м
+	const BUMP := 0.12                             ## прежний процедурный микрорельеф — слабее
+	const SILT_SCALE := 0.075                      ## ил — карманы по шуму, 1/м
+	const SILT_EDGE := Vector2(0.48, 0.62)
+	const PEBBLE_SCALE := 0.11                     ## галька — пятна шума, 1/м
+	const PEBBLE_EDGE := Vector2(0.45, 0.62)
+	const STEEP := Vector2(0.42, 0.65)             ## уклон (1 − ny), на котором детали уходят в скалу
+
+	## Веса [песок, ил, галька] ≥ 0, сумма 1. ny — y нормали, depth — глубина дна под льдом, м.
+	static func weights(x: float, z: float, ny: float, depth: float) -> Array:
+		var s := 1.0 - ny
+		var n_silt := HashNoise.fbm(x * SILT_SCALE + 7.0, z * SILT_SCALE + 7.0, 2)
+		var band := HashNoise.smooth(10.0, 18.0, depth) * (1.0 - HashNoise.smooth(55.0, 75.0, depth))
+		var silt := HashNoise.smooth(SILT_EDGE.x, SILT_EDGE.y, n_silt) * (0.35 + 0.65 * band) \
+				* HashNoise.smooth(0.80, 0.98, ny)
+		var spot := HashNoise.value(x * PEBBLE_SCALE + 31.0, z * PEBBLE_SCALE - 5.0)
+		var slope_band := HashNoise.smooth(0.08, 0.16, s) * (1.0 - HashNoise.smooth(0.36, 0.46, s))
+		var pebble := maxf(slope_band * HashNoise.smooth(0.25, 0.45, spot),
+				0.7 * HashNoise.smooth(PEBBLE_EDGE.x, PEBBLE_EDGE.y, spot))
+		silt *= 1.0 - pebble
+		return [1.0 - silt - pebble, silt, pebble]
+
+	## Сила деталей на склоне: на крутом остаётся скальный цвет.
+	static func detail_k(ny: float) -> float:
+		return 1.0 - HashNoise.smooth(STEEP.x, STEEP.y, 1.0 - ny)
+
+	static func normal_fade(dist: float) -> float:
+		return 1.0 - HashNoise.smooth(NORMAL_FADE.x, NORMAL_FADE.y, dist)
+
+	static func color_fade(dist: float) -> float:
+		return 1.0 - HashNoise.smooth(COLOR_FADE.x, COLOR_FADE.y, dist)
+
+	## Цвет: vertex_color · mix(1, 2·tsvet, k) — карта даёт отклонение от 50 % серого.
+	static func tint(base: Color, tsvet: Color, k: float) -> Color:
+		return Color(base.r * lerpf(1.0, 2.0 * tsvet.r, k), base.g * lerpf(1.0, 2.0 * tsvet.g, k),
+				base.b * lerpf(1.0, 2.0 * tsvet.b, k))
+
+	## Мировой базис нормалей: T — +X на поверхность, B = N × T (на ровном дне к −Z), +Y карты — к −Z мира.
+	static func basis(n: Vector3) -> Basis:
+		var t := (Vector3.RIGHT - n * n.dot(Vector3.RIGHT)).normalized()
+		return Basis(t, n.cross(t), n)
+
+	## UV грунта kind в точке мира.
+	static func uv(x: float, z: float, kind: int) -> Vector2:
+		return Vector2(x, z) / TILE + OFFSET[kind]
+
+	static func path(kind: int, map: int) -> String:
+		return TEX % [KINDS[kind], MAPS[map]]
