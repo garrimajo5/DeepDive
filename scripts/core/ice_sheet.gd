@@ -43,3 +43,29 @@ static func contrast(depth: float) -> float:
 ## Сила нормалей по глубине наблюдателя (0 с 35 м).
 static func relief(depth: float) -> float:
 	return NORMAL_DEPTH * clampf(1.0 - depth / RELIEF_TO, 0.0, 1.0)
+
+
+const CRACK_MASK := "res://textures/ice/treshchiny.png"
+const SHAFT_MASK := 0.70           ## основание шахты ART-052 — где маска трещин выше (ART-056)
+const CAUSTIC := 0.06              ## каустики под трещинами: 0,06·exp(−глубина дна / 12)
+const CAUSTIC_DEPTH := 12.0
+static var _mask: Image
+
+
+## Маска трещин 0…1 в точке льда (та же карта, что у шейдера, без фильтра — ближайший тексел).
+static func crack(x: float, z: float) -> float:
+	if _mask == null:
+		_mask = (load(CRACK_MASK) as Texture2D).get_image()
+		if _mask.is_compressed():
+			_mask.decompress()
+		_mask.clear_mipmaps()
+	var w := _mask.get_width()
+	var u := uv(x, z)
+	var px := posmod(int(floorf(u.x * w)), w)
+	var pz := posmod(int(floorf(u.y * w)), w)
+	return _mask.get_pixel(px, pz).r
+
+
+## Сила каустик под трещинами на дне глубиной depth (м подо льдом).
+static func caustic(depth: float) -> float:
+	return CAUSTIC * exp(-maxf(depth, 0.0) / CAUSTIC_DEPTH)

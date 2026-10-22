@@ -82,3 +82,31 @@ func test_scene_ice_material() -> void:
 	near(float(m.get_shader_parameter("relief")), 0.0, 1e-6, "и вода их не включает обратно")
 	ocean.queue_free()
 	await frames(1)
+
+
+## Шахты ART-052 стоят на трещинах льда: маска выше 0,70 там, где шум открыл сеть (ART-056).
+func test_shafts_stand_on_cracks() -> void:
+	var all := LightShafts.layout()
+	ok(all.size() > 150, "шахт %d" % all.size())
+	for s in all:
+		ok(IceSheet.crack(s.top.x, s.top.z) > IceSheet.SHAFT_MASK, "верх шахты на трещине (%.1f, %.1f)" % [s.top.x, s.top.z])
+		ok(IceSheet.gate(s.top.x, s.top.z) > 0.0, "там, где сеть трещин открыта")
+	var start := LightShafts.near(all, Helm.Ship.START, 60.0)
+	ok(start.size() >= 3, "у старта видно 3+ шахты (%d)" % start.size())
+	ok(IceSheet.crack(0.3, 0.3) >= 0.0 and IceSheet.crack(0.3, 0.3) <= 1.0, "маска 0…1")
+	near(IceSheet.crack(3.1, -5.2), IceSheet.crack(3.1 + IceSheet.TILE, -5.2 - IceSheet.TILE), 1e-6, "та же плитка 16 м")
+
+
+func test_caustics_under_cracks() -> void:
+	near(IceSheet.caustic(0.0), 0.06, 1e-6, "у льда 0,06")
+	near(IceSheet.caustic(12.0), 0.06 / exp(1.0), 1e-6, "exp(−глубина дна / 12)")
+	ok(IceSheet.caustic(60.0) < 0.001, "глубоко — нет")
+	var ocean := OceanView.new()
+	tree.root.add_child(ocean)
+	await frames(1)
+	var m := ocean.seabed_mat
+	eq((m.get_shader_parameter("crack_tex") as Texture2D).resource_path, IceSheet.CRACK_MASK, "дно — та же маска трещин")
+	near(float(m.get_shader_parameter("gate_scale")), IceSheet.GATE_SCALE, 1e-6, "и тот же шум открытости")
+	near(float(m.get_shader_parameter("crack_caustic")), IceSheet.CAUSTIC, 1e-6)
+	ocean.queue_free()
+	await frames(1)
