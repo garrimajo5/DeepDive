@@ -404,13 +404,13 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 
 
 ## Шаг мира у гостя сетевого забега: мир идёт сам (стебли, огни, стаи между кадрами), события — не кораблю (их
-## разбирает хост); near — существа рядом из свежего кадра хоста (`EcoLink.pack_near`), пустой — кадра не было.
+## разбирает хост); near — существа и мох рядом из свежего кадра хоста (`EcoLink.pack_world`), пустой — кадра не было.
 func step_client(dt: float, ship: EcoLink.ShipState, near: PackedFloat32Array = PackedFloat32Array()) -> void:
 	world.ship = ship
 	world.step(dt)
 	world.take_link()
 	if not near.is_empty():
-		EcoLink.apply_near(world.agents, near)
+		EcoLink.apply_world(world.agents, world.systems, near)
 	_sync(ship)
 
 

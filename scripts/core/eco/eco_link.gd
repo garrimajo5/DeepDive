@@ -149,6 +149,8 @@ static func apply_near(agents: Array[EcoAgent], data: PackedFloat32Array) -> int
 	var n := 0
 	for k in range(0, data.size() - NET_STRIDE + 1, NET_STRIDE):
 		var i := int(data[k])
+		if i == NET_MOSS:   # дальше — мох (`pack_world`)
+			break
 		var code := int(data[k + 1])
 		if i < 0 or i >= agents.size():
 			continue
@@ -159,5 +161,68 @@ static func apply_near(agents: Array[EcoAgent], data: PackedFloat32Array) -> int
 		a.alive = code & 8 == 0
 		a.p = Vector3(data[k + 2], data[k + 3], data[k + 4])
 		a.v = Vector3(data[k + 5], data[k + 6], data[k + 7])
+		n += 1
+	return n
+
+
+## Мох у гостя (`EcoMoss`): скребуны и монетки гостя едят по-своему, поэтому еда пятен рядом с кораблём едет с
+## существами — после них метка NET_MOSS и по NET_MOSS_STRIDE чисел на пятно: сквозной номер пятна (`mosses`)
+## и его еда 0…1. Яркость пятна у гостя — от этой еды (`EcoMoss.glow_of`).
+const NET_MOSS := -1
+const NET_MOSS_STRIDE := 2
+
+
+## Все пятна мха мира по порядку: системы `EcoMoss` из списка и мох внутри мест (`bones.moss`, `well.moss`) — без
+## повторов (у скребунов и монеток `moss` — ссылка на общий). Порядок у хоста и гостя один: системы те же.
+static func mosses(systems: Array) -> Array[EcoMoss]:
+	var out: Array[EcoMoss] = []
+	for s in systems:
+		var m: EcoMoss = null
+		if s is EcoMoss:
+			m = s
+		elif s is Object and "moss" in s and s.moss is EcoMoss:
+			m = s.moss
+		if m != null and not out.has(m):
+			out.append(m)
+	return out
+
+
+## Пакет «существа рядом» вместе с мхом: `pack_near`, затем NET_MOSS и пятна мха ближе radius (по горизонтали).
+static func pack_world(agents: Array[EcoAgent], systems: Array, center: Vector3,
+		radius: float = NET_R) -> PackedFloat32Array:
+	var out := pack_near(agents, center, radius)
+	var moss := PackedFloat32Array()
+	var i := 0
+	for m in mosses(systems):
+		for p in m.patches:
+			if Vector2(p.pos.x - center.x, p.pos.z - center.z).length() <= radius:
+				moss.append_array([i, p.food])
+			i += 1
+	if not moss.is_empty():
+		out.append(NET_MOSS)
+		out.append_array(moss)
+	return out
+
+
+## Поставить гостю существ и мох по пакету `pack_world` (старый пакет без мха — только существа). Возвращает,
+## сколько пятен мха поставлено.
+static func apply_world(agents: Array[EcoAgent], systems: Array, data: PackedFloat32Array) -> int:
+	apply_near(agents, data)
+	var at := -1
+	for k in range(0, data.size(), NET_STRIDE):
+		if int(data[k]) == NET_MOSS:
+			at = k + 1
+			break
+	if at < 0:
+		return 0
+	var all: Array[EcoMoss.Patch] = []
+	for m in mosses(systems):
+		all.append_array(m.patches)
+	var n := 0
+	for k in range(at, data.size() - NET_MOSS_STRIDE + 1, NET_MOSS_STRIDE):
+		var i := int(data[k])
+		if i < 0 or i >= all.size():
+			continue
+		all[i].food = clampf(data[k + 1], 0.0, 1.0)
 		n += 1
 	return n
