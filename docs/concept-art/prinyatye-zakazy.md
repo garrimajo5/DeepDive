@@ -545,3 +545,10 @@ ROADMAP потока А.
 `pult-energii-sostoyaniya.png`, кадр 16:9 `pult-energii-169.png`; решения — `pult-energii.md`: панель справа над
 кнопкой действия, пять одинаковых строк, выбор рамкой и полосой, янтарь только при перегреве, доли при сбросе
 сохраняются; ракурс открытого пульта свободнее. Встройка — задача ROADMAP потока А.
+## ART-053 Нормали и шероховатость обшивки — принято
+- Исходник: ART-024 (`obshivka.md`), ART-049 (`povrezhdeniya.md`), `hull_plating.gdshader`.
+
+**Принято 22.10.2026** (PR #405, ветка `art/ART-053-obshivka-normali`): `obshivka-normali.png`, `obshivka-sheroh.png`,
+`povrezhdeniya-normali.png`, лист `obshivka-normali-list.png`; решения — `obshivka-normali.md`: швы утоплены, крепёж
+выпуклый, вмятины/царапины/кольца/заплатки рельефом в регистр ART-049, OpenGL +Y, сила ≈ 1,0, трипланарные нормали
+сводить с разворотом базиса, на «Экономно» выключать. Встройка — задача ROADMAP потока А.
