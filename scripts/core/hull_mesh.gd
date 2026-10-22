@@ -36,6 +36,9 @@ const DAMAGE_ALT_SCALE := 0.83
 const DAMAGE_ALT_SHIFT := Vector2(0.37, 0.61)
 const DAMAGE_CELL := 1.37       ## ячейка шума выбора слоя в плитках (не кратна плитке)
 const DAMAGE_GATE := Vector2(0.46, 0.54)
+## Рельеф ART-053 (obshivka-normali.md): textures/hull/normali, sheroh, povrezhdeniya-normali; сила ≈ 1,0 и 0,7–1,0.
+const NORMAL_DEPTH := 1.0
+const DAMAGE_DEPTH := 0.85
 
 
 ## Краска под обшивкой: металл корпуса. Швы-кольца, окна, линза, шлюз — своим цветом.
@@ -99,6 +102,35 @@ static func _damage_one(col: Image, lvl: Image, uv: Vector2, loss: float) -> flo
 	var y := int(fposmod(uv.y, 1.0) * col.get_height()) % col.get_height()
 	var t := lvl.get_pixel(x * lvl.get_width() / col.get_width(), y * lvl.get_height() / col.get_height()).r
 	return col.get_pixel(x, y).a if damage_shown(loss, t) else 0.0
+
+
+## Нормаль из пикселя карты OpenGL (+Y — вверх по картинке) в осях плитки: x вдоль u, y вдоль v (v идёт вниз по
+## картинке, поэтому y меняет знак), z — от поверхности. Как `decode_n` в шейдере.
+static func decode_normal(c: Color) -> Vector3:
+	return Vector3(c.r * 2.0 - 1.0, -(c.g * 2.0 - 1.0), c.b * 2.0 - 1.0)
+
+
+## Нормаль второго слоя следов (координаты `damage_alt_uv`, поворот на 90°) — обратно в оси плитки.
+static func alt_back(t: Vector3) -> Vector3:
+	return Vector3(t.y, -t.x, t.z)
+
+
+## Деталь `d` поверх основы `b` (reoriented normal mapping), обе в осях плитки — как `rnm` в шейдере.
+static func rnm(b: Vector3, d: Vector3) -> Vector3:
+	var t := b + Vector3(0, 0, 1)
+	var u := d * Vector3(-1, -1, 1)
+	return (t * t.dot(u) / t.z - u).normalized()
+
+
+## Нормаль плитки `t` на трипланарной плоскости `axis` (0 — zy, 1 — xz, 2 — xy) при нормали меша `n`, в осях корабля
+## (whiteout, как `tri_normal` в шейдере для одной плоскости).
+static func plane_normal(axis: int, n: Vector3, t: Vector3) -> Vector3:
+	match axis:
+		0:
+			return Vector3(absf(t.z) * n.x, t.y + n.y, t.x + n.z).normalized()
+		1:
+			return Vector3(t.x + n.x, absf(t.z) * n.y, t.y + n.z).normalized()
+	return Vector3(t.x + n.x, t.y + n.y, absf(t.z) * n.z).normalized()
 
 
 ## Вес обрастания по локальной высоте (заметки художника ART-024): 0.65 · (1 − smoothstep(0.15, 0.50, h)).

@@ -7,12 +7,22 @@ shader_type spatial;
 // корпуса 0…1, HullMesh.wear), смешиваются уже видимые следы; поверх обрастания, на швах слабее.
 // Против повтора плитки (#406): два слоя следов — как есть и повёрнутый, крупнее, со сдвигом; слой выбирает
 // плавный шум по плоскости (HullMesh.damage_gate), слои дополняют друг друга.
+// Рельеф ART-053 (obshivka-normali.md): нормали ART-024 и следов ART-049 — OpenGL (+Y вверх по картинке, а v идёт
+// вниз, поэтому y меняет знак), каждая плоскость в своём базисе (whiteout), след сводится с основой RNM по весу
+// цвета следа; шероховатость — из карты. relief = false («Экономно») — без выборок рельефа, прежние константы.
+// Та же математика — HullMesh.decode_normal / plane_normal / rnm / alt_back (тест test_hull_view).
 
 uniform sampler2D color_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D mask_tex : hint_default_black, filter_linear_mipmap, repeat_enable;
 uniform sampler2D growth_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D damage_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D damage_lvl : hint_default_white, filter_nearest, repeat_enable;
+uniform sampler2D normal_tex : hint_normal, filter_linear_mipmap, repeat_enable;
+uniform sampler2D rough_tex : hint_roughness_r, filter_linear_mipmap, repeat_enable;
+uniform sampler2D damage_nrm : hint_normal, filter_linear_mipmap, repeat_enable;
+uniform bool relief = true;
+uniform float normal_depth = 1.0;
+uniform float damage_depth = 0.85;
 uniform float wear = 0.0;
 uniform float damage_seam = 0.55;
 uniform float alt_scale = 0.83;
@@ -74,6 +84,61 @@ vec4 damage2(vec2 uv) {
 	return damage(uv) * k + damage(vec2(-uv.y, uv.x) * alt_scale + alt_shift) * (1.0 - k);
 }
 
+// Нормаль карты в осях плитки: x — вдоль u, y — вдоль v, z — от поверхности.
+vec3 decode_n(vec4 c) {
+	vec3 d = c.rgb * 2.0 - 1.0;
+	return vec3(d.x, -d.y, d.z);
+}
+
+// Нормаль второго слоя следов (координаты повёрнуты на 90°) — обратно в оси плитки.
+vec3 alt_back(vec3 t) {
+	return vec3(t.y, -t.x, t.z);
+}
+
+// Свести деталь d с основой b (reoriented normal mapping), обе — в осях плитки.
+vec3 rnm(vec3 b, vec3 d) {
+	vec3 t = b + vec3(0.0, 0.0, 1.0);
+	vec3 u = d * vec3(-1.0, -1.0, 1.0);
+	return normalize(t * dot(t, u) / t.z - u);
+}
+
+// Нормаль следов одной плоскости (два слоя, как damage2), xyz — нормаль, w — вес.
+vec4 damage_n(vec2 uv) {
+	float k = smoothstep(gate_edge.x, gate_edge.y, gate_noise(uv));
+	vec2 uv2 = vec2(-uv.y, uv.x) * alt_scale + alt_shift;
+	float a1 = damage(uv).a * k;
+	float a2 = damage(uv2).a * (1.0 - k);
+	vec3 n = vec3(0.0, 0.0, 1.0) * max(0.0, 1.0 - a1 - a2)
+		+ decode_n(texture(damage_nrm, uv)) * a1 + alt_back(decode_n(texture(damage_nrm, uv2))) * a2;
+	return vec4(normalize(n), a1 + a2);
+}
+
+// Нормаль плитки плоскости uv: основа, сила, след поверх по весу (на швах слабее).
+vec3 plane_t(vec2 uv, float seam) {
+	vec3 t = decode_n(texture(normal_tex, uv));
+	t = normalize(vec3(t.xy * normal_depth, t.z));
+	if (wear > 0.0) {
+		vec4 d = damage_n(uv);
+		float wd = d.w * (1.0 - damage_seam * seam);
+		if (wd > 0.001) {
+			vec3 dn = normalize(vec3(d.xy * damage_depth, d.z));
+			t = rnm(t, normalize(mix(vec3(0.0, 0.0, 1.0), dn, wd)));
+		}
+	}
+	return t;
+}
+
+// Трипланарная нормаль в осях корабля (whiteout): плоскость zy — u по z, v по y; xz — u по x, v по z; xy.
+vec3 tri_normal(vec3 n, vec3 p, vec3 w, float seam) {
+	vec3 tx = plane_t(p.zy, seam);
+	vec3 ty = plane_t(p.xz, seam);
+	vec3 tz = plane_t(p.xy, seam);
+	vec3 ax = vec3(tx.xy + n.zy, abs(tx.z) * n.x);
+	vec3 ay = vec3(ty.xy + n.xz, abs(ty.z) * n.y);
+	vec3 az = vec3(tz.xy + n.xy, abs(tz.z) * n.z);
+	return normalize(ax.zyx * w.x + ay.xzy * w.y + az.xyz * w.z);
+}
+
 void fragment() {
 	vec3 w = tri_w();
 	vec3 p = lp / tile;
@@ -95,6 +160,12 @@ void fragment() {
 		}
 	}
 	ALBEDO = col;
-	ROUGHNESS = mix(mix(0.75, 0.45, seam), 0.9, g);
+	float r = mix(0.75, 0.45, seam);
+	if (relief) {
+		r = tri(rough_tex, p, w).r;
+		vec3 nl = tri_normal(normalize(ln), p, w, seam);
+		NORMAL = normalize((VIEW_MATRIX * (MODEL_MATRIX * vec4(nl, 0.0))).xyz);
+	}
+	ROUGHNESS = mix(r, 0.9, g);
 	METALLIC = 0.3 * (1.0 - g);
 }
