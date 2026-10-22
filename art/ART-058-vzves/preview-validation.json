@@ -1,0 +1,855 @@
+{
+  "melko": {
+    "placements": [
+      {
+        "frame": 12,
+        "screen_xy": [
+          1066,
+          329
+        ],
+        "card_px": 10
+      },
+      {
+        "frame": 4,
+        "screen_xy": [
+          990,
+          291
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 0,
+        "screen_xy": [
+          1289,
+          379
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 5,
+        "screen_xy": [
+          678,
+          330
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 1,
+        "screen_xy": [
+          366,
+          316
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 0,
+        "screen_xy": [
+          801,
+          311
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 8,
+        "screen_xy": [
+          414,
+          297
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 6,
+        "screen_xy": [
+          1128,
+          286
+        ],
+        "card_px": 10
+      },
+      {
+        "frame": 11,
+        "screen_xy": [
+          221,
+          363
+        ],
+        "card_px": 12
+      },
+      {
+        "frame": 4,
+        "screen_xy": [
+          228,
+          277
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 2,
+        "screen_xy": [
+          1327,
+          255
+        ],
+        "card_px": 9
+      },
+      {
+        "frame": 10,
+        "screen_xy": [
+          1064,
+          268
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 4,
+        "screen_xy": [
+          406,
+          253
+        ],
+        "card_px": 12
+      },
+      {
+        "frame": 13,
+        "screen_xy": [
+          816,
+          437
+        ],
+        "card_px": 8
+      },
+      {
+        "frame": 10,
+        "screen_xy": [
+          1151,
+          283
+        ],
+        "card_px": 10
+      },
+      {
+        "frame": 14,
+        "screen_xy": [
+          906,
+          431
+        ],
+        "card_px": 10
+      },
+      {
+        "frame": 6,
+        "screen_xy": [
+          803,
+          328
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 0,
+        "screen_xy": [
+          351,
+          323
+        ],
+        "card_px": 12
+      },
+      {
+        "frame": 3,
+        "screen_xy": [
+          922,
+          387
+        ],
+        "card_px": 8
+      },
+      {
+        "frame": 13,
+        "screen_xy": [
+          560,
+          400
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 1,
+        "screen_xy": [
+          1212,
+          282
+        ],
+        "card_px": 9
+      },
+      {
+        "frame": 1,
+        "screen_xy": [
+          303,
+          285
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 9,
+        "screen_xy": [
+          526,
+          294
+        ],
+        "card_px": 8
+      },
+      {
+        "frame": 4,
+        "screen_xy": [
+          1321,
+          251
+        ],
+        "card_px": 9
+      },
+      {
+        "frame": 14,
+        "screen_xy": [
+          263,
+          401
+        ],
+        "card_px": 9
+      },
+      {
+        "frame": 10,
+        "screen_xy": [
+          516,
+          394
+        ],
+        "card_px": 9
+      },
+      {
+        "frame": 3,
+        "screen_xy": [
+          867,
+          346
+        ],
+        "card_px": 8
+      },
+      {
+        "frame": 13,
+        "screen_xy": [
+          1101,
+          297
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 1,
+        "screen_xy": [
+          1346,
+          433
+        ],
+        "card_px": 8
+      },
+      {
+        "frame": 10,
+        "screen_xy": [
+          769,
+          293
+        ],
+        "card_px": 10
+      },
+      {
+        "frame": 4,
+        "screen_xy": [
+          1174,
+          295
+        ],
+        "card_px": 8
+      },
+      {
+        "frame": 3,
+        "screen_xy": [
+          1198,
+          355
+        ],
+        "card_px": 8
+      },
+      {
+        "frame": 3,
+        "screen_xy": [
+          413,
+          265
+        ],
+        "card_px": 12
+      },
+      {
+        "frame": 0,
+        "screen_xy": [
+          672,
+          337
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 3,
+        "screen_xy": [
+          433,
+          246
+        ],
+        "card_px": 12
+      },
+      {
+        "frame": 1,
+        "screen_xy": [
+          426,
+          412
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 4,
+        "screen_xy": [
+          1372,
+          410
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 9,
+        "screen_xy": [
+          1267,
+          455
+        ],
+        "card_px": 10
+      }
+    ],
+    "window_alpha_coverage_gt_8": 0.0027127982142626738,
+    "base": "melko",
+    "method": "2D atlas composite over real game capture; shaft artist mockup, not engine effect"
+  },
+  "glubzhe": {
+    "placements": [
+      {
+        "frame": 12,
+        "screen_xy": [
+          267,
+          271
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 10,
+        "screen_xy": [
+          547,
+          418
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 3,
+        "screen_xy": [
+          452,
+          311
+        ],
+        "card_px": 9
+      },
+      {
+        "frame": 4,
+        "screen_xy": [
+          1095,
+          293
+        ],
+        "card_px": 12
+      },
+      {
+        "frame": 5,
+        "screen_xy": [
+          491,
+          455
+        ],
+        "card_px": 12
+      },
+      {
+        "frame": 5,
+        "screen_xy": [
+          432,
+          380
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 9,
+        "screen_xy": [
+          503,
+          373
+        ],
+        "card_px": 8
+      },
+      {
+        "frame": 8,
+        "screen_xy": [
+          935,
+          435
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 5,
+        "screen_xy": [
+          798,
+          307
+        ],
+        "card_px": 10
+      },
+      {
+        "frame": 1,
+        "screen_xy": [
+          721,
+          377
+        ],
+        "card_px": 12
+      },
+      {
+        "frame": 0,
+        "screen_xy": [
+          911,
+          366
+        ],
+        "card_px": 8
+      },
+      {
+        "frame": 1,
+        "screen_xy": [
+          347,
+          240
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 3,
+        "screen_xy": [
+          740,
+          400
+        ],
+        "card_px": 8
+      },
+      {
+        "frame": 3,
+        "screen_xy": [
+          1322,
+          408
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 2,
+        "screen_xy": [
+          299,
+          286
+        ],
+        "card_px": 9
+      },
+      {
+        "frame": 4,
+        "screen_xy": [
+          802,
+          422
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 0,
+        "screen_xy": [
+          820,
+          394
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 2,
+        "screen_xy": [
+          1135,
+          282
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 2,
+        "screen_xy": [
+          1267,
+          289
+        ],
+        "card_px": 9
+      },
+      {
+        "frame": 10,
+        "screen_xy": [
+          312,
+          421
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 9,
+        "screen_xy": [
+          412,
+          339
+        ],
+        "card_px": 12
+      },
+      {
+        "frame": 0,
+        "screen_xy": [
+          1229,
+          457
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 9,
+        "screen_xy": [
+          1143,
+          408
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 9,
+        "screen_xy": [
+          528,
+          331
+        ],
+        "card_px": 12
+      },
+      {
+        "frame": 5,
+        "screen_xy": [
+          1290,
+          349
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 9,
+        "screen_xy": [
+          326,
+          295
+        ],
+        "card_px": 12
+      },
+      {
+        "frame": 4,
+        "screen_xy": [
+          489,
+          331
+        ],
+        "card_px": 12
+      },
+      {
+        "frame": 14,
+        "screen_xy": [
+          522,
+          386
+        ],
+        "card_px": 6
+      }
+    ],
+    "window_alpha_coverage_gt_8": 0.002128949847102693,
+    "base": "glubzhe",
+    "method": "2D atlas composite over real game capture; shaft artist mockup, not engine effect"
+  },
+  "shahta": {
+    "placements": [
+      {
+        "frame": 12,
+        "screen_xy": [
+          1066,
+          329
+        ],
+        "card_px": 10
+      },
+      {
+        "frame": 4,
+        "screen_xy": [
+          990,
+          291
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 0,
+        "screen_xy": [
+          1289,
+          379
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 5,
+        "screen_xy": [
+          678,
+          330
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 1,
+        "screen_xy": [
+          366,
+          316
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 0,
+        "screen_xy": [
+          801,
+          311
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 8,
+        "screen_xy": [
+          414,
+          297
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 6,
+        "screen_xy": [
+          1128,
+          286
+        ],
+        "card_px": 10
+      },
+      {
+        "frame": 11,
+        "screen_xy": [
+          221,
+          363
+        ],
+        "card_px": 12
+      },
+      {
+        "frame": 4,
+        "screen_xy": [
+          228,
+          277
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 2,
+        "screen_xy": [
+          1327,
+          255
+        ],
+        "card_px": 9
+      },
+      {
+        "frame": 10,
+        "screen_xy": [
+          1064,
+          268
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 4,
+        "screen_xy": [
+          406,
+          253
+        ],
+        "card_px": 12
+      },
+      {
+        "frame": 13,
+        "screen_xy": [
+          816,
+          437
+        ],
+        "card_px": 8
+      },
+      {
+        "frame": 10,
+        "screen_xy": [
+          1151,
+          283
+        ],
+        "card_px": 10
+      },
+      {
+        "frame": 14,
+        "screen_xy": [
+          906,
+          431
+        ],
+        "card_px": 10
+      },
+      {
+        "frame": 6,
+        "screen_xy": [
+          803,
+          328
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 0,
+        "screen_xy": [
+          351,
+          323
+        ],
+        "card_px": 12
+      },
+      {
+        "frame": 3,
+        "screen_xy": [
+          922,
+          387
+        ],
+        "card_px": 8
+      },
+      {
+        "frame": 13,
+        "screen_xy": [
+          560,
+          400
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 1,
+        "screen_xy": [
+          1212,
+          282
+        ],
+        "card_px": 9
+      },
+      {
+        "frame": 1,
+        "screen_xy": [
+          303,
+          285
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 9,
+        "screen_xy": [
+          526,
+          294
+        ],
+        "card_px": 8
+      },
+      {
+        "frame": 4,
+        "screen_xy": [
+          1321,
+          251
+        ],
+        "card_px": 9
+      },
+      {
+        "frame": 14,
+        "screen_xy": [
+          263,
+          401
+        ],
+        "card_px": 9
+      },
+      {
+        "frame": 10,
+        "screen_xy": [
+          516,
+          394
+        ],
+        "card_px": 9
+      },
+      {
+        "frame": 3,
+        "screen_xy": [
+          867,
+          346
+        ],
+        "card_px": 8
+      },
+      {
+        "frame": 13,
+        "screen_xy": [
+          1101,
+          297
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 1,
+        "screen_xy": [
+          1346,
+          433
+        ],
+        "card_px": 8
+      },
+      {
+        "frame": 10,
+        "screen_xy": [
+          769,
+          293
+        ],
+        "card_px": 10
+      },
+      {
+        "frame": 4,
+        "screen_xy": [
+          1174,
+          295
+        ],
+        "card_px": 8
+      },
+      {
+        "frame": 3,
+        "screen_xy": [
+          1198,
+          355
+        ],
+        "card_px": 8
+      },
+      {
+        "frame": 3,
+        "screen_xy": [
+          413,
+          265
+        ],
+        "card_px": 12
+      },
+      {
+        "frame": 0,
+        "screen_xy": [
+          672,
+          337
+        ],
+        "card_px": 6
+      },
+      {
+        "frame": 3,
+        "screen_xy": [
+          433,
+          246
+        ],
+        "card_px": 12
+      },
+      {
+        "frame": 1,
+        "screen_xy": [
+          426,
+          412
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 4,
+        "screen_xy": [
+          1372,
+          410
+        ],
+        "card_px": 7
+      },
+      {
+        "frame": 9,
+        "screen_xy": [
+          1267,
+          455
+        ],
+        "card_px": 10
+      }
+    ],
+    "window_alpha_coverage_gt_8": 0.0027127982142626738,
+    "base": "melko",
+    "method": "2D atlas composite over real game capture; shaft artist mockup, not engine effect"
+  }
+}
