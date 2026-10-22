@@ -1,0 +1,22 @@
+[
+  {
+    "name": "gear-fartuk-m",
+    "faces_rotated_over_90_degrees": [],
+    "max_vertex_displacement": 0.018821320007224203
+  },
+  {
+    "name": "gear-fartuk-zh",
+    "faces_rotated_over_90_degrees": [],
+    "max_vertex_displacement": 0.05185229184859255
+  },
+  {
+    "name": "gear-tunika-m",
+    "faces_rotated_over_90_degrees": [],
+    "max_vertex_displacement": 0.010000005330656165
+  },
+  {
+    "name": "gear-tunika-zh",
+    "faces_rotated_over_90_degrees": [],
+    "max_vertex_displacement": 0.010000005330656165
+  }
+]
