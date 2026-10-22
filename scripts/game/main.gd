@@ -237,6 +237,15 @@ func _ready() -> void:
 	overlay = TouchOverlay.new()
 	overlay.name = "Управление"
 	ui.add_child(overlay)
+	var ver := Label.new()   # версия сборки на экране (отладка): видно, какой APK запущен
+	ver.name = "Версия"
+	ver.text = version_text()
+	ver.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ver.add_theme_font_size_override("font_size", 13)
+	ver.modulate = Color(1.0, 1.0, 1.0, 0.45)
+	ver.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE, 4)
+	ver.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	ui.add_child(ver)
 	power_panel.layout = overlay.router.layout   # панель пульта не ложится под noclip и кнопку действия (#349)
 	reactor.message.connect(func(title: String, _text: String) -> void: say(title))
 	airlock.message.connect(say)
@@ -405,6 +414,15 @@ func _build_world() -> void:
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
+
+
+## Версия сборки для отладочной плашки: config/version + номер сборки из version.txt (пишет CI), иначе «dev».
+func version_text() -> String:
+	var v := str(ProjectSettings.get_setting("application/config/version", "?"))
+	var build := "dev"
+	if FileAccess.file_exists("res://version.txt"):
+		build = FileAccess.get_file_as_string("res://version.txt").strip_edges()
+	return "v%s · %s" % [v, build]
 
 
 ## Игру сворачивают или закрывают — несохранённое записать сразу.
