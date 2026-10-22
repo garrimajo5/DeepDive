@@ -1061,6 +1061,7 @@ func _place_ship() -> void:
 	hull.set_hull(vitals.hull)   # следы повреждений ART-049
 	bridge.set_wheel_turn(helm.turn)
 	ocean.apply_water(env, helm.depth(), helm.pos, silt.k)
+	ocean.set_ship(helm.pos, helm.yaw)   # лучи ART-052 не светят внутри корпуса
 
 
 func _place_camera() -> void:
