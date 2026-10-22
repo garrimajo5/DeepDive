@@ -60,6 +60,7 @@ class Ship:
 	var pos := START
 	var yaw := 0.0
 	var speed := 0.0
+	var extra_drag := 0.0   ## добавка к DRAG от существ на корпусе (EcoLink.DRAG, присоски), ставит Main каждый шаг мира
 	var vy := 0.0
 	var turn := 0.0
 	## Ввод пилота: тяга и поворот −1…1 (крестовина), вертикаль −1…1 (кнопки).
@@ -81,6 +82,7 @@ class Ship:
 		_last_floor = -INF
 		yaw = 0.0
 		speed = 0.0
+		extra_drag = 0.0
 		vy = 0.0
 		turn = 0.0
 		in_thrust = 0.0
@@ -97,7 +99,7 @@ class Ship:
 		var thrust := clampf(in_thrust, -1.0, 1.0)
 		var tr := clampf(in_turn, -1.0, 1.0)
 		var vert := clampf(in_vert, -1.0, 1.0)
-		speed += (thrust * (REVERSE if thrust < 0.0 else FORWARD) * k - speed * DRAG) * dt
+		speed += (thrust * (REVERSE if thrust < 0.0 else FORWARD) * k - speed * (DRAG + extra_drag)) * dt
 		turn += (tr - turn) * minf(1.0, dt * TURN_LAG)
 		yaw = wrapf(yaw - turn * TURN_RATE * dt, -PI, PI)
 		vy += (vert * CLIMB * k - vy) * minf(1.0, dt * CLIMB_LAG)

@@ -878,6 +878,7 @@ func _step_eco(dt: float) -> void:
 	if s.sonar_ping and not sonar.jammed:
 		sonar.take_contacts(events, helm.pos)
 		say("Сонар: контактов %d" % sonar.blips.size())
+	helm.extra_drag = 0.0   # нет события EcoLink.DRAG — тормоза нет (#270)
 	for e in events:
 		on_eco_event(e)
 	s.sonar_ping = false
@@ -893,6 +894,8 @@ func on_eco_event(e: Dictionary) -> void:
 			vitals.drain(str(e.get("by", "")), float(e.get("units", 0.0)))
 		EcoLink.MESSAGE:
 			say(str(e.get("text", "")))
+		EcoLink.DRAG:   # присоски на корпусе тормозят корабль (js/ship.js: drag = 0.45 + 0.025 * hullRemoras)
+			helm.extra_drag = float(e.get("k", 0.0))
 		EcoLink.STEAL:   # образец сорван с захвата (M.steal в js/manip.js)
 			if samples.steal(int(e.get("sample", -1))):
 				say("Образец украден: %s выхватил его из захвата и уносит в нору" % str(e.get("by", "Кто-то")))
