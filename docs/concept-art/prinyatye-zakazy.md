@@ -579,6 +579,13 @@ ORM = AO/шероховатость/металл, в существующие `P
 (цвет/нормали/ORM), листы `otseki-materialy-list.png`, `otseki-materialy-povtor.jpg`; решения — `otseki-materialy.md`:
 плитка 1 × 1 м, OpenGL +Y, выбор комплекта по z внутри существующих материалов `RoomsView` без новых вызовов, метровые UV
 как у мостика, на «Экономно» нормали и ORM выключать. Встройка — задача ROADMAP потока А.
+## ART-057 Стекло носовых окон — принято
+- Исходник: ART-002 (`mostik.md`), ART-025 (`tablo.md`), ART-054 (`mostik-materialy.md`), `BridgeView._add_glass`.
+
+**Принято 22.10.2026** (PR #418, ветка `art/ART-057-steklo-okon`): `steklo-maska.png`, `steklo-normali.png`, кадр
+`steklo-kadr.jpg`, сравнение `steklo-sravnenie.jpg`; решения — `steklo-okon.md`: муть/капли/царапины только у рамы, центр
+чистый, три окна одной картой с отражением участков UV, в имеющийся материал стекла без новых вызовов, мигание гасит
+только отражение, на «Экономно» без нормалей. Встройка — задача ROADMAP потока А.
 ## ART-058 Взвесь за бортом — принято
 - Исходник: `docs/world.md`, `Seabed.Water`, ART-048 (`sonarnaya-tma.md`), ART-052 (`luchi.md`), `OceanView._make_snow`.
 
