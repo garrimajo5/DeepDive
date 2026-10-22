@@ -1,4 +1,0 @@
-Built-in image_gen; no API fallback.
-Generation: Square transparent RGBA submarine hull damage overlay, 2×2 m tile. Subdued ochre metal #8C806B and #514D43, flat albedo, no red. Separate damage islands: exposed-metal paint scuffs, directional rock gouges, shallow dents, open-centered suction rings, dark welded repair patches. No plate background, panel seams, text, holes, flames or emission. Outer border transparent. Broad readable masses, limited fine noise.
-Edit: Preserve island positions and types; remove saturated red/yellow/green edge fringes, neutral metal only, clean alpha, square 1024. Preserve open suction-ring centres and weld beads. No background.
-Final generation stored as source/wear-source.png. Deterministic palette normalization and periodic registration in src/prepare.py. Generated motif count was 19; actual accepted counts documented rather than assumed from prompt.
