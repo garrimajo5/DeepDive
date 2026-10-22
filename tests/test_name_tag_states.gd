@@ -122,3 +122,28 @@ func test_lost_mate_tag() -> void:
 	mate.lost = false
 	main.step(1.0 / 30.0)
 	ok(not v.states[i].visible, "связь вернулась — строки нет")
+
+
+func test_pressing_tag_goes_first() -> void:
+	ok(NameTag.before(true, 5.0, false, 2.0), "нажимает — раньше ближней")
+	ok(not NameTag.before(false, 2.0, true, 5.0))
+	ok(NameTag.before(false, 2.0, false, 5.0), "иначе — ближняя раньше")
+
+
+func test_pressing_mate_behind_other_seen() -> void:
+	# #374, шаг 06d2-tag-press: биолог стоит прямо за инженером, его табличка не помещалась над ближней и пряталась
+	main.walker.x = -1.6
+	main.walker.z = -2.2
+	main.walker.yaw = deg_to_rad(-90.0)
+	main.walker.pitch = deg_to_rad(-5.0)
+	main.add_mate(0.2, -2.6, deg_to_rad(60.0), Crew.Role.ENGINEER, 1)
+	var bio := main.add_mate(0.9, -2.3, deg_to_rad(90.0), Crew.Role.BIOLOGIST, 0)
+	var i := main.crew.find(bio)
+	main.step(1.0 / 30.0)
+	bio.pad.action = true
+	for k in 4:
+		main.step(1.0 / 30.0)
+	var v := main.name_tags
+	ok(bio.active(), "биолог нажимает")
+	ok(v.tags[i].visible, "табличка биолога видна")
+	ok(v.glows[i].visible, "и подсветка на ней")

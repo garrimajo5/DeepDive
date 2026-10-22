@@ -84,6 +84,16 @@ static func visible_at(d: float, depth: float) -> bool:
 ## ней с зазором GAP высоты — только вверх (не на лицо и не на голостол) и не выше MAX_UP высот (иначе упрётся в
 ## потолок отсека); не помещается — скрыта (HIDDEN). Возвращает подъём каждой, px (≥ 0), или HIDDEN.
 const MAX_UP := 1.5
+## Порядок табличек для spread (#374): сначала те, кто нажимает (их состояние важнее), затем ближние. Дальняя,
+## что нажимает, встаёт на место, а ближняя поднимается над ней или скрыта — иначе подсветку не увидеть
+## (биолог прямо за инженером, `06d2-tag-press`).
+static func before(a_on: bool, a_d: float, b_on: bool, b_d: float) -> bool:
+	if a_on != b_on:
+		return a_on
+	return a_d < b_d
+
+
+
 const HIDDEN := -1.0
 static func spread(rects: Array) -> Array:
 	var placed: Array[Rect2] = []
