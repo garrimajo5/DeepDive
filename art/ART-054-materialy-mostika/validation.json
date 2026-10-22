@@ -1,0 +1,166 @@
+{
+  "tile_m": 1,
+  "normal_format": "OpenGL +Y",
+  "source_main": "0b1ec3e5840401fdb3fe02a88525ade0d24525a5",
+  "materials": {
+    "pol": {
+      "height_mm": [
+        -3.499999999999998,
+        0.22159402268694753
+      ],
+      "ao": [
+        0.6799999999999999,
+        1.0
+      ],
+      "roughness": [
+        0.5080291982581573,
+        0.7319999858538047
+      ],
+      "metallic": [
+        0.35000000000000253,
+        0.716891651471243
+      ],
+      "edge_equal": true
+    },
+    "stena": {
+      "height_mm": [
+        -0.9,
+        1.1971911474336465
+      ],
+      "ao": [
+        0.87,
+        1.0
+      ],
+      "roughness": [
+        0.615804664699638,
+        0.8541889183848845
+      ],
+      "metallic": [
+        0.020000000000000004,
+        0.5089934944970567
+      ],
+      "edge_equal": true
+    },
+    "potolok": {
+      "height_mm": [
+        -1.2,
+        2.4
+      ],
+      "ao": [
+        0.78,
+        1.0
+      ],
+      "roughness": [
+        0.6652000961932569,
+        0.8347993907909398
+      ],
+      "metallic": [
+        0.12,
+        0.33999999999999997
+      ],
+      "edge_equal": true
+    }
+  },
+  "green_dome_test": true,
+  "files": {
+    "materialy-list.png": {
+      "mode": "RGB",
+      "size": [
+        2048,
+        1152
+      ],
+      "bytes": 1419549,
+      "sha256": "3cc9850711b383af84f1a52c6734f7f05db37322f8cb5f322552266b334a9738"
+    },
+    "materialy-povtor.png": {
+      "mode": "RGB",
+      "size": [
+        2048,
+        1152
+      ],
+      "bytes": 312398,
+      "sha256": "4c96cebe5c40f1b8c734ff4459a8abc619fc0e7366304a9db0252b9eb4eae9a6"
+    },
+    "pol-normali.png": {
+      "mode": "RGB",
+      "size": [
+        1024,
+        1024
+      ],
+      "bytes": 74230,
+      "sha256": "fd468119b9ea21fb6422126956ea25b79bc6e8a6708d7a807ff86a8d4438349c"
+    },
+    "pol-orm.png": {
+      "mode": "RGB",
+      "size": [
+        1024,
+        1024
+      ],
+      "bytes": 138323,
+      "sha256": "87f2340a6dd06e4116e15cfc2dc53879d53e7fe30937cb45b6b67734e53dc428"
+    },
+    "pol-tsvet.png": {
+      "mode": "RGB",
+      "size": [
+        1024,
+        1024
+      ],
+      "bytes": 101663,
+      "sha256": "549b8439db8d2cffce64ae22ceaf9b7d86d6e759addfc6db1368b83ac40e3858"
+    },
+    "potolok-normali.png": {
+      "mode": "RGB",
+      "size": [
+        1024,
+        1024
+      ],
+      "bytes": 9268,
+      "sha256": "3c2dadb54b63134e139dcf066c6b7c234440312333e30bbe41c311df7ea0e4ba"
+    },
+    "potolok-orm.png": {
+      "mode": "RGB",
+      "size": [
+        1024,
+        1024
+      ],
+      "bytes": 31147,
+      "sha256": "651a5a5123b306e92e229ccfec033996f264cc27b8379aafda57e58a80a3872c"
+    },
+    "potolok-tsvet.png": {
+      "mode": "RGB",
+      "size": [
+        1024,
+        1024
+      ],
+      "bytes": 89890,
+      "sha256": "6667b1beb20e43975b075f7af6215859ff1245e3824509ea9c20cd6aab63d397"
+    },
+    "stena-normali.png": {
+      "mode": "RGB",
+      "size": [
+        1024,
+        1024
+      ],
+      "bytes": 8586,
+      "sha256": "6a41c0a8037702021305d6891d53608b3897d9d7c6ae0ddc8221437961af855e"
+    },
+    "stena-orm.png": {
+      "mode": "RGB",
+      "size": [
+        1024,
+        1024
+      ],
+      "bytes": 29705,
+      "sha256": "e7bc19c378d190105539889ddfe277cbe48096f1ad2c94f6571a24c2ee02cddc"
+    },
+    "stena-tsvet.png": {
+      "mode": "RGB",
+      "size": [
+        1024,
+        1024
+      ],
+      "bytes": 134263,
+      "sha256": "d6bb74daa9fd7a845e6a40c29b8acb5321374482995057263df4697276ffda5f"
+    }
+  }
+}
