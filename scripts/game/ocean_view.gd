@@ -17,6 +17,12 @@ var snow_mat: ShaderMaterial   # взвесь ART-058: атлас, доли ка
 var shafts: MultiMeshInstance3D   # лучи сквозь трещины льда (ART-052)
 var shafts_mat: ShaderMaterial
 var shaft_list: Array[LightShafts.Shaft] = []
+var backdrop: MeshInstance3D       # дальний фон — сфера цвета воды вокруг корабля (issue #456)
+var backdrop_mat: StandardMaterial3D
+
+## Радиус фона, м. Камера отходит от корабля до `Flyby` ~50 м, дальняя плоскость камер — 400 м: сфера всегда
+## ближе дальней плоскости, и чистый фон окружения (BG_COLOR) в кадр не попадает.
+const BACKDROP_R := 340.0
 
 
 func _ready() -> void:
@@ -79,6 +85,9 @@ func _ready() -> void:
 	sun.shadow_blur = 1.3
 	add_child(sun)
 
+	backdrop = _make_backdrop()
+	add_child(backdrop)
+
 	shafts = _make_shafts()
 	add_child(shafts)
 
@@ -91,6 +100,31 @@ func _ready() -> void:
 ## Высота кадра для взвеси: мельче 1,6 px карточка не становится — бледнеет (`marine_snow.gdshader`).
 func _fit_snow() -> void:
 	snow_mat.set_shader_parameter("screen_h", float(get_viewport().get_visible_rect().size.y))
+
+
+## Дальний фон (issue #456): изнанка сферы, без света, цвета тумана. На Forward Mobile чистый фон окружения
+## темнее тумана на геометрии — в щели между дальним краем дна и льда (за `far` камеры и за краем карты)
+## была тёмная полоса. Сфера — геометрия: её туманит тот же путь, что дно и лёд, и горизонт сходится в один цвет.
+## Один вызов, 512 треуг.; тени не отбрасывает, свет не принимает. Шейдер общий с образцами в захвате и колбах
+## (без света, непрозрачный) — нового ключа `ShaderKey` нет.
+func _make_backdrop() -> MeshInstance3D:
+	var s := SphereMesh.new()
+	s.radius = BACKDROP_R
+	s.height = BACKDROP_R * 2.0
+	s.radial_segments = 16
+	s.rings = 16
+	s.flip_faces = true   # видна изнутри
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = Seabed.Water.fog_color(0.0)
+	backdrop_mat = m
+	s.material = m
+	var node := MeshInstance3D.new()
+	node.name = "Дальний фон"
+	node.mesh = s
+	node.layers = LAYER_WORLD
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return node
 
 
 ## Лучи сквозь трещины льда (ART-052): все шахты отмели одним MultiMesh — один вызов отрисовки.
@@ -208,6 +242,8 @@ func apply_water(env: Environment, depth: float, around: Vector3, silt: float = 
 	# Каустики на дне гаснут по глубине (меньше света сквозь лёд) и в облаке ила (свет рассеивается).
 	seabed_mat.set_shader_parameter("light", clampf(Seabed.Water.caustic(depth) * (1.0 - 0.85 * silt), 0.0, 1.0))
 	snow.position = around
+	backdrop.position = around
+	backdrop_mat.albedo_color = fog
 	ice_mat.set_shader_parameter("water", fog)
 	ice_mat.set_shader_parameter("glow_k", exp(-maxf(depth, 0.0) / IceSheet.GLOW_DEPTH))
 	ice_mat.set_shader_parameter("contrast", IceSheet.contrast(depth))
