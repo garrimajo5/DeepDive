@@ -565,3 +565,10 @@ ROADMAP потока А.
 листы `mostik-materialy-list.png`, `mostik-materialy-povtor.png`; решения — `mostik-materialy.md`: плитка 1 × 1 м, OpenGL +Y,
 ORM = AO/шероховатость/металл, в существующие `Paint.DECK`/`METAL`/`SEAM` без новых вызовов, нужны метровые UV оболочки,
 на «Экономно» нормали выключать. Встройка — задача ROADMAP потока А.
+## ART-056 Лёд снизу — принято
+- Исходник: `docs/world.md`, ART-052 (`luchi.md`), `Seabed.ICE_Y`, `OceanView`.
+
+**Принято 22.10.2026** (PR #412, ветка `art/ART-056-led-snizu`): `led-tsvet.png`, `led-normali.png`, `led-treshchiny.png`,
+кадр `led-kadr.jpg`, лист `led-list.png`; решения — `led-snizu.md`: плитка 16 × 16 м по `world.xz`, маска трещин под крупным
+мировым шумом (рвёт повтор), слабая эмиссия с добавкой трещин и гашением по глубине, основания шахт ART-052 по той же маске.
+Встройка — задача ROADMAP потока А.
