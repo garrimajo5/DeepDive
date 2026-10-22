@@ -1,0 +1,12 @@
+{
+  "lut_size": [
+    1024,
+    64
+  ],
+  "orientation": "V top=0m bottom=120m, U constant",
+  "interpolation": "linear-light RGB, bilinear LUT",
+  "bytes": 490,
+  "sha256": "b1b2e1b1e437c36dc665fa124e10922d5811a9318fbe9895fbe04a6218e619b5",
+  "max_adjacent_row_step": 7,
+  "luminance_monotone": true
+}
