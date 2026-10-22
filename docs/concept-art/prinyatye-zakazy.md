@@ -531,3 +531,10 @@ ROADMAP потока А.
 `sonarnaya-tma-sostoyaniya.png`; решения — `sonarnaya-tma.md`: ил серо-зелёный, рваные хлопья в маске прежней
 карточки, луч × 0,45, вязнущий импульс рвётся на ⅓ радиуса, поле табло «ИЛ — СОНАР СЛЕП», подсказка — к пилоту.
 Встройка — задача ROADMAP потока А.
+## ART-049 Следы повреждений обшивки — принято
+- Исходник: ART-024 (`obshivka.md`), ART-023 (`dekali.md`), ART-001, `Vitals.hull`, `hull_plating.gdshader`.
+
+**Принято 22.10.2026** (PR #390, ветка `art/ART-049-povrezhdeniya`): `povrezhdeniya-tsvet.png`, `povrezhdeniya-uroven.png`,
+листы `povrezhdeniya-list.png`, `povrezhdeniya-proverka.png`; решения — `povrezhdeniya.md`: сколы, царапины, вмятины,
+кольца присосок, заплатки открываются порогом по потере корпуса (0/7/12/17 следов на плитку при 100/70/40/15 %), в тот же
+материал обшивки. Встройка — задача ROADMAP потока А.
