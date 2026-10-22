@@ -558,6 +558,13 @@ ROADMAP потока А.
 **Принято 22.10.2026** (PR #402, ветка `art/ART-052-luchi`): кадр `luchi-kadr.jpg`, `luchi-maska.png`, `luchi-shum.png`,
 лист `luchi-list.png`; решения — `luchi.md`: ~4 аддитивные шахты-конуса одним MultiMesh, холодный #9AD9E8, сила
 `0.14·exp(−глубина/9)`, гаснут вдали, у дна и у Края, мягкий видозависимый край. Встройка — задача ROADMAP потока А.
+## ART-054 Материалы мостика — принято
+- Исходник: ART-002 (`mostik.md`), ART-008 (`mashinnoe.md`), ART-024 (`obshivka.md`), `BridgePlan`, `BridgeView`.
+
+**Принято 22.10.2026** (PR #411, ветка `art/ART-054-materialy-mostika`): девять карт `mostik-{pol,stena,potolok}-{tsvet,normali,orm}.png`,
+листы `mostik-materialy-list.png`, `mostik-materialy-povtor.png`; решения — `mostik-materialy.md`: плитка 1 × 1 м, OpenGL +Y,
+ORM = AO/шероховатость/металл, в существующие `Paint.DECK`/`METAL`/`SEAM` без новых вызовов, нужны метровые UV оболочки,
+на «Экономно» нормали выключать. Встройка — задача ROADMAP потока А.
 ## ART-056 Лёд снизу — принято
 - Исходник: `docs/world.md`, ART-052 (`luchi.md`), `Seabed.ICE_Y`, `OceanView`.
 
