@@ -1061,6 +1061,7 @@ func _place_ship() -> void:
 	hull.set_hull(vitals.hull)   # следы повреждений ART-049
 	bridge.set_wheel_turn(helm.turn)
 	ocean.apply_water(env, helm.depth(), helm.pos, silt.k)
+	ocean.set_ship(helm.pos, helm.yaw)   # лучи ART-052 не светят внутри корпуса
 
 
 func _place_camera() -> void:
@@ -1655,6 +1656,7 @@ func debug_setup(kv: Dictionary) -> void:
 	if kv.get("relief", "1") == "0":  # relief=0 — обшивка без рельефа ART-053 («Экономно»)
 		hull.set_relief(false)
 		bridge.set_relief(false)   # и карты мостика ART-054
+		rooms.set_relief(false)    # и отсеков ART-055
 	if kv.has("energy"):  # energy=<ед.> — заряд корабля (меньше 20 — «МАЛО ЗАРЯДА» на табло)
 		vitals.energy = float(kv["energy"])
 	if kv.get("drain", "0") == "1":  # drain=1 — стеклоуст на корпусе (табло и рамка у щитка разряда)
