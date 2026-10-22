@@ -77,6 +77,8 @@ var at_vote: bool:                ## игрок решает у голостол
 		me.at_vote = v
 var vote_panel: VotePanel
 var route_card: RouteCard   ## карточка выбранного маршрута над голостолом (ART-016)
+var drop := NetDrop.new()   ## гость потерял хоста (ART-043): диалог, окно переподключения, «Играть одному»
+var drop_panel: DropPanel
 var current := Helm.SeaCurrent.new()
 
 var ocean: OceanView
@@ -250,6 +252,9 @@ func _ready() -> void:
 	ver.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE, 4)
 	ver.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	ui.add_child(ver)
+	drop_panel = DropPanel.new()   # поверх управления: пока диалог открыт, кнопки под ним не работают
+	drop_panel.name = "Связь потеряна"
+	ui.add_child(drop_panel)
 	power_panel.layout = overlay.router.layout   # панель пульта не ложится под noclip и кнопку действия (#349)
 	reactor.message.connect(func(title: String, _text: String) -> void: say(title))
 	airlock.message.connect(say)
@@ -1288,7 +1293,8 @@ func _net_poll(dt: float = 0.0) -> void:
 				say("Ушёл с борта: %s" % m.name)
 		changed = true
 	for id: int in net_mates:   # гость без ввода дольше NetLink.LOST_AFTER — табличка «Нет связи»
-		(net_mates[id] as Crew.Member).lost = (net_host.guests[id] as NetLink.Guest).lost()
+		var g: NetLink.Guest = net_host.guests.get(id)   # хост закрыт — гостей уже нет, а фигуры ещё на палубе
+		(net_mates[id] as Crew.Member).lost = g == null or g.lost()
 	if changed:
 		crew_view.set_members(crew, me)
 		for id: int in net_mates:
@@ -1332,6 +1338,7 @@ func join_game(address: String, port: int = NetLink.PORT, player: String = "", r
 	net_vote = {"secs": -1, "frac": -1.0, "tally": "", "ops": []}
 	net_smooth = NetSmooth.new()
 	net_pad.clear()
+	drop = NetDrop.new()
 	flyby.stop()   # клиент входит в идущий забег — облёта нет
 	message.clear(Flyby.START_MSG)
 	say(net_client.label())
@@ -1342,12 +1349,19 @@ func join_game(address: String, port: int = NetLink.PORT, player: String = "", r
 func _client_step(dt: float) -> void:
 	var r := overlay.router
 	var lk := overlay.look_points()
-	walker.look(lk)   # взгляд сразу свой: курс хост подтвердит кадром, наклон хосту не нужен
-	net_pad.move = Vector2(r.move)
-	net_pad.look += lk
-	net_pad.action = net_pad.action or r.action_pressed
-	net_pad.vert = r.vert()
-	net_pad.light = net_pad.light or r.light_pressed
+	if drop.blocks():   # связь потеряна: управление остановлено, касания — кнопкам диалога
+		net_pad.clear()
+		_drop_taps(r.taps)
+		if net_client == null:   # «Играть одному» — уже одиночный забег
+			r.end_frame()
+			return
+	else:
+		walker.look(lk)   # взгляд сразу свой: курс хост подтвердит кадром, наклон хосту не нужен
+		net_pad.move = Vector2(r.move)
+		net_pad.look += lk
+		net_pad.action = net_pad.action or r.action_pressed
+		net_pad.vert = r.vert()
+		net_pad.light = net_pad.light or r.light_pressed
 	var was := net_client.state
 	net_client.send_pad(net_pad)
 	var f := net_client.poll(dt)
@@ -1355,15 +1369,18 @@ func _client_step(dt: float) -> void:
 	if not f.is_empty():
 		_client_frame(f)
 		near = f.get("eco", near)
+		drop.restored()   # хост принял снова и кадр применён — управление вернулось
 	if net_client.lost():   # кадры хоста не идут — у товарищей «Нет связи», пока не придёт кадр
 		for m: Crew.Member in crew:
 			m.lost = m != me
 	net_smooth.step(dt)
 	net_smooth.apply(helm, crew, me)   # показ чуть позади свежего кадра: между кадрами — плавно
-	if net_client.state != was:
+	if net_client.state != was and not drop.active():
 		say(net_client.label())
-	if net_client.state == NetLink.State.REFUSED or net_client.state == NetLink.State.LOST:
-		_leave_net()
+	_drop_step(dt)
+	if net_client == null:
+		r.end_frame()
+		return
 	hull_motion.update(dt, helm.in_thrust, helm.in_vert, reactor.k(Reactor.Sys.ENGINES))
 	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP), silt.beam_k())
 	breach.time += dt   # пульс тревоги и свет сварки — своим временем, состояние — из кадра
@@ -1465,11 +1482,48 @@ func _client_frame(f: Dictionary) -> void:
 		walker.pitch = 0.0
 
 
-## Связь с хостом кончилась (отказ или потеря): дальше одиночная игра с тем, что было в последнем кадре.
+## Потеря хоста у гостя (ART-043): не соло молча — диалог и попытка переподключения на NetDrop.WINDOW; отказ хоста
+## при попытке — причина без повторов; окно истекло — «Нет ответа». Отказ при первом входе — одиночная игра.
+func _drop_step(dt: float) -> void:
+	var st := net_client.state
+	if st == NetLink.State.LOST and not drop.blocks():
+		drop.open()
+		net_client.rejoin(NetDrop.WINDOW)
+	elif drop.blocks():
+		if st == NetLink.State.REFUSED and net_client.why in ["version", "full"]:
+			drop.refused(net_client.why)
+		if drop.update(dt):
+			net_client.stop()
+	elif st == NetLink.State.REFUSED:
+		_leave_net()
+		return
+	else:
+		drop.update(dt)
+	drop_panel.show_drop(drop)
+
+
+## Касания кнопок диалога «Связь потеряна».
+func _drop_taps(taps: Array[Vector2]) -> void:
+	for p in taps:
+		match drop.press(drop.hit(p, get_viewport().get_visible_rect().size)):
+			"rejoin":
+				net_client.rejoin(NetDrop.WINDOW)
+			"solo":   # перенос забега в соло не сделан — новый одиночный забег
+				_leave_net()
+				if me.pilot.seated:
+					me.stand()
+				_restart()
+		drop_panel.show_drop(drop)
+		if net_client == null:
+			return
+
+
+## Связь с хостом кончилась (отказ при входе или «Играть одному»): дальше одиночная игра с последним кадром.
 func _leave_net() -> void:
 	net_client.stop()
 	net_client = null
 	crew = [me]
+	me.lost = false
 	crew_view.set_members(crew, me)
 
 

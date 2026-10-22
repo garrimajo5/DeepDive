@@ -46,6 +46,25 @@ func _go() -> void:
 		root.add_child(sp)
 		sp.set_progress(float(kv["splash"]))
 		sp._process(float(kv.get("hint", "0")))
+	if kv.has("drop"):   # drop=wait|retry|no|refused|solo|back — диалог «Связь с хостом потеряна» (ART-043), t=<с> в окне
+		var d := NetDrop.new()
+		d.open()
+		match kv["drop"]:
+			"retry":
+				d.update(NetDrop.WINDOW)
+				d.press("wait")
+			"no":
+				d.update(NetDrop.WINDOW)
+			"refused":
+				d.refused("full")
+			"solo":
+				d.press("solo")
+			"back":
+				d.restored()
+		d.update(float(kv.get("t", "3.2")))
+		var dp := DropPanel.new()
+		root.add_child(dp)
+		dp.show_drop(d)
 	for i in int(kv.get("frames", "8")):
 		await process_frame
 	await RenderingServer.frame_post_draw
