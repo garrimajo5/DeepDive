@@ -205,7 +205,7 @@ static func fish_of(systems: Array) -> EcoFish:
 
 ## Пакет «существа рядом» вместе с мхом и стаями: `pack_near`, затем NET_MOSS и пятна мха ближе radius
 ## (по горизонтали), затем NET_SHOAL и стаи светляков, центр которых ближе radius, затем NET_COINS и стайки
-## монетников ближе radius.
+## монетников ближе radius, затем NET_KELP и рощи ленточника с шипоежами ближе radius (по горизонтали).
 static func pack_world(agents: Array[EcoAgent], systems: Array, center: Vector3,
 		radius: float = NET_R) -> PackedFloat32Array:
 	var out := pack_near(agents, center, radius)
@@ -239,6 +239,15 @@ static func pack_world(agents: Array[EcoAgent], systems: Array, center: Vector3,
 	if not cn_out.is_empty():
 		out.append(NET_COINS)
 		out.append_array(cn_out)
+	var kelp := kelp_of(systems)
+	var kl_out := PackedFloat32Array()
+	if kelp != null:
+		for gr in kelp.groves:
+			if Vector2(gr.center.x - center.x, gr.center.z - center.z).length() <= radius:
+				kl_out.append_array(pack_grove(kelp, gr))
+	if not kl_out.is_empty():
+		out.append(NET_KELP)
+		out.append_array(kl_out)
 	return out
 
 
@@ -260,6 +269,7 @@ static func apply_world(agents: Array[EcoAgent], systems: Array, data: PackedFlo
 			n += 1
 	apply_shoals(agents, systems, data)
 	apply_coins(systems, data)
+	apply_kelp(systems, data)
 	return n
 
 
@@ -372,6 +382,83 @@ static func apply_coins(systems: Array, data: PackedFloat32Array) -> int:
 	return n
 
 
+## Ленточник и шипоежи у гостя (`EcoKelp`): ежи не в `agents`, цель и блуждание гость выбирал бы своим случаем,
+## и ленты объедал бы другие — роща ближе radius (по горизонтали) едет целиком после монетников: метка NET_KELP и
+## по NET_KELP_STRIDE чисел на рощу — номер, густота каждой из KELP_N лент, затем на каждого из URCH_N ежей рощи
+## NET_URCHIN_STRIDE чисел: −1 у живого или секунды до появления у съеденного, место, лента-цель (−1 — бродит),
+## точка блуждания (x, z) и секунды до новой, пауза наблюдения «graze». Кто ест ленту — по целям ежей.
+const NET_KELP := -4
+const NET_URCHIN_STRIDE := 9
+const NET_KELP_STRIDE := 1 + EcoKelp.KELP_N + EcoKelp.URCH_N * NET_URCHIN_STRIDE
+
+
+## Ленточник из списка систем мира или null.
+static func kelp_of(systems: Array) -> EcoKelp:
+	for s in systems:
+		if s is EcoKelp:
+			return s
+	return null
+
+
+## Ежи рощи gi по порядку.
+static func _grove_urchins(kelp: EcoKelp, gi: int) -> Array[EcoKelp.Urchin]:
+	var out: Array[EcoKelp.Urchin] = []
+	for u in kelp.urchins:
+		if u.grove == gi:
+			out.append(u)
+	return out
+
+
+## Запись рощи для пакета (NET_KELP_STRIDE чисел).
+static func pack_grove(kelp: EcoKelp, gr: EcoKelp.Grove) -> PackedFloat32Array:
+	var out := PackedFloat32Array([gr.index])
+	for k in EcoKelp.KELP_N:
+		out.append(gr.stalks[k].f if k < gr.stalks.size() else 1.0)
+	var us := _grove_urchins(kelp, gr.index)
+	for k in EcoKelp.URCH_N:
+		if k >= us.size():
+			out.append_array([-1.0, 0, 0, 0, -1, 0, 0, 0, 0])
+			continue
+		var u := us[k]
+		out.append_array([-1.0 if u.alive else maxf(u.respawn, 0.0), u.pos.x, u.pos.y, u.pos.z, u.goal,
+			u.wander.x, u.wander.z, u.wander_t, u.graze_cd])
+	return out
+
+
+## Рощи из пакета `pack_world`: густота лент и каждый ёж — как у хоста, кто ест ленту — по целям ежей. Возвращает,
+## сколько рощ поставлено.
+static func apply_kelp(systems: Array, data: PackedFloat32Array) -> int:
+	var part := _section(data, NET_KELP)
+	var kelp := kelp_of(systems)
+	if part.is_empty() or kelp == null:
+		return 0
+	var n := 0
+	for k in range(0, part.size() - NET_KELP_STRIDE + 1, NET_KELP_STRIDE):
+		var gi := int(part[k])
+		if gi < 0 or gi >= kelp.groves.size():
+			continue
+		var gr: EcoKelp.Grove = kelp.groves[gi]
+		for j in mini(EcoKelp.KELP_N, gr.stalks.size()):
+			gr.stalks[j].f = clampf(part[k + 1 + j], EcoKelp.F_MIN, 1.0)
+			gr.stalks[j].eater = -1
+		var us := _grove_urchins(kelp, gi)
+		for j in mini(EcoKelp.URCH_N, us.size()):
+			var b := k + 1 + EcoKelp.KELP_N + j * NET_URCHIN_STRIDE
+			var u := us[j]
+			u.alive = part[b] < 0.0
+			u.respawn = 0.0 if u.alive else part[b]
+			u.pos = Vector3(part[b + 1], part[b + 2], part[b + 3])
+			var goal := int(part[b + 4])
+			u.goal = goal if u.alive and goal >= 0 and goal < gr.stalks.size() else -1
+			if u.goal >= 0:
+				gr.stalks[u.goal].eater = u.index
+			u.wander = Vector3(part[b + 5], 0.0, part[b + 6])
+			u.wander_t = part[b + 7]
+			u.graze_cd = part[b + 8]
+		n += 1
+	return n
+
+
 ## Часть пакета `pack_world` после метки marker (без неё) до следующей метки: метки стоят на месте номера записи,
 ## номера записей не меньше нуля. Нет такой части — пусто.
 static func _section(data: PackedFloat32Array, marker: int) -> PackedFloat32Array:
@@ -401,4 +488,6 @@ static func _stride(marker: int) -> int:
 			return NET_SHOAL_STRIDE
 		NET_COINS:
 			return NET_COINS_STRIDE
+		NET_KELP:
+			return NET_KELP_STRIDE
 	return 0
