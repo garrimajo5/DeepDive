@@ -36,7 +36,7 @@
   `hash_noise.gd` (шум как `G.noise`/`G.fbm`), `seabed.gd` (рельеф `W.height`, цвет дна, вода по глубине — ключи ART-059 `Seabed.Water.KEYS`, грунты ART-060 — `Seabed.Ground`, карты `textures/dno/`),
   `helm.gd` (ход корабля `Helm.Ship`, течение `Helm.SeaCurrent`), `deck.gd` (палуба, посты, игрок `Deck.Walker`),
   `touch.gd` (раскладка, крестовина, разбор касаний), `bridge_plan.gd` (оболочка мостика по ART-002),
-  `bridge_props.gd` (места моделей художника на мостике), `searchlight.gd` (прожектор: числа, луч до дна, меш конуса),
+  `bridge_props.gd` (места моделей художника на мостике), `searchlight.gd` (прожектор: числа, луч до дна, меш конуса; рисунок ART-062 — маска пятна в проекторе `Searchlight.MASK`, поле взвеси луча `FIELD`, `density`, карты `textures/prozhektor/`),
   `texture_glow.gd` (маска голубых огней), `qa_script.gd` (сценарий тестера), `status.gd` (строка состояния
   по строкам экрана, сообщения на 4,2 с, румбы), `reactor.gd` (доли энергии `Reactor.k(Sys…)` — сила систем, перегрев,
   сброс; `Reactor.Console` — выбор на пульте). Новая система корабля берёт силу из `main.reactor.k(...)`.
