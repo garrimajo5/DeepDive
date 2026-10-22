@@ -182,6 +182,28 @@ func test_scene_warmup_own_material() -> void:
 	await frames(1)
 
 
+## Issue #217: в первом кадре прогрева каждая деталь корабля, отмели, ила и образцов видна и ей есть что рисовать.
+## Рамка подсказки табло тревог была без меша до первой тревоги — прогрев её не рисовал, и её шейдер (без света,
+## без отсечения граней) собирался, когда рамка у пульта энергии впервые попадала в кадр — на нажатии у пульта.
+func test_scene_warmup_draws_every_mesh() -> void:
+	Warmup.enabled = true
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	Warmup.enabled = false
+	ok(main.warming(), "идёт прогрев")
+	for root: Node in [main.ship, main.ocean, main.silt_view, main.samples_view]:
+		for n in root.find_children("*", "GeometryInstance3D", true, false):
+			var g := n as GeometryInstance3D
+			ok(g.is_visible_in_tree(), "в кадре прогрева показано: %s" % g.name)
+			if g is MeshInstance3D:
+				ok((g as MeshInstance3D).mesh != null, "есть меш у %s" % g.name)
+			elif g is MultiMeshInstance3D:
+				var mm := (g as MultiMeshInstance3D).multimesh
+				ok(mm != null and mm.mesh != null and mm.instance_count > 0, "есть что рисовать у %s" % g.name)
+	main.queue_free()
+	await frames(1)
+
+
 ## Облёт с борта в начале забега ждёт конца прогрева: под шторкой смотрят глаза на мостике.
 func test_scene_flyby_waits() -> void:
 	Warmup.enabled = true
