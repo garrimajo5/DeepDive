@@ -34,6 +34,7 @@ func _ready() -> void:
 	m.set_shader_parameter("gate_edge", IceSheet.GATE_EDGE)
 	m.set_shader_parameter("crack_caustic", IceSheet.CAUSTIC)
 	m.set_shader_parameter("crack_depth", IceSheet.CAUSTIC_DEPTH)
+	_set_ground(m)   # грунты ART-060: песок, ил, галька
 	seabed_mat = m
 	mesh.surface_set_material(0, m)
 	seabed.mesh = mesh
@@ -213,8 +214,31 @@ func apply_water(env: Environment, depth: float, around: Vector3, silt: float = 
 	ice_mat.set_shader_parameter("relief", IceSheet.relief(depth) if ice_relief else 0.0)
 
 
-## «Экономно» (ART-044): лёд без выборки нормалей, цвет и маска трещин остаются.
+## Грунты дна по ART-060 (`Seabed.Ground`): девять карт и числа в материал дна, без новых вызовов.
+static func _set_ground(m: ShaderMaterial) -> void:
+	const NAMES := ["sand", "silt", "pebble"]
+	for kind in 3:
+		for map in 3:
+			m.set_shader_parameter("%s_%s" % [NAMES[kind], Seabed.Ground.MAPS[map]], load(Seabed.Ground.path(kind, map)))
+	m.set_shader_parameter("ground", 1.0)
+	m.set_shader_parameter("relief", 1.0)
+	m.set_shader_parameter("tile", Seabed.Ground.TILE)
+	m.set_shader_parameter("off_silt", Seabed.Ground.OFFSET[1])
+	m.set_shader_parameter("off_pebble", Seabed.Ground.OFFSET[2])
+	m.set_shader_parameter("normal_k", Vector3(Seabed.Ground.NORMAL_K[0], Seabed.Ground.NORMAL_K[1], Seabed.Ground.NORMAL_K[2]))
+	m.set_shader_parameter("normal_fade", Seabed.Ground.NORMAL_FADE)
+	m.set_shader_parameter("color_fade", Seabed.Ground.COLOR_FADE)
+	m.set_shader_parameter("bump", Seabed.Ground.BUMP)
+	m.set_shader_parameter("silt_scale", Seabed.Ground.SILT_SCALE)
+	m.set_shader_parameter("silt_edge", Seabed.Ground.SILT_EDGE)
+	m.set_shader_parameter("pebble_scale", Seabed.Ground.PEBBLE_SCALE)
+	m.set_shader_parameter("pebble_edge", Seabed.Ground.PEBBLE_EDGE)
+	m.set_shader_parameter("steep", Seabed.Ground.STEEP)
+
+
+## «Экономно» (ART-044): лёд без выборки нормалей, цвет и маска трещин остаются; дно — только цвет грунтов.
 func set_relief(on: bool) -> void:
 	ice_relief = on
+	seabed_mat.set_shader_parameter("relief", 1.0 if on else 0.0)
 	if not on:
 		ice_mat.set_shader_parameter("relief", 0.0)
