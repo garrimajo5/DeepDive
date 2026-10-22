@@ -12,6 +12,7 @@ var pilot: Deck.Pilot:
 var crew: Array = [me]                       ## экипаж на борту; позже — игроки по сети
 var crew_view: CrewView
 var name_tags: NameTagView  ## таблички игроков над фигурами (ART-033, NameTag)
+var busy_marks: BusyMarkView  ## метки «Занято» над постами, занятыми другим (ART-033, BusyMark)
 var layout := ShipLayout.new()
 var airlock := Airlock.new()
 var posts: Array[Deck.Post] = []
@@ -167,6 +168,9 @@ func _ready() -> void:
 	name_tags = NameTagView.new()
 	name_tags.name = "Таблички экипажа"
 	ship.add_child(name_tags)
+	busy_marks = BusyMarkView.new()
+	busy_marks.name = "Метки «Занято»"
+	ship.add_child(busy_marks)
 	walker.stand = layout.can_stand
 	posts = Deck.posts()
 	posts.append(Deck.Post.new("winch", Samples.POST_AT, Samples.POST_R, "Лебёдка"))
@@ -624,7 +628,8 @@ func step(dt: float) -> void:
 	_place_ship()
 	_place_camera()
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
-	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt)
+	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
+	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy)
 	_update_ui()
 	_warm_frame()
 	_net_send(dt)
@@ -1375,7 +1380,8 @@ func _client_step(dt: float) -> void:
 	_place_ship()
 	_place_camera()
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
-	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt)
+	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
+	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy)
 	_update_ui()
 	_warm_frame()
 	r.end_frame()
@@ -1508,9 +1514,13 @@ func debug_setup(kv: Dictionary) -> void:
 		airlock.open = true
 		airlock.t = 1.0
 		rooms.apply(layout, reactor, airlock)
-	if kv.has("mate"):  # mate=x,z,курс°[,роль 0…3[,внешность 0…1]] — ещё один член экипажа стоит на палубе; mate=helm — сидит за штурвалом
+	if kv.has("mate"):  # mate=x,z,курс°[,роль 0…3[,внешность 0…1]] — ещё один член экипажа стоит на палубе; mate=helm — сидит за штурвалом, mate=energy — инженер у пульта
 		if kv["mate"] == "helm":
 			add_mate(0.0, Deck.SEAT_Z, 0.0, Crew.Role.SONAR, 0, true)
+		elif kv["mate"] == "energy":   # инженер у пульта энергии (метка «Занято»)
+			var e := add_mate(POWER_STAND.x, POWER_STAND.y, PI * 0.5, Crew.Role.ENGINEER, 0)
+			e.at_power = true
+			e.sync_post()
 		else:  # несколько — через «;»
 			for one: String in kv["mate"].split(";"):
 				var m: PackedFloat64Array = one.split_floats(",")
