@@ -47,6 +47,12 @@ func _ready() -> void:
 	sun.rotation_degrees = Vector3(-70, 20, 0)
 	sun.light_color = Color("9AD9E8")
 	sun.light_cull_mask = LAYER_WORLD
+	# Тени на отмели (Forward Mobile): существа и флора ложатся тенью на дно — глубина и вес.
+	sun.shadow_enabled = true
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS   # 2 каскада — дешевле для телефона
+	sun.directional_shadow_max_distance = 110.0   # за туманом тени не нужны
+	sun.light_angular_distance = 1.5              # мягкие края — рассеянный свет сквозь лёд
+	sun.shadow_blur = 1.3
 	add_child(sun)
 
 	snow = _make_snow()
