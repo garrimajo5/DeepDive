@@ -189,17 +189,52 @@ func set_screens(helm: Vector3, scanner: float) -> void:
 	scanner_text.modulate = Color(SCANNER_TEXT.r * scanner, SCANNER_TEXT.g * scanner, SCANNER_TEXT.b * scanner)
 
 
-## Стекло носового окна: едва заметный бирюзовый отлив, чтобы было видно, что окно застеклено.
+## Стекло носовых окон по ART-057 (`steklo-okon.md`): один квад на три окна, маска мути/капель/царапин и нормали
+## толстого стекла (`textures/bridge/steklo-*.png`, шейдер `window_glass.gdshader`); центр окна почти чистый.
+const GLASS_SHADER := preload("res://shaders/window_glass.gdshader")
+const GLASS_TINT := Color(0.6, 0.85, 0.9)
+var glass_mat: ShaderMaterial
+
+
 func _add_glass() -> void:
 	var g := MeshInstance3D.new()
 	g.name = "Стекло окна"
 	var q := QuadMesh.new()
 	q.size = Vector2(2 * BridgePlan.WINDOW_HALF, BridgePlan.WINDOW_TOP - BridgePlan.WINDOW_BOTTOM)
 	g.mesh = q
-	g.material_override = ShaderKey.glass(Color(0.6, 0.85, 0.9, 0.07))   # шейдер общий с подложками (issue #159)
+	glass_mat = glass_material()
+	g.material_override = glass_mat
 	g.position = Vector3(0, (BridgePlan.WINDOW_TOP + BridgePlan.WINDOW_BOTTOM) / 2.0, BridgePlan.NOSE_INNER - 0.05)
 	g.layers = OceanView.LAYER_SHIP
 	add_child(g)
+
+
+static func glass_material() -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = GLASS_SHADER
+	m.set_shader_parameter("tint", GLASS_TINT)
+	m.set_shader_parameter("mask", load(KIT_DIR + "steklo-maska.png"))
+	m.set_shader_parameter("normal_map", load(KIT_DIR + "steklo-normali.png"))
+	m.set_shader_parameter("split", glass_split())
+	m.set_shader_parameter("relief", true)
+	return m
+
+
+## Границы окон по u квада (стойки `BridgePlan.MULLIONS`): 0,328947 и 0,671053.
+static func glass_split() -> Vector2:
+	var w := 2.0 * BridgePlan.WINDOW_HALF
+	return Vector2((BridgePlan.MULLIONS[0] + BridgePlan.WINDOW_HALF) / w, (BridgePlan.MULLIONS[1] + BridgePlan.WINDOW_HALF) / w)
+
+
+## UV квада → UV карты окна (x, y) и знаки нормали (z — по U, w — по V), как в `window_glass.gdshader`:
+## левое окно как есть, среднее отражено по U, правое — по V (муть у рамы каждого окна, центр чистый).
+static func glass_uv(uv: Vector2) -> Vector4:
+	var s := glass_split()
+	if uv.x < s.x:
+		return Vector4(uv.x / s.x, uv.y, 1, 1)
+	if uv.x < s.y:
+		return Vector4(1.0 - (uv.x - s.x) / (s.y - s.x), uv.y, -1, 1)
+	return Vector4((uv.x - s.y) / (1.0 - s.y), 1.0 - uv.y, 1, -1)
 
 
 ## Материалы мостика ART-054 (`mostik-materialy.md`): какой комплект карт `textures/bridge/<имя>-*.png` на какой
@@ -253,8 +288,9 @@ static func kit_material(paint: int, kits: Dictionary = KITS, dir: String = KIT_
 	return m
 
 
-## «Экономно» (ART-044): false — карты нормалей и ORM не читаются, цвет остаётся (ключ снимка relief=0).
+## «Экономно» (ART-044): false — карты нормалей и ORM не читаются, цвет остаётся (ключ снимка relief=0); стекло окон — без нормалей.
 func set_relief(on: bool) -> void:
+	glass_mat.set_shader_parameter("relief", on)
 	for i in mesh_instance.mesh.get_surface_count():
 		var m := mesh_instance.mesh.surface_get_material(i) as ShaderMaterial
 		if m:
