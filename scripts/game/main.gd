@@ -33,6 +33,7 @@ var save := SaveGame.new()     ## груз трюма, поднятые обра
 var scanner := Scanner.new()   ## сканер биолога: цели от живого мира, изученные виды
 var at_scanner := false        ## игрок у поста «Сканер»: мир шлёт цели (ShipState.scan_range)
 var near_post := ""            ## пост рядом с игроком на ногах (id), "" — нет или игрок занят постом
+var busy_said := {}           ## пост → «Пульт энергии занят: Инженер» на приборах; гаснет, когда пост освободился
 var _noclip_return := Vector2.ZERO  ## куда вернуть игрока при выходе из noclip (где включил)
 var brief := Briefing.Fade.new()  ## голограмма брифинга у поста «Маршрут» (ART-016)
 var vote_fade := Briefing.Fade.new()  ## голосование на голограмме (VoteHolo)
@@ -553,7 +554,11 @@ func step(dt: float) -> void:
 		if p.id.begins_with("door"):
 			p.label = "Закрыть люк" if layout.doors[int(p.id.substr(4))].open else "Открыть люк"
 		elif Crew.BUSY.has(p.id):   # пост одного человека: занят другим — так и пишем в строке
-			p.label = Crew.BUSY[p.id] if Crew.holder(crew, me, p.id) else POST_FREE[p.id]
+			var who := Crew.holder(crew, me, p.id)
+			p.label = Crew.BUSY[p.id] if who else POST_FREE[p.id]
+			if busy_said.has(p.id) and (who == null or Crew.busy_text(p.id, who) != busy_said[p.id]):
+				message.clear(busy_said[p.id])   # державший встал или отключился — строка не врёт (issue #419)
+				busy_said.erase(p.id)
 		elif p.id == "airlock":
 			p.label = airlock.label()
 		elif p.id == "winch":
@@ -715,6 +720,7 @@ func use_post(id: String) -> void:
 	var other := Crew.holder(crew, me, id)
 	if other:   # пост держит другой член экипажа
 		say(Crew.busy_text(id, other))
+		busy_said[id] = message.text
 		return
 	if id in ["sonar", "zap", "scram", "route"]:
 		press_post = id
@@ -1648,6 +1654,7 @@ func debug_setup(kv: Dictionary) -> void:
 		vitals.hull = float(kv["hull"])
 	if kv.get("relief", "1") == "0":  # relief=0 — обшивка без рельефа ART-053 («Экономно»)
 		hull.set_relief(false)
+		bridge.set_relief(false)   # и карты мостика ART-054
 	if kv.has("energy"):  # energy=<ед.> — заряд корабля (меньше 20 — «МАЛО ЗАРЯДА» на табло)
 		vitals.energy = float(kv["energy"])
 	if kv.get("drain", "0") == "1":  # drain=1 — стеклоуст на корпусе (табло и рамка у щитка разряда)

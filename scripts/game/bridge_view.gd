@@ -24,7 +24,7 @@ var scanner_text: Label3D          ## экран сканера биолога (
 func _ready() -> void:
 	mesh_instance = MeshInstance3D.new()
 	mesh_instance.name = "Оболочка"
-	mesh_instance.mesh = build_mesh()
+	mesh_instance.mesh = build_mesh(BridgePlan.parts(), true)
 	mesh_instance.layers = OceanView.LAYER_SHIP
 	add_child(mesh_instance)
 	_add_glass()
@@ -202,7 +202,64 @@ func _add_glass() -> void:
 	add_child(g)
 
 
-static func build_mesh(parts: Array[BridgePlan.Part] = BridgePlan.parts()) -> ArrayMesh:
+## Материалы мостика ART-054 (`mostik-materialy.md`): какой комплект карт `textures/bridge/<имя>-*.png` на какой
+## краске. side — грани не вниз, down — смотрящие вниз (потолок, скос в METAL); depth — сила нормалей,
+## rough/metal — константы «Экономно». Подложки плафонов (SEAM, грани вбок) остаются заливкой.
+const KIT_DIR := "res://textures/bridge/"
+const KITS := {
+	BridgePlan.Paint.DECK: {"side": ["pol", 0.6, 0.72, 0.4]},
+	BridgePlan.Paint.METAL: {"side": ["stena", 0.8, 0.8, 0.15], "down": ["potolok", 0.7, 0.78, 0.2]},
+	BridgePlan.Paint.SEAM: {"down": ["potolok", 0.7, 0.78, 0.2]},
+}
+const SURFACE_SHADER := preload("res://shaders/ship_surface.gdshader")
+
+
+## Метровые планарные UV грани (1 UV = 1 м) по главной оси нормали: пол и потолок — (x, z), короба потолка
+## вдоль корабля; стены — по горизонтали вдоль стены и v вниз (−y), рисунок стоит вертикально.
+static func planar_uv(p: Vector3, n: Vector3) -> Vector2:
+	var a := n.abs()
+	if a.y >= a.x and a.y >= a.z:
+		return Vector2(p.x, p.z)
+	if a.x >= a.z:
+		return Vector2(p.z, -p.y)
+	return Vector2(p.x, -p.y)
+
+
+## Материал поверхности с картами ART-054 (шейдер ship_surface); null — у краски комплекта нет.
+static func kit_material(paint: int) -> ShaderMaterial:
+	if not KITS.has(paint):
+		return null
+	var m := ShaderMaterial.new()
+	m.shader = SURFACE_SHADER
+	m.set_shader_parameter("base_color", BridgePlan.COLORS[paint])
+	m.set_shader_parameter("base_rough", 0.75)
+	m.set_shader_parameter("base_metal", 0.25 if paint == BridgePlan.Paint.METAL else 0.0)
+	var kit: Dictionary = KITS[paint]
+	for side in ["side", "down"]:
+		m.set_shader_parameter(side + "_kit", kit.has(side))
+		if not kit.has(side):
+			continue
+		var k: Array = kit[side]
+		m.set_shader_parameter(side + "_albedo", load(KIT_DIR + k[0] + "-tsvet.png"))
+		m.set_shader_parameter(side + "_normal", load(KIT_DIR + k[0] + "-normali.png"))
+		m.set_shader_parameter(side + "_orm", load(KIT_DIR + k[0] + "-orm.png"))
+		m.set_shader_parameter(side + "_depth", k[1])
+		m.set_shader_parameter(side + "_rough", k[2])
+		m.set_shader_parameter(side + "_metal", k[3])
+	m.set_shader_parameter("relief", true)
+	return m
+
+
+## «Экономно» (ART-044): false — карты нормалей и ORM не читаются, цвет остаётся (ключ снимка relief=0).
+func set_relief(on: bool) -> void:
+	for i in mesh_instance.mesh.get_surface_count():
+		var m := mesh_instance.mesh.surface_get_material(i) as ShaderMaterial
+		if m:
+			m.set_shader_parameter("relief", on)
+
+
+## kits — материалы ART-054 на мостике (оболочка BridgeView); отсеки (RoomsView) пока заливкой.
+static func build_mesh(parts: Array[BridgePlan.Part] = BridgePlan.parts(), kits := false) -> ArrayMesh:
 	var by_paint := {}
 	for part in parts:
 		if not by_paint.has(part.paint):
@@ -215,7 +272,8 @@ static func build_mesh(parts: Array[BridgePlan.Part] = BridgePlan.parts()) -> Ar
 		var st: SurfaceTool = by_paint[paint]
 		st.generate_tangents()
 		st.commit(mesh)
-		mesh.surface_set_material(mesh.get_surface_count() - 1, material(paint))
+		var km := kit_material(paint) if kits else null
+		mesh.surface_set_material(mesh.get_surface_count() - 1, km if km else material(paint))
 	return mesh
 
 
@@ -255,5 +313,6 @@ static func _add_box(st: SurfaceTool, part: BridgePlan.Part) -> void:
 		# порядок a, b, c такой, что (b − a) × (c − a) смотрит внутрь — лицевая сторона наружу
 		for i in [0, 1, 2, 0, 2, 3]:
 			st.set_normal(nn)
-			st.set_uv(Vector2(0.5, 0.5))
-			st.add_vertex(t * q[i])
+			var pv: Vector3 = t * q[i]
+			st.set_uv(planar_uv(pv, nn))
+			st.add_vertex(pv)
