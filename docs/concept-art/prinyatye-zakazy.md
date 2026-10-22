@@ -572,3 +572,10 @@ ORM = AO/шероховатость/металл, в существующие `P
 кадр `led-kadr.jpg`, лист `led-list.png`; решения — `led-snizu.md`: плитка 16 × 16 м по `world.xz`, маска трещин под крупным
 мировым шумом (рвёт повтор), слабая эмиссия с добавкой трещин и гашением по глубине, основания шахт ART-052 по той же маске.
 Встройка — задача ROADMAP потока А.
+## ART-055 Материалы машинного и трюма — принято
+- Исходник: ART-008 (`mashinnoe.md`), `tryum.md`, ART-054 (`mostik-materialy.md`), ART-024 (`obshivka.md`), `ShipLayout`, `RoomsView`.
+
+**Принято 22.10.2026** (PR #417, ветка `art/ART-055-materialy-otsekov`): 15 карт `{mash,tryum}-{pol,stena}-*`, `otsek-potolok-*`
+(цвет/нормали/ORM), листы `otseki-materialy-list.png`, `otseki-materialy-povtor.jpg`; решения — `otseki-materialy.md`:
+плитка 1 × 1 м, OpenGL +Y, выбор комплекта по z внутри существующих материалов `RoomsView` без новых вызовов, метровые UV
+как у мостика, на «Экономно» нормали и ORM выключать. Встройка — задача ROADMAP потока А.
