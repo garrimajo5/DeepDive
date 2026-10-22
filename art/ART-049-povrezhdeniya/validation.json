@@ -1,0 +1,246 @@
+{
+  "tile_m": 2,
+  "shift_px": [
+    317,
+    211
+  ],
+  "features": [
+    {
+      "id": 0,
+      "kind": "skol",
+      "threshold": 0,
+      "source_bounds": [
+        61,
+        60,
+        594,
+        264
+      ]
+    },
+    {
+      "id": 1,
+      "kind": "koltso",
+      "threshold": 48,
+      "source_bounds": [
+        659,
+        86,
+        836,
+        267
+      ]
+    },
+    {
+      "id": 2,
+      "kind": "tsarapiny",
+      "threshold": 72,
+      "source_bounds": [
+        914,
+        57,
+        1189,
+        312
+      ]
+    },
+    {
+      "id": 3,
+      "kind": "tsarapiny",
+      "threshold": 24,
+      "source_bounds": [
+        60,
+        283,
+        364,
+        497
+      ]
+    },
+    {
+      "id": 4,
+      "kind": "vmyatina",
+      "threshold": 104,
+      "source_bounds": [
+        375,
+        297,
+        632,
+        479
+      ]
+    },
+    {
+      "id": 5,
+      "kind": "skol",
+      "threshold": 136,
+      "source_bounds": [
+        679,
+        317,
+        984,
+        500
+      ]
+    },
+    {
+      "id": 6,
+      "kind": "koltso",
+      "threshold": 168,
+      "source_bounds": [
+        1011,
+        297,
+        1182,
+        471
+      ]
+    },
+    {
+      "id": 7,
+      "kind": "koltso",
+      "threshold": 16,
+      "source_bounds": [
+        60,
+        530,
+        234,
+        702
+      ]
+    },
+    {
+      "id": 8,
+      "kind": "zaplatka",
+      "threshold": 200,
+      "source_bounds": [
+        309,
+        535,
+        483,
+        684
+      ]
+    },
+    {
+      "id": 9,
+      "kind": "skol",
+      "threshold": 184,
+      "source_bounds": [
+        537,
+        507,
+        922,
+        705
+      ]
+    },
+    {
+      "id": 10,
+      "kind": "vmyatina",
+      "threshold": 72,
+      "source_bounds": [
+        958,
+        510,
+        1191,
+        688
+      ]
+    },
+    {
+      "id": 11,
+      "kind": "vmyatina",
+      "threshold": 144,
+      "source_bounds": [
+        104,
+        719,
+        415,
+        928
+      ]
+    },
+    {
+      "id": 12,
+      "kind": "koltso",
+      "threshold": 120,
+      "source_bounds": [
+        483,
+        715,
+        662,
+        893
+      ]
+    },
+    {
+      "id": 13,
+      "kind": "tsarapiny",
+      "threshold": 56,
+      "source_bounds": [
+        865,
+        691,
+        1151,
+        821
+      ]
+    },
+    {
+      "id": 14,
+      "kind": "skol",
+      "threshold": 216,
+      "source_bounds": [
+        711,
+        800,
+        1194,
+        985
+      ]
+    },
+    {
+      "id": 15,
+      "kind": "tsarapiny",
+      "threshold": 152,
+      "source_bounds": [
+        63,
+        949,
+        442,
+        1190
+      ]
+    },
+    {
+      "id": 16,
+      "kind": "koltso",
+      "threshold": 232,
+      "source_bounds": [
+        470,
+        1003,
+        645,
+        1176
+      ]
+    },
+    {
+      "id": 17,
+      "kind": "zaplatka",
+      "threshold": 255,
+      "source_bounds": [
+        704,
+        1003,
+        884,
+        1153
+      ]
+    },
+    {
+      "id": 18,
+      "kind": "vmyatina",
+      "threshold": 208,
+      "source_bounds": [
+        918,
+        988,
+        1194,
+        1211
+      ]
+    }
+  ],
+  "states": {
+    "100": {
+      "visible_marks": 0,
+      "alpha_coverage": 0.0
+    },
+    "70": {
+      "visible_marks": 7,
+      "alpha_coverage": 0.1354532241821289
+    },
+    "40": {
+      "visible_marks": 12,
+      "alpha_coverage": 0.24115657806396484
+    },
+    "15": {
+      "visible_marks": 17,
+      "alpha_coverage": 0.33947181701660156
+    },
+    "0": {
+      "visible_marks": 19,
+      "alpha_coverage": 0.36098384857177734
+    }
+  },
+  "edges_exact_match": true,
+  "alpha_zero_fraction": 0.5912065505981445,
+  "dimensions": [
+    1024,
+    1024
+  ]
+}
