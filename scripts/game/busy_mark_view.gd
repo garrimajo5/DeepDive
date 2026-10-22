@@ -14,6 +14,11 @@ var plates := {}     ## id → Sprite3D таблички занявшего
 var letters := {}    ## id → Label3D буквы роли
 var names := {}      ## id → Label3D имени
 var keys := {}       ## id → роль и имя, под которые собрана метка
+var layout: Touch.Layout   ## кнопки экрана: метка под них не ложится (#373)
+## Собранные текстуры по роли и имени занявшего (#375): подложка и плашка рисуются попиксельно — десятки мс на
+## телефоне, поэтому их готовит `prepare` заранее (при сборке экипажа, под шторкой прогрева), а не нажатие «Занято».
+var cache := {}
+var images_built := 0      ## сколько раз рисовали текстуры (тест: при нажатии — ни разу)
 
 
 func _ready() -> void:
@@ -25,6 +30,7 @@ func _ready() -> void:
 ## (облёт с борта — метки скрыты). Возвращает занявших, чьи метки видны: их табличку над головой не показываем.
 func show_marks(crew: Array, me: Crew.Member, cam: Camera3D, own_cam: Camera3D) -> Array:
 	var holders: Array = []
+	prepare(crew)   # текстуры — заранее, с первого кадра (под шторкой прогрева), а не в кадр нажатия (#375)
 	for id: String in roots:
 		(roots[id] as Node3D).visible = false
 	if cam == null or cam != own_cam:
@@ -49,6 +55,7 @@ func show_marks(crew: Array, me: Crew.Member, cam: Camera3D, own_cam: Camera3D) 
 			continue
 		var h := NameTag.world_height(d, cam.fov, depth)
 		_build(id, m)
+		center = _fit(cam, center, depth, h, float(cache[keys[id]]["w"]))
 		root.global_transform = Transform3D(Basis(Vector3.UP, ang).scaled(Vector3.ONE * h), center)
 		var a := BusyMark.alpha(d)
 		(panels[id] as Sprite3D).modulate = Color(1, 1, 1, a)
@@ -60,6 +67,29 @@ func show_marks(crew: Array, me: Crew.Member, cam: Camera3D, own_cam: Camera3D) 
 		root.visible = true
 		holders.append(m)
 	return holders
+
+
+## Сдвинуть центр метки (мир) так, чтобы на экране она была целиком и не под кнопками (`BusyMark.fit`, #373).
+func _fit(cam: Camera3D, center: Vector3, depth: float, h: float, w: float) -> Vector3:
+	var vr := cam.get_viewport().get_visible_rect()
+	var m_px := vr.size.y / (2.0 * depth * tan(deg_to_rad(cam.fov) * 0.5))   # px на метр на этой глубине
+	var size := Vector2(w, BusyMark.H) * h * m_px
+	var c := cam.unproject_position(center)
+	var keep: Array = []
+	if layout != null:
+		for b: Touch.Circle in [layout.noclip, layout.action, layout.light, layout.up, layout.down, layout.pad]:
+			if b.r > 0.0:
+				keep.append(Rect2(b.c - Vector2.ONE * b.r, Vector2.ONE * b.r * 2.0))
+	var off := BusyMark.fit(Rect2(c - size * 0.5, size), vr, keep)
+	if off == Vector2.ZERO:
+		return center
+	return cam.project_position(c + off, depth)
+
+
+## Собрать текстуры меток для всего экипажа заранее (#375): дёшево, если всё уже собрано.
+func prepare(crew: Array) -> void:
+	for m: Crew.Member in crew:
+		_entry(m)
 
 
 func _add(id: String) -> void:
@@ -116,29 +146,48 @@ func _label(nm: String, em: float) -> Label3D:
 	return l
 
 
-## Метка под занявшего: подложка по ширине слова и таблички, табличка — как у NameTagView.
-func _build(id: String, m: Crew.Member) -> void:
+## Текстуры и размеры метки под занявшего (из кэша; нет — рисуем и кладём).
+func _entry(m: Crew.Member) -> Dictionary:
 	var text := NameTag.label(m.name, m.role)
 	var key := "%d|%s|%s" % [m.role, text, m.lost]
-	if keys[id] == key:
-		return
-	keys[id] = key
+	if cache.has(key):
+		return cache[key]
 	var font := ThemeDB.fallback_font
 	var ww := font.get_string_size(BusyMark.WORD, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_PX).x * BusyMark.WORD_EM / FONT_PX
 	var tw := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_PX).x * NameTag.NAME_EM / FONT_PX
 	var pw := NameTag.width(tw)
 	var w := BusyMark.width(ww, pw)
 	var cols := NameTag.colors(m.role, m.lost)
+	images_built += 1
+	var e := {
+		"key": key, "text": text, "ww": ww, "tw": tw, "pw": pw, "w": w,
+		"panel": ImageTexture.create_from_image(BusyMark.panel_image(w)),
+		"plate": ImageTexture.create_from_image(NameTag.plate_image(pw, cols[1], cols[0])),
+	}
+	cache[key] = e
+	return e
+
+
+## Метка под занявшего: подложка по ширине слова и таблички, табличка — как у NameTagView.
+func _build(id: String, m: Crew.Member) -> void:
+	var e := _entry(m)
+	if keys[id] == e["key"]:
+		return
+	keys[id] = e["key"]
+	var ww: float = e["ww"]
+	var tw: float = e["tw"]
+	var pw: float = e["pw"]
+	var w: float = e["w"]
 	var panel: Sprite3D = panels[id]
-	panel.texture = ImageTexture.create_from_image(BusyMark.panel_image(w))
+	panel.texture = e["panel"]
 	panel.pixel_size = BusyMark.H / BusyMark.TEX_H
 	(words[id] as Label3D).position = Vector3(BusyMark.from_center(BusyMark.PAD + BusyMark.WORD_X + ww * 0.5, w), 0.0, 0.01)
 	var pc := BusyMark.from_center(BusyMark.tag_x(ww) + pw * 0.5, w)   # центр таблички от середины подложки
 	var plate: Sprite3D = plates[id]
-	plate.texture = ImageTexture.create_from_image(NameTag.plate_image(pw, cols[1], cols[0]))
+	plate.texture = e["plate"]
 	plate.pixel_size = 1.0 / NameTag.TEX_H
 	plate.position = Vector3(pc, 0.0, 0.005)
 	(letters[id] as Label3D).text = NameTag.letter(m.role)
 	(letters[id] as Label3D).position = Vector3(pc + NameTag.letter_x(pw), 0.0, 0.01)
-	(names[id] as Label3D).text = text
+	(names[id] as Label3D).text = e["text"]
 	(names[id] as Label3D).position = Vector3(pc + NameTag.name_x(pw, tw), 0.0, 0.01)

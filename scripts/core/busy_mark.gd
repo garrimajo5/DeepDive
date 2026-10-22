@@ -32,6 +32,8 @@ const CORNER := 0.12
 const BORDER := 0.03
 const TEX_H := 90                ## высота текстуры подложки, px
 
+const EDGE_GAP := 0.02           ## поле от края экрана и от кнопок, доля высоты экрана (#373)
+
 const BACK := Color("132B36")
 const BACK_A := 0.88
 const EDGE := Color("2E5866")
@@ -70,6 +72,30 @@ static func width(word_w: float, plate_w: float) -> float:
 ## Центр точки x (от левого края подложки) от середины подложки шириной w.
 static func from_center(x: float, w: float) -> float:
 	return x - w * 0.5
+
+
+## Сдвиг метки на экране (px, y вниз), чтобы она вся была в кадре и не лежала под кнопками (#373): r — метка на
+## экране, screen — видимая область, keep_out — кнопки (прямоугольники). Сначала внутрь экрана с полем EDGE_GAP;
+## задела кнопку — самый короткий сдвиг из четырёх (влево, вправо, вверх, вниз), при котором она остаётся в кадре.
+static func fit(r: Rect2, screen: Rect2, keep_out: Array) -> Vector2:
+	var g := EDGE_GAP * screen.size.y
+	var inner := screen.grow(-g)
+	var off := Vector2.ZERO
+	off.x = clampf(r.position.x, inner.position.x, maxf(inner.end.x - r.size.x, inner.position.x)) - r.position.x
+	off.y = clampf(r.position.y, inner.position.y, maxf(inner.end.y - r.size.y, inner.position.y)) - r.position.y
+	for k: Rect2 in keep_out:
+		var cur := Rect2(r.position + off, r.size)
+		var kg := k.grow(g)
+		if not cur.intersects(kg):
+			continue
+		var best := Vector2.INF
+		for mv: Vector2 in [Vector2(kg.position.x - cur.end.x, 0.0), Vector2(kg.end.x - cur.position.x, 0.0),
+				Vector2(0.0, kg.position.y - cur.end.y), Vector2(0.0, kg.end.y - cur.position.y)]:
+			if inner.encloses(Rect2(cur.position + mv, cur.size)) and mv.length() < best.length():
+				best = mv
+		if best != Vector2.INF:
+			off += best
+	return off
 
 
 ## Подложка шириной w (высоты таблички): скруглённый тёмный фон с тонким контуром и контур замка слева.

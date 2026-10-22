@@ -256,6 +256,7 @@ func _ready() -> void:
 	drop_panel.name = "Связь потеряна"
 	ui.add_child(drop_panel)
 	power_panel.layout = overlay.router.layout   # панель пульта не ложится под noclip и кнопку действия (#349)
+	busy_marks.layout = overlay.router.layout    # метка «Занято» тоже (#373)
 	reactor.message.connect(func(title: String, _text: String) -> void: say(title))
 	airlock.message.connect(say)
 	samples.message.connect(say)
