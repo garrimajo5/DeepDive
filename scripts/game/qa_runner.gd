@@ -131,6 +131,9 @@ func tick(dt: float) -> void:
 			"act":   # последний товарищ жмёт кнопку действия (свой ввод, Main._drive_mates)
 				if main.crew.size() > 1:
 					(main.crew[-1] as Crew.Member).pad.action = true
+			"gone":   # последний товарищ отключился, как гость сети (Main.mate_gone)
+				if main.crew.size() > 1:
+					main.mate_gone(main.crew[-1])
 			"log":
 				_log("%s | %s" % [c[1], state()])
 			"quit":

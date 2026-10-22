@@ -89,6 +89,26 @@ func test_guest_leaves() -> void:
 	ok(main.crew[0] == main.me, "остался свой игрок")
 	eq(main.net_mates.size(), 0)
 	ok(not main.crew_view.figures[1].visible, "фигура гостя скрыта")
+	ok(main.notice.active(), "у хоста уведомление (ART-043)")
+	eq(main.notice.title, "Ира отключилась", "женская внешность — «отключилась»")
+	eq(main.notice.sub, "Роль свободна", "поста не держала")
+	ok(main.drop_panel.visible, "плашка на экране")
+	for i in int(HostNotice.LEFT_TIME / DT) + 2:
+		main.step(DT)
+	ok(not main.notice.active(), "через 4 с плашки нет")
+	ok(not main.drop_panel.visible)
+
+
+func test_guest_comes_back() -> void:   # ART-043: «Ира вернулась» — тот же гость по имени
+	ok(_pump(func() -> bool: return main.crew.size() == 2), "гость на палубе")
+	client.stop()
+	ok(_pump(func() -> bool: return main.crew.size() == 1), "ушла")
+	client = NetLink.Client.new()
+	client.join("127.0.0.1", PORT, "Ира", Crew.Role.BIOLOGIST, 1)
+	ok(_pump(func() -> bool: return main.crew.size() == 2), "вошла снова")
+	eq(main.notice.title, "Ира вернулась")
+	ok(main.notice.active())
+	eq(main.notice.time, HostNotice.BACK_TIME, "2 с")
 
 
 ## Гость на посту правит кораблём (по сети): за штурвалом — ход, руль, «Вниз», «Свет»; у пульта — доли энергии.

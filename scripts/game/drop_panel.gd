@@ -1,8 +1,8 @@
 class_name DropPanel
 extends Control
 ## Диалог «Связь с хостом потеряна» (ART-043) поверх затемнённого последнего кадра хоста; подтверждение
-## «Продолжить одному?»; плашка «Связь восстановлена». Состояние, тексты и места — `NetDrop`; палитра ART-028,
-## ничего красного.
+## «Продолжить одному?»; плашка «Связь восстановлена». Состояние, тексты и места — `NetDrop`. У хоста — плашка
+## «Игорь отключился» / «Игорь вернулся» (`HostNotice`). Палитра ART-028, ничего красного.
 
 const TEXT := Color("D5E4E8")
 const DIM := Color("9AD9E8")
@@ -12,6 +12,7 @@ const BTN := Color("11293A")
 const DARK_TEXT := Color("0B1C24")
 
 var drop: NetDrop
+var notice: HostNotice
 
 
 func _ready() -> void:
@@ -22,17 +23,35 @@ func _ready() -> void:
 
 func show_drop(d: NetDrop) -> void:
 	drop = d
-	visible = d != null and d.active()
+	_refresh()
+
+
+## Уведомление хоста о госте (ART-043): плашка поверх сцены, кнопки под ней работают.
+func show_notice(n: HostNotice) -> void:
+	notice = n
+	_refresh()
+
+
+func _refresh() -> void:
+	visible = (drop != null and drop.active()) or (notice != null and notice.active())
 	if visible:
 		queue_redraw()
 
 
 func _draw() -> void:
-	if drop == null or not drop.active():
-		return
 	var size := get_viewport_rect().size
 	var s := size.y / NetDrop.REF_H
 	var font := get_theme_default_font()
+	if notice != null and notice.active():
+		var a := notice.alpha()
+		var nb := NetDrop.to_screen(HostNotice.BOX, size)
+		draw_rect(nb, Color(BACK, 0.92 * a))
+		draw_rect(nb, Color(ACCENT, 0.8 * a), false, 2.0)
+		var one := notice.sub == ""
+		_center(font, nb, (104.0 if one else 72.0) * s, notice.title, 44.0 * s, Color(TEXT, a))
+		_center(font, nb, 130.0 * s, notice.sub, 32.0 * s, Color(DIM, a))
+	if drop == null or not drop.active():
+		return
 	var l := drop.lines()
 	if drop.phase == NetDrop.Phase.BACK:
 		var b := NetDrop.to_screen(NetDrop.BACK_BOX, size)
