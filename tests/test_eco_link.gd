@@ -678,3 +678,120 @@ func test_guest_urchins_follow_host() -> void:   # миры разошлись: 
 				worst_f = maxf(worst_f, absf(hk.groves[0].stalks[k].f - gk.groves[0].stalks[k].f))
 	ok(worst < 0.1, "ёж гостя рядом с хостовым: %.3f м" % worst)
 	ok(worst_f < 0.01, "густота лент как у хоста: %.4f" % worst_f)
+
+
+func _flash_world() -> EcoWorld:   # стая радужников и облако планктона, свои места; дно не задано (высота — потолок)
+	var w := EcoWorld.new()
+	var rd_homes: Array[Vector2] = [Vector2(0, 0), Vector2(300, 300)]
+	var pl_homes: Array[Vector2] = [Vector2(0, 40), Vector2(-300, 300)]
+	w.add(EcoRaduzh.new(rd_homes))
+	w.add(EcoPlankton.new(null, null, pl_homes))
+	w.reset()
+	return w
+
+
+func test_flashes_ride_to_guest() -> void:   # вспышка стаи и светящиеся клетки облака рядом едут гостю как у хоста
+	var h := _flash_world()
+	h.run(30.0)
+	var hr := EcoLink.raduzh_of(h.systems)
+	var hp := EcoLink.plankton_of(h.systems)
+	var sw: EcoRaduzh.Swarm = hr.swarms[0]
+	sw.glow = 0.8
+	sw.lit = true
+	var cl: EcoPlankton.Cloud = hp.clouds[0]
+	cl.cut_at = h.time - 0.3
+	cl.lit_at[5] = h.time - 0.3
+	cl.by[5] = EcoPlankton.By.SHIP
+	cl.lit_at[7] = h.time - 1.2
+	cl.by[7] = EcoPlankton.By.PRED
+	cl.lit_at[9] = h.time - 5.0   # давно погасла
+	cl.by[9] = EcoPlankton.By.SHIP
+	cl.ship = 0.6
+	cl.pred_lit = 9
+	var d := EcoLink.pack_world(h.agents, h.systems, Vector3(0, -10, 20), EcoLink.NET_R, h.time)
+	ok(d.has(float(EcoLink.NET_RADUZH)), "радужники в пакете")
+	ok(d.has(float(EcoLink.NET_PLANKTON)), "светящееся облако в пакете")
+	near(EcoLink.net_time(d), h.time, 1e-3, "время мира хоста в пакете")
+	var g := _flash_world()
+	g.run(2.0)   # гость вошёл позже — своё время другое
+	EcoLink.apply_world(g.agents, g.systems, d, g)
+	near(g.time, h.time, 1e-3, "время гостя — хостовое (разница больше TIME_SNAP — сразу)")
+	var gr := EcoLink.raduzh_of(g.systems)
+	var gp := EcoLink.plankton_of(g.systems)
+	near(gr.swarms[0].glow, 0.8, 1e-4, "вспышка стаи как у хоста")
+	ok(gr.swarms[0].lit, "луч задевает стаю и у гостя")
+	near(gr.flare, 0.8, 1e-4, "самая яркая вспышка — для хищников гостя")
+	ok(gr.swarms[0].c.distance_to(sw.c) < 0.01, "стая там же, где у хоста")
+	eq(gr.swarms[1].glow, 0.0, "дальняя стая не пришла")
+	var gc: EcoPlankton.Cloud = gp.clouds[0]
+	for k in [5, 7, 9, 100]:
+		near(EcoPlankton.glow(gc, k, g.time), EcoPlankton.glow(cl, k, h.time), 0.03, "яркость клетки %d" % k)
+	eq(gc.by[5], EcoPlankton.By.SHIP, "клетку 5 зажёг корабль")
+	eq(gc.by[7], EcoPlankton.By.PRED, "клетку 7 — серпохвост")
+	near(gc.ship, 0.6, 1e-4, "след корабля как у хоста")
+	near(gp.wake, 0.6, 1e-4)
+	eq(gc.pred_lit, 9)
+	near(gc.cut_at, cl.cut_at, 1e-3)
+	ok(gc.c.distance_to(cl.c) < 0.01, "облако там же, где у хоста")
+	cl.cut_at = h.time - 3.0   # облако погасло — больше не едет
+	ok(not EcoLink.pack_world(h.agents, h.systems, Vector3(0, -10, 20), EcoLink.NET_R, h.time)
+		.has(float(EcoLink.NET_PLANKTON)), "погасшее облако не едет")
+	ok(not EcoLink.pack_world(h.agents, h.systems, Vector3(5000, 0, 5000)).has(float(EcoLink.NET_RADUZH)), "вдали нет")
+	eq(EcoLink.net_time(EcoLink.pack_near(h.agents, Vector3.ZERO)), -1.0, "старый пакет — без времени")
+
+
+func test_synced_time() -> void:   # время гостя тянется к хостовому без рывков назад
+	eq(EcoLink.synced_time(5.0, -1.0), 5.0, "без времени хоста — своё")
+	eq(EcoLink.synced_time(5.0, 40.0), 40.0, "далеко — сразу хостовое")
+	near(EcoLink.synced_time(10.0, 10.2), 10.05, 1e-5, "близко — на четверть разницы")
+
+
+func test_guest_flashes_follow_host() -> void:   # гость вошёл позже: с кадрами хоста стаи, облака и вспышки как у хоста
+	var h := _flash_world()
+	var g := _flash_world()
+	g.run(40.0)   # время гостя ушло на 40 с — без времени хоста стаи и облака дрейфовали бы в другом месте
+	var hr := EcoLink.raduzh_of(h.systems)
+	var gr := EcoLink.raduzh_of(g.systems)
+	var hp := EcoLink.plankton_of(h.systems)
+	var gp := EcoLink.plankton_of(g.systems)
+	var worst_c := 0.0
+	var worst_g := 0.0
+	var worst_cell := 0.0
+	var lit_max := 0.0
+	var cut_cells := 0
+	for i in 600:   # 20 с по 1/30, кадр хоста — каждый третий шаг
+		var s := h.ship
+		s.yaw = 0.0
+		s.speed = 3.0   # режет облако быстрее WAKE_SPEED
+		s.pos = Vector3(0, -10, 60) + Vector3(0, 0, -s.speed * i / 30.0)
+		s.light_on = true
+		s.light_range = Searchlight.BASE_RANGE
+		for sh: EcoLink.ShipState in [g.ship]:   # корабль гостя — по кадру хоста
+			sh.pos = s.pos
+			sh.yaw = s.yaw
+			sh.speed = s.speed
+			sh.light_on = s.light_on
+			sh.light_range = s.light_range
+		h.step(1.0 / 30.0)
+		g.step(1.0 / 30.0)
+		if i % 3 == 0:
+			EcoLink.apply_world(g.agents, g.systems, EcoLink.pack_world(h.agents, h.systems, s.pos, EcoLink.NET_R,
+				h.time), g)
+		if i > 3 and i % 3 == 0:   # сразу после кадра хоста: между кадрами новые клетки гость узнаёт кадром позже
+			for k in hr.swarms.size():
+				worst_c = maxf(worst_c, hr.swarms[k].c.distance_to(gr.swarms[k].c))
+				worst_g = maxf(worst_g, absf(hr.swarms[k].glow - gr.swarms[k].glow))
+				lit_max = maxf(lit_max, hr.swarms[k].glow)
+			var hc: EcoPlankton.Cloud = hp.clouds[0]
+			var gc: EcoPlankton.Cloud = gp.clouds[0]
+			worst_c = maxf(worst_c, hc.c.distance_to(gc.c))
+			for k in EcoPlankton.PER_CLOUD:
+				var a := EcoPlankton.glow(hc, k, h.time)
+				if a > 0.0:
+					cut_cells += 1
+				worst_cell = maxf(worst_cell, absf(a - EcoPlankton.glow(gc, k, g.time)))
+	ok(lit_max > 0.5, "стая вспыхивала в луче у хоста: %.2f" % lit_max)
+	ok(cut_cells > 0, "корабль зажигал клетки облака")
+	ok(worst_c < 0.1, "стаи и облако гостя там же, где у хоста: %.3f м" % worst_c)
+	ok(worst_g < 0.15, "вспышка стаи как у хоста: %.3f" % worst_g)
+	ok(worst_cell < 0.15, "яркость клеток как у хоста: %.3f" % worst_cell)

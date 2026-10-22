@@ -3,6 +3,10 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-10-22
+- Сеть: вспышки у гостя как у хоста — стаи радужников (вспышка, луч) и светящиеся облака планктона (каждая клетка:
+  возраст вспышки и кто зажёг, след корабля) едут в пакете «eco»; с ними время мира хоста — у гостя, вошедшего позже,
+  стаи и облака дрейфовали в другом месте (`EcoLink.apply_raduzh`/`apply_plankton`/`synced_time`, `NetSnap.VERSION` 11).
+  Тесты `test_eco_link.test_flashes_ride_to_guest`, `test_guest_flashes_follow_host`, `test_synced_time`.
 - Сеть: ленточник и шипоежи у гостя как у хоста — роща ближе 70 м едет в пакете «eco» после монетников: густота
   лент, каждый ёж (жив или ждёт появления, место, цель, блуждание), кто ест ленту (`EcoLink.pack_grove`/`apply_kelp`,
   `NetSnap.VERSION` 10). Тесты `test_eco_link.test_kelp_rides_to_guest`, `test_guest_urchins_follow_host`.

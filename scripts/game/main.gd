@@ -1327,7 +1327,8 @@ func _net_send(dt: float) -> void:
 		var ev := NetSnap.events(breach, silt, time, welding, news if news_age < NetSnap.NEWS_TIME else [])
 		ev["r"] = _net_run()
 		var f := NetSnap.frame(net_host.seq, time, helm, reactor, vitals, light_on, crew, ev)
-		f["eco"] = EcoLink.pack_world(eco.world.agents, eco.world.systems, helm.pos)   # существа и мох рядом — гостям отдельным пакетом
+		f["eco"] = EcoLink.pack_world(eco.world.agents, eco.world.systems, helm.pos, EcoLink.NET_R,
+			eco.world.time)   # существа и мох рядом — гостям отдельным пакетом
 		net_host.send_frame(f)
 
 
