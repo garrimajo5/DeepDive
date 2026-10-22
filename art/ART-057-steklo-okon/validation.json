@@ -1,0 +1,14 @@
+{
+  "size": [
+    1024,
+    512
+  ],
+  "channels": "R frost G dried drops B scratches A combined strength",
+  "center_strength_max": 0.0022578541518350178,
+  "normal": "OpenGL +Y",
+  "normal_wave_height_mm": 0.8,
+  "bytes": {
+    "steklo-maska.png": 107641,
+    "steklo-normali.png": 2961
+  }
+}
