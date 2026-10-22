@@ -1,0 +1,49 @@
+{
+  "mask": {
+    "mode": "L8",
+    "size": [
+      512,
+      1024
+    ],
+    "edge_max": 0,
+    "range": [
+      0,
+      255
+    ]
+  },
+  "noise": {
+    "mode": "L8",
+    "size": [
+      256,
+      256
+    ],
+    "range": [
+      64,
+      183
+    ],
+    "mean": 128.00025939941406,
+    "edge_difference": 0,
+    "seed": 52
+  },
+  "depth_peak_linear": {
+    "0": 0.14,
+    "5": 0.08032547890324059,
+    "15": 0.026442584397258658,
+    "30": 0.004994359068615336,
+    "50": 0.0005412288195261932
+  },
+  "files": {
+    "luchi-list.png": {
+      "bytes": 144555,
+      "sha256": "9017515810a190def0b7af9b17d4763e1a6fb87aa499fa8cd02ef85f1505f087"
+    },
+    "luchi-maska.png": {
+      "bytes": 28415,
+      "sha256": "2a29473a65de025b5c8f19881f3bbe3ca73fa3880bf52a245bf8dee624237c0a"
+    },
+    "luchi-shum.png": {
+      "bytes": 13882,
+      "sha256": "ba3d5136934758ce2650094baedfb3cba07c3c21f95208f691c0f31185ccc5bc"
+    }
+  }
+}
