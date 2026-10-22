@@ -23,9 +23,10 @@ var keys: Array[String] = []     ## роль и имя, под которые с
 ## экрану; рядом стоящие разнесены вверх, ближняя на месте, не поместилась — скрыта (#320); вылезла за край экрана
 ## или легла на кнопку или панель (blocks — прямоугольники экрана) — скрыта (#319). Состояния ART-033: нажал
 ## кнопку (`Member.active`) — контур ярче и три штриха, вход и выход за NameTag.FADE_T (dt — шаг; без dt — сразу);
-## без связи (`Member.lost`) — всё приглушено и строка «Нет связи».
+## без связи (`Member.lost`) — всё приглушено и строка «Нет связи». hidden — члены экипажа без таблички над головой
+## (их табличка уже на метке «Занято» у поста, BusyMarkView).
 func show_tags(crew: Array, me: Crew.Member, view: CrewView, cam: Camera3D, own_cam: Camera3D, blocks: Array = [],
-		dt: float = 1.0) -> void:
+		dt: float = 1.0, hidden: Array = []) -> void:
 	while tags.size() < crew.size():
 		_add()
 	for i in mini(crew.size(), tags.size()):
@@ -35,7 +36,7 @@ func show_tags(crew: Array, me: Crew.Member, view: CrewView, cam: Camera3D, own_
 	for i in tags.size():
 		var t := tags[i]
 		t.visible = false
-		if i >= crew.size() or crew[i] == me or cam == null or cam != own_cam or i >= view.skeletons.size():
+		if i >= crew.size() or crew[i] == me or hidden.has(crew[i]) or cam == null or cam != own_cam or i >= view.skeletons.size():
 			continue
 		var m: Crew.Member = crew[i]
 		var sk := view.skeletons[i]
