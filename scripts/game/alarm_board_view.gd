@@ -59,6 +59,7 @@ func _ready() -> void:
 	hint_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	hint_mat.albedo_color = AlarmBoard.WORD_ON
 	hint.material_override = hint_mat
+	hint.mesh = build_hint(AlarmBoard.HINT_ENERGY_SIZE)   # меш сразу: прогрев рисует рамку под шторкой (#217)
 	hint.layers = OceanView.LAYER_SHIP
 	hint.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	hint.visible = false
