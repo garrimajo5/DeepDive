@@ -619,3 +619,62 @@ func test_guest_coins_follow_host() -> void:   # миры разошлись: с
 						and hc.schools[hc.coins[k].school].center.distance_to(hc.schools[0].center) <= EcoLink.NET_R:
 					worst = maxf(worst, hc.coins[k].pos.distance_to(gc.coins[k].pos))
 	ok(worst < 0.6, "монетник гостя рядом с хостовым: %.2f м" % worst)
+
+
+func _kelp_world(seed_value: int = EcoRandom.WORLD_SEED) -> EcoWorld:   # две рощи ленточника с ежами, свои места
+	var w := EcoWorld.new()
+	var spots: Array[Vector3] = [Vector3(0, -20, 0), Vector3(40, -20, 0)]
+	w.add(EcoKelp.new(null, spots))
+	w.reset(seed_value)
+	return w
+
+
+func test_kelp_rides_to_guest() -> void:   # роща рядом едет гостю целиком: густота лент и каждый ёж
+	var h := _kelp_world()
+	var hk := EcoLink.kelp_of(h.systems)
+	var gr: EcoKelp.Grove = hk.groves[0]
+	gr.stalks[3].f = 0.2   # объели у хоста
+	var dead: EcoKelp.Urchin = hk.urchins[0]
+	hk.kill(dead, 25.0)
+	var u: EcoKelp.Urchin = hk.urchins[1]
+	u.pos += Vector3(1, 0, -0.5)
+	u.goal = 5
+	gr.stalks[5].eater = u.index
+	u.wander_t = 3.0
+	u.graze_cd = 11.0
+	var d := EcoLink.pack_world(h.agents, h.systems, gr.center)
+	ok(d.has(float(EcoLink.NET_KELP)), "ленточник в пакете")
+	var g := _kelp_world(EcoRandom.WORLD_SEED + 7)
+	var gk := EcoLink.kelp_of(g.systems)
+	eq(EcoLink.apply_kelp(g.systems, d), 2, "обе рощи ближе NET_R поставлены")
+	near(gk.groves[0].stalks[3].f, 0.2, 1e-4, "объеденная лента объедена и у гостя")
+	ok(not gk.urchins[0].alive, "съеденный ёж — съеденный")
+	near(gk.urchins[0].respawn, 25.0, 1e-4)
+	eq(gk.urchins[1].pos, u.pos, "место как у хоста")
+	eq(gk.urchins[1].goal, 5, "цель как у хоста")
+	eq(gk.groves[0].stalks[5].eater, u.index, "ленту ест тот же ёж")
+	near(gk.urchins[1].graze_cd, 11.0, 1e-4)
+	ok(not EcoLink.pack_world(h.agents, h.systems, Vector3(5000, 0, 5000)).has(float(EcoLink.NET_KELP)), "вдали нет")
+	eq(EcoLink.apply_kelp(g.systems, EcoLink.pack_near(h.agents, gr.center)), 0, "старый пакет — без ленточника")
+
+
+func test_guest_urchins_follow_host() -> void:   # миры разошлись: с кадрами хоста ежи и ленты гостя как у хоста
+	var h := _kelp_world()
+	var g := _kelp_world(EcoRandom.WORLD_SEED + 7)
+	var hk := EcoLink.kelp_of(h.systems)
+	var gk := EcoLink.kelp_of(g.systems)
+	var worst := 0.0
+	var worst_f := 0.0
+	for i in 900:   # 30 с по 1/30, кадр хоста — каждый третий шаг
+		h.step(1.0 / 30.0)
+		g.step(1.0 / 30.0)
+		if i % 3 == 0:
+			EcoLink.apply_world(g.agents, g.systems, EcoLink.pack_world(h.agents, h.systems, hk.groves[0].center))
+		if i > 30:
+			for k in hk.urchins.size():
+				if hk.urchins[k].alive and gk.urchins[k].alive:
+					worst = maxf(worst, hk.urchins[k].pos.distance_to(gk.urchins[k].pos))
+			for k in hk.groves[0].stalks.size():
+				worst_f = maxf(worst_f, absf(hk.groves[0].stalks[k].f - gk.groves[0].stalks[k].f))
+	ok(worst < 0.1, "ёж гостя рядом с хостовым: %.3f м" % worst)
+	ok(worst_f < 0.01, "густота лент как у хоста: %.4f" % worst_f)
