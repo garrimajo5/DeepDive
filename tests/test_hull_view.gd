@@ -213,6 +213,40 @@ func test_damage_maps() -> void:
 	ok(a15 < 0.45, "при 15 %% следы не сплошные — обшивка читается (%.3f)" % a15)
 
 
+func test_damage_not_tiled() -> void:
+	# issue #406: при 30 % по всему борту читалась ровная сетка одинаковых пятен — соседние плитки 2 м
+	# должны отличаться, а доля следов на большом куске борта — остаться как у одной плитки
+	var col := Image.load_from_file(ProjectSettings.globalize_path(HullMesh.DAMAGE_TEX % "povrezhdeniya"))
+	var lvl := Image.load_from_file(ProjectSettings.globalize_path(HullMesh.DAMAGE_TEX % "povrezhdeniya-uroven"))
+	var loss := HullMesh.wear(30.0)
+	var steps := 48
+	for shift in [Vector2(1, 0), Vector2(0, 1), Vector2(3, 2)]:
+		var differ := 0
+		var marked := 0
+		for j in steps:
+			for i in steps:
+				var uv := Vector2(i, j) / steps
+				var a := HullMesh.damage_alpha(col, lvl, uv, loss) > 0.1
+				var b := HullMesh.damage_alpha(col, lvl, uv + shift, loss) > 0.1
+				if a or b:
+					marked += 1
+					if a != b:
+						differ += 1
+		ok(marked > 0 and differ > marked * 0.4,
+			"плитка и её сосед %s различаются: %d из %d точек со следами" % [shift, differ, marked])
+	var hit := 0.0
+	var all := 0
+	for j in 96:
+		for i in 96:
+			all += 1
+			if HullMesh.damage_alpha(col, lvl, Vector2(i, j) / 16.0 + Vector2(0.013, 0.021), loss) > 0.1:
+				hit += 1.0
+	var one := _damage_area(col, lvl, 30.0)
+	var big := hit / all
+	ok(big > one * 0.7 and big < one * 1.3, "доля следов на борту 6×6 плиток %.3f — как у плитки %.3f" % [big, one])
+	ok(HullMesh.damage_gate(Vector2(0.2, 0.3)) >= 0.0 and HullMesh.damage_gate(Vector2(0.2, 0.3)) <= 1.0)
+
+
 func test_scene_damage_follows_hull() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
@@ -221,6 +255,8 @@ func test_scene_damage_follows_hull() -> void:
 	ok(sm.get_shader_parameter("damage_tex") is Texture2D and sm.get_shader_parameter("damage_lvl") is Texture2D,
 		"две карты ART-049 в материале обшивки")
 	near(sm.get_shader_parameter("wear"), 0.0, 1e-6, "в начале корпус целый — следов нет")
+	near(sm.get_shader_parameter("gate_cell"), HullMesh.DAMAGE_CELL, 1e-6, "шум выбора слоя следов из HullMesh (#406)")
+	near(sm.get_shader_parameter("alt_scale"), HullMesh.DAMAGE_ALT_SCALE, 1e-6)
 	main.vitals.hull = 40.0
 	main.step(1.0 / 30.0)
 	near(sm.get_shader_parameter("wear"), HullMesh.wear(main.vitals.hull), 1e-3, "следы по прочности корпуса")
