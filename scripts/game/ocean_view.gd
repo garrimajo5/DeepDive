@@ -26,6 +26,13 @@ func _ready() -> void:
 	var m := ShaderMaterial.new()   # цвет вершин + процедурная детализация дна (shaders/seabed.gdshader)
 	m.shader = load("res://shaders/seabed.gdshader")
 	m.set_shader_parameter("caustic", 0.6)   # каустики включены; уровень «Экономно» выключит (ART-044)
+	m.set_shader_parameter("crack_tex", load(IceSheet.CRACK_MASK))   # каустики под трещинами льда (ART-056)
+	m.set_shader_parameter("ice_tile", IceSheet.TILE)
+	m.set_shader_parameter("ice_y", Seabed.ICE_Y)
+	m.set_shader_parameter("gate_scale", IceSheet.GATE_SCALE)
+	m.set_shader_parameter("gate_edge", IceSheet.GATE_EDGE)
+	m.set_shader_parameter("crack_caustic", IceSheet.CAUSTIC)
+	m.set_shader_parameter("crack_depth", IceSheet.CAUSTIC_DEPTH)
 	seabed_mat = m
 	mesh.surface_set_material(0, m)
 	seabed.mesh = mesh
