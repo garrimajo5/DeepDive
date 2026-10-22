@@ -24,7 +24,7 @@ var scanner_text: Label3D          ## экран сканера биолога (
 func _ready() -> void:
 	mesh_instance = MeshInstance3D.new()
 	mesh_instance.name = "Оболочка"
-	mesh_instance.mesh = build_mesh(BridgePlan.parts(), true)
+	mesh_instance.mesh = build_mesh(BridgePlan.parts(), KITS)
 	mesh_instance.layers = OceanView.LAYER_SHIP
 	add_child(mesh_instance)
 	_add_glass()
@@ -203,8 +203,9 @@ func _add_glass() -> void:
 
 
 ## Материалы мостика ART-054 (`mostik-materialy.md`): какой комплект карт `textures/bridge/<имя>-*.png` на какой
-## краске. side — грани не вниз, down — смотрящие вниз (потолок, скос в METAL); depth — сила нормалей,
-## rough/metal — константы «Экономно». Подложки плафонов (SEAM, грани вбок) остаются заливкой.
+## краске. side — грани не вниз, down — смотрящие вниз (потолок, скос в METAL), aft — грани не вниз дальше по
+## кораблю (отсеки, `RoomsView.KITS`); запись — [имя, сила нормалей, шероховатость и металл «Экономно», z от, z до]
+## (без z — весь корабль); "skip_up" — грани вверх заливкой. Подложки плафонов (SEAM, грани вбок) остаются заливкой.
 const KIT_DIR := "res://textures/bridge/"
 const KITS := {
 	BridgePlan.Paint.DECK: {"side": ["pol", 0.6, 0.72, 0.4]},
@@ -225,27 +226,29 @@ static func planar_uv(p: Vector3, n: Vector3) -> Vector2:
 	return Vector2(p.x, -p.y)
 
 
-## Материал поверхности с картами ART-054 (шейдер ship_surface); null — у краски комплекта нет.
-static func kit_material(paint: int) -> ShaderMaterial:
-	if not KITS.has(paint):
+## Материал поверхности с картами ART-054/055 (шейдер ship_surface); null — у краски комплекта нет.
+static func kit_material(paint: int, kits: Dictionary = KITS, dir: String = KIT_DIR) -> ShaderMaterial:
+	if not kits.has(paint):
 		return null
 	var m := ShaderMaterial.new()
 	m.shader = SURFACE_SHADER
 	m.set_shader_parameter("base_color", BridgePlan.COLORS[paint])
 	m.set_shader_parameter("base_rough", 0.75)
 	m.set_shader_parameter("base_metal", 0.25 if paint == BridgePlan.Paint.METAL else 0.0)
-	var kit: Dictionary = KITS[paint]
-	for side in ["side", "down"]:
+	var kit: Dictionary = kits[paint]
+	m.set_shader_parameter("skip_up", kit.get("skip_up", false))
+	for side in ["side", "aft", "down"]:
 		m.set_shader_parameter(side + "_kit", kit.has(side))
 		if not kit.has(side):
 			continue
 		var k: Array = kit[side]
-		m.set_shader_parameter(side + "_albedo", load(KIT_DIR + k[0] + "-tsvet.png"))
-		m.set_shader_parameter(side + "_normal", load(KIT_DIR + k[0] + "-normali.png"))
-		m.set_shader_parameter(side + "_orm", load(KIT_DIR + k[0] + "-orm.png"))
+		m.set_shader_parameter(side + "_albedo", load(dir + k[0] + "-tsvet.png"))
+		m.set_shader_parameter(side + "_normal", load(dir + k[0] + "-normali.png"))
+		m.set_shader_parameter(side + "_orm", load(dir + k[0] + "-orm.png"))
 		m.set_shader_parameter(side + "_depth", k[1])
 		m.set_shader_parameter(side + "_rough", k[2])
 		m.set_shader_parameter(side + "_metal", k[3])
+		m.set_shader_parameter(side + "_z", Vector2(k[4], k[5]) if k.size() >= 6 else Vector2(-1e6, 1e6))
 	m.set_shader_parameter("relief", true)
 	return m
 
@@ -258,8 +261,8 @@ func set_relief(on: bool) -> void:
 			m.set_shader_parameter("relief", on)
 
 
-## kits — материалы ART-054 на мостике (оболочка BridgeView); отсеки (RoomsView) пока заливкой.
-static func build_mesh(parts: Array[BridgePlan.Part] = BridgePlan.parts(), kits := false) -> ArrayMesh:
+## kits — комплекты карт по краскам (KITS мостика, RoomsView.KITS отсеков) из папки dir; пусто — заливка.
+static func build_mesh(parts: Array[BridgePlan.Part] = BridgePlan.parts(), kits: Dictionary = {}, dir: String = KIT_DIR) -> ArrayMesh:
 	var by_paint := {}
 	for part in parts:
 		if not by_paint.has(part.paint):
@@ -272,7 +275,7 @@ static func build_mesh(parts: Array[BridgePlan.Part] = BridgePlan.parts(), kits 
 		var st: SurfaceTool = by_paint[paint]
 		st.generate_tangents()
 		st.commit(mesh)
-		var km := kit_material(paint) if kits else null
+		var km := kit_material(paint, kits, dir) if not kits.is_empty() else null
 		mesh.surface_set_material(mesh.get_surface_count() - 1, km if km else material(paint))
 	return mesh
 
