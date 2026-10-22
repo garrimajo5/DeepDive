@@ -149,6 +149,25 @@ func test_act_step() -> void:   # товарищ жмёт свою кнопку 
 	eq(q.advance(0.1)[0], ["act"], "команда сцене")
 
 
+func test_gone_step() -> void:   # товарищ отключился, как гость сети: у хоста плашка ART-043
+	var q := QaScript.parse('[{"do": "gone"}]')
+	eq(q.errors.size(), 0, "шаг gone известен")
+	eq(q.advance(0.1)[0], ["gone"], "команда сцене")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.start_qa('[{"do": "mate", "x": -3.5, "z": -2.0, "yaw": 90, "role": 2, "look": 0}, {"do": "act"},'
+		+ ' {"do": "wait", "s": 0.3}, {"do": "gone"}, {"do": "wait", "s": 0.3}]')
+	for i in 30:
+		main.step(1.0 / 30.0)
+	eq(main.crew.size(), 1, "инженер ушёл с палубы")
+	ok(Crew.holder(main.crew, main.me, "energy") == null, "пульт свободен")
+	ok(main.notice.active(), "плашка у хоста")
+	eq(main.notice.sub, "Роль свободна · пост освобождён", "держал пульт")
+	main.queue_free()
+	await frames(1)
+
+
 func test_silt_step() -> void:
 	var q := QaScript.parse('[{"do": "silt"}, {"do": "silt", "on": false}]')
 	eq(q.errors.size(), 0, "шаг silt известен")
