@@ -5,7 +5,7 @@ class_name NetSnap
 
 const SEND_DT := 0.05          ## хост шлёт кадр 20 раз в секунду
 const MAX_BYTES := 1200        ## кадр с четырьмя членами экипажа влезает в один UDP-пакет (MTU 1280 с запасом)
-const VERSION := 4             ## формат кадра и ввода; клиент другой версии не подключается (4 — маршрут и голосование «r»)
+const VERSION := 5             ## формат кадра и ввода; клиент другой версии не подключается (5 — «нажимает» и «Нет связи» в флагах экипажа)
 const NEWS_TIME := 1.0         ## сообщение события едет в кадрах столько секунд (20 кадров — потеря всех почти исключена)
 
 
@@ -230,7 +230,8 @@ const POSTS := ["", "helm", "energy"]
 ## Член экипажа в кадре — плотно: [байты (роль, внешность, флаги постов, пост), числа float32, имя]. Словарь
 ## `Member.snapshot` с ключами-строками вчетверо больше: четыре игрока не влезли бы в пакет.
 static func pack_member(s: Dictionary) -> Array:
-	var flags := (1 if s.get("seated", false) else 0) | (2 if s.get("power", false) else 0) | (4 if s.get("vote", false) else 0)
+	var flags := (1 if s.get("seated", false) else 0) | (2 if s.get("power", false) else 0) | (4 if s.get("vote", false) else 0) \
+		| (8 if s.get("act", false) else 0) | (16 if s.get("lost", false) else 0)
 	var b := PackedByteArray([int(s.get("role", 0)), int(s.get("look", 0)), flags, maxi(POSTS.find(s.get("post", "")), 0)])
 	var f := PackedFloat32Array([s.get("x", 0.0), s.get("z", 0.0), s.get("yaw", 0.0), s.get("turn", 0.0),
 		s.get("phase", 0.0), s.get("swing", 0.0)])
@@ -249,7 +250,7 @@ static func unpack_member(a: Variant) -> Dictionary:
 	if b.size() != 4 or f.size() != 18:
 		return {}
 	return {"role": clampi(b[0], 0, 3), "look": clampi(b[1], 0, 1), "seated": b[2] & 1 != 0, "power": b[2] & 2 != 0,
-		"vote": b[2] & 4 != 0, "post": POSTS[mini(b[3], POSTS.size() - 1)], "x": f[0], "z": f[1], "yaw": f[2],
+		"vote": b[2] & 4 != 0, "act": b[2] & 8 != 0, "lost": b[2] & 16 != 0, "post": POSTS[mini(b[3], POSTS.size() - 1)], "x": f[0], "z": f[1], "yaw": f[2],
 		"turn": f[3], "phase": f[4], "swing": f[5], "weld": _from_nan(f.slice(6, 12)),
 		"hand_l": _from_nan(f.slice(12, 15)), "hand_r": _from_nan(f.slice(15, 18)), "name": str(a[2])}
 

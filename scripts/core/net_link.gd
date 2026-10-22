@@ -15,6 +15,8 @@ const CH_CTRL := 0              ## join, hello, no — надёжно
 const CH_FRAME := 1             ## кадры хоста
 const CH_PAD := 2               ## ввод клиентов
 const TIMEOUT := 5.0            ## клиент ждёт ответа хоста столько секунд
+const LOST_AFTER := 1.5         ## без пакетов столько секунд — «Нет связи» на табличке (ART-033): у хоста — гость
+                                ## без ввода, у гостя — все, если кадры хоста не идут
 
 enum State { OFF, CONNECTING, JOINED, REFUSED, LOST }
 
@@ -51,6 +53,10 @@ class Guest:
 	var index := -1        ## место в `main.crew` — уходит клиенту в кадре (`me`); −1 — ещё не на палубе
 	var acts := 0          ## последний принятый счётчик нажатий
 	var lights := 0        ## последний принятый счётчик нажатий «Свет»
+	var quiet := 0.0       ## секунд без ввода гостя (`Host.poll(dt)`); больше LOST_AFTER — `lost`
+
+	func lost() -> bool:
+		return quiet > NetLink.LOST_AFTER
 
 
 class Host:
@@ -86,10 +92,12 @@ class Host:
 
 	## Принять пакеты. События: {"k": "join", "guest": Guest} — телефон на борту (поставить члена экипажа),
 	## {"k": "leave", "guest": Guest} — ушёл (убрать). Ввод гостей копится в `Guest.pad`.
-	func poll() -> Array:
+	func poll(dt: float = 0.0) -> Array:
 		var out: Array = []
 		if peer == null:
 			return out
+		for g: Guest in guests.values():
+			g.quiet += dt
 		peer.poll()
 		while peer.get_available_packet_count() > 0:
 			var from := peer.get_packet_peer()
@@ -100,6 +108,7 @@ class Host:
 				"pad":
 					var g: Guest = guests.get(from)
 					if g:
+						g.quiet = 0.0
 						var s: Dictionary = msg.get("pad", {})
 						var n := int(msg.get("n", g.acts))
 						s["act"] = n > g.acts   # нажатие — по счётчику: потерянный пакет его не съест, повтор не удвоит
@@ -179,6 +188,7 @@ class Client:
 	var acts := 0          ## счётчик нажатий кнопки действия
 	var lights := 0        ## счётчик нажатий «Свет»
 	var got := 0           ## кадров принято
+	var quiet := 0.0       ## секунд без кадра хоста на борту (`poll(dt)`); больше LOST_AFTER — `lost`
 	var _info := {}
 	var _wait := 0.0
 	var _seq := -1
@@ -197,6 +207,7 @@ class Client:
 		state = NetLink.State.CONNECTING
 		why = ""
 		_wait = 0.0
+		quiet = 0.0
 		_seq = -1
 		_ev = {}
 		_ev_seq = -1
@@ -237,6 +248,7 @@ class Client:
 						_seq = s
 						newest = f
 						got += 1
+						quiet = 0.0
 				"e":   # события — полное состояние, не приращение: потерянный пакет заменит следующий
 					var es := int(msg.get("seq", -1))
 					if state == NetLink.State.JOINED and es > _ev_seq and msg.get("e") is Dictionary:
@@ -247,6 +259,8 @@ class Client:
 			if not _ev.is_empty():
 				newest["ev"] = _ev
 				_ev = {}
+		if newest.is_empty() and state == NetLink.State.JOINED:
+			quiet += dt
 		if state == NetLink.State.CONNECTING:
 			_wait += dt
 			if _wait > NetLink.TIMEOUT:
@@ -262,6 +276,10 @@ class Client:
 			peer.close()
 			peer = null
 		return newest
+
+	## Кадры хоста не идут дольше LOST_AFTER: товарищи у гостя — «Нет связи».
+	func lost() -> bool:
+		return joined() and quiet > NetLink.LOST_AFTER
 
 	## Свой ввод хосту (каждый кадр): крестовина как есть, свайп и нажатие съедаются — копятся до отправки.
 	func send_pad(pad: Crew.Pad) -> void:

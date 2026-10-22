@@ -33,6 +33,8 @@ const HAND := 0.1
 const EYE_UP := Deck.Walker.EYE - HIP  ## от таза до глаз
 ## Шаг: полный цикл ног на 1,3 м пути, размах бедра ±0,45 рад, рук ±0,35 рад.
 const STRIDE := 1.3
+## Нажатие кнопки видно табличкой (ART-033, «нажимает») столько секунд после него (`Member.pressed`, `active`).
+const PRESS_SHOW := 0.6
 const LEG_SWING := 0.45
 const ARM_SWING := 0.35
 ## Сидя: наклон к штурвалу; таз — seat_hip() (над сиденьем кресла ~0,5 м).
@@ -211,6 +213,8 @@ class Member:
 	## меша, в том числе с руками на посте (issue #137). Сидя и при сварке — 0.
 	var back := 0.0
 	var swing := 0.0  ## 0 — стоит, 1 — идёт полным ходом
+	var press := INF  ## секунд с последнего нажатия кнопки (действие или «Свет»); табличка ART-033 — `active`
+	var lost := false ## гость без связи: хост давно не получал его ввод — табличка «Нет связи» (ART-033)
 	var _last := Vector2.INF
 	## Свой ходок и свой ввод: у каждого члена экипажа (основа для сети). Свой игрок — `main.walker` это `me.walker`.
 	var walker := Deck.Walker.new()
@@ -219,6 +223,17 @@ class Member:
 	func _init(r: int = Role.PILOT, n: String = "") -> void:
 		role = r
 		name = n if n != "" else ROLE_NAMES[r]
+
+	## Нажал кнопку (действие или «Свет»): табличка над ним «нажимает» PRESS_SHOW с.
+	func pressed() -> void:
+		press = 0.0
+
+	func tick_press(dt: float) -> void:
+		press += dt
+
+	## Табличка в состоянии «нажимает»: контур ярче и три штриха (ART-033).
+	func active() -> bool:
+		return press < PRESS_SHOW
 
 	## Шаг позы: место и курс игрока; шаг ног — по пройденному пути.
 	func follow(px: float, pz: float, pyaw: float, is_seated: bool, turn: float, dt: float) -> void:
@@ -500,7 +515,7 @@ class Member:
 		return {"role": role, "name": name, "look": look, "x": x, "z": z, "yaw": yaw, "seated": seated,
 			"turn": wheel_turn, "phase": phase, "swing": swing, "post": post, "power": at_power, "vote": at_vote,
 			"weld": [weld_at.x, weld_at.y, weld_at.z, weld_n.x, weld_n.y, weld_n.z] if weld_at.is_finite() else [],
-			"hand_l": Crew._v3(hands[0]), "hand_r": Crew._v3(hands[1])}
+			"hand_l": Crew._v3(hands[0]), "hand_r": Crew._v3(hands[1]), "act": active(), "lost": lost}
 
 	func apply(s: Dictionary) -> void:
 		role = int(s.get("role", role))
@@ -522,6 +537,9 @@ class Member:
 		else:
 			weld(Vector3.INF)
 		hold(Crew._from3(s.get("hand_l", [])), Crew._from3(s.get("hand_r", [])))
+		if s.has("act"):   # у гостя «нажимает» держится, пока хост его шлёт
+			press = 0.0 if bool(s["act"]) else INF
+		lost = bool(s.get("lost", lost))
 		_last = Vector2(x, z)
 		walker.x = x   # ходок там же, где фигура: следующий drive идёт от места из снимка
 		walker.z = z
