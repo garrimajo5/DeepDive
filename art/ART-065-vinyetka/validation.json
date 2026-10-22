@@ -1,0 +1,103 @@
+{
+  "issue": 450,
+  "main": "512bd54",
+  "renderer": "Godot 4.7.2 Forward Mobile Vulkan",
+  "LUT": {
+    "mel": {
+      "max_error_in_8bit_codes": 0.4951287523962167,
+      "size": [
+        256,
+        16
+      ],
+      "disk_bytes": 1270
+    },
+    "sredniy": {
+      "max_error_in_8bit_codes": 0.490559422514002,
+      "size": [
+        256,
+        16
+      ],
+      "disk_bytes": 1481
+    },
+    "glubina": {
+      "max_error_in_8bit_codes": 0.4959355240395813,
+      "size": [
+        256,
+        16
+      ],
+      "disk_bytes": 1622
+    },
+    "il": {
+      "max_error_in_8bit_codes": 0.49677850066736307,
+      "size": [
+        256,
+        16
+      ],
+      "disk_bytes": 1127
+    }
+  },
+  "identity_nodes_exact": true,
+  "random_samples_per_LUT": 100000,
+  "texture_payload_CPU_RGB8_plus_one_GPU_RGBA8_bytes": 65536,
+  "calls": {
+    "20-off": {
+      "before_calls": 84,
+      "after_calls": 85
+    },
+    "20-on": {
+      "before_calls": 83,
+      "after_calls": 84
+    },
+    "45-off": {
+      "before_calls": 78,
+      "after_calls": 79
+    },
+    "45-on": {
+      "before_calls": 77,
+      "after_calls": 78
+    },
+    "8-off": {
+      "before_calls": 84,
+      "after_calls": 85
+    },
+    "8-on": {
+      "before_calls": 83,
+      "after_calls": 84
+    },
+    "90-off": {
+      "before_calls": 73,
+      "after_calls": 74
+    },
+    "90-on": {
+      "before_calls": 72,
+      "after_calls": 73
+    },
+    "flyby": {
+      "before_calls": 183,
+      "after_calls": 184
+    },
+    "silt": {
+      "before_calls": 77,
+      "after_calls": 78
+    }
+  },
+  "files_bytes": {
+    "lut-glubina.png": 1622,
+    "lut-il.png": 1127,
+    "lut-mel.png": 1270,
+    "lut-sredniy.png": 1481,
+    "para-20-off.jpg": 511581,
+    "para-20-on.jpg": 505016,
+    "para-45-off.jpg": 431944,
+    "para-45-on.jpg": 431799,
+    "para-8-off.jpg": 521384,
+    "para-8-on.jpg": 514485,
+    "para-90-off.jpg": 403853,
+    "para-90-on.jpg": 409020,
+    "para-flyby.jpg": 419615,
+    "para-silt.jpg": 411692,
+    "vinyetka-kontrol.jpg": 874267,
+    "vinyetka-list.png": 1643547
+  },
+  "phone_checked": false
+}
