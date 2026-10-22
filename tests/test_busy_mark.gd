@@ -111,3 +111,58 @@ func test_hidden_on_flyby() -> void:
 	main.flyby.start(Flyby.Kind.START)
 	main.step(1.0 / 30.0)
 	ok(not main.busy_marks.roots["helm"].visible, "на облёте с борта метки нет")
+
+
+func test_fit_inside_and_off_buttons() -> void:
+	var screen := Rect2(0, 0, 1600, 720)
+	var btn := Rect2(1500, 20, 70, 70)
+	var r := Rect2(1200, 40, 500, 90)   # за правым краем и на кнопке
+	var off := BusyMark.fit(r, screen, [btn])
+	var got := Rect2(r.position + off, r.size)
+	ok(screen.encloses(got), "метка целиком в кадре (%s)" % got)
+	ok(not got.intersects(btn), "и не на кнопке (%s)" % got)
+	eq(BusyMark.fit(Rect2(400, 300, 300, 60), screen, [btn]), Vector2.ZERO, "в кадре и мимо кнопок — на месте")
+
+
+## Метка на экране: углы подложки через камеру (px, y вниз).
+func _mark_rect(id: String) -> Rect2:
+	var v := main.busy_marks
+	var cam := main.get_viewport().get_camera_3d()
+	var w: float = v.cache[v.keys[id]]["w"]
+	var t: Transform3D = v.roots[id].global_transform
+	var r := Rect2(cam.unproject_position(t * Vector3(-w * 0.5, BusyMark.H * 0.5, 0.0)), Vector2.ZERO)
+	for c: Vector3 in [Vector3(w * 0.5, BusyMark.H * 0.5, 0), Vector3(-w * 0.5, -BusyMark.H * 0.5, 0), Vector3(w * 0.5, -BusyMark.H * 0.5, 0)]:
+		r = r.expand(cam.unproject_position(t * c))
+	return r
+
+
+func test_energy_mark_in_frame() -> void:
+	# #373: игрок у пульта, как в шаге 213 сценария, — метка уходила за правый край и под noclip
+	var mate := main.add_mate(-3.5, -2.0, PI * 0.5, Crew.Role.ENGINEER, 0)
+	mate.pad.action = true
+	main.step(1.0 / 30.0)
+	main.walker.x = -3.3
+	main.walker.z = -1.3
+	main.walker.yaw = deg_to_rad(100.0)
+	main.walker.pitch = deg_to_rad(-12.0)
+	main.step(1.0 / 30.0)
+	ok(main.busy_marks.roots["energy"].visible, "метка видна")
+	var r := _mark_rect("energy")
+	var vis := main.get_viewport().get_visible_rect()
+	ok(vis.encloses(r), "метка целиком в кадре (%s в %s)" % [r, vis])
+	var nc: Touch.Circle = main.overlay.router.layout.noclip
+	ok(not r.intersects(Rect2(nc.c - Vector2.ONE * nc.r, Vector2.ONE * nc.r * 2.0)), "и не под noclip (%s)" % r)
+
+
+func test_no_drawing_on_press() -> void:
+	# #375: подложку и плашку рисовали в кадр нажатия — 60 мс кода; теперь заранее
+	var mate := main.add_mate(-3.5, -2.0, PI * 0.5, Crew.Role.ENGINEER, 0)
+	main.walker.x = -2.6
+	main.walker.z = -1.2
+	main.walker.yaw = PI * 0.5
+	main.step(1.0 / 30.0)
+	var n := main.busy_marks.images_built
+	mate.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(main.busy_marks.roots["energy"].visible, "метка появилась")
+	eq(main.busy_marks.images_built, n, "текстуры уже собраны — в кадр нажатия не рисуем")
