@@ -558,3 +558,10 @@ ROADMAP потока А.
 **Принято 22.10.2026** (PR #402, ветка `art/ART-052-luchi`): кадр `luchi-kadr.jpg`, `luchi-maska.png`, `luchi-shum.png`,
 лист `luchi-list.png`; решения — `luchi.md`: ~4 аддитивные шахты-конуса одним MultiMesh, холодный #9AD9E8, сила
 `0.14·exp(−глубина/9)`, гаснут вдали, у дна и у Края, мягкий видозависимый край. Встройка — задача ROADMAP потока А.
+## ART-056 Лёд снизу — принято
+- Исходник: `docs/world.md`, ART-052 (`luchi.md`), `Seabed.ICE_Y`, `OceanView`.
+
+**Принято 22.10.2026** (PR #412, ветка `art/ART-056-led-snizu`): `led-tsvet.png`, `led-normali.png`, `led-treshchiny.png`,
+кадр `led-kadr.jpg`, лист `led-list.png`; решения — `led-snizu.md`: плитка 16 × 16 м по `world.xz`, маска трещин под крупным
+мировым шумом (рвёт повтор), слабая эмиссия с добавкой трещин и гашением по глубине, основания шахт ART-052 по той же маске.
+Встройка — задача ROADMAP потока А.
