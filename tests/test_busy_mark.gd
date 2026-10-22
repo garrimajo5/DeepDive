@@ -166,3 +166,29 @@ func test_no_drawing_on_press() -> void:
 	main.step(1.0 / 30.0)
 	ok(main.busy_marks.roots["energy"].visible, "метка появилась")
 	eq(main.busy_marks.images_built, n, "текстуры уже собраны — в кадр нажатия не рисуем")
+
+
+func test_front_depth() -> void:
+	near(BusyMark.front_depth(3.0, 5.0), 3.0, 1e-6, "фигура дальше метки — метка на месте")
+	near(BusyMark.front_depth(3.0, 2.5), 2.5 - BusyMark.BODY_R, 1e-6, "фигура ближе — метка перед ней")
+	near(BusyMark.front_depth(3.0, 0.3), BusyMark.NEAR_DEPTH, 1e-6, "не ближе NEAR_DEPTH")
+
+
+func test_energy_mark_before_holder() -> void:
+	# #382: шаг 213–216 сценария (25-power-busy) — голова инженера в щитке закрывала конец слова «Инженер»
+	var mate := main.add_mate(-3.5, -2.0, PI * 0.5, Crew.Role.ENGINEER, 0)
+	mate.pad.action = true
+	main.step(1.0 / 30.0)
+	main.walker.x = -3.3
+	main.walker.z = -1.3
+	main.walker.yaw = deg_to_rad(100.0)
+	main.walker.pitch = deg_to_rad(-12.0)
+	main.step(1.0 / 30.0)
+	var v := main.busy_marks
+	ok(v.roots["energy"].visible, "метка видна")
+	var cam := main.get_viewport().get_camera_3d()
+	var depth := -(cam.global_transform.affine_inverse() * (v.roots["energy"] as Node3D).global_position).z
+	var hd := v.holder_depth(cam, mate)
+	ok(depth < hd - 0.2 and depth >= BusyMark.NEAR_DEPTH - 1e-3, "метка ближе к камере, чем голова и плечи инженера (%.2f < %.2f)" % [depth, hd])
+	var r := _mark_rect("energy")
+	ok(main.get_viewport().get_visible_rect().encloses(r), "и по-прежнему в кадре (%s)" % r)

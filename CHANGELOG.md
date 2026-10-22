@@ -3,6 +3,10 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-10-22
+- Метку «Занято» не закрывает фигура занявшего (по issue #382): у пульта энергии игрок стоит за спиной инженера, и
+  голова в щитке перекрывала конец имени — метку ставим на том же луче перед ближайшей к камере точкой фигуры
+  (`BusyMark.front_depth`, `BusyMarkView.holder_depth`), размер на экране тот же. Тест
+  `test_busy_mark.test_energy_mark_before_holder`.
 - Строка состояния не лежит на табло тревог (по issue #376): вблизи носового окна табло уходит в верхнюю полосу
   экрана — плашку приборов опускаем под его нижний край (`AlarmBoard.status_y`, `Main.board_screen_rect`), не дальше
   140 px. Тесты `test_alarm_board.test_status_y`, `test_status_not_over_board_at_helm`.
