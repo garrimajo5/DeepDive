@@ -11,6 +11,13 @@ uniform float ripple = 0.55;   // рябь песка на плоском дне
 uniform float bump = 0.5;      // сила микрорельефа (возмущение нормали)
 uniform float fade_m = 85.0;   // дальность, за которой мелкий рисунок гаснет (против ряби пикселей вдали)
 
+// Каустики: движущийся узор преломлённого света сквозь лёд. Силу и свет по глубине ставит OceanView.
+uniform float caustic = 0.0;            // общая сила (0 — выкл; уровень графики/OceanView)
+uniform float light = 1.0;              // сколько света сквозь лёд дошло до дна (по глубине, с учётом ила)
+uniform float caustic_scale = 0.16;     // 1/м, крупные ячейки света
+uniform float caustic_speed = 0.32;     // скорость дрожания узора
+uniform vec3 caustic_tint : source_color = vec3(0.60, 0.85, 0.91);  // холодный свет сквозь лёд (#9AD9E8)
+
 varying vec3 w_pos;
 varying vec3 w_nrm;
 
@@ -58,6 +65,22 @@ void fragment() {
 	ALBEDO = base * clamp(shade, 0.55, 1.35);
 	ROUGHNESS = 1.0;   // матовый песок
 	SPECULAR = 0.1;
+
+	// Каустики: две бегущие волны шума дают тонкие яркие нити, фокусируются на плоском дне,
+	// гаснут по глубине (light) и вдали (fade). Ядра нитей светятся — ловят bloom.
+	if (caustic > 0.001) {
+		vec2 cp = p * caustic_scale;
+		float t = TIME * caustic_speed;
+		float l1 = vnoise(cp + vec2(t, t * 0.6));
+		float l2 = vnoise(cp * 1.6 + vec2(-t * 0.8, t * 0.5));
+		float l3 = vnoise(cp * 2.3 + vec2(t * 0.4, -t * 0.9));
+		float c = abs(l1 - l2) * 0.6 + abs(l2 - l3) * 0.4;   // пересечение волн — тонкая сеть
+		c = 1.0 - smoothstep(0.0, 0.16, c);                  // яркие тонкие нити
+		c = pow(c, 1.6);
+		float cmask = caustic * light * flat_k * fade;
+		ALBEDO += caustic_tint * c * cmask * 0.45;
+		EMISSION += caustic_tint * c * cmask * 0.22;         // ядра нитей ловят bloom, но мягко
+	}
 
 	// микрорельеф: нормаль из градиента шума, в мировых осях → в видовые (у меша нет тангентов для NORMAL_MAP)
 	float e = 0.6;
