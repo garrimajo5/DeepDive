@@ -634,9 +634,11 @@ func step(dt: float) -> void:
 	_place_ship()
 	_place_camera()
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
+	_update_ui()   # до меток: плашка строки уже на месте этого кадра (#387)
+	busy_marks.plate = status_rect()
 	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
-	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy)
-	_update_ui()
+	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy,
+			status_rect())
 	_warm_frame()
 	_net_send(dt)
 	r.end_frame()
@@ -1091,6 +1093,13 @@ func _update_ui() -> void:
 	hint.position.y = AlarmBoard.status_y(plate, board_screen_rect())   # плашка под табло, а не поверх (#376)
 
 
+## Плашка строки состояния на экране (метки и таблички на неё не ложатся, #387); пусто, если строк нет.
+func status_rect() -> Rect2:
+	if hint == null or not hint.is_visible_in_tree() or hint.text.is_empty():
+		return Rect2()
+	return Rect2(hint.position, hint.get_combined_minimum_size())
+
+
 ## Табло тревог на экране (AlarmBoard.screen_rect); пусто, если его нет в кадре.
 func board_screen_rect() -> Rect2:
 	var cam := get_viewport().get_camera_3d()
@@ -1419,9 +1428,11 @@ func _client_step(dt: float) -> void:
 	_place_ship()
 	_place_camera()
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
+	_update_ui()   # до меток: плашка строки уже на месте этого кадра (#387)
+	busy_marks.plate = status_rect()
 	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
-	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy)
-	_update_ui()
+	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy,
+			status_rect())
 	_warm_frame()
 	r.end_frame()
 

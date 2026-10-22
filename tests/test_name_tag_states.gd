@@ -147,3 +147,52 @@ func test_pressing_mate_behind_other_seen() -> void:
 	ok(bio.active(), "биолог нажимает")
 	ok(v.tags[i].visible, "табличка биолога видна")
 	ok(v.glows[i].visible, "и подсветка на ней")
+
+
+func test_tags_off_status_plate() -> void:
+	# #387, шаг 06d2-tag-press: табличка «И Инженер», поднятая над биологом, нижним краем лежала на плашке строк
+	var was := tree.root.size
+	tree.root.size = Vector2i(1600, 720)   # экран телефона, как в снимках тестера
+	main.walker.x = -1.6
+	main.walker.z = -2.2
+	main.walker.yaw = deg_to_rad(-90.0)
+	main.walker.pitch = deg_to_rad(-5.0)
+	main.add_mate(0.2, -2.6, deg_to_rad(60.0), Crew.Role.ENGINEER, 1)
+	var bio := main.add_mate(0.9, -2.3, deg_to_rad(90.0), Crew.Role.BIOLOGIST, 0)
+	main.step(1.0 / 30.0)
+	main.open_silt()   # тревога и сообщение — плашка в четыре строки
+	main.vitals.energy = 5.0
+	main.say("Биолог у сканера: рядом медузы-колокола, стая светляков и монетники на мху у Края отмели")
+	bio.pad.action = true
+	for k in 4:
+		main.step(1.0 / 30.0)
+	var plate := main.status_rect()
+	ok(plate.has_area(), "плашка строк на экране (%s)" % plate)
+	var v := main.name_tags
+	var cam := main.get_viewport().get_camera_3d()
+	ok(v.tags[main.crew.find(bio)].visible, "табличка нажимающего биолога видна")
+	for i in main.crew.size():
+		if not v.tags[i].visible:
+			continue
+		var r := _tag_rect(cam, i)
+		ok(not r.intersects(plate), "табличка %d %s не лежит на плашке строк %s" % [i, r, plate])
+	tree.root.size = was
+
+
+func test_under_plate() -> void:
+	var plate := Rect2(14, 9, 850, 120)
+	eq(NameTag.under_plate(Rect2(400, 200, 200, 40), plate, 30.0), 0.0, "ниже плашки — на месте")
+	eq(NameTag.under_plate(Rect2(900, 100, 200, 40), plate, 30.0), 0.0, "правее — на месте")
+	eq(NameTag.under_plate(Rect2(400, 110, 200, 40), Rect2(), 30.0), 0.0, "плашки нет — на месте")
+	near(NameTag.under_plate(Rect2(400, 110, 200, 40), plate, 30.0), 129.0 + NameTag.GAP * 40.0 - 110.0, 1e-4,
+			"задела низ — под плашку с зазором")
+	eq(NameTag.under_plate(Rect2(400, 60, 200, 40), plate, 30.0), NameTag.HIDDEN, "опускать далеко — скрыта")
+
+
+func _tag_rect(cam: Camera3D, i: int) -> Rect2:
+	var t: Transform3D = main.name_tags.tags[i].global_transform
+	var w: float = main.name_tags.widths[i]
+	var r := Rect2(cam.unproject_position(t * Vector3(-w * 0.5, 0.5, 0.0)), Vector2.ZERO)
+	for c: Vector3 in [Vector3(w * 0.5, 0.5, 0), Vector3(-w * 0.5, -0.5, 0), Vector3(w * 0.5, -0.5, 0)]:
+		r = r.expand(cam.unproject_position(t * c))
+	return r
