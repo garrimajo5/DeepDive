@@ -1,0 +1,34 @@
+[
+  {
+    "name": "gear-fartuk-m",
+    "sum_before": 3007,
+    "sum_after": 2384,
+    "rest_before": 67,
+    "rest_after": 43,
+    "poses_increased": []
+  },
+  {
+    "name": "gear-fartuk-zh",
+    "sum_before": 3751,
+    "sum_after": 2907,
+    "rest_before": 64,
+    "rest_after": 55,
+    "poses_increased": []
+  },
+  {
+    "name": "gear-tunika-m",
+    "sum_before": 8918,
+    "sum_after": 7861,
+    "rest_before": 192,
+    "rest_after": 178,
+    "poses_increased": []
+  },
+  {
+    "name": "gear-tunika-zh",
+    "sum_before": 14276,
+    "sum_after": 13724,
+    "rest_before": 276,
+    "rest_after": 257,
+    "poses_increased": []
+  }
+]
