@@ -79,6 +79,7 @@ class Router:
 	var light_pressed := false
 	var noclip_pressed := false  ## нажали тестовую кнопку noclip в этом кадре
 	var look := Vector2.ZERO     ## смещение пальцев обзора за кадр, px
+	var taps: Array[Vector2] = []   ## где пальцы коснулись экрана в этом кадре — кнопки диалогов (NetDrop)
 	var _fingers := {}           ## id → [Role, последняя точка]
 
 	func vert() -> int:
@@ -105,6 +106,7 @@ class Router:
 		elif pilot_buttons and layout.light.has(p):
 			role = Role.LIGHT
 		_fingers[id] = [role, p]
+		taps.append(p)
 		if role == Role.ACTION:
 			action_down = true
 			action_pressed = true
@@ -130,6 +132,7 @@ class Router:
 
 	func end_frame() -> void:
 		look = Vector2.ZERO
+		taps.clear()
 		action_pressed = false
 		light_pressed = false
 		noclip_pressed = false

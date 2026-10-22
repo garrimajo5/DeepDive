@@ -1,6 +1,6 @@
 extends TestCase
 ## Клиент в сцене (Main.join_game): шаг корабля не считает — кадры хоста ставят корабль, реактор и экипаж,
-## свой игрок — место `me` из кадра, камера у него; ввод с экрана уходит хосту; потеря хоста — одиночная игра.
+## свой игрок — место `me` из кадра, камера у него; ввод с экрана уходит хосту; потеря хоста — диалог ART-043 (NetDrop).
 ## Хост здесь — голый NetLink.Host с кадрами NetSnap.frame (как шлёт Main хоста), по loopback.
 
 const PORT := 24720
@@ -127,17 +127,81 @@ func test_own_yaw_stays_local_until_post() -> void:
 	near(main.walker.yaw, 0.0, 0.001, "курс поста от хоста")
 
 
-func test_lost_host_continues_alone() -> void:
+func test_lost_host_opens_dialog_not_solo() -> void:   # ART-043: не уходит в соло молча
 	ok(_pump(func() -> bool: return main.crew.size() == 2), "на борту")
 	host.stop()
-	ok(_pump(func() -> bool: return main.net_client == null, false), "связь потеряна")
+	ok(_pump(func() -> bool: return main.drop.blocks(), false), "диалог открыт")
+	ok(main.net_client != null, "клиент ждёт хоста, не соло")
+	eq(main.drop.phase, NetDrop.Phase.WAIT)
+	eq(main.net_client.state, NetLink.State.CONNECTING, "попытка переподключения к прежнему хосту")
+	eq(main.crew.size(), 2, "последний кадр хоста на экране")
+	ok(main.drop_panel.visible, "диалог виден")
+	main.overlay.router.begin(5, Vector2(150, 600))   # крестовина под диалогом не работает
+	main.step(DT)
+	eq(main.net_pad.move, Vector2.ZERO, "управление остановлено")
+	main.overlay.router.end(5)
+	for i in int(NetDrop.WINDOW / DT) + 2:
+		main.step(DT)
+	eq(main.drop.phase, NetDrop.Phase.NO_ANSWER, "окно истекло — «Нет ответа»")
+	eq(main.drop.wait_line(), "Нет ответа")
+	ok(main.net_client != null, "автоматического соло нет")
+	_tap("solo")
+	eq(main.drop.phase, NetDrop.Phase.CONFIRM_SOLO, "подтверждение")
+	_tap("no")
+	eq(main.drop.phase, NetDrop.Phase.NO_ANSWER, "«Нет» — назад")
+	_tap("solo")
+	_tap("yes")
+	ok(main.net_client == null, "одиночный забег")
 	eq(main.crew.size(), 1, "остался свой игрок")
-	ok(main.crew[0] == main.me)
+	ok(not main.drop.active() and not main.drop_panel.visible, "диалог закрыт")
 	var p := main.helm.pos
 	main.helm.speed = 3.0
 	for i in 10:
 		main.step(DT)
 	ok(main.helm.pos.distance_to(p) > 0.01, "корабль снова считает свой шаг")
+
+
+func test_host_back_restores() -> void:   # хост вернулся в окно ожидания — «Связь восстановлена», управление снова
+	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
+	host.stop()
+	ok(_pump(func() -> bool: return main.drop.blocks(), false), "диалог открыт")
+	eq(host.start(PORT), OK, "хост снова открыт")
+	h_crew.resize(1)
+	ok(_pump(func() -> bool: return not main.drop.blocks()), "принят снова")
+	eq(main.drop.phase, NetDrop.Phase.BACK)
+	eq(main.drop.lines()[0], "Связь восстановлена")
+	ok(main.net_client.joined())
+	for i in int(NetDrop.BACK_TIME / DT) + 2:
+		_host_tick()
+		main.step(DT)
+	ok(not main.drop.active(), "плашка ушла через 2 с")
+
+
+func test_refused_on_rejoin_no_retry() -> void:   # отказ хоста при попытке — причина вместо ожидания, «Ждать» погашена
+	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
+	host.stop()
+	ok(_pump(func() -> bool: return main.drop.blocks(), false), "диалог открыт")
+	main.net_client.version = -7
+	main.net_client.rejoin(NetDrop.WINDOW)
+	eq(host.start(PORT), OK)
+	ok(_pump(func() -> bool: return main.drop.phase == NetDrop.Phase.REFUSED), "отказ")
+	eq(main.drop.wait_line(), "Другая версия игры")
+	eq(main.drop.hit(_at("wait"), _size()), "", "без повторов")
+
+
+func _size() -> Vector2:
+	return main.get_viewport().get_visible_rect().size
+
+
+func _at(id: String) -> Vector2:
+	return NetDrop.to_screen(NetDrop.BUTTONS[id], _size()).get_center()
+
+
+## Касание кнопки диалога за один шаг.
+func _tap(id: String) -> void:
+	main.overlay.router.begin(9, _at(id))
+	main.step(DT)
+	main.overlay.router.end(9)
 
 
 ## Хост ведёт корабль и шлёт кадры со своим временем: у клиента корабль идёт ровно, без шага в 20 раз в секунду.

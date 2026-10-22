@@ -196,6 +196,9 @@ class Client:
 	var lights := 0        ## счётчик нажатий «Свет»
 	var got := 0           ## кадров принято
 	var quiet := 0.0       ## секунд без кадра хоста на борту (`poll(dt)`); больше LOST_AFTER — `lost`
+	var timeout := NetLink.TIMEOUT   ## ждать ответа хоста столько секунд (`rejoin` — окно NetDrop.WINDOW)
+	var address := ""      ## адрес и порт последнего `join` — для `rejoin`
+	var port := NetLink.PORT
 	var _info := {}
 	var _wait := 0.0
 	var _seq := -1
@@ -205,14 +208,26 @@ class Client:
 	var _eco_seq := -1
 
 	## Подключиться к хосту по адресу в локальной сети.
-	func join(address: String, port: int = NetLink.PORT, name: String = "", role: int = 0, look: int = 0) -> Error:
+	func join(to: String, at: int = NetLink.PORT, name: String = "", role: int = 0, look: int = 0) -> Error:
+		_info = {"k": "join", "v": version, "name": name, "role": role, "look": look}
+		timeout = NetLink.TIMEOUT
+		return _connect(to, at)
+
+	## Связь пропала (ART-043): та же попытка к прежнему хосту с тем же именем, ролью и внешностью; ждать до wait с.
+	func rejoin(wait: float) -> Error:
+		timeout = wait
+		_info["v"] = version
+		return _connect(address, port)
+
+	func _connect(to: String, at: int) -> Error:
 		stop()
+		address = to
+		port = at
 		peer = ENetMultiplayerPeer.new()
-		var err := peer.create_client(address, port, NetLink.CHANNELS)
+		var err := peer.create_client(to, at, NetLink.CHANNELS)
 		if err != OK:
 			peer = null
 			return err
-		_info = {"k": "join", "v": version, "name": name, "role": role, "look": look}
 		state = NetLink.State.CONNECTING
 		why = ""
 		_wait = 0.0
@@ -282,7 +297,7 @@ class Client:
 			quiet += dt
 		if state == NetLink.State.CONNECTING:
 			_wait += dt
-			if _wait > NetLink.TIMEOUT:
+			if _wait > timeout:
 				why = "timeout"
 				state = NetLink.State.REFUSED
 		if peer and peer.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
