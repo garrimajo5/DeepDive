@@ -163,6 +163,14 @@ func test_drain_step() -> void:   # issue #131: тревога о стеклоу
 	eq(q.advance(0.1)[0], ["drain", 2.5], "стеклоуст на корпусе 2,5 с")
 
 
+func test_hull_step() -> void:   # следы повреждений ART-049 на виде с борта
+	var q := QaScript.parse('[{"do": "hull", "pct": 30}, {"do": "hull", "pct": 140}]')
+	eq(q.errors.size(), 0, "шаг hull известен")
+	var out := q.advance(0.1)
+	eq(out[0], ["hull", 30.0], "корпус 30 %")
+	eq(out[1], ["hull", 100.0], "выше 100 % не бывает")
+
+
 ## issue #158: снимок полок трюма смотрел на правый стеллаж, а первая банка встаёт на левый.
 func test_shelves_shot_sees_first_jar() -> void:
 	var steps: Array = JSON.parse_string(FileAccess.get_file_as_string("res://tools/qa/scenario.json"))

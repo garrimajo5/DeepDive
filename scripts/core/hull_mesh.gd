@@ -25,6 +25,10 @@ const GROWTH_TO := 0.5          ## h, где его уже нет
 ## Низ и высота корпуса для локальной высоты h: от киля основного объёма до верха носовой оболочки.
 const KEEL_Y := HullPlan.CENTER_Y - HullPlan.NOSE_H * 0.5
 const HULL_H := HullPlan.NOSE_H
+## Следы повреждений ART-049 (`docs/concept-art/povrezhdeniya.md`): карта цвета с альфой и карта порога потери
+## корпуса (линейная, без mipmap) в той же плитке и тех же координатах, что ART-024; на швах след слабее.
+const DAMAGE_TEX := "res://textures/hull/%s.png"   ## povrezhdeniya, povrezhdeniya-uroven
+const DAMAGE_SEAM := 0.55
 
 
 ## Краска под обшивкой: металл корпуса. Швы-кольца, окна, линза, шлюз — своим цветом.
@@ -35,6 +39,16 @@ static func plated(paint: int) -> bool:
 ## Локальная высота точки корпуса (оси корабля): 0 у киля, 1 у верха.
 static func local_height(y: float) -> float:
 	return clampf((y - KEEL_Y) / HULL_H, 0.0, 1.0)
+
+
+## Потеря корпуса для следов ART-049: 0 при 100 %, 1 при 0 %.
+static func wear(hull: float) -> float:
+	return clampf(1.0 - hull / 100.0, 0.0, 1.0)
+
+
+## След с порогом `threshold` (0…1, карта уровня) виден при потере `loss` — как в шейдере: d > 0 и d ≥ t.
+static func damage_shown(loss: float, threshold: float) -> bool:
+	return loss > 0.0 and loss >= threshold
 
 
 ## Вес обрастания по локальной высоте (заметки художника ART-024): 0.65 · (1 − smoothstep(0.15, 0.50, h)).

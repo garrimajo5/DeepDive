@@ -63,7 +63,21 @@ static func plating() -> ShaderMaterial:
 	m.set_shader_parameter("growth_max", HullMesh.GROWTH_MAX)
 	m.set_shader_parameter("growth_from", HullMesh.GROWTH_FROM)
 	m.set_shader_parameter("growth_to", HullMesh.GROWTH_TO)
+	m.set_shader_parameter("damage_tex", load(HullMesh.DAMAGE_TEX % "povrezhdeniya"))
+	m.set_shader_parameter("damage_lvl", load(HullMesh.DAMAGE_TEX % "povrezhdeniya-uroven"))
+	m.set_shader_parameter("damage_seam", HullMesh.DAMAGE_SEAM)
+	m.set_shader_parameter("wear", 0.0)
 	return m
+
+
+## Следы повреждений ART-049 по прочности корпуса (`Vitals.hull`, %): одна uniform на материал обшивки.
+func set_hull(hull_pct: float) -> void:
+	var m: ShaderMaterial = _mats.get(-1)
+	if m == null:
+		return
+	var w := HullMesh.wear(hull_pct)
+	if not is_equal_approx(float(m.get_shader_parameter("wear")), w):
+		m.set_shader_parameter("wear", w)
 
 
 func body_material(paint: int) -> Material:

@@ -3,10 +3,16 @@ shader_type spatial;
 // в осях корабля (вершины меша — локальные метры), одни веса для всех трёх карт, плитка 2 м.
 // Маска линейная: 0 — металл, 128 — пятна, 255 — швы и крепёж (темнее, с блеском).
 // Обрастание — по локальной высоте h (0 у киля, 1 у верха), швы видны поверх. Числа — HullMesh.
+// Следы повреждений ART-049 (povrezhdeniya.md): порог сравнивается на каждой плоскости отдельно (wear — потеря
+// корпуса 0…1, HullMesh.wear), смешиваются уже видимые следы; поверх обрастания, на швах слабее.
 
 uniform sampler2D color_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D mask_tex : hint_default_black, filter_linear_mipmap, repeat_enable;
 uniform sampler2D growth_tex : source_color, filter_linear_mipmap, repeat_enable;
+uniform sampler2D damage_tex : source_color, filter_linear_mipmap, repeat_enable;
+uniform sampler2D damage_lvl : hint_default_white, filter_nearest, repeat_enable;
+uniform float wear = 0.0;
+uniform float damage_seam = 0.55;
 uniform float tile = 2.0;
 uniform float seam_dark = 0.7;
 uniform float stain_dark = 0.9;
@@ -33,6 +39,13 @@ vec4 tri(sampler2D t, vec3 p, vec3 w) {
 	return texture(t, p.zy) * w.x + texture(t, p.xz) * w.y + texture(t, p.xy) * w.z;
 }
 
+// След одной плоскости: rgb — цвет · альфа, a — альфа (0, если порог ещё не пройден).
+vec4 damage(vec2 uv) {
+	vec4 c = texture(damage_tex, uv);
+	float on = step(texture(damage_lvl, uv).r, wear);
+	return vec4(c.rgb * c.a, c.a) * on;
+}
+
 void fragment() {
 	vec3 w = tri_w();
 	vec3 p = lp / tile;
@@ -46,6 +59,12 @@ void fragment() {
 	if (g > 0.001) {
 		vec3 gc = tri(growth_tex, p, w).rgb;
 		col = mix(col, gc * mix(1.0, seam_dark, seam), g * (1.0 - 0.5 * seam));
+	}
+	if (wear > 0.0) {
+		vec4 d = damage(p.zy) * w.x + damage(p.xz) * w.y + damage(p.xy) * w.z;
+		if (d.a > 0.001) {
+			col = mix(col, d.rgb / d.a, d.a * (1.0 - damage_seam * seam));
+		}
 	}
 	ALBEDO = col;
 	ROUGHNESS = mix(mix(0.75, 0.45, seam), 0.9, g);

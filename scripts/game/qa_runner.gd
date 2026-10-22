@@ -117,6 +117,8 @@ func tick(dt: float) -> void:
 					main.silt.reset()
 			"drain":
 				drain_left = c[1]
+			"hull":
+				main.vitals.hull = c[1]
 			"mate":
 				var mate: Crew.Member
 				if c[6]:   # за штурвалом
