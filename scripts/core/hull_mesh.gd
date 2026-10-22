@@ -29,6 +29,13 @@ const HULL_H := HullPlan.NOSE_H
 ## корпуса (линейная, без mipmap) в той же плитке и тех же координатах, что ART-024; на швах след слабее.
 const DAMAGE_TEX := "res://textures/hull/%s.png"   ## povrezhdeniya, povrezhdeniya-uroven
 const DAMAGE_SEAM := 0.55
+## Против ровной сетки одинаковых следов (issue #406): два слоя карты следов — как есть и повёрнутый на 90°,
+## крупнее и со сдвигом; какой слой виден, решает плавный шум по плоскости с ячейкой DAMAGE_CELL плиток
+## (слои взаимно дополняют друг друга, поэтому доля следов почти не меняется). Числа — те же, что в шейдере.
+const DAMAGE_ALT_SCALE := 0.83
+const DAMAGE_ALT_SHIFT := Vector2(0.37, 0.61)
+const DAMAGE_CELL := 1.37       ## ячейка шума выбора слоя в плитках (не кратна плитке)
+const DAMAGE_GATE := Vector2(0.46, 0.54)
 
 
 ## Краска под обшивкой: металл корпуса. Швы-кольца, окна, линза, шлюз — своим цветом.
@@ -49,6 +56,49 @@ static func wear(hull: float) -> float:
 ## След с порогом `threshold` (0…1, карта уровня) виден при потере `loss` — как в шейдере: d > 0 и d ≥ t.
 static func damage_shown(loss: float, threshold: float) -> bool:
 	return loss > 0.0 and loss >= threshold
+
+
+## Координаты второго слоя следов: повёрнуты на 90°, крупнее и сдвинуты (как `damage_alt_uv` в шейдере).
+static func damage_alt_uv(uv: Vector2) -> Vector2:
+	return Vector2(-uv.y, uv.x) * DAMAGE_ALT_SCALE + DAMAGE_ALT_SHIFT
+
+
+## Хеш узла решётки 0…1 (как `cell_hash` в шейдере).
+static func cell_hash(c: Vector2) -> float:
+	var v := sin(c.dot(Vector2(127.1, 311.7))) * 43758.5453
+	return v - floorf(v)
+
+
+## Плавный шум по плоскости 0…1 с ячейкой DAMAGE_CELL плиток (как `gate_noise` в шейдере).
+static func gate_noise(uv: Vector2) -> float:
+	var q := uv / DAMAGE_CELL
+	var i := q.floor()
+	var f := q - i
+	f = f * f * (Vector2(3, 3) - 2.0 * f)
+	var a := cell_hash(i)
+	var b := cell_hash(i + Vector2(1, 0))
+	var c := cell_hash(i + Vector2(0, 1))
+	var d := cell_hash(i + Vector2(1, 1))
+	return lerpf(lerpf(a, b, f.x), lerpf(c, d, f.x), f.y)
+
+
+## Вес первого слоя следов в точке плоскости (второй — 1 − вес).
+static func damage_gate(uv: Vector2) -> float:
+	return smoothstep(DAMAGE_GATE.x, DAMAGE_GATE.y, gate_noise(uv))
+
+
+## Непрозрачность видимых следов в точке плоскости `uv` (в плитках) при потере `loss` — как `damage2` в шейдере.
+## `col` — карта цвета с альфой, `lvl` — карта порога (обе 1024², как в textures/hull).
+static func damage_alpha(col: Image, lvl: Image, uv: Vector2, loss: float) -> float:
+	var k := damage_gate(uv)
+	return _damage_one(col, lvl, uv, loss) * k + _damage_one(col, lvl, damage_alt_uv(uv), loss) * (1.0 - k)
+
+
+static func _damage_one(col: Image, lvl: Image, uv: Vector2, loss: float) -> float:
+	var x := int(fposmod(uv.x, 1.0) * col.get_width()) % col.get_width()
+	var y := int(fposmod(uv.y, 1.0) * col.get_height()) % col.get_height()
+	var t := lvl.get_pixel(x * lvl.get_width() / col.get_width(), y * lvl.get_height() / col.get_height()).r
+	return col.get_pixel(x, y).a if damage_shown(loss, t) else 0.0
 
 
 ## Вес обрастания по локальной высоте (заметки художника ART-024): 0.65 · (1 − smoothstep(0.15, 0.50, h)).

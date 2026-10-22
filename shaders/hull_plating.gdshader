@@ -5,6 +5,8 @@ shader_type spatial;
 // Обрастание — по локальной высоте h (0 у киля, 1 у верха), швы видны поверх. Числа — HullMesh.
 // Следы повреждений ART-049 (povrezhdeniya.md): порог сравнивается на каждой плоскости отдельно (wear — потеря
 // корпуса 0…1, HullMesh.wear), смешиваются уже видимые следы; поверх обрастания, на швах слабее.
+// Против повтора плитки (#406): два слоя следов — как есть и повёрнутый, крупнее, со сдвигом; слой выбирает
+// плавный шум по плоскости (HullMesh.damage_gate), слои дополняют друг друга.
 
 uniform sampler2D color_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D mask_tex : hint_default_black, filter_linear_mipmap, repeat_enable;
@@ -13,6 +15,10 @@ uniform sampler2D damage_tex : source_color, filter_linear_mipmap, repeat_enable
 uniform sampler2D damage_lvl : hint_default_white, filter_nearest, repeat_enable;
 uniform float wear = 0.0;
 uniform float damage_seam = 0.55;
+uniform float alt_scale = 0.83;
+uniform vec2 alt_shift = vec2(0.37, 0.61);
+uniform float gate_cell = 1.37;
+uniform vec2 gate_edge = vec2(0.46, 0.54);
 uniform float tile = 2.0;
 uniform float seam_dark = 0.7;
 uniform float stain_dark = 0.9;
@@ -46,6 +52,28 @@ vec4 damage(vec2 uv) {
 	return vec4(c.rgb * c.a, c.a) * on;
 }
 
+float cell_hash(vec2 c) {
+	return fract(sin(dot(c, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float gate_noise(vec2 uv) {
+	vec2 q = uv / gate_cell;
+	vec2 i = floor(q);
+	vec2 f = q - i;
+	f = f * f * (3.0 - 2.0 * f);
+	float a = cell_hash(i);
+	float b = cell_hash(i + vec2(1.0, 0.0));
+	float c = cell_hash(i + vec2(0.0, 1.0));
+	float d = cell_hash(i + vec2(1.0, 1.0));
+	return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+// Следы одной плоскости из двух слоёв: слой по шуму, второй — повёрнутый, крупнее и со сдвигом.
+vec4 damage2(vec2 uv) {
+	float k = smoothstep(gate_edge.x, gate_edge.y, gate_noise(uv));
+	return damage(uv) * k + damage(vec2(-uv.y, uv.x) * alt_scale + alt_shift) * (1.0 - k);
+}
+
 void fragment() {
 	vec3 w = tri_w();
 	vec3 p = lp / tile;
@@ -61,7 +89,7 @@ void fragment() {
 		col = mix(col, gc * mix(1.0, seam_dark, seam), g * (1.0 - 0.5 * seam));
 	}
 	if (wear > 0.0) {
-		vec4 d = damage(p.zy) * w.x + damage(p.xz) * w.y + damage(p.xy) * w.z;
+		vec4 d = damage2(p.zy) * w.x + damage2(p.xz) * w.y + damage2(p.xy) * w.z;
 		if (d.a > 0.001) {
 			col = mix(col, d.rgb / d.a, d.a * (1.0 - damage_seam * seam));
 		}
