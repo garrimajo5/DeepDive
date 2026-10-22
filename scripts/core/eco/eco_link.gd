@@ -149,7 +149,7 @@ static func apply_near(agents: Array[EcoAgent], data: PackedFloat32Array) -> int
 	var n := 0
 	for k in range(0, data.size() - NET_STRIDE + 1, NET_STRIDE):
 		var i := int(data[k])
-		if i == NET_MOSS:   # дальше — мох (`pack_world`)
+		if i < 0:   # дальше — мох и стаи (`pack_world`)
 			break
 		var code := int(data[k + 1])
 		if i < 0 or i >= agents.size():
@@ -187,7 +187,24 @@ static func mosses(systems: Array) -> Array[EcoMoss]:
 	return out
 
 
-## Пакет «существа рядом» вместе с мхом: `pack_near`, затем NET_MOSS и пятна мха ближе radius (по горизонтали).
+## Стаи светляков у гостя (`EcoFish`): рыбок больше, чем NET_MAX, и цель стаи гость выбирает своим случаем, поэтому
+## стая рядом едет целиком — после мха метка NET_SHOAL и по NET_SHOAL_STRIDE чисел на стаю ближе radius: номер
+## (`EcoFish.shoals`), центр, скорость, цель, секунды до новой цели, секунды тревоги. Гость сдвигает не пришедших
+## поштучно рыбок стаи так, чтобы центр стаи стал хостовым, — стая не уплывает в сторону между кадрами.
+const NET_SHOAL := -2
+const NET_SHOAL_STRIDE := 12
+
+
+## Система светляков из списка систем мира или null.
+static func fish_of(systems: Array) -> EcoFish:
+	for s in systems:
+		if s is EcoFish:
+			return s
+	return null
+
+
+## Пакет «существа рядом» вместе с мхом и стаями: `pack_near`, затем NET_MOSS и пятна мха ближе radius
+## (по горизонтали), затем NET_SHOAL и стаи светляков, центр которых ближе radius.
 static func pack_world(agents: Array[EcoAgent], systems: Array, center: Vector3,
 		radius: float = NET_R) -> PackedFloat32Array:
 	var out := pack_near(agents, center, radius)
@@ -201,28 +218,100 @@ static func pack_world(agents: Array[EcoAgent], systems: Array, center: Vector3,
 	if not moss.is_empty():
 		out.append(NET_MOSS)
 		out.append_array(moss)
+	var fish := fish_of(systems)
+	var sh_out := PackedFloat32Array()
+	if fish != null:
+		for sh in fish.shoals:
+			if sh.alive > 0 and sh.center.distance_to(center) <= radius:
+				sh_out.append_array([sh.index, sh.center.x, sh.center.y, sh.center.z,
+					sh.velocity.x, sh.velocity.y, sh.velocity.z, sh.goal.x, sh.goal.y, sh.goal.z,
+					sh.goal_timer, sh.alarm])
+	if not sh_out.is_empty():
+		out.append(NET_SHOAL)
+		out.append_array(sh_out)
 	return out
 
 
-## Поставить гостю существ и мох по пакету `pack_world` (старый пакет без мха — только существа). Возвращает,
-## сколько пятен мха поставлено.
+## Поставить гостю существ, мох и стаи по пакету `pack_world` (старый пакет без мха и стай — только существа).
+## Возвращает, сколько пятен мха поставлено; стаи — `apply_shoals`.
 static func apply_world(agents: Array[EcoAgent], systems: Array, data: PackedFloat32Array) -> int:
 	apply_near(agents, data)
-	var at := -1
-	for k in range(0, data.size(), NET_STRIDE):
-		if int(data[k]) == NET_MOSS:
-			at = k + 1
-			break
-	if at < 0:
-		return 0
-	var all: Array[EcoMoss.Patch] = []
-	for m in mosses(systems):
-		all.append_array(m.patches)
+	var moss := _section(data, NET_MOSS)
 	var n := 0
-	for k in range(at, data.size() - NET_MOSS_STRIDE + 1, NET_MOSS_STRIDE):
+	if not moss.is_empty():
+		var all: Array[EcoMoss.Patch] = []
+		for m in mosses(systems):
+			all.append_array(m.patches)
+		for k in range(0, moss.size() - NET_MOSS_STRIDE + 1, NET_MOSS_STRIDE):
+			var i := int(moss[k])
+			if i < 0 or i >= all.size():
+				continue
+			all[i].food = clampf(moss[k + 1], 0.0, 1.0)
+			n += 1
+	apply_shoals(agents, systems, data)
+	return n
+
+
+## Стаи из пакета `pack_world`: цель, таймер и тревога — как у хоста; рыбки стаи, не пришедшие поштучно в пакете
+## существ, сдвигаются одним смещением, чтобы центр живых стал хостовым; скорость стаи — хостовая. Возвращает,
+## сколько стай поставлено.
+static func apply_shoals(agents: Array[EcoAgent], systems: Array, data: PackedFloat32Array) -> int:
+	var part := _section(data, NET_SHOAL)
+	var fish := fish_of(systems)
+	if part.is_empty() or fish == null:
+		return 0
+	var sent := {}   # существа, поставленные поштучно
+	for k in range(0, data.size() - NET_STRIDE + 1, NET_STRIDE):
 		var i := int(data[k])
-		if i < 0 or i >= all.size():
+		if i < 0:
+			break
+		if i < agents.size():
+			sent[agents[i]] = true
+	var n := 0
+	for k in range(0, part.size() - NET_SHOAL_STRIDE + 1, NET_SHOAL_STRIDE):
+		var si := int(part[k])
+		if si < 0 or si >= fish.shoals.size():
 			continue
-		all[i].food = clampf(data[k + 1], 0.0, 1.0)
+		var sh: EcoFish.Shoal = fish.shoals[si]
+		var c := Vector3(part[k + 1], part[k + 2], part[k + 3])
+		var sum := Vector3.ZERO
+		var live := 0
+		var free: Array[EcoAgent] = []
+		for f: EcoFish.Fish in sh.members:
+			if not f.agent.alive:
+				continue
+			live += 1
+			sum += f.agent.p
+			if not sent.has(f.agent):
+				free.append(f.agent)
+		if not free.is_empty():
+			var shift := (c * live - sum) / free.size()
+			for a in free:
+				a.p += shift
+		sh.center = c
+		sh.velocity = Vector3(part[k + 4], part[k + 5], part[k + 6])
+		sh.goal = Vector3(part[k + 7], part[k + 8], part[k + 9])
+		sh.goal_timer = part[k + 10]
+		sh.alarm = maxf(part[k + 11], 0.0)
 		n += 1
 	return n
+
+
+## Часть пакета `pack_world` после метки marker (без неё) до следующей метки: метки стоят на месте номера записи,
+## номера записей не меньше нуля. Нет такой части — пусто.
+static func _section(data: PackedFloat32Array, marker: int) -> PackedFloat32Array:
+	var k := 0
+	while k + NET_STRIDE <= data.size() and int(data[k]) >= 0:
+		k += NET_STRIDE
+	while k < data.size():
+		var m := int(data[k])
+		var step := NET_MOSS_STRIDE if m == NET_MOSS else NET_SHOAL_STRIDE
+		var start := k + 1
+		k = start
+		while k + step <= data.size() and int(data[k]) >= 0:
+			k += step
+		if m == marker:
+			return data.slice(start, k)
+		if m != NET_MOSS and m != NET_SHOAL:
+			break
+	return PackedFloat32Array()

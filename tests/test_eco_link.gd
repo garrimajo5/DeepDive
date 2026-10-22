@@ -467,3 +467,89 @@ func test_moss_rides_to_guest() -> void:   # еда пятен мха рядом
 	var gb: EcoMoss.Patch = EcoLink.mosses(g.systems)[1].patches[0]
 	EcoLink.apply_world(g.agents, g.systems, EcoLink.pack_world(h.agents, h.systems, bp.pos))
 	near(gb.food, 0.0, 1e-4, "мох у рёбер как у хоста")
+
+
+func _fish_world(world_seed: int = EcoRandom.WORLD_SEED) -> EcoWorld:   # мир со светляками на настоящем дне
+	var w := EcoWorld.new(world_seed)
+	w.ground = Seabed.height
+	w.ship.pos = Vector3(500, 0, 500)
+	w.add(EcoFish.new())
+	return w
+
+
+func _live_center(sh: EcoFish.Shoal) -> Vector3:
+	var s := Vector3.ZERO
+	var n := 0
+	for f: EcoFish.Fish in sh.members:
+		if f.agent.alive:
+			s += f.agent.p
+			n += 1
+	return s / n
+
+
+func test_shoals_ride_to_guest() -> void:   # стая рядом едет гостю целиком: центр, цель, таймер, тревога
+	var h := _fish_world()
+	var hf := EcoLink.fish_of(h.systems)
+	var sh: EcoFish.Shoal = hf.shoals[0]
+	for f: EcoFish.Fish in sh.members:   # у хоста стая ушла на 6 м
+		f.agent.p += Vector3(6, 0, 0)
+	sh.center = _live_center(sh)
+	sh.velocity = Vector3(1, 0, 0)
+	sh.goal = sh.center + Vector3(10, 1, -4)
+	sh.goal_timer = 3.5
+	sh.alarm = 1.25
+	var d := EcoLink.pack_world(h.agents, h.systems, sh.center)
+	ok(d.has(float(EcoLink.NET_SHOAL)), "стаи в пакете")
+	# только часть стай — без поштучных существ: все рыбки стаи свободны, центр — хостовый
+	var g := _fish_world()
+	var gs: EcoFish.Shoal = EcoLink.fish_of(g.systems).shoals[0]
+	ok(_live_center(gs).distance_to(sh.center) > 5.0, "у гостя стая на старом месте")
+	ok(EcoLink.apply_shoals(g.agents, g.systems, _shoals_only(d)) >= 1, "стая поставлена")
+	near(_live_center(gs).distance_to(sh.center), 0.0, 1e-3, "центр живых — хостовый")
+	eq(gs.goal, sh.goal, "цель как у хоста")
+	near(gs.goal_timer, 3.5, 1e-4)
+	near(gs.alarm, 1.25, 1e-4, "тревога как у хоста")
+	eq(gs.velocity, sh.velocity)
+	# полный пакет: поштучные рыбки — точно на местах хоста, центр всё равно хостовый
+	var g2 := _fish_world()
+	var gs2: EcoFish.Shoal = EcoLink.fish_of(g2.systems).shoals[0]
+	EcoLink.apply_world(g2.agents, g2.systems, d)
+	eq(gs2.members[0].agent.p, sh.members[0].agent.p, "ближняя рыбка — как у хоста")
+	near(_live_center(gs2).distance_to(sh.center), 0.0, 1e-3)
+	# вдали стай нет; старый пакет — стаи не трогает
+	ok(not EcoLink.pack_world(h.agents, h.systems, Vector3(5000, 0, 5000)).has(float(EcoLink.NET_SHOAL)), "вдали стай нет")
+	eq(EcoLink.apply_shoals(g.agents, g.systems, EcoLink.pack_near(h.agents, sh.center)), 0, "старый пакет — без стай")
+
+
+func test_shoal_section_without_moss() -> void:   # стаи сразу за существами: существа не читают стаи как существ
+	var h := _fish_world()
+	var sh: EcoFish.Shoal = EcoLink.fish_of(h.systems).shoals[0]
+	var d := EcoLink.pack_world(h.agents, h.systems, sh.center)
+	ok(not d.has(float(EcoLink.NET_MOSS)), "мха в мире нет")
+	var g := _fish_world()
+	eq(EcoLink.apply_near(g.agents, d), EcoLink.NET_MAX, "поставлены только существа")
+	eq(EcoLink.apply_world(g.agents, g.systems, d), 0, "мха нет")
+
+
+func _shoals_only(d: PackedFloat32Array) -> PackedFloat32Array:   # пакет без поштучных существ (рядом тесно)
+	var k := 0
+	while k < d.size() and int(d[k]) >= 0:
+		k += EcoLink.NET_STRIDE
+	return d.slice(k)
+
+
+func test_guest_shoal_follows_host() -> void:   # миры разошлись: с кадрами хоста стая гостя идёт за стаей хоста,
+	# даже когда её рыбки не попали в NET_MAX ближних существ
+	var h := _fish_world()
+	var g := _fish_world(EcoRandom.WORLD_SEED + 7)   # другой случай — другие цели
+	var hs: EcoFish.Shoal = EcoLink.fish_of(h.systems).shoals[0]
+	var gs: EcoFish.Shoal = EcoLink.fish_of(g.systems).shoals[0]
+	var worst := 0.0
+	for i in 600:   # 20 с по 1/30, кадр хоста — каждый третий шаг
+		h.step(1.0 / 30.0)
+		g.step(1.0 / 30.0)
+		if i % 3 == 0:
+			EcoLink.apply_world(g.agents, g.systems, _shoals_only(EcoLink.pack_world(h.agents, h.systems, hs.center)))
+		if i > 30:
+			worst = maxf(worst, _live_center(gs).distance_to(_live_center(hs)))
+	ok(worst < 1.0, "центр стаи гостя рядом с хостовым: %.2f м" % worst)
