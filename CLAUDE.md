@@ -10,7 +10,13 @@
 ## Правила
 - Интерфейс и тексты — на русском, коротко и по делу.
 - Игра работает на Android-телефоне в альбомной ориентации: крестовина + кнопка действия + свайп, без клавиатуры.
-- Бюджет на телефоне: вызовов отрисовки < 260, треугольников < 350 тыс. Рендерер — Compatibility (OpenGL ES 3).
+- Бюджет на телефоне: вызовов отрисовки < 260, треугольников < 350 тыс. Рендерер — **Forward Mobile** (Vulkan).
+  > **Разворот 2026-10-22: перешли с Compatibility на Forward Mobile** — ради света и атмосферы (свечение биолюма/bloom
+  > включено в `Main._build_world`; дальше — тени, SSAO, шейдерные приёмы на существах). Цена: APK требует телефон
+  > с Vulkan, самые старые отпадают. Для **всех сессий и Codex**: материалы/модели по-прежнему в том же бюджете, но
+  > можно опираться на лучший свет и пост. Mobile-рендер работает на Vulkan, а в облаке Vulkan нет — скриншоты из
+  > сессии рендерятся в Compatibility (`--rendering-method gl_compatibility`, см. ниже), Mobile-эксклюзив (тени, SSAO)
+  > на них не виден, его проверяет тестер на устройстве / владелец на своей машине.
 - Внешние библиотеки, аддоны и пакеты по сети — только с решения владельца. Тесты — свой раннер `tests/run.gd`.
 - `docs/concept-art/` меняем только при приёмке художника.
 
@@ -62,7 +68,8 @@
 - Запуск в облачной сессии (Godot ставится за минуту, см. ниже):
   - `godot --headless --path . --import` (после новых файлов и моделей), затем `godot --headless --path . -s tests/run.gd`
     (фильтр: `-- test_helm` или часть имени теста);
-  - картинка: `xvfb-run -a -s "-screen 0 1600x720x24" godot --path . --rendering-driver opengl3 --resolution 1600x720 -s tools/shot.gd -- out.png z=-3 yaw=0`
+  - картинка: `xvfb-run -a -s "-screen 0 1600x720x24" godot --path . --rendering-method gl_compatibility --rendering-driver opengl3 --resolution 1600x720 -s tools/shot.gd -- out.png z=-3 yaw=0`
+    (`--rendering-method gl_compatibility` обязателен: игра теперь на Forward Mobile/Vulkan, а в облаке Vulkan нет; снимок — в Compatibility, свечение видно, тени/SSAO — нет)
     (ключи — в `tools/shot.gd`), смотреть через Read. Сцену после изменений смотреть глазами, не только тестами.
 - Поставить Godot в сессии: скачать `Godot_v4.7.2-stable_linux.x86_64.zip` с GitHub releases godotengine/godot,
   распаковать, `ln -s …/Godot_v4.7.2-stable_linux.x86_64 /usr/local/bin/godot`. Android SDK в сессии нет (`dl.google.com` закрыт),
