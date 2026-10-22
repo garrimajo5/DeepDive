@@ -151,7 +151,9 @@ jobs:
           done
           cat ~/.config/godot/editor_settings-4.7.tres
       - name: Номер версии
-        run: sed -i "s/^version\/code=.*/version\/code=${{ github.run_number }}/" export_presets.cfg
+        run: |
+          sed -i "s/^version\/code=.*/version\/code=${{ github.run_number }}/" export_presets.cfg
+          echo "#${{ github.run_number }} ${GITHUB_SHA::7}" > version.txt   # версия на экран (Main.version_text)
       - name: Импорт проекта
         run: ~/godot/godot --headless --path . --import
       - name: Экспорт APK
