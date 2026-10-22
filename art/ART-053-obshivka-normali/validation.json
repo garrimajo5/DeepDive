@@ -1,0 +1,196 @@
+{
+  "tile_m": 2,
+  "normal_format": "OpenGL +Y; RGB8 linear",
+  "height_base_range_mm": [
+    -1.40000451254989,
+    2.600010101193779
+  ],
+  "damage_features": [
+    {
+      "id": 0,
+      "kind": "skol",
+      "threshold": 0,
+      "height_min_mm": -0.3472554263403544,
+      "height_max_mm": 3.759675852761657e-08
+    },
+    {
+      "id": 1,
+      "kind": "koltso",
+      "threshold": 48,
+      "height_min_mm": -4.996003610813204e-16,
+      "height_max_mm": 1.7819895450496794
+    },
+    {
+      "id": 2,
+      "kind": "tsarapiny",
+      "threshold": 72,
+      "height_min_mm": -1.004835880878224,
+      "height_max_mm": 6.068379191741889e-06
+    },
+    {
+      "id": 3,
+      "kind": "tsarapiny",
+      "threshold": 24,
+      "height_min_mm": -1.0609258583803682,
+      "height_max_mm": 3.550108164784155e-08
+    },
+    {
+      "id": 4,
+      "kind": "vmyatina",
+      "threshold": 104,
+      "height_min_mm": -5.943253709131862,
+      "height_max_mm": 2.3016545834790056e-08
+    },
+    {
+      "id": 5,
+      "kind": "skol",
+      "threshold": 136,
+      "height_min_mm": -0.34725515634231785,
+      "height_max_mm": 3.326657468620877e-06
+    },
+    {
+      "id": 6,
+      "kind": "koltso",
+      "threshold": 168,
+      "height_min_mm": -4.996003610813204e-16,
+      "height_max_mm": 1.782079280018188
+    },
+    {
+      "id": 7,
+      "kind": "koltso",
+      "threshold": 16,
+      "height_min_mm": -3.122502256758253e-16,
+      "height_max_mm": 1.7787206385383638
+    },
+    {
+      "id": 8,
+      "kind": "zaplatka",
+      "threshold": 200,
+      "height_min_mm": -5.739259613811525e-08,
+      "height_max_mm": 4.144544346145281
+    },
+    {
+      "id": 9,
+      "kind": "skol",
+      "threshold": 184,
+      "height_min_mm": -0.34725506288548974,
+      "height_max_mm": 2.793075209956048e-08
+    },
+    {
+      "id": 10,
+      "kind": "vmyatina",
+      "threshold": 72,
+      "height_min_mm": -5.952609402631797,
+      "height_max_mm": 4.2471263057491426e-08
+    },
+    {
+      "id": 11,
+      "kind": "vmyatina",
+      "threshold": 144,
+      "height_min_mm": -5.947589955986319,
+      "height_max_mm": 1.6608136958327825e-08
+    },
+    {
+      "id": 12,
+      "kind": "koltso",
+      "threshold": 120,
+      "height_min_mm": -3.9968028886505636e-16,
+      "height_max_mm": 1.7797725720737168
+    },
+    {
+      "id": 13,
+      "kind": "tsarapiny",
+      "threshold": 56,
+      "height_min_mm": -1.0131686602875165,
+      "height_max_mm": 6.709468573370455e-06
+    },
+    {
+      "id": 14,
+      "kind": "skol",
+      "threshold": 216,
+      "height_min_mm": -0.34859233007433377,
+      "height_max_mm": 3.874422254306636e-06
+    },
+    {
+      "id": 15,
+      "kind": "tsarapiny",
+      "threshold": 152,
+      "height_min_mm": -1.18411134175365,
+      "height_max_mm": 3.6569737706798604e-08
+    },
+    {
+      "id": 16,
+      "kind": "koltso",
+      "threshold": 232,
+      "height_min_mm": -4.996003610813204e-16,
+      "height_max_mm": 1.778256937865527
+    },
+    {
+      "id": 17,
+      "kind": "zaplatka",
+      "threshold": 255,
+      "height_min_mm": -4.93291306658271e-08,
+      "height_max_mm": 3.8994504330521496
+    },
+    {
+      "id": 18,
+      "kind": "vmyatina",
+      "threshold": 208,
+      "height_min_mm": -5.952783297820571,
+      "height_max_mm": 3.596441836607324e-08
+    }
+  ],
+  "feature_threshold_registration_exact": true,
+  "outside_alpha_normal": [
+    128,
+    128,
+    255
+  ],
+  "edges_exact": true,
+  "green_dome_test": true,
+  "source_hashes": {
+    "obshivka-tsvet.png": "6e5e4166ea1f74cb7555ba138b724b2de2cc89d2cdf5fa7e48d77cc82bfcb7e5",
+    "obshivka-maska.png": "45d967eff4600dc2b4e17e538d4aa343e5044b5978b8a84f8bd8409df559bfaf",
+    "povrezhdeniya-tsvet.png": "c3fbd1fb0a0368f1d74eedb0cc0bb088e92b223abba6801f9c08b91969988ca2",
+    "povrezhdeniya-uroven.png": "904a9148885aa08f05c0ba650f053a6e4dcc0655078f6efc88e2e29639f84083"
+  },
+  "main_commit": "8f132f4d9cd079ecca7d15cf60b1c6e779a89489",
+  "files": {
+    "normali-list.png": {
+      "mode": "RGB",
+      "size": [
+        2048,
+        1152
+      ],
+      "bytes": 1080245,
+      "sha256": "18b321de584bdf122edc1b273631750d201350322a86fc7ed977d870c7a7ba80"
+    },
+    "obshivka-normali.png": {
+      "mode": "RGB",
+      "size": [
+        1024,
+        1024
+      ],
+      "bytes": 97555,
+      "sha256": "7fb743b373c2c75fc899e29404b5f329b1641dd51fde49f9996667826e591ba4"
+    },
+    "obshivka-sheroh.png": {
+      "mode": "L",
+      "size": [
+        1024,
+        1024
+      ],
+      "bytes": 20718,
+      "sha256": "f7d05634b996c66ecf7b263782521e10d1b29bdef8d3c77fe3c18d7947e8d257"
+    },
+    "povrezhdeniya-normali.png": {
+      "mode": "RGB",
+      "size": [
+        1024,
+        1024
+      ],
+      "bytes": 289099,
+      "sha256": "71fdbe934feaeaf3fd3a13d8eb83d5a958d23233252e5c618c828d6282ac33d3"
+    }
+  }
+}
