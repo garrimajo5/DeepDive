@@ -11,6 +11,9 @@ var seabed_mat: ShaderMaterial   # материал дна: каустики и 
 var ice: MeshInstance3D
 var sun: DirectionalLight3D
 var snow: CPUParticles3D
+var shafts: MultiMeshInstance3D   # лучи сквозь трещины льда (ART-052)
+var shafts_mat: ShaderMaterial
+var shaft_list: Array[LightShafts.Shaft] = []
 
 
 func _ready() -> void:
@@ -58,8 +61,60 @@ func _ready() -> void:
 	sun.shadow_blur = 1.3
 	add_child(sun)
 
+	shafts = _make_shafts()
+	add_child(shafts)
+
 	snow = _make_snow()
 	add_child(snow)
+
+
+## Лучи сквозь трещины льда (ART-052): все шахты отмели одним MultiMesh — один вызов отрисовки.
+## Дальние шейдер сжимает в точку; рисуются раньше прочего прозрачного (снег — поверх).
+func _make_shafts() -> MultiMeshInstance3D:
+	shaft_list = LightShafts.layout()
+	var cone := ArrayMesh.new()
+	cone.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, LightShafts.cone_arrays())
+	var m := ShaderMaterial.new()
+	m.shader = load("res://shaders/light_shafts.gdshader")
+	m.set_shader_parameter("mask_tex", load("res://textures/luchi/maska.png"))
+	m.set_shader_parameter("noise_tex", load("res://textures/luchi/shum.png"))
+	m.set_shader_parameter("ice_y", Seabed.ICE_Y)
+	m.set_shader_parameter("depth_scale", LightShafts.DEPTH_SCALE)
+	m.set_shader_parameter("gain", LightShafts.GAIN)
+	m.set_shader_parameter("far_fade", LightShafts.FAR)
+	m.set_shader_parameter("near_fade", LightShafts.NEAR)
+	m.set_shader_parameter("floor_fade", LightShafts.FLOOR_FADE)
+	m.set_shader_parameter("ship_center_y", HullPlan.CENTER_Y)
+	m.set_shader_parameter("ship_shape", LightShafts.SHIP)
+	m.set_shader_parameter("ship_inv", Projection(Transform3D.IDENTITY))
+	m.render_priority = -1
+	shafts_mat = m
+	cone.surface_set_material(0, m)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.use_custom_data = true
+	mm.mesh = cone
+	mm.instance_count = shaft_list.size()
+	for i in shaft_list.size():
+		var s := shaft_list[i]
+		mm.set_instance_transform(i, LightShafts.instance_xform(s))
+		mm.set_instance_custom_data(i, LightShafts.instance_custom(s))
+		mm.set_instance_color(i, LightShafts.instance_color(s))
+	var node := MultiMeshInstance3D.new()
+	node.name = "Лучи сквозь лёд"
+	node.multimesh = mm
+	node.layers = LAYER_WORLD
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# размеры конусов задаёт шейдер — границы на всю отмель, иначе отсечение по кадру спрячет шахты
+	node.custom_aabb = AABB(Vector3(-Seabed.SIZE / 2.0, -80.0, -Seabed.SIZE / 2.0), Vector3(Seabed.SIZE, 81.0, Seabed.SIZE))
+	return node
+
+
+## Где корабль: внутри корпуса шахты не светят (вид с мостика и из отсеков).
+func set_ship(pos: Vector3, yaw: float) -> void:
+	var t := Transform3D(Basis(Vector3.UP, yaw), pos)
+	shafts_mat.set_shader_parameter("ship_inv", Projection(t.affine_inverse()))
 
 
 ## Морской снег: медленные светлые точки вокруг корабля; частицы в мировых координатах,
@@ -98,6 +153,7 @@ func apply_water(env: Environment, depth: float, around: Vector3, silt: float = 
 	env.fog_light_color = fog
 	env.fog_light_energy = 1.0
 	env.fog_density = Seabed.Water.fog_density(depth) * 0.9 + 0.03 * silt
+	shafts_mat.set_shader_parameter("fog_density", env.fog_density)
 	env.fog_sky_affect = 0.0
 	env.ambient_light_color = Color(0.55, 0.75, 0.8)
 	env.ambient_light_energy = Seabed.Water.ambient(depth) * 0.7
