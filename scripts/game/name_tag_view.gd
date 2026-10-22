@@ -51,7 +51,7 @@ func show_tags(crew: Array, me: Crew.Member, view: CrewView, cam: Camera3D, own_
 			continue
 		_build(i, m)
 		shown.append([i, d, anchor, NameTag.world_height(d, cam.fov, depth)])
-	shown.sort_custom(func(a, b): return a[1] < b[1])
+	shown.sort_custom(func(a, b): return NameTag.before(levels[a[0]] > 0.0, a[1], levels[b[0]] > 0.0, b[1]))
 	var bz := cam.global_basis.z
 	var ang := atan2(bz.x, bz.z)   # плашка параллельна экрану (поворот только вокруг вертикали)
 	var screen := cam.get_viewport().get_visible_rect()
