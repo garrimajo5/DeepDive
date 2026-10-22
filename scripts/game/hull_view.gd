@@ -47,7 +47,8 @@ func _setup(mi: MeshInstance3D) -> void:
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
-## Металл неподвижного корпуса — обшивка ART-024 (шейдер `hull_plating`): плитка в осях корабля, обрастание по высоте.
+## Металл неподвижного корпуса — обшивка ART-024 (шейдер `hull_plating`): плитка в осях корабля, обрастание по высоте,
+## следы ART-049 и рельеф ART-053.
 ## Роторы и рули (свои оси, без обрастания) и прочие краски — однотонные.
 static func plating() -> ShaderMaterial:
 	var m := ShaderMaterial.new()
@@ -70,8 +71,22 @@ static func plating() -> ShaderMaterial:
 	m.set_shader_parameter("alt_shift", HullMesh.DAMAGE_ALT_SHIFT)
 	m.set_shader_parameter("gate_cell", HullMesh.DAMAGE_CELL)
 	m.set_shader_parameter("gate_edge", HullMesh.DAMAGE_GATE)
+	m.set_shader_parameter("normal_tex", load(HullMesh.PLATE_TEX % "normali"))
+	m.set_shader_parameter("rough_tex", load(HullMesh.PLATE_TEX % "sheroh"))
+	m.set_shader_parameter("damage_nrm", load(HullMesh.DAMAGE_TEX % "povrezhdeniya-normali"))
+	m.set_shader_parameter("normal_depth", HullMesh.NORMAL_DEPTH)
+	m.set_shader_parameter("damage_depth", HullMesh.DAMAGE_DEPTH)
+	m.set_shader_parameter("relief", true)
 	m.set_shader_parameter("wear", 0.0)
 	return m
+
+
+## Рельеф обшивки ART-053 (нормали и шероховатость из карт). Выкл — «Экономно» (ART-044): без выборок рельефа,
+## шероховатость прежними константами, цвет и следы остаются.
+func set_relief(on: bool) -> void:
+	var m: ShaderMaterial = _mats.get(-1)
+	if m != null:
+		m.set_shader_parameter("relief", on)
 
 
 ## Следы повреждений ART-049 по прочности корпуса (`Vitals.hull`, %): одна uniform на материал обшивки.

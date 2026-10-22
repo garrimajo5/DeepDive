@@ -263,3 +263,82 @@ func test_scene_damage_follows_hull() -> void:
 	ok(float(sm.get_shader_parameter("wear")) > 0.55, "при 40 % — потеря около 0,6")
 	main.queue_free()
 	await frames(1)
+
+
+func test_relief_math() -> void:
+	# рельеф ART-053: нормаль карты в осях плитки и в осях корабля — та же математика, что в шейдере
+	var flat := HullMesh.decode_normal(Color(0.5, 0.5, 1.0))
+	ok(flat.distance_to(Vector3(0, 0, 1)) < 0.01, "плоский пиксель (128,128,255) — нормаль от поверхности")
+	# OpenGL: выше выпуклости (меньше строка) склон смотрит вверх по картинке — g > 0,5; v растёт вниз → y < 0
+	ok(HullMesh.decode_normal(Color(0.5, 0.8, 0.9)).y < 0.0, "зелёный вверх — склон к меньшим v")
+	ok(HullMesh.decode_normal(Color(0.8, 0.5, 0.9)).x > 0.0, "красный — склон к большим u")
+	var sides := [Vector3(1, 0, 0), Vector3(-1, 0, 0), Vector3(0, 1, 0), Vector3(0, -1, 0), Vector3(0, 0, 1), Vector3(0, 0, -1)]
+	var axis_of := [0, 0, 1, 1, 2, 2]
+	for i in sides.size():
+		var n: Vector3 = sides[i]
+		ok(HullMesh.plane_normal(axis_of[i], n, Vector3(0, 0, 1)).distance_to(n) < 1e-5, "плоская карта не меняет нормаль %s" % n)
+	# поверхность x = ±(1 + h(z, y)), h = 0,3·z: нормаль (±1, 0, −0,3) — у обоих бортов склон в одну сторону по z
+	var t := Vector3(-0.3, 0, 1).normalized()   # (−dh/du, −dh/dv, 1), u = z, v = y
+	for sx in [1.0, -1.0]:
+		var want := Vector3(sx, 0, -0.3).normalized()
+		ok(HullMesh.plane_normal(0, Vector3(sx, 0, 0), t).distance_to(want) < 1e-4, "борт %+d: нормаль склона" % int(sx))
+	# крыша: u = x, v = z; h = 0,5·z → нормаль (0, 1, −0,5)
+	ok(HullMesh.plane_normal(1, Vector3(0, 1, 0), Vector3(0, -0.5, 1).normalized())
+		.distance_to(Vector3(0, 1, -0.5).normalized()) < 1e-4, "крыша: склон вдоль корабля")
+	# второй слой следов: h(u, v) = h'(u'), u' = −v·s — склон по u' становится склоном по v
+	var back := HullMesh.alt_back(Vector3(-1, 0, 1).normalized())
+	ok(back.x == 0.0 and back.y > 0.0, "повёрнутый слой: склон по u' → по v (как dh/dv = −s·dh'/du')")
+	ok(HullMesh.rnm(Vector3(0, 0, 1), t).distance_to(t) < 1e-5, "след на плоской основе — сам след")
+	ok(HullMesh.rnm(t, Vector3(0, 0, 1)).distance_to(t) < 1e-5, "плоский след не меняет основу")
+
+
+func test_relief_maps() -> void:
+	for k in ["normali", "sheroh"]:
+		var tx: Texture2D = load(HullMesh.PLATE_TEX % k)
+		ok(tx != null and tx.get_width() == 1024 and tx.get_height() == 1024, "карта %s 1024²" % k)
+	var dn: Texture2D = load(HullMesh.DAMAGE_TEX % "povrezhdeniya-normali")
+	ok(dn != null and dn.get_width() == 1024, "нормали следов 1024²")
+	# шероховатость в регистр маски швов ART-024: на швах глаже (0,48), на краске ≈ 0,82
+	var mask := Image.load_from_file(ProjectSettings.globalize_path(HullMesh.PLATE_TEX % "maska"))
+	var rough := Image.load_from_file(ProjectSettings.globalize_path(HullMesh.PLATE_TEX % "sheroh"))
+	var seam_r := 0.0
+	var seam_n := 0
+	var paint_r := 0.0
+	var paint_n := 0
+	for y in range(0, 1024, 4):
+		for x in range(0, 1024, 4):
+			var m := mask.get_pixel(x, y).r
+			if m > 0.95:
+				seam_r += rough.get_pixel(x, y).r
+				seam_n += 1
+			elif m < 0.05:
+				paint_r += rough.get_pixel(x, y).r
+				paint_n += 1
+	ok(seam_n > 0 and paint_n > 0)
+	ok(seam_r / seam_n + 0.15 < paint_r / paint_n, "швы глаже краски: %.2f < %.2f" % [seam_r / seam_n, paint_r / paint_n])
+	near(paint_r / paint_n, 0.82, 0.08, "краска ≈ 0,82")
+	# нормали следов вне альфы ART-049 — плоские: без следа рельеф не рисует вмятин
+	var col := Image.load_from_file(ProjectSettings.globalize_path(HullMesh.DAMAGE_TEX % "povrezhdeniya"))
+	var nrm := Image.load_from_file(ProjectSettings.globalize_path(HullMesh.DAMAGE_TEX % "povrezhdeniya-normali"))
+	var worst := 0.0
+	for y in range(0, 1024, 8):
+		for x in range(0, 1024, 8):
+			if col.get_pixel(x, y).a == 0.0:
+				worst = maxf(worst, 1.0 - HullMesh.decode_normal(nrm.get_pixel(x, y)).normalized().z)
+	ok(worst < 0.01, "вне следов нормаль плоская (отклонение %.4f)" % worst)
+
+
+func test_scene_relief() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var sm: ShaderMaterial = main.hull.body_material(HullPlan.Paint.METAL)
+	ok(sm.get_shader_parameter("normal_tex") is Texture2D and sm.get_shader_parameter("rough_tex") is Texture2D
+		and sm.get_shader_parameter("damage_nrm") is Texture2D, "три карты рельефа ART-053 в том же материале")
+	ok(sm.get_shader_parameter("relief"), "рельеф включён по умолчанию («Красиво»/«Обычно»)")
+	near(sm.get_shader_parameter("normal_depth"), HullMesh.NORMAL_DEPTH, 1e-6)
+	near(sm.get_shader_parameter("damage_depth"), HullMesh.DAMAGE_DEPTH, 1e-6)
+	main.hull.set_relief(false)
+	ok(not sm.get_shader_parameter("relief"), "«Экономно» — рельеф выключен веткой материала")
+	main.hull.set_relief(true)
+	eq((main.hull.body.mesh as ArrayMesh).get_surface_count(), HullMesh.paints().size(), "без новых поверхностей")
