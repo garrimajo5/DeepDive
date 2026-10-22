@@ -56,6 +56,10 @@ func show_marks(crew: Array, me: Crew.Member, cam: Camera3D, own_cam: Camera3D) 
 		var h := NameTag.world_height(d, cam.fov, depth)
 		_build(id, m)
 		center = _fit(cam, center, depth, h, float(cache[keys[id]]["w"]))
+		var nd := BusyMark.front_depth(depth, holder_depth(cam, m))
+		if nd < depth:   # перед фигурой занявшего на том же луче, размер на экране тот же (#382)
+			center = cam.project_position(cam.unproject_position(center), nd)
+			h *= nd / depth
 		root.global_transform = Transform3D(Basis(Vector3.UP, ang).scaled(Vector3.ONE * h), center)
 		var a := BusyMark.alpha(d)
 		(panels[id] as Sprite3D).modulate = Color(1, 1, 1, a)
@@ -67,6 +71,17 @@ func show_marks(crew: Array, me: Crew.Member, cam: Camera3D, own_cam: Camera3D) 
 		root.visible = true
 		holders.append(m)
 	return holders
+
+
+## Глубина ближайшей к камере точки фигуры занявшего (голова, шея, плечи; оси корабля → мир), м.
+func holder_depth(cam: Camera3D, m: Crew.Member) -> float:
+	var inv := cam.global_transform.affine_inverse()
+	var j := m.joints()
+	var best := INF
+	for k: String in ["head", "neck", "shoulder_l", "shoulder_r"]:
+		if j.has(k):
+			best = minf(best, -(inv * to_global(j[k])).z)
+	return best
 
 
 ## Сдвинуть центр метки (мир) так, чтобы на экране она была целиком и не под кнопками (`BusyMark.fit`, #373).
