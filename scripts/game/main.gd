@@ -1658,6 +1658,7 @@ func debug_setup(kv: Dictionary) -> void:
 		bridge.set_relief(false)   # и карты мостика ART-054
 		rooms.set_relief(false)    # и отсеков ART-055
 		ocean.set_relief(false)    # и льда ART-056
+		ocean.set_snow_lite(true)  # и взвесь ART-058 реже, без вращения
 	if kv.has("energy"):  # energy=<ед.> — заряд корабля (меньше 20 — «МАЛО ЗАРЯДА» на табло)
 		vitals.energy = float(kv["energy"])
 	if kv.get("drain", "0") == "1":  # drain=1 — стеклоуст на корпусе (табло и рамка у щитка разряда)

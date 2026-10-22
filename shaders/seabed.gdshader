@@ -18,6 +18,16 @@ uniform float caustic_scale = 0.16;     // 1/м, крупные ячейки с�
 uniform float caustic_speed = 0.32;     // скорость дрожания узора
 uniform vec3 caustic_tint : source_color = vec3(0.60, 0.85, 0.91);  // холодный свет сквозь лёд (#9AD9E8)
 
+// Каустики под трещинами льда (ART-056): та же маска трещин, что у «Льда», сверху — размытая и подвижная,
+// и тот же крупный шум открытости сети (IceSheet.gate). Числа — IceSheet.
+uniform sampler2D crack_tex : hint_default_black, filter_linear_mipmap, repeat_enable;
+uniform float ice_tile = 16.0;
+uniform float ice_y = 0.0;
+uniform float gate_scale = 60.0;
+uniform vec2 gate_edge = vec2(0.48, 0.62);
+uniform float crack_caustic = 0.06;   // IceSheet.CAUSTIC: свет под трещиной 0,06·exp(−глубина дна / 12)
+uniform float crack_depth = 12.0;
+
 varying vec3 w_pos;
 varying vec3 w_nrm;
 
@@ -40,6 +50,31 @@ float vnoise(vec2 p) {
 
 float fbm(vec2 p) {   // две октавы — дёшево для телефона
 	return vnoise(p) * 0.65 + vnoise(p * 2.7 + 7.0) * 0.35;
+}
+
+float ice_hash2(int ix, int iz) {   // HashNoise.hash2 (как в ice.gdshader)
+	uint h = uint(ix) * 374761393u + uint(iz) * 668265263u;
+	h = (h ^ (h >> 13u)) * 1274126177u;
+	h ^= h >> 16u;
+	return float(h) / 4294967295.0;
+}
+
+float ice_value(vec2 p) {   // HashNoise.value
+	vec2 f0 = floor(p);
+	ivec2 i = ivec2(f0);
+	vec2 f = p - f0;
+	vec2 u = f * f * (3.0 - 2.0 * f);
+	float a = ice_hash2(i.x, i.y);
+	float b = ice_hash2(i.x + 1, i.y);
+	float c = ice_hash2(i.x, i.y + 1);
+	float d = ice_hash2(i.x + 1, i.y + 1);
+	return a + (b - a) * u.x + (c - a) * u.y + (a - b - c + d) * u.x * u.y;
+}
+
+float ice_gate(vec2 xz) {   // IceSheet.gate
+	vec2 q = xz / gate_scale;
+	float n = (0.5 * ice_value(q) + 0.25 * ice_value(q * 2.0 + vec2(17.3, -9.1))) / 0.75;
+	return smoothstep(gate_edge.x, gate_edge.y, n);
 }
 
 void vertex() {
@@ -78,6 +113,12 @@ void fragment() {
 		c = 1.0 - smoothstep(0.0, 0.16, c);                  // яркие тонкие нити
 		c = pow(c, 1.6);
 		float cmask = caustic * light * flat_k * fade;
+		// под открытыми трещинами льда света больше: маска сверху, размытая (мелкий mip) и дрожащая
+		vec2 drift = vec2(sin(t * 0.7), cos(t * 0.53)) * 0.35;
+		float under = clamp(textureLod(crack_tex, (p + drift) / ice_tile, 5.0).r * 4.0, 0.0, 1.0) * ice_gate(p);
+		cmask *= 0.6 + 0.8 * under;
+		float crack_light = crack_caustic * exp(-max(ice_y - w_pos.y, 0.0) / crack_depth) * under * caustic / 0.6;
+		ALBEDO += caustic_tint * crack_light * light;
 		ALBEDO += caustic_tint * c * cmask * 0.45;
 		EMISSION += caustic_tint * c * cmask * 0.22;         // ядра нитей ловят bloom, но мягко
 	}
