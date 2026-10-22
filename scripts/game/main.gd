@@ -207,7 +207,7 @@ func _ready() -> void:
 	add_child(ui)
 	hint = Label.new()
 	hint.name = "Приборы"
-	hint.position = Vector2(24, 14) - Vector2(HINT_PAD, HINT_PAD * 0.5)
+	hint.position = HINT_POS
 	hint.add_theme_stylebox_override("normal", hint_backing())   # подложка: строки читаются поверх светлых плафонов (#139)
 	hint.add_theme_font_size_override("font_size", 24)
 	hint.add_theme_color_override("font_color", Color(0.75, 0.95, 1.0))
@@ -645,6 +645,7 @@ func step(dt: float) -> void:
 ## Подложка строк на приборах: тёмная полупрозрачная плашка с отступом HINT_PAD — белые плафоны потолка не съедают
 ## белый текст (issue #139), дно и лёд за ней видно.
 const HINT_PAD := 10.0
+const HINT_POS := Vector2(24, 14) - Vector2(HINT_PAD, HINT_PAD * 0.5)   ## верх-лево плашки на своём месте
 const HINT_BACKING := Color(0.02, 0.06, 0.08, 0.55)
 
 
@@ -1086,6 +1087,22 @@ func _update_ui() -> void:
 	var width := minf(900.0, get_viewport().get_visible_rect().size.x - 48.0)
 	hint.text = "\n".join(Status.lines(status_parts(),
 		func(t: String) -> float: return font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x, width))
+	var plate := Rect2(HINT_POS, hint.get_combined_minimum_size())
+	hint.position.y = AlarmBoard.status_y(plate, board_screen_rect())   # плашка под табло, а не поверх (#376)
+
+
+## Табло тревог на экране (AlarmBoard.screen_rect); пусто, если его нет в кадре.
+func board_screen_rect() -> Rect2:
+	var cam := get_viewport().get_camera_3d()
+	if cam == null or alarm_board == null or not alarm_board.is_inside_tree():
+		return Rect2()
+	var pts := PackedVector2Array()
+	var behind := false
+	for c in AlarmBoard.corners():
+		var g := alarm_board.to_global(c)
+		behind = behind or cam.is_position_behind(g)
+		pts.append(cam.unproject_position(g))
+	return AlarmBoard.screen_rect(pts, behind, get_viewport().get_visible_rect())
 
 
 ## Где на экране интерфейс, на который не ложится табличка товарища (#319): кнопки и открытые панели.

@@ -175,3 +175,40 @@ func test_board_after_leaving_sonar() -> void:
 	ok(y > plate, "верх табло (%.0f) ниже плашки приборов в четыре строки (%.0f)" % [y, plate])
 	main.queue_free()
 	await frames(1)
+
+
+func test_status_y() -> void:   # issue #376: плашка строк опускается под табло, если оно в верхней полосе
+	var plate := Rect2(14, 9, 850, 110)
+	eq(AlarmBoard.status_y(plate, Rect2()), 9.0, "табло вне кадра — плашка на месте")
+	eq(AlarmBoard.status_y(plate, Rect2(400, 250, 700, 30)), 9.0, "табло ниже плашки — на месте")
+	eq(AlarmBoard.status_y(plate, Rect2(900, 0, 600, 45)), 9.0, "табло правее плашки — на месте")
+	near(AlarmBoard.status_y(plate, Rect2(0, 0, 1600, 45)), 45.0 + AlarmBoard.STATUS_GAP, 1e-4, "плашка под табло")
+	eq(AlarmBoard.status_y(plate, Rect2(0, 0, 1600, 400)), 9.0, "табло на полэкрана — плашку не уводим вниз")
+	var view := Rect2(0, 0, 1600, 720)
+	var pts := PackedVector2Array([Vector2(-50, -30), Vector2(1700, -30), Vector2(-50, 45), Vector2(1700, 45)])
+	eq(AlarmBoard.screen_rect(pts, false, view), Rect2(0, 0, 1600, 45), "обрезано по кадру")
+	eq(AlarmBoard.screen_rect(pts, true, view), Rect2(), "угол за камерой — пусто")
+
+
+func test_status_not_over_board_at_helm() -> void:   # issue #376, шаг 23-helm-busy: игрок за креслом у окна
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.step(0.1)
+	var w := main.walker
+	w.x = 0.6
+	w.z = -3.3
+	w.yaw = 0.0
+	w.pitch = deg_to_rad(-10.0)
+	main.step(0.1)
+	await frames(1)
+	var cam := main.get_viewport().get_camera_3d()
+	var pts := PackedVector2Array()
+	for c in AlarmBoard.corners():
+		pts.append(cam.unproject_position(main.alarm_board.to_global(c)))
+	var board := AlarmBoard.screen_rect(pts, false, main.get_viewport().get_visible_rect())
+	ok(board.has_area() and board.position.y < Main.HINT_POS.y + 40.0, "табло в верхней полосе экрана: %s" % board)
+	var plate := Rect2(main.hint.position, main.hint.get_combined_minimum_size())
+	ok(not plate.intersects(board), "плашка строк %s не лежит на табло %s" % [plate, board])
+	main.queue_free()
+	await frames(1)

@@ -99,6 +99,43 @@ static func u_of(x: float) -> float:
 	return (x - CENTER.x + r.x * 0.5) / r.x
 
 
+## Плашка строки состояния и табло (#376): вблизи носового окна табло по перспективе уходит в верхнюю полосу экрана,
+## под строки приборов. Тогда плашку опускаем под нижний край табло (STATUS_GAP) — оба читаются. Если для этого
+## пришлось бы опустить её больше STATUS_MAX_SHIFT (смотрим на табло снизу, оно на полэкрана), плашка остаётся на месте.
+const STATUS_GAP := 6.0
+const STATUS_MAX_SHIFT := 140.0
+
+
+## Прямоугольник табло на экране по проекциям углов (`face_corners`); пусто, если угол за камерой или табло вне кадра.
+static func screen_rect(points: PackedVector2Array, behind: bool, view: Rect2) -> Rect2:
+	if behind or points.is_empty():
+		return Rect2()
+	var r := Rect2(points[0], Vector2.ZERO)
+	for p in points:
+		r = r.expand(p)
+	r = r.intersection(view)
+	return r if r.has_area() else Rect2()
+
+
+## Углы табло (по внешней рамке) в осях корабля.
+static func corners() -> Array[Vector3]:
+	var hw := SIZE.x * 0.5
+	var hh := SIZE.y * 0.5
+	var z := CENTER.z + SIZE.z * 0.5
+	return [Vector3(CENTER.x - hw, CENTER.y - hh, z), Vector3(CENTER.x + hw, CENTER.y - hh, z),
+		Vector3(CENTER.x - hw, CENTER.y + hh, z), Vector3(CENTER.x + hw, CENTER.y + hh, z)]
+
+
+## Верх плашки строки состояния: plate — плашка на своём месте, board — табло на экране (`screen_rect`).
+static func status_y(plate: Rect2, board: Rect2) -> float:
+	if not board.has_area() or not board.intersects(plate):
+		return plate.position.y
+	var y := board.end.y + STATUS_GAP
+	if y - plate.position.y > STATUS_MAX_SHIFT:
+		return plate.position.y
+	return maxf(y, plate.position.y)
+
+
 ## Подсказка к посту главной тревоги (ART-025, «таблица тревога → пост»): одна янтарная рамка у поста, который
 ## снимает главную тревогу. Стеклоуст — щиток разряда (`Zap.PANEL_POS`), мало заряда — пульт энергии, пробоина —
 ## место сварки (`Breach.active`; вода после заплатки откачивается сама — рамки нет), перегрев — кормовой люк мостика
