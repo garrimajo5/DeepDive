@@ -66,6 +66,10 @@ static func plating() -> ShaderMaterial:
 	m.set_shader_parameter("damage_tex", load(HullMesh.DAMAGE_TEX % "povrezhdeniya"))
 	m.set_shader_parameter("damage_lvl", load(HullMesh.DAMAGE_TEX % "povrezhdeniya-uroven"))
 	m.set_shader_parameter("damage_seam", HullMesh.DAMAGE_SEAM)
+	m.set_shader_parameter("alt_scale", HullMesh.DAMAGE_ALT_SCALE)
+	m.set_shader_parameter("alt_shift", HullMesh.DAMAGE_ALT_SHIFT)
+	m.set_shader_parameter("gate_cell", HullMesh.DAMAGE_CELL)
+	m.set_shader_parameter("gate_edge", HullMesh.DAMAGE_GATE)
 	m.set_shader_parameter("wear", 0.0)
 	return m
 
