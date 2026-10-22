@@ -553,3 +553,69 @@ func test_guest_shoal_follows_host() -> void:   # миры разошлись: �
 		if i > 30:
 			worst = maxf(worst, _live_center(gs).distance_to(_live_center(hs)))
 	ok(worst < 1.0, "центр стаи гостя рядом с хостовым: %.2f м" % worst)
+
+
+func test_coins_ride_to_guest() -> void:   # стайка монетников рядом едет гостю целиком: бегство, глазун, каждая рыбка
+	var h := _moss_world()
+	var hc := EcoLink.coins_of(h.systems)
+	var sc: EcoCoins.School = hc.schools[0]
+	sc.scatter = 1.5
+	sc.from = sc.center + Vector3(3, 0, 0)
+	sc.glazun.lunge = 0.6
+	sc.glazun.cd = 17.0
+	var dead := sc.members[0]
+	dead.alive = false
+	dead.respawn = 12.0
+	var c1 := sc.members[1]
+	c1.pos += Vector3(1, 0.5, -1)
+	c1.vel = Vector3(0.3, 0, 0.2)
+	c1.goal = c1.pos + Vector3(2, 0, 0)
+	c1.goal_t = 4.0
+	var d := EcoLink.pack_world(h.agents, h.systems, sc.center)
+	ok(d.has(float(EcoLink.NET_COINS)), "монетники в пакете")
+	var g := _moss_world()
+	var gc: EcoCoins.School = EcoLink.coins_of(g.systems).schools[0]
+	ok(gc.members[0].alive, "у гостя рыбка жива")
+	eq(EcoLink.apply_coins(g.systems, d), 1 + _schools_near(hc, sc.center), "стайки рядом поставлены")
+	ok(not gc.members[0].alive, "съеденная — съеденная")
+	near(gc.members[0].respawn, 12.0, 1e-4)
+	eq(gc.members[1].pos, c1.pos, "место как у хоста")
+	eq(gc.members[1].vel, c1.vel)
+	eq(gc.members[1].goal, c1.goal, "цель как у хоста")
+	near(gc.members[1].goal_t, 4.0, 1e-4)
+	near(gc.scatter, 1.5, 1e-4, "бегство как у хоста")
+	eq(gc.from, sc.from)
+	near(gc.glazun.lunge, 0.6, 1e-4, "бросок глазуна как у хоста")
+	near(gc.glazun.cd, 17.0, 1e-4)
+	# мох в том же пакете по-прежнему ставится; вдали монетников нет; старый пакет их не трогает
+	ok(EcoLink.apply_world(g.agents, g.systems, d) >= 1, "мох рядом поставлен")
+	ok(not EcoLink.pack_world(h.agents, h.systems, Vector3(5000, 0, 5000)).has(float(EcoLink.NET_COINS)), "вдали нет")
+	eq(EcoLink.apply_coins(g.systems, EcoLink.pack_near(h.agents, sc.center)), 0, "старый пакет — без монетников")
+
+
+func _schools_near(c: EcoCoins, p: Vector3) -> int:   # сколько других стаек тоже ближе NET_R
+	var n := -1
+	for s in c.schools:
+		if s.center.distance_to(p) <= EcoLink.NET_R:
+			n += 1
+	return n
+
+
+func test_guest_coins_follow_host() -> void:   # миры разошлись: с кадрами хоста монетники гостя там же, где у хоста
+	var h := _moss_world()
+	var g := _moss_world()
+	g.reset(EcoRandom.WORLD_SEED + 7)   # другой случай — другие цели
+	var hc := EcoLink.coins_of(h.systems)
+	var gc := EcoLink.coins_of(g.systems)
+	var worst := 0.0
+	for i in 600:   # 20 с по 1/30, кадр хоста — каждый третий шаг
+		h.step(1.0 / 30.0)
+		g.step(1.0 / 30.0)
+		if i % 3 == 0:
+			EcoLink.apply_world(g.agents, g.systems, EcoLink.pack_world(h.agents, h.systems, hc.schools[0].center))
+		if i > 30:
+			for k in hc.coins.size():
+				if hc.coins[k].alive and gc.coins[k].alive \
+						and hc.schools[hc.coins[k].school].center.distance_to(hc.schools[0].center) <= EcoLink.NET_R:
+					worst = maxf(worst, hc.coins[k].pos.distance_to(gc.coins[k].pos))
+	ok(worst < 0.6, "монетник гостя рядом с хостовым: %.2f м" % worst)

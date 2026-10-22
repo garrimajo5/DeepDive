@@ -204,7 +204,8 @@ static func fish_of(systems: Array) -> EcoFish:
 
 
 ## Пакет «существа рядом» вместе с мхом и стаями: `pack_near`, затем NET_MOSS и пятна мха ближе radius
-## (по горизонтали), затем NET_SHOAL и стаи светляков, центр которых ближе radius.
+## (по горизонтали), затем NET_SHOAL и стаи светляков, центр которых ближе radius, затем NET_COINS и стайки
+## монетников ближе radius.
 static func pack_world(agents: Array[EcoAgent], systems: Array, center: Vector3,
 		radius: float = NET_R) -> PackedFloat32Array:
 	var out := pack_near(agents, center, radius)
@@ -229,6 +230,15 @@ static func pack_world(agents: Array[EcoAgent], systems: Array, center: Vector3,
 	if not sh_out.is_empty():
 		out.append(NET_SHOAL)
 		out.append_array(sh_out)
+	var coins := coins_of(systems)
+	var cn_out := PackedFloat32Array()
+	if coins != null:
+		for sc in coins.schools:
+			if sc.center.distance_to(center) <= radius:
+				cn_out.append_array(pack_school(sc))
+	if not cn_out.is_empty():
+		out.append(NET_COINS)
+		out.append_array(cn_out)
 	return out
 
 
@@ -249,6 +259,7 @@ static func apply_world(agents: Array[EcoAgent], systems: Array, data: PackedFlo
 			all[i].food = clampf(moss[k + 1], 0.0, 1.0)
 			n += 1
 	apply_shoals(agents, systems, data)
+	apply_coins(systems, data)
 	return n
 
 
@@ -297,6 +308,70 @@ static func apply_shoals(agents: Array[EcoAgent], systems: Array, data: PackedFl
 	return n
 
 
+## Монетники у гостя (`EcoCoins`): рыбки не в `agents`, цели и бегство гость считал бы своим случаем, а глазун
+## у гостя ел бы других рыбок — стайка ближе radius едет целиком после стай: метка NET_COINS и по NET_COINS_STRIDE
+## чисел на стайку — номер, секунды бегства, от чего бежит, бросок и ожидание глазуна, затем на каждого из PER
+## монетников NET_COIN_STRIDE чисел: −1 у живого или секунды до появления у съеденного, место, скорость, цель,
+## секунды до новой цели.
+const NET_COINS := -3
+const NET_COIN_STRIDE := 11
+const NET_COINS_STRIDE := 7 + EcoCoins.PER * NET_COIN_STRIDE
+
+
+## Монетники из списка систем мира или null.
+static func coins_of(systems: Array) -> EcoCoins:
+	for s in systems:
+		if s is EcoCoins:
+			return s
+	return null
+
+
+## Запись стайки монетников для пакета (NET_COINS_STRIDE чисел).
+static func pack_school(sc: EcoCoins.School) -> PackedFloat32Array:
+	var gz := sc.glazun
+	var out := PackedFloat32Array([sc.index, sc.scatter, sc.from.x, sc.from.y, sc.from.z,
+		gz.lunge if gz else 0.0, gz.cd if gz else 0.0])
+	for k in EcoCoins.PER:
+		if k >= sc.members.size():
+			out.append_array([-1.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+			continue
+		var c := sc.members[k]
+		out.append_array([-1.0 if c.alive else maxf(c.respawn, 0.0), c.pos.x, c.pos.y, c.pos.z,
+			c.vel.x, c.vel.y, c.vel.z, c.goal.x, c.goal.y, c.goal.z, c.goal_t])
+	return out
+
+
+## Стайки монетников из пакета `pack_world`: бегство, глазун и каждый монетник — как у хоста. Возвращает, сколько
+## стаек поставлено.
+static func apply_coins(systems: Array, data: PackedFloat32Array) -> int:
+	var part := _section(data, NET_COINS)
+	var coins := coins_of(systems)
+	if part.is_empty() or coins == null:
+		return 0
+	var n := 0
+	for k in range(0, part.size() - NET_COINS_STRIDE + 1, NET_COINS_STRIDE):
+		var si := int(part[k])
+		if si < 0 or si >= coins.schools.size():
+			continue
+		var sc: EcoCoins.School = coins.schools[si]
+		sc.scatter = part[k + 1]
+		sc.from = Vector3(part[k + 2], part[k + 3], part[k + 4])
+		if sc.glazun:
+			sc.glazun.lunge = part[k + 5]
+			sc.glazun.cd = part[k + 6]
+		for j in mini(EcoCoins.PER, sc.members.size()):
+			var b := k + 7 + j * NET_COIN_STRIDE
+			var c := sc.members[j]
+			c.alive = part[b] < 0.0
+			c.respawn = 0.0 if c.alive else part[b]
+			c.pos = Vector3(part[b + 1], part[b + 2], part[b + 3])
+			c.vel = Vector3(part[b + 4], part[b + 5], part[b + 6])
+			c.goal = Vector3(part[b + 7], part[b + 8], part[b + 9])
+			c.goal_t = part[b + 10]
+		n += 1
+	return n
+
+
 ## Часть пакета `pack_world` после метки marker (без неё) до следующей метки: метки стоят на месте номера записи,
 ## номера записей не меньше нуля. Нет такой части — пусто.
 static func _section(data: PackedFloat32Array, marker: int) -> PackedFloat32Array:
@@ -305,13 +380,25 @@ static func _section(data: PackedFloat32Array, marker: int) -> PackedFloat32Arra
 		k += NET_STRIDE
 	while k < data.size():
 		var m := int(data[k])
-		var step := NET_MOSS_STRIDE if m == NET_MOSS else NET_SHOAL_STRIDE
+		var step := _stride(m)
+		if step <= 0:
+			break
 		var start := k + 1
 		k = start
 		while k + step <= data.size() and int(data[k]) >= 0:
 			k += step
 		if m == marker:
 			return data.slice(start, k)
-		if m != NET_MOSS and m != NET_SHOAL:
-			break
 	return PackedFloat32Array()
+
+
+## Чисел на запись в части пакета после метки marker; 0 — метка незнакомая.
+static func _stride(marker: int) -> int:
+	match marker:
+		NET_MOSS:
+			return NET_MOSS_STRIDE
+		NET_SHOAL:
+			return NET_SHOAL_STRIDE
+		NET_COINS:
+			return NET_COINS_STRIDE
+	return 0
