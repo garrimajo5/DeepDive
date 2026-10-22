@@ -7,6 +7,7 @@ const LAYER_WORLD := 1   ## слой отмели: её освещает све�
 const LAYER_SHIP := 2    ## слой корабля изнутри: только свои лампы
 
 var seabed: MeshInstance3D
+var seabed_mat: ShaderMaterial   # материал дна: каустики и свет по глубине задаём отсюда
 var ice: MeshInstance3D
 var sun: DirectionalLight3D
 var snow: CPUParticles3D
@@ -19,6 +20,8 @@ func _ready() -> void:
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, Seabed.build_arrays())
 	var m := ShaderMaterial.new()   # цвет вершин + процедурная детализация дна (shaders/seabed.gdshader)
 	m.shader = load("res://shaders/seabed.gdshader")
+	m.set_shader_parameter("caustic", 0.6)   # каустики включены; уровень «Экономно» выключит (ART-044)
+	seabed_mat = m
 	mesh.surface_set_material(0, m)
 	seabed.mesh = mesh
 	seabed.layers = LAYER_WORLD
@@ -99,4 +102,6 @@ func apply_water(env: Environment, depth: float, around: Vector3, silt: float = 
 	env.ambient_light_color = Color(0.55, 0.75, 0.8)
 	env.ambient_light_energy = Seabed.Water.ambient(depth) * 0.7
 	sun.light_energy = Seabed.Water.sun(depth) * 1.2
+	# Каустики на дне гаснут по глубине (меньше света сквозь лёд) и в облаке ила (свет рассеивается).
+	seabed_mat.set_shader_parameter("light", clampf(Seabed.Water.sun(depth) * (1.0 - 0.85 * silt), 0.0, 1.0))
 	snow.position = around
