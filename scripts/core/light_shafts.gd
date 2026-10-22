@@ -13,8 +13,7 @@ const LEN_MAX := 42.0
 const TOP_D := Vector2(0.8, 2.0)    ## диаметр у льда, м
 const BOT_D := Vector2(5.0, 13.0)   ## диаметр внизу, м
 const TILT_MAX := 8.0               ## наклон, градусы
-const CRACKS := 0.012               ## частота поля трещин: шахты стоят группами, не решёткой
-const CRACK_MIN := 0.5              ## порог поля трещин
+const CRACK_MIN := 0.5              ## порог открытости сети трещин (`IceSheet.gate`): шахты стоят группами
 const EDGE_X := 160.0               ## Край отмели: за ним дно уходит вниз (Seabed.height), шахты гаснут
 const EDGE_BAND := 20.0             ## полоса гашения у Края, м
 const FLOOR_FADE := 3.0             ## обрыв по дну: затухание 2–4 м
@@ -63,9 +62,27 @@ static func edge_k(x: float) -> float:
 	return 1.0 - HashNoise.smooth(EDGE_X - EDGE_BAND, EDGE_X, x)
 
 
-## Поле трещин 0…1: где оно выше порога, во льду есть трещины. Столб «Светового колодца» — свой (поток Б, ART-031).
+## Поле трещин 0…1: где сеть трещин льда открыта (`IceSheet.gate`, ART-056) — там шахты стоят группами.
+## Столб «Светового колодца» — свой (поток Б, ART-031).
 static func cracks(x: float, z: float) -> float:
-	return HashNoise.value(x * CRACKS + 11.3, z * CRACKS - 4.7)
+	return IceSheet.gate(x, z)
+
+
+## Основание шахты в клетке: точка сетки 1 м в пределах ±JITTER от центра, где маска трещин льда сильнее всего
+## (ART-056: выше `IceSheet.SHAFT_MASK`). Нет такой — Vector2.INF.
+static func base(cx: float, cz: float) -> Vector2:
+	var best := IceSheet.SHAFT_MASK
+	var at := Vector2.INF
+	var n := int(JITTER) * 2
+	for j in n + 1:
+		for i in n + 1:
+			var x := cx - JITTER + i
+			var z := cz - JITTER + j
+			var m := IceSheet.crack(x, z)
+			if m > best:
+				best = m
+				at = Vector2(x, z)
+	return at
 
 
 ## Все шахты отмели (детерминированно). size — сторона карты, ground — высота дна (x, z) → y.
@@ -85,10 +102,11 @@ static func layout(size: float = Seabed.SIZE, ground: Callable = Seabed.height) 
 			if e <= 0.0:
 				continue
 			var s := Shaft.new()
-			var hx := HashNoise.hash2(i * 3 + 1, j * 7 + 2)
-			var hz := HashNoise.hash2(i * 5 + 3, j * 11 + 4)
-			var x := cx + (hx * 2.0 - 1.0) * JITTER
-			var z := cz + (hz * 2.0 - 1.0) * JITTER
+			var at := base(cx, cz)   # верх шахты — на трещине льда (ART-056)
+			if at == Vector2.INF:
+				continue
+			var x := at.x
+			var z := at.y
 			var floor_y := float(ground.call(x, z))
 			s.top = Vector3(x, Seabed.ICE_Y, z)
 			s.floor_y = floor_y
