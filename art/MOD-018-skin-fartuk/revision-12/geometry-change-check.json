@@ -1,0 +1,68 @@
+[
+  {
+    "name": "gear-fartuk-m",
+    "max_displacement": 0.10727495962585074,
+    "turned_over_90_degrees": [
+      263,
+      265,
+      268,
+      269,
+      316,
+      319,
+      326,
+      330,
+      382
+    ],
+    "degenerate_faces": [],
+    "old_degenerate_faces": []
+  },
+  {
+    "name": "gear-fartuk-zh",
+    "max_displacement": 0.16632656752361996,
+    "turned_over_90_degrees": [
+      322,
+      323,
+      343,
+      385,
+      401,
+      403,
+      444
+    ],
+    "degenerate_faces": [],
+    "old_degenerate_faces": []
+  },
+  {
+    "name": "gear-tunika-m",
+    "max_displacement": 0.12062590441370921,
+    "turned_over_90_degrees": [
+      256,
+      462,
+      464,
+      467,
+      468,
+      515,
+      518,
+      525,
+      529
+    ],
+    "degenerate_faces": [
+      437
+    ],
+    "old_degenerate_faces": [
+      437
+    ]
+  },
+  {
+    "name": "gear-tunika-zh",
+    "max_displacement": 0.16632656752361996,
+    "turned_over_90_degrees": [
+      471,
+      472,
+      533,
+      551,
+      553
+    ],
+    "degenerate_faces": [],
+    "old_degenerate_faces": []
+  }
+]
