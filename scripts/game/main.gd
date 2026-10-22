@@ -1648,6 +1648,7 @@ func debug_setup(kv: Dictionary) -> void:
 		vitals.hull = float(kv["hull"])
 	if kv.get("relief", "1") == "0":  # relief=0 — обшивка без рельефа ART-053 («Экономно»)
 		hull.set_relief(false)
+		bridge.set_relief(false)   # и карты мостика ART-054
 	if kv.has("energy"):  # energy=<ед.> — заряд корабля (меньше 20 — «МАЛО ЗАРЯДА» на табло)
 		vitals.energy = float(kv["energy"])
 	if kv.get("drain", "0") == "1":  # drain=1 — стеклоуст на корпусе (табло и рамка у щитка разряда)
