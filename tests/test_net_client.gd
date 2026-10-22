@@ -14,6 +14,7 @@ var h_reactor := Reactor.new()
 var h_vitals := Vitals.new()
 var h_crew: Array = []
 var h_ev := {}   ## события в кадре хоста (NetSnap.events)
+var h_eco := PackedFloat32Array()   ## существа рядом в кадре хоста (EcoLink.pack_near)
 
 
 func before() -> void:
@@ -54,7 +55,10 @@ func _host_tick(send := true) -> void:
 			h_crew.append(m)
 			guest.index = 1
 	if send and host.due(DT):
-		host.send_frame(NetSnap.frame(host.seq, 0.0, h_helm, h_reactor, h_vitals, false, h_crew, h_ev))
+		var f := NetSnap.frame(host.seq, 0.0, h_helm, h_reactor, h_vitals, false, h_crew, h_ev)
+		if not h_eco.is_empty():
+			f["eco"] = h_eco
+		host.send_frame(f)
 
 
 ## Шаги хоста и клиента, пока cond не true (до 3 с настоящего времени).
@@ -228,3 +232,25 @@ func test_route_vote_and_result_from_host() -> void:   # маршрут, гол�
 	ok(_pump(func() -> bool: return main.sonar_view.vote.board.visible), "итог над столом")
 	(h_crew[1] as Crew.Member).at_vote = false
 	ok(_pump(func() -> bool: return not main.vote_panel.visible), "отошёл от стола — панели нет")
+
+
+func test_creatures_near_from_host() -> void:   # живой мир у гостя: существа рядом встают по кадру хоста
+	ok(_pump(func() -> bool: return main.net_seq > 0), "кадр принят")
+	var agents := main.eco.world.agents
+	ok(agents.size() > 3, "у гостя свой мир по зерну")
+	var i := 3
+	var a: EcoAgent = agents[i]
+	var t0 := main.eco.world.time
+	# мир хоста: то же существо в другом месте, удирает
+	var hw: Array[EcoAgent] = []
+	for k in i + 1:
+		hw.append(EcoAgent.new(agents[k].species, agents[k].p))
+	var want := h_helm.pos + Vector3(4, 1, -6)
+	hw[i].p = want
+	hw[i].v = Vector3(0.5, 0, 0)
+	hw[i].set_state(EcoAgent.State.FLEE)
+	h_eco = EcoLink.pack_near(hw, h_helm.pos)
+	ok(_pump(func() -> bool: return a.p.distance_to(want) < 0.2), "существо встало, где у хоста")
+	eq(a.state, EcoAgent.State.FLEE, "состояние как у хоста")
+	ok(main.eco.world.time > t0, "мир гостя идёт сам")
+	h_eco = PackedFloat32Array()
