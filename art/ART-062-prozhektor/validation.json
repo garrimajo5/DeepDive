@@ -1,0 +1,42 @@
+{
+  "prozhektor-maska.png": {
+    "mode": "L",
+    "size": [
+      512,
+      512
+    ],
+    "bytes": 51820,
+    "min": 0,
+    "max": 254,
+    "mean": 42.18989944458008
+  },
+  "prozhektor-luch.png": {
+    "mode": "L",
+    "size": [
+      256,
+      512
+    ],
+    "bytes": 26369,
+    "min": 40,
+    "max": 224,
+    "mean": 132.3319320678711
+  },
+  "45": {
+    "capture_log": [
+      "BASE draws 106.0",
+      "NEW draws 106.0 depth 45.0 silt 0.0"
+    ]
+  },
+  "90": {
+    "capture_log": [
+      "BASE draws 104.0",
+      "NEW draws 104.0 depth 90.0 silt 0.0"
+    ]
+  },
+  "il": {
+    "capture_log": [
+      "BASE draws 107.0",
+      "NEW draws 107.0 depth 45.0 silt 0.67981868420458"
+    ]
+  }
+}

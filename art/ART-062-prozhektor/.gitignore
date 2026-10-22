@@ -1,0 +1,4 @@
+*.log
+source/*-base.png
+source/*-new.png
+source/*-off.png
