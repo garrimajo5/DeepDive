@@ -63,3 +63,62 @@ func test_seabed_uses_detail_shader() -> void:
 	if mat is ShaderMaterial and (mat as ShaderMaterial).shader:
 		ok((mat as ShaderMaterial).shader.code.contains("Дно отмели"), "назначен шейдер дна")
 	ov.queue_free()
+
+
+## ART-059: ключи таблицы совпадают с принятым `voda-glubina.json` и стоят как есть.
+func test_water_keys_from_art059() -> void:
+	var f := FileAccess.open("res://docs/concept-art/voda-glubina.json", FileAccess.READ)
+	ok(f != null, "voda-glubina.json читается")
+	var keys: Array = JSON.parse_string(f.get_as_text())
+	eq(keys.size(), Seabed.Water.KEYS.size(), "десять ключей")
+	for key in keys:
+		var d: float = key["depth"]
+		var c := Color(key["fog"])
+		ok(Seabed.Water.fog_color(d).is_equal_approx(c), "цвет на %d м" % d)
+		near(Seabed.Water.fog_density(d), key["density"], 1e-6, "плотность на %d м" % d)
+		near(Seabed.Water.ambient(d), key["ambient"], 1e-6, "рассеянный на %d м" % d)
+		near(Seabed.Water.sun(d), key["sun"], 1e-6, "солнце на %d м" % d)
+		near(Seabed.Water.exposure(d), key["exposure"], 1e-6, "экспозиция на %d м" % d)
+
+
+func test_water_smooth_and_clamped() -> void:
+	var prev_v := 2.0
+	var prev_amb := 2.0
+	var worst := 0.0
+	var d := 0.0
+	while d <= 130.0:
+		var c := Seabed.Water.fog_color(d)
+		ok(c.v <= prev_v + 1e-6, "цвет не светлеет вглубь (%.1f м)" % d)
+		ok(Seabed.Water.ambient(d) <= prev_amb + 1e-9, "рассеянный не растёт (%.1f м)" % d)
+		if prev_v < 2.0:
+			worst = maxf(worst, prev_v - c.v)
+		prev_v = c.v
+		prev_amb = Seabed.Water.ambient(d)
+		d += 0.5
+	ok(worst < 0.02, "без скачков: шаг яркости за 0,5 м %.4f" % worst)
+	near(Seabed.Water.sun(200.0), Seabed.Water.sun(120.0), 1e-9, "ниже 120 м — как на 120")
+	near(Seabed.Water.ambient(-3.0), Seabed.Water.ambient(0.0), 1e-9, "выше льда — как у льда")
+	# цвет между ключами смешан в линейном свете: середина темнее, чем среднее sRGB
+	var a := Seabed.Water.fog_color(90.0)
+	var b := Seabed.Water.fog_color(60.0)
+	var mid := Seabed.Water.fog_color(75.0)
+	near(mid.srgb_to_linear().b, (a.srgb_to_linear().b + b.srgb_to_linear().b) / 2.0, 1e-4, "середина — в линейном")
+
+
+## OceanView.apply_water ставит конечные значения без прежних множителей 0,9 / 0,7 / 1,2.
+func test_apply_water_final_values() -> void:
+	var ov := OceanView.new()
+	tree.root.add_child(ov)
+	await frames(1)
+	var env := Environment.new()
+	for depth in [8.0, 20.0, 45.0, 90.0]:
+		ov.apply_water(env, depth, Vector3.ZERO)
+		near(env.fog_density, Seabed.Water.fog_density(depth), 1e-6, "туман на %d м" % depth)
+		near(env.ambient_light_energy, Seabed.Water.ambient(depth), 1e-6, "рассеянный на %d м" % depth)
+		near(env.tonemap_exposure, Seabed.Water.exposure(depth), 1e-6, "экспозиция на %d м" % depth)
+		near(ov.sun.light_energy, Seabed.Water.sun(depth), 1e-6, "солнце на %d м" % depth)
+	ov.apply_water(env, 20.0, Vector3.ZERO, 1.0)
+	near(env.fog_density, Seabed.Water.fog_density(20.0) + 0.03, 1e-6, "ил гуще на 0,03 (ART-048)")
+	ok(env.fog_light_color.is_equal_approx(Seabed.Water.fog_color(20.0).lerp(Silt.FAR_COLOR, 0.75)), "ил главнее цвета глубины")
+	ov.queue_free()
+	await frames(1)
