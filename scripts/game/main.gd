@@ -394,7 +394,11 @@ func _build_world() -> void:
 	env = Environment.new()
 	env.background_mode = Environment.BG_COLOR
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	# Тонмаппинг ACES: киношная свёртка ярких мест (мягкий перекат светов против пересвета мелководья),
+	# экспозиция чуть приглушена под «таинственную глубину».
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	env.tonemap_exposure = 0.9
+	env.tonemap_white = 6.0
 	# Свечение биолюминесценции (Forward Mobile): цветут только яркие места (огни текстур #67DDEB, вспышки)
 	env.glow_enabled = true
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
@@ -402,15 +406,14 @@ func _build_world() -> void:
 	env.glow_intensity = 1.1
 	env.glow_bloom = 0.22
 	env.glow_strength = 1.15
-	# SSAO (Forward Mobile): затенение в щелях и под объектами — вес и «реальность» подводного мира
-	env.ssao_enabled = true
-	env.ssao_radius = 1.5
-	env.ssao_intensity = 1.6
-	env.ssao_power = 1.5
-	# SSIL (Forward Mobile): отражённый свет — цвет перетекает между близкими поверхностями, мягче и реалистичнее
-	env.ssil_enabled = true
-	env.ssil_radius = 2.0
-	env.ssil_intensity = 1.2
+	# Цветокоррекция «таинственной глубины»: лёгкий контраст и насыщение, чуть холоднее — без пост-эффектов,
+	# работает на Forward Mobile. (SSAO/SSIL убраны: на Forward Mobile не поддерживаются — SSAO только Forward+/
+	# Compatibility, SSIL только Forward+; «вес» объектам дают тени от света сквозь лёд, а щели/ободок — шейдеры
+	# на «героях», этап 3. Для уровня «Красиво» на Forward+ их можно вернуть за флагом ART-044.)
+	env.adjustment_enabled = true
+	env.adjustment_brightness = 1.0
+	env.adjustment_contrast = 1.08
+	env.adjustment_saturation = 1.06
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
