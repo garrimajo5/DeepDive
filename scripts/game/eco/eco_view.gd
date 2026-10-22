@@ -410,7 +410,7 @@ func step_client(dt: float, ship: EcoLink.ShipState, near: PackedFloat32Array = 
 	world.step(dt)
 	world.take_link()
 	if not near.is_empty():
-		EcoLink.apply_world(world.agents, world.systems, near)
+		EcoLink.apply_world(world.agents, world.systems, near, world)
 	_sync(ship)
 
 

@@ -205,9 +205,11 @@ static func fish_of(systems: Array) -> EcoFish:
 
 ## Пакет «существа рядом» вместе с мхом и стаями: `pack_near`, затем NET_MOSS и пятна мха ближе radius
 ## (по горизонтали), затем NET_SHOAL и стаи светляков, центр которых ближе radius, затем NET_COINS и стайки
-## монетников ближе radius, затем NET_KELP и рощи ленточника с шипоежами ближе radius (по горизонтали).
+## монетников ближе radius, затем NET_KELP и рощи ленточника с шипоежами ближе radius (по горизонтали), затем
+## NET_RADUZH и стаи радужников ближе radius, NET_PLANKTON и облака планктона ближе radius, которые ещё светятся,
+## и NET_TIME — время мира хоста (time ≥ 0; по нему у гостя дрейфуют стаи, облака и клетки в шейдере).
 static func pack_world(agents: Array[EcoAgent], systems: Array, center: Vector3,
-		radius: float = NET_R) -> PackedFloat32Array:
+		radius: float = NET_R, time: float = -1.0) -> PackedFloat32Array:
 	var out := pack_near(agents, center, radius)
 	var moss := PackedFloat32Array()
 	var i := 0
@@ -248,12 +250,40 @@ static func pack_world(agents: Array[EcoAgent], systems: Array, center: Vector3,
 	if not kl_out.is_empty():
 		out.append(NET_KELP)
 		out.append_array(kl_out)
+	var rd := raduzh_of(systems)
+	var rd_out := PackedFloat32Array()
+	if rd != null:
+		for sw in rd.swarms:
+			if sw.c.distance_to(center) <= radius:
+				rd_out.append_array([sw.index, sw.glow, 1.0 if sw.lit else 0.0])
+	if not rd_out.is_empty():
+		out.append(NET_RADUZH)
+		out.append_array(rd_out)
+	var pl := plankton_of(systems)
+	var pl_out := PackedFloat32Array()
+	if pl != null and time >= 0.0:
+		for cl in pl.clouds:
+			if cl.c.distance_to(center) <= radius + EcoPlankton.R and time - cl.cut_at < PLANKTON_FADE:
+				pl_out.append_array(pack_cloud(cl, time))
+	if not pl_out.is_empty():
+		out.append(NET_PLANKTON)
+		out.append_array(pl_out)
+	if time >= 0.0:
+		out.append(NET_TIME)
+		out.append(time)
 	return out
 
 
 ## Поставить гостю существ, мох и стаи по пакету `pack_world` (старый пакет без мха и стай — только существа).
-## Возвращает, сколько пятен мха поставлено; стаи — `apply_shoals`.
-static func apply_world(agents: Array[EcoAgent], systems: Array, data: PackedFloat32Array) -> int:
+## Возвращает, сколько пятен мха поставлено; стаи — `apply_shoals`. world — мир гостя: его время подтягивается
+## к хостовому (`synced_time`) до вспышек, иначе вспышки ставятся по времени из пакета.
+static func apply_world(agents: Array[EcoAgent], systems: Array, data: PackedFloat32Array,
+		world: EcoWorld = null) -> int:
+	var host_t := net_time(data)
+	var now := host_t
+	if world != null:
+		world.time = synced_time(world.time, host_t)
+		now = world.time
 	apply_near(agents, data)
 	var moss := _section(data, NET_MOSS)
 	var n := 0
@@ -270,6 +300,9 @@ static func apply_world(agents: Array[EcoAgent], systems: Array, data: PackedFlo
 	apply_shoals(agents, systems, data)
 	apply_coins(systems, data)
 	apply_kelp(systems, data)
+	apply_raduzh(systems, data, now)
+	if now >= 0.0:
+		apply_plankton(systems, data, now)
 	return n
 
 
@@ -459,6 +492,140 @@ static func apply_kelp(systems: Array, data: PackedFloat32Array) -> int:
 	return n
 
 
+## Вспышки у гостя. Радужники (`EcoRaduzh`) вспыхивают в луче, а луч и время у гостя чуть свои — стая ближе
+## radius едет после рощ: метка NET_RADUZH и по NET_RADUZH_STRIDE чисел — номер, вспышка 0…1, задевает ли луч (1/0).
+## Планктон (`EcoPlankton`) зажигают корабль, серпохвосты и ледокрылы, а 360 клеток облака гость зажёг бы своим
+## расчётом — облако ближе radius (+R), которое режут или которое ещё светится (PLANKTON_FADE после последнего
+## разреза), едет целиком: метка NET_PLANKTON и по NET_PLANKTON_STRIDE чисел — номер, секунды с последнего разреза,
+## след корабля, клеток серпохвоста, затем по три клетки в числе: байт клетки — возраст вспышки шагами NET_AGE_Q
+## (0…62; 63 — не светится) + 64 × кто зажёг (`EcoPlankton.By`). Время мира хоста — метка NET_TIME и одно число:
+## дрейф стай и облаков считается по времени, и без него у гостя они плыли бы в другом месте.
+const NET_RADUZH := -5
+const NET_RADUZH_STRIDE := 3
+const NET_PLANKTON := -6
+const NET_PLANKTON_STRIDE := 4 + EcoPlankton.PER_CLOUD / 3
+const NET_TIME := -7
+const NET_AGE_Q := 0.05
+const NET_AGE_NONE := 63
+## Облако светится столько секунд после последней вспышки клетки (яркость гаснет до нуля).
+const PLANKTON_FADE := 1.0 / EcoPlankton.GLOW_DOWN
+## Время гостя тянется к хостовому: разница больше TIME_SNAP — сразу, меньше — на долю TIME_EASE за пакет
+## (без рывков назад на каждом кадре).
+const TIME_SNAP := 1.0
+const TIME_EASE := 0.25
+
+
+## Радужники из списка систем мира или null.
+static func raduzh_of(systems: Array) -> EcoRaduzh:
+	for s in systems:
+		if s is EcoRaduzh:
+			return s
+	return null
+
+
+## Планктон из списка систем мира или null.
+static func plankton_of(systems: Array) -> EcoPlankton:
+	for s in systems:
+		if s is EcoPlankton:
+			return s
+	return null
+
+
+## Время мира хоста из пакета `pack_world`; нет — −1.
+static func net_time(data: PackedFloat32Array) -> float:
+	var part := _section(data, NET_TIME)
+	return part[0] if not part.is_empty() else -1.0
+
+
+## Время гостя после пакета с временем хоста host (−1 — пакета без времени: своё).
+static func synced_time(local: float, host: float) -> float:
+	if host < 0.0:
+		return local
+	var d := host - local
+	return host if absf(d) > TIME_SNAP else local + d * TIME_EASE
+
+
+## Запись облака для пакета (NET_PLANKTON_STRIDE чисел) в момент мира t.
+static func pack_cloud(cl: EcoPlankton.Cloud, t: float) -> PackedFloat32Array:
+	var out := PackedFloat32Array([cl.index, maxf(t - cl.cut_at, 0.0), cl.ship, cl.pred_lit])
+	for k in range(0, EcoPlankton.PER_CLOUD, 3):
+		var v := 0
+		for j in 3:
+			v += _cell_byte(cl, k + j, t) << (8 * j)
+		out.append(v)
+	return out
+
+
+static func _cell_byte(cl: EcoPlankton.Cloud, k: int, t: float) -> int:
+	var age := t - cl.lit_at[k]   # lit_at хранится в float32 — вспышка этого шага бывает чуть «в будущем»
+	if age < -NET_AGE_Q or age >= PLANKTON_FADE:
+		return NET_AGE_NONE
+	return clampi(roundi(age / NET_AGE_Q), 0, NET_AGE_NONE - 1) + 64 * (cl.by[k] & 3)
+
+
+## Стаи радужников из пакета `pack_world`: вспышка и луч как у хоста, центр — по времени гостя. Возвращает, сколько
+## стай поставлено.
+static func apply_raduzh(systems: Array, data: PackedFloat32Array, now: float = -1.0) -> int:
+	var part := _section(data, NET_RADUZH)
+	var rd := raduzh_of(systems)
+	if part.is_empty() or rd == null:
+		return 0
+	var n := 0
+	for k in range(0, part.size() - NET_RADUZH_STRIDE + 1, NET_RADUZH_STRIDE):
+		var i := int(part[k])
+		if i < 0 or i >= rd.swarms.size():
+			continue
+		var sw: EcoRaduzh.Swarm = rd.swarms[i]
+		sw.glow = clampf(part[k + 1], 0.0, 1.0)
+		sw.lit = part[k + 2] > 0.5
+		if now >= 0.0:
+			sw.c = EcoRaduzh.center(sw, now)
+		n += 1
+	rd.flare = 0.0
+	rd.flare_swarm = null
+	for sw in rd.swarms:
+		if sw.glow > rd.flare:
+			rd.flare = sw.glow
+			rd.flare_swarm = sw
+	return n
+
+
+## Облака планктона из пакета `pack_world` в момент мира гостя now: вспышка каждой клетки и кто её зажёг, след
+## корабля — как у хоста; вид переписывает буфер (`version`). Возвращает, сколько облаков поставлено.
+static func apply_plankton(systems: Array, data: PackedFloat32Array, now: float) -> int:
+	var part := _section(data, NET_PLANKTON)
+	var pl := plankton_of(systems)
+	if part.is_empty() or pl == null:
+		return 0
+	var n := 0
+	for k in range(0, part.size() - NET_PLANKTON_STRIDE + 1, NET_PLANKTON_STRIDE):
+		var i := int(part[k])
+		if i < 0 or i >= pl.clouds.size():
+			continue
+		var cl: EcoPlankton.Cloud = pl.clouds[i]
+		cl.cut_at = now - part[k + 1]
+		cl.ship = clampf(part[k + 2], 0.0, 1.0)
+		cl.pred_lit = int(part[k + 3])
+		cl.c = EcoPlankton.center(cl, now)
+		for j in range(0, EcoPlankton.PER_CLOUD, 3):
+			var v := int(part[k + 4 + j / 3])
+			for b in 3:
+				var byte := (v >> (8 * b)) & 0xFF
+				var q := byte & 63
+				if q >= NET_AGE_NONE:
+					cl.lit_at[j + b] = -99.0
+					cl.by[j + b] = EcoPlankton.By.NONE
+				else:
+					cl.lit_at[j + b] = now - q * NET_AGE_Q
+					cl.by[j + b] = byte >> 6
+		cl.version += 1
+		n += 1
+	pl.wake = 0.0
+	for cl in pl.clouds:
+		pl.wake = maxf(pl.wake, cl.ship)
+	return n
+
+
 ## Часть пакета `pack_world` после метки marker (без неё) до следующей метки: метки стоят на месте номера записи,
 ## номера записей не меньше нуля. Нет такой части — пусто.
 static func _section(data: PackedFloat32Array, marker: int) -> PackedFloat32Array:
@@ -490,4 +657,10 @@ static func _stride(marker: int) -> int:
 			return NET_COINS_STRIDE
 		NET_KELP:
 			return NET_KELP_STRIDE
+		NET_RADUZH:
+			return NET_RADUZH_STRIDE
+		NET_PLANKTON:
+			return NET_PLANKTON_STRIDE
+		NET_TIME:
+			return 1
 	return 0
