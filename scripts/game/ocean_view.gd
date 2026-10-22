@@ -13,6 +13,7 @@ var ice_mat: ShaderMaterial   # лёд ART-056: свечение, контрас
 var ice_relief := true         # «Экономно» — без нормалей льда (set_relief)
 var sun: DirectionalLight3D
 var snow: CPUParticles3D
+var snow_mat: ShaderMaterial   # взвесь ART-058: атлас, доли кадров, вращение
 var shafts: MultiMeshInstance3D   # лучи сквозь трещины льда (ART-052)
 var shafts_mat: ShaderMaterial
 var shaft_list: Array[LightShafts.Shaft] = []
@@ -82,6 +83,13 @@ func _ready() -> void:
 
 	snow = _make_snow()
 	add_child(snow)
+	get_viewport().size_changed.connect(_fit_snow)
+	_fit_snow()
+
+
+## Высота кадра для взвеси: мельче 1,6 px карточка не становится — бледнеет (`marine_snow.gdshader`).
+func _fit_snow() -> void:
+	snow_mat.set_shader_parameter("screen_h", float(get_viewport().get_visible_rect().size.y))
 
 
 ## Лучи сквозь трещины льда (ART-052): все шахты отмели одним MultiMesh — один вызов отрисовки.
@@ -127,36 +135,56 @@ func _make_shafts() -> MultiMeshInstance3D:
 	return node
 
 
-## Где корабль: внутри корпуса шахты не светят (вид с мостика и из отсеков).
+## Где корабль: внутри корпуса шахты не светят и взвеси нет (вид с мостика и из отсеков).
 func set_ship(pos: Vector3, yaw: float) -> void:
 	var t := Transform3D(Basis(Vector3.UP, yaw), pos)
 	shafts_mat.set_shader_parameter("ship_inv", Projection(t.affine_inverse()))
+	snow_mat.set_shader_parameter("ship_inv", Projection(t.affine_inverse()))
 
 
-## Морской снег: медленные светлые точки вокруг корабля; частицы в мировых координатах,
-## поэтому при ходе корабль проплывает сквозь них — так видно движение.
+## Морской снег — взвесь по ART-058 (`MarineSnow`): хлопья, нити, пыль и пузыри из атласа 4×4 одним узлом и материалом.
+## Частицы в мировых координатах, поэтому при ходе корабль проплывает сквозь них — так видно движение. Движение,
+## размер и кадр считает шейдер из случайного смещения анимации; сам CPUParticles3D только рождает в объёме.
 func _make_snow() -> CPUParticles3D:
 	var p := CPUParticles3D.new()
 	p.name = "Морской снег"
-	p.amount = 420
-	p.lifetime = 14.0
-	p.preprocess = 14.0
+	p.amount = MarineSnow.AMOUNT
+	p.lifetime = MarineSnow.LIFETIME
+	p.preprocess = MarineSnow.LIFETIME
 	p.local_coords = false
 	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	p.emission_box_extents = Vector3(28, 14, 28)
-	p.direction = Vector3(0, -1, 0)
-	p.spread = 25.0
+	p.emission_box_extents = MarineSnow.EXTENTS
 	p.gravity = Vector3.ZERO
-	p.initial_velocity_min = 0.05
-	p.initial_velocity_max = 0.25
-	p.scale_amount_min = 0.5
-	p.scale_amount_max = 1.2
+	p.initial_velocity_min = 0.0
+	p.initial_velocity_max = 0.0
+	p.anim_offset_min = 0.0   # случайное r 0…1 → INSTANCE_CUSTOM.z: кадр, размер, скорость (шейдер)
+	p.anim_offset_max = 1.0
+	var m := ShaderMaterial.new()
+	m.shader = load("res://shaders/marine_snow.gdshader")
+	m.set_shader_parameter("atlas", load(MarineSnow.ATLAS))
+	m.set_shader_parameter("tint", MarineSnow.COLOR)
+	m.set_shader_parameter("cdf", MarineSnow.cdf())
+	m.set_shader_parameter("lifetime", MarineSnow.LIFETIME)
+	m.set_shader_parameter("near_fade", MarineSnow.NEAR)
+	m.set_shader_parameter("ship_center_y", HullPlan.CENTER_Y)
+	m.set_shader_parameter("ship_shape", LightShafts.SHIP)
+	m.set_shader_parameter("ship_inv", Projection(Transform3D.IDENTITY))
+	snow_mat = m
 	var mesh := QuadMesh.new()
-	mesh.size = Vector2(0.06, 0.06)
-	mesh.material = ShaderKey.flakes(Color(0.85, 0.95, 1.0, 0.55))   # шейдер общий с илом (issue #159)
+	mesh.size = Vector2(1, 1)   # размер карточки задаёт шейдер по семье
+	mesh.material = m
 	p.mesh = mesh
 	p.layers = LAYER_WORLD
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# карточки двигает шейдер (до 4 м за жизнь) — границы с запасом, иначе отсечение по кадру спрячет края
+	p.visibility_aabb = AABB(-MarineSnow.EXTENTS - Vector3.ONE * 5.0, (MarineSnow.EXTENTS + Vector3.ONE * 5.0) * 2.0)
 	return p
+
+
+## «Экономно» (ART-044): взвесь реже (180) и без вращения.
+func set_snow_lite(lite: bool) -> void:
+	snow.amount = MarineSnow.amount(lite)
+	snow_mat.set_shader_parameter("spin_k", 0.0 if lite else 1.0)
 
 
 ## Вода по глубине: цвет и плотность тумана, рассеянный свет, свет сквозь лёд. around — где корабль.
