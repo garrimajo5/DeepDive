@@ -1,0 +1,63 @@
+{
+  "tile_m": 16,
+  "seed": 56,
+  "normal_format": "OpenGL +Y",
+  "source_main": "ee525c6b4cedc62cff369a0ed040bf5e67627d74",
+  "height_range_m": [
+    -0.1780019889187568,
+    0.23425208118539687
+  ],
+  "transmission_range": [
+    3,
+    241
+  ],
+  "bright_area_fraction": 0.042695045471191406,
+  "edges_equal": true,
+  "files": {
+    "led-kadr.jpg": {
+      "size": [
+        1600,
+        720
+      ],
+      "mode": "RGB",
+      "bytes": 205468,
+      "sha256": "a609ebcbb57aae5645858362cd0d622676e5e56e3f859e6226e4930d964065e1"
+    },
+    "led-list.png": {
+      "size": [
+        2048,
+        1152
+      ],
+      "mode": "RGB",
+      "bytes": 533936,
+      "sha256": "2538c8238a5c3e719bee330e41263c02981ace4926400e5ff937c85eecca6f44"
+    },
+    "led-normali.png": {
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB",
+      "bytes": 635235,
+      "sha256": "ce8e32461f8a7ee1c71bea866edf3e94268ab064947afdbebe960d9071750f36"
+    },
+    "led-treshchiny.png": {
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "L",
+      "bytes": 124844,
+      "sha256": "21e837154aa78cea8054628f37b85108e0b43f61c61426f6e5bf7144c830cb31"
+    },
+    "led-tsvet.png": {
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB",
+      "bytes": 370643,
+      "sha256": "54f7724928002116a4bf4168dbc1fce00bf7dfdfe30f2e172d57ed68730fa9c5"
+    }
+  }
+}
