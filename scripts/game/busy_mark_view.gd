@@ -15,6 +15,7 @@ var letters := {}    ## id → Label3D буквы роли
 var names := {}      ## id → Label3D имени
 var keys := {}       ## id → роль и имя, под которые собрана метка
 var layout: Touch.Layout   ## кнопки экрана: метка под них не ложится (#373)
+var plate := Rect2()   ## плашка строки состояния на экране: метка на неё не ложится (#387), ставит Main
 ## Собранные текстуры по роли и имени занявшего (#375): подложка и плашка рисуются попиксельно — десятки мс на
 ## телефоне, поэтому их готовит `prepare` заранее (при сборке экипажа, под шторкой прогрева), а не нажатие «Занято».
 var cache := {}
@@ -84,7 +85,8 @@ func holder_depth(cam: Camera3D, m: Crew.Member) -> float:
 	return best
 
 
-## Сдвинуть центр метки (мир) так, чтобы на экране она была целиком и не под кнопками (`BusyMark.fit`, #373).
+## Сдвинуть центр метки (мир) так, чтобы на экране она была целиком и не под кнопками (`BusyMark.fit`, #373) и не
+## под плашкой строки состояния (`plate`, #387).
 func _fit(cam: Camera3D, center: Vector3, depth: float, h: float, w: float) -> Vector3:
 	var vr := cam.get_viewport().get_visible_rect()
 	var m_px := vr.size.y / (2.0 * depth * tan(deg_to_rad(cam.fov) * 0.5))   # px на метр на этой глубине
@@ -95,6 +97,8 @@ func _fit(cam: Camera3D, center: Vector3, depth: float, h: float, w: float) -> V
 		for b: Touch.Circle in [layout.noclip, layout.action, layout.light, layout.up, layout.down, layout.pad]:
 			if b.r > 0.0:
 				keep.append(Rect2(b.c - Vector2.ONE * b.r, Vector2.ONE * b.r * 2.0))
+	if plate.has_area():
+		keep.append(plate)   # плашка строки состояния под табло (#387)
 	var off := BusyMark.fit(Rect2(c - size * 0.5, size), vr, keep)
 	if off == Vector2.ZERO:
 		return center

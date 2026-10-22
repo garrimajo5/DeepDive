@@ -6,6 +6,7 @@ extends Node3D
 ## Узел в осях корабля рядом с CrewView, слой корабля. Сквозь стены не видна (проверка глубины).
 
 const FONT_PX := 64
+const DOWN_K := 0.8   ## табличку под плашкой строки опускаем не дальше этой доли LIFT — до макушки не доходит (#387)
 
 var tags: Array[Node3D] = []    ## корень таблички на каждого члена экипажа (по индексу в crew)
 var plates: Array[Sprite3D] = []
@@ -24,9 +25,10 @@ var keys: Array[String] = []     ## роль и имя, под которые с
 ## или легла на кнопку или панель (blocks — прямоугольники экрана) — скрыта (#319). Состояния ART-033: нажал
 ## кнопку (`Member.active`) — контур ярче и три штриха, вход и выход за NameTag.FADE_T (dt — шаг; без dt — сразу);
 ## без связи (`Member.lost`) — всё приглушено и строка «Нет связи». hidden — члены экипажа без таблички над головой
-## (их табличка уже на метке «Занято» у поста, BusyMarkView).
+## (их табличка уже на метке «Занято» у поста, BusyMarkView). plate — плашка строки состояния на экране: задетая
+## табличка опускается под неё не дальше DOWN_K·LIFT, иначе скрыта (#387).
 func show_tags(crew: Array, me: Crew.Member, view: CrewView, cam: Camera3D, own_cam: Camera3D, blocks: Array = [],
-		dt: float = 1.0, hidden: Array = []) -> void:
+		dt: float = 1.0, hidden: Array = [], plate: Rect2 = Rect2()) -> void:
 	while tags.size() < crew.size():
 		_add()
 	for i in mini(crew.size(), tags.size()):
@@ -63,6 +65,7 @@ func show_tags(crew: Array, me: Crew.Member, view: CrewView, cam: Camera3D, own_
 		var w: float = widths[s[0]] * hp
 		rects.append(Rect2(c.x - w * 0.5, c.y - hp * 0.5, w, hp))
 	var lift := NameTag.spread(rects)
+	var placed: Array = []   # поставленные таблички на экране
 	for k in shown.size():
 		var i: int = shown[k][0]
 		var d: float = shown[k][1]
@@ -71,9 +74,17 @@ func show_tags(crew: Array, me: Crew.Member, view: CrewView, cam: Camera3D, own_
 			continue   # не поместилась над ближней — скрыта (ART-033)
 		var r: Rect2 = rects[k]
 		r.position.y -= lift[k]
+		# под плашку строки состояния — опустить, но не на макушку (#387)
+		var down := NameTag.under_plate(r, plate, NameTag.LIFT * DOWN_K * r.size.y / h)
+		if down == NameTag.HIDDEN:
+			continue
+		r.position.y += down
+		if down > 0.0 and placed.any(func(q: Rect2) -> bool: return q.intersects(r)):
+			continue   # опущенная легла на другую табличку — скрыта, как при разносе (#320)
 		if not NameTag.clear_of(r, screen, blocks):
 			continue   # за краем экрана или на кнопке и панели (#319)
-		var up: float = lift[k] * h / rects[k].size.y   # пиксели экрана → метры у этой плашки
+		placed.append(r)
+		var up: float = (lift[k] - down) * h / rects[k].size.y   # пиксели экрана → метры у этой плашки
 		var t := tags[i]
 		t.global_transform = Transform3D(Basis(Vector3.UP, ang).scaled(Vector3.ONE * h),
 				shown[k][2] + Vector3.UP * (h * 0.5 + up))

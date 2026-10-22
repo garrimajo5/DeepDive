@@ -192,3 +192,27 @@ func test_energy_mark_before_holder() -> void:
 	ok(depth < hd - 0.2 and depth >= BusyMark.NEAR_DEPTH - 1e-3, "метка ближе к камере, чем голова и плечи инженера (%.2f < %.2f)" % [depth, hd])
 	var r := _mark_rect("energy")
 	ok(main.get_viewport().get_visible_rect().encloses(r), "и по-прежнему в кадре (%s)" % r)
+
+
+func test_helm_mark_off_status_plate() -> void:
+	# #387, шаг 23-helm-busy: плашка строки состояния опущена под табло (#380) и в тревоге в несколько строк —
+	# метка «Занято» над колесом заходила на неё верхним краем
+	_helm_mate()
+	main.open_silt()
+	main.vitals.energy = 5.0
+	var was := tree.root.size
+	tree.root.size = Vector2i(1600, 720)   # экран телефона, как в снимках тестера
+	main.walker.x = 0.6
+	main.walker.z = -3.3
+	main.walker.yaw = 0.0
+	main.walker.pitch = deg_to_rad(-10.0)
+	main.step(1.0 / 30.0)
+	main.say("Штурвал занят: Марина · стеклоуст на корпусе тянет энергию · перегрев реактора — сброс у кормового люка")
+	main.step(1.0 / 30.0)
+	ok(main.busy_marks.roots["helm"].visible, "метка видна")
+	var plate := main.status_rect()
+	ok(plate.has_area(), "плашка строк на экране (%s)" % plate)
+	var r := _mark_rect("helm")
+	ok(not r.intersects(plate), "метка %s не заходит на плашку строк %s" % [r, plate])
+	ok(main.get_viewport().get_visible_rect().encloses(r), "и в кадре")
+	tree.root.size = was
