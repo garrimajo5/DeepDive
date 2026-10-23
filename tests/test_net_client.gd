@@ -266,6 +266,38 @@ func test_events_from_host_frame() -> void:
 	ok(not main.breach_view.alarm.visible, "тревога погасла")
 
 
+func test_scorch_from_host_frame() -> void:   # разряд хоста у дна — тот же след на дне у гостя (ART-066)
+	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
+	eq(main.scorch.all.size(), 0, "дно чистое")
+	var sc := Seabed.Scorch.new()
+	var fy := Seabed.height(h_helm.pos.x, h_helm.pos.z)
+	ok(sc.add(Vector3(h_helm.pos.x, fy + Helm.Ship.CLEARANCE, h_helm.pos.z), fy, 1.0, 0.0), "след у хоста")
+	h_ev = {"z": NetSnap.scorch(sc, 0.0)}
+	ok(_pump(func() -> bool: return main.scorch.all.size() == 1), "след пришёл кадром")
+	var at: PackedVector4Array = main.ocean.seabed_mat.get_shader_parameter("scorch_at")
+	near(at[0].x, h_helm.pos.x, 0.01, "в материале дна под кораблём хоста")
+	var k: PackedVector4Array = main.ocean.seabed_mat.get_shader_parameter("scorch_k")
+	ok(k[0].x > 0.9 and k[0].z < 0.01, "свежий")
+	sc.clear()
+	h_ev = {"z": NetSnap.scorch(sc, 0.0)}
+	ok(_pump(func() -> bool: return main.scorch.all.is_empty()), "новый забег у хоста — чистое дно")
+	k = main.ocean.seabed_mat.get_shader_parameter("scorch_k")
+	eq(k[0].x, 0.0, "и в материале")
+
+
+func test_scorch_ages_on_guest() -> void:   # между кадрами след темнеет часами гостя
+	var sc := Seabed.Scorch.new()
+	var fy := Seabed.height(h_helm.pos.x, h_helm.pos.z)
+	sc.add(Vector3(h_helm.pos.x, fy + Helm.Ship.CLEARANCE, h_helm.pos.z), fy, 1.0, 0.0)
+	h_ev = {"z": NetSnap.scorch(sc, Seabed.Scorch.OLD.x)}   # хост: след уже 40 с
+	ok(_pump(func() -> bool: return main.scorch.all.size() == 1), "след пришёл")
+	for i in 20:
+		_host_tick()
+		main.step(5.0)   # 100 с у гостя: хост тот же кадр, но счёт не менялся
+	var k: PackedVector4Array = main.ocean.seabed_mat.get_shader_parameter("scorch_k")
+	near(k[0].z, 1.0, 1e-3, "стал старым пятном")
+
+
 func test_route_vote_and_result_from_host() -> void:   # маршрут, голосование и итог хоста — у гостя на голостоле
 	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
 	var run := Run.new()
