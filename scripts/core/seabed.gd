@@ -301,3 +301,70 @@ class Marks:
 			if st.x > 0.0 and st.y > 0.0 and st.x < 1.0 and st.y < 1.0:
 				out.append({"index": c.index, "st": st, "cat": c.cat, "layer": layer})
 		return out
+
+
+## Следы разрядов ART-066 (ячейки атласа 13–15): штамп на дне под кораблём после настоящего разряда у дна.
+## Сила 0…1 на событие — по зазору под корпусом и доле «Разряд»; держатся последние MAX до нового забега, свежий
+## («разряд А» или «Б») за OLD с темнеет в «старое пятно». Шейдер дна читает uniform-массивы `uniforms(t)`.
+class Scorch:
+	const MAX := 4                        ## сколько последних держит материал дна
+	const REACH := Vector2(2.0, 10.0)     ## зазор под корпусом (над CLEARANCE), м: до x — полная сила, к y — нет следа
+	const MIN_K := 0.1                    ## слабее — следа нет
+	const SIZE := Vector2(2.4, 4.0)       ## сторона квадрата штампа, м (по силе)
+	const OLD := Vector2(40.0, 120.0)     ## свежий → «старое пятно», с после разряда
+	const OLD_K := 0.75                   ## старое пятно бледнее свежего
+	const FRESH := [13, 14]               ## разряды А и Б — по очереди
+	const STALE := 15                     ## старое пятно
+
+	## [{at: Vector2 xz, rot, size, k, index, t}] — от старых к новым.
+	var all: Array = []
+	var count := 0                        ## разрядов у дна за забег (выбирает А/Б и поворот)
+
+	## Сила следа: зазор от низа корпуса до дна gap (м, CLEARANCE уже вычтен), доля «Разряд» share 0…1.
+	static func strength(gap: float, share: float) -> float:
+		var k := (1.0 - HashNoise.smooth(REACH.x, REACH.y, gap)) * clampf(share, 0.0, 1.0)
+		return k if k >= MIN_K else 0.0
+
+	## Разряд в момент t: корабль в ship, дно под ним на floor_y, доля share. Возвращает, лёг ли след.
+	func add(ship: Vector3, floor_y: float, share: float, t: float) -> bool:
+		var k := strength(ship.y - floor_y - Helm.Ship.CLEARANCE, share)
+		if k <= 0.0:
+			return false
+		all.append({"at": Vector2(ship.x, ship.z), "rot": HashNoise.hash2(count, 61) * TAU,
+			"size": lerpf(SIZE.x, SIZE.y, k), "k": k, "index": FRESH[count % FRESH.size()], "t": t})
+		count += 1
+		if all.size() > MAX:
+			all.pop_front()
+		return true
+
+	func clear() -> void:
+		all.clear()
+		count = 0
+
+	## Доля «старого пятна» у следа s в момент t (0 — свежий, 1 — старый).
+	static func old(s: Dictionary, t: float) -> float:
+		return HashNoise.smooth(OLD.x, OLD.y, t - float(s.t))
+
+	## Для шейдера: [где (x, z, поворот, размер), сила (k, ячейка, доля старого, 0)] по MAX; пустые — сила 0.
+	func uniforms(t: float) -> Array:
+		var at := PackedVector4Array()
+		var kk := PackedVector4Array()
+		for i in MAX:
+			if i < all.size():
+				var s: Dictionary = all[i]
+				var o := old(s, t)
+				at.append(Vector4(s.at.x, s.at.y, s.rot, s.size))
+				kk.append(Vector4(s.k * lerpf(1.0, OLD_K, o), s.index, o, 0.0))
+			else:
+				at.append(Vector4(0.0, 0.0, 0.0, 1.0))
+				kk.append(Vector4.ZERO)
+		return [at, kk]
+
+	## Следы, которые накрывают точку: [{index, st, k, old}] (двойник шейдера для тестов).
+	func at_point(x: float, z: float, t: float) -> Array:
+		var out := []
+		for s: Dictionary in all:
+			var st := Marks.stamp_uv(x, z, {"centre": s.at, "rot": s.rot, "size": s.size})
+			if st.x > 0.0 and st.y > 0.0 and st.x < 1.0 and st.y < 1.0:
+				out.append({"index": s.index, "st": st, "k": s.k, "old": old(s, t)})
+		return out

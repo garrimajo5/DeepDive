@@ -5,7 +5,7 @@ class_name NetSnap
 
 const SEND_DT := 0.05          ## хост шлёт кадр 20 раз в секунду
 const MAX_BYTES := 1200        ## кадр с четырьмя членами экипажа влезает в один UDP-пакет (MTU 1280 с запасом)
-const VERSION := 11            ## формат кадра и ввода; клиент другой версии не подключается (11 — вспышки и время мира в «eco»)
+const VERSION := 12            ## формат кадра и ввода; клиент другой версии не подключается (12 — следы разрядов «z»)
 const NEWS_TIME := 1.0         ## сообщение события едет в кадрах столько секунд (20 кадров — потеря всех почти исключена)
 
 
@@ -116,6 +116,37 @@ static func apply_events(ev: Dictionary, b: Breach, s: Silt, t: float) -> Array:
 	if n is Array and n.size() == 2:
 		return [int(n[0]), str(n[1])]
 	return []
+
+
+## Следы разрядов на дне (`Seabed.Scorch`) для гостя: [разрядов за забег, затем по следу x, z, поворот, размер,
+## сила, ячейка, возраст]. Возраст, а не момент: часы гостя свои. Кладётся в события: `events(...)["z"]`.
+static func scorch(sc: Seabed.Scorch, t: float) -> PackedFloat32Array:
+	var f := PackedFloat32Array([sc.count])
+	for s: Dictionary in sc.all:
+		f.append_array([s.at.x, s.at.y, s.rot, s.size, s.k, s.index, t - float(s.t)])
+	return f
+
+
+## Гость ставит следы хоста (t — своё время). Меняет только при новом разряде или новом забеге (счёт другой) —
+## между ними след стареет своими часами. Возвращает, поменялись ли следы (нужно обновить материал дна).
+static func apply_scorch(v: Variant, sc: Seabed.Scorch, t: float) -> bool:
+	if not v is PackedFloat32Array:
+		return false
+	var f: PackedFloat32Array = v
+	if f.size() < 1 or (f.size() - 1) % 7 != 0:
+		return false
+	var n := int(f[0])
+	var marks := (f.size() - 1) / 7
+	if n == sc.count and marks == sc.all.size():
+		return false
+	sc.all.clear()
+	for i in range(1, f.size(), 7):
+		sc.all.append({"at": Vector2(f[i], f[i + 1]), "rot": f[i + 2], "size": f[i + 3], "k": f[i + 4],
+			"index": int(f[i + 5]), "t": t - f[i + 6]})
+	while sc.all.size() > Seabed.Scorch.MAX:
+		sc.all.pop_front()
+	sc.count = n
+	return true
 
 
 ## Маршрут, голосование и итог для клиента (кладётся в события: `events(...)["r"]`). marks — метки голограммы

@@ -24,6 +24,7 @@ var reactor := Reactor.new()
 var sonar := Sonar.new()
 var vitals := Vitals.new()   ## корпус и заряд корабля
 var zap := Zap.new()
+var scorch := Seabed.Scorch.new()   ## следы разрядов у дна ART-066 (ячейки 13–15), до нового забега
 var samples := Samples.new()   ## образцы на дне и лебёдка трюма
 var samples_view: SamplesView
 var breach := Breach.new()     ## событие «пробоина»: струя, вода, сварка удержанием
@@ -151,7 +152,16 @@ func _ready() -> void:
 	samples_view = SamplesView.new(samples)
 	samples_view.name = "Образцы"
 	add_child(samples_view)
-	helm.ground = Seabed.height
+	# Пол корпуса — дно плюс верх скальных клиньев Края отмели: корабль не проходит сквозь скалу и чиркает по ней
+	# существующим ударом о дно (helm.bump → Vitals.scrape). Облако оползня — из свежего шрама (issue #258).
+	var ecv := eco
+	helm.ground = func(x: float, z: float) -> float:
+		var g: float = Seabed.height(x, z)
+		if ecv.drop:
+			g = maxf(g, ecv.drop.top(x, z))
+		return g
+	if eco.drop:
+		silt.slide_origin = eco.drop.slide_cloud_point()
 	ship = Node3D.new()
 	ship.name = "Корабль"
 	add_child(ship)
@@ -669,6 +679,8 @@ func step(dt: float) -> void:
 		hit_flash.color = Color(1.0, 0.36, 0.42, vitals.flash * 0.35)
 		zap_light.light_energy = Searchlight.DARK
 	bridge.set_zap_lever(zap.lever_deg(time), zap.ready(time))
+	if not scorch.all.is_empty():   # свежий след темнеет в «старое пятно»
+		ocean.set_scorch(scorch.uniforms(time))
 	_step_eco(dt)
 	_flicker(dt)
 	for i in Reactor.Sys.size():
@@ -930,6 +942,8 @@ func fire_zap() -> void:
 	if zap.fired_at(time):
 		eco_ship.zap = true
 		eco_ship.zap_radius = zap.radius
+		if scorch.add(helm.pos, Seabed.height(helm.pos.x, helm.pos.z), reactor.k(Reactor.Sys.ZAP), time):
+			ocean.set_scorch(scorch.uniforms(time))   # разряд у дна — след под корпусом
 	say(msg)
 
 
@@ -1139,6 +1153,8 @@ func _restart() -> void:
 	silt.reset()
 	reactor.reset()   # сброс, перегрев и доли — как на старте (#265)
 	airlock.reset()
+	scorch.clear()
+	ocean.set_scorch(scorch.uniforms(time))
 	walker.reset()
 	light_on = true
 	overlay.set_light(true)
@@ -1562,6 +1578,7 @@ func _net_send(dt: float) -> void:
 		var ev := NetSnap.events(breach, silt, time, welding, news if news_age < NetSnap.NEWS_TIME else [])
 		ev["r"] = _net_run()
 		ev["w"] = wreck.t   # шторка «Корпус разрушен» — у всех (ART-036)
+		ev["z"] = NetSnap.scorch(scorch, time)   # следы разрядов на дне — тот же след у гостя
 		var f := NetSnap.frame(net_host.seq, time, helm, reactor, vitals, light_on, crew, ev)
 		f["eco"] = EcoLink.pack_world(eco.world.agents, eco.world.systems, helm.pos, EcoLink.NET_R,
 			eco.world.time)   # существа и мох рядом — гостям отдельным пакетом
@@ -1650,6 +1667,8 @@ func _client_step(dt: float) -> void:
 	_wake(dt)   # пузыри у гостя — свои, по тяге из кадра
 	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP), silt.beam_k())
 	breach.time += dt   # пульс тревоги и свет сварки — своим временем, состояние — из кадра
+	if not scorch.all.is_empty():   # след хоста темнеет в «старое пятно» часами гостя
+		ocean.set_scorch(scorch.uniforms(time))
 	breach_view.apply()
 	_cabin(Wreck.lamps(wreck.t))   # авария ART-064 у гостя — тот же ритм огней; шторка ART-036 гасит плафоны
 	silt_view.apply(silt, time, helm.pos, helm.yaw)
@@ -1728,6 +1747,8 @@ func _client_frame(f: Dictionary) -> void:
 		var evd: Variant = f.get("ev", {})
 		if evd is Dictionary:
 			wreck.follow(float(evd.get("w", -1.0)))
+			if NetSnap.apply_scorch(evd.get("z"), scorch, time):
+				ocean.set_scorch(scorch.uniforms(time))   # разряд хоста у дна или новый забег
 		var rs := NetSnap.apply_run(evd.get("r") if evd is Dictionary else null, run)
 		if not rs.is_empty():   # маршрут хоста уже в run; метки, таймер и итог — для показа
 			votes = rs["marks"]
@@ -1961,6 +1982,14 @@ func debug_setup(kv: Dictionary) -> void:
 		var p: PackedFloat64Array = kv["ship"].split_floats(",")
 		helm.pos = Vector3(p[0], p[1], p[2])
 		_place_ship()
+	if kv.has("scorch"):  # scorch=n — n следов разряда на дне перед носом через 4 м (первый — старое пятно)
+		var n := int(kv["scorch"])
+		for i in n:
+			var at := helm.pos + helm.nose() * (9.0 + 4.0 * i)
+			var fy := Seabed.height(at.x, at.z)
+			scorch.add(Vector3(at.x, fy + Helm.Ship.CLEARANCE, at.z), fy, 1.0,
+					time - (Seabed.Scorch.OLD.y if i == 0 else 0.0))
+		ocean.set_scorch(scorch.uniforms(time))
 	if kv.has("use"):  # use=<пост> — встать (x, z, yaw) и нажать кнопку действия у поста, шаг игры 0,3 с — снимок
 		walker.x = float(kv.get("x", str(walker.x)))
 		walker.z = float(kv.get("z", str(walker.z)))

@@ -300,6 +300,12 @@ func set_decals_lite(lite: bool) -> void:
 	_decals_level(seabed_mat, lite)
 
 
+## Следы разрядов на дне (`Seabed.Scorch.uniforms`): [где, сила] по MAX — в тот же материал дна.
+func set_scorch(u: Array) -> void:
+	seabed_mat.set_shader_parameter("scorch_at", u[0])
+	seabed_mat.set_shader_parameter("scorch_k", u[1])
+
+
 func set_relief(on: bool) -> void:
 	ice_relief = on
 	seabed_mat.set_shader_parameter("relief", 1.0 if on else 0.0)
