@@ -153,6 +153,50 @@ func test_solid() -> void:
 	ok(not d.solid(Vector3(mid.x, mid.y - 1.0, 160.0)), "за участком — нет скалы")
 
 
+## top(x,z) — верх клина (один источник для solid); вне клиньев и в полосе шрама — −INF.
+func test_top_matches_solid() -> void:
+	var d := _drop()
+	var z := 50.0
+	var p := d.profile(0, z)
+	var mid := (p[1] + p[2]) * 0.5
+	var t := d.top(mid.x, z)
+	ok(t != -INF, "над клином есть верх")
+	near(t, mid.y, 1e-4, "верх — на профиле клина")
+	ok(d.solid(Vector3(mid.x, t - 1.0, z)), "под верхом — скала")
+	ok(not d.solid(Vector3(mid.x, t + 1.0, z)), "над верхом — вода")
+	eq(d.top(mid.x, 160.0), -INF, "за участком верха нет")
+	eq(d.top(EcoDrop.CENTER.x, EcoDrop.CENTER.y), -INF, "над склоном за стенкой верха нет")
+
+
+## Облако оползня идёт из свежего шрама (ниже скола по склону), а не с открытого склона в ~60 м восточнее (issue #258).
+func test_slide_cloud_at_scar() -> void:
+	var d := _drop()
+	var c := d.slide_cloud_point()
+	var sp := d.scar_point()
+	near(c.z, EcoDrop.SCAR_Z, 1e-6, "облако у середины шрама по z")
+	ok(c.x > sp.x and absf(c.x - sp.x) <= 12.0, "облако ниже по склону (+X) от скола, рядом: Δx %.1f" % absf(c.x - sp.x))
+	ok(c.y > d.floor_y(c.x, c.z) and c.y <= maxf(d.floor_y(c.x, c.z) + EcoDrop.SLIDE_UP, -55.0) + 1e-4,
+		"облако над дном, не глубже −55")
+	ok(absf(c.x - Silt.DROP.x) > 40.0, "новая точка далеко от старой DROP над открытым склоном")
+
+
+## Подключение в корабль (issue #258): main поднимает «пол» корпуса на верх скалы и берёт точку облака из шрама.
+func test_wired_into_ship() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	ok(main.silt.slide_origin != Vector3.INF, "silt берёт точку схода из мира")
+	near(main.silt.slide_origin.z, EcoDrop.SCAR_Z, 1e-6, "облако оползня — у шрама Края отмели")
+	var zr := EcoDrop.wedge_z(0)
+	var zc := (zr.x + zr.y) * 0.5
+	var rim := main.eco.drop.profile(0, zc)[1]
+	var g_here: float = main.helm.ground.call(rim.x, zc)
+	ok(g_here >= rim.y - 1e-3, "пол корпуса не ниже верха скалы: %.2f ≥ %.2f" % [g_here, rim.y])
+	ok(g_here > Seabed.height(rim.x, zc) + 0.5, "над скалой пол корпуса выше дна — корабль чиркает")
+	main.queue_free()
+	await frames(1)
+
+
 func test_view_one_mesh_budget() -> void:
 	var d := _drop()
 	var v := DropView.new(d)

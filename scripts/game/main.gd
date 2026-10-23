@@ -152,7 +152,16 @@ func _ready() -> void:
 	samples_view = SamplesView.new(samples)
 	samples_view.name = "Образцы"
 	add_child(samples_view)
-	helm.ground = Seabed.height
+	# Пол корпуса — дно плюс верх скальных клиньев Края отмели: корабль не проходит сквозь скалу и чиркает по ней
+	# существующим ударом о дно (helm.bump → Vitals.scrape). Облако оползня — из свежего шрама (issue #258).
+	var ecv := eco
+	helm.ground = func(x: float, z: float) -> float:
+		var g: float = Seabed.height(x, z)
+		if ecv.drop:
+			g = maxf(g, ecv.drop.top(x, z))
+		return g
+	if eco.drop:
+		silt.slide_origin = eco.drop.slide_cloud_point()
 	ship = Node3D.new()
 	ship.name = "Корабль"
 	add_child(ship)
