@@ -154,8 +154,11 @@ func test_scene_eco_hits_and_drain() -> void:
 	near(main.bridge.lamps[1].light_energy, CabinLight.of(true)[1].energy, 1e-6, "свет снова ровный")
 	fake.send = [EcoLink.hit("Серпохвост", 1.0, main.helm.pos)]
 	main.step(0.1)
+	ok(main.wreck.active(), "разрушен — шторка ART-036")
+	for i in 35:   # под сплошной шторкой — подъём
+		main.step(0.1)
 	near(main.vitals.hull, 100.0, 1e-6, "разрушен — корабль поднят с целым корпусом")
-	eq(main.helm.pos, Helm.Ship.START, "у начала спуска")
+	ok(main.helm.pos.distance_to(Helm.Ship.START) < 0.5, "у начала спуска (течение сносит, пока шторка тает)")
 
 
 func test_scene_scrape_into_slope() -> void:
