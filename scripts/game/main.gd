@@ -110,6 +110,8 @@ static var intro := true
 static var menu := true
 var main_menu := MainMenu.new()   ## «Погрузиться» / «Экипаж» / «Настройки»: пока открыто — игра стоит под меню
 var menu_panel: MenuPanel
+var pause := Pause.new()   ## пауза одиночного забега ART-037 (системная «Назад»): пока открыта — игра стоит
+var pause_panel: PausePanel
 var flyby := Flyby.new()   ## камера с борта: облёт в начале забега, вид при всплытии
 var flyby_cam: Camera3D
 var overlay: TouchOverlay
@@ -485,7 +487,9 @@ func version_text() -> String:
 
 ## Игру сворачивают или закрывают — несохранённое записать сразу.
 func _notification(what: int) -> void:
-	if what in [NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_APPLICATION_FOCUS_OUT]:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:   # системная «Назад» Android (`quit_on_go_back` выключен)
+		back_pressed()
+	elif what in [NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_APPLICATION_FOCUS_OUT]:
 		save.flush(samples, scanner)
 	elif what == NOTIFICATION_EXIT_TREE:
 		if net_host:
@@ -508,6 +512,9 @@ func step(dt: float) -> void:
 		qa.tick(dt)
 	if main_menu.open and not warm.active():   # главное меню: игра стоит, касания — кнопкам меню
 		_menu_step()
+		return
+	if pause.open:   # пауза: игра стоит, касания — кнопкам паузы
+		_pause_step()
 		return
 	if net_client:   # клиент: корабль, реактор и экипаж — из кадров хоста
 		_client_step(dt)
@@ -1015,6 +1022,67 @@ func _menu_step() -> void:
 	r.end_frame()
 
 
+## Системная «Назад» (Esc на ПК): в забеге — пауза ART-037, в паузе закрывает сначала подтверждение, потом паузу;
+## в главном меню — выход из игры. Сетевой забег и шторка «Корпус разрушен» — пока без паузы (меню забега — позже).
+func back_pressed() -> void:
+	if warm.active():
+		return
+	if main_menu.open:
+		save.flush(samples, scanner)
+		get_tree().quit()
+		return
+	if not pause.open and (net_host != null or net_client != null or wreck.active()):
+		return
+	pause.back()
+	_pause_show()
+
+
+func _unhandled_input(e: InputEvent) -> void:
+	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_ESCAPE:
+		back_pressed()
+
+
+func _pause_show() -> void:
+	if pause_panel == null:
+		pause_panel = PausePanel.new()
+		add_child(pause_panel)
+	pause_panel.show_pause(pause)
+	overlay.visible = not pause.open and not wreck.active()
+	hint.visible = not pause.open and not wreck.active()   # строки приборов не лезут к заголовку паузы
+	overlay.router.clear()   # палец, открывший или закрывший паузу, не идёт в игру
+
+
+## Шаг под паузой: касания кнопок. «Новый забег» — с начала спуска, «Выйти в меню» — главное меню ART-037.
+func _pause_step() -> void:
+	var r := overlay.router
+	for p in r.taps:
+		var what := pause.press(pause.hit(p, get_viewport().get_visible_rect().size))
+		if what != "":
+			_pause_show()
+			if what == "new" or what == "exit":
+				_leave_posts()
+				_restart()
+				if what == "new":
+					say("Новый забег: Ковчег у начала спуска")
+				else:
+					flyby.stop()
+					open_menu()
+			break
+		pause_panel.show_pause(pause)
+	r.end_frame()
+
+
+## Встать с постов перед новым забегом (штурвал, пульт, голосование).
+func _leave_posts() -> void:
+	if pilot.seated:
+		stand_up()
+	if at_power:
+		close_power()
+	if at_vote:
+		at_vote = false
+		vote_panel.visible = false
+
+
 func close_menu() -> void:
 	main_menu.open = false
 	if menu_panel:
@@ -1028,13 +1096,10 @@ func close_menu() -> void:
 func _on_destroyed() -> void:
 	if wreck.active():
 		return
-	if pilot.seated:
-		stand_up()
-	if at_power:
-		close_power()
-	if at_vote:
-		at_vote = false
-		vote_panel.visible = false
+	_leave_posts()
+	pause.close()
+	if pause_panel:
+		pause_panel.show_pause(pause)
 	wreck.start()
 	_wreck_show()
 
