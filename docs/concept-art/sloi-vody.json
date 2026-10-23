@@ -1,0 +1,45 @@
+{
+  "issue": 490,
+  "coordinates": "world Y up; depth=-world_y",
+  "layers": [
+    {
+      "id": "under_ice",
+      "depth_m": [
+        0,
+        6
+      ],
+      "edge_softness_m": 1.5,
+      "add_density_per_m": 0.008,
+      "color_srgb": "#3A8190",
+      "max_alpha": 0.11
+    },
+    {
+      "id": "thermocline",
+      "depth_m": [
+        28.5,
+        31.5
+      ],
+      "edge_softness_m": 1,
+      "add_density_per_m": 0.017,
+      "color_srgb": "#234F69",
+      "max_alpha": 0.1
+    }
+  ],
+  "bottom": {
+    "height_above_Seabed_height_m": [
+      0,
+      3
+    ],
+    "edge_softness_m": 1,
+    "add_density_per_m": 0.035,
+    "color_srgb": "#2B5359",
+    "protect_distance_m": 12,
+    "max_alpha": 0.1
+  },
+  "quality_gain": {
+    "economy": 0,
+    "normal": 0.6,
+    "beautiful": 0.9
+  },
+  "total_alpha_cap": 0.16
+}
