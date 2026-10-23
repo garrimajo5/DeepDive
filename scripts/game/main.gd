@@ -1918,6 +1918,7 @@ func debug_setup(kv: Dictionary) -> void:
 		ocean.set_relief(false)    # и льда ART-056
 		ocean.set_snow_lite(true)  # и взвесь ART-058 реже, без вращения
 		ocean.set_decals_lite(true) # и декали дна ART-066 реже и ближе
+		ocean.set_layers_lite(true) # и слои воды ART-069 выключены
 		searchlight.set_lite(true) # и луч прожектора ART-062 без дрейфа
 		wake.lite = true           # и след винтов ART-063: 96 карточек, кадры 0–11
 		wake_view.set_lite(true)
@@ -1925,6 +1926,8 @@ func debug_setup(kv: Dictionary) -> void:
 		glints.lite = true         # и блики воды в мостике ART-067 выключены
 	if kv.get("glints", "1") == "0":  # glints=0 — без бликов воды в мостике ART-067 (сравнить)
 		glints.lite = true
+	if kv.has("layers"):  # layers=<сила> — слои воды ART-069 (0 — выкл, 0,6 — «Обычно», 0,9 — «Красиво»)
+		ocean.set_layers_level(float(kv["layers"]))
 	if kv.get("grade", "1") == "0":  # grade=0 — без виньетки и цветокоррекции ART-065 (сравнить)
 		grade.set_on(false)
 	if kv.has("energy"):  # energy=<ед.> — заряд корабля (меньше 20 — «МАЛО ЗАРЯДА» на табло)

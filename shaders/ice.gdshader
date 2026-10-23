@@ -21,6 +21,8 @@ uniform float roughness = 0.62;
 uniform float gate_scale = 60.0;
 uniform vec2 gate_edge = vec2(0.48, 0.62);
 
+#include "res://shaders/water_layers.gdshaderinc"
+
 varying vec3 w_pos;
 
 float hash2(int ix, int iz) {   // HashNoise.hash2: 32-битная арифметика
@@ -53,6 +55,7 @@ void vertex() {
 }
 
 void fragment() {
+	FOG = water_layers_fog(CAMERA_POSITION_WORLD, w_pos, -1.0, TIME);   // слои воды ART-069
 	vec2 uv = w_pos.xz / tile;
 	vec3 c = texture(color_tex, uv).rgb;
 	ALBEDO = mix(water, c, contrast);
