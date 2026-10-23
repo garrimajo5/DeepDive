@@ -11,6 +11,9 @@ var pilot: Deck.Pilot:
 		return me.pilot
 var crew: Array = [me]                       ## экипаж на борту; позже — игроки по сети
 var crew_view: CrewView
+var ghosts: Array[MateGhost] = []   ## хост: фигуры отключившихся гостей — полупрозрачные 10 с (ART-043)
+var ghost_view: CrewView   ## их фигуры (alpha)
+var ghost_tags: NameTagView   ## их таблички «Нет связи»
 var name_tags: NameTagView  ## таблички игроков над фигурами (ART-033, NameTag)
 var busy_marks: BusyMarkView  ## метки «Занято» над постами, занятыми другим (ART-033, BusyMark)
 var layout := ShipLayout.new()
@@ -177,6 +180,12 @@ func _ready() -> void:
 	name_tags = NameTagView.new()
 	name_tags.name = "Таблички экипажа"
 	ship.add_child(name_tags)
+	ghost_view = CrewView.new()
+	ghost_view.name = "Отключившиеся"
+	ship.add_child(ghost_view)
+	ghost_tags = NameTagView.new()
+	ghost_tags.name = "Таблички отключившихся"
+	ship.add_child(ghost_tags)
 	busy_marks = BusyMarkView.new()
 	busy_marks.name = "Метки «Занято»"
 	ship.add_child(busy_marks)
@@ -305,6 +314,13 @@ func _begin_warmup() -> void:
 		_warm_mates.append(m)
 		crew_view.as_own.append(m)
 	crew_view.apply()
+	for r in Crew.Role.size():   # и полупрозрачными, как отключившийся гость (ART-043): каждая роль со снаряжением
+		var g := Crew.Member.new(r)
+		g.look = r % CrewRig.MODELS.size()
+		var at: Vector2 = Warmup.MATE_AT[r % Warmup.MATE_AT.size()]
+		g.place(at.x, at.y, PI)
+		ghosts.append(MateGhost.new(g))
+	_ghosts(0.0, true)
 	_warm_particles(true)
 	power_panel.reactor = reactor   # пульт энергии рисует строки под шторкой: шрифты всех размеров (#217)
 	power_panel.panel = power
@@ -401,6 +417,8 @@ func _warm_restore() -> void:
 		_warm_mates.clear()
 		crew_view.as_own.clear()
 		crew_view.set_members(crew, me)
+		ghosts.clear()
+		_ghosts(0.0, true)
 		_warm_particles(false)
 		curtain.queue_free()   # вместе с текстурой фона
 		curtain = null
@@ -660,6 +678,7 @@ func step(dt: float) -> void:
 	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
 	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy,
 			status_rect())
+	_ghosts(dt)
 	_warm_frame()
 	_net_send(dt)
 	r.end_frame()
@@ -1348,6 +1367,8 @@ func _net_poll(dt: float = 0.0) -> void:
 				m.name = g.name
 			m.pad = g.pad
 			net_mates[g.id] = m
+			if MateGhost.forget(ghosts, m.name):   # вернулся — прежняя фигура уходит, встаёт новая
+				_ghosts(0.0, true)
 			if not notice.joined(m.name, m.look == 1):
 				say("На борту: %s" % m.name)
 		else:
@@ -1371,6 +1392,24 @@ func mate_gone(m: Crew.Member) -> void:
 	crew.erase(m)
 	crew_view.set_members(crew, me)
 	drop_panel.show_notice(notice)
+	ghosts.append(MateGhost.new(m))   # на последнем месте полупрозрачным с «Нет связи», без поста (ART-043)
+	_ghosts(0.0, true)
+
+
+## Хост: фигуры отключившихся (`MateGhost`) — стоят, тают, растаявшие убраны; changed — список уже сменился.
+func _ghosts(dt: float, changed := false) -> void:
+	if ghosts.is_empty() and not changed:
+		return
+	changed = MateGhost.step(ghosts, dt) or changed
+	var list := MateGhost.members(ghosts)
+	if changed:
+		ghost_view.set_members(list, null)
+	ghost_view.alphas.assign(ghosts.map(func(g: MateGhost) -> float: return g.alpha()))
+	ghost_view.apply()
+	var melting := ghosts.filter(func(g: MateGhost) -> bool: return g.t > MateGhost.HOLD).map(
+		func(g: MateGhost) -> Crew.Member: return g.member)   # тает — табличка уже снята
+	ghost_tags.show_tags(list, null, ghost_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, melting,
+			status_rect())
 
 
 ## Кадр гостям раз в NetSnap.SEND_DT — после шага, как его видит хост.
