@@ -711,3 +711,11 @@ ORM = AO/шероховатость/металл, в существующие `P
 лист `led-otrazhenie-list.png`, проверка `led-otrazhenie-proverka.png`, параметры `led-otrazhenie-parametry.json`; решения —
 `led-otrazhenie.md`: смешение в `ice.gdshader` двумя выборками (одна на «Экономно»), 0 вызовов, трещины пропускают, ил гасит.
 Встройка — задача ROADMAP потока А.
+## ART-076 Ободок и затенение щелей корпуса снаружи — принято
+- Исходник: ART-001/024 (корпус и обшивка), ART-049, ART-053, ART-059, ART-068, ART-069.
+
+**Принято 24.10.2026** (PR #529, ветка `art/ART-076-obodok-korpusa`): LUT `obodok-gradient.png` (RGBA 256×8, линейные данные,
+по `1 − dot(N,V)` и глубине, строка ила нулевая), лист `obodok-list.png`, проверка `obodok-proverka.png`, кадр `obodok-45m.jpg`,
+параметры `obodok-parametry.json`; решения — `obodok-korpusa.md`: ободок цвета воды в EMISSION `hull_plating.gdshader` по
+геометрической нормали (1 выборка), AO процедурный — швы по маске ART-024 и поля примыканий `HullPlan`, ил и разрушение
+гасят, 0 вызовов. Встройка — задача ROADMAP потока А.

@@ -1,0 +1,114 @@
+{
+  "rows_m": [
+    0,
+    8,
+    14,
+    20,
+    32.5,
+    45,
+    90,
+    null
+  ],
+  "row_7": "silt",
+  "depth_keys": [
+    0,
+    8,
+    20,
+    45,
+    90
+  ],
+  "water_srgb": [
+    "3A8190",
+    "286B80",
+    "1A4667",
+    "0D2943",
+    "05131F"
+  ],
+  "strength": [
+    0.22,
+    0.32,
+    0.48,
+    0.82,
+    0.58
+  ],
+  "linear_light_multiplier": [
+    1.8,
+    1.9,
+    2.2,
+    3.0,
+    3.2
+  ],
+  "x": "1-dot(Ngeo,V)",
+  "ao": "procedural: existing seam mask plus HullPlan contacts",
+  "new_texture_samples": 1,
+  "ao_weights": {
+    "seam": 0.18,
+    "contacts": 0.34,
+    "min": 0.55,
+    "albedo_influence": 0.55,
+    "light_affect": 0.15,
+    "damage_protection": 0.8,
+    "eco_contacts": false
+  },
+  "contacts": {
+    "mounts": {
+      "center_abs_x_y_z": [
+        3.45,
+        1,
+        26.3
+      ],
+      "half_size": [
+        0.75,
+        0.225,
+        0.7
+      ],
+      "feather_m": 0.18
+    },
+    "recesses": {
+      "center_abs_x_y_z": [
+        5.4,
+        1,
+        26.5
+      ],
+      "radius_start": 1.0,
+      "radius_end": 1.29,
+      "z_width": 0.72
+    },
+    "rudder_roots": {
+      "center_abs_x_y_z": [
+        3.95,
+        2.6,
+        24.6
+      ],
+      "width": [
+        0.28,
+        0.3,
+        1
+      ]
+    },
+    "stabilizer_upper": {
+      "center": [
+        0,
+        3.42,
+        25
+      ],
+      "width": [
+        0.28,
+        0.25,
+        1.3
+      ]
+    },
+    "stabilizer_lower": {
+      "center": [
+        0,
+        -0.2,
+        25
+      ],
+      "width": [
+        0.25,
+        0.24,
+        1.1
+      ]
+    }
+  }
+}
