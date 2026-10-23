@@ -106,6 +106,10 @@ var light_on := true        ## прожектор включён (кнопка �
 var camera: Camera3D
 ## Облёт с борта в начале забега (тесты и снимки выключают: tests/run.gd, tools/shot.gd).
 static var intro := true
+## Главное меню ART-037 после заставки прогрева (тесты и снимки выключают: tests/run.gd, tools/shot.gd).
+static var menu := true
+var main_menu := MainMenu.new()   ## «Погрузиться» / «Экипаж» / «Настройки»: пока открыто — игра стоит под меню
+var menu_panel: MenuPanel
 var flyby := Flyby.new()   ## камера с борта: облёт в начале забега, вид при всплытии
 var flyby_cam: Camera3D
 var overlay: TouchOverlay
@@ -295,6 +299,8 @@ func _ready() -> void:
 	_place_ship()
 	_place_camera()
 	_begin_warmup()
+	if menu:
+		open_menu()
 	if QaRunner.pending():
 		start_qa()
 
@@ -500,6 +506,9 @@ func step(dt: float) -> void:
 	time += dt
 	if qa:
 		qa.tick(dt)
+	if main_menu.open and not warm.active():   # главное меню: игра стоит, касания — кнопкам меню
+		_menu_step()
+		return
 	if net_client:   # клиент: корабль, реактор и экипаж — из кадров хоста
 		_client_step(dt)
 		return
@@ -984,6 +993,36 @@ func _on_hit(percent: int, kind: String) -> void:
 		say("%s бьёт по корпусу: −%d%%" % [kind, percent])
 
 
+## Главное меню ART-037 поверх сцены (после заставки прогрева — сразу под ней). Игра под меню стоит.
+func open_menu() -> void:
+	main_menu.open = true
+	if menu_panel == null:
+		menu_panel = MenuPanel.new()
+		menu_panel.version = str(ProjectSettings.get_setting("application/config/version", "?"))
+		add_child(menu_panel)
+	menu_panel.show_menu(main_menu)
+	overlay.visible = false
+
+
+## Шаг под меню: касания кнопок. «Погрузиться» — забег с начала (облёт, часы забега), палец с кнопки не идёт в игру.
+func _menu_step() -> void:
+	var r := overlay.router
+	for p in r.taps:
+		if main_menu.press(main_menu.hit(p, get_viewport().get_visible_rect().size)) == "dive":
+			close_menu()
+			_begin_run()
+			break
+	r.end_frame()
+
+
+func close_menu() -> void:
+	main_menu.open = false
+	if menu_panel:
+		menu_panel.show_menu(main_menu)
+	overlay.router.clear()   # палец ещё на кнопке: не крестовина и не касание, пропускающее облёт
+	overlay.visible = not wreck.active()
+
+
 ## Корпус разрушен: забег проигран — шторка ART-036 3,5 с (`Wreck`), под сплошной шторкой подъём к старту с целым
 ## корпусом (`_wreck_step` → `_restart`). Ввод на это время не идёт в игру.
 func _on_destroyed() -> void:
@@ -1377,6 +1416,8 @@ func mate_action(m: Crew.Member) -> String:
 
 ## Открыть сетевой забег хостом (NetLink): телефоны по локальной сети встают членами экипажа, их ввод — `Member.pad`.
 func host_game(port: int = NetLink.PORT) -> Error:
+	if main_menu.open:
+		close_menu()
 	net_host = NetLink.Host.new()
 	var err := net_host.start(port)
 	if err != OK:
@@ -1474,6 +1515,8 @@ func _net_run() -> Dictionary:
 ## Войти в сетевой забег хоста по адресу в локальной сети: шаг корабля считает хост, здесь — свой ввод хосту
 ## (`net_pad` → `Client.send_pad`) и кадры хоста в корабль, реактор, корпус и экипаж; свой игрок — `crew[client.me]`.
 func join_game(address: String, port: int = NetLink.PORT, player: String = "", role: int = Crew.Role.PILOT, look: int = 0) -> Error:
+	if main_menu.open:
+		close_menu()
 	net_client = NetLink.Client.new()
 	var err := net_client.join(address, port, player, role, look)
 	if err != OK:

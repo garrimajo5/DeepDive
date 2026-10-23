@@ -4,7 +4,8 @@ extends RefCounted
 ## Сценарий — JSON-массив шагов (пример — tools/qa/scenario.json):
 ##   {"do": "wait", "s": 2}                          — подождать
 ##   {"do": "shot", "name": "01-start"}              — скриншот
-##   {"do": "press", "what": "action"}               — нажать и отпустить (action, up, down, light)
+##   {"do": "press", "what": "action"}               — нажать и отпустить (action, up, down, light;
+##                                                     dive — «Погрузиться» в главном меню ART-037)
 ##   {"do": "hold", "what": "pad", "dir": [0, 1], "s": 5} — держать (pad — с направлением [вправо, вперёд])
 ##   {"do": "swipe", "dx": 300, "dy": 0, "s": 0.6}   — свайп обзора, смещение в пикселях вьюпорта
 ##   {"do": "goto", "x": -2.2, "z": 17.2, "yaw": 90}  — перейти на палубе (дальние отсеки без ходьбы; yaw в градусах,
@@ -33,7 +34,7 @@ extends RefCounted
 ## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["route"], ["act"], ["gone"], ["wreck"], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
 const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "silt", "drain", "hull", "route", "gone", "wreck", "log", "quit"]
-const BUTTONS := ["action", "up", "down", "light", "pad"]
+const BUTTONS := ["action", "up", "down", "light", "pad", "dive"]
 const PRESS_TIME := 0.15   ## сколько держать кнопку при «press», с
 const FINGER := 900        ## номер пальца для касаний сценария (не пересекается с настоящими)
 ## После этих команд скриншот ждёт следующего шага: снимок берёт уже нарисованный кадр, и без кадра между ними
