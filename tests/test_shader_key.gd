@@ -13,6 +13,9 @@ func test_same_flags_same_key() -> void:
 	m.cull_mode = BaseMaterial3D.CULL_BACK
 	ok(ShaderKey.of(m) != ShaderKey.of(ShaderKey.glass(Color.RED)), "отсечение граней — другой шейдер")
 	eq(ShaderKey.of(null), "", "нет материала")
+	var tagged := ShaderKey.glass(Color.RED)
+	tagged.set_meta("_gltf_primary_texture_coord", 0)
+	eq(ShaderKey.of(tagged), ShaderKey.of(ShaderKey.glass(Color.RED)), "метаданные шейдер не меняют")
 
 
 func _find(keys: Dictionary, who: String) -> String:

@@ -13,6 +13,14 @@ const SAFE_ALARM := Color("A9DDE7")   ## опора в аварии
 const SAFE_K := 0.48
 const AMBER := Color("FFB259")        ## янтарь тревоги (без красного, #129)
 const HOT := Color("FF8A3C")          ## перегрев реактора
+## Материалы (ART-064): рассеиватели плафонов — текстура `textures/svet/plafon.png` (цвет × альфа) × оттенок × энергия;
+## кольцо лаборатории — опора, стержень реактора — свой огонь.
+const PLAFOND_E := 0.75
+const PLAFOND_MODULE := 0.4           ## м — рисунок по полосе отсека
+const RING_E := 0.7
+const RING_ALARM_E := 0.28
+const ROD_E := 0.45
+const WHEEL := Color("8C806B")        ## маховик вентиля машинного — матовый металл (без красного, #129)
 
 
 class Lamp:
@@ -98,3 +106,18 @@ static func reactor_color(r: Reactor) -> Color:
 static func reactor_energy(r: Reactor, k: float = 1.0) -> float:
 	return 0.0 if r.scram > 0.0 else reactor().energy * k
 
+
+
+## Оттенок свечения плафонов: обычный — рисунок как есть, авария — янтарь.
+static func plafond_tint(breach_room: int) -> Color:
+	return Color.WHITE if breach_room < 0 else AMBER
+
+
+## Энергия свечения плафонов: 0,75, авария — 0,22 + 0,48·p; × k (Vitals.lamp_k).
+static func plafond_energy(breach_room: int, t: float, k: float = 1.0) -> float:
+	return (PLAFOND_E if breach_room < 0 else 0.22 + 0.48 * pulse(t)) * k
+
+
+## Свечение кольца лаборатории (опора): 0,7, в аварии ровные 0,28; × k.
+static func ring_energy(breach_room: int, k: float = 1.0) -> float:
+	return (RING_E if breach_room < 0 else RING_ALARM_E) * k

@@ -93,3 +93,52 @@ func test_scene_lights_and_breach() -> void:
 	ok(main.bridge.lamps[1].light_color.is_equal_approx(CabinLight.lamps()[1].color), "и цвет свой")
 	main.queue_free()
 	await frames(1)
+
+
+func test_materials_envelope() -> void:
+	near(CabinLight.plafond_energy(-1, 0.3, 1.0), 0.75, 1e-6, "плафоны — 0,75")
+	near(CabinLight.plafond_energy(-1, 0.3, 0.5), 0.375, 1e-6, "× lamp_k")
+	eq(CabinLight.plafond_tint(-1), Color.WHITE, "рисунок как есть")
+	eq(CabinLight.plafond_tint(2), CabinLight.AMBER, "авария — янтарь")
+	near(CabinLight.plafond_energy(2, 0.0, 1.0), 0.22, 1e-6, "внизу 0,22")
+	near(CabinLight.plafond_energy(2, 0.6, 1.0), 0.70, 1e-6, "вверху 0,70")
+	near(CabinLight.ring_energy(-1), 0.7, 1e-6, "кольцо 0,7")
+	near(CabinLight.ring_energy(0, 0.5), 0.14, 1e-6, "в аварии 0,28 × k")
+	eq(BridgeView.plafond_tiles(0.4, 0.28), Vector2(1, 1), "панель мостика — один рисунок")
+	eq(BridgeView.plafond_tiles(0.15, 5.4), Vector2(1, 14), "полоса — модулем 0,4 м")
+	var tex: Image = load("res://textures/svet/plafon.png").get_image()
+	eq(tex.get_size(), Vector2i(256, 256), "текстура 256²")
+	ok(tex.get_pixel(2, 2).get_luminance() < 0.02, "за альфой — тёмный носитель")
+	var core := 0.0
+	for x in range(100, 156, 4):
+		core = maxf(core, tex.get_pixel(x, 120).get_luminance())
+	ok(core > 0.5, "ядро светится: %.2f" % core)
+
+
+func test_scene_materials() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var bm := main.bridge.plafond_mat
+	var rm := main.rooms.plafond_mat
+	ok(bm != null and rm != null and bm != rm, "у мостика и отсеков свои рассеиватели")
+	ok(bm.emission_texture != null and bm.albedo_texture == bm.emission_texture, "текстура плафона — цвет и свечение")
+	main.step(0.1)
+	near(bm.emission_energy_multiplier, 0.75, 1e-5, "мостик светится 0,75")
+	near(rm.emission_energy_multiplier, 0.75, 1e-5, "отсеки — тоже")
+	near(main.rooms._ring_mats[0].emission_energy_multiplier, 0.7, 1e-5, "кольцо 0,7")
+	near(main.rooms._rod_mat.emission_energy_multiplier, CabinLight.ROD_E, 1e-5, "стержень 0,45")
+	var wheel := main.rooms.valve_wheel.find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D
+	var wm := wheel.material_override as StandardMaterial3D
+	ok(wm != null and wm.albedo_color.is_equal_approx(CabinLight.WHEEL) and wm.albedo_texture == null, "маховик — матовый металл")
+	main.on_eco_event({"type": EcoLink.HIT, "damage": 0.12, "by": "Серпохвост"})
+	for i in 5:
+		main.step(0.1)
+		ok(bm.emission.is_equal_approx(CabinLight.AMBER), "плафоны — янтарь")
+		near(bm.emission_energy_multiplier, CabinLight.plafond_energy(0, main.breach.time), 1e-5, "по ритму")
+		near(main.rooms._ring_mats[0].emission_energy_multiplier, 0.28, 1e-5, "кольцо — ровная опора")
+	main.reactor.scram = 1.0
+	main.step(0.1)
+	eq(main.rooms._rod_mat.emission_energy_multiplier, 0.0, "SCRAM гасит стержень")
+	main.queue_free()
+	await frames(1)

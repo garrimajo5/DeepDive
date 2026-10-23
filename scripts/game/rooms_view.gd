@@ -10,6 +10,7 @@ var _rod_mat: StandardMaterial3D
 var reactor_light: OmniLight3D
 var lamps: Array[OmniLight3D] = []  ## огни отсеков C1, L1, E1, H1 по ART-064 (set_cabin)
 var _lamp_data: Array[CabinLight.Lamp] = []
+var plafond_mat: StandardMaterial3D   ## полосы-лампы отсеков ART-064 (set_cabin)
 ## Материалы машинного и трюма ART-055 (`otseki-materialy.md`), карты `textures/rooms/<имя>-*.png`, запись — как
 ## `BridgeView.KITS`: [имя, сила нормалей, шероховатость, металл «Экономно», z от, z до]. Машинное z 14…19,5 (side),
 ## трюм 19,5…24 и корма (aft), общий потолок обоих (down, у стен — низ перемычек над люками). Коридор и лаборатория —
@@ -58,6 +59,7 @@ func _ready() -> void:
 	mesh_instance.mesh = BridgeView.build_mesh(ShipLayout.parts(), KITS, KIT_DIR)
 	mesh_instance.layers = OceanView.LAYER_SHIP
 	add_child(mesh_instance)
+	plafond_mat = BridgeView.plafond_material(mesh_instance.mesh)
 	for l in CabinLight.of(false):   # C1, L1, E1, H1 по ART-064
 		var o := BridgeView.cabin_light(l)
 		add_child(o)
@@ -127,8 +129,18 @@ func set_cabin(breach_room: int, t: float, k: float) -> void:
 	for i in lamps.size():
 		lamps[i].light_color = CabinLight.color(_lamp_data[i], breach_room)
 		lamps[i].light_energy = CabinLight.energy(_lamp_data[i], breach_room, t, k)
-	for m in _ring_mats:   # голубая вставка кольца гаснет и мигает вместе с плафонами
-		m.emission_energy_multiplier = k
+	BridgeView.set_plafond(plafond_mat, breach_room, t, k)
+	for m in _ring_mats:   # голубая вставка кольца — опора лаборатории: 0,7, в аварии 0,28, мигает с плафонами
+		m.emission_energy_multiplier = CabinLight.ring_energy(breach_room, k)
+
+
+## Маховик вентиля по примерке ART-064: матовый металл #8C806B вместо красного (тревога в корабле — янтарь).
+static func wheel_material() -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()   # флаги — как у оболочки отсеков: шейдер общий
+	m.albedo_color = CabinLight.WHEEL
+	m.metallic = 0.4
+	m.roughness = 0.75
+	return m
 
 
 ## Огни отсеков × k без аварии (мигание, Vitals.lamp_k).
@@ -352,6 +364,8 @@ func set_lab(kinds: Array, lines: PackedStringArray, t: float) -> void:
 func _add_engine_room() -> void:
 	_model("ventil-truba", EngineRoom.VALVE_POS)
 	valve_wheel = _model("ventil-koleso", EngineRoom.VALVE_WHEEL)
+	for mi: MeshInstance3D in valve_wheel.find_children("*", "MeshInstance3D", true, false):
+		mi.material_override = wheel_material()   # без красного (ART-064, #129)
 	var panel := _model("shchitok", EngineRoom.PANEL_POS)
 	panel_lid = _model("shchitok-kryshka", EngineRoom.LID_POS)
 	var bmi: MeshInstance3D = panel.find_children("*", "MeshInstance3D", true, false)[0]
@@ -419,6 +433,6 @@ func apply(layout: ShipLayout, r: Reactor, lock: Airlock = null, engine: EngineR
 	var c := ShipLayout.rod_color(r)
 	_rod_mat.albedo_color = c
 	_rod_mat.emission = c
-	_rod_mat.emission_energy_multiplier = 0.0 if r.scram > 0.0 else 1.4
+	_rod_mat.emission_energy_multiplier = 0.0 if r.scram > 0.0 else CabinLight.ROD_E
 	reactor_light.light_color = CabinLight.reactor_color(r)
 	reactor_light.light_energy = CabinLight.reactor_energy(r)   # не мигает: его ведёт реактор

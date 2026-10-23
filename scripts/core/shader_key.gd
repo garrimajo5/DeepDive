@@ -17,7 +17,8 @@ static func of(m: Material) -> String:
 		return "shader:" + (sh.resource_path if sh and sh.resource_path != "" else str(sh.get_instance_id() if sh else 0))
 	var k := m.get_class()
 	for p in m.get_property_list():
-		if p.usage & PROPERTY_USAGE_STORAGE == 0 or p.name in ["render_priority", "resource_local_to_scene", "script"]:
+		if p.usage & PROPERTY_USAGE_STORAGE == 0 or p.name in ["render_priority", "resource_local_to_scene", "script"] \
+				or p.name.begins_with("metadata/"):   # метаданные (glTF, свои метки) шейдер не меняют
 			continue
 		if p.type == TYPE_BOOL or p.type == TYPE_INT:
 			k += "|%s=%s" % [p.name, m.get(p.name)]
