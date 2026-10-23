@@ -26,7 +26,7 @@ const STREAK_Y := Vector2(1.35, 2.85)    ## потёки гаснут к низ�
 const ALBEDO_K := 0.68
 const ROUGH := 0.24
 const ROUGH_K := 0.72
-const COAT_K := 0.7
+const COAT_K := 0.35         ## лак: SPECULAR 0,5 + COAT_K·amount (не CLEARCOAT — issue #535)
 
 enum Face { WALL, FLOOR, CEILING }
 

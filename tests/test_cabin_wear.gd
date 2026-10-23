@@ -81,3 +81,16 @@ func test_scene_sets_wear_on_bridge_and_rooms() -> void:
 	ok(seen > 0, "у отсеков материалы ship_surface")
 	main.queue_free()
 	await frames(1)
+
+
+## Issue #535: CLEARCOAT в шейдере включает второй блик на каждый огонь во всём материале (мостик и отсеки целиком,
+## даже при целом корпусе) — на устройстве видеокарта 2–3 → 40–60 мс. Лак износа — через SPECULAR.
+func test_no_clearcoat_in_shaders() -> void:
+	for f: String in DirAccess.get_files_at("res://shaders"):
+		if not f.ends_with(".gdshader") and not f.ends_with(".gdshaderinc"):
+			continue
+		var code := FileAccess.get_file_as_string("res://shaders/" + f)
+		var lines := PackedStringArray()
+		for line: String in code.split("\n"):
+			lines.append(line.split("//")[0])
+		ok(not "\n".join(lines).contains("CLEARCOAT"), "%s не пишет CLEARCOAT" % f)
