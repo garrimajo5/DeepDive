@@ -8,6 +8,8 @@ shader_type spatial;
 // (*_z: от, до); вне всех — прежняя заливка base_*. skip_up — грани вверх без карт (кромка шлюза в трюме).
 // relief = false («Экономно», ART-044) — без нормалей и ORM: цвет из карты, шероховатость и металл — константы.
 // Выборки внутри ветки — через textureGrad с производными снаружи, иначе mipmap на стыке граней рвётся.
+// Блики воды ART-067 (bliki-vody.md, числа — WaterGlints): маска каустик в EMISSION потолка (×1) и пола (×0,6) в зоне
+// мостика по z, две выборки текут; glint_k = 0 (отсеки, «Экономно», глубина) — маска не читается.
 
 uniform vec3 base_color : source_color = vec3(0.55, 0.5, 0.42);
 uniform float base_rough = 0.75;
@@ -42,6 +44,12 @@ uniform float down_depth = 0.7;
 uniform float down_rough = 0.78;
 uniform float down_metal = 0.2;
 
+uniform sampler2D glint_mask : hint_default_black, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float glint_k = 0.0;
+uniform float glint_time = 0.0;
+uniform vec3 glint_tint : source_color = vec3(0.65, 0.85, 0.95);
+
+varying vec3 ship_pos;
 varying float down;
 varying float up;
 varying float local_z;
@@ -50,6 +58,7 @@ void vertex() {
 	down = NORMAL.y < -0.5 ? 1.0 : 0.0;
 	up = NORMAL.y > 0.5 ? 1.0 : 0.0;
 	local_z = VERTEX.z;
+	ship_pos = VERTEX;
 }
 
 bool within(vec2 r, float z) {
@@ -112,6 +121,19 @@ void fragment() {
 		} else {
 			ROUGHNESS = side_rough;
 			METALLIC = side_metal;
+		}
+	}
+	vec2 q = ship_pos.xz / 3.2;   // производные — до ветки (как у карт выше)
+	vec2 qdx = dFdx(q);
+	vec2 qdy = dFdy(q);
+	if (glint_k >= 0.0001) {   // WaterGlints: zone, facing, flow, MIX
+		float region = (1.0 - smoothstep(-1.0, 3.0, ship_pos.z)) * smoothstep(-6.7, -5.8, ship_pos.z);
+		float facing = down > 0.5 ? 1.0 : (up > 0.5 ? 0.6 : 0.0);
+		if (region * facing > 0.0) {
+			float a = textureGrad(glint_mask, q + vec2(0.012, 0.007) * glint_time, qdx, qdy).r;
+			float b = textureGrad(glint_mask, q * vec2(-1.0, 1.0) + vec2(-0.006, 0.011) * glint_time + 0.37,
+				qdx * vec2(-1.0, 1.0), qdy * vec2(-1.0, 1.0)).r;
+			EMISSION += glint_tint * (0.6 * a + 0.4 * b) * glint_k * region * facing;
 		}
 	}
 }
