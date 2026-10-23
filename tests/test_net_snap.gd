@@ -232,3 +232,30 @@ func test_run_bad_data_ignored() -> void:   # испорченный маршр�
 	NetSnap.apply_run(st, my)
 	eq(my.route, -1, "чужой номер маршрута — без маршрута")
 	eq(my.visited, ["well"], "чужой номер места пропущен")
+
+
+func test_scorch_marks_reach_guest() -> void:   # следы разрядов у дна (ART-066) — у гостя те же, возраст по своим часам
+	var h := Seabed.Scorch.new()
+	var fy := -30.0
+	ok(h.add(Vector3(4.0, fy + Helm.Ship.CLEARANCE, -9.0), fy, 1.0, 100.0), "разряд у дна — след у хоста")
+	ok(h.add(Vector3(-6.0, fy + Helm.Ship.CLEARANCE + 3.0, 12.0), fy, 0.8, 150.0), "второй слабее")
+	var g := Seabed.Scorch.new()
+	ok(NetSnap.apply_scorch(NetSnap.scorch(h, 160.0), g, 20.0), "гость принял")
+	eq(g.all.size(), 2)
+	eq(g.count, 2)
+	for i in 2:
+		near(g.all[i].at.x, h.all[i].at.x, 1e-4, "место x")
+		near(g.all[i].at.y, h.all[i].at.y, 1e-4, "место z")
+		near(g.all[i].rot, h.all[i].rot, 1e-4, "поворот")
+		near(g.all[i].size, h.all[i].size, 1e-4, "размер")
+		near(g.all[i].k, h.all[i].k, 1e-4, "сила")
+		eq(g.all[i].index, h.all[i].index, "ячейка А/Б")
+	near(20.0 - float(g.all[0].t), 60.0, 1e-3, "возраст первого — 60 с, часы гостя свои")
+	near(Seabed.Scorch.old(g.all[0], 20.0), Seabed.Scorch.old(h.all[0], 160.0), 1e-4, "стареет так же")
+	ok(not NetSnap.apply_scorch(NetSnap.scorch(h, 161.0), g, 21.0), "тот же счёт — не переставляет")
+	near(20.0 - float(g.all[0].t), 60.0, 1e-3, "время следа осталось")
+	h.clear()
+	ok(NetSnap.apply_scorch(NetSnap.scorch(h, 200.0), g, 60.0), "новый забег у хоста")
+	ok(g.all.is_empty() and g.count == 0, "у гостя чистое дно")
+	ok(not NetSnap.apply_scorch(PackedFloat32Array([1.0, 2.0]), g, 0.0), "битый пакет не трогает")
+	ok(not NetSnap.apply_scorch(null, g, 0.0), "нет поля — не трогает")

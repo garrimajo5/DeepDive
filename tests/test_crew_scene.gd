@@ -32,7 +32,9 @@ func test_seated_hands_on_wheel_in_scene() -> void:
 	main.step(1.0 / 30.0)
 	var hand: Vector3 = _shown(0, "hand_r")
 	var grip: Vector3 = Crew.wheel_grips(main.helm.turn)[1]
-	ok(hand.distance_to(grip) < 0.12, "правая рука у обода (%.2f м)" % hand.distance_to(grip))
+	ok(hand.distance_to(grip) < 0.16, "правая рука у обода (%.2f м)" % hand.distance_to(grip))
+	var palm: Vector3 = main.me.joints()["palm_r"]
+	ok(palm.distance_to(grip) < 0.1, "ладонь на ободе (%.2f м)" % palm.distance_to(grip))
 	near(main.camera.position.y, main.me.eye().y, 1e-4, "камера в голове фигуры")
 	main.stand_up()
 
@@ -339,6 +341,40 @@ func test_mate_action_power() -> void:   # товарищ у пульта эне
 	main.use_post("energy")
 	ok(main.at_power, "теперь у пульта свой")
 	main.close_power()
+
+
+func test_busy_message_clears_when_mate_leaves() -> void:   # issue #419: «Пульт энергии занят: Инженер» после ухода
+	var m := main.add_mate(-3.5, -2.0, PI / 2.0, Crew.Role.ENGINEER, 0)
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	m.pad.clear()
+	ok(m.at_power, "инженер у пульта")
+	main.walker.x = -3.3
+	main.walker.z = -1.5
+	main.use_post("energy")
+	eq(main.message.text, "Пульт энергии занят: Инженер", "на приборах — кто держит")
+	main.step(1.0 / 30.0)
+	eq(main.message.text, "Пульт энергии занят: Инженер", "пока держит — строка остаётся")
+	main.mate_gone(m)
+	main.step(1.0 / 30.0)
+	eq(main.message.text, "", "инженер отключился — строка погасла сразу")
+	main.say("Прожектор включён")
+	main.step(1.0 / 30.0)
+	eq(main.message.text, "Прожектор включён", "чужое сообщение не гасим")
+
+
+func test_busy_message_clears_when_mate_stands() -> void:
+	var m := main.add_mate(-3.5, -2.0, PI / 2.0, Crew.Role.ENGINEER, 0)
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	main.walker.x = -3.3
+	main.walker.z = -1.5
+	main.use_post("energy")
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	ok(not m.at_power, "инженер отошёл")
+	main.step(1.0 / 30.0)
+	eq(main.message.text, "", "пост свободен — строка «занят» погасла")
 
 
 func test_mate_action_vote() -> void:   # у голостола товарищ встаёт к голосованию только после маршрута

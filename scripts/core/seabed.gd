@@ -88,23 +88,283 @@ static func build_arrays(segments: int = SEGMENTS, size: float = SIZE) -> Array:
 	return arr
 
 
-## Вода по глубине (updateEnv в js/game.js): у льда бирюзовая, к 95 м тёмная, туман гуще.
+## Вода по глубине по ART-059 (`docs/concept-art/voda-glubina.md`, ключи `voda-glubina.json`): конечные значения
+## тумана, рассеянного света, солнца сквозь лёд и экспозиции ACES — `OceanView.apply_water` ставит их как есть.
+## Между ключами — линейно (цвет — в линейном свете), ниже 120 м — как на 120 м.
 class Water:
-	const SHALLOW := Color8(0x1a, 0x66, 0x76)
-	const DEEP := Color8(0x04, 0x1a, 0x22)
+	## [глубина, цвет тумана, плотность, рассеянный, солнце, экспозиция]
+	const KEYS := [
+		[0.0, Color8(0x3A, 0x81, 0x90), 0.008, 0.70, 0.65, 0.84],
+		[5.0, Color8(0x2E, 0x76, 0x87), 0.009, 0.64, 0.60, 0.85],
+		[8.0, Color8(0x28, 0x6B, 0x80), 0.010, 0.58, 0.52, 0.86],
+		[15.0, Color8(0x20, 0x53, 0x6F), 0.0115, 0.43, 0.39, 0.885],
+		[20.0, Color8(0x1A, 0x46, 0x67), 0.013, 0.36, 0.31, 0.90],
+		[30.0, Color8(0x14, 0x37, 0x53), 0.0155, 0.25, 0.18, 0.92],
+		[45.0, Color8(0x0D, 0x29, 0x43), 0.018, 0.16, 0.085, 0.94],
+		[60.0, Color8(0x09, 0x1E, 0x34), 0.0195, 0.10, 0.04, 0.955],
+		[90.0, Color8(0x05, 0x13, 0x1F), 0.022, 0.045, 0.012, 0.98],
+		[120.0, Color8(0x04, 0x0D, 0x17), 0.0235, 0.025, 0.005, 0.98],
+	]
 
-	## 0 у льда (до 8 м), 1 на глубине 95 м и ниже.
+	## 0 у льда (до 8 м), 1 на глубине 95 м и ниже (каустики дна, прежняя кривая).
 	static func k(depth: float) -> float:
 		return HashNoise.smooth(8.0, 95.0, depth)
 
+	## Ключ и доля до следующего: [i, t].
+	static func _at(depth: float) -> Array:
+		var d := clampf(depth, KEYS[0][0], KEYS[KEYS.size() - 1][0])
+		for i in KEYS.size() - 1:
+			if d <= KEYS[i + 1][0]:
+				return [i, (d - KEYS[i][0]) / (KEYS[i + 1][0] - KEYS[i][0])]
+		return [KEYS.size() - 2, 1.0]
+
+	static func _num(depth: float, col: int) -> float:
+		var a := _at(depth)
+		return lerpf(KEYS[a[0]][col], KEYS[a[0] + 1][col], a[1])
+
 	static func fog_density(depth: float) -> float:
-		return 0.015 + 0.01 * k(depth)
+		return _num(depth, 2)
 
 	static func ambient(depth: float) -> float:
-		return 0.95 - 0.55 * k(depth)
+		return _num(depth, 3)
 
 	static func sun(depth: float) -> float:
-		return 0.55 - 0.4 * k(depth)
+		return _num(depth, 4)
+
+	static func exposure(depth: float) -> float:
+		return _num(depth, 5)
 
 	static func fog_color(depth: float) -> Color:
-		return SHALLOW.lerp(DEEP, k(depth))
+		var a := _at(depth)
+		var c0: Color = KEYS[a[0]][1]
+		var c1: Color = KEYS[a[0] + 1][1]
+		return c0.srgb_to_linear().lerp(c1.srgb_to_linear(), a[1]).linear_to_srgb()
+
+	## Свет каустик на дне — прежняя кривая (ART-059: лучи и каустики не усиливать и не ослаблять заново).
+	static func caustic(depth: float) -> float:
+		return 0.55 - 0.4 * k(depth)
+
+
+## Грунты дна по ART-060 (`docs/concept-art/dno-grunty.md`): песок, ил и галька — карты 2 × 2 м поверх `color_at`
+## в материале дна (`shaders/seabed.gdshader`, один вызов). Веса грунтов, затухания и базис нормалей — здесь;
+## шейдер считает то же тем же хешем, что `HashNoise` (до точности float).
+class Ground:
+	const TEX := "res://textures/dno/%s-%s.png"   ## грунт (pesok, il, galka), карта (tsvet, normali, orm)
+	const KINDS := ["pesok", "il", "galka"]
+	const MAPS := ["tsvet", "normali", "orm"]
+	const TILE := 2.0                              ## плитка, м: uv = world.xz / TILE
+	const OFFSET := [Vector2(0.0, 0.0), Vector2(0.37, 0.71), Vector2(0.63, 0.19)]   ## свой сдвиг UV у грунта
+	const NORMAL_K := [0.42, 0.25, 0.55]           ## сила нормалей: песок, ил, галька
+	const NORMAL_FADE := Vector2(8.0, 35.0)        ## нормали гаснут, м от камеры
+	const COLOR_FADE := Vector2(12.0, 55.0)        ## цвет деталей гаснет, м
+	const BUMP := 0.12                             ## прежний процедурный микрорельеф — слабее
+	const SILT_SCALE := 0.075                      ## ил — карманы по шуму, 1/м
+	const SILT_EDGE := Vector2(0.48, 0.62)
+	const PEBBLE_SCALE := 0.11                     ## галька — пятна шума, 1/м
+	const PEBBLE_EDGE := Vector2(0.45, 0.62)
+	const STEEP := Vector2(0.42, 0.65)             ## уклон (1 − ny), на котором детали уходят в скалу
+
+	## Веса [песок, ил, галька] ≥ 0, сумма 1. ny — y нормали, depth — глубина дна под льдом, м.
+	static func weights(x: float, z: float, ny: float, depth: float) -> Array:
+		var s := 1.0 - ny
+		var n_silt := HashNoise.fbm(x * SILT_SCALE + 7.0, z * SILT_SCALE + 7.0, 2)
+		var band := HashNoise.smooth(10.0, 18.0, depth) * (1.0 - HashNoise.smooth(55.0, 75.0, depth))
+		var silt := HashNoise.smooth(SILT_EDGE.x, SILT_EDGE.y, n_silt) * (0.35 + 0.65 * band) \
+				* HashNoise.smooth(0.80, 0.98, ny)
+		var spot := HashNoise.value(x * PEBBLE_SCALE + 31.0, z * PEBBLE_SCALE - 5.0)
+		var slope_band := HashNoise.smooth(0.08, 0.16, s) * (1.0 - HashNoise.smooth(0.36, 0.46, s))
+		var pebble := maxf(slope_band * HashNoise.smooth(0.25, 0.45, spot),
+				0.7 * HashNoise.smooth(PEBBLE_EDGE.x, PEBBLE_EDGE.y, spot))
+		silt *= 1.0 - pebble
+		return [1.0 - silt - pebble, silt, pebble]
+
+	## Сила деталей на склоне: на крутом остаётся скальный цвет.
+	static func detail_k(ny: float) -> float:
+		return 1.0 - HashNoise.smooth(STEEP.x, STEEP.y, 1.0 - ny)
+
+	static func normal_fade(dist: float) -> float:
+		return 1.0 - HashNoise.smooth(NORMAL_FADE.x, NORMAL_FADE.y, dist)
+
+	static func color_fade(dist: float) -> float:
+		return 1.0 - HashNoise.smooth(COLOR_FADE.x, COLOR_FADE.y, dist)
+
+	## Цвет: vertex_color · mix(1, 2·tsvet, k) — карта даёт отклонение от 50 % серого.
+	static func tint(base: Color, tsvet: Color, k: float) -> Color:
+		return Color(base.r * lerpf(1.0, 2.0 * tsvet.r, k), base.g * lerpf(1.0, 2.0 * tsvet.g, k),
+				base.b * lerpf(1.0, 2.0 * tsvet.b, k))
+
+	## Мировой базис нормалей: T — +X на поверхность, B = N × T (на ровном дне к −Z), +Y карты — к −Z мира.
+	static func basis(n: Vector3) -> Basis:
+		var t := (Vector3.RIGHT - n * n.dot(Vector3.RIGHT)).normalized()
+		return Basis(t, n.cross(t), n)
+
+	## UV грунта kind в точке мира.
+	static func uv(x: float, z: float, kind: int) -> Vector2:
+		return Vector2(x, z) / TILE + OFFSET[kind]
+
+	static func path(kind: int, map: int) -> String:
+		return TEX % [KINDS[kind], MAPS[map]]
+
+
+## Декали дна по ART-066 (`docs/concept-art/dekali-dna.md`): атлас 4×4 (следы, вмятины, ил, ракушечник, мох; разряды —
+## ячейки 13–15, в фон не идут) проекцией world.xz в материал дна (`shaders/seabed.gdshader`, без новых вызовов).
+## Два слоя клеток 4 × 4 м (второй сдвинут на полклетки): в клетке слоя — не больше одного штампа. Шейдер считает то же
+## целочисленным хешем `HashNoise.hash2` — места штампов здесь и там совпадают.
+class Marks:
+	const ATLAS := "res://textures/dno/dekali.png"
+	const CELL := 4.0                     ## клетка, м
+	const LAYERS := 2                     ## слоёв клеток (ART-066 — один; плотность поднята при встройке)
+	const ACCEPT := 0.72                  ## доля клеток со штампом
+	const SIZE := Vector2(1.55, 2.4)      ## сторона квадрата штампа, м
+	const JITTER := 0.2                   ## сдвиг центра, ± м
+	const STRENGTH := 0.85                ## сила множителя
+	const FADE := Vector2(10.0, 45.0)     ## гаснут, м от камеры
+	const SLOPE := Vector2(0.30, 0.48)    ## уклон (1 − ny), на котором гаснут
+	const TRACK_NY := Vector2(0.82, 0.96) ## следы — только на ровном
+	const MOSS_EDGE := Vector2(0.48, 0.68)
+	const EDGE := 0.07                    ## края квадрата гаснут в пустом поле ячейки (20 px из 256 ≈ 0,078)
+	## «Экономно» (ART-044): один слой, реже и ближе.
+	const LITE_ACCEPT := 0.36
+	const LITE_FADE := Vector2(6.0, 25.0)
+	## Категории фона: верхняя граница доли, первая ячейка, сколько ячеек.
+	const CATS := [[0.27, 0, 4], [0.40, 4, 2], [0.67, 6, 3], [0.85, 9, 2], [1.0, 11, 2]]
+	enum Cat { TRACK, DENT, SILT, SHELL, MOSS }
+	const SCORCH := [13, 14, 15]          ## разряды — только по событию, не в фоне
+
+	## Хеш клетки (как dhash в шейдере): k — номер числа, у слоя свои 8.
+	static func h(ix: int, iz: int, k: int) -> float:
+		return HashNoise.hash2(ix + 9973 * k, iz - 7919 * k)
+
+	## Сдвиг сетки слоя, м.
+	static func offset(layer: int) -> float:
+		return CELL * 0.5 if layer == 1 else 0.0
+
+	## Кандидат клетки слоя, в которую попала точка: {cell, accept, centre, rot, size, cat, index}.
+	static func candidate(x: float, z: float, layer: int, accept: float = ACCEPT) -> Dictionary:
+		var o := offset(layer)
+		var ix := int(floorf((x - o) / CELL))
+		var iz := int(floorf((z - o) / CELL))
+		var b := layer * 8
+		var pick := h(ix, iz, b + 5)
+		var cat := 0
+		while pick >= CATS[cat][0] and cat < CATS.size() - 1:
+			cat += 1
+		var index: int = CATS[cat][1] + mini(int(floorf(h(ix, iz, b + 6) * CATS[cat][2])), CATS[cat][2] - 1)
+		return {
+			"cell": Vector2i(ix, iz),
+			"accept": h(ix, iz, b) < accept,
+			"centre": Vector2((ix + 0.5) * CELL + o + (h(ix, iz, b + 1) - 0.5) * 2.0 * JITTER,
+					(iz + 0.5) * CELL + o + (h(ix, iz, b + 2) - 0.5) * 2.0 * JITTER),
+			"rot": h(ix, iz, b + 3) * TAU,
+			"size": lerpf(SIZE.x, SIZE.y, h(ix, iz, b + 4)),
+			"cat": cat,
+			"index": index,
+		}
+
+	## Координаты точки в квадрате штампа 0…1 (вне квадрата — за пределами 0…1).
+	static func stamp_uv(x: float, z: float, c: Dictionary) -> Vector2:
+		var q: Vector2 = Vector2(x, z) - c.centre
+		var cs: float = cos(c.rot)
+		var sn: float = sin(c.rot)
+		return Vector2(cs * q.x + sn * q.y, -sn * q.x + cs * q.y) / c.size + Vector2(0.5, 0.5)
+
+	## UV в атласе: ячейка index (слева направо, сверху вниз), точка st в ней.
+	static func atlas_uv(index: int, st: Vector2) -> Vector2:
+		return (Vector2(index % 4, floorf(index / 4.0)) + st) / 4.0
+
+	## Где лежит категория: веса грунта [песок, ил, галька], y нормали, точка (мох — по маске мха).
+	static func habitat(cat: int, w: Array, ny: float, x: float, z: float) -> float:
+		match cat:
+			Cat.TRACK:
+				return (w[0] + w[1]) * HashNoise.smooth(TRACK_NY.x, TRACK_NY.y, ny)
+			Cat.DENT:
+				return w[0] + w[1]
+			Cat.SILT:
+				return minf(0.3 * w[0] + w[1], 1.0)
+			Cat.SHELL:
+				return minf(0.35 * w[0] + w[2], 1.0)
+		return HashNoise.smooth(MOSS_EDGE.x, MOSS_EDGE.y, HashNoise.value(x * 0.03 + 7.0, z * 0.03))
+
+	## Затухание: вдали и на уклоне.
+	static func fade(dist: float, ny: float, lite: bool = false) -> float:
+		var f: Vector2 = LITE_FADE if lite else FADE
+		return (1.0 - HashNoise.smooth(f.x, f.y, dist)) * (1.0 - HashNoise.smooth(SLOPE.x, SLOPE.y, 1.0 - ny))
+
+	## Штампы, которые накрывают точку: [{index, st, cat}] по слоям (обычно 0–1).
+	static func at(x: float, z: float, lite: bool = false) -> Array:
+		var out := []
+		for layer in (1 if lite else LAYERS):
+			var c := candidate(x, z, layer, LITE_ACCEPT if lite else ACCEPT)
+			if not c.accept:
+				continue
+			var st := stamp_uv(x, z, c)
+			if st.x > 0.0 and st.y > 0.0 and st.x < 1.0 and st.y < 1.0:
+				out.append({"index": c.index, "st": st, "cat": c.cat, "layer": layer})
+		return out
+
+
+## Следы разрядов ART-066 (ячейки атласа 13–15): штамп на дне под кораблём после настоящего разряда у дна.
+## Сила 0…1 на событие — по зазору под корпусом и доле «Разряд»; держатся последние MAX до нового забега, свежий
+## («разряд А» или «Б») за OLD с темнеет в «старое пятно». Шейдер дна читает uniform-массивы `uniforms(t)`.
+class Scorch:
+	const MAX := 4                        ## сколько последних держит материал дна
+	const REACH := Vector2(2.0, 10.0)     ## зазор под корпусом (над CLEARANCE), м: до x — полная сила, к y — нет следа
+	const MIN_K := 0.1                    ## слабее — следа нет
+	const SIZE := Vector2(2.4, 4.0)       ## сторона квадрата штампа, м (по силе)
+	const OLD := Vector2(40.0, 120.0)     ## свежий → «старое пятно», с после разряда
+	const OLD_K := 0.75                   ## старое пятно бледнее свежего
+	const FRESH := [13, 14]               ## разряды А и Б — по очереди
+	const STALE := 15                     ## старое пятно
+
+	## [{at: Vector2 xz, rot, size, k, index, t}] — от старых к новым.
+	var all: Array = []
+	var count := 0                        ## разрядов у дна за забег (выбирает А/Б и поворот)
+
+	## Сила следа: зазор от низа корпуса до дна gap (м, CLEARANCE уже вычтен), доля «Разряд» share 0…1.
+	static func strength(gap: float, share: float) -> float:
+		var k := (1.0 - HashNoise.smooth(REACH.x, REACH.y, gap)) * clampf(share, 0.0, 1.0)
+		return k if k >= MIN_K else 0.0
+
+	## Разряд в момент t: корабль в ship, дно под ним на floor_y, доля share. Возвращает, лёг ли след.
+	func add(ship: Vector3, floor_y: float, share: float, t: float) -> bool:
+		var k := strength(ship.y - floor_y - Helm.Ship.CLEARANCE, share)
+		if k <= 0.0:
+			return false
+		all.append({"at": Vector2(ship.x, ship.z), "rot": HashNoise.hash2(count, 61) * TAU,
+			"size": lerpf(SIZE.x, SIZE.y, k), "k": k, "index": FRESH[count % FRESH.size()], "t": t})
+		count += 1
+		if all.size() > MAX:
+			all.pop_front()
+		return true
+
+	func clear() -> void:
+		all.clear()
+		count = 0
+
+	## Доля «старого пятна» у следа s в момент t (0 — свежий, 1 — старый).
+	static func old(s: Dictionary, t: float) -> float:
+		return HashNoise.smooth(OLD.x, OLD.y, t - float(s.t))
+
+	## Для шейдера: [где (x, z, поворот, размер), сила (k, ячейка, доля старого, 0)] по MAX; пустые — сила 0.
+	func uniforms(t: float) -> Array:
+		var at := PackedVector4Array()
+		var kk := PackedVector4Array()
+		for i in MAX:
+			if i < all.size():
+				var s: Dictionary = all[i]
+				var o := old(s, t)
+				at.append(Vector4(s.at.x, s.at.y, s.rot, s.size))
+				kk.append(Vector4(s.k * lerpf(1.0, OLD_K, o), s.index, o, 0.0))
+			else:
+				at.append(Vector4(0.0, 0.0, 0.0, 1.0))
+				kk.append(Vector4.ZERO)
+		return [at, kk]
+
+	## Следы, которые накрывают точку: [{index, st, k, old}] (двойник шейдера для тестов).
+	func at_point(x: float, z: float, t: float) -> Array:
+		var out := []
+		for s: Dictionary in all:
+			var st := Marks.stamp_uv(x, z, {"centre": s.at, "rot": s.rot, "size": s.size})
+			if st.x > 0.0 and st.y > 0.0 and st.x < 1.0 and st.y < 1.0:
+				out.append({"index": s.index, "st": st, "k": s.k, "old": old(s, t)})
+		return out

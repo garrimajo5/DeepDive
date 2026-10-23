@@ -110,3 +110,52 @@ func test_fewer_members_later() -> void:
 	var crew: Array = [Crew.Member.new(), Crew.Member.new()]
 	s.apply(Helm.Ship.new(), crew, null)   # экипаж длиннее кадра — не падает
 	ok(true)
+
+
+func _eco(i: int) -> PackedFloat32Array:
+	return PackedFloat32Array([3, 16, float(i), 0, 0, 0, 0, 0])
+
+
+## Живой мир у гостя — на тех же часах, что корабль: пакет существ из свежего кадра ждёт, пока до него дойдёт показ.
+func test_eco_waits_for_show_clock() -> void:
+	var s := NetSmooth.new()
+	s.push(0.0, Vector3.ZERO, 0.0, [], _eco(0))
+	eq(s.take_eco(), _eco(0), "первый пакет — сразу, как первый кадр корабля")
+	var shown: Array[float] = []
+	for i in range(1, 40):
+		s.push(i * NetSnap.SEND_DT, Vector3.ZERO, 0.0, [], _eco(i))
+		for j in 3:
+			s.step(DT)
+			var e := s.take_eco()
+			if not e.is_empty():
+				ok(e[2] * NetSnap.SEND_DT <= s.clock + 1e-5, "пакет не раньше часов показа")
+				shown.append(e[2])
+	var newest := 39.0
+	ok(shown.size() > 30, "пакеты показываются: %d" % shown.size())
+	var lag := (newest - shown[-1]) * NetSnap.SEND_DT
+	ok(lag >= NetSmooth.DELAY - NetSnap.SEND_DT - 1e-4 and lag <= NetSmooth.DELAY + NetSnap.SEND_DT,
+		"существа отстают от свежего кадра как корабль: %.3f с" % lag)
+	var ship_t := s.clock
+	ok(absf(shown[-1] * NetSnap.SEND_DT - ship_t) <= NetSnap.SEND_DT + 1e-4, "мир и корабль на одних часах")
+
+
+func test_eco_burst_takes_newest_due() -> void:
+	var s := NetSmooth.new()
+	for i in 5:
+		s.push(i * NetSnap.SEND_DT, Vector3.ZERO, 0.0, [], _eco(i))
+	s.take_eco()
+	s.clock = 0.11   # показ дошёл до кадра 2: пакеты 1 и 2 настали, полный — свежий из них
+	eq(s.take_eco()[2], 2.0, "из наставших — самый свежий")
+	eq(s.take_eco().size(), 0, "до кадра 3 — ничего нового")
+	eq(s.eco.size(), 2, "ждут кадры 3 и 4")
+
+
+func test_eco_restart_clears_queue() -> void:
+	var s := NetSmooth.new()
+	for i in 5:
+		s.push(i * NetSnap.SEND_DT, Vector3.ZERO, 0.0, [], _eco(i))
+	s.push(0.0, Vector3.ZERO, 0.0, [], _eco(7))   # новый забег: время хоста назад
+	eq(s.eco.size(), 1, "старые пакеты сброшены")
+	eq(s.take_eco()[2], 7.0, "первый пакет нового забега — сразу")
+	s.push(0.05, Vector3.ZERO, 0.0, [])   # кадр без существ — очередь не растёт
+	eq(s.eco.size(), 0)

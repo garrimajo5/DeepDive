@@ -117,6 +117,13 @@ func tick(dt: float) -> void:
 					main.silt.reset()
 			"drain":
 				drain_left = c[1]
+			"hull":
+				main.vitals.hull = c[1]
+			"wreck":   # корпус разрушен — как от удара (шторка ART-036)
+				main.vitals.hull = 0.0
+				main.vitals.destroyed.emit()
+			"back":   # системная «Назад»: пауза ART-037
+				main.back_pressed()
 			"mate":
 				var mate: Crew.Member
 				if c[6]:   # за штурвалом
@@ -129,6 +136,9 @@ func tick(dt: float) -> void:
 			"act":   # последний товарищ жмёт кнопку действия (свой ввод, Main._drive_mates)
 				if main.crew.size() > 1:
 					(main.crew[-1] as Crew.Member).pad.action = true
+			"gone":   # последний товарищ отключился, как гость сети (Main.mate_gone)
+				if main.crew.size() > 1:
+					main.mate_gone(main.crew[-1])
 			"log":
 				_log("%s | %s" % [c[1], state()])
 			"quit":
@@ -169,6 +179,10 @@ func _point(what: String, dir: Vector2) -> Vector2:
 			return l.down.c
 		"light":
 			return l.light.c
+		"dive":   # «Погрузиться» в главном меню ART-037
+			return MainMenu.screen_rect("dive", main.get_viewport().get_visible_rect().size).get_center()
+		"resume", "new", "exit", "yes", "no":   # пауза ART-037 и её подтверждение
+			return Pause.screen_rect(what, main.get_viewport().get_visible_rect().size).get_center()
 	return main.get_viewport().get_visible_rect().get_center()
 
 

@@ -167,3 +167,178 @@ func test_scene_plating() -> void:
 	eq(plated, 1, "одна поверхность обшивки — без новых вызовов отрисовки")
 	for r in main.hull.rotors + main.hull.rudders:
 		ok(r.mesh.surface_get_material(0) is StandardMaterial3D, "%s: без обрастания и плитки (свои оси)" % r.name)
+
+
+func test_damage_numbers() -> void:
+	# следы ART-049: потеря корпуса 0…1, след виден при d > 0 и d ≥ порога (как в шейдере)
+	near(HullMesh.wear(100.0), 0.0, 1e-6, "целый корпус — потерь нет")
+	near(HullMesh.wear(70.0), 0.3, 1e-6)
+	near(HullMesh.wear(0.0), 1.0, 1e-6)
+	eq(HullMesh.wear(130.0), 0.0, "сверх 100 % — не в минус")
+	ok(not HullMesh.damage_shown(0.0, 0.0), "при целом корпусе нет даже следов с порогом 0")
+	ok(HullMesh.damage_shown(0.3, 0.0), "след с порогом 0 — с первых потерь")
+	ok(not HullMesh.damage_shown(0.99, 1.0), "последний порог — только при нулевой прочности")
+	ok(HullMesh.damage_shown(1.0, 1.0))
+
+
+## Доля площади плитки под видимыми следами (альфа > 0,1) при прочности `hull`, по картам из textures/hull.
+func _damage_area(col: Image, lvl: Image, hull: float) -> float:
+	var d := HullMesh.wear(hull)
+	var n := 0
+	var all := 0
+	for y in range(0, 1024, 4):
+		for x in range(0, 1024, 4):
+			all += 1
+			if col.get_pixel(x, y).a > 0.1 and HullMesh.damage_shown(d, lvl.get_pixel(x, y).r):
+				n += 1
+	return n / float(all)
+
+
+func test_damage_maps() -> void:
+	var ct: Texture2D = load(HullMesh.DAMAGE_TEX % "povrezhdeniya")
+	var lt: Texture2D = load(HullMesh.DAMAGE_TEX % "povrezhdeniya-uroven")
+	ok(ct != null and ct.get_width() == 1024 and ct.get_height() == 1024, "цвет следов 1024²")
+	ok(lt != null and lt.get_width() == 1024 and lt.get_height() == 1024, "порог 1024²")
+	var lvl := lt.get_image()
+	ok(not lvl.is_compressed(), "порог без потерного сжатия — назначенные пороги целы")
+	ok(not lvl.has_mipmaps(), "порог без mipmap — соседние пороги не смешиваются")
+	var col := Image.load_from_file(ProjectSettings.globalize_path(HullMesh.DAMAGE_TEX % "povrezhdeniya"))
+	ok(col.detect_alpha() != Image.ALPHA_NONE, "у цвета следов есть прозрачность")
+	var a100 := _damage_area(col, lvl, 100.0)
+	var a70 := _damage_area(col, lvl, 70.0)
+	var a40 := _damage_area(col, lvl, 40.0)
+	var a15 := _damage_area(col, lvl, 15.0)
+	eq(a100, 0.0, "при 100 % следов нет")
+	ok(a70 > 0.08 and a70 < a40 and a40 < a15, "следы растут с потерей: %.3f < %.3f < %.3f" % [a70, a40, a15])
+	ok(a15 < 0.45, "при 15 %% следы не сплошные — обшивка читается (%.3f)" % a15)
+
+
+func test_damage_not_tiled() -> void:
+	# issue #406: при 30 % по всему борту читалась ровная сетка одинаковых пятен — соседние плитки 2 м
+	# должны отличаться, а доля следов на большом куске борта — остаться как у одной плитки
+	var col := Image.load_from_file(ProjectSettings.globalize_path(HullMesh.DAMAGE_TEX % "povrezhdeniya"))
+	var lvl := Image.load_from_file(ProjectSettings.globalize_path(HullMesh.DAMAGE_TEX % "povrezhdeniya-uroven"))
+	var loss := HullMesh.wear(30.0)
+	var steps := 48
+	for shift in [Vector2(1, 0), Vector2(0, 1), Vector2(3, 2)]:
+		var differ := 0
+		var marked := 0
+		for j in steps:
+			for i in steps:
+				var uv := Vector2(i, j) / steps
+				var a := HullMesh.damage_alpha(col, lvl, uv, loss) > 0.1
+				var b := HullMesh.damage_alpha(col, lvl, uv + shift, loss) > 0.1
+				if a or b:
+					marked += 1
+					if a != b:
+						differ += 1
+		ok(marked > 0 and differ > marked * 0.4,
+			"плитка и её сосед %s различаются: %d из %d точек со следами" % [shift, differ, marked])
+	var hit := 0.0
+	var all := 0
+	for j in 96:
+		for i in 96:
+			all += 1
+			if HullMesh.damage_alpha(col, lvl, Vector2(i, j) / 16.0 + Vector2(0.013, 0.021), loss) > 0.1:
+				hit += 1.0
+	var one := _damage_area(col, lvl, 30.0)
+	var big := hit / all
+	ok(big > one * 0.7 and big < one * 1.3, "доля следов на борту 6×6 плиток %.3f — как у плитки %.3f" % [big, one])
+	ok(HullMesh.damage_gate(Vector2(0.2, 0.3)) >= 0.0 and HullMesh.damage_gate(Vector2(0.2, 0.3)) <= 1.0)
+
+
+func test_scene_damage_follows_hull() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var sm: ShaderMaterial = main.hull.body_material(HullPlan.Paint.METAL)
+	ok(sm.get_shader_parameter("damage_tex") is Texture2D and sm.get_shader_parameter("damage_lvl") is Texture2D,
+		"две карты ART-049 в материале обшивки")
+	near(sm.get_shader_parameter("wear"), 0.0, 1e-6, "в начале корпус целый — следов нет")
+	near(sm.get_shader_parameter("gate_cell"), HullMesh.DAMAGE_CELL, 1e-6, "шум выбора слоя следов из HullMesh (#406)")
+	near(sm.get_shader_parameter("alt_scale"), HullMesh.DAMAGE_ALT_SCALE, 1e-6)
+	main.vitals.hull = 40.0
+	main.step(1.0 / 30.0)
+	near(sm.get_shader_parameter("wear"), HullMesh.wear(main.vitals.hull), 1e-3, "следы по прочности корпуса")
+	ok(float(sm.get_shader_parameter("wear")) > 0.55, "при 40 % — потеря около 0,6")
+	main.queue_free()
+	await frames(1)
+
+
+func test_relief_math() -> void:
+	# рельеф ART-053: нормаль карты в осях плитки и в осях корабля — та же математика, что в шейдере
+	var flat := HullMesh.decode_normal(Color(0.5, 0.5, 1.0))
+	ok(flat.distance_to(Vector3(0, 0, 1)) < 0.01, "плоский пиксель (128,128,255) — нормаль от поверхности")
+	# OpenGL: выше выпуклости (меньше строка) склон смотрит вверх по картинке — g > 0,5; v растёт вниз → y < 0
+	ok(HullMesh.decode_normal(Color(0.5, 0.8, 0.9)).y < 0.0, "зелёный вверх — склон к меньшим v")
+	ok(HullMesh.decode_normal(Color(0.8, 0.5, 0.9)).x > 0.0, "красный — склон к большим u")
+	var sides := [Vector3(1, 0, 0), Vector3(-1, 0, 0), Vector3(0, 1, 0), Vector3(0, -1, 0), Vector3(0, 0, 1), Vector3(0, 0, -1)]
+	var axis_of := [0, 0, 1, 1, 2, 2]
+	for i in sides.size():
+		var n: Vector3 = sides[i]
+		ok(HullMesh.plane_normal(axis_of[i], n, Vector3(0, 0, 1)).distance_to(n) < 1e-5, "плоская карта не меняет нормаль %s" % n)
+	# поверхность x = ±(1 + h(z, y)), h = 0,3·z: нормаль (±1, 0, −0,3) — у обоих бортов склон в одну сторону по z
+	var t := Vector3(-0.3, 0, 1).normalized()   # (−dh/du, −dh/dv, 1), u = z, v = y
+	for sx in [1.0, -1.0]:
+		var want := Vector3(sx, 0, -0.3).normalized()
+		ok(HullMesh.plane_normal(0, Vector3(sx, 0, 0), t).distance_to(want) < 1e-4, "борт %+d: нормаль склона" % int(sx))
+	# крыша: u = x, v = z; h = 0,5·z → нормаль (0, 1, −0,5)
+	ok(HullMesh.plane_normal(1, Vector3(0, 1, 0), Vector3(0, -0.5, 1).normalized())
+		.distance_to(Vector3(0, 1, -0.5).normalized()) < 1e-4, "крыша: склон вдоль корабля")
+	# второй слой следов: h(u, v) = h'(u'), u' = −v·s — склон по u' становится склоном по v
+	var back := HullMesh.alt_back(Vector3(-1, 0, 1).normalized())
+	ok(back.x == 0.0 and back.y > 0.0, "повёрнутый слой: склон по u' → по v (как dh/dv = −s·dh'/du')")
+	ok(HullMesh.rnm(Vector3(0, 0, 1), t).distance_to(t) < 1e-5, "след на плоской основе — сам след")
+	ok(HullMesh.rnm(t, Vector3(0, 0, 1)).distance_to(t) < 1e-5, "плоский след не меняет основу")
+
+
+func test_relief_maps() -> void:
+	for k in ["normali", "sheroh"]:
+		var tx: Texture2D = load(HullMesh.PLATE_TEX % k)
+		ok(tx != null and tx.get_width() == 1024 and tx.get_height() == 1024, "карта %s 1024²" % k)
+	var dn: Texture2D = load(HullMesh.DAMAGE_TEX % "povrezhdeniya-normali")
+	ok(dn != null and dn.get_width() == 1024, "нормали следов 1024²")
+	# шероховатость в регистр маски швов ART-024: на швах глаже (0,48), на краске ≈ 0,82
+	var mask := Image.load_from_file(ProjectSettings.globalize_path(HullMesh.PLATE_TEX % "maska"))
+	var rough := Image.load_from_file(ProjectSettings.globalize_path(HullMesh.PLATE_TEX % "sheroh"))
+	var seam_r := 0.0
+	var seam_n := 0
+	var paint_r := 0.0
+	var paint_n := 0
+	for y in range(0, 1024, 4):
+		for x in range(0, 1024, 4):
+			var m := mask.get_pixel(x, y).r
+			if m > 0.95:
+				seam_r += rough.get_pixel(x, y).r
+				seam_n += 1
+			elif m < 0.05:
+				paint_r += rough.get_pixel(x, y).r
+				paint_n += 1
+	ok(seam_n > 0 and paint_n > 0)
+	ok(seam_r / seam_n + 0.15 < paint_r / paint_n, "швы глаже краски: %.2f < %.2f" % [seam_r / seam_n, paint_r / paint_n])
+	near(paint_r / paint_n, 0.82, 0.08, "краска ≈ 0,82")
+	# нормали следов вне альфы ART-049 — плоские: без следа рельеф не рисует вмятин
+	var col := Image.load_from_file(ProjectSettings.globalize_path(HullMesh.DAMAGE_TEX % "povrezhdeniya"))
+	var nrm := Image.load_from_file(ProjectSettings.globalize_path(HullMesh.DAMAGE_TEX % "povrezhdeniya-normali"))
+	var worst := 0.0
+	for y in range(0, 1024, 8):
+		for x in range(0, 1024, 8):
+			if col.get_pixel(x, y).a == 0.0:
+				worst = maxf(worst, 1.0 - HullMesh.decode_normal(nrm.get_pixel(x, y)).normalized().z)
+	ok(worst < 0.01, "вне следов нормаль плоская (отклонение %.4f)" % worst)
+
+
+func test_scene_relief() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var sm: ShaderMaterial = main.hull.body_material(HullPlan.Paint.METAL)
+	ok(sm.get_shader_parameter("normal_tex") is Texture2D and sm.get_shader_parameter("rough_tex") is Texture2D
+		and sm.get_shader_parameter("damage_nrm") is Texture2D, "три карты рельефа ART-053 в том же материале")
+	ok(sm.get_shader_parameter("relief"), "рельеф включён по умолчанию («Красиво»/«Обычно»)")
+	near(sm.get_shader_parameter("normal_depth"), HullMesh.NORMAL_DEPTH, 1e-6)
+	near(sm.get_shader_parameter("damage_depth"), HullMesh.DAMAGE_DEPTH, 1e-6)
+	main.hull.set_relief(false)
+	ok(not sm.get_shader_parameter("relief"), "«Экономно» — рельеф выключен веткой материала")
+	main.hull.set_relief(true)
+	eq((main.hull.body.mesh as ArrayMesh).get_surface_count(), HullMesh.paints().size(), "без новых поверхностей")

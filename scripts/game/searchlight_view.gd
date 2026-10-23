@@ -24,6 +24,11 @@ func _ready() -> void:
 	spot.spot_attenuation = Searchlight.ATTENUATION
 	spot.spot_angle_attenuation = Searchlight.SPOT_EDGE
 	spot.light_cull_mask = OceanView.LAYER_WORLD
+	# ART-062: маска пятна отражателя — проектор; в 4.7.2 он работает только с тенями, кастеры — мир (не мостик)
+	spot.light_projector = load(Searchlight.MASK)
+	spot.shadow_enabled = true
+	spot.shadow_caster_mask = OceanView.LAYER_WORLD
+	spot.shadow_normal_bias = Searchlight.SHADOW_NORMAL_BIAS   # без полос «акне» на склоне (#489)
 	add_child(spot)
 	beam = MeshInstance3D.new()
 	beam.name = "Луч прожектора"
@@ -33,6 +38,12 @@ func _ready() -> void:
 	var m := ShaderMaterial.new()
 	m.shader = preload("res://shaders/beam.gdshader")
 	m.set_shader_parameter("beam_color", Searchlight.BEAM_COLOR)
+	m.set_shader_parameter("field", load(Searchlight.FIELD))
+	m.set_shader_parameter("density_base", Searchlight.DENSITY_BASE)
+	m.set_shader_parameter("drift", Searchlight.DRIFT)
+	m.set_shader_parameter("beam_length", Searchlight.BEAM_LENGTH)
+	m.set_shader_parameter("animate", 1.0)
+	m.set_shader_parameter("silt_dim", 0.0)
 	beam.material_override = m
 	beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	beam.layers = OceanView.LAYER_WORLD
@@ -55,6 +66,17 @@ func apply(is_on: bool, k: float, reach: float = 1.0) -> void:
 		var s := Searchlight.scale(k)
 		spot.spot_range = Searchlight.range_m(k) * reach
 		beam.scale = Vector3(s, s, s) * reach
+	# ил укоротил луч (reach) — длину в шейдере не множим, только плотность (ART-062)
+	beam_mat().set_shader_parameter("silt_dim", Searchlight.SILT_DIM * Searchlight.silt_k(reach))
+
+
+func beam_mat() -> ShaderMaterial:
+	return beam.material_override as ShaderMaterial
+
+
+## «Экономно» (ART-044): та же маска пятна, луч — поле без дрейфа.
+func set_lite(lite: bool) -> void:
+	beam_mat().set_shader_parameter("animate", 0.0 if lite else 1.0)
 
 
 ## Прожектор мигает вместе с плафонами (js/ship.js: spot.intensity × fl): свет × k, конус луча не трогаем.

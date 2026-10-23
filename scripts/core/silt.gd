@@ -59,6 +59,9 @@ var inside: Cloud = null
 var k := 0.0  ## насколько корабль в иле, плавно 0…1 (муть, помехи)
 var slide_t := SLIDE_FIRST
 var jam_t := -99.0  ## когда импульс завяз в иле
+## Точка схода облака оползня (мир). По умолчанию — над склоном у места «drop» (как было); main ставит её к
+## свежему шраму Края отмели из `EcoDrop.slide_cloud_point()` (issue #258). Vector3.INF — брать точку по умолчанию.
+var slide_origin := Vector3.INF
 
 
 func reset() -> void:
@@ -105,8 +108,11 @@ func update(dt: float, ship: Vector3, current: Vector3) -> String:
 	slide_t -= dt
 	if slide_t <= 0.0:
 		slide_t = SLIDE_PERIOD
-		var g := Seabed.height(DROP.x, DROP.y)
-		spawn(Vector3(DROP.x, maxf(g + 10.0, -55.0), DROP.y), SLIDE_R, SLIDE_LIFE, "slide")
+		var p := slide_origin
+		if p == Vector3.INF:   # точка не задана — старая над склоном у места «drop»
+			var g := Seabed.height(DROP.x, DROP.y)
+			p = Vector3(DROP.x, maxf(g + 10.0, -55.0), DROP.y)
+		spawn(p, SLIDE_R, SLIDE_LIFE, "slide")
 		msg = SLIDE_MSG
 	for i in range(clouds.size() - 1, -1, -1):
 		var cl := clouds[i]

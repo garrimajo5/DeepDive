@@ -161,6 +161,8 @@ func test_destroyed_clears_breach() -> void:
 	await frames(1)
 	main.open_breach(2)
 	main.vitals.hit(100, "")
+	for i in 36:   # шторка «Корпус разрушен» 3,5 с, под ней подъём (ART-036)
+		main.step(0.1)
 	ok(main.breach.active == null and main.breach.water == 0.0, "корабль поднят — пробоины нет")
 	main.step(0.1)
 	ok(not main.breach_view.spot_node.visible, "обшивки не видно")

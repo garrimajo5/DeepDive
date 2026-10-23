@@ -1,0 +1,107 @@
+[
+  {
+    "id": "B1",
+    "name": "Мостик, левый носовой",
+    "pos": [
+      -1.65,
+      2.8,
+      -3.6
+    ],
+    "color": "FFE3B5",
+    "energy": 1.8,
+    "range": 5.0,
+    "attenuation": 1.7,
+    "room": "мостик",
+    "kind": "safe"
+  },
+  {
+    "id": "B2",
+    "name": "Мостик, правый рабочий",
+    "pos": [
+      1.8,
+      2.8,
+      -2.6
+    ],
+    "color": "B8D9E8",
+    "energy": 1.65,
+    "range": 5.0,
+    "attenuation": 1.6,
+    "room": "мостик",
+    "kind": "alarm"
+  },
+  {
+    "id": "C1",
+    "name": "Коридор",
+    "pos": [
+      0,
+      2.2,
+      5
+    ],
+    "color": "F1DEC2",
+    "energy": 1.05,
+    "range": 3.0,
+    "attenuation": 1.6,
+    "room": "коридор",
+    "kind": "alarm"
+  },
+  {
+    "id": "L1",
+    "name": "Лаборатория / кольцо",
+    "pos": [
+      -0.4,
+      2.9,
+      11
+    ],
+    "color": "B8E7ED",
+    "energy": 1.4,
+    "range": 4.5,
+    "attenuation": 1.5,
+    "room": "лаборатория",
+    "kind": "safe"
+  },
+  {
+    "id": "E1",
+    "name": "Машинное, рабочая зона",
+    "pos": [
+      -1.1,
+      2.7,
+      16.5
+    ],
+    "color": "F4D9B0",
+    "energy": 1.7,
+    "range": 4.2,
+    "attenuation": 1.6,
+    "room": "машинное",
+    "kind": "alarm"
+  },
+  {
+    "id": "H1",
+    "name": "Трюм, лебёдка",
+    "pos": [
+      0.6,
+      2.5,
+      21.7
+    ],
+    "color": "C6D6DE",
+    "energy": 1.35,
+    "range": 3.6,
+    "attenuation": 1.6,
+    "room": "трюм",
+    "kind": "alarm"
+  },
+  {
+    "id": "R1",
+    "name": "Реактор, собственный свет",
+    "pos": [
+      0,
+      1.6,
+      17.2
+    ],
+    "color": "67DDEB",
+    "energy": 0.55,
+    "range": 2.8,
+    "attenuation": 2.0,
+    "room": "машинное",
+    "kind": "reactor"
+  }
+]

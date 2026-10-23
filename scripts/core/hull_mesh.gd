@@ -25,6 +25,20 @@ const GROWTH_TO := 0.5          ## h, где его уже нет
 ## Низ и высота корпуса для локальной высоты h: от киля основного объёма до верха носовой оболочки.
 const KEEL_Y := HullPlan.CENTER_Y - HullPlan.NOSE_H * 0.5
 const HULL_H := HullPlan.NOSE_H
+## Следы повреждений ART-049 (`docs/concept-art/povrezhdeniya.md`): карта цвета с альфой и карта порога потери
+## корпуса (линейная, без mipmap) в той же плитке и тех же координатах, что ART-024; на швах след слабее.
+const DAMAGE_TEX := "res://textures/hull/%s.png"   ## povrezhdeniya, povrezhdeniya-uroven
+const DAMAGE_SEAM := 0.55
+## Против ровной сетки одинаковых следов (issue #406): два слоя карты следов — как есть и повёрнутый на 90°,
+## крупнее и со сдвигом; какой слой виден, решает плавный шум по плоскости с ячейкой DAMAGE_CELL плиток
+## (слои взаимно дополняют друг друга, поэтому доля следов почти не меняется). Числа — те же, что в шейдере.
+const DAMAGE_ALT_SCALE := 0.83
+const DAMAGE_ALT_SHIFT := Vector2(0.37, 0.61)
+const DAMAGE_CELL := 1.37       ## ячейка шума выбора слоя в плитках (не кратна плитке)
+const DAMAGE_GATE := Vector2(0.46, 0.54)
+## Рельеф ART-053 (obshivka-normali.md): textures/hull/normali, sheroh, povrezhdeniya-normali; сила ≈ 1,0 и 0,7–1,0.
+const NORMAL_DEPTH := 1.0
+const DAMAGE_DEPTH := 0.85
 
 
 ## Краска под обшивкой: металл корпуса. Швы-кольца, окна, линза, шлюз — своим цветом.
@@ -35,6 +49,88 @@ static func plated(paint: int) -> bool:
 ## Локальная высота точки корпуса (оси корабля): 0 у киля, 1 у верха.
 static func local_height(y: float) -> float:
 	return clampf((y - KEEL_Y) / HULL_H, 0.0, 1.0)
+
+
+## Потеря корпуса для следов ART-049: 0 при 100 %, 1 при 0 %.
+static func wear(hull: float) -> float:
+	return clampf(1.0 - hull / 100.0, 0.0, 1.0)
+
+
+## След с порогом `threshold` (0…1, карта уровня) виден при потере `loss` — как в шейдере: d > 0 и d ≥ t.
+static func damage_shown(loss: float, threshold: float) -> bool:
+	return loss > 0.0 and loss >= threshold
+
+
+## Координаты второго слоя следов: повёрнуты на 90°, крупнее и сдвинуты (как `damage_alt_uv` в шейдере).
+static func damage_alt_uv(uv: Vector2) -> Vector2:
+	return Vector2(-uv.y, uv.x) * DAMAGE_ALT_SCALE + DAMAGE_ALT_SHIFT
+
+
+## Хеш узла решётки 0…1 (как `cell_hash` в шейдере).
+static func cell_hash(c: Vector2) -> float:
+	var v := sin(c.dot(Vector2(127.1, 311.7))) * 43758.5453
+	return v - floorf(v)
+
+
+## Плавный шум по плоскости 0…1 с ячейкой DAMAGE_CELL плиток (как `gate_noise` в шейдере).
+static func gate_noise(uv: Vector2) -> float:
+	var q := uv / DAMAGE_CELL
+	var i := q.floor()
+	var f := q - i
+	f = f * f * (Vector2(3, 3) - 2.0 * f)
+	var a := cell_hash(i)
+	var b := cell_hash(i + Vector2(1, 0))
+	var c := cell_hash(i + Vector2(0, 1))
+	var d := cell_hash(i + Vector2(1, 1))
+	return lerpf(lerpf(a, b, f.x), lerpf(c, d, f.x), f.y)
+
+
+## Вес первого слоя следов в точке плоскости (второй — 1 − вес).
+static func damage_gate(uv: Vector2) -> float:
+	return smoothstep(DAMAGE_GATE.x, DAMAGE_GATE.y, gate_noise(uv))
+
+
+## Непрозрачность видимых следов в точке плоскости `uv` (в плитках) при потере `loss` — как `damage2` в шейдере.
+## `col` — карта цвета с альфой, `lvl` — карта порога (обе 1024², как в textures/hull).
+static func damage_alpha(col: Image, lvl: Image, uv: Vector2, loss: float) -> float:
+	var k := damage_gate(uv)
+	return _damage_one(col, lvl, uv, loss) * k + _damage_one(col, lvl, damage_alt_uv(uv), loss) * (1.0 - k)
+
+
+static func _damage_one(col: Image, lvl: Image, uv: Vector2, loss: float) -> float:
+	var x := int(fposmod(uv.x, 1.0) * col.get_width()) % col.get_width()
+	var y := int(fposmod(uv.y, 1.0) * col.get_height()) % col.get_height()
+	var t := lvl.get_pixel(x * lvl.get_width() / col.get_width(), y * lvl.get_height() / col.get_height()).r
+	return col.get_pixel(x, y).a if damage_shown(loss, t) else 0.0
+
+
+## Нормаль из пикселя карты OpenGL (+Y — вверх по картинке) в осях плитки: x вдоль u, y вдоль v (v идёт вниз по
+## картинке, поэтому y меняет знак), z — от поверхности. Как `decode_n` в шейдере.
+static func decode_normal(c: Color) -> Vector3:
+	return Vector3(c.r * 2.0 - 1.0, -(c.g * 2.0 - 1.0), c.b * 2.0 - 1.0)
+
+
+## Нормаль второго слоя следов (координаты `damage_alt_uv`, поворот на 90°) — обратно в оси плитки.
+static func alt_back(t: Vector3) -> Vector3:
+	return Vector3(t.y, -t.x, t.z)
+
+
+## Деталь `d` поверх основы `b` (reoriented normal mapping), обе в осях плитки — как `rnm` в шейдере.
+static func rnm(b: Vector3, d: Vector3) -> Vector3:
+	var t := b + Vector3(0, 0, 1)
+	var u := d * Vector3(-1, -1, 1)
+	return (t * t.dot(u) / t.z - u).normalized()
+
+
+## Нормаль плитки `t` на трипланарной плоскости `axis` (0 — zy, 1 — xz, 2 — xy) при нормали меша `n`, в осях корабля
+## (whiteout, как `tri_normal` в шейдере для одной плоскости).
+static func plane_normal(axis: int, n: Vector3, t: Vector3) -> Vector3:
+	match axis:
+		0:
+			return Vector3(absf(t.z) * n.x, t.y + n.y, t.x + n.z).normalized()
+		1:
+			return Vector3(t.x + n.x, absf(t.z) * n.y, t.y + n.z).normalized()
+	return Vector3(t.x + n.x, t.y + n.y, absf(t.z) * n.z).normalized()
 
 
 ## Вес обрастания по локальной высоте (заметки художника ART-024): 0.65 · (1 − smoothstep(0.15, 0.50, h)).

@@ -14,8 +14,10 @@ var zap_lever: Node3D      ## рычаг разряда на левом борт
 var zap_panel: Node3D      ## щиток разряда (MOD-014)
 var zap_scale_mat: BaseMaterial3D   ## материал щитка со шкалой готовности (свечение гаснет на откат)
 var hatch_wheel: Node3D
-var lamps: Array[OmniLight3D] = []  ## плафоны мостика (мигают — set_lamps)
-const LAMP_ENERGY := 0.9
+var lamps: Array[OmniLight3D] = []  ## огни мостика B1, B2 по ART-064 (set_cabin)
+var _lamp_data: Array[CabinLight.Lamp] = []
+var plafond_mat: StandardMaterial3D   ## рассеиватели плафонов ART-064 (set_cabin)
+const PLAFOND_TEX := preload("res://textures/svet/plafon.png")
 var screens_mat: ShaderMaterial    ## экраны пульта пилота (помехи — set_screens)
 const SCANNER_TEXT := Color("67DDEB")
 var scanner_text: Label3D          ## экран сканера биолога (Scanner.screen_lines)
@@ -24,9 +26,10 @@ var scanner_text: Label3D          ## экран сканера биолога (
 func _ready() -> void:
 	mesh_instance = MeshInstance3D.new()
 	mesh_instance.name = "Оболочка"
-	mesh_instance.mesh = build_mesh()
+	mesh_instance.mesh = build_mesh(BridgePlan.parts(), KITS)
 	mesh_instance.layers = OceanView.LAYER_SHIP
 	add_child(mesh_instance)
+	plafond_mat = plafond_material(mesh_instance.mesh)
 	_add_glass()
 	for p in BridgeProps.fixed():
 		props[p.model] = _add_model(p, self)
@@ -57,22 +60,39 @@ func _ready() -> void:
 	for name in props:
 		if TextureGlow.MODELS.has(name):
 			light_texture(props[name])
-	# тёплый свет плафонов: две лампы под потолком вдоль мостика
-	for z in [-3.5, 0.0]:
-		var l := OmniLight3D.new()
-		l.light_color = BridgePlan.COLORS[BridgePlan.Paint.PLAFOND]
-		l.light_energy = LAMP_ENERGY
-		l.omni_range = 7.5
-		l.position = Vector3(0, 2.8, z)
-		l.light_cull_mask = OceanView.LAYER_SHIP
-		add_child(l)
-		lamps.append(l)
+	for l in CabinLight.of(true):   # B1, B2 по ART-064
+		var o := cabin_light(l)
+		add_child(o)
+		lamps.append(o)
+		_lamp_data.append(l)
 
 
-## Плафоны мостика × k (мигание, Vitals.lamp_k).
+## Огни мостика по ART-064 (CabinLight): breach_room — отсек открытой пробоины (−1 — нет), t — часы ритма,
+## k — мигание Vitals.lamp_k поверх огибающей.
+func set_cabin(breach_room: int, t: float, k: float) -> void:
+	for i in lamps.size():
+		lamps[i].light_color = CabinLight.color(_lamp_data[i], breach_room)
+		lamps[i].light_energy = CabinLight.energy(_lamp_data[i], breach_room, t, k)
+	set_plafond(plafond_mat, breach_room, t, k)
+
+
+## Плафоны мостика × k без аварии (мигание, Vitals.lamp_k).
 func set_lamps(k: float) -> void:
-	for l in lamps:
-		l.light_energy = LAMP_ENERGY * k
+	set_cabin(-1, 0.0, k)
+
+
+## Огонь по таблице ART-064: слой корабля, без теней; позиция — в осях корабля (родитель у корабля в нуле).
+static func cabin_light(l: CabinLight.Lamp) -> OmniLight3D:
+	var o := OmniLight3D.new()
+	o.name = "Свет " + l.id
+	o.position = l.pos
+	o.light_color = l.color
+	o.light_energy = l.energy
+	o.omni_range = l.range
+	o.omni_attenuation = l.attenuation
+	o.shadow_enabled = false
+	o.light_cull_mask = OceanView.LAYER_SHIP
+	return o
 
 
 ## Ползунок i пульта энергии на долю share 0…1 (паз наклонён: ползунок идёт по лицу пульта).
@@ -189,20 +209,116 @@ func set_screens(helm: Vector3, scanner: float) -> void:
 	scanner_text.modulate = Color(SCANNER_TEXT.r * scanner, SCANNER_TEXT.g * scanner, SCANNER_TEXT.b * scanner)
 
 
-## Стекло носового окна: едва заметный бирюзовый отлив, чтобы было видно, что окно застеклено.
+## Стекло носовых окон по ART-057 (`steklo-okon.md`): один квад на три окна, маска мути/капель/царапин и нормали
+## толстого стекла (`textures/bridge/steklo-*.png`, шейдер `window_glass.gdshader`); центр окна почти чистый.
+const GLASS_SHADER := preload("res://shaders/window_glass.gdshader")
+const GLASS_TINT := Color(0.6, 0.85, 0.9)
+var glass_mat: ShaderMaterial
+
+
 func _add_glass() -> void:
 	var g := MeshInstance3D.new()
 	g.name = "Стекло окна"
 	var q := QuadMesh.new()
 	q.size = Vector2(2 * BridgePlan.WINDOW_HALF, BridgePlan.WINDOW_TOP - BridgePlan.WINDOW_BOTTOM)
 	g.mesh = q
-	g.material_override = ShaderKey.glass(Color(0.6, 0.85, 0.9, 0.07))   # шейдер общий с подложками (issue #159)
+	glass_mat = glass_material()
+	g.material_override = glass_mat
 	g.position = Vector3(0, (BridgePlan.WINDOW_TOP + BridgePlan.WINDOW_BOTTOM) / 2.0, BridgePlan.NOSE_INNER - 0.05)
 	g.layers = OceanView.LAYER_SHIP
 	add_child(g)
 
 
-static func build_mesh(parts: Array[BridgePlan.Part] = BridgePlan.parts()) -> ArrayMesh:
+static func glass_material() -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = GLASS_SHADER
+	m.set_shader_parameter("tint", GLASS_TINT)
+	m.set_shader_parameter("mask", load(KIT_DIR + "steklo-maska.png"))
+	m.set_shader_parameter("normal_map", load(KIT_DIR + "steklo-normali.png"))
+	m.set_shader_parameter("split", glass_split())
+	m.set_shader_parameter("relief", true)
+	return m
+
+
+## Границы окон по u квада (стойки `BridgePlan.MULLIONS`): 0,328947 и 0,671053.
+static func glass_split() -> Vector2:
+	var w := 2.0 * BridgePlan.WINDOW_HALF
+	return Vector2((BridgePlan.MULLIONS[0] + BridgePlan.WINDOW_HALF) / w, (BridgePlan.MULLIONS[1] + BridgePlan.WINDOW_HALF) / w)
+
+
+## UV квада → UV карты окна (x, y) и знаки нормали (z — по U, w — по V), как в `window_glass.gdshader`:
+## левое окно как есть, среднее отражено по U, правое — по V (муть у рамы каждого окна, центр чистый).
+static func glass_uv(uv: Vector2) -> Vector4:
+	var s := glass_split()
+	if uv.x < s.x:
+		return Vector4(uv.x / s.x, uv.y, 1, 1)
+	if uv.x < s.y:
+		return Vector4(1.0 - (uv.x - s.x) / (s.y - s.x), uv.y, -1, 1)
+	return Vector4((uv.x - s.y) / (1.0 - s.y), 1.0 - uv.y, 1, -1)
+
+
+## Материалы мостика ART-054 (`mostik-materialy.md`): какой комплект карт `textures/bridge/<имя>-*.png` на какой
+## краске. side — грани не вниз, down — смотрящие вниз (потолок, скос в METAL), aft — грани не вниз дальше по
+## кораблю (отсеки, `RoomsView.KITS`); запись — [имя, сила нормалей, шероховатость и металл «Экономно», z от, z до]
+## (без z — весь корабль); "skip_up" — грани вверх заливкой. Подложки плафонов (SEAM, грани вбок) остаются заливкой.
+const KIT_DIR := "res://textures/bridge/"
+const KITS := {
+	BridgePlan.Paint.DECK: {"side": ["pol", 0.6, 0.72, 0.4]},
+	BridgePlan.Paint.METAL: {"side": ["stena", 0.8, 0.8, 0.15], "down": ["potolok", 0.7, 0.78, 0.2]},
+	BridgePlan.Paint.SEAM: {"down": ["potolok", 0.7, 0.78, 0.2]},
+}
+const SURFACE_SHADER := preload("res://shaders/ship_surface.gdshader")
+
+
+## Метровые планарные UV грани (1 UV = 1 м) по главной оси нормали: пол и потолок — (x, z), короба потолка
+## вдоль корабля; стены — по горизонтали вдоль стены и v вниз (−y), рисунок стоит вертикально.
+static func planar_uv(p: Vector3, n: Vector3) -> Vector2:
+	var a := n.abs()
+	if a.y >= a.x and a.y >= a.z:
+		return Vector2(p.x, p.z)
+	if a.x >= a.z:
+		return Vector2(p.z, -p.y)
+	return Vector2(p.x, -p.y)
+
+
+## Материал поверхности с картами ART-054/055 (шейдер ship_surface); null — у краски комплекта нет.
+static func kit_material(paint: int, kits: Dictionary = KITS, dir: String = KIT_DIR) -> ShaderMaterial:
+	if not kits.has(paint):
+		return null
+	var m := ShaderMaterial.new()
+	m.shader = SURFACE_SHADER
+	m.set_shader_parameter("base_color", BridgePlan.COLORS[paint])
+	m.set_shader_parameter("base_rough", 0.75)
+	m.set_shader_parameter("base_metal", 0.25 if paint == BridgePlan.Paint.METAL else 0.0)
+	var kit: Dictionary = kits[paint]
+	m.set_shader_parameter("skip_up", kit.get("skip_up", false))
+	for side in ["side", "aft", "down"]:
+		m.set_shader_parameter(side + "_kit", kit.has(side))
+		if not kit.has(side):
+			continue
+		var k: Array = kit[side]
+		m.set_shader_parameter(side + "_albedo", load(dir + k[0] + "-tsvet.png"))
+		m.set_shader_parameter(side + "_normal", load(dir + k[0] + "-normali.png"))
+		m.set_shader_parameter(side + "_orm", load(dir + k[0] + "-orm.png"))
+		m.set_shader_parameter(side + "_depth", k[1])
+		m.set_shader_parameter(side + "_rough", k[2])
+		m.set_shader_parameter(side + "_metal", k[3])
+		m.set_shader_parameter(side + "_z", Vector2(k[4], k[5]) if k.size() >= 6 else Vector2(-1e6, 1e6))
+	m.set_shader_parameter("relief", true)
+	return m
+
+
+## «Экономно» (ART-044): false — карты нормалей и ORM не читаются, цвет остаётся (ключ снимка relief=0); стекло окон — без нормалей.
+func set_relief(on: bool) -> void:
+	glass_mat.set_shader_parameter("relief", on)
+	for i in mesh_instance.mesh.get_surface_count():
+		var m := mesh_instance.mesh.surface_get_material(i) as ShaderMaterial
+		if m:
+			m.set_shader_parameter("relief", on)
+
+
+## kits — комплекты карт по краскам (KITS мостика, RoomsView.KITS отсеков) из папки dir; пусто — заливка.
+static func build_mesh(parts: Array[BridgePlan.Part] = BridgePlan.parts(), kits: Dictionary = {}, dir: String = KIT_DIR) -> ArrayMesh:
 	var by_paint := {}
 	for part in parts:
 		if not by_paint.has(part.paint):
@@ -215,7 +331,8 @@ static func build_mesh(parts: Array[BridgePlan.Part] = BridgePlan.parts()) -> Ar
 		var st: SurfaceTool = by_paint[paint]
 		st.generate_tangents()
 		st.commit(mesh)
-		mesh.surface_set_material(mesh.get_surface_count() - 1, material(paint))
+		var km := kit_material(paint, kits, dir) if not kits.is_empty() else null
+		mesh.surface_set_material(mesh.get_surface_count() - 1, km if km else material(paint))
 	return mesh
 
 
@@ -224,11 +341,38 @@ static func material(paint: int) -> StandardMaterial3D:
 	m.albedo_color = BridgePlan.COLORS[paint]
 	m.roughness = 0.75
 	m.metallic = 0.25 if paint == BridgePlan.Paint.METAL else 0.0
-	if paint == BridgePlan.Paint.PLAFOND:
+	if paint == BridgePlan.Paint.PLAFOND:   # рассеиватель ART-064: текстура (цвет × альфа) — и цвет, и свечение
+		m.albedo_color = Color.WHITE
+		m.albedo_texture = PLAFOND_TEX
 		m.emission_enabled = true
-		m.emission = BridgePlan.COLORS[paint]
-		m.emission_energy_multiplier = 1.4
+		m.emission = Color.WHITE
+		m.emission_texture = PLAFOND_TEX
+		m.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY   # оттенок × рисунок (шейдер — как у экипажа)
+		m.emission_energy_multiplier = CabinLight.PLAFOND_E
 	return m
+
+
+## Сколько раз рисунок плафона ложится на грань lu × lv м: модуль 0,4 м, не меньше одного (панель мостика 0,4 × 0,28 —
+## один рисунок, полоса отсека 0,15 × 5,4 — 14 по длине).
+static func plafond_tiles(lu: float, lv: float) -> Vector2:
+	return Vector2(maxf(1.0, roundf(lu / CabinLight.PLAFOND_MODULE)), maxf(1.0, roundf(lv / CabinLight.PLAFOND_MODULE)))
+
+
+## Материал плафонов в меше (краска PLAFOND), null — плафонов нет.
+static func plafond_material(mesh: Mesh) -> StandardMaterial3D:
+	for i in mesh.get_surface_count():
+		var m := mesh.surface_get_material(i)
+		if m is StandardMaterial3D and (m as StandardMaterial3D).emission_texture == PLAFOND_TEX:
+			return m as StandardMaterial3D
+	return null
+
+
+## Плафоны светятся по огням ART-064: обычный — белый × 0,75, авария — янтарь 0,22 + 0,48·p; × lamp_k.
+static func set_plafond(m: StandardMaterial3D, breach_room: int, t: float, k: float) -> void:
+	if m == null:
+		return
+	m.emission = CabinLight.plafond_tint(breach_room)
+	m.emission_energy_multiplier = CabinLight.plafond_energy(breach_room, t, k)
 
 
 ## Брусок: 6 граней по 2 треугольника, нормали наружу, обход для лицевой стороны Godot.
@@ -252,8 +396,12 @@ static func _add_box(st: SurfaceTool, part: BridgePlan.Part) -> void:
 		var dv := v * h
 		var q := [c - du - dv, c - du + dv, c + du + dv, c + du - dv]
 		var nn := (t.basis * n).normalized()
+		var tiles := plafond_tiles(du.length() * 2.0, dv.length() * 2.0)
+		var quv := [Vector2(0, 0), Vector2(0, tiles.y), tiles, Vector2(tiles.x, 0)]
 		# порядок a, b, c такой, что (b − a) × (c − a) смотрит внутрь — лицевая сторона наружу
 		for i in [0, 1, 2, 0, 2, 3]:
 			st.set_normal(nn)
-			st.set_uv(Vector2(0.5, 0.5))
-			st.add_vertex(t * q[i])
+			var pv: Vector3 = t * q[i]
+			# плафон ART-064: рисунок по грани — панель мостика целиком, полоса отсека — модулем 0,4 м
+			st.set_uv(quv[i] if part.paint == BridgePlan.Paint.PLAFOND else planar_uv(pv, nn))
+			st.add_vertex(pv)

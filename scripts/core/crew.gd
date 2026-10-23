@@ -11,7 +11,7 @@ const ROLE_NAMES := ["Пилот", "Сонарщик", "Инженер", "Био
 const ROLE_COLORS := [
 	Color(0.89, 0.62, 0.22),  ## пилот — янтарный, как кнопка «Свет»
 	Color(0.27, 0.76, 0.80),  ## сонарщик — бирюза голограммы
-	Color(0.85, 0.36, 0.22),  ## инженер — оранжево-красный
+	Color(0.66, 0.72, 0.78),  ## инженер — светлый стальной (нейтральный, без красного; владелец, #129)
 	Color(0.45, 0.74, 0.36),  ## биолог — зелёный
 ]
 const SUIT := Color(0.24, 0.27, 0.28)
@@ -44,6 +44,12 @@ const SEAT_LEAN := 0.44  ## рад (≈25°)
 const RIM := 0.25
 const GRIP_DEG := 55.0
 const GRIP_FOLLOW_DEG := 35.0
+## Ладонь лежит на ободе, а не в нём (#427): середина кисти — на 1 см к пилоту и на 8 см снаружи кольца от оси
+## обода, кисть согнута в запястье на 75° к центру колеса — ладонь ложится на обод сверху, пальцы не проходят
+## насквозь (подбор по вершинам кистей MOD-012, `test_crew_rig.test_hands_rest_on_rim_not_inside`).
+const PALM_PILOT := 0.01
+const PALM_IN := -0.08
+const PALM_BEND_DEG := 75.0
 ## Резак MOD-013 (`models/rezak.glb`, docs/concept-art/proboina.md): pivot в хвате, сопло — (0; 0,177; −0,143) от него.
 ## При сварке правая рука держит резак так, чтобы сопло было в 6 см от шва; не дотянуться — рука вытянута к нему.
 const TORCH_NOZZLE := Vector3(0.0, 0.1766, -0.1428)
@@ -109,6 +115,21 @@ static func wheel_grips(turn: float) -> Array[Vector3]:
 	var c := Vector3(0.0, BridgeProps.WHEEL_Y, BridgeProps.WHEEL_Z)
 	var a := deg_to_rad(GRIP_DEG)
 	return [c + b * Vector3(-RIM * sin(a), RIM * cos(a), 0.0), c + b * Vector3(RIM * sin(a), RIM * cos(a), 0.0)]
+
+
+## Где лежит середина ладони у хвата side (0 — левая, 1 — правая) и куда смотрят пальцы, если предплечье идёт
+## по fore (от локтя к запястью): [середина ладони, направление кисти] в осях корабля.
+static func wheel_palm(turn: float, side: int, fore: Vector3) -> Array[Vector3]:
+	var b := Basis.from_euler(Vector3(deg_to_rad(BridgeProps.WHEEL_TILT), 0.0, 0.0)) \
+		* Basis(Vector3.BACK, deg_to_rad(clampf(-turn * BridgeProps.WHEEL_TURN_DEG, -GRIP_FOLLOW_DEG, GRIP_FOLLOW_DEG)))
+	var c := Vector3(0.0, BridgeProps.WHEEL_Y, BridgeProps.WHEEL_Z)
+	var g: Vector3 = wheel_grips(turn)[side]
+	var inward := (c - g).normalized()
+	var palm := g + b * Vector3.BACK * PALM_PILOT + inward * PALM_IN
+	var f := fore.normalized()
+	var ax := f.cross(inward)
+	var dir := f.rotated(ax.normalized(), deg_to_rad(PALM_BEND_DEG)) if ax.length() > 1e-4 else f
+	return [palm, dir]
 
 
 ## Колено/локоть по двум длинам: от s к цели t, сгиб в сторону hint. Если цель дальше — рука вытянута к ней.
@@ -376,6 +397,14 @@ class Member:
 			j["hip_" + k] = hp
 			if seated:
 				_reach(j, k, sh, Crew.wheel_grips(wheel_turn)[side], right * s)
+				## Ладонь на обод (#427): кисть согнута к центру колеса, запястье — за серединой ладони.
+				var palm := Crew.wheel_palm(wheel_turn, side, j["wrist_" + k] - j["elbow_" + k])
+				var arm := Crew.two_bone(sh, palm[0] - palm[1] * HAND * 0.5, UPPER_ARM, FOREARM, Vector3.DOWN + right * s * 0.6)
+				j["elbow_" + k] = arm[0]
+				j["wrist_" + k] = arm[1]
+				j["hand_" + k] = arm[1] + palm[1] * HAND
+				j["grip_" + k] = palm[0]
+				j["palm_" + k] = palm[0]  ## середина ладони модели — сюда (CrewRig._arm_target)
 				## Сидя: бедро вперёд чуть вниз, голень вниз и вперёд, ступня на подножке.
 				var knee := hp + (fwd * cos(0.12) + Vector3.DOWN * sin(0.12)) * THIGH
 				var ankle := knee + (Vector3.DOWN * cos(0.35) + fwd * sin(0.35)) * SHIN

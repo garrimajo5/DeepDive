@@ -545,3 +545,123 @@ ROADMAP потока А.
 `pult-energii-sostoyaniya.png`, кадр 16:9 `pult-energii-169.png`; решения — `pult-energii.md`: панель справа над
 кнопкой действия, пять одинаковых строк, выбор рамкой и полосой, янтарь только при перегреве, доли при сбросе
 сохраняются; ракурс открытого пульта свободнее. Встройка — задача ROADMAP потока А.
+## ART-053 Нормали и шероховатость обшивки — принято
+- Исходник: ART-024 (`obshivka.md`), ART-049 (`povrezhdeniya.md`), `hull_plating.gdshader`.
+
+**Принято 22.10.2026** (PR #405, ветка `art/ART-053-obshivka-normali`): `obshivka-normali.png`, `obshivka-sheroh.png`,
+`povrezhdeniya-normali.png`, лист `obshivka-normali-list.png`; решения — `obshivka-normali.md`: швы утоплены, крепёж
+выпуклый, вмятины/царапины/кольца/заплатки рельефом в регистр ART-049, OpenGL +Y, сила ≈ 1,0, трипланарные нормали
+сводить с разворотом базиса, на «Экономно» выключать. Встройка — задача ROADMAP потока А.
+## ART-052 Лучи сквозь лёд — принято
+- Исходник: `docs/world.md`, ART-044 (`grafika.md`), `Seabed.Water`, `OceanView.apply_water`.
+
+**Принято 22.10.2026** (PR #402, ветка `art/ART-052-luchi`): кадр `luchi-kadr.jpg`, `luchi-maska.png`, `luchi-shum.png`,
+лист `luchi-list.png`; решения — `luchi.md`: ~4 аддитивные шахты-конуса одним MultiMesh, холодный #9AD9E8, сила
+`0.14·exp(−глубина/9)`, гаснут вдали, у дна и у Края, мягкий видозависимый край. Встройка — задача ROADMAP потока А.
+## ART-054 Материалы мостика — принято
+- Исходник: ART-002 (`mostik.md`), ART-008 (`mashinnoe.md`), ART-024 (`obshivka.md`), `BridgePlan`, `BridgeView`.
+
+**Принято 22.10.2026** (PR #411, ветка `art/ART-054-materialy-mostika`): девять карт `mostik-{pol,stena,potolok}-{tsvet,normali,orm}.png`,
+листы `mostik-materialy-list.png`, `mostik-materialy-povtor.png`; решения — `mostik-materialy.md`: плитка 1 × 1 м, OpenGL +Y,
+ORM = AO/шероховатость/металл, в существующие `Paint.DECK`/`METAL`/`SEAM` без новых вызовов, нужны метровые UV оболочки,
+на «Экономно» нормали выключать. Встройка — задача ROADMAP потока А.
+## ART-056 Лёд снизу — принято
+- Исходник: `docs/world.md`, ART-052 (`luchi.md`), `Seabed.ICE_Y`, `OceanView`.
+
+**Принято 22.10.2026** (PR #412, ветка `art/ART-056-led-snizu`): `led-tsvet.png`, `led-normali.png`, `led-treshchiny.png`,
+кадр `led-kadr.jpg`, лист `led-list.png`; решения — `led-snizu.md`: плитка 16 × 16 м по `world.xz`, маска трещин под крупным
+мировым шумом (рвёт повтор), слабая эмиссия с добавкой трещин и гашением по глубине, основания шахт ART-052 по той же маске.
+Встройка — задача ROADMAP потока А.
+## ART-055 Материалы машинного и трюма — принято
+- Исходник: ART-008 (`mashinnoe.md`), `tryum.md`, ART-054 (`mostik-materialy.md`), ART-024 (`obshivka.md`), `ShipLayout`, `RoomsView`.
+
+**Принято 22.10.2026** (PR #417, ветка `art/ART-055-materialy-otsekov`): 15 карт `{mash,tryum}-{pol,stena}-*`, `otsek-potolok-*`
+(цвет/нормали/ORM), листы `otseki-materialy-list.png`, `otseki-materialy-povtor.jpg`; решения — `otseki-materialy.md`:
+плитка 1 × 1 м, OpenGL +Y, выбор комплекта по z внутри существующих материалов `RoomsView` без новых вызовов, метровые UV
+как у мостика, на «Экономно» нормали и ORM выключать. Встройка — задача ROADMAP потока А.
+## ART-057 Стекло носовых окон — принято
+- Исходник: ART-002 (`mostik.md`), ART-025 (`tablo.md`), ART-054 (`mostik-materialy.md`), `BridgeView._add_glass`.
+
+**Принято 22.10.2026** (PR #418, ветка `art/ART-057-steklo-okon`): `steklo-maska.png`, `steklo-normali.png`, кадр
+`steklo-kadr.jpg`, сравнение `steklo-sravnenie.jpg`; решения — `steklo-okon.md`: муть/капли/царапины только у рамы, центр
+чистый, три окна одной картой с отражением участков UV, в имеющийся материал стекла без новых вызовов, мигание гасит
+только отражение, на «Экономно» без нормалей. Встройка — задача ROADMAP потока А.
+## ART-058 Взвесь за бортом — принято
+- Исходник: `docs/world.md`, `Seabed.Water`, ART-048 (`sonarnaya-tma.md`), ART-052 (`luchi.md`), `OceanView._make_snow`.
+
+**Принято 22.10.2026** (PR #423, ветка `art/ART-058-vzves`): атлас `vzves-atlas.png` (4×4: хлопья, нити, пыль, пузыри),
+лист `vzves-list.png`, проверка `vzves-test-telefon.png`; решения — `vzves.md`: один узел и материал «Морского снега»,
+кадр по долям при рождении, размеры 0,8–7 см, своё оседание/вращение по семьям, без эмиссии, на «Экономно» 180 частиц
+без вращения. Встройка — задача ROADMAP потока А.
+## ART-059 Цвет воды по глубине — принято
+- Исходник: `docs/world.md`, `Seabed.Water`, `OceanView.apply_water`, ART-052 (`luchi.md`), ART-056, ART-048.
+
+**Принято 22.10.2026** (PR #430, ветка `art/ART-059-voda-glubina`): LUT `voda-palitra.png` (1024×64, глубина 0…120 м сверху
+вниз), кадры `voda-kadry.jpg`, лист `voda-proverka.png`, ключи `voda-glubina.json`; решения — `voda-glubina.md`: десять ключей
+глубины (туман, плотность, рассеянный, солнце, экспозиция) — конечные значения, плавная интерполяция, стекло окон по
+рассеянному свету, ил ART-048 поверх. Встройка — задача ROADMAP потока А.
+## ART-060 Грунты отмели — принято
+- Исходник: `docs/world.md`, `Seabed.color_at`, `shaders/seabed.gdshader`, ART-052 (`luchi.md`), `Samples`.
+
+**Принято 22.10.2026** (PR #432, ветка `art/ART-060-dno`): девять карт `dno-{pesok,il,galka}-{tsvet,normali,orm}.png`, лист
+`dno-list.png`, сравнение `dno-sravnenie.jpg`; решения — `dno-grunty.md`: плитка 2 × 2 м по `world.xz`, цвет — множитель
+вокруг серого поверх `color_at`, выбор грунта по уклону, глубине и шуму без резких границ, мелкие детали гаснут к 35–55 м,
+в имеющийся материал дна без новых вызовов, на «Экономно» только цвет. Встройка — задача ROADMAP потока А.
+## ART-062 Рисунок прожектора — принято
+- Исходник: `Searchlight`, `SearchlightView`, `shaders/beam.gdshader`, ART-059 (`voda-glubina.md`), ART-048, ART-058.
+
+**Принято 22.10.2026** (PR #440, ветка `art/ART-062-prozhektor`): маска пятна `prozhektor-maska.png` (L8 512²), поле луча
+`prozhektor-luch.png` (L8 256×512), лист `prozhektor-list.png`, кадр `prozhektor-kadr.jpg`; решения — `prozhektor.md`:
+проектор на имеющемся `SpotLight3D` (в 4.7.2 требует теней — цену мерить на телефоне), плотность луча `0,28 + 0,72·mask`
+с дрейфом, ил укорачивает луч `Silt.beam_k` один раз, на «Экономно» маска без анимации. Встройка — задача ROADMAP потока А.
+## ART-063 След винтов и пузыри при всплытии — принято
+- Исходник: `HullPlan` (роторы, сервисные крышки), `HullMesh.Motion`, `Flyby`, ART-058 (`vzves.md`).
+
+**Принято 22.10.2026** (PR #441, ветка `art/ART-063-sled-vintov`): атлас `sled-atlas.png` (4×4: пузыри, группы, завитки),
+лист `sled-list.png`, кадры `sled-kadr.jpg`, `sled-vsplytie.jpg`; решения — `sled-vintov.md`: рождение за кожухами роторов
+по тяге `Motion.spin`, частицы в мире, выпуски у крышек при всплытии, общий предел 200, один материал без эмиссии, на
+«Экономно» 96. Встройка — задача ROADMAP потока А.
+## ART-064 Свет внутри корабля — принято
+- Исходник: ART-002, ART-054/055, ART-025, ART-013, `BridgeView.lamps`, `RoomsView.lamps`, `Vitals.lamp_k`, `Lab.RING`.
+
+**Принято 22.10.2026** (PR #448, ветка `art/ART-064-svet-vnutri`): лицо плафона `svet-plafon.png` (RGBA 256²), план
+`svet-plan.png`, таблица `svet-vnutri.json`, лист `svet-list.png`, лица `svet-litsa.jpg`, ритм `svet-ritm.jpg`; решения —
+`svet-vnutri.md`: те же семь рабочих огней (слой 2, без теней) переставлены в тёплые и холодные зоны, авария — янтарный
+ритм 1,2 с при пробоине с холодной опорой B1/L1, старый огонь пробоины в 0, `lamp_k` поверх, плафоны светятся текстурой
+в `Paint.PLAFOND` без новых вызовов. Встройка — задача ROADMAP потока А.
+## ART-065 Виньетка и цветокоррекция по глубине — принято
+- Исходник: ART-059 (`voda-glubina.md`, `Seabed.Water`), ART-048, ART-031/033, `OceanView.apply_water`.
+
+**Принято 22.10.2026** (PR #455, ветка `art/ART-065-vinyetka`): четыре LUT `vinyetka-lut-*.png` (16³ полосой 256×16),
+числа `vinyetka-lut.json`, листы `vinyetka-list.png`, `vinyetka-kontrol.jpg`; решения — `vinyetka.md`: один
+полноэкранный проход под интерфейсом, аффинные LUT одной выборкой с поправкой синего, смешение по глубине и илу на CPU,
+овал формулой с защитой огней; на «Экономно» только овал 0,10. Встройка — задача ROADMAP потока А.
+## ART-066 Декали дна — принято
+- Исходник: ART-060 (`dno-grunty.md`, `Seabed.Ground`), `Seabed.color_at`, ART-048, `Samples`, `docs/bestiary.md`.
+
+**Принято 23.10.2026** (PR #470, ветка `art/ART-066-dekali-dna`, вторая сдача): атлас `dekali-dna-atlas.png` (RGBA 1024², 4×4:
+следы, вмятины, ил, ракушечник, мох, разряды), лист `dekali-dna-list.png`, кадры `dekali-dna-blizko.jpg`, `dekali-dna-pole-20m.png`;
+решения — `dekali-dna.md`: проекция world.xz в материал дна по клеткам 4 × 4 м без новых вызовов, множитель вокруг серого,
+места по весам грунта и уклону, разряды только по событию, затухание 10…45 м; штатную плотность при встройке поднять
+(в примерке вплотную штампы ставились принудительно); на «Экономно» реже и ближе. Встройка — задача ROADMAP потока А.
+## ART-067 Блики воды в мостике — принято
+- Исходник: ART-057 (`steklo-okon.md`), ART-064 (`svet-vnutri.md`), ART-059 (`voda-glubina.md`), каустики дна.
+
+**Принято 23.10.2026** (PR #483, ветка `art/ART-067-bliki-vody`, вторая сдача): маска `bliki-maska.png` (L8 512², бесшовная),
+лист `bliki-list.png`, кадры `bliki-potolok.jpg`, `bliki-techenie.jpg`; решения — `bliki-vody.md`: узор в материале потолка и
+пола мостика без новых огней, плитка 3,2 м, две выборки одной маски текут ≈ 0,04 м/с, сила по глубине 8/20/45/90 м,
+гаснет в иле и при аварии, на «Экономно» выключено. Встройка — задача ROADMAP потока А.
+## ART-068 Разряд по корпусу снаружи — принято
+- Исходник: `razryad.md` (ART-015), ART-001/ART-024 (`hull_plating.gdshader`), ART-066 (`dekali-dna.md`).
+
+**Принято 23.10.2026** (PR #485, ветка `art/ART-068-razryad-korpus`, вторая сдача): атлас `razryad-dugi.png` (L8 1024×512, 4×2),
+лист `razryad-korpus-list.png`, кадры `razryad-okno.jpg`, `razryad-dno.jpg`; решения — `razryad-korpus.md`: дуги в шейдере
+обшивки бегут от носа к корме фронтом 50 м/с и гаснут к 0,8 с, 10 Гц, швы светятся; у окна и у дна — один общий меш
+карточек (+1 вызов), без новых огней; на «Экономно» статичный кадр. Встройка — задача ROADMAP потока А.
+## ART-069 Слои воды — принято
+- Исходник: ART-059 (`voda-glubina.md`, `Seabed.Water`), ART-052, ART-056, ART-058, ART-048.
+
+**Принято 23.10.2026** (PR #493, ветка `art/ART-069-sloi-vody`): профили `sloi-vody.json`, лист `sloi-vody-list.png`, кадры
+`sloi-vody-30m.jpg`, `sloi-vody-45m-vverh.jpg`; решения — `sloi-vody.md`: подлёдная муть 0…6 м, термоклин 28,5…31,5 м,
+пыль 0…3 м над дном по мировой глубине пикселя, аналитическая плотность вдоль луча в материалах дна, льда и дальней воды
+(0 новых вызовов, базу ART-059 восстанавливать в `FOG`), дрожание ±0,12 м; на «Экономно» выкл. Встройка — задача ROADMAP потока А.

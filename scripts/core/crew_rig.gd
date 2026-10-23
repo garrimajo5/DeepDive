@@ -13,6 +13,9 @@ const LOOK_NAMES := ["Мужчина", "Женщина"]
 const ANKLE_LIFT := 0.11
 ## Середина кисти модели — в 8 см от запястья (у `Crew` — HAND/2): в неё приходит точка хвата фигуры.
 const GRIP := 0.08
+## Середина ладони модели (центр вершин кисти) — в 12,5 см от запястья: у штурвала в неё приходит точка ладони
+## `Crew.wheel_palm` (#427).
+const PALM := 0.125
 ## Свой игрок: голова не рисуется (камера в ней).
 const HIDE_HEAD := ["neck", "Head", "head_end", "headfront"]
 ## И верх груди: сидя наклон к штурвалу подносит его к камере.
@@ -196,6 +199,8 @@ static func _limb(rest: Rest, j: Dictionary, limb: Array, s: Vector3, fwd: Vecto
 static func _arm_target(j: Dictionary, k: String) -> Vector3:
 	var je: Vector3 = j["wrist_" + k]
 	var hd: Vector3 = j["hand_" + k] - je
+	if j.has("palm_" + k):   # ладонь на ободе штурвала: середина кисти модели — в точку ладони (#427)
+		return j["palm_" + k] - hd.normalized() * PALM
 	return j.get("grip_" + k, je + hd * 0.5) - hd.normalized() * GRIP
 
 

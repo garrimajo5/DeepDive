@@ -4,6 +4,8 @@ extends RefCounted
 ## Клиент показывает корабль и фигуры с небольшим отставанием `DELAY` по времени хоста: между двумя кадрами,
 ## пришедшими раньше, — плавно, даже когда пакеты приходят пачкой или с паузой. Вперёд не угадывает (без экстраполяции).
 ## Без узлов: `push` — принятый кадр, `step(dt)` — часы показа, `ship`/`member` — что рисовать.
+## Живой мир — с тем же отставанием: пакет существ рядом («eco», `EcoLink.pack_world`) ждёт в очереди, пока часы
+## показа не дойдут до его кадра (`take_eco`), — существа, мох и время мира у гостя на тех же часах, что корабль.
 
 const DELAY := 0.1   ## отставание показа от свежего кадра, с: два кадра хоста — пара для перехода почти всегда есть
 const KEEP := 8      ## сколько последних кадров держим
@@ -21,13 +23,22 @@ class Shot:
 
 var shots: Array[Shot] = []
 var clock := 0.0   ## время показа (время хоста)
+var eco: Array = []   ## пакеты живого мира, ещё не показанные: [время хоста, PackedFloat32Array], старые первыми
+var _eco_fresh := false   ## очередь начата заново: первый пакет — сразу, как первый кадр корабля
 
 
 ## Принятый кадр хоста (после `NetSnap.apply_frame`): время хоста `t`, корабль, экипаж по порядку.
-## Время не выросло (новый забег, другой хост) — начинаем заново с этого кадра.
-func push(t: float, pos: Vector3, yaw: float, crew: Array) -> void:
-	if not shots.is_empty() and t <= shots[-1].t:
+## Время не выросло (новый забег, другой хост) — начинаем заново с этого кадра. eco — существа рядом из этого
+## кадра (пусто — не пришли): покажутся, когда часы показа дойдут до t (`take_eco`).
+func push(t: float, pos: Vector3, yaw: float, crew: Array, eco_data := PackedFloat32Array()) -> void:
+	if shots.is_empty() or t <= shots[-1].t:
 		shots.clear()
+		eco.clear()
+		_eco_fresh = true
+	if not eco_data.is_empty():
+		eco.append([t, eco_data])
+		while eco.size() > KEEP:
+			eco.pop_front()
 	var s := Shot.new()
 	s.t = t
 	s.pos = pos
@@ -64,6 +75,23 @@ func _pair() -> Array:
 			var a := shots[i - 1]
 			return [a, b, clampf((clock - a.t) / maxf(b.t - a.t, 1e-6), 0.0, 1.0)]
 	return [shots[-1], shots[-1], 0.0]
+
+
+## Пакет живого мира на часах показа: самый свежий, чьё время уже настало (старше — пропускаем, пакеты полные);
+## не настало ни одного — пусто. После сброса первый пакет — сразу (корабль тоже стоит на первом кадре).
+func take_eco() -> PackedFloat32Array:
+	var j := -1
+	for i in eco.size():
+		if float(eco[i][0]) <= clock + 1e-6:
+			j = i
+	if j < 0 and _eco_fresh and not eco.is_empty():
+		j = 0
+	if j < 0:
+		return PackedFloat32Array()
+	var out: PackedFloat32Array = eco[j][1]
+	eco = eco.slice(j + 1)
+	_eco_fresh = false
+	return out
 
 
 func ready() -> bool:

@@ -65,7 +65,7 @@ func test_scene_runs_scenario() -> void:
 	var shots := 0
 	var table: Node3D = main.bridge.props[BridgeProps.TABLE]
 	var legs_seen := false
-	for i in 2500:  # 83 с игры
+	for i in 2700:  # 90 с игры
 		# снимок берёт уже нарисованный кадр — камеру до шага, в котором он снят
 		var cam := main.camera
 		var table_vis := cam.is_position_in_frustum(table.global_position + table.global_basis.y * 0.9)
@@ -111,7 +111,9 @@ func test_scene_runs_scenario() -> void:
 	ok(log.contains("аварийный сброс щитком | ") and log.contains("° сброс"), "щитком заглушили реактор")
 	ok(log.contains("пробоина на мостике: струя, вода, янтарная тревога; на слух — сирена и шум струи | ") and log.contains("ПРОБОИНА · МОСТИК · вода"),
 		"пробоина на мостике — на приборах")
-	ok(log.contains("сварка: заплатка наполовину") and main.breach.active == null and log.contains("Вода: мостик"),
+	# пробоину смотрим в строке «шов заварен», не в конце: в новом забеге из меню корабль снова могут ударить
+	var welded := log.split("шов заварен")[-1].split("\n")[0] if log.contains("шов заварен") else "ПРОБОИНА"
+	ok(log.contains("сварка: заплатка наполовину") and not welded.contains("ПРОБОИНА") and log.contains("Вода: мостик"),
 		"заварили, вода откачивается")
 	eq(main.samples.cargo.size(), 1, "лебёдкой подняли образец")
 	ok(log.contains("лебёдка: захват тянется к образцу | ") and log.contains("лебёдка: образец в трюме | "), "лебёдка в логе")
@@ -149,6 +151,25 @@ func test_act_step() -> void:   # товарищ жмёт свою кнопку 
 	eq(q.advance(0.1)[0], ["act"], "команда сцене")
 
 
+func test_gone_step() -> void:   # товарищ отключился, как гость сети: у хоста плашка ART-043
+	var q := QaScript.parse('[{"do": "gone"}]')
+	eq(q.errors.size(), 0, "шаг gone известен")
+	eq(q.advance(0.1)[0], ["gone"], "команда сцене")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.start_qa('[{"do": "mate", "x": -3.5, "z": -2.0, "yaw": 90, "role": 2, "look": 0}, {"do": "act"},'
+		+ ' {"do": "wait", "s": 0.3}, {"do": "gone"}, {"do": "wait", "s": 0.3}]')
+	for i in 30:
+		main.step(1.0 / 30.0)
+	eq(main.crew.size(), 1, "инженер ушёл с палубы")
+	ok(Crew.holder(main.crew, main.me, "energy") == null, "пульт свободен")
+	ok(main.notice.active(), "плашка у хоста")
+	eq(main.notice.sub, "Роль свободна · пост освобождён", "держал пульт")
+	main.queue_free()
+	await frames(1)
+
+
 func test_silt_step() -> void:
 	var q := QaScript.parse('[{"do": "silt"}, {"do": "silt", "on": false}]')
 	eq(q.errors.size(), 0, "шаг silt известен")
@@ -161,6 +182,14 @@ func test_drain_step() -> void:   # issue #131: тревога о стеклоу
 	var q := QaScript.parse('[{"do": "drain", "s": 2.5}]')
 	eq(q.errors.size(), 0, "шаг drain известен")
 	eq(q.advance(0.1)[0], ["drain", 2.5], "стеклоуст на корпусе 2,5 с")
+
+
+func test_hull_step() -> void:   # следы повреждений ART-049 на виде с борта
+	var q := QaScript.parse('[{"do": "hull", "pct": 30}, {"do": "hull", "pct": 140}]')
+	eq(q.errors.size(), 0, "шаг hull известен")
+	var out := q.advance(0.1)
+	eq(out[0], ["hull", 30.0], "корпус 30 %")
+	eq(out[1], ["hull", 100.0], "выше 100 % не бывает")
 
 
 ## issue #158: снимок полок трюма смотрел на правый стеллаж, а первая банка встаёт на левый.
