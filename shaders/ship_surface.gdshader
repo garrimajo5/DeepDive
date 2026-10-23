@@ -10,6 +10,10 @@ shader_type spatial;
 // Выборки внутри ветки — через textureGrad с производными снаружи, иначе mipmap на стыке граней рвётся.
 // Блики воды ART-067 (bliki-vody.md, числа — WaterGlints): маска каустик в EMISSION потолка (×1) и пола (×0,6) в зоне
 // мостика по z, две выборки текут; glint_k = 0 (отсеки, «Экономно», глубина) — маска не читается.
+// «Корабль устал» ART-074 (ustalost-korpusa.md, двойник — CabinWear.amount): маска wear_mask (R потёки, G пятна пола,
+// B порог потери) по метровым UV, вход wear_loss = 1 − корпус/100; потёки на стенах сверху, у бортов на потолке,
+// мокрая полоса пола у бортов; только мостик и машинное, у постов и рамки окна сухо. Темнее, глаже, лак — без эмиссии.
+// wear_loss < 0,36 (самый низкий порог маски ≈ 0,37) — маска не читается.
 
 uniform vec3 base_color : source_color = vec3(0.55, 0.5, 0.42);
 uniform float base_rough = 0.75;
@@ -48,6 +52,9 @@ uniform sampler2D glint_mask : hint_default_black, filter_linear_mipmap_anisotro
 uniform float glint_k = 0.0;
 uniform float glint_time = 0.0;
 uniform vec3 glint_tint : source_color = vec3(0.65, 0.85, 0.95);
+
+uniform sampler2D wear_mask : hint_default_black, filter_linear_mipmap, repeat_enable;
+uniform float wear_loss = 0.0;
 
 varying vec3 ship_pos;
 varying float down;
@@ -135,5 +142,31 @@ void fragment() {
 				qdx * vec2(-1.0, 1.0), qdy * vec2(-1.0, 1.0)).r;
 			EMISSION += glint_tint * (0.6 * a + 0.4 * b) * glint_k * region * facing;
 		}
+	}
+	if (wear_loss >= 0.36) {   // CabinWear: gate, zone, safe, near_wall, amount
+		vec3 data = textureGrad(wear_mask, UV, dx, dy).rgb;
+		float zone = max(1.0 - smoothstep(1.8, 2.0, ship_pos.z),
+			smoothstep(14.0, 14.2, ship_pos.z) * (1.0 - smoothstep(19.3, 19.5, ship_pos.z)));
+		float wall_x = mix(3.0, 4.9, 1.0 - smoothstep(1.8, 2.0, ship_pos.z));
+		float near_wall = smoothstep(wall_x - 0.8, wall_x - 0.15, abs(ship_pos.x));
+		float safe = smoothstep(-5.7, -5.35, ship_pos.z);
+		safe *= smoothstep(0.8, 1.25, distance(ship_pos.xz, vec2(0.0, -4.2)));
+		safe *= smoothstep(0.8, 1.25, distance(ship_pos.xz, vec2(-3.9, -2.0)));
+		safe *= smoothstep(0.8, 1.25, distance(ship_pos.xz, vec2(3.85, -2.0)));
+		safe *= smoothstep(0.8, 1.25, distance(ship_pos.xz, vec2(0.0, -1.2)));
+		safe *= smoothstep(0.8, 1.25, distance(ship_pos.xz, vec2(-3.9, -0.5)));
+		safe *= smoothstep(0.8, 1.25, distance(ship_pos.xz, vec2(-2.2, 17.2)));
+		safe *= smoothstep(0.8, 1.25, distance(ship_pos.xz, vec2(2.2, 17.2)));
+		float wet = data.r * smoothstep(1.35, 2.85, ship_pos.y);
+		if (up > 0.5) {
+			wet = data.g * near_wall;
+		} else if (down > 0.5) {
+			wet = data.r * near_wall * 0.6;
+		}
+		float amount = wet * smoothstep(data.b, data.b + 0.14, wear_loss) * zone * safe;
+		ALBEDO *= 1.0 - amount * 0.68;
+		ROUGHNESS = mix(ROUGHNESS, 0.24, amount * 0.72);
+		CLEARCOAT = amount * 0.7;
+		CLEARCOAT_ROUGHNESS = 0.18;
 	}
 }
