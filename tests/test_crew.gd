@@ -119,6 +119,22 @@ func test_snapshot_round_trip() -> void:
 	eq(Crew.part_color("torso", Crew.Role.ENGINEER), Crew.ROLE_COLORS[Crew.Role.ENGINEER], "цвет роли на груди")
 
 
+## Палитра: «красный — знак хищника», поэтому ни один цвет роли не красно-доминантный (владелец по #129 выбрал
+## инженеру светлый нейтральный). И цвета ролей различимы между собой — на груди и на метках голосования.
+func test_role_colors_not_red_and_distinct() -> void:
+	# Красный (не оранжевый): яркий красный канал при низком зелёном — зелёный и отделяет красный от янтаря пилота.
+	for role in range(Crew.ROLE_COLORS.size()):
+		var c: Color = Crew.ROLE_COLORS[role]
+		ok(not (c.r > 0.6 and c.g < 0.5 and c.r - c.b > 0.3),
+			"%s — не красный цвет (красный — знак хищника)" % Crew.ROLE_NAMES[role])
+	for i in range(Crew.ROLE_COLORS.size()):
+		for j in range(i + 1, Crew.ROLE_COLORS.size()):
+			var a: Color = Crew.ROLE_COLORS[i]
+			var b: Color = Crew.ROLE_COLORS[j]
+			var d := absf(a.r - b.r) + absf(a.g - b.g) + absf(a.b - b.b)
+			ok(d > 0.25, "цвета %s и %s различимы" % [Crew.ROLE_NAMES[i], Crew.ROLE_NAMES[j]])
+
+
 func test_pad_drives_only_own_walker() -> void:   # у каждого свой ходок и ввод: основа для сети
 	var a := Crew.Member.new(Crew.Role.PILOT)
 	var b := Crew.Member.new(Crew.Role.ENGINEER)
