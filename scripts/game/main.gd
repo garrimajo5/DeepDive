@@ -276,7 +276,12 @@ func _ready() -> void:
 	visor.name = "Щиток сварщика"
 	visor.set_anchors_preset(Control.PRESET_FULL_RECT)
 	visor.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	visor.color = Breach.VISOR
+	visor.color = Color.WHITE
+	var vm := ShaderMaterial.new()   # яркое (искры, вспышка) сквозь щиток не тонирует — по issue #530
+	vm.shader = load("res://shaders/visor.gdshader")
+	vm.set_shader_parameter("shade", Breach.VISOR)
+	vm.set_shader_parameter("knee", Breach.VISOR_KNEE)
+	visor.material = vm
 	visor.visible = false
 	ui.add_child(visor)
 	vitals.hit_taken.connect(_on_hit)

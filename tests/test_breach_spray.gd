@@ -121,11 +121,21 @@ func test_sparks_quench_in_water() -> void:
 func test_spark_look() -> void:
 	near(BreachSpray.spark_size(Vector3(0, 0, 1)).y, 0.12, 1e-6, "медленная — 0,12 м")
 	near(BreachSpray.spark_size(Vector3(0, 0, 10)).y, 0.32, 1e-6, "быстрая — не длиннее 0,32 м")
-	ok(BreachSpray.spark_color(0.0).is_equal_approx(BreachSpray.HOT), "у резака #FFF2D5")
+	ok(BreachSpray.spark_color(0.0).is_equal_approx(BreachSpray.CORE), "у резака #FFA84D")
 	ok(BreachSpray.spark_color(1.0).is_equal_approx(BreachSpray.COOL), "остыла — #F18A3D")
 	for a in [0.0, 0.5, 1.0]:
 		var c := BreachSpray.spark_color(a)
 		ok(c.g > 0.5, "без красного (#129): %s" % c)
+
+
+## По issue #530: искры на снимке белые и бледные — #FFF2D5 × 1,5 зажимался в белое.
+func test_sparks_stay_warm() -> void:
+	for a in [0.0, 0.2, 0.5, 1.0]:
+		var c := BreachSpray.spark_lit(BreachSpray.spark_color(a))
+		var shown := Color(minf(c.r, 1.0), minf(c.g, 1.0), minf(c.b, 1.0))   # без тонмаппинга — зажато в 1
+		ok(shown.r - shown.b > 0.5 and shown.g < 0.9, "искра %.1f — жёлто-оранжевая, не белая: %s" % [a, shown])
+		ok(maxf(c.r, maxf(c.g, c.b)) > 1.0, "ярче единицы — bloom ловит")
+		near(c.g / c.r, BreachSpray.spark_color(a).g / BreachSpray.spark_color(a).r, 1e-4, "тон не сдвинут")
 
 
 func test_frames_stay_in_group() -> void:

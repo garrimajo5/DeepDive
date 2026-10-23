@@ -119,6 +119,9 @@ func test_scene_bite_breach_weld() -> void:
 	ok(main.breach_view.spark_mm.visible and main.breach_view.parts.flash, "искры и вспышка электрода")
 	ok(main.me.welding() and main.crew_view.torches[0].visible, "резак в правой руке")
 	ok(main.visor.visible, "щиток опущен — экран затемнён")
+	var vm := main.visor.material as ShaderMaterial
+	ok(vm != null and vm.shader.resource_path == "res://shaders/visor.gdshader",
+		"щиток — шейдер, яркое не тонирует (#530)")
 	ok(main.breach_view.splash_mm.visible, "брызги там, где струя бьёт в воду")
 	ok(main.breach_view.patch.scale.x > 0.4 and main.breach_view.patch.scale.x < 0.7, "заплатка наполовину: %.2f" % main.breach_view.patch.scale.x)
 	for i in 20:
@@ -189,3 +192,20 @@ func test_jet_lands_inside_room() -> void:
 	near(b.p.y + d.y * t - Breach.JET_G * 0.5 * t * t, 0.0, 1e-4, "мостик: точка падения — на полу")
 	var sp := BreachView.splash_local(b, 0.2)
 	near(sp.y, 0.2 - b.p.y, 1e-6, "брызги на уровне воды")
+
+
+## По issue #530: щиток ровно смешивал кадр с тенью — янтарные искры становились бледными и белёсыми.
+func test_visor_keeps_sparks() -> void:
+	var spark := BreachSpray.COOL   # остывающая искра — янтарь
+	var seen := Breach.visor_pass(spark)
+	near(seen.r, spark.r, 0.01, "искра сквозь щиток — та же яркость")
+	ok(seen.r - seen.b > 0.6, "искра остаётся янтарной: %s" % seen)
+	var hot := Breach.visor_pass(BreachSpray.HOT)
+	ok(hot.is_equal_approx(BreachSpray.HOT), "вспышка у резака не тонируется")
+	var wall := Color(0.25, 0.28, 0.3)
+	var dim := Breach.visor_pass(wall)
+	ok(dim.r < wall.r * 0.6 and dim.b < wall.b, "тёмное затемнено к тени щитка: %s" % dim)
+	ok(dim.is_equal_approx(wall.lerp(Color(Breach.VISOR.r, Breach.VISOR.g, Breach.VISOR.b), Breach.VISOR.a)),
+		"тёмное — как прежний щиток")
+	var mid := Breach.visor_pass(Color(0.85, 0.5, 0.2))
+	ok(mid.r > 0.85 * (1.0 - Breach.VISOR.a) and mid.r < 0.85, "между — мягкий переход")
