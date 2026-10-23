@@ -39,6 +39,7 @@ var _carry_mat: StandardMaterial3D
 var valve_wheel: Node3D            ## маховик вентиля сброса пара (MOD-009), крутится по x
 var panel_lid: Node3D              ## крышка щитка «Аварийный сброс» (MOD-009), откидывается по z
 var steam: SteamView               ## пар из вентиля ART-071 (ValveSteam)
+var lock_water: LockWaterView      ## вода в шахте шлюза ART-073 (LockWater), ставит Main
 var _button_mat: StandardMaterial3D
 var lab_samples: Array[MeshInstance3D] = []   ## образцы в колбах (Lab.contents), светятся цветом вида
 const JOURNAL_TEXT := Color("67DDEB")
@@ -84,6 +85,8 @@ func _ready() -> void:
 	add_child(airlock_cover)
 	var lid := _model("lyuk-tryuma-kryshka", Vector3(0, 0, -Airlock.RADIUS), airlock_cover)   # pivot модели — на петле
 	_set_layers(lid, OceanView.LAYER_SHIP | OceanView.LAYER_WORLD)
+	lock_water = LockWaterView.new()   # гладь в шахте под открытым шлюзом (ART-073)
+	add_child(lock_water)
 	_add_winch()
 	_add_shelves()
 	_add_lab()
