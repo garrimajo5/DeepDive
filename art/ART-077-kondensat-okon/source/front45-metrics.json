@@ -1,0 +1,26 @@
+{
+  "args": {
+    "ship": "220,-45,-80",
+    "yaw": "0",
+    "z": "-3"
+  },
+  "depth": 45.0,
+  "hull": 100.0,
+  "humidity": 0.56,
+  "ice": 1.0,
+  "melt": 0.0,
+  "stages": {
+    "after": {
+      "draws": 68.0,
+      "primitives": 240368.0
+    },
+    "before": {
+      "draws": 68.0,
+      "primitives": 240368.0
+    },
+    "zero": {
+      "draws": 68.0,
+      "primitives": 240368.0
+    }
+  }
+}
