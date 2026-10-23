@@ -14,8 +14,8 @@ var zap_lever: Node3D      ## рычаг разряда на левом борт
 var zap_panel: Node3D      ## щиток разряда (MOD-014)
 var zap_scale_mat: BaseMaterial3D   ## материал щитка со шкалой готовности (свечение гаснет на откат)
 var hatch_wheel: Node3D
-var lamps: Array[OmniLight3D] = []  ## плафоны мостика (мигают — set_lamps)
-const LAMP_ENERGY := 0.9
+var lamps: Array[OmniLight3D] = []  ## огни мостика B1, B2 по ART-064 (set_cabin)
+var _lamp_data: Array[CabinLight.Lamp] = []
 var screens_mat: ShaderMaterial    ## экраны пульта пилота (помехи — set_screens)
 const SCANNER_TEXT := Color("67DDEB")
 var scanner_text: Label3D          ## экран сканера биолога (Scanner.screen_lines)
@@ -57,22 +57,38 @@ func _ready() -> void:
 	for name in props:
 		if TextureGlow.MODELS.has(name):
 			light_texture(props[name])
-	# тёплый свет плафонов: две лампы под потолком вдоль мостика
-	for z in [-3.5, 0.0]:
-		var l := OmniLight3D.new()
-		l.light_color = BridgePlan.COLORS[BridgePlan.Paint.PLAFOND]
-		l.light_energy = LAMP_ENERGY
-		l.omni_range = 7.5
-		l.position = Vector3(0, 2.8, z)
-		l.light_cull_mask = OceanView.LAYER_SHIP
-		add_child(l)
-		lamps.append(l)
+	for l in CabinLight.of(true):   # B1, B2 по ART-064
+		var o := cabin_light(l)
+		add_child(o)
+		lamps.append(o)
+		_lamp_data.append(l)
 
 
-## Плафоны мостика × k (мигание, Vitals.lamp_k).
+## Огни мостика по ART-064 (CabinLight): breach_room — отсек открытой пробоины (−1 — нет), t — часы ритма,
+## k — мигание Vitals.lamp_k поверх огибающей.
+func set_cabin(breach_room: int, t: float, k: float) -> void:
+	for i in lamps.size():
+		lamps[i].light_color = CabinLight.color(_lamp_data[i], breach_room)
+		lamps[i].light_energy = CabinLight.energy(_lamp_data[i], breach_room, t, k)
+
+
+## Плафоны мостика × k без аварии (мигание, Vitals.lamp_k).
 func set_lamps(k: float) -> void:
-	for l in lamps:
-		l.light_energy = LAMP_ENERGY * k
+	set_cabin(-1, 0.0, k)
+
+
+## Огонь по таблице ART-064: слой корабля, без теней; позиция — в осях корабля (родитель у корабля в нуле).
+static func cabin_light(l: CabinLight.Lamp) -> OmniLight3D:
+	var o := OmniLight3D.new()
+	o.name = "Свет " + l.id
+	o.position = l.pos
+	o.light_color = l.color
+	o.light_energy = l.energy
+	o.omni_range = l.range
+	o.omni_attenuation = l.attenuation
+	o.shadow_enabled = false
+	o.light_cull_mask = OceanView.LAYER_SHIP
+	return o
 
 
 ## Ползунок i пульта энергии на долю share 0…1 (паз наклонён: ползунок идёт по лицу пульта).

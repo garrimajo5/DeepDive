@@ -347,12 +347,19 @@ func _warm_frame() -> void:
 	_warm_drawn = true
 
 
+## Огни корабля по ART-064 (CabinLight): авария — пока открыта пробоина, ритм — часами пробоины (у гостя тоже идут),
+## k — мигание Vitals.lamp_k поверх.
+func _cabin(k: float) -> void:
+	var br := breach.active.room if breach.active else -1
+	bridge.set_cabin(br, breach.time, k)
+	rooms.set_cabin(br, breach.time, k)
+
+
 ## Свет мигает, пока на корпусе присоска и после разряда (Vitals.lamp_k); тревога присоски шипит раз в 1,6 с
 ## (Vitals.hiss — короткий звук без петли, issue #163).
 func _flicker(dt: float) -> void:
 	var k := vitals.lamp_k(time, zap.flicker > 0.0)
-	bridge.set_lamps(k)
-	rooms.set_lamps(k)
+	_cabin(k)
 	searchlight.set_flicker(k)
 	bridge.set_screens(Vector3(vitals.screen_k(time, Vitals.Screen.HELM_L), vitals.screen_k(time, Vitals.Screen.HELM_C),
 		vitals.screen_k(time, Vitals.Screen.HELM_R)), vitals.screen_k(time, Vitals.Screen.SCANNER))
@@ -1447,6 +1454,7 @@ func _client_step(dt: float) -> void:
 	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP), silt.beam_k())
 	breach.time += dt   # пульс тревоги и свет сварки — своим временем, состояние — из кадра
 	breach_view.apply()
+	_cabin(1.0)   # авария ART-064 у гостя — тот же ритм огней
 	silt_view.apply(silt, time, helm.pos, helm.yaw)
 	_client_eco(dt, near)
 	visor.visible = me.welding()
