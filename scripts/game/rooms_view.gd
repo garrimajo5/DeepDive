@@ -126,6 +126,11 @@ func set_journal_k(k: float) -> void:
 	journal_text.modulate = Color(JOURNAL_TEXT.r * k, JOURNAL_TEXT.g * k, JOURNAL_TEXT.b * k)
 
 
+## «Корабль устал» ART-074 в машинном (CabinWear): потеря прочности 0…1.
+func set_wear(loss: float) -> void:
+	BridgeView.wear_on(mesh_instance.mesh, loss)
+
+
 ## Огни отсеков по ART-064 (CabinLight): breach_room — отсек открытой пробоины (−1 — нет), t — часы ритма,
 ## k — мигание Vitals.lamp_k поверх огибающей. Свет реактора R1 ставит apply по реактору.
 func set_cabin(breach_room: int, t: float, k: float) -> void:

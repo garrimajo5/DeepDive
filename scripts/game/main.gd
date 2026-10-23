@@ -105,6 +105,7 @@ var valve_steam := ValveSteam.new()   ## пар вентиля ART-071 (рису
 var lock_water := LockWater.new()     ## вода в шахте шлюза ART-073 (рисует rooms.lock_water)
 var wake_view: WakeView
 var glints := WaterGlints.new()   ## блики воды в мостике ART-067 (сила, огибающая тревоги; рисует BridgeView)
+var wear := CabinWear.new()   ## «корабль устал» внутри ART-074 по Vitals.hull (рисуют BridgeView, RoomsView)
 var grade: GradeView   ## виньетка и цветокоррекция по глубине ART-065 (слой −1, под интерфейсом)
 var light_on := true        ## прожектор включён (кнопка «Свет» за штурвалом)
 var camera: Camera3D
@@ -409,6 +410,13 @@ func _glints(dt: float, lamp_k: float) -> void:
 	bridge.set_glints(glints.k(d, silt.k, lamp_k), WaterGlints.tint(d), time)
 
 
+## «Корабль устал» внутри ART-074: потёки и мокрый пол мостика и машинного по прочности корпуса (сглажено 0,3 с).
+func _wear(dt: float) -> void:
+	wear.step(dt, vitals.hull)
+	bridge.set_wear(wear.loss)
+	rooms.set_wear(wear.loss)
+
+
 ## Свет мигает, пока на корпусе присоска и после разряда (Vitals.lamp_k); тревога присоски шипит раз в 1,6 с
 ## (Vitals.hiss — короткий звук без петли, issue #163).
 func _flicker(dt: float) -> void:
@@ -417,6 +425,7 @@ func _flicker(dt: float) -> void:
 	rooms.steam.apply(valve_steam, ValveSteam.tint(reactor, k * Wreck.lamps(wreck.t)))   # пар ART-071
 	rooms.lock_water.apply(lock_water, airlock.t, helm.depth(), helm.speed, vitals.hull, time, k * Wreck.lamps(wreck.t))   # ART-073
 	_glints(dt, k * Wreck.lamps(wreck.t))
+	_wear(dt)
 	searchlight.set_flicker(k)
 	bridge.set_screens(Vector3(vitals.screen_k(time, Vitals.Screen.HELM_L), vitals.screen_k(time, Vitals.Screen.HELM_C),
 		vitals.screen_k(time, Vitals.Screen.HELM_R)), vitals.screen_k(time, Vitals.Screen.SCANNER))
@@ -1170,6 +1179,7 @@ func _restart() -> void:
 		vote_panel.visible = false
 	helm.reset()
 	vitals.reset()
+	wear.snap(vitals.hull)   # новый забег — стены сразу сухие
 	breach.reset()
 	silt.reset()
 	reactor.reset()   # сброс, перегрев и доли — как на старте (#265)
@@ -1694,6 +1704,7 @@ func _client_step(dt: float) -> void:
 	breach_view.apply(dt)   # частицы ART-072 у гостя — своим временем по состоянию из кадра
 	_cabin(Wreck.lamps(wreck.t))   # авария ART-064 у гостя — тот же ритм огней; шторка ART-036 гасит плафоны
 	_glints(dt, Wreck.lamps(wreck.t))
+	_wear(dt)
 	silt_view.apply(silt, time, helm.pos, helm.yaw)
 	_client_eco(dt, near)
 	visor.visible = me.welding()
@@ -1923,8 +1934,9 @@ func debug_setup(kv: Dictionary) -> void:
 	if kv.has("hot"):  # hot=1 — перегрев (для снимка табло)
 		reactor.start_hot(false)
 		reactor.heat = float(kv["hot"])
-	if kv.has("hull"):  # hull=<%> — прочность корпуса (следы повреждений ART-049 снаружи)
+	if kv.has("hull"):  # hull=<%> — прочность корпуса (следы повреждений ART-049 снаружи, износ внутри ART-074)
 		vitals.hull = float(kv["hull"])
+		wear.snap(vitals.hull)
 	if kv.get("relief", "1") == "0":  # relief=0 — обшивка без рельефа ART-053 («Экономно»)
 		hull.set_relief(false)
 		bridge.set_relief(false)   # и карты мостика ART-054
