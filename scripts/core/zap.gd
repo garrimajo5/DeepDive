@@ -34,6 +34,22 @@ const ARC_HALO_COLOR := Color("67ddeb")
 const ARC_CORE := 3.0
 const ARC_SEAM := 0.2
 
+## Карточки у окна и у дна по ART-068 (razryad-korpus.md): один меш, +1 вызов, additive, видны только в разряде;
+## на «Экономно» выключены. Рисует HullView.set_zap_cards, шейдер shaders/zap_cards.gdshader. Оси корабля.
+enum Card { WINDOW, BRANCH, SPARK }
+## Дуга у нижней рамы носового окна (снаружи стекла): 2,4 м, бежит к +X со скоростью ARC_FLOW, уходит к WINDOW_GONE.
+const WINDOW_FROM := Vector3(-3.7, 1.05, -6.15)
+const WINDOW_TO := Vector3(-1.3, 1.05, -6.15)
+const WINDOW_HALF := 0.65
+const WINDOW_GONE := 0.22
+## Ветви от киля к точке касания — только если от киля до дна (по сетке дна, Seabed.mesh_height) не больше GROUND_GAP.
+const KEEL := Vector3(0.0, -1.6, 10.0)
+const BRANCH_DZ := [-0.65, 0.0, 0.65]
+const BRANCH_HALF := 0.7
+const SPARK_HALF := 0.55
+const GROUND_GAP := 3.0
+const GROUND_LIFT := 0.08
+
 var last := -99.0
 var radius := BASE_RADIUS
 var flicker := 0.0
@@ -73,6 +89,63 @@ static func arc_frame(t: float, lite := false) -> int:
 	if lite or t <= 0.0:
 		return 0
 	return mini(int(floor(t * ARC_FPS)), ARC_FRAMES - 1)
+
+
+## Сила карточки kind через t с после разряда (двойник shaders/zap_cards.gdshader); вне 0…FLICKER — 0.
+static func card_k(kind: int, t: float) -> float:
+	if t < 0.0 or t >= FLICKER:
+		return 0.0
+	match kind:
+		Card.WINDOW:
+			return 1.0 - smoothstep(0.0, WINDOW_GONE, t)
+		Card.BRANCH:
+			return smoothstep(0.12, 0.28, t) * (1.0 - smoothstep(0.4, FLICKER, t))
+	return smoothstep(0.12, 0.22, t) * (1.0 - smoothstep(0.4, FLICKER, t))
+
+
+## Точка касания дна под килем в осях корабля (ship — его мировое положение): чуть над сеткой дна;
+## Vector3.INF — дно дальше GROUND_GAP от киля, ветвей нет.
+static func ground_contact(ship: Transform3D) -> Vector3:
+	var keel := ship * KEEL
+	var floor_y := Seabed.mesh_height(keel.x, keel.z)
+	if keel.y - floor_y > GROUND_GAP:
+		return Vector3.INF
+	return ship.affine_inverse() * Vector3(keel.x, floor_y + GROUND_LIFT, keel.z)
+
+
+## Полосы карточек [от, до, полуширина (вектор), вид Card]: дуга у окна всегда, ветви и искра — при касании.
+static func card_strips(contact: Vector3) -> Array:
+	var out := [[WINDOW_FROM, WINDOW_TO, Vector3(0.0, WINDOW_HALF, 0.0), Card.WINDOW]]
+	if contact == Vector3.INF:
+		return out
+	for dz: float in BRANCH_DZ:
+		out.append([KEEL + Vector3(0.0, 0.0, dz), contact, Vector3(0.0, 0.0, BRANCH_HALF), Card.BRANCH])
+	out.append([contact + Vector3(0.0, 0.03, -SPARK_HALF), contact + Vector3(0.0, 0.03, SPARK_HALF),
+		Vector3(SPARK_HALF, 0.0, 0.0), Card.SPARK])
+	return out
+
+
+## Массивы меша карточек: по два треугольника на полосу, UV 0…1 по длине и ширине, вид — в COLOR.r.
+static func card_arrays(strips: Array) -> Array:
+	var pos := PackedVector3Array()
+	var uv := PackedVector2Array()
+	var col := PackedColorArray()
+	var corner_uv := [Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]
+	for s: Array in strips:
+		var a: Vector3 = s[0]
+		var b: Vector3 = s[1]
+		var w: Vector3 = s[2]
+		var pts := [a - w, b - w, b + w, a + w]
+		for i: int in [0, 1, 2, 0, 2, 3]:
+			pos.append(pts[i])
+			uv.append(corner_uv[i])
+			col.append(Color(float(s[3]), 0.0, 0.0, 1.0))
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = pos
+	arr[Mesh.ARRAY_TEX_UV] = uv
+	arr[Mesh.ARRAY_COLOR] = col
+	return arr
 
 
 func fire(t: float, k: float, vitals: Vitals) -> String:

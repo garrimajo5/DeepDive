@@ -689,6 +689,8 @@ func step(dt: float) -> void:
 		zap_light.light_energy = Searchlight.DARK
 	bridge.set_zap_lever(zap.lever_deg(time), zap.ready(time))
 	hull.set_zap(Zap.arc_time(zap.flicker))   # дуги по обшивке ART-068
+	if zap.flicker > 0.0 or hull.zap_cards.visible:   # у окна и у дна — карточки ART-068
+		hull.set_zap_cards(Zap.arc_time(zap.flicker), Zap.ground_contact(ship.global_transform))
 	if not scorch.all.is_empty():   # свежий след темнеет в «старое пятно»
 		ocean.set_scorch(scorch.uniforms(time))
 	_step_eco(dt)

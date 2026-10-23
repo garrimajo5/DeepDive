@@ -62,14 +62,19 @@ func test_scene_runs_scenario() -> void:
 	var sat := false
 	var table_seen := false
 	var zap_seen := false
+	var arc_seen := false   # 10a-zap-okno: дуга ART-068 у окна в кадре, пока видна
 	var shots := 0
 	var table: Node3D = main.bridge.props[BridgeProps.TABLE]
 	var legs_seen := false
-	for i in 2700:  # 90 с игры
+	for i in 2850:  # 95 с игры (сценарий идёт ~92 с)
 		# снимок берёт уже нарисованный кадр — камеру до шага, в котором он снят
 		var cam := main.camera
 		var table_vis := cam.is_position_in_frustum(table.global_position + table.global_basis.y * 0.9)
 		var zap_vis := cam.is_position_in_frustum(main.ship.to_global(Zap.LEVER_POS))
+		var arc_t := Zap.arc_time(main.zap.flicker)
+		var arc_at := (Zap.WINDOW_FROM + Zap.WINDOW_TO) / 2.0 + Vector3(maxf(arc_t, 0.0) * Zap.ARC_FLOW, 0.0, 0.0)
+		var arc_vis := main.hull.zap_cards.visible and cam.is_position_in_frustum(main.ship.to_global(arc_at)) \
+				and Zap.card_k(Zap.Card.WINDOW, arc_t) > 0.1
 		var j: Dictionary = main.me.joints()
 		var legs_vis := true
 		for k in ["toe_l", "toe_r", "hand_l", "hand_r"]:
@@ -84,6 +89,8 @@ func test_scene_runs_scenario() -> void:
 				legs_seen = legs_vis
 			if qa.log_lines[k].begins_with("скриншот 10-zap"):
 				zap_seen = zap_vis
+			if qa.log_lines[k].begins_with("скриншот 10a-zap-okno"):
+				arc_seen = arc_vis
 		shots = qa.log_lines.size()
 		if qa.script_q.finished:
 			break
@@ -105,6 +112,7 @@ func test_scene_runs_scenario() -> void:
 	ok(main.zap.last > 0.0, "у рычага дали разряд")
 	ok(table_seen, "на снимке 09-sonar голостол в кадре (#48)")
 	ok(zap_seen, "на снимке 10-zap рычаг в кадре")
+	ok(arc_seen, "на снимке 10a-zap-okno — дуга у носового окна (ART-068)")
 	ok(legs_seen, "на снимке 06b-own-legs в кадре свои ступни и кисти (#49)")
 	ok(log.contains("курс %d°" % Status.course_deg(main.helm.yaw)), "курс в логе — как на приборах, без минуса (#48)")
 	ok(log.contains("вентиль: пар, реактор остывает | "), "в машинном держали вентиль")
