@@ -1,0 +1,17 @@
+{
+  "files_bytes": {
+    "bliki-list.png": 1085838,
+    "bliki-maska.png": 56246,
+    "para-glubina.jpg": 337638,
+    "para-mostik.jpg": 451189,
+    "para-potolok.jpg": 524888,
+    "techenie.jpg": 547662
+  },
+  "mask_mode": "L",
+  "mask_size": [
+    512,
+    512
+  ],
+  "renderer": "Godot 4.7.2 Forward Mobile Vulkan",
+  "phone_checked": false
+}
