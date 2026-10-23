@@ -46,6 +46,7 @@ var shown: Array = []
 ## Фигуры, нарисованные материалом своего игрока (прогрев, #217): `_own_mat` с отсечением граней — отдельный шейдер,
 ## его видно только взглядом вниз у поста (руки на пульте энергии) — без прогрева он собирался при первом нажатии.
 var as_own: Array = []
+var alphas: Array[float] = []  ## непрозрачность фигуры i (нет — 1): < 1 — отключившиеся гости у хоста (MateGhost, ART-043)
 var pitch := 0.0  ## наклон взгляда своего игрока (рад, вниз < 0) — ставит Main перед apply()
 var _rest := {}  ## внешность → CrewRig.Rest
 var _own_mat := {}  ## внешность → материал своего игрока: с отсечением задних граней (не видно изнанки у камеры)
@@ -252,3 +253,27 @@ func apply() -> void:
 		torches[i].visible = m.welding()
 		if torches[i].visible:
 			torches[i].transform = m.torch_xform()
+		if i < alphas.size():
+			_fade(i, alphas[i])
+
+
+## Фигура i со снаряжением и резаком — полупрозрачная (`alphas`): копии её материалов с прозрачностью на поверхностях
+## узлов (общие материалы моделей не трогаем), дальше меняется только альфа цвета.
+func _fade(i: int, alpha: float) -> void:
+	for root: Node in [figures[i], torches[i]]:
+		for n: Node in root.find_children("*", "MeshInstance3D", true, false):
+			var mi := n as MeshInstance3D
+			if mi.mesh == null:
+				continue
+			if not mi.has_meta("fade"):
+				var mats: Array[BaseMaterial3D] = []
+				for k in mi.mesh.get_surface_count():
+					var src := mi.get_active_material(k)
+					if src is BaseMaterial3D:
+						var d: BaseMaterial3D = src.duplicate()
+						d.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+						mi.set_surface_override_material(k, d)
+						mats.append(d)
+				mi.set_meta("fade", mats)
+			for d: BaseMaterial3D in mi.get_meta("fade"):
+				d.albedo_color.a = alpha
