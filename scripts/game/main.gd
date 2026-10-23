@@ -95,6 +95,7 @@ var hull: HullView          ## корпус снаружи (HullPlan), рото�
 var hull_motion := HullMesh.Motion.new()
 var wake := Wake.new()      ## след винтов и выпуски при всплытии ART-063
 var wake_view: WakeView
+var grade: GradeView   ## виньетка и цветокоррекция по глубине ART-065 (слой −1, под интерфейсом)
 var light_on := true        ## прожектор включён (кнопка «Свет» за штурвалом)
 var camera: Camera3D
 ## Облёт с борта в начале забега (тесты и снимки выключают: tests/run.gd, tools/shot.gd).
@@ -208,6 +209,8 @@ func _ready() -> void:
 	flyby_cam.near = 0.2
 	flyby_cam.far = 400.0
 	ship.add_child(flyby_cam)
+	grade = GradeView.new()
+	add_child(grade)
 	var ui := CanvasLayer.new()
 	ui.name = "Интерфейс"
 	add_child(ui)
@@ -1095,6 +1098,8 @@ func _place_camera() -> void:
 		var a := vitals.shake / 0.6 * 0.04
 		camera.position += Vector3(sin(time * 61.0) * a, sin(time * 47.0 + 1.3) * a, 0.0)
 	camera.rotation = Vector3(walker.pitch, walker.yaw, 0.0)
+	var eye := flyby_cam if flyby_cam.current else camera
+	grade.apply(-eye.global_position.y, silt.k)   # ART-065: по глубине камеры, не корабля
 
 
 func _update_ui() -> void:
@@ -1683,6 +1688,9 @@ func debug_setup(kv: Dictionary) -> void:
 		searchlight.set_lite(true) # и луч прожектора ART-062 без дрейфа
 		wake.lite = true           # и след винтов ART-063: 96 карточек, кадры 0–11
 		wake_view.set_lite(true)
+		grade.set_lite(true)       # и виньетка ART-065: без LUT, овал 0,10
+	if kv.get("grade", "1") == "0":  # grade=0 — без виньетки и цветокоррекции ART-065 (сравнить)
+		grade.set_on(false)
 	if kv.has("energy"):  # energy=<ед.> — заряд корабля (меньше 20 — «МАЛО ЗАРЯДА» на табло)
 		vitals.energy = float(kv["energy"])
 	if kv.get("drain", "0") == "1":  # drain=1 — стеклоуст на корпусе (табло и рамка у щитка разряда)
