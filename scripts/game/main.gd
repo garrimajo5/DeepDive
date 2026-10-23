@@ -688,6 +688,7 @@ func step(dt: float) -> void:
 		hit_flash.color = Color(1.0, 0.36, 0.42, vitals.flash * 0.35)
 		zap_light.light_energy = Searchlight.DARK
 	bridge.set_zap_lever(zap.lever_deg(time), zap.ready(time))
+	hull.set_zap(Zap.arc_time(zap.flicker))   # дуги по обшивке ART-068
 	if not scorch.all.is_empty():   # свежий след темнеет в «старое пятно»
 		ocean.set_scorch(scorch.uniforms(time))
 	_step_eco(dt)

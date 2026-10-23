@@ -16,6 +16,24 @@ const LEVER_UP := 25.0
 const LEVER_DOWN := -25.0
 const POST_AT := Vector2(-3.9, -0.5)
 
+## Дуги на обшивке по ART-068 (docs/concept-art/razryad-korpus.md): фронт бежит от носа к корме,
+## z = ARC_FROM + ARC_SPEED·t, ширина ARC_WIDTH, к FLICKER гаснет до 0. Атлас 4×2 кадра, ARC_FPS кадров в секунду.
+## Тот же расчёт — в shaders/hull_plating.gdshader (zap_t), тест test_zap.
+const ARC_TEX := "res://textures/razryad/dugi.png"
+const ARC_FROM := -7.2
+const ARC_SPEED := 50.0
+const ARC_WIDTH := 7.0
+const ARC_FRAMES := 8
+const ARC_FPS := 10.0
+## Плитка атласа на обшивке: 8 м вдоль корабля × 2 м поперёк; рисунок бежит к корме 12 м/с.
+const ARC_TILE := Vector2(8.0, 2.0)
+const ARC_FLOW := 12.0
+## Цвета ART-068: ядро и ореол; ядро светит до ARC_CORE × огибающая, швы — ARC_SEAM × огибающая.
+const ARC_CORE_COLOR := Color("5ef2d6")
+const ARC_HALO_COLOR := Color("67ddeb")
+const ARC_CORE := 3.0
+const ARC_SEAM := 0.2
+
 var last := -99.0
 var radius := BASE_RADIUS
 var flicker := 0.0
@@ -32,6 +50,31 @@ static func flash_energy(fl: float) -> float:
 
 
 ## Разряд в момент t при силе k и заряде vitals. Возвращает текст для приборов; разряд был, если fired() == true.
+## Время с начала разряда по оставшемуся миганию (FLICKER → 0); −1 — разряда нет.
+static func arc_time(fl: float) -> float:
+	return FLICKER - fl if fl > 0.0 else -1.0
+
+
+## Фронт дуг (z в осях корабля, м) через t с после разряда.
+static func arc_front(t: float) -> float:
+	return ARC_FROM + ARC_SPEED * t
+
+
+## Сила дуг на обшивке в точке z через t с: гауссов фронт × (1 − t/FLICKER); вне 0…FLICKER — 0.
+static func arc_k(z: float, t: float) -> float:
+	if t < 0.0 or t >= FLICKER:
+		return 0.0
+	var d := (z - arc_front(t)) / ARC_WIDTH
+	return exp(-d * d) * (1.0 - t / FLICKER)
+
+
+## Кадр атласа (0…7) через t с: 10 Гц, на последнем держится. lite («Экономно») — всегда первый кадр.
+static func arc_frame(t: float, lite := false) -> int:
+	if lite or t <= 0.0:
+		return 0
+	return mini(int(floor(t * ARC_FPS)), ARC_FRAMES - 1)
+
+
 func fire(t: float, k: float, vitals: Vitals) -> String:
 	if k <= 0.0:
 		return "Разряд обесточен"

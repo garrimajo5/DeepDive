@@ -11,6 +11,9 @@ shader_type spatial;
 // вниз, поэтому y меняет знак), каждая плоскость в своём базисе (whiteout), след сводится с основой RNM по весу
 // цвета следа; шероховатость — из карты. relief = false («Экономно») — без выборок рельефа, прежние константы.
 // Та же математика — HullMesh.decode_normal / plane_normal / rnm / alt_back (тест test_hull_view).
+// Разряд ART-068 (razryad-korpus.md): zap_t — время с начала разряда (−1 — нет). Фронт от носа к корме, огибающая
+// и кадр атласа — как Zap.arc_k / arc_frame; атлас 4×2 плиткой 8 × 2 м бежит к корме, U сдвигается по полосам и
+// кадрам, чтобы прямые концы путей не стояли столбцом. Швы светятся по маске. zap_lite — один кадр («Экономно»).
 
 uniform sampler2D color_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D mask_tex : hint_default_black, filter_linear_mipmap, repeat_enable;
@@ -21,6 +24,20 @@ uniform sampler2D normal_tex : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform sampler2D rough_tex : hint_roughness_r, filter_linear_mipmap, repeat_enable;
 uniform sampler2D damage_nrm : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform bool relief = true;
+uniform sampler2D arc_tex : hint_default_black, filter_linear, repeat_enable;
+uniform float zap_t = -1.0;
+uniform bool zap_lite = false;
+uniform float zap_dur = 0.8;
+uniform float zap_from = -7.2;
+uniform float zap_speed = 50.0;
+uniform float zap_width = 7.0;
+uniform float zap_fps = 10.0;
+uniform vec2 zap_tile = vec2(8.0, 2.0);
+uniform float zap_flow = 12.0;
+uniform vec3 zap_core_color : source_color = vec3(0.37, 0.95, 0.84);
+uniform vec3 zap_halo_color : source_color = vec3(0.4, 0.87, 0.92);
+uniform float zap_core = 3.0;
+uniform float zap_seam = 0.2;
 uniform float normal_depth = 1.0;
 uniform float damage_depth = 0.85;
 uniform float wear = 0.0;
@@ -139,6 +156,15 @@ vec3 tri_normal(vec3 n, vec3 p, vec3 w, float seam) {
 	return normalize(ax.zyx * w.x + ay.xzy * w.y + az.xyz * w.z);
 }
 
+// Яркость атласа дуг на плоскости: u — вдоль корабля (z), v — поперёк, кадр f.
+float arc_at(float z, float v, float t, float f) {
+	float row = floor(v / zap_tile.y);
+	float u = (z - zap_flow * t) / zap_tile.x + cell_hash(vec2(row, f)) + f * 0.29;
+	vec2 cell = vec2(mod(f, 4.0), floor(f / 4.0));
+	vec2 uv = (cell + vec2(fract(u), fract(v / zap_tile.y))) / vec2(4.0, 2.0);
+	return texture(arc_tex, uv).r;
+}
+
 void fragment() {
 	vec3 w = tri_w();
 	vec3 p = lp / tile;
@@ -167,5 +193,16 @@ void fragment() {
 		NORMAL = normalize((VIEW_MATRIX * (MODEL_MATRIX * vec4(nl, 0.0))).xyz);
 	}
 	ROUGHNESS = mix(r, 0.9, g);
+	if (zap_t >= 0.0 && zap_t < zap_dur) {
+		float d = (lp.z - (zap_from + zap_speed * zap_t)) / zap_width;
+		float env = exp(-d * d) * (1.0 - zap_t / zap_dur);
+		if (env > 0.002) {
+			float f = zap_lite ? 0.0 : min(floor(zap_t * zap_fps), 7.0);
+			float a = arc_at(lp.z, lp.y, zap_t, f) * (w.x + w.z) + arc_at(lp.z, lp.x, zap_t, f) * w.y;
+			float core = smoothstep(0.55, 0.95, a);
+			float halo = smoothstep(0.03, 0.45, a);
+			EMISSION = (zap_core_color * core * zap_core + zap_halo_color * (halo * 1.2 + seam * zap_seam)) * env;
+		}
+	}
 	METALLIC = 0.3 * (1.0 - g);
 }
