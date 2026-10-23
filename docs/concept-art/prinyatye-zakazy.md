@@ -672,3 +672,10 @@ ORM = AO/шероховатость/металл, в существующие `P
 анатомия `ledokryl-anatomiya.png`, сцена `ledokryl-pod-ledom.jpg`; решения — `ledokryl.md`: размах 14 м, тело 9 + хвост 9 м,
 14 слабых точек по кромкам, рот-щель со скребком и резонатор снизу, присоски отдельно (`EcoRemora`), взмах по формуле `RayView`.
 Модель — следующий заказ MOD потока Б.
+## ART-071 Пар вентиля сброса в машинном — принято
+- Исходник: ART-019/ART-055 (`mashinnoe.md`, `otseki-materialy.md`), ART-064 (`svet-vnutri.md`), ART-058, ART-063.
+
+**Принято 23.10.2026** (PR #502, ветка `art/ART-071-par-ventilya`): атлас `par-ventilya-atlas.png` (RGBA 512², 4×4, прямая альфа),
+лист `par-ventilya-list.png`, кадры `par-ventilya-obychno.jpg`, `par-ventilya-peregrev.jpg`, `par-ventilya-otsek.jpg`; решения —
+`par-ventilya.md`: один MultiMesh из 48 билбордов (24 на «Экономно»), жизнь 1,25 с, струя рвётся у 0,3 м на клубы, кадры
+смешиваются по возрасту, неосвещённый с подкраской #C6D6DE / #E8C49F по перегреву, без новых огней. Встройка — задача ROADMAP потока А.
