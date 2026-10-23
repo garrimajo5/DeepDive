@@ -1438,16 +1438,15 @@ func _client_step(dt: float) -> void:
 	var was := net_client.state
 	net_client.send_pad(net_pad)
 	var f := net_client.poll(dt)
-	var near := PackedFloat32Array()
 	if not f.is_empty():
 		_client_frame(f)
-		near = f.get("eco", near)
 		drop.restored()   # хост принял снова и кадр применён — управление вернулось
 	if net_client.lost():   # кадры хоста не идут — у товарищей «Нет связи», пока не придёт кадр
 		for m: Crew.Member in crew:
 			m.lost = m != me
 	net_smooth.step(dt)
 	net_smooth.apply(helm, crew, me)   # показ чуть позади свежего кадра: между кадрами — плавно
+	var near := net_smooth.take_eco()   # существа рядом — на тех же часах показа, что корабль
 	if net_client.state != was and not drop.active():
 		say(net_client.label())
 	_drop_step(dt)
@@ -1528,7 +1527,7 @@ func _client_frame(f: Dictionary) -> void:
 	var seq := net_seq
 	net_seq = NetSnap.apply_frame(f, net_seq, helm, reactor, vitals, crew)
 	if net_seq != seq:
-		net_smooth.push(float(f.get("t", 0.0)), helm.pos, helm.yaw, crew)
+		net_smooth.push(float(f.get("t", 0.0)), helm.pos, helm.yaw, crew, f.get("eco", PackedFloat32Array()))
 		var ev := NetSnap.apply_events(f.get("ev", {}), breach, silt, time)
 		if ev.size() == 2 and ev[0] > net_news:   # сообщение события хоста — один раз
 			net_news = ev[0]
