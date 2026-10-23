@@ -1,0 +1,299 @@
+{
+  "base_main": "6ba73eec066e9ac696bf670bef12f12098469e49",
+  "mask_mode": "RGBA",
+  "mask_size": [
+    256,
+    256
+  ],
+  "mask_file_bytes": 22659,
+  "mask_raw_bytes": 262144,
+  "mask_with_mips_bytes": 349524,
+  "sha256": "960c3e80e959910281e191c05c74e6cabea476e261c0baebafcb7641e3ace308",
+  "centre_rgb_max": 0,
+  "centre_a_min": 255,
+  "extra_reads_full": 2,
+  "extra_reads_eco": 1,
+  "extra_meshes": 0,
+  "extra_lights": 0,
+  "captures": {
+    "close45": {
+      "args": {
+        "hull": "30",
+        "ship": "220,-45,-80",
+        "yaw": "0",
+        "z": "-5"
+      },
+      "depth": 45.0,
+      "hull": 30.00000015,
+      "humidity": 1.0,
+      "ice": 1.0,
+      "melt": 0.0,
+      "stages": {
+        "after": {
+          "draws": 62.0,
+          "primitives": 229012.0
+        },
+        "before": {
+          "draws": 62.0,
+          "primitives": 229012.0
+        },
+        "zero": {
+          "draws": 62.0,
+          "primitives": 229012.0
+        }
+      }
+    },
+    "eco45": {
+      "args": {
+        "hull": "30",
+        "relief": "0",
+        "ship": "220,-45,-80",
+        "yaw": "0",
+        "z": "-3"
+      },
+      "depth": 45.0,
+      "hull": 30.00000015,
+      "humidity": 1.0,
+      "ice": 1.0,
+      "melt": 0.0,
+      "stages": {
+        "after": {
+          "draws": 68.0,
+          "primitives": 239884.0
+        },
+        "before": {
+          "draws": 68.0,
+          "primitives": 239884.0
+        },
+        "zero": {
+          "draws": 68.0,
+          "primitives": 239884.0
+        }
+      },
+      "analysis": {
+        "clean_roi_xywh": [
+          710,
+          290,
+          175,
+          140
+        ],
+        "after_vs_before_mae_255": 0.0009251700680272109,
+        "zero_vs_before_mae_255": 0.0010612244897959184
+      }
+    },
+    "front45": {
+      "args": {
+        "ship": "220,-45,-80",
+        "yaw": "0",
+        "z": "-3"
+      },
+      "depth": 45.0,
+      "hull": 100.0,
+      "humidity": 0.56,
+      "ice": 1.0,
+      "melt": 0.0,
+      "stages": {
+        "after": {
+          "draws": 68.0,
+          "primitives": 240368.0
+        },
+        "before": {
+          "draws": 68.0,
+          "primitives": 240368.0
+        },
+        "zero": {
+          "draws": 68.0,
+          "primitives": 240368.0
+        }
+      },
+      "analysis": {
+        "clean_roi_xywh": [
+          710,
+          290,
+          175,
+          140
+        ],
+        "after_vs_before_mae_255": 0.00017687074829931973,
+        "zero_vs_before_mae_255": 0.00032653061224489796
+      }
+    },
+    "front45h30": {
+      "args": {
+        "hull": "30",
+        "ship": "220,-45,-80",
+        "yaw": "0",
+        "z": "-3"
+      },
+      "depth": 45.0,
+      "hull": 30.00000015,
+      "humidity": 1.0,
+      "ice": 1.0,
+      "melt": 0.0,
+      "stages": {
+        "after": {
+          "draws": 68.0,
+          "primitives": 240364.0
+        },
+        "before": {
+          "draws": 68.0,
+          "primitives": 240364.0
+        },
+        "zero": {
+          "draws": 68.0,
+          "primitives": 240364.0
+        }
+      },
+      "analysis": {
+        "clean_roi_xywh": [
+          710,
+          290,
+          175,
+          140
+        ],
+        "after_vs_before_mae_255": 0.00017687074829931973,
+        "zero_vs_before_mae_255": 0.00043537414965986397
+      }
+    },
+    "front8": {
+      "args": {
+        "ship": "10,-8,-40",
+        "yaw": "0",
+        "z": "-3"
+      },
+      "depth": 8.0,
+      "hull": 100.0,
+      "humidity": 0.0168,
+      "ice": 0.0,
+      "melt": 0.0,
+      "stages": {
+        "after": {
+          "draws": 81.0,
+          "primitives": 275311.0
+        },
+        "before": {
+          "draws": 81.0,
+          "primitives": 275311.0
+        },
+        "zero": {
+          "draws": 81.0,
+          "primitives": 275311.0
+        }
+      },
+      "analysis": {
+        "clean_roi_xywh": [
+          710,
+          290,
+          175,
+          140
+        ],
+        "after_vs_before_mae_255": 0.0009659863945578231,
+        "zero_vs_before_mae_255": 0.0011564625850340137
+      }
+    },
+    "half45": {
+      "args": {
+        "hot": "60",
+        "hull": "30",
+        "melt": "0.5",
+        "ship": "220,-45,-80",
+        "yaw": "0",
+        "z": "-3"
+      },
+      "depth": 45.0,
+      "hull": 30.00000015,
+      "humidity": 0.6,
+      "ice": 0.5,
+      "melt": 0.5,
+      "stages": {
+        "after": {
+          "draws": 70.0,
+          "primitives": 240476.0
+        },
+        "before": {
+          "draws": 70.0,
+          "primitives": 240476.0
+        },
+        "zero": {
+          "draws": 70.0,
+          "primitives": 240476.0
+        }
+      },
+      "analysis": {
+        "clean_roi_xywh": [
+          710,
+          290,
+          175,
+          140
+        ],
+        "after_vs_before_mae_255": 0.0003673469387755102,
+        "zero_vs_before_mae_255": 0.0007210884353741496
+      }
+    },
+    "melt45": {
+      "args": {
+        "hot": "85",
+        "hull": "30",
+        "melt": "1",
+        "ship": "220,-45,-80",
+        "yaw": "0",
+        "z": "-3"
+      },
+      "depth": 45.0,
+      "hull": 30.00000015,
+      "humidity": 0.2,
+      "ice": 0.0,
+      "melt": 1.0,
+      "stages": {
+        "after": {
+          "draws": 70.0,
+          "primitives": 240476.0
+        },
+        "before": {
+          "draws": 70.0,
+          "primitives": 240476.0
+        },
+        "zero": {
+          "draws": 70.0,
+          "primitives": 240476.0
+        }
+      },
+      "analysis": {
+        "clean_roi_xywh": [
+          710,
+          290,
+          175,
+          140
+        ],
+        "after_vs_before_mae_255": 0.00025850340136054423,
+        "zero_vs_before_mae_255": 0.0005306122448979592
+      }
+    },
+    "turn45": {
+      "args": {
+        "hull": "30",
+        "ship": "220,-45,-80",
+        "yaw": "12",
+        "z": "-5"
+      },
+      "depth": 45.0,
+      "hull": 30.00000015,
+      "humidity": 1.0,
+      "ice": 1.0,
+      "melt": 0.0,
+      "stages": {
+        "after": {
+          "draws": 67.0,
+          "primitives": 249628.0
+        },
+        "before": {
+          "draws": 67.0,
+          "primitives": 249628.0
+        },
+        "zero": {
+          "draws": 67.0,
+          "primitives": 249628.0
+        }
+      }
+    }
+  }
+}
