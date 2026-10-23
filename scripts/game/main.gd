@@ -24,6 +24,7 @@ var reactor := Reactor.new()
 var sonar := Sonar.new()
 var vitals := Vitals.new()   ## корпус и заряд корабля
 var zap := Zap.new()
+var scorch := Seabed.Scorch.new()   ## следы разрядов у дна ART-066 (ячейки 13–15), до нового забега
 var samples := Samples.new()   ## образцы на дне и лебёдка трюма
 var samples_view: SamplesView
 var breach := Breach.new()     ## событие «пробоина»: струя, вода, сварка удержанием
@@ -669,6 +670,8 @@ func step(dt: float) -> void:
 		hit_flash.color = Color(1.0, 0.36, 0.42, vitals.flash * 0.35)
 		zap_light.light_energy = Searchlight.DARK
 	bridge.set_zap_lever(zap.lever_deg(time), zap.ready(time))
+	if not scorch.all.is_empty():   # свежий след темнеет в «старое пятно»
+		ocean.set_scorch(scorch.uniforms(time))
 	_step_eco(dt)
 	_flicker(dt)
 	for i in Reactor.Sys.size():
@@ -930,6 +933,8 @@ func fire_zap() -> void:
 	if zap.fired_at(time):
 		eco_ship.zap = true
 		eco_ship.zap_radius = zap.radius
+		if scorch.add(helm.pos, Seabed.height(helm.pos.x, helm.pos.z), reactor.k(Reactor.Sys.ZAP), time):
+			ocean.set_scorch(scorch.uniforms(time))   # разряд у дна — след под корпусом
 	say(msg)
 
 
@@ -1139,6 +1144,8 @@ func _restart() -> void:
 	silt.reset()
 	reactor.reset()   # сброс, перегрев и доли — как на старте (#265)
 	airlock.reset()
+	scorch.clear()
+	ocean.set_scorch(scorch.uniforms(time))
 	walker.reset()
 	light_on = true
 	overlay.set_light(true)
@@ -1961,6 +1968,14 @@ func debug_setup(kv: Dictionary) -> void:
 		var p: PackedFloat64Array = kv["ship"].split_floats(",")
 		helm.pos = Vector3(p[0], p[1], p[2])
 		_place_ship()
+	if kv.has("scorch"):  # scorch=n — n следов разряда на дне перед носом через 4 м (первый — старое пятно)
+		var n := int(kv["scorch"])
+		for i in n:
+			var at := helm.pos + helm.nose() * (9.0 + 4.0 * i)
+			var fy := Seabed.height(at.x, at.z)
+			scorch.add(Vector3(at.x, fy + Helm.Ship.CLEARANCE, at.z), fy, 1.0,
+					time - (Seabed.Scorch.OLD.y if i == 0 else 0.0))
+		ocean.set_scorch(scorch.uniforms(time))
 	if kv.has("use"):  # use=<пост> — встать (x, z, yaw) и нажать кнопку действия у поста, шаг игры 0,3 с — снимок
 		walker.x = float(kv.get("x", str(walker.x)))
 		walker.z = float(kv.get("z", str(walker.z)))
