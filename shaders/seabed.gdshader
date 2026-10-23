@@ -66,6 +66,9 @@ uniform vec2 decal_slope = vec2(0.30, 0.48);
 uniform vec2 decal_track_ny = vec2(0.82, 0.96);
 uniform vec2 decal_moss = vec2(0.48, 0.68);
 uniform float decal_edge = 0.07;           // Seabed.Marks.EDGE
+// Следы разрядов (ячейки 13–15) — не в фоне: последние Seabed.Scorch.MAX по событию, Main ставит каждый шаг.
+uniform vec4 scorch_at[4];                 // x, z мира, поворот, сторона квадрата (м)
+uniform vec4 scorch_k[4];                  // сила 0…1, ячейка свежего (13/14), доля «старого пятна» (15), —
 
 varying vec3 w_pos;
 varying vec3 w_nrm;
@@ -180,6 +183,28 @@ vec3 decal_mul(vec2 p, int layer, vec3 gw, float ny, vec2 dpx, vec2 dpy) {
 	return mix(vec3(1.0), clamp(2.0 * a.rgb, vec3(0.5), vec3(1.3)), a.a * hab * decal_k * edge);
 }
 
+// Множитель цвета от следа разряда i (1 — нет следа): свежая ячейка, к старости — «старое пятно» 15.
+vec3 scorch_mul(vec2 p, int i, vec2 dpx, vec2 dpy) {
+	vec4 a4 = scorch_at[i];
+	vec4 k4 = scorch_k[i];
+	if (k4.x <= 0.001) {
+		return vec3(1.0);
+	}
+	mat2 r = mat2(vec2(cos(a4.z), -sin(a4.z)), vec2(sin(a4.z), cos(a4.z)));
+	vec2 st = r * (p - a4.xy) / a4.w + 0.5;
+	if (st.x <= 0.0 || st.y <= 0.0 || st.x >= 1.0 || st.y >= 1.0) {
+		return vec3(1.0);
+	}
+	vec2 gx = r * dpx / (a4.w * 4.0);
+	vec2 gy = r * dpy / (a4.w * 4.0);
+	vec4 fresh = textureGrad(decal_atlas, (vec2(mod(k4.y, 4.0), floor(k4.y / 4.0)) + st) / 4.0, gx, gy);
+	vec4 stale = textureGrad(decal_atlas, (vec2(3.0, 3.0) + st) / 4.0, gx, gy);
+	vec4 a = mix(fresh, stale, k4.z);
+	vec2 e = min(st, 1.0 - st);
+	float edge = smoothstep(0.0, decal_edge, min(e.x, e.y));
+	return mix(vec3(1.0), clamp(2.0 * a.rgb, vec3(0.5), vec3(1.3)), a.a * k4.x * edge);
+}
+
 void vertex() {
 	w_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	w_nrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
@@ -241,6 +266,9 @@ void fragment() {
 		vec3 dm = decal_mul(p, 0, w, w_nrm.y, dpx, dpy);
 		if (decal_layers > 1.5) {
 			dm *= decal_mul(p, 1, w, w_nrm.y, dpx, dpy);
+		}
+		for (int i = 0; i < 4; i++) {   // следы разрядов — поверх фона, в тех же затуханиях
+			dm *= scorch_mul(p, i, dpx, dpy);
 		}
 		ALBEDO *= mix(vec3(1.0), dm, df);
 	}
