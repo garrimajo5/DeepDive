@@ -38,7 +38,7 @@ vec3 ray_start=CAMERA_POSITION_WORLD;
  float ai=min(0.11,1.0-exp(-ice_len*0.008));
  float at=min(0.10,1.0-exp(-thermo_len*0.017));
  float dust=0.0;
- 
+
  float total=ai+at+dust;
  vec3 lc=(layer_ice*ai+layer_thermo*at+layer_dust*dust)/max(total,0.00001);
  float base_a=1.0-exp(-length(w_pos-ray_start)*base_density);
