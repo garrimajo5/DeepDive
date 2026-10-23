@@ -1115,10 +1115,13 @@ func _wreck_step(dt: float) -> bool:
 	return wreck.active()
 
 
-## Шторка на экране; крестовина и кнопка скрыты, пока она идёт.
+## Шторка на экране; крестовина, кнопка, строки приборов и плашки скрыты, пока она идёт (#473).
 func _wreck_show() -> void:
 	wreck_view.show_at(wreck.t)
-	overlay.visible = not wreck.active()
+	var on := wreck.active()
+	overlay.visible = not on
+	hint.visible = not on
+	drop_panel.set_quiet(on)
 
 
 ## Корабль у начала спуска, целый и заряженный, забег с нуля (корпус разрушен или новый забег после итога).
