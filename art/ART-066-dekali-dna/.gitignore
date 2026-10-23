@@ -1,4 +1,0 @@
-*.log
-source/*.png
-__pycache__/
-*.uid
