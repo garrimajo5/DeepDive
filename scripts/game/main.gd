@@ -83,6 +83,8 @@ var vote_panel: VotePanel
 var route_card: RouteCard   ## карточка выбранного маршрута над голостолом (ART-016)
 var drop := NetDrop.new()   ## гость потерял хоста (ART-043): диалог, окно переподключения, «Играть одному»
 var drop_panel: DropPanel
+var wreck := Wreck.new()   ## шторка «Корпус разрушен» ART-036: время, затем _restart
+var wreck_view: WreckView
 var notice := HostNotice.new()   ## у хоста: «Игорь отключился» / «Игорь вернулся» (ART-043), рисует drop_panel
 var weak := WeakLink.new()   ## у гостя: кадры хоста опаздывают — плашка «Слабая связь» (ART-043), рисует drop_panel
 var current := Helm.SeaCurrent.new()
@@ -274,6 +276,8 @@ func _ready() -> void:
 	drop_panel = DropPanel.new()   # поверх управления: пока диалог открыт, кнопки под ним не работают
 	drop_panel.name = "Связь потеряна"
 	ui.add_child(drop_panel)
+	wreck_view = WreckView.new()   # выше крестовины и кнопки, ниже заставки прогрева
+	add_child(wreck_view)
 	power_panel.layout = overlay.router.layout   # панель пульта не ложится под noclip и кнопку действия (#349)
 	busy_marks.layout = overlay.router.layout    # метка «Занято» тоже (#373)
 	reactor.message.connect(func(title: String, _text: String) -> void: say(title))
@@ -362,7 +366,7 @@ func _warm_frame() -> void:
 		camera.rotation = Vector3(warm.pitch(), warm.yaw(), 0.0)
 		if not camera.current:   # облёт с борта ждёт: прогрев смотрит глазами на мостике
 			camera.make_current()
-	for root: Node in [ship, ocean, silt_view, samples_view, vote_panel.get_parent()]:
+	for root: Node in [ship, ocean, silt_view, samples_view, vote_panel.get_parent(), wreck_view]:
 		_warm_show(root)
 	_warm_drawn = true
 
@@ -379,7 +383,7 @@ func _cabin(k: float) -> void:
 ## (Vitals.hiss — короткий звук без петли, issue #163).
 func _flicker(dt: float) -> void:
 	var k := vitals.lamp_k(time, zap.flicker > 0.0)
-	_cabin(k)
+	_cabin(k * Wreck.lamps(wreck.t))   # шторка «Корпус разрушен»: плафоны гаснут
 	searchlight.set_flicker(k)
 	bridge.set_screens(Vector3(vitals.screen_k(time, Vitals.Screen.HELM_L), vitals.screen_k(time, Vitals.Screen.HELM_C),
 		vitals.screen_k(time, Vitals.Screen.HELM_R)), vitals.screen_k(time, Vitals.Screen.SCANNER))
@@ -501,8 +505,9 @@ func step(dt: float) -> void:
 		return
 	_net_poll(dt)
 	var r := overlay.router
+	var wrecked := _wreck_step(dt)
 	_mark_presses(r, dt)
-	if r.noclip_pressed:
+	if r.noclip_pressed and not wrecked:
 		_toggle_noclip()
 	var hold_valve := false
 	var hold_winch := false
@@ -511,7 +516,11 @@ func step(dt: float) -> void:
 	at_scanner = false
 	near_post = ""
 	flyby.update(0.0 if warm.active() else dt)   # облёт ждёт конца прогрева шейдеров (под шторкой)
-	if flyby.kind == Flyby.Kind.START:   # облёт в начале забега: касание — к мостику, ввод этого кадра не идёт в игру
+	if wrecked:   # шторка «Корпус разрушен»: корабль без хода, игрок стоит
+		helm.in_thrust = 0.0
+		helm.in_turn = 0.0
+		helm.in_vert = 0.0
+	elif flyby.kind == Flyby.Kind.START:   # облёт в начале забега: касание — к мостику, ввод этого кадра не идёт в игру
 		helm.in_thrust = 0.0
 		helm.in_turn = 0.0
 		helm.in_vert = 0.0
@@ -975,14 +984,37 @@ func _on_hit(percent: int, kind: String) -> void:
 		say("%s бьёт по корпусу: −%d%%" % [kind, percent])
 
 
-## Корпус разрушен: забег проигран. Пока забега нет — подъём к старту с целым корпусом (как restart в браузере).
+## Корпус разрушен: забег проигран — шторка ART-036 3,5 с (`Wreck`), под сплошной шторкой подъём к старту с целым
+## корпусом (`_wreck_step` → `_restart`). Ввод на это время не идёт в игру.
 func _on_destroyed() -> void:
+	if wreck.active():
+		return
 	if pilot.seated:
 		stand_up()
 	if at_power:
 		close_power()
-	say("Корпус разрушен. Ковчег поднят к началу спуска")
-	_restart()
+	if at_vote:
+		at_vote = false
+		vote_panel.visible = false
+	wreck.start()
+	_wreck_show()
+
+
+## Шаг шторки «Корпус разрушен»: сплошная — забег с начала. true — шторка идёт (ввод не идёт в игру).
+func _wreck_step(dt: float) -> bool:
+	if not wreck.active():
+		return false
+	if wreck.update(dt):
+		_restart()
+		say("Корпус разрушен. Ковчег поднят к началу спуска")
+	_wreck_show()
+	return wreck.active()
+
+
+## Шторка на экране; крестовина и кнопка скрыты, пока она идёт.
+func _wreck_show() -> void:
+	wreck_view.show_at(wreck.t)
+	overlay.visible = not wreck.active()
 
 
 ## Корабль у начала спуска, целый и заряженный, забег с нуля (корпус разрушен или новый забег после итога).
@@ -1420,6 +1452,7 @@ func _net_send(dt: float) -> void:
 		var welding := crew.any(func(m: Crew.Member) -> bool: return m.welding())
 		var ev := NetSnap.events(breach, silt, time, welding, news if news_age < NetSnap.NEWS_TIME else [])
 		ev["r"] = _net_run()
+		ev["w"] = wreck.t   # шторка «Корпус разрушен» — у всех (ART-036)
 		var f := NetSnap.frame(net_host.seq, time, helm, reactor, vitals, light_on, crew, ev)
 		f["eco"] = EcoLink.pack_world(eco.world.agents, eco.world.systems, helm.pos, EcoLink.NET_R,
 			eco.world.time)   # существа и мох рядом — гостям отдельным пакетом
@@ -1462,7 +1495,11 @@ func join_game(address: String, port: int = NetLink.PORT, player: String = "", r
 func _client_step(dt: float) -> void:
 	var r := overlay.router
 	var lk := overlay.look_points()
-	if drop.blocks():   # связь потеряна: управление остановлено, касания — кнопкам диалога
+	wreck.update(dt)   # между кадрами хоста шторка идёт сама; кадр ставит время хоста
+	_wreck_show()
+	if wreck.active() and not drop.blocks():   # шторка «Корпус разрушен»: ввод не идёт хосту
+		net_pad.clear()
+	elif drop.blocks():   # связь потеряна: управление остановлено, касания — кнопкам диалога
 		net_pad.clear()
 		_drop_taps(r.taps)
 		if net_client == null:   # «Играть одному» — уже одиночный забег
@@ -1503,7 +1540,7 @@ func _client_step(dt: float) -> void:
 	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP), silt.beam_k())
 	breach.time += dt   # пульс тревоги и свет сварки — своим временем, состояние — из кадра
 	breach_view.apply()
-	_cabin(1.0)   # авария ART-064 у гостя — тот же ритм огней
+	_cabin(Wreck.lamps(wreck.t))   # авария ART-064 у гостя — тот же ритм огней; шторка ART-036 гасит плафоны
 	silt_view.apply(silt, time, helm.pos, helm.yaw)
 	_client_eco(dt, near)
 	visor.visible = me.welding()
@@ -1578,6 +1615,8 @@ func _client_frame(f: Dictionary) -> void:
 			net_news = ev[0]
 			say(ev[1])
 		var evd: Variant = f.get("ev", {})
+		if evd is Dictionary:
+			wreck.follow(float(evd.get("w", -1.0)))
 		var rs := NetSnap.apply_run(evd.get("r") if evd is Dictionary else null, run)
 		if not rs.is_empty():   # маршрут хоста уже в run; метки, таймер и итог — для показа
 			votes = rs["marks"]
@@ -1643,6 +1682,8 @@ func _drop_taps(taps: Array[Vector2]) -> void:
 func _leave_net() -> void:
 	net_client.stop()
 	net_client = null
+	wreck.reset()   # шторка хоста — не своя: одиночный забег без неё
+	_wreck_show()
 	weak.reset()
 	drop_panel.show_weak(weak)
 	crew = [me]
