@@ -78,6 +78,19 @@ static func plating() -> ShaderMaterial:
 	m.set_shader_parameter("damage_depth", HullMesh.DAMAGE_DEPTH)
 	m.set_shader_parameter("relief", true)
 	m.set_shader_parameter("wear", 0.0)
+	m.set_shader_parameter("arc_tex", load(Zap.ARC_TEX))   # разряд ART-068
+	m.set_shader_parameter("zap_t", -1.0)
+	m.set_shader_parameter("zap_dur", Zap.FLICKER)
+	m.set_shader_parameter("zap_from", Zap.ARC_FROM)
+	m.set_shader_parameter("zap_speed", Zap.ARC_SPEED)
+	m.set_shader_parameter("zap_width", Zap.ARC_WIDTH)
+	m.set_shader_parameter("zap_fps", Zap.ARC_FPS)
+	m.set_shader_parameter("zap_tile", Zap.ARC_TILE)
+	m.set_shader_parameter("zap_flow", Zap.ARC_FLOW)
+	m.set_shader_parameter("zap_core_color", Zap.ARC_CORE_COLOR)
+	m.set_shader_parameter("zap_halo_color", Zap.ARC_HALO_COLOR)
+	m.set_shader_parameter("zap_core", Zap.ARC_CORE)
+	m.set_shader_parameter("zap_seam", Zap.ARC_SEAM)
 	return m
 
 
@@ -87,6 +100,16 @@ func set_relief(on: bool) -> void:
 	var m: ShaderMaterial = _mats.get(-1)
 	if m != null:
 		m.set_shader_parameter("relief", on)
+		m.set_shader_parameter("zap_lite", not on)   # «Экономно»: дуги одним кадром
+
+
+## Разряд ART-068 по обшивке: t — время с начала разряда (Zap.arc_time), −1 — нет.
+func set_zap(t: float) -> void:
+	var m: ShaderMaterial = _mats.get(-1)
+	if m == null:
+		return
+	if not is_equal_approx(float(m.get_shader_parameter("zap_t")), t):
+		m.set_shader_parameter("zap_t", t)
 
 
 ## Следы повреждений ART-049 по прочности корпуса (`Vitals.hull`, %): одна uniform на материал обшивки.
