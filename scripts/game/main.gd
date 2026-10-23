@@ -102,6 +102,7 @@ var hull: HullView          ## корпус снаружи (HullPlan), рото�
 var hull_motion := HullMesh.Motion.new()
 var wake := Wake.new()      ## след винтов и выпуски при всплытии ART-063
 var valve_steam := ValveSteam.new()   ## пар вентиля ART-071 (рисует rooms.steam)
+var lock_water := LockWater.new()     ## вода в шахте шлюза ART-073 (рисует rooms.lock_water)
 var wake_view: WakeView
 var glints := WaterGlints.new()   ## блики воды в мостике ART-067 (сила, огибающая тревоги; рисует BridgeView)
 var grade: GradeView   ## виньетка и цветокоррекция по глубине ART-065 (слой −1, под интерфейсом)
@@ -414,6 +415,7 @@ func _flicker(dt: float) -> void:
 	var k := vitals.lamp_k(time, zap.flicker > 0.0)
 	_cabin(k * Wreck.lamps(wreck.t))   # шторка «Корпус разрушен»: плафоны гаснут
 	rooms.steam.apply(valve_steam, ValveSteam.tint(reactor, k * Wreck.lamps(wreck.t)))   # пар ART-071
+	rooms.lock_water.apply(lock_water, airlock.t, helm.depth(), helm.speed, vitals.hull, time, k * Wreck.lamps(wreck.t))   # ART-073
 	_glints(dt, k * Wreck.lamps(wreck.t))
 	searchlight.set_flicker(k)
 	bridge.set_screens(Vector3(vitals.screen_k(time, Vitals.Screen.HELM_L), vitals.screen_k(time, Vitals.Screen.HELM_C),
@@ -620,6 +622,7 @@ func step(dt: float) -> void:
 	_mate_posts(dt)
 	layout.update(dt)
 	airlock.update(dt)
+	lock_water.update(dt, airlock.t, samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying())
 	var ship_xf := Samples.ship_xform(helm.pos, helm.yaw)
 	if (hold_winch or debug_winch) and airlock.fully_open():
 		samples.hold(Samples.lock_point(ship_xf), dt)
@@ -1019,6 +1022,7 @@ func on_eco_event(e: Dictionary) -> void:
 
 
 func _on_hit(percent: int, kind: String) -> void:
+	lock_water.on_hit()   # рябь в шахте шлюза вспыхивает (ART-073)
 	if kind == "scrape":   # удар о дно поднимает ил
 		silt.on_scrape(helm.pos, Seabed.height(helm.pos.x, helm.pos.z))
 	if breach.on_hit(percent, vitals.hull):
@@ -1170,6 +1174,7 @@ func _restart() -> void:
 	silt.reset()
 	reactor.reset()   # сброс, перегрев и доли — как на старте (#265)
 	airlock.reset()
+	lock_water.reset()
 	scorch.clear()
 	ocean.set_scorch(scorch.uniforms(time))
 	walker.reset()
@@ -1885,6 +1890,10 @@ func debug_setup(kv: Dictionary) -> void:
 		airlock.open = true
 		airlock.t = 1.0
 		rooms.apply(layout, reactor, airlock)
+		if kv.has("lock_event"):  # lock_event=enter|exit — кольца от троса / всплеск захвата ART-073, lock_age=<с>
+			var exit: bool = kv["lock_event"] == "exit"
+			lock_water._event(LockWater.Kind.EXIT if exit else LockWater.Kind.ENTER, 1.0, LockWater.CENTER)
+			lock_water.event_age = float(kv.get("lock_age", "0.36"))
 	if kv.has("mate"):  # mate=x,z,курс°[,роль 0…3[,внешность 0…1]] — ещё один член экипажа стоит на палубе; mate=helm — сидит за штурвалом, mate=energy — инженер у пульта
 		if kv["mate"] == "helm":
 			add_mate(0.0, Deck.SEAT_Z, 0.0, Crew.Role.SONAR, 0, true)
@@ -1928,6 +1937,7 @@ func debug_setup(kv: Dictionary) -> void:
 		wake.lite = true           # и след винтов ART-063: 96 карточек, кадры 0–11
 		wake_view.set_lite(true)
 		valve_steam.lite = true    # и пар вентиля ART-071: 24 карточки
+		lock_water.lite = true     # и рябь в шахте шлюза ART-073 × 0,625
 		breach_view.parts.lite = true   # и частицы пробоины ART-072: 24/16/15+1
 		grade.set_lite(true)       # и виньетка ART-065: без LUT, овал 0,10
 		glints.lite = true         # и блики воды в мостике ART-067 выключены
