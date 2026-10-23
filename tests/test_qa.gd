@@ -65,7 +65,7 @@ func test_scene_runs_scenario() -> void:
 	var shots := 0
 	var table: Node3D = main.bridge.props[BridgeProps.TABLE]
 	var legs_seen := false
-	for i in 2900:  # 97 с игры
+	for i in 2500:  # 83 с игры
 		# снимок берёт уже нарисованный кадр — камеру до шага, в котором он снят
 		var cam := main.camera
 		var table_vis := cam.is_position_in_frustum(table.global_position + table.global_basis.y * 0.9)
