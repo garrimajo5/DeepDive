@@ -1,0 +1,115 @@
+{
+  "main": "9fabb222d1cb76a573b05f55f9d987fdf1ddc54a",
+  "atlas_size": [
+    1024,
+    1024
+  ],
+  "atlas_mode": "RGBA",
+  "cells": [
+    {
+      "id": 0,
+      "name": "Цепочка А",
+      "alpha_coverage": 0.2923583984375
+    },
+    {
+      "id": 1,
+      "name": "Цепочка Б",
+      "alpha_coverage": 0.3365936279296875
+    },
+    {
+      "id": 2,
+      "name": "Борозда",
+      "alpha_coverage": 0.3712005615234375
+    },
+    {
+      "id": 3,
+      "name": "След подошвы",
+      "alpha_coverage": 0.405120849609375
+    },
+    {
+      "id": 4,
+      "name": "Вмятина А",
+      "alpha_coverage": 0.4087677001953125
+    },
+    {
+      "id": 5,
+      "name": "Вмятина Б",
+      "alpha_coverage": 0.394256591796875
+    },
+    {
+      "id": 6,
+      "name": "Ил: пятно",
+      "alpha_coverage": 0.5428009033203125
+    },
+    {
+      "id": 7,
+      "name": "Ил: пальцы",
+      "alpha_coverage": 0.453704833984375
+    },
+    {
+      "id": 8,
+      "name": "Ил: вуаль",
+      "alpha_coverage": 0.520416259765625
+    },
+    {
+      "id": 9,
+      "name": "Ракушечник А",
+      "alpha_coverage": 0.41241455078125
+    },
+    {
+      "id": 10,
+      "name": "Ракушечник Б",
+      "alpha_coverage": 0.5662994384765625
+    },
+    {
+      "id": 11,
+      "name": "Мох: выеденный",
+      "alpha_coverage": 0.4091339111328125
+    },
+    {
+      "id": 12,
+      "name": "Мох: остаток",
+      "alpha_coverage": 0.472869873046875
+    },
+    {
+      "id": 13,
+      "name": "Разряд А",
+      "alpha_coverage": 0.5469970703125
+    },
+    {
+      "id": 14,
+      "name": "Разряд Б",
+      "alpha_coverage": 0.5617523193359375
+    },
+    {
+      "id": 15,
+      "name": "Старый разряд",
+      "alpha_coverage": 0.5066070556640625
+    }
+  ],
+  "calls_before_after": {
+    "blizko": [
+      "91",
+      "91"
+    ],
+    "mostik": [
+      "81",
+      "81"
+    ],
+    "sklon": [
+      "73",
+      "73"
+    ]
+  },
+  "files_bytes": {
+    "blizko.jpg": 187962,
+    "dekali-atlas.png": 963413,
+    "dekali-list.png": 1107524,
+    "mostik.jpg": 249375,
+    "para-blizko.jpg": 317015,
+    "para-mostik.jpg": 430421,
+    "para-sklon.jpg": 377852,
+    "sklon.jpg": 223601
+  },
+  "phone_checked": false
+}
