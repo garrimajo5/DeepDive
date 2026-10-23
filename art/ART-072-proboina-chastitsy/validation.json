@@ -1,0 +1,139 @@
+{
+  "atlas": {
+    "mode": "RGBA",
+    "size": [
+      512,
+      512
+    ],
+    "bytes": 162161,
+    "alpha": "straight",
+    "transparent_padding_px": 12,
+    "outer8px_cell_alpha_max": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "native_drawcalls": {
+    "bridge": {
+      "after": 102.0,
+      "baseline": 101.0,
+      "control": 101.0,
+      "counts": [
+        48,
+        32,
+        32
+      ],
+      "hit_z": 2.29243411561276,
+      "jet_life": 0.643911257956657,
+      "spark_min_y": -0.884999990463257,
+      "splash_min_y": -0.888000006521896,
+      "water": 0.100000016
+    },
+    "side": {
+      "after": 123.0,
+      "baseline": 121.0,
+      "control": 121.0,
+      "counts": [
+        48,
+        32,
+        32
+      ],
+      "hit_z": 2.29243411561276,
+      "jet_life": 0.643911257956657,
+      "spark_min_y": -0.884999990463257,
+      "splash_min_y": -0.888000006521896,
+      "water": 0.100000016
+    },
+    "weld": {
+      "after": 111.0,
+      "baseline": 109.0,
+      "control": 109.0,
+      "counts": [
+        48,
+        32,
+        32
+      ],
+      "hit_z": 2.39661699388011,
+      "jet_life": 0.67317470668384,
+      "spark_min_y": -0.98499995470047,
+      "splash_min_y": -0.988000003081612,
+      "water": 1.6e-08
+    },
+    "weld-side": {
+      "after": 94.0,
+      "baseline": 91.0,
+      "control": 91.0,
+      "counts": [
+        48,
+        32,
+        32
+      ],
+      "hit_z": 2.39661699388011,
+      "jet_life": 0.67317470668384,
+      "spark_min_y": -0.98499995470047,
+      "splash_min_y": -0.988000003081612,
+      "water": 1.6e-08
+    },
+    "eco": {
+      "after": 94.0,
+      "baseline": 91.0,
+      "control": 91.0,
+      "counts": [
+        24,
+        16,
+        16
+      ],
+      "hit_z": 2.39661699388011,
+      "jet_life": 0.67317470668384,
+      "spark_min_y": -0.985000014305115,
+      "splash_min_y": -0.987999994734318,
+      "water": 1.6e-08
+    },
+    "phase": {
+      "after": 111.0,
+      "baseline": 109.0,
+      "control": 109.0,
+      "counts": [
+        48,
+        32,
+        32
+      ],
+      "hit_z": 2.39661699388011,
+      "jet_life": 0.67317470668384,
+      "spark_min_y": -0.98499995470047,
+      "splash_min_y": -0.988000012711416,
+      "water": 1.6e-08
+    }
+  },
+  "motion_Vulkan": {
+    "below_water_splash": 0,
+    "hit_z": 2.29243413272155,
+    "jet_life": 0.643911262762268,
+    "min_splash_local": -0.888000030070543,
+    "samples": 121,
+    "total": 112
+  },
+  "new_lights": 0,
+  "normal_total": 112,
+  "eco_total": 56,
+  "phase_seconds": [
+    0.23,
+    0.2633
+  ],
+  "limits": "Artistic reference in actual Godot scene, not gameplay integration; phone FPS and full moving playthrough not tested",
+  "eco_jet_length_multiplier": 1.45
+}
