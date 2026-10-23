@@ -84,6 +84,7 @@ var route_card: RouteCard   ## карточка выбранного маршр�
 var drop := NetDrop.new()   ## гость потерял хоста (ART-043): диалог, окно переподключения, «Играть одному»
 var drop_panel: DropPanel
 var notice := HostNotice.new()   ## у хоста: «Игорь отключился» / «Игорь вернулся» (ART-043), рисует drop_panel
+var weak := WeakLink.new()   ## у гостя: кадры хоста опаздывают — плашка «Слабая связь» (ART-043), рисует drop_panel
 var current := Helm.SeaCurrent.new()
 
 var ocean: OceanView
@@ -1492,6 +1493,11 @@ func _client_step(dt: float) -> void:
 	if net_client == null:
 		r.end_frame()
 		return
+	if drop.active():   # диалог или «Связь восстановлена» — плашка не нужна
+		weak.reset()
+	else:
+		weak.update(dt, net_client.quiet)
+	drop_panel.show_weak(weak)
 	hull_motion.update(dt, helm.in_thrust, helm.in_vert, reactor.k(Reactor.Sys.ENGINES))
 	_wake(dt)   # пузыри у гостя — свои, по тяге из кадра
 	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP), silt.beam_k())
@@ -1637,6 +1643,8 @@ func _drop_taps(taps: Array[Vector2]) -> void:
 func _leave_net() -> void:
 	net_client.stop()
 	net_client = null
+	weak.reset()
+	drop_panel.show_weak(weak)
 	crew = [me]
 	me.lost = false
 	crew_view.set_members(crew, me)

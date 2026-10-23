@@ -2,7 +2,8 @@ class_name DropPanel
 extends Control
 ## Диалог «Связь с хостом потеряна» (ART-043) поверх затемнённого последнего кадра хоста; подтверждение
 ## «Продолжить одному?»; плашка «Связь восстановлена». Состояние, тексты и места — `NetDrop`. У хоста — плашка
-## «Игорь отключился» / «Игорь вернулся» (`HostNotice`). Палитра ART-028, ничего красного.
+## «Игорь отключился» / «Игорь вернулся» (`HostNotice`). У гостя — плашка «Слабая связь» (`WeakLink`). Палитра ART-028,
+## ничего красного.
 
 const TEXT := Color("D5E4E8")
 const DIM := Color("9AD9E8")
@@ -13,6 +14,7 @@ const DARK_TEXT := Color("0B1C24")
 
 var drop: NetDrop
 var notice: HostNotice
+var weak: WeakLink
 
 
 func _ready() -> void:
@@ -32,8 +34,15 @@ func show_notice(n: HostNotice) -> void:
 	_refresh()
 
 
+## Слабая связь у гостя (ART-043): плашка у левого края, игра идёт, касания проходят.
+func show_weak(w: WeakLink) -> void:
+	weak = w
+	_refresh()
+
+
 func _refresh() -> void:
-	visible = (drop != null and drop.active()) or (notice != null and notice.active())
+	visible = (drop != null and drop.active()) or (notice != null and notice.active()) \
+		or (weak != null and weak.visible())
 	if visible:
 		queue_redraw()
 
@@ -42,6 +51,8 @@ func _draw() -> void:
 	var size := get_viewport_rect().size
 	var s := size.y / NetDrop.REF_H
 	var font := get_theme_default_font()
+	if weak != null and weak.visible():
+		_weak(weak.a, WeakLink.to_screen(size), s, font)
 	if notice != null and notice.active():
 		var a := notice.alpha()
 		var nb := NetDrop.to_screen(HostNotice.BOX, size)
@@ -86,6 +97,22 @@ func _draw() -> void:
 			draw_rect(r, Color(ACCENT, 0.45 if on else 0.2), false, maxf(1.0, 2.0 * s))
 		var col := DARK_TEXT if main_btn else TEXT
 		_center(font, r, r.size.y * 0.5 + 12.0 * s, b[1], 34.0 * s, Color(col, 1.0 if on else 0.45))
+
+
+## «≈ Слабая связь»: тёмная плашка с бирюзовой рамкой, две волны слева — знак связи (без цвета тревоги).
+func _weak(a: float, r: Rect2, s: float, font: Font) -> void:
+	draw_rect(r, Color(BACK, 0.9 * a))
+	draw_rect(r, Color(ACCENT, 0.7 * a), false, maxf(1.0, 2.0 * s))
+	var x0 := r.position.x + 30.0 * s
+	var cy := r.get_center().y
+	for k in 2:
+		var pts := PackedVector2Array()
+		for i in 13:
+			var u := float(i) / 12.0
+			pts.append(Vector2(x0 + u * 40.0 * s, cy + (k * 12.0 - 6.0) * s + sin(u * TAU) * 4.0 * s))
+		draw_polyline(pts, Color(ACCENT, a), maxf(1.0, 3.0 * s), true)
+	draw_string(font, Vector2(x0 + 60.0 * s, cy + 12.0 * s), WeakLink.TEXT, HORIZONTAL_ALIGNMENT_LEFT,
+		r.end.x - x0 - 70.0 * s, int(34.0 * s), Color(TEXT, a))
 
 
 func _panel(r: Rect2, a: float) -> void:
