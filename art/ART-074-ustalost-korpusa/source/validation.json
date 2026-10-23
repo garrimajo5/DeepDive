@@ -1,0 +1,89 @@
+{
+  "seam_error": 0,
+  "alpha_border_max": 0,
+  "mask": [
+    512,
+    512
+  ],
+  "atlas": [
+    512,
+    512
+  ],
+  "repair_weights": [
+    {
+      "hull": 100,
+      "mean_R_weight": 0.0,
+      "mean_G_weight": 0.0
+    },
+    {
+      "hull": 70,
+      "mean_R_weight": 0.0,
+      "mean_G_weight": 0.0
+    },
+    {
+      "hull": 40,
+      "mean_R_weight": 0.030377242296696902,
+      "mean_G_weight": 0.01425694543738997
+    },
+    {
+      "hull": 15,
+      "mean_R_weight": 0.08698845951599696,
+      "mean_G_weight": 0.05276099793722635
+    },
+    {
+      "hull": 0,
+      "mean_R_weight": 0.08894256890988818,
+      "mean_G_weight": 0.05316135182100183
+    }
+  ],
+  "captures": {
+    "wide70": {
+      "after": 119.0,
+      "baseline": 119.0,
+      "cards": 24,
+      "hull": 70.0,
+      "surface_materials": 6,
+      "surface_only": 119.0
+    },
+    "wide40": {
+      "after": 120.0,
+      "baseline": 119.0,
+      "cards": 24,
+      "hull": 40.0,
+      "surface_materials": 6,
+      "surface_only": 119.0
+    },
+    "wide15": {
+      "after": 120.0,
+      "baseline": 119.0,
+      "cards": 24,
+      "hull": 15.0,
+      "surface_materials": 6,
+      "surface_only": 119.0
+    },
+    "engine15": {
+      "after": 82.0,
+      "baseline": 81.0,
+      "cards": 24,
+      "hull": 15.0,
+      "surface_materials": 6,
+      "surface_only": 81.0
+    },
+    "eco15": {
+      "after": 82.0,
+      "baseline": 81.0,
+      "cards": 12,
+      "hull": 15.0,
+      "surface_materials": 6,
+      "surface_only": 81.0
+    },
+    "spark15": {
+      "after": 113.0,
+      "baseline": 112.0,
+      "cards": 24,
+      "hull": 15.0,
+      "surface_materials": 6,
+      "surface_only": 112.0
+    }
+  }
+}
