@@ -60,8 +60,11 @@ func test_seated_hands_on_wheel() -> void:
 		m.follow(0.0, Deck.SEAT_Z, 0.0, true, turn, 0.1)
 		var j := m.joints()
 		var g := Crew.wheel_grips(turn)
-		near(j["hand_l"].distance_to(g[0]), 0.0, 0.06, "левая рука на ободе (поворот %s)" % turn)
-		near(j["hand_r"].distance_to(g[1]), 0.0, 0.06, "правая рука на ободе (поворот %s)" % turn)
+		for side in 2:
+			var k := "l" if side == 0 else "r"
+			ok(j["palm_" + k].distance_to(g[side]) < 0.1, "ладонь %s у обода (поворот %s)" % [k, turn])
+			ok((j["hand_" + k] - j["wrist_" + k]).dot(Vector3(0, BridgeProps.WHEEL_Y, BridgeProps.WHEEL_Z) - g[side]) > 0.0,
+				"пальцы к центру колеса, на обод (поворот %s)" % turn)
 		near(absf(j["elbow_l"].distance_to(j["shoulder_l"])), Crew.UPPER_ARM, 1e-3, "длина плеча")
 	var g0 := Crew.wheel_grips(0.0)
 	var g1 := Crew.wheel_grips(1.0)
