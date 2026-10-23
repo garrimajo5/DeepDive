@@ -679,3 +679,11 @@ ORM = AO/шероховатость/металл, в существующие `P
 лист `par-ventilya-list.png`, кадры `par-ventilya-obychno.jpg`, `par-ventilya-peregrev.jpg`, `par-ventilya-otsek.jpg`; решения —
 `par-ventilya.md`: один MultiMesh из 48 билбордов (24 на «Экономно»), жизнь 1,25 с, струя рвётся у 0,3 м на клубы, кадры
 смешиваются по возрасту, неосвещённый с подкраской #C6D6DE / #E8C49F по перегреву, без новых огней. Встройка — задача ROADMAP потока А.
+## ART-072 Пробоина изнутри: струя, брызги, искры — принято
+- Исходник: ART-013 (`proboina.md`), ART-064 (`svet-vnutri.md`), ART-071 (`par-ventilya.md`), ART-063.
+
+**Принято 23.10.2026** (PR #507, ветка `art/ART-072-proboina-chastitsy`): атлас `proboina-chastitsy-atlas.png` (RGBA 512², 4×4,
+прямая альфа), лист `proboina-chastitsy-list.png`, кадры `proboina-chastitsy-mostik.jpg`, `-svarka.jpg`, `-svarka-sboku.jpg`;
+решения — `proboina-chastitsy.md`: три MultiMesh с общим материалом вместо трёх `CPUParticles3D` в `BreachView` (≤ 112
+частиц, ≤ 3 вызова, 56 на «Экономно»), струя по баллистике `Breach.JET_*` до воды, брызги на воде, искры-чёрточки с отскоком,
+без новых огней. Встройка — задача ROADMAP потока А.
