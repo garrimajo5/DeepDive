@@ -93,6 +93,8 @@ var rooms: RoomsView
 var searchlight: SearchlightView
 var hull: HullView          ## корпус снаружи (HullPlan), роторы и рули — по hull_motion
 var hull_motion := HullMesh.Motion.new()
+var wake := Wake.new()      ## след винтов и выпуски при всплытии ART-063
+var wake_view: WakeView
 var light_on := true        ## прожектор включён (кнопка «Свет» за штурвалом)
 var camera: Camera3D
 ## Облёт с борта в начале забега (тесты и снимки выключают: tests/run.gd, tools/shot.gd).
@@ -126,6 +128,8 @@ func _ready() -> void:
 	add_child(ocean)
 	silt_view = SiltView.new()
 	add_child(silt_view)
+	wake_view = WakeView.new()   # в «Отмели»: прогрев показывает его на кадр
+	ocean.add_child(wake_view)
 	eco = EcoView.new()
 	eco.name = "Живой мир"
 	eco.ground = Seabed.height
@@ -584,6 +588,7 @@ func step(dt: float) -> void:
 	engine.update(dt, reactor, hold_valve or debug_vent)
 	helm.update(dt, reactor.k(Reactor.Sys.ENGINES), current.vel())
 	hull_motion.update(dt, helm.in_thrust, helm.in_vert, reactor.k(Reactor.Sys.ENGINES))
+	_wake(dt)
 	helm.speed = vitals.scrape(helm.bump / maxf(dt, 1e-4), helm.speed)
 	if vitals.update(dt, helm.in_thrust, helm.in_vert, Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP)),
 			0.0 if run.ended else reactor.k(Reactor.Sys.LIFE)):   # на итоге корпус не чинится — как на панели (#266)
@@ -1015,6 +1020,7 @@ func decide(choice: String) -> void:
 	vote_panel.show_results(result_detail, run.score)
 	vote_panel.visible = at_vote   # решили товарищи, пока свой у другого поста: итог — у голостола
 	flyby.start(Flyby.Kind.SURFACE)   # вид с борта при всплытии, затем — итог на голограмме
+	wake.vent()   # продувка: пузыри у сервисных крышек
 	announce("Экипаж поднялся наверх: очки %d" % run.score)
 
 
@@ -1052,6 +1058,12 @@ func _toggle_noclip() -> void:
 		walker.y = Deck.Walker.EYE
 		say("noclip вкл — крестовина ведёт по взгляду, можно выйти с корабля")
 	overlay.set_noclip(walker.noclip)
+
+
+## След винтов ART-063: пузыри за роторами по тяге, в мировых координатах.
+func _wake(dt: float) -> void:
+	wake.update(dt, Transform3D(Basis(Vector3.UP, helm.yaw), helm.pos), hull_motion.spin, current.vel())
+	wake_view.apply(wake, helm.pos)
 
 
 func _place_ship() -> void:
@@ -1431,6 +1443,7 @@ func _client_step(dt: float) -> void:
 		r.end_frame()
 		return
 	hull_motion.update(dt, helm.in_thrust, helm.in_vert, reactor.k(Reactor.Sys.ENGINES))
+	_wake(dt)   # пузыри у гостя — свои, по тяге из кадра
 	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP), silt.beam_k())
 	breach.time += dt   # пульс тревоги и свет сварки — своим временем, состояние — из кадра
 	breach_view.apply()
@@ -1660,6 +1673,8 @@ func debug_setup(kv: Dictionary) -> void:
 		ocean.set_relief(false)    # и льда ART-056
 		ocean.set_snow_lite(true)  # и взвесь ART-058 реже, без вращения
 		searchlight.set_lite(true) # и луч прожектора ART-062 без дрейфа
+		wake.lite = true           # и след винтов ART-063: 96 карточек, кадры 0–11
+		wake_view.set_lite(true)
 	if kv.has("energy"):  # energy=<ед.> — заряд корабля (меньше 20 — «МАЛО ЗАРЯДА» на табло)
 		vitals.energy = float(kv["energy"])
 	if kv.get("drain", "0") == "1":  # drain=1 — стеклоуст на корпусе (табло и рамка у щитка разряда)
@@ -1748,6 +1763,7 @@ func debug_setup(kv: Dictionary) -> void:
 			current.update(dt)
 			helm.update(dt, 1.0, current.vel())
 			hull_motion.update(dt, helm.in_thrust, helm.in_vert, 1.0)
+			_wake(dt)
 		_place_ship()
 		_place_camera()
 		_update_ui()
@@ -1755,6 +1771,10 @@ func debug_setup(kv: Dictionary) -> void:
 		flyby.start(Flyby.Kind.SURFACE if kv["flyby"] == "surface" else Flyby.Kind.START)
 		flyby.update(float(kv.get("age", "2.0")))
 		_place_camera()
+	if kv.has("vent"):  # vent=<с> — выпуски у сервисных крышек ART-063 через столько секунд после продувки
+		wake.vent()
+		for i in int(float(kv["vent"]) * 30.0):
+			_wake(1.0 / 30.0)
 	if kv.has("view"):  # view=x,y,z — камера снаружи в осях корабля, смотрит на середину корпуса (снимок корпуса)
 		var v: PackedFloat64Array = kv["view"].split_floats(",")
 		var out := Camera3D.new()
