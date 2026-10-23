@@ -1,0 +1,95 @@
+{
+  "critical_degrees": 48.590377890729144,
+  "extra_calls": 0,
+  "captures": {
+    "bridge8": {
+      "after": 62.0,
+      "baseline": 62.0,
+      "extra_meshes": 0,
+      "extra_texture_samples": 2,
+      "ship_depth": 8.0,
+      "silt": 0.0,
+      "zero_gain": 62.0,
+      "effect_vs_zero_roi_mae": 19.061909352836878,
+      "control_vs_zero_roi_mae": 0.0013973847517730496
+    },
+    "flyby8": {
+      "after": 195.0,
+      "baseline": 195.0,
+      "extra_meshes": 0,
+      "extra_texture_samples": 2,
+      "ship_depth": 8.0,
+      "silt": 0.0,
+      "zero_gain": 195.0,
+      "effect_vs_zero_roi_mae": 5.600265957446808,
+      "control_vs_zero_roi_mae": 0.07495789007092199
+    },
+    "flyby": {
+      "after": 195.0,
+      "baseline": 195.0,
+      "extra_meshes": 0,
+      "extra_texture_samples": 2,
+      "ship_depth": 20.0,
+      "silt": 0.0,
+      "zero_gain": 195.0,
+      "effect_vs_zero_roi_mae": 0.22452903368794327,
+      "control_vs_zero_roi_mae": 0.06632978723404255
+    },
+    "bridge30": {
+      "after": 65.0,
+      "baseline": 65.0,
+      "extra_meshes": 0,
+      "extra_texture_samples": 2,
+      "ship_depth": 30.0,
+      "silt": 0.0,
+      "zero_gain": 65.0,
+      "effect_vs_zero_roi_mae": 0.44036679964539005,
+      "control_vs_zero_roi_mae": 0.19212987588652483
+    },
+    "open8": {
+      "after": 61.0,
+      "baseline": 61.0,
+      "extra_meshes": 0,
+      "extra_texture_samples": 2,
+      "ship_depth": 8.0,
+      "silt": 0.0,
+      "zero_gain": 61.0,
+      "effect_vs_zero_roi_mae": 16.979038120567377,
+      "control_vs_zero_roi_mae": 6.205673758865249e-05
+    },
+    "eco8": {
+      "after": 62.0,
+      "baseline": 62.0,
+      "extra_meshes": 0,
+      "extra_texture_samples": 1,
+      "ship_depth": 8.0,
+      "silt": 0.0,
+      "zero_gain": 62.0,
+      "effect_vs_zero_roi_mae": 10.139715203900709,
+      "control_vs_zero_roi_mae": 0.0
+    },
+    "bridge45": {
+      "after": 69.0,
+      "baseline": 69.0,
+      "extra_meshes": 0,
+      "extra_texture_samples": 2,
+      "ship_depth": 45.0,
+      "silt": 0.0,
+      "zero_gain": 69.0,
+      "effect_vs_zero_roi_mae": 0.016135859929078015,
+      "control_vs_zero_roi_mae": 8.865248226950355e-06
+    },
+    "silt8": {
+      "after": 62.0,
+      "baseline": 62.0,
+      "extra_meshes": 0,
+      "extra_texture_samples": 2,
+      "ship_depth": 8.0,
+      "silt": 0.9999985,
+      "zero_gain": 62.0,
+      "effect_vs_zero_roi_mae": 0.0002792553191489362,
+      "control_vs_zero_roi_mae": 0.000350177304964539
+    }
+  },
+  "seam_error": 0
+}
