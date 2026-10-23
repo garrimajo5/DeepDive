@@ -69,6 +69,10 @@ func _ready() -> void:
 	spray_mat.shader = load("res://shaders/breach_spray.gdshader")
 	spray_mat.set_shader_parameter("atlas", load(BreachSpray.ATLAS))
 	spray_mat.set_shader_parameter("glow", BreachSpray.GLOW)
+	spray_mat.set_shader_parameter("hot", BreachSpray.HOT)
+	spray_mat.set_shader_parameter("core", BreachSpray.CORE)
+	spray_mat.set_shader_parameter("cool", BreachSpray.COOL)
+	spray_mat.set_shader_parameter("cap", BreachSpray.SPARK_CAP)
 	jet_mm = _spray_node("Струя", BreachSpray.JET_LIMIT)
 	splash_mm = _spray_node("Брызги", BreachSpray.SPLASH_LIMIT)
 	spark_mm = _spray_node("Искры сварки", BreachSpray.SPARK_LIMIT + 1)
@@ -195,7 +199,7 @@ func draw_parts() -> void:
 	if parts.flash:
 		var f := 0.2 * (0.85 + 0.15 * sin(breach.time * 53.0))
 		spk.append([BreachSpray.SPARK_FROM, f, Vector3.UP * f,
-			Color(BreachSpray.FLASH_FRAME, 0.9, BreachSpray.FLASH_FRAME, 1.0)])
+			Color(BreachSpray.FLASH_FRAME, 0.9, BreachSpray.FLASH_FRAME, 3.0)])   # 3 — вспышка, тон HOT
 	_fill(spark_mm, spk)
 	var k := maxf(lamp_k, BreachSpray.DARK)
 	spray_mat.set_shader_parameter("water", Color(BreachSpray.WATER.r * k, BreachSpray.WATER.g * k, BreachSpray.WATER.b * k))

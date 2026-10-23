@@ -25,9 +25,11 @@ const SPARK_WET := 0.02                ## вода выше — искры в н
 const SPARK_QUENCH := 0.08             ## за столько секунд
 const GOLDEN := 2.399963
 const WATER := Color("C0E1EB")         ## вода холодная
-const HOT := Color("FFF2D5")           ## искра у резака
+const HOT := Color("FFF2D5")           ## вспышка электрода — бело-жёлтая
+const CORE := Color("FFA84D")          ## искра у резака — жёлто-оранжевая (по issue #530: от #FFF2D5 искры были белёсыми)
 const COOL := Color("F18A3D")          ## остывая — янтарь, без красного (#129)
 const GLOW := 1.5                      ## эмиссия искр (bloom), без новых огней
+const SPARK_CAP := 1.25                ## искра ярче — не выше этого по самому сильному каналу: тон не выгорает в белое
 const DARK := 0.12                     ## в темноте вода не светится белым
 ## Кадры атласа 4×4 по группам: первый и последний (переходов между группами нет).
 const JET_FRAMES := Vector2i(0, 7)
@@ -156,9 +158,17 @@ static func spark_alpha(a: float) -> float:
 	return S(0.0, 0.03, a) * (1.0 - S(0.7, 1.0, a))
 
 
-## Цвет искры по доле жизни: #FFF2D5 → #F18A3D.
+## Цвет искры по доле жизни: #FFA84D → #F18A3D (вспышка электрода — HOT отдельно).
 static func spark_color(a: float) -> Color:
-	return HOT.lerp(COOL, S(0.05, 0.70, a))
+	return CORE.lerp(COOL, S(0.05, 0.70, a))
+
+
+## Яркость искры в кадре (двойник шейдера): GLOW для bloom, но самый сильный канал не выше SPARK_CAP —
+## иначе зажатый в 1 цвет выгорает в белое и теряет тон (по issue #530).
+static func spark_lit(c: Color) -> Color:
+	var m := maxf(c.r, maxf(c.g, c.b))
+	var k := minf(GLOW, SPARK_CAP / maxf(m, 1e-4))
+	return Color(c.r * k, c.g * k, c.b * k)
 
 
 ## Кадр группы по доле жизни: дробный номер в пределах [first, last] (двойник шейдера — смешение соседних).
