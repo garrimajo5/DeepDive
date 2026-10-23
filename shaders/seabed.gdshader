@@ -2,7 +2,7 @@ shader_type spatial;
 // Дно отмели (OceanView.seabed, Seabed): база — цвет вершин (Seabed.color_at), поверх — процедурная «текстура»
 // мельче сетки 5 м: пятна осадка, зерно, рябь песка на плоском дне, скальные прожилки на склонах, лёгкий
 // микрорельеф под светом сквозь лёд; вблизи — грунты ART-060 (песок, ил, галька: цвет, нормали, ORM по world.xz / 2,
-// веса и затухания — Seabed.Ground). 1 вызов отрисовки (тот же меш).
+// веса и затухания — Seabed.Ground); декали ART-066 — Seabed.Marks. 1 вызов отрисовки (тот же меш).
 render_mode cull_back;
 
 uniform float detail = 0.5;    // частота мелкого рисунка, 1/м
@@ -50,6 +50,22 @@ uniform float gate_scale = 60.0;
 uniform vec2 gate_edge = vec2(0.48, 0.62);
 uniform float crack_caustic = 0.06;   // IceSheet.CAUSTIC: свет под трещиной 0,06·exp(−глубина дна / 12)
 uniform float crack_depth = 12.0;
+
+// Декали дна ART-066: атлас 4×4 (данные без sRGB, цвет — множитель вокруг серого, альфа — форма), штампы по клеткам
+// world.xz в двух слоях; места, категории и затухания — Seabed.Marks (тот же хеш HashNoise.hash2).
+uniform sampler2D decal_atlas : hint_default_white, filter_linear_mipmap, repeat_disable;   // без анизотропии: её след под углом залезает в соседнюю ячейку
+uniform float decals = 0.0;                  // 0 — без декалей (до загрузки атласа)
+uniform float decal_cell = 4.0;
+uniform float decal_layers = 2.0;
+uniform float decal_accept = 0.72;
+uniform vec2 decal_size = vec2(1.55, 2.4);
+uniform float decal_jitter = 0.2;
+uniform float decal_k = 0.85;
+uniform vec2 decal_fade = vec2(10.0, 45.0);
+uniform vec2 decal_slope = vec2(0.30, 0.48);
+uniform vec2 decal_track_ny = vec2(0.82, 0.96);
+uniform vec2 decal_moss = vec2(0.48, 0.68);
+uniform float decal_edge = 0.07;           // Seabed.Marks.EDGE
 
 varying vec3 w_pos;
 varying vec3 w_nrm;
@@ -116,6 +132,54 @@ vec3 ground_weights(vec2 xz, float ny, float depth) {   // Seabed.Ground.weights
 	return vec3(1.0 - silt - pebble, silt, pebble);
 }
 
+float dhash(ivec2 c, int k) {   // Seabed.Marks.h
+	return ice_hash2(c.x + 9973 * k, c.y - 7919 * k);
+}
+
+// Множитель цвета от штампа клетки слоя (1 — штампа нет). dpx/dpy — производные world.xz (вне ветвлений).
+vec3 decal_mul(vec2 p, int layer, vec3 gw, float ny, vec2 dpx, vec2 dpy) {
+	float o = layer == 1 ? decal_cell * 0.5 : 0.0;
+	vec2 cf = floor((p - o) / decal_cell);
+	ivec2 c = ivec2(cf);
+	int b = layer * 8;
+	if (dhash(c, b) >= decal_accept) {
+		return vec3(1.0);
+	}
+	vec2 centre = (cf + 0.5) * decal_cell + o + (vec2(dhash(c, b + 1), dhash(c, b + 2)) - 0.5) * 2.0 * decal_jitter;
+	float rot = dhash(c, b + 3) * 6.2831853;
+	float size = mix(decal_size.x, decal_size.y, dhash(c, b + 4));
+	mat2 r = mat2(vec2(cos(rot), -sin(rot)), vec2(sin(rot), cos(rot)));
+	vec2 st = r * (p - centre) / size + 0.5;
+	if (st.x <= 0.0 || st.y <= 0.0 || st.x >= 1.0 || st.y >= 1.0) {
+		return vec3(1.0);
+	}
+	float pick = dhash(c, b + 5);
+	float v = dhash(c, b + 6);
+	float index;
+	float hab;
+	if (pick < 0.27) {          // следы — на ровном песке и иле
+		index = min(floor(v * 4.0), 3.0);
+		hab = (gw.x + gw.y) * smoothstep(decal_track_ny.x, decal_track_ny.y, ny);
+	} else if (pick < 0.40) {   // вмятины
+		index = 4.0 + min(floor(v * 2.0), 1.0);
+		hab = gw.x + gw.y;
+	} else if (pick < 0.67) {   // ил
+		index = 6.0 + min(floor(v * 3.0), 2.0);
+		hab = min(0.3 * gw.x + gw.y, 1.0);
+	} else if (pick < 0.85) {   // ракушечник
+		index = 9.0 + min(floor(v * 2.0), 1.0);
+		hab = min(0.35 * gw.x + gw.z, 1.0);
+	} else {                    // выеденный мох — по маске мха
+		index = 11.0 + min(floor(v * 2.0), 1.0);
+		hab = smoothstep(decal_moss.x, decal_moss.y, ice_value(p * 0.03 + vec2(7.0, 0.0)));
+	}
+	vec2 uv = (vec2(mod(index, 4.0), floor(index / 4.0)) + st) / 4.0;
+	vec4 a = textureGrad(decal_atlas, uv, r * dpx / (size * 4.0), r * dpy / (size * 4.0));
+	vec2 e = min(st, 1.0 - st);   // края квадрата гаснут в пустом поле ячейки (20 px из 256): не видно рамки
+	float edge = smoothstep(0.0, decal_edge, min(e.x, e.y));
+	return mix(vec3(1.0), clamp(2.0 * a.rgb, vec3(0.5), vec3(1.3)), a.a * hab * decal_k * edge);
+}
+
 void vertex() {
 	w_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	w_nrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
@@ -142,9 +206,16 @@ void fragment() {
 	// Грунты ART-060: цвет — множитель вокруг серого, гаснет 12…55 м; нормали и ORM — 8…35 м (Seabed.Ground)
 	vec3 gn = vec3(0.0);   // смещение нормали в базисе поверхности (x — к +X, y — к −Z)
 	float cf = (1.0 - smoothstep(color_fade.x, color_fade.y, dist)) * ground;
+	float df = (1.0 - smoothstep(decal_fade.x, decal_fade.y, dist)) * decals
+			* (1.0 - smoothstep(decal_slope.x, decal_slope.y, slope_raw));
+	vec2 dpx = dFdx(p);
+	vec2 dpy = dFdy(p);
+	vec3 w = vec3(1.0, 0.0, 0.0);
+	if (cf > 0.001 || df > 0.001) {
+		w = ground_weights(p, w_nrm.y, max(ice_y - w_pos.y, 0.0));
+	}
 	if (cf > 0.001) {
 		float dk = 1.0 - smoothstep(steep.x, steep.y, slope_raw);
-		vec3 w = ground_weights(p, w_nrm.y, max(ice_y - w_pos.y, 0.0));
 		vec2 uv0 = p / tile;
 		vec2 uv1 = uv0 + off_silt;
 		vec2 uv2 = uv0 + off_pebble;
@@ -163,6 +234,15 @@ void fragment() {
 			AO = mix(1.0, orm.r, nf);
 			AO_LIGHT_AFFECT = 0.5;
 		}
+	}
+
+	// Декали ART-066: следы, вмятины, ил, ракушечник, мох — до каустик, гаснут 10…45 м и на уклоне (Seabed.Marks)
+	if (df > 0.001) {
+		vec3 dm = decal_mul(p, 0, w, w_nrm.y, dpx, dpy);
+		if (decal_layers > 1.5) {
+			dm *= decal_mul(p, 1, w, w_nrm.y, dpx, dpy);
+		}
+		ALBEDO *= mix(vec3(1.0), dm, df);
 	}
 
 	// Каустики: две бегущие волны шума дают тонкие яркие нити, фокусируются на плоском дне,

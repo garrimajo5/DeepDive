@@ -1883,6 +1883,7 @@ func debug_setup(kv: Dictionary) -> void:
 		rooms.set_relief(false)    # и отсеков ART-055
 		ocean.set_relief(false)    # и льда ART-056
 		ocean.set_snow_lite(true)  # и взвесь ART-058 реже, без вращения
+		ocean.set_decals_lite(true) # и декали дна ART-066 реже и ближе
 		searchlight.set_lite(true) # и луч прожектора ART-062 без дрейфа
 		wake.lite = true           # и след винтов ART-063: 96 карточек, кадры 0–11
 		wake_view.set_lite(true)

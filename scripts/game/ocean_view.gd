@@ -39,6 +39,7 @@ func _ready() -> void:
 	m.set_shader_parameter("crack_caustic", IceSheet.CAUSTIC)
 	m.set_shader_parameter("crack_depth", IceSheet.CAUSTIC_DEPTH)
 	_set_ground(m)   # грунты ART-060: песок, ил, галька
+	_set_decals(m)   # декали ART-066: следы, вмятины, ил, ракушечник, мох
 	seabed_mat = m
 	mesh.surface_set_material(0, m)
 	seabed.mesh = mesh
@@ -271,6 +272,34 @@ static func _set_ground(m: ShaderMaterial) -> void:
 
 
 ## «Экономно» (ART-044): лёд без выборки нормалей, цвет и маска трещин остаются; дно — только цвет грунтов.
+## Декали дна по ART-066 (`Seabed.Marks`): атлас и числа в материал дна, без новых вызовов.
+static func _set_decals(m: ShaderMaterial) -> void:
+	const D := Seabed.Marks
+	m.set_shader_parameter("decal_atlas", load(D.ATLAS))
+	m.set_shader_parameter("decals", 1.0)
+	m.set_shader_parameter("decal_cell", D.CELL)
+	m.set_shader_parameter("decal_size", D.SIZE)
+	m.set_shader_parameter("decal_jitter", D.JITTER)
+	m.set_shader_parameter("decal_k", D.STRENGTH)
+	m.set_shader_parameter("decal_slope", D.SLOPE)
+	m.set_shader_parameter("decal_track_ny", D.TRACK_NY)
+	m.set_shader_parameter("decal_moss", D.MOSS_EDGE)
+	m.set_shader_parameter("decal_edge", D.EDGE)
+	_decals_level(m, false)
+
+
+static func _decals_level(m: ShaderMaterial, lite: bool) -> void:
+	const D := Seabed.Marks
+	m.set_shader_parameter("decal_layers", 1.0 if lite else float(D.LAYERS))
+	m.set_shader_parameter("decal_accept", D.LITE_ACCEPT if lite else D.ACCEPT)
+	m.set_shader_parameter("decal_fade", D.LITE_FADE if lite else D.FADE)
+
+
+## «Экономно» (ART-044): декали дна реже (один слой, 0,36) и ближе (6…25 м).
+func set_decals_lite(lite: bool) -> void:
+	_decals_level(seabed_mat, lite)
+
+
 func set_relief(on: bool) -> void:
 	ice_relief = on
 	seabed_mat.set_shader_parameter("relief", 1.0 if on else 0.0)

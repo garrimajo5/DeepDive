@@ -111,7 +111,9 @@ func test_scene_runs_scenario() -> void:
 	ok(log.contains("аварийный сброс щитком | ") and log.contains("° сброс"), "щитком заглушили реактор")
 	ok(log.contains("пробоина на мостике: струя, вода, янтарная тревога; на слух — сирена и шум струи | ") and log.contains("ПРОБОИНА · МОСТИК · вода"),
 		"пробоина на мостике — на приборах")
-	ok(log.contains("сварка: заплатка наполовину") and main.breach.active == null and log.contains("Вода: мостик"),
+	# пробоину смотрим в строке «шов заварен», не в конце: в новом забеге из меню корабль снова могут ударить
+	var welded := log.split("шов заварен")[-1].split("\n")[0] if log.contains("шов заварен") else "ПРОБОИНА"
+	ok(log.contains("сварка: заплатка наполовину") and not welded.contains("ПРОБОИНА") and log.contains("Вода: мостик"),
 		"заварили, вода откачивается")
 	eq(main.samples.cargo.size(), 1, "лебёдкой подняли образец")
 	ok(log.contains("лебёдка: захват тянется к образцу | ") and log.contains("лебёдка: образец в трюме | "), "лебёдка в логе")
