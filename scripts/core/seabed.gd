@@ -204,3 +204,100 @@ class Ground:
 
 	static func path(kind: int, map: int) -> String:
 		return TEX % [KINDS[kind], MAPS[map]]
+
+
+## Декали дна по ART-066 (`docs/concept-art/dekali-dna.md`): атлас 4×4 (следы, вмятины, ил, ракушечник, мох; разряды —
+## ячейки 13–15, в фон не идут) проекцией world.xz в материал дна (`shaders/seabed.gdshader`, без новых вызовов).
+## Два слоя клеток 4 × 4 м (второй сдвинут на полклетки): в клетке слоя — не больше одного штампа. Шейдер считает то же
+## целочисленным хешем `HashNoise.hash2` — места штампов здесь и там совпадают.
+class Marks:
+	const ATLAS := "res://textures/dno/dekali.png"
+	const CELL := 4.0                     ## клетка, м
+	const LAYERS := 2                     ## слоёв клеток (ART-066 — один; плотность поднята при встройке)
+	const ACCEPT := 0.72                  ## доля клеток со штампом
+	const SIZE := Vector2(1.55, 2.4)      ## сторона квадрата штампа, м
+	const JITTER := 0.2                   ## сдвиг центра, ± м
+	const STRENGTH := 0.85                ## сила множителя
+	const FADE := Vector2(10.0, 45.0)     ## гаснут, м от камеры
+	const SLOPE := Vector2(0.30, 0.48)    ## уклон (1 − ny), на котором гаснут
+	const TRACK_NY := Vector2(0.82, 0.96) ## следы — только на ровном
+	const MOSS_EDGE := Vector2(0.48, 0.68)
+	const EDGE := 0.07                    ## края квадрата гаснут в пустом поле ячейки (20 px из 256 ≈ 0,078)
+	## «Экономно» (ART-044): один слой, реже и ближе.
+	const LITE_ACCEPT := 0.36
+	const LITE_FADE := Vector2(6.0, 25.0)
+	## Категории фона: верхняя граница доли, первая ячейка, сколько ячеек.
+	const CATS := [[0.27, 0, 4], [0.40, 4, 2], [0.67, 6, 3], [0.85, 9, 2], [1.0, 11, 2]]
+	enum Cat { TRACK, DENT, SILT, SHELL, MOSS }
+	const SCORCH := [13, 14, 15]          ## разряды — только по событию, не в фоне
+
+	## Хеш клетки (как dhash в шейдере): k — номер числа, у слоя свои 8.
+	static func h(ix: int, iz: int, k: int) -> float:
+		return HashNoise.hash2(ix + 9973 * k, iz - 7919 * k)
+
+	## Сдвиг сетки слоя, м.
+	static func offset(layer: int) -> float:
+		return CELL * 0.5 if layer == 1 else 0.0
+
+	## Кандидат клетки слоя, в которую попала точка: {cell, accept, centre, rot, size, cat, index}.
+	static func candidate(x: float, z: float, layer: int, accept: float = ACCEPT) -> Dictionary:
+		var o := offset(layer)
+		var ix := int(floorf((x - o) / CELL))
+		var iz := int(floorf((z - o) / CELL))
+		var b := layer * 8
+		var pick := h(ix, iz, b + 5)
+		var cat := 0
+		while pick >= CATS[cat][0] and cat < CATS.size() - 1:
+			cat += 1
+		var index: int = CATS[cat][1] + mini(int(floorf(h(ix, iz, b + 6) * CATS[cat][2])), CATS[cat][2] - 1)
+		return {
+			"cell": Vector2i(ix, iz),
+			"accept": h(ix, iz, b) < accept,
+			"centre": Vector2((ix + 0.5) * CELL + o + (h(ix, iz, b + 1) - 0.5) * 2.0 * JITTER,
+					(iz + 0.5) * CELL + o + (h(ix, iz, b + 2) - 0.5) * 2.0 * JITTER),
+			"rot": h(ix, iz, b + 3) * TAU,
+			"size": lerpf(SIZE.x, SIZE.y, h(ix, iz, b + 4)),
+			"cat": cat,
+			"index": index,
+		}
+
+	## Координаты точки в квадрате штампа 0…1 (вне квадрата — за пределами 0…1).
+	static func stamp_uv(x: float, z: float, c: Dictionary) -> Vector2:
+		var q: Vector2 = Vector2(x, z) - c.centre
+		var cs: float = cos(c.rot)
+		var sn: float = sin(c.rot)
+		return Vector2(cs * q.x + sn * q.y, -sn * q.x + cs * q.y) / c.size + Vector2(0.5, 0.5)
+
+	## UV в атласе: ячейка index (слева направо, сверху вниз), точка st в ней.
+	static func atlas_uv(index: int, st: Vector2) -> Vector2:
+		return (Vector2(index % 4, floorf(index / 4.0)) + st) / 4.0
+
+	## Где лежит категория: веса грунта [песок, ил, галька], y нормали, точка (мох — по маске мха).
+	static func habitat(cat: int, w: Array, ny: float, x: float, z: float) -> float:
+		match cat:
+			Cat.TRACK:
+				return (w[0] + w[1]) * HashNoise.smooth(TRACK_NY.x, TRACK_NY.y, ny)
+			Cat.DENT:
+				return w[0] + w[1]
+			Cat.SILT:
+				return minf(0.3 * w[0] + w[1], 1.0)
+			Cat.SHELL:
+				return minf(0.35 * w[0] + w[2], 1.0)
+		return HashNoise.smooth(MOSS_EDGE.x, MOSS_EDGE.y, HashNoise.value(x * 0.03 + 7.0, z * 0.03))
+
+	## Затухание: вдали и на уклоне.
+	static func fade(dist: float, ny: float, lite: bool = false) -> float:
+		var f: Vector2 = LITE_FADE if lite else FADE
+		return (1.0 - HashNoise.smooth(f.x, f.y, dist)) * (1.0 - HashNoise.smooth(SLOPE.x, SLOPE.y, 1.0 - ny))
+
+	## Штампы, которые накрывают точку: [{index, st, cat}] по слоям (обычно 0–1).
+	static func at(x: float, z: float, lite: bool = false) -> Array:
+		var out := []
+		for layer in (1 if lite else LAYERS):
+			var c := candidate(x, z, layer, LITE_ACCEPT if lite else ACCEPT)
+			if not c.accept:
+				continue
+			var st := stamp_uv(x, z, c)
+			if st.x > 0.0 and st.y > 0.0 and st.x < 1.0 and st.y < 1.0:
+				out.append({"index": c.index, "st": st, "cat": c.cat, "layer": layer})
+		return out
