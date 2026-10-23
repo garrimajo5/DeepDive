@@ -18,6 +18,7 @@ var lamps: Array[OmniLight3D] = []  ## огни мостика B1, B2 по ART-0
 var _lamp_data: Array[CabinLight.Lamp] = []
 var plafond_mat: StandardMaterial3D   ## рассеиватели плафонов ART-064 (set_cabin)
 const PLAFOND_TEX := preload("res://textures/svet/plafon.png")
+const GLINT_MASK := preload("res://textures/bridge/bliki-maska.png")   ## ART-067, L8 512², бесшовная
 var screens_mat: ShaderMaterial    ## экраны пульта пилота (помехи — set_screens)
 const SCANNER_TEXT := Color("67DDEB")
 var scanner_text: Label3D          ## экран сканера биолога (Scanner.screen_lines)
@@ -30,6 +31,8 @@ func _ready() -> void:
 	mesh_instance.layers = OceanView.LAYER_SHIP
 	add_child(mesh_instance)
 	plafond_mat = plafond_material(mesh_instance.mesh)
+	for m in surface_materials():   # блики воды ART-067: маска в потолке и полу, сила — set_glints
+		m.set_shader_parameter("glint_mask", GLINT_MASK)
 	_add_glass()
 	for p in BridgeProps.fixed():
 		props[p.model] = _add_model(p, self)
@@ -74,6 +77,24 @@ func set_cabin(breach_room: int, t: float, k: float) -> void:
 		lamps[i].light_color = CabinLight.color(_lamp_data[i], breach_room)
 		lamps[i].light_energy = CabinLight.energy(_lamp_data[i], breach_room, t, k)
 	set_plafond(plafond_mat, breach_room, t, k)
+
+
+## Блики воды ART-067 (WaterGlints): сила k (0 — маска не читается), оттенок воды, часы течения t, с.
+func set_glints(k: float, tint: Color, t: float) -> void:
+	for m in surface_materials():
+		m.set_shader_parameter("glint_k", k)
+		m.set_shader_parameter("glint_tint", tint)
+		m.set_shader_parameter("glint_time", t)
+
+
+## Материалы оболочки с картами ART-054 (шейдер ship_surface): пол, стены, потолок.
+func surface_materials() -> Array[ShaderMaterial]:
+	var out: Array[ShaderMaterial] = []
+	for i in mesh_instance.mesh.get_surface_count():
+		var m := mesh_instance.mesh.surface_get_material(i) as ShaderMaterial
+		if m:
+			out.append(m)
+	return out
 
 
 ## Плафоны мостика × k без аварии (мигание, Vitals.lamp_k).

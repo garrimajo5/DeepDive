@@ -102,6 +102,7 @@ var hull: HullView          ## корпус снаружи (HullPlan), рото�
 var hull_motion := HullMesh.Motion.new()
 var wake := Wake.new()      ## след винтов и выпуски при всплытии ART-063
 var wake_view: WakeView
+var glints := WaterGlints.new()   ## блики воды в мостике ART-067 (сила, огибающая тревоги; рисует BridgeView)
 var grade: GradeView   ## виньетка и цветокоррекция по глубине ART-065 (слой −1, под интерфейсом)
 var light_on := true        ## прожектор включён (кнопка «Свет» за штурвалом)
 var camera: Camera3D
@@ -397,11 +398,19 @@ func _cabin(k: float) -> void:
 	rooms.set_cabin(br, breach.time, k)
 
 
+## Блики воды на потолке и полу мостика ART-067: глубина корабля, ил, авария (огибающая), мигание плафонов lamp_k.
+func _glints(dt: float, lamp_k: float) -> void:
+	glints.step(dt, breach.active != null)
+	var d := helm.depth()
+	bridge.set_glints(glints.k(d, silt.k, lamp_k), WaterGlints.tint(d), time)
+
+
 ## Свет мигает, пока на корпусе присоска и после разряда (Vitals.lamp_k); тревога присоски шипит раз в 1,6 с
 ## (Vitals.hiss — короткий звук без петли, issue #163).
 func _flicker(dt: float) -> void:
 	var k := vitals.lamp_k(time, zap.flicker > 0.0)
 	_cabin(k * Wreck.lamps(wreck.t))   # шторка «Корпус разрушен»: плафоны гаснут
+	_glints(dt, k * Wreck.lamps(wreck.t))
 	searchlight.set_flicker(k)
 	bridge.set_screens(Vector3(vitals.screen_k(time, Vitals.Screen.HELM_L), vitals.screen_k(time, Vitals.Screen.HELM_C),
 		vitals.screen_k(time, Vitals.Screen.HELM_R)), vitals.screen_k(time, Vitals.Screen.SCANNER))
@@ -1671,6 +1680,7 @@ func _client_step(dt: float) -> void:
 		ocean.set_scorch(scorch.uniforms(time))
 	breach_view.apply()
 	_cabin(Wreck.lamps(wreck.t))   # авария ART-064 у гостя — тот же ритм огней; шторка ART-036 гасит плафоны
+	_glints(dt, Wreck.lamps(wreck.t))
 	silt_view.apply(silt, time, helm.pos, helm.yaw)
 	_client_eco(dt, near)
 	visor.visible = me.welding()
@@ -1909,6 +1919,9 @@ func debug_setup(kv: Dictionary) -> void:
 		wake.lite = true           # и след винтов ART-063: 96 карточек, кадры 0–11
 		wake_view.set_lite(true)
 		grade.set_lite(true)       # и виньетка ART-065: без LUT, овал 0,10
+		glints.lite = true         # и блики воды в мостике ART-067 выключены
+	if kv.get("glints", "1") == "0":  # glints=0 — без бликов воды в мостике ART-067 (сравнить)
+		glints.lite = true
 	if kv.get("grade", "1") == "0":  # grade=0 — без виньетки и цветокоррекции ART-065 (сравнить)
 		grade.set_on(false)
 	if kv.has("energy"):  # energy=<ед.> — заряд корабля (меньше 20 — «МАЛО ЗАРЯДА» на табло)
