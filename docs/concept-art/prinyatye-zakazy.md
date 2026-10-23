@@ -703,3 +703,11 @@ ORM = AO/шероховатость/металл, в существующие `P
 `ustalost-proverka.png`, кадры `ustalost-mostik-15.jpg`, `ustalost-mashinnoe-15.jpg`; решения — `ustalost-korpusa.md`: потёки
 и пятна по `Vitals.hull` в `ship_surface.gdshader` (0 вызовов), капли/искры/пар — один MultiMesh из 24 карточек (12 на
 «Экономно»), без новых огней и без красного. Встройка — задача ROADMAP потока А.
+## ART-075 Лёд снизу: окно Снелля и отражение воды — принято
+- Исходник: ART-056 (`led-snizu.md`), ART-052 (`luchi.md`), ART-057, ART-059, ART-069.
+
+**Принято 23.10.2026** (PR #523, ветка `art/ART-075-led-otrazhenie`): LUT `led-otrazhenie-gradient.png` (RGBA 256×16, линейные
+данные, A — френель + окно Снелля с затуханием по глубине), маска гладкости `led-otrazhenie-maska.png` (L8 512², плитка 16 м),
+лист `led-otrazhenie-list.png`, проверка `led-otrazhenie-proverka.png`, параметры `led-otrazhenie-parametry.json`; решения —
+`led-otrazhenie.md`: смешение в `ice.gdshader` двумя выборками (одна на «Экономно»), 0 вызовов, трещины пропускают, ил гасит.
+Встройка — задача ROADMAP потока А.
