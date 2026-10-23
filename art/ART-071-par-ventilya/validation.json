@@ -1,0 +1,125 @@
+{
+  "atlas": {
+    "mode": "RGBA",
+    "size": [
+      512,
+      512
+    ],
+    "bytes": 158541,
+    "alpha": "straight",
+    "padding_px": 12,
+    "alpha_max_outer8px_each_cell": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "drawcalls": {
+    "normal": {
+      "after": 90.0,
+      "baseline": 89.0,
+      "control": 89.0,
+      "particles": 48,
+      "renderer": "Forward Mobile Vulkan"
+    },
+    "hot": {
+      "after": 90.0,
+      "baseline": 89.0,
+      "control": 89.0,
+      "particles": 48,
+      "renderer": "Forward Mobile Vulkan"
+    },
+    "eco": {
+      "after": 90.0,
+      "baseline": 89.0,
+      "control": 89.0,
+      "particles": 24,
+      "renderer": "Forward Mobile Vulkan"
+    },
+    "phase": {
+      "after": 90.0,
+      "baseline": 89.0,
+      "control": 89.0,
+      "particles": 48,
+      "renderer": "Forward Mobile Vulkan"
+    },
+    "panel": {
+      "after": 91.0,
+      "baseline": 91.0,
+      "control": 91.0,
+      "particles": 48,
+      "renderer": "Forward Mobile Vulkan"
+    },
+    "overview": {
+      "after": 83.0,
+      "baseline": 82.0,
+      "control": 82.0,
+      "particles": 48,
+      "renderer": "Forward Mobile Vulkan"
+    },
+    "panel-clear": {
+      "after": 84.0,
+      "baseline": 84.0,
+      "control": 84.0,
+      "particles": 48,
+      "renderer": "Forward Mobile Vulkan"
+    },
+    "room": {
+      "after": 84.0,
+      "baseline": 83.0,
+      "control": 83.0,
+      "particles": 48,
+      "renderer": "Forward Mobile Vulkan"
+    }
+  },
+  "new_Light3D": 0,
+  "particle_quad_triangles": {
+    "normal": 96,
+    "eco": 48
+  },
+  "frame_blend": "premultiplied linear values, smoothstep weight, output straight alpha",
+  "phase_samples_seconds": [
+    0.32,
+    0.3533
+  ],
+  "shader_errors": false,
+  "limits": "Native Forward Mobile RTX3070Ti; no phone FPS claim",
+  "panel_visibility": {
+    "panel-clear": {
+      "roi_xyxy": [
+        770,
+        350,
+        840,
+        450
+      ],
+      "mean_abs_RGB_difference_0_255": 0.0
+    },
+    "room": {
+      "roi_xyxy": [
+        20,
+        325,
+        220,
+        545
+      ],
+      "mean_abs_RGB_difference_0_255": 0.0
+    }
+  },
+  "native_modes": {
+    "normal": "unshaded C6D6DE",
+    "hot": "unshaded E8C49F; native reactor hot=true heat=95 scram=0 for still",
+    "eco": "24 particles + relief=0, not full global graphics preset"
+  }
+}
