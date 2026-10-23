@@ -141,6 +141,8 @@ func test_scene_projector_and_beam() -> void:
 	ok(v.spot.light_projector != null, "маска отражателя в проекторе")
 	ok(v.spot.shadow_enabled, "проектор работает только с тенями (4.7.2)")
 	eq(v.spot.shadow_caster_mask, OceanView.LAYER_WORLD, "тени бросает мир, не мостик")
+	ok(Searchlight.SHADOW_NORMAL_BIAS >= 2.0, "при смещении 1,0 дно в пятне само себя затеняет полосами (#489)")
+	near(v.spot.shadow_normal_bias, Searchlight.SHADOW_NORMAL_BIAS, 1e-6, "смещение тени по нормали — у прожектора")
 	near(v.spot.light_energy, Searchlight.ENERGY, 1e-6, "энергию не поднимали")
 	var m := v.beam_mat()
 	ok(m.get_shader_parameter("field") != null, "поле взвеси в луче")
