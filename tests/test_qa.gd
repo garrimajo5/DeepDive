@@ -66,6 +66,7 @@ func test_scene_runs_scenario() -> void:
 	var shots := 0
 	var table: Node3D = main.bridge.props[BridgeProps.TABLE]
 	var legs_seen := false
+	var weld_y := -1.0   # issue #524: на 16-breach-weld шов в середине кадра по высоте (доля от верха)
 	for i in 2850:  # 95 с игры (сценарий идёт ~92 с)
 		# снимок берёт уже нарисованный кадр — камеру до шага, в котором он снят
 		var cam := main.camera
@@ -79,6 +80,11 @@ func test_scene_runs_scenario() -> void:
 		var legs_vis := true
 		for k in ["toe_l", "toe_r", "hand_l", "hand_r"]:
 			legs_vis = legs_vis and cam.is_position_in_frustum(main.ship.to_global(j[k]))
+		var weld_at := -1.0
+		if main.breach.active:
+			var seam := main.ship.to_global(main.breach.active.p)
+			if cam.is_position_in_frustum(seam):
+				weld_at = cam.unproject_position(seam).y / cam.get_viewport().get_visible_rect().size.y
 		main.step(1.0 / 30.0)
 		sat = sat or main.pilot.seated
 		ahead = maxf(ahead, z0 - main.helm.pos.z)
@@ -87,6 +93,8 @@ func test_scene_runs_scenario() -> void:
 				table_seen = table_vis
 			if qa.log_lines[k].begins_with("скриншот 06b-own-legs"):
 				legs_seen = legs_vis
+			if qa.log_lines[k].begins_with("скриншот 16-breach-weld"):
+				weld_y = weld_at
 			if qa.log_lines[k].begins_with("скриншот 10-zap"):
 				zap_seen = zap_vis
 			if qa.log_lines[k].begins_with("скриншот 10a-zap-okno"):
@@ -95,6 +103,7 @@ func test_scene_runs_scenario() -> void:
 		if qa.script_q.finished:
 			break
 	ok(qa.script_q.finished, "сценарий дошёл до конца")
+	ok(weld_y > 0.3 and weld_y < 0.7, "на 16-breach-weld шов в середине кадра: %.2f высоты (#524)" % weld_y)
 	ok(sat, "по сценарию садились за штурвал")
 	ok(not main.pilot.seated, "и встали")
 	ok(ahead > 20.0, "корабль прошёл вперёд: %.1f м" % ahead)
