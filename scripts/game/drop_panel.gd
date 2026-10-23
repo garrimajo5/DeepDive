@@ -15,6 +15,7 @@ const DARK_TEXT := Color("0B1C24")
 var drop: NetDrop
 var notice: HostNotice
 var weak: WeakLink
+var quiet := false   ## шторка «Корпус разрушен» на экране: плашки хоста и «Слабая связь» не рисуются (#473)
 
 
 func _ready() -> void:
@@ -40,9 +41,20 @@ func show_weak(w: WeakLink) -> void:
 	_refresh()
 
 
+## Шторка поверх кадра (ART-036): плашки молчат, диалог потери связи остаётся (#473).
+func set_quiet(q: bool) -> void:
+	if quiet == q:
+		return
+	quiet = q
+	_refresh()
+
+
+func plates_shown() -> bool:
+	return not quiet and ((notice != null and notice.active()) or (weak != null and weak.visible()))
+
+
 func _refresh() -> void:
-	visible = (drop != null and drop.active()) or (notice != null and notice.active()) \
-		or (weak != null and weak.visible())
+	visible = (drop != null and drop.active()) or plates_shown()
 	if visible:
 		queue_redraw()
 
@@ -51,9 +63,9 @@ func _draw() -> void:
 	var size := get_viewport_rect().size
 	var s := size.y / NetDrop.REF_H
 	var font := get_theme_default_font()
-	if weak != null and weak.visible():
+	if weak != null and weak.visible() and not quiet:
 		_weak(weak.a, WeakLink.to_screen(size), s, font)
-	if notice != null and notice.active():
+	if notice != null and notice.active() and not quiet:
 		var a := notice.alpha()
 		var nb := NetDrop.to_screen(HostNotice.BOX, size)
 		draw_rect(nb, Color(BACK, 0.92 * a))

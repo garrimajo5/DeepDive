@@ -101,3 +101,28 @@ func test_scene_curtain_then_restart() -> void:
 	main.queue_free()
 	await frames(1)
 
+
+
+## #473: плашка «Инженер отключился» и строки приборов не лезут на шторку; после шторки строки возвращаются.
+func test_scene_curtain_hides_plates() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.notice.left("Инженер", true)
+	main.drop_panel.show_notice(main.notice)
+	ok(main.drop_panel.visible and main.drop_panel.plates_shown(), "плашка хоста на экране")
+	ok(main.hint.visible, "строки приборов на экране")
+	main.vitals.hit(100, "")
+	main.step(0.1)
+	ok(main.wreck.active(), "шторка идёт")
+	ok(main.notice.active(), "плашка ещё не истекла")
+	ok(not main.drop_panel.plates_shown(), "плашка под шторкой не рисуется")
+	ok(not main.drop_panel.visible, "панель плашек скрыта")
+	ok(not main.hint.visible, "строки приборов скрыты")
+	for i in 60:
+		main.step(0.1)
+	ok(not main.wreck.active(), "шторка убрана")
+	ok(main.hint.visible, "строки приборов вернулись")
+	ok(not main.drop_panel.quiet, "плашки снова можно показывать")
+	main.queue_free()
+	await frames(1)
