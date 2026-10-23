@@ -101,6 +101,7 @@ var searchlight: SearchlightView
 var hull: HullView          ## корпус снаружи (HullPlan), роторы и рули — по hull_motion
 var hull_motion := HullMesh.Motion.new()
 var wake := Wake.new()      ## след винтов и выпуски при всплытии ART-063
+var valve_steam := ValveSteam.new()   ## пар вентиля ART-071 (рисует rooms.steam)
 var wake_view: WakeView
 var glints := WaterGlints.new()   ## блики воды в мостике ART-067 (сила, огибающая тревоги; рисует BridgeView)
 var grade: GradeView   ## виньетка и цветокоррекция по глубине ART-065 (слой −1, под интерфейсом)
@@ -351,8 +352,9 @@ func _begin_warmup() -> void:
 	_warm_frame()
 
 
-## Частицы корабля (пар вентиля, струя, брызги и искры пробоины) на время прогрева выпущены сразу (preprocess) —
-## их шейдер собирается под шторкой, а не при первом сбросе пара (issue #159). Конец прогрева — снова пусто.
+## Частицы корабля (струя, брызги и искры пробоины) на время прогрева выпущены сразу (preprocess) — их шейдер
+## собирается под шторкой, а не при первом событии (issue #159). Конец прогрева — снова пусто. Пар вентиля ART-071 —
+## MultiMesh с пустой карточкой: его показывает _warm_show.
 func _warm_particles(on: bool) -> void:
 	if on:
 		for p: CPUParticles3D in ship.find_children("*", "CPUParticles3D", true, false):
@@ -410,6 +412,7 @@ func _glints(dt: float, lamp_k: float) -> void:
 func _flicker(dt: float) -> void:
 	var k := vitals.lamp_k(time, zap.flicker > 0.0)
 	_cabin(k * Wreck.lamps(wreck.t))   # шторка «Корпус разрушен»: плафоны гаснут
+	rooms.steam.apply(valve_steam, ValveSteam.tint(reactor, k * Wreck.lamps(wreck.t)))   # пар ART-071
 	_glints(dt, k * Wreck.lamps(wreck.t))
 	searchlight.set_flicker(k)
 	bridge.set_screens(Vector3(vitals.screen_k(time, Vitals.Screen.HELM_L), vitals.screen_k(time, Vitals.Screen.HELM_C),
@@ -659,6 +662,7 @@ func step(dt: float) -> void:
 		announce(run_msg)
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
 	engine.update(dt, reactor, hold_valve or debug_vent)
+	valve_steam.update(dt, engine.venting)
 	helm.update(dt, reactor.k(Reactor.Sys.ENGINES), current.vel())
 	hull_motion.update(dt, helm.in_thrust, helm.in_vert, reactor.k(Reactor.Sys.ENGINES))
 	_wake(dt)
@@ -1922,6 +1926,7 @@ func debug_setup(kv: Dictionary) -> void:
 		searchlight.set_lite(true) # и луч прожектора ART-062 без дрейфа
 		wake.lite = true           # и след винтов ART-063: 96 карточек, кадры 0–11
 		wake_view.set_lite(true)
+		valve_steam.lite = true    # и пар вентиля ART-071: 24 карточки
 		grade.set_lite(true)       # и виньетка ART-065: без LUT, овал 0,10
 		glints.lite = true         # и блики воды в мостике ART-067 выключены
 	if kv.get("glints", "1") == "0":  # glints=0 — без бликов воды в мостике ART-067 (сравнить)
