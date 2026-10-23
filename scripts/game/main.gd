@@ -101,6 +101,7 @@ var searchlight: SearchlightView
 var hull: HullView          ## корпус снаружи (HullPlan), роторы и рули — по hull_motion
 var hull_motion := HullMesh.Motion.new()
 var wake := Wake.new()      ## след винтов и выпуски при всплытии ART-063
+var valve_steam := ValveSteam.new()   ## пар вентиля ART-071 (рисует rooms.steam)
 var wake_view: WakeView
 var glints := WaterGlints.new()   ## блики воды в мостике ART-067 (сила, огибающая тревоги; рисует BridgeView)
 var grade: GradeView   ## виньетка и цветокоррекция по глубине ART-065 (слой −1, под интерфейсом)
@@ -351,8 +352,9 @@ func _begin_warmup() -> void:
 	_warm_frame()
 
 
-## Частицы корабля (пар вентиля, струя, брызги и искры пробоины) на время прогрева выпущены сразу (preprocess) —
-## их шейдер собирается под шторкой, а не при первом сбросе пара (issue #159). Конец прогрева — снова пусто.
+## CPUParticles3D корабля (если появятся) на время прогрева выпущены сразу (preprocess) — их шейдер собирается под
+## шторкой, а не при первом событии (issue #159). Конец прогрева — снова пусто. Пар вентиля ART-071 и частицы пробоины
+## ART-072 — MultiMesh с пустой карточкой: их показывает _warm_show.
 func _warm_particles(on: bool) -> void:
 	if on:
 		for p: CPUParticles3D in ship.find_children("*", "CPUParticles3D", true, false):
@@ -394,6 +396,7 @@ func _warm_frame() -> void:
 ## k — мигание Vitals.lamp_k поверх.
 func _cabin(k: float) -> void:
 	var br := breach.active.room if breach.active else -1
+	breach_view.lamp_k = k   # вода струи ART-072 гаснет со светом отсеков
 	bridge.set_cabin(br, breach.time, k)
 	rooms.set_cabin(br, breach.time, k)
 
@@ -410,6 +413,7 @@ func _glints(dt: float, lamp_k: float) -> void:
 func _flicker(dt: float) -> void:
 	var k := vitals.lamp_k(time, zap.flicker > 0.0)
 	_cabin(k * Wreck.lamps(wreck.t))   # шторка «Корпус разрушен»: плафоны гаснут
+	rooms.steam.apply(valve_steam, ValveSteam.tint(reactor, k * Wreck.lamps(wreck.t)))   # пар ART-071
 	_glints(dt, k * Wreck.lamps(wreck.t))
 	searchlight.set_flicker(k)
 	bridge.set_screens(Vector3(vitals.screen_k(time, Vitals.Screen.HELM_L), vitals.screen_k(time, Vitals.Screen.HELM_C),
@@ -659,6 +663,7 @@ func step(dt: float) -> void:
 		announce(run_msg)
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
 	engine.update(dt, reactor, hold_valve or debug_vent)
+	valve_steam.update(dt, engine.venting)
 	helm.update(dt, reactor.k(Reactor.Sys.ENGINES), current.vel())
 	hull_motion.update(dt, helm.in_thrust, helm.in_vert, reactor.k(Reactor.Sys.ENGINES))
 	_wake(dt)
@@ -669,7 +674,7 @@ func step(dt: float) -> void:
 		overlay.set_light(false)
 		say("Прожектор погас: не хватает энергии")
 	vitals.hull = breach.update(dt, reactor.k(Reactor.Sys.LIFE), vitals.hull)
-	breach_view.apply()
+	breach_view.apply(dt)   # и частицы ART-072
 	_drive_mates(dt)
 	_tick_vote(dt)
 	_hands(dt, hold_valve, hold_winch, hold_scan)
@@ -1681,7 +1686,7 @@ func _client_step(dt: float) -> void:
 	breach.time += dt   # пульс тревоги и свет сварки — своим временем, состояние — из кадра
 	if not scorch.all.is_empty():   # след хоста темнеет в «старое пятно» часами гостя
 		ocean.set_scorch(scorch.uniforms(time))
-	breach_view.apply()
+	breach_view.apply(dt)   # частицы ART-072 у гостя — своим временем по состоянию из кадра
 	_cabin(Wreck.lamps(wreck.t))   # авария ART-064 у гостя — тот же ритм огней; шторка ART-036 гасит плафоны
 	_glints(dt, Wreck.lamps(wreck.t))
 	silt_view.apply(silt, time, helm.pos, helm.yaw)
@@ -1922,6 +1927,8 @@ func debug_setup(kv: Dictionary) -> void:
 		searchlight.set_lite(true) # и луч прожектора ART-062 без дрейфа
 		wake.lite = true           # и след винтов ART-063: 96 карточек, кадры 0–11
 		wake_view.set_lite(true)
+		valve_steam.lite = true    # и пар вентиля ART-071: 24 карточки
+		breach_view.parts.lite = true   # и частицы пробоины ART-072: 24/16/15+1
 		grade.set_lite(true)       # и виньетка ART-065: без LUT, овал 0,10
 		glints.lite = true         # и блики воды в мостике ART-067 выключены
 	if kv.get("glints", "1") == "0":  # glints=0 — без бликов воды в мостике ART-067 (сравнить)
@@ -1996,7 +2003,10 @@ func debug_setup(kv: Dictionary) -> void:
 		if kv.has("water"):
 			breach.water = float(kv["water"])
 		breach.time = 0.25
-		breach_view.apply()
+		for i in 60:   # частицы ART-072 уже летят: секунда пробоины (и сварки, если weld)
+			breach.welding = debug_weld
+			breach_view.apply(1.0 / 60.0)
+		breach.time = 0.25
 	if kv.has("ship"):  # ship=x,y,z — поставить корабль (y — высота, глубина со знаком минус)
 		var p: PackedFloat64Array = kv["ship"].split_floats(",")
 		helm.pos = Vector3(p[0], p[1], p[2])

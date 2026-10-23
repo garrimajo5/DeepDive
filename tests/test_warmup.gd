@@ -102,8 +102,9 @@ func test_scene_warmup() -> void:
 	var qa := main.start_qa('[{"do": "wait", "s": 1}, {"do": "log", "note": "прогрев"}]')
 	var torch: Node3D = main.crew_view.torches[0]
 	var yaws := {}
-	var steam: CPUParticles3D = main.rooms.steam
-	ok(steam.emitting and main.breach_view.spray.emitting, "частицы корабля выпущены на прогрев")
+	var steam: SteamView = main.rooms.steam
+	ok(main.breach_view.jet_mm.visible and main.breach_view.spark_mm.visible, "частицы пробоины ART-072 в кадре прогрева — пустой карточкой")
+	ok(steam.visible and steam.multimesh.visible_instance_count >= 1, "пар ART-071 в кадре прогрева — пустой карточкой")
 	var outside := 0
 	near(main.curtain.progress, 0.0, 1e-9, "заставка с 0 %")
 	var prev := 0.0
@@ -128,8 +129,9 @@ func test_scene_warmup() -> void:
 	main.step(1.0 / 60.0)
 	ok(not main.warming(), "прогрев кончился")
 	eq(outside, Warmup.OUTSIDE.size(), "были кадры снаружи")
-	ok(not steam.emitting and not main.breach_view.spray.emitting, "частицы снова не идут")
-	near(steam.preprocess, 0.0, 1e-9, "preprocess пара вернулся")
+	ok(not steam.visible and not main.breach_view.jet_mm.visible, "частицы снова скрыты, пар скрыт")
+	eq(main.breach_view.parts.count(), 0, "частиц пробоины прогрев не родил")
+	eq(main.valve_steam.puffs.size(), 0, "клубов пара прогрев не родил")
 	ok(not main.vote_panel.visible, "панель решения снова скрыта")
 	ok(not main.power_panel.visible, "пульт энергии снова скрыт")
 	ok(main.camera.current, "глаза на мостике")

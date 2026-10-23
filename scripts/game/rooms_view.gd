@@ -38,7 +38,7 @@ var winch_carry: MeshInstance3D    ## образец под захватом п�
 var _carry_mat: StandardMaterial3D
 var valve_wheel: Node3D            ## маховик вентиля сброса пара (MOD-009), крутится по x
 var panel_lid: Node3D              ## крышка щитка «Аварийный сброс» (MOD-009), откидывается по z
-var steam: CPUParticles3D          ## пар из вентиля
+var steam: SteamView               ## пар из вентиля ART-071 (ValveSteam)
 var _button_mat: StandardMaterial3D
 var lab_samples: Array[MeshInstance3D] = []   ## образцы в колбах (Lab.contents), светятся цветом вида
 const JOURNAL_TEXT := Color("67DDEB")
@@ -360,7 +360,7 @@ func set_lab(kinds: Array, lines: PackedStringArray, t: float) -> void:
 		journal_text.text = text
 
 
-## Машинное (MOD-009): вентиль на левой стене, щиток на правой; пар — частицы у маховика.
+## Машинное (MOD-009): вентиль на левой стене, щиток на правой; пар — SteamView у сопла (ART-071).
 func _add_engine_room() -> void:
 	_model("ventil-truba", EngineRoom.VALVE_POS)
 	valve_wheel = _model("ventil-koleso", EngineRoom.VALVE_WHEEL)
@@ -371,52 +371,8 @@ func _add_engine_room() -> void:
 	var bmi: MeshInstance3D = panel.find_children("*", "MeshInstance3D", true, false)[0]
 	_button_mat = (bmi.get_active_material(0) as StandardMaterial3D).duplicate()
 	bmi.material_override = _button_mat
-	steam = CPUParticles3D.new()
-	steam.name = "Пар вентиля"
-	steam.position = EngineRoom.VALVE_POS + Vector3(0.18, 0.12, 0.0)
-	steam.layers = OceanView.LAYER_SHIP
-	steam.emitting = false
-	steam.amount = 48
-	steam.lifetime = 1.4
-	steam.direction = Vector3(1.0, 0.8, 0.0)
-	steam.spread = 22.0
-	steam.initial_velocity_min = 1.2
-	steam.initial_velocity_max = 1.8
-	steam.gravity = Vector3(0, 0.6, 0)
-	steam.damping_min = 1.0
-	steam.damping_max = 1.6
-	steam.scale_amount_min = 0.6
-	steam.scale_amount_max = 1.0
-	var grow := Curve.new()
-	grow.add_point(Vector2(0, 0.25))
-	grow.add_point(Vector2(1, 1.6))
-	steam.scale_amount_curve = grow
-	var fade := Gradient.new()
-	fade.set_color(0, Color(0.84, 0.89, 0.91, 0.4))
-	fade.set_color(1, Color(0.84, 0.89, 0.91, 0.0))
-	steam.color_ramp = fade
-	var q := QuadMesh.new()
-	q.size = Vector2(0.7, 0.7)
-	var sm := StandardMaterial3D.new()
-	sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	sm.vertex_color_use_as_albedo = true
-	sm.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	sm.billboard_keep_scale = true
-	sm.albedo_texture = _puff()
-	q.material = sm
-	steam.mesh = q
+	steam = SteamView.new()   # пар ART-071: один MultiMesh, ставит Main через apply
 	add_child(steam)
-
-
-## Мягкое круглое пятно пара 32×32.
-static func _puff() -> ImageTexture:
-	var img := Image.create(32, 32, false, Image.FORMAT_RGBA8)
-	for y in 32:
-		for x in 32:
-			var d := Vector2(x - 15.5, y - 15.5).length() / 15.5
-			img.set_pixel(x, y, Color(1, 1, 1, clampf(1.0 - d, 0.0, 1.0) ** 1.5))
-	return ImageTexture.create_from_image(img)
 
 
 ## Створки люков, крышка шлюза и цвет реактора — каждый кадр.
@@ -424,7 +380,6 @@ func apply(layout: ShipLayout, r: Reactor, lock: Airlock = null, engine: EngineR
 	if engine:
 		valve_wheel.rotation_degrees.x = engine.wheel_deg
 		panel_lid.rotation_degrees.z = EngineRoom.LID_OPEN_DEG * engine.lid
-		steam.emitting = engine.venting
 		_button_mat.emission_energy_multiplier = 1.0 + 0.8 * minf(engine.pressed, 1.0)
 	if lock:
 		airlock_cover.transform = lock.cover_pose()
