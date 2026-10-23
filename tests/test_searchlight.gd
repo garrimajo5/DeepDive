@@ -155,3 +155,15 @@ func test_scene_projector_and_beam() -> void:
 	ok(v.spot.light_projector != null, "маска пятна остаётся")
 	v.queue_free()
 	await frames(1)
+
+
+## Issue #489: полосы поперёк пятна на склоне — самозатенение дна (акне) при сдвиге тени по нормали 1,0.
+func test_spot_shadow_without_acne() -> void:
+	var v := SearchlightView.new()
+	tree.root.add_child(v)
+	await frames(1)
+	ok(v.spot.shadow_enabled, "тени прожектора остаются")
+	ok(v.spot.shadow_normal_bias >= 2.0, "сдвиг по нормали ≥ 2 — без полос на склоне")
+	near(v.spot.shadow_normal_bias, Searchlight.SHADOW_NORMAL_BIAS, 1e-6)
+	v.queue_free()
+	await frames(1)

@@ -28,6 +28,7 @@ func _ready() -> void:
 	spot.light_projector = load(Searchlight.MASK)
 	spot.shadow_enabled = true
 	spot.shadow_caster_mask = OceanView.LAYER_WORLD
+	spot.shadow_normal_bias = Searchlight.SHADOW_NORMAL_BIAS   # без полос «акне» на склоне (#489)
 	add_child(spot)
 	beam = MeshInstance3D.new()
 	beam.name = "Луч прожектора"
