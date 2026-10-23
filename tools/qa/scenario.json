@@ -162,7 +162,7 @@
   {"do": "goto", "x": -1.35, "z": 22.6, "yaw": -66, "pitch": -40},
   {"do": "hold", "what": "action", "s": 1},
   {"do": "shot", "name": "13-winch-grab"},
-  {"do": "log", "note": "лебёдка: захват тянется к образцу, от троса по воде шлюза кольца (ART-073)"},
+  {"do": "log", "note": "лебёдка: захват тянется к образцу"},
   {"do": "hold", "what": "action", "s": 0.8},
   {"do": "wait", "s": 1.6},
   {"do": "shot", "name": "14-winch-cargo"},
