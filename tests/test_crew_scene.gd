@@ -32,7 +32,9 @@ func test_seated_hands_on_wheel_in_scene() -> void:
 	main.step(1.0 / 30.0)
 	var hand: Vector3 = _shown(0, "hand_r")
 	var grip: Vector3 = Crew.wheel_grips(main.helm.turn)[1]
-	ok(hand.distance_to(grip) < 0.12, "правая рука у обода (%.2f м)" % hand.distance_to(grip))
+	ok(hand.distance_to(grip) < 0.16, "правая рука у обода (%.2f м)" % hand.distance_to(grip))
+	var palm: Vector3 = main.me.joints()["palm_r"]
+	ok(palm.distance_to(grip) < 0.1, "ладонь на ободе (%.2f м)" % palm.distance_to(grip))
 	near(main.camera.position.y, main.me.eye().y, 1e-4, "камера в голове фигуры")
 	main.stand_up()
 
