@@ -98,7 +98,7 @@ func test_scene_bite_breach_weld() -> void:
 	eq(main.message.text, "Пробоина: мостик — держите «Сварка» у пробоины", "на приборах")
 	for i in 20:
 		main.step(0.1)
-	ok(main.breach_view.spot_node.visible and main.breach_view.spray.emitting, "струя бьёт")
+	ok(main.breach_view.spot_node.visible and main.breach_view.jet_mm.visible, "струя бьёт")
 	ok(main.breach_view.water.visible, "на полу вода")
 	ok(main.breach_view.alarm.visible, "тревога")
 	ok(main.breach_view.siren.playing and main.breach_view.jet_sound.playing, "воет сирена, шумит струя")
@@ -116,23 +116,28 @@ func test_scene_bite_breach_weld() -> void:
 	r.begin(1, r.layout.action.c)
 	for i in 20:
 		main.step(0.1)
-	ok(main.breach_view.sparks.emitting, "искры")
+	ok(main.breach_view.spark_mm.visible and main.breach_view.parts.flash, "искры и вспышка электрода")
 	ok(main.me.welding() and main.crew_view.torches[0].visible, "резак в правой руке")
 	ok(main.visor.visible, "щиток опущен — экран затемнён")
-	ok(main.breach_view.splash.emitting, "брызги там, где струя бьёт в воду")
+	ok(main.breach_view.splash_mm.visible, "брызги там, где струя бьёт в воду")
 	ok(main.breach_view.patch.scale.x > 0.4 and main.breach_view.patch.scale.x < 0.7, "заплатка наполовину: %.2f" % main.breach_view.patch.scale.x)
 	for i in 20:
 		main.step(0.1)
 	r.end(1)
 	main.step(0.1)
 	ok(main.breach.active == null, "заварено")
-	ok(not main.breach_view.spray.emitting and not main.breach_view.sparks.emitting, "струя и искры погасли")
-	ok(not main.breach_view.splash.emitting, "брызг нет")
+	var born := main.breach_view.parts.born
+	ok(not main.breach_view.parts.flash, "электрод погас")
 	ok(not main.breach_view.siren.playing and not main.breach_view.jet_sound.playing, "сирена и струя смолкли")
 	ok(not main.me.welding() and not main.crew_view.torches[0].visible and not main.visor.visible,
 		"заварил — резак убран, щиток поднят")
 	ok(main.breach_view._seam_mat.emission_energy_multiplier > 1.0, "шов горит")
 	ok(main.breach_view.water.visible, "вода ещё стоит")
+	for i in 8:
+		main.step(0.1)
+	eq(main.breach_view.parts.born, born, "заварено — новых частиц нет")
+	ok(not main.breach_view.jet_mm.visible and not main.breach_view.splash_mm.visible
+		and not main.breach_view.spark_mm.visible, "живые дожили: струи, брызг и искр нет")
 	main.queue_free()
 	await frames(1)
 
