@@ -101,3 +101,57 @@ func test_spot_seen_over_console() -> void:
 	ok(spot + Searchlight.spot_angle_deg() * 0.5 > wheel,
 		"под колесом прячется только середина конуса: колесо %.1f°" % wheel)
 	ok(sl.spot.light_energy >= 8.0 and sl.spot.spot_angle_attenuation <= 1.0, "свет ярче рассеянного, край мягкий")
+
+
+## Рисунок прожектора по ART-062: маска пятна в проекторе (с тенями, кастеры — мир), поле взвеси в луче с дрейфом,
+## ил гасит плотность, длину укорачивает один раз; «Экономно» — без дрейфа.
+func test_density_and_uv() -> void:
+	near(Searchlight.density(0.0, 0.0), 0.28, 1e-6, "пустое место поля — 0,28")
+	near(Searchlight.density(1.0, 0.0), 1.0, 1e-6, "густое — полная")
+	near(Searchlight.density(1.0, 1.0), 0.75, 1e-6, "в иле × 0,75")
+	var uv := Searchlight.beam_uv(Vector3(1.0, 0.0, -27.5))
+	near(uv.x, 0.5, 1e-6, "угол 0 — середина U")
+	near(uv.y, 0.5, 1e-6, "половина длины — V 0,5")
+	near(Searchlight.beam_uv(Vector3(0.0, 1.0, -80.0)).y, 1.0, 1e-6, "за концом — V 1")
+	var moved := Searchlight.beam_uv(Vector3(1.0, 0.0, -27.5), 10.0) - uv
+	ok(moved.y < 0.0, "поле плывёт к лампе")
+	near(-moved.y * Searchlight.BEAM_LENGTH, 7.7, 0.01, "≈ 0,77 м/с")
+	near(Searchlight.silt_k(1.0), 0.0, 1e-6, "без ила")
+	near(Searchlight.silt_k(Silt.BEAM_K), 1.0, 1e-6, "в густом иле")
+
+
+func test_maps_imported() -> void:
+	var m: Texture2D = load(Searchlight.MASK)
+	eq(m.get_width(), 512, "маска 512²")
+	var img := m.get_image()
+	img.decompress()
+	var c := img.get_pixel(256, 256)
+	ok(c.r > 0.8, "ядро пятна ≈ 1")
+	near(c.a, 1.0, 1e-3, "непрозрачная")
+	ok(img.get_pixel(2, 2).r < 0.05, "рамка чёрная")
+	var f: Texture2D = load(Searchlight.FIELD)
+	eq(f.get_width(), 256)
+	eq(f.get_height(), 512)
+
+
+func test_scene_projector_and_beam() -> void:
+	var v := SearchlightView.new()
+	tree.root.add_child(v)
+	await frames(1)
+	ok(v.spot.light_projector != null, "маска отражателя в проекторе")
+	ok(v.spot.shadow_enabled, "проектор работает только с тенями (4.7.2)")
+	eq(v.spot.shadow_caster_mask, OceanView.LAYER_WORLD, "тени бросает мир, не мостик")
+	near(v.spot.light_energy, Searchlight.ENERGY, 1e-6, "энергию не поднимали")
+	var m := v.beam_mat()
+	ok(m.get_shader_parameter("field") != null, "поле взвеси в луче")
+	near(float(m.get_shader_parameter("animate")), 1.0, 1e-6)
+	v.apply(true, 1.0, Silt.BEAM_K)
+	near(float(m.get_shader_parameter("silt_dim")), 0.25, 1e-6, "в иле плотность × 0,75")
+	near(v.beam.scale.x, Silt.BEAM_K, 1e-6, "длина укорочена один раз — масштабом конуса")
+	v.apply(true, 1.0, 1.0)
+	near(float(m.get_shader_parameter("silt_dim")), 0.0, 1e-6)
+	v.set_lite(true)
+	near(float(m.get_shader_parameter("animate")), 0.0, 1e-6, "«Экономно» — без дрейфа")
+	ok(v.spot.light_projector != null, "маска пятна остаётся")
+	v.queue_free()
+	await frames(1)

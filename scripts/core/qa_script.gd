@@ -4,7 +4,10 @@ extends RefCounted
 ## Сценарий — JSON-массив шагов (пример — tools/qa/scenario.json):
 ##   {"do": "wait", "s": 2}                          — подождать
 ##   {"do": "shot", "name": "01-start"}              — скриншот
-##   {"do": "press", "what": "action"}               — нажать и отпустить (action, up, down, light)
+##   {"do": "press", "what": "action"}               — нажать и отпустить (action, up, down, light;
+##                                                     dive — «Погрузиться» в главном меню ART-037; в паузе ART-037:
+##                                                     resume, new, exit, в подтверждении yes / no)
+##   {"do": "back"}                                  — системная «Назад» Android: пауза ART-037 (в паузе — закрыть)
 ##   {"do": "hold", "what": "pad", "dir": [0, 1], "s": 5} — держать (pad — с направлением [вправо, вперёд])
 ##   {"do": "swipe", "dx": 300, "dy": 0, "s": 0.6}   — свайп обзора, смещение в пикселях вьюпорта
 ##   {"do": "goto", "x": -2.2, "z": 17.2, "yaw": 90}  — перейти на палубе (дальние отсеки без ходьбы; yaw в градусах,
@@ -26,13 +29,14 @@ extends RefCounted
 ##                                                     (Crew.Pad.action: сесть за штурвал, к пульту, к голосованию; занят — встать)
 ##   {"do": "gone"}                                  — последний добавленный член экипажа отключился, как гость сети:
 ##                                                     уходит с палубы, у хоста «… отключился» (HostNotice, ART-043)
+##   {"do": "wreck"}                                 — корпус разрушен: шторка ART-036 3,5 с, затем забег с начала
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["route"], ["act"], ["gone"], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["route"], ["act"], ["gone"], ["wreck"], ["back"], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
-const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "silt", "drain", "hull", "route", "gone", "log", "quit"]
-const BUTTONS := ["action", "up", "down", "light", "pad"]
+const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "silt", "drain", "hull", "route", "gone", "wreck", "back", "log", "quit"]
+const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "new", "exit", "yes", "no"]
 const PRESS_TIME := 0.15   ## сколько держать кнопку при «press», с
 const FINGER := 900        ## номер пальца для касаний сценария (не пересекается с настоящими)
 ## После этих команд скриншот ждёт следующего шага: снимок берёт уже нарисованный кадр, и без кадра между ними
@@ -159,6 +163,10 @@ func _begin(st: Dictionary, out: Array) -> void:
 			out.append(["act"])
 		"gone":
 			out.append(["gone"])
+		"wreck":
+			out.append(["wreck"])
+		"back":
+			out.append(["back"])
 		"mate":
 			out.append(["mate", float(st.get("x", 0.0)), float(st.get("z", 0.0)), float(st.get("yaw", 0.0)),
 				int(st.get("role", 1)), int(st.get("look", 1)), bool(st.get("seated", false))])

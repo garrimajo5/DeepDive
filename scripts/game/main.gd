@@ -11,6 +11,9 @@ var pilot: Deck.Pilot:
 		return me.pilot
 var crew: Array = [me]                       ## экипаж на борту; позже — игроки по сети
 var crew_view: CrewView
+var ghosts: Array[MateGhost] = []   ## хост: фигуры отключившихся гостей — полупрозрачные 10 с (ART-043)
+var ghost_view: CrewView   ## их фигуры (alpha)
+var ghost_tags: NameTagView   ## их таблички «Нет связи»
 var name_tags: NameTagView  ## таблички игроков над фигурами (ART-033, NameTag)
 var busy_marks: BusyMarkView  ## метки «Занято» над постами, занятыми другим (ART-033, BusyMark)
 var layout := ShipLayout.new()
@@ -80,7 +83,10 @@ var vote_panel: VotePanel
 var route_card: RouteCard   ## карточка выбранного маршрута над голостолом (ART-016)
 var drop := NetDrop.new()   ## гость потерял хоста (ART-043): диалог, окно переподключения, «Играть одному»
 var drop_panel: DropPanel
+var wreck := Wreck.new()   ## шторка «Корпус разрушен» ART-036: время, затем _restart
+var wreck_view: WreckView
 var notice := HostNotice.new()   ## у хоста: «Игорь отключился» / «Игорь вернулся» (ART-043), рисует drop_panel
+var weak := WeakLink.new()   ## у гостя: кадры хоста опаздывают — плашка «Слабая связь» (ART-043), рисует drop_panel
 var current := Helm.SeaCurrent.new()
 
 var ocean: OceanView
@@ -93,10 +99,19 @@ var rooms: RoomsView
 var searchlight: SearchlightView
 var hull: HullView          ## корпус снаружи (HullPlan), роторы и рули — по hull_motion
 var hull_motion := HullMesh.Motion.new()
+var wake := Wake.new()      ## след винтов и выпуски при всплытии ART-063
+var wake_view: WakeView
+var grade: GradeView   ## виньетка и цветокоррекция по глубине ART-065 (слой −1, под интерфейсом)
 var light_on := true        ## прожектор включён (кнопка «Свет» за штурвалом)
 var camera: Camera3D
 ## Облёт с борта в начале забега (тесты и снимки выключают: tests/run.gd, tools/shot.gd).
 static var intro := true
+## Главное меню ART-037 после заставки прогрева (тесты и снимки выключают: tests/run.gd, tools/shot.gd).
+static var menu := true
+var main_menu := MainMenu.new()   ## «Погрузиться» / «Экипаж» / «Настройки»: пока открыто — игра стоит под меню
+var menu_panel: MenuPanel
+var pause := Pause.new()   ## пауза одиночного забега ART-037 (системная «Назад»): пока открыта — игра стоит
+var pause_panel: PausePanel
 var flyby := Flyby.new()   ## камера с борта: облёт в начале забега, вид при всплытии
 var flyby_cam: Camera3D
 var overlay: TouchOverlay
@@ -126,6 +141,8 @@ func _ready() -> void:
 	add_child(ocean)
 	silt_view = SiltView.new()
 	add_child(silt_view)
+	wake_view = WakeView.new()   # в «Отмели»: прогрев показывает его на кадр
+	ocean.add_child(wake_view)
 	eco = EcoView.new()
 	eco.name = "Живой мир"
 	eco.ground = Seabed.height
@@ -172,6 +189,12 @@ func _ready() -> void:
 	name_tags = NameTagView.new()
 	name_tags.name = "Таблички экипажа"
 	ship.add_child(name_tags)
+	ghost_view = CrewView.new()
+	ghost_view.name = "Отключившиеся"
+	ship.add_child(ghost_view)
+	ghost_tags = NameTagView.new()
+	ghost_tags.name = "Таблички отключившихся"
+	ship.add_child(ghost_tags)
 	busy_marks = BusyMarkView.new()
 	busy_marks.name = "Метки «Занято»"
 	ship.add_child(busy_marks)
@@ -204,6 +227,8 @@ func _ready() -> void:
 	flyby_cam.near = 0.2
 	flyby_cam.far = 400.0
 	ship.add_child(flyby_cam)
+	grade = GradeView.new()
+	add_child(grade)
 	var ui := CanvasLayer.new()
 	ui.name = "Интерфейс"
 	add_child(ui)
@@ -257,6 +282,8 @@ func _ready() -> void:
 	drop_panel = DropPanel.new()   # поверх управления: пока диалог открыт, кнопки под ним не работают
 	drop_panel.name = "Связь потеряна"
 	ui.add_child(drop_panel)
+	wreck_view = WreckView.new()   # выше крестовины и кнопки, ниже заставки прогрева
+	add_child(wreck_view)
 	power_panel.layout = overlay.router.layout   # панель пульта не ложится под noclip и кнопку действия (#349)
 	busy_marks.layout = overlay.router.layout    # метка «Занято» тоже (#373)
 	reactor.message.connect(func(title: String, _text: String) -> void: say(title))
@@ -274,6 +301,8 @@ func _ready() -> void:
 	_place_ship()
 	_place_camera()
 	_begin_warmup()
+	if menu:
+		open_menu()
 	if QaRunner.pending():
 		start_qa()
 
@@ -298,6 +327,13 @@ func _begin_warmup() -> void:
 		_warm_mates.append(m)
 		crew_view.as_own.append(m)
 	crew_view.apply()
+	for r in Crew.Role.size():   # и полупрозрачными, как отключившийся гость (ART-043): каждая роль со снаряжением
+		var g := Crew.Member.new(r)
+		g.look = r % CrewRig.MODELS.size()
+		var at: Vector2 = Warmup.MATE_AT[r % Warmup.MATE_AT.size()]
+		g.place(at.x, at.y, PI)
+		ghosts.append(MateGhost.new(g))
+	_ghosts(0.0, true)
 	_warm_particles(true)
 	power_panel.reactor = reactor   # пульт энергии рисует строки под шторкой: шрифты всех размеров (#217)
 	power_panel.panel = power
@@ -338,17 +374,24 @@ func _warm_frame() -> void:
 		camera.rotation = Vector3(warm.pitch(), warm.yaw(), 0.0)
 		if not camera.current:   # облёт с борта ждёт: прогрев смотрит глазами на мостике
 			camera.make_current()
-	for root: Node in [ship, ocean, silt_view, samples_view, vote_panel.get_parent()]:
+	for root: Node in [ship, ocean, silt_view, samples_view, vote_panel.get_parent(), wreck_view]:
 		_warm_show(root)
 	_warm_drawn = true
+
+
+## Огни корабля по ART-064 (CabinLight): авария — пока открыта пробоина, ритм — часами пробоины (у гостя тоже идут),
+## k — мигание Vitals.lamp_k поверх.
+func _cabin(k: float) -> void:
+	var br := breach.active.room if breach.active else -1
+	bridge.set_cabin(br, breach.time, k)
+	rooms.set_cabin(br, breach.time, k)
 
 
 ## Свет мигает, пока на корпусе присоска и после разряда (Vitals.lamp_k); тревога присоски шипит раз в 1,6 с
 ## (Vitals.hiss — короткий звук без петли, issue #163).
 func _flicker(dt: float) -> void:
 	var k := vitals.lamp_k(time, zap.flicker > 0.0)
-	bridge.set_lamps(k)
-	rooms.set_lamps(k)
+	_cabin(k * Wreck.lamps(wreck.t))   # шторка «Корпус разрушен»: плафоны гаснут
 	searchlight.set_flicker(k)
 	bridge.set_screens(Vector3(vitals.screen_k(time, Vitals.Screen.HELM_L), vitals.screen_k(time, Vitals.Screen.HELM_C),
 		vitals.screen_k(time, Vitals.Screen.HELM_R)), vitals.screen_k(time, Vitals.Screen.SCANNER))
@@ -387,6 +430,8 @@ func _warm_restore() -> void:
 		_warm_mates.clear()
 		crew_view.as_own.clear()
 		crew_view.set_members(crew, me)
+		ghosts.clear()
+		_ghosts(0.0, true)
 		_warm_particles(false)
 		curtain.queue_free()   # вместе с текстурой фона
 		curtain = null
@@ -442,7 +487,9 @@ func version_text() -> String:
 
 ## Игру сворачивают или закрывают — несохранённое записать сразу.
 func _notification(what: int) -> void:
-	if what in [NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_APPLICATION_FOCUS_OUT]:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:   # системная «Назад» Android (`quit_on_go_back` выключен)
+		back_pressed()
+	elif what in [NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_APPLICATION_FOCUS_OUT]:
 		save.flush(samples, scanner)
 	elif what == NOTIFICATION_EXIT_TREE:
 		if net_host:
@@ -463,13 +510,20 @@ func step(dt: float) -> void:
 	time += dt
 	if qa:
 		qa.tick(dt)
+	if main_menu.open and not warm.active():   # главное меню: игра стоит, касания — кнопкам меню
+		_menu_step()
+		return
+	if pause.open:   # пауза: игра стоит, касания — кнопкам паузы
+		_pause_step()
+		return
 	if net_client:   # клиент: корабль, реактор и экипаж — из кадров хоста
 		_client_step(dt)
 		return
 	_net_poll(dt)
 	var r := overlay.router
+	var wrecked := _wreck_step(dt)
 	_mark_presses(r, dt)
-	if r.noclip_pressed:
+	if r.noclip_pressed and not wrecked:
 		_toggle_noclip()
 	var hold_valve := false
 	var hold_winch := false
@@ -478,7 +532,11 @@ func step(dt: float) -> void:
 	at_scanner = false
 	near_post = ""
 	flyby.update(0.0 if warm.active() else dt)   # облёт ждёт конца прогрева шейдеров (под шторкой)
-	if flyby.kind == Flyby.Kind.START:   # облёт в начале забега: касание — к мостику, ввод этого кадра не идёт в игру
+	if wrecked:   # шторка «Корпус разрушен»: корабль без хода, игрок стоит
+		helm.in_thrust = 0.0
+		helm.in_turn = 0.0
+		helm.in_vert = 0.0
+	elif flyby.kind == Flyby.Kind.START:   # облёт в начале забега: касание — к мостику, ввод этого кадра не идёт в игру
 		helm.in_thrust = 0.0
 		helm.in_turn = 0.0
 		helm.in_vert = 0.0
@@ -584,6 +642,7 @@ func step(dt: float) -> void:
 	engine.update(dt, reactor, hold_valve or debug_vent)
 	helm.update(dt, reactor.k(Reactor.Sys.ENGINES), current.vel())
 	hull_motion.update(dt, helm.in_thrust, helm.in_vert, reactor.k(Reactor.Sys.ENGINES))
+	_wake(dt)
 	helm.speed = vitals.scrape(helm.bump / maxf(dt, 1e-4), helm.speed)
 	if vitals.update(dt, helm.in_thrust, helm.in_vert, Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP)),
 			0.0 if run.ended else reactor.k(Reactor.Sys.LIFE)):   # на итоге корпус не чинится — как на панели (#266)
@@ -645,6 +704,7 @@ func step(dt: float) -> void:
 	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
 	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy,
 			status_rect())
+	_ghosts(dt)
 	_warm_frame()
 	_net_send(dt)
 	r.end_frame()
@@ -940,14 +1000,128 @@ func _on_hit(percent: int, kind: String) -> void:
 		say("%s бьёт по корпусу: −%d%%" % [kind, percent])
 
 
-## Корпус разрушен: забег проигран. Пока забега нет — подъём к старту с целым корпусом (как restart в браузере).
-func _on_destroyed() -> void:
+## Главное меню ART-037 поверх сцены (после заставки прогрева — сразу под ней). Игра под меню стоит.
+func open_menu() -> void:
+	main_menu.open = true
+	if menu_panel == null:
+		menu_panel = MenuPanel.new()
+		menu_panel.version = str(ProjectSettings.get_setting("application/config/version", "?"))
+		add_child(menu_panel)
+	menu_panel.show_menu(main_menu)
+	overlay.visible = false
+
+
+## Шаг под меню: касания кнопок. «Погрузиться» — забег с начала (облёт, часы забега), палец с кнопки не идёт в игру.
+func _menu_step() -> void:
+	var r := overlay.router
+	for p in r.taps:
+		if main_menu.press(main_menu.hit(p, get_viewport().get_visible_rect().size)) == "dive":
+			close_menu()
+			_begin_run()
+			break
+	r.end_frame()
+
+
+## Системная «Назад» (Esc на ПК): в забеге — пауза ART-037, в паузе закрывает сначала подтверждение, потом паузу;
+## в главном меню — выход из игры. Сетевой забег и шторка «Корпус разрушен» — пока без паузы (меню забега — позже).
+func back_pressed() -> void:
+	if warm.active():
+		return
+	if main_menu.open:
+		save.flush(samples, scanner)
+		get_tree().quit()
+		return
+	if not pause.open and (net_host != null or net_client != null or wreck.active()):
+		return
+	pause.back()
+	_pause_show()
+
+
+func _unhandled_input(e: InputEvent) -> void:
+	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_ESCAPE:
+		back_pressed()
+
+
+func _pause_show() -> void:
+	if pause_panel == null:
+		pause_panel = PausePanel.new()
+		add_child(pause_panel)
+	pause_panel.show_pause(pause)
+	overlay.visible = not pause.open and not wreck.active()
+	hint.visible = not pause.open and not wreck.active()   # строки приборов не лезут к заголовку паузы
+	overlay.router.clear()   # палец, открывший или закрывший паузу, не идёт в игру
+
+
+## Шаг под паузой: касания кнопок. «Новый забег» — с начала спуска, «Выйти в меню» — главное меню ART-037.
+func _pause_step() -> void:
+	var r := overlay.router
+	for p in r.taps:
+		var what := pause.press(pause.hit(p, get_viewport().get_visible_rect().size))
+		if what != "":
+			_pause_show()
+			if what == "new" or what == "exit":
+				_leave_posts()
+				_restart()
+				if what == "new":
+					say("Новый забег: Ковчег у начала спуска")
+				else:
+					flyby.stop()
+					open_menu()
+			break
+		pause_panel.show_pause(pause)
+	r.end_frame()
+
+
+## Встать с постов перед новым забегом (штурвал, пульт, голосование).
+func _leave_posts() -> void:
 	if pilot.seated:
 		stand_up()
 	if at_power:
 		close_power()
-	say("Корпус разрушен. Ковчег поднят к началу спуска")
-	_restart()
+	if at_vote:
+		at_vote = false
+		vote_panel.visible = false
+
+
+func close_menu() -> void:
+	main_menu.open = false
+	if menu_panel:
+		menu_panel.show_menu(main_menu)
+	overlay.router.clear()   # палец ещё на кнопке: не крестовина и не касание, пропускающее облёт
+	overlay.visible = not wreck.active()
+
+
+## Корпус разрушен: забег проигран — шторка ART-036 3,5 с (`Wreck`), под сплошной шторкой подъём к старту с целым
+## корпусом (`_wreck_step` → `_restart`). Ввод на это время не идёт в игру.
+func _on_destroyed() -> void:
+	if wreck.active():
+		return
+	_leave_posts()
+	pause.close()
+	if pause_panel:
+		pause_panel.show_pause(pause)
+	wreck.start()
+	_wreck_show()
+
+
+## Шаг шторки «Корпус разрушен»: сплошная — забег с начала. true — шторка идёт (ввод не идёт в игру).
+func _wreck_step(dt: float) -> bool:
+	if not wreck.active():
+		return false
+	if wreck.update(dt):
+		_restart()
+		say("Корпус разрушен. Ковчег поднят к началу спуска")
+	_wreck_show()
+	return wreck.active()
+
+
+## Шторка на экране; крестовина, кнопка, строки приборов и плашки скрыты, пока она идёт (#473).
+func _wreck_show() -> void:
+	wreck_view.show_at(wreck.t)
+	var on := wreck.active()
+	overlay.visible = not on
+	hint.visible = not on
+	drop_panel.set_quiet(on)
 
 
 ## Корабль у начала спуска, целый и заряженный, забег с нуля (корпус разрушен или новый забег после итога).
@@ -1015,6 +1189,7 @@ func decide(choice: String) -> void:
 	vote_panel.show_results(result_detail, run.score)
 	vote_panel.visible = at_vote   # решили товарищи, пока свой у другого поста: итог — у голостола
 	flyby.start(Flyby.Kind.SURFACE)   # вид с борта при всплытии, затем — итог на голограмме
+	wake.vent()   # продувка: пузыри у сервисных крышек
 	announce("Экипаж поднялся наверх: очки %d" % run.score)
 
 
@@ -1054,6 +1229,12 @@ func _toggle_noclip() -> void:
 	overlay.set_noclip(walker.noclip)
 
 
+## След винтов ART-063: пузыри за роторами по тяге, в мировых координатах.
+func _wake(dt: float) -> void:
+	wake.update(dt, Transform3D(Basis(Vector3.UP, helm.yaw), helm.pos), hull_motion.spin, current.vel())
+	wake_view.apply(wake, helm.pos)
+
+
 func _place_ship() -> void:
 	ship.position = helm.pos
 	ship.rotation = Vector3(0.0, helm.yaw, 0.0)
@@ -1076,6 +1257,8 @@ func _place_camera() -> void:
 		var a := vitals.shake / 0.6 * 0.04
 		camera.position += Vector3(sin(time * 61.0) * a, sin(time * 47.0 + 1.3) * a, 0.0)
 	camera.rotation = Vector3(walker.pitch, walker.yaw, 0.0)
+	var eye := flyby_cam if flyby_cam.current else camera
+	grade.apply(-eye.global_position.y, silt.k)   # ART-065: по глубине камеры, не корабля
 
 
 func _update_ui() -> void:
@@ -1301,6 +1484,8 @@ func mate_action(m: Crew.Member) -> String:
 
 ## Открыть сетевой забег хостом (NetLink): телефоны по локальной сети встают членами экипажа, их ввод — `Member.pad`.
 func host_game(port: int = NetLink.PORT) -> Error:
+	if main_menu.open:
+		close_menu()
 	net_host = NetLink.Host.new()
 	var err := net_host.start(port)
 	if err != OK:
@@ -1324,6 +1509,8 @@ func _net_poll(dt: float = 0.0) -> void:
 				m.name = g.name
 			m.pad = g.pad
 			net_mates[g.id] = m
+			if MateGhost.forget(ghosts, m.name):   # вернулся — прежняя фигура уходит, встаёт новая
+				_ghosts(0.0, true)
 			if not notice.joined(m.name, m.look == 1):
 				say("На борту: %s" % m.name)
 		else:
@@ -1347,6 +1534,24 @@ func mate_gone(m: Crew.Member) -> void:
 	crew.erase(m)
 	crew_view.set_members(crew, me)
 	drop_panel.show_notice(notice)
+	ghosts.append(MateGhost.new(m))   # на последнем месте полупрозрачным с «Нет связи», без поста (ART-043)
+	_ghosts(0.0, true)
+
+
+## Хост: фигуры отключившихся (`MateGhost`) — стоят, тают, растаявшие убраны; changed — список уже сменился.
+func _ghosts(dt: float, changed := false) -> void:
+	if ghosts.is_empty() and not changed:
+		return
+	changed = MateGhost.step(ghosts, dt) or changed
+	var list := MateGhost.members(ghosts)
+	if changed:
+		ghost_view.set_members(list, null)
+	ghost_view.alphas.assign(ghosts.map(func(g: MateGhost) -> float: return g.alpha()))
+	ghost_view.apply()
+	var melting := ghosts.filter(func(g: MateGhost) -> bool: return g.t > MateGhost.HOLD).map(
+		func(g: MateGhost) -> Crew.Member: return g.member)   # тает — табличка уже снята
+	ghost_tags.show_tags(list, null, ghost_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, melting,
+			status_rect())
 
 
 ## Кадр гостям раз в NetSnap.SEND_DT — после шага, как его видит хост.
@@ -1356,6 +1561,7 @@ func _net_send(dt: float) -> void:
 		var welding := crew.any(func(m: Crew.Member) -> bool: return m.welding())
 		var ev := NetSnap.events(breach, silt, time, welding, news if news_age < NetSnap.NEWS_TIME else [])
 		ev["r"] = _net_run()
+		ev["w"] = wreck.t   # шторка «Корпус разрушен» — у всех (ART-036)
 		var f := NetSnap.frame(net_host.seq, time, helm, reactor, vitals, light_on, crew, ev)
 		f["eco"] = EcoLink.pack_world(eco.world.agents, eco.world.systems, helm.pos, EcoLink.NET_R,
 			eco.world.time)   # существа и мох рядом — гостям отдельным пакетом
@@ -1377,6 +1583,8 @@ func _net_run() -> Dictionary:
 ## Войти в сетевой забег хоста по адресу в локальной сети: шаг корабля считает хост, здесь — свой ввод хосту
 ## (`net_pad` → `Client.send_pad`) и кадры хоста в корабль, реактор, корпус и экипаж; свой игрок — `crew[client.me]`.
 func join_game(address: String, port: int = NetLink.PORT, player: String = "", role: int = Crew.Role.PILOT, look: int = 0) -> Error:
+	if main_menu.open:
+		close_menu()
 	net_client = NetLink.Client.new()
 	var err := net_client.join(address, port, player, role, look)
 	if err != OK:
@@ -1398,7 +1606,11 @@ func join_game(address: String, port: int = NetLink.PORT, player: String = "", r
 func _client_step(dt: float) -> void:
 	var r := overlay.router
 	var lk := overlay.look_points()
-	if drop.blocks():   # связь потеряна: управление остановлено, касания — кнопкам диалога
+	wreck.update(dt)   # между кадрами хоста шторка идёт сама; кадр ставит время хоста
+	_wreck_show()
+	if wreck.active() and not drop.blocks():   # шторка «Корпус разрушен»: ввод не идёт хосту
+		net_pad.clear()
+	elif drop.blocks():   # связь потеряна: управление остановлено, касания — кнопкам диалога
 		net_pad.clear()
 		_drop_taps(r.taps)
 		if net_client == null:   # «Играть одному» — уже одиночный забег
@@ -1414,26 +1626,32 @@ func _client_step(dt: float) -> void:
 	var was := net_client.state
 	net_client.send_pad(net_pad)
 	var f := net_client.poll(dt)
-	var near := PackedFloat32Array()
 	if not f.is_empty():
 		_client_frame(f)
-		near = f.get("eco", near)
 		drop.restored()   # хост принял снова и кадр применён — управление вернулось
 	if net_client.lost():   # кадры хоста не идут — у товарищей «Нет связи», пока не придёт кадр
 		for m: Crew.Member in crew:
 			m.lost = m != me
 	net_smooth.step(dt)
 	net_smooth.apply(helm, crew, me)   # показ чуть позади свежего кадра: между кадрами — плавно
+	var near := net_smooth.take_eco()   # существа рядом — на тех же часах показа, что корабль
 	if net_client.state != was and not drop.active():
 		say(net_client.label())
 	_drop_step(dt)
 	if net_client == null:
 		r.end_frame()
 		return
+	if drop.active():   # диалог или «Связь восстановлена» — плашка не нужна
+		weak.reset()
+	else:
+		weak.update(dt, net_client.quiet)
+	drop_panel.show_weak(weak)
 	hull_motion.update(dt, helm.in_thrust, helm.in_vert, reactor.k(Reactor.Sys.ENGINES))
+	_wake(dt)   # пузыри у гостя — свои, по тяге из кадра
 	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP), silt.beam_k())
 	breach.time += dt   # пульс тревоги и свет сварки — своим временем, состояние — из кадра
 	breach_view.apply()
+	_cabin(Wreck.lamps(wreck.t))   # авария ART-064 у гостя — тот же ритм огней; шторка ART-036 гасит плафоны
 	silt_view.apply(silt, time, helm.pos, helm.yaw)
 	_client_eco(dt, near)
 	visor.visible = me.welding()
@@ -1502,12 +1720,14 @@ func _client_frame(f: Dictionary) -> void:
 	var seq := net_seq
 	net_seq = NetSnap.apply_frame(f, net_seq, helm, reactor, vitals, crew)
 	if net_seq != seq:
-		net_smooth.push(float(f.get("t", 0.0)), helm.pos, helm.yaw, crew)
+		net_smooth.push(float(f.get("t", 0.0)), helm.pos, helm.yaw, crew, f.get("eco", PackedFloat32Array()))
 		var ev := NetSnap.apply_events(f.get("ev", {}), breach, silt, time)
 		if ev.size() == 2 and ev[0] > net_news:   # сообщение события хоста — один раз
 			net_news = ev[0]
 			say(ev[1])
 		var evd: Variant = f.get("ev", {})
+		if evd is Dictionary:
+			wreck.follow(float(evd.get("w", -1.0)))
 		var rs := NetSnap.apply_run(evd.get("r") if evd is Dictionary else null, run)
 		if not rs.is_empty():   # маршрут хоста уже в run; метки, таймер и итог — для показа
 			votes = rs["marks"]
@@ -1573,6 +1793,10 @@ func _drop_taps(taps: Array[Vector2]) -> void:
 func _leave_net() -> void:
 	net_client.stop()
 	net_client = null
+	wreck.reset()   # шторка хоста — не своя: одиночный забег без неё
+	_wreck_show()
+	weak.reset()
+	drop_panel.show_weak(weak)
 	crew = [me]
 	me.lost = false
 	crew_view.set_members(crew, me)
@@ -1659,6 +1883,12 @@ func debug_setup(kv: Dictionary) -> void:
 		rooms.set_relief(false)    # и отсеков ART-055
 		ocean.set_relief(false)    # и льда ART-056
 		ocean.set_snow_lite(true)  # и взвесь ART-058 реже, без вращения
+		searchlight.set_lite(true) # и луч прожектора ART-062 без дрейфа
+		wake.lite = true           # и след винтов ART-063: 96 карточек, кадры 0–11
+		wake_view.set_lite(true)
+		grade.set_lite(true)       # и виньетка ART-065: без LUT, овал 0,10
+	if kv.get("grade", "1") == "0":  # grade=0 — без виньетки и цветокоррекции ART-065 (сравнить)
+		grade.set_on(false)
 	if kv.has("energy"):  # energy=<ед.> — заряд корабля (меньше 20 — «МАЛО ЗАРЯДА» на табло)
 		vitals.energy = float(kv["energy"])
 	if kv.get("drain", "0") == "1":  # drain=1 — стеклоуст на корпусе (табло и рамка у щитка разряда)
@@ -1747,6 +1977,7 @@ func debug_setup(kv: Dictionary) -> void:
 			current.update(dt)
 			helm.update(dt, 1.0, current.vel())
 			hull_motion.update(dt, helm.in_thrust, helm.in_vert, 1.0)
+			_wake(dt)
 		_place_ship()
 		_place_camera()
 		_update_ui()
@@ -1754,6 +1985,10 @@ func debug_setup(kv: Dictionary) -> void:
 		flyby.start(Flyby.Kind.SURFACE if kv["flyby"] == "surface" else Flyby.Kind.START)
 		flyby.update(float(kv.get("age", "2.0")))
 		_place_camera()
+	if kv.has("vent"):  # vent=<с> — выпуски у сервисных крышек ART-063 через столько секунд после продувки
+		wake.vent()
+		for i in int(float(kv["vent"]) * 30.0):
+			_wake(1.0 / 30.0)
 	if kv.has("view"):  # view=x,y,z — камера снаружи в осях корабля, смотрит на середину корпуса (снимок корпуса)
 		var v: PackedFloat64Array = kv["view"].split_floats(",")
 		var out := Camera3D.new()

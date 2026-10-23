@@ -119,6 +119,11 @@ func tick(dt: float) -> void:
 				drain_left = c[1]
 			"hull":
 				main.vitals.hull = c[1]
+			"wreck":   # корпус разрушен — как от удара (шторка ART-036)
+				main.vitals.hull = 0.0
+				main.vitals.destroyed.emit()
+			"back":   # системная «Назад»: пауза ART-037
+				main.back_pressed()
 			"mate":
 				var mate: Crew.Member
 				if c[6]:   # за штурвалом
@@ -174,6 +179,10 @@ func _point(what: String, dir: Vector2) -> Vector2:
 			return l.down.c
 		"light":
 			return l.light.c
+		"dive":   # «Погрузиться» в главном меню ART-037
+			return MainMenu.screen_rect("dive", main.get_viewport().get_visible_rect().size).get_center()
+		"resume", "new", "exit", "yes", "no":   # пауза ART-037 и её подтверждение
+			return Pause.screen_rect(what, main.get_viewport().get_visible_rect().size).get_center()
 	return main.get_viewport().get_visible_rect().get_center()
 
 

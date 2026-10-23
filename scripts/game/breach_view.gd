@@ -8,7 +8,6 @@ const WATER_COLOR := Color(0.525, 0.737, 0.796, 0.55)   ## #86BCCB
 const ALARM_COLOR := Color("ffb259")
 const SEAM_COLOR := Color("f18a3d")
 const SPARK_COLOR := Color("d5e4e8")
-const ALARM_ENERGY := 1.6
 const HOLE_COLOR := Color("0b1c24")
 const SIREN_DB := -16.0      ## сирена тише струи: слышно, но не оглушает (js/audio.js: 0,05 при общей 0,7)
 const JET_DB := -4.0
@@ -249,4 +248,4 @@ func apply() -> void:
 		var top := BridgePlan.CEILING if a.room == ShipLayout.Room.BRIDGE else float(ShipLayout.ROOMS[a.room][3])
 		alarm.position = Vector3(a.floor.position.x + a.floor.size.x / 2.0, top - 0.3, a.floor.position.y + a.floor.size.y / 2.0)
 		alarm.omni_range = maxf(a.floor.size.x, a.floor.size.y) * 0.9
-		alarm.light_energy = ALARM_ENERGY * breach.alarm()
+		alarm.light_energy = 0.0   # ART-064: аварию ведут огни корабля (CabinLight), узел остаётся

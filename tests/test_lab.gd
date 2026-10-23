@@ -134,9 +134,9 @@ func test_scene_ceiling_ring() -> void:   # кольцо-светильник MO
 	var mat := mi.material_override as BaseMaterial3D
 	ok(mat != null and mat.emission_enabled, "вставка светится")
 	main.rooms.set_lamps(0.2)
-	near(mat.emission_energy_multiplier, 0.2, 1e-4, "мигание плафонов — и у кольца")
+	near(mat.emission_energy_multiplier, CabinLight.RING_E * 0.2, 1e-4, "мигание плафонов — и у кольца")
 	main.rooms.set_lamps(1.0)
-	near(mat.emission_energy_multiplier, 1.0, 1e-4)
+	near(mat.emission_energy_multiplier, CabinLight.RING_E, 1e-4, "кольцо 0,7 по ART-064")
 	main.queue_free()
 	await frames(1)
 

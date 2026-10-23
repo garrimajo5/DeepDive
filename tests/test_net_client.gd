@@ -318,3 +318,28 @@ func test_creatures_near_from_host() -> void:   # живой мир у гост�
 	eq(a.state, EcoAgent.State.FLEE, "состояние как у хоста")
 	ok(main.eco.world.time > t0, "мир гостя идёт сам")
 	h_eco = PackedFloat32Array()
+
+
+func test_weak_link_plate() -> void:   # ART-043: кадры хоста опаздывают — «Слабая связь», игра идёт; 2 с ровно — снята
+	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
+	ok(not main.weak.visible(), "связь ровная — плашки нет")
+	for i in int((NetLink.WEAK_AFTER + 0.2) / DT):
+		_host_tick(false)   # хост молчит: кадры опаздывают
+		main.step(DT)
+	ok(main.weak.on, "слабая связь")
+	ok(main.drop_panel.visible, "плашка видна")
+	ok(not main.drop.active(), "диалога нет — игра идёт")
+	main.overlay.router.move = Vector2i(0, 1)   # крестовина под плашкой работает
+	main.step(DT)
+	eq(main.net_pad.move, Vector2(0.0, 1.0), "управление не остановлено")
+	main.overlay.router.move = Vector2i.ZERO
+	ok(_pump(func() -> bool: return main.net_client.quiet == 0.0), "кадры снова идут")
+	for i in int(1.5 / DT):
+		_host_tick()
+		main.step(DT)
+	ok(main.weak.visible(), "до 2 с устойчивой связи плашка стоит")
+	for i in int(1.0 / DT):
+		_host_tick()
+		main.step(DT)
+	ok(not main.weak.visible(), "2 с ровной связи — снята")
+	ok(not main.drop_panel.visible, "панель скрыта")

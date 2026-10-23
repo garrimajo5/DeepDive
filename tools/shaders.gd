@@ -6,6 +6,7 @@ extends SceneTree
 func _initialize() -> void:
 	SaveGame.default_path = ""
 	Main.intro = false
+	Main.menu = false
 	_go.call_deferred()
 
 

@@ -9,6 +9,10 @@ const LAYER_SHIP := 2    ## слой корабля изнутри: только
 var seabed: MeshInstance3D
 var seabed_mat: ShaderMaterial   # материал дна: каустики и свет по глубине задаём отсюда
 var ice: MeshInstance3D
+## Радиус дальней воды, м: меньше дальности камер (400) и дальше, чем туман оставляет что-то видимым.
+const FAR_WALL := 380.0
+var far_wall: MeshInstance3D   # дальняя вода: сфера цвета тумана вокруг камеры (issue #456)
+var far_mat: ShaderMaterial
 var ice_mat: ShaderMaterial   # лёд ART-056: свечение, контраст и нормали по глубине — из apply_water
 var ice_relief := true         # «Экономно» — без нормалей льда (set_relief)
 var sun: DirectionalLight3D
@@ -79,6 +83,9 @@ func _ready() -> void:
 	sun.shadow_blur = 1.3
 	add_child(sun)
 
+	far_wall = _make_far_wall()
+	add_child(far_wall)
+
 	shafts = _make_shafts()
 	add_child(shafts)
 
@@ -86,6 +93,32 @@ func _ready() -> void:
 	add_child(snow)
 	get_viewport().size_changed.connect(_fit_snow)
 	_fit_snow()
+
+
+## Дальняя вода (issue #456): сфера цвета тумана вокруг камеры закрывает щель между краем льда и дна — фон
+## `BG_COLOR` в кадр не попадает. Один вызов, теней нет.
+func _make_far_wall() -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.name = "Дальняя вода"
+	var sphere := SphereMesh.new()
+	sphere.radius = FAR_WALL
+	sphere.height = FAR_WALL * 2.0
+	sphere.radial_segments = 24
+	sphere.rings = 12
+	mi.mesh = sphere
+	far_mat = ShaderMaterial.new()
+	far_mat.shader = load("res://shaders/far_water.gdshader")
+	mi.material_override = far_mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.layers = LAYER_WORLD
+	mi.extra_cull_margin = FAR_WALL
+	return mi
+
+
+func _process(_dt: float) -> void:
+	var cam := get_viewport().get_camera_3d()
+	if cam:
+		far_wall.global_position = cam.global_position
 
 
 ## Высота кадра для взвеси: мельче 1,6 px карточка не становится — бледнеет (`marine_snow.gdshader`).
@@ -193,6 +226,7 @@ func set_snow_lite(lite: bool) -> void:
 func apply_water(env: Environment, depth: float, around: Vector3, silt: float = 0.0) -> void:
 	var fog := Seabed.Water.fog_color(depth).lerp(Silt.FAR_COLOR, 0.75 * silt)   # серо-зелёная муть (ART-048)
 	env.background_color = fog
+	far_mat.set_shader_parameter("water", fog)   # дальняя вода — того же цвета, туман её доведёт до фона (#456)
 	env.fog_enabled = true
 	env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
 	env.fog_light_color = fog

@@ -3,7 +3,7 @@ extends TestCase
 ## это секунды прогрева на телефоне. Свои материалы корабля делят шейдеры по образцам ShaderKey.glass / flakes.
 
 ## Сколько разных шейдеров у корабля (без живого мира) — потолок. Вырос — проверить, нельзя ли взять образец.
-const SHIP_BUDGET := 32   # +1: стекло окон ART-057 `shaders/window_glass.gdshader` (маска и нормали, освещается плафонами; прежде делило образец glass с брызгами; в кадре с первого кадра); +1: взвесь ART-058 `shaders/marine_snow.gdshader` (атлас 4×4, кадр/размер/движение по семьям в вершинах, освещается; прежде делила образец flakes с илом; в кадре с первого кадра); +1: лёд снизу ART-056 `shaders/ice.gdshader` (карты, шум трещин; прежний StandardMaterial льда делил ключ с другими, этот — свой; лёд в кадре с первого кадра); +1: лучи сквозь лёд ART-052 `shaders/light_shafts.gdshader` (аддитив с маской и глубиной кадра, один MultiMesh, в кадре с первого кадра); +1: процедурный шейдер дна `shaders/seabed.gdshader` (образцом glass/flakes не заменить; дно видно с кадра 1 — прогревается само); +1: материалы мостика ART-054 `shaders/ship_surface.gdshader` (карты и выбор по нормали; мостик в кадре с первого кадра; отсеки ART-055 возьмут его же)
+const SHIP_BUDGET := 34   # +1: след винтов ART-063 `shaders/wake.gdshader` (билборды MultiMesh с ячейкой атласа в данных экземпляра; образец flakes — частицы CPUParticles; узел держит прозрачную карточку и прогревается под шторкой); +1: дальняя вода `shaders/far_water.gdshader` (#456: сфера цвета тумана у горизонта вместо фона; в кадре с первого кадра — прогревается сама); +1: стекло окон ART-057 `shaders/window_glass.gdshader` (маска и нормали, освещается плафонами; прежде делило образец glass с брызгами; в кадре с первого кадра); +1: взвесь ART-058 `shaders/marine_snow.gdshader` (атлас 4×4, кадр/размер/движение по семьям в вершинах, освещается; прежде делила образец flakes с илом; в кадре с первого кадра); +1: лёд снизу ART-056 `shaders/ice.gdshader` (карты, шум трещин; прежний StandardMaterial льда делил ключ с другими, этот — свой; лёд в кадре с первого кадра); +1: лучи сквозь лёд ART-052 `shaders/light_shafts.gdshader` (аддитив с маской и глубиной кадра, один MultiMesh, в кадре с первого кадра); +1: процедурный шейдер дна `shaders/seabed.gdshader` (образцом glass/flakes не заменить; дно видно с кадра 1 — прогревается само); +1: материалы мостика ART-054 `shaders/ship_surface.gdshader` (карты и выбор по нормали; мостик в кадре с первого кадра; отсеки ART-055 возьмут его же)
 
 
 func test_same_flags_same_key() -> void:
@@ -13,6 +13,9 @@ func test_same_flags_same_key() -> void:
 	m.cull_mode = BaseMaterial3D.CULL_BACK
 	ok(ShaderKey.of(m) != ShaderKey.of(ShaderKey.glass(Color.RED)), "отсечение граней — другой шейдер")
 	eq(ShaderKey.of(null), "", "нет материала")
+	var tagged := ShaderKey.glass(Color.RED)
+	tagged.set_meta("_gltf_primary_texture_coord", 0)
+	eq(ShaderKey.of(tagged), ShaderKey.of(ShaderKey.glass(Color.RED)), "метаданные шейдер не меняют")
 
 
 func _find(keys: Dictionary, who: String) -> String:
