@@ -65,6 +65,12 @@ func _go() -> void:
 		var dp := DropPanel.new()
 		root.add_child(dp)
 		dp.show_drop(d)
+	if kv.has("weak"):   # weak=1 — плашка «Слабая связь» у гостя (ART-043)
+		var wl := WeakLink.new()
+		wl.update(1.0, NetLink.WEAK_AFTER + 0.1)
+		var wp := DropPanel.new()
+		root.add_child(wp)
+		wp.show_weak(wl)
 	for i in int(kv.get("frames", "8")):
 		await process_frame
 	await RenderingServer.frame_post_draw
