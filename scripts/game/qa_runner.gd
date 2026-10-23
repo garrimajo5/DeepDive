@@ -177,6 +177,8 @@ func _point(what: String, dir: Vector2) -> Vector2:
 			return l.down.c
 		"light":
 			return l.light.c
+		"dive":   # «Погрузиться» в главном меню ART-037
+			return MainMenu.screen_rect("dive", main.get_viewport().get_visible_rect().size).get_center()
 	return main.get_viewport().get_visible_rect().get_center()
 
 
