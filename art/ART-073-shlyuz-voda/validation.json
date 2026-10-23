@@ -1,0 +1,129 @@
+{
+  "maps_bytes": 134341,
+  "normal": {
+    "mode": "RGB",
+    "size": [
+      512,
+      512
+    ],
+    "format": "OpenGL +Y tangent data, linear sampler",
+    "opposite_edges_max_error_255": 0,
+    "max_unit_length_error": 0.0048020036369751384
+  },
+  "rings": {
+    "size": [
+      512,
+      512
+    ],
+    "channels": "R height, A mask; G/B zero",
+    "outer8px_cell_alpha_max": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "native_drawcalls": {
+    "rest": {
+      "after": 132.0,
+      "airlock_t": 1.0,
+      "amplitude": 1.2,
+      "baseline": 131.0,
+      "control": 131.0,
+      "depth": 20.0,
+      "event": "none",
+      "water_y": -1.12000000476837
+    },
+    "rope": {
+      "after": 133.0,
+      "airlock_t": 1.0,
+      "amplitude": 1.2,
+      "baseline": 132.0,
+      "control": 132.0,
+      "depth": 20.0,
+      "event": "enter",
+      "water_y": -1.12000000476837
+    },
+    "eco": {
+      "after": 133.0,
+      "airlock_t": 1.0,
+      "amplitude": 0.75,
+      "baseline": 132.0,
+      "control": 132.0,
+      "depth": 20.0,
+      "event": "enter",
+      "water_y": -1.12000000476837
+    },
+    "return": {
+      "after": 135.0,
+      "airlock_t": 1.0,
+      "amplitude": 1.2,
+      "baseline": 134.0,
+      "control": 134.0,
+      "depth": 20.0,
+      "event": "leave",
+      "water_y": -1.12000000476837
+    },
+    "closed": {
+      "after": 131.0,
+      "airlock_t": 0.0,
+      "amplitude": 1.2,
+      "baseline": 131.0,
+      "control": 131.0,
+      "depth": 20.0,
+      "event": "none",
+      "water_y": -1.12000000476837
+    },
+    "deep": {
+      "after": 119.0,
+      "airlock_t": 1.0,
+      "amplitude": 1.2,
+      "baseline": 118.0,
+      "control": 118.0,
+      "depth": 45.0,
+      "event": "none",
+      "water_y": -1.12000000476837
+    },
+    "phase": {
+      "after": 133.0,
+      "airlock_t": 1.0,
+      "amplitude": 1.2,
+      "baseline": 132.0,
+      "control": 132.0,
+      "depth": 20.0,
+      "event": "enter",
+      "water_y": -1.12000000476837
+    },
+    "moving": {
+      "after": 132.0,
+      "airlock_t": 1.0,
+      "amplitude": 2.26470630570429,
+      "baseline": 131.0,
+      "control": 131.0,
+      "depth": 20.0,
+      "event": "none",
+      "water_y": -1.12000000476837
+    }
+  },
+  "plane_m": [
+    2.2,
+    2.2
+  ],
+  "water_y": -1.12,
+  "new_lights": 0,
+  "additional_bubble_meshes": 0,
+  "reflection_scene_passes": 0,
+  "limit": "Preview shader and sampled events only; phone FPS/full moving traversal not tested"
+}
