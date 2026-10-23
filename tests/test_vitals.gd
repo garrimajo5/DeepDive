@@ -141,8 +141,8 @@ func test_scene_eco_hits_and_drain() -> void:
 	for i in 18:   # 3 с: плафоны мостика и отсеков и прожектор мигают вместе
 		fake.send = [{"type": EcoLink.DRAIN, "by": "Стеклоуст", "units": 3.2}]
 		main.step(1.0 / Vitals.FLICKER_HZ)
-		var k: float = main.bridge.lamps[0].light_energy / BridgeView.LAMP_ENERGY
-		near(main.rooms.lamps[0].light_energy, RoomsView.LAMP_ENERGY * k, 1e-5, "отсеки вместе с мостиком")
+		var k: float = main.bridge.lamps[0].light_energy / CabinLight.of(true)[0].energy
+		near(main.rooms.lamps[0].light_energy, CabinLight.of(false)[0].energy * k, 1e-5, "отсеки вместе с мостиком")
 		near(main.searchlight.spot.light_energy, Searchlight.ENERGY * k, 1e-5, "прожектор вместе с плафонами")
 		seen[snappedf(k, 0.01)] = true
 	ok(seen.has(1.0) and seen.has(Vitals.FLICKER_DIM), "свет то горит, то проваливается: %s" % [seen.keys()])
@@ -151,7 +151,7 @@ func test_scene_eco_hits_and_drain() -> void:
 	main.step(0.3)
 	ok(not Status.join(main.status_parts()).contains("Стеклоуст"), "отпустил — тревога погасла")
 	ok(not main.drain_sound.playing, "шипение смолкло")
-	near(main.bridge.lamps[1].light_energy, BridgeView.LAMP_ENERGY, 1e-6, "свет снова ровный")
+	near(main.bridge.lamps[1].light_energy, CabinLight.of(true)[1].energy, 1e-6, "свет снова ровный")
 	fake.send = [EcoLink.hit("Серпохвост", 1.0, main.helm.pos)]
 	main.step(0.1)
 	near(main.vitals.hull, 100.0, 1e-6, "разрушен — корабль поднят с целым корпусом")
