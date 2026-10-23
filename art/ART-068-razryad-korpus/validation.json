@@ -1,0 +1,20 @@
+{
+  "files_bytes": {
+    "dno.jpg": 202397,
+    "okno.jpg": 226324,
+    "razryad-dugi.png": 43428,
+    "razryad-list.png": 1348823,
+    "t0.jpg": 227550,
+    "t3.jpg": 207918,
+    "t7.jpg": 194529,
+    "t8.jpg": 194215
+  },
+  "atlas_size": [
+    1024,
+    512
+  ],
+  "mode": "L",
+  "fps": 10,
+  "cutoff_seconds": 0.8,
+  "phone_checked": false
+}
