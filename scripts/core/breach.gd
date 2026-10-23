@@ -20,8 +20,12 @@ const SLOW_WATER := 0.2       ## вода выше — идти тяжелее
 const SLOW := 0.55
 const POST_R := 1.0
 ## Щиток сварщика (ART-014, `ekipazh-inzhener.jpg`): свой игрок, пока варит, смотрит сквозь опущенный щиток —
-## экран затемнён цветом тени #0B1C24, искры и свет сварки сквозь него видны.
+## экран затемнён цветом тени #0B1C24, искры и свет сварки сквозь него видны: яркое (самый сильный канал выше
+## VISOR_KNEE.x) затемняется слабее, выше VISOR_KNEE.y — не затемняется и не тонируется (по issue #530 — раньше
+## щиток ровно смешивал весь кадр с тенью, и янтарные искры ART-072 становились бледными и белёсыми).
+## Двойник шейдера `shaders/visor.gdshader` — `visor_pass`.
 const VISOR := Color(0.043, 0.11, 0.141, 0.6)
+const VISOR_KNEE := Vector2(0.75, 0.95)
 ## Струя (BreachView): из отверстия по нормали со скоростью JET_V, чуть вверх (JET_UP), падает с ускорением JET_G.
 const JET_V := 3.6
 const JET_UP := 0.15
@@ -205,3 +209,12 @@ func label() -> String:
 ## Пост у открытой пробоины (id "breach"): где стоять.
 func post_at() -> Vector2:
 	return active.at if active else Vector2(1e6, 1e6)
+
+
+## Цвет пикселя сквозь щиток сварщика (двойник `shaders/visor.gdshader`): тёмное — к тени VISOR с её долей,
+## яркое (искры, вспышка электрода, шов) проходит как есть.
+static func visor_pass(c: Color) -> Color:
+	var l := maxf(c.r, maxf(c.g, c.b))
+	var t := clampf((l - VISOR_KNEE.x) / (VISOR_KNEE.y - VISOR_KNEE.x), 0.0, 1.0)
+	var keep := t * t * (3.0 - 2.0 * t)
+	return c.lerp(Color(VISOR.r, VISOR.g, VISOR.b), VISOR.a * (1.0 - keep))
