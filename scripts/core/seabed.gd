@@ -25,6 +25,26 @@ static func height(x: float, z: float) -> float:
 	return minf(h, TOP)
 
 
+## Высота сетки дна (build_arrays, клетка SIZE / SEGMENTS) под (x, z): та, что видно, — между вершинами линейно по
+## треугольникам клетки (диагональ от (x0 + шаг, z0) к (x0, z0 + шаг)). Вне карты — по ближней клетке.
+static func mesh_height(x: float, z: float) -> float:
+	var step := SIZE / SEGMENTS
+	var half := SIZE / 2.0
+	var i := clampf(floor((x + half) / step), 0.0, SEGMENTS - 1.0)
+	var j := clampf(floor((z + half) / step), 0.0, SEGMENTS - 1.0)
+	var x0 := -half + i * step
+	var z0 := -half + j * step
+	var a := (x - x0) / step
+	var b := (z - z0) / step
+	var h10 := height(x0 + step, z0)
+	var h01 := height(x0, z0 + step)
+	if a + b <= 1.0:
+		var h00 := height(x0, z0)
+		return h00 + (h10 - h00) * a + (h01 - h00) * b
+	var h11 := height(x0 + step, z0 + step)
+	return h11 + (h01 - h11) * (1.0 - a) + (h10 - h11) * (1.0 - b)
+
+
 ## Цвет дна (js/world.js): песок, на крутых склонах скала, пятнами мох, в глубине темнеет. ny — y нормали.
 static func color_at(x: float, y: float, z: float, ny: float) -> Color:
 	var k := clampf((1.0 - ny) * 3.2, 0.0, 1.0)
