@@ -87,6 +87,19 @@ func set_glints(k: float, tint: Color, t: float) -> void:
 		m.set_shader_parameter("glint_time", t)
 
 
+## «Корабль устал» ART-074 (CabinWear): потёки и мокрый пол по сглаженной потере прочности 0…1.
+func set_wear(loss: float) -> void:
+	wear_on(mesh_instance.mesh, loss)
+
+
+## Потеря прочности в материалы ship_surface меша (мостик, отсеки).
+static func wear_on(mesh: Mesh, loss: float) -> void:
+	for i in mesh.get_surface_count():
+		var m := mesh.surface_get_material(i) as ShaderMaterial
+		if m:
+			m.set_shader_parameter("wear_loss", loss)
+
+
 ## Материалы оболочки с картами ART-054 (шейдер ship_surface): пол, стены, потолок.
 func surface_materials() -> Array[ShaderMaterial]:
 	var out: Array[ShaderMaterial] = []
@@ -326,6 +339,7 @@ static func kit_material(paint: int, kits: Dictionary = KITS, dir: String = KIT_
 		m.set_shader_parameter(side + "_metal", k[3])
 		m.set_shader_parameter(side + "_z", Vector2(k[4], k[5]) if k.size() >= 6 else Vector2(-1e6, 1e6))
 	m.set_shader_parameter("relief", true)
+	m.set_shader_parameter("wear_mask", CabinWear.MASK)   # «корабль устал» ART-074, сила — set_wear
 	return m
 
 
