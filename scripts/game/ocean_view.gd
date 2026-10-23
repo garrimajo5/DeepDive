@@ -21,6 +21,9 @@ var snow_mat: ShaderMaterial   # взвесь ART-058: атлас, доли ка
 var shafts: MultiMeshInstance3D   # лучи сквозь трещины льда (ART-052)
 var shafts_mat: ShaderMaterial
 var shaft_list: Array[LightShafts.Shaft] = []
+## Слои воды ART-069 (`WaterLayers`) в материалах дна, льда и дальней воды: сила по уровню ART-044 и по илу.
+var layers_level := WaterLayers.GAIN_NORMAL
+var layers_silt := 0.0
 
 
 func _ready() -> void:
@@ -86,6 +89,7 @@ func _ready() -> void:
 
 	far_wall = _make_far_wall()
 	add_child(far_wall)
+	_init_layers()
 
 	shafts = _make_shafts()
 	add_child(shafts)
@@ -120,6 +124,52 @@ func _process(_dt: float) -> void:
 	var cam := get_viewport().get_camera_3d()
 	if cam:
 		far_wall.global_position = cam.global_position
+		set_layers_camera(cam.global_position)
+
+
+## Материалы со слоями воды ART-069 (`shaders/water_layers.gdshaderinc`).
+func layer_mats() -> Array[ShaderMaterial]:
+	return [seabed_mat, ice_mat, far_mat]
+
+
+## Цвета слоёв — один раз при сборке.
+func _init_layers() -> void:
+	for m in layer_mats():
+		m.set_shader_parameter("layer_ice_color", _lin(WaterLayers.ICE.color))
+		m.set_shader_parameter("layer_thermo_color", _lin(WaterLayers.THERMO.color))
+		m.set_shader_parameter("layer_dust_color", _lin(WaterLayers.DUST.color))
+	_apply_layers_gain()
+
+
+## Цвет в линейный vec3 для шейдера слоёв.
+static func _lin(c: Color) -> Vector3:
+	var l := c.srgb_to_linear()
+	return Vector3(l.r, l.g, l.b)
+
+
+## Высота камеры над дном — для придонной пыли (дно под камерой считаем ровным).
+func set_layers_camera(cam: Vector3) -> void:
+	var floor_y := Seabed.mesh_height(cam.x, cam.z)
+	for m in layer_mats():
+		m.set_shader_parameter("layer_cam_above", maxf(cam.y - floor_y, 0.0))
+		m.set_shader_parameter("layer_floor_y", floor_y)
+
+
+func _apply_layers_gain() -> void:
+	var g := WaterLayers.gain(layers_level, layers_silt)
+	for m in layer_mats():
+		m.set_shader_parameter("layer_gain", g)
+
+
+## «Экономно» (ART-044): слои воды выключены — в шейдере остаётся только база тумана ART-059.
+func set_layers_lite(lite: bool) -> void:
+	set_layers_level(WaterLayers.GAIN_LITE if lite else WaterLayers.GAIN_NORMAL)
+
+
+## Сила слоёв по уровню графики: 0 / 0,6 / 0,9 (`WaterLayers.GAIN_*`).
+func set_layers_level(level: float) -> void:
+	layers_level = level
+	_apply_layers_gain()
 
 
 ## Высота кадра для взвеси: мельче 1,6 px карточка не становится — бледнеет (`marine_snow.gdshader`).
@@ -235,6 +285,11 @@ func apply_water(env: Environment, depth: float, around: Vector3, silt: float = 
 	# ART-059: конечные значения таблицы `Seabed.Water` — без прежних множителей 0,9 / 0,7 / 1,2
 	env.fog_density = Seabed.Water.fog_density(depth) + 0.03 * silt
 	shafts_mat.set_shader_parameter("fog_density", env.fog_density)
+	for m in layer_mats():   # FOG в шейдере заменяет штатный туман — база ART-059 туда же (ART-069)
+		m.set_shader_parameter("layer_base", _lin(fog))
+		m.set_shader_parameter("layer_density", env.fog_density)
+	layers_silt = silt
+	_apply_layers_gain()
 	env.fog_sky_affect = 0.0
 	env.ambient_light_color = Color(0.55, 0.75, 0.8)
 	env.ambient_light_energy = Seabed.Water.ambient(depth)

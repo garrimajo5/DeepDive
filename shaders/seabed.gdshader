@@ -70,6 +70,8 @@ uniform float decal_edge = 0.07;           // Seabed.Marks.EDGE
 uniform vec4 scorch_at[4];                 // x, z мира, поворот, сторона квадрата (м)
 uniform vec4 scorch_k[4];                  // сила 0…1, ячейка свежего (13/14), доля «старого пятна» (15), —
 
+#include "res://shaders/water_layers.gdshaderinc"
+
 varying vec3 w_pos;
 varying vec3 w_nrm;
 
@@ -306,4 +308,5 @@ void fragment() {
 	vec3 bn = cross(wn, tn);
 	wn = normalize(wn + tn * gn.x + bn * gn.y);
 	NORMAL = normalize((VIEW_MATRIX * vec4(wn, 0.0)).xyz);
+	FOG = water_layers_fog(CAMERA_POSITION_WORLD, w_pos, 0.0, TIME);   // слои воды ART-069, точка на дне
 }
