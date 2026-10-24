@@ -36,6 +36,7 @@ func _initialize() -> void:
 	Main.menu = false    # без главного меню ART-037: забег сразу (его проверяет test_main_menu)
 	Main.intro = false   # без облёта с борта в начале забега (его проверяет test_flyby)
 	Main.hints = false   # без подсказок первого забега ART-038 (их проверяет test_tutorial)
+	Main.offer = false   # без предложения «Экономно» ART-044 (его проверяет test_lite_offer)
 	_run.call_deferred()
 
 
