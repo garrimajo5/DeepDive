@@ -1,7 +1,7 @@
 class_name Pause
 extends RefCounted
 ## Пауза одиночного забега по ART-037 (`docs/concept-art/menyu.md`, `menyu-pauza.png`, `menyu-sostoyaniya.png`):
-## системная «Назад» в забеге — «Продолжить», «Новый забег», «Настройки» (погашена до своей части), «Выйти в меню»;
+## системная «Назад» в забеге — «Продолжить», «Новый забег», «Настройки» (`Settings`, возврат в паузу), «Выйти в меню»;
 ## «Новый забег» и «Выйти в меню» — через подтверждение, в нём выделено «Нет». «Назад» закрывает сначала диалог,
 ## потом паузу. Здесь — состояние, кнопки и раскладка без узлов; рисует `scripts/game/pause_panel.gd`
 ## (`main.pause_panel`), шаг — `Main._pause_step`, «Назад» — `Main.back_pressed`. Макет 2400×1080, масштаб и
@@ -52,8 +52,7 @@ const MODES := ["solo", "host", "guest"]
 var open := false
 var ask := ""   ## открытое подтверждение: "new" / "exit" / "leave"; "" — нет
 var mode := "solo"   ## "solo" — пауза, игра стоит; "host" / "guest" — меню сетевого забега, мир идёт
-## «Настройки» — следующей частью ART-037.
-var enabled := {"resume": true, "new": true, "settings": false, "exit": true, "leave": true}
+var enabled := {"resume": true, "new": true, "settings": true, "exit": true, "leave": true}
 
 
 ## Кнопки режима m сверху вниз: [id, подпись].
@@ -141,7 +140,8 @@ func hit(p: Vector2, size: Vector2) -> String:
 
 
 ## Нажатие кнопки id. Возвращает, что сделать игре: "resume" — играть дальше, "new" — новый забег, "exit" — в главное
-## меню, "leave" — гость покидает экипаж (пауза закрыта); "" — ничего (открыто или закрыто подтверждение).
+## меню, "leave" — гость покидает экипаж (пауза закрыта), "settings" — настройки поверх паузы (пауза открыта);
+## "" — ничего (открыто или закрыто подтверждение).
 func press(id: String) -> String:
 	if not open:
 		return ""
@@ -161,6 +161,8 @@ func press(id: String) -> String:
 		"resume":
 			open = false
 			return "resume"
+		"settings":
+			return "settings"
 		"new", "exit", "leave":
 			ask = id
 	return ""

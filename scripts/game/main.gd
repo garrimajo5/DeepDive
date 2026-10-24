@@ -121,6 +121,8 @@ var address_panel: AddressPanel
 var address_client: NetLink.Client   ## попытка входа с экрана адреса; на борту — становится `net_client`
 var pause := Pause.new()   ## пауза одиночного забега ART-037 (системная «Назад»): пока открыта — игра стоит
 var pause_panel: PausePanel
+var settings := Settings.new()   ## настройки ART-037 поверх меню или паузы: громкость, свайп, облёт, сброс сохранения
+var settings_panel: SettingsPanel
 var flyby := Flyby.new()   ## камера с борта: облёт в начале забега, вид при всплытии
 var flyby_cam: Camera3D
 var overlay: TouchOverlay
@@ -317,7 +319,10 @@ func _ready() -> void:
 	if QaRunner.pending():   # прогон тестера — всегда с чистого трюма и без записи
 		save.path = ""
 		address.path = ""
+		settings.path = ""   # и облёт в начале — как в сценарии, а не как у тестера в настройках
 	address.load_last()
+	settings.read()
+	_apply_settings()
 	save.load_into(samples, scanner)
 	_begin_run()
 	samples.changed.connect(save.mark)
@@ -567,7 +572,10 @@ func step(dt: float) -> void:
 		_pause_step()
 		if stop or main_menu.open:
 			return
-		overlay.router.clear()   # палец на кнопке меню не идёт в игру: свой игрок стоит, за постом — без хода
+		if settings.open:   # палец на ползунке настроек держится, но в игру не идёт
+			overlay.router.mute()
+		else:
+			overlay.router.clear()   # палец на кнопке меню не идёт в игру: свой игрок стоит, за постом — без хода
 	if net_client:   # клиент: корабль, реактор и экипаж — из кадров хоста
 		_client_step(dt)
 		return
@@ -1076,6 +1084,10 @@ func open_menu() -> void:
 ## Шаг под меню: касания кнопок. «Погрузиться» — забег с начала (облёт, часы забега), палец с кнопки не идёт в игру.
 func _menu_step(dt: float = 0.0) -> void:
 	var r := overlay.router
+	if settings.open:
+		_settings_step(r)
+		r.end_frame()
+		return
 	if address.open:
 		_address_step(r, dt)
 		r.end_frame()
@@ -1089,7 +1101,74 @@ func _menu_step(dt: float = 0.0) -> void:
 		if what == "crew":
 			open_address()
 			break
+		if what == "settings":
+			open_settings()
+			break
 	r.end_frame()
+
+
+## Настройки ART-037 поверх главного меню (на его фоне) или паузы (над затемнённой сценой); «Назад» вернёт к ним.
+func open_settings() -> void:
+	settings.show()
+	_settings_show()
+	overlay.router.clear()   # палец с кнопки «Настройки» не берёт ползунок
+
+
+func _settings_show() -> void:
+	if settings_panel == null:
+		settings_panel = SettingsPanel.new()
+		add_child(settings_panel)
+	settings_panel.show_settings(settings)
+	if menu_panel:   # над главным меню — его фон без кнопок
+		menu_panel.visible = main_menu.open and not address.open
+		menu_panel.draw.visible = not settings.open
+	if pause_panel:
+		pause_panel.visible = pause.open and not settings.open
+
+
+## Шаг настроек: касания кнопок, палец на ползунке двигает значение; изменения — сразу в игру и в файл
+## (ползунок — когда палец отпущен).
+func _settings_step(r: Touch.Router) -> void:
+	var size := get_viewport().get_visible_rect().size
+	for p in r.taps:
+		var id := settings.hit(p, size)
+		var what := settings.press(id, p, size)
+		if id in ["volume", "swipe"]:
+			_apply_settings()
+			continue
+		_settings_do(what)
+		if what == "back":
+			break
+	if settings.grab != "":
+		var pts := r.points()
+		if pts.is_empty():
+			settings.grab = ""
+			settings.write()
+		elif settings.drag(pts[0], size):
+			_apply_settings()
+	_settings_show()
+
+
+## Что сказали настройки: сохранить и применить, стереть сохранение забега, вернуться.
+func _settings_do(what: String) -> void:
+	match what:
+		"changed":
+			_apply_settings()
+			settings.write()
+		"wipe":
+			save.reset(samples, scanner)
+			say("Сохранение сброшено")
+		"back":
+			settings.write()
+			_settings_show()
+			overlay.router.clear()   # палец с «Назад» не нажимает кнопку меню под ним
+
+
+## Громкость шины Master, чувствительность свайпа; облёт читает `_begin_run`.
+func _apply_settings() -> void:
+	AudioServer.set_bus_volume_db(0, Settings.volume_db(settings.volume))
+	if overlay:
+		overlay.swipe = settings.swipe
 
 
 ## Экран «Войти по адресу» ART-039 поверх главного меню (пока нет сбора экипажа ART-028 — по «Экипаж»).
@@ -1147,6 +1226,10 @@ func _address_do(what: String) -> void:
 func back_pressed() -> void:
 	if warm.active():
 		return
+	if settings.open:   # настройки: сначала подтверждение сброса, потом — назад к меню или паузе
+		_settings_do(settings.back())
+		_settings_show()
+		return
 	if main_menu.open and address.open:   # экран адреса: сначала отмена попытки, потом меню
 		_address_do(address.back())
 		if address_panel:
@@ -1187,7 +1270,13 @@ func _pause_step() -> void:
 	if not pause.stops_world() and (wreck.active() or (net_client != null and drop.blocks())
 			or (net_host == null and net_client == null)):
 		pause.close()
+		settings.close()
+		_settings_show()
 		_pause_show()
+		return
+	if settings.open:
+		_settings_step(r)
+		r.end_frame()
 		return
 	for p in r.taps:
 		var what := pause.press(pause.hit(p, get_viewport().get_visible_rect().size))
@@ -1208,6 +1297,8 @@ func _pause_step() -> void:
 				"leave":
 					_leave_net()
 					_to_menu()
+				"settings":
+					open_settings()
 			break
 		pause_panel.show_pause(pause)
 	r.end_frame()
@@ -1262,6 +1353,9 @@ func _on_destroyed() -> void:
 		return
 	_leave_posts()
 	pause.close()
+	if settings.open:
+		settings.close()
+		_settings_show()
 	if pause_panel:
 		pause_panel.show_pause(pause)
 	wreck.start()
@@ -1316,7 +1410,7 @@ func _restart() -> void:
 
 func _begin_run() -> void:
 	run.begin(time, samples.cargo.size(), scanner.scanned.size(), breach.count)
-	if intro:
+	if intro and settings.intro:
 		flyby.start(Flyby.Kind.START)   # облёт корабля с борта, затем — глаза на мостике
 		say(Flyby.START_MSG)
 

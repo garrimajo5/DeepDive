@@ -31,6 +31,7 @@ class ErrorTrap:
 func _initialize() -> void:
 	SaveGame.default_path = ""   # не читать и не писать сохранение игрока
 	AddressScreen.default_path = ""   # и последний адрес входа ART-039
+	Settings.default_path = ""   # и настройки ART-037
 	Warmup.enabled = false       # без прогрева шейдеров: сценовые тесты считают шаги с первого (test_warmup включает)
 	Main.menu = false    # без главного меню ART-037: забег сразу (его проверяет test_main_menu)
 	Main.intro = false   # без облёта с борта в начале забега (его проверяет test_flyby)

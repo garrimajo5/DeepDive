@@ -40,7 +40,9 @@ func test_back_and_confirm() -> void:
 	eq(p.back(), "pause", "«Назад» — пауза")
 	ok(p.open, "пауза открыта")
 	eq(p.hit(Pause.screen_rect("resume", size).get_center(), size), "resume", "касание «Продолжить»")
-	eq(p.hit(Pause.screen_rect("settings", size).get_center(), size), "", "«Настройки» погашены до своей части")
+	eq(p.hit(Pause.screen_rect("settings", size).get_center(), size), "settings", "касание «Настройки»")
+	eq(p.press("settings"), "settings", "«Настройки» — поверх паузы")
+	ok(p.open, "пауза под настройками открыта")
 	eq(p.press("new"), "", "«Новый забег» — сначала подтверждение")
 	eq(p.ask, "new", "подтверждение нового забега")
 	eq(p.hit(Pause.screen_rect("exit", size).get_center(), size), "", "под подтверждением кнопки паузы не берутся")
@@ -59,6 +61,17 @@ func test_back_and_confirm() -> void:
 	ok(not p.open, "пауза закрыта")
 	p.back()
 	eq(p.back(), "resume", "второй «Назад» закрывает паузу")
+
+
+## Палец на крестовине «вперёд» мимо кнопок паузы (на узком окне кнопки ложатся на крестовину).
+func _pad_point() -> Vector2:
+	var r := main.overlay.router
+	var size := main.get_viewport().get_visible_rect().size
+	for k in [0.7, 0.5, 0.3, 0.1]:
+		var p := r.layout.pad.c + Vector2(0, -r.layout.pad.r * k)
+		if main.pause.hit(p, size) == "":
+			return p
+	return r.layout.pad.c + Vector2(-r.layout.pad.r * 0.7, 0)
 
 
 func _tap(id: String, finger: int) -> void:
@@ -81,7 +94,7 @@ func test_scene_pause_stops_game_then_new_run() -> void:
 	ok(not main.hint.visible, "строки приборов под паузой скрыты")
 	var r := main.overlay.router
 	var t: float = main.run.start["t"]
-	r.begin(1, r.layout.pad.c + Vector2(0, -r.layout.pad.r * 0.7))   # крестовина вперёд — игра стоит
+	r.begin(1, _pad_point())   # крестовина вперёд — игра стоит
 	for i in 30:
 		main.step(1.0 / 30.0)
 	r.end(1)
@@ -227,7 +240,7 @@ func test_scene_host_menu_world_goes_on_then_exit() -> void:
 	ok(main.pause.open and main.pause.mode == "host", "«Назад» — меню забега хоста")
 	ok(not main.overlay.visible, "крестовина скрыта")
 	var r := main.overlay.router
-	r.begin(1, r.layout.pad.c + Vector2(0, -r.layout.pad.r * 0.7))   # крестовина вперёд — своему игроку не идёт
+	r.begin(1, _pad_point())   # крестовина вперёд — своему игроку не идёт
 	var p: Vector3 = main.helm.pos
 	var t: float = main.time
 	for i in 30:

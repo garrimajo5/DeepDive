@@ -183,6 +183,10 @@ func _point(what: String, dir: Vector2) -> Vector2:
 			return MainMenu.screen_rect("dive", main.get_viewport().get_visible_rect().size).get_center()
 		"resume", "new", "exit", "yes", "no":   # пауза ART-037 и её подтверждение
 			return Pause.screen_rect(what, main.get_viewport().get_visible_rect().size).get_center()
+		"settings":   # «Настройки» паузы или главного меню ART-037
+			var size := main.get_viewport().get_visible_rect().size
+			return (Pause.screen_rect("settings", size, main.pause.mode) if main.pause.open
+				else MainMenu.screen_rect("settings", size)).get_center()
 		"crew":   # «Экипаж» в главном меню — экран «Войти по адресу» ART-039
 			return MainMenu.screen_rect("crew", main.get_viewport().get_visible_rect().size).get_center()
 		"join", "last":
