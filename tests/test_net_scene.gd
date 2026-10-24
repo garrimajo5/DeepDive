@@ -196,3 +196,23 @@ func test_guest_picks_route_and_gets_vote() -> void:   # кнопка гостя
 		got[0] = NetSnap.apply_run(ev.get("r") if ev is Dictionary else null, my)
 		return my.done and not got[0].is_empty() and not got[0]["ops"].is_empty()), "мнения ролей — гостю")
 	eq(got[0]["marks"], VoteHolo.votes(got[0]["ops"]), "голосует один — метки по мнениям ролей")
+
+
+func test_guest_pings_sonar_for_all() -> void:   # кнопка гостя у голостола — импульс хоста, кадр везёт его гостю
+	ok(_pump(func() -> bool: return main.crew.size() == 2), "гость на палубе")
+	var m: Crew.Member = main.crew[1]
+	m.place(-1.3, -1.6, 0.0)
+	m.walker.x = -1.3
+	m.walker.z = -1.6
+	main.time = 50.0
+	var n := main.sonar.count
+	var pad := Crew.Pad.new()
+	pad.action = true
+	client.send_pad(pad)
+	ok(_pump(func() -> bool: return main.sonar.count == n + 1), "импульс у хоста от кнопки гостя")
+	var mine := Sonar.new()
+	ok(_pump(func() -> bool:
+		var ev: Variant = frame.get("ev", {})
+		return ev is Dictionary and NetSnap.apply_sonar(ev.get("so"), mine, 0.0)), "импульс хоста — в кадре гостю")
+	eq(mine.count, main.sonar.count, "тот же счёт импульсов")
+	ok(mine.ping_time > -1.0, "волна идёт на часах гостя: %.2f" % mine.ping_time)
