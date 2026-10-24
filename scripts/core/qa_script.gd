@@ -7,7 +7,8 @@ extends RefCounted
 ##   {"do": "press", "what": "action"}               — нажать и отпустить (action, up, down, light;
 ##                                                     dive — «Погрузиться» в главном меню ART-037; в паузе ART-037:
 ##                                                     resume, new, exit, в подтверждении yes / no; crew — «Экипаж»,
-##                                                     journal — «Журнал экспедиции» ART-047 (закрывает back),
+##                                                     journal — «Журнал экспедиции» ART-047 (закрывает back; в нём
+##                                                     jcell0…jcell5 — ячейка вида, jprev / jnext, jclose),
 ##                                                     на экране «Войти по адресу» ART-039: join, last, клавиши
 ##                                                     key0…key9, key., keydel)
 ##   {"do": "back"}                                  — системная «Назад» Android: пауза ART-037 (в паузе — закрыть)
@@ -42,6 +43,7 @@ extends RefCounted
 
 const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "silt", "drain", "hull", "route", "gone", "wreck", "back", "tutorial", "cards", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "new", "exit", "yes", "no", "crew", "journal", "settings", "join", "last",
+	"jcell0", "jcell1", "jcell2", "jcell3", "jcell4", "jcell5", "jprev", "jnext", "jclose",
 	"key0", "key1", "key2", "key3", "key4", "key5", "key6", "key7", "key8", "key9", "key.", "keydel"]
 const PRESS_TIME := 0.15   ## сколько держать кнопку при «press», с
 const FINGER := 900        ## номер пальца для касаний сценария (не пересекается с настоящими)

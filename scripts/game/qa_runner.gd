@@ -205,8 +205,16 @@ func _point(what: String, dir: Vector2) -> Vector2:
 				else MainMenu.screen_rect("settings", size)).get_center()
 		"crew", "journal":   # «Экипаж» (экран «Войти по адресу» ART-039), «Журнал экспедиции» ART-047 в главном меню
 			return MainMenu.screen_rect(what, main.get_viewport().get_visible_rect().size).get_center()
+		"jprev":   # «Журнал экспедиции» ART-047: «Ранее» / «Далее», «Закрыть» карточки
+			return Journal.prev_rect(main.get_viewport().get_visible_rect().size).get_center()
+		"jnext":
+			return Journal.next_rect(main.get_viewport().get_visible_rect().size).get_center()
+		"jclose":
+			return Journal.close_rect(main.get_viewport().get_visible_rect().size).get_center()
 		"join", "last":
 			return AddressScreen.screen_rect(what, main.get_viewport().get_visible_rect().size).get_center()
+	if what.begins_with("jcell"):   # ячейка сетки видов журнала ART-047
+		return Journal.cell_rect(int(what.substr(5)), main.get_viewport().get_visible_rect().size).get_center()
 	if what.begins_with("key"):   # клавиша экрана адреса: key0…key9, key., keydel
 		var k := what.substr(3)
 		for r in AddressPad.KEYS.size():
