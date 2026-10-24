@@ -7,6 +7,9 @@ class_name NetLink
 ## Сообщения: клиент → хост `join` (версия, имя, роль, внешность; надёжно) и `pad` (ввод, счётчики нажатий `n`, «Свет» `nl`;
 ## по порядку, без повторов — счётчик не теряет нажатие при потере пакета); хост → клиент `hello` / `no`
 ## (надёжно) и `f` — кадр (по порядку, без повторов: старый не придёт после нового).
+## Сбор экипажа ART-028 до забега (`LobbyLink`): клиент → хост `lq` — запрос комнаты (`Lobby.press`: роль, готовность;
+## надёжно), хост → клиент `ans` — ответ на свой запрос (отказ «Занято») и `room` — снимок комнаты (`Lobby.pack`,
+## надёжно, по порядку после `hello`). Кадров `f` гость в комнате не получает: места на палубе ещё нет (`Guest.index`).
 
 const PORT := 24680             ## порт хоста по умолчанию (UDP)
 const MAX_CLIENTS := 3          ## хост и три телефона — четыре роли
@@ -119,6 +122,11 @@ class Host:
 						s["light"] = nl > g.lights
 						g.lights = maxi(g.lights, nl)
 						g.pad.apply(s)
+				"lq":   # запрос комнаты сбора экипажа — решает хост (`LobbyLink.serve`)
+					var lg: Guest = guests.get(from)
+					if lg:
+						lg.quiet = 0.0
+						out.append({"k": "room", "guest": lg, "q": str(msg.get("q", "")).left(16)})
 		for id in _left:
 			var g: Guest = guests.get(id)
 			if g:
@@ -147,6 +155,18 @@ class Host:
 		guests[from] = g
 		NetLink._put(peer, from, NetLink.CH_CTRL, true, {"k": "hello", "v": NetSnap.VERSION, "id": from})
 		out.append({"k": "join", "guest": g})
+
+	## Снимок комнаты сбора экипажа всем гостям (надёжно): `Lobby.pack`.
+	func send_room(room: Dictionary) -> void:
+		if peer == null:
+			return
+		for g: Guest in guests.values():
+			NetLink._put(peer, g.id, NetLink.CH_CTRL, true, {"k": "room", "r": room})
+
+	## Ответ гостю id на его запрос комнаты q: why "" — принят, "taken" — роль занята (`Lobby.act`).
+	func answer(id: int, q: String, why: String) -> void:
+		if peer and guests.has(id):
+			NetLink._put(peer, id, NetLink.CH_CTRL, true, {"k": "ans", "q": q, "why": why})
 
 	## Пора ли слать кадр: раз в `NetSnap.SEND_DT` (номер кадра растёт).
 	func due(dt: float) -> bool:
@@ -208,6 +228,8 @@ class Client:
 	var _ev_seq := -1
 	var _eco := PackedFloat32Array()   ## существа рядом, пришедшие отдельным пакетом, — к следующему кадру («eco»)
 	var _eco_seq := -1
+	var _room := {}        ## снимок комнаты сбора экипажа, ещё не отданный (`take_room`)
+	var _answers: Array = []   ## ответы хоста на свои запросы комнаты [[q, why], …] (`take_answers`)
 
 	## Подключиться к хосту по адресу в локальной сети.
 	func join(to: String, at: int = NetLink.PORT, name: String = "", role: int = 0, look: int = 0) -> Error:
@@ -239,6 +261,8 @@ class Client:
 		_ev_seq = -1
 		_eco = PackedFloat32Array()
 		_eco_seq = -1
+		_room = {}
+		_answers.clear()
 		peer.peer_connected.connect(func(pid: int) -> void:
 			if pid == 1:
 				NetLink._put(peer, 1, NetLink.CH_CTRL, true, _info))
@@ -287,6 +311,13 @@ class Client:
 					if state == NetLink.State.JOINED and cs > _eco_seq and msg.get("c") is PackedFloat32Array:
 						_eco_seq = cs
 						_eco = msg["c"]
+				"room":   # снимок комнаты — полное состояние, надёжно и по порядку: важен последний
+					if state == NetLink.State.JOINED and msg.get("r") is Dictionary:
+						_room = msg["r"]
+						quiet = 0.0
+				"ans":
+					if state == NetLink.State.JOINED:
+						_answers.append([str(msg.get("q", "")), str(msg.get("why", ""))])
 		if not newest.is_empty():
 			me = int(newest.get("me", me))
 			if not _ev.is_empty():
@@ -312,6 +343,23 @@ class Client:
 			peer.close()
 			peer = null
 		return newest
+
+	## Свой запрос комнаты сбора экипажа хосту (`Lobby.press`: "role:<i>", "ready", "unready").
+	func send_room(q: String) -> void:
+		if joined() and peer != null and q != "":
+			NetLink._put(peer, 1, NetLink.CH_CTRL, true, {"k": "lq", "q": q})
+
+	## Свежий снимок комнаты от хоста ({} — нового нет); отдаётся один раз.
+	func take_room() -> Dictionary:
+		var r := _room
+		_room = {}
+		return r
+
+	## Ответы хоста на свои запросы с прошлого вызова: [[q, why], …].
+	func take_answers() -> Array:
+		var a := _answers.duplicate()
+		_answers.clear()
+		return a
 
 	## Кадры хоста не идут дольше LOST_AFTER: товарищи у гостя — «Нет связи».
 	func lost() -> bool:
