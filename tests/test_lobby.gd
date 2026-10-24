@@ -226,8 +226,80 @@ func test_panel_draws() -> void:
 	p.show_lobby(l)
 	ok(p.visible)
 	await frames(2)
+	var e := Lobby.new()   # поиск: строки забегов и подключение
+	e.show_entry()
+	var run := RunBeacon.Found.new()
+	run.name = "Лена"
+	run.players = 2
+	run.vacant = [3]
+	e.runs = [run, RunBeacon.Found.new()]
+	e.joining = 0
+	p.show_lobby(e)
+	await frames(2)
+	e.runs = []
+	e.joining = -1
+	p.show_lobby(e)
+	await frames(1)
 	l.open = false
 	p.show_lobby(l)
 	ok(not p.visible, "закрыт — скрыт")
 	p.queue_free()
 	await frames(1)
+
+
+## Поиск забегов ART-028: три кнопки внизу между углами с зазором ≥ 30 px, строки забегов на экране и над кнопками,
+## «Подключиться» внутри строки; заголовок, подпись и кнопки по найденному.
+func test_search_list() -> void:
+	for size: Vector2 in SIZES:
+		var screen := Rect2(Vector2.ZERO, size)
+		for i in Lobby.RUN_ROWS:
+			var row := Lobby.rect_to_screen(Lobby.run_rect(i), size)
+			ok(screen.encloses(row), "строка забега %d на экране" % i)
+			ok(row.encloses(Lobby.screen_rect("join%d" % i, size)), "«Подключиться» внутри строки")
+	ok(Lobby.run_rect(Lobby.RUN_ROWS - 1).end.y + 30.0 <= Lobby.NEW.position.y, "строки над кнопками")
+	ok(Lobby.RUN_ROW.position.y >= Lobby.LIST_HEAD_AT.y + Lobby.ROLE_PX, "заголовок над строками")
+	var bottom: Array[Rect2] = [Lobby.NEW, Lobby.BY_ADDR, Lobby.REFRESH]
+	for k in bottom.size():
+		ok(bottom[k].position.x >= 360.0 and bottom[k].end.x <= 2040.0, "низ — между углами")
+		ok(bottom[k].size.y >= 96.0)
+		if k > 0:
+			ok(bottom[k].position.x - bottom[k - 1].end.x >= 30.0, "между кнопками ≥ 30 px")
+	ok(Lobby.JOIN.size.y >= 96.0)
+	var l := Lobby.new()
+	l.show_entry()
+	l.searching = true
+	eq(l.entry_head(), "Ищем забеги…")
+	eq(l.entry_sub(), "Одна сеть Wi-Fi · ищем забеги…")
+	l.searching = false
+	eq(l.entry_head(), "Никого нет")
+	ok(not l.enabled("join0"))
+	var a := RunBeacon.Found.new()
+	a.name = "Лена"
+	a.players = 2
+	a.vacant = [2, 3]
+	var b := RunBeacon.Found.new()
+	b.name = "Игорь"
+	b.players = 4
+	l.runs = [a, b]
+	eq(l.entry_head(), "Найдено 2 забега")
+	eq(l.entry_sub(), "Одна сеть Wi-Fi · выберите забег")
+	ok(l.enabled("join0") and not l.enabled("join1"), "полный забег не открыть")
+	eq(l.join_text(1), "Мест нет")
+	var size := Vector2(1600, 720)
+	eq(l.hit(l.rect("join0", size).get_center(), size), "join0")
+	eq(l.hit(l.rect("refresh", size).get_center(), size), "refresh")
+	eq(l.press("refresh"), "refresh")
+	eq(l.press("search"), "refresh", "«Подключиться» вверху — поиск заново")
+	eq(l.press("join0"), "join")
+	eq(l.joining, 0)
+	eq(l.join_text(0), "Подключаемся…")
+	for id: String in ["new", "address", "refresh", "create", "search", "join0"]:
+		ok(not l.enabled(id), "%s ждёт, пока идёт подключение" % id)
+	l.joining = -1
+	l.why = "full"
+	eq(l.entry_head(), "Экипаж полон", "отказ хоста — вместо заголовка")
+	l.press("refresh")
+	eq(l.entry_head(), "Найдено 2 забега", "новый поиск снимает причину")
+	l.runs = [a, b, a, b]
+	eq(l.shown_runs(), Lobby.RUN_ROWS)
+	ok(not l.enabled("join3"))

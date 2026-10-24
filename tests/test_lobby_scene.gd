@@ -6,6 +6,7 @@ extends TestCase
 const PORT := 24760
 const DT := 1.0 / 30.0
 const PUMP := 150
+const FIND_PORT := PORT + 9   ## маяки забегов в тесте — на 127.0.0.1 сюда
 var main: Main
 var host: NetLink.Host
 var client: NetLink.Client
@@ -22,6 +23,9 @@ func after() -> void:
 			main.net_client.stop()
 		if main.lobby_client:
 			main.lobby_client.stop()
+		if main.lobby_join:
+			main.lobby_join.stop()
+		main.finder.stop()
 		if main.net_host:
 			main.net_host.stop()
 		main.queue_free()
@@ -36,6 +40,7 @@ func _main() -> void:
 	Main.menu = true
 	main = load("res://scenes/main.tscn").instantiate()
 	main.lobby_port = PORT
+	main.finder.port = FIND_PORT
 	tree.root.add_child(main)
 	await frames(2)
 
@@ -73,11 +78,19 @@ func test_entry_and_back() -> void:
 	ok(main.lobby.open and main.lobby.entry, "«Экипаж» — вход сбора")
 	ok(main.lobby_panel.visible and not main.menu_panel.visible, "вход вместо меню")
 	ok(main.lobby.enabled("new") and main.lobby.enabled("address") and main.lobby.enabled("create"))
-	ok(not main.lobby.enabled("search"), "«Подключиться» погашена до поиска забегов")
-	eq(main.lobby.entry_head(), "Кооп-забег")
+	ok(main.lobby.enabled("search") and main.lobby.enabled("refresh"), "«Подключиться» и «Обновить список» — поиск")
+	ok(main.finder.udp != null, "вход слушает маяки")
+	eq(main.lobby.entry_head(), "Ищем забеги…")
+	for i in int(RunBeacon.SEARCH_TIME / DT) + 2:
+		main.step(DT)
+	eq(main.lobby.entry_head(), "Никого нет", "поиск завершён, забегов нет")
+	eq(main.lobby.entry_sub(), "Одна сеть Wi-Fi · поиск завершён")
+	_tap(Lobby.screen_rect("refresh", _size()).get_center())
+	eq(main.lobby.entry_head(), "Ищем забеги…", "«Обновить список» — снова ищем")
 	main.back_pressed()
 	ok(not main.lobby.open and main.menu_panel.visible, "«Назад» — меню")
 	ok(main.main_menu.open)
+	ok(main.finder.udp == null, "в меню маяки не слушаем")
 
 
 func test_host_room_and_start() -> void:
@@ -225,3 +238,66 @@ func test_host_room_beacon() -> void:
 	_tap(main.lobby.rect("leave", _size()).get_center())
 	ok(main.beacon.udp == null, "«Назад» хоста — маяк молчит")
 	f.stop()
+
+
+## Забег из списка: маяк хоста в сети — строка «Забег «Лена»», «Подключиться» — гость в его комнате.
+func test_join_from_list() -> void:
+	host = NetLink.Host.new()
+	eq(host.start(PORT + 3), OK)
+	room = Lobby.new()
+	room.host("Лена", "127.0.0.1")
+	room.open = true
+	room.players[0].role = Crew.Role.PILOT
+	var b := RunBeacon.Beacon.new()
+	b.to = "127.0.0.1"
+	b.to_port = FIND_PORT
+	eq(b.start(), OK)
+	await _main()
+	_tap(MainMenu.screen_rect("crew", _size()).get_center())
+	var found := false
+	for i in PUMP:
+		b.step(DT, room, PORT + 3)
+		main.step(DT)
+		if main.lobby.runs.size() == 1:
+			found = true
+			break
+		OS.delay_msec(2)
+	ok(found, "забег в списке")
+	eq(main.lobby.entry_head(), "Найден 1 забег")
+	eq(main.lobby.entry_sub(), "Одна сеть Wi-Fi · выберите забег")
+	ok(main.lobby.enabled("join0") and not main.lobby.enabled("join1"))
+	_tap(main.lobby.rect("join0", _size()).get_center())
+	ok(main.lobby_join != null, "подключаемся")
+	eq(main.lobby.join_text(0), "Подключаемся…")
+	ok(not main.lobby.enabled("new") and not main.lobby.enabled("join0"), "во время попытки кнопки ждут")
+	ok(_pump(func() -> bool: return main.lobby_client != null and main.lobby.players.size() == 2), "гость в комнате")
+	ok(not main.lobby.entry and not main.lobby.is_host())
+	eq(main.lobby.host_name(), "Лена")
+	ok(main.finder.udp == null, "в комнате маяки не слушаем")
+	b.stop()
+
+
+## Хост не ответил на подключение из списка — причина вместо заголовка, список снова живой; «Назад» отменяет попытку.
+func test_join_from_list_no_answer() -> void:
+	await _main()
+	_tap(MainMenu.screen_rect("crew", _size()).get_center())
+	var info := {"k": "run", "v": NetSnap.VERSION, "name": "Игорь", "n": 1, "free": [1, 2, 3], "port": PORT + 4}
+	main.finder.take(info, "127.0.0.1")
+	main.step(DT)
+	_tap(main.lobby.rect("join0", _size()).get_center())
+	ok(main.lobby_join != null)
+	main.back_pressed()
+	ok(main.lobby_join == null and main.lobby.open and main.lobby.entry, "«Назад» — попытка отменена, поиск открыт")
+	eq(main.lobby.joining, -1)
+	ok(main.lobby.enabled("join0"), "можно снова")
+	_tap(main.lobby.rect("join0", _size()).get_center())
+	var c: NetLink.Client = main.lobby_join
+	ok(c != null)
+	for i in PUMP:
+		main.finder.take(info, "127.0.0.1")   # маяк ещё идёт, а хост молчит
+		main.step(1.0 / 10.0)
+		if main.lobby_join == null:
+			break
+	ok(main.lobby_join == null, "попытка кончилась")
+	eq(main.lobby.entry_head(), "Хост не отвечает")
+	ok(main.lobby.enabled("join0"), "список снова живой")

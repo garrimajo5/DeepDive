@@ -10,9 +10,10 @@ extends RefCounted
 ## комнаты хоста (`pack` / `unpack`). Макет 2400×1080 вписан в экран по центру (`scale`), текст не растягивается.
 ## У хоста — по ART-039 (`vhod-po-adresu.md`, `vhod-po-adresu-host.png`): «Ваш адрес» крупно над ролями (`address`,
 ## `address_text`), «Назад» вверху вместо «Создать забег» / «Подключиться», строки и кнопки ниже на `SHIFT` (`dy`).
-## Вход (`entry`, по «Экипаж» из меню, пока нет поиска забегов): по макету «В сети никого нет» — «Создать забег»
-## и «По адресу» на месте «Обновить список» (ART-039), «Подключиться» вверху погашена до поиска; итог прошлой
-## попытки — `why` вместо заголовка.
+## Вход (`entry`, по «Экипаж» из меню) — поиск забегов по листу ART-028: найденные маяки (`runs` от
+## `RunBeacon.Finder`) строками «Забег «Лена» · 2 / 4 · свободны И / Б» с «Подключиться» (`join<i>`), пусто —
+## «Ищем забеги…» / «Никого нет»; внизу «Создать забег», «По адресу» (ART-039) и «Обновить список»; «Подключиться»
+## вверху — тот же поиск заново. Итог прошлой попытки (`why`) — вместо заголовка.
 
 const W := 2400.0
 const H := 1080.0
@@ -61,16 +62,26 @@ const ADDR_HINT_PX := 30.0
 const NO_ADDR := "Нет адреса сети"
 
 ## Вход (`entry`): места по листу состояний ART-028, «02 · В сети никого нет».
-const ENTRY_SUB := "Одна сеть Wi-Fi · создайте забег или войдите по адресу"
-const ENTRY_HEAD := "Кооп-забег"
+const ENTRY_SUB := {"search": "Одна сеть Wi-Fi · ищем забеги…", "found": "Одна сеть Wi-Fi · выберите забег",
+	"none": "Одна сеть Wi-Fi · поиск завершён"}
 const ENTRY_HEAD_Y := 410.0          ## центр строки заголовка
 const ENTRY_LINES := ["Подключитесь к одной сети Wi-Fi.", "Один создаёт забег, остальные входят по адресу."]
 const ENTRY_LINE_Y := 506.0          ## центр первой строки; следующая ниже на ENTRY_LINE_STEP
 const ENTRY_LINE_STEP := 66.0
 const ENTRY_CX := 1192.0             ## ось текста — между нижними кнопками
-const NEW := Rect2(512, 800, 660, 112)       ## «Создать забег» (главное действие)
-const BY_ADDR := Rect2(1211, 800, 660, 112)  ## «По адресу» — на месте «Обновить список»
-## Итог прошлой попытки на входе (`why`).
+const NEW := Rect2(472, 800, 460, 112)       ## «Создать забег» (главное действие, пока список пуст)
+const BY_ADDR := Rect2(962, 800, 460, 112)   ## «По адресу» — между «Создать забег» и «Обновить список» (ART-039)
+const REFRESH := Rect2(1452, 800, 460, 112)  ## «Обновить список»
+## Список найденных забегов (лист ART-028 «01 · Поиск: забеги найдены»): заголовок, строки, «Подключиться».
+const LIST_HEAD_AT := Vector2(400, 262)      ## «Найдено 2 забега» — левый край и верх глифов
+const RUN_ROW := Rect2(380, 330, 1640, 124)  ## строка забега 0; следующие ниже на RUN_STEP
+const RUN_STEP := 140.0
+const RUN_ROWS := 3                          ## больше в экран не входит (до кнопок внизу)
+const JOIN := Rect2(1600, 340, 380, 104)     ## «Подключиться» в строке 0
+const RUN_TITLE_PX := 34.0
+const RUN_LINE_PX := 29.0
+const LIST_NOTE := "Не нашли забег? Узнайте адрес у хоста."
+## Итог прошлой попытки на входе (`why`): свои и отказы хоста `NetLink.WHY` («Хост не отвечает», «Экипаж полон»…).
 const WHY := {"port": "Забег не открылся: сеть занята", "lost": "Связь с хостом потеряна"}
 
 ## Палитра ART-028 (как `MainMenu`), красного нет.
@@ -101,7 +112,10 @@ var started := false
 var refused := -1              ## роль, в которой отказал хост (своя попытка) — «Занято» и подсказка; −1 — нет
 var address := ""              ## у хоста: свой адрес в локальной сети ("" — нет сети)
 var entry := false             ## вход: «Создать забег» / «По адресу» (комнаты ещё нет)
-var why := ""                  ## на входе: чем кончилась прошлая попытка (ключ `WHY`), "" — ничего
+var why := ""                  ## на входе: чем кончилась прошлая попытка (ключ `WHY` / `NetLink.WHY`), "" — ничего
+var runs: Array = []           ## на входе: найденные забеги (`RunBeacon.Found`), ставит Main из `Finder`
+var searching := false         ## на входе: поиск ещё идёт («Ищем забеги…»)
+var joining := -1              ## на входе: строка забега, к которому идёт подключение; −1 — нет
 
 
 ## Комната хоста: хост — первый игрок; addr — свой адрес для гостей (`local_address`).
@@ -120,6 +134,7 @@ func show_entry(w := "") -> void:
 	open = true
 	entry = true
 	why = w
+	joining = -1
 	players.clear()
 	started = false
 	refused = -1
@@ -138,9 +153,35 @@ func guest() -> void:
 	address = ""
 
 
-## Заголовок входа: итог прошлой попытки или «Кооп-забег».
+## Заголовок входа: итог прошлой попытки, «Найдено 2 забега», «Ищем забеги…» или «Никого нет».
 func entry_head() -> String:
-	return WHY.get(why, ENTRY_HEAD)
+	if why != "":
+		return WHY.get(why, NetLink.WHY.get(why, "Нет ответа"))
+	var n := runs.size()
+	if n > 0:
+		return RunBeacon.found_text(n)
+	return "Ищем забеги…" if searching else "Никого нет"
+
+
+## Подзаголовок входа: ищем / выберите забег / поиск завершён.
+func entry_sub() -> String:
+	return ENTRY_SUB["found" if not runs.is_empty() else ("search" if searching else "none")]
+
+
+## Сколько строк забегов на экране.
+func shown_runs() -> int:
+	return mini(runs.size(), RUN_ROWS)
+
+
+static func run_rect(i: int) -> Rect2:
+	return Rect2(RUN_ROW.position + Vector2(0.0, RUN_STEP * i), RUN_ROW.size)
+
+
+## Подпись «Подключиться» в строке i: идёт подключение — «Подключаемся…», мест нет — «Мест нет».
+func join_text(i: int) -> String:
+	if i == joining:
+		return "Подключаемся…"
+	return "Подключиться" if (runs[i] as RunBeacon.Found).open() else "Мест нет"
 
 
 ## Адрес хоста из адресов устройства (локальная сеть IPv4, `AddressPad.host_address`).
@@ -384,7 +425,12 @@ func enabled(id: String) -> bool:
 	if not open or started:
 		return false
 	if entry:
-		return id in ["create", "new", "address"]
+		if joining >= 0:   # идёт подключение — ждём ответа хоста («Назад» отменяет)
+			return false
+		if id.begins_with("join"):
+			var i := int(id.substr(4))
+			return i < shown_runs() and (runs[i] as RunBeacon.Found).open()
+		return id in ["create", "search", "new", "address", "refresh"]
 	var m := mine()
 	if id.begins_with("pick"):
 		return can_pick(int(id.substr(4)))
@@ -402,9 +448,11 @@ func enabled(id: String) -> bool:
 
 ## Кнопка id на экране; shift — сдвиг строк и нижних кнопок (`dy()`), верхние кнопки не сдвигаются.
 static func screen_rect(id: String, size: Vector2, shift := 0.0) -> Rect2:
+	if id.begins_with("join"):
+		return rect_to_screen(Rect2(JOIN.position + Vector2(0.0, RUN_STEP * int(id.substr(4))), JOIN.size), size)
 	if id.begins_with("pick"):
 		return rect_to_screen(pick_rect(int(id.substr(4)), shift), size)
-	var r: Rect2 = {"create": CREATE, "search": SEARCH, "new": NEW, "address": BY_ADDR, "leave": LEAVE, "ready": READY, "start": START, "back": BACK,
+	var r: Rect2 = {"create": CREATE, "search": SEARCH, "new": NEW, "address": BY_ADDR, "refresh": REFRESH, "leave": LEAVE, "ready": READY, "start": START, "back": BACK,
 		"note": NOTE}.get(id, Rect2())
 	if id in ["ready", "start", "back", "note"]:
 		r.position.y += shift
@@ -418,9 +466,11 @@ func rect(id: String, size: Vector2) -> Rect2:
 
 ## Какая работающая кнопка под касанием p ("" — никакая).
 func hit(p: Vector2, size: Vector2) -> String:
-	var ids := ["create", "new", "address", "leave", "ready", "start", "back"]
+	var ids := ["create", "search", "new", "address", "refresh", "leave", "ready", "start", "back"]
 	for i in SEATS:
 		ids.append("pick%d" % i)
+	for i in RUN_ROWS:
+		ids.append("join%d" % i)
 	for id: String in ids:
 		if enabled(id) and rect(id, size).has_point(p):
 			return id
@@ -432,9 +482,17 @@ func hit(p: Vector2, size: Vector2) -> String:
 func press(id: String) -> String:
 	if not enabled(id):
 		return ""
-	if entry:   # вход: «Создать забег» (вверху или внизу) — комната хоста, «По адресу» — экран адреса ART-039
-		why = ""
-		return "address" if id == "address" else "create"
+	if entry:   # вход: «Создать забег» (вверху или внизу) — комната хоста, «По адресу» — экран адреса ART-039,
+		why = ""   # «Обновить список» / «Подключиться» вверху — поиск заново, «Подключиться» в строке — вход в забег
+		if id.begins_with("join"):
+			joining = int(id.substr(4))
+			return "join"
+		match id:
+			"address":
+				return "address"
+			"search", "refresh":
+				return "refresh"
+		return "create"
 	var q := ""
 	if id.begins_with("pick"):
 		q = "role:" + id.substr(4)

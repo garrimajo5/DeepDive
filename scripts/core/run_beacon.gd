@@ -177,7 +177,12 @@ class Finder:
 		var n := runs.size()
 		if n == 0:
 			return "Ищем забеги…" if not done() else "Никого нет"
-		return ("Найден %d " if n % 10 == 1 and n % 100 != 11 else "Найдено %d ") % n + RunBeacon.plural(n)
+		return RunBeacon.found_text(n)
+
+
+## «Найден 1 забег», «Найдено 2 забега», «Найдено 5 забегов».
+static func found_text(n: int) -> String:
+	return ("Найден %d " if n % 10 == 1 and n % 100 != 11 else "Найдено %d ") % n + plural(n)
 
 
 ## «забег», «забега», «забегов».

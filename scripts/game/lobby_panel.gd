@@ -1,6 +1,7 @@
 class_name LobbyPanel
 extends CanvasLayer
-## Экран сбора экипажа ART-028 (`Lobby`) поверх затемнённой сцены мостика: заголовок, подзаголовок, «Создать забег»
+## Экран сбора экипажа ART-028 (`Lobby`) поверх затемнённой сцены мостика: вход — поиск забегов (строки найденных,
+## «Создать забег», «По адресу», «Обновить список»); комната — заголовок, подзаголовок, «Создать забег»
 ## и «Подключиться» (в комнате погашены), четыре строки ролей, строка ожидания, «Готов» / «Отменить готовность»,
 ## «Начать погружение» (у гостя — «Ждём начала от хоста»), «Назад к списку» при занятой роли. Состояние и места —
 ## `Lobby`; слой как у экрана адреса (91), под заставкой прогрева (100). Статус не только цветом: галочка, кольцо,
@@ -82,20 +83,55 @@ func _draw_screen() -> void:
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, roundi(px), MainMenu.SOFT)
 
 
-## Вход по «Экипаж» (лист ART-028, «В сети никого нет»): «Создать забег» / «По адресу», «Подключиться» погашена.
+## Вход по «Экипаж» — поиск забегов (лист ART-028): найденные забеги строками с «Подключиться», пусто — «Ищем
+## забеги…» / «Никого нет» с пояснением; внизу «Создать забег», «По адресу», «Обновить список».
 func _entry(font: Font, size: Vector2, s: float) -> void:
 	_text(bold, Lobby.TITLE, Lobby.to_screen(Lobby.TITLE_AT, size), Lobby.TITLE_PX * s, MainMenu.INK)
-	_text(font, Lobby.ENTRY_SUB, Lobby.to_screen(Lobby.SUB_AT, size), Lobby.SUB_PX * s, MainMenu.SOFT)
+	_text(font, lobby.entry_sub(), Lobby.to_screen(Lobby.SUB_AT, size), Lobby.SUB_PX * s, MainMenu.SOFT)
 	draw.draw_line(Lobby.to_screen(Vector2(Lobby.TITLE_AT.x, Lobby.RULE_Y), size),
 		Lobby.to_screen(Vector2(Lobby.SEARCH.end.x, Lobby.RULE_Y), size), Color(MainMenu.EDGE, 0.8), maxf(1.0, 2.0 * s))
-	_button(bold, lobby.rect("create", size), "Создать забег", s, "plain")
-	_button(bold, lobby.rect("search", size), "Подключиться", s, "off")
-	_centered(bold, lobby.entry_head(), Lobby.ENTRY_HEAD_Y, Lobby.TITLE_PX * s, MainMenu.INK, size)
-	for i in Lobby.ENTRY_LINES.size():
-		_centered(font, Lobby.ENTRY_LINES[i], Lobby.ENTRY_LINE_Y + Lobby.ENTRY_LINE_STEP * i, 32.0 * s, MainMenu.INK,
-			size)
-	_button(bold, lobby.rect("new", size), "Создать забег", s, "main")
-	_button(bold, lobby.rect("address", size), "По адресу", s, "plain")
+	var busy := lobby.joining >= 0
+	_button(bold, lobby.rect("create", size), "Создать забег", s, "off" if busy else "plain")
+	_button(bold, lobby.rect("search", size), "Подключиться", s, "off" if busy else "main")
+	var n := lobby.shown_runs()
+	if n == 0:
+		_centered(bold, lobby.entry_head(), Lobby.ENTRY_HEAD_Y, Lobby.TITLE_PX * s, MainMenu.INK, size)
+		for i in Lobby.ENTRY_LINES.size():
+			_centered(font, Lobby.ENTRY_LINES[i], Lobby.ENTRY_LINE_Y + Lobby.ENTRY_LINE_STEP * i, 32.0 * s, MainMenu.INK,
+				size)
+	else:
+		var hr := Lobby.rect_to_screen(Rect2(Lobby.RUN_ROW.position.x, Lobby.LIST_HEAD_AT.y - 14.0, 760.0, 62.0), size)
+		draw.draw_rect(hr, Color(MainMenu.DARK, 0.78))   # заголовок не теряется на табло тревог за окном
+		_text(bold, lobby.entry_head(), Lobby.to_screen(Lobby.LIST_HEAD_AT, size), Lobby.ROLE_PX * s, MainMenu.INK)
+		for i in n:
+			_run_row(font, i, size, s)
+		if n < Lobby.RUN_ROWS:
+			var y := Lobby.run_rect(n).position.y + 30.0
+			_text(font, Lobby.LIST_NOTE, Lobby.to_screen(Vector2(Lobby.LIST_HEAD_AT.x, y), size), 30.0 * s, MainMenu.SOFT)
+	# пока список пуст, главное действие — создать свой забег
+	_button(bold, lobby.rect("new", size), "Создать забег", s, "off" if busy else ("main" if n == 0 else "plain"))
+	_button(bold, lobby.rect("address", size), "По адресу", s, "off" if busy else "plain")
+	_button(bold, lobby.rect("refresh", size), "Обновить список", s, "off" if busy else "plain")
+
+
+## Строка найденного забега: «Забег «Лена»», под ним «2 / 4 · свободны И / Б», справа «Подключиться».
+func _run_row(font: Font, i: int, size: Vector2, s: float) -> void:
+	var run: RunBeacon.Found = lobby.runs[i]
+	var r := Lobby.rect_to_screen(Lobby.run_rect(i), size)
+	var own := i == lobby.joining
+	draw.draw_style_box(_box(s, MainMenu.PANEL, MainMenu.MAIN if own else MainMenu.EDGE, 3.0 if own else 2.0), r)
+	var x := r.position.x + 40.0 * s
+	var tpx := Lobby.RUN_TITLE_PX * s
+	var lpx := Lobby.RUN_LINE_PX * s
+	var w := (Lobby.JOIN.position.x - Lobby.RUN_ROW.position.x - 80.0) * s
+	draw.draw_string(bold, Vector2(x, r.position.y + 22.0 * s + Splash.CAP_H * tpx), run.title(),
+		HORIZONTAL_ALIGNMENT_LEFT, w, roundi(tpx), MainMenu.INK)
+	draw.draw_string(font, Vector2(x, r.position.y + 74.0 * s + Splash.CAP_H * lpx), run.line(),
+		HORIZONTAL_ALIGNMENT_LEFT, w, roundi(lpx), MainMenu.SOFT)
+	var id := "join%d" % i
+	var on := lobby.enabled(id)
+	_button(bold, lobby.rect(id, size), lobby.join_text(i), s, "plain" if on else ("main" if own else "off"),
+		MainMenu.MAIN)
 
 
 ## Строка по оси входа `Lobby.ENTRY_CX`, cy — центр строки в макете.
