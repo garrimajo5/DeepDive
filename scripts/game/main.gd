@@ -133,6 +133,7 @@ var lobby := Lobby.new()   ## сбор экипажа ART-028 по «Экипа�
 var lobby_panel: LobbyPanel
 var lobby_client: NetLink.Client   ## гость в комнате хоста (`LobbyLink.take`); старт — становится `net_client`
 var lobby_port := NetLink.PORT   ## порт «Создать забег» (тесты ставят свой)
+var beacon := RunBeacon.Beacon.new()   ## маяк забега в сети, пока у хоста открыта комната (поиск забегов ART-028)
 var pause := Pause.new()   ## пауза одиночного забега ART-037 (системная «Назад»): пока открыта — игра стоит
 var pause_panel: PausePanel
 var settings := Settings.new()   ## настройки ART-037 поверх меню или паузы: громкость, свайп, облёт, сброс сохранения
@@ -1302,6 +1303,7 @@ func _lobby_step(r: Touch.Router, dt: float) -> void:
 			_lobby_back(true)
 			return
 	if net_host:
+		beacon.step(dt, lobby, lobby_port)
 		LobbyLink.serve(lobby, net_host, net_host.poll(dt))
 		if lobby.started:
 			_lobby_start_host()
@@ -1329,6 +1331,7 @@ func _lobby_create() -> void:
 		return
 	lobby.host("", Lobby.local_address())
 	lobby.open = true
+	beacon.start()   # нет сети — маяка нет, вход по адресу работает
 	_lobby_show()
 
 
@@ -1338,6 +1341,7 @@ func _lobby_back(pressed := false) -> void:
 	var in_room := not lobby.entry
 	if not pressed:
 		lobby.back()
+	beacon.stop()
 	if net_host:
 		net_host.stop()
 		net_host = null
@@ -1355,6 +1359,7 @@ func _lobby_back(pressed := false) -> void:
 ## Хост: «Начать погружение» принято — роли гостей из комнаты (`LobbyLink.seat`), свой — тоже, гости на палубе,
 ## забег с начала. Снимок со стартом уже ушёл всем (`LobbyLink.host_press`).
 func _lobby_start_host() -> void:
+	beacon.stop()   # забег начался — в списках гостей он больше не нужен
 	LobbyLink.seat(lobby, net_host)
 	var mine := lobby.mine()
 	if mine and mine.role >= 0:
