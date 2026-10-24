@@ -203,8 +203,8 @@ func _point(what: String, dir: Vector2) -> Vector2:
 			var size := main.get_viewport().get_visible_rect().size
 			return (Pause.screen_rect("settings", size, main.pause.mode) if main.pause.open
 				else MainMenu.screen_rect("settings", size)).get_center()
-		"crew":   # «Экипаж» в главном меню — экран «Войти по адресу» ART-039
-			return MainMenu.screen_rect("crew", main.get_viewport().get_visible_rect().size).get_center()
+		"crew", "journal":   # «Экипаж» (экран «Войти по адресу» ART-039), «Журнал экспедиции» ART-047 в главном меню
+			return MainMenu.screen_rect(what, main.get_viewport().get_visible_rect().size).get_center()
 		"join", "last":
 			return AddressScreen.screen_rect(what, main.get_viewport().get_visible_rect().size).get_center()
 	if what.begins_with("key"):   # клавиша экрана адреса: key0…key9, key., keydel
