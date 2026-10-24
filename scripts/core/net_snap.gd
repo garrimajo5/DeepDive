@@ -5,7 +5,7 @@ class_name NetSnap
 
 const SEND_DT := 0.05          ## хост шлёт кадр 20 раз в секунду
 const MAX_BYTES := 1200        ## кадр с четырьмя членами экипажа влезает в один UDP-пакет (MTU 1280 с запасом)
-const VERSION := 12            ## формат кадра и ввода; клиент другой версии не подключается (12 — следы разрядов «z»)
+const VERSION := 13            ## формат кадра и ввода; клиент другой версии не подключается (13 — сонар хоста «so»)
 const NEWS_TIME := 1.0         ## сообщение события едет в кадрах столько секунд (20 кадров — потеря всех почти исключена)
 
 
@@ -146,6 +146,50 @@ static func apply_scorch(v: Variant, sc: Seabed.Scorch, t: float) -> bool:
 	while sc.all.size() > Seabed.Scorch.MAX:
 		sc.all.pop_front()
 	sc.count = n
+	return true
+
+
+## Сонар хоста для гостей (кладётся в события: `events(...)["so"]`): [числа — импульсов за игру `Sonar.count`, возраст
+## импульса, возраст отметок, дальность, завяз ли; байты — отметки по 9 байт: x, y, z в дециметрах (int16) и цвет RGB].
+## Отметки едут только NEWS_TIME после импульса (20 кадров — потеря всех почти исключена; гость берёт их один раз, по
+## новому счёту), дальше — пять чисел. Возраст, а не момент: часы гостя свои.
+static func sonar(so: Sonar, t: float) -> Array:
+	var b := PackedByteArray()
+	if t - so.ping_time < NEWS_TIME and so.blip_alpha(t) > 0.0:
+		b.resize(so.blips.size() * 9)
+		for i in so.blips.size():
+			var p: Vector3 = so.blips[i]["pos"]
+			var c: Color = so.blips[i]["color"]
+			b.encode_s16(i * 9, clampi(roundi(p.x * 10.0), -32768, 32767))
+			b.encode_s16(i * 9 + 2, clampi(roundi(p.y * 10.0), -32768, 32767))
+			b.encode_s16(i * 9 + 4, clampi(roundi(p.z * 10.0), -32768, 32767))
+			b[i * 9 + 6] = c.r8
+			b[i * 9 + 7] = c.g8
+			b[i * 9 + 8] = c.b8
+	return [PackedFloat32Array([so.count, minf(t - so.ping_time, 99.0), minf(t - so.blip_time, 99.0), so.range_m,
+		1.0 if so.jammed else 0.0]), b]
+
+
+## Гость ставит сонар хоста (t — своё время). Меняет только при новом импульсе хоста (другой счёт — и при входе в
+## забег): между импульсами волна и отметки гаснут своими часами. true — пришёл новый импульс.
+static func apply_sonar(v: Variant, so: Sonar, t: float) -> bool:
+	if not (v is Array and v.size() == 2 and v[0] is PackedFloat32Array and v[1] is PackedByteArray):
+		return false
+	var f: PackedFloat32Array = v[0]
+	var b: PackedByteArray = v[1]
+	if f.size() != 5 or b.size() % 9 != 0 or b.size() / 9 > Sonar.MAX_BLIPS:
+		return false
+	if int(f[0]) == so.count:
+		return false
+	so.count = int(f[0])
+	so.ping_time = t - f[1]
+	so.blip_time = t - f[2]
+	so.range_m = f[3]
+	so.jammed = f[4] > 0.5
+	so.blips.clear()
+	for i in range(0, b.size(), 9):
+		so.blips.append({"pos": Vector3(b.decode_s16(i), b.decode_s16(i + 2), b.decode_s16(i + 4)) * 0.1,
+			"species": "", "color": Color8(b[i + 6], b[i + 7], b[i + 8])})
 	return true
 
 

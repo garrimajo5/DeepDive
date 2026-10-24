@@ -18,6 +18,7 @@ var blip_time := -99.0  ## когда сняты нынешние отметки
 var range_m := BASE_RANGE
 var blips: Array[Dictionary] = []   ## {"pos": Vector3, "species": String, "color": Color}
 var jammed := false  ## импульс завяз в иле (Silt): отметок нет до следующего импульса
+var count := 0       ## импульсов за игру: гость сети по нему узнаёт новый импульс хоста (NetSnap.sonar)
 
 
 static func range_for(k: float) -> float:
@@ -36,6 +37,7 @@ func ping(t: float, k: float, jam: bool = false) -> String:
 	if not can_ping(t):
 		return ""
 	ping_time = t
+	count += 1
 	jammed = jam
 	if jam:
 		return "Сонар: импульс"

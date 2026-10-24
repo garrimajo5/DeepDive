@@ -190,25 +190,26 @@ func test_scene_off_in_tests_and_done() -> void:
 	ok(not main.tutorial_panel.visible, "плашки нет")
 
 
-func test_guest_skips_sonar() -> void:   # у гостя сети шага сонара нет: «… / 5», с маршрута — сразу после энергии
+func test_guest_has_sonar_step() -> void:   # импульс гостя идёт хосту — у гостя те же шесть шагов
 	var t := Tutorial.new()
-	t.set_guest(true)
-	eq(t.step_line(), "Первый забег · 1 / 5", "у гостя пять шагов")
+	eq(t.step_line(), "Первый забег · 1 / 6")
 	_pass(t, Tutorial.Ev.SAT)
 	_pass(t, Tutorial.Ev.THRUST)
 	_pass(t, Tutorial.Ev.LIGHT)
-	eq(t.step_line(), "Первый забег · 4 / 5", "энергия — четвёртый")
 	_pass(t, Tutorial.Ev.SHARE)
-	eq(t.target(), "route", "после энергии — маршрут, сонар пропущен")
-	eq(t.step_line(), "Первый забег · 5 / 5")
-	ok(t.note(Tutorial.Ev.ROUTE), "маршрут")
-	ok(t.update(Tutorial.DONE_TIME + 0.01, false) and t.finished(), "пройдено без сонара")
-	var s := Tutorial.new()
-	s.step = 4   # стоял на сонаре в своей игре и вошёл к хосту
-	s.set_guest(true)
-	eq(s.target(), "route", "шаг сонара у гостя сразу пропущен")
-	s.set_guest(false)
-	eq(s.step_line(), "Первый забег · 6 / 6", "в своей игре снова шесть")
+	eq(t.target(), "sonar", "после энергии — сонар")
+	eq(t.step_line(), "Первый забег · 5 / 6")
+	var g := Tutorial.Guest.new()
+	var sh: Array = [2, 2, 2, 2, 2]
+	var dt := 1.0 / 30.0
+	g.update(dt, false, false, "sonar", Vector2.ZERO, false, false, false, sh, -1, 3)
+	eq(g.update(dt, false, false, "sonar", Vector2.ZERO, false, false, false, sh, -1, 4), [],
+		"чужой импульс без своего нажатия — не считается")
+	g.update(dt, false, false, "sonar", Vector2.ZERO, false, true, false, sh, -1, 4)
+	eq(g.update(dt, false, false, "sonar", Vector2.ZERO, false, false, false, sh, -1, 4), [], "ждём кадр хоста")
+	eq(g.update(dt, false, false, "sonar", Vector2.ZERO, false, false, false, sh, -1, 5), [Tutorial.Ev.PING],
+		"кнопка у голостола — в кадре новый импульс хоста")
+	ok(t.note(Tutorial.Ev.PING), "шаг сонара засчитан")
 
 
 func test_guest_events_by_host_frame() -> void:

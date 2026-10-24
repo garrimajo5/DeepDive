@@ -1002,10 +1002,12 @@ func complete_route() -> void:
 		say(run.update(p.x, p.y))
 
 
-## Импульс сонара: сила — доля «Сонар»; существ в этот же шаг сообщит живой мир (EcoLink.NEAR).
-func ping_sonar() -> void:
+## Импульс сонара: сила — доля «Сонар»; существ в этот же шаг сообщит живой мир (EcoLink.NEAR). Голограмма одна на
+## всех (гостям — `NetSnap.sonar`); everyone — нажал товарищ: ответ приборов и ему (`announce`).
+func ping_sonar(everyone: bool = false) -> void:
+	var tell := announce if everyone else say
 	if reactor.k(Reactor.Sys.SONAR) > 0.0 and sonar.can_ping(time) and vitals.energy < Vitals.SONAR_COST:
-		say("Мало энергии: для импульса нужно %d единиц" % int(Vitals.SONAR_COST))
+		tell.call("Мало энергии: для импульса нужно %d единиц" % int(Vitals.SONAR_COST))
 		return
 	var msg := sonar.ping(time, reactor.k(Reactor.Sys.SONAR), silt.inside != null)
 	if msg == "Сонар: импульс":
@@ -1015,7 +1017,7 @@ func ping_sonar() -> void:
 		if silt.jam_ping(time):
 			msg = Silt.JAM_MSG
 	if not msg.is_empty():
-		say(msg)
+		tell.call(msg)
 
 
 ## Разряд по корпусу: живой мир узнаёт о нём в этот же шаг (ShipState.zap, zap_radius).
@@ -1049,7 +1051,7 @@ func _step_eco(dt: float) -> void:
 	scanner.take(events if at_scanner else [])
 	if s.sonar_ping and not sonar.jammed:
 		sonar.take_contacts(events, helm.pos)
-		say("Сонар: контактов %d" % sonar.blips.size())
+		announce("Сонар: контактов %d" % sonar.blips.size())   # отметки на голограмме видят все
 	helm.extra_drag = 0.0   # нет события EcoLink.DRAG — тормоза нет (#270)
 	for e in events:
 		on_eco_event(e)
@@ -1795,6 +1797,9 @@ func mate_action(m: Crew.Member) -> String:
 				announce(run.cycle())
 				return ""
 			m.at_vote = true
+		"sonar":   # импульс хоста — голограмма и отметки у всех (у гостя — по кадру, NetSnap.sonar)
+			ping_sonar(true)
+			return ""
 		_:
 			return ""
 	m.sync_post()
@@ -1882,6 +1887,7 @@ func _net_send(dt: float) -> void:
 		ev["r"] = _net_run()
 		ev["w"] = wreck.t   # шторка «Корпус разрушен» — у всех (ART-036)
 		ev["z"] = NetSnap.scorch(scorch, time)   # следы разрядов на дне — тот же след у гостя
+		ev["so"] = NetSnap.sonar(sonar, time)   # импульс и отметки голограммы — те же у гостя
 		var f := NetSnap.frame(net_host.seq, time, helm, reactor, vitals, light_on, crew, ev)
 		f["eco"] = EcoLink.pack_world(eco.world.agents, eco.world.systems, helm.pos, EcoLink.NET_R,
 			eco.world.time)   # существа и мох рядом — гостям отдельным пакетом
@@ -1925,7 +1931,7 @@ func _enter_client(c: NetLink.Client) -> void:
 	drop.menu_ready = true   # главное меню ART-037 есть: «В меню» в диалоге обрыва связи
 	flyby.stop()   # клиент входит в идущий забег — облёта нет
 	tutorial_guest = Tutorial.Guest.new()
-	tutorial.set_guest(true)   # сонара у гостя нет — шаг пропущен
+	sonar.count = -1   # первый кадр хоста ставит его сонар, даже если счёт импульсов совпал со своим
 	message.clear(Flyby.START_MSG)
 	say(net_client.label())
 
@@ -1985,13 +1991,14 @@ func _client_step(dt: float) -> void:
 	_glints(dt, Wreck.lamps(wreck.t))
 	_wear(dt, Wreck.lamps(wreck.t))
 	silt_view.apply(silt, time, helm.pos, helm.yaw)
+	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0, silt.noise(time))
 	_client_eco(dt, near)
 	visor.visible = me.welding()
 	alarm_board.show_alarms(alarms_on(), time, breach.active)
 	_client_run_view(dt)
 	var live := not (wreck.active() or drop.blocks())   # ввод, который ушёл хосту
 	for ev in tutorial_guest.update(dt, pilot.seated, at_power, near_post, Vector2(r.move) if live else Vector2.ZERO,
-			live and r.light_pressed, live and r.action_pressed, light_on, reactor.share, run.route):
+			live and r.light_pressed, live and r.action_pressed, light_on, reactor.share, run.route, sonar.count):
 		tutorial.note(ev)
 	_tutorial_step(dt)
 	for i in Reactor.Sys.size():
@@ -2067,6 +2074,7 @@ func _client_frame(f: Dictionary) -> void:
 			wreck.follow(float(evd.get("w", -1.0)))
 			if NetSnap.apply_scorch(evd.get("z"), scorch, time):
 				ocean.set_scorch(scorch.uniforms(time))   # разряд хоста у дна или новый забег
+			NetSnap.apply_sonar(evd.get("so"), sonar, time)
 		var rs := NetSnap.apply_run(evd.get("r") if evd is Dictionary else null, run)
 		if not rs.is_empty():   # маршрут хоста уже в run; метки, таймер и итог — для показа
 			votes = rs["marks"]
@@ -2136,7 +2144,6 @@ func _leave_net() -> void:
 	net_client.stop()
 	net_client = null
 	tutorial_guest = null
-	tutorial.set_guest(false)
 	wreck.reset()   # шторка хоста — не своя: одиночный забег без неё
 	_wreck_show()
 	weak.reset()

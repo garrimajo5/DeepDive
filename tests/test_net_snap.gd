@@ -116,6 +116,38 @@ func test_frame_fits_packet() -> void:
 	ok(n <= NetSnap.MAX_BYTES / 2, "события — %d байт" % n)
 
 
+func test_sonar_round_trip() -> void:   # импульс хоста и отметки — у гостя на голограмме, на своих часах
+	var h := Sonar.new()
+	h.ping(100.0, 1.0)
+	var ship := Vector3(10, -40, 95)
+	var ev := []
+	for i in Sonar.MAX_BLIPS:
+		ev.append(EcoLink.near("serpohvost" if i == 0 else "svetlyak", "?", ship + Vector3(i - 16.0, -3.25, 20.0), ship))
+	h.take_contacts(ev, ship)
+	var so := NetSnap.sonar(h, 100.5)
+	var busy := _busy_events()
+	busy["so"] = so
+	var n := NetSnap.bytes(busy)
+	ok(n <= NetSnap.MAX_BYTES, "секунда после импульса: события с 32 отметками — один пакет, %d байт" % n)
+	busy["so"] = NetSnap.sonar(h, 100.0 + NetSnap.NEWS_TIME)
+	ok(NetSnap.bytes(busy) <= NetSnap.MAX_BYTES / 2, "дальше отметки не едут — %d байт" % NetSnap.bytes(busy))
+	var g := Sonar.new()
+	ok(NetSnap.apply_sonar(bytes_to_var(var_to_bytes(so)), g, 7.0), "новый импульс")
+	eq(g.count, 1)
+	near(g.ping_time, 6.5, 1e-4, "импульс полсекунды назад — на часах гостя")
+	near(g.blip_alpha(7.0), h.blip_alpha(100.5), 1e-4, "отметки гаснут так же")
+	eq(g.blips.size(), Sonar.MAX_BLIPS)
+	near(g.blips[0]["pos"].distance_to(h.blips[0]["pos"]), 0.0, 0.06, "место отметки — до 5 см")
+	eq(g.blips[0]["color"], h.blips[0]["color"], "цвет вида")
+	ok(not NetSnap.apply_sonar(NetSnap.sonar(h, 102.0), g, 8.0), "тот же импульс — гость гасит своими часами")
+	eq(NetSnap.sonar(h, 120.0)[1].size(), 0, "отметки погасли — в кадре их нет")
+	var late := Sonar.new()
+	ok(NetSnap.apply_sonar(NetSnap.sonar(h, 100.8), late, 0.0) and late.blips.size() == Sonar.MAX_BLIPS, "гость вошёл через 0,8 с — отметки ещё едут")
+	h.ping(130.0, 1.0, true)
+	ok(NetSnap.apply_sonar(NetSnap.sonar(h, 130.0), g, 30.0) and g.jammed, "завязший импульс")
+	ok(not NetSnap.apply_sonar([PackedFloat32Array([1, 2]), PackedByteArray()], g, 0.0), "испорченный — мимо")
+
+
 func test_pad_round_trip() -> void:   # ввод клиента у хоста: крестовина, свайп копится, нажатие не теряется
 	var p := Crew.Pad.new()
 	p.move = Vector2(0.0, 1.0)

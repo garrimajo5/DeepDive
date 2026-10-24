@@ -394,6 +394,24 @@ func test_mate_action_vote() -> void:   # у голостола товарищ �
 	ok(not m.at_vote, "кнопка — отойти")
 
 
+func test_mate_action_sonar() -> void:   # ROADMAP «импульс сонара у гостя»: кнопка товарища у голостола — импульс хоста
+	var m := main.add_mate(-1.3, -1.6, -PI / 2.0, Crew.Role.SONAR, 1)
+	m.walker.x = -1.3
+	m.walker.z = -1.6
+	main.time = 50.0
+	var n := main.sonar.count
+	var e0: float = main.vitals.energy
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	eq(main.sonar.count, n + 1, "импульс прошёл")
+	ok(main.vitals.energy < e0, "заряд потрачен, как за свой импульс")
+	ok(not m.busy(), "у голостола товарищ поста не держит")
+	eq(str(main.news[1]).begins_with("Сонар:"), true, "ответ приборов — всем (сообщение события): %s" % [main.news])
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	eq(main.sonar.count, n + 1, "перезарядка — второго импульса нет")
+
+
 func test_coop_vote_majority() -> void:   # двое у голостола: метки — голоса игроков, решение ждёт второго
 	main.walker.x = Main.ROUTE_POST.x
 	main.walker.z = Main.ROUTE_POST.y
