@@ -159,6 +159,13 @@ func test_layout_fits_and_spacing() -> void:
 		ok(not Lobby.screen_rect("ready", size).intersects(Lobby.screen_rect("start", size)))
 		near(Lobby.screen_rect("start", size).position.x - Lobby.screen_rect("ready", size).end.x,
 			40.0 * Lobby.scale(size), 0.01, "между кнопками ≥ 30 px макета")
+		for id: String in ["leave", "ready", "start", "back", "note", "pick3"]:   # хост: всё ниже на SHIFT
+			ok(screen.encloses(Lobby.screen_rect(id, size, Lobby.SHIFT)), "%s хоста на экране %s" % [id, size])
+		ok(screen.encloses(Lobby.rect_to_screen(Lobby.ADDR, size)))
+		ok(screen.encloses(Lobby.rect_to_screen(Lobby.row_rect(3, Lobby.SHIFT), size)))
+	ok(Lobby.row_rect(3, Lobby.SHIFT).end.y <= Lobby.NOTE.position.y + Lobby.SHIFT, "роли не заходят на строку под ними")
+	ok(Lobby.NOTE.end.y + Lobby.SHIFT <= Lobby.READY.position.y + Lobby.SHIFT)
+	ok(Lobby.READY.end.y + Lobby.SHIFT <= Lobby.H, "кнопки хоста на экране")
 	# углы под крестовиной и кнопкой действия пусты (макет: x < 360 и x > 2040 при y > 760)
 	for r: Rect2 in [Lobby.READY, Lobby.START, Lobby.BACK, Lobby.NOTE]:
 		ok(r.position.x >= 360.0 and r.end.x <= 2040.0, "низ экрана — между углами")
@@ -167,13 +174,48 @@ func test_layout_fits_and_spacing() -> void:
 func test_hit_finds_buttons() -> void:
 	var l := _room()
 	var size := Vector2(1600, 720)
-	eq(l.hit(Lobby.screen_rect("pick2", size).get_center(), size), "pick2")
-	eq(l.hit(Lobby.screen_rect("ready", size).get_center(), size), "", "без роли «Готов» не нажать")
+	eq(l.hit(l.rect("pick2", size).get_center(), size), "pick2")
+	eq(l.hit(l.rect("ready", size).get_center(), size), "", "без роли «Готов» не нажать")
 	eq(l.hit(Lobby.screen_rect("create", size).get_center(), size), "")
 	l.press("pick0")
-	eq(l.hit(Lobby.screen_rect("ready", size).get_center(), size), "ready")
+	eq(l.hit(l.rect("ready", size).get_center(), size), "ready")
 	l.open = false
-	eq(l.hit(Lobby.screen_rect("pick2", size).get_center(), size), "", "закрыт — касания мимо")
+	eq(l.hit(l.rect("pick2", size).get_center(), size), "", "закрыт — касания мимо")
+
+
+## ART-039: у хоста «Ваш адрес» над ролями, строки ниже на 20 px, «Назад» вверху вместо «Создать» / «Подключиться».
+func test_host_address_plate() -> void:
+	var l := Lobby.new()
+	l.host("Игрок 1", "192.168.43.17")
+	l.open = true
+	ok(l.shows_address())
+	eq(l.address_text(), "192.168.43.17")
+	eq(l.address_hint(), "Скажите его товарищам")
+	near(l.dy(), 20.0, 0.001)
+	eq(Lobby.row_rect(0, l.dy()).position.y, 320.0, "первая строка — 320 по макету ART-039")
+	eq(l.rect("ready", Vector2(Lobby.W, Lobby.H)).position.y, 920.0)
+	ok(Lobby.ADDR.end.y + 30.0 <= Lobby.row_rect(0, l.dy()).position.y, "30 px между адресом и первой строкой")
+	ok(not Lobby.ADDR.intersects(Lobby.LEAVE), "«Назад» не на плашке")
+	var size := Vector2(1600, 720)
+	eq(l.hit(l.rect("leave", size).get_center(), size), "leave")
+	eq(l.hit(Lobby.screen_rect("create", size).get_center(), size), "", "«Создать забег» у хоста нет")
+	eq(l.press("leave"), "back", "«Назад» — выйти из комнаты")
+	ok(not l.open)
+	var none := Lobby.new()
+	none.host("Игрок 1")
+	eq(none.address_text(), "Нет адреса сети")
+	eq(none.address_hint(), "Подключитесь к сети")
+	# у гостя плашки нет: макет ART-028 без сдвига, «Назад» вверху не работает
+	var g := Lobby.new()
+	g.open = true
+	g.me = 3
+	g.unpack(l.pack())
+	ok(not g.shows_address())
+	eq(g.dy(), 0.0)
+	eq(g.hit(Lobby.screen_rect("leave", size).get_center(), size), "")
+	# адрес устройства — локальная сеть, если есть
+	var a := Lobby.local_address()
+	ok(a == "" or AddressPad.check(a) == AddressPad.Check.OK, "адрес устройства — IPv4 или пусто")
 
 
 func test_panel_draws() -> void:
