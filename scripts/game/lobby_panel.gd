@@ -4,7 +4,7 @@ extends CanvasLayer
 ## и «Подключиться» (в комнате погашены), четыре строки ролей, строка ожидания, «Готов» / «Отменить готовность»,
 ## «Начать погружение» (у гостя — «Ждём начала от хоста»), «Назад к списку» при занятой роли. Состояние и места —
 ## `Lobby`; слой как у экрана адреса (91), под заставкой прогрева (100). Статус не только цветом: галочка, кольцо,
-## прочерк, замок.
+## прочерк, замок. У хоста по ART-039 — «Назад» вверху и плашка «Ваш адрес» над ролями (строки ниже на `Lobby.dy`).
 
 var lobby: Lobby
 var draw: Control
@@ -45,40 +45,55 @@ func _draw_screen() -> void:
 		bold = FontVariation.new()
 		bold.base_font = font
 		bold.variation_embolden = 0.7
-	_text(bold, Lobby.TITLE, Lobby.to_screen(Lobby.TITLE_AT, size), Lobby.TITLE_PX * s, MainMenu.INK)
-	_text(font, lobby.subtitle(), Lobby.to_screen(Lobby.SUB_AT, size), Lobby.SUB_PX * s, MainMenu.SOFT)
-	draw.draw_line(Lobby.to_screen(Vector2(Lobby.TITLE_AT.x, Lobby.RULE_Y), size),
-		Lobby.to_screen(Vector2(Lobby.SEARCH.end.x, Lobby.RULE_Y), size), Color(MainMenu.EDGE, 0.8), maxf(1.0, 2.0 * s))
-	_button(bold, Lobby.screen_rect("create", size), "Создать забег", s, "off")
-	_button(bold, Lobby.screen_rect("search", size), "Подключиться", s, "off")
-	_text(font, lobby.head(), Lobby.to_screen(Lobby.HEAD_AT, size), Lobby.SMALL_PX * s, MainMenu.SOFT)
+	if lobby.shows_address():
+		_host_top(font, size, s)
+	else:
+		_text(bold, Lobby.TITLE, Lobby.to_screen(Lobby.TITLE_AT, size), Lobby.TITLE_PX * s, MainMenu.INK)
+		_text(font, lobby.subtitle(), Lobby.to_screen(Lobby.SUB_AT, size), Lobby.SUB_PX * s, MainMenu.SOFT)
+		draw.draw_line(Lobby.to_screen(Vector2(Lobby.TITLE_AT.x, Lobby.RULE_Y), size),
+			Lobby.to_screen(Vector2(Lobby.SEARCH.end.x, Lobby.RULE_Y), size), Color(MainMenu.EDGE, 0.8), maxf(1.0, 2.0 * s))
+		_button(bold, Lobby.screen_rect("create", size), "Создать забег", s, "off")
+		_button(bold, Lobby.screen_rect("search", size), "Подключиться", s, "off")
+		_text(font, lobby.head(), Lobby.to_screen(Lobby.HEAD_AT, size), Lobby.SMALL_PX * s, MainMenu.SOFT)
 	for i in Lobby.SEATS:
 		_row(font, i, size, s)
-	var nr := Lobby.rect_to_screen(Lobby.NOTE, size)
+	var nr := lobby.rect("note", size)
 	draw.draw_rect(nr, Color(MainMenu.DARK, 0.78))
 	var npx := Lobby.SMALL_PX * s
 	draw.draw_string(font, Vector2(nr.position.x + 16.0 * s, nr.get_center().y + Splash.CAP_H * npx * 0.5),
 		lobby.note(), HORIZONTAL_ALIGNMENT_LEFT, nr.size.x - 32.0 * s, roundi(npx), MainMenu.INK)
 	if lobby.shows_back():
-		_button(bold, Lobby.screen_rect("back", size), "Назад к списку", s, "plain")
+		_button(bold, lobby.rect("back", size), "Назад к списку", s, "plain")
 		return
 	var m := lobby.mine()
 	var ready_on := lobby.enabled("ready")
 	var start_on := lobby.enabled("start")
-	_button(bold, Lobby.screen_rect("ready", size), lobby.ready_text(), s,
+	_button(bold, lobby.rect("ready", size), lobby.ready_text(), s,
 		"off" if not ready_on else ("plain" if m.ready else "main"))
 	if lobby.is_host():
-		_button(bold, Lobby.screen_rect("start", size), lobby.start_text(), s, "main" if start_on else "off")
+		_button(bold, lobby.rect("start", size), lobby.start_text(), s, "main" if start_on else "off")
 	else:
-		var r := Lobby.screen_rect("start", size)
+		var r := lobby.rect("start", size)
 		var px := Lobby.SMALL_PX * s
 		draw.draw_string(font, Vector2(r.position.x, r.get_center().y + Splash.CAP_H * px * 0.5), lobby.start_text(),
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, roundi(px), MainMenu.SOFT)
 
 
+## Верх хоста по ART-039: заголовок, «Назад», плашка «Ваш адрес: 192.168.43.17 · Скажите его товарищам».
+func _host_top(font: Font, size: Vector2, s: float) -> void:
+	_text(bold, Lobby.TITLE, Lobby.to_screen(Lobby.HOST_TITLE_AT, size), Lobby.TITLE_PX * s, MainMenu.INK)
+	_button(bold, lobby.rect("leave", size), "Назад", s, "plain")
+	draw.draw_style_box(_box(s, MainMenu.PANEL, MainMenu.EDGE), Lobby.rect_to_screen(Lobby.ADDR, size))
+	_text(font, "Ваш адрес:", Lobby.to_screen(Lobby.ADDR_LABEL_AT, size), Lobby.ADDR_LABEL_PX * s, MainMenu.SOFT)
+	var has := lobby.address != ""
+	_text(font, lobby.address_text(), Lobby.to_screen(Lobby.ADDR_AT, size), Lobby.ADDR_PX * s,
+		MainMenu.MAIN if has else MainMenu.INK)
+	_text(font, lobby.address_hint(), Lobby.to_screen(Lobby.ADDR_HINT_AT, size), Lobby.ADDR_HINT_PX * s, MainMenu.SOFT)
+
+
 ## Строка роли: кружок с буквой, название и кто, состояние справа; своя — толще контур акцентом.
 func _row(font: Font, i: int, size: Vector2, s: float) -> void:
-	var r := Lobby.rect_to_screen(Lobby.row_rect(i), size)
+	var r := Lobby.rect_to_screen(Lobby.row_rect(i, lobby.dy()), size)
 	var h := lobby.holder(i)
 	var own := h != null and h.id == lobby.me
 	var free := h == null
@@ -106,7 +121,7 @@ func _row(font: Font, i: int, size: Vector2, s: float) -> void:
 		Lobby.Look.FREE:
 			draw.draw_line(Vector2(r.position.x + 640.0 * s, cy), Vector2(r.position.x + 860.0 * s, cy), MainMenu.EDGE,
 				maxf(1.0, 2.0 * s))
-			var pr := Lobby.screen_rect("pick%d" % i, size)
+			var pr := lobby.rect("pick%d" % i, size)
 			if lobby.enabled("pick%d" % i):
 				_button(bold, pr, "Выбрать роль", s, "plain", MainMenu.MAIN)
 		Lobby.Look.READY:
