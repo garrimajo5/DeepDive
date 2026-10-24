@@ -1,0 +1,1590 @@
+[
+  {
+    "name": "gear-fartuk-m",
+    "poses": {
+      "rest": {
+        "samples": 1536,
+        "min_abs": 0.004418636672198772,
+        "max_abs": 0.03570103645324707,
+        "min_signed": -0.018898088485002518,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": 236
+      },
+      "post10": {
+        "samples": 1536,
+        "min_abs": 0.0002185070770792663,
+        "max_abs": 0.03173802047967911,
+        "min_signed": -0.01987456902861595,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "post12": {
+        "samples": 1536,
+        "min_abs": 0.0013660762924700975,
+        "max_abs": 0.031646210700273514,
+        "min_signed": -0.020281972363591194,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "post14": {
+        "samples": 1536,
+        "min_abs": 0.0025355680845677853,
+        "max_abs": 0.03172851726412773,
+        "min_signed": -0.020735908299684525,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "post16": {
+        "samples": 1536,
+        "min_abs": 0.0036781728267669678,
+        "max_abs": 0.03239031136035919,
+        "min_signed": -0.019147705286741257,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "post18": {
+        "samples": 1536,
+        "min_abs": 0.0034376797266304493,
+        "max_abs": 0.03302990272641182,
+        "min_signed": -0.014697598293423653,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "post20": {
+        "samples": 1536,
+        "min_abs": 0.0031979552004486322,
+        "max_abs": 0.03364228829741478,
+        "min_signed": -0.02117781899869442,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat0": {
+        "samples": 1536,
+        "min_abs": 0.0006870765355415642,
+        "max_abs": 0.03787650913000107,
+        "min_signed": -0.018441220745444298,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat1": {
+        "samples": 1536,
+        "min_abs": 0.0006870765355415642,
+        "max_abs": 0.03787650913000107,
+        "min_signed": -0.018441220745444298,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat2": {
+        "samples": 1536,
+        "min_abs": 0.0006870765355415642,
+        "max_abs": 0.03787650913000107,
+        "min_signed": -0.018441220745444298,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat3": {
+        "samples": 1536,
+        "min_abs": 0.0004073916934430599,
+        "max_abs": 0.038044337183237076,
+        "min_signed": -0.018548142164945602,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat4": {
+        "samples": 1536,
+        "min_abs": 0.0004976679338142276,
+        "max_abs": 0.038328442722558975,
+        "min_signed": -0.016201136633753777,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat5": {
+        "samples": 1536,
+        "min_abs": 0.0006870765355415642,
+        "max_abs": 0.03880435600876808,
+        "min_signed": -0.015304075554013252,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat6": {
+        "samples": 1536,
+        "min_abs": 0.0001815926079871133,
+        "max_abs": 0.03922467678785324,
+        "min_signed": -0.015316375531256199,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat7": {
+        "samples": 1536,
+        "min_abs": 0.0001815926079871133,
+        "max_abs": 0.03922467678785324,
+        "min_signed": -0.015316375531256199,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat8": {
+        "samples": 1536,
+        "min_abs": 0.0001815926079871133,
+        "max_abs": 0.03922467678785324,
+        "min_signed": -0.015316375531256199,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "standing": {
+        "samples": 1536,
+        "min_abs": 0.00019430775137152523,
+        "max_abs": 0.029905369505286217,
+        "min_signed": -0.01959911175072193,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk0": {
+        "samples": 1536,
+        "min_abs": 0.00039308873238041997,
+        "max_abs": 0.030441906303167343,
+        "min_signed": -0.02009485475718975,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk1": {
+        "samples": 1536,
+        "min_abs": 0.0007100586663000286,
+        "max_abs": 0.029601551592350006,
+        "min_signed": -0.018882008269429207,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk10": {
+        "samples": 1536,
+        "min_abs": 5.2325751312309876e-05,
+        "max_abs": 0.0334906280040741,
+        "min_signed": -0.01804386079311371,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk11": {
+        "samples": 1536,
+        "min_abs": 0.00010933109297184274,
+        "max_abs": 0.03295917436480522,
+        "min_signed": -0.016886640340089798,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk12": {
+        "samples": 1536,
+        "min_abs": 0.0001916899491334334,
+        "max_abs": 0.032483261078596115,
+        "min_signed": -0.018536675721406937,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk13": {
+        "samples": 1536,
+        "min_abs": 0.0003118846798315644,
+        "max_abs": 0.031941987574100494,
+        "min_signed": -0.018194064497947693,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk14": {
+        "samples": 1536,
+        "min_abs": 0.00038401392521336675,
+        "max_abs": 0.03109601140022278,
+        "min_signed": -0.017672857269644737,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk15": {
+        "samples": 1536,
+        "min_abs": 0.0006537992157973349,
+        "max_abs": 0.030012795701622963,
+        "min_signed": -0.01921178214251995,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk16": {
+        "samples": 1536,
+        "min_abs": 0.0003210049180779606,
+        "max_abs": 0.029544873163104057,
+        "min_signed": -0.02009485475718975,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk17": {
+        "samples": 1536,
+        "min_abs": 0.00027115159900859,
+        "max_abs": 0.030363135039806366,
+        "min_signed": -0.021822841838002205,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk18": {
+        "samples": 1536,
+        "min_abs": 0.0006281838286668062,
+        "max_abs": 0.03117445483803749,
+        "min_signed": -0.02061786875128746,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk19": {
+        "samples": 1536,
+        "min_abs": 1.4891685168549884e-05,
+        "max_abs": 0.03193362057209015,
+        "min_signed": -0.018564580008387566,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk2": {
+        "samples": 1536,
+        "min_abs": 0.00038401392521336675,
+        "max_abs": 0.029934920370578766,
+        "min_signed": -0.017293576151132584,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk20": {
+        "samples": 1536,
+        "min_abs": 0.00024517608107998967,
+        "max_abs": 0.03259316831827164,
+        "min_signed": -0.01628689467906952,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk21": {
+        "samples": 1536,
+        "min_abs": 0.0004364911583252251,
+        "max_abs": 0.03294779360294342,
+        "min_signed": -0.019606923684477806,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk22": {
+        "samples": 1536,
+        "min_abs": 0.0009376451489515603,
+        "max_abs": 0.033579155802726746,
+        "min_signed": -0.016719240695238113,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk23": {
+        "samples": 1536,
+        "min_abs": 0.0009145334479399025,
+        "max_abs": 0.0340392142534256,
+        "min_signed": -0.02851463295519352,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk24": {
+        "samples": 1536,
+        "min_abs": 0.000861919077578932,
+        "max_abs": 0.035262808203697205,
+        "min_signed": -0.016435060650110245,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk25": {
+        "samples": 1536,
+        "min_abs": 0.0006632012082263827,
+        "max_abs": 0.03535646200180054,
+        "min_signed": -0.013501002453267574,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk26": {
+        "samples": 1536,
+        "min_abs": 0.0005547879845835268,
+        "max_abs": 0.03519111126661301,
+        "min_signed": -0.01794266700744629,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk27": {
+        "samples": 1536,
+        "min_abs": 0.0004364911583252251,
+        "max_abs": 0.034535039216279984,
+        "min_signed": -0.02853420004248619,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk28": {
+        "samples": 1536,
+        "min_abs": 0.00024517608107998967,
+        "max_abs": 0.0329819917678833,
+        "min_signed": -0.01975245587527752,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk29": {
+        "samples": 1536,
+        "min_abs": 1.4891685168549884e-05,
+        "max_abs": 0.032501015812158585,
+        "min_signed": -0.018329579383134842,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk3": {
+        "samples": 1536,
+        "min_abs": 0.00030216717277653515,
+        "max_abs": 0.031191591173410416,
+        "min_signed": -0.017112866044044495,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk30": {
+        "samples": 1536,
+        "min_abs": 0.0006281838286668062,
+        "max_abs": 0.03193672001361847,
+        "min_signed": -0.02003629505634308,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk31": {
+        "samples": 1536,
+        "min_abs": 0.00021228230616543442,
+        "max_abs": 0.031237125396728516,
+        "min_signed": -0.021492289379239082,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk4": {
+        "samples": 1536,
+        "min_abs": 0.00019017532758880407,
+        "max_abs": 0.03223898261785507,
+        "min_signed": -0.018479224294424057,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk5": {
+        "samples": 1536,
+        "min_abs": 0.00010879762703552842,
+        "max_abs": 0.03301647678017616,
+        "min_signed": -0.01914382167160511,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk6": {
+        "samples": 1536,
+        "min_abs": 5.166697519598529e-05,
+        "max_abs": 0.03348858654499054,
+        "min_signed": -0.01669125258922577,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk7": {
+        "samples": 1536,
+        "min_abs": 1.9121893274132162e-05,
+        "max_abs": 0.033556368201971054,
+        "min_signed": -0.021991755813360214,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk8": {
+        "samples": 1536,
+        "min_abs": 6.101754934206838e-06,
+        "max_abs": 0.03390825167298317,
+        "min_signed": -0.020021779462695122,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk9": {
+        "samples": 1536,
+        "min_abs": 1.779215926944744e-05,
+        "max_abs": 0.033804647624492645,
+        "min_signed": -0.016568750143051147,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      }
+    }
+  },
+  {
+    "name": "gear-fartuk-zh",
+    "poses": {
+      "rest": {
+        "samples": 1776,
+        "min_abs": 0.0022316661197692156,
+        "max_abs": 0.06158986687660217,
+        "min_signed": -0.020651590079069138,
+        "over_4cm": 10,
+        "outside_rest_1to2cm": 347
+      },
+      "post10": {
+        "samples": 1776,
+        "min_abs": 0.002530944300815463,
+        "max_abs": 0.038485679775476456,
+        "min_signed": -0.033278848975896835,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "post12": {
+        "samples": 1776,
+        "min_abs": 0.0025580995716154575,
+        "max_abs": 0.038630302995443344,
+        "min_signed": -0.018696725368499756,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "post14": {
+        "samples": 1776,
+        "min_abs": 0.0025074563454836607,
+        "max_abs": 0.03877599909901619,
+        "min_signed": -0.025139030069112778,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "post16": {
+        "samples": 1776,
+        "min_abs": 0.0023440716322511435,
+        "max_abs": 0.03892192989587784,
+        "min_signed": -0.019080335274338722,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "post18": {
+        "samples": 1776,
+        "min_abs": 0.0021853388752788305,
+        "max_abs": 0.03928154334425926,
+        "min_signed": -0.0345563106238842,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "post20": {
+        "samples": 1776,
+        "min_abs": 0.002032397547736764,
+        "max_abs": 0.03968990966677666,
+        "min_signed": -0.0335066057741642,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat0": {
+        "samples": 1776,
+        "min_abs": 5.467874143505469e-05,
+        "max_abs": 0.03525765985250473,
+        "min_signed": -0.01881452091038227,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat1": {
+        "samples": 1776,
+        "min_abs": 5.467874143505469e-05,
+        "max_abs": 0.03525765985250473,
+        "min_signed": -0.01881452091038227,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat2": {
+        "samples": 1776,
+        "min_abs": 5.467874143505469e-05,
+        "max_abs": 0.03525765985250473,
+        "min_signed": -0.01881452091038227,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat3": {
+        "samples": 1776,
+        "min_abs": 5.467874143505469e-05,
+        "max_abs": 0.03486498072743416,
+        "min_signed": -0.02191809006035328,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat4": {
+        "samples": 1776,
+        "min_abs": 5.467874143505469e-05,
+        "max_abs": 0.03414289280772209,
+        "min_signed": -0.023408150300383568,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat5": {
+        "samples": 1776,
+        "min_abs": 5.467874143505469e-05,
+        "max_abs": 0.03344063460826874,
+        "min_signed": -0.026607735082507133,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat6": {
+        "samples": 1776,
+        "min_abs": 5.467874143505469e-05,
+        "max_abs": 0.03318651393055916,
+        "min_signed": -0.02399500273168087,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat7": {
+        "samples": 1776,
+        "min_abs": 5.467874143505469e-05,
+        "max_abs": 0.03318651393055916,
+        "min_signed": -0.02399500273168087,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat8": {
+        "samples": 1776,
+        "min_abs": 5.467874143505469e-05,
+        "max_abs": 0.03318651393055916,
+        "min_signed": -0.02399500273168087,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "standing": {
+        "samples": 1776,
+        "min_abs": 0.0008419178193435073,
+        "max_abs": 0.037616338580846786,
+        "min_signed": -0.021298663690686226,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk0": {
+        "samples": 1776,
+        "min_abs": 0.002032696269452572,
+        "max_abs": 0.03682172670960426,
+        "min_signed": -0.03251948952674866,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk1": {
+        "samples": 1776,
+        "min_abs": 0.0017800682689994574,
+        "max_abs": 0.037430766969919205,
+        "min_signed": -0.031851716339588165,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk10": {
+        "samples": 1776,
+        "min_abs": 0.001340363873168826,
+        "max_abs": 0.04174413904547691,
+        "min_signed": -0.024546556174755096,
+        "over_4cm": 1,
+        "outside_rest_1to2cm": null
+      },
+      "walk11": {
+        "samples": 1776,
+        "min_abs": 0.0015423927688971162,
+        "max_abs": 0.039103176444768906,
+        "min_signed": -0.017196208238601685,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk12": {
+        "samples": 1776,
+        "min_abs": 0.0015657299663871527,
+        "max_abs": 0.038689497858285904,
+        "min_signed": -0.013687892816960812,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk13": {
+        "samples": 1776,
+        "min_abs": 0.0007800774765200913,
+        "max_abs": 0.038544293493032455,
+        "min_signed": -0.018595287576317787,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk14": {
+        "samples": 1776,
+        "min_abs": 0.0017082447884604335,
+        "max_abs": 0.038309045135974884,
+        "min_signed": -0.0199545007199049,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk15": {
+        "samples": 1776,
+        "min_abs": 0.0018496670527383685,
+        "max_abs": 0.03797602653503418,
+        "min_signed": -0.020270928740501404,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk16": {
+        "samples": 1776,
+        "min_abs": 0.0017161869909614325,
+        "max_abs": 0.037558890879154205,
+        "min_signed": -0.027636902406811714,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk17": {
+        "samples": 1776,
+        "min_abs": 0.0022959590423852205,
+        "max_abs": 0.037092216312885284,
+        "min_signed": -0.031943537294864655,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk18": {
+        "samples": 1776,
+        "min_abs": 0.0025809151120483875,
+        "max_abs": 0.036621641367673874,
+        "min_signed": -0.022612573578953743,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk19": {
+        "samples": 1776,
+        "min_abs": 0.002088206820189953,
+        "max_abs": 0.036190807819366455,
+        "min_signed": -0.03324919939041138,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk2": {
+        "samples": 1776,
+        "min_abs": 0.0016233687056228518,
+        "max_abs": 0.03777021914720535,
+        "min_signed": -0.021961446851491928,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk20": {
+        "samples": 1776,
+        "min_abs": 0.003157232655212283,
+        "max_abs": 0.03583064302802086,
+        "min_signed": -0.033917102962732315,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk21": {
+        "samples": 1776,
+        "min_abs": 0.003398110391572118,
+        "max_abs": 0.03555595129728317,
+        "min_signed": -0.02128020115196705,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk22": {
+        "samples": 1776,
+        "min_abs": 0.002825652714818716,
+        "max_abs": 0.03536798059940338,
+        "min_signed": -0.0308869406580925,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk23": {
+        "samples": 1776,
+        "min_abs": 0.0018049284117296338,
+        "max_abs": 0.03526025265455246,
+        "min_signed": -0.031000135466456413,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk24": {
+        "samples": 1776,
+        "min_abs": 0.0013074191519990563,
+        "max_abs": 0.03600997105240822,
+        "min_signed": -0.013942382298409939,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk25": {
+        "samples": 1776,
+        "min_abs": 0.0009514814591966569,
+        "max_abs": 0.04101218655705452,
+        "min_signed": -0.018545934930443764,
+        "over_4cm": 1,
+        "outside_rest_1to2cm": null
+      },
+      "walk26": {
+        "samples": 1776,
+        "min_abs": 0.0010329375509172678,
+        "max_abs": 0.04041145741939545,
+        "min_signed": -0.018544860184192657,
+        "over_4cm": 1,
+        "outside_rest_1to2cm": null
+      },
+      "walk27": {
+        "samples": 1776,
+        "min_abs": 0.001415725564584136,
+        "max_abs": 0.035964589565992355,
+        "min_signed": -0.012442372739315033,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk28": {
+        "samples": 1776,
+        "min_abs": 0.0024404539726674557,
+        "max_abs": 0.035373106598854065,
+        "min_signed": -0.01314413920044899,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk29": {
+        "samples": 1776,
+        "min_abs": 0.0028532675933092833,
+        "max_abs": 0.035618145018815994,
+        "min_signed": -0.01880558766424656,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk3": {
+        "samples": 1776,
+        "min_abs": 0.0006257564527913928,
+        "max_abs": 0.03815693408250809,
+        "min_signed": -0.018271449953317642,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk30": {
+        "samples": 1776,
+        "min_abs": 0.00272769876755774,
+        "max_abs": 0.03594693914055824,
+        "min_signed": -0.018986092880368233,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk31": {
+        "samples": 1776,
+        "min_abs": 0.002360680839046836,
+        "max_abs": 0.036354925483465195,
+        "min_signed": -0.03325904533267021,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk4": {
+        "samples": 1776,
+        "min_abs": 0.0017308576498180628,
+        "max_abs": 0.038442909717559814,
+        "min_signed": -0.022557085379958153,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk5": {
+        "samples": 1776,
+        "min_abs": 0.0016572870081290603,
+        "max_abs": 0.03862769156694412,
+        "min_signed": -0.018526939675211906,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk6": {
+        "samples": 1776,
+        "min_abs": 0.0014636906562373042,
+        "max_abs": 0.03873228654265404,
+        "min_signed": -0.01781410723924637,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk7": {
+        "samples": 1776,
+        "min_abs": 0.0013417340815067291,
+        "max_abs": 0.038790132850408554,
+        "min_signed": -0.013175198808312416,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk8": {
+        "samples": 1776,
+        "min_abs": 0.0013014194555580616,
+        "max_abs": 0.03902650997042656,
+        "min_signed": -0.017462216317653656,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk9": {
+        "samples": 1776,
+        "min_abs": 0.0012392791686579585,
+        "max_abs": 0.041544366627931595,
+        "min_signed": -0.017438584938645363,
+        "over_4cm": 1,
+        "outside_rest_1to2cm": null
+      }
+    }
+  },
+  {
+    "name": "gear-tunika-m",
+    "poses": {
+      "rest": {
+        "samples": 2340,
+        "min_abs": 0.003086843527853489,
+        "max_abs": 0.04075034707784653,
+        "min_signed": -0.017103448510169983,
+        "over_4cm": 7,
+        "outside_rest_1to2cm": 443
+      },
+      "post10": {
+        "samples": 2340,
+        "min_abs": 0.0002185070770792663,
+        "max_abs": 0.040072932839393616,
+        "min_signed": -0.017101634293794632,
+        "over_4cm": 1,
+        "outside_rest_1to2cm": null
+      },
+      "post12": {
+        "samples": 2340,
+        "min_abs": 0.0013660762924700975,
+        "max_abs": 0.03995564952492714,
+        "min_signed": -0.028384380042552948,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "post14": {
+        "samples": 2340,
+        "min_abs": 0.0025355680845677853,
+        "max_abs": 0.040459804236888885,
+        "min_signed": -0.028373636305332184,
+        "over_4cm": 2,
+        "outside_rest_1to2cm": null
+      },
+      "post16": {
+        "samples": 2340,
+        "min_abs": 0.0028534242883324623,
+        "max_abs": 0.04100968316197395,
+        "min_signed": -0.02856074459850788,
+        "over_4cm": 2,
+        "outside_rest_1to2cm": null
+      },
+      "post18": {
+        "samples": 2340,
+        "min_abs": 0.0024462135042995214,
+        "max_abs": 0.040818460285663605,
+        "min_signed": -0.026207465678453445,
+        "over_4cm": 2,
+        "outside_rest_1to2cm": null
+      },
+      "post20": {
+        "samples": 2340,
+        "min_abs": 0.002120253862813115,
+        "max_abs": 0.03992069512605667,
+        "min_signed": -0.02005201391875744,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "seat0": {
+        "samples": 2340,
+        "min_abs": 0.00033808746957220137,
+        "max_abs": 0.05377354100346565,
+        "min_signed": -0.046795085072517395,
+        "over_4cm": 21,
+        "outside_rest_1to2cm": null
+      },
+      "seat1": {
+        "samples": 2340,
+        "min_abs": 0.00033808746957220137,
+        "max_abs": 0.05377354100346565,
+        "min_signed": -0.046795085072517395,
+        "over_4cm": 21,
+        "outside_rest_1to2cm": null
+      },
+      "seat2": {
+        "samples": 2340,
+        "min_abs": 0.00033808746957220137,
+        "max_abs": 0.05377354100346565,
+        "min_signed": -0.046795085072517395,
+        "over_4cm": 21,
+        "outside_rest_1to2cm": null
+      },
+      "seat3": {
+        "samples": 2340,
+        "min_abs": 0.00015499614528380334,
+        "max_abs": 0.0527273491024971,
+        "min_signed": -0.04680682718753815,
+        "over_4cm": 22,
+        "outside_rest_1to2cm": null
+      },
+      "seat4": {
+        "samples": 2340,
+        "min_abs": 0.00011958751565543935,
+        "max_abs": 0.051105838268995285,
+        "min_signed": -0.046817369759082794,
+        "over_4cm": 23,
+        "outside_rest_1to2cm": null
+      },
+      "seat5": {
+        "samples": 2340,
+        "min_abs": 8.856890053721145e-05,
+        "max_abs": 0.049486249685287476,
+        "min_signed": -0.04681600257754326,
+        "over_4cm": 23,
+        "outside_rest_1to2cm": null
+      },
+      "seat6": {
+        "samples": 2340,
+        "min_abs": 0.00010631261829985306,
+        "max_abs": 0.048369914293289185,
+        "min_signed": -0.04676711931824684,
+        "over_4cm": 22,
+        "outside_rest_1to2cm": null
+      },
+      "seat7": {
+        "samples": 2340,
+        "min_abs": 0.00010631261829985306,
+        "max_abs": 0.048369914293289185,
+        "min_signed": -0.04676711931824684,
+        "over_4cm": 22,
+        "outside_rest_1to2cm": null
+      },
+      "seat8": {
+        "samples": 2340,
+        "min_abs": 0.00010631261829985306,
+        "max_abs": 0.048369914293289185,
+        "min_signed": -0.04676711931824684,
+        "over_4cm": 22,
+        "outside_rest_1to2cm": null
+      },
+      "standing": {
+        "samples": 2340,
+        "min_abs": 0.00019430775137152523,
+        "max_abs": 0.041386425495147705,
+        "min_signed": -0.03289196267724037,
+        "over_4cm": 2,
+        "outside_rest_1to2cm": null
+      },
+      "walk0": {
+        "samples": 2340,
+        "min_abs": 0.00039308873238041997,
+        "max_abs": 0.04133432358503342,
+        "min_signed": -0.024020608514547348,
+        "over_4cm": 1,
+        "outside_rest_1to2cm": null
+      },
+      "walk1": {
+        "samples": 2340,
+        "min_abs": 0.0007100586663000286,
+        "max_abs": 0.04126846417784691,
+        "min_signed": -0.01833842508494854,
+        "over_4cm": 1,
+        "outside_rest_1to2cm": null
+      },
+      "walk10": {
+        "samples": 2340,
+        "min_abs": 5.2325751312309876e-05,
+        "max_abs": 0.03891092166304588,
+        "min_signed": -0.01804386079311371,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk11": {
+        "samples": 2340,
+        "min_abs": 0.00010933109297184274,
+        "max_abs": 0.03912296146154404,
+        "min_signed": -0.02604798413813114,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk12": {
+        "samples": 2340,
+        "min_abs": 0.0001916899491334334,
+        "max_abs": 0.03918243199586868,
+        "min_signed": -0.01707356795668602,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk13": {
+        "samples": 2340,
+        "min_abs": 0.0003118846798315644,
+        "max_abs": 0.03919931501150131,
+        "min_signed": -0.032812800258398056,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk14": {
+        "samples": 2340,
+        "min_abs": 0.00038401392521336675,
+        "max_abs": 0.040051694959402084,
+        "min_signed": -0.017323564738035202,
+        "over_4cm": 1,
+        "outside_rest_1to2cm": null
+      },
+      "walk15": {
+        "samples": 2340,
+        "min_abs": 0.0006537992157973349,
+        "max_abs": 0.040874917060136795,
+        "min_signed": -0.023745829239487648,
+        "over_4cm": 1,
+        "outside_rest_1to2cm": null
+      },
+      "walk16": {
+        "samples": 2340,
+        "min_abs": 0.0003210049180779606,
+        "max_abs": 0.04106123745441437,
+        "min_signed": -0.02009485475718975,
+        "over_4cm": 1,
+        "outside_rest_1to2cm": null
+      },
+      "walk17": {
+        "samples": 2340,
+        "min_abs": 0.00027115159900859,
+        "max_abs": 0.04113394021987915,
+        "min_signed": -0.027660133317112923,
+        "over_4cm": 1,
+        "outside_rest_1to2cm": null
+      },
+      "walk18": {
+        "samples": 2340,
+        "min_abs": 0.0006281838286668062,
+        "max_abs": 0.04131689295172691,
+        "min_signed": -0.02061786875128746,
+        "over_4cm": 3,
+        "outside_rest_1to2cm": null
+      },
+      "walk19": {
+        "samples": 2340,
+        "min_abs": 1.4891685168549884e-05,
+        "max_abs": 0.042843423783779144,
+        "min_signed": -0.018564580008387566,
+        "over_4cm": 6,
+        "outside_rest_1to2cm": null
+      },
+      "walk2": {
+        "samples": 2340,
+        "min_abs": 0.00017083255806937814,
+        "max_abs": 0.04105016961693764,
+        "min_signed": -0.018347354605793953,
+        "over_4cm": 1,
+        "outside_rest_1to2cm": null
+      },
+      "walk20": {
+        "samples": 2340,
+        "min_abs": 0.00024517608107998967,
+        "max_abs": 0.04281260445713997,
+        "min_signed": -0.015289844013750553,
+        "over_4cm": 6,
+        "outside_rest_1to2cm": null
+      },
+      "walk21": {
+        "samples": 2340,
+        "min_abs": 0.00026456103660166264,
+        "max_abs": 0.04209296032786369,
+        "min_signed": -0.026056872680783272,
+        "over_4cm": 6,
+        "outside_rest_1to2cm": null
+      },
+      "walk22": {
+        "samples": 2340,
+        "min_abs": 0.0009376451489515603,
+        "max_abs": 0.041844092309474945,
+        "min_signed": -0.026189200580120087,
+        "over_4cm": 2,
+        "outside_rest_1to2cm": null
+      },
+      "walk23": {
+        "samples": 2340,
+        "min_abs": 0.0009145334479399025,
+        "max_abs": 0.04168577119708061,
+        "min_signed": -0.02626957558095455,
+        "over_4cm": 2,
+        "outside_rest_1to2cm": null
+      },
+      "walk24": {
+        "samples": 2340,
+        "min_abs": 0.00010279515845468268,
+        "max_abs": 0.0416315533220768,
+        "min_signed": -0.02629663608968258,
+        "over_4cm": 2,
+        "outside_rest_1to2cm": null
+      },
+      "walk25": {
+        "samples": 2340,
+        "min_abs": 0.0006611394928768277,
+        "max_abs": 0.041608553379774094,
+        "min_signed": -0.013501002453267574,
+        "over_4cm": 6,
+        "outside_rest_1to2cm": null
+      },
+      "walk26": {
+        "samples": 2340,
+        "min_abs": 0.0008132593939080834,
+        "max_abs": 0.04210279881954193,
+        "min_signed": -0.015255942940711975,
+        "over_4cm": 6,
+        "outside_rest_1to2cm": null
+      },
+      "walk27": {
+        "samples": 2340,
+        "min_abs": 0.00017942888371180743,
+        "max_abs": 0.04202314466238022,
+        "min_signed": -0.01992584578692913,
+        "over_4cm": 6,
+        "outside_rest_1to2cm": null
+      },
+      "walk28": {
+        "samples": 2340,
+        "min_abs": 0.00024517608107998967,
+        "max_abs": 0.04302215203642845,
+        "min_signed": -0.018510449677705765,
+        "over_4cm": 6,
+        "outside_rest_1to2cm": null
+      },
+      "walk29": {
+        "samples": 2340,
+        "min_abs": 1.4891685168549884e-05,
+        "max_abs": 0.043064672499895096,
+        "min_signed": -0.018329579383134842,
+        "over_4cm": 6,
+        "outside_rest_1to2cm": null
+      },
+      "walk3": {
+        "samples": 2340,
+        "min_abs": 0.00030216717277653515,
+        "max_abs": 0.039944250136613846,
+        "min_signed": -0.017112866044044495,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk30": {
+        "samples": 2340,
+        "min_abs": 0.00036673928843811154,
+        "max_abs": 0.041951462626457214,
+        "min_signed": -0.026992427185177803,
+        "over_4cm": 8,
+        "outside_rest_1to2cm": null
+      },
+      "walk31": {
+        "samples": 2340,
+        "min_abs": 0.00021228230616543442,
+        "max_abs": 0.04127125069499016,
+        "min_signed": -0.021492289379239082,
+        "over_4cm": 2,
+        "outside_rest_1to2cm": null
+      },
+      "walk4": {
+        "samples": 2340,
+        "min_abs": 0.00019017532758880407,
+        "max_abs": 0.03934205695986748,
+        "min_signed": -0.03218065947294235,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk5": {
+        "samples": 2340,
+        "min_abs": 0.00010879762703552842,
+        "max_abs": 0.03908080980181694,
+        "min_signed": -0.026573091745376587,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk6": {
+        "samples": 2340,
+        "min_abs": 5.166697519598529e-05,
+        "max_abs": 0.0389125719666481,
+        "min_signed": -0.018405716866254807,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk7": {
+        "samples": 2340,
+        "min_abs": 1.9121893274132162e-05,
+        "max_abs": 0.03897666931152344,
+        "min_signed": -0.016588643193244934,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk8": {
+        "samples": 2340,
+        "min_abs": 6.101754934206838e-06,
+        "max_abs": 0.038716498762369156,
+        "min_signed": -0.020834287628531456,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      },
+      "walk9": {
+        "samples": 2340,
+        "min_abs": 1.779215926944744e-05,
+        "max_abs": 0.03876713290810585,
+        "min_signed": -0.016568750143051147,
+        "over_4cm": 0,
+        "outside_rest_1to2cm": null
+      }
+    }
+  },
+  {
+    "name": "gear-tunika-zh",
+    "poses": {
+      "rest": {
+        "samples": 2380,
+        "min_abs": 0.0014182330342009664,
+        "max_abs": 0.047542594373226166,
+        "min_signed": -0.020151205360889435,
+        "over_4cm": 23,
+        "outside_rest_1to2cm": 688
+      },
+      "post10": {
+        "samples": 2380,
+        "min_abs": 0.00015092274406924844,
+        "max_abs": 0.04754259064793587,
+        "min_signed": -0.022147750481963158,
+        "over_4cm": 18,
+        "outside_rest_1to2cm": null
+      },
+      "post12": {
+        "samples": 2380,
+        "min_abs": 0.00013738316192757338,
+        "max_abs": 0.04754258319735527,
+        "min_signed": -0.04575085639953613,
+        "over_4cm": 18,
+        "outside_rest_1to2cm": null
+      },
+      "post14": {
+        "samples": 2380,
+        "min_abs": 0.000134359099320136,
+        "max_abs": 0.047542572021484375,
+        "min_signed": -0.02259298786520958,
+        "over_4cm": 19,
+        "outside_rest_1to2cm": null
+      },
+      "post16": {
+        "samples": 2380,
+        "min_abs": 0.00014080437540542334,
+        "max_abs": 0.04754253849387169,
+        "min_signed": -0.019357167184352875,
+        "over_4cm": 25,
+        "outside_rest_1to2cm": null
+      },
+      "post18": {
+        "samples": 2380,
+        "min_abs": 0.00015603807696606964,
+        "max_abs": 0.0478179007768631,
+        "min_signed": -0.027773769572377205,
+        "over_4cm": 25,
+        "outside_rest_1to2cm": null
+      },
+      "post20": {
+        "samples": 2380,
+        "min_abs": 8.889351738616824e-05,
+        "max_abs": 0.04840470477938652,
+        "min_signed": -0.04526931047439575,
+        "over_4cm": 25,
+        "outside_rest_1to2cm": null
+      },
+      "seat0": {
+        "samples": 2380,
+        "min_abs": 6.774761277483776e-05,
+        "max_abs": 0.057893261313438416,
+        "min_signed": -0.03845394402742386,
+        "over_4cm": 26,
+        "outside_rest_1to2cm": null
+      },
+      "seat1": {
+        "samples": 2380,
+        "min_abs": 6.774761277483776e-05,
+        "max_abs": 0.057893261313438416,
+        "min_signed": -0.03845394402742386,
+        "over_4cm": 26,
+        "outside_rest_1to2cm": null
+      },
+      "seat2": {
+        "samples": 2380,
+        "min_abs": 6.774761277483776e-05,
+        "max_abs": 0.057893261313438416,
+        "min_signed": -0.03845394402742386,
+        "over_4cm": 26,
+        "outside_rest_1to2cm": null
+      },
+      "seat3": {
+        "samples": 2380,
+        "min_abs": 6.774761277483776e-05,
+        "max_abs": 0.05810903012752533,
+        "min_signed": -0.03660356625914574,
+        "over_4cm": 25,
+        "outside_rest_1to2cm": null
+      },
+      "seat4": {
+        "samples": 2380,
+        "min_abs": 6.774761277483776e-05,
+        "max_abs": 0.05862690880894661,
+        "min_signed": -0.03716345876455307,
+        "over_4cm": 25,
+        "outside_rest_1to2cm": null
+      },
+      "seat5": {
+        "samples": 2380,
+        "min_abs": 6.774761277483776e-05,
+        "max_abs": 0.05929373949766159,
+        "min_signed": -0.038591042160987854,
+        "over_4cm": 28,
+        "outside_rest_1to2cm": null
+      },
+      "seat6": {
+        "samples": 2380,
+        "min_abs": 6.774761277483776e-05,
+        "max_abs": 0.058273497968912125,
+        "min_signed": -0.0481313094496727,
+        "over_4cm": 32,
+        "outside_rest_1to2cm": null
+      },
+      "seat7": {
+        "samples": 2380,
+        "min_abs": 6.774761277483776e-05,
+        "max_abs": 0.058273497968912125,
+        "min_signed": -0.0481313094496727,
+        "over_4cm": 32,
+        "outside_rest_1to2cm": null
+      },
+      "seat8": {
+        "samples": 2380,
+        "min_abs": 6.774761277483776e-05,
+        "max_abs": 0.058273497968912125,
+        "min_signed": -0.0481313094496727,
+        "over_4cm": 32,
+        "outside_rest_1to2cm": null
+      },
+      "standing": {
+        "samples": 2380,
+        "min_abs": 0.00036096549592912197,
+        "max_abs": 0.04845299944281578,
+        "min_signed": -0.048351552337408066,
+        "over_4cm": 16,
+        "outside_rest_1to2cm": null
+      },
+      "walk0": {
+        "samples": 2380,
+        "min_abs": 0.00019669614266604185,
+        "max_abs": 0.04842248186469078,
+        "min_signed": -0.04772258922457695,
+        "over_4cm": 20,
+        "outside_rest_1to2cm": null
+      },
+      "walk1": {
+        "samples": 2380,
+        "min_abs": 0.0004026677634101361,
+        "max_abs": 0.04859289899468422,
+        "min_signed": -0.04770243540406227,
+        "over_4cm": 18,
+        "outside_rest_1to2cm": null
+      },
+      "walk10": {
+        "samples": 2380,
+        "min_abs": 0.0002606347552500665,
+        "max_abs": 0.04911010339856148,
+        "min_signed": -0.045172467827796936,
+        "over_4cm": 22,
+        "outside_rest_1to2cm": null
+      },
+      "walk11": {
+        "samples": 2380,
+        "min_abs": 9.728747681947425e-05,
+        "max_abs": 0.04905735328793526,
+        "min_signed": -0.04523465409874916,
+        "over_4cm": 21,
+        "outside_rest_1to2cm": null
+      },
+      "walk12": {
+        "samples": 2380,
+        "min_abs": 0.00023021362721920013,
+        "max_abs": 0.04897989332675934,
+        "min_signed": -0.03434548154473305,
+        "over_4cm": 21,
+        "outside_rest_1to2cm": null
+      },
+      "walk13": {
+        "samples": 2380,
+        "min_abs": 0.0007456849562004209,
+        "max_abs": 0.048876143991947174,
+        "min_signed": -0.045392535626888275,
+        "over_4cm": 21,
+        "outside_rest_1to2cm": null
+      },
+      "walk14": {
+        "samples": 2380,
+        "min_abs": 0.0009546406799927354,
+        "max_abs": 0.04874618723988533,
+        "min_signed": -0.04546648636460304,
+        "over_4cm": 21,
+        "outside_rest_1to2cm": null
+      },
+      "walk15": {
+        "samples": 2380,
+        "min_abs": 0.000732815416995436,
+        "max_abs": 0.04859289899468422,
+        "min_signed": -0.03418096527457237,
+        "over_4cm": 18,
+        "outside_rest_1to2cm": null
+      },
+      "walk16": {
+        "samples": 2380,
+        "min_abs": 0.0008713919669389725,
+        "max_abs": 0.04842248186469078,
+        "min_signed": -0.04079151526093483,
+        "over_4cm": 20,
+        "outside_rest_1to2cm": null
+      },
+      "walk17": {
+        "samples": 2380,
+        "min_abs": 0.0002502675342839211,
+        "max_abs": 0.048243917524814606,
+        "min_signed": -0.04770747944712639,
+        "over_4cm": 18,
+        "outside_rest_1to2cm": null
+      },
+      "walk18": {
+        "samples": 2380,
+        "min_abs": 8.085691661108285e-05,
+        "max_abs": 0.048067521303892136,
+        "min_signed": -0.04765959084033966,
+        "over_4cm": 27,
+        "outside_rest_1to2cm": null
+      },
+      "walk19": {
+        "samples": 2380,
+        "min_abs": 9.736905485624447e-05,
+        "max_abs": 0.047903697937726974,
+        "min_signed": -0.047587160021066666,
+        "over_4cm": 29,
+        "outside_rest_1to2cm": null
+      },
+      "walk2": {
+        "samples": 2380,
+        "min_abs": 0.00013392615073826164,
+        "max_abs": 0.04874618723988533,
+        "min_signed": -0.04546648636460304,
+        "over_4cm": 16,
+        "outside_rest_1to2cm": null
+      },
+      "walk20": {
+        "samples": 2380,
+        "min_abs": 0.00023213138047140092,
+        "max_abs": 0.047761209309101105,
+        "min_signed": -0.03178592398762703,
+        "over_4cm": 29,
+        "outside_rest_1to2cm": null
+      },
+      "walk21": {
+        "samples": 2380,
+        "min_abs": 0.0003960701578762382,
+        "max_abs": 0.047646600753068924,
+        "min_signed": -0.03287537768483162,
+        "over_4cm": 29,
+        "outside_rest_1to2cm": null
+      },
+      "walk22": {
+        "samples": 2380,
+        "min_abs": 0.00016871864499989897,
+        "max_abs": 0.04756323993206024,
+        "min_signed": -0.04734813794493675,
+        "over_4cm": 28,
+        "outside_rest_1to2cm": null
+      },
+      "walk23": {
+        "samples": 2380,
+        "min_abs": 3.6303903470980003e-05,
+        "max_abs": 0.047513026744127274,
+        "min_signed": -0.04730185121297836,
+        "over_4cm": 28,
+        "outside_rest_1to2cm": null
+      },
+      "walk24": {
+        "samples": 2380,
+        "min_abs": 0.00028586681582964957,
+        "max_abs": 0.04749627038836479,
+        "min_signed": -0.04728568717837334,
+        "over_4cm": 28,
+        "outside_rest_1to2cm": null
+      },
+      "walk25": {
+        "samples": 2380,
+        "min_abs": 0.00039647475932724774,
+        "max_abs": 0.04795289784669876,
+        "min_signed": -0.04730185121297836,
+        "over_4cm": 30,
+        "outside_rest_1to2cm": null
+      },
+      "walk26": {
+        "samples": 2380,
+        "min_abs": 0.0005351158324629068,
+        "max_abs": 0.04807480797171593,
+        "min_signed": -0.04734813794493675,
+        "over_4cm": 30,
+        "outside_rest_1to2cm": null
+      },
+      "walk27": {
+        "samples": 2380,
+        "min_abs": 0.00023466296261176467,
+        "max_abs": 0.047646600753068924,
+        "min_signed": -0.047418318688869476,
+        "over_4cm": 29,
+        "outside_rest_1to2cm": null
+      },
+      "walk28": {
+        "samples": 2380,
+        "min_abs": 4.741652082884684e-05,
+        "max_abs": 0.047761209309101105,
+        "min_signed": -0.047502197325229645,
+        "over_4cm": 27,
+        "outside_rest_1to2cm": null
+      },
+      "walk29": {
+        "samples": 2380,
+        "min_abs": 8.051707118283957e-05,
+        "max_abs": 0.047903697937726974,
+        "min_signed": -0.047587160021066666,
+        "over_4cm": 27,
+        "outside_rest_1to2cm": null
+      },
+      "walk3": {
+        "samples": 2380,
+        "min_abs": 0.00029378439649008214,
+        "max_abs": 0.048876143991947174,
+        "min_signed": -0.03390968590974808,
+        "over_4cm": 17,
+        "outside_rest_1to2cm": null
+      },
+      "walk30": {
+        "samples": 2380,
+        "min_abs": 0.0007293595117516816,
+        "max_abs": 0.048067521303892136,
+        "min_signed": -0.04765959084033966,
+        "over_4cm": 29,
+        "outside_rest_1to2cm": null
+      },
+      "walk31": {
+        "samples": 2380,
+        "min_abs": 0.0005526774330064654,
+        "max_abs": 0.048243917524814606,
+        "min_signed": -0.04770747944712639,
+        "over_4cm": 31,
+        "outside_rest_1to2cm": null
+      },
+      "walk4": {
+        "samples": 2380,
+        "min_abs": 0.00020535240764729679,
+        "max_abs": 0.04897989332675934,
+        "min_signed": -0.04442598298192024,
+        "over_4cm": 21,
+        "outside_rest_1to2cm": null
+      },
+      "walk5": {
+        "samples": 2380,
+        "min_abs": 0.0005263542989268899,
+        "max_abs": 0.04905735328793526,
+        "min_signed": -0.021871104836463928,
+        "over_4cm": 21,
+        "outside_rest_1to2cm": null
+      },
+      "walk6": {
+        "samples": 2380,
+        "min_abs": 0.00021461740834638476,
+        "max_abs": 0.04911010339856148,
+        "min_signed": -0.045172467827796936,
+        "over_4cm": 21,
+        "outside_rest_1to2cm": null
+      },
+      "walk7": {
+        "samples": 2380,
+        "min_abs": 0.0005826458800584078,
+        "max_abs": 0.04914054274559021,
+        "min_signed": -0.032514628022909164,
+        "over_4cm": 22,
+        "outside_rest_1to2cm": null
+      },
+      "walk8": {
+        "samples": 2380,
+        "min_abs": 0.0005741033237427473,
+        "max_abs": 0.04915041849017143,
+        "min_signed": -0.023702509701251984,
+        "over_4cm": 22,
+        "outside_rest_1to2cm": null
+      },
+      "walk9": {
+        "samples": 2380,
+        "min_abs": 0.0009073494584299624,
+        "max_abs": 0.04914054274559021,
+        "min_signed": -0.02366247959434986,
+        "over_4cm": 22,
+        "outside_rest_1to2cm": null
+      }
+    }
+  }
+]

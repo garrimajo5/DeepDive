@@ -1,0 +1,44 @@
+[
+  {
+    "sex": "m",
+    "pose": "post20",
+    "max_error_m": 7.41719122743234e-05,
+    "mean_error_m": 2.4344949933968172e-05,
+    "samples": 1343
+  },
+  {
+    "sex": "m",
+    "pose": "seat1",
+    "max_error_m": 0.00022605540289077908,
+    "mean_error_m": 0.00010492959048576637,
+    "samples": 1343
+  },
+  {
+    "sex": "m",
+    "pose": "standing",
+    "max_error_m": 7.469680713256821e-05,
+    "mean_error_m": 2.3998650400249466e-05,
+    "samples": 1343
+  },
+  {
+    "sex": "zh",
+    "pose": "post20",
+    "max_error_m": 7.461621862603351e-05,
+    "mean_error_m": 2.5822821616345716e-05,
+    "samples": 1601
+  },
+  {
+    "sex": "zh",
+    "pose": "seat1",
+    "max_error_m": 0.00022633728804066777,
+    "mean_error_m": 9.896809339727565e-05,
+    "samples": 1601
+  },
+  {
+    "sex": "zh",
+    "pose": "standing",
+    "max_error_m": 7.460876804543659e-05,
+    "mean_error_m": 2.5748937127674595e-05,
+    "samples": 1601
+  }
+]
