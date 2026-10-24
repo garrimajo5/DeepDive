@@ -58,6 +58,10 @@ func _go() -> void:
 		while main.zap.flicker > 0.0 and Zap.arc_time(main.zap.flicker) < float(kv["zap_age"]) - 1e-3:
 			main.step(1.0 / 30.0)
 		main.set_process(false)   # кадр — ровно на этом времени разряда
+	if kv.has("wear_t"):   # hull=<%> wear_t=<с> — частицы износа ART-074 ровно в этот момент (0,05 — пакет искр)
+		main.time = float(kv["wear_t"])
+		main.step(0.0)
+		main.set_process(false)
 	if kv.has("lock_event"):   # lock=1 lock_event=enter|exit — событие троса ART-073 ровно на lock_age
 		main.set_process(false)
 		main.lock_water.event_age = float(kv.get("lock_age", "0.36"))

@@ -39,6 +39,7 @@ var _carry_mat: StandardMaterial3D
 var valve_wheel: Node3D            ## маховик вентиля сброса пара (MOD-009), крутится по x
 var panel_lid: Node3D              ## крышка щитка «Аварийный сброс» (MOD-009), откидывается по z
 var steam: SteamView               ## пар из вентиля ART-071 (ValveSteam)
+var drops: WearDropsView           ## капли, искры и пар износа ART-074 (WearDrops) — мостик и машинное, ставит Main
 var lock_water: LockWaterView      ## вода в шахте шлюза ART-073 (LockWater), ставит Main
 var _button_mat: StandardMaterial3D
 var lab_samples: Array[MeshInstance3D] = []   ## образцы в колбах (Lab.contents), светятся цветом вида
@@ -381,6 +382,8 @@ func _add_engine_room() -> void:
 	bmi.material_override = _button_mat
 	steam = SteamView.new()   # пар ART-071: один MultiMesh, ставит Main через apply
 	add_child(steam)
+	drops = WearDropsView.new()   # износ ART-074: один MultiMesh на мостик и машинное (оси корабля)
+	add_child(drops)
 
 
 ## Створки люков, крышка шлюза и цвет реактора — каждый кадр.
