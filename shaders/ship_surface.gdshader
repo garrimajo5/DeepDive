@@ -12,7 +12,7 @@ shader_type spatial;
 // мостика по z, две выборки текут; glint_k = 0 (отсеки, «Экономно», глубина) — маска не читается.
 // «Корабль устал» ART-074 (ustalost-korpusa.md, двойник — CabinWear.amount): маска wear_mask (R потёки, G пятна пола,
 // B порог потери) по метровым UV, вход wear_loss = 1 − корпус/100; потёки на стенах сверху, у бортов на потолке,
-// мокрая полоса пола у бортов; только мостик и машинное, у постов и рамки окна сухо. Темнее, глаже, лак — без эмиссии.
+// мокрая полоса пола у бортов; только мостик и машинное, у постов и рамки окна сухо. Темнее, глаже, лак — SPECULAR, без эмиссии и без CLEARCOAT (#535).
 // wear_loss < 0,36 (самый низкий порог маски ≈ 0,37) — маска не читается.
 
 uniform vec3 base_color : source_color = vec3(0.55, 0.5, 0.42);
@@ -166,7 +166,6 @@ void fragment() {
 		float amount = wet * smoothstep(data.b, data.b + 0.14, wear_loss) * zone * safe;
 		ALBEDO *= 1.0 - amount * 0.68;
 		ROUGHNESS = mix(ROUGHNESS, 0.24, amount * 0.72);
-		CLEARCOAT = amount * 0.7;
-		CLEARCOAT_ROUGHNESS = 0.18;
+		SPECULAR = 0.5 + amount * 0.35;   // лак — сильнее блик; CLEARCOAT не пишем: второй блик на каждый огонь везде (#535)
 	}
 }
