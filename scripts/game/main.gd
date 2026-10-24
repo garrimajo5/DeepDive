@@ -395,9 +395,8 @@ func _warm_frame() -> void:
 	if not warm.active():
 		return
 	var k := warm.outside()
-	if k >= 0:   # кадр снаружи: камера с борта в точке облёта смотрит на корпус (облёт ещё ждёт)
-		var p: Vector3 = Flyby.START_PATH[k]
-		flyby_cam.transform = Transform3D(Basis.looking_at(Flyby.LOOK_AT - p), p)
+	if k >= 0:   # кадр снаружи: камера с борта в точке облёта (и всплытия, #519) смотрит на корпус (облёт ещё ждёт)
+		flyby_cam.transform = Warmup.outside_pose(k)
 		if not flyby_cam.current:
 			flyby_cam.make_current()
 	else:
