@@ -1317,6 +1317,8 @@ func _lobby_step(r: Touch.Router, dt: float) -> void:
 		if q == "back":
 			_lobby_back(true)
 			return
+		if q == "retry" and lobby_client and lobby_client.rejoin(NetLink.TIMEOUT) != OK:
+			lobby.retry_failed("timeout")
 	if lobby.entry:
 		finder.poll(dt)
 		_lobby_runs()
@@ -1330,15 +1332,21 @@ func _lobby_step(r: Touch.Router, dt: float) -> void:
 			return
 	elif lobby_client:
 		lobby_client.poll(dt)
-		LobbyLink.take(lobby, lobby_client)
-		if lobby.started and lobby_client.joined():
-			_lobby_start_guest()
-			return
-		if not lobby_client.joined():   # хост закрыл забег или связь пропала («Повторить» — с поиском забегов)
-			lobby_client.stop()
-			lobby_client = null
-			open_lobby("lost")
-			return
+		if lobby.lost:   # карточка «Связь потеряна»: ждём ответа на «Повторить»
+			if lobby.retrying:
+				match lobby_client.state:
+					NetLink.State.JOINED:
+						lobby.rejoined()
+						LobbyLink.take(lobby, lobby_client)
+					NetLink.State.REFUSED, NetLink.State.LOST, NetLink.State.OFF:
+						lobby.retry_failed(lobby_client.why)
+		else:
+			LobbyLink.take(lobby, lobby_client)
+			if lobby.started and lobby_client.joined():
+				_lobby_start_guest()
+				return
+			if not lobby_client.joined():   # хост закрыл забег или связь пропала — «Повторить» / «К списку забегов»
+				lobby.lose()
 	_lobby_show()
 
 

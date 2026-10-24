@@ -58,6 +58,9 @@ func _draw_screen() -> void:
 			Lobby.to_screen(Vector2(Lobby.SEARCH.end.x, Lobby.RULE_Y), size), Color(MainMenu.EDGE, 0.8), maxf(1.0, 2.0 * s))
 		_button(bold, Lobby.screen_rect("create", size), "Создать забег", s, "off")
 		_button(bold, Lobby.screen_rect("search", size), "Подключиться", s, "off")
+		if lobby.lost:
+			_lost(font, size, s)
+			return
 		_text(font, lobby.head(), Lobby.to_screen(Lobby.HEAD_AT, size), Lobby.SMALL_PX * s, MainMenu.SOFT)
 	for i in Lobby.SEATS:
 		_row(font, i, size, s)
@@ -81,6 +84,19 @@ func _draw_screen() -> void:
 		var px := Lobby.SMALL_PX * s
 		draw.draw_string(font, Vector2(r.position.x, r.get_center().y + Splash.CAP_H * px * 0.5), lobby.start_text(),
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, roundi(px), MainMenu.SOFT)
+
+
+## Карточка «Связь потеряна» (лист ART-028 «05»): заголовок, «Проверьте Wi-Fi…», «Готовность будет сброшена»,
+## «Повторить» (главная; во время попытки — «Подключаемся…», погашена) и «К списку забегов».
+func _lost(font: Font, size: Vector2, s: float) -> void:
+	draw.draw_style_box(_box(s, MainMenu.DARK, MainMenu.SOFT, 3.0), Lobby.rect_to_screen(Lobby.LOST_BOX, size))
+	_text(bold, Lobby.LOST_TITLE, Lobby.to_screen(Lobby.LOST_TITLE_AT, size), Lobby.LOST_TITLE_PX * s, MainMenu.INK)
+	var lines := lobby.lost_lines()
+	for i in lines.size():
+		_text(font, lines[i], Lobby.to_screen(Lobby.LOST_LINE_AT + Vector2(0.0, Lobby.LOST_LINE_STEP * i), size),
+			Lobby.LOST_LINE_PX * s, MainMenu.INK)
+	_button(bold, lobby.rect("retry", size), lobby.retry_text(), s, "main" if lobby.enabled("retry") else "off")
+	_button(bold, lobby.rect("tolist", size), "К списку забегов", s, "plain")
 
 
 ## Вход по «Экипаж» — поиск забегов (лист ART-028): найденные забеги строками с «Подключиться», пусто — «Ищем

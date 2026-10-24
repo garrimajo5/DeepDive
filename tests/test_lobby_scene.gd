@@ -204,11 +204,62 @@ func test_guest_host_gone() -> void:
 	main.address_client = NetLink.Client.new()
 	eq(main.address_client.join("127.0.0.1", PORT + 2), OK)
 	ok(_pump(func() -> bool: return main.lobby_client != null), "гость в комнате")
+	_tap(main.lobby.rect("pick3", _size()).get_center())
+	ok(_pump(func() -> bool: return main.lobby.mine() != null and main.lobby.mine().role == 3), "роль закреплена")
+	_tap(main.lobby.rect("ready", _size()).get_center())
+	ok(_pump(func() -> bool: return room.ready_count() == 1), "гость готов")
 	host.stop()
 	host = null
-	ok(_pump(func() -> bool: return main.lobby.entry), "хост ушёл — вход")
-	eq(main.lobby.entry_head(), "Связь с хостом потеряна")
+	ok(_pump(func() -> bool: return main.lobby.lost), "хост ушёл — «Связь потеряна»")
+	ok(not main.lobby.entry and main.lobby.open and not main.lobby.mine().ready, "в комнате, готовность сброшена")
+	_tap(main.lobby.rect("tolist", _size()).get_center())
+	ok(main.lobby.entry and main.lobby.open, "«К списку забегов» — поиск")
+	eq(main.lobby.why, "")
+	ok(main.finder.udp != null, "ищем забеги")
 	ok(main.lobby_client == null and main.net_client == null)
+
+
+## «Повторить» после потери связи: хост снова открыл забег на том же адресе — гость в его комнате, роль заново;
+## хост молчит — «Хост не отвечает» на карточке. Системная «Назад» с карточки — к списку забегов.
+func test_guest_retry() -> void:
+	host = NetLink.Host.new()
+	eq(host.start(PORT + 5), OK)
+	room = Lobby.new()
+	room.host("Лена", "127.0.0.1")
+	room.open = true
+	await _main()
+	_tap(MainMenu.screen_rect("crew", _size()).get_center())
+	_tap(Lobby.screen_rect("address", _size()).get_center())
+	main.address.field.text = "127.0.0.1"
+	main.address.field.begin()
+	main.address_client = NetLink.Client.new()
+	eq(main.address_client.join("127.0.0.1", PORT + 5), OK)
+	ok(_pump(func() -> bool: return main.lobby_client != null and main.lobby.players.size() == 2), "гость в комнате")
+	host.stop()
+	host = null
+	ok(_pump(func() -> bool: return main.lobby.lost), "связь потеряна")
+	_tap(main.lobby.rect("retry", _size()).get_center())
+	ok(main.lobby.retrying, "подключаемся")
+	for i in PUMP:   # хоста нет — ответа не будет
+		main.step(1.0 / 10.0)
+		if not main.lobby.retrying:
+			break
+	ok(main.lobby.lost and not main.lobby.retrying)
+	eq(main.lobby.lost_lines()[0], "Хост не отвечает. Проверьте Wi-Fi и телефон хоста.")
+	host = NetLink.Host.new()
+	eq(host.start(PORT + 5), OK)
+	room = Lobby.new()
+	room.host("Лена", "127.0.0.1")
+	room.open = true
+	_tap(main.lobby.rect("retry", _size()).get_center())
+	ok(_pump(func() -> bool: return not main.lobby.lost and main.lobby.players.size() == 2), "снова в комнате хоста")
+	eq(main.lobby.host_name(), "Лена")
+	ok(main.lobby.mine() != null and main.lobby.mine().role < 0, "роль выбирать заново")
+	host.stop()
+	host = null
+	ok(_pump(func() -> bool: return main.lobby.lost))
+	main.back_pressed()
+	ok(main.lobby.open and main.lobby.entry and main.lobby_client == null, "«Назад» с карточки — к списку")
 
 
 func test_host_room_beacon() -> void:
