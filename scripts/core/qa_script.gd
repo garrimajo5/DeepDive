@@ -33,12 +33,13 @@ extends RefCounted
 ##                                                     уходит с палубы, у хоста «… отключился» (HostNotice, ART-043)
 ##   {"do": "wreck"}                                 — корпус разрушен: шторка ART-036 3,5 с, затем забег с начала
 ##   {"do": "tutorial", "on": true}                 — подсказки первого забега ART-038 с первого шага (false — убрать)
+##   {"do": "cards", "on": true}                    — карточки ролей у постов ART-045 с нуля (false — убрать)
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["route"], ["act"], ["gone"], ["wreck"], ["back"], ["tutorial", on], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["route"], ["act"], ["gone"], ["wreck"], ["back"], ["tutorial", on], ["cards", on], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
-const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "silt", "drain", "hull", "route", "gone", "wreck", "back", "tutorial", "log", "quit"]
+const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "silt", "drain", "hull", "route", "gone", "wreck", "back", "tutorial", "cards", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "new", "exit", "yes", "no", "crew", "settings", "join", "last",
 	"key0", "key1", "key2", "key3", "key4", "key5", "key6", "key7", "key8", "key9", "key.", "keydel"]
 const PRESS_TIME := 0.15   ## сколько держать кнопку при «press», с
@@ -173,6 +174,8 @@ func _begin(st: Dictionary, out: Array) -> void:
 			out.append(["back"])
 		"tutorial":
 			out.append(["tutorial", bool(st.get("on", true))])
+		"cards":
+			out.append(["cards", bool(st.get("on", true))])
 		"mate":
 			out.append(["mate", float(st.get("x", 0.0)), float(st.get("z", 0.0)), float(st.get("yaw", 0.0)),
 				int(st.get("role", 1)), int(st.get("look", 1)), bool(st.get("seated", false))])

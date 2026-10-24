@@ -69,7 +69,7 @@ static func dpad(d: Vector2, radius: float) -> Vector2i:
 ## Разбор касаний: палец на крестовине ведёт игрока (можно вести по кругу и за край), на кнопке — держит её,
 ## остальные — обзор свайпом. Пальцы работают одновременно.
 class Router:
-	enum Role { PAD, ACTION, LOOK, UP, DOWN, LIGHT, NOCLIP }
+	enum Role { PAD, ACTION, LOOK, UP, DOWN, LIGHT, NOCLIP, UI }
 
 	var layout := Layout.new()
 	var pilot_buttons := false  ## за штурвалом работают «Всплыть», «Вниз», «Свет»
@@ -80,6 +80,9 @@ class Router:
 	var noclip_pressed := false  ## нажали тестовую кнопку noclip в этом кадре
 	var look := Vector2.ZERO     ## смещение пальцев обзора за кадр, px
 	var taps: Array[Vector2] = []   ## где пальцы коснулись экрана в этом кадре — кнопки диалогов (NetDrop)
+	## Прямоугольники экрана, где касание берёт интерфейс поверх игры (карточка роли ART-045): палец там не крутит
+	## взгляд — только `taps`. Кнопки управления важнее.
+	var blocks: Array[Rect2] = []
 	var _fingers := {}           ## id → [Role, последняя точка]
 
 	func vert() -> int:
@@ -105,6 +108,10 @@ class Router:
 			role = Role.DOWN
 		elif pilot_buttons and layout.light.has(p):
 			role = Role.LIGHT
+		else:
+			for b in blocks:
+				if b.has_point(p):
+					role = Role.UI
 		_fingers[id] = [role, p]
 		taps.append(p)
 		if role == Role.ACTION:

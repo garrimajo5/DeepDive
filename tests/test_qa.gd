@@ -67,8 +67,9 @@ func test_scene_runs_scenario() -> void:
 	var table: Node3D = main.bridge.props[BridgeProps.TABLE]
 	var legs_seen := false
 	var weld_y := -1.0   # issue #524: на 16-breach-weld шов в середине кадра по высоте (доля от верха)
+	var card_seen := false   # 30: карточка роли ART-045 на экране
 	var no_answer := false   # 29f: экран адреса ART-039 дождался «Нет ответа»
-	for i in 3150:  # 105 с игры (сценарий идёт ~99 с)
+	for i in 3300:  # 110 с игры (сценарий идёт ~104 с)
 		# снимок берёт уже нарисованный кадр — камеру до шага, в котором он снят
 		var cam := main.camera
 		var table_vis := cam.is_position_in_frustum(table.global_position + table.global_basis.y * 0.9)
@@ -81,6 +82,7 @@ func test_scene_runs_scenario() -> void:
 		var legs_vis := true
 		for k in ["toe_l", "toe_r", "hand_l", "hand_r"]:
 			legs_vis = legs_vis and cam.is_position_in_frustum(main.ship.to_global(j[k]))
+		var card_vis: bool = main.role_card_panel.visible and main.role_card.a > 0.5
 		var weld_at := -1.0
 		if main.breach.active:
 			var seam := main.ship.to_global(main.breach.active.p)
@@ -101,6 +103,8 @@ func test_scene_runs_scenario() -> void:
 				zap_seen = zap_vis
 			if qa.log_lines[k].begins_with("скриншот 10a-zap-okno"):
 				arc_seen = arc_vis
+			if qa.log_lines[k].begins_with("скриншот 30-kartochka-sonar"):
+				card_seen = card_vis
 		shots = qa.log_lines.size()
 		if qa.script_q.finished:
 			break
@@ -124,6 +128,8 @@ func test_scene_runs_scenario() -> void:
 	ok(table_seen, "на снимке 09-sonar голостол в кадре (#48)")
 	ok(zap_seen, "на снимке 10-zap рычаг в кадре")
 	ok(arc_seen, "на снимке 10a-zap-okno — дуга у носового окна (ART-068)")
+	ok(card_seen, "на снимке 30-kartochka-sonar — карточка роли (ART-045)")
+	ok(not main.role_card.on, "после — карточки выключены")
 	ok(no_answer, "экран «Войти по адресу»: без хоста — «Нет ответа» (29f)")
 	ok(not main.address.open, "«Назад» закрыл экран адреса")
 	ok(legs_seen, "на снимке 06b-own-legs в кадре свои ступни и кисти (#49)")
