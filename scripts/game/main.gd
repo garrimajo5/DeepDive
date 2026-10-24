@@ -114,6 +114,10 @@ var camera: Camera3D
 static var intro := true
 ## Главное меню ART-037 после заставки прогрева (тесты и снимки выключают: tests/run.gd, tools/shot.gd).
 static var menu := true
+## Подсказки первого забега ART-038 (тесты и снимки выключают: tests/run.gd, tools/shot.gd; прогон тестера — шаг `tutorial`).
+static var hints := true
+var tutorial := Tutorial.new()   ## шаги «штурвал → ход → свет → энергия → сонар → маршрут»; пройдено — Settings.hints_done
+var tutorial_panel: TutorialPanel
 var main_menu := MainMenu.new()   ## «Погрузиться» / «Экипаж» / «Настройки»: пока открыто — игра стоит под меню
 var menu_panel: MenuPanel
 var address := AddressScreen.new()   ## «Войти по адресу» ART-039 поверх меню («Экипаж»): пока открыт — меню ждёт
@@ -304,6 +308,10 @@ func _ready() -> void:
 	ver.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE, 4)
 	ver.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	ui.add_child(ver)
+	tutorial_panel = TutorialPanel.new()   # поверх кнопок: обводка нужной ложится на них, касания проходят
+	tutorial_panel.name = "Подсказка"
+	tutorial_panel.layout = overlay.router.layout
+	ui.add_child(tutorial_panel)
 	drop_panel = DropPanel.new()   # поверх управления: пока диалог открыт, кнопки под ним не работают
 	drop_panel.name = "Связь потеряна"
 	ui.add_child(drop_panel)
@@ -323,6 +331,7 @@ func _ready() -> void:
 	address.load_last()
 	settings.read()
 	_apply_settings()
+	tutorial.on = hints and not settings.hints_done and not QaRunner.pending()   # тестер включает шагом `tutorial`
 	save.load_into(samples, scanner)
 	_begin_run()
 	samples.changed.connect(save.mark)
@@ -564,12 +573,14 @@ func step(dt: float) -> void:
 	if qa:
 		qa.tick(dt)
 	if main_menu.open and not warm.active():   # главное меню: игра стоит, касания — кнопкам меню
+		_tutorial_hide()
 		_menu_step(dt)
 		return
 	if pause.open:   # пауза: игра стоит, касания — кнопкам паузы; меню сетевого забега — мир идёт без своего ввода
 		var stop := pause.stops_world()
 		_pause_step()
 		if stop or main_menu.open:
+			_tutorial_hide()
 			return
 		if settings.open:   # палец на ползунке настроек держится, но в игру не идёт
 			overlay.router.mute()
@@ -612,8 +623,13 @@ func step(dt: float) -> void:
 		helm.in_thrust = r.move.y
 		helm.in_turn = r.move.x
 		helm.in_vert = r.vert()
+		if r.move.y > 0:
+			tutorial.note(Tutorial.Ev.THRUST)
 		if r.light_pressed:
+			var was_lit := light_on
 			toggle_light()
+			if light_on != was_lit:
+				tutorial.note(Tutorial.Ev.LIGHT)
 		walker.look(overlay.look_points())
 		if r.action_pressed:
 			stand_up()
@@ -622,7 +638,10 @@ func step(dt: float) -> void:
 		helm.in_turn = 0.0
 		helm.in_vert = 0.0
 		walker.look(overlay.look_points())
+		var shares := reactor.share.duplicate()
 		power.nav(reactor, r.move, dt)
+		if reactor.share != shares:
+			tutorial.note(Tutorial.Ev.SHARE)
 		if r.action_pressed:
 			close_power()
 	elif at_vote:
@@ -766,6 +785,7 @@ func step(dt: float) -> void:
 	_place_camera()
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
 	_update_ui()   # до меток: плашка строки уже на месте этого кадра (#387)
+	_tutorial_step(dt)
 	busy_marks.plate = status_rect()
 	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
 	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy,
@@ -858,6 +878,8 @@ func use_post(id: String) -> void:
 			open_power()
 		"sonar":
 			ping_sonar()
+			if sonar.ping_time == time:   # импульс прошёл (не «обесточен» и не «мало энергии»)
+				tutorial.note(Tutorial.Ev.PING)
 		"route":
 			if run.ended:   # итог, решённый без своего игрока
 				at_vote = true
@@ -866,6 +888,7 @@ func use_post(id: String) -> void:
 				open_vote()
 			else:
 				announce(run.cycle())   # маршрут выбран — гостям тоже
+				tutorial.note(Tutorial.Ev.ROUTE)
 		"zap":
 			walker.x = ZAP_STAND.x   # шаг к рычагу (#137)
 			walker.z = ZAP_STAND.y
@@ -1459,6 +1482,27 @@ func sit_at_helm() -> void:
 	pilot.sit(walker)
 	overlay.set_pilot(true)
 	say(SAT_MSG)
+	tutorial.note(Tutorial.Ev.SAT)
+
+
+## Подсказки первого забега ART-038: скрыты под тревогой, голосованием, итогом, облётом, шторкой, паузой и меню
+## (шаг стоит); у гостя сети — пока нет (их шаги — следующая часть). Пройдено — запомнить в настройках.
+func _tutorial_step(dt: float) -> void:
+	var hidden := net_client != null or alarms_on().has(true) or at_vote or run.ended or pause.open \
+		or main_menu.open or settings.open or flyby.active() or warm.active() or wreck.active() or walker.noclip
+	if tutorial.update(dt, hidden):
+		settings.hints_done = true
+		settings.write()
+	var near := near_post
+	tutorial_panel.show_tutorial(tutorial, tutorial.text(pilot.seated, near),
+		tutorial.highlight(pilot.seated, at_power, near), status_rect(),
+		power_panel.box() if power_panel.visible else Rect2())
+
+
+func _tutorial_hide() -> void:
+	tutorial.a = 0.0
+	if tutorial_panel != null and tutorial_panel.visible:
+		tutorial_panel.visible = false
 
 
 func stand_up() -> void:
@@ -1584,6 +1628,8 @@ func tag_blocks() -> Array:
 			out.append(p.call("box"))
 	if route_card.visible:
 		out.append(route_card.rect)
+	if tutorial_panel != null and tutorial_panel.visible:   # плашка подсказки ART-038
+		out.append(tutorial_panel.box())
 	return out
 
 
@@ -1931,6 +1977,7 @@ func _client_step(dt: float) -> void:
 	visor.visible = me.welding()
 	alarm_board.show_alarms(alarms_on(), time, breach.active)
 	_client_run_view(dt)
+	_tutorial_step(dt)   # у гостя пока скрыты
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	overlay.set_pilot(pilot.seated)

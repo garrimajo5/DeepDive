@@ -35,6 +35,7 @@ func _initialize() -> void:
 	Warmup.enabled = false       # без прогрева шейдеров: сценовые тесты считают шаги с первого (test_warmup включает)
 	Main.menu = false    # без главного меню ART-037: забег сразу (его проверяет test_main_menu)
 	Main.intro = false   # без облёта с борта в начале забега (его проверяет test_flyby)
+	Main.hints = false   # без подсказок первого забега ART-038 (их проверяет test_tutorial)
 	_run.call_deferred()
 
 

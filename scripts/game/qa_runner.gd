@@ -130,6 +130,9 @@ func tick(dt: float) -> void:
 				main.vitals.destroyed.emit()
 			"back":   # системная «Назад»: пауза ART-037
 				main.back_pressed()
+			"tutorial":   # подсказки первого забега ART-038: с первого шага или убрать
+				main.tutorial.reset()
+				main.tutorial.on = c[1]
 			"mate":
 				var mate: Crew.Member
 				if c[6]:   # за штурвалом
