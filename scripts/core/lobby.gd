@@ -10,6 +10,9 @@ extends RefCounted
 ## комнаты хоста (`pack` / `unpack`). Макет 2400×1080 вписан в экран по центру (`scale`), текст не растягивается.
 ## У хоста — по ART-039 (`vhod-po-adresu.md`, `vhod-po-adresu-host.png`): «Ваш адрес» крупно над ролями (`address`,
 ## `address_text`), «Назад» вверху вместо «Создать забег» / «Подключиться», строки и кнопки ниже на `SHIFT` (`dy`).
+## Вход (`entry`, по «Экипаж» из меню, пока нет поиска забегов): по макету «В сети никого нет» — «Создать забег»
+## и «По адресу» на месте «Обновить список» (ART-039), «Подключиться» вверху погашена до поиска; итог прошлой
+## попытки — `why` вместо заголовка.
 
 const W := 2400.0
 const H := 1080.0
@@ -57,6 +60,19 @@ const ADDR_HINT_AT := Vector2(1430, 230)
 const ADDR_HINT_PX := 30.0
 const NO_ADDR := "Нет адреса сети"
 
+## Вход (`entry`): места по листу состояний ART-028, «02 · В сети никого нет».
+const ENTRY_SUB := "Одна сеть Wi-Fi · создайте забег или войдите по адресу"
+const ENTRY_HEAD := "Кооп-забег"
+const ENTRY_HEAD_Y := 410.0          ## центр строки заголовка
+const ENTRY_LINES := ["Подключитесь к одной сети Wi-Fi.", "Один создаёт забег, остальные входят по адресу."]
+const ENTRY_LINE_Y := 506.0          ## центр первой строки; следующая ниже на ENTRY_LINE_STEP
+const ENTRY_LINE_STEP := 66.0
+const ENTRY_CX := 1192.0             ## ось текста — между нижними кнопками
+const NEW := Rect2(512, 800, 660, 112)       ## «Создать забег» (главное действие)
+const BY_ADDR := Rect2(1211, 800, 660, 112)  ## «По адресу» — на месте «Обновить список»
+## Итог прошлой попытки на входе (`why`).
+const WHY := {"port": "Забег не открылся: сеть занята", "lost": "Связь с хостом потеряна"}
+
 ## Палитра ART-028 (как `MainMenu`), красного нет.
 const DIM := Color(0.043, 0.11, 0.141, 0.84)   ## затемнение мостика под экраном (#0B1C24)
 const LETTERS := ["П", "С", "И", "Б"]
@@ -84,16 +100,47 @@ var players: Array[Player] = []   ## по порядку входа; первы�
 var started := false
 var refused := -1              ## роль, в которой отказал хост (своя попытка) — «Занято» и подсказка; −1 — нет
 var address := ""              ## у хоста: свой адрес в локальной сети ("" — нет сети)
+var entry := false             ## вход: «Создать забег» / «По адресу» (комнаты ещё нет)
+var why := ""                  ## на входе: чем кончилась прошлая попытка (ключ `WHY`), "" — ничего
 
 
 ## Комната хоста: хост — первый игрок; addr — свой адрес для гостей (`local_address`).
 func host(name: String, addr := "") -> void:
+	entry = false
 	players.clear()
 	me = HOST
 	started = false
 	refused = -1
 	address = addr
 	add(HOST, name)
+
+
+## Вход по «Экипаж»: комнаты нет; w — итог прошлой попытки (`WHY`).
+func show_entry(w := "") -> void:
+	open = true
+	entry = true
+	why = w
+	players.clear()
+	started = false
+	refused = -1
+	address = ""
+
+
+## Гость в комнате хоста: свой id и снимок придут от хоста (`LobbyLink.take`).
+func guest() -> void:
+	open = true
+	entry = false
+	why = ""
+	players.clear()
+	me = -1
+	started = false
+	refused = -1
+	address = ""
+
+
+## Заголовок входа: итог прошлой попытки или «Кооп-забег».
+func entry_head() -> String:
+	return WHY.get(why, ENTRY_HEAD)
 
 
 ## Адрес хоста из адресов устройства (локальная сеть IPv4, `AddressPad.host_address`).
@@ -103,7 +150,7 @@ static func local_address() -> String:
 
 ## Плашка адреса — только у хоста.
 func shows_address() -> bool:
-	return is_host()
+	return is_host() and not entry
 
 
 ## Сдвиг строк и кнопок вниз: у хоста плашка адреса (ART-039), у гостя — макет ART-028.
@@ -336,6 +383,8 @@ func shows_back() -> bool:
 func enabled(id: String) -> bool:
 	if not open or started:
 		return false
+	if entry:
+		return id in ["create", "new", "address"]
 	var m := mine()
 	if id.begins_with("pick"):
 		return can_pick(int(id.substr(4)))
@@ -355,7 +404,7 @@ func enabled(id: String) -> bool:
 static func screen_rect(id: String, size: Vector2, shift := 0.0) -> Rect2:
 	if id.begins_with("pick"):
 		return rect_to_screen(pick_rect(int(id.substr(4)), shift), size)
-	var r: Rect2 = {"create": CREATE, "search": SEARCH, "leave": LEAVE, "ready": READY, "start": START, "back": BACK,
+	var r: Rect2 = {"create": CREATE, "search": SEARCH, "new": NEW, "address": BY_ADDR, "leave": LEAVE, "ready": READY, "start": START, "back": BACK,
 		"note": NOTE}.get(id, Rect2())
 	if id in ["ready", "start", "back", "note"]:
 		r.position.y += shift
@@ -364,12 +413,12 @@ static func screen_rect(id: String, size: Vector2, shift := 0.0) -> Rect2:
 
 ## Кнопка id этой комнаты на экране (со сдвигом хоста).
 func rect(id: String, size: Vector2) -> Rect2:
-	return screen_rect(id, size, dy())
+	return screen_rect(id, size, 0.0 if entry else dy())
 
 
 ## Какая работающая кнопка под касанием p ("" — никакая).
 func hit(p: Vector2, size: Vector2) -> String:
-	var ids := ["leave", "ready", "start", "back"]
+	var ids := ["create", "new", "address", "leave", "ready", "start", "back"]
 	for i in SEATS:
 		ids.append("pick%d" % i)
 	for id: String in ids:
@@ -383,6 +432,9 @@ func hit(p: Vector2, size: Vector2) -> String:
 func press(id: String) -> String:
 	if not enabled(id):
 		return ""
+	if entry:   # вход: «Создать забег» (вверху или внизу) — комната хоста, «По адресу» — экран адреса ART-039
+		why = ""
+		return "address" if id == "address" else "create"
 	var q := ""
 	if id.begins_with("pick"):
 		q = "role:" + id.substr(4)
