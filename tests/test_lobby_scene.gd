@@ -196,3 +196,32 @@ func test_guest_host_gone() -> void:
 	ok(_pump(func() -> bool: return main.lobby.entry), "хост ушёл — вход")
 	eq(main.lobby.entry_head(), "Связь с хостом потеряна")
 	ok(main.lobby_client == null and main.net_client == null)
+
+
+func test_host_room_beacon() -> void:
+	var f := RunBeacon.Finder.new()
+	f.port = PORT + 7
+	eq(f.start(), OK)
+	await _main()
+	main.beacon.to = "127.0.0.1"
+	main.beacon.to_port = PORT + 7
+	_tap(MainMenu.screen_rect("crew", _size()).get_center())
+	ok(main.beacon.udp == null, "на входе маяка нет")
+	_tap(Lobby.screen_rect("new", _size()).get_center())
+	ok(main.beacon.udp != null, "комната хоста — маяк в сеть")
+	var found := false
+	for i in PUMP:
+		main.step(DT)
+		f.poll(DT)
+		if not f.runs.is_empty():
+			found = true
+			break
+		OS.delay_msec(2)
+	ok(found, "гость видит забег")
+	if found:
+		eq(f.runs[0].title(), "Забег «Игрок 1»")
+		eq(f.runs[0].port, PORT, "порт комнаты")
+		eq(f.runs[0].line(), "1 / 4 · свободны П / С / И / Б")
+	_tap(main.lobby.rect("leave", _size()).get_center())
+	ok(main.beacon.udp == null, "«Назад» хоста — маяк молчит")
+	f.stop()
