@@ -3,11 +3,17 @@ extends RefCounted
 ## Сохранение экспедиции в user:// (как js/save.js): груз трюма, номера поднятых со дна образцов, изученные виды.
 ## Формат файла — JSON, совместимый с браузерным: {"v": 1, "cargo": [{"kind": "moss", "i": 3}, …], "got": [3, …],
 ## "species": {"fish": {"scanned": true, "seen": []}, …}} (i = null — образец не со дна; seen — ключи наблюдений вида, `Scanner.seen`). Запись не чаще раза в секунду после изменений и сразу, когда игру сворачивают.
-## Файл недоступен или испорчен — игра просто не сохраняет и начинает с чистого трюма.
+## История экспедиции для журнала ART-047 — ключ "log" (`Expedition.snapshot`), если задан `expedition`; старый файл без
+## него принимается, история тогда неизвестна (`Expedition.full = false`).
+## Файл недоступен или испорчен — игра просто не сохраняет и начинает с чистого трюма; что вышло при чтении — `state`
+## (испорченный файл журнал показывает своим сообщением, не как первый запуск).
 
 const PATH := "user://save.json"
 const VERSION := 1
 const DELAY := 1.0                                   ## с после изменения до записи
+## Итог чтения файла: не читали / файла нет, прочитан, испорчен (не JSON или не наш формат).
+enum Load { NONE, OK, BROKEN }
+
 const KINDS := ["moss", "shell", "coral", "spine"]   ## Samples.Kind → вид в файле (как KIND в js/manip.js)
 
 ## Путь по умолчанию для новых сохранений; пустой — не сохранять (тесты и снимки ставят "", чтобы не зависеть
@@ -17,10 +23,12 @@ static var default_path := PATH
 var path := default_path        ## пустой — сохранение выключено
 var dirty := false
 var timer := 0.0
+var expedition: Expedition = null   ## история для журнала ART-047; null — не сохранять её
+var state := Load.NONE              ## что вышло при последнем `load_into`
 
 
 ## Снимок того, что сохраняется.
-static func snapshot(samples: Samples, scanner: Scanner = null) -> Dictionary:
+static func snapshot(samples: Samples, scanner: Scanner = null, history: Expedition = null) -> Dictionary:
 	var cargo: Array = []
 	for c in samples.cargo:
 		cargo.append({"kind": KINDS[int(c[0])], "i": int(c[1]) if int(c[1]) >= 0 else null})
@@ -32,11 +40,13 @@ static func snapshot(samples: Samples, scanner: Scanner = null) -> Dictionary:
 		for id in Species.ids():
 			species[id] = {"scanned": scanner.is_scanned(id), "seen": scanner.seen_of(id)}
 		out["species"] = species
+	if history:
+		out["log"] = history.snapshot()
 	return out
 
 
 ## Вернуть снимок в игру; false — не наш формат (тогда ничего не меняется).
-static func apply(data: Variant, samples: Samples, scanner: Scanner = null) -> bool:
+static func apply(data: Variant, samples: Samples, scanner: Scanner = null, history: Expedition = null) -> bool:
 	if not (data is Dictionary) or int(data.get("v", 0)) != VERSION:
 		return false
 	var cargo: Array = []
@@ -67,6 +77,8 @@ static func apply(data: Variant, samples: Samples, scanner: Scanner = null) -> b
 				if sp.get("seen") is Array:
 					notes[id] = sp["seen"]
 		scanner.restore(ids, notes)
+	if history:
+		history.apply(data.get("log"))
 	return true
 
 
@@ -102,19 +114,22 @@ func save(samples: Samples, scanner: Scanner = null) -> bool:
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
 		return false
-	f.store_string(JSON.stringify(snapshot(samples, scanner)))
+	f.store_string(JSON.stringify(snapshot(samples, scanner, expedition)))
 	f.close()
 	return true
 
 
 ## Прочитать файл и вернуть его в игру; false — файла нет, он испорчен или сохранение выключено.
 func load_into(samples: Samples, scanner: Scanner = null) -> bool:
+	state = Load.NONE
 	if not enabled() or not FileAccess.file_exists(path):
 		return false
 	var json := JSON.new()
-	if json.parse(FileAccess.get_file_as_string(path)) != OK:
+	if json.parse(FileAccess.get_file_as_string(path)) != OK or not apply(json.data, samples, scanner, expedition):
+		state = Load.BROKEN
 		return false
-	return apply(json.data, samples, scanner)
+	state = Load.OK
+	return true
 
 
 ## Стереть сохранение (новая экспедиция).
@@ -125,7 +140,11 @@ func wipe() -> void:
 		DirAccess.remove_absolute(path)
 
 
-## «Сбросить сохранение» в настройках ART-037: файл стёрт, груз, поднятые образцы и изученные виды — с нуля.
+## «Сбросить сохранение» в настройках ART-037: файл стёрт, груз, поднятые образцы, изученные виды и история
+## журнала — с нуля.
 func reset(samples: Samples, scanner: Scanner = null) -> void:
 	apply({"v": VERSION}, samples, scanner)
+	if expedition:
+		expedition.clear()   # новая экспедиция — история с начала, полная
+	state = Load.NONE
 	wipe()
