@@ -69,3 +69,41 @@ static func crack(x: float, z: float) -> float:
 ## Сила каустик под трещинами на дне глубиной depth (м подо льдом).
 static func caustic(depth: float) -> float:
 	return CAUSTIC * exp(-maxf(depth, 0.0) / CAUSTIC_DEPTH)
+
+
+# --- Окно Снелля и отражение воды на нижней грани по ART-075 (`docs/concept-art/led-otrazhenie.md`) ---
+# Двойник шейдера: LUT 256×16 (X — косинус угла взгляда к нижней нормали, строки — глубина корабля), маска гладкости по
+# плитке 16 м. Отражение — в EMISSION, затухание по глубине уже в A таблицы (не умножать на exp(−depth/9)).
+const REFLECT_LUT := "res://textures/ice/otrazhenie.png"   ## RGBA8 256×16, линейные данные, без mipmap
+const SMOOTH_MASK := "res://textures/ice/gladkost.png"     ## L8 512², бесшовная по плитке, mipmap
+const CRIT_COS := 0.6614378277661477   ## cos θc при n = 4/3 (θc = 48,59°)
+const ROW_KEYS := [[0.0, 0.0], [8.0, 3.0], [20.0, 7.0], [45.0, 11.0], [90.0, 15.0]]   ## [глубина, строка LUT]
+const OPEN_EDGE := Vector2(0.10, 0.55)  ## трещины пропускают свет, не зеркалят: smoothstep по crack·gate
+const MIRROR_ROUGH := 0.20              ## шероховатость гладкой грани под зеркалом
+const LITE_SMOOTH := 0.55               ## «Экономно» (ART-044): маску не читать — гладкость константой
+const LITE_K := 0.55                    ## и доля отражения × 0,55
+
+
+## Строка LUT (0…15, дробная — между строками фильтр) по глубине корабля: кусочно-линейно по ключам 0/8/20/45/90 м.
+static func row(depth: float) -> float:
+	var d := clampf(depth, 0.0, 90.0)
+	for i in range(1, ROW_KEYS.size()):
+		var a: Array = ROW_KEYS[i - 1]
+		var b: Array = ROW_KEYS[i]
+		if d <= b[0]:
+			return lerpf(a[1], b[1], (d - a[0]) / (b[0] - a[0]))
+	return 15.0
+
+
+## Куда смотреть в LUT: шершавая грань (smooth → 0) прижимает косинус к критическому — граница окна мягче.
+static func lookup(mu: float, smooth: float) -> float:
+	return clampf(CRIT_COS + (mu - CRIT_COS) * lerpf(0.35, 1.0, smooth), 0.0, 1.0)
+
+
+## Доля отражения: A таблицы, гладкость, открытые трещины, сила и ил (ил главнее — в густом нет отражения).
+static func mirror(lut_a: float, smooth: float, crack: float, g: float, gain: float, silt: float,
+		lite: bool = false) -> float:
+	var s := LITE_SMOOTH if lite else smooth
+	var open := HashNoise.smooth(OPEN_EDGE.x, OPEN_EDGE.y, crack * g)
+	var a := lut_a * (0.30 + 0.70 * s) * (1.0 - open) * gain * (1.0 - clampf(silt, 0.0, 1.0))
+	return a * LITE_K if lite else a

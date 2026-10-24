@@ -68,6 +68,11 @@ func _ready() -> void:
 	im.set_shader_parameter("roughness", IceSheet.ROUGHNESS)
 	im.set_shader_parameter("gate_scale", IceSheet.GATE_SCALE)
 	im.set_shader_parameter("gate_edge", IceSheet.GATE_EDGE)
+	im.set_shader_parameter("reflect_lut", load(IceSheet.REFLECT_LUT))   # окно Снелля и отражение ART-075
+	im.set_shader_parameter("smooth_tex", load(IceSheet.SMOOTH_MASK))
+	im.set_shader_parameter("crit_cos", IceSheet.CRIT_COS)
+	im.set_shader_parameter("open_edge", IceSheet.OPEN_EDGE)
+	im.set_shader_parameter("reflect_lite", 0.0)
 	ice_mat = im
 	ice.material_override = im
 	ice.position.y = Seabed.ICE_Y
@@ -302,6 +307,8 @@ func apply_water(env: Environment, depth: float, around: Vector3, silt: float = 
 	ice_mat.set_shader_parameter("glow_k", exp(-maxf(depth, 0.0) / IceSheet.GLOW_DEPTH))
 	ice_mat.set_shader_parameter("contrast", IceSheet.contrast(depth))
 	ice_mat.set_shader_parameter("relief", IceSheet.relief(depth) if ice_relief else 0.0)
+	ice_mat.set_shader_parameter("reflect_row", IceSheet.row(depth))   # ART-075: строка LUT по глубине корабля
+	ice_mat.set_shader_parameter("silt_k", silt)                       # ил главнее — отражения нет
 
 
 ## Грунты дна по ART-060 (`Seabed.Ground`): девять карт и числа в материал дна, без новых вызовов.
@@ -363,6 +370,7 @@ func set_scorch(u: Array) -> void:
 
 func set_relief(on: bool) -> void:
 	ice_relief = on
+	ice_mat.set_shader_parameter("reflect_lite", 0.0 if on else 1.0)   # «Экономно» ART-075: без маски, × 0,55
 	seabed_mat.set_shader_parameter("relief", 1.0 if on else 0.0)
 	if not on:
 		ice_mat.set_shader_parameter("relief", 0.0)
