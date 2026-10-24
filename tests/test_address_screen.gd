@@ -14,6 +14,8 @@ func after() -> void:
 	if main:
 		if main.net_client:
 			main.net_client.stop()
+		if main.lobby_client:
+			main.lobby_client.stop()
 		main.queue_free()
 		main = null
 	if host:
@@ -132,13 +134,19 @@ func test_scene_menu_crew_join() -> void:
 	var size := main.get_viewport().get_visible_rect().size
 	ok(main.main_menu.open)
 	_tap(r, MainMenu.screen_rect("crew", size).get_center())
-	ok(main.address.open, "«Экипаж» — экран «Войти по адресу»")
+	ok(main.lobby.open and main.lobby.entry, "«Экипаж» — вход сбора экипажа")
+	_tap(r, Lobby.screen_rect("address", size).get_center())
+	ok(main.address.open, "«По адресу» — экран «Войти по адресу»")
 	ok(main.address_panel.visible and not main.menu_panel.visible, "экран адреса вместо меню")
+	ok(not main.lobby_panel.visible, "вход сбора — под экраном адреса")
 	ok(main.main_menu.open, "игра всё ещё под меню")
 	main.back_pressed()
-	ok(not main.address.open and main.menu_panel.visible, "«Назад» — снова меню")
+	ok(not main.address.open and main.lobby_panel.visible, "«Назад» — снова вход сбора")
+	main.back_pressed()
+	ok(not main.lobby.open and main.menu_panel.visible, "ещё «Назад» — меню")
 	ok(main.main_menu.open)
 	_tap(r, MainMenu.screen_rect("crew", size).get_center())
+	_tap(r, Lobby.screen_rect("address", size).get_center())
 	main.address.field.text = "127.0.0.1"
 	var c := main.address_client
 	ok(c == null)
@@ -151,12 +159,14 @@ func test_scene_menu_crew_join() -> void:
 		host.poll(DT)
 		main.step(DT)
 		await frames(1)
-		if main.net_client != null:
+		if main.lobby_client != null:
 			joined = true
 			break
-	ok(joined, "хост ответил — клиент на борту")
-	ok(not main.main_menu.open and not main.address.open, "меню и экран адреса закрыты")
-	ok(not main.address_panel.visible, "экран скрыт")
+	ok(joined, "хост ответил — гость в комнате сбора (ART-028), не на палубе")
+	ok(main.net_client == null, "кадров хоста ещё нет")
+	ok(main.main_menu.open and not main.address.open, "экран адреса закрыт, под меню — комната")
+	ok(not main.address_panel.visible and main.lobby_panel.visible, "экран адреса скрыт, комната видна")
+	ok(not main.lobby.entry and not main.lobby.is_host(), "комната глазами гостя")
 	eq(main.address.field.last, "127.0.0.1", "адрес запомнен")
 
 
@@ -168,6 +178,7 @@ func test_scene_no_answer() -> void:
 	var r := main.overlay.router
 	var size := main.get_viewport().get_visible_rect().size
 	_tap(r, MainMenu.screen_rect("crew", size).get_center())
+	_tap(r, Lobby.screen_rect("address", size).get_center())
 	main.address.field.text = "127.0.0.1"   # порт по умолчанию — хоста нет
 	_tap(r, AddressScreen.screen_rect("join", size).get_center())
 	ok(main.address_client != null and main.address.field.connecting, "«Войти» — попытка идёт")

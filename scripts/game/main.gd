@@ -128,7 +128,11 @@ var main_menu := MainMenu.new()   ## «Погрузиться» / «Экипаж
 var menu_panel: MenuPanel
 var address := AddressScreen.new()   ## «Войти по адресу» ART-039 поверх меню («Экипаж»): пока открыт — меню ждёт
 var address_panel: AddressPanel
-var address_client: NetLink.Client   ## попытка входа с экрана адреса; на борту — становится `net_client`
+var address_client: NetLink.Client   ## попытка входа с экрана адреса; принят — в комнату сбора (`lobby_client`)
+var lobby := Lobby.new()   ## сбор экипажа ART-028 по «Экипаж»: вход, комната хоста или гостя; пока открыт — меню ждёт
+var lobby_panel: LobbyPanel
+var lobby_client: NetLink.Client   ## гость в комнате хоста (`LobbyLink.take`); старт — становится `net_client`
+var lobby_port := NetLink.PORT   ## порт «Создать забег» (тесты ставят свой)
 var pause := Pause.new()   ## пауза одиночного забега ART-037 (системная «Назад»): пока открыта — игра стоит
 var pause_panel: PausePanel
 var settings := Settings.new()   ## настройки ART-037 поверх меню или паузы: громкость, свайп, облёт, сброс сохранения
@@ -1137,6 +1141,10 @@ func _menu_step(dt: float = 0.0) -> void:
 		_address_step(r, dt)
 		r.end_frame()
 		return
+	if lobby.open:
+		_lobby_step(r, dt)
+		r.end_frame()
+		return
 	if logbook.open:
 		_journal_step(r)
 		r.end_frame()
@@ -1148,7 +1156,7 @@ func _menu_step(dt: float = 0.0) -> void:
 			_begin_run()
 			break
 		if what == "crew":
-			open_address()
+			open_lobby()
 			break
 		if what == "journal":
 			open_journal()
@@ -1253,7 +1261,126 @@ func _journal_step(r: Touch.Router) -> void:
 	_journal_show()
 
 
-## Экран «Войти по адресу» ART-039 поверх главного меню (пока нет сбора экипажа ART-028 — по «Экипаж»).
+## Сбор экипажа ART-028 по «Экипаж»: вход — «Создать забег» / «По адресу» (поиска забегов ещё нет).
+func open_lobby(why := "") -> void:
+	lobby.show_entry(why)
+	_lobby_show()
+	overlay.router.clear()   # палец с кнопки «Экипаж» не нажмёт кнопку входа под ним
+
+
+func _lobby_show() -> void:
+	if lobby_panel == null:
+		lobby_panel = LobbyPanel.new()
+		add_child(lobby_panel)
+	lobby_panel.show_lobby(lobby)
+	lobby_panel.visible = lobby.open and not address.open   # «По адресу» — экран адреса поверх входа
+	if menu_panel:
+		menu_panel.visible = main_menu.open and not lobby.open and not address.open
+
+
+## Шаг сбора экипажа: касания кнопок; у хоста — гости в комнату (`LobbyLink.serve`), у гостя — снимок хоста
+## (`LobbyLink.take`); «Начать погружение» — забег у всех с ролями из комнаты.
+func _lobby_step(r: Touch.Router, dt: float) -> void:
+	var size := get_viewport().get_visible_rect().size
+	for p in r.taps:
+		var id := lobby.hit(p, size)
+		if id == "":
+			continue
+		if lobby.entry:
+			if lobby.press(id) == "create":
+				_lobby_create()
+			else:
+				open_address()
+			overlay.router.clear()
+			return
+		var q := ""
+		if net_host:
+			q = LobbyLink.host_press(lobby, net_host, id)
+		elif lobby_client:
+			q = LobbyLink.guest_press(lobby, lobby_client, id)
+		if q == "back":
+			_lobby_back(true)
+			return
+	if net_host:
+		LobbyLink.serve(lobby, net_host, net_host.poll(dt))
+		if lobby.started:
+			_lobby_start_host()
+			return
+	elif lobby_client:
+		lobby_client.poll(dt)
+		LobbyLink.take(lobby, lobby_client)
+		if lobby.started and lobby_client.joined():
+			_lobby_start_guest()
+			return
+		if not lobby_client.joined():   # хост закрыл забег или связь пропала («Повторить» — с поиском забегов)
+			lobby_client.stop()
+			lobby_client = null
+			open_lobby("lost")
+			return
+	_lobby_show()
+
+
+## «Создать забег»: открыть хост и комнату, где хост — первый игрок со своим адресом (ART-039).
+func _lobby_create() -> void:
+	net_host = NetLink.Host.new()
+	if net_host.start(lobby_port) != OK:
+		net_host = null
+		open_lobby("port")
+		return
+	lobby.host("", Lobby.local_address())
+	lobby.open = true
+	_lobby_show()
+
+
+## Выйти из комнаты: хост закрывает забег (у гостей — «Связь с хостом потеряна»), гость уходит; со входа — в меню.
+## pressed — «Назад» уже нажата (комната закрыта), иначе — системная «Назад».
+func _lobby_back(pressed := false) -> void:
+	var in_room := not lobby.entry
+	if not pressed:
+		lobby.back()
+	if net_host:
+		net_host.stop()
+		net_host = null
+	if lobby_client:
+		lobby_client.stop()
+		lobby_client = null
+	if in_room:
+		open_lobby()
+		return
+	_lobby_show()
+	if menu_panel:
+		menu_panel.show_menu(main_menu)
+
+
+## Хост: «Начать погружение» принято — роли гостей из комнаты (`LobbyLink.seat`), свой — тоже, гости на палубе,
+## забег с начала. Снимок со стартом уже ушёл всем (`LobbyLink.host_press`).
+func _lobby_start_host() -> void:
+	LobbyLink.seat(lobby, net_host)
+	var mine := lobby.mine()
+	if mine and mine.role >= 0:
+		me.role = mine.role
+		me.name = mine.name
+	close_menu()
+	for g: NetLink.Guest in net_host.guests.values():
+		var p := lobby.find(g.id)
+		var m := _seat_guest(g)
+		if p:
+			m.name = p.name   # имя как в комнате («Игрок 3», если телефон не назвался)
+	crew_view.set_members(crew, me)
+	_net_index()
+	_begin_run()
+
+
+## Гость: старт у хоста — дальше кадры хоста (`_enter_client`); облёта у гостя нет.
+func _lobby_start_guest() -> void:
+	var c := lobby_client
+	lobby_client = null
+	close_menu()
+	c.quiet = 0.0   # в комнате кадров не было — «Нет связи» не мигнёт до первого кадра
+	_enter_client(c)
+
+
+## Экран «Войти по адресу» ART-039 поверх входа сбора экипажа ART-028 («По адресу»).
 func open_address() -> void:
 	address.show()
 	if address_panel == null:
@@ -1262,6 +1389,8 @@ func open_address() -> void:
 	address_panel.show_screen(address)
 	if menu_panel:
 		menu_panel.visible = false
+	if lobby_panel:
+		lobby_panel.visible = false
 
 
 ## Шаг экрана адреса: клавиши, «Войти» / «Отмена», «Назад»; попытка входа ждёт ответа хоста здесь, под экраном.
@@ -1271,11 +1400,15 @@ func _address_step(r: Touch.Router, dt: float) -> void:
 		_address_do(address.press(address.hit(p, get_viewport().get_visible_rect().size)))
 	if address_client:
 		address_client.poll(dt)
-		if address.result(address_client.state, address_client.why):
+		if address.result(address_client.state, address_client.why):   # хост принял — в его комнату (ART-028)
 			var c := address_client
 			address_client = null
-			close_menu()
-			_enter_client(c)
+			address.open = false
+			address_panel.show_screen(address)
+			lobby_client = c
+			lobby.guest()
+			LobbyLink.take(lobby, c)
+			_lobby_show()
 			return
 		if not address.field.connecting:
 			address_client = null
@@ -1298,7 +1431,9 @@ func _address_do(what: String) -> void:
 			if what == "back":
 				if address_panel:
 					address_panel.show_screen(address)
-				if menu_panel:
+				if lobby.open:   # назад — ко входу сбора экипажа
+					_lobby_show()
+				elif menu_panel:
 					menu_panel.show_menu(main_menu)
 
 
@@ -1318,10 +1453,13 @@ func back_pressed() -> void:
 			save.flush(samples, scanner)
 		_journal_show()
 		return
-	if main_menu.open and address.open:   # экран адреса: сначала отмена попытки, потом меню
+	if main_menu.open and address.open:   # экран адреса: сначала отмена попытки, потом вход сбора
 		_address_do(address.back())
 		if address_panel:
 			address_panel.show_screen(address)
+		return
+	if main_menu.open and lobby.open:   # комната — ко входу, вход — в меню (ART-028)
+		_lobby_back()
 		return
 	if main_menu.open:
 		save.flush(samples, scanner)
@@ -1426,6 +1564,9 @@ func _leave_posts() -> void:
 func close_menu() -> void:
 	main_menu.open = false
 	address.open = false
+	lobby.open = false
+	if lobby_panel:
+		lobby_panel.show_lobby(lobby)
 	logbook.open = false
 	if logbook_panel:
 		_journal_show()
@@ -1933,28 +2074,41 @@ func _net_poll(dt: float = 0.0) -> void:
 	for e: Dictionary in net_host.poll(dt):
 		var g: NetLink.Guest = e["guest"]
 		if e["k"] == "join":
-			var m := add_mate(NET_SPAWN.x, NET_SPAWN.y, NET_SPAWN.z, g.role, g.look)
-			if g.name != "":
-				m.name = g.name
-			m.pad = g.pad
-			net_mates[g.id] = m
+			var m := _seat_guest(g)
 			if MateGhost.forget(ghosts, m.name):   # вернулся — прежняя фигура уходит, встаёт новая
 				_ghosts(0.0, true)
 			if not notice.joined(m.name, m.look == 1):
 				say("На борту: %s" % m.name)
-		else:
+		elif e["k"] == "leave":
 			var m: Crew.Member = net_mates.get(g.id)
 			net_mates.erase(g.id)
 			if m:
 				mate_gone(m)
+		else:   # запрос комнаты после старта — комнаты уже нет
+			continue
 		changed = true
 	for id: int in net_mates:   # гость без ввода дольше NetLink.LOST_AFTER — табличка «Нет связи»
 		var g: NetLink.Guest = net_host.guests.get(id)   # хост закрыт — гостей уже нет, а фигуры ещё на палубе
 		(net_mates[id] as Crew.Member).lost = g == null or g.lost()
 	if changed:
 		crew_view.set_members(crew, me)
-		for id: int in net_mates:
-			(net_host.guests[id] as NetLink.Guest).index = crew.find(net_mates[id])
+		_net_index()
+
+
+## Гость хоста на палубу: член экипажа своей роли и внешности с его вводом.
+func _seat_guest(g: NetLink.Guest) -> Crew.Member:
+	var m := add_mate(NET_SPAWN.x, NET_SPAWN.y, NET_SPAWN.z, g.role, g.look)
+	if g.name != "":
+		m.name = g.name
+	m.pad = g.pad
+	net_mates[g.id] = m
+	return m
+
+
+## Места гостей в экипаже — уходят им в кадре (`Guest.index`).
+func _net_index() -> void:
+	for id: int in net_mates:
+		(net_host.guests[id] as NetLink.Guest).index = crew.find(net_mates[id])
 
 
 ## Товарищ ушёл с борта (гость отключился): убрать с палубы, его пост свободен; у хоста — «… отключился» (ART-043).

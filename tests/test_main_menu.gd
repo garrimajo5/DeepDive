@@ -39,11 +39,11 @@ func test_buttons() -> void:
 	eq(m.hit(dive, size), "", "закрытое меню касаний не берёт")
 	m.open = true
 	eq(m.hit(dive, size), "dive", "касание «Погрузиться»")
-	eq(m.hit(crew, size), "crew", "«Экипаж» — экран «Войти по адресу» ART-039 (до сбора ART-028)")
+	eq(m.hit(crew, size), "crew", "«Экипаж» — вход сбора экипажа ART-028")
 	eq(m.hit(MainMenu.screen_rect("settings", size).get_center(), size), "settings", "касание «Настройки»")
 	eq(m.hit(Vector2(size.x - 10, size.y - 10), size), "", "мимо кнопок — ничего")
 	eq(m.press("settings"), "settings", "«Настройки» — поверх меню")
-	eq(m.press("crew"), "crew", "«Экипаж» — экран адреса поверх меню")
+	eq(m.press("crew"), "crew", "«Экипаж» — сбор экипажа поверх меню")
 	ok(m.open, "меню открыто")
 	eq(m.press("dive"), "dive", "«Погрузиться» — забег")
 	ok(not m.open, "меню закрыто")

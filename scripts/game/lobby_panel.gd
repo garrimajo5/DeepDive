@@ -45,6 +45,9 @@ func _draw_screen() -> void:
 		bold = FontVariation.new()
 		bold.base_font = font
 		bold.variation_embolden = 0.7
+	if lobby.entry:
+		_entry(font, size, s)
+		return
 	if lobby.shows_address():
 		_host_top(font, size, s)
 	else:
@@ -77,6 +80,30 @@ func _draw_screen() -> void:
 		var px := Lobby.SMALL_PX * s
 		draw.draw_string(font, Vector2(r.position.x, r.get_center().y + Splash.CAP_H * px * 0.5), lobby.start_text(),
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, roundi(px), MainMenu.SOFT)
+
+
+## Вход по «Экипаж» (лист ART-028, «В сети никого нет»): «Создать забег» / «По адресу», «Подключиться» погашена.
+func _entry(font: Font, size: Vector2, s: float) -> void:
+	_text(bold, Lobby.TITLE, Lobby.to_screen(Lobby.TITLE_AT, size), Lobby.TITLE_PX * s, MainMenu.INK)
+	_text(font, Lobby.ENTRY_SUB, Lobby.to_screen(Lobby.SUB_AT, size), Lobby.SUB_PX * s, MainMenu.SOFT)
+	draw.draw_line(Lobby.to_screen(Vector2(Lobby.TITLE_AT.x, Lobby.RULE_Y), size),
+		Lobby.to_screen(Vector2(Lobby.SEARCH.end.x, Lobby.RULE_Y), size), Color(MainMenu.EDGE, 0.8), maxf(1.0, 2.0 * s))
+	_button(bold, lobby.rect("create", size), "Создать забег", s, "plain")
+	_button(bold, lobby.rect("search", size), "Подключиться", s, "off")
+	_centered(bold, lobby.entry_head(), Lobby.ENTRY_HEAD_Y, Lobby.TITLE_PX * s, MainMenu.INK, size)
+	for i in Lobby.ENTRY_LINES.size():
+		_centered(font, Lobby.ENTRY_LINES[i], Lobby.ENTRY_LINE_Y + Lobby.ENTRY_LINE_STEP * i, 32.0 * s, MainMenu.INK,
+			size)
+	_button(bold, lobby.rect("new", size), "Создать забег", s, "main")
+	_button(bold, lobby.rect("address", size), "По адресу", s, "plain")
+
+
+## Строка по оси входа `Lobby.ENTRY_CX`, cy — центр строки в макете.
+func _centered(font: Font, t: String, cy: float, px: float, col: Color, size: Vector2) -> void:
+	var c := Lobby.to_screen(Vector2(Lobby.ENTRY_CX, cy), size)
+	var w := 1600.0 * Lobby.scale(size)
+	draw.draw_string(font, Vector2(c.x - w * 0.5, c.y + Splash.CAP_H * px * 0.5), t, HORIZONTAL_ALIGNMENT_CENTER, w,
+		roundi(px), col)
 
 
 ## Верх хоста по ART-039: заголовок, «Назад», плашка «Ваш адрес: 192.168.43.17 · Скажите его товарищам».
