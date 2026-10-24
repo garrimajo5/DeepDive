@@ -183,6 +183,16 @@ func _point(what: String, dir: Vector2) -> Vector2:
 			return MainMenu.screen_rect("dive", main.get_viewport().get_visible_rect().size).get_center()
 		"resume", "new", "exit", "yes", "no":   # пауза ART-037 и её подтверждение
 			return Pause.screen_rect(what, main.get_viewport().get_visible_rect().size).get_center()
+		"crew":   # «Экипаж» в главном меню — экран «Войти по адресу» ART-039
+			return MainMenu.screen_rect("crew", main.get_viewport().get_visible_rect().size).get_center()
+		"join", "last":
+			return AddressScreen.screen_rect(what, main.get_viewport().get_visible_rect().size).get_center()
+	if what.begins_with("key"):   # клавиша экрана адреса: key0…key9, key., keydel
+		var k := what.substr(3)
+		for r in AddressPad.KEYS.size():
+			var c: int = AddressPad.KEYS[r].find(k)
+			if c >= 0:
+				return AddressPad.key_rect(c, r, main.get_viewport().get_visible_rect().size).get_center()
 	return main.get_viewport().get_visible_rect().get_center()
 
 
