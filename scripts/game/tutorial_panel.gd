@@ -14,15 +14,19 @@ var line := ""        ## текст действия этого кадра
 var ring := ""        ## что обвести: Tutorial.highlight
 var status := Rect2() ## строка приборов на экране — плашка на неё не ложится
 var avoid := Rect2()  ## открытая панель (пульт энергии) — плашка уходит от неё
+var arrow: Array = [] ## стрелка у края к посту вне кадра: [ячейка на экране, зеркалить] (`HintPointer.edge`)
+var atlas: Texture2D  ## атлас указателя ART-038
 
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	visible = false
+	atlas = load(HintPointer.PATH)
 
 
-func show_tutorial(t: Tutorial, text: String, highlight: String, status_rect: Rect2, panel := Rect2()) -> void:
+func show_tutorial(t: Tutorial, text: String, highlight: String, status_rect: Rect2, panel := Rect2(),
+		edge: Array = []) -> void:
 	tut = t
 	var vis := t != null and t.shown()
 	if vis != visible:
@@ -33,6 +37,7 @@ func show_tutorial(t: Tutorial, text: String, highlight: String, status_rect: Re
 	ring = highlight
 	status = status_rect
 	avoid = panel
+	arrow = edge
 	queue_redraw()
 
 
@@ -72,3 +77,8 @@ func _draw() -> void:
 		if c != null:
 			var w := maxf(2.0, Tutorial.RING * s)
 			draw_arc(c.c, c.r + w * 0.5, 0.0, TAU, 64, Color(ACCENT, a), w, true)
+	if arrow.size() == 2 and atlas != null:   # пост вне кадра — стрелка у края (у правого — зеркально)
+		var r: Rect2 = arrow[0]
+		if arrow[1]:
+			r = Rect2(r.position.x + r.size.x, r.position.y, -r.size.x, r.size.y)
+		draw_texture_rect_region(atlas, r, HintPointer.ARROW_CELL, Color(1, 1, 1, a))

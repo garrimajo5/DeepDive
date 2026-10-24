@@ -118,6 +118,7 @@ static var menu := true
 static var hints := true
 var tutorial := Tutorial.new()   ## шаги «штурвал → ход → свет → энергия → сонар → маршрут»; пройдено — Settings.hints_done
 var tutorial_panel: TutorialPanel
+var hint_pointer: HintPointerView   ## указатель над постом-целью подсказки (ART-038, HintPointer); вне кадра — стрелка у края
 var main_menu := MainMenu.new()   ## «Погрузиться» / «Экипаж» / «Настройки»: пока открыто — игра стоит под меню
 var menu_panel: MenuPanel
 var address := AddressScreen.new()   ## «Войти по адресу» ART-039 поверх меню («Экипаж»): пока открыт — меню ждёт
@@ -222,6 +223,9 @@ func _ready() -> void:
 	busy_marks = BusyMarkView.new()
 	busy_marks.name = "Метки «Занято»"
 	ship.add_child(busy_marks)
+	hint_pointer = HintPointerView.new()
+	hint_pointer.name = "Указатель подсказки"
+	ship.add_child(hint_pointer)
 	walker.stand = layout.can_stand
 	posts = Deck.posts()
 	posts.append(Deck.Post.new("winch", Samples.POST_AT, Samples.POST_R, "Лебёдка"))
@@ -1494,13 +1498,18 @@ func _tutorial_step(dt: float) -> void:
 		settings.hints_done = true
 		settings.write()
 	var near := near_post
+	var target := tutorial.pointer_target(pilot.seated) if tutorial.shown() else ""
+	var edge := hint_pointer.show_pointer(target, near == target or (at_power and target == "energy"), tutorial.a, dt,
+		get_viewport().get_camera_3d(), camera)
 	tutorial_panel.show_tutorial(tutorial, tutorial.text(pilot.seated, near),
 		tutorial.highlight(pilot.seated, at_power, near), status_rect(),
-		power_panel.box() if power_panel.visible else Rect2())
+		power_panel.box() if power_panel.visible else Rect2(), edge)
 
 
 func _tutorial_hide() -> void:
 	tutorial.a = 0.0
+	if hint_pointer != null:
+		hint_pointer.show_pointer("", false, 0.0, 0.0, null, null)
 	if tutorial_panel != null and tutorial_panel.visible:
 		tutorial_panel.visible = false
 

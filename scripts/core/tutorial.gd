@@ -23,7 +23,7 @@ const FADE := 0.15                ## появление и исчезновен�
 const DONE_TIME := 0.5            ## «Выполнено» столько секунд
 const DONE := "Выполнено"
 
-## Шаги: текст плашки, событие, пост-цель (указатель — следующая часть ART-038), управление.
+## Шаги: текст плашки, событие, пост-цель (указатель `HintPointer`).
 const STEPS := [
 	["Подойдите к штурвалу — кнопка справа", Ev.SAT, "helm"],
 	["За штурвалом: крестовина вверх — ход", Ev.THRUST, "helm"],
@@ -118,9 +118,19 @@ func highlight(seated: bool, at_power: bool, near: String) -> String:
 	return ""
 
 
-## Пост-цель шага (для указателя).
+## Пост-цель шага.
 func target() -> String:
 	return "" if finished() else STEPS[step][2]
+
+
+## Куда показывает указатель (`HintPointer`): пост-цель шага; "" — в «Выполнено», когда обучение не идёт и когда
+## игрок уже сидит за штурвалом, а цель — штурвал (указатель был бы над его же креслом). Шаг энергии из кресла —
+## указатель на пульт.
+func pointer_target(seated: bool) -> String:
+	if not active() or done_t >= 0.0:
+		return ""
+	var id: String = STEPS[step][2]
+	return "" if seated and id == "helm" else id
 
 
 ## Плашка на экране size: по центру, верх TOP. Легла бы на строку приборов status — опускается под неё; на открытую
