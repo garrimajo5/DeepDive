@@ -14,6 +14,9 @@ extends RefCounted
 ## `RunBeacon.Finder`) строками «Забег «Лена» · 2 / 4 · свободны И / Б» с «Подключиться» (`join<i>`), пусто —
 ## «Ищем забеги…» / «Никого нет»; внизу «Создать забег», «По адресу» (ART-039) и «Обновить список»; «Подключиться»
 ## вверху — тот же поиск заново. Итог прошлой попытки (`why`) — вместо заголовка.
+## Связь с хостом пропала у гостя в комнате (лист ART-028 «05 · Связь потеряна», `lose`) — вместо строк ролей карточка
+## «Связь потеряна»: «Повторить» — к тому же хосту (`retrying`, итог `rejoined` / `retry_failed`), «К списку забегов» —
+## поиск; своя готовность сброшена. Системная «Назад» из комнаты — тоже к списку (`Main._lobby_back`).
 
 const W := 2400.0
 const H := 1080.0
@@ -83,6 +86,18 @@ const RUN_LINE_PX := 29.0
 const LIST_NOTE := "Не нашли забег? Узнайте адрес у хоста."
 ## Итог прошлой попытки на входе (`why`): свои и отказы хоста `NetLink.WHY` («Хост не отвечает», «Экипаж полон»…).
 const WHY := {"port": "Забег не открылся: сеть занята", "lost": "Связь с хостом потеряна"}
+## Карточка «Связь потеряна» (лист ART-028 «05»): рамка, заголовок, две строки, «Повторить» / «К списку забегов».
+const LOST_BOX := Rect2(480, 300, 1440, 490)
+const LOST_TITLE := "Связь потеряна"
+const LOST_TITLE_AT := Vector2(700, 380)     ## левый край и верх глифов
+const LOST_TITLE_PX := 50.0
+const LOST_LINE_AT := Vector2(650, 486)      ## первая строка; следующая ниже на LOST_LINE_STEP
+const LOST_LINE_STEP := 70.0
+const LOST_LINE_PX := 31.0
+const LOST_HINT := "Проверьте Wi-Fi и телефон хоста."
+const LOST_RESET := "Готовность будет сброшена."
+const RETRY := Rect2(540, 640, 620, 112)
+const TO_LIST := Rect2(1200, 640, 660, 112)
 
 ## Палитра ART-028 (как `MainMenu`), красного нет.
 const DIM := Color(0.043, 0.11, 0.141, 0.84)   ## затемнение мостика под экраном (#0B1C24)
@@ -116,6 +131,9 @@ var why := ""                  ## на входе: чем кончилась п�
 var runs: Array = []           ## на входе: найденные забеги (`RunBeacon.Found`), ставит Main из `Finder`
 var searching := false         ## на входе: поиск ещё идёт («Ищем забеги…»)
 var joining := -1              ## на входе: строка забега, к которому идёт подключение; −1 — нет
+var lost := false              ## гость: связь с хостом пропала — карточка «Связь потеряна» вместо ролей
+var retrying := false          ## «Повторить» нажата — ждём ответа того же хоста
+var lost_why := ""             ## итог неудачного повтора (ключ `NetLink.WHY`), "" — ещё не пробовали
 
 
 ## Комната хоста: хост — первый игрок; addr — свой адрес для гостей (`local_address`).
@@ -126,6 +144,7 @@ func host(name: String, addr := "") -> void:
 	started = false
 	refused = -1
 	address = addr
+	_found()
 	add(HOST, name)
 
 
@@ -139,6 +158,7 @@ func show_entry(w := "") -> void:
 	started = false
 	refused = -1
 	address = ""
+	_found()
 
 
 ## Гость в комнате хоста: свой id и снимок придут от хоста (`LobbyLink.take`).
@@ -151,6 +171,48 @@ func guest() -> void:
 	started = false
 	refused = -1
 	address = ""
+	_found()
+
+
+## Связь с хостом есть (или комнаты нет) — карточки «Связь потеряна» нет.
+func _found() -> void:
+	lost = false
+	retrying = false
+	lost_why = ""
+
+
+## Гость: связь с хостом пропала — карточка «Связь потеряна»; своя готовность сброшена (у хоста место уже свободно).
+func lose() -> void:
+	lost = true
+	retrying = false
+	refused = -1
+	var m := mine()
+	if m:
+		m.ready = false
+
+
+## «Повторить» удалась: снова в комнате хоста, снимок — от него (`LobbyLink.take`).
+func rejoined() -> void:
+	guest()
+
+
+## «Повторить» не удалась (w — ключ `NetLink.WHY`): карточка остаётся с причиной, можно ещё раз.
+func retry_failed(w: String) -> void:
+	retrying = false
+	lost_why = w if w != "" else "timeout"
+
+
+## Строки карточки «Связь потеряна»: после неудачного повтора — причина первой.
+func lost_lines() -> Array[String]:
+	var first := LOST_HINT
+	if lost_why != "":
+		first = "%s. %s" % [NetLink.WHY.get(lost_why, "Нет ответа"), LOST_HINT]
+	var l: Array[String] = [first, LOST_RESET]
+	return l
+
+
+func retry_text() -> String:
+	return "Подключаемся…" if retrying else "Повторить"
 
 
 ## Заголовок входа: итог прошлой попытки, «Найдено 2 забега», «Ищем забеги…» или «Никого нет».
@@ -364,6 +426,8 @@ func host_name() -> String:
 ## Подзаголовок: «Забег «Игрок 1» · вы — хост», у гостя — «· подключено» или «· выберите свободную роль».
 func subtitle() -> String:
 	var s := "Забег «%s»" % host_name()
+	if lost:
+		return s + " · соединение прервано"
 	if is_host():
 		return s + " · вы — хост"
 	if refused >= 0:
@@ -431,6 +495,8 @@ func enabled(id: String) -> bool:
 			var i := int(id.substr(4))
 			return i < shown_runs() and (runs[i] as RunBeacon.Found).open()
 		return id in ["create", "search", "new", "address", "refresh"]
+	if lost:   # карточка «Связь потеряна»: только её кнопки; «К списку забегов» отменяет и повтор
+		return id == "tolist" or (id == "retry" and not retrying)
 	var m := mine()
 	if id.begins_with("pick"):
 		return can_pick(int(id.substr(4)))
@@ -453,7 +519,7 @@ static func screen_rect(id: String, size: Vector2, shift := 0.0) -> Rect2:
 	if id.begins_with("pick"):
 		return rect_to_screen(pick_rect(int(id.substr(4)), shift), size)
 	var r: Rect2 = {"create": CREATE, "search": SEARCH, "new": NEW, "address": BY_ADDR, "refresh": REFRESH, "leave": LEAVE, "ready": READY, "start": START, "back": BACK,
-		"note": NOTE}.get(id, Rect2())
+		"note": NOTE, "retry": RETRY, "tolist": TO_LIST}.get(id, Rect2())
 	if id in ["ready", "start", "back", "note"]:
 		r.position.y += shift
 	return rect_to_screen(r, size)
@@ -466,7 +532,7 @@ func rect(id: String, size: Vector2) -> Rect2:
 
 ## Какая работающая кнопка под касанием p ("" — никакая).
 func hit(p: Vector2, size: Vector2) -> String:
-	var ids := ["create", "search", "new", "address", "refresh", "leave", "ready", "start", "back"]
+	var ids := ["create", "search", "new", "address", "refresh", "leave", "ready", "start", "back", "retry", "tolist"]
 	for i in SEATS:
 		ids.append("pick%d" % i)
 	for i in RUN_ROWS:
@@ -493,6 +559,11 @@ func press(id: String) -> String:
 			"search", "refresh":
 				return "refresh"
 		return "create"
+	if lost:   # «Повторить» — к тому же хосту (`Main`), «К списку забегов» — выйти из комнаты к поиску
+		if id == "retry":
+			retrying = true
+			return "retry"
+		return back()
 	var q := ""
 	if id.begins_with("pick"):
 		q = "role:" + id.substr(4)

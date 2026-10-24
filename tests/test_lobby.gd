@@ -303,3 +303,59 @@ func test_search_list() -> void:
 	l.runs = [a, b, a, b]
 	eq(l.shown_runs(), Lobby.RUN_ROWS)
 	ok(not l.enabled("join3"))
+
+
+## Лист ART-028 «05 · Связь потеряна»: у гостя вместо ролей карточка, готовность сброшена; «Повторить» ждёт хоста
+## («Подключаемся…»), неудача — причина первой строкой; «К списку забегов» — выйти из комнаты; повтор удался — снова
+## в комнате по снимку хоста.
+func test_lost_card() -> void:
+	var host := _room()
+	host.act(Lobby.HOST, "role:0")
+	host.act(3, "role:2")
+	host.act(3, "ready")
+	var l := Lobby.new()
+	l.guest()
+	l.me = 3
+	l.unpack(host.pack())
+	ok(l.mine().ready)
+	l.lose()
+	ok(l.lost and not l.mine().ready, "готовность сброшена")
+	eq(l.subtitle(), "Забег «Игрок 1» · соединение прервано")
+	eq(l.lost_lines(), ["Проверьте Wi-Fi и телефон хоста.", "Готовность будет сброшена."])
+	var size := Vector2(1600, 720)
+	for id: String in ["ready", "pick1", "pick3", "start", "back", "create", "search"]:
+		ok(not l.enabled(id), "%s под карточкой не работает" % id)
+	eq(l.hit(l.rect("retry", size).get_center(), size), "retry")
+	eq(l.press("retry"), "retry")
+	ok(l.retrying and not l.enabled("retry"), "ждём хоста — второй раз не нажать")
+	eq(l.retry_text(), "Подключаемся…")
+	ok(l.enabled("tolist"), "к списку — и во время попытки")
+	l.retry_failed("timeout")
+	ok(not l.retrying and l.enabled("retry"))
+	eq(l.lost_lines()[0], "Хост не отвечает. Проверьте Wi-Fi и телефон хоста.")
+	eq(l.retry_text(), "Повторить")
+	l.rejoined()
+	ok(not l.lost and l.players.is_empty(), "снова в комнате — ждём снимок хоста")
+	l.me = 4
+	host.remove(3)
+	host.add(4, "")
+	l.unpack(host.pack())
+	ok(l.mine() != null and l.mine().role < 0 and not l.mine().ready, "роль и готовность — заново")
+	l.lose()
+	eq(l.press("tolist"), "back", "«К списку забегов» — выйти из комнаты")
+	ok(not l.open)
+	l.show_entry()
+	ok(not l.lost, "на входе карточки нет")
+
+
+func test_lost_card_layout() -> void:
+	for size: Vector2 in SIZES:
+		var screen := Rect2(Vector2.ZERO, size)
+		var box := Lobby.rect_to_screen(Lobby.LOST_BOX, size)
+		ok(screen.encloses(box))
+		for id: String in ["retry", "tolist"]:
+			var r := Lobby.screen_rect(id, size)
+			ok(box.encloses(r), "%s в карточке на %s" % [id, size])
+			ok(r.size.y >= 96.0 * Lobby.scale(size) - 0.01)
+	ok(Lobby.TO_LIST.position.x - Lobby.RETRY.end.x >= 30.0, "между кнопками ≥ 30 px")
+	ok(Lobby.LOST_BOX.position.x >= 360.0 and Lobby.LOST_BOX.end.x <= 2040.0, "мимо углов крестовины и действия")
