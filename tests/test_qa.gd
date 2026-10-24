@@ -68,6 +68,8 @@ func test_scene_runs_scenario() -> void:
 	var legs_seen := false
 	var weld_y := -1.0   # issue #524: на 16-breach-weld шов в середине кадра по высоте (доля от верха)
 	var card_seen := false   # 30: карточка роли ART-045 на экране
+	var power_hot := false   # 08a: открытый пульт на перегреве (ART-050)
+	var cooled := false      # к 09-sonar перегрев снят шагом hot 0
 	var no_answer := false   # 29f: экран адреса ART-039 дождался «Нет ответа»
 	for i in 3600:  # 120 с игры (сценарий идёт ~113 с)
 		# снимок берёт уже нарисованный кадр — камеру до шага, в котором он снят
@@ -88,6 +90,8 @@ func test_scene_runs_scenario() -> void:
 			var seam := main.ship.to_global(main.breach.active.p)
 			if cam.is_position_in_frustum(seam):
 				weld_at = cam.unproject_position(seam).y / cam.get_viewport().get_visible_rect().size.y
+		var hot_vis := main.at_power and main.power_panel.visible and main.reactor.hot
+		var cool_vis := not main.reactor.hot and main.reactor.scram == 0.0
 		main.step(1.0 / 30.0)
 		no_answer = no_answer or (main.address.open and main.address.hint() == AddressScreen.NO_ANSWER)
 		sat = sat or main.pilot.seated
@@ -95,6 +99,9 @@ func test_scene_runs_scenario() -> void:
 		for k in range(shots, qa.log_lines.size()):   # #48: на 09-sonar в кадре голостол, на 10-zap — рычаг
 			if qa.log_lines[k].begins_with("скриншот 09-sonar"):
 				table_seen = table_vis
+				cooled = cool_vis
+			if qa.log_lines[k].begins_with("скриншот 08a-power-hot"):
+				power_hot = hot_vis
 			if qa.log_lines[k].begins_with("скриншот 06b-own-legs"):
 				legs_seen = legs_vis
 			if qa.log_lines[k].begins_with("скриншот 16-breach-weld"):
@@ -109,6 +116,8 @@ func test_scene_runs_scenario() -> void:
 		if qa.script_q.finished:
 			break
 	ok(qa.script_q.finished, "сценарий дошёл до конца")
+	ok(power_hot, "на 08a-power-hot пульт открыт и реактор перегрет (ART-050)")
+	ok(cooled, "шаг hot 0 остудил реактор: 09-sonar без перегрева и сброса")
 	ok(weld_y > 0.3 and weld_y < 0.7, "на 16-breach-weld шов в середине кадра: %.2f высоты (#524)" % weld_y)
 	ok(sat, "по сценарию садились за штурвал")
 	ok(not main.pilot.seated, "и встали")
