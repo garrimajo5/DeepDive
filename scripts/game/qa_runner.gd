@@ -108,8 +108,12 @@ func tick(dt: float) -> void:
 				if c.size() > 4:
 					main.walker.pitch = deg_to_rad(c[4])
 			"hot":
-				main.reactor.start_hot(false)
-				main.reactor.heat = c[1]
+				if c[1] <= 0.0:   # heat 0 — остудить: перегрев снят, следующие шаги без него
+					main.reactor.hot = false
+					main.reactor.heat = 0.0
+				else:
+					main.reactor.start_hot(false)
+					main.reactor.heat = c[1]
 			"sample":
 				main.park_over_sample(c[1])
 			"breach":

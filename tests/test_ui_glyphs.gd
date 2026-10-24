@@ -53,9 +53,9 @@ func test_scan_finds_missing_glyph() -> void:   # проверка сама ви
 func test_panel_hints_fit() -> void:   # подсказки словами длиннее стрелок — но влезают в панели
 	var f := ThemeDB.fallback_font
 	var vis := Vector2(1600, 720)
-	var pw := minf(560.0, vis.x * 0.36)   # PowerPanel.box
-	ok(f.get_string_size(PowerPanel.FOOT, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x < pw * 0.9,
-		"пульт: %d px из %d" % [f.get_string_size(PowerPanel.FOOT, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x, pw * 0.9])
+	ok(f.get_string_size(PowerScreen.CONTROLS, HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x < PowerScreen.W - 40.0,
+		"пульт: %d px из %d" % [f.get_string_size(PowerScreen.CONTROLS, HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x,
+		PowerScreen.W - 40.0])
 	var vp := VotePanel.new()
 	vp.show_vote(0, [])
 	var vw := minf(470.0, vis.x * 0.3)   # VotePanel.box
