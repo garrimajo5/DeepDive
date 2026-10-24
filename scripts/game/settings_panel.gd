@@ -37,6 +37,9 @@ func _draw_settings() -> void:
 	var s := Splash.scale(size)
 	var font := draw.get_theme_default_font()
 	draw.draw_rect(Rect2(Vector2.ZERO, size), Color(MainMenu.DARK, Pause.DIM))
+	if settings.page == "grafika":
+		_draw_graphics(font, s, size)
+		return
 	var k := 0.35 if settings.ask else 1.0
 	_text(font, Settings.TITLE, Settings.TITLE_AT, Settings.TITLE_PX * s, Color(MainMenu.INK, k), size)
 	_button(font, Settings.screen_rect("back", size), "Назад", false, k, s)
@@ -47,6 +50,7 @@ func _draw_settings() -> void:
 	_text(font, Settings.INTRO_LABEL, Vector2(Settings.LABEL_X, Settings.INTRO_TOP), Settings.BUTTON_PX * s,
 		Color(MainMenu.INK, k), size)
 	_button(font, Settings.screen_rect("intro", size), "Вкл" if settings.intro else "Выкл", settings.intro, k, s)
+	_button(font, Settings.screen_rect("graphics", size), Settings.GRAPHICS_LABEL, false, k, s)
 	_button(font, Settings.screen_rect("reset", size), Settings.RESET_LABEL, false, k, s)
 	if not settings.ask:
 		return
@@ -66,6 +70,25 @@ func _draw_settings() -> void:
 				MainMenu.SOFT, size)
 	_button(font, Settings.screen_rect("yes", size), "Да", false, 1.0, s)
 	_button(font, Settings.screen_rect("no", size), "Нет", true, 1.0, s)   # выделено «Нет»
+
+
+## Страница «Настройки · Графика» ART-044: три уровня (выбранный — главная кнопка), четыре строки словами,
+## «Показывать кадры/с» Вкл./Выкл., подпись про чёткий интерфейс.
+func _draw_graphics(font: Font, s: float, size: Vector2) -> void:
+	_text(font, Graphics.TITLE, Graphics.TITLE_AT, Graphics.TITLE_PX * s, MainMenu.INK, size)
+	_button(font, Graphics.screen_rect("back", size), "Назад", false, 1.0, s)
+	for i in Graphics.NAMES.size():
+		_button(font, Graphics.screen_rect("g%d" % i, size), Graphics.NAMES[i], i == settings.graphics, 1.0, s)
+	var rows := Graphics.rows(settings.graphics)
+	for i in rows.size():
+		var top := Graphics.ROW_TOP + Graphics.ROW_STEP * i
+		_text(font, rows[i][0], Vector2(Graphics.ROW_X, top), Graphics.ROW_PX * s, MainMenu.INK, size)
+		_value_at(font, rows[i][1], Graphics.VALUE_RIGHT, top, Graphics.ROW_PX * s, MainMenu.MAIN, size)
+	var fr := Graphics.FPS
+	var fps_top := fr.position.y + (fr.size.y - Graphics.ROW_PX * Splash.CAP_H) * 0.5
+	_text(font, Graphics.FPS_LABEL, Vector2(Graphics.ROW_X, fps_top), Graphics.ROW_PX * s, MainMenu.INK, size)
+	_button(font, Graphics.screen_rect("fps", size), "Вкл." if settings.fps else "Выкл.", settings.fps, 1.0, s)
+	_text(font, Graphics.NOTE, Vector2(Graphics.ROW_X, Graphics.NOTE_TOP), Graphics.NOTE_PX * s, MainMenu.SOFT, size)
 
 
 ## Дорожка на высоте y макета: залитая часть до доли f, ручка.
@@ -108,7 +131,12 @@ func _text(font: Font, text: String, at: Vector2, px: float, color: Color, size:
 
 ## Значение ползунка: правый край — `Settings.VALUE_RIGHT`.
 func _value(font: Font, text: String, top: float, px: float, color: Color, size: Vector2) -> void:
-	var p := Splash.to_screen(Vector2(Settings.VALUE_RIGHT, top), size)
+	_value_at(font, text, Settings.VALUE_RIGHT, top, px, color, size)
+
+
+## Строка с правым краем right макета.
+func _value_at(font: Font, text: String, right: float, top: float, px: float, color: Color, size: Vector2) -> void:
+	var p := Splash.to_screen(Vector2(right, top), size)
 	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(px)).x
 	draw.draw_string(font, Vector2(p.x - w, p.y + Splash.CAP_H * px), text, HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(px),
 		color)
