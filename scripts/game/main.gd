@@ -118,6 +118,9 @@ static var menu := true
 static var hints := true
 var tutorial := Tutorial.new()   ## шаги «штурвал → ход → свет → энергия → сонар → маршрут»; пройдено — Settings.hints_done
 var tutorial_panel: TutorialPanel
+## Карточка роли у поста ART-045 (выключают те же `hints`; тестер — шаг `cards`): прочитанное — Settings.cards.
+var role_card := RoleCard.new()
+var role_card_panel: RoleCardPanel
 var tutorial_guest: Tutorial.Guest   ## у гостя сети: свои шаги по своему нажатию и кадру хоста; в своей игре — null
 var hint_pointer: HintPointerView   ## указатель над постом-целью подсказки (ART-038, HintPointer); вне кадра — стрелка у края
 var main_menu := MainMenu.new()   ## «Погрузиться» / «Экипаж» / «Настройки»: пока открыто — игра стоит под меню
@@ -317,6 +320,9 @@ func _ready() -> void:
 	tutorial_panel.name = "Подсказка"
 	tutorial_panel.layout = overlay.router.layout
 	ui.add_child(tutorial_panel)
+	role_card_panel = RoleCardPanel.new()   # карточка роли ART-045: касания — через Router.blocks/taps
+	role_card_panel.name = "Карточка роли"
+	ui.add_child(role_card_panel)
 	drop_panel = DropPanel.new()   # поверх управления: пока диалог открыт, кнопки под ним не работают
 	drop_panel.name = "Связь потеряна"
 	ui.add_child(drop_panel)
@@ -337,6 +343,8 @@ func _ready() -> void:
 	settings.read()
 	_apply_settings()
 	tutorial.on = hints and not settings.hints_done and not QaRunner.pending()   # тестер включает шагом `tutorial`
+	role_card.on = hints and not QaRunner.pending()   # тестер включает шагом `cards`
+	role_card.set_read(settings.cards)
 	save.load_into(samples, scanner)
 	_begin_run()
 	samples.changed.connect(save.mark)
@@ -791,6 +799,7 @@ func step(dt: float) -> void:
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
 	_update_ui()   # до меток: плашка строки уже на месте этого кадра (#387)
 	_tutorial_step(dt)
+	_card_step(dt)
 	busy_marks.plate = status_rect()
 	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
 	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy,
@@ -1414,6 +1423,7 @@ func _wreck_show() -> void:
 ## Корабль у начала спуска, целый и заряженный, забег с нуля (корпус разрушен или новый забег после итога).
 func _restart() -> void:
 	ballot.clear()
+	role_card.reset_run()
 	for m: Crew.Member in crew:
 		if m != me:
 			m.at_vote = false
@@ -1509,8 +1519,48 @@ func _tutorial_step(dt: float) -> void:
 		power_panel.box() if power_panel.visible else Rect2(), edge)
 
 
+## Карточка роли у поста ART-045: пост, у которого стоит свой игрок, своей ли он роли (в одиночном забеге — все
+## свои), что её скрывает; касания карточки и «?» — из `Router.taps`, взгляд под ними не крутится (`Router.blocks`).
+func _card_step(dt: float) -> void:
+	var at := RoleCard.post_at(pilot.seated, at_power, near_post)
+	var solo := net_client == null and net_mates.is_empty()
+	var hidden := alarms_on().has(true) or at_vote or run.ended or pause.open or main_menu.open or settings.open \
+		or flyby.active() or warm.active() or wreck.active() or walker.noclip or brief.k > 0.0 \
+		or (net_client != null and drop.active())
+	var quiet := tutorial.active() or (at != "" and Crew.holder(crew, me, at) != null)
+	var changed := role_card.update(dt, at, RoleCard.is_own(at, me.role, solo), hidden, quiet)
+	var size := get_viewport().get_visible_rect().size
+	role_card.status = status_rect()
+	var avoid: Array = []
+	if power_panel.visible:
+		avoid.append(power_panel.box())
+	if route_card.visible:
+		avoid.append(route_card.rect)
+	var rect := RoleCard.card_rect(role_card.post, size, avoid, status_rect()) if role_card.open else Rect2()
+	if role_card.open and not rect.has_area():   # места нет — сразу «?»
+		changed = role_card.fold() or changed
+	if not hidden:
+		var before := role_card.read.size()
+		for p in overlay.router.taps:
+			if role_card.tap(p, size, rect) == "ask":   # «?» — карточка снова на своём месте
+				rect = RoleCard.card_rect(role_card.post, size, avoid, status_rect())
+		changed = changed or role_card.read.size() != before
+	overlay.router.blocks = role_card.blocks(size, rect)
+	if changed:
+		settings.cards = role_card.read_list()
+		settings.write()
+	role_card_panel.show_card(role_card, rect if rect.has_area() else role_card_panel.rect)
+
+
 func _tutorial_hide() -> void:
 	tutorial.a = 0.0
+	role_card.a = 0.0   # и карточка роли ART-045 (меню, пауза): после — снова по `_card_step`
+	role_card.q = 0.0
+	role_card.f = 0.0
+	if role_card_panel != null and role_card_panel.visible:
+		role_card_panel.visible = false
+	if overlay != null:
+		overlay.router.blocks.clear()
 	if hint_pointer != null:
 		hint_pointer.show_pointer("", false, 0.0, 0.0, null, null)
 	if tutorial_panel != null and tutorial_panel.visible:
@@ -2001,6 +2051,7 @@ func _client_step(dt: float) -> void:
 			live and r.light_pressed, live and r.action_pressed, light_on, reactor.share, run.route, sonar.count):
 		tutorial.note(ev)
 	_tutorial_step(dt)
+	_card_step(dt)
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	overlay.set_pilot(pilot.seated)

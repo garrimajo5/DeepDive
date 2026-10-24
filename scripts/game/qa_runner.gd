@@ -133,6 +133,10 @@ func tick(dt: float) -> void:
 			"tutorial":   # подсказки первого забега ART-038: с первого шага или убрать
 				main.tutorial.reset()
 				main.tutorial.on = c[1]
+			"cards":   # карточки ролей у постов ART-045: с нуля (ничего не прочитано) или убрать
+				main.role_card.set_read([])
+				main.role_card.reset_run()
+				main.role_card.on = c[1]
 			"mate":
 				var mate: Crew.Member
 				if c[6]:   # за штурвалом
