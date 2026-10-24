@@ -375,3 +375,54 @@ func test_weak_link_plate() -> void:   # ART-043: кадры хоста опаз
 		main.step(DT)
 	ok(not main.weak.visible(), "2 с ровной связи — снята")
 	ok(not main.drop_panel.visible, "панель скрыта")
+
+
+## Касание кнопки меню забега (ART-037) за один шаг.
+func _tap_pause(id: String) -> void:
+	main.overlay.router.begin(8, main.pause.rect(id, _size()).get_center())
+	main.step(DT)
+	main.overlay.router.end(8)
+
+
+func test_guest_run_menu_world_goes_on() -> void:   # ART-037 кооп: «Меню забега» у гостя, кадры идут, ввода нет
+	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
+	main.back_pressed()
+	ok(main.pause.open, "«Назад» — меню забега")
+	eq(main.pause.mode, "guest")
+	eq(main.pause.title(), "Меню забега")
+	eq(main.pause.subtitle(), "Вы — гость · забег продолжается")
+	ok(main.pause_panel.visible and not main.overlay.visible, "меню на экране, крестовина скрыта")
+	main.overlay.router.begin(5, main.overlay.router.layout.pad.c + Vector2(0, -main.overlay.router.layout.pad.r * 0.7))
+	h_helm.pos += Vector3(0.0, 0.0, -6.0)
+	var seq := main.net_seq
+	ok(_pump(func() -> bool: return main.net_seq > seq), "кадры хоста идут под меню")
+	ok(main.helm.pos.distance_to(h_helm.pos) < 0.5, "корабль идёт по кадрам хоста")
+	eq(main.net_pad.move, Vector2.ZERO, "крестовина под меню хосту не идёт")
+	main.overlay.router.end(5)
+	_tap_pause("leave")
+	eq(main.pause.ask, "leave", "«Покинуть экипаж» — через подтверждение")
+	eq(main.pause.ask_lines()[1], "Вы выйдете из текущего забега.")
+	_tap_pause("no")
+	ok(main.pause.open and main.net_client != null, "«Нет» — снова меню, гость на борту")
+	_tap_pause("leave")
+	_tap_pause("yes")
+	ok(main.net_client == null, "гость покинул экипаж")
+	eq(main.crew.size(), 1, "остался свой игрок")
+	ok(not main.pause.open and not main.pause_panel.visible, "меню забега закрыто")
+	ok(main.main_menu.open and main.menu_panel.visible, "главное меню")
+	ok(_pump(func() -> bool: return host.guests.is_empty()), "хост увидел уход гостя")
+
+
+func test_drop_dialog_to_menu() -> void:   # ART-043: «В меню» в диалоге обрыва связи — главное меню ART-037
+	ok(_pump(func() -> bool: return main.crew.size() == 2), "на борту")
+	host.stop()
+	ok(_pump(func() -> bool: return main.drop.blocks(), false), "диалог открыт")
+	main.back_pressed()
+	ok(not main.pause.open, "под диалогом обрыва меню забега не открывается")
+	ok(main.drop.menu_ready, "«В меню» доступна")
+	_tap("menu")
+	eq(main.drop.phase, NetDrop.Phase.CONFIRM_MENU, "подтверждение")
+	_tap("yes")
+	ok(main.net_client == null, "сетевой забег покинут")
+	ok(not main.drop.active() and not main.drop_panel.visible, "диалог закрыт")
+	ok(main.main_menu.open and main.menu_panel.visible, "главное меню")
