@@ -1295,6 +1295,7 @@ func _place_ship() -> void:
 	ship.rotation = Vector3(0.0, helm.yaw, 0.0)
 	hull.apply(hull_motion)
 	hull.set_hull(vitals.hull)   # следы повреждений ART-049
+	hull.set_rim(helm.depth(), silt.k, HullMesh.rim_alive(wreck.t))   # ободок ART-076
 	bridge.set_wheel_turn(helm.turn)
 	ocean.apply_water(env, helm.depth(), helm.pos, silt.k)
 	ocean.set_ship(helm.pos, helm.yaw)   # лучи ART-052 не светят внутри корпуса

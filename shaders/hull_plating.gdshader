@@ -14,6 +14,10 @@ shader_type spatial;
 // Разряд ART-068 (razryad-korpus.md): zap_t — время с начала разряда (−1 — нет). Фронт от носа к корме, огибающая
 // и кадр атласа — как Zap.arc_k / arc_frame; атлас 4×2 плиткой 8 × 2 м бежит к корме, U сдвигается по полосам и
 // кадрам, чтобы прямые концы путей не стояли столбцом. Швы светятся по маске. zap_lite — один кадр («Экономно»).
+// Ободок и затенение щелей ART-076 (obodok-korpusa.md): кромка из LUT rim_tex по e = 1 − N·V геометрической нормали
+// (не рельефа — царапины не блестят) и строке глубины rim_row, в EMISSION; rim_k — с CPU (жив, ил, «Экономно»).
+// AO — шов по маске и поля примыканий в метрах корабля (max); ao_contacts = false («Экономно») — только шов.
+// Та же математика — HullMesh.rim_row / rim_zap / contact / occlusion (тест test_hull_rim).
 
 uniform sampler2D color_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D mask_tex : hint_default_black, filter_linear_mipmap, repeat_enable;
@@ -38,6 +42,30 @@ uniform vec3 zap_core_color : source_color = vec3(0.37, 0.95, 0.84);
 uniform vec3 zap_halo_color : source_color = vec3(0.4, 0.87, 0.92);
 uniform float zap_core = 3.0;
 uniform float zap_seam = 0.2;
+uniform sampler2D rim_tex : hint_default_black, filter_linear, repeat_disable;
+uniform float rim_row = 0.0;
+uniform float rim_k = 1.0;
+uniform float rim_contact = 0.55;
+uniform float rim_zap = 0.55;
+uniform bool ao_contacts = true;
+uniform float ao_seam = 0.18;
+uniform float ao_contact = 0.34;
+uniform float ao_min = 0.55;
+uniform float ao_albedo = 0.55;
+uniform float ao_light = 0.15;
+uniform float ao_protect = 0.8;
+uniform vec3 ao_mount = vec3(3.45, 1.0, 26.3);
+uniform vec3 ao_mount_half = vec3(0.75, 0.225, 0.7);
+uniform float ao_mount_feather = 0.18;
+uniform vec3 ao_recess = vec3(5.4, 1.0, 26.5);
+uniform vec2 ao_recess_r = vec2(1.0, 1.29);
+uniform float ao_recess_z = 0.72;
+uniform vec3 ao_rudder = vec3(3.95, 2.6, 24.6);
+uniform vec3 ao_rudder_r = vec3(0.28, 0.3, 1.0);
+uniform vec3 ao_stab_up = vec3(0.0, 3.42, 25.0);
+uniform vec3 ao_stab_up_r = vec3(0.28, 0.25, 1.3);
+uniform vec3 ao_stab_down = vec3(0.0, -0.2, 25.0);
+uniform vec3 ao_stab_down_r = vec3(0.25, 0.24, 1.1);
 uniform float normal_depth = 1.0;
 uniform float damage_depth = 0.85;
 uniform float wear = 0.0;
@@ -165,6 +193,26 @@ float arc_at(float z, float v, float t, float f) {
 	return texture(arc_tex, uv).r;
 }
 
+float ao_patch(vec3 p, vec3 c, vec3 r) {
+	vec3 q = (p - c) / r;
+	return exp(-dot(q, q));
+}
+
+// Примыкание 0…1 в точке p (оси корабля): крепления, ниши роторов, корни рулей и стабилизаторов — max.
+float contact(vec3 p) {
+	vec3 a = vec3(abs(p.x), p.y, p.z);
+	vec3 q = abs(a - ao_mount) - ao_mount_half;
+	float box = length(max(q, vec3(0.0))) + min(max(q.x, max(q.y, q.z)), 0.0);
+	float c = exp(-max(box, 0.0) / ao_mount_feather);
+	float rho = length(a.xy - ao_recess.xy);
+	float dz = (a.z - ao_recess.z) / ao_recess_z;
+	c = max(c, (1.0 - smoothstep(ao_recess_r.x, ao_recess_r.y, rho)) * exp(-dz * dz));
+	c = max(c, ao_patch(a, ao_rudder, ao_rudder_r));
+	c = max(c, ao_patch(p, ao_stab_up, ao_stab_up_r));
+	c = max(c, ao_patch(p, ao_stab_down, ao_stab_down_r));
+	return c;
+}
+
 void fragment() {
 	vec3 w = tri_w();
 	vec3 p = lp / tile;
@@ -179,13 +227,19 @@ void fragment() {
 		vec3 gc = tri(growth_tex, p, w).rgb;
 		col = mix(col, gc * mix(1.0, seam_dark, seam), g * (1.0 - 0.5 * seam));
 	}
+	float cover = 0.0;
 	if (wear > 0.0) {
 		vec4 d = damage2(p.zy) * w.x + damage2(p.xz) * w.y + damage2(p.xy) * w.z;
 		if (d.a > 0.001) {
 			col = mix(col, d.rgb / d.a, d.a * (1.0 - damage_seam * seam));
 		}
+		cover = d.a;
 	}
-	ALBEDO = col;
+	float ct = ao_contacts ? contact(lp) : 0.0;
+	float occ = clamp(1.0 - (ao_seam * seam + ao_contact * ct) * (1.0 - ao_protect * cover), ao_min, 1.0);
+	ALBEDO = col * mix(1.0, occ, ao_albedo);
+	AO = occ;
+	AO_LIGHT_AFFECT = ao_light;
 	float r = mix(0.75, 0.45, seam);
 	if (relief) {
 		r = tri(rough_tex, p, w).r;
@@ -193,6 +247,15 @@ void fragment() {
 		NORMAL = normalize((VIEW_MATRIX * (MODEL_MATRIX * vec4(nl, 0.0))).xyz);
 	}
 	ROUGHNESS = mix(r, 0.9, g);
+	vec3 ng = normalize((VIEW_MATRIX * (MODEL_MATRIX * vec4(normalize(ln), 0.0))).xyz);
+	float e = 1.0 - clamp(dot(ng, VIEW), 0.0, 1.0);
+	vec4 rim = texture(rim_tex, vec2((255.0 * e + 0.5) / 256.0, (rim_row + 0.5) / 8.0));
+	float rk = rim.a * rim_k * (1.0 - rim_contact * ct);
+	if (zap_t >= 0.0 && zap_t < zap_dur) {
+		float zs = sin(PI * zap_t / zap_dur);
+		rk *= 1.0 - rim_zap * zs * zs;
+	}
+	vec3 emit = rim.rgb * rk;
 	if (zap_t >= 0.0 && zap_t < zap_dur) {
 		float d = (lp.z - (zap_from + zap_speed * zap_t)) / zap_width;
 		float env = exp(-d * d) * (1.0 - zap_t / zap_dur);
@@ -201,8 +264,9 @@ void fragment() {
 			float a = arc_at(lp.z, lp.y, zap_t, f) * (w.x + w.z) + arc_at(lp.z, lp.x, zap_t, f) * w.y;
 			float core = smoothstep(0.55, 0.95, a);
 			float halo = smoothstep(0.03, 0.45, a);
-			EMISSION = (zap_core_color * core * zap_core + zap_halo_color * (halo * 1.2 + seam * zap_seam)) * env;
+			emit += (zap_core_color * core * zap_core + zap_halo_color * (halo * 1.2 + seam * zap_seam)) * env;
 		}
 	}
+	EMISSION = emit;
 	METALLIC = 0.3 * (1.0 - g);
 }
