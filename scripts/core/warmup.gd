@@ -27,8 +27,10 @@ const POSTS := [
 	[0.0, Deck.SEAT_EYE, Deck.SEAT_Z, 0.0, -20.0],
 	[3.85, Deck.Walker.EYE, -2.0, -90.0, -30.0],
 ]
-## Кадры снаружи после взглядов с мостика: точки облёта `Flyby.START_PATH`, камера с борта смотрит на корпус.
-const OUTSIDE := [0, 2]
+## Кадры снаружи после взглядов с мостика: [вид облёта, точка пути] — камера с борта смотрит на корпус. Issue #519:
+## ещё вид при всплытии (`Flyby.Kind.SURFACE`, последняя точка — под бортом, взглядом вверх к льду): там идёт продувка
+## (выпуски `Wake.vent`), и без этого кадра первый вид снизу собирал шейдеры прямо на всплытии (провал 211 мс, `21a-vent`).
+const OUTSIDE := [[Flyby.Kind.START, 0], [Flyby.Kind.START, 2], [Flyby.Kind.SURFACE, 2]]
 ## Члены экипажа на время прогрева — каждая внешность CrewRig.MODELS перед глазами (x, z на палубе).
 const MATE_AT := [Vector2(-0.6, -3.6), Vector2(0.6, -3.6)]
 ## Issue #217: ещё по фигуре каждой внешности материалом своего игрока (`CrewView.as_own`) — его шейдер иначе
@@ -56,9 +58,18 @@ func active() -> bool:
 	return i < frames()
 
 
-## Точка облёта (`Flyby.START_PATH`) для кадра снаружи; -1 — кадр с мостика или прогрев кончился.
+## Номер кадра снаружи в OUTSIDE; -1 — кадр с мостика или прогрев кончился.
 func outside() -> int:
-	return OUTSIDE[i - _inside()] if active() and i >= _inside() else -1
+	return i - _inside() if active() and i >= _inside() else -1
+
+
+## Камера с борта для кадра снаружи k (оси корабля): точка пути облёта, взгляд как у самого облёта (`Flyby.pose`).
+static func outside_pose(k: int) -> Transform3D:
+	var kind: Flyby.Kind = OUTSIDE[k][0]
+	var path: Array = Flyby.START_PATH if kind == Flyby.Kind.START else Flyby.SURFACE_PATH
+	var p: Vector3 = path[OUTSIDE[k][1]]
+	var look := Flyby.LOOK_AT + (Vector3.UP * Flyby.SURFACE_LOOK_UP if kind == Flyby.Kind.SURFACE else Vector3.ZERO)
+	return Transform3D(Basis.looking_at(look - p, Vector3.UP), p)
 
 
 ## Взгляд с мостика текущего кадра: [x, y, z, курс°, наклон°].

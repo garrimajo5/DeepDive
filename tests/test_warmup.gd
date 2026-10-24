@@ -10,7 +10,7 @@ func test_views_cover_circle() -> void:
 			yaws[int(v[0]) % 360] = true
 	for y in range(0, 360, 60):
 		ok(yaws.has(y), "взгляд на курс %d°" % y)
-	ok(Warmup.frames() <= 15, "кадров прогрева немного: %d (issue #159)" % Warmup.frames())
+	ok(Warmup.frames() <= 16, "кадров прогрева немного: %d (issue #159; +1 — вид при всплытии, #519)" % Warmup.frames())
 	ok(Deck.FOV > 60.0, "шаг 60° не оставляет щелей при поле зрения %.0f°" % Deck.FOV)
 	near(Warmup.zap_radius(), 80.0, 1e-6, "разряд на пределе доли: 60 / 15 × 20 м")
 
@@ -91,6 +91,24 @@ func test_sweep_order() -> void:
 	ok(not Warmup.new().active(), "выключен — сразу готов")
 
 
+## Issue #519: провал 211 мс на продувке при виде с борта у поверхности — прогрев смотрит и оттуда: кадр снаружи
+## совпадает с концом облёта `Flyby.Kind.SURFACE` (камера под бортом, взгляд вверх), кадры начала облёта на месте.
+func test_outside_surface() -> void:
+	var f := Flyby.new()
+	f.start(Flyby.Kind.SURFACE)
+	f.t = f.length()
+	var end := f.pose()
+	var found := false
+	for k in Warmup.OUTSIDE.size():
+		var pose := Warmup.outside_pose(k)
+		if pose.origin.distance_to(end.origin) < 1e-4 and (-pose.basis.z).dot(-end.basis.z) > 0.9999:
+			found = true
+	ok(found, "вид при всплытии в кадрах снаружи")
+	var start := Warmup.outside_pose(0)
+	near(start.origin.distance_to(Flyby.START_PATH[0]), 0.0, 1e-6, "первый кадр снаружи — начало облёта")
+	ok((-start.basis.z).dot((Flyby.LOOK_AT - start.origin).normalized()) > 0.9999, "смотрит на корпус")
+
+
 func test_scene_warmup() -> void:
 	Warmup.enabled = true
 	var main: Main = load("res://scenes/main.tscn").instantiate()
@@ -106,6 +124,7 @@ func test_scene_warmup() -> void:
 	ok(main.breach_view.jet_mm.visible and main.breach_view.spark_mm.visible, "частицы пробоины ART-072 в кадре прогрева — пустой карточкой")
 	ok(steam.visible and steam.multimesh.visible_instance_count >= 1, "пар ART-071 в кадре прогрева — пустой карточкой")
 	var outside := 0
+	var up_view := false
 	near(main.curtain.progress, 0.0, 1e-9, "заставка с 0 %")
 	var prev := 0.0
 	for i in Warmup.frames() - 1:   # первый взгляд показан при старте, дальше по кадру на взгляд
@@ -119,6 +138,10 @@ func test_scene_warmup() -> void:
 			outside += 1
 			ok(main.flyby_cam.current, "кадр снаружи — камера с борта")
 			ok(main.flyby_cam.global_position.distance_to(main.ship.global_position) > 20.0, "камера вне корпуса")
+			ok(main.wake_view.visible and main.wake_view.multimesh.visible_instance_count >= 1,
+					"пузыри следа и продувки ART-063 в кадре снаружи — пустой карточкой (#519)")
+			if -main.flyby_cam.global_basis.z.y > 0.05:   # снизу вверх: при облёте START камера смотрит вниз
+				up_view = true
 			continue
 		near(main.camera.position.distance_to(main.warm.eye()), 0.0, 1e-6, "камера в центре мостика или у поста")
 		yaws[roundi(rad_to_deg(main.camera.rotation.y))] = true
@@ -129,6 +152,8 @@ func test_scene_warmup() -> void:
 	main.step(1.0 / 60.0)
 	ok(not main.warming(), "прогрев кончился")
 	eq(outside, Warmup.OUTSIDE.size(), "были кадры снаружи")
+	ok(up_view, "кадр снаружи снизу вверх — как при всплытии (#519)")
+	ok(not main.wake_view.visible, "след снова скрыт — пузырей нет")
 	ok(not steam.visible and not main.breach_view.jet_mm.visible, "частицы снова скрыты, пар скрыт")
 	eq(main.breach_view.parts.count(), 0, "частиц пробоины прогрев не родил")
 	eq(main.valve_steam.puffs.size(), 0, "клубов пара прогрев не родил")
