@@ -188,3 +188,52 @@ func test_scene_off_in_tests_and_done() -> void:
 	ok(not main.tutorial.on, "раннер выключил подсказки")
 	_tick(5)
 	ok(not main.tutorial_panel.visible, "плашки нет")
+
+
+func test_guest_skips_sonar() -> void:   # у гостя сети шага сонара нет: «… / 5», с маршрута — сразу после энергии
+	var t := Tutorial.new()
+	t.set_guest(true)
+	eq(t.step_line(), "Первый забег · 1 / 5", "у гостя пять шагов")
+	_pass(t, Tutorial.Ev.SAT)
+	_pass(t, Tutorial.Ev.THRUST)
+	_pass(t, Tutorial.Ev.LIGHT)
+	eq(t.step_line(), "Первый забег · 4 / 5", "энергия — четвёртый")
+	_pass(t, Tutorial.Ev.SHARE)
+	eq(t.target(), "route", "после энергии — маршрут, сонар пропущен")
+	eq(t.step_line(), "Первый забег · 5 / 5")
+	ok(t.note(Tutorial.Ev.ROUTE), "маршрут")
+	ok(t.update(Tutorial.DONE_TIME + 0.01, false) and t.finished(), "пройдено без сонара")
+	var s := Tutorial.new()
+	s.step = 4   # стоял на сонаре в своей игре и вошёл к хосту
+	s.set_guest(true)
+	eq(s.target(), "route", "шаг сонара у гостя сразу пропущен")
+	s.set_guest(false)
+	eq(s.step_line(), "Первый забег · 6 / 6", "в своей игре снова шесть")
+
+
+func test_guest_events_by_host_frame() -> void:
+	var g := Tutorial.Guest.new()
+	var sh: Array = [2, 2, 2, 2, 2]
+	var dt := 1.0 / 30.0
+	eq(g.update(dt, false, false, "helm", Vector2.ZERO, false, false, false, sh, -1), [], "первый шаг — только запомнить")
+	eq(g.update(dt, true, false, "helm", Vector2.ZERO, false, false, false, sh, -1), [Tutorial.Ev.SAT],
+		"кадр: свой пост — за штурвалом")
+	eq(g.update(dt, true, false, "", Vector2(0, 1), false, false, false, sh, -1), [Tutorial.Ev.THRUST],
+		"своя крестовина вверх за штурвалом")
+	eq(g.update(dt, true, false, "", Vector2.ZERO, false, false, true, sh, -1), [],
+		"свет сменился без своего нажатия — не считается")
+	eq(g.update(dt, true, false, "", Vector2.ZERO, true, false, true, sh, -1), [], "нажал «Свет» — ждём кадр")
+	eq(g.update(0.5, true, false, "", Vector2.ZERO, false, false, false, sh, -1), [Tutorial.Ev.LIGHT],
+		"кадр хоста: свет сменился")
+	eq(g.update(dt, false, true, "energy", Vector2(-1, 0), false, false, false, sh, -1), [], "крестовина у пульта")
+	eq(g.update(Tutorial.Guest.WAIT + 0.1, false, true, "energy", Vector2.ZERO, false, false, false, sh, -1), [],
+		"кадр так и не пришёл")
+	var sh2: Array = [1, 2, 2, 2, 2]
+	eq(g.update(dt, false, true, "energy", Vector2.ZERO, false, false, false, sh2, -1), [],
+		"доли сменились позже ожидания — не своё")
+	g.update(dt, false, true, "energy", Vector2(1, 0), false, false, false, sh2, -1)
+	eq(g.update(dt, false, true, "energy", Vector2.ZERO, false, false, false, sh, -1), [Tutorial.Ev.SHARE],
+		"доли сменились после своей крестовины")
+	g.update(dt, false, false, "route", Vector2.ZERO, false, true, false, sh, -1)
+	eq(g.update(dt, false, false, "route", Vector2.ZERO, false, false, false, sh, 0), [Tutorial.Ev.ROUTE],
+		"кнопка у поста «Маршрут» — маршрут в кадре сменился")

@@ -39,6 +39,7 @@ var step := 0          ## текущий шаг 0…5; STEPS.size() — прой
 var done_t := -1.0     ## ≥ 0 — показывается «Выполнено» этого шага столько секунд
 var a := 0.0           ## прозрачность плашки 0…1
 var on := true         ## обучение не выключено
+var skip: Array = []   ## события шагов, которых нет (у гостя сети — сонар: импульс гостя хосту не идёт)
 
 
 func finished() -> bool:
@@ -67,6 +68,7 @@ func update(dt: float, hidden: bool) -> bool:
 		if done_t >= DONE_TIME:
 			done_t = -1.0
 			step += 1
+			_skip()
 	var want := active() and not hidden
 	a = move_toward(a, 1.0 if want else 0.0, dt / FADE)
 	return finished() and not was
@@ -76,9 +78,29 @@ func shown() -> bool:
 	return a > 0.0 and on and step < STEPS.size()
 
 
-## «Первый забег · 2 / 6».
+## «Первый забег · 2 / 6»; пропущенные шаги не считаются (у гостя — «… / 5»).
 func step_line() -> String:
-	return "Первый забег · %d / %d" % [mini(step + 1, STEPS.size()), STEPS.size()]
+	var n := 0
+	var at := 0
+	for i in STEPS.size():
+		if STEPS[i][1] in skip:
+			continue
+		n += 1
+		if i <= step:
+			at = n
+	return "Первый забег · %d / %d" % [maxi(1, at), n]
+
+
+## Гость сети или своя игра: у гостя шага сонара нет (стоял на нём — сразу следующий), в своей игре — все шесть.
+func set_guest(guest: bool) -> void:
+	skip = [Ev.PING] if guest else []
+	if done_t < 0.0:
+		_skip()
+
+
+func _skip() -> void:
+	while step < STEPS.size() and STEPS[step][1] in skip:
+		step += 1
 
 
 ## Текст плашки: «Выполнено» или действие шага; на шаге энергии — промежуточные фразы (сидит за штурвалом, у пульта).
@@ -165,6 +187,57 @@ static func ring_of(id: String, l: Touch.Layout) -> Touch.Circle:
 		"up":
 			return up_ring(l.pad)
 	return null
+
+
+## Гость сети: корабль считает хост, поэтому шаг засчитывает своё нажатие, подтверждённое кадром хоста за `WAIT`:
+## «Свет» за штурвалом — свет в кадре сменился, крестовина у пульта — доли сменились, кнопка у поста «Маршрут» —
+## маршрут сменился. Сел — свой пост в кадре стал «за штурвалом» (пост у каждого свой), ход — своя крестовина вверх
+## за штурвалом. Чужое изменение без своего нажатия не считается. `update` — каждый шаг клиента после кадра.
+class Guest:
+	const WAIT := 1.5   ## нажал — ждём кадр хоста с переменой столько секунд
+
+	var wait := {}   ## Ev → секунды с нажатия
+	var primed := false
+	var seated := false
+	var light := false
+	var shares: Array = []
+	var route := -1
+
+	## События своего игрока за этот шаг. move, light_pressed, action_pressed — свой ввод (вне диалога и шторки);
+	## seated, at_power, near — свой пост из кадра; lit, share, route_now — свет, доли и маршрут из кадра хоста.
+	func update(dt: float, seated_now: bool, at_power: bool, near: String, move: Vector2, light_pressed: bool,
+			action_pressed: bool, lit: bool, share: Array, route_now: int) -> Array[Ev]:
+		var out: Array[Ev] = []
+		for k: int in wait.keys():
+			wait[k] += dt
+			if wait[k] > WAIT:
+				wait.erase(k)
+		if seated_now and light_pressed:
+			wait[Ev.LIGHT] = 0.0
+		if at_power and move != Vector2.ZERO:
+			wait[Ev.SHARE] = 0.0
+		if near == "route" and action_pressed and not seated_now and not at_power:
+			wait[Ev.ROUTE] = 0.0
+		if primed:
+			if seated_now and not seated:
+				out.append(Ev.SAT)
+			if lit != light and wait.has(Ev.LIGHT):
+				out.append(Ev.LIGHT)
+				wait.erase(Ev.LIGHT)
+			if share != shares and wait.has(Ev.SHARE):
+				out.append(Ev.SHARE)
+				wait.erase(Ev.SHARE)
+			if route_now != route and wait.has(Ev.ROUTE):
+				out.append(Ev.ROUTE)
+				wait.erase(Ev.ROUTE)
+		if seated_now and move.y > 0.0:
+			out.append(Ev.THRUST)
+		primed = true
+		seated = seated_now
+		light = lit
+		shares = share.duplicate()
+		route = route_now
+		return out
 
 
 func reset() -> void:

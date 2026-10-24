@@ -118,6 +118,7 @@ static var menu := true
 static var hints := true
 var tutorial := Tutorial.new()   ## шаги «штурвал → ход → свет → энергия → сонар → маршрут»; пройдено — Settings.hints_done
 var tutorial_panel: TutorialPanel
+var tutorial_guest: Tutorial.Guest   ## у гостя сети: свои шаги по своему нажатию и кадру хоста; в своей игре — null
 var hint_pointer: HintPointerView   ## указатель над постом-целью подсказки (ART-038, HintPointer); вне кадра — стрелка у края
 var main_menu := MainMenu.new()   ## «Погрузиться» / «Экипаж» / «Настройки»: пока открыто — игра стоит под меню
 var menu_panel: MenuPanel
@@ -1490,9 +1491,9 @@ func sit_at_helm() -> void:
 
 
 ## Подсказки первого забега ART-038: скрыты под тревогой, голосованием, итогом, облётом, шторкой, паузой и меню
-## (шаг стоит); у гостя сети — пока нет (их шаги — следующая часть). Пройдено — запомнить в настройках.
+## (шаг стоит); у гостя сети — свои шаги без сонара (`Tutorial.Guest`). Пройдено — запомнить в настройках.
 func _tutorial_step(dt: float) -> void:
-	var hidden := net_client != null or alarms_on().has(true) or at_vote or run.ended or pause.open \
+	var hidden := alarms_on().has(true) or at_vote or run.ended or pause.open \
 		or main_menu.open or settings.open or flyby.active() or warm.active() or wreck.active() or walker.noclip
 	if tutorial.update(dt, hidden):
 		settings.hints_done = true
@@ -1923,6 +1924,8 @@ func _enter_client(c: NetLink.Client) -> void:
 	drop = NetDrop.new()
 	drop.menu_ready = true   # главное меню ART-037 есть: «В меню» в диалоге обрыва связи
 	flyby.stop()   # клиент входит в идущий забег — облёта нет
+	tutorial_guest = Tutorial.Guest.new()
+	tutorial.set_guest(true)   # сонара у гостя нет — шаг пропущен
 	message.clear(Flyby.START_MSG)
 	say(net_client.label())
 
@@ -1986,7 +1989,11 @@ func _client_step(dt: float) -> void:
 	visor.visible = me.welding()
 	alarm_board.show_alarms(alarms_on(), time, breach.active)
 	_client_run_view(dt)
-	_tutorial_step(dt)   # у гостя пока скрыты
+	var live := not (wreck.active() or drop.blocks())   # ввод, который ушёл хосту
+	for ev in tutorial_guest.update(dt, pilot.seated, at_power, near_post, Vector2(r.move) if live else Vector2.ZERO,
+			live and r.light_pressed, live and r.action_pressed, light_on, reactor.share, run.route):
+		tutorial.note(ev)
+	_tutorial_step(dt)
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	overlay.set_pilot(pilot.seated)
@@ -2128,6 +2135,8 @@ func _drop_taps(taps: Array[Vector2]) -> void:
 func _leave_net() -> void:
 	net_client.stop()
 	net_client = null
+	tutorial_guest = null
+	tutorial.set_guest(false)
 	wreck.reset()   # шторка хоста — не своя: одиночный забег без неё
 	_wreck_show()
 	weak.reset()

@@ -15,9 +15,11 @@ var h_vitals := Vitals.new()
 var h_crew: Array = []
 var h_ev := {}   ## события в кадре хоста (NetSnap.events)
 var h_eco := PackedFloat32Array()   ## существа рядом в кадре хоста (EcoLink.pack_near)
+var h_lit := false   ## прожектор хоста
 
 
 func before() -> void:
+	h_lit = false
 	host = NetLink.Host.new()
 	eq(host.start(PORT), OK, "хост открыт")
 	main = load("res://scenes/main.tscn").instantiate()
@@ -55,7 +57,7 @@ func _host_tick(send := true) -> void:
 			h_crew.append(m)
 			guest.index = 1
 	if send and host.due(DT):
-		var f := NetSnap.frame(host.seq, 0.0, h_helm, h_reactor, h_vitals, false, h_crew, h_ev)
+		var f := NetSnap.frame(host.seq, 0.0, h_helm, h_reactor, h_vitals, h_lit, h_crew, h_ev)
 		if not h_eco.is_empty():
 			f["eco"] = h_eco
 		host.send_frame(f)
@@ -426,3 +428,26 @@ func test_drop_dialog_to_menu() -> void:   # ART-043: «В меню» в диа�
 	ok(main.net_client == null, "сетевой забег покинут")
 	ok(not main.drop.active() and not main.drop_panel.visible, "диалог закрыт")
 	ok(main.main_menu.open and main.menu_panel.visible, "главное меню")
+
+
+func test_guest_tutorial_steps() -> void:   # ART-038 у гостя: плашка видна, свет — по своему нажатию и кадру хоста
+	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
+	var t := main.tutorial
+	t.on = true
+	t.step = 2   # «За штурвалом нажмите «Свет»»
+	var me := h_crew[1] as Crew.Member
+	me.sit()
+	me.sync_post()
+	ok(_pump(func() -> bool: return main.pilot.seated), "гость за штурвалом по кадру")
+	ok(_pump(func() -> bool: return main.tutorial_panel.visible), "у гостя плашка подсказки видна")
+	eq(main.tutorial_panel.ring, "light", "обведён «Свет»")
+	main.overlay.router.light_pressed = true
+	ok(_pump(func() -> bool: return guest.pad.light), "«Свет» ушёл хосту")
+	for i in 5:
+		_host_tick()
+		main.step(DT)
+	ok(t.done_t < 0.0 and t.step == 2, "пока свет в кадре не сменился — не засчитан")
+	h_lit = true   # хост переключил прожектор по нажатию гостя
+	ok(_pump(func() -> bool: return t.done_t >= 0.0 or t.step > 2), "свет в кадре хоста — шаг засчитан")
+	ok(_pump(func() -> bool: return t.step == 3), "шаг энергии")
+	eq(t.step_line(), "Первый забег · 4 / 5", "у гостя без сонара")
