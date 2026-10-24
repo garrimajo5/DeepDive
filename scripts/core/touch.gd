@@ -137,9 +137,22 @@ class Router:
 		light_pressed = false
 		noclip_pressed = false
 
+	## Где сейчас пальцы на экране (ползунки настроек ART-037).
+	func points() -> Array[Vector2]:
+		var out: Array[Vector2] = []
+		for f in _fingers.values():
+			out.append(f[1])
+		return out
+
 	## Касается ли экрана хоть один палец.
 	func touching() -> bool:
 		return not _fingers.is_empty()
+
+	## Ввод кадра не идёт в игру, пальцы остаются на экране (ползунок настроек поверх идущего мира).
+	func mute() -> void:
+		move = Vector2i.ZERO
+		action_down = false
+		end_frame()
 
 	func clear() -> void:
 		_fingers.clear()

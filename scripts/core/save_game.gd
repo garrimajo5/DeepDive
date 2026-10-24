@@ -123,3 +123,9 @@ func wipe() -> void:
 	timer = 0.0
 	if enabled() and FileAccess.file_exists(path):
 		DirAccess.remove_absolute(path)
+
+
+## «Сбросить сохранение» в настройках ART-037: файл стёрт, груз, поднятые образцы и изученные виды — с нуля.
+func reset(samples: Samples, scanner: Scanner = null) -> void:
+	apply({"v": VERSION}, samples, scanner)
+	wipe()

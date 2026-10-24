@@ -9,6 +9,7 @@ var action_label := ""   ## подпись на кнопке действия (�
 var noclip_on := false   ## тестовый режим noclip включён: кнопка подсвечена
 ## Сколько «точек» экрана (1/160 дюйма) в одном пикселе вьюпорта — для чувствительности свайпа.
 var points_per_px := 1.0
+var swipe := 1.0   ## чувствительность свайпа из настроек ART-037 (`Settings.swipe`)
 
 
 func _ready() -> void:
@@ -50,7 +51,7 @@ func _input(event: InputEvent) -> void:
 
 ## Свайп за кадр в «точках» экрана.
 func look_points() -> Vector2:
-	return router.look * points_per_px
+	return router.look * points_per_px * swipe
 
 
 func set_pilot(on: bool) -> void:

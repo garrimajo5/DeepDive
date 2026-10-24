@@ -38,7 +38,7 @@ extends RefCounted
 ## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["route"], ["act"], ["gone"], ["wreck"], ["back"], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
 const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "silt", "drain", "hull", "route", "gone", "wreck", "back", "log", "quit"]
-const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "new", "exit", "yes", "no", "crew", "join", "last",
+const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "new", "exit", "yes", "no", "crew", "settings", "join", "last",
 	"key0", "key1", "key2", "key3", "key4", "key5", "key6", "key7", "key8", "key9", "key.", "keydel"]
 const PRESS_TIME := 0.15   ## сколько держать кнопку при «press», с
 const FINGER := 900        ## номер пальца для касаний сценария (не пересекается с настоящими)
