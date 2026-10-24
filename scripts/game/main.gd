@@ -34,6 +34,7 @@ var run := Run.new()           ## маршрут забега: выбор у г�
 var breach_view: BreachView
 var debug_weld := false        ## снимок: сварку держат без пальца
 var save := SaveGame.new()     ## груз трюма, поднятые образцы и изученные виды в user:// (js/save.js)
+var expedition := Expedition.new()   ## история для журнала ART-047: места, забеги, рекорд глубины, прочитанное
 var scanner := Scanner.new()   ## сканер биолога: цели от живого мира, изученные виды
 var at_scanner := false        ## игрок у поста «Сканер»: мир шлёт цели (ShipState.scan_range)
 var near_post := ""            ## пост рядом с игроком на ногах (id), "" — нет или игрок занят постом
@@ -345,10 +346,12 @@ func _ready() -> void:
 	tutorial.on = hints and not settings.hints_done and not QaRunner.pending()   # тестер включает шагом `tutorial`
 	role_card.on = hints and not QaRunner.pending()   # тестер включает шагом `cards`
 	role_card.set_read(settings.cards)
+	save.expedition = expedition
 	save.load_into(samples, scanner)
 	_begin_run()
 	samples.changed.connect(save.mark)
 	scanner.changed.connect(save.mark)
+	expedition.changed.connect(save.mark)
 	scanner.message.connect(say)
 	_place_ship()
 	_place_camera()
@@ -730,6 +733,8 @@ func step(dt: float) -> void:
 	var run_msg := run.update(helm.pos.x, helm.pos.z)
 	if not run_msg.is_empty():
 		announce(run_msg)
+	expedition.visit(helm.pos.x, helm.pos.z)   # журнал ART-047: места и рекорд глубины
+	expedition.dive_depth(helm.depth())
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
 	engine.update(dt, reactor, hold_valve or debug_vent)
 	valve_steam.update(dt, engine.venting)
@@ -1405,6 +1410,7 @@ func _wreck_step(dt: float) -> bool:
 	if not wreck.active():
 		return false
 	if wreck.update(dt):
+		expedition.end_run()
 		_restart()
 		say("Корпус разрушен. Ковчег поднят к началу спуска")
 	_wreck_show()
@@ -1486,6 +1492,7 @@ func decide(choice: String) -> void:
 		announce(run.go_deeper())   # гостям — тоже
 		return
 	var rows := run.finish(time, samples.cargo.size(), scanner.scanned.size(), breach.count, vitals.hull)
+	expedition.end_run()
 	result_rows = run.summary(samples.cargo.size(), scanner.scanned.size(), breach.count)
 	result_detail = Run.detail(rows)
 	vote_panel.show_results(result_detail, run.score)
