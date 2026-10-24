@@ -1,7 +1,8 @@
 class_name MainMenu
 extends RefCounted
 ## Главное меню после заставки прогрева по ART-037 (`docs/concept-art/menyu.md`): «Погружение», «Погрузиться» (одиночный
-## забег), «Экипаж» (пока нет сбора ART-028 — экран гостя «Войти по адресу» ART-039, `AddressScreen`), «Настройки» (`Settings`, возврат в меню), внизу версия
+## забег), «Экипаж» (пока нет сбора ART-028 — экран гостя «Войти по адресу» ART-039, `AddressScreen`), «Журнал экспедиции»
+## (ART-047, `Journal`), «Настройки» (`Settings`, возврат в меню), внизу версия
 ## из `project.godot`. Здесь — состояние, кнопки и раскладка без узлов; рисует `scripts/game/menu_panel.gd`
 ## (`main.menu_panel`), шаг — `Main._menu_step`. Макет 2400×1080 на фоне заставки: масштаб и обрезка боков — `Splash`.
 ## Места текста — левый край и верх видимых глифов, как в заметке художника.
@@ -26,12 +27,12 @@ const EDGE := Color("#32616D")
 const OFF := Color("#6E909A")        ## неактивное
 
 ## Кнопки сверху вниз: id, подпись.
-const ITEMS := [["dive", "Погрузиться"], ["crew", "Экипаж"], ["settings", "Настройки"]]
+const ITEMS := [["dive", "Погрузиться"], ["crew", "Экипаж"], ["journal", "Журнал экспедиции"], ["settings", "Настройки"]]
 const MAIN_ITEM := "dive"
 
 var open := false
 ## Какие кнопки работают.
-var enabled := {"dive": true, "crew": true, "settings": true}
+var enabled := {"dive": true, "crew": true, "journal": true, "settings": true}
 
 
 ## Прямоугольник i-й кнопки в макете.
@@ -63,8 +64,8 @@ func hit(p: Vector2, size: Vector2) -> String:
 
 
 ## Нажатие кнопки id. Возвращает, что сделать игре: "dive" — одиночный забег (меню закрыто), "crew" — экран
-## «Войти по адресу» поверх меню (меню остаётся открытым: «Назад» вернёт к нему), "settings" — настройки поверх
-## меню (так же), "" — ничего.
+## «Войти по адресу» поверх меню (меню остаётся открытым: «Назад» вернёт к нему), "journal" — «Журнал экспедиции»
+## ART-047 поверх меню (так же), "settings" — настройки поверх меню (так же), "" — ничего.
 func press(id: String) -> String:
 	if not open or not enabled.get(id, false):
 		return ""
@@ -74,6 +75,8 @@ func press(id: String) -> String:
 			return "dive"
 		"crew":
 			return "crew"
+		"journal":
+			return "journal"
 		"settings":
 			return "settings"
 	return ""

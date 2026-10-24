@@ -133,6 +133,8 @@ var pause := Pause.new()   ## пауза одиночного забега ART-0
 var pause_panel: PausePanel
 var settings := Settings.new()   ## настройки ART-037 поверх меню или паузы: громкость, свайп, облёт, сброс сохранения
 var settings_panel: SettingsPanel
+var logbook := Journal.new()   ## «Журнал экспедиции» ART-047 поверх меню: пока открыт — меню ждёт
+var logbook_panel: JournalPanel
 var flyby := Flyby.new()   ## камера с борта: облёт в начале забега, вид при всплытии
 var flyby_cam: Camera3D
 var overlay: TouchOverlay
@@ -1135,6 +1137,10 @@ func _menu_step(dt: float = 0.0) -> void:
 		_address_step(r, dt)
 		r.end_frame()
 		return
+	if logbook.open:
+		_journal_step(r)
+		r.end_frame()
+		return
 	for p in r.taps:
 		var what := main_menu.press(main_menu.hit(p, get_viewport().get_visible_rect().size))
 		if what == "dive":
@@ -1143,6 +1149,9 @@ func _menu_step(dt: float = 0.0) -> void:
 			break
 		if what == "crew":
 			open_address()
+			break
+		if what == "journal":
+			open_journal()
 			break
 		if what == "settings":
 			open_settings()
@@ -1214,6 +1223,32 @@ func _apply_settings() -> void:
 		overlay.swipe = settings.swipe
 
 
+## «Журнал экспедиции» ART-047 поверх главного меню: история `expedition`, изученные виды, груз трюма.
+func open_journal() -> void:
+	logbook.show()
+	_journal_show()
+	overlay.router.clear()
+
+
+func _journal_show() -> void:
+	if logbook_panel == null:
+		logbook_panel = JournalPanel.new()
+		add_child(logbook_panel)
+	logbook_panel.show_journal(logbook, expedition, scanner.scanned.size(), Species.count(), samples.cargo.size(),
+		save.state == SaveGame.Load.BROKEN)
+	if menu_panel:
+		menu_panel.visible = main_menu.open and not logbook.open and not address.open
+
+
+## Шаг журнала: касание места — название под картой, «Назад» — в меню.
+func _journal_step(r: Touch.Router) -> void:
+	for p in r.taps:
+		if logbook.press(logbook.hit(p, get_viewport().get_visible_rect().size)) == "back":
+			overlay.router.clear()
+			break
+	_journal_show()
+
+
 ## Экран «Войти по адресу» ART-039 поверх главного меню (пока нет сбора экипажа ART-028 — по «Экипаж»).
 func open_address() -> void:
 	address.show()
@@ -1272,6 +1307,10 @@ func back_pressed() -> void:
 	if settings.open:   # настройки: сначала подтверждение сброса, потом — назад к меню или паузе
 		_settings_do(settings.back())
 		_settings_show()
+		return
+	if main_menu.open and logbook.open:
+		logbook.back()
+		_journal_show()
 		return
 	if main_menu.open and address.open:   # экран адреса: сначала отмена попытки, потом меню
 		_address_do(address.back())
@@ -1381,6 +1420,9 @@ func _leave_posts() -> void:
 func close_menu() -> void:
 	main_menu.open = false
 	address.open = false
+	logbook.open = false
+	if logbook_panel:
+		_journal_show()
 	if menu_panel:
 		menu_panel.show_menu(main_menu)
 	if address_panel:
