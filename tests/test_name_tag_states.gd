@@ -162,9 +162,10 @@ func test_tags_off_status_plate() -> void:
 	main.step(1.0 / 30.0)
 	main.open_silt()   # тревога и сообщение — плашка в четыре строки
 	main.vitals.energy = 5.0
+	bio.pad.action = true   # у голостола — импульс хоста (мало энергии — ответ всем), сообщение ниже — после него
+	main.step(1.0 / 30.0)
 	main.say("Биолог у сканера: рядом медузы-колокола, стая светляков и монетники на мху у Края отмели")
-	bio.pad.action = true
-	for k in 4:
+	for k in 3:
 		main.step(1.0 / 30.0)
 	var plate := main.status_rect()
 	ok(plate.has_area(), "плашка строк на экране (%s)" % plate)

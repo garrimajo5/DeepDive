@@ -450,4 +450,4 @@ func test_guest_tutorial_steps() -> void:   # ART-038 у гостя: плашк�
 	h_lit = true   # хост переключил прожектор по нажатию гостя
 	ok(_pump(func() -> bool: return t.done_t >= 0.0 or t.step > 2), "свет в кадре хоста — шаг засчитан")
 	ok(_pump(func() -> bool: return t.step == 3), "шаг энергии")
-	eq(t.step_line(), "Первый забег · 4 / 5", "у гостя без сонара")
+	eq(t.step_line(), "Первый забег · 4 / 6", "у гостя все шесть: сонар — импульсом хоста")
