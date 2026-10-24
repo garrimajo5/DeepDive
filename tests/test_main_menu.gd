@@ -39,10 +39,11 @@ func test_buttons() -> void:
 	eq(m.hit(dive, size), "", "закрытое меню касаний не берёт")
 	m.open = true
 	eq(m.hit(dive, size), "dive", "касание «Погрузиться»")
-	eq(m.hit(crew, size), "", "«Экипаж» погашена до экрана сбора ART-028")
+	eq(m.hit(crew, size), "crew", "«Экипаж» — экран «Войти по адресу» ART-039 (до сбора ART-028)")
 	eq(m.hit(MainMenu.screen_rect("settings", size).get_center(), size), "", "«Настройки» погашены")
 	eq(m.hit(Vector2(size.x - 10, size.y - 10), size), "", "мимо кнопок — ничего")
-	eq(m.press("crew"), "", "погашенная не нажимается")
+	eq(m.press("settings"), "", "погашенная не нажимается")
+	eq(m.press("crew"), "crew", "«Экипаж» — экран адреса поверх меню")
 	ok(m.open, "меню открыто")
 	eq(m.press("dive"), "dive", "«Погрузиться» — забег")
 	ok(not m.open, "меню закрыто")
@@ -63,16 +64,22 @@ func test_scene_menu_then_dive() -> void:
 	var size := main.get_viewport().get_visible_rect().size
 	var start := Vector2(main.walker.x, main.walker.z)
 	var pos: Vector3 = main.helm.pos
-	r.begin(1, r.layout.pad.c + Vector2(0, -r.layout.pad.r * 0.7))   # крестовина вперёд — игра стоит
+	var on_pad := r.layout.pad.c + Vector2(0, -r.layout.pad.r * 0.7)
+	for d: Vector2 in [Vector2(0, -0.7), Vector2(0, 0.7), Vector2(0.7, 0), Vector2(-0.7, 0)]:   # мимо кнопок меню
+		on_pad = r.layout.pad.c + d * r.layout.pad.r
+		if main.main_menu.hit(on_pad, size) == "":
+			break
+	eq(main.main_menu.hit(on_pad, size), "", "палец на крестовине мимо кнопок меню")
+	r.begin(1, on_pad)   # крестовина — игра стоит
 	for i in 30:
 		main.step(1.0 / 30.0)
 	r.end(1)
 	eq(Vector2(main.walker.x, main.walker.z), start, "игрок под меню не ходит")
 	ok(main.helm.pos.is_equal_approx(pos), "корабль под меню стоит")
-	r.begin(2, MainMenu.screen_rect("crew", size).get_center())
+	r.begin(2, MainMenu.screen_rect("settings", size).get_center())
 	main.step(1.0 / 30.0)
 	r.end(2)
-	ok(main.main_menu.open, "погашенная «Экипаж» меню не закрывает")
+	ok(main.main_menu.open, "погашенные «Настройки» меню не закрывают")
 	r.begin(3, MainMenu.screen_rect("dive", size).get_center())   # палец остаётся на экране
 	main.step(1.0 / 30.0)
 	ok(not main.main_menu.open, "«Погрузиться» — меню закрыто")

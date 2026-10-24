@@ -116,6 +116,9 @@ static var intro := true
 static var menu := true
 var main_menu := MainMenu.new()   ## «Погрузиться» / «Экипаж» / «Настройки»: пока открыто — игра стоит под меню
 var menu_panel: MenuPanel
+var address := AddressScreen.new()   ## «Войти по адресу» ART-039 поверх меню («Экипаж»): пока открыт — меню ждёт
+var address_panel: AddressPanel
+var address_client: NetLink.Client   ## попытка входа с экрана адреса; на борту — становится `net_client`
 var pause := Pause.new()   ## пауза одиночного забега ART-037 (системная «Назад»): пока открыта — игра стоит
 var pause_panel: PausePanel
 var flyby := Flyby.new()   ## камера с борта: облёт в начале забега, вид при всплытии
@@ -313,6 +316,8 @@ func _ready() -> void:
 	breach.message.connect(announce)
 	if QaRunner.pending():   # прогон тестера — всегда с чистого трюма и без записи
 		save.path = ""
+		address.path = ""
+	address.load_last()
 	save.load_into(samples, scanner)
 	_begin_run()
 	samples.changed.connect(save.mark)
@@ -555,7 +560,7 @@ func step(dt: float) -> void:
 	if qa:
 		qa.tick(dt)
 	if main_menu.open and not warm.active():   # главное меню: игра стоит, касания — кнопкам меню
-		_menu_step()
+		_menu_step(dt)
 		return
 	if pause.open:   # пауза: игра стоит, касания — кнопкам паузы
 		_pause_step()
@@ -1066,20 +1071,82 @@ func open_menu() -> void:
 
 
 ## Шаг под меню: касания кнопок. «Погрузиться» — забег с начала (облёт, часы забега), палец с кнопки не идёт в игру.
-func _menu_step() -> void:
+func _menu_step(dt: float = 0.0) -> void:
 	var r := overlay.router
+	if address.open:
+		_address_step(r, dt)
+		r.end_frame()
+		return
 	for p in r.taps:
-		if main_menu.press(main_menu.hit(p, get_viewport().get_visible_rect().size)) == "dive":
+		var what := main_menu.press(main_menu.hit(p, get_viewport().get_visible_rect().size))
+		if what == "dive":
 			close_menu()
 			_begin_run()
 			break
+		if what == "crew":
+			open_address()
+			break
 	r.end_frame()
+
+
+## Экран «Войти по адресу» ART-039 поверх главного меню (пока нет сбора экипажа ART-028 — по «Экипаж»).
+func open_address() -> void:
+	address.show()
+	if address_panel == null:
+		address_panel = AddressPanel.new()
+		add_child(address_panel)
+	address_panel.show_screen(address)
+	if menu_panel:
+		menu_panel.visible = false
+
+
+## Шаг экрана адреса: клавиши, «Войти» / «Отмена», «Назад»; попытка входа ждёт ответа хоста здесь, под экраном.
+## На борту — экран и меню закрыты, дальше — шаг клиента (`_enter_client`).
+func _address_step(r: Touch.Router, dt: float) -> void:
+	for p in r.taps:
+		_address_do(address.press(address.hit(p, get_viewport().get_visible_rect().size)))
+	if address_client:
+		address_client.poll(dt)
+		if address.result(address_client.state, address_client.why):
+			var c := address_client
+			address_client = null
+			close_menu()
+			_enter_client(c)
+			return
+		if not address.field.connecting:
+			address_client = null
+	if address_panel:
+		address_panel.show_screen(address)
+
+
+## Что сказал экран адреса: подключаться, бросить попытку или вернуться в меню.
+func _address_do(what: String) -> void:
+	match what:
+		"join":
+			address_client = NetLink.Client.new()
+			if address_client.join(address.field.text) != OK:
+				address_client = null
+				address.failed()
+		"cancel", "back":
+			if address_client:
+				address_client.stop()
+				address_client = null
+			if what == "back":
+				if address_panel:
+					address_panel.show_screen(address)
+				if menu_panel:
+					menu_panel.show_menu(main_menu)
 
 
 ## Системная «Назад» (Esc на ПК): в забеге — пауза ART-037, в паузе закрывает сначала подтверждение, потом паузу;
 ## в главном меню — выход из игры. Сетевой забег и шторка «Корпус разрушен» — пока без паузы (меню забега — позже).
 func back_pressed() -> void:
 	if warm.active():
+		return
+	if main_menu.open and address.open:   # экран адреса: сначала отмена попытки, потом меню
+		_address_do(address.back())
+		if address_panel:
+			address_panel.show_screen(address)
 		return
 	if main_menu.open:
 		save.flush(samples, scanner)
@@ -1139,8 +1206,11 @@ func _leave_posts() -> void:
 
 func close_menu() -> void:
 	main_menu.open = false
+	address.open = false
 	if menu_panel:
 		menu_panel.show_menu(main_menu)
+	if address_panel:
+		address_panel.show_screen(address)
 	overlay.router.clear()   # палец ещё на кнопке: не крестовина и не касание, пропускающее облёт
 	overlay.visible = not wreck.active()
 
@@ -1643,14 +1713,20 @@ func _net_run() -> Dictionary:
 
 ## Войти в сетевой забег хоста по адресу в локальной сети: шаг корабля считает хост, здесь — свой ввод хосту
 ## (`net_pad` → `Client.send_pad`) и кадры хоста в корабль, реактор, корпус и экипаж; свой игрок — `crew[client.me]`.
-func join_game(address: String, port: int = NetLink.PORT, player: String = "", role: int = Crew.Role.PILOT, look: int = 0) -> Error:
+func join_game(to: String, port: int = NetLink.PORT, player: String = "", role: int = Crew.Role.PILOT, look: int = 0) -> Error:
 	if main_menu.open:
 		close_menu()
-	net_client = NetLink.Client.new()
-	var err := net_client.join(address, port, player, role, look)
+	var c := NetLink.Client.new()
+	var err := c.join(to, port, player, role, look)
 	if err != OK:
-		net_client = null
 		return err
+	_enter_client(c)
+	return OK
+
+
+## Стать клиентом хоста: c уже подключается (`join_game`) или на борту (экран адреса ART-039).
+func _enter_client(c: NetLink.Client) -> void:
+	net_client = c
 	net_seq = -1
 	net_news = 0
 	net_vote = {"secs": -1, "frac": -1.0, "tally": "", "ops": []}
@@ -1660,7 +1736,6 @@ func join_game(address: String, port: int = NetLink.PORT, player: String = "", r
 	flyby.stop()   # клиент входит в идущий забег — облёта нет
 	message.clear(Flyby.START_MSG)
 	say(net_client.label())
-	return OK
 
 
 ## Шаг клиента: ввод с экрана — хосту, свежий кадр — в корабль и экипаж, дальше только картинка (без шага корабля).
