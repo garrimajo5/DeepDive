@@ -28,6 +28,12 @@ var _skip_frame := true
 ## за секунду считало и сам скриншот, и «05b-light-off» через 0,5 с после снимка показывал 3 к/с при худшем кадре 34 мс.
 var frames := 0
 var frames_us := 0
+## Issue #435: кадры сразу после снимка на эмуляторе долгие (видеокарта догоняет после чтения кадра) — строка
+## описания через 0,3 с после снимка показывала 1–18 к/с при 50–60 у скриншотов. В средние их не берём; худший кадр
+## считается как раньше (рывок сразу после снимка не прячем). Своих кадров нет — у строки «—».
+const SETTLE_FRAMES := 3
+var _settle := 0
+var _shot_taken := false
 var _warm_frames := 0   ## кадры прогрева шейдеров при старте (Warmup) — в лог, когда он кончится
 var _warm_from_us := 0
 var _warm_last_us := 0
@@ -159,8 +165,11 @@ func _measure(now_us: int) -> void:
 		if ms > worst_ms:
 			worst_ms = ms
 			worst_at = worst_note(_step_label, render_ms(), code_ms(), gpu_ms())
-		frames += 1
-		frames_us += now_us - _last_us
+		if _settle > 0:
+			_settle -= 1
+		else:
+			frames += 1
+			frames_us += now_us - _last_us
 	_skip_frame = false
 	_last_us = now_us
 
@@ -202,18 +211,25 @@ func _point(what: String, dir: Vector2) -> Vector2:
 
 ## Средние кадр/с с прошлого скриншота по своим замерам. Среднее движка — только когда своих кадров нет: оно за секунду
 ## считает и сам снимок (issue #281: «14b-hold-shelves» через 0,3 с после снимка — 4 к/с при худшем кадре 172 мс).
+## Issue #435: после снимка, пока своих кадров нет (SETTLE_FRAMES), — -1 («—» в строке), а не среднее движка со снимком.
 func fps() -> int:
 	if frames < 1 or frames_us <= 0:
-		return roundi(Engine.get_frames_per_second())
+		return -1 if _shot_taken else roundi(Engine.get_frames_per_second())
 	return roundi(frames * 1000000.0 / frames_us)
+
+
+## Кадр/с для строки лога: число или «—» (сразу после снимка замера нет, issue #435).
+func fps_text() -> String:
+	var f := fps()
+	return "—" if f < 0 else str(f)
 
 
 ## Состояние игры одной строкой для лога.
 func state() -> String:
 	var h := main.helm
-	return "t %.1f с · %s · свет %s · глубина %.1f м · ход %.2f м/с · курс %d° · корабль (%.1f, %.1f, %.1f) · игрок (%.2f, %.2f) · реактор %s · %d кадр/с" % [
+	return "t %.1f с · %s · свет %s · глубина %.1f м · ход %.2f м/с · курс %d° · корабль (%.1f, %.1f, %.1f) · игрок (%.2f, %.2f) · реактор %s · %s кадр/с" % [
 		time, "за штурвалом" if main.pilot.seated else ("у пульта энергии" if main.at_power else "на ногах"), "вкл" if main.light_on else "выкл", h.depth(), h.speed, Status.course_deg(h.yaw),
-		h.pos.x, h.pos.y, h.pos.z, main.walker.x, main.walker.z, "%s %d°%s" % [str(main.reactor.share), roundi(main.reactor.heat), " сброс" if main.reactor.scram > 0.0 else ""], fps()] + worst_text() + ("" if main.breach.status().is_empty() else " · " + main.breach.status()) \
+		h.pos.x, h.pos.y, h.pos.z, main.walker.x, main.walker.z, "%s %d°%s" % [str(main.reactor.share), roundi(main.reactor.heat), " сброс" if main.reactor.scram > 0.0 else ""], fps_text()] + worst_text() + ("" if main.breach.status().is_empty() else " · " + main.breach.status()) \
 		+ _run_state()
 
 
@@ -285,11 +301,18 @@ func _shot(name: String) -> void:
 	img.save_png("%s/%s.png" % [OUT, name])
 	shots.append(name)
 	_log("скриншот %s | %s" % [name, state()])
+	after_shot()
+
+
+## Сброс замеров после скриншота: кадр снимка не считается совсем, следующие SETTLE_FRAMES — только в худший кадр.
+func after_shot() -> void:
 	worst_ms = 0.0
 	worst_at = ""
 	frames = 0
 	frames_us = 0
 	_skip_frame = true
+	_settle = SETTLE_FRAMES
+	_shot_taken = true
 
 
 ## Отметка кадра прогрева: сколько прошло с прошлой (первая — от начала сценария).
