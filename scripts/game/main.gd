@@ -562,9 +562,12 @@ func step(dt: float) -> void:
 	if main_menu.open and not warm.active():   # главное меню: игра стоит, касания — кнопкам меню
 		_menu_step(dt)
 		return
-	if pause.open:   # пауза: игра стоит, касания — кнопкам паузы
+	if pause.open:   # пауза: игра стоит, касания — кнопкам паузы; меню сетевого забега — мир идёт без своего ввода
+		var stop := pause.stops_world()
 		_pause_step()
-		return
+		if stop or main_menu.open:
+			return
+		overlay.router.clear()   # палец на кнопке меню не идёт в игру: свой игрок стоит, за постом — без хода
 	if net_client:   # клиент: корабль, реактор и экипаж — из кадров хоста
 		_client_step(dt)
 		return
@@ -1139,7 +1142,8 @@ func _address_do(what: String) -> void:
 
 
 ## Системная «Назад» (Esc на ПК): в забеге — пауза ART-037, в паузе закрывает сначала подтверждение, потом паузу;
-## в главном меню — выход из игры. Сетевой забег и шторка «Корпус разрушен» — пока без паузы (меню забега — позже).
+## в главном меню — выход из игры. В сетевом забеге — «Меню забега» (мир идёт); под шторкой «Корпус разрушен» и
+## диалогом обрыва связи ART-043 — без паузы.
 func back_pressed() -> void:
 	if warm.active():
 		return
@@ -1152,8 +1156,10 @@ func back_pressed() -> void:
 		save.flush(samples, scanner)
 		get_tree().quit()
 		return
-	if not pause.open and (net_host != null or net_client != null or wreck.active()):
-		return
+	if not pause.open:
+		if wreck.active() or (net_client != null and drop.blocks()):
+			return
+		pause.set_mode("host" if net_host != null else ("guest" if net_client != null else "solo"))
 	pause.back()
 	_pause_show()
 
@@ -1174,23 +1180,57 @@ func _pause_show() -> void:
 
 
 ## Шаг под паузой: касания кнопок. «Новый забег» — с начала спуска, «Выйти в меню» — главное меню ART-037.
+## Меню сетевого забега: хост — новый забег у всех или конец забега (гости теряют хоста), гость — «Покинуть экипаж».
+## Шторка «Корпус разрушен», обрыв связи или конец сети закрывают меню забега.
 func _pause_step() -> void:
 	var r := overlay.router
+	if not pause.stops_world() and (wreck.active() or (net_client != null and drop.blocks())
+			or (net_host == null and net_client == null)):
+		pause.close()
+		_pause_show()
+		return
 	for p in r.taps:
 		var what := pause.press(pause.hit(p, get_viewport().get_visible_rect().size))
 		if what != "":
 			_pause_show()
-			if what == "new" or what == "exit":
-				_leave_posts()
-				_restart()
-				if what == "new":
-					say("Новый забег: Ковчег у начала спуска")
-				else:
-					flyby.stop()
-					open_menu()
+			match what:
+				"new":
+					_leave_posts()
+					_restart()
+					if net_host:
+						announce("Хост начал новый забег: Ковчег у начала спуска")
+					else:
+						say("Новый забег: Ковчег у начала спуска")
+				"exit":
+					if net_host:
+						_stop_host()
+					_to_menu()
+				"leave":
+					_leave_net()
+					_to_menu()
 			break
 		pause_panel.show_pause(pause)
 	r.end_frame()
+
+
+## Забег окончен, в главное меню: встать с постов, корабль у начала спуска, без облёта.
+func _to_menu() -> void:
+	_leave_posts()
+	_restart()
+	flyby.stop()
+	open_menu()
+
+
+## Хост закрывает сетевой забег: гости отключены (у них — диалог обрыва связи), их фигуры и тени убраны.
+func _stop_host() -> void:
+	net_host.stop()
+	net_host = null
+	for id: int in net_mates:
+		crew.erase(net_mates[id])
+	net_mates.clear()
+	ghosts.clear()
+	_ghosts(0.0, true)
+	crew_view.set_members(crew, me)
 
 
 ## Встать с постов перед новым забегом (штурвал, пульт, голосование).
@@ -1733,6 +1773,7 @@ func _enter_client(c: NetLink.Client) -> void:
 	net_smooth = NetSmooth.new()
 	net_pad.clear()
 	drop = NetDrop.new()
+	drop.menu_ready = true   # главное меню ART-037 есть: «В меню» в диалоге обрыва связи
 	flyby.stop()   # клиент входит в идущий забег — облёта нет
 	message.clear(Flyby.START_MSG)
 	say(net_client.label())
@@ -1926,6 +1967,9 @@ func _drop_taps(taps: Array[Vector2]) -> void:
 				if me.pilot.seated:
 					me.stand()
 				_restart()
+			"menu":   # «В меню» (ART-043): сетевой забег покинут, главное меню ART-037
+				_leave_net()
+				_to_menu()
 		drop_panel.show_drop(drop)
 		if net_client == null:
 			return
