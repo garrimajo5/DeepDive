@@ -1234,18 +1234,22 @@ func _journal_show() -> void:
 	if logbook_panel == null:
 		logbook_panel = JournalPanel.new()
 		add_child(logbook_panel)
-	logbook_panel.show_journal(logbook, expedition, scanner.scanned.size(), Species.count(), samples.cargo.size(),
+	logbook.blank = Journal.empty(expedition, scanner.scanned.size(), samples.cargo.size())
+	logbook_panel.show_journal(logbook, expedition, scanner, Species.count(), samples.cargo.size(),
 		save.state == SaveGame.Load.BROKEN)
 	if menu_panel:
 		menu_panel.visible = main_menu.open and not logbook.open and not address.open
 
 
-## Шаг журнала: касание места — название под картой, «Назад» — в меню.
+## Шаг журнала: касание места — название под картой, вида — карточка или подсказка, «Ранее» / «Далее», «Назад» — в меню.
 func _journal_step(r: Touch.Router) -> void:
 	for p in r.taps:
-		if logbook.press(logbook.hit(p, get_viewport().get_visible_rect().size)) == "back":
+		var did := logbook.press(logbook.hit(p, get_viewport().get_visible_rect().size), scanner.scanned, expedition)
+		if did in ["card", "back"]:   # карточка открыта/закрыта, журнал закрыт: палец не нажмёт то, что под ним
 			overlay.router.clear()
 			break
+	if not logbook.open:   # прочитанные карточки («новое» снято) — в файл, пока меню стоит
+		save.flush(samples, scanner)
 	_journal_show()
 
 
@@ -1310,6 +1314,8 @@ func back_pressed() -> void:
 		return
 	if main_menu.open and logbook.open:
 		logbook.back()
+		if not logbook.open:
+			save.flush(samples, scanner)
 		_journal_show()
 		return
 	if main_menu.open and address.open:   # экран адреса: сначала отмена попытки, потом меню
