@@ -142,6 +142,11 @@ var settings := Settings.new()   ## настройки ART-037 поверх ме
 var settings_panel: SettingsPanel
 var graphics_level := Graphics.DEFAULT   ## применённый уровень графики ART-044 (`_apply_graphics`)
 var fps_view: FpsView   ## счётчик кадров ART-044 у правого края («Показывать кадры/с»)
+## Предложение «Экономно» ART-044 после нескольких секунд низких кадр/с (тесты и снимки выключают: tests/run.gd,
+## tools/shot.gd; прогон тестера — только шаг `slow`). Отказ — `Settings.lite_no`.
+static var offer := true
+var lite_offer := LiteOffer.new()
+var lite_offer_panel: LiteOfferPanel
 var logbook := Journal.new()   ## «Журнал экспедиции» ART-047 поверх меню: пока открыт — меню ждёт
 var logbook_panel: JournalPanel
 var flyby := Flyby.new()   ## камера с борта: облёт в начале забега, вид при всплытии
@@ -354,6 +359,8 @@ func _ready() -> void:
 	address.load_last()
 	fps_view = FpsView.new()   # счётчик кадров ART-044: под меню и паузой, касаний не принимает
 	add_child(fps_view)
+	lite_offer_panel = LiteOfferPanel.new()   # предложение «Экономно» ART-044: касания — `_offer_step`
+	add_child(lite_offer_panel)
 	settings.read()
 	_apply_settings()
 	tutorial.on = hints and not settings.hints_done and not QaRunner.pending()   # тестер включает шагом `tutorial`
@@ -595,6 +602,7 @@ func _process(dt: float) -> void:
 	step_ms = (Time.get_ticks_usec() - t0) / 1000.0
 	if fps_view and fps_view.visible:
 		fps_view.push(dt)
+	lite_offer.push(dt)   # настоящее время кадра: предложение «Экономно» ART-044
 
 
 ## Один шаг игры: ввод, игрок, корабль, вода. Вынесен из _process для тестов.
@@ -617,6 +625,8 @@ func step(dt: float) -> void:
 			overlay.router.mute()
 		else:
 			overlay.router.clear()   # палец на кнопке меню не идёт в игру: свой игрок стоит, за постом — без хода
+	if _offer_step():   # предложение «Экономно»: касания — его кнопкам, свой игрок стоит, мир идёт
+		overlay.router.clear()
 	if net_client:   # клиент: корабль, реактор и экипаж — из кадров хоста
 		_client_step(dt)
 		return
@@ -1247,6 +1257,43 @@ func _apply_settings() -> void:
 		fps_view.visible = settings.fps
 
 
+## Предложение «Экономно» ART-044: открыть после низких кадр/с, когда ничего не мешает (не на «Экономно», не под
+## тревогой, меню, паузой, настройками, облётом, голосованием, шторками; тестер — только шагом `slow`); касания —
+## «Да» / «Нет». true — диалог открыт (ввод этого кадра в игру не идёт).
+func _offer_step() -> bool:
+	var blocked := not offer or qa != null or alarms_on().has(true) or main_menu.open or pause.open \
+		or settings.open or warm.active() or flyby.active() or wreck.active() or at_vote or run.ended \
+		or (net_client != null and drop.active())
+	lite_offer.update(graphics_level, settings.lite_no, blocked)
+	if lite_offer.open:
+		var size := get_viewport().get_visible_rect().size
+		for p in overlay.router.taps:
+			var what := lite_offer.press(lite_offer.hit(p, size))
+			if what != "":
+				_offer_do(what)
+				break
+	if lite_offer_panel:
+		lite_offer_panel.show_offer(lite_offer)
+	return lite_offer.open
+
+
+## Ответ на предложение: «Да» — «Экономно» сразу и в настройки, «Нет» — больше не предлагать.
+func _offer_do(what: String) -> void:
+	match what:
+		"yes":
+			settings.graphics = Graphics.ECONOMY
+			_apply_settings()
+			say("Графика: «Экономно»")
+		"no":
+			settings.lite_no = true
+		_:
+			return
+	settings.write()
+	if lite_offer_panel:
+		lite_offer_panel.show_offer(lite_offer)
+	overlay.router.clear()   # палец с кнопки не идёт в игру
+
+
 ## Уровень графики ART-044 (`Graphics.LEVELS`): дальность камер, «Экономно» у рельефа, частиц и пост, тени света
 ## сквозь лёд и прожектора, сглаживание и разрешение 3D-сцены (интерфейс — в полном), сила слоёв воды.
 func _apply_graphics(level: int) -> void:
@@ -1600,6 +1647,9 @@ func back_pressed() -> void:
 	if main_menu.open:
 		save.flush(samples, scanner)
 		get_tree().quit()
+		return
+	if lite_offer.open:   # «Назад» над предложением «Экономно» — как «Нет»
+		_offer_do(lite_offer.back())
 		return
 	if not pause.open:
 		if wreck.active() or (net_client != null and drop.blocks()):

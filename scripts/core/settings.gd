@@ -55,6 +55,7 @@ var hints_done := false   ## подсказки первого забега ART-
 var cards: Array = []     ## прочитанные карточки ролей ART-045 — посты (`RoleCard.read_list`)
 var graphics := Graphics.DEFAULT   ## уровень графики ART-044
 var fps := false                   ## «Показывать кадры/с» ART-044
+var lite_no := false               ## отказ от предложения «Экономно» ART-044 (`LiteOffer`) — больше не предлагать
 
 var open := false
 var ask := false    ## открыто подтверждение сброса
@@ -246,6 +247,7 @@ func write() -> bool:
 	cfg.set_value("nastrojki", "kartochki", cards)
 	cfg.set_value("nastrojki", "grafika", graphics)
 	cfg.set_value("nastrojki", "kadry", fps)
+	cfg.set_value("nastrojki", "ekonomno_net", lite_no)
 	return cfg.save(path) == OK
 
 
@@ -264,4 +266,5 @@ func read() -> bool:
 	cards = c if c is Array else []
 	graphics = Graphics.valid(int(cfg.get_value("nastrojki", "grafika", Graphics.DEFAULT)))
 	fps = bool(cfg.get_value("nastrojki", "kadry", false))
+	lite_no = bool(cfg.get_value("nastrojki", "ekonomno_net", false))
 	return true
