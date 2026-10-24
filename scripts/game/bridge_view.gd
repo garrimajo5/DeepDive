@@ -271,7 +271,19 @@ static func glass_material() -> ShaderMaterial:
 	m.set_shader_parameter("normal_map", load(KIT_DIR + "steklo-normali.png"))
 	m.set_shader_parameter("split", glass_split())
 	m.set_shader_parameter("relief", true)
+	m.set_shader_parameter("condensation", load(WindowFog.MASK))   # конденсат и иней ART-077, сила — set_fog
+	m.set_shader_parameter("humidity", 0.0)
+	m.set_shader_parameter("ice_k", 0.0)
+	m.set_shader_parameter("ice_color", Vector3(WindowFog.ICE_COLOR.r, WindowFog.ICE_COLOR.g, WindowFog.ICE_COLOR.b))
 	return m
+
+
+## Конденсат и иней на окнах ART-077: влажность и доля инея (`WindowFog`, сглажены на CPU) — две uniform стекла.
+func set_fog(humidity: float, ice_k: float) -> void:
+	if not is_equal_approx(float(glass_mat.get_shader_parameter("humidity")), humidity):
+		glass_mat.set_shader_parameter("humidity", humidity)
+	if not is_equal_approx(float(glass_mat.get_shader_parameter("ice_k")), ice_k):
+		glass_mat.set_shader_parameter("ice_k", ice_k)
 
 
 ## Границы окон по u квада (стойки `BridgePlan.MULLIONS`): 0,328947 и 0,671053.

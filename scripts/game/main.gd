@@ -105,6 +105,7 @@ var valve_steam := ValveSteam.new()   ## пар вентиля ART-071 (рису
 var lock_water := LockWater.new()     ## вода в шахте шлюза ART-073 (рисует rooms.lock_water)
 var wake_view: WakeView
 var glints := WaterGlints.new()   ## блики воды в мостике ART-067 (сила, огибающая тревоги; рисует BridgeView)
+var window_fog := WindowFog.new()   ## конденсат и иней на окнах мостика ART-077 (рисует BridgeView.set_fog)
 var wear := CabinWear.new()   ## «корабль устал» внутри ART-074 по Vitals.hull (рисуют BridgeView, RoomsView)
 var grade: GradeView   ## виньетка и цветокоррекция по глубине ART-065 (слой −1, под интерфейсом)
 var light_on := true        ## прожектор включён (кнопка «Свет» за штурвалом)
@@ -422,6 +423,8 @@ func _wear(dt: float, light: float) -> void:
 	bridge.set_wear(wear.loss)
 	rooms.set_wear(wear.loss)
 	rooms.drops.apply(time, wear.loss, light)
+	window_fog.step(dt, helm.depth(), vitals.hull, reactor.heat, reactor.scram)   # конденсат на окнах ART-077
+	bridge.set_fog(window_fog.humidity, window_fog.ice_k)
 
 
 ## Свет мигает, пока на корпусе присоска и после разряда (Vitals.lamp_k); тревога присоски шипит раз в 1,6 с
@@ -1190,6 +1193,7 @@ func _restart() -> void:
 	breach.reset()
 	silt.reset()
 	reactor.reset()   # сброс, перегрев и доли — как на старте (#265)
+	window_fog.snap(helm.depth(), vitals.hull, reactor.heat, reactor.scram)   # окна — по глубине старта (ART-077)
 	airlock.reset()
 	lock_water.reset()
 	scorch.clear()
@@ -2042,6 +2046,8 @@ func debug_setup(kv: Dictionary) -> void:
 		var p: PackedFloat64Array = kv["ship"].split_floats(",")
 		helm.pos = Vector3(p[0], p[1], p[2])
 		_place_ship()
+		window_fog.snap(helm.depth(), vitals.hull, reactor.heat, reactor.scram)   # окна сразу по глубине (ART-077)
+		bridge.set_fog(window_fog.humidity, window_fog.ice_k)
 	if kv.has("scorch"):  # scorch=n — n следов разряда на дне перед носом через 4 м (первый — старое пятно)
 		var n := int(kv["scorch"])
 		for i in n:

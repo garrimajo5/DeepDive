@@ -6,6 +6,9 @@ shader_type spatial;
 // Участки u по стойкам (BridgeView.glass_uv — то же на GDScript, тест test_bridge_glass): левый как есть,
 // средний отражён по U, правый — по V; на отражённых нормали инвертируются по той же оси.
 // relief = false («Экономно», ART-044) — без нормалей, альфа 0,07 + 0,12·A, шероховатость 0,6.
+// Конденсат и иней ART-077 (kondensat-okon.md): маска condensation в тех же UV — R капли, G дорожки, B иней, A порог
+// от рамы к центру (центр 56 × 56 % — A = 1, чист); humidity и ice_k сглажены на CPU (WindowFog). Одна выборка, без
+// экранного буфера и нормалей капель — вариант «Экономно» для всех уровней; добавки поверх ART-057, не вместо.
 render_mode blend_mix, cull_disabled, depth_draw_never, fog_disabled;
 
 uniform vec3 tint : source_color = vec3(0.6, 0.85, 0.9);
@@ -14,6 +17,10 @@ uniform sampler2D normal_map : hint_normal, filter_linear_mipmap, repeat_disable
 uniform vec2 split = vec2(0.328947, 0.671053);
 uniform float normal_depth = 0.12;
 uniform bool relief = true;
+uniform sampler2D condensation : hint_default_black, filter_linear_mipmap, repeat_disable;
+uniform float humidity = 0.0;
+uniform float ice_k = 0.0;
+uniform vec3 ice_color = vec3(0.38, 0.62, 0.7);
 
 void fragment() {
 	float u = UV.x;
@@ -46,5 +53,14 @@ void fragment() {
 	} else {
 		ALPHA = 0.07 + 0.12 * m.a;
 		ROUGHNESS = 0.6;
+	}
+	if (humidity > 0.001) {
+		vec4 c = textureGrad(condensation, uv, dx, dy);
+		float gate = smoothstep(c.a, c.a + 0.18, humidity);
+		float drops = max(c.r, c.g * 0.65) * gate;
+		float frost = c.b * ice_k * gate;
+		ALPHA = 1.0 - (1.0 - ALPHA) * (1.0 - 0.16 * drops - 0.42 * frost);
+		ALBEDO = mix(tint, ice_color, frost);
+		ROUGHNESS = mix(ROUGHNESS, 0.85, frost);
 	}
 }
