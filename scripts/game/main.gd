@@ -415,11 +415,13 @@ func _glints(dt: float, lamp_k: float) -> void:
 	bridge.set_glints(glints.k(d, silt.k, lamp_k), WaterGlints.tint(d), time)
 
 
-## «Корабль устал» внутри ART-074: потёки и мокрый пол мостика и машинного по прочности корпуса (сглажено 0,3 с).
-func _wear(dt: float) -> void:
+## «Корабль устал» внутри ART-074: потёки и мокрый пол мостика и машинного по прочности корпуса (сглажено 0,3 с),
+## капли, искры и пар — WearDrops по тем же часам (у гостя — свои часы, корпус из кадра); light — свет плафонов.
+func _wear(dt: float, light: float) -> void:
 	wear.step(dt, vitals.hull)
 	bridge.set_wear(wear.loss)
 	rooms.set_wear(wear.loss)
+	rooms.drops.apply(time, wear.loss, light)
 
 
 ## Свет мигает, пока на корпусе присоска и после разряда (Vitals.lamp_k); тревога присоски шипит раз в 1,6 с
@@ -430,7 +432,7 @@ func _flicker(dt: float) -> void:
 	rooms.steam.apply(valve_steam, ValveSteam.tint(reactor, k * Wreck.lamps(wreck.t)))   # пар ART-071
 	rooms.lock_water.apply(lock_water, airlock.t, helm.depth(), helm.speed, vitals.hull, time, k * Wreck.lamps(wreck.t))   # ART-073
 	_glints(dt, k * Wreck.lamps(wreck.t))
-	_wear(dt)
+	_wear(dt, k * Wreck.lamps(wreck.t))
 	searchlight.set_flicker(k)
 	bridge.set_screens(Vector3(vitals.screen_k(time, Vitals.Screen.HELM_L), vitals.screen_k(time, Vitals.Screen.HELM_C),
 		vitals.screen_k(time, Vitals.Screen.HELM_R)), vitals.screen_k(time, Vitals.Screen.SCANNER))
@@ -1709,7 +1711,7 @@ func _client_step(dt: float) -> void:
 	breach_view.apply(dt)   # частицы ART-072 у гостя — своим временем по состоянию из кадра
 	_cabin(Wreck.lamps(wreck.t))   # авария ART-064 у гостя — тот же ритм огней; шторка ART-036 гасит плафоны
 	_glints(dt, Wreck.lamps(wreck.t))
-	_wear(dt)
+	_wear(dt, Wreck.lamps(wreck.t))
 	silt_view.apply(silt, time, helm.pos, helm.yaw)
 	_client_eco(dt, near)
 	visor.visible = me.welding()
@@ -1954,6 +1956,7 @@ func debug_setup(kv: Dictionary) -> void:
 		wake.lite = true           # и след винтов ART-063: 96 карточек, кадры 0–11
 		wake_view.set_lite(true)
 		valve_steam.lite = true    # и пар вентиля ART-071: 24 карточки
+		rooms.drops.lite = true    # и капли износа ART-074: 12 карточек
 		lock_water.lite = true     # и рябь в шахте шлюза ART-073 × 0,625
 		breach_view.parts.lite = true   # и частицы пробоины ART-072: 24/16/15+1
 		grade.set_lite(true)       # и виньетка ART-065: без LUT, овал 0,10

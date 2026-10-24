@@ -41,7 +41,7 @@ func apply(st: ValveSteam, tint: Color) -> void:
 		var a := p.age / ValveSteam.LIFE
 		var s := ValveSteam.size(a)
 		mm.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3(s.x, s.y, 1.0)), ValveSteam.pos(p.age, p.angle)))
-		mm.set_instance_custom_data(i, Color(a, ValveSteam.alpha(a), 0.0, 0.0))
+		mm.set_instance_custom_data(i, Color(a, ValveSteam.alpha(a), 0.0, float(ValveSteam.LAST)))   # кадры 0…15
 	shown = n
 	if n == 0:
 		mm.set_instance_transform(0, Transform3D(Basis.from_scale(Vector3(0.1, 0.1, 1.0)), ValveSteam.NOZZLE))
