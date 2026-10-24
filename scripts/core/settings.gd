@@ -48,6 +48,7 @@ var path := default_path   ## пустой — настройки не чита�
 var volume := VOLUME_DEFAULT
 var swipe := SWIPE_DEFAULT
 var intro := true   ## облёт с борта в начале забега
+var hints_done := false   ## подсказки первого забега ART-038 пройдены — больше не показывать (`Tutorial`)
 
 var open := false
 var ask := false    ## открыто подтверждение сброса
@@ -204,6 +205,7 @@ func write() -> bool:
 	cfg.set_value("nastrojki", "volume", volume)
 	cfg.set_value("nastrojki", "swipe", swipe)
 	cfg.set_value("nastrojki", "intro", intro)
+	cfg.set_value("nastrojki", "podskazki", hints_done)
 	return cfg.save(path) == OK
 
 
@@ -217,4 +219,5 @@ func read() -> bool:
 	set_volume(float(cfg.get_value("nastrojki", "volume", VOLUME_DEFAULT)))
 	set_swipe(float(cfg.get_value("nastrojki", "swipe", SWIPE_DEFAULT)))
 	intro = bool(cfg.get_value("nastrojki", "intro", true))
+	hints_done = bool(cfg.get_value("nastrojki", "podskazki", false))
 	return true
