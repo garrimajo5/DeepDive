@@ -6,7 +6,9 @@ extends RefCounted
 ##   {"do": "shot", "name": "01-start"}              — скриншот
 ##   {"do": "press", "what": "action"}               — нажать и отпустить (action, up, down, light;
 ##                                                     dive — «Погрузиться» в главном меню ART-037; в паузе ART-037:
-##                                                     resume, new, exit, в подтверждении yes / no; crew — «Экипаж»,
+##                                                     resume, new, exit, в подтверждении yes / no; в настройках
+##                                                     graphics — страница «Графика» ART-044, на ней g0…g2 — уровень,
+##                                                     fps — «Показывать кадры/с»; crew — «Экипаж»,
 ##                                                     journal — «Журнал экспедиции» ART-047 (закрывает back; в нём
 ##                                                     jcell0…jcell5 — ячейка вида, jprev / jnext, jclose),
 ##                                                     на экране «Войти по адресу» ART-039: join, last, клавиши
@@ -42,7 +44,7 @@ extends RefCounted
 ## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["route"], ["act"], ["gone"], ["wreck"], ["back"], ["tutorial", on], ["cards", on], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
 const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "silt", "drain", "hull", "route", "gone", "wreck", "back", "tutorial", "cards", "log", "quit"]
-const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "new", "exit", "yes", "no", "crew", "journal", "settings", "join", "last", "lobby_new", "lobby_addr", "lobby_refresh",
+const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "new", "exit", "yes", "no", "crew", "journal", "settings", "graphics", "g0", "g1", "g2", "fps", "join", "last", "lobby_new", "lobby_addr", "lobby_refresh",
 	"jcell0", "jcell1", "jcell2", "jcell3", "jcell4", "jcell5", "jprev", "jnext", "jclose",
 	"key0", "key1", "key2", "key3", "key4", "key5", "key6", "key7", "key8", "key9", "key.", "keydel"]
 const PRESS_TIME := 0.15   ## сколько держать кнопку при «press», с

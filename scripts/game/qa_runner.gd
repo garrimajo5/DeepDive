@@ -203,6 +203,10 @@ func _point(what: String, dir: Vector2) -> Vector2:
 			var size := main.get_viewport().get_visible_rect().size
 			return (Pause.screen_rect("settings", size, main.pause.mode) if main.pause.open
 				else MainMenu.screen_rect("settings", size)).get_center()
+		"graphics":   # «Графика» в настройках ART-044
+			return Settings.screen_rect("graphics", main.get_viewport().get_visible_rect().size).get_center()
+		"g0", "g1", "g2", "fps":   # страница «Настройки · Графика» ART-044: уровень, «Показывать кадры/с»
+			return Graphics.screen_rect(what, main.get_viewport().get_visible_rect().size).get_center()
 		"lobby_new", "lobby_addr", "lobby_refresh":   # поиск забегов ART-028: «Создать забег» / «По адресу» / «Обновить»
 			return Lobby.screen_rect({"lobby_new": "new", "lobby_addr": "address", "lobby_refresh": "refresh"}[what],
 				main.get_viewport().get_visible_rect().size).get_center()

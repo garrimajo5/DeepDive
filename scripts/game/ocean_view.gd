@@ -171,6 +171,18 @@ func set_layers_lite(lite: bool) -> void:
 	set_layers_level(WaterLayers.GAIN_LITE if lite else WaterLayers.GAIN_NORMAL)
 
 
+## Радиус дальней воды по уровню графики ART-044 (`Graphics.LEVELS` "wall"; камера видит чуть дальше).
+func set_far(radius: float) -> void:
+	far_wall.scale = Vector3.ONE * (radius / FAR_WALL)
+
+
+## Тени света сквозь лёд по уровню графики ART-044: 0 — выключены, 2 / 4 — каскадов.
+func set_shadows(splits: int) -> void:
+	sun.shadow_enabled = splits > 0
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS if splits >= 4 \
+		else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+
+
 ## Сила слоёв по уровню графики: 0 / 0,6 / 0,9 (`WaterLayers.GAIN_*`).
 func set_layers_level(level: float) -> void:
 	layers_level = level

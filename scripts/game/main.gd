@@ -140,6 +140,8 @@ var pause := Pause.new()   ## пауза одиночного забега ART-0
 var pause_panel: PausePanel
 var settings := Settings.new()   ## настройки ART-037 поверх меню или паузы: громкость, свайп, облёт, сброс сохранения
 var settings_panel: SettingsPanel
+var graphics_level := Graphics.DEFAULT   ## применённый уровень графики ART-044 (`_apply_graphics`)
+var fps_view: FpsView   ## счётчик кадров ART-044 у правого края («Показывать кадры/с»)
 var logbook := Journal.new()   ## «Журнал экспедиции» ART-047 поверх меню: пока открыт — меню ждёт
 var logbook_panel: JournalPanel
 var flyby := Flyby.new()   ## камера с борта: облёт в начале забега, вид при всплытии
@@ -350,6 +352,8 @@ func _ready() -> void:
 		address.path = ""
 		settings.path = ""   # и облёт в начале — как в сценарии, а не как у тестера в настройках
 	address.load_last()
+	fps_view = FpsView.new()   # счётчик кадров ART-044: под меню и паузой, касаний не принимает
+	add_child(fps_view)
 	settings.read()
 	_apply_settings()
 	tutorial.on = hints and not settings.hints_done and not QaRunner.pending()   # тестер включает шагом `tutorial`
@@ -589,6 +593,8 @@ func _process(dt: float) -> void:
 	var t0 := Time.get_ticks_usec()
 	step(dt)
 	step_ms = (Time.get_ticks_usec() - t0) / 1000.0
+	if fps_view and fps_view.visible:
+		fps_view.push(dt)
 
 
 ## Один шаг игры: ввод, игрок, корабль, вода. Вынесен из _process для тестов.
@@ -1218,6 +1224,9 @@ func _settings_do(what: String) -> void:
 		"changed":
 			_apply_settings()
 			settings.write()
+		"graphics":
+			_apply_settings()
+			settings.write()
 		"wipe":
 			save.reset(samples, scanner)
 			say("Сохранение сброшено")
@@ -1227,11 +1236,58 @@ func _settings_do(what: String) -> void:
 			overlay.router.clear()   # палец с «Назад» не нажимает кнопку меню под ним
 
 
-## Громкость шины Master, чувствительность свайпа; облёт читает `_begin_run`.
+## Громкость шины Master, чувствительность свайпа, уровень графики ART-044; облёт читает `_begin_run`.
 func _apply_settings() -> void:
 	AudioServer.set_bus_volume_db(0, Settings.volume_db(settings.volume))
 	if overlay:
 		overlay.swipe = settings.swipe
+	if graphics_level != settings.graphics:
+		_apply_graphics(settings.graphics)
+	if fps_view:
+		fps_view.visible = settings.fps
+
+
+## Уровень графики ART-044 (`Graphics.LEVELS`): дальность камер, «Экономно» у рельефа, частиц и пост, тени света
+## сквозь лёд и прожектора, сглаживание и разрешение 3D-сцены (интерфейс — в полном), сила слоёв воды.
+func _apply_graphics(level: int) -> void:
+	graphics_level = Graphics.valid(level)
+	var g := Graphics.level(graphics_level)
+	var lite: bool = g["lite"]
+	for cam: Camera3D in [camera, flyby_cam]:
+		if cam:
+			cam.far = g["far"]
+	if ocean:
+		ocean.set_far(g["wall"])
+		ocean.set_relief(not lite)    # лёд ART-056
+		ocean.set_snow_lite(lite)     # взвесь ART-058 реже, без вращения
+		ocean.set_decals_lite(lite)   # декали дна ART-066 реже и ближе
+		ocean.set_layers_level(g["layers"])   # слои воды ART-069: 0 / 0,6 / 0,9
+		ocean.set_shadows(g["shadows"])
+	if hull:
+		hull.set_relief(not lite)     # обшивка ART-053
+	if bridge:
+		bridge.set_relief(not lite)   # мостик ART-054
+	if rooms:
+		rooms.set_relief(not lite)    # отсеки ART-055
+		rooms.drops.lite = lite       # капли износа ART-074: 12 карточек
+	if searchlight:
+		searchlight.set_lite(lite)    # луч прожектора ART-062 без дрейфа
+		searchlight.spot.shadow_enabled = int(g["shadows"]) > 0
+	wake.lite = lite                  # след винтов ART-063: 96 карточек, кадры 0–11
+	if wake_view:
+		wake_view.set_lite(lite)
+	valve_steam.lite = lite           # пар вентиля ART-071: 24 карточки
+	lock_water.lite = lite            # рябь в шахте шлюза ART-073 × 0,625
+	if breach_view:
+		breach_view.parts.lite = lite  # частицы пробоины ART-072: 24/16/15+1
+	if grade:
+		grade.set_lite(lite)          # виньетка ART-065: без LUT, овал 0,10
+	glints.lite = lite                # блики воды в мостике ART-067 выключены
+	var vp := get_viewport()
+	if vp:
+		vp.msaa_3d = {0: Viewport.MSAA_DISABLED, 2: Viewport.MSAA_2X, 4: Viewport.MSAA_4X}.get(int(g["msaa"]),
+			Viewport.MSAA_2X)
+		vp.scaling_3d_scale = g["scale"]
 
 
 ## «Журнал экспедиции» ART-047 поверх главного меню: история `expedition`, изученные виды, груз трюма.
@@ -2573,23 +2629,10 @@ func debug_setup(kv: Dictionary) -> void:
 	if kv.has("hull"):  # hull=<%> — прочность корпуса (следы повреждений ART-049 снаружи, износ внутри ART-074)
 		vitals.hull = float(kv["hull"])
 		wear.snap(vitals.hull)
-	if kv.get("relief", "1") == "0":  # relief=0 — обшивка без рельефа ART-053 («Экономно»)
-		hull.set_relief(false)
-		bridge.set_relief(false)   # и карты мостика ART-054
-		rooms.set_relief(false)    # и отсеков ART-055
-		ocean.set_relief(false)    # и льда ART-056
-		ocean.set_snow_lite(true)  # и взвесь ART-058 реже, без вращения
-		ocean.set_decals_lite(true) # и декали дна ART-066 реже и ближе
-		ocean.set_layers_lite(true) # и слои воды ART-069 выключены
-		searchlight.set_lite(true) # и луч прожектора ART-062 без дрейфа
-		wake.lite = true           # и след винтов ART-063: 96 карточек, кадры 0–11
-		wake_view.set_lite(true)
-		valve_steam.lite = true    # и пар вентиля ART-071: 24 карточки
-		rooms.drops.lite = true    # и капли износа ART-074: 12 карточек
-		lock_water.lite = true     # и рябь в шахте шлюза ART-073 × 0,625
-		breach_view.parts.lite = true   # и частицы пробоины ART-072: 24/16/15+1
-		grade.set_lite(true)       # и виньетка ART-065: без LUT, овал 0,10
-		glints.lite = true         # и блики воды в мостике ART-067 выключены
+	if kv.get("relief", "1") == "0":  # relief=0 — уровень «Экономно» ART-044 (рельеф ART-053…056, частицы, пост)
+		_apply_graphics(Graphics.ECONOMY)
+	if kv.has("grafika"):  # grafika=0|1|2 — уровень графики ART-044 (0 — «Экономно», 2 — «Красиво»)
+		_apply_graphics(int(kv["grafika"]))
 	if kv.get("glints", "1") == "0":  # glints=0 — без бликов воды в мостике ART-067 (сравнить)
 		glints.lite = true
 	if kv.has("layers"):  # layers=<сила> — слои воды ART-069 (0 — выкл, 0,6 — «Обычно», 0,9 — «Красиво»)

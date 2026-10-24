@@ -1,7 +1,8 @@
 class_name Settings
 extends RefCounted
 ## Настройки ART-037 (`docs/concept-art/menyu.md`, `menyu-nastrojki.png`, сброс — `menyu-sostoyaniya.png`):
-## громкость и чувствительность свайпа (ползунки), «Камера с борта в начале забега» (Вкл/Выкл), «Сбросить сохранение»
+## громкость и чувствительность свайпа (ползунки), «Камера с борта в начале забега» (Вкл/Выкл), «Графика» — страница
+## уровней ART-044 (`page`, числа и раскладка — `Graphics`), «Сбросить сохранение»
 ## через подтверждение (выделено «Нет»), «Назад» — туда, откуда открыты (главное меню или пауза). Хранятся отдельно от
 ## сохранения забега — `user://nastrojki.cfg` (тесты, снимки и прогон тестера не читают и не пишут: `path` = "").
 ## Здесь — значения, файл, кнопки и раскладка без узлов; рисует `scripts/game/settings_panel.gd`
@@ -32,7 +33,9 @@ const SLIDERS := [
 const INTRO_LABEL := "Камера с борта в начале забега"
 const INTRO_TOP := 690.0
 const INTRO := Rect2(1580, 655, 260, 112)
-const RESET := Rect2(560, 842, 1280, 112)
+const RESET := Rect2(1220, 842, 620, 112)
+const GRAPHICS := Rect2(560, 842, 620, 112)   ## «Графика» — страница ART-044 (`Graphics`)
+const GRAPHICS_LABEL := "Графика"
 const RESET_LABEL := "Сбросить сохранение"
 ## Подтверждение сброса — окно и кнопки как у паузы (`Pause.BOX`, `YES`, `NO`).
 const ASK := ["Сбросить сохранение?", "Сохранение будет удалено.", "Отменить это действие нельзя."]
@@ -50,10 +53,13 @@ var swipe := SWIPE_DEFAULT
 var intro := true   ## облёт с борта в начале забега
 var hints_done := false   ## подсказки первого забега ART-038 пройдены — больше не показывать (`Tutorial`)
 var cards: Array = []     ## прочитанные карточки ролей ART-045 — посты (`RoleCard.read_list`)
+var graphics := Graphics.DEFAULT   ## уровень графики ART-044
+var fps := false                   ## «Показывать кадры/с» ART-044
 
 var open := false
 var ask := false    ## открыто подтверждение сброса
 var grab := ""      ## ползунок под пальцем: "volume" / "swipe"; "" — нет
+var page := ""      ## "" — основная страница, "grafika" — «Настройки · Графика» ART-044
 
 
 func set_volume(v: float) -> void:
@@ -106,6 +112,8 @@ static func screen_rect(id: String, size: Vector2) -> Rect2:
 			return Splash.rect_to_screen(INTRO, size)
 		"reset":
 			return Splash.rect_to_screen(RESET, size)
+		"graphics":
+			return Splash.rect_to_screen(GRAPHICS, size)
 		"yes":
 			return Splash.rect_to_screen(Pause.YES, size)
 		"no":
@@ -124,19 +132,23 @@ func show() -> void:
 	open = true
 	ask = false
 	grab = ""
+	page = ""
 
 
 func close() -> void:
 	open = false
 	ask = false
 	grab = ""
+	page = ""
 
 
 ## Что под касанием p ("" — ничего). Под подтверждением — только «yes» / «no».
 func hit(p: Vector2, size: Vector2) -> String:
 	if not open:
 		return ""
-	var ids := ["yes", "no"] if ask else ["back", "volume", "swipe", "intro", "reset"]
+	if page == "grafika":
+		return Graphics.hit(p, size)
+	var ids := ["yes", "no"] if ask else ["back", "volume", "swipe", "intro", "graphics", "reset"]
 	for id: String in ids:
 		if screen_rect(id, size).has_point(p):
 			return id
@@ -144,10 +156,13 @@ func hit(p: Vector2, size: Vector2) -> String:
 
 
 ## Касание p по элементу id. Возвращает: "back" — настройки закрыты, "changed" — значение поменялось (сохранить и
-## применить), "wipe" — подтверждён сброс сохранения; "" — ничего (открыт или закрыт диалог, взят ползунок без сдвига).
+## применить), "graphics" — уровень графики поменялся (применить и сохранить), "wipe" — подтверждён сброс сохранения;
+## "" — ничего (открыт или закрыт диалог или страница, взят ползунок без сдвига).
 func press(id: String, p: Vector2 = Vector2.ZERO, size: Vector2 = Vector2.ZERO) -> String:
 	if not open:
 		return ""
+	if page == "grafika":
+		return _press_graphics(id)
 	if ask:
 		match id:
 			"yes":
@@ -165,9 +180,27 @@ func press(id: String, p: Vector2 = Vector2.ZERO, size: Vector2 = Vector2.ZERO) 
 			return "changed"
 		"reset":
 			ask = true
+		"graphics":
+			page = "grafika"
 		"volume", "swipe":
 			grab = id
 			return "changed" if drag(p, size) else ""
+	return ""
+
+
+## Страница «Графика»: «Назад» — к основной странице, уровень — применить, «Показывать кадры/с» — Вкл./Выкл.
+func _press_graphics(id: String) -> String:
+	match id:
+		"back":
+			page = ""
+		"fps":
+			fps = not fps
+			return "changed"
+		"g0", "g1", "g2":
+			var g := int(id.substr(1))
+			if g != graphics:
+				graphics = g
+				return "graphics"
 	return ""
 
 
@@ -190,6 +223,9 @@ func back() -> String:
 	if ask:
 		ask = false
 		return ""
+	if page != "":
+		page = ""
+		return ""
 	close()
 	return "back"
 
@@ -208,6 +244,8 @@ func write() -> bool:
 	cfg.set_value("nastrojki", "intro", intro)
 	cfg.set_value("nastrojki", "podskazki", hints_done)
 	cfg.set_value("nastrojki", "kartochki", cards)
+	cfg.set_value("nastrojki", "grafika", graphics)
+	cfg.set_value("nastrojki", "kadry", fps)
 	return cfg.save(path) == OK
 
 
@@ -224,4 +262,6 @@ func read() -> bool:
 	hints_done = bool(cfg.get_value("nastrojki", "podskazki", false))
 	var c: Variant = cfg.get_value("nastrojki", "kartochki", [])
 	cards = c if c is Array else []
+	graphics = Graphics.valid(int(cfg.get_value("nastrojki", "grafika", Graphics.DEFAULT)))
+	fps = bool(cfg.get_value("nastrojki", "kadry", false))
 	return true
