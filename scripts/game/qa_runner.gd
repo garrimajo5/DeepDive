@@ -203,8 +203,8 @@ func _point(what: String, dir: Vector2) -> Vector2:
 			var size := main.get_viewport().get_visible_rect().size
 			return (Pause.screen_rect("settings", size, main.pause.mode) if main.pause.open
 				else MainMenu.screen_rect("settings", size)).get_center()
-		"lobby_new", "lobby_addr":   # вход сбора экипажа ART-028: «Создать забег» / «По адресу»
-			return Lobby.screen_rect("new" if what == "lobby_new" else "address",
+		"lobby_new", "lobby_addr", "lobby_refresh":   # поиск забегов ART-028: «Создать забег» / «По адресу» / «Обновить»
+			return Lobby.screen_rect({"lobby_new": "new", "lobby_addr": "address", "lobby_refresh": "refresh"}[what],
 				main.get_viewport().get_visible_rect().size).get_center()
 		"crew", "journal":   # «Экипаж» (вход сбора экипажа ART-028), «Журнал экспедиции» ART-047 в главном меню
 			return MainMenu.screen_rect(what, main.get_viewport().get_visible_rect().size).get_center()

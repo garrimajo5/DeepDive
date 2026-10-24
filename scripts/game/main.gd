@@ -133,6 +133,8 @@ var lobby := Lobby.new()   ## сбор экипажа ART-028 по «Экипа�
 var lobby_panel: LobbyPanel
 var lobby_client: NetLink.Client   ## гость в комнате хоста (`LobbyLink.take`); старт — становится `net_client`
 var lobby_port := NetLink.PORT   ## порт «Создать забег» (тесты ставят свой)
+var finder := RunBeacon.Finder.new()   ## поиск забегов на входе сбора: маяки хостов в сети (ART-028)
+var lobby_join: NetLink.Client   ## подключение к забегу из списка; принят — в комнату (`lobby_client`)
 var beacon := RunBeacon.Beacon.new()   ## маяк забега в сети, пока у хоста открыта комната (поиск забегов ART-028)
 var pause := Pause.new()   ## пауза одиночного забега ART-037 (системная «Назад»): пока открыта — игра стоит
 var pause_panel: PausePanel
@@ -1262,9 +1264,14 @@ func _journal_step(r: Touch.Router) -> void:
 	_journal_show()
 
 
-## Сбор экипажа ART-028 по «Экипаж»: вход — «Создать забег» / «По адресу» (поиска забегов ещё нет).
+## Сбор экипажа ART-028 по «Экипаж»: вход — поиск забегов в сети (`finder`), «Создать забег», «По адресу».
 func open_lobby(why := "") -> void:
 	lobby.show_entry(why)
+	if finder.udp == null:
+		finder.start()   # порт занят — список пуст, «Никого нет»; «По адресу» работает
+	else:
+		finder.search()
+	_lobby_runs()
 	_lobby_show()
 	overlay.router.clear()   # палец с кнопки «Экипаж» не нажмёт кнопку входа под ним
 
@@ -1288,11 +1295,19 @@ func _lobby_step(r: Touch.Router, dt: float) -> void:
 		if id == "":
 			continue
 		if lobby.entry:
-			if lobby.press(id) == "create":
-				_lobby_create()
-			else:
-				open_address()
+			match lobby.press(id):
+				"create":
+					finder.stop()
+					_lobby_create()
+				"address":
+					open_address()
+				"refresh":
+					finder.search()
+					_lobby_runs()
+				"join":
+					_lobby_join_start()
 			overlay.router.clear()
+			_lobby_show()
 			return
 		var q := ""
 		if net_host:
@@ -1302,7 +1317,12 @@ func _lobby_step(r: Touch.Router, dt: float) -> void:
 		if q == "back":
 			_lobby_back(true)
 			return
-	if net_host:
+	if lobby.entry:
+		finder.poll(dt)
+		_lobby_runs()
+		if lobby_join:
+			_lobby_join_step(dt)
+	elif net_host:
 		beacon.step(dt, lobby, lobby_port)
 		LobbyLink.serve(lobby, net_host, net_host.poll(dt))
 		if lobby.started:
@@ -1322,6 +1342,46 @@ func _lobby_step(r: Touch.Router, dt: float) -> void:
 	_lobby_show()
 
 
+## Список найденных забегов — на экран входа (строку подключения держит, пока идёт попытка).
+func _lobby_runs() -> void:
+	if lobby_join == null:
+		lobby.runs = finder.runs.duplicate()
+	lobby.searching = not finder.done()
+
+
+## «Подключиться» в строке забега: вход к хосту по адресу и порту из маяка.
+func _lobby_join_start() -> void:
+	var run: RunBeacon.Found = lobby.runs[lobby.joining]
+	lobby_join = NetLink.Client.new()
+	if lobby_join.join(run.address, run.port) != OK:
+		_lobby_join_end("timeout")
+
+
+## Ответ хоста на подключение из списка: принят — в его комнату, отказ или тишина — причина вместо заголовка.
+func _lobby_join_step(dt: float) -> void:
+	lobby_join.poll(dt)
+	match lobby_join.state:
+		NetLink.State.JOINED:
+			var c := lobby_join
+			lobby_join = null
+			finder.stop()
+			lobby_client = c
+			lobby.guest()
+			LobbyLink.take(lobby, c)
+		NetLink.State.REFUSED, NetLink.State.LOST, NetLink.State.OFF:
+			_lobby_join_end(lobby_join.why if lobby_join.why != "" else "timeout")
+
+
+## Попытка из списка кончилась ничем (why — ключ `NetLink.WHY`; "" — отменена); список снова живой.
+func _lobby_join_end(why: String) -> void:
+	if lobby_join:
+		lobby_join.stop()
+		lobby_join = null
+	lobby.joining = -1
+	lobby.why = why
+	_lobby_runs()
+
+
 ## «Создать забег»: открыть хост и комнату, где хост — первый игрок со своим адресом (ART-039).
 func _lobby_create() -> void:
 	net_host = NetLink.Host.new()
@@ -1338,7 +1398,13 @@ func _lobby_create() -> void:
 ## Выйти из комнаты: хост закрывает забег (у гостей — «Связь с хостом потеряна»), гость уходит; со входа — в меню.
 ## pressed — «Назад» уже нажата (комната закрыта), иначе — системная «Назад».
 func _lobby_back(pressed := false) -> void:
+	if lobby_join and not pressed:   # «Назад» во время подключения из списка — отменить попытку, остаться в поиске
+		_lobby_join_end("")
+		_lobby_show()
+		return
 	var in_room := not lobby.entry
+	if not in_room:
+		finder.stop()
 	if not pressed:
 		lobby.back()
 	beacon.stop()
@@ -1411,6 +1477,7 @@ func _address_step(r: Touch.Router, dt: float) -> void:
 			address.open = false
 			address_panel.show_screen(address)
 			lobby_client = c
+			finder.stop()
 			lobby.guest()
 			LobbyLink.take(lobby, c)
 			_lobby_show()

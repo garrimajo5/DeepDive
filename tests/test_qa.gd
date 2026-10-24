@@ -69,7 +69,7 @@ func test_scene_runs_scenario() -> void:
 	var weld_y := -1.0   # issue #524: на 16-breach-weld шов в середине кадра по высоте (доля от верха)
 	var card_seen := false   # 30: карточка роли ART-045 на экране
 	var no_answer := false   # 29f: экран адреса ART-039 дождался «Нет ответа»
-	for i in 3300:  # 110 с игры (сценарий идёт ~104 с)
+	for i in 3600:  # 120 с игры (сценарий идёт ~113 с)
 		# снимок берёт уже нарисованный кадр — камеру до шага, в котором он снят
 		var cam := main.camera
 		var table_vis := cam.is_position_in_frustum(table.global_position + table.global_basis.y * 0.9)
