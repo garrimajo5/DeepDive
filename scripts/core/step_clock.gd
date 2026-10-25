@@ -9,12 +9,18 @@ const MIN_MS := 1.0        ## части короче — не пишем
 
 var parts := {}            ## часть → мс этого шага (части с одним именем складываются)
 var dt := 0.0              ## шаг времени этого кадра, с — большой шаг дробит живой мир на подшаги
+var last := {}             ## части прошлого, законченного шага — их читает лог тестера (issue #662)
+var last_dt := 0.0         ## шаг времени прошлого шага, с
 var _from := 0
 
 
 ## Новый шаг игры с момента now_us.
+## Прошлый шаг уходит в `last`: замер кадра (`QaRunner._measure`) идёт уже внутри нового шага, после `start`,
+## и меряет время прошлого — его части и нужны (issue #662).
 func start(now_us: int, step_dt: float = 0.0) -> void:
-	parts.clear()
+	last = parts
+	last_dt = dt
+	parts = {}
 	dt = step_dt
 	_from = now_us
 
@@ -27,17 +33,30 @@ func lap(name: String, now_us: int) -> void:
 
 ## Самые долгие части по убыванию: «мир 80, виды 20, корабль 5»; пусто — нечего показать.
 func top(n: int = SHOW, min_ms: float = MIN_MS) -> String:
-	var keys: Array = parts.keys().filter(func(k): return float(parts[k]) >= min_ms)
-	keys.sort_custom(func(a, b): return float(parts[a]) > float(parts[b]) or (is_equal_approx(parts[a], parts[b]) and str(a) < str(b)))
+	return _top(parts, n, min_ms)
+
+
+static func _top(of: Dictionary, n: int, min_ms: float) -> String:
+	var keys: Array = of.keys().filter(func(k): return float(of[k]) >= min_ms)
+	keys.sort_custom(func(a, b): return float(of[a]) > float(of[b]) or (is_equal_approx(of[a], of[b]) and str(a) < str(b)))
 	var out := PackedStringArray()
 	for k in keys.slice(0, n):
-		out.append("%s %d" % [k, roundi(float(parts[k]))])
+		out.append("%s %d" % [k, roundi(float(of[k]))])
 	return ", ".join(out)
 
 
 ## Подпись для лога: части и шаг времени, если он больше обычного (1/30 с): «мир 80, виды 20; шаг 120 мс».
 func note() -> String:
-	var t := top()
-	if dt > 0.05:
-		t += ("; " if not t.is_empty() else "") + "шаг %d мс" % roundi(dt * 1000.0)
+	return _note(parts, dt)
+
+
+## То же для прошлого, законченного шага — его время `Main.step_ms` и меряет худший кадр (issue #662).
+func last_note() -> String:
+	return _note(last, last_dt)
+
+
+static func _note(of: Dictionary, step_dt: float) -> String:
+	var t := _top(of, SHOW, MIN_MS)
+	if step_dt > 0.05:
+		t += ("; " if not t.is_empty() else "") + "шаг %d мс" % roundi(step_dt * 1000.0)
 	return t
