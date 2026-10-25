@@ -1369,6 +1369,8 @@ func _apply_graphics(level: int) -> void:
 	if grade:
 		grade.set_lite(lite)          # виньетка ART-065: без LUT, овал 0,10
 	glints.lite = lite                # блики воды в мостике ART-067 выключены
+	if eco:
+		eco.set_lite(lite)            # живой мир: флора не колышется, ободка тел нет (EcoView.set_lite, #598)
 	var vp := get_viewport()
 	if vp:
 		vp.msaa_3d = {0: Viewport.MSAA_DISABLED, 2: Viewport.MSAA_2X, 4: Viewport.MSAA_4X}.get(int(g["msaa"]),

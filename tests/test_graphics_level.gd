@@ -110,6 +110,7 @@ func test_scene_applies_level() -> void:
 	near(vp.scaling_3d_scale, 0.75, 1e-5, "разрешение сцены снижено")
 	eq(vp.msaa_3d, Viewport.MSAA_DISABLED, "без сглаживания")
 	ok(main.wake.lite and main.glints.lite, "частицы и блики — «Экономно»")
+	ok(EcoShaders.sway_lite and EcoRim.lite, "живой мир — «Экономно»: флора не колышется, ободка нет (#598)")
 	near(main.ocean.layers_level, WaterLayers.GAIN_LITE, 1e-5, "слоёв воды нет")
 	main.settings.graphics = Graphics.BEAUTY
 	main._apply_settings()
@@ -117,6 +118,7 @@ func test_scene_applies_level() -> void:
 	eq(main.ocean.sun.directional_shadow_mode, DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS, "подробные")
 	eq(vp.msaa_3d, Viewport.MSAA_4X, "4× MSAA")
 	ok(not main.wake.lite and not main.glints.lite, "частицы как обычно")
+	ok(not EcoShaders.sway_lite and not EcoRim.lite, "живой мир как обычно")
 	near(main.ocean.layers_level, WaterLayers.GAIN_BEAUTIFUL, 1e-5, "слои — «Красиво»")
 	main.settings.graphics = Graphics.NORMAL
 	main._apply_settings()
