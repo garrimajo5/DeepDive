@@ -84,7 +84,9 @@ func test_scene_runs_scenario() -> void:
 		var legs_vis := true
 		for k in ["toe_l", "toe_r", "hand_l", "hand_r"]:
 			legs_vis = legs_vis and cam.is_position_in_frustum(main.ship.to_global(j[k]))
-		var card_vis: bool = main.role_card_panel.visible and main.role_card.a > 0.5
+		# Под тревогой карточка скрыта нарочно: у точки старта хищник может ударить на 12 % и пробить борт в первые
+		# секунды нового забега (issue #506) — время ударов в прогоне зависит от настоящих кадров.
+		var card_vis: bool = (main.role_card_panel.visible and main.role_card.a > 0.5) or main.alarms_on().has(true)
 		var weld_at := -1.0
 		if main.breach.active:
 			var seam := main.ship.to_global(main.breach.active.p)
