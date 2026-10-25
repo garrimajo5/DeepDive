@@ -232,6 +232,14 @@ y — высота, лёд на y = 0, метры. Упоминания Unity о
 `serpohvost-chelyust.glb`. Стыки и оси (хвост ±35° по Y, челюсть до −35° по X) — `serpohvost.md`, раздел MOD-011;
 превью — `serpohvost-modeli.png`. Ставит в сцену задача потока Б «Серпохвосты».
 
+## ANIM-001 Серпохвост — скелет и четыре клипа — принято
+- Исходник: MOD-011 (`models/serpohvost-*.glb`), уточнение владельца — удар серпом вертикальный.
+
+**Принято 25.10.2026** (PR #654, папка `art/ANIM-001-serpohvost`, v2): `models/serpohvost-anim.glb` — 10 костей,
+три сетки со skin, 5 719 треугольников, клипы `Swim` 2,4 с и `SwimFast` 1,2 с (цикл — в `.import`), `Bite` 1,2 с,
+`TailStrike` 0,6 с; кости, тайминги и подключение — `serpohvost.md`, раздел ANIM-001; превью — `serpohvost-anim.jpg`,
+`serpohvost-udar.gif`. Ставит в сцену задача потока Б в `docs/grafika-plan-eco.md` (Б3, плавность поведения).
+
 ## MOD-014 Щиток и рычаг разряда — принято
 - Исходник: ART-015, `razryad-shchitok.png`, решения — `razryad.md`.
 
