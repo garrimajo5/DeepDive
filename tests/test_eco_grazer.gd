@@ -360,7 +360,8 @@ func test_stands_on_ground_nose_along_course() -> void:
 	near(min_y, p.y - EcoGrazer.LIFT, 1e-3, "стопы на дне")
 	near(min_y, Seabed.height(p.x, p.z), 0.01)
 	ok(max_x - p.x > 0.6, "скребок спереди, по курсу")
-	ok(EcoGrazerLook.basis(g).determinant() > 0.99, "поворот без зеркала (грани не выворачиваются)")
+	var k := EcoGrazerLook.scale(g)
+	near(EcoGrazerLook.basis(g).determinant(), k * k * k, 1e-3, "поворот без зеркала (грани не выворачиваются)")
 
 
 func test_eaten_grazer_invisible() -> void:
@@ -431,7 +432,9 @@ func test_view_one_moss_mesh_and_one_grazer_multimesh() -> void:
 	var g := view.grazers.all[2]
 	var tr := GrazerView.transform_at(gv.buffer, g.index)
 	ok(tr.origin.distance_to(EcoGrazerLook.origin(g)) < 1e-3, "место скребуна — из мира")
-	ok((tr.basis * Vector3(0, 0, 1)).distance_to(EcoGrazerLook.forward(g)) < 1e-3, "нос по курсу")
+	ok((tr.basis * Vector3(0, 0, 1)).distance_to(EcoGrazerLook.forward(g) * EcoGrazerLook.scale(g)) < 1e-3, "нос по курсу")
+	var tn := GrazerView.tint_at(gv.buffer, g.index)
+	ok(tn.is_equal_approx(EcoGrazerLook.tint(g)), "оттенок особи — цвет экземпляра")
 	var pose := GrazerView.custom_at(gv.buffer, g.index)
 	ok(pose.distance_to(EcoGrazerLook.custom(g, view.world.time)) < 1e-4, "поза — из мира")
 	# шейдер двигает вершины так же, как posed: проверим лапу по буферу

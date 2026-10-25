@@ -25,6 +25,10 @@ const SLANT := 0.015
 const BODY_COLOR := Color("344F63")
 ## Доля цвета полос на концах хвоста.
 const FIN_GLOW := 0.6
+## Разброс особей (Б4, EcoVary): размер ±12 %, тело светлее-темнее ±20 %, частота виляния ±15 %.
+const SIZE_SPREAD := 0.12
+const SHADE_SPREAD := 0.2
+const RATE_SPREAD := 0.15
 
 ## Чем окрашена вершина.
 enum Paint { BODY, STRIPE, FIN }
@@ -125,10 +129,31 @@ static func stripe(f: EcoFish.Fish) -> Color:
 	return Color(c.r * k, c.g * k, c.b * k)
 
 
-## Цвет вершины по краске: тело тёмное всегда, полосы и концы хвоста — светом стаи.
+## Размер рыбки в форме: свой у каждой особи (EcoVary) × размер возраста (молодь мельче).
+static func scale(f: EcoFish.Fish) -> float:
+	return f.size * EcoVary.spread(f.index, EcoVary.SIZE, SIZE_SPREAD)
+
+
+## Множитель цвета тела особи: одни рыбки светлее, другие темнее.
+static func shade(f: EcoFish.Fish) -> float:
+	return EcoVary.spread(f.index, EcoVary.SHADE, SHADE_SPREAD)
+
+
+## Частота виляния особи (рад/с): стая не машет хвостами в лад.
+static func wiggle_rate(f: EcoFish.Fish) -> float:
+	return WIGGLE_RATE * EcoVary.spread(f.index, EcoVary.RATE, RATE_SPREAD)
+
+
+## Цвет тела особи: BODY_COLOR × shade().
+static func body_color(f: EcoFish.Fish) -> Color:
+	var k := shade(f)
+	return Color(BODY_COLOR.r * k, BODY_COLOR.g * k, BODY_COLOR.b * k)
+
+
+## Цвет вершины по краске: тело тёмное (своего оттенка, в тревоге не меняется), полосы и концы хвоста — светом стаи.
 static func vertex_color(f: EcoFish.Fish, p: Paint) -> Color:
 	if p == Paint.BODY:
-		return BODY_COLOR
+		return body_color(f)
 	var c := stripe(f)
 	return Color(c.r * FIN_GLOW, c.g * FIN_GLOW, c.b * FIN_GLOW) if p == Paint.FIN else c
 
@@ -137,13 +162,13 @@ static func vertex_color(f: EcoFish.Fish, p: Paint) -> Color:
 static func forward(f: EcoFish.Fish, t: float) -> Vector3:
 	var v := f.agent.v
 	var dir := v.normalized() if v.length_squared() > 1e-8 else Vector3(0, 0, 1)
-	var w := sin(t * WIGGLE_RATE + f.phase) * WIGGLE
+	var w := sin(t * wiggle_rate(f) + f.phase) * WIGGLE
 	var cw := cos(w)
 	var sw := sin(w)
 	return Vector3(dir.x * cw + dir.z * sw, dir.y, -dir.x * sw + dir.z * cw)
 
 
-## Расстановка рыбки в мире: столбцы — бок, спина, нос формы (× размер рыбки: молодь мельче). Съеденная — нулевой basis (стянута в точку).
+## Расстановка рыбки в мире: столбцы — бок, спина, нос формы (× scale(): своя у особи, молодь мельче). Съеденная — нулевой basis (стянута в точку).
 static func basis(f: EcoFish.Fish, t: float) -> Basis:
 	if not f.agent.alive:
 		return Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO)
@@ -152,7 +177,8 @@ static func basis(f: EcoFish.Fish, t: float) -> Basis:
 	var side := Vector3(fw.z, 0, -fw.x)
 	side = side.normalized() if side.length() > 1e-4 else Vector3(1, 0, 0)
 	var up := fw.cross(side)
-	return Basis(side * f.size, up * f.size, fw * f.size)
+	var k := scale(f)
+	return Basis(side * k, up * k, fw * k)
 
 
 ## Место вершины i формы для рыбки в момент t (то, что нарисует MultiMesh).
