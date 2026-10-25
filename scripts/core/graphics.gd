@@ -46,6 +46,48 @@ const COUNTER_PX := 34.0
 const COUNTER_EVERY := 0.5
 
 
+## Автовыбор уровня при первом запуске (`Settings.pick_first`, `Main._ready`): по видеокарте и памяти телефона.
+## Слабое — «Экономно», флагман с памятью от 8 ГБ — «Красиво», остальное и не телефон — «Обычно»; дальше в игре
+## подстрахует `LiteOffer`, вручную — «Настройки · Графика». Имена — как отдаёт драйвер Vulkan («Adreno (TM) 740»).
+const AUTO_LOW_MB := 4096    ## памяти меньше — «Экономно»
+const AUTO_HIGH_MB := 8192   ## «Красиво» — только от этой памяти
+const WEAK_GPU := ["adreno[^0-9]*[1-5][0-9][0-9]\\b", "adreno[^0-9]*6[0-3][0-9]\\b", "mali-t", "mali-g[3-6][0-9]\\b",
+	"mali-4", "powervr", "swiftshader", "llvmpipe"]
+const STRONG_GPU := ["adreno[^0-9]*7[3-9][0-9]\\b", "adreno[^0-9]*8[0-9][0-9]\\b", "immortalis",
+	"mali-g7[1-9][0-9]\\b", "mali-g9[0-9][0-9]\\b", "xclipse[^0-9]*9[0-9][0-9]\\b"]
+
+
+## Уровень по видеокарте adapter, памяти memory_mb (≤ 0 — неизвестно) и телефон ли это.
+static func auto(adapter: String, memory_mb: int, mobile := true) -> int:
+	if not mobile:
+		return DEFAULT
+	var name := adapter.to_lower()
+	if _matches(name, WEAK_GPU) or (memory_mb > 0 and memory_mb < AUTO_LOW_MB):
+		return ECONOMY
+	if _matches(name, STRONG_GPU) and memory_mb >= AUTO_HIGH_MB:
+		return BEAUTY
+	return NORMAL
+
+
+static func _matches(name: String, patterns: Array) -> bool:
+	for p: String in patterns:
+		if RegEx.create_from_string(p).search(name) != null:
+			return true
+	return false
+
+
+## Что знаем о своём устройстве: "adapter", "memory_mb", "mobile".
+static func device() -> Dictionary:
+	var mem: int = OS.get_memory_info().get("physical", -1)
+	return {"adapter": RenderingServer.get_video_adapter_name(), "memory_mb": mem / 1048576 if mem > 0 else -1,
+		"mobile": OS.has_feature("mobile")}
+
+
+static func auto_here() -> int:
+	var d := device()
+	return auto(d["adapter"], d["memory_mb"], d["mobile"])
+
+
 static func level(i: int) -> Dictionary:
 	return LEVELS[clampi(i, ECONOMY, BEAUTY)]
 
