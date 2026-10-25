@@ -180,6 +180,10 @@ func test_power_view() -> void:
 	eq(Vector2(main.me.x, main.me.z), Main.POWER_STAND, "для сети — у пульта")
 	var hip: Vector3 = main.crew_view.shown[0]["hip"]
 	ok(Vector2(hip.x, hip.z).distance_to(PowerScreen.CAM_AT) < 0.3, "своя фигура — у камеры, не заслоняет пульт")
+	# #576: фигура лицом к пульту, как стоя у поста (курс ходока 90°) — плечи вдоль z; повёрнутая курсом камеры
+	# на 70° тянула правый рукав через весь кадр.
+	var sh: Vector3 = main.crew_view.shown[0]["shoulder_r"] - main.crew_view.shown[0]["shoulder_l"]
+	ok(absf(sh.x) < absf(sh.z) * tan(deg_to_rad(5.0)), "плечи вдоль пульта (x %.3f, z %.3f)" % [sh.x, sh.z])
 	main.walker.yaw += 0.2   # свайп
 	main.step(1.0 / 30.0)
 	near(main.camera.rotation.y, PowerScreen.CAM_YAW + 0.2, 1e-4, "свайп — от ракурса")
