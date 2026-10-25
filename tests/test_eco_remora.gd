@@ -320,7 +320,8 @@ func test_view_one_multimesh() -> void:
 	view.sync(w.time)
 	for i in 6:
 		near(view.placed[i].origin.distance_to(_remoras(w).remoras[i].p), 0.0, 1e-5, "на месте рыбы")
-		near(view.placed[i].basis.z.length(), RemoraView.SCALE, 1e-4, "масштаб 1,6")
+		near(view.placed[i].basis.z.length(), RemoraView.SCALE * RemoraView.remora_scale(_remoras(w).remoras[i].index), 1e-4,
+			"масштаб 1,6 с разбросом особи")
 	view.queue_free()
 	await frames(1)
 

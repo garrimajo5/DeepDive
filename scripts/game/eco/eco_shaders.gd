@@ -286,7 +286,8 @@ void fragment() {
 		if (w < 0.5) {
 			discard;
 		}
-		ALBEDO = mix(paint, edge, smoothstep(1.6, 2.6, el));
+		// цвет экземпляра — разброс веерников (FanView.fan_tint), без него белый
+		ALBEDO = mix(paint, edge, smoothstep(1.6, 2.6, el)) * COLOR.rgb;
 	} else {
 		// лента (цвет экземпляра) и труба органа (цвет вершины)
 		ALBEDO = COLOR.rgb * shade;
