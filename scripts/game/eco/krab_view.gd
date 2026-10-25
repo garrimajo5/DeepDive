@@ -2,9 +2,9 @@ class_name KrabView
 extends Node3D
 ## Кольчужник в сцене (initKelp — нора, crabUpdate, crabSpines в js/creatures.js): нора из пяти приплюснутых камней
 ## (#4f4a5c, гранёные), тело — панцирь-эллипсоид (#8a4a2e, слабое свечение #1a0804) и шесть ног одним мешем,
-## клешни отдельным мешем (поднимаются на 0,9 · raise), иглы ежей на панцире — MultiMesh на 10 игл (лишние сжаты
-## в точку), переписывается, только когда игл стало больше (EcoKrab.dirty). Тело в 1,25 раза крупнее, на ходу
-## подпрыгивает на 3 см. Четыре вызова отрисовки; стоит на слое отмели (OceanView.LAYER_WORLD).
+## клешни отдельным мешем (поднимаются на 0,9 · raise), иглы ежей на панцире — MultiMesh на 10 игл (стержень со
+## светом, кончик светится сам; лишние сжаты в точку), переписывается, только когда игл стало больше (EcoKrab.dirty). Тело в 1,25 раза крупнее, на ходу
+## подпрыгивает на 3 см. Пять вызовов отрисовки (у игл две поверхности); стоит на слое отмели (OceanView.LAYER_WORLD).
 
 const ROCK := Color("4f4a5c")
 const SHELL := Color("8a4a2e")
@@ -129,9 +129,11 @@ static func build_claws() -> ArrayMesh:
 	return _commit(st, true)
 
 
-## Игла ежа: четырёхгранный конус 0,3 м и светящийся кончик-ромб.
+## Игла ежа: четырёхгранный конус 0,3 м и светящийся кончик-ромб. Стержень освещается (ловит свет сквозь лёд,
+## прожектор и тени), сам светится только кончик — две поверхности, см. spine_mesh.
 static func build_spine() -> ArrayMesh:
-	var st := _begin()
+	var shaft := _begin()
+	var glow := _begin()
 	var tip := Vector3(0, 0.3, 0)
 	var ring: Array[Vector3] = []
 	for j in 4:
@@ -139,18 +141,29 @@ static func build_spine() -> ArrayMesh:
 		ring.append(Vector3(cos(t), 0, sin(t)) * 0.025)
 	var mid := Vector3(0, 0.1, 0)
 	for j in 4:
-		_tri(st, ring[j], ring[(j + 1) % 4], tip, SPINE_BASE, mid)
-		_tri(st, ring[(j + 1) % 4], ring[j], Vector3.ZERO, SPINE_BASE, mid)
+		_tri(shaft, ring[j], ring[(j + 1) % 4], tip, SPINE_BASE, mid)
+		_tri(shaft, ring[(j + 1) % 4], ring[j], Vector3.ZERO, SPINE_BASE, mid)
 	var e := 0.03
 	var pts: Array[Vector3] = [tip + Vector3(e, 0, 0), tip + Vector3(0, 0, e), tip - Vector3(e, 0, 0), tip - Vector3(0, 0, e)]
 	for j in 4:
-		_tri(st, pts[j], pts[(j + 1) % 4], tip + Vector3(0, e, 0), SPINE_TIP, tip)
-		_tri(st, pts[j], pts[(j + 1) % 4], tip - Vector3(0, e, 0), SPINE_TIP, tip)
-	var m := st.commit()
+		_tri(glow, pts[j], pts[(j + 1) % 4], tip + Vector3(0, e, 0), SPINE_TIP, tip)
+		_tri(glow, pts[j], pts[(j + 1) % 4], tip - Vector3(0, e, 0), SPINE_TIP, tip)
+	return spine_mesh(shaft, glow)
+
+
+## Игла из двух поверхностей: 0 — стержень со светом (цвет вершин, матовый — тот же шейдер, что у норы), 1 — кончик
+## без освещения (светится сам). Новых шейдеров нет; у MultiMesh игл — два вызова отрисовки.
+static func spine_mesh(shaft: SurfaceTool, glow: SurfaceTool) -> ArrayMesh:
+	var m := shaft.commit()
+	var lit := StandardMaterial3D.new()
+	lit.vertex_color_use_as_albedo = true
+	lit.roughness = 0.6
+	m.surface_set_material(0, lit)
+	glow.commit(m)
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.vertex_color_use_as_albedo = true
-	m.surface_set_material(0, mat)
+	m.surface_set_material(1, mat)
 	return m
 
 
