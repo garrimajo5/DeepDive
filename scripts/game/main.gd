@@ -138,6 +138,8 @@ var lobby_join: NetLink.Client   ## подключение к забегу из 
 var beacon := RunBeacon.Beacon.new()   ## маяк забега в сети, пока у хоста открыта комната (поиск забегов ART-028)
 var pause := Pause.new()   ## пауза одиночного забега ART-037 (системная «Назад»): пока открыта — игра стоит
 var pause_panel: PausePanel
+var ship_map := ShipMap.new()   ## схема корабля ART-042 из паузы / меню забега: пока открыта — пауза под ней
+var ship_map_panel: ShipMapPanel
 var settings := Settings.new()   ## настройки ART-037 поверх меню или паузы: громкость, свайп, облёт, сброс сохранения
 var settings_panel: SettingsPanel
 var graphics_level := Graphics.DEFAULT   ## применённый уровень графики ART-044 (`_apply_graphics`)
@@ -1203,7 +1205,7 @@ func _settings_show() -> void:
 		menu_panel.visible = main_menu.open and not address.open
 		menu_panel.draw.visible = not settings.open
 	if pause_panel:
-		pause_panel.visible = pause.open and not settings.open
+		pause_panel.visible = pause.open and not settings.open and not ship_map.open
 
 
 ## Шаг настроек: касания кнопок, палец на ползунке двигает значение; изменения — сразу в игру и в файл
@@ -1627,6 +1629,9 @@ func _address_do(what: String) -> void:
 func back_pressed() -> void:
 	if warm.active():
 		return
+	if ship_map.open:   # схема корабля — назад туда, откуда открыли (пауза)
+		_map_back()
+		return
 	if settings.open:   # настройки: сначала подтверждение сброса, потом — назад к меню или паузе
 		_settings_do(settings.back())
 		_settings_show()
@@ -1669,7 +1674,12 @@ func _pause_show() -> void:
 	if pause_panel == null:
 		pause_panel = PausePanel.new()
 		add_child(pause_panel)
+	if not pause.open and ship_map.open:   # пауза закрылась (шторка, обрыв связи) — схема с ней
+		ship_map.close()
 	pause_panel.show_pause(pause)
+	if ship_map.open:
+		pause_panel.visible = false
+	_map_show()
 	overlay.visible = not pause.open and not wreck.active()
 	hint.visible = not pause.open and not wreck.active()   # строки приборов не лезут к заголовку паузы
 	overlay.router.clear()   # палец, открывший или закрывший паузу, не идёт в игру
@@ -1686,6 +1696,10 @@ func _pause_step() -> void:
 		settings.close()
 		_settings_show()
 		_pause_show()
+		return
+	if ship_map.open:
+		_map_step(r)
+		r.end_frame()
 		return
 	if settings.open:
 		_settings_step(r)
@@ -1712,9 +1726,55 @@ func _pause_step() -> void:
 					_to_menu()
 				"settings":
 					open_settings()
+				"map":
+					open_map("pause")
 			break
 		pause_panel.show_pause(pause)
 	r.end_frame()
+
+
+## Схема корабля ART-042 поверх паузы / меню забега: кнопки паузы скрыты, касания — «Назад».
+func open_map(where: String) -> void:
+	ship_map.open_from(where)
+	if pause_panel:
+		pause_panel.visible = false
+	_map_show()
+	overlay.router.clear()   # палец с пункта «Схема корабля» не жмёт «Назад»
+
+
+## «Назад» схемы: обратно в паузу.
+func _map_back() -> void:
+	ship_map.back()
+	_map_show()
+	if pause_panel:
+		pause_panel.show_pause(pause)
+	overlay.router.clear()
+
+
+## Шаг открытой схемы: касание «Назад»; в коопе мир идёт — отметки товарищей перерисовываются каждый шаг.
+func _map_step(r: Touch.Router) -> void:
+	for p in r.taps:
+		if ship_map.hit(p, get_viewport().get_visible_rect().size) == "back":
+			_map_back()
+			return
+	_map_show()
+
+
+## Данные схемы: отметки экипажа (свой — me), люки, тревога по главному полю табло.
+func _map_show() -> void:
+	if ship_map_panel == null:
+		if not ship_map.open:
+			return
+		ship_map_panel = ShipMapPanel.new()
+		add_child(ship_map_panel)
+	var marks: Array = []
+	for m: Crew.Member in crew:
+		marks.append([m.x, m.z, ShipMap.letter(m.role)])
+	var doors: Array[bool] = []
+	for d in layout.doors:
+		doors.append(d.passable())
+	var a := ShipMap.alarm(AlarmBoard.main_field(alarms_on()), breach.active)
+	ship_map_panel.show_map(ship_map, marks, crew.find(me), doors, a)
 
 
 ## Забег окончен, в главное меню: встать с постов, корабль у начала спуска, без облёта.
@@ -1773,6 +1833,9 @@ func _on_destroyed() -> void:
 		return
 	_leave_posts()
 	pause.close()
+	if ship_map.open:
+		ship_map.close()
+		_map_show()
 	if settings.open:
 		settings.close()
 		_settings_show()

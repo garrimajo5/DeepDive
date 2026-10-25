@@ -18,7 +18,7 @@ const SUB_TOP := 217.0   ## подпись коопа
 const SUB_PX := 32.0
 const SUB := {"host": "Вы — хост · забег продолжается", "guest": "Вы — гость · забег продолжается"}
 const BUTTON := Rect2(820, 310, 760, 112)   ## первая кнопка; следующие ниже на STEP
-const STEP := 142.0
+const STEP := 136.0   ## шаг пунктов со «Схемой корабля» ART-042
 const BUTTON_PX := 38.0
 
 ## Подтверждение: окно, заголовок и строка (верх глифов), «Да» / «Нет».
@@ -44,15 +44,18 @@ const ASK_NET := {
 const DIM := 0.62   ## затемнение живой сцены под паузой
 
 ## Кнопки сверху вниз: id, подпись.
-const ITEMS := [["resume", "Продолжить"], ["new", "Новый забег"], ["settings", "Настройки"], ["exit", "Выйти в меню"]]
-const GUEST_ITEMS := [["resume", "Продолжить"], ["settings", "Настройки"], ["leave", "Покинуть экипаж"]]
+## «Схема корабля» ART-042 — сразу после «Продолжить» (`ShipMap`, пауза остаётся открытой под схемой).
+const ITEMS := [["resume", "Продолжить"], ["map", "Схема корабля"], ["new", "Новый забег"], ["settings", "Настройки"],
+	["exit", "Выйти в меню"]]
+const GUEST_ITEMS := [["resume", "Продолжить"], ["map", "Схема корабля"], ["settings", "Настройки"],
+	["leave", "Покинуть экипаж"]]
 const MAIN_ITEM := "resume"
 const MODES := ["solo", "host", "guest"]
 
 var open := false
 var ask := ""   ## открытое подтверждение: "new" / "exit" / "leave"; "" — нет
 var mode := "solo"   ## "solo" — пауза, игра стоит; "host" / "guest" — меню сетевого забега, мир идёт
-var enabled := {"resume": true, "new": true, "settings": true, "exit": true, "leave": true}
+var enabled := {"resume": true, "map": true, "new": true, "settings": true, "exit": true, "leave": true}
 
 
 ## Кнопки режима m сверху вниз: [id, подпись].
@@ -140,7 +143,8 @@ func hit(p: Vector2, size: Vector2) -> String:
 
 
 ## Нажатие кнопки id. Возвращает, что сделать игре: "resume" — играть дальше, "new" — новый забег, "exit" — в главное
-## меню, "leave" — гость покидает экипаж (пауза закрыта), "settings" — настройки поверх паузы (пауза открыта);
+## меню, "leave" — гость покидает экипаж (пауза закрыта), "settings" — настройки поверх паузы (пауза открыта), "map" —
+## схема корабля ART-042 поверх паузы;
 ## "" — ничего (открыто или закрыто подтверждение).
 func press(id: String) -> String:
 	if not open:
@@ -161,8 +165,8 @@ func press(id: String) -> String:
 		"resume":
 			open = false
 			return "resume"
-		"settings":
-			return "settings"
+		"settings", "map":
+			return id
 		"new", "exit", "leave":
 			ask = id
 	return ""
