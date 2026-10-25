@@ -1742,9 +1742,23 @@ func open_map(where: String) -> void:
 	overlay.router.clear()   # палец с пункта «Схема корабля» не жмёт «Назад»
 
 
-## «Назад» схемы: обратно в паузу.
+## Кнопка «Схема» на подсказке первого забега: схема поверх паузы (одиночный забег стоит, в коопе мир идёт —
+## «Меню забега»), «Назад» — сразу к подсказке.
+func open_hint_map() -> void:
+	pause.set_mode("host" if net_host != null else ("guest" if net_client != null else "solo"))
+	if not pause.open:
+		pause.back()
+	_pause_show()
+	open_map("hint")
+
+
+## «Назад» схемы: обратно в паузу; открыли с подсказки — к подсказке, пауза закрывается.
 func _map_back() -> void:
-	ship_map.back()
+	if ship_map.back() == "hint":
+		_map_show()
+		pause.close()
+		_pause_show()
+		return
 	_map_show()
 	if pause_panel:
 		pause_panel.show_pause(pause)
@@ -1963,7 +1977,13 @@ func _tutorial_step(dt: float) -> void:
 		get_viewport().get_camera_3d(), camera)
 	tutorial_panel.show_tutorial(tutorial, tutorial.text(pilot.seated, near),
 		tutorial.highlight(pilot.seated, at_power, near), status_rect(),
-		power_panel.box() if power_panel.visible else Rect2(), edge)
+		power_panel.box() if power_panel.visible else Rect2(), edge,
+		not hidden and tutorial.map_wanted(target, near, at_power))
+	var m := tutorial_panel.map_rect()
+	for p in overlay.router.taps:
+		if m.has_point(p):
+			open_hint_map()
+			return
 
 
 ## Карточка роли у поста ART-045: пост, у которого стоит свой игрок, своей ли он роли (в одиночном забеге — все
@@ -1993,6 +2013,8 @@ func _card_step(dt: float) -> void:
 				rect = RoleCard.card_rect(role_card.post, size, avoid, status_rect())
 		changed = changed or role_card.read.size() != before
 	overlay.router.blocks = role_card.blocks(size, rect)
+	if tutorial_panel.map_rect().has_area():   # кнопка «Схема» на подсказке: палец там не крутит взгляд
+		overlay.router.blocks.append(tutorial_panel.map_rect())
 	if changed:
 		settings.cards = role_card.read_list()
 		settings.write()
@@ -2071,13 +2093,13 @@ func power_view() -> bool:
 
 ## Фигуры экипажа (dt ≥ 0 — ещё шаг наклона своей фигуры к посту). У открытого пульта своя фигура стоит у камеры
 ## ракурса (как в принятом макете ART-050: тянется к ползункам, тело не заслоняет пульт), и камера — в её голове;
-## место игрока для постов и сети остаётся у пульта (`POWER_STAND`).
+## место игрока для постов и сети остаётся у пульта (`POWER_STAND`). Курс фигуры — курс ходока (лицом к пульту,
+## как стоя у поста), а не курс камеры: повёрнутая на 70° фигура тянула правую руку через весь кадр (#576).
 func _apply_crew_view(dt: float = -1.0) -> void:
 	var keep := [me.x, me.z, me.yaw]
 	if power_view():
 		me.x = PowerScreen.CAM_AT.x
 		me.z = PowerScreen.CAM_AT.y
-		me.yaw = PowerScreen.cam_yaw(walker.yaw)
 	if dt >= 0.0:
 		me.ease_lean(dt)
 	crew_view.apply()

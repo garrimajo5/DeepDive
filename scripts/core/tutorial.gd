@@ -22,6 +22,12 @@ const RING := 8.0                 ## обводка нужного управл�
 const FADE := 0.15                ## появление и исчезновение, с
 const DONE_TIME := 0.5            ## «Выполнено» столько секунд
 const DONE := "Выполнено"
+## Кнопка «Схема» на плашке, пока игрок ищет пост (ART-042): справа, по центру по высоте; открывает схему корабля,
+## «Назад» схемы возвращает к подсказке (`Main.open_hint_map`).
+const MAP_BTN := Vector2(360, 112)
+const MAP_RIGHT := 24.0           ## от правого края плашки
+const MAP_TEXT := "Схема"
+const MAP_PX := 36.0
 
 ## Шаги: текст плашки, событие, пост-цель (указатель `HintPointer`).
 const STEPS := [
@@ -131,6 +137,21 @@ func pointer_target(seated: bool) -> String:
 		return ""
 	var id: String = STEPS[step][2]
 	return "" if seated and id == "helm" else id
+
+
+## Кнопка «Схема» нужна: шаг ждёт поста-цели target (`pointer_target`), а игрок не у него (near — пост рядом,
+## at_power — пульт открыт). У нужного поста, в «Выполнено» и без цели кнопки нет.
+func map_wanted(target: String, near: String, at_power: bool) -> bool:
+	if not shown() or not active() or done_t >= 0.0 or target == "":
+		return false
+	return target != near and not (at_power and target == "energy")
+
+
+## Кнопка «Схема» на плашке b (экран высотой size.y).
+static func map_rect(b: Rect2, size: Vector2) -> Rect2:
+	var s := size.y / REF_H
+	var w := MAP_BTN * s
+	return Rect2(b.end.x - (MAP_RIGHT * s) - w.x, b.position.y + (b.size.y - w.y) * 0.5, w.x, w.y)
 
 
 ## Плашка на экране size: по центру, верх TOP. Легла бы на строку приборов status — опускается под неё; на открытую

@@ -16,6 +16,7 @@ var status := Rect2() ## строка приборов на экране — п�
 var avoid := Rect2()  ## открытая панель (пульт энергии) — плашка уходит от неё
 var arrow: Array = [] ## стрелка у края к посту вне кадра: [ячейка на экране, зеркалить] (`HintPointer.edge`)
 var atlas: Texture2D  ## атлас указателя ART-038
+var map_btn := false  ## кнопка «Схема» на плашке (`Tutorial.map_wanted`)
 
 
 func _ready() -> void:
@@ -26,7 +27,7 @@ func _ready() -> void:
 
 
 func show_tutorial(t: Tutorial, text: String, highlight: String, status_rect: Rect2, panel := Rect2(),
-		edge: Array = []) -> void:
+		edge: Array = [], map := false) -> void:
 	tut = t
 	var vis := t != null and t.shown()
 	if vis != visible:
@@ -38,7 +39,15 @@ func show_tutorial(t: Tutorial, text: String, highlight: String, status_rect: Re
 	status = status_rect
 	avoid = panel
 	arrow = edge
+	map_btn = map
 	queue_redraw()
+
+
+## Кнопка «Схема» на экране; пустой прямоугольник — кнопки нет.
+func map_rect() -> Rect2:
+	if not visible or not map_btn:
+		return Rect2()
+	return Tutorial.map_rect(box(), get_viewport_rect().size)
 
 
 ## Плашка на экране (для табличек и меток: на неё не ложатся).
@@ -70,7 +79,20 @@ func _draw() -> void:
 		draw_polyline(PackedVector2Array([p0, p0 + Vector2(h * 0.35, h * 0.35), p0 + Vector2(h, -h * 0.4)]),
 			Color(ACCENT, a), maxf(2.0, 5.0 * s), true)
 		base.x += h + 16.0 * s
-	draw_string(font, base, line, HORIZONTAL_ALIGNMENT_LEFT, b.end.x - base.x - 24.0 * s, px,
+	var text_end := b.end.x - 24.0 * s
+	if map_btn:   # «Схема» справа: контур акцентом, текст по центру
+		var m := Tutorial.map_rect(b, size)
+		text_end = m.position.x - 16.0 * s
+		var mb := StyleBoxFlat.new()
+		mb.bg_color = Color(BACK, BACK.a * a)
+		mb.border_color = Color(ACCENT, a)
+		mb.set_border_width_all(maxi(1, roundi(3.0 * s)))
+		mb.set_corner_radius_all(roundi(12.0 * s))
+		draw_style_box(mb, m)
+		var mpx := int(Tutorial.MAP_PX * s)
+		draw_string(font, Vector2(m.position.x, m.get_center().y + mpx * 0.36), Tutorial.MAP_TEXT,
+			HORIZONTAL_ALIGNMENT_CENTER, m.size.x, mpx, Color(ACCENT, a))
+	draw_string(font, base, line, HORIZONTAL_ALIGNMENT_LEFT, text_end - base.x, px,
 		Color(ACCENT if line == Tutorial.DONE else TEXT, a))
 	if layout != null and ring != "":
 		var c := Tutorial.ring_of(ring, layout)

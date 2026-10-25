@@ -203,6 +203,8 @@ func _point(what: String, dir: Vector2) -> Vector2:
 			return l.light.c
 		"dive":   # «Погрузиться» в главном меню ART-037
 			return MainMenu.screen_rect("dive", main.get_viewport().get_visible_rect().size).get_center()
+		"hint_map":   # кнопка «Схема» на плашке подсказки ART-038
+			return main.tutorial_panel.map_rect().get_center()
 		"map_back":   # «Назад» схемы корабля ART-042
 			return ShipMap.back_rect(main.get_viewport().get_visible_rect().size).get_center()
 		"map":   # «Схема корабля» в паузе / меню забега ART-042
