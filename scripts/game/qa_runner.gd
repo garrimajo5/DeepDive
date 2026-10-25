@@ -38,6 +38,7 @@ var _warm_frames := 0   ## кадры прогрева шейдеров при �
 var _warm_from_us := 0
 var _warm_last_us := 0
 var _warm_ms: Array[int] = []   ## длительность каждого кадра прогрева, мс (issue #159: какой взгляд дорогой)
+var composing := 0     ## кадры Google Play (шаг «play»), которые ещё собираются — «quit» их ждёт
 var drain_left := 0.0   ## шаг «drain»: столько секунд ещё слать в игру EcoLink.DRAIN от стеклоуста
 
 
@@ -95,6 +96,10 @@ func tick(dt: float) -> void:
 				r.end(c[1])
 			"shot":
 				_shot(c[1])
+			"hud":   # кадры для магазина: без крестовины, кнопок и строк приборов
+				main.set_hud(c[1])
+			"play":   # кадр Google Play ART-046: снимок и кадр 1920×1080 с подписью
+				_play(c[1])
 			"goto":
 				if main.pilot.seated:
 					main.stand_up()
@@ -168,8 +173,7 @@ func tick(dt: float) -> void:
 			"log":
 				_log("%s | %s" % [c[1], state()])
 			"quit":
-				_finish()
-				main.get_tree().quit()
+				_quit_after_frames()
 			"done":
 				_finish()
 	_step_label = step_label(script_q)   # этот кадр рисуется на этом шаге — к нему и отнесём его время
@@ -351,6 +355,34 @@ func _shot(name: String) -> void:
 	shots.append(name)
 	_log("скриншот %s | %s" % [name, state()])
 	after_shot()
+
+
+## Кадр Google Play n (ART-046): снимок как есть — kadr-n-snimok.png, собранный кадр с подписью — kadr-n.png
+## (подпись рисуется одним кадром позже, `PlayCaption`; в headless — лог без картинки, как у скриншота).
+func _play(n: int) -> void:
+	var name := PlayFrame.file_name(n)
+	var img: Image = null
+	if DisplayServer.get_name() != "headless":
+		img = main.get_viewport().get_texture().get_image()
+	if img == null or img.is_empty():
+		_log("кадр %s: нет картинки (headless)" % name)
+		return
+	img.save_png("%s/%s-snimok.png" % [OUT, name])
+	shots.append(name)
+	_log("кадр %s «%s» | %s" % [name, PlayFrame.caption(n), state()])
+	after_shot()
+	composing += 1
+	var cap: Image = await PlayCaption.render(self, PlayFrame.caption(n))
+	PlayFrame.compose(img, cap).save_png("%s/%s.png" % [OUT, name])
+	composing -= 1
+
+
+## «quit»: дождаться сборки кадров Google Play (подпись рисуется кадр спустя), затем итог и выход.
+func _quit_after_frames() -> void:
+	while composing > 0:
+		await get_tree().process_frame
+	_finish()
+	main.get_tree().quit()
 
 
 ## Сброс замеров после скриншота: кадр снимка не считается совсем, следующие SETTLE_FRAMES — только в худший кадр.
