@@ -21,7 +21,7 @@ func test_runner_disables_file() -> void:
 func test_layout_fits_phones() -> void:
 	for size: Vector2 in [Vector2(2400, 1080), Vector2(1600, 720), Vector2(1920, 1080), Vector2(2340, 1080)]:
 		var screen := Rect2(Vector2.ZERO, size)
-		var ids := ["back", "volume", "swipe", "intro", "reset"]
+		var ids := ["back", "volume", "swipe", "intro", "graphics", "golos", "reset"]
 		for i in ids.size():
 			var r := Settings.screen_rect(ids[i], size)
 			ok(r.size.x > 0.0 and screen.encloses(r), "%s на экране %s" % [ids[i], size])
