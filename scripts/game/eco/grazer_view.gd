@@ -3,7 +3,8 @@ extends MultiMeshInstance3D
 ## Скребуны в сцене: все десять — один MultiMesh (один вызов отрисовки). Форма — EcoGrazerLook, место и курс —
 ## EcoGrazerLook.basis/origin, поза (фаза шага, ход скребка) — EcoGrazerLook.custom в INSTANCE_CUSTOM. Шейдер двигает
 ## лапы и скребок так же, как EcoGrazerLook.posed: в UV.x — тройка лапы (±1, у корпуса 0), в UV.y — скребок (1),
-## в UV2 — бедро лапы (x, z). Краска — цвет вершины; грани плоские (нормаль по производным), своего света нет.
+## в UV2 — бедро лапы (x, z). Краска — цвет вершины × цвет экземпляра (EcoGrazerLook.tint — свой у особи, Б4);
+## размер особи — в basis. Грани плоские (нормаль по производным), своего света нет.
 ## Стоит на слое отмели (OceanView.LAYER_WORLD).
 
 const SHADER := """
@@ -104,8 +105,9 @@ static func pack(system: EcoGrazer, t: float) -> PackedFloat32Array:
 		var b := EcoGrazerLook.basis(g)
 		var o := EcoGrazerLook.origin(g)
 		var c := EcoGrazerLook.custom(g, t)
+		var tn := EcoGrazerLook.tint(g)
 		var row := [b.x.x, b.y.x, b.z.x, o.x, b.x.y, b.y.y, b.z.y, o.y, b.x.z, b.y.z, b.z.z, o.z,
-			1.0, 1.0, 1.0, 1.0, c.x, c.y, 0.0, 0.0]
+			tn.r, tn.g, tn.b, 1.0, c.x, c.y, 0.0, 0.0]
 		var i := g.index * STRIDE
 		for k in STRIDE:
 			out[i + k] = row[k]
@@ -117,6 +119,12 @@ static func transform_at(buf: PackedFloat32Array, n: int) -> Transform3D:
 	var i := n * STRIDE
 	return Transform3D(Vector3(buf[i], buf[i + 4], buf[i + 8]), Vector3(buf[i + 1], buf[i + 5], buf[i + 9]),
 		Vector3(buf[i + 2], buf[i + 6], buf[i + 10]), Vector3(buf[i + 3], buf[i + 7], buf[i + 11]))
+
+
+## Цвет экземпляра скребуна n из буфера (EcoGrazerLook.tint).
+static func tint_at(buf: PackedFloat32Array, n: int) -> Color:
+	var i := n * STRIDE + 12
+	return Color(buf[i], buf[i + 1], buf[i + 2], buf[i + 3])
 
 
 ## Поза скребуна n из буфера (фаза шага, ход скребка).
