@@ -400,11 +400,11 @@ func test_view_three_draws() -> void:
 	eq(v.bodies.multimesh.instance_count, 3)
 	eq(v.eyes.multimesh.instance_count, 6)
 	var cn := c.coins[4]
-	ok(KelpView.transform_at(v.coin_buffer, 4, CoinsView.STRIDE).origin.is_equal_approx(cn.pos), "рыбка на месте")
+	ok(KelpView.transform_at(v.coin_buffer, 4, CoinsView.STRIDE_C).origin.is_equal_approx(cn.pos), "рыбка на месте")
 	cn.alive = false
 	c.glazuns[1].lit = true
 	v.sync(1.0)
-	ok(KelpView.transform_at(v.coin_buffer, 4, CoinsView.STRIDE).basis.x.length() < 1e-6, "съеденная сжата")
+	ok(KelpView.transform_at(v.coin_buffer, 4, CoinsView.STRIDE_C).basis.x.length() < 1e-6, "съеденная сжата")
 	var i := (1 * 2 + 0) * CoinsView.STRIDE_C + 12
 	ok(v.eye_buffer[i] > 1.0, "глаза в луче яркие")
 	near(KelpView.transform_at(v.eye_buffer, 2, CoinsView.STRIDE_C).basis.x.length(), 1.6, 1e-4, "и крупнее")

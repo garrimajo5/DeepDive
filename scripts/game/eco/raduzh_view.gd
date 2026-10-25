@@ -5,6 +5,8 @@ extends Node3D
 ## пятен лицом к камере (1,1 м). Без света гребневик — едва заметный голубоватый силуэт, в луче — бегущая радуга;
 ## ореол виден только у вспыхнувшей стаи (яркость glow² · 0,7). Своя эмиссия; туман для сложения выключен —
 ## гаснут сами к FADE_FAR. Гребневики не заходят в корпус (EcoRaduzh.member_pos_outside). Слой отмели.
+## Разброс особей (Б4, EcoVary по номеру гребневика): свой размер, частота «дыхания» и яркость тёмного силуэта —
+## стая не клоны; мир и его случай не меняются, вызовов отрисовки не прибавилось.
 
 const BODY_SHADER := """
 shader_type spatial;
@@ -31,6 +33,11 @@ const FADE_FAR := 70.0
 ## Чисел на экземпляр: transform 3 × 4 и цвет (4).
 const STRIDE := 12
 const STRIDE_C := 16
+## Разброс особей: размер ±15 %, частота дыхания ±20 % (около BREATH_RATE), силуэт без света светлее-темнее ±25 %.
+const SIZE_SPREAD := 0.15
+const RATE_SPREAD := 0.2
+const SHADE_SPREAD := 0.25
+const BREATH_RATE := 2.4
 
 var raduzh: EcoRaduzh
 var bodies: MultiMeshInstance3D
@@ -38,6 +45,8 @@ var halos: MultiMeshInstance3D
 ## Последние буферы тел и ореолов (для тестов).
 var body_buffer := PackedFloat32Array()
 var halo_buffer := PackedFloat32Array()
+## Разброс по номеру гребневика: размер, частота дыхания, яркость силуэта (хеш — раз, не в каждом кадре).
+var _vary := PackedFloat32Array()
 
 
 func _init(system: EcoRaduzh) -> void:
@@ -45,6 +54,11 @@ func _init(system: EcoRaduzh) -> void:
 	name = "Радужники"
 	var n := raduzh.swarms.size() * EcoRaduzh.PER_SWARM
 	bodies = _instance("Гребневики", build_body(), n)
+	_vary.resize(n * 3)
+	for i in n:
+		_vary[i * 3] = member_scale(i)
+		_vary[i * 3 + 1] = member_rate(i)
+		_vary[i * 3 + 2] = member_shade(i)
 	halos = _instance("Ореолы", build_halo(), n)
 	sync(0.0, Vector3(1e6, 0, 1e6), 0.0)
 
@@ -114,12 +128,14 @@ func sync(t: float, ship_pos: Vector3, ship_yaw: float, all := false) -> void:
 			continue
 		var gg := sw.glow * sw.glow * HALO_K
 		for k in EcoRaduzh.PER_SWARM:
-			var j := (sw.index * EcoRaduzh.PER_SWARM + k) * STRIDE_C
+			var idx := sw.index * EcoRaduzh.PER_SWARM + k
+			var j := idx * STRIDE_C
 			var m := sw.members[k]
 			var p := EcoRaduzh.member_pos_outside(sw, k, t, ship_pos, ship_yaw)
 			var b := Basis.from_euler(Vector3(sin(t * 0.7 + m.phase) * 0.4, m.phase, 0.0))
-			b = b.scaled_local(BODY * (1.0 + sin(t * 2.4 + m.phase) * 0.08))
-			var c := EcoRaduzh.member_color(sw, k, t)
+			b = b.scaled_local(BODY * (_vary[idx * 3] * (1.0 + sin(t * _vary[idx * 3 + 1] + m.phase) * 0.08)))
+			# свой силуэт без света; во вспышке радуга одна на всех
+			var c := EcoRaduzh.member_color(sw, k, t) * lerpf(_vary[idx * 3 + 2], 1.0, sw.glow)
 			_put(body_buffer, j, b, p)
 			_color(body_buffer, j + STRIDE, c)
 			# без вспышки ореол не нужен — схлопнут в точку, фрагментов не рисует
@@ -127,6 +143,21 @@ func sync(t: float, ship_pos: Vector3, ship_yaw: float, all := false) -> void:
 			_color(halo_buffer, j + STRIDE, c * gg)
 	bodies.multimesh.buffer = body_buffer
 	halos.multimesh.buffer = halo_buffer
+
+
+## Размер гребневика n (номер по всем стаям: стая · PER_SWARM + место) — множитель BODY.
+static func member_scale(n: int) -> float:
+	return EcoVary.spread(n, EcoVary.SIZE, SIZE_SPREAD)
+
+
+## Частота «дыхания» гребневика n, рад/с.
+static func member_rate(n: int) -> float:
+	return BREATH_RATE * EcoVary.spread(n, EcoVary.RATE, RATE_SPREAD)
+
+
+## Яркость тёмного силуэта гребневика n (без света).
+static func member_shade(n: int) -> float:
+	return EcoVary.spread(n, EcoVary.SHADE, SHADE_SPREAD)
 
 
 ## Переписать ли стаю в этом кадре: близкая или вспыхнувшая — всегда, средняя — через кадр, дальняя — в свой кадр

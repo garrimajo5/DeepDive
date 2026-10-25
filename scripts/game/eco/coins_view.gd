@@ -4,7 +4,8 @@ extends Node3D
 ## 30 см боком к воде (#e8d48a, слабое свечение #3a3010) с хвостом-конусом (#b59a50), нос по скорости, покачивается;
 ## съеденные сжаты в точку. Глазун — плоское тело в песке (#8a7a60) со стебельками глаз (#6a5a44), в броске
 ## приподнимается; глаза — светящиеся шарики, в луче прожектора крупнее и ярче. Три MultiMesh — три вызова
-## отрисовки; стоят на слое отмели (OceanView.LAYER_WORLD).
+## отрисовки; стоят на слое отмели (OceanView.LAYER_WORLD). Разброс монетников (Б4, EcoVary по номеру рыбки): свой
+## размер, ритм покачивания и оттенок диска (цвет экземпляра × краска вершины) — стайка не клоны, мир не меняется.
 
 const COIN := Color("e8d48a")
 const FIN := Color("b59a50")
@@ -14,6 +15,12 @@ const STALK := Color("6a5a44")
 ## Чисел на экземпляр: transform 3 × 4 и цвет (4).
 const STRIDE := 12
 const STRIDE_C := 16
+## Разброс монетников: размер ±12 %, светлее-темнее ±15 %, теплее-холоднее на 6 %, покачивание ±25 % около ROCK_RATE.
+const SIZE_SPREAD := 0.12
+const SHADE_SPREAD := 0.15
+const HUE_SPREAD := 0.06
+const RATE_SPREAD := 0.25
+const ROCK_RATE := 2.0
 
 var coins: EcoCoins
 var fish: MultiMeshInstance3D
@@ -23,12 +30,20 @@ var eyes: MultiMeshInstance3D
 var coin_buffer := PackedFloat32Array()
 var body_buffer := PackedFloat32Array()
 var eye_buffer := PackedFloat32Array()
+## Разброс по номеру монетника: размер, ритм, оттенок r g b (хеш — раз, не в каждом кадре).
+var _vary := PackedFloat32Array()
 
 
 func _init(system: EcoCoins) -> void:
 	coins = system
 	name = "Монетники"
-	fish = _instance("Монетники", build_coin(), coins.coins.size(), false)
+	fish = _instance("Монетники", build_coin(), coins.coins.size(), true)
+	_vary.resize(coins.coins.size() * 5)
+	for cn in coins.coins:
+		var tn := coin_tint(cn)
+		var row := [coin_scale(cn), coin_rate(cn), tn.r, tn.g, tn.b]
+		for q in 5:
+			_vary[cn.index * 5 + q] = row[q]
 	bodies = _instance("Глазуны", build_glazun(), coins.glazuns.size(), false)
 	eyes = _instance("Глаза", build_eye(), coins.glazuns.size() * 2, true)
 	visible = not coins.schools.is_empty()
@@ -54,11 +69,15 @@ func _instance(n: String, mesh: Mesh, count: int, colors: bool) -> MultiMeshInst
 
 ## Расставить монетников и глазунов в момент t (время мира).
 func sync(t: float) -> void:
-	coin_buffer.resize(coins.coins.size() * STRIDE)
+	coin_buffer.resize(coins.coins.size() * STRIDE_C)
 	for cn in coins.coins:
-		var tr := Transform3D(EcoCoins.coin_basis(cn, t), cn.pos) if cn.alive \
+		var q := cn.index * 5
+		var tr := Transform3D(EcoCoins.coin_basis(cn, t, _vary[q + 1]) * _vary[q], cn.pos) if cn.alive \
 			else Transform3D(Basis.from_scale(Vector3.ZERO), Vector3(0, -999, 0))
-		KelpView._put(coin_buffer, cn.index * STRIDE, tr)
+		var j := cn.index * STRIDE_C
+		KelpView._put(coin_buffer, j, tr)
+		coin_buffer[j + 12] = _vary[q + 2]; coin_buffer[j + 13] = _vary[q + 3]; coin_buffer[j + 14] = _vary[q + 4]
+		coin_buffer[j + 15] = 1.0
 	fish.multimesh.buffer = coin_buffer
 	body_buffer.resize(coins.glazuns.size() * STRIDE)
 	eye_buffer.resize(coins.glazuns.size() * 2 * STRIDE_C)
@@ -74,6 +93,23 @@ func sync(t: float) -> void:
 			eye_buffer[j + 12] = c.r; eye_buffer[j + 13] = c.g; eye_buffer[j + 14] = c.b; eye_buffer[j + 15] = 1.0
 	bodies.multimesh.buffer = body_buffer
 	eyes.multimesh.buffer = eye_buffer
+
+
+## Размер монетника (множитель формы).
+static func coin_scale(cn: EcoCoins.Coin) -> float:
+	return EcoVary.spread(cn.index, EcoVary.SIZE, SIZE_SPREAD)
+
+
+## Частота покачивания монетника, рад/с.
+static func coin_rate(cn: EcoCoins.Coin) -> float:
+	return ROCK_RATE * EcoVary.spread(cn.index, EcoVary.RATE, RATE_SPREAD)
+
+
+## Множитель красок монетника — цвет экземпляра: светлее или темнее, теплее (к меди) или холоднее (к серебру).
+static func coin_tint(cn: EcoCoins.Coin) -> Color:
+	var k := EcoVary.spread(cn.index, EcoVary.SHADE, SHADE_SPREAD)
+	var h := (EcoVary.unit(cn.index, EcoVary.HUE) * 2.0 - 1.0) * HUE_SPREAD
+	return Color(k * (1.0 + h), k, k * (1.0 - h))
 
 
 ## Монетник: диск радиусом 0,15 м толщиной 3,5 см боком (ось — x), хвост-конус назад (−Z), нос — +Z.
