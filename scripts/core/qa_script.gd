@@ -39,15 +39,18 @@ extends RefCounted
 ##   {"do": "wreck"}                                 — корпус разрушен: шторка ART-036 3,5 с, затем забег с начала
 ##   {"do": "tutorial", "on": true}                 — подсказки первого забега ART-038 с первого шага (false — убрать)
 ##   {"do": "cards", "on": true}                    — карточки ролей у постов ART-045 с нуля (false — убрать)
+##   {"do": "voice", "role": 2, "text": "Сбросьте ход", "fake": false} — голос во внутренней связи ART-040, как
+##                                                     событие мира EcoLink.VOICE ("silent": true — подделка молчит
+##                                                     на «Спросить код», "ask": "ping"/"light"); кнопка плашки — press ask
 ##   {"do": "slow"}                                  — предложение «Экономно» ART-044, как после низких кадр/с
 ##                                                     (в прогоне само не открывается; ответ — lite_yes / lite_no)
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["route"], ["act"], ["gone"], ["wreck"], ["back"], ["tutorial", on], ["cards", on], ["slow"], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["route"], ["act"], ["gone"], ["wreck"], ["back"], ["tutorial", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
-const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "silt", "drain", "hull", "charge", "route", "gone", "wreck", "back", "tutorial", "cards", "slow", "log", "quit"]
-const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "map", "map_back", "hint_map", "new", "exit", "yes", "no", "crew", "journal", "settings", "graphics", "g0", "g1", "g2", "fps", "lite_yes", "lite_no", "join", "last", "lobby_new", "lobby_addr", "lobby_refresh",
+const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "silt", "drain", "hull", "charge", "route", "gone", "wreck", "back", "tutorial", "cards", "voice", "slow", "log", "quit"]
+const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "map", "map_back", "hint_map", "new", "exit", "yes", "no", "crew", "journal", "settings", "graphics", "g0", "g1", "g2", "fps", "lite_yes", "lite_no", "ask", "join", "last", "lobby_new", "lobby_addr", "lobby_refresh",
 	"jcell0", "jcell1", "jcell2", "jcell3", "jcell4", "jcell5", "jprev", "jnext", "jclose",
 	"key0", "key1", "key2", "key3", "key4", "key5", "key6", "key7", "key8", "key9", "key.", "keydel"]
 const PRESS_TIME := 0.15   ## сколько держать кнопку при «press», с
@@ -188,6 +191,9 @@ func _begin(st: Dictionary, out: Array) -> void:
 			out.append(["cards", bool(st.get("on", true))])
 		"slow":
 			out.append(["slow"])
+		"voice":
+			out.append(["voice", int(st.get("role", 2)), str(st.get("text", "")), bool(st.get("fake", false)),
+				str(st.get("ask", "")), bool(st.get("silent", false))])
 		"mate":
 			out.append(["mate", float(st.get("x", 0.0)), float(st.get("z", 0.0)), float(st.get("yaw", 0.0)),
 				int(st.get("role", 1)), int(st.get("look", 1)), bool(st.get("seated", false))])

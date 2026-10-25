@@ -795,3 +795,22 @@ func test_guest_flashes_follow_host() -> void:   # гость вошёл поз�
 	ok(worst_c < 0.1, "стаи и облако гостя там же, где у хоста: %.3f м" % worst_c)
 	ok(worst_g < 0.15, "вспышка стаи как у хоста: %.3f" % worst_g)
 	ok(worst_cell < 0.15, "яркость клеток как у хоста: %.3f" % worst_cell)
+
+
+func test_voice_reaches_comms() -> void:   # голос мира (эхоловец) — на плашке связи ART-040, подделка без кода
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var e := EcoLink.voice(Crew.Role.PILOT, "Дайте импульс", true, "ping")
+	eq(e["type"], EcoLink.VOICE, "тип события")
+	eq([e["role"], e["text"], e["fake"], e["ask"], e["silent"]], [0, "Дайте импульс", true, "ping", false], "поля")
+	eq(EcoLink.voice(9, "x")["role"], 3, "роль в пределах 0…3")
+	main.on_eco_event(e)
+	main.step(0.1)
+	ok(main.comms.cur != null, "сообщение на плашке")
+	eq(main.comms.title(), "Пилот", "заявленная роль")
+	eq(main.comms.code_line(), "Код: …", "подделка — без кодового слова")
+	eq(main.comms.cur.ask, "ping", "просьба сохранена, корабль её не исполняет")
+	eq(main.sonar.count, 0, "импульса сам корабль не дал")
+	main.queue_free()
+	await frames(1)

@@ -70,8 +70,10 @@ func test_scene_runs_scenario() -> void:
 	var card_seen := false   # 30: карточка роли ART-045 на экране
 	var power_hot := false   # 08a: открытый пульт на перегреве (ART-050)
 	var cooled := false      # к 09-sonar перегрев снят шагом hot 0
+	var comms_seen := false   # 31: плашка связи ART-040 со своим кодом
+	var exposed_seen := false   # 31d: подделка разоблачена
 	var no_answer := false   # 29f: экран адреса ART-039 дождался «Нет ответа»
-	for i in 3600:  # 120 с игры (сценарий идёт ~113 с)
+	for i in 4200:  # 140 с игры (сценарий идёт ~128 с)
 		# снимок берёт уже нарисованный кадр — камеру до шага, в котором он снят
 		var cam := main.camera
 		var table_vis := cam.is_position_in_frustum(table.global_position + table.global_basis.y * 0.9)
@@ -94,6 +96,9 @@ func test_scene_runs_scenario() -> void:
 				weld_at = cam.unproject_position(seam).y / cam.get_viewport().get_visible_rect().size.y
 		var hot_vis := main.at_power and main.power_panel.visible and main.reactor.hot
 		var cool_vis := not main.reactor.hot and main.reactor.scram == 0.0
+		var comms_vis := main.comms_panel.visible and main.comms.a > 0.5
+		var comms_line := main.comms.code_line()
+		var comms_state := main.comms.state
 		main.step(1.0 / 30.0)
 		no_answer = no_answer or (main.address.open and main.address.hint() == AddressScreen.NO_ANSWER)
 		sat = sat or main.pilot.seated
@@ -114,6 +119,10 @@ func test_scene_runs_scenario() -> void:
 				arc_seen = arc_vis
 			if qa.log_lines[k].begins_with("скриншот 30-kartochka-sonar"):
 				card_seen = card_vis
+			if qa.log_lines[k].begins_with("скриншот 31-svyaz"):
+				comms_seen = comms_vis and comms_line == "Код: %s" % main.comms.code
+			if qa.log_lines[k].begins_with("скриншот 31d-ne-nash"):
+				exposed_seen = comms_vis and comms_state == Comms.Ask.EXPOSED
 		shots = qa.log_lines.size()
 		if qa.script_q.finished:
 			break
@@ -141,6 +150,9 @@ func test_scene_runs_scenario() -> void:
 	ok(arc_seen, "на снимке 10a-zap-okno — дуга у носового окна (ART-068)")
 	ok(card_seen, "на снимке 30-kartochka-sonar — карточка роли (ART-045)")
 	ok(not main.role_card.on, "после — карточки выключены")
+	ok(comms_seen, "на снимке 31-svyaz — плашка связи с кодом забега (ART-040)")
+	ok(exposed_seen, "на снимке 31d-ne-nash — «Это был не наш» (ART-040)")
+	ok(main.comms.closing or not main.comms.active(), "«Понятно» закрыла плашку связи")
 	ok(no_answer, "экран «Войти по адресу»: без хоста — «Нет ответа» (29f)")
 	ok(not main.address.open, "«Назад» закрыл экран адреса")
 	ok(legs_seen, "на снимке 06b-own-legs в кадре свои ступни и кисти (#49)")
