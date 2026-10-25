@@ -430,6 +430,43 @@ func test_ship_under_way_lights_shoal_up() -> void:
 	near(EcoFishLook.brightness(f), f.bright, 1e-6, "угроза ушла — гаснет обратно")
 
 
+## Волна хвоста (Б3): голова жёсткая, изгиб растёт к кончику хвоста; волна бежит к хвосту; «Экономно» гасит.
+func test_tail_wave_bends_tail_not_head() -> void:
+	eq(EcoFishLook.tail_bend(EcoFishLook.NOSE), 0.0, "нос не гнётся")
+	eq(EcoFishLook.tail_bend(EcoFishLook.TAIL_FROM), 0.0, "голова до TAIL_FROM жёсткая")
+	near(EcoFishLook.tail_bend(EcoFishLook.TAIL_TIP), 1.0, 1e-6, "кончик хвоста гнётся целиком")
+	ok(EcoFishLook.tail_bend(-0.22) < EcoFishLook.tail_bend(-0.35), "к кончику сильнее")
+	var most := 0.0
+	var head := 0.0
+	for k in 200:
+		var t := k * 0.013
+		most = maxf(most, absf(EcoFishLook.tail_wave(EcoFishLook.TAIL_TIP, t, 0.3)))
+		head = maxf(head, absf(EcoFishLook.tail_wave(0.2, t, 0.3)))
+	eq(head, 0.0, "голова стоит")
+	ok(most > EcoFishLook.TAIL_AMP * 0.9 and most <= EcoFishLook.TAIL_AMP + 1e-6, "кончик ходит на ±TAIL_AMP")
+	eq(EcoFishLook.tail_wave(EcoFishLook.TAIL_TIP, 0.7, 0.3, 0.0), 0.0, "«Экономно» — без волны")
+	# бегущая волна: гребень у корня хвоста догоняется кончиком чуть позже
+	var a := 0.3
+	var rate := EcoFishLook.TAIL_RATE * (1.0 - EcoFishLook.TAIL_RATE_SPREAD
+		+ 2.0 * EcoFishLook.TAIL_RATE_SPREAD * fposmod(a * 7.13, 1.0))
+	var dt := (-0.1 - EcoFishLook.TAIL_TIP) * EcoFishLook.TAIL_K / rate
+	var root := EcoFishLook.tail_wave(-0.1, 0.5, a) / EcoFishLook.tail_bend(-0.1)
+	var tip := EcoFishLook.tail_wave(EcoFishLook.TAIL_TIP, 0.5 + dt, a) / EcoFishLook.TAIL_AMP
+	near(root / EcoFishLook.TAIL_AMP, tip, 1e-4, "волна бежит к кончику")
+
+
+## У рыбок одной стаи фазы хвоста разные — машут вразнобой.
+func test_tail_phase_differs_in_shoal() -> void:
+	var w := _world()
+	var fish := _fish(w)
+	var phases := {}
+	for f: EcoFish.Fish in fish.shoals[0].members:
+		var a := EcoFishLook.tail_phase(f)
+		ok(a >= 0.0 and a < 1.0, "фаза — доля оборота")
+		phases[snappedf(a, 0.01)] = true
+	ok(phases.size() > fish.shoals[0].members.size() / 2, "фазы разные")
+
+
 # ---------- В сцене ----------
 
 func test_view_one_multimesh_follows_world() -> void:
@@ -451,6 +488,15 @@ func test_view_one_multimesh_follows_world() -> void:
 	_close(EcoFishLook.forward(f, view.world.time) * EcoFishLook.scale(f), tr.basis * Vector3(0, 0, 1), "нос по курсу")
 	_close(EcoFishLook.basis(f, view.world.time).x, tr.basis.x, "расстановка — как EcoFishLook.basis")
 	near(FishView.shade_at(fv.buffer, f.index), EcoFishLook.shade(f), 1e-5, "оттенок тела особи")
+	near(FishView.tail_phase_at(fv.buffer, f.index), EcoFishLook.tail_phase(f), 1e-5, "фаза хвоста — в альфе цвета")
+	var mat := fv.multimesh.mesh.surface_get_material(0) as ShaderMaterial
+	var code := mat.shader.code
+	ok(code.contains("VERTEX.x +=") and code.contains("%.5f" % EcoFishLook.TAIL_K)
+		and code.contains("%.5f" % EcoFishLook.TAIL_AMP), "волна хвоста в шейдере — числа из EcoFishLook")
+	EcoShaders.set_sway_lite(true)
+	eq(mat.get_shader_parameter("sway_k"), 0.0, "«Экономно» гасит волну хвоста")
+	EcoShaders.set_sway_lite(false)
+	eq(mat.get_shader_parameter("sway_k"), 1.0, "и возвращает")
 	ok(fv.buffer.size() == ALL * FishView.STRIDE, "буфер на всех рыбок")
 	var c := FishView.stripe_at(fv.buffer, f.index)
 	near(c.g, EcoFishLook.stripe(f).g, 1e-3, "цвет полос стаи")

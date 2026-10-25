@@ -4,12 +4,15 @@ extends MultiMeshInstance3D
 ## и курс каждой рыбки — EcoFishLook.basis, цвет полос — EcoFishLook.stripe в INSTANCE_CUSTOM.rgb, оттенок тела особи
 ## (EcoFishLook.shade, Б4) — в INSTANCE_CUSTOM.a; размер и ритм виляния у каждой свои. Краска вершины лежит
 ## в цвете вершины (r: 0 — тело, 1 — полоса, FIN_GLOW — конец хвоста): тело тёмное и освещается, полосы светятся сами.
+## Хвост и корма гнутся бегущей волной (EcoFishLook.tail_wave, Б3): фаза особи — альфа цвета экземпляра (Godot множит
+## цвет экземпляра на цвет вершины, у вершин альфа 1); «Экономно» — sway_k = 0 через EcoShaders.follow / set_sway_lite.
 ## Стоит на слое отмели (OceanView.LAYER_WORLD).
 
 const SHADER := """
 shader_type spatial;
 render_mode cull_back;
 uniform vec3 body_color : source_color;
+uniform float sway_k = 1.0;
 varying vec3 glow;
 varying float paint;
 varying float shade;
@@ -17,6 +20,11 @@ void vertex() {
 	glow = INSTANCE_CUSTOM.rgb;
 	shade = INSTANCE_CUSTOM.a;
 	paint = COLOR.r;
+	// волна хвоста — двойник EcoFishLook.tail_wave
+	float a = COLOR.a;
+	float s = clamp((%s - VERTEX.z) / %s, 0.0, 1.0);
+	float rate = %s * (%s + %s * fract(a * 7.13));
+	VERTEX.x += sin(TIME * rate + a * 6.2831853 + VERTEX.z * %s) * %s * s * s * sway_k;
 }
 void fragment() {
 	// полоса — узкая середина кольца, конец хвоста — канал g
@@ -65,10 +73,21 @@ static func build_mesh() -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	var mat := ShaderMaterial.new()
-	mat.shader = EcoShaders.shader(SHADER)
+	mat.shader = EcoShaders.shader(shader_code())
 	mat.set_shader_parameter("body_color", EcoFishLook.BODY_COLOR)
-	mesh.surface_set_material(0, mat)
+	mesh.surface_set_material(0, EcoShaders.follow(mat))
 	return mesh
+
+
+## Код шейдера с числами волны хвоста из EcoFishLook.
+static func shader_code() -> String:
+	var L := EcoFishLook
+	return SHADER % [_f(L.TAIL_FROM), _f(L.TAIL_FROM - L.TAIL_TIP), _f(L.TAIL_RATE), _f(1.0 - L.TAIL_RATE_SPREAD),
+		_f(2.0 * L.TAIL_RATE_SPREAD), _f(L.TAIL_K), _f(L.TAIL_AMP)]
+
+
+static func _f(x: float) -> String:
+	return "%.5f" % x
 
 
 ## Расставить рыбок по миру в момент t (время мира): один буфер MultiMesh за раз.
@@ -83,21 +102,24 @@ func sync(t: float) -> void:
 ## Последний буфер MultiMesh (по нему проверяют тесты: в headless сервер отрисовки буфер не хранит).
 var buffer := PackedFloat32Array()
 
-## Чисел на рыбку в буфере: transform 3 × 4 по строкам, цвет экземпляра (белый), затем INSTANCE_CUSTOM.
+## Чисел на рыбку в буфере: transform 3 × 4 по строкам, цвет экземпляра (белый, в альфе — фаза хвоста
+## EcoFishLook.tail_phase), затем INSTANCE_CUSTOM.
 const STRIDE := 20
 
-## Разброс особей по номеру рыбки: размер (EcoFishLook.scale без возраста), частота виляния, оттенок тела —
-## считается раз (хеш на каждую рыбку в каждом кадре дорог).
+## Разброс особей по номеру рыбки: размер (EcoFishLook.scale без возраста), частота виляния, оттенок тела, фаза
+## хвоста — считается раз (хеш на каждую рыбку в каждом кадре дорог).
 static var _vary := PackedFloat32Array()
+const VARY := 4
 
 
 static func _vary_of(system: EcoFish) -> PackedFloat32Array:
-	if _vary.size() != system.all.size() * 3:
-		_vary.resize(system.all.size() * 3)
+	if _vary.size() != system.all.size() * VARY:
+		_vary.resize(system.all.size() * VARY)
 		for f: EcoFish.Fish in system.all:
-			_vary[f.index * 3] = EcoVary.spread(f.index, EcoVary.SIZE, EcoFishLook.SIZE_SPREAD)
-			_vary[f.index * 3 + 1] = EcoFishLook.wiggle_rate(f)
-			_vary[f.index * 3 + 2] = EcoFishLook.shade(f)
+			_vary[f.index * VARY] = EcoVary.spread(f.index, EcoVary.SIZE, EcoFishLook.SIZE_SPREAD)
+			_vary[f.index * VARY + 1] = EcoFishLook.wiggle_rate(f)
+			_vary[f.index * VARY + 2] = EcoFishLook.shade(f)
+			_vary[f.index * VARY + 3] = EcoFishLook.tail_phase(f)
 	return _vary
 
 
@@ -134,12 +156,12 @@ static func fill(out: PackedFloat32Array, system: EcoFish, t: float, moved_only:
 			out[i + 12] = 1.0
 			out[i + 13] = 1.0
 			out[i + 14] = 1.0
-			out[i + 15] = 1.0
+			out[i + 15] = vary[f.index * VARY + 3]
 			var k := f.bright * glow
 			out[i + 16] = col.r * k
 			out[i + 17] = col.g * k
 			out[i + 18] = col.b * k
-			out[i + 19] = vary[f.index * 3 + 2]
+			out[i + 19] = vary[f.index * VARY + 2]
 			if not a.alive:
 				for c in [0, 1, 2, 4, 5, 6, 8, 9, 10]:
 					out[i + c] = 0.0  # съеденная — нулевой basis
@@ -147,14 +169,14 @@ static func fill(out: PackedFloat32Array, system: EcoFish, t: float, moved_only:
 			# EcoFishLook.forward: нос по скорости с вилянием вокруг вертикали
 			var v := a.v
 			var dir := v.normalized() if v.length_squared() > 1e-8 else Vector3(0, 0, 1)
-			var w := sin(t * vary[f.index * 3 + 1] + f.phase) * EcoFishLook.WIGGLE
+			var w := sin(t * vary[f.index * VARY + 1] + f.phase) * EcoFishLook.WIGGLE
 			var cw := cos(w)
 			var sw := sin(w)
 			var fw := Vector3(dir.x * cw + dir.z * sw, dir.y, -dir.x * sw + dir.z * cw)
 			var side := Vector3(fw.z, 0, -fw.x)
 			side = side.normalized() if side.length() > 1e-4 else Vector3(1, 0, 0)
 			var up := fw.cross(side)
-			var sz := f.size * vary[f.index * 3]  # своя у особи, молодь мельче
+			var sz := f.size * vary[f.index * VARY]  # своя у особи, молодь мельче
 			if sz != 1.0:
 				fw *= sz
 				side *= sz
@@ -181,6 +203,11 @@ static func transform_at(buf: PackedFloat32Array, n: int) -> Transform3D:
 static func stripe_at(buf: PackedFloat32Array, n: int) -> Color:
 	var i := n * STRIDE + 16
 	return Color(buf[i], buf[i + 1], buf[i + 2])
+
+
+## Фаза хвоста рыбки n из буфера (EcoFishLook.tail_phase).
+static func tail_phase_at(buf: PackedFloat32Array, n: int) -> float:
+	return buf[n * STRIDE + 15]
 
 
 ## Оттенок тела рыбки n из буфера (EcoFishLook.shade).
