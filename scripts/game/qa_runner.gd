@@ -139,6 +139,8 @@ func tick(dt: float) -> void:
 			"tutorial":   # подсказки первого забега ART-038: с первого шага или убрать
 				main.tutorial.reset()
 				main.tutorial.on = c[1]
+			"voice":   # голос во внутренней связи ART-040 — как событие мира EcoLink.VOICE
+				main.on_eco_event(EcoLink.voice(c[1], c[2], c[3], c[4], c[5]))
 			"slow":   # предложение «Экономно» ART-044 — как после нескольких секунд низких кадр/с
 				main.lite_offer.force()
 			"cards":   # карточки ролей у постов ART-045: с нуля (ничего не прочитано) или убрать
@@ -219,6 +221,8 @@ func _point(what: String, dir: Vector2) -> Vector2:
 				else MainMenu.screen_rect("settings", size)).get_center()
 		"graphics":   # «Графика» в настройках ART-044
 			return Settings.screen_rect("graphics", main.get_viewport().get_visible_rect().size).get_center()
+		"ask":   # «Спросить код» / «Понятно» на плашке связи ART-040
+			return Comms.button_rect(main.get_viewport().get_visible_rect().size).get_center()
 		"lite_yes", "lite_no":   # «Да» / «Нет» предложения «Экономно» ART-044
 			return LiteOffer.screen_rect(what.substr(5), main.get_viewport().get_visible_rect().size).get_center()
 		"g0", "g1", "g2", "fps":   # страница «Настройки · Графика» ART-044: уровень, «Показывать кадры/с»

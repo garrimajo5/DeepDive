@@ -122,6 +122,10 @@ var tutorial_panel: TutorialPanel
 ## Карточка роли у поста ART-045 (выключают те же `hints`; тестер — шаг `cards`): прочитанное — Settings.cards.
 var role_card := RoleCard.new()
 var role_card_panel: RoleCardPanel
+## Внутренняя связь ART-040: плашка внизу по центру, кодовое слово забега, «Спросить код» (голоса — `EcoLink.VOICE`).
+var comms := Comms.new()
+var comms_panel: CommsPanel
+var _code_rng := RandomNumberGenerator.new()   ## кодовое слово нового забега
 var tutorial_guest: Tutorial.Guest   ## у гостя сети: свои шаги по своему нажатию и кадру хоста; в своей игре — null
 var hint_pointer: HintPointerView   ## указатель над постом-целью подсказки (ART-038, HintPointer); вне кадра — стрелка у края
 var main_menu := MainMenu.new()   ## «Погрузиться» / «Экипаж» / «Настройки»: пока открыто — игра стоит под меню
@@ -342,6 +346,10 @@ func _ready() -> void:
 	role_card_panel = RoleCardPanel.new()   # карточка роли ART-045: касания — через Router.blocks/taps
 	role_card_panel.name = "Карточка роли"
 	ui.add_child(role_card_panel)
+	comms_panel = CommsPanel.new()   # плашка связи ART-040: касания — через Router.blocks/taps (`_comms_step`)
+	comms_panel.name = "Связь"
+	ui.add_child(comms_panel)
+	_code_rng.randomize()
 	drop_panel = DropPanel.new()   # поверх управления: пока диалог открыт, кнопки под ним не работают
 	drop_panel.name = "Связь потеряна"
 	ui.add_child(drop_panel)
@@ -831,6 +839,7 @@ func step(dt: float) -> void:
 	_update_ui()   # до меток: плашка строки уже на месте этого кадра (#387)
 	_tutorial_step(dt)
 	_card_step(dt)
+	_comms_step(dt)
 	busy_marks.plate = status_rect()
 	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
 	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy,
@@ -1108,6 +1117,9 @@ func on_eco_event(e: Dictionary) -> void:
 			vitals.drain(str(e.get("by", "")), float(e.get("units", 0.0)))
 		EcoLink.MESSAGE:
 			say(str(e.get("text", "")))
+		EcoLink.VOICE:   # голос во внутренней связи ART-040; просьбу не исполняем — решает игрок
+			comms.push(int(e.get("role", Crew.Role.ENGINEER)), str(e.get("text", "")), bool(e.get("fake", false)),
+				str(e.get("ask", "")), bool(e.get("silent", false)))
 		EcoLink.DRAG:   # присоски на корпусе тормозят корабль (js/ship.js: drag = 0.45 + 0.025 * hullRemoras)
 			helm.extra_drag = float(e.get("k", 0.0))
 		EcoLink.STEAL:   # образец сорван с захвата (M.steal в js/manip.js)
@@ -1884,6 +1896,7 @@ func _wreck_show() -> void:
 func _restart() -> void:
 	ballot.clear()
 	role_card.reset_run()
+	comms.reset_run(_code_rng.randi())   # новый забег — новое кодовое слово, очередь связи пуста
 	for m: Crew.Member in crew:
 		if m != me:
 			m.at_vote = false
@@ -2021,8 +2034,26 @@ func _card_step(dt: float) -> void:
 	role_card_panel.show_card(role_card, rect if rect.has_area() else role_card_panel.rect)
 
 
+## Внутренняя связь ART-040: при голосовании, итоге, меню, паузе, брифинге (и шторках) — отложена, часы стоят;
+## «Спросить код» / «Понятно» — из `Router.taps`, кнопка не крутит взгляд (`Router.blocks`, после карточки роли).
+func _comms_step(dt: float) -> void:
+	var hidden := at_vote or run.ended or pause.open or main_menu.open or settings.open or ship_map.open \
+		or brief.k > 0.0 or flyby.active() or warm.active() or wreck.active() or (net_client != null and drop.active())
+	comms.solo = net_client == null and net_mates.is_empty()
+	var size := get_viewport().get_visible_rect().size
+	comms.update(dt, hidden)
+	if not hidden:
+		for p in overlay.router.taps:
+			comms.tap(p, size)
+	overlay.router.blocks.append_array(comms.blocks(size))
+	comms_panel.show_comms(comms, time)
+
+
 func _tutorial_hide() -> void:
 	tutorial.a = 0.0
+	comms.a = 0.0   # плашка связи ART-040 под меню и паузой не висит: после — снова по `_comms_step`
+	if comms_panel != null and comms_panel.visible:
+		comms_panel.visible = false
 	role_card.a = 0.0   # и карточка роли ART-045 (меню, пауза): после — снова по `_card_step`
 	role_card.q = 0.0
 	role_card.f = 0.0
