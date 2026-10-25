@@ -3,6 +3,8 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-10-25
+- Под главным меню, сбором экипажа и журналом строки приборов скрыты, как под паузой: шапка «СБОР ЭКИПАЖА»
+  больше не ложится на «Мостик · глубина…» (issue #571, `Main.open_menu`/`close_menu`).
 - Сеть на Android (issue #570): в пресете экспорта включены разрешения INTERNET, ACCESS_NETWORK_STATE,
   ACCESS_WIFI_STATE и CHANGE_WIFI_MULTICAST_STATE — без INTERNET Android запрещал `socket()`, и «Создать забег»,
   маяк поиска и вход по адресу в APK не работали совсем (`test_android_permissions`).
