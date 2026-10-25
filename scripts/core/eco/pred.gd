@@ -91,6 +91,10 @@ class Pred:
 	var truce_cd := 0.0
 	## Пауза наблюдения «обходит вуаль» (avoidCd).
 	var avoid_cd := 0.0
+	## Куда смотрит тело (единичный, догоняет скорость плавно — turn) и крен в повороте (рад, > 0 —
+	## левым боком вниз).
+	var look := Vector3(0, 0, 1)
+	var bank := 0.0
 
 
 var all: Array[Pred] = []
@@ -195,6 +199,57 @@ func targets(_world: EcoWorld, out: Array[Dictionary]) -> void:
 func step(world: EcoWorld, dt: float) -> void:
 	for pr in all:
 		_step_pred(world, pr, dt)
+		turn(pr, dt)
+
+
+## Плавный поворот (Б3, «плавность поведения»): тело не щёлкает за скоростью, а догоняет её — доля угла за секунду
+## TURN_FOLLOW, но не быстрее TURN_MAX (рад/с); в повороте ложится на бок: крен BANK_K на 1 рад/с поворота, не больше
+## BANK_MAX, догоняет нужный за BANK_FOLLOW (1/с). Остановился — держит курс, нос выравнивается к горизонту.
+const TURN_FOLLOW := 4.0
+const TURN_MAX := 3.0
+const BANK_K := 0.35
+const BANK_MAX := deg_to_rad(25.0)
+const BANK_FOLLOW := 3.0
+## Наклон тела вверх-вниз не больше (рад).
+const PITCH_MAX := deg_to_rad(30.0)
+
+
+## Куда хочет смотреть голова: по скорости, наклон — не больше PITCH_MAX; почти стоит — прежний курс без наклона.
+static func aim(pr: Pred) -> Vector3:
+	var v := pr.agent.v
+	if v.length_squared() <= 0.01:
+		var f := Vector2(pr.look.x, pr.look.z)
+		f = f.normalized() if f.length_squared() > 1e-8 else Vector2(0, 1)
+		return Vector3(f.x, 0.0, f.y)
+	var flat := Vector2(v.x, v.z).length()
+	var pitch := clampf(atan2(v.y, flat), -PITCH_MAX, PITCH_MAX)
+	var h := Vector2(v.x, v.z).normalized() if flat > 1e-4 else Vector2(pr.look.x, pr.look.z).normalized()
+	if not h.is_finite() or h.length_squared() < 0.5:
+		h = Vector2(0, 1)
+	return Vector3(h.x * cos(pitch), sin(pitch), h.y * cos(pitch))
+
+
+## Курс по горизонтали (рад; растёт — поворот влево, 0 — нос в −Z, как yaw корабля).
+static func yaw_of(d: Vector3) -> float:
+	return atan2(-d.x, -d.z)
+
+
+## Шаг поворота тела за dt: look догоняет aim, крен — скорость поворота по горизонтали.
+static func turn(pr: Pred, dt: float) -> void:
+	if dt <= 0.0:
+		return
+	var from := pr.look
+	var want := aim(pr)
+	var ang := from.angle_to(want)
+	if ang > 1e-5:
+		var axis := from.cross(want)
+		if axis.length_squared() < 1e-10:  # ровно назад — разворот по горизонтали
+			axis = Vector3.UP
+		var step := minf(ang * (1.0 - exp(-TURN_FOLLOW * dt)), TURN_MAX * dt)
+		pr.look = from.rotated(axis.normalized(), step).normalized()
+	var rate := wrapf(yaw_of(pr.look) - yaw_of(from), -PI, PI) / dt
+	var bank_want := clampf(rate * BANK_K, -BANK_MAX, BANK_MAX)
+	pr.bank = lerpf(pr.bank, bank_want, 1.0 - exp(-BANK_FOLLOW * dt))
 
 
 static func _set_mode(pr: Pred, m: Mode, t: float) -> void:

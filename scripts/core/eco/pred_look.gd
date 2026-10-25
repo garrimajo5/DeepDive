@@ -16,7 +16,7 @@ const JAW_HINGE := Vector3(0, -0.12, -0.95)
 const TAIL_MAX := deg_to_rad(35.0)
 const JAW_MAX := deg_to_rad(35.0)
 ## Наклон тела вверх-вниз не больше (рад).
-const PITCH_MAX := deg_to_rad(30.0)
+const PITCH_MAX := deg_to_rad(30.0)  # тот же предел — EcoPred.PITCH_MAX (курс тела)
 ## Волна хвоста: частота в покое (рад/с) и прибавка за 1 м/с; размах в покое (рад) и прибавка за 1 м/с.
 const WAVE_RATE := 3.0
 const WAVE_RATE_PER_SPEED := 0.6
@@ -32,20 +32,15 @@ const CHEW_RATE := 6.0
 const CHEW_OPEN := 0.5
 
 
-## Куда смотрит голова: по скорости; почти стоит — на +Z (как lookAt в браузере). Наклон — не больше PITCH_MAX.
+## Куда смотрит голова сейчас (плавный курс EcoPred.turn).
 static func forward(pr: EcoPred.Pred) -> Vector3:
-	var v := pr.agent.v
-	if v.length_squared() <= 0.01:
-		return Vector3(0, 0, 1)
-	var flat := Vector2(v.x, v.z).length()
-	var pitch := clampf(atan2(v.y, flat), -PITCH_MAX, PITCH_MAX)
-	var h := Vector2(v.x, v.z).normalized() if flat > 1e-4 else Vector2(0, 1)
-	return Vector3(h.x * cos(pitch), sin(pitch), h.y * cos(pitch))
+	return pr.look
 
 
-## Поворот тела: −Z модели смотрит в forward, спина вверх.
+## Поворот тела: −Z модели смотрит в forward, спина вверх, в повороте — крен на EcoPred.Pred.bank вокруг оси тела
+## (> 0 — левым боком вниз).
 static func basis(pr: EcoPred.Pred) -> Basis:
-	return Basis.looking_at(forward(pr), Vector3.UP)
+	return Basis.looking_at(forward(pr), Vector3.UP) * Basis(Vector3.BACK, pr.bank)
 
 
 ## Поворот хвоста вокруг Y (рад, ±TAIL_MAX) в момент t: волна, после укуса — взмах серпом.
