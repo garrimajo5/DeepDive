@@ -424,13 +424,87 @@ func test_meshes_face_outward() -> void:
 		eq(bad, 0, "все грани наружу")
 
 
+## Монетник плывёт со скоростью v n шагов по dt (только поворот тела).
+func _swim(cn: EcoCoins.Coin, v: Vector3, n: int, dt := 0.05) -> void:
+	cn.vel = v
+	for i in n:
+		EcoCoins.turn(cn, dt)
+
+
 func test_coin_faces_its_swim() -> void:
 	var cn := EcoCoins.Coin.new()
-	cn.vel = Vector3(1, 0, 0)
+	_swim(cn, Vector3(1, 0, 0), 60)
 	var b := EcoCoins.coin_basis(cn, 0.0)
-	ok(b.z.dot(Vector3.RIGHT) > 0.95, "нос (+Z) по скорости")
-	cn.vel = Vector3(0, 1, 0)
+	ok(b.z.dot(Vector3.RIGHT) > 0.95, "нос (+Z) догнал скорость")
+	_swim(cn, Vector3(0, 1, 0), 60)
 	ok(EcoCoins.coin_basis(cn, 0.0).is_finite(), "вертикально — без ошибки")
+
+
+# ---------- Плавность (Б3) ----------
+
+func test_coin_turns_smoothly() -> void:
+	var cn := EcoCoins.Coin.new()
+	cn.vel = Vector3(1, 0, 0)
+	var before := cn.look
+	EcoCoins.turn(cn, 0.05)
+	var a := before.angle_to(cn.look)
+	ok(a > 0.0 and a <= EcoCoins.TURN_MAX * 0.05 + 1e-4, "за шаг — не больше TURN_MAX·dt: %.3f" % a)
+	ok(cn.look.dot(Vector3.RIGHT) < 0.5, "на прямой угол сразу не щёлкает")
+	_swim(cn, Vector3(1, 0, 0), 40)
+	ok(cn.look.dot(Vector3.RIGHT) > 0.99, "за 2 с догнал путь")
+
+
+func test_coin_banks_into_turn() -> void:
+	var cn := EcoCoins.Coin.new()  # нос в +Z, phase 0: в t = 0 покачивания нет
+	_swim(cn, Vector3(1, 0, 0), 4)  # +X при носе в +Z — поворот влево
+	ok(cn.bank > 0.05, "в повороте влево — крен влево: %.3f" % cn.bank)
+	ok(cn.bank <= EcoCoins.BANK_MAX, "не круче BANK_MAX")
+	ok(EcoCoins.coin_basis(cn, 0.0).y.x > 0.02, "спина наклонена внутрь поворота (+X)")
+	_swim(cn, Vector3(1, 0, 0), 80)
+	ok(absf(cn.bank) < 0.02, "на прямой крен уходит: %.3f" % cn.bank)
+	var right := EcoCoins.Coin.new()
+	_swim(right, Vector3(-1, 0, 0), 4)
+	ok(right.bank < -0.05, "вправо — на правый бок")
+
+
+func test_coin_holds_course_when_stopped() -> void:
+	var cn := EcoCoins.Coin.new()
+	_swim(cn, Vector3(1, 0, 0), 60)
+	_swim(cn, Vector3.ZERO, 40)
+	ok(cn.look.dot(Vector3.RIGHT) > 0.99, "стоит — держит курс")
+	ok(EcoCoins.coin_basis(cn, 0.0).z.dot(Vector3.RIGHT) > 0.95, "меш не щёлкает носом на свой случайный угол")
+	_swim(cn, Vector3(0.02, 0.05, 0), 40)
+	ok(absf(cn.look.y) < 0.01, "медленный дрейф — нос выровнен к горизонту")
+
+
+func test_coin_pitch_limited() -> void:
+	var cn := EcoCoins.Coin.new()
+	_swim(cn, Vector3(0, 2, 0.01), 100)
+	ok(cn.look.y <= sin(EcoCoins.PITCH_MAX) + 1e-3, "вверх — не круче PITCH_MAX: %.3f" % cn.look.y)
+	ok(cn.look.y > sin(EcoCoins.PITCH_MAX) - 0.05, "но носом вверх")
+	_swim(cn, Vector3(0, -2, 0.01), 100)
+	ok(cn.look.y >= -sin(EcoCoins.PITCH_MAX) - 1e-3, "вниз — тоже")
+
+
+func test_coins_turn_smoothly_in_world() -> void:
+	var w := _world()
+	w.reset()
+	var c := _coins(w)
+	var prev: Array[Vector3] = []
+	for cn in c.coins:
+		prev.append(cn.look)
+	var worst := 0.0
+	for i in 400:
+		if i == 200:
+			c.schools[1].scatter = EcoCoins.SCATTER_TIME  # рассыпались — резкий разворот
+			c.schools[1].from = c.schools[1].center + Vector3(1, 0, 0)
+		w.step(0.05)
+		for cn in c.coins:
+			if cn.alive:
+				worst = maxf(worst, prev[cn.index].angle_to(cn.look))
+				ok(absf(cn.look.length() - 1.0) < 1e-3 and absf(cn.bank) <= EcoCoins.BANK_MAX + 1e-4, "нос единичный, крен в пределе")
+			prev[cn.index] = cn.look
+	ok(worst <= EcoCoins.TURN_MAX * 0.05 + 1e-3, "за кадр 0,05 с — не больше TURN_MAX·dt: %.3f" % worst)
 
 
 func test_eco_view_has_coins() -> void:
