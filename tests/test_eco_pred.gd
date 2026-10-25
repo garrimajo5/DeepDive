@@ -434,13 +434,20 @@ func test_look_heading_tail_and_jaw() -> void:
 	var w := _alone()
 	var pr := _preds(w).all[0]
 	pr.agent.v = Vector3(3, 0, 0)
+	for i in 100:
+		EcoPred.turn(pr, 0.05)
 	var b := EcoPredLook.basis(pr)
-	ok((b * Vector3(0, 0, -1)).distance_to(Vector3(1, 0, 0)) < 1e-4, "голова модели (−Z) — по скорости")
-	ok((b * Vector3.UP).y > 0.99, "спина вверх")
+	ok((b * Vector3(0, 0, -1)).distance_to(Vector3(1, 0, 0)) < 1e-3, "голова модели (−Z) — по скорости")
+	ok((b * Vector3.UP).y > 0.99, "на прямой — спина вверх, без крена")
 	pr.agent.v = Vector3(0, 9, 1)
-	ok(EcoPredLook.forward(pr).y <= sin(EcoPredLook.PITCH_MAX) + 1e-5, "наклон не больше 30°")
+	ok(EcoPred.aim(pr).y <= sin(EcoPredLook.PITCH_MAX) + 1e-5, "наклон не больше 30°")
+	for i in 100:
+		EcoPred.turn(pr, 0.05)
+	ok(EcoPredLook.forward(pr).y <= sin(EcoPredLook.PITCH_MAX) + 1e-4, "и у тела наклон не больше 30°")
 	pr.agent.v = Vector3.ZERO
-	eq(EcoPredLook.forward(pr), Vector3(0, 0, 1), "стоит — смотрит на +Z")
+	for i in 100:
+		EcoPred.turn(pr, 0.05)
+	ok(EcoPredLook.forward(pr).distance_to(Vector3(0, 0, 1)) < 1e-3, "встал — держит курс, нос к горизонту")
 
 	# хвост: волна в пределах модели, быстрее — шире
 	var slow := 0.0
@@ -468,6 +475,65 @@ func test_look_heading_tail_and_jaw() -> void:
 	pr.mode = EcoPred.Mode.EAT
 	var chew := EcoPredLook.jaw_angle(pr, FAR, 0.3)
 	ok(chew >= 0.0 and chew <= EcoPredLook.JAW_MAX * EcoPredLook.CHEW_OPEN, "жуёт вполсилы")
+
+
+## Б3, плавность: тело не щёлкает за скоростью — догоняет её не быстрее TURN_MAX, в повороте ложится на бок.
+func test_look_turns_smoothly_and_banks() -> void:
+	var w := _alone()
+	var pr := _preds(w).all[0]
+	eq(pr.look, Vector3(0, 0, 1), "в начале смотрит по стартовой скорости")
+	# скорость разом развернулась налево (нос +Z → +X: yaw растёт)
+	pr.agent.v = Vector3(3, 0, 0)
+	EcoPred.turn(pr, 0.05)
+	var a1 := pr.look.angle_to(Vector3(0, 0, 1))
+	ok(a1 > 0.0 and a1 <= EcoPred.TURN_MAX * 0.05 + 1e-5, "за шаг — не дальше TURN_MAX · dt: %.3f" % a1)
+	var max_bank := 0.0
+	var max_step := 0.0
+	var prev := pr.look
+	for i in 40:
+		EcoPred.turn(pr, 0.05)
+		max_step = maxf(max_step, prev.angle_to(pr.look))
+		prev = pr.look
+		max_bank = maxf(max_bank, pr.bank)
+		ok(absf(pr.bank) <= EcoPred.BANK_MAX + 1e-6, "крен не больше 25°")
+	ok(max_step <= EcoPred.TURN_MAX * 0.05 + 1e-5, "поворот без рывков")
+	ok(max_bank > deg_to_rad(8.0), "в левом повороте ложится на левый бок: %.1f°" % rad_to_deg(max_bank))
+	# левым боком вниз: спина смотрит влево от курса
+	pr.bank = deg_to_rad(20.0)
+	var flat := Basis.looking_at(pr.look, Vector3.UP)
+	var up := EcoPredLook.basis(pr) * Vector3.UP
+	ok(up.dot(flat * Vector3.LEFT) > 0.3, "крен > 0 — спина к левому борту")
+	ok((EcoPredLook.basis(pr) * Vector3(0, 0, -1)).distance_to(pr.look) < 1e-4, "крен не сбивает курс")
+	pr.bank = max_bank
+	# прямо — крен уходит
+	for i in 80:
+		EcoPred.turn(pr, 0.05)
+	ok(pr.look.distance_to(Vector3(1, 0, 0)) < 1e-3, "догнал скорость")
+	near(pr.bank, 0.0, 0.01, "на прямой выровнялся")
+	# направо (нос +X → +Z) — крен в другую сторону
+	pr.agent.v = Vector3(0, 0, 3)
+	var min_bank := 0.0
+	for i in 20:
+		EcoPred.turn(pr, 0.05)
+		min_bank = minf(min_bank, pr.bank)
+	ok(min_bank < -deg_to_rad(8.0), "в правом повороте — на правый бок")
+	# ровно назад — тоже плавно, по горизонтали
+	pr.agent.v = Vector3(0, 0, 3)
+	pr.look = Vector3(0, 0, -1)
+	EcoPred.turn(pr, 0.05)
+	ok(pr.look.is_normalized() and absf(pr.look.y) < 1e-5, "разворот кругом — по горизонтали")
+	ok(pr.look.angle_to(Vector3(0, 0, -1)) <= EcoPred.TURN_MAX * 0.05 + 1e-5, "и не щелчком")
+
+
+## Мир ведёт поворот сам: после шагов курс близок к скорости, пиявник на теле — по тому же курсу.
+func test_world_turns_preds() -> void:
+	var w := _alone()
+	for i in 200:
+		_step(w)
+	for pr in _preds(w).all:
+		ok(pr.look.is_normalized(), "курс единичный")
+		if pr.agent.v.length() > 1.0:
+			ok(pr.look.angle_to(EcoPred.aim(pr)) < 0.6, "курс догоняет скорость: %.2f" % pr.look.angle_to(EcoPred.aim(pr)))
 
 
 func test_view_models_in_scene() -> void:
