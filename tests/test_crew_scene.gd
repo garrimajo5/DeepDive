@@ -210,10 +210,16 @@ func test_role_gear() -> void:
 	var at := main.crew_view.to_local(visor.global_position)
 	ok(at.distance_to(head) < 0.3, "щиток у головы (%.2f м)" % at.distance_to(head))
 	var up := visor.transform
-	mate.weld(Vector3(0.0, 1.2, -6.0), Vector3.BACK)
+	main.open_breach(0)   # варит по-настоящему: держит кнопку у пробоины (`Pad.hold`, `Main._mate_holds`)
+	var s: Breach.Spot = main.breach.all[0]
+	mate.walker.x = s.at.x
+	mate.walker.z = s.at.y
+	main.step(0.0)
+	mate.pad.hold = true
 	main.step(1.0 / 30.0)
+	ok(mate.welding(), "товарищ варит")
 	ok(not visor.transform.is_equal_approx(up), "на сварке щиток опущен")
-	mate.weld(Vector3.INF)
+	mate.pad.hold = false
 	mate.role = Crew.Role.BIOLOGIST
 	main.step(1.0 / 30.0)
 	eq(main.crew_view.gear[i].keys(), CrewRig.ROLE_GEAR[Crew.Role.BIOLOGIST], "сменил роль — туника и пробы")

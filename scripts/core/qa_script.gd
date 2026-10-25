@@ -34,6 +34,8 @@ extends RefCounted
 ##                                                     "walk": [0, 1, 1.5] — идёт своим вводом: крестовина, секунды)
 ##   {"do": "act"}                                   — последний добавленный член экипажа жмёт свою кнопку действия
 ##                                                     (Crew.Pad.action: сесть за штурвал, к пульту, к голосованию; занят — встать)
+##   {"do": "mate_hold", "on": true}                — последний добавленный член экипажа держит кнопку действия
+##                                                     (Crew.Pad.hold: сварка пробоины, вентиль, лебёдка, сканер), false — отпустил
 ##   {"do": "gone"}                                  — последний добавленный член экипажа отключился, как гость сети:
 ##                                                     уходит с палубы, у хоста «… отключился» (HostNotice, ART-043)
 ##   {"do": "wreck"}                                 — корпус разрушен: шторка ART-036 3,5 с, затем забег с начала
@@ -47,9 +49,9 @@ extends RefCounted
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["route"], ["act"], ["gone"], ["wreck"], ["back"], ["tutorial", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["route"], ["act"], ["mate_hold", on], ["gone"], ["wreck"], ["back"], ["tutorial", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
-const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "silt", "drain", "hull", "charge", "route", "gone", "wreck", "back", "tutorial", "cards", "voice", "slow", "log", "quit"]
+const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "route", "gone", "wreck", "back", "tutorial", "cards", "voice", "slow", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "map", "map_back", "hint_map", "new", "exit", "yes", "no", "crew", "journal", "settings", "graphics", "g0", "g1", "g2", "fps", "lite_yes", "lite_no", "ask", "join", "last", "lobby_new", "lobby_addr", "lobby_refresh",
 	"jcell0", "jcell1", "jcell2", "jcell3", "jcell4", "jcell5", "jprev", "jnext", "jclose",
 	"key0", "key1", "key2", "key3", "key4", "key5", "key6", "key7", "key8", "key9", "key.", "keydel"]
@@ -179,6 +181,8 @@ func _begin(st: Dictionary, out: Array) -> void:
 			out.append(["route"])
 		"act":
 			out.append(["act"])
+		"mate_hold":
+			out.append(["mate_hold", bool(st.get("on", true))])
 		"gone":
 			out.append(["gone"])
 		"wreck":

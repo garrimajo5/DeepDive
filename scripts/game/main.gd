@@ -728,20 +728,21 @@ func step(dt: float) -> void:
 		at_scanner = post != null and post.id == "scanner"
 		near_post = post.id if post else ""
 		hold_scan = at_scanner and r.action_down
+	var held := _mate_holds()   # товарищи держат кнопку у постов удержания — то же, что свой игрок
 	_mate_posts(dt)
 	layout.update(dt)
 	airlock.update(dt)
 	lock_water.update(dt, airlock.t, samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying())
 	var ship_xf := Samples.ship_xform(helm.pos, helm.yaw)
-	if (hold_winch or debug_winch) and airlock.fully_open():
+	if (hold_winch or held.has("winch") or debug_winch) and airlock.fully_open():
 		samples.hold(Samples.lock_point(ship_xf), dt)
 	samples.update(dt)
 	samples_view.sync()
 	save.tick(dt, samples, scanner)
-	if hold_scan:
+	if hold_scan or held.has("scanner"):
 		scanner.hold(dt)
 	scanner.update(dt)
-	if hold_weld or debug_weld:
+	if hold_weld or held.has("breach") or debug_weld:
 		breach.hold(dt)
 	for p in posts:
 		if p.id.begins_with("door"):
@@ -776,7 +777,7 @@ func step(dt: float) -> void:
 	expedition.visit(helm.pos.x, helm.pos.z)   # журнал ART-047: места и рекорд глубины
 	expedition.dive_depth(helm.depth())
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
-	engine.update(dt, reactor, hold_valve or debug_vent)
+	engine.update(dt, reactor, hold_valve or held.has("valve") or debug_vent)
 	valve_steam.update(dt, engine.venting)
 	helm.update(dt, reactor.k(Reactor.Sys.ENGINES), current.vel())
 	hull_motion.update(dt, helm.in_thrust, helm.in_vert, reactor.k(Reactor.Sys.ENGINES))
@@ -792,7 +793,8 @@ func step(dt: float) -> void:
 	_drive_mates(dt)
 	_tick_vote(dt)
 	_hands(dt, hold_valve, hold_winch, hold_scan)
-	if breach.welding and breach.active:   # свой игрок варит: резак в руке, щиток опущен
+	_mate_hands(held)
+	if (hold_weld or debug_weld) and breach.welding and breach.active:   # свой игрок варит: резак в руке, щиток опущен
 		me.weld(breach.active.p, breach.active.n)
 	else:
 		me.weld(Vector3.INF)
@@ -2374,6 +2376,45 @@ func _mate_posts(dt: float) -> void:
 		m.pad.light = false
 
 
+## Посты, у которых товарищ держит кнопку действия (`Pad.hold`): сварка пробоины, вентиль, лебёдка, сканер —
+## {пост: товарищ}. Занятый постом (штурвал, пульт, голосование) не держит. Товарищ у сканера — мир шлёт цели
+## (`at_scanner`), как своему игроку.
+const MATE_HOLDS := ["breach", "valve", "winch", "scanner"]
+
+func _mate_holds() -> Dictionary:
+	var out := {}
+	for m: Crew.Member in crew:
+		if m == me or m.busy():
+			continue
+		var post := Deck.nearest(posts, m.walker.x, m.walker.z)
+		if post == null or post.id not in MATE_HOLDS:
+			continue
+		if post.id == "scanner":
+			at_scanner = true
+		if m.pad.hold and not out.has(post.id):
+			out[post.id] = m
+	return out
+
+
+## Поза товарищей, которые держат пост (`_mate_holds`): резак у шва и щиток, руки на вентиле, лебёдке, сканере.
+func _mate_hands(held: Dictionary) -> void:
+	for m: Crew.Member in crew:
+		if m == me:
+			continue
+		if held.get("breach") == m and breach.active:
+			m.weld(breach.active.p, breach.active.n)
+		else:
+			m.weld(Vector3.INF)
+		var g := CrewHands.none()
+		if held.get("valve") == m:
+			g = CrewHands.valve()
+		elif held.get("winch") == m:
+			g = CrewHands.winch(m.walker.x, m.walker.z)
+		elif held.get("scanner") == m:
+			g = CrewHands.scanner()
+		m.hold(g[0], g[1])
+
+
 func _drive_mates(dt: float) -> void:
 	for m: Crew.Member in crew:
 		if m != me:
@@ -2600,6 +2641,7 @@ func _client_step(dt: float) -> void:
 		net_pad.move = Vector2(r.move)
 		net_pad.look += lk
 		net_pad.action = net_pad.action or r.action_pressed
+		net_pad.hold = r.action_down   # держит кнопку: сварка, вентиль, лебёдка, сканер — у хоста (`_mate_holds`)
 		net_pad.vert = r.vert()
 		net_pad.light = net_pad.light or r.light_pressed
 	var was := net_client.state
@@ -3015,3 +3057,11 @@ func debug_setup(kv: Dictionary) -> void:
 		out.global_position = ship.to_global(Vector3(v[0], v[1], v[2]))
 		out.look_at(ship.to_global(Vector3(0.0, HullPlan.CENTER_Y, 10.0)))
 		out.make_current()
+	if kv.get("mate_hold", "0") == "1" and crew.size() > 1:   # последний товарищ держит кнопку (сварка, вентиль…)
+		if kv.has("x"):   # свой игрок — на своём месте до шагов: пост держит товарищ
+			walker.x = float(kv["x"])
+			walker.z = float(kv.get("z", "0"))
+		var mate: Crew.Member = crew[-1]
+		mate.pad.hold = true
+		for i in int(float(kv.get("hold_s", "1.5")) * 10.0):
+			step(0.1)
