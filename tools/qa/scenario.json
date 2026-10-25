@@ -171,6 +171,7 @@
   {"do": "shot", "name": "10-zap"},
   {"do": "log", "note": "разряд"},
   {"do": "wait", "s": 2},
+  {"do": "charge", "units": 40},
   {"do": "goto", "x": -3.9, "z": -0.5, "yaw": 90, "pitch": -45},
   {"do": "press", "what": "action"},
   {"do": "goto", "x": -1.2, "z": -3.6, "yaw": 0, "pitch": -6},
