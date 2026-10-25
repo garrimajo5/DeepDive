@@ -660,7 +660,7 @@ func step(dt: float) -> void:
 	var wrecked := _wreck_step(dt)
 	_mark_presses(r, dt)
 	if r.noclip_pressed and not wrecked:
-		_toggle_noclip()
+		toggle_noclip()
 	var hold_valve := false
 	var hold_winch := false
 	var hold_weld := false
@@ -1020,6 +1020,16 @@ func park_over_sample(n: int) -> void:
 	airlock.t = 1.0
 	rooms.apply(layout, reactor, airlock, engine)
 	_place_ship()
+
+
+## Поставить корабль в точку мира (y — высота, глубина со знаком минус) и остановить: снимки и шаг тестера `ship`.
+func park_at(p: Vector3) -> void:
+	helm.speed = 0.0
+	helm.vy = 0.0
+	helm.pos = p
+	_place_ship()
+	window_fog.snap(helm.depth(), vitals.hull, reactor.heat, reactor.scram)   # окна сразу по глубине (ART-077)
+	bridge.set_fog(window_fog.humidity, window_fog.ice_k)
 
 
 ## Встать к пульту энергии: взгляд на пульт, крестовина правит доли, кнопка — закрыть.
@@ -2153,7 +2163,7 @@ func stand_up() -> void:
 
 
 ## Тестовая кнопка noclip: вкл — игрок летит сквозь корпус смотреть живой мир; выкл — назад на пол, где включил.
-func _toggle_noclip() -> void:
+func toggle_noclip() -> void:
 	if walker.noclip:
 		walker.noclip = false
 		var p := layout.free_spot(_noclip_return.x, _noclip_return.y)
@@ -3040,10 +3050,7 @@ func debug_setup(kv: Dictionary) -> void:
 		breach.time = 0.25
 	if kv.has("ship"):  # ship=x,y,z — поставить корабль (y — высота, глубина со знаком минус)
 		var p: PackedFloat64Array = kv["ship"].split_floats(",")
-		helm.pos = Vector3(p[0], p[1], p[2])
-		_place_ship()
-		window_fog.snap(helm.depth(), vitals.hull, reactor.heat, reactor.scram)   # окна сразу по глубине (ART-077)
-		bridge.set_fog(window_fog.humidity, window_fog.ice_k)
+		park_at(Vector3(p[0], p[1], p[2]))
 	if kv.has("scorch"):  # scorch=n — n следов разряда на дне перед носом через 4 м (первый — старое пятно)
 		var n := int(kv["scorch"])
 		for i in n:
