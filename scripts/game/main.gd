@@ -821,9 +821,8 @@ func step(dt: float) -> void:
 	me.back = CrewView.own_back(walker.pitch, me.holding())   # взгляд вниз — фигура дальше позади глаза, видны ступни (#108)
 	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt)
 	me.sync_post()
-	me.ease_lean(dt)
 	crew_view.pitch = walker.pitch
-	crew_view.apply()
+	_apply_crew_view(dt)
 	_place_ship()
 	_place_camera()
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
@@ -865,7 +864,7 @@ const POST_BUTTON := {"helm": "Штурвал", "energy": "Энергия", "sca
 const POST_FREE := {"helm": "Сесть за штурвал", "energy": "Пульт энергии"}
 ## Где встать у пульта энергии (у поста «energy») и куда смотреть, рад: ниже — ползунки и рука на выбранном.
 const POWER_STAND := Vector2(-4.05, -2.0)
-const POWER_PITCH := -0.8
+const POWER_PITCH := PowerScreen.CAM_PITCH   ## наклон взгляда у открытого пульта (ракурс ART-050)
 ## Где встать у щитка «Аварийный сброс»: правое плечо напротив крышки, фигура позади камеры (Crew.Member.back)
 ## достаёт рукой без наклона и поворота ключицы (issue #137).
 const SCRAM_STAND := Vector2(2.35, 17.0)
@@ -999,7 +998,7 @@ func open_power() -> void:
 	var at: Vector2 = POWER_STAND   # шаг к пульту: из радиуса поста руки не достали бы до ползунков (#107)
 	walker.x = at.x
 	walker.z = at.y
-	walker.yaw = PI / 2.0   # пульт на левом борту (−X)
+	walker.yaw = PowerScreen.STAND_YAW   # пульт на левом борту (−X); камера — свой ракурс (_place_camera)
 	walker.pitch = POWER_PITCH   # взгляд на ползунки: рука на выбранном видна
 	power_panel.show_for(reactor, power)
 
@@ -1906,7 +1905,7 @@ func _tutorial_step(dt: float) -> void:
 func _card_step(dt: float) -> void:
 	var at := RoleCard.post_at(pilot.seated, at_power, near_post)
 	var solo := net_client == null and net_mates.is_empty()
-	var hidden := alarms_on().has(true) or at_vote or run.ended or pause.open or main_menu.open or settings.open \
+	var hidden := alarms_on().has(true) or at_vote or at_power or run.ended or pause.open or main_menu.open or settings.open \
 		or flyby.active() or warm.active() or wreck.active() or walker.noclip or brief.k > 0.0 \
 		or (net_client != null and drop.active())
 	var quiet := tutorial.active() or (at != "" and Crew.holder(crew, me, at) != null)
@@ -1996,6 +1995,32 @@ func _place_ship() -> void:
 	ocean.set_ship(helm.pos, helm.yaw)   # лучи ART-052 не светят внутри корпуса
 
 
+var power_eye := Vector3.ZERO   ## сдвиг глаза наклоном своей фигуры на ракурсе пульта (`_apply_crew_view`)
+
+
+## Открыт пульт энергии — камера и своя фигура на ракурсе ART-050 (`PowerScreen.CAM_AT`), а не в ходоке.
+func power_view() -> bool:
+	return at_power and not walker.noclip
+
+
+## Фигуры экипажа (dt ≥ 0 — ещё шаг наклона своей фигуры к посту). У открытого пульта своя фигура стоит у камеры
+## ракурса (как в принятом макете ART-050: тянется к ползункам, тело не заслоняет пульт), и камера — в её голове;
+## место игрока для постов и сети остаётся у пульта (`POWER_STAND`).
+func _apply_crew_view(dt: float = -1.0) -> void:
+	var keep := [me.x, me.z, me.yaw]
+	if power_view():
+		me.x = PowerScreen.CAM_AT.x
+		me.z = PowerScreen.CAM_AT.y
+		me.yaw = PowerScreen.cam_yaw(walker.yaw)
+	if dt >= 0.0:
+		me.ease_lean(dt)
+	crew_view.apply()
+	power_eye = me.eye_offset()
+	me.x = keep[0]
+	me.z = keep[1]
+	me.yaw = keep[2]
+
+
 func _place_camera() -> void:
 	if flyby.active():
 		flyby_cam.transform = flyby.pose()
@@ -2004,10 +2029,14 @@ func _place_camera() -> void:
 	elif flyby_cam.current:   # облёт кончился — глаза на мостике
 		camera.make_current()
 	camera.position = pilot.eye(walker) + me.eye_offset()   # наклон к посту — камера в голове
+	var cam_yaw := walker.yaw
+	if power_view():   # ракурс ART-050: камера отходит от ходока, таблица не закрывает ползунки
+		camera.position = PowerScreen.cam_pos(pilot.eye(walker)) + power_eye
+		cam_yaw = PowerScreen.cam_yaw(walker.yaw)
 	if vitals.shake > 0.0:   # тряска после удара: детерминированная, затухает за 0,6 с
 		var a := vitals.shake / 0.6 * 0.04
 		camera.position += Vector3(sin(time * 61.0) * a, sin(time * 47.0 + 1.3) * a, 0.0)
-	camera.rotation = Vector3(walker.pitch, walker.yaw, 0.0)
+	camera.rotation = Vector3(walker.pitch, cam_yaw, 0.0)
 	var eye := flyby_cam if flyby_cam.current else camera
 	grade.apply(-eye.global_position.y, silt.k)   # ART-065: по глубине камеры, не корабля
 
@@ -2453,7 +2482,7 @@ func _client_step(dt: float) -> void:
 	message.update(dt)
 	me.back = CrewView.own_back(walker.pitch, me.holding())
 	crew_view.pitch = walker.pitch
-	crew_view.apply()
+	_apply_crew_view()
 	_place_ship()
 	_place_camera()
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))

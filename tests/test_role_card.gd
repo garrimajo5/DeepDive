@@ -172,6 +172,23 @@ func test_scene_card_at_sonar() -> void:
 	ok(main.role_card.q == 0.0, "пробоина — «?» скрыт")
 
 
+## ART-050: при открытом пульте энергии карточка роли скрыта — широкая таблица и ползунки не под ней.
+func test_scene_card_hidden_at_power() -> void:
+	Main.hints = true
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.tutorial.on = false
+	main.open_power()
+	_tick(10)
+	ok(not main.role_card_panel.visible, "пульт открыт — карточки нет")
+	ok(not main.role_card.read.has("energy"), "не прочитана — покажется у поста, пока пульт закрыт")
+	main.close_power()
+	_tick(10)
+	eq(main.role_card.post, "energy", "закрыл пульт — у своего поста")
+	ok(main.role_card_panel.visible, "карточка вернулась")
+
+
 func test_scene_off_in_tests() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)

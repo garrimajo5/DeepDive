@@ -113,7 +113,9 @@ func test_hands_on_posts_in_scene() -> void:
 	var g := CrewHands.energy(4, main.reactor.share[4] / float(Reactor.MAX))
 	ok(main.me.hands[1].is_equal_approx(g[1]), "у пульта: правая на ползунке прожектора")
 	var hand: Vector3 = main.crew_view.shown[0]["hand_r"]
-	ok(hand.distance_to(g[1]) < 0.08, "модель дотянулась до ползунка (%.3f м)" % hand.distance_to(g[1]))
+	var sh: Vector3 = main.crew_view.shown[0]["shoulder_r"]
+	## Ракурс ART-050: своя фигура у камеры (как в макете) — рука вытянута к ползунку, хват — в me.hands для сети.
+	ok(hand.distance_to(g[1]) < sh.distance_to(g[1]) - 0.4, "модель тянется к ползунку (%.3f м)" % hand.distance_to(g[1]))
 	main.close_power()
 	main.step(1.0 / 30.0)
 	ok(not main.me.holding(), "отошёл от пульта — руки свободны")
@@ -158,9 +160,34 @@ func test_power_steps_to_panel() -> void:
 	for i in 15:
 		main.step(1.0 / 30.0)
 	var g := CrewHands.energy(0, main.reactor.share[0] / float(Reactor.MAX))
+	ok(main.me.hands[0].is_equal_approx(g[0]), "левая на ползунке двигателей (хват для сети и товарищей)")
 	var hand: Vector3 = main.crew_view.shown[0]["hand_l"]
-	ok(hand.distance_to(g[0]) < 0.08, "левая на ползунке двигателей (%.3f м)" % hand.distance_to(g[0]))
+	var sh: Vector3 = main.crew_view.shown[0]["shoulder_l"]
+	ok(hand.distance_to(g[0]) < sh.distance_to(g[0]) - 0.4, "модель тянется к ползунку (%.3f м)" % hand.distance_to(g[0]))
 	main.close_power()
+
+
+## Ракурс открытого пульта ART-050: камера и своя фигура — у CAM_AT (курс 70°, наклон −32°), таблица справа не
+## закрывает ползунки; ходок и место для сети — у пульта, свайп крутит взгляд от ракурса; закрыл — камера в ходоке.
+func test_power_view() -> void:
+	main.open_power()
+	main.step(1.0 / 30.0)
+	var cam: Vector3 = main.camera.position
+	near(Vector2(cam.x, cam.z).distance_to(PowerScreen.CAM_AT), 0.0, 0.15, "камера на ракурсе (в голове наклонённой фигуры)")
+	near(main.camera.rotation.y, PowerScreen.CAM_YAW, 1e-4, "курс 70°")
+	near(main.camera.rotation.x, PowerScreen.CAM_PITCH, 1e-4, "наклон −32°")
+	eq(Vector2(main.walker.x, main.walker.z), Main.POWER_STAND, "ходок у пульта")
+	eq(Vector2(main.me.x, main.me.z), Main.POWER_STAND, "для сети — у пульта")
+	var hip: Vector3 = main.crew_view.shown[0]["hip"]
+	ok(Vector2(hip.x, hip.z).distance_to(PowerScreen.CAM_AT) < 0.3, "своя фигура — у камеры, не заслоняет пульт")
+	main.walker.yaw += 0.2   # свайп
+	main.step(1.0 / 30.0)
+	near(main.camera.rotation.y, PowerScreen.CAM_YAW + 0.2, 1e-4, "свайп — от ракурса")
+	main.close_power()
+	main.step(1.0 / 30.0)
+	var eye: Vector3 = main.pilot.eye(main.walker) + main.me.eye_offset()
+	ok(main.camera.position.distance_to(eye) < 1e-4, "закрыл — камера в ходоке")
+	near(main.camera.rotation.y, main.walker.yaw, 1e-6, "курс ходока")
 
 
 ## Снаряжение ролей MOD-016: роль видна по деталям, свой игрок не видит их на голове и груди, щиток — на сварке.
