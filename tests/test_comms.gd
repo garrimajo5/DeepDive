@@ -301,3 +301,52 @@ func test_scene_mate_ask_reaches_host() -> void:   # «Спросить код»
 	main.step(DT)
 	eq(main.comms.state, Comms.Ask.WAIT, "нажатие товарища начало проверку")
 	eq(mate.pad.ask, 0, "нажатие съедено")
+
+
+## Ближайшая точка прямоугольника к центру круга дальше радиуса — не пересекаются.
+static func _clear(r: Rect2, c: Touch.Circle) -> bool:
+	var q := Vector2(clampf(c.c.x, r.position.x, r.end.x), clampf(c.c.y, r.position.y, r.end.y))
+	return q.distance_to(c.c) > c.r
+
+
+func test_plate_clear_of_controls_with_cutout() -> void:   # issue #603: вырез сдвигал крестовину под плашку
+	var cases := [Rect2(133, 0, 2267, 1080), Rect2(0, 0, 2400, 1080), Rect2(133, 0, 2134, 1080),
+		Rect2(0, 0, 2240, 1080), Rect2(0, 0, 1920, 1080), Rect2(0, 0, 1600, 720), Rect2(90, 0, 1510, 720)]
+	for safe: Rect2 in cases:
+		var lay := Touch.Layout.new()
+		lay.compute(safe)
+		eq(lay.area, safe, "раскладка помнит безопасную область")
+		var plate := Comms.plate_rect(lay.area.size)
+		plate.position += lay.area.position
+		var b := Comms.button_rect(lay.area.size)
+		b.position += lay.area.position
+		ok(plate.encloses(b), "%s: кнопка внутри плашки" % safe)
+		for name in ["pad", "action", "light", "up", "down"]:
+			ok(_clear(plate, lay.get(name)), "%s: плашка не на «%s»" % [safe, name])
+	var cut := Touch.Layout.new()
+	cut.compute(Rect2(133, 0, 2267, 1080))
+	ok(not _clear(Comms.plate_rect(Vector2(2400, 1080)), cut.pad), "по всему экрану, а не по области, — наезжала (как в отчёте)")
+
+
+func test_scene_plate_in_safe_area() -> void:   # issue #603: на телефоне с вырезом плашка — от безопасной области
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var vis := main.get_viewport().get_visible_rect()
+	var safe := Rect2(vis.position + Vector2(vis.size.x * 0.06, 0.0), vis.size - Vector2(vis.size.x * 0.06, 0.0))
+	main.overlay.router.layout.compute(safe)
+	eq(main.comms_area(), safe, "плашка раскладывается по безопасной области")
+	main.comms.reset_run(0)
+	main.on_eco_event(EcoLink.voice(Crew.Role.ENGINEER, "Сбросьте ход, перегрев"))
+	for i in 10:
+		main.step(DT)
+	eq(main.comms_panel.area, safe, "панель рисует от неё же")
+	var plate := Comms.plate_rect(safe.size)
+	plate.position += safe.position
+	ok(_clear(plate, main.overlay.router.layout.pad), "плашка не на крестовине")
+	var b := Comms.button_rect(safe.size)
+	b.position += safe.position
+	ok(main.overlay.router.blocks.has(b), "кнопка держит касания на своём месте")
+	main.overlay.router.taps.append(b.get_center())
+	main.step(DT)
+	eq(main.comms.state, Comms.Ask.WAIT, "касание «Спросить код» по сдвинутой кнопке дошло")

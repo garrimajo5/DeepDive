@@ -2060,6 +2060,12 @@ func _card_step(dt: float) -> void:
 
 ## Внутренняя связь ART-040: при голосовании, итоге, меню, паузе, брифинге (и шторках) — отложена, часы стоят;
 ## «Спросить код» / «Понятно» — из `Router.taps`, кнопка не крутит взгляд (`Router.blocks`, после карточки роли).
+## Где раскладывать плашку связи: безопасная область крестовины и кнопок (`Touch.Layout.area`), пока её нет — экран.
+func comms_area() -> Rect2:
+	var area := overlay.router.layout.area
+	return area if area.has_area() else get_viewport().get_visible_rect()
+
+
 func _comms_step(dt: float) -> void:
 	var hidden := _overlay_hidden()
 	comms.solo = net_client == null and net_mates.is_empty()
@@ -2071,14 +2077,16 @@ func _comms_step(dt: float) -> void:
 				comms.press(m.pad.ask)
 				m.pad.ask = 0
 	comms.update(dt, hidden)
+	var area := comms_area()   # плашка в безопасной области, как крестовина: вырез не сдвигает её на крестовину (#603)
 	if not hidden:
 		for p in overlay.router.taps:
-			comms.tap(p, size)
+			comms.tap(p - area.position, area.size)
 	if comms.asked > 0:   # гость: нажатие уходит хосту со следующим вводом
 		net_pad.ask = comms.asked
 		comms.asked = 0
-	overlay.router.blocks.append_array(comms.blocks(size))
-	comms_panel.show_comms(comms, time)
+	for r in comms.blocks(area.size):
+		overlay.router.blocks.append(Rect2(r.position + area.position, r.size))
+	comms_panel.show_comms(comms, time, area)
 
 
 ## Плашки поверх игры (связь ART-040, рация ART-041) не показываются: голосование, итог, меню, пауза, брифинг, шторки.
