@@ -129,7 +129,10 @@ func _draw_map() -> void:
 		pts.append(Vector2(m[0], m[1]))
 		letters.append(m[2])
 	var r0 := ShipMap.MARK * 0.5 * kk
-	for m: ShipMap.Mark in ShipMap.marks(pts, letters, own, size):
+	var ms := ShipMap.marks(pts, letters, own, size)
+	if not ms.is_empty() and ms[0].own:
+		ms.push_back(ms.pop_front())   # свой — поверх всех (#575)
+	for m: ShipMap.Mark in ms:
 		if m.pos != m.at:
 			draw.draw_line(m.at, m.pos, MainMenu.SOFT, lw * 0.5)
 			draw.draw_circle(m.at, 3.0 * kk, MainMenu.SOFT)

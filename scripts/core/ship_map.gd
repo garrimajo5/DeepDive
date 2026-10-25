@@ -40,7 +40,8 @@ const MARK_PX := 32.0
 const HERE := "Вы здесь"
 const HERE_PX := 30.0
 const HERE_LINE := 40.0              ## выноска «Вы здесь» вниз от кружка
-const SPREAD := 48.0                 ## разнос наложенных отметок
+const SPREAD := 56.0                 ## разнос наложенных отметок: кольцо 6 мест на SPREAD, второе — 12 на 2·SPREAD
+const HERE_HALF := 75.0              ## полуширина места подписи «Вы здесь» (8 знаков по 30 px), px макета
 const RULER_M := 5.0
 const RULER_GAP := 40.0              ## линейка ниже мостика
 const RULER_PX := 22.0
@@ -219,7 +220,8 @@ static func legend_at(i: int, size: Vector2) -> Vector2:
 
 
 ## Отметки экипажа: points — (x, z) каждого, letters — буквы ролей, own — индекс своего (−1 — нет).
-## Наложенные кружки разнесены на SPREAD px макета (выноска к настоящей точке), свой — всегда на месте.
+## Наложенные кружки разнесены по двум кольцам (выноска к настоящей точке), свой — всегда на месте,
+## его выноску и подпись «Вы здесь» чужие отметки не закрывают (#575).
 static func marks(points: Array, letters: Array, own: int, size: Vector2) -> Array[Mark]:
 	var out: Array[Mark] = []
 	var order: Array[int] = []
@@ -230,6 +232,7 @@ static func marks(points: Array, letters: Array, own: int, size: Vector2) -> Arr
 			order.append(i)
 	var kk := k(size)
 	var gap := MARK * kk
+	var here := Rect2()
 	for i in order:
 		var m := Mark.new()
 		var p: Vector2 = points[i]
@@ -237,14 +240,41 @@ static func marks(points: Array, letters: Array, own: int, size: Vector2) -> Arr
 		m.pos = m.at
 		m.letter = letters[i] if i < letters.size() else ""
 		m.own = i == own
-		if _crowded(m.pos, out, gap):
-			for d in 8:
-				var cand := m.at + Vector2.from_angle(-PI * 0.25 - d * PI * 0.25) * SPREAD * kk
-				if not _crowded(cand, out, gap):
+		if m.own:
+			here = here_rect(m.pos, size)
+		elif _crowded(m.pos, out, gap) or _covers(m.pos, here, gap * 0.5):
+			for c in _slots():
+				var cand := m.at + c * kk
+				if not _crowded(cand, out, gap) and not _covers(cand, here, gap * 0.5):
 					m.pos = cand
 					break
 		out.append(m)
 	return out
+
+
+## Место выноски и подписи «Вы здесь» под своим кружком в точке p.
+static func here_rect(p: Vector2, size: Vector2) -> Rect2:
+	var kk := k(size)
+	var top := p.y + MARK * 0.5 * kk
+	var h := (HERE_LINE + 12.0 + HERE_PX * 1.2) * kk
+	return Rect2(p.x - HERE_HALF * kk, top, HERE_HALF * 2.0 * kk, h)
+
+
+## Места разноса, px макета: сначала вверх (подпись своего — внизу), кольцо 6 и кольцо 12.
+static func _slots() -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	for d in 6:
+		out.append(Vector2.from_angle(-PI * 0.5 + d * TAU / 6.0) * SPREAD)
+	for d in 12:
+		out.append(Vector2.from_angle(-PI * 0.5 + d * TAU / 12.0) * SPREAD * 2.0)
+	return out
+
+
+static func _covers(p: Vector2, r: Rect2, radius: float) -> bool:
+	if r.size == Vector2.ZERO:
+		return false
+	var q := Vector2(clampf(p.x, r.position.x, r.end.x), clampf(p.y, r.position.y, r.end.y))
+	return q.distance_to(p) < radius
 
 
 static func _crowded(p: Vector2, placed: Array[Mark], gap: float) -> bool:

@@ -85,10 +85,32 @@ func test_marks_own_first_and_spread() -> void:
 			if a != b:
 				ok(a.pos.distance_to(b.pos) >= ShipMap.MARK - 0.02, "кружки не налезают")
 	for m in ms:
-		ok(m.pos.distance_to(m.at) <= ShipMap.SPREAD + 0.01, "разнос не дальше 48 px")
+		ok(m.pos.distance_to(m.at) <= ShipMap.SPREAD * 2.0 + 0.01, "разнос не дальше второго кольца")
 	var solo := ShipMap.marks([Vector2(0.0, 5.0)], ["П"], 0, size)
 	eq(solo.size(), 1, "соло — только своя отметка")
 	eq(ShipMap.letter(Crew.Role.BIOLOGIST), "Б", "буква роли")
+
+
+## #575: шесть человек почти в одной точке (сценарий тестера) — кружки не налезают ни друг на друга,
+## ни на выноску «Вы здесь»; раньше разнос 48 px был меньше кружка 50 px, и чужие ложились поверх своего.
+func test_marks_crowd_keeps_own_visible() -> void:
+	for size: Vector2 in [Vector2(2400, 1080), Vector2(1600, 720)]:
+		var kk := ShipMap.k(size)
+		var pts := [Vector2(0.0, -2.0), Vector2(0.0, -2.0), Vector2(0.05, -2.0), Vector2(0.0, -1.95),
+			Vector2(0.3, -1.6), Vector2(-0.2, -2.3)]
+		var ms := ShipMap.marks(pts, ["С", "Б", "Б", "И", "С", "П"], 5, size)
+		eq(ms.size(), 6, "все отметки")
+		var own: ShipMap.Mark = ms[0]
+		ok(own.own and own.pos == own.at, "свой — на месте")
+		var here := ShipMap.here_rect(own.pos, size)
+		var r0 := ShipMap.MARK * 0.5 * kk
+		for a in ms:
+			for b in ms:
+				if a != b:
+					ok(a.pos.distance_to(b.pos) >= ShipMap.MARK * kk - 0.02, "кружки не налезают")
+			if not a.own:
+				var q := Vector2(clampf(a.pos.x, here.position.x, here.end.x), clampf(a.pos.y, here.position.y, here.end.y))
+				ok(q.distance_to(a.pos) >= r0 - 0.01, "«Вы здесь» не закрыта (%s)" % a.letter)
 
 
 func test_alarm_targets() -> void:
