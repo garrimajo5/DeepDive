@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""Тесты страницы «Где мы» (tools/status.py): разбор чек-листа эпика, прогресс по плану, статус этапа, отрисовка.
+Запуск: python3 tools/test_status.py (его же гоняет .github/workflows/status.yml перед обновлением страницы)."""
+import os
+import sys
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import status  # noqa: E402
+
+
+class ParseTasks(unittest.TestCase):
+    def test_roles_and_blocker(self):
+        body = ("Вступление\n## Задачи\n"
+                "- [x] Связь на мостике — поток А (#316)\n"
+                "- [ ] Озвучка реплик — звук — ⛔ владелец: выбор инструмента\n"
+                "- [ ] Механика загадок — поток А, поток Б\n"
+                "текст без галочки\n")
+        t = status.parse_tasks(body)
+        self.assertEqual(len(t), 3)
+        self.assertTrue(t[0]["done"])
+        self.assertEqual(t[0]["roles"], ["поток А"])
+        self.assertEqual(t[1]["text"], "Озвучка реплик")
+        self.assertEqual(t[1]["roles"], ["звук"])
+        self.assertEqual(t[1]["blocker"], "владелец: выбор инструмента")
+        self.assertEqual(t[2]["roles"], ["поток А", "поток Б"])
+        self.assertIsNone(t[2]["blocker"])
+
+    def test_role_word_not_inside_other_words(self):
+        # «art» не находится внутри «старт», «qa» — внутри других слов
+        t = status.parse_tasks("- [ ] Старт забега — поток А\n")
+        self.assertEqual(t[0]["roles"], ["поток А"])
+
+    def test_empty(self):
+        self.assertEqual(status.parse_tasks(None), [])
+
+
+class Progress(unittest.TestCase):
+    def test_doc_progress_counts_removed_as_done(self):
+        text = "- [x] а\n- [ ] б\n  - [~] снято\n- [X] в\nне задача\n"
+        self.assertEqual(status.doc_progress(text), (3, 4))
+
+    def test_plan_path(self):
+        self.assertEqual(status.plan_path("План: `docs/grafika-plan.md` — задачи там"), "docs/grafika-plan.md")
+        self.assertIsNone(status.plan_path("без плана"))
+
+    def test_bar_and_pct(self):
+        self.assertEqual(status.bar(0, 0), "░" * 10)
+        self.assertEqual(status.bar(5, 10), "▓" * 5 + "░" * 5)
+        self.assertEqual(status.pct(1, 3), 33)
+
+
+class Stage(unittest.TestCase):
+    def test_statuses(self):
+        self.assertEqual(status.stage_status(True, 0, 0, 0, False), "✅ пройден")
+        self.assertTrue(status.stage_status(False, 0, 0, 0, True).startswith("🟡"))   # раньше эпиков — ждёт приёмки
+        self.assertTrue(status.stage_status(False, 0, 0, 0, False).startswith("⏳"))
+        self.assertTrue(status.stage_status(False, 2, 3, 3, False).startswith("🟡"))  # всё сделано
+        self.assertTrue(status.stage_status(False, 2, 1, 3, False).startswith("🔄"))
+        self.assertTrue(status.stage_status(False, 2, 0, 3, False).startswith("⏳"))
+
+
+class Render(unittest.TestCase):
+    def test_page(self):
+        ms = [{"number": 1, "title": "Этап 1. Каркас", "state": "open"},
+              {"number": 4, "title": "Этап 4. Забег", "state": "open"}]
+        epic = {"number": 10, "title": "Эпик: забег", "state": "open", "milestone": {"number": 4},
+                "labels": [{"name": "эпик"}, {"name": "qa"}],
+                "body": "- [x] раз — qa\n- [ ] два — владелец — ⛔ владелец\n",
+                "sub_issues_summary": {"completed": 1, "total": 2}}
+        owner_issue = {"number": 11, "title": "Вопрос", "labels": [{"name": "ждёт владельца"}, {"name": "поток А"}]}
+        page = status.render(ms, [epic], [epic, owner_issue], [], {})
+        self.assertIn("**Сейчас:** Этап 4. Забег", page)
+        self.assertIn("Каркас", page)
+        self.assertIn("2/4", page)                       # 1 галочка + 1 подзадача из 2+2
+        self.assertIn("#11 Вопрос", page)                # ждёт владельца — issue
+        self.assertIn("два — эпик #10", page)            # ждёт владельца — задача чек-листа
+        self.assertIn("нет исполнителя-агента", page)    # звук и сюжет без агента
+
+    def test_on_hold_not_waiting_owner_and_verify_is_qa(self):
+        ms = [{"number": 4, "title": "Этап 4. Забег", "state": "open"}]
+        epic = {"number": 10, "title": "Эпик: экипаж", "state": "open", "milestone": None,
+                "labels": [{"name": "эпик"}], "sub_issues_summary": {"completed": 0, "total": 0},
+                "body": "- [ ] Одежда — model — ⛔ on-hold (владелец)\n- [ ] Анимации — model — ⛔ владелец\n"}
+        fix = {"number": 12, "title": "Провал кадра", "labels": [{"name": "проверить"}, {"name": "поток А"}]}
+        page = status.render(ms, [epic], [epic, fix], [], {})
+        owner = page.split("## ⛔ Ждёт владельца")[1].split("##")[0]
+        self.assertIn("Анимации", owner)
+        self.assertNotIn("Одежда", owner)                # on-hold — решение уже есть, не ждёт
+        qa_row = [l for l in page.splitlines() if l.startswith("| Тестер")][0]
+        self.assertIn("#12 (проверить)", qa_row)         # «проверить» — работа тестера
+
+    def test_short_drops_code_marks(self):
+        self.assertEqual(status.short("Кадры по `tools/qa/play-kadry.json` для Google Play", 20), "Кадры по tools/qa/pl…")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=1)
