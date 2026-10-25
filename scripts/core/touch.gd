@@ -112,7 +112,7 @@ class Router:
 			for b in blocks:
 				if b.has_point(p):
 					role = Role.UI
-		_fingers[id] = [role, p]
+		_fingers[id] = [role, p, p]
 		taps.append(p)
 		if role == Role.ACTION:
 			action_down = true
@@ -150,6 +150,13 @@ class Router:
 		for f in _fingers.values():
 			out.append(f[1])
 		return out
+
+	## Держит ли палец кнопку интерфейса (рация ART-041): коснулся внутри `r` и ещё на экране — можно сползти.
+	func held_in(r: Rect2) -> bool:
+		for f in _fingers.values():
+			if f[0] == Role.UI and r.has_point(f[2]):
+				return true
+		return false
 
 	## Касается ли экрана хоть один палец.
 	func touching() -> bool:
