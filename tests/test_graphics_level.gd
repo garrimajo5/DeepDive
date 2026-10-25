@@ -159,3 +159,44 @@ func test_scene_page_by_taps() -> void:
 	main.settings.graphics = Graphics.NORMAL
 	main._apply_settings()
 	main.back_pressed()
+
+
+func test_auto_by_phone() -> void:
+	eq(Graphics.auto("Adreno (TM) 740", 12288), Graphics.BEAUTY, "флагман с 12 ГБ — «Красиво»")
+	eq(Graphics.auto("Adreno (TM) 740", 6144), Graphics.NORMAL, "флагман с 6 ГБ — «Обычно»")
+	eq(Graphics.auto("Mali-G715-Immortalis MC11", 8192), Graphics.BEAUTY, "Immortalis")
+	eq(Graphics.auto("Adreno (TM) 650", 8192), Graphics.NORMAL, "средний — «Обычно»")
+	eq(Graphics.auto("Mali-G610 MC6", 8192), Graphics.NORMAL, "G610 — не слабый")
+	eq(Graphics.auto("Adreno (TM) 619", 8192), Graphics.ECONOMY, "Adreno 6xx младший — «Экономно»")
+	eq(Graphics.auto("Mali-G57 MC2", 8192), Graphics.ECONOMY, "Mali-G57")
+	eq(Graphics.auto("PowerVR Rogue GE8320", 4096), Graphics.ECONOMY, "PowerVR")
+	eq(Graphics.auto("Adreno (TM) 740", 3072), Graphics.ECONOMY, "мало памяти — «Экономно»")
+	eq(Graphics.auto("Adreno (TM) 740", -1), Graphics.NORMAL, "память неизвестна — не «Красиво»")
+	eq(Graphics.auto("Что-то новое", -1), Graphics.NORMAL, "неизвестное — «Обычно»")
+	eq(Graphics.auto("Mali-G57", 2048, false), Graphics.DEFAULT, "не телефон — по умолчанию")
+	var d := Graphics.device()
+	ok(d.has("adapter") and d.has("memory_mb") and d.has("mobile"), "сведения об устройстве")
+
+
+func test_pick_first_once() -> void:
+	var path := "user://test_grafika_pervyj.cfg"
+	DirAccess.remove_absolute(path)
+	var s := Settings.new()
+	s.path = path
+	ok(s.pick_first(Graphics.ECONOMY), "первый запуск — выбран и записан")
+	var t := Settings.new()
+	t.path = path
+	ok(t.read(), "файл есть")
+	eq(t.graphics, Graphics.ECONOMY, "уровень сохранён")
+	t.graphics = Graphics.BEAUTY
+	t.write()
+	var u := Settings.new()
+	u.path = path
+	ok(not u.pick_first(Graphics.ECONOMY), "второй запуск — выбор игрока не трогаем")
+	u.read()
+	eq(u.graphics, Graphics.BEAUTY, "ручной выбор остался")
+	var off := Settings.new()
+	off.path = ""
+	ok(not off.pick_first(Graphics.ECONOMY), "настройки выключены (тесты, тестер) — без автовыбора")
+	eq(off.graphics, Graphics.DEFAULT, "уровень не тронут")
+	DirAccess.remove_absolute(path)

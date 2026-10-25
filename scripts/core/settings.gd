@@ -315,6 +315,15 @@ func write() -> bool:
 	return cfg.save(path) == OK
 
 
+## Первый запуск ART-044: файла настроек ещё нет — уровень графики level (`Graphics.auto_here`) и сразу записать;
+## false — файл уже есть или настройки выключены (тесты, снимки, прогон тестера).
+func pick_first(level: int) -> bool:
+	if not enabled() or FileAccess.file_exists(path):
+		return false
+	graphics = Graphics.valid(level)
+	return write()
+
+
 ## Прочитать файл; false — его нет, он чужой или настройки выключены (тогда значения по умолчанию).
 func read() -> bool:
 	if not enabled() or not FileAccess.file_exists(path):
