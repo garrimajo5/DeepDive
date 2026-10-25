@@ -1,0 +1,45 @@
+{
+  "source_commit": "46d4640b2c9037f171ef316d26784cbef9873713",
+  "issue": 651,
+  "bones": [
+    "Root",
+    "Body",
+    "Tail01",
+    "Tail02",
+    "Tail03",
+    "Jaw",
+    "FinFrontL",
+    "FinRearL",
+    "FinFrontR",
+    "FinRearR"
+  ],
+  "triangles": 5719,
+  "clips": [
+    {
+      "name": "Swim",
+      "seconds": 2.4,
+      "loop": true
+    },
+    {
+      "name": "SwimFast",
+      "seconds": 1.2,
+      "loop": true
+    },
+    {
+      "name": "Bite",
+      "seconds": 1.2,
+      "loop": false
+    },
+    {
+      "name": "TailStrike",
+      "seconds": 0.6,
+      "loop": false
+    }
+  ],
+  "source_sha256": {
+    "serpohvost-chelyust.glb": "5d78d7f794dc617fb37210a2fc5887b7fed1d4c6533ba3cf06bc329fbf5e57f4",
+    "serpohvost-hvost.glb": "dfc8eaabeb4318009973deaf3df482bbb309417c2f24943064600a5a9ed2c3ef",
+    "serpohvost-telo.glb": "137d24898015aa1e977df39853a235811e72526d31199804da246bb7c14d7dd4"
+  },
+  "glb_bytes": 2405904
+}

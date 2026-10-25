@@ -1,0 +1,45 @@
+{
+  "bones": 10,
+  "clips": {
+    "Bite": {
+      "endpoint_angle_error": 0.0,
+      "seconds": 1.20000004768372,
+      "tracks": 5
+    },
+    "Swim": {
+      "endpoint_angle_error": 0.0,
+      "seconds": 2.40000009536743,
+      "tracks": 9
+    },
+    "SwimFast": {
+      "endpoint_angle_error": 0.0,
+      "seconds": 1.20000004768372,
+      "tracks": 9
+    },
+    "TailStrike": {
+      "endpoint_angle_error": 0.0,
+      "seconds": 0.600000023841858,
+      "tracks": 4
+    }
+  },
+  "jaw_tip_drop_m": 0.315467096865177,
+  "meshes": 3,
+  "skeletons": 1,
+  "strike_tip_offsets_m": [
+    [
+      0.0,
+      0.322779536247253,
+      -0.0333223342895508
+    ],
+    [
+      0.0,
+      -0.862527668476105,
+      -0.21475625038147
+    ],
+    [
+      0.0,
+      0.0,
+      0.0
+    ]
+  ]
+}
