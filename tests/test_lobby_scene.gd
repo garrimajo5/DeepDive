@@ -352,3 +352,17 @@ func test_join_from_list_no_answer() -> void:
 	ok(main.lobby_join == null, "попытка кончилась")
 	eq(main.lobby.entry_head(), "Хост не отвечает")
 	ok(main.lobby.enabled("join0"), "список снова живой")
+
+
+## По issue #571: шапка «СБОР ЭКИПАЖА» ложилась на строки приборов — под меню и сбором они скрыты, в игре — снова видны.
+func test_status_lines_hidden_under_menu_and_lobby() -> void:
+	await _main()
+	main.step(DT)
+	ok(not main.hint.visible, "под меню строки приборов скрыты")
+	_tap(MainMenu.screen_rect("crew", _size()).get_center())
+	ok(main.lobby.open, "вход сбора")
+	main.step(DT)
+	ok(not main.hint.visible, "под сбором экипажа строки приборов скрыты")
+	main.close_menu()
+	main.step(DT)
+	ok(main.hint.visible, "в игре строки приборов вернулись")

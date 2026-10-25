@@ -1146,6 +1146,8 @@ func open_menu() -> void:
 		add_child(menu_panel)
 	menu_panel.show_menu(main_menu)
 	overlay.visible = false
+	if hint:
+		hint.visible = false   # строки приборов не лезут к шапкам меню, сбора и журнала (#571)
 
 
 ## Шаг под меню: касания кнопок. «Погрузиться» — забег с начала (облёт, часы забега), палец с кнопки не идёт в игру.
@@ -1761,6 +1763,7 @@ func close_menu() -> void:
 		address_panel.show_screen(address)
 	overlay.router.clear()   # палец ещё на кнопке: не крестовина и не касание, пропускающее облёт
 	overlay.visible = not wreck.active()
+	hint.visible = not wreck.active() and not pause.open
 
 
 ## Корпус разрушен: забег проигран — шторка ART-036 3,5 с (`Wreck`), под сплошной шторкой подъём к старту с целым
