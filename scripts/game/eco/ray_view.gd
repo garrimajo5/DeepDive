@@ -4,11 +4,13 @@ extends MultiMeshInstance3D
 ## отрисовки). Тело — пластина 14 × 9 м (18 × 8 клеток), сужается к хвосту и носу, горб по середине 0,5 м, края
 ## светлее; хвост-хлыст 9 м назад; на спине два ряда по 7 светящихся пятнышек (#9ffcff). Взмах крыльев — в шейдере
 ## (как в браузере: sin(1,3 t + i − 0,32 |x|) · (|x| / 7)^1,4 · 1,8, номер ската — в INSTANCE_CUSTOM), крен 0,22 рад.
-## Свет сквозь лёд падает на спину; брюхо снизу темнее. Стоит на слое отмели (OceanView.LAYER_WORLD).
+## Свет сквозь лёд падает на спину; брюхо снизу темнее; края крыльев — ободок света (EcoRim, uniform rim). Стоит на слое отмели (OceanView.LAYER_WORLD).
 
 const SHADER := """
 shader_type spatial;
 render_mode cull_disabled;
+uniform float rim = 0.0;
+uniform float rim_tint = 0.0;
 varying float glow;
 void vertex() {
 	float ax = abs(VERTEX.x);
@@ -24,6 +26,8 @@ void fragment() {
 	ALBEDO = COLOR.rgb * (1.0 - glow);
 	ROUGHNESS = 0.8;
 	SPECULAR = 0.2;
+	RIM = rim;
+	RIM_TINT = rim_tint;
 	EMISSION = vec3(0.07, 0.22, 0.28) * (1.0 - glow) + COLOR.rgb * glow * 1.6;
 }
 """
