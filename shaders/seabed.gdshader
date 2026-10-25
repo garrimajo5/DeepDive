@@ -48,8 +48,10 @@ uniform float ice_tile = 16.0;
 uniform float ice_y = 0.0;
 uniform float gate_scale = 60.0;
 uniform vec2 gate_edge = vec2(0.48, 0.62);
-uniform float crack_caustic = 0.06;   // IceSheet.CAUSTIC: свет под трещиной 0,06·exp(−глубина дна / 12)
-uniform float crack_depth = 12.0;
+uniform float crack_caustic = 0.12;   // IceSheet.CAUSTIC: свет под трещиной 0,12·exp(−глубина дна / 45) (#445)
+uniform float crack_depth = 45.0;
+uniform float crack_net = 1.6;        // IceSheet.CAUSTIC_NET: сеть под трещиной ярче (IceSheet.caustic_net)
+uniform float crack_widen = 0.10;     // IceSheet.CAUSTIC_WIDEN: нити под трещиной шире (порог 0,16 → 0,26)
 
 // Декали дна ART-066: атлас 4×4 (данные без sRGB, цвет — множитель вокруг серого, альфа — форма), штампы по клеткам
 // world.xz в двух слоях; места, категории и затухания — Seabed.Marks (тот же хеш HashNoise.hash2).
@@ -283,16 +285,16 @@ void fragment() {
 		float l1 = vnoise(cp + vec2(t, t * 0.6));
 		float l2 = vnoise(cp * 1.6 + vec2(-t * 0.8, t * 0.5));
 		float l3 = vnoise(cp * 2.3 + vec2(t * 0.4, -t * 0.9));
-		float c = abs(l1 - l2) * 0.6 + abs(l2 - l3) * 0.4;   // пересечение волн — тонкая сеть
-		c = 1.0 - smoothstep(0.0, 0.16, c);                  // яркие тонкие нити
-		c = pow(c, 1.6);
-		float cmask = caustic * light * flat_k * fade;
 		// под открытыми трещинами льда света больше: маска сверху, размытая (мелкий mip) и дрожащая
 		vec2 drift = vec2(sin(t * 0.7), cos(t * 0.53)) * 0.35;
 		float under = clamp(textureLod(crack_tex, (p + drift) / ice_tile, 5.0).r * 4.0, 0.0, 1.0) * ice_gate(p);
-		cmask *= 0.6 + 0.8 * under;
+		float c = abs(l1 - l2) * 0.6 + abs(l2 - l3) * 0.4;   // пересечение волн — тонкая сеть
+		c = 1.0 - smoothstep(0.0, 0.16 + crack_widen * under, c);   // яркие тонкие нити; под трещиной — гуще (#445)
+		c = pow(c, 1.6);
+		float cmask = caustic * light * flat_k * fade;
+		cmask *= 0.6 + crack_net * under;
 		float crack_light = crack_caustic * exp(-max(ice_y - w_pos.y, 0.0) / crack_depth) * under * caustic / 0.6;
-		ALBEDO += caustic_tint * crack_light * light;
+		ALBEDO += caustic_tint * crack_light * light * (0.5 + 1.5 * c);   // пятно под трещиной — в узоре сети (#445)
 		ALBEDO += caustic_tint * c * cmask * 0.45;
 		EMISSION += caustic_tint * c * cmask * 0.22;         // ядра нитей ловят bloom, но мягко
 	}
