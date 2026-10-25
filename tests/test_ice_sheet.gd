@@ -98,9 +98,11 @@ func test_shafts_stand_on_cracks() -> void:
 
 
 func test_caustics_under_cracks() -> void:
-	near(IceSheet.caustic(0.0), 0.06, 1e-6, "у льда 0,06")
-	near(IceSheet.caustic(12.0), 0.06 / exp(1.0), 1e-6, "exp(−глубина дна / 12)")
-	ok(IceSheet.caustic(60.0) < 0.001, "глубоко — нет")
+	near(IceSheet.caustic(0.0), IceSheet.CAUSTIC, 1e-6, "у льда — полная сила")
+	near(IceSheet.caustic(IceSheet.CAUSTIC_DEPTH), IceSheet.CAUSTIC / exp(1.0), 1e-6, "exp(−глубина дна / CAUSTIC_DEPTH)")
+	ok(IceSheet.caustic(60.0) < IceSheet.caustic(30.0), "глубже — слабее")
+	near(IceSheet.caustic_net(0.0), 0.6, 1e-6, "сеть без трещины — как была")
+	ok(IceSheet.caustic_net(1.0) >= 3.0 * IceSheet.caustic_net(0.0), "под трещиной сеть втрое ярче")
 	var ocean := OceanView.new()
 	tree.root.add_child(ocean)
 	await frames(1)
@@ -108,8 +110,25 @@ func test_caustics_under_cracks() -> void:
 	eq((m.get_shader_parameter("crack_tex") as Texture2D).resource_path, IceSheet.CRACK_MASK, "дно — та же маска трещин")
 	near(float(m.get_shader_parameter("gate_scale")), IceSheet.GATE_SCALE, 1e-6, "и тот же шум открытости")
 	near(float(m.get_shader_parameter("crack_caustic")), IceSheet.CAUSTIC, 1e-6)
+	near(float(m.get_shader_parameter("crack_depth")), IceSheet.CAUSTIC_DEPTH, 1e-6)
+	near(float(m.get_shader_parameter("crack_net")), IceSheet.CAUSTIC_NET, 1e-6, "шейдер — та же сила сети")
 	ocean.queue_free()
 	await frames(1)
+
+
+## #445: свет под трещинами виден на настоящем дне отмели (30…47 м подо льдом), а не только у льда. При прежних
+## 0,06·exp(−d/12) на медиане дна было 0,002 — тестер не видел каустик.
+func test_caustics_visible_on_shallows_floor() -> void:
+	var hs: Array[float] = []
+	for x in range(-150, 151, 25):
+		for z in range(-150, 151, 25):
+			hs.append(Seabed.ICE_Y - Seabed.height(x, z))
+	hs.sort()
+	var median := hs[hs.size() / 2]
+	ok(median > 30.0, "дно отмели глубоко подо льдом (%.0f м)" % median)
+	ok(IceSheet.caustic(median) >= 0.04, "на медиане дна свет трещин ≥ 0,04 (%.4f)" % IceSheet.caustic(median))
+	ok(IceSheet.caustic(hs[-1]) >= 0.025, "и на самом глубоком месте рядом виден (%.4f)" % IceSheet.caustic(hs[-1]))
+	ok(IceSheet.caustic(0.0) <= 0.15, "у самого льда не выбеливает дно")
 
 
 ## ART-075: строка LUT по глубине — ключи 0/8/20/45/90 м → строки 0/3/7/11/15, между ними линейно.
