@@ -28,6 +28,10 @@ extends RefCounted
 ##                                                     (тревога и расход заряда без самого существа)
 ##   {"do": "hull", "pct": 30}                       — прочность корпуса, % (следы повреждений ART-049 снаружи)
 ##   {"do": "charge", "units": 100}                  — заряд корабля, ед. (разряд по шагам не зависит от длины прогона)
+##   {"do": "ship", "x": 38, "y": -20, "z": -25}     — поставить корабль в точку мира (y — высота, глубина со знаком
+##                                                     минус), корабль стоит: вид на дно под трещинами льда (#445)
+##   {"do": "fly", "y": -8, "pitch": -55}            — тестовый полёт noclip: глаз на высоте y в осях корабля (над
+##                                                     палубой — плюс), наклон взгляда в градусах; "on": false — на пол
 ##   {"do": "mate", "x": -1, "z": -2.5, "yaw": 90, "role": 2, "look": 1} — ещё один член экипажа на палубе (роль 0…3,
 ##                                                     внешность 0 — мужская модель, 1 — женская;
 ##                                                     "seated": true — сидит за штурвалом, x/z/yaw не нужны;
@@ -52,9 +56,9 @@ extends RefCounted
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["route"], ["act"], ["mate_hold", on], ["gone"], ["wreck"], ["back"], ["tutorial", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["route"], ["act"], ["mate_hold", on], ["gone"], ["wreck"], ["back"], ["tutorial", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
-const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "route", "gone", "wreck", "back", "tutorial", "cards", "voice", "slow", "hud", "play", "log", "quit"]
+const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "ship", "fly", "route", "gone", "wreck", "back", "tutorial", "cards", "voice", "slow", "hud", "play", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "map", "map_back", "hint_map", "new", "exit", "yes", "no", "crew", "journal", "settings", "graphics", "g0", "g1", "g2", "fps", "golos", "v_hold", "v_voice", "v_hear", "v_mic", "lite_yes", "lite_no", "ask", "join", "last", "lobby_new", "lobby_addr", "lobby_refresh",
 	"jcell0", "jcell1", "jcell2", "jcell3", "jcell4", "jcell5", "jprev", "jnext", "jclose",
 	"key0", "key1", "key2", "key3", "key4", "key5", "key6", "key7", "key8", "key9", "key.", "keydel"]
@@ -62,7 +66,7 @@ const PRESS_TIME := 0.15   ## сколько держать кнопку при 
 const FINGER := 900        ## номер пальца для касаний сценария (не пересекается с настоящими)
 ## После этих команд скриншот ждёт следующего шага: снимок берёт уже нарисованный кадр, и без кадра между ними
 ## на картинке было бы старое место (issue #216: 09g-tablo сразу после goto повторял 09e-eel-alarm).
-const NEEDS_FRAME := ["goto", "sample", "breach", "mate", "act", "gone", "route", "silt", "hot", "hud"]
+const NEEDS_FRAME := ["goto", "ship", "fly", "sample", "breach", "mate", "act", "gone", "route", "silt", "hot", "hud"]
 
 var steps: Array = []
 var errors: Array[String] = []
@@ -180,6 +184,11 @@ func _begin(st: Dictionary, out: Array) -> void:
 			out.append(["hull", clampf(float(st.get("pct", 100.0)), 0.0, 100.0)])
 		"charge":
 			out.append(["charge", clampf(float(st.get("units", Vitals.MAX)), 0.0, Vitals.MAX)])
+		"ship":
+			out.append(["ship", float(st.get("x", 0.0)), float(st.get("y", -20.0)), float(st.get("z", 0.0))])
+		"fly":
+			out.append(["fly", bool(st.get("on", true)), float(st.get("y", Deck.Walker.EYE)),
+				float(st.get("pitch", 0.0))])
 		"route":
 			out.append(["route"])
 		"act":
