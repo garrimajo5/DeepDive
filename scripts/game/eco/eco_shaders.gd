@@ -231,11 +231,13 @@ vec3 eco_sway(vec3 o, float h, float height, vec3 bn) {
 }
 """
 
-## Растения на дне со светом (обе стороны): ленты ленточника, листья волнолиста, кружево веерника, трубы органа. Что
+## Растения на дне со светом (обе стороны): ленты ленточника, листья волнолиста, кружево веерника, трубы органа,
+## щупальца хватней (тело со светом, к кончикам светится само — `tip_glow`, доля длины — в COLOR.a). Что
 ## рисовать — `mode` (Plant), краски и числа каждого вида — в своих uniform; формулы — прежние формулы видов.
 ## Общее: шероховатость `rough`, блик `spec`, своё свечение `glow` (линейный цвет) плюс волна `glow_wave` · sin(TIME · 1,7);
-## колыхание в течении мира — `bend`/`reach` вида и общий поток `flow` (`set_flow`), формула — EcoCurrent.sway.
-enum Plant { KELP, LEAF, FAN, ORGAN }
+## колыхание в течении мира — `bend`/`reach` вида и общий поток `flow` (`set_flow`), формула — EcoCurrent.sway;
+## `phase_axis` — сдвиг фазы по углу оси экземпляра вокруг вертикали (щупальца одного диска вразнобой, у растений 0).
+enum Plant { KELP, LEAF, FAN, ORGAN, TENTACLE }
 const PLANT := """
 shader_type spatial;
 render_mode cull_disabled;
@@ -253,6 +255,9 @@ uniform vec3 glow_wave = vec3(0.0);
 // bend — изгиб вида, reach — высота растения в осях меша; поток и выключатель — в SWAY
 uniform vec3 bend = vec3(0.0);
 uniform float reach = 1.0;
+uniform float phase_axis = 0.0;
+// щупальце: свечение у основания и у кончика (доля длины — COLOR.a, по квадрату)
+uniform vec2 tip_glow = vec2(0.0);
 """ + SWAY + """
 void vertex() {
 	if (sway_k > 0.0 && dot(bend, bend) > 0.0) {
@@ -261,7 +266,12 @@ void vertex() {
 		vec3 ay = MODEL_MATRIX[1].xyz;
 		vec3 az = MODEL_MATRIX[2].xyz;
 		float h = clamp(VERTEX.y / reach, 0.0, 1.0);
-		vec3 off = eco_sway(o, h, reach * length(ay), bend);
+		// щупальца: фаза ещё и по углу оси вокруг вертикали (у растений phase_axis = 0 — без atan)
+		vec3 po = o;
+		if (phase_axis != 0.0) {
+			po.x += atan(ay.z, ay.x) * phase_axis;
+		}
+		vec3 off = eco_sway(po, h, reach * length(ay), bend);
 		// мировое смещение — в оси меша (у растений оси ортогональны: поворот и масштаб)
 		VERTEX += vec3(dot(off, ax) / max(dot(ax, ax), 1e-6), dot(off, ay) / max(dot(ay, ay), 1e-6),
 			dot(off, az) / max(dot(az, az), 1e-6));
@@ -300,12 +310,16 @@ void fragment() {
 		// цвет экземпляра — разброс веерников (FanView.fan_tint), без него белый
 		ALBEDO = mix(paint, edge, smoothstep(1.6, 2.6, el)) * COLOR.rgb;
 	} else {
-		// лента (цвет экземпляра) и труба органа (цвет вершины)
+		// лента (цвет экземпляра), труба органа и щупальце (цвет вершины)
 		ALBEDO = COLOR.rgb * shade;
 	}
 	ROUGHNESS = rough;
 	SPECULAR = spec;
-	EMISSION = glow + glow_wave * sin(TIME * 1.7);
+	vec3 e = glow + glow_wave * sin(TIME * 1.7);
+	if (mode == 4) {
+		e += COLOR.rgb * mix(tip_glow.x, tip_glow.y, COLOR.a * COLOR.a);
+	}
+	EMISSION = e;
 }
 """
 

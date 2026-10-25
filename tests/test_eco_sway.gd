@@ -147,3 +147,49 @@ func test_coral_sways_gently() -> void:
 	EcoShaders.set_sway_lite(false)
 	ev.free()
 	EcoShaders.set_flow(Vector3.ZERO)
+
+
+# ---------- Щупальца хватней ----------
+
+## Щупальца хватней (Б1 + Б3): тело со светом, к кончику светится само, колышутся общим шейдером растений —
+## нового шейдера нет; у диска стоят, кончик ходит заметно, но не дальше трети длины, соседние — вразнобой.
+func test_hvaten_tentacles_writhe() -> void:
+	var m := HvatenView.build_tentacle()
+	var mat := m.surface_get_material(0) as ShaderMaterial
+	ok(mat != null and mat.shader.code == EcoShaders.PLANT, "щупальца — общий шейдер растений")
+	eq(int(mat.get_shader_parameter("mode")), int(EcoShaders.Plant.TENTACLE), "режим щупалец")
+	ok(not mat.shader.code.contains("unshaded"), "тело ловит свет")
+	var glow: Vector2 = mat.get_shader_parameter("tip_glow")
+	ok(glow.y > glow.x * 3.0 and glow.x > 0.0, "к кончику светится ярче, у диска — чуть")
+	var col: PackedColorArray = m.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	var v: PackedVector3Array = m.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	for i in v.size():
+		near(col[i].a, clampf(v[i].y, 0.0, 1.0), 0.01, "в альфе — доля длины")
+	ok(EcoShaders.PLANT.contains("po.x += atan(ay.z, ay.x) * phase_axis"), "фаза вдоль оси — и в шейдере")
+	var ev := EcoView.new()
+	ev.ground = Seabed.height
+	ev.step(0.1, EcoLink.ShipState.new())
+	var hv := ev.hvaten_view
+	var tm := hv.tents.multimesh.mesh.surface_get_material(0) as ShaderMaterial
+	near((tm.get_shader_parameter("flow") as Vector3).distance_to(ev.current.vel()), 0.0, 1e-4,
+		"щупальца идут по течению мира")
+	var flow := Vector3(0, 0, EcoCurrent.SPEED)
+	var a := HvatenView.transform_at(hv.tent_buffer, 0)
+	var b := HvatenView.transform_at(hv.tent_buffer, 1)
+	var most := 0.0
+	var apart := 0.0
+	for k in 300:
+		var t := k * 0.2
+		near(HvatenView.tentacle_offset(a, Vector3.ZERO, t, flow).length(), 0.0, 1e-6, "у диска стоит")
+		var ta := HvatenView.tentacle_offset(a, Vector3.UP, t, flow)
+		most = maxf(most, ta.length())
+		apart = maxf(apart, ta.distance_to(HvatenView.tentacle_offset(b, Vector3.UP, t, flow)))
+	var length := a.basis.y.length()
+	ok(most > 0.08, "кончик заметно извивается: %.2f м" % most)
+	ok(most < length / 3.0, "но не дальше трети длины: %.2f из %.2f м" % [most, length])
+	ok(apart > 0.05, "соседние щупальца одного диска — вразнобой: %.2f м" % apart)
+	EcoShaders.set_sway_lite(true)
+	eq(float(tm.get_shader_parameter("sway_k")), 0.0, "«Экономно» — щупальца не извиваются в шейдере")
+	EcoShaders.set_sway_lite(false)
+	ev.free()
+	EcoShaders.set_flow(Vector3.ZERO)
