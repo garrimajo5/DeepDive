@@ -255,7 +255,7 @@ func _ready() -> void:
 	hint_pointer = HintPointerView.new()
 	hint_pointer.name = "Указатель подсказки"
 	ship.add_child(hint_pointer)
-	walker.stand = layout.can_stand
+	walker.stand = stand_for(me)
 	posts = Deck.posts()
 	posts.append(Deck.Post.new("winch", Samples.POST_AT, Samples.POST_R, "Лебёдка"))
 	posts.append(Deck.Post.new("breach", breach.post_at(), Breach.POST_R, "Сварка"))
@@ -1939,6 +1939,9 @@ func _restart() -> void:
 	scorch.clear()
 	ocean.set_scorch(scorch.uniforms(time))
 	walker.reset()
+	var spawn := Crew.spawn_spot(crew, me, walker.x, walker.z, layout.can_stand)   # не в товарища у штурвала (#602)
+	walker.x = spawn.x
+	walker.z = spawn.y
 	light_on = true
 	overlay.set_light(true)
 	_begin_run()
@@ -2868,12 +2871,17 @@ func _leave_net() -> void:
 	crew_view.set_members(crew, me)
 
 
+## Куда может шагнуть член экипажа m: пол корабля (ShipLayout.can_stand) и не в другую фигуру (Crew.room_for, #602).
+func stand_for(m: Crew.Member) -> Callable:
+	return func(x: float, z: float) -> bool: return layout.can_stand(x, z) and Crew.room_for(crew, m, x, z)
+
+
 ## Ещё один член экипажа на палубе (снимки и сценарий тестера, пока нет сети): место, курс (рад), роль, внешность.
 ## Стоящего не ставим в мебель: место внутри голостола или пульта сдвигается к ближайшему свободному (issue #156).
 func add_mate(x: float, z: float, yaw: float, role: int, look: int, seated: bool = false) -> Crew.Member:
 	var mate := Crew.Member.new(role)
 	mate.look = look
-	mate.walker.stand = layout.can_stand
+	mate.walker.stand = stand_for(mate)
 	if not seated:
 		var p := layout.free_spot(x, z)
 		x = p.x

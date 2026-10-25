@@ -73,6 +73,8 @@ func test_scene_runs_scenario() -> void:
 	var comms_seen := false   # 31: плашка связи ART-040 со своим кодом
 	var exposed_seen := false   # 31d: подделка разоблачена
 	var no_answer := false   # 29f: экран адреса ART-039 дождался «Нет ответа»
+	var crowded: Array[String] = []   # issue #602: на снимке товарищ вплотную к камере — кадр закрыт его головой
+	var mate_weld_seen := false   # 26b: шов в кадре, его варит товарищ
 	for i in 4200:  # 140 с игры (сценарий идёт ~128 с)
 		# снимок берёт уже нарисованный кадр — камеру до шага, в котором он снят
 		var cam := main.camera
@@ -99,6 +101,13 @@ func test_scene_runs_scenario() -> void:
 		var comms_vis := main.comms_panel.visible and main.comms.a > 0.5
 		var comms_line := main.comms.code_line()
 		var comms_state := main.comms.state
+		var near := INF
+		for m: Crew.Member in main.crew:
+			if m != main.me:
+				near = minf(near, Vector2(m.walker.x - main.walker.x, m.walker.z - main.walker.z).length())
+		var mate_welds := false
+		for m: Crew.Member in main.crew:
+			mate_welds = mate_welds or (m != main.me and m.welding() and weld_at > 0.0)
 		main.step(1.0 / 30.0)
 		no_answer = no_answer or (main.address.open and main.address.hint() == AddressScreen.NO_ANSWER)
 		sat = sat or main.pilot.seated
@@ -119,6 +128,10 @@ func test_scene_runs_scenario() -> void:
 				arc_seen = arc_vis
 			if qa.log_lines[k].begins_with("скриншот 30-kartochka-sonar"):
 				card_seen = card_vis
+			if qa.log_lines[k].begins_with("скриншот ") and near < Crew.GAP * 0.75:
+				crowded.append("%s (%.2f м)" % [qa.log_lines[k].split(" ")[1], near])
+			if qa.log_lines[k].begins_with("скриншот 26b-mate-weld"):
+				mate_weld_seen = mate_welds
 			if qa.log_lines[k].begins_with("скриншот 31-svyaz"):
 				comms_seen = comms_vis and comms_line == "Код: %s" % main.comms.code
 			if qa.log_lines[k].begins_with("скриншот 31d-ne-nash"):
@@ -130,6 +143,8 @@ func test_scene_runs_scenario() -> void:
 	ok(power_hot, "на 08a-power-hot пульт открыт и реактор перегрет (ART-050)")
 	ok(cooled, "шаг hot 0 остудил реактор: 09-sonar без перегрева и сброса")
 	ok(weld_y > 0.3 and weld_y < 0.7, "на 16-breach-weld шов в середине кадра: %.2f высоты (#524)" % weld_y)
+	eq(crowded, [] as Array[String], "на снимках товарищи не вплотную к камере (#602)")
+	ok(mate_weld_seen, "на 26b-mate-weld товарищ варит шов в кадре (#602)")
 	ok(sat, "по сценарию садились за штурвал")
 	ok(not main.pilot.seated, "и встали")
 	ok(ahead > 20.0, "корабль прошёл вперёд: %.1f м" % ahead)
