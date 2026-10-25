@@ -47,8 +47,12 @@ static func relief(depth: float) -> float:
 
 const CRACK_MASK := "res://textures/ice/treshchiny.png"
 const SHAFT_MASK := 0.70           ## основание шахты ART-052 — где маска трещин выше (ART-056)
-const CAUSTIC := 0.06              ## каустики под трещинами: 0,06·exp(−глубина дна / 12)
-const CAUSTIC_DEPTH := 12.0
+## Каустики под трещинами: CAUSTIC·exp(−глубина дна / CAUSTIC_DEPTH). У ART-056 было 0,06·exp(−d/12), но дно отмели
+## лежит на 30…47 м подо льдом (медиана 41) — там это 0,002, глазу не видно (#445); теперь ≈ 0,05 на 41 м.
+const CAUSTIC := 0.12
+const CAUSTIC_DEPTH := 45.0
+const CAUSTIC_NET := 1.6           ## сеть каустик под трещиной ярче: cmask × (0,6 + 1,6·под трещиной), было 0,8
+const CAUSTIC_WIDEN := 0.10        ## и гуще: порог нитей 0,16 + 0,10·под трещиной
 static var _mask: Image
 
 
@@ -69,6 +73,11 @@ static func crack(x: float, z: float) -> float:
 ## Сила каустик под трещинами на дне глубиной depth (м подо льдом).
 static func caustic(depth: float) -> float:
 	return CAUSTIC * exp(-maxf(depth, 0.0) / CAUSTIC_DEPTH)
+
+
+## Множитель сети каустик над точкой дна: under — маска трещин сверху (размытая, 0…1, с воротами `gate`).
+static func caustic_net(under: float) -> float:
+	return 0.6 + CAUSTIC_NET * clampf(under, 0.0, 1.0)
 
 
 # --- Окно Снелля и отражение воды на нижней грани по ART-075 (`docs/concept-art/led-otrazhenie.md`) ---

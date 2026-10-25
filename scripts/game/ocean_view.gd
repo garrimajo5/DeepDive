@@ -41,6 +41,8 @@ func _ready() -> void:
 	m.set_shader_parameter("gate_edge", IceSheet.GATE_EDGE)
 	m.set_shader_parameter("crack_caustic", IceSheet.CAUSTIC)
 	m.set_shader_parameter("crack_depth", IceSheet.CAUSTIC_DEPTH)
+	m.set_shader_parameter("crack_net", IceSheet.CAUSTIC_NET)
+	m.set_shader_parameter("crack_widen", IceSheet.CAUSTIC_WIDEN)
 	_set_ground(m)   # грунты ART-060: песок, ил, галька
 	_set_decals(m)   # декали ART-066: следы, вмятины, ил, ракушечник, мох
 	seabed_mat = m
