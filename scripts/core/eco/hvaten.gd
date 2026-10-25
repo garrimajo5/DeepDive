@@ -270,16 +270,41 @@ func targets(_world: EcoWorld, out: Array[Dictionary]) -> void:
 		out.append(EcoWorld.target(PESTR, hv.pc, 0.6))
 
 
-## Расстановка щупальца k хватня в момент t (anemoneUpdate): основание на диске в 0,3 м от оси, наклон наружу
-## tilt · (0,25 + 0,75 · open) с покачиванием, длина × (0,12 + 0,88 · open), сжатое — вдвое толще.
-static func tentacle(hv: Anemone, k: int, t: float) -> Transform3D:
+## Дыхание тела (план реализма Б3): столб и диск медленно раздуваются и опадают — ±BREATH_AMP по ширине за BREATH_T с,
+## у каждого хватня своя фаза; спрятавший щупальца сжимается до CLOSED_W ширины. Высота не меняется — диск на месте.
+const BREATH_T := 5.5
+const BREATH_AMP := 0.05
+const CLOSED_W := 0.88
+## Основание щупальца на диске — в TENT_R м от оси (при ширине 1).
+const TENT_R := 0.3
+
+
+## Ширина тела хватня в момент t (доля от исходной): сжатие по open и дыхание; live = false — без дыхания
+## («Экономно»: тело не колышется, только сжимается).
+static func breath(hv: Anemone, t: float, live := true) -> float:
+	var w := lerpf(CLOSED_W, 1.0, hv.open)
+	if live:
+		w *= 1.0 + BREATH_AMP * sin(t * TAU / BREATH_T + hv.index * 2.1 + hv.yaw)
+	return w
+
+
+## Расстановка щупальца k хватня в момент t (anemoneUpdate): основание на диске в 0,3 м от оси (× ширина тела
+## `breath`), наклон наружу tilt · (0,25 + 0,75 · open) с покачиванием, длина × (0,12 + 0,88 · open), сжатое — вдвое толще.
+static func tentacle(hv: Anemone, k: int, t: float, live := true) -> Transform3D:
 	var tn := hv.tents[k]
 	var o := hv.open
 	var sway := sin(t * 1.4 + tn.phase) * 0.18 * o
 	var b := Basis(Vector3.UP, -tn.a) * Basis(Vector3.BACK, -(tn.tilt * (0.25 + 0.75 * o) + sway))
 	var w := 1.0 + (1.0 - o)
 	b = b * Basis.from_scale(Vector3(w, tn.length * (0.12 + 0.88 * o), w))
-	return Transform3D(b, hv.top + Vector3(cos(tn.a) * 0.3, 0.0, sin(tn.a) * 0.3))
+	var r := TENT_R * breath(hv, t, live)
+	return Transform3D(b, hv.top + Vector3(cos(tn.a) * r, 0.0, sin(tn.a) * r))
+
+
+## Расстановка тела хватня в момент t: поворот yaw у подножия, ширина — `breath`.
+static func body(hv: Anemone, t: float, live := true) -> Transform3D:
+	var w := breath(hv, t, live)
+	return Transform3D(Basis(Vector3.UP, hv.yaw) * Basis.from_scale(Vector3(w, 1.0, w)), hv.base)
 
 
 ## Расстановка пестрянки: носом по ходу (по кругу хоровода, если стоит), виляет хвостом.

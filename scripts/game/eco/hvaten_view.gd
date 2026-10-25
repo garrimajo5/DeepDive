@@ -1,7 +1,7 @@
 class_name HvatenView
 extends Node3D
 ## Хватни и пестрянки в сцене (initAnemones в js/creatures.js): три MultiMesh — тела (столб 0,45 → 0,32 м высотой
-## 0,8 м и розовый диск щупалец, своё слабое свечение #2a0a24), щупальца (тонкие конусы 1 м с цветом по длине:
+## 0,8 м и розовый диск щупалец, своё слабое свечение #2a0a24; дышат и сжимаются по ширине — EcoHvaten.body), щупальца (тонкие конусы 1 м с цветом по длине:
 ## лиловые у диска, светлее к кончикам; тело ловит свет, к кончикам светится само и колышется в течении мира —
 ## общий шейдер растений EcoShaders.PLANT, режим TENTACLE, двойник на CPU — `tentacle_offset`) и пестрянки
 ## (вытянутые капли 7 × 10 × 24 см, оранжевые и белая). Стоят на слое отмели (OceanView.LAYER_WORLD).
@@ -24,7 +24,8 @@ var hvaten: EcoHvaten
 var bodies: MultiMeshInstance3D
 var tents: MultiMeshInstance3D
 var pestr: MultiMeshInstance3D
-## Последние буферы щупалец и пестрянок (для тестов — сервер отрисовки без экрана экземпляры не хранит).
+## Последние буферы тел, щупалец и пестрянок (для тестов — сервер отрисовки без экрана экземпляры не хранит).
+var body_buffer := PackedFloat32Array()
 var tent_buffer := PackedFloat32Array()
 var pestr_buffer := PackedFloat32Array()
 
@@ -36,11 +37,7 @@ func _init(system: EcoHvaten) -> void:
 	bodies = _instance("Тела", build_body(), n, false)
 	tents = _instance("Щупальца", build_tentacle(), n * EcoHvaten.TENT, false)
 	pestr = _instance("Пестрянки", build_pestr(), n * EcoHvaten.PESTR_N, true)
-	var buf := PackedFloat32Array()
-	buf.resize(n * STRIDE)
-	for hv in hvaten.anemones:
-		_put(buf, hv.index * STRIDE, Transform3D(Basis(Vector3.UP, hv.yaw), hv.base))
-	bodies.multimesh.buffer = buf
+	body_buffer.resize(n * STRIDE)
 	tent_buffer.resize(n * EcoHvaten.TENT * STRIDE)
 	pestr_buffer.resize(n * EcoHvaten.PESTR_N * STRIDE_C)
 	for hv in hvaten.anemones:
@@ -156,18 +153,22 @@ const FAR_EVERY := 3
 var _frame := 0
 
 
-## Расставить щупальца и пестрянок в момент t (время мира); all — переписать всех хватней сразу.
+## Расставить тела (дыхание — EcoHvaten.breath), щупальца и пестрянок в момент t (время мира); all — переписать всех
+## хватней сразу. На «Экономно» (EcoShaders.sway_lite) тело не дышит, только сжимается со щупальцами.
 func sync(t: float, ship_pos := Vector3.ZERO, all := true) -> void:
 	_frame += 1
+	var live := not EcoShaders.sway_lite
 	for hv in hvaten.anemones:
 		if not all and not due(hv, ship_pos, _frame):
 			continue
+		_put(body_buffer, hv.index * STRIDE, EcoHvaten.body(hv, t, live))
 		for k in EcoHvaten.TENT:
-			_put(tent_buffer, (hv.index * EcoHvaten.TENT + k) * STRIDE, EcoHvaten.tentacle(hv, k, t))
+			_put(tent_buffer, (hv.index * EcoHvaten.TENT + k) * STRIDE, EcoHvaten.tentacle(hv, k, t, live))
 		for k in EcoHvaten.PESTR_N:
 			var tr := EcoHvaten.pestr_pose(hv, k, t)
 			tr.basis = tr.basis * Basis.from_scale(PESTR_SIZE)
 			_put(pestr_buffer, (hv.index * EcoHvaten.PESTR_N + k) * STRIDE_C, tr)
+	bodies.multimesh.buffer = body_buffer
 	tents.multimesh.buffer = tent_buffer
 	pestr.multimesh.buffer = pestr_buffer
 
