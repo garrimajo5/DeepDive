@@ -1,5 +1,6 @@
 extends TestCase
-## Разброс особей в MultiMesh (Б4, `docs/grafika-plan-eco.md`): у светляков, скребунов, радужников и монетников свой размер, оттенок
+## Разброс особей в MultiMesh (Б4, `docs/grafika-plan-eco.md`): у светляков, скребунов, радужников, монетников,
+## веерников, пиявников и прилипал свой размер, оттенок
 ## и ритм — стая не клоны. Числа — хешем от номера особи (EcoVary): мир и его случай не меняются, вид один и тот же
 ## при каждом запуске, вызовов отрисовки и шейдеров не прибавилось.
 
@@ -239,4 +240,91 @@ func test_coins_differ_and_carry_tint() -> void:
 	ok(tints.size() >= c.coins.size() * 0.7, "почти все разного оттенка: %d из %d" % [tints.size(), c.coins.size()])
 	eq(EcoCoins.coin_basis(c.coins[0], 1.0), EcoCoins.coin_basis(c.coins[0], 1.0, CoinsView.ROCK_RATE),
 		"без своего ритма — прежнее покачивание")
+	v.free()
+
+
+func test_fans_differ_and_carry_tint() -> void:
+	var w := EcoWorld.new(EcoRandom.WORLD_SEED)
+	w.ground = Seabed.height
+	w.ship.pos = Vector3(500, 0, 500)
+	var cur := w.add(EcoCurrent.new()) as EcoCurrent
+	w.add(EcoCoral.new())
+	var f := w.add(EcoFan.new(cur)) as EcoFan
+	var v := FanView.new(f)
+	v.sync(1.5)
+	ok(v.multimesh.use_colors, "у веера цвет экземпляра")
+	var sizes := []
+	var tints := {}
+	for fan in f.fans:
+		var k := FanView.fan_scale(fan.index)
+		sizes.append(k)
+		var tr := FanView.transform_at(v.buffer, fan.index)
+		if not near(tr.basis.y.length(), k, 1e-4, "размер веера %d в буфере" % fan.index):
+			return
+		ok(tr.basis.is_equal_approx(EcoFan.basis(fan, 1.5) * k), "поворот к потоку прежний")
+		var tn := FanView.fan_tint(fan.index)
+		ok(tn.r >= 0.85 - 1e-5 and tn.r <= 1.15 + 1e-5, "светлее-темнее ±15 %%: %s" % tn)
+		var i := fan.index * FanView.STRIDE + 12
+		ok(Color(v.buffer[i], v.buffer[i + 1], v.buffer[i + 2]).is_equal_approx(tn), "оттенок — цвет экземпляра")
+		tints[Vector3i(roundi(tn.r * 40), roundi(tn.g * 40), roundi(tn.b * 40))] = true
+	var s := _span(sizes)
+	ok(s.x >= 0.85 - 1e-5 and s.y <= 1.15 + 1e-5 and s.y - s.x > 0.08, "размер ±15 %%: %s" % s)
+	eq(tints.size(), f.fans.size(), "все веера разного оттенка")
+	ok(EcoShaders.PLANT.contains("smoothstep(1.6, 2.6, el)) * COLOR.rgb"), "кружево веера берёт цвет экземпляра")
+	v.free()
+
+
+func test_remoras_differ() -> void:
+	var sizes := []
+	var rates := []
+	var shades := []
+	for n in 12:
+		sizes.append(RemoraView.remora_scale(n))
+		rates.append(RemoraView.remora_rate(n))
+		shades.append(RemoraView.remora_shade(n))
+	var s := _span(sizes)
+	ok(s.x >= 0.85 - 1e-5 and s.y <= 1.15 + 1e-5 and s.y - s.x > 0.15, "размер ±15 %%: %s" % s)
+	var r := _span(rates)
+	ok(r.x >= 14.0 * 0.8 - 1e-4 and r.y <= 14.0 * 1.2 + 1e-4 and r.y - r.x > 3.0, "виляют не в лад: %s рад/с" % r)
+	var d := _span(shades)
+	ok(d.y - d.x > 0.1, "светлее-темнее: %s" % d)
+	# на плаву: поворот хвоста в своём ритме, масштаб — свой
+	var rm := EcoRemora.Remora.new()
+	rm.index = 3
+	rm.dir = Vector3(1, 0, 0)
+	rm.ph = 0.4
+	rm.mode = EcoRemora.Mode.SWIM
+	var x := RemoraView.place(rm, 0.7)
+	near(x.basis.z.length(), RemoraView.SCALE * RemoraView.remora_scale(3), 1e-4, "масштаб рыбы 3")
+	var want := Basis.looking_at(-rm.dir, Vector3.UP) * Basis(Vector3.UP, sin(0.7 * RemoraView.remora_rate(3) + 0.4) * RemoraView.WAG)
+	ok(x.basis.orthonormalized().is_equal_approx(want), "виляние — своей частотой")
+	var view := RemoraView.new(EcoRemora.new())
+	ok(view.multimesh.use_colors, "у прилипалы цвет экземпляра")
+	view.free()
+
+
+func test_leeches_differ() -> void:
+	var sizes := []
+	var rates := []
+	for n in 6:
+		sizes.append(LeechView.leech_scale(n))
+		rates.append(LeechView.leech_rate(n))
+	var s := _span(sizes)
+	ok(s.x >= 0.85 - 1e-5 and s.y <= 1.15 + 1e-5 and s.y - s.x > 0.08, "размер ±15 %%: %s" % s)
+	var r := _span(rates)
+	ok(r.y - r.x > 0.3, "изгибаются не в лад: %s рад/с" % r)
+	var w := EcoWorld.new(EcoRandom.WORLD_SEED)
+	w.ground = Seabed.height
+	w.ship.pos = Vector3(500, 0, 500)
+	var ps := w.add(EcoPred.new()) as EcoPred
+	var lc := w.add(EcoLeech.new(ps)) as EcoLeech
+	var pr := ps.all[0]
+	pr.leech = true
+	var v := LeechView.new(lc)
+	ok(v.mesh.multimesh.use_colors, "у ленты цвет экземпляра")
+	v.sync(1.0)
+	var x := v.placed[0]
+	near(x.basis.y.length(), LeechView.leech_scale(pr.index), 1e-4, "длина ленты — своя")
+	var k := LeechView.leech_shade(pr.index)
+	ok(v.color_at(0).is_equal_approx(Color(k, k, k, 1.0)), "оттенок — цвет экземпляра")
 	v.free()

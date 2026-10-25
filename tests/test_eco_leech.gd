@@ -293,7 +293,7 @@ func test_view_ribbon_on_infected() -> void:
 	ship.pos = FAR
 	view.step(0.05, ship)
 	var sick := view.leech_view.placed[0]
-	near(sick.basis.get_scale().y, 1.0, 1e-4, "у заражённого лента видна")
+	near(sick.basis.get_scale().y, LeechView.leech_scale(view.preds.all[0].index), 1e-4, "у заражённого лента видна (свой размер)")
 	near(sick.origin.distance_to(EcoLeech.position_on(view.preds.all[0])), 0.0, 1e-4)
 	near(view.leech_view.placed[1].basis.get_scale().length(), 0.0, 1e-6, "у здорового — нет")
 	tree.root.remove_child(view)

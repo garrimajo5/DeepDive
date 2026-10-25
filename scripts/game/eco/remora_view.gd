@@ -4,6 +4,7 @@ extends MultiMeshInstance3D
 ## отрисовки). Рыба 35 см: серое тело-веретено (#55606a), светлая присоска-диск на темени (#d8e6ea), тёмный хвост
 ## (#3a444c); слабый свой свет (#0c1418), чтобы не пропадали в темноте. Масштаб 1,6 как в браузере. Нос — +Z меша
 ## по EcoRemora.Remora.dir; на плаву виляет хвостом (sin(14 t + ph) · 0,3 рад). Слой отмели (OceanView.LAYER_WORLD).
+## Разброс (Б4, EcoVary по номеру рыбы): свой размер, частота виляния и оттенок — цвет экземпляра × цвет вершины.
 
 const BODY := Color("55606a")
 const DISC := Color("d8e6ea")
@@ -20,6 +21,10 @@ const TAIL_Z := -0.24
 const SCALE := 1.6
 const WAG := 0.3
 const WAG_RATE := 14.0
+## Разброс: размер ±15 %, частота виляния ±20 %, светлее-темнее ±12 %.
+const SIZE_SPREAD := 0.15
+const RATE_SPREAD := 0.2
+const SHADE_SPREAD := 0.12
 
 var remoras: EcoRemora
 ## Треугольников в меше одной рыбы (для тестов и бюджета).
@@ -39,6 +44,7 @@ func _init(system: EcoRemora) -> void:
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
 	mm.mesh = build()
 	mm.instance_count = maxi(1, EcoRemora.PER_RAY * EcoRay.PATHS.size())
 	multimesh = mm
@@ -70,10 +76,15 @@ func sync(t: float) -> void:
 	placed.resize(n)
 	for i in n:
 		var x := Transform3D(Basis.from_scale(Vector3.ZERO), Vector3.ZERO)
+		var c := Color.WHITE
 		if i < remoras.remoras.size():
-			x = place(remoras.remoras[i], t)
+			var rm := remoras.remoras[i]
+			x = place(rm, t)
+			var k := remora_shade(rm.index)
+			c = Color(k, k, k)
 		placed[i] = x
 		multimesh.set_instance_transform(i, x)
+		multimesh.set_instance_color(i, c)
 
 
 ## Место рыбы: нос (+Z) — по dir, на плаву виляет.
@@ -82,8 +93,23 @@ static func place(rm: EcoRemora.Remora, t: float) -> Transform3D:
 	var up := Vector3.UP if absf(fwd.normalized().y) < 0.99 else Vector3.BACK
 	var b := Basis.looking_at(-fwd, up)  # looking_at смотрит в −Z: меш смотрит носом в +Z
 	if rm.mode == EcoRemora.Mode.SWIM:
-		b = b * Basis(Vector3.UP, sin(t * WAG_RATE + rm.ph) * WAG)
-	return Transform3D(b.scaled_local(Vector3.ONE * SCALE), rm.p)
+		b = b * Basis(Vector3.UP, sin(t * remora_rate(rm.index) + rm.ph) * WAG)
+	return Transform3D(b.scaled_local(Vector3.ONE * SCALE * remora_scale(rm.index)), rm.p)
+
+
+## Размер рыбы n (множитель к SCALE).
+static func remora_scale(n: int) -> float:
+	return EcoVary.spread(n, EcoVary.SIZE, SIZE_SPREAD)
+
+
+## Частота виляния рыбы n, рад/с.
+static func remora_rate(n: int) -> float:
+	return WAG_RATE * EcoVary.spread(n, EcoVary.RATE, RATE_SPREAD)
+
+
+## Светлее-темнее рыбы n (множитель цвета экземпляра).
+static func remora_shade(n: int) -> float:
+	return EcoVary.spread(n, EcoVary.SHADE, SHADE_SPREAD)
 
 
 ## Эллипсоид: кольца по широте, обход — лицом наружу (по часовой, если смотреть снаружи).
