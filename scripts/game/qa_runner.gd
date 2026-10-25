@@ -204,7 +204,7 @@ func _measure(now_us: int) -> void:
 		var ms := (now_us - _last_us) / 1000.0
 		if ms > worst_ms:
 			worst_ms = ms
-			worst_at = worst_note(_step_label, render_ms(), code_ms(), gpu_ms(), ms)
+			worst_at = worst_note(_step_label, render_ms(), code_ms(), gpu_ms(), ms, main.clock.note() if main else "")
 		if _settle > 0:
 			_settle -= 1
 		else:
@@ -308,14 +308,18 @@ func worst_text() -> String:
 	return " · худший кадр %d мс (%s)" % [roundi(worst_ms), worst_at] if worst_ms > 0.0 else ""
 
 
+const PARTS_FROM := 20.0   ## код дольше, мс, — пишем его части (issue #627)
+
+
 ## Подпись к худшему кадру: шаг, код (шаг игры `Main.step` с живым миром), отрисовка на процессоре и, если драйвер умеет
-## замерять, на видеокарте, мс (issue #217, #281). Код и отрисовка малы, а кадр долгий — время ушло вне шага и
+## замерять, на видеокарте, мс (issue #217, #281). Долгий код — с частями шага `StepClock.note` (issue #627):
+## «код 112 мс (мир 80, виды 20), …». Код и отрисовка малы, а кадр долгий — время ушло вне шага и
 ## отрисовки (физика, ввод, система). Замер видеокарты движок отдаёт с запаздыванием на несколько кадров: больше самого
 ## кадра frame (мс) — он от другого кадра, не пишем (issue #609).
-static func worst_note(step: String, draw: float, code: float = -1.0, gpu: float = 0.0, frame := INF) -> String:
+static func worst_note(step: String, draw: float, code: float = -1.0, gpu: float = 0.0, frame := INF, parts := "") -> String:
 	var d := "отрисовка %d мс" % roundi(draw)
 	if code >= 0.0:
-		d = "код %d мс, %s" % [roundi(code), d]
+		d = "код %d мс%s, %s" % [roundi(code), " (%s)" % parts if not parts.is_empty() and code >= PARTS_FROM else "", d]
 	if gpu > 0.0 and gpu <= frame + 1.0:
 		d += ", видеокарта %d мс" % roundi(gpu)
 	return step + ", " + d if not step.is_empty() else d
