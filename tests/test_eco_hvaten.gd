@@ -312,7 +312,8 @@ func test_view_three_multimeshes() -> void:
 	eq(hv.pestr.multimesh.instance_count, 4 * EcoHvaten.PESTR_N, "пестрянки одним MultiMesh")
 	var a := view.hvaten.anemones[2]
 	var tr := HvatenView.transform_at(hv.tent_buffer, 2 * EcoHvaten.TENT + 3)
-	ok(tr.origin.distance_to(a.top) < 0.31, "щупальце растёт из диска")
+	near(tr.origin.distance_to(a.top), EcoHvaten.TENT_R * EcoHvaten.breath(a, view.world.time), 1e-4,
+		"щупальце растёт из диска")
 	var tip := tr * Vector3(0, 1, 0)
 	ok(Vector2(tip.x - a.top.x, tip.z - a.top.z).length() > Vector2(tr.origin.x - a.top.x, tr.origin.z - a.top.z).length(),
 		"раскрытое щупальце клонится наружу")
@@ -324,5 +325,72 @@ func test_view_three_multimeshes() -> void:
 	var pe := HvatenView.transform_at(hv.pestr_buffer, 2 * EcoHvaten.PESTR_N, HvatenView.STRIDE_C)
 	ok(pe.origin.is_equal_approx(a.pestr[0].p), "пестрянка на месте")
 	near(hv.pestr_buffer[2 * EcoHvaten.PESTR_N * HvatenView.STRIDE_C + 12], HvatenView.PESTR_COLORS[0].r, 1e-4, "оранжевая")
+	view.queue_free()
+	await frames(1)
+
+
+# ---------- Дыхание тела (план реализма Б3) ----------
+
+func test_body_breathes_slowly() -> void:
+	var w := _world()
+	var hv := _system(w).anemones[0]
+	var lo := 9.0
+	var hi := 0.0
+	for i in 110:
+		var b := EcoHvaten.breath(hv, i * 0.05)
+		lo = minf(lo, b)
+		hi = maxf(hi, b)
+	ok(hi - lo > EcoHvaten.BREATH_AMP * 1.5, "за период тело раздувается и опадает")
+	ok(lo >= 1.0 - EcoHvaten.BREATH_AMP - 1e-4 and hi <= 1.0 + EcoHvaten.BREATH_AMP + 1e-4, "не больше ±5 %")
+	near(EcoHvaten.breath(hv, 1.0), EcoHvaten.breath(hv, 1.0 + EcoHvaten.BREATH_T), 1e-4, "период 5,5 с")
+	ok(absf(EcoHvaten.breath(hv, 1.0) - EcoHvaten.breath(hv, 1.1)) < 0.01, "медленно — без дрожи")
+	hv.open = 0.0
+	ok(EcoHvaten.breath(hv, 1.0) < 1.0 - EcoHvaten.BREATH_AMP, "спрятавший щупальца сжимается")
+	near(EcoHvaten.breath(hv, 1.0, false), EcoHvaten.CLOSED_W, 1e-5, "без дыхания — только сжатие")
+
+
+func test_anemones_breathe_apart() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var a := view.hvaten.anemones
+	ok(a.size() >= 2, "хватней несколько")
+	var t := 3.0
+	for hv in a:
+		hv.open = 1.0
+	ok(absf(EcoHvaten.breath(a[0], t) - EcoHvaten.breath(a[1], t)) > 0.005, "соседи дышат вразнобой")
+	view.queue_free()
+	await frames(1)
+
+
+func test_body_and_tentacles_breathe_in_view() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var hv := view.hvaten_view
+	var a := view.hvaten.anemones[1]
+	a.open = 1.0
+	var widths: Array[float] = []
+	for i in 8:
+		var t := EcoHvaten.BREATH_T * i / 8.0
+		hv.sync(t)
+		var body := HvatenView.transform_at(hv.body_buffer, 1)
+		ok(body.origin.is_equal_approx(a.base), "тело стоит у подножия")
+		near(body.basis.y.length(), 1.0, 1e-5, "высота не меняется — диск на месте")
+		near(body.basis.x.length(), EcoHvaten.breath(a, t), 1e-5, "ширина тела — дыхание")
+		widths.append(body.basis.x.length())
+		var tent := HvatenView.transform_at(hv.tent_buffer, EcoHvaten.TENT + 5)
+		var r := Vector2(tent.origin.x - a.top.x, tent.origin.z - a.top.z).length()
+		near(r, EcoHvaten.TENT_R * widths[-1], 1e-4, "щупальца сидят на дышащем диске")
+		ok(r < 0.4 * widths[-1], "не мимо края диска")
+	ok(widths.max() - widths.min() > EcoHvaten.BREATH_AMP, "в сцене тело дышит")
+	EcoShaders.set_sway_lite(true)
+	hv.sync(EcoHvaten.BREATH_T * 0.25)
+	var w1 := HvatenView.transform_at(hv.body_buffer, 1).basis.x.length()
+	hv.sync(EcoHvaten.BREATH_T * 0.75)
+	near(HvatenView.transform_at(hv.body_buffer, 1).basis.x.length(), w1, 1e-5, "на «Экономно» тело не дышит")
+	EcoShaders.set_sway_lite(false)
 	view.queue_free()
 	await frames(1)
