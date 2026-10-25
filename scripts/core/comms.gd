@@ -10,6 +10,8 @@ extends RefCounted
 ## Кодовое слово одно на забег (`reset_run`). Источник голосов — живой мир через `EcoLink.VOICE` (`Main.on_eco_event`).
 ## Здесь — очередь, часы, состояние проверки и места (макет 2400×1080, масштаб H/1080); рисует
 ## `scripts/game/comms_panel.gd` (`main.comms_panel`), касания — `Main._comms_step` через `Touch.Router.taps`/`blocks`.
+## Кооп: очередь и проверку ведёт хост, гостю едет снимок `pack` в кадре (`ev["c"]`), гость `follow` — ставит его
+## `apply`, сам только тает; его «Спросить код» / «Понятно» — `asked` (номер сообщения) → `Crew.Pad.ask` → хост `press`.
 
 enum Ask { NONE, WAIT, MATCH, WRONG, EXPOSED, SILENT }
 
@@ -63,6 +65,7 @@ const BARS := Rect2(0, 748, 114, 36)
 
 class Msg:
 	extends RefCounted
+	var id := 0          ## номер сообщения за сеанс (гость нажимает именно его, `press`)
 	var role := 2
 	var text := ""
 	var fake := false
@@ -85,6 +88,9 @@ var closing := false          ## плашка уходит — следом сл
 var shown := false            ## не отложено (`hidden` в этом кадре)
 var exposed := 0              ## разоблачённых подделок за забег
 var solo := true              ## одиночный забег: подпись «· экипаж»
+var follow := false           ## гость сети: сообщение и проверка — из кадра хоста (`apply`), свои часы не идут
+var asked := 0                ## гость: нажал кнопку сообщения с этим номером — уходит хосту (`Crew.Pad.ask`)
+var next_id := 0
 
 
 ## Кодовое слово забега по числу (новый забег — новое слово).
@@ -102,11 +108,14 @@ func reset_run(n: int) -> void:
 	a = 0.0
 	closing = false
 	exposed = 0
+	asked = 0
 
 
 ## Сообщение в эфир. Своё отвечает кодом забега; подделка — чужим словом или молчит (`silent`).
 func push(role: int, text: String, fake := false, ask := "", silent := false) -> Msg:
 	var m := Msg.new()
+	next_id += 1
+	m.id = next_id
 	m.role = clampi(role, 0, LETTERS.size() - 1)
 	m.text = text
 	m.fake = fake
@@ -139,6 +148,9 @@ func active() -> bool:
 ## Шаг: `hidden` — связь отложена (голосование, итог, меню, пауза, брифинг): плашка тает, часы стоят.
 func update(dt: float, hidden: bool) -> void:
 	shown = not hidden
+	if follow:
+		_follow(dt, hidden)
+		return
 	if cur == null:
 		if queue.is_empty():
 			a = 0.0
@@ -207,11 +219,82 @@ func tap(p: Vector2, size: Vector2) -> bool:
 		return false
 	if not button_rect(size).has_point(p):
 		return false
+	if follow:   # гость: решает хост, кнопка — его сообщению
+		if button_live():
+			asked = cur.id
+	else:
+		press(cur.id)
+	return true
+
+
+## Кнопка сообщения номер id (своя или гостя сети): «Спросить код» / снова после «Нет ответа» / «Понятно».
+## Старое нажатие (сообщение уже сменилось) не действует. true — нажатие принято.
+func press(id: int) -> bool:
+	if cur == null or cur.id != id or not button_live():
+		return false
 	if state in [Ask.NONE, Ask.SILENT]:
 		_go(Ask.WAIT)
-	elif state == Ask.EXPOSED:
+	else:
 		closing = true
 	return true
+
+
+## ---- Сеть: снимок хоста для гостя ----
+
+const TEXT_MAX := 120   ## реплика в кадре не длиннее (плашка столько и не вместит)
+
+
+## Снимок для кадра гостям: код забега и сообщение на плашке с ходом проверки. Ответ источника едет, только когда
+## он уже показан («Код: <чужое>» и разоблачение) — до вопроса гость его не знает, как и хост.
+func pack() -> Dictionary:
+	var d := {"k": code}
+	if cur != null:
+		var reply := cur.reply if state in [Ask.WRONG, Ask.EXPOSED] else ""
+		d["m"] = [cur.id, cur.role, cur.text.left(TEXT_MAX), cur.fake, reply, cur.t, cur.speech, int(state), st,
+			closing, exposed]
+	return d
+
+
+## Гость ставит снимок хоста. Сообщения нет — плашка тает (`_follow`); новое — с начала.
+func apply(d: Variant) -> void:
+	if not d is Dictionary:
+		return
+	code = str(d.get("k", code))
+	var m: Variant = d.get("m")
+	if not (m is Array and m.size() == 11):
+		if cur != null:
+			closing = true
+		return
+	var id := int(m[0])
+	if cur == null or cur.id != id:
+		cur = Msg.new()
+		cur.id = id
+		a = 0.0
+	cur.role = clampi(int(m[1]), 0, LETTERS.size() - 1)
+	cur.text = str(m[2])
+	cur.fake = bool(m[3])
+	cur.reply = str(m[4])
+	cur.t = float(m[5])
+	cur.speech = float(m[6])
+	state = clampi(int(m[7]), 0, Ask.SILENT) as Ask
+	st = float(m[8])
+	closing = bool(m[9])
+	exposed = int(m[10])
+
+
+## Гость между кадрами хоста: только прозрачность и индикатор речи.
+func _follow(dt: float, hidden: bool) -> void:
+	var want := 0.0 if hidden or closing or cur == null else 1.0
+	a = move_toward(a, want, dt / FADE)
+	if cur == null:
+		return
+	if closing and a <= 0.0:
+		cur = null
+		closing = false
+		return
+	if not hidden:
+		cur.t += dt
+		st += dt
 
 
 ## Где касание не крутит взгляд: кнопка видимой плашки. Вне кнопки плашка пропускает касания и свайпы.
