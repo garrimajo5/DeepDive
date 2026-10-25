@@ -204,7 +204,7 @@ func _measure(now_us: int) -> void:
 		var ms := (now_us - _last_us) / 1000.0
 		if ms > worst_ms:
 			worst_ms = ms
-			worst_at = worst_note(_step_label, render_ms(), code_ms(), gpu_ms(), ms, main.clock.note() if main else "")
+			worst_at = worst_note(_step_label, render_ms(), code_ms(), gpu_ms(), ms, main.clock.last_note() if main else "")   # _measure — уже в новом шаге (issue #662)
 		if _settle > 0:
 			_settle -= 1
 		else:
