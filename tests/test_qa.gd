@@ -361,6 +361,39 @@ func test_worst_note_code_and_gpu() -> void:   # issue #217, #281: отрисо�
 	eq(QaRunner.worst_note("", 3.0), "отрисовка 3 мс", "без шага и кода — как раньше")
 
 
+## Issue #609: «отрисовка 1466 мс» при худшем кадре 178 мс — замер движка запаздывал и приходился на чужой кадр.
+## Теперь отрисовка — от frame_pre_draw до frame_post_draw того кадра, чьё время меряется; видеокарта больше кадра — не пишем.
+func test_worst_frame_own_draw() -> void:
+	var r := QaRunner.new()
+	var t := 1000000
+	r._measure(t)
+	r.draw_ms = 4.0
+	t += 20000
+	r._measure(t)
+	r.after_shot()
+	r.draw_ms = 1466.0            # кадр снимка: сборка шейдеров уровня «Экономно» — его не считаем
+	t += 1500000
+	r._measure(t)
+	r._step_label = "шаг 353 press"
+	r.draw_ms = 3.0               # рывок кадра, отрисовка в нём мала
+	t += 178000
+	r._measure(t)
+	r.draw_ms = 5.0
+	t += 20000
+	r._measure(t)
+	eq(roundi(r.worst_ms), 178, "худший кадр 178 мс")
+	ok(r.worst_at.contains("отрисовка 3 мс"), "отрисовка своего кадра, не кадра снимка: " + r.worst_at)
+	ok(not r.worst_at.contains("1466"), "чужие 1466 мс не приписаны: " + r.worst_at)
+	r._on_pre_draw()
+	r._on_post_draw()
+	ok(r.draw_ms >= 0.0 and r.draw_ms < 50.0, "замер отрисовки по сигналам: %.2f мс" % r.draw_ms)
+	eq(QaRunner.worst_note("шаг 1 wait", 3.0, 2.0, 1466.0, 178.0), "шаг 1 wait, код 2 мс, отрисовка 3 мс",
+		"видеокарта больше самого кадра — от другого кадра, не пишем")
+	eq(QaRunner.worst_note("шаг 1 wait", 3.0, 2.0, 150.0, 178.0), "шаг 1 wait, код 2 мс, отрисовка 3 мс, видеокарта 150 мс",
+		"видеокарта в пределах кадра — пишем")
+	r.free()
+
+
 func test_fps_few_frames_without_shot() -> void:   # issue #281: 0,3 с после снимка — 2 кадра, а не среднее движка со снимком
 	var r := QaRunner.new()
 	var t := 1000000

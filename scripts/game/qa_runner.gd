@@ -24,6 +24,12 @@ var worst_at := ""
 var _step_label := ""
 var _last_us := 0
 var _skip_frame := true
+## Отрисовка последнего кадра, мс: от RenderingServer.frame_pre_draw до frame_post_draw того же кадра (issue #609).
+## Замер движка (viewport_get_measured_render_time_cpu) приходит на несколько кадров позже и после сборки шейдеров
+## бывает больше самого кадра — «отрисовка 1466 мс» при худшем 178 приписывалась чужому кадру (кадру снимка).
+## Сюда входит и ожидание видеокарты и показа кадра (вплоть до кадровой развёртки).
+var draw_ms := 0.0
+var _draw_from_us := 0
 ## Кадры и их время (мкс) с прошлого скриншота — без кадра снимка и прогрева (issue #169): среднее движка
 ## за секунду считало и сам скриншот, и «05b-light-off» через 0,5 с после снимка показывал 3 к/с при худшем кадре 34 мс.
 var frames := 0
@@ -54,7 +60,9 @@ func start(m: Main, text: String = "") -> void:
 		text = FileAccess.get_file_as_string(SCENARIO)
 		DirAccess.rename_absolute(SCENARIO, DIR + "/scenario.last.json")
 	script_q = QaScript.parse(text)
-	RenderingServer.viewport_set_measure_render_time(main.get_viewport().get_viewport_rid(), true)   # для worst_at
+	RenderingServer.viewport_set_measure_render_time(main.get_viewport().get_viewport_rid(), true)   # видеокарта — для worst_at
+	RenderingServer.frame_pre_draw.connect(_on_pre_draw)
+	RenderingServer.frame_post_draw.connect(_on_post_draw)
 	_warm_from_us = Time.get_ticks_usec()
 	DirAccess.make_dir_recursive_absolute(OUT)
 	for f in DirAccess.get_files_at(OUT):
@@ -188,7 +196,7 @@ func _measure(now_us: int) -> void:
 		var ms := (now_us - _last_us) / 1000.0
 		if ms > worst_ms:
 			worst_ms = ms
-			worst_at = worst_note(_step_label, render_ms(), code_ms(), gpu_ms())
+			worst_at = worst_note(_step_label, render_ms(), code_ms(), gpu_ms(), ms)
 		if _settle > 0:
 			_settle -= 1
 		else:
@@ -292,22 +300,30 @@ func worst_text() -> String:
 
 
 ## Подпись к худшему кадру: шаг, код (шаг игры `Main.step` с живым миром), отрисовка на процессоре и, если драйвер умеет
-## замерять, на видеокарте, мс (issue #217, #281). Код и отрисовка малы, а кадр долгий — ждали видеокарту или драйвер.
-static func worst_note(step: String, draw_ms: float, code: float = -1.0, gpu: float = 0.0) -> String:
-	var d := "отрисовка %d мс" % roundi(draw_ms)
+## замерять, на видеокарте, мс (issue #217, #281). Код и отрисовка малы, а кадр долгий — время ушло вне шага и
+## отрисовки (физика, ввод, система). Замер видеокарты движок отдаёт с запаздыванием на несколько кадров: больше самого
+## кадра frame (мс) — он от другого кадра, не пишем (issue #609).
+static func worst_note(step: String, draw: float, code: float = -1.0, gpu: float = 0.0, frame := INF) -> String:
+	var d := "отрисовка %d мс" % roundi(draw)
 	if code >= 0.0:
 		d = "код %d мс, %s" % [roundi(code), d]
-	if gpu > 0.0:
+	if gpu > 0.0 and gpu <= frame + 1.0:
 		d += ", видеокарта %d мс" % roundi(gpu)
 	return step + ", " + d if not step.is_empty() else d
 
 
-## Отрисовка прошлого кадра на процессоре, мс.
+## Отрисовка прошлого кадра, мс — того же, чьё время меряет _measure (issue #609, `draw_ms`).
 func render_ms() -> float:
-	if main == null or not main.is_inside_tree():
-		return 0.0
-	return RenderingServer.viewport_get_measured_render_time_cpu(main.get_viewport().get_viewport_rid()) \
-		+ RenderingServer.get_frame_setup_time_cpu()
+	return draw_ms
+
+
+func _on_pre_draw() -> void:
+	_draw_from_us = Time.get_ticks_usec()
+
+
+func _on_post_draw() -> void:
+	if _draw_from_us > 0:
+		draw_ms = (Time.get_ticks_usec() - _draw_from_us) / 1000.0
 
 
 ## Код прошлого кадра: шаг игры `Main.step` (корабль, живой мир, виды), мс. Performance.TIME_PROCESS не годится —
