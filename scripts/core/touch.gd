@@ -16,8 +16,11 @@ class Layout:
 	var down := Circle.new()
 	var light := Circle.new()
 	var noclip := Circle.new()  ## тестовая кнопка «noclip» в правом верхнем углу
+	## Безопасная область экрана (без вырезов), от которой разложены органы: по ней же — плашки поверх них (#603).
+	var area := Rect2()
 
 	func compute(safe: Rect2) -> void:
+		area = safe
 		var s := minf(safe.size.x, safe.size.y)
 		var m := s * MARGIN_SHARE
 		var pr := s * PAD_SHARE
