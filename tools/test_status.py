@@ -26,6 +26,10 @@ class ParseTasks(unittest.TestCase):
         self.assertEqual(t[2]["roles"], ["поток А", "поток Б"])
         self.assertIsNone(t[2]["blocker"])
 
+    def test_animation_role(self):
+        t = status.parse_tasks("- [ ] Анимации экипажа — заказ ANIM — анимация, поток А\n")
+        self.assertEqual(t[0]["roles"], ["поток А", "анимация"])
+
     def test_role_word_not_inside_other_words(self):
         # «art» не находится внутри «старт», «qa» — внутри других слов
         t = status.parse_tasks("- [ ] Старт забега — поток А\n")
