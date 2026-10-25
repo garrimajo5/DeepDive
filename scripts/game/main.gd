@@ -377,6 +377,9 @@ func _ready() -> void:
 	add_child(fps_view)
 	lite_offer_panel = LiteOfferPanel.new()   # предложение «Экономно» ART-044: касания — `_offer_step`
 	add_child(lite_offer_panel)
+	if settings.pick_first(Graphics.auto_here()):   # первый запуск — уровень графики по телефону ART-044
+		var d := Graphics.device()
+		print("графика: автовыбор «%s» (%s, %d МБ)" % [Graphics.NAMES[settings.graphics], d["adapter"], d["memory_mb"]])
 	settings.read()
 	_apply_settings()
 	tutorial.on = hints and not settings.hints_done and not QaRunner.pending()   # тестер включает шагом `tutorial`
