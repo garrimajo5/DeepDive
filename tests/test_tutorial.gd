@@ -238,3 +238,69 @@ func test_guest_events_by_host_frame() -> void:
 	g.update(dt, false, false, "route", Vector2.ZERO, false, true, false, sh, -1)
 	eq(g.update(dt, false, false, "route", Vector2.ZERO, false, false, false, sh, 0), [Tutorial.Ev.ROUTE],
 		"кнопка у поста «Маршрут» — маршрут в кадре сменился")
+
+
+## Кнопка «Схема» ART-042 на плашке: пока игрок ищет пост-цель; у поста, в «Выполнено» и без цели — нет.
+func test_map_button_wanted_and_place() -> void:
+	var t := Tutorial.new()
+	t.a = 1.0
+	ok(t.map_wanted("helm", "", false), "ищет штурвал — «Схема»")
+	ok(not t.map_wanted("helm", "helm", false), "у штурвала — нет")
+	ok(not t.map_wanted("", "", false), "цели нет (сидит, шаг штурвала) — нет")
+	ok(t.map_wanted("energy", "", false), "шаг энергии из кресла — «Схема»")
+	ok(not t.map_wanted("energy", "energy", true), "пульт открыт — нет")
+	t.note(Tutorial.Ev.SAT)
+	ok(not t.map_wanted("helm", "", false), "«Выполнено» — нет")
+	t.a = 0.0
+	ok(not Tutorial.new().map_wanted("helm", "", false), "плашки не видно — нет")
+	for size: Vector2 in [Vector2(2400, 1080), Vector2(1600, 720)]:
+		var b := Tutorial.box(size)
+		var m := Tutorial.map_rect(b, size)
+		var s := size.y / Tutorial.REF_H
+		near(m.size.x, 360.0 * s, 1e-3, "ширина 360")
+		near(m.size.y, 112.0 * s, 1e-3, "высота 112")
+		ok(b.encloses(m), "кнопка на плашке")
+		near(b.end.x - m.end.x, Tutorial.MAP_RIGHT * s, 1e-3, "у правого края")
+		var font := ThemeDB.fallback_font
+		for st in Tutorial.STEPS:
+			var w := font.get_string_size(st[0], HORIZONTAL_ALIGNMENT_LEFT, -1, int(Tutorial.TEXT_PX * s)).x
+			ok(b.position.x + Tutorial.TEXT_AT.x * s + w < m.position.x, "текст «%s» не под кнопкой" % st[0])
+
+
+func test_scene_map_from_hint_and_back() -> void:
+	Main.hints = true
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.walker.x = 2.0   # далеко от штурвала: шаг 1 — найдите пост
+	main.walker.z = 1.0
+	_tick(10)
+	var m: Rect2 = main.tutorial_panel.map_rect()
+	ok(m.has_area(), "на плашке «Схема»")
+	ok(main.overlay.router.blocks.has(m), "палец на кнопке не крутит взгляд")
+	var r := main.overlay.router
+	r.begin(1, m.get_center())
+	_tick()
+	r.end(1)
+	_tick()
+	ok(main.ship_map.open and main.ship_map.from == "hint", "схема открыта с подсказки")
+	ok(main.pause.open and not main.pause_panel.visible, "игра стоит, кнопок паузы не видно")
+	ok(not main.overlay.visible, "управление скрыто")
+	var size := main.get_viewport().get_visible_rect().size
+	r.begin(2, ShipMap.back_rect(size).get_center())
+	_tick()
+	r.end(2)
+	_tick(10)
+	ok(not main.ship_map.open and not main.pause.open, "«Назад» — сразу к подсказке, без паузы")
+	ok(main.overlay.visible and main.tutorial_panel.visible, "управление и подсказка снова на экране")
+	eq(main.tutorial.step, 0, "шаг тот же")
+	main.walker.x = 0.0
+	main.walker.z = Deck.CHAIR_Z
+	_tick(10)
+	ok(not main.tutorial_panel.map_rect().has_area(), "у штурвала кнопки нет")
+	main.walker.x = 2.0
+	main.walker.z = 1.0
+	_tick(10)
+	main.back_pressed()   # не мешает обычной паузе
+	_tick()
+	ok(main.pause.open and not main.ship_map.open, "системная «Назад» — обычная пауза")
