@@ -2041,11 +2041,20 @@ func _comms_step(dt: float) -> void:
 	var hidden := at_vote or run.ended or pause.open or main_menu.open or settings.open or ship_map.open \
 		or brief.k > 0.0 or flyby.active() or warm.active() or wreck.active() or (net_client != null and drop.active())
 	comms.solo = net_client == null and net_mates.is_empty()
+	comms.follow = net_client != null   # гость: плашка и проверка — по кадру хоста (`Comms.apply`)
 	var size := get_viewport().get_visible_rect().size
+	if net_client == null:
+		for m: Crew.Member in crew:   # «Спросить код» / «Понятно» гостя — его сообщению (`Crew.Pad.ask`)
+			if m != me and m.pad.ask > 0:
+				comms.press(m.pad.ask)
+				m.pad.ask = 0
 	comms.update(dt, hidden)
 	if not hidden:
 		for p in overlay.router.taps:
 			comms.tap(p, size)
+	if comms.asked > 0:   # гость: нажатие уходит хосту со следующим вводом
+		net_pad.ask = comms.asked
+		comms.asked = 0
 	overlay.router.blocks.append_array(comms.blocks(size))
 	comms_panel.show_comms(comms, time)
 
@@ -2482,6 +2491,7 @@ func _net_send(dt: float) -> void:
 		ev["w"] = wreck.t   # шторка «Корпус разрушен» — у всех (ART-036)
 		ev["z"] = NetSnap.scorch(scorch, time)   # следы разрядов на дне — тот же след у гостя
 		ev["so"] = NetSnap.sonar(sonar, time)   # импульс и отметки голограммы — те же у гостя
+		ev["c"] = comms.pack()   # связь ART-040: код забега, плашка и ход проверки — те же у гостя
 		var f := NetSnap.frame(net_host.seq, time, helm, reactor, vitals, light_on, crew, ev)
 		f["eco"] = EcoLink.pack_world(eco.world.agents, eco.world.systems, helm.pos, EcoLink.NET_R,
 			eco.world.time)   # существа и мох рядом — гостям отдельным пакетом
@@ -2526,6 +2536,8 @@ func _enter_client(c: NetLink.Client) -> void:
 	flyby.stop()   # клиент входит в идущий забег — облёта нет
 	tutorial_guest = Tutorial.Guest.new()
 	sonar.count = -1   # первый кадр хоста ставит его сонар, даже если счёт импульсов совпал со своим
+	comms.reset_run(0)
+	comms.code = ""   # кодовое слово — хоста, до первого кадра страницы «Связь» нет
 	message.clear(Flyby.START_MSG)
 	say(net_client.label())
 
@@ -2596,6 +2608,7 @@ func _client_step(dt: float) -> void:
 		tutorial.note(ev)
 	_tutorial_step(dt)
 	_card_step(dt)
+	_comms_step(dt)   # плашка связи хоста; нажатие — `net_pad.ask` со следующим вводом
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	overlay.set_pilot(pilot.seated)
@@ -2605,7 +2618,8 @@ func _client_step(dt: float) -> void:
 	_apply_crew_view()
 	_place_ship()
 	_place_camera()
-	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))   # гость: код хоста ещё не приходит (ROADMAP «Связь у гостя сети») — без страницы «Связь»
+	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR),
+		comms.code)   # код забега — из кадра хоста (`Comms.apply`)
 	_update_ui()   # до меток: плашка строки уже на месте этого кадра (#387)
 	busy_marks.plate = status_rect()
 	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
@@ -2670,6 +2684,7 @@ func _client_frame(f: Dictionary) -> void:
 			if NetSnap.apply_scorch(evd.get("z"), scorch, time):
 				ocean.set_scorch(scorch.uniforms(time))   # разряд хоста у дна или новый забег
 			NetSnap.apply_sonar(evd.get("so"), sonar, time)
+			comms.apply(evd.get("c"))
 		var rs := NetSnap.apply_run(evd.get("r") if evd is Dictionary else null, run)
 		if not rs.is_empty():   # маршрут хоста уже в run; метки, таймер и итог — для показа
 			votes = rs["marks"]

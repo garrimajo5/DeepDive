@@ -216,3 +216,88 @@ func test_scene_new_run_clears() -> void:
 	main._restart()
 	ok(not main.comms.active() and main.comms.queue.is_empty(), "новый забег — связь с чистого листа")
 	ok(Comms.WORDS.has(main.comms.code), "новое кодовое слово из списка")
+
+
+## Кооп: снимок хоста по сети (как в кадре) — гость видит ту же плашку и ход проверки, свои часы не ведёт.
+func _net(host: Comms, guest: Comms) -> void:
+	guest.apply(bytes_to_var(var_to_bytes(host.pack())))
+
+
+func test_guest_follows_host_plate() -> void:
+	var h := Comms.new()
+	h.reset_run(3)
+	var g := Comms.new()
+	g.follow = true
+	g.code = ""
+	_net(h, g)
+	eq(g.code, h.code, "кодовое слово забега — хоста")
+	ok(not g.active(), "сообщения нет")
+	h.push(Crew.Role.PILOT, "Дайте импульс", true, "ping")
+	_run(h, 0.5)
+	_net(h, g)
+	_run(g, 0.5)
+	ok(g.active() and g.a > 0.99, "плашка у гостя")
+	eq([g.title(), g.line(), g.code_line(), g.button_text()], [h.title(), h.line(), h.code_line(), h.button_text()],
+		"те же строки")
+	eq(h.pack()["m"][4], "", "ответ подделки до вопроса не едет")
+	g.update(DT, true)
+	_run(g, 0.3, true)
+	ok(g.a <= 0.0, "у гостя связь отложена своим экраном — плашка тает")
+	_run(g, 0.3)
+	ok(_ask(g), "кнопка взяла касание")
+	eq(g.state, Comms.Ask.NONE, "гость сам проверку не начинает")
+	eq(g.asked, h.cur.id, "нажатие — сообщению хоста")
+	ok(not h.press(h.cur.id + 1), "старое нажатие не действует")
+	ok(h.press(g.asked), "хост принял нажатие гостя")
+	_run(h, 1.05)
+	_net(h, g)
+	eq(g.state, Comms.Ask.WRONG, "у гостя — ответ с чужим кодом")
+	eq(g.code_line(), h.code_line(), "тот же чужой код")
+	_run(h, 1.55)
+	_net(h, g)
+	eq(g.line(), "Это был не наш", "разоблачение у гостя")
+	eq(g.exposed, 1)
+	g.asked = 0
+	ok(_ask(g) and g.asked == h.cur.id, "«Понятно» гостя")
+	ok(h.press(g.asked) and h.closing, "закрывает у всех")
+	_run(h, 0.3)
+	ok(not h.active(), "у хоста плашка ушла")
+	_net(h, g)
+	ok(g.closing, "у гостя тает")
+	_run(g, 0.3)
+	ok(not g.active(), "и уходит")
+
+
+func test_guest_new_message_by_id() -> void:
+	var h := Comms.new()
+	h.reset_run(0)
+	var g := Comms.new()
+	g.follow = true
+	h.push(Crew.Role.ENGINEER, "Первое")
+	h.push(Crew.Role.BIOLOGIST, "Второе")
+	_run(h, 0.2)
+	_net(h, g)
+	var first := g.cur
+	eq(g.line(), "Первое")
+	_run(h, Comms.MIN_SHOW + 0.5)
+	_net(h, g)
+	eq(g.line(), "Второе", "следующее сообщение хоста")
+	ok(g.cur != first and g.cur.role == Crew.Role.BIOLOGIST, "новое — с начала")
+	g.apply(null)
+	g.apply({"k": "Маяк", "m": [1, 2]})   # битый снимок
+	eq(g.code, "Маяк", "код берём, битое сообщение — плашка тает")
+	ok(g.closing)
+
+
+func test_scene_mate_ask_reaches_host() -> void:   # «Спросить код» товарища (гость по сети — Pad.ask) — у хоста
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var mate: Crew.Member = main.add_mate(-1.0, 4.0, 0.0, Crew.Role.BIOLOGIST, 1)
+	main.on_eco_event(EcoLink.voice(Crew.Role.ENGINEER, "Сбросьте ход"))
+	for i in 10:
+		main.step(DT)
+	mate.pad.apply({"ask": main.comms.cur.id})
+	main.step(DT)
+	eq(main.comms.state, Comms.Ask.WAIT, "нажатие товарища начало проверку")
+	eq(mate.pad.ask, 0, "нажатие съедено")

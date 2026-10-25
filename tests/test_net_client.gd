@@ -455,3 +455,24 @@ func test_guest_tutorial_steps() -> void:   # ART-038 у гостя: плашк�
 	ok(_pump(func() -> bool: return t.done_t >= 0.0 or t.step > 2), "свет в кадре хоста — шаг засчитан")
 	ok(_pump(func() -> bool: return t.step == 3), "шаг энергии")
 	eq(t.step_line(), "Первый забег · 4 / 6", "у гостя все шесть: сонар — импульсом хоста")
+
+
+func test_comms_from_host_and_ask_back() -> void:   # ART-040 у гостя: плашка и код хоста, «Спросить код» — хосту
+	var hc := Comms.new()
+	hc.reset_run(5)
+	h_ev = {"c": hc.pack()}
+	ok(_pump(func() -> bool: return main.net_seq > 0 and main.comms.code == hc.code), "код забега хоста")
+	ok(main.comms.follow and not main.comms.active(), "гость следует за хостом, сообщения нет")
+	hc.push(Crew.Role.PILOT, "Свет на полную", true, "light")
+	hc.update(DT, false)
+	h_ev = {"c": hc.pack()}
+	ok(_pump(func() -> bool: return main.comms_panel.visible and main.comms.a >= 1.0), "плашка у гостя")
+	eq(main.comms.line(), "Свет на полную")
+	eq(main.comms.code_line(), "Код: …", "подделка — «Код: …»")
+	var size := main.get_viewport().get_visible_rect().size
+	main.overlay.router.taps.append(Comms.button_rect(size).get_center())
+	ok(_pump(func() -> bool: return guest.pad.ask == hc.cur.id), "нажатие дошло хосту номером сообщения")
+	eq(main.comms.state, Comms.Ask.NONE, "проверку ведёт хост")
+	ok(hc.press(guest.pad.ask), "хост начал проверку")
+	h_ev = {"c": hc.pack()}
+	ok(_pump(func() -> bool: return main.comms.state == Comms.Ask.WAIT), "«Ждём ответ…» у гостя")

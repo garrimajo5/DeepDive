@@ -58,6 +58,7 @@ class Guest:
 	var index := -1        ## место в `main.crew` — уходит клиенту в кадре (`me`); −1 — ещё не на палубе
 	var acts := 0          ## последний принятый счётчик нажатий
 	var lights := 0        ## последний принятый счётчик нажатий «Свет»
+	var asks := 0          ## последний принятый счётчик нажатий кнопки связи («Спросить код»)
 	var quiet := 0.0       ## секунд без ввода гостя (`Host.poll(dt)`); больше LOST_AFTER — `lost`
 
 	func lost() -> bool:
@@ -121,6 +122,9 @@ class Host:
 						var nl := int(msg.get("nl", g.lights))
 						s["light"] = nl > g.lights
 						g.lights = maxi(g.lights, nl)
+						var na := int(msg.get("na", g.asks))
+						s["ask"] = int(msg.get("ci", 0)) if na > g.asks else 0   # номер сообщения связи (`Comms.press`)
+						g.asks = maxi(g.asks, na)
 						g.pad.apply(s)
 				"lq":   # запрос комнаты сбора экипажа — решает хост (`LobbyLink.serve`)
 					var lg: Guest = guests.get(from)
@@ -216,6 +220,8 @@ class Client:
 	var version := NetSnap.VERSION   ## версия кадра; тест подменяет
 	var acts := 0          ## счётчик нажатий кнопки действия
 	var lights := 0        ## счётчик нажатий «Свет»
+	var asks := 0          ## счётчик нажатий кнопки связи; `ask_id` — номер последнего нажатого сообщения
+	var ask_id := 0
 	var got := 0           ## кадров принято
 	var quiet := 0.0       ## секунд без кадра хоста на борту (`poll(dt)`); больше LOST_AFTER — `lost`
 	var timeout := NetLink.TIMEOUT   ## ждать ответа хоста столько секунд (`rejoin` — окно NetDrop.WINDOW)
@@ -373,13 +379,19 @@ class Client:
 			acts += 1
 		if pad.light:
 			lights += 1
+		if pad.ask > 0:
+			asks += 1
+			ask_id = pad.ask
 		var s := pad.snapshot()
 		s.erase("act")
 		s.erase("light")
-		NetLink._put(peer, 1, NetLink.CH_PAD, false, {"k": "pad", "pad": s, "n": acts, "nl": lights})
+		s.erase("ask")
+		NetLink._put(peer, 1, NetLink.CH_PAD, false, {"k": "pad", "pad": s, "n": acts, "nl": lights, "na": asks,
+			"ci": ask_id})
 		pad.look = Vector2.ZERO
 		pad.action = false
 		pad.light = false
+		pad.ask = 0
 
 	## Строка для экрана подключения.
 	func label() -> String:
