@@ -3,7 +3,7 @@ extends Node3D
 ## Ленточник и шипоежи в сцене (initKelp, setKelp, urchinRender в js/creatures.js): три MultiMesh — ленты (полоса
 ## 0,45 × 1 м в 7 отрезков, видна с обеих сторон, качается в шейдере как G.sway с размахом 0,9; цвет экземпляра — от
 ## голого стебля к зелени по густоте, слабое своё свечение #0b1a10), тела ежей (икосаэдр 0,2 м, #3a1f4a, свечение
-## #12061a) и иглы (18 игл по 0,32 м со светящимися голубыми кончиками, без освещения). Ленты переписываются, только
+## #12061a) и иглы (18 игл по 0,32 м: стержни со светом, голубые кончики светятся сами). Ленты переписываются, только
 ## когда ёж их объел или они отросли (EcoKelp.dirty). Ленты — общий шейдер растений (EcoShaders.PLANT).
 ## Стоит на слое отмели (OceanView.LAYER_WORLD).
 
@@ -109,10 +109,13 @@ static func build_body() -> SphereMesh:
 
 
 ## Иглы ежа одним мешем: 18 четырёхгранных конусов по спирали (угол 2,39996), от экватора чуть вниз и вверх,
-## на конце — светящийся кончик (spineGeo).
+## на конце — светящийся кончик (spineGeo). Стержни освещаются (цвет от основания к кончику), кончики светятся
+## сами — две поверхности KrabView.spine_mesh; все грани лицом наружу.
 static func build_spines() -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var shaft := SurfaceTool.new()
+	shaft.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var glow := SurfaceTool.new()
+	glow.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for k in SPINES:
 		var y := 1.0 - (k + 0.5) / SPINES * 1.2
 		var rr := sqrt(maxf(0.0, 1.0 - y * y))
@@ -126,30 +129,33 @@ static func build_spines() -> ArrayMesh:
 		for j in 4:
 			var t := j * TAU / 4.0
 			ring.append(base + (side * cos(t) + up * sin(t)) * 0.02)
+		var axis := base + dir * SPINE_LEN / 3.0   # ось на высоте середины грани — грань смотрит от неё
 		for j in 4:
-			var p0 := ring[j]
-			var p1 := ring[(j + 1) % 4]
-			_tri(st, [p0, p1, tip], [SPINE_BASE, SPINE_BASE, SPINE_TIP])
+			_shaft_tri(shaft, ring[j], ring[(j + 1) % 4], tip, axis)
 		# кончик — маленький ромб 3 см
 		var e := 0.03
 		var c := tip
 		var pts: Array[Vector3] = [c + side * e, c + up * e, c - side * e, c - up * e]
 		for j in 4:
-			_tri(st, [pts[j], pts[(j + 1) % 4], c + dir * e], [SPINE_TIP, SPINE_TIP, SPINE_TIP])
-			_tri(st, [pts[(j + 1) % 4], pts[j], c - dir * e], [SPINE_TIP, SPINE_TIP, SPINE_TIP])
-	var m := st.commit()
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.vertex_color_use_as_albedo = true
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	m.surface_set_material(0, mat)
-	return m
+			KrabView._tri(glow, pts[j], pts[(j + 1) % 4], c + dir * e, SPINE_TIP, c)
+			KrabView._tri(glow, pts[(j + 1) % 4], pts[j], c - dir * e, SPINE_TIP, c)
+	return KrabView.spine_mesh(shaft, glow)
 
 
-static func _tri(st: SurfaceTool, p: Array[Vector3], c: Array[Color]) -> void:
-	for i in 3:
-		st.set_color(c[i])
-		st.add_vertex(p[i])
+## Грань стержня иглы: основание a, b цвета SPINE_BASE, кончик c — SPINE_TIP; лицом наружу от точки оси inside.
+static func _shaft_tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, inside: Vector3) -> void:
+	var top := c
+	var n := (b - a).cross(c - a)
+	if n.dot((a + b + c) / 3.0 - inside) > 0.0:
+		var t := b
+		b = c
+		c = t
+		n = -n
+	n = -n.normalized()
+	for p in [a, b, c]:
+		st.set_color(SPINE_TIP if p == top else SPINE_BASE)
+		st.set_normal(n)
+		st.add_vertex(p)
 
 
 ## Расставить ленты (если менялись) и ежей в момент t (время мира).
