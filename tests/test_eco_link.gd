@@ -814,3 +814,21 @@ func test_voice_reaches_comms() -> void:   # голос мира (эхолове
 	eq(main.sonar.count, 0, "импульса сам корабль не дал")
 	main.queue_free()
 	await frames(1)
+
+
+func test_echo_fake_reaches_comms() -> void:   # подделка эхоловца из живого мира — на плашке связи, без кода и с молчанием
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var e := main.eco.echo
+	ok(e != null and e.preds == main.eco.preds, "эхоловец знает серпохвостов сцены")
+	e.fake(main.eco.world, EcoEcho.ASK_PING)
+	main.step(0.1)
+	ok(main.comms.cur != null, "ложный вызов на плашке")
+	eq(main.comms.title(), "Сонарщик", "заявленная роль")
+	eq(main.comms.code_line(), "Код: …", "без кодового слова")
+	eq(main.comms.cur.ask, EcoEcho.ASK_PING, "просит импульс")
+	eq(main.comms.cur.reply, "", "первый спуск — молчит на «Спросить код»")
+	eq(main.sonar.count, 0, "импульса корабль сам не дал")
+	main.queue_free()
+	await frames(1)

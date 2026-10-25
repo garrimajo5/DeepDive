@@ -262,6 +262,11 @@ static func _text(world: EcoWorld, fmt: String, c: Species.Case = Species.Case.N
 		return fmt % (Species.cap(name) if cap else name)
 
 
+## Заманить хищника на корабль (E.lure: эхоловец выпросил свет) — бросок, как на свет прожектора.
+func lure(world: EcoWorld, pr: Pred) -> void:
+	_start_charge(world, pr)
+
+
 func _start_charge(world: EcoWorld, pr: Pred) -> void:
 	_set_mode(pr, Mode.CHARGE, 10.0)
 	pr.prey = null

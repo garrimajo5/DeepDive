@@ -189,7 +189,7 @@ func _init() -> void:
 	bones = world.add(EcoBones.new()) as EcoBones
 	well = world.add(EcoWell.new()) as EcoWell
 	drop = world.add(EcoDrop.new()) as EcoDrop
-	echo = world.add(EcoEcho.new(bones)) as EcoEcho
+	echo = world.add(EcoEcho.new(bones, preds)) as EcoEcho
 	echo_view = EchoView.new(echo)
 	add_child(echo_view)
 	_rebuild_moss()
