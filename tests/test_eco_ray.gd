@@ -301,3 +301,52 @@ func test_view_one_multimesh() -> void:
 	near(span * 2.0, RayView.SPAN, 0.8, "размах около 14 м")
 	view.queue_free()
 	await frames(1)
+
+
+func test_tail_whips() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var rv := view.ray_view
+	var mesh := rv.multimesh.mesh
+	var arr := mesh.surface_get_arrays(0)
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	eq(uv.size(), v.size(), "доля длины хвоста — у каждой вершины")
+	var z0 := RayView.TAIL_Z + RayView.TAIL_L * 0.5
+	var tail := 0
+	for i in v.size():
+		if uv[i].x > 0.0:
+			tail += 1
+			near(v[i].z, z0 - RayView.TAIL_L * uv[i].x, 1e-4, "доля длины растёт к кончику")
+			ok(absf(v[i].x) < 0.2, "это хвост, а не крыло")
+	ok(tail >= (RayView.TAIL_RINGS - 1) * 6, "хвост из %d колец гнётся: %d вершин" % [RayView.TAIL_RINGS, tail])
+	var mat := mesh.surface_get_material(0) as ShaderMaterial
+	ok(mat.shader.code.contains(
+		"VERTEX.x += sin(TIME * 2.4 + INSTANCE_CUSTOM.x * 2.1 - UV.x * 5.0) * 0.8 * UV.x * UV.x * sway_k"),
+		"волна хвоста — в шейдере, числа как у двойника")
+	near(RayView.TAIL_RATE, 2.4, 1e-6, "частота")
+	near(RayView.TAIL_PHASE, 2.1, 1e-6, "сдвиг между скатами")
+	near(RayView.TAIL_K, 5.0, 1e-6, "волн на длину")
+	near(RayView.TAIL_AMP, 0.8, 1e-6, "размах")
+	var most := 0.0
+	var apart := 0.0
+	var mid := 0.0
+	for k in 300:
+		var t := k * 0.1
+		near(RayView.tail_wave(0.0, t, 0), 0.0, 1e-6, "у тела хвост стоит")
+		var tip := RayView.tail_wave(1.0, t, 0)
+		most = maxf(most, absf(tip))
+		mid = maxf(mid, absf(RayView.tail_wave(0.5, t, 0)))
+		apart = maxf(apart, absf(tip - RayView.tail_wave(1.0, t, 1)))
+	ok(most > 0.5 and most <= RayView.TAIL_AMP + 1e-6, "кончик хлещет: %.2f м" % most)
+	ok(mid < most * 0.5, "у середины размах меньше: %.2f" % mid)
+	ok(apart > 0.3, "два ската — вразнобой: %.2f" % apart)
+	EcoShaders.set_sway_lite(true)
+	eq(float(mat.get_shader_parameter("sway_k")), 0.0, "«Экономно» — хвост не гнётся")
+	near(RayView.tail_wave(1.0, 0.7, 0, 0.0), 0.0, 1e-9, "двойник тоже стоит")
+	EcoShaders.set_sway_lite(false)
+	eq(float(mat.get_shader_parameter("sway_k")), 1.0, "выключили — снова хлещет")
+	view.queue_free()
+	await frames(1)
