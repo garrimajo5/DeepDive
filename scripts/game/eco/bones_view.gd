@@ -41,7 +41,7 @@ func _init(system: EcoBones) -> void:
 	bones = system
 	name = "Кости левиафана"
 	layers = OceanView.LAYER_WORLD
-	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	EcoShadows.cast(self)
 	if bones.rib_pts.is_empty():
 		return
 	_ribs()

@@ -63,7 +63,7 @@ func _init(system: EcoRay) -> void:
 	rays = system
 	name = "Ледокрылы"
 	layers = OceanView.LAYER_WORLD
-	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	EcoShadows.cast(self)
 	_body()
 	_tail()
 	for k in SPOTS:

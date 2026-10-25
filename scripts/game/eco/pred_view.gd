@@ -37,13 +37,13 @@ func _init(system: EcoPred) -> void:
 	sync(0.0, Vector3(1e6, 0, 1e6))
 
 
-## Часть модели на своём месте; все меши — на слой отмели, без теней.
+## Часть модели на своём месте; все меши — на слой отмели, с тенью (EcoShadows).
 static func _part(scene: PackedScene, at: Vector3) -> Node3D:
 	var n: Node3D = scene.instantiate()
 	n.position = at
 	for m: MeshInstance3D in n.find_children("*", "MeshInstance3D", true, false):
 		m.layers = OceanView.LAYER_WORLD
-		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		EcoShadows.cast(m)
 	return n
 
 
