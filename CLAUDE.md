@@ -5,7 +5,7 @@
 и числа, но не код один в один. `js/…` в комментариях — файлы браузерного прототипа (`archive/web/js/…` в pogrujenie),
 `Core/…cs` — Unity-версия там же. Клонировать при переносе: `git clone --depth 1 https://github.com/garrimajo5/pogrujenie`.
 Мир (утверждён владельцем, главный источник по лору): `docs/world.md`. Контекст: `docs/context.txt`, бестиарий на 100 видов: `docs/bestiary.md`, концепт-арт: `docs/concept-art/`,
-заказы художнику и ошибки — GitHub Issues, план: `ROADMAP.md`, поэтапный план игры: `docs/plan.md`, план графики: `docs/grafika-plan.md`.
+заказы художнику и ошибки — GitHub Issues, план: `ROADMAP.md`, поэтапный план игры: `docs/plan.md`, план графики: `docs/grafika-plan.md`, реализм живого мира (поток Б): `docs/grafika-plan-eco.md`.
 
 ## Правила
 - Интерфейс и тексты — на русском, коротко и по делу.
