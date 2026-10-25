@@ -15,6 +15,10 @@ const PROTECT := Vector2(12.0, 45.0)
 const TOTAL_CAP := 0.16
 ## Дрожание термоклина ±0,12 м: sin(x·0,09 + t·0,25)·sin(z·0,07 − t·0,15), периоды ≈ 25 и 42 с.
 const WAVE := 0.12
+## Расширение края слоя с расстоянием (`edge`): с SPREAD_FROM м по SPREAD м на метр, не больше SPREAD_MAX.
+const SPREAD_FROM := 60.0
+const SPREAD := 0.1
+const SPREAD_MAX := 30.0
 ## Сила по уровням ART-044: «Экономно» 0 (шейдер без расчёта слоёв), «Обычно» 0,6, «Красиво» 0,9.
 const GAIN_LITE := 0.0
 const GAIN_NORMAL := 0.6
@@ -41,6 +45,13 @@ static func soft_integral(y: float, a: float, b: float) -> float:
 ## Первообразная профиля слоя [lo, hi] с мягкими краями e.
 static func band_integral(y: float, lo: float, hi: float, e: float) -> float:
 	return soft_integral(y, lo - e, lo + e) - soft_integral(y, hi - e, hi + e)
+
+
+## Мягкость края подлёдного слоя и термоклина для точки на расстоянии dist (issue #516): e + clamp((dist − 60)·0,1, 0, 30).
+## Ближе 60 м — край ART-069; к дальней воде (380 м) граница слоя размыта на ±30 м — у горизонта мягкая полоса, не
+## линия: без этого луч дотягивался до слоя в угле 0,3°. Толщина слоя (интеграл профиля) та же.
+static func edge(e: float, dist: float) -> float:
+	return e + clampf((dist - SPREAD_FROM) * SPREAD, 0.0, SPREAD_MAX)
 
 
 ## Профиль слоя в точке y: 1 внутри, 0 снаружи, smoothstep на краях.
@@ -72,8 +83,8 @@ static func wave(p: Vector3, t: float) -> float:
 static func add(cam: Vector3, p: Vector3, cam_above: float, p_above: float, t: float = 0.0) -> Array:
 	var dist := cam.distance_to(p)
 	var w := wave(p, t)
-	var li := band_length(cam.y, p.y, dist, ICE.y.x, ICE.y.y, ICE.edge)
-	var lt := band_length(cam.y, p.y, dist, THERMO.y.x + w, THERMO.y.y + w, THERMO.edge)
+	var li := band_length(cam.y, p.y, dist, ICE.y.x, ICE.y.y, edge(ICE.edge, dist))
+	var lt := band_length(cam.y, p.y, dist, THERMO.y.x + w, THERMO.y.y + w, edge(THERMO.edge, dist))
 	var ld := band_length(cam_above, p_above, dist, DUST.y.x, DUST.y.y, DUST.edge)
 	var ai := soft_cap(li * ICE.density, ICE.cap)
 	var at := soft_cap(lt * THERMO.density, THERMO.cap)
