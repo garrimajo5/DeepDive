@@ -30,7 +30,7 @@ func test_layout_fits_phones() -> void:
 		ok(not yes.intersects(no), "«Да» и «Нет» не налезают")
 		ok(yes.position.x < no.position.x, "«Да» слева, «Нет» справа")
 	near(Pause.screen_rect("resume", Vector2(2400, 1080)).get_center().x, 1200.0, 0.01, "кнопки по центру")
-	eq(Pause.button_rect(3).end.y, 310.0 + 142.0 * 3 + 112.0, "четвёртая кнопка по макету")
+	eq(Pause.button_rect(4).end.y, 310.0 + 136.0 * 4 + 112.0, "пятая кнопка по макету (шаг 136 со схемой ART-042)")
 
 
 func test_back_and_confirm() -> void:
@@ -181,7 +181,7 @@ func test_net_modes() -> void:
 	ok(not p.stops_world(), "меню сетевого забега — мир идёт")
 	eq(p.title(), "Меню забега")
 	eq(p.subtitle(), "Вы — хост · забег продолжается")
-	eq(p.items().map(func(it: Array) -> String: return it[0]), ["resume", "new", "settings", "exit"], "у хоста четыре")
+	eq(p.items().map(func(it: Array) -> String: return it[0]), ["resume", "map", "new", "settings", "exit"], "у хоста пять (со схемой ART-042)")
 	p.back()
 	p.set_mode("guest")
 	eq(p.mode, "host", "открытое меню режим не меняет")
@@ -195,7 +195,7 @@ func test_net_modes() -> void:
 	p.set_mode("guest")
 	p.back()
 	eq(p.subtitle(), "Вы — гость · забег продолжается")
-	eq(p.items().map(func(it: Array) -> String: return it[0]), ["resume", "settings", "leave"], "у гостя три")
+	eq(p.items().map(func(it: Array) -> String: return it[0]), ["resume", "map", "settings", "leave"], "у гостя четыре (со схемой ART-042)")
 	eq(p.press("new"), "", "у гостя нового забега нет")
 	eq(p.press("exit"), "", "и выхода в меню хоста нет")
 	eq(p.ask, "")
