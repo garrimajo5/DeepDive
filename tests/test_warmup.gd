@@ -22,8 +22,9 @@ func test_post_views() -> void:
 	var seat := false
 	for v in Warmup.POSTS:
 		var at := Vector3(v[0], v[1], v[2])
-		if at.distance_to(Vector3(Main.POWER_STAND.x, Deck.Walker.EYE, Main.POWER_STAND.y)) < 1e-4 \
-				and absf(deg_to_rad(v[4]) - Main.POWER_PITCH) < 0.01 and absf(deg_to_rad(v[3]) - PI / 2.0) < 1e-4:
+		if at.distance_to(PowerScreen.cam_pos(Vector3(0.0, Deck.Walker.EYE, 0.0))) < 1e-4 \
+				and absf(deg_to_rad(v[4]) - Main.POWER_PITCH) < 0.01 \
+				and absf(deg_to_rad(v[3]) - PowerScreen.cam_yaw(PowerScreen.STAND_YAW)) < 1e-4:
 			power = true
 		if at.distance_to(Vector3(0.0, Deck.SEAT_EYE, Deck.SEAT_Z)) < 1e-4:
 			seat = true

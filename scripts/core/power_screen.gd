@@ -39,6 +39,24 @@ const SCRAM_NOTE := "Подача 0 · настройки сохранены"
 const MAX_WORD := "ПРЕДЕЛ"
 const OFF_WORD := "ВЫКЛ."
 
+## Ракурс открытого пульта по ART-050: широкой таблице справа нужен свободный вид — камера отходит от ходока к
+## (CAM_AT.x, CAM_AT.y) на палубе, курс CAM_YAW, наклон CAM_PITCH (рад). Ходок остаётся у ползунков (`Main.POWER_STAND`,
+## курс 90°): руки достают до них, свайп крутит взгляд от этого ракурса.
+const CAM_AT := Vector2(-3.0, -2.0)
+const CAM_YAW := deg_to_rad(70.0)
+const CAM_PITCH := deg_to_rad(-32.0)
+const STAND_YAW := PI / 2.0   ## курс ходока у пульта: пульт на левом борту (−X)
+
+
+## Где камера открытого пульта: глаз ходока eye (высота — его), место — CAM_AT в осях корабля.
+static func cam_pos(eye: Vector3) -> Vector3:
+	return Vector3(CAM_AT.x, eye.y, CAM_AT.y)
+
+
+## Курс камеры открытого пульта при курсе ходока walker_yaw: CAM_YAW, свайп поворачивает от него.
+static func cam_yaw(walker_yaw: float) -> float:
+	return walker_yaw + CAM_YAW - STAND_YAW
+
 enum Mode { NORMAL, HOT, SCRAM }
 
 
