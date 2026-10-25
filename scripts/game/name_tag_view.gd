@@ -26,14 +26,15 @@ var keys: Array[String] = []     ## роль и имя, под которые с
 ## кнопку (`Member.active`) — контур ярче и три штриха, вход и выход за NameTag.FADE_T (dt — шаг; без dt — сразу);
 ## без связи (`Member.lost`) — всё приглушено и строка «Нет связи». hidden — члены экипажа без таблички над головой
 ## (их табличка уже на метке «Занято» у поста, BusyMarkView). plate — плашка строки состояния на экране: задетая
-## табличка опускается под неё не дальше DOWN_K·LIFT, иначе скрыта (#387).
+## табличка опускается под неё не дальше DOWN_K·LIFT, иначе скрыта (#387). voice — места в экипаже тех, кто говорит
+## по рации ART-041 (`Radio.voice`, только в поле зрения): та же «активность», не вторая табличка.
 func show_tags(crew: Array, me: Crew.Member, view: CrewView, cam: Camera3D, own_cam: Camera3D, blocks: Array = [],
-		dt: float = 1.0, hidden: Array = [], plate: Rect2 = Rect2()) -> void:
+		dt: float = 1.0, hidden: Array = [], plate: Rect2 = Rect2(), voice: Array = []) -> void:
 	while tags.size() < crew.size():
 		_add()
 	for i in mini(crew.size(), tags.size()):
 		var mm: Crew.Member = crew[i]
-		levels[i] = NameTag.glow_step(levels[i], mm.active() and not mm.lost, dt)
+		levels[i] = NameTag.glow_step(levels[i], (mm.active() or voice.has(i)) and not mm.lost, dt)
 	var shown: Array = []   # [индекс, расстояние, точка над макушкой, высота в мире]
 	for i in tags.size():
 		var t := tags[i]
