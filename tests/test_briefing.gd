@@ -206,3 +206,52 @@ func test_scene_numbers_clear_of_icons() -> void:
 	main.queue_free()
 	tree.root.size = was
 	await frames(1)
+
+
+## ART-040: страница «Связь» карточки брифинга — кодовое слово забега.
+func test_code_lines() -> void:
+	eq(Briefing.code_lines("").size(), 0, "слова нет — страницы нет")
+	eq(Briefing.code_lines("  ").size(), 0)
+	var l := Briefing.code_lines("Иней")
+	eq(l, [Briefing.CODE_TITLE, "Иней", Briefing.CODE_HINT, Briefing.CODE_NOTE], "заголовок, слово, подсказка, примечание")
+	eq(l.size(), RouteCard.CODE_PX.size(), "кегль на каждую строку")
+	eq(RouteCard.CODE_ROW.size(), RouteCard.CODE_PX.size())
+	for px in RouteCard.CODE_PX:
+		ok(px >= 18, "экранный кегль не меньше 18 px (ART-016)")
+
+
+func test_scene_code_on_briefing() -> void:
+	var was := tree.root.size
+	tree.root.size = Vector2i(1600, 720)
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.walker.x = Main.ROUTE_POST.x
+	main.walker.z = Main.ROUTE_POST.y
+	main.walker.yaw = PI / 2
+	main.walker.pitch = -0.5
+	main.step(0.3)
+	main.step(0.05)
+	ok(main.run.route < 0, "маршрут ещё не выбран")
+	ok(main.route_card.visible, "у голостола — карточка со словом, даже без маршрута")
+	eq(main.route_card.lines.size(), 0, "строк маршрута нет")
+	eq(main.route_card.code[1], main.comms.code, "кодовое слово забега — то же, что проверяет связь")
+	var only := main.route_card.rect
+	main.run.choose(0)
+	main.step(0.05)
+	eq(main.route_card.lines[0], "Рифовый сад", "маршрут выбран — сверху маршрут")
+	eq(main.route_card.code[1], main.comms.code, "под ним — страница «Связь»")
+	ok(main.route_card.rect.size.y > only.size.y + 100.0, "карточка выросла на строки маршрута")
+	var scr := main.get_viewport().get_visible_rect().size
+	ok(Rect2(Vector2.ZERO, scr).encloses(main.route_card.rect), "вся карточка на экране 1600 × 720")
+	ok(main.route_card.rect.end.x <= scr.x - Briefing.CARD_RIGHT_FREE, "не заходит на кнопку действия")
+	main.comms.reset_run(7)
+	main.step(0.05)
+	eq(main.route_card.code[1], main.comms.code, "новый забег — новое слово на карточке")
+	main.walker.x = 0.0
+	main.walker.z = 1.5
+	main.step(0.5)
+	ok(not main.route_card.visible, "отошёл от поста — карточки нет")
+	main.queue_free()
+	await frames(1)
+	tree.root.size = was

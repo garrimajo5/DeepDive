@@ -35,6 +35,23 @@ const CARD_RIGHT_FREE := 240.0  ## справа — кнопка действи�
 const RISK_COLOR := Color("F1A23D")   ## риск — янтарный
 
 
+## Страница «Связь» карточки (ART-040, кадр 04 `svyaz-sostoyaniya.png`): кодовое слово забега под маршрутом — одно
+## на весь экипаж, по нему отличают своих от «чужого голоса в эфире» (`Comms.code`). Видно, пока открыт брифинг,
+## даже если маршрут ещё не выбран.
+const CODE_TITLE := "Связь · кодовое слово забега"
+const CODE_HINT := "Запомните. Спросите код, если сомневаетесь."
+const CODE_NOTE := "Один код у всего экипажа"
+
+
+## Строки страницы «Связь»: заголовок, слово, подсказка, примечание. Слова нет (гость ещё не знает код хоста) — пусто.
+static func code_lines(word: String) -> Array[String]:
+	var out: Array[String] = []
+	if word.strip_edges() == "":
+		return out
+	out.append_array([CODE_TITLE, word, CODE_HINT, CODE_NOTE])
+	return out
+
+
 static func icon_path(key: String) -> String:
 	return "res://textures/places/%s.png" % key
 

@@ -835,7 +835,8 @@ func step(dt: float) -> void:
 	_apply_crew_view(dt)
 	_place_ship()
 	_place_camera()
-	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
+	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR),
+		comms.code)   # страница «Связь» — кодовое слово забега (ART-040)
 	_update_ui()   # до меток: плашка строки уже на месте этого кадра (#387)
 	_tutorial_step(dt)
 	_card_step(dt)
@@ -2604,7 +2605,7 @@ func _client_step(dt: float) -> void:
 	_apply_crew_view()
 	_place_ship()
 	_place_camera()
-	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))
+	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR))   # гость: код хоста ещё не приходит (ROADMAP «Связь у гостя сети») — без страницы «Связь»
 	_update_ui()   # до меток: плашка строки уже на месте этого кадра (#387)
 	busy_marks.plate = status_rect()
 	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
