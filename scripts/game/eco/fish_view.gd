@@ -6,7 +6,8 @@ extends MultiMeshInstance3D
 ## в цвете вершины (r: 0 — тело, 1 — полоса, FIN_GLOW — конец хвоста): тело тёмное и освещается, полосы светятся сами.
 ## Хвост и корма гнутся бегущей волной (EcoFishLook.tail_wave, Б3): фаза особи — альфа цвета экземпляра (Godot множит
 ## цвет экземпляра на цвет вершины, у вершин альфа 1); «Экономно» — sway_k = 0 через EcoShaders.follow / set_sway_lite.
-## Стоит на слое отмели (OceanView.LAYER_WORLD).
+## Грудные плавники гребут вверх-вниз (EcoFishLook.fin_flap, вес — канал b цвета вершины): у светляка вес 0, тот же
+## шейдер рисует пестрянок (HvatenView, форма EcoPestrLook). Стоит на слое отмели (OceanView.LAYER_WORLD).
 
 const SHADER := """
 shader_type spatial;
@@ -25,6 +26,8 @@ void vertex() {
 	float s = clamp((%s - VERTEX.z) / %s, 0.0, 1.0);
 	float rate = %s * (%s + %s * fract(a * 7.13));
 	VERTEX.x += sin(TIME * rate + a * 6.2831853 + VERTEX.z * %s) * %s * s * s * sway_k;
+	// взмах грудных плавников (вес — канал b, у светляка 0) — двойник EcoFishLook.fin_flap
+	VERTEX.y += sin(TIME * %s + a * 6.2831853 + sign(VERTEX.x) * %s) * %s * COLOR.b * sway_k;
 }
 void fragment() {
 	// полоса — узкая середина кольца, конец хвоста — канал g
@@ -83,7 +86,7 @@ static func build_mesh() -> ArrayMesh:
 static func shader_code() -> String:
 	var L := EcoFishLook
 	return SHADER % [_f(L.TAIL_FROM), _f(L.TAIL_FROM - L.TAIL_TIP), _f(L.TAIL_RATE), _f(1.0 - L.TAIL_RATE_SPREAD),
-		_f(2.0 * L.TAIL_RATE_SPREAD), _f(L.TAIL_K), _f(L.TAIL_AMP)]
+		_f(2.0 * L.TAIL_RATE_SPREAD), _f(L.TAIL_K), _f(L.TAIL_AMP), _f(L.PEC_RATE), _f(L.PEC_SKEW), _f(L.PEC_AMP)]
 
 
 static func _f(x: float) -> String:
