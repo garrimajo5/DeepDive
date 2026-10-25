@@ -43,7 +43,7 @@ func _init(system: EcoShell) -> void:
 	shell = system
 	name = "Раковина древних"
 	layers = OceanView.LAYER_WORLD
-	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	EcoShadows.cast(self)
 	if shell.ring.is_empty():
 		return
 	_tube()

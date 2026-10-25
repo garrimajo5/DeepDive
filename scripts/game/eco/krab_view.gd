@@ -65,7 +65,7 @@ func _mesh(n: String, m: Mesh, parent: Node3D) -> MeshInstance3D:
 	mi.name = n
 	mi.mesh = m
 	mi.layers = OceanView.LAYER_WORLD
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	EcoShadows.cast(mi)
 	parent.add_child(mi)
 	return mi
 

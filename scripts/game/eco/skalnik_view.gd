@@ -49,12 +49,12 @@ func _init(system: EcoSkalnik) -> void:
 	body.mesh = build_body()
 	body.material_override = material
 	body.layers = OceanView.LAYER_WORLD
-	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	EcoShadows.cast(body)
 	add_child(body)
 	arms = MultiMeshInstance3D.new()
 	arms.name = "Щупальца"
 	arms.layers = OceanView.LAYER_WORLD
-	arms.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	EcoShadows.cast(arms)
 	arms.material_override = material
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
