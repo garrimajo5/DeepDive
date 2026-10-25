@@ -73,7 +73,7 @@ func test_caps_and_silt() -> void:
 	var cam := Vector3(0, -30, 0)
 	var p := Vector3(0, -30, 300)
 	var r: Array = WaterLayers.add(cam, p, 1.0, 0.0)
-	ok(float(r[0]) <= WaterLayers.THERMO.cap + WaterLayers.DUST.cap + 0.0001, "каждый слой не выше своего предела")
+	ok(float(r[0]) <= WaterLayers.ICE.cap + WaterLayers.THERMO.cap + WaterLayers.DUST.cap + 0.0001, "каждый слой не выше своего предела")
 	var f: Array = WaterLayers.fog(cam, p, 1.0, 0.0, base, 0.0, 1.0)
 	near(float(f[0]), WaterLayers.TOTAL_CAP, 0.00001, "сумма слоёв не больше 0,16 (база 0 → альфа = предел)")
 	ok(WaterLayers.gain(WaterLayers.GAIN_NORMAL, 1.0) < WaterLayers.GAIN_NORMAL * 0.2, "в иле слои почти гаснут")
@@ -100,7 +100,7 @@ func test_dust_protected_near_camera() -> void:
 ## Числа шейдера совпадают с WaterLayers — двойник проверяет то же, что рисуется.
 func test_shader_numbers_match() -> void:
 	var src := FileAccess.get_file_as_string(INC)
-	for s in ["-6.0, 0.0, 1.5", "-31.5 + w, -28.5 + w, 1.0", "0.0, 3.0, 1.0", "0.11 * (1.0 - exp(-li * 0.008 / 0.11))",
+	for s in ["-6.0, 0.0, wl_edge(1.5, dist)", "-31.5 + w, -28.5 + w, wl_edge(1.0, dist)", "clamp((dist - 60.0) * 0.1, 0.0, 30.0)", "0.0, 3.0, 1.0", "0.11 * (1.0 - exp(-li * 0.008 / 0.11))",
 			"0.10 * (1.0 - exp(-lt * 0.017 / 0.10))", "0.10 * (1.0 - exp(-ld * 0.035 / 0.10))", "smoothstep(12.0, 45.0, dist)", "0.0, 0.16)", "0.12 * sin(p.x * 0.09 + t * 0.25)",
 			"sin(p.z * 0.07 - t * 0.15)"]:
 		ok(src.contains(s), "в шейдере есть «%s»" % s)
@@ -139,3 +139,39 @@ func test_ocean_materials_get_layers() -> void:
 	near(float(o.far_mat.get_shader_parameter("layer_cam_above")), 2.0, 0.001, "камера в 2 м над дном")
 	main.queue_free()
 	await frames(1)
+
+
+## Issue #516: у горизонта дальняя вода (сфера 380 м) давала ровную линию — луч с 20 м дотягивался до слоя на
+## конце отрезка в узком угле (край 1 м на 380 м ≈ 0,3°), выше линии муть, ниже нет. Края слоя вдали шире
+## (`WaterLayers.edge`): от угла к углу (0,1° ≈ 1 px на 6" экране) добавка меняется плавно, переход — несколько градусов.
+func test_far_wall_no_line_at_horizon() -> void:
+	for depth in [20.0, 29.0, 45.0]:
+		var cam := Vector3(0, -depth, 0)
+		var prev := -1.0
+		var worst := 0.0
+		var lo := 1.0
+		var hi := 0.0
+		for i in range(-120, 121):   # −12…+12° от горизонта, шаг 0,1°
+			var a := deg_to_rad(i * 0.1)
+			var p := cam + Vector3(0, sin(a), -cos(a)) * 380.0
+			var above := 30.0 + p.y - cam.y   # дно в 30 м под камерой; ниже пыли дальнюю воду закрывает дно
+			if p.y > 0.0 or above < 4.0:
+				continue
+			var t := float(WaterLayers.add(cam, p, 30.0, above)[0])
+			lo = minf(lo, t)
+			hi = maxf(hi, t)
+			if prev >= 0.0:
+				worst = maxf(worst, absf(t - prev))
+			prev = t
+		ok(hi - lo > 0.02, "на %d м слои у горизонта видны (%.3f…%.3f)" % [depth, lo, hi])
+		ok(worst < 0.006, "на %d м нет ступени у горизонта: худший шаг %.4f на 0,1°" % [depth, worst])
+
+
+## Вблизи края слоя прежние: дно и лёд в нескольких метрах видят слой той же толщины.
+func test_edge_widens_only_far() -> void:
+	near(WaterLayers.edge(1.0, 0.0), 1.0, 0.0001, "у камеры край как в ART-069")
+	near(WaterLayers.edge(1.0, 60.0), 1.0, 0.0001, "до 60 м край прежний — дно и лёд рядом как в ART-069")
+	ok(WaterLayers.edge(1.0, 380.0) >= 10.0, "у дальней воды край шире 10 м")
+	near(WaterLayers.edge(1.0, 5000.0), WaterLayers.edge(1.0, 1000.0), 0.0001, "предел расширения")
+	# толщина слоя (интеграл профиля) не меняется — та же муть, только размыта по высоте
+	near(_numeric(-80.0, 20.0, 100.0, -31.5, -28.5, WaterLayers.edge(1.0, 380.0)), 3.0, 0.01, "интеграл профиля = толщине")
