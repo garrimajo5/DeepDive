@@ -2,8 +2,9 @@ class_name HvatenView
 extends Node3D
 ## Хватни и пестрянки в сцене (initAnemones в js/creatures.js): три MultiMesh — тела (столб 0,45 → 0,32 м высотой
 ## 0,8 м и розовый диск щупалец, своё слабое свечение #2a0a24), щупальца (тонкие конусы 1 м с цветом по длине:
-## лиловые у диска, светлее к кончикам, светятся сами) и пестрянки (вытянутые капли 7 × 10 × 24 см, оранжевые
-## и белая). Стоят на слое отмели (OceanView.LAYER_WORLD).
+## лиловые у диска, светлее к кончикам; тело ловит свет, к кончикам светится само и колышется в течении мира —
+## общий шейдер растений EcoShaders.PLANT, режим TENTACLE, двойник на CPU — `tentacle_offset`) и пестрянки
+## (вытянутые капли 7 × 10 × 24 см, оранжевые и белая). Стоят на слое отмели (OceanView.LAYER_WORLD).
 
 ## Цвета пестрянок по порядку (pc в браузере).
 const PESTR_COLORS: Array[Color] = [Color("ff7a2a"), Color("fff1d0"), Color("ff9a4a")]
@@ -12,6 +13,12 @@ const PESTR_SIZE := Vector3(0.035, 0.05, 0.12)
 ## Чисел на экземпляр: transform 3 × 4, у пестрянок ещё цвет (4).
 const STRIDE := 12
 const STRIDE_C := 16
+## Колыхание щупальца (доли длины на полном течении: крен, волна, поперёк) — мягче ленты ленточника, но заметно на
+## метровом щупальце; сдвиг фазы по углу щупальца вокруг вертикали — щупальца одного диска извиваются вразнобой.
+const BEND := Vector3(0.1, 0.16, 0.12)
+const PHASE_AXIS := 10.0
+## Свечение щупальца: у диска — доля цвета, у кончика — почти полный (раньше светилось целиком, MeshBasicMaterial).
+const TIP_GLOW := Vector2(0.15, 0.9)
 
 var hvaten: EcoHvaten
 var bodies: MultiMeshInstance3D
@@ -78,7 +85,7 @@ static func build_body() -> ArrayMesh:
 
 
 ## Щупальце: конус 0,05 → 0,015 м длиной 1 м от основания вверх, четыре грани, цвет по высоте k:
-## (0,55 + 0,45k, 0,25 + 0,6k, 0,6 + 0,35k); светится само (MeshBasicMaterial).
+## (0,55 + 0,45k, 0,25 + 0,6k, 0,6 + 0,35k), в альфе — k (свечение к кончику); тело со светом (PLANT, TENTACLE).
 static func build_tentacle() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -89,15 +96,21 @@ static func build_tentacle() -> ArrayMesh:
 	var col := PackedColorArray()
 	for p in v:
 		var k := clampf(p.y, 0.0, 1.0)
-		col.append(Color(0.55 + k * 0.45, 0.25 + k * 0.6, 0.6 + k * 0.35))
+		col.append(Color(0.55 + k * 0.45, 0.25 + k * 0.6, 0.6 + k * 0.35, k))
 	arr[Mesh.ARRAY_COLOR] = col
 	var out := ArrayMesh.new()
 	out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.vertex_color_use_as_albedo = true
-	out.surface_set_material(0, mat)
+	out.surface_set_material(0, EcoShaders.plant(EcoShaders.Plant.TENTACLE, {"rough": 0.6, "spec": 0.4,
+		"bend": BEND, "reach": 1.0, "phase_axis": PHASE_AXIS, "tip_glow": TIP_GLOW}))
 	return out
+
+
+## Смещение точки v щупальца (в осях меша: y — доля длины) в мире по формуле шейдера PLANT (двойник для тестов):
+## tr — расстановка щупальца из буфера, flow — течение мира.
+static func tentacle_offset(tr: Transform3D, v: Vector3, t: float, flow: Vector3) -> Vector3:
+	var ay := tr.basis.y
+	var po := tr.origin + Vector3(atan2(ay.z, ay.x) * PHASE_AXIS, 0.0, 0.0)
+	return EcoCurrent.sway(po, clampf(v.y, 0.0, 1.0), ay.length(), t, flow, BEND)
 
 
 ## Пестрянка: сплюснутая сфера 6 × 4, вытянута вдоль +Z (нос по ходу); цвет — у экземпляра, светится сама.

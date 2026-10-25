@@ -4,6 +4,8 @@ extends MultiMeshInstance3D
 ## отрисовки). Тело — пластина 14 × 9 м (18 × 8 клеток), сужается к хвосту и носу, горб по середине 0,5 м, края
 ## светлее; хвост-хлыст 9 м назад; на спине два ряда по 7 светящихся пятнышек (#9ffcff). Взмах крыльев — в шейдере
 ## (как в браузере: sin(1,3 t + i − 0,32 |x|) · (|x| / 7)^1,4 · 1,8, номер ската — в INSTANCE_CUSTOM), крен 0,22 рад.
+## Хвост-хлыст извивается волной от корня к кончику (TAIL_*, доля длины хвоста — в UV.x; двойник на CPU — tail_wave);
+## «Экономно» — sway_k = 0 через EcoShaders.follow / set_sway_lite.
 ## Свет сквозь лёд падает на спину; брюхо снизу темнее; края крыльев — ободок света (EcoRim, uniform rim). Стоит на слое отмели (OceanView.LAYER_WORLD).
 
 const SHADER := """
@@ -11,6 +13,7 @@ shader_type spatial;
 render_mode cull_disabled;
 uniform float rim = 0.0;
 uniform float rim_tint = 0.0;
+uniform float sway_k = 1.0;
 varying float glow;
 void vertex() {
 	float ax = abs(VERTEX.x);
@@ -20,6 +23,8 @@ void vertex() {
 	// наклон крыла от взмаха: d(y)/d|x|
 	float slope = -cos(ph) * 0.32 * k + sin(ph) * 1.8 * 1.4 * pow(ax / 7.0, 0.4) / 7.0;
 	NORMAL = normalize(NORMAL - vec3(sign(VERTEX.x) * slope, 0.0, 0.0));
+	// хвост-хлыст: волна бежит к кончику, размах растёт как квадрат доли длины (UV.x; у тела UV.x = 0)
+	VERTEX.x += sin(TIME * 2.4 + INSTANCE_CUSTOM.x * 2.1 - UV.x * 5.0) * 0.8 * UV.x * UV.x * sway_k;
 	glow = COLOR.a;
 }
 void fragment() {
@@ -43,6 +48,12 @@ const SWEEP := 2.2
 const TAIL_L := 9.0
 const TAIL_R := Vector2(0.12, 0.03)
 const TAIL_Z := -8.5
+## Колец вдоль хвоста (чтобы гнулся) и волна хлыста: размах на кончике (м), частота (рад/с), волн на длину (рад).
+const TAIL_RINGS := 9
+const TAIL_AMP := 0.8
+const TAIL_RATE := 2.4
+const TAIL_K := 5.0
+const TAIL_PHASE := 2.1
 ## Пятнышки на спине: 14 штук радиусом 0,12 м.
 const SPOTS := 14
 const SPOT_R := 0.12
@@ -60,6 +71,8 @@ var placed: Array[Transform3D] = []
 
 var _nor := PackedVector3Array()
 var _col := PackedColorArray()
+## Доля длины хвоста у вершины (у тела и пятнышек — 0).
+var _uv := PackedVector2Array()
 var _idx := PackedInt32Array()
 
 
@@ -79,10 +92,12 @@ func _init(system: EcoRay) -> void:
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	arrays[Mesh.ARRAY_NORMAL] = _nor
 	arrays[Mesh.ARRAY_COLOR] = _col
+	arrays[Mesh.ARRAY_TEX_UV] = _uv
 	arrays[Mesh.ARRAY_INDEX] = _idx
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	var mat := ShaderMaterial.new()
 	mat.shader = EcoShaders.shader(SHADER)
+	EcoShaders.follow(mat)
 	m.surface_set_material(0, mat)
 	tris = _idx.size() / 3
 	var mm := MultiMesh.new()
@@ -124,6 +139,7 @@ func _body() -> void:
 			# крылья стреловидные, концы отогнуты назад (концепт icewing.jpg); у браузера — прямые
 			verts.append(Vector3(nx, y, z - SWEEP * pow(absf(nx) / (SPAN * 0.5), 1.5)))
 			_nor.append(Vector3.UP)
+			_uv.append(Vector2.ZERO)
 			var c := 0.4 + absf(x) / 7.0 * 0.6
 			_col.append(Color(BODY.r * c * 0.75, BODY.g * c, minf(1.0, BODY.b * c * 1.15), 0.0))
 	var row := CELLS_X + 1
@@ -133,22 +149,29 @@ func _body() -> void:
 			_idx.append_array([q, q + 1, q + row, q + 1, q + row + 1, q + row])
 
 
-## Хвост-хлыст: конус из 5 граней от тела назад.
+## Хвост-хлыст: конус из 5 граней от тела назад, TAIL_RINGS колец — гнётся волной в шейдере; доля длины — в UV.x.
 func _tail() -> void:
 	var v0 := verts.size()
 	var z0 := TAIL_Z + TAIL_L * 0.5
-	var z1 := TAIL_Z - TAIL_L * 0.5
-	for i in 6:
-		var a := TAU * i / 5.0
-		var d := Vector3(cos(a), sin(a), 0)
-		verts.append(Vector3(0, 0.1, z0) + d * TAIL_R.x)
-		verts.append(Vector3(0, 0.1, z1) + d * TAIL_R.y)
-		for k in 2:
+	for r in TAIL_RINGS:
+		var s := r / float(TAIL_RINGS - 1)
+		var rad := lerpf(TAIL_R.x, TAIL_R.y, s)
+		for i in 6:
+			var a := TAU * i / 5.0
+			var d := Vector3(cos(a), sin(a), 0)
+			verts.append(Vector3(0, 0.1, z0 - TAIL_L * s) + d * rad)
 			_nor.append(d)
+			_uv.append(Vector2(s, 0.0))
 			_col.append(Color(BODY.r * 0.6, BODY.g * 0.6, BODY.b * 0.6, 0.0))
-	for i in 5:
-		var q := v0 + i * 2
-		_idx.append_array([q, q + 1, q + 2, q + 2, q + 1, q + 3])
+	for r in TAIL_RINGS - 1:
+		for i in 5:
+			var q := v0 + r * 6 + i
+			_idx.append_array([q, q + 6, q + 1, q + 1, q + 6, q + 7])
+
+
+## Сдвиг вбок (м, по x меша) точки хвоста на доле длины s в момент t у ската номер index — двойник шейдера.
+static func tail_wave(s: float, t: float, index: int, sway_k := 1.0) -> float:
+	return sin(t * TAIL_RATE + index * TAIL_PHASE - s * TAIL_K) * TAIL_AMP * s * s * sway_k
 
 
 ## Светящееся пятнышко: октаэдр радиуса SPOT_R (альфа 1 — светится в шейдере).
@@ -158,6 +181,7 @@ func _spot(c: Vector3) -> void:
 	for d in dirs:
 		verts.append(c + d * SPOT_R)
 		_nor.append(d)
+		_uv.append(Vector2.ZERO)
 		_col.append(Color(SPOT.r, SPOT.g, SPOT.b, 1.0))
 	for t in [[0, 2, 4], [2, 1, 4], [1, 3, 4], [3, 0, 4], [2, 0, 5], [1, 2, 5], [3, 1, 5], [0, 3, 5]]:
 		_idx.append_array([v0 + t[0], v0 + t[1], v0 + t[2]])
