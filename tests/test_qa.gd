@@ -228,6 +228,11 @@ func test_hull_step() -> void:   # следы повреждений ART-049 н�
 	var out := q.advance(0.1)
 	eq(out[0], ["hull", 30.0], "корпус 30 %")
 	eq(out[1], ["hull", 100.0], "выше 100 % не бывает")
+	var cq := QaScript.parse('[{"do": "charge", "units": 40}, {"do": "charge", "units": 500}]')
+	eq(cq.errors.size(), 0, "шаг charge известен")
+	var c := cq.advance(0.1)
+	eq(c[0], ["charge", 40.0], "заряд 40 ед.")
+	eq(c[1], ["charge", Vitals.MAX], "выше полного не бывает")
 
 
 ## issue #158: снимок полок трюма смотрел на правый стеллаж, а первая банка встаёт на левый.
