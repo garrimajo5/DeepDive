@@ -15,6 +15,7 @@ const GLYPH_TOP := 0.76   ## от верха видимых глифов до б
 
 var comms: Comms
 var time := 0.0
+var area := Rect2()  ## безопасная область экрана (`Main.comms_area`): места `Comms` считаются от неё (#603)
 
 
 func _ready() -> void:
@@ -23,9 +24,10 @@ func _ready() -> void:
 	visible = false
 
 
-func show_comms(c: Comms, t: float) -> void:
+func show_comms(c: Comms, t: float, at: Rect2 = Rect2()) -> void:
 	comms = c
 	time = t
+	area = at
 	var vis := c != null and c.cur != null and c.a > 0.0
 	if vis != visible:
 		visible = vis
@@ -50,7 +52,8 @@ func _text(font: Font, top: Vector2, text: String, px: int, color: Color, width 
 func _draw() -> void:
 	if comms == null or comms.cur == null:
 		return
-	var size := get_viewport_rect().size
+	var size := area.size if area.has_area() else get_viewport_rect().size
+	draw_set_transform(area.position if area.has_area() else Vector2.ZERO)
 	var s := Comms.scale(size)
 	var a := comms.a
 	var font := get_theme_default_font()

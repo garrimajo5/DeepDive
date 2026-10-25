@@ -229,7 +229,8 @@ func _point(what: String, dir: Vector2) -> Vector2:
 		"graphics":   # «Графика» в настройках ART-044
 			return Settings.screen_rect("graphics", main.get_viewport().get_visible_rect().size).get_center()
 		"ask":   # «Спросить код» / «Понятно» на плашке связи ART-040
-			return Comms.button_rect(main.get_viewport().get_visible_rect().size).get_center()
+			var area: Rect2 = main.comms_area()
+			return Comms.button_rect(area.size).get_center() + area.position
 		"lite_yes", "lite_no":   # «Да» / «Нет» предложения «Экономно» ART-044
 			return LiteOffer.screen_rect(what.substr(5), main.get_viewport().get_visible_rect().size).get_center()
 		"golos":   # «Голос» в настройках ART-041
