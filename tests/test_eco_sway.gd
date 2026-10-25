@@ -107,3 +107,43 @@ func test_eco_view_gives_current() -> void:
 	near(float(fan.get_shader_parameter("reach")), EcoFan.HEIGHT, 1e-6, "веер — своя высота")
 	ev.free()
 	EcoShaders.set_flow(Vector3.ZERO)
+
+
+# ---------- Огнецвет ----------
+
+## Огнецвет колышется тем же куском SWAY: подножие стоит, вершина со станцией огнёвок — не дальше 0,3 м,
+## коралл твёрже веерника, соседние кусты вразнобой.
+func test_coral_sways_gently() -> void:
+	var ev := EcoView.new()
+	ev.ground = Seabed.height
+	ev.step(0.1, EcoLink.ShipState.new())
+	var cv := ev.coral_view
+	var mat := cv.material()
+	ok(mat.shader.code.contains("eco_sway(foot[i], UV2.x, tall[i], bend)"), "кусты гнутся общим куском SWAY")
+	eq(cv.heights.size(), cv.verts.size(), "доля высоты у каждой вершины")
+	eq(cv.feet.size(), ev.coral.bushes.size(), "подножие каждого куста")
+	near((mat.get_shader_parameter("flow") as Vector3).distance_to(ev.current.vel()), 0.0, 1e-4,
+		"огнецвет идёт по течению мира")
+	ok(CoralView.BEND.x < FanView.BEND.x, "коралл твёрже веерника")
+	var flow := Vector3(0, 0, EcoCurrent.SPEED)
+	var top_i := 0
+	var low_i := 0
+	for i in EcoCoralLook.verts.size():
+		if cv.heights[i] > cv.heights[top_i]:
+			top_i = i
+		if cv.heights[i] < cv.heights[low_i]:
+			low_i = i
+	var most := 0.0
+	for k in 300:
+		var t := k * 0.2
+		near(cv.offset(low_i, t, flow).length(), 0.0, 1e-6, "подножие стоит")
+		most = maxf(most, cv.offset(top_i, t, flow).length())
+	ok(most > 0.05, "вершина заметно колышется: %.2f м" % most)
+	ok(most < 0.3, "но станция огнёвок на месте: %.2f м" % most)
+	var n := EcoCoralLook.verts.size()
+	ok(cv.offset(top_i, 10.0, flow).distance_to(cv.offset(n + top_i, 10.0, flow)) > 0.01, "кусты вразнобой")
+	EcoShaders.set_sway_lite(true)
+	eq(float(mat.get_shader_parameter("sway_k")), 0.0, "«Экономно» — огнецвет стоит")
+	EcoShaders.set_sway_lite(false)
+	ev.free()
+	EcoShaders.set_flow(Vector3.ZERO)
