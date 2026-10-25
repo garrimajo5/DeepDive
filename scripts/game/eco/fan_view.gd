@@ -4,14 +4,19 @@ extends MultiMeshInstance3D
 ## рисует общий шейдер растений (EcoShaders.PLANT, как fanTex в js/creatures.js: ствол, 13 лучей веером и дуги
 ## между ними; остальное отброшено).
 ## Своего света нет: светлые края — отражённый свет (ART-004, #68E6DC). Плоскость повёрнута навстречу потоку
-## (EcoFan.basis), видна с обеих сторон. Стоит на слое отмели (OceanView.LAYER_WORLD).
+## (EcoFan.basis), видна с обеих сторон. Стоит на слое отмели (OceanView.LAYER_WORLD). Разброс (Б4, EcoVary по номеру
+## веера): свой размер и оттенок кружева — цвет экземпляра, мир не меняется.
 
 const RIB := Color("1f8796")
 const EDGE := Color("68E6DC")
 ## Веер жёсткий — в течении лишь чуть выгибается парусом (EcoCurrent.sway, в шейдере): доли высоты.
 const BEND := Vector3(0.04, 0.02, 0.015)
-## Чисел на веер в буфере: transform 3 × 4 по строкам.
-const STRIDE := 12
+## Чисел на веер в буфере: transform 3 × 4 по строкам и цвет экземпляра (4).
+const STRIDE := 16
+## Разброс веерников: размер ±15 %, светлее-темнее ±15 %, зеленее-синее на 8 %.
+const SIZE_SPREAD := 0.15
+const SHADE_SPREAD := 0.15
+const HUE_SPREAD := 0.08
 
 var fans: EcoFan
 ## Последний буфер MultiMesh (для тестов).
@@ -25,6 +30,7 @@ func _init(system: EcoFan) -> void:
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
 	mm.mesh = build_mesh()
 	mm.instance_count = fans.fans.size()
 	multimesh = mm
@@ -53,13 +59,26 @@ static func build_mesh() -> ArrayMesh:
 func sync(t: float) -> void:
 	buffer.resize(fans.fans.size() * STRIDE)
 	for f in fans.fans:
-		var b := EcoFan.basis(f, t)
+		var b := EcoFan.basis(f, t) * fan_scale(f.index)
 		var o := f.pos
+		var c := fan_tint(f.index)
 		var i := f.index * STRIDE
-		var row := [b.x.x, b.y.x, b.z.x, o.x, b.x.y, b.y.y, b.z.y, o.y, b.x.z, b.y.z, b.z.z, o.z]
+		var row := [b.x.x, b.y.x, b.z.x, o.x, b.x.y, b.y.y, b.z.y, o.y, b.x.z, b.y.z, b.z.z, o.z, c.r, c.g, c.b, 1.0]
 		for k in STRIDE:
 			buffer[i + k] = row[k]
 	multimesh.buffer = buffer
+
+
+## Размер веера n (множитель прямоугольника; колыхание в шейдере считает высоту по осям — веер выше гнётся дальше).
+static func fan_scale(n: int) -> float:
+	return EcoVary.spread(n, EcoVary.SIZE, SIZE_SPREAD)
+
+
+## Множитель красок веера n — цвет экземпляра: светлее или темнее, зеленее или синее.
+static func fan_tint(n: int) -> Color:
+	var k := EcoVary.spread(n, EcoVary.SHADE, SHADE_SPREAD)
+	var h := (EcoVary.unit(n, EcoVary.HUE) * 2.0 - 1.0) * HUE_SPREAD
+	return Color(k, k * (1.0 + h), k * (1.0 - h))
 
 
 ## Расстановка веера n из буфера.

@@ -251,7 +251,7 @@ func test_view_one_coral_mesh_and_one_fan_multimesh() -> void:
 	var fan := view.fans.fans[2]
 	var tr := FanView.transform_at(fv.buffer, fan.index)
 	ok(tr.origin.distance_to(fan.pos) < 1e-4, "веер на своём месте")
-	ok((tr.basis * Vector3(0, 0, 1)).distance_to(EcoFan.facing(fan)) < 0.06, "смотрит навстречу потоку")
+	ok((tr.basis * Vector3(0, 0, 1)).normalized().distance_to(EcoFan.facing(fan)) < 0.06, "смотрит навстречу потоку")
 
 	var up := cv.uploads
 	b0.glow = EcoCoral.MIN_GLOW
