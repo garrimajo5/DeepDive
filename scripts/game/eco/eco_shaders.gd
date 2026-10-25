@@ -206,6 +206,31 @@ void fragment() {
 }
 """
 
+## Колыхание в течении мира — общий кусок шейдера растений (PLANT) и огнецвета (CoralView), двойник
+## EcoCurrent.sway: подножие o, доля высоты h (0 — подножие, 1 — верх), высота height в метрах, изгиб bend вида.
+## Материалы с этим куском получают поток через follow / set_flow и выключатель «Экономно» set_sway_lite.
+const SWAY := """
+// колыхание в течении (EcoCurrent.sway — двойник): flow — скорость потока, м/с; bend — (крен, волна, поперёк)
+// в долях высоты на полном течении; sway_k — 0 на «Экономно»
+uniform vec3 flow = vec3(0.0);
+uniform float sway_k = 1.0;
+vec3 eco_sway(vec3 o, float h, float height, vec3 bn) {
+	float v = length(flow);
+	float s = v / 0.3;
+	vec3 d = v > 1e-5 ? flow / v : vec3(0.0, 0.0, 1.0);
+	vec3 c = vec3(-d.z, 0.0, d.x);
+	float ph = o.x * 0.23 + o.z * 0.19;
+	float gust = 0.65 + 0.35 * sin(TIME * 0.45 + ph);
+	float fl = sin(TIME * 1.6 + ph * 1.3 - h * 2.2);
+	float cr = sin(TIME * 1.1 + ph * 0.7 - h * 1.5);
+	float w = 0.4 + 0.6 * s;
+	float k = h * h * height;
+	vec3 off = (d * (bn.x * s * gust + bn.y * w * fl) * k + c * (bn.z * w * cr) * k) * sway_k;
+	off.y -= dot(off, off) / (2.0 * max(height, 0.1));
+	return off;
+}
+"""
+
 ## Растения на дне со светом (обе стороны): ленты ленточника, листья волнолиста, кружево веерника, трубы органа. Что
 ## рисовать — `mode` (Plant), краски и числа каждого вида — в своих uniform; формулы — прежние формулы видов.
 ## Общее: шероховатость `rough`, блик `spec`, своё свечение `glow` (линейный цвет) плюс волна `glow_wave` · sin(TIME · 1,7);
@@ -225,12 +250,10 @@ uniform float rough = 0.9;
 uniform float spec = 0.5;
 uniform vec3 glow = vec3(0.0);
 uniform vec3 glow_wave = vec3(0.0);
-// колыхание в течении (EcoCurrent.sway — двойник): flow — скорость потока, м/с; bend — (крен, волна, поперёк)
-// в долях высоты на полном течении; reach — высота растения в осях меша; sway_k — 0 на «Экономно»
-uniform vec3 flow = vec3(0.0);
+// bend — изгиб вида, reach — высота растения в осях меша; поток и выключатель — в SWAY
 uniform vec3 bend = vec3(0.0);
 uniform float reach = 1.0;
-uniform float sway_k = 1.0;
+""" + SWAY + """
 void vertex() {
 	if (sway_k > 0.0 && dot(bend, bend) > 0.0) {
 		vec3 o = MODEL_MATRIX[3].xyz;
@@ -238,19 +261,7 @@ void vertex() {
 		vec3 ay = MODEL_MATRIX[1].xyz;
 		vec3 az = MODEL_MATRIX[2].xyz;
 		float h = clamp(VERTEX.y / reach, 0.0, 1.0);
-		float height = reach * length(ay);
-		float v = length(flow);
-		float s = v / 0.3;
-		vec3 d = v > 1e-5 ? flow / v : vec3(0.0, 0.0, 1.0);
-		vec3 c = vec3(-d.z, 0.0, d.x);
-		float ph = o.x * 0.23 + o.z * 0.19;
-		float gust = 0.65 + 0.35 * sin(TIME * 0.45 + ph);
-		float fl = sin(TIME * 1.6 + ph * 1.3 - h * 2.2);
-		float cr = sin(TIME * 1.1 + ph * 0.7 - h * 1.5);
-		float w = 0.4 + 0.6 * s;
-		float k = h * h * height;
-		vec3 off = (d * (bend.x * s * gust + bend.y * w * fl) * k + c * (bend.z * w * cr) * k) * sway_k;
-		off.y -= dot(off, off) / (2.0 * max(height, 0.1));
+		vec3 off = eco_sway(o, h, reach * length(ay), bend);
 		// мировое смещение — в оси меша (у растений оси ортогональны: поворот и масштаб)
 		VERTEX += vec3(dot(off, ax) / max(dot(ax, ax), 1e-6), dot(off, ay) / max(dot(ay, ay), 1e-6),
 			dot(off, az) / max(dot(az, az), 1e-6));
@@ -351,6 +362,11 @@ static func mist(kind: Mist, params: Dictionary = {}) -> ShaderMaterial:
 static func plant(kind: Plant, params: Dictionary = {}) -> ShaderMaterial:
 	var mat := material(PLANT, params)
 	mat.set_shader_parameter("mode", int(kind))
+	return follow(mat)
+
+
+## Материал с куском SWAY (растения, огнецвет) — получает текущий поток и выключатель «Экономно» сразу и дальше.
+static func follow(mat: ShaderMaterial) -> ShaderMaterial:
 	mat.set_shader_parameter("flow", flow)
 	mat.set_shader_parameter("sway_k", 0.0 if sway_lite else 1.0)
 	_plants = _plants.filter(func(r: WeakRef) -> bool: return r.get_ref() != null)
