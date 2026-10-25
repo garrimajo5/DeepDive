@@ -60,6 +60,18 @@ func update(dt: float) -> void:
 		d.update(dt)
 
 
+## Видно ли из точки z_a точку z_b вдоль корабля (рация ART-041: табличка «активность» сквозь стены не видна):
+## в одном отсеке — да, в разных — только если каждый люк между ними открыт хотя бы на SEE_AT.
+const SEE_AT := 0.3
+static func in_sight(z_a: float, z_b: float, at_doors: Array[Door]) -> bool:
+	var lo := minf(z_a, z_b)
+	var hi := maxf(z_a, z_b)
+	for d in at_doors:
+		if d.z > lo and d.z <= hi and d.t < SEE_AT:
+			return false
+	return true
+
+
 static func room_at(z: float) -> int:
 	if z < 1.9:
 		return Room.BRIDGE

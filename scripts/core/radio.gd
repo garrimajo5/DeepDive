@@ -128,6 +128,19 @@ func heard(id: int, who: String, role: int, level := 1.0, seen := true) -> void:
 	talkers.append(n)
 
 
+## Над кем табличка ART-033 в «активности» (контур ярче, три штриха): места в экипаже товарищей, чей голос идёт
+## (`HOLD` после пакета), если звук товарищей включён и товарищ в поле зрения (`seen`) — сквозь стены нет, за стеной
+## остаётся только строка списка. Пакеты голоса приходят только в коопе — без них никого.
+func voice() -> Array[int]:
+	var out: Array[int] = []
+	if not hear:
+		return out
+	for t in talkers:
+		if t.since <= HOLD and t.seen:
+			out.append(t.id)
+	return out
+
+
 ## Строки списка сверху вниз: первые `ROWS` по порядку, в котором заговорили; при выключенном звуке — пусто.
 func rows() -> Array[Talker]:
 	var out: Array[Talker] = []
