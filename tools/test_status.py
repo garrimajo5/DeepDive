@@ -50,6 +50,31 @@ class Progress(unittest.TestCase):
         self.assertEqual(status.pct(1, 3), 33)
 
 
+class Week(unittest.TestCase):
+    def test_week_stats(self):
+        recent = [
+            {"number": 1, "state_reason": "completed", "closed_at": "2", "labels": [{"name": "баг"}]},
+            {"number": 2, "state_reason": "completed", "closed_at": "3", "labels": [{"name": "art"}]},
+            {"number": 3, "state_reason": "completed", "closed_at": "1", "labels": [{"name": "model"}]},
+            {"number": 4, "state_reason": "not_planned", "closed_at": "4", "labels": []},
+            {"number": 5, "closed_at": "5", "labels": [], "pull_request": {}},          # PR в списке issues — не задача
+        ]
+        prs = [{"merged_at": "x", "head": {"ref": "feat/a-x"}}, {"merged_at": "x", "head": {"ref": "fix/b-y"}},
+               {"merged_at": "x", "head": {"ref": "art/ART-1-z"}}, {"merged_at": "x", "head": {"ref": "qa/2026"}},
+               {"merged_at": None, "head": {"ref": "feat/a-closed-unmerged"}}]
+        w = status.week_stats(recent, prs)
+        self.assertEqual((w["pr"], w["pr_code"], w["pr_art"], w["pr_qa"]), (4, 2, 1, 1))
+        self.assertEqual((w["done"], w["bugs"], w["art"], w["model"], w["dropped"]), (3, 1, 1, 1, 1))
+        self.assertEqual([i["number"] for i in w["list"]], [2, 1, 3])   # свежие сверху
+
+    def test_page_shows_week_table(self):
+        page = status.render([], [], [], [{"number": 9, "title": "Готово", "state_reason": "completed",
+                                          "closed_at": "1", "labels": []}], {},
+                             prs=[{"merged_at": "x", "head": {"ref": "art/A"}}])
+        self.assertIn("| PR слито | 1 | код и документы 0 · сдачи художника 1 · отчёты тестера 0 |", page)
+        self.assertIn("| Issues закрыто как сделанные | 1 |", page)
+
+
 class Stage(unittest.TestCase):
     def test_statuses(self):
         self.assertEqual(status.stage_status(True, 0, 0, 0, False), "✅ пройден")

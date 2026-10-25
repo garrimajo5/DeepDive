@@ -19,6 +19,7 @@ concurrency:
 permissions:
   contents: read
   issues: write
+  pull-requests: read   # без него GitHub не отдаёт PR — в итогах недели было «0 PR»
 
 jobs:
   status:
@@ -27,8 +28,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
-      - name: Тесты страницы
-        run: python3 tools/test_status.py
+      - name: Тесты страницы и картинок в issue
+        run: python3 tools/test_status.py && python3 tools/test_issue_img.py
       - name: Обновить issue «Где мы»
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
