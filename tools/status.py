@@ -21,12 +21,13 @@ from urllib.parse import quote
 REPO = os.environ.get("STATUS_REPO", "garrimajo5/DeepDive")
 STATUS_LABEL = "статус"
 STATUS_TITLE = "Где мы — статус разработки"
-ROLES = ["поток А", "поток Б", "art", "model", "qa", "звук", "сюжет", "владелец"]
+ROLES = ["поток А", "поток Б", "art", "model", "анимация", "qa", "звук", "сюжет", "владелец"]
 ROLE_NAMES = {
     "поток А": "Dev: корабль (Claude, поток А)",
     "поток Б": "Dev: живой мир (Claude, поток Б)",
     "art": "Концепт-арт, 2D (Codex)",
     "model": "3D-модели (Codex)",
+    "анимация": "Анимации (Codex, Blender)",
     "qa": "Тестер",
     "звук": "Звук, музыка, голоса (Codex, ElevenLabs)",
     "сюжет": "Сюжет и лор (владелец)",
