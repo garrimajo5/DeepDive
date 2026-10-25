@@ -6,8 +6,15 @@ extends EcoSystem
 ## (поворот и наклон), поворачивается на корабль (EAR_TURN рад/с, в пределах EAR_YAW/EAR_PITCH), дальше — уши
 ## медленно обводят воду. Затаившегося нет ни на сонаре, ни в прицеле сканера. Импульс сонара ближе REVEAL_R
 ## выдаёт его на REVEAL_T с (Ec.onPing): он виден сонару и сканеру, наблюдение «reveal» — только когда раскрылся.
-## Подделка голосов экипажа по связи («fake», «strike», «lure») — следующая задача потока Б вместе со связью
-## корабля (ART-040, поток А).
+## Подделка голосов (Ec.fake/real/onPing/onLight): корабль ближе LISTEN_R, эхоловец затаился — через FAKE_FIRST с
+## и потом раз в FAKE_CD с он шлёт по внутренней связи (EcoLink.VOICE, плашка ART-040 у корабля) ложный вызов
+## с просьбой, выгодной ему: «включите прожектор» (пилот, если свет выключен — в половине случаев) или «срочно
+## импульс» (сонарщик). Кодового слова забега у подделки нет: на первом спуске она молчит на «Спросить код»
+## (silent), на следующих — отвечает чужим словом (старое, с прошлого спуска). Просьба действует BAIT_T с: импульс
+## ближе STRIKE_R — удар по корпусу STRIKE («strike»), свет включили — ближайший серпохвост ближе LURE_R бросается
+## на корабль (EcoPred.lure, «lure»); не послушались — наблюдение «fake» без текста. Импульс, о котором он не просил,
+## раскрывает его (выше) — пока раскрыт, подделок нет. Настоящие доклады экипажа с кодом забега (Ec.real) — ближе
+## TALK_R раз в REAL_CD с, чтобы было с чем сравнить. Просьбу корабль сам не исполняет — решает игрок.
 
 const ID := "echo"
 ## Слушает корабль ближе LISTEN_R (м), импульс сонара ближе REVEAL_R раскрывает его на REVEAL_T с (js/echo.js).
@@ -38,6 +45,34 @@ const IDLE_PITCH := 0.35
 const TARGET_R := 2.0
 ## Без дна (тесты без ground) лежит на этой высоте.
 const FALLBACK_FLOOR := -46.0
+## Подделки голосов (js/echo.js): первая через FAKE_FIRST с после того, как корабль подошёл, потом раз в FAKE_CD с;
+## просьба ждёт исполнения BAIT_T с; удар на выпрошенный импульс ближе STRIKE_R м — доля прочности STRIKE (−12 %);
+## на свет идёт серпохвост не дальше LURE_R м.
+const FAKE_FIRST := 12.0
+const FAKE_CD := 45.0
+const BAIT_T := 10.0
+const STRIKE_R := 50.0
+const STRIKE := 0.12
+const LURE_R := 160.0
+## Настоящие доклады экипажа: корабль ближе TALK_R м, первый через REAL_FIRST с, потом раз в REAL_CD с.
+const TALK_R := 150.0
+const REAL_FIRST := 30.0
+const REAL_CD := 75.0
+## Просьбы подделки (EcoLink.VOICE "ask").
+const ASK_PING := "ping"
+const ASK_LIGHT := "light"
+## Ложные вызовы: просьба → [роль (Crew.Role), текст].
+const FAKES := {
+	"light": [0, "Включите прожектор, ничего не видно!"],
+	"ping": [1, "Срочно импульс сонара, рядом что-то большое!"],
+}
+## Настоящие доклады: [роль, текст] — без чисел корабля (мир их не знает).
+const REALS: Array = [
+	[0, "Курс держим, идём дальше."],
+	[2, "Слежу за реактором."],
+	[1, "Сонар готов, жду команды."],
+	[3, "Записываю всё, что видим."],
+]
 
 
 ## Сам эхоловец.
@@ -52,6 +87,14 @@ class Lurker:
 	var near := false
 	## Сколько ещё раскрыт (с); ≤ 0 — затаился.
 	var revealed := 0.0
+	## До следующей подделки и настоящего доклада, с (Ec.fakeT, Ec.realT).
+	var fake_t := FAKE_FIRST
+	var real_t := REAL_FIRST
+	## Просьба последней подделки ("" — нет) и сколько ещё ждёт исполнения, с (Ec.bait).
+	var bait := ""
+	var bait_t := 0.0
+	## Ложных вызовов за забег.
+	var fakes := 0
 
 	func is_revealed() -> bool:
 		return revealed > 0.0
@@ -67,18 +110,31 @@ class Lurker:
 
 var echo: Lurker
 
+## Серпохвосты: на свет по подделке идёт ближайший (null — хищников нет).
+var preds: EcoPred
+
 var _bones: EcoBones
 var _ground: Callable
 var _t := 0.0
+var _rnd: EcoRandom
+var _light_was := false
 
 
-func _init(bones: EcoBones = null) -> void:
+func _init(bones: EcoBones = null, pred: EcoPred = null) -> void:
 	_bones = bones
+	preds = pred
+
+
+## Своё зерно (js: свой генератор, не сбивает случайность экосистемы).
+static func seed_for(world_seed: int) -> int:
+	return (world_seed * 37 + 9) & 0xFFFFFFFF
 
 
 func reset(world: EcoWorld) -> void:
 	_ground = world.ground
 	_t = 0.0
+	_rnd = EcoWorld.seeded_for(seed_for(world.seed_value))
+	_light_was = world.ship.light_on
 	echo = Lurker.new()
 	var at := lair()
 	echo.yaw = heading()
@@ -115,9 +171,11 @@ func step(world: EcoWorld, dt: float) -> void:
 	if ec == null:
 		return
 	var s := world.ship.pos
-	ec.near = ec.p.distance_to(s) < LISTEN_R
+	var d := ec.p.distance_to(s)
+	ec.near = d < LISTEN_R
 	if ec.revealed > 0.0:
 		ec.revealed = maxf(0.0, ec.revealed - dt)
+	_step_voices(world, d, dt)
 	for i in 2:
 		var want := aim(i, s) if ec.near else idle(i, _t)
 		var e := ec.ears[i]
@@ -149,13 +207,94 @@ func ear_dir(i: int) -> Vector3:
 	return Basis(Vector3.UP, echo.yaw) * local
 
 
-## Импульс сонара (Ec.onPing): ближе REVEAL_R — раскрыт на REVEAL_T с; наблюдение — только когда раскрылся.
+## Голоса по связи: свет включили по просьбе, просьба истекла, настоящий доклад, новая подделка.
+func _step_voices(world: EcoWorld, d: float, dt: float) -> void:
+	var ec := echo
+	var light := world.ship.light_on
+	if light and not _light_was:
+		on_light(world)
+	_light_was = light
+	if ec.bait != "":
+		ec.bait_t -= dt
+		if ec.bait_t <= 0.0:   # не послушались — подделка ничего не дала
+			ec.bait = ""
+			world.emit(ID, "fake", ec.p)
+	if d < TALK_R:
+		ec.real_t -= dt
+		if ec.real_t <= 0.0:
+			ec.real_t = REAL_CD
+			if ec.bait == "":
+				real(world)
+	if ec.near and not ec.is_revealed():
+		ec.fake_t -= dt
+		if ec.fake_t <= 0.0:
+			ec.fake_t = FAKE_CD
+			fake(world)
+	elif not ec.near:
+		ec.fake_t = maxf(ec.fake_t, FAKE_FIRST)
+
+
+## Ложный вызов (Ec.fake): ask — "light" или "ping"; "" — сам выбирает (свет выключен — в половине случаев свет).
+## Кода забега у подделки нет: на первом спуске молчит на «Спросить код», дальше — отвечает старым словом.
+func fake(world: EcoWorld, ask := "") -> Dictionary:
+	var ec := echo
+	if ask == "":
+		ask = ASK_LIGHT if not world.ship.light_on and _rnd.chance(0.5) else ASK_PING
+	var line: Array = FAKES[ask]
+	ec.bait = ask
+	ec.bait_t = BAIT_T
+	ec.fakes += 1
+	var e := EcoLink.voice(line[0], line[1], true, ask, world.ship.dive == 0)
+	world.send(e)
+	return e
+
+
+## Настоящий доклад экипажа с кодом забега (Ec.real): роль и текст — по очереди случая.
+func real(world: EcoWorld) -> Dictionary:
+	var line: Array = REALS[_rnd.index(REALS.size())]
+	var e := EcoLink.voice(line[0], line[1])
+	world.send(e)
+	return e
+
+
+## Свет включили (Ec.onLight): по просьбе подделки — ближайший серпохвост ближе LURE_R (не в броске) идёт на корабль.
+func on_light(world: EcoWorld) -> EcoPred.Pred:
+	var ec := echo
+	if ec == null or ec.bait != ASK_LIGHT:
+		return null
+	ec.bait = ""
+	var best: EcoPred.Pred = null
+	if preds:
+		var bd := LURE_R
+		for pr in preds.all:
+			var dd := pr.agent.distance_to(world.ship.pos)
+			if pr.agent.alive and pr.mode != EcoPred.Mode.CHARGE and dd < bd:
+				bd = dd
+				best = pr
+	if best:
+		preds.lure(world, best)
+	world.emit(ID, "lure", ec.p, _lure_text(world))
+	return best
+
+
+## Импульс сонара (Ec.onPing): выпрошенный подделкой ближе STRIKE_R — удар по корпусу; не выпрошенный ближе
+## REVEAL_R — раскрыт на REVEAL_T с; наблюдение — только когда раскрылся.
 func on_ping(world: EcoWorld, pos: Vector3) -> void:
 	var ec := echo
-	if ec == null or ec.p.distance_to(pos) >= REVEAL_R:
+	if ec == null:
+		return
+	var d := ec.p.distance_to(pos)
+	if ec.bait == ASK_PING:
+		if d < STRIKE_R:
+			ec.bait = ""
+			world.hit_ship(Species.cap(world.nm(ID)), STRIKE, ec.p)
+			world.emit(ID, "strike", ec.p, _strike_text(world))
+		return
+	if d >= REVEAL_R:
 		return
 	var was := ec.is_revealed()
 	ec.revealed = REVEAL_T
+	ec.bait = ""
 	if not was:
 		world.emit(ID, "reveal", ec.p, _reveal_text(world))
 
@@ -188,3 +327,20 @@ static func _reveal_text(world: EcoWorld) -> Callable:
 		var w: EcoWorld = wr.get_ref()
 		var who := w.nm(ID, Species.Case.ACC) if w else Species.called(ID, Species.Case.ACC)
 		return "Импульс сонара выдал %s: он раскрыт" % who
+
+
+## «Эхоловец ударил по корпусу на звук импульса…» и «на свет идёт серпохвост» — названия в момент показа.
+static func _strike_text(world: EcoWorld) -> Callable:
+	var wr: WeakRef = weakref(world)
+	return func() -> String:
+		var w: EcoWorld = wr.get_ref()
+		var who := w.nm(ID) if w else Species.called(ID)
+		return "%s ударил по корпусу на звук импульса, который сам выпросил" % Species.cap(who)
+
+
+static func _lure_text(world: EcoWorld) -> Callable:
+	var wr: WeakRef = weakref(world)
+	return func() -> String:
+		var w: EcoWorld = wr.get_ref()
+		var p := w.nm(EcoPred.ID) if w else Species.called(EcoPred.ID)
+		return "Свет включили по ложному вызову — на него идёт %s" % p

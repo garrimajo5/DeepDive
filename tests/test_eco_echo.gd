@@ -1,7 +1,8 @@
 extends TestCase
 ## Эхоловец (js/echo.js, ART-007): лежит у Костей левиафана снаружи клетки, уши по отдельности поворачиваются
 ## на корабль, затаившегося нет на сонаре и в прицеле, импульс сонара ближе 70 м раскрывает его на 120 с;
-## в сцене — шесть вызовов отрисовки.
+## подделывает голоса экипажа по связи (EcoLink.VOICE): выпрошенный импульс — удар, выпрошенный свет —
+## серпохвост; в сцене — шесть вызовов отрисовки.
 
 const FLAT := -46.0
 const FAR := Vector3(500, -30, 500)
@@ -222,6 +223,225 @@ func test_reveal_text_uses_scanned_name() -> void:
 		if ev["type"] == EcoLink.OBSERVE and ev["note"] == "reveal":
 			txt = ev["text"]
 	eq(txt, "Импульс сонара выдал эхоловца: он раскрыт", "изученный — по имени")
+
+
+# ---------- Подделки голосов (Ec.fake/real/onPing/onLight) ----------
+
+func _voices(link: Array[Dictionary]) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for ev in link:
+		if ev["type"] == EcoLink.VOICE:
+			out.append(ev)
+	return out
+
+
+func _hits(link: Array[Dictionary]) -> int:
+	var n := 0
+	for ev in link:
+		if ev["type"] == EcoLink.HIT:
+			n += 1
+	return n
+
+
+## Корабль у эхоловца: подождать первую подделку; вернуть её событие.
+func _first_fake(w: EcoWorld, ec: EcoEcho.Lurker) -> Dictionary:
+	w.ship.pos = ec.p + Vector3(0, 10, 30)
+	for i in int(EcoEcho.FAKE_FIRST / 0.05) + 2:
+		w.step(0.05)
+		for v in _voices(w.take_link()):
+			if v["fake"]:
+				return v
+	return {}
+
+
+func test_fake_call_when_ship_near() -> void:
+	var w := _world()
+	var ec := (_sys(w, EcoEcho) as EcoEcho).echo
+	w.ship.pos = ec.p + Vector3(0, 10, EcoEcho.LISTEN_R + 5.0)
+	w.run(EcoEcho.FAKE_FIRST + 5.0)
+	var far := 0
+	for v in _voices(w.take_link()):
+		if v["fake"]:
+			far += 1
+	eq(far, 0, "дальше LISTEN_R — подделок нет")
+	w.ship.pos = ec.p + Vector3(0, 10, 30)
+	w.run(EcoEcho.FAKE_FIRST - 1.0)
+	eq(ec.fakes, 0, "первая — не раньше FAKE_FIRST после подхода")
+	w.run(1.5)
+	eq(ec.fakes, 1, "потом ложный вызов")
+	var v := _voices(w.take_link())
+	var f := {}
+	for x in v:
+		if x["fake"]:
+			f = x
+	ok(not f.is_empty(), "VOICE с fake")
+	ok(f["ask"] == EcoEcho.ASK_PING or f["ask"] == EcoEcho.ASK_LIGHT, "с просьбой: %s" % f["ask"])
+	eq([f["role"], f["text"]], EcoEcho.FAKES[f["ask"]], "роль и текст по просьбе")
+	ok(f["silent"], "первый спуск: старого кода нет — молчит на «Спросить код»")
+	eq(ec.bait, f["ask"], "просьба ждёт исполнения")
+	w.run(EcoEcho.FAKE_CD - 2.0)
+	eq(ec.fakes, 1, "следующая не раньше FAKE_CD")
+	w.run(3.0)
+	eq(ec.fakes, 2, "раз в FAKE_CD")
+
+
+func test_fake_answers_old_word_on_later_dive() -> void:
+	var w := _world()
+	w.ship.dive = 1
+	var ec := (_sys(w, EcoEcho) as EcoEcho).echo
+	var f := _first_fake(w, ec)
+	ok(not f.is_empty(), "подделка")
+	ok(not f["silent"], "второй спуск: отвечает старым словом (у корабля — «Код не совпал»)")
+
+
+func test_light_off_sometimes_asks_light() -> void:
+	var w := _world()
+	var e: EcoEcho = _sys(w, EcoEcho)
+	var kinds := {}
+	for i in 30:
+		kinds[e.fake(w)["ask"]] = true
+	ok(kinds.has(EcoEcho.ASK_LIGHT) and kinds.has(EcoEcho.ASK_PING), "без света — и свет, и импульс: %s" % kinds)
+	w.ship.light_on = true
+	for i in 20:
+		eq(e.fake(w)["ask"], EcoEcho.ASK_PING, "свет уже горит — просит импульс")
+
+
+func test_asked_ping_strikes_hull() -> void:
+	var w := _world()
+	var e: EcoEcho = _sys(w, EcoEcho)
+	var ec := e.echo
+	w.ship.pos = ec.p + Vector3(0, 10, 30)
+	e.fake(w, EcoEcho.ASK_PING)
+	w.take_link()
+	var link := _ping(w, ec.p + Vector3(0, 10, 30))
+	eq(_hits(link), 1, "выпрошенный импульс — удар")
+	for ev in link:
+		if ev["type"] == EcoLink.HIT:
+			near(ev["damage"], EcoEcho.STRIKE, 1e-6, "−12 %")
+	ok(not ec.is_revealed(), "свой импульс его не раскрывает")
+	eq(ec.bait, "", "просьба исполнена")
+	var txt := ""
+	for ev in link:
+		if ev["type"] == EcoLink.OBSERVE and ev["note"] == "strike":
+			txt = ev["text"]
+	eq(txt, "Засадчик с ушами-воронками ударил по корпусу на звук импульса, который сам выпросил", "наблюдение «strike»")
+	link = _ping(w, ec.p + Vector3(0, 10, 30))
+	eq(_hits(link), 0, "второй импульс — уже не выпрошен")
+	ok(ec.is_revealed(), "и раскрывает его")
+
+
+func test_asked_ping_far_no_strike() -> void:
+	var w := _world()
+	var e: EcoEcho = _sys(w, EcoEcho)
+	var ec := e.echo
+	e.fake(w, EcoEcho.ASK_PING)
+	var link := _ping(w, ec.p + Vector3(0, 10, EcoEcho.STRIKE_R + 5.0))
+	eq(_hits(link), 0, "дальше STRIKE_R — не дотянулся")
+	ok(not ec.is_revealed(), "выпрошенный импульс не раскрывает")
+
+
+func test_unasked_ping_reveals_and_stops_fakes() -> void:
+	var w := _world()
+	var e: EcoEcho = _sys(w, EcoEcho)
+	var ec := e.echo
+	e.fake(w, EcoEcho.ASK_LIGHT)
+	var link := _ping(w, ec.p + Vector3(0, 10, 30))
+	eq(_hits(link), 0, "о импульсе не просил — удара нет")
+	ok(ec.is_revealed(), "раскрыт")
+	eq(ec.bait, "", "просьба сорвана")
+	var n := ec.fakes
+	w.run(EcoEcho.FAKE_CD + 5.0)
+	eq(ec.fakes, n, "пока раскрыт — подделок нет")
+
+
+func test_asked_light_lures_predator() -> void:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	w.ship.pos = FAR
+	var b := w.add(EcoBones.new()) as EcoBones
+	var preds := w.add(EcoPred.new()) as EcoPred
+	var e := w.add(EcoEcho.new(b, preds)) as EcoEcho
+	var ec := e.echo
+	w.ship.pos = ec.p + Vector3(0, 10, 30)
+	w.step(0.05)
+	w.take_link()
+	e.fake(w, EcoEcho.ASK_LIGHT)
+	w.ship.light_on = true
+	w.step(0.05)
+	var charging := 0
+	for pr in preds.all:
+		if pr.mode == EcoPred.Mode.CHARGE:
+			charging += 1
+	eq(charging, 1, "ближайший серпохвост бросается на корабль")
+	eq(ec.bait, "", "просьба исполнена")
+	var lure := 0
+	for ev in w.take_link():
+		if ev["type"] == EcoLink.OBSERVE and ev["note"] == "lure":
+			lure += 1
+			ok(str(ev["text"]).begins_with("Свет включили по ложному вызову"), "текст: %s" % ev["text"])
+	eq(lure, 1, "наблюдение «lure»")
+	w.ship.light_on = false
+	w.step(0.05)
+	w.ship.light_on = true
+	w.step(0.05)
+	eq(_notes(w, "lure"), 0, "свет без просьбы — без «lure»")
+
+
+func test_ignored_bait_expires() -> void:
+	var w := _world()
+	var e: EcoEcho = _sys(w, EcoEcho)
+	var ec := e.echo
+	w.ship.pos = ec.p + Vector3(0, 10, 30)
+	e.fake(w, EcoEcho.ASK_PING)
+	w.run(EcoEcho.BAIT_T + 0.2)
+	eq(ec.bait, "", "не послушались — просьба истекла")
+	var obs := 0
+	for ev in w.take_link():
+		if ev["type"] == EcoLink.OBSERVE and ev["note"] == "fake":
+			obs += 1
+			eq(ev["text"], "", "без текста: подсказку не выдаём строкой")
+	eq(obs, 1, "наблюдение «fake»")
+	var link := _ping(w, ec.p + Vector3(0, 10, 30))
+	eq(_hits(link), 0, "поздний импульс — не на просьбу")
+	ok(ec.is_revealed(), "а раскрывает его")
+
+
+func test_real_reports_near_bones() -> void:
+	var w := _world()
+	var ec := (_sys(w, EcoEcho) as EcoEcho).echo
+	w.ship.pos = ec.p + Vector3(0, 10, EcoEcho.TALK_R + 10.0)
+	w.run(EcoEcho.REAL_FIRST + 5.0)
+	eq(_voices(w.take_link()).size(), 0, "далеко от костей — эфир тих")
+	w.ship.pos = ec.p + Vector3(0, 10, EcoEcho.LISTEN_R + 20.0)   # слышно, но не подслушивает
+	w.run(EcoEcho.REAL_FIRST - 1.0)
+	eq(_voices(w.take_link()).size(), 0, "первый доклад — не раньше REAL_FIRST")
+	w.run(2.0)
+	var v := _voices(w.take_link())
+	eq(v.size(), 1, "настоящий доклад")
+	ok(not v[0]["fake"] and v[0]["ask"] == "" and not v[0]["silent"], "свой: с кодом, без просьбы")
+	ok(EcoEcho.REALS.has([v[0]["role"], v[0]["text"]]), "из списка докладов")
+	w.run(EcoEcho.REAL_CD)
+	eq(_voices(w.take_link()).size(), 1, "раз в REAL_CD")
+
+
+func test_voices_repeat_with_seed_and_reset() -> void:
+	var a := _world()
+	var b := _world()
+	var ea := (_sys(a, EcoEcho) as EcoEcho)
+	var eb := (_sys(b, EcoEcho) as EcoEcho)
+	var la: Array = []
+	var lb: Array = []
+	for i in 12:
+		la.append(ea.fake(a)["ask"])
+		lb.append(eb.fake(b)["ask"])
+	eq(la, lb, "одно зерно — те же просьбы")
+	a.reset()
+	eq(ea.echo.fakes, 0, "сброс — счёт с нуля")
+	eq(ea.echo.bait, "", "без просьбы")
+	var lc: Array = []
+	for i in 12:
+		lc.append(ea.fake(a)["ask"])
+	eq(lc, la, "после сброса — те же")
 
 
 # ---------- Сцена ----------
