@@ -10,7 +10,7 @@ func _run_all(q: QaScript, secs: float, dt: float = 0.05) -> Array:
 
 
 func test_parse_skips_bad_steps() -> void:
-	var q := QaScript.parse('[{"do":"wait","s":1},{"do":"fly"},{"do":"press","what":"nose"},{"do":"press","what":"pad"},{"do":"shot","name":"a"}]')
+	var q := QaScript.parse('[{"do":"wait","s":1},{"do":"swim"},{"do":"press","what":"nose"},{"do":"press","what":"pad"},{"do":"shot","name":"a"}]')
 	eq(q.steps.size(), 2, "остались хорошие шаги")
 	eq(q.errors.size(), 3, "три ошибки")
 	ok(QaScript.parse("{}").errors.size() == 1, "не массив — ошибка")
@@ -406,3 +406,54 @@ func test_fps_few_frames_without_shot() -> void:   # issue #281: 0,3 с посл
 	eq(r.frames, 2, "два своих кадра")
 	eq(r.fps(), 6, "6 к/с по своим кадрам по 170 мс")
 	r.free()
+
+
+## issue #445: каустики под трещинами на снимках прогона не разглядеть — шаги ship и fly дают вид вблизи дна.
+func test_ship_and_fly_steps() -> void:
+	var q := QaScript.parse('[{"do": "ship", "x": 38, "y": -20, "z": -25}, {"do": "fly", "y": -8, "pitch": -55}, ' \
+		+ '{"do": "shot", "name": "k"}, {"do": "fly", "on": false}]')
+	eq(q.errors.size(), 0, "шаги ship и fly известны")
+	var out := q.advance(0.1)
+	eq(out[0], ["ship", 38.0, -20.0, -25.0], "корабль в точку мира")
+	eq(out[1], ["fly", true, -8.0, -55.0], "полёт: высота глаза и наклон")
+	eq(out.size(), 2, "снимок — в следующем шаге, после кадра с новым местом")
+	var out2 := q.advance(0.1)
+	eq(out2[0], ["shot", "k"], "затем снимок")
+	eq(out2[1], ["fly", false, Deck.Walker.EYE, 0.0], "назад на пол")
+
+
+## Снимок 32-kaustiki смотрит на дно под шахтами света, глаз над дном, а не в грунте.
+func test_caustics_shot_under_cracks() -> void:
+	var raw := FileAccess.get_file_as_string("res://tools/qa/scenario.json")
+	var steps: Array = JSON.parse_string(raw)
+	var ship := {}
+	var fly := {}
+	for st in steps:
+		if st["do"] == "ship":
+			ship = st
+		if st["do"] == "fly" and st.get("on", true):
+			fly = st
+	ok(not ship.is_empty() and not fly.is_empty(), "в сценарии есть вид на дно под трещинами")
+	var at := Vector3(float(ship["x"]), 0.0, float(ship["z"]))
+	ok(LightShafts.near(LightShafts.layout(), at, 25.0).size() > 0, "рядом шахты света — над дном трещины")
+	var eye_y := float(ship["y"]) + float(fly["y"])
+	var floor_y := Seabed.height(at.x, at.z)
+	ok(eye_y > floor_y + 2.0, "глаз над дном (%.1f > %.1f)" % [eye_y, floor_y])
+	ok(eye_y < float(ship["y"]) - 4.0, "глаз под днищем — корпус не закрывает дно")
+
+
+func test_park_at_and_toggle_noclip() -> void:
+	var main: Node = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.helm.speed = 3.0
+	main.park_at(Vector3(38, -20, -25))
+	eq(main.helm.pos, Vector3(38, -20, -25), "корабль на месте")
+	eq(main.helm.speed, 0.0, "и стоит")
+	main.toggle_noclip()
+	ok(main.walker.noclip, "полёт включён")
+	main.toggle_noclip()
+	ok(not main.walker.noclip, "полёт выключен")
+	eq(main.walker.y, Deck.Walker.EYE, "глаз снова на высоте шага")
+	main.queue_free()
+	await frames(1)

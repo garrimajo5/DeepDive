@@ -129,6 +129,14 @@ func tick(dt: float) -> void:
 					main.reactor.heat = c[1]
 			"sample":
 				main.park_over_sample(c[1])
+			"ship":   # корабль в точку мира и стоит (вид на дно под трещинами, #445)
+				main.park_at(Vector3(c[1], c[2], c[3]))
+			"fly":   # тестовый полёт noclip: глаз на высоте c[2] в осях корабля, наклон c[3]
+				if main.walker.noclip != c[1]:
+					main.toggle_noclip()
+				if c[1]:
+					main.walker.y = c[2]
+					main.walker.pitch = deg_to_rad(c[3])
 			"breach":
 				main.open_breach(c[1])
 			"route":
