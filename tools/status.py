@@ -95,6 +95,31 @@ def short(text, n=40):
     return text if len(text) <= n else text[:n].rstrip() + "…"
 
 
+WEEK = 7
+
+
+def pr_kind(pr):
+    """Что за PR по ветке: сдача художника (art/…), отчёт тестера (qa/…) или код и документы."""
+    ref = (pr.get("head") or {}).get("ref", "")
+    return "art" if ref.startswith("art/") else "qa" if ref.startswith("qa/") else "code"
+
+
+def week_stats(recent, prs):
+    """Итоги недели: слитые PR по видам, issues закрытые как сделанные (по меткам) и закрытые без работы."""
+    issues = [i for i in recent if "pull_request" not in i and STATUS_LABEL not in labels_of(i)]
+    done = [i for i in issues if i.get("state_reason") != "not_planned"]
+    merged = [p for p in prs if p.get("merged_at")]
+
+    def with_label(name):
+        return sum(name in labels_of(i) for i in done)
+
+    return {"pr": len(merged), "pr_code": sum(pr_kind(p) == "code" for p in merged),
+            "pr_art": sum(pr_kind(p) == "art" for p in merged), "pr_qa": sum(pr_kind(p) == "qa" for p in merged),
+            "done": len(done), "bugs": with_label("баг"), "art": with_label("art"), "model": with_label("model"),
+            "epics": with_label("эпик"), "dropped": len(issues) - len(done),
+            "list": sorted(done, key=lambda i: i.get("closed_at", ""), reverse=True)}
+
+
 def stage_status(closed, n_epics, done, total, has_later_work):
     """Статус этапа: пройден / ждёт приёмки / в работе / впереди."""
     if closed:
@@ -147,16 +172,25 @@ def collect():
     epics = gh(f"repos/{REPO}/issues?state=all&labels=эпик&per_page=100", paginate=True)
     open_issues = [i for i in gh(f"repos/{REPO}/issues?state=open&per_page=100", paginate=True)
                    if "pull_request" not in i]
-    since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=WEEK)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Закрытые issues за неделю. PR в этом списке есть, только если у токена есть право на PR, — поэтому
+    # отбрасываем их здесь, а слитые PR считаем отдельно по pulls (иначе в CI было «0 PR»).
     recent = [i for i in gh(f"repos/{REPO}/issues?state=closed&since={since}&per_page=100", paginate=True)
-              if i.get("closed_at", "") >= since]
+              if i.get("closed_at", "") >= since and "pull_request" not in i]
+    prs, page = [], 1
+    while page <= 20:   # свежие сверху; дальше страниц, где всё старше недели, не листаем
+        chunk = gh(f"repos/{REPO}/pulls?state=closed&sort=updated&direction=desc&per_page=100&page={page}") or []
+        prs += [p for p in chunk if (p.get("merged_at") or "") >= since]
+        if len(chunk) < 100 or chunk[-1].get("updated_at", "") < since:
+            break
+        page += 1
     blocked = {}
     for i in open_issues:
         deps = gh(f"repos/{REPO}/issues/{i['number']}/dependencies/blocked_by") or []
         open_deps = [d for d in deps if d.get("state") == "open"]
         if open_deps:
             blocked[i["number"]] = open_deps
-    return ms, epics, open_issues, recent, blocked
+    return ms, epics, open_issues, recent, blocked, prs
 
 
 def epic_row(e):
@@ -179,7 +213,7 @@ def epic_row(e):
             "done": done, "total": total, "tasks": tasks, "plan": plan}
 
 
-def render(ms, epics, open_issues, recent, blocked, now=None):
+def render(ms, epics, open_issues, recent, blocked, prs=None, now=None):
     now = now or dt.datetime.now(MSK)
     rows = [epic_row(e) for e in epics]
     by_ms = {}
@@ -265,20 +299,25 @@ def render(ms, epics, open_issues, recent, blocked, now=None):
         L += [f"- #{i['number']} {i['title']} — `on-hold`" for i in held]
 
     # --- сделано за неделю ---
-    done7 = [i for i in recent if "pull_request" not in i and STATUS_LABEL not in labels_of(i)]
-    prs7 = [i for i in recent if "pull_request" in i]
-    L += ["", f"## ✅ Сделано за 7 дней: {len(done7)} задач, {len(prs7)} PR"]
-    L += [f"- #{i['number']} {i['title']}" for i in sorted(done7, key=lambda i: i["closed_at"], reverse=True)[:15]]
-    if len(done7) > 15:
-        L.append(f"- …и ещё {len(done7) - 15}")
+    w = week_stats(recent, prs or [])
+    start = now - dt.timedelta(days=WEEK)
+    L += ["", f"## ✅ Сделано за 7 дней ({start:%d.%m}–{now:%d.%m})", "| Что | Сколько | Из них |", "|---|---|---|",
+          f"| PR слито | {w['pr']} | код и документы {w['pr_code']} · сдачи художника {w['pr_art']} · "
+          f"отчёты тестера {w['pr_qa']} |",
+          f"| Issues закрыто как сделанные | {w['done']} | баги {w['bugs']} · арт (`art`) {w['art']} · "
+          f"3D (`model`) {w['model']} · эпики {w['epics']} |",
+          f"| Закрыто без работы (не нужно) | {w['dropped']} | — |", "", "Последние закрытые:"]
+    L += [f"- #{i['number']} {i['title']}" for i in w["list"][:15]]
+    if len(w["list"]) > 15:
+        L.append(f"- …и ещё {len(w['list']) - 15}")
     L += ["", "---", "Как устроено: этап = milestone, эпик = issue «эпик» (чек-лист `- [ ] что — роль — ⛔ кто "
           "блокирует` + подзадачи), роль = метка, блокер = «blocked by». Правила — `CLAUDE.md`, раздел «Роадмап и статус»."]
     return "\n".join(L) + "\n"
 
 
 def main():
-    ms, epics, open_issues, recent, blocked = collect()
-    text = render(ms, epics, open_issues, recent, blocked)
+    ms, epics, open_issues, recent, blocked, prs = collect()
+    text = render(ms, epics, open_issues, recent, blocked, prs)
     if "--print" in sys.argv:
         print(text)
         return
