@@ -48,3 +48,36 @@ func test_scene_step_parts() -> void:
 	ok(sum > 0.0, "части шага — не нули: %.2f мс" % sum)
 	main.queue_free()
 	await frames(1)
+
+
+## Issue #662: замер кадра идёт внутри нового шага, после `start` — части и шаг времени нужны прошлого шага.
+func test_last_step_kept() -> void:
+	var c := StepClock.new()
+	c.start(0, 0.1)
+	c.lap("мир", 40000)
+	c.lap("виды", 52000)
+	c.start(60000, 1.0 / 30.0)   # новый шаг начался — части прошлого не пропали
+	eq(c.note(), "", "у нового шага частей ещё нет")
+	eq(c.last_note(), "мир 40, виды 12; шаг 100 мс", "части и шаг времени прошлого шага")
+	c.lap("корабль", 65000)
+	c.start(70000, 1.0 / 30.0)
+	eq(c.last_note(), "корабль 5", "прошлый — это последний законченный шаг")
+
+
+## Issue #662: в логе тестера «код 68 мс (шаг 100 мс)» без частей — `_measure` читал части нового, пустого шага.
+func test_worst_frame_has_last_parts() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var r := QaRunner.new()
+	r.main = main
+	main.clock.start(0, 0.1)
+	main.clock.lap("мир", 50000)        # прошлый шаг: мир 50 мс
+	main.step_ms = 60.0
+	main.clock.start(60000, 1.0 / 30.0) # новый шаг начался, в нём и идёт замер (qa.tick)
+	r._measure(1000000)
+	r._measure(1100000)
+	ok(r.worst_at.contains("код 60 мс (мир 50; шаг 100 мс)"), "части прошлого шага в подписи: " + r.worst_at)
+	r.free()
+	main.queue_free()
+	await frames(1)
