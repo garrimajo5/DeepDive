@@ -1,0 +1,36 @@
+name: Где мы
+# Страница статуса разработки — закреплённый issue с меткой «статус» (tools/status.py): этапы, эпики, кто что делает,
+# что ждёт владельца, что сделано за неделю. Обновляется при любом изменении issues (галочка в эпике, метка, этап,
+# закрытие), при слиянии в main (планы графики — в репозитории) и раз в день. Правки страницы самим workflow
+# (GITHUB_TOKEN) новых запусков не порождают — петли нет.
+on:
+  issues:
+    types: [opened, edited, closed, reopened, deleted, labeled, unlabeled, milestoned, demilestoned]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * *"   # 06:17 МСК
+  workflow_dispatch:
+
+concurrency:
+  group: status
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  status:
+    name: Обновить «Где мы»
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Тесты страницы
+        run: python3 tools/test_status.py
+      - name: Обновить issue «Где мы»
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STATUS_REPO: ${{ github.repository }}
+        run: python3 tools/status.py
