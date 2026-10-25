@@ -8,3 +8,6 @@
 # локальные хвосты
 .DS_Store
 Thumbs.db
+
+# Python (tools/status.py)
+__pycache__/
