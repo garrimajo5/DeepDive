@@ -850,7 +850,7 @@ func step(dt: float) -> void:
 	busy_marks.plate = status_rect()
 	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
 	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy,
-			status_rect())
+			status_rect(), radio.voice())
 	_ghosts(dt)
 	_warm_frame()
 	_net_send(dt)
@@ -2079,11 +2079,20 @@ func _radio_step(dt: float) -> void:
 	radio.on = Radio.enabled and (net_client != null or not net_mates.is_empty())
 	var size := get_viewport().get_visible_rect().size
 	radio.update(dt, overlay.router.held_in(Radio.button_rect(size)), _overlay_hidden())
+	_radio_sight()
 	for p in overlay.router.taps:
 		radio.tap(p, size)
 	radio.settings_wanted = false   # запрос разрешения микрофона Android — вместе с голосом
 	overlay.router.blocks.append_array(radio.blocks(size))
 	radio_panel.show_radio(radio, time)
+
+
+## Говорящий товарищ в поле зрения или за стеной (ART-041): за закрытым люком — строка «Вне поля зрения», табличка
+## над ним без «активности» (`ShipLayout.in_sight`).
+func _radio_sight() -> void:
+	for t in radio.talkers:
+		if t.id >= 0 and t.id < crew.size():
+			t.seen = ShipLayout.in_sight(me.z, (crew[t.id] as Crew.Member).z, layout.doors)
 
 
 func _tutorial_hide() -> void:
@@ -2655,7 +2664,7 @@ func _client_step(dt: float) -> void:
 	busy_marks.plate = status_rect()
 	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
 	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy,
-			status_rect())
+			status_rect(), radio.voice())
 	_warm_frame()
 	r.end_frame()
 

@@ -197,3 +197,25 @@ func _tag_rect(cam: Camera3D, i: int) -> Rect2:
 	for c: Vector3 in [Vector3(w * 0.5, 0.5, 0), Vector3(-w * 0.5, -0.5, 0), Vector3(w * 0.5, -0.5, 0)]:
 		r = r.expand(cam.unproject_position(t * c))
 	return r
+
+
+func test_voice_lights_tag_not_through_walls() -> void:
+	var mate := _mate()
+	var i := main.crew.find(mate)
+	var v := main.name_tags
+	for k in 6:
+		main.radio.heard(i, mate.name, mate.role, 0.8)   # пакеты голоса товарища (рация ART-041)
+		main.step(1.0 / 30.0)
+	ok(v.tags[i].visible, "табличка видна")
+	near(v.levels[i], 1.0, 1e-6, "говорит — та же табличка в «активности»")
+	ok(v.glows[i].visible, "контур ярче и три штриха")
+	for k in 20:
+		main.step(1.0 / 30.0)
+	near(v.levels[i], 0.0, 1e-6, "замолчал — погасло (0,4 с + 0,15 с)")
+	mate.walker.z = 10.0   # ушёл в лабораторию, люки закрыты
+	mate.walker.x = 0.0
+	for k in 6:
+		main.radio.heard(i, mate.name, mate.role, 0.8)
+		main.step(1.0 / 30.0)
+	ok(not main.radio.talkers[0].seen, "за стеной — «Вне поля зрения»")
+	near(v.levels[i], 0.0, 1e-6, "сквозь стены «активности» нет")

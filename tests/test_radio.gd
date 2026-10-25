@@ -216,3 +216,29 @@ func test_scene_coop_shows_and_pause_hides() -> void:
 	ok(not main.radio_panel.visible, "под паузой рации не видно")
 	main.overlay.router.end(0)
 	main.net_mates.clear()
+
+
+func test_voice_tags_only_in_sight_and_heard() -> void:
+	var r := _radio()
+	r.heard(1, "Игорь", Crew.Role.ENGINEER, 0.8)
+	r.heard(2, "Марина", Crew.Role.BIOLOGIST, 0.5, false)
+	r.update(DT, false, false)
+	eq(r.voice(), [1] as Array[int], "табличка «активность» — только над видимым; за стеной — только строка")
+	eq(r.rows().size(), 2, "в списке оба")
+	r.hear = false
+	ok(r.voice().is_empty(), "звук товарищей выкл. — без «активности»")
+	r.hear = true
+	for k in 15:
+		r.update(DT, false, false)
+	ok(r.voice().is_empty(), "через 0,4 с после пакета — погасло")
+
+
+func test_in_sight_through_doors() -> void:
+	var l := ShipLayout.new()
+	ok(ShipLayout.in_sight(-3.0, 0.5, l.doors), "в одном отсеке — видно")
+	ok(not ShipLayout.in_sight(0.0, 10.0, l.doors), "мостик и лаборатория за закрытыми люками — не видно")
+	l.doors[0].t = 1.0
+	ok(not ShipLayout.in_sight(0.0, 10.0, l.doors), "второй люк закрыт — не видно")
+	l.doors[1].t = 1.0
+	ok(ShipLayout.in_sight(10.0, 0.0, l.doors), "оба открыты — видно (порядок не важен)")
+	ok(not ShipLayout.in_sight(0.0, 16.0, l.doors), "машинное за закрытым люком")
