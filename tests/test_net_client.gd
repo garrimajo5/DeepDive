@@ -394,7 +394,11 @@ func test_guest_run_menu_world_goes_on() -> void:   # ART-037 кооп: «Мен
 	eq(main.pause.title(), "Меню забега")
 	eq(main.pause.subtitle(), "Вы — гость · забег продолжается")
 	ok(main.pause_panel.visible and not main.overlay.visible, "меню на экране, крестовина скрыта")
-	main.overlay.router.begin(5, main.overlay.router.layout.pad.c + Vector2(0, -main.overlay.router.layout.pad.r * 0.7))
+	var pad := main.overlay.router.layout.pad
+	var at := pad.c + Vector2(0, -pad.r * 0.7)
+	if main.pause.hit(at, _size()) != "":   # на квадратном окне кнопки меню ложатся на крестовину — палец мимо них
+		at = pad.c + Vector2(-pad.r * 0.7, 0)
+	main.overlay.router.begin(5, at)
 	h_helm.pos += Vector3(0.0, 0.0, -6.0)
 	var seq := main.net_seq
 	ok(_pump(func() -> bool: return main.net_seq > seq), "кадры хоста идут под меню")
