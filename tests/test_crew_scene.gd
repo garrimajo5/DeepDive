@@ -62,7 +62,7 @@ func test_mate_not_inside_table() -> void:   # issue #156: сценарий ст
 
 func test_screen_input_only_to_own() -> void:   # ввод с экрана — своему, у другого свой ввод
 	var m := main.add_mate(1.5, 0.5, 0.0, Crew.Role.ENGINEER, 0)
-	eq(m.walker.stand, main.layout.can_stand, "ходок товарища знает весь корабль")
+	ok(m.walker.stand.call(0.0, 10.0) and not Deck.can_stand(0.0, 10.0), "ходок товарища знает весь корабль")
 	var me0 := Vector2(main.walker.x, main.walker.z)
 	main.overlay.router.move = Vector2i(0, 1)
 	for i in 20:
@@ -499,3 +499,41 @@ func test_coop_vote_timer_up() -> void:   # второй молчит — по �
 	ok(main.run.ended, "время вышло — наверх")
 	ok(main.at_vote, "свой у стола видит итог")
 	main.close_vote()
+
+
+func test_walk_stops_at_mate() -> void:   # issue #602: шагом не войти в товарища — камера не в его голове
+	var mate := main.add_mate(-1.3, -1.6, 0.0, Crew.Role.SONAR, 0)
+	main.walker.x = -1.3
+	main.walker.z = -2.6
+	main.walker.yaw = PI   # лицом к корме, на товарища
+	for i in 60:
+		main.walker.walk(Vector2(0.0, 1.0), 1.0 / 30.0)
+	var d := Vector2(main.walker.x - mate.walker.x, main.walker.z - mate.walker.z).length()
+	ok(d >= Crew.GAP - 0.01 and d < Crew.GAP + 0.2, "остановился перед товарищем: %.2f м" % d)
+	mate.walker.yaw = 0.0   # и товарищ своим вводом не входит в своего игрока
+	for i in 60:
+		mate.walker.walk(Vector2(0.0, 1.0), 1.0 / 30.0)
+	d = Vector2(main.walker.x - mate.walker.x, main.walker.z - mate.walker.z).length()
+	ok(d >= Crew.GAP - 0.01, "товарищ тоже остановился: %.2f м" % d)
+
+
+func test_overlapped_can_step_away() -> void:   # поставили вплотную (сценарий, сеть) — отойти можно
+	var mate := main.add_mate(-1.3, -1.6, 0.0, Crew.Role.SONAR, 0)
+	main.walker.x = -1.3
+	main.walker.z = -1.8
+	main.walker.yaw = 0.0   # лицом к носу, от товарища
+	main.walker.walk(Vector2(0.0, 1.0), 0.2)
+	ok(main.walker.z < -1.8 - 0.3, "отошёл: z %.2f" % main.walker.z)
+	ok(Crew.room_for(main.crew, main.me, -1.3, -1.4) == false, "к товарищу ближе GAP — нельзя")
+	ok(mate != null)
+
+
+func test_restart_not_inside_mate() -> void:   # issue #602: новый забег ставил своего в товарища у штурвала
+	main.walker.reset()
+	var mate := main.add_mate(main.walker.x, main.walker.z, 0.0, Crew.Role.PILOT, 1)
+	main.walker.x = -1.0
+	main._restart()
+	var d := Vector2(main.walker.x - mate.walker.x, main.walker.z - mate.walker.z).length()
+	ok(d >= Crew.GAP, "свой игрок рядом с началом спуска, но не в товарище: %.2f м" % d)
+	ok(main.layout.can_stand(main.walker.x, main.walker.z), "и на полу")
+	ok(d < 1.0, "не дальше метра")

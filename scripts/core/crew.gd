@@ -66,6 +66,43 @@ const CROUCH_ARM_DROP := 0.35  ## на сколько хват может быт
 const BUSY := {"helm": "Штурвал занят", "energy": "Пульт энергии занят"}
 
 
+## Между фигурами на палубе не меньше GAP (м, по центрам): товарищ не входит в другого, камера — в чужую голову
+## (issue #602). Тесно у постов, поэтому меньше двух радиусов шага (Deck.Walker.RADIUS).
+const GAP := 0.55
+
+
+## Можно ли m шагнуть в (x, z) по товарищам: не ближе GAP к другому члену экипажа. Уже стоящий вплотную (поставили
+## сценарием, сеть) может отходить — шаг, который не сближает, разрешён.
+static func room_for(crew: Array, m: Member, x: float, z: float) -> bool:
+	for o: Member in crew:
+		if o == m:
+			continue
+		var d := Vector2(x - o.walker.x, z - o.walker.z).length()
+		if d < GAP and d < Vector2(m.walker.x - o.walker.x, m.walker.z - o.walker.z).length():
+			return false
+	return true
+
+
+## Где поставить m рядом с (x, z), чтобы не стоять в другой фигуре: сама точка, если до всех не меньше GAP, иначе
+## ближайшая по кольцам (шаг 0,15 м, до 1,5 м), где stand(x, z) пускает. Новый забег ставит своего игрока к началу
+## спуска, а там может стоять товарищ, вставший из-за штурвала (#602).
+static func spawn_spot(crew: Array, m: Member, x: float, z: float, stand: Callable) -> Vector2:
+	for k in 11:
+		var d := k * 0.15
+		for a in (1 if k == 0 else 24):
+			var p := Vector2(x, z) + Vector2.from_angle(PI / 2.0 + TAU * a / 24.0) * d   # сначала назад, к корме
+			if k > 0 and not stand.call(p.x, p.y):
+				continue
+			var free := true
+			for o: Member in crew:
+				if o != m and Vector2(p.x - o.walker.x, p.y - o.walker.z).length() < GAP:
+					free = false
+					break
+			if free:
+				return p
+	return Vector2(x, z)
+
+
 ## Кто из других членов экипажа держит пост id (за штурвалом — сидящий); null — пост свободен или общий.
 static func holder(crew: Array, me: Member, id: String) -> Member:
 	if not BUSY.has(id):
