@@ -4,15 +4,17 @@ extends Node3D
 ## 0,8 м и розовый диск щупалец, своё слабое свечение #2a0a24; дышат и сжимаются по ширине — EcoHvaten.body), щупальца (тонкие конусы 1 м с цветом по длине:
 ## лиловые у диска, светлее к кончикам; тело ловит свет, к кончикам светится само и колышется в течении мира —
 ## общий шейдер растений EcoShaders.PLANT, режим TENTACLE, двойник на CPU — `tentacle_offset`) и пестрянки
-## (вытянутые капли 7 × 10 × 24 см, оранжевые и белая). Стоят на слое отмели (OceanView.LAYER_WORLD).
+## (форма EcoPestrLook: тело 7 × 10 × 19 см, хвост-веер, спинной и грудные плавники; оранжевые и белая — цвет
+## в INSTANCE_CUSTOM.rgb, фаза плавников — в альфе цвета экземпляра; рисует шейдер светляков FishView: хвост машет,
+## грудные гребут, «Экономно» — sway_k через EcoShaders.follow). Стоят на слое отмели (OceanView.LAYER_WORLD).
 
 ## Цвета пестрянок по порядку (pc в браузере).
 const PESTR_COLORS: Array[Color] = [Color("ff7a2a"), Color("fff1d0"), Color("ff9a4a")]
 const BODY_GLOW := Color("2a0a24")
-const PESTR_SIZE := Vector3(0.035, 0.05, 0.12)
-## Чисел на экземпляр: transform 3 × 4, у пестрянок ещё цвет (4).
+## Чисел на экземпляр: transform 3 × 4, у пестрянок ещё цвет (4: белый, в альфе — фаза плавников) и INSTANCE_CUSTOM
+## (4: свечение, оттенок тела 1).
 const STRIDE := 12
-const STRIDE_C := 16
+const STRIDE_P := 20
 ## Колыхание щупальца (доли длины на полном течении: крен, волна, поперёк) — мягче ленты ленточника, но заметно на
 ## метровом щупальце; сдвиг фазы по углу щупальца вокруг вертикали — щупальца одного диска извиваются вразнобой.
 const BEND := Vector3(0.1, 0.16, 0.12)
@@ -36,19 +38,21 @@ func _init(system: EcoHvaten) -> void:
 	var n := hvaten.anemones.size()
 	bodies = _instance("Тела", build_body(), n, false)
 	tents = _instance("Щупальца", build_tentacle(), n * EcoHvaten.TENT, false)
-	pestr = _instance("Пестрянки", build_pestr(), n * EcoHvaten.PESTR_N, true)
+	pestr = _instance("Пестрянки", build_pestr(), n * EcoHvaten.PESTR_N, true, true)
 	body_buffer.resize(n * STRIDE)
 	tent_buffer.resize(n * EcoHvaten.TENT * STRIDE)
-	pestr_buffer.resize(n * EcoHvaten.PESTR_N * STRIDE_C)
+	pestr_buffer.resize(n * EcoHvaten.PESTR_N * STRIDE_P)
 	for hv in hvaten.anemones:
 		for k in EcoHvaten.PESTR_N:
-			var c := PESTR_COLORS[k % PESTR_COLORS.size()]
-			var i := (hv.index * EcoHvaten.PESTR_N + k) * STRIDE_C
-			pestr_buffer[i + 12] = c.r; pestr_buffer[i + 13] = c.g; pestr_buffer[i + 14] = c.b; pestr_buffer[i + 15] = 1.0
+			var c := PESTR_COLORS[k % PESTR_COLORS.size()] * EcoPestrLook.GLOW
+			var i := (hv.index * EcoHvaten.PESTR_N + k) * STRIDE_P
+			pestr_buffer[i + 12] = 1.0; pestr_buffer[i + 13] = 1.0; pestr_buffer[i + 14] = 1.0
+			pestr_buffer[i + 15] = EcoPestrLook.phase(hv, k)
+			pestr_buffer[i + 16] = c.r; pestr_buffer[i + 17] = c.g; pestr_buffer[i + 18] = c.b; pestr_buffer[i + 19] = 1.0
 	sync(0.0)
 
 
-func _instance(n: String, mesh: Mesh, count: int, colors: bool) -> MultiMeshInstance3D:
+func _instance(n: String, mesh: Mesh, count: int, colors: bool, custom := false) -> MultiMeshInstance3D:
 	var mi := MultiMeshInstance3D.new()
 	mi.name = n
 	mi.layers = OceanView.LAYER_WORLD
@@ -56,6 +60,7 @@ func _instance(n: String, mesh: Mesh, count: int, colors: bool) -> MultiMeshInst
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = colors
+	mm.use_custom_data = custom
 	mm.mesh = mesh
 	mm.instance_count = count
 	mi.multimesh = mm
@@ -110,17 +115,21 @@ static func tentacle_offset(tr: Transform3D, v: Vector3, t: float, flow: Vector3
 	return EcoCurrent.sway(po, clampf(v.y, 0.0, 1.0), ay.length(), t, flow, BEND)
 
 
-## Пестрянка: сплюснутая сфера 6 × 4, вытянута вдоль +Z (нос по ходу); цвет — у экземпляра, светится сама.
-static func build_pestr() -> SphereMesh:
-	var m := SphereMesh.new()
-	m.radius = 1.0
-	m.height = 2.0
-	m.radial_segments = 6
-	m.rings = 4
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.vertex_color_use_as_albedo = true
-	m.material = mat
+## Пестрянка: форма EcoPestrLook (нос по +Z) на шейдере светляков FishView — тот же ресурс Shader, свой материал
+## с тёмной основой плавников; светится цветом экземпляра, плавники машут в шейдере.
+static func build_pestr() -> ArrayMesh:
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = EcoPestrLook.shape
+	arrays[Mesh.ARRAY_NORMAL] = EcoPestrLook.normals
+	arrays[Mesh.ARRAY_COLOR] = EcoPestrLook.colors
+	arrays[Mesh.ARRAY_INDEX] = EcoPestrLook.tris
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var mat := ShaderMaterial.new()
+	mat.shader = EcoShaders.shader(FishView.shader_code())
+	mat.set_shader_parameter("body_color", EcoPestrLook.BODY_COLOR)
+	m.surface_set_material(0, EcoShaders.follow(mat))
 	return m
 
 
@@ -166,8 +175,8 @@ func sync(t: float, ship_pos := Vector3.ZERO, all := true) -> void:
 			_put(tent_buffer, (hv.index * EcoHvaten.TENT + k) * STRIDE, EcoHvaten.tentacle(hv, k, t, live))
 		for k in EcoHvaten.PESTR_N:
 			var tr := EcoHvaten.pestr_pose(hv, k, t)
-			tr.basis = tr.basis * Basis.from_scale(PESTR_SIZE)
-			_put(pestr_buffer, (hv.index * EcoHvaten.PESTR_N + k) * STRIDE_C, tr)
+			tr.basis = tr.basis * Basis.from_scale(Vector3.ONE * EcoPestrLook.SCALE)
+			_put(pestr_buffer, (hv.index * EcoHvaten.PESTR_N + k) * STRIDE_P, tr)
 	bodies.multimesh.buffer = body_buffer
 	tents.multimesh.buffer = tent_buffer
 	pestr.multimesh.buffer = pestr_buffer

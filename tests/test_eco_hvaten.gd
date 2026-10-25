@@ -322,9 +322,10 @@ func test_view_three_multimeshes() -> void:
 	hv.sync(view.world.time)
 	var closed := HvatenView.transform_at(hv.tent_buffer, 2 * EcoHvaten.TENT + 3)
 	ok((closed * Vector3(0, 1, 0)).distance_to(closed.origin) < 0.2, "спрятанное — короткое")
-	var pe := HvatenView.transform_at(hv.pestr_buffer, 2 * EcoHvaten.PESTR_N, HvatenView.STRIDE_C)
+	var pe := HvatenView.transform_at(hv.pestr_buffer, 2 * EcoHvaten.PESTR_N, HvatenView.STRIDE_P)
 	ok(pe.origin.is_equal_approx(a.pestr[0].p), "пестрянка на месте")
-	near(hv.pestr_buffer[2 * EcoHvaten.PESTR_N * HvatenView.STRIDE_C + 12], HvatenView.PESTR_COLORS[0].r, 1e-4, "оранжевая")
+	near(hv.pestr_buffer[2 * EcoHvaten.PESTR_N * HvatenView.STRIDE_P + 16], HvatenView.PESTR_COLORS[0].r * EcoPestrLook.GLOW,
+		1e-4, "оранжевая — свечение в INSTANCE_CUSTOM")
 	view.queue_free()
 	await frames(1)
 
@@ -392,5 +393,93 @@ func test_body_and_tentacles_breathe_in_view() -> void:
 	hv.sync(EcoHvaten.BREATH_T * 0.75)
 	near(HvatenView.transform_at(hv.body_buffer, 1).basis.x.length(), w1, 1e-5, "на «Экономно» тело не дышит")
 	EcoShaders.set_sway_lite(false)
+	view.queue_free()
+	await frames(1)
+
+
+# ---------- Плавники пестрянок (план реализма Б3) ----------
+
+## Форма пестрянки: тело закрыто и смотрит наружу, хвост-веер позади кормы, грудные плавники по бокам гребут.
+func test_pestr_shape_has_fins() -> void:
+	var L := EcoPestrLook
+	eq(L.shape.size(), L.normals.size(), "нормаль у каждой вершины")
+	eq(L.shape.size(), L.colors.size(), "цвет у каждой вершины")
+	eq(L.tris.size() % 3, 0, "треугольники")
+	near(L.shape[L.nose_vertex].z, L.NOSE, 1e-6, "нос по +Z")
+	var body_tris := 2 * L.SEGMENTS * L.RINGS
+	var mid := (L.NOSE + L.BACK) * 0.5
+	for t in body_tris:
+		var a := L.shape[L.tris[t * 3]]
+		var b := L.shape[L.tris[t * 3 + 1]]
+		var c := L.shape[L.tris[t * 3 + 2]]
+		var m := (a + b + c) / 3.0
+		ok((b - a).cross(c - a).dot(Vector3(m.x, m.y, m.z - mid)) < 0.0, "грань тела %d — лицом наружу" % t)
+	eq(L.tail_tips.size(), 2, "две лопасти хвоста")
+	for i in L.tail_tips:
+		ok(L.shape[i].z < L.BACK - 0.1, "хвост за кормой")
+		eq(L.colors[i].b, 0.0, "хвост не гребёт — машет волной")
+	eq(L.pec_tips.size(), 2, "два грудных плавника")
+	ok(L.shape[L.pec_tips[0]].x > L.HALF_WIDTH and L.shape[L.pec_tips[1]].x < -L.HALF_WIDTH, "по бокам")
+	for i in L.pec_tips:
+		eq(L.colors[i].b, 1.0, "кончик грудного гребёт целиком")
+	for i in L.shape.size():
+		var tip := false
+		for j in L.pec_tips:
+			tip = tip or L.shape[i].is_equal_approx(L.shape[j])
+		if not tip:
+			eq(L.colors[i].b, 0.0, "остальное не гребёт (вершина %d)" % i)
+
+
+## Плавники живые: хвост ходит вбок, грудные — вверх-вниз вразнобой, нос стоит; «Экономно» — всё стоит.
+func test_pestr_fins_beat() -> void:
+	var L := EcoPestrLook
+	var a := 0.37
+	var tail := 0.0
+	var nose := 0.0
+	var pec := 0.0
+	var differ := 0.0
+	for k in 240:
+		var t := k * 0.011
+		tail = maxf(tail, absf(L.offset(L.tail_tips[0], t, a).x))
+		nose = maxf(nose, L.offset(L.nose_vertex, t, a).length())
+		var r := L.offset(L.pec_tips[0], t, a)
+		var l := L.offset(L.pec_tips[1], t, a)
+		pec = maxf(pec, absf(r.y))
+		differ = maxf(differ, absf(r.y - l.y))
+	eq(nose, 0.0, "нос стоит")
+	ok(tail > 0.6 * EcoFishLook.TAIL_AMP, "хвост машет: %.3f" % tail)
+	ok(pec > 0.9 * EcoFishLook.PEC_AMP and pec <= EcoFishLook.PEC_AMP + 1e-6, "грудной гребёт на ±PEC_AMP")
+	ok(differ > 0.5 * EcoFishLook.PEC_AMP, "правый и левый — вразнобой")
+	eq(L.offset(L.pec_tips[0], 0.4, a, 0.0), Vector3.ZERO, "«Экономно» — грудной стоит")
+	eq(L.offset(L.tail_tips[0], 0.4, a, 0.0), Vector3.ZERO, "«Экономно» — хвост стоит")
+	eq(EcoFishLook.fin_flap(0.1, 0.0, 0.4, a), 0.0, "у светляка (вес 0) грудных взмахов нет")
+
+
+## В сцене пестрянки — тот же шейдер, что светляки (шейдеров не прибавилось), фаза плавников у каждой своя.
+func test_pestr_view_shares_fish_shader() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var hv := view.hvaten_view
+	var mat := hv.pestr.multimesh.mesh.surface_get_material(0) as ShaderMaterial
+	var fish := view.fish_view.multimesh.mesh.surface_get_material(0) as ShaderMaterial
+	ok(mat != null and fish != null, "материалы на шейдере")
+	eq(mat.shader, fish.shader, "пестрянки и светляки — один шейдер")
+	ok(mat.shader.code.contains("COLOR.b") and mat.shader.code.contains("%.5f" % EcoFishLook.PEC_AMP),
+		"взмах грудных в шейдере — числа из EcoFishLook")
+	ok(hv.pestr.multimesh.use_custom_data, "свечение — в INSTANCE_CUSTOM")
+	var phases := {}
+	for i in hv.pestr.multimesh.instance_count:
+		var a := hv.pestr_buffer[i * HvatenView.STRIDE_P + 15]
+		ok(a >= 0.0 and a < 1.0, "фаза — доля оборота")
+		phases[snappedf(a, 0.01)] = true
+	ok(phases.size() > hv.pestr.multimesh.instance_count / 2, "пестрянки машут вразнобой")
+	var tr := HvatenView.transform_at(hv.pestr_buffer, 0, HvatenView.STRIDE_P)
+	near(tr.basis.z.length(), EcoPestrLook.SCALE, 1e-4, "форма уменьшена до пестрянки")
+	EcoShaders.set_sway_lite(true)
+	eq(mat.get_shader_parameter("sway_k"), 0.0, "«Экономно» гасит плавники")
+	EcoShaders.set_sway_lite(false)
+	eq(mat.get_shader_parameter("sway_k"), 1.0, "и возвращает")
 	view.queue_free()
 	await frames(1)

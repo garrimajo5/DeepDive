@@ -39,6 +39,12 @@ const TAIL_AMP := 0.05
 const TAIL_RATE := 9.0
 const TAIL_RATE_SPREAD := 0.15
 const TAIL_K := 9.0
+## Взмах грудных плавников (Б3, у форм с весом в канале b цвета вершины — пестрянки EcoPestrLook; у светляка вес 0):
+## кончик ходит вверх-вниз на ±PEC_AMP (м формы) с частотой PEC_RATE (рад/с), правый и левый — со сдвигом PEC_SKEW
+## (рад) — гребут вразнобой. Двойник шейдера FishView — fin_flap.
+const PEC_AMP := 0.035
+const PEC_RATE := 6.0
+const PEC_SKEW := 1.2
 
 ## Чем окрашена вершина.
 enum Paint { BODY, STRIPE, FIN }
@@ -170,6 +176,12 @@ static func tail_phase(f: EcoFish.Fish) -> float:
 static func tail_wave(z: float, t: float, a: float, sway_k := 1.0) -> float:
 	var rate := TAIL_RATE * (1.0 - TAIL_RATE_SPREAD + 2.0 * TAIL_RATE_SPREAD * fposmod(a * 7.13, 1.0))
 	return sin(t * rate + a * TAU + z * TAIL_K) * TAIL_AMP * tail_bend(z) * sway_k
+
+
+## Сдвиг вверх (м, по оси y формы) точки плавника с боком x и весом взмаха w (канал b цвета вершины) в момент t
+## у особи с фазой a; sway_k — 0 на «Экономно». Двойник вершинного шейдера FishView.
+static func fin_flap(x: float, w: float, t: float, a: float, sway_k := 1.0) -> float:
+	return sin(t * PEC_RATE + a * TAU + signf(x) * PEC_SKEW) * PEC_AMP * w * sway_k
 
 
 ## Цвет тела особи: BODY_COLOR × shade().
