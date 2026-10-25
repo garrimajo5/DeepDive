@@ -208,7 +208,8 @@ void fragment() {
 
 ## Растения на дне со светом (обе стороны): ленты ленточника, листья волнолиста, кружево веерника, трубы органа. Что
 ## рисовать — `mode` (Plant), краски и числа каждого вида — в своих uniform; формулы — прежние формулы видов.
-## Общее: шероховатость `rough`, блик `spec`, своё свечение `glow` (линейный цвет) плюс волна `glow_wave` · sin(TIME · 1,7).
+## Общее: шероховатость `rough`, блик `spec`, своё свечение `glow` (линейный цвет) плюс волна `glow_wave` · sin(TIME · 1,7);
+## колыхание в течении мира — `bend`/`reach` вида и общий поток `flow` (`set_flow`), формула — EcoCurrent.sway.
 enum Plant { KELP, LEAF, FAN, ORGAN }
 const PLANT := """
 shader_type spatial;
@@ -224,13 +225,35 @@ uniform float rough = 0.9;
 uniform float spec = 0.5;
 uniform vec3 glow = vec3(0.0);
 uniform vec3 glow_wave = vec3(0.0);
+// колыхание в течении (EcoCurrent.sway — двойник): flow — скорость потока, м/с; bend — (крен, волна, поперёк)
+// в долях высоты на полном течении; reach — высота растения в осях меша; sway_k — 0 на «Экономно»
+uniform vec3 flow = vec3(0.0);
+uniform vec3 bend = vec3(0.0);
+uniform float reach = 1.0;
+uniform float sway_k = 1.0;
 void vertex() {
-	if (mode == 0) {
-		// лента качается как G.sway: размах 0,9 к верху, фаза — от места экземпляра
-		float ph = MODEL_MATRIX[3].x * 0.23 + MODEL_MATRIX[3].z * 0.19;
-		float k = clamp(VERTEX.y, 0.0, 1.0);
-		VERTEX.x += sin(TIME * 1.2 + ph + VERTEX.y * 2.0) * k * k * 0.9;
-		VERTEX.z += cos(TIME * 0.9 + ph * 1.3) * k * k * 0.54;
+	if (sway_k > 0.0 && dot(bend, bend) > 0.0) {
+		vec3 o = MODEL_MATRIX[3].xyz;
+		vec3 ax = MODEL_MATRIX[0].xyz;
+		vec3 ay = MODEL_MATRIX[1].xyz;
+		vec3 az = MODEL_MATRIX[2].xyz;
+		float h = clamp(VERTEX.y / reach, 0.0, 1.0);
+		float height = reach * length(ay);
+		float v = length(flow);
+		float s = v / 0.3;
+		vec3 d = v > 1e-5 ? flow / v : vec3(0.0, 0.0, 1.0);
+		vec3 c = vec3(-d.z, 0.0, d.x);
+		float ph = o.x * 0.23 + o.z * 0.19;
+		float gust = 0.65 + 0.35 * sin(TIME * 0.45 + ph);
+		float fl = sin(TIME * 1.6 + ph * 1.3 - h * 2.2);
+		float cr = sin(TIME * 1.1 + ph * 0.7 - h * 1.5);
+		float w = 0.4 + 0.6 * s;
+		float k = h * h * height;
+		vec3 off = (d * (bend.x * s * gust + bend.y * w * fl) * k + c * (bend.z * w * cr) * k) * sway_k;
+		off.y -= dot(off, off) / (2.0 * max(height, 0.1));
+		// мировое смещение — в оси меша (у растений оси ортогональны: поворот и масштаб)
+		VERTEX += vec3(dot(off, ax) / max(dot(ax, ax), 1e-6), dot(off, ay) / max(dot(ay, ay), 1e-6),
+			dot(off, az) / max(dot(az, az), 1e-6));
 	}
 }
 void fragment() {
@@ -323,8 +346,49 @@ static func mist(kind: Mist, params: Dictionary = {}) -> ShaderMaterial:
 	return mat
 
 
-## Растение со светом (PLANT): что рисовать — kind, числа вида — params.
+## Растение со светом (PLANT): что рисовать — kind, числа вида — params. Материал получает поток set_flow.
 static func plant(kind: Plant, params: Dictionary = {}) -> ShaderMaterial:
 	var mat := material(PLANT, params)
 	mat.set_shader_parameter("mode", int(kind))
+	mat.set_shader_parameter("flow", flow)
+	mat.set_shader_parameter("sway_k", 0.0 if sway_lite else 1.0)
+	_plants = _plants.filter(func(r: WeakRef) -> bool: return r.get_ref() != null)
+	_plants.append(weakref(mat))
 	return mat
+
+
+## Поток течения мира для колыхания растений (EcoView каждый шаг: EcoCurrent.vel()).
+static var flow := Vector3.ZERO
+## «Экономно»: растения не колышутся в шейдере (sway_k = 0). Включает уровень графики — set_sway_lite.
+static var sway_lite := false
+## Материалы растений — слабые ссылки, чтобы при выходе не оставалось ресурсов в статике.
+static var _plants: Array[WeakRef] = []
+
+
+## Отдать поток всем живым материалам растений; меняется заметно — только тогда пишем uniform.
+static func set_flow(v: Vector3) -> void:
+	if v.distance_to(flow) < 1e-4:
+		return
+	flow = v
+	for r in _plants:
+		var mat: ShaderMaterial = r.get_ref()
+		if mat:
+			mat.set_shader_parameter("flow", v)
+
+
+## Выключатель колыхания для «Экономно» (ART-044): true — растения стоят (только качание листьев и вееров на CPU).
+static func set_sway_lite(on: bool) -> void:
+	sway_lite = on
+	for r in _plants:
+		var mat: ShaderMaterial = r.get_ref()
+		if mat:
+			mat.set_shader_parameter("sway_k", 0.0 if on else 1.0)
+
+
+## Сколько живых материалов растений получает поток (для тестов).
+static func plant_count() -> int:
+	var n := 0
+	for r in _plants:
+		if r.get_ref():
+			n += 1
+	return n

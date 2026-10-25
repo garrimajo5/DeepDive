@@ -8,6 +8,8 @@ extends MultiMeshInstance3D
 
 const RIB := Color("1f8796")
 const EDGE := Color("68E6DC")
+## Веер жёсткий — в течении лишь чуть выгибается парусом (EcoCurrent.sway, в шейдере): доли высоты.
+const BEND := Vector3(0.04, 0.02, 0.015)
 ## Чисел на веер в буфере: transform 3 × 4 по строкам.
 const STRIDE := 12
 
@@ -43,7 +45,7 @@ static func build_mesh() -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	mesh.surface_set_material(0, EcoShaders.plant(EcoShaders.Plant.FAN, {"paint": RIB, "edge": EDGE, "rough": 0.6,
-		"size": Vector2(EcoFan.WIDTH, EcoFan.HEIGHT)}))
+		"size": Vector2(EcoFan.WIDTH, EcoFan.HEIGHT), "bend": BEND, "reach": EcoFan.HEIGHT}))
 	return mesh
 
 

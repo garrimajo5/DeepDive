@@ -37,7 +37,7 @@ func test_plant_modes() -> void:
 	eq(a.shader, b.shader, "лента и орган — один шейдер")
 	eq(int(b.get_shader_parameter("mode")), EcoShaders.Plant.ORGAN, "что рисовать — в uniform")
 	near(float(b.get_shader_parameter("shade")), 0.45, 1e-6, "числа вида — в uniform")
-	# режимы шейдера совпадают с enum: качается только лента, у листа и веера — свои ветки, остальное — цвет вершины
+	# режимы шейдера совпадают с enum: у листа и веера — свои ветки, остальное — цвет вершины; колыхание — по bend (test_eco_sway)
 	eq(EcoShaders.Plant.KELP, 0, "лента — режим 0 (качание)")
 	ok(EcoShaders.PLANT.contains("mode == %d" % EcoShaders.Plant.LEAF), "ветка листа")
 	ok(EcoShaders.PLANT.contains("mode == %d" % EcoShaders.Plant.FAN), "ветка веера")

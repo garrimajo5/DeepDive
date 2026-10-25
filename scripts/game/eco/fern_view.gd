@@ -8,6 +8,8 @@ extends Node3D
 const LEAF := Color("3D9D91")
 const EDGE := Color("68E6DC")
 const SHELL := Color("9a8fb2")
+## Колыхание листа в течении (EcoCurrent.sway, в шейдере): крен, волна вверх, поперёк — доли длины листа.
+const BEND := Vector3(0.1, 0.06, 0.04)
 ## Отрезков листа по длине и загиб кончика наружу (м при длине 1,4).
 const SEGMENTS := 6
 const CURL := 0.22
@@ -80,7 +82,8 @@ static func build_leaf() -> ArrayMesh:
 	arrays[Mesh.ARRAY_INDEX] = idx
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	mesh.surface_set_material(0, EcoShaders.plant(EcoShaders.Plant.LEAF, {"paint": LEAF, "edge": EDGE, "rough": 0.7}))
+	mesh.surface_set_material(0, EcoShaders.plant(EcoShaders.Plant.LEAF, {"paint": LEAF, "edge": EDGE, "rough": 0.7,
+		"bend": BEND, "reach": EcoFern.LEAF_LEN}))
 	return mesh
 
 
