@@ -94,6 +94,7 @@ var current := Helm.SeaCurrent.new()
 var ocean: OceanView
 var eco: EcoView            ## живой мир отмели (поток Б), связь — EcoLink
 var step_ms := 0.0          ## сколько занял прошлый шаг игры (код), мс — для лога тестера (issue #217)
+var clock := StepClock.new()   ## части прошлого шага (корабль, мир, виды) — для лога тестера (issue #627)
 var eco_ship := EcoLink.ShipState.new()
 var ship: Node3D            ## корабль: всё, что движется вместе с ним
 var bridge: BridgeView
@@ -632,6 +633,7 @@ func _process(dt: float) -> void:
 
 ## Один шаг игры: ввод, игрок, корабль, вода. Вынесен из _process для тестов.
 func step(dt: float) -> void:
+	clock.start(Time.get_ticks_usec(), dt)
 	_warm_restore()
 	time += dt
 	if qa:
@@ -654,6 +656,7 @@ func step(dt: float) -> void:
 		overlay.router.clear()
 	if net_client:   # клиент: корабль, реактор и экипаж — из кадров хоста
 		_client_step(dt)
+		clock.lap("гость", Time.get_ticks_usec())
 		return
 	_net_poll(dt)
 	var r := overlay.router
@@ -824,6 +827,7 @@ func step(dt: float) -> void:
 		hull.set_zap_cards(Zap.arc_time(zap.flicker), Zap.ground_contact(ship.global_transform))
 	if not scorch.all.is_empty():   # свежий след темнеет в «старое пятно»
 		ocean.set_scorch(scorch.uniforms(time))
+	clock.lap("корабль", Time.get_ticks_usec())
 	_step_eco(dt)
 	_flicker(dt)
 	for i in Reactor.Sys.size():
@@ -852,6 +856,7 @@ func step(dt: float) -> void:
 	_apply_crew_view(dt)
 	_place_ship()
 	_place_camera()
+	clock.lap("виды", Time.get_ticks_usec())
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR),
 		comms.code)   # страница «Связь» — кодовое слово забега (ART-040)
 	_update_ui()   # до меток: плашка строки уже на месте этого кадра (#387)
@@ -859,6 +864,7 @@ func step(dt: float) -> void:
 	_card_step(dt)
 	_comms_step(dt)
 	_radio_step(dt)
+	clock.lap("интерфейс", Time.get_ticks_usec())
 	busy_marks.plate = status_rect()
 	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
 	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy,
@@ -867,6 +873,7 @@ func step(dt: float) -> void:
 	_warm_frame()
 	_net_send(dt)
 	r.end_frame()
+	clock.lap("метки и сеть", Time.get_ticks_usec())
 
 
 ## Подложка строк на приборах: тёмная полупрозрачная плашка с отступом HINT_PAD — белые плафоны потолка не съедают
@@ -1126,6 +1133,7 @@ func _step_eco(dt: float) -> void:
 	s.claw_target = samples.target.pos if samples.target else Vector3.ZERO
 	s.claw_sample = samples.target.i if samples.target else -1
 	var events := eco.step(dt, s)
+	clock.lap("мир", Time.get_ticks_usec())   # живой мир и его виды (EcoView)
 	scanner.take(events if at_scanner else [])
 	if s.sonar_ping and not sonar.jammed:
 		sonar.take_contacts(events, helm.pos)
@@ -1135,6 +1143,7 @@ func _step_eco(dt: float) -> void:
 		on_eco_event(e)
 	s.sonar_ping = false
 	s.zap = false
+	clock.lap("события мира", Time.get_ticks_usec())
 
 
 ## Событие живого мира (EcoLink). Пока — на приборы; урон корпусу и тревога — задачи потока А.
