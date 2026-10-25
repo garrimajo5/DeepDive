@@ -126,6 +126,7 @@ var ground: Callable:
 		_rebuild_well()
 		_rebuild_drop()
 		_rebuild_plankton()
+		EcoRim.apply(self)
 
 
 func _init() -> void:
@@ -211,6 +212,14 @@ func _init() -> void:
 	_rebuild_well()
 	_rebuild_drop()
 	_rebuild_plankton()
+	EcoRim.apply(self)
+
+
+## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев погашен — меняются
+## только числа в uniform, шейдеры те же. Включает уровень графики — поток А (`Main._apply_graphics`).
+func set_lite(on: bool) -> void:
+	EcoShaders.set_sway_lite(on)
+	EcoRim.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
