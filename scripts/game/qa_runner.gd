@@ -129,6 +129,8 @@ func tick(dt: float) -> void:
 				drain_left = c[1]
 			"hull":
 				main.vitals.hull = c[1]
+			"charge":
+				main.vitals.energy = c[1]
 			"wreck":   # корпус разрушен — как от удара (шторка ART-036)
 				main.vitals.hull = 0.0
 				main.vitals.destroyed.emit()
