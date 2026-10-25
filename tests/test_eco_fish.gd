@@ -275,9 +275,9 @@ func _find(x: float, y: float, z: float) -> int:
 	return 0
 
 
-## Момент, когда рыбка не виляет: sin(t·12 + фаза) = 0.
+## Момент, когда рыбка не виляет: sin(t·частота особи + фаза) = 0.
 func _straight(f: EcoFish.Fish) -> float:
-	return -f.phase / EcoFishLook.WIGGLE_RATE
+	return -f.phase / EcoFishLook.wiggle_rate(f)
 
 
 func _close(want: Vector3, got: Vector3, msg: String) -> void:
@@ -346,13 +346,14 @@ func test_nose_follows_velocity() -> void:
 	f.agent.v = Vector3(3, 0, 0)
 	var p := f.agent.p
 	var t := _straight(f)
-	_close(p + Vector3(0.28, 0, 0), EcoFishLook.place(f, t, _find(0, 0, 0.28)), "нос по ходу")
-	_close(p + Vector3(-0.25, 0, 0), EcoFishLook.place(f, t, _find(0, 0, -0.25)), "корма сзади")
-	_close(p + Vector3(-0.42, 0.12, 0), EcoFishLook.place(f, t, _find(0, 0.12, -0.42)), "хвост позади и вверх")
+	var k := EcoFishLook.scale(f)
+	_close(p + Vector3(0.28, 0, 0) * k, EcoFishLook.place(f, t, _find(0, 0, 0.28)), "нос по ходу")
+	_close(p + Vector3(-0.25, 0, 0) * k, EcoFishLook.place(f, t, _find(0, 0, -0.25)), "корма сзади")
+	_close(p + Vector3(-0.42, 0.12, 0) * k, EcoFishLook.place(f, t, _find(0, 0.12, -0.42)), "хвост позади и вверх")
 	var side := EcoFishLook.shape[EcoFishLook.stripe_vertex]
 	ok(side.x > 0.05, "вершина полосы — на боку")
-	_close(p + Vector3(side.z, 0, -side.x), EcoFishLook.place(f, t, EcoFishLook.stripe_vertex), "бок поперёк хода")
-	ok(EcoFishLook.basis(f, t).determinant() > 0.99, "поворот без зеркала — грани не выворачиваются")
+	_close(p + Vector3(side.z, 0, -side.x) * k, EcoFishLook.place(f, t, EcoFishLook.stripe_vertex), "бок поперёк хода")
+	near(EcoFishLook.basis(f, t).determinant(), k * k * k, 1e-3, "поворот без зеркала — грани не выворачиваются")
 
 
 func test_wiggle_within_025() -> void:
@@ -373,7 +374,8 @@ func test_vertical_and_still_do_not_break() -> void:
 	var w := _world()
 	var f := _fish(w).all[5]
 	f.agent.v = Vector3(0, 2, 0)
-	_close(f.agent.p + Vector3(0, 0.28, 0), EcoFishLook.place(f, 1.3, _find(0, 0, 0.28)), "плывёт вверх — нос вверх")
+	_close(f.agent.p + Vector3(0, 0.28 * EcoFishLook.scale(f), 0), EcoFishLook.place(f, 1.3, _find(0, 0, 0.28)),
+		"плывёт вверх — нос вверх")
 	f.agent.v = Vector3.ZERO
 	var b := EcoFishLook.basis(f, 1.3)
 	for v in [b.x, b.y, b.z]:
@@ -403,13 +405,14 @@ func test_stripes_shoal_colour_body_dark() -> void:
 		near(st.b, c.b * f.bright, 1e-4)
 		near(EcoFishLook.vertex_color(f, EcoFishLook.Paint.FIN).g, st.g * EcoFishLook.FIN_GLOW, 1e-4, "концы хвоста тише")
 		var body := EcoFishLook.vertex_color(f, EcoFishLook.Paint.BODY)
-		near(body.r, 0x34 / 255.0, 1e-4, "тело #344F63")
-		near(body.g, 0x4F / 255.0, 1e-4)
-		near(body.b, 0x63 / 255.0, 1e-4)
+		var sd := EcoFishLook.shade(f)
+		near(body.r, 0x34 / 255.0 * sd, 1e-4, "тело #344F63 своего оттенка")
+		near(body.g, 0x4F / 255.0 * sd, 1e-4)
+		near(body.b, 0x63 / 255.0 * sd, 1e-4)
 	var f0: EcoFish.Fish = fish.shoals[0].members[0]
 	var g0 := EcoFishLook.stripe(f0).g
 	fish.shoals[0].alarm = 2.0
-	eq(EcoFishLook.vertex_color(f0, EcoFishLook.Paint.BODY), EcoFishLook.BODY_COLOR, "в тревоге тело не меняется")
+	eq(EcoFishLook.vertex_color(f0, EcoFishLook.Paint.BODY), EcoFishLook.body_color(f0), "в тревоге тело не меняется")
 	near(EcoFishLook.stripe(f0).g, g0 * EcoFishLook.ALARM_GLOW, 1e-4, "полосы ярче")
 
 
@@ -445,7 +448,9 @@ func test_view_one_multimesh_follows_world() -> void:
 	var f := view.fish.all[10]
 	var tr := FishView.transform_at(fv.buffer, f.index)
 	ok(tr.origin.distance_to(f.agent.p) < 1e-3, "место рыбки — из мира")
-	_close(EcoFishLook.forward(f, view.world.time), tr.basis * Vector3(0, 0, 1), "нос по курсу")
+	_close(EcoFishLook.forward(f, view.world.time) * EcoFishLook.scale(f), tr.basis * Vector3(0, 0, 1), "нос по курсу")
+	_close(EcoFishLook.basis(f, view.world.time).x, tr.basis.x, "расстановка — как EcoFishLook.basis")
+	near(FishView.shade_at(fv.buffer, f.index), EcoFishLook.shade(f), 1e-5, "оттенок тела особи")
 	ok(fv.buffer.size() == ALL * FishView.STRIDE, "буфер на всех рыбок")
 	var c := FishView.stripe_at(fv.buffer, f.index)
 	near(c.g, EcoFishLook.stripe(f).g, 1e-3, "цвет полос стаи")
@@ -468,7 +473,8 @@ func test_young_hide_between_ribs() -> void:
 	eq(sh.members.size(), EcoFish.JUV_PER, "14 мальков")
 	for f: EcoFish.Fish in sh.members:
 		near(f.size, EcoFish.JUV_SIZE, 1e-6, "мельче взрослых")
-		near(EcoFishLook.basis(f, 0.0).x.length(), EcoFish.JUV_SIZE, 1e-4, "и в форме")
+		near(EcoFishLook.basis(f, 0.0).x.length(), EcoFish.JUV_SIZE * EcoFishLook.scale(f) / f.size, 1e-4, "и в форме")
+		ok(EcoFishLook.scale(f) <= EcoFish.JUV_SIZE * (1.0 + EcoFishLook.SIZE_SPREAD) + 1e-5, "малёк мельче взрослых")
 	var hl := bones.to_local(sh.home)
 	ok(absf(hl.x) < 0.01 and absf(hl.z) < 0.01, "дом — в середине клетки")
 	ok(not bones.solid(sh.home), "в доме костей нет")

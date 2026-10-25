@@ -28,6 +28,11 @@ const RIM := Color("819799")
 const UNDER := Color("23333A")
 const LEG := Color("2E4148")
 
+## Разброс особей (Б4, EcoVary): размер ±10 %, светлее-темнее ±12 %, оттенок — к ржавому или к холодному на 6 %.
+const SIZE_SPREAD := 0.1
+const SHADE_SPREAD := 0.12
+const HUE_SPREAD := 0.06
+
 ## Часть, к которой относится вершина: лапа 0–5, скребок или корпус.
 const BODY := -1
 const SCRAPER := 6
@@ -187,7 +192,20 @@ static func basis(g: EcoGrazer.Grazer) -> Basis:
 	if not g.agent.alive:
 		return Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO)
 	var fw := forward(g)
-	return Basis(Vector3(fw.z, 0, -fw.x), Vector3.UP, fw)
+	var k := scale(g)
+	return Basis(Vector3(fw.z, 0, -fw.x) * k, Vector3.UP * k, fw * k)
+
+
+## Размер скребуна: свой у каждой особи (EcoVary); стопы остаются на дне — начало формы под ними.
+static func scale(g: EcoGrazer.Grazer) -> float:
+	return EcoVary.spread(g.index, EcoVary.SIZE, SIZE_SPREAD)
+
+
+## Множитель красок особи — цвет экземпляра MultiMesh (GrazerView): светлее или темнее, теплее или холоднее.
+static func tint(g: EcoGrazer.Grazer) -> Color:
+	var k := EcoVary.spread(g.index, EcoVary.SHADE, SHADE_SPREAD)
+	var h := (EcoVary.unit(g.index, EcoVary.HUE) * 2.0 - 1.0) * HUE_SPREAD
+	return Color(k * (1.0 + h), k, k * (1.0 - h))
 
 
 ## Начало формы: стопы на дне под скребуном (agent.p на EcoGrazer.LIFT выше дна).

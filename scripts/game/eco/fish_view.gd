@@ -1,7 +1,8 @@
 class_name FishView
 extends MultiMeshInstance3D
 ## Светляки-полосники в сцене: все рыбки (стаи рифа, кроны и молодь в костях) — один MultiMesh (один вызов отрисовки). Форма — EcoFishLook, место
-## и курс каждой рыбки — EcoFishLook.basis, цвет полос — EcoFishLook.stripe в INSTANCE_CUSTOM. Краска вершины лежит
+## и курс каждой рыбки — EcoFishLook.basis, цвет полос — EcoFishLook.stripe в INSTANCE_CUSTOM.rgb, оттенок тела особи
+## (EcoFishLook.shade, Б4) — в INSTANCE_CUSTOM.a; размер и ритм виляния у каждой свои. Краска вершины лежит
 ## в цвете вершины (r: 0 — тело, 1 — полоса, FIN_GLOW — конец хвоста): тело тёмное и освещается, полосы светятся сами.
 ## Стоит на слое отмели (OceanView.LAYER_WORLD).
 
@@ -11,14 +12,16 @@ render_mode cull_back;
 uniform vec3 body_color : source_color;
 varying vec3 glow;
 varying float paint;
+varying float shade;
 void vertex() {
 	glow = INSTANCE_CUSTOM.rgb;
+	shade = INSTANCE_CUSTOM.a;
 	paint = COLOR.r;
 }
 void fragment() {
 	// полоса — узкая середина кольца, конец хвоста — канал g
 	float p = smoothstep(0.55, 0.95, paint) + COLOR.g;
-	ALBEDO = mix(body_color, glow * 0.3, clamp(p, 0.0, 1.0));
+	ALBEDO = mix(body_color * shade, glow * 0.3, clamp(p, 0.0, 1.0));
 	ROUGHNESS = 0.6;
 	EMISSION = glow * p * 1.8;
 }
@@ -83,6 +86,20 @@ var buffer := PackedFloat32Array()
 ## Чисел на рыбку в буфере: transform 3 × 4 по строкам, цвет экземпляра (белый), затем INSTANCE_CUSTOM.
 const STRIDE := 20
 
+## Разброс особей по номеру рыбки: размер (EcoFishLook.scale без возраста), частота виляния, оттенок тела —
+## считается раз (хеш на каждую рыбку в каждом кадре дорог).
+static var _vary := PackedFloat32Array()
+
+
+static func _vary_of(system: EcoFish) -> PackedFloat32Array:
+	if _vary.size() != system.all.size() * 3:
+		_vary.resize(system.all.size() * 3)
+		for f: EcoFish.Fish in system.all:
+			_vary[f.index * 3] = EcoVary.spread(f.index, EcoVary.SIZE, EcoFishLook.SIZE_SPREAD)
+			_vary[f.index * 3 + 1] = EcoFishLook.wiggle_rate(f)
+			_vary[f.index * 3 + 2] = EcoFishLook.shade(f)
+	return _vary
+
 
 ## Буфер MultiMesh (TRANSFORM_3D + custom data) для всех рыбок в момент t. Те же числа, что EcoFishLook.basis
 ## и EcoFishLook.stripe, но без вызовов на каждую рыбку (132 за кадр): цвет и тревога — по стае, basis — на месте.
@@ -96,6 +113,7 @@ static func pack(system: EcoFish, t: float) -> PackedFloat32Array:
 ## Переписать буфер out (размер — на всех рыбок). moved_only — только стаи, шагнувшие в этом кадре: дальняя стая
 ## копит время (lag > 0) и стоит на месте — её рыбки остаются как были, только съеденные гаснут (issue #133).
 static func fill(out: PackedFloat32Array, system: EcoFish, t: float, moved_only: bool) -> void:
+	var vary := _vary_of(system)
 	for sh in system.shoals:
 		if moved_only and sh.lag > 0.0:
 			for f: EcoFish.Fish in sh.members:
@@ -121,7 +139,7 @@ static func fill(out: PackedFloat32Array, system: EcoFish, t: float, moved_only:
 			out[i + 16] = col.r * k
 			out[i + 17] = col.g * k
 			out[i + 18] = col.b * k
-			out[i + 19] = 1.0
+			out[i + 19] = vary[f.index * 3 + 2]
 			if not a.alive:
 				for c in [0, 1, 2, 4, 5, 6, 8, 9, 10]:
 					out[i + c] = 0.0  # съеденная — нулевой basis
@@ -129,14 +147,14 @@ static func fill(out: PackedFloat32Array, system: EcoFish, t: float, moved_only:
 			# EcoFishLook.forward: нос по скорости с вилянием вокруг вертикали
 			var v := a.v
 			var dir := v.normalized() if v.length_squared() > 1e-8 else Vector3(0, 0, 1)
-			var w := sin(t * EcoFishLook.WIGGLE_RATE + f.phase) * EcoFishLook.WIGGLE
+			var w := sin(t * vary[f.index * 3 + 1] + f.phase) * EcoFishLook.WIGGLE
 			var cw := cos(w)
 			var sw := sin(w)
 			var fw := Vector3(dir.x * cw + dir.z * sw, dir.y, -dir.x * sw + dir.z * cw)
 			var side := Vector3(fw.z, 0, -fw.x)
 			side = side.normalized() if side.length() > 1e-4 else Vector3(1, 0, 0)
 			var up := fw.cross(side)
-			var sz := f.size  # молодь мельче
+			var sz := f.size * vary[f.index * 3]  # своя у особи, молодь мельче
 			if sz != 1.0:
 				fw *= sz
 				side *= sz
@@ -162,4 +180,9 @@ static func transform_at(buf: PackedFloat32Array, n: int) -> Transform3D:
 ## Цвет полос рыбки n из буфера.
 static func stripe_at(buf: PackedFloat32Array, n: int) -> Color:
 	var i := n * STRIDE + 16
-	return Color(buf[i], buf[i + 1], buf[i + 2], buf[i + 3])
+	return Color(buf[i], buf[i + 1], buf[i + 2])
+
+
+## Оттенок тела рыбки n из буфера (EcoFishLook.shade).
+static func shade_at(buf: PackedFloat32Array, n: int) -> float:
+	return buf[n * STRIDE + 19]
