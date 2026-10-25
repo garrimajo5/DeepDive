@@ -2,7 +2,8 @@ class_name Settings
 extends RefCounted
 ## Настройки ART-037 (`docs/concept-art/menyu.md`, `menyu-nastrojki.png`, сброс — `menyu-sostoyaniya.png`):
 ## громкость и чувствительность свайпа (ползунки), «Камера с борта в начале забега» (Вкл/Выкл), «Графика» — страница
-## уровней ART-044 (`page`, числа и раскладка — `Graphics`), «Сбросить сохранение»
+## уровней ART-044 (`page`, числа и раскладка — `Graphics`), «Голос» — страница рации ART-041 (`page` = "golos",
+## раскладка — `VoicePage`), «Сбросить сохранение»
 ## через подтверждение (выделено «Нет»), «Назад» — туда, откуда открыты (главное меню или пауза). Хранятся отдельно от
 ## сохранения забега — `user://nastrojki.cfg` (тесты, снимки и прогон тестера не читают и не пишут: `path` = "").
 ## Здесь — значения, файл, кнопки и раскладка без узлов; рисует `scripts/game/settings_panel.gd`
@@ -33,9 +34,11 @@ const SLIDERS := [
 const INTRO_LABEL := "Камера с борта в начале забега"
 const INTRO_TOP := 690.0
 const INTRO := Rect2(1580, 655, 260, 112)
-const RESET := Rect2(1220, 842, 620, 112)
-const GRAPHICS := Rect2(560, 842, 620, 112)   ## «Графика» — страница ART-044 (`Graphics`)
+const RESET := Rect2(1340, 842, 500, 112)
+const GRAPHICS := Rect2(560, 842, 380, 112)   ## «Графика» — страница ART-044 (`Graphics`)
 const GRAPHICS_LABEL := "Графика"
+const GOLOS := Rect2(980, 842, 320, 112)      ## «Голос» — страница рации ART-041 (`VoicePage`)
+const GOLOS_LABEL := "Голос"
 const RESET_LABEL := "Сбросить сохранение"
 ## Подтверждение сброса — окно и кнопки как у паузы (`Pause.BOX`, `YES`, `NO`).
 const ASK := ["Сбросить сохранение?", "Сохранение будет удалено.", "Отменить это действие нельзя."]
@@ -56,11 +59,18 @@ var cards: Array = []     ## прочитанные карточки ролей 
 var graphics := Graphics.DEFAULT   ## уровень графики ART-044
 var fps := false                   ## «Показывать кадры/с» ART-044
 var lite_no := false               ## отказ от предложения «Экономно» ART-044 (`LiteOffer`) — больше не предлагать
+## Голос ART-041 (`VoicePage`, в рацию — `Main._apply_settings`): громкость товарищей, режим (`Radio.Mode`), приём и
+## микрофон — независимо. mic_ok — разрешение микрофона Android сейчас (не хранится, ставит `Main._settings_show`).
+var mates := VOLUME_DEFAULT
+var voice_mode := Radio.Mode.HOLD
+var hear := true
+var mic_on := true
+var mic_ok := true
 
 var open := false
 var ask := false    ## открыто подтверждение сброса
-var grab := ""      ## ползунок под пальцем: "volume" / "swipe"; "" — нет
-var page := ""      ## "" — основная страница, "grafika" — «Настройки · Графика» ART-044
+var grab := ""      ## ползунок под пальцем: "volume" / "swipe" / "mates"; "" — нет
+var page := ""      ## "" — основная страница, "grafika" — «Настройки · Графика» ART-044, "golos" — «Голос» ART-041
 
 
 func set_volume(v: float) -> void:
@@ -71,8 +81,17 @@ func set_swipe(v: float) -> void:
 	swipe = clampf(snappedf(v, 0.1), SWIPE.x, SWIPE.y)
 
 
+func set_mates(v: float) -> void:
+	mates = clampf(snappedf(v, 0.01), VOLUME.x, VOLUME.y)
+
+
 func value(id: String) -> float:
-	return volume if id == "volume" else swipe
+	match id:
+		"volume":
+			return volume
+		"mates":
+			return mates
+	return swipe
 
 
 ## Значение ползунка id в долях дорожки 0…1.
@@ -82,13 +101,18 @@ func fraction(id: String) -> float:
 
 
 static func range_of(id: String) -> Vector2:
-	return VOLUME if id == "volume" else SWIPE
+	return SWIPE if id == "swipe" else VOLUME
+
+
+## Дорожка ползунка id в x макета: у «Громкости товарищей» — своя (`VoicePage.TRACK_X`).
+static func track_of(id: String) -> Vector2:
+	return VoicePage.TRACK_X if id == "mates" else TRACK_X
 
 
 ## Подпись значения: «70 %», «1,0×».
 func value_text(id: String) -> String:
-	if id == "volume":
-		return "%d %%" % roundi(volume * 100.0)
+	if id != "swipe":
+		return "%d %%" % roundi(value(id) * 100.0)
 	return ("%.1f×" % swipe).replace(".", ",")
 
 
@@ -115,6 +139,8 @@ static func screen_rect(id: String, size: Vector2) -> Rect2:
 			return Splash.rect_to_screen(RESET, size)
 		"graphics":
 			return Splash.rect_to_screen(GRAPHICS, size)
+		"golos":
+			return Splash.rect_to_screen(GOLOS, size)
 		"yes":
 			return Splash.rect_to_screen(Pause.YES, size)
 		"no":
@@ -123,10 +149,11 @@ static func screen_rect(id: String, size: Vector2) -> Rect2:
 	return Splash.rect_to_screen(s[4], size) if not s.is_empty() else Rect2()
 
 
-## Доля дорожки под точкой экрана p (0…1).
-static func track_k(p: Vector2, size: Vector2) -> float:
+## Доля дорожки ползунка id под точкой экрана p (0…1).
+static func track_k(p: Vector2, size: Vector2, id := "volume") -> float:
 	var x := (p.x + Splash.offset(size).x) / Splash.scale(size)
-	return clampf((x - TRACK_X.x) / (TRACK_X.y - TRACK_X.x), 0.0, 1.0)
+	var t := track_of(id)
+	return clampf((x - t.x) / (t.y - t.x), 0.0, 1.0)
 
 
 func show() -> void:
@@ -149,7 +176,9 @@ func hit(p: Vector2, size: Vector2) -> String:
 		return ""
 	if page == "grafika":
 		return Graphics.hit(p, size)
-	var ids := ["yes", "no"] if ask else ["back", "volume", "swipe", "intro", "graphics", "reset"]
+	if page == "golos":
+		return VoicePage.hit(p, size)
+	var ids := ["yes", "no"] if ask else ["back", "volume", "swipe", "intro", "graphics", "golos", "reset"]
 	for id: String in ids:
 		if screen_rect(id, size).has_point(p):
 			return id
@@ -164,6 +193,8 @@ func press(id: String, p: Vector2 = Vector2.ZERO, size: Vector2 = Vector2.ZERO) 
 		return ""
 	if page == "grafika":
 		return _press_graphics(id)
+	if page == "golos":
+		return _press_voice(id, p, size)
 	if ask:
 		match id:
 			"yes":
@@ -183,6 +214,8 @@ func press(id: String, p: Vector2 = Vector2.ZERO, size: Vector2 = Vector2.ZERO) 
 			ask = true
 		"graphics":
 			page = "grafika"
+		"golos":
+			page = "golos"
 		"volume", "swipe":
 			grab = id
 			return "changed" if drag(p, size) else ""
@@ -205,17 +238,43 @@ func _press_graphics(id: String) -> String:
 	return ""
 
 
+## Страница «Голос»: «Назад» — к основной, ползунок товарищей, режим, приём и микрофон — сразу в рацию.
+func _press_voice(id: String, p: Vector2, size: Vector2) -> String:
+	match id:
+		"back":
+			page = ""
+			grab = ""
+		"mates":
+			grab = id
+			return "changed" if drag(p, size) else ""
+		"v_hold", "v_voice":
+			var m := Radio.Mode.HOLD if id == "v_hold" else Radio.Mode.VOICE
+			if m != voice_mode:
+				voice_mode = m
+				return "changed"
+		"v_hear":
+			hear = not hear
+			return "changed"
+		"v_mic":
+			mic_on = not mic_on
+			return "changed"
+	return ""
+
+
 ## Палец на взятом ползунке в точке p: новое значение; true — поменялось.
 func drag(p: Vector2, size: Vector2) -> bool:
 	if grab == "" or size == Vector2.ZERO:
 		return false
 	var r := range_of(grab)
 	var before := value(grab)
-	var v := lerpf(r.x, r.y, track_k(p, size))
-	if grab == "volume":
-		set_volume(v)
-	else:
-		set_swipe(v)
+	var v := lerpf(r.x, r.y, track_k(p, size, grab))
+	match grab:
+		"volume":
+			set_volume(v)
+		"mates":
+			set_mates(v)
+		_:
+			set_swipe(v)
 	return not is_equal_approx(before, value(grab))
 
 
@@ -226,6 +285,7 @@ func back() -> String:
 		return ""
 	if page != "":
 		page = ""
+		grab = ""
 		return ""
 	close()
 	return "back"
@@ -248,6 +308,10 @@ func write() -> bool:
 	cfg.set_value("nastrojki", "grafika", graphics)
 	cfg.set_value("nastrojki", "kadry", fps)
 	cfg.set_value("nastrojki", "ekonomno_net", lite_no)
+	cfg.set_value("nastrojki", "golos_gromkost", mates)
+	cfg.set_value("nastrojki", "golos_rezhim", voice_mode)
+	cfg.set_value("nastrojki", "golos_priem", hear)
+	cfg.set_value("nastrojki", "golos_mikrofon", mic_on)
 	return cfg.save(path) == OK
 
 
@@ -267,4 +331,9 @@ func read() -> bool:
 	graphics = Graphics.valid(int(cfg.get_value("nastrojki", "grafika", Graphics.DEFAULT)))
 	fps = bool(cfg.get_value("nastrojki", "kadry", false))
 	lite_no = bool(cfg.get_value("nastrojki", "ekonomno_net", false))
+	set_mates(float(cfg.get_value("nastrojki", "golos_gromkost", VOLUME_DEFAULT)))
+	voice_mode = Radio.Mode.VOICE if int(cfg.get_value("nastrojki", "golos_rezhim", 0)) == Radio.Mode.VOICE \
+		else Radio.Mode.HOLD
+	hear = bool(cfg.get_value("nastrojki", "golos_priem", true))
+	mic_on = bool(cfg.get_value("nastrojki", "golos_mikrofon", true))
 	return true
