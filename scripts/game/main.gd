@@ -1221,6 +1221,7 @@ func _settings_show() -> void:
 	if settings_panel == null:
 		settings_panel = SettingsPanel.new()
 		add_child(settings_panel)
+	settings.mic_ok = radio.mic   # статус микрофона на странице «Голос» ART-041
 	settings_panel.show_settings(settings)
 	if menu_panel:   # над главным меню — его фон без кнопок
 		menu_panel.visible = main_menu.open and not address.open
@@ -1236,7 +1237,7 @@ func _settings_step(r: Touch.Router) -> void:
 	for p in r.taps:
 		var id := settings.hit(p, size)
 		var what := settings.press(id, p, size)
-		if id in ["volume", "swipe"]:
+		if id in ["volume", "swipe", "mates"]:
 			_apply_settings()
 			continue
 		_settings_do(what)
@@ -1279,6 +1280,10 @@ func _apply_settings() -> void:
 		_apply_graphics(settings.graphics)
 	if fps_view:
 		fps_view.visible = settings.fps
+	radio.mode = settings.voice_mode   # страница «Голос» ART-041: режим, приём и микрофон — независимо
+	radio.hear = settings.hear
+	radio.mic_on = settings.mic_on
+	radio.volume = settings.mates
 
 
 ## Предложение «Экономно» ART-044: открыть после низких кадр/с, когда ничего не мешает (не на «Экономно», не под

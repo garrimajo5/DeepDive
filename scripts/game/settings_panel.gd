@@ -40,6 +40,9 @@ func _draw_settings() -> void:
 	if settings.page == "grafika":
 		_draw_graphics(font, s, size)
 		return
+	if settings.page == "golos":
+		_draw_voice(font, s, size)
+		return
 	var k := 0.35 if settings.ask else 1.0
 	_text(font, Settings.TITLE, Settings.TITLE_AT, Settings.TITLE_PX * s, Color(MainMenu.INK, k), size)
 	_button(font, Settings.screen_rect("back", size), "Назад", false, k, s)
@@ -51,6 +54,7 @@ func _draw_settings() -> void:
 		Color(MainMenu.INK, k), size)
 	_button(font, Settings.screen_rect("intro", size), "Вкл" if settings.intro else "Выкл", settings.intro, k, s)
 	_button(font, Settings.screen_rect("graphics", size), Settings.GRAPHICS_LABEL, false, k, s)
+	_button(font, Settings.screen_rect("golos", size), Settings.GOLOS_LABEL, false, k, s)
 	_button(font, Settings.screen_rect("reset", size), Settings.RESET_LABEL, false, k, s)
 	if not settings.ask:
 		return
@@ -91,10 +95,33 @@ func _draw_graphics(font: Font, s: float, size: Vector2) -> void:
 	_text(font, Graphics.NOTE, Vector2(Graphics.ROW_X, Graphics.NOTE_TOP), Graphics.NOTE_PX * s, MainMenu.SOFT, size)
 
 
-## Дорожка на высоте y макета: залитая часть до доли f, ручка.
-func _slider(y: float, f: float, held: bool, k: float, s: float, size: Vector2) -> void:
-	var a := Splash.to_screen(Vector2(Settings.TRACK_X.x, y), size)
-	var b := Splash.to_screen(Vector2(Settings.TRACK_X.y, y), size)
+## Страница «Настройки · Голос» ART-041 (кадр 08 `raciya-sostoyaniya.png`): громкость товарищей, статус микрофона,
+## режим (выбранный — главная кнопка) с подписью, переключатели приёма и микрофона.
+func _draw_voice(font: Font, s: float, size: Vector2) -> void:
+	_text(font, VoicePage.TITLE, Graphics.TITLE_AT, Graphics.TITLE_PX * s, MainMenu.INK, size)
+	_button(font, VoicePage.screen_rect("back", size), "Назад", false, 1.0, s)
+	var px := VoicePage.LABEL_PX * s
+	var x := VoicePage.LABEL_X
+	_text(font, VoicePage.MATES_LABEL, Vector2(x, VoicePage.MATES_TOP), px, MainMenu.INK, size)
+	_value_at(font, settings.value_text("mates"), VoicePage.VALUE_RIGHT, VoicePage.MATES_TOP, px, MainMenu.SOFT, size)
+	_slider(VoicePage.TRACK_Y, settings.fraction("mates"), settings.grab == "mates", 1.0, s, size, VoicePage.TRACK_X)
+	_text(font, VoicePage.MIC_LABEL, Vector2(x, VoicePage.label_top(VoicePage.STATE)), px, MainMenu.INK, size)
+	_button(font, VoicePage.screen_rect("v_state", size), VoicePage.state_text(settings.mic_ok), false, 1.0, s)
+	_text(font, VoicePage.MODE_LABEL, Vector2(x, VoicePage.label_top(VoicePage.HOLD)), px, MainMenu.INK, size)
+	var voice := settings.voice_mode == Radio.Mode.VOICE
+	_button(font, VoicePage.screen_rect("v_hold", size), "Нажать и держать", not voice, 1.0, s)
+	_button(font, VoicePage.screen_rect("v_voice", size), "По голосу", voice, 1.0, s)
+	_text(font, VoicePage.note(settings.voice_mode), Vector2(x, VoicePage.NOTE_TOP), VoicePage.NOTE_PX * s,
+		MainMenu.SOFT, size)
+	_button(font, VoicePage.screen_rect("v_hear", size), VoicePage.hear_text(settings.hear), false, 1.0, s)
+	_button(font, VoicePage.screen_rect("v_mic", size), VoicePage.mic_text(settings.mic_on), false, 1.0, s)
+
+
+## Дорожка на высоте y макета (от и до — track): залитая часть до доли f, ручка.
+func _slider(y: float, f: float, held: bool, k: float, s: float, size: Vector2,
+		track := Settings.TRACK_X) -> void:
+	var a := Splash.to_screen(Vector2(track.x, y), size)
+	var b := Splash.to_screen(Vector2(track.y, y), size)
 	var h := maxf(2.0, Settings.TRACK_H * s)
 	var at := a.lerp(b, f)
 	draw.draw_line(a, b, Color(MainMenu.EDGE, k), h, true)
