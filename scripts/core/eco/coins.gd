@@ -362,13 +362,13 @@ func came_to(i: int) -> bool:
 
 
 ## Наклон монетника в момент t: нос по скорости (+Z — вперёд), покачивание с боку на бок.
-static func coin_basis(cn: Coin, t: float) -> Basis:
+static func coin_basis(cn: Coin, t: float, rate := 2.0) -> Basis:
 	var b: Basis
 	if cn.vel.length_squared() > 1e-4 and Vector2(cn.vel.x, cn.vel.z).length_squared() > 1e-6:
 		b = Basis.looking_at(cn.vel, Vector3.UP, true)
 	else:
 		b = Basis(Vector3.UP, cn.phase)
-	return b * Basis(Vector3.BACK, sin(t * 2.0 + cn.phase) * 0.2)
+	return b * Basis(Vector3.BACK, sin(t * rate + cn.phase) * 0.2)
 
 
 ## Тело глазуна: приподнимается в броске на 0,35 м и задирает голову.

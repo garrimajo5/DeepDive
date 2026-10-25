@@ -1,5 +1,5 @@
 extends TestCase
-## Разброс особей в MultiMesh (Б4, `docs/grafika-plan-eco.md`): у светляков и скребунов свой размер, оттенок
+## Разброс особей в MultiMesh (Б4, `docs/grafika-plan-eco.md`): у светляков, скребунов, радужников и монетников свой размер, оттенок
 ## и ритм — стая не клоны. Числа — хешем от номера особи (EcoVary): мир и его случай не меняются, вид один и тот же
 ## при каждом запуске, вызовов отрисовки и шейдеров не прибавилось.
 
@@ -150,3 +150,93 @@ func test_world_unchanged() -> void:
 	for f: EcoFish.Fish in fa.all:
 		if not near(f.agent.clearance, 0.4 * f.size, 1e-6, "зазор — по размеру возраста"):
 			return
+
+
+func _raduzh_view() -> RaduzhView:
+	var w := EcoWorld.new(EcoRandom.WORLD_SEED)
+	w.ground = Seabed.height
+	w.ship.pos = Vector3(500, 0, 500)
+	return RaduzhView.new(w.add(EcoRaduzh.new()) as EcoRaduzh)
+
+
+func test_raduzh_differ_in_size_rhythm_and_shade() -> void:
+	var rv := _raduzh_view()
+	var r := rv.raduzh
+	var sizes := []
+	var shades := []
+	var rates := []
+	for sw in r.swarms:
+		for k in EcoRaduzh.PER_SWARM:
+			var n := sw.index * EcoRaduzh.PER_SWARM + k
+			sizes.append(RaduzhView.member_scale(n))
+			rates.append(RaduzhView.member_rate(n))
+			shades.append(RaduzhView.member_shade(n))
+	var s := _span(sizes)
+	ok(s.x >= 0.85 - 1e-5 and s.y <= 1.15 + 1e-5 and s.y - s.x > 0.2, "размер ±15 %%: %s" % s)
+	near(_mean(sizes), 1.0, 0.04, "в среднем — прежний гребневик")
+	var rt := _span(rates)
+	ok(rt.y - rt.x > 0.7, "дышат не в лад: %s рад/с" % rt)
+	near(_mean(rates), RaduzhView.BREATH_RATE, 0.15, "средняя частота прежняя")
+	var d := _span(shades)
+	ok(d.y - d.x > 0.35, "силуэты светлее-темнее: %s" % d)
+	# в буфере: размер в basis (в момент без дыхания — sin = 0 при t = −phase/rate, проще сравнить отношение осей)
+	rv.sync(3.0, Vector3(1e6, 0, 1e6), 0.0, true)
+	var sw := r.swarms[1]
+	for k in EcoRaduzh.PER_SWARM:
+		var n := sw.index * EcoRaduzh.PER_SWARM + k
+		var j := n * RaduzhView.STRIDE_C
+		var bx := Vector3(rv.body_buffer[j], rv.body_buffer[j + 4], rv.body_buffer[j + 8]).length()
+		var m := sw.members[k]
+		var want := RaduzhView.BODY.x * RaduzhView.member_scale(n) \
+			* (1.0 + sin(3.0 * RaduzhView.member_rate(n) + m.phase) * 0.08)
+		if not near(bx, want, 1e-4, "размер гребневика %d в буфере" % n):
+			return
+		var c := RaduzhView.color_at(rv.body_buffer, n)
+		var base := EcoRaduzh.member_color(sw, k, 3.0)
+		if not near(c.b, base.b * RaduzhView.member_shade(n), 1e-5, "силуэт без света — свой оттенок"):
+			return
+	# во вспышке радуга одна на всех: оттенок особи не гасит её
+	sw.glow = 1.0
+	rv.sync(3.0, Vector3(1e6, 0, 1e6), 0.0, true)
+	var n0 := sw.index * EcoRaduzh.PER_SWARM
+	ok(RaduzhView.color_at(rv.body_buffer, n0).is_equal_approx(EcoRaduzh.member_color(sw, 0, 3.0)), "вспышка — без разброса")
+	eq(rv.bodies.multimesh.instance_count, r.swarms.size() * EcoRaduzh.PER_SWARM, "те же экземпляры")
+	rv.free()
+
+
+func test_coins_differ_and_carry_tint() -> void:
+	var w := EcoWorld.new(EcoRandom.WORLD_SEED)
+	w.ground = Seabed.height
+	w.ship.pos = Vector3(500, 0, 500)
+	var m := w.add(EcoMoss.new()) as EcoMoss
+	var c := w.add(EcoCoins.new(m)) as EcoCoins
+	if not ok(c.coins.size() > 10, "монетники есть: %d" % c.coins.size()):
+		return
+	var v := CoinsView.new(c)
+	v.sync(2.0)
+	ok(v.fish.multimesh.use_colors, "у монетника цвет экземпляра")
+	var sizes := []
+	var rates := []
+	var tints := {}
+	for cn in c.coins:
+		var k := CoinsView.coin_scale(cn)
+		sizes.append(k)
+		rates.append(CoinsView.coin_rate(cn))
+		var tn := CoinsView.coin_tint(cn)
+		tints[Vector3i(roundi(tn.r * 40), roundi(tn.g * 40), roundi(tn.b * 40))] = true
+		ok(tn.g >= 0.85 - 1e-5 and tn.g <= 1.15 + 1e-5, "светлее-темнее ±15 %%: %s" % tn)
+		var tr := KelpView.transform_at(v.coin_buffer, cn.index, CoinsView.STRIDE_C)
+		if not near(tr.basis.x.length(), k, 1e-4, "размер монетника %d в буфере" % cn.index):
+			return
+		ok(tr.basis.is_equal_approx(EcoCoins.coin_basis(cn, 2.0, CoinsView.coin_rate(cn)).scaled_local(Vector3.ONE * k)),
+			"покачивание — в своём ритме")
+		var i := cn.index * CoinsView.STRIDE_C + 12
+		ok(Color(v.coin_buffer[i], v.coin_buffer[i + 1], v.coin_buffer[i + 2]).is_equal_approx(tn), "оттенок — цвет экземпляра")
+	var s := _span(sizes)
+	ok(s.x >= 0.88 - 1e-5 and s.y <= 1.12 + 1e-5 and s.y - s.x > 0.15, "размер ±12 %%: %s" % s)
+	var r := _span(rates)
+	ok(r.y - r.x > 0.6, "качаются не в лад: %s рад/с" % r)
+	ok(tints.size() >= c.coins.size() * 0.7, "почти все разного оттенка: %d из %d" % [tints.size(), c.coins.size()])
+	eq(EcoCoins.coin_basis(c.coins[0], 1.0), EcoCoins.coin_basis(c.coins[0], 1.0, CoinsView.ROCK_RATE),
+		"без своего ритма — прежнее покачивание")
+	v.free()
