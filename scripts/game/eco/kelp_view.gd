@@ -1,13 +1,15 @@
 class_name KelpView
 extends Node3D
 ## Ленточник и шипоежи в сцене (initKelp, setKelp, urchinRender в js/creatures.js): три MultiMesh — ленты (полоса
-## 0,45 × 1 м в 7 отрезков, видна с обеих сторон, качается в шейдере как G.sway с размахом 0,9; цвет экземпляра — от
+## 0,45 × 1 м в 7 отрезков, видна с обеих сторон, колышется в шейдере по течению мира — EcoCurrent.sway; цвет экземпляра — от
 ## голого стебля к зелени по густоте, слабое своё свечение #0b1a10), тела ежей (икосаэдр 0,2 м, #3a1f4a, свечение
 ## #12061a) и иглы (18 игл по 0,32 м: стержни со светом, голубые кончики светятся сами). Ленты переписываются, только
 ## когда ёж их объел или они отросли (EcoKelp.dirty). Ленты — общий шейдер растений (EcoShaders.PLANT).
 ## Стоит на слое отмели (OceanView.LAYER_WORLD).
 
 const KELP_GLOW := Color("0b1a10")
+## Колыхание ленты в течении (EcoCurrent.sway): крен, волна вверх, поперёк — доли высоты ленты.
+const BEND := Vector3(0.12, 0.1, 0.06)
 const SEGMENTS := 7
 const BODY := Color("3a1f4a")
 const BODY_GLOW := Color("12061a")
@@ -83,7 +85,7 @@ static func build_stalk() -> ArrayMesh:
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	m.surface_set_material(0, EcoShaders.plant(EcoShaders.Plant.KELP, {"rough": 0.9,
-		"glow": _linear(KELP_GLOW)}))
+		"glow": _linear(KELP_GLOW), "bend": BEND, "reach": 1.0}))
 	return m
 
 
