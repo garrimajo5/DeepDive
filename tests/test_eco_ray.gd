@@ -112,6 +112,40 @@ func test_over_ship_rises_above() -> void:
 	ok(ry.p.y > w.ship.pos.y + EcoRay.SHIP_TOP + EcoRay.OVER - 1.0, "поднялся над корпусом: %.2f" % ry.p.y)
 
 
+## Б3, плавность: над кораблём скат взмывает носом вверх и плавно выравнивается, а не всплывает «лифтом».
+func test_climbs_nose_up_over_ship_smoothly() -> void:
+	var w := _world()
+	var ry := _rays(w).rays[0]
+	var at := ry.ang + 6.0 / ry.radius
+	w.ship.pos = Vector3(ry.center.x + cos(at) * ry.radius, -10.0, ry.center.z + sin(at) * ry.radius)
+	var top := 0.0
+	var prev := ry.pitch
+	var dt := 0.05
+	for i in 80:
+		w.step(dt)
+		top = maxf(top, ry.pitch)
+		ok(absf(ry.pitch - prev) <= EcoRay.PITCH_MAX * 2.0 * EcoRay.PITCH_FOLLOW * dt + 1e-5,
+			"тангаж меняется плавно (шаг %d)" % i)
+		ok(absf(ry.pitch) <= EcoRay.PITCH_MAX + 1e-5, "не круче 20°")
+		prev = ry.pitch
+	ok(top > deg_to_rad(10.0), "взмыл над кораблём носом вверх: %.1f°" % rad_to_deg(top))
+	var nose := EcoRay.xform(ry).basis.z.normalized()
+	near(nose.y, sin(ry.pitch), 1e-4, "нос меша — по тангажу")
+	near(Vector2(nose.x, nose.z).normalized().dot(Vector2(ry.dir.x, ry.dir.z)), 1.0, 1e-4, "и по курсу")
+
+
+func test_level_far_from_ship() -> void:
+	var w := _world()
+	var r := _rays(w)
+	for ry in r.rays:
+		eq(ry.pitch, 0.0, "в начале — ровно")
+	w.run(30.0)
+	for ry in r.rays:
+		ok(absf(ry.pitch) < deg_to_rad(6.0), "на своей глубине почти ровно: %.1f°" % rad_to_deg(ry.pitch))
+	near(EcoRay.pitch_for(1.0, 4.0), atan2(1.0, 4.0), 1e-6, "наклон пути")
+	near(EcoRay.pitch_for(-50.0, 4.0), -EcoRay.PITCH_MAX, 1e-6, "вниз — не круче предела")
+
+
 func test_far_ship_does_not_lift() -> void:
 	var w := _world()
 	w.run(5.0)

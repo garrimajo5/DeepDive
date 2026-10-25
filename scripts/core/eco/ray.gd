@@ -40,6 +40,11 @@ const SCALE: Array[float] = [110.0, 123.5, 146.8, 164.8, 196.0, 220.0]
 const TARGET_R := 7.0
 ## Крен ската (rotateZ(−0,22)), рад.
 const BANK := 0.22
+## Тангаж (Б3, «плавность поведения»): идёт вверх — нос вверх, вниз — нос вниз, по наклону пути
+## (atan2(вертикальная скорость, скорость по кругу)), не круче PITCH_MAX; догоняет нужный за PITCH_FOLLOW (1/с) —
+## над кораблём скат не всплывает «лифтом», а взмывает и плавно выравнивается.
+const PITCH_MAX := deg_to_rad(20.0)
+const PITCH_FOLLOW := 4.0
 
 
 ## Ледокрыл.
@@ -57,6 +62,8 @@ class Ray:
 	var dir := Vector3.ZERO
 	## Над кораблём сейчас (поднялся над корпусом).
 	var over := false
+	## Тангаж тела (рад, > 0 — нос вверх), плавный.
+	var pitch := 0.0
 	var lead_cd := 0.0
 	var placed := false
 
@@ -127,12 +134,23 @@ func _place(world: EcoWorld, ry: Ray, dt: float) -> void:
 	if ry.over:
 		ty = minf(CEIL_Y, maxf(ty, s.pos.y + SHIP_TOP + OVER))
 	var y := lerpf(ry.p.y, ty, minf(1.0, dt * (3.0 if ry.over else 0.5))) if ry.placed else ty
+	var y0 := ry.p.y
+	var was := ry.placed
 	ry.placed = true
 	ry.p = Vector3(x, y, z)
 	var res := EcoHull.push_out(ry.p, s.pos, s.yaw, HULL_GAP)
 	if not res.is_empty():
 		ry.p = res[0]
 	ry.dir = Vector3(-sin(ry.ang), 0.0, cos(ry.ang))
+	if not was or dt <= 0.0:
+		ry.pitch = 0.0
+	else:
+		ry.pitch = lerpf(ry.pitch, pitch_for((ry.p.y - y0) / dt, ry.speed), 1.0 - exp(-PITCH_FOLLOW * dt))
+
+
+## Нужный тангаж при вертикальной скорости vy (м/с) и скорости по кругу speed (м/с): наклон пути, ± PITCH_MAX.
+static func pitch_for(vy: float, speed: float) -> float:
+	return clampf(atan2(vy, maxf(speed, 0.1)), -PITCH_MAX, PITCH_MAX)
 
 
 ## Позвать ближайшую свободную стаю рифа (не у кроны и не молодь) ближе LEAD_R.
@@ -181,9 +199,11 @@ func _sing(world: EcoWorld) -> void:
 		world.emit(ID, "song", at, _text(world, "%s поёт где-то " + side + " — низкий голос слышен сквозь корпус"))
 
 
-## Место ската в мире: +Z — по курсу, крен BANK в повороте (как меш RayView). По нему же сидят присоски на спине.
+## Место ската в мире: +Z — по курсу, нос поднят на pitch, крен BANK в повороте (как меш RayView). По нему же сидят
+## присоски на спине.
 static func xform(ry: Ray) -> Transform3D:
 	var fwd := ry.dir if ry.dir.length_squared() > 1e-6 else Vector3.BACK
+	fwd = fwd * cos(ry.pitch) + Vector3.UP * sin(ry.pitch)
 	var b := Basis.looking_at(-fwd, Vector3.UP)  # looking_at смотрит в −Z: меш смотрит носом в +Z
 	b = b * Basis(Vector3.BACK, -BANK)
 	return Transform3D(b, ry.p)
