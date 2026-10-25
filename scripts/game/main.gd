@@ -629,6 +629,12 @@ func step(dt: float) -> void:
 			overlay.router.clear()   # палец на кнопке меню не идёт в игру: свой игрок стоит, за постом — без хода
 	if _offer_step():   # предложение «Экономно»: касания — его кнопкам, свой игрок стоит, мир идёт
 		overlay.router.clear()
+	if ship_map.open and ship_map.from == "hint":   # схема из подсказки ART-038: мир идёт, свой ввод — только «Назад»
+		if wreck.active() or main_menu.open or (net_client != null and drop.blocks()):
+			_map_back()
+		else:
+			_map_step(overlay.router)
+			overlay.router.mute()
 	if net_client:   # клиент: корабль, реактор и экипаж — из кадров хоста
 		_client_step(dt)
 		return
@@ -1733,20 +1739,27 @@ func _pause_step() -> void:
 	r.end_frame()
 
 
-## Схема корабля ART-042 поверх паузы / меню забега: кнопки паузы скрыты, касания — «Назад».
+## Схема корабля ART-042 поверх паузы / меню забега ("pause": кнопки паузы скрыты) или с плашки подсказки ("hint":
+## мир идёт, управление и строки приборов скрыты); касания — «Назад».
 func open_map(where: String) -> void:
 	ship_map.open_from(where)
 	if pause_panel:
 		pause_panel.visible = false
+	if where == "hint":
+		overlay.visible = false
+		hint.visible = false
 	_map_show()
 	overlay.router.clear()   # палец с пункта «Схема корабля» не жмёт «Назад»
 
 
-## «Назад» схемы: обратно в паузу.
+## «Назад» схемы: обратно в паузу или в забег к той же подсказке.
 func _map_back() -> void:
-	ship_map.back()
+	var from := ship_map.back()
 	_map_show()
-	if pause_panel:
+	if from == "hint":
+		overlay.visible = not wreck.active() and not main_menu.open
+		hint.visible = overlay.visible
+	elif pause_panel:
 		pause_panel.show_pause(pause)
 	overlay.router.clear()
 
@@ -1952,8 +1965,14 @@ func sit_at_helm() -> void:
 ## Подсказки первого забега ART-038: скрыты под тревогой, голосованием, итогом, облётом, шторкой, паузой и меню
 ## (шаг стоит); у гостя сети — свои шаги без сонара (`Tutorial.Guest`). Пройдено — запомнить в настройках.
 func _tutorial_step(dt: float) -> void:
-	var hidden := alarms_on().has(true) or at_vote or run.ended or pause.open \
+	var hidden := alarms_on().has(true) or at_vote or run.ended or pause.open or ship_map.open \
 		or main_menu.open or settings.open or flyby.active() or warm.active() or wreck.active() or walker.noclip
+	var btn := tutorial_panel.map_rect() if not hidden else Rect2()
+	for p in overlay.router.taps:   # «Схема» на плашке «найдите пост» — схема корабля ART-042, шаг стоит
+		if btn.has_point(p):
+			open_map("hint")
+			hidden = true
+			break
 	if tutorial.update(dt, hidden):
 		settings.hints_done = true
 		settings.write()
@@ -1963,7 +1982,7 @@ func _tutorial_step(dt: float) -> void:
 		get_viewport().get_camera_3d(), camera)
 	tutorial_panel.show_tutorial(tutorial, tutorial.text(pilot.seated, near),
 		tutorial.highlight(pilot.seated, at_power, near), status_rect(),
-		power_panel.box() if power_panel.visible else Rect2(), edge)
+		power_panel.box() if power_panel.visible else Rect2(), edge, tutorial.map_wanted(pilot.seated, at_power, near))
 
 
 ## Карточка роли у поста ART-045: пост, у которого стоит свой игрок, своей ли он роли (в одиночном забеге — все
@@ -1972,6 +1991,7 @@ func _card_step(dt: float) -> void:
 	var at := RoleCard.post_at(pilot.seated, at_power, near_post)
 	var solo := net_client == null and net_mates.is_empty()
 	var hidden := alarms_on().has(true) or at_vote or at_power or run.ended or pause.open or main_menu.open or settings.open \
+		or ship_map.open \
 		or flyby.active() or warm.active() or wreck.active() or walker.noclip or brief.k > 0.0 \
 		or (net_client != null and drop.active())
 	var quiet := tutorial.active() or (at != "" and Crew.holder(crew, me, at) != null)
@@ -1993,6 +2013,8 @@ func _card_step(dt: float) -> void:
 				rect = RoleCard.card_rect(role_card.post, size, avoid, status_rect())
 		changed = changed or role_card.read.size() != before
 	overlay.router.blocks = role_card.blocks(size, rect)
+	if tutorial_panel.map_rect().has_area():   # палец на «Схеме» не крутит взгляд
+		overlay.router.blocks.append(tutorial_panel.map_rect())
 	if changed:
 		settings.cards = role_card.read_list()
 		settings.write()

@@ -238,3 +238,88 @@ func test_guest_events_by_host_frame() -> void:
 	g.update(dt, false, false, "route", Vector2.ZERO, false, true, false, sh, -1)
 	eq(g.update(dt, false, false, "route", Vector2.ZERO, false, false, false, sh, 0), [Tutorial.Ev.ROUTE],
 		"кнопка у поста «Маршрут» — маршрут в кадре сменился")
+
+
+func test_map_button_by_art() -> void:   # кнопка «Схема» ART-042 на плашке «найдите пост»
+	var t := Tutorial.new()
+	ok(t.map_wanted(false, false, ""), "шаг 1, игрок не у штурвала — «Схема»")
+	ok(not t.map_wanted(false, false, "helm"), "у штурвала — без кнопки")
+	eq(t.step_line(true), "Первый забег · 1 / 6 · найдите пост", "строка шага по макету")
+	eq(t.step_line(), "Первый забег · 1 / 6", "без кнопки — как раньше")
+	t.note(Tutorial.Ev.SAT)
+	ok(not t.map_wanted(false, false, ""), "в «Выполнено» — без кнопки")
+	t.update(Tutorial.DONE_TIME + 0.01, false)
+	ok(not t.map_wanted(true, false, ""), "шаг хода за штурвалом — без кнопки")
+	t.step = 3
+	ok(not t.map_wanted(true, false, ""), "сидит перед энергией — «Встать», без кнопки")
+	ok(t.map_wanted(false, false, "helm"), "встал — найдите пульт энергии")
+	ok(not t.map_wanted(false, false, "energy") and not t.map_wanted(false, true, ""), "у пульта — без кнопки")
+	t.step = 5
+	ok(t.map_wanted(false, false, "sonar") and not t.map_wanted(false, false, "route"), "цель — пост «Маршрут»")
+	var size := Vector2(2400, 1080)
+	var b := Tutorial.box(size, Rect2(), Rect2(), Tutorial.box_h(true, 400.0))
+	eq(b, Rect2(520, 32, 1360, 238), "плашка с кнопкой — 1360×238 по макету")
+	eq(Tutorial.map_rect(b, size.y, false), Rect2(1480, 150, 360, 112), "«Схема» (1480, 150, 360×112)")
+	eq(Tutorial.box_h(false, 400.0), Tutorial.BOX.y, "без кнопки — прежняя высота")
+	ok(not Tutorial.fits_beside(1000.0), "длинный текст не помещается до кнопки")
+	eq(Tutorial.box_h(true, 1000.0), Tutorial.MAP_LOW_H, "кнопка — отдельной строкой, плашка выше")
+	var low := Tutorial.box(size, Rect2(), Rect2(), Tutorial.MAP_LOW_H)
+	var lr := Tutorial.map_rect(low, size.y, true)
+	ok(low.encloses(lr), "кнопка в нижней строке внутри плашки")
+	ok(lr.position.y > b.position.y + Tutorial.TEXT_AT.y + 12.0, "ниже строки действия")
+	var small := Tutorial.box(Vector2(1600, 720), Rect2(), Rect2(), Tutorial.MAP_BOX_H)
+	ok(small.encloses(Tutorial.map_rect(small, 720.0, false)), "16:9 — кнопка внутри плашки")
+
+
+func test_scene_map_from_hint_and_back() -> void:
+	Main.hints = true
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.tutorial.step = 3   # энергия: встал от штурвала — найдите пульт
+	main.walker.x = 0.0
+	main.walker.z = -1.0
+	_tick(10)
+	var p := main.tutorial_panel
+	ok(p.map, "шаг «найдите пост» — кнопка «Схема»")
+	var btn := p.map_rect()
+	ok(btn.has_area() and p.box().encloses(btn), "кнопка на плашке")
+	var text_end := p.box().position.x + (Tutorial.TEXT_AT.x + p._text_w() + 24.0) * p.get_viewport_rect().size.y / Tutorial.REF_H
+	ok(text_end <= btn.position.x or btn.position.y > p.box().position.y + Tutorial.TEXT_AT.y * p.get_viewport_rect().size.y / Tutorial.REF_H,
+		"текст действия не уходит под кнопку")
+	ok(main.overlay.router.blocks.has(btn), "палец на кнопке не крутит взгляд")
+	var r := main.overlay.router
+	r.begin(7, btn.get_center())
+	_tick()
+	r.end(7)
+	ok(main.ship_map.open and main.ship_map.from == "hint", "касание «Схемы» открыло схему")
+	ok(main.ship_map_panel.visible, "схема на экране")
+	ok(not main.pause.open, "без паузы: мир идёт")
+	ok(not main.overlay.visible and not main.hint.visible, "управление и строки приборов скрыты")
+	var x0 := main.walker.x
+	var z0 := main.walker.z
+	r.move = Vector2i(0, 1)
+	_tick(10)
+	r.move = Vector2i.ZERO
+	near(main.walker.x, x0, 1e-4, "крестовина под схемой не ведёт игрока")
+	near(main.walker.z, z0, 1e-4, "и вперёд тоже")
+	ok(not main.tutorial_panel.visible, "плашка под схемой скрыта")
+	eq(main.tutorial.step, 3, "шаг стоит")
+	r.begin(8, ShipMap.back_rect(main.get_viewport().get_visible_rect().size).get_center())
+	_tick()
+	r.end(8)
+	ok(not main.ship_map.open and not main.ship_map_panel.visible, "«Назад» закрыл схему")
+	ok(main.overlay.visible and main.hint.visible, "управление вернулось")
+	ok(not main.pause.open, "в забег, не в паузу")
+	_tick(10)
+	ok(main.tutorial_panel.visible and main.tutorial.step == 3, "та же подсказка")
+	r.begin(9, main.tutorial_panel.map_rect().get_center())
+	_tick()
+	r.end(9)
+	main.back_pressed()
+	ok(not main.ship_map.open and not main.pause.open, "системная «Назад» — из схемы в забег, без паузы")
+	r.begin(10, main.tutorial_panel.map_rect().get_center())
+	_tick(5)
+	r.end(10)
+	main._on_destroyed()
+	ok(not main.ship_map.open, "шторка «Корпус разрушен» закрывает схему")

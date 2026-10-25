@@ -22,6 +22,16 @@ const RING := 8.0                 ## обводка нужного управл�
 const FADE := 0.15                ## появление и исчезновение, с
 const DONE_TIME := 0.5            ## «Выполнено» столько секунд
 const DONE := "Выполнено"
+## Кнопка «Схема» ART-042 (`shema.md`, PR #318) на плашке шага «найдите пост»: плашка выше (238), кнопка 360×112
+## под строкой шага справа (1480, 150 на макете — в плашке 960, 118); текст длиннее места до кнопки — кнопка
+## отдельной нижней строкой, плашка ещё выше. Схема открывается поверх идущей игры, шаг стоит, «Назад» — обратно.
+const MAP_BOX_H := 238.0
+const MAP_LOW_H := 290.0               ## кнопка отдельной строкой под текстом
+const MAP_BTN := Rect2(960, 118, 360, 112)
+const MAP_LOW_Y := 150.0               ## верх кнопки в нижней строке
+const MAP_PX := 34.0
+const MAP_TEXT := "Схема"
+const FIND := "найдите пост"
 
 ## Шаги: текст плашки, событие, пост-цель (указатель `HintPointer`).
 const STEPS := [
@@ -76,9 +86,28 @@ func shown() -> bool:
 	return a > 0.0 and on and step < STEPS.size()
 
 
+## Шаг просит дойти до поста, а игрок не у него: на плашке — «найдите пост» и кнопка «Схема». Пока сидит за
+## штурвалом на шаге энергии («Встать»), у поста-цели и в «Выполнено» — без кнопки.
+func map_wanted(seated: bool, at_power: bool, near: String) -> bool:
+	if not active() or done_t >= 0.0 or at_power:
+		return false
+	match STEPS[step][1]:
+		Ev.SAT:
+			return not seated and near != "helm"
+		Ev.SHARE:
+			return not seated and near != "energy"
+		Ev.PING:
+			return not seated and near != "sonar"
+		Ev.ROUTE:
+			return not seated and near != "route"
+	return false
+
+
 ## «Первый забег · 2 / 6» (у гостя сети — те же шесть: импульс сонара гостя идёт хосту, `Main.mate_action`).
-func step_line() -> String:
-	return "Первый забег · %d / %d" % [mini(step + 1, STEPS.size()), STEPS.size()]
+## find — шаг «найдите пост» (`map_wanted`): «Первый забег · 4 / 6 · найдите пост».
+func step_line(find := false) -> String:
+	var out := "Первый забег · %d / %d" % [mini(step + 1, STEPS.size()), STEPS.size()]
+	return out + " · " + FIND if find else out
 
 
 ## Текст плашки: «Выполнено» или действие шага; на шаге энергии — промежуточные фразы (сидит за штурвалом, у пульта).
@@ -135,10 +164,11 @@ func pointer_target(seated: bool) -> String:
 
 ## Плашка на экране size: по центру, верх TOP. Легла бы на строку приборов status — опускается под неё; на открытую
 ## панель avoid (пульт энергии справа) — сдвигается влево от неё, не помещается — опускается под панель.
-static func box(size: Vector2, status: Rect2 = Rect2(), avoid: Rect2 = Rect2()) -> Rect2:
+## h — высота по макету: BOX.y, с кнопкой «Схема» — MAP_BOX_H / MAP_LOW_H (`box_h`).
+static func box(size: Vector2, status: Rect2 = Rect2(), avoid: Rect2 = Rect2(), h: float = BOX.y) -> Rect2:
 	var s := size.y / REF_H
 	var w := minf(BOX.x * s, size.x - 32.0)
-	var r := Rect2((size.x - w) * 0.5, TOP * s, w, BOX.y * s)
+	var r := Rect2((size.x - w) * 0.5, TOP * s, w, h * s)
 	if status.has_area() and r.intersects(status):
 		r.position.y = status.end.y + GAP * s
 	if avoid.has_area() and r.intersects(avoid):
@@ -146,6 +176,28 @@ static func box(size: Vector2, status: Rect2 = Rect2(), avoid: Rect2 = Rect2()) 
 		if r.intersects(avoid):
 			r.position.y = avoid.end.y + GAP * s
 	return r
+
+
+## Высота плашки по макету: без кнопки — BOX.y; с кнопкой — MAP_BOX_H, если текст шириной text_w (px при
+## H = 1080) помещается до кнопки, иначе MAP_LOW_H. box_w — ширина плашки на экране в px макета.
+static func box_h(map: bool, text_w: float, box_w: float = BOX.x) -> float:
+	if not map:
+		return BOX.y
+	return MAP_BOX_H if fits_beside(text_w, box_w) else MAP_LOW_H
+
+
+## Текст действия до кнопки «Схема» с промежутком 24 px.
+static func fits_beside(text_w: float, box_w: float = BOX.x) -> bool:
+	return TEXT_AT.x + text_w + 24.0 <= box_w - (BOX.x - MAP_BTN.position.x)
+
+
+## Кнопка «Схема» на плашке b (экран высотой size_y): справа, отступ от края как в макете; в нижней строке —
+## под текстом. Пустой — плашка без кнопки.
+static func map_rect(b: Rect2, size_y: float, low: bool) -> Rect2:
+	var s := size_y / REF_H
+	var right := (BOX.x - MAP_BTN.end.x) * s
+	var y := (MAP_LOW_Y if low else MAP_BTN.position.y) * s
+	return Rect2(b.end.x - right - MAP_BTN.size.x * s, b.position.y + y, MAP_BTN.size.x * s, MAP_BTN.size.y * s)
 
 
 ## Верх крестовины (стрелка «вперёд», `TouchOverlay` рисует её от 0,55 до 0,78 радиуса): круг обводки.

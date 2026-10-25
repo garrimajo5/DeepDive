@@ -7,6 +7,7 @@ const TEXT := Color("D5E4E8")
 const DIM := Color("9AD9E8")
 const ACCENT := Color("67DDEB")
 const BACK := Color(0.043, 0.11, 0.141, 244.0 / 255.0)   ## #0B1C24, альфа 244
+const MAP_BACK := Color("102B37")   ## кнопка «Схема»
 
 var tut: Tutorial
 var layout: Touch.Layout
@@ -16,6 +17,7 @@ var status := Rect2() ## строка приборов на экране — п�
 var avoid := Rect2()  ## открытая панель (пульт энергии) — плашка уходит от неё
 var arrow: Array = [] ## стрелка у края к посту вне кадра: [ячейка на экране, зеркалить] (`HintPointer.edge`)
 var atlas: Texture2D  ## атлас указателя ART-038
+var map := false      ## шаг «найдите пост»: на плашке кнопка «Схема» ART-042 (`Tutorial.map_wanted`)
 
 
 func _ready() -> void:
@@ -26,11 +28,12 @@ func _ready() -> void:
 
 
 func show_tutorial(t: Tutorial, text: String, highlight: String, status_rect: Rect2, panel := Rect2(),
-		edge: Array = []) -> void:
+		edge: Array = [], find := false) -> void:
 	tut = t
 	var vis := t != null and t.shown()
 	if vis != visible:
 		visible = vis
+	map = vis and find
 	if not vis:
 		return
 	line = text
@@ -43,7 +46,24 @@ func show_tutorial(t: Tutorial, text: String, highlight: String, status_rect: Re
 
 ## Плашка на экране (для табличек и меток: на неё не ложатся).
 func box() -> Rect2:
-	return Tutorial.box(get_viewport_rect().size, status, avoid)
+	return Tutorial.box(get_viewport_rect().size, status, avoid, Tutorial.box_h(map, _text_w(), _box_w()))
+
+
+## Кнопка «Схема» на экране; пустой — кнопки нет.
+func map_rect() -> Rect2:
+	if not visible or not map:
+		return Rect2()
+	return Tutorial.map_rect(box(), get_viewport_rect().size.y, not Tutorial.fits_beside(_text_w(), _box_w()))
+
+
+## Ширина строки действия при H = 1080 и ширина плашки в px макета.
+func _text_w() -> float:
+	return get_theme_default_font().get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, int(Tutorial.TEXT_PX)).x
+
+
+func _box_w() -> float:
+	var size := get_viewport_rect().size
+	return minf(Tutorial.BOX.x, (size.x - 32.0) * Tutorial.REF_H / size.y)
 
 
 func _draw() -> void:
@@ -60,7 +80,7 @@ func _draw() -> void:
 	sb.set_border_width_all(maxi(1, roundi(2.0 * s)))
 	sb.set_corner_radius_all(roundi(12.0 * s))
 	draw_style_box(sb, b)
-	draw_string(font, b.position + Tutorial.STEP_AT * s, tut.step_line(), HORIZONTAL_ALIGNMENT_LEFT, -1,
+	draw_string(font, b.position + Tutorial.STEP_AT * s, tut.step_line(map), HORIZONTAL_ALIGNMENT_LEFT, -1,
 		int(Tutorial.STEP_PX * s), Color(DIM, a))
 	var px := int(Tutorial.TEXT_PX * s)
 	var base := b.position + Tutorial.TEXT_AT * s
@@ -70,8 +90,21 @@ func _draw() -> void:
 		draw_polyline(PackedVector2Array([p0, p0 + Vector2(h * 0.35, h * 0.35), p0 + Vector2(h, -h * 0.4)]),
 			Color(ACCENT, a), maxf(2.0, 5.0 * s), true)
 		base.x += h + 16.0 * s
-	draw_string(font, base, line, HORIZONTAL_ALIGNMENT_LEFT, b.end.x - base.x - 24.0 * s, px,
+	var btn := map_rect()
+	var end := btn.position.x if btn.has_area() and btn.position.y < base.y else b.end.x
+	draw_string(font, base, line, HORIZONTAL_ALIGNMENT_LEFT, end - base.x - 24.0 * s, px,
 		Color(ACCENT if line == Tutorial.DONE else TEXT, a))
+	if btn.has_area():   # «Схема» ART-042: контур акцентом, подпись по центру
+		var bs := StyleBoxFlat.new()
+		bs.bg_color = Color(MAP_BACK, a)
+		bs.border_color = Color(ACCENT, a)
+		bs.set_border_width_all(maxi(1, roundi(2.0 * s)))
+		bs.set_corner_radius_all(roundi(10.0 * s))
+		draw_style_box(bs, btn)
+		var mpx := int(Tutorial.MAP_PX * s)
+		var tw := font.get_string_size(Tutorial.MAP_TEXT, HORIZONTAL_ALIGNMENT_LEFT, -1, mpx)
+		draw_string(font, Vector2(btn.get_center().x - tw.x * 0.5, btn.get_center().y + mpx * 0.35),
+			Tutorial.MAP_TEXT, HORIZONTAL_ALIGNMENT_LEFT, -1, mpx, Color(TEXT, a))
 	if layout != null and ring != "":
 		var c := Tutorial.ring_of(ring, layout)
 		if c != null:

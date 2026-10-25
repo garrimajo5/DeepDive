@@ -129,6 +129,8 @@ func tick(dt: float) -> void:
 				drain_left = c[1]
 			"hull":
 				main.vitals.hull = c[1]
+			"charge":
+				main.vitals.energy = c[1]
 			"wreck":   # корпус разрушен — как от удара (шторка ART-036)
 				main.vitals.hull = 0.0
 				main.vitals.destroyed.emit()
@@ -205,6 +207,8 @@ func _point(what: String, dir: Vector2) -> Vector2:
 			return MainMenu.screen_rect("dive", main.get_viewport().get_visible_rect().size).get_center()
 		"map_back":   # «Назад» схемы корабля ART-042
 			return ShipMap.back_rect(main.get_viewport().get_visible_rect().size).get_center()
+		"hint_map":   # «Схема» на плашке подсказки «найдите пост» ART-038
+			return main.tutorial_panel.map_rect().get_center()
 		"map":   # «Схема корабля» в паузе / меню забега ART-042
 			return Pause.screen_rect("map", main.get_viewport().get_visible_rect().size, main.pause.mode).get_center()
 		"resume", "new", "exit", "yes", "no":   # пауза ART-037 и её подтверждение
