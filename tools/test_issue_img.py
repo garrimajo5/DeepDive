@@ -22,6 +22,19 @@ class Body(unittest.TestCase):
         self.assertIn("/issue-img/5/v2.jpg)", body)
         self.assertLess(body.index("Вариант 1"), body.index("Вариант 2"))
 
+    def test_audio_is_a_listen_link(self):
+        body = issue_img.comment_body(9, [("sonar-ping-1.wav", "Вариант 1"), ("menu.mp3", "")])
+        self.assertIn(f"**Вариант 1** — [▶ послушать `sonar-ping-1.wav`]({issue_img.raw_url(9, 'sonar-ping-1.wav')})", body)
+        self.assertIn("**menu.mp3** — [▶ послушать", body)
+        self.assertNotIn("![", body)                     # звук не встраивается картинкой
+
+    def test_big_audio_kept_as_is(self):
+        path = os.path.join(tempfile.mkdtemp(), "theme.mp3")
+        with open(path, "wb") as f:
+            f.write(b"\xff\xfb" + b"\0" * (issue_img.MAX_BYTES + 10))
+        data, name = issue_img.shrink(path)
+        self.assertEqual((name, len(data)), ("theme.mp3", issue_img.MAX_BYTES + 12))
+
     def test_no_caption(self):
         self.assertEqual(issue_img.comment_body(7, [("s.png", "")]), f"![s.png]({issue_img.raw_url(7, 's.png')})")
 

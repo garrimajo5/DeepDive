@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Картинка прямо в issue: кладёт снимок в ветку `issue-img` (папка = номер issue) и пишет в issue комментарий,
+"""Картинка (или звук) прямо в issue: кладёт снимок в ветку `issue-img` (папка = номер issue) и пишет в issue комментарий,
 где картинка встроена — владелец видит её сразу, в том числе с телефона.
 
     python3 tools/issue_img.py 576 qa/out/27-power.png "Рукава у пульта энергии"
@@ -32,24 +32,35 @@ def gh(path, method="GET", payload=None, ok_404=False):
     return json.loads(r.stdout) if r.stdout.strip() else None
 
 
+AUDIO = (".mp3", ".wav", ".ogg")
+
+
 def raw_url(issue, name):
     return f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/{issue}/{name}"
 
 
+def is_audio(name):
+    return name.lower().endswith(AUDIO)
+
+
 def comment_body(issue, items, text=""):
-    """Текст комментария: вступление и по картинке с подписью на каждую пару (имя, подпись)."""
+    """Текст комментария: вступление, по картинке с подписью на каждую пару (имя, подпись); звук — ссылкой
+    «▶ послушать» (GitHub не встраивает аудио, но ссылка играет прямо в браузере телефона)."""
     parts = [text.strip()] if text.strip() else []
     for name, caption in items:
-        parts.append(f"**{caption}**\n\n![{caption}]({raw_url(issue, name)})" if caption else
-                     f"![{name}]({raw_url(issue, name)})")
+        url = raw_url(issue, name)
+        if is_audio(name):
+            parts.append(f"**{caption or name}** — [▶ послушать `{name}`]({url})")
+        else:
+            parts.append(f"**{caption}**\n\n![{caption}]({url})" if caption else f"![{name}]({url})")
     return "\n\n".join(parts)
 
 
 def shrink(path):
-    """Байты файла и имя в ветке: крупный снимок → JPEG 85 % (если есть Pillow)."""
+    """Байты файла и имя в ветке: крупный снимок → JPEG 85 % (если есть Pillow); звук — как есть."""
     data = open(path, "rb").read()
     name = os.path.basename(path)
-    if len(data) <= MAX_BYTES:
+    if len(data) <= MAX_BYTES or is_audio(name):
         return data, name
     try:
         from PIL import Image

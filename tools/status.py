@@ -28,7 +28,7 @@ ROLE_NAMES = {
     "art": "Концепт-арт, 2D (Codex)",
     "model": "3D-модели (Codex)",
     "qa": "Тестер",
-    "звук": "Звук и музыка (владелец + Suno)",
+    "звук": "Звук, музыка, голоса (Codex, ElevenLabs)",
     "сюжет": "Сюжет и лор (владелец)",
     "владелец": "Владелец: решения и приёмка",
 }
@@ -281,7 +281,7 @@ def render(ms, epics, open_issues, recent, blocked, prs=None, now=None):
         near = [f"#{i['number']}" + (" (в работе)" if "в работе" in labels_of(i) else "")
                 + (" (проверить)" if role == "qa" and "проверить" in labels_of(i) else "") for i in iss[:3]]
         near += [f"{short(t['text'])} (#{r['n']})" for r, t in tasks if not t["blocker"]][:max(0, 2 - len(near))]
-        flag = " ⚠️ нет исполнителя-агента" if role in ("звук", "сюжет") else ""
+        flag = " ⚠️ нет исполнителя-агента" if role == "сюжет" else ""
         L.append(f"| {ROLE_NAMES[role]}{flag} | {len(tasks)} | {len(iss)} | {'; '.join(near) or '—'} |")
 
     # --- ждёт владельца и заблокировано ---
