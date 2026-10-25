@@ -589,6 +589,16 @@ func _build_world() -> void:
 	add_child(we)
 
 
+## Кадры для магазина (ART-046, шаг тестера `hud`, `shot.gd hud=0`): спрятать или вернуть крестовину и кнопки,
+## строки приборов и плашку версии. Следующее событие интерфейса (пауза, меню, шторка) ставит их по-своему.
+func set_hud(on: bool) -> void:
+	overlay.visible = on
+	hint.visible = on
+	var ver := overlay.get_parent().get_node_or_null("Версия") as CanvasItem
+	if ver:
+		ver.visible = on
+
+
 ## Версия сборки для отладочной плашки: config/version + номер сборки из version.txt (пишет CI), иначе «dev».
 func version_text() -> String:
 	var v := str(ProjectSettings.get_setting("application/config/version", "?"))
