@@ -29,6 +29,16 @@ const FIN_GLOW := 0.6
 const SIZE_SPREAD := 0.12
 const SHADE_SPREAD := 0.2
 const RATE_SPREAD := 0.15
+## Волна хвоста (Б3): задняя часть тела и хвост гнутся вбок бегущей волной к кончику, поверх виляния всего тела.
+## Гнётся то, что за TAIL_FROM (м по z), сильнее к кончику TAIL_TIP (квадрат доли); размах кончика TAIL_AMP (м),
+## частота TAIL_RATE (рад/с, у особи ±TAIL_RATE_SPREAD по фазе), волна вдоль тела TAIL_K (рад/м). В шейдере FishView —
+## двойник tail_wave; фаза особи — tail_phase в альфе цвета экземпляра.
+const TAIL_FROM := 0.05
+const TAIL_TIP := -0.42
+const TAIL_AMP := 0.05
+const TAIL_RATE := 9.0
+const TAIL_RATE_SPREAD := 0.15
+const TAIL_K := 9.0
 
 ## Чем окрашена вершина.
 enum Paint { BODY, STRIPE, FIN }
@@ -142,6 +152,24 @@ static func shade(f: EcoFish.Fish) -> float:
 ## Частота виляния особи (рад/с): стая не машет хвостами в лад.
 static func wiggle_rate(f: EcoFish.Fish) -> float:
 	return WIGGLE_RATE * EcoVary.spread(f.index, EcoVary.RATE, RATE_SPREAD)
+
+
+## Доля изгиба точки формы с z (0 — жёсткая голова, 1 — кончик хвоста): квадрат доли пути от TAIL_FROM к TAIL_TIP.
+static func tail_bend(z: float) -> float:
+	var s := clampf((TAIL_FROM - z) / (TAIL_FROM - TAIL_TIP), 0.0, 1.0)
+	return s * s
+
+
+## Фаза волны хвоста особи (доля оборота 0…1): от её фазы виляния — соседки в стае машут вразнобой.
+static func tail_phase(f: EcoFish.Fish) -> float:
+	return fposmod(f.phase / TAU, 1.0)
+
+
+## Сдвиг вбок (м, по оси x формы) точки формы с z в момент t шейдера у особи с фазой a (tail_phase); sway_k — 0
+## на «Экономно». Двойник вершинного шейдера FishView.
+static func tail_wave(z: float, t: float, a: float, sway_k := 1.0) -> float:
+	var rate := TAIL_RATE * (1.0 - TAIL_RATE_SPREAD + 2.0 * TAIL_RATE_SPREAD * fposmod(a * 7.13, 1.0))
+	return sin(t * rate + a * TAU + z * TAIL_K) * TAIL_AMP * tail_bend(z) * sway_k
 
 
 ## Цвет тела особи: BODY_COLOR × shade().
