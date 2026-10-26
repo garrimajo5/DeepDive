@@ -235,6 +235,7 @@ vec3 eco_sway(vec3 o, float h, float height, vec3 bn) {
 ## щупальца хватней (тело со светом, к кончикам светится само — `tip_glow`, доля длины — в COLOR.a). Что
 ## рисовать — `mode` (Plant), краски и числа каждого вида — в своих uniform; формулы — прежние формулы видов.
 ## Общее: шероховатость `rough`, блик `spec`, своё свечение `glow` (линейный цвет) плюс волна `glow_wave` · sin(TIME · 1,7);
+## просвет против огня — `back`/`back_k` (EcoBack, `BACKLIGHT`);
 ## колыхание в течении мира — `bend`/`reach` вида и общий поток `flow` (`set_flow`), формула — EcoCurrent.sway;
 ## `phase_axis` — сдвиг фазы по углу оси экземпляра вокруг вертикали (щупальца одного диска вразнобой, у растений 0).
 enum Plant { KELP, LEAF, FAN, ORGAN, TENTACLE }
@@ -258,6 +259,9 @@ uniform float reach = 1.0;
 uniform float phase_axis = 0.0;
 // щупальце: свечение у основания и у кончика (доля длины — COLOR.a, по квадрату)
 uniform vec2 tip_glow = vec2(0.0);
+// просвет (EcoBack): доля альбедо по каналам, что светится против огня; back_k — 0 на «Экономно»
+uniform vec3 back = vec3(0.0);
+uniform float back_k = 1.0;
 """ + SWAY + """
 void vertex() {
 	if (sway_k > 0.0 && dot(bend, bend) > 0.0) {
@@ -320,6 +324,12 @@ void fragment() {
 		e += COLOR.rgb * mix(tip_glow.x, tip_glow.y, COLOR.a * COLOR.a);
 	}
 	EMISSION = e;
+	// просвет: щупальце к кончику тоньше (EcoBack.through — двойник)
+	vec3 b = back * back_k;
+	if (mode == 4) {
+		b *= mix(0.6, 1.3, COLOR.a);
+	}
+	BACKLIGHT = ALBEDO * b;
 }
 """
 
@@ -376,6 +386,7 @@ static func mist(kind: Mist, params: Dictionary = {}) -> ShaderMaterial:
 static func plant(kind: Plant, params: Dictionary = {}) -> ShaderMaterial:
 	var mat := material(PLANT, params)
 	mat.set_shader_parameter("mode", int(kind))
+	EcoBack.apply(mat, int(kind), params)
 	return follow(mat)
 
 
