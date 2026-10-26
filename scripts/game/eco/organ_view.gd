@@ -26,6 +26,7 @@ var dust := EcoOrganDust.new()
 var dust_view: MultiMeshInstance3D
 var dust_buffer := PackedFloat32Array()
 var _dust_empty := false
+var _packed := PackedByteArray()
 ## Вершины и треугольники всего меша (для тестов).
 var verts := PackedVector3Array()
 var tris := 0
@@ -66,12 +67,45 @@ func _init(system: EcoOrgan) -> void:
 ## Выдохи губок в момент t (время мира); ship — корабль (близость, дальность и луч), flow — течение.
 func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> void:
 	dust.update(organs, t, ship.pos if ship else Vector3.ZERO)
-	var shown := dust.dust.shown(t)
-	if shown == 0 and _dust_empty and dust_buffer.size() == EcoOrganDust.POOL * GrazerView.DUST_STRIDE:
+	var shown := pack(t, ship, flow)
+	if shown == 0 and _dust_empty:
 		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
-	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, ship, EcoOrganDust.COLOR, EcoOrganDust.LIT)
 	dust_view.multimesh.buffer = dust_buffer
 	_dust_empty = shown == 0
+
+
+## Переписать буфер мути (TRANSFORM_3D + цвет): живые облачка — на месте, растаявшие стянуты в точку один раз.
+## Как GrazerView.pack_dust, но буфер не создаётся заново каждый кадр (замер шага мира test_eco_speed).
+## Возвращает, сколько облачков видно.
+func pack(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> int:
+	var shown := 0
+	var puffs := dust.dust.puffs
+	var stride := GrazerView.DUST_STRIDE
+	if dust_buffer.size() != puffs.size() * stride:
+		dust_buffer.resize(puffs.size() * stride)
+		dust_buffer.fill(0.0)
+		_packed.resize(puffs.size())
+		_packed.fill(0)
+	for n in puffs.size():
+		var p := puffs[n]
+		var i := n * stride
+		var a := EcoGrazerDust.fade(p, t)
+		if a <= 0.0:
+			if _packed[n] != 0:
+				for k in stride:
+					dust_buffer[i + k] = 0.0
+				_packed[n] = 0
+			continue
+		_packed[n] = 1
+		shown += 1
+		var s := EcoGrazerDust.size(p, t)
+		var o := EcoGrazerDust.pos(p, t, flow)
+		var c := EcoOrganDust.COLOR.lerp(EcoOrganDust.LIT, EcoGrazerDust.light(o, ship))
+		dust_buffer[i] = s; dust_buffer[i + 3] = o.x
+		dust_buffer[i + 5] = s; dust_buffer[i + 7] = o.y
+		dust_buffer[i + 10] = s; dust_buffer[i + 11] = o.z
+		dust_buffer[i + 12] = c.r; dust_buffer[i + 13] = c.g; dust_buffer[i + 14] = c.b; dust_buffer[i + 15] = a
+	return shown
 
 
 ## Открытый конус от основания b (радиус TUBE_BASE_R) до устья top (TUBE_TOP_R).

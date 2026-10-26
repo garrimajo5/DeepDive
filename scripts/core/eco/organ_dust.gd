@@ -12,8 +12,10 @@ extends RefCounted
 ## Рисует OrganView дочерним MultiMesh «Муть» на общем шейдере EcoShaders.MIST (INK) — +1 вызов отрисовки, шейдеров
 ## не прибавилось. «Экономно» — общий выключатель мелочи жизни EcoGrazerDust.lite.
 
-## Мест в пуле: 2 губки × 7 труб, не чаще такта (3,7 с) на трубу при жизни облачка 3,6 с — до 14 разом.
-const POOL := 20
+## Мест в пуле: труба выдыхает не чаще такта (3,7 с) при жизни облачка 3,6 с — у губки до 7 облачков разом; губки
+## в 100 м друг от друга, корабль рядом только с одной (у дальней — меньше половины тактов). Пул мал — буфер
+## MultiMesh переписывается каждый кадр (замер шага мира test_eco_speed); старое уступает новому.
+const POOL := 10
 ## Такт выдоха — такт тления губки (EcoOrgan.glow: sin 1,7 t), в тактах за секунду.
 const RATE := 1.7 / TAU
 ## Доля тактов, в которые труба выдыхает, когда корабля рядом нет (рядом — каждый такт).
@@ -39,6 +41,8 @@ var dust := EcoGrazerDust.new(POOL)
 var _cycle := PackedInt64Array()
 var _made := 0
 var _last := -1e9
+## Когда начнётся ближайший новый такт у какой-нибудь трубы: до него шаг ничего не делает (замер шага мира).
+var _due := -1e9
 
 
 ## Номер трубы k губки og во всех губках.
@@ -96,8 +100,11 @@ func update(system: EcoOrgan, t: float, ship: Vector3) -> void:
 				var j := tube_id(og, k)
 				_cycle[j] = cycle(j, t)
 		_last = t
+		_due = _next_due()
 		return
 	_last = t
+	if t < _due:
+		return
 	for og in system.organs:
 		var far := EcoGrazerDust.lite or og.base.distance_to(ship) > EcoGrazerDust.NEAR
 		var near_k := closeness(og, ship)
@@ -113,3 +120,12 @@ func update(system: EcoOrgan, t: float, ship: Vector3) -> void:
 			var key := c * 64 + j
 			var a := lerpf(ALPHA, ALPHA_NEAR, near_k) * EcoVary.spread(key, SALT + 4, 0.2)
 			dust.add(spot(og, k, key), cycle_start(j, c), a, key, lerpf(SCALE, SCALE_NEAR, near_k))
+	_due = _next_due()
+
+
+## Начало ближайшего следующего такта среди всех труб.
+func _next_due() -> float:
+	var d := INF
+	for j in _cycle.size():
+		d = minf(d, cycle_start(j, int(_cycle[j]) + 1))
+	return d

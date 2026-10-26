@@ -201,3 +201,32 @@ func test_scene_multimesh() -> void:
 	ok(seen > 0, "губка выдохнула (%d)" % seen)
 	view.queue_free()
 	await frames(1)
+
+
+## Свой буфер мути — тот же, что GrazerView.pack_dust: живые облачка на месте, растаявшие стянуты в точку.
+func test_pack_same_as_grazer_pack() -> void:
+	EcoGrazerDust.lite = false
+	var w := _world()
+	var o := _org(w)
+	var view := OrganView.new(o)
+	var info := EcoLink.ShipState.new()
+	info.pos = o.organs[0].base + Vector3(0, 4, 6)
+	info.light_on = true
+	info.light_range = 30.0
+	var flow := Vector3(0.3, 0, -0.1)
+	var t := 0.0
+	var checked := 0
+	while t < 20.0:
+		t += 0.05
+		view.sync(t, info, flow)
+		var ref := GrazerView.pack_dust(view.dust.dust, t, flow, info, EcoOrganDust.COLOR, EcoOrganDust.LIT)
+		if view.dust.dust.shown(t) > 0:
+			checked += 1
+			for i in ref.size():
+				if absf(ref[i] - view.dust_buffer[i]) > 1e-5 and not (ref[(i / 16) * 16 + 15] <= 0.0
+						and view.dust_buffer[(i / 16) * 16] == 0.0):
+					ok(false, "буфер расходится в %d: %.4f и %.4f" % [i, view.dust_buffer[i], ref[i]])
+					view.free()
+					return
+	ok(checked > 100, "сравнили кадров с облачками (%d)" % checked)
+	view.free()
