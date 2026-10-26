@@ -14,6 +14,8 @@ render_mode cull_disabled;
 uniform float rim = 0.0;
 uniform float rim_tint = 0.0;
 uniform float sway_k = 1.0;
+uniform float rough = 0.8;
+uniform float spec = 0.2;
 varying float glow;
 void vertex() {
 	float ax = abs(VERTEX.x);
@@ -29,8 +31,8 @@ void vertex() {
 }
 void fragment() {
 	ALBEDO = COLOR.rgb * (1.0 - glow);
-	ROUGHNESS = 0.8;
-	SPECULAR = 0.2;
+	ROUGHNESS = rough;
+	SPECULAR = spec;
 	RIM = rim;
 	RIM_TINT = rim_tint;
 	EMISSION = vec3(0.07, 0.22, 0.28) * (1.0 - glow) + COLOR.rgb * glow * 1.6;

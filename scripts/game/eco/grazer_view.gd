@@ -12,6 +12,8 @@ shader_type spatial;
 render_mode cull_back;
 uniform float swing;
 uniform float step_lift;
+uniform float rough = 0.7;
+uniform float spec = 0.5;
 varying vec3 paint;
 void vertex() {
 	paint = COLOR.rgb;
@@ -30,7 +32,8 @@ void vertex() {
 void fragment() {
 	NORMAL = normalize(cross(dFdx(VERTEX), dFdy(VERTEX)));
 	ALBEDO = paint;
-	ROUGHNESS = 0.7;
+	ROUGHNESS = rough;
+	SPECULAR = spec;
 }
 """
 
