@@ -1,0 +1,78 @@
+{
+  "issue": 706,
+  "model": "eleven_text_to_sound_v2",
+  "parameters": {
+    "loop": true,
+    "prompt_influence": 0.85
+  },
+  "items": [
+    {
+      "name": "engines-1",
+      "duration": 15,
+      "requested_duration": 15,
+      "loop": true,
+      "prompt": "Seamless loop. Steady low electric propulsion motor hum and submerged propellers heard through a steel submarine hull. Soft irregular blade beating, rounded bass, restrained mechanical vibration. No rhythmic musical beat, diesel roar, aircraft turbine, cavitation squeal, speech or music.",
+      "node_id": "Iw7pVKRaVURTSJ3tSumd",
+      "run": {},
+      "error": "429: {'type': 'rate_limit_error', 'code': 'rate_limited', 'message': 'You have made too many requests. Please try again later.', 'status': 'rate_limited', 'request_id': '51fcef5ed829aeb8b63e45454931ac55', 'docs_url': 'https://elevenlabs.io/docs/eleven-api/resources/errors#rate-limiting-and-concurrency'}"
+    },
+    {
+      "name": "engines-2",
+      "duration": 15,
+      "requested_duration": 15,
+      "loop": true,
+      "prompt": "Seamless loop. Low smooth electric motor drone inside a steel submersible, distant watery propeller wash and subtle overlapping blade pulses, slightly more water texture than machinery. Stable running load. No diesel, aircraft, squealing cavitation, voices or music.",
+      "node_id": "L6QNsvCLyKys48zGaB2b"
+    },
+    {
+      "name": "reactor-hum-1",
+      "duration": 24,
+      "requested_duration": 24,
+      "loop": true,
+      "prompt": "Seamless loop. Dense low reactor machinery hum inside a steel engine compartment, steady deep vibration, quiet electrical buzzing, a very occasional subdued relay click. Heavy tangible industrial sound. No high pitched whine, futuristic synth, voices or music.",
+      "node_id": "0mCmxN8jJVBDoD9q1sf5"
+    },
+    {
+      "name": "reactor-hum-2",
+      "duration": 24,
+      "requested_duration": 24,
+      "loop": true,
+      "prompt": "Seamless loop. Warm low industrial power core rumble transmitted through steel decking, gentle transformer buzz above the bass, sparse dry relay clicks. Constant operation with restrained resonances. No piercing tones, sci-fi synthesizer, voices or music.",
+      "node_id": "qZ5ikQgF9PAvAm1XQRVd"
+    },
+    {
+      "name": "overheat-buzz-1",
+      "duration": 1.8,
+      "requested_duration": 1.8,
+      "loop": true,
+      "prompt": "Seamless loop. Insistent harsh midrange electromechanical warning buzzer in a steel machinery compartment, continuous rasping electrical vibration with subtle rough flutter. Clearly audible over low machinery, rounded treble. No siren pitch sweeps, clock beeps, voices or music.",
+      "node_id": "QJYX7adwQyq581Zea5Sv"
+    },
+    {
+      "name": "overheat-buzz-2",
+      "duration": 1.8,
+      "requested_duration": 1.8,
+      "loop": true,
+      "prompt": "Seamless loop. Urgent low-mid industrial panel buzzer, coarse steady vibrating metal reed tone with dense electrical rasp, slightly deeper and heavier than a typical alarm. Short steel room reflections. No two-tone siren, rising wail, clock beeps, voices or music.",
+      "node_id": "fQLYXrhVuA4rsyWt3bgB"
+    },
+    {
+      "name": "steam-valve-1",
+      "duration": 6,
+      "requested_duration": 6,
+      "loop": true,
+      "prompt": "Seamless loop. Strong continuous pressurized steam jet escaping a narrow valve nozzle inside a steel engine room, dense focused hiss with slight pipe vibration and dry metallic resonance. Stable full flow. No kettle whistle, wind gusts, speech or music.",
+      "node_id": "VZF4lHwMEUV6yQPZ2rs0"
+    },
+    {
+      "name": "steam-valve-2",
+      "duration": 6,
+      "requested_duration": 6,
+      "loop": true,
+      "prompt": "Seamless loop. Heavy continuous pressure release from a steel pipe valve, broad turbulent steam hiss, faint rattling pipe resonance beneath the jet, close industrial sound in a small metal compartment. No kettle whistle, wind, voices or music.",
+      "node_id": "U5gCnz6nSTnrIXmJcsAK"
+    }
+  ],
+  "flow_id": "cvN7ycmJVK1ljJEgx15M",
+  "estimate_credits": 936
+}
