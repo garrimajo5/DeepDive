@@ -57,13 +57,12 @@
 | sonar-ping | Импульс сонара и эхо (`Sonar.ping`) | один раз 3–4 с | П1 | **готов** — `audio/ship/sonar-ping.wav` (SND-002 вар. 1, `ShipSounds`) |
 | sonar-jam | Импульс завяз в иле — глухой, обрывается (`Silt.jam_ping`) | один раз 2 с | П2 | нужен |
 | engines | Роторы на ходу, тон по тяге (`Helm`, `HullMesh.Motion.spin`) | петля 10–20 с | П1 | нужен |
-| hull-hit | Удар по корпусу, 3 варианта (`Vitals.hit`, `EcoLink.HIT`) | один раз 1–2 с | П1 | **готов** — `audio/ship/hull-hit-1…3.wav` (SND-002, `HullSound`) |
-| hull-scrape | Скрежет о дно и скалу (`Vitals.scrape`) | один раз 2–3 с | П1 | **готов** — `audio/ship/hull-scrape.wav` (SND-002, правка: вар. rev1-1 — сталь о скалу, 3,7 с) |
-| hull-creak | Скрип корпуса под давлением, 4–6 коротких (случайно, чаще глубже) | один раз 1–3 с | П2 | нужен |
-| breach-jet | Струя воды в пробоину (`Breach`; сейчас `Synth.jet`) | петля 5–10 с | П1 | заказан SND-003 #657 |
-| alarm-siren | Сирена тревоги (сейчас `Synth.siren`) | петля 2–4 с | П1 | заказан SND-003 #657 |
+| hull-scrape | Скрежет обшивки о дно и скалу — хвостом под ударом о дно (`Vitals.scrape`) | один раз 2–3 с | П1 | **правки** — владелец: переделать в скрежет и царапины обшивки (#656); сейчас `audio/ship/hull-scrape.wav` (SND-002 вар. 2) |
+>>>>>>> origin/main
+| breach-jet | Струя воды в пробоину (`Breach`, `BreachView.jet_sound`) | петля 5–10 с | П1 | **готов** — `audio/ship/breach-jet.wav` (SND-003 вар. 1) |
+| alarm-siren | Сирена тревоги (`BreachView.siren`) | петля 2–4 с | П1 | **готов** — `audio/ship/alarm-siren.wav` (SND-003 вар. 1) |
 | weld | Сварка пробоины: шипение и треск искр (`Breach.hold`) | петля 3–5 с | П2 | нужен |
-| zap | Разряд по корпусу (`main.fire_zap`) | один раз 1–2 с | П1 | заказан SND-003 #657 |
+| zap | Разряд по корпусу (`main.fire_zap`, `ShipSounds.play_zap`) | один раз 1–2 с | П1 | **готов** — `audio/ship/zap.wav` (SND-003 вар. 2) |
 | steam-valve | Вентиль сброса пара (`EngineRoom.venting`) | петля 4–8 с | П2 | нужен |
 | overheat-buzz | Перегрев реактора — зуммер | петля 1–2 с | П2 | нужен |
 | searchlight | Прожектор: включение и гудение лампы (`Searchlight`) | один раз + петля | П3 | нужен |
