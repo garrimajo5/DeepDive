@@ -1,24 +1,24 @@
-Input #0, mp3, from 'C:\Users\FEDYA\Documents\ChatGPT\Pogrujenie\work\snd001-work\art\SND-001-embient\ambient-shelf-1.mp3':
-  Metadata:
-    encoder         : Lavf61.7.100
-  Duration: 00:00:25.05, start: 0.025057, bitrate: 192 kb/s
-  Stream #0:0: Audio: mp3 (mp3float), 44100 Hz, stereo, fltp, 192 kb/s
-      Metadata:
-        encoder         : Lavc61.19
-[Parsed_volumedetect_0 @ 0000026182fd18c0] n_samples: 0
-Stream mapping:
-  Stream #0:0 -> #0:0 (mp3 (mp3float) -> pcm_s16le (native))
-Output #0, null, to 'pipe:':
-  Metadata:
-    encoder         : Lavf61.7.100
-  Stream #0:0: Audio: pcm_s16le, 44100 Hz, stereo, s16, 1411 kb/s
-      Metadata:
-        encoder         : Lavc61.19.100 pcm_s16le
-[Parsed_volumedetect_0 @ 0000026181596f00] n_samples: 2205022
-[Parsed_volumedetect_0 @ 0000026181596f00] mean_volume: -17.3 dB
-[Parsed_volumedetect_0 @ 0000026181596f00] max_volume: -2.7 dB
-[Parsed_volumedetect_0 @ 0000026181596f00] histogram_2db: 377
-[Parsed_volumedetect_0 @ 0000026181596f00] histogram_3db: 1496
-[Parsed_volumedetect_0 @ 0000026181596f00] histogram_4db: 3146
-[out#0/null @ 0000026182fbef40] video:0KiB audio:4307KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
-size=N/A time=00:00:25.00 bitrate=N/A speed= 982x    
+Input #0, mp3, from 'C:\Users\FEDYA\Documents\ChatGPT\Pogrujenie\work\snd001-work\art\SND-001-embient\ambient-shelf-1.mp3':
+  Metadata:
+    encoder         : Lavf61.7.100
+  Duration: 00:00:25.05, start: 0.025057, bitrate: 192 kb/s
+  Stream #0:0: Audio: mp3 (mp3float), 44100 Hz, stereo, fltp, 192 kb/s
+      Metadata:
+        encoder         : Lavc61.19
+[Parsed_volumedetect_0 @ 0000026182fd18c0] n_samples: 0
+Stream mapping:
+  Stream #0:0 -> #0:0 (mp3 (mp3float) -> pcm_s16le (native))
+Output #0, null, to 'pipe:':
+  Metadata:
+    encoder         : Lavf61.7.100
+  Stream #0:0: Audio: pcm_s16le, 44100 Hz, stereo, s16, 1411 kb/s
+      Metadata:
+        encoder         : Lavc61.19.100 pcm_s16le
+[Parsed_volumedetect_0 @ 0000026181596f00] n_samples: 2205022
+[Parsed_volumedetect_0 @ 0000026181596f00] mean_volume: -17.3 dB
+[Parsed_volumedetect_0 @ 0000026181596f00] max_volume: -2.7 dB
+[Parsed_volumedetect_0 @ 0000026181596f00] histogram_2db: 377
+[Parsed_volumedetect_0 @ 0000026181596f00] histogram_3db: 1496
+[Parsed_volumedetect_0 @ 0000026181596f00] histogram_4db: 3146
+[out#0/null @ 0000026182fbef40] video:0KiB audio:4307KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+size=N/A time=00:00:25.00 bitrate=N/A speed= 982x
