@@ -6,6 +6,9 @@ extends EcoSystem
 ## EcoLink.DRAG, сопротивление воды +0,025 за прилипалу. Стеклоуст не садится на корпус, где есть прилипалы
 ## (EcoEel.remoras, E.hullRemoras). Разряд по корпусу сбрасывает всех: плывут к ближайшему ледокрылу и минуту
 ## не перебираются снова. Сонар их не видит, сканер — видит (r 0,4).
+## Нос рыбы поворачивается плавно (turn: доля угла TURN_K/с, не быстрее TURN_MAX рад/с) — снялась со ската, доплыла
+## до места, сброшена разрядом — разворачивается, а не щёлкает носом; сидящая едет с носителем (carry): поворот ската
+## или корабля переносит её нос сразу, без отставания.
 ## Наблюдения: «ride» (ледокрыл с прилипалами ближе 40 м, раз в 2 мин), «hop» (первая на корпусе), «drag» (третья),
 ## «eel» (стеклоуст не сел, раз в 40 с), «zap».
 
@@ -21,6 +24,9 @@ const SWIM_SPEED := 8.0
 const ARRIVE := 0.3
 ## Вернулась на ската или сброшена разрядом — BACK_CD с не перебирается.
 const BACK_CD := 60.0
+## Поворот носа: доля угла TURN_K в секунду, не быстрее TURN_MAX рад/с.
+const TURN_K := 6.0
+const TURN_MAX := 6.0
 ## Обход корпуса, пока плывёт обратно (S.pushOut(rm.p, 0,2)).
 const SWIM_PAD := 0.2
 ## «ride» — ледокрыл ближе RIDE_R к кораблю, не чаще RIDE_CD с; «eel» — не чаще EEL_CD с.
@@ -56,6 +62,8 @@ class Remora:
 	var p := Vector3.ZERO
 	## Куда смотрит (нос рыбы).
 	var dir := Vector3.BACK
+	## Курс носителя (ската или корабля) на прошлом шаге — его поворот переносит нос сидящей; ZERO — не сидит.
+	var carry := Vector3.ZERO
 	## Пауза до следующего перехода на корпус.
 	var cd := 0.0
 	## Фаза взмахов хвоста.
@@ -115,7 +123,7 @@ func step(world: EcoWorld, dt: float) -> void:
 		match rm.mode:
 			Mode.RAY:
 				rm.p = anchor(s, rm)
-				rm.dir = rm.ray.dir
+				_ride(rm, rm.ray.dir, dt)
 				if rm.cd <= 0.0 and hop_cd <= 0.0 and rm.ray.p.distance_to(s.pos) < HOP_R:
 					var free := free_slot()
 					if free >= 0:
@@ -126,7 +134,7 @@ func step(world: EcoWorld, dt: float) -> void:
 				_swim(world, rm, dt)
 			Mode.HULL:
 				rm.p = anchor(s, rm)
-				rm.dir = s.nose()
+				_ride(rm, s.nose(), dt)
 	on_hull = 0
 	for rm in remoras:
 		if rm.mode == Mode.HULL:
@@ -156,11 +164,40 @@ func _swim(world: EcoWorld, rm: Remora, dt: float) -> void:
 			rm.cd = BACK_CD
 		return
 	rm.p += to * minf(1.0, SWIM_SPEED * dt / d)
-	rm.dir = to / d
+	rm.carry = Vector3.ZERO
+	rm.dir = turn(rm.dir, to / d, dt)
 	if rm.slot < 0:
 		var res := EcoHull.push_out(rm.p, s.pos, s.yaw, SWIM_PAD)
 		if not res.is_empty():
 			rm.p = res[0]
+
+
+## Сидит на носителе с курсом fwd: поворот носителя с прошлого шага переносит нос, затем нос доворачивает к fwd.
+func _ride(rm: Remora, fwd: Vector3, dt: float) -> void:
+	if rm.carry != Vector3.ZERO and fwd != Vector3.ZERO:
+		var a := atan2(rm.carry.cross(fwd).y, Vector2(rm.carry.x, rm.carry.z).dot(Vector2(fwd.x, fwd.z)))
+		rm.dir = rm.dir.rotated(Vector3.UP, a)
+	rm.carry = fwd
+	rm.dir = turn(rm.dir, fwd, dt)
+
+
+## Нос from доворачивает к want за dt: доля угла TURN_K/с, не быстрее TURN_MAX рад/с; навстречу — через верх (ось UP).
+static func turn(from: Vector3, want: Vector3, dt: float) -> Vector3:
+	if want.length_squared() < 1e-8:
+		return from
+	want = want.normalized()
+	if from.length_squared() < 1e-8:
+		return want
+	from = from.normalized()
+	var ang := from.angle_to(want)
+	if ang < 1e-4:
+		return want
+	var step := minf(ang * minf(1.0, TURN_K * dt), TURN_MAX * dt)
+	var axis := from.cross(want)
+	if axis.length_squared() < 1e-10:
+		var side := Vector3.UP if absf(from.y) < 0.9 else Vector3.RIGHT
+		axis = side - from * from.dot(side)
+	return from.rotated(axis.normalized(), step).normalized()
 
 
 ## Ледокрыл с прилипалами ближе RIDE_R — «ride» (раз в RIDE_CD с).
