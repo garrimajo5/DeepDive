@@ -1,7 +1,7 @@
 class_name SettingsPanel
 extends CanvasLayer
 ## Настройки ART-037 поверх затемнённой сцены (`main.settings_panel`, `menyu-nastrojki.png`): заголовок, «Назад»,
-## ползунки громкости и свайпа со значениями, «Камера с борта в начале забега» Вкл/Выкл, «Сбросить сохранение» и его
+## ползунки громкости и свайпа со значениями, страницы «Графика», «Звук» (шины `SoundPage`) и «Голос», «Камера с борта в начале забега» Вкл/Выкл, «Сбросить сохранение» и его
 ## подтверждение с выделенным «Нет». Состояние и места — `Settings`, масштаб — `Splash`, палитра — `MainMenu`.
 ## Слой выше главного меню и паузы (их 90), ниже заставки прогрева (100). Касания — `Main._settings_step`.
 
@@ -43,6 +43,9 @@ func _draw_settings() -> void:
 	if settings.page == "golos":
 		_draw_voice(font, s, size)
 		return
+	if settings.page == "zvuk":
+		_draw_sound(font, s, size)
+		return
 	var k := 0.35 if settings.ask else 1.0
 	_text(font, Settings.TITLE, Settings.TITLE_AT, Settings.TITLE_PX * s, Color(MainMenu.INK, k), size)
 	_button(font, Settings.screen_rect("back", size), "Назад", false, k, s)
@@ -54,6 +57,7 @@ func _draw_settings() -> void:
 		Color(MainMenu.INK, k), size)
 	_button(font, Settings.screen_rect("intro", size), "Вкл" if settings.intro else "Выкл", settings.intro, k, s)
 	_button(font, Settings.screen_rect("graphics", size), Settings.GRAPHICS_LABEL, false, k, s)
+	_button(font, Settings.screen_rect("zvuk", size), Settings.ZVUK_LABEL, false, k, s)
 	_button(font, Settings.screen_rect("golos", size), Settings.GOLOS_LABEL, false, k, s)
 	_button(font, Settings.screen_rect("reset", size), Settings.RESET_LABEL, false, k, s)
 	if not settings.ask:
@@ -115,6 +119,22 @@ func _draw_voice(font: Font, s: float, size: Vector2) -> void:
 		MainMenu.SOFT, size)
 	_button(font, VoicePage.screen_rect("v_hear", size), VoicePage.hear_text(settings.hear), false, 1.0, s)
 	_button(font, VoicePage.screen_rect("v_mic", size), VoicePage.mic_text(settings.mic_on), false, 1.0, s)
+
+
+## Страница «Настройки · Звук»: шесть ползунков шин (`SoundPage`) в две колонки, подпись про общую громкость.
+func _draw_sound(font: Font, s: float, size: Vector2) -> void:
+	_text(font, SoundPage.TITLE, Graphics.TITLE_AT, Graphics.TITLE_PX * s, MainMenu.INK, size)
+	_button(font, SoundPage.screen_rect("back", size), "Назад", false, 1.0, s)
+	var px := SoundPage.LABEL_PX * s
+	for i in SoundPage.count():
+		var id := SoundPage.id_of(i)
+		var c := SoundPage.column(i)
+		var top := SoundPage.label_top(i)
+		_text(font, SoundPage.label(i), Vector2(c.x, top), px, MainMenu.INK, size)
+		_value_at(font, settings.value_text(id), c.y, top, px, MainMenu.SOFT, size)
+		_slider(SoundPage.track_y(i), settings.fraction(id), settings.grab == id, 1.0, s, size, SoundPage.track_x(i))
+	_text(font, SoundPage.NOTE, Vector2(SoundPage.COLUMNS[0].x, SoundPage.NOTE_TOP), SoundPage.NOTE_PX * s,
+		MainMenu.SOFT, size)
 
 
 ## Дорожка на высоте y макета (от и до — track): залитая часть до доли f, ручка.

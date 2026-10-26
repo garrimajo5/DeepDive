@@ -249,8 +249,10 @@ func _point(what: String, dir: Vector2) -> Vector2:
 			return Comms.button_rect(area.size).get_center() + area.position
 		"lite_yes", "lite_no":   # «Да» / «Нет» предложения «Экономно» ART-044
 			return LiteOffer.screen_rect(what.substr(5), main.get_viewport().get_visible_rect().size).get_center()
-		"golos":   # «Голос» в настройках ART-041
-			return Settings.screen_rect("golos", main.get_viewport().get_visible_rect().size).get_center()
+		"golos", "zvuk":   # «Голос» ART-041 / «Звук» (громкости шин) в настройках
+			return Settings.screen_rect(what, main.get_viewport().get_visible_rect().size).get_center()
+		"s0":   # страница «Настройки · Звук»: середина ползунка «Музыка» — 50 %
+			return SoundPage.screen_rect(what, main.get_viewport().get_visible_rect().size).get_center()
 		"v_hold", "v_voice", "v_hear", "v_mic":   # страница «Настройки · Голос» ART-041: режим, приём, микрофон
 			return VoicePage.screen_rect(what, main.get_viewport().get_visible_rect().size).get_center()
 		"g0", "g1", "g2", "fps":   # страница «Настройки · Графика» ART-044: уровень, «Показывать кадры/с»

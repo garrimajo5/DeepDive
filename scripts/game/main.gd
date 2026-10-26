@@ -1278,7 +1278,7 @@ func _settings_step(r: Touch.Router) -> void:
 	for p in r.taps:
 		var id := settings.hit(p, size)
 		var what := settings.press(id, p, size)
-		if id in ["volume", "swipe", "mates"]:
+		if id == "swipe" or Settings.is_volume(id):
 			_apply_settings()
 			continue
 		_settings_do(what)
@@ -2342,7 +2342,7 @@ func _sound(dt: float) -> void:
 	sound_mix.outside = flyby.active()
 	sound_mix.tension = wreck.active() or alarms_on().slice(0, AlarmBoard.Field.size() - 1).has(true)
 	sound_mix.depth = helm.depth()
-	SoundMix.apply(sound_mix.update(dt))
+	SoundMix.apply(sound_mix.update(dt), settings.buses)   # × громкости шин из настроек («Звук»)
 	ambience.set_pair(sound_mix.ambient_pair())
 
 
