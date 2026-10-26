@@ -6,6 +6,8 @@ extends Node3D
 ## приподнимается; глаза — светящиеся шарики, в луче прожектора крупнее и ярче. Три MultiMesh — три вызова
 ## отрисовки; стоят на слое отмели (OceanView.LAYER_WORLD). Разброс монетников (Б4, EcoVary по номеру рыбки): свой
 ## размер, ритм покачивания и оттенок диска (цвет экземпляра × краска вершины) — стайка не клоны, мир не меняется.
+## Муть у дна (EcoCoinsDust: бросок глазуна — клуб песка кольцом у тела, сонар рассыпал стайку — облачка из-под
+## низко висевших рыбок) — дочерний MultiMesh «Муть» на общем шейдере EcoShaders.MIST: +1 вызов.
 
 const COIN := Color("e8d48a")
 const FIN := Color("b59a50")
@@ -32,6 +34,10 @@ var body_buffer := PackedFloat32Array()
 var eye_buffer := PackedFloat32Array()
 ## Разброс по номеру монетника: размер, ритм, оттенок r g b (хеш — раз, не в каждом кадре).
 var _vary := PackedFloat32Array()
+var dust := EcoCoinsDust.new()
+var dust_view: MultiMeshInstance3D
+var dust_buffer := PackedFloat32Array()
+var _dust_empty := false
 
 
 func _init(system: EcoCoins) -> void:
@@ -46,6 +52,8 @@ func _init(system: EcoCoins) -> void:
 			_vary[cn.index * 5 + q] = row[q]
 	bodies = _instance("Глазуны", build_glazun(), coins.glazuns.size(), false)
 	eyes = _instance("Глаза", build_eye(), coins.glazuns.size() * 2, true)
+	dust_view = GrazerView.build_dust(EcoCoinsDust.POOL)
+	add_child(dust_view)
 	visible = not coins.schools.is_empty()
 	sync(0.0)
 
@@ -67,8 +75,10 @@ func _instance(n: String, mesh: Mesh, count: int, colors: bool) -> MultiMeshInst
 	return mi
 
 
-## Расставить монетников и глазунов в момент t (время мира).
-func sync(t: float) -> void:
+## Расставить монетников и глазунов в момент t (время мира). ship — корабль (муть — ближе EcoGrazerDust.NEAR,
+## светлее в луче прожектора; null — мути нет), flow — течение мира (уносит муть).
+func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> void:
+	_sync_dust(t, ship, flow)
 	coin_buffer.resize(coins.coins.size() * STRIDE_C)
 	for cn in coins.coins:
 		var q := cn.index * 5
@@ -93,6 +103,17 @@ func sync(t: float) -> void:
 			eye_buffer[j + 12] = c.r; eye_buffer[j + 13] = c.g; eye_buffer[j + 14] = c.b; eye_buffer[j + 15] = 1.0
 	bodies.multimesh.buffer = body_buffer
 	eyes.multimesh.buffer = eye_buffer
+
+
+func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3) -> void:
+	dust.update(coins, t, ship.pos if ship else Vector3(INF, INF, INF))
+	var shown := dust.dust.shown(t)
+	if shown == 0 and _dust_empty and dust_buffer.size() == EcoCoinsDust.POOL * GrazerView.DUST_STRIDE:
+		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
+	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, ship, EcoCoinsDust.COLOR, EcoCoinsDust.LIT,
+			Seabed.mesh_height)
+	dust_view.multimesh.buffer = dust_buffer
+	_dust_empty = shown == 0
 
 
 ## Размер монетника (множитель формы).
