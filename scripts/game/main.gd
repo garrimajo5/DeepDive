@@ -58,6 +58,7 @@ var ambience: Ambience   ## фон забега: эмбиент за борто�
 var sound_mix := SoundMix.Mix.new()  ## сведение шин звука (docs/zvuk.md): меню, пауза, вид с борта, тревога — Main._sound
 ## Прогрев шейдеров при старте (Warmup, issue #50): шторка, камера оглядывает корабль, скрытое показано на кадр.
 var warm := Warmup.new()
+var timeline := RunTimeline.new()   ## хронометраж забега (#633): лента и сводка в user://zabegi.txt
 var curtain: WarmSplash   ## заставка прогрева (ART-034), после прогрева — null
 var _warm_drawn := false            ## прошлый шаг показал взгляд прогрева
 var _warm_shown: Array[Node] = []   ## что прогрев показал на кадр — вернуть скрытым
@@ -566,6 +567,8 @@ func start_qa(text: String = "") -> QaRunner:
 	qa = QaRunner.new()
 	qa.name = "Сценарий тестера"
 	add_child(qa)
+	timeline.path = QaRunner.OUT + "/zabeg.txt"   # хронометраж прогона — рядом с логом, файл игрока не трогаем
+	timeline.forget()
 	qa.start(self, text)
 	return qa
 
@@ -624,6 +627,7 @@ func _notification(what: int) -> void:
 		back_pressed()
 	elif what in [NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_APPLICATION_FOCUS_OUT]:
 		save.flush(samples, scanner)
+		timeline.save(Time.get_datetime_string_from_system(false, true))   # недописанный забег — «не закончен»
 	elif what == NOTIFICATION_EXIT_TREE:
 		if net_host:
 			net_host.stop()
@@ -797,6 +801,7 @@ func step(dt: float) -> void:
 	var run_msg := run.update(helm.pos.x, helm.pos.z)
 	if not run_msg.is_empty():
 		announce(run_msg)
+		timeline.mark(time, run_msg)
 	expedition.visit(helm.pos.x, helm.pos.z)   # журнал ART-047: места и рекорд глубины
 	expedition.dive_depth(helm.depth())
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
@@ -812,6 +817,9 @@ func step(dt: float) -> void:
 		overlay.set_light(false)
 		say("Прожектор погас: не хватает энергии")
 	vitals.hull = breach.update(dt, reactor.k(Reactor.Sys.LIFE), vitals.hull)
+	timeline.watch(time, {"пробоина": breach.active != null, "сонарная тьма": silt.inside != null,
+		"присоска": vitals.drain_left > 0.0, "перегрев": reactor.hot, "сброс реактора": reactor.scram > 0.0,
+		"голосование": at_vote}, vitals.hull, helm.depth())
 	breach_view.apply(dt)   # и частицы ART-072
 	_drive_mates(dt)
 	_tick_vote(dt)
@@ -1129,6 +1137,7 @@ func fire_zap() -> void:
 	if zap.fired_at(time):
 		eco_ship.zap = true
 		eco_ship.zap_radius = zap.radius
+		timeline.mark(time, "разряд")
 		if scorch.add(helm.pos, Seabed.height(helm.pos.x, helm.pos.z), reactor.k(Reactor.Sys.ZAP), time):
 			ocean.set_scorch(scorch.uniforms(time))   # разряд у дна — след под корпусом
 	say(msg)
@@ -1943,6 +1952,7 @@ func _wreck_step(dt: float) -> bool:
 		return false
 	if wreck.update(dt):
 		expedition.end_run()
+		timeline.finish(time, "корпус разрушен", Time.get_datetime_string_from_system(false, true))
 		_restart()
 		say("Корпус разрушен. Ковчег поднят к началу спуска")
 	_wreck_show()
@@ -1991,6 +2001,7 @@ func _restart() -> void:
 
 func _begin_run() -> void:
 	run.begin(time, samples.cargo.size(), scanner.scanned.size(), breach.count)
+	timeline.begin(time)
 	if intro and settings.intro:
 		flyby.start(Flyby.Kind.START)   # облёт корабля с борта, затем — глаза на мостике
 		say(Flyby.START_MSG)
@@ -2025,10 +2036,12 @@ func decide(choice: String) -> void:
 		for m: Crew.Member in crew:   # все у стола отходят: маршрут выбирать заново
 			m.at_vote = false
 		vote_panel.visible = false
+		timeline.mark(time, "решили: глубже")
 		announce(run.go_deeper())   # гостям — тоже
 		return
 	var rows := run.finish(time, samples.cargo.size(), scanner.scanned.size(), breach.count, vitals.hull)
 	expedition.end_run()
+	timeline.finish(time, "наверх, очки %d" % run.score, Time.get_datetime_string_from_system(false, true))
 	result_rows = run.summary(samples.cargo.size(), scanner.scanned.size(), breach.count)
 	result_detail = Run.detail(rows)
 	vote_panel.show_results(result_detail, run.score)

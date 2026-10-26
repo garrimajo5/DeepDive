@@ -464,6 +464,7 @@ func _log(line: String) -> void:
 
 func _finish() -> void:
 	_log("Готово | " + state())
+	main.timeline.save()   # хронометраж забега прогона — qa/out/zabeg.txt
 	var f := FileAccess.open(OUT + "/done.txt", FileAccess.WRITE)
 	if f:
 		f.store_string("ok\n")
