@@ -138,7 +138,10 @@ func tick(dt: float) -> void:
 					main.walker.y = c[2]
 					main.walker.pitch = deg_to_rad(c[3])
 			"breach":
-				main.open_breach(c[1])
+				if c[1] < 0:
+					main.close_breach()
+				else:
+					main.open_breach(c[1])
 			"route":
 				main.complete_route()
 			"silt":

@@ -243,6 +243,47 @@ func test_silt_step() -> void:
 	eq(out[1], ["silt", false], "убрать ил")
 
 
+## Отчёты тестера 0010…0215 26.10: на 32-kaustiki «ПРОБОИНА · МОСТИК» от случайного удара на шагах связи 31.
+func test_breach_off_step() -> void:
+	var q := QaScript.parse('[{"do": "breach", "n": 2}, {"do": "breach", "on": false}]')
+	eq(q.errors.size(), 0, "шаг breach с on известен")
+	var out := q.advance(0.1)
+	eq(out[0], ["breach", 2], "пробоина в лаборатории")
+	eq(out[1], ["breach", -1], "закрыть пробоину")
+
+
+func test_close_breach_clears_state() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.open_breach(0)
+	for i in 60:
+		main.step(1.0 / 30.0)
+	ok(main.breach.active != null and main.breach.water > 0.0, "пробоина открыта, вода пошла")
+	main.close_breach()
+	ok(main.breach.active == null, "пробоины нет")
+	eq(main.breach.water, 0.0, "воды нет")
+	eq(main.breach.status(), "", "в строке приборов о пробоине ничего")
+	ok(not main.breach.on_hit(50, 100.0), "сразу после — удар борт не пробивает")
+	main.queue_free()
+	await frames(1)
+
+
+func test_caustics_shot_starts_clean() -> void:
+	var steps: Array = JSON.parse_string(FileAccess.get_file_as_string("res://tools/qa/scenario.json"))
+	var closed := false
+	var whole := false
+	for st in steps:
+		if st["do"] == "breach":
+			closed = not bool(st.get("on", true))
+		if st["do"] == "hull":
+			whole = float(st["pct"]) >= 100.0
+		if st["do"] == "shot" and st["name"] == "32-kaustiki":
+			break
+	ok(closed, "перед 32-kaustiki пробоина закрыта")
+	ok(whole, "и корпус целый")
+
+
 func test_drain_step() -> void:   # issue #131: тревога о стеклоусте видна в прогоне тестера
 	var q := QaScript.parse('[{"do": "drain", "s": 2.5}]')
 	eq(q.errors.size(), 0, "шаг drain известен")

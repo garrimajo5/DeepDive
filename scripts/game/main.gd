@@ -1027,6 +1027,14 @@ func open_breach(n: int) -> void:
 	breach_view.apply()
 
 
+## Убрать пробоину и воду без следа (сценарий тестера: чистый кадр 32-kaustiki после случайных ударов).
+## Новая пробоина от удара не откроется ещё Breach.COOLDOWN секунд.
+func close_breach() -> void:
+	breach.reset()
+	breach.cd = Breach.COOLDOWN
+	breach_view.apply()
+
+
 ## Поставить корабль над образцом n: шлюз в 8 м над ним, корабль стоит, шлюз открыт (сценарий тестера, снимки).
 func park_over_sample(n: int) -> void:
 	var smp: Samples.Sample = samples.all[clampi(n, 0, samples.all.size() - 1)]
