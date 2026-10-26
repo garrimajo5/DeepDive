@@ -7,7 +7,8 @@ extends MultiMeshInstance3D
 ## Хвост и корма гнутся бегущей волной (EcoFishLook.tail_wave, Б3): фаза особи — альфа цвета экземпляра (Godot множит
 ## цвет экземпляра на цвет вершины, у вершин альфа 1); «Экономно» — sway_k = 0 через EcoShaders.follow / set_sway_lite.
 ## Грудные плавники гребут вверх-вниз (EcoFishLook.fin_flap, вес — канал b цвета вершины): у светляка вес 0, тот же
-## шейдер рисует пестрянок (HvatenView, форма EcoPestrLook). Стоит на слое отмели (OceanView.LAYER_WORLD).
+## шейдер рисует пестрянок (HvatenView, форма EcoPestrLook). Переливы чешуи по углу (EcoIris, Б2) — uniform iris,
+## сдвиг оттенка — от фазы особи; у пестрянок iris = 0, «Экономно» — EcoIris.set_lite. Стоит на слое отмели (OceanView.LAYER_WORLD).
 
 const SHADER := """
 shader_type spatial;
@@ -16,7 +17,9 @@ uniform vec3 body_color : source_color;
 uniform float sway_k = 1.0;
 uniform float rough = 0.6;
 uniform float spec = 0.5;
+uniform float iris = 0.0;
 varying vec3 glow;
+varying float phase;
 varying float paint;
 varying float shade;
 void vertex() {
@@ -25,16 +28,21 @@ void vertex() {
 	paint = COLOR.r;
 	// волна хвоста — двойник EcoFishLook.tail_wave
 	float a = COLOR.a;
+	phase = a;
 	float s = clamp((%s - VERTEX.z) / %s, 0.0, 1.0);
 	float rate = %s * (%s + %s * fract(a * 7.13));
 	VERTEX.x += sin(TIME * rate + a * 6.2831853 + VERTEX.z * %s) * %s * s * s * sway_k;
 	// взмах грудных плавников (вес — канал b, у светляка 0) — двойник EcoFishLook.fin_flap
 	VERTEX.y += sin(TIME * %s + a * 6.2831853 + sign(VERTEX.x) * %s) * %s * COLOR.b * sway_k;
 }
+%s
 void fragment() {
+	// перелив чешуи по углу к взгляду (EcoIris, Б2): к телу, под светом; у пестрянок iris = 0
+	float ndv = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
+	vec3 body = body_color * shade + iris_film(ndv, fract(phase) * %s) * iris_weight(ndv) * iris;
 	// полоса — узкая середина кольца, конец хвоста — канал g
 	float p = smoothstep(0.55, 0.95, paint) + COLOR.g;
-	ALBEDO = mix(body_color * shade, glow * 0.3, clamp(p, 0.0, 1.0));
+	ALBEDO = mix(body, glow * 0.3, clamp(p, 0.0, 1.0));
 	ROUGHNESS = rough;
 	SPECULAR = spec;
 	EMISSION = glow * p * 1.8;
@@ -81,6 +89,7 @@ static func build_mesh() -> ArrayMesh:
 	var mat := ShaderMaterial.new()
 	mat.shader = EcoShaders.shader(shader_code())
 	mat.set_shader_parameter("body_color", EcoFishLook.BODY_COLOR)
+	EcoIris.apply(mat, EcoIris.FISH)
 	mesh.surface_set_material(0, EcoShaders.follow(mat))
 	return mesh
 
@@ -89,7 +98,8 @@ static func build_mesh() -> ArrayMesh:
 static func shader_code() -> String:
 	var L := EcoFishLook
 	return SHADER % [_f(L.TAIL_FROM), _f(L.TAIL_FROM - L.TAIL_TIP), _f(L.TAIL_RATE), _f(1.0 - L.TAIL_RATE_SPREAD),
-		_f(2.0 * L.TAIL_RATE_SPREAD), _f(L.TAIL_K), _f(L.TAIL_AMP), _f(L.PEC_RATE), _f(L.PEC_SKEW), _f(L.PEC_AMP)]
+		_f(2.0 * L.TAIL_RATE_SPREAD), _f(L.TAIL_K), _f(L.TAIL_AMP), _f(L.PEC_RATE), _f(L.PEC_SKEW), _f(L.PEC_AMP),
+		EcoIris.glsl(), _f(EcoIris.SHIFT)]
 
 
 static func _f(x: float) -> String:
