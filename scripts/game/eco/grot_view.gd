@@ -6,6 +6,8 @@ extends Node3D
 ## риф на спине — 11 веток огнецвета (#b35933) и 6 мшистых бугров (#59cc8c), свечение #2a1004; светящиеся кончики
 ## веток и жёлтые глаза — отдельный меш без освещения. Четыре вызова отрисовки, ≈ 1,6 тыс. треугольников;
 ## слой отмели (OceanView.LAYER_WORLD); дальше FAR от корабля не виден в мути.
+## Муть у дна (EcoGrotDust: облачко у ступни на каждом шаге, панцирь осел — клуб у обода, ноги снова выпущены — у
+## ступней) — дочерний MultiMesh «Муть» на общем шейдере мира (+1 вызов).
 
 const SHELL := Color("5b5a4a")
 const RIM := Color("3e3b30")
@@ -34,6 +36,10 @@ var body: MeshInstance3D
 var legs: MeshInstance3D
 var reef: MeshInstance3D
 var glow: MeshInstance3D
+var dust := EcoGrotDust.new()
+var dust_view: MultiMeshInstance3D
+var dust_buffer := PackedFloat32Array()
+var _dust_empty := false
 
 
 func _init(system: EcoGrot) -> void:
@@ -49,6 +55,8 @@ func _init(system: EcoGrot) -> void:
 	bright.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	bright.vertex_color_use_as_albedo = true
 	glow = _mesh("Огоньки", build_glow(), bright)
+	dust_view = GrazerView.build_dust(EcoGrotDust.POOL)
+	add_child(dust_view)
 	sync(0.0, Vector3.ZERO)
 
 
@@ -73,8 +81,10 @@ static func _lit(emission: Color) -> StandardMaterial3D:
 	return mat
 
 
-## Поставить гротовика в момент t (время мира); ship — центр корабля (дальше FAR — спрятан).
-func sync(t: float, ship: Vector3) -> void:
+## Поставить гротовика в момент t (время мира); ship — центр корабля (дальше FAR — спрятан). info — корабль целиком
+## (муть светлее в луче прожектора), flow — течение мира (уносит муть).
+func sync(t: float, ship: Vector3, info: EcoLink.ShipState = null, flow := Vector3.ZERO) -> void:
+	_sync_dust(t, ship, info, flow)
 	var gr := grots.grot
 	visible = gr != null and Vector3(gr.p.x, gr.body_y, gr.p.z).distance_to(ship) < FAR
 	if not visible:
@@ -82,6 +92,17 @@ func sync(t: float, ship: Vector3) -> void:
 	group.transform = Transform3D(Basis(Vector3.UP, gr.yaw), Vector3(gr.p.x, gr.body_y, gr.p.z))
 	legs.rotation = Vector3(sin(t * 2.2) * 0.08 if gr.moving() else 0.0, 0.0, 0.0)
 	legs.scale = Vector3(1.0, 0.35 + 0.65 * gr.lift, 1.0)
+
+
+func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3) -> void:
+	dust.update(grots, t, ship)
+	var shown := dust.dust.shown(t)
+	if shown == 0 and _dust_empty and dust_buffer.size() == EcoGrotDust.POOL * GrazerView.DUST_STRIDE:
+		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
+	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, info, EcoGrotDust.COLOR, EcoGrotDust.LIT,
+			Seabed.mesh_height)
+	dust_view.multimesh.buffer = dust_buffer
+	_dust_empty = shown == 0
 
 
 ## Панцирь (верхняя половина эллипсоида), обод по краю и голова спереди.
