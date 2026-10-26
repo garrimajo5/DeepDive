@@ -55,6 +55,7 @@ var zap_light: OmniLight3D   ## вспышка разряда вокруг ко�
 var drain_sound: AudioStreamPlayer   ## шипение тревоги, пока на корпусе присоска (Synth.latch)
 var drain_hisses := 0                ## сколько раз шипела тревога присоски (для тестов)
 var ambience: Ambience   ## фон забега: эмбиент за бортом и гул корабля (SND-001), доли по глубине — Main._sound
+var ship_sounds: ShipSounds   ## разовые звуки корабля SND-002: импульс сонара, удары, скрежет (`HullSound`)
 var sound_mix := SoundMix.Mix.new()  ## сведение шин звука (docs/zvuk.md): меню, пауза, вид с борта, тревога — Main._sound
 ## Прогрев шейдеров при старте (Warmup, issue #50): шторка, камера оглядывает корабль, скрытое показано на кадр.
 var warm := Warmup.new()
@@ -187,6 +188,8 @@ func _ready() -> void:
 	SoundMix.ensure()   # шины звука — до первых плееров
 	ambience = Ambience.new()
 	add_child(ambience)
+	ship_sounds = ShipSounds.new()
+	add_child(ship_sounds)
 	_build_world()
 	ocean = OceanView.new()
 	ocean.name = "Отмель"
@@ -1125,8 +1128,10 @@ func ping_sonar(everyone: bool = false) -> void:
 		vitals.spend(Vitals.SONAR_COST)
 		eco_ship.sonar_ping = true   # существа слышат импульс и в иле
 		eco_ship.sonar_range = Sonar.range_for(reactor.k(Reactor.Sys.SONAR))
-		if silt.jam_ping(time):
+		var jam := silt.jam_ping(time)
+		if jam:
 			msg = Silt.JAM_MSG
+		ship_sounds.play_ping(jam)
 	if not msg.is_empty():
 		tell.call(msg)
 
@@ -1205,6 +1210,7 @@ func on_eco_event(e: Dictionary) -> void:
 
 
 func _on_hit(percent: int, kind: String) -> void:
+	ship_sounds.play_hit(percent, kind)   # SND-002: удар или скрежет на шине «Корабль»
 	lock_water.on_hit()   # рябь в шахте шлюза вспыхивает (ART-073)
 	if kind == "scrape":   # удар о дно поднимает ил
 		silt.on_scrape(helm.pos, Seabed.height(helm.pos.x, helm.pos.z))
