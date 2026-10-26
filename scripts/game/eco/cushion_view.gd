@@ -4,6 +4,8 @@ extends Node3D
 ## с бархатными полипами (цвет по высоте: розовые у дна, светлее к макушке, слабое своё свечение #1a0a14), сжатая
 ## подушка ниже и уже. Облака чернил — второй MultiMesh из плоских тёмных пятен 2,4 м лицом к камере (смешивание
 ## по прозрачности, без записи глубины, общий шейдер EcoShaders.MIST): тёмно-синие, тают последние 2 с. Стоит на слое отмели (OceanView.LAYER_WORLD).
+## Муть у дна (EcoCushionDust: сжалась — клуб ила кольцом вокруг основания) — дочерний MultiMesh «Муть» на том же
+## шейдере MIST, +1 вызов.
 
 ## Подушка: полусфера радиуса 1 м, сплюснутая по ширине и высоте (g.scale(1.1, 0.75, 1)).
 const SHAPE := Vector3(1.1, 0.75, 1.0)
@@ -26,6 +28,11 @@ var pad_buffer := PackedFloat32Array()
 var ink_buffer := PackedFloat32Array()
 ## Подушки, чьё облако в буфере ещё видно: без чернил буфер облака не пишется и не грузится заново (issue #133).
 var _ink_shown := PackedByteArray()
+## Муть у дна и её последний буфер (для тестов).
+var dust := EcoCushionDust.new()
+var dust_view: MultiMeshInstance3D
+var dust_buffer := PackedFloat32Array()
+var _dust_empty := false
 
 
 func _init(system: EcoCushion) -> void:
@@ -34,6 +41,8 @@ func _init(system: EcoCushion) -> void:
 	var n := cushions.cushions.size()
 	pads = _instance("Подушки", build_pad(), n, false)
 	ink = _instance("Чернила", build_ink(), n * EcoCushion.INK_N, true)
+	dust_view = GrazerView.build_dust(EcoCushionDust.POOL)
+	add_child(dust_view)
 	sync(0.0)
 
 
@@ -92,8 +101,10 @@ static func build_ink() -> QuadMesh:
 	return m
 
 
-## Расставить подушки и облака в момент t (время мира).
-func sync(t: float) -> void:
+## Расставить подушки и облака в момент t (время мира). ship_pos — корабль (задел ли он подушку, дальние не пылят),
+## info — корабль целиком (муть светлее в луче прожектора), flow — течение мира (уносит муть).
+func sync(t: float, ship_pos := Vector3.ZERO, info: EcoLink.ShipState = null, flow := Vector3.ZERO) -> void:
+	_sync_dust(t, ship_pos, info, flow)
 	pad_buffer.resize(pads.multimesh.instance_count * STRIDE)
 	var fresh := ink_buffer.size() != ink.multimesh.instance_count * STRIDE_C
 	ink_buffer.resize(ink.multimesh.instance_count * STRIDE_C)
@@ -118,6 +129,17 @@ func sync(t: float) -> void:
 	pads.multimesh.buffer = pad_buffer
 	if ink_changed:
 		ink.multimesh.buffer = ink_buffer
+
+
+func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3) -> void:
+	dust.update(cushions, t, ship)
+	var shown := dust.dust.shown(t)
+	if shown == 0 and _dust_empty and dust_buffer.size() == EcoCushionDust.POOL * GrazerView.DUST_STRIDE:
+		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
+	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, info, EcoCushionDust.COLOR, EcoCushionDust.LIT,
+			Seabed.mesh_height)
+	dust_view.multimesh.buffer = dust_buffer
+	_dust_empty = shown == 0
 
 
 static func _put(buf: PackedFloat32Array, i: int, tr: Transform3D) -> void:
