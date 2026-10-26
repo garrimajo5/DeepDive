@@ -114,7 +114,8 @@ func test_unfinished_saved_then_completed() -> void:
 	r.watch(30.0, {"пробоина": true}, 100.0, 0.0)
 	r.save("2026-10-26 11:00:00")   # свернули игру
 	var text := FileAccess.get_file_as_string(TEST_PATH)
-	ok(text.begins_with("Забег 1, не закончен · 2026-10-26 11:00:00 · 00:30 · идёт"), "недописанный: %s" % text)
+	ok(text.begins_with("Забег 1 · 2026-10-26 11:00:00 · 00:30 · не закончен"),
+		"недописанный — шапка как у законченных (#692): %s" % text)
 	ok(r._on.has("пробоина") and r.spans[0][2] < 0.0, "запись не закрыла идущую пробоину")
 	r.watch(50.0, {"пробоина": false}, 100.0, 0.0)   # вернулись и доиграли
 	r.finish(60.0, "наверх")
@@ -122,6 +123,59 @@ func test_unfinished_saved_then_completed() -> void:
 	ok(text.begins_with("Забег 1 · 01:00 · наверх"), "дописан вместо недописанного: %s" % text)
 	ok(not text.contains("не закончен"), "недописанного больше нет")
 	ok(text.contains("00:50 пробоина — кончилось (00:20)"), "пробоина закрыта по-настоящему")
+
+
+## #692: сценарий тестера ставит износ корпуса — это не удар.
+func test_set_hull_not_a_hit() -> void:
+	var r := _tl()
+	r.begin(0.0)
+	r.watch(1.0, {}, 100.0, 0.0)
+	r.set_hull(2.0, 30.0)
+	r.watch(2.0, {}, 30.0, 0.0)
+	r.set_hull(3.0, 15.0)
+	r.watch(3.0, {}, 15.0, 0.0)
+	r.watch(4.0, {}, 5.0, 0.0)   # а это настоящий удар
+	var lines := r.finish(20.0, "наверх")
+	ok(lines.has("00:02 корпус задан: 30%"), "износ сценария помечен: %s" % [lines])
+	ok(not lines.has("00:02 удар: корпус 30%"), "и не удар")
+	ok(lines.has("00:04 удар: корпус 5%"), "настоящий удар остался")
+	ok(lines[-1].contains("ударов 1"), "в сводке один удар: %s" % lines[-1])
+
+
+## #692: перегрев на кадр снимка (00:00) — мигание, в ленту и сводку не идёт; идущие рядом не сбиваются.
+func test_blink_dropped() -> void:
+	var r := _tl()
+	r.begin(0.0)
+	r.watch(5.0, {"пробоина": true, "перегрев": false}, 100.0, 0.0)
+	r.watch(10.0, {"пробоина": true, "перегрев": true}, 100.0, 0.0)
+	r.watch(10.2, {"пробоина": true, "перегрев": false}, 100.0, 0.0)
+	r.watch(20.0, {"пробоина": false, "перегрев": false}, 100.0, 0.0)
+	var lines := r.finish(30.0, "наверх")
+	for l in lines:
+		ok(not l.contains("перегрев"), "мигнувшего перегрева нет: %s" % l)
+	ok(lines.has("00:20 пробоина — кончилось (00:15)"), "пробоина закрыта своим отрезком: %s" % [lines])
+	eq(r.spans.size(), 1, "один отрезок")
+
+
+func test_unfinished_without_stamp_same_header() -> void:
+	var r := RunTimeline.new()
+	r.path = TEST_PATH
+	r.begin(0.0)
+	r.watch(23.0, {}, 100.0, 0.0)
+	r.save()
+	var head := FileAccess.get_file_as_string(TEST_PATH).get_slice("\n", 0)
+	eq(head, "Забег 1 · 00:23 · не закончен", "без даты — тот же разделитель")
+
+
+func test_old_unfinished_header_loads() -> void:
+	var f := FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	f.store_string("Забег 3, не закончен · 00:23 · идёт\n00:00 начало\n\nЗабег 2 · 00:11 · корпус разрушен\n")
+	f.close()
+	var r := RunTimeline.new()
+	r.path = TEST_PATH
+	r._load()
+	eq(r._n, 3, "номер из старой шапки")
+	eq(r._old.size(), 2)
 
 
 func test_killed_run_stays_in_file() -> void:
