@@ -38,8 +38,11 @@ var reef: MeshInstance3D
 var glow: MeshInstance3D
 var dust := EcoGrotDust.new()
 var dust_view: MultiMeshInstance3D
-var dust_buffer := PackedFloat32Array()
-var _dust_empty := false
+## Буфер мути (EcoDustBuffer, issue #732).
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
 
 
 func _init(system: EcoGrot) -> void:
@@ -96,13 +99,10 @@ func sync(t: float, ship: Vector3, info: EcoLink.ShipState = null, flow := Vecto
 
 func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3) -> void:
 	dust.update(grots, t, ship)
-	var shown := dust.dust.shown(t)
-	if shown == 0 and _dust_empty and dust_buffer.size() == EcoGrotDust.POOL * GrazerView.DUST_STRIDE:
-		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
-	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, info, EcoGrotDust.COLOR, EcoGrotDust.LIT,
+	_dust.pack(dust.dust, t, flow, info, EcoGrotDust.COLOR, EcoGrotDust.LIT,
 			Seabed.mesh_height)
-	dust_view.multimesh.buffer = dust_buffer
-	_dust_empty = shown == 0
+	if _dust.changed:   # мути нет и не было — буфер тот же, не грузим (issue #133)
+		dust_view.multimesh.buffer = _dust.data
 
 
 ## Панцирь (верхняя половина эллипсоида), обод по краю и голова спереди.

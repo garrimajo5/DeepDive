@@ -54,8 +54,11 @@ var fold_mat: StandardMaterial3D
 var _glow := HUSH
 var dust := EcoEchoDust.new()
 var dust_view: MultiMeshInstance3D
-var dust_buffer := PackedFloat32Array()
-var _dust_empty := false
+## Буфер мути (EcoDustBuffer, issue #732).
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
 
 
 func _init(system: EcoEcho) -> void:
@@ -122,13 +125,10 @@ func sync(t: float, ship: Vector3, info: EcoLink.ShipState = null, flow := Vecto
 
 func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3) -> void:
 	dust.update(echoes, t, ship)
-	var shown := dust.dust.shown(t)
-	if shown == 0 and _dust_empty and dust_buffer.size() == EcoEchoDust.POOL * GrazerView.DUST_STRIDE:
-		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
-	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, info, EcoEchoDust.COLOR, EcoEchoDust.LIT,
+	_dust.pack(dust.dust, t, flow, info, EcoEchoDust.COLOR, EcoEchoDust.LIT,
 			Seabed.mesh_height)
-	dust_view.multimesh.buffer = dust_buffer
-	_dust_empty = shown == 0
+	if _dust.changed:   # мути нет и не было — буфер тот же, не грузим (issue #133)
+		dust_view.multimesh.buffer = _dust.data
 
 
 ## Тело: две капсулы, голова, челюсть, лапы и хвост; бледные полосы поперёк спины.
