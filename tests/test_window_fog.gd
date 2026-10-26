@@ -93,3 +93,25 @@ func test_scene_fog_follows_depth() -> void:
 	near(m.get_shader_parameter("humidity"), main.window_fog.humidity, 1e-4, "в стекле — сглаженная влажность")
 	main.queue_free()
 	await frames(1)
+
+
+## Полный вариант (window_glass_wet, «Красиво»): веса слоёв и сдвиг преломления.
+func test_wet_twins() -> void:
+	var w := WindowFog.wet_weights(0.1, 0.0, 0.0, 0.0)
+	near(w.x, 0.1, 1e-6, "чистое место — исходное стекло ART-057")
+	near(w.y + w.z, 0.0, 1e-6, "без капель — ни инея, ни вида сквозь каплю")
+	for c in [[0.1, 1.0, 0.0, 0.5], [0.2, 0.6, 0.8, 0.0], [0.07, 0.3, 0.3, 1.0]]:
+		var q := WindowFog.wet_weights(c[0], c[1], c[2], c[3])
+		ok(c[0] + q.y <= q.x + 1e-6, "исходное стекло и холодный слой — в пределах альфы %s" % [c])
+		near(q.x, 1.0 - (1.0 - c[0]) * (1.0 - 0.72 * c[2]) * (1.0 - 0.09 * c[3]) * (1.0 - 0.16 * c[1]), 1e-6)
+		ok(q.x < 0.8, "капли и иней не глухие: %.2f" % q.x)
+	near(WindowFog.wet_weights(0.1, 1.0, 0.0, 0.0).x, WindowFog.alpha(0.1, 1.0, 0.0), 1e-6,
+		"капля закрывает фон лишь плёнкой, как в «Обычно» (копия экрана темнее настоящего фона)")
+	ok(WindowFog.wet_weights(0.1, 1.0, 0.0, 0.0).z > 0.4, "капля в основном показывает мир за стеклом")
+	near(WindowFog.wet_weights(0.1, 1.0, 1.0, 0.0).z, 0.0, 1e-6, "под инеем вида сквозь каплю нет")
+	near(WindowFog.bead(0.0, 1.0), 0.0, 1e-6, "мениск только у капли")
+	near(WindowFog.bead(1.0, 1.0), 0.0, 1e-6, "и не на вершине")
+	ok(WindowFog.bead(0.3, 1.0) > 0.9)
+	near(WindowFog.bead(0.3, 0.0), 0.0, 1e-6, "сухое стекло — без мениска")
+	eq(WindowFog.wet_offset(Vector2(10, 10)), Vector2(0.002, -0.002), "сдвиг экрана ограничен 0,002")
+	near(WindowFog.wet_offset(Vector2(0.1, 0.0)).x, 0.0009, 1e-7)

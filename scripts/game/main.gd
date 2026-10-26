@@ -1384,6 +1384,7 @@ func _apply_graphics(level: int) -> void:
 		hull.set_relief(not lite)     # обшивка ART-053
 	if bridge:
 		bridge.set_relief(not lite)   # мостик ART-054
+		bridge.set_wet(g.get("wet", false))   # капли ART-077 с преломлением — только «Красиво»
 	if rooms:
 		rooms.set_relief(not lite)    # отсеки ART-055
 		rooms.drops.lite = lite       # капли износа ART-074: 12 карточек

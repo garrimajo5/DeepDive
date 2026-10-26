@@ -75,7 +75,7 @@ func test_scene_runs_scenario() -> void:
 	var no_answer := false   # 29f: экран адреса ART-039 дождался «Нет ответа»
 	var crowded: Array[String] = []   # issue #602: на снимке товарищ вплотную к камере — кадр закрыт его головой
 	var mate_weld_seen := false   # 26b: шов в кадре, его варит товарищ
-	for i in 4200:  # 140 с игры (сценарий идёт ~128 с)
+	for i in 4800:  # 160 с игры (сценарий идёт ~148 с)
 		# снимок берёт уже нарисованный кадр — камеру до шага, в котором он снят
 		var cam := main.camera
 		var table_vis := cam.is_position_in_frustum(table.global_position + table.global_basis.y * 0.9)
@@ -428,11 +428,12 @@ func test_caustics_shot_under_cracks() -> void:
 	var steps: Array = JSON.parse_string(raw)
 	var ship := {}
 	var fly := {}
-	for st in steps:
+	for st in steps:   # корабль — последний перед полётом под днище (дальше в сценарии — другие стоянки)
 		if st["do"] == "ship":
 			ship = st
 		if st["do"] == "fly" and st.get("on", true):
 			fly = st
+			break
 	ok(not ship.is_empty() and not fly.is_empty(), "в сценарии есть вид на дно под трещинами")
 	var at := Vector3(float(ship["x"]), 0.0, float(ship["z"]))
 	ok(LightShafts.near(LightShafts.layout(), at, 25.0).size() > 0, "рядом шахты света — над дном трещины")

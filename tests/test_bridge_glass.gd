@@ -70,3 +70,58 @@ func test_material_and_economy() -> void:
 	ok(not v.glass_mat.get_shader_parameter("relief"), "мигание не трогает материал стекла (альфа остаётся)")
 	v.queue_free()
 	await frames(1)
+
+
+## Полный конденсат ART-077 только на «Красиво»: копия экрана (hint_screen_texture) есть лишь в шейдере wet.
+func test_wet_only_on_beauty() -> void:
+	ok(not Graphics.level(Graphics.ECONOMY)["wet"] and not Graphics.level(Graphics.NORMAL)["wet"],
+		"«Экономно» и «Обычно» — без экранного буфера (до замера на телефоне)")
+	ok(Graphics.level(Graphics.BEAUTY)["wet"], "«Красиво» — капли с преломлением")
+	var dry := FileAccess.get_file_as_string("res://shaders/window_glass.gdshader") \
+		+ FileAccess.get_file_as_string("res://shaders/window_glass.gdshaderinc")
+	ok(dry.contains("WET_REFRACT"), "преломление в общем теле — под #ifdef")
+	ok(not FileAccess.get_file_as_string("res://shaders/window_glass.gdshader").contains("#define WET_REFRACT"),
+		"обычное стекло не включает полный вариант")
+	ok(FileAccess.get_file_as_string("res://shaders/window_glass_wet.gdshader").contains("#define WET_REFRACT"))
+	var plain := (BridgeView.GLASS_SHADER as Shader).get_shader_uniform_list().map(func(u): return u["name"])
+	ok(not plain.has("screen"), "обычное стекло не читает экран: %s" % [plain])
+	var wet := (BridgeView.GLASS_WET_SHADER as Shader).get_shader_uniform_list().map(func(u): return u["name"])
+	ok(wet.has("humidity") and wet.has("mask"), "полный вариант — те же uniform: %s" % [wet])
+
+
+func test_set_wet_keeps_values() -> void:
+	var v := BridgeView.new()
+	tree.root.add_child(v)
+	await frames(1)
+	ok(not v.is_wet(), "по умолчанию — без преломления")
+	v.set_fog(0.7, 0.4)
+	v.set_relief(true)
+	v.set_wet(true)
+	await frames(1)
+	ok(v.is_wet(), "«Красиво» — шейдер window_glass_wet")
+	near(float(v.glass_mat.get_shader_parameter("humidity")), 0.7, 1e-6, "влажность сохранилась при смене шейдера")
+	near(float(v.glass_mat.get_shader_parameter("ice_k")), 0.4, 1e-6)
+	ok(v.glass_mat.get_shader_parameter("condensation") != null and v.glass_mat.get_shader_parameter("mask") != null,
+		"карты сохранились")
+	eq(v.glass_mat.get_shader_parameter("split"), BridgeView.glass_split())
+	v.set_wet(false)
+	ok(not v.is_wet())
+	near(float(v.glass_mat.get_shader_parameter("humidity")), 0.7, 1e-6, "и обратно")
+	v.queue_free()
+	await frames(1)
+
+
+func test_main_applies_wet_by_level() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main._apply_graphics(Graphics.BEAUTY)
+	ok(main.bridge.is_wet(), "«Красиво» включает полный конденсат")
+	main.step(1.0 / 30.0)
+	await frames(1)
+	main._apply_graphics(Graphics.NORMAL)
+	ok(not main.bridge.is_wet(), "«Обычно» — без копии экрана")
+	main._apply_graphics(Graphics.ECONOMY)
+	ok(not main.bridge.is_wet())
+	main.queue_free()
+	await frames(1)
