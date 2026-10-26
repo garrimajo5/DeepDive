@@ -73,6 +73,7 @@ func test_scene_runs_scenario() -> void:
 	var comms_seen := false   # 31: плашка связи ART-040 со своим кодом
 	var exposed_seen := false   # 31d: подделка разоблачена
 	var no_answer := false   # 29f: экран адреса ART-039 дождался «Нет ответа»
+	var windows_hidden: Array[String] = []   # конденсат 33/33a: окна не заслонены товарищами
 	var crowded: Array[String] = []   # issue #602: на снимке товарищ вплотную к камере — кадр закрыт его головой
 	var mate_weld_seen := false   # 26b: шов в кадре, его варит товарищ
 	for i in 4800:  # 160 с игры (сценарий идёт ~148 с)
@@ -105,6 +106,10 @@ func test_scene_runs_scenario() -> void:
 		for m: Crew.Member in main.crew:
 			if m != main.me:
 				near = minf(near, Vector2(m.walker.x - main.walker.x, m.walker.z - main.walker.z).length())
+		var screens := 0   # стоящие товарищи в кадре перед камерой: на 33/33a они заслоняли окна (отчёт 2026-10-26-1233)
+		for m: Crew.Member in main.crew:
+			if m != main.me and not m.seated and cam.is_position_in_frustum(main.ship.to_global(m.joints()["head"])):
+				screens += 1
 		var mate_welds := false
 		for m: Crew.Member in main.crew:
 			mate_welds = mate_welds or (m != main.me and m.welding() and weld_at > 0.0)
@@ -128,6 +133,8 @@ func test_scene_runs_scenario() -> void:
 				arc_seen = arc_vis
 			if qa.log_lines[k].begins_with("скриншот 30-kartochka-sonar"):
 				card_seen = card_vis
+			if qa.log_lines[k].begins_with("скриншот 33") and screens > 0:
+				windows_hidden.append("%s %d" % [qa.log_lines[k].split(" ")[1], screens])
 			if qa.log_lines[k].begins_with("скриншот ") and near < Crew.GAP * 0.75:
 				crowded.append("%s (%.2f м)" % [qa.log_lines[k].split(" ")[1], near])
 			if qa.log_lines[k].begins_with("скриншот 26b-mate-weld"):
@@ -144,6 +151,7 @@ func test_scene_runs_scenario() -> void:
 	ok(cooled, "шаг hot 0 остудил реактор: 09-sonar без перегрева и сброса")
 	ok(weld_y > 0.3 and weld_y < 0.7, "на 16-breach-weld шов в середине кадра: %.2f высоты (#524)" % weld_y)
 	eq(crowded, [] as Array[String], "на снимках товарищи не вплотную к камере (#602)")
+	eq(windows_hidden, [] as Array[String], "на 33/33a окна не заслоняют товарищи (отчёт 2026-10-26-1233)")
 	ok(mate_weld_seen, "на 26b-mate-weld товарищ варит шов в кадре (#602)")
 	ok(sat, "по сценарию садились за штурвал")
 	ok(not main.pilot.seated, "и встали")
