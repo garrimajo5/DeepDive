@@ -184,6 +184,8 @@ func test_power_view() -> void:
 	# на 70° тянула правый рукав через весь кадр.
 	var sh: Vector3 = main.crew_view.shown[0]["shoulder_r"] - main.crew_view.shown[0]["shoulder_l"]
 	ok(absf(sh.x) < absf(sh.z) * tan(deg_to_rad(5.0)), "плечи вдоль пульта (x %.3f, z %.3f)" % [sh.x, sh.z])
+	# #576 (решение владельца): пока нет анимации рук у пульта, свою фигуру на ракурсе не рисуем — рукава не в кадре.
+	ok(not main.crew_view.figures[0].visible, "своя фигура у пульта спрятана")
 	main.walker.yaw += 0.2   # свайп
 	main.step(1.0 / 30.0)
 	near(main.camera.rotation.y, PowerScreen.CAM_YAW + 0.2, 1e-4, "свайп — от ракурса")
@@ -191,6 +193,7 @@ func test_power_view() -> void:
 	main.step(1.0 / 30.0)
 	var eye: Vector3 = main.pilot.eye(main.walker) + main.me.eye_offset()
 	ok(main.camera.position.distance_to(eye) < 1e-4, "закрыл — камера в ходоке")
+	ok(main.crew_view.figures[0].visible, "закрыл — своя фигура снова видна")
 	near(main.camera.rotation.y, main.walker.yaw, 1e-6, "курс ходока")
 
 

@@ -48,6 +48,10 @@ var shown: Array = []
 var as_own: Array = []
 var alphas: Array[float] = []  ## непрозрачность фигуры i (нет — 1): < 1 — отключившиеся гости у хоста (MateGhost, ART-043)
 var pitch := 0.0  ## наклон взгляда своего игрока (рад, вниз < 0) — ставит Main перед apply()
+## Своя фигура спрятана (ставит Main перед apply()): у открытого пульта энергии рукава загромождали кадр (#576), а
+## нормальной анимации рук у пульта пока нет — решение владельца: прятать, пока её нет. Позу и `shown` считаем
+## как обычно (руки для сети и товарищей — `Crew.Member.hands`), не рисуем только меш и снаряжение.
+var hide_own := false
 var _rest := {}  ## внешность → CrewRig.Rest
 var _own_mat := {}  ## внешность → материал своего игрока: с отсечением задних граней (не видно изнанки у камеры)
 var _scenes := {}  ## внешность → PackedScene модели (держим загруженной: новая фигура не грузит её заново)
@@ -211,6 +215,7 @@ func apply() -> void:
 		var m: Crew.Member = members[i]
 		_build(i, m.look)
 		var own: bool = m == local
+		figures[i].visible = not (own and hide_own)
 		var j := m.joints()
 		var g := CrewRig.pose(_rest[looks[i]], j, CrewRig.SEAT_BEND if m.seated else 0.0)
 		var sk := skeletons[i]
