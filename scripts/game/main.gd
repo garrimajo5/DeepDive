@@ -1153,6 +1153,8 @@ func _step_eco(dt: float) -> void:
 func on_eco_event(e: Dictionary) -> void:
 	match e.get("type", ""):
 		EcoLink.HIT:
+			if flyby.shields():
+				return   # облёт в начале забега: удар не доходит до корпуса (#506)
 			vitals.hit(roundi(float(e.get("damage", 0.0)) * 100.0), str(e.get("by", "")))
 		EcoLink.DRAIN:
 			vitals.drain(str(e.get("by", "")), float(e.get("units", 0.0)))

@@ -93,6 +93,35 @@ func test_scene_intro_ends_and_surface_view() -> void:
 	ok(main.flyby.kind == Flyby.Kind.START, "новый забег — снова облёт")
 
 
+func test_shields_only_start() -> void:
+	var f := Flyby.new()
+	ok(not f.shields(), "без облёта корпус открыт")
+	f.start(Flyby.Kind.START)
+	ok(f.shields(), "облёт в начале забега — корпус под защитой")
+	f.update(Flyby.START_S + 0.1)
+	ok(not f.shields(), "облёт кончился — защиты нет")
+	f.start(Flyby.Kind.SURFACE)
+	ok(not f.shields(), "вид при всплытии не защищает")
+
+
+func test_scene_no_breach_during_intro() -> void:   # issue #506
+	Main.intro = true
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	ok(main.flyby.kind == Flyby.Kind.START, "в начале забега — облёт")
+	var hull := main.vitals.hull
+	main.on_eco_event({"type": EcoLink.HIT, "damage": 0.12, "by": "Серпохвост"})
+	eq(main.vitals.hull, hull, "удар во время облёта не снял корпус")
+	ok(main.breach.active == null, "пробоины нет")
+	for i in int(Flyby.START_S * 30.0) + 2:
+		main.step(1.0 / 30.0)
+	ok(not main.flyby.active(), "облёт кончился")
+	main.on_eco_event({"type": EcoLink.HIT, "damage": 0.12, "by": "Серпохвост"})
+	ok(main.vitals.hull < hull, "после облёта удар доходит")
+	ok(main.breach.active != null, "и пробивает корпус")
+
+
 func test_scene_surface_skipped_by_action() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
