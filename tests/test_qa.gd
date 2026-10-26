@@ -42,6 +42,26 @@ func test_shot_after_goto_waits_frame() -> void:   # issue #216: 09g-tablo сн�
 	eq(held.map(func(c): return c[0]), ["begin", "end", "shot", "done"], "после удержания снимок сразу — пар ещё в кадре")
 
 
+func test_level_switch_has_own_shot() -> void:   # 29-golos: худший кадр — смена уровня графики «Красиво» → «Обычно»
+	var q := QaScript.parse(FileAccess.get_file_as_string("res://tools/qa/scenario.json"))
+	var seen := 0
+	for i in q.steps.size():
+		var st: Dictionary = q.steps[i]
+		if st.get("do") != "press" or not str(st.get("what")) in ["g0", "g1", "g2"]:
+			continue
+		seen += 1
+		var own := true   # до снимка — только ожидание, запись и «Назад»; конец сценария — тоже можно
+		for j in range(i + 1, q.steps.size()):
+			var nx: Dictionary = q.steps[j]
+			if nx.get("do") == "shot":
+				break
+			if not nx.get("do") in ["wait", "log", "back"]:
+				own = false
+				break
+		ok(own, "после смены уровня %s — свой снимок: её кадр не уходит в строку следующего экрана" % st.get("what"))
+	ok(seen >= 3, "сценарий проходит три уровня графики")
+
+
 func test_swipe_moves_full_distance() -> void:
 	var q := QaScript.parse('[{"do":"swipe","dx":300,"dy":-40,"s":0.5}]')
 	var sum := Vector2.ZERO
