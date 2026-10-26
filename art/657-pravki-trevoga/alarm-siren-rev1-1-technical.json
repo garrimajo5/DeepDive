@@ -1,0 +1,38 @@
+{
+  "file": "alarm-siren-rev1-1.mp3",
+  "duration_seconds": 3.51,
+  "stream": "Audio: mp3 (mp3float), 44100 Hz, stereo, fltp, 192 kb/s",
+  "source_stream": "Audio: mp3 (mp3float), 44100 Hz, stereo, fltp, 128 kb/s",
+  "gain_db": -7.49,
+  "source_loudness": {
+    "input_i": "-10.51",
+    "input_tp": "-1.02",
+    "input_lra": "0.70",
+    "input_thresh": "-20.51",
+    "output_i": "-18.18",
+    "output_tp": "-8.85",
+    "output_lra": "0.00",
+    "output_thresh": "-28.18",
+    "normalization_type": "dynamic",
+    "target_offset": "0.18"
+  },
+  "final_loudness": {
+    "input_i": "-18.29",
+    "input_tp": "-8.77",
+    "input_lra": "0.60",
+    "input_thresh": "-28.29",
+    "output_i": "-18.23",
+    "output_tp": "-8.85",
+    "output_lra": "0.00",
+    "output_thresh": "-28.23",
+    "normalization_type": "dynamic",
+    "target_offset": "0.23"
+  },
+  "sample_peak_dbfs": -8.775766075922762,
+  "boundary_jump_dbfs": [
+    -53.82555848966048,
+    -52.24627788189734
+  ],
+  "bytes": 85933,
+  "sha256": "48174edfa47f937e519bb8e62a7a2c4fde1b6ddc7e69fc4702c39b09898ade22"
+}
