@@ -13,6 +13,8 @@ static var default_path := PATH
 const KEEP := 20          ## сколько забегов держать в файле
 const HIT_MIN := 1.5      ## падение корпуса за шаг от стольких % — «удар» (вода пробоины точит понемногу)
 const SHORT := 10.0       ## забег короче, с — не пишем (вышли в меню сразу после «Погрузиться»)
+const UNFINISHED := "не закончен"   ## итог в шапке недописанного забега
+const BLINK := 0.5        ## событие короче, с — мигание состояния (сценарий тестера на кадр снимка), в ленту не идёт (#692)
 
 var path := default_path
 var running := false
@@ -59,14 +61,27 @@ func watch(t: float, on: Dictionary, hull_now: float, depth: float) -> void:
 			spans.append([name, at, -1.0])
 			_add(at, name + " — началось")
 		elif not going and _on.has(name):
-			var s: Array = spans[_on[name]]
-			s[2] = at
+			var i: int = _on[name]
+			var s: Array = spans[i]
 			_on.erase(name)
+			if at - s[1] < BLINK:
+				_drop(i)
+				continue
+			s[2] = at
 			_add(at, "%s — кончилось (%s)" % [name, clock(at - s[1])])
 	if hull - hull_now >= HIT_MIN:
 		_add(at, "удар: корпус %d%%" % roundi(hull_now))
 	hull = hull_now
 	deepest = maxf(deepest, depth)
+
+
+## Корпус задан не ударом (сценарий тестера ставит износ) — строка «корпус задан», в «удары» не идёт (#692).
+func set_hull(t: float, pct: float) -> void:
+	if not running:
+		return
+	if absf(pct - hull) >= HIT_MIN:
+		_add(t - t0, "корпус задан: %d%%" % roundi(pct))
+	hull = pct
 
 
 ## Разовое событие забега (сообщение на приборах, «разряд»).
@@ -102,8 +117,8 @@ func save(stamp := "") -> void:
 	if running and t_last - t0 >= SHORT:
 		var keep := spans.duplicate(true)
 		_close(t_last - t0)
-		var lines := text_lines("идёт", stamp)
-		lines[0] = "Забег %d, не закончен · %s" % [_n + 1, lines[0]]
+		var lines := text_lines(UNFINISHED, stamp)
+		lines[0] = "Забег %d · %s" % [_n + 1, lines[0]]   # шапка как у законченных (#692)
 		blocks.push_front("\n".join(lines))
 		spans = keep
 	var f := FileAccess.open(path, FileAccess.WRITE)
@@ -179,6 +194,19 @@ func _add(at: float, text: String) -> void:
 	events.append([at, text])
 
 
+## Убрать мигнувшее событие: его отрезок и строку «началось».
+func _drop(i: int) -> void:
+	var s: Array = spans[i]
+	spans.remove_at(i)
+	for k: String in _on:
+		if _on[k] > i:
+			_on[k] -= 1
+	for j in range(events.size() - 1, -1, -1):
+		if events[j][0] == s[1] and events[j][1] == s[0] + " — началось":
+			events.remove_at(j)
+			break
+
+
 func _close(at: float) -> void:
 	for s in spans:
 		if s[2] < 0.0:
@@ -220,5 +248,5 @@ func _load() -> void:
 	for b in text.split("\n\n", false):
 		if b.begins_with("Забег "):   # и «не закончен» — игру закрыли посреди забега
 			_old.append(b)
-			_n = maxi(_n, b.substr(6).get_slice(" ", 0).get_slice(",", 0).to_int())
+			_n = maxi(_n, b.substr(6).get_slice(" ", 0).get_slice(",", 0).to_int())   # «, не закончен» — старый файл
 	_old.resize(mini(_old.size(), KEEP))

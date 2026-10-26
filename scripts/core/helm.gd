@@ -55,6 +55,7 @@ class Ship:
 	const DEEP := -96.0
 	const EDGE := 300.0
 	const CLEARANCE := 3.0     ## над дном
+	const RUB_GAP := 0.15      ## м над нижним пределом — ещё трёмся о дно (rub)
 	const START := Vector3(0.0, -20.0, 95.0)
 
 	var pos := START
@@ -70,6 +71,12 @@ class Ship:
 	## На сколько метров дно подняло корабль в последнем шаге (для удара о дно — Vitals.scrape): только подъём самого
 	## дна под кораблём, пока корабль на нём лежит; спуск на дно по кнопке «Вниз» ударом не считается.
 	var bump := 0.0
+	## Скорость вверх (м/с), с которой корабль в последнем шаге упёрся в лёд (CEILING); 0 — не упирался (удар о лёд —
+	## `HullSound.ice_db`, звук без урона).
+	var knock := 0.0
+	## Скорость хода (м/с, по модулю), с которой корабль в последнем шаге тёрся о дно — лежит на нём (ближе RUB_GAP)
+	## и идёт; 0 — над дном. Петля скрежета — `HullSound.rub_db`, `ShipSounds.set_rub`.
+	var rub := 0.0
 	var _last_floor := -INF
 	## Высота дна под (x, z); корабль держится на CLEARANCE выше. Пустой Callable — дна нет.
 	var ground: Callable
@@ -82,6 +89,8 @@ class Ship:
 		_last_floor = -INF
 		yaw = 0.0
 		speed = 0.0
+		knock = 0.0
+		rub = 0.0
 		extra_drag = 0.0
 		vy = 0.0
 		turn = 0.0
@@ -107,9 +116,11 @@ class Ship:
 		pos.y += vy * dt
 		pos.x = clampf(pos.x, -EDGE, EDGE)
 		pos.z = clampf(pos.z, -EDGE, EDGE)
+		knock = 0.0
 		if pos.y > CEILING:
 			pos.y = CEILING
 			if vy > 0.0:
+				knock = vy
 				vy = 0.0
 		var floor_y := DEEP
 		if ground.is_valid():
@@ -121,3 +132,4 @@ class Ship:
 			if vy < 0.0:
 				vy = 0.0
 		_last_floor = floor_y
+		rub = absf(speed) if pos.y - floor_y < RUB_GAP else 0.0

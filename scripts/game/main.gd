@@ -55,6 +55,8 @@ var zap_light: OmniLight3D   ## вспышка разряда вокруг ко�
 var drain_sound: AudioStreamPlayer   ## шипение тревоги, пока на корпусе присоска (Synth.latch)
 var drain_hisses := 0                ## сколько раз шипела тревога присоски (для тестов)
 var ambience: Ambience   ## фон забега: эмбиент за бортом и гул корабля (SND-001), доли по глубине — Main._sound
+var ship_sounds: ShipSounds   ## разовые звуки корабля SND-002: импульс сонара, удары, скрежет (`HullSound`)
+var hit_local: Variant = null   ## точка удара существа в осях корабля, пока идёт vitals.hit (звук по стороне, #656)
 var sound_mix := SoundMix.Mix.new()  ## сведение шин звука (docs/zvuk.md): меню, пауза, вид с борта, тревога — Main._sound
 ## Прогрев шейдеров при старте (Warmup, issue #50): шторка, камера оглядывает корабль, скрытое показано на кадр.
 var warm := Warmup.new()
@@ -187,6 +189,8 @@ func _ready() -> void:
 	SoundMix.ensure()   # шины звука — до первых плееров
 	ambience = Ambience.new()
 	add_child(ambience)
+	ship_sounds = ShipSounds.new()
+	add_child(ship_sounds)
 	_build_world()
 	ocean = OceanView.new()
 	ocean.name = "Отмель"
@@ -811,6 +815,9 @@ func step(dt: float) -> void:
 	hull_motion.update(dt, helm.in_thrust, helm.in_vert, reactor.k(Reactor.Sys.ENGINES))
 	_wake(dt)
 	helm.speed = vitals.scrape(helm.bump / maxf(dt, 1e-4), helm.speed)
+	if helm.knock > 0.0:
+		ship_sounds.play_ice(helm.knock)   # упёрлись в лёд снизу — удар без урона (#656)
+	ship_sounds.set_rub(helm.rub, dt)   # трёмся о дно на ходу — петля скрежета (#656)
 	if vitals.update(dt, helm.in_thrust, helm.in_vert, Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP)),
 			0.0 if run.ended else reactor.k(Reactor.Sys.LIFE)):   # на итоге корпус не чинится — как на панели (#266)
 		light_on = false
@@ -1125,8 +1132,10 @@ func ping_sonar(everyone: bool = false) -> void:
 		vitals.spend(Vitals.SONAR_COST)
 		eco_ship.sonar_ping = true   # существа слышат импульс и в иле
 		eco_ship.sonar_range = Sonar.range_for(reactor.k(Reactor.Sys.SONAR))
-		if silt.jam_ping(time):
+		var jam := silt.jam_ping(time)
+		if jam:
 			msg = Silt.JAM_MSG
+		ship_sounds.play_ping(jam)
 	if not msg.is_empty():
 		tell.call(msg)
 
@@ -1138,6 +1147,7 @@ func fire_zap() -> void:
 		eco_ship.zap = true
 		eco_ship.zap_radius = zap.radius
 		timeline.mark(time, "разряд")
+		ship_sounds.play_zap()   # SND-003
 		if scorch.add(helm.pos, Seabed.height(helm.pos.x, helm.pos.z), reactor.k(Reactor.Sys.ZAP), time):
 			ocean.set_scorch(scorch.uniforms(time))   # разряд у дна — след под корпусом
 	say(msg)
@@ -1179,7 +1189,10 @@ func on_eco_event(e: Dictionary) -> void:
 		EcoLink.HIT:
 			if flyby.shields():
 				return   # облёт в начале забега: удар не доходит до корпуса (#506)
+			var at: Variant = e.get("at")
+			hit_local = hit_local_of(at) if at is Vector3 else null   # откуда бьёт — для звука удара (#656)
 			vitals.hit(roundi(float(e.get("damage", 0.0)) * 100.0), str(e.get("by", "")))
+			hit_local = null
 		EcoLink.DRAIN:
 			vitals.drain(str(e.get("by", "")), float(e.get("units", 0.0)))
 		EcoLink.MESSAGE:
@@ -1204,7 +1217,13 @@ func on_eco_event(e: Dictionary) -> void:
 				say("Новое наблюдение: %s" % Species.called(sp, Species.Case.NOM, scanner.is_scanned(sp)))
 
 
+## Точка удара at (мир) в осях корабля: нос −Z, правый борт +X (`HullSound.side`).
+func hit_local_of(at: Vector3) -> Vector3:
+	return (at - helm.pos).rotated(Vector3.UP, -helm.yaw)
+
+
 func _on_hit(percent: int, kind: String) -> void:
+	ship_sounds.play_hit(percent, kind, hit_local)   # SND-002: удар (по стороне) или удар о дно со скрежетом (#656)
 	lock_water.on_hit()   # рябь в шахте шлюза вспыхивает (ART-073)
 	if kind == "scrape":   # удар о дно поднимает ил
 		silt.on_scrape(helm.pos, Seabed.height(helm.pos.x, helm.pos.z))
