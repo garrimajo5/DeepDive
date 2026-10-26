@@ -224,9 +224,9 @@ static func _toy_world(world_seed: int = EcoRandom.WORLD_SEED) -> EcoWorld:
 
 func test_step_splits_into_substeps() -> void:
 	var w := EcoWorld.new()
-	w.step(0.2)
-	eq(w.steps, 4, "0,2 с — 4 подшага")
-	near(w.time, 0.2, 1e-5, "время")
+	w.step(0.3)
+	eq(w.steps, 4, "0,3 с — 4 подшага по SLOW_STEP")
+	near(w.time, 0.3, 1e-5, "время")
 	w.step(0.05)
 	eq(w.steps, 5, "0,05 с — один")
 	w.step(0.0)

@@ -9,7 +9,7 @@ func reset(_world: EcoWorld) -> void:
 	pass
 
 
-## Шаг на dt секунд (не больше EcoWorld.MAX_STEP).
+## Шаг на dt секунд (не больше EcoWorld.SLOW_STEP).
 func step(_world: EcoWorld, _dt: float) -> void:
 	pass
 

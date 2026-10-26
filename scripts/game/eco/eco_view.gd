@@ -409,10 +409,11 @@ func _rebuild_plankton() -> void:
 	add_child(plankton_view)
 
 
-## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
+## Шаг мира: dt — время кадра (мир берёт не больше EcoWorld.FRAME_CAP), ship — состояние корабля. Возвращает
+## события для корабля (EcoLink).
 func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	world.ship = ship
-	world.step(dt)
+	world.step(minf(dt, EcoWorld.FRAME_CAP))
 	_sync(ship)
 	return world.take_link()
 
@@ -421,7 +422,7 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 ## разбирает хост); near — существа и мох рядом из свежего кадра хоста (`EcoLink.pack_world`), пустой — кадра не было.
 func step_client(dt: float, ship: EcoLink.ShipState, near: PackedFloat32Array = PackedFloat32Array()) -> void:
 	world.ship = ship
-	world.step(dt)
+	world.step(minf(dt, EcoWorld.FRAME_CAP))
 	world.take_link()
 	if not near.is_empty():
 		EcoLink.apply_world(world.agents, world.systems, near, world)

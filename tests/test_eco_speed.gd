@@ -379,3 +379,60 @@ func test_eating_urchin_skips_ground() -> void:
 	calls[0] = 0
 	w.step(0.05)
 	eq(calls[0], 0, "ёж ест на месте — дно не считает")
+
+
+## Медленный кадр до SLOW_STEP мир проходит одним подшагом (issue #713): кадр 55 мс не удваивает шаг мира.
+func test_slow_frame_one_substep() -> void:
+	var w := EcoWorld.new()
+	w.reset()
+	w.step(1.0 / 60.0)
+	eq(w.steps, 1, "обычный кадр — один подшаг")
+	w.step(0.055)
+	eq(w.steps, 2, "кадр 55 мс — тоже один подшаг")
+	w.step(EcoWorld.SLOW_STEP)
+	eq(w.steps, 3, "кадр SLOW_STEP — один подшаг")
+	w.step(0.1)
+	eq(w.steps, 5, "кадр 100 мс — два подшага по 50 мс")
+	near(w.time, 1.0 / 60.0 + 0.055 + EcoWorld.SLOW_STEP + 0.1, 1e-6, "время мира — всё время кадров")
+
+
+## После долгой заминки мир в кадре догоняет не больше FRAME_CAP — не десяток подшагов разом (issue #713).
+func test_view_caps_long_frame() -> void:
+	var view := EcoView.new()
+	tree.root.add_child(view)
+	view.ground = Seabed.height
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Helm.Ship.START
+	view.step(1.0 / 60.0, ship)
+	var t := view.world.time
+	var s := view.world.steps
+	view.step(1.5, ship)
+	near(view.world.time - t, EcoWorld.FRAME_CAP, 1e-6, "заминка 1,5 с — мир прошёл FRAME_CAP")
+	ok(view.world.steps - s <= int(ceil(EcoWorld.FRAME_CAP / EcoWorld.SLOW_STEP)), "подшагов не больше 4")
+	view.step(0.1, ship)
+	near(view.world.time - t, EcoWorld.FRAME_CAP + 0.1, 1e-6, "обычный кадр — всё время")
+	view.queue_free()
+	await frames(1)
+
+
+## Весь мир на длинном подшаге SLOW_STEP не разлетается: существа на месте, числа конечные.
+func test_world_steady_on_slow_step() -> void:
+	var view := EcoView.new()
+	tree.root.add_child(view)
+	view.ground = Seabed.height
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Helm.Ship.START
+	for i in int(40.0 / EcoWorld.SLOW_STEP):
+		view.step(EcoWorld.SLOW_STEP, ship)
+	eq(view.world.steps, int(40.0 / EcoWorld.SLOW_STEP), "каждый кадр — один подшаг")
+	var bad := 0
+	for a in view.world.agents:
+		var p := a.p
+		if not (is_finite(p.x) and is_finite(p.y) and is_finite(p.z)) or absf(p.x) > 400.0 or absf(p.z) > 400.0 \
+				or p.y > 5.0 or p.y < Seabed.height(p.x, p.z) - 3.0:
+			bad += 1
+			if bad <= 3:
+				ok(false, "%s в %s" % [a.species, p])
+	eq(bad, 0, "все %d существ в воде над дном" % view.world.agents.size())
+	view.queue_free()
+	await frames(1)
