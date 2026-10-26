@@ -217,7 +217,7 @@ func _init() -> void:
 	EcoSurface.apply(self)
 
 
-## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи и просвет листвы погашены, скребуны не поднимают муть — меняются
+## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи и просвет листвы погашены, скребуны и кольчужник не поднимают муть — меняются
 ## только числа в uniform, шейдеры те же. Включает уровень графики — поток А (`Main._apply_graphics`).
 func set_lite(on: bool) -> void:
 	EcoShaders.set_sway_lite(on)
@@ -449,7 +449,7 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	ognevka_view.sync()
 	hvaten_view.sync(world.time, ship.pos, false)
 	kelp_view.sync(world.time)
-	krab_view.sync(world.time)
+	krab_view.sync(world.time, ship, current.vel())
 	skalnik_view.sync(world.time, ship.pos)
 	coins_view.sync(world.time)
 	ray_view.sync()

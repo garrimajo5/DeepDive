@@ -26,6 +26,8 @@ const WALK_ALPHA := 0.25
 const SNOUT := 1.1
 const SCATTER := 0.25
 const BASE_LIFT := 0.35
+## Середина облачка над видимым дном — не ниже этой доли его размера (above).
+const CLEAR := 0.35
 ## Течение уносит облачко с этой долей своей скорости (у дна поток слабее).
 const DRIFT := 0.6
 ## Дальше этого от корабля новых облачков не поднимают — их не видно (м).
@@ -48,6 +50,8 @@ class Puff:
 	var born := -1e9
 	var alpha := 0.0
 	var key := 0
+	## Высота видимого дна под местом подъёма (считает рисунок один раз на облачко; −INF — ещё не считана).
+	var floor_y := -INF
 
 
 var puffs: Array[Puff] = []
@@ -58,9 +62,22 @@ var _made := 0
 var _last := -1e9
 
 
-func _init() -> void:
-	for i in POOL:
+## pool — мест в пуле (у скребунов POOL; кольчужнику хватает меньше — EcoKrabDust).
+func _init(pool: int = POOL) -> void:
+	for i in pool:
 		puffs.append(Puff.new())
+
+
+## Поднять облачко в точке at в момент t с непрозрачностью alpha; key — номер для разброса. Старое уступает новому.
+func add(at: Vector3, t: float, alpha: float, key: int) -> Puff:
+	var p := puffs[_slot]
+	_slot = (_slot + 1) % puffs.size()
+	p.key = key
+	p.at = at
+	p.born = t
+	p.alpha = alpha
+	p.floor_y = -INF
+	return p
 
 
 ## Пауза до следующего облачка скребуна g (пасётся — чаще).
@@ -133,13 +150,15 @@ func update(system: EcoGrazer, t: float, ship: Vector3) -> void:
 		_next[g.index] = t + every(g)
 		if lite or g.agent.p.distance_to(ship) > NEAR:
 			continue
-		var p := puffs[_slot]
-		_slot = (_slot + 1) % POOL
 		_made += 1
-		p.key = _made * 16 + g.index
-		p.at = spot(g, p.key)
-		p.born = t
-		p.alpha = (GRAZE_ALPHA if g.grazing() else WALK_ALPHA) * EcoVary.spread(p.key, SALT + 3, 0.25)
+		var key := _made * 16 + g.index
+		add(spot(g, key), t, (GRAZE_ALPHA if g.grazing() else WALK_ALPHA) * EcoVary.spread(key, SALT + 3, 0.25), key)
+
+
+## Высота середины облачка размером s над видимым дном floor_y: не ниже доли CLEAR размера — облачко лицом к
+## камере, нижняя его половина иначе уходит под сетку дна.
+static func above(y: float, s: float, floor_y: float) -> float:
+	return maxf(y, floor_y + s * CLEAR)
 
 
 ## Насколько облачко в точке at освещено прожектором корабля ship (0…1): ближе к кораблю — светлее, за дальностью
