@@ -112,3 +112,36 @@ func test_scene_ping_and_hit_play_on_ship_bus() -> void:
 	near(s.hit.volume_db, HullSound.ICE_DB, 0.01, "громкость удара о лёд")
 	main.queue_free()
 	await frames(1)
+
+
+## SND-003 (#657): петли струи и тревоги из файлов, разряд — один раз.
+func test_snd003_files() -> void:
+	for path in [HullSound.JET, HullSound.SIREN]:
+		var s := load(path) as AudioStreamWAV
+		ok(s != null, "петля загружается: %s" % path)
+		if s:
+			eq(s.loop_mode, AudioStreamWAV.LOOP_FORWARD, "петля вперёд: %s" % path)
+			ok(s.get_length() > 2.0 and s.get_length() < 10.0, "петля 2–10 с: %s %.2f" % [path, s.get_length()])
+	var z := load(HullSound.ZAP) as AudioStreamWAV
+	ok(z != null and z.loop_mode != AudioStreamWAV.LOOP_FORWARD, "разряд — один раз")
+
+
+func test_snd003_scene() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var bv := main.breach_view
+	eq(bv.siren.stream, load(HullSound.SIREN), "тревога — из файла, не Synth")
+	eq(bv.jet_sound.stream, load(HullSound.JET), "струя — из файла, не Synth")
+	var s := main.ship_sounds
+	eq(String(s.zap.bus), SoundMix.SHIP, "разряд — на шине «Корабль»")
+	main.vitals.energy = 100.0
+	main.fire_zap()
+	eq(s.last, HullSound.ZAP, "разряд прозвучал")
+	ok(s.zap.playing, "плеер разряда играет")
+	s.last = ""
+	main.step(0.5)
+	main.fire_zap()   # копится (Zap.COOLDOWN) — разряда нет
+	eq(s.last, "", "несостоявшийся разряд молчит")
+	main.queue_free()
+	await frames(1)

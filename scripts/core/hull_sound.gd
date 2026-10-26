@@ -11,6 +11,12 @@ const PING := "res://audio/ship/sonar-ping.wav"
 const HITS: Array[String] = ["res://audio/ship/hull-hit-1.wav", "res://audio/ship/hull-hit-2.wav",
 		"res://audio/ship/hull-hit-3.wav"]
 const SCRAPE := "res://audio/ship/hull-scrape.wav"
+## SND-003 (#657): петли струи пробоины и тревоги (вместо `Synth.jet`/`Synth.siren`, играет `BreachView`) и разряд
+## (`Main.fire_zap` → `ShipSounds.play_zap`).
+const JET := "res://audio/ship/breach-jet.wav"
+const SIREN := "res://audio/ship/alarm-siren.wav"
+const ZAP := "res://audio/ship/zap.wav"
+const ZAP_DB := -3.0
 
 const PING_DB := -6.0       ## импульс — заметно, но под гулом и тревогой
 const JAM_DB := -14.0       ## импульс завяз в иле — глухо (пока нет своего sonar-jam)
