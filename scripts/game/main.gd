@@ -54,6 +54,7 @@ var debug_winch := false         ## снимок: кнопку у лебёдки
 var zap_light: OmniLight3D   ## вспышка разряда вокруг корпуса (за бортом)
 var drain_sound: AudioStreamPlayer   ## шипение тревоги, пока на корпусе присоска (Synth.latch)
 var drain_hisses := 0                ## сколько раз шипела тревога присоски (для тестов)
+var ambience: Ambience   ## фон забега: эмбиент за бортом и гул корабля (SND-001), доли по глубине — Main._sound
 var sound_mix := SoundMix.Mix.new()  ## сведение шин звука (docs/zvuk.md): меню, пауза, вид с борта, тревога — Main._sound
 ## Прогрев шейдеров при старте (Warmup, issue #50): шторка, камера оглядывает корабль, скрытое показано на кадр.
 var warm := Warmup.new()
@@ -183,6 +184,8 @@ const NET_SPAWN := Vector3(0.0, 1.0, 0.0)   ## гость встаёт на мо
 
 func _ready() -> void:
 	SoundMix.ensure()   # шины звука — до первых плееров
+	ambience = Ambience.new()
+	add_child(ambience)
 	_build_world()
 	ocean = OceanView.new()
 	ocean.name = "Отмель"
@@ -2340,6 +2343,7 @@ func _sound(dt: float) -> void:
 	sound_mix.tension = wreck.active() or alarms_on().slice(0, AlarmBoard.Field.size() - 1).has(true)
 	sound_mix.depth = helm.depth()
 	SoundMix.apply(sound_mix.update(dt))
+	ambience.set_pair(sound_mix.ambient_pair())
 
 
 ## Активные поля табло тревог (AlarmBoard.Field) — из тех же строк, что тревога в строке состояния.
