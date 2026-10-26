@@ -8,8 +8,8 @@
     "prompt_influence": 0.7,
     "loop": true
   },
-  "confirmed_completed_cost": 250,
-  "remaining_estimate_credits": 750,
+  "confirmed_completed_cost": 1000,
+  "remaining_estimate_credits": 0,
   "items": [
     {
       "file": "ambient-shelf-1.mp3",
@@ -24,22 +24,43 @@
       "file": "ambient-shelf-2.mp3",
       "node_id": "5GJenRQe0hnU1R3pjhlB",
       "prompt": "25-second seamless ambience deep underwater beneath thick ice. A very soft broad low-frequency water-pressure drone, slow distant resonant ice flexing, and a few faint tiny irregular alien biological ticks widely spaced in the background. More stillness than events, smooth dark texture, no sharp transients. No music, melody, speech, recognizable animals, sonar, surface splashes or waves. Steady level, no fade in or fade out.",
-      "status": "not_run",
-      "last_error": "429 rate_limited on batch launch; get_flow confirmed not_run"
+      "status": "completed",
+      "session_id": "ALXFjc4SGJ2sKc5skWCx",
+      "generation_id": "PiuEpZKcE68brYUax4j6",
+      "reported_credit_cost": 250,
+      "credits": 250
     },
     {
       "file": "ship-hum-1.mp3",
       "node_id": "xGRuRm1Dv91KNDVXQ9gn",
       "prompt": "25-second seamless room tone inside the steel pressure hull of a small submarine bridge. Soft steady ventilation airflow, a warm low electrical transformer hum, very occasional subdued metal panel ticks. Close enclosed space with short damped metal resonance, quiet reliable machinery, restrained even dynamics. No voices, music, melody, beeps, buzzers, alarms, sonar or engine revving. Continuous low background bed, no fade in or fade out.",
-      "status": "not_run",
-      "last_error": "429 rate_limited on batch launch; get_flow confirmed not_run"
+      "status": "completed",
+      "session_id": "cb1J2a1cHGnCP7CKga2K",
+      "generation_id": "3FXdwynmXUMOMGsBI4ww",
+      "reported_credit_cost": 250,
+      "credits": 250
     },
     {
       "file": "ship-hum-2.mp3",
       "node_id": "TMIclaBHLIoZBQ4PmvGl",
-      "prompt": "25-second seamless background ambience inside a steel submarine cabin. Broad soft ventilation air moving slowly through ducts, a barely audible stable low electrical hum, a few distant gentle hull contraction clicks. Airflow dominates, less tonal than a transformer, compact damped steel interior, smooth level and restful mechanical texture. No speech, music, melody, high-pitched whine, beeps, buzzers, alarms, sonar or dramatic creaks. No fade in or fade out.",
-      "status": "not_run",
-      "last_error": "429 rate_limited on batch launch; get_flow confirmed not_run"
+      "prompt": "25-second seamless ambience inside a steel submarine cabin. Soft ventilation air moving through ducts, barely audible steady low electrical hum, a few distant gentle hull contraction ticks. Airflow dominates over tone; compact damped steel interior, smooth level, restful machinery. No speech, music, melody, high whine, beeps, buzzers, alarms, sonar or dramatic creaks. No fade in or fade out.",
+      "status": "completed",
+      "session_id": "GHKNLuPrBRI7ArHGVdUY",
+      "generation_id": "zv90A7tNuoo7g8b1kTGD",
+      "reported_credit_cost": 250,
+      "failed_generation_price_reported": 250,
+      "previous_failed_attempt": {
+        "session_id": "TYR1JfXFZ4FT6Wi3BBle",
+        "generation_id": "ydBCip62UP9TZAvnR7SS",
+        "error": "Prompt must be at most 450 characters, got 462.",
+        "price_reported": 250,
+        "refund_status": "unknown",
+        "prompt": "25-second seamless background ambience inside a steel submarine cabin. Broad soft ventilation air moving slowly through ducts, a barely audible stable low electrical hum, a few distant gentle hull contraction clicks. Airflow dominates, less tonal than a transformer, compact damped steel interior, smooth level and restful mechanical texture. No speech, music, melody, high-pitched whine, beeps, buzzers, alarms, sonar or dramatic creaks. No fade in or fade out."
+      },
+      "credits": 250
     }
-  ]
+  ],
+  "reported_failed_attempt_price": 250,
+  "net_balance_and_refunds": "unknown; failed attempt price is metadata, not proof of a final charge",
+  "additional_file": "ship-hum-2-loopfix.mp3: local seam correction, no new generation"
 }

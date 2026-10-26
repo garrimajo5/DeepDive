@@ -1,0 +1,38 @@
+{
+  "file": "ship-hum-1.mp3",
+  "source_stream": "Audio: mp3 (mp3float), 44100 Hz, stereo, fltp, 128 kb/s\r",
+  "output_stream": "Audio: mp3 (mp3float), 44100 Hz, stereo, fltp, 192 kb/s\r",
+  "decoded_duration_seconds": 25.000249433106575,
+  "file_bytes": 601904,
+  "source_loudness": {
+    "input_i": "-51.77",
+    "input_tp": "-34.64",
+    "input_lra": "1.60",
+    "input_thresh": "-61.77",
+    "output_i": "-17.86",
+    "output_tp": "-1.50",
+    "output_lra": "1.50",
+    "output_thresh": "-27.86",
+    "normalization_type": "dynamic",
+    "target_offset": "-0.14"
+  },
+  "constant_gain_db": 33.14,
+  "output_loudness": {
+    "input_i": "-18.90",
+    "input_tp": "-1.77",
+    "input_lra": "1.70",
+    "input_thresh": "-28.90",
+    "output_i": "-17.86",
+    "output_tp": "-1.50",
+    "output_lra": "1.50",
+    "output_thresh": "-27.86",
+    "normalization_type": "dynamic",
+    "target_offset": "-0.14"
+  },
+  "decoded_sample_peak_dbfs": -1.7754396410414315,
+  "boundary_jump_dbfs": [
+    -21.22482535638731,
+    -23.944940523410743
+  ],
+  "note": "No listening test; constant gain and re-encoding only, source quality not increased."
+}
