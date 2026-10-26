@@ -10,8 +10,8 @@ const ALARM_COLOR := Color("ffb259")
 const SEAM_COLOR := Color("f18a3d")
 const SPARK_COLOR := Color("d5e4e8")
 const HOLE_COLOR := Color("0b1c24")
-const SIREN_DB := -16.0      ## сирена тише струи: слышно, но не оглушает (js/audio.js: 0,05 при общей 0,7)
-const JET_DB := -4.0
+const SIREN_DB := -10.0      ## сирена SND-003 тише струи: слышно, но не оглушает (js/audio.js: 0,05 при общей 0,7)
+const JET_DB := -2.0
 const LIFT := BreachSpray.LIFT   ## обшивка чуть над поверхностью борта, чтобы не мерцала с ним
 
 var breach: Breach
@@ -29,8 +29,8 @@ var lamp_k := 1.0                ## свет отсеков (Vitals.lamp_k × ш
 var weld_light: OmniLight3D
 var water: MeshInstance3D
 var alarm: OmniLight3D
-var siren: AudioStreamPlayer       ## сирена на весь корабль, пока пробоина открыта (Synth.siren)
-var jet_sound: AudioStreamPlayer3D ## шум струи из отверстия (Synth.jet)
+var siren: AudioStreamPlayer       ## сирена на весь корабль, пока пробоина открыта (SND-003, `HullSound.SIREN`)
+var jet_sound: AudioStreamPlayer3D ## шум струи из отверстия (SND-003, `HullSound.JET`)
 var _shown: Breach.Spot = null
 
 
@@ -100,13 +100,13 @@ func _ready() -> void:
 	add_child(water)
 	siren = AudioStreamPlayer.new()
 	siren.name = "Сирена"
-	siren.stream = Synth.siren()
+	siren.stream = _loop(HullSound.SIREN, Synth.siren())
 	siren.volume_db = SIREN_DB
 	siren.bus = SoundMix.SHIP
 	add_child(siren)
 	jet_sound = AudioStreamPlayer3D.new()
 	jet_sound.name = "Шум струи"
-	jet_sound.stream = Synth.jet()
+	jet_sound.stream = _loop(HullSound.JET, Synth.jet())
 	jet_sound.volume_db = JET_DB
 	jet_sound.bus = SoundMix.SHIP
 	jet_sound.unit_size = 2.5
@@ -120,6 +120,12 @@ func _ready() -> void:
 	alarm.light_energy = 0.0
 	alarm.visible = false
 	add_child(alarm)
+
+
+## Петля из файла SND-003; нет файла — процедурная из Synth (запас).
+func _loop(path: String, fallback: AudioStream) -> AudioStream:
+	var s := load(path) as AudioStream if ResourceLoader.exists(path) else null
+	return s if s else fallback
 
 
 func _model(file: String) -> Node3D:
