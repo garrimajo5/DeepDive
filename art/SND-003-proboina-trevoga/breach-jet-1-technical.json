@@ -1,0 +1,38 @@
+{
+  "file": "breach-jet-1.mp3",
+  "duration_seconds": 6.95,
+  "stream": "Audio: mp3 (mp3float), 44100 Hz, stereo, fltp, 192 kb/s",
+  "source_stream": "Audio: mp3 (mp3float), 44100 Hz, stereo, fltp, 128 kb/s",
+  "gain_db": -5.1,
+  "source_loudness": {
+    "input_i": "-12.90",
+    "input_tp": "-1.00",
+    "input_lra": "0.20",
+    "input_thresh": "-22.90",
+    "output_i": "-17.93",
+    "output_tp": "-6.03",
+    "output_lra": "0.20",
+    "output_thresh": "-27.93",
+    "normalization_type": "dynamic",
+    "target_offset": "-0.07"
+  },
+  "final_loudness": {
+    "input_i": "-18.24",
+    "input_tp": "-6.23",
+    "input_lra": "0.10",
+    "input_thresh": "-28.24",
+    "output_i": "-17.93",
+    "output_tp": "-5.95",
+    "output_lra": "0.10",
+    "output_thresh": "-27.93",
+    "normalization_type": "dynamic",
+    "target_offset": "-0.07"
+  },
+  "sample_peak_dbfs": -6.404674006070686,
+  "boundary_jump_dbfs": [
+    -46.85591698817973,
+    -34.4393606020263
+  ],
+  "bytes": 168689,
+  "sha256": "abe3a3c6f1bcdac2aa384cabb0df6ec9d00b0e38c05473e3338b5930cf3c8a73"
+}
