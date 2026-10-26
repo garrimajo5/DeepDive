@@ -3,7 +3,9 @@ extends Node3D
 ## Стеклоусты в сцене (initEels/eelRender в js/creatures.js; ART-006, `docs/concept-art/stekloust-skrebun.md`): пять
 ## MultiMesh на всех — камни логов (бурые, гранёные), прозрачная оболочка (#9AD9E8, звенья тела и голова), внутренности
 ## (#607F89, без своего света), два красных глаза (#E34D50, светятся сами — единственный свет вида) и кольцо присоски
-## у пасти (на стекле расплющено). Стоит на слое отмели (OceanView.LAYER_WORLD).
+## у пасти (на стекле расплющено). Муть у дна (EcoEelDust: клуб у устья при выходе и возвращении, след у дна в броске) —
+## дочерний MultiMesh «Муть» в мировых координатах, общий шейдер EcoShaders.MIST (INK). Стоит на слое отмели
+## (OceanView.LAYER_WORLD).
 
 const SHELL := Color(0.604, 0.851, 0.91, 0.3)   ## #9AD9E8, прозрачный край
 const SHELL_GLOW := Color("16323a")
@@ -38,6 +40,11 @@ var ring_buffer := PackedFloat32Array()
 
 var _organ_buffer := PackedFloat32Array()
 var _eye_buffer := PackedFloat32Array()
+## Муть от угрей и её MultiMesh; буфер мути — для тестов.
+var dust := EcoEelDust.new()
+var dust_view: MultiMeshInstance3D
+var dust_buffer := PackedFloat32Array()
+var _dust_empty := false
 
 
 func _init(system: EcoEel) -> void:
@@ -49,6 +56,8 @@ func _init(system: EcoEel) -> void:
 	organs = _instance("Внутренности", _sphere(6, 4, _flat(ORGANS, false)), n * (EcoEel.SEGS - 1))
 	eyes = _instance("Глаза", _sphere(6, 4, _flat(EYE, true), EYE_R), n * EYES.size())
 	rings = _instance("Присоска", _ring(), n)
+	dust_view = GrazerView.build_dust(EcoEelDust.POOL)
+	add_child(dust_view)
 	_place_rocks()
 	sync(0.0)
 
@@ -146,8 +155,10 @@ func _place_rocks() -> void:
 	rocks.multimesh.buffer = buf
 
 
-## Расставить тела в момент t (время мира).
-func sync(t: float) -> void:
+## Расставить тела в момент t (время мира); ship — корабль (муть дальше EcoGrazerDust.NEAR не поднимается, в луче
+## прожектора светлее), flow — течение мира (уносит муть), ground — дно мира (след у дна).
+func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground := Callable()) -> void:
+	_sync_dust(t, ship, flow, ground)
 	var n := eels.eels.size()
 	shell_buffer.resize(n * EcoEel.SEGS * STRIDE)
 	_organ_buffer.resize(n * (EcoEel.SEGS - 1) * STRIDE)
@@ -183,6 +194,16 @@ func sync(t: float) -> void:
 	organs.multimesh.buffer = _organ_buffer
 	eyes.multimesh.buffer = _eye_buffer
 	rings.multimesh.buffer = ring_buffer
+
+
+func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3, ground: Callable) -> void:
+	dust.update(eels, t, ship.pos if ship else Vector3(1e6, 0, 1e6), ground)
+	var shown := dust.dust.shown(t)
+	if shown == 0 and _dust_empty and dust_buffer.size() == EcoEelDust.POOL * GrazerView.DUST_STRIDE:
+		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
+	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, ship, EcoEelDust.COLOR, EcoEelDust.LIT, Seabed.mesh_height)
+	dust_view.multimesh.buffer = dust_buffer
+	_dust_empty = shown == 0
 
 
 ## Поворот, у которого +Z смотрит вдоль dir (голова — пастью вперёд).
