@@ -27,8 +27,53 @@ func test_hits_alternate_scrape_separate() -> void:
 		prev = i
 		seen[i] = true
 	eq(seen.size(), HullSound.HITS.size(), "звучат все три удара")
-	eq(HullSound.hit_index("scrape", 0), -1, "о дно — не удар")
-	eq(HullSound.for_hit(10, "scrape", 0)["path"], HullSound.SCRAPE, "о дно — скрежет")
+	eq(HullSound.hit_index("scrape", 0), HullSound.Side.BELOW, "о дно — удар снизу (#656)")
+	var d := HullSound.for_hit(10, "scrape", 0)
+	eq(d["path"], HullSound.HITS[HullSound.Side.BELOW], "о дно — звук удара, не один скрежет")
+	eq(d["tail"], HullSound.SCRAPE, "под ударом о дно — скрежет хвостом")
+	ok(d["tail_db"] < d["db"], "скрежет тише удара")
+	eq(HullSound.for_hit(10, "Хватун", 0)["tail"], "", "удар существа — без скрежета")
+
+
+func test_side_of_hit() -> void:
+	eq(HullSound.side(Vector3(0, 0, -8)), HullSound.Side.FRONT, "в нос — прямой")
+	eq(HullSound.side(Vector3(2, 0.5, -8)), HullSound.Side.FRONT, "чуть сбоку от носа — прямой")
+	eq(HullSound.side(Vector3(6, 0, -1)), HullSound.Side.SIDE, "в борт — косой")
+	eq(HullSound.side(Vector3(-3, 1, 9)), HullSound.Side.SIDE, "в корму — косой")
+	eq(HullSound.side(Vector3(0, -3, -8)), HullSound.Side.BELOW, "из-под днища — снизу")
+	eq(HullSound.hit_index("Хватун", 5, Vector3(0, -3, 0)), HullSound.Side.BELOW, "точка удара важнее счётчика")
+	eq(HullSound.hit_index("Хватун", 1, null), 1, "без точки — по счётчику")
+
+
+func test_ice_knock_volume() -> void:
+	ok(is_nan(HullSound.ice_db(0.5)), "медленный упор в лёд — молча")
+	near(HullSound.ice_db(HullSound.ICE_KNOCK), HullSound.ICE_SOFT_DB, 0.01, "на пороге — тихо")
+	near(HullSound.ice_db(Helm.Ship.CLIMB), HullSound.ICE_DB, 0.01, "на полном подъёме — громче")
+	near(HullSound.ice_db(9.0), HullSound.ICE_DB, 0.01, "выше полного не громче")
+
+
+func test_helm_knock_on_ice() -> void:
+	var h := Helm.Ship.new()
+	h.pos = Vector3(0, Helm.Ship.CEILING - 0.05, 0)
+	h.in_vert = 1.0
+	var best := 0.0
+	var count := 0
+	for i in 120:
+		h.update(1.0 / 30.0)
+		if h.knock > 0.0:
+			best = maxf(best, h.knock)
+			if h.knock >= HullSound.ICE_KNOCK:
+				count += 1
+	ok(best < HullSound.ICE_KNOCK, "из-подо льда медленно — удара нет (%.2f)" % best)
+	h.pos = Vector3(0, -12.0, 0)
+	h.vy = Helm.Ship.CLIMB
+	count = 0
+	for i in 200:
+		h.update(1.0 / 30.0)
+		if h.knock >= HullSound.ICE_KNOCK:
+			count += 1
+	eq(count, 1, "с разгона в лёд — один удар, упор дальше молчит")
+	eq(h.pos.y, Helm.Ship.CEILING, "стоит подо льдом")
 
 
 func test_scene_ping_and_hit_play_on_ship_bus() -> void:
@@ -49,6 +94,21 @@ func test_scene_ping_and_hit_play_on_ship_bus() -> void:
 	ok(s.hit.playing, "плеер ударов играет")
 	main.vitals.hit_cd = 0.0
 	main.vitals.scrape(10.0, 3.0)
-	eq(s.last, HullSound.SCRAPE, "удар о дно — скрежет")
+	eq(s.last, HullSound.HITS[HullSound.Side.BELOW], "удар о дно — удар снизу")
+	eq(s.last_tail, HullSound.SCRAPE, "и скрежет хвостом")
+	ok(s.scrape.playing, "плеер скрежета играет")
+	eq(String(s.scrape.bus), SoundMix.SHIP, "скрежет — на шине «Корабль»")
+	main.vitals.hit_cd = 0.0
+	main.on_eco_event(EcoLink.hit("Хватун", 0.05, main.helm.pos + Vector3(0, -4, 0)))
+	eq(s.last, HullSound.HITS[HullSound.Side.BELOW], "существо из-под днища — удар снизу")
+	eq(main.hit_local, null, "точка удара не залипает")
+	main.helm.yaw = PI / 2.0   # нос смотрит в −X
+	main.on_eco_event(EcoLink.hit("Хватун", 0.05, main.helm.pos + Vector3(-8, 0, 0)))
+	eq(s.last, HullSound.HITS[HullSound.Side.FRONT], "в нос при повороте — прямой")
+	main.vitals.hit(3, "Хватун")
+	eq(s.last_tail, "", "удар существа без скрежета")
+	s.play_ice(Helm.Ship.CLIMB)
+	eq(s.last, HullSound.HITS[HullSound.Side.FRONT], "упор в лёд — прямой удар")
+	near(s.hit.volume_db, HullSound.ICE_DB, 0.01, "громкость удара о лёд")
 	main.queue_free()
 	await frames(1)
