@@ -113,6 +113,18 @@ static func front_depth(depth: float, holder_depth: float) -> float:
 
 ## Подложка шириной w (высоты таблички): скруглённый тёмный фон с тонким контуром и контур замка слева.
 static func panel_image(w: float) -> Image:
+	if _panel == null:
+		_panel = _panel_full(float(PANEL_CAP.x + 1 + PANEL_CAP.y) / (TEX_H / H))
+	return NameTag.stretch(_panel, roundi(w * (TEX_H / H)), PANEL_CAP, func() -> Image: return _panel_full(w))
+
+
+## Подложка из узкой заготовки, как плашка NameTag (#725): левый край с замком, средний столбец, правый край, px.
+const PANEL_CAP := Vector2i(54, 14)
+static var _panel: Image = null
+
+
+## Полный попиксельный расчёт подложки — заготовка и эталон для теста.
+static func _panel_full(w: float) -> Image:
 	var px := TEX_H / H                  # px на высоту таблички
 	var wp := roundi(w * px)
 	var hp := TEX_H
