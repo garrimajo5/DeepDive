@@ -320,6 +320,7 @@ const ALL: Array[Dictionary] = [
 
 ## Номер вида по ключу — строится при первом обращении (только числа, без объектов: ничего не держит при выходе).
 static var _index: Dictionary = {}
+static var _infos: Dictionary = {}   ## ключ → Info: обёртка одна на вид (названия зовут каждый шаг, #738)
 
 
 static func count() -> int:
@@ -348,8 +349,15 @@ static func index_of(id: String) -> int:
 
 ## Вид по ключу; null — нет такого.
 static func info(id: String) -> Info:
+	var got: Info = _infos.get(id)
+	if got:
+		return got
 	var i := index_of(id)
-	return Info.new(ALL[i]) if i >= 0 else null
+	if i < 0:
+		return null
+	got = Info.new(ALL[i])
+	_infos[id] = got
+	return got
 
 
 ## Название вида в падеже (G.nm); "" — нет такого вида.
