@@ -102,11 +102,13 @@ func _ready() -> void:
 	siren.name = "Сирена"
 	siren.stream = Synth.siren()
 	siren.volume_db = SIREN_DB
+	siren.bus = SoundMix.SHIP
 	add_child(siren)
 	jet_sound = AudioStreamPlayer3D.new()
 	jet_sound.name = "Шум струи"
 	jet_sound.stream = Synth.jet()
 	jet_sound.volume_db = JET_DB
+	jet_sound.bus = SoundMix.SHIP
 	jet_sound.unit_size = 2.5
 	jet_sound.max_distance = 18.0
 	jet_sound.position = Vector3(0, 0, 0.1)
