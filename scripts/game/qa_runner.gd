@@ -158,6 +158,7 @@ func tick(dt: float) -> void:
 				main.vitals.energy = c[1]
 			"wreck":   # корпус разрушен — как от удара (шторка ART-036)
 				main.vitals.hull = 0.0
+				main.timeline.set_hull(main.time, 0.0)   # крушение из сценария — не «удар» в хронометраже
 				main.vitals.destroyed.emit()
 			"back":   # системная «Назад»: пауза ART-037
 				main.back_pressed()
