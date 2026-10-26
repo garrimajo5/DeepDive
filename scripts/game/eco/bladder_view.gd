@@ -24,6 +24,9 @@ var bubbles: MultiMeshInstance3D
 var bubble := EcoBladderBubbles.new()
 var bubble_buffer := PackedFloat32Array()
 var _bubbles_empty := false
+## Места пула, что видны или ждут своего мгновения, и сколько пузырьков пул уже принял (EcoBladderBubbles.added).
+var _bubbles_live := PackedInt32Array()
+var _bubbles_seen := 0
 ## Последние буферы луковиц и спор (для тестов).
 var bulb_buffer := PackedFloat32Array()
 var spore_buffer := PackedFloat32Array()
@@ -172,12 +175,58 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 
 func _sync_bubbles(t: float, ship: EcoLink.ShipState, flow: Vector3) -> void:
 	bubble.update(bladders, t, ship.pos if ship else Vector3.ZERO)
-	var shown := bubble.shown(t)
-	if shown == 0 and _bubbles_empty and bubble_buffer.size() == EcoBladderBubbles.POOL * STRIDE_C:
+	var shown := pack_bubbles_into(t, flow, ship)
+	if shown == 0 and _bubbles_empty:
 		return   # пузырьков нет и в буфере пусто — буфер не грузим заново (issue #133)
-	bubble_buffer = pack_bubbles(bubble, t, flow, ship)
 	bubbles.multimesh.buffer = bubble_buffer
 	_bubbles_empty = shown == 0
+
+
+## Переписать буфер пузырьков на месте (как pack_bubbles, но без нового буфера каждый кадр и без перебора всего
+## пула — замер шага мира test_eco_speed): смотрим только места, что были видны, и новые с прошлого кадра
+## (EcoBladderBubbles.added); живые — на месте, растаявшие стянуты в точку один раз. Возвращает, сколько видно.
+func pack_bubbles_into(t: float, flow: Vector3, ship: EcoLink.ShipState = null) -> int:
+	var list := bubble.bubbles
+	var pool := list.size()
+	if bubble_buffer.size() != pool * STRIDE_C:
+		bubble_buffer.resize(pool * STRIDE_C)
+		bubble_buffer.fill(0.0)
+		_bubbles_live.clear()
+		_bubbles_seen = bubble.added - pool   # все места пула — на проверку
+	var fresh := mini(bubble.added - _bubbles_seen, pool)
+	_bubbles_seen = bubble.added
+	var check := _bubbles_live
+	var top := bubble.slot()
+	for f in fresh:
+		var n := posmod(top - 1 - f, pool)
+		if not check.has(n):
+			check.append(n)
+	var live := PackedInt32Array()
+	for n in check:
+		var b := list[n]
+		var i := n * STRIDE_C
+		var age := t - b.born
+		var a := EcoBladderBubbles.fade(b, t) if age >= 0.0 and age < EcoBladderBubbles.LIFE else 0.0
+		if a <= 0.0:
+			for k in STRIDE_C:
+				bubble_buffer[i + k] = 0.0
+			if age < 0.0:
+				live.append(n)   # ещё не сорвался — ждёт своего мгновения
+			continue
+		live.append(n)
+		var sz := EcoBladderBubbles.size(b, t)
+		var o := EcoBladderBubbles.pos(b, t, flow)
+		var c := EcoBladderBubbles.COLOR.lerp(EcoBladderBubbles.LIT, EcoGrazerDust.light(o, ship))
+		bubble_buffer[i] = sz; bubble_buffer[i + 3] = o.x
+		bubble_buffer[i + 5] = sz; bubble_buffer[i + 7] = o.y
+		bubble_buffer[i + 10] = sz; bubble_buffer[i + 11] = o.z
+		bubble_buffer[i + 12] = c.r; bubble_buffer[i + 13] = c.g; bubble_buffer[i + 14] = c.b; bubble_buffer[i + 15] = a
+	_bubbles_live = live
+	var shown := 0
+	for n in live:
+		if bubble_buffer[n * STRIDE_C + 15] > 0.0:
+			shown += 1
+	return shown
 
 
 ## Базис, что ставит единичный стебель (ось +Y, середина в нуле) от основания по вектору up.

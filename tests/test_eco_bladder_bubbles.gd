@@ -198,3 +198,45 @@ func test_scene_multimesh_on_world_shader() -> void:
 	eq(shown, EcoBladderBubbles.POP_N * EcoBladder.STEMS, "все пузырьки лопнувшего куста видны")
 	view.queue_free()
 	await frames(1)
+
+
+## Буфер на месте (pack_bubbles_into: только видимые и новые места пула) — тот же, что pack_bubbles: живые на месте,
+## растаявшие и не сорвавшиеся стянуты в точку; лопание и сочение, пул переполнен по кругу.
+func test_pack_into_same_as_pack() -> void:
+	EcoGrazerDust.lite = false
+	var w := _world()
+	var b := _bl(w)
+	var view := BladderView.new(b)
+	var ship := EcoLink.ShipState.new()
+	ship.pos = w.ship.pos
+	ship.light_on = true
+	ship.light_range = 30.0
+	var flow := Vector3(0.2, 0, 0.1)
+	var checked := 0
+	for f in 900:
+		w.step(1.0 / 30.0)
+		if f % 150 == 10:
+			b.pop(w, b.bushes[0], false)
+		if f % 7 == 0:
+			b.bushes[0].ripe = 0.9
+		view.sync(w.time, ship, flow)
+		var ref := BladderView.pack_bubbles(view.bubble, w.time, flow, ship)
+		var shown := 0
+		for n in EcoBladderBubbles.POOL:
+			var i := n * BladderView.STRIDE_C
+			if ref[i + 15] > 0.0:
+				shown += 1
+				for k in BladderView.STRIDE_C:
+					if absf(ref[i + k] - view.bubble_buffer[i + k]) > 1e-5:
+						ok(false, "кадр %d, пузырёк %d: буфер расходится" % [f, n])
+						view.free()
+						return
+			elif view.bubble_buffer[i] != 0.0 or view.bubble_buffer[i + 15] != 0.0:
+				ok(false, "кадр %d, пузырёк %d: растаявший не стянут" % [f, n])
+				view.free()
+				return
+		if shown > 0:
+			checked += 1
+	ok(view.bubble.added > EcoBladderBubbles.POOL, "пул прошёл по кругу (%d)" % view.bubble.added)
+	ok(checked > 300, "сравнили кадров с пузырьками (%d)" % checked)
+	view.free()

@@ -218,7 +218,8 @@ Compatibility-снимке).
     хешем `EcoVary`, поэтому у гостя пузырьки те же. Пул 64, дальше 80 м нет; цвет — отсвет сока, в луче —
     серебро. Рисует `BladderView` дочерним MultiMesh «Пузырьки» на `EcoShaders.MIST` (BUBBLE, uniform `placed` —
     место и размер с процессора; +1 вызов, шейдеров не прибавилось). «Экономно» — общий `EcoGrazerDust.lite`.
-    Тест — `test_eco_bladder_bubbles`
+    Тест — `test_eco_bladder_bubbles`. Буфер пишется на месте и только по видимым и новым местам пула
+    (`BladderView.pack_bubbles_into`, `EcoBladderBubbles.added`): шаг мира −0,13 мс (замер `test_eco_speed`)
   - [x] Выдох трубного органа (`scripts/core/eco/organ_dust.gd`, `EcoOrganDust`): губка гонит воду сквозь трубы —
     в такт гулу (такт тления `EcoOrgan.glow`, sin 1,7 t ≈ 3,7 с) каждая труба в свою фазу (хеш `EcoVary`) выпускает
     над устьем облачко отцеженной мути, вдали от корабля — в 45 % тактов, слабое (0,45) и мелкое (доля 0,7);
