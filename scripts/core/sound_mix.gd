@@ -23,6 +23,13 @@ const TENSION_AMBIENT_K := 0.6  ## напряжение: эмбиент усту
 ## Эмбиент по глубине: до DEEP_FROM — петля отмели, глубже DEEP_TO — петля глубины, между — перекрёстно.
 const DEEP_FROM := 150.0
 const DEEP_TO := 250.0
+## Петли эмбиента и гула (SND-001 #655, docs/zvuk/SND-001.md). Петля глубины ещё не заказана — пока её файла нет,
+## петля отмели звучит на любой глубине (`loop_k`). Играет `scripts/game/ambience.gd` (`main.ambience`).
+const SHELF_LOOP := "res://audio/ambient/ambient-shelf.mp3"
+const DEEP_LOOP := "res://audio/ambient/ambient-deep.mp3"
+const HUM_LOOP := "res://audio/ship/ship-hum.mp3"
+const AMBIENT_DB := -6.0    ## эмбиент за бортом — фон под всем остальным
+const HUM_DB := -12.0       ## гул корабля поверх эмбиента, тише (в файле он громче эмбиента на ~5 дБ)
 
 
 ## Заводит недостающие шины (по порядку BUSES, выход — в Master). Повторный вызов ничего не меняет.
@@ -57,6 +64,11 @@ static func shelf_k(depth: float) -> float:
 ## Доля петли глубины — дополняет отмель до 1.
 static func deep_k(depth: float) -> float:
 	return 1.0 - shelf_k(depth)
+
+
+## Доли петель [отмель, глубина] с учётом того, есть ли петля глубины: без неё отмель — на полную везде.
+static func loop_k(pair: Vector2, has_deep: bool) -> Vector2:
+	return pair if has_deep else Vector2(1.0, 0.0)
 
 
 ## Сведение шин. Состояние игры — полями (ставит `Main._sound` каждый кадр), `update(dt)` ведёт доли к целям.
