@@ -1,4 +1,4 @@
-import array, hashlib, json, math, re, subprocess
+import array, hashlib, json, math, re, subprocess, sys
 from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 ffmpeg = next(Path('C:/Users/FEDYA/Documents/ChatGPT/Pogrujenie/output/snd001-test/deps/imageio_ffmpeg/binaries').glob('*.exe'))
@@ -14,7 +14,7 @@ for item in state['items']:
     src=root/'source'/(item['name']+'.mp3')
     ext='.mp3' if item['loop'] else '.wav'
     dest=root/(item['name']+ext)
-    if dest.exists(): continue
+    if dest.exists() and not ('--refresh-new-wav' in sys.argv and not item['loop']): continue
     source,log=measure(src)
     gain=min(-18-float(source['input_i']),-2-float(source['input_tp']))
     duration=item['duration']
@@ -23,7 +23,7 @@ for item in state['items']:
         filt=f'[0:a]asplit=3[mid][tail][head];[mid]atrim=start=0.05:end={d-0.05},asetpts=PTS-STARTPTS[m];[tail]atrim=start={d-0.05}:end={d},asetpts=PTS-STARTPTS,afade=t=out:st=0:d=0.05[t];[head]atrim=start=0:end=0.05,asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.05[h];[t][h]amix=inputs=2:duration=shortest:normalize=0[c];[m][c]concat=n=2:v=0:a=1,volume={gain:.4f}dB[out]'
         run(['-i',str(src),'-filter_complex',filt,'-map','[out]','-ar','44100','-c:a','libmp3lame','-b:a','192k','-map_metadata','-1',str(dest)])
     else:
-        run(['-i',str(src),'-af',f'volume={gain:.4f}dB','-ar','48000','-c:a','pcm_s16le','-map_metadata','-1',str(dest)])
+        run(['-i',str(src),'-af',f'volume={gain:.4f}dB,afade=t=in:st=0:d=0.001,afade=t=out:st={duration-0.03}:d=0.03','-ar','48000','-c:a','pcm_s16le','-map_metadata','-1','-y',str(dest)])
     final,flog=measure(dest)
     hz=44100 if item['loop'] else 48000
     pcm=array.array('f',run(['-i',str(dest),'-f','f32le','-acodec','pcm_f32le','-']).stdout)

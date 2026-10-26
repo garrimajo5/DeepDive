@@ -1,74 +1,83 @@
 # SND-003 — пробоина, тревога и разряд
 
-Issue #657, базовый origin/main `9c1a079c9ada92294a6e502648d735444abe531e`. Ветка `art/SND-003-proboina-trevoga`. Дата 26.10.2026. **Частичная работа: 2 из 6 вариантов, заказ остаётся «в работе».**
+Issue #657, PR #690, ветка `art/SND-003-proboina-trevoga`. Базовый origin/main `9c1a079c9ada92294a6e502648d735444abe531e`. 26.10.2026. **Полный комплект: по два варианта каждой группы, готов к приёмке.**
 
-## Готовые файлы
+## Файлы и рекомендация
 
-| Файл | Тип | Длина | Формат | Пик sample / true | LUFS | Замысел |
-|---|---|---:|---|---:|---:|---|
-| breach-jet-1.mp3 | петля | 6,95 с | MP3 stereo 44,1 кГц / 192 кбит/с | −6,40 / −6,23 дБ | −18,24 | Узкая мощная струя под давлением, бурление о металл |
-| breach-jet-2.mp3 | петля | 6,95 с | MP3 stereo 44,1 кГц / 192 кбит/с | −7,44 / −7,40 дБ | −18,26 | Более широкая турбулентная струя, меньше шипения, больше бурления |
+Все описания — замысел промптов, не слуховая оценка: я звук не слышу. Для первого прослушивания рекомендую **breach-jet-1, alarm-siren-1 и zap-1**: узкая мощная струя, более чёткое чередование гудка и короткий разряд с низким хвостом. Вторые варианты дают более широкую жидкостную/дуговую фактуру или более протяжные ноты. Пики и громкости измерены; художественное соответствие, читаемость тревоги и стыки подтверждают владелец и тестер.
 
-Оба файла по 168689 байт. Рекомендую первым для прослушивания вариант 1: по замыслу он отчётливее обозначает небольшую пробоину под давлением. Это рекомендация по промпту и технике, не слуховая оценка. Я звук не слышу: характер струи, отсутствие дождя/душа/водопада, речи и слышимого стыка проверяют владелец и тестер.
+| Файл | Тип | Длина, с | Формат | Sample / true peak, дБ | LUFS | Размер, байт | Замысел |
+|---|---|---:|---|---:|---:|---:|---|
+| `breach-jet-1.mp3` | петля | 6.95 | MP3 44,1 кГц / 192 кбит/с stereo | -6.40 / -6.23 | -18.24 | 168689 | Узкая мощная струя, свист давления приглушён, бурление у палубы. |
+| `breach-jet-2.mp3` | петля | 6.95 | MP3 44,1 кГц / 192 кбит/с stereo | -7.44 / -7.40 | -18.26 | 168689 | Более широкая турбулентная струя, больше низкого бурления. |
+| `alarm-siren-1.mp3` | петля | 2.95 | MP3 44,1 кГц / 192 кбит/с stereo | -9.22 / -9.21 | -18.20 | 72141 | Двухтоновый низкий металлический гудок, короткие чёткие чередования. |
+| `alarm-siren-2.mp3` | петля | 2.95 | MP3 44,1 кГц / 192 кбит/с stereo | -13.08 / -13.06 | -18.10 | 72141 | Более протяжный полый двухтоновый гудок, мягче атака. |
+| `zap-1.wav` | один раз | 1.60 | WAV PCM16 stereo 48 кГц | -3.75 / -3.64 | -18.00 | 307278 | Короткий электрический удар, резкий треск и низкий хвост корпуса. |
+| `zap-2.wav` | один раз | 1.60 | WAV PCM16 stereo 48 кГц | -2.00 / -2.00 | -19.02 | 307278 | Более широкий дуговой разряд, зернистый треск с мягким гулом после. |
 
-## Настройки и учёт
+## Генерация и стоимость
 
-ElevenLabs Creative Studio: creative_get_model_schema, creative_add_flow_node, creative_run_flow_nodes(estimate_only=true), creative_run_flow_nodes(generations_count=1), creative_show_flow_results. Модель eleven_text_to_sound_v2, prompt_influence=0.7. Все промпты короче 450 символов. Flow `HIazYUdOjFxEaHj6tC13`.
+ElevenLabs Creative Studio: creative_get_model_schema → creative_add_flow_node → creative_run_flow_nodes(estimate_only=true) → creative_run_flow_nodes(generations_count=1) → creative_show_flow_results. Модель `eleven_text_to_sound_v2`, prompt_influence=0.7. Loop включён для струи и гудка, выключен для разряда; заданная длина 7 / 3 / 1,6 с соответственно. Все промпты короче 450 символов. Flow `HIazYUdOjFxEaHj6tC13`. Готовые варианты не генерировались повторно.
 
-Две завершённые генерации — **140 кредитов по метаданным** (70 каждая). При запуске alarm-siren-1 получен 429 rate_limited, request id 898884b965477a31ba7f557e1a2f3044; стоимость/идентификатор новой генерации не возвращены. Новых запусков после 429 не делалось. Перед продолжением прочитать существующий flow и восстановить результат, если он появился; готовые breach-jet не генерировать заново.
+Шесть успешных генераций — **232 кредита по метаданным**: 140 за струи в прошлом проходе и 92 за тревоги/разряды в продолжении. На предыдущем запуске alarm-siren-1 была ошибка 429 без id новой генерации/цены; перед продолжением creative_get_flow подтвердил not_run у четырёх оставшихся узлов. Фактический остаток и возможные списания по ошибке не проверены: отдельного инструмента баланса нет. Покупок, смены плана и доплат не было.
 
-## Проверка и обработка
+## Техническая проверка
 
-Исходники в source/*.mp3: MP3 44,1 кГц / 128 кбит/с. Полное декодирование FFmpeg 7.1 без ошибок. Подготовленные петли перекодированы в 192 кбит/с — это не восстанавливает потерянное исходное качество. Применён постоянный gain −5,10 / −6,99 дБ. Для циклического стыка края исходной записи перекрыты на 50 мс через FFmpeg afade/amix/concat: средняя часть 0,05–6,95 с плюс смешанные хвост/начало. Без синтеза, удлинения или затухания в тишину. Итог 6,95 с — внутри требуемых 5–10 с.
+FFmpeg 7.1 полностью декодировал каждый исходный MP3 и подготовленный файл без ошибок. Проверены потоки, длительность, sample peak, true peak и размер. Все файлы меньше 6 МБ, пики ниже −1 дБ, длины внутри диапазонов заказа. Измерения и SHA-256 — в `*-technical.json`; в них `final_loudness.input_*` означает измерение готового файла, а `output_*` — только расчёт фильтра loudnorm, не применённую динамическую обработку.
 
-Повторно измерены sample peak и true peak (ниже −1 дБ), длительность, формат и размер; SHA-256 и измерения — в *-technical.json. Разница крайних сэмплов: вар.1 −46,86/−34,44 dBFS, вар.2 −37,66/−37,23 dBFS. Это диагностика, не доказательство незаметного стыка. Скрипт src/prepare_audio.py воспроизводит техническую обработку, исходники сохранены.
+Исходники в `source/*.mp3`: MP3 stereo 44,1 кГц / 128 кбит/с. Перекодирование в 192 кбит/с или PCM48 не восстанавливает исходное качество. Применены только постоянный gain и техническая обработка границ; исходники сохранены. Усиление рассчитывается по ориентиру −18 LUFS и запасу true peak −2 дБ, после обработки пики измерены повторно.
 
-## Все подготовленные варианты и дословные промпты
+У четырёх петель края исходника циклически перекрыты на 50 мс через FFmpeg afade/amix/concat: средняя часть 0,05–(D−0,05) плюс смешанные хвост и начало. Нет затухания в тишину или синтеза нового звука. Длины после обработки 6,95 и 2,95 с. Разряды: fade-in 1 мс и fade-out 30 мс для мягких границ, длительность 1,6 с; короткая атака может быть слегка смягчена. Скрипт `src/prepare_audio.py` воспроизводит обработку.
+
+Измеренные разницы крайних сэмплов петель (L/R dBFS):
+
+- breach-jet-1: -46.86 / -34.44.
+- breach-jet-2: -37.66 / -37.23.
+- alarm-siren-1: -46.30 / -45.92.
+- alarm-siren-2: -42.82 / -44.80.
+
+Это диагностика, не доказательство неслышного стыка. Владелец должен послушать несколько повторений и проверить характер гудка, струи и разрядов, отсутствие полиции/автосигнализации, дождя/душа/водопада, лазерных «пиу», речи и музыки. Сведение в игровом окружении и проверка на телефоне — после приёмки.
+
+## Дословные промпты и идентификаторы
 
 ### breach-jet-1
 
-Запрошено 7 с, loop=true; Узкая мощная струя, свист давления приглушён, бурление у палубы.
-Node `rvbGqCxa3twXDlLpBjiC`; session `SJ6xc2lkPzeQkaSS4QfU`, generation `zsWBh4I2mZo0VqHC80ti`, completed, 70 кредитов.
+Node `rvbGqCxa3twXDlLpBjiC`; session `SJ6xc2lkPzeQkaSS4QfU`; generation `zsWBh4I2mZo0VqHC80ti`; status completed; стоимость 70 кредитов. Запрошено 7 с, loop=True.
 
 7-second seamless loop of a powerful narrow jet of pressurized seawater forcing through a small breach into a steel submarine compartment. Dense rushing water, low pressure roar and turbulent bubbling against metal close by. Steady urgent flow, enclosed steel hull resonance. No rain, shower, waterfall, voices, music or alarms. No fades.
 
 ### breach-jet-2
 
-Запрошено 7 с, loop=true; Более широкая турбулентная струя, больше низкого бурления.
-Node `mQ6nRhUmI0F5WGHeBwkF`; session `Y0BJ10bc73Ywyd0HzzID`, generation `YY08YpZ3mCjkJErSc8pG`, completed, 70 кредитов.
+Node `mQ6nRhUmI0F5WGHeBwkF`; session `Y0BJ10bc73Ywyd0HzzID`; generation `YY08YpZ3mCjkJErSc8pG`; status completed; стоимость 70 кредитов. Запрошено 7 с, loop=True.
 
 7-second seamless loop inside a damaged steel submarine compartment: a broad turbulent stream of seawater under high pressure, thick low rushing noise and coarse bubbling as water churns over metal. Less hiss, more dense liquid turbulence than a narrow jet. No rain, shower, waterfall, speech, music or siren. Steady flow with no fade in or out.
 
 ### alarm-siren-1
 
-Запрошено 3 с, loop=true; Двухтоновый низкий металлический гудок, короткие чёткие чередования.
-Node `G1DmS7UkKovM6inDg0hE`; запуск получил 429; аудио не получено.
+Node `G1DmS7UkKovM6inDg0hE`; session `HDVdziyIVWeVaL87I9th`; generation `m3RsiWtuRMSHESscif0E`; status completed; стоимость 30 кредитов. Запрошено 3 с, loop=True.
 
 3-second seamless loop of an industrial submarine emergency horn inside a steel hull. Two alternating low-mid metallic notes, clear measured pulses with a restrained short room resonance. Urgent and audible but not painfully loud, rounded attack. No police siren, car alarm, sweeping pitch, music, voices or extra beeps. Repeat evenly without fades.
 
 ### alarm-siren-2
 
-Запрошено 3 с, loop=true; Более протяжный полый двухтоновый гудок, мягче атака.
-Node `6PSHeRvIf4oAdWZabS7T`; ещё не запускался.
+Node `6PSHeRvIf4oAdWZabS7T`; session `NHu1l17LIk5EbsMumxtg`; generation `kxaNyyy9gNxdAqb1APkB`; status completed; стоимость 30 кредитов. Запрошено 3 с, loop=True.
 
 3-second seamless loop of a two-tone warning horn in a steel research submarine. Alternating hollow low notes with slightly longer holds, soft-edged onset and compact metallic room resonance. Serious measured warning, restrained dynamics. No police or car siren, rapid warbling, high squeal, music, speech or other beeps. Even repetition without fades.
 
 ### zap-1
 
-Запрошено 1.6 с, loop=false; Короткий электрический удар, резкий треск и низкий хвост корпуса.
-Node `fP2qRBr1Y4HwAyKPEGX7`; ещё не запускался.
+Node `fP2qRBr1Y4HwAyKPEGX7`; session `R8Idj68l6MXHJbLxAbzx`; generation `Uds0lCFG2zCWiJiNwlxR`; status completed; стоимость 16 кредитов. Запрошено 1.6 с, loop=False.
 
 One powerful electrical discharge across a submerged steel submarine hull, sharp dense crack at the start followed by rough electric crackle and a brief low metallic resonance fading to silence over 1.6 seconds. Muffled underwater perspective. No laser, sci-fi pew, explosion, voices, music or repeated strikes.
 
 ### zap-2
 
-Запрошено 1.6 с, loop=false; Более широкий дуговой разряд, зернистый треск с мягким гулом после.
-Node `hqquwCoXzLCrM14RNkbU`; ещё не запускался.
+Node `hqquwCoXzLCrM14RNkbU`; session `Do0LEVy3gg30W6q22Yxh`; generation `9KY8vyh32xzT2vFSogtP`; status completed; стоимость 16 кредитов. Запрошено 1.6 с, loop=False.
 
 A single broad electric arc snapping across wet thick steel underwater, gritty short crackling burst and a soft bass hull shudder decaying naturally into silence. 1.6 seconds, close submerged vessel perspective, forceful but controlled. No laser, sci-fi pew, cinematic explosion, music, voices or repeating shocks.
 
 ## Права и открытые вопросы
 
-Free и 10000 кредитов — по сообщению владельца на момент обсуждения; текущий баланс/тариф рабочего пространства коннектор не показывает. Владелец разрешил некоммерческое использование через Creative Studio вместо старых MCP-инструментов. При публикации нужна атрибуция ElevenLabs (elevenlabs.io); коммерческие права не заявляются. Покупок, включения доплат и смены плана не было.
+Free, 10000 кредитов и некоммерческое использование — по сообщению владельца на момент обсуждения. Текущий тариф/баланс рабочего пространства не подтверждены инструментально. Владелец разрешил использовать Creative Studio вместо старых имён MCP и не требовать платный план для некоммерческих эффектов. Для публичного некоммерческого использования нужна атрибуция ElevenLabs (elevenlabs.io / 11.ai); коммерческие права не заявляются.
 
-Осталось: два варианта тревоги 2–4 с и два разряда 1–2 с, техпроверка и полная сдача. Собственная интерпретация — характер двух струй и варианты гудка/разряда в пределах заказа. Новых сюжетных фактов и реплик нет. Палитра и геометрия к звуку не применяются.
+Самостоятельная интерпретация — тембровые отличия двух вариантов каждой группы, внутри среды и ограничений заказа. Новых сюжетных фактов и реплик нет. Открыто: окончательный выбор владельцем после прослушивания и проверка в игре. Палитра и геометрия к звуку не применяются.
