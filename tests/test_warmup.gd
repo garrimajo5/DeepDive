@@ -10,7 +10,7 @@ func test_views_cover_circle() -> void:
 			yaws[int(v[0]) % 360] = true
 	for y in range(0, 360, 60):
 		ok(yaws.has(y), "взгляд на курс %d°" % y)
-	ok(Warmup.frames() <= 16, "кадров прогрева немного: %d (issue #159; +1 — вид при всплытии, #519)" % Warmup.frames())
+	ok(Warmup.frames() <= 19, "кадров прогрева немного: %d (issue #159; +1 — вид при всплытии, #519; +3 — первый взгляд по слоям, #424)" % Warmup.frames())
 	ok(Deck.FOV > 60.0, "шаг 60° не оставляет щелей при поле зрения %.0f°" % Deck.FOV)
 	near(Warmup.zap_radius(), 80.0, 1e-6, "разряд на пределе доли: 60 / 15 × 20 м")
 
@@ -38,7 +38,7 @@ func test_post_views() -> void:
 	while w.outside() < 0 and w.active():
 		eyes.append(w.eye())
 		w.advance()
-	eq(eyes.size(), Warmup.VIEWS.size() + Warmup.POSTS.size(), "взгляды с мостика: из центра и у постов")
+	eq(eyes.size(), Warmup.STAGES + Warmup.VIEWS.size() + Warmup.POSTS.size(), "взгляды с мостика: по слоям, из центра и у постов")
 	eq(eyes[0], Warmup.EYE, "сначала из центра")
 	eq(eyes[-1], Vector3(Warmup.POSTS[-1][0], Warmup.POSTS[-1][1], Warmup.POSTS[-1][2]), "потом у постов")
 
@@ -218,7 +218,9 @@ func test_scene_warmup_draws_every_mesh() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	Warmup.enabled = false
-	ok(main.warming(), "идёт прогрев")
+	for i in Warmup.STAGES:   # первый взгляд по слоям (#424) — до кадра, где виден весь мир
+		main.step(1.0 / 60.0)
+	ok(main.warming() and main.warm.stage() == -1, "идёт прогрев, первый взгляд целиком")
 	for root: Node in [main.ship, main.ocean, main.silt_view, main.samples_view]:
 		for n in root.find_children("*", "GeometryInstance3D", true, false):
 			var g := n as GeometryInstance3D
@@ -228,6 +230,59 @@ func test_scene_warmup_draws_every_mesh() -> void:
 			elif g is MultiMeshInstance3D:
 				var mm := (g as MultiMeshInstance3D).multimesh
 				ok(mm != null and mm.mesh != null and mm.instance_count > 0, "есть что рисовать у %s" % g.name)
+	main.queue_free()
+	await frames(1)
+
+
+## Issue #424: на холодном кэше кадр 1 прогрева собирал почти все шейдеры (8,3 с из 10,9 на эмуляторе), полоса заставки
+## стояла. Первые Warmup.STAGES кадров — тот же первый взгляд, мир показывается слоями Main.warm_layers(): на кадре s
+## видны слои 0…s, остальное скрыто только на этот кадр; дальше всё видно, как раньше.
+func test_stage_order() -> void:
+	Warmup.enabled = true
+	var w := Warmup.new()
+	Warmup.enabled = false
+	for s in Warmup.STAGES:
+		eq(w.stage(), s, "кадр %d — слой %d" % [s, s])
+		eq(w.eye(), Warmup.EYE, "слой %d — из центра мостика" % s)
+		near(w.yaw(), deg_to_rad(Warmup.VIEWS[0][0]), 1e-9, "слой %d — первым взглядом" % s)
+		near(w.pitch(), deg_to_rad(Warmup.VIEWS[0][1]), 1e-9, "наклон первого взгляда")
+		w.advance()
+	eq(w.stage(), -1, "после слоёв — обычные кадры")
+	near(w.pitch(), deg_to_rad(Warmup.VIEWS[0][1]), 1e-9, "первый взгляд целиком")
+	w.advance()
+	near(w.yaw(), deg_to_rad(Warmup.VIEWS[1][0]), 1e-9, "дальше — круг взглядов")
+
+
+func test_scene_warm_layers() -> void:
+	Warmup.enabled = true
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	Warmup.enabled = false
+	var layers := main.warm_layers()
+	eq(layers.size(), Warmup.STAGES + 1, "слоёв на один больше кадров по слоям: последний виден с первого полного кадра")
+	eq(layers[0], [], "слой 0 — интерьер и всё, чего нет в других слоях")
+	var seen := {}
+	for s in Warmup.STAGES:
+		eq(main.warm.stage(), s, "кадр по слоям %d" % s)
+		for k in layers.size():
+			for n: Node3D in layers[k]:
+				if k > s:
+					ok(not n.visible, "%s на кадре слоя %d скрыт" % [n.name, s])
+				elif n.visible:
+					seen[n] = true
+		ok(main.bridge.visible and main.rooms.visible, "интерьер виден на каждом кадре")
+		ok(main.camera.current, "камера мостика")
+		main.step(1.0 / 60.0)
+	eq(main.warm.stage(), -1, "слои кончились")
+	for k in layers.size():
+		for n: Node3D in layers[k]:   # ил (SiltView) скрыт до события — его слои не трогают
+			ok(n.visible or not seen.has(n), "%s снова виден" % n.name)
+	for n in [main.crew_view, main.hull, main.ocean]:   # живой мир — с первого полного кадра
+		ok(seen.has(n), "%s показан на своём кадре" % n.name)
+	ok(main.eco in layers[-1] and main.ocean in layers[-2], "вода и живой мир — последними (самые тяжёлые)")
+	while main.warming():
+		main.step(1.0 / 60.0)
+	ok(main.ocean.visible and main.eco.visible and main.hull.visible and main.crew_view.visible, "после прогрева мир виден")
 	main.queue_free()
 	await frames(1)
 
