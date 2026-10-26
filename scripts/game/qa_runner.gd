@@ -130,6 +130,9 @@ func tick(dt: float) -> void:
 			"sample":
 				main.park_over_sample(c[1])
 			"ship":   # корабль в точку мира и стоит (вид на дно под трещинами, #445)
+				if c.size() > 4:   # курс задан — видно то же место, как бы ни шёл забег до этого
+					main.helm.yaw = deg_to_rad(c[4])
+					main.helm.turn = 0.0
 				main.park_at(Vector3(c[1], c[2], c[3]))
 			"fly":   # тестовый полёт noclip: глаз на высоте c[2] в осях корабля, наклон c[3]
 				if main.walker.noclip != c[1]:
