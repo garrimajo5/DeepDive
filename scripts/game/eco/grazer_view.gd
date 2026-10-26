@@ -5,7 +5,8 @@ extends MultiMeshInstance3D
 ## лапы и скребок так же, как EcoGrazerLook.posed: в UV.x — тройка лапы (±1, у корпуса 0), в UV.y — скребок (1),
 ## в UV2 — бедро лапы (x, z). Краска — цвет вершины × цвет экземпляра (EcoGrazerLook.tint — свой у особи, Б4);
 ## размер особи — в basis. Грани плоские (нормаль по производным), своего света нет.
-## Стоит на слое отмели (OceanView.LAYER_WORLD).
+## Муть у дна от скребка и лап (EcoGrazerDust) — дочерний MultiMesh «Муть»: облачка ила лицом к камере, общий
+## шейдер EcoShaders.MIST (режим INK), +1 вызов отрисовки. Стоит на слое отмели (OceanView.LAYER_WORLD).
 
 const SHADER := """
 shader_type spatial;
@@ -43,6 +44,12 @@ const STRIDE := 20
 var grazers: EcoGrazer
 ## Последний буфер MultiMesh (по нему проверяют тесты: в headless сервер отрисовки буфер не хранит).
 var buffer := PackedFloat32Array()
+## Муть от скребунов: пул облачков и его MultiMesh; буфер мути — для тестов.
+var dust := EcoGrazerDust.new()
+var dust_view: MultiMeshInstance3D
+var dust_buffer := PackedFloat32Array()
+## Чисел на облачко в буфере мути: transform 3 × 4 и цвет.
+const DUST_STRIDE := 16
 
 
 func _init(system: EcoGrazer) -> void:
@@ -57,7 +64,27 @@ func _init(system: EcoGrazer) -> void:
 	mm.mesh = build_mesh()
 	mm.instance_count = grazers.all.size()
 	multimesh = mm
+	dust_view = _build_dust()
+	add_child(dust_view)
 	sync(0.0)
+
+
+func _build_dust() -> MultiMeshInstance3D:
+	var mi := MultiMeshInstance3D.new()
+	mi.name = "Муть"
+	mi.layers = OceanView.LAYER_WORLD
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var quad := QuadMesh.new()
+	quad.size = Vector2.ONE
+	quad.material = EcoShaders.mist(EcoShaders.Mist.INK)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = quad
+	mm.instance_count = EcoGrazerDust.POOL
+	mi.multimesh = mm
+	mi.custom_aabb = AABB(Vector3(-400, -200, -400), Vector3(800, 400, 800))
+	return mi
 
 
 ## Меш одного скребуна по EcoGrazerLook: вершины, краски, тройка лапы и скребок в UV, бедро в UV2.
@@ -94,10 +121,39 @@ static func build_mesh() -> ArrayMesh:
 	return mesh
 
 
-## Расставить скребунов по миру в момент t (время мира): один буфер MultiMesh за раз.
-func sync(t: float) -> void:
+## Расставить скребунов по миру в момент t (время мира): один буфер MultiMesh за раз. ship — корабль (муть
+## дальше EcoGrazerDust.NEAR не поднимается, в луче прожектора светлее), flow — течение мира (уносит муть).
+func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO) -> void:
 	buffer = pack(grazers, t)
 	multimesh.buffer = buffer
+	dust.update(grazers, t, ship.pos if ship else Vector3.ZERO)
+	var shown := dust.shown(t)
+	if shown == 0 and dust_buffer.size() == EcoGrazerDust.POOL * DUST_STRIDE and _dust_empty:
+		return   # мути нет и в буфере пусто — не грузим буфер заново (issue #133)
+	dust_buffer = pack_dust(dust, t, flow, ship)
+	dust_view.multimesh.buffer = dust_buffer
+	_dust_empty = shown == 0
+
+
+var _dust_empty := false
+
+
+## Буфер мути (TRANSFORM_3D + цвет): растаявшие облачка стянуты в точку, в луче прожектора — светлее.
+static func pack_dust(d: EcoGrazerDust, t: float, flow: Vector3, ship: EcoLink.ShipState = null) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	out.resize(EcoGrazerDust.POOL * DUST_STRIDE)
+	for n in d.puffs.size():
+		var p := d.puffs[n]
+		var i := n * DUST_STRIDE
+		var a := EcoGrazerDust.fade(p, t)
+		var s := EcoGrazerDust.size(p, t) if a > 0.0 else 0.0
+		var o := EcoGrazerDust.pos(p, t, flow)
+		var c := EcoGrazerDust.tone(EcoGrazerDust.light(o, ship))
+		out[i] = s; out[i + 3] = o.x
+		out[i + 5] = s; out[i + 7] = o.y
+		out[i + 10] = s; out[i + 11] = o.z
+		out[i + 12] = c.r; out[i + 13] = c.g; out[i + 14] = c.b; out[i + 15] = a
+	return out
 
 
 ## Буфер MultiMesh (TRANSFORM_3D + custom data) для всех скребунов в момент t.

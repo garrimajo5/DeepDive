@@ -217,13 +217,14 @@ func _init() -> void:
 	EcoSurface.apply(self)
 
 
-## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи и просвет листвы погашены — меняются
+## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи и просвет листвы погашены, скребуны не поднимают муть — меняются
 ## только числа в uniform, шейдеры те же. Включает уровень графики — поток А (`Main._apply_graphics`).
 func set_lite(on: bool) -> void:
 	EcoShaders.set_sway_lite(on)
 	EcoRim.set_lite(on)
 	EcoIris.set_lite(on)
 	EcoBack.set_lite(on)
+	EcoGrazerDust.lite = on
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -430,7 +431,7 @@ func step_client(dt: float, ship: EcoLink.ShipState, near: PackedFloat32Array = 
 func _sync(ship: EcoLink.ShipState) -> void:
 	EcoShaders.set_flow(current.vel())
 	fish_view.sync(world.time)
-	grazer_view.sync(world.time)
+	grazer_view.sync(world.time, ship, current.vel())
 	pred_view.sync(world.time, ship.pos)
 	leech_view.sync(world.time)
 	moss_view.sync()
