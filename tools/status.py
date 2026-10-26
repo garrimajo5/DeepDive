@@ -289,9 +289,17 @@ def render(ms, epics, open_issues, recent, blocked, prs=None, now=None):
     owner = [i for i in open_issues if "ждёт владельца" in labels_of(i)]
     owner_tasks = [(r, t) for r in rows if r["state"] == "open" for t in r["tasks"]
                    if not t["done"] and t["blocker"] and "владел" in t["blocker"] and "on-hold" not in t["blocker"]]
-    L += ["", f"## ⛔ Ждёт владельца ({len(owner) + len(owner_tasks)})"]
+    # приёмка и дела самого владельца: роль «владелец» без блокера (бета, контрольные точки этапов)
+    own = [(r, t) for r in rows if r["state"] == "open" for t in r["tasks"]
+           if not t["done"] and not t["blocker"] and "владелец" in t["roles"]]
+    L += ["", f"## ⛔ Ждёт владельца ({len(owner) + len(owner_tasks) + len(own)})"]
+    if owner or owner_tasks:
+        L += ["", "**Решения** — без них работа стоит:"]
     L += [f"- #{i['number']} {i['title']}" for i in owner]
     L += [f"- {t['text']} — эпик #{r['n']}" for r, t in owner_tasks]
+    if own:
+        L += ["", "**Приёмка и твои дела** — работу не держат, но без них этап не закрыть:"]
+        L += [f"- {t['text']} — эпик #{r['n']}" for r, t in own]
     blk_issues = [(n, ds) for n, ds in blocked.items() if n not in epic_nums]
     held = [i for i in open_issues if "on-hold" in labels_of(i)]
     if blk_issues or held:
