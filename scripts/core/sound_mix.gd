@@ -2,7 +2,8 @@ class_name SoundMix
 ## Шины громкости по звуковой карте `docs/zvuk.md`: Master → Музыка, Эмбиент, Корабль, Мир, Голоса, Интерфейс.
 ## Шины заводит `ensure()` из кода (файла раскладки шин нет), каждый плеер ставит свою шину (`bus = SoundMix.SHIP`…).
 ## Сведение — `Mix`: по состоянию игры (меню, пауза, вид с борта, тревога, глубина) у каждой шины целевая доля
-## громкости, к ней доля идёт плавно (FADE_S), на шину — в дБ (`apply`). Общую громкость (Master) ставят настройки.
+## громкости, к ней доля идёт плавно (FADE_S), на шину — в дБ (`apply`). Общую громкость (Master) ставят настройки, долю каждой шины —
+## страница «Звук» (`SoundPage`, `Settings.buses`), она умножается на сведение в `apply`.
 ## Эмбиент по глубине — две петли (отмель и глубже 200 м): их доли — `shelf_k`/`deep_k`, их берёт плеер эмбиента.
 
 const MUSIC := "Музыка"
@@ -48,12 +49,18 @@ static func to_db(k: float) -> float:
 	return MUTE_DB if k <= 0.001 else maxf(MUTE_DB, linear_to_db(k))
 
 
-## Ставит шинам громкости из словаря «шина → доля» (`Mix.levels`). Шины без записи не трогает.
-static func apply(levels: Dictionary) -> void:
+## Ставит шинам громкости из словаря «шина → доля» (`Mix.levels`), умноженные на доли из настроек user
+## («шина → доля», `Settings.buses`; нет записи — 100 %). Шины без записи в levels не трогает.
+static func apply(levels: Dictionary, user := {}) -> void:
 	for name: String in levels:
 		var i := AudioServer.get_bus_index(name)
 		if i >= 0:
-			AudioServer.set_bus_volume_db(i, to_db(levels[name]))
+			AudioServer.set_bus_volume_db(i, to_db(gain(levels, user, name)))
+
+
+## Итоговая доля шины name: сведение × настройка игрока.
+static func gain(levels: Dictionary, user: Dictionary, name: String) -> float:
+	return float(levels.get(name, 0.0)) * clampf(float(user.get(name, 1.0)), 0.0, 1.0)
 
 
 ## Доля петли отмели на глубине depth (м): 1 до DEEP_FROM, 0 глубже DEEP_TO, между — плавно.

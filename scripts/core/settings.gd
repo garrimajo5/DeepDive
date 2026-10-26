@@ -3,7 +3,8 @@ extends RefCounted
 ## Настройки ART-037 (`docs/concept-art/menyu.md`, `menyu-nastrojki.png`, сброс — `menyu-sostoyaniya.png`):
 ## громкость и чувствительность свайпа (ползунки), «Камера с борта в начале забега» (Вкл/Выкл), «Графика» — страница
 ## уровней ART-044 (`page`, числа и раскладка — `Graphics`), «Голос» — страница рации ART-041 (`page` = "golos",
-## раскладка — `VoicePage`), «Сбросить сохранение»
+## раскладка — `VoicePage`), «Звук» — громкости шин `SoundMix` (`page` = "zvuk", раскладка — `SoundPage`, доли — `buses`),
+## «Сбросить сохранение»
 ## через подтверждение (выделено «Нет»), «Назад» — туда, откуда открыты (главное меню или пауза). Хранятся отдельно от
 ## сохранения забега — `user://nastrojki.cfg` (тесты, снимки и прогон тестера не читают и не пишут: `path` = "").
 ## Здесь — значения, файл, кнопки и раскладка без узлов; рисует `scripts/game/settings_panel.gd`
@@ -35,9 +36,11 @@ const INTRO_LABEL := "Камера с борта в начале забега"
 const INTRO_TOP := 690.0
 const INTRO := Rect2(1580, 655, 260, 112)
 const RESET := Rect2(1340, 842, 500, 112)
-const GRAPHICS := Rect2(560, 842, 380, 112)   ## «Графика» — страница ART-044 (`Graphics`)
+const GRAPHICS := Rect2(560, 842, 240, 112)   ## «Графика» — страница ART-044 (`Graphics`)
 const GRAPHICS_LABEL := "Графика"
-const GOLOS := Rect2(980, 842, 320, 112)      ## «Голос» — страница рации ART-041 (`VoicePage`)
+const ZVUK := Rect2(835, 842, 215, 112)       ## «Звук» — громкости шин (`SoundPage`)
+const ZVUK_LABEL := "Звук"
+const GOLOS := Rect2(1085, 842, 220, 112)     ## «Голос» — страница рации ART-041 (`VoicePage`)
 const GOLOS_LABEL := "Голос"
 const RESET_LABEL := "Сбросить сохранение"
 ## Подтверждение сброса — окно и кнопки как у паузы (`Pause.BOX`, `YES`, `NO`).
@@ -66,11 +69,14 @@ var voice_mode := Radio.Mode.HOLD
 var hear := true
 var mic_on := true
 var mic_ok := true
+## Звук: доля громкости каждой шины `SoundMix` 0…1 (шина → доля; нет записи — 100 %), `SoundPage`.
+var buses := {}
 
 var open := false
 var ask := false    ## открыто подтверждение сброса
 var grab := ""      ## ползунок под пальцем: "volume" / "swipe" / "mates"; "" — нет
-var page := ""      ## "" — основная страница, "grafika" — «Настройки · Графика» ART-044, "golos" — «Голос» ART-041
+var page := ""      ## "" — основная страница, "grafika" — «Настройки · Графика» ART-044, "golos" — «Голос» ART-041,
+                    ## "zvuk" — «Звук» (громкости шин)
 
 
 func set_volume(v: float) -> void:
@@ -85,12 +91,24 @@ func set_mates(v: float) -> void:
 	mates = clampf(snappedf(v, 0.01), VOLUME.x, VOLUME.y)
 
 
+## Громкость шины name (`SoundMix.MUSIC`…) — доля 0…1 с шагом 1 %.
+func set_bus(name: String, v: float) -> void:
+	buses[name] = clampf(snappedf(v, 0.01), VOLUME.x, VOLUME.y)
+
+
+func bus_k(name: String) -> float:
+	return float(buses.get(name, SoundPage.DEFAULT))
+
+
 func value(id: String) -> float:
 	match id:
 		"volume":
 			return volume
 		"mates":
 			return mates
+	var i := SoundPage.index(id)
+	if i >= 0:
+		return bus_k(SoundPage.bus(i))
 	return swipe
 
 
@@ -104,8 +122,11 @@ static func range_of(id: String) -> Vector2:
 	return SWIPE if id == "swipe" else VOLUME
 
 
-## Дорожка ползунка id в x макета: у «Громкости товарищей» — своя (`VoicePage.TRACK_X`).
+## Дорожка ползунка id в x макета: у «Громкости товарищей» — своя (`VoicePage.TRACK_X`), у шин — `SoundPage`.
 static func track_of(id: String) -> Vector2:
+	var i := SoundPage.index(id)
+	if i >= 0:
+		return SoundPage.track_x(i)
 	return VoicePage.TRACK_X if id == "mates" else TRACK_X
 
 
@@ -139,6 +160,8 @@ static func screen_rect(id: String, size: Vector2) -> Rect2:
 			return Splash.rect_to_screen(RESET, size)
 		"graphics":
 			return Splash.rect_to_screen(GRAPHICS, size)
+		"zvuk":
+			return Splash.rect_to_screen(ZVUK, size)
 		"golos":
 			return Splash.rect_to_screen(GOLOS, size)
 		"yes":
@@ -178,7 +201,9 @@ func hit(p: Vector2, size: Vector2) -> String:
 		return Graphics.hit(p, size)
 	if page == "golos":
 		return VoicePage.hit(p, size)
-	var ids := ["yes", "no"] if ask else ["back", "volume", "swipe", "intro", "graphics", "golos", "reset"]
+	if page == "zvuk":
+		return SoundPage.hit(p, size)
+	var ids := ["yes", "no"] if ask else ["back", "volume", "swipe", "intro", "graphics", "zvuk", "golos", "reset"]
 	for id: String in ids:
 		if screen_rect(id, size).has_point(p):
 			return id
@@ -195,6 +220,8 @@ func press(id: String, p: Vector2 = Vector2.ZERO, size: Vector2 = Vector2.ZERO) 
 		return _press_graphics(id)
 	if page == "golos":
 		return _press_voice(id, p, size)
+	if page == "zvuk":
+		return _press_sound(id, p, size)
 	if ask:
 		match id:
 			"yes":
@@ -216,6 +243,8 @@ func press(id: String, p: Vector2 = Vector2.ZERO, size: Vector2 = Vector2.ZERO) 
 			page = "grafika"
 		"golos":
 			page = "golos"
+		"zvuk":
+			page = "zvuk"
 		"volume", "swipe":
 			grab = id
 			return "changed" if drag(p, size) else ""
@@ -261,6 +290,23 @@ func _press_voice(id: String, p: Vector2, size: Vector2) -> String:
 	return ""
 
 
+## Страница «Звук»: «Назад» — к основной, ползунок шины — значение сразу в сведение.
+func _press_sound(id: String, p: Vector2, size: Vector2) -> String:
+	if id == "back":
+		page = ""
+		grab = ""
+		return ""
+	if SoundPage.index(id) >= 0:
+		grab = id
+		return "changed" if drag(p, size) else ""
+	return ""
+
+
+## Ползунок под пальцем — громкость: общая, товарищей или шины (на них звук откликается, пока палец ведёт).
+static func is_volume(id: String) -> bool:
+	return id in ["volume", "mates"] or SoundPage.index(id) >= 0
+
+
 ## Палец на взятом ползунке в точке p: новое значение; true — поменялось.
 func drag(p: Vector2, size: Vector2) -> bool:
 	if grab == "" or size == Vector2.ZERO:
@@ -273,8 +319,12 @@ func drag(p: Vector2, size: Vector2) -> bool:
 			set_volume(v)
 		"mates":
 			set_mates(v)
-		_:
+		"swipe":
 			set_swipe(v)
+		_:
+			var i := SoundPage.index(grab)
+			if i >= 0:
+				set_bus(SoundPage.bus(i), v)
 	return not is_equal_approx(before, value(grab))
 
 
@@ -312,6 +362,7 @@ func write() -> bool:
 	cfg.set_value("nastrojki", "golos_rezhim", voice_mode)
 	cfg.set_value("nastrojki", "golos_priem", hear)
 	cfg.set_value("nastrojki", "golos_mikrofon", mic_on)
+	cfg.set_value("nastrojki", "shiny", buses)
 	return cfg.save(path) == OK
 
 
@@ -345,4 +396,10 @@ func read() -> bool:
 		else Radio.Mode.HOLD
 	hear = bool(cfg.get_value("nastrojki", "golos_priem", true))
 	mic_on = bool(cfg.get_value("nastrojki", "golos_mikrofon", true))
+	buses = {}
+	var b: Variant = cfg.get_value("nastrojki", "shiny", {})
+	if b is Dictionary:
+		for name: String in SoundPage.gains({}):
+			if b.has(name):
+				set_bus(name, float(b[name]))
 	return true
