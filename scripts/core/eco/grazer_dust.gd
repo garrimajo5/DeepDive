@@ -50,6 +50,8 @@ class Puff:
 	var born := -1e9
 	var alpha := 0.0
 	var key := 0
+	## Доля размера (1 — облачко скребуна; у мелких существ — меньше, EcoUrchinDust).
+	var scale := 1.0
 	## Высота видимого дна под местом подъёма (считает рисунок один раз на облачко; −INF — ещё не считана).
 	var floor_y := -INF
 
@@ -68,14 +70,16 @@ func _init(pool: int = POOL) -> void:
 		puffs.append(Puff.new())
 
 
-## Поднять облачко в точке at в момент t с непрозрачностью alpha; key — номер для разброса. Старое уступает новому.
-func add(at: Vector3, t: float, alpha: float, key: int) -> Puff:
+## Поднять облачко в точке at в момент t с непрозрачностью alpha; key — номер для разброса, scale — доля размера.
+## Старое уступает новому.
+func add(at: Vector3, t: float, alpha: float, key: int, scale: float = 1.0) -> Puff:
 	var p := puffs[_slot]
 	_slot = (_slot + 1) % puffs.size()
 	p.key = key
 	p.at = at
 	p.born = t
 	p.alpha = alpha
+	p.scale = scale
 	p.floor_y = -INF
 	return p
 
@@ -105,7 +109,7 @@ static func alive(p: Puff, t: float) -> bool:
 ## Размер облачка в момент t: быстро раздувается и замедляется (ease-out).
 static func size(p: Puff, t: float) -> float:
 	var a := clampf(age(p, t), 0.0, 1.0)
-	return lerpf(SIZE_START, SIZE_END, 1.0 - (1.0 - a) * (1.0 - a))
+	return lerpf(SIZE_START, SIZE_END, 1.0 - (1.0 - a) * (1.0 - a)) * p.scale
 
 
 ## Непрозрачность в момент t: проявляется за десятую жизни, ровно тает к концу.
@@ -120,7 +124,7 @@ static func fade(p: Puff, t: float) -> float:
 static func pos(p: Puff, t: float, flow: Vector3) -> Vector3:
 	var a := clampf(age(p, t), 0.0, 1.0)
 	var dt := a * LIFE
-	var rise := RISE * (1.0 - (1.0 - a) * (1.0 - a))
+	var rise := RISE * p.scale * (1.0 - (1.0 - a) * (1.0 - a))
 	return p.at + Vector3(flow.x, 0.0, flow.z) * DRIFT * dt + Vector3(0, rise, 0)
 
 
