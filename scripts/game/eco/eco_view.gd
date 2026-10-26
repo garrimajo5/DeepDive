@@ -127,6 +127,7 @@ var ground: Callable:
 		_rebuild_drop()
 		_rebuild_plankton()
 		EcoRim.apply(self)
+		EcoSurface.apply(self)
 
 
 func _init() -> void:
@@ -213,6 +214,7 @@ func _init() -> void:
 	_rebuild_drop()
 	_rebuild_plankton()
 	EcoRim.apply(self)
+	EcoSurface.apply(self)
 
 
 ## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев погашен — меняются
