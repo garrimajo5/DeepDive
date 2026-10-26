@@ -1,0 +1,45 @@
+{
+  "issue": 655,
+  "base_main": "1f23d2d8b2dc9eaba96bbf0976822730099eb13c",
+  "flow_id": "SDdZBtUnkoZBpb57qnql",
+  "model_id": "eleven_text_to_sound_v2",
+  "model_parameters": {
+    "duration_seconds": 25,
+    "prompt_influence": 0.7,
+    "loop": true
+  },
+  "confirmed_completed_cost": 250,
+  "remaining_estimate_credits": 750,
+  "items": [
+    {
+      "file": "ambient-shelf-1.mp3",
+      "node_id": "TC7Nb0IcjLxTD7pY7pUx",
+      "session_id": "UFRbMEHHlnte7V7IX7Wt",
+      "generation_id": "s5Oi6fVu5qXN90hzHN13",
+      "status": "completed",
+      "credits": 250,
+      "prompt": "25-second seamless underwater ambience beneath a thick ice ceiling, 100 meters deep. Soft steady low water rumble, distant muffled ice creaks and slow ice groans overhead, very sparse tiny dry biological clicks far away. Calm spacious alien ocean, restrained dynamics, no foreground events. No music, melody, speech, whales, dolphins, birds or surface waves. Continuous texture with no fade in or fade out."
+    },
+    {
+      "file": "ambient-shelf-2.mp3",
+      "node_id": "5GJenRQe0hnU1R3pjhlB",
+      "prompt": "25-second seamless ambience deep underwater beneath thick ice. A very soft broad low-frequency water-pressure drone, slow distant resonant ice flexing, and a few faint tiny irregular alien biological ticks widely spaced in the background. More stillness than events, smooth dark texture, no sharp transients. No music, melody, speech, recognizable animals, sonar, surface splashes or waves. Steady level, no fade in or fade out.",
+      "status": "not_run",
+      "last_error": "429 rate_limited on batch launch; get_flow confirmed not_run"
+    },
+    {
+      "file": "ship-hum-1.mp3",
+      "node_id": "xGRuRm1Dv91KNDVXQ9gn",
+      "prompt": "25-second seamless room tone inside the steel pressure hull of a small submarine bridge. Soft steady ventilation airflow, a warm low electrical transformer hum, very occasional subdued metal panel ticks. Close enclosed space with short damped metal resonance, quiet reliable machinery, restrained even dynamics. No voices, music, melody, beeps, buzzers, alarms, sonar or engine revving. Continuous low background bed, no fade in or fade out.",
+      "status": "not_run",
+      "last_error": "429 rate_limited on batch launch; get_flow confirmed not_run"
+    },
+    {
+      "file": "ship-hum-2.mp3",
+      "node_id": "TMIclaBHLIoZBQ4PmvGl",
+      "prompt": "25-second seamless background ambience inside a steel submarine cabin. Broad soft ventilation air moving slowly through ducts, a barely audible stable low electrical hum, a few distant gentle hull contraction clicks. Airflow dominates, less tonal than a transformer, compact damped steel interior, smooth level and restful mechanical texture. No speech, music, melody, high-pitched whine, beeps, buzzers, alarms, sonar or dramatic creaks. No fade in or fade out.",
+      "status": "not_run",
+      "last_error": "429 rate_limited on batch launch; get_flow confirmed not_run"
+    }
+  ]
+}
