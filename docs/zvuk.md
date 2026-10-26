@@ -58,7 +58,7 @@
 | sonar-jam | Импульс завяз в иле — глухой, обрывается (`Silt.jam_ping`) | один раз 2 с | П2 | нужен |
 | engines | Роторы на ходу, тон по тяге (`Helm`, `HullMesh.Motion.spin`) | петля 10–20 с | П1 | нужен |
 | hull-hit | Удар по корпусу, 3 варианта (`Vitals.hit`, `EcoLink.HIT`) | один раз 1–2 с | П1 | **готов** — `audio/ship/hull-hit-1…3.wav` (SND-002, `HullSound`) |
-| hull-scrape | Скрежет о дно и скалу (`Vitals.scrape`) | один раз 2–3 с | П1 | **готов** — `audio/ship/hull-scrape.wav` (SND-002 вар. 2) |
+| hull-scrape | Скрежет о дно и скалу (`Vitals.scrape`) | один раз 2–3 с | П1 | **готов** — `audio/ship/hull-scrape.wav` (SND-002, правка: вар. rev1-1 — сталь о скалу, 3,7 с) |
 | hull-creak | Скрип корпуса под давлением, 4–6 коротких (случайно, чаще глубже) | один раз 1–3 с | П2 | нужен |
 | breach-jet | Струя воды в пробоину (`Breach`; сейчас `Synth.jet`) | петля 5–10 с | П1 | заказан SND-003 #657 |
 | alarm-siren | Сирена тревоги (сейчас `Synth.siren`) | петля 2–4 с | П1 | заказан SND-003 #657 |
