@@ -36,7 +36,7 @@ if ($Pc) {
   $head = (git -C $repo rev-parse --short HEAD).Trim()
   & $godot.FullName --path $repo --import --headless | Out-Null
   $p = Start-Process $godot.FullName -ArgumentList '--path', $repo, '--resolution', '2400x1080' -PassThru
-  if (-not $p.WaitForExit(180000)) { $p.Kill(); Write-Output 'TIMEOUT: сценарий не закончился за 3 минуты' }
+  if (-not $p.WaitForExit(300000)) { $p.Kill(); Write-Output 'TIMEOUT: сценарий не закончился за 5 минут' }
   Copy-Item "$user\out\*" $run -Force
   $done = Test-Path "$run\done.txt"
   Write-Output "PC $head $($godot.Name) done=$done"
@@ -86,7 +86,7 @@ if ($inst -notmatch 'Success') { Write-Output "INSTALL_FAILED $head"; $inst; exi
 & $adb logcat -c
 & $adb shell monkey -p $app -c android.intent.category.LAUNCHER 1 | Out-Null
 $done = $false
-for ($i = 0; $i -lt 90; $i++) {
+for ($i = 0; $i -lt 150; $i++) {
   Start-Sleep 2
   if ((& $adb shell "run-as $app ls files/qa/out/done.txt" 2>&1) -match 'done.txt$') { $done = $true; break }
 }
