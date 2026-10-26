@@ -6,21 +6,31 @@ extends Node3D
 ## ореол виден только у вспыхнувшей стаи (яркость glow² · 0,7). Своя эмиссия; туман для сложения выключен —
 ## гаснут сами к FADE_FAR. Гребневики не заходят в корпус (EcoRaduzh.member_pos_outside). Слой отмели.
 ## Разброс особей (Б4, EcoVary по номеру гребневика): свой размер, частота «дыхания» и яркость тёмного силуэта —
-## стая не клоны; мир и его случай не меняются, вызовов отрисовки не прибавилось.
+## стая не клоны; мир и его случай не меняются, вызовов отрисовки не прибавилось. Переливы по краю тела (EcoIris, Б2) —
+## uniform iris, «Экономно» — EcoIris.set_lite.
 
 const BODY_SHADER := """
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_back, shadows_disabled, fog_disabled;
 uniform float fade_far = 70.0;
+uniform float iris = 0.0;
 varying vec3 tint;
+varying float phase;
 void vertex() {
+	// сдвиг оттенка особи — от места гребневика (свой у каждого)
+	phase = fract(dot(MODEL_MATRIX[3].xyz, vec3(0.173, 0.311, 0.257)));
 	float far = length((VIEW_MATRIX * vec4(MODEL_MATRIX[3].xyz, 1.0)).xyz);
 	tint = COLOR.rgb * clamp(1.0 - far / fade_far, 0.0, 1.0);
 }
+%s
 void fragment() {
 	// края прозрачного тела светлее середины — ряды ресничек
-	float rim = 1.0 - abs(dot(NORMAL, VIEW));
+	float ndv = abs(dot(NORMAL, VIEW));
+	float rim = 1.0 - ndv;
 	ALBEDO = tint * (0.45 + rim * 0.9);
+	// радуга по краю (EcoIris, Б2): доля своей яркости — в темноте силуэт тусклый, перелив тоже
+	float lum = max(tint.r, max(tint.g, tint.b));
+	ALBEDO += iris_film(ndv, phase * %s) * iris_weight(ndv) * rim * lum * iris;
 }
 """
 
@@ -93,8 +103,14 @@ static func build_body() -> SphereMesh:
 	m.height = 2.0
 	m.radial_segments = 7
 	m.rings = 5
-	m.material = _material(BODY_SHADER)
+	m.material = _material(body_code())
+	EcoIris.apply(m.material as ShaderMaterial, EcoIris.RADUZH)
 	return m
+
+
+## Код шейдера тела с куском переливов EcoIris.
+static func body_code() -> String:
+	return BODY_SHADER % [EcoIris.glsl(), EcoIris._f(EcoIris.SHIFT)]
 
 
 static func build_halo() -> QuadMesh:
