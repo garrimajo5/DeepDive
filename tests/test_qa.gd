@@ -243,6 +243,23 @@ func test_gone_step() -> void:   # товарищ отключился, как �
 	await frames(1)
 
 
+## Отчёт qa/2026-10-26-1620-novaya-c3f0473: шаг «wreck» ставит корпус 0 сам — в хронометраже это не «удар».
+func test_wreck_step_not_a_hit() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.start_qa('[{"do": "wait", "s": 0.2}, {"do": "wreck"}, {"do": "wait", "s": 0.3}]')
+	for i in 20:
+		main.step(1.0 / 30.0)
+	var text := ""
+	for e: Array in main.timeline.events:
+		text += "%s\n" % e[1]
+	ok(text.contains("корпус задан: 0%"), "крушение из сценария помечено: %s" % text)
+	ok(not text.contains("удар: корпус 0%"), "и не считается ударом: %s" % text)
+	main.queue_free()
+	await frames(1)
+
+
 func test_silt_step() -> void:
 	var q := QaScript.parse('[{"do": "silt"}, {"do": "silt", "on": false}]')
 	eq(q.errors.size(), 0, "шаг silt известен")
