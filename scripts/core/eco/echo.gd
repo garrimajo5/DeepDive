@@ -95,6 +95,8 @@ class Lurker:
 	var bait_t := 0.0
 	## Ложных вызовов за забег.
 	var fakes := 0
+	## Ударов по корпусу за забег (выпрошенный импульс; муть — EcoEchoDust).
+	var strikes := 0
 
 	func is_revealed() -> bool:
 		return revealed > 0.0
@@ -287,6 +289,7 @@ func on_ping(world: EcoWorld, pos: Vector3) -> void:
 	if ec.bait == ASK_PING:
 		if d < STRIKE_R:
 			ec.bait = ""
+			ec.strikes += 1
 			world.hit_ship(Species.cap(world.nm(ID)), STRIKE, ec.p)
 			world.emit(ID, "strike", ec.p, _strike_text(world))
 		return
