@@ -5,6 +5,8 @@ extends MeshInstance3D
 ## #9a7f6a и #6f5b4c, обод #ffd9a0; губка чуть тлеет тёплым (EcoOrgan.glow — в общем шейдере растений
 ## EcoShaders.PLANT по TIME).
 ## Стоит на слое отмели (OceanView.LAYER_WORLD).
+## Выдох губки (EcoOrganDust: в такт гулу трубы выпускают над устьями облачка отцеженной мути, корабль рядом —
+## чаще и гуще) — дочерний MultiMesh «Муть» на общем шейдере EcoShaders.MIST (INK) — +1 вызов отрисовки.
 
 const LIGHT := Color("9a7f6a")
 const DARK := Color("6f5b4c")
@@ -20,6 +22,10 @@ const RIM_TUBE := 0.05
 const RIM_SIDES := 4
 
 var organs: EcoOrgan
+var dust := EcoOrganDust.new()
+var dust_view: MultiMeshInstance3D
+var dust_buffer := PackedFloat32Array()
+var _dust_empty := false
 ## Вершины и треугольники всего меша (для тестов).
 var verts := PackedVector3Array()
 var tris := 0
@@ -53,6 +59,19 @@ func _init(system: EcoOrgan) -> void:
 			"spec": 0.1, "glow": GLOW, "glow_wave": GLOW_WAVE}))
 	mesh = m
 	tris = _idx.size() / 3
+	dust_view = GrazerView.build_dust(EcoOrganDust.POOL)
+	add_child(dust_view)
+
+
+## Выдохи губок в момент t (время мира); ship — корабль (близость, дальность и луч), flow — течение.
+func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> void:
+	dust.update(organs, t, ship.pos if ship else Vector3.ZERO)
+	var shown := dust.dust.shown(t)
+	if shown == 0 and _dust_empty and dust_buffer.size() == EcoOrganDust.POOL * GrazerView.DUST_STRIDE:
+		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
+	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, ship, EcoOrganDust.COLOR, EcoOrganDust.LIT)
+	dust_view.multimesh.buffer = dust_buffer
+	_dust_empty = shown == 0
 
 
 ## Открытый конус от основания b (радиус TUBE_BASE_R) до устья top (TUBE_TOP_R).
