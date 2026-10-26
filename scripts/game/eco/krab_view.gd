@@ -4,7 +4,9 @@ extends Node3D
 ## (#4f4a5c, гранёные), тело — панцирь-эллипсоид (#8a4a2e, слабое свечение #1a0804) и шесть ног одним мешем,
 ## клешни отдельным мешем (поднимаются на 0,9 · raise), иглы ежей на панцире — MultiMesh на 10 игл (стержень со
 ## светом, кончик светится сам; лишние сжаты в точку), переписывается, только когда игл стало больше (EcoKrab.dirty). Тело в 1,25 раза крупнее, на ходу
-## подпрыгивает на 3 см. Пять вызовов отрисовки (у игл две поверхности); стоит на слое отмели (OceanView.LAYER_WORLD).
+## подпрыгивает на 3 см. Муть у дна из-под ног и от клешней (EcoKrabDust) — дочерний MultiMesh «Муть» в мировых
+## координатах, общий шейдер EcoShaders.MIST (INK), бурый цвет EcoKrabDust.COLOR/LIT. Шесть вызовов отрисовки (у игл две поверхности); стоит на слое
+## отмели (OceanView.LAYER_WORLD).
 
 const ROCK := Color("4f4a5c")
 const SHELL := Color("8a4a2e")
@@ -31,6 +33,11 @@ var shown_spines := 0
 var spine_writes := 0
 ## Последний буфер игл (KelpView.transform_at с шагом KelpView.STRIDE).
 var spine_buffer := PackedFloat32Array()
+## Муть от краба и её MultiMesh; буфер мути — для тестов.
+var dust := EcoKrabDust.new()
+var dust_view: MultiMeshInstance3D
+var dust_buffer := PackedFloat32Array()
+var _dust_empty := false
 
 
 func _init(system: EcoKrab) -> void:
@@ -53,6 +60,8 @@ func _init(system: EcoKrab) -> void:
 	spines.custom_aabb = AABB(Vector3(-1, -1, -1), Vector3(2, 2, 2))
 	body.add_child(spines)
 	body.scale = Vector3.ONE * SCALE
+	dust_view = GrazerView.build_dust(EcoKrabDust.POOL)
+	add_child(dust_view)
 	visible = cr != null
 	if cr:
 		den.transform = Transform3D(Basis(Vector3.UP, atan2(cr.out.x, cr.out.z)), cr.den)
@@ -70,11 +79,13 @@ func _mesh(n: String, m: Mesh, parent: Node3D) -> MeshInstance3D:
 	return mi
 
 
-## Расставить краба в момент t (время мира).
-func sync(t: float) -> void:
+## Расставить краба в момент t (время мира). ship — корабль (дальше EcoGrazerDust.NEAR муть не поднимается, в луче
+## прожектора светлее), flow — течение мира (уносит муть).
+func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO) -> void:
 	var cr := krab.crab
 	if cr == null:
 		return
+	_sync_dust(t, ship, flow)
 	var p := cr.pos
 	if cr.moving:
 		p.y += absf(sin(t * 8.0)) * 0.03
@@ -89,6 +100,17 @@ func sync(t: float) -> void:
 		spines.multimesh.buffer = spine_buffer
 		shown_spines = cr.spines
 		spine_writes += 1
+
+
+func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3) -> void:
+	dust.update(krab, t, ship.pos if ship else Vector3.ZERO)
+	var shown := dust.dust.shown(t)
+	if shown == 0 and _dust_empty and dust_buffer.size() == EcoKrabDust.POOL * GrazerView.DUST_STRIDE:
+		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
+	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, ship, EcoKrabDust.COLOR, EcoKrabDust.LIT,
+			Seabed.mesh_height)
+	dust_view.multimesh.buffer = dust_buffer
+	_dust_empty = shown == 0
 
 
 ## Место иглы k на панцире: по кругу, наклонена наружу (crab spineM).

@@ -64,12 +64,13 @@ func _init(system: EcoGrazer) -> void:
 	mm.mesh = build_mesh()
 	mm.instance_count = grazers.all.size()
 	multimesh = mm
-	dust_view = _build_dust()
+	dust_view = build_dust()
 	add_child(dust_view)
 	sync(0.0)
 
 
-func _build_dust() -> MultiMeshInstance3D:
+## MultiMesh мути на pool облачков (общий шейдер EcoShaders.MIST, INK); его же берёт KrabView.
+static func build_dust(pool: int = EcoGrazerDust.POOL) -> MultiMeshInstance3D:
 	var mi := MultiMeshInstance3D.new()
 	mi.name = "Муть"
 	mi.layers = OceanView.LAYER_WORLD
@@ -81,7 +82,7 @@ func _build_dust() -> MultiMeshInstance3D:
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
 	mm.mesh = quad
-	mm.instance_count = EcoGrazerDust.POOL
+	mm.instance_count = pool
 	mi.multimesh = mm
 	mi.custom_aabb = AABB(Vector3(-400, -200, -400), Vector3(800, 400, 800))
 	return mi
@@ -128,9 +129,9 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 	multimesh.buffer = buffer
 	dust.update(grazers, t, ship.pos if ship else Vector3.ZERO)
 	var shown := dust.shown(t)
-	if shown == 0 and dust_buffer.size() == EcoGrazerDust.POOL * DUST_STRIDE and _dust_empty:
+	if shown == 0 and dust_buffer.size() == dust.puffs.size() * DUST_STRIDE and _dust_empty:
 		return   # мути нет и в буфере пусто — не грузим буфер заново (issue #133)
-	dust_buffer = pack_dust(dust, t, flow, ship)
+	dust_buffer = pack_dust(dust, t, flow, ship, EcoGrazerDust.COLOR, EcoGrazerDust.LIT, Seabed.mesh_height)
 	dust_view.multimesh.buffer = dust_buffer
 	_dust_empty = shown == 0
 
@@ -138,17 +139,25 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 var _dust_empty := false
 
 
-## Буфер мути (TRANSFORM_3D + цвет): растаявшие облачка стянуты в точку, в луче прожектора — светлее.
-static func pack_dust(d: EcoGrazerDust, t: float, flow: Vector3, ship: EcoLink.ShipState = null) -> PackedFloat32Array:
+## Буфер мути (TRANSFORM_3D + цвет): растаявшие облачка стянуты в точку, в луче прожектора — светлее (от dark к lit;
+## у скребунов — EcoGrazerDust.COLOR/LIT, у кольчужника своя бурая муть — EcoKrabDust.COLOR/LIT). floor_at(x, z) —
+## высота видимой сетки дна (в сцене Seabed.mesh_height): облачко над ней не ниже EcoGrazerDust.above, иначе сетка
+## дна между вершинами выше точного дна мира и прячет нижнюю половину облачка.
+static func pack_dust(d: EcoGrazerDust, t: float, flow: Vector3, ship: EcoLink.ShipState = null,
+		dark: Color = EcoGrazerDust.COLOR, lit: Color = EcoGrazerDust.LIT, floor_at: Callable = Callable()) -> PackedFloat32Array:
 	var out := PackedFloat32Array()
-	out.resize(EcoGrazerDust.POOL * DUST_STRIDE)
+	out.resize(d.puffs.size() * DUST_STRIDE)
 	for n in d.puffs.size():
 		var p := d.puffs[n]
 		var i := n * DUST_STRIDE
 		var a := EcoGrazerDust.fade(p, t)
 		var s := EcoGrazerDust.size(p, t) if a > 0.0 else 0.0
 		var o := EcoGrazerDust.pos(p, t, flow)
-		var c := EcoGrazerDust.tone(EcoGrazerDust.light(o, ship))
+		if s > 0.0 and floor_at.is_valid():
+			if p.floor_y == -INF:   # дно под облачком — раз на облачко: течение уносит его на полметра
+				p.floor_y = float(floor_at.call(p.at.x, p.at.z))
+			o.y = EcoGrazerDust.above(o.y, s, p.floor_y)
+		var c := dark.lerp(lit, EcoGrazerDust.light(o, ship))
 		out[i] = s; out[i + 3] = o.x
 		out[i + 5] = s; out[i + 7] = o.y
 		out[i + 10] = s; out[i + 11] = o.z
