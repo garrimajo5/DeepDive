@@ -1,0 +1,86 @@
+[
+  {
+    "gear": "gear-fartuk-m",
+    "pose": "post20",
+    "max_error_m": 6.848432531114668e-05,
+    "mean_error_m": 3.212366027221992e-05,
+    "samples": 252
+  },
+  {
+    "gear": "gear-fartuk-m",
+    "pose": "seat1",
+    "max_error_m": 0.0002225698990514502,
+    "mean_error_m": 0.000127911191983667,
+    "samples": 252
+  },
+  {
+    "gear": "gear-fartuk-m",
+    "pose": "standing",
+    "max_error_m": 6.598218897124752e-05,
+    "mean_error_m": 3.236680990505015e-05,
+    "samples": 252
+  },
+  {
+    "gear": "gear-tunika-m",
+    "pose": "post20",
+    "max_error_m": 6.848432531114668e-05,
+    "mean_error_m": 3.2712500851677956e-05,
+    "samples": 383
+  },
+  {
+    "gear": "gear-tunika-m",
+    "pose": "seat1",
+    "max_error_m": 0.0002240147878183052,
+    "mean_error_m": 0.00012163864623441534,
+    "samples": 383
+  },
+  {
+    "gear": "gear-tunika-m",
+    "pose": "standing",
+    "max_error_m": 6.899979780428112e-05,
+    "mean_error_m": 3.275999249219083e-05,
+    "samples": 383
+  },
+  {
+    "gear": "gear-fartuk-zh",
+    "pose": "post20",
+    "max_error_m": 6.639686762355268e-05,
+    "mean_error_m": 2.823179418278954e-05,
+    "samples": 278
+  },
+  {
+    "gear": "gear-fartuk-zh",
+    "pose": "seat1",
+    "max_error_m": 0.00022257090313360095,
+    "mean_error_m": 0.00010970123938755097,
+    "samples": 278
+  },
+  {
+    "gear": "gear-fartuk-zh",
+    "pose": "standing",
+    "max_error_m": 6.612101424252614e-05,
+    "mean_error_m": 2.8269988020100616e-05,
+    "samples": 278
+  },
+  {
+    "gear": "gear-tunika-zh",
+    "pose": "post20",
+    "max_error_m": 7.006111991358921e-05,
+    "mean_error_m": 3.097529027927371e-05,
+    "samples": 393
+  },
+  {
+    "gear": "gear-tunika-zh",
+    "pose": "seat1",
+    "max_error_m": 0.00022299731790553778,
+    "mean_error_m": 0.0001169302938713328,
+    "samples": 393
+  },
+  {
+    "gear": "gear-tunika-zh",
+    "pose": "standing",
+    "max_error_m": 7.045343954814598e-05,
+    "mean_error_m": 3.103241298742511e-05,
+    "samples": 393
+  }
+]

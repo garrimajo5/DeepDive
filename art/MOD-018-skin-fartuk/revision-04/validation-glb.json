@@ -1,0 +1,38 @@
+[
+  {
+    "file": "gear-fartuk-m.glb",
+    "bytes": 722688,
+    "triangles": 384,
+    "skins": 1,
+    "materials": 1,
+    "animations": 0,
+    "embedded_images": 1
+  },
+  {
+    "file": "gear-fartuk-zh.glb",
+    "bytes": 724600,
+    "triangles": 444,
+    "skins": 1,
+    "materials": 1,
+    "animations": 0,
+    "embedded_images": 1
+  },
+  {
+    "file": "gear-tunika-m.glb",
+    "bytes": 500340,
+    "triangles": 585,
+    "skins": 1,
+    "materials": 1,
+    "animations": 0,
+    "embedded_images": 1
+  },
+  {
+    "file": "gear-tunika-zh.glb",
+    "bytes": 501116,
+    "triangles": 595,
+    "skins": 1,
+    "materials": 1,
+    "animations": 0,
+    "embedded_images": 1
+  }
+]
