@@ -1,0 +1,27 @@
+{
+  "items": [
+    {
+      "name": "hull-scrape-rev1-1",
+      "node_id": "e9spFWrNpdJMk0gqotfO",
+      "prompt": "Seamless loop: thick steel submarine hull dragged across rough rock underwater. Sustained uneven grinding and long scraping scratches, deep dark hull rumble with occasional short harsh metal snags. Heavy resonant low end, muffled water around the hull, continuous friction already underway. No glass, bells, electronic beeps, explosions, voices, music or thin sandpaper hiss.",
+      "session_id": "XYZHsi34EnUB894FZKos",
+      "generation_id": "Z73TNmaLkvNnzgPTHIhj",
+      "credits": 37.99999999999999
+    },
+    {
+      "name": "hull-scrape-rev1-2",
+      "node_id": "7uWR2kFEx3h21kbNVqgZ",
+      "prompt": "Seamless loop: heavy steel hull rubbing and gouging against hard ice underwater. Irregular drawn-out metallic creaks and scraping scratches, weighty low resonance, intermittent brief strained squealing catches embedded in the dark grinding. Continuous rough contact, no start impact or end fade. No glass shattering, ringing, electronic whine, voices, music or light abrasive hiss.",
+      "session_id": "u8K5VdapL79z3lQTzO44",
+      "generation_id": "7ab7xIUWcx9PfoolAwTL",
+      "credits": 37.99999999999999
+    }
+  ],
+  "model": "eleven_text_to_sound_v2",
+  "parameters": {
+    "duration_seconds": 3.8,
+    "prompt_influence": 0.9,
+    "loop": true
+  },
+  "flow_id": "DV3u3KSHZSdIMbzQoqJN"
+}

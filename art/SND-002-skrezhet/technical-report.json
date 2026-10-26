@@ -1,0 +1,36 @@
+[
+  {
+    "file": "hull-scrape-rev1-1.wav",
+    "seconds": 3.71,
+    "bytes": 712398,
+    "rate": 48000,
+    "bits": 16,
+    "channels": 2,
+    "sample_peak_dbfs": -5.62827560087742,
+    "true_peak_dbtp": -5.62,
+    "lufs": -18.0,
+    "gain_db": -5.300000000000001,
+    "crossfade_ms": 50,
+    "boundary_rotation_seconds": 2.0295,
+    "seam_jump_dbfs": -90.30899869919436,
+    "edge_50ms_rms_difference_db": 0.005061239652542435,
+    "sha256": "4e5b79e97a4a8d998b42392504ac2661beae06f85b12b6e674efa9a2506a3564"
+  },
+  {
+    "file": "hull-scrape-rev1-2.wav",
+    "seconds": 3.71,
+    "bytes": 712398,
+    "rate": 48000,
+    "bits": 16,
+    "channels": 2,
+    "sample_peak_dbfs": -3.221450942529387,
+    "true_peak_dbtp": -3.2,
+    "lufs": -19.31,
+    "gain_db": 1.0699999999999994,
+    "crossfade_ms": 50,
+    "boundary_rotation_seconds": 3.0109791666666665,
+    "seam_jump_dbfs": -240.0,
+    "edge_50ms_rms_difference_db": 0.4291527094072054,
+    "sha256": "294f614e086a1eb2e40108ec045b106a4597175f01aef499bbc9c0e78a4b7ca0"
+  }
+]
