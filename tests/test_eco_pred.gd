@@ -430,7 +430,7 @@ func test_reset_returns_preds_and_forgets_hits() -> void:
 
 # ---------- Вид ----------
 
-func test_look_heading_tail_and_jaw() -> void:
+func test_look_heading() -> void:
 	var w := _alone()
 	var pr := _preds(w).all[0]
 	pr.agent.v = Vector3(3, 0, 0)
@@ -449,32 +449,64 @@ func test_look_heading_tail_and_jaw() -> void:
 		EcoPred.turn(pr, 0.05)
 	ok(EcoPredLook.forward(pr).distance_to(Vector3(0, 0, 1)) < 1e-3, "встал — держит курс, нос к горизонту")
 
-	# хвост: волна в пределах модели, быстрее — шире
-	var slow := 0.0
-	var fast := 0.0
-	for i in 400:
-		var t := i * 0.01
-		pr.agent.v = Vector3(0, 0, 1)
-		slow = maxf(slow, absf(EcoPredLook.tail_angle(pr, t)))
-		pr.agent.v = Vector3(0, 0, 9.5)
-		var a := EcoPredLook.tail_angle(pr, t)
-		fast = maxf(fast, absf(a))
-		if not ok(absf(a) <= EcoPredLook.TAIL_MAX + 1e-6, "хвост не дальше 35°"):
-			return
-	ok(fast > slow + 0.1, "в броске хвост машет шире: %.2f > %.2f" % [fast, slow])
-	# удар серпом сразу после укуса — до 35°
-	pr.bit_at = 10.0
-	near(EcoPredLook.tail_angle(pr, 10.0 + EcoPredLook.STRIKE_TIME / 2.0), EcoPredLook.TAIL_MAX, 1e-5, "взмах серпом")
 
-	# пасть: закрыта в патруле, раскрыта в броске у корабля, жуёт во время еды
-	pr.mode = EcoPred.Mode.PATROL
-	near(EcoPredLook.jaw_angle(pr, pr.agent.p, 0.0), 0.0, 1e-9)
+
+## Плавание ANIM-001: смесь Swim → SwimFast и частота цикла растут со скоростью, в покое — реже Swim.
+func test_swim_mix_by_speed() -> void:
+	var pr := _preds(_alone()).all[0]
+	var mix := -1.0
+	var rate := 0.0
+	for s in [0.0, 1.0, 3.0, 5.0, 7.6, 9.0]:
+		pr.agent.v = Vector3(0, 0, s)
+		var m := EcoPredLook.swim_mix(pr)
+		var r := EcoPredLook.swim_rate(pr)
+		ok(m >= mix and r > rate, "быстрее — больше броска и чаще волна (%.1f м/с: %.2f, %.2f)" % [s, m, r])
+		mix = m
+		rate = r
+	pr.agent.v = Vector3(0, 0, EcoPred.PATROL_SPEED)
+	near(EcoPredLook.swim_mix(pr), 0.0, 1e-6, "патруль — только Swim")
+	near(EcoPredLook.swim_rate(pr), 1.0 / EcoPredLook.SWIM_LEN, 1e-6, "и в его родном темпе")
+	pr.agent.v = Vector3(0, 0, EcoPred.CHARGE_SPEED)
+	near(EcoPredLook.swim_mix(pr), 1.0, 1e-6, "бросок — только SwimFast")
+	near(EcoPredLook.swim_rate(pr), 1.0 / EcoPredLook.SWIM_FAST_LEN, 1e-6, "в его родном темпе")
+	pr.agent.v = Vector3.ZERO
+	near(EcoPredLook.swim_rate(pr), EcoPredLook.REST_RATE_K / EcoPredLook.SWIM_LEN, 1e-6, "встал — волна вдвое реже")
+
+
+## Разовые клипы: укус раз за сближение в броске (раньше касания), снова — когда отошёл; жуёт, пока ест;
+## удар серпом — раз на укус корпуса; вдали клипы не меняются и старый укус потом не отыгрывается.
+func test_bite_and_strike_cues() -> void:
+	var pr := _preds(_alone()).all[0]
+	var c := EcoPredLook.Cues.new()
+	var ship := pr.agent.p + Vector3(30, 0, 0)
 	pr.mode = EcoPred.Mode.CHARGE
-	near(EcoPredLook.jaw_angle(pr, pr.agent.p + Vector3(15, 0, 0), 0.0), EcoPredLook.JAW_MAX, 1e-9, "бросок — пасть открыта")
-	near(EcoPredLook.jaw_angle(pr, pr.agent.p + Vector3(30, 0, 0), 0.0), 0.0, 1e-9, "корабль далеко — закрыта")
+	ok(not c.update(pr, ship, 1.0)["bite"], "корабль далеко — пасть закрыта")
+	ship = pr.agent.p + Vector3(EcoPredLook.BITE_SHIP_DIST - 0.5, 0, 0)
+	ok(EcoPredLook.BITE_SHIP_DIST > EcoPred.BITE_DIST, "пасть раскрывается раньше касания")
+	ok(c.update(pr, ship, 1.1)["bite"], "у корабля в броске — укус")
+	ok(not c.update(pr, ship, 1.2)["bite"], "один раз за сближение")
+	pr.bit_at = 1.3
+	var cue := c.update(pr, ship, 1.35)
+	ok(cue["strike"], "укус корпуса — удар серпом")
+	ok(not c.update(pr, ship, 1.4)["strike"], "удар — раз на укус")
+	pr.mode = EcoPred.Mode.RETREAT
+	ok(not c.update(pr, ship, 1.5)["bite"], "уходит — не кусает")
+	pr.mode = EcoPred.Mode.CHARGE
+	ok(c.update(pr, ship, 30.0)["bite"], "новый бросок — новый укус")
+	pr.mode = EcoPred.Mode.PATROL
+	ok(not c.update(pr, ship, 31.0)["bite"], "в патруле у корабля — без укуса")
 	pr.mode = EcoPred.Mode.EAT
-	var chew := EcoPredLook.jaw_angle(pr, FAR, 0.3)
-	ok(chew >= 0.0 and chew <= EcoPredLook.JAW_MAX * EcoPredLook.CHEW_OPEN, "жуёт вполсилы")
+	ok(c.update(pr, ship, 32.0)["bite"], "ест — жуёт")
+	ok(not c.update(pr, ship, 32.0 + EcoPredLook.CHEW_EVERY * 0.5)["bite"], "не чаще CHEW_EVERY")
+	ok(c.update(pr, ship, 32.0 + EcoPredLook.CHEW_EVERY)["bite"], "и снова")
+	# вдали: без смены клипов, а подплыв — старый укус не играет
+	pr.mode = EcoPred.Mode.PATROL
+	pr.bit_at = 40.0
+	cue = c.update(pr, ship, 40.1, true)
+	ok(not cue["strike"] and not cue["bite"], "вдали — только плавание")
+	ok(not c.update(pr, ship, 40.2)["strike"], "старый укус не отыгрывается")
+	pr.bit_at = 50.0
+	ok(not c.update(pr, ship, 50.0 + EcoPredLook.STRIKE_TIME + 0.1)["strike"], "укус старше клипа — не играет")
 
 
 ## Б3, плавность: тело не щёлкает за скоростью — догоняет её не быстрее TURN_MAX, в повороте ложится на бок.
@@ -536,6 +568,12 @@ func test_world_turns_preds() -> void:
 			ok(pr.look.angle_to(EcoPred.aim(pr)) < 0.6, "курс догоняет скорость: %.2f" % pr.look.angle_to(EcoPred.aim(pr)))
 
 
+## Мировая точка кости зверя i в его модели.
+func _bone_at(pv: PredView, i: int, bone: String) -> Vector3:
+	var sk: Skeleton3D = pv.bodies[i].find_children("*", "Skeleton3D", true, false)[0]
+	return sk.global_transform * sk.get_bone_global_pose(sk.find_bone(bone)).origin
+
+
 func test_view_models_in_scene() -> void:
 	var view := EcoView.new()
 	view.ground = Seabed.height
@@ -544,11 +582,13 @@ func test_view_models_in_scene() -> void:
 	var pv := view.pred_view
 	ok(pv != null and pv.get_parent() == view, "серпохвосты — в живом мире")
 	eq(pv.bodies.size(), 3, "три хищника")
+	eq(pv.find_children("*", "Skeleton3D", true, false).size(), 3, "у каждого — скелет ANIM-001")
 	var meshes := pv.find_children("*", "MeshInstance3D", true, false)
-	eq(meshes.size(), 9, "по три части на зверя — 9 вызовов отрисовки")
+	eq(meshes.size(), 9, "три сетки на зверя — 9 вызовов отрисовки")
 	var tris := 0
 	for m: MeshInstance3D in meshes:
 		eq(m.layers, OceanView.LAYER_WORLD, "слой отмели")
+		ok(m.skin != null, "%s на скелете" % m.name)
 		var arr := m.mesh.surface_get_arrays(0)
 		tris += (arr[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
 	eq(tris, 3 * (3988 + 986 + 745), "треугольники моделей MOD-011")
@@ -559,19 +599,59 @@ func test_view_models_in_scene() -> void:
 		view.step(0.05, ship)
 	var pr := view.preds.all[1]
 	var root := pv.bodies[1]
+	var at := pv.trees[1]
 	ok(root.position.distance_to(pr.agent.p) < 1e-4, "место — из мира")
 	ok((root.basis * Vector3(0, 0, -1)).distance_to(EcoPredLook.forward(pr)) < 1e-3, "голова по курсу")
-	near(pv.tails[1].rotation.y, EcoPredLook.tail_angle(pr, view.world.time), 1e-5, "хвост — из EcoPredLook")
-	ok(pv.tails[1].position.distance_to(EcoPredLook.TAIL_ROOT) < 1e-6, "хвост у корня")
-	ok(pv.jaws[1].position.distance_to(EcoPredLook.JAW_HINGE) < 1e-6, "челюсть на шарнире")
+	near(at.get(PredView.P_MIX), EcoPredLook.swim_mix(pr), 1e-5, "смесь плавания — из EcoPredLook")
+	near(at.get(PredView.P_SWIM) / at.get(PredView.P_FAST), EcoPredLook.SWIM_LEN / EcoPredLook.SWIM_FAST_LEN, 1e-5,
+			"у Swim и SwimFast одна фаза")
+	# хвост машет: кончик в осях зверя ходит вбок
+	var side := 0.0
+	var a0 := root.global_transform.affine_inverse() * _bone_at(pv, 1, "Tail03")
+	for i in 30:
+		view.step(0.05, ship)
+		var tip := root.global_transform.affine_inverse() * _bone_at(pv, 1, "Tail03")
+		side = maxf(side, absf(tip.x - a0.x))
+	ok(side > 0.05, "хвост волной вбок: %.2f м" % side)
 
-	# бросок у корабля — пасть раскрывается
+	# бросок у корабля — укус, только челюсть
 	pr.mode = EcoPred.Mode.CHARGE
 	pr.agent.timer = 10.0
 	pr.cooldown = 99.0
-	ship.pos = pr.agent.p + Vector3(18, 0, 0)
-	for i in 10:
+	var sk: Skeleton3D = root.find_children("*", "Skeleton3D", true, false)[0]
+	var jaw_rest := sk.get_bone_pose_rotation(sk.find_bone("Jaw"))
+	ship.pos = pr.agent.p + Vector3(EcoPredLook.BITE_SHIP_DIST - 1.0, 0, 0)
+	view.step(0.05, ship)
+	ok(at.get(PredView.P_BITE_ON), "укус играет")
+	var opened := 0.0
+	for i in 12:
+		ship.pos = pr.agent.p + Vector3(EcoPredLook.BITE_SHIP_DIST - 1.0, 0, 0)
 		view.step(0.05, ship)
-	ok(-pv.jaws[1].rotation.x > EcoPredLook.JAW_MAX * 0.9, "пасть открыта: %.2f" % -pv.jaws[1].rotation.x)
+		opened = maxf(opened, sk.get_bone_pose_rotation(sk.find_bone("Jaw")).angle_to(jaw_rest))
+	ok(opened > deg_to_rad(20.0), "пасть раскрылась на %.0f°" % rad_to_deg(opened))
+
+	# укус корпуса — удар серпом
+	pr.bit_at = view.world.time
+	view.step(0.05, ship)
+	ok(at.get(PredView.P_STRIKE_ON), "удар серпом играет")
+	view.queue_free()
+	await frames(1)
+
+
+## Вдали (дальше CUE_FAR) клипы не меняются — только плавание.
+func test_view_far_keeps_swimming() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var ship := EcoLink.ShipState.new()
+	ship.pos = FAR
+	view.step(0.05, ship)
+	var pr := view.preds.all[0]
+	pr.mode = EcoPred.Mode.EAT
+	pr.bit_at = view.world.time
+	view.pred_view.sync(view.world.time + 0.05, pr.agent.p + Vector3(EcoPredLook.CUE_FAR + 5.0, 0, 0))
+	ok(not view.pred_view.trees[0].get(PredView.P_BITE_ON), "вдали не жуёт")
+	ok(not view.pred_view.trees[0].get(PredView.P_STRIKE_ON), "и не бьёт")
 	view.queue_free()
 	await frames(1)
