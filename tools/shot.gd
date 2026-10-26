@@ -10,6 +10,7 @@ func _initialize() -> void:
 	SaveGame.default_path = ""   # не читать и не писать сохранение игрока
 	AddressScreen.default_path = ""   # и последний адрес входа ART-039
 	Settings.default_path = ""   # и настройки ART-037
+	RunTimeline.default_path = ""   # и хронометраж забегов (#633)
 	Main.intro = false   # снимок с мостика; flyby=start|surface — вид с борта
 	Main.menu = "menu=1" in OS.get_cmdline_user_args()   # menu=1 — главное меню ART-037 поверх сцены
 	Main.hints = false   # подсказки первого забега ART-038 — только по podskazki=<шаг>

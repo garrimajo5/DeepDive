@@ -30,6 +30,12 @@ var pestr: MultiMeshInstance3D
 var body_buffer := PackedFloat32Array()
 var tent_buffer := PackedFloat32Array()
 var pestr_buffer := PackedFloat32Array()
+## Муть у дна (EcoHvatenDust: рывком прячет щупальца — клуб ила вокруг основания) — дочерний MultiMesh «Муть» на
+## общем шейдере EcoShaders.MIST, +1 вызов; буфер — для тестов.
+var dust := EcoHvatenDust.new()
+var dust_view: MultiMeshInstance3D
+var dust_buffer := PackedFloat32Array()
+var _dust_empty := false
 
 
 func _init(system: EcoHvaten) -> void:
@@ -42,6 +48,8 @@ func _init(system: EcoHvaten) -> void:
 	body_buffer.resize(n * STRIDE)
 	tent_buffer.resize(n * EcoHvaten.TENT * STRIDE)
 	pestr_buffer.resize(n * EcoHvaten.PESTR_N * STRIDE_P)
+	dust_view = GrazerView.build_dust(EcoHvatenDust.POOL)
+	add_child(dust_view)
 	for hv in hvaten.anemones:
 		for k in EcoHvaten.PESTR_N:
 			var c := PESTR_COLORS[k % PESTR_COLORS.size()] * EcoPestrLook.GLOW
@@ -164,8 +172,11 @@ var _frame := 0
 
 ## Расставить тела (дыхание — EcoHvaten.breath), щупальца и пестрянок в момент t (время мира); all — переписать всех
 ## хватней сразу. На «Экономно» (EcoShaders.sway_lite) тело не дышит, только сжимается со щупальцами.
-func sync(t: float, ship_pos := Vector3.ZERO, all := true) -> void:
+## info — корабль целиком (муть светлее в луче прожектора), flow — течение мира (уносит муть).
+func sync(t: float, ship_pos := Vector3.ZERO, all := true, info: EcoLink.ShipState = null,
+		flow := Vector3.ZERO) -> void:
 	_frame += 1
+	_sync_dust(t, ship_pos, info, flow)
 	var live := not EcoShaders.sway_lite
 	for hv in hvaten.anemones:
 		if not all and not due(hv, ship_pos, _frame):
@@ -180,6 +191,17 @@ func sync(t: float, ship_pos := Vector3.ZERO, all := true) -> void:
 	bodies.multimesh.buffer = body_buffer
 	tents.multimesh.buffer = tent_buffer
 	pestr.multimesh.buffer = pestr_buffer
+
+
+func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3) -> void:
+	dust.update(hvaten, t, ship)
+	var shown := dust.dust.shown(t)
+	if shown == 0 and _dust_empty and dust_buffer.size() == EcoHvatenDust.POOL * GrazerView.DUST_STRIDE:
+		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
+	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, info, EcoHvatenDust.COLOR, EcoHvatenDust.LIT,
+			Seabed.mesh_height)
+	dust_view.multimesh.buffer = dust_buffer
+	_dust_empty = shown == 0
 
 
 ## Переписать ли хватня в этом кадре: близкий или в луче — всегда, дальний — в свой кадр из трёх.
