@@ -4,6 +4,8 @@ extends Node3D
 ## конуса (ставятся один раз), луковицы — второй MultiMesh со своим цветом сока у каждой, облака спор — третий
 ## MultiMesh из плоских светящихся точек лицом к камере (сложение цвета, без записи глубины). Сок и споры —
 ## зелёные (#8EE87E), своя эмиссия; стебли #3f7a5a. Стоит на слое отмели (OceanView.LAYER_WORLD).
+## Пузырьки газа с луковиц (EcoBladderBubbles: лопнули — со всех луковиц, спелые сочатся) — четвёртый MultiMesh
+## «Пузырьки» на общем шейдере EcoShaders.MIST (BUBBLE, `placed`) — +1 вызов отрисовки, шейдеров не прибавилось.
 
 const STEM := Color("3f7a5a")
 ## Луковица — сфера 0,16 м, вытянутая в 1,3 раза; спора — точка 0,35 м (в браузере 0,5 с ореолом — здесь ореол внутри точки).
@@ -18,6 +20,10 @@ var bladders: EcoBladder
 var stems: MultiMeshInstance3D
 var bulbs: MultiMeshInstance3D
 var spores: MultiMeshInstance3D
+var bubbles: MultiMeshInstance3D
+var bubble := EcoBladderBubbles.new()
+var bubble_buffer := PackedFloat32Array()
+var _bubbles_empty := false
 ## Последние буферы луковиц и спор (для тестов).
 var bulb_buffer := PackedFloat32Array()
 var spore_buffer := PackedFloat32Array()
@@ -33,6 +39,7 @@ func _init(system: EcoBladder) -> void:
 	stems = _instance("Стебли", build_stem(), n * EcoBladder.STEMS, false)
 	bulbs = _instance("Луковицы", build_bulb(), n * EcoBladder.STEMS, true)
 	spores = _instance("Споры", build_spore(), n * EcoBladder.SPORES, true)
+	bubbles = _instance("Пузырьки", build_bubble(), EcoBladderBubbles.POOL, true)
 	var buf := PackedFloat32Array()
 	buf.resize(stems.multimesh.instance_count * STRIDE)
 	for bl in bladders.bushes:
@@ -104,8 +111,35 @@ static func build_spore() -> QuadMesh:
 	return m
 
 
-## Расставить луковицы и споры в момент t (время мира).
-func sync(t: float) -> void:
+## Пузырёк: квадрат лицом к камере, светлый ободок и прозрачная середина (как пузыри курильщика); место, размер,
+## цвет и непрозрачность — из экземпляра.
+static func build_bubble() -> QuadMesh:
+	var m := QuadMesh.new()
+	m.size = Vector2.ONE
+	m.material = EcoShaders.mist(EcoShaders.Mist.BUBBLE, {"tint": Color.WHITE, "placed": true})
+	return m
+
+
+## Буфер пузырьков (TRANSFORM_3D + цвет): растаявшие и не сорвавшиеся стянуты в точку, в луче прожектора — светлее.
+static func pack_bubbles(d: EcoBladderBubbles, t: float, flow: Vector3,
+		ship: EcoLink.ShipState = null) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	out.resize(d.bubbles.size() * STRIDE_C)
+	for n in d.bubbles.size():
+		var b := d.bubbles[n]
+		var i := n * STRIDE_C
+		var a := EcoBladderBubbles.fade(b, t)
+		var s := EcoBladderBubbles.size(b, t) if a > 0.0 else 0.0
+		var o := EcoBladderBubbles.pos(b, t, flow) if a > 0.0 else b.at
+		var c := EcoBladderBubbles.COLOR.lerp(EcoBladderBubbles.LIT, EcoGrazerDust.light(o, ship))
+		_put(out, i, Transform3D(Basis.from_scale(Vector3.ONE * s), o))
+		out[i + 12] = c.r; out[i + 13] = c.g; out[i + 14] = c.b; out[i + 15] = a
+	return out
+
+
+## Расставить луковицы, споры и пузырьки в момент t (время мира); ship — корабль (дальность и луч), flow — течение.
+func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> void:
+	_sync_bubbles(t, ship, flow)
 	bulb_buffer.resize(bulbs.multimesh.instance_count * STRIDE_C)
 	var fresh := spore_buffer.size() != spores.multimesh.instance_count * STRIDE_C
 	spore_buffer.resize(spores.multimesh.instance_count * STRIDE_C)
@@ -134,6 +168,16 @@ func sync(t: float) -> void:
 	bulbs.multimesh.buffer = bulb_buffer
 	if spores_changed:
 		spores.multimesh.buffer = spore_buffer
+
+
+func _sync_bubbles(t: float, ship: EcoLink.ShipState, flow: Vector3) -> void:
+	bubble.update(bladders, t, ship.pos if ship else Vector3.ZERO)
+	var shown := bubble.shown(t)
+	if shown == 0 and _bubbles_empty and bubble_buffer.size() == EcoBladderBubbles.POOL * STRIDE_C:
+		return   # пузырьков нет и в буфере пусто — буфер не грузим заново (issue #133)
+	bubble_buffer = pack_bubbles(bubble, t, flow, ship)
+	bubbles.multimesh.buffer = bubble_buffer
+	_bubbles_empty = shown == 0
 
 
 ## Базис, что ставит единичный стебель (ось +Y, середина в нуле) от основания по вектору up.

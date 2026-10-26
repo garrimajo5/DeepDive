@@ -108,8 +108,9 @@ void fragment() {
 """
 
 ## Прозрачное без света (смешение по альфе, без записи глубины, обе стороны): один код на купола и щупальца вуалей,
-## чернила подушечника, пузыри и марево курильщика, трещину и столб света колодца. Что рисовать — `mode` (Mist), числа
-## каждого вида — в своих uniform; формулы — прежние формулы видов. Ветка по uniform одна на весь вызов отрисовки.
+## чернила подушечника, пузыри и марево курильщика, пузырьки существ (BUBBLE с `placed`), трещину и столб света
+## колодца. Что рисовать — `mode` (Mist), числа каждого вида — в своих uniform; формулы — прежние формулы видов.
+## Ветка по uniform одна на весь вызов отрисовки.
 enum Mist { BELL, TENTACLE, INK, BUBBLE, HAZE, CRACK, COLUMN }
 const MIST := """
 shader_type spatial;
@@ -123,6 +124,8 @@ uniform float swell = 1.0;
 uniform float drift = 0.0;
 uniform float size_low = 0.1;
 uniform float size_high = 0.2;
+// пузырьки существ (EcoBladderBubbles): место и размер — в экземпляре, непрозрачность — в альфе цвета экземпляра
+uniform bool placed = false;
 // марево
 uniform vec3 water : source_color;
 uniform vec3 heat : source_color;
@@ -150,6 +153,12 @@ void vertex() {
 	} else if (mode == 2) {
 		// чернила: пятно лицом к камере, размер — из масштаба экземпляра
 		float s = length(MODEL_MATRIX[0].xyz);
+		MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * s, INV_VIEW_MATRIX[1] * s, INV_VIEW_MATRIX[2] * s,
+			MODEL_MATRIX[3]);
+	} else if (mode == 3 && placed) {
+		// пузырёк, что ведёт процессор: лицом к камере, размер — из масштаба экземпляра
+		float s = length(MODEL_MATRIX[0].xyz);
+		fade = COLOR.a;
 		MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * s, INV_VIEW_MATRIX[1] * s, INV_VIEW_MATRIX[2] * s,
 			MODEL_MATRIX[3]);
 	} else if (mode == 3) {
@@ -183,7 +192,7 @@ void fragment() {
 	} else if (mode == 3) {
 		// пузырь: светлый ободок и прозрачная середина
 		float ring = (1.0 - smoothstep(0.8, 1.0, d)) * (0.35 + 0.65 * smoothstep(0.45, 0.9, d));
-		ALBEDO = tint.rgb;
+		ALBEDO = placed ? tint.rgb * tone.rgb : tint.rgb;
 		ALPHA = fade * ring;
 	} else if (mode == 4) {
 		// марево: шум из синусов бежит вверх, слабеет вверх и к краям полосы
