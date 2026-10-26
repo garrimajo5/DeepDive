@@ -153,6 +153,7 @@ func tick(dt: float) -> void:
 				drain_left = c[1]
 			"hull":
 				main.vitals.hull = c[1]
+				main.timeline.set_hull(main.time, c[1])   # износ из сценария — не «удар» (#692)
 			"charge":
 				main.vitals.energy = c[1]
 			"wreck":   # корпус разрушен — как от удара (шторка ART-036)
@@ -464,7 +465,7 @@ func _log(line: String) -> void:
 
 func _finish() -> void:
 	_log("Готово | " + state())
-	main.timeline.save()   # хронометраж забега прогона — qa/out/zabeg.txt
+	main.timeline.save(Time.get_datetime_string_from_system(false, true))   # хронометраж забега прогона — qa/out/zabeg.txt
 	var f := FileAccess.open(OUT + "/done.txt", FileAccess.WRITE)
 	if f:
 		f.store_string("ok\n")
