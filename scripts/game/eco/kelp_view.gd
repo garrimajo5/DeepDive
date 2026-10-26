@@ -4,7 +4,8 @@ extends Node3D
 ## 0,45 × 1 м в 7 отрезков, видна с обеих сторон, колышется в шейдере по течению мира — EcoCurrent.sway; цвет экземпляра — от
 ## голого стебля к зелени по густоте, слабое своё свечение #0b1a10), тела ежей (икосаэдр 0,2 м, #3a1f4a, свечение
 ## #12061a) и иглы (18 игл по 0,32 м: стержни со светом, голубые кончики светятся сами). Ленты переписываются, только
-## когда ёж их объел или они отросли (EcoKelp.dirty). Ленты — общий шейдер растений (EcoShaders.PLANT).
+## когда ёж их объел или они отросли (EcoKelp.dirty). Ленты — общий шейдер растений (EcoShaders.PLANT). Муть у дна
+## от ежей (EcoUrchinDust) — дочерний MultiMesh «Муть» в мировых координатах, общий шейдер EcoShaders.MIST (INK).
 ## Стоит на слое отмели (OceanView.LAYER_WORLD).
 
 const KELP_GLOW := Color("0b1a10")
@@ -32,6 +33,11 @@ var stalk_buffer := PackedFloat32Array()
 var urchin_buffer := PackedFloat32Array()
 ## Сколько раз переписан буфер лент (для тестов: без перемен — не переписывается).
 var stalk_writes := 0
+## Муть от ежей и её MultiMesh; буфер мути — для тестов.
+var dust := EcoUrchinDust.new()
+var dust_view: MultiMeshInstance3D
+var dust_buffer := PackedFloat32Array()
+var _dust_empty := false
 
 
 func _init(system: EcoKelp) -> void:
@@ -40,6 +46,8 @@ func _init(system: EcoKelp) -> void:
 	stalks = _instance("Ленты", build_stalk(), kelp.groves.size() * EcoKelp.KELP_N, true)
 	bodies = _instance("Шипоежи", build_body(), kelp.urchins.size(), false)
 	spines = _instance("Иглы", build_spines(), kelp.urchins.size(), false)
+	dust_view = GrazerView.build_dust(EcoUrchinDust.POOL)
+	add_child(dust_view)
 	kelp.dirty = true
 	sync(0.0)
 
@@ -160,8 +168,9 @@ static func _shaft_tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, insi
 		st.add_vertex(p)
 
 
-## Расставить ленты (если менялись) и ежей в момент t (время мира).
-func sync(t: float) -> void:
+## Расставить ленты (если менялись) и ежей в момент t (время мира); ship — корабль (муть дальше
+## EcoGrazerDust.NEAR не поднимается, в луче прожектора светлее), flow — течение мира (уносит муть).
+func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO) -> void:
 	if kelp.dirty:
 		kelp.dirty = false
 		stalk_buffer.resize(stalks.multimesh.instance_count * STRIDE_C)
@@ -182,6 +191,18 @@ func sync(t: float) -> void:
 		_put(urchin_buffer, u.index * STRIDE, tr)
 	bodies.multimesh.buffer = urchin_buffer
 	spines.multimesh.buffer = urchin_buffer
+	_sync_dust(t, ship, flow)
+
+
+func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3) -> void:
+	dust.update(kelp, t, ship.pos if ship else Vector3.ZERO)
+	var shown := dust.dust.shown(t)
+	if shown == 0 and _dust_empty and dust_buffer.size() == EcoUrchinDust.POOL * GrazerView.DUST_STRIDE:
+		return
+	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, ship, EcoUrchinDust.COLOR, EcoUrchinDust.LIT,
+		Seabed.mesh_height)
+	dust_view.multimesh.buffer = dust_buffer
+	_dust_empty = shown == 0
 
 
 static func _put(buf: PackedFloat32Array, i: int, tr: Transform3D) -> void:
