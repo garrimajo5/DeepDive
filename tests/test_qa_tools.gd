@@ -29,3 +29,23 @@ func test_ps1_valid_utf8() -> void:
 		var text := b.slice(3).get_string_from_utf8()
 		ok(text.length() > 0 and text.contains("\n"), "читается как UTF-8: %s" % path)
 		ok(not text.contains("﻿"), "BOM один, в начале: %s" % path)
+
+
+## run-qa.ps1 ждёт done.txt N × 2 с. Сценарий рос, и ожидания (90 × 2 с) перестало хватать:
+## при долгом прогреве после установки игра не доходила до конца (отчёт 2026-10-26-1233, done=False).
+## Время сценария — сумма ожиданий и удержаний; сверху четверть на шаги и кадры и 30 с на запуск и прогрев.
+func test_run_qa_waits_for_whole_scenario() -> void:
+	var ps := FileAccess.get_file_as_bytes(DIR.path_join("run-qa.ps1")).slice(3).get_string_from_utf8()
+	var re := RegEx.create_from_string("for \\(\\$i = 0; \\$i -lt (\\d+); \\$i\\+\\+\\) \\{\\s*\\n\\s*Start-Sleep (\\d+)")
+	var m := re.search(ps)
+	ok(m != null, "цикл ожидания done.txt найден")
+	if m == null:
+		return
+	var budget := int(m.get_string(1)) * int(m.get_string(2))
+	var steps: Array = JSON.parse_string(FileAccess.get_file_as_string(DIR.path_join("scenario.json")))
+	var timed := 0.0
+	for st in steps:
+		if st.get("do", "") in ["wait", "hold", "drain", "swipe"]:
+			timed += float(st.get("s", 0.0))
+	var need := timed * 1.25 + 30.0
+	ok(need <= budget, "ожидание %d с покрывает сценарий ~%.0f с" % [budget, need])
