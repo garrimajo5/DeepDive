@@ -59,6 +59,8 @@ class Bubble:
 
 var bubbles: Array[Bubble] = []
 var _slot := 0
+## Сколько раз пузырёк ставился в пул (рисунок по нему находит новые места пула, не перебирая весь пул).
+var added := 0
 var _made := 0
 var _last := -1e9
 ## По кусту: облако спор на прошлом шаге и время следующего пузырька спелых луковиц.
@@ -75,6 +77,7 @@ func _init(pool: int = POOL) -> void:
 func add(at: Vector3, t: float, alpha: float, key: int) -> Bubble:
 	var b := bubbles[_slot]
 	_slot = (_slot + 1) % bubbles.size()
+	added += 1
 	b.at = at
 	b.born = t
 	b.alpha = alpha
@@ -82,6 +85,11 @@ func add(at: Vector3, t: float, alpha: float, key: int) -> Bubble:
 	b.size = SIZE * EcoVary.spread(key, SALT + 1, SIZE_SPREAD)
 	b.phase = EcoVary.unit(key, SALT + 2) * TAU
 	return b
+
+
+## Место пула, куда встанет следующий пузырёк.
+func slot() -> int:
+	return _slot
 
 
 ## Возраст пузырька в долях жизни (0…1; > 1 — растаял, < 0 — ещё не сорвался).
