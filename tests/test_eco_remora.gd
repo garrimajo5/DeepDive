@@ -347,3 +347,64 @@ func test_eco_view_has_remoras() -> void:
 	ok(ev.eels.remoras == ev.remoras, "стеклоуст знает о прилипалах")
 	eq(ev.remoras.remoras.size(), 6)
 	ev.free()
+
+
+# ---------- Поворот носа ----------
+
+func test_turn_is_rate_limited() -> void:
+	var d := Vector3.BACK
+	var lim := EcoRemora.TURN_MAX * 0.05 + 1e-4
+	for i in 40:
+		var n := EcoRemora.turn(d, Vector3.FORWARD, 0.05)
+		near(n.length(), 1.0, 1e-4, "нос — единичный")
+		ok(d.angle_to(n) <= lim, "за шаг не больше %.2f рад (%.3f)" % [lim, d.angle_to(n)])
+		d = n
+	near(d.dot(Vector3.FORWARD), 1.0, 1e-3, "за 2 с развернулась кругом")
+	near(EcoRemora.turn(Vector3.BACK, Vector3.BACK * 3.0, 0.05).dot(Vector3.BACK), 1.0, 1e-6, "по курсу — как есть")
+
+
+## Нос за шаг — не больше TURN_MAX · dt плюс поворот носителя (скат за шаг поворачивает мало).
+func _check_turns(w: EcoWorld, seconds: float, prev: Array[Vector3]) -> int:
+	var rm := _remoras(w)
+	var ry := _rays(w).rays[0]
+	var lim := EcoRemora.TURN_MAX * 0.05 + 0.03
+	var bad := 0
+	for i in int(round(seconds / 0.05)):
+		w.ship.pos = Vector3(ry.p.x, -20.0, ry.p.z)
+		w.ship.yaw = 0.3
+		w.step(0.05)
+		for k in rm.remoras.size():
+			if rm.remoras[k].dir.angle_to(prev[k]) > lim:
+				bad += 1
+			prev[k] = rm.remoras[k].dir
+	return bad
+
+
+func test_nose_turns_smoothly_hop_and_zap() -> void:
+	var w := _world()
+	var rm := _remoras(w)
+	var prev: Array[Vector3] = []
+	for r in rm.remoras:
+		prev.append(r.dir)
+	eq(_check_turns(w, 12.0, prev), 0, "перебираясь на корпус, нос не щёлкает")
+	eq(rm.on_hull, 3)
+	w.ship.zap = true
+	eq(_check_turns(w, 0.05, prev), 0, "разряд не щёлкает носом")
+	w.ship.zap = false
+	eq(_check_turns(w, 30.0, prev), 0, "обратно на ската — тоже плавно")
+	eq(_count(w, EcoRemora.Mode.RAY), 6)
+	for r in rm.remoras:
+		near(r.dir.dot(r.ray.dir), 1.0, 1e-3, "на скате снова смотрит по его курсу")
+
+
+func test_hull_rider_turns_with_ship() -> void:
+	var w := _world()
+	_follow_ray(w, 12.0)
+	var rm := _remoras(w)
+	eq(rm.on_hull, 3)
+	# корабль разом повернул на 0,6 рад: сидящие на корпусе — вместе с ним, без отставания
+	w.ship.yaw = 0.9
+	w.step(0.05)
+	for r in rm.remoras:
+		if r.mode == EcoRemora.Mode.HULL:
+			near(r.dir.dot(w.ship.nose()), 1.0, 1e-4, "нос по носу корабля сразу")
