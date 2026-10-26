@@ -55,6 +55,7 @@ var zap_light: OmniLight3D   ## вспышка разряда вокруг ко�
 var drain_sound: AudioStreamPlayer   ## шипение тревоги, пока на корпусе присоска (Synth.latch)
 var drain_hisses := 0                ## сколько раз шипела тревога присоски (для тестов)
 var ambience: Ambience   ## фон забега: эмбиент за бортом и гул корабля (SND-001), доли по глубине — Main._sound
+var music: Music   ## музыка SND-004: тема меню и напряжение, какая звучит — Main._sound (SoundMix.Mix.music_pair)
 var ship_sounds: ShipSounds   ## разовые звуки корабля SND-002: импульс сонара, удары, скрежет (`HullSound`)
 var hit_local: Variant = null   ## точка удара существа в осях корабля, пока идёт vitals.hit (звук по стороне, #656)
 var sound_mix := SoundMix.Mix.new()  ## сведение шин звука (docs/zvuk.md): меню, пауза, вид с борта, тревога — Main._sound
@@ -189,6 +190,8 @@ func _ready() -> void:
 	SoundMix.ensure()   # шины звука — до первых плееров
 	ambience = Ambience.new()
 	add_child(ambience)
+	music = Music.new()
+	add_child(music)
 	ship_sounds = ShipSounds.new()
 	add_child(ship_sounds)
 	_build_world()
@@ -2385,6 +2388,7 @@ func _sound(dt: float) -> void:
 	sound_mix.depth = helm.depth()
 	SoundMix.apply(sound_mix.update(dt), settings.buses)   # × громкости шин из настроек («Звук»)
 	ambience.set_pair(sound_mix.ambient_pair())
+	music.set_pair(sound_mix.music_pair())
 
 
 ## Активные поля табло тревог (AlarmBoard.Field) — из тех же строк, что тревога в строке состояния.

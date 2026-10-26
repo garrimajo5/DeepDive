@@ -31,6 +31,12 @@ const DEEP_LOOP := "res://audio/ambient/ambient-deep.mp3"
 const HUM_LOOP := "res://audio/ship/ship-hum.mp3"
 const AMBIENT_DB := -6.0    ## эмбиент за бортом — фон под всем остальным
 const HUM_DB := -12.0       ## гул корабля поверх эмбиента, тише (в файле он громче эмбиента на ~5 дБ)
+## Музыка SND-004 (#658, docs/zvuk/SND-004.md): тема меню и напряжение — петли на шине «Музыка», играет
+## `scripts/game/music.gd` (`main.music`). Какая из двух звучит — `Mix.music_pair`, громкость шины — `Mix.levels`.
+const MENU_MUSIC := "res://audio/music/music-menu.mp3"
+const TENSION_MUSIC := "res://audio/music/music-tension.mp3"
+const MENU_DB := -2.0       ## тема меню звучит одна (корабль и мир молчат)
+const TENSION_DB := -8.0    ## напряжение — слой под эмбиентом и тревогой, не поверх них
 
 
 ## Заводит недостающие шины (по порядку BUSES, выход — в Master). Повторный вызов ничего не меняет.
@@ -86,9 +92,14 @@ class Mix extends RefCounted:
 	var tension := false   ## тревога на корабле или «Корпус разрушен» — играет музыка напряжения
 	var depth := 0.0       ## глубина корабля, м — для эмбиента (shelf_k/deep_k)
 	var levels := {}       ## шина → текущая доля 0…1
+	## Доля темы меню в шине «Музыка» (остальное — напряжение). Меняется, только пока шина звучит или к ней идёт:
+	## шина затихает — какая звучала, та и затихает (меню закрыли — тема не сменяется напряжением на спаде);
+	## шина молчит — сразу та, что нужна (тревога после меню — без хвоста темы меню).
+	var menu_k := 0.0
 
 	func _init() -> void:
 		levels = target()
+		menu_k = 1.0 if menu else 0.0
 
 	## Цели долей для текущего состояния.
 	func target() -> Dictionary:
@@ -115,9 +126,18 @@ class Mix extends RefCounted:
 	func update(dt: float) -> Dictionary:
 		var t := target()
 		var step := dt / FADE_S
+		var want := 1.0 if menu else 0.0
+		if float(levels.get(MUSIC, 0.0)) <= 0.001:
+			menu_k = want
+		elif float(t[MUSIC]) > 0.0:
+			menu_k = move_toward(menu_k, want, step)
 		for b: String in t:
 			levels[b] = move_toward(float(levels.get(b, t[b])), t[b], step)
 		return levels
+
+	## Доли петель музыки [тема меню, напряжение] — их берёт плеер музыки (`Music.set_pair`).
+	func music_pair() -> Vector2:
+		return Vector2(menu_k, 1.0 - menu_k)
 
 	## Доли петель эмбиента на текущей глубине: [отмель, глубина].
 	func ambient_pair() -> Vector2:
