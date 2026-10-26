@@ -1,0 +1,6 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+PASS telo surfaces=1 texture=1024 emission=false aabb=[P: (-0.698002, -0.7, -1.499575), S: (1.396005, 0.903203, 2.96388)]
+PASS uho surfaces=1 texture=1024 emission=true aabb=[P: (-0.158924, -0.09, -0.398711), S: (0.987357, 0.89, 0.938735)]
+PASS meshok surfaces=1 texture=1024 emission=false aabb=[P: (-0.330614, -0.139661, -0.222453), S: (0.661227, 0.279323, 0.444906)]
+PASS chelyust surfaces=1 texture=1024 emission=false aabb=[P: (-0.185188, -0.214589, -0.062835), S: (0.324634, 0.261938, 0.413478)]
