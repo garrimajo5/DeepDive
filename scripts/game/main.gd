@@ -54,6 +54,7 @@ var debug_winch := false         ## снимок: кнопку у лебёдки
 var zap_light: OmniLight3D   ## вспышка разряда вокруг корпуса (за бортом)
 var drain_sound: AudioStreamPlayer   ## шипение тревоги, пока на корпусе присоска (Synth.latch)
 var drain_hisses := 0                ## сколько раз шипела тревога присоски (для тестов)
+var sound_mix := SoundMix.Mix.new()  ## сведение шин звука (docs/zvuk.md): меню, пауза, вид с борта, тревога — Main._sound
 ## Прогрев шейдеров при старте (Warmup, issue #50): шторка, камера оглядывает корабль, скрытое показано на кадр.
 var warm := Warmup.new()
 var curtain: WarmSplash   ## заставка прогрева (ART-034), после прогрева — null
@@ -181,6 +182,7 @@ const NET_SPAWN := Vector3(0.0, 1.0, 0.0)   ## гость встаёт на мо
 
 
 func _ready() -> void:
+	SoundMix.ensure()   # шины звука — до первых плееров
 	_build_world()
 	ocean = OceanView.new()
 	ocean.name = "Отмель"
@@ -227,6 +229,7 @@ func _ready() -> void:
 	drain_sound.name = "Тревога присоски"
 	drain_sound.stream = Synth.latch()
 	drain_sound.volume_db = DRAIN_DB
+	drain_sound.bus = SoundMix.SHIP
 	add_child(drain_sound)
 	sonar_view = SonarView.new()
 	bridge.add_child(sonar_view)
@@ -638,6 +641,7 @@ func _process(dt: float) -> void:
 func step(dt: float) -> void:
 	clock.start(Time.get_ticks_usec(), dt)
 	_warm_restore()
+	_sound(dt)
 	time += dt
 	if qa:
 		qa.tick(dt)
@@ -2326,6 +2330,16 @@ func tag_blocks() -> Array:
 	if tutorial_panel != null and tutorial_panel.visible:   # плашка подсказки ART-038
 		out.append(tutorial_panel.box())
 	return out
+
+
+## Сведение шин звука по состоянию игры (SoundMix.Mix): меню, пауза мира, вид с борта, тревога, глубина.
+func _sound(dt: float) -> void:
+	sound_mix.menu = main_menu.open and not warm.active()
+	sound_mix.paused = pause.open and pause.stops_world()
+	sound_mix.outside = flyby.active()
+	sound_mix.tension = wreck.active() or alarms_on().slice(0, AlarmBoard.Field.size() - 1).has(true)
+	sound_mix.depth = helm.depth()
+	SoundMix.apply(sound_mix.update(dt))
 
 
 ## Активные поля табло тревог (AlarmBoard.Field) — из тех же строк, что тревога в строке состояния.
