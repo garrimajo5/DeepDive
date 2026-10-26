@@ -817,6 +817,7 @@ func step(dt: float) -> void:
 	helm.speed = vitals.scrape(helm.bump / maxf(dt, 1e-4), helm.speed)
 	if helm.knock > 0.0:
 		ship_sounds.play_ice(helm.knock)   # упёрлись в лёд снизу — удар без урона (#656)
+	ship_sounds.set_rub(helm.rub, dt)   # трёмся о дно на ходу — петля скрежета (#656)
 	if vitals.update(dt, helm.in_thrust, helm.in_vert, Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP)),
 			0.0 if run.ended else reactor.k(Reactor.Sys.LIFE)):   # на итоге корпус не чинится — как на панели (#266)
 		light_on = false
