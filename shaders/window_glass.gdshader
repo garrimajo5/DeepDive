@@ -8,59 +8,6 @@ shader_type spatial;
 // relief = false («Экономно», ART-044) — без нормалей, альфа 0,07 + 0,12·A, шероховатость 0,6.
 // Конденсат и иней ART-077 (kondensat-okon.md): маска condensation в тех же UV — R капли, G дорожки, B иней, A порог
 // от рамы к центру (центр 56 × 56 % — A = 1, чист); humidity и ice_k сглажены на CPU (WindowFog). Одна выборка, без
-// экранного буфера и нормалей капель — вариант «Экономно» для всех уровней; добавки поверх ART-057, не вместо.
-render_mode blend_mix, cull_disabled, depth_draw_never, fog_disabled;
-
-uniform vec3 tint : source_color = vec3(0.6, 0.85, 0.9);
-uniform sampler2D mask : hint_default_black, filter_linear_mipmap, repeat_disable;
-uniform sampler2D normal_map : hint_normal, filter_linear_mipmap, repeat_disable;
-uniform vec2 split = vec2(0.328947, 0.671053);
-uniform float normal_depth = 0.12;
-uniform bool relief = true;
-uniform sampler2D condensation : hint_default_black, filter_linear_mipmap, repeat_disable;
-uniform float humidity = 0.0;
-uniform float ice_k = 0.0;
-uniform vec3 ice_color = vec3(0.38, 0.62, 0.7);
-
-void fragment() {
-	float u = UV.x;
-	vec2 uv;
-	vec2 flip = vec2(1.0);
-	if (u < split.x) {
-		uv = vec2(u / split.x, UV.y);
-	} else if (u < split.y) {
-		uv = vec2(1.0 - (u - split.x) / (split.y - split.x), UV.y);
-		flip.x = -1.0;
-	} else {
-		uv = vec2((u - split.y) / (1.0 - split.y), 1.0 - UV.y);
-		flip.y = -1.0;
-	}
-	// производные непрерывного UV: на стыках участков (под стойками) mipmap не рвётся
-	vec2 dx = dFdx(UV) * vec2(1.0 / split.x, 1.0);
-	vec2 dy = dFdy(UV) * vec2(1.0 / split.x, 1.0);
-	vec4 m = textureGrad(mask, uv, dx, dy);
-	ALBEDO = tint;
-	METALLIC = 0.0;
-	// блики плафонов в чистом центре окна слабее (ART-057: не ложиться на существ), у рамы — полные
-	SPECULAR = 0.55 * mix(0.3, 1.0, smoothstep(0.0, 0.15, m.a));
-	if (relief) {
-		ALPHA = 0.07 + 0.26 * m.a;
-		ROUGHNESS = clamp(0.12 + 0.50 * m.r + 0.14 * m.g, 0.12, 0.70);
-		vec3 n = textureGrad(normal_map, uv, dx, dy).rgb * 2.0 - 1.0;
-		n.xy *= flip;
-		NORMAL_MAP = n * 0.5 + 0.5;
-		NORMAL_MAP_DEPTH = normal_depth;
-	} else {
-		ALPHA = 0.07 + 0.12 * m.a;
-		ROUGHNESS = 0.6;
-	}
-	if (humidity > 0.001) {
-		vec4 c = textureGrad(condensation, uv, dx, dy);
-		float gate = smoothstep(c.a, c.a + 0.18, humidity);
-		float drops = max(c.r, c.g * 0.65) * gate;
-		float frost = c.b * ice_k * gate;
-		ALPHA = 1.0 - (1.0 - ALPHA) * (1.0 - 0.16 * drops - 0.42 * frost);
-		ALBEDO = mix(tint, ice_color, frost);
-		ROUGHNESS = mix(ROUGHNESS, 0.85, frost);
-	}
-}
+// экранного буфера и нормалей капель — «Экономно» и «Обычно»; добавки поверх ART-057, не вместо.
+// Тело — `window_glass.gdshaderinc`; полный вариант с преломлением капель — `window_glass_wet.gdshader` («Красиво»).
+#include "res://shaders/window_glass.gdshaderinc"

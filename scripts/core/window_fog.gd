@@ -6,7 +6,9 @@ extends RefCounted
 ## (`BridgeView.set_fog`, `shaders/window_glass.gdshader`). Маска `textures/bridge/kondensat-maska.png` (линейные данные,
 ## UV стекла `BridgeView.glass_uv`): R — капли, G — дорожки, B — иней, A — порог от рамы к центру; центр 56 × 56 % —
 ## R = G = B = 0, A = 1 (всегда чист). Без экранного буфера и нормалей капель: вариант «Экономно» для всех уровней,
-## преломление — после замера на телефоне. `gate`/`drops`/`frost`/`alpha` — двойники шейдера для тестов.
+## полный вариант — нормали капель и слабое экранное преломление (`shaders/window_glass_wet.gdshader`, копия экрана) —
+## только на «Красиво» (`Graphics.LEVELS` "wet", `BridgeView.set_wet`); на «Обычно» — после замера на телефоне.
+## `gate`/`drops`/`frost`/`alpha`, `bead`/`wet_weights`/`wet_offset` — двойники шейдера для тестов.
 
 const MASK := "res://textures/bridge/kondensat-maska.png"
 const COLD_FROM := 8.0          ## м — выше конденсата нет
@@ -92,3 +94,26 @@ static func frost(m: Color, h: float, ice: float) -> float:
 ## Непрозрачность стекла поверх исходной ART-057 (base): добавки складываются, не заменяют.
 static func alpha(base: float, d: float, f: float) -> float:
 	return 1.0 - (1.0 - base) * (1.0 - DROP_ALPHA * d - FROST_ALPHA * f)
+
+
+## Полный вариант (window_glass_wet): мениск — гладкое кольцо по высоте капли r.
+static func bead(r: float, g: float) -> float:
+	return smoothstep(0.08, 0.3, r) * (1.0 - smoothstep(0.3, 0.75, r)) * g
+
+
+## Веса полного варианта поверх исходной непрозрачности base: x — итоговая альфа, y — вес холодного цвета (иней и
+## мениск), z — доля вида сквозь каплю, к которой добавляется сдвиг преломления (EMISSION из копии экрана);
+## остаток x − base − y — плёнка капли цветом стекла (0,16, как в «Обычно»). Копией экрана капля фон не подменяет:
+## в копии нет поздних прозрачных (дальняя вода, лучи, взвесь), она темнее настоящего фона — капли вышли бы точками.
+static func wet_weights(base: float, d: float, f: float, b: float) -> Vector3:
+	var dc := 0.6 * d * (1.0 - f)
+	var fc := 0.72 * f
+	var bc := 0.09 * b
+	var ff := DROP_ALPHA * d
+	var a := 1.0 - (1.0 - base) * (1.0 - fc) * (1.0 - bc) * (1.0 - ff)
+	return Vector3(a, (1.0 - base) * (fc + (1.0 - fc) * bc), (1.0 - base) * (1.0 - fc) * (1.0 - bc) * (1.0 - ff) * dc)
+
+
+## Сдвиг экранного UV преломления по изгибу bend (view space): не больше 0,002 по каждой оси.
+static func wet_offset(bend: Vector2) -> Vector2:
+	return (bend * Vector2(1.0, -1.0) * 0.009).clamp(Vector2(-0.002, -0.002), Vector2(0.002, 0.002))

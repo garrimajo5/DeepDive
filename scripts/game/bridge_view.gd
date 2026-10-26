@@ -246,6 +246,8 @@ func set_screens(helm: Vector3, scanner: float) -> void:
 ## Стекло носовых окон по ART-057 (`steklo-okon.md`): один квад на три окна, маска мути/капель/царапин и нормали
 ## толстого стекла (`textures/bridge/steklo-*.png`, шейдер `window_glass.gdshader`); центр окна почти чистый.
 const GLASS_SHADER := preload("res://shaders/window_glass.gdshader")
+## Полный конденсат ART-077 (нормали капель, экранное преломление) — отдельный ресурс: копия экрана только на «Красиво».
+const GLASS_WET_SHADER := preload("res://shaders/window_glass_wet.gdshader")
 const GLASS_TINT := Color(0.6, 0.85, 0.9)
 var glass_mat: ShaderMaterial
 
@@ -284,6 +286,24 @@ func set_fog(humidity: float, ice_k: float) -> void:
 		glass_mat.set_shader_parameter("humidity", humidity)
 	if not is_equal_approx(float(glass_mat.get_shader_parameter("ice_k")), ice_k):
 		glass_mat.set_shader_parameter("ice_k", ice_k)
+
+
+## Полный вариант конденсата ART-077 («Красиво», `Main._apply_graphics`): true — шейдер с нормалями капель и
+## преломлением (`window_glass_wet`, читает копию экрана), false — без экранного буфера. Значения uniform те же.
+func set_wet(on: bool) -> void:
+	var want: Shader = GLASS_WET_SHADER if on else GLASS_SHADER
+	if glass_mat.shader == want:
+		return
+	var keep := {}
+	for u in glass_mat.shader.get_shader_uniform_list():
+		keep[u["name"]] = glass_mat.get_shader_parameter(u["name"])
+	glass_mat.shader = want
+	for k in keep:
+		glass_mat.set_shader_parameter(k, keep[k])
+
+
+func is_wet() -> bool:
+	return glass_mat.shader == GLASS_WET_SHADER
 
 
 ## Границы окон по u квада (стойки `BridgePlan.MULLIONS`): 0,328947 и 0,671053.
