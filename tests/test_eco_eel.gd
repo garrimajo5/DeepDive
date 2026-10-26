@@ -1,6 +1,6 @@
 extends TestCase
 ## Стеклоуст (initEels, eelUpdate, onZap в js/creatures.js; ART-006): три логова, бросок на скребунов и светляков,
-## присоска на стекле носа — EcoLink.DRAIN 3,2 ед./с, разряд сбрасывает; пять MultiMesh в сцене.
+## присоска на стекле носа — EcoLink.DRAIN 3,2 ед./с, разряд сбрасывает; шесть MultiMesh в сцене (с мутью).
 
 const FLAT := -40.0
 const FAR := Vector3(500, -30, 500)
@@ -334,7 +334,7 @@ func test_view_five_multimeshes() -> void:
 		if c is MultiMeshInstance3D:
 			mm += 1
 			eq((c as MultiMeshInstance3D).layers, OceanView.LAYER_WORLD, "%s — на слое отмели" % c.name)
-	eq(mm, 5, "камни, оболочка, внутренности, глаза, присоска — пять вызовов")
+	eq(mm, 6, "камни, оболочка, внутренности, глаза, присоска и муть — шесть вызовов")
 	eq(view.rocks.multimesh.instance_count, 5, "пять камней логова")
 	eq(view.shell.multimesh.instance_count, EcoEel.SEGS, "голова и 13 звеньев")
 	var e := eels.eels[0]
