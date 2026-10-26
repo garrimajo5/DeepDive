@@ -119,6 +119,22 @@ class Render(unittest.TestCase):
         qa_row = [l for l in page.splitlines() if l.startswith("| Тестер")][0]
         self.assertIn("#12 (проверить)", qa_row)         # «проверить» — работа тестера
 
+    def test_owner_acceptance_listed(self):
+        # дела самого владельца без блокера (приёмка этапа, бета) тоже ждут его — отдельным списком
+        ms = [{"number": 4, "title": "Этап 4. Забег", "state": "open"}]
+        epic = {"number": 10, "title": "Эпик: приёмка", "state": "open", "milestone": None,
+                "labels": [{"name": "эпик"}], "sub_issues_summary": {"completed": 0, "total": 0},
+                "body": "- [ ] Этап 1: корабль удобно вести — владелец\n- [x] Выбор музыки — владелец\n"
+                        "- [ ] Сварка — поток А\n"}
+        page = status.render(ms, [epic], [epic], [], {})
+        owner = page.split("## ⛔ Ждёт владельца")[1].split("\n## ")[0]
+        self.assertIn("(1)", page.split("## ⛔ Ждёт владельца")[1].splitlines()[0])
+        self.assertIn("Приёмка и твои дела", owner)
+        self.assertIn("Этап 1: корабль удобно вести — эпик #10", owner)
+        self.assertNotIn("Выбор музыки", owner)          # сделано
+        self.assertNotIn("Сварка", owner)                # не роль владельца
+        self.assertNotIn("Решения", owner)               # решений не ждут — заголовка нет
+
     def test_short_drops_code_marks(self):
         self.assertEqual(status.short("Кадры по `tools/qa/play-kadry.json` для Google Play", 20), "Кадры по tools/qa/pl…")
 
