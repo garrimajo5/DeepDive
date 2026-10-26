@@ -13,12 +13,15 @@ const NAMES := ["Экономно", "Обычно", "Красиво"]
 ## Числа уровня: far — дальность камеры, м (дальняя вода — `wall`); lite — «Экономно» у частиц, рельефа и пост
 ## (`Main._apply_graphics`); shadows — каскадов тени света сквозь лёд (0 — тени выключены, и у прожектора тоже);
 ## msaa — множитель сглаживания; scale — разрешение 3D-сцены (интерфейс — всегда полное); layers — сила слоёв воды
-## ART-069. «Обычно» — то, что было до ART-044 (msaa 2× из `project.godot`, 2 каскада, слои 0,6).
+## ART-069; wet — полный конденсат окон ART-077 (нормали капель и экранное преломление, копия экрана каждый кадр;
+## на «Обычно» — после замера на телефоне). «Обычно» — то, что было до ART-044 (msaa 2× из `project.godot`, 2 каскада, слои 0,6).
 const LEVELS := [
-	{"far": 260.0, "wall": 250.0, "lite": true, "shadows": 0, "msaa": 0, "scale": 0.75, "layers": WaterLayers.GAIN_LITE},
-	{"far": 400.0, "wall": 380.0, "lite": false, "shadows": 2, "msaa": 2, "scale": 1.0, "layers": WaterLayers.GAIN_NORMAL},
+	{"far": 260.0, "wall": 250.0, "lite": true, "shadows": 0, "msaa": 0, "scale": 0.75, "layers": WaterLayers.GAIN_LITE,
+		"wet": false},
+	{"far": 400.0, "wall": 380.0, "lite": false, "shadows": 2, "msaa": 2, "scale": 1.0, "layers": WaterLayers.GAIN_NORMAL,
+		"wet": false},
 	{"far": 400.0, "wall": 380.0, "lite": false, "shadows": 4, "msaa": 4, "scale": 1.0,
-		"layers": WaterLayers.GAIN_BEAUTIFUL},
+		"layers": WaterLayers.GAIN_BEAUTIFUL, "wet": true},
 ]
 
 ## Страница «Настройки · Графика» (координаты макета по `grafika.md`).
