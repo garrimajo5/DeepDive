@@ -4,8 +4,10 @@ extends Node3D
 ## гранёный меш, восемь щупалец по шесть шаров — MultiMesh. Цвет общий: камень #4f4a5c, без маскировки — кожа
 ## #b8553c и слабое свечение. Щупальца колышутся, у камня поджаты (0,55), на ходу тянутся за телом и ложатся
 ## на дно. Вдали (дальше FAR от корабля) неподвижный камень щупальца не переписывает. Украденный образец —
-## светящийся октаэдр 0,22 м над мантией между рогами (carryM), виден, только пока несёт. Два вызова отрисовки (с добычей — три),
-## слой отмели (OceanView.LAYER_WORLD).
+## светящийся октаэдр 0,22 м над мантией между рогами (carryM), виден, только пока несёт. Муть у дна (EcoSkalnikDust:
+## клуб, когда «камень» снимается с места и оседает, след щупалец у дна) — дочерний MultiMesh «Муть» в мировых
+## координатах, общий шейдер EcoShaders.MIST (INK). Три вызова отрисовки (с добычей — четыре), слой отмели
+## (OceanView.LAYER_WORLD).
 
 const ROCK := Color("4f4a5c")
 const SKIN := Color("b8553c")
@@ -34,6 +36,11 @@ var _buf := PackedFloat32Array()
 var _floor := PackedFloat32Array()
 var _floor_at := Vector3.INF
 var _camo := 1.0
+## Муть от скальника и её MultiMesh; буфер мути — для тестов.
+var dust := EcoSkalnikDust.new()
+var dust_view: MultiMeshInstance3D
+var dust_buffer := PackedFloat32Array()
+var _dust_empty := false
 
 
 func _init(system: EcoSkalnik) -> void:
@@ -78,6 +85,8 @@ func _init(system: EcoSkalnik) -> void:
 	carry.material_override = cm
 	carry.visible = false
 	add_child(carry)
+	dust_view = GrazerView.build_dust(EcoSkalnikDust.POOL)
+	add_child(dust_view)
 	_buf.resize(ARMS * SEG * STRIDE)
 	visible = skalnik.octo != null
 	sync(0.0, Vector3(INF, INF, INF), true)
@@ -88,11 +97,13 @@ static func skin_color(camo: float) -> Color:
 	return ROCK.lerp(SKIN, 1.0 - camo)
 
 
-## Расставить скальника в момент t; ship — центр корабля (вдали камень не шевелится); force — переписать всё.
-func sync(t: float, ship: Vector3, force := false) -> void:
+## Расставить скальника в момент t; ship — центр корабля (вдали камень не шевелится); force — переписать всё;
+## info — корабль целиком (муть светлее в луче прожектора), flow — течение мира (уносит муть).
+func sync(t: float, ship: Vector3, force := false, info: EcoLink.ShipState = null, flow := Vector3.ZERO) -> void:
 	var sk := skalnik.octo
 	if sk == null:
 		return
+	_sync_dust(t, ship, info, flow)
 	body.transform = Transform3D(Basis(Vector3.UP, atan2(sk.dir.x, sk.dir.z)), sk.pos)
 	carry.visible = sk.loot >= 0
 	if carry.visible:
@@ -127,6 +138,17 @@ func sync(t: float, ship: Vector3, force := false) -> void:
 	arms.multimesh.buffer = _buf
 	arms.custom_aabb = aabb.grow(0.3)
 	arm_writes += 1
+
+
+func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3) -> void:
+	dust.update(skalnik, t, ship)
+	var shown := dust.dust.shown(t)
+	if shown == 0 and _dust_empty and dust_buffer.size() == EcoSkalnikDust.POOL * GrazerView.DUST_STRIDE:
+		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
+	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, info, EcoSkalnikDust.COLOR, EcoSkalnikDust.LIT,
+			Seabed.mesh_height)
+	dust_view.multimesh.buffer = dust_buffer
+	_dust_empty = shown == 0
 
 
 ## Дно под щупальцами меряется заново, только когда скальник сдвинулся больше чем на 0,25 м.

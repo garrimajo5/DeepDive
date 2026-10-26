@@ -450,7 +450,7 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	hvaten_view.sync(world.time, ship.pos, false)
 	kelp_view.sync(world.time, ship, current.vel())
 	krab_view.sync(world.time, ship, current.vel())
-	skalnik_view.sync(world.time, ship.pos)
+	skalnik_view.sync(world.time, ship.pos, false, ship, current.vel())
 	coins_view.sync(world.time)
 	ray_view.sync()
 	remora_view.sync(world.time)
