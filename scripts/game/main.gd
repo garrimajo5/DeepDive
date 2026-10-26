@@ -65,6 +65,7 @@ var timeline := RunTimeline.new()   ## хронометраж забега (#633
 var curtain: WarmSplash   ## заставка прогрева (ART-034), после прогрева — null
 var _warm_drawn := false            ## прошлый шаг показал взгляд прогрева
 var _warm_shown: Array[Node] = []   ## что прогрев показал на кадр — вернуть скрытым
+var _warm_hidden: Array[Node] = []  ## что кадр по слоям (#424) скрыл — вернуть видимым
 var _warm_mates: Array = []         ## члены экипажа на время прогрева (каждая внешность)
 var _warm_emit: Array = []          ## частицы, выпущенные прогревом: [узел, прежний preprocess]
 var hit_flash: ColorRect
@@ -484,7 +485,21 @@ func _warm_frame() -> void:
 			camera.make_current()
 	for root: Node in [ship, ocean, silt_view, samples_view, vote_panel.get_parent(), wreck_view]:
 		_warm_show(root)
+	var s := warm.stage()
+	if s >= 0:   # первый взгляд по слоям (#424): слои после s на этот кадр скрыты
+		var layers := warm_layers()
+		for later in range(s + 1, layers.size()):
+			for n: Node3D in layers[later]:
+				if n.visible:
+					n.visible = false
+					_warm_hidden.append(n)
 	_warm_drawn = true
+
+
+## Слои первого взгляда прогрева (Warmup.STAGES, #424): интерьер с интерфейсом (всё, чего нет ниже) → экипаж и
+## корпус → вода → живой мир. Кадр слоя s показывает слои 0…s.
+func warm_layers() -> Array:
+	return [[], [crew_view, ghost_view, hull], [ocean], [eco, silt_view, samples_view]]
 
 
 ## Огни корабля по ART-064 (CabinLight): авария — пока открыта пробоина, ритм — часами пробоины (у гостя тоже идут),
@@ -549,6 +564,10 @@ func _warm_restore() -> void:
 		if is_instance_valid(n):
 			n.visible = false
 	_warm_shown.clear()
+	for n in _warm_hidden:
+		if is_instance_valid(n):
+			n.visible = true
+	_warm_hidden.clear()
 	if not _warm_drawn:
 		return
 	_warm_drawn = false
