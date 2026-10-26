@@ -60,6 +60,8 @@ var puffs: Array[Puff] = []
 ## Время следующего облачка у каждого скребуна (по номеру).
 var _next := PackedFloat32Array()
 var _slot := 0
+## Сколько облачков поднято за всё время (EcoDustBuffer: нового нет и всё растаяло — буфер не трогать).
+var added := 0
 var _made := 0
 var _last := -1e9
 
@@ -75,6 +77,7 @@ func _init(pool: int = POOL) -> void:
 func add(at: Vector3, t: float, alpha: float, key: int, scale: float = 1.0) -> Puff:
 	var p := puffs[_slot]
 	_slot = (_slot + 1) % puffs.size()
+	added += 1
 	p.key = key
 	p.at = at
 	p.born = t

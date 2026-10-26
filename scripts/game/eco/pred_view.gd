@@ -26,8 +26,11 @@ var cues: Array[EcoPredLook.Cues] = []
 ## Муть от броска у дна и её MultiMesh; буфер мути — для тестов.
 var dust := EcoPredDust.new()
 var dust_view: MultiMeshInstance3D
-var dust_buffer := PackedFloat32Array()
-var _dust_empty := false
+## Буфер мути (EcoDustBuffer, issue #732).
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
 
 var _last_t := 0.0
 var _started := false
@@ -138,10 +141,7 @@ func sync(t: float, ship: Vector3, state: EcoLink.ShipState = null, flow := Vect
 
 func _sync_dust(t: float, ship: Vector3, state: EcoLink.ShipState, flow: Vector3, ground: Callable) -> void:
 	dust.update(preds, t, ship, ground)
-	var shown := dust.dust.shown(t)
-	if shown == 0 and _dust_empty and dust_buffer.size() == EcoPredDust.POOL * GrazerView.DUST_STRIDE:
-		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
-	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, state, EcoPredDust.COLOR, EcoPredDust.LIT,
+	_dust.pack(dust.dust, t, flow, state, EcoPredDust.COLOR, EcoPredDust.LIT,
 			Seabed.mesh_height)
-	dust_view.multimesh.buffer = dust_buffer
-	_dust_empty = shown == 0
+	if _dust.changed:   # мути нет и не было — буфер тот же, не грузим (issue #133)
+		dust_view.multimesh.buffer = _dust.data

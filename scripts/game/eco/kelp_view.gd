@@ -36,8 +36,11 @@ var stalk_writes := 0
 ## Муть от ежей и её MultiMesh; буфер мути — для тестов.
 var dust := EcoUrchinDust.new()
 var dust_view: MultiMeshInstance3D
-var dust_buffer := PackedFloat32Array()
-var _dust_empty := false
+## Буфер мути (EcoDustBuffer, issue #732).
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
 
 
 func _init(system: EcoKelp) -> void:
@@ -196,13 +199,10 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 
 func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3) -> void:
 	dust.update(kelp, t, ship.pos if ship else Vector3.ZERO)
-	var shown := dust.dust.shown(t)
-	if shown == 0 and _dust_empty and dust_buffer.size() == EcoUrchinDust.POOL * GrazerView.DUST_STRIDE:
-		return
-	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, ship, EcoUrchinDust.COLOR, EcoUrchinDust.LIT,
+	_dust.pack(dust.dust, t, flow, ship, EcoUrchinDust.COLOR, EcoUrchinDust.LIT,
 		Seabed.mesh_height)
-	dust_view.multimesh.buffer = dust_buffer
-	_dust_empty = shown == 0
+	if _dust.changed:   # мути нет и не было — буфер тот же, не грузим (issue #133)
+		dust_view.multimesh.buffer = _dust.data
 
 
 static func _put(buf: PackedFloat32Array, i: int, tr: Transform3D) -> void:

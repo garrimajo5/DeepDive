@@ -43,8 +43,11 @@ var _eye_buffer := PackedFloat32Array()
 ## Муть от угрей и её MultiMesh; буфер мути — для тестов.
 var dust := EcoEelDust.new()
 var dust_view: MultiMeshInstance3D
-var dust_buffer := PackedFloat32Array()
-var _dust_empty := false
+## Буфер мути (EcoDustBuffer, issue #732).
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
 
 
 func _init(system: EcoEel) -> void:
@@ -198,12 +201,9 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground
 
 func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3, ground: Callable) -> void:
 	dust.update(eels, t, ship.pos if ship else Vector3(1e6, 0, 1e6), ground)
-	var shown := dust.dust.shown(t)
-	if shown == 0 and _dust_empty and dust_buffer.size() == EcoEelDust.POOL * GrazerView.DUST_STRIDE:
-		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
-	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, ship, EcoEelDust.COLOR, EcoEelDust.LIT, Seabed.mesh_height)
-	dust_view.multimesh.buffer = dust_buffer
-	_dust_empty = shown == 0
+	_dust.pack(dust.dust, t, flow, ship, EcoEelDust.COLOR, EcoEelDust.LIT, Seabed.mesh_height)
+	if _dust.changed:   # мути нет и не было — буфер тот же, не грузим (issue #133)
+		dust_view.multimesh.buffer = _dust.data
 
 
 ## Поворот, у которого +Z смотрит вдоль dir (голова — пастью вперёд).
