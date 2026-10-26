@@ -1,0 +1,47 @@
+# SND-004 — музыка меню и напряжения
+Заказ #658. Четыре варианта для выбора владельцем, 2026-10-26.
+## Файлы и задуманные различия
+- music-menu-1.mp3: 116 с; глубокие медленные пэды, редкие холодные звоны, простор.
+- music-menu-2.mp3: 116 с; более холодный и минимальный вариант, разреженные стеклянные тоны.
+- music-tension-1.mp3: 51 с; регулярный мягкий низкий пульс, сдержанное давление.
+- music-tension-2.mp3: 51 с; нерегулярные импульсы, диссонанс и более неустойчивое давление.
+
+Это описание различий по промптам, не результат прослушивания. Звук оценивают владелец и тестер.
+Предварительно рекомендую menu-2: технически ровнее переход (0,03 дБ разницы RMS соседних секунд); tension-1: в задании регулярный тихий пульс и больше запас по пикам. Финальный выбор за владельцем.
+
+## Генерация
+ElevenLabs Creative Studio, модель eleven_music_v2, instrumental=true, lyrics_type=instrumental, одна генерация на узел. Два варианта каждой позиции. Музыка, не SFX.
+Flow: aQPwxuSWidp3iKaYcyH9.
+Принятый сервисом расход: 5250 кредитов (1800 + 1800 + 825 + 825). Остаток баланса инструмент не сообщает. Покупки, смена тарифа и overage не включались.
+Использование Free — только некоммерческий прототип; атрибуция: Music generated with ElevenLabs. Коммерческие права здесь не заявляются.
+Исходные MP3 сохранены в source/. Идентификаторы, настройки и дословные промпты — также в generation-state.json.
+
+### music-menu-1
+Длительность генерации 120 с; node 0X6qFfo5C4VGO9zd1lW5; session bnsY5rvfdF3hRWpOBjuX; generation pUtfmsVLTA8hc0gZEehZ; 1800 кредитов.
+
+Instrumental underwater science fiction menu music. Vast dark water beneath thick ice, slow deep evolving pads, rare cold distant chimes, restrained mysterious harmony, spacious muffled reverberation. No vocals, speech, drums, epic orchestra or animal sounds. Continuous circular arrangement, no intro or ending, suitable for a seamless ambient loop.
+
+### music-menu-2
+Длительность генерации 120 с; node cjJCkOUS0FVtJal8ZCAy; session 7dbWNT9qLnqqtr4uagwn; generation eszMmFZsHC1X0loOt6VE; 1800 кредитов.
+
+Instrumental ambient loop for an underwater game menu. Slow suspended dark synth chords, very sparse icy glass tones, immense still water under an alien ice sheet, distant low resonances. Colder and more minimal than a warm pad theme. No voices, drums, orchestra, animal sounds or dramatic hits. Steady circular texture without intro, ending or silence.
+
+### music-tension-1
+Длительность генерации 55 с; node Cit39GkhYmw4Fcsx25Yn; session osCCDL9TYRBSYJyqMvBU; generation Bz0Fejd2AA7hs6uLqcoi; 825 кредитов.
+
+Instrumental underwater danger underscore loop, low soft regular synthesizer pulse beneath a restrained dark pressure drone. Slow growing harmonic tension that returns to its starting state. No clear melody, vocals, speech, rock, percussion hits, animals or loud impacts. Quiet unobtrusive layer beneath submarine ambience. Continuous circular texture, no intro, outro or silence.
+
+### music-tension-2
+Длительность генерации 55 с; node CG6qzDetZQAp3UI0OYru; session hFQEjnICWTdnAjBrLIqd; generation 0ESLOmwSpDslW2sqtCLu; 825 кредитов.
+
+Instrumental submarine tension loop with irregular low muted pulses and slowly beating dissonant bass pads. Claustrophobic pressure inside a steel hull under ice. More unstable and sparse than a regular pulse. No identifiable melody, vocals, speech, rock, drums, animals or loud impacts. Restrained dynamics, sits under ambience, circular ending returns to beginning.
+
+## Подготовка и проверка
+prepare_audio.py воспроизводит обработку через FFmpeg и NumPy; аргумент — путь к FFmpeg.
+Из исходной записи сделана круговая петля: последние и первые 4 с сведены косинусным кроссфейдом, длина уменьшена на 4 с. На границах добавлены рампы по 5 мс для подавления переходного процесса MP3-декодера. Это обработка сгенерированных записей, без синтеза звука.
+Громкость приведена приблизительно к −18 LUFS с запасом пиков. MP3 stereo, 44,1 кГц, 192 кбит/с, Xing/LAME gapless metadata.
+Полное декодирование всех файлов прошло без ошибок. Итог: −18,26…−18,27 LUFS, true peak −6,32…−3,66 dBTP, каждый файл меньше 2,8 МБ. Перепад одного отсчёта на стыке после декодирования ниже −75 dBFS. Подробные измерения и SHA-256: technical-report.json.
+Численные проверки не доказывают музыкальную бесшовность: нужно прослушать два повторения, особенно гармонический переход menu-1. Рампы по 5 мс не заменяют проверку на слух.
+
+## Передача разработчику
+После выбора скопировать выбранные файлы в audio/music/music-menu.mp3 и music-tension.mp3, включить loop, проверить два повтора в Godot и переход тревоги под эмбиентом. В этой сдаче код игры и интеграция не менялись.

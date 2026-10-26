@@ -1,0 +1,41 @@
+{
+  "flow_id": "aQPwxuSWidp3iKaYcyH9",
+  "items": [
+    {
+      "name": "music-menu-1",
+      "node_id": "0X6qFfo5C4VGO9zd1lW5",
+      "session_id": "bnsY5rvfdF3hRWpOBjuX",
+      "generation_id": "pUtfmsVLTA8hc0gZEehZ",
+      "credits": 1800,
+      "prompt": "Instrumental underwater science fiction menu music. Vast dark water beneath thick ice, slow deep evolving pads, rare cold distant chimes, restrained mysterious harmony, spacious muffled reverberation. No vocals, speech, drums, epic orchestra or animal sounds. Continuous circular arrangement, no intro or ending, suitable for a seamless ambient loop.",
+      "duration": 120
+    },
+    {
+      "name": "music-menu-2",
+      "node_id": "cjJCkOUS0FVtJal8ZCAy",
+      "session_id": "7dbWNT9qLnqqtr4uagwn",
+      "generation_id": "eszMmFZsHC1X0loOt6VE",
+      "credits": 1800,
+      "prompt": "Instrumental ambient loop for an underwater game menu. Slow suspended dark synth chords, very sparse icy glass tones, immense still water under an alien ice sheet, distant low resonances. Colder and more minimal than a warm pad theme. No voices, drums, orchestra, animal sounds or dramatic hits. Steady circular texture without intro, ending or silence.",
+      "duration": 120
+    },
+    {
+      "name": "music-tension-1",
+      "node_id": "Cit39GkhYmw4Fcsx25Yn",
+      "prompt": "Instrumental underwater danger underscore loop, low soft regular synthesizer pulse beneath a restrained dark pressure drone. Slow growing harmonic tension that returns to its starting state. No clear melody, vocals, speech, rock, percussion hits, animals or loud impacts. Quiet unobtrusive layer beneath submarine ambience. Continuous circular texture, no intro, outro or silence.",
+      "duration": 55,
+      "session_id": "osCCDL9TYRBSYJyqMvBU",
+      "generation_id": "Bz0Fejd2AA7hs6uLqcoi",
+      "credits": 825
+    },
+    {
+      "name": "music-tension-2",
+      "node_id": "CG6qzDetZQAp3UI0OYru",
+      "prompt": "Instrumental submarine tension loop with irregular low muted pulses and slowly beating dissonant bass pads. Claustrophobic pressure inside a steel hull under ice. More unstable and sparse than a regular pulse. No identifiable melody, vocals, speech, rock, drums, animals or loud impacts. Restrained dynamics, sits under ambience, circular ending returns to beginning.",
+      "duration": 55,
+      "session_id": "hFQEjnICWTdnAjBrLIqd",
+      "generation_id": "0ESLOmwSpDslW2sqtCLu",
+      "credits": 825
+    }
+  ]
+}
