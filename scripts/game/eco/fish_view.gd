@@ -14,6 +14,8 @@ shader_type spatial;
 render_mode cull_back;
 uniform vec3 body_color : source_color;
 uniform float sway_k = 1.0;
+uniform float rough = 0.6;
+uniform float spec = 0.5;
 varying vec3 glow;
 varying float paint;
 varying float shade;
@@ -33,7 +35,8 @@ void fragment() {
 	// полоса — узкая середина кольца, конец хвоста — канал g
 	float p = smoothstep(0.55, 0.95, paint) + COLOR.g;
 	ALBEDO = mix(body_color * shade, glow * 0.3, clamp(p, 0.0, 1.0));
-	ROUGHNESS = 0.6;
+	ROUGHNESS = rough;
+	SPECULAR = spec;
 	EMISSION = glow * p * 1.8;
 }
 """
