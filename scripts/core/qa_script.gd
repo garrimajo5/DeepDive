@@ -21,7 +21,8 @@ extends RefCounted
 ##   {"do": "hot", "heat": 80}                       — перегреть реактор (проверить вентиль и щиток машинного); heat 0 — остудить
 ##   {"do": "sample", "n": 8}                       — поставить корабль над образцом n (шлюз в 8 м над ним, корабль стоит)
 ##   {"do": "breach", "n": 0}                       — пробоина в месте n (0 мостик, 1 коридор, 2 лаборатория, 3 машинное),
-##                                                     игрок встаёт у неё лицом к борту
+##                                                     игрок встаёт у неё лицом к борту; "on": false — закрыть
+##                                                     пробоину и убрать воду (чистый кадр после случайных ударов)
 ##   {"do": "route"}                                 — пройти выбранный маршрут разом (нет — первый): «глубже или наверх»
 ##   {"do": "silt"}                                  — облако ила вокруг корабля (сонарная тьма); "on": false — убрать ил
 ##   {"do": "drain", "s": 4}                        — стеклоуст «на корпусе» s секунд: мир будто шлёт EcoLink.DRAIN
@@ -56,7 +57,7 @@ extends RefCounted
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["route"], ["act"], ["mate_hold", on], ["gone"], ["wreck"], ["back"], ["tutorial", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["route"], ["act"], ["mate_hold", on], ["gone"], ["wreck"], ["back"], ["tutorial", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
 const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "ship", "fly", "route", "gone", "wreck", "back", "tutorial", "cards", "voice", "slow", "hud", "play", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "map", "map_back", "hint_map", "new", "exit", "yes", "no", "crew", "journal", "settings", "graphics", "g0", "g1", "g2", "fps", "golos", "zvuk", "s0", "v_hold", "v_voice", "v_hear", "v_mic", "lite_yes", "lite_no", "ask", "join", "last", "lobby_new", "lobby_addr", "lobby_refresh",
@@ -175,7 +176,7 @@ func _begin(st: Dictionary, out: Array) -> void:
 		"sample":
 			out.append(["sample", int(st.get("n", 0))])
 		"breach":
-			out.append(["breach", int(st.get("n", 0))])
+			out.append(["breach", int(st.get("n", 0)) if bool(st.get("on", true)) else -1])
 		"silt":
 			out.append(["silt", bool(st.get("on", true))])
 		"drain":
