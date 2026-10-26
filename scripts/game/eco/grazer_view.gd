@@ -47,7 +47,11 @@ var buffer := PackedFloat32Array()
 ## Муть от скребунов: пул облачков и его MultiMesh; буфер мути — для тестов.
 var dust := EcoGrazerDust.new()
 var dust_view: MultiMeshInstance3D
-var dust_buffer := PackedFloat32Array()
+## Буфер мути (EcoDustBuffer, issue #732).
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
 ## Чисел на облачко в буфере мути: transform 3 × 4 и цвет.
 const DUST_STRIDE := 16
 
@@ -128,15 +132,11 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 	buffer = pack(grazers, t)
 	multimesh.buffer = buffer
 	dust.update(grazers, t, ship.pos if ship else Vector3.ZERO)
-	var shown := dust.shown(t)
-	if shown == 0 and dust_buffer.size() == dust.puffs.size() * DUST_STRIDE and _dust_empty:
-		return   # мути нет и в буфере пусто — не грузим буфер заново (issue #133)
-	dust_buffer = pack_dust(dust, t, flow, ship, EcoGrazerDust.COLOR, EcoGrazerDust.LIT, Seabed.mesh_height)
-	dust_view.multimesh.buffer = dust_buffer
-	_dust_empty = shown == 0
+	_dust.pack(dust, t, flow, ship, EcoGrazerDust.COLOR, EcoGrazerDust.LIT, Seabed.mesh_height)
+	if _dust.changed:   # мути нет и не было — буфер тот же, не грузим (issue #133)
+		dust_view.multimesh.buffer = _dust.data
 
 
-var _dust_empty := false
 
 
 ## Буфер мути (TRANSFORM_3D + цвет): растаявшие облачка стянуты в точку, в луче прожектора — светлее (от dark к lit;

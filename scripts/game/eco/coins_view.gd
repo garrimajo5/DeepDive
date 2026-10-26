@@ -36,8 +36,11 @@ var eye_buffer := PackedFloat32Array()
 var _vary := PackedFloat32Array()
 var dust := EcoCoinsDust.new()
 var dust_view: MultiMeshInstance3D
-var dust_buffer := PackedFloat32Array()
-var _dust_empty := false
+## Буфер мути (EcoDustBuffer, issue #732).
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
 
 
 func _init(system: EcoCoins) -> void:
@@ -107,13 +110,10 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 
 func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3) -> void:
 	dust.update(coins, t, ship.pos if ship else Vector3(INF, INF, INF))
-	var shown := dust.dust.shown(t)
-	if shown == 0 and _dust_empty and dust_buffer.size() == EcoCoinsDust.POOL * GrazerView.DUST_STRIDE:
-		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
-	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, ship, EcoCoinsDust.COLOR, EcoCoinsDust.LIT,
+	_dust.pack(dust.dust, t, flow, ship, EcoCoinsDust.COLOR, EcoCoinsDust.LIT,
 			Seabed.mesh_height)
-	dust_view.multimesh.buffer = dust_buffer
-	_dust_empty = shown == 0
+	if _dust.changed:   # мути нет и не было — буфер тот же, не грузим (issue #133)
+		dust_view.multimesh.buffer = _dust.data
 
 
 ## Размер монетника (множитель формы).

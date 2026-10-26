@@ -36,8 +36,11 @@ var spine_buffer := PackedFloat32Array()
 ## Муть от краба и её MultiMesh; буфер мути — для тестов.
 var dust := EcoKrabDust.new()
 var dust_view: MultiMeshInstance3D
-var dust_buffer := PackedFloat32Array()
-var _dust_empty := false
+## Буфер мути (EcoDustBuffer, issue #732).
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
 
 
 func _init(system: EcoKrab) -> void:
@@ -104,13 +107,10 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 
 func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3) -> void:
 	dust.update(krab, t, ship.pos if ship else Vector3.ZERO)
-	var shown := dust.dust.shown(t)
-	if shown == 0 and _dust_empty and dust_buffer.size() == EcoKrabDust.POOL * GrazerView.DUST_STRIDE:
-		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
-	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, ship, EcoKrabDust.COLOR, EcoKrabDust.LIT,
+	_dust.pack(dust.dust, t, flow, ship, EcoKrabDust.COLOR, EcoKrabDust.LIT,
 			Seabed.mesh_height)
-	dust_view.multimesh.buffer = dust_buffer
-	_dust_empty = shown == 0
+	if _dust.changed:   # мути нет и не было — буфер тот же, не грузим (issue #133)
+		dust_view.multimesh.buffer = _dust.data
 
 
 ## Место иглы k на панцире: по кругу, наклонена наружу (crab spineM).
