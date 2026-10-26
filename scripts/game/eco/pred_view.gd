@@ -4,7 +4,9 @@ extends Node3D
 ## skin — 3 вызова отрисовки на зверя, 5 719 треугольников). Место и курс — из мира, клипы выбирает EcoPredLook:
 ## Swim и SwimFast смешиваются по скорости (Blend2 с общей фазой), Bite — поверх, только челюсть, TailStrike — после
 ## укуса корпуса. Дерево анимации идёт вручную от времени мира (`sync`) — у гостя сети мир свой, клипы тоже.
-## Глаза и фотофоры светятся сами (карта свечения в GLB). Стоит на слое отмели (OceanView.LAYER_WORLD).
+## Глаза и фотофоры светятся сами (карта свечения в GLB). Муть у дна от броска (EcoPredDust) — дочерний MultiMesh
+## «Муть» в мировых координатах на общем шейдере EcoShaders.MIST (INK), +1 вызов. Стоит на слое отмели
+## (OceanView.LAYER_WORLD).
 
 ## Узлы дерева анимации (parameters/<узел>/…).
 const P_SWIM := "parameters/ts_swim/scale"
@@ -20,6 +22,12 @@ var preds: EcoPred
 var bodies: Array[Node3D] = []
 var trees: Array[AnimationTree] = []
 var cues: Array[EcoPredLook.Cues] = []
+
+## Муть от броска у дна и её MultiMesh; буфер мути — для тестов.
+var dust := EcoPredDust.new()
+var dust_view: MultiMeshInstance3D
+var dust_buffer := PackedFloat32Array()
+var _dust_empty := false
 
 var _last_t := 0.0
 var _started := false
@@ -47,6 +55,8 @@ func _init(system: EcoPred) -> void:
 		bodies.append(root)
 		trees.append(at)
 		cues.append(EcoPredLook.Cues.new())
+	dust_view = GrazerView.build_dust(EcoPredDust.POOL)
+	add_child(dust_view)
 	sync(0.0, Vector3(1e6, 0, 1e6))
 
 
@@ -97,7 +107,10 @@ static func _shot() -> AnimationNodeOneShot:
 
 
 ## Поставить хищников по миру в момент t; ship — где корабль (укус в броске, дальние — без смены клипов).
-func sync(t: float, ship: Vector3) -> void:
+## state — корабль для мути (в луче прожектора светлее), flow — течение (уносит муть), ground — дно мира.
+func sync(t: float, ship: Vector3, state: EcoLink.ShipState = null, flow := Vector3.ZERO,
+		ground := Callable()) -> void:
+	_sync_dust(t, ship, state, flow, ground)
 	var dt := clampf(t - _last_t, 0.0, 0.1)
 	_last_t = t
 	for i in preds.all.size():
@@ -121,3 +134,14 @@ func sync(t: float, ship: Vector3) -> void:
 		elif root.visible:
 			at.advance(dt)
 	_started = true
+
+
+func _sync_dust(t: float, ship: Vector3, state: EcoLink.ShipState, flow: Vector3, ground: Callable) -> void:
+	dust.update(preds, t, ship, ground)
+	var shown := dust.dust.shown(t)
+	if shown == 0 and _dust_empty and dust_buffer.size() == EcoPredDust.POOL * GrazerView.DUST_STRIDE:
+		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
+	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, state, EcoPredDust.COLOR, EcoPredDust.LIT,
+			Seabed.mesh_height)
+	dust_view.multimesh.buffer = dust_buffer
+	_dust_empty = shown == 0

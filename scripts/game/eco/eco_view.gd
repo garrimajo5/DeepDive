@@ -432,7 +432,7 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	EcoShaders.set_flow(current.vel())
 	fish_view.sync(world.time)
 	grazer_view.sync(world.time, ship, current.vel())
-	pred_view.sync(world.time, ship.pos)
+	pred_view.sync(world.time, ship.pos, ship, current.vel(), world.ground)
 	leech_view.sync(world.time)
 	moss_view.sync()
 	if bones_view.moss_view:
