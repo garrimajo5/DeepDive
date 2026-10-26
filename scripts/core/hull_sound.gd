@@ -25,6 +25,12 @@ const HIT_SOFT_DB := -12.0  ## слабый удар (1 %) — тише на 12 
 const HIT_FULL := 15        ## с этой доли корпуса удар — в полную
 const SCRAPE_DB := -4.0
 const SCRAPE_TAIL_DB := -10.0   ## скрежет под ударом о дно — хвостом, тише удара
+## Петля скрежета, пока корабль трётся о дно на ходу (`Helm.Ship.rub`): тот же файл SCRAPE по кругу (#656, PR #700).
+const RUB_SPEED := 0.6      ## м/с: медленнее — молча
+const RUB_FULL := 3.0       ## м/с: с этой скорости — в полную
+const RUB_SOFT_DB := -20.0  ## на RUB_SPEED
+const RUB_DB := -8.0        ## на RUB_FULL и быстрее
+const RUB_FADE := 0.15      ## с: подъём и спад петли (без щелчка)
 const ICE_KNOCK := 1.2      ## м/с вверх: с такой скорости упор в лёд — удар (ниже — молча)
 const ICE_SOFT_DB := -14.0  ## удар о лёд на ICE_KNOCK
 const ICE_DB := -4.0        ## на полном подъёме (Helm.Ship.CLIMB)
@@ -74,3 +80,10 @@ static func ice_db(vy: float) -> float:
 	if vy < ICE_KNOCK:
 		return NAN
 	return lerpf(ICE_SOFT_DB, ICE_DB, clampf((vy - ICE_KNOCK) / (Helm.Ship.CLIMB - ICE_KNOCK), 0.0, 1.0))
+
+
+## Громкость петли скрежета при трении о дно на скорости speed м/с (`Helm.Ship.rub`); медленнее RUB_SPEED — NAN (молча).
+static func rub_db(speed: float) -> float:
+	if speed < RUB_SPEED:
+		return NAN
+	return lerpf(RUB_SOFT_DB, RUB_DB, clampf((speed - RUB_SPEED) / (RUB_FULL - RUB_SPEED), 0.0, 1.0))

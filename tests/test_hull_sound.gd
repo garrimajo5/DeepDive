@@ -145,3 +145,62 @@ func test_snd003_scene() -> void:
 	eq(s.last, "", "несостоявшийся разряд молчит")
 	main.queue_free()
 	await frames(1)
+
+
+## Петля скрежета, пока корабль трётся о дно на ходу (#656, PR #700).
+func test_rub_volume() -> void:
+	ok(is_nan(HullSound.rub_db(0.0)), "стоим — молча")
+	ok(is_nan(HullSound.rub_db(HullSound.RUB_SPEED - 0.05)), "ползком — молча")
+	near(HullSound.rub_db(HullSound.RUB_SPEED), HullSound.RUB_SOFT_DB, 0.01, "на пороге — тихо")
+	near(HullSound.rub_db(HullSound.RUB_FULL), HullSound.RUB_DB, 0.01, "на ходу — в полную")
+	near(HullSound.rub_db(9.0), HullSound.RUB_DB, 0.01, "быстрее не громче")
+	ok(HullSound.rub_db(1.5) < HullSound.rub_db(2.5), "громче с ходом")
+
+
+func test_helm_rub_on_floor() -> void:
+	var h := Helm.Ship.new()
+	h.ground = func(_x: float, _z: float) -> float: return -60.0
+	var floor_y := -60.0 + Helm.Ship.CLEARANCE
+	h.pos = Vector3(0, floor_y, 0)
+	h.in_thrust = 1.0
+	for i in 90:
+		h.update(1.0 / 30.0)
+	ok(h.rub > HullSound.RUB_SPEED, "лежим на дне и идём — трёмся (%.2f)" % h.rub)
+	near(h.rub, absf(h.speed), 0.001, "трение — по ходу")
+	h.pos.y = floor_y + 2.0
+	h.update(1.0 / 30.0)
+	eq(h.rub, 0.0, "над дном — не трёмся")
+	h.reset()
+	eq(h.rub, 0.0, "сброс — не трёмся")
+
+
+func test_scene_rub_loop() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var s := main.ship_sounds
+	eq(String(s.rub.bus), SoundMix.SHIP, "петля скрежета — на шине «Корабль»")
+	var w := s.rub.stream as AudioStreamWAV
+	ok(w != null and w.loop_mode == AudioStreamWAV.LOOP_FORWARD, "скрежет о дно — по кругу")
+	ok(w != null and w.loop_end > int(w.mix_rate), "петля — на всю запись")
+	var tail := load(HullSound.SCRAPE) as AudioStreamWAV
+	eq(tail.loop_mode, AudioStreamWAV.LOOP_DISABLED, "хвост удара о дно остаётся разовым")
+	ok(not s.rub.playing, "над дном молчит")
+	s.set_rub(HullSound.RUB_FULL, 0.05)
+	ok(s.rub.playing, "трёмся — петля играет")
+	ok(s.rub.volume_db < HullSound.RUB_DB - 1.0, "поднимается плавно")
+	s.set_rub(HullSound.RUB_FULL, HullSound.RUB_FADE)
+	near(s.rub.volume_db, HullSound.RUB_DB, 0.01, "на ходу — в полную")
+	s.set_rub(0.0, HullSound.RUB_FADE / 2.0)
+	ok(s.rub.playing, "оторвались — спадает, не обрывается")
+	ok(s.rub.volume_db < HullSound.RUB_DB, "тише")
+	s.set_rub(0.0, HullSound.RUB_FADE)
+	ok(not s.rub.playing, "спала — петля стоит")
+	main.helm.pos.y = Seabed.height(main.helm.pos.x, main.helm.pos.z) + Helm.Ship.CLEARANCE - 1.0
+	main.helm.speed = 2.5
+	main.step(1.0 / 30.0)
+	ok(main.helm.rub > HullSound.RUB_SPEED, "в игре: на дне на ходу — трёмся (%.2f)" % main.helm.rub)
+	main.step(HullSound.RUB_FADE)
+	ok(s.rub.playing, "в игре: петля скрежета играет")
+	main.queue_free()
+	await frames(1)
