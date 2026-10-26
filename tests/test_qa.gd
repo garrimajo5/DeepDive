@@ -529,6 +529,55 @@ func test_caustics_shot_under_cracks() -> void:
 	ok(eye_y < float(ship["y"]) - 4.0, "глаз под днищем — корпус не закрывает дно")
 
 
+## Шаг ship с курсом: курс — пятым числом (как у goto), без него — прежний (#729: вид на губку органа не зависит
+## от того, куда повернул забег).
+func test_ship_step_yaw() -> void:
+	var q := QaScript.parse('[{"do": "ship", "x": 52, "y": -25, "z": 40, "yaw": 0}, {"do": "ship", "x": 1, "z": 2}]')
+	eq(q.errors.size(), 0, "без ошибок")
+	var out := q.advance(0.1)
+	eq(out[0], ["ship", 52.0, -25.0, 40.0, 0.0], "курс задан")
+	eq(out[1], ["ship", 1.0, -20.0, 2.0], "курс не задан — четыре числа")
+
+
+## Снимки 32b/32c (выдох трубного органа, PR #729): корабль «в гуле» губки, курс задан, губка впереди и ниже
+## глаза, глаз над дном и под днищем.
+func test_organ_shot_at_organ() -> void:
+	var raw := FileAccess.get_file_as_string("res://tools/qa/scenario.json")
+	var steps: Array = JSON.parse_string(raw)
+	var ship := {}
+	var fly := {}
+	var look := {}
+	var shot := false
+	for st in steps:
+		if st["do"] == "ship":
+			ship = st
+			look = {}
+		if st["do"] == "goto":
+			look = st
+		if st["do"] == "fly" and st.get("on", true):
+			fly = st
+		if st["do"] == "shot" and st["name"] == "32b-organ":
+			shot = true
+			break
+	ok(shot and not ship.is_empty() and not fly.is_empty(), "в сценарии есть снимок органа после стоянки и полёта")
+	ok(ship.has("yaw"), "курс корабля задан")
+	ok(not look.is_empty() and is_zero_approx(float(look["yaw"])), "после стоянки взгляд по носу (goto yaw 0) — "
+		+ "не остаётся от прошлого снимка")
+	var at := Vector2(float(ship["x"]), float(ship["z"]))
+	var spot := EcoOrgan.SPOTS[0]
+	for s in EcoOrgan.SPOTS:
+		if s.distance_to(at) < spot.distance_to(at):
+			spot = s
+	ok(spot.distance_to(at) < EcoOrgan.MASK_R, "корабль ближе %.0f м к губке — трубы дышат каждый такт" % EcoOrgan.MASK_R)
+	var nose := Vector2(0, -1).rotated(-deg_to_rad(float(ship["yaw"])))
+	ok(nose.dot((spot - at).normalized()) > 0.9, "губка впереди по носу")
+	var eye_y := float(ship["y"]) + float(fly["y"])
+	var floor_y := Seabed.height(at.x, at.y)
+	ok(eye_y > floor_y + 2.0, "глаз над дном (%.1f > %.1f)" % [eye_y, floor_y])
+	ok(eye_y > Seabed.height(spot.x, spot.y) + EcoOrgan.TOP_UP, "глаз выше устьев труб")
+	ok(eye_y < float(ship["y"]) - 3.0, "глаз под днищем")
+
+
 func test_park_at_and_toggle_noclip() -> void:
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
