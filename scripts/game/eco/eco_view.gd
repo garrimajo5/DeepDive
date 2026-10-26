@@ -457,4 +457,4 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	veil_view.sync(world.time, ship.pos)
 	grot_view.sync(world.time, ship.pos)
 	plankton_view.sync(world.time, ship.pos, ship.yaw)
-	echo_view.sync(world.time, ship.pos)
+	echo_view.sync(world.time, ship.pos, ship, current.vel())

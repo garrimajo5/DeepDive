@@ -7,6 +7,8 @@ extends Node3D
 ## кожа снаружи и слуховые складки внутри со слабым свечением #67DDEB — две поверхности. Раскрытый сонаром — складки
 ## пульсируют ярче. Шесть вызовов отрисовки, ≈ 1,3 тыс. треугольников; слой отмели (OceanView.LAYER_WORLD);
 ## дальше FAR от корабля не виден в мути. Материалы как у гротовика — новых шейдеров нет.
+## Муть у дна (EcoEchoDust: раскрыт сонаром — клуб ила вокруг тела, удар по корпусу — под головой) — дочерний
+## MultiMesh «Муть» на общем шейдере мира (+1 вызов).
 
 const SKIN := Color("344A59")
 const SKIN_LIT := Color("667A87")
@@ -50,6 +52,10 @@ var sac: MeshInstance3D
 var ears: Array[Node3D] = []
 var fold_mat: StandardMaterial3D
 var _glow := HUSH
+var dust := EcoEchoDust.new()
+var dust_view: MultiMeshInstance3D
+var dust_buffer := PackedFloat32Array()
+var _dust_empty := false
 
 
 func _init(system: EcoEcho) -> void:
@@ -72,6 +78,8 @@ func _init(system: EcoEcho) -> void:
 		group.add_child(joint)
 		_mesh(joint, "Воронка", ear_mesh, skin)
 		ears.append(joint)
+	dust_view = GrazerView.build_dust(EcoEchoDust.POOL)
+	add_child(dust_view)
 	sync(0.0, Vector3.ZERO)
 
 
@@ -91,8 +99,10 @@ static func ear_basis(e: Vector2) -> Basis:
 	return Basis(Vector3.UP, e.x) * Basis(Vector3.RIGHT, -e.y)
 
 
-## Поставить эхоловца в момент t (время мира); ship — центр корабля (дальше FAR — спрятан).
-func sync(t: float, ship: Vector3) -> void:
+## Поставить эхоловца в момент t (время мира); ship — центр корабля (дальше FAR — спрятан). info — корабль целиком
+## (муть светлее в луче прожектора), flow — течение мира (уносит муть).
+func sync(t: float, ship: Vector3, info: EcoLink.ShipState = null, flow := Vector3.ZERO) -> void:
+	_sync_dust(t, ship, info, flow)
 	var ec := echoes.echo
 	visible = ec != null and ec.p.distance_to(ship) < FAR
 	if not visible:
@@ -108,6 +118,17 @@ func sync(t: float, ship: Vector3) -> void:
 	if k != _glow:  # затаился — материал не трогаем каждый кадр
 		_glow = k
 		fold_mat.emission = FOLD * k
+
+
+func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3) -> void:
+	dust.update(echoes, t, ship)
+	var shown := dust.dust.shown(t)
+	if shown == 0 and _dust_empty and dust_buffer.size() == EcoEchoDust.POOL * GrazerView.DUST_STRIDE:
+		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
+	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, info, EcoEchoDust.COLOR, EcoEchoDust.LIT,
+			Seabed.mesh_height)
+	dust_view.multimesh.buffer = dust_buffer
+	_dust_empty = shown == 0
 
 
 ## Тело: две капсулы, голова, челюсть, лапы и хвост; бледные полосы поперёк спины.
