@@ -133,16 +133,47 @@ func scan_targets() -> Array[Dictionary]:
 
 ## NEAR для корабля в конце шага: отметки сонара (импульс в этот шаг, по горизонтали ближе sonar_range — как
 ## So.blips в js/sonar.js) и цели сканера (ближе scan_range, не спрятавшиеся). Ближние первыми.
+## Сканеру нужна только ближняя цель каждого вида (Scanner.take выбирает по виду), поэтому для сканера идёт одно
+## событие на вид — ближнее; без импульса это десятки событий в шаг вместо сотни (issue #738: всплеск «мира» у поста).
 func _send_near() -> void:
 	var sp := ship.pos
-	var found: Array[Dictionary] = []
+	var scan2 := ship.scan_range * ship.scan_range if ship.scan_range > 0.0 else -1.0
+	var sonar2 := ship.sonar_range * ship.sonar_range if ship.sonar_ping else -1.0
+	var best := {}   # вид → [квадрат расстояния, номер цели] — ближняя цель вида для сканера
+	var cand: Array[Dictionary] = []
+	var d2s: PackedFloat32Array = []
+	var sonar_hit: Array[bool] = []
 	for t in scan_targets():
 		var p: Vector3 = t["pos"]
-		var on_sonar: bool = ship.sonar_ping and t["sonar"] \
-				and Vector2(p.x - sp.x, p.z - sp.z).length() < ship.sonar_range
-		var on_scan: bool = ship.scan_range > 0.0 and not t["hidden"] and p.distance_to(sp) <= ship.scan_range
-		if on_sonar or on_scan:
-			found.append(EcoLink.near(t["species"], nm(t["species"]), p, sp, t["r"], on_sonar, on_scan))
+		var dx := p.x - sp.x
+		var dz := p.z - sp.z
+		var on_sonar: bool = sonar2 >= 0.0 and t["sonar"] and dx * dx + dz * dz < sonar2
+		var d2 := p.distance_squared_to(sp)
+		var on_scan: bool = scan2 >= 0.0 and not t["hidden"] and d2 <= scan2
+		if not on_sonar and not on_scan:
+			continue
+		if on_scan:
+			var sk: String = t["species"]
+			var b: Variant = best.get(sk)
+			if b == null or d2 < b[0]:
+				best[sk] = [d2, cand.size()]
+		cand.append(t)
+		d2s.append(d2)
+		sonar_hit.append(on_sonar)
+	var scan_at := {}
+	for sk in best:
+		scan_at[best[sk][1]] = true
+	var names := {}
+	var found: Array[Dictionary] = []
+	for i in cand.size():
+		var on_scan := scan_at.has(i)
+		if not sonar_hit[i] and not on_scan:
+			continue
+		var t := cand[i]
+		var sk: String = t["species"]
+		if not names.has(sk):
+			names[sk] = nm(sk)
+		found.append(EcoLink.near(sk, names[sk], t["pos"], sp, t["r"], sonar_hit[i], on_scan))
 	found.sort_custom(func(a, b): return a["dist"] < b["dist"])
 	_link.append_array(found)
 

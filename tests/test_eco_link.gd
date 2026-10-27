@@ -171,6 +171,16 @@ class Probe:
 		out.append(EcoWorld.target("fish", Vector3(0, 0, 5), 2.5, true, true))
 
 
+## Стая: много целей одного вида — сканеру нужна только ближняя (#738).
+class Crowd:
+	extends EcoSystem
+	func targets(_world: EcoWorld, out: Array[Dictionary]) -> void:
+		for i in 40:
+			out.append(EcoWorld.target("fish", Vector3(0, 0, 50.0 - i), 1.0))
+		out.append(EcoWorld.target("grazer", Vector3(20, 0, 0), 1.4, false))
+		out.append(EcoWorld.target("grazer", Vector3(5, 0, 0), 1.4, false))
+
+
 static func _near(events: Array[Dictionary]) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for e in events:
@@ -266,6 +276,40 @@ func test_near_sonar_hidden_and_scanner() -> void:
 	w.ship.sonar_ping = false
 	w.step(0.05)
 	eq(_near(w.take_link()).size(), 1, "дальность прицела 10 м: только скребун")
+
+
+## Всплеск шага мира у сканера (#738): раньше сканер получал NEAR на каждое существо ближе 80 м (сотня событий
+## в шаг) — теперь одно на вид, ближнее. Импульс сонара по-прежнему отмечает всех.
+func test_scanner_gets_nearest_per_species() -> void:
+	var w := EcoWorld.new()
+	w.add(Crowd.new())
+	w.ship.scan_range = 80.0
+	w.step(0.05)
+	var got := _near(w.take_link())
+	eq(got.size(), 2, "одно событие на вид")
+	eq(got[0]["species"], "grazer", "ближняя первой")
+	near(got[0]["dist"], 5.0, 1e-4, "ближний скребун")
+	near(got[1]["dist"], 11.0, 1e-4, "ближняя рыба стаи")
+	for e in got:
+		ok(e["scan"] and not e["sonar"], "только сканеру")
+	w.ship.sonar_ping = true
+	w.ship.sonar_range = 100.0
+	w.step(0.05)
+	got = _near(w.take_link())
+	var sonar := 0
+	var scan := 0
+	for e in got:
+		sonar += int(e["sonar"])
+		scan += int(e["scan"])
+	eq(sonar, 40, "импульс: все рыбы стаи на сонаре")
+	eq(scan, 2, "сканеру — по одной на вид")
+	eq(got.size(), 41, "одно существо — одно событие (скребун сонару не виден, дальний — не нужен)")
+	ok(got[0]["scan"] and got[0]["species"] == "grazer", "ближний скребун — прицелу")
+
+
+func test_species_info_shared() -> void:
+	ok(Species.info("fish") == Species.info("fish"), "обёртка вида одна — названия не создают объектов каждый шаг")
+	eq(Species.info("нет такого"), null)
 
 
 func test_near_reaches_sonar_table() -> void:
