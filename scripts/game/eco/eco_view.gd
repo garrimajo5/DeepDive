@@ -436,7 +436,7 @@ func step_client(dt: float, ship: EcoLink.ShipState, near: PackedFloat32Array = 
 
 func _sync(ship: EcoLink.ShipState) -> void:
 	EcoShaders.set_flow(current.vel())
-	fish_view.sync(world.time)
+	fish_view.sync(world.time, ship, current.vel(), world.ground)
 	grazer_view.sync(world.time, ship, current.vel())
 	pred_view.sync(world.time, ship.pos, ship, current.vel(), world.ground)
 	leech_view.sync(world.time, ship, current.vel())
