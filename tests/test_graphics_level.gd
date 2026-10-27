@@ -19,8 +19,10 @@ func test_rows_follow_numbers() -> void:
 	eq(Graphics.rows(Graphics.NORMAL), [["Дальность обзора", "Средняя"], ["Морской снег и частицы", "Умеренно"],
 		["Тени", "Простые"], ["Разрешение сцены", "Полное"]], "«Обычно» — как до ART-044")
 	eq(Graphics.rows(Graphics.BEAUTY)[2][1], "Подробные", "«Красиво» — 4 каскада тени")
-	eq(Graphics.level(Graphics.NORMAL)["msaa"], int(ProjectSettings.get_setting("rendering/anti_aliasing/quality/msaa_3d")),
-		"«Обычно» — сглаживание из project.godot")
+	# msaa_3d в project.godot — номер Viewport.MSAA_* (1 — 2×, 2 — 4×), а не число выборок (issue #744)
+	eq(int(ProjectSettings.get_setting("rendering/anti_aliasing/quality/msaa_3d")), Viewport.MSAA_2X,
+		"«Обычно» — сглаживание из project.godot: 2×")
+	eq(Graphics.level(Graphics.NORMAL)["msaa"], 2, "«Обычно» — 2 выборки")
 	eq(Graphics.valid(7), Graphics.BEAUTY, "уровень в пределах")
 	eq(Graphics.DEFAULT, Graphics.NORMAL, "по умолчанию — «Обычно»")
 
@@ -94,6 +96,24 @@ func test_fps_counter() -> void:
 	ok(f.value < 30, "просадка видна")
 	ok(not f.push(0.0), "нулевой кадр не считается")
 	eq(Graphics.counter_text(58), "58 кадр/с", "надпись по макету")
+
+
+## Issue #744: «Обычно» при старте шёл с MSAA проекта (4×) — уровень равен значению по умолчанию, `_apply_graphics`
+## не звался, и до страницы «Графика» видеокарта считала 4× (отчёт #742: 30–40 мс вместо 2–3 мс).
+func test_start_applies_level_msaa() -> void:
+	var was := tree.root.msaa_3d
+	tree.root.msaa_3d = Viewport.MSAA_4X   # как с прошлого «Красиво» или из настроек проекта
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	eq(main.graphics_level, Graphics.NORMAL, "уровень «Обычно»")
+	eq(main.get_viewport().msaa_3d, Viewport.MSAA_2X, "MSAA «Обычно» — 2× сразу при старте")
+	eq(ProjectSettings.get_setting("rendering/anti_aliasing/quality/msaa_3d"), Viewport.MSAA_2X,
+		"MSAA проекта — как у «Обычно»: первый кадр заставки тоже 2×")
+	main.queue_free()
+	main = null
+	tree.root.msaa_3d = was
+	await frames(1)
 
 
 func test_scene_applies_level() -> void:

@@ -593,3 +593,34 @@ func test_park_at_and_toggle_noclip() -> void:
 	eq(main.walker.y, Deck.Walker.EYE, "глаз снова на высоте шага")
 	main.queue_free()
 	await frames(1)
+
+
+## Отчёт #742: видеокарта 30–40 мс весь первый забег, 1–3 мс после страницы «Графика» — уровень графики и что он
+## поставил на деле пишутся в лог при старте и при каждой смене.
+func test_graphics_line() -> void:
+	eq(QaRunner.graphics_line(Graphics.NORMAL, 2, 1.0, 2, "Adreno 740"),
+		"графика «Обычно»: MSAA 2×, масштаб 1,00, тени 2 · видеокарта Adreno 740", "обычно")
+	eq(QaRunner.graphics_line(Graphics.ECONOMY, 0, 0.75, 0, ""),
+		"графика «Экономно»: MSAA выкл, масштаб 0,75, тени выкл · видеокарта —", "экономно, видеокарта неизвестна")
+
+
+func test_graphics_logged_on_change() -> void:
+	tree.root.msaa_3d = Viewport.MSAA_4X   # MSAA, оставленный прошлым «Красиво», — при старте его ставит уровень
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var qa := main.start_qa('[{"do":"wait","s":5}]')
+	main.step(1.0 / 30.0)
+	var first := Array(qa.log_lines).filter(func(l): return l.begins_with("графика «"))
+	eq(first.size(), 1, "при старте — одна строка графики")
+	ok(first[0].begins_with("графика «Обычно»: MSAA 2×, масштаб 1,00, тени 2"), "уровень по умолчанию: " + first[0])
+	main.step(1.0 / 30.0)
+	eq(Array(qa.log_lines).filter(func(l): return l.begins_with("графика «")).size(), 1, "без смены — не повторяется")
+	main._apply_graphics(Graphics.BEAUTY)
+	main.step(1.0 / 30.0)
+	var all := Array(qa.log_lines).filter(func(l): return l.begins_with("графика «"))
+	eq(all.size(), 2, "смена уровня — новая строка")
+	ok(all[-1].begins_with("графика «Красиво»: MSAA 4×, масштаб 1,00, тени 4"), "красиво: " + all[-1])
+	main._apply_graphics(Graphics.NORMAL)
+	main.queue_free()
+	await frames(1)
