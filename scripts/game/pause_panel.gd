@@ -33,9 +33,9 @@ func _draw_pause() -> void:
 	draw.draw_rect(Rect2(Vector2.ZERO, size), Color(MainMenu.DARK, Pause.DIM))
 	var faded := pause.ask != ""   # под подтверждением пауза приглушена
 	var k := 0.35 if faded else 1.0
-	_center(font, pause.title(), Pause.TITLE_TOP, Pause.TITLE_PX * s, Color(MainMenu.INK, k), size)
+	UiStyle.center(draw, font, pause.title(), Pause.TITLE_TOP, Pause.TITLE_PX * s, Color(MainMenu.INK, k), size)
 	if pause.subtitle() != "":   # кооп: «Вы — гость · забег продолжается»
-		_center(font, pause.subtitle(), Pause.SUB_TOP, Pause.SUB_PX * s, Color(MainMenu.SOFT, k), size)
+		UiStyle.center(draw, font, pause.subtitle(), Pause.SUB_TOP, Pause.SUB_PX * s, Color(MainMenu.SOFT, k), size)
 	for it: Array in pause.items():
 		var on: bool = pause.enabled.get(it[0], false)
 		_button(font, pause.rect(it[0], size), it[1], it[0] == Pause.MAIN_ITEM and on, on, k, s)
@@ -47,9 +47,10 @@ func _draw_pause() -> void:
 	var lines: Array = pause.ask_lines()
 	for i in lines.size():
 		if i == 0:
-			_center(font, lines[0], Pause.ASK_TOP, Pause.ASK_PX * s, MainMenu.INK, size)
+			UiStyle.center(draw, font, lines[0], Pause.ASK_TOP, Pause.ASK_PX * s, MainMenu.INK, size)
 		else:
-			_center(font, lines[i], Pause.LINE_TOP + Pause.LINE_STEP * (i - 1), Pause.LINE_PX * s, MainMenu.SOFT, size)
+			UiStyle.center(draw, font, lines[i], Pause.LINE_TOP + Pause.LINE_STEP * (i - 1), Pause.LINE_PX * s,
+				MainMenu.SOFT, size)
 	_button(font, Pause.screen_rect("yes", size), "Да", false, true, 1.0, s)
 	_button(font, Pause.screen_rect("no", size), "Нет", true, true, 1.0, s)   # выделено «Нет»
 
@@ -61,10 +62,3 @@ func _button(font: Font, r: Rect2, text: String, main_btn: bool, on: bool, k: fl
 	var base := r.position.y + r.size.y * 0.5 + Splash.CAP_H * px * 0.5
 	draw.draw_string(font, Vector2(r.position.x, base), text, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, roundi(px),
 		Color(col, k))
-
-
-## Строка по центру экрана: top — верх видимых глифов в макете.
-func _center(font: Font, text: String, top: float, px: float, color: Color, size: Vector2) -> void:
-	var y := Splash.to_screen(Vector2(0.0, top), size).y
-	draw.draw_string(font, Vector2(0.0, y + Splash.CAP_H * px), text, HORIZONTAL_ALIGNMENT_CENTER, size.x, roundi(px),
-		color)

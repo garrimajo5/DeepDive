@@ -171,7 +171,7 @@ func _text(font: Font, text: String, p: Vector2, px: float, color: Color, align:
 			x -= w * 0.5
 		HORIZONTAL_ALIGNMENT_RIGHT:
 			x -= w
-	draw.draw_string(font, Vector2(x, p.y + Splash.CAP_H * px), text, align, w, roundi(px), color)
+	UiStyle.text(draw, font, text, Vector2(x, p.y), px, color, w, align)
 
 
 func _button(font: Font, r: Rect2, text: String, kk: float) -> void:

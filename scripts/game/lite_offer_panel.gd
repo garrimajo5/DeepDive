@@ -35,9 +35,8 @@ func _draw_offer() -> void:
 	draw.draw_style_box(UiStyle.dialog(s), LiteOffer.screen_rect("box", size))
 	for i in LiteOffer.LINES.size():
 		var px: float = LiteOffer.LINE_PX[i] * s
-		var y := Splash.to_screen(Vector2(0.0, LiteOffer.LINE_TOP[i]), size).y
-		draw.draw_string(font, Vector2(0.0, y + Splash.CAP_H * px), LiteOffer.LINES[i], HORIZONTAL_ALIGNMENT_CENTER,
-			size.x, roundi(px), MainMenu.INK if i == 0 else MainMenu.SOFT)
+		UiStyle.center(draw, font, LiteOffer.LINES[i], LiteOffer.LINE_TOP[i], px,
+			MainMenu.INK if i == 0 else MainMenu.SOFT, size)
 	_button(font, LiteOffer.screen_rect("yes", size), "Да", true, s)
 	_button(font, LiteOffer.screen_rect("no", size), "Нет", false, s)
 

@@ -1,7 +1,7 @@
 class_name UiStyle
 extends RefCounted
-## Общее для экранных панелей: цвета надписей на приборах и скруглённая плашка. Раньше каждая панель объявляла
-## эти цвета сама и собирала StyleBoxFlat вручную (одни и те же 5–7 строк в 15 файлах).
+## Общее для экранных панелей: цвета надписей на приборах, скруглённая плашка, строки текста `text`/`center`.
+## Раньше каждая панель объявляла эти цвета сама и собирала StyleBoxFlat вручную (одни и те же 5–7 строк в 15 файлах).
 
 const TEXT := Color("D5E4E8")     ## основной текст
 const DIM := Color("9AD9E8")      ## второстепенный
@@ -77,3 +77,17 @@ static func screen(parent: Node, nm: String, draw_fn: Callable, dark: Color, dim
 	if dim.a > 0.0:
 		cover(parent, dim)
 	return canvas(parent, nm, draw_fn)
+
+
+## Строка от верха видимых глифов: at — левый верх заглавных (как в макетах), кегль px (округляется), ширина width
+## и выравнивание align — как у draw_string. Раньше у каждой панели была своя копия (`_text`).
+static func text(canvas: CanvasItem, font: Font, t: String, at: Vector2, px: float, color: Color, width := -1.0,
+		align := HORIZONTAL_ALIGNMENT_LEFT) -> void:
+	canvas.draw_string(font, at + Vector2(0.0, Splash.CAP_H * px), t, align, width, roundi(px), color)
+
+
+## Строка по центру экрана шириной size.x, верх заглавных — top в осях макета `Splash` (пауза, настройки).
+static func center(canvas: CanvasItem, font: Font, t: String, top: float, px: float, color: Color,
+		size: Vector2) -> void:
+	text(canvas, font, t, Vector2(0.0, Splash.to_screen(Vector2(0.0, top), size).y), px, color, size.x,
+		HORIZONTAL_ALIGNMENT_CENTER)
