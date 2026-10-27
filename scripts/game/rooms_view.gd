@@ -47,7 +47,6 @@ const JOURNAL_TEXT := Color("67DDEB")
 var lab_ring: Node3D               ## кольцо-светильник на потолке лаборатории (MOD-020), вставка мигает с плафонами
 var _ring_mats: Array[BaseMaterial3D] = []
 var journal_text: Label3D          ## экран стойки журнала (Lab.journal_lines)
-var _lab_kinds: Array[int] = []
 ## Полки трюма (MOD-017, HoldShelves): банки — металл и стекло — и образцы в них, по MultiMesh на всё (3 вызова).
 var shelf_jars: MultiMeshInstance3D
 var shelf_glass: MultiMeshInstance3D

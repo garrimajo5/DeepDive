@@ -52,16 +52,7 @@ func _draw_menu() -> void:
 		var r := MainMenu.screen_rect(it[0], size)
 		var main_btn: bool = it[0] == MainMenu.MAIN_ITEM
 		var on: bool = menu.enabled.get(it[0], false)
-		var sb := StyleBoxFlat.new()
-		sb.set_corner_radius_all(roundi(MainMenu.RADIUS * s))
-		sb.anti_aliasing = true
-		if main_btn and on:
-			sb.bg_color = MainMenu.MAIN
-		else:
-			sb.bg_color = Color(MainMenu.PANEL, 0.88 if on else 0.6)
-			sb.set_border_width_all(maxi(1, roundi(2.0 * s)))
-			sb.border_color = Color(MainMenu.EDGE, 1.0 if on else 0.6)
-		draw.draw_style_box(sb, r)
+		draw.draw_style_box(UiStyle.menu_button(main_btn and on, s, 0.88 if on else 0.6, 1.0 if on else 0.6), r)
 		var col := MainMenu.DARK if main_btn and on else (MainMenu.INK if on else MainMenu.OFF)
 		var px := MainMenu.BUTTON_PX * s
 		var base := r.position.y + r.size.y * 0.5 + Splash.CAP_H * px * 0.5
