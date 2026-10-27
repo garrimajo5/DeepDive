@@ -605,6 +605,7 @@ func test_graphics_line() -> void:
 
 
 func test_graphics_logged_on_change() -> void:
+	tree.root.msaa_3d = Viewport.MSAA_4X   # MSAA, оставленный прошлым «Красиво», — при старте его ставит уровень
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(2)
