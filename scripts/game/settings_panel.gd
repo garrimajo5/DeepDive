@@ -61,9 +61,9 @@ func _draw_settings() -> void:
 	draw.draw_style_box(UiStyle.dialog(s), Splash.rect_to_screen(Pause.BOX, size))
 	for i in Settings.ASK.size():
 		if i == 0:
-			_center(font, Settings.ASK[0], Pause.ASK_TOP, Pause.ASK_PX * s, MainMenu.INK, size)
+			UiStyle.center(draw, font, Settings.ASK[0], Pause.ASK_TOP, Pause.ASK_PX * s, MainMenu.INK, size)
 		else:
-			_center(font, Settings.ASK[i], Pause.LINE_TOP + Pause.LINE_STEP * (i - 1), Pause.LINE_PX * s,
+			UiStyle.center(draw, font, Settings.ASK[i], Pause.LINE_TOP + Pause.LINE_STEP * (i - 1), Pause.LINE_PX * s,
 				MainMenu.SOFT, size)
 	_button(font, Settings.screen_rect("yes", size), "Да", false, 1.0, s)
 	_button(font, Settings.screen_rect("no", size), "Нет", true, 1.0, s)   # выделено «Нет»
@@ -152,8 +152,7 @@ func _button(font: Font, r: Rect2, text: String, main_btn: bool, k: float, s: fl
 
 ## Строка от левого края at.x макета, at.y — верх видимых глифов.
 func _text(font: Font, text: String, at: Vector2, px: float, color: Color, size: Vector2) -> void:
-	var p := Splash.to_screen(at, size)
-	draw.draw_string(font, Vector2(p.x, p.y + Splash.CAP_H * px), text, HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(px), color)
+	UiStyle.text(draw, font, text, Splash.to_screen(at, size), px, color)
 
 
 ## Значение ползунка: правый край — `Settings.VALUE_RIGHT`.
@@ -165,11 +164,4 @@ func _value(font: Font, text: String, top: float, px: float, color: Color, size:
 func _value_at(font: Font, text: String, right: float, top: float, px: float, color: Color, size: Vector2) -> void:
 	var p := Splash.to_screen(Vector2(right, top), size)
 	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(px)).x
-	draw.draw_string(font, Vector2(p.x - w, p.y + Splash.CAP_H * px), text, HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(px),
-		color)
-
-
-func _center(font: Font, text: String, top: float, px: float, color: Color, size: Vector2) -> void:
-	var y := Splash.to_screen(Vector2(0.0, top), size).y
-	draw.draw_string(font, Vector2(0.0, y + Splash.CAP_H * px), text, HORIZONTAL_ALIGNMENT_CENTER, size.x, roundi(px),
-		color)
+	UiStyle.text(draw, font, text, Vector2(p.x - w, p.y), px, color)

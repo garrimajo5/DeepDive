@@ -73,3 +73,17 @@ func test_panels_on_frame() -> void:
 		p.free()
 	for p in [menu, adr, jr, lb]:
 		p.free()
+
+
+func test_text_shared() -> void:
+	# строки панелей (#760): одна UiStyle.text/center вместо копий _text/_center в каждой панели
+	for f in ["address_panel", "journal_panel", "lobby_panel", "menu_panel", "pause_panel", "settings_panel",
+			"lite_offer_panel", "ship_map_panel"]:
+		var src := FileAccess.get_file_as_string("res://scripts/game/%s.gd" % f)
+		ok(src != "", "%s: прочитан" % f)
+		ok(not src.contains("func _center("), "%s: без своей _center" % f)
+		ok(not src.contains("Splash.CAP_H * px), "), "%s: строку от верха глифов пишет UiStyle" % f)
+		ok(src.contains("UiStyle.text(") or src.contains("UiStyle.center("), "%s: пишет через UiStyle" % f)
+	for f in ["address_panel", "journal_panel", "lobby_panel", "menu_panel"]:
+		ok(not FileAccess.get_file_as_string("res://scripts/game/%s.gd" % f).contains("func _text("),
+			"%s: без своей _text" % f)

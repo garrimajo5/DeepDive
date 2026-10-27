@@ -38,9 +38,11 @@ func _draw_screen() -> void:
 	var font := draw.get_theme_default_font()
 	var f := screen.field
 	var busy := f.connecting
-	_text(font, AddressScreen.TITLE, Splash.to_screen(AddressScreen.TITLE_AT, size), AddressScreen.TITLE_PX * s, MainMenu.INK)
+	UiStyle.text(draw, font, AddressScreen.TITLE, Splash.to_screen(AddressScreen.TITLE_AT, size),
+		AddressScreen.TITLE_PX * s, MainMenu.INK)
 	_button(font, AddressScreen.screen_rect("back", size), "Назад", AddressScreen.BACK_PX * s, s, "plain")
-	_text(font, AddressScreen.LABEL, Splash.to_screen(AddressScreen.LABEL_AT, size), AddressScreen.SMALL_PX * s, MainMenu.SOFT)
+	UiStyle.text(draw, font, AddressScreen.LABEL, Splash.to_screen(AddressScreen.LABEL_AT, size),
+		AddressScreen.SMALL_PX * s, MainMenu.SOFT)
 	# поле: рамка главного цвета, текст или заглушка, курсор
 	var fr := AddressScreen.screen_rect("field", size)
 	var sb := _box(s, Color(MainMenu.PANEL, 0.92), MainMenu.MAIN)
@@ -56,14 +58,16 @@ func _draw_screen() -> void:
 		var cx := x + font.get_string_size(f.text, HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(px)).x + 4.0 * s
 		draw.draw_line(Vector2(cx, base - px * 0.85), Vector2(cx, base + px * 0.12), MainMenu.MAIN, maxf(1.0, 3.0 * s))
 	var h := screen.hint()
-	_text(font, h, Splash.to_screen(AddressScreen.HINT_AT, size), AddressScreen.HINT_PX * s,
+	UiStyle.text(draw, font, h, Splash.to_screen(AddressScreen.HINT_AT, size), AddressScreen.HINT_PX * s,
 		MainMenu.INK if h == AddressScreen.EMPTY_TEXT else MainMenu.SOFT)
 	if screen.has_last():
-		_text(font, AddressScreen.LAST_LABEL, Splash.to_screen(AddressScreen.LAST_LABEL_AT, size), AddressScreen.SMALL_PX * s, MainMenu.SOFT)
+		UiStyle.text(draw, font, AddressScreen.LAST_LABEL, Splash.to_screen(AddressScreen.LAST_LABEL_AT, size),
+			AddressScreen.SMALL_PX * s, MainMenu.SOFT)
 		_button(font, AddressScreen.screen_rect("last", size), f.last, AddressScreen.LAST_PX * s, s, "off" if busy else "plain")
 	var join_on := busy or f.can_join()
 	_button(font, AddressScreen.screen_rect("join", size), f.join_text(), AddressScreen.JOIN_PX * s, s, "main" if join_on else "off")
-	_text(font, AddressScreen.ASK, Splash.to_screen(AddressScreen.ASK_AT, size), AddressScreen.SMALL_PX * s, MainMenu.SOFT)
+	UiStyle.text(draw, font, AddressScreen.ASK, Splash.to_screen(AddressScreen.ASK_AT, size),
+		AddressScreen.SMALL_PX * s, MainMenu.SOFT)
 	for r in AddressPad.KEYS.size():
 		for c in AddressPad.KEYS[r].size():
 			var k: String = AddressPad.KEYS[r][c]
@@ -91,8 +95,3 @@ func _button(font: Font, r: Rect2, label: String, px: float, s: float, kind: Str
 
 func _box(s: float, fill: Color, edge: Color) -> StyleBoxFlat:
 	return UiStyle.box(fill, AddressScreen.RADIUS * s, edge, 2.0 * s if edge.a > 0.0 else 0.0)
-
-
-## Строка: at — левый край и верх видимых глифов на экране.
-func _text(font: Font, text: String, at: Vector2, px: float, color: Color) -> void:
-	draw.draw_string(font, at + Vector2(0.0, Splash.CAP_H * px), text, HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(px), color)
