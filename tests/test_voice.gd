@@ -165,3 +165,22 @@ func test_round_trip_keeps_pitch() -> void:
 	near(float(cross), 80.0, 4.0, "100 мс тона 400 Гц — около 80 переходов через ноль")
 	near(sqrt(sum / (out.size() - 1)), 0.5 / sqrt(2.0), 0.04, "громкость сохранилась")
 	ok(d.playing(), "играет")
+
+
+func test_room_per_speaker() -> void:   # голоса товарищей у слушателя: свой Decoder на место, уровень для Radio.heard
+	var r := Voice.Room.new()
+	var pk: Array = []
+	for i in Voice.DELAY:
+		pk.append([2, _packet(i, 0.5)])
+		pk.append([1, _packet(100 + i, 0.1)])
+	pk.append(["мусор"])
+	r.take(pk)
+	eq(r.decoders.size(), 2, "два говорящих")
+	eq(r.talking(), [] as Array[int], "буфер набран, но ещё не играет")
+	r.decoder(1).pull(Voice.FRAME + 1, Voice.RATE)
+	r.decoder(2).pull(Voice.FRAME + 1, Voice.RATE)
+	eq(r.talking(), [1, 2] as Array[int])
+	ok(r.level(2) > r.level(1), "громче — выше уровень")
+	eq(r.level(3), 0.0, "чужого нет — тишина")
+	r.forget(2)
+	eq(r.talking(), [1] as Array[int], "ушёл — забыт")

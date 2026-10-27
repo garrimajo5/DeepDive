@@ -279,3 +279,79 @@ func test_creatures_ride_with_frame() -> void:   # существа рядом (
 	h.send_frame(NetSnap.frame(2, 0.0, Helm.Ship.new(), Reactor.new(), Vitals.new(), true, [Crew.Member.new()]))
 	ok(_pump(func() -> bool: return c.has_meta("f")), "кадр без существ")
 	ok(not (c.get_meta("f") as Dictionary).has("eco"), "старые существа второй раз не приходят")
+
+
+func _voice_packet(seq: int, v: float) -> PackedByteArray:
+	var p := PackedByteArray()
+	p.resize(Voice.SIZE)
+	p.encode_u16(0, seq)
+	for i in Voice.FRAME:
+		p[Voice.HEAD + i] = Voice.encode_sample(v)
+	return p
+
+
+## Голос рации (#634): гость → хост, хост пересылает другим гостям с местом говорящего; себе — нет.
+func test_voice_relay() -> void:
+	var h := _host()
+	var a := _client("Ира")
+	var b := _client("Олег")
+	ok(_pump(func() -> bool: return a.joined() and b.joined() and events.size() == 2), "оба на борту")
+	for e in events:
+		var g: NetLink.Guest = e["guest"]
+		g.index = 1 if g.id == a.id else 2
+	var at_host: Array = []
+	var at_a: Array = []
+	var at_b: Array = []
+	var p := _voice_packet(7, 0.3)
+	a.send_voice(p)
+	ok(_pump(func() -> bool:
+		at_host.append_array(h.take_voice())
+		at_b.append_array(b.take_voice())
+		at_a.append_array(a.take_voice())
+		return not at_host.is_empty() and not at_b.is_empty()), "голос дошёл до хоста и второго гостя")
+	eq(at_host.size(), 1)
+	eq(at_host[0][0], 1, "у хоста — место говорящего")
+	ok(at_host[0][1] == p, "пакет тот же")
+	eq(at_b[0][0], 1, "у второго гостя — место говорящего")
+	ok(at_b[0][1] == p)
+	var p2 := _voice_packet(1, -0.2)
+	h.send_voice(0, p2)
+	ok(_pump(func() -> bool:
+		at_a.append_array(a.take_voice())
+		at_b.append_array(b.take_voice())
+		return at_a.size() >= 1 and at_b.size() >= 2), "голос хоста — всем гостям")
+	eq(at_a.size(), 1, "свой голос гостю не вернулся — только голос хоста")
+	eq(at_a[0][0], 0)
+	ok(at_a[0][1] == p2)
+	eq(at_b[1][0], 0)
+
+
+func test_voice_rejected_bad_or_off_deck() -> void:
+	var h := _host()
+	var c := _client()
+	ok(_pump(func() -> bool: return c.joined() and not events.is_empty()), "на борту")
+	var g: NetLink.Guest = events[0]["guest"]
+	c.send_voice(_voice_packet(1, 0.5))   # места на палубе ещё нет — не голос экипажа
+	c.send_voice(PackedByteArray([1, 2, 3]))   # не пакет Voice — клиент сам не шлёт
+	var pad := Crew.Pad.new()
+	pad.action = true
+	c.send_pad(pad)   # ввод идёт после голоса по другому каналу — ждём его, голос к этому времени тоже пришёл бы
+	ok(_pump(func() -> bool: return g.acts == 1), "ввод дошёл")
+	for i in 20:
+		h.poll()
+		OS.delay_msec(5)
+	eq(h.take_voice().size(), 0, "гость вне палубы — голос мимо")
+	g.index = 1
+	c.send_voice(_voice_packet(2, 0.5))
+	var got: Array = []
+	ok(_pump(func() -> bool:
+		got.append_array(h.take_voice())
+		return not got.is_empty()), "на палубе — голос принят")
+	eq(got.size(), 1)
+	var q: Array = []
+	for i in NetLink.VOICE_QUEUE + 5:
+		NetLink._queue_voice(q, 1, _voice_packet(i, 0.1))
+	eq(q.size(), NetLink.VOICE_QUEUE, "очередь не растёт без предела")
+	eq((q[0][1] as PackedByteArray).decode_u16(0), 5, "выброшены самые старые")
+	ok(not NetLink._queue_voice(q, 1, PackedByteArray([0, 0])), "короткий пакет — мимо")
+	ok(not NetLink._queue_voice(q, 9, _voice_packet(0, 0.1)), "место вне экипажа — мимо")
