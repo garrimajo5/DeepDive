@@ -45,6 +45,7 @@ var _warm_from_us := 0
 var _warm_last_us := 0
 var _warm_ms: Array[int] = []   ## длительность каждого кадра прогрева, мс (issue #159: какой взгляд дорогой)
 var composing := 0     ## кадры Google Play (шаг «play»), которые ещё собираются — «quit» их ждёт
+var graphics_seen := ""   ## последняя записанная строка графики (`graphics_now`): новая — в лог (по отчёту #742)
 var drain_left := 0.0   ## шаг «drain»: столько секунд ещё слать в игру EcoLink.DRAIN от стеклоуста
 
 
@@ -90,6 +91,7 @@ func tick(dt: float) -> void:
 		_warm_frames = -1
 	time += dt
 	_measure(Time.get_ticks_usec())
+	_log_graphics()
 	var r := main.overlay.router
 	for c in script_q.advance(dt):
 		match c[0]:
@@ -204,6 +206,35 @@ func tick(dt: float) -> void:
 	if drain_left > 0.0:   # как присосавшийся стеклоуст: 3,2 ед./с (js/creatures.js), пока не истечёт шаг
 		drain_left -= dt
 		main.on_eco_event(EcoLink.drain("Стеклоуст", 3.2))
+
+
+## Уровень графики и то, что он поставил на деле, — в лог при старте и при каждой смене (отчёт #742: видеокарта
+## 30–40 мс весь первый забег и 1–3 мс после страницы «Графика» — по логу не понять, с каким уровнем шёл забег).
+func _log_graphics() -> void:
+	var line := graphics_now()
+	if line != graphics_seen:
+		graphics_seen = line
+		_log(line)
+
+
+## Графика сейчас одной строкой: уровень `Main.graphics_level` и фактические MSAA, масштаб сцены и тени солнца.
+func graphics_now() -> String:
+	var vp := main.get_viewport()
+	var msaa := {Viewport.MSAA_DISABLED: 0, Viewport.MSAA_2X: 2, Viewport.MSAA_4X: 4, Viewport.MSAA_8X: 8}.get(
+		vp.msaa_3d, -1) as int
+	var splits := 0
+	if main.ocean and main.ocean.sun.shadow_enabled:
+		splits = 4 if main.ocean.sun.directional_shadow_mode == DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS else 2
+	return graphics_line(main.graphics_level, msaa, vp.scaling_3d_scale, splits,
+		RenderingServer.get_video_adapter_name())
+
+
+## «графика «Обычно»: MSAA 2×, масштаб 1,00, тени 2 · видеокарта Adreno 740».
+static func graphics_line(level: int, msaa: int, scale: float, splits: int, adapter: String) -> String:
+	var aa := "выкл" if msaa == 0 else "%d×" % msaa
+	var sh := "выкл" if splits == 0 else str(splits)
+	return "графика «%s»: MSAA %s, масштаб %s, тени %s · видеокарта %s" % [Graphics.NAMES[Graphics.valid(level)], aa,
+		("%.2f" % scale).replace(".", ","), sh, adapter if not adapter.is_empty() else "—"]
 
 
 ## Учесть кадр, начавшийся в момент now_us (мкс).

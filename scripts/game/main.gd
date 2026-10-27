@@ -156,7 +156,9 @@ var ship_map := ShipMap.new()   ## схема корабля ART-042 из пау
 var ship_map_panel: ShipMapPanel
 var settings := Settings.new()   ## настройки ART-037 поверх меню или паузы: громкость, свайп, облёт, сброс сохранения
 var settings_panel: SettingsPanel
-var graphics_level := Graphics.DEFAULT   ## применённый уровень графики ART-044 (`_apply_graphics`)
+## Применённый уровень графики ART-044 (`_apply_graphics`); −1 — ещё не применён: при старте `_apply_settings` ставит
+## уровень всегда, даже «Обычно» — иначе MSAA и прочее остаются, какими были до него (issue #744).
+var graphics_level := -1
 var fps_view: FpsView   ## счётчик кадров ART-044 у правого края («Показывать кадры/с»)
 ## Предложение «Экономно» ART-044 после нескольких секунд низких кадр/с (тесты и снимки выключают: tests/run.gd,
 ## tools/shot.gd; прогон тестера — только шаг `slow`). Отказ — `Settings.lite_no`.
