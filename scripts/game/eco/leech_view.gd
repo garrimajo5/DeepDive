@@ -3,7 +3,9 @@ extends Node3D
 ## Пиявники в сцене (ART-003: плоская лента 0,2 м у жаберной щели, бурая с тёмными кольцами): один MultiMesh
 ## по экземпляру на серпохвоста, у здорового — нулевой масштаб. Место — EcoLeech.ON_BODY в осях тела хищника,
 ## лента слегка изгибается (жабры дышат). Стоит на слое отмели (OceanView.LAYER_WORLD). Разброс (Б4, EcoVary по номеру
-## хищника): свой размер ленты, ритм изгиба и оттенок — цвет экземпляра.
+## хищника): свой размер ленты, ритм изгиба и оттенок — цвет экземпляра. Облачка слизи на станции чистки
+## (EcoLeechDust: огнёвки обирают жабры, паразит снят — клуб) — дочерний MultiMesh «Муть» в мировых координатах на
+## общем шейдере EcoShaders.MIST (INK), +1 вызов.
 
 ## Лента: капсула 0,2 м длиной и 0,06 м шириной, сплющена к боку хищника; наклонена вдоль жаберной щели.
 const LENGTH := 0.2
@@ -24,6 +26,14 @@ var mesh: MultiMeshInstance3D
 ## Последние места лент (по хищнику; для тестов — сервер отрисовки без экрана экземпляры не хранит).
 var placed: Array[Transform3D] = []
 var _buffer := PackedFloat32Array()
+## Облачка на станции чистки и их MultiMesh.
+var dust := EcoLeechDust.new()
+var dust_view: MultiMeshInstance3D
+## Буфер облачков (EcoDustBuffer) — для тестов.
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
 ## Чисел на ленту: transform 3 × 4 и цвет экземпляра (4).
 const STRIDE := 16
 
@@ -44,6 +54,8 @@ func _init(system: EcoLeech) -> void:
 	mesh.multimesh = mm
 	mesh.custom_aabb = AABB(Vector3(-400, -200, -400), Vector3(800, 400, 800))
 	add_child(mesh)
+	dust_view = GrazerView.build_dust(EcoLeechDust.POOL)
+	add_child(dust_view)
 	sync(0.0)
 
 
@@ -70,10 +82,12 @@ static func place(pr: EcoPred.Pred, t: float) -> Transform3D:
 	return Transform3D(EcoPredLook.basis(pr) * local, EcoLeech.position_on(pr))
 
 
-func sync(t: float) -> void:
+## Поставить ленты в момент t; state — корабль (облачка: дальность, свет прожектора), flow — течение (уносит их).
+func sync(t: float, state: EcoLink.ShipState = null, flow := Vector3.ZERO) -> void:
 	var ps := leeches.preds()
 	if ps == null:
 		return
+	_sync_dust(t, state, flow)
 	var mm := mesh.multimesh
 	var n := mini(ps.all.size(), mm.instance_count)
 	placed.resize(n)
@@ -110,3 +124,12 @@ static func leech_shade(n: int) -> float:
 func color_at(n: int) -> Color:
 	var o := n * STRIDE + 12
 	return Color(_buffer[o], _buffer[o + 1], _buffer[o + 2], _buffer[o + 3])
+
+
+func _sync_dust(t: float, state: EcoLink.ShipState, flow: Vector3) -> void:
+	if state == null:
+		return
+	dust.update(leeches, t, state.pos)
+	_dust.pack(dust.dust, t, flow, state, EcoLeechDust.COLOR, EcoLeechDust.LIT, Seabed.mesh_height)
+	if _dust.changed:   # облачков нет и не было — буфер тот же, не грузим (issue #133)
+		dust_view.multimesh.buffer = _dust.data
