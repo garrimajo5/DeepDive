@@ -284,7 +284,7 @@ func set_shelves(kinds: Array[int]) -> void:
 		shelf_samples.multimesh.set_instance_color(i, Samples.COLORS[kinds[i]])
 		n += 1
 	for mm in [shelf_jars, shelf_glass, shelf_samples]:
-		# пусто — узел скрыт со всеми банками: прогрев шейдеров (Main._warm_show) покажет его на кадр целиком
+		# пусто — узел скрыт со всеми банками: прогрев шейдеров (WarmRunner._show) покажет его на кадр целиком
 		mm.multimesh.visible_instance_count = n if n > 0 else -1
 		mm.visible = n > 0
 

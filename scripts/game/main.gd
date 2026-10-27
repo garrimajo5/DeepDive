@@ -63,11 +63,7 @@ var sound_mix := SoundMix.Mix.new()  ## сведение шин звука (docs
 var warm := Warmup.new()
 var timeline := RunTimeline.new()   ## хронометраж забега (#633): лента и сводка в user://zabegi.txt
 var curtain: WarmSplash   ## заставка прогрева (ART-034), после прогрева — null
-var _warm_drawn := false            ## прошлый шаг показал взгляд прогрева
-var _warm_shown: Array[Node] = []   ## что прогрев показал на кадр — вернуть скрытым
-var _warm_hidden: Array[Node] = []  ## что кадр по слоям (#424) скрыл — вернуть видимым
-var _warm_mates: Array = []         ## члены экипажа на время прогрева (каждая внешность)
-var _warm_emit: Array = []          ## частицы, выпущенные прогревом: [узел, прежний preprocess]
+var warm_run := WarmRunner.new(self)   ## прогрев на сцене: заставка, взгляды, скрытое на кадр (#752)
 var hit_flash: ColorRect
 var visor: ColorRect          ## щиток сварщика: затемнение, пока свой игрок варит (Breach.VISOR)
 var sonar_view: SonarView
@@ -411,7 +407,7 @@ func _ready() -> void:
 	scanner.message.connect(say)
 	_place_ship()
 	_place_camera()
-	_begin_warmup()
+	warm_run.begin()
 	if menu:
 		open_menu()
 	if QaRunner.pending():
@@ -423,85 +419,9 @@ func warming() -> bool:
 	return warm.active()
 
 
-## Заставка (WarmSplash, ART-034) и члены экипажа каждой внешности на время прогрева (Warmup).
-func _begin_warmup() -> void:
-	if not warm.active():
-		return
-	curtain = WarmSplash.new()   # заставка ART-034: фон, полоса по доле прогрева, подсказки
-	add_child(curtain)
-	for look in CrewRig.MODELS.size():
-		var at: Vector2 = Warmup.MATE_AT[look % Warmup.MATE_AT.size()]
-		_warm_mates.append(add_mate(at.x, at.y, PI, Crew.Role.PILOT, look))
-	for look in CrewRig.MODELS.size():   # и материалом своего игрока: свои руки у пульта энергии (#217)
-		var at: Vector2 = Warmup.OWN_AT[look % Warmup.OWN_AT.size()]
-		var m := add_mate(at.x, at.y, PI, Crew.Role.PILOT, look)
-		_warm_mates.append(m)
-		crew_view.as_own.append(m)
-	crew_view.apply()
-	for r in Crew.Role.size():   # и полупрозрачными, как отключившийся гость (ART-043): каждая роль со снаряжением
-		var g := Crew.Member.new(r)
-		g.look = r % CrewRig.MODELS.size()
-		var at: Vector2 = Warmup.MATE_AT[r % Warmup.MATE_AT.size()]
-		g.place(at.x, at.y, PI)
-		ghosts.append(MateGhost.new(g))
-	_ghosts(0.0, true)
-	_warm_particles(true)
-	power_panel.reactor = reactor   # пульт энергии рисует строки под шторкой: шрифты всех размеров (#217)
-	power_panel.panel = power
-	_warm_frame()
-
-
-## CPUParticles3D корабля (если появятся) на время прогрева выпущены сразу (preprocess) — их шейдер собирается под
-## шторкой, а не при первом событии (issue #159). Конец прогрева — снова пусто. Пар вентиля ART-071 и частицы пробоины
-## ART-072 — MultiMesh с пустой карточкой: их показывает _warm_show.
-func _warm_particles(on: bool) -> void:
-	if on:
-		for p: CPUParticles3D in ship.find_children("*", "CPUParticles3D", true, false):
-			if not p.emitting:
-				_warm_emit.append([p, p.preprocess])
-				p.preprocess = p.lifetime
-				p.restart()
-		return
-	for e in _warm_emit:
-		var p: CPUParticles3D = e[0]
-		if is_instance_valid(p):
-			p.preprocess = e[1]
-			p.restart()
-			p.emitting = false
-	_warm_emit.clear()
-
-
-## Конец шага: пока идёт прогрев — взгляд камеры, скрытые детали корабля на кадр, вспышка разряда, прожектор.
-func _warm_frame() -> void:
-	if not warm.active():
-		return
-	var k := warm.outside()
-	if k >= 0:   # кадр снаружи: камера с борта в точке облёта (и всплытия, #519) смотрит на корпус (облёт ещё ждёт)
-		flyby_cam.transform = Warmup.outside_pose(k)
-		if not flyby_cam.current:
-			flyby_cam.make_current()
-	else:
-		camera.position = warm.eye()   # центр мостика или место у поста (#217)
-		camera.rotation = Vector3(warm.pitch(), warm.yaw(), 0.0)
-		if not camera.current:   # облёт с борта ждёт: прогрев смотрит глазами на мостике
-			camera.make_current()
-	for root: Node in [ship, ocean, silt_view, samples_view, vote_panel.get_parent(), wreck_view]:
-		_warm_show(root)
-	var s := warm.stage()
-	if s >= 0:   # первый взгляд по слоям (#424): слои после s на этот кадр скрыты
-		var layers := warm_layers()
-		for later in range(s + 1, layers.size()):
-			for n: Node3D in layers[later]:
-				if n.visible:
-					n.visible = false
-					_warm_hidden.append(n)
-	_warm_drawn = true
-
-
-## Слои первого взгляда прогрева (Warmup.STAGES, #424): интерьер с интерфейсом (всё, чего нет ниже) → экипаж и
-## корпус → вода → живой мир. Кадр слоя s показывает слои 0…s.
+## Слои первого взгляда прогрева (#424) — `WarmRunner.layers`.
 func warm_layers() -> Array:
-	return [[], [crew_view, ghost_view, hull], [ocean], [eco, silt_view, samples_view]]
+	return warm_run.layers()
 
 
 ## Огни корабля по ART-064 (CabinLight): авария — пока открыта пробоина, ритм — часами пробоины (у гостя тоже идут),
@@ -549,45 +469,6 @@ func _flicker(dt: float) -> void:
 		drain_hisses += 1
 	elif vitals.drain_left <= 0.0 and drain_sound.playing:
 		drain_sound.stop()
-
-
-## Показать на кадр скрытые узлы под root (запомнить, чтобы вернуть).
-func _warm_show(root: Node) -> void:
-	for n in root.get_children(true):
-		if (n is Node3D or n is CanvasItem) and not n.visible:
-			n.visible = true
-			_warm_shown.append(n)
-		_warm_show(n)
-
-
-## Начало шага: вернуть скрытым показанное прогревом; кадр прогрева показан — следующий взгляд.
-func _warm_restore() -> void:
-	for n in _warm_shown:
-		if is_instance_valid(n):
-			n.visible = false
-	_warm_shown.clear()
-	for n in _warm_hidden:
-		if is_instance_valid(n):
-			n.visible = true
-	_warm_hidden.clear()
-	if not _warm_drawn:
-		return
-	_warm_drawn = false
-	var done := warm.advance()
-	if curtain:
-		curtain.set_progress(warm.progress())
-	if done:
-		for m in _warm_mates:
-			crew.erase(m)
-		_warm_mates.clear()
-		crew_view.as_own.clear()
-		crew_view.set_members(crew, me)
-		ghosts.clear()
-		_ghosts(0.0, true)
-		_warm_particles(false)
-		curtain.queue_free()   # вместе с текстурой фона
-		curtain = null
-		_place_camera()
 
 
 ## Запустить сценарий тестера: из user://qa/scenario.json или из текста (тесты).
@@ -675,7 +556,7 @@ func _process(dt: float) -> void:
 ## Один шаг игры: ввод, игрок, корабль, вода. Вынесен из _process для тестов.
 func step(dt: float) -> void:
 	clock.start(Time.get_ticks_usec(), dt)
-	_warm_restore()
+	warm_run.restore()
 	_sound(dt)
 	time += dt
 	if qa:
@@ -924,7 +805,7 @@ func step(dt: float) -> void:
 	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy,
 			status_rect(), radio.voice())
 	_ghosts(dt)
-	_warm_frame()
+	warm_run.frame()
 	_net_send(dt)
 	r.end_frame()
 	clock.lap("метки и сеть", Time.get_ticks_usec())
@@ -2836,7 +2717,7 @@ func _client_step(dt: float) -> void:
 	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
 	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy,
 			status_rect(), radio.voice())
-	_warm_frame()
+	warm_run.frame()
 	r.end_frame()
 
 
