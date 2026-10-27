@@ -39,11 +39,11 @@ func menu_step(dt: float = 0.0) -> void:
 		r.end_frame()
 		return
 	if main.address.open:
-		main._address_step(r, dt)
+		main.lobby_flow.address_step(r, dt)
 		r.end_frame()
 		return
 	if main.lobby.open:
-		main._lobby_step(r, dt)
+		main.lobby_flow.lobby_step(r, dt)
 		r.end_frame()
 		return
 	if main.logbook.open:

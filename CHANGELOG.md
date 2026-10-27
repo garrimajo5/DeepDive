@@ -3,6 +3,9 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-10-27
+- Порядок в коде: сбор экипажа ART-028 и вход по адресу ART-039 вынесены из `main.gd` в `LobbyFlow`
+  (`scripts/game/lobby_flow.gd`, `main.lobby_flow`, −250 строк); у `Main` — пересылки `open_lobby`, `open_address`.
+  Поведение то же, снимки `sbor=list`, `adres=…` совпадают (по issue #755, `test_lobby_flow`).
 - Порядок в коде: системная «Назад», пауза ART-037 и схема корабля ART-042 вынесены из `main.gd` в `PauseFlow`
   (`scripts/game/pause_flow.gd`, `main.pause_flow`); у `Main` — пересылки `back_pressed`, `open_map`,
   `open_hint_map`. Порядок проверок «Назад» тот же, снимки `pause=1|exit`, `shema=1|door` совпадают (по issue #754,

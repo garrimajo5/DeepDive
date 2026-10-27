@@ -33,12 +33,12 @@ func back_pressed() -> void:
 		main._journal_show()
 		return
 	if main.main_menu.open and main.address.open:   # экран адреса: сначала отмена попытки, потом вход сбора
-		main._address_do(main.address.back())
+		main.lobby_flow.address_do(main.address.back())
 		if main.address_panel:
 			main.address_panel.show_screen(main.address)
 		return
 	if main.main_menu.open and main.lobby.open:   # комната — ко входу, вход — в меню (ART-028)
-		main._lobby_back()
+		main.lobby_flow.lobby_back()
 		return
 	if main.main_menu.open:
 		main.save.flush(main.samples, main.scanner)
