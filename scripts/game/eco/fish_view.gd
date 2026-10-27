@@ -9,6 +9,8 @@ extends MultiMeshInstance3D
 ## Грудные плавники гребут вверх-вниз (EcoFishLook.fin_flap, вес — канал b цвета вершины): у светляка вес 0, тот же
 ## шейдер рисует пестрянок (HvatenView, форма EcoPestrLook). Переливы чешуи по углу (EcoIris, Б2) — uniform iris,
 ## сдвиг оттенка — от фазы особи; у пестрянок iris = 0, «Экономно» — EcoIris.set_lite. Стоит на слое отмели (OceanView.LAYER_WORLD).
+## Муть у дна (EcoFishDust: всполошились у дна — облачка из-под хвостов, забились в коралл — клуб у дна под домом) —
+## дочерний MultiMesh «Муть» (GrazerView.build_dust, общий шейдер мути, +1 вызов).
 
 const SHADER := """
 shader_type spatial;
@@ -50,6 +52,14 @@ void fragment() {
 """
 
 var fish: EcoFish
+## Муть у дна от стай (Б3).
+var dust := EcoFishDust.new()
+var dust_view: MultiMeshInstance3D
+## Буфер мути (EcoDustBuffer, issue #732).
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
 
 
 func _init(system: EcoFish) -> void:
@@ -64,6 +74,8 @@ func _init(system: EcoFish) -> void:
 	mm.mesh = build_mesh()
 	mm.instance_count = fish.all.size()
 	multimesh = mm
+	dust_view = GrazerView.build_dust(EcoFishDust.POOL)
+	add_child(dust_view)
 	sync(0.0)
 
 
@@ -106,8 +118,14 @@ static func _f(x: float) -> String:
 	return "%.5f" % x
 
 
-## Расставить рыбок по миру в момент t (время мира): один буфер MultiMesh за раз.
-func sync(t: float) -> void:
+## Расставить рыбок по миру в момент t (время мира): один буфер MultiMesh за раз. ship — корабль (муть — ближе
+## EcoGrazerDust.NEAR, светлее в луче; null — мути нет), flow — течение мира (уносит муть), ground — дно мира.
+func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground := Callable()) -> void:
+	if ship != null:
+		dust.update(fish, t, ship.pos, ground)
+		_dust.pack(dust.dust, t, flow, ship, EcoFishDust.COLOR, EcoFishDust.LIT, Seabed.mesh_height)
+		if _dust.changed:   # мути нет и не было — буфер тот же, не грузим (issue #133)
+			dust_view.multimesh.buffer = _dust.data
 	if buffer.size() != fish.all.size() * STRIDE:
 		buffer = pack(fish, t)
 	else:
