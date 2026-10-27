@@ -735,3 +735,10 @@ ORM = AO/шероховатость/металл, в существующие `P
 `kondensat-proverka.png`, параметры `kondensat-parametry.json`; решения — `kondensat-okon.md`: слой в `window_glass.gdshader`
 по глубине (с 8 м, полный к 45 м), корпусу и нагреву реактора, сначала вариант «Экономно» (1 выборка, без экранного буфера),
 0 вызовов. Встройка — задача ROADMAP потока А.
+## ART-079 Терраса врат — принято
+- Исходник: `uzel-terrasa-vrat.jpg`, `docs/world.md`, #818 (места 07/08), лист корабля `kovcheg-7-rakursy.png`.
+
+**Принято 27.10.2026** (PR #857, ветка `art/ART-079-terrasa-vrat`): листы `terrasa-vrat-ansambl.png`, `terrasa-vrat-kontakt.png`,
+схема `terrasa-vrat-gabarity.png`, иконки `ikonka-terrasa-vrat.png`, `ikonka-nablyudenie-polya.png`; решения — `terrasa-vrat.md`:
+арка 120 × 58 × 23 м, проход 60 × 36 м, карман Ø 100 м, бюджет модели 59 тыс. треуг. с LOD, 3 материала. Глубина пола 65 м —
+предложение, проверить при сборке места 07. Модель — следующий заказ MOD.

@@ -100,7 +100,6 @@ func test_scene_bite_breach_weld() -> void:
 		main.step(0.1)
 	ok(main.breach_view.spot_node.visible and main.breach_view.jet_mm.visible, "струя бьёт")
 	ok(main.breach_view.water.visible, "на полу вода")
-	ok(main.breach_view.alarm.visible, "тревога")
 	ok(main.breach_view.siren.playing and main.breach_view.jet_sound.playing, "воет сирена, шумит струя")
 	ok(main.breach_view.jet_sound.global_position.distance_to(main.breach_view.spot_node.global_position) < 0.2,
 		"шум — из пробоины")

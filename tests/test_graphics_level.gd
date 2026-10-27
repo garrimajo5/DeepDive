@@ -153,6 +153,33 @@ func test_scene_applies_level() -> void:
 	main._apply_settings()
 
 
+## Issue #842: дешёвые правки видеокарты — дно без тени на всех уровнях; на «Экономно» нет bloom и виньетка
+## не копирует экран (умножение кадра на овал, `grade_lite.gdshader`); на «Обычно» всё возвращается.
+func test_scene_lite_gpu_savings() -> void:
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	eq(main.ocean.seabed.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "дно не отбрасывает тень")
+	ok(main.env.glow_enabled, "«Обычно» — свечение")
+	ok(main.grade.mat.shader.code.contains("hint_screen_texture"), "«Обычно» — полная цветокоррекция")
+	main.settings.graphics = Graphics.ECONOMY
+	main._apply_settings()
+	ok(not main.env.glow_enabled, "«Экономно» — без свечения")
+	var code: String = main.grade.mat.shader.code
+	ok(not code.contains("hint_screen_texture"), "«Экономно» — виньетка без копии экрана")
+	ok(code.contains("blend_mul"), "овал умножением кадра")
+	near(float(main.grade.mat.get_shader_parameter("strength")), Grade.LITE, 1e-6, "сила овала 0,10")
+	main.settings.graphics = Graphics.NORMAL
+	main._apply_settings()
+	ok(main.env.glow_enabled, "«Обычно» — свечение вернулось")
+	ok(main.grade.mat.shader.code.contains("hint_screen_texture"), "цветокоррекция вернулась")
+	ok(main.grade.mat.get_shader_parameter("lut_tex") == main.grade.tex, "LUT на месте")
+	main.helm.pos.y = -60.0
+	main._place_ship()
+	main._place_camera()
+	near(float(main.grade.mat.get_shader_parameter("strength")), 0.34, 1e-4, "сила снова по глубине")
+
+
 func _tap(p: Vector2, finger: int) -> void:
 	var r := main.overlay.router
 	r.begin(finger, p)
