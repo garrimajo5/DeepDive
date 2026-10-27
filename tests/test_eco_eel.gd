@@ -97,6 +97,75 @@ func test_hidden_body_in_crevice() -> void:
 	near(e.face.dot(e.out), 1.0, 1e-4, "смотрит из расщелины")
 
 
+## Самый большой сдвиг звена и поворот головы за шаг 0,05 с, пока идёт мир (seconds с) или until() не true.
+func _max_jump(w: EcoWorld, e: EcoEel.Eel, seconds: float) -> Vector2:
+	var most := Vector2.ZERO
+	var t := 0.0
+	while t < seconds:
+		var was := e.segs.duplicate()
+		var face := e.face
+		w.step(0.05)
+		t += 0.05
+		for k in EcoEel.SEGS:
+			most.x = maxf(most.x, was[k].distance_to(e.segs[k]))
+		most.y = maxf(most.y, face.angle_to(e.face))
+	return most
+
+
+func test_returns_into_crevice_smoothly() -> void:
+	# Возвращается в логово, тело тянется за головой снаружи устья: в расщелину оно втягивается за SETTLE,
+	# а не перескакивает за шаг (раньше хвост прыгал на 11 м, голова — на пол-оборота).
+	var w := _world()
+	var e := _eels(w).eels[0]
+	e.mode = EcoEel.Mode.RETURN
+	e.cd = 30.0
+	e.agent.p = e.lair + e.out * 8.0
+	for k in EcoEel.SEGS:
+		e.segs[k] = e.agent.p + e.out * (k * EcoEel.SEG_FOLLOW)
+	e.face = -e.out
+	var most := _max_jump(w, e, 3.0)
+	eq(e.mode, EcoEel.Mode.HIDE, "вернулся в логово")
+	ok(most.x < 1.6, "звено за шаг сдвинулось не больше 1,6 м (%.2f)" % most.x)
+	ok(most.y < EcoEel.FACE_MAX * 0.05 + 1e-3, "голова за шаг повернулась не больше 0,35 рад (%.2f)" % most.y)
+	for k in range(1, EcoEel.SEGS):
+		ok((e.segs[k] - e.agent.p).dot(e.out) < 0.0, "звено %d — в глубине расщелины" % k)
+	near(e.face.dot(e.out), 1.0, 1e-4, "смотрит из расщелины")
+
+
+func test_latches_smoothly() -> void:
+	# На стекло тело ложится за SETTLE, а не прыгает на окно за шаг; по пути — мимо корпуса.
+	var w := _world()
+	var e := _eels(w).eels[0]
+	e.cd = 0.0
+	_ship_near(w, e)
+	var t := 0.0
+	var jump := 0.0   # самый большой сдвиг звена за последний шаг пути к носу и шаг, на котором присосался
+	while t < 60.0 and not e.latched():
+		var was := e.segs.duplicate()
+		w.step(0.05)
+		t += 0.05
+		jump = 0.0
+		for k in EcoEel.SEGS:
+			jump = maxf(jump, was[k].distance_to(e.segs[k]))
+	ok(e.latched(), "присосался")
+	ok(jump < 1.2, "на шаге, где присосался, звенья не прыгнули на стекло (%.2f м)" % jump)
+	var most := _max_jump(w, e, EcoEel.SETTLE + 0.2)
+	ok(most.x < 1.2, "звено за шаг сдвинулось не больше 1,2 м (%.2f)" % most.x)
+	ok(most.y < EcoEel.FACE_MAX * 0.05 + 1e-3, "голова за шаг повернулась не больше 0,35 рад (%.2f)" % most.y)
+	for k in EcoEel.SEGS:
+		ok(not EcoHull.touches(e.segs[k], w.ship.pos, w.ship.yaw), "звено %d не в корпусе" % k)
+		near(e.segs[k].distance_to(EcoEel.latch_point(w.ship, k, w.time)), 0.0, 1e-4, "звено %d на стекле" % k)
+
+
+func test_turn_face() -> void:
+	var f := EcoEel.turn_face(Vector3.FORWARD, Vector3.BACK, 0.05)
+	near(Vector3.FORWARD.angle_to(f), EcoEel.FACE_MAX * 0.05, 1e-4, "назад — не быстрее 7 рад/с")
+	near(f.y, 0.0, 1e-5, "ровно назад — разворот по горизонтали")
+	var g := EcoEel.turn_face(Vector3.FORWARD, Vector3.FORWARD.rotated(Vector3.UP, 0.1), 0.05)
+	near(Vector3.FORWARD.angle_to(g), 0.1 * (1.0 - exp(-EcoEel.FACE_FOLLOW * 0.05)), 1e-4, "малый угол — долей")
+	eq(EcoEel.turn_face(Vector3.RIGHT, Vector3.RIGHT, 0.05), Vector3.RIGHT, "уже смотрит — так и есть")
+
+
 # ---------- Охота ----------
 
 func test_strikes_grazer() -> void:
@@ -193,6 +262,7 @@ func test_latched_pose_on_glass() -> void:
 	e.cd = 0.0
 	_ship_near(w, e)
 	ok(_run_until_latched(w), "присосался")
+	w.run(EcoEel.SETTLE + 0.1, 0.05)   # тело легло на стекло
 	for yaw in [0.0, 1.1, -2.3]:
 		w.ship.yaw = yaw
 		w.step(0.05)
@@ -345,6 +415,7 @@ func test_view_five_multimeshes() -> void:
 	e.cd = 0.0
 	_ship_near(w, e)
 	ok(_run_until_latched(w), "присосался")
+	w.run(EcoEel.SETTLE + 0.1, 0.05)   # тело легло на стекло
 	view.sync(w.time)
 	ring = EelView.transform_at(view.ring_buffer, 0)
 	ok(ring.basis.get_scale().x > 1.2, "на стекле кольцо расплющено")
