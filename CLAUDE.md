@@ -68,7 +68,8 @@
   (#67DDEB) зажигает `BridgeView.light_texture` (шейдер `shaders/tex_glow.gdshader`, маска — `TextureGlow`, список моделей там же).
 - Свои меши: лицевая сторона треугольника — обход по часовой стрелке, если смотреть на неё
   (векторное (b − a) × (c − a) смотрит внутрь).
-- Экспорт: `export_presets.cfg`, пресет «Android» (arm64-v8a и x86_64 для эмулятора), подпись — `android/debug.keystore`
+- Экспорт: `export_presets.cfg`, пресет «Android» — телефон, arm64-v8a (`DeepDive.apk`), «Android эмулятор» — x86_64
+  для эмулятора тестера (`DeepDive-emulator.apk`, его ставит `run-qa.ps1`; #844), подпись — `android/debug.keystore`
   (отладочный ключ, пароль `android`, в репозитории намеренно — чтобы APK обновлялся поверх).
 
 ## Тесты и проверка
