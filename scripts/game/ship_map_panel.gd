@@ -20,12 +20,7 @@ func _init() -> void:
 	layer = LAYER
 	visible = false
 	atlas = load(ShipMap.ATLAS)
-	draw = Control.new()
-	draw.name = "План"
-	draw.set_anchors_preset(Control.PRESET_FULL_RECT)
-	draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	draw.draw.connect(_draw_map)
-	add_child(draw)
+	draw = UiStyle.canvas(self, "План", _draw_map)
 
 
 func show_map(m: ShipMap, crew_marks: Array, own_index: int, door_open: Array[bool], a: ShipMap.Alarm) -> void:

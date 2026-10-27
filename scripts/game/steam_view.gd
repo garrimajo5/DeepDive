@@ -1,7 +1,7 @@
 class_name SteamView
 extends MultiMeshInstance3D
 ## Пар вентиля по ART-071: частицы `ValveSteam` одним MultiMesh в осях корабля (один материал, один вызов),
-## шейдер `shaders/steam.gdshader`, атлас `textures/par/atlas.png`. Слой корабля, без теней и огней.
+## шейдер `shaders/steam.gdshader`, атлас `textures/par/atlas.png`. Слой корабля, без теней и огней (`CardSwarm`).
 
 var mat: ShaderMaterial
 var shown := 0   ## сколько карточек видно (для тестов)
@@ -9,24 +9,9 @@ var shown := 0   ## сколько карточек видно (для тест�
 
 func _init() -> void:
 	name = "Пар вентиля"
-	layers = OceanView.LAYER_SHIP
-	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var quad := QuadMesh.new()
-	quad.size = Vector2.ONE
-	mat = ShaderMaterial.new()
-	mat.shader = load("res://shaders/steam.gdshader")
-	mat.set_shader_parameter("atlas", load(ValveSteam.ATLAS))
-	mat.set_shader_parameter("tint", ValveSteam.COLD)
-	quad.material = mat
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_custom_data = true
-	mm.mesh = quad
-	mm.instance_count = ValveSteam.LIMIT
-	mm.visible_instance_count = 1
-	mm.set_instance_transform(0, Transform3D(Basis.from_scale(Vector3(0.1, 0.1, 1.0)), ValveSteam.NOZZLE))
-	mm.set_instance_custom_data(0, Color(0.0, 0.0, 0.0, 0.0))
-	multimesh = mm
+	mat = CardSwarm.material("res://shaders/steam.gdshader", {"atlas": load(ValveSteam.ATLAS), "tint": ValveSteam.COLD})
+	var mm := CardSwarm.setup(self, mat, ValveSteam.LIMIT, OceanView.LAYER_SHIP)
+	CardSwarm.park(mm, ValveSteam.NOZZLE)
 	# весь путь пара: от сопла до +0,3 м по x и +0,6 м вверх, с запасом на карточку
 	mm.custom_aabb = AABB(ValveSteam.NOZZLE + Vector3(-0.4, -0.4, -0.4), Vector3(1.2, 1.4, 0.8))
 	visible = false
@@ -44,8 +29,7 @@ func apply(st: ValveSteam, tint: Color) -> void:
 		mm.set_instance_custom_data(i, Color(a, ValveSteam.alpha(a), 0.0, float(ValveSteam.LAST)))   # кадры 0…15
 	shown = n
 	if n == 0:
-		mm.set_instance_transform(0, Transform3D(Basis.from_scale(Vector3(0.1, 0.1, 1.0)), ValveSteam.NOZZLE))
-		mm.set_instance_custom_data(0, Color(0.0, 0.0, 0.0, 0.0))
+		CardSwarm.park(mm, ValveSteam.NOZZLE)
 	mm.visible_instance_count = maxi(n, 1)
 	mat.set_shader_parameter("tint", tint)
 	visible = n > 0
