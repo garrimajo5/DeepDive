@@ -20,6 +20,13 @@ var plafond_mat: StandardMaterial3D   ## рассеиватели плафоно
 const PLAFOND_TEX := preload("res://textures/svet/plafon.png")
 const GLINT_MASK := preload("res://textures/bridge/bliki-maska.png")   ## ART-067, L8 512², бесшовная
 var screens_mat: ShaderMaterial    ## экраны пульта пилота (помехи — set_screens)
+## Последние значения в материалы и огни (#847): то же самое каждый кадр не пишем.
+var _cabin_key := Vector3(-2.0, 0.0, -1.0)
+var _glint_k := -1.0
+var _glint_tint := Color(-1.0, -1.0, -1.0)
+var _wear_loss := -1.0
+var _screens := Vector4(-1.0, -1.0, -1.0, -1.0)
+var _surfaces: Array[ShaderMaterial] = []
 const SCANNER_TEXT := Color("67DDEB")
 var scanner_text: Label3D          ## экран сканера биолога (Scanner.screen_lines)
 
@@ -73,6 +80,10 @@ func _ready() -> void:
 ## Огни мостика по ART-064 (CabinLight): breach_room — отсек открытой пробоины (−1 — нет), t — часы ритма,
 ## k — мигание Vitals.lamp_k поверх огибающей.
 func set_cabin(breach_room: int, t: float, k: float) -> void:
+	var key := CabinLight.key(breach_room, t, k)
+	if key == _cabin_key:
+		return
+	_cabin_key = key
 	for i in lamps.size():
 		lamps[i].light_color = CabinLight.color(_lamp_data[i], breach_room)
 		lamps[i].light_energy = CabinLight.energy(_lamp_data[i], breach_room, t, k)
@@ -80,15 +91,29 @@ func set_cabin(breach_room: int, t: float, k: float) -> void:
 
 
 ## Блики воды ART-067 (WaterGlints): сила k (0 — маска не читается), оттенок воды, часы течения t, с.
+## Без изменений не пишем (#847): бликов нет (k = 0) — ни силы, ни часов; оттенок — только новый.
 func set_glints(k: float, tint: Color, t: float) -> void:
-	for m in surface_materials():
-		m.set_shader_parameter("glint_k", k)
-		m.set_shader_parameter("glint_tint", tint)
+	if k == 0.0 and _glint_k == 0.0:
+		return
+	if _surfaces.is_empty():
+		_surfaces = surface_materials()
+	var k_new := k != _glint_k
+	var tint_new := tint != _glint_tint
+	_glint_k = k
+	_glint_tint = tint
+	for m in _surfaces:
+		if k_new:
+			m.set_shader_parameter("glint_k", k)
+		if tint_new:
+			m.set_shader_parameter("glint_tint", tint)
 		m.set_shader_parameter("glint_time", t)
 
 
 ## «Корабль устал» ART-074 (CabinWear): потёки и мокрый пол по сглаженной потере прочности 0…1.
 func set_wear(loss: float) -> void:
+	if loss == _wear_loss:   # потеря стоит почти всегда — не переписываем материалы (#847)
+		return
+	_wear_loss = loss
 	wear_on(mesh_instance.mesh, loss)
 
 
@@ -239,6 +264,10 @@ func _light_screens(n: Node3D) -> void:
 
 ## Яркость экранов при помехах (Vitals.screen_k): три экрана пульта пилота слева направо и экран сканера.
 func set_screens(helm: Vector3, scanner: float) -> void:
+	var key := Vector4(helm.x, helm.y, helm.z, scanner)
+	if key == _screens:   # без помех яркость ровная — не пишем (#847)
+		return
+	_screens = key
 	screens_mat.set_shader_parameter("k", helm)
 	scanner_text.modulate = Color(SCANNER_TEXT.r * scanner, SCANNER_TEXT.g * scanner, SCANNER_TEXT.b * scanner)
 

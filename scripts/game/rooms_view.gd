@@ -47,6 +47,10 @@ const JOURNAL_TEXT := Color("67DDEB")
 var lab_ring: Node3D               ## кольцо-светильник на потолке лаборатории (MOD-020), вставка мигает с плафонами
 var _ring_mats: Array[BaseMaterial3D] = []
 var journal_text: Label3D          ## экран стойки журнала (Lab.journal_lines)
+## Последние значения в огни и материалы (#847): то же самое каждый кадр не пишем.
+var _cabin_key := Vector3(-2.0, 0.0, -1.0)
+var _wear_loss := -1.0
+var _journal_k := -1.0
 var _journal_lines := PackedStringArray([""])   ## последние строки экрана журнала
 ## Полки трюма (MOD-017, HoldShelves): банки — металл и стекло — и образцы в них, по MultiMesh на всё (3 вызова).
 var shelf_jars: MultiMeshInstance3D
@@ -124,17 +128,27 @@ func set_relief(on: bool) -> void:
 
 
 func set_journal_k(k: float) -> void:
+	if k == _journal_k:
+		return
+	_journal_k = k
 	journal_text.modulate = Color(JOURNAL_TEXT.r * k, JOURNAL_TEXT.g * k, JOURNAL_TEXT.b * k)
 
 
 ## «Корабль устал» ART-074 в машинном (CabinWear): потеря прочности 0…1.
 func set_wear(loss: float) -> void:
+	if loss == _wear_loss:
+		return
+	_wear_loss = loss
 	BridgeView.wear_on(mesh_instance.mesh, loss)
 
 
 ## Огни отсеков по ART-064 (CabinLight): breach_room — отсек открытой пробоины (−1 — нет), t — часы ритма,
 ## k — мигание Vitals.lamp_k поверх огибающей. Свет реактора R1 ставит apply по реактору.
 func set_cabin(breach_room: int, t: float, k: float) -> void:
+	var key := CabinLight.key(breach_room, t, k)
+	if key == _cabin_key:
+		return
+	_cabin_key = key
 	for i in lamps.size():
 		lamps[i].light_color = CabinLight.color(_lamp_data[i], breach_room)
 		lamps[i].light_energy = CabinLight.energy(_lamp_data[i], breach_room, t, k)
