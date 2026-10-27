@@ -99,6 +99,8 @@ var drop_view: DropView
 ## затаившегося выдаёт только импульс сонара.
 var echo: EcoEcho
 var echo_view: EchoView
+## Жизнь вдали (Б5): тёмные силуэты рыб в мути за 40…125 м — фон, не вид мира (EcoFarLife).
+var far_view: FarLifeView
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -194,6 +196,8 @@ func _init() -> void:
 	echo = world.add(EcoEcho.new(bones, preds)) as EcoEcho
 	echo_view = EchoView.new(echo)
 	add_child(echo_view)
+	far_view = FarLifeView.new()
+	add_child(far_view)
 	_rebuild_moss()
 	_rebuild_coral()
 	_rebuild_ferns()
@@ -217,7 +221,7 @@ func _init() -> void:
 	EcoSurface.apply(self)
 
 
-## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи и просвет листвы погашены, скребуны и кольчужник не поднимают муть — меняются
+## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи и просвет листвы погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали нет — меняются
 ## только числа в uniform, шейдеры те же. Включает уровень графики — поток А (`Main._apply_graphics`).
 func set_lite(on: bool) -> void:
 	EcoShaders.set_sway_lite(on)
@@ -225,6 +229,7 @@ func set_lite(on: bool) -> void:
 	EcoIris.set_lite(on)
 	EcoBack.set_lite(on)
 	EcoGrazerDust.lite = on
+	far_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -460,3 +465,4 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	grot_view.sync(world.time, ship.pos, ship, current.vel())
 	plankton_view.sync(world.time, ship.pos, ship.yaw)
 	echo_view.sync(world.time, ship.pos, ship, current.vel())
+	far_view.sync(world.time, ship.pos, world.ground)
