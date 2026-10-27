@@ -435,11 +435,3 @@ static func set_sway_lite(on: bool) -> void:
 		if mat:
 			mat.set_shader_parameter("sway_k", 0.0 if on else 1.0)
 
-
-## Сколько живых материалов растений получает поток (для тестов).
-static func plant_count() -> int:
-	var n := 0
-	for r in _plants:
-		if r.get_ref():
-			n += 1
-	return n
