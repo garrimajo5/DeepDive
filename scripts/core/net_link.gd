@@ -10,13 +10,18 @@ class_name NetLink
 ## Сбор экипажа ART-028 до забега (`LobbyLink`): клиент → хост `lq` — запрос комнаты (`Lobby.press`: роль, готовность;
 ## надёжно), хост → клиент `ans` — ответ на свой запрос (отказ «Занято») и `room` — снимок комнаты (`Lobby.pack`,
 ## надёжно, по порядку после `hello`). Кадров `f` гость в комнате не получает: места на палубе ещё нет (`Guest.index`).
+## Голос рации ART-041 (`Voice`, #634) — свой канал `CH_VOICE`, по порядку без повторов (опоздавший пакет голоса не
+## нужен): клиент → хост `v` с пакетом `p` (`Voice.SIZE` байт); хост пересылает его остальным гостям на палубе с местом
+## говорящего `w` и забирает себе (`Host.take_voice`), свой голос шлёт всем (`Host.send_voice`). Себя гость не слышит.
 
 const PORT := 24680             ## порт хоста по умолчанию (UDP)
 const MAX_CLIENTS := 3          ## хост и три телефона — четыре роли
-const CHANNELS := 3
+const CHANNELS := 4
 const CH_CTRL := 0              ## join, hello, no — надёжно
 const CH_FRAME := 1             ## кадры хоста
 const CH_PAD := 2               ## ввод клиентов
+const CH_VOICE := 3             ## голос рации — пакеты `Voice`
+const VOICE_QUEUE := 64         ## принятых пакетов голоса не больше (≈ 0,3 с на четверых) — не забрали, старые мимо
 const TIMEOUT := 5.0            ## клиент ждёт ответа хоста столько секунд
 const LOST_AFTER := 1.5         ## без пакетов столько секунд — «Нет связи» на табличке (ART-033): у хоста — гость
                                 ## без ввода, у гостя — все, если кадры хоста не идут
@@ -47,6 +52,16 @@ static func _put(peer: ENetMultiplayerPeer, to: int, channel: int, reliable: boo
 	peer.put_packet(encode(msg))
 
 
+## Пакет голоса от места `who` в очередь (не больше VOICE_QUEUE: старые выбрасываются).
+static func _queue_voice(q: Array, who: int, p: Variant) -> bool:
+	if not (p is PackedByteArray) or (p as PackedByteArray).size() != Voice.SIZE or who < 0 or who > MAX_CLIENTS:
+		return false
+	q.append([who, p])
+	while q.size() > VOICE_QUEUE:
+		q.pop_front()
+	return true
+
+
 ## Телефон на борту у хоста: его ввод и место в экипаже.
 class Guest:
 	extends RefCounted
@@ -73,6 +88,7 @@ class Host:
 	var sent := 0          ## кадров отправлено (каждому гостю — свой пакет)
 	var _acc := 0.0
 	var _left: Array[int] = []
+	var _voice: Array = []   ## принятый голос гостей [[место, пакет], …] (`take_voice`)
 
 	## Открыть хост на порту; ошибка — порт занят или сеть недоступна.
 	func start(port: int = NetLink.PORT) -> Error:
@@ -92,6 +108,7 @@ class Host:
 		peer = null
 		guests.clear()
 		_left.clear()
+		_voice.clear()
 
 	func active() -> bool:
 		return peer != null
@@ -126,6 +143,11 @@ class Host:
 						s["ask"] = int(msg.get("ci", 0)) if na > g.asks else 0   # номер сообщения связи (`Comms.press`)
 						g.asks = maxi(g.asks, na)
 						g.pad.apply(s)
+				"v":    # голос гостя на палубе: себе и остальным на палубе (`Voice`)
+					var vg: Guest = guests.get(from)
+					if vg and vg.index >= 0 and NetLink._queue_voice(_voice, vg.index, msg.get("p")):
+						vg.quiet = 0.0
+						_relay(vg.index, msg["p"], from)
 				"lq":   # запрос комнаты сбора экипажа — решает хост (`LobbyLink.serve`)
 					var lg: Guest = guests.get(from)
 					if lg:
@@ -159,6 +181,23 @@ class Host:
 		guests[from] = g
 		NetLink._put(peer, from, NetLink.CH_CTRL, true, {"k": "hello", "v": NetSnap.VERSION, "id": from})
 		out.append({"k": "join", "guest": g})
+
+	## Пакет голоса места who всем гостям на палубе, кроме peer skip.
+	func _relay(who: int, p: PackedByteArray, skip: int) -> void:
+		for g: Guest in guests.values():
+			if g.id != skip and g.index >= 0 and g.index != who:
+				NetLink._put(peer, g.id, NetLink.CH_VOICE, false, {"k": "v", "w": who, "p": p})
+
+	## Свой голос (место хоста в экипаже who, пакет `Voice.Encoder`) всем гостям на палубе.
+	func send_voice(who: int, p: PackedByteArray) -> void:
+		if peer != null and p.size() == Voice.SIZE:
+			_relay(who, p, 0)
+
+	## Голос гостей с прошлого вызова: [[место в экипаже, пакет], …].
+	func take_voice() -> Array:
+		var v := _voice
+		_voice = []
+		return v
 
 	## Снимок комнаты сбора экипажа всем гостям (надёжно): `Lobby.pack`.
 	func send_room(room: Dictionary) -> void:
@@ -236,6 +275,7 @@ class Client:
 	var _eco_seq := -1
 	var _room := {}        ## снимок комнаты сбора экипажа, ещё не отданный (`take_room`)
 	var _answers: Array = []   ## ответы хоста на свои запросы комнаты [[q, why], …] (`take_answers`)
+	var _voice: Array = []     ## голос товарищей [[место в экипаже, пакет], …] (`take_voice`)
 
 	## Подключиться к хосту по адресу в локальной сети.
 	func join(to: String, at: int = NetLink.PORT, name: String = "", role: int = 0, look: int = 0) -> Error:
@@ -269,6 +309,7 @@ class Client:
 		_eco_seq = -1
 		_room = {}
 		_answers.clear()
+		_voice.clear()
 		peer.peer_connected.connect(func(pid: int) -> void:
 			if pid == 1:
 				NetLink._put(peer, 1, NetLink.CH_CTRL, true, _info))
@@ -324,6 +365,10 @@ class Client:
 				"ans":
 					if state == NetLink.State.JOINED:
 						_answers.append([str(msg.get("q", "")), str(msg.get("why", ""))])
+				"v":    # голос товарища (место w); своего голоса хост не присылает
+					var w := int(msg.get("w", -1))
+					if state == NetLink.State.JOINED and w != me:
+						NetLink._queue_voice(_voice, w, msg.get("p"))
 		if not newest.is_empty():
 			me = int(newest.get("me", me))
 			if not _ev.is_empty():
@@ -354,6 +399,17 @@ class Client:
 	func send_room(q: String) -> void:
 		if joined() and peer != null and q != "":
 			NetLink._put(peer, 1, NetLink.CH_CTRL, true, {"k": "lq", "q": q})
+
+	## Свой пакет голоса (`Voice.Encoder`) хосту — он перешлёт остальным. Пока не на борту — мимо.
+	func send_voice(p: PackedByteArray) -> void:
+		if joined() and peer != null and p.size() == Voice.SIZE:
+			NetLink._put(peer, 1, NetLink.CH_VOICE, false, {"k": "v", "p": p})
+
+	## Голос товарищей с прошлого вызова: [[место в экипаже, пакет], …].
+	func take_voice() -> Array:
+		var v := _voice
+		_voice = []
+		return v
 
 	## Свежий снимок комнаты от хоста ({} — нового нет); отдаётся один раз.
 	func take_room() -> Dictionary:
