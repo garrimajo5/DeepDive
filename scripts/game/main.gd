@@ -136,7 +136,7 @@ var role_card_panel: RoleCardPanel
 ## Внутренняя связь ART-040: плашка внизу по центру, кодовое слово забега, «Спросить код» (голоса — `EcoLink.VOICE`).
 var comms := Comms.new()
 var comms_panel: CommsPanel
-var radio := Radio.new()   ## рация ART-041 (в игре скрыта до решения по голосу — `Radio.enabled`)
+var radio := Radio.new()   ## рация ART-041 (в коопе; разрешение микрофона — `OverlayFlow.mic_permit`)
 var radio_panel: RadioPanel
 var voice_io: VoiceIO   ## голос рации (#634): захват и проигрыватели товарищей, шаг — `OverlayFlow.voice_step`
 var _code_rng := RandomNumberGenerator.new()   ## кодовое слово нового забега
