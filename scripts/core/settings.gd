@@ -204,10 +204,7 @@ func hit(p: Vector2, size: Vector2) -> String:
 	if page == "zvuk":
 		return SoundPage.hit(p, size)
 	var ids := ["yes", "no"] if ask else ["back", "volume", "swipe", "intro", "graphics", "zvuk", "golos", "reset"]
-	for id: String in ids:
-		if screen_rect(id, size).has_point(p):
-			return id
-	return ""
+	return Splash.hit_ids(p, size, ids, screen_rect)
 
 
 ## Касание p по элементу id. Возвращает: "back" — настройки закрыты, "changed" — значение поменялось (сохранить и

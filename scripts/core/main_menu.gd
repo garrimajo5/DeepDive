@@ -57,10 +57,8 @@ static func version_line(v: String) -> String:
 func hit(p: Vector2, size: Vector2) -> String:
 	if not open:
 		return ""
-	for it: Array in ITEMS:
-		if enabled.get(it[0], false) and screen_rect(it[0], size).has_point(p):
-			return it[0]
-	return ""
+	return Splash.hit_ids(p, size, ITEMS.map(func(it: Array) -> String: return it[0]), screen_rect,
+			func(id: String) -> bool: return enabled.get(id, false))
 
 
 ## Нажатие кнопки id. Возвращает, что сделать игре: "dive" — одиночный забег (меню закрыто), "crew" — экран

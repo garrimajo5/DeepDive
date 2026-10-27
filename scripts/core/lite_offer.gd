@@ -96,10 +96,7 @@ static func screen_rect(id: String, size: Vector2) -> Rect2:
 func hit(p: Vector2, size: Vector2) -> String:
 	if not open:
 		return ""
-	for id: String in ["yes", "no"]:
-		if screen_rect(id, size).has_point(p):
-			return id
-	return ""
+	return Splash.hit_ids(p, size, ["yes", "no"], screen_rect)
 
 
 ## Нажатие: "yes" — включить «Экономно», "no" — отказ (запомнить); диалог закрывается. Иначе — "".
