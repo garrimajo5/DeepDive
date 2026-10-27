@@ -67,6 +67,7 @@ var warm_run := WarmRunner.new(self)   ## прогрев на сцене: зас
 var menu_flow := MenuFlow.new(self)   ## экраны меню: главное, настройки, «Экономно», журнал (#753)
 var overlay_flow := OverlayFlow.new(self)   ## подсказки, карточка роли, связь, рация поверх игры (#758)
 var crew_flow := CrewFlow.new(self)   ## товарищи на постах, руки экипажа, новый товарищ (#757)
+var pause_flow := PauseFlow.new(self)   ## «Назад», пауза ART-037, схема корабля ART-042 (#754)
 var hit_flash: ColorRect
 var visor: ColorRect          ## щиток сварщика: затемнение, пока свой игрок варит (Breach.VISOR)
 var sonar_view: SonarView
@@ -570,7 +571,7 @@ func step(dt: float) -> void:
 		return
 	if pause.open:   # пауза: игра стоит, касания — кнопкам паузы; меню сетевого забега — мир идёт без своего ввода
 		var stop := pause.stops_world()
-		_pause_step()
+		pause_flow.pause_step()
 		if stop or main_menu.open:
 			overlay_flow.hide_all()
 			return
@@ -1435,46 +1436,9 @@ func _address_do(what: String) -> void:
 					menu_panel.show_menu(main_menu)
 
 
-## Системная «Назад» (Esc на ПК): в забеге — пауза ART-037, в паузе закрывает сначала подтверждение, потом паузу;
-## в главном меню — выход из игры. В сетевом забеге — «Меню забега» (мир идёт); под шторкой «Корпус разрушен» и
-## диалогом обрыва связи ART-043 — без паузы.
+## Системная «Назад» (Esc на ПК): пауза, схема, экраны меню — `PauseFlow.back_pressed` (#754).
 func back_pressed() -> void:
-	if warm.active():
-		return
-	if ship_map.open:   # схема корабля — назад туда, откуда открыли (пауза)
-		_map_back()
-		return
-	if settings.open:   # настройки: сначала подтверждение сброса, потом — назад к меню или паузе
-		menu_flow.settings_do(settings.back())
-		_settings_show()
-		return
-	if main_menu.open and logbook.open:
-		logbook.back()
-		if not logbook.open:
-			save.flush(samples, scanner)
-		_journal_show()
-		return
-	if main_menu.open and address.open:   # экран адреса: сначала отмена попытки, потом вход сбора
-		_address_do(address.back())
-		if address_panel:
-			address_panel.show_screen(address)
-		return
-	if main_menu.open and lobby.open:   # комната — ко входу, вход — в меню (ART-028)
-		_lobby_back()
-		return
-	if main_menu.open:
-		save.flush(samples, scanner)
-		get_tree().quit()
-		return
-	if lite_offer.open:   # «Назад» над предложением «Экономно» — как «Нет»
-		menu_flow.offer_do(lite_offer.back())
-		return
-	if not pause.open:
-		if wreck.active() or (net_client != null and drop.blocks()):
-			return
-		pause.set_mode("host" if net_host != null else ("guest" if net_client != null else "solo"))
-	pause.back()
-	_pause_show()
+	pause_flow.back_pressed()
 
 
 func _unhandled_input(e: InputEvent) -> void:
@@ -1482,125 +1446,14 @@ func _unhandled_input(e: InputEvent) -> void:
 		back_pressed()
 
 
-func _pause_show() -> void:
-	if pause_panel == null:
-		pause_panel = PausePanel.new()
-		add_child(pause_panel)
-	if not pause.open and ship_map.open:   # пауза закрылась (шторка, обрыв связи) — схема с ней
-		ship_map.close()
-	pause_panel.show_pause(pause)
-	if ship_map.open:
-		pause_panel.visible = false
-	_map_show()
-	overlay.visible = not pause.open and not wreck.active()
-	hint.visible = not pause.open and not wreck.active()   # строки приборов не лезут к заголовку паузы
-	overlay.router.clear()   # палец, открывший или закрывший паузу, не идёт в игру
-
-
-## Шаг под паузой: касания кнопок. «Новый забег» — с начала спуска, «Выйти в меню» — главное меню ART-037.
-## Меню сетевого забега: хост — новый забег у всех или конец забега (гости теряют хоста), гость — «Покинуть экипаж».
-## Шторка «Корпус разрушен», обрыв связи или конец сети закрывают меню забега.
-func _pause_step() -> void:
-	var r := overlay.router
-	if not pause.stops_world() and (wreck.active() or (net_client != null and drop.blocks())
-			or (net_host == null and net_client == null)):
-		pause.close()
-		settings.close()
-		_settings_show()
-		_pause_show()
-		return
-	if ship_map.open:
-		_map_step(r)
-		r.end_frame()
-		return
-	if settings.open:
-		menu_flow.settings_step(r)
-		r.end_frame()
-		return
-	for p in r.taps:
-		var what := pause.press(pause.hit(p, get_viewport().get_visible_rect().size))
-		if what != "":
-			_pause_show()
-			match what:
-				"new":
-					_leave_posts()
-					_restart()
-					if net_host:
-						announce("Хост начал новый забег: Ковчег у начала спуска")
-					else:
-						say("Новый забег: Ковчег у начала спуска")
-				"exit":
-					if net_host:
-						_stop_host()
-					menu_flow.to_menu()
-				"leave":
-					_leave_net()
-					menu_flow.to_menu()
-				"settings":
-					open_settings()
-				"map":
-					open_map("pause")
-			break
-		pause_panel.show_pause(pause)
-	r.end_frame()
-
-
-## Схема корабля ART-042 поверх паузы / меню забега: кнопки паузы скрыты, касания — «Назад».
+## Схема корабля ART-042 поверх паузы / меню забега (`PauseFlow.open_map`).
 func open_map(where: String) -> void:
-	ship_map.open_from(where)
-	if pause_panel:
-		pause_panel.visible = false
-	_map_show()
-	overlay.router.clear()   # палец с пункта «Схема корабля» не жмёт «Назад»
+	pause_flow.open_map(where)
 
 
-## Кнопка «Схема» на подсказке первого забега: схема поверх паузы (одиночный забег стоит, в коопе мир идёт —
-## «Меню забега»), «Назад» — сразу к подсказке.
+## Кнопка «Схема» на подсказке первого забега (`PauseFlow.open_hint_map`).
 func open_hint_map() -> void:
-	pause.set_mode("host" if net_host != null else ("guest" if net_client != null else "solo"))
-	if not pause.open:
-		pause.back()
-	_pause_show()
-	open_map("hint")
-
-
-## «Назад» схемы: обратно в паузу; открыли с подсказки — к подсказке, пауза закрывается.
-func _map_back() -> void:
-	if ship_map.back() == "hint":
-		_map_show()
-		pause.close()
-		_pause_show()
-		return
-	_map_show()
-	if pause_panel:
-		pause_panel.show_pause(pause)
-	overlay.router.clear()
-
-
-## Шаг открытой схемы: касание «Назад»; в коопе мир идёт — отметки товарищей перерисовываются каждый шаг.
-func _map_step(r: Touch.Router) -> void:
-	for p in r.taps:
-		if ship_map.hit(p, get_viewport().get_visible_rect().size) == "back":
-			_map_back()
-			return
-	_map_show()
-
-
-## Данные схемы: отметки экипажа (свой — me), люки, тревога по главному полю табло.
-func _map_show() -> void:
-	if ship_map_panel == null:
-		if not ship_map.open:
-			return
-		ship_map_panel = ShipMapPanel.new()
-		add_child(ship_map_panel)
-	var marks: Array = []
-	for m: Crew.Member in crew:
-		marks.append([m.x, m.z, ShipMap.letter(m.role)])
-	var doors: Array[bool] = []
-	for d in layout.doors:
-		doors.append(d.passable())
-	var a := ShipMap.alarm(AlarmBoard.main_field(alarms_on()), breach.active)
-	ship_map_panel.show_map(ship_map, marks, crew.find(me), doors, a)
+	pause_flow.open_hint_map()
 
 
 ## Хост закрывает сетевой забег: гости отключены (у них — диалог обрыва связи), их фигуры и тени убраны.
@@ -1639,7 +1492,7 @@ func _on_destroyed() -> void:
 	pause.close()
 	if ship_map.open:
 		ship_map.close()
-		_map_show()
+		pause_flow.map_show()
 	if settings.open:
 		settings.close()
 		_settings_show()
