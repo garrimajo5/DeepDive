@@ -73,8 +73,7 @@ func _draw_screen() -> void:
 	else:
 		var r := lobby.rect("start", size)
 		var px := Lobby.SMALL_PX * s
-		draw.draw_string(font, Vector2(r.position.x, r.get_center().y + Splash.CAP_H * px * 0.5), lobby.start_text(),
-			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, roundi(px), MainMenu.SOFT)
+		UiStyle.label(draw, font, lobby.start_text(), r, px, MainMenu.SOFT)
 
 
 ## Карточка «Связь потеряна» (лист ART-028 «05»): заголовок, «Проверьте Wi-Fi…», «Готовность будет сброшена»,
@@ -233,8 +232,7 @@ func _button(font: Font, r: Rect2, label: String, s: float, kind: String, edge :
 			sb = _box(s, Color(MainMenu.PANEL, 0.92), edge)
 	draw.draw_style_box(sb, r)
 	var px := Lobby.BUTTON_PX * s
-	draw.draw_string(font, Vector2(r.position.x, r.get_center().y + Splash.CAP_H * px * 0.5), label,
-		HORIZONTAL_ALIGNMENT_CENTER, r.size.x, roundi(px), col)
+	UiStyle.label(draw, font, label, r, px, col)
 
 
 func _box(s: float, fill: Color, edge: Color, border := 2.0) -> StyleBoxFlat:

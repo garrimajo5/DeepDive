@@ -91,3 +91,14 @@ static func center(canvas: CanvasItem, font: Font, t: String, top: float, px: fl
 		size: Vector2) -> void:
 	text(canvas, font, t, Vector2(0.0, Splash.to_screen(Vector2(0.0, top), size).y), px, color, size.x,
 		HORIZONTAL_ALIGNMENT_CENTER)
+
+
+## Подпись кнопки: по центру плашки r, середина высоты заглавных — на середине r. Раньше — своя копия базовой линии
+## в каждой панели с кнопками.
+static func label(canvas: CanvasItem, font: Font, t: String, r: Rect2, px: float, color: Color) -> void:
+	canvas.draw_string(font, label_at(r, px), t, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, roundi(px), color)
+
+
+## Начало базовой линии подписи кнопки: левый край r, ниже середины r на половину высоты заглавных.
+static func label_at(r: Rect2, px: float) -> Vector2:
+	return Vector2(r.position.x, r.position.y + r.size.y * 0.5 + Splash.CAP_H * px * 0.5)

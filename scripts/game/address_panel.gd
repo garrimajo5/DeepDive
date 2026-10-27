@@ -89,8 +89,7 @@ func _button(font: Font, r: Rect2, label: String, px: float, s: float, kind: Str
 		_:
 			sb = _box(s, Color(MainMenu.PANEL, 0.88), MainMenu.EDGE)
 	draw.draw_style_box(sb, r)
-	var base := r.position.y + r.size.y * 0.5 + Splash.CAP_H * px * 0.5
-	draw.draw_string(font, Vector2(r.position.x, base), label, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, roundi(px), col)
+	UiStyle.label(draw, font, label, r, px, col)
 
 
 func _box(s: float, fill: Color, edge: Color) -> StyleBoxFlat:

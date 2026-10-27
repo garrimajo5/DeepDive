@@ -145,9 +145,7 @@ func _button(font: Font, r: Rect2, text: String, main_btn: bool, k: float, s: fl
 	draw.draw_style_box(UiStyle.menu_button(main_btn, s, 0.92, 1.0, k), r)
 	var col := MainMenu.DARK if main_btn else MainMenu.INK
 	var px := Settings.BUTTON_PX * s
-	var base := r.position.y + r.size.y * 0.5 + Splash.CAP_H * px * 0.5
-	draw.draw_string(font, Vector2(r.position.x, base), text, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, roundi(px),
-		Color(col, k))
+	UiStyle.label(draw, font, text, r, px, Color(col, k))
 
 
 ## Строка от левого края at.x макета, at.y — верх видимых глифов.
