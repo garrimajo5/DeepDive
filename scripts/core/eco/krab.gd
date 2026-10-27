@@ -29,6 +29,9 @@ const CRACK_DIST := 0.7
 const CRACK_TIME := 3.0
 const RESPAWN_MIN := 80.0
 const RESPAWN_MAX := 120.0
+## Поворот тела: доля угла 4/с, не быстрее 2,5 рад/с (EcoAgent.turn_flat) — не щёлкает при развороте к дому.
+const TURN_K := 4.0
+const TURN_MAX := 2.5
 ## Домой — 0,8 м/с (напуганный — 2), дома ближе 0,4 м.
 const HOME_SPEED := 0.8
 const SCARED_SPEED := 2.0
@@ -163,7 +166,6 @@ func step(world: EcoWorld, dt: float) -> void:
 			speed = SCARED_SPEED if cr.scared > 0.0 else HOME_SPEED
 			if _flat_dist(cr.pos, cr.den) < HOME_DIST:
 				cr.state = State.DEN
-				cr.dir = cr.out
 		State.GUARD:
 			raise = 1.0
 			if _flat_dist(cr.pos, cr.den) > HOME_DIST:
@@ -171,7 +173,7 @@ func step(world: EcoWorld, dt: float) -> void:
 			speed = GUARD_SPEED
 			var to_ship := Vector3(world.ship.pos.x - cr.pos.x, 0.0, world.ship.pos.z - cr.pos.z)
 			if to_ship.length_squared() > 0.01:
-				cr.dir = cr.dir.lerp(to_ship.normalized(), minf(1.0, dt * 3.0)).normalized()
+				cr.dir = EcoAgent.turn_flat(cr.dir, to_ship, dt, TURN_K, TURN_MAX)
 			if cr.guard_cd <= 0.0:
 				cr.guard_cd = GUARD_CD
 				world.emit(ID, "guard", cr.pos, _guard_text(world, false))
@@ -182,13 +184,15 @@ func step(world: EcoWorld, dt: float) -> void:
 			if d_ship > LEAVE_R:
 				cr.state = State.HOME
 	cr.moving = goal != Vector3.INF
+	if cr.state == State.DEN:
+		cr.dir = EcoAgent.turn_flat(cr.dir, cr.out, dt, TURN_K, TURN_MAX)   # в норе — лицом наружу, доворотом
 	if cr.moving:
 		var to := Vector3(goal.x - cr.pos.x, 0.0, goal.z - cr.pos.z)
 		var dist := to.length()
 		if dist > 0.05:
 			cr.pos += to * (minf(dist, speed * dt) / dist)
 			if cr.state != State.GUARD:
-				cr.dir = cr.dir.lerp(to / dist, minf(1.0, dt * 4.0)).normalized()
+				cr.dir = EcoAgent.turn_flat(cr.dir, to, dt, TURN_K, TURN_MAX)
 			cr.pos.y = _floor(world, cr.pos.x, cr.pos.z, cr.pos.y)   # стоящему — дно то же (issue #133)
 	cr.raise += (raise - cr.raise) * minf(1.0, dt * 5.0)
 

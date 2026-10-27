@@ -138,3 +138,22 @@ func confine(ground: Callable = Callable()) -> void:
 		p.y = ceiling
 	p.x = clampf(p.x, -EDGE, EDGE)
 	p.z = clampf(p.z, -EDGE, EDGE)
+
+
+## Курс по дну from доворачивает к want за dt вокруг вертикали: доля угла k/с, не быстрее max_rate рад/с
+## (донные — кольчужник, скальник). Ровно назад — разворот в одну сторону, а не через ноль: lerp векторов
+## навстречу проходил через нулевой курс, и тело щёлкало носом. Без вертикали; нулевой want — курс тот же.
+static func turn_flat(from: Vector3, want: Vector3, dt: float, k: float, max_rate: float) -> Vector3:
+	var w := Vector3(want.x, 0.0, want.z)
+	if w.length_squared() < 1e-8:
+		return from
+	w = w.normalized()
+	var f := Vector3(from.x, 0.0, from.z)
+	if f.length_squared() < 1e-8:
+		return w
+	f = f.normalized()
+	var ang := atan2(f.cross(w).y, f.dot(w))   # со знаком: + — влево (вокруг +Y)
+	if absf(ang) < 1e-4:
+		return w
+	var step := signf(ang) * minf(absf(ang) * minf(1.0, k * dt), max_rate * dt)
+	return f.rotated(Vector3.UP, step).normalized()
