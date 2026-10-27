@@ -454,6 +454,7 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	cushion_view.sync(world.time, ship.pos, ship, current.vel())
 	eel_view.sync(world.time, ship, current.vel(), world.ground)
 	raduzh_view.sync(world.time, ship.pos, ship.yaw)
+	raduzh_view.sync_dust(world.time, ship, current.vel())
 	ognevka_view.sync()
 	ognevka_view.sync_dust(world.time, ship, current.vel())
 	hvaten_view.sync(world.time, ship.pos, false, ship, current.vel())
