@@ -542,3 +542,17 @@ func test_restart_not_inside_mate() -> void:   # issue #602: новый забе
 	ok(d >= Crew.GAP, "свой игрок рядом с началом спуска, но не в товарище: %.2f м" % d)
 	ok(main.layout.can_stand(main.walker.x, main.walker.z), "и на полу")
 	ok(d < 1.0, "не дальше метра")
+
+
+func test_crew_freed_with_main() -> void:   # issue #779: ходок держал своего Member через stand_for — цикл RefCounted, утечка
+	var m: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(m)
+	await frames(2)
+	var me_ref: WeakRef = weakref(m.me)
+	var mate_ref: WeakRef = weakref(m.add_mate(0.0, -3.0, 0.0, Crew.Role.BIOLOGIST, 1))
+	ok(m.me.walker.stand.call(m.me.walker.x, m.me.walker.z), "ходок стоит на полу")
+	m.queue_free()
+	m = null
+	await frames(3)
+	ok(me_ref.get_ref() == null, "свой игрок освобождён вместе с main")
+	ok(mate_ref.get_ref() == null, "товарищ освобождён вместе с main")
