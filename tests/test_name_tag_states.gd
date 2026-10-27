@@ -96,7 +96,7 @@ func test_mate_press_lights_tag() -> void:
 
 func test_own_press_marks_me() -> void:
 	main.overlay.router.action_pressed = true
-	main._mark_presses(main.overlay.router, 1.0 / 30.0)
+	main.crew_flow.mark_presses(main.overlay.router, 1.0 / 30.0)
 	main.overlay.router.action_pressed = false
 	ok(main.me.active(), "свой нажал — гости увидят «нажимает» в кадре")
 
