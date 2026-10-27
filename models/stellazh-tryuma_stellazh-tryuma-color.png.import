@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://br6vjtf60gajw"
-path="res://.godot/imported/stellazh-tryuma_stellazh-tryuma-color.png-c3cd7d25b718e2f9eab64e89749ebfb0.ctex"
+path.s3tc="res://.godot/imported/stellazh-tryuma_stellazh-tryuma-color.png-c3cd7d25b718e2f9eab64e89749ebfb0.s3tc.ctex"
+path.etc2="res://.godot/imported/stellazh-tryuma_stellazh-tryuma-color.png-c3cd7d25b718e2f9eab64e89749ebfb0.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "e87b3b12115be5a2c24aa929ce7d910a"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/stellazh-tryuma_stellazh-tryuma-color.png"
-dest_files=["res://.godot/imported/stellazh-tryuma_stellazh-tryuma-color.png-c3cd7d25b718e2f9eab64e89749ebfb0.ctex"]
+dest_files=["res://.godot/imported/stellazh-tryuma_stellazh-tryuma-color.png-c3cd7d25b718e2f9eab64e89749ebfb0.s3tc.ctex", "res://.godot/imported/stellazh-tryuma_stellazh-tryuma-color.png-c3cd7d25b718e2f9eab64e89749ebfb0.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

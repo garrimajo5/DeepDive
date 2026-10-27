@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dhou8e1o0oth7"
-path="res://.godot/imported/pult-ekrany_pult-ekrany-color.png-1a18285c010e524e1af1854d64bb208a.ctex"
+path.s3tc="res://.godot/imported/pult-ekrany_pult-ekrany-color.png-1a18285c010e524e1af1854d64bb208a.s3tc.ctex"
+path.etc2="res://.godot/imported/pult-ekrany_pult-ekrany-color.png-1a18285c010e524e1af1854d64bb208a.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "77d0e6fa18a41ce3fb4d49bc1c05ef6d"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/pult-ekrany_pult-ekrany-color.png"
-dest_files=["res://.godot/imported/pult-ekrany_pult-ekrany-color.png-1a18285c010e524e1af1854d64bb208a.ctex"]
+dest_files=["res://.godot/imported/pult-ekrany_pult-ekrany-color.png-1a18285c010e524e1af1854d64bb208a.s3tc.ctex", "res://.godot/imported/pult-ekrany_pult-ekrany-color.png-1a18285c010e524e1af1854d64bb208a.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

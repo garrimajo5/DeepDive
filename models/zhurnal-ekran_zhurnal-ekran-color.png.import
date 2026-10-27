@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c2a2bm31e0tjt"
-path="res://.godot/imported/zhurnal-ekran_zhurnal-ekran-color.png-82850e2f72ba529a588690b4929ae47e.ctex"
+path.s3tc="res://.godot/imported/zhurnal-ekran_zhurnal-ekran-color.png-82850e2f72ba529a588690b4929ae47e.s3tc.ctex"
+path.etc2="res://.godot/imported/zhurnal-ekran_zhurnal-ekran-color.png-82850e2f72ba529a588690b4929ae47e.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "830ceccd70fced0a4e5fb7d26fc03fb0"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/zhurnal-ekran_zhurnal-ekran-color.png"
-dest_files=["res://.godot/imported/zhurnal-ekran_zhurnal-ekran-color.png-82850e2f72ba529a588690b4929ae47e.ctex"]
+dest_files=["res://.godot/imported/zhurnal-ekran_zhurnal-ekran-color.png-82850e2f72ba529a588690b4929ae47e.s3tc.ctex", "res://.godot/imported/zhurnal-ekran_zhurnal-ekran-color.png-82850e2f72ba529a588690b4929ae47e.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

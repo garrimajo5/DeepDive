@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b6ocgi37od75x"
-path="res://.godot/imported/shturval-koleso_shturval-koleso-color.png-ce60dec296a545147f87ab756269104c.ctex"
+path.s3tc="res://.godot/imported/shturval-koleso_shturval-koleso-color.png-ce60dec296a545147f87ab756269104c.s3tc.ctex"
+path.etc2="res://.godot/imported/shturval-koleso_shturval-koleso-color.png-ce60dec296a545147f87ab756269104c.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "cec579ff08883f14aedfdb0d41d9e6c2"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/shturval-koleso_shturval-koleso-color.png"
-dest_files=["res://.godot/imported/shturval-koleso_shturval-koleso-color.png-ce60dec296a545147f87ab756269104c.ctex"]
+dest_files=["res://.godot/imported/shturval-koleso_shturval-koleso-color.png-ce60dec296a545147f87ab756269104c.s3tc.ctex", "res://.godot/imported/shturval-koleso_shturval-koleso-color.png-ce60dec296a545147f87ab756269104c.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
