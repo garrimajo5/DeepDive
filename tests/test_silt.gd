@@ -96,7 +96,7 @@ func test_scene_silt_blinds_sonar() -> void:
 	var mi := main.silt_view.multimesh
 	var inside := 0
 	for i in mi.visible_instance_count:
-		var p := mi.get_instance_transform(i).origin
+		var p := main.silt_view.flake(i).origin
 		if HullPlan.inside_world(p, main.helm.pos, main.helm.yaw):
 			inside += 1
 	eq(inside, 0, "внутри корабля ила нет")
@@ -197,10 +197,35 @@ func test_bow_swarm_wraps() -> void:
 	for i in 30:
 		s.update(0.1, Vector3.ZERO, Vector3.ZERO)
 	sv.apply(s, 0.0, Vector3.ZERO, 0.0)
-	var a := sv.multimesh.get_instance_transform(0).origin
+	var a := sv.flake(0).origin
 	sv.apply(s, 0.0, Vector3(0.0, 0.0, -0.5), 0.0)
-	near(sv.multimesh.get_instance_transform(0).origin.distance_to(a), 0.0, 1e-4, "хлопок не едет с кораблём")
+	near(sv.flake(0).origin.distance_to(a), 0.0, 1e-4, "хлопок не едет с кораблём")
 	s.reset()
 	sv.apply(s, 0.0, Vector3.ZERO, 0.0)
 	eq(sv.shown, 0, "ила нет — хлопьев нет")
+	sv.free()
+
+
+## #847: хлопья уходят одним буфером, а не 900 вызовами; без ила — ни одной записи за кадр.
+func test_flakes_one_buffer_and_idle_without_silt() -> void:
+	var sv := SiltView.new()
+	var s := Silt.new()
+	sv.apply(s, 0.0, Vector3.ZERO, 0.0)
+	sv.apply(s, 0.1, Vector3.ZERO, 0.0)
+	eq(sv.writes, 0, "ила нет — буфер не отправляется")
+	s.spawn(Vector3(0, 0, -40), Silt.SCRAPE_R, Silt.SCRAPE_LIFE, "scrape").life = 30.0
+	for i in 30:
+		s.update(0.1, Vector3.ZERO, Vector3.ZERO)
+	sv.apply(s, 1.0, Vector3(500, 0, 500), 0.0)   # корабль далеко: ни один хлопок не пропущен, j-й — j-я карточка
+	eq(sv.writes, 1, "один вызов на кадр")
+	ok(sv.shown > 0, "хлопья есть")
+	var j := 8   # каждая девятая — крупная
+	var tr := sv.flake(j)
+	near(tr.basis.x.x, SiltView.card_scale(j), 1e-5, "масштаб карточки в буфере")
+	near(tr.basis.x.y, 0.0, 1e-6, "без поворота")
+	s.reset()
+	sv.apply(s, 2.0, Vector3.ZERO, 0.0)
+	ok(not sv.visible and sv.shown == 0, "ил осел — скрыт")
+	sv.apply(s, 2.1, Vector3.ZERO, 0.0)
+	eq(sv.writes, 1, "и больше не пишет")
 	sv.free()
