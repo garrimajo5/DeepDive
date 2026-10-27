@@ -5,7 +5,10 @@ extends RefCounted
 ## у слушателя — буфер против рывков сети и обратно в частоту микшера.
 ## Здесь только числа без узлов: `Encoder` (кадры захвата → пакеты, уровень), `Gate` («По голосу»: речь или тишина),
 ## `Decoder` (пакеты → кадры проигрывателя, уровень для «активности» таблички). Захват `AudioEffectCapture`,
-## проигрыватель `AudioStreamGenerator`, канал `NetLink` и разрешение микрофона Android — следующая часть.
+## Канал по сети — `NetLink.CH_VOICE` (`Host.send_voice`/`take_voice`, `Client.send_voice`/`take_voice`), голоса
+## нескольких товарищей у слушателя — `Room`. Что уходит и что звучит за шаг — `Station` (захват → пакеты, «По голосу»,
+## `link` для «Вас слышно», голоса → `Radio.heard`); узлы захвата `AudioEffectCapture` и проигрывателей
+## `AudioStreamGenerator` — `scripts/game/voice_io.gd` (`main.voice_io`). Разрешение микрофона Android — следующая часть.
 
 const RATE := 8000           ## частота голоса в сети, Гц
 const FRAME := 160           ## отсчётов в пакете — 20 мс
@@ -17,6 +20,8 @@ const GATE_HOLD := 0.3       ## речь держится после затих�
 const DELAY := 3             ## пакетов в буфере до начала проигрыша (60 мс)
 const MAX_BUF := 10          ## больше — самые старые выбрасываем (200 мс), отставание не копится
 const FADE := 0.9            ## затухание к нулю, когда пакетов нет, — без щелчка
+const LINK_HOLD := 0.3       ## «Вас слышно» держится столько после последнего пакета захвата, с
+const LEVEL_K := 4.0         ## СКЗ речи (≈ 0,05…0,25) → высота штрихов `Radio.heard` 0…1
 
 static var _table := PackedFloat32Array()
 
@@ -36,6 +41,17 @@ static func decode_sample(b: int) -> float:
 			var a := (pow(1.0 + MU, y) - 1.0) / MU
 			_table[i] = -a if i & 128 else a
 	return _table[b & 255]
+
+
+## СКЗ пакета (для «По голосу» по каждому пакету, не только по последнему).
+static func packet_level(p: PackedByteArray) -> float:
+	if p.size() != SIZE:
+		return 0.0
+	var sum := 0.0
+	for i in FRAME:
+		var v := decode_sample(p[HEAD + i])
+		sum += v * v
+	return sqrt(sum / FRAME)
 
 
 ## Номер `a` позже `b` с учётом перехода 65535 → 0.
@@ -208,4 +224,93 @@ class Decoder:
 				_pos -= 1.0
 				_a = _b
 				_b = _sample()
+		return out
+
+
+## Голоса товарищей у слушателя: по `Decoder` на место в экипаже. `take` — пакеты из `NetLink.take_voice`, `talking` —
+## чьи голоса сейчас звучат (для `Radio.heard` с уровнем `level`), `forget` — товарищ ушёл.
+class Room:
+	extends RefCounted
+	var decoders := {}           ## место в экипаже → Decoder
+
+	func take(packets: Array) -> void:
+		for e in packets:
+			if e is Array and (e as Array).size() == 2 and e[1] is PackedByteArray:
+				decoder(int(e[0])).push(e[1])
+
+	func decoder(who: int) -> Decoder:
+		if not decoders.has(who):
+			decoders[who] = Decoder.new()
+		return decoders[who]
+
+	func level(who: int) -> float:
+		return (decoders[who] as Decoder).level if decoders.has(who) else 0.0
+
+	## Места, чей голос сейчас звучит (проигрывается и не тишина пропавшего пакета).
+	func talking() -> Array[int]:
+		var out: Array[int] = []
+		for who: int in decoders:
+			var d: Decoder = decoders[who]
+			if d.playing() and d.level > 0.0:
+				out.append(who)
+		out.sort()
+		return out
+
+	func forget(who: int) -> void:
+		decoders.erase(who)
+
+
+## Голос игрока за шаг (рация ART-041): свой захват → пакеты в сеть, голоса товарищей → проигрыватели и `Radio.heard`.
+## Без узлов: кадры захвата и число кадров проигрывателя даёт `VoiceIO`. «Нажать и держать» — уходит всё, пока
+## `talk`; «По голосу» — только пакеты, где `Gate` открыт (тишина не идёт). `link` — захват даёт пакеты и есть куда
+## слать: «Вас слышно» по `Radio.link`, в «По голосу» — и в паузах речи.
+class Station:
+	extends RefCounted
+	var encoder := Encoder.new()
+	var gate := Gate.new()
+	var room := Room.new()
+	var link := false
+	var sent := 0                ## пакетов ушло (для теста и лога)
+	var _since := 1.0e9          ## с последнего пакета захвата, с
+	var _was := false
+
+	## Кадры захвата за шаг → пакеты к отправке. talk — `Radio.wants()`, by_voice — режим «По голосу»,
+	## online — есть куда слать (гость на борту или хост с гостями).
+	func outgoing(frames: PackedVector2Array, mix_rate: float, dt: float, talk: bool, by_voice: bool,
+			online: bool) -> Array[PackedByteArray]:
+		var out: Array[PackedByteArray] = []
+		if not talk:
+			if _was:
+				encoder.reset()
+				gate.open = false
+			_was = false
+			_since = 1.0e9
+			link = false
+			return out
+		_was = true
+		var ps := encoder.push(frames, mix_rate)
+		_since = 0.0 if not ps.is_empty() else _since + dt
+		for p in ps:
+			if not by_voice or gate.update(Voice.packet_level(p), float(Voice.FRAME) / Voice.RATE):
+				out.append(p)
+		link = online and _since <= Voice.LINK_HOLD
+		if online:
+			sent += out.size()
+		else:
+			out.clear()
+		return out
+
+	## Пакеты из `NetLink.take_voice` ([[место, пакет], …]).
+	func incoming(packets: Array) -> void:
+		room.take(packets)
+
+	## `count` кадров проигрывателя голоса места who.
+	func pull(who: int, count: int, mix_rate: float) -> PackedVector2Array:
+		return room.decoder(who).pull(count, mix_rate)
+
+	## Звучащие голоса: [[место, высота штрихов 0…1], …] для `Radio.heard`.
+	func voices() -> Array:
+		var out := []
+		for who in room.talking():
+			out.append([who, clampf(room.level(who) * Voice.LEVEL_K, 0.0, 1.0)])
 		return out
