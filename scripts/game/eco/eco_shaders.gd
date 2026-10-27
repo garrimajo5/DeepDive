@@ -117,9 +117,16 @@ shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
 uniform int mode = 0;
 uniform vec4 tint : source_color = vec4(1.0);
-// щупальца: время и пульс купола
+// щупальца: время и пульс купола; волна пульса вниз — (размах, рад/с, фаза вуали, отставание на звено), рост к
+// кончику grow, звеньев seg; снос течением flow (м/с) на долю trail длины; sway_k — 0 на «Экономно»
 uniform float t = 0.0;
 uniform float swell = 1.0;
+uniform vec4 wave = vec4(0.0);
+uniform float grow = 0.0;
+uniform float seg = 10.0;
+uniform float trail = 0.0;
+uniform vec3 flow = vec3(0.0);
+uniform float sway_k = 1.0;
 // пузыри
 uniform float drift = 0.0;
 uniform float size_low = 0.1;
@@ -146,8 +153,16 @@ void vertex() {
 		float j = UV.y;
 		vec3 p = vec3(VERTEX.x * swell, VERTEX.y, VERTEX.z * swell);
 		if (j > 0.5) {
+			float h = j / seg;
+			float sj = mix(swell, 1.0 + sin(t * wave.y + wave.z - j * wave.w) * wave.x * (1.0 + grow * h), sway_k);
+			p.xz = VERTEX.xz * sj;
 			p.x += sin(t * 0.9 + (j - 1.0) * 0.45 + k) * j * 0.12;
 			p.z += cos(t * 0.7 + (j - 1.0) * 0.4 + k * 1.3) * j * 0.12;
+			// снос течением (EcoVeil.trail): глубина звена — -VERTEX.y, длина нити — она же / h
+			float depth = -VERTEX.y;
+			vec3 off = flow / 0.3 * (trail * (0.85 + 0.15 * sin(t * 0.4 + wave.z)) * h * depth) * sway_k;
+			off.y = dot(off, off) / (2.0 * max(depth / max(h, 0.01), 0.1));
+			p += off;
 		}
 		VERTEX = p;
 	} else if (mode == 2) {
