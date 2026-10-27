@@ -6,6 +6,7 @@ extends MeshInstance3D
 ## Стоит на слое отмели (OceanView.LAYER_WORLD). Кусты колышутся в течении мира (план реализма Б3): доля высоты
 ## вершины над подножием — UV2.x, подножие и высота куста — массивы foot/tall, формула — общий кусок EcoShaders.SWAY
 ## (двойник EcoCurrent.sway); коралл жёсткий — изгиб BEND меньше, чем у веерника. «Экономно» — EcoShaders.set_sway_lite.
+## Куст рывком гасит кончики — у них облачка слизи (EcoCoralDust): дочерний MultiMesh «Муть», +1 вызов.
 
 const SHADER := """
 shader_type spatial;
@@ -61,6 +62,15 @@ var heights := PackedFloat32Array()
 var feet := PackedVector3Array()
 var talls := PackedFloat32Array()
 
+## Облачка слизи у кончиков (EcoCoralDust) — дочерний MultiMesh «Муть» на общем шейдере EcoShaders.MIST; буфер —
+## для тестов.
+var dust := EcoCoralDust.new()
+var dust_view: MultiMeshInstance3D
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
+
 var _mat: ShaderMaterial
 
 
@@ -113,6 +123,8 @@ func _init(system: EcoCoral) -> void:
 		EcoShaders.follow(_mat)
 		m.surface_set_material(0, _mat)
 	mesh = m
+	dust_view = GrazerView.build_dust(EcoCoralDust.POOL)
+	add_child(dust_view)
 	glows.resize(coral.bushes.size())
 	glows.fill(-1.0)
 	sync()
@@ -129,6 +141,14 @@ func sync() -> bool:
 		_mat.set_shader_parameter("glow", glows)
 		uploads += 1
 	return dirty
+
+
+## Облачки слизи в момент t (время мира): ship — корабль (дальние не пылят, в луче — светлее), flow — течение мира.
+func sync_dust(t: float, ship: EcoLink.ShipState, flow := Vector3.ZERO) -> void:
+	dust.update(coral, t, ship.pos if ship != null else Vector3.ZERO)
+	_dust.pack(dust.dust, t, flow, ship, EcoCoralDust.COLOR, EcoCoralDust.LIT)
+	if _dust.changed:   # облачков нет и не было — буфер тот же, не грузим (issue #133)
+		dust_view.multimesh.buffer = _dust.data
 
 
 ## Смещение вершины i в течении flow в момент t — двойник шейдера (EcoCurrent.sway с подножием и высотой куста).
