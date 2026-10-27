@@ -1,9 +1,10 @@
 class_name EelView
 extends Node3D
-## Стеклоусты в сцене (initEels/eelRender в js/creatures.js; ART-006, `docs/concept-art/stekloust-skrebun.md`): пять
+## Стеклоусты в сцене (initEels/eelRender в js/creatures.js; ART-006, `docs/concept-art/stekloust-skrebun.md`): четыре
 ## MultiMesh на всех — камни логов (бурые, гранёные), прозрачная оболочка (#9AD9E8, звенья тела и голова), внутренности
-## (#607F89, без своего света), два красных глаза (#E34D50, светятся сами — единственный свет вида) и кольцо присоски
-## у пасти (на стекле расплющено). Муть у дна (EcoEelDust: клуб у устья при выходе и возвращении, след у дна в броске) —
+## вместе с глазами (#607F89 без своего света и два красных глаза #E34D50, светятся сами — единственный свет вида;
+## один шар, цвет экземпляра, свет глаз — по альфе цвета на общем шейдере растений `EcoShaders.Plant.TENTACLE`,
+## #849: было два вызова отрисовки) и кольцо присоски у пасти (на стекле расплющено). Муть у дна (EcoEelDust: клуб у устья при выходе и возвращении, след у дна в броске) —
 ## дочерний MultiMesh «Муть» в мировых координатах, общий шейдер EcoShaders.MIST (INK). Стоит на слое отмели
 ## (OceanView.LAYER_WORLD).
 
@@ -27,19 +28,21 @@ const RING_FLAT := Vector3(1.35, 1.35, 0.5)
 ## На ходу тело виляет: смещение вбок sin(10t − 0,9k) · 0,05k.
 const WAG := 0.05
 const STRIDE := 12
+## Запись экземпляра с цветом: трансформ и RGBA.
+const CSTRIDE := 16
 
 var eels: EcoEel
 var rocks: MultiMeshInstance3D
 var shell: MultiMeshInstance3D
+## Внутренности и глаза одним MultiMesh (#849): сначала n · (SEGS − 1) звеньев, потом n · 2 глаза.
 var organs: MultiMeshInstance3D
-var eyes: MultiMeshInstance3D
 var rings: MultiMeshInstance3D
 ## Последние буферы (для тестов).
 var shell_buffer := PackedFloat32Array()
 var ring_buffer := PackedFloat32Array()
 
-var _organ_buffer := PackedFloat32Array()
-var _eye_buffer := PackedFloat32Array()
+## Буфер внутренностей и глаз (трансформ и цвет экземпляра, CSTRIDE): цвета пишутся один раз при сборке.
+var organ_buffer := PackedFloat32Array()
 ## Муть от угрей и её MultiMesh; буфер мути — для тестов.
 var dust := EcoEelDust.new()
 var dust_view: MultiMeshInstance3D
@@ -56,8 +59,9 @@ func _init(system: EcoEel) -> void:
 	var n := eels.eels.size()
 	rocks = EcoMM.instance(self, "Камни логов", build_rock(), n * EcoEel.ROCKS.size(), false)
 	shell = EcoMM.instance(self, "Оболочка", _sphere(10, 6, _shell_material()), n * EcoEel.SEGS, false)
-	organs = EcoMM.instance(self, "Внутренности", _sphere(6, 4, _flat(ORGANS, false)), n * (EcoEel.SEGS - 1), false)
-	eyes = EcoMM.instance(self, "Глаза", _sphere(6, 4, _flat(EYE, true), EYE_R), n * EYES.size(), false)
+	organs = EcoMM.instance(self, "Внутренности", _sphere(6, 4, _organ_material()), n * (EcoEel.SEGS - 1 + EYES.size()),
+		true)
+	_paint_organs(n)
 	rings = EcoMM.instance(self, "Присоска", _ring(), n, false)
 	dust_view = GrazerView.build_dust(EcoEelDust.POOL)
 	add_child(dust_view)
@@ -86,13 +90,30 @@ static func _shell_material() -> StandardMaterial3D:
 	return mat
 
 
-static func _flat(c: Color, glow: bool) -> StandardMaterial3D:
+## Внутренности и глаза: шейдер щупалец хватня (Plant.TENTACLE) без колыхания и просвета — цвет экземпляра в
+## альбедо, альфа цвета 1 — светится сам (глаз), 0 — без своего света.
+static func _organ_material() -> ShaderMaterial:
+	return EcoShaders.plant(EcoShaders.Plant.TENTACLE, {"rough": 0.8, "spec": 0.4, "tip_glow": Vector2(0.0, 1.0),
+		"back": Vector3.ZERO})
+
+
+## Цвета экземпляров внутренностей и глаз. Цвет экземпляра — sRGB как есть: снимок сверен с прежним
+## StandardMaterial (#607F89), с переводом в линейный внутренности выходили на четверть темнее.
+func _paint_organs(n: int) -> void:
+	var organ_n := n * (EcoEel.SEGS - 1)
+	organ_buffer.resize(organs.multimesh.instance_count * CSTRIDE)
+	var oc := ORGANS
+	var ec := EYE
+	for i in organs.multimesh.instance_count:
+		var c := Color(oc, 0.0) if i < organ_n else Color(ec, 1.0)
+		var o := i * CSTRIDE + STRIDE
+		organ_buffer[o] = c.r; organ_buffer[o + 1] = c.g; organ_buffer[o + 2] = c.b; organ_buffer[o + 3] = c.a
+
+
+static func _flat(c: Color) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = c
-	if glow:
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	else:
-		mat.roughness = 0.8
+	mat.roughness = 0.8
 	return mat
 
 
@@ -103,7 +124,7 @@ static func _ring() -> TorusMesh:
 	m.outer_radius = 0.34
 	m.rings = 16
 	m.ring_segments = 6
-	m.material = _flat(RING, false)
+	m.material = _flat(RING)
 	return m
 
 
@@ -159,8 +180,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground
 	_sync_dust(t, ship, flow, ground)
 	var n := eels.eels.size()
 	shell_buffer.resize(n * EcoEel.SEGS * STRIDE)
-	_organ_buffer.resize(n * (EcoEel.SEGS - 1) * STRIDE)
-	_eye_buffer.resize(n * EYES.size() * STRIDE)
+	var eye0 := n * (EcoEel.SEGS - 1)
 	ring_buffer.resize(n * STRIDE)
 	for e in eels.eels:
 		var segs := e.segs
@@ -177,20 +197,20 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground
 			var b := _look(dir)
 			EcoMM.put(shell_buffer, (e.index * EcoEel.SEGS + k) * STRIDE,
 				Transform3D(b.scaled_local(Vector3(r, r * 0.85, r * SEG_STRETCH)), pos))
-			EcoMM.put(_organ_buffer, (e.index * (EcoEel.SEGS - 1) + k - 1) * STRIDE,
+			EcoMM.put(organ_buffer, (e.index * (EcoEel.SEGS - 1) + k - 1) * CSTRIDE,
 				Transform3D(b.scaled_local(Vector3(r, r * 0.8, r * SEG_STRETCH) * ORGAN_K), pos - Vector3(0, r * 0.15, 0)))
 		var hb := _look(e.face)
 		var head := Transform3D(hb, segs[0])
 		EcoMM.put(shell_buffer, e.index * EcoEel.SEGS * STRIDE, Transform3D(hb.scaled_local(HEAD), segs[0]))
 		for j in EYES.size():
-			EcoMM.put(_eye_buffer, (e.index * EYES.size() + j) * STRIDE, Transform3D(hb, head * EYES[j]))
+			EcoMM.put(organ_buffer, (eye0 + e.index * EYES.size() + j) * CSTRIDE,
+				Transform3D(hb.scaled_local(Vector3.ONE * EYE_R), head * EYES[j]))
 		var rb := hb * Basis(Vector3.RIGHT, PI / 2.0)
 		if e.latched():
 			rb = hb.scaled_local(RING_FLAT) * Basis(Vector3.RIGHT, PI / 2.0)
 		EcoMM.put(ring_buffer, e.index * STRIDE, Transform3D(rb, head * RING_AT))
 	shell.multimesh.buffer = shell_buffer
-	organs.multimesh.buffer = _organ_buffer
-	eyes.multimesh.buffer = _eye_buffer
+	organs.multimesh.buffer = organ_buffer
 	rings.multimesh.buffer = ring_buffer
 
 
@@ -207,7 +227,7 @@ static func _look(dir: Vector3) -> Basis:
 
 
 ## Расстановка экземпляра n из буфера.
-static func transform_at(buf: PackedFloat32Array, n: int) -> Transform3D:
-	var i := n * STRIDE
+static func transform_at(buf: PackedFloat32Array, n: int, stride := STRIDE) -> Transform3D:
+	var i := n * stride
 	return Transform3D(Vector3(buf[i], buf[i + 4], buf[i + 8]), Vector3(buf[i + 1], buf[i + 5], buf[i + 9]),
 		Vector3(buf[i + 2], buf[i + 6], buf[i + 10]), Vector3(buf[i + 3], buf[i + 7], buf[i + 11]))

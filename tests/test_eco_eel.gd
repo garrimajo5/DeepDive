@@ -394,7 +394,7 @@ func test_same_seed_same_story() -> void:
 
 # ---------- Сцена ----------
 
-func test_view_five_multimeshes() -> void:
+func test_view_four_multimeshes() -> void:
 	var w := _world()
 	var eels := _eels(w)
 	var view := EelView.new(eels)
@@ -404,12 +404,13 @@ func test_view_five_multimeshes() -> void:
 		if c is MultiMeshInstance3D:
 			mm += 1
 			eq((c as MultiMeshInstance3D).layers, OceanView.LAYER_WORLD, "%s — на слое отмели" % c.name)
-	eq(mm, 6, "камни, оболочка, внутренности, глаза, присоска и муть — шесть вызовов")
+	eq(mm, 5, "камни, оболочка, внутренности с глазами, присоска и муть — пять вызовов (#849)")
 	eq(view.rocks.multimesh.instance_count, 5, "пять камней логова")
 	eq(view.shell.multimesh.instance_count, EcoEel.SEGS, "голова и 13 звеньев")
 	var e := eels.eels[0]
 	view.sync(w.time)
 	near(EelView.transform_at(view.shell_buffer, 0).origin.distance_to(e.segs[0]), 0.0, 1e-4, "голова на месте")
+	_check_organs(view, e)
 	var ring := EelView.transform_at(view.ring_buffer, 0)
 	near(ring.basis.get_scale().x, 1.0, 1e-3, "в логове кольцо круглое")
 	e.cd = 0.0
@@ -433,3 +434,25 @@ func test_eco_view_has_eels() -> void:
 	ok(view.eel_view != null and view.eel_view.get_parent() == view, "и в сцене")
 	view.queue_free()
 	await frames(1)
+
+
+## Внутренности и глаза — один MultiMesh (#849): звенья без своего света, за ними глаза у головы, светятся сами.
+func _check_organs(view: EelView, e: EcoEel.Eel) -> void:
+	var mm := view.organs.multimesh
+	var n := view.eels.eels.size()
+	var organ_n := n * (EcoEel.SEGS - 1)
+	eq(mm.instance_count, organ_n + n * EelView.EYES.size(), "звенья и глаза в одном MultiMesh")
+	ok(mm.use_colors, "цвет экземпляра")
+	ok(view.find_child("Глаза", false, false) == null, "отдельного узла глаз нет")
+	var mat := (mm.mesh as SphereMesh).material as ShaderMaterial
+	ok(mat != null and mat.shader == EcoShaders.shader(EcoShaders.PLANT), "общий шейдер растений, нового нет")
+	var buf := view.organ_buffer
+	eq(buf.size(), mm.instance_count * EelView.CSTRIDE, "буфер с цветами")
+	near(buf[EelView.STRIDE + 3], 0.0, 1e-6, "звено без своего света")
+	var eye := organ_n + e.index * EelView.EYES.size()
+	near(buf[eye * EelView.CSTRIDE + EelView.STRIDE + 3], 1.0, 1e-6, "глаз светится сам")
+	near(buf[eye * EelView.CSTRIDE + EelView.STRIDE], EelView.EYE.r, 1e-6, "глаз красный")
+	near(buf[EelView.STRIDE], EelView.ORGANS.r, 1e-6, "звено — цвета внутренностей")
+	var tr := EelView.transform_at(buf, eye, EelView.CSTRIDE)
+	near(tr.origin.distance_to(e.segs[0]), EelView.EYES[0].length(), 1e-3, "глаз у головы")
+	near(tr.basis.get_scale().x, EelView.EYE_R, 1e-4, "глаз маленький")
