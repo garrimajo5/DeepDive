@@ -40,4 +40,3 @@ if len(sys.argv)>2:
     detail=Image.open(sys.argv[2]).convert('RGB').resize((2048,1152),Image.Resampling.LANCZOS)
     ImageOps.posterize(detail,5).save(ROOT/'02-stvorka.png',optimize=True)
     print('02-stvorka.png',(ROOT/'02-stvorka.png').stat().st_size)
-
