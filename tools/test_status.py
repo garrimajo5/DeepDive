@@ -104,7 +104,8 @@ class Render(unittest.TestCase):
         self.assertIn("2/4", page)                       # 1 галочка + 1 подзадача из 2+2
         self.assertIn("#11 Вопрос", page)                # ждёт владельца — issue
         self.assertIn("два — эпик #10", page)            # ждёт владельца — задача чек-листа
-        self.assertIn("нет исполнителя-агента", page)    # звук и сюжет без агента
+        self.assertIn("Сюжет и тексты (Codex пишет, владелец утверждает)", page)  # тексты — Codex, 27.10
+        self.assertNotIn("нет исполнителя-агента", page)
 
     def test_on_hold_not_waiting_owner_and_verify_is_qa(self):
         ms = [{"number": 4, "title": "Этап 4. Забег", "state": "open"}]
