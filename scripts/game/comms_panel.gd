@@ -1,7 +1,7 @@
 class_name CommsPanel
 extends Control
 ## Плашка внутренней связи ART-040 внизу по центру (состояние, строки и места — `Comms`). Касания идут через
-## `Touch.Router.taps`/`blocks` (`Main._comms_step`), сам узел их не ловит. Палитра ART-028/040: заливка #0B1C24,
+## `Touch.Router.taps`/`blocks` (`OverlayFlow.comms_step`), сам узел их не ловит. Палитра ART-028/040: заливка #0B1C24,
 ## контур #67DDEB, текст #D5E4E8/#9AD9E8, неактивное #6E909A, кнопка #102B37 с контуром #32616D. Красного и янтаря нет.
 
 const TEXT := UiStyle.TEXT

@@ -9,7 +9,7 @@ extends RefCounted
 ## «Вас слышно» — только когда голос реально уходит (`link`). Захват и передача голоса — решение владельца
 ## (встроенные средства Godot, разрешение микрофона Android), поэтому `link` пока всегда false и рация в игре скрыта
 ## (`Radio.enabled`); раскладка, состояния и список — здесь, рисует `scripts/game/radio_panel.gd` (`main.radio_panel`),
-## удержание — `Touch.Router.held_in` по `blocks` (`Main._radio_step`), снимок `shot.gd raciya=…`.
+## удержание — `Touch.Router.held_in` по `blocks` (`OverlayFlow.radio_step`), снимок `shot.gd raciya=…`.
 
 enum Mode { HOLD, VOICE }
 
@@ -67,7 +67,7 @@ var toggled := false     ## «По голосу»: микрофон включё
 var hidden := false      ## меню, пауза, шторки, вне забега — передачи нет
 var ask := 0.0           ## сколько ещё держать «Разрешите микрофон»
 var settings_wanted := false   ## нажали «В настройки» (забирает `Main`)
-var pinned := false      ## снимок `shot.gd raciya=…`: состояние держится как задано, `Main._radio_step` только рисует
+var pinned := false      ## снимок `shot.gd raciya=…`: состояние держится как задано, `OverlayFlow.radio_step` только рисует
 var talkers: Array[Talker] = []
 var _was_down := false
 

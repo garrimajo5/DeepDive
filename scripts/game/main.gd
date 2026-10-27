@@ -65,6 +65,7 @@ var timeline := RunTimeline.new()   ## хронометраж забега (#633
 var curtain: WarmSplash   ## заставка прогрева (ART-034), после прогрева — null
 var warm_run := WarmRunner.new(self)   ## прогрев на сцене: заставка, взгляды, скрытое на кадр (#752)
 var menu_flow := MenuFlow.new(self)   ## экраны меню: главное, настройки, «Экономно», журнал (#753)
+var overlay_flow := OverlayFlow.new(self)   ## подсказки, карточка роли, связь, рация поверх игры (#758)
 var hit_flash: ColorRect
 var visor: ColorRect          ## щиток сварщика: затемнение, пока свой игрок варит (Breach.VISOR)
 var sonar_view: SonarView
@@ -363,7 +364,7 @@ func _ready() -> void:
 	role_card_panel = RoleCardPanel.new()   # карточка роли ART-045: касания — через Router.blocks/taps
 	role_card_panel.name = "Карточка роли"
 	ui.add_child(role_card_panel)
-	comms_panel = CommsPanel.new()   # плашка связи ART-040: касания — через Router.blocks/taps (`_comms_step`)
+	comms_panel = CommsPanel.new()   # плашка связи ART-040: касания — через Router.blocks/taps (`OverlayFlow.comms_step`)
 	comms_panel.name = "Связь"
 	ui.add_child(comms_panel)
 	radio_panel = RadioPanel.new()   # рация ART-041: кнопка «Говорить» и список говорящих; касания — Router.blocks
@@ -563,14 +564,14 @@ func step(dt: float) -> void:
 	if qa:
 		qa.tick(dt)
 	if main_menu.open and not warm.active():   # главное меню: игра стоит, касания — кнопкам меню
-		_tutorial_hide()
+		overlay_flow.hide_all()
 		menu_flow.menu_step(dt)
 		return
 	if pause.open:   # пауза: игра стоит, касания — кнопкам паузы; меню сетевого забега — мир идёт без своего ввода
 		var stop := pause.stops_world()
 		_pause_step()
 		if stop or main_menu.open:
-			_tutorial_hide()
+			overlay_flow.hide_all()
 			return
 		if settings.open:   # палец на ползунке настроек держится, но в игру не идёт
 			overlay.router.mute()
@@ -793,13 +794,13 @@ func step(dt: float) -> void:
 	clock.lap("интерфейс/маршрут", Time.get_ticks_usec())   # подчасти — в худшем кадре лога тестера (#745)
 	_update_ui()   # до меток: плашка строки уже на месте этого кадра (#387)
 	clock.lap("интерфейс/приборы", Time.get_ticks_usec())
-	_tutorial_step(dt)
+	overlay_flow.tutorial_step(dt)
 	clock.lap("интерфейс/подсказки", Time.get_ticks_usec())
-	_card_step(dt)
+	overlay_flow.card_step(dt)
 	clock.lap("интерфейс/карточка роли", Time.get_ticks_usec())
-	_comms_step(dt)
+	overlay_flow.comms_step(dt)
 	clock.lap("интерфейс/связь", Time.get_ticks_usec())
-	_radio_step(dt)
+	overlay_flow.radio_step(dt)
 	clock.lap("интерфейс/рация", Time.get_ticks_usec())
 	busy_marks.plate = status_rect()
 	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
@@ -1788,145 +1789,9 @@ func sit_at_helm() -> void:
 	tutorial.note(Tutorial.Ev.SAT)
 
 
-## Подсказки первого забега ART-038: скрыты под тревогой, голосованием, итогом, облётом, шторкой, паузой и меню
-## (шаг стоит); у гостя сети — свои шаги без сонара (`Tutorial.Guest`). Пройдено — запомнить в настройках.
-func _tutorial_step(dt: float) -> void:
-	var hidden := alarms_on().has(true) or at_vote or run.ended or pause.open \
-		or main_menu.open or settings.open or flyby.active() or warm.active() or wreck.active() or walker.noclip
-	if tutorial.update(dt, hidden):
-		settings.hints_done = true
-		settings.write()
-	var near := near_post
-	var target := tutorial.pointer_target(pilot.seated) if tutorial.shown() else ""
-	var edge := hint_pointer.show_pointer(target, near == target or (at_power and target == "energy"), tutorial.a, dt,
-		get_viewport().get_camera_3d(), camera)
-	tutorial_panel.show_tutorial(tutorial, tutorial.text(pilot.seated, near),
-		tutorial.highlight(pilot.seated, at_power, near), status_rect(),
-		power_panel.box() if power_panel.visible else Rect2(), edge,
-		not hidden and tutorial.map_wanted(target, near, at_power))
-	var m := tutorial_panel.map_rect()
-	for p in overlay.router.taps:
-		if m.has_point(p):
-			open_hint_map()
-			return
-
-
-## Карточка роли у поста ART-045: пост, у которого стоит свой игрок, своей ли он роли (в одиночном забеге — все
-## свои), что её скрывает; касания карточки и «?» — из `Router.taps`, взгляд под ними не крутится (`Router.blocks`).
-func _card_step(dt: float) -> void:
-	var at := RoleCard.post_at(pilot.seated, at_power, near_post)
-	var solo := net_client == null and net_mates.is_empty()
-	var hidden := alarms_on().has(true) or at_vote or at_power or run.ended or pause.open or main_menu.open or settings.open \
-		or flyby.active() or warm.active() or wreck.active() or walker.noclip or brief.k > 0.0 \
-		or (net_client != null and drop.active())
-	var quiet := tutorial.active() or (at != "" and Crew.holder(crew, me, at) != null)
-	var changed := role_card.update(dt, at, RoleCard.is_own(at, me.role, solo), hidden, quiet)
-	var size := get_viewport().get_visible_rect().size
-	role_card.status = status_rect()
-	var avoid: Array = []
-	if power_panel.visible:
-		avoid.append(power_panel.box())
-	if route_card.visible:
-		avoid.append(route_card.rect)
-	var rect := RoleCard.card_rect(role_card.post, size, avoid, status_rect()) if role_card.open else Rect2()
-	if role_card.open and not rect.has_area():   # места нет — сразу «?»
-		changed = role_card.fold() or changed
-	if not hidden:
-		var before := role_card.read.size()
-		for p in overlay.router.taps:
-			if role_card.tap(p, size, rect) == "ask":   # «?» — карточка снова на своём месте
-				rect = RoleCard.card_rect(role_card.post, size, avoid, status_rect())
-		changed = changed or role_card.read.size() != before
-	overlay.router.blocks = role_card.blocks(size, rect)
-	if tutorial_panel.map_rect().has_area():   # кнопка «Схема» на подсказке: палец там не крутит взгляд
-		overlay.router.blocks.append(tutorial_panel.map_rect())
-	if changed:
-		settings.cards = role_card.read_list()
-		settings.write()
-	role_card_panel.show_card(role_card, rect if rect.has_area() else role_card_panel.rect)
-
-
-## Внутренняя связь ART-040: при голосовании, итоге, меню, паузе, брифинге (и шторках) — отложена, часы стоят;
-## «Спросить код» / «Понятно» — из `Router.taps`, кнопка не крутит взгляд (`Router.blocks`, после карточки роли).
-## Где раскладывать плашку связи: безопасная область крестовины и кнопок (`Touch.Layout.area`), пока её нет — экран.
+## Где раскладывать плашку связи ART-040 — пересылка `OverlayFlow.comms_area` (тесты, `tools/shot.gd`, `QaRunner`).
 func comms_area() -> Rect2:
-	var area := overlay.router.layout.area
-	return area if area.has_area() else get_viewport().get_visible_rect()
-
-
-func _comms_step(dt: float) -> void:
-	var hidden := _overlay_hidden()
-	comms.solo = net_client == null and net_mates.is_empty()
-	comms.follow = net_client != null   # гость: плашка и проверка — по кадру хоста (`Comms.apply`)
-	var size := get_viewport().get_visible_rect().size
-	if net_client == null:
-		for m: Crew.Member in crew:   # «Спросить код» / «Понятно» гостя — его сообщению (`Crew.Pad.ask`)
-			if m != me and m.pad.ask > 0:
-				comms.press(m.pad.ask)
-				m.pad.ask = 0
-	comms.update(dt, hidden)
-	var area := comms_area()   # плашка в безопасной области, как крестовина: вырез не сдвигает её на крестовину (#603)
-	if not hidden:
-		for p in overlay.router.taps:
-			comms.tap(p - area.position, area.size)
-	if comms.asked > 0:   # гость: нажатие уходит хосту со следующим вводом
-		net_pad.ask = comms.asked
-		comms.asked = 0
-	for r in comms.blocks(area.size):
-		overlay.router.blocks.append(Rect2(r.position + area.position, r.size))
-	comms_panel.show_comms(comms, time, area)
-
-
-## Плашки поверх игры (связь ART-040, рация ART-041) не показываются: голосование, итог, меню, пауза, брифинг, шторки.
-func _overlay_hidden() -> bool:
-	return at_vote or run.ended or pause.open or main_menu.open or settings.open or ship_map.open \
-		or brief.k > 0.0 or flyby.active() or warm.active() or wreck.active() or (net_client != null and drop.active())
-
-
-## Рация ART-041 в коопе: «Нажать и держать» — палец на кнопке (`Router.held_in`), меню и пауза обрывают передачу;
-## кнопка не крутит взгляд (`Router.blocks`). Голоса пока нет (решение владельца) — `Radio.enabled` выключено.
-func _radio_step(dt: float) -> void:
-	if radio.pinned:
-		radio_panel.show_radio(radio, time)
-		return
-	radio.on = Radio.enabled and (net_client != null or not net_mates.is_empty())
-	var size := get_viewport().get_visible_rect().size
-	radio.update(dt, overlay.router.held_in(Radio.button_rect(size)), _overlay_hidden())
-	_radio_sight()
-	for p in overlay.router.taps:
-		radio.tap(p, size)
-	radio.settings_wanted = false   # запрос разрешения микрофона Android — вместе с голосом
-	overlay.router.blocks.append_array(radio.blocks(size))
-	radio_panel.show_radio(radio, time)
-
-
-## Говорящий товарищ в поле зрения или за стеной (ART-041): за закрытым люком — строка «Вне поля зрения», табличка
-## над ним без «активности» (`ShipLayout.in_sight`).
-func _radio_sight() -> void:
-	for t in radio.talkers:
-		if t.id >= 0 and t.id < crew.size():
-			t.seen = ShipLayout.in_sight(me.z, (crew[t.id] as Crew.Member).z, layout.doors)
-
-
-func _tutorial_hide() -> void:
-	tutorial.a = 0.0
-	comms.a = 0.0   # плашка связи ART-040 под меню и паузой не висит: после — снова по `_comms_step`
-	if comms_panel != null and comms_panel.visible:
-		comms_panel.visible = false
-	radio.update(0.0, false, true)   # рация ART-041: меню и пауза обрывают передачу сразу
-	if radio_panel != null and radio_panel.visible:
-		radio_panel.visible = false
-	role_card.a = 0.0   # и карточка роли ART-045 (меню, пауза): после — снова по `_card_step`
-	role_card.q = 0.0
-	role_card.f = 0.0
-	if role_card_panel != null and role_card_panel.visible:
-		role_card_panel.visible = false
-	if overlay != null:
-		overlay.router.blocks.clear()
-	if hint_pointer != null:
-		hint_pointer.show_pointer("", false, 0.0, 0.0, null, null)
-	if tutorial_panel != null and tutorial_panel.visible:
-		tutorial_panel.visible = false
+	return overlay_flow.comms_area()
 
 
 func stand_up() -> void:
@@ -2511,10 +2376,7 @@ func _client_step(dt: float) -> void:
 	for ev in tutorial_guest.update(dt, pilot.seated, at_power, near_post, Vector2(r.move) if live else Vector2.ZERO,
 			live and r.light_pressed, live and r.action_pressed, light_on, reactor.share, run.route, sonar.count):
 		tutorial.note(ev)
-	_tutorial_step(dt)
-	_card_step(dt)
-	_comms_step(dt)   # плашка связи хоста; нажатие — `net_pad.ask` со следующим вводом
-	_radio_step(dt)
+	overlay_flow.step(dt)   # подсказки, карточка роли, связь, рация
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	overlay.set_pilot(pilot.seated)

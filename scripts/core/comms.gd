@@ -9,7 +9,7 @@ extends RefCounted
 ## спросить снова. Проверяет логика события (подделку знает тот, кто её прислал), не игрок заявленной роли.
 ## Кодовое слово одно на забег (`reset_run`). Источник голосов — живой мир через `EcoLink.VOICE` (`Main.on_eco_event`).
 ## Здесь — очередь, часы, состояние проверки и места (макет 2400×1080, масштаб H/1080); рисует
-## `scripts/game/comms_panel.gd` (`main.comms_panel`), касания — `Main._comms_step` через `Touch.Router.taps`/`blocks`.
+## `scripts/game/comms_panel.gd` (`main.comms_panel`), касания — `OverlayFlow.comms_step` через `Touch.Router.taps`/`blocks`.
 ## Кооп: очередь и проверку ведёт хост, гостю едет снимок `pack` в кадре (`ev["c"]`), гость `follow` — ставит его
 ## `apply`, сам только тает; его «Спросить код» / «Понятно» — `asked` (номер сообщения) → `Crew.Pad.ask` → хост `press`.
 
