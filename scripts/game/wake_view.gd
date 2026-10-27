@@ -1,7 +1,7 @@
 class_name WakeView
 extends MultiMeshInstance3D
 ## След винтов и выпуски при всплытии по ART-063: частицы `Wake` одним мировым MultiMesh (один вызов отрисовки),
-## шейдер `shaders/wake.gdshader`, атлас `textures/sled/atlas.png`. Слой мира (1), без теней.
+## шейдер `shaders/wake.gdshader`, атлас `textures/sled/atlas.png`. Слой мира (1), без теней (`CardSwarm`).
 
 var mat: ShaderMaterial
 var shown := 0   ## сколько карточек видно (для тестов)
@@ -10,22 +10,8 @@ var shown := 0   ## сколько карточек видно (для тест�
 func _init() -> void:
 	name = "След винтов"
 	top_level = true
-	layers = OceanView.LAYER_WORLD
-	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var quad := QuadMesh.new()
-	quad.size = Vector2.ONE
-	mat = ShaderMaterial.new()
-	mat.shader = load("res://shaders/wake.gdshader")
-	mat.set_shader_parameter("atlas", load(Wake.ATLAS))
-	mat.set_shader_parameter("tint", Wake.COLOR)
-	quad.material = mat
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_custom_data = true
-	mm.mesh = quad
-	mm.instance_count = Wake.LIMIT
-	mm.visible_instance_count = 0
-	multimesh = mm
+	mat = CardSwarm.material("res://shaders/wake.gdshader", {"atlas": load(Wake.ATLAS), "tint": Wake.COLOR})
+	CardSwarm.setup(self, mat, Wake.LIMIT, OceanView.LAYER_WORLD)
 
 
 func set_lite(on: bool) -> void:
@@ -48,8 +34,7 @@ func apply(w: Wake, anchor: Vector3 = Vector3.ZERO) -> void:
 		hi = hi.max(b.pos)
 	shown = n
 	if n == 0:   # одна прозрачная карточка у корабля — для прогрева
-		mm.set_instance_transform(0, Transform3D(Basis.from_scale(Vector3.ONE * 0.5), anchor))
-		mm.set_instance_custom_data(0, Color(0.0, 0.0, 0.0, 0.0))
+		CardSwarm.park(mm, anchor, Vector3.ONE * 0.5)
 		lo = anchor
 		hi = anchor
 	mm.visible_instance_count = maxi(n, 1)
