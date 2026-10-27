@@ -75,6 +75,12 @@ static func pulse(t: float) -> float:
 	return 0.5 - 0.5 * cos(TAU * t / PERIOD)
 
 
+## Ключ состояния огней кабины для `set_cabin`: тот же ключ — огни и плафоны не переписываем (#847). Без аварии
+## часы ритма t ни на что не влияют — в ключ не идут.
+static func key(breach_room: int, t: float, k: float) -> Vector3:
+	return Vector3(breach_room, t if breach_room >= 0 else 0.0, k)
+
+
 ## Цвет огня: обычный или аварийный (breach_room — отсек открытой пробоины, −1 — пробоины нет).
 static func color(l: Lamp, breach_room: int) -> Color:
 	if breach_room < 0 or l.kind == Kind.REACTOR:
