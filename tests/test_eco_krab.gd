@@ -104,6 +104,47 @@ func test_hungry_crab_cracks_nearest_urchin() -> void:
 	ok(Vector2(cr.pos.x - cr.den.x, cr.pos.z - cr.den.z).length() < EcoKrab.HOME_DIST)
 
 
+## Поворот по дну (EcoAgent.turn_flat): навстречу — разворот с ограниченной скоростью, а не через нулевой курс.
+func test_turn_flat_reverses_without_zero() -> void:
+	var f := Vector3.FORWARD
+	var d := EcoAgent.turn_flat(f, Vector3.BACK, 0.05, 4.0, 2.5)
+	near(d.length(), 1.0, 1e-5, "курс не обнулился")
+	near(f.angle_to(d), 2.5 * 0.05, 1e-4, "навстречу — не быстрее 2,5 рад/с")
+	var e := EcoAgent.turn_flat(f, Vector3.LEFT, 0.05, 4.0, 2.5)
+	ok(e.x < 0.0, "влево — через лево")
+	near(f.angle_to(e), 0.125, 1e-4, "доля угла 4/с меньше предела — предел")
+	var small := EcoAgent.turn_flat(f, Vector3(-0.1, 0.0, -1.0), 0.05, 4.0, 2.5)
+	near(f.angle_to(small), Vector3.FORWARD.angle_to(Vector3(-0.1, 0, -1)) * 0.2, 1e-4, "малый угол — доля 4/с")
+	ok(EcoAgent.turn_flat(f, Vector3.ZERO, 0.05, 4.0, 2.5) == f, "нулевая цель — курс тот же")
+	near(EcoAgent.turn_flat(f, Vector3(0, 5, -1), 0.05, 4.0, 2.5).y, 0.0, 1e-6, "без вертикали")
+
+
+## Весь путь за ежом и домой — тело доворачивает не быстрее TURN_MAX (раньше lerp курса щёлкал носом
+## на развороте от расколотого ежа к норе), в норе — снова лицом наружу.
+func test_crab_turns_smoothly_and_faces_out_at_home() -> void:
+	var w := _world()
+	var cr := _krab(w).crab
+	cr.hunger = 1.05
+	var dt := 0.05
+	var worst := 0.0
+	var t := 0.0
+	var prev := cr.dir
+	var saw_home := false
+	while t < 70.0:
+		w.step(dt)
+		t += dt
+		near(cr.dir.length(), 1.0, 1e-4, "курс не нулевой")
+		worst = maxf(worst, prev.angle_to(cr.dir))
+		prev = cr.dir
+		saw_home = saw_home or cr.state == EcoKrab.State.HOME
+		if saw_home and cr.state == EcoKrab.State.DEN and t > 5.0:
+			break
+	ok(saw_home, "сходил за ежом и домой")
+	ok(worst <= EcoKrab.TURN_MAX * dt + 1e-4, "поворот за шаг %.3f ≤ %.3f" % [worst, EcoKrab.TURN_MAX * dt])
+	w.run(3.0)
+	ok(cr.dir.dot(cr.out) > 0.99, "в норе лицом наружу")
+
+
 func test_crack_takes_three_seconds() -> void:
 	var w := _world()
 	var k := _kelp(w)

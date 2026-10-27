@@ -36,6 +36,9 @@ const GLASS_DOWN := 0.8
 ## Домой 1,8 м/с, дома ближе 0,5 м.
 const BACK_SPEED := 1.8
 const HOME_DIST := 0.5
+## Поворот тела по ходу: доля угла 3/с, не быстрее 2,5 рад/с (EcoAgent.turn_flat) — бросок назад к дому без щелчка.
+const TURN_K := 3.0
+const TURN_MAX := 2.5
 ## В луче — показывает себя 6 с, сообщение «mimic» раз в 40 с, если был почти невидим (camo > 0,6).
 const REVEAL := 6.0
 const SPOOKED := 4.0
@@ -214,7 +217,7 @@ func step(world: EcoWorld, dt: float) -> void:
 			sk.pos += sk.vel * dt
 			var flat := Vector3(sk.vel.x, 0.0, sk.vel.z)
 			if flat.length_squared() > 1e-4:
-				sk.dir = sk.dir.lerp(flat.normalized(), minf(1.0, dt * 3.0)).normalized()
+				sk.dir = EcoAgent.turn_flat(sk.dir, flat, dt, TURN_K, TURN_MAX)
 		else:
 			sk.vel = Vector3.ZERO
 		var res := EcoHull.push_out(sk.pos, s.pos, s.yaw, PAD)

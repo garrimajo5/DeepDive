@@ -160,6 +160,30 @@ func test_stalks_hunting_crab_and_drives_it_home() -> void:
 	ok(sk.pos.is_equal_approx(sk.home))
 
 
+## Подкрался, бросился на краба, вернулся домой — тело доворачивает не быстрее TURN_MAX (раньше lerp курса
+## щёлкал носом на развороте после броска).
+func test_turns_smoothly_through_pounce_and_back() -> void:
+	var w := _world()
+	var kr := _krab(w)
+	var sk := _sk(w).octo
+	kr.crab.hunger = 1.2
+	var dt := 0.05
+	var prev := sk.dir
+	var worst := 0.0
+	var moved := false
+	var t := 0.0
+	while t < 60.0:
+		w.step(dt)
+		t += dt
+		near(sk.dir.length(), 1.0, 1e-4, "курс не нулевой")
+		worst = maxf(worst, prev.angle_to(sk.dir))
+		moved = moved or prev.angle_to(sk.dir) > 1e-3
+		prev = sk.dir
+	ok(moved, "поворачивался")
+	ok(not _notes(w, "hunt").is_empty(), "бросок был")
+	ok(worst <= EcoSkalnik.TURN_MAX * dt + 1e-4, "поворот за шаг %.3f ≤ %.3f" % [worst, EcoSkalnik.TURN_MAX * dt])
+
+
 func test_backs_off_armored_crab() -> void:
 	var w := _world()
 	var kr := _krab(w)
