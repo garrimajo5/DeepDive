@@ -29,6 +29,4 @@ func _draw_counter() -> void:
 	var s := size.y / Splash.H
 	draw.draw_style_box(UiStyle.box(Color(MainMenu.DARK, 0.78), 8.0 * s, MainMenu.EDGE, 2.0 * s), r)
 	var px := Graphics.COUNTER_PX * s
-	var base := r.position.y + r.size.y * 0.5 + Splash.CAP_H * px * 0.5
-	draw.draw_string(draw.get_theme_default_font(), Vector2(r.position.x, base), Graphics.counter_text(fps.value),
-		HORIZONTAL_ALIGNMENT_CENTER, r.size.x, roundi(px), MainMenu.INK)
+	UiStyle.label(draw, draw.get_theme_default_font(), Graphics.counter_text(fps.value), r, px, MainMenu.INK)

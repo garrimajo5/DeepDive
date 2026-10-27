@@ -38,8 +38,6 @@ func _draw_menu() -> void:
 		draw.draw_style_box(UiStyle.menu_button(main_btn and on, s, 0.88 if on else 0.6, 1.0 if on else 0.6), r)
 		var col := MainMenu.DARK if main_btn and on else (MainMenu.INK if on else MainMenu.OFF)
 		var px := MainMenu.BUTTON_PX * s
-		var base := r.position.y + r.size.y * 0.5 + Splash.CAP_H * px * 0.5
-		draw.draw_string(font, Vector2(r.position.x, base), it[1], HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
-			roundi(px), col)
+		UiStyle.label(draw, font, it[1], r, px, col)
 	var vp := MainMenu.VERSION_PX * s
 	UiStyle.center(draw, font, MainMenu.version_line(version), MainMenu.VERSION_TOP, vp, MainMenu.SOFT, size)
