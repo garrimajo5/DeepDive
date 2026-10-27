@@ -15,6 +15,7 @@ const DECAY := 2.0           ## спад прогресса без удержа�
 
 var scanned := {}            ## изученные виды: ключ Species → true
 var seen := {}               ## наблюдения: ключ Species → [ключ заметки, …] в порядке, как увидели
+var rev := 0                 ## растёт при каждом изменении scanned/seen (экран журнала лаборатории, #847)
 var targets: Array[Dictionary] = []   ## NEAR с "scan": true этого шага, ближние первыми
 var target: Dictionary = {}  ## текущая цель ({} — никого)
 var key := ""                ## вид, который сканируется
@@ -72,6 +73,7 @@ func complete(species: String) -> void:
 	if is_scanned(species):
 		return
 	scanned[species] = true
+	rev += 1
 	changed.emit()
 	message.emit("Новый вид: %s" % Species.info(species).name)
 
@@ -93,6 +95,7 @@ func observe(species: String, note: String) -> bool:
 		return false
 	got.append(note)
 	seen[species] = got
+	rev += 1
 	changed.emit()
 	return true
 
@@ -163,6 +166,7 @@ func list() -> Array[String]:
 func restore(ids: Array, notes: Dictionary = {}) -> void:
 	scanned.clear()
 	seen.clear()
+	rev += 1
 	for id in ids:
 		if Species.has(str(id)):
 			scanned[str(id)] = true
