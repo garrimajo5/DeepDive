@@ -3,6 +3,8 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-10-27
+- Порядок в коде: `EcoLink.ShipState` для живого мира заполняет одна функция `Main._fill_ship_state(full)` у хоста и
+  гостя; гость нарочно не передаёт шум, сканер и захват — это приходит кадром хоста (по issue #765, `test_ship_state`).
 - Порядок в коде: кнопку под пальцем ищет одна функция `Splash.hit_ids` (список id, прямоугольник, «работает ли»)
   — вместо своих циклов в `MainMenu`, `Pause`, `Settings`, `SoundPage`, `Graphics`, `LiteOffer`, `Lobby` и местах
   `Journal`; поведение то же (по issue #766, `test_splash.test_hit_ids`). Новые экраны — сразу через неё.
