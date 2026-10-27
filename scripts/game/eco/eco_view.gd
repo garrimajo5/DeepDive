@@ -447,7 +447,7 @@ func _sync(ship: EcoLink.ShipState) -> void:
 		well_view.moss_view.sync()
 	coral_view.sync()
 	fan_view.sync(world.time)
-	fern_view.sync(world.time)
+	fern_view.sync(world.time, ship, current.vel())
 	bladder_view.sync(world.time, ship, current.vel())
 	organ_view.sync(world.time, ship, current.vel())
 	cushion_view.sync(world.time, ship.pos, ship, current.vel())
