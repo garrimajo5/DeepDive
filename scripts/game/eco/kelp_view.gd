@@ -185,8 +185,7 @@ func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3) -> void:
 	dust.update(kelp, t, ship.pos if ship else Vector3.ZERO)
 	_dust.pack(dust.dust, t, flow, ship, EcoUrchinDust.COLOR, EcoUrchinDust.LIT,
 		Seabed.mesh_height)
-	if _dust.changed:   # мути нет и не было — буфер тот же, не грузим (issue #133)
-		dust_view.multimesh.buffer = _dust.data
+	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 
 
 ## Расстановка экземпляра n из буфера с шагом stride.

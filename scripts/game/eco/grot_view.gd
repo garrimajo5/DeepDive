@@ -101,8 +101,7 @@ func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3)
 	dust.update(grots, t, ship)
 	_dust.pack(dust.dust, t, flow, info, EcoGrotDust.COLOR, EcoGrotDust.LIT,
 			Seabed.mesh_height)
-	if _dust.changed:   # мути нет и не было — буфер тот же, не грузим (issue #133)
-		dust_view.multimesh.buffer = _dust.data
+	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 
 
 ## Панцирь (верхняя половина эллипсоида), обод по краю и голова спереди.

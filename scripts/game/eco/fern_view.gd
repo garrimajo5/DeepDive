@@ -107,8 +107,7 @@ func sync(t: float, info: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 	if info != null:
 		dust.update(ferns, t, info.pos, _ground)
 		_dust.pack(dust.dust, t, flow, info, EcoFernDust.COLOR, EcoFernDust.LIT, Seabed.mesh_height)
-		if _dust.changed:   # мути нет и не было — буфер тот же, не грузим (issue #133)
-			dust_view.multimesh.buffer = _dust.data
+		_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 	buffer.resize(leaves.multimesh.instance_count * STRIDE)
 	for fe in ferns.ferns:
 		for j in EcoFern.LEAVES:

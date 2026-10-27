@@ -138,8 +138,7 @@ func sync() -> void:
 func sync_dust(t: float, ship: EcoLink.ShipState, flow := Vector3.ZERO) -> void:
 	dust.update(rays, t, ship.pos if ship != null else Vector3.ZERO)
 	_dust.pack(dust.dust, t, flow, ship, EcoRayDust.COLOR, EcoRayDust.LIT)
-	if _dust.changed:   # облачков нет и не было — буфер тот же, не грузим (issue #133)
-		dust_view.multimesh.buffer = _dust.data
+	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 
 
 ## Место ската: +Z меша — по курсу, крен BANK.

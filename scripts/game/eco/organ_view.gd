@@ -68,6 +68,7 @@ func _init(system: EcoOrgan) -> void:
 func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> void:
 	dust.update(organs, t, ship.pos if ship else Vector3.ZERO)
 	var shown := pack(t, ship, flow)
+	dust_view.visible = shown > 0   # пустой слой мути не рисуется (issue #849)
 	if shown == 0 and _dust_empty:
 		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
 	dust_view.multimesh.buffer = dust_buffer

@@ -133,8 +133,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 	multimesh.buffer = buffer
 	dust.update(grazers, t, ship.pos if ship else Vector3.ZERO)
 	_dust.pack(dust, t, flow, ship, EcoGrazerDust.COLOR, EcoGrazerDust.LIT, Seabed.mesh_height)
-	if _dust.changed:   # мути нет и не было — буфер тот же, не грузим (issue #133)
-		dust_view.multimesh.buffer = _dust.data
+	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 
 
 

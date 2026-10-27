@@ -147,8 +147,7 @@ func sync() -> bool:
 func sync_dust(t: float, ship: EcoLink.ShipState, flow := Vector3.ZERO) -> void:
 	dust.update(coral, t, ship.pos if ship != null else Vector3.ZERO)
 	_dust.pack(dust.dust, t, flow, ship, EcoCoralDust.COLOR, EcoCoralDust.LIT)
-	if _dust.changed:   # облачков нет и не было — буфер тот же, не грузим (issue #133)
-		dust_view.multimesh.buffer = _dust.data
+	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 
 
 ## Смещение вершины i в течении flow в момент t — двойник шейдера (EcoCurrent.sway с подножием и высотой куста).
