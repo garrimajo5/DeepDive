@@ -3,6 +3,10 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-10-27
+- Порядок в коде: системная «Назад», пауза ART-037 и схема корабля ART-042 вынесены из `main.gd` в `PauseFlow`
+  (`scripts/game/pause_flow.gd`, `main.pause_flow`); у `Main` — пересылки `back_pressed`, `open_map`,
+  `open_hint_map`. Порядок проверок «Назад» тот же, снимки `pause=1|exit`, `shema=1|door` совпадают (по issue #754,
+  `test_pause_flow`).
 - Порядок в коде: экипаж на постах (товарищи за штурвалом и у пульта, их кнопка действия и удержания, руки экипажа
   на постах, место на палубе) вынесен из `main.gd` в `CrewFlow` (`scripts/game/crew_flow.gd`, `main.crew_flow`);
   руки своего и товарища на вентиле, лебёдке и сканере — одна поза `CrewFlow.grip`; у `Main` — пересылка `add_mate`.
