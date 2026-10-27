@@ -331,8 +331,7 @@ func step(world: EcoWorld, dt: float) -> void:
 			h += sh.lag  # стая подошла: догоняет набранное
 			sh.lag = 0.0
 		_step_shoal(world, sh, h)
-		for f: Fish in sh.members:
-			_step_fish(world, f, h, t, world.ground, hull_r2)
+		_step_members(world, sh, h, t, world.ground, hull_r2)
 
 
 func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
@@ -434,65 +433,85 @@ static func _flee_text(world: EcoWorld) -> Callable:
 		return "%s: стая уходит в кораллы — рядом хищник" % Species.cap(name)
 
 
-func _step_fish(world: EcoWorld, f: Fish, dt: float, t: float, ground: Callable, hull_r2: float) -> void:
-	var a := f.agent
-	var sh := f.shoal
-	if not a.alive:
-		if a.timer > 0.0:
-			return
-		a.alive = true
-		a.p = sh.home + Vector3(sh.rnd.range_f(-2, 2), sh.rnd.range_f(0, 2), sh.rnd.range_f(-2, 2))
-		a.v = Vector3(0, 0.2, 0)
-	# место и скорость — в локальных, обратно в агента один раз (свойство объекта на каждое чтение дороже)
-	var p := a.p
-	var v := a.v
+## Шаг рыбок стаи sh: всё общее для стаи (центр, цель, тревога, угроза, корабль) — в локальных один раз на стаю,
+## место и скорость рыбки — в локальных, обратно в агента один раз (свойство объекта на каждое чтение дороже,
+## а Fish.shoal — слабая ссылка; issue #790).
+func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Callable, hull_r2: float) -> void:
 	var alarm := sh.alarm > 0.0
-	var acc := (sh.center - p) * 0.5 + (sh.velocity - v) * 0.6
-	var goal := sh.home if alarm and not sh.threat_is_ship else sh.goal
-	acc += (goal - p).limit_length(8.0) * (1.2 if alarm else 0.35)
-	acc += sh.sep[f.slot]
-	if sh.has_threat:
-		var away := p - sh.threat
-		var d := away.length()
-		if d < 14.0 and d > 0.01:
-			acc += away * ((10.0 * (1.0 - d / 14.0) + 2.0) / d)
-	if sh.near_veil:
-		var stung := []
-		acc += veils.fish_push(world, p, dt, stung)
-		if not stung.is_empty():  # вуаль ужалила — рыбка съедена
-			kill(f)
-			return
-	if sh.cage:
-		acc += cage_push(sh.frame, p)
-	var ph := f.phase
-	acc += Vector3(sin(t * 1.7 + ph) * 0.6, sin(t * 1.3 + ph * 2.0) * 0.3, cos(t * 1.5 + ph) * 0.6)
+	var center := sh.center
+	var velocity := sh.velocity
+	var home := sh.home
+	var goal := home if alarm and not sh.threat_is_ship else sh.goal
+	var pull := 1.2 if alarm else 0.35
+	var sep := sh.sep
+	var has_threat := sh.has_threat
+	var threat := sh.threat
+	var near_veil := sh.near_veil
+	var cage := sh.cage
+	var frame := sh.frame
 	var has_ground := ground.is_valid()
-	var h := a.ground_y(ground) if has_ground else 0.0
-	var low := 1.2 * f.size
-	if has_ground and p.y < h + low:
-		acc.y += (h + low - p.y) * 6.0
-	if p.y > -3.0:
-		acc.y -= 4.0
+	var ship_pos := world.ship.pos
+	var calm_s := ALARM_SPEED if alarm else CALM_SPEED
+	var state := EcoAgent.State.FLEE if alarm else EcoAgent.State.GRAZE
+	var wave_x := t * 1.7
+	var wave_y := t * 1.3
+	var wave_z := t * 1.5
+	var edge := EcoAgent.EDGE
+	for f: Fish in sh.members:
+		var a := f.agent
+		if not a.alive:
+			if a.timer > 0.0:
+				continue
+			a.alive = true
+			a.p = home + Vector3(sh.rnd.range_f(-2, 2), sh.rnd.range_f(0, 2), sh.rnd.range_f(-2, 2))
+			a.v = Vector3(0, 0.2, 0)
+		var p := a.p
+		var v := a.v
+		var acc := (center - p) * 0.5 + (velocity - v) * 0.6
+		acc += (goal - p).limit_length(8.0) * pull
+		acc += sep[f.slot]
+		if has_threat:
+			var away := p - threat
+			var d := away.length()
+			if d < 14.0 and d > 0.01:
+				acc += away * ((10.0 * (1.0 - d / 14.0) + 2.0) / d)
+		if near_veil:
+			var stung := []
+			acc += veils.fish_push(world, p, dt, stung)
+			if not stung.is_empty():  # вуаль ужалила — рыбка съедена
+				kill(f)
+				continue
+		if cage:
+			acc += cage_push(frame, p)
+		var ph := f.phase
+		acc += Vector3(sin(wave_x + ph) * 0.6, sin(wave_y + ph * 2.0) * 0.3, cos(wave_z + ph) * 0.6)
+		var h := a.ground_y(ground) if has_ground else 0.0
+		var low := 1.2 * f.size
+		if has_ground and p.y < h + low:
+			acc.y += (h + low - p.y) * 6.0
+		if p.y > -3.0:
+			acc.y -= 4.0
 
-	v += acc * dt
-	var hide := alarm and p.distance_squared_to(sh.home) < 16.0
-	var max_s := HIDE_SPEED if hide else (ALARM_SPEED if alarm else CALM_SPEED)
-	var sp := v.length()
-	if sp > max_s:
-		v *= max_s / sp
-	elif sp < MIN_SPEED:
-		v *= MIN_SPEED / (sp + 1e-3)
-	p += v * dt
-	a.p = p
-	a.v = v
-	if p.distance_squared_to(world.ship.pos) < hull_r2 and world.push_out(a, HULL_GAP): # сквозь корпус не проплывают
-		p = a.p
-	if has_ground and p.y < h + a.clearance:
-		p.y = h + a.clearance
-	p.x = clampf(p.x, -EcoAgent.EDGE, EcoAgent.EDGE)
-	p.z = clampf(p.z, -EcoAgent.EDGE, EcoAgent.EDGE)
-	a.p = p
-	a.state = EcoAgent.State.HIDE if hide else (EcoAgent.State.FLEE if alarm else EcoAgent.State.GRAZE)
+		v += acc * dt
+		var hide := alarm and p.distance_squared_to(home) < 16.0
+		var max_s := HIDE_SPEED if hide else calm_s
+		var sp := v.length()
+		if sp > max_s:
+			v *= max_s / sp
+		elif sp < MIN_SPEED:
+			v *= MIN_SPEED / (sp + 1e-3)
+		p += v * dt
+		a.v = v
+		if p.distance_squared_to(ship_pos) < hull_r2:  # сквозь корпус не проплывают
+			a.p = p
+			if world.push_out(a, HULL_GAP):
+				p = a.p
+		if has_ground and p.y < h + a.clearance:
+			p.y = h + a.clearance
+		p.x = clampf(p.x, -edge, edge)
+		p.z = clampf(p.z, -edge, edge)
+		a.p = p
+		a.state = EcoAgent.State.HIDE if hide else state
 
 
 ## Не толкаться: живые соседи ближе √0,6 м отталкивают друг друга (сила 1,8 / (d² + 0,05) по разнице мест).

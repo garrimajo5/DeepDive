@@ -132,8 +132,14 @@ func test_hull_bound_covers_hull() -> void:
 		eq(EcoHull.push_out(ship + Vector3(EcoHull.BOUND + 1.0, 0, 0), ship, yaw, 0.3), [], "вдали — пусто")
 
 
-## Мерка скорости машины: 40 раз толчки соседей в стае из 22 рыбок (чистый GDScript, как шаг мира); на ПК ≈ 0,6 мс.
+## Мерки скорости машины, на ПК ≈ REF_PC_MS и REF_OBJ_PC_MS. Первая — 40 раз толчки соседей в стае из 22 рыбок
+## (плотный цикл по массивам); вторая — шаги 132 «рыбок»-объектов: чтение и запись свойств, векторы, синусы, вызов
+## дна через Callable — как шаг мира. Машина бывает медленнее по-разному: облачная — в 1,25 раза на первой мерке
+## и в 1,6 на второй, — берётся худшая из двух (issue #790).
 const REF_PC_MS := 0.6
+const REF_OBJ_PC_MS := 0.30
+## Порог шага живого мира на ПК (мс).
+const LIMIT_PC_MS := 2.0
 ## Больше всего замеров шага живого мира на шумной машине (test_view_step_fits_frame, issue #732).
 const ROUNDS := 12
 
@@ -149,6 +155,61 @@ static func _ref_ms() -> float:
 	for i in 40:
 		EcoFish._separation(pos, live)
 	return (Time.get_ticks_usec() - t0) / 1000.0
+
+
+## «Рыбка» второй мерки: только свои поля, чтобы мерка не менялась вместе с кодом мира.
+class _Probe:
+	extends RefCounted
+	var p := Vector3.ZERO
+	var v := Vector3.ZERO
+	var phase := 0.0
+
+
+static func _probe_floor(x: float, z: float) -> float:
+	return sin(x * 0.07) * 3.0 + cos(z * 0.05) * 2.0 - 30.0
+
+
+static func _ref_obj_ms() -> float:
+	var r := EcoRandom.new(7)
+	var all: Array[_Probe] = []
+	for i in 132:
+		var o := _Probe.new()
+		o.p = Vector3(r.range_f(-20, 20), r.range_f(-30, -10), r.range_f(-20, 20))
+		o.phase = r.range_f(0, 6)
+		all.append(o)
+	var ground := Callable(_probe_floor)
+	var c := Vector3(0, -20, 0)
+	var t0 := Time.get_ticks_usec()
+	for k in 6:
+		var t := k * 0.016
+		for o in all:
+			var p := o.p
+			var v := o.v
+			var acc := (c - p) * 0.5 - v * 0.6 + (c - p).limit_length(8.0) * 0.35
+			acc += Vector3(sin(t * 1.7 + o.phase) * 0.6, sin(t * 1.3) * 0.3, cos(t * 1.5 + o.phase) * 0.6)
+			var h: float = ground.call(p.x, p.z)
+			if p.y < h + 1.0:
+				acc.y += 1.0
+			v += acc * 0.016
+			var sp := v.length()
+			if sp > 2.4:
+				v *= 2.4 / sp
+			o.v = v
+			o.p = p + v * 0.016
+	return (Time.get_ticks_usec() - t0) / 1000.0
+
+
+## Во сколько раз машина медленнее ПК по мерам ref (толчки) и obj (объекты): худшая, не меньше 1.
+static func slowness(ref: float, obj: float) -> float:
+	return maxf(1.0, maxf(ref / REF_PC_MS, obj / REF_OBJ_PC_MS))
+
+
+func test_slowness_takes_worst_probe() -> void:
+	near(slowness(REF_PC_MS, REF_OBJ_PC_MS), 1.0, 1e-6, "ПК")
+	near(slowness(REF_PC_MS * 0.5, REF_OBJ_PC_MS * 0.5), 1.0, 1e-6, "быстрее ПК — порог не ниже ПК")
+	near(slowness(REF_PC_MS * 1.25, REF_OBJ_PC_MS * 1.6), 1.6, 1e-6, "облачная: по объектам медленнее")
+	near(slowness(REF_PC_MS * 1.3, REF_OBJ_PC_MS * 1.1), 1.3, 1e-6, "и наоборот")
+	ok(_ref_obj_ms() > 0.0, "мерка объектов меряет")
 
 
 func test_view_step_fits_frame() -> void:
@@ -168,20 +229,25 @@ func test_view_step_fits_frame() -> void:
 	# Муть Б3 у одиннадцати видов подняла шаг до ≈ 2,8 мс на облачной машине — буфер мути стал общим EcoDustBuffer
 	# (растаявшее не переписывается, пустой пул не проходится), шаг снова ниже порога (issue #732). Шумная машина:
 	# не меньше пяти замеров и до ROUNDS, пока лучший не уложится, — тест ловит устойчивый рост шага, а не всплеск.
+	# Issue #790: мерка толчков занижала медленность облачной машины (1,25 вместо ≈ 1,6 на шаге мира) — добавлена
+	# мерка объектов, берётся худшая; рыбки стаи шагают с общим для стаи в локальных (EcoFish._step_members).
 	var best := INF
 	var ref := INF
+	var obj := INF
 	var slow := 1.0
-	var limit := 2.0
+	var limit := LIMIT_PC_MS
 	for k in ROUNDS:
 		ref = minf(ref, _ref_ms())
+		obj = minf(obj, _ref_obj_ms())
 		var t0 := Time.get_ticks_usec()
 		for i in 60:
 			view.step(1.0 / 60.0, ship)
 		best = minf(best, (Time.get_ticks_usec() - t0) / 60.0 / 1000.0)
-		slow = maxf(1.0, ref / REF_PC_MS)
-		limit = 2.0 * slow
+		slow = slowness(ref, obj)
+		limit = LIMIT_PC_MS * slow
 		if k >= 4 and best < limit:
 			break
+	print("    шаг живого мира %.2f мс, порог %.2f (мерки %.3f / %.3f мс)" % [best, limit, ref, obj])
 	ok(best < limit, "шаг живого мира %.2f мс (< %.2f мс; машина медленнее ПК в %.2f раза)" % [best, limit, slow])
 	view.queue_free()
 	await frames(1)
