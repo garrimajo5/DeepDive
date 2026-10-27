@@ -7,6 +7,11 @@
   `main.gd` в `MenuFlow` (`scripts/game/menu_flow.gd`, `main.menu_flow`); у `Main` — пересылки `open_menu`,
   `close_menu`, `open_settings`, `open_journal`, `_settings_show`, `_journal_show`, `_apply_settings`. Поведение то же,
   снимки меню, настроек, журнала и «Экономно» совпадают (по issue #753, `test_main_menu.test_scene_menu_flow`).
+- Живой мир считается чуть быстрее: рыбки стаи берут общее для стаи один раз (шаг стай светляков −15 %); порог
+  шага мира в тесте — 2,5 мс на ПК, шаг и порог печатаются в лог CI (по issue #790, `test_eco_speed`).
+- Живой мир: волнолист стряхивает ил — когда луч прожектора разворачивает куст, с кончиков листьев срываются
+  облачка мути, а рыбы, что клюют открывшихся под листьями моллюсков, поднимают у дна песок; на «Экономно» облачков
+  нет (`EcoFernDust`, `test_eco_fern_dust`).
 - Порядок в коде: прогрев шейдеров на сцене (заставка, взгляды камеры, скрытое на кадр, слои первого взгляда)
   вынесен из `main.gd` в `WarmRunner` (`scripts/game/warm_runner.gd`, `main.warm_run`); у `Main` — пересылки
   `warming()`/`warm_layers()`. Поведение то же: 18 кадров прогрева (по issue #752, `test_warmup.test_scene_warm_runner`).
