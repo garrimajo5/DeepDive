@@ -2992,8 +2992,12 @@ func _leave_net() -> void:
 
 
 ## Куда может шагнуть член экипажа m: пол корабля (ShipLayout.can_stand) и не в другую фигуру (Crew.room_for, #602).
+## m держим слабой ссылкой: лямбда лежит в m.walker.stand, иначе цикл RefCounted и утечка после выхода (#779).
 func stand_for(m: Crew.Member) -> Callable:
-	return func(x: float, z: float) -> bool: return layout.can_stand(x, z) and Crew.room_for(crew, m, x, z)
+	var w: WeakRef = weakref(m)
+	return func(x: float, z: float) -> bool:
+		var mm: Crew.Member = w.get_ref()
+		return layout.can_stand(x, z) and (mm == null or Crew.room_for(crew, mm, x, z))
 
 
 ## Ещё один член экипажа на палубе (снимки и сценарий тестера, пока нет сети): место, курс (рад), роль, внешность.
