@@ -385,9 +385,10 @@
         буфер 60 мс, порядок, опоздавшие и пропавшие, уровень (`test_voice`)
       - [x] Канал голоса `NetLink.CH_VOICE`: гость → хост, хост пересылает остальным на палубе с местом говорящего
         `w`, свой голос — всем (`send_voice`/`take_voice`); голоса у слушателя — `Voice.Room` (`test_net_link`, `test_voice`)
-      - [ ] Захват (`AudioEffectCapture` на шине микрофона) и проигрыватель (`AudioStreamGenerator` на шине
-        «Голоса», громкость `Radio.volume`), пакеты из `Voice.Room` → `Radio.heard` с уровнем `Decoder.level`,
-        `Radio.link`
+      - [x] Захват (`AudioEffectCapture` на шине «Микрофон», −80 дБ) и проигрыватели (`AudioStreamGenerator` на шине
+        «Голоса», громкость `Radio.volume`), пакеты из `Voice.Room` → `Radio.heard` с уровнем, `Radio.link`; «По голосу» —
+        тишина не уходит (`Voice.Station`, `VoiceIO`, `OverlayFlow.voice_step`; микрофон — только при
+        `audio/driver/enable_input`, его включает следующая часть)
       - [ ] Разрешение `RECORD_AUDIO` Android (`Radio.mic`, «В настройки»), включить `Radio.enabled`; проверка вдвоём — тестер
   - Экран сбора экипажа по ART-028 (принят, `sbor-ekipazha.md`): 2D поверх мостика, роли П/С/И/Б, «Готов»,
     старт у хоста; табличка над фигурой — заказ ART-033 (#235) — разделено:
