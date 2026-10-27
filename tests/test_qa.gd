@@ -329,6 +329,35 @@ func test_caustics_shot_starts_clean() -> void:
 	ok(whole, "и корпус целый")
 
 
+func test_sonar_card_shot_calm_and_clear() -> void:   # issue #882: укус хищника прятал карточку, камера — в товарище
+	var steps: Array = JSON.parse_string(FileAccess.get_file_as_string("res://tools/qa/scenario.json"))
+	var mates: Array[Vector2] = []
+	var closed := false
+	var look := {}
+	var shot := false
+	for st in steps:
+		if st["do"] == "mate" and st.has("x"):
+			mates.append(Vector2(float(st["x"]), float(st["z"])))
+		if st["do"] == "press" and st.get("what", "") == "dive":
+			closed = false   # новый забег: тревоги того забега не в счёт
+			look = {}
+		if st["do"] == "breach":
+			closed = not bool(st.get("on", true))
+		if st["do"] == "goto":
+			look = st
+		if st["do"] == "shot" and st["name"] == "30-kartochka-sonar":
+			shot = true
+			break
+	ok(shot and not look.is_empty(), "снимок карточки после «Погрузиться» и подхода к посту")
+	ok(closed, "пробоина закрыта перед снимком — под тревогой карточка прячется")
+	var at := Vector2(float(look["x"]), float(look["z"]))
+	ok(Deck.can_stand(at.x, at.y), "на месте можно стоять")
+	var post := Deck.nearest(Deck.posts(), at.x, at.y)
+	ok(post != null and post.id == "sonar", "ближайший пост — сонар")
+	for p in mates:
+		ok(p.distance_to(at) > 1.0, "товарищ %s не вплотную к камере (%.2f м)" % [p, p.distance_to(at)])
+
+
 func test_drain_step() -> void:   # issue #131: тревога о стеклоусте видна в прогоне тестера
 	var q := QaScript.parse('[{"do": "drain", "s": 2.5}]')
 	eq(q.errors.size(), 0, "шаг drain известен")
