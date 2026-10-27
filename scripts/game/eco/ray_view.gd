@@ -7,6 +7,8 @@ extends MultiMeshInstance3D
 ## Хвост-хлыст извивается волной от корня к кончику (TAIL_*, доля длины хвоста — в UV.x; двойник на CPU — tail_wave);
 ## «Экономно» — sway_k = 0 через EcoShaders.follow / set_sway_lite.
 ## Свет сквозь лёд падает на спину; брюхо снизу темнее; края крыльев — ободок света (EcoRim, uniform rim). Стоит на слое отмели (OceanView.LAYER_WORLD).
+## Скат взмывает над кораблём — с кончиков крыльев срываются облачка взвеси (EcoRayDust): дочерний MultiMesh «Муть»
+## в мировых координатах (у самого RayView преобразование единичное) на общем шейдере EcoShaders.MIST, +1 вызов.
 
 const SHADER := """
 shader_type spatial;
@@ -70,6 +72,13 @@ var verts := PackedVector3Array()
 var tris := 0
 ## Последние места скатов (для тестов: без видеокарты MultiMesh их не хранит).
 var placed: Array[Transform3D] = []
+## Вихри с кончиков крыльев (EcoRayDust); буфер — для тестов.
+var dust := EcoRayDust.new()
+var dust_view: MultiMeshInstance3D
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
 
 var _nor := PackedVector3Array()
 var _col := PackedColorArray()
@@ -110,6 +119,8 @@ func _init(system: EcoRay) -> void:
 	multimesh = mm
 	# скаты огромные и плывут по кругу 110–170 м: границу не считаем, отсечение по камере — по всей отмели
 	custom_aabb = AABB(Vector3(-400, -120, -400), Vector3(800, 240, 800))
+	dust_view = GrazerView.build_dust(EcoRayDust.POOL)
+	add_child(dust_view)
 	sync()
 
 
@@ -121,6 +132,14 @@ func sync() -> void:
 		placed[ry.index] = x
 		multimesh.set_instance_transform(ry.index, x)
 		multimesh.set_instance_custom_data(ry.index, Color(float(ry.index), 0, 0, 0))
+
+
+## Вихри с кончиков крыльев в момент t (время мира); flow — течение (сносит облачка).
+func sync_dust(t: float, ship: EcoLink.ShipState, flow := Vector3.ZERO) -> void:
+	dust.update(rays, t, ship.pos if ship != null else Vector3.ZERO)
+	_dust.pack(dust.dust, t, flow, ship, EcoRayDust.COLOR, EcoRayDust.LIT)
+	if _dust.changed:   # облачков нет и не было — буфер тот же, не грузим (issue #133)
+		dust_view.multimesh.buffer = _dust.data
 
 
 ## Место ската: +Z меша — по курсу, крен BANK.
