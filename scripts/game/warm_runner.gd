@@ -38,7 +38,7 @@ func begin() -> void:
 		var at: Vector2 = Warmup.MATE_AT[r % Warmup.MATE_AT.size()]
 		g.place(at.x, at.y, PI)
 		main.ghosts.append(MateGhost.new(g))
-	main._ghosts(0.0, true)
+	main.net_game.ghosts_step(0.0, true)
 	_particles(true)
 	main.power_panel.reactor = main.reactor   # пульт энергии рисует строки под шторкой: шрифты всех размеров (#217)
 	main.power_panel.panel = main.power
@@ -133,7 +133,7 @@ func restore() -> void:
 		main.crew_view.as_own.clear()
 		main.crew_view.set_members(main.crew, main.me)
 		main.ghosts.clear()
-		main._ghosts(0.0, true)
+		main.net_game.ghosts_step(0.0, true)
 		_particles(false)
 		main.curtain.queue_free()   # вместе с текстурой фона
 		main.curtain = null
