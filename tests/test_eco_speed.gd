@@ -72,6 +72,74 @@ func test_far_shoals_step_every_third_frame() -> void:
 	ok(first.max() - first.min() > 0.01, "дальние стаи сдвинуты по фазе")
 
 
+## Сколько стай дальше MID сдвинулось за каждый шаг w на неровных кадрах (14…40 мс, как на телефоне) — по числу стай.
+func _far_moves_per_frame(w: EcoWorld, frames_n: int) -> Array[int]:
+	var fish := w.systems[0] as EcoFish
+	var r := EcoRandom.new(7)
+	var out: Array[int] = []
+	out.resize(fish.shoals.size() + 1)
+	out.fill(0)
+	for i in frames_n:
+		var before: Array[Vector3] = []
+		for sh in fish.shoals:
+			before.append((sh.members[0] as EcoFish.Fish).agent.p)
+		w.step(r.range_f(0.014, 0.04))
+		var n := 0
+		for k in fish.shoals.size():
+			var sh := fish.shoals[k]
+			if sh.center.distance_to(w.ship.pos) > EcoFish.MID and (sh.members[0] as EcoFish.Fish).agent.p != before[k]:
+				n += 1
+		out[n] += 1
+	return out
+
+
+## Больше всего стай, шагнувших в одном кадре, по счёту _far_moves_per_frame.
+static func _most(hist: Array[int]) -> int:
+	var most := 0
+	for k in hist.size():
+		if hist[k] > 0:
+			most = k
+	return most
+
+
+## Issue #803: дальние стаи шли по набранному времени, и неровный кадр сводил их в один — раз в несколько кадров
+## шагали все девять стай сразу (мир 51 мс вместо 15). Теперь очередь по счётчику шагов: не больше трети за кадр.
+func test_far_shoals_stay_apart_on_uneven_frames() -> void:
+	var w := _world(Vector3(500, 0, 500))  # все стаи дальше FAR
+	var n := (w.systems[0] as EcoFish).shoals.size()
+	var hist := _far_moves_per_frame(w, 3000)
+	var cap := ceili(n / float(EcoFish.FAR_EVERY))
+	ok(_most(hist) <= cap, "дальних стай за кадр не больше %d из %d: было %d (%s)" % [cap, n, _most(hist), str(hist)])
+
+
+## Стаи у корабля (часть ближе MID, часть дальше) на неровных кадрах тоже не сходятся в один кадр.
+func test_mixed_shoals_stay_apart_on_uneven_frames() -> void:
+	var w := _world(Vector3(37, -30, 62))  # как на 31b-kod-net: стаи и средние, и дальние, и рядом
+	var n := (w.systems[0] as EcoFish).shoals.size()
+	var hist := _far_moves_per_frame(w, 3000)
+	ok(_most(hist) <= ceili(n / float(EcoFish.MID_EVERY)), "стай дальше MID за кадр %d из %d (%s)" % [_most(hist), n, str(hist)])
+
+
+## На медленных ровных кадрах (33…75 мс) стая шагает раньше очереди: шаг стаи (набранное + кадр) не длиннее LAG_MAX.
+func test_far_shoal_step_capped_on_slow_frames() -> void:
+	for dt: float in [1.0 / 30.0, EcoFish.FAR_STEP, 0.06, EcoWorld.SLOW_STEP]:
+		_check_step_cap(dt)
+
+
+func _check_step_cap(dt: float) -> void:
+	var w := _world(Vector3(500, 0, 500))
+	var fish := w.systems[0] as EcoFish
+	for i in 100:
+		var lags: Array[float] = []
+		for sh in fish.shoals:
+			lags.append(sh.lag)
+		w.step(dt)
+		for k in fish.shoals.size():
+			if fish.shoals[k].lag == 0.0 and not ok(lags[k] + dt <= EcoFish.LAG_MAX + 1e-6,
+					"шаг стаи %.3f с, предел %.3f" % [lags[k] + dt, EcoFish.LAG_MAX]):
+				return
+
+
 func test_near_shoal_steps_every_frame() -> void:
 	var w := _world(EcoFish.HOMES[0] + Vector3(0, 0, 30))
 	var f := ((w.systems[0] as EcoFish).shoals[0].members[0] as EcoFish.Fish).agent
@@ -84,7 +152,7 @@ func test_near_shoal_steps_every_frame() -> void:
 
 func test_shoal_coming_near_catches_up_lag() -> void:
 	var w := _world(Vector3(500, 0, 500))
-	var sh := (w.systems[0] as EcoFish).shoals[0]
+	var sh := (w.systems[0] as EcoFish).shoals[1]  # стая 0 шагает в первом шаге, стая 1 — ждёт очереди
 	w.step(1.0 / 60.0)
 	ok(sh.lag > 0.0, "дальняя стая копит время")
 	w.ship.pos = sh.center + Vector3(0, 0, 30)

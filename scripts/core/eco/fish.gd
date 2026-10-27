@@ -30,15 +30,20 @@ const LEAD_BELOW := 3.0
 ## Стая ближе r + VEIL_PAD к фонарной вуали по горизонтали (центр стаи; рыбки — в пределах 14 м от дома) — рыбки
 ## обходят купол и могут попасть под щупальца (EcoVeil.fish_push).
 const VEIL_PAD := EcoVeil.FISH_PAD + 20.0
-## Стая дальше FAR от корабля (в тумане, плотность ≥ 0,0135 — видна на четверть) ходит реже: шагом FAR_STEP
-## (= EcoWorld.MAX_STEP, при 60 к/с — каждый третий кадр), набирая пропущенное время. Дальние стаи сдвинуты
-## по фазе, чтобы не считались в одном кадре.
+## Стая дальше FAR от корабля (в тумане, плотность ≥ 0,0135 — видна на четверть) ходит реже: раз в FAR_EVERY
+## шагов мира (при 60 к/с — каждый третий кадр, шагом ≈ FAR_STEP), набирая пропущенное время. Очередь — по счётчику
+## шагов и номеру стаи, а не по набранному времени: при неровном кадре время сводило все дальние стаи в один кадр
+## (issue #803: мир 51 мс вместо 15). Дальние стаи сдвинуты по фазе, чтобы не считались в одном кадре.
 const FAR := 100.0
 const FAR_STEP := 0.05
-## Стая дальше MID (но ближе FAR) ходит через кадр — шагом MID_STEP, набирая пропущенное (issue #133): рыбка
+const FAR_EVERY := 3
+## Стая дальше MID (но ближе FAR) ходит через шаг — раз в MID_EVERY, набирая пропущенное (issue #133): рыбка
 ## в 50 м — пара точек на экране, сдвиг на 4 см за кадр не виден.
 const MID := 50.0
-const MID_STEP := 1.0 / 30.0
+const MID_EVERY := 2
+## Шаг стаи не длиннее LAG_MAX (с), как было до очереди (FAR_STEP + EcoWorld.SLOW_STEP): если ещё кадр ожидания
+## сделал бы шаг длиннее, стая на медленных кадрах шагает раньше своей очереди.
+const LAG_MAX := FAR_STEP + EcoWorld.SLOW_STEP
 
 ## Дома стай: шесть мест кораллов (W.coralSpots), ближайших к (0, 55) и разнесённых больше чем на 35 м, плюс 1,5 м
 ## вверх — числа браузерной версии (в Unity x со знаком минус). Дом на 3,5 м над дном (Seabed.height).
@@ -183,6 +188,8 @@ var veils: EcoVeil
 var _rnd: EcoRandom
 ## Живые хищники на этом шаге: один обход мира на все стаи.
 var _preds: Array[EcoAgent] = []
+## Шаги мира с reset — очередь дальних и средних стай (FAR_EVERY, MID_EVERY).
+var _tick := 0
 
 
 ## Всех рыбок: стаи рифа и кроны по PER_SHOAL и молодь в костях по JUV_PER.
@@ -197,6 +204,7 @@ static func seed_for(world_seed: int) -> int:
 
 func reset(world: EcoWorld) -> void:
 	_rnd = EcoWorld.seeded_for(seed_for(world.seed_value))
+	_tick = 0
 	var crown_rnd := EcoWorld.seeded_for(seed_for(world.seed_value) ^ 0x5F3C)
 	var cage_rnd := EcoWorld.seeded_for(seed_for(world.seed_value) ^ 0x0B0E)
 	shoals.clear()
@@ -237,7 +245,6 @@ func reset(world: EcoWorld) -> void:
 			sh.center = foot + Vector3(cos(a0) * r0, CROWN_HIDE, sin(a0) * r0)
 			sh.goal = sh.center
 		sh.color = COLORS[si % COLORS.size()]
-		sh.lag = (si % 3) * FAR_STEP / 3.0
 		shoals.append(sh)
 		var spread := 1.5 if sh.cage else 3.0
 		for k in count:
@@ -322,16 +329,18 @@ func step(world: EcoWorld, dt: float) -> void:
 		var h := dt
 		var d := sh.center.distance_to(world.ship.pos)
 		if d > MID:
-			sh.lag += dt
-			if sh.lag < (FAR_STEP if d > FAR else MID_STEP) - 1e-6:
+			var every := FAR_EVERY if d > FAR else MID_EVERY
+			if (_tick + sh.index) % every != 0 and sh.lag + 2.0 * dt <= LAG_MAX + 1e-6:
+				sh.lag += dt
 				continue
-			h = sh.lag
+			h += sh.lag
 			sh.lag = 0.0
 		elif sh.lag > 0.0:
 			h += sh.lag  # стая подошла: догоняет набранное
 			sh.lag = 0.0
 		_step_shoal(world, sh, h)
 		_step_members(world, sh, h, t, world.ground, hull_r2)
+	_tick += 1
 
 
 func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
