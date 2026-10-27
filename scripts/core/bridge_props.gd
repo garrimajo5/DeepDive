@@ -33,8 +33,6 @@ const CONSOLE_D := 0.65
 const CONSOLE_SY := 0.74
 const CONSOLE_SZ := 0.75
 const CONSOLE_Z := Deck.NOSE_INNER + CONSOLE_D * CONSOLE_SZ / 2.0
-const CONSOLE_FRONT := Deck.NOSE_INNER + CONSOLE_D * CONSOLE_SZ
-const CONSOLE_TOP := CONSOLE_H * CONSOLE_SY
 ## Экраны пульта светятся ровным голубым, пока на них ничего не рисуем.
 const SCREEN_GLOW := Color(0.06, 0.26, 0.32)
 

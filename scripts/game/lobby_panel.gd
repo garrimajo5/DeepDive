@@ -242,14 +242,7 @@ func _button(font: Font, r: Rect2, label: String, s: float, kind: String, edge :
 
 
 func _box(s: float, fill: Color, edge: Color, border := 2.0) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.set_corner_radius_all(roundi(Lobby.RADIUS * s))
-	sb.anti_aliasing = true
-	sb.bg_color = fill
-	if edge.a > 0.0:
-		sb.set_border_width_all(maxi(1, roundi(border * s)))
-		sb.border_color = edge
-	return sb
+	return UiStyle.box(fill, Lobby.RADIUS * s, edge, border * s if edge.a > 0.0 else 0.0)
 
 
 ## Строка: at — левый край и верх видимых глифов на экране.

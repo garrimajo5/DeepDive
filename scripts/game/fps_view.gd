@@ -32,13 +32,7 @@ func _draw_counter() -> void:
 	var size := draw.get_viewport_rect().size
 	var r := Graphics.counter_rect(size)
 	var s := size.y / Splash.H
-	var sb := StyleBoxFlat.new()
-	sb.set_corner_radius_all(roundi(8.0 * s))
-	sb.anti_aliasing = true
-	sb.bg_color = Color(MainMenu.DARK, 0.78)
-	sb.set_border_width_all(maxi(1, roundi(2.0 * s)))
-	sb.border_color = MainMenu.EDGE
-	draw.draw_style_box(sb, r)
+	draw.draw_style_box(UiStyle.box(Color(MainMenu.DARK, 0.78), 8.0 * s, MainMenu.EDGE, 2.0 * s), r)
 	var px := Graphics.COUNTER_PX * s
 	var base := r.position.y + r.size.y * 0.5 + Splash.CAP_H * px * 0.5
 	draw.draw_string(draw.get_theme_default_font(), Vector2(r.position.x, base), Graphics.counter_text(fps.value),

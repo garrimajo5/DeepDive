@@ -30,11 +30,6 @@ static func field_span(i: int) -> Vector2:
 	return Vector2(x, x + WIDTHS[i])
 
 
-static func field_x(i: int) -> float:
-	var s := field_span(i)
-	return (s.x + s.y) * 0.5
-
-
 ## Активные поля по строкам тревог корабля (как в `Main.status_parts`): пробоина, стеклоуст, перегрев реактора
 ## или аварийный сброс, сонарная тьма, мало заряда.
 static func active(breach: String, drain: String, heat: String, silt: String, low_charge: bool) -> Array[bool]:
