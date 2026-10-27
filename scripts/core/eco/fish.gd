@@ -143,6 +143,9 @@ class Shoal:
 	var pos := PackedVector3Array()
 	var live := PackedByteArray()
 	var sep := PackedVector3Array()
+	## Рамка стаи для поиска добычи (nearest_fish): дальше этого (м) от center живых рыбок нет; −1 — живых нет.
+	## Считает шаг стаи после того, как рыбки сдвинулись, и bounds(); INF — не считана (перебираются все).
+	var spread := INF
 
 	## Кто ведёт стаю сейчас (объект с полями p и dir) или null.
 	func leader() -> Object:
@@ -297,17 +300,44 @@ func kill(f: Fish) -> void:
 
 
 ## Ближайшая живая рыбка не дальше radius; skip — (Fish) -> bool, кого не видно (в укрытии). null — никого.
+## Сначала стая: дальше radius + Shoal.spread от её центра рыбок нет — её не перебираем (issue #848). Дальше —
+## квадрат расстояния, и только ближе лучшей найденной зовётся skip (фильтр укрытий дорогой: станции, кельп, риф,
+## чернила). Рыбку переставили руками в обход шага — сначала bounds().
 func nearest_fish(pos: Vector3, radius: float, skip: Callable = Callable()) -> Fish:
 	var best: Fish = null
-	var bd := radius
-	for f in all:
-		if not f.agent.alive or (skip.is_valid() and skip.call(f)):
+	var bd2 := radius * radius
+	var has_skip := skip.is_valid()
+	for sh in shoals:
+		if sh.spread < 0.0:
 			continue
-		var d := f.agent.p.distance_to(pos)
-		if d < bd:
-			bd = d
-			best = f
+		var reach := radius + sh.spread
+		if sh.center.distance_squared_to(pos) > reach * reach:
+			continue
+		for f: Fish in sh.members:
+			var a := f.agent
+			if not a.alive:
+				continue
+			var d2 := a.p.distance_squared_to(pos)
+			if d2 < bd2 and not (has_skip and skip.call(f)):
+				bd2 = d2
+				best = f
 	return best
+
+
+## Пересчитать рамки стай (Shoal.spread) по нынешним местам рыбок — после того, как рыбок двигали не шагом стаи.
+func bounds() -> void:
+	for sh in shoals:
+		_bound(sh)
+
+
+static func _bound(sh: Shoal) -> void:
+	var c := sh.center
+	var r2 := -1.0
+	for f: Fish in sh.members:
+		var a := f.agent
+		if a.alive:
+			r2 = maxf(r2, a.p.distance_squared_to(c))
+	sh.spread = sqrt(r2) if r2 >= 0.0 else -1.0
 
 
 ## Для сонара и сканера стая — одна отметка в центре, если в ней не меньше трёх живых рыбок (sh.n >= 3).
@@ -466,6 +496,7 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 	var wave_y := t * 1.3
 	var wave_z := t * 1.5
 	var edge := EcoAgent.EDGE
+	var r2 := -1.0  # рамка стаи (Shoal.spread) — заодно с шагом, без второго обхода
 	for f: Fish in sh.members:
 		var a := f.agent
 		if not a.alive:
@@ -521,6 +552,8 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 		p.z = clampf(p.z, -edge, edge)
 		a.p = p
 		a.state = EcoAgent.State.HIDE if hide else state
+		r2 = maxf(r2, p.distance_squared_to(center))
+	sh.spread = sqrt(r2) if r2 >= 0.0 else -1.0
 
 
 ## Не толкаться: живые соседи ближе √0,6 м отталкивают друг друга (сила 1,8 / (d² + 0,05) по разнице мест).

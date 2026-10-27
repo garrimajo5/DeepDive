@@ -95,9 +95,14 @@ class Pred:
 	## левым боком вниз).
 	var look := Vector3(0, 0, 1)
 	var bank := 0.0
+	## Секунды до следующего поиска добычи в патруле (раз в SEEK_EVERY, issue #848); 0 — ищет сразу.
+	var seek_t := 0.0
 
 
 var all: Array[Pred] = []
+## Фильтр укрытий на нынешний шаг (_skip_now); сбрасывается в конце step.
+var _skip := Callable()
+var _skip_built := false
 ## Светляки, на которых охотится; null — охотиться не на кого.
 var fish: EcoFish
 ## Трубные органы: в их гуле двигатели корабля не слышно (null — органов нет).
@@ -196,10 +201,25 @@ func targets(_world: EcoWorld, out: Array[Dictionary]) -> void:
 			out.append(EcoWorld.target(ID, pr.agent.p, 2.5))
 
 
+## Голодный хищник в патруле ищет добычу не каждый шаг, а раз в столько секунд (issue #848: поиск по всем
+## светлякам с фильтром укрытий — главная доля «мира» в провалах кадра).
+const SEEK_EVERY := 0.25
+
+
 func step(world: EcoWorld, dt: float) -> void:
 	for pr in all:
 		_step_pred(world, pr, dt)
 		turn(pr, dt)
+	_skip = Callable()
+	_skip_built = false  # лямбда держит хищников — до следующего шага не храним
+
+
+## Фильтр укрытий светляков на этот шаг: собирается один раз (первый, кому нужен), не на каждого хищника.
+func _skip_now() -> Callable:
+	if not _skip_built:
+		_skip = _hidden_fish()
+		_skip_built = true
+	return _skip
 
 
 ## Плавный поворот (Б3, «плавность поведения»): тело не щёлкает за скоростью, а догоняет её — доля угла за секунду
@@ -396,8 +416,10 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 					gz = _rnd.range_f(-170, 150)
 				var gy := minf(_floor(world, gx, gz, GOAL_CEILING - 14.0) + _rnd.range_f(4, 14), GOAL_CEILING)
 				a.goal = Vector3(gx, gy, gz)
-			if pr.hunger > HUNT_HUNGER and fish and not at_station:
-				var f := fish.nearest_fish(a.p, HUNT_RADIUS, _hidden_fish())
+			pr.seek_t = maxf(pr.seek_t - dt, 0.0)
+			if pr.hunger > HUNT_HUNGER and fish and not at_station and pr.seek_t <= 0.0:
+				pr.seek_t = SEEK_EVERY
+				var f := fish.nearest_fish(a.p, HUNT_RADIUS, _skip_now())
 				if f:
 					_set_mode(pr, Mode.HUNT, 12.0)
 					pr.prey = f

@@ -106,8 +106,7 @@ func _sync_dust(t: float, state: EcoLink.ShipState, flow: Vector3) -> void:
 		return
 	dust.update(remoras, t, state.pos)
 	_dust.pack(dust.dust, t, flow, state, EcoRemoraDust.COLOR, EcoRemoraDust.LIT, Seabed.mesh_height)
-	if _dust.changed:   # облачков нет и не было — буфер тот же, не грузим (issue #133)
-		dust_view.multimesh.buffer = _dust.data
+	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 
 
 ## Место рыбы: нос (+Z) — по dir, на плаву виляет.

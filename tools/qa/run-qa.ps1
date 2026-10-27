@@ -14,7 +14,7 @@ $repo  = 'D:\AI\DeepDive'
 $out   = 'D:\AI\qa-build'
 $run   = "$out\run"
 $app   = 'com.garrimajo5.deepdive'
-$apk   = "$out\DeepDive.apk"
+$apk   = "$out\DeepDive-emulator.apk"   # эмулятору — x86_64-сборка (#844); телефону — DeepDive.apk
 if (-not $Scenario) { $Scenario = "$repo\tools\qa\scenario.json" }
 New-Item -ItemType Directory -Force $out | Out-Null
 Remove-Item -Recurse -Force $run -ErrorAction SilentlyContinue
@@ -57,8 +57,9 @@ if ($Pr) {
   $dir = "$out\pr$Pr"
   Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
   gh run download $rid -n deepdive-apk -D $dir
-  if (-not (Test-Path "$dir\DeepDive.apk")) { Write-Output "NO_ARTIFACT: в прогоне PR #$Pr нет deepdive-apk (сборка APK не шла — в PR нет кода?)"; exit 1 }
-  $apk = "$dir\DeepDive.apk"
+  # эмулятору — x86_64-сборка; в артефактах до #844 был один общий DeepDive.apk
+  $apk = @("$dir\DeepDive-emulator.apk", "$dir\DeepDive.apk") | Where-Object { Test-Path $_ } | Select -First 1
+  if (-not $apk) { Write-Output "NO_ARTIFACT: в прогоне PR #$Pr нет deepdive-apk (сборка APK не шла — в PR нет кода?)"; exit 1 }
   $head = "PR#$Pr $($sha.Substring(0,7))"
 } else {
   # APK из релиза apk-latest (то, что собрал CI из main)
@@ -66,7 +67,9 @@ if ($Pr) {
   $head = if ($rel.body -match 'коммит ([0-9a-f]{7})') { $Matches[1] } else { $rel.published_at }
   $last = if (Test-Path "$out\last-commit.txt") { (Get-Content "$out\last-commit.txt").Trim() } else { '' }
   if ($head -eq $last -and -not $Force) { Write-Output "NO_CHANGES $head"; exit 0 }
-  $asset = $rel.assets | Where-Object name -eq 'DeepDive.apk' | Select -First 1
+  # эмулятору — x86_64-сборка (#844); в релизах до неё — один общий DeepDive.apk
+  $asset = $rel.assets | Where-Object name -eq 'DeepDive-emulator.apk' | Select -First 1
+  if (-not $asset) { $asset = $rel.assets | Where-Object name -eq 'DeepDive.apk' | Select -First 1 }
   Invoke-WebRequest $asset.browser_download_url -OutFile $apk -Headers @{ 'User-Agent' = 'run-qa' }
 }
 

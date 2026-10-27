@@ -311,6 +311,9 @@ static func apply_world(agents: Array[EcoAgent], systems: Array, data: PackedFlo
 			all[i].food = clampf(moss[k + 1], 0.0, 1.0)
 			n += 1
 	apply_shoals(agents, systems, data)
+	var fish := fish_of(systems)
+	if fish:  # рыбок поставили мимо шага стаи — рамки для поиска добычи (EcoFish.nearest_fish) заново
+		fish.bounds()
 	apply_coins(systems, data)
 	apply_kelp(systems, data)
 	apply_raduzh(systems, data, now)
