@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://pwh2og7s44bh"
-path="res://.godot/imported/kolco-svetilnik_emission.png-c18423819d51250b110c75ad47356163.ctex"
+path.s3tc="res://.godot/imported/kolco-svetilnik_emission.png-c18423819d51250b110c75ad47356163.s3tc.ctex"
+path.etc2="res://.godot/imported/kolco-svetilnik_emission.png-c18423819d51250b110c75ad47356163.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "9ce21470ad15279b47f9668b4b5732aa"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/kolco-svetilnik_emission.png"
-dest_files=["res://.godot/imported/kolco-svetilnik_emission.png-c18423819d51250b110c75ad47356163.ctex"]
+dest_files=["res://.godot/imported/kolco-svetilnik_emission.png-c18423819d51250b110c75ad47356163.s3tc.ctex", "res://.godot/imported/kolco-svetilnik_emission.png-c18423819d51250b110c75ad47356163.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

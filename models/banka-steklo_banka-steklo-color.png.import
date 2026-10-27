@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dyn56ibbfgb06"
-path="res://.godot/imported/banka-steklo_banka-steklo-color.png-d0d96506cdce5a3a7cf6e769a61b953b.ctex"
+path.s3tc="res://.godot/imported/banka-steklo_banka-steklo-color.png-d0d96506cdce5a3a7cf6e769a61b953b.s3tc.ctex"
+path.etc2="res://.godot/imported/banka-steklo_banka-steklo-color.png-d0d96506cdce5a3a7cf6e769a61b953b.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "fdcf253ece5cfee09905343c1ca73621"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/banka-steklo_banka-steklo-color.png"
-dest_files=["res://.godot/imported/banka-steklo_banka-steklo-color.png-d0d96506cdce5a3a7cf6e769a61b953b.ctex"]
+dest_files=["res://.godot/imported/banka-steklo_banka-steklo-color.png-d0d96506cdce5a3a7cf6e769a61b953b.s3tc.ctex", "res://.godot/imported/banka-steklo_banka-steklo-color.png-d0d96506cdce5a3a7cf6e769a61b953b.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

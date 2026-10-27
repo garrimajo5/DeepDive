@@ -184,3 +184,91 @@ func test_room_per_speaker() -> void:   # голоса товарищей у с�
 	eq(r.level(3), 0.0, "чужого нет — тишина")
 	r.forget(2)
 	eq(r.talking(), [1] as Array[int], "ушёл — забыт")
+
+
+func _speech(n: int, amp: float) -> PackedVector2Array:
+	return _tone(n, 48000.0, 300.0, amp)
+
+
+func test_station_hold_sends_while_talking() -> void:   # «Нажать и держать»: уходит всё, пока держат; link — только онлайн
+	var st := Voice.Station.new()
+	var out := st.outgoing(_speech(4800, 0.0), 48000.0, 0.1, true, false, true)
+	eq(out.size(), 5, "100 мс захвата — пять пакетов, тишина тоже уходит")
+	ok(st.link, "пакеты идут и есть куда — «Вас слышно»")
+	out = st.outgoing(_speech(4800, 0.3), 48000.0, 0.1, true, false, false)
+	eq(out.size(), 0, "не в сети — никуда")
+	ok(not st.link, "без сети «Вас слышно» не пишем")
+	out = st.outgoing(_speech(4800, 0.3), 48000.0, 0.1, false, false, true)
+	eq(out.size(), 0, "отпустили — не шлём")
+	ok(not st.link)
+	eq(st.sent, 5)
+
+
+func test_station_link_needs_capture() -> void:   # микрофон не даёт кадров — передачи нет, «Нет передачи»
+	var st := Voice.Station.new()
+	st.outgoing(_speech(4800, 0.3), 48000.0, 0.1, true, false, true)
+	ok(st.link)
+	for i in 3:
+		st.outgoing(PackedVector2Array(), 48000.0, 0.1, true, false, true)
+	ok(not st.link, "захват затих дольше LINK_HOLD — link гаснет")
+
+
+func test_station_voice_mode_skips_silence() -> void:   # «По голосу»: тишина не уходит, конец слова — уходит
+	var st := Voice.Station.new()
+	eq(st.outgoing(_speech(4800, 0.0), 48000.0, 0.1, true, true, true).size(), 0, "тишина — не шлём")
+	ok(st.link, "но микрофон работает — «Вас слышно» и в паузе")
+	eq(st.outgoing(_speech(4800, 0.3), 48000.0, 0.1, true, true, true).size(), 5, "речь — вся")
+	var tail := st.outgoing(_speech(48000, 0.0), 48000.0, 1.0, true, true, true).size()
+	var hold := roundi(Voice.GATE_HOLD / 0.02)
+	ok(tail >= hold - 1 and tail <= hold, "после речи — ещё GATE_HOLD (≈ %d пакетов): %d" % [hold, tail])
+
+
+func test_station_voices_for_radio() -> void:   # принятые голоса → места и высота штрихов для Radio.heard
+	var st := Voice.Station.new()
+	var pk: Array = []
+	for i in Voice.DELAY:
+		pk.append([1, _packet(i, 0.1)])
+		pk.append([2, _packet(i, 0.0)])
+	st.incoming(pk)
+	st.pull(1, Voice.FRAME + 1, Voice.RATE)
+	st.pull(2, Voice.FRAME + 1, Voice.RATE)
+	var v := st.voices()
+	eq(v.size(), 1, "тишина не говорит")
+	eq(v[0][0], 1)
+	near(v[0][1], 0.1 * Voice.LEVEL_K, 0.02, "уровень → штрихи")
+
+
+func test_voice_io_hears_mates() -> void:   # узел: пакеты товарища → строка рации с именем и ролью, своё — мимо
+	var io := VoiceIO.new()
+	tree.root.add_child(io)
+	var radio := Radio.new()
+	radio.on = true
+	radio.update(0.0, false, false)
+	var crew: Array = []
+	for i in 3:
+		var m := Crew.Member.new()
+		m.name = "Игрок %d" % i
+		m.role = i
+		crew.append(m)
+	var sent: Array = []
+	var pk: Array = []
+	for i in Voice.DELAY + 10:
+		pk.append([1, _packet(i, 0.2)])
+		pk.append([0, _packet(i, 0.2)])   # своё место — не слышим себя
+	io.step(0.02, radio, true, func(p: PackedByteArray) -> void: sent.append(p), pk, crew, 0,
+		func(w: int) -> bool: return w != 2)
+	for i in 5:
+		radio.update(0.02, false, false)
+		io.step(0.02, radio, true, func(p: PackedByteArray) -> void: sent.append(p), [], crew, 0,
+			func(w: int) -> bool: return true)
+	eq(radio.talkers.size(), 1, "говорит один товарищ")
+	eq(radio.talkers[0].id, 1)
+	eq(radio.talkers[0].name, "Игрок 1")
+	eq(radio.talkers[0].role, 1)
+	ok(radio.talkers[0].level > 0.5, "громко — высокие штрихи")
+	eq(radio.voice(), [1] as Array[int], "табличка товарища — в «активности»")
+	eq(sent.size(), 0, "не держим кнопку — ничего не ушло")
+	ok(not radio.link)
+	ok(not io.players.has(0), "своему месту проигрыватель не нужен")
+	io.queue_free()
+	await frames(1)

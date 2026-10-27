@@ -128,7 +128,8 @@ func hidden() -> bool:
 
 
 ## Рация ART-041 в коопе: «Нажать и держать» — палец на кнопке (`Router.held_in`), меню и пауза обрывают передачу;
-## кнопка не крутит взгляд (`Router.blocks`). Голоса пока нет (решение владельца) — `Radio.enabled` выключено.
+## кнопка не крутит взгляд (`Router.blocks`). Голос — `voice_step`; пока нет разрешения микрофона Android — `Radio.enabled`
+## выключено.
 func radio_step(dt: float) -> void:
 	var m := main
 	var radio := m.radio
@@ -138,12 +139,40 @@ func radio_step(dt: float) -> void:
 	radio.on = Radio.enabled and (m.net_client != null or not m.net_mates.is_empty())
 	var size := _size()
 	radio.update(dt, m.overlay.router.held_in(Radio.button_rect(size)), hidden())
+	voice_step(dt)
 	radio_sight()
 	for p in m.overlay.router.taps:
 		radio.tap(p, size)
 	radio.settings_wanted = false   # запрос разрешения микрофона Android — вместе с голосом
 	m.overlay.router.blocks.append_array(radio.blocks(size))
 	m.radio_panel.show_radio(radio, m.time)
+
+
+## Голос рации (#634): свой захват хосту (гость) или всем на палубе (хост), голоса товарищей — в проигрыватели и
+## в список рации (`VoiceIO`, `Voice.Station`).
+func voice_step(dt: float) -> void:
+	var m := main
+	if m.voice_io == null:
+		return
+	var online := false
+	var send := func(_p: PackedByteArray) -> void: pass
+	var packets := []
+	var me := m.crew.find(m.me)
+	if m.net_client != null:
+		online = m.net_client.joined()
+		send = m.net_client.send_voice
+		packets = m.net_client.take_voice()
+		me = m.net_client.me
+	elif m.net_host != null:
+		online = not m.net_mates.is_empty()
+		var host := m.net_host
+		var i := me
+		send = func(p: PackedByteArray) -> void: host.send_voice(i, p)
+		packets = m.net_host.take_voice()
+	var sight := func(w: int) -> bool:
+		return w < 0 or w >= m.crew.size() \
+			or ShipLayout.in_sight(m.me.z, (m.crew[w] as Crew.Member).z, m.layout.doors)
+	m.voice_io.step(dt, m.radio, online, send, packets, m.crew, me, sight)
 
 
 ## Говорящий товарищ в поле зрения или за стеной (ART-041): за закрытым люком — строка «Вне поля зрения», табличка

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://1pexc0sqdo7s"
-path="res://.godot/imported/rezak_rezak-color.png-789d240c6b56a7023a8d13509f0d4353.ctex"
+path.s3tc="res://.godot/imported/rezak_rezak-color.png-789d240c6b56a7023a8d13509f0d4353.s3tc.ctex"
+path.etc2="res://.godot/imported/rezak_rezak-color.png-789d240c6b56a7023a8d13509f0d4353.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "0cb2158378ddfc73c6f3b8b7dafe4677"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/rezak_rezak-color.png"
-dest_files=["res://.godot/imported/rezak_rezak-color.png-789d240c6b56a7023a8d13509f0d4353.ctex"]
+dest_files=["res://.godot/imported/rezak_rezak-color.png-789d240c6b56a7023a8d13509f0d4353.s3tc.ctex", "res://.godot/imported/rezak_rezak-color.png-789d240c6b56a7023a8d13509f0d4353.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -137,6 +137,7 @@ var comms := Comms.new()
 var comms_panel: CommsPanel
 var radio := Radio.new()   ## рация ART-041 (в игре скрыта до решения по голосу — `Radio.enabled`)
 var radio_panel: RadioPanel
+var voice_io: VoiceIO   ## голос рации (#634): захват и проигрыватели товарищей, шаг — `OverlayFlow.voice_step`
 var _code_rng := RandomNumberGenerator.new()   ## кодовое слово нового забега
 var tutorial_guest: Tutorial.Guest   ## у гостя сети: свои шаги по своему нажатию и кадру хоста; в своей игре — null
 var hint_pointer: HintPointerView   ## указатель над постом-целью подсказки (ART-038, HintPointer); вне кадра — стрелка у края
@@ -195,6 +196,8 @@ func _ready() -> void:
 	SoundMix.ensure()   # шины звука — до первых плееров
 	ambience = Ambience.new()
 	add_child(ambience)
+	voice_io = VoiceIO.new()
+	add_child(voice_io)
 	music = Music.new()
 	add_child(music)
 	ship_sounds = ShipSounds.new()
@@ -1165,7 +1168,9 @@ func _apply_graphics(level: int) -> void:
 	if breach_view:
 		breach_view.parts.lite = lite  # частицы пробоины ART-072: 24/16/15+1
 	if grade:
-		grade.set_lite(lite)          # виньетка ART-065: без LUT, овал 0,10
+		grade.set_lite(lite)          # виньетка ART-065: без LUT и без копии экрана, овал 0,10 (#842)
+	if env:
+		env.glow_enabled = not lite   # bloom — лишние проходы размытия на слабых телефонах (#842)
 	glints.lite = lite                # блики воды в мостике ART-067 выключены
 	if eco:
 		eco.set_lite(lite)            # живой мир: флора не колышется, ободка тел нет (EcoView.set_lite, #598)

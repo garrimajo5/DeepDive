@@ -49,6 +49,9 @@ func _ready() -> void:
 	mesh.surface_set_material(0, m)
 	seabed.mesh = mesh
 	seabed.layers = LAYER_WORLD
+	# тень не отбрасывает (#842): сетка ≈39 тыс. треуг. в каскадах солнца и тени прожектора, а солнце под −70° —
+	# самозатенения дна почти не видно; тени существ, камней и корабля дно по-прежнему принимает
+	seabed.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(seabed)
 
 	# лёд: плоскость на y = 0 лицом вниз; карты, трещины и свечение по ART-056 (IceSheet, shaders/ice.gdshader)

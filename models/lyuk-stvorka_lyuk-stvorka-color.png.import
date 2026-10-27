@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://d4ahigou5m3bs"
-path="res://.godot/imported/lyuk-stvorka_lyuk-stvorka-color.png-dadd29733bd6bc16d7bcf24eff5541fb.ctex"
+path.s3tc="res://.godot/imported/lyuk-stvorka_lyuk-stvorka-color.png-dadd29733bd6bc16d7bcf24eff5541fb.s3tc.ctex"
+path.etc2="res://.godot/imported/lyuk-stvorka_lyuk-stvorka-color.png-dadd29733bd6bc16d7bcf24eff5541fb.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "24565fbebd7e550bb53fb9094c0e5c50"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/lyuk-stvorka_lyuk-stvorka-color.png"
-dest_files=["res://.godot/imported/lyuk-stvorka_lyuk-stvorka-color.png-dadd29733bd6bc16d7bcf24eff5541fb.ctex"]
+dest_files=["res://.godot/imported/lyuk-stvorka_lyuk-stvorka-color.png-dadd29733bd6bc16d7bcf24eff5541fb.s3tc.ctex", "res://.godot/imported/lyuk-stvorka_lyuk-stvorka-color.png-dadd29733bd6bc16d7bcf24eff5541fb.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ba32db1dvis0c"
-path="res://.godot/imported/skaner-biologa_skaner-biologa-color.png-300202678526dc26ee85b7ab63aa4a6b.ctex"
+path.s3tc="res://.godot/imported/skaner-biologa_skaner-biologa-color.png-300202678526dc26ee85b7ab63aa4a6b.s3tc.ctex"
+path.etc2="res://.godot/imported/skaner-biologa_skaner-biologa-color.png-300202678526dc26ee85b7ab63aa4a6b.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "c34fe70f598a9a2756f07a2799358094"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/skaner-biologa_skaner-biologa-color.png"
-dest_files=["res://.godot/imported/skaner-biologa_skaner-biologa-color.png-300202678526dc26ee85b7ab63aa4a6b.ctex"]
+dest_files=["res://.godot/imported/skaner-biologa_skaner-biologa-color.png-300202678526dc26ee85b7ab63aa4a6b.s3tc.ctex", "res://.godot/imported/skaner-biologa_skaner-biologa-color.png-300202678526dc26ee85b7ab63aa4a6b.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
