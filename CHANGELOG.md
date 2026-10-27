@@ -3,6 +3,10 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-10-27
+- Порядок в коде: экраны меню (главное меню, настройки, предложение «Экономно», журнал экспедиции) вынесены из
+  `main.gd` в `MenuFlow` (`scripts/game/menu_flow.gd`, `main.menu_flow`); у `Main` — пересылки `open_menu`,
+  `close_menu`, `open_settings`, `open_journal`, `_settings_show`, `_journal_show`, `_apply_settings`. Поведение то же,
+  снимки меню, настроек, журнала и «Экономно» совпадают (по issue #753, `test_main_menu.test_scene_menu_flow`).
 - Порядок в коде: прогрев шейдеров на сцене (заставка, взгляды камеры, скрытое на кадр, слои первого взгляда)
   вынесен из `main.gd` в `WarmRunner` (`scripts/game/warm_runner.gd`, `main.warm_run`); у `Main` — пересылки
   `warming()`/`warm_layers()`. Поведение то же: 18 кадров прогрева (по issue #752, `test_warmup.test_scene_warm_runner`).

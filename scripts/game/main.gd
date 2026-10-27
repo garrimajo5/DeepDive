@@ -64,6 +64,7 @@ var warm := Warmup.new()
 var timeline := RunTimeline.new()   ## хронометраж забега (#633): лента и сводка в user://zabegi.txt
 var curtain: WarmSplash   ## заставка прогрева (ART-034), после прогрева — null
 var warm_run := WarmRunner.new(self)   ## прогрев на сцене: заставка, взгляды, скрытое на кадр (#752)
+var menu_flow := MenuFlow.new(self)   ## экраны меню: главное, настройки, «Экономно», журнал (#753)
 var hit_flash: ColorRect
 var visor: ColorRect          ## щиток сварщика: затемнение, пока свой игрок варит (Breach.VISOR)
 var sonar_view: SonarView
@@ -388,7 +389,7 @@ func _ready() -> void:
 	address.load_last()
 	fps_view = FpsView.new()   # счётчик кадров ART-044: под меню и паузой, касаний не принимает
 	add_child(fps_view)
-	lite_offer_panel = LiteOfferPanel.new()   # предложение «Экономно» ART-044: касания — `_offer_step`
+	lite_offer_panel = LiteOfferPanel.new()   # предложение «Экономно» ART-044: касания — `MenuFlow.offer_step`
 	add_child(lite_offer_panel)
 	if settings.pick_first(Graphics.auto_here()):   # первый запуск — уровень графики по телефону ART-044
 		var d := Graphics.device()
@@ -563,7 +564,7 @@ func step(dt: float) -> void:
 		qa.tick(dt)
 	if main_menu.open and not warm.active():   # главное меню: игра стоит, касания — кнопкам меню
 		_tutorial_hide()
-		_menu_step(dt)
+		menu_flow.menu_step(dt)
 		return
 	if pause.open:   # пауза: игра стоит, касания — кнопкам паузы; меню сетевого забега — мир идёт без своего ввода
 		var stop := pause.stops_world()
@@ -575,7 +576,7 @@ func step(dt: float) -> void:
 			overlay.router.mute()
 		else:
 			overlay.router.clear()   # палец на кнопке меню не идёт в игру: свой игрок стоит, за постом — без хода
-	if _offer_step():   # предложение «Экономно»: касания — его кнопкам, свой игрок стоит, мир идёт
+	if menu_flow.offer_step():   # предложение «Экономно»: касания — его кнопкам, свой игрок стоит, мир идёт
 		overlay.router.clear()
 	if net_client:   # клиент: корабль, реактор и экипаж — из кадров хоста
 		_client_step(dt)
@@ -1134,167 +1135,23 @@ func _on_hit(percent: int, kind: String) -> void:
 		say("%s бьёт по корпусу: −%d%%" % [kind, percent])
 
 
-## Главное меню ART-037 поверх сцены (после заставки прогрева — сразу под ней). Игра под меню стоит.
+## Главное меню ART-037 поверх сцены — `MenuFlow.open_menu` (#753).
 func open_menu() -> void:
-	main_menu.open = true
-	if menu_panel == null:
-		menu_panel = MenuPanel.new()
-		menu_panel.version = str(ProjectSettings.get_setting("application/config/version", "?"))
-		add_child(menu_panel)
-	menu_panel.show_menu(main_menu)
-	overlay.visible = false
-	if hint:
-		hint.visible = false   # строки приборов не лезут к шапкам меню, сбора и журнала (#571)
+	menu_flow.open_menu()
 
 
-## Шаг под меню: касания кнопок. «Погрузиться» — забег с начала (облёт, часы забега), палец с кнопки не идёт в игру.
-func _menu_step(dt: float = 0.0) -> void:
-	var r := overlay.router
-	if settings.open:
-		_settings_step(r)
-		r.end_frame()
-		return
-	if address.open:
-		_address_step(r, dt)
-		r.end_frame()
-		return
-	if lobby.open:
-		_lobby_step(r, dt)
-		r.end_frame()
-		return
-	if logbook.open:
-		_journal_step(r)
-		r.end_frame()
-		return
-	for p in r.taps:
-		var what := main_menu.press(main_menu.hit(p, get_viewport().get_visible_rect().size))
-		if what == "dive":
-			close_menu()
-			_begin_run()
-			break
-		if what == "crew":
-			open_lobby()
-			break
-		if what == "journal":
-			open_journal()
-			break
-		if what == "settings":
-			open_settings()
-			break
-	r.end_frame()
-
-
-## Настройки ART-037 поверх главного меню (на его фоне) или паузы (над затемнённой сценой); «Назад» вернёт к ним.
+## Настройки ART-037 поверх меню или паузы — `MenuFlow.open_settings` (#753).
 func open_settings() -> void:
-	settings.show()
-	_settings_show()
-	overlay.router.clear()   # палец с кнопки «Настройки» не берёт ползунок
+	menu_flow.open_settings()
 
 
 func _settings_show() -> void:
-	if settings_panel == null:
-		settings_panel = SettingsPanel.new()
-		add_child(settings_panel)
-	settings.mic_ok = radio.mic   # статус микрофона на странице «Голос» ART-041
-	settings_panel.show_settings(settings)
-	if menu_panel:   # над главным меню — его фон без кнопок
-		menu_panel.visible = main_menu.open and not address.open
-		menu_panel.draw.visible = not settings.open
-	if pause_panel:
-		pause_panel.visible = pause.open and not settings.open and not ship_map.open
+	menu_flow.settings_show()
 
 
-## Шаг настроек: касания кнопок, палец на ползунке двигает значение; изменения — сразу в игру и в файл
-## (ползунок — когда палец отпущен).
-func _settings_step(r: Touch.Router) -> void:
-	var size := get_viewport().get_visible_rect().size
-	for p in r.taps:
-		var id := settings.hit(p, size)
-		var what := settings.press(id, p, size)
-		if id == "swipe" or Settings.is_volume(id):
-			_apply_settings()
-			continue
-		_settings_do(what)
-		if what == "back":
-			break
-	if settings.grab != "":
-		var pts := r.points()
-		if pts.is_empty():
-			settings.grab = ""
-			settings.write()
-		elif settings.drag(pts[0], size):
-			_apply_settings()
-	_settings_show()
-
-
-## Что сказали настройки: сохранить и применить, стереть сохранение забега, вернуться.
-func _settings_do(what: String) -> void:
-	match what:
-		"changed":
-			_apply_settings()
-			settings.write()
-		"graphics":
-			_apply_settings()
-			settings.write()
-		"wipe":
-			save.reset(samples, scanner)
-			say("Сохранение сброшено")
-		"back":
-			settings.write()
-			_settings_show()
-			overlay.router.clear()   # палец с «Назад» не нажимает кнопку меню под ним
-
-
-## Громкость шины Master, чувствительность свайпа, уровень графики ART-044; облёт читает `_begin_run`.
+## Громкость, свайп, уровень графики, рация — `MenuFlow.apply_settings` (#753).
 func _apply_settings() -> void:
-	AudioServer.set_bus_volume_db(0, Settings.volume_db(settings.volume))
-	if overlay:
-		overlay.swipe = settings.swipe
-	if graphics_level != settings.graphics:
-		_apply_graphics(settings.graphics)
-	if fps_view:
-		fps_view.visible = settings.fps
-	radio.mode = settings.voice_mode   # страница «Голос» ART-041: режим, приём и микрофон — независимо
-	radio.hear = settings.hear
-	radio.mic_on = settings.mic_on
-	radio.volume = settings.mates
-
-
-## Предложение «Экономно» ART-044: открыть после низких кадр/с, когда ничего не мешает (не на «Экономно», не под
-## тревогой, меню, паузой, настройками, облётом, голосованием, шторками; тестер — только шагом `slow`); касания —
-## «Да» / «Нет». true — диалог открыт (ввод этого кадра в игру не идёт).
-func _offer_step() -> bool:
-	var blocked := not offer or qa != null or alarms_on().has(true) or main_menu.open or pause.open \
-		or settings.open or warm.active() or flyby.active() or wreck.active() or at_vote or run.ended \
-		or (net_client != null and drop.active())
-	lite_offer.update(graphics_level, settings.lite_no, blocked)
-	if lite_offer.open:
-		var size := get_viewport().get_visible_rect().size
-		for p in overlay.router.taps:
-			var what := lite_offer.press(lite_offer.hit(p, size))
-			if what != "":
-				_offer_do(what)
-				break
-	if lite_offer_panel:
-		lite_offer_panel.show_offer(lite_offer)
-	return lite_offer.open
-
-
-## Ответ на предложение: «Да» — «Экономно» сразу и в настройки, «Нет» — больше не предлагать.
-func _offer_do(what: String) -> void:
-	match what:
-		"yes":
-			settings.graphics = Graphics.ECONOMY
-			_apply_settings()
-			say("Графика: «Экономно»")
-		"no":
-			settings.lite_no = true
-		_:
-			return
-	settings.write()
-	if lite_offer_panel:
-		lite_offer_panel.show_offer(lite_offer)
-	overlay.router.clear()   # палец с кнопки не идёт в игру
+	menu_flow.apply_settings()
 
 
 ## Уровень графики ART-044 (`Graphics.LEVELS`): дальность камер, «Экономно» у рельефа, частиц и пост, тени света
@@ -1343,34 +1200,13 @@ func _apply_graphics(level: int) -> void:
 		vp.scaling_3d_scale = g["scale"]
 
 
-## «Журнал экспедиции» ART-047 поверх главного меню: история `expedition`, изученные виды, груз трюма.
+## «Журнал экспедиции» ART-047 — `MenuFlow.open_journal` (#753).
 func open_journal() -> void:
-	logbook.show()
-	_journal_show()
-	overlay.router.clear()
+	menu_flow.open_journal()
 
 
 func _journal_show() -> void:
-	if logbook_panel == null:
-		logbook_panel = JournalPanel.new()
-		add_child(logbook_panel)
-	logbook.blank = Journal.empty(expedition, scanner.scanned.size(), samples.cargo.size())
-	logbook_panel.show_journal(logbook, expedition, scanner, Species.count(), samples.cargo.size(),
-		save.state == SaveGame.Load.BROKEN)
-	if menu_panel:
-		menu_panel.visible = main_menu.open and not logbook.open and not address.open
-
-
-## Шаг журнала: касание места — название под картой, вида — карточка или подсказка, «Ранее» / «Далее», «Назад» — в меню.
-func _journal_step(r: Touch.Router) -> void:
-	for p in r.taps:
-		var did := logbook.press(logbook.hit(p, get_viewport().get_visible_rect().size), scanner.scanned, expedition)
-		if did in ["card", "back"]:   # карточка открыта/закрыта, журнал закрыт: палец не нажмёт то, что под ним
-			overlay.router.clear()
-			break
-	if not logbook.open:   # прочитанные карточки («новое» снято) — в файл, пока меню стоит
-		save.flush(samples, scanner)
-	_journal_show()
+	menu_flow.journal_show()
 
 
 ## Сбор экипажа ART-028 по «Экипаж»: вход — поиск забегов в сети (`finder`), «Создать забег», «По адресу».
@@ -1636,7 +1472,7 @@ func back_pressed() -> void:
 		_map_back()
 		return
 	if settings.open:   # настройки: сначала подтверждение сброса, потом — назад к меню или паузе
-		_settings_do(settings.back())
+		menu_flow.settings_do(settings.back())
 		_settings_show()
 		return
 	if main_menu.open and logbook.open:
@@ -1658,7 +1494,7 @@ func back_pressed() -> void:
 		get_tree().quit()
 		return
 	if lite_offer.open:   # «Назад» над предложением «Экономно» — как «Нет»
-		_offer_do(lite_offer.back())
+		menu_flow.offer_do(lite_offer.back())
 		return
 	if not pause.open:
 		if wreck.active() or (net_client != null and drop.blocks()):
@@ -1705,7 +1541,7 @@ func _pause_step() -> void:
 		r.end_frame()
 		return
 	if settings.open:
-		_settings_step(r)
+		menu_flow.settings_step(r)
 		r.end_frame()
 		return
 	for p in r.taps:
@@ -1723,10 +1559,10 @@ func _pause_step() -> void:
 				"exit":
 					if net_host:
 						_stop_host()
-					_to_menu()
+					menu_flow.to_menu()
 				"leave":
 					_leave_net()
-					_to_menu()
+					menu_flow.to_menu()
 				"settings":
 					open_settings()
 				"map":
@@ -1794,14 +1630,6 @@ func _map_show() -> void:
 	ship_map_panel.show_map(ship_map, marks, crew.find(me), doors, a)
 
 
-## Забег окончен, в главное меню: встать с постов, корабль у начала спуска, без облёта.
-func _to_menu() -> void:
-	_leave_posts()
-	_restart()
-	flyby.stop()
-	open_menu()
-
-
 ## Хост закрывает сетевой забег: гости отключены (у них — диалог обрыва связи), их фигуры и тени убраны.
 func _stop_host() -> void:
 	net_host.stop()
@@ -1826,21 +1654,7 @@ func _leave_posts() -> void:
 
 
 func close_menu() -> void:
-	main_menu.open = false
-	address.open = false
-	lobby.open = false
-	if lobby_panel:
-		lobby_panel.show_lobby(lobby)
-	logbook.open = false
-	if logbook_panel:
-		_journal_show()
-	if menu_panel:
-		menu_panel.show_menu(main_menu)
-	if address_panel:
-		address_panel.show_screen(address)
-	overlay.router.clear()   # палец ещё на кнопке: не крестовина и не касание, пропускающее облёт
-	overlay.visible = not wreck.active()
-	hint.visible = not wreck.active() and not pause.open
+	menu_flow.close_menu()
 
 
 ## Корпус разрушен: забег проигран — шторка ART-036 3,5 с (`Wreck`), под сплошной шторкой подъём к старту с целым
@@ -2852,7 +2666,7 @@ func _drop_taps(taps: Array[Vector2]) -> void:
 				_restart()
 			"menu":   # «В меню» (ART-043): сетевой забег покинут, главное меню ART-037
 				_leave_net()
-				_to_menu()
+				menu_flow.to_menu()
 		drop_panel.show_drop(drop)
 		if net_client == null:
 			return
