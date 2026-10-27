@@ -147,3 +147,56 @@ func test_no_strip_lamp_through_ring() -> void:   # полоса плафона 
 		names.append(p.name)
 	ok(not names.any(func(n: String) -> bool: return n.contains("Лампа: Лаборатория")), "в лаборатории полосы нет")
 	ok(names.any(func(n: String) -> bool: return n.contains("Лампа: Коридор")), "в коридоре — есть")
+
+
+func test_screen_cache() -> void:   # #847: строки журнала не считаются каждый кадр — только при изменении
+	var s := Samples.new(func(_x: float, _z: float) -> float: return -60.0)
+	var sc := Scanner.new()
+	var scr := Lab.Screen.new()
+	var first := scr.lines(s, sc, 0)
+	for i in 10:
+		scr.lines(s, sc, 0)
+	eq(scr.builds, 1, "без изменений — один расчёт")
+	eq(scr.lines(s, sc, 0), first, "те же строки")
+	s.state = Samples.State.BACK   # образец уложен в трюм (_stow)
+	s.target = s.all[0]
+	s.update(Samples.BACK_TIME + 0.1)
+	eq(s.cargo.size(), 1, "образец в трюме")
+	ok(scr.lines(s, sc, 0) != first, "груз сменился — строки новые")
+	eq(scr.builds, 2, "пересчёт по грузу")
+	sc.observe("pred", "ping")
+	scr.lines(s, sc, 0)
+	eq(scr.builds, 3, "наблюдение — пересчёт")
+	eq(scr.lines(s, sc, 1), Lab.page_lines(s, sc, 1), "страница карточки — как без кэша")
+	eq(scr.builds, 4, "смена страницы — пересчёт")
+	sc.observe("pred", "catch")   # число карточек то же, заметка новая
+	eq(scr.lines(s, sc, 1)[2], "Наблюдений 2 из 6", "новая заметка видна на той же странице")
+	sc.complete("pred")
+	eq(scr.lines(s, sc, 1), Lab.page_lines(s, sc, 1), "изучен — карточка с именем")
+	var before := scr.builds
+	s.restore([], [[Samples.Kind.MOSS, -1], [Samples.Kind.MOSS, -1]])
+	sc.restore([], {})
+	scr.lines(s, sc, 1)
+	eq(scr.builds, before + 1, "из сохранения — пересчёт")
+	eq(scr.lines(s, sc, 0), Lab.page_lines(s, sc, 0), "сводка после сохранения — как без кэша")
+
+
+func test_scene_journal_not_every_frame() -> void:   # #847: в шаге игры экран журнала не пересобирается каждый кадр
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	for i in 3:
+		main.step(1.0 / 30.0)
+	var b := main.lab_screen.builds
+	var revs := main.scanner.rev + main.samples.cargo_rev   # живой мир может записать наблюдение — это изменение
+	for i in 30:
+		main.step(1.0 / 30.0)
+	var changes := main.scanner.rev + main.samples.cargo_rev - revs
+	ok(main.lab_screen.builds - b <= changes, "за 30 кадров пересчётов %d, изменений %d" % [main.lab_screen.builds - b, changes])
+	ok(changes < 5, "изменений мало: %d" % changes)
+	main.scanner.observe("pred", "ping")
+	main.journal_page = 1
+	main.step(1.0 / 30.0)
+	ok(main.rooms.journal_text.text.contains("Наблюдений 1 из 6"), "экран обновился: %s" % main.rooms.journal_text.text)
+	main.queue_free()
+	await frames(1)

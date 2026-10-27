@@ -742,3 +742,10 @@ ORM = AO/шероховатость/металл, в существующие `P
 схема `terrasa-vrat-gabarity.png`, иконки `ikonka-terrasa-vrat.png`, `ikonka-nablyudenie-polya.png`; решения — `terrasa-vrat.md`:
 арка 120 × 58 × 23 м, проход 60 × 36 м, карман Ø 100 м, бюджет модели 59 тыс. треуг. с LOD, 3 материала. Глубина пола 65 м —
 предложение, проверить при сборке места 07. Модель — следующий заказ MOD.
+## ART-080 Инеевая бахрома и ледяная моль — принято
+- Исходник: `docs/bestiary.md`, `svetovoy-kolodets.md`, `ledokryl.md`, `led-snizu.md`, #818 (место 05).
+
+**Принято 27.10.2026** (PR #864, ветка `art/ART-080-bahroma-mol`): листы `inevaya-bahroma-list.png`, `ledyanaya-mol-list.png`,
+атлас `ledyanaya-mol-atlas.png` (RGBA 256², 2×2); решения — `inevaya-bahroma-i-mol.md`: бахрома 48 нитей одним MultiMesh
+(24 на «Экономно»), след касания #67DDEB до 60 с без bloom, моль ≤ 300 карточек одним MultiMesh (96 на «Экономно»), часть
+на наружном стекле, тревогу не закрывает. Встройка — поток Б (#836).

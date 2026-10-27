@@ -48,6 +48,7 @@ var result_fade := Briefing.Fade.new()  ## итог забега на голог
 var result_rows: Array = []      ## четыре строки итога на голограмме (Run.summary)
 var result_detail: Array = []    ## итог на панели (Run.detail) — гостям в кадре
 var journal_page := 0          ## страница журнала лаборатории: 0 — сводка, дальше карточки видов (Lab.page_lines)
+var lab_screen := Lab.Screen.new()   ## строки экрана журнала — только при изменении (#847)
 var engine := EngineRoom.new()   ## машинное: вентиль сброса пара и щиток «Аварийный сброс»
 var debug_vent := false          ## снимок: вентиль держат без пальца
 var debug_winch := false         ## снимок: кнопку у лебёдки держат без пальца
@@ -783,7 +784,7 @@ func step(dt: float) -> void:
 	rooms.apply(layout, reactor, airlock, engine)
 	var carry_c: Color = Samples.COLORS[samples.target.kind] if samples.target else Color.WHITE
 	rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(), carry_c)
-	rooms.set_lab(Lab.contents(samples.cargo), Lab.page_lines(samples, scanner, journal_page), time)
+	rooms.set_lab(Lab.contents(samples.cargo), lab_screen.lines(samples, scanner, journal_page), time)
 	rooms.set_shelves(HoldShelves.contents(samples.cargo))
 	bridge.set_scanner_screen(scanner.screen_lines())
 	message.update(dt)

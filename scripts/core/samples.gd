@@ -57,6 +57,7 @@ var state := State.IDLE
 var target: Sample = null
 var progress := 0.0            ## захват 0…1 за GRAB_TIME удержания
 var version := 0               ## растёт при каждом изменении того, что лежит на дне (для перерисовки)
+var cargo_rev := 0             ## растёт при каждом изменении груза и поднятых (экран журнала лаборатории, #847)
 var stolen := {}               ## номера образцов, сорванных с захвата (EcoLink.STEAL): не на дне и не в грузе
 var _ground: Callable
 var _back := 0.0
@@ -148,6 +149,7 @@ func _stow() -> void:
 	_back = 0.0
 	cargo.append([s.kind, s.i])
 	got[s.i] = true
+	cargo_rev += 1
 	changed.emit()
 	message.emit("В трюме: %s (образцов %d)" % [s.title().to_lower(), cargo.size()])
 
@@ -210,6 +212,7 @@ func reset() -> void:
 	_back = 0.0
 	_holding = false
 	version += 1
+	cargo_rev += 1
 	changed.emit()
 
 
@@ -244,6 +247,7 @@ func restore(got_list: Array, cargo_list: Array) -> void:
 			got[n] = true
 		cargo.append([k, n if n >= 0 else -1])
 	version += 1
+	cargo_rev += 1
 
 
 ## Захват (крепление троса) в мире — для живого мира (EcoLink.ShipState.claw).
