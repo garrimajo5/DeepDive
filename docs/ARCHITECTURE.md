@@ -68,7 +68,7 @@ Main (main.gd)                    — шаг игры, пилот, посты, �
 | Прожектор | `searchlight.gd` | `searchlight_view.gd`, `shaders/beam.gdshader` | А |
 | Сканер биолога | `scanner.gd` | `bridge_view.gd` (экран) | А |
 | Приборы | `status.gd` | `main.gd` | А |
-| Прогрев шейдеров при старте | `warmup.gd` | `main.gd` (шторка, взгляды, скрытое на кадр) | А |
+| Прогрев шейдеров при старте | `warmup.gd` | `warm_runner.gd` (`main.warm_run`: шторка, взгляды, скрытое на кадр) | А |
 | Ввод | `touch.gd` | `touch_overlay.gd` | А |
 | Рельеф и вода | `hash_noise.gd`, `seabed.gd` | `ocean_view.gd` | А (рельеф читают оба) |
 | Живой мир | `core/eco/*` | `game/eco/*` | **Б** |

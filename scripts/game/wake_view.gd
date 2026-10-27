@@ -19,7 +19,7 @@ func set_lite(on: bool) -> void:
 
 
 ## anchor — где держать пустую карточку, пока пузырей нет (положение корабля): узел скрыт, но прогрев шейдеров
-## (`Main._warm_show`) показывает его на кадр — шейдер собирается под шторкой, а не при первом ходе.
+## (`WarmRunner._show`) показывает его на кадр — шейдер собирается под шторкой, а не при первом ходе.
 func apply(w: Wake, anchor: Vector3 = Vector3.ZERO) -> void:
 	var mm := multimesh
 	var n := mini(w.bubbles.size(), mm.instance_count)

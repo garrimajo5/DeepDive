@@ -287,6 +287,27 @@ func test_scene_warm_layers() -> void:
 	await frames(1)
 
 
+## #752: прогрев на сцене вынесен из Main в WarmRunner (`main.warm_run`): состояние — у него, после прогрева пусто.
+func test_scene_warm_runner() -> void:
+	Warmup.enabled = true
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	Warmup.enabled = false
+	ok(main.warm_run is WarmRunner and main.warm_run.main == main, "прогрев сцены — поле main.warm_run")
+	ok(not ("_warm_shown" in main) and not ("_warm_mates" in main), "состояние прогрева больше не в Main")
+	ok(main.warm_run._mates.size() == 2 * CrewRig.MODELS.size(), "члены экипажа каждой внешности — у WarmRunner")
+	ok(main.warm_run._shown.size() > 0, "скрытое показано на кадр")
+	eq(main.warm_layers(), main.warm_run.layers(), "Main.warm_layers — пересылка")
+	while main.warming():
+		main.step(1.0 / 60.0)
+	main.step(1.0 / 60.0)
+	ok(main.warm_run._mates.is_empty() and main.warm_run._shown.is_empty() and main.warm_run._hidden.is_empty()
+		and main.warm_run._emit.is_empty(), "после прогрева у WarmRunner пусто")
+	eq(main.crew, [main.me], "временные члены экипажа ушли")
+	main.queue_free()
+	await frames(1)
+
+
 ## Облёт с борта в начале забега ждёт конца прогрева: под шторкой смотрят глаза на мостике.
 func test_scene_flyby_waits() -> void:
 	Warmup.enabled = true
