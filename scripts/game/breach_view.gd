@@ -65,14 +65,9 @@ func _ready() -> void:
 	_seam_mat.emission = SEAM_COLOR
 	_seam_mat.emission_energy_multiplier = 0.0
 	smi.material_override = _seam_mat
-	spray_mat = ShaderMaterial.new()
-	spray_mat.shader = load("res://shaders/breach_spray.gdshader")
-	spray_mat.set_shader_parameter("atlas", load(BreachSpray.ATLAS))
-	spray_mat.set_shader_parameter("glow", BreachSpray.GLOW)
-	spray_mat.set_shader_parameter("hot", BreachSpray.HOT)
-	spray_mat.set_shader_parameter("core", BreachSpray.CORE)
-	spray_mat.set_shader_parameter("cool", BreachSpray.COOL)
-	spray_mat.set_shader_parameter("cap", BreachSpray.SPARK_CAP)
+	spray_mat = CardSwarm.material("res://shaders/breach_spray.gdshader", {"atlas": load(BreachSpray.ATLAS),
+			"glow": BreachSpray.GLOW, "hot": BreachSpray.HOT, "core": BreachSpray.CORE, "cool": BreachSpray.COOL,
+			"cap": BreachSpray.SPARK_CAP})
 	jet_mm = _spray_node("Струя", BreachSpray.JET_LIMIT)
 	splash_mm = _spray_node("Брызги", BreachSpray.SPLASH_LIMIT)
 	spark_mm = _spray_node("Искры сварки", BreachSpray.SPARK_LIMIT + 1)
@@ -140,20 +135,10 @@ func _model(file: String) -> Node3D:
 ## MultiMesh частиц ART-072 в осях узла пробоины: квадрат 1×1, общий материал, данные кадра в custom.
 ## Пусто — одна прозрачная карточка (прогрев покажет её на кадр), узел скрыт.
 func _spray_node(nm: String, cap: int) -> MultiMeshInstance3D:
-	var quad := QuadMesh.new()
-	quad.size = Vector2.ONE
-	quad.material = spray_mat
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_custom_data = true
-	mm.mesh = quad
-	mm.instance_count = cap
-	mm.custom_aabb = AABB(Vector3(-2.0, -1.6, -0.2), Vector3(4.0, 3.2, 5.0))   # отсек перед пробоиной
 	var n := MultiMeshInstance3D.new()
 	n.name = nm
-	n.multimesh = mm
-	n.layers = OceanView.LAYER_SHIP
-	n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mm := CardSwarm.setup(n, spray_mat, cap, OceanView.LAYER_SHIP)
+	mm.custom_aabb = AABB(Vector3(-2.0, -1.6, -0.2), Vector3(4.0, 3.2, 5.0))   # отсек перед пробоиной
 	_fill(n, [])
 	spot_node.add_child(n)
 	return n
@@ -170,8 +155,7 @@ static func _fill(n: MultiMeshInstance3D, cards: Array) -> void:
 		mm.set_instance_transform(i, Transform3D(Basis(wv, along, Vector3.BACK), d[0]))
 		mm.set_instance_custom_data(i, d[3])
 	if c == 0:
-		mm.set_instance_transform(0, Transform3D(Basis.from_scale(Vector3(0.1, 0.1, 1.0)), Vector3.ZERO))
-		mm.set_instance_custom_data(0, Color(0.0, 0.0, 0.0, 0.0))
+		CardSwarm.park(mm, Vector3.ZERO)
 	mm.visible_instance_count = maxi(c, 1)
 	n.visible = c > 0
 
@@ -203,7 +187,7 @@ func draw_parts() -> void:
 		var sz := BreachSpray.spark_size(v)
 		spk.append([BreachSpray.spark_pos(p.v, p.age, p.floor_y) - v.normalized() * sz.y * 0.5, sz.x,
 			v.normalized() * sz.y, Color(BreachSpray.frame(a, BreachSpray.SPARK_FRAMES), BreachSpray.spark_alpha(a),
-			BreachSpray.SPARK_FRAMES.y, 1.0 + BreachSpray.S(0.05, 0.70, a))])
+			BreachSpray.SPARK_FRAMES.y, 1.0 + HashNoise.smooth(0.05, 0.70, a))])
 	if parts.flash:
 		var f := 0.2 * (0.85 + 0.15 * sin(breach.time * 53.0))
 		spk.append([BreachSpray.SPARK_FROM, f, Vector3.UP * f,

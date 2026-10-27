@@ -57,10 +57,6 @@ var _acc := [0.0, 0.0, 0.0]
 var _spot: Breach.Spot = null
 
 
-static func S(e0: float, e1: float, x: float) -> float:
-	return smoothstep(e0, e1, x)
-
-
 ## Скорость струи у отверстия (Breach.JET_V под углом JET_UP), м/с.
 static func jet_v0() -> Vector3:
 	return Vector3(0.0, Breach.JET_UP, 1.0).normalized() * Breach.JET_V
@@ -87,7 +83,7 @@ static func jet_size(a: float, is_lite: bool = false) -> Vector2:
 
 
 static func jet_alpha(a: float) -> float:
-	return 0.58 * S(0.0, 0.025, a) * (1.0 - S(0.85, 1.0, a))
+	return 0.58 * HashNoise.smooth(0.0, 0.025, a) * (1.0 - HashNoise.smooth(0.85, 1.0, a))
 
 
 ## Центр брызг в осях пробоины: где струя падает на воду, чуть над водой.
@@ -106,7 +102,7 @@ static func splash_size(a: float) -> Vector2:
 
 
 static func splash_alpha(a: float) -> float:
-	return 0.45 * S(0.0, 0.08, a) * (1.0 - S(0.15, 1.0, a))
+	return 0.45 * HashNoise.smooth(0.0, 0.08, a) * (1.0 - HashNoise.smooth(0.15, 1.0, a))
 
 
 ## Начальная скорость искры по доле k и углу: 1,5–3 м/с, веером внутрь отсека и вниз.
@@ -155,12 +151,12 @@ static func spark_size(v: Vector3) -> Vector2:
 
 
 static func spark_alpha(a: float) -> float:
-	return S(0.0, 0.03, a) * (1.0 - S(0.7, 1.0, a))
+	return HashNoise.smooth(0.0, 0.03, a) * (1.0 - HashNoise.smooth(0.7, 1.0, a))
 
 
 ## Цвет искры по доле жизни: #FFA84D → #F18A3D (вспышка электрода — HOT отдельно).
 static func spark_color(a: float) -> Color:
-	return CORE.lerp(COOL, S(0.05, 0.70, a))
+	return CORE.lerp(COOL, HashNoise.smooth(0.05, 0.70, a))
 
 
 ## Яркость искры в кадре (двойник шейдера): GLOW для bloom, но самый сильный канал не выше SPARK_CAP —
