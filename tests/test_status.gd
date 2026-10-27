@@ -100,3 +100,27 @@ func test_hint_has_backing() -> void:
 	near(main.hint.position.x + sb.content_margin_left, 24.0, 0.5, "текст на прежнем месте")
 	main.queue_free()
 	await frames(1)
+
+
+## #847: та же строка — без новых замеров шрифтом; смена части, ширины или размера — пересчёт.
+func test_lines_cached_until_change() -> void:
+	var calls := [0]
+	var counted := func(s: String) -> float:
+		calls[0] += 1
+		return float(s.length())
+	var l := Status.Lines.new()
+	var parts := ["Мостик", "глубина 20 м", "ход 1,5 м/с"]
+	ok(l.update(parts, counted, 30.0, 20), "первый раз — новая строка")
+	eq(l.text, "\n".join(Status.lines(parts, by_len, 30.0)), "текст как у Status.lines")
+	var first: int = calls[0]
+	ok(first > 0, "мерили шрифтом")
+	for i in 30:
+		ok(not l.update(["Мостик", "глубина 20 м", "ход 1,5 м/с"], counted, 30.0, 20), "та же строка — не новая")
+	eq(calls[0], first, "за 30 кадров без изменений — ни одного замера")
+	ok(l.update(["Мостик", "глубина 21 м", "ход 1,5 м/с"], counted, 30.0, 20), "глубина сменилась")
+	ok(calls[0] > first, "пересчитали")
+	ok(l.update(["Мостик", "глубина 21 м", "ход 1,5 м/с"], counted, 12.0, 20), "уже экран — пересчёт")
+	eq(l.text, "Мостик\nглубина 21 м\nход 1,5 м/с", "по новой ширине")
+	ok(l.update(["Мостик", "глубина 21 м", "ход 1,5 м/с"], counted, 12.0, 24), "другой размер шрифта — пересчёт")
+	ok(l.update(["Мостик", "глубина 21 м"], counted, 12.0, 24), "часть ушла — пересчёт")
+	ok(l.update(["Мостик глубина 21 м"], counted, 12.0, 24), "склейка частей — другая строка")
