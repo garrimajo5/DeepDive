@@ -63,31 +63,14 @@ func _init(system: EcoRaduzh) -> void:
 	raduzh = system
 	name = "Радужники"
 	var n := raduzh.swarms.size() * EcoRaduzh.PER_SWARM
-	bodies = _instance("Гребневики", build_body(), n)
+	bodies = EcoMM.instance(self, "Гребневики", build_body(), n, true)
 	_vary.resize(n * 3)
 	for i in n:
 		_vary[i * 3] = member_scale(i)
 		_vary[i * 3 + 1] = member_rate(i)
 		_vary[i * 3 + 2] = member_shade(i)
-	halos = _instance("Ореолы", build_halo(), n)
+	halos = EcoMM.instance(self, "Ореолы", build_halo(), n, true)
 	sync(0.0, Vector3(1e6, 0, 1e6), 0.0)
-
-
-func _instance(n: String, mesh: Mesh, count: int) -> MultiMeshInstance3D:
-	var mi := MultiMeshInstance3D.new()
-	mi.name = n
-	mi.layers = OceanView.LAYER_WORLD
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
-	mm.mesh = mesh
-	mm.instance_count = count
-	mi.multimesh = mm
-	# стаи дрейфуют — границы не пересчитываем, рамка на всю отмель
-	mi.custom_aabb = AABB(Vector3(-400, -200, -400), Vector3(800, 400, 800))
-	add_child(mi)
-	return mi
 
 
 static func _material(code: String) -> ShaderMaterial:
@@ -152,10 +135,10 @@ func sync(t: float, ship_pos: Vector3, ship_yaw: float, all := false) -> void:
 			b = b.scaled_local(BODY * (_vary[idx * 3] * (1.0 + sin(t * _vary[idx * 3 + 1] + m.phase) * 0.08)))
 			# свой силуэт без света; во вспышке радуга одна на всех
 			var c := EcoRaduzh.member_color(sw, k, t) * lerpf(_vary[idx * 3 + 2], 1.0, sw.glow)
-			_put(body_buffer, j, b, p)
+			EcoMM.put_basis(body_buffer, j, b, p)
 			_color(body_buffer, j + STRIDE, c)
 			# без вспышки ореол не нужен — схлопнут в точку, фрагментов не рисует
-			_put(halo_buffer, j, Basis.IDENTITY if gg > 0.0 else Basis.from_scale(Vector3.ZERO), p)
+			EcoMM.put_basis(halo_buffer, j, Basis.IDENTITY if gg > 0.0 else Basis.from_scale(Vector3.ZERO), p)
 			_color(halo_buffer, j + STRIDE, c * gg)
 	bodies.multimesh.buffer = body_buffer
 	halos.multimesh.buffer = halo_buffer
@@ -185,12 +168,6 @@ static func due(sw: EcoRaduzh.Swarm, ship_pos: Vector3, frame: int) -> bool:
 	if d < MID:
 		return true
 	return (frame + sw.index) % (MID_EVERY if d < FAR else FAR_EVERY) == 0
-
-
-static func _put(buf: PackedFloat32Array, i: int, b: Basis, o: Vector3) -> void:
-	buf[i] = b.x.x; buf[i + 1] = b.y.x; buf[i + 2] = b.z.x; buf[i + 3] = o.x
-	buf[i + 4] = b.x.y; buf[i + 5] = b.y.y; buf[i + 6] = b.z.y; buf[i + 7] = o.y
-	buf[i + 8] = b.x.z; buf[i + 9] = b.y.z; buf[i + 10] = b.z.z; buf[i + 11] = o.z
 
 
 static func _color(buf: PackedFloat32Array, i: int, c: Color) -> void:

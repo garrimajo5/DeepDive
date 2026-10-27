@@ -52,13 +52,7 @@ func _init(system: EcoBones) -> void:
 	skull_tris = verts.size() / 3 - before
 	_jaw()
 	_tufts()
-	var arrays := []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_NORMAL] = normals
-	arrays[Mesh.ARRAY_COLOR] = _col
-	var m := ArrayMesh.new()
-	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var m := EcoMM.tris(verts, normals, _col)
 	m.surface_set_material(0, EcoShaders.stone(GROWTH, FILL, ROUGH, SPEC))
 	mesh = m
 	tris = verts.size() / 3

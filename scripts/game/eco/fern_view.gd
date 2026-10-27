@@ -26,8 +26,8 @@ var buffer := PackedFloat32Array()
 func _init(system: EcoFern, ground: Callable = Callable()) -> void:
 	ferns = system
 	name = "Волнолист"
-	leaves = _instance("Листья", build_leaf(), ferns.ferns.size() * EcoFern.LEAVES)
-	shells = _instance("Моллюски", build_shell(), ferns.ferns.size() * EcoFern.SHELLS)
+	leaves = EcoMM.instance(self, "Листья", build_leaf(), ferns.ferns.size() * EcoFern.LEAVES, false, false, false)
+	shells = EcoMM.instance(self, "Моллюски", build_shell(), ferns.ferns.size() * EcoFern.SHELLS, false, false, false)
 	var buf := PackedFloat32Array()
 	buf.resize(shells.multimesh.instance_count * STRIDE)
 	for fe in ferns.ferns:
@@ -35,23 +35,9 @@ func _init(system: EcoFern, ground: Callable = Callable()) -> void:
 			var p := EcoFern.shell_pos(fe, j, ground)
 			var a := float(j) / EcoFern.SHELLS * TAU + fe.yaw
 			var b := Basis(Vector3.UP, a).scaled_local(Vector3(1.0, 0.5, 1.3) * fe.scale)
-			_put(buf, fe.index * EcoFern.SHELLS + j, Transform3D(b, p))
+			EcoMM.put(buf, (fe.index * EcoFern.SHELLS + j) * STRIDE, Transform3D(b, p))
 	shells.multimesh.buffer = buf
 	sync(0.0)
-
-
-func _instance(n: String, mesh: Mesh, count: int) -> MultiMeshInstance3D:
-	var mi := MultiMeshInstance3D.new()
-	mi.name = n
-	mi.layers = OceanView.LAYER_WORLD
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = mesh
-	mm.instance_count = count
-	mi.multimesh = mm
-	add_child(mi)
-	return mi
 
 
 ## Лист-перо 0,28 × 1,4 м (PlaneGeometry с шириной sin(y/1,4 · π) · 1,2, как в браузере): основание у подножия,
@@ -107,17 +93,8 @@ func sync(t: float) -> void:
 	buffer.resize(leaves.multimesh.instance_count * STRIDE)
 	for fe in ferns.ferns:
 		for j in EcoFern.LEAVES:
-			_put(buffer, fe.index * EcoFern.LEAVES + j, Transform3D(EcoFern.leaf_basis(fe, j, t), fe.pos))
+			EcoMM.put(buffer, (fe.index * EcoFern.LEAVES + j) * STRIDE, Transform3D(EcoFern.leaf_basis(fe, j, t), fe.pos))
 	leaves.multimesh.buffer = buffer
-
-
-static func _put(buf: PackedFloat32Array, n: int, tr: Transform3D) -> void:
-	var b := tr.basis
-	var o := tr.origin
-	var i := n * STRIDE
-	buf[i] = b.x.x; buf[i + 1] = b.y.x; buf[i + 2] = b.z.x; buf[i + 3] = o.x
-	buf[i + 4] = b.x.y; buf[i + 5] = b.y.y; buf[i + 6] = b.z.y; buf[i + 7] = o.y
-	buf[i + 8] = b.x.z; buf[i + 9] = b.y.z; buf[i + 10] = b.z.z; buf[i + 11] = o.z
 
 
 ## Расстановка экземпляра n из буфера.

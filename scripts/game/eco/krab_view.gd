@@ -99,7 +99,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 		spine_buffer.resize(EcoKrab.SPINE_MAX * KelpView.STRIDE)
 		for k in EcoKrab.SPINE_MAX:
 			var tr := spine_transform(k) if k < cr.spines else Transform3D(Basis.from_scale(Vector3.ZERO), Vector3.ZERO)
-			KelpView._put(spine_buffer, k * KelpView.STRIDE, tr)
+			EcoMM.put(spine_buffer, k * KelpView.STRIDE, tr)
 		spines.multimesh.buffer = spine_buffer
 		shown_spines = cr.spines
 		spine_writes += 1

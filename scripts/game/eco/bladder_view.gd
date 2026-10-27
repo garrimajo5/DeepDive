@@ -39,36 +39,19 @@ func _init(system: EcoBladder) -> void:
 	bladders = system
 	name = "Пузырчатка"
 	var n := bladders.bushes.size()
-	stems = _instance("Стебли", build_stem(), n * EcoBladder.STEMS, false)
-	bulbs = _instance("Луковицы", build_bulb(), n * EcoBladder.STEMS, true)
-	spores = _instance("Споры", build_spore(), n * EcoBladder.SPORES, true)
-	bubbles = _instance("Пузырьки", build_bubble(), EcoBladderBubbles.POOL, true)
+	stems = EcoMM.instance(self, "Стебли", build_stem(), n * EcoBladder.STEMS, false)
+	bulbs = EcoMM.instance(self, "Луковицы", build_bulb(), n * EcoBladder.STEMS, true)
+	spores = EcoMM.instance(self, "Споры", build_spore(), n * EcoBladder.SPORES, true)
+	bubbles = EcoMM.instance(self, "Пузырьки", build_bubble(), EcoBladderBubbles.POOL, true)
 	var buf := PackedFloat32Array()
 	buf.resize(stems.multimesh.instance_count * STRIDE)
 	for bl in bladders.bushes:
 		for k in EcoBladder.STEMS:
 			var a := bl.stem_base[k]
 			var up := bl.stem_top[k] - a
-			_put(buf, (bl.index * EcoBladder.STEMS + k) * STRIDE, Transform3D(_along(up), a + up * 0.5))  # конус стоит серединой в нуле
+			EcoMM.put(buf, (bl.index * EcoBladder.STEMS + k) * STRIDE, Transform3D(_along(up), a + up * 0.5))  # конус стоит серединой в нуле
 	stems.multimesh.buffer = buf
 	sync(0.0)
-
-
-func _instance(n: String, mesh: Mesh, count: int, colors: bool) -> MultiMeshInstance3D:
-	var mi := MultiMeshInstance3D.new()
-	mi.name = n
-	mi.layers = OceanView.LAYER_WORLD
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = colors
-	mm.mesh = mesh
-	mm.instance_count = count
-	mi.multimesh = mm
-	# облака и луковицы двигаются — границы не пересчитываем, рамка на всю отмель
-	mi.custom_aabb = AABB(Vector3(-400, -200, -400), Vector3(800, 400, 800))
-	add_child(mi)
-	return mi
 
 
 ## Стебель 1 м по +Y: усечённый конус 0,04 → 0,025 м, 4 грани (в расстановке тянется на длину стебля).
@@ -135,7 +118,7 @@ static func pack_bubbles(d: EcoBladderBubbles, t: float, flow: Vector3,
 		var s := EcoBladderBubbles.size(b, t) if a > 0.0 else 0.0
 		var o := EcoBladderBubbles.pos(b, t, flow) if a > 0.0 else b.at
 		var c := EcoBladderBubbles.COLOR.lerp(EcoBladderBubbles.LIT, EcoGrazerDust.light(o, ship))
-		_put(out, i, Transform3D(Basis.from_scale(Vector3.ONE * s), o))
+		EcoMM.put(out, i, Transform3D(Basis.from_scale(Vector3.ONE * s), o))
 		out[i + 12] = c.r; out[i + 13] = c.g; out[i + 14] = c.b; out[i + 15] = a
 	return out
 
@@ -153,7 +136,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 		var c := EcoBladder.bulb_color(bl)
 		for k in EcoBladder.STEMS:
 			var i := (bl.index * EcoBladder.STEMS + k) * STRIDE_C
-			_put(bulb_buffer, i, Transform3D(Basis.from_scale(Vector3.ONE * r), EcoBladder.bulb(bl, k, t)))
+			EcoMM.put(bulb_buffer, i, Transform3D(Basis.from_scale(Vector3.ONE * r), EcoBladder.bulb(bl, k, t)))
 			_color(bulb_buffer, i + STRIDE, c)
 		var popped := bl.popped()
 		if not popped and not fresh and _spores_shown[bl.index] == 0:
@@ -164,9 +147,9 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 		for j in EcoBladder.SPORES:
 			var i := (bl.index * EcoBladder.SPORES + j) * STRIDE_C
 			if popped:
-				_put(spore_buffer, i, Transform3D(Basis.IDENTITY, EcoBladder.spore(bl, j, t)))
+				EcoMM.put(spore_buffer, i, Transform3D(Basis.IDENTITY, EcoBladder.spore(bl, j, t)))
 			else:
-				_put(spore_buffer, i, Transform3D(Basis.from_scale(Vector3.ZERO), bl.cloud))
+				EcoMM.put(spore_buffer, i, Transform3D(Basis.from_scale(Vector3.ZERO), bl.cloud))
 			_color(spore_buffer, i + STRIDE, SPORE * g)
 	bulbs.multimesh.buffer = bulb_buffer
 	if spores_changed:
@@ -237,14 +220,6 @@ static func _along(up: Vector3) -> Basis:
 		x = Vector3.RIGHT
 	var z := x.cross(y)
 	return Basis(x, y * up.length(), z)
-
-
-static func _put(buf: PackedFloat32Array, i: int, tr: Transform3D) -> void:
-	var b := tr.basis
-	var o := tr.origin
-	buf[i] = b.x.x; buf[i + 1] = b.y.x; buf[i + 2] = b.z.x; buf[i + 3] = o.x
-	buf[i + 4] = b.x.y; buf[i + 5] = b.y.y; buf[i + 6] = b.z.y; buf[i + 7] = o.y
-	buf[i + 8] = b.x.z; buf[i + 9] = b.y.z; buf[i + 10] = b.z.z; buf[i + 11] = o.z
 
 
 static func _color(buf: PackedFloat32Array, i: int, c: Color) -> void:

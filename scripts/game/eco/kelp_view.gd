@@ -46,29 +46,13 @@ var _dust := EcoDustBuffer.new()
 func _init(system: EcoKelp) -> void:
 	kelp = system
 	name = "Ленточник"
-	stalks = _instance("Ленты", build_stalk(), kelp.groves.size() * EcoKelp.KELP_N, true)
-	bodies = _instance("Шипоежи", build_body(), kelp.urchins.size(), false)
-	spines = _instance("Иглы", build_spines(), kelp.urchins.size(), false)
+	stalks = EcoMM.instance(self, "Ленты", build_stalk(), kelp.groves.size() * EcoKelp.KELP_N, true)
+	bodies = EcoMM.instance(self, "Шипоежи", build_body(), kelp.urchins.size(), false)
+	spines = EcoMM.instance(self, "Иглы", build_spines(), kelp.urchins.size(), false)
 	dust_view = GrazerView.build_dust(EcoUrchinDust.POOL)
 	add_child(dust_view)
 	kelp.dirty = true
 	sync(0.0)
-
-
-func _instance(n: String, mesh: Mesh, count: int, colors: bool) -> MultiMeshInstance3D:
-	var mi := MultiMeshInstance3D.new()
-	mi.name = n
-	mi.layers = OceanView.LAYER_WORLD
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = colors
-	mm.mesh = mesh
-	mm.instance_count = count
-	mi.multimesh = mm
-	mi.custom_aabb = AABB(Vector3(-400, -200, -400), Vector3(800, 400, 800))
-	add_child(mi)
-	return mi
 
 
 ## Полоса ленты: ширина EcoKelp.WIDTH (экземпляр сужает её по густоте), высота 1 от основания, нормаль +Z.
@@ -182,7 +166,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 				var s := gr.stalks[k]
 				s.drawn = s.f
 				var i := (gr.index * EcoKelp.KELP_N + k) * STRIDE_C
-				_put(stalk_buffer, i, Transform3D(EcoKelp.stalk_basis(s), s.pos))
+				EcoMM.put(stalk_buffer, i, Transform3D(EcoKelp.stalk_basis(s), s.pos))
 				var c := EcoKelp.stalk_color(s)
 				stalk_buffer[i + 12] = c.r; stalk_buffer[i + 13] = c.g; stalk_buffer[i + 14] = c.b; stalk_buffer[i + 15] = 1.0
 		stalks.multimesh.buffer = stalk_buffer
@@ -191,7 +175,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 	for u in kelp.urchins:
 		var tr := Transform3D(EcoKelp.urchin_basis(u, t), u.pos) if u.alive \
 			else Transform3D(Basis.from_scale(Vector3.ZERO), Vector3(0, -999, 0))
-		_put(urchin_buffer, u.index * STRIDE, tr)
+		EcoMM.put(urchin_buffer, u.index * STRIDE, tr)
 	bodies.multimesh.buffer = urchin_buffer
 	spines.multimesh.buffer = urchin_buffer
 	_sync_dust(t, ship, flow)
@@ -203,14 +187,6 @@ func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3) -> void:
 		Seabed.mesh_height)
 	if _dust.changed:   # мути нет и не было — буфер тот же, не грузим (issue #133)
 		dust_view.multimesh.buffer = _dust.data
-
-
-static func _put(buf: PackedFloat32Array, i: int, tr: Transform3D) -> void:
-	var b := tr.basis
-	var o := tr.origin
-	buf[i] = b.x.x; buf[i + 1] = b.y.x; buf[i + 2] = b.z.x; buf[i + 3] = o.x
-	buf[i + 4] = b.x.y; buf[i + 5] = b.y.y; buf[i + 6] = b.z.y; buf[i + 7] = o.y
-	buf[i + 8] = b.x.z; buf[i + 9] = b.y.z; buf[i + 10] = b.z.z; buf[i + 11] = o.z
 
 
 ## Расстановка экземпляра n из буфера с шагом stride.

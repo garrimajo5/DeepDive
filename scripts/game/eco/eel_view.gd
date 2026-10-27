@@ -54,30 +54,15 @@ func _init(system: EcoEel) -> void:
 	eels = system
 	name = "Стеклоусты"
 	var n := eels.eels.size()
-	rocks = _instance("Камни логов", build_rock(), n * EcoEel.ROCKS.size())
-	shell = _instance("Оболочка", _sphere(10, 6, _shell_material()), n * EcoEel.SEGS)
-	organs = _instance("Внутренности", _sphere(6, 4, _flat(ORGANS, false)), n * (EcoEel.SEGS - 1))
-	eyes = _instance("Глаза", _sphere(6, 4, _flat(EYE, true), EYE_R), n * EYES.size())
-	rings = _instance("Присоска", _ring(), n)
+	rocks = EcoMM.instance(self, "Камни логов", build_rock(), n * EcoEel.ROCKS.size(), false)
+	shell = EcoMM.instance(self, "Оболочка", _sphere(10, 6, _shell_material()), n * EcoEel.SEGS, false)
+	organs = EcoMM.instance(self, "Внутренности", _sphere(6, 4, _flat(ORGANS, false)), n * (EcoEel.SEGS - 1), false)
+	eyes = EcoMM.instance(self, "Глаза", _sphere(6, 4, _flat(EYE, true), EYE_R), n * EYES.size(), false)
+	rings = EcoMM.instance(self, "Присоска", _ring(), n, false)
 	dust_view = GrazerView.build_dust(EcoEelDust.POOL)
 	add_child(dust_view)
 	_place_rocks()
 	sync(0.0)
-
-
-func _instance(n: String, mesh: Mesh, count: int) -> MultiMeshInstance3D:
-	var mi := MultiMeshInstance3D.new()
-	mi.name = n
-	mi.layers = OceanView.LAYER_WORLD
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = mesh
-	mm.instance_count = count
-	mi.multimesh = mm
-	mi.custom_aabb = AABB(Vector3(-400, -200, -400), Vector3(800, 400, 800))
-	add_child(mi)
-	return mi
 
 
 static func _sphere(radial: int, rings_n: int, mat: Material, r: float = 1.0) -> SphereMesh:
@@ -153,7 +138,7 @@ func _place_rocks() -> void:
 	for e in eels.eels:
 		for r in e.rocks:
 			var b := Basis.from_euler(Vector3(n * 1.7, n * 2.3, 0.0)).scaled(Vector3.ONE * r.w)
-			_put(buf, n * STRIDE, Transform3D(b, Vector3(r.x, r.y, r.z)))
+			EcoMM.put(buf, n * STRIDE, Transform3D(b, Vector3(r.x, r.y, r.z)))
 			n += 1
 	rocks.multimesh.buffer = buf
 
@@ -180,19 +165,19 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground
 			var pos := segs[k] + side * (sin(t * 10.0 - k * 0.9) * WAG * k if wag else 0.0)
 			var r := SEG_R * (1.0 - float(k) / EcoEel.SEGS * 0.7)
 			var b := _look(dir)
-			_put(shell_buffer, (e.index * EcoEel.SEGS + k) * STRIDE,
+			EcoMM.put(shell_buffer, (e.index * EcoEel.SEGS + k) * STRIDE,
 				Transform3D(b.scaled_local(Vector3(r, r * 0.85, r * SEG_STRETCH)), pos))
-			_put(_organ_buffer, (e.index * (EcoEel.SEGS - 1) + k - 1) * STRIDE,
+			EcoMM.put(_organ_buffer, (e.index * (EcoEel.SEGS - 1) + k - 1) * STRIDE,
 				Transform3D(b.scaled_local(Vector3(r, r * 0.8, r * SEG_STRETCH) * ORGAN_K), pos - Vector3(0, r * 0.15, 0)))
 		var hb := _look(e.face)
 		var head := Transform3D(hb, segs[0])
-		_put(shell_buffer, e.index * EcoEel.SEGS * STRIDE, Transform3D(hb.scaled_local(HEAD), segs[0]))
+		EcoMM.put(shell_buffer, e.index * EcoEel.SEGS * STRIDE, Transform3D(hb.scaled_local(HEAD), segs[0]))
 		for j in EYES.size():
-			_put(_eye_buffer, (e.index * EYES.size() + j) * STRIDE, Transform3D(hb, head * EYES[j]))
+			EcoMM.put(_eye_buffer, (e.index * EYES.size() + j) * STRIDE, Transform3D(hb, head * EYES[j]))
 		var rb := hb * Basis(Vector3.RIGHT, PI / 2.0)
 		if e.latched():
 			rb = hb.scaled_local(RING_FLAT) * Basis(Vector3.RIGHT, PI / 2.0)
-		_put(ring_buffer, e.index * STRIDE, Transform3D(rb, head * RING_AT))
+		EcoMM.put(ring_buffer, e.index * STRIDE, Transform3D(rb, head * RING_AT))
 	shell.multimesh.buffer = shell_buffer
 	organs.multimesh.buffer = _organ_buffer
 	eyes.multimesh.buffer = _eye_buffer
@@ -210,14 +195,6 @@ func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3, ground: Callab
 static func _look(dir: Vector3) -> Basis:
 	var up := Vector3.UP if absf(dir.normalized().y) < 0.98 else Vector3.RIGHT
 	return Basis.looking_at(dir, up, true)
-
-
-static func _put(buf: PackedFloat32Array, i: int, tr: Transform3D) -> void:
-	var b := tr.basis
-	var o := tr.origin
-	buf[i] = b.x.x; buf[i + 1] = b.y.x; buf[i + 2] = b.z.x; buf[i + 3] = o.x
-	buf[i + 4] = b.x.y; buf[i + 5] = b.y.y; buf[i + 6] = b.z.y; buf[i + 7] = o.y
-	buf[i + 8] = b.x.z; buf[i + 9] = b.y.z; buf[i + 10] = b.z.z; buf[i + 11] = o.z
 
 
 ## Расстановка экземпляра n из буфера.
