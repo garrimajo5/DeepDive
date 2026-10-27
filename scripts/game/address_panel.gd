@@ -3,7 +3,7 @@ extends CanvasLayer
 ## Экран «Войти по адресу» ART-039 на фоне заставки (`main.address_panel`): заголовок, поле, подпись, последний
 ## удачный адрес, «Войти» / «Отмена», клавиатура, «Назад». Состояние и места — `AddressScreen`, клавиши —
 ## `AddressPad.key_rect`, масштаб и обрезка фона — `Splash`. Слой над главным меню (его 90), ниже заставки прогрева
-## (100); касания — `Touch.Router.taps` (`Main._address_step`).
+## (100); касания — `Touch.Router.taps` (`LobbyFlow.address_step`).
 
 var screen: AddressScreen
 var draw: Control
