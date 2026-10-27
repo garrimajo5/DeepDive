@@ -124,8 +124,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground
 	if ship != null:
 		dust.update(fish, t, ship.pos, ground)
 		_dust.pack(dust.dust, t, flow, ship, EcoFishDust.COLOR, EcoFishDust.LIT, Seabed.mesh_height)
-		if _dust.changed:   # мути нет и не было — буфер тот же, не грузим (issue #133)
-			dust_view.multimesh.buffer = _dust.data
+		_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 	if buffer.size() != fish.all.size() * STRIDE:
 		buffer = pack(fish, t)
 	else:

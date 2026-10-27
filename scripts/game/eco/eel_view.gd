@@ -187,8 +187,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground
 func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3, ground: Callable) -> void:
 	dust.update(eels, t, ship.pos if ship else Vector3(1e6, 0, 1e6), ground)
 	_dust.pack(dust.dust, t, flow, ship, EcoEelDust.COLOR, EcoEelDust.LIT, Seabed.mesh_height)
-	if _dust.changed:   # мути нет и не было — буфер тот же, не грузим (issue #133)
-		dust_view.multimesh.buffer = _dust.data
+	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 
 
 ## Поворот, у которого +Z смотрит вдоль dir (голова — пастью вперёд).

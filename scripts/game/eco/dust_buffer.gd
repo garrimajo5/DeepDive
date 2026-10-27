@@ -86,3 +86,11 @@ func pack(d: EcoGrazerDust, t: float, flow: Vector3, ship: EcoLink.ShipState = n
 	shown = n_shown
 	changed = fresh or n_shown > 0 or was > 0
 	return n_shown
+
+
+## Загрузить буфер в слой мути mi, если он изменился (issue #133), и спрятать слой, пока облачков нет: пустой
+## MultiMesh всё равно стоит вызова отрисовки, а слоёв мути у видов ≈20 (issue #849).
+func upload(mi: MultiMeshInstance3D) -> void:
+	if changed:
+		mi.multimesh.buffer = data
+	mi.visible = shown > 0
