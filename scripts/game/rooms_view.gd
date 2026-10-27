@@ -47,6 +47,7 @@ const JOURNAL_TEXT := Color("67DDEB")
 var lab_ring: Node3D               ## кольцо-светильник на потолке лаборатории (MOD-020), вставка мигает с плафонами
 var _ring_mats: Array[BaseMaterial3D] = []
 var journal_text: Label3D          ## экран стойки журнала (Lab.journal_lines)
+var _journal_lines := PackedStringArray([""])   ## последние строки экрана журнала
 ## Полки трюма (MOD-017, HoldShelves): банки — металл и стекло — и образцы в них, по MultiMesh на всё (3 вызова).
 var shelf_jars: MultiMeshInstance3D
 var shelf_glass: MultiMeshInstance3D
@@ -363,9 +364,10 @@ func set_lab(kinds: Array, lines: PackedStringArray, t: float) -> void:
 			var f: Vector2 = Lab.FLASKS[i]
 			orb.position = Vector3(f.x, Lab.SAMPLE_Y + Lab.bob(t, i), f.y)
 			orb.rotation.y = t * 0.4 + float(i)
-	var text := "\n".join(lines)
-	if journal_text.text != text:
-		journal_text.text = text
+	if lines == _journal_lines:   # строки не менялись — не собирать текст заново (#847)
+		return
+	_journal_lines = lines
+	journal_text.text = "\n".join(lines)
 
 
 ## Машинное (MOD-009): вентиль на левой стене, щиток на правой; пар — SteamView у сопла (ART-071).
