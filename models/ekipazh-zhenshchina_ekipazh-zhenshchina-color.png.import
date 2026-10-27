@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bhqsfy1uqgp3i"
-path="res://.godot/imported/ekipazh-zhenshchina_ekipazh-zhenshchina-color.png-5ed1dd778320cadf3187485f415adda9.ctex"
+path.s3tc="res://.godot/imported/ekipazh-zhenshchina_ekipazh-zhenshchina-color.png-5ed1dd778320cadf3187485f415adda9.s3tc.ctex"
+path.etc2="res://.godot/imported/ekipazh-zhenshchina_ekipazh-zhenshchina-color.png-5ed1dd778320cadf3187485f415adda9.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "154135b28fe99f18d879bd72fb0458cf"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/ekipazh-zhenshchina_ekipazh-zhenshchina-color.png"
-dest_files=["res://.godot/imported/ekipazh-zhenshchina_ekipazh-zhenshchina-color.png-5ed1dd778320cadf3187485f415adda9.ctex"]
+dest_files=["res://.godot/imported/ekipazh-zhenshchina_ekipazh-zhenshchina-color.png-5ed1dd778320cadf3187485f415adda9.s3tc.ctex", "res://.godot/imported/ekipazh-zhenshchina_ekipazh-zhenshchina-color.png-5ed1dd778320cadf3187485f415adda9.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

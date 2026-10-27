@@ -6,7 +6,6 @@ extends Node3D
 ## (`shaders/breach_spray.gdshader`, атлас `textures/proboina/atlas.png`). Всё на слое корабля.
 
 const WATER_COLOR := Color(0.525, 0.737, 0.796, 0.55)   ## #86BCCB
-const ALARM_COLOR := Color("ffb259")
 const SEAM_COLOR := Color("f18a3d")
 const SPARK_COLOR := Color("d5e4e8")
 const HOLE_COLOR := Color("0b1c24")
@@ -28,7 +27,6 @@ var spark_mm: MultiMeshInstance3D    ## искры сварки и вспышк�
 var lamp_k := 1.0                ## свет отсеков (Vitals.lamp_k × шторка): вода в темноте не светится
 var weld_light: OmniLight3D
 var water: MeshInstance3D
-var alarm: OmniLight3D
 var siren: AudioStreamPlayer       ## сирена на весь корабль, пока пробоина открыта (SND-003, `HullSound.SIREN`)
 var jet_sound: AudioStreamPlayer3D ## шум струи из отверстия (SND-003, `HullSound.JET`)
 var _shown: Breach.Spot = null
@@ -108,13 +106,6 @@ func _ready() -> void:
 	jet_sound.max_distance = 18.0
 	jet_sound.position = Vector3(0, 0, 0.1)
 	spot_node.add_child(jet_sound)
-	alarm = OmniLight3D.new()
-	alarm.name = "Тревога"
-	alarm.light_color = ALARM_COLOR
-	alarm.light_cull_mask = OceanView.LAYER_SHIP
-	alarm.light_energy = 0.0
-	alarm.visible = false
-	add_child(alarm)
 
 
 ## Петля из файла SND-003; нет файла — процедурная из Synth (запас).
@@ -238,7 +229,6 @@ func apply(dt: float = 0.0) -> void:
 	_play(jet_sound, breach.active != null)
 	if s == null:
 		water.visible = false
-		alarm.visible = false
 		return
 	if s != _shown:
 		_shown = s
@@ -256,10 +246,3 @@ func apply(dt: float = 0.0) -> void:
 		var f := ws.floor
 		water.position = Vector3(f.position.x + f.size.x / 2.0, breach.water, f.position.y + f.size.y / 2.0)
 		water.scale = Vector3(f.size.x, 1.0, f.size.y)
-	alarm.visible = breach.active != null
-	if alarm.visible:
-		var a := breach.active
-		var top := BridgePlan.CEILING if a.room == ShipLayout.Room.BRIDGE else float(ShipLayout.ROOMS[a.room][3])
-		alarm.position = Vector3(a.floor.position.x + a.floor.size.x / 2.0, top - 0.3, a.floor.position.y + a.floor.size.y / 2.0)
-		alarm.omni_range = maxf(a.floor.size.x, a.floor.size.y) * 0.9
-		alarm.light_energy = 0.0   # ART-064: аварию ведут огни корабля (CabinLight), узел остаётся

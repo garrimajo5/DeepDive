@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://2nvasbd0pel3"
-path="res://.godot/imported/gear-planshet-ekran_gear-planshet-ekran-color.png-1fbc38ee33df9e1dbef3f0055a2278a4.ctex"
+path.s3tc="res://.godot/imported/gear-planshet-ekran_gear-planshet-ekran-color.png-1fbc38ee33df9e1dbef3f0055a2278a4.s3tc.ctex"
+path.etc2="res://.godot/imported/gear-planshet-ekran_gear-planshet-ekran-color.png-1fbc38ee33df9e1dbef3f0055a2278a4.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "830ceccd70fced0a4e5fb7d26fc03fb0"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/gear-planshet-ekran_gear-planshet-ekran-color.png"
-dest_files=["res://.godot/imported/gear-planshet-ekran_gear-planshet-ekran-color.png-1fbc38ee33df9e1dbef3f0055a2278a4.ctex"]
+dest_files=["res://.godot/imported/gear-planshet-ekran_gear-planshet-ekran-color.png-1fbc38ee33df9e1dbef3f0055a2278a4.s3tc.ctex", "res://.godot/imported/gear-planshet-ekran_gear-planshet-ekran-color.png-1fbc38ee33df9e1dbef3f0055a2278a4.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

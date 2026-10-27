@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cbod6g0q6i6p8"
-path="res://.godot/imported/pult-energii_pult-energii-color.png-dad59c908a8042ea04ae73d54535bfac.ctex"
+path.s3tc="res://.godot/imported/pult-energii_pult-energii-color.png-dad59c908a8042ea04ae73d54535bfac.s3tc.ctex"
+path.etc2="res://.godot/imported/pult-energii_pult-energii-color.png-dad59c908a8042ea04ae73d54535bfac.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "d302b5b5aae576a56c538f5148ebfc8e"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/pult-energii_pult-energii-color.png"
-dest_files=["res://.godot/imported/pult-energii_pult-energii-color.png-dad59c908a8042ea04ae73d54535bfac.ctex"]
+dest_files=["res://.godot/imported/pult-energii_pult-energii-color.png-dad59c908a8042ea04ae73d54535bfac.s3tc.ctex", "res://.godot/imported/pult-energii_pult-energii-color.png-dad59c908a8042ea04ae73d54535bfac.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

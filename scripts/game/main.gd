@@ -1168,7 +1168,9 @@ func _apply_graphics(level: int) -> void:
 	if breach_view:
 		breach_view.parts.lite = lite  # частицы пробоины ART-072: 24/16/15+1
 	if grade:
-		grade.set_lite(lite)          # виньетка ART-065: без LUT, овал 0,10
+		grade.set_lite(lite)          # виньетка ART-065: без LUT и без копии экрана, овал 0,10 (#842)
+	if env:
+		env.glow_enabled = not lite   # bloom — лишние проходы размытия на слабых телефонах (#842)
 	glints.lite = lite                # блики воды в мостике ART-067 выключены
 	if eco:
 		eco.set_lite(lite)            # живой мир: флора не колышется, ободка тел нет (EcoView.set_lite, #598)

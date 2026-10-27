@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://coe6rc2wgx3bo"
-path="res://.godot/imported/gear-shchitok_gear-shchitok-color.png-b4193fd8ec726848a1614114d842dace.ctex"
+path.s3tc="res://.godot/imported/gear-shchitok_gear-shchitok-color.png-b4193fd8ec726848a1614114d842dace.s3tc.ctex"
+path.etc2="res://.godot/imported/gear-shchitok_gear-shchitok-color.png-b4193fd8ec726848a1614114d842dace.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "2212ce607a68a95b2602ea073529de95"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/gear-shchitok_gear-shchitok-color.png"
-dest_files=["res://.godot/imported/gear-shchitok_gear-shchitok-color.png-b4193fd8ec726848a1614114d842dace.ctex"]
+dest_files=["res://.godot/imported/gear-shchitok_gear-shchitok-color.png-b4193fd8ec726848a1614114d842dace.s3tc.ctex", "res://.godot/imported/gear-shchitok_gear-shchitok-color.png-b4193fd8ec726848a1614114d842dace.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
