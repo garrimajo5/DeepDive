@@ -14,12 +14,7 @@ func _init() -> void:
 	name = "Предложение Экономно"
 	layer = LAYER
 	visible = false
-	draw = Control.new()
-	draw.name = "Диалог"
-	draw.set_anchors_preset(Control.PRESET_FULL_RECT)
-	draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	draw.draw.connect(_draw_offer)
-	add_child(draw)
+	draw = UiStyle.canvas(self, "Диалог", _draw_offer)
 
 
 func show_offer(o: LiteOffer) -> void:

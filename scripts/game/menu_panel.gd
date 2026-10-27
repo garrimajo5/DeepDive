@@ -13,25 +13,7 @@ var draw: Control
 func _init() -> void:
 	name = "Главное меню"
 	layer = 90
-	var dark := ColorRect.new()   # под фоном: если текстура не загрузилась, сцена всё равно закрыта
-	dark.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dark.color = MainMenu.DARK
-	add_child(dark)
-	var bg := TextureRect.new()
-	bg.name = "Фон"
-	bg.texture = load(Splash.BG)
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
-	draw = Control.new()
-	draw.name = "Кнопки"
-	draw.set_anchors_preset(Control.PRESET_FULL_RECT)
-	draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	draw.draw.connect(_draw_menu)
-	add_child(draw)
+	draw = UiStyle.screen(self, "Кнопки", _draw_menu, MainMenu.DARK)
 
 
 func show_menu(m: MainMenu) -> void:

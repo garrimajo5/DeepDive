@@ -14,12 +14,7 @@ func _init() -> void:
 	name = "Кадры в секунду"
 	layer = LAYER
 	visible = false
-	draw = Control.new()
-	draw.name = "Плашка"
-	draw.set_anchors_preset(Control.PRESET_FULL_RECT)
-	draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	draw.draw.connect(_draw_counter)
-	add_child(draw)
+	draw = UiStyle.canvas(self, "Плашка", _draw_counter)
 
 
 ## Настоящее время кадра dt; перерисовка — только когда число обновилось.

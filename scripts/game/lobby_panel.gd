@@ -15,17 +15,8 @@ var bold: FontVariation   ## полужирный шрифта игры: заг�
 func _init() -> void:
 	name = "Сбор экипажа"
 	layer = 91
-	var dim := ColorRect.new()
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dim.color = Lobby.DIM
-	add_child(dim)
-	draw = Control.new()
-	draw.name = "Строки"
-	draw.set_anchors_preset(Control.PRESET_FULL_RECT)
-	draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	draw.draw.connect(_draw_screen)
-	add_child(draw)
+	UiStyle.cover(self, Lobby.DIM)
+	draw = UiStyle.canvas(self, "Строки", _draw_screen)
 	visible = false
 
 
