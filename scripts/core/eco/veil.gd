@@ -70,6 +70,9 @@ class Veil:
 	var small_size := PackedFloat32Array()
 	var small_y := PackedFloat32Array()
 	var small_ph := PackedFloat32Array()
+	## Сколько раз ужалила светляка и где последний (облачка слизи — EcoVeilDust).
+	var stings := 0
+	var sting_at := Vector3.ZERO
 
 	## Цель сонара и сканера (vl.scanP).
 	func scan_point() -> Vector3:
@@ -192,6 +195,8 @@ func fish_push(world: EcoWorld, p: Vector3, dt: float, sting: Array) -> Vector3:
 			acc.z += dz / dh * FISH_PUSH
 			if dh < R * STING_R and p.y < vl.p.y - 0.5 and _rnd.next() < dt * STING_RATE:
 				sting.append(vl)
+				vl.stings += 1
+				vl.sting_at = p
 				world.emit(ID, "sting", p, _sting_text(world))
 				return acc
 	return acc

@@ -10,6 +10,8 @@ extends Node3D
 ## шейдер прозрачного (EcoShaders.MIST). Всё без света,
 ## прозрачное, без записи глубины, на слое отмели (OceanView.LAYER_WORLD). Дальше FAR от корабля вуаль не видна в мути —
 ## узел прячется и не пересчитывается.
+## Выдох купола и слизь ужаливания (EcoVeilDust: на сокращении купола из-под кромки — облачка, ужалила светляка —
+## клуб у рыбки) — дочерний MultiMesh «Муть» на общем шейдере EcoShaders.MIST (INK) — +1 вызов отрисовки.
 
 const RIM_SHADER := """
 shader_type spatial;
@@ -56,6 +58,13 @@ var rims: Array[MeshInstance3D] = []
 var tentacles: Array[MeshInstance3D] = []
 ## Последний буфер куполов каждой вуали (для тестов).
 var bell_buffers: Array[PackedFloat32Array] = []
+## Выдох купола и слизь ужаливания (EcoVeilDust); буфер — для тестов.
+var dust := EcoVeilDust.new()
+var dust_view: MultiMeshInstance3D
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
 
 
 func _init(system: EcoVeil) -> void:
@@ -98,6 +107,8 @@ func _init(system: EcoVeil) -> void:
 		tm.custom_aabb = AABB(Vector3(-8, -EcoVeil.LEN - 2, -8), Vector3(16, EcoVeil.LEN + 3, 16))
 		g.add_child(tm)
 		tentacles.append(tm)
+	dust_view = GrazerView.build_dust(EcoVeilDust.POOL)
+	add_child(dust_view)
 	sync(0.0, Vector3.ZERO)
 
 
@@ -224,6 +235,14 @@ func sync(t: float, ship: Vector3) -> void:
 		var tmat := tentacles[vl.index].material_override as ShaderMaterial
 		tmat.set_shader_parameter("t", t)
 		tmat.set_shader_parameter("swell", s.x)
+
+
+## Облачка выдоха и слизи в момент t (время мира): ship — корабль (дальность и луч), flow — течение мира.
+func sync_dust(t: float, ship: EcoLink.ShipState, flow := Vector3.ZERO) -> void:
+	dust.update(veils, t, ship.pos if ship != null else Vector3.ZERO)
+	_dust.pack(dust.dust, t, flow, ship, EcoVeilDust.COLOR, EcoVeilDust.LIT)
+	if _dust.changed:   # облачков нет и не было — буфер тот же, не грузим (issue #133)
+		dust_view.multimesh.buffer = _dust.data
 
 
 static func _put(buf: PackedFloat32Array, n: int, b: Basis, o: Vector3, c: Color) -> void:
