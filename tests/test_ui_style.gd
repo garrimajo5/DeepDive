@@ -87,3 +87,16 @@ func test_text_shared() -> void:
 	for f in ["address_panel", "journal_panel", "lobby_panel", "menu_panel"]:
 		ok(not FileAccess.get_file_as_string("res://scripts/game/%s.gd" % f).contains("func _text("),
 			"%s: без своей _text" % f)
+
+
+func test_button_label() -> void:
+	# подпись кнопки: середина заглавных (CAP_H кегля) — на середине плашки, одна функция на все экраны
+	var at := UiStyle.label_at(Rect2(100, 200, 300, 80), 40.0)
+	near(at.x, 100.0, 1e-6, "от левого края плашки, по центру — шириной плашки")
+	near(at.y - Splash.CAP_H * 40.0 * 0.5, 240.0, 1e-4, "середина заглавных на середине высоты")
+	for f in ["address_panel", "fps_view", "lite_offer_panel", "lobby_panel", "menu_panel", "pause_panel",
+			"settings_panel", "ship_map_panel"]:
+		var src := FileAccess.get_file_as_string("res://scripts/game/%s.gd" % f)
+		ok(src.contains("UiStyle.label("), "%s: подпись кнопки — UiStyle.label" % f)
+		ok(not src.contains("var base := r.position.y + r.size.y * 0.5"), "%s: без своей базовой линии кнопки" % f)
+		ok(not src.contains("r.get_center().y + Splash.CAP_H * px * 0.5"), "%s: и без get_center-копии" % f)
