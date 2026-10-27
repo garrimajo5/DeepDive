@@ -85,7 +85,8 @@ func test_scene_lights_and_breach() -> void:
 		seen[snappedf(b2.light_energy, 0.1)] = true
 		near(main.bridge.lamps[0].light_energy, 1.8 * 0.48, 1e-5, "B1 — ровная опора")
 	ok(seen.size() >= 4, "B2 пульсирует: %s" % [seen.keys()])
-	eq(main.breach_view.alarm.light_energy, 0.0, "старый огонь тревоги погашен, узел на месте")
+	eq(main.breach_view.find_children("*", "OmniLight3D", true, false).filter(func(l: Light3D) -> bool: return l.visible).size(),
+		0, "пустой лампы тревоги нет — аварию ведут огни корабля (#842)")
 	main.breach.hold(10.0)
 	main.step(0.1)
 	ok(main.breach.active == null, "заварили")
