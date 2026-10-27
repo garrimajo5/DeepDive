@@ -43,8 +43,8 @@ func _draw_screen() -> void:
 	if lobby.shows_address():
 		_host_top(font, size, s)
 	else:
-		_text(bold, Lobby.TITLE, Lobby.to_screen(Lobby.TITLE_AT, size), Lobby.TITLE_PX * s, MainMenu.INK)
-		_text(font, lobby.subtitle(), Lobby.to_screen(Lobby.SUB_AT, size), Lobby.SUB_PX * s, MainMenu.SOFT)
+		UiStyle.text(draw, bold, Lobby.TITLE, Lobby.to_screen(Lobby.TITLE_AT, size), Lobby.TITLE_PX * s, MainMenu.INK)
+		UiStyle.text(draw, font, lobby.subtitle(), Lobby.to_screen(Lobby.SUB_AT, size), Lobby.SUB_PX * s, MainMenu.SOFT)
 		draw.draw_line(Lobby.to_screen(Vector2(Lobby.TITLE_AT.x, Lobby.RULE_Y), size),
 			Lobby.to_screen(Vector2(Lobby.SEARCH.end.x, Lobby.RULE_Y), size), Color(MainMenu.EDGE, 0.8), maxf(1.0, 2.0 * s))
 		_button(bold, Lobby.screen_rect("create", size), "Создать забег", s, "off")
@@ -52,7 +52,7 @@ func _draw_screen() -> void:
 		if lobby.lost:
 			_lost(font, size, s)
 			return
-		_text(font, lobby.head(), Lobby.to_screen(Lobby.HEAD_AT, size), Lobby.SMALL_PX * s, MainMenu.SOFT)
+		UiStyle.text(draw, font, lobby.head(), Lobby.to_screen(Lobby.HEAD_AT, size), Lobby.SMALL_PX * s, MainMenu.SOFT)
 	for i in Lobby.SEATS:
 		_row(font, i, size, s)
 	var nr := lobby.rect("note", size)
@@ -73,18 +73,17 @@ func _draw_screen() -> void:
 	else:
 		var r := lobby.rect("start", size)
 		var px := Lobby.SMALL_PX * s
-		draw.draw_string(font, Vector2(r.position.x, r.get_center().y + Splash.CAP_H * px * 0.5), lobby.start_text(),
-			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, roundi(px), MainMenu.SOFT)
+		UiStyle.label(draw, font, lobby.start_text(), r, px, MainMenu.SOFT)
 
 
 ## Карточка «Связь потеряна» (лист ART-028 «05»): заголовок, «Проверьте Wi-Fi…», «Готовность будет сброшена»,
 ## «Повторить» (главная; во время попытки — «Подключаемся…», погашена) и «К списку забегов».
 func _lost(font: Font, size: Vector2, s: float) -> void:
 	draw.draw_style_box(_box(s, MainMenu.DARK, MainMenu.SOFT, 3.0), Lobby.rect_to_screen(Lobby.LOST_BOX, size))
-	_text(bold, Lobby.LOST_TITLE, Lobby.to_screen(Lobby.LOST_TITLE_AT, size), Lobby.LOST_TITLE_PX * s, MainMenu.INK)
+	UiStyle.text(draw, bold, Lobby.LOST_TITLE, Lobby.to_screen(Lobby.LOST_TITLE_AT, size), Lobby.LOST_TITLE_PX * s, MainMenu.INK)
 	var lines := lobby.lost_lines()
 	for i in lines.size():
-		_text(font, lines[i], Lobby.to_screen(Lobby.LOST_LINE_AT + Vector2(0.0, Lobby.LOST_LINE_STEP * i), size),
+		UiStyle.text(draw, font, lines[i], Lobby.to_screen(Lobby.LOST_LINE_AT + Vector2(0.0, Lobby.LOST_LINE_STEP * i), size),
 			Lobby.LOST_LINE_PX * s, MainMenu.INK)
 	_button(bold, lobby.rect("retry", size), lobby.retry_text(), s, "main" if lobby.enabled("retry") else "off")
 	_button(bold, lobby.rect("tolist", size), "К списку забегов", s, "plain")
@@ -93,8 +92,8 @@ func _lost(font: Font, size: Vector2, s: float) -> void:
 ## Вход по «Экипаж» — поиск забегов (лист ART-028): найденные забеги строками с «Подключиться», пусто — «Ищем
 ## забеги…» / «Никого нет» с пояснением; внизу «Создать забег», «По адресу», «Обновить список».
 func _entry(font: Font, size: Vector2, s: float) -> void:
-	_text(bold, Lobby.TITLE, Lobby.to_screen(Lobby.TITLE_AT, size), Lobby.TITLE_PX * s, MainMenu.INK)
-	_text(font, lobby.entry_sub(), Lobby.to_screen(Lobby.SUB_AT, size), Lobby.SUB_PX * s, MainMenu.SOFT)
+	UiStyle.text(draw, bold, Lobby.TITLE, Lobby.to_screen(Lobby.TITLE_AT, size), Lobby.TITLE_PX * s, MainMenu.INK)
+	UiStyle.text(draw, font, lobby.entry_sub(), Lobby.to_screen(Lobby.SUB_AT, size), Lobby.SUB_PX * s, MainMenu.SOFT)
 	draw.draw_line(Lobby.to_screen(Vector2(Lobby.TITLE_AT.x, Lobby.RULE_Y), size),
 		Lobby.to_screen(Vector2(Lobby.SEARCH.end.x, Lobby.RULE_Y), size), Color(MainMenu.EDGE, 0.8), maxf(1.0, 2.0 * s))
 	var busy := lobby.joining >= 0
@@ -109,12 +108,12 @@ func _entry(font: Font, size: Vector2, s: float) -> void:
 	else:
 		var hr := Lobby.rect_to_screen(Rect2(Lobby.RUN_ROW.position.x, Lobby.LIST_HEAD_AT.y - 14.0, 760.0, 62.0), size)
 		draw.draw_rect(hr, Color(MainMenu.DARK, 0.78))   # заголовок не теряется на табло тревог за окном
-		_text(bold, lobby.entry_head(), Lobby.to_screen(Lobby.LIST_HEAD_AT, size), Lobby.ROLE_PX * s, MainMenu.INK)
+		UiStyle.text(draw, bold, lobby.entry_head(), Lobby.to_screen(Lobby.LIST_HEAD_AT, size), Lobby.ROLE_PX * s, MainMenu.INK)
 		for i in n:
 			_run_row(font, i, size, s)
 		if n < Lobby.RUN_ROWS:
 			var y := Lobby.run_rect(n).position.y + 30.0
-			_text(font, Lobby.LIST_NOTE, Lobby.to_screen(Vector2(Lobby.LIST_HEAD_AT.x, y), size), 30.0 * s, MainMenu.SOFT)
+			UiStyle.text(draw, font, Lobby.LIST_NOTE, Lobby.to_screen(Vector2(Lobby.LIST_HEAD_AT.x, y), size), 30.0 * s, MainMenu.SOFT)
 	# пока список пуст, главное действие — создать свой забег
 	_button(bold, lobby.rect("new", size), "Создать забег", s, "off" if busy else ("main" if n == 0 else "plain"))
 	_button(bold, lobby.rect("address", size), "По адресу", s, "off" if busy else "plain")
@@ -151,14 +150,14 @@ func _centered(font: Font, t: String, cy: float, px: float, col: Color, size: Ve
 
 ## Верх хоста по ART-039: заголовок, «Назад», плашка «Ваш адрес: 192.168.43.17 · Скажите его товарищам».
 func _host_top(font: Font, size: Vector2, s: float) -> void:
-	_text(bold, Lobby.TITLE, Lobby.to_screen(Lobby.HOST_TITLE_AT, size), Lobby.TITLE_PX * s, MainMenu.INK)
+	UiStyle.text(draw, bold, Lobby.TITLE, Lobby.to_screen(Lobby.HOST_TITLE_AT, size), Lobby.TITLE_PX * s, MainMenu.INK)
 	_button(bold, lobby.rect("leave", size), "Назад", s, "plain")
 	draw.draw_style_box(_box(s, MainMenu.PANEL, MainMenu.EDGE), Lobby.rect_to_screen(Lobby.ADDR, size))
-	_text(font, "Ваш адрес:", Lobby.to_screen(Lobby.ADDR_LABEL_AT, size), Lobby.ADDR_LABEL_PX * s, MainMenu.SOFT)
+	UiStyle.text(draw, font, "Ваш адрес:", Lobby.to_screen(Lobby.ADDR_LABEL_AT, size), Lobby.ADDR_LABEL_PX * s, MainMenu.SOFT)
 	var has := lobby.address != ""
-	_text(font, lobby.address_text(), Lobby.to_screen(Lobby.ADDR_AT, size), Lobby.ADDR_PX * s,
+	UiStyle.text(draw, font, lobby.address_text(), Lobby.to_screen(Lobby.ADDR_AT, size), Lobby.ADDR_PX * s,
 		MainMenu.MAIN if has else MainMenu.INK)
-	_text(font, lobby.address_hint(), Lobby.to_screen(Lobby.ADDR_HINT_AT, size), Lobby.ADDR_HINT_PX * s, MainMenu.SOFT)
+	UiStyle.text(draw, font, lobby.address_hint(), Lobby.to_screen(Lobby.ADDR_HINT_AT, size), Lobby.ADDR_HINT_PX * s, MainMenu.SOFT)
 
 
 ## Строка роли: кружок с буквой, название и кто, состояние справа; своя — толще контур акцентом.
@@ -228,14 +227,8 @@ func _button(font: Font, r: Rect2, label: String, s: float, kind: String, edge :
 			sb = _box(s, Color(MainMenu.PANEL, 0.92), edge)
 	draw.draw_style_box(sb, r)
 	var px := Lobby.BUTTON_PX * s
-	draw.draw_string(font, Vector2(r.position.x, r.get_center().y + Splash.CAP_H * px * 0.5), label,
-		HORIZONTAL_ALIGNMENT_CENTER, r.size.x, roundi(px), col)
+	UiStyle.label(draw, font, label, r, px, col)
 
 
 func _box(s: float, fill: Color, edge: Color, border := 2.0) -> StyleBoxFlat:
 	return UiStyle.box(fill, Lobby.RADIUS * s, edge, border * s if edge.a > 0.0 else 0.0)
-
-
-## Строка: at — левый край и верх видимых глифов на экране.
-func _text(font: Font, text: String, at: Vector2, px: float, color: Color) -> void:
-	draw.draw_string(font, at + Vector2(0.0, Splash.CAP_H * px), text, HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(px), color)

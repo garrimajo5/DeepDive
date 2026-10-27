@@ -58,13 +58,10 @@ func _button(font: Font, r: Rect2, text: String, main_btn: bool, on: bool, k: fl
 	draw.draw_style_box(UiStyle.menu_button(main_btn, s, 0.92 if on else 0.6, 1.0 if on else 0.6, k), r)
 	var col := MainMenu.DARK if main_btn else (MainMenu.INK if on else MainMenu.OFF)
 	var px := Pause.BUTTON_PX * s
-	var base := r.position.y + r.size.y * 0.5 + Splash.CAP_H * px * 0.5
-	draw.draw_string(font, Vector2(r.position.x, base), text, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, roundi(px),
-		Color(col, k))
+	UiStyle.label(draw, font, text, r, px, Color(col, k))
 
 
 ## Строка по центру экрана: top — верх видимых глифов в макете.
 func _center(font: Font, text: String, top: float, px: float, color: Color, size: Vector2) -> void:
 	var y := Splash.to_screen(Vector2(0.0, top), size).y
-	draw.draw_string(font, Vector2(0.0, y + Splash.CAP_H * px), text, HORIZONTAL_ALIGNMENT_CENTER, size.x, roundi(px),
-		color)
+	UiStyle.center(draw, font, text, 0.0, y, size.x, px, color)

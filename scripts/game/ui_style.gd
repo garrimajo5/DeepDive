@@ -77,3 +77,28 @@ static func screen(parent: Node, nm: String, draw_fn: Callable, dark: Color, dim
 	if dim.a > 0.0:
 		cover(parent, dim)
 	return canvas(parent, nm, draw_fn)
+
+
+## Строка надписи: at.x — левый край, at.y — верх видимых глифов (базовая линия ниже на `Splash.CAP_H` кегля),
+## px — кегль в пикселях экрана (округляется). width и align — как у `draw_string` (по центру полосы, справа…).
+## Раньше своя копия `_text` была почти в каждой панели.
+static func text(ci: CanvasItem, font: Font, t: String, at: Vector2, px: float, color: Color, width := -1.0,
+		align := HORIZONTAL_ALIGNMENT_LEFT) -> void:
+	ci.draw_string(font, at + Vector2(0.0, Splash.CAP_H * px), t, align, width, roundi(px), color)
+
+
+## Строка по центру полосы [x, x + width]; top — верх видимых глифов.
+static func center(ci: CanvasItem, font: Font, t: String, x: float, top: float, width: float, px: float,
+		color: Color) -> void:
+	ci.draw_string(font, Vector2(x, top + Splash.CAP_H * px), t, HORIZONTAL_ALIGNMENT_CENTER, width, roundi(px),
+		color)
+
+
+## Подпись кнопки: по центру плашки r и по середине высоты видимых глифов.
+static func label(ci: CanvasItem, font: Font, t: String, r: Rect2, px: float, color: Color) -> void:
+	ci.draw_string(font, label_at(r, px), t, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, roundi(px), color)
+
+
+## Начало базовой линии подписи кнопки: левый край r, середина высоты видимых глифов — на середине r.
+static func label_at(r: Rect2, px: float) -> Vector2:
+	return Vector2(r.position.x, r.position.y + r.size.y * 0.5 + Splash.CAP_H * px * 0.5)

@@ -36,8 +36,7 @@ func _draw_offer() -> void:
 	for i in LiteOffer.LINES.size():
 		var px: float = LiteOffer.LINE_PX[i] * s
 		var y := Splash.to_screen(Vector2(0.0, LiteOffer.LINE_TOP[i]), size).y
-		draw.draw_string(font, Vector2(0.0, y + Splash.CAP_H * px), LiteOffer.LINES[i], HORIZONTAL_ALIGNMENT_CENTER,
-			size.x, roundi(px), MainMenu.INK if i == 0 else MainMenu.SOFT)
+		UiStyle.center(draw, font, LiteOffer.LINES[i], 0.0, y, size.x, px, MainMenu.INK if i == 0 else MainMenu.SOFT)
 	_button(font, LiteOffer.screen_rect("yes", size), "Да", true, s)
 	_button(font, LiteOffer.screen_rect("no", size), "Нет", false, s)
 
@@ -45,6 +44,4 @@ func _draw_offer() -> void:
 func _button(font: Font, r: Rect2, text: String, main_btn: bool, s: float) -> void:
 	draw.draw_style_box(UiStyle.menu_button(main_btn, s), r)
 	var px := LiteOffer.BUTTON_PX * s
-	var base := r.position.y + r.size.y * 0.5 + Splash.CAP_H * px * 0.5
-	draw.draw_string(font, Vector2(r.position.x, base), text, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, roundi(px),
-		MainMenu.DARK if main_btn else MainMenu.INK)
+	UiStyle.label(draw, font, text, r, px, MainMenu.DARK if main_btn else MainMenu.INK)

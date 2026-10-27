@@ -73,3 +73,22 @@ func test_panels_on_frame() -> void:
 		p.free()
 	for p in [menu, adr, jr, lb]:
 		p.free()
+
+
+func test_label_baseline() -> void:
+	# подпись кнопки (#760): середина видимых глифов (CAP_H кегля) — на середине плашки
+	var at := UiStyle.label_at(Rect2(100, 200, 300, 80), 40.0)
+	near(at.x, 100.0, 1e-6, "от левого края плашки, выравнивание — по ширине")
+	near(at.y - Splash.CAP_H * 40.0 * 0.5, 240.0, 1e-4, "середина глифов на середине высоты")
+
+
+func test_text_helpers_not_copied() -> void:
+	# надписи панелей (#760): строка «от верха видимых глифов» — одна, в UiStyle, а не своя копия в каждой панели
+	for f in ["address_panel", "journal_panel", "lobby_panel", "menu_panel"]:
+		var src := FileAccess.get_file_as_string("res://scripts/game/%s.gd" % f)
+		ok(src != "", "%s прочитан" % f)
+		ok(not src.contains("func _text("), "%s: без своей _text" % f)
+	for f in ["address_panel", "menu_panel", "pause_panel", "settings_panel", "ship_map_panel", "lite_offer_panel",
+			"lobby_panel", "fps_view"]:
+		var src := FileAccess.get_file_as_string("res://scripts/game/%s.gd" % f)
+		ok(not src.contains("var base := r.position.y + r.size.y * 0.5"), "%s: без своей базовой линии кнопки" % f)
