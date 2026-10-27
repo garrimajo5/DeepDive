@@ -8,6 +8,8 @@ extends Node3D
 ## Разброс особей (Б4, EcoVary по номеру гребневика): свой размер, частота «дыхания» и яркость тёмного силуэта —
 ## стая не клоны; мир и его случай не меняются, вызовов отрисовки не прибавилось. Переливы по краю тела (EcoIris, Б2) —
 ## uniform iris, «Экономно» — EcoIris.set_lite.
+## Слизь гребневиков (EcoRaduzhDust: вспыхнули в луче — облачка у нескольких гребневиков, корпус упёрся в стаю —
+## облачко у задетого) — дочерний MultiMesh «Муть» на общем шейдере EcoShaders.MIST (INK) — +1 вызов отрисовки.
 
 const BODY_SHADER := """
 shader_type spatial;
@@ -57,6 +59,13 @@ var body_buffer := PackedFloat32Array()
 var halo_buffer := PackedFloat32Array()
 ## Разброс по номеру гребневика: размер, частота дыхания, яркость силуэта (хеш — раз, не в каждом кадре).
 var _vary := PackedFloat32Array()
+## Слизь гребневиков (EcoRaduzhDust); буфер — для тестов.
+var dust := EcoRaduzhDust.new()
+var dust_view: MultiMeshInstance3D
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
 
 
 func _init(system: EcoRaduzh) -> void:
@@ -70,6 +79,8 @@ func _init(system: EcoRaduzh) -> void:
 		_vary[i * 3 + 1] = member_rate(i)
 		_vary[i * 3 + 2] = member_shade(i)
 	halos = EcoMM.instance(self, "Ореолы", build_halo(), n, true)
+	dust_view = GrazerView.build_dust(EcoRaduzhDust.POOL)
+	add_child(dust_view)
 	sync(0.0, Vector3(1e6, 0, 1e6), 0.0)
 
 
@@ -142,6 +153,16 @@ func sync(t: float, ship_pos: Vector3, ship_yaw: float, all := false) -> void:
 			_color(halo_buffer, j + STRIDE, c * gg)
 	bodies.multimesh.buffer = body_buffer
 	halos.multimesh.buffer = halo_buffer
+
+
+## Облачка слизи в момент t (время мира): ship — корабль (дальность, корпус и луч), flow — течение мира.
+func sync_dust(t: float, ship: EcoLink.ShipState, flow := Vector3.ZERO) -> void:
+	if ship == null:
+		return
+	dust.update(raduzh, t, ship.pos, ship.yaw)
+	_dust.pack(dust.dust, t, flow, ship, EcoRaduzhDust.COLOR, EcoRaduzhDust.LIT)
+	if _dust.changed:   # облачков нет и не было — буфер тот же, не грузим (issue #133)
+		dust_view.multimesh.buffer = _dust.data
 
 
 ## Размер гребневика n (номер по всем стаям: стая · PER_SWARM + место) — множитель BODY.
