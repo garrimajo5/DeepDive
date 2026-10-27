@@ -23,6 +23,23 @@ func test_model_textures_vram_compressed() -> void:
 	ok(n >= 60, "текстуры моделей найдены (%d)" % n)
 
 
+## Вторая часть #843: карты грунтов дна ART-060 (на экране всегда, 9 штук 1024²) и цвет льда. Карты нормалей дна —
+## режимом нормалей (`compress/normal_map=1`, на телефоне — два канала RG): шейдер дна читает только `.rg`.
+## Не сжимаем то, что читается на CPU (маска трещин), декодирует нормали вручную (обшивка, мостик, отсеки)
+## или служит таблицей (LUT, градиенты, атласы карточек) — им нужна точность.
+func test_seabed_and_ice_textures_vram_compressed() -> void:
+	for g in ["pesok", "il", "galka"]:
+		for m in ["tsvet", "orm", "normali"]:
+			var path := "res://textures/dno/%s-%s.png.import" % [g, m]
+			eq(_mode(path), 2, "%s: VRAM Compressed" % path)
+			var cfg := ConfigFile.new()
+			cfg.load(path)
+			eq(int(cfg.get_value("params", "compress/normal_map", -1)), 1 if m == "normali" else 0,
+				"%s: режим нормалей — только у карт нормалей" % path)
+	eq(_mode("res://textures/ice/tsvet.png.import"), 2, "цвет льда: VRAM Compressed")
+	eq(_mode("res://textures/ice/treshchiny.png.import"), 0, "маска трещин — без потерь: её читает CPU (IceSheet.crack)")
+
+
 func test_compressed_texture_loads_as_vram() -> void:
 	var t: Texture2D = load("res://models/pult-pilota_pult-pilota-color.png")
 	ok(t != null, "текстура грузится")
