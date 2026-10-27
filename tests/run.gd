@@ -1,6 +1,8 @@
 extends SceneTree
 ## Маленький раннер тестов без сторонних дополнений.
 ## Запуск: godot --headless --path . -s tests/run.gd [-- имя_файла_или_теста ...]
+## Часть прогона для CI (#845): `-- --shard 2/3` — файлы части 2 из 3 по сумме времени (`TestShards`).
+## Замер времени файлов: `-- --times tests/vremya.txt` — после прогона пишет таблицу для раскладки частей.
 ## Берёт все tests/test_*.gd, в каждом — методы test_*. Ошибка движка во время теста (null, неверный тип и т. п.)
 ## тоже валит тест: её ловит свой Logger. Код выхода 0 — всё зелёное, 1 — есть падения.
 
@@ -44,16 +46,40 @@ func _initialize() -> void:
 func _run() -> void:
 	var trap := ErrorTrap.new()
 	OS.add_logger(trap)
-	var filters: Array = Array(OS.get_cmdline_user_args())
+	var filters: Array = []
+	var shard: Array[int] = []
+	var times_out := ""
+	var args := Array(OS.get_cmdline_user_args())
+	var a := 0
+	while a < args.size():
+		var arg: String = args[a]
+		if arg == "--shard" and a + 1 < args.size():
+			shard = TestShards.parse(args[a + 1])
+			if shard.is_empty():
+				print("Неверная часть «%s»: нужно i/n, например 2/3" % args[a + 1])
+				quit(1)
+				return
+			a += 2
+		elif arg == "--times" and a + 1 < args.size():
+			times_out = args[a + 1]
+			a += 2
+		else:
+			filters.append(arg)
+			a += 1
 	var files: Array[String] = []
 	for f in DirAccess.get_files_at(DIR):
 		if f.begins_with("test_") and f.ends_with(".gd"):
 			files.append(f)
 	files.sort()
+	if not shard.is_empty():
+		files = TestShards.pick(files, TestShards.load_times(), shard[0], shard[1])
+		print("Часть %d из %d: файлов %d" % [shard[0], shard[1], files.size()])
+	var file_ms := {}
 	var passed := 0
 	var failed: Array[String] = []
 	var t0 := Time.get_ticks_msec()
 	for f in files:
+		var f0 := Time.get_ticks_msec()
 		var script: GDScript = load(DIR + "/" + f)
 		if script == null or not script.can_instantiate():
 			failed.append("%s: скрипт не загрузился" % f)
@@ -89,9 +115,15 @@ func _run() -> void:
 			for c in root.get_children():
 				c.queue_free()
 			await process_frame
+		file_ms[f] = (Time.get_ticks_msec() - f0) / 1000.0
 	var ms := Time.get_ticks_msec() - t0
 	print("\nТестов: %d, прошло: %d, упало: %d (%.1f с)" % [passed + failed.size(), passed, failed.size(), ms / 1000.0])
 	for f in failed:
 		print("  упал: ", f)
+	if not times_out.is_empty():
+		var fa := FileAccess.open(times_out, FileAccess.WRITE)
+		if fa:
+			fa.store_string(TestShards.write_times(file_ms))
+			print("Время файлов записано: ", times_out)
 	OS.remove_logger(trap)
 	quit(0 if failed.is_empty() and passed > 0 else 1)
