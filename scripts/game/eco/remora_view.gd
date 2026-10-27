@@ -5,6 +5,8 @@ extends MultiMeshInstance3D
 ## (#3a444c); слабый свой свет (#0c1418), чтобы не пропадали в темноте. Масштаб 1,6 как в браузере. Нос — +Z меша
 ## по EcoRemora.Remora.dir; на плаву виляет хвостом (sin(14 t + ph) · 0,3 рад). Слой отмели (OceanView.LAYER_WORLD).
 ## Разброс (Б4, EcoVary по номеру рыбы): свой размер, частота виляния и оттенок — цвет экземпляра × цвет вершины.
+## Слизь присосок (EcoRemoraDust: легла, снялась, сорвана разрядом — облачка) — дочерний MultiMesh «Муть» в мировых
+## координатах на общем шейдере EcoShaders.MIST (INK): +1 вызов, шейдеров не прибавилось.
 
 const BODY := Color("55606a")
 const DISC := Color("d8e6ea")
@@ -34,6 +36,15 @@ var placed: Array[Transform3D] = []
 ## Центр части меша у каждого треугольника (для теста обхода).
 var mids := PackedVector3Array()
 
+## Слизь присосок и её MultiMesh.
+var dust := EcoRemoraDust.new()
+var dust_view: MultiMeshInstance3D
+## Буфер облачков (EcoDustBuffer) — для тестов.
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
+
 var _st := SurfaceTool.new()
 
 
@@ -49,6 +60,8 @@ func _init(system: EcoRemora) -> void:
 	mm.instance_count = maxi(1, EcoRemora.PER_RAY * EcoRay.PATHS.size())
 	multimesh = mm
 	custom_aabb = AABB(Vector3(-400, -120, -400), Vector3(800, 240, 800))
+	dust_view = GrazerView.build_dust(EcoRemoraDust.POOL)
+	add_child(dust_view)
 	sync(0.0)
 
 
@@ -70,8 +83,9 @@ func build() -> ArrayMesh:
 	return m
 
 
-## Поставить прилипал по миру.
-func sync(t: float) -> void:
+## Поставить прилипал по миру; state — корабль (null — без слизи), flow — течение мира.
+func sync(t: float, state: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO) -> void:
+	_sync_dust(t, state, flow)
 	var n := multimesh.instance_count
 	placed.resize(n)
 	for i in n:
@@ -85,6 +99,15 @@ func sync(t: float) -> void:
 		placed[i] = x
 		multimesh.set_instance_transform(i, x)
 		multimesh.set_instance_color(i, c)
+
+
+func _sync_dust(t: float, state: EcoLink.ShipState, flow: Vector3) -> void:
+	if state == null:
+		return
+	dust.update(remoras, t, state.pos)
+	_dust.pack(dust.dust, t, flow, state, EcoRemoraDust.COLOR, EcoRemoraDust.LIT, Seabed.mesh_height)
+	if _dust.changed:   # облачков нет и не было — буфер тот же, не грузим (issue #133)
+		dust_view.multimesh.buffer = _dust.data
 
 
 ## Место рыбы: нос (+Z) — по dir, на плаву виляет.
