@@ -51,7 +51,20 @@ func _init(system: EcoBladder) -> void:
 			var up := bl.stem_top[k] - a
 			EcoMM.put(buf, (bl.index * EcoBladder.STEMS + k) * STRIDE, Transform3D(_along(up), a + up * 0.5))  # конус стоит серединой в нуле
 	stems.multimesh.buffer = buf
+	EcoMM.fit([stems, bulbs, spores], places(bladders), FRAME_GROW)
 	sync(0.0)
+
+
+## Запас рамки вокруг подножий (#849): стебли, луковицы и облако спор (2,2 м вверх, 2,5 м вширь, тянется к кораблю).
+const FRAME_GROW := 12.0
+
+
+## Подножия кустов — по ним рамка видимости.
+static func places(sys: EcoBladder) -> PackedVector3Array:
+	var pts := PackedVector3Array()
+	for bl in sys.bushes:
+		pts.append(bl.base)
+	return pts
 
 
 ## Стебель 1 м по +Y: усечённый конус 0,04 → 0,025 м, 4 грани (в расстановке тянется на длину стебля).

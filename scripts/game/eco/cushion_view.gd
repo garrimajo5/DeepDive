@@ -46,7 +46,15 @@ func _init(system: EcoCushion) -> void:
 	ink = EcoMM.instance(self, "Чернила", build_ink(), n * EcoCushion.INK_N, true)
 	dust_view = GrazerView.build_dust(EcoCushionDust.POOL)
 	add_child(dust_view)
+	var pts := PackedVector3Array()
+	for c in cushions.cushions:
+		pts.append(c.base)
+	EcoMM.fit([pads, ink], pts, FRAME_GROW)
 	sync(0.0)
+
+
+## Запас рамки вокруг подушек (#849): облако чернил — 2 м вверх и 5,5 м вширь, его сносит течением.
+const FRAME_GROW := 12.0
 
 
 ## Полусфера подушки с цветом вершин по высоте (0,85 − 0,2y, 0,45 + 0,25y, 0,6 + 0,3y; y — высота сферы до сплющивания).

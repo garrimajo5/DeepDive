@@ -141,6 +141,16 @@ func _place_rocks() -> void:
 			EcoMM.put(buf, n * STRIDE, Transform3D(b, Vector3(r.x, r.y, r.z)))
 			n += 1
 	rocks.multimesh.buffer = buf
+	var pts := PackedVector3Array()
+	for e in eels.eels:
+		for r in e.rocks:
+			pts.append(Vector3(r.x, r.y, r.z))
+	EcoMM.fit([rocks], pts, ROCK_GROW)
+
+
+## Запас рамки камней логов (#849): камни неподвижны, запас — их размер. Тело угря выплывает к кораблю —
+## ему рамка на всю отмель.
+const ROCK_GROW := 3.0
 
 
 ## Расставить тела в момент t (время мира); ship — корабль (муть дальше EcoGrazerDust.NEAR не поднимается, в луче
