@@ -33,3 +33,47 @@ static func menu_button(main: bool, s: float, fill_a := 0.92, edge_a := 1.0, k :
 ## Окно подтверждения поверх затемнения (пауза, настройки, «Экономно»).
 static func dialog(s: float) -> StyleBoxFlat:
 	return box(Color(MainMenu.PANEL, 0.97), MainMenu.RADIUS * s, MainMenu.EDGE, 2.0 * s)
+
+
+## Полноэкранная заливка color в parent, мимо касаний (тёмная подложка под фоном, затемнение поверх).
+static func cover(parent: Node, color: Color) -> ColorRect:
+	var r := ColorRect.new()
+	r.set_anchors_preset(Control.PRESET_FULL_RECT)
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	r.color = color
+	parent.add_child(r)
+	return r
+
+
+## Фон заставки ART-034 (`Splash.BG`) на весь экран, обрезан по сторонам (`KEEP_ASPECT_COVERED`), мимо касаний.
+static func backdrop(parent: Node) -> TextureRect:
+	var bg := TextureRect.new()
+	bg.name = "Фон"
+	bg.texture = load(Splash.BG)
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	parent.add_child(bg)
+	return bg
+
+
+## Холст панели: Control на весь экран, мимо касаний, рисует draw_fn.
+static func canvas(parent: Node, nm: String, draw_fn: Callable) -> Control:
+	var c := Control.new()
+	c.name = nm
+	c.set_anchors_preset(Control.PRESET_FULL_RECT)
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	c.draw.connect(draw_fn)
+	parent.add_child(c)
+	return c
+
+
+## Полноэкранный экран меню: тёмная подложка dark (если текстура не загрузилась, сцена всё равно закрыта), фон
+## заставки, затемнение dim (прозрачное — без него) и холст nm, который рисует draw_fn.
+static func screen(parent: Node, nm: String, draw_fn: Callable, dark: Color, dim := Color(0, 0, 0, 0)) -> Control:
+	cover(parent, dark)
+	backdrop(parent)
+	if dim.a > 0.0:
+		cover(parent, dim)
+	return canvas(parent, nm, draw_fn)

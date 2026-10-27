@@ -15,12 +15,7 @@ func _init() -> void:
 	name = "Настройки"
 	layer = LAYER
 	visible = false
-	draw = Control.new()
-	draw.name = "Поля"
-	draw.set_anchors_preset(Control.PRESET_FULL_RECT)
-	draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	draw.draw.connect(_draw_settings)
-	add_child(draw)
+	draw = UiStyle.canvas(self, "Поля", _draw_settings)
 
 
 func show_settings(s: Settings) -> void:

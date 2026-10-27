@@ -55,7 +55,7 @@
   колесо `set_wheel_turn`; стекло окон ART-057 — `BridgeView.glass_material`/`glass_uv`, шейдер `shaders/window_glass.gdshader`; конденсат и иней ART-077 — `scripts/core/window_fog.gd` (`WindowFog`: глубина, корпус, нагрев, сглаживание; `main.window_fog`, `BridgeView.set_fog`, маска `textures/bridge/kondensat-maska.png`; капли с преломлением — только «Красиво»: `BridgeView.set_wet`, `shaders/window_glass_wet.gdshader`, общее тело `window_glass.gdshaderinc`); материалы ART-054 — `BridgeView.KITS`, метровые UV `planar_uv`, шейдер `shaders/ship_surface.gdshader`,
   карты `textures/bridge/`, «Экономно» — `set_relief(false)`; машинное и трюм ART-055 — `RoomsView.KITS` по z, карты `textures/rooms/`), `ocean_view.gd` (дно, лёд, морской снег, вода по глубине `apply_water`, дальняя вода `far_wall` — сфера цвета тумана вместо фона у горизонта, #456), `searchlight_view.gd` (свет и конус луча,
   `apply(on, k)`), `touch_overlay.gd`, `qa_runner.gd`; общее у экранных панелей — `ui_style.gd` (`UiStyle`: цвета надписей,
-  плашка `box`, кнопка меню `menu_button`, окно подтверждения `dialog` — новую панель собирать из них). Шейдеры — `shaders/`.
+  плашка `box`, кнопка меню `menu_button`, окно подтверждения `dialog`, каркас экрана `screen`/`canvas`/`cover`/`backdrop` — новую панель собирать из них). Шейдеры — `shaders/`.
 - Посты кнопки действия — `Deck.posts()` (штурвал, энергия, сканер, люк), действие — `Main.use_post(id)`,
   подпись на кнопке — `Main.POST_BUTTON`. Препятствия на полу — `Deck.OBSTACLES` (круги) и прямоугольники `*_RECT`.
 - Слои света: отмель — слой 1 (`OceanView.LAYER_WORLD`, свет сквозь лёд), корабль изнутри — слой 2 (`LAYER_SHIP`, только

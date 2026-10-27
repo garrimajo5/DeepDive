@@ -14,12 +14,7 @@ func _init() -> void:
 	name = "Пауза"
 	layer = LAYER
 	visible = false
-	draw = Control.new()
-	draw.name = "Кнопки"
-	draw.set_anchors_preset(Control.PRESET_FULL_RECT)
-	draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	draw.draw.connect(_draw_pause)
-	add_child(draw)
+	draw = UiStyle.canvas(self, "Кнопки", _draw_pause)
 
 
 func show_pause(p: Pause) -> void:

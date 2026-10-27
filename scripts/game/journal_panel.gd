@@ -23,30 +23,7 @@ var _icons := {}
 func _init() -> void:
 	name = "Журнал экспедиции"
 	layer = 91
-	var dark := ColorRect.new()
-	dark.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dark.color = Journal.DARK
-	add_child(dark)
-	var bg := TextureRect.new()
-	bg.name = "Фон"
-	bg.texture = load(Splash.BG)
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
-	var dim := ColorRect.new()
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dim.color = Color(Journal.DARK, DIM)
-	add_child(dim)
-	draw = Control.new()
-	draw.name = "Страница"
-	draw.set_anchors_preset(Control.PRESET_FULL_RECT)
-	draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	draw.draw.connect(_draw_page)
-	add_child(draw)
+	draw = UiStyle.screen(self, "Страница", _draw_page, Journal.DARK, Color(Journal.DARK, DIM))
 
 
 func show_journal(j: Journal, e: Expedition, sc: Scanner, total: int, cargo: int, was_broken: bool) -> void:

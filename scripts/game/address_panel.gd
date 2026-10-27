@@ -13,30 +13,8 @@ var blink := 0.0   ## время для мигания курсора
 func _init() -> void:
 	name = "Вход по адресу"
 	layer = 91
-	var dark := ColorRect.new()
-	dark.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dark.color = MainMenu.DARK
-	add_child(dark)
-	var bg := TextureRect.new()
-	bg.name = "Фон"
-	bg.texture = load(Splash.BG)
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
-	var dim := ColorRect.new()   # экран ввода темнее меню: цифры читаются на любом месте фона
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dim.color = Color(MainMenu.DARK, AddressScreen.DIM)
-	add_child(dim)
-	draw = Control.new()
-	draw.name = "Клавиши"
-	draw.set_anchors_preset(Control.PRESET_FULL_RECT)
-	draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	draw.draw.connect(_draw_screen)
-	add_child(draw)
+	# экран ввода темнее меню: цифры читаются на любом месте фона
+	draw = UiStyle.screen(self, "Клавиши", _draw_screen, MainMenu.DARK, Color(MainMenu.DARK, AddressScreen.DIM))
 
 
 func show_screen(s: AddressScreen) -> void:
