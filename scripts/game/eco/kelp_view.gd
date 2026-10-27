@@ -134,8 +134,8 @@ static func build_spines() -> ArrayMesh:
 		var c := tip
 		var pts: Array[Vector3] = [c + side * e, c + up * e, c - side * e, c - up * e]
 		for j in 4:
-			KrabView._tri(glow, pts[j], pts[(j + 1) % 4], c + dir * e, SPINE_TIP, c)
-			KrabView._tri(glow, pts[(j + 1) % 4], pts[j], c - dir * e, SPINE_TIP, c)
+			EcoMM.tri(glow, pts[j], pts[(j + 1) % 4], c + dir * e, SPINE_TIP, c)
+			EcoMM.tri(glow, pts[(j + 1) % 4], pts[j], c - dir * e, SPINE_TIP, c)
 	return KrabView.spine_mesh(shaft, glow)
 
 

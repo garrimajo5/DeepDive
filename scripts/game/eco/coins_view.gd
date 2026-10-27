@@ -119,7 +119,7 @@ static func coin_tint(cn: EcoCoins.Coin) -> Color:
 ## Монетник: диск радиусом 0,15 м толщиной 3,5 см боком (ось — x), хвост-конус назад (−Z), нос — +Z.
 static func build_coin() -> ArrayMesh:
 	var st := KrabView._begin()
-	KrabView._ellipsoid(st, Vector3.ZERO, Vector3(0.0175, 0.15, 0.15), 12, 6, COIN)
+	EcoMM.ellipsoid(st, Vector3.ZERO, Vector3(0.0175, 0.15, 0.15), 12, 6, COIN)
 	var ring: Array[Vector3] = []
 	for j in 4:
 		var a := j * TAU / 4.0
@@ -127,15 +127,15 @@ static func build_coin() -> ArrayMesh:
 	var tip := Vector3(0, 0, -0.24)
 	var mid := Vector3(0, 0, -0.16)
 	for j in 4:
-		KrabView._tri(st, ring[j], ring[(j + 1) % 4], tip, FIN, mid)
-		KrabView._tri(st, ring[(j + 1) % 4], ring[j], Vector3(0, 0, -0.12), FIN, mid + Vector3(0, 0, -0.01))
+		EcoMM.tri(st, ring[j], ring[(j + 1) % 4], tip, FIN, mid)
+		EcoMM.tri(st, ring[(j + 1) % 4], ring[j], Vector3(0, 0, -0.12), FIN, mid + Vector3(0, 0, -0.01))
 	return _commit(st, COIN_GLOW)
 
 
 ## Глазун: сплющенное тело 0,9 × 0,16 × 0,6 м и два стебелька глаз впереди (+Z).
 static func build_glazun() -> ArrayMesh:
 	var st := KrabView._begin()
-	KrabView._ellipsoid(st, Vector3.ZERO, Vector3(0.45, 0.08, 0.3), 10, 6, SAND)
+	EcoMM.ellipsoid(st, Vector3.ZERO, Vector3(0.45, 0.08, 0.3), 10, 6, SAND)
 	for sx in [-1.0, 1.0]:
 		var at := Vector3(sx * EcoCoins.EYE.x, 0.08, EcoCoins.EYE.z)
 		KrabView._box(st, Transform3D.IDENTITY, at, Vector3(0.028, 0.12, 0.028), STALK)

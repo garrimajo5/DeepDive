@@ -169,10 +169,10 @@ func _measure_floor(sk: EcoSkalnik.Octo) -> void:
 ## Мантия (0,6 × 0,5 × 0,75, сдвинута назад), два рога-конуса в стороны и два глаза спереди (+Z).
 static func build_body() -> ArrayMesh:
 	var st := KrabView._begin()
-	KrabView._ellipsoid(st, Vector3(0, 0.45, -0.15), Vector3(0.6, 0.5, 0.75), 12, 8, Color.WHITE)
+	EcoMM.ellipsoid(st, Vector3(0, 0.45, -0.15), Vector3(0.6, 0.5, 0.75), 12, 8, Color.WHITE)
 	for sx in [-1.0, 1.0]:
 		_horn(st, Vector3(sx * 0.35, 0.95, 0.15), -sx * 0.5)
-		KrabView._ellipsoid(st, Vector3(sx * 0.3, 0.55, 0.45), Vector3(0.08, 0.08, 0.08), 6, 4, Color.WHITE)
+		EcoMM.ellipsoid(st, Vector3(sx * 0.3, 0.55, 0.45), Vector3(0.08, 0.08, 0.08), 6, 4, Color.WHITE)
 	return st.commit()
 
 
@@ -187,8 +187,8 @@ static func _horn(st: SurfaceTool, at: Vector3, tilt: float) -> void:
 		var t := k * TAU / 5.0
 		ring.append(base + b * Vector3(cos(t) * 0.08, 0, sin(t) * 0.08))
 	for k in 5:
-		KrabView._tri(st, ring[k], ring[(k + 1) % 5], tip, Color.WHITE, mid)
-		KrabView._tri(st, ring[(k + 1) % 5], ring[k], base, Color.WHITE, mid)
+		EcoMM.tri(st, ring[k], ring[(k + 1) % 5], tip, Color.WHITE, mid)
+		EcoMM.tri(st, ring[(k + 1) % 5], ring[k], base, Color.WHITE, mid)
 
 
 ## Октаэдр 0,22 м (OctahedronGeometry(0.22) в браузере) — камешек в щупальцах.
@@ -199,6 +199,6 @@ static func build_carry() -> ArrayMesh:
 	var top := Vector3(0, r, 0)
 	var bot := Vector3(0, -r, 0)
 	for k in 4:
-		KrabView._tri(st, v[k], v[(k + 1) % 4], top, Color.WHITE, Vector3.ZERO)
-		KrabView._tri(st, v[(k + 1) % 4], v[k], bot, Color.WHITE, Vector3.ZERO)
+		EcoMM.tri(st, v[k], v[(k + 1) % 4], top, Color.WHITE, Vector3.ZERO)
+		EcoMM.tri(st, v[(k + 1) % 4], v[k], bot, Color.WHITE, Vector3.ZERO)
 	return st.commit()

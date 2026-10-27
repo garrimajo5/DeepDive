@@ -108,9 +108,9 @@ func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3)
 ## Панцирь (верхняя половина эллипсоида), обод по краю и голова спереди.
 static func build_body() -> ArrayMesh:
 	var st := KrabView._begin()
-	_dome(st, Vector3.ZERO, EcoGrot.SHELL, 16, 5, SHELL)
+	EcoMM.ellipsoid(st, Vector3.ZERO, EcoGrot.SHELL, 16, 5, SHELL, 0.0, 0.5)
 	_ring(st, Vector3(EcoGrot.SHELL.x, 1.0, EcoGrot.SHELL.z), 0.12, 20, 5, RIM)
-	KrabView._ellipsoid(st, Vector3(0, 0.25, 3.4), Vector3(0.55, 0.385, 0.66), 10, 6, HEAD)
+	EcoMM.ellipsoid(st, Vector3(0, 0.25, 3.4), Vector3(0.55, 0.385, 0.66), 10, 6, HEAD)
 	return st.commit()
 
 
@@ -143,7 +143,7 @@ static func build_reef() -> ArrayMesh:
 		_cone(st, branch(k), 0.06, 0.14, branch_len(k), 5, WOOD, true)
 	for k in BUMPS:
 		var a := k * 1.1 + 0.4
-		KrabView._ellipsoid(st, Vector3(cos(a) * 1.5, 0.8, sin(a) * 2.1), Vector3(0.45, 0.2, 0.45), 8, 5, MOSS)
+		EcoMM.ellipsoid(st, Vector3(cos(a) * 1.5, 0.8, sin(a) * 2.1), Vector3(0.45, 0.2, 0.45), 8, 5, MOSS)
 	return st.commit()
 
 
@@ -152,30 +152,11 @@ static func build_glow() -> ArrayMesh:
 	var st := KrabView._begin()
 	for k in BRANCHES:
 		var tip := branch(k) * Vector3(0, branch_len(k), 0)
-		KrabView._ellipsoid(st, tip, Vector3.ONE * 0.16, 6, 4, TIP)
+		EcoMM.ellipsoid(st, tip, Vector3.ONE * 0.16, 6, 4, TIP)
 	for sx in [-1.0, 1.0]:
-		KrabView._ellipsoid(st, Vector3(sx * 0.3, 0.45, 3.85), Vector3.ONE * 0.09, 6, 4, EYE)
+		EcoMM.ellipsoid(st, Vector3(sx * 0.3, 0.45, 3.85), Vector3.ONE * 0.09, 6, 4, EYE)
 	return st.commit()
 
-
-## Купол: верхняя половина эллипсоида с радиусами r, seg × rings граней, низ открыт.
-static func _dome(st: SurfaceTool, c: Vector3, r: Vector3, seg: int, rings: int, col: Color) -> void:
-	var pts: Array = []
-	for i in rings + 1:
-		var th := PI * 0.5 * float(i) / rings
-		var row: Array[Vector3] = []
-		for j in seg:
-			var ph := TAU * float(j) / seg
-			row.append(c + Vector3(sin(th) * cos(ph) * r.x, cos(th) * r.y, sin(th) * sin(ph) * r.z))
-		pts.append(row)
-	for i in rings:
-		for j in seg:
-			var a: Vector3 = pts[i][j]
-			var b: Vector3 = pts[i][(j + 1) % seg]
-			var d: Vector3 = pts[i + 1][j]
-			var e: Vector3 = pts[i + 1][(j + 1) % seg]
-			KrabView._tri(st, a, b, d, col, c)
-			KrabView._tri(st, b, e, d, col, c)
 
 
 ## Обод: тор с трубкой tube вокруг эллипса scale (x, z) в плоскости y = 0.
@@ -193,8 +174,8 @@ static func _ring(st: SurfaceTool, scale: Vector3, tube: float, seg: int, sides:
 			var p01 := _tube(a0, b1, scale, tube)
 			var p10 := _tube(a1, b0, scale, tube)
 			var p11 := _tube(a1, b1, scale, tube)
-			KrabView._tri(st, p00, p10, p01, col, mid)
-			KrabView._tri(st, p10, p11, p01, col, mid)
+			EcoMM.tri(st, p00, p10, p01, col, mid)
+			EcoMM.tri(st, p10, p11, p01, col, mid)
 
 
 static func _tube(a: float, b: float, scale: Vector3, tube: float) -> Vector3:
@@ -217,7 +198,7 @@ static func _cone(st: SurfaceTool, tr: Transform3D, r_top: float, r_bottom: floa
 		var p1 := tr * Vector3(cos(a1) * r0, 0, sin(a1) * r0)
 		var q0 := tr * Vector3(cos(a0) * r1, y_end, sin(a0) * r1)
 		var q1 := tr * Vector3(cos(a1) * r1, y_end, sin(a1) * r1)
-		KrabView._tri(st, p0, p1, q0, col, mid)
-		KrabView._tri(st, p1, q1, q0, col, mid)
-		KrabView._tri(st, p0, p1, tr * Vector3.ZERO, col, mid)
-		KrabView._tri(st, q0, q1, tr * Vector3(0, y_end, 0), col, mid)
+		EcoMM.tri(st, p0, p1, q0, col, mid)
+		EcoMM.tri(st, p1, q1, q0, col, mid)
+		EcoMM.tri(st, p0, p1, tr * Vector3.ZERO, col, mid)
+		EcoMM.tri(st, q0, q1, tr * Vector3(0, y_end, 0), col, mid)

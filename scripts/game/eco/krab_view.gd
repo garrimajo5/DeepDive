@@ -125,14 +125,14 @@ static func build_den() -> ArrayMesh:
 	var st := _begin()
 	for i in ROCKS.size():
 		var s := ROCK_SIZES[i]
-		_ellipsoid(st, ROCKS[i], Vector3(s, s * 0.6, s), 5, 3, ROCK, 0.17 * i)
+		EcoMM.ellipsoid(st, ROCKS[i], Vector3(s, s * 0.6, s), 5, 3, ROCK, 0.17 * i)
 	return _commit(st, false)
 
 
 ## Панцирь и шесть ног (по три с борта, разведены веером и опущены к дну).
 static func build_body() -> ArrayMesh:
 	var st := _begin()
-	_ellipsoid(st, Vector3(0, 0.35, 0), Vector3(0.55, 0.22, 0.42), 10, 6, SHELL)
+	EcoMM.ellipsoid(st, Vector3(0, 0.35, 0), Vector3(0.55, 0.22, 0.42), 10, 6, SHELL)
 	for sx in [-1.0, 1.0]:
 		for z in [-0.25, 0.0, 0.25]:
 			var yaw: float = -z * 1.5 if sx > 0 else PI + z * 1.5
@@ -147,7 +147,7 @@ static func build_claws() -> ArrayMesh:
 	var st := _begin()
 	for sx in [-1.0, 1.0]:
 		_box(st, Transform3D.IDENTITY, Vector3(sx * 0.22, 0, 0.2), Vector3(0.08, 0.08, 0.4), ARM)
-		_ellipsoid(st, Vector3(sx * 0.24, 0, 0.5), Vector3(0.11, 0.08, 0.2), 8, 5, PINCER)
+		EcoMM.ellipsoid(st, Vector3(sx * 0.24, 0, 0.5), Vector3(0.11, 0.08, 0.2), 8, 5, PINCER)
 	return _commit(st, true)
 
 
@@ -163,13 +163,13 @@ static func build_spine() -> ArrayMesh:
 		ring.append(Vector3(cos(t), 0, sin(t)) * 0.025)
 	var mid := Vector3(0, 0.1, 0)
 	for j in 4:
-		_tri(shaft, ring[j], ring[(j + 1) % 4], tip, SPINE_BASE, mid)
-		_tri(shaft, ring[(j + 1) % 4], ring[j], Vector3.ZERO, SPINE_BASE, mid)
+		EcoMM.tri(shaft, ring[j], ring[(j + 1) % 4], tip, SPINE_BASE, mid)
+		EcoMM.tri(shaft, ring[(j + 1) % 4], ring[j], Vector3.ZERO, SPINE_BASE, mid)
 	var e := 0.03
 	var pts: Array[Vector3] = [tip + Vector3(e, 0, 0), tip + Vector3(0, 0, e), tip - Vector3(e, 0, 0), tip - Vector3(0, 0, e)]
 	for j in 4:
-		_tri(glow, pts[j], pts[(j + 1) % 4], tip + Vector3(0, e, 0), SPINE_TIP, tip)
-		_tri(glow, pts[j], pts[(j + 1) % 4], tip - Vector3(0, e, 0), SPINE_TIP, tip)
+		EcoMM.tri(glow, pts[j], pts[(j + 1) % 4], tip + Vector3(0, e, 0), SPINE_TIP, tip)
+		EcoMM.tri(glow, pts[j], pts[(j + 1) % 4], tip - Vector3(0, e, 0), SPINE_TIP, tip)
 	return spine_mesh(shaft, glow)
 
 
@@ -207,42 +207,6 @@ static func _commit(st: SurfaceTool, glow: bool) -> ArrayMesh:
 	return m
 
 
-## Треугольник выпуклой фигуры с серединой inside: лицом наружу (обход по часовой, если смотреть снаружи —
-## (b − a) × (c − a) смотрит внутрь), нормаль грани — наружу (гранёный вид).
-static func _tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, col: Color, inside: Vector3) -> void:
-	var n := (b - a).cross(c - a)
-	if n.length_squared() < 1e-12:
-		return
-	if n.dot((a + b + c) / 3.0 - inside) > 0.0:
-		var t := b
-		b = c
-		c = t
-		n = -n
-	n = -n.normalized()
-	for p in [a, b, c]:
-		st.set_color(col)
-		st.set_normal(n)
-		st.add_vertex(p)
-
-
-## Эллипсоид из seg × rings граней; turn — поворот сетки (камни разные).
-static func _ellipsoid(st: SurfaceTool, c: Vector3, r: Vector3, seg: int, rings: int, col: Color, turn: float = 0.0) -> void:
-	var pts: Array = []
-	for i in rings + 1:
-		var th := PI * float(i) / rings
-		var row: Array[Vector3] = []
-		for j in seg:
-			var ph := TAU * float(j) / seg + turn
-			row.append(c + Vector3(sin(th) * cos(ph) * r.x, cos(th) * r.y, sin(th) * sin(ph) * r.z))
-		pts.append(row)
-	for i in rings:
-		for j in seg:
-			var a: Vector3 = pts[i][j]
-			var b: Vector3 = pts[i][(j + 1) % seg]
-			var d: Vector3 = pts[i + 1][j]
-			var e: Vector3 = pts[i + 1][(j + 1) % seg]
-			_tri(st, a, b, d, col, c)
-			_tri(st, b, e, d, col, c)
 
 
 ## Брусок размером size с серединой at в системе tr.
@@ -253,5 +217,5 @@ static func _box(st: SurfaceTool, tr: Transform3D, at: Vector3, size: Vector3, c
 		v.append(tr * (at + Vector3(h.x if k & 1 else -h.x, h.y if k & 2 else -h.y, h.z if k & 4 else -h.z)))
 	var mid := tr * at
 	for f in [[0, 1, 3, 2], [4, 6, 7, 5], [0, 4, 5, 1], [2, 3, 7, 6], [0, 2, 6, 4], [1, 5, 7, 3]]:
-		_tri(st, v[f[0]], v[f[1]], v[f[2]], col, mid)
-		_tri(st, v[f[0]], v[f[2]], v[f[3]], col, mid)
+		EcoMM.tri(st, v[f[0]], v[f[1]], v[f[2]], col, mid)
+		EcoMM.tri(st, v[f[0]], v[f[2]], v[f[3]], col, mid)
