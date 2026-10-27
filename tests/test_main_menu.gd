@@ -106,3 +106,25 @@ func test_net_closes_menu() -> void:
 	main.host_game(NetLink.PORT + 41)
 	ok(not main.main_menu.open, "сетевой забег — без меню")
 	ok(main.overlay.visible, "управление на экране")
+
+
+## Экраны меню — у `MenuFlow` (`main.menu_flow`, #753): шаги не в `Main`, входы для тестов и `tools/` — пересылки.
+func test_scene_menu_flow() -> void:
+	Main.menu = true
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	ok(main.menu_flow is MenuFlow and main.menu_flow.main == main, "экраны меню — поле main.menu_flow")
+	for f in ["_menu_step", "_settings_step", "_settings_do", "_offer_step", "_offer_do", "_journal_step", "_to_menu"]:
+		ok(not main.has_method(f), "%s больше не в Main" % f)
+	ok(main.main_menu.open, "меню открыто через пересылку open_menu")
+	main.open_settings()
+	ok(main.settings.open and main.settings_panel.visible, "open_settings — экран настроек")
+	main.menu_flow.settings_do("back")
+	main.settings.open = false
+	main._settings_show()
+	main.open_journal()
+	ok(main.logbook.open and main.logbook_panel.visible, "open_journal — журнал")
+	main.close_menu()
+	ok(not main.main_menu.open and not main.logbook.open, "close_menu закрыл меню и журнал")
+	ok(main.overlay.visible, "крестовина снова на экране")

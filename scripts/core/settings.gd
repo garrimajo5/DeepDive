@@ -8,7 +8,7 @@ extends RefCounted
 ## через подтверждение (выделено «Нет»), «Назад» — туда, откуда открыты (главное меню или пауза). Хранятся отдельно от
 ## сохранения забега — `user://nastrojki.cfg` (тесты, снимки и прогон тестера не читают и не пишут: `path` = "").
 ## Здесь — значения, файл, кнопки и раскладка без узлов; рисует `scripts/game/settings_panel.gd`
-## (`main.settings_panel`), шаг — `Main._settings_step`, применяет — `Main._apply_settings` (громкость шины Master,
+## (`main.settings_panel`), шаг — `MenuFlow.settings_step`, применяет — `MenuFlow.apply_settings` (громкость шины Master,
 ## `TouchOverlay.swipe`, облёт `Flyby.Kind.START`). Макет 2400×1080, масштаб и обрезка боков — `Splash`.
 
 const PATH := "user://nastrojki.cfg"
@@ -62,8 +62,8 @@ var cards: Array = []     ## прочитанные карточки ролей 
 var graphics := Graphics.DEFAULT   ## уровень графики ART-044
 var fps := false                   ## «Показывать кадры/с» ART-044
 var lite_no := false               ## отказ от предложения «Экономно» ART-044 (`LiteOffer`) — больше не предлагать
-## Голос ART-041 (`VoicePage`, в рацию — `Main._apply_settings`): громкость товарищей, режим (`Radio.Mode`), приём и
-## микрофон — независимо. mic_ok — разрешение микрофона Android сейчас (не хранится, ставит `Main._settings_show`).
+## Голос ART-041 (`VoicePage`, в рацию — `MenuFlow.apply_settings`): громкость товарищей, режим (`Radio.Mode`), приём и
+## микрофон — независимо. mic_ok — разрешение микрофона Android сейчас (не хранится, ставит `MenuFlow.settings_show`).
 var mates := VOLUME_DEFAULT
 var voice_mode := Radio.Mode.HOLD
 var hear := true
