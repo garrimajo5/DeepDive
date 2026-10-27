@@ -4,6 +4,7 @@ extends Node3D
 ## у подножий — второй MultiMesh из полусферы (initFerns в js/creatures.js). Цвет листа #3D9D91, края и кончик
 ## светлее (#68E6DC, ART-004) — отражённый свет, своей эмиссии нет; виден с обеих сторон;
 ## лист — общий шейдер растений (EcoShaders.PLANT). Стоит на слое отмели (OceanView.LAYER_WORLD). Моллюски не двигаются — расставлены один раз.
+## Муть (EcoFernDust) — третий MultiMesh «Муть» на общем шейдере EcoShaders.MIST.
 
 const LEAF := Color("3D9D91")
 const EDGE := Color("68E6DC")
@@ -21,10 +22,20 @@ var leaves: MultiMeshInstance3D
 var shells: MultiMeshInstance3D
 ## Последний буфер листьев (для тестов).
 var buffer := PackedFloat32Array()
+## Муть (EcoFernDust: раскрываясь, листья стряхивают ил; рыбы клюют моллюсков) — дочерний MultiMesh «Муть» на общем
+## шейдере EcoShaders.MIST, +1 вызов; буфер — для тестов.
+var dust := EcoFernDust.new()
+var dust_view: MultiMeshInstance3D
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
+var _ground := Callable()
 
 
 func _init(system: EcoFern, ground: Callable = Callable()) -> void:
 	ferns = system
+	_ground = ground
 	name = "Волнолист"
 	leaves = EcoMM.instance(self, "Листья", build_leaf(), ferns.ferns.size() * EcoFern.LEAVES, false, false, false)
 	shells = EcoMM.instance(self, "Моллюски", build_shell(), ferns.ferns.size() * EcoFern.SHELLS, false, false, false)
@@ -37,6 +48,8 @@ func _init(system: EcoFern, ground: Callable = Callable()) -> void:
 			var b := Basis(Vector3.UP, a).scaled_local(Vector3(1.0, 0.5, 1.3) * fe.scale)
 			EcoMM.put(buf, (fe.index * EcoFern.SHELLS + j) * STRIDE, Transform3D(b, p))
 	shells.multimesh.buffer = buf
+	dust_view = GrazerView.build_dust(EcoFernDust.POOL)
+	add_child(dust_view)
 	sync(0.0)
 
 
@@ -88,8 +101,14 @@ static func build_shell() -> SphereMesh:
 	return m
 
 
-## Расставить листья в момент t (время мира).
-func sync(t: float) -> void:
+## Расставить листья в момент t (время мира). info — корабль (муть дальше 80 м не встаёт, светлее в луче),
+## flow — течение мира (уносит муть); без корабля мути нет.
+func sync(t: float, info: EcoLink.ShipState = null, flow := Vector3.ZERO) -> void:
+	if info != null:
+		dust.update(ferns, t, info.pos, _ground)
+		_dust.pack(dust.dust, t, flow, info, EcoFernDust.COLOR, EcoFernDust.LIT, Seabed.mesh_height)
+		if _dust.changed:   # мути нет и не было — буфер тот же, не грузим (issue #133)
+			dust_view.multimesh.buffer = _dust.data
 	buffer.resize(leaves.multimesh.instance_count * STRIDE)
 	for fe in ferns.ferns:
 		for j in EcoFern.LEAVES:
