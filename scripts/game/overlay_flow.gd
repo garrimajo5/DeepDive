@@ -7,6 +7,7 @@ extends RefCounted
 ## Живёт полем `main.overlay_flow`; `Main.comms_area` — пересылка для тестов, `tools/` и `QaRunner`.
 
 var main: Main
+var mic_permit := MicPermit.here()   ## разрешение микрофона Android для рации (#634)
 
 
 func _init(m: Main) -> void:
@@ -128,8 +129,8 @@ func hidden() -> bool:
 
 
 ## Рация ART-041 в коопе: «Нажать и держать» — палец на кнопке (`Router.held_in`), меню и пауза обрывают передачу;
-## кнопка не крутит взгляд (`Router.blocks`). Голос — `voice_step`; пока нет разрешения микрофона Android — `Radio.enabled`
-## выключено.
+## кнопка не крутит взгляд (`Router.blocks`). Голос — `voice_step`; разрешение микрофона Android — `mic_permit`: нет
+## доступа — `Radio.mic` = false, первое нажатие и «В настройки» показывают системный запрос.
 func radio_step(dt: float) -> void:
 	var m := main
 	var radio := m.radio
@@ -137,13 +138,16 @@ func radio_step(dt: float) -> void:
 		m.radio_panel.show_radio(radio, m.time)
 		return
 	radio.on = Radio.enabled and (m.net_client != null or not m.net_mates.is_empty())
+	radio.mic = mic_permit.ok()
 	var size := _size()
 	radio.update(dt, m.overlay.router.held_in(Radio.button_rect(size)), hidden())
 	voice_step(dt)
 	radio_sight()
 	for p in m.overlay.router.taps:
 		radio.tap(p, size)
-	radio.settings_wanted = false   # запрос разрешения микрофона Android — вместе с голосом
+	if mic_permit.step(dt, radio.begged, radio.settings_wanted, OS.get_granted_permissions):
+		OS.request_permission(MicPermit.NAME)   # ответ — в списке разрешений, `mic_permit` опросит
+	radio.settings_wanted = false
 	m.overlay.router.blocks.append_array(radio.blocks(size))
 	m.radio_panel.show_radio(radio, m.time)
 

@@ -7,14 +7,14 @@ extends RefCounted
 ## Режимы: «Нажать и держать» — передача, пока палец на кнопке (отпускание, меню, пауза, выход из забега — сразу
 ## стоп); «По голосу» — кнопка включает и выключает микрофон, подпись «Микрофон».
 ## «Вас слышно» — только когда голос реально уходит (`link` ставит `VoiceIO` по `Voice.Station.link`; голоса
-## товарищей — `heard` оттуда же). Пока нет разрешения микрофона Android, рация в игре скрыта (`Radio.enabled`) и
-## ввод звука в проекте выключен; раскладка, состояния и список — здесь, рисует `scripts/game/radio_panel.gd` (`main.radio_panel`),
+## товарищей — `heard` оттуда же). Разрешение микрофона Android — `MicPermit` (`mic`; нажали без доступа — `begged`,
+## системный запрос делает `OverlayFlow.radio_step`); раскладка, состояния и список — здесь, рисует `scripts/game/radio_panel.gd` (`main.radio_panel`),
 ## удержание — `Touch.Router.held_in` по `blocks` (`OverlayFlow.radio_step`), снимок `shot.gd raciya=…`.
 
 enum Mode { HOLD, VOICE }
 
-## Рация на экране в коопе. Пока голоса нет (решение владельца), в игре выключено — видна только в снимке и тестах.
-static var enabled := false
+## Рация на экране в коопе (#634: захват, сеть и разрешение микрофона готовы). Выключить — только снимки и тесты.
+static var enabled := true
 
 const REF_H := 1080.0
 const HOLD := 0.4           ## имя держится после последнего пакета, с
@@ -66,7 +66,8 @@ var held := false        ## «Нажать и держать»: палец на 
 var toggled := false     ## «По голосу»: микрофон включён кнопкой
 var hidden := false      ## меню, пауза, шторки, вне забега — передачи нет
 var ask := 0.0           ## сколько ещё держать «Разрешите микрофон»
-var settings_wanted := false   ## нажали «В настройки» (забирает `Main`)
+var settings_wanted := false   ## нажали «В настройки» (забирает `OverlayFlow.radio_step` — снова спросить разрешение)
+var begged := false      ## в этом шаге нажали кнопку без доступа — первый раз спросить разрешение (`MicPermit`)
 var pinned := false      ## снимок `shot.gd raciya=…`: состояние держится как задано, `OverlayFlow.radio_step` только рисует
 var talkers: Array[Talker] = []
 var _was_down := false
@@ -80,7 +81,8 @@ func update(dt: float, down: bool, is_hidden: bool) -> void:
 		toggled = false
 	var pressed := down and not _was_down
 	_was_down = down
-	if pressed and not mic:
+	begged = pressed and not mic
+	if begged:
 		ask = ASK_TIME   # доступа нет — просим разрешение, передачу сами не включаем
 	match mode:
 		Mode.HOLD:
