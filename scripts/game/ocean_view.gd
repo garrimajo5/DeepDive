@@ -24,6 +24,14 @@ var shaft_list: Array[LightShafts.Shaft] = []
 ## Слои воды ART-069 (`WaterLayers`) в материалах дна, льда и дальней воды: сила по уровню ART-044 и по илу.
 var layers_level := WaterLayers.GAIN_NORMAL
 var layers_silt := 0.0
+## #847: вода, туман и лёд по глубине пишутся, только когда глубина или ил сдвинулись больше порога —
+## иначе ≈20 свойств окружения и ≈25 значений шейдеров уходили каждый кадр, хотя корабль стоит.
+const WATER_EPS_DEPTH := 0.005   ## м
+const WATER_EPS_SILT := 0.0005
+var water_writes := 0                          ## сколько раз вода записана (тесты)
+var _water_at := Vector2(INF, INF)             ## глубина и ил последней записи
+var _layers_cam := Vector3(INF, INF, INF)      ## камера последней записи придонной пыли
+var _ship_at := Transform3D(Basis(), Vector3(INF, INF, INF))   ## корабль последней записи лучей и взвеси
 
 
 func _ready() -> void:
@@ -133,8 +141,10 @@ func _make_far_wall() -> MeshInstance3D:
 func _process(_dt: float) -> void:
 	var cam := get_viewport().get_camera_3d()
 	if cam:
-		far_wall.global_position = cam.global_position
-		set_layers_camera(cam.global_position)
+		var at := cam.global_position
+		if not at.is_equal_approx(_layers_cam):   # камера стоит — дальняя вода и пыль на месте (#847)
+			far_wall.global_position = at
+			set_layers_camera(at)
 
 
 ## Материалы со слоями воды ART-069 (`shaders/water_layers.gdshaderinc`).
@@ -159,6 +169,7 @@ static func _lin(c: Color) -> Vector3:
 
 ## Высота камеры над дном — для придонной пыли (дно под камерой считаем ровным).
 func set_layers_camera(cam: Vector3) -> void:
+	_layers_cam = cam
 	var floor_y := Seabed.mesh_height(cam.x, cam.z)
 	for m in layer_mats():
 		m.set_shader_parameter("layer_cam_above", maxf(cam.y - floor_y, 0.0))
@@ -245,6 +256,9 @@ func _make_shafts() -> MultiMeshInstance3D:
 ## Где корабль: внутри корпуса шахты не светят и взвеси нет (вид с мостика и из отсеков).
 func set_ship(pos: Vector3, yaw: float) -> void:
 	var t := Transform3D(Basis(Vector3.UP, yaw), pos)
+	if t.is_equal_approx(_ship_at):   # корабль стоит — матрицы в лучах и взвеси те же (#847)
+		return
+	_ship_at = t
 	shafts_mat.set_shader_parameter("ship_inv", Projection(t.affine_inverse()))
 	snow_mat.set_shader_parameter("ship_inv", Projection(t.affine_inverse()))
 
@@ -297,6 +311,11 @@ func set_snow_lite(lite: bool) -> void:
 ## Вода по глубине: цвет и плотность тумана, рассеянный свет, свет сквозь лёд. around — где корабль.
 ## silt — корабль в облаке ила 0…1 (Silt.k): вода бурая и мутная.
 func apply_water(env: Environment, depth: float, around: Vector3, silt: float = 0.0) -> void:
+	snow.position = around
+	if absf(depth - _water_at.x) < WATER_EPS_DEPTH and absf(silt - _water_at.y) < WATER_EPS_SILT:
+		return   # глубина и ил те же — всё ниже уже записано (#847)
+	_water_at = Vector2(depth, silt)
+	water_writes += 1
 	var fog := Seabed.Water.fog_color(depth).lerp(Silt.FAR_COLOR, 0.75 * silt)   # серо-зелёная муть (ART-048)
 	env.background_color = fog
 	far_mat.set_shader_parameter("water", fog)   # дальняя вода — того же цвета, туман её доведёт до фона (#456)
@@ -319,7 +338,6 @@ func apply_water(env: Environment, depth: float, around: Vector3, silt: float = 
 	sun.light_energy = Seabed.Water.sun(depth)
 	# Каустики на дне гаснут по глубине (меньше света сквозь лёд) и в облаке ила (свет рассеивается).
 	seabed_mat.set_shader_parameter("light", clampf(Seabed.Water.caustic(depth) * (1.0 - 0.85 * silt), 0.0, 1.0))
-	snow.position = around
 	ice_mat.set_shader_parameter("water", fog)
 	ice_mat.set_shader_parameter("glow_k", exp(-maxf(depth, 0.0) / IceSheet.GLOW_DEPTH))
 	ice_mat.set_shader_parameter("contrast", IceSheet.contrast(depth))
@@ -387,6 +405,7 @@ func set_scorch(u: Array) -> void:
 
 func set_relief(on: bool) -> void:
 	ice_relief = on
+	_water_at = Vector2(INF, INF)   # рельеф льда — из apply_water: записать заново на следующем шаге
 	ice_mat.set_shader_parameter("reflect_lite", 0.0 if on else 1.0)   # «Экономно» ART-075: без маски, × 0,55
 	seabed_mat.set_shader_parameter("relief", 1.0 if on else 0.0)
 	if not on:
