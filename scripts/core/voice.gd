@@ -5,7 +5,9 @@ extends RefCounted
 ## у слушателя — буфер против рывков сети и обратно в частоту микшера.
 ## Здесь только числа без узлов: `Encoder` (кадры захвата → пакеты, уровень), `Gate` («По голосу»: речь или тишина),
 ## `Decoder` (пакеты → кадры проигрывателя, уровень для «активности» таблички). Захват `AudioEffectCapture`,
-## проигрыватель `AudioStreamGenerator`, канал `NetLink` и разрешение микрофона Android — следующая часть.
+## Канал по сети — `NetLink.CH_VOICE` (`Host.send_voice`/`take_voice`, `Client.send_voice`/`take_voice`), голоса
+## нескольких товарищей у слушателя — `Room`. Захват `AudioEffectCapture`, проигрыватель `AudioStreamGenerator` и
+## разрешение микрофона Android — следующая часть.
 
 const RATE := 8000           ## частота голоса в сети, Гц
 const FRAME := 160           ## отсчётов в пакете — 20 мс
@@ -209,3 +211,36 @@ class Decoder:
 				_a = _b
 				_b = _sample()
 		return out
+
+
+## Голоса товарищей у слушателя: по `Decoder` на место в экипаже. `take` — пакеты из `NetLink.take_voice`, `talking` —
+## чьи голоса сейчас звучат (для `Radio.heard` с уровнем `level`), `forget` — товарищ ушёл.
+class Room:
+	extends RefCounted
+	var decoders := {}           ## место в экипаже → Decoder
+
+	func take(packets: Array) -> void:
+		for e in packets:
+			if e is Array and (e as Array).size() == 2 and e[1] is PackedByteArray:
+				decoder(int(e[0])).push(e[1])
+
+	func decoder(who: int) -> Decoder:
+		if not decoders.has(who):
+			decoders[who] = Decoder.new()
+		return decoders[who]
+
+	func level(who: int) -> float:
+		return (decoders[who] as Decoder).level if decoders.has(who) else 0.0
+
+	## Места, чей голос сейчас звучит (проигрывается и не тишина пропавшего пакета).
+	func talking() -> Array[int]:
+		var out: Array[int] = []
+		for who: int in decoders:
+			var d: Decoder = decoders[who]
+			if d.playing() and d.level > 0.0:
+				out.append(who)
+		out.sort()
+		return out
+
+	func forget(who: int) -> void:
+		decoders.erase(who)
