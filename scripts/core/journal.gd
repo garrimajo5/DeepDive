@@ -236,9 +236,9 @@ func hit(p: Vector2, size: Vector2) -> String:
 		return "back"
 	if blank:
 		return ""
-	for k: String in Run.PLACES:
-		if place_rect(k, size).has_point(p):
-			return "place:" + k
+	var k := Splash.hit_ids(p, size, Run.PLACES.keys(), place_rect)
+	if k != "":
+		return "place:" + k
 	var ids := page_ids(page)
 	for i in ids.size():
 		if cell_rect(i, size).has_point(p):

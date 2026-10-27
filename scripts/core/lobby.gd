@@ -537,10 +537,7 @@ func hit(p: Vector2, size: Vector2) -> String:
 		ids.append("pick%d" % i)
 	for i in RUN_ROWS:
 		ids.append("join%d" % i)
-	for id: String in ids:
-		if enabled(id) and rect(id, size).has_point(p):
-			return id
-	return ""
+	return Splash.hit_ids(p, size, ids, rect, enabled)
 
 
 ## Нажатие кнопки id. Возвращает запрос хосту для `act` ("role:<i>", "ready", "unready", "start"), "back" — выйти

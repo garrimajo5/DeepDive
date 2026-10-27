@@ -132,14 +132,9 @@ func hit(p: Vector2, size: Vector2) -> String:
 	if not open:
 		return ""
 	if ask != "":
-		for id: String in ["yes", "no"]:
-			if screen_rect(id, size).has_point(p):
-				return id
-		return ""
-	for it: Array in items():
-		if enabled.get(it[0], false) and rect(it[0], size).has_point(p):
-			return it[0]
-	return ""
+		return Splash.hit_ids(p, size, ["yes", "no"], screen_rect)
+	return Splash.hit_ids(p, size, items().map(func(it: Array) -> String: return it[0]), rect,
+			func(id: String) -> bool: return enabled.get(id, false))
 
 
 ## Нажатие кнопки id. Возвращает, что сделать игре: "resume" — играть дальше, "new" — новый забег, "exit" — в главное
