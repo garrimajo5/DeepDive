@@ -85,7 +85,7 @@
 - Поставить Godot в сессии: скачать `Godot_v4.7.2-stable_linux.x86_64.zip` с GitHub releases godotengine/godot,
   распаковать, `ln -s …/Godot_v4.7.2-stable_linux.x86_64 /usr/local/bin/godot`. Android SDK в сессии нет (`dl.google.com` закрыт),
   APK собирает только CI.
-- CI «Godot» (`.github/workflows/godot.yml`): «Тесты» и «Сборка APK» (артефакт `deepdive-apk`) идут **параллельно**;
+- CI «Godot» (`.github/workflows/godot.yml`): «Тесты» (три части матрицей по времени файлов — `tests/run.gd -- --shard i/3`, `TestShards`, таблица `tests/vremya.txt`; обновить — `-- --times tests/vremya.txt`) и «Сборка APK» (артефакт `deepdive-apk`) идут **параллельно**;
   релиз `apk-latest` — отдельный job «Релиз» после обоих зелёных, только на `main`. PR сливается, когда тесты и APK зелёные.
   Импорт проекта кэшируется (`.godot`), поэтому прогон быстрый. Если в PR нет кода (только `art/`, `qa/`, `*.md`, картинки
   и html в `docs/`), job «Что изменилось» пропускает тесты, APK и релиз — «skipped» тоже считается зелёным.
