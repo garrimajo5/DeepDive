@@ -6,8 +6,8 @@ extends Control
 ## Под маршрутом — страница «Связь» (ART-040): кодовое слово забега крупно, подсказка (`Briefing.code_lines`);
 ## маршрут не выбран — карточка только со словом.
 
-const TEXT := Color("D5E4E8")
-const DIM := Color("9AD9E8")
+const TEXT := UiStyle.TEXT
+const DIM := UiStyle.DIM
 const EDGE := Color("67DDEB")
 const BACK := Color("0B1C24")
 const TITLE_PX := 26

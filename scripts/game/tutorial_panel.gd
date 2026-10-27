@@ -3,9 +3,9 @@ extends Control
 ## Плашка подсказки первого забега ART-038 и обводка нужного управления поверх кнопок (`Touch.Layout`); касания
 ## не перехватывает. Шаги, тексты, место — `Tutorial`. Палитра ART-038, красного нет.
 
-const TEXT := Color("D5E4E8")
-const DIM := Color("9AD9E8")
-const ACCENT := Color("67DDEB")
+const TEXT := UiStyle.TEXT
+const DIM := UiStyle.DIM
+const ACCENT := UiStyle.ACCENT
 const BACK := Color(0.043, 0.11, 0.141, 244.0 / 255.0)   ## #0B1C24, альфа 244
 
 var tut: Tutorial
@@ -63,12 +63,7 @@ func _draw() -> void:
 	var a := tut.a
 	var font := get_theme_default_font()
 	var b := box()
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(BACK, BACK.a * a)
-	sb.border_color = Color(ACCENT, a)
-	sb.set_border_width_all(maxi(1, roundi(2.0 * s)))
-	sb.set_corner_radius_all(roundi(12.0 * s))
-	draw_style_box(sb, b)
+	draw_style_box(UiStyle.box(Color(BACK, BACK.a * a), 12.0 * s, Color(ACCENT, a), 2.0 * s), b)
 	draw_string(font, b.position + Tutorial.STEP_AT * s, tut.step_line(), HORIZONTAL_ALIGNMENT_LEFT, -1,
 		int(Tutorial.STEP_PX * s), Color(DIM, a))
 	var px := int(Tutorial.TEXT_PX * s)
@@ -83,12 +78,7 @@ func _draw() -> void:
 	if map_btn:   # «Схема» справа: контур акцентом, текст по центру
 		var m := Tutorial.map_rect(b, size)
 		text_end = m.position.x - 16.0 * s
-		var mb := StyleBoxFlat.new()
-		mb.bg_color = Color(BACK, BACK.a * a)
-		mb.border_color = Color(ACCENT, a)
-		mb.set_border_width_all(maxi(1, roundi(3.0 * s)))
-		mb.set_corner_radius_all(roundi(12.0 * s))
-		draw_style_box(mb, m)
+		draw_style_box(UiStyle.box(Color(BACK, BACK.a * a), 12.0 * s, Color(ACCENT, a), 3.0 * s), m)
 		var mpx := int(Tutorial.MAP_PX * s)
 		draw_string(font, Vector2(m.position.x, m.get_center().y + mpx * 0.36), Tutorial.MAP_TEXT,
 			HORIZONTAL_ALIGNMENT_CENTER, m.size.x, mpx, Color(ACCENT, a))

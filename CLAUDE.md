@@ -54,7 +54,8 @@
 - `scripts/game/` — узлы: `main.gd` (сборка сцены, шаг игры `step(dt)`, пилот), `bridge_view.gd` (оболочка, стекло, модели,
   колесо `set_wheel_turn`; стекло окон ART-057 — `BridgeView.glass_material`/`glass_uv`, шейдер `shaders/window_glass.gdshader`; конденсат и иней ART-077 — `scripts/core/window_fog.gd` (`WindowFog`: глубина, корпус, нагрев, сглаживание; `main.window_fog`, `BridgeView.set_fog`, маска `textures/bridge/kondensat-maska.png`; капли с преломлением — только «Красиво»: `BridgeView.set_wet`, `shaders/window_glass_wet.gdshader`, общее тело `window_glass.gdshaderinc`); материалы ART-054 — `BridgeView.KITS`, метровые UV `planar_uv`, шейдер `shaders/ship_surface.gdshader`,
   карты `textures/bridge/`, «Экономно» — `set_relief(false)`; машинное и трюм ART-055 — `RoomsView.KITS` по z, карты `textures/rooms/`), `ocean_view.gd` (дно, лёд, морской снег, вода по глубине `apply_water`, дальняя вода `far_wall` — сфера цвета тумана вместо фона у горизонта, #456), `searchlight_view.gd` (свет и конус луча,
-  `apply(on, k)`), `touch_overlay.gd`, `qa_runner.gd`. Шейдеры — `shaders/`.
+  `apply(on, k)`), `touch_overlay.gd`, `qa_runner.gd`; общее у экранных панелей — `ui_style.gd` (`UiStyle`: цвета надписей,
+  плашка `box`, кнопка меню `menu_button`, окно подтверждения `dialog` — новую панель собирать из них). Шейдеры — `shaders/`.
 - Посты кнопки действия — `Deck.posts()` (штурвал, энергия, сканер, люк), действие — `Main.use_post(id)`,
   подпись на кнопке — `Main.POST_BUTTON`. Препятствия на полу — `Deck.OBSTACLES` (круги) и прямоугольники `*_RECT`.
 - Слои света: отмель — слой 1 (`OceanView.LAYER_WORLD`, свет сквозь лёд), корабль изнутри — слой 2 (`LAYER_SHIP`, только
@@ -80,7 +81,7 @@
     (фильтр: `-- test_helm` или часть имени теста);
   - картинка: `xvfb-run -a -s "-screen 0 1600x720x24" godot --path . --rendering-method gl_compatibility --rendering-driver opengl3 --resolution 1600x720 -s tools/shot.gd -- out.png z=-3 yaw=0`
     (`--rendering-method gl_compatibility` обязателен: игра теперь на Forward Mobile/Vulkan, а в облаке Vulkan нет; снимок — в Compatibility, свечение видно, тени/SSAO — нет)
-    (ключи — в `tools/shot.gd`), смотреть через Read. Сцену после изменений смотреть глазами, не только тестами.
+    (ключи — в `tools/shot.gd`, сцену по ключам готовит `tools/shot_setup.gd`), смотреть через Read. Сцену после изменений смотреть глазами, не только тестами.
 - Поставить Godot в сессии: скачать `Godot_v4.7.2-stable_linux.x86_64.zip` с GitHub releases godotengine/godot,
   распаковать, `ln -s …/Godot_v4.7.2-stable_linux.x86_64 /usr/local/bin/godot`. Android SDK в сессии нет (`dl.google.com` закрыт),
   APK собирает только CI.

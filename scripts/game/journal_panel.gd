@@ -71,13 +71,7 @@ func _icon(path: String) -> Texture2D:
 
 
 func _box(r: Rect2, s: float, edge: Color, width: float, fill := Color(Journal.PANEL, 0.92)) -> void:
-	var sb := StyleBoxFlat.new()
-	sb.set_corner_radius_all(roundi(12.0 * s))
-	sb.anti_aliasing = true
-	sb.bg_color = fill
-	sb.set_border_width_all(maxi(1, roundi(width * s)))
-	sb.border_color = edge
-	draw.draw_style_box(sb, r)
+	draw.draw_style_box(UiStyle.box(fill, 12.0 * s, edge, width * s), r)
 
 
 ## Строка: at — левый край и верх видимых глифов на экране.

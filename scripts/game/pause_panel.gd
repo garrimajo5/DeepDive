@@ -48,13 +48,7 @@ func _draw_pause() -> void:
 		return
 	draw.draw_rect(Rect2(Vector2.ZERO, size), Color(MainMenu.DARK, 0.45))
 	var box := Splash.rect_to_screen(Pause.BOX, size)
-	var sb := StyleBoxFlat.new()
-	sb.set_corner_radius_all(roundi(MainMenu.RADIUS * s))
-	sb.anti_aliasing = true
-	sb.bg_color = Color(MainMenu.PANEL, 0.97)
-	sb.set_border_width_all(maxi(1, roundi(2.0 * s)))
-	sb.border_color = MainMenu.EDGE
-	draw.draw_style_box(sb, box)
+	draw.draw_style_box(UiStyle.dialog(s), box)
 	var lines: Array = pause.ask_lines()
 	for i in lines.size():
 		if i == 0:
@@ -66,16 +60,7 @@ func _draw_pause() -> void:
 
 
 func _button(font: Font, r: Rect2, text: String, main_btn: bool, on: bool, k: float, s: float) -> void:
-	var sb := StyleBoxFlat.new()
-	sb.set_corner_radius_all(roundi(MainMenu.RADIUS * s))
-	sb.anti_aliasing = true
-	if main_btn:
-		sb.bg_color = Color(MainMenu.MAIN, k)
-	else:
-		sb.bg_color = Color(MainMenu.PANEL, (0.92 if on else 0.6) * k)
-		sb.set_border_width_all(maxi(1, roundi(2.0 * s)))
-		sb.border_color = Color(MainMenu.EDGE, (1.0 if on else 0.6) * k)
-	draw.draw_style_box(sb, r)
+	draw.draw_style_box(UiStyle.menu_button(main_btn, s, 0.92 if on else 0.6, 1.0 if on else 0.6, k), r)
 	var col := MainMenu.DARK if main_btn else (MainMenu.INK if on else MainMenu.OFF)
 	var px := Pause.BUTTON_PX * s
 	var base := r.position.y + r.size.y * 0.5 + Splash.CAP_H * px * 0.5
