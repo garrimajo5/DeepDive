@@ -136,7 +136,7 @@ func sync(t: float, ship: Vector3, force := false, info: EcoLink.ShipState = nul
 			if p.y < h:
 				p.y = h
 			var sc := 0.2 * (1.0 - float(j) / SEG * 0.65)
-			_put(_buf, (a * SEG + j) * STRIDE, Basis.from_scale(Vector3(sc, sc * 0.75, sc)), p)
+			EcoMM.put_basis(_buf, (a * SEG + j) * STRIDE, Basis.from_scale(Vector3(sc, sc * 0.75, sc)), p)
 			aabb = aabb.expand(p)
 	arms.multimesh.buffer = _buf
 	arms.custom_aabb = aabb.grow(0.3)
@@ -164,21 +164,6 @@ func _measure_floor(sk: EcoSkalnik.Octo) -> void:
 		var z := sk.pos.z + sin(ang) * 0.9
 		_floor[a] = float(g.call(x, z)) if g.is_valid() else sk.home.y
 	ground_reads += 1
-
-
-static func _put(buf: PackedFloat32Array, i: int, b: Basis, o: Vector3) -> void:
-	buf[i] = b.x.x
-	buf[i + 1] = b.y.x
-	buf[i + 2] = b.z.x
-	buf[i + 3] = o.x
-	buf[i + 4] = b.x.y
-	buf[i + 5] = b.y.y
-	buf[i + 6] = b.z.y
-	buf[i + 7] = o.y
-	buf[i + 8] = b.x.z
-	buf[i + 9] = b.y.z
-	buf[i + 10] = b.z.z
-	buf[i + 11] = o.z
 
 
 ## Мантия (0,6 × 0,5 × 0,75, сдвинута назад), два рога-конуса в стороны и два глаза спереди (+Z).

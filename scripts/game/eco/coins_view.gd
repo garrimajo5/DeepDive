@@ -46,36 +46,19 @@ var _dust := EcoDustBuffer.new()
 func _init(system: EcoCoins) -> void:
 	coins = system
 	name = "Монетники"
-	fish = _instance("Монетники", build_coin(), coins.coins.size(), true)
+	fish = EcoMM.instance(self, "Монетники", build_coin(), coins.coins.size(), true)
 	_vary.resize(coins.coins.size() * 5)
 	for cn in coins.coins:
 		var tn := coin_tint(cn)
 		var row := [coin_scale(cn), coin_rate(cn), tn.r, tn.g, tn.b]
 		for q in 5:
 			_vary[cn.index * 5 + q] = row[q]
-	bodies = _instance("Глазуны", build_glazun(), coins.glazuns.size(), false)
-	eyes = _instance("Глаза", build_eye(), coins.glazuns.size() * 2, true)
+	bodies = EcoMM.instance(self, "Глазуны", build_glazun(), coins.glazuns.size(), false)
+	eyes = EcoMM.instance(self, "Глаза", build_eye(), coins.glazuns.size() * 2, true)
 	dust_view = GrazerView.build_dust(EcoCoinsDust.POOL)
 	add_child(dust_view)
 	visible = not coins.schools.is_empty()
 	sync(0.0)
-
-
-func _instance(n: String, mesh: Mesh, count: int, colors: bool) -> MultiMeshInstance3D:
-	var mi := MultiMeshInstance3D.new()
-	mi.name = n
-	mi.layers = OceanView.LAYER_WORLD
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = colors
-	mm.mesh = mesh
-	mm.instance_count = count
-	mi.multimesh = mm
-	# рыбки плавают и рассыпаются — рамка на всю отмель
-	mi.custom_aabb = AABB(Vector3(-400, -200, -400), Vector3(800, 400, 800))
-	add_child(mi)
-	return mi
 
 
 ## Расставить монетников и глазунов в момент t (время мира). ship — корабль (муть — ближе EcoGrazerDust.NEAR,
@@ -88,7 +71,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 		var tr := Transform3D(EcoCoins.coin_basis(cn, t, _vary[q + 1]) * _vary[q], cn.pos) if cn.alive \
 			else Transform3D(Basis.from_scale(Vector3.ZERO), Vector3(0, -999, 0))
 		var j := cn.index * STRIDE_C
-		KelpView._put(coin_buffer, j, tr)
+		EcoMM.put(coin_buffer, j, tr)
 		coin_buffer[j + 12] = _vary[q + 2]; coin_buffer[j + 13] = _vary[q + 3]; coin_buffer[j + 14] = _vary[q + 4]
 		coin_buffer[j + 15] = 1.0
 	fish.multimesh.buffer = coin_buffer
@@ -96,13 +79,13 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 	eye_buffer.resize(coins.glazuns.size() * 2 * STRIDE_C)
 	for gz in coins.glazuns:
 		var tr := EcoCoins.glazun_transform(gz)
-		KelpView._put(body_buffer, gz.index * STRIDE, tr)
+		EcoMM.put(body_buffer, gz.index * STRIDE, tr)
 		var c := EcoCoins.eye_color(gz, t)
 		var s := 1.6 if gz.lit else 1.0
 		for e in 2:
 			var j := (gz.index * 2 + e) * STRIDE_C
 			var p: Vector3 = gz.eyes[e] + Vector3(0, gz.lunge * 0.35, 0)
-			KelpView._put(eye_buffer, j, Transform3D(Basis.from_scale(Vector3.ONE * s), p))
+			EcoMM.put(eye_buffer, j, Transform3D(Basis.from_scale(Vector3.ONE * s), p))
 			eye_buffer[j + 12] = c.r; eye_buffer[j + 13] = c.g; eye_buffer[j + 14] = c.b; eye_buffer[j + 15] = 1.0
 	bodies.multimesh.buffer = body_buffer
 	eyes.multimesh.buffer = eye_buffer

@@ -71,13 +71,7 @@ func _build_rock() -> void:
 		var tb := vent.tubes[i + 1]
 		_skirt(Vector2(tb.floor_c.x, tb.floor_c.z), EcoVent.PLATES[i][0], tb.base_r * 0.9, EcoVent.PLATES[i][1],
 			SMALL_SIDES, 2 + i)
-	var arrays := []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_NORMAL] = normals
-	arrays[Mesh.ARRAY_COLOR] = _col
-	var m := ArrayMesh.new()
-	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var m := EcoMM.tris(verts, normals, _col)
 	m.surface_set_material(0, EcoShaders.material(EcoShaders.STONE, {"growth": HEAT, "fill": 0.0, "glow_k": 1.6, "cut": 1.0,
 		"rough": 0.95, "spec": 0.15, "flicker": 1.0}))
 	rock = MeshInstance3D.new()

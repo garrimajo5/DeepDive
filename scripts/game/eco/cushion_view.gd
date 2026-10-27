@@ -42,27 +42,11 @@ func _init(system: EcoCushion) -> void:
 	cushions = system
 	name = "Подушечник"
 	var n := cushions.cushions.size()
-	pads = _instance("Подушки", build_pad(), n, false)
-	ink = _instance("Чернила", build_ink(), n * EcoCushion.INK_N, true)
+	pads = EcoMM.instance(self, "Подушки", build_pad(), n, false)
+	ink = EcoMM.instance(self, "Чернила", build_ink(), n * EcoCushion.INK_N, true)
 	dust_view = GrazerView.build_dust(EcoCushionDust.POOL)
 	add_child(dust_view)
 	sync(0.0)
-
-
-func _instance(n: String, mesh: Mesh, count: int, colors: bool) -> MultiMeshInstance3D:
-	var mi := MultiMeshInstance3D.new()
-	mi.name = n
-	mi.layers = OceanView.LAYER_WORLD
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = colors
-	mm.mesh = mesh
-	mm.instance_count = count
-	mi.multimesh = mm
-	mi.custom_aabb = AABB(Vector3(-400, -200, -400), Vector3(800, 400, 800))
-	add_child(mi)
-	return mi
 
 
 ## Полусфера подушки с цветом вершин по высоте (0,85 − 0,2y, 0,45 + 0,25y, 0,6 + 0,3y; y — высота сферы до сплющивания).
@@ -115,7 +99,7 @@ func sync(t: float, ship_pos := Vector3.ZERO, info: EcoLink.ShipState = null, fl
 	var ink_changed := fresh
 	for cu in cushions.cushions:
 		var b := Basis(Vector3.UP, float(cu.index)) * Basis.from_scale(EcoCushion.squash(cu))
-		_put(pad_buffer, cu.index * STRIDE, Transform3D(b, cu.base))
+		EcoMM.put(pad_buffer, cu.index * STRIDE, Transform3D(b, cu.base))
 		var inked := cu.inked()
 		if not inked and not fresh and _ink_shown[cu.index] == 0:
 			continue
@@ -125,9 +109,9 @@ func sync(t: float, ship_pos := Vector3.ZERO, info: EcoLink.ShipState = null, fl
 		for j in EcoCushion.INK_N:
 			var i := (cu.index * EcoCushion.INK_N + j) * STRIDE_C
 			if inked:
-				_put(ink_buffer, i, Transform3D(Basis.IDENTITY, EcoCushion.ink_point(cu, j, t)))
+				EcoMM.put(ink_buffer, i, Transform3D(Basis.IDENTITY, EcoCushion.ink_point(cu, j, t)))
 			else:
-				_put(ink_buffer, i, Transform3D(Basis.from_scale(Vector3.ZERO), cu.ink_c))
+				EcoMM.put(ink_buffer, i, Transform3D(Basis.from_scale(Vector3.ZERO), cu.ink_c))
 			ink_buffer[i + 12] = c.r; ink_buffer[i + 13] = c.g; ink_buffer[i + 14] = c.b; ink_buffer[i + 15] = c.a
 	pads.multimesh.buffer = pad_buffer
 	if ink_changed:
@@ -140,14 +124,6 @@ func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3)
 			Seabed.mesh_height)
 	if _dust.changed:   # мути нет и не было — буфер тот же, не грузим (issue #133)
 		dust_view.multimesh.buffer = _dust.data
-
-
-static func _put(buf: PackedFloat32Array, i: int, tr: Transform3D) -> void:
-	var b := tr.basis
-	var o := tr.origin
-	buf[i] = b.x.x; buf[i + 1] = b.y.x; buf[i + 2] = b.z.x; buf[i + 3] = o.x
-	buf[i + 4] = b.x.y; buf[i + 5] = b.y.y; buf[i + 6] = b.z.y; buf[i + 7] = o.y
-	buf[i + 8] = b.x.z; buf[i + 9] = b.y.z; buf[i + 10] = b.z.z; buf[i + 11] = o.z
 
 
 ## Расстановка экземпляра n из буфера с шагом stride.

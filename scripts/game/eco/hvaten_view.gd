@@ -45,9 +45,9 @@ func _init(system: EcoHvaten) -> void:
 	hvaten = system
 	name = "Хватни"
 	var n := hvaten.anemones.size()
-	bodies = _instance("Тела", build_body(), n, false)
-	tents = _instance("Щупальца", build_tentacle(), n * EcoHvaten.TENT, false)
-	pestr = _instance("Пестрянки", build_pestr(), n * EcoHvaten.PESTR_N, true, true)
+	bodies = EcoMM.instance(self, "Тела", build_body(), n, false)
+	tents = EcoMM.instance(self, "Щупальца", build_tentacle(), n * EcoHvaten.TENT, false)
+	pestr = EcoMM.instance(self, "Пестрянки", build_pestr(), n * EcoHvaten.PESTR_N, true, true)
 	body_buffer.resize(n * STRIDE)
 	tent_buffer.resize(n * EcoHvaten.TENT * STRIDE)
 	pestr_buffer.resize(n * EcoHvaten.PESTR_N * STRIDE_P)
@@ -61,23 +61,6 @@ func _init(system: EcoHvaten) -> void:
 			pestr_buffer[i + 15] = EcoPestrLook.phase(hv, k)
 			pestr_buffer[i + 16] = c.r; pestr_buffer[i + 17] = c.g; pestr_buffer[i + 18] = c.b; pestr_buffer[i + 19] = 1.0
 	sync(0.0)
-
-
-func _instance(n: String, mesh: Mesh, count: int, colors: bool, custom := false) -> MultiMeshInstance3D:
-	var mi := MultiMeshInstance3D.new()
-	mi.name = n
-	mi.layers = OceanView.LAYER_WORLD
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = colors
-	mm.use_custom_data = custom
-	mm.mesh = mesh
-	mm.instance_count = count
-	mi.multimesh = mm
-	mi.custom_aabb = AABB(Vector3(-400, -200, -400), Vector3(800, 400, 800))
-	add_child(mi)
-	return mi
 
 
 ## Тело: столб (0,32 сверху, 0,45 снизу, 0,8 м) цвета (0,48, 0,22, 0,42) и диск (0,4 → 0,32, 0,08 м) на 0,82 м —
@@ -184,13 +167,13 @@ func sync(t: float, ship_pos := Vector3.ZERO, all := true, info: EcoLink.ShipSta
 	for hv in hvaten.anemones:
 		if not all and not due(hv, ship_pos, _frame):
 			continue
-		_put(body_buffer, hv.index * STRIDE, EcoHvaten.body(hv, t, live))
+		EcoMM.put(body_buffer, hv.index * STRIDE, EcoHvaten.body(hv, t, live))
 		for k in EcoHvaten.TENT:
-			_put(tent_buffer, (hv.index * EcoHvaten.TENT + k) * STRIDE, EcoHvaten.tentacle(hv, k, t, live))
+			EcoMM.put(tent_buffer, (hv.index * EcoHvaten.TENT + k) * STRIDE, EcoHvaten.tentacle(hv, k, t, live))
 		for k in EcoHvaten.PESTR_N:
 			var tr := EcoHvaten.pestr_pose(hv, k, t)
 			tr.basis = tr.basis * Basis.from_scale(Vector3.ONE * EcoPestrLook.SCALE)
-			_put(pestr_buffer, (hv.index * EcoHvaten.PESTR_N + k) * STRIDE_P, tr)
+			EcoMM.put(pestr_buffer, (hv.index * EcoHvaten.PESTR_N + k) * STRIDE_P, tr)
 	bodies.multimesh.buffer = body_buffer
 	tents.multimesh.buffer = tent_buffer
 	pestr.multimesh.buffer = pestr_buffer
@@ -207,14 +190,6 @@ func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3)
 ## Переписать ли хватня в этом кадре: близкий или в луче — всегда, дальний — в свой кадр из трёх.
 static func due(hv: EcoHvaten.Anemone, ship_pos: Vector3, frame: int) -> bool:
 	return hv.lit or hv.base.distance_squared_to(ship_pos) < FAR * FAR or (frame + hv.index) % FAR_EVERY == 0
-
-
-static func _put(buf: PackedFloat32Array, i: int, tr: Transform3D) -> void:
-	var b := tr.basis
-	var o := tr.origin
-	buf[i] = b.x.x; buf[i + 1] = b.y.x; buf[i + 2] = b.z.x; buf[i + 3] = o.x
-	buf[i + 4] = b.x.y; buf[i + 5] = b.y.y; buf[i + 6] = b.z.y; buf[i + 7] = o.y
-	buf[i + 8] = b.x.z; buf[i + 9] = b.y.z; buf[i + 10] = b.z.z; buf[i + 11] = o.z
 
 
 ## Расстановка экземпляра n из буфера с шагом stride.
