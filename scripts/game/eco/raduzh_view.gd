@@ -161,8 +161,7 @@ func sync_dust(t: float, ship: EcoLink.ShipState, flow := Vector3.ZERO) -> void:
 		return
 	dust.update(raduzh, t, ship.pos, ship.yaw)
 	_dust.pack(dust.dust, t, flow, ship, EcoRaduzhDust.COLOR, EcoRaduzhDust.LIT)
-	if _dust.changed:   # облачков нет и не было — буфер тот же, не грузим (issue #133)
-		dust_view.multimesh.buffer = _dust.data
+	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 
 
 ## Размер гребневика n (номер по всем стаям: стая · PER_SWARM + место) — множитель BODY.
