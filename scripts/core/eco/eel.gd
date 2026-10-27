@@ -56,6 +56,13 @@ const FRONT := Vector3(0, 1.75, HullPlan.NOSE_CUT - 0.65)
 const LATCH_X0 := -3.4
 const LATCH_DX := 0.5
 const LATCH_WAVE := 0.3
+## Плавность (Б3): тело переходит в позу логова и стекла не прыжком, а за SETTLE с (смягчённо, к движущейся цели —
+## стекло едет с кораблём); голова доворачивает к своему курсу долей угла FACE_FOLLOW в секунду, не быстрее FACE_MAX
+## рад/с. Раньше на входе в логово 14 звеньев перескакивали из-за головы в расщелину, а на стекле — на окно за шаг,
+## голова щёлкала на пол-оборота.
+const SETTLE := 0.7
+const FACE_FOLLOW := 10.0
+const FACE_MAX := 7.0
 ## Запас от корпуса на ходу: голова 0,3 м, звенья 0,25 м.
 const HEAD_PAD := 0.3
 const SEG_PAD := 0.25
@@ -76,6 +83,8 @@ class Eel:
 	## Звенья тела: 0 — голова; куда смотрит голова (единичный): на стекле — в стекло, иначе — от первого звена.
 	var segs := PackedVector3Array()
 	var face := Vector3.FORWARD
+	## Доля перехода тела в позу логова или стекла: 0 — только вошёл в режим, 1 — лежит как надо (SETTLE).
+	var settle := 1.0
 	## Пауза до следующего броска; секунды до конца броска или пути к кораблю.
 	var cd := 0.0
 	var timer := 0.0
@@ -201,7 +210,7 @@ func _update(world: EcoWorld, e: Eel, dt: float, t: float) -> void:
 		if dl > 0.01:
 			a.p += d * minf(1.0, speed * dt / dl)
 		world.push_out(a, HEAD_PAD)
-	_pose(world, e, t)
+	_pose(world, e, dt)
 
 
 ## В логове: добыча рядом — бросок; иначе корабль рядом — к носу (eelUpdate, case 'hide').
@@ -254,6 +263,8 @@ func _go_home(e: Eel, m: Mode, cd: float) -> void:
 
 
 func _set_mode(e: Eel, m: Mode) -> void:
+	if (m == Mode.HIDE or m == Mode.LATCHED) and m != e.mode:
+		e.settle = 0.0   # тело было на ходу — в позу переходит за SETTLE
 	e.mode = m
 	if m != Mode.STRIKE:
 		e.prey_grazer = null
@@ -276,20 +287,26 @@ func on_zap(world: EcoWorld, _radius: float) -> void:
 
 
 ## Звенья тела: в логове — в расщелину, на стекле — поперёк окна, на ходу — тянутся за головой мимо корпуса.
-func _pose(world: EcoWorld, e: Eel, t: float) -> void:
+## В логово и на стекло тело переходит за SETTLE (settle_frac), голова доворачивает (turn_face).
+func _pose(world: EcoWorld, e: Eel, dt: float) -> void:
 	var a := e.agent
+	var want := e.face
 	match e.mode:
 		Mode.LATCHED:
+			var k_in := settle_frac(e, dt)
 			for k in SEGS:
-				e.segs[k] = latch_point(world.ship, k, t)
+				var q := e.segs[k].lerp(latch_point(world.ship, k, world.time), k_in)
+				if k_in < 1.0:   # по пути на стекло — мимо корпуса
+					var res := EcoHull.push_out(q, world.ship.pos, world.ship.yaw, SEG_PAD)
+					q = res[0] if not res.is_empty() else q
+				e.segs[k] = q
 			a.p = e.segs[0]
-			e.face = Vector3.BACK.rotated(Vector3.UP, world.ship.yaw)
-			return
+			want = Vector3.BACK.rotated(Vector3.UP, world.ship.yaw)
 		Mode.HIDE:
+			var k_in := settle_frac(e, dt)
 			for k in SEGS:
-				e.segs[k] = a.p - e.out * ((k + 0.5) * SEG_HIDE)
-			e.face = e.out
-			return
+				e.segs[k] = e.segs[k].lerp(a.p - e.out * ((k + 0.5) * SEG_HIDE), k_in)
+			want = e.out
 		_:
 			e.segs[0] = a.p
 			for k in range(1, SEGS):
@@ -300,9 +317,38 @@ func _pose(world: EcoWorld, e: Eel, t: float) -> void:
 					q = e.segs[k - 1] + d * (SEG_FOLLOW / dl)
 				var res := EcoHull.push_out(q, world.ship.pos, world.ship.yaw, SEG_PAD)
 				e.segs[k] = res[0] if not res.is_empty() else q
-	var f := e.segs[0] - e.segs[1]
-	if f.length_squared() > 1e-6:
-		e.face = f.normalized()
+			var f := e.segs[0] - e.segs[1]
+			if f.length_squared() > 1e-6:
+				want = f.normalized()
+	# легло в логово или на стекло — голова стоит ровно (на стекле едет с кораблём, как бы он ни поворачивал)
+	var laid := e.settle >= 1.0 and not e.moving()
+	e.face = want if laid else turn_face(e.face, want, dt)
+
+
+## Доля пути звеньев к позе за этот шаг: смягчённый (smoothstep) переход за SETTLE к цели, которая может ехать (стекло
+## с кораблём). На последнем шаге — 1: тело ложится ровно в позу. settle растёт.
+static func settle_frac(e: Eel, dt: float) -> float:
+	if e.settle >= 1.0:
+		return 1.0
+	var s0 := e.settle
+	var s1 := minf(1.0, s0 + dt / SETTLE)
+	e.settle = s1
+	var e0 := smoothstep(0.0, 1.0, s0)
+	var e1 := smoothstep(0.0, 1.0, s1)
+	return 1.0 if s1 >= 1.0 else (e1 - e0) / maxf(1e-6, 1.0 - e0)
+
+
+## Курс головы from доворачивает к want: доля угла FACE_FOLLOW в секунду, не быстрее FACE_MAX рад/с; ровно назад —
+## разворот по горизонтали (вокруг вертикали). Оба — единичные.
+static func turn_face(from: Vector3, want: Vector3, dt: float) -> Vector3:
+	var ang := from.angle_to(want)
+	if ang < 1e-5 or dt <= 0.0:
+		return want if ang < 1e-5 else from
+	var axis := from.cross(want)
+	if axis.length_squared() < 1e-10:
+		axis = Vector3.UP
+	var step := minf(ang * (1.0 - exp(-FACE_FOLLOW * dt)), FACE_MAX * dt)
+	return from.rotated(axis.normalized(), step).normalized()
 
 
 ## Звено k стеклоуста на стекле в момент t (мир).
