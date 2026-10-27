@@ -56,3 +56,21 @@ static func fbm(x: float, z: float, oct: int) -> float:
 static func smooth(e0: float, e1: float, x: float) -> float:
 	var t := clampf((x - e0) / (e1 - e0), 0.0, 1.0)
 	return t * t * (3.0 - 2.0 * t)
+
+
+## Ключ таблицы `[[x, значение…], …]` (x по возрастанию) и доля до следующего: [i, t]; x зажат в края таблицы.
+static func key_at(table: Array, x: float) -> Array:
+	var d := clampf(x, table[0][0], table[table.size() - 1][0])
+	for i in table.size() - 1:
+		if d <= table[i + 1][0]:
+			return [i, (d - table[i][0]) / (table[i + 1][0] - table[i][0])]
+	return [table.size() - 2, 1.0]
+
+
+## Кусочно-линейно по таблице ключей (столбец `col`): до первого ключа — его значение, за последним — значение
+## последнего или `after`, если задано (не NAN). Таблицы по глубине (лёд, вода, блики, слои глубже) — через неё.
+static func keyed(table: Array, x: float, col := 1, after := NAN) -> float:
+	if not is_nan(after) and x > table[table.size() - 1][0]:
+		return after
+	var a := key_at(table, x)
+	return lerpf(table[a[0]][col], table[a[0] + 1][col], a[1])

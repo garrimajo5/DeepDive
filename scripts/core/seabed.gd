@@ -132,15 +132,10 @@ class Water:
 
 	## Ключ и доля до следующего: [i, t].
 	static func _at(depth: float) -> Array:
-		var d := clampf(depth, KEYS[0][0], KEYS[KEYS.size() - 1][0])
-		for i in KEYS.size() - 1:
-			if d <= KEYS[i + 1][0]:
-				return [i, (d - KEYS[i][0]) / (KEYS[i + 1][0] - KEYS[i][0])]
-		return [KEYS.size() - 2, 1.0]
+		return HashNoise.key_at(KEYS, depth)
 
 	static func _num(depth: float, col: int) -> float:
-		var a := _at(depth)
-		return lerpf(KEYS[a[0]][col], KEYS[a[0] + 1][col], a[1])
+		return HashNoise.keyed(KEYS, depth, col)
 
 	static func fog_density(depth: float) -> float:
 		return _num(depth, 2)
