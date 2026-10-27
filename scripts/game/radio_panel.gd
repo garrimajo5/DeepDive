@@ -6,11 +6,11 @@ extends Control
 ## контур #67DDEB, текст #D5E4E8, неактивное #6E909A; «Вас слышно» — светлая кнопка #67DDEB с тёмной подписью.
 ## Ничего красного.
 
-const TEXT := Color("D5E4E8")
-const DIM := Color("9AD9E8")
-const OFF := Color("6E909A")
-const ACCENT := Color("67DDEB")
-const DARK := Color("0B1C24")
+const TEXT := UiStyle.TEXT
+const DIM := UiStyle.DIM
+const OFF := UiStyle.OFF
+const ACCENT := UiStyle.ACCENT
+const DARK := UiStyle.DARK
 const EDGE := Color("32616D")
 const GLYPH_TOP := 0.76   ## от верха видимых глифов до базовой линии, доля кегля (DejaVu Sans)
 
@@ -35,12 +35,7 @@ func show_radio(r: Radio, t: float) -> void:
 
 
 func _box(r: Rect2, s: float, fill: Color, border: Color, radius := 12.0) -> void:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = fill
-	sb.border_color = border
-	sb.set_border_width_all(maxi(1, roundi(2.0 * s)))
-	sb.set_corner_radius_all(roundi(radius * s))
-	draw_style_box(sb, r)
+	draw_style_box(UiStyle.box(fill, radius * s, border, 2.0 * s), r)
 
 
 func _text(font: Font, top: Vector2, text: String, px: int, color: Color, width := -1.0) -> void:
@@ -104,12 +99,7 @@ func _draw() -> void:
 	for i in rows.size():
 		var t: Radio.Talker = rows[i]
 		var r := Radio.row_rect(i, size)
-		var sb := StyleBoxFlat.new()
-		sb.bg_color = Color(DARK, 0.88 * t.a)
-		sb.border_color = Color(ACCENT, t.a)
-		sb.set_border_width_all(maxi(1, roundi(2.0 * s)))
-		sb.set_corner_radius_all(roundi(12.0 * s))
-		draw_style_box(sb, r)
+		draw_style_box(UiStyle.box(Color(DARK, 0.88 * t.a), 12.0 * s, Color(ACCENT, t.a), 2.0 * s), r)
 		var c := r.position + Vector2(40.0 * s, r.size.y * 0.5)
 		draw_arc(c, 24.0 * s, 0.0, TAU, 48, Color(TEXT, t.a), maxf(1.5, 2.0 * s), true)
 		var lpx := int(Radio.LETTER_PX * s)

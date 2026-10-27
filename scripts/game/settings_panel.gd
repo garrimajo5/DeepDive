@@ -63,13 +63,7 @@ func _draw_settings() -> void:
 	if not settings.ask:
 		return
 	draw.draw_rect(Rect2(Vector2.ZERO, size), Color(MainMenu.DARK, 0.45))
-	var sb := StyleBoxFlat.new()
-	sb.set_corner_radius_all(roundi(MainMenu.RADIUS * s))
-	sb.anti_aliasing = true
-	sb.bg_color = Color(MainMenu.PANEL, 0.97)
-	sb.set_border_width_all(maxi(1, roundi(2.0 * s)))
-	sb.border_color = MainMenu.EDGE
-	draw.draw_style_box(sb, Splash.rect_to_screen(Pause.BOX, size))
+	draw.draw_style_box(UiStyle.dialog(s), Splash.rect_to_screen(Pause.BOX, size))
 	for i in Settings.ASK.size():
 		if i == 0:
 			_center(font, Settings.ASK[0], Pause.ASK_TOP, Pause.ASK_PX * s, MainMenu.INK, size)
@@ -153,16 +147,7 @@ func _slider(y: float, f: float, held: bool, k: float, s: float, size: Vector2,
 
 
 func _button(font: Font, r: Rect2, text: String, main_btn: bool, k: float, s: float) -> void:
-	var sb := StyleBoxFlat.new()
-	sb.set_corner_radius_all(roundi(MainMenu.RADIUS * s))
-	sb.anti_aliasing = true
-	if main_btn:
-		sb.bg_color = Color(MainMenu.MAIN, k)
-	else:
-		sb.bg_color = Color(MainMenu.PANEL, 0.92 * k)
-		sb.set_border_width_all(maxi(1, roundi(2.0 * s)))
-		sb.border_color = Color(MainMenu.EDGE, k)
-	draw.draw_style_box(sb, r)
+	draw.draw_style_box(UiStyle.menu_button(main_btn, s, 0.92, 1.0, k), r)
 	var col := MainMenu.DARK if main_btn else MainMenu.INK
 	var px := Settings.BUTTON_PX * s
 	var base := r.position.y + r.size.y * 0.5 + Splash.CAP_H * px * 0.5

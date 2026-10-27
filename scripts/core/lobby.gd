@@ -267,7 +267,7 @@ func address_text() -> String:
 
 
 func address_hint() -> String:
-	return "Скажите его товарищам" if address != "" else "Подключитесь к сети"
+	return "Скажите его товарищам" if address != "" else AddressPad.NO_ADDRESS_HINT
 
 
 ## Масштаб макета на экран size: вписан целиком, по центру.

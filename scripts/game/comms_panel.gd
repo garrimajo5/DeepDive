@@ -4,11 +4,11 @@ extends Control
 ## `Touch.Router.taps`/`blocks` (`Main._comms_step`), сам узел их не ловит. Палитра ART-028/040: заливка #0B1C24,
 ## контур #67DDEB, текст #D5E4E8/#9AD9E8, неактивное #6E909A, кнопка #102B37 с контуром #32616D. Красного и янтаря нет.
 
-const TEXT := Color("D5E4E8")
-const DIM := Color("9AD9E8")
-const OFF := Color("6E909A")
-const ACCENT := Color("67DDEB")
-const DARK := Color("0B1C24")
+const TEXT := UiStyle.TEXT
+const DIM := UiStyle.DIM
+const OFF := UiStyle.OFF
+const ACCENT := UiStyle.ACCENT
+const DARK := UiStyle.DARK
 const BUTTON := Color("102B37")
 const BUTTON_EDGE := Color("32616D")
 const GLYPH_TOP := 0.76   ## от верха видимых глифов до базовой линии, доля кегля (DejaVu Sans)
@@ -36,12 +36,7 @@ func show_comms(c: Comms, t: float, at: Rect2 = Rect2()) -> void:
 
 
 func _box(r: Rect2, s: float, a: float, fill: Color, border: Color, radius := 12.0) -> void:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(fill, fill.a * a)
-	sb.border_color = Color(border, border.a * a)
-	sb.set_border_width_all(maxi(1, roundi(2.0 * s)))
-	sb.set_corner_radius_all(roundi(radius * s))
-	draw_style_box(sb, r)
+	draw_style_box(UiStyle.box(Color(fill, fill.a * a), radius * s, Color(border, border.a * a), 2.0 * s), r)
 
 
 ## Строка от верха видимых глифов.

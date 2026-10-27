@@ -1,6 +1,8 @@
 extends TestCase
 ## Экипаж в сцене: своя фигура идёт за игроком и садится за штурвал, другой член экипажа виден целиком.
 
+const ShotSetup := preload("res://tools/shot_setup.gd")
+
 var main: Main
 
 
@@ -40,7 +42,7 @@ func test_seated_hands_on_wheel_in_scene() -> void:
 
 
 func test_mate_visible_whole() -> void:
-	await main.debug_setup({"mate": "1,0.5,180,2"})
+	ShotSetup.apply(main, {"mate": "1,0.5,180,2"})
 	main.step(1.0 / 30.0)
 	eq(main.crew_view.figures.size(), 2, "две фигуры")
 	eq(main.crew[1].role, Crew.Role.ENGINEER, "роль из ключа")
@@ -85,7 +87,7 @@ func _tris(mi: MeshInstance3D) -> int:
 
 
 func test_model_replaces_capsules() -> void:
-	await main.debug_setup({"mate": "1,0.5,180,2"})
+	ShotSetup.apply(main, {"mate": "1,0.5,180,2"})
 	main.step(1.0 / 30.0)
 	var cv := main.crew_view
 	ok(cv.skeletons[0] is Skeleton3D and cv.skeletons[0].get_bone_count() == 24, "модель MOD-012 со скелетом")
