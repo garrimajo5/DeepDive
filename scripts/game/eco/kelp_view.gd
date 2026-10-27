@@ -52,7 +52,17 @@ func _init(system: EcoKelp) -> void:
 	dust_view = GrazerView.build_dust(EcoUrchinDust.POOL)
 	add_child(dust_view)
 	kelp.dirty = true
+	var pts := PackedVector3Array()
+	for g in kelp.groves:
+		for st in g.stalks:
+			pts.append(st.pos)
+	EcoMM.fit([stalks], pts, FRAME_GROW)
 	sync(0.0)
+
+
+## Запас рамки вокруг оснований лент (#849): лента до 5,5 м вверх с наклоном и качанием. Ежи ходят между
+## рощами — им рамка на всю отмель.
+const FRAME_GROW := 7.0
 
 
 ## Полоса ленты: ширина EcoKelp.WIDTH (экземпляр сужает её по густоте), высота 1 от основания, нормаль +Z.

@@ -29,6 +29,24 @@ static func instance(parent: Node, n: String, mesh: Mesh, count: int, colors := 
 	return mi
 
 
+## Рамка вокруг точек `pts`, раздутая на `grow` м (#849): неподвижным видам — по местам их экземпляров, чтобы
+## Godot отсекал вид за спиной и вдали и не пересчитывал границы при каждой записи буфера. Пусто — нулевая рамка.
+static func frame(pts: PackedVector3Array, grow: float) -> AABB:
+	if pts.is_empty():
+		return AABB()
+	var box := AABB(pts[0], Vector3.ZERO)
+	for p in pts:
+		box = box.expand(p)
+	return box.grow(grow)
+
+
+## Поставить всем `mis` одну рамку по точкам `pts` с запасом `grow` (см. frame).
+static func fit(mis: Array, pts: PackedVector3Array, grow: float) -> void:
+	var box := frame(pts, grow)
+	for mi: MultiMeshInstance3D in mis:
+		mi.custom_aabb = box
+
+
 ## Трансформ в буфер MultiMesh с позиции `i` (порядок строк — как у `MultiMesh.buffer`).
 ## Тело повторено в put_basis: вызов функции в GDScript дорог, а это — горячий цикл каждого вида.
 static func put(buf: PackedFloat32Array, i: int, tr: Transform3D) -> void:

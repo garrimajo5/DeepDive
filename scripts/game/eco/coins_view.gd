@@ -58,7 +58,15 @@ func _init(system: EcoCoins) -> void:
 	dust_view = GrazerView.build_dust(EcoCoinsDust.POOL)
 	add_child(dust_view)
 	visible = not coins.schools.is_empty()
+	var pts := PackedVector3Array()
+	for gz in coins.glazuns:
+		pts.append(gz.pos)
+	EcoMM.fit([bodies, eyes], pts, GLAZUN_GROW)
 	sync(0.0)
+
+
+## Запас рамки глазунов (#849): стоят на месте, стебель с глазами до 2,2 м вверх.
+const GLAZUN_GROW := 4.0
 
 
 ## Расставить монетников и глазунов в момент t (время мира). ship — корабль (муть — ближе EcoGrazerDust.NEAR,

@@ -60,7 +60,15 @@ func _init(system: EcoHvaten) -> void:
 			pestr_buffer[i + 12] = 1.0; pestr_buffer[i + 13] = 1.0; pestr_buffer[i + 14] = 1.0
 			pestr_buffer[i + 15] = EcoPestrLook.phase(hv, k)
 			pestr_buffer[i + 16] = c.r; pestr_buffer[i + 17] = c.g; pestr_buffer[i + 18] = c.b; pestr_buffer[i + 19] = 1.0
+	var pts := PackedVector3Array()
+	for hv in hvaten.anemones:
+		pts.append(hv.base)
+	EcoMM.fit([bodies, tents, pestr], pts, FRAME_GROW)
 	sync(0.0)
+
+
+## Запас рамки вокруг хватней (#849): щупальца тянутся на 1,9 м, пестрянки кружат рядом, течение гнёт.
+const FRAME_GROW := 5.0
 
 
 ## Тело: столб (0,32 сверху, 0,45 снизу, 0,8 м) цвета (0,48, 0,22, 0,42) и диск (0,4 → 0,32, 0,08 м) на 0,82 м —
