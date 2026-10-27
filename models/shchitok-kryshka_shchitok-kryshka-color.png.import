@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://hpl0e8kthm5x"
-path="res://.godot/imported/shchitok-kryshka_shchitok-kryshka-color.png-3ac33407995a946759b5fdf08eec7524.ctex"
+path.s3tc="res://.godot/imported/shchitok-kryshka_shchitok-kryshka-color.png-3ac33407995a946759b5fdf08eec7524.s3tc.ctex"
+path.etc2="res://.godot/imported/shchitok-kryshka_shchitok-kryshka-color.png-3ac33407995a946759b5fdf08eec7524.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "0628ffb2ee195b935a60c5858c6a73ab"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/shchitok-kryshka_shchitok-kryshka-color.png"
-dest_files=["res://.godot/imported/shchitok-kryshka_shchitok-kryshka-color.png-3ac33407995a946759b5fdf08eec7524.ctex"]
+dest_files=["res://.godot/imported/shchitok-kryshka_shchitok-kryshka-color.png-3ac33407995a946759b5fdf08eec7524.s3tc.ctex", "res://.godot/imported/shchitok-kryshka_shchitok-kryshka-color.png-3ac33407995a946759b5fdf08eec7524.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

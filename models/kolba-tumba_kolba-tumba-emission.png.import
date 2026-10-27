@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bm1sy5cm7ii71"
-path="res://.godot/imported/kolba-tumba_kolba-tumba-emission.png-8705c5f3e3d0959df0b1291eeb6815ea.ctex"
+path.s3tc="res://.godot/imported/kolba-tumba_kolba-tumba-emission.png-8705c5f3e3d0959df0b1291eeb6815ea.s3tc.ctex"
+path.etc2="res://.godot/imported/kolba-tumba_kolba-tumba-emission.png-8705c5f3e3d0959df0b1291eeb6815ea.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "8f619397ae59dceea2981660f5302c7f"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/kolba-tumba_kolba-tumba-emission.png"
-dest_files=["res://.godot/imported/kolba-tumba_kolba-tumba-emission.png-8705c5f3e3d0959df0b1291eeb6815ea.ctex"]
+dest_files=["res://.godot/imported/kolba-tumba_kolba-tumba-emission.png-8705c5f3e3d0959df0b1291eeb6815ea.s3tc.ctex", "res://.godot/imported/kolba-tumba_kolba-tumba-emission.png-8705c5f3e3d0959df0b1291eeb6815ea.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

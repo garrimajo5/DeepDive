@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cc52kqraxi4b7"
-path="res://.godot/imported/kolba-steklo_kolba-steklo-color.png-127d478f228605e69ff91ed3408dad26.ctex"
+path.s3tc="res://.godot/imported/kolba-steklo_kolba-steklo-color.png-127d478f228605e69ff91ed3408dad26.s3tc.ctex"
+path.etc2="res://.godot/imported/kolba-steklo_kolba-steklo-color.png-127d478f228605e69ff91ed3408dad26.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "44629d97934f383a871cbc2dcc3f24db"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/kolba-steklo_kolba-steklo-color.png"
-dest_files=["res://.godot/imported/kolba-steklo_kolba-steklo-color.png-127d478f228605e69ff91ed3408dad26.ctex"]
+dest_files=["res://.godot/imported/kolba-steklo_kolba-steklo-color.png-127d478f228605e69ff91ed3408dad26.s3tc.ctex", "res://.godot/imported/kolba-steklo_kolba-steklo-color.png-127d478f228605e69ff91ed3408dad26.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bc50i5l6t45f0"
-path="res://.godot/imported/gear-garnitura_gear-garnitura-emission.png-47381b35c9efbc91e22cfaa1e9dbbda3.ctex"
+path.s3tc="res://.godot/imported/gear-garnitura_gear-garnitura-emission.png-47381b35c9efbc91e22cfaa1e9dbbda3.s3tc.ctex"
+path.etc2="res://.godot/imported/gear-garnitura_gear-garnitura-emission.png-47381b35c9efbc91e22cfaa1e9dbbda3.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "5a88b10ef83dfa28d76e36d00e29050f"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/gear-garnitura_gear-garnitura-emission.png"
-dest_files=["res://.godot/imported/gear-garnitura_gear-garnitura-emission.png-47381b35c9efbc91e22cfaa1e9dbbda3.ctex"]
+dest_files=["res://.godot/imported/gear-garnitura_gear-garnitura-emission.png-47381b35c9efbc91e22cfaa1e9dbbda3.s3tc.ctex", "res://.godot/imported/gear-garnitura_gear-garnitura-emission.png-47381b35c9efbc91e22cfaa1e9dbbda3.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

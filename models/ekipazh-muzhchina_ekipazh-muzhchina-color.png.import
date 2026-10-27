@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b4wwvuxgcvb2q"
-path="res://.godot/imported/ekipazh-muzhchina_ekipazh-muzhchina-color.png-b63f9230ef0b897e860439b8c1d6f0e8.ctex"
+path.s3tc="res://.godot/imported/ekipazh-muzhchina_ekipazh-muzhchina-color.png-b63f9230ef0b897e860439b8c1d6f0e8.s3tc.ctex"
+path.etc2="res://.godot/imported/ekipazh-muzhchina_ekipazh-muzhchina-color.png-b63f9230ef0b897e860439b8c1d6f0e8.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "be2539bf54a8043641be5602e1eed439"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/ekipazh-muzhchina_ekipazh-muzhchina-color.png"
-dest_files=["res://.godot/imported/ekipazh-muzhchina_ekipazh-muzhchina-color.png-b63f9230ef0b897e860439b8c1d6f0e8.ctex"]
+dest_files=["res://.godot/imported/ekipazh-muzhchina_ekipazh-muzhchina-color.png-b63f9230ef0b897e860439b8c1d6f0e8.s3tc.ctex", "res://.godot/imported/ekipazh-muzhchina_ekipazh-muzhchina-color.png-b63f9230ef0b897e860439b8c1d6f0e8.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
