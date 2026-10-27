@@ -96,6 +96,21 @@ static func course_deg(yaw: float) -> int:
 	return int(round(fposmod(rad_to_deg(-yaw), 360.0))) % 360
 
 
+## Строки по частям без пересчёта каждый кадр (#847): шрифтом меряем только при смене частей, ширины или размера
+## шрифта — иначе ≈25 замеров строк на кадр. `update` — true, если текст новый (плашку тогда ужать заново).
+class Lines:
+	var key := ""
+	var text := ""
+
+	func update(parts: Array, measure: Callable, width: float, size: int = 0) -> bool:
+		var k := "%s|%d|%s" % [width, size, "\u001f".join(PackedStringArray(parts.map(func(p): return str(p))))]
+		if k == key:
+			return false
+		key = k
+		text = "\n".join(Status.lines(parts, measure, width))
+		return true
+
+
 ## Сообщение в конце строки состояния («Вы за штурвалом», «Прожектор погашен»…): держится 4,2 с и гаснет.
 ## Сообщение-состояние гасят сразу, когда состояние кончилось (clear), — только если на приборах всё ещё оно.
 ## (Отчёт тестера в pogrujenie: «Вы за штурвалом» висело после «Встать» до следующего сообщения.)

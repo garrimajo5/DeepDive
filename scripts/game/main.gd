@@ -175,6 +175,7 @@ var flyby := Flyby.new()   ## камера с борта: облёт в нача
 var flyby_cam: Camera3D
 var overlay: TouchOverlay
 var hint: Label            ## строка состояния на приборах (Status), по строкам экрана
+var status_lines := Status.Lines.new()   ## раскладка строки состояния — пересчёт только при смене (#847)
 var message := Status.Message.new()
 const SAT_MSG := "Вы за штурвалом"
 const DRAIN_DB := -12.0   ## шипение присоски: js/audio.js 0,12 против 0,05 у сирены (−16 дБ)
@@ -1484,9 +1485,10 @@ func _update_ui() -> void:
 	var font := hint.get_theme_font("font")
 	var fs := hint.get_theme_font_size("font_size")
 	var width := minf(900.0, get_viewport().get_visible_rect().size.x - 48.0)
-	hint.text = "\n".join(Status.lines(status_parts(),
-		func(t: String) -> float: return font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x, width))
-	hint.reset_size()   # Label сам растёт, но не ужимается: после длинного сообщения плашка оставалась высокой
+	if status_lines.update(status_parts(),   # шрифтом меряем только новую строку (#847)
+			func(t: String) -> float: return font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x, width, fs):
+		hint.text = status_lines.text
+		hint.reset_size()   # Label сам растёт, но не ужимается: после длинного сообщения плашка оставалась высокой
 	var plate := Rect2(HINT_POS, hint.size)
 	hint.position.y = AlarmBoard.status_y(plate, board_screen_rect())   # плашка под табло, а не поверх (#376)
 

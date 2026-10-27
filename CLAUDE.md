@@ -38,7 +38,7 @@
   `touch.gd` (раскладка, крестовина, разбор касаний), `bridge_plan.gd` (оболочка мостика по ART-002),
   `bridge_props.gd` (места моделей художника на мостике), `searchlight.gd` (прожектор: числа, луч до дна, меш конуса; рисунок ART-062 — маска пятна в проекторе `Searchlight.MASK`, поле взвеси луча `FIELD`, `density`, карты `textures/prozhektor/`),
   `texture_glow.gd` (маска голубых огней), `qa_script.gd` (сценарий тестера; части шага для лога худшего кадра — `step_clock.gd`, `main.clock`), `status.gd` (строка состояния
-  по строкам экрана, сообщения на 4,2 с, румбы), `reactor.gd` (доли энергии `Reactor.k(Sys…)` — сила систем, перегрев,
+  по строкам экрана, без пересчёта каждый кадр — `Status.Lines`, сообщения на 4,2 с, румбы), `reactor.gd` (доли энергии `Reactor.k(Sys…)` — сила систем, перегрев,
   сброс; `Reactor.Console` — выбор на пульте; экран пульта ART-050 — `power_screen.gd` (`PowerScreen`: место `box`, строки, `foot` по состоянию; ракурс открытого пульта — `CAM_AT`/`cam_pos`/`cam_yaw`, `Main.power_view`, своя фигура у камеры — `Main._apply_crew_view`), рисует `scripts/game/power_panel.gd`). Новая система корабля берёт силу из `main.reactor.k(...)`.
   `ship_layout.gd` — отсеки за мостиком (z 2…24), люки `ShipLayout.Door`, `can_stand` для всего корабля (мостик — `Deck`),
   геометрия `parts()`; рисует `scripts/game/rooms_view.gd` (там же реактор). `hull_plan.gd` — корпус снаружи по ART-001
