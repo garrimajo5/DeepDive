@@ -1,7 +1,7 @@
 class_name RoleCardPanel
 extends Control
 ## Карточка роли у поста ART-045, «?» и плашка чужой роли (состояние и места — `RoleCard`). Касания идут через
-## `Touch.Router.blocks`/`taps` (`Main._card_step`), сам узел их не ловит. Палитра ART-028/038, красного нет.
+## `Touch.Router.blocks`/`taps` (`OverlayFlow.card_step`), сам узел их не ловит. Палитра ART-028/038, красного нет.
 
 const TEXT := UiStyle.TEXT
 const DIM := UiStyle.DIM

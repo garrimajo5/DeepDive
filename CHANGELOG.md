@@ -3,6 +3,10 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-10-27
+- Порядок в коде: наложения поверх игры (подсказки первого забега, карточка роли, внутренняя связь, рация) вынесены
+  из `main.gd` в `OverlayFlow` (`scripts/game/overlay_flow.gd`, `main.overlay_flow`); у `Main` — пересылка
+  `comms_area`. Поведение то же, снимки `podskazki`, `kartochka`, `svyaz`, `raciya` совпадают (по issue #758,
+  `test_overlay_flow`).
 - Порядок в коде: экраны меню (главное меню, настройки, предложение «Экономно», журнал экспедиции) вынесены из
   `main.gd` в `MenuFlow` (`scripts/game/menu_flow.gd`, `main.menu_flow`); у `Main` — пересылки `open_menu`,
   `close_menu`, `open_settings`, `open_journal`, `_settings_show`, `_journal_show`, `_apply_settings`. Поведение то же,
