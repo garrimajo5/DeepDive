@@ -74,6 +74,7 @@ test_eco_organ_dust.gd	0.10
 test_eco_plankton.gd	0.54
 test_eco_pred.gd	14.19
 test_eco_pred_dust.gd	0.09
+test_eco_prey.gd	4.70
 test_eco_raduzh.gd	0.54
 test_eco_raduzh_dust.gd	0.26
 test_eco_ray.gd	1.60
