@@ -3,8 +3,8 @@ extends RefCounted
 ## Сбор экипажа ART-028 и вход по адресу ART-039 поверх меню сцены `Main` (#755). Вход сбора — поиск забегов
 ## (`main.finder`), «Создать забег» (хост `main.net_host`, маяк `main.beacon`), подключение из списка
 ## (`main.lobby_join`), «По адресу» (`main.address`, попытка `main.address_client`); комната — у хоста
-## `LobbyLink.serve`, у гостя `LobbyLink.take` (`main.lobby_client`). Старт забега — `Main._seat_guest`/`_begin_run`
-## у хоста и `Main._enter_client` у гостя. Состояние — поля `main.lobby`, `main.address`, панели —
+## `LobbyLink.serve`, у гостя `LobbyLink.take` (`main.lobby_client`). Старт забега — `NetGame.seat_guest`/`_begin_run`
+## у хоста и `NetGame.enter_client` у гостя. Состояние — поля `main.lobby`, `main.address`, панели —
 ## `main.lobby_panel`, `main.address_panel`. Живёт полем `main.lobby_flow`; входы для тестов и `tools/`
 ## (`open_lobby`, `open_address`) — тонкие пересылки у `Main`.
 
@@ -193,21 +193,21 @@ func _start_host() -> void:
 	main.close_menu()
 	for g: NetLink.Guest in main.net_host.guests.values():
 		var p := main.lobby.find(g.id)
-		var m := main._seat_guest(g)
+		var m := main.net_game.seat_guest(g)
 		if p:
 			m.name = p.name   # имя как в комнате («Игрок 3», если телефон не назвался)
 	main.crew_view.set_members(main.crew, main.me)
-	main._net_index()
+	main.net_game.net_index()
 	main._begin_run()
 
 
-## Гость: старт у хоста — дальше кадры хоста (`_enter_client`); облёта у гостя нет.
+## Гость: старт у хоста — дальше кадры хоста (`NetGame.enter_client`); облёта у гостя нет.
 func _start_guest() -> void:
 	var c := main.lobby_client
 	main.lobby_client = null
 	main.close_menu()
 	c.quiet = 0.0   # в комнате кадров не было — «Нет связи» не мигнёт до первого кадра
-	main._enter_client(c)
+	main.net_game.enter_client(c)
 
 
 ## Экран «Войти по адресу» ART-039 поверх входа сбора экипажа ART-028 («По адресу»).
@@ -224,7 +224,7 @@ func open_address() -> void:
 
 
 ## Шаг экрана адреса: клавиши, «Войти» / «Отмена», «Назад»; попытка входа ждёт ответа хоста здесь, под экраном.
-## На борту — экран и меню закрыты, дальше — шаг клиента (`_enter_client`).
+## На борту — экран и меню закрыты, дальше — шаг клиента (`NetGame.enter_client`).
 func address_step(r: Touch.Router, dt: float) -> void:
 	for p in r.taps:
 		address_do(main.address.press(main.address.hit(p, main.get_viewport().get_visible_rect().size)))

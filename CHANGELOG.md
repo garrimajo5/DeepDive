@@ -3,6 +3,9 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-10-27
+- Порядок в коде: сетевая игра — хост, гость, потеря связи, фигуры ушедших — вынесена из `main.gd` в `NetGame`
+  (`scripts/game/net_game.gd`, `main.net_game`, −355 строк); у `Main` — пересылки `host_game`, `join_game`,
+  `mate_gone`. Поведение то же, снимок `gone=1` прежний (по issue #756, `test_net_game`).
 - Порядок в коде: сбор экипажа ART-028 и вход по адресу ART-039 вынесены из `main.gd` в `LobbyFlow`
   (`scripts/game/lobby_flow.gd`, `main.lobby_flow`, −250 строк); у `Main` — пересылки `open_lobby`, `open_address`.
   Поведение то же, снимки `sbor=list`, `adres=…` совпадают (по issue #755, `test_lobby_flow`).

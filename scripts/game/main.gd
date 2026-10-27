@@ -69,6 +69,7 @@ var overlay_flow := OverlayFlow.new(self)   ## подсказки, карточ�
 var crew_flow := CrewFlow.new(self)   ## товарищи на постах, руки экипажа, новый товарищ (#757)
 var pause_flow := PauseFlow.new(self)   ## «Назад», пауза ART-037, схема корабля ART-042 (#754)
 var lobby_flow := LobbyFlow.new(self)   ## сбор экипажа ART-028 и вход по адресу ART-039 (#755)
+var net_game := NetGame.new(self)   ## сетевая игра: хост, гость, потеря связи, фигуры ушедших (#756)
 var hit_flash: ColorRect
 var visor: ColorRect          ## щиток сварщика: затемнение, пока свой игрок варит (Breach.VISOR)
 var sonar_view: SonarView
@@ -583,10 +584,10 @@ func step(dt: float) -> void:
 	if menu_flow.offer_step():   # предложение «Экономно»: касания — его кнопкам, свой игрок стоит, мир идёт
 		overlay.router.clear()
 	if net_client:   # клиент: корабль, реактор и экипаж — из кадров хоста
-		_client_step(dt)
+		net_game.client_step(dt)
 		clock.lap("гость", Time.get_ticks_usec())
 		return
-	_net_poll(dt)
+	net_game.net_poll(dt)
 	var r := overlay.router
 	var wrecked := _wreck_step(dt)
 	crew_flow.mark_presses(r, dt)
@@ -808,9 +809,9 @@ func step(dt: float) -> void:
 	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
 	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy,
 			status_rect(), radio.voice())
-	_ghosts(dt)
+	net_game.ghosts_step(dt)
 	warm_run.frame()
-	_net_send(dt)
+	net_game.net_send(dt)
 	r.end_frame()
 	clock.lap("метки и сеть", Time.get_ticks_usec())
 
@@ -1212,18 +1213,6 @@ func open_map(where: String) -> void:
 ## Кнопка «Схема» на подсказке первого забега (`PauseFlow.open_hint_map`).
 func open_hint_map() -> void:
 	pause_flow.open_hint_map()
-
-
-## Хост закрывает сетевой забег: гости отключены (у них — диалог обрыва связи), их фигуры и тени убраны.
-func _stop_host() -> void:
-	net_host.stop()
-	net_host = null
-	for id: int in net_mates:
-		crew.erase(net_mates[id])
-	net_mates.clear()
-	ghosts.clear()
-	_ghosts(0.0, true)
-	crew_view.set_members(crew, me)
 
 
 ## Встать с постов перед новым забегом (штурвал, пульт, голосование).
@@ -1628,242 +1617,19 @@ func vote_marks() -> Dictionary:
 	return ballot.marks() if vote_ids().size() > 1 else votes
 
 
-## Открыть сетевой забег хостом (NetLink): телефоны по локальной сети встают членами экипажа, их ввод — `Member.pad`.
+## Открыть сетевой забег хостом — пересылка `NetGame.host_game` (тесты, `tools/`).
 func host_game(port: int = NetLink.PORT) -> Error:
-	if main_menu.open:
-		close_menu()
-	net_host = NetLink.Host.new()
-	var err := net_host.start(port)
-	if err != OK:
-		net_host = null
-	return err
+	return net_game.host_game(port)
 
 
-## Гости хоста: пришёл — член экипажа своей роли и внешности с вводом гостя, ушёл — убрать с палубы.
-func _net_poll(dt: float = 0.0) -> void:
-	if notice.active():
-		notice.update(dt)
-		drop_panel.show_notice(notice)
-	if net_host == null:
-		return
-	var changed := false
-	for e: Dictionary in net_host.poll(dt):
-		var g: NetLink.Guest = e["guest"]
-		if e["k"] == "join":
-			var m := _seat_guest(g)
-			if MateGhost.forget(ghosts, m.name):   # вернулся — прежняя фигура уходит, встаёт новая
-				_ghosts(0.0, true)
-			if not notice.joined(m.name, m.look == 1):
-				say("На борту: %s" % m.name)
-		elif e["k"] == "leave":
-			var m: Crew.Member = net_mates.get(g.id)
-			net_mates.erase(g.id)
-			if m:
-				mate_gone(m)
-		else:   # запрос комнаты после старта — комнаты уже нет
-			continue
-		changed = true
-	for id: int in net_mates:   # гость без ввода дольше NetLink.LOST_AFTER — табличка «Нет связи»
-		var g: NetLink.Guest = net_host.guests.get(id)   # хост закрыт — гостей уже нет, а фигуры ещё на палубе
-		(net_mates[id] as Crew.Member).lost = g == null or g.lost()
-	if changed:
-		crew_view.set_members(crew, me)
-		_net_index()
-
-
-## Гость хоста на палубу: член экипажа своей роли и внешности с его вводом.
-func _seat_guest(g: NetLink.Guest) -> Crew.Member:
-	var m := add_mate(NET_SPAWN.x, NET_SPAWN.y, NET_SPAWN.z, g.role, g.look)
-	if g.name != "":
-		m.name = g.name
-	m.pad = g.pad
-	net_mates[g.id] = m
-	return m
-
-
-## Места гостей в экипаже — уходят им в кадре (`Guest.index`).
-func _net_index() -> void:
-	for id: int in net_mates:
-		(net_host.guests[id] as NetLink.Guest).index = crew.find(net_mates[id])
-
-
-## Товарищ ушёл с борта (гость отключился): убрать с палубы, его пост свободен; у хоста — «… отключился» (ART-043).
-func mate_gone(m: Crew.Member) -> void:
-	notice.left(m.name, m.busy(), m.look == 1)
-	crew.erase(m)
-	crew_view.set_members(crew, me)
-	drop_panel.show_notice(notice)
-	ghosts.append(MateGhost.new(m))   # на последнем месте полупрозрачным с «Нет связи», без поста (ART-043)
-	_ghosts(0.0, true)
-
-
-## Хост: фигуры отключившихся (`MateGhost`) — стоят, тают, растаявшие убраны; changed — список уже сменился.
-func _ghosts(dt: float, changed := false) -> void:
-	if ghosts.is_empty() and not changed:
-		return
-	changed = MateGhost.step(ghosts, dt) or changed
-	var list := MateGhost.members(ghosts)
-	if changed:
-		ghost_view.set_members(list, null)
-	ghost_view.alphas.assign(ghosts.map(func(g: MateGhost) -> float: return g.alpha()))
-	ghost_view.apply()
-	var melting := ghosts.filter(func(g: MateGhost) -> bool: return g.t > MateGhost.HOLD).map(
-		func(g: MateGhost) -> Crew.Member: return g.member)   # тает — табличка уже снята
-	ghost_tags.show_tags(list, null, ghost_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, melting,
-			status_rect())
-
-
-## Кадр гостям раз в NetSnap.SEND_DT — после шага, как его видит хост.
-func _net_send(dt: float) -> void:
-	news_age += dt
-	if net_host and net_host.due(dt):
-		var welding := crew.any(func(m: Crew.Member) -> bool: return m.welding())
-		var ev := NetSnap.events(breach, silt, time, welding, news if news_age < NetSnap.NEWS_TIME else [])
-		ev["r"] = _net_run()
-		ev["w"] = wreck.t   # шторка «Корпус разрушен» — у всех (ART-036)
-		ev["z"] = NetSnap.scorch(scorch, time)   # следы разрядов на дне — тот же след у гостя
-		ev["so"] = NetSnap.sonar(sonar, time)   # импульс и отметки голограммы — те же у гостя
-		ev["c"] = comms.pack()   # связь ART-040: код забега, плашка и ход проверки — те же у гостя
-		var f := NetSnap.frame(net_host.seq, time, helm, reactor, vitals, light_on, crew, ev)
-		f["eco"] = EcoLink.pack_world(eco.world.agents, eco.world.systems, helm.pos, EcoLink.NET_R,
-			eco.world.time)   # существа и мох рядом — гостям отдельным пакетом
-		net_host.send_frame(f)
-
-
-## Маршрут, голосование и итог для гостей (NetSnap.run_state): мнения ролей — по кораблю сейчас; метки — голоса
-## у стола, а если голосует один — мнения ролей, как у своего игрока у стола.
-func _net_run() -> Dictionary:
-	var ops := []
-	if run.done and not run.ended:
-		ops = Run.opinions(vitals.hull, vitals.energy, reactor.hot, silt.inside != null, samples.cargo.size())
-	var coop := vote_ids().size() > 1
-	var marks: Dictionary = vote_marks() if coop or at_vote else VoteHolo.votes(ops)
-	return NetSnap.run_state(run, marks, ballot.seconds() if coop else -1, ballot.fraction() if coop else -1.0,
-		vote_panel.tally, ops, result_rows, result_detail)
-
-
-## Войти в сетевой забег хоста по адресу в локальной сети: шаг корабля считает хост, здесь — свой ввод хосту
-## (`net_pad` → `Client.send_pad`) и кадры хоста в корабль, реактор, корпус и экипаж; свой игрок — `crew[client.me]`.
+## Войти в сетевой забег хоста — пересылка `NetGame.join_game` (тесты, `tools/`).
 func join_game(to: String, port: int = NetLink.PORT, player: String = "", role: int = Crew.Role.PILOT, look: int = 0) -> Error:
-	if main_menu.open:
-		close_menu()
-	var c := NetLink.Client.new()
-	var err := c.join(to, port, player, role, look)
-	if err != OK:
-		return err
-	_enter_client(c)
-	return OK
+	return net_game.join_game(to, port, player, role, look)
 
 
-## Стать клиентом хоста: c уже подключается (`join_game`) или на борту (экран адреса ART-039).
-func _enter_client(c: NetLink.Client) -> void:
-	net_client = c
-	net_seq = -1
-	net_news = 0
-	net_vote = {"secs": -1, "frac": -1.0, "tally": "", "ops": []}
-	net_smooth = NetSmooth.new()
-	net_pad.clear()
-	drop = NetDrop.new()
-	drop.menu_ready = true   # главное меню ART-037 есть: «В меню» в диалоге обрыва связи
-	flyby.stop()   # клиент входит в идущий забег — облёта нет
-	tutorial_guest = Tutorial.Guest.new()
-	sonar.count = -1   # первый кадр хоста ставит его сонар, даже если счёт импульсов совпал со своим
-	comms.reset_run(0)
-	comms.code = ""   # кодовое слово — хоста, до первого кадра страницы «Связь» нет
-	message.clear(Flyby.START_MSG)
-	say(net_client.label())
-
-
-## Шаг клиента: ввод с экрана — хосту, свежий кадр — в корабль и экипаж, дальше только картинка (без шага корабля).
-func _client_step(dt: float) -> void:
-	var r := overlay.router
-	var lk := overlay.look_points()
-	wreck.update(dt)   # между кадрами хоста шторка идёт сама; кадр ставит время хоста
-	_wreck_show()
-	if wreck.active() and not drop.blocks():   # шторка «Корпус разрушен»: ввод не идёт хосту
-		net_pad.clear()
-	elif drop.blocks():   # связь потеряна: управление остановлено, касания — кнопкам диалога
-		net_pad.clear()
-		_drop_taps(r.taps)
-		if net_client == null:   # «Играть одному» — уже одиночный забег
-			r.end_frame()
-			return
-	else:
-		walker.look(lk)   # взгляд сразу свой: курс хост подтвердит кадром, наклон хосту не нужен
-		net_pad.move = Vector2(r.move)
-		net_pad.look += lk
-		net_pad.action = net_pad.action or r.action_pressed
-		net_pad.hold = r.action_down   # держит кнопку: сварка, вентиль, лебёдка, сканер — у хоста (`CrewFlow.holds`)
-		net_pad.vert = r.vert()
-		net_pad.light = net_pad.light or r.light_pressed
-	var was := net_client.state
-	net_client.send_pad(net_pad)
-	var f := net_client.poll(dt)
-	if not f.is_empty():
-		_client_frame(f)
-		drop.restored()   # хост принял снова и кадр применён — управление вернулось
-	if net_client.lost():   # кадры хоста не идут — у товарищей «Нет связи», пока не придёт кадр
-		for m: Crew.Member in crew:
-			m.lost = m != me
-	net_smooth.step(dt)
-	net_smooth.apply(helm, crew, me)   # показ чуть позади свежего кадра: между кадрами — плавно
-	var near := net_smooth.take_eco()   # существа рядом — на тех же часах показа, что корабль
-	if net_client.state != was and not drop.active():
-		say(net_client.label())
-	_drop_step(dt)
-	if net_client == null:
-		r.end_frame()
-		return
-	if drop.active():   # диалог или «Связь восстановлена» — плашка не нужна
-		weak.reset()
-	else:
-		weak.update(dt, net_client.quiet)
-	drop_panel.show_weak(weak)
-	hull_motion.update(dt, helm.in_thrust, helm.in_vert, reactor.k(Reactor.Sys.ENGINES))
-	_wake(dt)   # пузыри у гостя — свои, по тяге из кадра
-	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP), silt.beam_k())
-	breach.time += dt   # пульс тревоги и свет сварки — своим временем, состояние — из кадра
-	if not scorch.all.is_empty():   # след хоста темнеет в «старое пятно» часами гостя
-		ocean.set_scorch(scorch.uniforms(time))
-	breach_view.apply(dt)   # частицы ART-072 у гостя — своим временем по состоянию из кадра
-	_cabin(Wreck.lamps(wreck.t))   # авария ART-064 у гостя — тот же ритм огней; шторка ART-036 гасит плафоны
-	_glints(dt, Wreck.lamps(wreck.t))
-	_wear(dt, Wreck.lamps(wreck.t))
-	silt_view.apply(silt, time, helm.pos, helm.yaw)
-	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0, silt.noise(time))
-	_client_eco(dt, near)
-	visor.visible = me.welding()
-	alarm_board.show_alarms(alarms_on(), time, breach.active)
-	_client_run_view(dt)
-	var live := not (wreck.active() or drop.blocks())   # ввод, который ушёл хосту
-	for ev in tutorial_guest.update(dt, pilot.seated, at_power, near_post, Vector2(r.move) if live else Vector2.ZERO,
-			live and r.light_pressed, live and r.action_pressed, light_on, reactor.share, run.route, sonar.count):
-		tutorial.note(ev)
-	overlay_flow.step(dt)   # подсказки, карточка роли, связь, рация
-	for i in Reactor.Sys.size():
-		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
-	overlay.set_pilot(pilot.seated)
-	message.update(dt)
-	me.back = CrewView.own_back(walker.pitch, me.holding())
-	crew_view.pitch = walker.pitch
-	_apply_crew_view()
-	_place_ship()
-	_place_camera()
-	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR),
-		comms.code)   # код забега — из кадра хоста (`Comms.apply`)
-	_update_ui()   # до меток: плашка строки уже на месте этого кадра (#387)
-	busy_marks.plate = status_rect()
-	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
-	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy,
-			status_rect(), radio.voice())
-	warm_run.frame()
-	r.end_frame()
-
-
-## Клиент: живой мир идёт сам, существа рядом встают по кадру хоста (`EcoView.step_client`). Удары, присоски и
-## сообщения мира разбирает хост — у гостя мир событий кораблю не шлёт.
-func _client_eco(dt: float, near: PackedFloat32Array) -> void:
-	eco.step_client(dt, _fill_ship_state(false), near)
+## Товарищ ушёл с борта — пересылка `NetGame.mate_gone` (`QaRunner`, `tools/`).
+func mate_gone(m: Crew.Member) -> void:
+	net_game.mate_gone(m)
 
 
 ## Состояние корабля для живого мира (`eco_ship`): место, курс, ход, прожектор (с илом), глубина маршрута. full —
@@ -1888,127 +1654,6 @@ func _fill_ship_state(full: bool) -> EcoLink.ShipState:
 	s.claw_target = samples.target.pos if samples.target else Vector3.ZERO
 	s.claw_sample = samples.target.i if samples.target else -1
 	return s
-
-
-## Клиент: маршрут, голосование и итог по кадру хоста (`run` уже как у хоста) — точка и брифинг на голостоле, поля
-## голосования с метками и таймером, итог над столом, панель у стола.
-func _client_run_view(dt: float) -> void:
-	near_post = ""
-	if not me.busy():
-		var post := Deck.nearest(posts, walker.x, walker.z)
-		near_post = post.id if post else ""
-	sonar_view.show_waypoint(run.waypoint())
-	sonar_view.show_briefing(brief.update(dt, Briefing.wanted(near_post, at_vote, run.ended)), run, helm.pos)
-	sonar_view.show_vote(vote_fade.update(dt, VoteHolo.wanted(at_vote, run.ended)), votes, int(net_vote["secs"]),
-		float(net_vote["frac"]))
-	sonar_view.show_result(result_fade.update(dt, VoteHolo.result_wanted(at_vote, run.ended)), result_rows,
-		camera.global_position)
-	if not at_vote:
-		vote_panel.visible = false
-	elif run.ended:
-		vote_panel.show_results(result_detail, run.score)
-	else:
-		vote_panel.show_vote(run.depth, net_vote["ops"])
-		vote_panel.set_tally(net_vote["tally"])
-
-
-## Кадр хоста: корабль, реактор, корпус, свет, экипаж. Свой игрок — место `me` в кадре; его курс остаётся своим
-## (свайп уже повернул камеру), пока он не сел за пост или не встал — тогда курс хоста.
-func _client_frame(f: Dictionary) -> void:
-	var yaw := walker.yaw
-	var was_busy := me.busy()
-	var n := crew.size()
-	var seq := net_seq
-	net_seq = NetSnap.apply_frame(f, net_seq, helm, reactor, vitals, crew)
-	if net_seq != seq:
-		net_smooth.push(float(f.get("t", 0.0)), helm.pos, helm.yaw, crew, f.get("eco", PackedFloat32Array()))
-		var ev := NetSnap.apply_events(f.get("ev", {}), breach, silt, time)
-		if ev.size() == 2 and ev[0] > net_news:   # сообщение события хоста — один раз
-			net_news = ev[0]
-			say(ev[1])
-		var evd: Variant = f.get("ev", {})
-		if evd is Dictionary:
-			wreck.follow(float(evd.get("w", -1.0)))
-			if NetSnap.apply_scorch(evd.get("z"), scorch, time):
-				ocean.set_scorch(scorch.uniforms(time))   # разряд хоста у дна или новый забег
-			NetSnap.apply_sonar(evd.get("so"), sonar, time)
-			comms.apply(evd.get("c"))
-		var rs := NetSnap.apply_run(evd.get("r") if evd is Dictionary else null, run)
-		if not rs.is_empty():   # маршрут хоста уже в run; метки, таймер и итог — для показа
-			votes = rs["marks"]
-			result_rows = rs["rows"]
-			result_detail = rs["detail"]
-			net_vote = rs
-	light_on = bool(f.get("light", light_on))
-	overlay.set_light(light_on)
-	var i := net_client.me
-	var mine: Crew.Member = crew[i] if i >= 0 and i < crew.size() else me
-	if mine != me or crew.size() != n:
-		var moved := mine != me
-		me = mine
-		walker = me.walker
-		crew_view.set_members(crew, me)
-		if moved:
-			walker.pitch = 0.0
-			return
-	if me.busy() == was_busy:
-		walker.yaw = yaw
-		me.yaw = yaw
-	elif me.busy():
-		walker.pitch = 0.0
-
-
-## Потеря хоста у гостя (ART-043): не соло молча — диалог и попытка переподключения на NetDrop.WINDOW; отказ хоста
-## при попытке — причина без повторов; окно истекло — «Нет ответа». Отказ при первом входе — одиночная игра.
-func _drop_step(dt: float) -> void:
-	var st := net_client.state
-	if st == NetLink.State.LOST and not drop.blocks():
-		drop.open()
-		net_client.rejoin(NetDrop.WINDOW)
-	elif drop.blocks():
-		if st == NetLink.State.REFUSED and net_client.why in ["version", "full"]:
-			drop.refused(net_client.why)
-		if drop.update(dt):
-			net_client.stop()
-	elif st == NetLink.State.REFUSED:
-		_leave_net()
-		return
-	else:
-		drop.update(dt)
-	drop_panel.show_drop(drop)
-
-
-## Касания кнопок диалога «Связь потеряна».
-func _drop_taps(taps: Array[Vector2]) -> void:
-	for p in taps:
-		match drop.press(drop.hit(p, get_viewport().get_visible_rect().size)):
-			"rejoin":
-				net_client.rejoin(NetDrop.WINDOW)
-			"solo":   # перенос забега в соло не сделан — новый одиночный забег
-				_leave_net()
-				if me.pilot.seated:
-					me.stand()
-				_restart()
-			"menu":   # «В меню» (ART-043): сетевой забег покинут, главное меню ART-037
-				_leave_net()
-				menu_flow.to_menu()
-		drop_panel.show_drop(drop)
-		if net_client == null:
-			return
-
-
-## Связь с хостом кончилась (отказ при входе или «Играть одному»): дальше одиночная игра с последним кадром.
-func _leave_net() -> void:
-	net_client.stop()
-	net_client = null
-	tutorial_guest = null
-	wreck.reset()   # шторка хоста — не своя: одиночный забег без неё
-	_wreck_show()
-	weak.reset()
-	drop_panel.show_weak(weak)
-	crew = [me]
-	me.lost = false
-	crew_view.set_members(crew, me)
 
 
 ## Ещё один член экипажа на палубе — пересылка `CrewFlow.add_mate` (тесты, `tools/`, `QaRunner`).

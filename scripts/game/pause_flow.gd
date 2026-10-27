@@ -104,10 +104,10 @@ func pause_step() -> void:
 						main.say("Новый забег: Ковчег у начала спуска")
 				"exit":
 					if main.net_host:
-						main._stop_host()
+						main.net_game.stop_host()
 					main.menu_flow.to_menu()
 				"leave":
-					main._leave_net()
+					main.net_game.leave_net()
 					main.menu_flow.to_menu()
 				"settings":
 					main.open_settings()
