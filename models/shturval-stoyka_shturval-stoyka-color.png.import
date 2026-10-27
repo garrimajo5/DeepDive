@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://f8wfb6md1dep"
-path="res://.godot/imported/shturval-stoyka_shturval-stoyka-color.png-f709e1aaa7d07fce19709cdcc089ed37.ctex"
+path.s3tc="res://.godot/imported/shturval-stoyka_shturval-stoyka-color.png-f709e1aaa7d07fce19709cdcc089ed37.s3tc.ctex"
+path.etc2="res://.godot/imported/shturval-stoyka_shturval-stoyka-color.png-f709e1aaa7d07fce19709cdcc089ed37.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "2ab831c6b51e15252ea180f9d0bc088b"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/shturval-stoyka_shturval-stoyka-color.png"
-dest_files=["res://.godot/imported/shturval-stoyka_shturval-stoyka-color.png-f709e1aaa7d07fce19709cdcc089ed37.ctex"]
+dest_files=["res://.godot/imported/shturval-stoyka_shturval-stoyka-color.png-f709e1aaa7d07fce19709cdcc089ed37.s3tc.ctex", "res://.godot/imported/shturval-stoyka_shturval-stoyka-color.png-f709e1aaa7d07fce19709cdcc089ed37.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

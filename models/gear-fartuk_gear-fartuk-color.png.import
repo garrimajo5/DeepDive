@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c8j6yq1le3les"
-path="res://.godot/imported/gear-fartuk_gear-fartuk-color.png-8241529433c77818087e9c382ef29c4b.ctex"
+path.s3tc="res://.godot/imported/gear-fartuk_gear-fartuk-color.png-8241529433c77818087e9c382ef29c4b.s3tc.ctex"
+path.etc2="res://.godot/imported/gear-fartuk_gear-fartuk-color.png-8241529433c77818087e9c382ef29c4b.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "edd74e3144ce7d8b146c3b1dc112b8ce"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/gear-fartuk_gear-fartuk-color.png"
-dest_files=["res://.godot/imported/gear-fartuk_gear-fartuk-color.png-8241529433c77818087e9c382ef29c4b.ctex"]
+dest_files=["res://.godot/imported/gear-fartuk_gear-fartuk-color.png-8241529433c77818087e9c382ef29c4b.s3tc.ctex", "res://.godot/imported/gear-fartuk_gear-fartuk-color.png-8241529433c77818087e9c382ef29c4b.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

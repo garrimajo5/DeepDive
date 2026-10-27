@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://si23goi3hn17"
-path="res://.godot/imported/pult-pilota_pult-pilota-color.png-b96c8b11cfb175e3499b8efa7fe6d003.ctex"
+path.s3tc="res://.godot/imported/pult-pilota_pult-pilota-color.png-b96c8b11cfb175e3499b8efa7fe6d003.s3tc.ctex"
+path.etc2="res://.godot/imported/pult-pilota_pult-pilota-color.png-b96c8b11cfb175e3499b8efa7fe6d003.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "bb5e62cac586c3c04f90af7bd93596d7"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/pult-pilota_pult-pilota-color.png"
-dest_files=["res://.godot/imported/pult-pilota_pult-pilota-color.png-b96c8b11cfb175e3499b8efa7fe6d003.ctex"]
+dest_files=["res://.godot/imported/pult-pilota_pult-pilota-color.png-b96c8b11cfb175e3499b8efa7fe6d003.s3tc.ctex", "res://.godot/imported/pult-pilota_pult-pilota-color.png-b96c8b11cfb175e3499b8efa7fe6d003.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
