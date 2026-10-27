@@ -98,6 +98,9 @@ func test_lite_only_oval() -> void:
 	ok(c.is_equal_approx(grey), "«Экономно»: в центре без LUT — исходный цвет")
 	var k := Grade.shade(grey, Vector2(0.0, 0.0), m, true)
 	near(k.r, grey.r * (1.0 - Grade.LITE), 1e-5, "в углу — овал 0,10")
+	var white := Color(0.9, 0.9, 0.9)   # «Экономно» — умножение кадра без чтения: яркое тоже под овалом (#842)
+	var kw := Grade.shade(white, Vector2(0.0, 0.0), m, true)
+	near(kw.r, white.r * (1.0 - Grade.LITE), 1e-5, "яркое в углу — тот же множитель")
 
 
 func test_view_in_scene() -> void:

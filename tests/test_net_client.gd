@@ -248,7 +248,7 @@ func test_events_from_host_frame() -> void:
 	ok(main.breach.active == main.breach.all[1], "та же — в коридоре")
 	near(main.breach.water, 0.2, 0.001, "вода в отсеке")
 	ok(main.breach_view.water.visible, "вода видна")
-	ok(main.breach_view.alarm.visible, "тревога горит")
+	ok(main.breach_view.siren.playing, "сирена воет")
 	ok(main.alarms_on()[0], "табло: пробоина")
 	ok(main.silt.inside != null, "корабль в облаке ила")
 	near(main.silt.k, 1.0, 0.001)
@@ -265,7 +265,7 @@ func test_events_from_host_frame() -> void:
 	h_ev = NetSnap.events(b, sl, 0.0, false)
 	ok(_pump(func() -> bool: return main.breach.active == null), "шов заварен у хоста — и у клиента")
 	ok(main.silt.clouds.is_empty() and main.silt.inside == null, "ила нет")
-	ok(not main.breach_view.alarm.visible, "тревога погасла")
+	ok(not main.breach_view.siren.playing, "сирена смолкла")
 
 
 func test_scorch_from_host_frame() -> void:   # разряд хоста у дна — тот же след на дне у гостя (ART-066)
