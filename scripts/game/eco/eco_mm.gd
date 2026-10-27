@@ -57,3 +57,49 @@ static func tris(verts: PackedVector3Array, normals: PackedVector3Array,
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return m
+
+
+## Треугольник в SurfaceTool лицом от точки `inside` (обход переставит сам), с плоской нормалью и цветом.
+## Вырожденный пропускает.
+static func tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, col: Color, inside: Vector3) -> void:
+	var n := (b - a).cross(c - a)
+	if n.length_squared() < 1e-12:
+		return
+	if n.dot((a + b + c) / 3.0 - inside) > 0.0:
+		var t := b
+		b = c
+		c = t
+		n = -n
+	n = -n.normalized()
+	for p in [a, b, c]:
+		st.set_color(col)
+		st.set_normal(n)
+		st.add_vertex(p)
+
+
+## Точки эллипсоида с центром c и полуосями r: rings + 1 рядов по широте (от верхнего полюса) по seg точек.
+## turn — поворот сетки вокруг y; top — доля от полюса до полюса (0,5 — купол, низ открыт).
+static func ellipsoid_rows(c: Vector3, r: Vector3, seg: int, rings: int, turn := 0.0, top := 1.0) -> Array:
+	var pts: Array = []
+	for i in rings + 1:
+		var th := PI * top * float(i) / rings
+		var row: Array[Vector3] = []
+		for j in seg:
+			var ph := TAU * float(j) / seg + turn
+			row.append(c + Vector3(sin(th) * cos(ph) * r.x, cos(th) * r.y, sin(th) * sin(ph) * r.z))
+		pts.append(row)
+	return pts
+
+
+## Эллипсоид (или купол при top = 0,5) из seg × rings граней одного цвета, лицом наружу.
+static func ellipsoid(st: SurfaceTool, c: Vector3, r: Vector3, seg: int, rings: int, col: Color,
+		turn := 0.0, top := 1.0) -> void:
+	var pts := ellipsoid_rows(c, r, seg, rings, turn, top)
+	for i in rings:
+		for j in seg:
+			var a: Vector3 = pts[i][j]
+			var b: Vector3 = pts[i][(j + 1) % seg]
+			var d: Vector3 = pts[i + 1][j]
+			var e: Vector3 = pts[i + 1][(j + 1) % seg]
+			tri(st, a, b, d, col, c)
+			tri(st, b, e, d, col, c)

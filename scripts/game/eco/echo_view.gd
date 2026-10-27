@@ -189,21 +189,14 @@ static func _funnel(st: SurfaceTool, mouth: float, col: Color, inner: bool) -> v
 			var axis := Vector3(0, 0, mid.z)
 			# снаружи — лицом от оси (середина на оси), внутри — лицом к оси (середина далеко снаружи)
 			var inside := axis + (mid - axis) * 4.0 if inner else axis
-			KrabView._tri(st, a, b, d, col, inside)
-			KrabView._tri(st, b, e, d, col, inside)
+			EcoMM.tri(st, a, b, d, col, inside)
+			EcoMM.tri(st, b, e, d, col, inside)
 
 
 ## Эллипсоид с центром c и полуосями r; stripes — бледные полосы поперёк спины (по z), col — цвет без полос.
 static func _blob(st: SurfaceTool, c: Vector3, r: Vector3, seg: int, rings: int, stripes: bool,
 		col: Color = SKIN) -> void:
-	var pts: Array = []
-	for i in rings + 1:
-		var th := PI * float(i) / rings
-		var row: Array[Vector3] = []
-		for j in seg:
-			var ph := TAU * float(j) / seg
-			row.append(c + Vector3(sin(th) * cos(ph) * r.x, cos(th) * r.y, sin(th) * sin(ph) * r.z))
-		pts.append(row)
+	var pts := EcoMM.ellipsoid_rows(c, r, seg, rings)
 	for i in rings:
 		for j in seg:
 			var a: Vector3 = pts[i][j]
@@ -216,5 +209,5 @@ static func _blob(st: SurfaceTool, c: Vector3, r: Vector3, seg: int, rings: int,
 				k = STRIPE if posmod(int(floor(mid.z / 0.32)), 2) == 0 else SKIN_LIT
 			elif mid.y < c.y - r.y * 0.4:
 				k = col.darkened(0.35)
-			KrabView._tri(st, a, b, d, k, c)
-			KrabView._tri(st, b, e, d, k, c)
+			EcoMM.tri(st, a, b, d, k, c)
+			EcoMM.tri(st, b, e, d, k, c)

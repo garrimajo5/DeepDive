@@ -49,3 +49,53 @@ func test_tris() -> void:
 	eq((arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size(), 3)
 	eq((arr[Mesh.ARRAY_COLOR] as PackedColorArray).size(), 3)
 	ok(EcoMM.tris(v, n).surface_get_arrays(0)[Mesh.ARRAY_COLOR] == null, "без цветов")
+
+
+func _surface(st: SurfaceTool) -> Array:
+	return st.commit().surface_get_arrays(0)
+
+
+## Грань лицом от середины: обход переставлен, нормаль наружу и равна −(b − a) × (c − a) (правило CLAUDE.md).
+func test_tri_faces_out() -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# обход «внутрь» и «наружу» дают одну и ту же грань
+	EcoMM.tri(st, Vector3(0, 1, 0), Vector3(1, 1, 0), Vector3(0, 1, 1), Color.RED, Vector3.ZERO)
+	EcoMM.tri(st, Vector3(0, 1, 0), Vector3(0, 1, 1), Vector3(1, 1, 0), Color.RED, Vector3.ZERO)
+	EcoMM.tri(st, Vector3.ZERO, Vector3.ONE, Vector3.ONE * 2.0, Color.RED, Vector3.DOWN)   # вырожденная
+	var a := _surface(st)
+	var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+	var n: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
+	eq(v.size(), 6)
+	for k in 2:
+		near(n[k * 3].distance_to(Vector3.UP), 0.0, 1e-3)   # нормали в меше сжаты
+		var inward := (v[k * 3 + 1] - v[k * 3]).cross(v[k * 3 + 2] - v[k * 3])
+		ok(inward.dot(Vector3.UP) < 0.0, "по часовой снаружи")
+	eq(a[Mesh.ARRAY_COLOR][0], Color.RED)
+
+
+## Эллипсоид: 2 × seg × rings граней без вырожденных у полюсов, все точки на поверхности, нормали наружу;
+## купол (top = 0,5) — не ниже центра.
+func test_ellipsoid_and_dome() -> void:
+	var c := Vector3(1, 2, 3)
+	var r := Vector3(0.5, 0.3, 0.8)
+	var rows := EcoMM.ellipsoid_rows(c, r, 8, 4)
+	eq(rows.size(), 5)
+	eq((rows[0] as Array).size(), 8)
+	near((rows[0][0] as Vector3).distance_to(c + Vector3(0, r.y, 0)), 0.0, 1e-5)
+	near((rows[4][3] as Vector3).distance_to(c - Vector3(0, r.y, 0)), 0.0, 1e-5)
+	for top in [1.0, 0.5]:
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		EcoMM.ellipsoid(st, c, r, 8, 4, Color.WHITE, 0.3, top)
+		var a := _surface(st)
+		var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		var n: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
+		eq(v.size(), (8 * 4 * 2 - 16) * 3 if top == 1.0 else (8 * 4 * 2 - 8) * 3)   # полюса — по 8 вырожденных
+		for k in v.size():
+			var q := (v[k] - c) / r
+			near(q.length(), 1.0, 1e-4)
+			if top < 1.0:
+				ok(v[k].y >= c.y - 1e-4, "купол не ниже центра")
+		for k in range(0, v.size(), 3):
+			ok(n[k].dot((v[k] + v[k + 1] + v[k + 2]) / 3.0 - c) > 0.0, "нормаль наружу")
