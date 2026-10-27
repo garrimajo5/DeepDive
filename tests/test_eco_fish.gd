@@ -82,6 +82,7 @@ func test_predator_sends_shoal_home_to_hide() -> void:
 	var w := _world()
 	var fish := _fish(w)
 	var sh := fish.shoals[0]
+	w.ship.pos = sh.home + Vector3(0, 0, 40)  # ближе MID: стая шагает каждый шаг мира, не по очереди дальних (issue #803)
 	w.run(8.0)  # стая отошла от дома
 	ok(_mean_to(sh, sh.home) > 8.0, "стая отошла от дома")
 	var pred := w.spawn("pred", sh.center + Vector3(5, 0, 0))  # стоит на месте
@@ -245,6 +246,7 @@ func test_same_seed_same_shoals() -> void:
 func test_scanned_fish_is_named() -> void:
 	var w := _world()
 	w.scanned = func(sp: String) -> bool: return sp == "fish"
+	w.ship.pos = _fish(w).shoals[2].home + Vector3(0, 0, 40)  # ближе MID: стая шагает каждый шаг мира, не по очереди дальних (issue #803)
 	w.spawn("pred", _fish(w).shoals[2].center)
 	w.step(0.05)
 	var ev := w.bus.take()
@@ -479,10 +481,10 @@ func test_view_one_multimesh_follows_world() -> void:
 	eq(fv.multimesh.instance_count, ALL, "один MultiMesh на всех")
 	eq(fv.layers, OceanView.LAYER_WORLD, "слой отмели")
 	var ship := EcoLink.ShipState.new()
-	ship.pos = Vector3(500, 0, 500)
+	var f := view.fish.all[10]
+	ship.pos = f.shoal.home + Vector3(0, 0, 40)  # ближе MID: стая шагает каждый шаг мира, не по очереди дальних (issue #803)
 	for i in 20:
 		view.step(0.05, ship)
-	var f := view.fish.all[10]
 	var tr := FishView.transform_at(fv.buffer, f.index)
 	ok(tr.origin.distance_to(f.agent.p) < 1e-3, "место рыбки — из мира")
 	_close(EcoFishLook.forward(f, view.world.time) * EcoFishLook.scale(f), tr.basis * Vector3(0, 0, 1), "нос по курсу")

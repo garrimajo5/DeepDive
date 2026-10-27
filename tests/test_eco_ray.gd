@@ -162,6 +162,7 @@ func test_leads_nearest_reef_shoal() -> void:
 	var ry := r.rays[0]
 	# скат — у стаи 4 (дом (56, 6)), зов сейчас
 	var sh := fish.shoals[4]
+	w.ship.pos = sh.home + Vector3(0, 0, 40)  # ближе MID: стая шагает каждый шаг мира, не по очереди дальних (issue #803)
 	ry.center = Vector3(sh.center.x - 20.0, ry.center.y, sh.center.z)
 	ry.radius = 20.0
 	ry.ang = 0.0
