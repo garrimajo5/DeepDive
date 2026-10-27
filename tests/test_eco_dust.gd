@@ -147,7 +147,7 @@ func test_scene_one_multimesh() -> void:
 	tree.root.add_child(view)
 	view.ground = Seabed.height
 	await frames(1)
-	var dust := view.find_child("Муть", true, false) as MultiMeshInstance3D
+	var dust := view.grazer_view.find_child("Муть", false, false) as MultiMeshInstance3D   # у светляков своя
 	if not ok(dust != null, "муть в сцене"):
 		view.queue_free()
 		return
