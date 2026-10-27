@@ -20,4 +20,3 @@ for p in out.glob('*.png'):
     im=Image.open(p); im.verify()
     assert p.stat().st_size<2_000_000,p
     print(p.name,Image.open(p).size,Image.open(p).mode,p.stat().st_size)
-
