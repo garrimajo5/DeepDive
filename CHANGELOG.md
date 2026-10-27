@@ -7,6 +7,9 @@
   из `main.gd` в `OverlayFlow` (`scripts/game/overlay_flow.gd`, `main.overlay_flow`); у `Main` — пересылка
   `comms_area`. Поведение то же, снимки `podskazki`, `kartochka`, `svyaz`, `raciya` совпадают (по issue #758,
   `test_overlay_flow`).
+- Живой мир: огнецвет выдыхает слизь — когда куст рывком гасит огни (разряд, импульс сонара, шумный ход корабля
+  рядом), у втянутых кончиков встают бледные облачка слизи и уплывают по течению: от разряда — густой клуб, от
+  импульса — меньше, от шума — пара слабых; на «Экономно» облачков нет (`EcoCoralDust`, `test_eco_coral_dust`).
 - Порядок в коде: экраны меню (главное меню, настройки, предложение «Экономно», журнал экспедиции) вынесены из
   `main.gd` в `MenuFlow` (`scripts/game/menu_flow.gd`, `main.menu_flow`); у `Main` — пересылки `open_menu`,
   `close_menu`, `open_settings`, `open_journal`, `_settings_show`, `_journal_show`, `_apply_settings`. Поведение то же,
