@@ -303,7 +303,7 @@ func test_targets_each_urchin_for_scanner_herd_for_sonar() -> void:
 
 # ---------- Сцена ----------
 
-func test_view_three_multimeshes() -> void:
+func test_view_two_multimeshes() -> void:
 	var w := _world()
 	var k := _kelp(w)
 	var v := KelpView.new(k)
@@ -311,7 +311,11 @@ func test_view_three_multimeshes() -> void:
 	await frames(1)
 	eq(v.stalks.multimesh.instance_count, EcoKelp.KELP_N)
 	eq(v.bodies.multimesh.instance_count, EcoKelp.URCH_N)
-	eq(v.spines.multimesh.instance_count, EcoKelp.URCH_N)
+	# #849: ёж целиком (тело, стержни, кончики) — один MultiMesh и одна поверхность, кроме мути узлов два
+	var mms := v.find_children("*", "MultiMeshInstance3D", false, false).filter(
+		func(n: Node) -> bool: return n != v.dust_view)
+	eq(mms.size(), 2, "ленты и ежи — два вызова отрисовки")
+	eq(v.bodies.multimesh.mesh.get_surface_count(), 1, "ёж — одна поверхность")
 	eq(v.stalks.layers, OceanView.LAYER_WORLD)
 	var s := k.groves[0].stalks[3]
 	var tr := KelpView.transform_at(v.stalk_buffer, 3)
