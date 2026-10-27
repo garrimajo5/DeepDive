@@ -908,12 +908,17 @@ func step(dt: float) -> void:
 	clock.lap("виды", Time.get_ticks_usec())
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR),
 		comms.code)   # страница «Связь» — кодовое слово забега (ART-040)
+	clock.lap("интерфейс/маршрут", Time.get_ticks_usec())   # подчасти — в худшем кадре лога тестера (#745)
 	_update_ui()   # до меток: плашка строки уже на месте этого кадра (#387)
+	clock.lap("интерфейс/приборы", Time.get_ticks_usec())
 	_tutorial_step(dt)
+	clock.lap("интерфейс/подсказки", Time.get_ticks_usec())
 	_card_step(dt)
+	clock.lap("интерфейс/карточка роли", Time.get_ticks_usec())
 	_comms_step(dt)
+	clock.lap("интерфейс/связь", Time.get_ticks_usec())
 	_radio_step(dt)
-	clock.lap("интерфейс", Time.get_ticks_usec())
+	clock.lap("интерфейс/рация", Time.get_ticks_usec())
 	busy_marks.plate = status_rect()
 	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
 	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy,
