@@ -66,6 +66,7 @@ var curtain: WarmSplash   ## заставка прогрева (ART-034), пос
 var warm_run := WarmRunner.new(self)   ## прогрев на сцене: заставка, взгляды, скрытое на кадр (#752)
 var menu_flow := MenuFlow.new(self)   ## экраны меню: главное, настройки, «Экономно», журнал (#753)
 var overlay_flow := OverlayFlow.new(self)   ## подсказки, карточка роли, связь, рация поверх игры (#758)
+var crew_flow := CrewFlow.new(self)   ## товарищи на постах, руки экипажа, новый товарищ (#757)
 var hit_flash: ColorRect
 var visor: ColorRect          ## щиток сварщика: затемнение, пока свой игрок варит (Breach.VISOR)
 var sonar_view: SonarView
@@ -271,7 +272,7 @@ func _ready() -> void:
 	hint_pointer = HintPointerView.new()
 	hint_pointer.name = "Указатель подсказки"
 	ship.add_child(hint_pointer)
-	walker.stand = stand_for(me)
+	walker.stand = crew_flow.stand_for(me)
 	posts = Deck.posts()
 	posts.append(Deck.Post.new("winch", Samples.POST_AT, Samples.POST_R, "Лебёдка"))
 	posts.append(Deck.Post.new("breach", breach.post_at(), Breach.POST_R, "Сварка"))
@@ -586,7 +587,7 @@ func step(dt: float) -> void:
 	_net_poll(dt)
 	var r := overlay.router
 	var wrecked := _wreck_step(dt)
-	_mark_presses(r, dt)
+	crew_flow.mark_presses(r, dt)
 	if r.noclip_pressed and not wrecked:
 		toggle_noclip()
 	var hold_valve := false
@@ -666,8 +667,8 @@ func step(dt: float) -> void:
 		at_scanner = post != null and post.id == "scanner"
 		near_post = post.id if post else ""
 		hold_scan = at_scanner and r.action_down
-	var held := _mate_holds()   # товарищи держат кнопку у постов удержания — то же, что свой игрок
-	_mate_posts(dt)
+	var held := crew_flow.holds()   # товарищи держат кнопку у постов удержания — то же, что свой игрок
+	crew_flow.posts(dt)
 	layout.update(dt)
 	airlock.update(dt)
 	lock_water.update(dt, airlock.t, samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying())
@@ -735,10 +736,9 @@ func step(dt: float) -> void:
 		"присоска": vitals.drain_left > 0.0, "перегрев": reactor.hot, "сброс реактора": reactor.scram > 0.0,
 		"голосование": at_vote}, vitals.hull, helm.depth())
 	breach_view.apply(dt)   # и частицы ART-072
-	_drive_mates(dt)
+	crew_flow.drive(dt)
 	_tick_vote(dt)
-	_hands(dt, hold_valve, hold_winch, hold_scan)
-	_mate_hands(held)
+	crew_flow.hands(dt, hold_valve, hold_winch, hold_scan, held)
 	if (hold_weld or debug_weld) and breach.welding and breach.active:   # свой игрок варит: резак в руке, щиток опущен
 		me.weld(breach.active.p, breach.active.n)
 	else:
@@ -848,34 +848,6 @@ const ZAP_STAND := Vector2(-4.05, -0.5)
 ## Пост «Маршрут» — у правого борта голостола (с остальных сторон стол — сонар).
 const ROUTE_POST := Vector2(1.5, BridgeProps.TABLE_Z)
 const ROUTE_POST_R := 0.6
-
-
-## Руки своего игрока на посте (CrewHands): у пульта энергии, пока держит вентиль, лебёдку или сканер; после
-## нажатия у голостола, рычага и щитка — ещё CrewHands.PRESS секунд.
-func _hands(dt: float, valve: bool, winch: bool, scan: bool) -> void:
-	press_t = maxf(press_t - dt, 0.0)
-	if not CrewHands.pressing(press_t, press_at, Vector2(walker.x, walker.z)):
-		press_t = 0.0   # отошёл от поста — руки не тянутся к нему через мостик, фигура не кланяется (#349)
-	var g := CrewHands.none()
-	if pilot.seated:
-		pass
-	elif at_power:
-		g = CrewHands.energy(power.sel, reactor.share[power.sel] / float(Reactor.MAX))
-	elif valve:
-		g = CrewHands.valve()
-	elif winch:
-		g = CrewHands.winch(walker.x, walker.z)
-	elif scan:
-		g = CrewHands.scanner()
-	elif press_t > 0.0:
-		match press_post:
-			"sonar", "route":
-				g = CrewHands.table(walker.x, walker.z)
-			"zap":
-				g = CrewHands.lever(zap.lever_deg(time))
-			"scram":
-				g = CrewHands.scram()
-	me.hold(g[0], g[1])
 
 
 ## Кнопка действия у поста.
@@ -2045,126 +2017,6 @@ func vote_marks() -> Dictionary:
 	return ballot.marks() if vote_ids().size() > 1 else votes
 
 
-## Товарищ на посту правит кораблём своим вводом (`Member.pad`, гость по сети — тоже): за штурвалом — ход, руль,
-## «Всплыть/Вниз» и «Свет», у пульта энергии — доли реактора. Пост держит один человек (Crew.BUSY): свой ввод
-## тогда штурвал не трогает.
-func _mate_posts(dt: float) -> void:
-	for m: Crew.Member in crew:
-		if m == me:
-			continue
-		var mv := Vector2i(roundi(m.pad.move.x), roundi(m.pad.move.y))   # крестовина 8 направлений, как у своего
-		if m.seated and not pilot.seated:
-			helm.in_thrust = mv.y
-			helm.in_turn = mv.x
-			helm.in_vert = m.pad.vert
-			m.wheel_turn = helm.turn
-			if m.pad.light:
-				toggle_light()
-		elif m.at_power and not at_power:
-			power.nav(reactor, mv, dt)
-		m.pad.light = false
-
-
-## Посты, у которых товарищ держит кнопку действия (`Pad.hold`): сварка пробоины, вентиль, лебёдка, сканер —
-## {пост: товарищ}. Занятый постом (штурвал, пульт, голосование) не держит. Товарищ у сканера — мир шлёт цели
-## (`at_scanner`), как своему игроку.
-const MATE_HOLDS := ["breach", "valve", "winch", "scanner"]
-
-func _mate_holds() -> Dictionary:
-	var out := {}
-	for m: Crew.Member in crew:
-		if m == me or m.busy():
-			continue
-		var post := Deck.nearest(posts, m.walker.x, m.walker.z)
-		if post == null or post.id not in MATE_HOLDS:
-			continue
-		if post.id == "scanner":
-			at_scanner = true
-		if m.pad.hold and not out.has(post.id):
-			out[post.id] = m
-	return out
-
-
-## Поза товарищей, которые держат пост (`_mate_holds`): резак у шва и щиток, руки на вентиле, лебёдке, сканере.
-func _mate_hands(held: Dictionary) -> void:
-	for m: Crew.Member in crew:
-		if m == me:
-			continue
-		if held.get("breach") == m and breach.active:
-			m.weld(breach.active.p, breach.active.n)
-		else:
-			m.weld(Vector3.INF)
-		var g := CrewHands.none()
-		if held.get("valve") == m:
-			g = CrewHands.valve()
-		elif held.get("winch") == m:
-			g = CrewHands.winch(m.walker.x, m.walker.z)
-		elif held.get("scanner") == m:
-			g = CrewHands.scanner()
-		m.hold(g[0], g[1])
-
-
-func _drive_mates(dt: float) -> void:
-	for m: Crew.Member in crew:
-		if m != me:
-			if m.pad.action:
-				m.pad.action = false
-				mate_action(m)
-			if m.at_vote and run.done and not run.ended:   # голос своей крестовиной
-				var c := ballot.nav(m.get_instance_id(), m.pad.move, true)
-				if c != "":
-					ballot.cast(m.get_instance_id(), m.role, c)
-			m.drive(dt, breach.slow(ShipLayout.room_at(m.walker.z)))
-
-
-## Кто нажал кнопку в этом кадре (действие или «Свет»; свой — с экрана, товарищ — `Pad`): табличка над ним
-## «нажимает» (ART-033, `Member.pressed`). До того, как шаг съест нажатия.
-func _mark_presses(r: Touch.Router, dt: float) -> void:
-	for m: Crew.Member in crew:
-		m.tick_press(dt)
-		if (r.action_pressed or r.light_pressed) if m == me else (m.pad.action or m.pad.light):
-			m.pressed()
-
-
-## Кнопка действия товарища (`Pad.action`): занятый постом встаёт; стоящий у штурвала садится, у пульта энергии
-## встаёт к ползункам, у голостола после маршрута — к голосованию. Пост, который держит другой, не берёт.
-## Возвращает пост, за который встал или сел ("" — встал с поста или рядом нечего взять).
-func mate_action(m: Crew.Member) -> String:
-	if m.busy():
-		if m.seated:
-			m.stand()
-		m.at_power = false
-		m.at_vote = false
-		m.sync_post()
-		return ""
-	var post := Deck.nearest(posts, m.walker.x, m.walker.z)
-	if post == null or Crew.holder(crew, m, post.id):
-		return ""
-	m.pad.move = Vector2.ZERO   # крестовина, которой шёл к посту, не ведёт корабль (гость пришлёт новую)
-	m.pad.left = INF
-	match post.id:
-		"helm":
-			m.sit()
-		"energy":
-			m.at_power = true
-			m.walker.x = POWER_STAND.x
-			m.walker.z = POWER_STAND.y
-			m.walker.yaw = PI / 2.0
-			m.place(m.walker.x, m.walker.z, m.walker.yaw)
-		"route":
-			if not run.done:   # маршрут не пройден: кнопка у поста «Маршрут» листает маршруты — у всех
-				announce(run.cycle())
-				return ""
-			m.at_vote = true
-		"sonar":   # импульс хоста — голограмма и отметки у всех (у гостя — по кадру, NetSnap.sonar)
-			ping_sonar(true)
-			return ""
-		_:
-			return ""
-	m.sync_post()
-	return post.id
-
-
 ## Открыть сетевой забег хостом (NetLink): телефоны по локальной сети встают членами экипажа, их ввод — `Member.pad`.
 func host_game(port: int = NetLink.PORT) -> Error:
 	if main_menu.open:
@@ -2330,7 +2182,7 @@ func _client_step(dt: float) -> void:
 		net_pad.move = Vector2(r.move)
 		net_pad.look += lk
 		net_pad.action = net_pad.action or r.action_pressed
-		net_pad.hold = r.action_down   # держит кнопку: сварка, вентиль, лебёдка, сканер — у хоста (`_mate_holds`)
+		net_pad.hold = r.action_down   # держит кнопку: сварка, вентиль, лебёдка, сканер — у хоста (`CrewFlow.holds`)
 		net_pad.vert = r.vert()
 		net_pad.light = net_pad.light or r.light_pressed
 	var was := net_client.state
@@ -2548,28 +2400,6 @@ func _leave_net() -> void:
 	crew_view.set_members(crew, me)
 
 
-## Куда может шагнуть член экипажа m: пол корабля (ShipLayout.can_stand) и не в другую фигуру (Crew.room_for, #602).
-## m держим слабой ссылкой: лямбда лежит в m.walker.stand, иначе цикл RefCounted и утечка после выхода (#779).
-func stand_for(m: Crew.Member) -> Callable:
-	var w: WeakRef = weakref(m)
-	return func(x: float, z: float) -> bool:
-		var mm: Crew.Member = w.get_ref()
-		return layout.can_stand(x, z) and (mm == null or Crew.room_for(crew, mm, x, z))
-
-
-## Ещё один член экипажа на палубе (снимки и сценарий тестера, пока нет сети): место, курс (рад), роль, внешность.
-## Стоящего не ставим в мебель: место внутри голостола или пульта сдвигается к ближайшему свободному (issue #156).
+## Ещё один член экипажа на палубе — пересылка `CrewFlow.add_mate` (тесты, `tools/`, `QaRunner`).
 func add_mate(x: float, z: float, yaw: float, role: int, look: int, seated: bool = false) -> Crew.Member:
-	var mate := Crew.Member.new(role)
-	mate.look = look
-	mate.walker.stand = stand_for(mate)
-	if not seated:
-		var p := layout.free_spot(x, z)
-		x = p.x
-		z = p.y
-	mate.place(x, z, yaw, seated)
-	mate.sync_post()
-	crew.append(mate)
-	crew_view.set_members(crew, me)
-	crew_view.apply()
-	return mate
+	return crew_flow.add_mate(x, z, yaw, role, look, seated)

@@ -3,6 +3,10 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-10-27
+- Порядок в коде: экипаж на постах (товарищи за штурвалом и у пульта, их кнопка действия и удержания, руки экипажа
+  на постах, место на палубе) вынесен из `main.gd` в `CrewFlow` (`scripts/game/crew_flow.gd`, `main.crew_flow`);
+  руки своего и товарища на вентиле, лебёдке и сканере — одна поза `CrewFlow.grip`; у `Main` — пересылка `add_mate`.
+  Поведение то же, снимки `mate=helm` и `mate_hold=1` совпадают (по issue #757, `test_crew_flow`).
 - Порядок в коде: наложения поверх игры (подсказки первого забега, карточка роли, внутренняя связь, рация) вынесены
   из `main.gd` в `OverlayFlow` (`scripts/game/overlay_flow.gd`, `main.overlay_flow`); у `Main` — пересылка
   `comms_area`. Поведение то же, снимки `podskazki`, `kartochka`, `svyaz`, `raciya` совпадают (по issue #758,

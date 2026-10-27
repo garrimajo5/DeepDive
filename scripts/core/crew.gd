@@ -214,10 +214,10 @@ class Pad:
 	var move := Vector2.ZERO   ## крестовина: y — вперёд, x — вправо (как TouchRouter.move)
 	var look := Vector2.ZERO   ## свайп за кадр в «точках» экрана; съедается шагом
 	var left := INF            ## сколько секунд ещё держать move (сценарий); INF — пока не сменят
-	var action := false        ## кнопка действия нажата в этом кадре; съедается шагом (`Main._drive_mates`)
-	var hold := false          ## кнопку действия держат (сварка, вентиль, лебёдка, сканер — `Main._mate_holds`); не съедается
+	var action := false        ## кнопка действия нажата в этом кадре; съедается шагом (`CrewFlow.drive`)
+	var hold := false          ## кнопку действия держат (сварка, вентиль, лебёдка, сканер — `CrewFlow.holds`); не съедается
 	var vert := 0              ## за штурвалом: «Всплыть» 1, «Вниз» −1 (как TouchRouter.vert)
-	var light := false         ## за штурвалом нажали «Свет» в этом кадре; съедается шагом (`Main._mate_posts`)
+	var light := false         ## за штурвалом нажали «Свет» в этом кадре; съедается шагом (`CrewFlow.posts`)
 	var ask := 0               ## нажал «Спросить код» / «Понятно» сообщения связи с этим номером (`Comms.press`); 0 — нет
 
 	func clear() -> void:

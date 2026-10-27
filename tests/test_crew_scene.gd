@@ -215,7 +215,7 @@ func test_role_gear() -> void:
 	var at := main.crew_view.to_local(visor.global_position)
 	ok(at.distance_to(head) < 0.3, "щиток у головы (%.2f м)" % at.distance_to(head))
 	var up := visor.transform
-	main.open_breach(0)   # варит по-настоящему: держит кнопку у пробоины (`Pad.hold`, `Main._mate_holds`)
+	main.open_breach(0)   # варит по-настоящему: держит кнопку у пробоины (`Pad.hold`, `CrewFlow.holds`)
 	var s: Breach.Spot = main.breach.all[0]
 	mate.walker.x = s.at.x
 	mate.walker.z = s.at.y

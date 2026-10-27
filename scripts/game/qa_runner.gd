@@ -187,7 +187,7 @@ func tick(dt: float) -> void:
 				if c.size() > 9:   # идёт своим вводом (Crew.Pad), свой игрок стоит
 					mate.pad.move = Vector2(c[7], c[8])
 					mate.pad.left = c[9]
-			"act":   # последний товарищ жмёт кнопку действия (свой ввод, Main._drive_mates)
+			"act":   # последний товарищ жмёт кнопку действия (свой ввод, CrewFlow.drive)
 				if main.crew.size() > 1:
 					(main.crew[-1] as Crew.Member).pad.action = true
 			"mate_hold":   # последний товарищ держит кнопку действия (Crew.Pad.hold — сварка, вентиль, лебёдка, сканер)

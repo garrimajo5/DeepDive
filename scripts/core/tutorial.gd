@@ -82,7 +82,7 @@ func shown() -> bool:
 	return a > 0.0 and on and step < STEPS.size()
 
 
-## «Первый забег · 2 / 6» (у гостя сети — те же шесть: импульс сонара гостя идёт хосту, `Main.mate_action`).
+## «Первый забег · 2 / 6» (у гостя сети — те же шесть: импульс сонара гостя идёт хосту, `CrewFlow.mate_action`).
 func step_line() -> String:
 	return "Первый забег · %d / %d" % [mini(step + 1, STEPS.size()), STEPS.size()]
 
