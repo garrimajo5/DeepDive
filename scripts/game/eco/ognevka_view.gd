@@ -2,6 +2,8 @@ class_name OgnevkaView
 extends Node3D
 ## Огнёвки в сцене (js/creatures.js initStations: капсулы 0,06 × 0,2 м, MeshBasicMaterial #FFA040 — светятся сами):
 ## один MultiMesh на всех рачков всех станций, капсула вытянута по ходу. Стоит на слое отмели (OceanView.LAYER_WORLD).
+## Рачки обирают веерник пустой станции — у кружева облачка взвеси (EcoOgnevkaDust): дочерний MultiMesh «Муть»
+## в мировых координатах на общем шейдере EcoShaders.MIST, +1 вызов.
 
 const RADIUS := 0.06
 const LENGTH := 0.2
@@ -12,6 +14,14 @@ var mesh: MultiMeshInstance3D
 ## Последние места рачков (для тестов — сервер отрисовки без экрана экземпляры не хранит).
 var placed: Array[Transform3D] = []
 var _buffer := PackedFloat32Array()
+
+## Облачка у веерника (EcoOgnevkaDust); буфер — для тестов.
+var dust := EcoOgnevkaDust.new()
+var dust_view: MultiMeshInstance3D
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
 
 
 func _init(system: EcoOgnevka) -> void:
@@ -28,6 +38,8 @@ func _init(system: EcoOgnevka) -> void:
 	mesh.multimesh = mm
 	mesh.custom_aabb = AABB(Vector3(-400, -200, -400), Vector3(800, 400, 800))
 	add_child(mesh)
+	dust_view = GrazerView.build_dust(EcoOgnevkaDust.POOL)
+	add_child(dust_view)
 	sync(true)
 
 
@@ -74,3 +86,11 @@ func sync(all := false) -> void:
 		_buffer[o + 4] = b.x.y; _buffer[o + 5] = b.y.y; _buffer[o + 6] = b.z.y; _buffer[o + 7] = x.origin.y
 		_buffer[o + 8] = b.x.z; _buffer[o + 9] = b.y.z; _buffer[o + 10] = b.z.z; _buffer[o + 11] = x.origin.z
 	mm.buffer = _buffer
+
+
+## Облачка у веерников в момент t (время мира); flow — течение (сносит облачка).
+func sync_dust(t: float, ship: EcoLink.ShipState, flow := Vector3.ZERO) -> void:
+	dust.update(ognevka, t, ship.pos if ship != null else Vector3.ZERO)
+	_dust.pack(dust.dust, t, flow, ship, EcoOgnevkaDust.COLOR, EcoOgnevkaDust.LIT)
+	if _dust.changed:   # облачков нет и не было — буфер тот же, не грузим (issue #133)
+		dust_view.multimesh.buffer = _dust.data
