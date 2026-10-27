@@ -1184,20 +1184,7 @@ func fire_zap() -> void:
 
 ## Шаг живого мира: корабль отдаёт своё состояние, получает события (EcoLink) и решает, что с ними делать.
 func _step_eco(dt: float) -> void:
-	var s := eco_ship
-	s.pos = helm.pos
-	s.yaw = helm.yaw
-	s.speed = helm.speed
-	s.light_on = Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP))
-	s.light_range = Searchlight.range_m(reactor.k(Reactor.Sys.LAMP)) * silt.beam_k() if s.light_on else 0.0
-	s.hull_noise = engine.noise(clampf(absf(helm.speed) / 6.7, 0.0, 1.0))
-	s.scan_range = Scanner.RANGE if at_scanner else 0.0
-	s.dive = run.depth
-	var xf := Samples.ship_xform(helm.pos, helm.yaw)
-	s.claw = samples.hook_world(xf)
-	s.claw_state = samples.state   # Samples.State совпадает с EcoLink.CLAW_*
-	s.claw_target = samples.target.pos if samples.target else Vector3.ZERO
-	s.claw_sample = samples.target.i if samples.target else -1
+	var s := _fill_ship_state(true)
 	var events := eco.step(dt, s)
 	clock.lap("мир", Time.get_ticks_usec())   # живой мир и его виды (EcoView)
 	scanner.take(events if at_scanner else [])
@@ -2856,6 +2843,14 @@ func _client_step(dt: float) -> void:
 ## Клиент: живой мир идёт сам, существа рядом встают по кадру хоста (`EcoView.step_client`). Удары, присоски и
 ## сообщения мира разбирает хост — у гостя мир событий кораблю не шлёт.
 func _client_eco(dt: float, near: PackedFloat32Array) -> void:
+	eco.step_client(dt, _fill_ship_state(false), near)
+
+
+## Состояние корабля для живого мира (`eco_ship`): место, курс, ход, прожектор (с илом), глубина маршрута. full —
+## у хоста ещё шум двигателей, сканер и захват лебёдки. Гостю они не нужны нарочно (#765): его мир событий не шлёт,
+## существа рядом, цели сканера и кража образца приходят кадром хоста (`EcoLink.apply_world`), а `hull_noise` мир
+## пока не читает — у гостя они остаются прежними (нулями), и мир гостя не считает списки сканера зря.
+func _fill_ship_state(full: bool) -> EcoLink.ShipState:
 	var s := eco_ship
 	s.pos = helm.pos
 	s.yaw = helm.yaw
@@ -2863,7 +2858,16 @@ func _client_eco(dt: float, near: PackedFloat32Array) -> void:
 	s.light_on = Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP))
 	s.light_range = Searchlight.range_m(reactor.k(Reactor.Sys.LAMP)) * silt.beam_k() if s.light_on else 0.0
 	s.dive = run.depth
-	eco.step_client(dt, s, near)
+	if not full:
+		return s
+	s.hull_noise = engine.noise(clampf(absf(helm.speed) / 6.7, 0.0, 1.0))
+	s.scan_range = Scanner.RANGE if at_scanner else 0.0
+	var xf := Samples.ship_xform(helm.pos, helm.yaw)
+	s.claw = samples.hook_world(xf)
+	s.claw_state = samples.state   # Samples.State совпадает с EcoLink.CLAW_*
+	s.claw_target = samples.target.pos if samples.target else Vector3.ZERO
+	s.claw_sample = samples.target.i if samples.target else -1
+	return s
 
 
 ## Клиент: маршрут, голосование и итог по кадру хоста (`run` уже как у хоста) — точка и брифинг на голостоле, поля
