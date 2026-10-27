@@ -30,7 +30,7 @@ ROLE_NAMES = {
     "анимация": "Анимации (Codex, Blender)",
     "qa": "Тестер",
     "звук": "Звук, музыка, голоса (Codex, ElevenLabs)",
-    "сюжет": "Сюжет и лор (владелец)",
+    "сюжет": "Сюжет и тексты (Codex пишет, владелец утверждает)",
     "владелец": "Владелец: решения и приёмка",
 }
 TASK_RE = re.compile(r"^\s*[-*] \[( |x|X|~)\] (.+?)\s*$")
@@ -282,8 +282,7 @@ def render(ms, epics, open_issues, recent, blocked, prs=None, now=None):
         near = [f"#{i['number']}" + (" (в работе)" if "в работе" in labels_of(i) else "")
                 + (" (проверить)" if role == "qa" and "проверить" in labels_of(i) else "") for i in iss[:3]]
         near += [f"{short(t['text'])} (#{r['n']})" for r, t in tasks if not t["blocker"]][:max(0, 2 - len(near))]
-        flag = " ⚠️ нет исполнителя-агента" if role == "сюжет" else ""
-        L.append(f"| {ROLE_NAMES[role]}{flag} | {len(tasks)} | {len(iss)} | {'; '.join(near) or '—'} |")
+        L.append(f"| {ROLE_NAMES[role]} | {len(tasks)} | {len(iss)} | {'; '.join(near) or '—'} |")
 
     # --- ждёт владельца и заблокировано ---
     owner = [i for i in open_issues if "ждёт владельца" in labels_of(i)]
