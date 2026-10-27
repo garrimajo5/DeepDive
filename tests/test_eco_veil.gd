@@ -324,3 +324,97 @@ func test_tentacle_mesh_matches_shader_formula() -> void:
 		var j := int(uv[i].y)
 		var got := VeilView.shader_point(v[i], k, j, t, s)
 		near(got.distance_to(EcoVeil.tentacle_point(vl, k, j, t)), 0.0, 1e-4, "точка %d щупальца %d" % [j, k])
+
+
+## Б3: сокращение купола бежит волной вниз по щупальцам — кончик раздувается позже основания и шире.
+func test_pulse_wave_runs_down_tentacles() -> void:
+	var vl := _veils(_world()).veils[0]
+	var k := 3
+	var rest := Vector2(cos(vl.tent_a[k]), sin(vl.tent_a[k])) * vl.tent_r[k]
+	var best := {}
+	for j in [1, EcoVeil.SEGMENTS]:
+		var top := -1.0
+		var lo := 1e9
+		var hi := -1e9
+		var at := 0.0
+		var jf := float(j)
+		for i in 600:
+			var t := 100.0 + i * 0.01
+			var p := EcoVeil.tentacle_point(vl, k, j, t, Vector3.ZERO, true)
+			# радиальная доля без колыхания браузера
+			var wob := Vector2(sin(t * 0.9 + (jf - 1) * 0.45 + k), cos(t * 0.7 + (jf - 1) * 0.4 + k * 1.3)) * jf * 0.12
+			var r: float = (Vector2(p.x, p.z) - wob).length() / rest.length()
+			lo = minf(lo, r)
+			hi = maxf(hi, r)
+			if r > top:
+				top = r
+				at = t
+		best[j] = [at, hi - lo]
+	var lag: float = fposmod(best[EcoVeil.SEGMENTS][0] - best[1][0], TAU / EcoVeil.PULSE_W)
+	near(lag, (EcoVeil.SEGMENTS - 1) * EcoVeil.WAVE_LAG / EcoVeil.PULSE_W, 0.05, "кончик раздувается позже")
+	ok(best[EcoVeil.SEGMENTS][1] > best[1][1] * 1.6, "к кончику размах больше: %s" % [best])
+	var plain := EcoVeil.tentacle_point(vl, k, 6, 50.0)
+	var lite := VeilView.shader_point(Vector3(rest.x, -6 * vl.tent_len[k] / EcoVeil.SEGMENTS, rest.y), k, 6, 50.0,
+		EcoVeil.pulse(vl, 50.0).x, VeilView.tentacle_params(vl), Vector3(0.3, 0, 0), 0.0)
+	near(lite.distance_to(plain), 0.0, 1e-4, "«Экономно» — колыхание браузера, без волны и сноса")
+
+
+## Б3: течение сносит щупальца — кончик уходит по потоку, основание стоит, нить не вытягивается.
+func test_current_trails_tentacles() -> void:
+	var vl := _veils(_world()).veils[0]
+	var flow := Vector3(0, 0, -EcoCurrent.SPEED)
+	var t := 31.0
+	for k in [0, 17]:
+		var still := EcoVeil.tentacle_point(vl, k, EcoVeil.SEGMENTS, t, Vector3.ZERO, true)
+		var tip := EcoVeil.tentacle_point(vl, k, EcoVeil.SEGMENTS, t, flow, true)
+		var d := tip - still
+		ok(d.z < -0.7 * EcoVeil.TRAIL * vl.tent_len[k], "кончик %d по потоку: %.2f м" % [k, d.z])
+		ok(d.z > -EcoVeil.TRAIL * vl.tent_len[k] - 1e-4, "не дальше TRAIL длины")
+		near(d.x, 0.0, 1e-4, "поперёк потока не сносит")
+		ok(d.y > 0.0, "кончик приподнят — нить не вытягивается")
+		near(EcoVeil.tentacle_point(vl, k, 0, t, flow, true).distance_to(
+			EcoVeil.tentacle_point(vl, k, 0, t, Vector3.ZERO, true)), 0.0, 1e-6, "основание на куполе")
+		var mid := EcoVeil.tentacle_point(vl, k, 5, t, flow, true) - EcoVeil.tentacle_point(vl, k, 5, t, Vector3.ZERO, true)
+		ok(absf(mid.z) < absf(d.z) * 0.3, "середина сносится меньше (доля длины²)")
+
+
+## Шейдер щупалец считает волну и снос так же, как EcoVeil.tentacle_point; материал получает поток мира и
+## выключатель «Экономно».
+func test_tentacle_shader_live_matches_cpu() -> void:
+	var w := _world()
+	var vl := _veils(w).veils[0]
+	var m := VeilView.build_tentacles(vl)
+	var arr := m.surface_get_arrays(0)
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	var params := VeilView.tentacle_params(vl)
+	var flow := Vector3(0.2, 0, -0.22)
+	for t in [3.3, 77.1]:
+		var s := EcoVeil.pulse(vl, t).x
+		for i in [0, 1, 19, 238, 799]:
+			var k := int(uv[i].x)
+			var j := int(uv[i].y)
+			var got := VeilView.shader_point(v[i], k, j, t, s, params, flow, 1.0)
+			near(got.distance_to(EcoVeil.tentacle_point(vl, k, j, t, flow, true)), 0.0, 1e-4,
+				"точка %d щупальца %d в %.1f с" % [j, k, t])
+	var code := EcoShaders.MIST
+	for u in ["uniform vec4 wave", "uniform float trail", "uniform vec3 flow", "uniform float sway_k"]:
+		ok(code.contains(u), "в шейдере: %s" % u)
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var mat := view.veil_view.tentacles[0].material_override as ShaderMaterial
+	var p0 := view.veils.veils[0]
+	eq(mat.get_shader_parameter("wave"), Vector4(EcoVeil.PULSE, EcoVeil.PULSE_W, p0.ph, EcoVeil.WAVE_LAG), "волна вуали")
+	near(float(mat.get_shader_parameter("trail")), EcoVeil.TRAIL, 1e-6, "снос")
+	var ship := EcoLink.ShipState.new()
+	ship.pos = p0.p + Vector3(0, -5, 30)
+	view.step(0.05, ship)
+	near((mat.get_shader_parameter("flow") as Vector3).distance_to(view.current.vel()), 0.0, 1e-4, "поток мира")
+	EcoShaders.set_sway_lite(true)
+	near(float(mat.get_shader_parameter("sway_k")), 0.0, 1e-6, "«Экономно» — без волны и сноса")
+	EcoShaders.set_sway_lite(false)
+	near(float(mat.get_shader_parameter("sway_k")), 1.0, 1e-6, "обратно")
+	view.queue_free()
+	await frames(1)

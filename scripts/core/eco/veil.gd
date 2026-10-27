@@ -134,17 +134,41 @@ static func rim_glow(vl: Veil, t: float) -> float:
 	return 0.6 + 0.4 * sin(t * 2.6 + vl.ph)
 
 
-## Точка j (0…SEGMENTS) щупальца k относительно середины купола в момент t — как veilUpdate; та же формула —
-## в шейдере VeilView.
-static func tentacle_point(vl: Veil, k: int, j: int, t: float) -> Vector3:
+## Жизнь щупалец (план реализма Б3): сокращение купола бежит волной вниз по щупальцам — звено j повторяет пульс
+## купола с отставанием WAVE_LAG рад на звено, размах к кончику растёт в (1 + WAVE_GROW) раз; течение сносит нити —
+## кончик по потоку на TRAIL длины на полном течении (растёт как доля длины², порыв 0,7…1 за ~16 с), звено
+## поднимается, чтобы нить не вытягивалась. Без этого (live = false, «Экономно») — колыхание браузера.
+const WAVE_LAG := 0.35
+const WAVE_GROW := 1.0
+const TRAIL := 0.12
+
+
+## Точка j (0…SEGMENTS) щупальца k относительно середины купола в момент t — как veilUpdate, плюс волна пульса и
+## снос течением flow (м/с) при live; та же формула — в шейдере VeilView (EcoShaders.MIST, режим TENTACLE).
+static func tentacle_point(vl: Veil, k: int, j: int, t: float, flow := Vector3.ZERO, live := false) -> Vector3:
 	var s := pulse(vl, t).x
-	var x0 := cos(vl.tent_a[k]) * vl.tent_r[k] * s
-	var z0 := sin(vl.tent_a[k]) * vl.tent_r[k] * s
+	var x0 := cos(vl.tent_a[k]) * vl.tent_r[k]
+	var z0 := sin(vl.tent_a[k]) * vl.tent_r[k]
 	if j == 0:
-		return Vector3(x0, -0.1, z0)
+		return Vector3(x0 * s, -0.1, z0 * s)
+	var h := j / float(SEGMENTS)
+	var sj := s
+	if live:
+		sj = 1.0 + sin(t * PULSE_W + vl.ph - j * WAVE_LAG) * PULSE * (1.0 + WAVE_GROW * h)
 	var step_len := vl.tent_len[k] / SEGMENTS
-	return Vector3(x0 + sin(t * 0.9 + (j - 1) * 0.45 + k) * j * 0.12, -j * step_len,
-		z0 + cos(t * 0.7 + (j - 1) * 0.4 + k * 1.3) * j * 0.12)
+	var p := Vector3(x0 * sj + sin(t * 0.9 + (j - 1) * 0.45 + k) * j * 0.12, -j * step_len,
+		z0 * sj + cos(t * 0.7 + (j - 1) * 0.4 + k * 1.3) * j * 0.12)
+	if live:
+		p += trail(vl, h, j * step_len, t, flow)
+	return p
+
+
+## Снос звена течением: h — доля длины щупальца, depth — глубина звена под куполом (м) — двойник шейдера.
+static func trail(vl: Veil, h: float, depth: float, t: float, flow: Vector3) -> Vector3:
+	var gust := 0.85 + 0.15 * sin(t * 0.4 + vl.ph)
+	var off := flow / EcoCurrent.SPEED * (TRAIL * gust * h * depth)
+	off.y = off.length_squared() / (2.0 * maxf(depth / maxf(h, 0.01), 0.1))
+	return off
 
 
 ## Близко ли к вуали хоть что-то в радиусе pad по горизонтали (для отбора стай перед обходом рыбок).

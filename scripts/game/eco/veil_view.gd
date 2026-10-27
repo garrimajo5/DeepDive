@@ -4,7 +4,9 @@ extends Node3D
 ## вызова отрисовки. Купола — MultiMesh из полусферы: наружный голубой купол 6 м (#7ff5ff, 0,22), розовое ядро 0,6 r
 ## (#ff8ae0, 0,28) и девять колокольчиков по кругу (#bff8ff, 0,35); все пульсируют, кромка купола ярче (по краю
 ## прозрачности). Кромка — 48 огоньков-точек лицом к камере (#cffcff), мерцают. Щупальца — 40 нитей по 10 звеньев
-## одним мешем линий (#ff9ae6, 0,6): колышутся в шейдере по той же формуле, что EcoVeil.tentacle_point. Купола и щупальца — общий
+## одним мешем линий (#ff9ae6, 0,6): колышутся в шейдере по той же формуле, что EcoVeil.tentacle_point, — пульс купола
+## бежит по ним волной вниз, течение (`EcoShaders.follow`, поток мира) сносит кончики; «Экономно» — только колыхание
+## браузера (`sway_k` = 0, `EcoShaders.set_sway_lite`). Купола и щупальца — общий
 ## шейдер прозрачного (EcoShaders.MIST). Всё без света,
 ## прозрачное, без записи глубины, на слое отмели (OceanView.LAYER_WORLD). Дальше FAR от корабля вуаль не видна в мути —
 ## узел прячется и не пересчитывается.
@@ -92,7 +94,7 @@ func _init(system: EcoVeil) -> void:
 		tm.name = "Щупальца"
 		_layer(tm)
 		tm.mesh = build_tentacles(vl)
-		tm.material_override = EcoShaders.mist(EcoShaders.Mist.TENTACLE, {"tint": TENTACLE})
+		tm.material_override = EcoShaders.follow(EcoShaders.mist(EcoShaders.Mist.TENTACLE, tentacle_params(vl)))
 		tm.custom_aabb = AABB(Vector3(-8, -EcoVeil.LEN - 2, -8), Vector3(16, EcoVeil.LEN + 3, 16))
 		g.add_child(tm)
 		tentacles.append(tm)
@@ -172,12 +174,28 @@ static func build_tentacles(vl: EcoVeil.Veil) -> ArrayMesh:
 	return m
 
 
-## Точка j щупальца k из меша по формуле шейдера (для тестов: совпадает с EcoVeil.tentacle_point).
-static func shader_point(rest: Vector3, k: int, j: int, t: float, pulse: float) -> Vector3:
+## Числа щупалец вуали для шейдера: цвет, волна пульса вниз (EcoVeil.WAVE_*) с фазой вуали, снос течением TRAIL.
+static func tentacle_params(vl: EcoVeil.Veil) -> Dictionary:
+	return {"tint": TENTACLE, "wave": Vector4(EcoVeil.PULSE, EcoVeil.PULSE_W, vl.ph, EcoVeil.WAVE_LAG),
+		"grow": EcoVeil.WAVE_GROW, "seg": float(EcoVeil.SEGMENTS), "trail": EcoVeil.TRAIL}
+
+
+## Точка j щупальца k из меша по формуле шейдера (для тестов: совпадает с EcoVeil.tentacle_point); m — материал
+## щупалец (его волна и снос), flow — поток, sway_k — 0 на «Экономно».
+static func shader_point(rest: Vector3, k: int, j: int, t: float, pulse: float, m: Dictionary = {},
+		flow := Vector3.ZERO, sway_k := 0.0) -> Vector3:
 	var p := Vector3(rest.x * pulse, rest.y, rest.z * pulse)
 	if j > 0:
-		p.x += sin(t * 0.9 + (j - 1) * 0.45 + k) * j * 0.12
-		p.z += cos(t * 0.7 + (j - 1) * 0.4 + k * 1.3) * j * 0.12
+		var h := j / float(m.get("seg", 10.0))
+		var wave: Vector4 = m.get("wave", Vector4.ZERO)
+		var sj := lerpf(pulse, 1.0 + sin(t * wave.y + wave.z - j * wave.w) * wave.x
+			* (1.0 + float(m.get("grow", 0.0)) * h), sway_k)
+		p.x = rest.x * sj + sin(t * 0.9 + (j - 1) * 0.45 + k) * j * 0.12
+		p.z = rest.z * sj + cos(t * 0.7 + (j - 1) * 0.4 + k * 1.3) * j * 0.12
+		var depth := -rest.y
+		var off := flow / 0.3 * (float(m.get("trail", 0.0)) * (0.85 + 0.15 * sin(t * 0.4 + wave.z)) * h * depth) * sway_k
+		off.y = off.length_squared() / (2.0 * maxf(depth / maxf(h, 0.01), 0.1))
+		p += off
 	return p
 
 
