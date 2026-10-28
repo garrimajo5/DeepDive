@@ -13,3 +13,34 @@ const CENTER := Vector2(-250.0, -210.0)
 const FANS: Array[Vector2] = [Vector2(-238.0, -168.0), Vector2(-236.0, -256.0)]
 ## Не ближе этого к оси прохода (м): полоса прохода `Seabed.Layer.LANE_HALF` (32) + запас под ширину веера.
 const CLEAR := 36.0
+
+## Пограничное поле (#833, часть 1; #818, раздел 08): узкий пояс вдоль всей западной границы отмели, x от `BELT_OUT`
+## до `BELT_IN`. В мире он не светится и не рисуется — его видно только по животным: мелкие проходят в пояс до края
+## отмели (`EcoAgent.EDGE`), крупные (`BIG`) у внутренней кромки разворачиваются на восток и дальше не заходят.
+## Выхода во внешний океан нет: край отмели (−290) лежит внутри пояса. Держит `EcoAgent.confine` (флаг `EcoAgent.big`).
+const BELT_IN := -285.0
+const BELT_OUT := -300.0
+## Крупные подвижные виды — длиннее ≈ 3 м: серпохвост, стеклоуст, ледокрыл, фонарная вуаль, гротовик.
+const BIG: Array[String] = ["pred", "eel", "ray", "veil", "grot"]
+
+
+static func is_big(species_id: String) -> bool:
+	return BIG.has(species_id)
+
+
+## Точка (x) в поясе поля.
+static func in_belt(x: float) -> bool:
+	return x < BELT_IN and x >= BELT_OUT
+
+
+## Крупное существо у пояса разворачивается: место — не западнее `BELT_IN`, скорость на запад отражается на восток,
+## цель за кромкой — зеркально к востоку от неё. Возвращает true, если пришлось развернуть.
+static func turn_back(a: EcoAgent) -> bool:
+	if a.p.x >= BELT_IN:
+		return false
+	a.p.x = BELT_IN
+	if a.v.x < 0.0:
+		a.v.x = -a.v.x
+	if a.goal.x < BELT_IN:
+		a.goal.x = 2.0 * BELT_IN - a.goal.x
+	return true
