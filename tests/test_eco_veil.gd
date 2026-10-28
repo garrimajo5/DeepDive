@@ -268,44 +268,96 @@ func test_texts_name_species() -> void:
 
 # ---------- Сцена ----------
 
-func test_view_three_draw_calls_per_veil() -> void:
+## #849: все вуали — три вызова отрисовки на всех (купола, кромки, щупальца), не по три на каждую; дальние не рисуются.
+func test_view_three_draw_calls_for_all_veils() -> void:
 	var view := EcoView.new()
 	view.ground = Seabed.height
 	tree.root.add_child(view)
 	await frames(1)
 	var vv := view.veil_view
 	ok(vv != null and vv.get_parent() == view, "вуали — в живом мире")
-	eq(vv.groups.size(), 2, "две вуали")
+	eq(view.veils.veils.size(), 2, "две вуали")
 	ok(view.fish.veils == view.veils and view.preds.veils == view.veils, "светляки и серпохвосты знают о вуалях")
+	var calls := 0
+	var tris := 0
+	for c in vv.get_children():
+		if c == vv.dust_view:
+			continue
+		var gi := c as GeometryInstance3D
+		ok(gi is MultiMeshInstance3D, "MultiMesh: %s" % c.name)
+		eq(gi.layers, OceanView.LAYER_WORLD, "слой отмели: %s" % c.name)
+		calls += 1
+	eq(calls, 3, "три вызова отрисовки на все вуали")
+	eq(vv.bells.multimesh.instance_count, 2 * VeilView.BELLS, "по куполу, ядру и 9 колокольчиков на вуаль")
+	eq(vv.rims.multimesh.instance_count, 2, "кромка — экземпляр на вуаль")
+	eq(vv.tentacles.multimesh.instance_count, 2, "щупальца — экземпляр на вуаль")
+	var mm := vv.bells.multimesh
+	tris = mm.mesh.get_faces().size() / 3 * mm.instance_count
+	ok(tris < 24000, "треугольников куполов: %d" % tris)
+	var p0 := view.veils.veils[0]
+	var p1 := view.veils.veils[1]
 	var ship := EcoLink.ShipState.new()
-	ship.pos = view.veils.veils[0].p + Vector3(0, -5, 30)
+	ship.pos = p0.p + Vector3(0, -5, 30)
 	view.step(0.05, ship)
-	var g := vv.groups[0]
-	ok(g.visible, "ближняя вуаль видна")
-	near(g.position.distance_to(view.veils.veils[0].p), 0.0, 1e-4, "узел на куполе")
-	eq(vv.groups[1].visible, view.veils.veils[1].p.distance_to(ship.pos) < VeilView.FAR, "дальше FAR — спрятана")
+	ok(vv.shown[0] and vv.bells.visible, "ближняя вуаль видна")
+	var far1 := p1.p.distance_to(ship.pos) >= VeilView.FAR
+	eq(vv.shown[1], not far1, "дальше FAR — не рисуется")
+	eq(vv.bells.multimesh.visible_instance_count, vv.shown_count * VeilView.BELLS, "рисуются только видимые")
+	eq(vv.tentacles.multimesh.visible_instance_count, vv.shown_count)
+	var buf := vv.bell_buffer
+	near(buf[0], EcoVeil.R * EcoVeil.pulse(p0, view.world.time).x, 1e-4, "купол 6 м с пульсом")
+	near(Vector3(buf[3], buf[7], buf[11]).distance_to(p0.p), 0.0, 1e-4, "купол на месте вуали")
+	near(buf[15], VeilView.BELL.a, 1e-4, "прозрачный купол")
+	near(vv.rim_buffer[15], EcoVeil.rim_glow(p0, view.world.time), 1e-4, "мерцание кромки — в альфе экземпляра")
+	ok(vv.bells.custom_aabb.has_point(p0.p) and vv.tentacles.custom_aabb.has_point(p0.p - Vector3(0, 10, 0)),
+		"рамка видимости — у видимой вуали")
+	if far1:
+		ok(not vv.bells.custom_aabb.has_point(p1.p), "дальняя вуаль рамку не раздувает")
 	var far_ship := EcoLink.ShipState.new()
 	far_ship.pos = Vector3(-250, -20, -250)
 	view.step(0.05, far_ship)
-	ok(not vv.groups[0].visible and not vv.groups[1].visible, "далеко от корабля обе спрятаны")
+	ok(not vv.shown[0] and not vv.shown[1], "далеко от корабля обе не видны")
+	ok(not vv.bells.visible and not vv.rims.visible and not vv.tentacles.visible, "узлы спрятаны")
+	ship.pos = (p0.p + p1.p) * 0.5
 	view.step(0.05, ship)
-	var calls := 0
-	var tris := 0
-	for c in g.get_children():
-		var gi := c as GeometryInstance3D
-		eq(gi.layers, OceanView.LAYER_WORLD, "слой отмели: %s" % c.name)
-		calls += 1
-		if c is MultiMeshInstance3D:
-			var mm := (c as MultiMeshInstance3D).multimesh
-			eq(mm.instance_count, VeilView.BELLS, "купол, ядро и 9 колокольчиков")
-			tris += mm.mesh.get_faces().size() / 3 * mm.instance_count
-	eq(calls, 3, "три вызова отрисовки на вуаль")
-	ok(tris < 12000, "треугольников куполов: %d" % tris)
-	var buf := vv.bell_buffers[0]
-	near(buf[0], EcoVeil.R * EcoVeil.pulse(view.veils.veils[0], view.world.time).x, 1e-4, "купол 6 м с пульсом")
-	near(buf[15], VeilView.BELL.a, 1e-4, "прозрачный купол")
+	eq(vv.shown_count, 2, "посередине видны обе")
+	ok(vv.bells.custom_aabb.has_point(p0.p) and vv.bells.custom_aabb.has_point(p1.p), "рамка — по обеим")
+	near(Vector3(vv.bell_buffer[VeilView.BELLS * VeilView.STRIDE + 3], vv.bell_buffer[VeilView.BELLS * VeilView.STRIDE + 7],
+		vv.bell_buffer[VeilView.BELLS * VeilView.STRIDE + 11]).distance_to(p1.p), 0.0, 1e-4, "второй купол — у второй")
 	view.queue_free()
 	await frames(1)
+
+
+## #849: общий меш нитей всех вуалей — экземпляр вуали рисует только свои нити ровно как EcoVeil.tentacle_point,
+## чужие сжимает в точку.
+func test_tentacles_all_veils_one_mesh() -> void:
+	var w := _world([SPOT, SPOT + Vector2(40, 10)])
+	var list := _veils(w).veils
+	var m := VeilView.build_tentacles_all(list)
+	var arr := m.surface_get_arrays(0)
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	var uv2: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV2]
+	var per := EcoVeil.TENTACLES * EcoVeil.SEGMENTS * 2
+	eq(v.size(), per * list.size(), "нити всех вуалей")
+	var params := VeilView.tentacle_params()
+	eq((params["wave"] as Vector4).z, 0.0, "у общего материала фаза 0 — она в экземпляре")
+	var flow := Vector3(0.2, 0, -0.22)
+	var t := 41.3
+	for vl in list:
+		var custom := Color(EcoVeil.pulse(vl, t).x, vl.ph, vl.index, 0.0)
+		for i in [0, 1, 19, 238, 799]:
+			var own: int = vl.index * per + i
+			eq(int(uv2[own].x), vl.index, "номер вуали в UV2")
+			var got := VeilView.instance_point(v[own], uv[own], uv2[own].x, custom, vl.p, t, params, flow, 1.0)
+			var want := vl.p + EcoVeil.tentacle_point(vl, int(uv[own].x), int(uv[own].y), t, flow, true)
+			near(got.distance_to(want), 0.0, 1e-4, "вуаль %d, вершина %d" % [vl.index, i])
+			var other: int = (1 - vl.index) * per + i
+			near(VeilView.instance_point(v[other], uv[other], uv2[other].x, custom, vl.p, t, params, flow, 1.0)
+				.distance_to(vl.p), 0.0, 1e-6, "чужая нить — в точку")
+	var code := EcoShaders.MIST
+	for u in ["INSTANCE_CUSTOM.g", "UV2.x - INSTANCE_CUSTOM.b"]:
+		ok(code.contains(u), "в шейдере: %s" % u)
 
 
 func test_tentacle_mesh_matches_shader_formula() -> void:
@@ -404,9 +456,9 @@ func test_tentacle_shader_live_matches_cpu() -> void:
 	view.ground = Seabed.height
 	tree.root.add_child(view)
 	await frames(1)
-	var mat := view.veil_view.tentacles[0].material_override as ShaderMaterial
+	var mat := view.veil_view.tentacles.material_override as ShaderMaterial
 	var p0 := view.veils.veils[0]
-	eq(mat.get_shader_parameter("wave"), Vector4(EcoVeil.PULSE, EcoVeil.PULSE_W, p0.ph, EcoVeil.WAVE_LAG), "волна вуали")
+	eq(mat.get_shader_parameter("wave"), Vector4(EcoVeil.PULSE, EcoVeil.PULSE_W, 0.0, EcoVeil.WAVE_LAG), "волна вуалей")
 	near(float(mat.get_shader_parameter("trail")), EcoVeil.TRAIL, 1e-6, "снос")
 	var ship := EcoLink.ShipState.new()
 	ship.pos = p0.p + Vector3(0, -5, 30)
