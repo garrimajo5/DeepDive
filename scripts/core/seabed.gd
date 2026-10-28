@@ -8,8 +8,13 @@ const TOP := -7.0        ## выше дно не поднимается
 const ICE_Y := 0.0
 
 
-## Высота дна под точкой (x, z).
+## Высота дна под точкой (x, z): прежняя отмель `base` + гребень и проходы слоя 1 (`Layer`).
 static func height(x: float, z: float) -> float:
+	return minf(Layer.lanes(x, z, Layer.ridge(x, z, base(x, z))), TOP)
+
+
+## Рельеф отмели как W.height в js/world.js (до карты слоя 1), без предела `TOP`.
+static func base(x: float, z: float) -> float:
 	var n := HashNoise.fbm(x * 0.006, z * 0.006, 4)
 	var h := -64.0 + (n - 0.5) * 34.0
 	var r := sqrt((x + 10.0) * (x + 10.0) + (z + 10.0) * (z + 10.0))
@@ -22,7 +27,75 @@ static func height(x: float, z: float) -> float:
 	var e := maxf(absf(x), absf(z))
 	h += HashNoise.smooth(285.0, 345.0, e) * 80.0
 	h += (HashNoise.value(x * 0.13, z * 0.13) - 0.5) * 1.4
-	return minf(h, TOP)
+	return h
+
+
+## Рельеф под карту слоя 1 (#821, часть 2; карта и места — `LayerMap`, схема #818): поверх прежнего рельефа отмели
+## поднят северо-западный гребень с террасой врат 07 и наблюдением поля 08, а вдоль маршрутов слоя и в карманах
+## разворота у 01, 07 и 09 макушки гряд срезаны до «свободно 30 м подо льдом». Где дно и так ниже — не трогаем: шесть
+## ориентиров ART-005, старт и склон на востоке стоят как были.
+class Layer:
+	## Гребень: дно около 47 м (ориентир 07/08 — 35 м), вдоль отрезка 08→07, продлённого на `RIDGE_PAD` на запад за 08.
+	const RIDGE_FLOOR := -47.0
+	const RIDGE_FULL := 70.0     ## м от оси гребня — дно гребня целиком
+	const RIDGE_FADE := 110.0    ## м — дальше прежний рельеф (Кости левиафана 04 — дальше)
+	const RIDGE_PAD := 40.0
+	## Проход: полоса ±`LANE_HALF` м вокруг отрезка маршрута, где дно не выше `LANE_CAP` (от льда ≥ 30 м воды и
+	## полметра запаса — габарит карты 60 × 30 м); дальше `LANE_FADE` м — плавно к прежнему рельефу. Прежняя отмель
+	## в проходах почти везде и так глубже: срезаются только макушки гряд, мох и стаи на них не трогаются.
+	const LANE_CAP := -30.5
+	const LANE_HALF := 32.0
+	const LANE_FADE := 24.0
+	const LANE_RIPPLE := 0.5     ## м — срез не плоский: рябь вниз от `LANE_CAP`
+	## Карманы разворота: круг радиуса `POCKET_R` (≈ 90 м поперёк) у мест, срез — как у прохода.
+	const POCKETS: Array[String] = ["01", "07", "09"]
+	const POCKET_R := 46.0
+	## Отрезки, которые режем: все маршруты слоя, кроме спуска 06→10 к лесу (склон глубже — отдельная задача).
+	static var _lanes: Array = []
+
+	## Дно гребня в (x, z) поверх прежнего h: только поднимает и не выше `RIDGE_FLOOR` + пологие бугры ±3 м.
+	static func ridge(x: float, z: float, h: float) -> float:
+		if x > 20.0 or z > -80.0:  # дальше `RIDGE_FADE` от оси гребня
+			return h
+		var a := LayerMap.xz("08")
+		var b := LayerMap.xz("07")
+		var dir := (b - a).normalized()
+		var d := _seg_dist(Vector2(x, z), a - dir * RIDGE_PAD, b)
+		var w := 1.0 - HashNoise.smooth(RIDGE_FULL, RIDGE_FADE, d)
+		if w <= 0.0:
+			return h
+		var top := RIDGE_FLOOR + (HashNoise.value(x * 0.02 + 5.3, z * 0.02 - 2.1) - 0.5) * 6.0
+		return lerpf(h, maxf(h, top), w)
+
+	## Срез гряд в проходах и карманах: дно не выше `LANE_CAP` (с лёгкой рябью вниз), плавно по краям.
+	static func lanes(x: float, z: float, h: float) -> float:
+		if h <= LANE_CAP - LANE_RIPPLE:
+			return h
+		var q := Vector2(x, z)
+		var d := INF
+		for s: Array in segments():
+			d = minf(d, _seg_dist(q, s[0], s[1]))
+		var w := 1.0 - HashNoise.smooth(LANE_HALF, LANE_HALF + LANE_FADE, d)
+		for id: String in POCKETS:
+			var dp := q.distance_to(LayerMap.xz(id))
+			w = maxf(w, 1.0 - HashNoise.smooth(POCKET_R, POCKET_R + LANE_FADE, dp))
+		if w <= 0.0:
+			return h
+		var cap := LANE_CAP - HashNoise.value(x * 0.05 - 1.3, z * 0.05 + 4.7) * LANE_RIPPLE
+		return lerpf(h, minf(h, cap), w)
+
+	## Отрезки проходов [Vector2, Vector2] из `LayerMap.segments()` без спуска к лесу (место 10).
+	static func segments() -> Array:
+		if _lanes.is_empty():
+			for s: Array in LayerMap.segments():
+				if not s.has("10"):
+					_lanes.append([LayerMap.xz(s[0]), LayerMap.xz(s[1])])
+		return _lanes
+
+	static func _seg_dist(q: Vector2, a: Vector2, b: Vector2) -> float:
+		var ab := b - a
+		var t := clampf((q - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+		return q.distance_to(a + ab * t)
 
 
 ## Высота сетки дна (build_arrays, клетка SIZE / SEGMENTS) под (x, z): та, что видно, — между вершинами линейно по
