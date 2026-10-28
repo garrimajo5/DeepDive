@@ -153,6 +153,24 @@ static func _layout() -> Dictionary:
 	return out
 
 
+## Подпись «граница» у площадки 08 (#829): тонкая строка под её кнопкой, только когда поле замечено
+## (`LayerLore.FIELD08`) — пояс поля на карте не рисуется стеной.
+const BORDER := "граница"
+const BORDER_PX := 24.0
+const BORDER_H := 30.0
+const BORDER_W := 140.0
+
+
+static func border_shown(lore: LayerLore) -> bool:
+	return lore != null and lore.knows(LayerLore.FIELD08)
+
+
+static func border_rect(size: Vector2) -> Rect2:
+	var b := place_rect(LayerMap.POINTS["08"]["key"], size)
+	var s := scale(size)
+	return Rect2(Vector2(b.get_center().x - BORDER_W * 0.5 * s, b.end.y + 2.0 * s), Vector2(BORDER_W, BORDER_H) * s)
+
+
 static func place_rect(key: String, size: Vector2) -> Rect2:
 	var side := PLACE_BUTTON * scale(size)
 	return Rect2(place_center(key, size) - Vector2(side, side) * 0.5, Vector2(side, side))

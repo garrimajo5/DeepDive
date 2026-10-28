@@ -41,6 +41,21 @@ func test_layout_by_mockup() -> void:
 	eq(Journal.back_rect(half).size, Vector2(150, 56), "кнопки — по высоте экрана")
 
 
+func test_border_label_at_08() -> void:
+	ok(not Journal.border_shown(null), "без знаний подписи нет")
+	var l := LayerLore.new()
+	ok(not Journal.border_shown(l), "поле не замечено — подписи нет")
+	l.learn(LayerLore.FIELD08)
+	ok(Journal.border_shown(l), "поле 08 замечено — «граница»")
+	for size: Vector2 in [SIZE, Vector2(1920, 1080), Vector2(1280, 720)]:
+		var br := Journal.border_rect(size)
+		ok(Journal.map_rect(size).encloses(br), "%s: подпись на карте" % size)
+		var b := Journal.place_rect("field", size)
+		ok(br.position.y >= b.end.y and absf(br.get_center().x - b.get_center().x) < 1.0, "%s: под кнопкой 08" % size)
+		for k: String in Run.PLACES:
+			ok(not br.intersects(Journal.place_rect(k, size)), "%s: подпись не на кнопке %s" % [size, k])
+
+
 func test_summary_and_unknown_history() -> void:
 	var e := Expedition.new()
 	e.runs = 5

@@ -29,6 +29,32 @@ func test_learn_once() -> void:
 			ok(not l.knows(k), "%s сам не ставится" % k)
 
 
+func test_field_seen_only_at_08() -> void:
+	var l := LayerLore.new()
+	var at := LayerMap.xz("08")
+	ok(not l.observe_field(at.x + LayerLore.FIELD_SEE + 1.0, at.y), "дальше круга 08 — поле не замечено")
+	ok(not l.observe_field(LayerMap.xz("07").x, LayerMap.xz("07").y), "у террасы врат 07 — тоже нет")
+	ok(not l.knows(LayerLore.FIELD08), "факта нет")
+	ok(l.observe_field(at.x + 10.0, at.y - 5.0), "у площадки 08 — граница замечена")
+	ok(l.knows(LayerLore.FIELD08), "факт поля 08")
+	ok(not l.observe_field(at.x, at.y), "второй раз — не новое")
+	eq(l.facts.size(), 1, "другие факты сами не ставятся")
+
+
+func test_scene_ship_at_08_learns_field() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.step(1.0 / 30.0)
+	ok(not main.lore.knows(LayerLore.FIELD08), "у старта поле не замечено")
+	var at := LayerMap.xz("08")
+	main.helm.pos = Vector3(at.x, main.helm.pos.y, at.y)
+	main.step(1.0 / 30.0)
+	ok(main.lore.knows(LayerLore.FIELD08), "корабль у 08 — граница поля в знаниях")
+	main.queue_free()
+	await frames(1)
+
+
 func test_diagnostics_separate_and_not_required() -> void:
 	var l := LayerLore.new()
 	eq(l.unread_diagnostics().size(), 3, "три факта диагностики отдельно")
