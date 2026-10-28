@@ -180,6 +180,7 @@ var hint: Label            ## строка состояния на прибор�
 var status_lines := Status.Lines.new()   ## раскладка строки состояния — пересчёт только при смене (#847)
 var message := Status.Message.new()
 const SAT_MSG := "Вы за штурвалом"
+const LOADED_MSG := "Корпус разрушен. Ковчег у последнего сохранения"   ## гибель в кампании (#824)
 const DRAIN_DB := -12.0   ## шипение присоски: js/audio.js 0,12 против 0,05 у сирены (−16 дБ)
 var env: Environment
 var qa: QaRunner           ## прогон сценария тестера, если он есть (docs/QA.md)
@@ -1337,8 +1338,8 @@ func close_menu() -> void:
 	menu_flow.close_menu()
 
 
-## Корпус разрушен: забег проигран — шторка ART-036 3,5 с (`Wreck`), под сплошной шторкой подъём к старту с целым
-## корпусом (`_wreck_step` → `_restart`). Ввод на это время не идёт в игру.
+## Корпус разрушен: шторка ART-036 3,5 с (`Wreck`), под сплошной шторкой — загрузка последнего сохранения кампании
+## (#824, `_load_last`); сохранения нет — подъём к старту с целым корпусом. Ввод на это время не идёт в игру.
 func _on_destroyed() -> void:
 	if wreck.active():
 		return
@@ -1353,18 +1354,22 @@ func _on_destroyed() -> void:
 	if pause_panel:
 		pause_panel.show_pause(pause)
 	wreck.start()
+	wreck_view.sub.text = Wreck.sub(has_saved_ship())
 	_wreck_show()
 
 
-## Шаг шторки «Корпус разрушен»: сплошная — забег с начала. true — шторка идёт (ввод не идёт в игру).
+## Шаг шторки «Корпус разрушен»: сплошная — загрузка последнего сохранения (#824). true — шторка идёт (ввод не
+## идёт в игру).
 func _wreck_step(dt: float) -> bool:
 	if not wreck.active():
 		return false
 	if wreck.update(dt):
 		expedition.end_run()
 		timeline.finish(time, "корпус разрушен", Time.get_datetime_string_from_system(false, true))
-		_restart()
-		say("Корпус разрушен. Ковчег поднят к началу спуска")
+		if _load_last():
+			say(LOADED_MSG)
+		else:
+			say("Корпус разрушен. Ковчег поднят к началу спуска")
 	_wreck_show()
 	return wreck.active()
 
@@ -1378,8 +1383,33 @@ func _wreck_show() -> void:
 	drop_panel.set_quiet(on)
 
 
-## Корабль у начала спуска, целый и заряженный, забег с нуля (корпус разрушен или новый забег после итога).
+## Есть сохранённое место кампании (#823), к которому вернёт гибель (#824).
+func has_saved_ship() -> bool:
+	return save.live and not save.ship.is_empty()
+
+
+## Гибель в кампании (#824): системы и события как на старте, корабль — место, курс, корпус и заряд последнего
+## сохранения, без облёта. Груз, изученные виды, знания слоя и журнал не трогаются (они в памяти те же, что в
+## файле). false — сохранённого места нет: корабль у начала спуска, как `_restart`.
+func _load_last() -> bool:
+	_reset_ship()
+	if not has_saved_ship() or not SaveGame.ship_apply(save.ship, helm, vitals):
+		_begin_run()
+		return false
+	wear.snap(vitals.hull)
+	window_fog.snap(helm.depth(), vitals.hull, reactor.heat, reactor.scram)
+	_begin_run(false)
+	return true
+
+
+## Корабль у начала спуска, целый и заряженный, забег с нуля (новый забег из паузы, после итога, в меню).
 func _restart() -> void:
+	_reset_ship()
+	_begin_run()
+
+
+## Корабль у начала спуска, целый и заряженный; события, посты и связь — с нуля.
+func _reset_ship() -> void:
 	ballot.clear()
 	role_card.reset_run()
 	comms.reset_run(_code_rng.randi())   # новый забег — новое кодовое слово, очередь связи пуста
@@ -1406,7 +1436,6 @@ func _restart() -> void:
 	walker.z = spawn.y
 	light_on = true
 	overlay.set_light(true)
-	_begin_run()
 
 
 func _begin_run(fly := true) -> void:

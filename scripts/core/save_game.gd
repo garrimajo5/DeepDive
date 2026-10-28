@@ -172,7 +172,8 @@ func save(samples: Samples, scanner: Scanner = null) -> bool:
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
 		return false
-	var raw := ship_snapshot(helm, vitals) if helm and vitals and live else {}
+	# разрушенный корпус (шторка ART-036 идёт) не пишется: гибель ведёт к прошлому месту (#824)
+	var raw := ship_snapshot(helm, vitals) if helm and vitals and live and vitals.hull > 0.0 else {}
 	if not raw.is_empty():
 		ship = ship_read(raw)
 	elif not ship.is_empty():   # корабль не подключён или не в забеге — не терять прочитанный
