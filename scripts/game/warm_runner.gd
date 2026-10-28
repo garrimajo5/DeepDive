@@ -23,9 +23,9 @@ func begin() -> void:
 		return
 	main.curtain = WarmSplash.new()   # заставка ART-034: фон, полоса по доле прогрева, подсказки
 	main.add_child(main.curtain)
-	for look in CrewRig.MODELS.size():
-		var at: Vector2 = Warmup.MATE_AT[look % Warmup.MATE_AT.size()]
-		_mates.append(main.add_mate(at.x, at.y, PI, Crew.Role.PILOT, look))
+	for r in Warmup.mate_count():   # каждая роль со снаряжением и каждая внешность (#883)
+		var at: Vector2 = Warmup.MATE_AT[r % Warmup.MATE_AT.size()]
+		_mates.append(main.add_mate(at.x, at.y, PI, r % Crew.Role.size(), r % CrewRig.MODELS.size()))
 	for look in CrewRig.MODELS.size():   # и материалом своего игрока: свои руки у пульта энергии (#217)
 		var at: Vector2 = Warmup.OWN_AT[look % Warmup.OWN_AT.size()]
 		var m := main.add_mate(at.x, at.y, PI, Crew.Role.PILOT, look)
