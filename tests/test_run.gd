@@ -48,9 +48,43 @@ func test_cycle_and_progress() -> void:
 	run.cycle()
 	eq(run.route, 1, "следующее нажатие — следующий маршрут")
 	ok(not run.done and run.visited.is_empty(), "прогресс с нуля")
-	run.cycle()
-	run.cycle()
+	for i in Run.ROUTES.size() - 1:
+		run.cycle()
 	eq(run.route, 0, "по кругу")
+
+
+## #829: у каждого места слоя, кроме старта, есть маршрут, где оно — точка цели на сонаре (без исправления 07–10
+## ни на одном маршруте не было и отметка к ним не вела).
+func test_every_place_is_a_target() -> void:
+	for k: String in Run.PLACES:
+		if k == "start":
+			continue
+		var found := false
+		for i in Run.ROUTES.size():
+			var run := Run.new()
+			run.choose(i)
+			for step in Run.ROUTES[i]["places"].size():
+				if run.waypoint() == Run.place_xz(k):
+					found = true
+				var n := run.next_key()
+				run.update(Run.place_xz(n).x, Run.place_xz(n).y)
+		ok(found, "место %s — точка цели на сонаре" % k)
+
+
+func test_layer_routes_follow_map() -> void:
+	var by_id := {}
+	for r: Dictionary in Run.ROUTES:
+		by_id[r["id"]] = r["places"]
+	var keys := func(ids: Array) -> Array:
+		return ids.map(func(id: String) -> String: return LayerMap.POINTS[id]["key"])
+	eq(by_id["main"], keys.call(LayerMap.MAIN_ROUTE.slice(1)), "основной путь — по карте слоя, со старта")
+	eq(by_id["loop"], keys.call(LayerMap.LINKS[0].slice(1)), "петля — по карте слоя, со старта")
+	eq(by_id["field"], keys.call(LayerMap.LINKS[1]), "ветка 07 ↔ 08")
+	var run := Run.new()
+	run.choose(5)
+	eq(run.waypoint(), Run.place_xz("gate"))
+	run.update(-100.0, -240.0)
+	eq(run.waypoint(), Run.place_xz("field"), "после террасы — поле")
 
 
 func test_scene_route_post() -> void:
