@@ -146,7 +146,7 @@ func radio_step(dt: float) -> void:
 	radio_sight()
 	for p in m.overlay.router.taps:
 		radio.tap(p, size)
-	if mic_permit.step(dt, radio.begged, radio.settings_wanted, OS.get_granted_permissions):
+	if mic_permit.step(dt, radio.on, radio.begged, radio.settings_wanted, OS.get_granted_permissions):
 		OS.request_permission(MicPermit.NAME)   # ответ — в списке разрешений, `mic_permit` опросит
 	radio.settings_wanted = false
 	m.overlay.router.blocks.append_array(radio.blocks(size))
