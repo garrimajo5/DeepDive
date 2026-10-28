@@ -20,6 +20,20 @@ func test_places_match_map() -> void:
 			ok(Run.PLACES.has(k), "у маршрута %s места из списка" % r["id"])
 
 
+## #938: «Путь к спуску» строкой приборов в две строки закрывал номера мест на голостоле — в строке только
+## число мест и риск (места — в карточке у стола).
+func test_choose_message_fits_one_line() -> void:
+	var run := Run.new()
+	for i in Run.ROUTES.size():
+		var msg := run.choose(i)
+		ok(msg.length() <= Run.LINE_MAX, "%s: %d знаков" % [msg, msg.length()])
+		ok(msg.ends_with(Run.ROUTES[i]["risk"]), "строка риска остаётся")
+	eq(run.choose(3), "Маршрут «Путь к спуску»: 5 мест; за краем — склон до 290 м")
+	eq(run.choose(0), "Маршрут «Рифовый сад»: 3 места; много серпохвостов")
+	eq([Run.places_word(1), Run.places_word(2), Run.places_word(5), Run.places_word(11), Run.places_word(22)],
+		["место", "места", "мест", "мест", "места"])
+
+
 func test_cycle_and_progress() -> void:
 	var run := Run.new()
 	eq(run.status(0, 0), "", "без маршрута строки нет")
@@ -27,7 +41,7 @@ func test_cycle_and_progress() -> void:
 	eq(run.label(), "Маршрут: выбрать")
 	var msg := run.cycle()
 	eq(run.route, 0, "первое нажатие — первый маршрут")
-	ok(msg.begins_with("Маршрут «Рифовый сад»: Каменный цветок, Кости левиафана, Световой колодец"), msg)
+	ok(msg.begins_with("Маршрут «Рифовый сад»: 3 места"), msg)
 	ok(msg.ends_with("много серпохвостов"), "строка риска")
 	eq(run.label(), "Маршрут: сменить")
 	eq(run.waypoint(), Run.place_xz("flower"), "первая точка на голостоле")
