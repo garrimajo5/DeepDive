@@ -12,6 +12,8 @@ const ID := "ezh"
 ## Рощи — у этих стай светляков (E.shoals[gi + 1]); стай должно быть хотя бы три.
 const SHOALS: Array[int] = [1, 2]
 const MIN_SHOALS := 3
+## Рощи без своей стаи (x, z): Тихая заводь 09 (EcoCove, #831) — ежи там пасутся, а прятаться в ней некому.
+const EXTRA: Array[Vector2] = [EcoCove.KELP]
 ## Лент в роще и радиус рощи (KELP_N, KELP_R); ежей у рощи (URCH_N).
 const KELP_N := 34
 const KELP_R := 7.0
@@ -116,7 +118,8 @@ var _ground: Callable
 var _tick := 0
 
 
-## prey_fish — светляки мира (подключены раньше); spots — свои середины рощ (для тестов), пусто — у стай 1 и 2.
+## prey_fish — светляки мира (подключены раньше); spots — свои середины рощ (для тестов), пусто — у стай 1 и 2
+## и в местах EXTRA.
 func _init(prey_fish: EcoFish = null, spots: Array[Vector3] = []) -> void:
 	fish = prey_fish
 	_spots = spots.duplicate()
@@ -143,6 +146,9 @@ func reset(world: EcoWorld) -> void:
 		for si in SHOALS:
 			places.append(fish.shoals[si].home)
 			owners.append(fish.shoals[si])
+		for xz in EXTRA:
+			places.append(Vector3(xz.x, fish.shoals[0].home.y - 3.5, xz.y))
+			owners.append(null)
 	for gi in places.size():
 		var gr := Grove.new()
 		gr.index = gi

@@ -59,8 +59,8 @@ func test_two_organs_seven_tubes_on_ground() -> void:
 	var w := EcoWorld.new()
 	w.ground = Seabed.height
 	var o := w.add(EcoOrgan.new()) as EcoOrgan
-	eq(o.organs.size(), 2, "две губки")
-	for i in 2:
+	eq(o.organs.size(), 3, "две губки из браузера и третья в Тихой заводи (#831)")
+	for i in o.organs.size():
 		var og := o.organs[i]
 		near(og.base.x, EcoOrgan.SPOTS[i].x, 1e-6, "место из браузера")
 		near(og.base.z, EcoOrgan.SPOTS[i].y, 1e-6)
@@ -77,7 +77,7 @@ func test_two_organs_seven_tubes_on_ground() -> void:
 			near(og.tube_len[k], 3.4 - r * 1.2 + (k % 3) * 0.4, 1e-4, "длина по organGeo")
 			ok(og.tube_len[k] > 2.0 and og.tube_len[k] < 4.0, "около 2,5–3,4 м")
 	var t := w.scan_targets()
-	eq(t.size(), 2, "обе губки видны сонару и сканеру")
+	eq(t.size(), o.organs.size(), "все губки видны сонару и сканеру")
 	eq(t[0]["species"], EcoOrgan.ID)
 	near(t[1]["r"], 1.6, 1e-6)
 
@@ -206,7 +206,7 @@ func test_view_one_mesh() -> void:
 	eq(ov.layers, OceanView.LAYER_WORLD, "слой отмели")
 	eq(ov.mesh.get_surface_count(), 1, "один вызов отрисовки")
 	var per_tube := OrganView.SIDES * 2 + OrganView.SIDES * OrganView.RIM_SIDES * 2
-	eq(ov.tris, 2 * EcoOrgan.TUBES * per_tube, "треугольников: %d" % ov.tris)
+	eq(ov.tris, EcoOrgan.SPOTS.size() * EcoOrgan.TUBES * per_tube, "треугольников: %d" % ov.tris)
 	var og := view.organs.organs[1]
 	var top := og.tube_base[3] + Vector3(0, og.tube_len[3], 0)
 	var best := INF

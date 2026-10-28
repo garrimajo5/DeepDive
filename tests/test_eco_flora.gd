@@ -59,7 +59,7 @@ func test_current_matches_ship_current() -> void:
 func test_coral_bushes_on_station_spots() -> void:
 	var w := _world()
 	var co: EcoCoral = _sys(w, EcoCoral)
-	eq(co.bushes.size(), 3, "три куста — места станций огнёвок")
+	eq(co.bushes.size(), 4, "три куста — места станций огнёвок, четвёртый — в Тихой заводи (#831)")
 	for b in co.bushes:
 		near(b.base.y, Seabed.height(b.base.x, b.base.z), 1e-4, "куст на дне")
 		near(b.glow, 1.0, 1e-6, "горит")
@@ -118,12 +118,12 @@ func test_fans_by_coral_and_at_start() -> void:
 	var w := _world()
 	var f: EcoFan = _sys(w, EcoFan)
 	var co: EcoCoral = _sys(w, EcoCoral)
-	eq(f.fans.size(), 4, "у трёх огнецветов и один у старта")
-	for i in 3:
+	eq(f.fans.size(), EcoCoral.BASES.size() + 1, "у каждого огнецвета (с заводью 09) и один у старта")
+	for i in EcoCoral.BASES.size():
 		near(Vector2(f.fans[i].pos.x - co.bushes[i].base.x, f.fans[i].pos.z - co.bushes[i].base.z).length(), 7.0, 1e-3,
 			"в 7 м от огнецвета")
-	near(f.fans[3].pos.x, EcoFan.START.x, 1e-6)
-	near(f.fans[3].pos.z, EcoFan.START.y, 1e-6)
+	near(f.fans[-1].pos.x, EcoFan.START.x, 1e-6)
+	near(f.fans[-1].pos.z, EcoFan.START.y, 1e-6)
 	for fan in f.fans:
 		near(fan.pos.y, Seabed.height(fan.pos.x, fan.pos.z) - 0.05, 1e-4, "на дне")
 	var t := w.scan_targets()
@@ -132,7 +132,7 @@ func test_fans_by_coral_and_at_start() -> void:
 		if x["species"] == "fan":
 			n += 1
 			ok(x["sonar"], "сонар видит веерник")
-	eq(n, 4, "все веерники — цели сонара и сканера")
+	eq(n, f.fans.size(), "все веерники — цели сонара и сканера")
 
 
 func test_fan_stands_across_current_and_turns_after_it() -> void:
@@ -240,7 +240,7 @@ func test_view_one_coral_mesh_and_one_fan_multimesh() -> void:
 	eq(cv.layers, OceanView.LAYER_WORLD, "слой отмели")
 	eq(fv.layers, OceanView.LAYER_WORLD)
 	eq(cv.mesh.get_surface_count(), 1, "все кусты — один меш")
-	eq(fv.multimesh.instance_count, 4, "один MultiMesh на все веера")
+	eq(fv.multimesh.instance_count, view.fans.fans.size(), "один MultiMesh на все веера")
 	var b0 := view.coral.bushes[0]
 	near(cv.verts[0].y, EcoCoralLook.transform(b0).origin.y + EcoCoralLook.verts[0].y * b0.scale, 1e-3, "куст — по дну сцены")
 	near(b0.base.y, Seabed.height(b0.base.x, b0.base.z), 1e-3)
