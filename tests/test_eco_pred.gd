@@ -568,6 +568,12 @@ func test_world_turns_preds() -> void:
 			ok(pr.look.angle_to(EcoPred.aim(pr)) < 0.6, "курс догоняет скорость: %.2f" % pr.look.angle_to(EcoPred.aim(pr)))
 
 
+## Корабль в 60 м от зверя: он в кадре и машет хвостом каждый кадр (ближе EcoPredLook.ANIM_FAR), но корабля не
+## замечает — тихо и без света.
+func _beside(pr: EcoPred.Pred) -> Vector3:
+	return pr.agent.p + Vector3(60, 0, 0)
+
+
 ## Мировая точка кости зверя i в его модели.
 func _bone_at(pv: PredView, i: int, bone: String) -> Vector3:
 	var sk: Skeleton3D = pv.bodies[i].find_children("*", "Skeleton3D", true, false)[0]
@@ -594,10 +600,10 @@ func test_view_models_in_scene() -> void:
 	eq(tris, 3 * (3988 + 986 + 745), "треугольники моделей MOD-011")
 
 	var ship := EcoLink.ShipState.new()
-	ship.pos = FAR
-	for i in 20:
-		view.step(0.05, ship)
 	var pr := view.preds.all[1]
+	for i in 20:
+		ship.pos = _beside(pr)
+		view.step(0.05, ship)
 	var root := pv.bodies[1]
 	var at := pv.trees[1]
 	ok(root.position.distance_to(pr.agent.p) < 1e-4, "место — из мира")
@@ -609,6 +615,7 @@ func test_view_models_in_scene() -> void:
 	var side := 0.0
 	var a0 := root.global_transform.affine_inverse() * _bone_at(pv, 1, "Tail03")
 	for i in 30:
+		ship.pos = _beside(pr)
 		view.step(0.05, ship)
 		var tip := root.global_transform.affine_inverse() * _bone_at(pv, 1, "Tail03")
 		side = maxf(side, absf(tip.x - a0.x))
@@ -653,5 +660,67 @@ func test_view_far_keeps_swimming() -> void:
 	view.pred_view.sync(view.world.time + 0.05, pr.agent.p + Vector3(EcoPredLook.CUE_FAR + 5.0, 0, 0))
 	ok(not view.pred_view.trees[0].get(PredView.P_BITE_ON), "вдали не жуёт")
 	ok(not view.pred_view.trees[0].get(PredView.P_STRIKE_ON), "и не бьёт")
+	view.queue_free()
+	await frames(1)
+
+
+## LOD скелета (issue #850): вблизи — каждый кадр, вдали — набранным временем раз в ANIM_FAR_STEP, спрятанный стоит,
+## пропущенное (не больше LAG_MAX) отдаёт, когда покажется.
+func test_clock_lod() -> void:
+	var c := EcoPredLook.Clock.new()
+	near(c.tick(0.05, 30.0), 0.05, 1e-6, "вблизи — каждый кадр")
+	var far := EcoPredLook.ANIM_FAR + 10.0
+	var got := 0.0
+	var calls := 0
+	for i in 20:
+		var s := c.tick(0.05, far)
+		if s > 0.0:
+			calls += 1
+			got += s
+	eq(calls, 5, "вдали — раз в %.1f с" % EcoPredLook.ANIM_FAR_STEP)
+	near(got + c.lag, 1.0, 1e-5, "время не теряется")
+	var hide := EcoPredLook.HIDE_FAR + 10.0
+	c.lag = 0.0
+	for i in 100:
+		eq(c.tick(0.05, hide), 0.0, "спрятан — дерево стоит")
+	near(c.tick(0.05, 30.0), EcoPredLook.LAG_MAX, 1e-6, "показался — пропущенное разом, не длиннее LAG_MAX")
+	ok(EcoPredLook.CUE_FAR < EcoPredLook.ANIM_FAR, "укусы и удары — только там, где скелет идёт каждый кадр")
+
+
+## Дальше HIDE_FAR хищник спрятан и его скелет не считается; вдали — поза меняется реже кадра.
+func test_view_far_hidden_and_still() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var pv := view.pred_view
+	var pr := view.preds.all[1]
+	var ship := EcoLink.ShipState.new()
+	ship.pos = _beside(pr)
+	view.step(0.05, ship)
+	var sk: Skeleton3D = pv.bodies[1].find_children("*", "Skeleton3D", true, false)[0]
+	var tail := sk.find_bone("Tail03")
+	# спрятан: модель не рисуется, кость хвоста стоит
+	var t0 := view.world.time
+	pv.sync(t0 + 0.05, pr.agent.p + Vector3(EcoPredLook.HIDE_FAR + 20.0, 0, 0))
+	ok(not pv.bodies[1].visible, "дальше %.0f м — спрятан" % EcoPredLook.HIDE_FAR)
+	var rest := sk.get_bone_pose_rotation(tail)
+	for i in range(2, 12):
+		pv.sync(t0 + 0.05 * i, pr.agent.p + Vector3(EcoPredLook.HIDE_FAR + 20.0, 0, 0))
+		ok(sk.get_bone_pose_rotation(tail).is_equal_approx(rest), "спрятанный не машет хвостом")
+	# вдали (между ANIM_FAR и HIDE_FAR): виден, поза меняется не каждый кадр
+	var mid := pr.agent.p + Vector3(EcoPredLook.ANIM_FAR + 20.0, 0, 0)
+	t0 += 0.6
+	pv.sync(t0, mid)  # отдаёт набранное
+	ok(pv.bodies[1].visible, "вдали — виден")
+	var changes := 0
+	var last := sk.get_bone_pose_rotation(tail)
+	for i in range(1, 21):
+		pv.sync(t0 + 0.05 * i, mid)
+		var q := sk.get_bone_pose_rotation(tail)
+		if not q.is_equal_approx(last):
+			changes += 1
+		last = q
+	ok(changes >= 3 and changes <= 6, "поза вдали сменилась %d раз за 20 кадров" % changes)
 	view.queue_free()
 	await frames(1)
