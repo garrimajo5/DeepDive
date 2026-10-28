@@ -217,7 +217,7 @@ func _make_shafts() -> MultiMeshInstance3D:
 	var cone := ArrayMesh.new()
 	cone.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, LightShafts.cone_arrays())
 	var m := ShaderMaterial.new()
-	m.shader = load("res://shaders/light_shafts.gdshader")
+	m.shader = SHAFTS_SHADER
 	m.set_shader_parameter("mask_tex", load("res://textures/luchi/maska.png"))
 	m.set_shader_parameter("noise_tex", load("res://textures/luchi/shum.png"))
 	m.set_shader_parameter("ice_y", Seabed.ICE_Y)
@@ -306,6 +306,16 @@ func _make_snow() -> CPUParticles3D:
 func set_snow_lite(lite: bool) -> void:
 	snow.amount = MarineSnow.amount(lite)
 	snow_mat.set_shader_parameter("spin_k", 0.0 if lite else 1.0)
+
+
+## «Экономно» (#852): лучи сквозь лёд без чтения глубины кадра (`light_shafts_lite.gdshader`) — движку не нужна
+## копия буфера глубины каждый кадр; край шахты у дна и корпуса резче. Параметры материала остаются.
+const SHAFTS_SHADER := preload("res://shaders/light_shafts.gdshader")
+const SHAFTS_LITE := preload("res://shaders/light_shafts_lite.gdshader")
+
+
+func set_shafts_lite(lite: bool) -> void:
+	shafts_mat.shader = SHAFTS_LITE if lite else SHAFTS_SHADER
 
 
 ## Вода по глубине: цвет и плотность тумана, рассеянный свет, свет сквозь лёд. around — где корабль.

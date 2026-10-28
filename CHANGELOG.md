@@ -3,6 +3,10 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-10-28
+- «Экономно»: лучи сквозь лёд без чтения глубины кадра (`light_shafts_lite.gdshader`, общее тело —
+  `light_shafts.gdshaderinc`) — движку не нужна копия буфера глубины каждый кадр; прожектор пишет дальность, конус,
+  плотность и энергию только при изменении (эпик #852, `test_shafts_lite_without_depth`,
+  `test_range_written_only_on_change`).
 - Принят ART-082 (#908): иконки мест 00 «Старт», 09 «Тихая заводь», 10 «Спуск к лесу» — на голостоле и в журнале
   вместо временных значков (`textures/places/start|cove|descent.png`, заметка `docs/concept-art/ikonki-mest-sloj1.md`).
 - По issue #913: карточка маршрута у голостола встаёт правее карты брифинга на экране (`Briefing.card_rect` с
