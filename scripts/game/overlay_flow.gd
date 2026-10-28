@@ -36,6 +36,7 @@ func tutorial_step(dt: float) -> void:
 	if m.tutorial.update(dt, hidden):
 		m.settings.hints_done = true
 		m.settings.write()
+		m.lore.learn(LayerLore.INTRO)   # знание кампании «обучение просмотрено» (#827): загрузка его не повторит
 	var near := m.near_post
 	var target := m.tutorial.pointer_target(m.pilot.seated) if m.tutorial.shown() else ""
 	var edge := m.hint_pointer.show_pointer(target, near == target or (m.at_power and target == "energy"),

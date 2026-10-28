@@ -56,6 +56,12 @@ func active() -> bool:
 	return on and not finished()
 
 
+## Обучение у старта 00 идёт (#827): события слоя ждут его конца — удары и тяга существ не доходят до корпуса,
+## пробоина и сонарная тьма от удара о дно не открываются, подделки в эфире молчат (`Main.events_held`).
+func holds_events() -> bool:
+	return active()
+
+
 ## Событие своего игрока. true — шаг засчитан (началось «Выполнено»).
 func note(ev: Ev) -> bool:
 	if not active() or done_t >= 0.0 or STEPS[step][1] != ev:
