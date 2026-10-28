@@ -130,6 +130,7 @@ func test_scene_surface_skipped_by_action() -> void:
 	main.walker.z = Main.ROUTE_POST.y
 	main.use_post("route")
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	main.use_post("route")
 	main.step(1.0 / 30.0)
 	main.decide("up")

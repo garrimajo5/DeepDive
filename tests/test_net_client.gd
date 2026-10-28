@@ -311,6 +311,7 @@ func test_route_vote_and_result_from_host() -> void:   # маршрут, гол�
 	eq(main.run.waypoint(), Run.place_xz("well"), "точка на голостоле — колодец")
 	for k in Run.ROUTES[2]["places"]:
 		run.update(Run.place_xz(k).x, Run.place_xz(k).y)
+	run.open_vote()   # в слое — переход у 10 (#828)
 	var ops := Run.opinions(30.0, 80.0, false, false, 0)
 	(h_crew[1] as Crew.Member).at_vote = true   # гость у голостола
 	h_ev["r"] = NetSnap.run_state(run, {"deep": [Crew.Role.PILOT], "up": [Crew.Role.BIOLOGIST]}, 9, 0.6,

@@ -72,7 +72,7 @@ func drive(dt: float) -> void:
 			if m.pad.action:
 				m.pad.action = false
 				mate_action(m)
-			if m.at_vote and g.run.done and not g.run.ended:   # голос своей крестовиной
+			if m.at_vote and g.run.voting and not g.run.ended:   # голос своей крестовиной
 				var c := g.ballot.nav(m.get_instance_id(), m.pad.move, true)
 				if c != "":
 					g.ballot.cast(m.get_instance_id(), m.role, c)
@@ -158,7 +158,7 @@ func mate_action(m: Crew.Member) -> String:
 			m.walker.yaw = PI / 2.0
 			m.place(m.walker.x, m.walker.z, m.walker.yaw)
 		"route":
-			if not g.run.done:   # маршрут не пройден: кнопка у поста «Маршрут» листает маршруты — у всех
+			if not g.run.voting:   # голосования нет: кнопка у поста «Маршрут» листает маршруты — у всех
 				g.announce(g.run.cycle())
 				return ""
 			m.at_vote = true

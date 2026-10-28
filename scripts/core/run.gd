@@ -3,7 +3,8 @@ extends RefCounted
 ## Маршрут забега (js/run.js): у голостола экипаж выбирает один из трёх маршрутов по местам отмели, на приборах —
 ## следующая точка и расстояние до неё, на голостоле — отметка точки. Точка пройдена, когда корабль ближе радиуса
 ## места (по горизонтали); порядок не важен, «следующая» — первая непройденная по списку. Все точки пройдены —
-## маршрут закрыт, пора решать: глубже или наверх (голосование — следующая часть этапа «Забег»).
+## маршрут закрыт — можно выбрать следующий. В кампании слоя (#824) пройденный маршрут голосования не открывает:
+## «глубже или наверх» — механика решений (`open_vote`), её откроет переход у 10 (#828).
 ## Места — из карты слоя `LayerMap` (#821; ориентиры ART-005 там же), радиусы — js/world.js.
 
 ## key → [название, (x, z), радиус м]
@@ -32,6 +33,7 @@ var route := -1           ## индекс в ROUTES, −1 — маршрут н�
 var visited: Array[String] = []
 var seen: Array[String] = []   ## места, пройденные за забег (без повторов) — строка «Места» итога
 var done := false
+var voting := false       ## открыто голосование у стола (`open_vote`): маршрут им больше не кончается (#824)
 var depth := 0            ## сколько раз экипаж решил «глубже»: 0 — первый спуск
 var routes := 0           ## маршрутов пройдено за забег
 var ended := false        ## решили «наверх»: забег окончен, на экране итог
@@ -54,6 +56,7 @@ func begin(t: float, cargo_n: int, species_n: int, breaches_n: int) -> void:
 	visited.clear()
 	seen.clear()
 	done = false
+	voting = false
 	depth = 0
 	routes = 0
 	ended = false
@@ -63,9 +66,9 @@ func begin(t: float, cargo_n: int, species_n: int, breaches_n: int) -> void:
 
 ## Подпись поста у голостола.
 func label() -> String:
-	if done:
+	if voting:
 		return "Глубже или наверх?"
-	return "Маршрут: выбрать" if route < 0 else "Маршрут: сменить"
+	return "Маршрут: выбрать" if route < 0 or done else "Маршрут: сменить"
 
 
 ## Нажатие у голостола: следующий маршрут по кругу, прогресс с нуля. Возвращает сообщение для приборов.
@@ -116,7 +119,7 @@ func update(x: float, z: float) -> String:
 			return "Точка маршрута пройдена: %s. Дальше — %s" % [place_name(k), place_name(n)]
 		done = true
 		routes += 1
-		return "Маршрут «%s» пройден: глубже или наверх?" % r["name"]
+		return "Маршрут «%s» пройден. Следующий — у голостола" % r["name"]
 	return ""
 
 
@@ -147,6 +150,7 @@ static func opinions(hull: float, energy: float, hot: bool, in_silt: bool, cargo
 
 ## Открыть голосование: первое нажатие крестовины после того, как её отпустят.
 func open_vote() -> void:
+	voting = true
 	_vote_held = true
 
 
@@ -167,6 +171,7 @@ func go_deeper() -> String:
 	route = -1
 	visited.clear()
 	done = false
+	voting = false
 	return "Глубже: %d-й спуск, хищники чутче на %d %%. Маршрут — у голостола" % [depth + 1,
 		roundi(depth * EcoLink.PRED_PER_DIVE * 100.0)]
 

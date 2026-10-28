@@ -38,8 +38,10 @@ func test_cycle_and_progress() -> void:
 	eq(run.waypoint(), Run.place_xz("bones"))
 	# по пути зашли в третью точку раньше второй — тоже засчитана, следующей остаётся вторая
 	eq(run.update(-170.0, -70.0), "Точка маршрута пройдена: Световой колодец. Дальше — Кости левиафана")
-	eq(run.update(-30.0, -148.0), "Маршрут «Рифовый сад» пройден: глубже или наверх?")
+	eq(run.update(-30.0, -148.0), "Маршрут «Рифовый сад» пройден. Следующий — у голостола")
 	ok(run.done, "маршрут закрыт")
+	ok(not run.voting, "в слое пройденный маршрут голосования не открывает (#824)")
+	eq(run.label(), "Маршрут: выбрать")
 	eq(run.waypoint(), Vector2.INF, "отметки больше нет")
 	eq(run.status(0, 0), "маршрут «Рифовый сад» пройден")
 	eq(run.update(40.0, -50.0), "", "закрытый маршрут молчит")
@@ -97,11 +99,13 @@ func test_vote_and_finish() -> void:
 	eq(run.vote_nav(Vector2i(0, -1)), "", "один голос за нажатие")
 	run.choose(1)
 	run.update(-126.0, 45.0)
-	eq(run.update(162.0, -36.0), "Маршрут «Тёплые трубы» пройден: глубже или наверх?")
+	eq(run.update(162.0, -36.0), "Маршрут «Тёплые трубы» пройден. Следующий — у голостола")
 	eq(run.routes, 1)
+	run.open_vote()
+	ok(run.voting)
 	eq(run.label(), "Глубже или наверх?")
 	eq(run.go_deeper(), "Глубже: 2-й спуск, хищники чутче на 15 %. Маршрут — у голостола")
-	ok(run.route == -1 and not run.done, "маршрут выбирать заново")
+	ok(run.route == -1 and not run.done and not run.voting, "маршрут выбирать заново")
 	var rows := run.finish(100.0 + 7.0 * 60.0, 4, 5, 2, 64.0)
 	ok(run.ended, "забег окончен")
 	eq(rows[0], ["Время под водой", "7 мин"])
@@ -149,7 +153,7 @@ func test_scene_vote() -> void:
 	ok(main.run.done, "маршрут пройден")
 	main.step(1.0 / 30.0)
 	eq(main.overlay.action_label, "Маршрут")
-	main.use_post("route")
+	main.open_vote()   # в слое — переход у 10 (#828)
 	ok(main.at_vote and main.vote_panel.visible, "у голостола — решение")
 	eq(main.vote_panel.rows.size(), 4, "мнения четырёх ролей")
 	var r := main.overlay.router
@@ -164,7 +168,7 @@ func test_scene_vote() -> void:
 	eq(main.run.route, -1, "маршрут заново")
 	main.complete_route()
 	main.vitals.hull = 70.0
-	main.use_post("route")
+	main.open_vote()
 	main.step(1.0 / 30.0)
 	r.begin(1, pad.c - Vector2(0, pad.r * 0.7))   # вверх — наверх
 	main.step(1.0 / 30.0)
@@ -196,7 +200,7 @@ func test_qa_logs_run() -> void:
 	tree.root.add_child(main)
 	await frames(2)
 	var qa := main.start_qa('[{"do": "goto", "x": 1.6, "z": -1.2, "yaw": 90}, {"do": "press", "what": "action"}, ' +
-		'{"do": "route"}, {"do": "press", "what": "action"}, {"do": "log", "note": "решение"}, ' +
+		'{"do": "route"}, {"do": "log", "note": "решение"}, {"do": "wait", "s": 0.1}, ' +
 		'{"do": "hold", "what": "pad", "dir": [0, -1], "s": 0.3}, {"do": "log", "note": "глубже"}]')
 	for i in 60:
 		main.step(1.0 / 30.0)
@@ -204,5 +208,33 @@ func test_qa_logs_run() -> void:
 	ok(log.contains("решение | ") and log.contains("маршрут «Рифовый сад» пройден · решение у голостола"), "в логе — решение")
 	ok(log.contains("глубже | ") and log.contains("спуск 2"), "в логе — второй спуск")
 	eq(main.run.depth, 1)
+	main.queue_free()
+	await frames(1)
+
+
+## Кампания слоя (#824): пройденный маршрут не открывает «глубже или наверх» — кнопка у стола даёт следующий маршрут,
+## голосование и итог не появляются (и у товарища у стола).
+func test_scene_route_done_no_vote() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.walker.x = Main.ROUTE_POST.x
+	main.walker.z = Main.ROUTE_POST.y
+	main.use_post("route")
+	main.complete_route()
+	ok(main.run.done and not main.run.voting, "маршрут пройден, голосования нет")
+	main.step(1.0 / 30.0)
+	main.use_post("route")
+	main.step(1.0 / 30.0)
+	ok(not main.at_vote and not main.vote_panel.visible, "у стола — не решение")
+	eq(main.run.route, 1, "кнопка — следующий маршрут")
+	ok(not main.run.done, "прогресс нового маршрута с нуля")
+	main.complete_route()
+	var mate: Crew.Member = main.add_mate(Main.ROUTE_POST.x + 0.4, Main.ROUTE_POST.y, PI / 2.0, 3, 0)
+	main.crew_flow.mate_action(mate)
+	ok(not mate.at_vote, "товарищ у стола тоже не голосует")
+	eq(main.run.route, 2, "товарищ листает маршруты")
+	main.step(1.0 / 30.0)
+	ok(not main.run.ended and main.result_rows.is_empty(), "итога забега нет")
 	main.queue_free()
 	await frames(1)

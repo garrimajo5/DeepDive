@@ -90,6 +90,7 @@ func test_scene_briefing_at_route_post() -> void:
 	eq(mat.get_shader_parameter("sel_route"), 0, "выбранный маршрут ярче")
 	near(mat.get_shader_parameter("route_len"), Briefing.route_length(0), 1e-4)
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	main.use_post("route")   # маршрут пройден — голосование
 	ok(main.at_vote)
 	main.step(0.3)
@@ -225,6 +226,7 @@ func test_scene_route_card() -> void:
 	ok(not main.route_card.visible, "точка за спиной — карточки нет")
 	main.walker.yaw = PI / 2
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	main.use_post("route")   # голосование — брифинг гаснет
 	main.step(0.3)
 	ok(not main.route_card.visible, "в голосовании карточки нет")

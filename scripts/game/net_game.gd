@@ -134,7 +134,7 @@ func net_send(dt: float) -> void:
 ## у стола, а если голосует один — мнения ролей, как у своего игрока у стола.
 func net_run() -> Dictionary:
 	var ops := []
-	if main.run.done and not main.run.ended:
+	if main.run.voting and not main.run.ended:
 		ops = Run.opinions(main.vitals.hull, main.vitals.energy, main.reactor.hot, main.silt.inside != null, main.samples.cargo.size())
 	var coop := main.vote_ids().size() > 1
 	var marks: Dictionary = main.vote_marks() if coop or main.at_vote else VoteHolo.votes(ops)
