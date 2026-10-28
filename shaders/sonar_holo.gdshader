@@ -25,8 +25,8 @@ uniform float dim = 0.0;      // голосование над столом: р�
 uniform float brief_k = 0.0;
 uniform float brief_scale = 0.0016143;  // Briefing.SCALE: м стола на м мира
 uniform float brief_side = 1.13;
-uniform vec4 segs[8];         // концы отрезков маршрутов на столе: a.x, a.z, b.x, b.z (м)
-uniform vec2 seg_info[8];     // индекс маршрута, путь от начала маршрута до a (м)
+uniform vec4 segs[16];        // концы отрезков маршрутов на столе: a.x, a.z, b.x, b.z (м)
+uniform vec2 seg_info[16];    // индекс маршрута, путь от начала маршрута до a (м)
 uniform int seg_count = 0;
 uniform int sel_route = -1;
 uniform float route_len = 1.0;
@@ -53,7 +53,7 @@ vec3 briefing(vec2 lm, float c, float s) {
 	col += soft * 0.22 * step(abs(edge - half_side), 0.003);
 	float scan = fract(time * 0.22) * half_side * 1.42;   // сканирующее кольцо
 	col += holo * 0.14 * step(abs(length(lm) - scan), 0.004) * step(edge, half_side);
-	for (int i = 0; i < 8; i++) {
+	for (int i = 0; i < 16; i++) {
 		if (i >= seg_count) break;
 		vec2 a = segs[i].xy, b = segs[i].zw;
 		vec2 ab = b - a;
@@ -62,14 +62,15 @@ vec3 briefing(vec2 lm, float c, float s) {
 		float d = length(lm - a - ab * t);
 		float along = seg_info[i].y + t * len;
 		int route = int(seg_info[i].x + 0.5);
+		int kind = route % 3;   // Briefing.dash: тип линии по кругу
 		bool sel = route == sel_route;
 		float w = sel ? 0.007 : 0.0045;
 		float m;
-		if (route == 2) {   // точки
+		if (kind == 2) {   // точки
 			float q = (fract(along / 0.024) - 0.5) * 0.024;
 			m = step(length(vec2(q, d)), w * 1.25);
 		} else {
-			m = step(d, w) * (route == 1 ? step(fract(along / 0.05), 0.62) : 1.0);
+			m = step(d, w) * (kind == 1 ? step(fract(along / 0.05), 0.62) : 1.0);
 		}
 		vec3 lc = sel ? pick : holo * 0.5;
 		if (sel) {

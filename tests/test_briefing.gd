@@ -31,7 +31,9 @@ func test_places_apart_on_table() -> void:
 
 func test_segments_follow_routes() -> void:
 	var segs := Briefing.segments()
-	eq(segs.size(), 4, "1→4→5, 2→3, 5→6")
+	eq(segs.size(), 13, "1→4→5, 2→3, 5→6, 1→7→3→6→10, 9→2→5→4→7, 7→8")
+	for i in Run.ROUTES.size():
+		ok(Briefing.dash(i) in [Briefing.Dash.SOLID, Briefing.Dash.LONG, Briefing.Dash.DOTS], "тип линии у %d" % i)
 	ok(segs.size() <= Briefing.MAX_SEGS, "шейдер держит все отрезки")
 	eq(segs[0]["route"], 0)
 	eq(segs[0]["a"], Briefing.table_xz(Run.place_xz("flower")))
@@ -182,21 +184,23 @@ func test_scene_card_clear_of_places() -> void:
 	main.walker.z = -1.2
 	main.walker.yaw = PI / 2.0
 	main.walker.pitch = deg_to_rad(-38.0)
-	main.run.choose(0)
-	main.step(0.5)
-	await frames(1)
-	ok(main.route_card.visible, "карточка видна")
-	var cam := main.get_viewport().get_camera_3d()
-	var sv := main.sonar_view
-	for i in Briefing.ORDER.size():
-		var k := Briefing.ORDER[i]
-		var ico := _screen_rect(cam, sv.icons[i].global_position, Vector2.ONE * Briefing.ICON_SIZE * 0.35)
-		var l := sv.numbers[i]
-		var c := l.global_position + (cam.global_basis.x * l.offset.x + cam.global_basis.y * l.offset.y) * l.pixel_size
-		var num := _screen_rect(cam, c, Vector2(0.4, 0.5) * l.font_size * l.pixel_size * 0.6)
-		ok(not main.route_card.rect.intersects(ico), "иконка места %d не под карточкой: %s / %s" % [Briefing.NUMBERS[k],
-			ico, main.route_card.rect])
-		ok(not main.route_card.rect.intersects(num), "номер места %d не под карточкой" % Briefing.NUMBERS[k])
+	for r in Run.ROUTES.size():   # у маршрутов слоя 1 (#829) по пять мест — карточка выше
+		main.run.choose(r)
+		main.step(0.5)
+		await frames(1)
+		ok(main.route_card.visible, "карточка видна")
+		var cam := main.get_viewport().get_camera_3d()
+		var sv := main.sonar_view
+		for i in Briefing.ORDER.size():
+			var k := Briefing.ORDER[i]
+			var ico := _screen_rect(cam, sv.icons[i].global_position, Vector2.ONE * Briefing.ICON_SIZE * 0.35)
+			var l := sv.numbers[i]
+			var c := l.global_position + (cam.global_basis.x * l.offset.x + cam.global_basis.y * l.offset.y) * l.pixel_size
+			var num := _screen_rect(cam, c, Vector2(0.4, 0.5) * l.font_size * l.pixel_size * 0.6)
+			ok(not main.route_card.rect.intersects(ico), "маршрут %d: иконка места %d не под карточкой: %s / %s" % [r,
+				Briefing.NUMBERS[k], ico, main.route_card.rect])
+			ok(not main.route_card.rect.intersects(num), "маршрут %d: номер места %d не под карточкой" % [r,
+				Briefing.NUMBERS[k]])
 	ok(Rect2(Vector2.ZERO, Vector2(1600, 720)).encloses(main.route_card.rect), "карточка на экране")
 	main.queue_free()
 	tree.root.size = was

@@ -22,11 +22,18 @@ const PLACES := {
 	"cove": [LayerMap.POINTS["09"]["name"], Vector2(LayerMap.POINTS["09"]["x"], LayerMap.POINTS["09"]["z"]), 40.0],
 	"descent": [LayerMap.POINTS["10"]["name"], Vector2(LayerMap.POINTS["10"]["x"], LayerMap.POINTS["10"]["z"]), 55.0],
 }
-## Маршруты: название, места по порядку, одна строка риска (ART-016, #86).
+## Маршруты: название, места по порядку, одна строка риска (ART-016, #86; слой 1 — #829).
 const ROUTES: Array = [
 	{"id": "reef", "name": "Рифовый сад", "places": ["flower", "bones", "well"], "risk": "много серпохвостов"},
 	{"id": "vents", "name": "Тёплые трубы", "places": ["geyser", "shell"], "risk": "реактор будет греться"},
 	{"id": "edge", "name": "Край отмели", "places": ["well", "drop"], "risk": "оползни: сонарная тьма"},
+	# слой 1 (#829, docs/sloj1-sad.md «Маршруты и связность»): основной путь, петля и ветка к полю — так у мест
+	# 07–10 есть точка цели на сонаре. Новые — после трёх ART-016: индексы старых в сети и в тестах не сдвигаются.
+	{"id": "main", "name": "Путь к спуску", "places": ["flower", "gate", "shell", "drop", "descent"],
+		"risk": "за краем — склон до 290 м"},
+	{"id": "loop", "name": "Петля к террасе", "places": ["cove", "geyser", "well", "bones", "gate"],
+		"risk": "долгий путь: заряд и реактор"},
+	{"id": "field", "name": "Поле у врат", "places": ["gate", "field"], "risk": "дальше поля не идти"},
 ]
 
 var route := -1           ## индекс в ROUTES, −1 — маршрут не выбран
