@@ -146,8 +146,11 @@ static func apply(g: Main, kv: Dictionary) -> void:
 			g.breach.welding = g.debug_weld
 			g.breach_view.apply(1.0 / 60.0)
 		g.breach.time = 0.25
-	if kv.has("ship"):  # ship=x,y,z — поставить корабль (y — высота, глубина со знаком минус)
+	if kv.has("ship"):  # ship=x,y,z[,курс°] — поставить корабль (y — высота, глубина со знаком минус)
 		var p: PackedFloat64Array = kv["ship"].split_floats(",")
+		if p.size() > 3:   # ship=x,y,z,курс° — курс корабля, как шаг «ship» сценария тестера
+			g.helm.yaw = deg_to_rad(p[3])
+			g.helm.turn = 0.0
 		g.park_at(Vector3(p[0], p[1], p[2]))
 	if kv.has("scorch"):  # scorch=n — n следов разряда на дне перед носом через 4 м (первый — старое пятно)
 		var n := int(kv["scorch"])
