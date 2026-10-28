@@ -112,7 +112,7 @@ func sync(t: float, info: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 	for fe in ferns.ferns:
 		for j in EcoFern.LEAVES:
 			EcoMM.put(buffer, (fe.index * EcoFern.LEAVES + j) * STRIDE, Transform3D(EcoFern.leaf_basis(fe, j, t), fe.pos))
-	leaves.multimesh.buffer = buffer
+	EcoMM.send(leaves, buffer)
 
 
 ## Расстановка экземпляра n из буфера.

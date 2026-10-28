@@ -100,7 +100,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 		EcoMM.put(body_buffer, j, EcoCoins.glazun_transform(gz))
 		body_buffer[j + 12] = 1.0; body_buffer[j + 13] = 1.0; body_buffer[j + 14] = 1.0
 		body_buffer[j + 15] = eye_alpha(gz, t)
-	bodies.multimesh.buffer = body_buffer
+	EcoMM.send(bodies, body_buffer)
 
 
 func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3) -> void:
