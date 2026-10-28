@@ -1159,7 +1159,7 @@ func on_eco_event(e: Dictionary) -> void:
 				return   # обучение (#827): присоски энергию не тянут
 			vitals.drain(str(e.get("by", "")), float(e.get("units", 0.0)))
 		EcoLink.MESSAGE:
-			say(str(e.get("text", "")))
+			_world_say(str(e.get("text", "")))
 		EcoLink.VOICE:   # голос во внутренней связи ART-040; просьбу не исполняем — решает игрок
 			if bool(e.get("fake", false)) and events_held():
 				return   # обучение (#827): подделок в эфире нет, свои доклады идут
@@ -1177,9 +1177,16 @@ func on_eco_event(e: Dictionary) -> void:
 			var fresh := scanner.observe(sp, str(e.get("note", "")))
 			var text := str(e.get("text", ""))
 			if text != "":
-				say(text)
+				_world_say(text)
 			elif fresh:
-				say("Новое наблюдение: %s" % Species.called(sp, Species.Case.NOM, scanner.is_scanned(sp)))
+				_world_say("Новое наблюдение: %s" % Species.called(sp, Species.Case.NOM, scanner.is_scanned(sp)))
+
+
+## Строка живого мира на приборы. Пока идёт облёт в начале забега, она не перебивает `Flyby.START_MSG` — игрок ещё
+## ничего не делает, а сцена у старта сразу в луче (#827); наблюдение в журнал при этом записано.
+func _world_say(text: String) -> void:
+	if flyby.kind != Flyby.Kind.START:
+		say(text)
 
 
 ## Идёт обучение у старта 00 (#827, `Tutorial.holds_events`): события слоя ждут его конца.
