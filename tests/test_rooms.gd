@@ -82,3 +82,69 @@ func test_walk_from_bridge_to_cargo() -> void:
 		if i == 2:
 			main.walker.x = 1.8   # обойти реактор по борту
 	ok(Status.join(main.status_parts()).contains("Трюм"), "в трюме: " + Status.join(main.status_parts()))
+
+
+## #846: оболочка отсеков по группам — каждая часть в одной группе, переборки отдельно, всего частей столько же.
+func test_groups_cover_parts() -> void:
+	var g := ShipLayout.groups()
+	var n := 0
+	for k in g:
+		n += (g[k] as Array).size()
+	eq(n, ShipLayout.parts().size(), "каждая часть — в одной группе")
+	for r in [ShipLayout.Room.CORRIDOR, ShipLayout.Room.LAB, ShipLayout.Room.ENGINE, ShipLayout.Room.CARGO]:
+		ok(g.has(r), "%s — своя группа" % ShipLayout.ROOM_NAMES[r])
+	for i in range(1, ShipLayout.DOOR_Z.size()):
+		ok(g.has(ShipLayout.BULKHEAD + i), "переборка люка %d — своя группа" % (i + 1))
+	ok(not g.has(ShipLayout.Room.BRIDGE) and not g.has(ShipLayout.BULKHEAD), "мостик и его стена — в BridgePlan")
+	for p: BridgePlan.Part in g[ShipLayout.Room.CARGO]:
+		ok(p.center.z >= 19.5, "в трюме — части трюма: %s" % p.name)
+
+
+## #846: за закрытым люком отсек не рисуется; щель — уже видно; переборка видна с любой стороны; снаружи — всё.
+func test_group_seen_by_doors() -> void:
+	var l := ShipLayout.new()
+	var R := ShipLayout.Room
+	var B := ShipLayout.BULKHEAD
+	var bridge := Vector3(0, 1.6, -2.0)
+	for g in [R.CORRIDOR, R.LAB, R.ENGINE, R.CARGO, B + 1, B + 2, B + 3]:
+		ok(not ShipLayout.group_seen(g, bridge, l.doors), "с мостика при закрытом люке не видно: %d" % g)
+	var corridor := Vector3(0, 1.6, 5.0)
+	ok(ShipLayout.group_seen(R.CORRIDOR, corridor, l.doors), "свой отсек виден")
+	ok(ShipLayout.group_seen(B + 1, corridor, l.doors), "закрытый люк в лабораторию — его переборка видна")
+	ok(not ShipLayout.group_seen(R.LAB, corridor, l.doors), "лаборатория за закрытым люком — нет")
+	l.doors[0].open = true
+	l.update(0.01)
+	ok(ShipLayout.group_seen(R.CORRIDOR, bridge, l.doors), "люк мостика приоткрыт — коридор виден")
+	ok(ShipLayout.group_seen(B + 1, bridge, l.doors), "и переборка за ним")
+	ok(not ShipLayout.group_seen(R.LAB, bridge, l.doors), "лаборатория — за вторым закрытым люком")
+	var cargo := Vector3(0, 1.6, 22.0)
+	ok(ShipLayout.group_seen(R.CARGO, cargo, l.doors) and not ShipLayout.group_seen(R.ENGINE, cargo, l.doors),
+		"из трюма — трюм, машинное за люком нет")
+	ok(ShipLayout.group_seen(R.ENGINE, Vector3(12, 0, 10), l.doors), "камера с борта — видно всё (окна лаборатории)")
+
+
+## #846: в сцене отсеки за закрытым люком скрыты, открыли люк — видно; материалы у групп общие.
+func test_scene_rooms_hidden_behind_doors() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.step(1.0 / 60.0)
+	var r := main.rooms
+	ok(main.camera.current and ShipLayout.room_at(r.to_local(main.camera.global_position).z) == ShipLayout.Room.BRIDGE,
+		"игрок на мостике")
+	for g in r.meshes:
+		ok(not (r.meshes[g] as MeshInstance3D).visible, "за закрытым люком не рисуется: %s" % r.meshes[g].name)
+	main.layout.doors[0].open = true
+	for i in 10:
+		main.step(1.0 / 60.0)
+	ok(r.meshes[ShipLayout.Room.CORRIDOR].visible, "люк открыт — коридор виден")
+	ok(not r.meshes[ShipLayout.Room.LAB].visible, "лаборатория — за вторым люком")
+	var deck := r.mesh.surface_get_material(0)
+	var shared := false
+	for g in r.meshes:
+		var m: Mesh = (r.meshes[g] as MeshInstance3D).mesh
+		for i in m.get_surface_count():
+			shared = shared or m.surface_get_material(i) == deck
+	ok(shared, "материалы групп — общие с mesh")
+	main.queue_free()
+	await frames(1)
