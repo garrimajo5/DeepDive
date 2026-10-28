@@ -15,8 +15,8 @@ const LINE_PX := 20
 const PAD := Vector2(18, 12)
 const ROW := 28.0
 ## Страница «Связь»: заголовок, слово, подсказка, примечание — кегль и высота строки, px.
-const CODE_PX: Array[int] = [20, 36, 20, 18]
-const CODE_ROW: Array[float] = [28.0, 46.0, 28.0, 26.0]
+const CODE_PX: Array[int] = [20, 36, 20, 20, 18]
+const CODE_ROW: Array[float] = [28.0, 46.0, 26.0, 28.0, 26.0]
 const CODE_GAP := 14.0       ## от маршрута до черты и от черты до страницы «Связь», px
 
 var lines: Array[String] = []   ## маршрут (Briefing.card_lines)
@@ -31,16 +31,19 @@ func _ready() -> void:
 	visible = false
 
 
-## k — доля перехода брифинга (Briefing.Fade), route — Run.route, anchor — точка привязки в мире,
-## word — кодовое слово забега (`Comms.code`; пусто — без страницы «Связь»).
-func show_card(k: float, route: int, cam: Camera3D, anchor: Vector3, word := "") -> void:
+## k — доля перехода брифинга (Briefing.Fade), route — Run.route, holo — оси голограммы в мире (точка привязки
+## Briefing.CARD_ANCHOR и карта `Briefing.map_points` — в них), word — кодовое слово забега (`Comms.code`; пусто — без
+## страницы «Связь»).
+func show_card(k: float, route: int, cam: Camera3D, holo: Transform3D, word := "") -> void:
+	var anchor := holo * Briefing.CARD_ANCHOR
 	var l := Briefing.card_lines(route)
 	var c := Briefing.code_lines(word)
 	var on := k > 0.0 and not (l.is_empty() and c.is_empty()) and cam != null and not cam.is_position_behind(anchor)
 	if not on:
 		visible = false
 		return
-	var r := Briefing.card_rect(cam.unproject_position(anchor), card_size(l, c), get_viewport_rect().size)
+	var r := Briefing.card_rect(cam.unproject_position(anchor), card_size(l, c), get_viewport_rect().size,
+		map_rect(cam, holo))
 	if visible and l == lines and c == code and r == rect and is_equal_approx(k, alpha):
 		return
 	lines = l
@@ -49,6 +52,20 @@ func show_card(k: float, route: int, cam: Camera3D, anchor: Vector3, word := "")
 	alpha = k
 	visible = true
 	queue_redraw()
+
+
+## Прямоугольник карты брифинга с подписями на экране; угол за камерой — пусто (карточка встанет по точке привязки).
+static func map_rect(cam: Camera3D, holo: Transform3D) -> Rect2:
+	var r := Rect2()
+	var first := true
+	for p in Briefing.map_points():
+		var w := holo * p
+		if cam.is_position_behind(w):
+			return Rect2()
+		var s := cam.unproject_position(w)
+		r = Rect2(s, Vector2.ZERO) if first else r.expand(s)
+		first = false
+	return r
 
 
 ## Высота строк маршрута, px (без полей).
@@ -102,6 +119,6 @@ func _draw() -> void:
 		top += CODE_GAP
 	for i in code.size():
 		top += CODE_ROW[i]
-		var col := EDGE if i == 1 else TEXT if i == 2 else DIM
+		var col := EDGE if i == 1 else TEXT if i == 2 or i == 3 else DIM
 		draw_string(font, Vector2(x, top - CODE_ROW[i] * 0.25), code[i], HORIZONTAL_ALIGNMENT_LEFT, -1, CODE_PX[i],
 			Color(col, alpha))
