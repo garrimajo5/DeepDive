@@ -37,6 +37,14 @@ const CHEW_EVERY := 1.5
 const STRIKE_TIME := 0.6
 ## Дальше от корабля (м) — без смены клипов: только плавание (LOD).
 const CUE_FAR := 80.0
+## Дальше ANIM_FAR (м) скелет считается реже: раз в ANIM_FAR_STEP (с) набранным временем — зверь в тумане
+## (как дальние стаи, EcoFish.FAR), пять поз в секунду там не видно (issue #850).
+const ANIM_FAR := 100.0
+const ANIM_FAR_STEP := 0.2
+## Дальше HIDE_FAR (м) зверь спрятан, как гротовик и эхоловец (GrotView.FAR): не рисуется, скелет стоит.
+const HIDE_FAR := 160.0
+## Набранное время отдаётся скелету разом не длиннее (с): фаза плавания вдали не важна, а длинный шаг дерева дорог.
+const LAG_MAX := 1.0
 
 
 ## Куда смотрит голова сейчас (плавный курс EcoPred.turn).
@@ -100,4 +108,21 @@ class Cues:
 			out["bite"] = false
 		elif out["bite"]:
 			bite_at = t
+		return out
+
+
+## Часы скелета одного зверя (LOD анимации, issue #850): вблизи — каждый кадр, вдали — реже набранным временем,
+## спрятанный — стоит, а пропущенное (не больше LAG_MAX) отдаёт, когда снова покажется.
+class Clock:
+	extends RefCounted
+	## Пропущенное время, ещё не отданное дереву анимации (с).
+	var lag := 0.0
+
+	## Сколько времени отдать дереву анимации в этот кадр: dt — шаг кадра, dist — до корабля (м); 0 — дерево не трогать.
+	func tick(dt: float, dist: float) -> float:
+		lag = minf(lag + dt, LAG_MAX)
+		if dist > HIDE_FAR or (dist > ANIM_FAR and lag < ANIM_FAR_STEP - 1e-6) or lag <= 0.0:
+			return 0.0
+		var out := lag
+		lag = 0.0
 		return out
