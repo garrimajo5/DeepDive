@@ -962,7 +962,7 @@ func use_post(id: String) -> void:
 			if run.ended:   # итог, решённый без своего игрока
 				at_vote = true
 				vote_panel.visible = true
-			elif run.done:
+			elif run.voting:   # голосование открыто (переход у 10, #828): вернуться к нему
 				open_vote()
 			else:
 				announce(run.cycle())   # маршрут выбран — гостям тоже
@@ -1729,7 +1729,7 @@ func open_silt() -> void:
 ## Другие члены экипажа идут своим ходоком по своему вводу (`Member.pad`; позже — по сети). Ввод с экрана — только `me`.
 ## Голосование у голостола: голоса тех, кто у стола (Ballot), решение — большинством или по таймеру.
 func _tick_vote(dt: float) -> void:
-	if not run.done or run.ended:
+	if not run.voting or run.ended:
 		ballot.clear()
 		return
 	var ids := vote_ids()

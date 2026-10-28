@@ -206,12 +206,12 @@ static func run_state(run: Run, marks: Dictionary, secs: int, frac: float, tally
 	var seen := PackedByteArray()
 	for k in run.seen:
 		seen.append(keys.find(k))
-	var r := {"ru": PackedInt32Array([run.route, 1 if run.done else 0, run.depth, run.routes, 1 if run.ended else 0,
+	var r := {"ru": PackedInt32Array([run.route, (1 if run.done else 0) | (2 if run.voting else 0), run.depth, run.routes, 1 if run.ended else 0,
 		run.score, secs]), "rf": frac, "rv": vis, "rs": seen,
 		"vm": [PackedByteArray(marks.get("deep", [])), PackedByteArray(marks.get("up", []))]}
 	if tally != "":
 		r["ta"] = tally
-	if run.done and not run.ended:
+	if run.voting and not run.ended:
 		r["op"] = ops
 	if run.ended:
 		r["rr"] = rows
@@ -231,7 +231,8 @@ static func apply_run(r: Variant, run: Run) -> Dictionary:
 			and vm[0] is PackedByteArray and vm[1] is PackedByteArray):
 		return {}
 	run.route = ru[0] if ru[0] >= 0 and ru[0] < Run.ROUTES.size() else -1
-	run.done = ru[1] == 1
+	run.done = (ru[1] & 1) != 0
+	run.voting = (ru[1] & 2) != 0
 	run.depth = maxi(0, ru[2])
 	run.routes = maxi(0, ru[3])
 	run.ended = ru[4] == 1

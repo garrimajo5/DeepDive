@@ -147,8 +147,9 @@ func tick(dt: float) -> void:
 					main.close_breach()
 				else:
 					main.open_breach(c[1])
-			"route":
+			"route":   # маршрут разом и голосование у стола — как его откроет переход у 10 (#828, #824)
 				main.complete_route()
+				main.open_vote()
 			"silt":
 				if c[1]:
 					main.open_silt()

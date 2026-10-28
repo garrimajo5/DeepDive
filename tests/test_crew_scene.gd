@@ -433,6 +433,7 @@ func test_mate_action_vote() -> void:   # у голостола товарищ �
 	main.step(1.0 / 30.0)
 	ok(not m.at_vote, "маршрут не пройден — голосовать рано")
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	m.pad.action = true
 	main.step(1.0 / 30.0)
 	ok(m.at_vote, "товарищ у голосования")
@@ -464,6 +465,7 @@ func test_coop_vote_majority() -> void:   # двое у голостола: ме
 	main.walker.x = Main.ROUTE_POST.x
 	main.walker.z = Main.ROUTE_POST.y
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	var m := main.add_mate(Main.ROUTE_POST.x + 0.2, Main.ROUTE_POST.y + 0.2, 0.0, Crew.Role.BIOLOGIST, 1)
 	m.walker.x = Main.ROUTE_POST.x + 0.2
 	m.walker.z = Main.ROUTE_POST.y + 0.2
@@ -489,6 +491,7 @@ func test_coop_vote_timer_up() -> void:   # второй молчит — по �
 	main.walker.x = Main.ROUTE_POST.x
 	main.walker.z = Main.ROUTE_POST.y
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	var m := main.add_mate(Main.ROUTE_POST.x + 0.2, Main.ROUTE_POST.y + 0.2, 0.0, Crew.Role.ENGINEER, 0)
 	m.walker.x = Main.ROUTE_POST.x + 0.2
 	m.walker.z = Main.ROUTE_POST.y + 0.2

@@ -186,6 +186,7 @@ func test_guest_picks_route_and_gets_vote() -> void:   # кнопка гостя
 		return ev is Dictionary and not NetSnap.apply_run(ev.get("r"), my).is_empty() and my.route == 0),
 		"маршрут хоста — в кадре гостю")
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	pad = Crew.Pad.new()
 	pad.action = true
 	client.send_pad(pad)
