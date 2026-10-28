@@ -28,6 +28,21 @@ const NUMBER_SHIFT := {"flower": Vector2(-0.09, 0.0), "shell": Vector2(0.08, 0.0
 static func number_shift(key: String) -> Vector2:
 	return NUMBER_SHIFT.get(key, Vector2.ZERO)
 
+
+## Дальний ряд мест с поста «Маршрут» (взгляд к −X) мельче ближнего втрое — 5, 8, 2, 9 не читались (#829). Номер
+## растёт к дальнему краю стола: у ближнего (+X) — как был, у дальнего — в 1 + NUMBER_GROW раз. Цель — номер на экране
+## не ниже NUMBER_MIN_PX (1600 × 720, тест test_scene_far_numbers_readable).
+const NUMBER_GROW := 0.7
+const NUMBER_MIN_PX := 16
+## Крупный номер поднят на полвысоты цифры за каждую долю роста — низ цифры не наезжает на иконку, м.
+const NUMBER_LIFT := 0.027
+
+
+## Множитель кегля номера места в точке стола t (Briefing.table_xz).
+static func number_scale(t: Vector2) -> float:
+	var h := SIDE * 0.5
+	return 1.0 + NUMBER_GROW * clampf((h - t.x) / SIDE, 0.0, 1.0)
+
 ## Карточка выбранного маршрута (ART-016): экранная надпись у каждого игрока своя, привязана к точке над правым
 ## (от поста «Маршрут») краем карты — сбоку и чуть выше, не закрывает точки. Точка — в осях голограммы (SonarView).
 const CARD_ANCHOR := Vector3(0.0, 0.3, -0.62)

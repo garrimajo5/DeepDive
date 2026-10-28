@@ -274,6 +274,54 @@ func test_scene_numbers_clear_of_icons() -> void:
 	await frames(1)
 
 
+## #829: с точки сценария 09c-route дальний ряд мест (5, 8, 2, 9) читался плохо — номера мельче ближних втрое, «5» пряталась
+## за иконками ближних мест. Дальние номера крупнее (Briefing.number_scale): каждый не ниже NUMBER_MIN_PX на экране,
+## номера не налезают друг на друга и не уходят
+## под иконки мест ближе к посту.
+func test_scene_far_numbers_readable() -> void:
+	var was := tree.root.size
+	tree.root.size = Vector2i(1600, 720)
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.walker.x = 1.6
+	main.walker.z = -1.2
+	main.walker.yaw = PI / 2.0
+	main.walker.pitch = deg_to_rad(-38.0)
+	main.run.choose(0)
+	main.step(0.5)
+	await frames(1)
+	var cam := main.get_viewport().get_camera_3d()
+	var sv := main.sonar_view
+	var num := {}
+	var ico := {}
+	for i in Briefing.ORDER.size():
+		var k := Briefing.ORDER[i]
+		var l := sv.numbers[i]
+		var c := l.global_position + (cam.global_basis.x * l.offset.x + cam.global_basis.y * l.offset.y) * l.pixel_size
+		num[k] = _screen_rect(cam, c, Vector2(0.4 * l.text.length(), 0.5) * l.font_size * l.pixel_size * 0.6)
+		ico[k] = _screen_rect(cam, sv.icons[i].global_position, Vector2.ONE * Briefing.ICON_SIZE * 0.35)
+	for k in Briefing.ORDER:
+		var h: float = num[k].size.y
+		ok(h >= Briefing.NUMBER_MIN_PX, "номер %d не мельче %d px: %.1f" % [Briefing.NUMBERS[k], Briefing.NUMBER_MIN_PX, h])
+		for o in Briefing.ORDER:
+			if o == k:
+				continue
+			if Run.place_xz(o).x > Run.place_xz(k).x:   # ближняя к посту иконка закрыла бы номер (дальнюю номер перекрывает сам)
+				ok(not num[k].intersects(ico[o]), "номер %d не под иконкой %d" % [Briefing.NUMBERS[k], Briefing.NUMBERS[o]])
+			if Briefing.ORDER.find(o) > Briefing.ORDER.find(k):
+				ok(not num[k].intersects(num[o]), "номера %d и %d не налезают" % [Briefing.NUMBERS[k], Briefing.NUMBERS[o]])
+	main.queue_free()
+	tree.root.size = was
+	await frames(1)
+
+
+func test_number_scale() -> void:
+	near(Briefing.number_scale(Vector2(Briefing.SIDE * 0.5, 0.0)), 1.0, 1e-6, "ближний край стола — как было")
+	near(Briefing.number_scale(Vector2(-Briefing.SIDE * 0.5, 0.0)), 1.0 + Briefing.NUMBER_GROW, 1e-6, "дальний — крупнее")
+	ok(Briefing.number_scale(Vector2(-0.2, 0.0)) > Briefing.number_scale(Vector2(0.2, 0.0)), "чем дальше от поста, тем крупнее")
+
+
 ## ART-040: страница «Связь» карточки брифинга — кодовое слово забега.
 func test_code_lines() -> void:
 	eq(Briefing.code_lines("").size(), 0, "слова нет — страницы нет")
