@@ -876,3 +876,45 @@ func test_echo_fake_reaches_comms() -> void:   # подделка эхоловц
 	eq(main.sonar.count, 0, "импульса корабль сам не дал")
 	main.queue_free()
 	await frames(1)
+
+
+func test_world_packet_parsed_once() -> void:   # #850: гость размечает пакет один раз, не по разу на каждую часть
+	var h := _moss_world()
+	h.add(EcoFish.new())
+	var spots: Array[Vector3] = [Vector3(0, -20, 0)]
+	h.add(EcoKelp.new(null, spots))
+	var rd_homes: Array[Vector2] = [Vector2(0, 0)]
+	var pl_homes: Array[Vector2] = [Vector2(0, 10)]
+	h.add(EcoRaduzh.new(rd_homes))
+	var pl := h.add(EcoPlankton.new(null, null, pl_homes)) as EcoPlankton
+	h.reset()
+	h.run(5.0)
+	pl.clouds[0].cut_at = h.time - 0.2   # облако светится — едет
+	var spot := EcoLink.mosses(h.systems)[0].patches[0].pos
+	var d := EcoLink.pack_world(h.agents, h.systems, Vector3(spot.x, -20, spot.z), 5000.0, h.time)
+	var at := EcoLink.parts(d)
+	for m in [EcoLink.NET_MOSS, EcoLink.NET_SHOAL, EcoLink.NET_COINS, EcoLink.NET_KELP, EcoLink.NET_RADUZH,
+			EcoLink.NET_PLANKTON, EcoLink.NET_TIME]:
+		var from: int = at[-2 * m]
+		var to: int = at[-2 * m + 1]
+		ok(from > 0 and to > from, "часть %d в пакете" % m)
+		eq(int(d[from - 1]), m, "перед частью %d — её метка" % m)
+		eq((to - from) % EcoLink._stride(m), 0, "в части %d целые записи" % m)
+		ok(to == d.size() or int(d[to]) < 0, "часть %d кончается меткой или концом" % m)
+	near(EcoLink.net_time(d, at), h.time, 1e-3, "время из разметки")
+	var g := _moss_world()
+	g.add(EcoFish.new())
+	g.add(EcoKelp.new(null, spots))
+	g.add(EcoRaduzh.new(rd_homes))
+	g.add(EcoPlankton.new(null, null, pl_homes))
+	g.reset(EcoRandom.WORLD_SEED + 3)
+	var before := EcoLink.scans
+	ok(EcoLink.apply_world(g.agents, g.systems, d, g) > 0, "мох поставлен")
+	eq(EcoLink.scans - before, 1, "пакет размечен один раз")
+	eq(EcoLink.parts(PackedFloat32Array())[-2 * EcoLink.NET_MOSS], -1, "пустой пакет — частей нет")
+
+
+func test_world_packet_has_no_empty_parts() -> void:   # метка без записей снимается — пакет как прежде
+	var h := _moss_world()
+	var d := EcoLink.pack_world(h.agents, h.systems, Vector3(5000, 0, 5000))
+	eq(d.size(), 0, "вдали — пустой пакет, без голых меток")
