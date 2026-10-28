@@ -110,7 +110,7 @@ func test_view_one_mesh_no_new_shader() -> void:
 	eq(fv.mm.layers, OceanView.LAYER_WORLD)
 	eq(fv.mm.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "без тени")
 	var mat := fv.mm.multimesh.mesh.surface_get_material(0)
-	eq(ShaderKey.of(mat), ShaderKey.of(CoinsView.build_eye().material), "шейдер глаз глазуна — нового нет")
+	eq(ShaderKey.of(mat), ShaderKey.of(KrabView.build_spine().surface_get_material(1)), "шейдер кончиков игл — нового нет")
 	var ship := EcoLink.ShipState.new()
 	for k in FarLifeView.EVERY:
 		view.step(0.05, ship)
