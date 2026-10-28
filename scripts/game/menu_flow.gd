@@ -7,6 +7,8 @@ extends RefCounted
 ## `main.settings_panel`, `main.lite_offer_panel`, `main.logbook_panel`. Уровень графики ставит `Main._apply_graphics`.
 ## Живёт полем `main.menu_flow`; входы для тестов и `tools/` — тонкие пересылки у `Main`.
 
+const CONTINUE_MSG := "Ковчег на месте сохранения"
+
 var main: Main
 
 
@@ -21,6 +23,8 @@ func _size() -> Vector2:
 ## Главное меню ART-037 поверх сцены (после заставки прогрева — сразу под ней). Игра под меню стоит.
 func open_menu() -> void:
 	main.main_menu.open = true
+	main.save.live = false   # корабль под меню у начала спуска — сохранённое место не перетирать (#823)
+	main.main_menu.can_continue = not main.save.ship.is_empty()
 	if main.menu_panel == null:
 		main.menu_panel = MenuPanel.new()
 		main.menu_panel.version = str(ProjectSettings.get_setting("application/config/version", "?"))
@@ -54,7 +58,12 @@ func menu_step(dt: float = 0.0) -> void:
 		var what := main.main_menu.press(main.main_menu.hit(p, _size()))
 		if what == "dive":
 			close_menu()
+			main.save.live = true
 			main._begin_run()
+			break
+		if what == "continue":
+			close_menu()
+			continue_run()
 			break
 		if what == "crew":
 			main.open_lobby()
@@ -86,8 +95,23 @@ func close_menu() -> void:
 	main.hint.visible = not main.wreck.active() and not main.pause.open
 
 
+## «Продолжить» (#823): забег с сохранённого места — корабль стоит там, курс, корпус и заряд из файла, без облёта.
+func continue_run() -> void:
+	var m := main
+	m.save.live = true
+	m.flyby.stop()   # облёт, начатый при запуске под меню
+	if not SaveGame.ship_apply(m.save.ship, m.helm, m.vitals):
+		m._begin_run()
+		return
+	m.wear.snap(m.vitals.hull)
+	m.window_fog.snap(m.helm.depth(), m.vitals.hull, m.reactor.heat, m.reactor.scram)
+	m._begin_run(false)
+	m.say(CONTINUE_MSG)
+
+
 ## Забег окончен, в главное меню: встать с постов, корабль у начала спуска, без облёта.
 func to_menu() -> void:
+	main.save.live = false   # «Забег будет потерян»: корабль у начала спуска не перетирает сохранённое место
 	main._leave_posts()
 	main._restart()
 	main.flyby.stop()

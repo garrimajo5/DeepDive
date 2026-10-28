@@ -31,9 +31,9 @@ func _draw_menu() -> void:
 	var font := draw.get_theme_default_font()
 	UiStyle.text(draw, font, MainMenu.TITLE, Splash.to_screen(MainMenu.TITLE_AT, size), MainMenu.TITLE_PX * s,
 		MainMenu.INK)
-	for it: Array in MainMenu.ITEMS:
-		var r := MainMenu.screen_rect(it[0], size)
-		var main_btn: bool = it[0] == MainMenu.MAIN_ITEM
+	for it: Array in menu.items():
+		var r := menu.rect(it[0], size)
+		var main_btn: bool = it[0] == menu.main_item()
 		var on: bool = menu.enabled.get(it[0], false)
 		draw.draw_style_box(UiStyle.menu_button(main_btn and on, s, 0.88 if on else 0.6, 1.0 if on else 0.6), r)
 		var col := MainMenu.DARK if main_btn and on else (MainMenu.INK if on else MainMenu.OFF)

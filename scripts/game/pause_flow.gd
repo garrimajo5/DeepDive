@@ -51,6 +51,7 @@ func back_pressed() -> void:
 		if main.wreck.active() or (main.net_client != null and main.drop.blocks()):
 			return
 		main.pause.set_mode("host" if main.net_host != null else ("guest" if main.net_client != null else "solo"))
+		main.pause.enabled["save"] = main.save.enabled()   # тесты и прогон тестера не пишут — кнопка погашена
 	main.pause.back()
 	pause_show()
 
@@ -113,6 +114,8 @@ func pause_step() -> void:
 					main.open_settings()
 				"map":
 					open_map("pause")
+				"save":
+					main.save_now()
 			break
 		main.pause_panel.show_pause(main.pause)
 	r.end_frame()

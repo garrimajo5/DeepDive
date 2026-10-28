@@ -1187,6 +1187,16 @@ func _on_hit(percent: int, kind: String) -> void:
 		say("%s бьёт по корпусу: −%d%%" % [kind, percent])
 
 
+## «Сохранить» в паузе (#823): записать сейчас — груз, виды, журнал и корабль на месте.
+func save_now() -> bool:
+	return save.save(samples, scanner)
+
+
+## «Продолжить» в главном меню (#823) — `MenuFlow.continue_run`.
+func continue_run() -> void:
+	menu_flow.continue_run()
+
+
 ## Главное меню ART-037 поверх сцены — `MenuFlow.open_menu` (#753).
 func open_menu() -> void:
 	menu_flow.open_menu()
@@ -1380,10 +1390,10 @@ func _restart() -> void:
 	_begin_run()
 
 
-func _begin_run() -> void:
+func _begin_run(fly := true) -> void:
 	run.begin(time, samples.cargo.size(), scanner.scanned.size(), breach.count)
 	timeline.begin(time)
-	if intro and settings.intro:
+	if fly and intro and settings.intro:
 		flyby.start(Flyby.Kind.START)   # облёт корабля с борта, затем — глаза на мостике
 		say(Flyby.START_MSG)
 

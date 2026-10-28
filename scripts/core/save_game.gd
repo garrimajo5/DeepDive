@@ -32,6 +32,9 @@ var state := Load.NONE              ## что вышло при последне
 var helm: Helm.Ship = null          ## корабль для ключа "ship"; null — пишется то, что прочитано (`ship`)
 var vitals: Vitals = null           ## корпус и заряд для ключа "ship" (вместе с `helm`)
 var ship := {}                      ## корабль из файла или последней записи (`ship_read`); пусто — не сохранён
+## Корабль в игре — тот, что сохраняем (забег идёт). false — главное меню: корабль у начала спуска не перетирает
+## сохранённое место, запись берёт прочитанный `ship` («Продолжить», #823).
+var live := true
 
 
 ## Снимок того, что сохраняется.
@@ -161,10 +164,10 @@ func save(samples: Samples, scanner: Scanner = null) -> bool:
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
 		return false
-	var raw := ship_snapshot(helm, vitals) if helm and vitals else {}
+	var raw := ship_snapshot(helm, vitals) if helm and vitals and live else {}
 	if not raw.is_empty():
 		ship = ship_read(raw)
-	elif not ship.is_empty():   # корабль не подключён — не терять прочитанный
+	elif not ship.is_empty():   # корабль не подключён или не в забеге — не терять прочитанный
 		raw = {"x": ship["pos"].x, "y": ship["pos"].y, "z": ship["pos"].z, "yaw": ship["yaw"], "hull": ship["hull"],
 			"energy": ship["energy"]}
 	f.store_string(JSON.stringify(snapshot(samples, scanner, expedition, raw)))

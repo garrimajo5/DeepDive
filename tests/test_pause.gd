@@ -33,6 +33,35 @@ func test_layout_fits_phones() -> void:
 	eq(Pause.button_rect(4).end.y, 310.0 + 136.0 * 4 + 112.0, "пятая кнопка по макету (шаг 136 со схемой ART-042)")
 
 
+## «Сохранить» в одиночной паузе (#823): шесть кнопок на экране, «Сохранено» после нажатия, в коопе кнопки нет.
+func test_save_button() -> void:
+	var ids := Pause.items_of("solo").map(func(it: Array) -> String: return it[0])
+	eq(ids, ["resume", "map", "save", "new", "settings", "exit"], "в одиночной паузе — «Сохранить» после схемы")
+	for size: Vector2 in [Vector2(2400, 1080), Vector2(1600, 720), Vector2(1920, 1080)]:
+		var prev := Rect2()
+		for id: String in ids:
+			var r := Pause.screen_rect(id, size)
+			ok(Rect2(Vector2.ZERO, size).encloses(r), "%s на экране %s" % [id, size])
+			if prev.size.x > 0.0:
+				ok(not prev.intersects(r), "кнопки не налезают")
+			prev = r
+	ok(Pause.button_rect(0, 6).position.y > Pause.TITLE_TOP + Pause.TITLE_PX, "первая — под заголовком")
+	ok(not Pause.items_of("host").any(func(it: Array) -> bool: return it[0] == "save"), "у хоста — нет (кооп — #823 ч. 4)")
+	ok(not Pause.items_of("guest").any(func(it: Array) -> bool: return it[0] == "save"), "у гостя — нет")
+	var p := Pause.new()
+	p.back()
+	var it: Array = Pause.SOLO_ITEMS[2]
+	eq(p.label_of(it), "Сохранить")
+	eq(p.press("save"), "save", "«Сохранить» — записать")
+	ok(p.open, "пауза остаётся")
+	eq(p.label_of(it), "Сохранено", "на кнопке — «Сохранено»")
+	p.back()
+	p.back()
+	eq(p.label_of(it), "Сохранить", "новая пауза — снова «Сохранить»")
+	p.enabled["save"] = false
+	eq(p.hit(Pause.screen_rect("save", Vector2(1600, 720)).get_center(), Vector2(1600, 720)), "", "погашенная не берётся")
+
+
 func test_back_and_confirm() -> void:
 	var p := Pause.new()
 	var size := Vector2(1600, 720)
