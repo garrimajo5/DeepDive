@@ -35,6 +35,9 @@ const CARD_GAP := 16.0          ## от точки привязки до лев�
 const CARD_MARGIN := 24.0       ## от краёв экрана, px
 const CARD_TOP_FREE := 150.0    ## сверху — строки приборов, px
 const CARD_RIGHT_FREE := 240.0  ## справа — кнопка действия, px
+## Карта на столе с иконками и номерами над ней — в осях голограммы: квадрат SIDE и высота подписей, м. Карточка
+## ставится мимо её проекции на экран (`map_points`, `card_rect`): на 09c-route она закрывала места 4, 7, 8 (#913).
+const MAP_TOP := 0.24
 const RISK_COLOR := Color("F1A23D")   ## риск — янтарный
 
 
@@ -42,16 +45,17 @@ const RISK_COLOR := Color("F1A23D")   ## риск — янтарный
 ## на весь экипаж, по нему отличают своих от «чужого голоса в эфире» (`Comms.code`). Видно, пока открыт брифинг,
 ## даже если маршрут ещё не выбран.
 const CODE_TITLE := "Связь · кодовое слово забега"
-const CODE_HINT := "Запомните. Спросите код, если сомневаетесь."
+## Подсказка — две строки: одной строкой она была самой широкой и сдвигала карточку на карту (#913).
+const CODE_HINT: Array[String] = ["Запомните.", "Спросите код, если сомневаетесь."]
 const CODE_NOTE := "Один код у всего экипажа"
 
 
-## Строки страницы «Связь»: заголовок, слово, подсказка, примечание. Слова нет (гость ещё не знает код хоста) — пусто.
+## Строки страницы «Связь»: заголовок, слово, подсказка (две строки), примечание. Слова нет (гость ещё не знает код хоста) — пусто.
 static func code_lines(word: String) -> Array[String]:
 	var out: Array[String] = []
 	if word.strip_edges() == "":
 		return out
-	out.append_array([CODE_TITLE, word, CODE_HINT, CODE_NOTE])
+	out.append_array([CODE_TITLE, word, CODE_HINT[0], CODE_HINT[1], CODE_NOTE])
 	return out
 
 
@@ -78,13 +82,28 @@ static func card_lines(i: int) -> Array[String]:
 
 
 ## Где карточка размера size на экране screen, если точка привязки видна в anchor: справа от точки, по её высоте,
-## но внутри экрана — ниже строк приборов и левее кнопки действия.
-static func card_rect(anchor: Vector2, size: Vector2, screen: Vector2) -> Rect2:
+## но внутри экрана — ниже строк приборов и левее кнопки действия. map — прямоугольник карты на экране (`map_points`):
+## карточка встаёт правее него, но не дальше правого предела — тогда на карту заходит разве что её ближний нижний
+## угол (он шире всего в перспективе, мест там нет). Левее карты не ставим: там крестовина (#913).
+static func card_rect(anchor: Vector2, size: Vector2, screen: Vector2, map := Rect2()) -> Rect2:
 	var x := anchor.x + CARD_GAP
 	var y := anchor.y - size.y * 0.5
-	x = clampf(x, CARD_MARGIN, maxf(CARD_MARGIN, screen.x - CARD_RIGHT_FREE - size.x))
+	var right := maxf(CARD_MARGIN, screen.x - CARD_RIGHT_FREE - size.x)
+	if map.has_area():
+		x = maxf(x, map.end.x + CARD_GAP)
+	x = clampf(x, CARD_MARGIN, right)
 	y = clampf(y, CARD_TOP_FREE, maxf(CARD_TOP_FREE, screen.y - CARD_MARGIN - size.y))
 	return Rect2(Vector2(x, y), size)
+
+
+## Углы карты с подписями в осях голограммы: квадрат на столе и он же на высоте номеров (MAP_TOP).
+static func map_points() -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	var h := SIDE * 0.5
+	for y in [0.0, MAP_TOP]:
+		for p in [Vector2(-h, -h), Vector2(h, -h), Vector2(h, h), Vector2(-h, h)]:
+			out.append(Vector3(p.x, y, p.y))
+	return out
 
 
 ## Тип линии маршрута по индексу в Run.ROUTES: 0 — сплошная, 1 — длинный пунктир, 2 — точки.

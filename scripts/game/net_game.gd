@@ -249,7 +249,7 @@ func client_step(dt: float) -> void:
 	main._apply_crew_view()
 	main._place_ship()
 	main._place_camera()
-	main.route_card.show_card(main.brief.k, main.run.route, main.get_viewport().get_camera_3d(), main.sonar_view.to_global(Briefing.CARD_ANCHOR),
+	main.route_card.show_card(main.brief.k, main.run.route, main.get_viewport().get_camera_3d(), main.sonar_view.global_transform,
 		main.comms.code)   # код забега — из кадра хоста (`Comms.apply`)
 	main._update_ui()   # до меток: плашка строки уже на месте этого кадра (#387)
 	main.busy_marks.plate = main.status_rect()

@@ -156,6 +156,52 @@ func test_card_rect() -> void:
 	eq(r.position.x, Briefing.CARD_MARGIN, "не уходит за левый край")
 
 
+## #913: карточка встаёт мимо карты на экране — справа от неё, но не дальше кнопки действия.
+func test_card_rect_beside_map() -> void:
+	var scr := Vector2(1600, 720)
+	var sz := Vector2(330, 300)
+	var map := Rect2(575, 150, 400, 180)
+	var r := Briefing.card_rect(Vector2(800, 240), sz, scr, map)
+	eq(r.position.x, map.end.x + Briefing.CARD_GAP, "точка над картой — карточка правее карты")
+	ok(not r.intersects(map), "карту не закрывает")
+	map = Rect2(575, 150, 600, 180)
+	r = Briefing.card_rect(Vector2(800, 240), sz, scr, map)
+	eq(r.end.x, scr.x - Briefing.CARD_RIGHT_FREE, "справа места мало — у правого предела, не на кнопке действия")
+	eq(Briefing.map_points().size(), 8, "углы карты на столе и на высоте номеров")
+
+
+## #913: с точки сценария 09c-route карточка «Рифового сада» закрывала места 4, 7, 8 на голостоле.
+func test_scene_card_clear_of_places() -> void:
+	var was := tree.root.size
+	tree.root.size = Vector2i(1600, 720)
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.walker.x = 1.6
+	main.walker.z = -1.2
+	main.walker.yaw = PI / 2.0
+	main.walker.pitch = deg_to_rad(-38.0)
+	main.run.choose(0)
+	main.step(0.5)
+	await frames(1)
+	ok(main.route_card.visible, "карточка видна")
+	var cam := main.get_viewport().get_camera_3d()
+	var sv := main.sonar_view
+	for i in Briefing.ORDER.size():
+		var k := Briefing.ORDER[i]
+		var ico := _screen_rect(cam, sv.icons[i].global_position, Vector2.ONE * Briefing.ICON_SIZE * 0.35)
+		var l := sv.numbers[i]
+		var c := l.global_position + (cam.global_basis.x * l.offset.x + cam.global_basis.y * l.offset.y) * l.pixel_size
+		var num := _screen_rect(cam, c, Vector2(0.4, 0.5) * l.font_size * l.pixel_size * 0.6)
+		ok(not main.route_card.rect.intersects(ico), "иконка места %d не под карточкой: %s / %s" % [Briefing.NUMBERS[k],
+			ico, main.route_card.rect])
+		ok(not main.route_card.rect.intersects(num), "номер места %d не под карточкой" % Briefing.NUMBERS[k])
+	ok(Rect2(Vector2.ZERO, Vector2(1600, 720)).encloses(main.route_card.rect), "карточка на экране")
+	main.queue_free()
+	tree.root.size = was
+	await frames(1)
+
+
 func test_scene_route_card() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
@@ -231,7 +277,8 @@ func test_code_lines() -> void:
 	eq(Briefing.code_lines("").size(), 0, "слова нет — страницы нет")
 	eq(Briefing.code_lines("  ").size(), 0)
 	var l := Briefing.code_lines("Иней")
-	eq(l, [Briefing.CODE_TITLE, "Иней", Briefing.CODE_HINT, Briefing.CODE_NOTE], "заголовок, слово, подсказка, примечание")
+	eq(l, [Briefing.CODE_TITLE, "Иней", Briefing.CODE_HINT[0], Briefing.CODE_HINT[1], Briefing.CODE_NOTE],
+		"заголовок, слово, подсказка в две строки, примечание")
 	eq(l.size(), RouteCard.CODE_PX.size(), "кегль на каждую строку")
 	eq(RouteCard.CODE_ROW.size(), RouteCard.CODE_PX.size())
 	for px in RouteCard.CODE_PX:

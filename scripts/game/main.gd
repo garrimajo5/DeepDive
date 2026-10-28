@@ -874,7 +874,7 @@ func _step_view(dt: float) -> void:
 
 ## Шаг: интерфейс — карточка маршрута, приборы, подсказки, связь, рация (подчасти — в худшем кадре лога тестера, #745).
 func _step_ui(dt: float) -> void:
-	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR),
+	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.global_transform,
 		comms.code)   # страница «Связь» — кодовое слово забега (ART-040)
 	clock.lap("интерфейс/маршрут", Time.get_ticks_usec())   # подчасти — в худшем кадре лога тестера (#745)
 	_update_ui()   # до меток: плашка строки уже на месте этого кадра (#387)
