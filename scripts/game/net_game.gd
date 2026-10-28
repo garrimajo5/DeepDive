@@ -123,6 +123,7 @@ func net_send(dt: float) -> void:
 		ev["z"] = NetSnap.scorch(main.scorch, main.time)   # следы разрядов на дне — тот же след у гостя
 		ev["so"] = NetSnap.sonar(main.sonar, main.time)   # импульс и отметки голограммы — те же у гостя
 		ev["c"] = main.comms.pack()   # связь ART-040: код забега, плашка и ход проверки — те же у гостя
+		ev["k"] = main.lore.pack()    # знания слоя 1 (#825) — общие, подключившийся получает их сразу
 		var f := NetSnap.frame(main.net_host.seq, main.time, main.helm, main.reactor, main.vitals, main.light_on, main.crew, ev)
 		f["eco"] = EcoLink.pack_world(main.eco.world.agents, main.eco.world.systems, main.helm.pos, EcoLink.NET_R,
 			main.eco.world.time)   # существа и мох рядом — гостям отдельным пакетом
@@ -308,6 +309,7 @@ func client_frame(f: Dictionary) -> void:
 				main.ocean.set_scorch(main.scorch.uniforms(main.time))   # разряд хоста у дна или новый забег
 			NetSnap.apply_sonar(evd.get("so"), main.sonar, main.time)
 			main.comms.apply(evd.get("c"))
+			main.lore.apply_net(evd.get("k"))
 		var rs := NetSnap.apply_run(evd.get("r") if evd is Dictionary else null, main.run)
 		if not rs.is_empty():   # маршрут хоста уже в run; метки, таймер и итог — для показа
 			main.votes = rs["marks"]
