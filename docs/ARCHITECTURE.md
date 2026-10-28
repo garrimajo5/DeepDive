@@ -63,6 +63,7 @@ Main (main.gd)                    — шаг игры, пилот, посты, �
 | Реактор и энергия | `reactor.gd`, `engine_room.gd` | `power_panel.gd`, `rooms_view.gd` | А |
 | Пробоина (событие) | `breach.gd` | `breach_view.gd` | А |
 | Сонарная тьма (событие) | `silt.gd` | `silt_view.gd`, помехи `sonar_view.gd`, муть `ocean_view.gd` | А |
+| Карта слоя: места и маршруты (один источник координат) | `layer_map.gd` | через `run.gd` — брифинг, журнал | А |
 | Маршрут забега, «глубже или наверх», итог | `run.gd` | точка на голограмме и карта брифинга (`briefing.gd`) `sonar_view.gd`, карточка маршрута `route_card.gd`, решение и итог `vote_panel.gd` | А |
 | Корпус снаружи | `hull_plan.gd`, `hull_mesh.gd` | `hull_view.gd` | А |
 | Прожектор | `searchlight.gd` | `searchlight_view.gd`, `shaders/beam.gdshader` | А |

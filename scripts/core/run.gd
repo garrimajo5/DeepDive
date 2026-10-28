@@ -4,16 +4,16 @@ extends RefCounted
 ## следующая точка и расстояние до неё, на голостоле — отметка точки. Точка пройдена, когда корабль ближе радиуса
 ## места (по горизонтали); порядок не важен, «следующая» — первая непройденная по списку. Все точки пройдены —
 ## маршрут закрыт, пора решать: глубже или наверх (голосование — следующая часть этапа «Забег»).
-## Места — по карте отмели ART-005 (docs/concept-art/karta-otmeli-mesta.json), радиусы — js/world.js.
+## Места — из карты слоя `LayerMap` (#821; ориентиры ART-005 там же), радиусы — js/world.js.
 
 ## key → [название, (x, z), радиус м]
 const PLACES := {
-	"flower": ["Каменный цветок", Vector2(40.0, -50.0), 45.0],
-	"geyser": ["Чёрный курильщик", Vector2(-126.0, 45.0), 45.0],
-	"shell": ["Раковина древних", Vector2(162.0, -36.0), 45.0],
-	"bones": ["Кости левиафана", Vector2(-30.0, -148.0), 45.0],
-	"well": ["Световой колодец", Vector2(-170.0, -70.0), 50.0],
-	"drop": ["Край отмели", Vector2(215.0, 90.0), 55.0],
+	"flower": [LayerMap.POINTS["01"]["name"], Vector2(LayerMap.POINTS["01"]["x"], LayerMap.POINTS["01"]["z"]), 45.0],
+	"geyser": [LayerMap.POINTS["02"]["name"], Vector2(LayerMap.POINTS["02"]["x"], LayerMap.POINTS["02"]["z"]), 45.0],
+	"shell": [LayerMap.POINTS["03"]["name"], Vector2(LayerMap.POINTS["03"]["x"], LayerMap.POINTS["03"]["z"]), 45.0],
+	"bones": [LayerMap.POINTS["04"]["name"], Vector2(LayerMap.POINTS["04"]["x"], LayerMap.POINTS["04"]["z"]), 45.0],
+	"well": [LayerMap.POINTS["05"]["name"], Vector2(LayerMap.POINTS["05"]["x"], LayerMap.POINTS["05"]["z"]), 50.0],
+	"drop": [LayerMap.POINTS["06"]["name"], Vector2(LayerMap.POINTS["06"]["x"], LayerMap.POINTS["06"]["z"]), 55.0],
 }
 ## Маршруты: название, места по порядку, одна строка риска (ART-016, #86).
 const ROUTES: Array = [
