@@ -147,11 +147,12 @@ func test_scene_one_multimesh() -> void:
 	tree.root.add_child(view)
 	view.ground = Seabed.height
 	await frames(1)
-	var dust := view.grazer_view.find_child("Муть", false, false) as MultiMeshInstance3D   # у светляков своя
-	if not ok(dust != null, "муть в сцене"):
+	var dust := view.dust_layer   # #849: муть всех видов — один общий слой
+	if not ok(dust != null and dust.get_parent() == view, "муть в сцене"):
 		view.queue_free()
 		return
-	eq(dust.multimesh.instance_count, EcoGrazerDust.POOL, "один MultiMesh на весь пул")
+	ok(view.grazer_view.dust_view == null, "своего слоя у скребунов в живом мире нет")
+	eq(dust.pools[dust.parts.find(view.grazer_view._dust)], EcoGrazerDust.POOL, "кусок общего слоя на весь пул")
 	eq(dust.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "без тени")
 	var mat := (dust.multimesh.mesh as QuadMesh).material as ShaderMaterial
 	ok(mat.shader == EcoShaders.mist(EcoShaders.Mist.INK).shader, "общий шейдер MIST — шейдеров не прибавилось")

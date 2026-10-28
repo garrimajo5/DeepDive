@@ -101,6 +101,8 @@ var echo: EcoEcho
 var echo_view: EchoView
 ## Жизнь вдали (Б5): тёмные силуэты рыб в мути за 40…125 м — фон, не вид мира (EcoFarLife).
 var far_view: FarLifeView
+## Муть всех видов — один слой и один вызов отрисовки (EcoDustLayer, issue #849).
+var dust_layer := EcoDustLayer.new()
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -130,6 +132,7 @@ var ground: Callable:
 		_rebuild_plankton()
 		EcoRim.apply(self)
 		EcoSurface.apply(self)
+		dust_layer.gather(self)
 
 
 func _init() -> void:
@@ -219,6 +222,8 @@ func _init() -> void:
 	_rebuild_plankton()
 	EcoRim.apply(self)
 	EcoSurface.apply(self)
+	add_child(dust_layer)
+	dust_layer.gather(self)
 
 
 ## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи и просвет листвы погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали нет — меняются
@@ -471,3 +476,4 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	plankton_view.sync(world.time, ship.pos, ship.yaw)
 	echo_view.sync(world.time, ship.pos, ship, current.vel())
 	far_view.sync(world.time, ship.pos, world.ground)
+	dust_layer.sync()

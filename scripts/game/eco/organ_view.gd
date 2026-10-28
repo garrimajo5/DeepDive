@@ -26,6 +26,8 @@ var dust := EcoOrganDust.new()
 var dust_view: MultiMeshInstance3D
 var dust_buffer := PackedFloat32Array()
 var _dust_empty := false
+## Буфер мути для общего слоя EcoDustLayer (#849): свой рисунок губок (pack), сюда — готовые числа.
+var _dust := EcoDustBuffer.new()
 var _packed := PackedByteArray()
 ## Вершины и треугольники всего меша (для тестов).
 var verts := PackedVector3Array()
@@ -68,11 +70,12 @@ func _init(system: EcoOrgan) -> void:
 func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> void:
 	dust.update(organs, t, ship.pos if ship else Vector3.ZERO)
 	var shown := pack(t, ship, flow)
-	dust_view.visible = shown > 0   # пустой слой мути не рисуется (issue #849)
-	if shown == 0 and _dust_empty:
-		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
-	dust_view.multimesh.buffer = dust_buffer
+	_dust.shown = shown
+	_dust.changed = not (shown == 0 and _dust_empty)   # мути нет и в буфере пусто — не грузим заново (issue #133)
 	_dust_empty = shown == 0
+	if _dust.changed:
+		_dust.data = dust_buffer
+	_dust.upload(dust_view)   # пустой слой мути не рисуется (issue #849); в живом мире — общий слой
 
 
 ## Переписать буфер мути (TRANSFORM_3D + цвет): живые облачка — на месте, растаявшие стянуты в точку один раз.

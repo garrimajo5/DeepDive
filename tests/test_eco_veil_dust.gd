@@ -160,11 +160,11 @@ func test_view_dust_mesh() -> void:
 	tree.root.add_child(view)
 	await frames(1)
 	var vv := view.veil_view
-	ok(vv.dust_view != null and vv.dust_view.get_parent() == vv, "у вуалей — MultiMesh «Муть»")
-	eq(vv.dust_view.multimesh.instance_count, EcoVeilDust.POOL)
-	eq(vv.dust_view.layers, OceanView.LAYER_WORLD)
+	ok(vv.dust_view == null and view.dust_layer.parts.has(vv._dust), "у вуалей — MultiMesh «Муть» — кусок общего слоя (#849)")
+	eq(view.dust_layer.pools[view.dust_layer.parts.find(vv._dust)], EcoVeilDust.POOL)
+	eq(view.dust_layer.layers, OceanView.LAYER_WORLD)
 	eq(vv.transform, Transform3D.IDENTITY, "облачка в мировых координатах")
-	var mat := (vv.dust_view.multimesh.mesh as QuadMesh).material as ShaderMaterial
+	var mat := (view.dust_layer.multimesh.mesh as QuadMesh).material as ShaderMaterial
 	ok(mat.shader == EcoShaders.mist(EcoShaders.Mist.INK).shader, "общий шейдер MIST — шейдеров не прибавилось")
 	var ship := EcoLink.ShipState.new()
 	var vl := view.veils.veils[0]

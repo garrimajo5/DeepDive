@@ -157,10 +157,10 @@ func test_view_dust_mesh() -> void:
 	tree.root.add_child(view)
 	await frames(1)
 	var rv := view.remora_view
-	ok(rv.dust_view != null and rv.dust_view.get_parent() == rv, "у присосок — MultiMesh «Муть»")
-	eq(rv.dust_view.multimesh.instance_count, EcoRemoraDust.POOL)
-	eq(rv.dust_view.layers, OceanView.LAYER_WORLD)
-	var mat := (rv.dust_view.multimesh.mesh as QuadMesh).material as ShaderMaterial
+	ok(rv.dust_view == null and view.dust_layer.parts.has(rv._dust), "у присосок — MultiMesh «Муть» — кусок общего слоя (#849)")
+	eq(view.dust_layer.pools[view.dust_layer.parts.find(rv._dust)], EcoRemoraDust.POOL)
+	eq(view.dust_layer.layers, OceanView.LAYER_WORLD)
+	var mat := (view.dust_layer.multimesh.mesh as QuadMesh).material as ShaderMaterial
 	ok(mat.shader == EcoShaders.mist(EcoShaders.Mist.INK).shader, "общий шейдер MIST — шейдеров не прибавилось")
 	var at := view.remoras.remoras[0].p
 	var ship := EcoLink.ShipState.new()
