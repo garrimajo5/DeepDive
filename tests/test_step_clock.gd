@@ -113,3 +113,20 @@ func test_scene_ui_sub_parts() -> void:
 		ok(main.clock.subs.get("интерфейс", {}).has(k), "подчасть интерфейса «%s»: %s" % [k, str(main.clock.subs)])
 	main.queue_free()
 	await frames(1)
+
+
+## Issue #759: `step()` разбит на шаги по системам — части кадра в логе тестера те же, что до разбиения.
+func test_main_step_parts() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.step(1.0 / 30.0)
+	var parts: Array = main.clock.parts.keys()
+	parts.sort()
+	var want := ["виды", "интерфейс", "корабль", "метки и сеть", "мир", "события мира"]
+	eq(parts, want, "части шага: %s" % [parts])
+	var subs: Array = main.clock.subs.get("интерфейс", {}).keys()
+	subs.sort()
+	eq(subs, ["карточка роли", "маршрут", "подсказки", "приборы", "рация", "связь"], "подчасти интерфейса")
+	main.queue_free()
+	await frames(1)
