@@ -60,11 +60,12 @@ func _ready() -> void:
 		l.double_sided = true
 		l.font_size = 48
 		l.outline_size = 10
-		l.pixel_size = 0.0016
+		var sc := Briefing.number_scale(t)   # дальний ряд крупнее (#829)
+		l.pixel_size = 0.0016 * sc
 		l.offset = Briefing.number_shift(k) / l.pixel_size   # сдвиг по экрану (#194)
 		l.modulate = Color("#D5E4E8")
 		l.outline_modulate = Color("#0B1C24")
-		l.position = Vector3(t.x, Briefing.ICON_SIZE * 1.12, t.y)
+		l.position = Vector3(t.x, Briefing.ICON_SIZE * 1.12 + Briefing.NUMBER_LIFT * (sc - 1.0), t.y)
 		l.layers = OceanView.LAYER_SHIP
 		l.visible = false
 		add_child(l)
