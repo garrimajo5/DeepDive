@@ -537,6 +537,7 @@ func test_coins_turn_smoothly_in_world() -> void:
 	var w := _world()
 	w.reset()
 	var c := _coins(w)
+	w.ship.pos = c.schools[1].center + Vector3(0, 30, 0)  # стайка 1 рядом — шагает каждый кадр (дальние — EcoLod)
 	var prev: Array[Vector3] = []
 	for cn in c.coins:
 		prev.append(cn.look)
@@ -547,7 +548,7 @@ func test_coins_turn_smoothly_in_world() -> void:
 			c.schools[1].from = c.schools[1].center + Vector3(1, 0, 0)
 		w.step(0.05)
 		for cn in c.coins:
-			if cn.alive:
+			if cn.alive and cn.school == 1:
 				worst = maxf(worst, prev[cn.index].angle_to(cn.look))
 				ok(absf(cn.look.length() - 1.0) < 1e-3 and absf(cn.bank) <= EcoCoins.BANK_MAX + 1e-4, "нос единичный, крен в пределе")
 			prev[cn.index] = cn.look
