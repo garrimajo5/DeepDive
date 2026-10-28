@@ -218,3 +218,74 @@ func test_scene_saves_ship() -> void:
 	eq(float(data["ship"]["hull"]), 66.0, "корпус в файле")
 	main.queue_free()
 	await frames(1)
+
+
+## Под главным меню (`live = false`) корабль у начала спуска не перетирает сохранённое место (#823).
+func test_menu_keeps_saved_ship() -> void:
+	var s := Samples.new(_flat)
+	var ship := Helm.Ship.new()
+	var v := Vitals.new()
+	var save := SaveGame.new()
+	save.path = TEST_PATH
+	save.helm = ship
+	save.vitals = v
+	ship.pos = Vector3(12.0, -50.0, 40.0)
+	save.save(s)
+	ship.reset()   # выход в меню: корабль у начала спуска
+	save.live = false
+	save.save(s)
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(TEST_PATH))
+	eq(float(data["ship"]["z"]), 40.0, "под меню в файле прежнее место")
+	save.live = true
+	save.save(s)
+	data = JSON.parse_string(FileAccess.get_file_as_string(TEST_PATH))
+	near(float(data["ship"]["z"]), ship.pos.z, 0.01, "в забеге — место корабля в игре")
+
+
+## «Продолжить» в меню — забег с сохранённого места; «Сохранить» в паузе пишет сразу; выход в меню место не трогает.
+func test_scene_continue_and_pause_save() -> void:
+	var f := FileAccess.open(TEST_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify({"v": 1, "cargo": [], "got": [],
+		"ship": {"x": 20.0, "y": -45.0, "z": -30.0, "yaw": 0.5, "hull": 70.0, "energy": 55.0}}))
+	f.close()
+	Main.menu = true
+	Main.intro = true
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	main.save.path = TEST_PATH
+	tree.root.add_child(main)
+	await frames(1)
+	main.settings.intro = true
+	ok(main.main_menu.open and main.main_menu.can_continue, "в меню есть «Продолжить»")
+	eq(main.main_menu.main_item(), "continue", "«Продолжить» — главная кнопка")
+	var r := main.overlay.router
+	var size := main.get_viewport().get_visible_rect().size
+	r.begin(1, main.main_menu.rect("continue", size).get_center())
+	main.step(1.0 / 30.0)
+	r.end(1)
+	ok(not main.main_menu.open, "меню закрыто")
+	ok(main.helm.pos.is_equal_approx(Vector3(20.0, -45.0, -30.0)), "корабль на сохранённом месте")
+	near(main.helm.yaw, 0.5, 1e-4, "курс из файла")
+	near(main.vitals.hull, 70.0, 0.01, "корпус из файла")
+	near(main.vitals.energy, 55.0, 0.01, "заряд из файла")
+	ok(not main.flyby.active(), "без облёта: продолжаем, а не начинаем")
+	main.helm.pos = Vector3(25.0, -45.0, -35.0)
+	main.back_pressed()
+	ok(main.pause.open and main.pause.enabled["save"], "пауза, «Сохранить» работает")
+	r.begin(2, main.pause.rect("save", size).get_center())
+	main.step(1.0 / 30.0)
+	r.end(2)
+	ok(main.pause.open and main.pause.saved, "пауза открыта, на кнопке «Сохранено»")
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(TEST_PATH))
+	eq(float(data["ship"]["z"]), -35.0, "«Сохранить» записал место сразу")
+	main.pause.press("exit")
+	main.pause.press("yes")
+	main.menu_flow.to_menu()
+	main.save.mark()
+	main.save.flush(main.samples, main.scanner)
+	data = JSON.parse_string(FileAccess.get_file_as_string(TEST_PATH))
+	eq(float(data["ship"]["z"]), -35.0, "выход в меню сохранённое место не перетёр")
+	ok(main.main_menu.open and main.main_menu.can_continue, "в меню снова «Продолжить»")
+	main.queue_free()
+	Main.menu = false
+	Main.intro = false
+	await frames(1)
