@@ -148,3 +148,34 @@ func test_scene_rooms_hidden_behind_doors() -> void:
 	ok(shared, "материалы групп — общие с mesh")
 	main.queue_free()
 	await frames(1)
+
+
+## #846, часть 2: модели отсеков (реактор, колбы, кольцо, лебёдка, полки) скрыты вместе с отсеком за закрытым люком;
+## то, что выходит за борт (захват, трос, крышка шлюза), — в корне и не прячется.
+func test_scene_room_props_hidden_behind_doors() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.step(1.0 / 60.0)
+	var r := main.rooms
+	var R := ShipLayout.Room
+	eq(r.props.keys().size(), 3, "наполнение лаборатории, машинного и трюма")
+	ok(r.props[R.ENGINE].is_ancestor_of(r.reactor_rod) and r.props[R.ENGINE].is_ancestor_of(r.valve_wheel),
+		"реактор и вентиль — в машинном")
+	ok(r.props[R.LAB].is_ancestor_of(r.lab_ring) and r.props[R.LAB].is_ancestor_of(r.journal_text)
+		and r.props[R.LAB].is_ancestor_of(r.lab_samples[0]), "кольцо, журнал и колбы — в лаборатории")
+	ok(r.props[R.CARGO].is_ancestor_of(r.winch_drum) and r.props[R.CARGO].is_ancestor_of(r.shelf_jars), "лебёдка и полки — в трюме")
+	for n: Node in [r.winch_hook, r.winch_cable, r.airlock_cover, r.reactor_light]:
+		ok(n.get_parent() == r, "в корне, не прячется: %s" % n.name)
+	for room in r.props:
+		ok(not (r.props[room] as Node3D).visible, "за закрытым люком не рисуется: %s" % r.props[room].name)
+	for i in 3:
+		main.layout.doors[i].open = true
+	for i in 40:
+		main.step(1.0 / 60.0)
+	ok(r.props[R.LAB].visible and r.props[R.ENGINE].visible, "люки открыты — лаборатория и машинное видны")
+	ok(not r.props[R.CARGO].visible, "трюм — за закрытым люком")
+	r.show_from(Vector3(12, 0, 10), main.layout)
+	ok(r.props[R.CARGO].visible, "глаз снаружи — видно всё")
+	main.queue_free()
+	await frames(1)
