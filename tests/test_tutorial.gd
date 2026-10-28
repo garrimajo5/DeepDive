@@ -304,3 +304,75 @@ func test_scene_map_from_hint_and_back() -> void:
 	main.back_pressed()   # не мешает обычной паузе
 	_tick()
 	ok(main.pause.open and not main.ship_map.open, "системная «Назад» — обычная пауза")
+
+
+func test_holds_events_while_active() -> void:   # #827: события слоя ждут конца обучения
+	var t := Tutorial.new()
+	ok(t.holds_events(), "обучение идёт — события ждут")
+	t.on = false
+	ok(not t.holds_events(), "обучение выключено — события идут")
+	t.on = true
+	t.step = Tutorial.STEPS.size()
+	ok(not t.holds_events(), "пройдено — события идут")
+
+
+func test_scene_no_events_during_hints() -> void:   # #827: ни нападения, ни пробоины, ни подделок, пока подсказки
+	Main.hints = true
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	ok(main.tutorial.on and main.events_held(), "первый забег: подсказки, события ждут")
+	var hull := main.vitals.hull
+	main.on_eco_event({"type": EcoLink.HIT, "damage": 0.12, "by": "Серпохвост"})
+	eq(main.vitals.hull, hull, "удар существа не снял корпус")
+	ok(main.breach.active == null, "пробоины нет")
+	var energy := main.vitals.energy
+	main.on_eco_event({"type": EcoLink.DRAIN, "by": "Присоска", "units": 5.0})
+	eq(main.vitals.energy, energy, "присоски не тянут энергию")
+	main.on_eco_event({"type": EcoLink.DRAG, "k": 0.3})
+	eq(main.helm.extra_drag, 0.0, "присоски не тормозят")
+	var n := main.comms.queue.size() + (1 if main.comms.cur != null else 0)
+	main.on_eco_event({"type": EcoLink.VOICE, "role": Crew.Role.PILOT, "text": "Включите прожектор!", "fake": true,
+		"ask": "light"})
+	eq(main.comms.queue.size() + (1 if main.comms.cur != null else 0), n, "подделка в эфир не попала")
+	main.on_eco_event({"type": EcoLink.VOICE, "role": Crew.Role.PILOT, "text": "Курс держим.", "fake": false})
+	eq(main.comms.queue.size() + (1 if main.comms.cur != null else 0), n + 1, "свой доклад идёт")
+	main.vitals.hit(20, "scrape")   # удар о дно на учебном ходу: корпус — да, пробоина и ил — нет
+	ok(main.vitals.hull < hull, "удар о дно снимает корпус")
+	ok(main.breach.active == null, "пробоины от удара о дно нет")
+	eq(main.silt.clouds.size(), 0, "ила от удара нет")
+	main.tutorial.step = Tutorial.STEPS.size()   # обучение пройдено
+	ok(not main.events_held(), "после обучения события идут")
+	hull = main.vitals.hull
+	main.on_eco_event({"type": EcoLink.HIT, "damage": 0.12, "by": "Серпохвост"})
+	ok(main.vitals.hull < hull, "удар доходит")
+	ok(main.breach.active != null, "и пробивает корпус")
+
+
+func test_scene_finish_learns_intro() -> void:   # #827: пройденное обучение — знание кампании
+	Main.hints = true
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.tutorial.step = Tutorial.STEPS.size() - 1
+	ok(main.tutorial.note(Tutorial.Ev.ROUTE), "последний шаг засчитан")
+	_tick(30)
+	ok(main.tutorial.finished(), "пройдено")
+	ok(main.lore.knows(LayerLore.INTRO), "знание «обучение просмотрено»")
+
+
+func test_scene_loaded_campaign_no_hints() -> void:   # #827: загрузка сохранения обучение заново не запускает
+	const PATH := "user://test_tutorial_save.json"
+	var f := FileAccess.open(PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify({"v": SaveGame.VERSION, "lore": [LayerLore.INTRO]}))
+	f.close()
+	SaveGame.default_path = PATH
+	Main.hints = true
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	SaveGame.default_path = ""
+	DirAccess.remove_absolute(PATH)
+	ok(main.lore.knows(LayerLore.INTRO), "знание прочитано из сохранения")
+	ok(not main.tutorial.on, "подсказок нет")
+	ok(not main.events_held(), "события слоя не ждут")
