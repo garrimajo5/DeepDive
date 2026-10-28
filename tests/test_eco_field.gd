@@ -118,3 +118,38 @@ func test_big_homes_off_belt() -> void:
 			big += 1
 			ok(a.home.x >= EcoField.BELT_IN, "%s дома не в поясе (x = %.1f)" % [a.species, a.home.x])
 	ok(big > 0, "крупные в мире есть")
+
+
+func _ship_at(x: float, z: float, ping: bool, sonar_range: float = Sonar.BASE_RANGE) -> EcoLink.ShipState:
+	var s := EcoLink.ShipState.new()
+	s.pos = Vector3(x, -40.0, z)
+	s.sonar_ping = ping
+	s.sonar_range = sonar_range
+	return s
+
+
+func test_rhythm_only_at_08() -> void:   # #833, часть 2: ритм поля ловит только импульс с площадки 08
+	var c := EcoField.CENTER
+	ok(EcoField.hears(_ship_at(c.x, c.y, true)), "импульс на площадке 08 — ритм пойман")
+	ok(EcoField.hears(_ship_at(c.x + 20.0, c.y - 20.0, true)), "у края площадки — тоже")
+	ok(not EcoField.hears(_ship_at(c.x, c.y, false)), "без импульса — нет")
+	ok(not EcoField.hears(_ship_at(c.x + EcoField.SEE + 1.0, c.y, true)), "дальше круга 08 — нет")
+	ok(not EcoField.hears(_ship_at(-280.0, 0.0, true)), "у той же западной кромки, но не у 08 — нет")
+	ok(not EcoField.hears(_ship_at(LayerMap.xz("07").x, LayerMap.xz("07").y, true)), "у террасы врат 07 — нет")
+	ok(not EcoField.hears(_ship_at(c.x + 30.0, c.y, true, 20.0)), "слабый импульс до пояса не достаёт — нет")
+	var e := EcoField.rhythm(_ship_at(c.x, c.y, true))
+	eq(e.get("type"), EcoLink.FIELD, "событие ритма")
+	near(float(e["period"]), EcoField.PERIOD, 1e-6, "период поля")
+	ok(EcoField.rhythm(_ship_at(0.0, 0.0, true)).is_empty(), "у старта события нет")
+
+
+func test_world_sends_rhythm_once_per_ping() -> void:
+	var w := EcoWorld.new()
+	w.ship.pos = Vector3(EcoField.CENTER.x, -40.0, EcoField.CENTER.y)
+	w.step(0.05)
+	ok(w.take_link().filter(func(ev: Dictionary) -> bool: return ev["type"] == EcoLink.FIELD).is_empty(), "без импульса — тихо")
+	w.ship.sonar_ping = true
+	w.ship.sonar_range = Sonar.BASE_RANGE
+	w.step(0.2)
+	eq(w.take_link().filter(func(ev: Dictionary) -> bool: return ev["type"] == EcoLink.FIELD).size(), 1,
+		"один импульс — одно событие, сколько бы ни было подшагов")

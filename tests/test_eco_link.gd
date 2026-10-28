@@ -918,3 +918,18 @@ func test_world_packet_has_no_empty_parts() -> void:   # метка без за�
 	var h := _moss_world()
 	var d := EcoLink.pack_world(h.agents, h.systems, Vector3(5000, 0, 5000))
 	eq(d.size(), 0, "вдали — пустой пакет, без голых меток")
+
+
+func test_field_rhythm_learns_08() -> void:   # #833: ритм поля из мира — знание «поле 08» и строка на приборах
+	var e := EcoLink.field(2.4, "ритм")
+	eq([e["type"], e["period"], e["text"]], [EcoLink.FIELD, 2.4, "ритм"], "поля события")
+	near(float(EcoLink.field(-1.0, "")["period"]), 0.0, 1e-6, "период не отрицательный")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	ok(not main.lore.knows(LayerLore.FIELD08), "до события поле не замечено")
+	main.on_eco_event(e)
+	ok(main.lore.knows(LayerLore.FIELD08), "событие ставит знание")
+	eq(main.message.text, "ритм", "строка мира на приборах")
+	main.queue_free()
+	await frames(1)

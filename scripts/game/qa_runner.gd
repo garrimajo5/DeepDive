@@ -162,6 +162,8 @@ func tick(dt: float) -> void:
 				main.timeline.set_hull(main.time, c[1])   # износ из сценария — не «удар» (#692)
 			"charge":
 				main.vitals.energy = c[1]
+			"ping":   # импульс сонара, как с поста (у площадки 08 — ритм пограничного поля, #833)
+				main.ping_sonar()
 			"wreck":   # корпус разрушен — как от удара (шторка ART-036)
 				main.vitals.hull = 0.0
 				main.timeline.set_hull(main.time, 0.0)   # крушение из сценария — не «удар» в хронометраже

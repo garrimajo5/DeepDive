@@ -789,7 +789,6 @@ func _step_ship(dt: float, h: Holds) -> void:
 		announce(run_msg)
 		timeline.mark(time, run_msg)
 	expedition.visit(helm.pos.x, helm.pos.z)   # журнал ART-047: места и рекорд глубины
-	lore.observe_field(helm.pos.x, helm.pos.z)   # у площадки 08 виден пояс поля — «граница» в журнале (#829)
 	var spot := autosave.update(helm.pos.x, helm.pos.z)   # кампания #823: вошли к месту-стоянке — записать
 	if spot != "" and save.live and not wreck.active() and save_now():
 		say(Autosave.message(spot))
@@ -1170,6 +1169,9 @@ func on_eco_event(e: Dictionary) -> void:
 		EcoLink.STEAL:   # образец сорван с захвата (M.steal в js/manip.js)
 			if samples.steal(int(e.get("sample", -1))):
 				say("Образец украден: %s выхватил его из захвата и уносит в нору" % str(e.get("by", "Кто-то")))
+		EcoLink.FIELD:   # импульс с площадки 08 поймал ритм поля (#833) — «граница» в журнале (#829)
+			lore.learn(LayerLore.FIELD08)
+			_world_say(str(e.get("text", "")))
 		EcoLink.DROP:   # унесённый образец снова на дне (M.drop)
 			samples.drop(int(e.get("sample", -1)), e.get("at", Vector3.ZERO))
 		EcoLink.OBSERVE:   # наблюдение в журнал (handleEvents в js/game.js)
