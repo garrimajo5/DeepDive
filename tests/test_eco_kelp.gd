@@ -70,12 +70,15 @@ func test_two_groves_by_shoals_on_ground() -> void:
 	w.ground = Seabed.height
 	var f := w.add(EcoFish.new()) as EcoFish
 	var k := w.add(EcoKelp.new(f)) as EcoKelp
-	eq(k.groves.size(), 2, "две рощи")
-	eq(k.urchins.size(), 2 * EcoKelp.URCH_N, "по 7 ежей у рощи")
-	for gi in 2:
+	eq(k.groves.size(), 2 + EcoKelp.EXTRA.size(), "две рощи у стай и роща в Тихой заводи (#831)")
+	eq(k.urchins.size(), k.groves.size() * EcoKelp.URCH_N, "по 7 ежей у рощи")
+	eq(k.groves[2].shoal, null, "у рощи заводи своей стаи нет")
+	near(k.groves[2].center.x, EcoKelp.EXTRA[0].x, 1e-4)
+	for gi in k.groves.size():
 		var gr := k.groves[gi]
-		ok(gr.shoal == f.shoals[EcoKelp.SHOALS[gi]], "роща у своей стаи")
-		near(gr.center.x, f.shoals[gi + 1].home.x, 1e-4)
+		if gi < 2:
+			ok(gr.shoal == f.shoals[EcoKelp.SHOALS[gi]], "роща у своей стаи")
+			near(gr.center.x, f.shoals[gi + 1].home.x, 1e-4)
 		eq(gr.stalks.size(), EcoKelp.KELP_N, "34 ленты")
 		near(gr.cover, 1.0, 1e-6, "густая")
 		for s in gr.stalks:
@@ -343,7 +346,7 @@ func test_eco_view_has_kelp() -> void:
 	tree.root.add_child(view)
 	view.ground = Seabed.height
 	ok(view.preds.kelp == view.kelp, "серпохвосты знают про ленточник")
-	eq(view.kelp.groves.size(), 2)
+	eq(view.kelp.groves.size(), 2 + EcoKelp.EXTRA.size())
 	ok(view.kelp_view != null and view.kelp_view.get_parent() == view)
 	var ship := EcoLink.ShipState.new()
 	ship.pos = Helm.Ship.START
