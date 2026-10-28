@@ -6,6 +6,10 @@ extends Node3D
 ## Оболочка отсеков по группам ShipLayout.group_of (#846): группа → меш. Каждый освещают только огни рядом, невидимый
 ## глазу (ShipLayout.group_seen: за закрытым люком) не рисуется — apply.
 var meshes := {}
+## Наполнение отсеков (#846, часть 2): отсек (Room.*) → узел с его моделями — реактор и машинное, колбы, кольцо и
+## стойка лаборатории, лебёдка и полки трюма. Скрыт вместе с оболочкой отсека (show_from). Что выходит за борт и видно
+## снаружи (захват, трос, крышка шлюза, вода в шахте), огни и рои карточек — в корне, их не прячем.
+var props := {}
 ## Вся оболочка одним мешем — не рисуется, держит общие материалы групп (set_relief, set_wear, тесты).
 var mesh: ArrayMesh
 var doors: Array[Node3D] = []      ## створки люков 2…4 (у первого — модель MOD-006 на мостике)
@@ -110,7 +114,7 @@ func _add_reactor() -> void:
 	var root := Node3D.new()
 	root.name = "Реактор"
 	root.position = ShipLayout.REACTOR_POS
-	add_child(root)
+	_props(ShipLayout.Room.ENGINE).add_child(root)
 	for m in ["reaktor-osnova", "reaktor-kozhuh", "reaktor-sterzhen"]:
 		var n: Node3D = load("res://models/%s.glb" % m).instantiate()
 		n.name = m
@@ -180,6 +184,16 @@ func set_lamps(k: float) -> void:
 	set_cabin(-1, 0.0, k)
 
 
+## Узел наполнения отсека room (props): создаётся при первом обращении, в осях отсеков.
+func _props(room: int) -> Node3D:
+	if not props.has(room):
+		var n := Node3D.new()
+		n.name = "Наполнение: " + ShipLayout.ROOM_NAMES[room]
+		add_child(n)
+		props[room] = n
+	return props[room]
+
+
 func _model(file: String, pos: Vector3, parent: Node3D = null) -> Node3D:
 	var n: Node3D = load("res://models/%s.glb" % file).instantiate()
 	n.name = file
@@ -197,8 +211,8 @@ static func _set_layers(n: Node3D, layers: int) -> void:
 ## Лебёдка трюма (MOD-010, tryum.md): опора у кормовой кромки проёма, барабан над центром проёма, трос и захват.
 ## Захват и трос уходят за борт — видны и снаружи (слои корабля и отмели).
 func _add_winch() -> void:
-	_model("lebedka-opora", Samples.BASE)
-	winch_drum = _model("lebedka-baraban", Samples.DRUM)
+	_model("lebedka-opora", Samples.BASE, _props(ShipLayout.Room.CARGO))
+	winch_drum = _model("lebedka-baraban", Samples.DRUM, _props(ShipLayout.Room.CARGO))
 	winch_hook = _model("lebedka-zahvat", Samples.REST)
 	_set_layers(winch_hook, OceanView.LAYER_SHIP | OceanView.LAYER_WORLD)
 	winch_cable = MeshInstance3D.new()
@@ -249,7 +263,7 @@ static func _turn_to(dir: Vector3) -> Quaternion:
 ## Полки трюма (MOD-017, tryum.md): стеллаж у каждого борта; банки с образцами груза — в ячейках HoldShelves.cells().
 func _add_shelves() -> void:
 	for side in HoldShelves.RACKS.size():
-		var rack := _model("stellazh-tryuma", HoldShelves.RACKS[side])
+		var rack := _model("stellazh-tryuma", HoldShelves.RACKS[side], _props(ShipLayout.Room.CARGO))
 		rack.name = "Стеллаж %s" % ["левый", "правый"][side]
 		rack.rotation.y = HoldShelves.rack_yaw(side)
 	shelf_jars = _multi("banka-obraztsa", "Банки на полках")
@@ -292,7 +306,7 @@ func _multi_mesh(mesh: Mesh, label: String, colors: bool) -> MultiMeshInstance3D
 	node.name = label
 	node.multimesh = mm
 	node.layers = OceanView.LAYER_SHIP
-	add_child(node)
+	_props(ShipLayout.Room.CARGO).add_child(node)   # полки — только в трюме
 	return node
 
 
@@ -320,9 +334,10 @@ func shown_shelves() -> Array[int]:
 
 ## Лаборатория (MOD-015, laboratoriya.md): три тумбы со стеклом, в колбах — образцы груза; стойка журнала с экраном.
 func _add_lab() -> void:
+	var room := _props(ShipLayout.Room.LAB)
 	for i in Lab.FLASKS.size():
 		var f: Vector2 = Lab.FLASKS[i]
-		var base := _model("kolba-tumba", Vector3(f.x, 0.0, f.y))
+		var base := _model("kolba-tumba", Vector3(f.x, 0.0, f.y), room)
 		base.name = "Колба %d" % (i + 1)
 		_model("kolba-steklo", Vector3(0.0, Lab.GLASS_Y, 0.0), base)
 		var orb := MeshInstance3D.new()
@@ -334,9 +349,9 @@ func _add_lab() -> void:
 		orb.layers = OceanView.LAYER_SHIP
 		orb.position = Vector3(f.x, Lab.SAMPLE_Y, f.y)
 		orb.visible = false
-		add_child(orb)
+		room.add_child(orb)
 		lab_samples.append(orb)
-	lab_ring = _model("kolco-svetilnik", Lab.RING)
+	lab_ring = _model("kolco-svetilnik", Lab.RING, room)
 	lab_ring.name = "Кольцо-светильник"
 	for mi: MeshInstance3D in lab_ring.find_children("*", "MeshInstance3D", true, false):
 		var mat := mi.mesh.surface_get_material(0)
@@ -344,7 +359,7 @@ func _add_lab() -> void:
 			var own := (mat as BaseMaterial3D).duplicate() as BaseMaterial3D
 			mi.material_override = own
 			_ring_mats.append(own)
-	var stand := _model("zhurnal-stoyka", Vector3(Lab.JOURNAL.x, 0.0, Lab.JOURNAL.y))
+	var stand := _model("zhurnal-stoyka", Vector3(Lab.JOURNAL.x, 0.0, Lab.JOURNAL.y), room)
 	var screen := _model("zhurnal-ekran", Vector3.ZERO, stand)
 	var sm := StandardMaterial3D.new()
 	sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -395,12 +410,13 @@ func set_lab(kinds: Array, lines: PackedStringArray, t: float) -> void:
 
 ## Машинное (MOD-009): вентиль на левой стене, щиток на правой; пар — SteamView у сопла (ART-071).
 func _add_engine_room() -> void:
-	_model("ventil-truba", EngineRoom.VALVE_POS)
-	valve_wheel = _model("ventil-koleso", EngineRoom.VALVE_WHEEL)
+	var room := _props(ShipLayout.Room.ENGINE)
+	_model("ventil-truba", EngineRoom.VALVE_POS, room)
+	valve_wheel = _model("ventil-koleso", EngineRoom.VALVE_WHEEL, room)
 	for mi: MeshInstance3D in valve_wheel.find_children("*", "MeshInstance3D", true, false):
 		mi.material_override = wheel_material()   # без красного (ART-064, #129)
-	var panel := _model("shchitok", EngineRoom.PANEL_POS)
-	panel_lid = _model("shchitok-kryshka", EngineRoom.LID_POS)
+	var panel := _model("shchitok", EngineRoom.PANEL_POS, room)
+	panel_lid = _model("shchitok-kryshka", EngineRoom.LID_POS, room)
 	var bmi: MeshInstance3D = panel.find_children("*", "MeshInstance3D", true, false)[0]
 	_button_mat = (bmi.get_active_material(0) as StandardMaterial3D).duplicate()
 	bmi.material_override = _button_mat
@@ -410,13 +426,17 @@ func _add_engine_room() -> void:
 	add_child(drops)
 
 
-## Оболочка отсеков видна по глазу eye в осях отсеков (ShipLayout.group_seen, #846).
+## Оболочка и наполнение отсеков видны по глазу eye в осях отсеков (ShipLayout.group_seen, #846).
 func show_from(eye: Vector3, layout: ShipLayout) -> void:
 	for g in meshes:
-		var mi: MeshInstance3D = meshes[g]
-		var on := ShipLayout.group_seen(g, eye, layout.doors)
-		if mi.visible != on:
-			mi.visible = on
+		_show(meshes[g], ShipLayout.group_seen(g, eye, layout.doors))
+	for room in props:
+		_show(props[room], ShipLayout.group_seen(room, eye, layout.doors))
+
+
+static func _show(n: Node3D, on: bool) -> void:
+	if n.visible != on:
+		n.visible = on
 
 
 ## Створки люков, крышка шлюза и цвет реактора — каждый кадр.
