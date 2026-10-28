@@ -85,8 +85,8 @@ func test_rooms_cabin_wear_journal() -> void:
 
 	r.set_wear(0.2)
 	var m: ShaderMaterial = null
-	for i in r.mesh_instance.mesh.get_surface_count():
-		var s := r.mesh_instance.mesh.surface_get_material(i) as ShaderMaterial
+	for i in r.mesh.get_surface_count():
+		var s := r.mesh.surface_get_material(i) as ShaderMaterial
 		if s:
 			m = s
 			break

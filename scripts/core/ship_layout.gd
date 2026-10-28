@@ -62,14 +62,62 @@ func update(dt: float) -> void:
 
 ## Видно ли из точки z_a точку z_b вдоль корабля (рация ART-041: табличка «активность» сквозь стены не видна):
 ## в одном отсеке — да, в разных — только если каждый люк между ними открыт хотя бы на SEE_AT.
+## see_at — с какой доли открытия люк не загораживает (отрисовка отсеков — OPEN_SEEN: хоть щель).
 const SEE_AT := 0.3
-static func in_sight(z_a: float, z_b: float, at_doors: Array[Door]) -> bool:
+static func in_sight(z_a: float, z_b: float, at_doors: Array[Door], see_at: float = SEE_AT) -> bool:
 	var lo := minf(z_a, z_b)
 	var hi := maxf(z_a, z_b)
 	for d in at_doors:
-		if d.z > lo and d.z <= hi and d.t < SEE_AT:
+		if d.z > lo and d.z <= hi and d.t < see_at:
 			return false
 	return true
+
+
+## Отрисовка по отсекам (#846): часть parts() — в группе своего отсека (Room.*) или переборки люка DOOR_Z[i]
+## (BULKHEAD + i). Каждая группа — свой меш RoomsView: его освещают только огни рядом, невидимый не рисуется.
+const BULKHEAD := 10
+## Люк открыт хоть на щель — за ним видно.
+const OPEN_SEEN := 0.001
+## Глаз внутри корабля (мостик и отсеки, оси корабля): иначе — камера с борта, отсеки видны в окна лаборатории.
+const INSIDE := AABB(Vector3(-4.3, -0.5, -7.0), Vector3(8.6, 4.2, 31.2))
+
+
+static func group_of(part: BridgePlan.Part) -> int:
+	if part.name == "Переборка" or part.name == "Над люком":
+		for i in DOOR_Z.size():
+			if absf(part.center.z - DOOR_Z[i]) < 0.01:
+				return BULKHEAD + i
+	return room_at(part.center.z)
+
+
+## Части parts() по группам group_of: группа → Array[BridgePlan.Part].
+static func groups() -> Dictionary:
+	var out := {}
+	for part in parts():
+		var g := group_of(part)
+		if not out.has(g):
+			var a: Array[BridgePlan.Part] = []
+			out[g] = a
+		(out[g] as Array).append(part)
+	return out
+
+
+## Видна ли группа глазу eye (оси корабля): отсек — если люки от глаза до ближней его точки хоть чуть открыты;
+## переборка — если виден отсек с любой её стороны; глаз снаружи (не в INSIDE) — видно всё.
+static func group_seen(group: int, eye: Vector3, at_doors: Array[Door]) -> bool:
+	if not INSIDE.has_point(eye):
+		return true
+	if group >= BULKHEAD:
+		var z: float = DOOR_Z[group - BULKHEAD]
+		return room_seen(room_at(z - 0.1), eye, at_doors) or room_seen(room_at(z + 0.1), eye, at_doors)
+	return room_seen(group, eye, at_doors)
+
+
+static func room_seen(room: int, eye: Vector3, at_doors: Array[Door]) -> bool:
+	if room == Room.BRIDGE:
+		return true
+	var a: Array = ROOMS[room]
+	return in_sight(eye.z, clampf(eye.z, float(a[0]) + 0.01, float(a[1]) - 0.01), at_doors, OPEN_SEEN)   # точка внутри отсека: люк на границе считается с обеих сторон
 
 
 static func room_at(z: float) -> int:

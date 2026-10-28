@@ -3,7 +3,11 @@ extends Node3D
 ## Отсеки за мостиком (ShipLayout): коридор, лаборатория, машинное с реактором (MOD-008), трюм; створки люков.
 ## Всё на слое корабля, свет — лампы отсеков; стержень реактора светится цветом состояния.
 
-var mesh_instance: MeshInstance3D
+## Оболочка отсеков по группам ShipLayout.group_of (#846): группа → меш. Каждый освещают только огни рядом, невидимый
+## глазу (ShipLayout.group_seen: за закрытым люком) не рисуется — apply.
+var meshes := {}
+## Вся оболочка одним мешем — не рисуется, держит общие материалы групп (set_relief, set_wear, тесты).
+var mesh: ArrayMesh
 var doors: Array[Node3D] = []      ## створки люков 2…4 (у первого — модель MOD-006 на мостике)
 var reactor_rod: MeshInstance3D
 var _rod_mat: StandardMaterial3D
@@ -60,12 +64,17 @@ var _shelf_kinds: Array[int] = []
 
 
 func _ready() -> void:
-	mesh_instance = MeshInstance3D.new()
-	mesh_instance.name = "Отсеки"
-	mesh_instance.mesh = BridgeView.build_mesh(ShipLayout.parts(), KITS, KIT_DIR)
-	mesh_instance.layers = OceanView.LAYER_SHIP
-	add_child(mesh_instance)
-	plafond_mat = BridgeView.plafond_material(mesh_instance.mesh)
+	var mats := {}
+	mesh = BridgeView.build_mesh(ShipLayout.parts(), KITS, KIT_DIR, mats)
+	var groups := ShipLayout.groups()
+	for g in groups:
+		var mi := MeshInstance3D.new()
+		mi.name = "Отсеки: " + (ShipLayout.ROOM_NAMES[g] if g < ShipLayout.BULKHEAD else "переборка %d" % (g - ShipLayout.BULKHEAD + 1))
+		mi.mesh = BridgeView.build_mesh(groups[g], KITS, KIT_DIR, mats)
+		mi.layers = OceanView.LAYER_SHIP
+		add_child(mi)
+		meshes[g] = mi
+	plafond_mat = BridgeView.plafond_material(mesh)
 	for l in CabinLight.of(false):   # C1, L1, E1, H1 по ART-064
 		var o := BridgeView.cabin_light(l)
 		add_child(o)
@@ -121,8 +130,8 @@ func _add_reactor() -> void:
 ## Яркость экрана журнала при помехах (Vitals.screen_k).
 ## «Экономно» (ART-044): false — карты нормалей и ORM отсеков не читаются, цвет остаётся (ключ снимка relief=0).
 func set_relief(on: bool) -> void:
-	for i in mesh_instance.mesh.get_surface_count():
-		var m := mesh_instance.mesh.surface_get_material(i) as ShaderMaterial
+	for i in mesh.get_surface_count():
+		var m := mesh.surface_get_material(i) as ShaderMaterial
 		if m:
 			m.set_shader_parameter("relief", on)
 
@@ -139,7 +148,7 @@ func set_wear(loss: float) -> void:
 	if loss == _wear_loss:
 		return
 	_wear_loss = loss
-	BridgeView.wear_on(mesh_instance.mesh, loss)
+	BridgeView.wear_on(mesh, loss)
 
 
 ## Огни отсеков по ART-064 (CabinLight): breach_room — отсек открытой пробоины (−1 — нет), t — часы ритма,
@@ -401,6 +410,15 @@ func _add_engine_room() -> void:
 	add_child(drops)
 
 
+## Оболочка отсеков видна по глазу eye в осях отсеков (ShipLayout.group_seen, #846).
+func show_from(eye: Vector3, layout: ShipLayout) -> void:
+	for g in meshes:
+		var mi: MeshInstance3D = meshes[g]
+		var on := ShipLayout.group_seen(g, eye, layout.doors)
+		if mi.visible != on:
+			mi.visible = on
+
+
 ## Створки люков, крышка шлюза и цвет реактора — каждый кадр.
 func apply(layout: ShipLayout, r: Reactor, lock: Airlock = null, engine: EngineRoom = null) -> void:
 	if engine:
@@ -411,6 +429,9 @@ func apply(layout: ShipLayout, r: Reactor, lock: Airlock = null, engine: EngineR
 		airlock_cover.transform = lock.cover_pose()
 	for i in doors.size():
 		doors[i].position.x = layout.doors[i + 1].offset()
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
+	if cam:
+		show_from(to_local(cam.global_position), layout)
 	var c := ShipLayout.rod_color(r)
 	_rod_mat.albedo_color = c
 	_rod_mat.emission = c

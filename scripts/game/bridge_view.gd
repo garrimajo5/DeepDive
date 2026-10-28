@@ -414,7 +414,10 @@ func set_relief(on: bool) -> void:
 
 
 ## kits — комплекты карт по краскам (KITS мостика, RoomsView.KITS отсеков) из папки dir; пусто — заливка.
-static func build_mesh(parts: Array[BridgePlan.Part] = BridgePlan.parts(), kits: Dictionary = {}, dir: String = KIT_DIR) -> ArrayMesh:
+## mats — общие материалы по краскам (#846: меши отсеков RoomsView рисуются отдельно, материалы одни): краска уже
+## есть — её материал, нет — новый кладётся туда.
+static func build_mesh(parts: Array[BridgePlan.Part] = BridgePlan.parts(), kits: Dictionary = {}, dir: String = KIT_DIR,
+		mats: Dictionary = {}) -> ArrayMesh:
 	var by_paint := {}
 	for part in parts:
 		if not by_paint.has(part.paint):
@@ -427,8 +430,10 @@ static func build_mesh(parts: Array[BridgePlan.Part] = BridgePlan.parts(), kits:
 		var st: SurfaceTool = by_paint[paint]
 		st.generate_tangents()
 		st.commit(mesh)
-		var km := kit_material(paint, kits, dir) if not kits.is_empty() else null
-		mesh.surface_set_material(mesh.get_surface_count() - 1, km if km else material(paint))
+		if not mats.has(paint):
+			var km := kit_material(paint, kits, dir) if not kits.is_empty() else null
+			mats[paint] = km if km else material(paint)
+		mesh.surface_set_material(mesh.get_surface_count() - 1, mats[paint])
 	return mesh
 
 
