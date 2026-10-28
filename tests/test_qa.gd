@@ -96,6 +96,8 @@ func test_scene_runs_scenario() -> void:
 	var windows_hidden: Array[String] = []   # конденсат 33/33a: окна не заслонены товарищами
 	var crowded: Array[String] = []   # issue #602: на снимке товарищ вплотную к камере — кадр закрыт его головой
 	var mate_weld_seen := false   # 26b: шов в кадре, его варит товарищ
+	var field_known := false   # 32e2: импульс с площадки 08 поймал ритм поля (#833)
+	ok(not main.lore.knows(LayerLore.FIELD08), "до прогона поле 08 не замечено")
 	for i in 4800:  # 160 с игры (сценарий идёт ~148 с)
 		# снимок берёт уже нарисованный кадр — камеру до шага, в котором он снят
 		var cam := main.camera
@@ -136,6 +138,7 @@ func test_scene_runs_scenario() -> void:
 		main.step(1.0 / 30.0)
 		no_answer = no_answer or (main.address.open and main.address.hint() == AddressScreen.NO_ANSWER)
 		sat = sat or main.pilot.seated
+		field_known = field_known or main.lore.knows(LayerLore.FIELD08)
 		ahead = maxf(ahead, z0 - main.helm.pos.z)
 		for k in range(shots, qa.log_lines.size()):   # #48: на 09-sonar в кадре голостол, на 10-zap — рычаг
 			if qa.log_lines[k].begins_with("скриншот 09-sonar"):
@@ -174,6 +177,7 @@ func test_scene_runs_scenario() -> void:
 	eq(windows_hidden, [] as Array[String], "на 33/33a окна не заслоняют товарищи (отчёт 2026-10-26-1233)")
 	ok(mate_weld_seen, "на 26b-mate-weld товарищ варит шов в кадре (#602)")
 	ok(sat, "по сценарию садились за штурвал")
+	ok(field_known, "32e2: импульс у 08 — ритм поля, знание «поле 08»")
 	ok(not main.pilot.seated, "и встали")
 	ok(ahead > 20.0, "корабль прошёл вперёд: %.1f м" % ahead)
 	ok(FileAccess.file_exists(QaRunner.OUT + "/done.txt"), "done.txt записан")

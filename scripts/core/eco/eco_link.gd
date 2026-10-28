@@ -80,6 +80,10 @@ const PRED_PER_DIVE := 0.15
 ##     код» отвечает чужим словом («Код не совпал» → «Это был не наш»), а с "silent": true — молчит («Нет ответа»,
 ##     не разоблачение). ask — о чём просит голос: "ping" — импульс сонара, "light" — свет, "" — ни о чём. Корабль
 ##     просьбу не исполняет сам; за исполненную просьбу подделки наказывает мир (по ShipState.sonar_ping / light_on).
+## {"type": FIELD, "period": 2.4, "text": "…"}                            — импульс сонара с площадки 08 поймал ритм
+##     пограничного поля (`EcoField.rhythm`, #833): period — с между ударами, text — строка на приборы. Корабль
+##     ставит знание «поле 08 замечено» (`LayerLore.FIELD08`) и показывает строку. Приходит только в шаг импульса
+##     у 08 — в других местах отмели не приходит.
 const HIT := "hit"
 const DRAIN := "drain"
 const NEAR := "near"
@@ -89,6 +93,7 @@ const OBSERVE := "observe"
 const STEAL := "steal"
 const DROP := "drop"
 const VOICE := "voice"
+const FIELD := "field"
 
 
 static func hit(by: String, damage: float, at: Vector3) -> Dictionary:
@@ -119,6 +124,10 @@ static func observe(species: String, note: String, text: String = "") -> Diction
 
 static func voice(role: int, text: String, fake := false, ask := "", silent := false) -> Dictionary:
 	return {"type": VOICE, "role": clampi(role, 0, 3), "text": text, "fake": fake, "ask": ask, "silent": silent}
+
+
+static func field(period: float, text: String) -> Dictionary:
+	return {"type": FIELD, "period": maxf(period, 0.0), "text": text}
 
 
 static func steal(by: String, sample: int) -> Dictionary:

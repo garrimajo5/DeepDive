@@ -23,6 +23,15 @@ const BELT_OUT := -300.0
 ## Крупные подвижные виды — длиннее ≈ 3 м: серпохвост, стеклоуст, ледокрыл, фонарная вуаль, гротовик.
 const BIG: Array[String] = ["pred", "eel", "ray", "veil", "grot"]
 
+## Ритм поля на приборах (#833, часть 2; #818, раздел 08): импульс сонара с площадки 08 (ближе `SEE` м к `CENTER`
+## по x, z, а пояс — в дальности импульса) ловит ровное биение поля — мир шлёт кораблю `EcoLink.FIELD`, корабль
+## ставит знание «поле 08 замечено» (`LayerLore.FIELD08`) и пишет строку на приборы. В других местах отмели — и у
+## той же западной кромки — импульс ритма не ловит: с площадки поле видно сбоку, вдоль пояса. Выхода и генератора нет.
+const SEE := 40.0
+## Период биения поля (с): ровный, без случая — у хоста и гостя одно и то же.
+const PERIOD := 2.4
+const RHYTHM_TEXT := "Сонар: на западе ровный ритм — удар каждые 2,4 с. Мелкие проходят, крупные у пояса разворачиваются"
+
 
 static func is_big(species_id: String) -> bool:
 	return BIG.has(species_id)
@@ -44,3 +53,17 @@ static func turn_back(a: EcoAgent) -> bool:
 	if a.goal.x < BELT_IN:
 		a.goal.x = 2.0 * BELT_IN - a.goal.x
 	return true
+
+
+## Импульс сонара корабля ловит ритм поля: только с площадки 08 и только если пояс в дальности импульса.
+static func hears(ship: EcoLink.ShipState) -> bool:
+	if not ship.sonar_ping:
+		return false
+	if Vector2(ship.pos.x, ship.pos.z).distance_to(CENTER) >= SEE:
+		return false
+	return ship.pos.x - ship.sonar_range <= BELT_IN
+
+
+## Событие для корабля, если импульс ловит ритм; иначе {}.
+static func rhythm(ship: EcoLink.ShipState) -> Dictionary:
+	return EcoLink.field(PERIOD, RHYTHM_TEXT) if hears(ship) else {}

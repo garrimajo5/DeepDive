@@ -94,6 +94,9 @@ func step(dt: float) -> void:
 		last_ping = time
 		for s in systems:
 			s.on_ping(self, ship.pos)
+		var f := EcoField.rhythm(ship)   # ритм пограничного поля — только с площадки 08 (#833)
+		if not f.is_empty():
+			_link.append(f)
 	if ship.zap:
 		var r := ship.zap_radius if ship.zap_radius > 0.0 else ZAP_RADIUS
 		for s in systems:
