@@ -70,7 +70,7 @@ func test_two_groves_by_shoals_on_ground() -> void:
 	w.ground = Seabed.height
 	var f := w.add(EcoFish.new()) as EcoFish
 	var k := w.add(EcoKelp.new(f)) as EcoKelp
-	eq(k.groves.size(), 2 + EcoKelp.EXTRA.size(), "две рощи у стай и роща в Тихой заводи (#831)")
+	eq(k.groves.size(), 2 + EcoKelp.EXTRA.size(), "две рощи у стай, роща в Тихой заводи и две у врат 07 (#831)")
 	eq(k.urchins.size(), k.groves.size() * EcoKelp.URCH_N, "по 7 ежей у рощи")
 	eq(k.groves[2].shoal, null, "у рощи заводи своей стаи нет")
 	near(k.groves[2].center.x, EcoKelp.EXTRA[0].x, 1e-4)

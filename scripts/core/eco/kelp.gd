@@ -12,8 +12,9 @@ const ID := "ezh"
 ## Рощи — у этих стай светляков (E.shoals[gi + 1]); стай должно быть хотя бы три.
 const SHOALS: Array[int] = [1, 2]
 const MIN_SHOALS := 3
-## Рощи без своей стаи (x, z): Тихая заводь 09 (EcoCove, #831) — ежи там пасутся, а прятаться в ней некому.
-const EXTRA: Array[Vector2] = [EcoCove.KELP]
+## Рощи без своей стаи (x, z): Тихая заводь 09 (EcoCove, #831) — ежи там пасутся, а прятаться в ней некому;
+## две у террасы врат 07 — рама позади арки (EcoGate, #831).
+const EXTRA: Array[Vector2] = [EcoCove.KELP, EcoGate.KELP[0], EcoGate.KELP[1]]
 ## Лент в роще и радиус рощи (KELP_N, KELP_R); ежей у рощи (URCH_N).
 const KELP_N := 34
 const KELP_R := 7.0
@@ -82,6 +83,8 @@ class Grove:
 	var msg_cd := 0.0
 	var graze_cd := 0.0
 	var stalks: Array[Stalk] = []
+	## Ленты рощи пора переписать в буфер вида (KelpView.sync переписывает только такие рощи).
+	var redraw := true
 
 
 ## Шипоёж.
@@ -197,6 +200,7 @@ func step(world: EcoWorld, dt: float) -> void:
 				s.f = minf(1.0, s.f + dt * REGROW)  # объеденный ленточник медленно отрастает
 			if absf(s.f - s.drawn) > REDRAW:
 				dirty = true
+				gr.redraw = true
 			sum += s.f
 		gr.cover = (sum / KELP_N - F_MIN) / (1.0 - F_MIN)
 

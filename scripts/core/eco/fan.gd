@@ -54,13 +54,15 @@ func _init(sea: EcoCurrent, spots: Array[Vector2] = []) -> void:
 	_spots = spots.duplicate() if not spots.is_empty() else default_spots()
 
 
-## Места из браузера: у каждого огнецвета и у старта (последний); между ними — два по бокам площадки 08 (EcoField).
+## Места из браузера: у каждого огнецвета и у старта (последний); между ними — два по бокам площадки 08 (EcoField)
+## и два у сходов с террасы врат 07 (EcoGate).
 static func default_spots() -> Array[Vector2]:
 	var out: Array[Vector2] = []
 	for i in EcoCoral.BASES.size():
 		var a := i * 2.1 + 2.6
 		out.append(EcoCoral.BASES[i] + Vector2(cos(a), sin(a)) * FROM_CORAL)
 	out.append_array(EcoField.FANS)
+	out.append_array(EcoGate.FANS)
 	out.append(START)
 	return out
 

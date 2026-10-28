@@ -185,6 +185,9 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 		kelp.dirty = false
 		stalk_buffer.resize(stalks.multimesh.instance_count * STRIDE_C)
 		for gr in kelp.groves:
+			if not gr.redraw:   # роща не менялась — её ленты в буфере верны
+				continue
+			gr.redraw = false
 			for k in gr.stalks.size():
 				var s := gr.stalks[k]
 				s.drawn = s.f
