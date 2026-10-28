@@ -47,6 +47,24 @@ static func fit(mis: Array, pts: PackedVector3Array, grow: float) -> void:
 		mi.custom_aabb = box
 
 
+## Сколько раз send загрузил буфер в MultiMesh (для тестов: неподвижное не грузится каждый кадр, #850).
+static var uploads := 0
+const _SENT := &"eco_sent"
+
+
+## Загрузить `buf` в MultiMesh `mi`, только если он отличается от загруженного прошлый раз (#850): буферы
+## неподвижного (подушки, листья волнолиста, угри в норах, хватни и радужники без «due») не уходят в видеокарту
+## каждый кадр. Сравнение — в движке, дешевле загрузки; копия — только при загрузке. Буфер `mi` писать только через
+## send. true — загрузил.
+static func send(mi: MultiMeshInstance3D, buf: PackedFloat32Array) -> bool:
+	if mi.has_meta(_SENT) and mi.get_meta(_SENT) == buf:
+		return false
+	mi.multimesh.buffer = buf
+	mi.set_meta(_SENT, buf.duplicate())   # массивы Packed в Variant общие по ссылке — храним свою копию
+	uploads += 1
+	return true
+
+
 ## Трансформ в буфер MultiMesh с позиции `i` (порядок строк — как у `MultiMesh.buffer`).
 ## Тело повторено в put_basis: вызов функции в GDScript дорог, а это — горячий цикл каждого вида.
 static func put(buf: PackedFloat32Array, i: int, tr: Transform3D) -> void:

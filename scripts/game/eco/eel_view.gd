@@ -209,9 +209,9 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground
 		if e.latched():
 			rb = hb.scaled_local(RING_FLAT) * Basis(Vector3.RIGHT, PI / 2.0)
 		EcoMM.put(ring_buffer, e.index * STRIDE, Transform3D(rb, head * RING_AT))
-	shell.multimesh.buffer = shell_buffer
-	organs.multimesh.buffer = organ_buffer
-	rings.multimesh.buffer = ring_buffer
+	EcoMM.send(shell, shell_buffer)
+	EcoMM.send(organs, organ_buffer)
+	EcoMM.send(rings, ring_buffer)
 
 
 func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3, ground: Callable) -> void:

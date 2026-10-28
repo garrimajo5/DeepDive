@@ -164,7 +164,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 			else:
 				EcoMM.put(spore_buffer, i, Transform3D(Basis.from_scale(Vector3.ZERO), bl.cloud))
 			_color(spore_buffer, i + STRIDE, SPORE * g)
-	bulbs.multimesh.buffer = bulb_buffer
+	EcoMM.send(bulbs, bulb_buffer)
 	if spores_changed:
 		spores.multimesh.buffer = spore_buffer
 

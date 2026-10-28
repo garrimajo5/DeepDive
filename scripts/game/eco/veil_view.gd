@@ -276,13 +276,13 @@ func sync(t: float, ship: Vector3) -> void:
 		mi.visible = n > 0
 	if n == 0:
 		return
-	bells.multimesh.buffer = bell_buffer
+	EcoMM.send(bells, bell_buffer)
 	bells.multimesh.visible_instance_count = n * BELLS
 	bells.custom_aabb = bell_box
-	rims.multimesh.buffer = rim_buffer
+	EcoMM.send(rims, rim_buffer)
 	rims.multimesh.visible_instance_count = n
 	rims.custom_aabb = bell_box
-	tentacles.multimesh.buffer = tent_buffer
+	EcoMM.send(tentacles, tent_buffer)
 	tentacles.multimesh.visible_instance_count = n
 	tentacles.custom_aabb = tent_box
 	(tentacles.material_override as ShaderMaterial).set_shader_parameter("t", t)
