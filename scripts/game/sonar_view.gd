@@ -13,6 +13,10 @@ var icons: Array[Sprite3D] = []    ## иконки мест брифинга (te
 var vote: VoteView                 ## поля голосования над столом (ART-016)
 var _vote_k := 0.0
 var _result_k := 0.0
+var writes := 0                    ## сколько значений записано в шейдер (тест: неизменное каждый кадр не пишется, #847)
+var _last := {}                    ## последнее записанное значение по имени uniform
+var _blip_key := Vector4(-1, -1, -1, -1)   ## (импульс, когда сняты, сколько, яркость) — отметки, что уже в шейдере
+var _brief_on := true              ## номера и иконки брифинга сейчас показаны (первый вызов их прячет)
 static var _map: ImageTexture
 
 
@@ -89,7 +93,7 @@ func _ready() -> void:
 ## seconds и frac — таймер голосования (Ballot.seconds/fraction; -1 — нет, кольцо скрыто).
 func show_vote(k: float, votes: Dictionary, seconds: int = -1, frac: float = -1.0) -> void:
 	_vote_k = k
-	mat.set_shader_parameter("dim", maxf(_vote_k, _result_k) * VoteHolo.DIM_SONAR)
+	_put("dim", maxf(_vote_k, _result_k) * VoteHolo.DIM_SONAR)
 	vote.show_vote(k, votes, seconds, frac)
 
 
@@ -97,23 +101,28 @@ func show_vote(k: float, votes: Dictionary, seconds: int = -1, frac: float = -1.
 ## Рельеф гаснет, как в голосовании.
 func show_result(k: float, rows: Array, eye: Vector3) -> void:
 	_result_k = k
-	mat.set_shader_parameter("dim", maxf(_vote_k, _result_k) * VoteHolo.DIM_SONAR)
+	_put("dim", maxf(_vote_k, _result_k) * VoteHolo.DIM_SONAR)
 	vote.show_result(k, rows, to_local(eye))
 
 
 ## Каждый кадр: где корабль, сколько прошло с импульса, отметки.
-## noise — помехи 0…1 (сонарная тьма, Silt.noise).
+## noise — помехи 0…1 (сонарная тьма, Silt.noise). Пишет только изменившееся (#847): отметки — когда сменились
+## импульс, снимок, их число или яркость (погасшие не переписываются).
 func show_state(s: Sonar, ship_pos: Vector3, yaw: float, t: float, powered: bool, noise: float = 0.0) -> void:
-	mat.set_shader_parameter("noise", noise)
-	mat.set_shader_parameter("jam", 1.0 if s.jammed else 0.0)
-	mat.set_shader_parameter("jam_time", Silt.JAM_TIME)
-	mat.set_shader_parameter("time", t)
-	mat.set_shader_parameter("ship_xz", Vector2(ship_pos.x, ship_pos.z))
-	mat.set_shader_parameter("ship_yaw", yaw)
-	mat.set_shader_parameter("range_m", s.range_m)
-	mat.set_shader_parameter("ping_age", t - s.ping_time)
-	mat.set_shader_parameter("brightness", 1.0 if powered else 0.25)
+	_put("noise", noise)
+	_put("jam", 1.0 if s.jammed else 0.0)
+	_put("jam_time", Silt.JAM_TIME)
+	_put("time", t)
+	_put("ship_xz", Vector2(ship_pos.x, ship_pos.z))
+	_put("ship_yaw", yaw)
+	_put("range_m", s.range_m)
+	_put("ping_age", t - s.ping_time)
+	_put("brightness", 1.0 if powered else 0.25)
 	var a := s.blip_alpha(t)
+	var key := Vector4(s.count, s.blip_time, s.blips.size(), a)
+	if key == _blip_key:
+		return
+	_blip_key = key
 	var data := PackedVector4Array()
 	var cols := PackedVector3Array()
 	for b in s.blips:
@@ -123,23 +132,35 @@ func show_state(s: Sonar, ship_pos: Vector3, yaw: float, t: float, powered: bool
 		cols.append(Vector3(c.r, c.g, c.b))
 	data.resize(Sonar.MAX_BLIPS)
 	cols.resize(Sonar.MAX_BLIPS)
-	mat.set_shader_parameter("blip_count", s.blips.size())
-	mat.set_shader_parameter("blips", data)
-	mat.set_shader_parameter("blip_cols", cols)
+	_put("blip_count", s.blips.size())
+	_put("blips", data)
+	_put("blip_cols", cols)
+
+
+## Записать uniform, только если значение сменилось.
+func _put(key: String, v: Variant) -> void:
+	if _last.has(key) and typeof(_last[key]) == typeof(v) and _last[key] == v:
+		return
+	_last[key] = v
+	mat.set_shader_parameter(key, v)
+	writes += 1
 
 
 ## Точка маршрута (Run.waypoint): кольцо на карте, за краем дальности — на краю круга в её сторону.
 ## Vector2.INF — точки нет.
 func show_waypoint(xz: Vector2) -> void:
 	var on := xz.is_finite()
-	mat.set_shader_parameter("wp_on", 1.0 if on else 0.0)
+	_put("wp_on", 1.0 if on else 0.0)
 	if on:
-		mat.set_shader_parameter("wp_xz", xz)
+		_put("wp_xz", xz)
 
 
 ## Брифинг: k — доля перехода 0…1 (Briefing.Fade), маршрут и пройденные точки — из Run, корабль — где он сейчас.
 func show_briefing(k: float, run: Run, ship_pos: Vector3) -> void:
-	mat.set_shader_parameter("brief_k", k)
+	_put("brief_k", k)
+	if k <= 0.0 and not _brief_on:
+		return   # брифинг скрыт и уже спрятан — номера и иконки не трогать (#847)
+	_brief_on = k > 0.0
 	var st := place_states(run)
 	for i in numbers.size():
 		numbers[i].visible = k > 0.0
@@ -149,10 +170,10 @@ func show_briefing(k: float, run: Run, ship_pos: Vector3) -> void:
 		icons[i].modulate = Color(1, 1, 1, k * Briefing.icon_alpha(st[i]))
 	if k <= 0.0:
 		return
-	mat.set_shader_parameter("sel_route", run.route)
-	mat.set_shader_parameter("route_len", maxf(Briefing.route_length(run.route), 0.01) if run.route >= 0 else 1.0)
-	mat.set_shader_parameter("ship_t", Briefing.table_xz(Vector2(ship_pos.x, ship_pos.z)))
-	mat.set_shader_parameter("place_state", st)
+	_put("sel_route", run.route)
+	_put("route_len", maxf(Briefing.route_length(run.route), 0.01) if run.route >= 0 else 1.0)
+	_put("ship_t", Briefing.table_xz(Vector2(ship_pos.x, ship_pos.z)))
+	_put("place_state", st)
 
 
 ## Состояние мест для шейдера, порядок — Briefing.ORDER: 0 — не на маршруте, 1 — на маршруте, 2 — пройдено,
