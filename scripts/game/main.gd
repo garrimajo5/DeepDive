@@ -34,6 +34,7 @@ var run := Run.new()           ## маршрут забега: выбор у г�
 var breach_view: BreachView
 var debug_weld := false        ## снимок: сварку держат без пальца
 var save := SaveGame.new()     ## груз трюма, поднятые образцы и изученные виды в user:// (js/save.js)
+var autosave := Autosave.new()   ## автосохранение у мест-стоянок 00, 07, 09, 10 (#823)
 var expedition := Expedition.new()   ## история для журнала ART-047: места, забеги, рекорд глубины, прочитанное
 var scanner := Scanner.new()   ## сканер биолога: цели от живого мира, изученные виды
 var at_scanner := false        ## игрок у поста «Сканер»: мир шлёт цели (ShipState.scan_range)
@@ -782,6 +783,9 @@ func _step_ship(dt: float, h: Holds) -> void:
 		announce(run_msg)
 		timeline.mark(time, run_msg)
 	expedition.visit(helm.pos.x, helm.pos.z)   # журнал ART-047: места и рекорд глубины
+	var spot := autosave.update(helm.pos.x, helm.pos.z)   # кампания #823: вошли к месту-стоянке — записать
+	if spot != "" and save.live and not wreck.active() and save_now():
+		say(Autosave.message(spot))
 	expedition.dive_depth(helm.depth())
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
 	engine.update(dt, reactor, h.valve or held.has("valve") or debug_vent)
@@ -1391,6 +1395,7 @@ func _restart() -> void:
 
 
 func _begin_run(fly := true) -> void:
+	autosave.reset()   # место под кораблём на старте или после «Продолжить» — не повод записать
 	run.begin(time, samples.cargo.size(), scanner.scanned.size(), breach.count)
 	timeline.begin(time)
 	if fly and intro and settings.intro:
