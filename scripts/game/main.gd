@@ -36,6 +36,7 @@ var debug_weld := false        ## снимок: сварку держат без
 var save := SaveGame.new()     ## груз трюма, поднятые образцы и изученные виды в user:// (js/save.js)
 var autosave := Autosave.new()   ## автосохранение у мест-стоянок 00, 07, 09, 10 (#823)
 var expedition := Expedition.new()   ## история для журнала ART-047: места, забеги, рекорд глубины, прочитанное
+var lore := LayerLore.new()   ## знания слоя 1 (#825): диагностика 07, запись К-2, Раковина 03, поле 08…
 var scanner := Scanner.new()   ## сканер биолога: цели от живого мира, изученные виды
 var at_scanner := false        ## игрок у поста «Сканер»: мир шлёт цели (ShipState.scan_range)
 var near_post := ""            ## пост рядом с игроком на ногах (id), "" — нет или игрок занят постом
@@ -443,6 +444,7 @@ func _load_state() -> void:
 	role_card.on = hints and not QaRunner.pending()   # тестер включает шагом `cards`
 	role_card.set_read(settings.cards)
 	save.expedition = expedition
+	save.lore = lore       # знания слоя 1 — ключ "lore" (#825)
 	save.helm = helm       # место, курс, корпус и заряд — ключ "ship" для кампании (#823)
 	save.vitals = vitals
 	save.load_into(samples, scanner)
@@ -450,6 +452,7 @@ func _load_state() -> void:
 	samples.changed.connect(save.mark)
 	scanner.changed.connect(save.mark)
 	expedition.changed.connect(save.mark)
+	lore.changed.connect(save.mark)
 	scanner.message.connect(say)
 
 

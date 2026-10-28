@@ -476,3 +476,16 @@ func test_comms_from_host_and_ask_back() -> void:   # ART-040 у гостя: п�
 	ok(hc.press(guest.pad.ask), "хост начал проверку")
 	h_ev = {"c": hc.pack()}
 	ok(_pump(func() -> bool: return main.comms.state == Comms.Ask.WAIT), "«Ждём ответ…» у гостя")
+
+
+func test_lore_from_host_frame() -> void:   # #825: знания слоя общие — гость получает их кадром хоста
+	var host_lore := LayerLore.new()
+	host_lore.learn(LayerLore.D07_RELAY)
+	host_lore.learn(LayerLore.K2)
+	h_ev = {"k": host_lore.pack()}
+	ok(_pump(func() -> bool: return main.lore.knows(LayerLore.K2)), "знания хоста у гостя")
+	eq(main.lore.pack(), host_lore.pack(), "те же факты")
+	h_ev = {}
+	ok(_pump(func() -> bool: return main.net_seq > 3), "кадры без «k» идут")
+	ok(main.lore.knows(LayerLore.D07_RELAY), "без «k» знания не теряются")
+

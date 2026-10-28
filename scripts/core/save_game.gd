@@ -9,6 +9,8 @@ extends RefCounted
 ## заданы `helm` и `vitals` (`ship_snapshot`); прочитанное — `ship` (`ship_read`: числа проверены, место в пределах хода),
 ## вернуть в игру — `ship_apply`. Старый файл без "ship" принимается (версия та же — формат дополнен, как "species" и
 ## "log"), `ship` тогда пуст.
+## Знания слоя 1 (#825) — ключ "lore" (`LayerLore.snapshot`, список ключей), если задан `lore`; старый файл без него —
+## знаний нет.
 ## Файл недоступен или испорчен — игра просто не сохраняет и начинает с чистого трюма; что вышло при чтении — `state`
 ## (испорченный файл журнал показывает своим сообщением, не как первый запуск).
 
@@ -28,6 +30,7 @@ var path := default_path        ## пустой — сохранение вык�
 var dirty := false
 var timer := 0.0
 var expedition: Expedition = null   ## история для журнала ART-047; null — не сохранять её
+var lore: LayerLore = null          ## знания слоя 1 (#825); null — не сохранять их
 var state := Load.NONE              ## что вышло при последнем `load_into`
 var helm: Helm.Ship = null          ## корабль для ключа "ship"; null — пишется то, что прочитано (`ship`)
 var vitals: Vitals = null           ## корпус и заряд для ключа "ship" (вместе с `helm`)
@@ -39,7 +42,7 @@ var live := true
 
 ## Снимок того, что сохраняется.
 static func snapshot(samples: Samples, scanner: Scanner = null, history: Expedition = null,
-		ship_data: Dictionary = {}) -> Dictionary:
+		ship_data: Dictionary = {}, knowledge: LayerLore = null) -> Dictionary:
 	var cargo: Array = []
 	for c in samples.cargo:
 		cargo.append({"kind": KINDS[int(c[0])], "i": int(c[1]) if int(c[1]) >= 0 else null})
@@ -55,6 +58,8 @@ static func snapshot(samples: Samples, scanner: Scanner = null, history: Expedit
 		out["log"] = history.snapshot()
 	if not ship_data.is_empty():
 		out["ship"] = ship_data
+	if knowledge:
+		out["lore"] = knowledge.snapshot()
 	return out
 
 
@@ -96,7 +101,8 @@ static func ship_apply(d: Dictionary, s: Helm.Ship, v: Vitals) -> bool:
 
 
 ## Вернуть снимок в игру; false — не наш формат (тогда ничего не меняется).
-static func apply(data: Variant, samples: Samples, scanner: Scanner = null, history: Expedition = null) -> bool:
+static func apply(data: Variant, samples: Samples, scanner: Scanner = null, history: Expedition = null,
+		knowledge: LayerLore = null) -> bool:
 	if not (data is Dictionary) or int(data.get("v", 0)) != VERSION:
 		return false
 	var cargo: Array = []
@@ -129,6 +135,8 @@ static func apply(data: Variant, samples: Samples, scanner: Scanner = null, hist
 		scanner.restore(ids, notes)
 	if history:
 		history.apply(data.get("log"))
+	if knowledge:
+		knowledge.apply(data.get("lore"))
 	return true
 
 
@@ -170,7 +178,7 @@ func save(samples: Samples, scanner: Scanner = null) -> bool:
 	elif not ship.is_empty():   # корабль не подключён или не в забеге — не терять прочитанный
 		raw = {"x": ship["pos"].x, "y": ship["pos"].y, "z": ship["pos"].z, "yaw": ship["yaw"], "hull": ship["hull"],
 			"energy": ship["energy"]}
-	f.store_string(JSON.stringify(snapshot(samples, scanner, expedition, raw)))
+	f.store_string(JSON.stringify(snapshot(samples, scanner, expedition, raw, lore)))
 	f.close()
 	return true
 
@@ -182,7 +190,7 @@ func load_into(samples: Samples, scanner: Scanner = null) -> bool:
 	if not enabled() or not FileAccess.file_exists(path):
 		return false
 	var json := JSON.new()
-	if json.parse(FileAccess.get_file_as_string(path)) != OK or not apply(json.data, samples, scanner, expedition):
+	if json.parse(FileAccess.get_file_as_string(path)) != OK or not apply(json.data, samples, scanner, expedition, lore):
 		state = Load.BROKEN
 		return false
 	ship = ship_read(json.data.get("ship"))
@@ -204,6 +212,8 @@ func reset(samples: Samples, scanner: Scanner = null) -> void:
 	apply({"v": VERSION}, samples, scanner)
 	if expedition:
 		expedition.clear()   # новая экспедиция — история с начала, полная
+	if lore:
+		lore.clear()         # и знания слоя — с нуля
 	state = Load.NONE
 	ship = {}
 	wipe()
