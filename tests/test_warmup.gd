@@ -117,7 +117,7 @@ func test_scene_warmup() -> void:
 	Warmup.enabled = false
 	ok(main.warming(), "при старте идёт прогрев")
 	ok(main.curtain != null and main.curtain.visible, "экран под шторкой")
-	eq(main.crew.size(), 1 + 2 * CrewRig.MODELS.size(), "каждая внешность экипажа в кадре — и материалом своего игрока")
+	eq(main.crew.size(), 1 + Warmup.mate_count() + CrewRig.MODELS.size(), "каждая роль и внешность экипажа в кадре — и материалом своего игрока")
 	var qa := main.start_qa('[{"do": "wait", "s": 1}, {"do": "log", "note": "прогрев"}]')
 	var torch: Node3D = main.crew_view.torches[0]
 	var yaws := {}
@@ -295,7 +295,7 @@ func test_scene_warm_runner() -> void:
 	Warmup.enabled = false
 	ok(main.warm_run is WarmRunner and main.warm_run.main == main, "прогрев сцены — поле main.warm_run")
 	ok(not ("_warm_shown" in main) and not ("_warm_mates" in main), "состояние прогрева больше не в Main")
-	ok(main.warm_run._mates.size() == 2 * CrewRig.MODELS.size(), "члены экипажа каждой внешности — у WarmRunner")
+	ok(main.warm_run._mates.size() == Warmup.mate_count() + CrewRig.MODELS.size(), "члены экипажа каждой внешности — у WarmRunner")
 	ok(main.warm_run._shown.size() > 0, "скрытое показано на кадр")
 	eq(main.warm_layers(), main.warm_run.layers(), "Main.warm_layers — пересылка")
 	while main.warming():
@@ -324,5 +324,32 @@ func test_scene_flyby_waits() -> void:
 	main.step(0.5)
 	ok(not main.warming() and main.flyby.active(), "прогрев кончился — облёт")
 	ok(main.flyby_cam.current, "камера с борта")
+	main.queue_free()
+	await frames(1)
+
+
+## #883: товарищи прогрева — каждой роли, поэтому всё снаряжение MOD-016 (фартук, щиток, туника, пробы, планшет)
+## нарисовано непрозрачным под шторкой, а не при первом появлении инженера (провал на `06c-crew-model`).
+func test_scene_warmup_all_gear() -> void:
+	Warmup.enabled = true
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	Warmup.enabled = false
+	ok(Warmup.MATE_AT.size() >= Warmup.mate_count(), "у каждого товарища прогрева своё место")
+	main.step(1.0 / 60.0)
+	var cv := main.crew_view
+	var worn := {}
+	var looks := {}
+	for i in cv.members.size():
+		if cv.members[i] in main.warm_run._mates and not (cv.members[i] in cv.as_own):
+			looks[cv.looks[i]] = true
+			for g in cv.gear[i]:
+				if (cv.gear[i][g] as Node3D).is_visible_in_tree():
+					worn[g] = true
+	for g in CrewRig.GEAR:
+		ok(worn.has(g), "%s на товарище прогрева" % g)
+	eq(looks.size(), CrewRig.MODELS.size(), "каждая внешность")
+	while main.warming():
+		main.step(1.0 / 60.0)
 	main.queue_free()
 	await frames(1)
