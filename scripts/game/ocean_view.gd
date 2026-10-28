@@ -103,6 +103,7 @@ func _ready() -> void:
 	sun.directional_shadow_max_distance = 110.0   # за туманом тени не нужны
 	sun.light_angular_distance = 1.5              # мягкие края — рассеянный свет сквозь лёд
 	sun.shadow_blur = 1.3
+	sun.shadow_caster_mask = LAYER_WORLD   # мостик и отсеки изнутри (слой 2) тень на дно не кладут (отчёт #945)
 	add_child(sun)
 
 	far_wall = _make_far_wall()
