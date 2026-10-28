@@ -22,6 +22,15 @@ func _pose(m: Crew.Member, look: int = 0) -> Dictionary:
 	return out
 
 
+## #847: номер кости по имени — из таблицы, а не поиском по списку (pose зовёт его десятки раз на фигуру за кадр).
+func test_rest_index_table() -> void:
+	var r := _rest(0)
+	eq(r.index.size(), r.names.size(), "все кости в таблице")
+	for i in r.names.size():
+		eq(r.idx(r.names[i]), i, r.names[i])
+	eq(r.idx("нет такой"), -1, "нет кости — −1, как find")
+
+
 func test_standing_matches_model_rest() -> void:
 	for look in CrewRig.MODELS.size():
 		var m := Crew.Member.new()
