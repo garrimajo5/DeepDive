@@ -180,10 +180,10 @@ func test_view_dust_mesh() -> void:
 	tree.root.add_child(view)
 	await frames(1)
 	var ov := view.ognevka_view
-	ok(ov.dust_view != null and ov.dust_view.get_parent() == ov, "у огнёвок — MultiMesh «Муть»")
-	eq(ov.dust_view.multimesh.instance_count, EcoOgnevkaDust.POOL)
-	eq(ov.dust_view.layers, OceanView.LAYER_WORLD)
-	var mat := (ov.dust_view.multimesh.mesh as QuadMesh).material as ShaderMaterial
+	ok(ov.dust_view == null and view.dust_layer.parts.has(ov._dust), "у огнёвок — MultiMesh «Муть» — кусок общего слоя (#849)")
+	eq(view.dust_layer.pools[view.dust_layer.parts.find(ov._dust)], EcoOgnevkaDust.POOL)
+	eq(view.dust_layer.layers, OceanView.LAYER_WORLD)
+	var mat := (view.dust_layer.multimesh.mesh as QuadMesh).material as ShaderMaterial
 	ok(mat.shader == EcoShaders.mist(EcoShaders.Mist.INK).shader, "общий шейдер MIST — шейдеров не прибавилось")
 	var st := view.leeches.stations[0]
 	var f := view.ognevka.fan_at(st)

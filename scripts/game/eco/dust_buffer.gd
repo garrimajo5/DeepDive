@@ -12,6 +12,11 @@ var data := PackedFloat32Array()
 var shown := 0
 ## Буфер изменился с прошлой загрузки: мути нет и не было — не грузим заново (issue #133).
 var changed := true
+## Буфер отдан общему слою мути живого мира (EcoDustLayer.gather, issue #849): свой слой вида убран, upload только
+## отмечает `dirty`, грузит общий слой.
+var joined := false
+## Для общего слоя: буфер менялся с его прошлой сборки.
+var dirty := false
 var _packed := PackedByteArray()
 var _added := -1
 ## В пуле есть облачко, что ещё не поднялось (время мира шло назад) — пул проходить, пока не встанет.
@@ -90,7 +95,11 @@ func pack(d: EcoGrazerDust, t: float, flow: Vector3, ship: EcoLink.ShipState = n
 
 ## Загрузить буфер в слой мути mi, если он изменился (issue #133), и спрятать слой, пока облачков нет: пустой
 ## MultiMesh всё равно стоит вызова отрисовки, а слоёв мути у видов ≈20 (issue #849).
+## В общем слое (`joined`) mi не нужен — только отметка для EcoDustLayer.sync.
 func upload(mi: MultiMeshInstance3D) -> void:
+	if joined:
+		dirty = dirty or changed
+		return
 	if changed:
 		mi.multimesh.buffer = data
 	mi.visible = shown > 0
