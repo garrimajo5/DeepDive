@@ -96,6 +96,12 @@ func test_model_replaces_capsules() -> void:
 	ok(_tris(cv.meshes[0]) < _tris(cv.meshes[1]) * 0.9, "свой игрок — без головы (%d треуг.)" % _tris(cv.meshes[0]))
 	ok(cv.meshes[0].material_override != null and cv.meshes[1].material_override == null, "свой — с отсечением граней")
 	ok(cv.patches[1].visible and not cv.patches[0].visible, "нашивка роли — у других")
+	eq((cv.patches[1].mesh.material as StandardMaterial3D).albedo_color, Crew.role_color(2), "нашивка цвета роли")
+	main.crew[1].role = 0
+	main.step(1.0 / 30.0)
+	eq((cv.patches[1].mesh.material as StandardMaterial3D).albedo_color, Crew.role_color(0), "сменил роль — нашивка тоже")
+	main.crew[1].role = 2
+	main.step(1.0 / 30.0)
 	var j := main.me.joints()
 	var hip: Vector3 = _shown(0, "hip")
 	near((hip - main.camera.position).dot(j["fwd"]), -CrewView.OWN_BACK, 1e-3, "стоя своя модель чуть позади камеры")

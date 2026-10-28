@@ -122,6 +122,7 @@ class Rest:
 	var parents: PackedInt32Array
 	var local: Array[Transform3D] = []
 	var global: Array[Transform3D] = []
+	var index := {}   ## имя кости → номер: idx/at без поиска по списку имён каждый кадр (#847)
 
 	func _init(n: PackedStringArray, p: PackedInt32Array, l: Array[Transform3D]) -> void:
 		names = n
@@ -129,9 +130,11 @@ class Rest:
 		local = l
 		for i in n.size():
 			global.append(l[i] if p[i] < 0 else global[p[i]] * l[i])
+			if not index.has(n[i]):
+				index[n[i]] = i
 
 	func idx(n: String) -> int:
-		return names.find(n)
+		return index.get(n, -1)
 
 	func at(n: String) -> Vector3:
 		return global[idx(n)].origin
