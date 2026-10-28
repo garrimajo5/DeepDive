@@ -387,29 +387,76 @@ func test_reset_restores() -> void:
 
 # ---------- Сцена ----------
 
-func test_view_three_draws() -> void:
+## Два вызова отрисовки (#849): монетники и глазуны целиком (тело, стебли, глаза — один MultiMesh).
+func test_view_two_draws() -> void:
 	var w := _world()
 	var c := _coins(w)
 	var v := CoinsView.new(c)
 	tree.root.add_child(v)
 	await frames(1)
 	ok(v.visible)
-	for mi: MultiMeshInstance3D in [v.fish, v.bodies, v.eyes]:
+	for mi: MultiMeshInstance3D in [v.fish, v.bodies]:
 		eq(mi.layers, OceanView.LAYER_WORLD)
 	eq(v.fish.multimesh.instance_count, 27)
 	eq(v.bodies.multimesh.instance_count, 3)
-	eq(v.eyes.multimesh.instance_count, 6)
+	ok(v.find_child("Глаза", false, false) == null, "отдельного узла глаз нет")
 	var cn := c.coins[4]
 	ok(KelpView.transform_at(v.coin_buffer, 4, CoinsView.STRIDE_C).origin.is_equal_approx(cn.pos), "рыбка на месте")
 	cn.alive = false
 	c.glazuns[1].lit = true
 	v.sync(1.0)
 	ok(KelpView.transform_at(v.coin_buffer, 4, CoinsView.STRIDE_C).basis.x.length() < 1e-6, "съеденная сжата")
-	var i := (1 * 2 + 0) * CoinsView.STRIDE_C + 12
-	ok(v.eye_buffer[i] > 1.0, "глаза в луче яркие")
-	near(KelpView.transform_at(v.eye_buffer, 2, CoinsView.STRIDE_C).basis.x.length(), 1.6, 1e-4, "и крупнее")
+	eq(v.body_buffer[1 * CoinsView.STRIDE_C + 15], 1.0, "глаза в луче: альфа 1 — ярко и крупнее")
+	ok(v.body_buffer[0 * CoinsView.STRIDE_C + 15] < 0.8, "вне луча — тусклее, не раздуваются")
+	near(v.body_buffer[0 * CoinsView.STRIDE_C + 12], 1.0, 1e-6, "цвет экземпляра белый — тело своей краски")
 	v.queue_free()
 	await frames(1)
+
+
+## Глазун одним мешем (#849): одна поверхность на общем шейдере растений; тело и стебли — альфа 0, глаза — 1,
+## свет глаз — по альфе, в луче шарик раздувается по нормали до прежних 1,6 радиуса.
+func test_glazun_one_mesh() -> void:
+	var m := CoinsView.build_glazun()
+	eq(m.get_surface_count(), 1, "одна поверхность")
+	var mat := m.surface_get_material(0) as ShaderMaterial
+	ok(mat != null and mat.get_shader_parameter("mode") == EcoShaders.Plant.TENTACLE, "шейдер растений, щупальце")
+	eq(ShaderKey.of(mat), ShaderKey.of(KelpView.build_urchin().surface_get_material(0)), "нового шейдера нет")
+	var grow: Vector2 = mat.get_shader_parameter("tip_grow")
+	near(CoinsView.EYE_R * (1.0 + grow.y), CoinsView.EYE_R * 1.6, 1e-6, "в луче глаз в 1,6 раза крупнее")
+	var arr := m.surface_get_arrays(0)
+	var vv: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var nn: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+	var cc: PackedColorArray = arr[Mesh.ARRAY_COLOR]
+	var eye_v := 0
+	var off := 0
+	for i in vv.size():
+		if cc[i].a > 0.5:
+			eye_v += 1
+			var ctr := Vector3(signf(vv[i].x) * EcoCoins.EYE.x, EcoCoins.EYE.y, EcoCoins.EYE.z)
+			if absf(vv[i].distance_to(ctr) - CoinsView.EYE_R) > 1e-4 \
+					or nn[i].distance_to((vv[i] - ctr).normalized()) > 1e-3:
+				off += 1
+		elif cc[i].a > 0.01:
+			off += 1
+	ok(eye_v > 0, "у глаз альфа 1")
+	eq(off, 0, "глаза — шарики на стебельках с нормалью от центра, у тела альфа 0")
+	# глаз светится: свет = краска · сила · альфа² — в луче как прежние (k = 1: зелёный 1,25)
+	near(CoinsView.EYE_PAINT.g * CoinsView.EYE_GLOW, 1.25, 1e-4, "в луче — прежняя яркость")
+
+
+## Без броска глаза шейдерного глазуна стоят там же, где мир считает глаза (gz.eyes — сканер, луч).
+func test_glazun_eyes_where_world_sees() -> void:
+	var c := _coins(_world())
+	for gz in c.glazuns:
+		var tr := EcoCoins.glazun_transform(gz)
+		for e in 2:
+			var local := Vector3((-1.0 if e == 0 else 1.0) * EcoCoins.EYE.x, EcoCoins.EYE.y, EcoCoins.EYE.z)
+			ok((tr * local).distance_to(gz.eyes[e]) < 1e-4, "глаз %d глазуна %d" % [e, gz.index])
+	var gz := c.glazuns[0]
+	gz.lit = false
+	ok(CoinsView.eye_alpha(gz, 3.0) < 0.9, "вне луча шейдер глаза не раздувает")
+	gz.lit = true
+	eq(CoinsView.eye_alpha(gz, 3.0), 1.0)
 
 
 func test_meshes_face_outward() -> void:
