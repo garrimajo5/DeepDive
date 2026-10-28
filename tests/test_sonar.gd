@@ -77,3 +77,49 @@ func test_scene_ping_at_holotable() -> void:
 	r.end(2)
 	main.step(0.1)
 	eq(main.message.text, "Сонар обесточен", "без доли — не стреляет")
+
+
+## #847: голограмма пишет в шейдер только изменившееся — в тихом кадре без отметок только время и возраст импульса,
+## погасшие отметки не переписываются, скрытый брифинг не трогает номера и иконки.
+func test_view_writes_only_changes() -> void:
+	var sv := SonarView.new()
+	tree.root.add_child(sv)
+	await frames(1)
+	var s := Sonar.new()
+	var ship := Vector3(0, -20, 95)
+	sv.show_state(s, ship, 0.0, 1.0, true)
+	sv.show_briefing(0.0, Run.new(), ship)
+	sv.show_waypoint(Vector2.INF)
+	var w := sv.writes
+	sv.show_state(s, ship, 0.0, 1.0, true)
+	sv.show_briefing(0.0, Run.new(), ship)
+	sv.show_waypoint(Vector2.INF)
+	eq(sv.writes, w, "тот же кадр — ни одной записи")
+	sv.show_state(s, ship, 0.0, 1.5, true)
+	eq(sv.writes - w, 2, "идёт время — только time и ping_age")
+	# импульс и отметки: пока гаснут — пишутся, погасли — нет
+	s.ping(2.0, 1.0)
+	s.take_contacts([EcoLink.near("serpohvost", "серпохвост", ship + Vector3(30, 0, 0), ship)], ship)
+	sv.show_state(s, ship, 0.0, 3.0, true)
+	eq(sv.mat.get_shader_parameter("blip_count"), 1, "отметка в шейдере")
+	var data: PackedVector4Array = sv.mat.get_shader_parameter("blips")
+	near(data[0].w, s.blip_alpha(3.0), 1e-6, "яркость отметки")
+	sv.show_state(s, ship, 0.0, 20.0, true)
+	near(sv.mat.get_shader_parameter("blips")[0].w, 0.0, 1e-6, "через 12 с погасла")
+	w = sv.writes
+	sv.show_state(s, ship, 0.0, 21.0, true)
+	eq(sv.writes - w, 2, "погасшие отметки не переписываются")
+	# новый импульс с теми же числами всё равно обновляет
+	s.ping(30.0, 1.0)
+	sv.show_state(s, ship, 0.0, 30.0, true)
+	eq(sv.mat.get_shader_parameter("blip_count"), 0, "новый импульс — отметки сброшены")
+	# брифинг: показан — номера видны, скрыт — спрятаны и больше не трогаются
+	var run := Run.new()
+	sv.show_briefing(1.0, run, ship)
+	ok(sv.numbers[0].visible, "брифинг — номера видны")
+	sv.show_briefing(0.0, run, ship)
+	ok(not sv.numbers[0].visible, "брифинг скрыт — номера спрятаны")
+	sv.numbers[0].visible = true
+	sv.show_briefing(0.0, run, ship)
+	ok(sv.numbers[0].visible, "повторно скрытый брифинг номера не перебирает")
+	sv.queue_free()
