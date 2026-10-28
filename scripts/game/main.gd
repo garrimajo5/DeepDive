@@ -440,7 +440,6 @@ func _load_state() -> void:
 		print("графика: автовыбор «%s» (%s, %d МБ)" % [Graphics.NAMES[settings.graphics], d["adapter"], d["memory_mb"]])
 	settings.read()
 	_apply_settings()
-	tutorial.on = hints and not settings.hints_done and not QaRunner.pending()   # тестер включает шагом `tutorial`
 	role_card.on = hints and not QaRunner.pending()   # тестер включает шагом `cards`
 	role_card.set_read(settings.cards)
 	save.expedition = expedition
@@ -448,6 +447,9 @@ func _load_state() -> void:
 	save.helm = helm       # место, курс, корпус и заряд — ключ "ship" для кампании (#823)
 	save.vitals = vitals
 	save.load_into(samples, scanner)
+	# обучение — пока не пройдено ни в настройках, ни в кампании (знание «обучение просмотрено», #827); тестер
+	# включает шагом `tutorial`
+	tutorial.on = hints and not settings.hints_done and not lore.knows(LayerLore.INTRO) and not QaRunner.pending()
 	_begin_run()
 	samples.changed.connect(save.mark)
 	scanner.changed.connect(save.mark)
@@ -1144,21 +1146,25 @@ func _step_eco(dt: float) -> void:
 func on_eco_event(e: Dictionary) -> void:
 	match e.get("type", ""):
 		EcoLink.HIT:
-			if flyby.shields():
-				return   # облёт в начале забега: удар не доходит до корпуса (#506)
+			if flyby.shields() or events_held():
+				return   # облёт в начале забега (#506) и обучение у старта (#827): удар не доходит до корпуса
 			var at: Variant = e.get("at")
 			hit_local = hit_local_of(at) if at is Vector3 else null   # откуда бьёт — для звука удара (#656)
 			vitals.hit(roundi(float(e.get("damage", 0.0)) * 100.0), str(e.get("by", "")))
 			hit_local = null
 		EcoLink.DRAIN:
+			if events_held():
+				return   # обучение (#827): присоски энергию не тянут
 			vitals.drain(str(e.get("by", "")), float(e.get("units", 0.0)))
 		EcoLink.MESSAGE:
 			say(str(e.get("text", "")))
 		EcoLink.VOICE:   # голос во внутренней связи ART-040; просьбу не исполняем — решает игрок
+			if bool(e.get("fake", false)) and events_held():
+				return   # обучение (#827): подделок в эфире нет, свои доклады идут
 			comms.push(int(e.get("role", Crew.Role.ENGINEER)), str(e.get("text", "")), bool(e.get("fake", false)),
 				str(e.get("ask", "")), bool(e.get("silent", false)))
 		EcoLink.DRAG:   # присоски на корпусе тормозят корабль (js/ship.js: drag = 0.45 + 0.025 * hullRemoras)
-			helm.extra_drag = float(e.get("k", 0.0))
+			helm.extra_drag = 0.0 if events_held() else float(e.get("k", 0.0))   # обучение (#827) — не тормозят
 		EcoLink.STEAL:   # образец сорван с захвата (M.steal в js/manip.js)
 			if samples.steal(int(e.get("sample", -1))):
 				say("Образец украден: %s выхватил его из захвата и уносит в нору" % str(e.get("by", "Кто-то")))
@@ -1174,6 +1180,11 @@ func on_eco_event(e: Dictionary) -> void:
 				say("Новое наблюдение: %s" % Species.called(sp, Species.Case.NOM, scanner.is_scanned(sp)))
 
 
+## Идёт обучение у старта 00 (#827, `Tutorial.holds_events`): события слоя ждут его конца.
+func events_held() -> bool:
+	return tutorial.holds_events()
+
+
 ## Точка удара at (мир) в осях корабля: нос −Z, правый борт +X (`HullSound.side`).
 func hit_local_of(at: Vector3) -> Vector3:
 	return (at - helm.pos).rotated(Vector3.UP, -helm.yaw)
@@ -1182,9 +1193,10 @@ func hit_local_of(at: Vector3) -> Vector3:
 func _on_hit(percent: int, kind: String) -> void:
 	ship_sounds.play_hit(percent, kind, hit_local)   # SND-002: удар (по стороне) или удар о дно со скрежетом (#656)
 	lock_water.on_hit()   # рябь в шахте шлюза вспыхивает (ART-073)
-	if kind == "scrape":   # удар о дно поднимает ил
+	var held := events_held()   # обучение у старта (#827): ни сонарной тьмы, ни пробоины от удара о дно
+	if kind == "scrape" and not held:   # удар о дно поднимает ил
 		silt.on_scrape(helm.pos, Seabed.height(helm.pos.x, helm.pos.z))
-	if breach.on_hit(percent, vitals.hull):
+	if not held and breach.on_hit(percent, vitals.hull):
 		return   # о пробоине скажет Breach
 	if kind == "scrape":
 		say("Удар о дно: корпус −%d%%" % percent)
