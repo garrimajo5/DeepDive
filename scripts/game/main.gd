@@ -1248,6 +1248,7 @@ func _apply_graphics(level: int) -> void:
 	if ocean:
 		ocean.set_far(g["wall"])
 		ocean.set_relief(not lite)    # лёд ART-056
+		ocean.set_shafts_lite(lite)   # лучи ART-052 без чтения глубины кадра (#852)
 		ocean.set_snow_lite(lite)     # взвесь ART-058 реже, без вращения
 		ocean.set_decals_lite(lite)   # декали дна ART-066 реже и ближе
 		ocean.set_layers_level(g["layers"])   # слои воды ART-069: 0 / 0,6 / 0,9

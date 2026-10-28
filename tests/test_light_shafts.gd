@@ -101,3 +101,26 @@ func test_scene_one_multimesh() -> void:
 	ok(local.distance_to(Vector3(0, 1.6, 5)) < 1e-3, "ship_inv переводит мир в оси корабля")
 	main.queue_free()
 	await frames(1)
+
+
+## #852: на «Экономно» лучи не читают глубину кадра (нет копии буфера глубины), параметры материала остаются;
+## на «Обычно» мягкое касание по глубине возвращается.
+func test_shafts_lite_without_depth() -> void:
+	var full: String = (load("res://shaders/light_shafts.gdshader") as Shader).code
+	var lite: String = (load("res://shaders/light_shafts_lite.gdshader") as Shader).code
+	ok(full.contains("#define SOFT_DEPTH"), "полный вариант — с глубиной")
+	ok(not lite.contains("SOFT_DEPTH"), "«Экономно» — без")
+	var inc := FileAccess.get_file_as_string("res://shaders/light_shafts.gdshaderinc")
+	var at := inc.find("hint_depth_texture")
+	ok(at > 0 and inc.rfind("#ifdef SOFT_DEPTH", at) > inc.rfind("#endif", at), "глубина объявлена только под SOFT_DEPTH")
+	var o := OceanView.new()
+	tree.root.add_child(o)
+	await frames(1)
+	near(float(o.shafts_mat.get_shader_parameter("gain")), LightShafts.GAIN, 1e-6, "сила лучей")
+	o.set_shafts_lite(true)
+	eq(o.shafts_mat.shader, OceanView.SHAFTS_LITE, "«Экономно» — лёгкий шейдер")
+	near(float(o.shafts_mat.get_shader_parameter("gain")), LightShafts.GAIN, 1e-6, "параметры остались")
+	o.set_shafts_lite(false)
+	eq(o.shafts_mat.shader, OceanView.SHAFTS_SHADER, "«Обычно» — с глубиной")
+	o.queue_free()
+	await frames(1)
