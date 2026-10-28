@@ -449,6 +449,7 @@ func test_grazing_grazer_skips_ground() -> void:
 	eq(calls[0], 0, "все едят на месте — дно не считают")
 	gz.all[0].agent.set_state(EcoAgent.State.SEEK)
 	gz.all[0].agent.p = moss.patches[0].pos + Vector3(10, 0, 0)
+	w.ship.pos = gz.all[0].agent.p + Vector3(0, 10, 0)   # рядом с кораблём — шагает каждый раз (вдали — EcoLod)
 	w.step(0.05)
 	eq(calls[0], 1, "идущий — считает")
 

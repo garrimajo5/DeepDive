@@ -35,6 +35,8 @@ class Grazer:
 	var patch: EcoMoss.Patch
 	## Секунды до следующего сообщения «объедает мох».
 	var graze_cd := 0.0
+	## Набранное время вдали (EcoLod): шагает реже, догоняя пропущенное.
+	var lag := 0.0
 
 	func grazing() -> bool:
 		return agent.alive and agent.state == EcoAgent.State.GRAZE
@@ -45,6 +47,8 @@ var moss: EcoMoss
 
 var _count: int
 var _rnd: EcoRandom
+## Шаги модуля с reset — очередь скребунов вдали (EcoLod).
+var _tick := 0
 
 
 func _init(moss_system: EcoMoss, n: int = COUNT) -> void:
@@ -60,6 +64,7 @@ static func seed_for(world_seed: int) -> int:
 
 func reset(world: EcoWorld) -> void:
 	_rnd = EcoWorld.seeded_for(seed_for(world.seed_value))
+	_tick = 0
 	all.clear()
 	var pp := moss.patches
 	if pp.is_empty():
@@ -137,9 +142,17 @@ func targets(_world: EcoWorld, out: Array[Dictionary]) -> void:
 			out.append(EcoWorld.target(ID, g.agent.p, 1.4))
 
 
+## Скребун вдали шагает реже (EcoLod): у дна в мути, сдвиг на 3 см за кадр не виден, а дно под ним (шум fbm) —
+## самое дорогое в шаге.
 func step(world: EcoWorld, dt: float) -> void:
 	for g in all:
-		_step_grazer(world, g, dt)
+		if EcoLod.wait(g.agent.p.distance_to(world.ship.pos), _tick, g.index, g.lag, dt):
+			g.lag += dt
+			continue
+		var h := dt + g.lag
+		g.lag = 0.0
+		_step_grazer(world, g, h)
+	_tick += 1
 
 
 ## Текст «объедает мох» собирается в момент показа; мир — слабой ссылкой (событие лежит в шине мира).
