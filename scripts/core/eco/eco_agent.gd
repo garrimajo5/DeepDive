@@ -25,6 +25,8 @@ var state: State = State.GRAZE
 ## Секунды до конца текущего состояния (уменьшается в tick, не ниже нуля).
 var timer := 0.0
 var alive := true
+## Крупный вид (`EcoField.BIG`): у пограничного поля на западе разворачивается (#833).
+var big := false
 ## Как быстро скорость догоняет желаемую (1/с): 1,1 обычно, 1,6 в броске.
 var agility := 1.1
 ## Высота над дном, ниже которой не опускается.
@@ -59,6 +61,7 @@ func _init(species_id: String, pos: Vector3) -> void:
 	p = pos
 	home = pos
 	goal = pos
+	big = EcoField.is_big(species_id)
 
 
 ## Сменить состояние на t секунд.
@@ -126,7 +129,7 @@ func ground_y(ground: Callable) -> float:
 	return _gh
 
 
-## Не под дном, не выше потолка, не за краем отмели (как после шага серпохвоста).
+## Не под дном, не выше потолка, не за краем отмели (как после шага серпохвоста); крупные — не в поясе поля (#833).
 func confine(ground: Callable = Callable()) -> void:
 	if ground.is_valid():
 		var floor_y: float = ground.call(p.x, p.z) + clearance
@@ -138,6 +141,8 @@ func confine(ground: Callable = Callable()) -> void:
 		p.y = ceiling
 	p.x = clampf(p.x, -EDGE, EDGE)
 	p.z = clampf(p.z, -EDGE, EDGE)
+	if big and p.x < EcoField.BELT_IN:
+		EcoField.turn_back(self)
 
 
 ## Курс по дну from доворачивает к want за dt вокруг вертикали: доля угла k/с, не быстрее max_rate рад/с

@@ -65,3 +65,56 @@ func test_scene_only_fans_near() -> void:
 	eq(seen, {EcoFan.ID: 2}, "у площадки — два веерника и больше ничего")
 	view.queue_free()
 	await frames(1)
+
+
+## Пограничное поле (#833): крупный вид, плывущий на запад, разворачивается у кромки пояса и в пояс не заходит.
+func test_big_turns_at_belt() -> void:
+	var a := EcoAgent.new("pred", Vector3(-270.0, -20.0, -210.0))
+	ok(a.big, "серпохвост — крупный")
+	var turned := false
+	for i in 300:
+		a.steer_to(Vector3(-400.0, -20.0, -210.0), 6.0, 0.05)
+		ok(a.p.x >= EcoField.BELT_IN, "не в поясе (x = %.2f)" % a.p.x)
+		if a.v.x > 0.0:
+			turned = true
+	ok(turned, "развернулся на восток")
+	ok(a.goal.x >= EcoField.BELT_IN, "цель за кромкой отражена на восток")
+
+
+## Мелкий вид проходит в пояс до края отмели — дальше края мира нет (выхода во внешний океан нет).
+func test_small_passes_belt() -> void:
+	var a := EcoAgent.new("fish", Vector3(-270.0, -20.0, -210.0))
+	ok(not a.big, "светляк — мелкий")
+	for i in 300:
+		a.steer_to(Vector3(-400.0, -20.0, -210.0), 6.0, 0.05)
+	ok(EcoField.in_belt(a.p.x), "в поясе (x = %.2f)" % a.p.x)
+	near(a.p.x, -EcoAgent.EDGE, 0.01, "дальше края отмели — нет")
+	ok(-EcoAgent.EDGE > EcoField.BELT_OUT, "край отмели — внутри пояса")
+	ok(-EcoAgent.EDGE < EcoField.BELT_IN, "край отмели — за внутренней кромкой")
+
+
+## Восток и прочие края поле не трогает; кромку держит только запад.
+func test_belt_only_west() -> void:
+	var a := EcoAgent.new("pred", Vector3(280.0, -20.0, 280.0))
+	for i in 200:
+		a.steer_to(Vector3(400.0, -20.0, 400.0), 6.0, 0.05)
+	near(a.p.x, EcoAgent.EDGE, 0.01, "на востоке — обычный край отмели")
+	near(a.p.z, EcoAgent.EDGE, 0.01, "на юге — тоже")
+
+
+## В мире ни одно логово стеклоуста и ни один старт серпохвоста не лежит в поясе — крупных у поля не выталкивает.
+func test_big_homes_off_belt() -> void:
+	var w := EcoWorld.new()
+	w.ground = Seabed.height
+	var fish := w.add(EcoFish.new()) as EcoFish
+	var moss := w.add(EcoMoss.new()) as EcoMoss
+	var grazers := w.add(EcoGrazer.new(moss)) as EcoGrazer
+	w.add(EcoPred.new(fish))
+	w.add(EcoEel.new(grazers, fish))
+	w.step(0.1)
+	var big := 0
+	for a in w.agents:
+		if a.big:
+			big += 1
+			ok(a.home.x >= EcoField.BELT_IN, "%s дома не в поясе (x = %.1f)" % [a.species, a.home.x])
+	ok(big > 0, "крупные в мире есть")
