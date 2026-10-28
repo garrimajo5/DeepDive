@@ -118,7 +118,8 @@ func test_fans_by_coral_and_at_start() -> void:
 	var w := _world()
 	var f: EcoFan = _sys(w, EcoFan)
 	var co: EcoCoral = _sys(w, EcoCoral)
-	eq(f.fans.size(), EcoCoral.BASES.size() + 1, "у каждого огнецвета (с заводью 09) и один у старта")
+	eq(f.fans.size(), EcoCoral.BASES.size() + EcoField.FANS.size() + 1,
+		"у каждого огнецвета (с заводью 09), два у площадки 08 и один у старта")
 	for i in EcoCoral.BASES.size():
 		near(Vector2(f.fans[i].pos.x - co.bushes[i].base.x, f.fans[i].pos.z - co.bushes[i].base.z).length(), 7.0, 1e-3,
 			"в 7 м от огнецвета")
