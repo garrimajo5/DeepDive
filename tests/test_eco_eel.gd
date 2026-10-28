@@ -117,6 +117,7 @@ func test_returns_into_crevice_smoothly() -> void:
 	# а не перескакивает за шаг (раньше хвост прыгал на 11 м, голова — на пол-оборота).
 	var w := _world()
 	var e := _eels(w).eels[0]
+	w.ship.pos = e.lair + Vector3(0, 20, 40)   # корабль смотрит — ближе EcoLod.MID: стеклоуст шагает каждый кадр
 	e.mode = EcoEel.Mode.RETURN
 	e.cd = 30.0
 	e.agent.p = e.lair + e.out * 8.0

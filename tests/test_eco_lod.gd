@@ -136,3 +136,63 @@ func test_far_school_still_grazes_and_glazun_hunts() -> void:
 				ok(Vector2(cn.pos.x - c.schools[cn.school].center.x, cn.pos.z - c.schools[cn.school].center.z).length() < 12.0,
 					"рыбка у своего пятна")
 	ok(ambush > 0, "глазун хватает и вдали: %d" % ambush)
+
+
+## Роща ленточника с ежами на ровном дне в точке (0, 0); корабль в ship.
+func _kelp_world(ship: Vector3, calls: Array) -> EcoWorld:
+	var w := EcoWorld.new()
+	w.ground = _floor(calls)
+	w.ship.pos = ship
+	w.add(EcoKelp.new(null, [Vector3(0, FLAT, 0)] as Array[Vector3]))
+	w.reset()
+	calls[0] = 0
+	return w
+
+
+func test_far_urchins_step_less_often() -> void:
+	# корабль над рощей: ежи шагают каждый кадр; в 160 м — раз в три, высоту дна считают реже
+	var near_calls := [0]
+	var far_calls := [0]
+	var near := _kelp_world(Vector3(0, FLAT + 20.0, 0), near_calls)
+	var far := _kelp_world(Vector3(0, FLAT, EcoLod.FAR + 60.0), far_calls)
+	for i in 60:
+		near.step(1.0 / 30.0)
+		far.step(1.0 / 30.0)
+	ok(near_calls[0] > 0, "вблизи ежи ползут — дно под ними считается")
+	ok(far_calls[0] * 2 <= near_calls[0] + 1, "вдали дно реже: %d против %d" % [far_calls[0], near_calls[0]])
+	# путь тот же: набранное время догоняется, ежи уходят от появления так же далеко
+	var kn: EcoKelp = near.systems[0]
+	var kf: EcoKelp = far.systems[0]
+	for i in kn.urchins.size():
+		var a := kn.urchins[i]
+		var b := kf.urchins[i]
+		near(a.pos.distance_to(b.pos), 0.0, 0.3, "ёж %d вдали на том же пути" % i)
+
+
+func test_eel_far_waits_but_at_ship_steps_every_time() -> void:
+	# логово в 160 м: стеклоуст на броске шагает раз в три; плывёт к носу — каждый шаг
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float: return FLAT
+	w.ship.pos = Vector3(0, FLAT + 10.0, EcoLod.FAR + 60.0)
+	var eels := w.add(EcoEel.new(null, null, [Vector3(0, FLAT, 0)] as Array[Vector3])) as EcoEel
+	w.reset()
+	var e := eels.eels[0]
+	e.mode = EcoEel.Mode.RETURN
+	e.agent.p = e.lair + Vector3(20, 0, 0)
+	var moved := 0
+	for i in 12:
+		var was := e.agent.p
+		w.step(1.0 / 30.0)
+		if e.agent.p != was:
+			moved += 1
+	eq(moved, 12 / EcoLod.FAR_EVERY, "вдали — раз в три шага")
+	e.mode = EcoEel.Mode.TO_SHIP
+	e.timer = 100.0
+	e.lag = 0.0
+	moved = 0
+	for i in 12:
+		var was := e.agent.p
+		w.step(1.0 / 30.0)
+		if e.agent.p != was:
+			moved += 1
+	eq(moved, 12, "к носу — каждый шаг")

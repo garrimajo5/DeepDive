@@ -98,6 +98,8 @@ class Urchin:
 	var graze_cd := 0.0
 	## Фаза покачивания (рисунок).
 	var phase := 0.0
+	## Набранное время вдали (EcoLod): шагает реже, догоняя пропущенное.
+	var lag := 0.0
 
 
 var groves: Array[Grove] = []
@@ -110,6 +112,8 @@ var dirty := true
 var _rnd: EcoRandom
 var _spots: Array[Vector3]
 var _ground: Callable
+## Шаги модуля с reset — очередь ежей вдали (EcoLod).
+var _tick := 0
 
 
 ## prey_fish — светляки мира (подключены раньше); spots — свои середины рощ (для тестов), пусто — у стай 1 и 2.
@@ -128,6 +132,7 @@ func reset(world: EcoWorld) -> void:
 	groves.clear()
 	urchins.clear()
 	dirty = true
+	_tick = 0
 	var places: Array[Vector3] = []
 	var owners: Array[EcoFish.Shoal] = []
 	if not _spots.is_empty():
@@ -167,9 +172,16 @@ func reset(world: EcoWorld) -> void:
 			urchins.append(u)
 
 
+## Ёж вдали шагает реже (EcoLod): ползёт 0,3 м/с у дна в мути, а высота дна под ним (шум fbm) — самое дорогое в шаге.
 func step(world: EcoWorld, dt: float) -> void:
 	for u in urchins:
-		_step_urchin(world, u, dt)
+		if EcoLod.wait(u.pos.distance_to(world.ship.pos), _tick, u.index, u.lag, dt):
+			u.lag += dt
+			continue
+		var h := dt + u.lag
+		u.lag = 0.0
+		_step_urchin(world, u, h)
+	_tick += 1
 	for gr in groves:
 		gr.msg_cd -= dt
 		gr.graze_cd -= dt
