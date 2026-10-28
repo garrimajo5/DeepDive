@@ -442,6 +442,8 @@ func _load_state() -> void:
 	role_card.on = hints and not QaRunner.pending()   # тестер включает шагом `cards`
 	role_card.set_read(settings.cards)
 	save.expedition = expedition
+	save.helm = helm       # место, курс, корпус и заряд — ключ "ship" для кампании (#823)
+	save.vitals = vitals
 	save.load_into(samples, scanner)
 	_begin_run()
 	samples.changed.connect(save.mark)
