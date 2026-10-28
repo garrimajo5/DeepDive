@@ -51,26 +51,26 @@ func test_project_input_and_presets() -> void:
 func test_desktop_needs_nothing() -> void:
 	var p := MicPermit.new()
 	ok(p.ok(), "не Android — микрофон можно")
-	ok(not p.step(DT, true, true, _list), "и не спрашиваем")
+	ok(not p.step(DT, true, true, true, _list), "и не спрашиваем")
 
 
 func test_first_press_asks_once() -> void:
 	var p := _phone()
 	ok(not p.ok(), "Android без разрешения — нельзя")
-	ok(not p.step(DT, false, false, _list), "без нажатия не спрашиваем")
-	ok(p.step(DT, true, false, _list), "первое нажатие — системный запрос")
-	ok(not p.step(DT, true, false, _list), "второе нажатие — уже не навязываемся")
-	ok(p.step(DT, false, true, _list), "«В настройки» — спросить снова")
+	ok(not p.step(DT, true, false, false, _list), "без нажатия не спрашиваем")
+	ok(p.step(DT, true, true, false, _list), "первое нажатие — системный запрос")
+	ok(not p.step(DT, true, true, false, _list), "второе нажатие — уже не навязываемся")
+	ok(p.step(DT, true, false, true, _list), "«В настройки» — спросить снова")
 	ok(not p.ok(), "отказ — всё ещё нельзя")
 
 
 func test_grant_is_polled() -> void:
 	var p := _phone()
-	p.step(DT, true, false, _list)
+	p.step(DT, true, true, false, _list)
 	granted = PackedStringArray([MicPermit.NAME])
-	p.step(DT, false, false, _list)
+	p.step(DT, true, false, false, _list)
 	ok(p.ok(), "разрешили — сразу на следующем шаге (опрос после запроса)")
-	ok(not p.step(DT, true, true, _list), "с разрешением не спрашиваем")
+	ok(not p.step(DT, true, true, true, _list), "с разрешением не спрашиваем")
 
 
 func test_poll_is_rare() -> void:
@@ -80,8 +80,52 @@ func test_poll_is_rare() -> void:
 		calls[0] += 1
 		return PackedStringArray()
 	for i in 30:
-		p.step(DT, false, false, list)
+		p.step(DT, true, false, false, list)
 	ok(calls[0] <= 3, "список разрешений — раз в %.1f с, не каждый кадр (%d раз за секунду)" % [MicPermit.POLL, calls[0]])
+
+
+## Одиночная игра: рации нет — список разрешений (запрос к системе, 20–40 мс на эмуляторе) не трогаем вовсе;
+## без вызова здесь «интерфейс/рация» брала десятки мс раз в 0,5 с (отчёт тестера 2026-10-28-1915).
+func test_solo_never_polls() -> void:
+	var p := _phone()
+	var calls := [0]
+	var list := func() -> PackedStringArray:
+		calls[0] += 1
+		return PackedStringArray()
+	for i in 300:
+		ok(not p.step(DT, false, false, false, list), "без рации не спрашиваем")
+	eq(calls[0], 0, "без рации список не читаем")
+	p.step(DT, true, false, false, list)
+	eq(calls[0], 1, "рация появилась — смотрим сразу")
+
+
+## Без запроса — раз в IDLE; после запроса — часто, пока идёт WAIT.
+func test_idle_poll_slow_after_ask_fast() -> void:
+	var p := _phone()
+	var calls := [0]
+	var list := func() -> PackedStringArray:
+		calls[0] += 1
+		return PackedStringArray()
+	for i in int(MicPermit.IDLE * 30.0) - 1:
+		p.step(DT, true, false, false, list)
+	eq(calls[0], 1, "за %.0f с без запроса — один раз" % MicPermit.IDLE)
+	calls[0] = 0
+	p.step(DT, true, true, false, list)
+	for i in 30:
+		p.step(DT, true, false, false, list)
+	ok(calls[0] >= 2, "после запроса — раз в %.1f с (%d за секунду)" % [MicPermit.POLL, calls[0]])
+
+
+func test_scene_solo_never_polls() -> void:
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var permit := main.overlay_flow.mic_permit
+	permit.needed = true   # телефон без разрешения, одиночная игра
+	for i in 40:
+		main.step(DT)
+	ok(not main.radio.on, "в одиночной игре рации нет")
+	ok(not permit.granted and permit._poll == 0.0, "и список разрешений не читали")
 
 
 func test_radio_press_without_mic() -> void:
