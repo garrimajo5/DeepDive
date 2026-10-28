@@ -224,111 +224,133 @@ static func fish_of(systems: Array) -> EcoFish:
 static func pack_world(agents: Array[EcoAgent], systems: Array, center: Vector3,
 		radius: float = NET_R, time: float = -1.0) -> PackedFloat32Array:
 	var out := pack_near(agents, center, radius)
-	var moss := PackedFloat32Array()
+	# части пишутся прямо в out: метка, затем записи; без записей метка снимается (`_close`)
+	var mark := _open(out, NET_MOSS)
 	var i := 0
 	for m in mosses(systems):
 		for p in m.patches:
 			if Vector2(p.pos.x - center.x, p.pos.z - center.z).length() <= radius:
-				moss.append_array([i, p.food])
+				out.append(i)
+				out.append(p.food)
 			i += 1
-	if not moss.is_empty():
-		out.append(NET_MOSS)
-		out.append_array(moss)
+	_close(out, mark)
 	var fish := fish_of(systems)
-	var sh_out := PackedFloat32Array()
 	if fish != null:
+		mark = _open(out, NET_SHOAL)
 		for sh in fish.shoals:
 			if sh.alive > 0 and sh.center.distance_to(center) <= radius:
-				sh_out.append_array([sh.index, sh.center.x, sh.center.y, sh.center.z,
+				out.append_array([sh.index, sh.center.x, sh.center.y, sh.center.z,
 					sh.velocity.x, sh.velocity.y, sh.velocity.z, sh.goal.x, sh.goal.y, sh.goal.z,
 					sh.goal_timer, sh.alarm])
-	if not sh_out.is_empty():
-		out.append(NET_SHOAL)
-		out.append_array(sh_out)
+		_close(out, mark)
 	var coins := coins_of(systems)
-	var cn_out := PackedFloat32Array()
 	if coins != null:
+		mark = _open(out, NET_COINS)
 		for sc in coins.schools:
 			if sc.center.distance_to(center) <= radius:
-				cn_out.append_array(pack_school(sc))
-	if not cn_out.is_empty():
-		out.append(NET_COINS)
-		out.append_array(cn_out)
+				_put_school(out, sc)
+		_close(out, mark)
 	var kelp := kelp_of(systems)
-	var kl_out := PackedFloat32Array()
 	if kelp != null:
+		mark = _open(out, NET_KELP)
 		for gr in kelp.groves:
 			if Vector2(gr.center.x - center.x, gr.center.z - center.z).length() <= radius:
-				kl_out.append_array(pack_grove(kelp, gr))
-	if not kl_out.is_empty():
-		out.append(NET_KELP)
-		out.append_array(kl_out)
+				_put_grove(out, kelp, gr)
+		_close(out, mark)
 	var rd := raduzh_of(systems)
-	var rd_out := PackedFloat32Array()
 	if rd != null:
+		mark = _open(out, NET_RADUZH)
 		for sw in rd.swarms:
 			if sw.c.distance_to(center) <= radius:
-				rd_out.append_array([sw.index, sw.glow, 1.0 if sw.lit else 0.0])
-	if not rd_out.is_empty():
-		out.append(NET_RADUZH)
-		out.append_array(rd_out)
+				out.append_array([sw.index, sw.glow, 1.0 if sw.lit else 0.0])
+		_close(out, mark)
 	var pl := plankton_of(systems)
-	var pl_out := PackedFloat32Array()
 	if pl != null and time >= 0.0:
+		mark = _open(out, NET_PLANKTON)
 		for cl in pl.clouds:
 			if cl.c.distance_to(center) <= radius + EcoPlankton.R and time - cl.cut_at < PLANKTON_FADE:
-				pl_out.append_array(pack_cloud(cl, time))
-	if not pl_out.is_empty():
-		out.append(NET_PLANKTON)
-		out.append_array(pl_out)
+				_put_cloud(out, cl, time)
+		_close(out, mark)
 	if time >= 0.0:
 		out.append(NET_TIME)
 		out.append(time)
 	return out
 
 
+## Начать часть пакета: метка marker в конец out. Возвращает, где она стоит (для `_close`).
+static func _open(out: PackedFloat32Array, marker: int) -> int:
+	out.append(marker)
+	return out.size() - 1
+
+
+## Закончить часть пакета, начатую `_open` на месте mark: ни одной записи — метка снимается.
+static func _close(out: PackedFloat32Array, mark: int) -> void:
+	if out.size() == mark + 1:
+		out.resize(mark)
+
+
 ## Поставить гостю существ, мох и стаи по пакету `pack_world` (старый пакет без мха и стай — только существа).
 ## Возвращает, сколько пятен мха поставлено; стаи — `apply_shoals`. world — мир гостя: его время подтягивается
-## к хостовому (`synced_time`) до вспышек, иначе вспышки ставятся по времени из пакета.
+## к хостовому (`synced_time`) до вспышек, иначе вспышки ставятся по времени из пакета. Пакет размечается один раз
+## (`parts`), части читаются прямо из data — без копий.
 static func apply_world(agents: Array[EcoAgent], systems: Array, data: PackedFloat32Array,
 		world: EcoWorld = null) -> int:
-	var host_t := net_time(data)
+	var at := parts(data)
+	var host_t := net_time(data, at)
 	var now := host_t
 	if world != null:
 		world.time = synced_time(world.time, host_t)
 		now = world.time
 	apply_near(agents, data)
-	var moss := _section(data, NET_MOSS)
-	var n := 0
-	if not moss.is_empty():
-		var all: Array[EcoMoss.Patch] = []
-		for m in mosses(systems):
-			all.append_array(m.patches)
-		for k in range(0, moss.size() - NET_MOSS_STRIDE + 1, NET_MOSS_STRIDE):
-			var i := int(moss[k])
-			if i < 0 or i >= all.size():
-				continue
-			all[i].food = clampf(moss[k + 1], 0.0, 1.0)
-			n += 1
-	apply_shoals(agents, systems, data)
+	var n := _apply_moss(systems, data, at)
+	apply_shoals(agents, systems, data, at)
 	var fish := fish_of(systems)
 	if fish:  # рыбок поставили мимо шага стаи — рамки для поиска добычи (EcoFish.nearest_fish) заново
 		fish.bounds()
-	apply_coins(systems, data)
-	apply_kelp(systems, data)
-	apply_raduzh(systems, data, now)
+	apply_coins(systems, data, at)
+	apply_kelp(systems, data, at)
+	apply_raduzh(systems, data, now, at)
 	if now >= 0.0:
-		apply_plankton(systems, data, now)
+		apply_plankton(systems, data, now, at)
+	return n
+
+
+## Пятна мха из пакета: номера сквозные по `mosses` и идут по возрастанию — список мха проходится один раз.
+static func _apply_moss(systems: Array, data: PackedFloat32Array, at: PackedInt32Array) -> int:
+	var from := at[_slot(NET_MOSS)]
+	if from < 0:
+		return 0
+	var to := at[_slot(NET_MOSS) + 1]
+	var all := mosses(systems)
+	var mi := 0
+	var base := 0
+	var n := 0
+	for k in range(from, to - NET_MOSS_STRIDE + 1, NET_MOSS_STRIDE):
+		var i := int(data[k])
+		if i < base:   # номера не по порядку — с начала списка
+			mi = 0
+			base = 0
+		while mi < all.size() and i >= base + all[mi].patches.size():
+			base += all[mi].patches.size()
+			mi += 1
+		if i < 0 or mi >= all.size():
+			continue
+		all[mi].patches[i - base].food = clampf(data[k + 1], 0.0, 1.0)
+		n += 1
 	return n
 
 
 ## Стаи из пакета `pack_world`: цель, таймер и тревога — как у хоста; рыбки стаи, не пришедшие поштучно в пакете
 ## существ, сдвигаются одним смещением, чтобы центр живых стал хостовым; скорость стаи — хостовая. Возвращает,
 ## сколько стай поставлено.
-static func apply_shoals(agents: Array[EcoAgent], systems: Array, data: PackedFloat32Array) -> int:
-	var part := _section(data, NET_SHOAL)
+static func apply_shoals(agents: Array[EcoAgent], systems: Array, data: PackedFloat32Array,
+		at := PackedInt32Array()) -> int:
+	if at.is_empty():
+		at = parts(data)
+	var from := at[_slot(NET_SHOAL)]
+	var to := at[_slot(NET_SHOAL) + 1]
 	var fish := fish_of(systems)
-	if part.is_empty() or fish == null:
+	if from < 0 or fish == null:
 		return 0
 	var sent := {}   # существа, поставленные поштучно
 	for k in range(0, data.size() - NET_STRIDE + 1, NET_STRIDE):
@@ -338,12 +360,12 @@ static func apply_shoals(agents: Array[EcoAgent], systems: Array, data: PackedFl
 		if i < agents.size():
 			sent[agents[i]] = true
 	var n := 0
-	for k in range(0, part.size() - NET_SHOAL_STRIDE + 1, NET_SHOAL_STRIDE):
-		var si := int(part[k])
+	for k in range(from, to - NET_SHOAL_STRIDE + 1, NET_SHOAL_STRIDE):
+		var si := int(data[k])
 		if si < 0 or si >= fish.shoals.size():
 			continue
 		var sh: EcoFish.Shoal = fish.shoals[si]
-		var c := Vector3(part[k + 1], part[k + 2], part[k + 3])
+		var c := Vector3(data[k + 1], data[k + 2], data[k + 3])
 		var sum := Vector3.ZERO
 		var live := 0
 		var free: Array[EcoAgent] = []
@@ -359,10 +381,10 @@ static func apply_shoals(agents: Array[EcoAgent], systems: Array, data: PackedFl
 			for a in free:
 				a.p += shift
 		sh.center = c
-		sh.velocity = Vector3(part[k + 4], part[k + 5], part[k + 6])
-		sh.goal = Vector3(part[k + 7], part[k + 8], part[k + 9])
-		sh.goal_timer = part[k + 10]
-		sh.alarm = maxf(part[k + 11], 0.0)
+		sh.velocity = Vector3(data[k + 4], data[k + 5], data[k + 6])
+		sh.goal = Vector3(data[k + 7], data[k + 8], data[k + 9])
+		sh.goal_timer = data[k + 10]
+		sh.alarm = maxf(data[k + 11], 0.0)
 		n += 1
 	return n
 
@@ -387,8 +409,15 @@ static func coins_of(systems: Array) -> EcoCoins:
 
 ## Запись стайки монетников для пакета (NET_COINS_STRIDE чисел).
 static func pack_school(sc: EcoCoins.School) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	_put_school(out, sc)
+	return out
+
+
+## Дописать запись стайки в конец out.
+static func _put_school(out: PackedFloat32Array, sc: EcoCoins.School) -> void:
 	var gz := sc.glazun
-	var out := PackedFloat32Array([sc.index, sc.scatter, sc.from.x, sc.from.y, sc.from.z,
+	out.append_array([sc.index, sc.scatter, sc.from.x, sc.from.y, sc.from.z,
 		gz.lunge if gz else 0.0, gz.cd if gz else 0.0])
 	for k in EcoCoins.PER:
 		if k >= sc.members.size():
@@ -397,36 +426,38 @@ static func pack_school(sc: EcoCoins.School) -> PackedFloat32Array:
 		var c := sc.members[k]
 		out.append_array([-1.0 if c.alive else maxf(c.respawn, 0.0), c.pos.x, c.pos.y, c.pos.z,
 			c.vel.x, c.vel.y, c.vel.z, c.goal.x, c.goal.y, c.goal.z, c.goal_t])
-	return out
 
 
 ## Стайки монетников из пакета `pack_world`: бегство, глазун и каждый монетник — как у хоста. Возвращает, сколько
 ## стаек поставлено.
-static func apply_coins(systems: Array, data: PackedFloat32Array) -> int:
-	var part := _section(data, NET_COINS)
+static func apply_coins(systems: Array, data: PackedFloat32Array, at := PackedInt32Array()) -> int:
+	if at.is_empty():
+		at = parts(data)
+	var from := at[_slot(NET_COINS)]
+	var to := at[_slot(NET_COINS) + 1]
 	var coins := coins_of(systems)
-	if part.is_empty() or coins == null:
+	if from < 0 or coins == null:
 		return 0
 	var n := 0
-	for k in range(0, part.size() - NET_COINS_STRIDE + 1, NET_COINS_STRIDE):
-		var si := int(part[k])
+	for k in range(from, to - NET_COINS_STRIDE + 1, NET_COINS_STRIDE):
+		var si := int(data[k])
 		if si < 0 or si >= coins.schools.size():
 			continue
 		var sc: EcoCoins.School = coins.schools[si]
-		sc.scatter = part[k + 1]
-		sc.from = Vector3(part[k + 2], part[k + 3], part[k + 4])
+		sc.scatter = data[k + 1]
+		sc.from = Vector3(data[k + 2], data[k + 3], data[k + 4])
 		if sc.glazun:
-			sc.glazun.lunge = part[k + 5]
-			sc.glazun.cd = part[k + 6]
+			sc.glazun.lunge = data[k + 5]
+			sc.glazun.cd = data[k + 6]
 		for j in mini(EcoCoins.PER, sc.members.size()):
 			var b := k + 7 + j * NET_COIN_STRIDE
 			var c := sc.members[j]
-			c.alive = part[b] < 0.0
-			c.respawn = 0.0 if c.alive else part[b]
-			c.pos = Vector3(part[b + 1], part[b + 2], part[b + 3])
-			c.vel = Vector3(part[b + 4], part[b + 5], part[b + 6])
-			c.goal = Vector3(part[b + 7], part[b + 8], part[b + 9])
-			c.goal_t = part[b + 10]
+			c.alive = data[b] < 0.0
+			c.respawn = 0.0 if c.alive else data[b]
+			c.pos = Vector3(data[b + 1], data[b + 2], data[b + 3])
+			c.vel = Vector3(data[b + 4], data[b + 5], data[b + 6])
+			c.goal = Vector3(data[b + 7], data[b + 8], data[b + 9])
+			c.goal_t = data[b + 10]
 		n += 1
 	return n
 
@@ -460,7 +491,14 @@ static func _grove_urchins(kelp: EcoKelp, gi: int) -> Array[EcoKelp.Urchin]:
 
 ## Запись рощи для пакета (NET_KELP_STRIDE чисел).
 static func pack_grove(kelp: EcoKelp, gr: EcoKelp.Grove) -> PackedFloat32Array:
-	var out := PackedFloat32Array([gr.index])
+	var out := PackedFloat32Array()
+	_put_grove(out, kelp, gr)
+	return out
+
+
+## Дописать запись рощи в конец out.
+static func _put_grove(out: PackedFloat32Array, kelp: EcoKelp, gr: EcoKelp.Grove) -> void:
+	out.append(gr.index)
 	for k in EcoKelp.KELP_N:
 		out.append(gr.stalks[k].f if k < gr.stalks.size() else 1.0)
 	var us := _grove_urchins(kelp, gr.index)
@@ -471,39 +509,41 @@ static func pack_grove(kelp: EcoKelp, gr: EcoKelp.Grove) -> PackedFloat32Array:
 		var u := us[k]
 		out.append_array([-1.0 if u.alive else maxf(u.respawn, 0.0), u.pos.x, u.pos.y, u.pos.z, u.goal,
 			u.wander.x, u.wander.z, u.wander_t, u.graze_cd])
-	return out
 
 
 ## Рощи из пакета `pack_world`: густота лент и каждый ёж — как у хоста, кто ест ленту — по целям ежей. Возвращает,
 ## сколько рощ поставлено.
-static func apply_kelp(systems: Array, data: PackedFloat32Array) -> int:
-	var part := _section(data, NET_KELP)
+static func apply_kelp(systems: Array, data: PackedFloat32Array, at := PackedInt32Array()) -> int:
+	if at.is_empty():
+		at = parts(data)
+	var from := at[_slot(NET_KELP)]
+	var to := at[_slot(NET_KELP) + 1]
 	var kelp := kelp_of(systems)
-	if part.is_empty() or kelp == null:
+	if from < 0 or kelp == null:
 		return 0
 	var n := 0
-	for k in range(0, part.size() - NET_KELP_STRIDE + 1, NET_KELP_STRIDE):
-		var gi := int(part[k])
+	for k in range(from, to - NET_KELP_STRIDE + 1, NET_KELP_STRIDE):
+		var gi := int(data[k])
 		if gi < 0 or gi >= kelp.groves.size():
 			continue
 		var gr: EcoKelp.Grove = kelp.groves[gi]
 		for j in mini(EcoKelp.KELP_N, gr.stalks.size()):
-			gr.stalks[j].f = clampf(part[k + 1 + j], EcoKelp.F_MIN, 1.0)
+			gr.stalks[j].f = clampf(data[k + 1 + j], EcoKelp.F_MIN, 1.0)
 			gr.stalks[j].eater = -1
 		var us := _grove_urchins(kelp, gi)
 		for j in mini(EcoKelp.URCH_N, us.size()):
 			var b := k + 1 + EcoKelp.KELP_N + j * NET_URCHIN_STRIDE
 			var u := us[j]
-			u.alive = part[b] < 0.0
-			u.respawn = 0.0 if u.alive else part[b]
-			u.pos = Vector3(part[b + 1], part[b + 2], part[b + 3])
-			var goal := int(part[b + 4])
+			u.alive = data[b] < 0.0
+			u.respawn = 0.0 if u.alive else data[b]
+			u.pos = Vector3(data[b + 1], data[b + 2], data[b + 3])
+			var goal := int(data[b + 4])
 			u.goal = goal if u.alive and goal >= 0 and goal < gr.stalks.size() else -1
 			if u.goal >= 0:
 				gr.stalks[u.goal].eater = u.index
-			u.wander = Vector3(part[b + 5], 0.0, part[b + 6])
-			u.wander_t = part[b + 7]
-			u.graze_cd = part[b + 8]
+			u.wander = Vector3(data[b + 5], 0.0, data[b + 6])
+			u.wander_t = data[b + 7]
+			u.graze_cd = data[b + 8]
 		n += 1
 	return n
 
@@ -548,9 +588,11 @@ static func plankton_of(systems: Array) -> EcoPlankton:
 
 
 ## Время мира хоста из пакета `pack_world`; нет — −1.
-static func net_time(data: PackedFloat32Array) -> float:
-	var part := _section(data, NET_TIME)
-	return part[0] if not part.is_empty() else -1.0
+static func net_time(data: PackedFloat32Array, at := PackedInt32Array()) -> float:
+	if at.is_empty():
+		at = parts(data)
+	var from := at[_slot(NET_TIME)]
+	return data[from] if from >= 0 and from < at[_slot(NET_TIME) + 1] else -1.0
 
 
 ## Время гостя после пакета с временем хоста host (−1 — пакета без времени: своё).
@@ -563,13 +605,19 @@ static func synced_time(local: float, host: float) -> float:
 
 ## Запись облака для пакета (NET_PLANKTON_STRIDE чисел) в момент мира t.
 static func pack_cloud(cl: EcoPlankton.Cloud, t: float) -> PackedFloat32Array:
-	var out := PackedFloat32Array([cl.index, maxf(t - cl.cut_at, 0.0), cl.ship, cl.pred_lit])
+	var out := PackedFloat32Array()
+	_put_cloud(out, cl, t)
+	return out
+
+
+## Дописать запись облака в конец out.
+static func _put_cloud(out: PackedFloat32Array, cl: EcoPlankton.Cloud, t: float) -> void:
+	out.append_array([cl.index, maxf(t - cl.cut_at, 0.0), cl.ship, cl.pred_lit])
 	for k in range(0, EcoPlankton.PER_CLOUD, 3):
 		var v := 0
 		for j in 3:
 			v += _cell_byte(cl, k + j, t) << (8 * j)
 		out.append(v)
-	return out
 
 
 static func _cell_byte(cl: EcoPlankton.Cloud, k: int, t: float) -> int:
@@ -581,19 +629,23 @@ static func _cell_byte(cl: EcoPlankton.Cloud, k: int, t: float) -> int:
 
 ## Стаи радужников из пакета `pack_world`: вспышка и луч как у хоста, центр — по времени гостя. Возвращает, сколько
 ## стай поставлено.
-static func apply_raduzh(systems: Array, data: PackedFloat32Array, now: float = -1.0) -> int:
-	var part := _section(data, NET_RADUZH)
+static func apply_raduzh(systems: Array, data: PackedFloat32Array, now: float = -1.0,
+		at := PackedInt32Array()) -> int:
+	if at.is_empty():
+		at = parts(data)
+	var from := at[_slot(NET_RADUZH)]
+	var to := at[_slot(NET_RADUZH) + 1]
 	var rd := raduzh_of(systems)
-	if part.is_empty() or rd == null:
+	if from < 0 or rd == null:
 		return 0
 	var n := 0
-	for k in range(0, part.size() - NET_RADUZH_STRIDE + 1, NET_RADUZH_STRIDE):
-		var i := int(part[k])
+	for k in range(from, to - NET_RADUZH_STRIDE + 1, NET_RADUZH_STRIDE):
+		var i := int(data[k])
 		if i < 0 or i >= rd.swarms.size():
 			continue
 		var sw: EcoRaduzh.Swarm = rd.swarms[i]
-		sw.glow = clampf(part[k + 1], 0.0, 1.0)
-		sw.lit = part[k + 2] > 0.5
+		sw.glow = clampf(data[k + 1], 0.0, 1.0)
+		sw.lit = data[k + 2] > 0.5
 		if now >= 0.0:
 			sw.c = EcoRaduzh.center(sw, now)
 		n += 1
@@ -608,23 +660,27 @@ static func apply_raduzh(systems: Array, data: PackedFloat32Array, now: float = 
 
 ## Облака планктона из пакета `pack_world` в момент мира гостя now: вспышка каждой клетки и кто её зажёг, след
 ## корабля — как у хоста; вид переписывает буфер (`version`). Возвращает, сколько облаков поставлено.
-static func apply_plankton(systems: Array, data: PackedFloat32Array, now: float) -> int:
-	var part := _section(data, NET_PLANKTON)
+static func apply_plankton(systems: Array, data: PackedFloat32Array, now: float,
+		at := PackedInt32Array()) -> int:
+	if at.is_empty():
+		at = parts(data)
+	var from := at[_slot(NET_PLANKTON)]
+	var to := at[_slot(NET_PLANKTON) + 1]
 	var pl := plankton_of(systems)
-	if part.is_empty() or pl == null:
+	if from < 0 or pl == null:
 		return 0
 	var n := 0
-	for k in range(0, part.size() - NET_PLANKTON_STRIDE + 1, NET_PLANKTON_STRIDE):
-		var i := int(part[k])
+	for k in range(from, to - NET_PLANKTON_STRIDE + 1, NET_PLANKTON_STRIDE):
+		var i := int(data[k])
 		if i < 0 or i >= pl.clouds.size():
 			continue
 		var cl: EcoPlankton.Cloud = pl.clouds[i]
-		cl.cut_at = now - part[k + 1]
-		cl.ship = clampf(part[k + 2], 0.0, 1.0)
-		cl.pred_lit = int(part[k + 3])
+		cl.cut_at = now - data[k + 1]
+		cl.ship = clampf(data[k + 2], 0.0, 1.0)
+		cl.pred_lit = int(data[k + 3])
 		cl.c = EcoPlankton.center(cl, now)
 		for j in range(0, EcoPlankton.PER_CLOUD, 3):
-			var v := int(part[k + 4 + j / 3])
+			var v := int(data[k + 4 + j / 3])
 			for b in 3:
 				var byte := (v >> (8 * b)) & 0xFF
 				var q := byte & 63
@@ -642,9 +698,18 @@ static func apply_plankton(systems: Array, data: PackedFloat32Array, now: float)
 	return n
 
 
-## Часть пакета `pack_world` после метки marker (без неё) до следующей метки: метки стоят на месте номера записи,
-## номера записей не меньше нуля. Нет такой части — пусто.
-static func _section(data: PackedFloat32Array, marker: int) -> PackedFloat32Array:
+## Сколько раз пакет размечен (`parts`) — для теста: `apply_world` размечает пакет один раз.
+static var scans := 0
+
+
+## Разметка пакета `pack_world` за один проход: на каждую метку два числа (`_slot`) — где начинается её часть
+## (сразу за меткой) и где кончается; части нет — −1, −1. Метки стоят на месте номера записи, номера записей не
+## меньше нуля. Незнакомая метка обрывает разбор: дальше — не наше.
+static func parts(data: PackedFloat32Array) -> PackedInt32Array:
+	scans += 1
+	var at := PackedInt32Array()
+	at.resize(_slot(NET_TIME) + 2)
+	at.fill(-1)
 	var k := 0
 	while k + NET_STRIDE <= data.size() and int(data[k]) >= 0:
 		k += NET_STRIDE
@@ -657,9 +722,15 @@ static func _section(data: PackedFloat32Array, marker: int) -> PackedFloat32Arra
 		k = start
 		while k + step <= data.size() and int(data[k]) >= 0:
 			k += step
-		if m == marker:
-			return data.slice(start, k)
-	return PackedFloat32Array()
+		if at[_slot(m)] < 0:
+			at[_slot(m)] = start
+			at[_slot(m) + 1] = k
+	return at
+
+
+## Место метки marker (−1…−7) в разметке `parts`.
+static func _slot(marker: int) -> int:
+	return -2 * marker
 
 
 ## Чисел на запись в части пакета после метки marker; 0 — метка незнакомая.
