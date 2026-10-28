@@ -30,8 +30,8 @@ uniform vec2 seg_info[8];     // индекс маршрута, путь от н
 uniform int seg_count = 0;
 uniform int sel_route = -1;
 uniform float route_len = 1.0;
-uniform vec2 places[6];       // места на столе (м)
-uniform float place_state[6]; // 0 — не на маршруте, 1 — на маршруте, 2 — пройдено, 3 — следующая точка
+uniform vec2 places[11];       // места на столе (м)
+uniform float place_state[11]; // 0 — не на маршруте, 1 — на маршруте, 2 — пройдено, 3 — следующая точка
 uniform vec2 ship_t = vec2(0.0);  // корабль на столе (м)
 
 varying vec2 local;
@@ -78,7 +78,7 @@ vec3 briefing(vec2 lm, float c, float s) {
 		}
 		col = mix(col, lc, m);
 	}
-	for (int i = 0; i < 6; i++) {
+	for (int i = 0; i < 11; i++) {
 		float d = length(lm - places[i]);
 		float st = place_state[i];
 		vec3 pc = st > 0.5 ? pick : soft * 0.55;

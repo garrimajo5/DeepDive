@@ -9,6 +9,8 @@ func test_places_match_map() -> void:
 	for l in data["locations"]:
 		by_name[l["name"]] = Vector2(float(l["x"]), float(l["z"]))
 	for k in Run.PLACES:
+		if LayerMap.id_of(k) == "00" or not LayerMap.POINTS[LayerMap.id_of(k)]["accepted"]:
+			continue   # старт и места слоя 1 (#829) — не ART-005, их сверяет test_layer_map
 		ok(by_name.has(Run.place_name(k)), "место %s есть на карте" % k)
 		eq(Run.place_xz(k), by_name[Run.place_name(k)], "место %s — по карте ART-005" % k)
 	eq(Run.place_xz("geyser"), Reactor.VENT_POS, "курильщик там же, где перегрев")

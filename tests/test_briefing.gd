@@ -11,7 +11,22 @@ func test_scale_and_places() -> void:
 		var t := Briefing.table_xz(Run.place_xz(k))
 		ok(absf(t.x) < Briefing.SIDE / 2 and absf(t.y) < Briefing.SIDE / 2, "место %s на карте стола" % k)
 	eq(Briefing.NUMBERS["bones"], 4, "номера — по таблице ART-016")
-	eq(Briefing.ORDER.size(), 6)
+	eq(Briefing.ORDER.size(), 11, "все 11 мест слоя 1 (#829)")
+	eq(Briefing.ORDER, Array(Run.PLACES.keys()), "порядок шейдера — как Run.PLACES")
+	for k: String in Briefing.ORDER:
+		eq(Briefing.NUMBERS[k], int(LayerMap.id_of(k)), "номер места %s — по карте слоя" % k)
+	var src := FileAccess.get_file_as_string("res://shaders/sonar_holo.gdshader")
+	ok(src.contains("places[%d]" % Briefing.ORDER.size()) and src.contains("place_state[%d]" % Briefing.ORDER.size())
+		and src.contains("i < %d;" % Briefing.ORDER.size()), "шейдер держит все места")
+
+
+## #829: места слоя 1 на столе не налезают иконками друг на друга (по горизонтали стола, с запасом на номер).
+func test_places_apart_on_table() -> void:
+	for a: String in Briefing.ORDER:
+		for b: String in Briefing.ORDER:
+			if a < b:
+				var d := Briefing.table_xz(Run.place_xz(a)).distance_to(Briefing.table_xz(Run.place_xz(b)))
+				ok(d >= Briefing.ICON_SIZE, "%s и %s дальше иконки на столе (%.3f м)" % [a, b, d])
 
 
 func test_segments_follow_routes() -> void:
@@ -44,11 +59,13 @@ func test_wanted_and_fade() -> void:
 
 func test_place_states() -> void:
 	var run := Run.new()
-	eq(Array(SonarView.place_states(run)), [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "без маршрута — все тусклые")
+	eq(Array(SonarView.place_states(run)), [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+		"без маршрута — все тусклые")
 	run.choose(0)
 	run.update(40.0, -50.0)   # Каменный цветок пройден
-	# порядок ORDER: flower, geyser, shell, bones, well, drop
-	eq(Array(SonarView.place_states(run)), [2.0, 0.0, 0.0, 3.0, 1.0, 0.0], "пройдено, следующая, на маршруте")
+	# порядок ORDER: flower, geyser, shell, bones, well, drop, start, gate, field, cove, descent
+	eq(Array(SonarView.place_states(run)), [2.0, 0.0, 0.0, 3.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+		"пройдено, следующая, на маршруте; места слоя 1 вне маршрутов — тусклые")
 
 
 func test_scene_briefing_at_route_post() -> void:
@@ -96,7 +113,8 @@ func test_scene_icons() -> void:
 	tree.root.add_child(main)
 	await frames(2)
 	var sv := main.sonar_view
-	eq(sv.icons.size(), 6, "шесть иконок мест")
+	eq(sv.icons.size(), 11, "иконки всех 11 мест слоя 1 (#829)")
+	eq(sv.numbers[Briefing.ORDER.find("descent")].text, "10", "спуск к лесу — «10»")
 	ok(not sv.icons[0].visible, "вне брифинга иконки скрыты")
 	main.walker.x = Main.ROUTE_POST.x
 	main.walker.z = Main.ROUTE_POST.y

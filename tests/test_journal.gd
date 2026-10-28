@@ -23,12 +23,16 @@ func test_layout_by_mockup() -> void:
 	near(Journal.left(Vector2(1280, 720)), 120.0, 1e-3, "16:9 меньше — тот же макет")
 	eq(Journal.back_rect(SIZE), Rect2(1740, 52, 300, 112), "«Назад» у правого края контента")
 	eq(Journal.map_rect(SIZE), Rect2(360, 270, 730, 570), "карта")
-	var c := Journal.place_center("flower", SIZE)
-	ok(c.is_equal_approx(Vector2(360 + 365 + 1.25 * 40.0, 560 + 1.25 * -50.0)), "u = L + 365 + 1,25·x, v = 560 + 1,25·z")
+	var c := Journal.place_center("drop", SIZE)   # рядом никого — не раздвинута
+	ok(c.is_equal_approx(Vector2(360 + 360 + 0.95 * 215.0, 555 + 0.95 * 90.0)), "u = L + 360 + 0,95·x, v = 555 + 0,95·z")
 	var map := Journal.map_rect(SIZE)
+	eq(Run.PLACES.size(), 11, "на карте все 11 мест слоя 1 (#829)")
 	for k: String in Run.PLACES:
 		var r := Journal.place_rect(k, SIZE)
 		ok(map.encloses(r), "%s — кнопка целиком на карте" % k)
+		var true_at := Vector2(360, 0) + Journal.MAP_CENTER + Run.place_xz(k) * Journal.PX_PER_M
+		ok(r.get_center().distance_to(true_at) < Journal.PLACE_BUTTON * 0.5,
+			"%s — кнопка раздвинута не дальше полукнопки от своей точки" % k)
 		ok(r.size.x >= 96.0, "кнопка места ≥ 96 px")
 		for o: String in Run.PLACES:
 			if o != k:
@@ -67,7 +71,7 @@ func test_footer_next_and_pick() -> void:
 	var j := Journal.new()
 	j.show()
 	var f := j.footer(e)
-	eq(f[0][0], "Посещено 3 из 6")
+	eq(f[0][0], "Посещено 3 из 11")
 	eq(f[1][0], "Дальше: Чёрный курильщик", "первое непосещённое по маршрутам")
 	eq(f[2][0], Journal.ROUTE_HINT)
 	eq(j.hit(Journal.place_center("geyser", SIZE), SIZE), "place:geyser", "касание места")

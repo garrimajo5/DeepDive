@@ -14,6 +14,12 @@ const PLACES := {
 	"bones": [LayerMap.POINTS["04"]["name"], Vector2(LayerMap.POINTS["04"]["x"], LayerMap.POINTS["04"]["z"]), 45.0],
 	"well": [LayerMap.POINTS["05"]["name"], Vector2(LayerMap.POINTS["05"]["x"], LayerMap.POINTS["05"]["z"]), 50.0],
 	"drop": [LayerMap.POINTS["06"]["name"], Vector2(LayerMap.POINTS["06"]["x"], LayerMap.POINTS["06"]["z"]), 55.0],
+	# места слоя 1 (#829) — после шести ART-005: порядок ключей — номера мест в сети (NetSnap.run_state)
+	"start": [LayerMap.POINTS["00"]["name"], Vector2(LayerMap.POINTS["00"]["x"], LayerMap.POINTS["00"]["z"]), 40.0],
+	"gate": [LayerMap.POINTS["07"]["name"], Vector2(LayerMap.POINTS["07"]["x"], LayerMap.POINTS["07"]["z"]), 50.0],
+	"field": [LayerMap.POINTS["08"]["name"], Vector2(LayerMap.POINTS["08"]["x"], LayerMap.POINTS["08"]["z"]), 45.0],
+	"cove": [LayerMap.POINTS["09"]["name"], Vector2(LayerMap.POINTS["09"]["x"], LayerMap.POINTS["09"]["z"]), 40.0],
+	"descent": [LayerMap.POINTS["10"]["name"], Vector2(LayerMap.POINTS["10"]["x"], LayerMap.POINTS["10"]["z"]), 55.0],
 }
 ## Маршруты: название, места по порядку, одна строка риска (ART-016, #86).
 const ROUTES: Array = [

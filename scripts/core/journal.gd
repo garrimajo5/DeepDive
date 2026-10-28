@@ -20,10 +20,13 @@ const MAP_NAME := "Подлёдный сад"
 const MAP_NAME_TOP := 215.0
 const NORTH := "север вверх"
 const LABEL_PX := 34.0
-const PLACE_BUTTON := 112.0                ## кнопка места на карте
-const PLACE_ICON := 80.0
-const PX_PER_M := 1.25                     ## 1 px макета = 0,8 м
-const MAP_CENTER := Vector2(365, 560)      ## от (L, 0): точка (0, 0) отмели
+## Карта — все 11 мест слоя 1 (#829, `LayerMap`, вместе с террасой врат и спуском к лесу у 10): масштаб мельче макета
+## (1,25 px/м), кнопки 96 px; близкие (старт 00 и заводь 09) раздвинуты `place_spot` — точки не налезают.
+const PLACE_BUTTON := 96.0                 ## кнопка места на карте (не меньше 96 px — палец)
+const PLACE_ICON := 70.0
+const PLACE_GAP := 6.0                     ## между кнопками мест, px
+const PX_PER_M := 0.95                     ## 1 px макета ≈ 1,05 м
+const MAP_CENTER := Vector2(360, 555)      ## от (L, 0): точка (0, 0) отмели
 const SUMMARY_AT := Vector2(64, 219)       ## от (R, 0): верх глифов первой строки
 const SUMMARY_STEP := 67.0
 const SUMMARY_PX := 36.0
@@ -103,11 +106,51 @@ static func map_rect(size: Vector2) -> Rect2:
 	return to_screen(MAP, size)
 
 
-## Центр места key на экране: u = L + 365 + 1,25·x, v = 560 + 1,25·z (север −Z вверх).
+## Центр места key на экране: точка макета `place_spot` от (L, 0) (север −Z вверх).
 static func place_center(key: String, size: Vector2) -> Vector2:
-	var p := Run.place_xz(key)
-	var at := MAP_CENTER + p * PX_PER_M
-	return (at + Vector2(left(size), 0.0)) * scale(size)
+	return (place_spot(key) + Vector2(left(size), 0.0)) * scale(size)
+
+
+static var _spots := {}
+
+
+## Центр кнопки места key на карте, px макета от (L, 0): u = 360 + 0,95·x, v = 555 + 0,95·z, затем кнопки, что
+## налезают, раздвинуты по оси меньшего перекрытия (поровну) и оставлены внутри карты. Детерминированно, один раз.
+static func place_spot(key: String) -> Vector2:
+	if _spots.is_empty():
+		_spots = _layout()
+	return _spots[key]
+
+
+static func _layout() -> Dictionary:
+	var keys: Array = Run.PLACES.keys()
+	var at: Array[Vector2] = []
+	for k: String in keys:
+		at.append(MAP_CENTER + Run.place_xz(k) * PX_PER_M)
+	var need := PLACE_BUTTON + PLACE_GAP
+	var half := PLACE_BUTTON * 0.5 + PLACE_GAP
+	for _pass in 40:
+		var moved := false
+		for i in at.size():
+			for j in range(i + 1, at.size()):
+				var d := at[j] - at[i]
+				var ox := need - absf(d.x)
+				var oy := need - absf(d.y)
+				if ox <= 0.0 or oy <= 0.0:
+					continue
+				moved = true
+				var push := Vector2(signf(d.x) if d.x != 0.0 else 1.0, 0.0) * ox if ox < oy \
+					else Vector2(0.0, signf(d.y) if d.y != 0.0 else 1.0) * oy
+				at[i] -= push * 0.5
+				at[j] += push * 0.5
+		for i in at.size():
+			at[i] = at[i].clamp(MAP.position + Vector2(half, half), MAP.end - Vector2(half, half))
+		if not moved:
+			break
+	var out := {}
+	for i in keys.size():
+		out[keys[i]] = at[i]
+	return out
 
 
 static func place_rect(key: String, size: Vector2) -> Rect2:
