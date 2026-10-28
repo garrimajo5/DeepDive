@@ -91,6 +91,8 @@ class Eel:
 	## Добыча броска: скребун или светляк (одно из двух).
 	var prey_grazer: EcoGrazer.Grazer
 	var prey_fish: EcoFish.Fish
+	## Набранное время вдали (EcoLod): шагает реже, догоняя пропущенное.
+	var lag := 0.0
 
 	func latched() -> bool:
 		return mode == Mode.LATCHED
@@ -110,6 +112,8 @@ var fish: EcoFish
 
 var _spots: Array[Vector3]
 var _rnd: EcoRandom
+## Шаги модуля с reset — очередь стеклоустов вдали (EcoLod).
+var _tick := 0
 
 
 ## spots — свои устья (x, дно, z) для тестов; пусто — три логова из браузера на дне мира.
@@ -127,6 +131,7 @@ func reset(world: EcoWorld) -> void:
 	_rnd = EcoWorld.seeded_for(seed_for(world.seed_value))
 	eels.clear()
 	latched = null
+	_tick = 0
 	var places := _spots.duplicate()
 	if places.is_empty():
 		for xz in LAIRS:
@@ -158,10 +163,19 @@ static func front(s: EcoLink.ShipState) -> Vector3:
 	return s.pos + FRONT.rotated(Vector3.UP, s.yaw)
 
 
+## Стеклоуст вдали шагает реже (EcoLod): в логове в мути или на броске за скребуном сдвиг за кадр не виден, а поиск
+## добычи и звенья мимо корпуса — каждый шаг. К кораблю и на стекле — каждый шаг (он у носа, ближе MID).
 func step(world: EcoWorld, dt: float) -> void:
 	var t := world.time
 	for e in eels:
-		_update(world, e, dt, t)
+		var far := e.mode != Mode.TO_SHIP and e.mode != Mode.LATCHED
+		if far and EcoLod.wait(e.agent.p.distance_to(world.ship.pos), _tick, e.index, e.lag, dt):
+			e.lag += dt
+			continue
+		var h := dt + e.lag
+		e.lag = 0.0
+		_update(world, e, h, t)
+	_tick += 1
 	if latched:
 		world.drain(Species.info(ID).name, DRAIN)
 
