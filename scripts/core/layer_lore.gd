@@ -23,6 +23,9 @@ const DOWN := "down"            ## экипаж ушёл в слой 2
 const BACK := "back"            ## вернулся из слоя 2
 const KEYS: Array[String] = [INTRO, D07_RETURN, D07_RELAY, D07_AUTH, K2, SHELL03, FIELD08, AUTH07, DOWN, BACK]
 const DIAGNOSTICS: Array[String] = [D07_RETURN, D07_RELAY, D07_AUTH]
+## Наблюдение поля 08 (#829): корабль подошёл к площадке ближе `FIELD_SEE` м по (x, z) — с неё виден пояс поля на
+## западе, граница замечена (`observe_field`, ставит `Main._step_ship`; в журнале — подпись «граница» у 08).
+const FIELD_SEE := 40.0
 
 var facts: Array[String] = []   ## узнанное, в порядке узнавания
 var rev := 0                    ## растёт при каждом изменении — показ пересчитывает строки только по нему
@@ -35,6 +38,13 @@ func learn(key: String) -> bool:
 	facts.append(key)
 	_touch()
 	return true
+
+
+## Корабль в (x, z): у площадки 08 — факт «поле замечено» (true — узнано только что).
+func observe_field(x: float, z: float) -> bool:
+	if facts.has(FIELD08) or Vector2(x, z).distance_to(LayerMap.xz("08")) >= FIELD_SEE:
+		return false
+	return learn(FIELD08)
 
 
 func knows(key: String) -> bool:

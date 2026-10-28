@@ -249,7 +249,7 @@ func journal_show() -> void:
 		m.add_child(m.logbook_panel)
 	m.logbook.blank = Journal.empty(m.expedition, m.scanner.scanned.size(), m.samples.cargo.size())
 	m.logbook_panel.show_journal(m.logbook, m.expedition, m.scanner, Species.count(), m.samples.cargo.size(),
-		m.save.state == SaveGame.Load.BROKEN)
+		m.save.state == SaveGame.Load.BROKEN, m.lore)
 	if m.menu_panel:
 		m.menu_panel.visible = m.main_menu.open and not m.logbook.open and not m.address.open
 

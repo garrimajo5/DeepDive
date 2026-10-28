@@ -789,6 +789,7 @@ func _step_ship(dt: float, h: Holds) -> void:
 		announce(run_msg)
 		timeline.mark(time, run_msg)
 	expedition.visit(helm.pos.x, helm.pos.z)   # журнал ART-047: места и рекорд глубины
+	lore.observe_field(helm.pos.x, helm.pos.z)   # у площадки 08 виден пояс поля — «граница» в журнале (#829)
 	var spot := autosave.update(helm.pos.x, helm.pos.z)   # кампания #823: вошли к месту-стоянке — записать
 	if spot != "" and save.live and not wreck.active() and save_now():
 		say(Autosave.message(spot))
