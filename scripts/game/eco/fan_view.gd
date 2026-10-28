@@ -66,7 +66,7 @@ func sync(t: float) -> void:
 		var row := [b.x.x, b.y.x, b.z.x, o.x, b.x.y, b.y.y, b.z.y, o.y, b.x.z, b.y.z, b.z.z, o.z, c.r, c.g, c.b, 1.0]
 		for k in STRIDE:
 			buffer[i + k] = row[k]
-	multimesh.buffer = buffer
+	EcoMM.send(self, buffer)
 
 
 ## Размер веера n (множитель прямоугольника; колыхание в шейдере считает высоту по осям — веер выше гнётся дальше).

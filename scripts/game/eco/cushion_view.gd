@@ -121,7 +121,7 @@ func sync(t: float, ship_pos := Vector3.ZERO, info: EcoLink.ShipState = null, fl
 			else:
 				EcoMM.put(ink_buffer, i, Transform3D(Basis.from_scale(Vector3.ZERO), cu.ink_c))
 			ink_buffer[i + 12] = c.r; ink_buffer[i + 13] = c.g; ink_buffer[i + 14] = c.b; ink_buffer[i + 15] = c.a
-	pads.multimesh.buffer = pad_buffer
+	EcoMM.send(pads, pad_buffer)
 	if ink_changed:
 		ink.multimesh.buffer = ink_buffer
 

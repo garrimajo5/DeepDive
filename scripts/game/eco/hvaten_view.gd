@@ -182,9 +182,9 @@ func sync(t: float, ship_pos := Vector3.ZERO, all := true, info: EcoLink.ShipSta
 			var tr := EcoHvaten.pestr_pose(hv, k, t)
 			tr.basis = tr.basis * Basis.from_scale(Vector3.ONE * EcoPestrLook.SCALE)
 			EcoMM.put(pestr_buffer, (hv.index * EcoHvaten.PESTR_N + k) * STRIDE_P, tr)
-	bodies.multimesh.buffer = body_buffer
-	tents.multimesh.buffer = tent_buffer
-	pestr.multimesh.buffer = pestr_buffer
+	EcoMM.send(bodies, body_buffer)
+	EcoMM.send(tents, tent_buffer)
+	EcoMM.send(pestr, pestr_buffer)
 
 
 func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3) -> void:

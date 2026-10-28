@@ -151,8 +151,8 @@ func sync(t: float, ship_pos: Vector3, ship_yaw: float, all := false) -> void:
 			# без вспышки ореол не нужен — схлопнут в точку, фрагментов не рисует
 			EcoMM.put_basis(halo_buffer, j, Basis.IDENTITY if gg > 0.0 else Basis.from_scale(Vector3.ZERO), p)
 			_color(halo_buffer, j + STRIDE, c * gg)
-	bodies.multimesh.buffer = body_buffer
-	halos.multimesh.buffer = halo_buffer
+	EcoMM.send(bodies, body_buffer)
+	EcoMM.send(halos, halo_buffer)
 
 
 ## Облачка слизи в момент t (время мира): ship — корабль (дальность, корпус и луч), flow — течение мира.
