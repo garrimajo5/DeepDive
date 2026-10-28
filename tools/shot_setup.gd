@@ -113,7 +113,7 @@ static func apply(g: Main, kv: Dictionary) -> void:
 		for id in kv["scanned"].split(",", false):
 			g.scanner.scanned[id] = true
 	if kv.has("route"):   # маршрут n (0…2) выбран у голостола
-		g.run.choose(int(kv["route"]))
+		g.say(g.run.choose(int(kv["route"])))   # как нажатие у стола: строка на приборах (#938)
 	if kv.get("vote", "") in ["1", "up"]:   # маршрут пройден, решение у голостола; vote=up — итог забега
 		g.complete_route()
 		g.open_vote()

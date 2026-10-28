@@ -36,6 +36,9 @@ const ROUTES: Array = [
 	{"id": "field", "name": "Поле у врат", "places": ["gate", "field"], "risk": "дальше поля не идти"},
 ]
 
+## Сообщение о выборе маршрута — не длиннее строки приборов слева от карточки у стола (#938).
+const LINE_MAX := 64
+
 var route := -1           ## индекс в ROUTES, −1 — маршрут не выбран
 var visited: Array[String] = []
 var seen: Array[String] = []   ## места, пройденные за забег (без повторов) — строка «Места» итога
@@ -88,10 +91,20 @@ func choose(i: int) -> String:
 	visited.clear()
 	done = false
 	var r: Dictionary = ROUTES[route]
-	var names := PackedStringArray()
-	for k in r["places"]:
-		names.append(place_name(k))
-	return "Маршрут «%s»: %s; %s" % [r["name"], ", ".join(names), r["risk"]]
+	var n: int = r["places"].size()
+	# места и риск — в карточке у стола; полный список в строке приборов шёл на две строки и ложился
+	# на номера мест голостола (#938) — здесь только число мест и риск
+	var msg := "Маршрут «%s»: %d %s; %s" % [r["name"], n, places_word(n), r["risk"]]
+	return msg if msg.length() <= LINE_MAX else "Маршрут «%s»: %d %s" % [r["name"], n, places_word(n)]
+
+
+## «место», «места», «мест» по числу.
+static func places_word(n: int) -> String:
+	if n % 10 == 1 and n % 100 != 11:
+		return "место"
+	if n % 10 in [2, 3, 4] and not (n % 100 in [12, 13, 14]):
+		return "места"
+	return "мест"
 
 
 ## Ключ следующей непройденной точки или "".
