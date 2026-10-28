@@ -2,7 +2,7 @@ class_name Briefing
 extends RefCounted
 ## Голограмма брифинга над голостолом (ART-016, docs/concept-art/golostol-brifing.md): пока игрок у поста «Маршрут»,
 ## сонар над столом сменяет карта всей отмели — неподвижная, нос (−Z) вверх, +X вправо, 700 × 700 м во вписанный
-## квадрат 1,13 м. На ней шесть мест с номерами и три маршрута `Run.ROUTES`: «Рифовый сад» — сплошная линия,
+## квадрат 1,13 м. На ней все 11 мест слоя с номерами (#829) и три маршрута `Run.ROUTES`: «Рифовый сад» — сплошная линия,
 ## «Тёплые трубы» — длинный пунктир, «Край отмели» — точки; выбранный ярче и толще, по нему бежит подсветка.
 ## Здесь — числа и геометрия без узлов; рисует `SonarView` (шейдер sonar_holo).
 
@@ -10,9 +10,12 @@ const SIDE := 1.13             ## сторона квадрата карты н�
 const SCALE := SIDE / 700.0    ## м стола на м мира
 const FADE := 0.25             ## переход сонар ↔ брифинг, с
 const MAX_SEGS := 8            ## столько отрезков держит шейдер
-## Номера мест — по таблице ART-016.
-const NUMBERS := {"flower": 1, "geyser": 2, "shell": 3, "bones": 4, "well": 5, "drop": 6}
-const ORDER: Array[String] = ["flower", "geyser", "shell", "bones", "well", "drop"]
+## Номера мест — по таблице ART-016 и карте слоя 1 #818 (`LayerMap`, #829: все 11 мест, старт — «0»).
+const NUMBERS := {"flower": 1, "geyser": 2, "shell": 3, "bones": 4, "well": 5, "drop": 6,
+	"start": 0, "gate": 7, "field": 8, "cove": 9, "descent": 10}
+## Порядок мест в шейдере (`places`, `place_state`) — как в `Run.PLACES`.
+const ORDER: Array[String] = ["flower", "geyser", "shell", "bones", "well", "drop", "start", "gate", "field", "cove",
+	"descent"]
 ## Иконки мест (ART-005, `docs/concept-art/ikonka-*.png`, в игре — `textures/places/<ключ>.png`): билборд стоит
 ## нижним краем на точке места, высота на столе, м. Места не на выбранном маршруте — тусклее.
 const ICON_SIZE := 0.13

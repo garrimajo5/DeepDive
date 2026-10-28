@@ -29,7 +29,11 @@ func test_old_landmarks_stay() -> void:
 
 
 func test_run_places_from_map() -> void:
-	eq(Run.PLACES.size(), 6, "в забеге пока шесть мест ART-005")
+	eq(Run.PLACES.size(), LayerMap.POINTS.size(), "все 11 мест слоя — в Run.PLACES (#829)")
+	eq(Array(Run.PLACES.keys()).slice(0, 6), ["flower", "geyser", "shell", "bones", "well", "drop"],
+		"шесть мест ART-005 — первыми: номера в сети не сдвинулись")
+	for id: String in LayerMap.POINTS:
+		ok(LayerMap.POINTS[id]["key"] != "", "у места %s есть ключ" % id)
 	for key: String in Run.PLACES:
 		var id := LayerMap.id_of(key)
 		ok(id != "", "у места забега есть точка карты: " + key)
