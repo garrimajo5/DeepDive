@@ -135,13 +135,26 @@ func test_scene_icons() -> void:
 
 
 func test_card_lines() -> void:
-	eq(Briefing.card_lines(-1).size(), 0, "маршрут не выбран — карточки нет")
+	eq(Briefing.card_lines(-1), Briefing.goal_lines(), "маршрут не выбран — цели слоя (#824)")
 	var l := Briefing.card_lines(0)
 	eq(l[0], "Рифовый сад", "название")
 	eq(l.slice(1, 4), ["1  Каменный цветок", "4  Кости левиафана", "5  Световой колодец"], "места по порядку с номерами карты")
 	eq(l[4], "Риск: много серпохвостов", "одна строка риска — последняя")
 	eq(Briefing.card_lines(1).size(), 4, "«Тёплые трубы»: два места")
 	eq(Briefing.RISK_COLOR, Color("F1A23D"), "риск янтарным, как в ART-016")
+
+
+## #824, часть 3: кампания — у стола сначала цели слоя: путь 00→01→07→03→06→10, куда он ведёт, маршруты — варианты.
+func test_goal_lines() -> void:
+	var l := Briefing.goal_lines()
+	eq(l[0], "Цели слоя", "заголовок")
+	eq(l[1], "Путь: 0 – 1 – 7 – 3 – 6 – 10", "рекомендуемый путь номерами карты — как LayerMap.MAIN_ROUTE")
+	eq(l[2], "Спуск к лесу — у места 10", "куда ведёт путь")
+	eq(l[3], "Маршруты у стола — варианты", "старые маршруты — варианты исследования")
+	eq(l[-1], "Риск: " + Run.ROUTES[Run.MAIN]["risk"], "риск последней строкой — янтарным")
+	eq(Run.ROUTES[Run.MAIN]["id"], "main", "Run.MAIN — «Путь к спуску»")
+	var path: Array = Run.ROUTES[Run.MAIN]["places"]
+	eq(LayerMap.id_of(path[-1]), LayerMap.MAIN_ROUTE[-1], "маршрут «Путь к спуску» ведёт туда же, куда цели слоя")
 
 
 func test_card_rect() -> void:
@@ -184,8 +197,11 @@ func test_scene_card_clear_of_places() -> void:
 	main.walker.z = -1.2
 	main.walker.yaw = PI / 2.0
 	main.walker.pitch = deg_to_rad(-38.0)
-	for r in Run.ROUTES.size():   # у маршрутов слоя 1 (#829) по пять мест — карточка выше
-		main.run.choose(r)
+	for r in range(-1, Run.ROUTES.size()):   # у маршрутов слоя 1 (#829) по пять мест — карточка выше; −1 — цели слоя
+		if r < 0:
+			main.run.route = -1
+		else:
+			main.run.choose(r)
 		main.step(0.5)
 		await frames(1)
 		ok(main.route_card.visible, "карточка видна")
@@ -353,14 +369,12 @@ func test_scene_code_on_briefing() -> void:
 	main.step(0.05)
 	ok(main.run.route < 0, "маршрут ещё не выбран")
 	ok(main.route_card.visible, "у голостола — карточка со словом, даже без маршрута")
-	eq(main.route_card.lines.size(), 0, "строк маршрута нет")
+	eq(main.route_card.lines[0], "Цели слоя", "без маршрута — цели слоя (#824)")
 	eq(main.route_card.code[1], main.comms.code, "кодовое слово забега — то же, что проверяет связь")
-	var only := main.route_card.rect
 	main.run.choose(0)
 	main.step(0.05)
 	eq(main.route_card.lines[0], "Рифовый сад", "маршрут выбран — сверху маршрут")
 	eq(main.route_card.code[1], main.comms.code, "под ним — страница «Связь»")
-	ok(main.route_card.rect.size.y > only.size.y + 100.0, "карточка выросла на строки маршрута")
 	var scr := main.get_viewport().get_visible_rect().size
 	ok(Rect2(Vector2.ZERO, scr).encloses(main.route_card.rect), "вся карточка на экране 1600 × 720")
 	ok(main.route_card.rect.end.x <= scr.x - Briefing.CARD_RIGHT_FREE, "не заходит на кнопку действия")
