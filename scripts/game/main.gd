@@ -1201,7 +1201,7 @@ func on_eco_event(e: Dictionary) -> void:
 ## ничего не делает, а сцена у старта сразу в луче (#827); наблюдение в журнал при этом записано.
 func _world_say(text: String) -> void:
 	if flyby.kind != Flyby.Kind.START:
-		say(text)
+		message.say(text, Status.MESSAGE_SECONDS, true)   # не стирает строку, видную меньше 1 с (issue #979)
 
 
 ## Идёт обучение у старта 00 (#827, `Tutorial.holds_events`): события слоя ждут его конца.

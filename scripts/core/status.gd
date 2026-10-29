@@ -114,26 +114,67 @@ class Lines:
 ## Сообщение в конце строки состояния («Вы за штурвалом», «Прожектор погашен»…): держится 4,2 с и гаснет.
 ## Сообщение-состояние гасят сразу, когда состояние кончилось (clear), — только если на приборах всё ещё оно.
 ## (Отчёт тестера в pogrujenie: «Вы за штурвалом» висело после «Встать» до следующего сообщения.)
+## Сообщение мира (`wait`) не перебивает другое сообщение мира, пока то видно меньше MIN_SHOW с: ждёт своей очереди (одно, последнее), —
+## иначе строку мира («веер повёрнут к жерлу») стирал укус хищника в ту же секунду (issue #979). Свои действия
+## игрока (`wait` = false) показываются сразу — отклик на кнопку не ждёт.
 class Message:
+	const MIN_SHOW := 1.0
 	var text := ""
 	var left := 0.0
+	## Сколько секунд видно текущее сообщение; ждущее и его время.
+	var shown := 0.0
+	var next := ""
+	var next_left := 0.0
+	## Текущее — строка мира (её и бережём от следующей строки мира).
+	var world := false
 
 	func visible() -> bool:
 		return not text.is_empty()
 
-	func say(msg: String, seconds: float = MESSAGE_SECONDS) -> void:
-		text = msg
-		left = seconds if not msg.is_empty() else 0.0
+	func say(msg: String, seconds: float = MESSAGE_SECONDS, wait := false) -> void:
+		if wait and world and not msg.is_empty() and not text.is_empty() and msg != text and shown < MIN_SHOW:
+			next = msg
+			next_left = seconds
+			return
+		if wait or msg == next:
+			next = ""
+			next_left = 0.0
+		_show(msg, seconds)
+		world = wait
 
 	func clear(msg: String) -> void:
+		if next == msg:
+			next = ""
+			next_left = 0.0
 		if text == msg:
 			text = ""
 			left = 0.0
+			_take_next()
 
 	func update(dt: float) -> void:
 		if text.is_empty() or dt <= 0.0:
+			_take_next()
 			return
 		left -= dt
-		if left <= 0.0:
+		shown += dt
+		if not next.is_empty() and shown >= MIN_SHOW:
+			_take_next()
+		elif left <= 0.0:
 			text = ""
 			left = 0.0
+			_take_next()
+
+	func _show(msg: String, seconds: float) -> void:
+		text = msg
+		left = seconds if not msg.is_empty() else 0.0
+		shown = 0.0
+
+	func _take_next() -> void:
+		if next.is_empty():
+			return
+		var m := next
+		var s := next_left
+		next = ""
+		next_left = 0.0
+		_show(m, s)
+		world = true
