@@ -59,6 +59,28 @@ static func seeded_for(s: int) -> EcoRandom:
 	return EcoRandom.new(s)
 
 
+## Один постановочный эпизод угрозы у корабля за раз (#834): бросок серпохвоста к кораблю, стеклоуст к стеклу и на
+## стекле. Кто идёт к кораблю, держит эпизод (`hold_threat` каждый шаг); другой начинает свой, только когда эпизод
+## свободен (`threat_free`) — через THREAT_HOLD с после конца прежнего.
+const THREAT_HOLD := 1.0
+var _threat := 0
+var _threat_until := -INF
+
+
+func threat_free(who: Object) -> bool:
+	return _threat == 0 or _threat == who.get_instance_id() or time > _threat_until
+
+
+func hold_threat(who: Object) -> void:
+	_threat = who.get_instance_id()
+	_threat_until = time + THREAT_HOLD
+
+
+## Кто держит эпизод угрозы сейчас (id объекта, 0 — никто).
+func threat_holder() -> int:
+	return _threat if time <= _threat_until else 0
+
+
 ## Подключить модуль: он сразу расставляет своих существ.
 func add(system: EcoSystem) -> EcoSystem:
 	systems.append(system)
@@ -81,6 +103,8 @@ func reset(world_seed: int = -1) -> void:
 	hits = 0
 	last_hit = {}
 	last_ping = -99.0
+	_threat = 0
+	_threat_until = -INF
 	for s in systems:
 		s.reset(self)
 

@@ -190,6 +190,8 @@ func step(world: EcoWorld, dt: float) -> void:
 		var h := dt + e.lag
 		e.lag = 0.0
 		_update(world, e, h, t)
+		if e.mode == Mode.TO_SHIP or e.mode == Mode.LATCHED:   # к стеклу и на стекле — эпизод угрозы (#834)
+			world.hold_threat(e)
 	_tick += 1
 	_sign(world, dt)
 	if latched:
@@ -272,13 +274,15 @@ func _look_around(world: EcoWorld, e: Eel, dt: float) -> void:
 		e.prey_fish = f
 		_set_mode(e, Mode.STRIKE)
 		e.timer = STRIKE_TIME
-	elif latched == null and front(world.ship).distance_to(e.lair) < SHIP_R and _rnd.next() < dt * SHIP_CHANCE:
+	elif latched == null and front(world.ship).distance_to(e.lair) < SHIP_R and world.threat_free(e) \
+			and _rnd.next() < dt * SHIP_CHANCE:
 		if remoras and remoras.on_hull > 0:   # на корпусе уже прилипалы — не садится
 			e.cd = CD_REMORA
 			remoras.scare_eel(world, e.lair)
 		else:
 			_set_mode(e, Mode.TO_SHIP)
 			e.timer = TO_SHIP_TIME
+			world.hold_threat(e)
 
 
 func _prey_agent(e: Eel) -> EcoAgent:
