@@ -72,6 +72,19 @@ const FACE := Vector2(0.0, 0.0)
 ## Зерно формы — своё, не мира.
 const SHAPE_SEED := 2029
 
+## Осмотр (#835, раздел 03 карты #818): два наблюдения в любом порядке подтверждают, что Раковина построена.
+## Сканер — биолог держит сканер включённым (ShipState.scan_range > 0), корабль ближе SCAN_R по горизонтали и не выше
+## SCAN_UP над дном, SCAN_TIME с (ушёл раньше — набранное спадает вдвое быстрее): гнёзда тройками → SCAN_TEXT.
+## Сонар — импульс, когда корабль ближе PING_R (и не дальше дальности импульса): ровные витки → PING_TEXT.
+## Оба — EcoLink.shell(DONE_TEXT): корабль ставит знание «осмотр 03». Строки — без новых сюжетных фактов, кодов нет.
+const SCAN_R := 30.0
+const SCAN_UP := 25.0
+const SCAN_TIME := 3.0
+const PING_R := 70.0
+const SCAN_TEXT := "Сканер: контактные гнёзда по три, одинаковые, с ровным шагом. Так не растёт."
+const PING_TEXT := "Сонар: витки спирали повторяют друг друга точно, разлом — с ровным краем внутри."
+const DONE_TEXT := "Раковина древних — постройка: гнёзда и рельеф сходятся."
+
 ## Подножие (мир): середина опоры на нижней точке трубки; поворот (локальная +Z — лицо).
 var base := Vector3.ZERO
 var basis := Basis.IDENTITY
@@ -94,6 +107,12 @@ var tuft_n := PackedVector3Array()
 var rock_c := PackedVector3Array()
 var rock_r := PackedFloat32Array()
 
+## Осмотр: сколько с идёт сканер, что уже видели, подтверждено.
+var scan_t := 0.0
+var scanned := false
+var pinged := false
+var confirmed := false
+
 var _center: Vector2
 var _b := 0.0         # рост ρ = e^(b·(θ − END_ANGLE))
 var _k := 0.0         # rr = k·ρ (в осях спирали до растяжения)
@@ -113,6 +132,48 @@ func _init(center: Vector2 = CENTER) -> void:
 func reset(world: EcoWorld) -> void:
 	ground = world.ground
 	_build()
+	scan_t = 0.0
+	scanned = false
+	pinged = false
+	confirmed = false
+
+
+func step(world: EcoWorld, dt: float) -> void:
+	if scanned:
+		return
+	if in_scan(world.ship):
+		scan_t += dt
+		if scan_t >= SCAN_TIME:
+			scanned = true
+			world.send(EcoLink.message(SCAN_TEXT))
+			_confirm(world)
+	else:
+		scan_t = maxf(0.0, scan_t - 2.0 * dt)
+
+
+func on_ping(world: EcoWorld, pos: Vector3) -> void:
+	if pinged:
+		return
+	var d := Vector2(pos.x - _center.x, pos.z - _center.y).length()
+	var reach := PING_R if world.ship.sonar_range <= 0.0 else minf(PING_R, world.ship.sonar_range)
+	if d <= reach:
+		pinged = true
+		world.send(EcoLink.message(PING_TEXT))
+		_confirm(world)
+
+
+## Сканер видит гнёзда: включён, корабль у Раковины и невысоко над дном.
+func in_scan(ship: EcoLink.ShipState) -> bool:
+	if ship.scan_range <= 0.0:
+		return false
+	var d := Vector2(ship.pos.x - _center.x, ship.pos.z - _center.y).length()
+	return d <= minf(SCAN_R, ship.scan_range) and ship.pos.y - floor_y(ship.pos.x, ship.pos.z) <= SCAN_UP
+
+
+func _confirm(world: EcoWorld) -> void:
+	if scanned and pinged and not confirmed:
+		confirmed = true
+		world.send(EcoLink.shell(DONE_TEXT))
 
 
 ## Дно под (x, z): мир передаёт Seabed.height; без него — −40 м.

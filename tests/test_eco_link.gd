@@ -933,3 +933,17 @@ func test_field_rhythm_learns_08() -> void:   # #833: ритм поля из м�
 	eq(main.message.text, "ритм", "строка мира на приборах")
 	main.queue_free()
 	await frames(1)
+
+
+func test_shell_inspected_learns_03() -> void:   # #835: Раковина осмотрена сканером и сонаром — знание «осмотр 03»
+	var e := EcoLink.shell("постройка")
+	eq([e["type"], e["text"]], [EcoLink.SHELL, "постройка"], "поля события")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	ok(not main.lore.knows(LayerLore.SHELL03), "до события Раковина не осмотрена")
+	main.on_eco_event(e)
+	ok(main.lore.knows(LayerLore.SHELL03), "событие ставит знание")
+	eq(main.message.text, "постройка", "строка мира на приборах")
+	main.queue_free()
+	await frames(1)
