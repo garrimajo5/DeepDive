@@ -36,6 +36,9 @@ const ROUTES: Array = [
 	{"id": "field", "name": "Поле у врат", "places": ["gate", "field"], "risk": "дальше поля не идти"},
 ]
 
+## Индекс маршрута «Путь к спуску» — основной путь слоя (`LayerMap.MAIN_ROUTE`, цели у стола — `Briefing.goal_lines`).
+const MAIN := 3
+
 ## Сообщение о выборе маршрута — не длиннее строки приборов слева от карточки у стола (#938).
 const LINE_MAX := 64
 

@@ -84,10 +84,13 @@ static func icon_alpha(state: float) -> float:
 	return ICON_DIM if state < 0.5 else 1.0
 
 
-## Строки карточки маршрута i: название, места по порядку с номерами карты, риск. Маршрут не выбран — пусто.
+## Строки карточки маршрута i: название, места по порядку с номерами карты, риск. Маршрут не выбран — цели слоя
+## (`goal_lines`, кампания #824): у стола сначала путь слоя, маршруты — варианты исследования.
 static func card_lines(i: int) -> Array[String]:
+	if i < 0:
+		return goal_lines()
 	var out: Array[String] = []
-	if i < 0 or i >= Run.ROUTES.size():
+	if i >= Run.ROUTES.size():
 		return out
 	var r: Dictionary = Run.ROUTES[i]
 	out.append(r["name"])
@@ -95,6 +98,22 @@ static func card_lines(i: int) -> Array[String]:
 		out.append("%d  %s" % [NUMBERS[k], Run.place_name(k)])
 	out.append("Риск: " + r["risk"])
 	return out
+
+
+## Цели слоя на карточке у стола, пока маршрут не выбран (#824, часть 3): рекомендуемый путь `LayerMap.MAIN_ROUTE`
+## номерами карты, куда он ведёт, что маршруты у стола — варианты, риск последней строкой (янтарным, как у маршрута).
+static func goal_lines() -> Array[String]:
+	var ids: Array[String] = []
+	for id in LayerMap.MAIN_ROUTE:
+		ids.append(str(int(id)))
+	var last: String = LayerMap.MAIN_ROUTE[-1]
+	return [
+		"Цели слоя",
+		"Путь: " + " – ".join(ids),
+		"%s — у места %d" % [LayerMap.POINTS[last]["name"], int(last)],
+		"Маршруты у стола — варианты",
+		"Риск: " + Run.ROUTES[Run.MAIN]["risk"],
+	]
 
 
 ## Где карточка размера size на экране screen, если точка привязки видна в anchor: справа от точки, по её высоте,
