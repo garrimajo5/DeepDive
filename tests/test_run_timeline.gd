@@ -225,3 +225,53 @@ func test_scene_breach_and_surface() -> void:
 	ok(main.timeline._old[0].contains("наверх, очки"), "итог в заголовке")
 	main.queue_free()
 	await frames(1)
+
+
+func test_legs_between_places() -> void:
+	var r := _tl()
+	r.begin(0.0)
+	var p00 := LayerMap.xz("00")
+	var p01 := LayerMap.xz("01")
+	var p07 := LayerMap.xz("07")
+	r.place(1.0, p00.x, p00.y)      # старт у 00
+	r.place(30.0, 0.0, 30.0)        # между местами — не место
+	r.place(70.0, p01.x, p01.y)     # 00→01 за 69 с
+	r.place(80.0, 0.0, 30.0)
+	r.place(90.0, p01.x, p01.y)     # вернулся к тому же — не участок
+	r.place(250.0, p07.x, p07.y)    # 01→07 за 180 с от прихода к 01
+	eq(r.legs.size(), 2, "два участка")
+	eq(r.legs[0], ["00", "01", 69.0])
+	eq(r.legs[1], ["01", "07", 180.0])
+	var lines := r.finish(260.0, "наверх")
+	ok(lines.has("Участки: 00→01 01:09 · 01→07 03:00"), "участки в сводке: %s" % "\n".join(lines))
+	r.begin(300.0)
+	eq(r.legs.size(), 0, "новый забег — участки с нуля")
+
+
+func test_no_legs_line_without_places() -> void:
+	var r := _tl()
+	r.begin(0.0)
+	r.place(5.0, LayerMap.xz("00").x, LayerMap.xz("00").y)
+	for l in r.finish(60.0, "наверх"):
+		ok(not l.begins_with("Участки"), "одно место — участков нет")
+
+
+func test_place_at_ids() -> void:
+	eq(RunTimeline.place_at(LayerMap.xz("10").x, LayerMap.xz("10").y), "10")
+	eq(RunTimeline.place_at(LayerMap.xz("04").x, LayerMap.xz("04").y), "04")
+	eq(RunTimeline.place_at(0.0, 30.0), "", "между 00 и 01 — не место")
+
+
+func test_scene_leg_from_start() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.step(0.1)
+	eq(main.timeline._place, "00", "забег начался у старта")
+	var p := LayerMap.xz("01")
+	main.helm.pos = Vector3(p.x, main.helm.pos.y, p.y)
+	main.step(0.1)
+	eq(main.timeline.legs.size(), 1, "пришли к 01 — участок")
+	eq(main.timeline.legs[0][1], "01")
+	main.queue_free()
+	await frames(1)

@@ -24,7 +24,10 @@ var events: Array = []    ## [t от начала, текст] — по врем
 var spans: Array = []     ## [имя, начало, конец (−1 — ещё идёт)]
 var deepest := 0.0
 var hull := 100.0
+var legs: Array = []      ## участки слоя (#824): [откуда id, куда id, с] — от прихода к месту до прихода к следующему
 var _on := {}             ## имя события → индекс в spans, пока идёт
+var _place := ""          ## id `LayerMap` места, где корабль был последним
+var _place_at := 0.0      ## когда пришёл туда, с от начала забега
 var _old: Array[String] = []   ## записанные забеги (блоки текста), новый — первым
 var _n := 0               ## номер забега за всё время файла
 
@@ -42,7 +45,10 @@ func begin(t: float) -> void:
 	t_last = t
 	events.clear()
 	spans.clear()
+	legs.clear()
 	_on.clear()
+	_place = ""
+	_place_at = 0.0
 	deepest = 0.0
 	hull = 100.0
 	_add(0.0, "начало")
@@ -73,6 +79,29 @@ func watch(t: float, on: Dictionary, hull_now: float, depth: float) -> void:
 		_add(at, "удар: корпус %d%%" % roundi(hull_now))
 	hull = hull_now
 	deepest = maxf(deepest, depth)
+
+
+## Корабль в (x, z) (шаг забега): пришёл к другому месту слоя — участок от прошлого места (кампания #824: хронометраж
+## по участкам слоя, а не только по забегу). Вышел из круга и вернулся к тому же месту — участка нет.
+func place(t: float, x: float, z: float) -> void:
+	if not running:
+		return
+	var id := place_at(x, z)
+	if id.is_empty() or id == _place:
+		return
+	var at := t - t0
+	if not _place.is_empty():
+		legs.append([_place, id, at - _place_at])
+	_place = id
+	_place_at = at
+
+
+## id `LayerMap` места, в круге которого точка (x, z) (радиусы `Run.PLACES`), или "".
+static func place_at(x: float, z: float) -> String:
+	for k: String in Run.PLACES:
+		if Vector2(x, z).distance_to(Run.place_xz(k)) < float(Run.PLACES[k][2]):
+			return LayerMap.id_of(k)
+	return ""
 
 
 ## Корпус задан не ударом (сценарий тестера ставит износ) — строка «корпус задан», в «удары» не идёт (#692).
@@ -166,6 +195,11 @@ func summary(dur: float) -> PackedStringArray:
 			hits += 1
 	parts.append("ударов %d" % hits)
 	out.append("События: %s · глубже всего %d м · корпус %d%%" % [", ".join(parts), roundi(deepest), roundi(hull)])
+	if not legs.is_empty():
+		var ls := PackedStringArray()
+		for l: Array in legs:
+			ls.append("%s→%s %s" % [l[0], l[1], clock(l[2])])
+		out.append("Участки: " + " · ".join(ls))
 	return out
 
 
