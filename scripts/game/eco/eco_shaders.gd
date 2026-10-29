@@ -139,6 +139,8 @@ uniform vec3 heat : source_color;
 uniform float pulse = 0.0;
 uniform float period = 10.0;
 uniform float strength = 1.0;
+// колодец: столб тает у камеры (EcoWell.near_fade): прозрачен ближе near.x, в полную силу дальше near.y, м
+uniform vec2 near = vec2(0.0);
 varying vec4 tone;
 varying float fade;
 varying vec3 wp;
@@ -230,7 +232,8 @@ void fragment() {
 		// столб света: грань под острым углом к взгляду почти прозрачна, без яркого контура
 		float face = abs(dot(normalize(NORMAL), normalize(VIEW)));
 		ALBEDO = tone.rgb * k;
-		ALPHA = clamp(tone.a * face * face * strength * k, 0.0, 1.0);
+		float close = near.y > 0.0 ? smoothstep(near.x, near.y, distance(wp, CAMERA_POSITION_WORLD)) : 1.0;
+		ALPHA = clamp(tone.a * face * face * strength * k * close, 0.0, 1.0);
 	}
 }
 """

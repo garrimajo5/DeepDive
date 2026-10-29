@@ -35,6 +35,7 @@ func _init(system: EcoWell) -> void:
 	crack = _instance("Трещина во льду", _crack_mesh(), EcoShaders.Mist.CRACK)
 	column = _instance("Столб света", _column_mesh(), EcoShaders.Mist.COLUMN)
 	(column.mesh.surface_get_material(0) as ShaderMaterial).set_shader_parameter("strength", STRENGTH)
+	(column.mesh.surface_get_material(0) as ShaderMaterial).set_shader_parameter("near", EcoWell.NEAR)
 	tris = (crack_verts.size() + column_verts.size()) / 3
 	moss_view = MossView.new(well.moss, well.ground)
 	moss_view.name = "Мох колодца"
