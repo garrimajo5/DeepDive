@@ -6,6 +6,9 @@ extends Node3D
 ## тонет в темноте (правило `test_eco_lit`). Буфер (место и INSTANCE_CUSTOM.x — клетка атласа) переписывается каждый
 ## кадр, пока корабль у колодца
 ## (`EcoMoth.near`); дальше узел скрыт и ничего не пишет. «Экономно» — первые COUNT_LITE рачков. Слой отмели.
+## Моль на стекле (#836, часть 4) — тот же MultiMesh: после рачков в воде идут сидящие на наружном стекле (до GLASS),
+## место — из осей корабля в мир (`Swarm.glass_world`); корабль их не освещает изнутри — на светлой воде они тёмные
+## точки, в луче — блики.
 
 const ATLAS := "res://models/ledyanaya-mol-atlas.png"
 ## Карточка, м: рачок 5 мм с лапками; на экране телефона он был бы меньше пикселя, поэтому карточка крупнее
@@ -68,11 +71,12 @@ func _init(system: EcoMoth) -> void:
 	mm.use_custom_data = true
 	mm.mesh = build_mesh()
 	material = mm.mesh.material as ShaderMaterial
-	mm.instance_count = moth.swarm.pos.size()
+	mm.instance_count = moth.swarm.pos.size() + EcoMoth.GLASS
 	cards.multimesh = mm
-	# рой ходит у колодца: рамка — облака с запасом на тягу к лучу
+	# рой ходит у колодца, стекло — с кораблём ближе ACTIVE: рамка — круг ACTIVE с запасом на корпус
 	var w := EcoMoth.WELL
-	cards.custom_aabb = AABB(Vector3(w.x - 60.0, -60.0, w.y - 60.0), Vector3(120.0, 60.0, 120.0))
+	var r := EcoMoth.ACTIVE + 20.0
+	cards.custom_aabb = AABB(Vector3(w.x - r, -80.0, w.y - r), Vector3(r * 2.0, 80.0, r * 2.0))
 	add_child(cards)
 	buffer.resize(mm.instance_count * STRIDE)
 	for i in mm.instance_count:
@@ -99,17 +103,25 @@ func sync(ship: EcoLink.ShipState) -> void:
 		return
 	visible = true
 	var mm := cards.multimesh
-	if mm.instance_count != sw.pos.size():
+	if mm.instance_count != sw.pos.size() + EcoMoth.GLASS:
 		return
 	for i in sw.active:
-		var b := i * STRIDE
-		var p := sw.pos[i]
-		buffer[b + 3] = p.x
-		buffer[b + 7] = p.y
-		buffer[b + 11] = p.z
+		_put(i, sw.pos[i])
+	var n := sw.active
+	for k in sw.glass_max:
+		if sw.glass_life[k] > 0.0:
+			_put(n, sw.glass_world(ship, k))
+			n += 1
 	mm.buffer = buffer
-	mm.visible_instance_count = sw.active
+	mm.visible_instance_count = n
 	writes += 1
+
+
+func _put(i: int, p: Vector3) -> void:
+	var b := i * STRIDE
+	buffer[b + 3] = p.x
+	buffer[b + 7] = p.y
+	buffer[b + 11] = p.z
 
 
 ## Место рачка n из буфера.
