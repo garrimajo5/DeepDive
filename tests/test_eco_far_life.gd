@@ -151,3 +151,49 @@ func test_view_schools_take_turns() -> void:
 			visible += 1
 	ok(seen.size() >= visible - 1 and visible > 0, "за круг переписаны видимые: %d из %d" % [seen.size(), visible])
 	fv.free()
+
+
+## Склон 06→10 (#832): жизнь редеет с глубиной дна — на отмели все стайки, внизу склона — около четверти, крупных
+## пар нет; стайка гаснет плавно.
+func test_thins_with_depth() -> void:
+	var n := EcoFarLife.schools()
+	for i in n:
+		eq(EcoFarLife.thin(i, -40.0), 1.0, "на отмели стайка %d целиком" % i)
+		eq(EcoFarLife.thin(i, EcoFarLife.THIN_FROM + 1.0), 1.0, "до начала склона — тоже")
+	var prev := float(n) + 1.0
+	for y in [-120.0, -160.0, -200.0, -250.0, -300.0]:
+		var sum := 0.0
+		for i in n:
+			sum += EcoFarLife.thin(i, y)
+		ok(sum <= prev + 1e-6, "глубже — не больше жизни (%.0f м: %.2f)" % [y, sum])
+		prev = sum
+	var bottom := 0.0
+	for i in n:
+		bottom += EcoFarLife.thin(i, -306.0)
+		if EcoFarLife.is_big(i):
+			eq(EcoFarLife.thin(i, -306.0), 0.0, "крупные пары внизу склона уходят")
+	ok(bottom < n * 0.45, "внизу склона жизни меньше половины (%.2f из %d)" % [bottom, n])
+	var mid := 0
+	for i in n:
+		for y in range(-120, -310, -2):
+			var k := EcoFarLife.thin(i, float(y))
+			if k > 0.0 and k < 1.0:
+				mid += 1
+	ok(mid > 0, "есть промежуточные доли — гаснет плавно")
+
+
+## У места 10 на дне склона силуэтов вокруг корабля заметно меньше, чем на отмели (над стенами котловины дно
+## высоко — там стайки остаются).
+func test_fewer_at_place_10() -> void:
+	var shelf := 0
+	var deep := 0
+	var ship := Vector3(560, -290, 200)
+	for t in [0.0, 40.0, 90.0, 160.0]:
+		for i in EcoFarLife.schools():
+			for j in EcoFarLife.size_of(i):
+				if _shown(EcoFarLife.xform(i, j, t, ship, Callable(self, "_flat"))):
+					shelf += 1
+				if _shown(EcoFarLife.xform(i, j, t, ship, Seabed.height)):
+					deep += 1
+	ok(shelf > 0, "на ровной отмели вокруг кто-то есть")
+	ok(deep * 10 < shelf * 7, "у 10 жизни меньше на треть и больше (%d против %d)" % [deep, shelf])
