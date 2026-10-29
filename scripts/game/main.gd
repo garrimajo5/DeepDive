@@ -1173,6 +1173,9 @@ func on_eco_event(e: Dictionary) -> void:
 		EcoLink.FIELD:   # импульс с площадки 08 поймал ритм поля (#833) — «граница» в журнале (#829)
 			lore.learn(LayerLore.FIELD08)
 			_world_say(str(e.get("text", "")))
+		EcoLink.SHELL:   # Раковина 03: гнёзда на сканере и рельеф на сонаре (#835) — знание «осмотр 03»
+			lore.learn(LayerLore.SHELL03)
+			_world_say(str(e.get("text", "")))
 		EcoLink.DROP:   # унесённый образец снова на дне (M.drop)
 			samples.drop(int(e.get("sample", -1)), e.get("at", Vector3.ZERO))
 		EcoLink.OBSERVE:   # наблюдение в журнал (handleEvents в js/game.js)

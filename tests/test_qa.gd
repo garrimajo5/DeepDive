@@ -98,6 +98,7 @@ func test_scene_runs_scenario() -> void:
 	var mate_weld_seen := false   # 26b: шов в кадре, его варит товарищ
 	var field_known := false   # 32e2: импульс с площадки 08 поймал ритм поля (#833)
 	var bones_seen := false   # 32g: сканер у Костей 04 — строка о минерализации (#840)
+	var shell_known := false   # 32h: сонар и сканер у Раковины 03 — знание «осмотр 03» (#835)
 	ok(not main.lore.knows(LayerLore.FIELD08), "до прогона поле 08 не замечено")
 	for i in 5100:  # 170 с игры (сценарий идёт ~153 с)
 		# снимок берёт уже нарисованный кадр — камеру до шага, в котором он снят
@@ -141,6 +142,7 @@ func test_scene_runs_scenario() -> void:
 		sat = sat or main.pilot.seated
 		field_known = field_known or main.lore.knows(LayerLore.FIELD08)
 		bones_seen = bones_seen or main.eco.bones.inspected
+		shell_known = shell_known or main.lore.knows(LayerLore.SHELL03)
 		ahead = maxf(ahead, z0 - main.helm.pos.z)
 		for k in range(shots, qa.log_lines.size()):   # #48: на 09-sonar в кадре голостол, на 10-zap — рычаг
 			if qa.log_lines[k].begins_with("скриншот 09-sonar"):
@@ -181,6 +183,7 @@ func test_scene_runs_scenario() -> void:
 	ok(sat, "по сценарию садились за штурвал")
 	ok(field_known, "32e2: импульс у 08 — ритм поля, знание «поле 08»")
 	ok(bones_seen, "32g: сканер у Костей 04 — строка о минерализации")
+	ok(shell_known, "32h: сонар и сканер у Раковины 03 — знание «осмотр 03»")
 	ok(not main.pilot.seated, "и встали")
 	ok(ahead > 20.0, "корабль прошёл вперёд: %.1f м" % ahead)
 	ok(FileAccess.file_exists(QaRunner.OUT + "/done.txt"), "done.txt записан")
