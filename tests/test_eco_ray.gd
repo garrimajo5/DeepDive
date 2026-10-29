@@ -385,3 +385,25 @@ func test_tail_whips() -> void:
 	eq(float(mat.get_shader_parameter("sway_k")), 1.0, "выключили — снова хлещет")
 	view.queue_free()
 	await frames(1)
+
+
+# ---------- Световой колодец 05 (#836) ----------
+
+## Корабль держится у колодца 05 на 20 м (и в точке снимка тестера `32n-mol-kolodec`): ледокрыл второго круга
+## проходит вдалеке — в виду из окна, но корабль не задевает и над ним не поднимается.
+func test_passes_far_from_well() -> void:
+	var well := LayerMap.POINTS["05"]
+	for ship: Vector3 in [Vector3(well["x"], -float(well["depth"]), well["z"]), Vector3(-149.2, -14.0, -71.1)]:
+		var w := _world()
+		var r := _rays(w)
+		w.ship.pos = ship
+		w.ship.yaw = 0.0
+		var closest := INF
+		for i in 1200:   # 120 с — круг второго ската (55 м при 3,6 м/с) проходит целиком
+			w.step(0.1)
+			for ry in r.rays:
+				ok(not ry.over, "у колодца (%.0f, %.0f) скат не поднимается над кораблём" % [ship.x, ship.z])
+				ok(not EcoHull.touches(ry.p, ship, 0.0, 6.0), "тело далеко от корпуса")
+				closest = minf(closest, Vector2(ry.p.x - ship.x, ry.p.z - ship.z).length())
+		ok(closest > EcoRay.WING + 6.0, "проходит вдалеке: ближе всего %.0f м" % closest)
+		ok(closest < 60.0, "но в виду из окна: %.0f м" % closest)
