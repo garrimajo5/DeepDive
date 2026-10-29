@@ -25,6 +25,11 @@ const READ_R := 30.0
 const READ_CD := 150.0
 const TURN_R := 70.0
 const TURN_CD := 60.0
+## Строка у курильщика — свой отсчёт (не делит READ_CD со строкой «поперёк» у старта) и только после VENT_DWELL с
+## у вееров: на входе в 45 м реактор сразу шлёт «Перегрев реактора» (Reactor.start_hot), строка приборов держится
+## 4,2 с (Status.MESSAGE_SECONDS) — без задержки она перебивала строку веера (отчёт QA 2026-10-29-1515, #954).
+const VENT_CD := 150.0
+const VENT_DWELL := 5.0
 const VENT_TEXT := "%s у курильщика повёрнут к жерлу — у дна вода тянется к трубам. Обходите сбоку"
 
 
@@ -49,6 +54,9 @@ var fans: Array[Fan] = []
 var current: EcoCurrent
 var read_cd := 0.0
 var turn_cd := 0.0
+var vent_cd := 0.0
+## Сколько секунд корабль подряд стоит у веера курильщика (ближе READ_R).
+var vent_near := 0.0
 
 var _spots: Array[Vector2]
 var _turns := 0
@@ -78,6 +86,8 @@ func reset(world: EcoWorld) -> void:
 	fans.clear()
 	read_cd = 0.0
 	turn_cd = 0.0
+	vent_cd = 0.0
+	vent_near = 0.0
 	_turns = current.turns
 	for i in _spots.size():
 		var f := Fan.new()
@@ -106,13 +116,18 @@ func step(world: EcoWorld, dt: float) -> void:
 	for f in fans:
 		var dy := wrapf(aim(f, current.angle) - f.yaw, -PI, PI)
 		f.yaw += dy * minf(1.0, dt * TURN_RATE)
-	if read_cd <= 0.0 and _any_near(sp, READ_R):
-		read_cd = READ_CD
-		var near := _nearest(sp)
-		if near and near.pull > 0.5:
+	vent_cd -= dt
+	var near := _nearest(sp) if _any_near(sp, READ_R) else null
+	if near and near.pull > 0.5:
+		vent_near += dt
+		if vent_near >= VENT_DWELL and vent_cd <= 0.0:
+			vent_cd = VENT_CD
 			world.emit(ID, "vent", sp, _text(world, VENT_TEXT))
-		else:
-			world.emit(ID, "across", sp, _text(world, "%s стоит поперёк течения — по нему видно, куда несёт"))
+		return
+	vent_near = 0.0
+	if read_cd <= 0.0 and near:
+		read_cd = READ_CD
+		world.emit(ID, "across", sp, _text(world, "%s стоит поперёк течения — по нему видно, куда несёт"))
 
 
 ## Тяга к жерлу курильщика в точке (x, z): 1 ближе EcoVent.PULL_IN, 0 дальше EcoVent.PULL_OUT, между — плавно.

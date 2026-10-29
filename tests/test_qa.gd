@@ -100,7 +100,7 @@ func test_scene_runs_scenario() -> void:
 	var bones_seen := false   # 32g: сканер у Костей 04 — строка о минерализации (#840)
 	var shell_known := false   # 32h: сонар и сканер у Раковины 03 — знание «осмотр 03» (#835)
 	ok(not main.lore.knows(LayerLore.FIELD08), "до прогона поле 08 не замечено")
-	for i in 5400:  # 180 с игры (сценарий идёт ~156 с)
+	for i in 5850:  # 195 с игры (сценарий идёт ~181 с)
 		# снимок берёт уже нарисованный кадр — камеру до шага, в котором он снят
 		var cam := main.camera
 		var table_vis := cam.is_position_in_frustum(table.global_position + table.global_basis.y * 0.9)

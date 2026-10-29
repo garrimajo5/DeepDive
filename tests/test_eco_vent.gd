@@ -299,18 +299,69 @@ func test_vent_fans_point_flow_to_vent() -> void:
 	ok(EcoFan.facing(far).distance_to(cur.vel().normalized()) < 0.05, "веерник у огнецвета — поперёк течения, как раньше")
 
 
+## Тексты сообщений мира за шаги.
+func _texts(w: EcoWorld) -> Array[String]:
+	var out: Array[String] = []
+	for e in w.take_link():
+		if e["type"] == EcoLink.MESSAGE and e["text"] != "":
+			out.append(e["text"])
+	return out
+
+
+func _vent_fan(fans: EcoFan) -> EcoFan.Fan:
+	for f in fans.fans:
+		if f.pull > 0.5:
+			return f
+	return null
+
+
+func _to_vent(t: String) -> bool:
+	return t.contains("повёрнут к жерлу")
+
+
+## Простоять у веера secs с шагом 0,05 — все строки мира.
+func _stay(w: EcoWorld, secs: float) -> Array[String]:
+	var texts: Array[String] = []
+	for i in roundi(secs / 0.05):
+		w.step(0.05)
+		texts.append_array(_texts(w))
+	return texts
+
+
 func test_vent_fan_message() -> void:
 	var w := _fan_world()
 	var fans := _fans(w)
-	var vf: EcoFan.Fan
-	for f in fans.fans:
-		if f.pull > 0.5:
-			vf = f
-	w.ship.pos = vf.top + Vector3(0, 8, 6)
-	w.step(0.05)
-	var texts: Array[String] = []
-	for e in w.take_link():
-		if e["type"] == EcoLink.MESSAGE and e["text"] != "":
-			texts.append(e["text"])
-	ok(texts.any(func(t: String) -> bool: return t.contains("повёрнут к жерлу")), "рядом — строка про поток к жерлу: %s" % str(texts))
+	w.ship.pos = _vent_fan(fans).top + Vector3(0, 8, 6)
+	var early := _stay(w, 1.0)
+	ok(not early.any(_to_vent), "сразу у вееров строки нет — её перебил бы «Перегрев реактора»: %s" % str(early))
+	var texts := _stay(w, EcoFan.VENT_DWELL)
+	eq(texts.filter(_to_vent).size(), 1, "постояв у вееров — одна строка про поток к жерлу: %s" % str(texts))
 	ok(not texts.any(func(t: String) -> bool: return t.contains("поперёк течения")), "не «поперёк течения»")
+	ok(not _stay(w, 30.0).any(_to_vent), "дальше — не чаще раза в VENT_CD")
+
+
+## Отчёт QA 2026-10-29-1515 (#954): строка «поперёк» у старта ставила общий отсчёт на 150 с — у курильщика строки
+## не было; и перегрев реактора на входе в 45 м сразу перебивал её (строка держится Status.MESSAGE_SECONDS).
+func test_vent_fan_line_after_start_fan() -> void:
+	var w := _fan_world()
+	var fans := _fans(w)
+	w.ship.pos = fans.fans[-1].top + Vector3(0, 5, 4)   # веер у старта
+	_stay(w, 0.1)
+	ok(fans.read_cd > 100.0, "у старта — «поперёк» (наблюдение), отсчёт READ_CD пошёл")
+	w.ship.pos = _vent_fan(fans).top + Vector3(0, 8, 6)
+	ok(_stay(w, EcoFan.VENT_DWELL + 0.5).any(_to_vent), "у курильщика строка своя, несмотря на строку у старта")
+	ok(EcoFan.VENT_DWELL > Status.MESSAGE_SECONDS, "строка веера приходит, когда «Перегрев реактора» уже погас")
+
+
+## Отошёл от вееров раньше VENT_DWELL — отсчёт заново.
+func test_vent_fan_dwell_resets() -> void:
+	var w := _fan_world()
+	var fans := _fans(w)
+	var at := _vent_fan(fans).top + Vector3(0, 8, 6)
+	w.ship.pos = at
+	_stay(w, EcoFan.VENT_DWELL - 1.0)
+	w.ship.pos = Vector3(500, 0, 500)
+	_stay(w, 0.5)
+	w.ship.pos = at
+	ok(not _stay(w, EcoFan.VENT_DWELL - 1.0).any(_to_vent), "после ухода — снова ждать VENT_DWELL")
+	ok(_stay(w, 1.5).any(_to_vent), "простояв — строка есть")
