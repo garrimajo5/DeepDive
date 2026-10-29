@@ -243,7 +243,7 @@ func test_legs_between_places() -> void:
 	eq(r.legs[0], ["00", "01", 69.0])
 	eq(r.legs[1], ["01", "07", 180.0])
 	var lines := r.finish(260.0, "наверх")
-	ok(lines.has("Участки: 00→01 01:09 · 01→07 03:00"), "участки в сводке: %s" % "\n".join(lines))
+	ok(lines.has("Участки: 00–01 01:09 · 01–07 03:00"), "участки в сводке: %s" % "\n".join(lines))
 	r.begin(300.0)
 	eq(r.legs.size(), 0, "новый забег — участки с нуля")
 

@@ -198,7 +198,7 @@ func summary(dur: float) -> PackedStringArray:
 	if not legs.is_empty():
 		var ls := PackedStringArray()
 		for l: Array in legs:
-			ls.append("%s→%s %s" % [l[0], l[1], clock(l[2])])
+			ls.append("%s–%s %s" % [l[0], l[1], clock(l[2])])
 		out.append("Участки: " + " · ".join(ls))
 	return out
 
