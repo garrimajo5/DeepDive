@@ -425,6 +425,9 @@ func lure(world: EcoWorld, pr: Pred) -> void:
 
 
 func _start_charge(world: EcoWorld, pr: Pred) -> void:
+	if not world.threat_free(pr):   # у корабля уже идёт другой эпизод угрозы (#834) — бросок позже
+		return
+	world.hold_threat(pr)
 	_set_mode(pr, Mode.CHARGE, 10.0)
 	pr.prey = null
 	var at := pr.agent.p
@@ -569,6 +572,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 		Mode.CHARGE:
 			speed = CHARGE_SPEED
 			a.goal = ship
+			world.hold_threat(pr)
 			if in_reef:  # корабль ушёл в риф у цветка — хищник отворачивает к краю рифа
 				_set_mode(pr, Mode.RETREAT, 8.0)
 				pr.cooldown = maxf(pr.cooldown, 10.0)
