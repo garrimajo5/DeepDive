@@ -55,6 +55,37 @@ func test_clear_only_own_message() -> void:
 	eq(m.text, "Течение сменилось", "чужое не трогаем")
 
 
+func test_message_not_cut_right_away() -> void:
+	# issue #979: строку веера через 0,2 с перебивал укус хищника — тестер её не видел
+	var m := Status.Message.new()
+	m.say("Кружевной веер у курильщика повёрнут к жерлу", Status.MESSAGE_SECONDS, true)
+	m.update(0.2)
+	m.say("Крупный хищник укусил корпус", Status.MESSAGE_SECONDS, true)
+	eq(m.text, "Кружевной веер у курильщика повёрнут к жерлу", "первая строка видна MIN_SHOW")
+	m.update(0.5)
+	eq(m.text, "Кружевной веер у курильщика повёрнут к жерлу", "через 0,7 с ещё она")
+	m.update(0.4)
+	eq(m.text, "Крупный хищник укусил корпус", "после 1 с — ждущая")
+	m.update(4.1)
+	ok(m.visible(), "ждущая держит свои 4,2 с")
+	m.update(0.2)
+	ok(not m.visible(), "и гаснет")
+	m.say("А")
+	m.update(2.0)
+	m.say("Б", Status.MESSAGE_SECONDS, true)
+	eq(m.text, "Б", "после MIN_SHOW новое сразу")
+	m.say("Б", Status.MESSAGE_SECONDS, true)
+	eq(m.text, "Б", "то же самое — не в очередь")
+	m.say("В", Status.MESSAGE_SECONDS, true)
+	m.clear("В")
+	m.update(1.5)
+	eq(m.text, "Б", "погашенное ждущее не всплывает")
+	m.say("Свет")
+	eq(m.text, "Свет", "своё действие — сразу, без очереди")
+	m.say("Мир", Status.MESSAGE_SECONDS, true)
+	eq(m.text, "Мир", "своё строку мира не держит — она сразу")
+
+
 func test_rumbs_and_course() -> void:
 	eq(Status.rumb(Vector3(0, 0, -1)), "С", "к −Z — север")
 	eq(Status.rumb(Vector3(1, 0, 0)), "В", "+X — восток")
