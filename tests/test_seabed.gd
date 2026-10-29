@@ -70,7 +70,7 @@ func test_water_keys_from_art059() -> void:
 	var f := FileAccess.open("res://docs/concept-art/voda-glubina.json", FileAccess.READ)
 	ok(f != null, "voda-glubina.json читается")
 	var keys: Array = JSON.parse_string(f.get_as_text())
-	eq(keys.size(), Seabed.Water.KEYS.size(), "десять ключей")
+	eq(keys.size(), Seabed.Water.ART059, "десять ключей ART-059 — первые в таблице")
 	for key in keys:
 		var d: float = key["depth"]
 		var c := Color(key["fog"])
@@ -86,7 +86,7 @@ func test_water_smooth_and_clamped() -> void:
 	var prev_amb := 2.0
 	var worst := 0.0
 	var d := 0.0
-	while d <= 130.0:
+	while d <= 320.0:
 		var c := Seabed.Water.fog_color(d)
 		ok(c.v <= prev_v + 1e-6, "цвет не светлеет вглубь (%.1f м)" % d)
 		ok(Seabed.Water.ambient(d) <= prev_amb + 1e-9, "рассеянный не растёт (%.1f м)" % d)
@@ -96,13 +96,28 @@ func test_water_smooth_and_clamped() -> void:
 		prev_amb = Seabed.Water.ambient(d)
 		d += 0.5
 	ok(worst < 0.02, "без скачков: шаг яркости за 0,5 м %.4f" % worst)
-	near(Seabed.Water.sun(200.0), Seabed.Water.sun(120.0), 1e-9, "ниже 120 м — как на 120")
+	near(Seabed.Water.sun(400.0), Seabed.Water.sun(300.0), 1e-9, "ниже 300 м — как на 300")
+	near(Seabed.Water.ambient(400.0), Seabed.Water.ambient(300.0), 1e-9, "рассеянный ниже 300 м — как на 300")
 	near(Seabed.Water.ambient(-3.0), Seabed.Water.ambient(0.0), 1e-9, "выше льда — как у льда")
 	# цвет между ключами смешан в линейном свете: середина темнее, чем среднее sRGB
 	var a := Seabed.Water.fog_color(90.0)
 	var b := Seabed.Water.fog_color(60.0)
 	var mid := Seabed.Water.fog_color(75.0)
 	near(mid.srgb_to_linear().b, (a.srgb_to_linear().b + b.srgb_to_linear().b) / 2.0, 1e-4, "середина — в линейном")
+
+
+## #822: склон до 300 м — вода темнеет и дальше 120 м (раньше там стоял clamp), плавно и без красного.
+func test_water_below_120() -> void:
+	ok(Seabed.Water.fog_color(300.0).v < Seabed.Water.fog_color(120.0).v - 0.02, "на 300 м туман темнее, чем на 120")
+	ok(Seabed.Water.ambient(300.0) < Seabed.Water.ambient(120.0) * 0.5, "рассеянный на 300 м слабее вдвое")
+	ok(Seabed.Water.ambient(200.0) < Seabed.Water.ambient(120.0), "на 200 м уже темнее, чем на 120")
+	ok(Seabed.Water.fog_density(300.0) > Seabed.Water.fog_density(120.0), "вода гуще")
+	ok(Seabed.Water.fog_density(300.0) < 0.03, "прожектор ещё достаёт склон: плотность < 0,03")
+	near(Seabed.Water.sun(300.0), 0.0, 1e-9, "солнца на 300 м нет")
+	var c := Seabed.Water.fog_color(300.0)
+	ok(c.b >= c.g and c.g >= c.r and c.v > 0.0, "оттенок тот же — синий, не серый и не чёрный ноль")
+	var keys: Array = Seabed.Water.KEYS
+	eq(keys[keys.size() - 1][0], 300.0, "последний ключ — 300 м")
 
 
 ## OceanView.apply_water ставит конечные значения без прежних множителей 0,9 / 0,7 / 1,2.

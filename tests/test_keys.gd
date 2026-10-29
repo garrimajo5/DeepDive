@@ -67,4 +67,4 @@ func test_same_numbers_as_before() -> void:
 	eq(bad, 0, "лёд, вода и блики — те же числа от −4 до 170 м")
 	eq(IceSheet.row(200.0), 15.0, "лёд глубже 90 м — строка 15")
 	eq(WaterGlints.strength(200.0), 0.0, "блики глубже — нет")
-	eq(Seabed.Water.fog_density(500.0), 0.0235, "вода глубже 120 м — как на 120")
+	eq(Seabed.Water.fog_density(500.0), 0.0255, "вода глубже 300 м — как на 300 (#822)")
