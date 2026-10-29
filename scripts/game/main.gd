@@ -31,6 +31,8 @@ var breach := Breach.new()     ## событие «пробоина»: стру�
 var silt := Silt.new()         ## событие «сонарная тьма»: облака ила (на дне от удара, у Края отмели — оползни)
 var silt_view: SiltView
 var run := Run.new()           ## маршрут забега: выбор у голостола, точки по местам отмели
+var trip := DescentTrip.new()  ## уход к Кристальному лесу у 10 после «глубже» (#828), шторка — `trip_view`
+var trip_view: DescentView
 var breach_view: BreachView
 var debug_weld := false        ## снимок: сварку держат без пальца
 var save := SaveGame.new()     ## груз трюма, поднятые образцы и изученные виды в user:// (js/save.js)
@@ -359,6 +361,8 @@ func _build_ui() -> void:
 	power_panel = PowerPanel.new()
 	power_panel.name = "Пульт энергии"
 	ui.add_child(power_panel)
+	trip_view = DescentView.new()
+	add_child(trip_view)
 	vote_panel = VotePanel.new()
 	vote_panel.name = "Решение экипажа"
 	ui.add_child(vote_panel)
@@ -885,6 +889,7 @@ func _step_view(dt: float) -> void:
 
 ## Шаг: интерфейс — карточка маршрута, приборы, подсказки, связь, рация (подчасти — в худшем кадре лога тестера, #745).
 func _step_ui(dt: float) -> void:
+	_trip_step(dt)
 	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.global_transform,
 		comms.code)   # страница «Связь» — кодовое слово забега (ART-040)
 	clock.lap("интерфейс/маршрут", Time.get_ticks_usec())   # подчасти — в худшем кадре лога тестера (#745)
@@ -1230,6 +1235,24 @@ func _on_hit(percent: int, kind: String) -> void:
 		say("%s бьёт по корпусу: −%d%%" % [kind, percent])
 
 
+## Уход к Кристальному лесу (#828): посреди экрана «в разработке» корабль — снова у 10, знания и сохранение.
+func _trip_step(dt: float) -> void:
+	if not trip.active:
+		return
+	match trip.update(dt):
+		"arrive":
+			park_at(DescentTrip.return_spot())
+			helm.yaw = 0.5 * PI   # носом на запад — к террасе 07
+			_place_ship()
+			lore.learn(LayerLore.DOWN)
+			lore.learn(LayerLore.BACK)
+			save_now()
+			timeline.mark(time, "вернулись к спуску 10")
+		"done":
+			announce(DescentTrip.BACK_MSG)
+	trip_view.apply(trip)
+
+
 ## «Сохранить» в паузе (#823): записать сейчас — груз, виды, журнал и корабль на месте.
 func save_now() -> bool:
 	return save.save(samples, scanner)
@@ -1501,7 +1524,12 @@ func decide(choice: String) -> void:
 			m.at_vote = false
 		vote_panel.visible = false
 		timeline.mark(time, "решили: глубже")
-		announce(run.go_deeper())   # гостям — тоже
+		var at_ten := run.at_descent()
+		var msg := run.go_deeper()
+		if at_ten:   # у спуска 10 — кат-сцена и экран «Кристальный лес — в разработке» (#828)
+			trip.start()
+			msg = DescentTrip.START_MSG
+		announce(msg)   # гостям — тоже
 		return
 	var rows := run.finish(time, samples.cargo.size(), scanner.scanned.size(), breach.count, vitals.hull)
 	expedition.end_run()

@@ -61,6 +61,14 @@ func _go() -> void:
 		while main.wreck.active() and main.wreck.t < float(kv["wreck"]):
 			main.step(1.0 / 30.0)
 		main.set_process(false)   # кадр — ровно на этом времени шторки
+	if kv.has("spusk"):   # spusk=<с> — уход к Кристальному лесу у 10 (#828): шторка через столько секунд после «глубже»
+		var at := Run.place_xz(Run.DESCENT)
+		main.park_at(Vector3(at.x, Seabed.height(at.x, at.y) + 20.0, at.y))
+		main.step(1.0 / 30.0)
+		main.decide("deep")
+		while main.trip.active and main.trip.t < float(kv["spusk"]):
+			main.step(1.0 / 30.0)
+		main.set_process(false)
 	if kv.has("zap_age"):   # zap=1 zap_age=<с> — дуги по обшивке ART-068 через столько секунд после разряда
 		main.step(0.0)
 		while main.zap.flicker > 0.0 and Zap.arc_time(main.zap.flicker) < float(kv["zap_age"]) - 1e-3:

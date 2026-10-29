@@ -179,6 +179,11 @@ func descent(x: float, z: float) -> String:
 	return ""
 
 
+## Корабль в круге места 10 (вход в него открыл голосование спуска): «глубже» здесь — уход к Кристальному лесу.
+func at_descent() -> bool:
+	return _at_descent
+
+
 ## Часть строки состояния: «Рифовый сад 1/3 · Кости левиафана 120 м», пусто без маршрута.
 func status(x: float, z: float) -> String:
 	if route < 0:
