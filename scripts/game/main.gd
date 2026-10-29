@@ -788,6 +788,15 @@ func _step_ship(dt: float, h: Holds) -> void:
 	if not run_msg.is_empty():
 		announce(run_msg)
 		timeline.mark(time, run_msg)
+	var deep_msg := run.descent(helm.pos.x, helm.pos.z)   # переход у 10: голосование «глубже или наверх» (#828)
+	if not deep_msg.is_empty():
+		announce(deep_msg)
+		timeline.mark(time, deep_msg)
+		if not run.voting:   # ушли от спуска, не решив: голоса и панель — прочь
+			ballot.clear()
+			for m: Crew.Member in crew:
+				m.at_vote = false
+			vote_panel.visible = false
 	expedition.visit(helm.pos.x, helm.pos.z)   # журнал ART-047: места и рекорд глубины
 	timeline.place(time, helm.pos.x, helm.pos.z)   # хронометраж по участкам слоя (#824)
 	var spot := autosave.update(helm.pos.x, helm.pos.z)   # кампания #823: вошли к месту-стоянке — записать
