@@ -717,6 +717,7 @@ func test_layer_shots_look_out_window() -> void:   # issue #967: 32i–32m сн�
 	var fly := false
 	var held := false
 	var waited := 0.0
+	var since_ship := 0.0
 	var hot := false
 	var cooled := false
 	var seen := []
@@ -732,6 +733,9 @@ func test_layer_shots_look_out_window() -> void:   # issue #967: 32i–32m сн�
 				held = true
 			"wait":
 				waited += float(st["s"])
+				since_ship += float(st["s"])
+			"ship":
+				since_ship = 0.0
 			"hot":
 				cooled = hot and float(st["heat"]) <= 0.0
 			"shot":
@@ -749,6 +753,10 @@ func test_layer_shots_look_out_window() -> void:   # issue #967: 32i–32m сн�
 						"%s — у носового окна, взгляд по носу" % name)
 				if name == "32j-kurilshchik-veerniki":
 					hot = true
+					# issue #982: строка мира перед строкой веера держит её в очереди до MIN_SHOW — снимок после
+					ok(since_ship > EcoFan.VENT_DWELL + Status.Message.MIN_SHOW + 0.25
+							and since_ship < EcoFan.VENT_DWELL + Status.MESSAGE_SECONDS,
+						"32j — строка веера на приборах и после очереди (%.1f с)" % since_ship)
 				if name == "33-kondensat-obychno":
 					ok(cooled, "33 — реактор остужен после курильщика (нагрев сушит конденсат)")
 	eq(seen.size(), 5, "все снимки 32i–32m на месте")
