@@ -150,6 +150,18 @@ static func table_xz(world: Vector2) -> Vector2:
 	return world * SCALE
 
 
+## Не ближе к краю стола, м: место и корабль за краем карты 700 × 700 м (склон за восточным краем, место 10, #822)
+## стоят у края квадрата со стороны, где они есть, иконка не свешивается со стола.
+const EDGE_IN := ICON_SIZE * 0.5
+
+
+## Точка мира (x, z) → точка на столе, прижатая внутрь квадрата карты (`EDGE_IN`). Внутри карты — как `table_xz`.
+static func on_table(world: Vector2) -> Vector2:
+	var h := SIDE * 0.5 - EDGE_IN
+	var t := table_xz(world)
+	return Vector2(clampf(t.x, -h, h), clampf(t.y, -h, h))
+
+
 ## Тип линии маршрута i (не меняется при выборе — ART-016).
 static func dash(i: int) -> int:
 	return [Dash.SOLID, Dash.LONG, Dash.DOTS][posmod(i, 3)]
@@ -163,8 +175,8 @@ static func segments() -> Array[Dictionary]:
 		var keys: Array = Run.ROUTES[i]["places"]
 		var s := 0.0
 		for j in keys.size() - 1:
-			var a := table_xz(Run.place_xz(keys[j]))
-			var b := table_xz(Run.place_xz(keys[j + 1]))
+			var a := on_table(Run.place_xz(keys[j]))
+			var b := on_table(Run.place_xz(keys[j + 1]))
 			out.append({"a": a, "b": b, "route": i, "start": s})
 			s += a.distance_to(b)
 	return out

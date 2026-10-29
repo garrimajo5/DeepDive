@@ -12,7 +12,11 @@ func test_matches_layer_json() -> void:
 	for l: Dictionary in j["locations"]:
 		var p: Dictionary = LayerMap.POINTS[l["id"]]
 		eq(p["name"], l["name"], "название " + str(l["id"]))
-		ok(LayerMap.at(l["id"]).is_equal_approx(Vector3(l["x"], -float(l["depth"]), l["z"])), "место " + str(l["id"]))
+		if LayerMap.MOVED.has(l["id"]):
+			eq(LayerMap.MOVED[l["id"]], Vector2(l["x"], l["z"]), "сдвинутое место %s — с карты #818" % l["id"])
+			eq(p["depth"], float(l["depth"]), "глубина сдвинутого места " + str(l["id"]))
+		else:
+			ok(LayerMap.at(l["id"]).is_equal_approx(Vector3(l["x"], -float(l["depth"]), l["z"])), "место " + str(l["id"]))
 		eq(p["accepted"], l["status"] == "существующая", "статус " + str(l["id"]))
 	eq(Array(LayerMap.MAIN_ROUTE), j["main_route"], "основной маршрут")
 	eq(LayerMap.LINKS, j["optional_links"], "петли и ответвления")
@@ -48,3 +52,22 @@ func test_segments() -> void:
 	ok(s.has(["07", "08"]) and s.has(["01", "03"]) and s.has(["00", "01"]), "есть все виды отрезков")
 	for seg: Array in s:
 		ok(LayerMap.POINTS.has(seg[0]) and LayerMap.POINTS.has(seg[1]), "концы отрезка — места карты")
+
+
+## #822: спуск к лесу 10 — на дне склона за восточным краем: корабль туда заходит, дно ниже 290 м с запасом,
+## на голостоле место прижато к восточному краю карты, в журнале — у правого края карты.
+func test_descent_on_slope() -> void:
+	var p := LayerMap.at("10")
+	ok(p.x > Helm.Ship.EDGE, "10 за краем отмели (x %.0f)" % p.x)
+	ok(-p.y >= 290.0, "ориентир 10 не выше 290 м")
+	ok(Helm.Ship.east_ok(p.x, p.z), "корабль заходит к 10 — котловина склона")
+	ok(p.y >= Helm.Ship.DEEP, "10 не ниже предела хода")
+	var h := Seabed.height(p.x, p.z)
+	ok(h <= p.y - Helm.Ship.CLEARANCE - 3.0, "под 10 дно %.1f — ниже корабля с запасом" % h)
+	ok(h <= -300.0, "дно у 10 глубже 300 м: %.1f" % h)
+	var t := Briefing.on_table(LayerMap.xz("10"))
+	near(t.x, Briefing.SIDE * 0.5 - Briefing.EDGE_IN, 1e-6, "на столе — у восточного края карты")
+	ok(t.y > Briefing.on_table(LayerMap.xz("06")).y, "и южнее Края отмели, как в мире")
+	var size := Vector2(1600, 720)
+	var c := Journal.place_center("descent", size)
+	ok(c.x > Journal.place_center("drop", size).x, "в журнале 10 правее Края отмели")

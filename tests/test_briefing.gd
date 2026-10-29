@@ -8,7 +8,7 @@ func test_scale_and_places() -> void:
 	eq(Briefing.table_xz(Vector2(0, -100)).y < 0.0, true, "нос (−Z) — вверх, к носу стола")
 	for k in Run.PLACES:
 		ok(Briefing.NUMBERS.has(k) and Briefing.ORDER.has(k), "у места %s есть номер" % k)
-		var t := Briefing.table_xz(Run.place_xz(k))
+		var t := Briefing.on_table(Run.place_xz(k))
 		ok(absf(t.x) < Briefing.SIDE / 2 and absf(t.y) < Briefing.SIDE / 2, "место %s на карте стола" % k)
 	eq(Briefing.NUMBERS["bones"], 4, "номера — по таблице ART-016")
 	eq(Briefing.ORDER.size(), 11, "все 11 мест слоя 1 (#829)")
@@ -25,7 +25,7 @@ func test_places_apart_on_table() -> void:
 	for a: String in Briefing.ORDER:
 		for b: String in Briefing.ORDER:
 			if a < b:
-				var d := Briefing.table_xz(Run.place_xz(a)).distance_to(Briefing.table_xz(Run.place_xz(b)))
+				var d := Briefing.on_table(Run.place_xz(a)).distance_to(Briefing.on_table(Run.place_xz(b)))
 				ok(d >= Briefing.ICON_SIZE, "%s и %s дальше иконки на столе (%.3f м)" % [a, b, d])
 
 
@@ -36,8 +36,8 @@ func test_segments_follow_routes() -> void:
 		ok(Briefing.dash(i) in [Briefing.Dash.SOLID, Briefing.Dash.LONG, Briefing.Dash.DOTS], "тип линии у %d" % i)
 	ok(segs.size() <= Briefing.MAX_SEGS, "шейдер держит все отрезки")
 	eq(segs[0]["route"], 0)
-	eq(segs[0]["a"], Briefing.table_xz(Run.place_xz("flower")))
-	eq(segs[1]["b"], Briefing.table_xz(Run.place_xz("well")))
+	eq(segs[0]["a"], Briefing.on_table(Run.place_xz("flower")))
+	eq(segs[1]["b"], Briefing.on_table(Run.place_xz("well")))
 	near(segs[1]["start"], (segs[0]["a"] as Vector2).distance_to(segs[0]["b"]), 1e-6, "путь от начала маршрута")
 	eq(segs[2]["start"], 0.0, "новый маршрут — с нуля")
 	eq(segs[3]["route"], 2)
