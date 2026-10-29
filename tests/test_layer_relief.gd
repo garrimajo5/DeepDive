@@ -101,11 +101,14 @@ func test_cuts_only_lower_and_ridge_only_raises() -> void:
 
 
 func test_relief_smooth() -> void:
-	# Без ступенек на краях гребня и проходов: через 1 м склон круче прежнего не больше чем на 1 м.
+	# Без ступенек на краях гребня и проходов: через 1 м склон круче прежнего не больше чем на 1 м. Склон за
+	# восточным краем (#822) — свой тест, `test_slope`.
 	for i in 140:
 		for j in 140:
 			var x := -350.0 + i * 5.0
 			var z := -350.0 + j * 5.0
+			if x > Seabed.Slope.X_IN - 2.0 and Seabed.Slope.mask(x + 2.0, z) + Seabed.Slope.mask(x, z + 2.0) > 0.0:
+				continue
 			var h := Seabed.height(x, z)
 			var b := minf(Seabed.base(x, z), Seabed.TOP)
 			for d: Vector2 in [Vector2(1, 0), Vector2(0, 1)]:
