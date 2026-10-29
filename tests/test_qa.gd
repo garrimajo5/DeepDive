@@ -524,6 +524,19 @@ func test_worst_frame_names_step() -> void:   # issue #217: в логе видн
 	r.free()
 
 
+func test_worst_note_pipelines() -> void:   # issue #983: провал отрисовки — сборка шейдеров или нет
+	eq(QaRunner.pipes_note(PackedInt32Array([0, 0, 0, 0, 0])), "", "сборок нет — молчим")
+	eq(QaRunner.pipes_note(PackedInt32Array([0, 0, 2, 1, 0])), "сборок шейдеров 3: поверхности 2, при отрисовке 1")
+	eq(QaRunner.worst_note("шаг 595 wait", 338.0, 12.0, 2.0, 352.0, "", PackedInt32Array([1, 0, 0, 4, 0])),
+		"шаг 595 wait, код 12 мс, отрисовка 338 мс (сборок шейдеров 5: 2D 1, при отрисовке 4), видеокарта 2 мс")
+	eq(QaRunner.worst_note("шаг 54 press", 7.2, 5.4, 0.0), "шаг 54 press, код 5 мс, отрисовка 7 мс", "без счётчиков — как раньше")
+	var r := QaRunner.new()
+	r._on_post_draw()
+	r._on_post_draw()
+	eq(r.pipes, PackedInt32Array([0, 0, 0, 0, 0]), "между двумя пустыми кадрами сборок нет — счёт за кадр, не накопленный")
+	r.free()
+
+
 func test_worst_note_code_and_gpu() -> void:   # issue #217, #281: отрисовка мала — код это или видеокарта
 	eq(QaRunner.worst_note("шаг 54 press", 7.2, 5.4, 0.0), "шаг 54 press, код 5 мс, отрисовка 7 мс", "без замера видеокарты")
 	eq(QaRunner.worst_note("шаг 54 press", 7.2, 5.4, 731.0), "шаг 54 press, код 5 мс, отрисовка 7 мс, видеокарта 731 мс",

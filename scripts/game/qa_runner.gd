@@ -30,6 +30,15 @@ var _skip_frame := true
 ## Сюда входит и ожидание видеокарты и показа кадра (вплоть до кадровой развёртки).
 var draw_ms := 0.0
 var _draw_from_us := 0
+## Сборки шейдеров (конвейеров видеокарты) в последнем кадре по видам `PIPES` (issue #983): провал «отрисовка 338 мс»
+## на устройстве — сборка это или выгрузка. Счётчики движка накопительные; Compatibility их не ведёт (нули).
+var pipes := PackedInt32Array([0, 0, 0, 0, 0])
+var _pipes_total := PackedInt32Array([0, 0, 0, 0, 0])
+const PIPES := [[RenderingServer.RENDERING_INFO_PIPELINE_COMPILATIONS_CANVAS, "2D"],
+	[RenderingServer.RENDERING_INFO_PIPELINE_COMPILATIONS_MESH, "меши"],
+	[RenderingServer.RENDERING_INFO_PIPELINE_COMPILATIONS_SURFACE, "поверхности"],
+	[RenderingServer.RENDERING_INFO_PIPELINE_COMPILATIONS_DRAW, "при отрисовке"],
+	[RenderingServer.RENDERING_INFO_PIPELINE_COMPILATIONS_SPECIALIZATION, "варианты"]]
 ## Кадры и их время (мкс) с прошлого скриншота — без кадра снимка и прогрева (issue #169): среднее движка
 ## за секунду считало и сам скриншот, и «05b-light-off» через 0,5 с после снимка показывал 3 к/с при худшем кадре 34 мс.
 var frames := 0
@@ -64,6 +73,8 @@ func start(m: Main, text: String = "") -> void:
 	RenderingServer.viewport_set_measure_render_time(main.get_viewport().get_viewport_rid(), true)   # видеокарта — для worst_at
 	RenderingServer.frame_pre_draw.connect(_on_pre_draw)
 	RenderingServer.frame_post_draw.connect(_on_post_draw)
+	for i in PIPES.size():   # счёт сборок — с начала прогона, не с запуска (issue #983)
+		_pipes_total[i] = RenderingServer.get_rendering_info(PIPES[i][0])
 	_warm_from_us = Time.get_ticks_usec()
 	DirAccess.make_dir_recursive_absolute(OUT)
 	for f in DirAccess.get_files_at(OUT):
@@ -248,7 +259,7 @@ func _measure(now_us: int) -> void:
 		var ms := (now_us - _last_us) / 1000.0
 		if ms > worst_ms:
 			worst_ms = ms
-			worst_at = worst_note(_step_label, render_ms(), code_ms(), gpu_ms(), ms, main.clock.last_note() if main else "")   # _measure — уже в новом шаге (issue #662)
+			worst_at = worst_note(_step_label, render_ms(), code_ms(), gpu_ms(), ms, main.clock.last_note() if main else "", pipes)   # _measure — уже в новом шаге (issue #662)
 		if _settle > 0:
 			_settle -= 1
 		else:
@@ -362,13 +373,29 @@ const PARTS_FROM := 20.0   ## код дольше, мс, — пишем его �
 ## «код 112 мс (мир 80, виды 20), …». Код и отрисовка малы, а кадр долгий — время ушло вне шага и
 ## отрисовки (физика, ввод, система). Замер видеокарты движок отдаёт с запаздыванием на несколько кадров: больше самого
 ## кадра frame (мс) — он от другого кадра, не пишем (issue #609).
-static func worst_note(step: String, draw: float, code: float = -1.0, gpu: float = 0.0, frame := INF, parts := "") -> String:
+static func worst_note(step: String, draw: float, code: float = -1.0, gpu: float = 0.0, frame := INF, parts := "",
+		built := PackedInt32Array()) -> String:
 	var d := "отрисовка %d мс" % roundi(draw)
+	var b := pipes_note(built)
+	if not b.is_empty():
+		d += " (%s)" % b
 	if code >= 0.0:
 		d = "код %d мс%s, %s" % [roundi(code), " (%s)" % parts if not parts.is_empty() and code >= PARTS_FROM else "", d]
 	if gpu > 0.0 and gpu <= frame + 1.0:
 		d += ", видеокарта %d мс" % roundi(gpu)
 	return step + ", " + d if not step.is_empty() else d
+
+
+## Сборки шейдеров кадра по видам `PIPES` для лога: «сборок шейдеров 3: поверхности 2, при отрисовке 1»; нет — "".
+## «При отрисовке» — то, что прогрев не собрал заранее и кадр ждал (issue #983).
+static func pipes_note(built: PackedInt32Array) -> String:
+	var n := 0
+	var parts: Array[String] = []
+	for i in mini(built.size(), PIPES.size()):
+		if built[i] > 0:
+			n += built[i]
+			parts.append("%s %d" % [PIPES[i][1], built[i]])
+	return "" if n == 0 else "сборок шейдеров %d: %s" % [n, ", ".join(parts)]
 
 
 ## Отрисовка прошлого кадра, мс — того же, чьё время меряет _measure (issue #609, `draw_ms`).
@@ -383,6 +410,10 @@ func _on_pre_draw() -> void:
 func _on_post_draw() -> void:
 	if _draw_from_us > 0:
 		draw_ms = (Time.get_ticks_usec() - _draw_from_us) / 1000.0
+	for i in PIPES.size():   # сборки шейдеров этого кадра (issue #983)
+		var t := RenderingServer.get_rendering_info(PIPES[i][0])
+		pipes[i] = t - _pipes_total[i]
+		_pipes_total[i] = t
 
 
 ## Код прошлого кадра: шаг игры `Main.step` (корабль, живой мир, виды), мс. Performance.TIME_PROCESS не годится —
