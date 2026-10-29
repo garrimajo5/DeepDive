@@ -708,3 +708,47 @@ func test_graphics_logged_on_change() -> void:
 	main._apply_graphics(Graphics.NORMAL)
 	main.queue_free()
 	await frames(1)
+
+
+func test_layer_shots_look_out_window() -> void:   # issue #967: 32i–32m снимали стену сканера, строку костей перебивал «Новый вид»
+	var raw := FileAccess.get_file_as_string("res://tools/qa/scenario.json")
+	var steps: Array = JSON.parse_string(raw)
+	var look := {}
+	var fly := false
+	var held := false
+	var waited := 0.0
+	var hot := false
+	var cooled := false
+	var seen := []
+	for st in steps:
+		match st["do"]:
+			"goto":
+				look = st
+				held = false
+				waited = 0.0
+			"fly":
+				fly = st.get("on", true)
+			"hold":
+				held = true
+			"wait":
+				waited += float(st["s"])
+			"hot":
+				cooled = hot and float(st["heat"]) <= 0.0
+			"shot":
+				var name: String = st["name"]
+				if name == "32g-kosti-skan":
+					ok(is_equal_approx(float(look["x"]), 3.5) and is_equal_approx(float(look["z"]), -2.0), "32g — у сканера")
+					ok(not held, "32g — кнопку не держат: «Новый вид» не перебивает строку костей")
+					ok(waited > EcoBones.INSPECT_TIME and waited < EcoBones.INSPECT_TIME + Status.MESSAGE_SECONDS,
+						"32g — стоим дольше осмотра (%.1f с), строка ещё на приборах" % waited)
+				if name in ["32i-kurilshchik-znak", "32j-kurilshchik-veerniki", "32k-stekloust-glaz",
+						"32l-cvetok-gasnet", "32m-cvetok-rif"]:
+					seen.append(name)
+					ok(not fly, "%s — с мостика" % name)
+					ok(float(look["z"]) < -2.5 and absf(float(look["x"])) < 1.5 and is_zero_approx(float(look["yaw"])),
+						"%s — у носового окна, взгляд по носу" % name)
+				if name == "32j-kurilshchik-veerniki":
+					hot = true
+				if name == "33-kondensat-obychno":
+					ok(cooled, "33 — реактор остужен после курильщика (нагрев сушит конденсат)")
+	eq(seen.size(), 5, "все снимки 32i–32m на месте")
