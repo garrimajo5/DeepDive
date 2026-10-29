@@ -290,6 +290,51 @@ func test_wreck_step_not_a_hit() -> void:
 	await frames(1)
 
 
+## Кампания (#824, часть 4б): шаг «save» кладёт место в память сохранения (файл прогона не пишется), «wreck» после
+## него — загрузка этого места без облёта, а не подъём к началу спуска.
+func test_save_then_wreck_loads_place() -> void:
+	var q := QaScript.parse('[{"do": "save"}, {"do": "wreck"}, {"do": "save", "on": false}]')
+	eq(q.errors.size(), 0, "шаг save известен")
+	eq(q.advance(0.1).slice(0, 3), [["save", true], ["wreck"], ["save", false]], "команды сцене")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	eq(main.save.path, "", "прогон не пишет файл сохранения")
+	main.start_qa('[{"do": "ship", "x": 40, "y": -30, "z": -30, "yaw": 0}, {"do": "save"}, {"do": "wait", "s": 0.2},'
+		+ ' {"do": "ship", "x": 0, "y": -20, "z": 60}, {"do": "wreck"}, {"do": "wait", "s": 0.2}]')
+	for i in 20:
+		main.step(1.0 / 30.0)
+	ok(main.has_saved_ship(), "место в памяти сохранения")
+	eq(main.wreck_view.sub.text, Wreck.SUB_LOAD, "шторка обещает последнее сохранение")
+	for i in int(Wreck.END * 30.0) + 10:
+		main.step(1.0 / 30.0)
+	ok(not main.wreck.active(), "шторка прошла")
+	near(main.helm.pos.x, 40.0, 0.5, "корабль у сохранённого места (x)")
+	near(main.helm.pos.z, -30.0, 0.5, "корабль у сохранённого места (z)")
+	ok(not main.flyby.active(), "без облёта")
+	main.start_qa('[{"do": "save", "on": false}, {"do": "wait", "s": 0.1}]')
+	main.step(1.0 / 30.0)
+	ok(not main.has_saved_ship(), "место забыто — меню без «Продолжить»")
+	main.queue_free()
+	await frames(1)
+
+
+## Есть сохранённое место — в меню сверху «Продолжить», кнопки ниже: «crew»/«journal»/«dive» сценария жмут по
+## текущему меню, а не по меню без «Продолжить» (иначе «Экипаж» попадал мимо, 29f не дожидался «Нет ответа»).
+func test_menu_press_with_continue() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var qa := main.start_qa('[{"do": "wait", "s": 0.1}]')
+	main.main_menu.open = true
+	main.main_menu.can_continue = true
+	var size := main.get_viewport().get_visible_rect().size
+	for id in ["dive", "crew", "journal"]:
+		eq(main.main_menu.hit(qa._point(id, Vector2.ZERO), size), id, "касание «%s» — по своей кнопке" % id)
+	main.queue_free()
+	await frames(1)
+
+
 func test_silt_step() -> void:
 	var q := QaScript.parse('[{"do": "silt"}, {"do": "silt", "on": false}]')
 	eq(q.errors.size(), 0, "шаг silt известен")
