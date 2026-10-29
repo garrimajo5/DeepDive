@@ -151,3 +151,31 @@ func test_view_budget_and_faces() -> void:
 		"не прожектор: мягкое смешение, без яркого сложения")
 	v.queue_free()
 	await frames(1)
+
+
+## По issue #994: у колодца (шаг тестера 32n — корабль на 14 м в 20 м восточнее, носом к нему) ближняя грань
+## столба во всё левое окно — ровная белая плоскость. Вблизи столб тает, издали — в полную силу.
+func test_column_fades_near_camera() -> void:
+	var w := _well(Seabed.height)
+	var cam := Vector3(-153.0, -13.3, -72.0)   # глаз у окон мостика при ship=-150,-14,-72, курс 270°
+	var best := 1e9
+	for k in 61:
+		var s := k / 60.0
+		var c := w.top.lerp(w.base, s)
+		var a := lerpf(EcoWell.CRACK_L, EcoWell.SPOT_L, s) * 0.5
+		var b := lerpf(EcoWell.CRACK_W, EcoWell.SPOT_W, s) * 0.5
+		for j in 120:
+			var ang := TAU * j / 120.0
+			best = minf(best, (c + w.along * (cos(ang) * a) + w.across * (sin(ang) * b)).distance_to(cam))
+	ok(best < 15.0, "у 32n столб вплотную: %f м" % best)
+	ok(EcoWell.near_fade(best) < 0.15, "ближняя грань почти прозрачна: %f" % EcoWell.near_fade(best))
+	near(EcoWell.near_fade(40.0), 1.0, 1e-6, "издали — в полную силу")
+	near(EcoWell.near_fade(5.0), 0.0, 1e-6, "вплотную — нет")
+	var v := WellView.new(w)
+	var mat := v.column.mesh.surface_get_material(0) as ShaderMaterial
+	eq(mat.get_shader_parameter("near"), EcoWell.NEAR, "порог — в шейдере столба")
+	ok(mat.shader.code.contains("CAMERA_POSITION_WORLD"), "по расстоянию до камеры")
+	var crack := v.crack.mesh.surface_get_material(0) as ShaderMaterial
+	var cn: Variant = crack.get_shader_parameter("near")
+	ok(cn == null or cn == Vector2.ZERO, "трещина под льдом не тает")
+	v.free()
