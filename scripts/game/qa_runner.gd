@@ -164,6 +164,8 @@ func tick(dt: float) -> void:
 				main.vitals.energy = c[1]
 			"ping":   # импульс сонара, как с поста (у площадки 08 — ритм пограничного поля, #833)
 				main.ping_sonar()
+			"save":   # место для гибели (#824): как автосохранение, но только в памяти — файл прогона не пишется
+				main.save.ship = SaveGame.ship_read(SaveGame.ship_snapshot(main.helm, main.vitals)) if c[1] else {}
 			"wreck":   # корпус разрушен — как от удара (шторка ART-036)
 				main.vitals.hull = 0.0
 				main.timeline.set_hull(main.time, 0.0)   # крушение из сценария — не «удар» в хронометраже
@@ -271,7 +273,7 @@ func _point(what: String, dir: Vector2) -> Vector2:
 		"light":
 			return l.light.c
 		"dive":   # «Погрузиться» в главном меню ART-037
-			return MainMenu.screen_rect("dive", main.get_viewport().get_visible_rect().size).get_center()
+			return main.main_menu.rect("dive", main.get_viewport().get_visible_rect().size).get_center()
 		"hint_map":   # кнопка «Схема» на плашке подсказки ART-038
 			return main.tutorial_panel.map_rect().get_center()
 		"map_back":   # «Назад» схемы корабля ART-042
@@ -303,7 +305,7 @@ func _point(what: String, dir: Vector2) -> Vector2:
 			return Lobby.screen_rect({"lobby_new": "new", "lobby_addr": "address", "lobby_refresh": "refresh"}[what],
 				main.get_viewport().get_visible_rect().size).get_center()
 		"crew", "journal":   # «Экипаж» (вход сбора экипажа ART-028), «Журнал экспедиции» ART-047 в главном меню
-			return MainMenu.screen_rect(what, main.get_viewport().get_visible_rect().size).get_center()
+			return main.main_menu.rect(what, main.get_viewport().get_visible_rect().size).get_center()   # с «Продолжить» — ниже
 		"jprev":   # «Журнал экспедиции» ART-047: «Ранее» / «Далее», «Закрыть» карточки
 			return Journal.prev_rect(main.get_viewport().get_visible_rect().size).get_center()
 		"jnext":
