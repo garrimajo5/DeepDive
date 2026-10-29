@@ -70,8 +70,8 @@ static func ship_snapshot(s: Helm.Ship, v: Vitals) -> Dictionary:
 
 
 ## Ключ "ship" из файла: {"pos": Vector3, "yaw", "hull", "energy"}; не словарь или нет числа — пусто (корабль не
-## сохранён). Место — в пределах хода (`Helm.Ship.EDGE`, лёд `CEILING` … `DEEP`), корпус не ниже 1 % (разрушенный
-## корпус не сохраняют — гибель ведёт к прошлой записи), заряд 0…100.
+## сохранён). Место — в пределах хода (`Helm.Ship.EDGE`, склон за краем — `east_ok`, лёд `CEILING` … `DEEP`), корпус
+## не ниже 1 % (разрушенный корпус не сохраняют — гибель ведёт к прошлой записи), заряд 0…100.
 static func ship_read(raw: Variant) -> Dictionary:
 	if not (raw is Dictionary):
 		return {}
@@ -82,7 +82,11 @@ static func ship_read(raw: Variant) -> Dictionary:
 			return {}
 		n[k] = float(x)
 	var e := Helm.Ship.EDGE
-	return {"pos": Vector3(clampf(n["x"], -e, e), clampf(n["y"], Helm.Ship.DEEP, Helm.Ship.CEILING), clampf(n["z"], -e, e)),
+	var px := clampf(n["x"], -e, Helm.Ship.EAST_END)
+	var pz := clampf(n["z"], -e, e)
+	if not Helm.Ship.east_ok(px, pz):   # за краем — только в проходе и котловине склона (#822)
+		px = e
+	return {"pos": Vector3(px, clampf(n["y"], Helm.Ship.DEEP, Helm.Ship.CEILING), pz),
 		"yaw": wrapf(n["yaw"], -PI, PI), "hull": clampf(n["hull"], 1.0, Vitals.MAX),
 		"energy": clampf(n["energy"], 0.0, Vitals.MAX)}
 

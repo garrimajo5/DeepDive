@@ -6,6 +6,9 @@ const SIZE := 700.0      ## сторона карты, м
 const SEGMENTS := 140    ## клеток на сторону (141×141 вершин, ~39 тыс. треугольников)
 const TOP := -7.0        ## выше дно не поднимается
 const ICE_Y := 0.0
+## Участок сетки дна за восточным краем карты (#822, часть 2): x 350…700, z 60…340 — проход и котловина `Slope` с
+## запасом на её стены. Шаг и узлы — как у основной сетки (стык без щели), в той же поверхности (`map_arrays`).
+const EAST := Rect2(350.0, 60.0, 350.0, 280.0)
 
 
 ## Высота дна под точкой (x, z): прежняя отмель `base` + гребень и проходы слоя 1 (`Layer`) + склон за восточным
@@ -103,7 +106,8 @@ class Layer:
 ## в скальной стене за Краем отмели 06 — проход шириной `GAP_HALF`·2 м у z = `GAP_Z`, за ним дно уходит от
 ## нынешних ~112 м к `BOTTOM` м у `X_BOTTOM` и раскрывается в котловину шириной `BASIN_HALF`·2 м; по бокам и в конце
 ## котловины — прежняя стена. На склоне — крупные скальные массы (`ROCK` м), вдоль оси прохода они ниже (`AXIS_FREE`),
-## чтобы корабль шёл вниз без касаний. Сетку дна за краем карты и ход корабля туда открывает следующая часть #822.
+## чтобы корабль шёл вниз без касаний. Сетка дна за краем — `EAST`/`map_arrays`, ход корабля туда — `open`
+## (`Helm.Ship`, #822, часть 2).
 class Slope:
 	const GAP_Z := 200.0         ## ось прохода, м
 	const GAP_HALF := 40.0       ## полуширина прохода в стене (≥ 30 — проход не уже 60 м)
@@ -128,6 +132,10 @@ class Slope:
 			return h
 		return lerpf(h, minf(h, floor_at(x, z)), m)
 
+	## Сюда за край отмели (x > `Helm.Ship.EDGE`) корабль заходит: проход и котловина хотя бы наполовину.
+	static func open(x: float, z: float) -> bool:
+		return mask(x, z) >= 0.5
+
 	## Доля склона в (x, z): 0 — стена, 1 — проход или котловина целиком.
 	static func mask(x: float, z: float) -> float:
 		var half := lerpf(GAP_HALF, BASIN_HALF, HashNoise.smooth(X_WIDE.x, X_WIDE.y, x))
@@ -147,12 +155,16 @@ class Slope:
 		return p + rock * free + grain
 
 
-## Высота сетки дна (build_arrays, клетка SIZE / SEGMENTS) под (x, z): та, что видно, — между вершинами линейно по
-## треугольникам клетки (диагональ от (x0 + шаг, z0) к (x0, z0 + шаг)). Вне карты — по ближней клетке.
+## Высота сетки дна (`map_arrays`, клетка SIZE / SEGMENTS) под (x, z): та, что видно, — между вершинами линейно по
+## треугольникам клетки (диагональ от (x0 + шаг, z0) к (x0, z0 + шаг)). Вне карты — по ближней клетке; за восточным
+## краем в полосе `EAST` — по клеткам участка склона.
 static func mesh_height(x: float, z: float) -> float:
 	var step := SIZE / SEGMENTS
 	var half := SIZE / 2.0
-	var i := clampf(floor((x + half) / step), 0.0, SEGMENTS - 1.0)
+	var last_i := SEGMENTS - 1.0
+	if x > half and z >= EAST.position.y and z < EAST.end.y:
+		last_i = (EAST.end.x + half) / step - 1.0
+	var i := clampf(floor((x + half) / step), 0.0, last_i)
 	var j := clampf(floor((z + half) / step), 0.0, SEGMENTS - 1.0)
 	var x0 := -half + i * step
 	var z0 := -half + j * step
@@ -181,41 +193,67 @@ static func color_at(x: float, y: float, z: float, ny: float) -> Color:
 
 ## Сетка дна: массивы для ArrayMesh (вершины, нормали, цвета, индексы), лицевая сторона вверх.
 static func build_arrays(segments: int = SEGMENTS, size: float = SIZE) -> Array:
-	var n := segments + 1
-	var step := size / segments
-	var half := size / 2.0
+	return grid_arrays(Vector2(-size / 2.0, -size / 2.0), segments, segments, size / segments)
+
+
+## Вся видимая сетка дна одной поверхностью (один вызов отрисовки): квадрат карты и участок склона `EAST`.
+static func map_arrays() -> Array:
+	var step := SIZE / SEGMENTS
+	var main := build_arrays()
+	var east := grid_arrays(EAST.position, int(EAST.size.x / step), int(EAST.size.y / step), step)
+	var base_n: int = (main[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	var idx: PackedInt32Array = east[Mesh.ARRAY_INDEX]
+	for t in idx.size():
+		idx[t] += base_n
+	var all: PackedInt32Array = main[Mesh.ARRAY_INDEX]
+	all.append_array(idx)
+	main[Mesh.ARRAY_INDEX] = all
+	var vs: PackedVector3Array = main[Mesh.ARRAY_VERTEX]
+	vs.append_array(east[Mesh.ARRAY_VERTEX])
+	main[Mesh.ARRAY_VERTEX] = vs
+	var ns: PackedVector3Array = main[Mesh.ARRAY_NORMAL]
+	ns.append_array(east[Mesh.ARRAY_NORMAL])
+	main[Mesh.ARRAY_NORMAL] = ns
+	var cs: PackedColorArray = main[Mesh.ARRAY_COLOR]
+	cs.append_array(east[Mesh.ARRAY_COLOR])
+	main[Mesh.ARRAY_COLOR] = cs
+	return main
+
+
+## Сетка nx × nz клеток шага step от угла at. Нормали — по разностям высоты через узел (на краю — за краем по
+## `height`), поэтому у двух сеток на общем ребре нормали совпадают и стык не виден.
+static func grid_arrays(at: Vector2, nx: int, nz: int, step: float) -> Array:
+	var w := nx + 3   # узлы с кольцом в одну клетку вокруг — для нормалей
 	var hs := PackedFloat32Array()
-	hs.resize(n * n)
-	for j in n:
-		for i in n:
-			hs[j * n + i] = height(-half + i * step, -half + j * step)
+	hs.resize(w * (nz + 3))
+	for j in nz + 3:
+		for i in w:
+			hs[j * w + i] = height(at.x + (i - 1) * step, at.y + (j - 1) * step)
+	var n := nx + 1
 	var pos := PackedVector3Array()
 	var nor := PackedVector3Array()
 	var col := PackedColorArray()
-	pos.resize(n * n)
-	nor.resize(n * n)
-	col.resize(n * n)
-	for j in n:
+	pos.resize(n * (nz + 1))
+	nor.resize(n * (nz + 1))
+	col.resize(n * (nz + 1))
+	for j in nz + 1:
 		for i in n:
 			var v := j * n + i
-			var x := -half + i * step
-			var z := -half + j * step
-			var y := hs[v]
-			var il := maxi(i - 1, 0)
-			var ir := mini(i + 1, n - 1)
-			var jd := maxi(j - 1, 0)
-			var ju := mini(j + 1, n - 1)
-			var dx := (hs[j * n + ir] - hs[j * n + il]) / ((ir - il) * step)
-			var dz := (hs[ju * n + i] - hs[jd * n + i]) / ((ju - jd) * step)
+			var x := at.x + i * step
+			var z := at.y + j * step
+			var c := (j + 1) * w + i + 1
+			var y := hs[c]
+			var dx := (hs[c + 1] - hs[c - 1]) / (2.0 * step)
+			var dz := (hs[c + w] - hs[c - w]) / (2.0 * step)
 			var nn := Vector3(-dx, 1.0, -dz).normalized()
 			pos[v] = Vector3(x, y, z)
 			nor[v] = nn
 			col[v] = color_at(x, y, z, nn.y)
 	var idx := PackedInt32Array()
-	idx.resize(segments * segments * 6)
+	idx.resize(nx * nz * 6)
 	var t := 0
-	for j in segments:
-		for i in segments:
+	for j in nz:
+		for i in nx:
 			var v := j * n + i
 			# Godot: лицевая сторона — обход по часовой стрелке, если смотреть на неё (сверху)
 			idx[t] = v; idx[t + 1] = v + 1; idx[t + 2] = v + n
