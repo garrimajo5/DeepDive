@@ -1,5 +1,5 @@
 extends TestCase
-## Стеклоуст (initEels, eelUpdate, onZap в js/creatures.js; ART-006): три логова, бросок на скребунов и светляков,
+## Стеклоуст (initEels, eelUpdate, onZap в js/creatures.js; ART-006): одно логово у трещины 02↔01 (#834), бросок на скребунов и светляков,
 ## присоска на стекле носа — EcoLink.DRAIN 3,2 ед./с, разряд сбрасывает; шесть MultiMesh в сцене (с мутью).
 
 const FLAT := -40.0
@@ -63,13 +63,13 @@ func _run_until_latched(w: EcoWorld, limit := 60.0) -> bool:
 
 # ---------- Расстановка ----------
 
-func test_three_lairs_on_ground() -> void:
+func test_lair_on_ground() -> void:
 	var w := EcoWorld.new()
 	w.ground = Seabed.height
 	var eels := w.add(EcoEel.new()) as EcoEel
-	eq(eels.eels.size(), 3, "три логова, как W.lairs")
-	eq(w.count(EcoEel.ID), 3, "три стеклоуста в мире")
-	for i in 3:
+	eq(eels.eels.size(), EcoEel.LAIRS.size(), "по стеклоусту на логово")
+	eq(w.count(EcoEel.ID), EcoEel.LAIRS.size(), "стеклоусты в мире")
+	for i in EcoEel.LAIRS.size():
 		var e := eels.eels[i]
 		var xz := EcoEel.LAIRS[i]
 		near(e.lair.y, Seabed.height(xz.x, xz.y) + EcoEel.MOUTH_UP, 0.01, "устье %d на 1,1 м над дном" % i)
@@ -83,7 +83,126 @@ func test_three_lairs_on_ground() -> void:
 	var again := EcoWorld.new()
 	again.ground = Seabed.height
 	var e2 := again.add(EcoEel.new()) as EcoEel
-	eq(e2.eels[1].out, eels.eels[1].out, "при том же зерне — те же логова")
+	eq(e2.eels[0].out, eels.eels[0].out, "при том же зерне — то же логово")
+
+
+# ---------- Слой 1 (#834): один читаемый эпизод у трещины 02↔01 ----------
+
+## Ближайшая точка отрезка 02→01 к xz и доля пути по нему.
+static func _on_crack_path(xz: Vector2) -> Vector2:
+	var a := LayerMap.xz("02")
+	var b := LayerMap.xz("01")
+	var t := clampf((xz - a).dot(b - a) / (b - a).length_squared(), 0.0, 1.0)
+	return a.lerp(b, t)
+
+
+func test_single_lair_at_crack_02_01() -> void:
+	eq(EcoEel.LAIRS.size(), 1, "одно логово — один читаемый эпизод, не три")
+	var xz := EcoEel.LAIRS[0]
+	var off := xz.distance_to(_on_crack_path(xz))
+	ok(off < 20.0, "логово у трещины на подходе 02↔01: %.1f м от пути" % off)
+	ok(xz.distance_to(LayerMap.xz("02")) > 50.0 and xz.distance_to(LayerMap.xz("01")) > 50.0,
+		"посреди подхода, а не у самих мест")
+	for id: String in ["00", "07", "09", "10", "01"]:
+		var d := xz.distance_to(LayerMap.xz(id))
+		ok(d >= EcoEel.LAIR_CLEAR, "логово в %.0f м от %s (места сохранения, терминал и серпохвост у цветка)" % [d, id])
+	# путь обучения 00→01 мимо логова — дальше броска к стеклу
+	var a := LayerMap.xz("00")
+	var b := LayerMap.xz("01")
+	var t := clampf((xz - a).dot(b - a) / (b - a).length_squared(), 0.0, 1.0)
+	ok(xz.distance_to(a.lerp(b, t)) > EcoEel.WARN_R, "путь обучения 00→01 не задевает логово")
+
+
+## Знак раньше угрозы: корабль идёт к логову носом на 4 м/с — строка про красный глаз приходит, пока нос дальше
+## SHIP_R, к стеклу стеклоуст плывёт позже и ближе.
+func test_eye_sign_before_threat() -> void:
+	var w := _world()
+	var eels := _eels(w)
+	var e := eels.eels[0]
+	e.cd = 0.0
+	w.ship.yaw = PI   # нос к +z, логово впереди
+	var sign_at := -1.0
+	var go_at := -1.0
+	for i in 400:
+		var d := 90.0 - i * 0.4
+		w.ship.pos = e.lair + Vector3(0, 6, -d)
+		w.step(0.1)
+		var nose := EcoEel.front(w.ship).distance_to(e.lair)
+		if sign_at < 0.0 and _texts(w).has(EcoEel.WARN_TEXT):
+			sign_at = nose
+		if go_at < 0.0 and e.mode == EcoEel.Mode.TO_SHIP:
+			go_at = nose
+			break
+	ok(sign_at > 0.0, "знак пришёл")
+	ok(go_at > 0.0, "стеклоуст всё же поплыл к стеклу")
+	ok(sign_at > EcoEel.SHIP_R + 10.0, "знак пришёл при носе в %.0f м, дальше броска (28 м)" % sign_at)
+	ok(sign_at - go_at >= 15.0, "знак на %.0f м раньше угрозы" % (sign_at - go_at))
+
+
+## Знак — один раз за заход и не в разгар: в круге — тишина; вышел и вернулся — снова, но не раньше WARN_CD; висит на
+## стекле — знака нет.
+func test_eye_sign_once_per_visit() -> void:
+	var w := _world()
+	var e := _eels(w).eels[0]
+	e.cd = 999.0   # сидит, к стеклу не плывёт
+	var inside := e.lair + Vector3(0, 8, EcoEel.WARN_R - 10.0)
+	var outside := e.lair + Vector3(0, 8, EcoEel.WARN_R + 20.0)
+	var got := 0
+	w.ship.pos = inside
+	for i in 50:
+		w.step(0.1)
+		got += _texts(w).count(EcoEel.WARN_TEXT)
+	eq(got, 1, "в круге — одна строка")
+	w.ship.pos = outside
+	w.step(0.1)
+	w.ship.pos = inside
+	for i in 50:
+		w.step(0.1)
+		got += _texts(w).count(EcoEel.WARN_TEXT)
+	eq(got, 1, "вернулся сразу — тишина до WARN_CD")
+	w.ship.pos = outside
+	for i in int(EcoEel.WARN_CD * 10.0):
+		w.step(0.1)
+	w.ship.pos = inside
+	w.step(0.1)
+	got += _texts(w).count(EcoEel.WARN_TEXT)
+	eq(got, 2, "через WARN_CD — снова")
+
+
+## Обход есть: корабль идёт от 02 к 01 стороной, на 45 м от пути в сторону от логова, на 28 м глубины — дно ниже, нос
+## всё время дальше SHIP_R, стеклоуст сидит в расщелине (бросается только на прямом пути).
+func test_detour_past_lair() -> void:
+	var w := EcoWorld.new()
+	w.ground = Seabed.height
+	var eels := w.add(EcoEel.new()) as EcoEel
+	var e := eels.eels[0]
+	e.cd = 0.0
+	var a := LayerMap.xz("02")
+	var b := LayerMap.xz("01")
+	var lair := Vector2(e.lair.x, e.lair.z)
+	var n := (b - a).normalized().orthogonal()
+	if (lair - _on_crack_path(lair)).dot(n) > 0.0:
+		n = -n   # в сторону от логова
+	var dir := (b - a).normalized()
+	w.ship.yaw = atan2(-dir.x, -dir.y)
+	var closest := INF
+	for i in 400:
+		var p := a.lerp(b, i / 399.0) + n * 45.0
+		var floor_y := Seabed.height(p.x, p.y)
+		ok(floor_y < -32.0, "дно на обходе ниже корабля: %.1f м у (%.0f; %.0f)" % [floor_y, p.x, p.y])
+		w.ship.pos = Vector3(p.x, -28.0, p.y)
+		w.step(0.1)
+		closest = minf(closest, EcoEel.front(w.ship).distance_to(e.lair))
+		ok(e.mode == EcoEel.Mode.HIDE, "стеклоуст сидит в логове")
+	ok(closest > EcoEel.SHIP_R, "нос не ближе %.0f м к логову" % closest)
+
+
+static func _texts(w: EcoWorld) -> Array[String]:
+	var out: Array[String] = []
+	for ev in w.take_link():
+		if ev.get("type", "") == EcoLink.MESSAGE:
+			out.append(str(ev["text"]))
+	return out
 
 
 func test_hidden_body_in_crevice() -> void:
@@ -369,7 +488,7 @@ func test_targets_for_sonar_and_scanner() -> void:
 	w.ground = Seabed.height
 	w.add(EcoEel.new())
 	var t := w.scan_targets()
-	eq(t.size(), 3, "три стеклоуста")
+	eq(t.size(), EcoEel.LAIRS.size(), "стеклоуст виден в логове")
 	ok(t[0]["sonar"] and not t[0]["hidden"], "видны сонару и сканеру и в логове")
 	eq(t[0]["r"], 1.3, "размер цели 1,3 м")
 
@@ -431,7 +550,7 @@ func test_eco_view_has_eels() -> void:
 	var view := EcoView.new()
 	tree.root.add_child(view)
 	view.ground = Seabed.height
-	ok(view.eels != null and view.eels.eels.size() == 3, "три стеклоуста в живом мире")
+	ok(view.eels != null and view.eels.eels.size() == 1, "стеклоуст у трещины 02↔01 в живом мире")
 	ok(view.eel_view != null and view.eel_view.get_parent() == view, "и в сцене")
 	view.queue_free()
 	await frames(1)

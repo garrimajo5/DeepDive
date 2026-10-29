@@ -50,8 +50,8 @@ func test_giant_on_ground() -> void:
 		var e := fl.tip_end(i)
 		reach = maxf(reach, Vector2(e.x - fl.base.x, e.z - fl.base.z).length())
 	ok(reach > EcoFlower.SPREAD - 1.5, "крона раскрыта почти на Ø 26 м: радиус %f" % reach)
-	# соседи: логово стеклоуста (62; −45) и огнецвет (54,88; −68,69) — дальше кроны
-	for xz in [EcoEel.LAIRS[2], EcoCoral.BASES[2]]:
+	# соседи: логово стеклоуста (#834 — у трещины 02↔01) и огнецвет (54,88; −68,69) — дальше кроны
+	for xz in [EcoEel.LAIRS[0], EcoCoral.BASES[2]]:
 		ok(Vector2(xz.x - fl.base.x, xz.y - fl.base.z).length() > EcoFlower.SPREAD + 6.0, "сосед %s не в кроне" % xz)
 
 
