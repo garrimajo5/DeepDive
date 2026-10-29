@@ -92,6 +92,9 @@ var bones_view: BonesView
 ## Световой колодец (место 5, ART-031): трещина во льду, наклонный столб солнечного света, пятно мха на дне.
 var well: EcoWell
 var well_view: WellView
+## Ледяная моль у колодца (#836, ART-080): 240 рачков тремя облаками под трещиной, тянутся к прожектору.
+var moth: EcoMoth
+var moth_view: MothView
 ## Край отмели (место 6, ART-032): скальные клинья вдоль бровки, шрам оползня с осыпью, трещины на площадке.
 var drop: EcoDrop
 var drop_view: DropView
@@ -195,6 +198,9 @@ func _init() -> void:
 	shell = world.add(EcoShell.new()) as EcoShell
 	bones = world.add(EcoBones.new()) as EcoBones
 	well = world.add(EcoWell.new()) as EcoWell
+	moth = world.add(EcoMoth.new()) as EcoMoth
+	moth_view = MothView.new(moth)
+	add_child(moth_view)
 	drop = world.add(EcoDrop.new()) as EcoDrop
 	echo = world.add(EcoEcho.new(bones, preds)) as EcoEcho
 	echo_view = EchoView.new(echo)
@@ -226,7 +232,7 @@ func _init() -> void:
 	dust_layer.gather(self)
 
 
-## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи и просвет листвы погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали нет — меняются
+## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи и просвет листвы погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали нет, моли у колодца 80 — меняются
 ## только числа в uniform, шейдеры те же. Включает уровень графики — поток А (`Main._apply_graphics`).
 func set_lite(on: bool) -> void:
 	EcoShaders.set_sway_lite(on)
@@ -235,6 +241,7 @@ func set_lite(on: bool) -> void:
 	EcoBack.set_lite(on)
 	EcoGrazerDust.lite = on
 	far_view.set_lite(on)
+	moth.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -475,6 +482,7 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	veil_view.sync_dust(world.time, ship, current.vel())
 	grot_view.sync(world.time, ship.pos, ship, current.vel())
 	plankton_view.sync(world.time, ship.pos, ship.yaw)
+	moth_view.sync(ship)
 	echo_view.sync(world.time, ship.pos, ship, current.vel())
 	far_view.sync(world.time, ship.pos, world.ground)
 	dust_layer.sync()
