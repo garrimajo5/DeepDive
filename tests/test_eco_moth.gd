@@ -1,6 +1,6 @@
 extends TestCase
 ## Ледяная моль у колодца 05 (#836): рой под льдом, ход с рывками, тяга к прожектору (часть 1); модуль мира и вид
-## одним MultiMesh атласа ART-080 (часть 2).
+## одним MultiMesh атласа ART-080 (часть 2); моль на стекле (часть 4).
 
 
 func _ship(at: Vector3, yaw: float, light: bool) -> EcoLink.ShipState:
@@ -128,7 +128,7 @@ func test_view_buffer_and_hide() -> void:
 	m.reset(null)
 	var v := MothView.new(m)
 	tree.root.add_child(v)
-	eq(v.cards.multimesh.instance_count, EcoMoth.COUNT, "240 карточек одним MultiMesh")
+	eq(v.cards.multimesh.instance_count, EcoMoth.COUNT + EcoMoth.GLASS, "240 + 60 на стекле одним MultiMesh")
 	ok(v.material.get_shader_parameter("atlas") is Texture2D, "атлас ART-080 загружен")
 	ok(not v.material.shader.code.contains("unshaded"), "моль без своего свечения — светит отражённым светом")
 	ok(not v.material.shader.code.contains("EMISSION"), "и без EMISSION")
@@ -164,4 +164,104 @@ func test_in_eco_view() -> void:
 	ev.set_lite(false)
 	eq(ev.moth.swarm.active, EcoMoth.COUNT, "обратно — 240")
 	ev.queue_free()
+	await frames(1)
+
+
+## Часть 4: моль из луча садится на наружное стекло — гуще у краёв, без света и на ходу слетает, вдали стекло чистое.
+func test_lands_on_glass_from_beam() -> void:
+	var ship := _ship(Vector3(EcoMoth.WELL.x + 30.0, -6.0, EcoMoth.WELL.y), PI / 2.0, true)
+	var sw := EcoMoth.Swarm.new()
+	_run(sw, ship, 40.0)
+	ok(sw.on_glass > 20, "в луче моль садится на стекло: %d" % sw.on_glass)
+	ok(sw.on_glass <= EcoMoth.GLASS, "не больше 60")
+	var edge := 0
+	for k in EcoMoth.GLASS:
+		if sw.glass_life[k] <= 0.0:
+			continue
+		var g := sw.glass[k]
+		ok(absf(g.x) <= EcoMoth.GLASS_HALF + 1e-4 and g.y >= EcoMoth.GLASS_Y.x - 1e-4 and g.y <= EcoMoth.GLASS_Y.y + 1e-4,
+				"в пределах стекла")
+		near(g.z, HullPlan.NOSE_CUT - EcoMoth.GLASS_OUT, 1e-4, "снаружи на срезе носа")
+		if absf(g.x) > EcoMoth.GLASS_HALF * 0.4:
+			edge += 1
+	ok(edge > sw.on_glass * 0.75, "центральные 40 %% окна почти чисты: у краёв %d из %d" % [edge, sw.on_glass])
+	# точка в мире — на носу корабля по курсу
+	for k in EcoMoth.GLASS:
+		if sw.glass_life[k] > 0.0:
+			var wp := sw.glass_world(ship, k)
+			var local := (wp - ship.pos).rotated(Vector3.UP, -ship.yaw)
+			ok(local.is_equal_approx(sw.glass[k]), "мир ↔ оси корабля")
+			ok((wp - ship.pos).dot(EcoMoth.nose_dir(ship)) > 7.0, "у носа, перед кораблём")
+			break
+
+
+func test_no_light_no_landing_and_leaves() -> void:
+	var ship := _ship(Vector3(EcoMoth.WELL.x + 30.0, -6.0, EcoMoth.WELL.y), PI / 2.0, false)
+	var sw := EcoMoth.Swarm.new()
+	_run(sw, ship, 30.0)
+	eq(sw.on_glass, 0, "без прожектора не садится")
+	ship.light_on = true
+	_run(sw, ship, 30.0)
+	var n := sw.on_glass
+	ok(n > 0, "свет — сели")
+	ship.light_on = false
+	_run(sw, ship, EcoMoth.STAY.y / EcoMoth.DARK_K + 1.0)
+	eq(sw.on_glass, 0, "свет погас — слетели быстрее обычного")
+
+
+func test_wash_off_on_speed() -> void:
+	var ship := _ship(Vector3(EcoMoth.WELL.x + 30.0, -6.0, EcoMoth.WELL.y), PI / 2.0, true)
+	var sw := EcoMoth.Swarm.new()
+	_run(sw, ship, 30.0)
+	var still := sw.glass_life.duplicate()
+	ship.speed = 3.0
+	sw.step_glass(ship, 1.0, 0)
+	for k in EcoMoth.GLASS:
+		if still[k] > EcoMoth.WASH_K:
+			near(sw.glass_life[k], still[k] - EcoMoth.WASH_K, 1e-4, "на ходу время сидения идёт быстрее")
+			return
+	ok(false, "кто-то сидел на стекле")
+
+
+func test_glass_lite_and_leaving_well() -> void:
+	var w := EcoWorld.new()
+	var m := w.add(EcoMoth.new()) as EcoMoth
+	w.ship = _ship(Vector3(EcoMoth.WELL.x + 30.0, -6.0, EcoMoth.WELL.y), PI / 2.0, true)
+	w.run(40.0)
+	ok(m.swarm.on_glass > EcoMoth.GLASS_LITE, "на стекле больше 16: %d" % m.swarm.on_glass)
+	m.set_lite(true)
+	eq(m.swarm.on_glass, _alive(m.swarm), "счёт сходится")
+	ok(m.swarm.on_glass <= EcoMoth.GLASS_LITE, "«Экономно» — не больше 16")
+	w.run(20.0)
+	ok(m.swarm.on_glass <= EcoMoth.GLASS_LITE, "и не садятся сверх 16")
+	w.ship = _ship(Vector3(0, -20, 0), 0.0, true)
+	w.run(0.5)
+	eq(m.swarm.on_glass, 0, "ушли от колодца — стекло чистое")
+
+
+func _alive(sw: EcoMoth.Swarm) -> int:
+	var n := 0
+	for k in EcoMoth.GLASS:
+		if sw.glass_life[k] > 0.0:
+			n += 1
+	return n
+
+
+func test_view_draws_glass_after_water() -> void:
+	var m := EcoMoth.new()
+	m.reset(null)
+	var v := MothView.new(m)
+	tree.root.add_child(v)
+	var ship := _ship(Vector3(EcoMoth.WELL.x + 30.0, -6.0, EcoMoth.WELL.y), PI / 2.0, true)
+	for i in 300:
+		m.swarm.step(ship, 0.1)
+	v.sync(ship)
+	var n := m.swarm.on_glass
+	ok(n > 0, "есть моль на стекле")
+	eq(v.cards.multimesh.visible_instance_count, EcoMoth.COUNT + n, "вода + стекло")
+	var k := 0
+	while m.swarm.glass_life[k] <= 0.0:
+		k += 1
+	ok(v.origin_at(EcoMoth.COUNT).is_equal_approx(m.swarm.glass_world(ship, k)), "первая на стекле — сразу после воды")
+	v.queue_free()
 	await frames(1)
