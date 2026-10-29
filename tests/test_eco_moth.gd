@@ -1,5 +1,6 @@
 extends TestCase
-## Ледяная моль у колодца 05 (#836, часть 1): рой под льдом, ход с рывками, тяга к прожектору.
+## Ледяная моль у колодца 05 (#836): рой под льдом, ход с рывками, тяга к прожектору (часть 1); модуль мира и вид
+## одним MultiMesh атласа ART-080 (часть 2).
 
 
 func _ship(at: Vector3, yaw: float, light: bool) -> EcoLink.ShipState:
@@ -97,3 +98,70 @@ func test_same_seed_same_swarm() -> void:
 	_run(a, ship, 10.0)
 	_run(b, ship, 10.0)
 	eq(a.pos, b.pos, "детерминированно — у хоста и гостя один рой")
+
+
+## Часть 2: в мире рой шагает только у колодца, «Экономно» — 80 рачков, тот же случай мира.
+func test_world_module_steps_only_near_well() -> void:
+	var w := EcoWorld.new()
+	var m := w.add(EcoMoth.new()) as EcoMoth
+	var start := m.swarm.pos.duplicate()
+	w.ship = _ship(Vector3(0, -20, 0), 0.0, true)
+	ok(not EcoMoth.near(w.ship), "старт отмели далеко от колодца")
+	w.run(10.0)
+	eq(m.swarm.pos, start, "далеко — рой стоит (шаг не тратится)")
+	w.ship = _ship(Vector3(EcoMoth.WELL.x + 30.0, -6.0, EcoMoth.WELL.y), PI / 2.0, true)
+	w.run(10.0)
+	ok(m.swarm.pos != start, "у колодца рой живёт")
+	m.set_lite(true)
+	eq(m.swarm.active, EcoMoth.COUNT_LITE, "«Экономно» — 80 рачков")
+	var tail := m.swarm.pos[EcoMoth.COUNT_LITE]
+	w.run(5.0)
+	eq(m.swarm.pos[EcoMoth.COUNT_LITE], tail, "лишние рачки не шагают")
+	w.reset()
+	eq(m.swarm.active, EcoMoth.COUNT_LITE, "сброс мира помнит «Экономно»")
+	eq(m.swarm.pos, EcoMoth.Swarm.new().pos, "сброс — тот же рой с начала")
+
+
+## Вид: один MultiMesh атласа, у колодца — места в буфере, далеко — скрыт и не пишет; своего свечения нет.
+func test_view_buffer_and_hide() -> void:
+	var m := EcoMoth.new()
+	m.reset(null)
+	var v := MothView.new(m)
+	tree.root.add_child(v)
+	eq(v.cards.multimesh.instance_count, EcoMoth.COUNT, "240 карточек одним MultiMesh")
+	ok(v.material.get_shader_parameter("atlas") is Texture2D, "атлас ART-080 загружен")
+	ok(not v.material.shader.code.contains("unshaded"), "моль без своего свечения — светит отражённым светом")
+	ok(not v.material.shader.code.contains("EMISSION"), "и без EMISSION")
+	var far := _ship(Vector3(0, -20, 0), 0.0, true)
+	v.sync(far)
+	ok(not v.visible, "далеко от колодца — скрыт")
+	eq(v.writes, 0, "и буфер не пишется")
+	var ship := _ship(Vector3(EcoMoth.WELL.x + 30.0, -6.0, EcoMoth.WELL.y), PI / 2.0, true)
+	v.sync(ship)
+	ok(v.visible, "у колодца — виден")
+	eq(v.writes, 1, "буфер записан")
+	var bad := 0
+	for i in EcoMoth.COUNT:
+		if not v.origin_at(i).is_equal_approx(m.swarm.pos[i]):
+			bad += 1
+	eq(bad, 0, "места рачков в буфере")
+	eq(v.cards.multimesh.visible_instance_count, EcoMoth.COUNT, "240 карточек видно")
+	m.set_lite(true)
+	v.sync(ship)
+	eq(v.cards.multimesh.visible_instance_count, EcoMoth.COUNT_LITE, "«Экономно» — 80 карточек")
+	v.queue_free()
+	await frames(1)
+
+
+## В живом мире сцены моль есть и выключается «Экономно».
+func test_in_eco_view() -> void:
+	var ev := EcoView.new()
+	tree.root.add_child(ev)
+	ok(ev.moth != null and ev.moth_view != null, "моль в мире и в сцене")
+	ok(ev.world.systems.has(ev.moth), "модуль мира подключён")
+	ev.set_lite(true)
+	eq(ev.moth.swarm.active, EcoMoth.COUNT_LITE, "«Экономно» из уровня графики")
+	ev.set_lite(false)
+	eq(ev.moth.swarm.active, EcoMoth.COUNT, "обратно — 240")
+	ev.queue_free()
+	await frames(1)

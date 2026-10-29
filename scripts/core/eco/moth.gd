@@ -1,10 +1,11 @@
 class_name EcoMoth
-extends RefCounted
+extends EcoSystem
 ## Ледяная моль у Светового колодца 05 (#836, часть 1; концепт ART-080 — `docs/concept-art/inevaya-bahroma-i-mol.md`):
 ## рачки 5 мм без своего свечения облаками под трещиной льда. Ход 0,03–0,10 м/с с рывками; прожектор их тянет —
 ## моль в луче (ближе дальности света и в конусе `CONE` от носа) плывёт к его оси, без света — обратно к своему облаку.
-## Здесь — числа и шаг роя без узлов (`Swarm`), детерминированно от зерна; вид одним MultiMesh атласа
-## `ledyanaya-mol-atlas.png`, запуск в мире и моль на стекле — следующие части #836.
+## Здесь — числа и шаг роя без узлов (`Swarm`), детерминированно от своего зерна (случай мира не трогает). Модуль мира
+## (#836, часть 2): рой шагает, только пока корабль ближе ACTIVE к колодцу; «Экономно» — первые COUNT_LITE рачков
+## (`set_lite`). Вид — `MothView` (один MultiMesh атласа `models/ledyanaya-mol-atlas.png`). Моль на стекле — следующая часть.
 
 const ID := "moth"
 ## Середина колодца (x, z) — `LayerMap.xz("05")`.
@@ -25,6 +26,34 @@ const DASH_TIME := 0.4
 ## Конус луча от носа: половина угла (рад); прожектор стоит в носу — NOSE м от центра корабля (корпус 32 м).
 const CONE := 0.42
 const NOSE := 16.0
+## Дальше этого от середины колодца (м по горизонтали) рой стоит и не рисуется.
+const ACTIVE := 110.0
+
+## Рой модуля мира и уровень «Экономно».
+var swarm: Swarm
+var lite := false
+
+
+func reset(_world: EcoWorld) -> void:
+	swarm = Swarm.new()
+	swarm.set_lite(lite)
+
+
+func step(world: EcoWorld, dt: float) -> void:
+	if near(world.ship):
+		swarm.step(world.ship, dt)
+
+
+## «Экономно»: шагают и рисуются первые COUNT_LITE рачков (по облакам поровну — облако рачка i — i % 3).
+func set_lite(on: bool) -> void:
+	lite = on
+	if swarm:
+		swarm.set_lite(on)
+
+
+## Корабль у колодца: ближе ACTIVE по горизонтали.
+static func near(ship: EcoLink.ShipState) -> bool:
+	return Vector2(ship.pos.x, ship.pos.z).distance_to(WELL) <= ACTIVE
 
 
 ## Рой у колодца: положения рачков, их облако и таймер рывка.
@@ -35,6 +64,8 @@ class Swarm:
 	var dash_in := PackedFloat32Array()
 	var dash_t := PackedFloat32Array()
 	var rng: EcoRandom
+	## Сколько первых рачков живёт и рисуется (все, «Экономно» — COUNT_LITE).
+	var active := 0
 
 	func _init(lite := false, seed_value := 836) -> void:
 		rng = EcoRandom.new(seed_value)
@@ -51,10 +82,14 @@ class Swarm:
 			var o := EcoMoth.cloud_center(c)
 			pos[i] = Vector3(o.x + cos(a) * r, rng.range_f(CEIL_LOW, CEIL_HIGH), o.z + sin(a) * r)
 			dash_in[i] = rng.range_f(0.0, DASH_EVERY.y)
+		active = n
+
+	func set_lite(on: bool) -> void:
+		active = mini(COUNT_LITE, pos.size()) if on else pos.size()
 
 	## Шаг на dt с: к оси луча, если рачок в нём, иначе к своему облаку; скорость SLOW, во время рывка FAST.
 	func step(ship: EcoLink.ShipState, dt: float) -> void:
-		for i in pos.size():
+		for i in active:
 			dash_in[i] -= dt
 			if dash_in[i] <= 0.0:
 				dash_t[i] = DASH_TIME
@@ -83,8 +118,8 @@ class Swarm:
 	## Сколько рачков в луче прожектора.
 	func in_beam(ship: EcoLink.ShipState) -> int:
 		var n := 0
-		for p in pos:
-			if EcoMoth.lit(ship, p):
+		for i in active:
+			if EcoMoth.lit(ship, pos[i]):
 				n += 1
 		return n
 
