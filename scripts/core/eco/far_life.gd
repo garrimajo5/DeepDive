@@ -29,6 +29,12 @@ const CEIL := -7.0
 const ABOVE := 1.5
 ## Без дна (мир ещё не встал) — эта глубина дна.
 const NO_GROUND := -24.0
+## Склон 06→10 (#832): жизнь редеет с глубиной дна. До THIN_FROM м остаются все стайки, к THIN_TO — доля
+## THIN_KEEP (крупные пары уходят первыми); стайка гаснет плавно, а не исчезает, — по доле THIN_SOFT.
+const THIN_FROM := -120.0
+const THIN_TO := -300.0
+const THIN_KEEP := 0.25
+const THIN_SOFT := 0.08
 ## Цвет силуэта (почти чёрная вода) и разброс тона стайки.
 const COLOR := Color(0.025, 0.05, 0.065)
 const SHADE := 0.35
@@ -41,6 +47,7 @@ const _SPEED := 15
 const _DIR := 16
 const _OFF := 20
 const _PHASE := 30
+const _THIN := 31
 
 
 static func count() -> int:
@@ -102,6 +109,19 @@ static func fade(d: float) -> float:
 	return smoothstep(NEAR_IN, NEAR_FULL, d) * (1.0 - smoothstep(FAR_FULL, FAR_OUT, d))
 
 
+## Какая доля стаек живёт над дном floor_y (м, y мира): 1 на отмели, THIN_KEEP внизу склона.
+static func alive(floor_y: float) -> float:
+	return lerpf(1.0, THIN_KEEP, smoothstep(THIN_FROM, THIN_TO, floor_y))
+
+
+## Доля размера стайки i над дном floor_y: 1 — живёт, 0 — здесь её нет. Порог стайки — хеш; у крупных пар он
+## выше (уходят первыми), между — плавно на THIN_SOFT.
+static func thin(i: int, floor_y: float) -> float:
+	var r := EcoVary.unit(i, _THIN)
+	var u := lerpf(0.55, 1.0 - THIN_SOFT, r) if is_big(i) else r * (1.0 - THIN_SOFT)
+	return clampf((alive(floor_y) - u) / THIN_SOFT, 0.0, 1.0)
+
+
 ## Длина силуэта j стайки i, м.
 static func length_of(i: int, j: int) -> float:
 	var u := EcoVary.unit(i * 16 + j, EcoVary.SIZE)
@@ -148,6 +168,9 @@ static func school_at(i: int, t: float, ship: Vector3, ground: Callable) -> Pack
 	if k <= 0.0:
 		return PackedFloat32Array([at.x, NO_GROUND, at.y, c.y, 0.0, NO_GROUND])
 	var floor_y := float(ground.call(at.x, at.y)) if ground.is_valid() else NO_GROUND
+	k *= thin(i, floor_y)
+	if k <= 0.0:
+		return PackedFloat32Array([at.x, NO_GROUND, at.y, c.y, 0.0, NO_GROUND])
 	var h := lerpf(LOW, HIGH, EcoVary.unit(i, _H)) + sin(t * 0.13 + float(i)) * 1.5
 	return PackedFloat32Array([at.x, floor_y + h, at.y, c.y, k, floor_y])
 
