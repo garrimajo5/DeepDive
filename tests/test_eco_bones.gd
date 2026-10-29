@@ -244,3 +244,91 @@ func test_moss_at_rib_feet() -> void:
 	eq(mv.look.verts.size(), EcoBones.MOSS_PAIRS.size() * EcoMossLook.VERTS_PER_PATCH, "один меш на все пятна")
 	eq(mv.layers, OceanView.LAYER_WORLD, "слой отмели")
 	ev.free()
+
+
+## Строки MESSAGE из событий мира для корабля.
+static func _messages(w: EcoWorld) -> Array[String]:
+	var out: Array[String] = []
+	for e in w.take_link():
+		if e.get("type", "") == EcoLink.MESSAGE:
+			out.append(str(e["text"]))
+	return out
+
+
+## Мир с костями и кораблём у клетки (на 10 м над дном, 12 м от центра), сканер включён.
+func _inspect_world() -> Array:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	var b := w.add(EcoBones.new()) as EcoBones
+	w.ship.pos = Vector3(EcoBones.CENTER.x + 12.0, FLAT + 10.0, EcoBones.CENTER.y)
+	w.ship.scan_range = Scanner.RANGE
+	return [w, b]
+
+
+func test_scanner_shows_mineral_once() -> void:
+	var r := _inspect_world()
+	var w: EcoWorld = r[0]
+	var b: EcoBones = r[1]
+	var got: Array[String] = []
+	for i in 20:   # 2 с — ещё рано
+		w.step(0.1)
+		got.append_array(_messages(w))
+	eq(got.size(), 0, "осмотр короче INSPECT_TIME — строки нет")
+	for i in 15:
+		w.step(0.1)
+		got.append_array(_messages(w))
+	eq(got, [EcoBones.INSPECT_TEXT] as Array[String], "после 3 с сканера у костей — одна строка о минерализации")
+	ok(b.inspected, "осмотр отмечен")
+	for i in 100:
+		w.step(0.1)
+		got.append_array(_messages(w))
+	eq(got.size(), 1, "строка приходит один раз за забег")
+	w.reset()
+	ok(not b.inspected and b.inspect == 0.0, "новый забег — осмотр заново")
+
+
+func test_scanner_off_or_far_no_message() -> void:
+	var cases := {
+		"сканер выключен": func(w: EcoWorld) -> void: w.ship.scan_range = 0.0,
+		"далеко от клетки": func(w: EcoWorld) -> void: w.ship.pos.x = EcoBones.CENTER.x + EcoBones.INSPECT_R + 5.0,
+		"высоко над дном": func(w: EcoWorld) -> void: w.ship.pos.y = FLAT + EcoBones.INSPECT_UP + 5.0,
+	}
+	for why: String in cases:
+		var r := _inspect_world()
+		var w: EcoWorld = r[0]
+		(cases[why] as Callable).call(w)
+		var got: Array[String] = []
+		for i in 80:
+			w.step(0.1)
+			got.append_array(_messages(w))
+		eq(got.size(), 0, why)
+
+
+func test_leaving_early_decays() -> void:
+	var r := _inspect_world()
+	var w: EcoWorld = r[0]
+	var b: EcoBones = r[1]
+	for i in 25:   # 2,5 с у костей
+		w.step(0.1)
+	w.ship.scan_range = 0.0
+	for i in 10:   # 1 с без сканера — спало на 2 с
+		w.step(0.1)
+	near(b.inspect, 0.5, 0.05, "отошёл — набранное спадает вдвое быстрее")
+	w.ship.scan_range = Scanner.RANGE
+	var got: Array[String] = []
+	for i in 20:
+		w.step(0.1)
+		got.append_array(_messages(w))
+	eq(got.size(), 0, "после спада нужно снова почти все 3 с")
+	for i in 10:
+		w.step(0.1)
+		got.append_array(_messages(w))
+	eq(got.size(), 1, "досмотрел — строка пришла")
+
+
+func test_inspect_text_no_new_lore() -> void:
+	var t := EcoBones.INSPECT_TEXT
+	ok(t.begins_with("Сканер: "), "строка сканера")
+	for word in ["убит", "поле", "К-6", "левиафан", "метр", "лет"]:
+		ok(not t.contains(word), "без новых сюжетных фактов: %s" % word)
+	ok(t.length() <= 110, "коротко: %d" % t.length())

@@ -85,6 +85,15 @@ const MOSS_IN := 1.2
 const OBSTACLE_R := 26.0
 ## Зерно формы — своё, не мира.
 const SHAPE_SEED := 2030
+## Осмотр сканером (#840, «Кости 04», раздел 04 карты #818): сканер биолога включён (ShipState.scan_range > 0),
+## корабль ближе INSPECT_R по горизонтали от центра клетки и не выше INSPECT_UP над дном — за INSPECT_TIME с такого
+## осмотра мир один раз за забег шлёт строку INSPECT_TEXT (EcoLink.MESSAGE): кость и риф вокруг минерализованы
+## по-разному. Только масштаб и время — ни вида, ни причины смерти, ни полной расшифровки. Ушёл раньше — набранное
+## время спадает вдвое быстрее (как прогресс сканера). Отдельного вида в бестиарии нет: это место, не существо.
+const INSPECT_R := 34.0
+const INSPECT_UP := 30.0
+const INSPECT_TIME := 3.0
+const INSPECT_TEXT := "Сканер: кость почти целиком заместил минерал, риф на ней тонкий и молодой. Лежит здесь очень давно."
 
 ## Поворот осей скелета; начало — центр клетки на высоте 0.
 var base := Vector3.ZERO
@@ -119,6 +128,9 @@ var moss: EcoMoss
 
 var _center: Vector2
 var _skull_inv := Transform3D.IDENTITY
+## Осмотр сканером: набранные секунды и показана ли строка в этом забеге.
+var inspect := 0.0
+var inspected := false
 
 
 ## center — своё место (для тестов), по умолчанию — с карты отмели.
@@ -131,11 +143,34 @@ func reset(world: EcoWorld) -> void:
 	_build()
 	moss = EcoMoss.new(moss_spots())
 	moss.reset(world)
+	inspect = 0.0
+	inspected = false
 
 
 func step(world: EcoWorld, dt: float) -> void:
 	if moss:
 		moss.step(world, dt)
+	_inspect(world, dt)
+
+
+## Сканер осматривает кости: корабль у клетки и сканер включён.
+func in_view(ship: EcoLink.ShipState) -> bool:
+	if ship.scan_range <= 0.0:
+		return false
+	var d := Vector2(ship.pos.x - _center.x, ship.pos.z - _center.y).length()
+	return d <= minf(INSPECT_R, ship.scan_range) and ship.pos.y - floor_y(ship.pos.x, ship.pos.z) <= INSPECT_UP
+
+
+func _inspect(world: EcoWorld, dt: float) -> void:
+	if inspected:
+		return
+	if in_view(world.ship):
+		inspect += dt
+		if inspect >= INSPECT_TIME:
+			inspected = true
+			world.send(EcoLink.message(INSPECT_TEXT))
+	else:
+		inspect = maxf(0.0, inspect - 2.0 * dt)
 
 
 ## Места пятен мха (мир, y — дно): у ноги ребра пары MOSS_PAIRS[i], сторона чередуется (чётные — слева).
