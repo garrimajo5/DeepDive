@@ -451,6 +451,7 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	if well_view.moss_view:
 		well_view.moss_view.sync()
 	coral_view.sync()
+	flower_view.sync()
 	coral_view.sync_dust(world.time, ship, current.vel())
 	fan_view.sync(world.time)
 	fern_view.sync(world.time, ship, current.vel())

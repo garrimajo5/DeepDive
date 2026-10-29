@@ -2,6 +2,7 @@ extends TestCase
 ## Каменный цветок (место 1 карты отмели, концепт ART-027): место с карты, коралл 28 м стоит на дне, крона Ø 26 м
 ## не задевает логово стеклоуста и огнецвет, три ветви × четыре вилки = 48 кончиков, середина кроны выше краёв,
 ## кончики мерцают волной снизу вверх (6 с, 15…100 %), цоколь твёрдый, меш — один вызов отрисовки, грани наружу.
+## Громкий импульс сонара рядом гасит огни, потом они возвращаются (#834).
 
 const FLAT := -40.0
 
@@ -163,3 +164,78 @@ func test_in_eco_view() -> void:
 	ok(ev.flower != null and ev.flower_view != null, "цветок в живом мире")
 	near(ev.flower.base.y, FLAT, 1e-4, "встал на дно мира")
 	ev.free()
+
+
+func _ping_world() -> Array:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	var f := w.add(EcoFlower.new()) as EcoFlower
+	w.reset()
+	return [w, f]
+
+
+func _ping(w: EcoWorld, pos: Vector3) -> void:
+	w.ship.pos = pos
+	w.ship.sonar_ping = true
+	w.step(0.1)
+	w.ship.sonar_ping = false
+
+
+func _texts(w: EcoWorld) -> Array:
+	var out := []
+	for e in w.take_link():
+		if e.get("type", "") == EcoLink.MESSAGE:
+			out.append(e.get("text", ""))
+	return out
+
+
+func test_ping_dims_and_light_returns() -> void:
+	var pair := _ping_world()
+	var w: EcoWorld = pair[0]
+	var f: EcoFlower = pair[1]
+	near(f.light, 1.0, 1e-6, "до импульса горит")
+	_ping(w, f.heart() + Vector3(35, 0, 0))
+	ok(f.light <= EcoFlower.DARK_LIGHT + 1e-6, "импульс в 35 м гасит кончики")
+	ok(EcoFlower.MSG_DARK in _texts(w), "на приборах — строка о погасшем цветке")
+	for i in int(EcoFlower.DARK_HOLD / 0.5) - 1:
+		w.step(0.5)
+	ok(f.light <= EcoFlower.DARK_LIGHT + 1e-6, "темнота держится %s с" % EcoFlower.DARK_HOLD)
+	w.step(1.0 + EcoFlower.RELIGHT_TIME * 0.5)
+	ok(f.light > 0.3 and f.light < 0.9, "свет возвращается постепенно: %s" % f.light)
+	w.step(EcoFlower.RELIGHT_TIME)
+	near(f.light, 1.0, 1e-6, "через %s с цветок горит снова" % (EcoFlower.DARK_HOLD + EcoFlower.RELIGHT_TIME))
+
+
+func test_far_ping_keeps_light() -> void:
+	var pair := _ping_world()
+	var w: EcoWorld = pair[0]
+	var f: EcoFlower = pair[1]
+	_ping(w, f.heart() + Vector3(0, 0, EcoFlower.PING_R + 5.0))
+	near(f.light, 1.0, 1e-6, "импульс дальше %s м цветок не гасит" % EcoFlower.PING_R)
+	ok(not (EcoFlower.MSG_DARK in _texts(w)), "и строки нет")
+
+
+func test_dark_message_not_spammed() -> void:
+	var pair := _ping_world()
+	var w: EcoWorld = pair[0]
+	var f: EcoFlower = pair[1]
+	_ping(w, f.heart())
+	_texts(w)
+	w.step(EcoFlower.DARK_HOLD + EcoFlower.RELIGHT_TIME + 1.0)
+	_ping(w, f.heart())
+	ok(f.light <= EcoFlower.DARK_LIGHT + 1e-6, "второй импульс снова гасит")
+	ok(not (EcoFlower.MSG_DARK in _texts(w)), "строка не чаще раза в %s с" % EcoFlower.MSG_CD)
+
+
+func test_view_takes_light() -> void:
+	var pair := _ping_world()
+	var w: EcoWorld = pair[0]
+	var f: EcoFlower = pair[1]
+	var v := FlowerView.new(f)
+	var mat := v.mesh.surface_get_material(0) as ShaderMaterial
+	near(float(mat.get_shader_parameter("light")), 1.0, 1e-6, "сначала горит")
+	ok(not v.sync(), "без перемен шейдеру не отдаёт")
+	_ping(w, f.heart())
+	ok(v.sync(), "после импульса отдаёт")
+	near(float(mat.get_shader_parameter("light")), EcoFlower.DARK_LIGHT, 1e-6, "шейдер гасит кончики")
+	v.free()
