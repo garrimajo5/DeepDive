@@ -52,8 +52,9 @@ class Ship:
 	const CLIMB := 2.6
 	const CLIMB_LAG := 1.6
 	const CEILING := -5.0      ## выше подо льдом не поднимаемся
-	const DEEP := -96.0
-	const EDGE := 300.0
+	const DEEP := -310.0       ## ниже не уходим — дно склона за восточным краем (`Seabed.Slope.BOTTOM`, #822)
+	const EDGE := 300.0        ## край отмели; на восток дальше — только в проход и котловину склона (`east_ok`)
+	const EAST_END := 640.0    ## и не дальше этого x — у восточной стены котловины
 	const CLEARANCE := 3.0     ## над дном
 	const RUB_GAP := 0.15      ## м над нижним пределом — ещё трёмся о дно (rub)
 	const START := Vector3(0.0, -20.0, 95.0)
@@ -98,6 +99,10 @@ class Ship:
 		in_turn = 0.0
 		in_vert = 0.0
 
+	## Можно ли стоять в (x, z): на отмели — до `EDGE`, за ним — в проходе и котловине склона (`Seabed.Slope.open`).
+	static func east_ok(x: float, z: float) -> bool:
+		return x <= EDGE or Seabed.Slope.open(x, z)
+
 	func nose() -> Vector3:
 		return Vector3(-sin(yaw), 0.0, -cos(yaw))
 
@@ -112,10 +117,19 @@ class Ship:
 		turn += (tr - turn) * minf(1.0, dt * TURN_LAG)
 		yaw = wrapf(yaw - turn * TURN_RATE * dt, -PI, PI)
 		vy += (vert * CLIMB * k - vy) * minf(1.0, dt * CLIMB_LAG)
+		var was := pos
 		pos += (nose() * speed + current) * dt
 		pos.y += vy * dt
-		pos.x = clampf(pos.x, -EDGE, EDGE)
+		pos.x = clampf(pos.x, -EDGE, EAST_END)
 		pos.z = clampf(pos.z, -EDGE, EDGE)
+		if not east_ok(pos.x, pos.z):   # в стене за краем: скользим вдоль неё, иначе стоим
+			if east_ok(was.x, pos.z):
+				pos.x = was.x
+			elif east_ok(pos.x, was.z):
+				pos.z = was.z
+			else:
+				pos.x = minf(was.x, EDGE) if not east_ok(was.x, was.z) else was.x
+				pos.z = was.z
 		knock = 0.0
 		if pos.y > CEILING:
 			pos.y = CEILING

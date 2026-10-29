@@ -38,7 +38,7 @@ func _ready() -> void:
 	seabed = MeshInstance3D.new()
 	seabed.name = "Дно"
 	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, Seabed.build_arrays())
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, Seabed.map_arrays())   # отмель и склон за краем (#822)
 	var m := ShaderMaterial.new()   # цвет вершин + процедурная детализация дна (shaders/seabed.gdshader)
 	m.shader = load("res://shaders/seabed.gdshader")
 	m.set_shader_parameter("caustic", 0.6)   # каустики включены; уровень «Экономно» выключит (ART-044)
@@ -66,7 +66,7 @@ func _ready() -> void:
 	ice = MeshInstance3D.new()
 	ice.name = "Лёд"
 	var q := PlaneMesh.new()
-	q.size = Vector2(Seabed.SIZE, Seabed.SIZE)
+	q.size = Vector2(Seabed.SIZE + Seabed.EAST.size.x, Seabed.SIZE)   # и над склоном за восточным краем (#822)
 	q.flip_faces = true
 	ice.mesh = q
 	var im := ShaderMaterial.new()
@@ -88,7 +88,7 @@ func _ready() -> void:
 	im.set_shader_parameter("reflect_lite", 0.0)
 	ice_mat = im
 	ice.material_override = im
-	ice.position.y = Seabed.ICE_Y
+	ice.position = Vector3(Seabed.EAST.size.x / 2.0, Seabed.ICE_Y, 0.0)
 	ice.layers = LAYER_WORLD
 	add_child(ice)
 
