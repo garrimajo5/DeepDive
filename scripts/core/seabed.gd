@@ -8,9 +8,10 @@ const TOP := -7.0        ## выше дно не поднимается
 const ICE_Y := 0.0
 
 
-## Высота дна под точкой (x, z): прежняя отмель `base` + гребень и проходы слоя 1 (`Layer`).
+## Высота дна под точкой (x, z): прежняя отмель `base` + гребень и проходы слоя 1 (`Layer`) + склон за восточным
+## краем (`Slope`, #822).
 static func height(x: float, z: float) -> float:
-	return minf(Layer.lanes(x, z, Layer.ridge(x, z, base(x, z))), TOP)
+	return minf(Slope.cut(x, z, Layer.lanes(x, z, Layer.ridge(x, z, base(x, z)))), TOP)
 
 
 ## Рельеф отмели как W.height в js/world.js (до карты слоя 1), без предела `TOP`.
@@ -96,6 +97,54 @@ class Layer:
 		var ab := b - a
 		var t := clampf((q - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
 		return q.distance_to(a + ab * t)
+
+
+## Склон до 300 м за восточным краем (#822, решение владельца 27.10 — расширение карты, не обрыв внутри квадрата):
+## в скальной стене за Краем отмели 06 — проход шириной `GAP_HALF`·2 м у z = `GAP_Z`, за ним дно уходит от
+## нынешних ~112 м к `BOTTOM` м у `X_BOTTOM` и раскрывается в котловину шириной `BASIN_HALF`·2 м; по бокам и в конце
+## котловины — прежняя стена. На склоне — крупные скальные массы (`ROCK` м), вдоль оси прохода они ниже (`AXIS_FREE`),
+## чтобы корабль шёл вниз без касаний. Сетку дна за краем карты и ход корабля туда открывает следующая часть #822.
+class Slope:
+	const GAP_Z := 200.0         ## ось прохода, м
+	const GAP_HALF := 40.0       ## полуширина прохода в стене (≥ 30 — проход не уже 60 м)
+	const BASIN_HALF := 90.0     ## полуширина котловины за стеной
+	const FADE := 40.0           ## м — края прохода и котловины плавно к стене
+	const X_IN := 250.0          ## отсюда (дно ~112 м) начинается склон
+	const X_OPEN := 285.0        ## к этому x проход открыт целиком (здесь начинается стена)
+	const X_WIDE := Vector2(330.0, 430.0)  ## на этом участке проход раскрывается в котловину
+	const X_BOTTOM := 590.0      ## здесь склон доходит до `BOTTOM`
+	const X_END := 680.0         ## восточная стена котловины
+	const FLOOR_IN := -112.0     ## дно в начале склона, м
+	const BOTTOM := -310.0       ## дно внизу склона, м
+	const ROCK := 38.0           ## м — высота скальных масс
+	const AXIS_FREE := Vector2(22.0, 60.0)  ## м от оси: ближе — массы ниже в разы, дальше `y` — в полную силу
+
+	## Дно поверх h: в проходе и котловине — склон со скалами, дальше — h (стена). Только опускает.
+	static func cut(x: float, z: float, h: float) -> float:
+		if x <= X_IN:
+			return h
+		var m := mask(x, z)
+		if m <= 0.0:
+			return h
+		return lerpf(h, minf(h, floor_at(x, z)), m)
+
+	## Доля склона в (x, z): 0 — стена, 1 — проход или котловина целиком.
+	static func mask(x: float, z: float) -> float:
+		var half := lerpf(GAP_HALF, BASIN_HALF, HashNoise.smooth(X_WIDE.x, X_WIDE.y, x))
+		var dz := absf(z - GAP_Z)
+		var side := 1.0 - HashNoise.smooth(half, half + FADE, dz)
+		var start := HashNoise.smooth(X_IN, X_OPEN, x)
+		var end := 1.0 - HashNoise.smooth(X_END - FADE, X_END, x)
+		return side * start * end
+
+	## Дно склона: профиль по x и скальные массы, вдоль оси прохода пониже.
+	static func floor_at(x: float, z: float) -> float:
+		var p := lerpf(FLOOR_IN, BOTTOM, HashNoise.smooth(X_IN, X_BOTTOM, x))
+		var rn := HashNoise.fbm(x * 0.011 + 11.3, z * 0.011 - 6.2, 3)
+		var rock := HashNoise.smooth(0.45, 0.8, rn) * ROCK
+		var free := lerpf(0.15, 1.0, HashNoise.smooth(AXIS_FREE.x, AXIS_FREE.y, absf(z - GAP_Z)))
+		var grain := (HashNoise.value(x * 0.09, z * 0.09) - 0.5) * 3.0
+		return p + rock * free + grain
 
 
 ## Высота сетки дна (build_arrays, клетка SIZE / SEGMENTS) под (x, z): та, что видно, — между вершинами линейно по
