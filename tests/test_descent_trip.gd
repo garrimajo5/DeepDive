@@ -68,3 +68,44 @@ func test_scene_deeper_elsewhere_no_trip() -> void:
 	eq(main.run.depth, 1)
 	main.queue_free()
 	await frames(1)
+
+
+## Часть 2в: в коопе шторка у гостя идёт за хостом; возвращение корабля у гостя не срабатывает.
+func test_guest_follows_host_time() -> void:
+	var host := DescentTrip.new()
+	eq(host.pack(), -1.0, "нет шторки — −1")
+	host.start()
+	host.update(DescentTrip.SINK + 1.0)
+	var g := DescentTrip.new()
+	g.follow(host.pack())
+	ok(g.active, "гость: шторка по времени хоста")
+	near(g.alpha(), 1.0, 1e-4, "экран закрыт и у гостя")
+	var got := []
+	while g.active and got.size() < 200:
+		got.append(g.update(0.1))
+	ok(not got.has("arrive"), "у гостя корабль не возвращается — его приносит кадр хоста")
+	g.follow(1.0)
+	g.follow(-1.0)
+	ok(not g.active, "у хоста шторки нет — у гостя тоже")
+	eq(g.alpha(), 0.0)
+
+
+func test_scene_guest_curtain_from_frame() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var host := DescentTrip.new()
+	host.start()
+	host.update(DescentTrip.SINK + 1.0)
+	main.net_client = NetLink.Client.new()   # гость без сокета: кадры подаём сами
+	var f := NetSnap.frame(5, main.time, main.helm, main.reactor, main.vitals, main.light_on, main.crew, {"d": host.pack()})
+	main.net_game.client_frame(f)
+	ok(main.trip.active, "кадр хоста с «d» — шторка у гостя")
+	main.trip_view.apply(main.trip)
+	ok(main.trip_view.visible, "шторка на экране")
+	var f2 := NetSnap.frame(6, main.time, main.helm, main.reactor, main.vitals, main.light_on, main.crew, {"d": -1.0})
+	main.net_game.client_frame(f2)
+	ok(not main.trip.active, "хост закончил — у гостя тоже")
+	main.net_client = null
+	main.queue_free()
+	await frames(1)

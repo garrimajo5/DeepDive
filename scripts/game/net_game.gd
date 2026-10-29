@@ -120,6 +120,7 @@ func net_send(dt: float) -> void:
 		var ev := NetSnap.events(main.breach, main.silt, main.time, welding, main.news if main.news_age < NetSnap.NEWS_TIME else [])
 		ev["r"] = net_run()
 		ev["w"] = main.wreck.t   # шторка «Корпус разрушен» — у всех (ART-036)
+		ev["d"] = main.trip.pack()   # уход к Кристальному лесу у 10 (#828) — шторка у всех
 		ev["z"] = NetSnap.scorch(main.scorch, main.time)   # следы разрядов на дне — тот же след у гостя
 		ev["so"] = NetSnap.sonar(main.sonar, main.time)   # импульс и отметки голограммы — те же у гостя
 		ev["c"] = main.comms.pack()   # связь ART-040: код забега, плашка и ход проверки — те же у гостя
@@ -180,6 +181,8 @@ func client_step(dt: float) -> void:
 	var lk := main.overlay.look_points()
 	main.wreck.update(dt)   # между кадрами хоста шторка идёт сама; кадр ставит время хоста
 	main._wreck_show()
+	main.trip.update(dt)   # шторка ухода к лесу (#828) — так же; корабль возвращает кадр хоста
+	main.trip_view.apply(main.trip)
 	if main.wreck.active() and not main.drop.blocks():   # шторка «Корпус разрушен»: ввод не идёт хосту
 		main.net_pad.clear()
 	elif main.drop.blocks():   # связь потеряна: управление остановлено, касания — кнопкам диалога
@@ -305,6 +308,7 @@ func client_frame(f: Dictionary) -> void:
 		var evd: Variant = f.get("ev", {})
 		if evd is Dictionary:
 			main.wreck.follow(float(evd.get("w", -1.0)))
+			main.trip.follow(float(evd.get("d", -1.0)))
 			if NetSnap.apply_scorch(evd.get("z"), main.scorch, main.time):
 				main.ocean.set_scorch(main.scorch.uniforms(main.time))   # разряд хоста у дна или новый забег
 			NetSnap.apply_sonar(evd.get("so"), main.sonar, main.time)
@@ -381,6 +385,8 @@ func leave_net() -> void:
 	main.tutorial_guest = null
 	main.wreck.reset()   # шторка хоста — не своя: одиночный забег без неё
 	main._wreck_show()
+	main.trip.follow(-1.0)   # и шторка ухода к лесу (#828)
+	main.trip_view.apply(main.trip)
 	main.weak.reset()
 	main.drop_panel.show_weak(main.weak)
 	main.crew = [main.me]
