@@ -16,6 +16,9 @@ extends EcoSystem
 ## Фонарные вуали (EcoVeil, поле veils) обходит стороной, корабль под куполом вуали теряет.
 ## Напуганную стаю в рифе на спине гротовика (EcoGrot, поле grot) теряет.
 ## Сквозь корпус не проходят (EcoWorld.push_out).
+## Риф у Каменного цветка 01 (#834, «читаемая встреча»): хищник патрулирует снаружи кольца REEF_KEEP и в него не
+## заходит; импульс сонара у цветка зовёт его к внешнему краю рифа со своей стороны (REEF_EDGE), а не к кораблю;
+## корабль в рифе он не атакует — туда можно отступить. Стаи у кроны прячутся раньше (EcoFish.CROWN_ALARM).
 
 const ID := "pred"
 
@@ -59,6 +62,17 @@ const GOAL_CEILING := -6.0
 ## Запас до корпуса корабля, м (S.pushOut(pr.p, 0.7)), и до какого зазора дотягивается укусом (hullDist < 1,2).
 const HULL_GAP := 0.7
 const BITE_REACH := 1.2
+## Риф у Каменного цветка (ось — подножие цветка, EcoFish.Shoal.axis стай кроны): внутрь кольца REEF_KEEP (м по
+## горизонтали; крона Ø 26 м и кусты коралла вокруг) хищник не заходит, импульс ближе REEF_PING к оси зовёт его на
+## REEF_EDGE от оси со своей стороны. Отталкивание от кольца — REEF_PUSH (м/с на долю заступа). Сообщение «не идёт
+## в риф» — не чаще REEF_CD с на хищника.
+const REEF_KEEP := 32.0
+const REEF_EDGE := 42.0
+const REEF_PING := EcoFlower.PING_R
+const REEF_PUSH := 8.0
+## С какого запаса до кольца хищник начинает огибать риф, м.
+const REEF_MARGIN := 8.0
+const REEF_CD := 30.0
 
 ## Режим хищника (pr.state в браузере); общее EcoAgent.State — у его существа.
 enum Mode { PATROL, HUNT, EAT, INVESTIGATE, CHARGE, RETREAT, FLEE, CLEAN }
@@ -97,6 +111,8 @@ class Pred:
 	var bank := 0.0
 	## Секунды до следующего поиска добычи в патруле (раз в SEEK_EVERY, issue #848); 0 — ищет сразу.
 	var seek_t := 0.0
+	## Пауза сообщения «не идёт в риф у цветка» (#834).
+	var reef_cd := 0.0
 
 
 var all: Array[Pred] = []
@@ -125,6 +141,8 @@ var grot: EcoGrot
 var plankton: EcoPlankton
 
 var _rnd: EcoRandom
+## Ось рифа у цветка на этот шаг (reef_axis).
+var _reef := Vector3.INF
 
 
 func _init(prey_fish: EcoFish = null) -> void:
@@ -160,6 +178,8 @@ func reset(world: EcoWorld) -> void:
 func on_ping(world: EcoWorld, pos: Vector3) -> void:
 	world.last_ping = world.time
 	var heard := false
+	var reef := reef_axis()
+	var at_reef := reef.is_finite() and _flat_dist(pos, reef) < REEF_PING
 	for pr in all:
 		if pr.mode == Mode.CHARGE or pr.mode == Mode.RETREAT or pr.mode == Mode.FLEE:
 			continue
@@ -169,9 +189,15 @@ func on_ping(world: EcoWorld, pos: Vector3) -> void:
 		_set_mode(pr, Mode.INVESTIGATE, 25.0)
 		pr.prey = null
 		pr.agent.goal = pos
+		if at_reef:  # у цветка — к краю рифа со своей стороны, не к кораблю
+			var g := reef_edge(reef, pr.agent.p, REEF_EDGE)
+			g.y = minf(_floor(world, g.x, g.z, GOAL_CEILING - 8.0) + 8.0, GOAL_CEILING)
+			pr.agent.goal = g
 		if d < PING_HEARD:
 			heard = true
-	if heard:
+	if heard and at_reef:
+		world.emit(ID, "ping", pos, _text(world, "%s услышал сонар и кружит у внешнего края рифа — в риф он не заходит"))
+	elif heard:
 		world.emit(ID, "ping", pos, _text(world, "%s услышал сонар и плывёт на звук"))
 
 
@@ -206,7 +232,63 @@ func targets(_world: EcoWorld, out: Array[Dictionary]) -> void:
 const SEEK_EVERY := 0.25
 
 
+## Ось рифа у Каменного цветка — подножие, вокруг которого кружат стаи кроны; Vector3.INF — рифа нет (нет светляков).
+func reef_axis() -> Vector3:
+	if fish:
+		for sh in fish.shoals:
+			if sh.crown:
+				return sh.axis
+	return Vector3.INF
+
+
+## Расстояние по горизонтали.
+static func _flat_dist(a: Vector3, b: Vector3) -> float:
+	return Vector2(a.x - b.x, a.z - b.z).length()
+
+
+## Точка на кольце радиуса r вокруг оси рифа в сторону from (по горизонтали; высота — from).
+static func reef_edge(axis: Vector3, from: Vector3, r: float) -> Vector3:
+	var off := Vector2(from.x - axis.x, from.z - axis.z)
+	off = off.normalized() if off.length_squared() > 1e-6 else Vector2(1, 0)
+	return Vector3(axis.x + off.x * r, from.y, axis.z + off.y * r)
+
+
+## Цель за кольцом рифа: внутри кольца keep — вынесена на кольцо по горизонтали.
+static func outside_reef(axis: Vector3, g: Vector3, keep: float) -> Vector3:
+	if not axis.is_finite() or _flat_dist(g, axis) >= keep:
+		return g
+	return reef_edge(axis, g, keep)
+
+
+## Обход рифа у цветка: ближе REEF_KEEP + REEF_MARGIN к оси скорость внутрь кольца поворачивает вдоль него (в лоб —
+## против часовой, если смотреть сверху), заступившего за кольцо выталкивает (REEF_PUSH). Скорость по горизонтали
+## не меняется по величине — хищник огибает риф, а не тормозит у него.
+static func reef_steer(axis: Vector3, p: Vector3, want: Vector3) -> Vector3:
+	var off := Vector2(p.x - axis.x, p.z - axis.z)
+	var r := off.length()
+	if r >= REEF_KEEP + REEF_MARGIN:
+		return want
+	var out := off / r if r > 1e-4 else Vector2(1, 0)
+	var w2 := Vector2(want.x, want.z)
+	var sp := w2.length()
+	var radial := w2.dot(out)
+	if radial < 0.0:
+		var tang := w2 - out * radial
+		if tang.length() < 0.2 * sp:
+			tang = Vector2(-out.y, out.x) * (signf(tang.dot(Vector2(-out.y, out.x))) if tang.length() > 1e-4 else 1.0)
+		w2 = tang.normalized() * sp
+	if r < REEF_KEEP:
+		w2 += out * (REEF_PUSH * (REEF_KEEP - r) / REEF_KEEP + 1.0)
+	return Vector3(w2.x, want.y, w2.y)
+
+
+## Корабль в рифе у цветка: хищник его там не атакует (#834).
+func ship_in_reef(world: EcoWorld, reef: Vector3) -> bool:
+	return reef.is_finite() and _flat_dist(world.ship.pos, reef) < REEF_KEEP
+
+
 func step(world: EcoWorld, dt: float) -> void:
+	_reef = reef_axis()
 	for pr in all:
 		_step_pred(world, pr, dt)
 		turn(pr, dt)
@@ -383,13 +465,15 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 	pr.flare_cd -= dt
 	pr.truce_cd -= dt
 	pr.avoid_cd -= dt
+	pr.reef_cd -= dt
 	var ship := world.ship.pos
 	var d_ship := a.distance_to(ship)
 	var at_station := leeches.near_station(a.p) != null if leeches else false
 	var lure := lured(world, pr, d_ship)  # и голодного, и сытого: гул органа прячет корабль от каждого
 	var sheltered := ship_sheltered(world)
+	var in_reef := ship_in_reef(world, _reef)
 	var can_attack := pr.cooldown <= 0.0 and pr.hunger > (EcoLeech.ATTACK_HUNGER if pr.leech else ATTACK_HUNGER) \
-		and lure and not at_station and not sheltered
+		and lure and not at_station and not sheltered and not in_reef
 	if raduzh and not sheltered:
 		_step_flare(world, pr, d_ship)
 	if lure and sheltered and pr.cooldown <= 0.0 and pr.truce_cd <= 0.0 \
@@ -414,6 +498,9 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 				else:
 					gx = _rnd.range_f(-170, 150)
 					gz = _rnd.range_f(-170, 150)
+				var gp := outside_reef(_reef, Vector3(gx, 0.0, gz), REEF_KEEP)  # патруль — снаружи рифа у цветка
+				gx = gp.x
+				gz = gp.z
 				var gy := minf(_floor(world, gx, gz, GOAL_CEILING - 14.0) + _rnd.range_f(4, 14), GOAL_CEILING)
 				a.goal = Vector3(gx, gy, gz)
 			pr.seek_t = maxf(pr.seek_t - dt, 0.0)
@@ -482,7 +569,16 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 		Mode.CHARGE:
 			speed = CHARGE_SPEED
 			a.goal = ship
-			if sheltered:  # корабль у станции чистки — хищник отворачивает
+			if in_reef:  # корабль ушёл в риф у цветка — хищник отворачивает к краю рифа
+				_set_mode(pr, Mode.RETREAT, 8.0)
+				pr.cooldown = maxf(pr.cooldown, 10.0)
+				var g := reef_edge(_reef, a.p, REEF_EDGE)
+				g.y = minf(_floor(world, g.x, g.z, GOAL_CEILING - 8.0) + 8.0, GOAL_CEILING)
+				a.goal = g
+				if pr.reef_cd <= 0.0:
+					pr.reef_cd = REEF_CD
+					world.emit(ID, "reef", a.p, _text(world, "%s не идёт за кораблём в риф у Каменного цветка"))
+			elif sheltered:  # корабль у станции чистки — хищник отворачивает
 				_set_mode(pr, Mode.RETREAT, EcoOgnevka.TURN_AWAY_TIME)
 				pr.cooldown = maxf(pr.cooldown, EcoOgnevka.TURN_AWAY_PAUSE)
 				var g := a.p + Vector3(_rnd.range_f(-40, 40), 4.0, _rnd.range_f(-40, 40))
@@ -540,6 +636,8 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 			if pr.avoid_cd <= 0.0:
 				pr.avoid_cd = EcoVeil.AVOID_CD
 				veils.avoided(world, a.p)
+	if _reef.is_finite() and pr.mode != Mode.CHARGE:
+		want = reef_steer(_reef, a.p, want)
 	a.agility = 1.6 if pr.mode == Mode.HUNT or pr.mode == Mode.CHARGE else 1.1
 	a.drive(want, dt, world.ground)
 	world.push_out(a, HULL_GAP) # корпус не пускает внутрь
@@ -650,10 +748,15 @@ func _hidden_fish() -> Callable:
 	var truce := ognevka != null and leeches != null and not leeches.stations.is_empty()
 	var grove := kelp != null and not kelp.groves.is_empty()
 	var reef := grot != null and grot.shoal != null and grot.shoal.alarm > 0.0
-	if not ink and not truce and not grove and not reef:
+	var crown := false  # стая в чаше кроны цветка (#834)
+	if fish:
+		for sh in fish.shoals:
+			if sh.crown and sh.alarm > 0.0:
+				crown = true
+	if not ink and not truce and not grove and not reef and not crown:
 		return Callable()
 	return func(f: EcoFish.Fish) -> bool:
-		return (truce and leeches.near_station(f.agent.p) != null) or (grove and kelp.shelter(f) != null) \
+		return (crown and f.shoal.crown and f.shoal.alarm > 0.0) or (truce and leeches.near_station(f.agent.p) != null) or (grove and kelp.shelter(f) != null) \
 			or (reef and grot.shelter(f) != null) or (ink and _in_ink(f))
 
 

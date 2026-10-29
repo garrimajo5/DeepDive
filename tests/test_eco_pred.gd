@@ -365,6 +365,8 @@ func test_shallows_live_with_preds_and_shoals() -> void:
 	var preds := w.add(EcoPred.new(fish)) as EcoPred
 	var catches := 0
 	var flees := 0
+	var reef := preds.reef_axis()
+	var closest := 1e9
 	for s in 300:
 		w.run(1.0)
 		for ev in w.bus.take():
@@ -379,6 +381,8 @@ func test_shallows_live_with_preds_and_shoals() -> void:
 			ok(p.y <= -4.0 + 1e-4, "не выше потолка")
 			ok(absf(p.x) <= EcoAgent.EDGE and absf(p.z) <= EcoAgent.EDGE, "в пределах отмели")
 			ok(pr.hunger >= 0.0 and pr.hunger <= 1.0)
+			closest = minf(closest, Vector2(p.x - reef.x, p.z - reef.z).length())
+	ok(closest > EcoPred.REEF_KEEP - 4.0, "в риф у Каменного цветка не заходят (ближе всего %.1f м)" % closest)
 	ok(catches > 0, "за 5 минут серпохвосты кого-то поймали")
 	ok(flees > 0, "стаи уходили в кораллы от хищников")
 	eq(w.hits, 0, "корабль далеко — ударов нет")
@@ -724,3 +728,151 @@ func test_view_far_hidden_and_still() -> void:
 	ok(changes >= 3 and changes <= 6, "поза вдали сменилась %d раз за 20 кадров" % changes)
 	view.queue_free()
 	await frames(1)
+
+
+# ---------- Риф у Каменного цветка 01 (#834, часть 2б) ----------
+
+## Светляки и серпохвосты на ровном дне; хищники, кроме первого, далеко; корабль далеко.
+func _reef_world() -> Array:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	w.ship.pos = FAR
+	var fish := w.add(EcoFish.new()) as EcoFish
+	var preds := w.add(EcoPred.new(fish)) as EcoPred
+	for i in range(1, preds.all.size()):
+		preds.all[i].agent.p = Vector3(-300 + 20 * i, -30, 300)
+	return [w, preds, fish]
+
+
+func _crown(fish: EcoFish) -> Array[EcoFish.Shoal]:
+	var out: Array[EcoFish.Shoal] = []
+	for sh in fish.shoals:
+		if sh.crown:
+			out.append(sh)
+	return out
+
+
+func test_crown_shoals_hide_before_pred_reaches_reef() -> void:
+	var r := _reef_world()
+	var w: EcoWorld = r[0]
+	var preds: EcoPred = r[1]
+	var fish: EcoFish = r[2]
+	var axis := preds.reef_axis()
+	ok(axis.is_finite(), "ось рифа — подножие цветка")
+	near(axis.x, EcoFlower.CENTER.x, 1e-4)
+	near(axis.z, EcoFlower.CENTER.y, 1e-4)
+	var pr := preds.all[0]
+	pr.agent.p = Vector3(axis.x + 90.0, -30.0, axis.z)  # далеко — стаи спокойны
+	pr.agent.goal = pr.agent.p
+	for i in 4:
+		_step(w)
+	for sh in _crown(fish):
+		near(sh.alarm, 0.0, 1e-6, "хищник в 90 м — стая у кроны спокойна")
+	pr.agent.p = Vector3(axis.x + EcoPred.REEF_EDGE + 5.0, -30.0, axis.z)  # снаружи края рифа
+	pr.agent.goal = pr.agent.p
+	w.bus.take()
+	for i in 4:  # стаи вдали от корабля шагают через раз
+		_step(w)
+	var texts: Array[String] = []
+	for ev in w.bus.take():
+		if ev.species == "fish" and ev.note == "flee":
+			texts.append(ev.text())
+	for sh in _crown(fish):
+		ok(sh.alarm > 0.0, "хищник ещё за краем рифа (47 м) — стая у кроны уже прячется в чашу")
+		ok(sh.center.distance_to(pr.agent.p) > EcoFish.PRED_ALARM, "раньше, чем он подошёл на 16 м")
+	ok(texts.size() >= 1 and "Каменного цветка" in texts[0] and "крону" in texts[0], "знак: стая прячется в крону")
+	var f := fish.nearest_fish(pr.agent.p, 200.0, preds._hidden_fish())
+	ok(f == null or not f.shoal.crown, "спрятавшуюся в крону стаю хищник не выбирает")
+
+
+func test_ping_at_flower_calls_pred_to_reef_edge_not_ship() -> void:
+	var r := _reef_world()
+	var w: EcoWorld = r[0]
+	var preds: EcoPred = r[1]
+	var axis := preds.reef_axis()
+	var pr := preds.all[0]
+	pr.agent.p = Vector3(axis.x + 80.0, -30.0, axis.z + 20.0)
+	w.ship.pos = Vector3(axis.x - 10.0, -30.0, axis.z)
+	preds.on_ping(w, w.ship.pos)
+	eq(pr.mode, EcoPred.Mode.INVESTIGATE, "услышал импульс")
+	var g := pr.agent.goal
+	near(Vector2(g.x - axis.x, g.z - axis.z).length(), EcoPred.REEF_EDGE, 1e-3, "плывёт к внешнему краю рифа")
+	ok(g.x > axis.x, "со своей стороны рифа")
+	ok(g.distance_to(w.ship.pos) > 40.0, "не к кораблю")
+	var pings := _notes(w, "ping")
+	ok(pings.size() == 1 and "края рифа" in pings[0].text(), "строка: кружит у края рифа")
+	# импульс вдали от цветка — по-старому, на звук
+	r = _reef_world()
+	w = r[0]
+	pr = (r[1] as EcoPred).all[0]
+	pr.agent.p = Vector3(axis.x + 100.0, -30.0, axis.z + 20.0)
+	w.ship.pos = Vector3(axis.x + 70.0, -30.0, axis.z)
+	(r[1] as EcoPred).on_ping(w, w.ship.pos)
+	ok(pr.agent.goal.distance_to(w.ship.pos) < 1e-3, "дальше 60 м от цветка — плывёт на звук")
+
+
+func test_ship_in_reef_is_safe() -> void:
+	for inside in [true, false]:
+		var r := _reef_world()
+		var w: EcoWorld = r[0]
+		var preds: EcoPred = r[1]
+		var axis := preds.reef_axis()
+		var pr := preds.all[0]
+		pr.hunger = 0.5
+		pr.cooldown = 0.0
+		var ship_x := 20.0 if inside else 60.0
+		w.ship.pos = Vector3(axis.x + ship_x, -30.0, axis.z)
+		pr.agent.p = w.ship.pos + Vector3(25.0, 0, 0)
+		pr.agent.goal = pr.agent.p
+		w.ship.light_on = true
+		_step(w)
+		if inside:
+			ok(pr.mode != EcoPred.Mode.CHARGE, "корабль в рифе у цветка — хищник не бросается")
+		else:
+			eq(pr.mode, EcoPred.Mode.CHARGE, "за рифом свет ближе 32 м — бросок, как везде")
+
+
+func test_charge_breaks_off_at_reef() -> void:
+	var r := _reef_world()
+	var w: EcoWorld = r[0]
+	var preds: EcoPred = r[1]
+	var axis := preds.reef_axis()
+	var pr := preds.all[0]
+	pr.hunger = 0.5
+	pr.cooldown = 0.0
+	w.ship.pos = Vector3(axis.x + 60.0, -30.0, axis.z)
+	pr.agent.p = w.ship.pos + Vector3(25.0, 0, 0)
+	w.ship.light_on = true
+	_step(w)
+	eq(pr.mode, EcoPred.Mode.CHARGE)
+	w.bus.take()
+	w.ship.pos = Vector3(axis.x + 10.0, -30.0, axis.z)  # корабль ушёл в риф
+	_step(w)
+	eq(pr.mode, EcoPred.Mode.RETREAT, "отвернул от рифа")
+	near(Vector2(pr.agent.goal.x - axis.x, pr.agent.goal.z - axis.z).length(), EcoPred.REEF_EDGE, 1e-3, "к краю рифа")
+	eq(_notes(w, "reef").size(), 1, "строка: не идёт в риф")
+	eq(w.hits, 0)
+
+
+func test_patrol_goes_around_reef() -> void:
+	var r := _reef_world()
+	var w: EcoWorld = r[0]
+	var preds: EcoPred = r[1]
+	var axis := preds.reef_axis()
+	var pr := preds.all[0]
+	pr.hunger = -2.0  # сыт весь прогон — не отвлекается на охоту
+	ok(preds.outside_reef(axis, axis + Vector3(5, 0, 0), EcoPred.REEF_KEEP).distance_to(axis) >= EcoPred.REEF_KEEP - 1e-3,
+		"цель патруля внутри рифа выносится на кольцо")
+	pr.agent.p = Vector3(axis.x - 60.0, -30.0, axis.z + 3.0)
+	pr.agent.goal = Vector3(axis.x + 60.0, -30.0, axis.z - 3.0)  # путь прямо через цветок
+	pr.agent.timer = 120.0
+	var closest := 1e9
+	var target := pr.agent.goal
+	var reached := false
+	for i in 1600:  # 80 с: 120 м пути и дуга вокруг рифа на 3 м/с
+		_step(w)
+		var p := pr.agent.p
+		closest = minf(closest, Vector2(p.x - axis.x, p.z - axis.z).length())
+		reached = reached or Vector2(p.x - target.x, p.z - target.z).length() < 5.0
+	ok(closest > EcoPred.REEF_KEEP - 4.0, "огибает риф, а не плывёт сквозь крону (ближе всего %.1f м)" % closest)
+	ok(reached, "и доплывает до цели на той стороне (%s)" % pr.agent.p)
