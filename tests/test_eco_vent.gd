@@ -242,3 +242,75 @@ func test_plume_sign_once_per_visit() -> void:
 	eq(got.size(), 2, "после WARN_CD новый заход — снова знак")
 	w.reset()
 	ok(v.warn_cd == 0.0, "новый забег — знак заново")
+
+
+# ---------- Веерники у курильщика (#835, часть 2б) ----------
+
+func _fan_world() -> EcoWorld:
+	var w := EcoWorld.new()
+	w.ground = Seabed.height
+	w.ship.pos = Vector3(500, 0, 500)
+	var cur := w.add(EcoCurrent.new()) as EcoCurrent
+	w.add(EcoCoral.new())
+	w.add(EcoFan.new(cur))
+	w.reset()
+	return w
+
+
+func _fans(w: EcoWorld) -> EcoFan:
+	for s in w.systems:
+		if s is EcoFan:
+			return s
+	return null
+
+
+## Плоскость веера смотрит на жерло (без знака: плоскость двусторонняя).
+func _faces_vent(f: EcoFan.Fan) -> float:
+	var to := EcoVent.CENTER - Vector2(f.pos.x, f.pos.z)
+	var n := EcoFan.facing(f)
+	return absf(Vector2(n.x, n.z).dot(to.normalized()))
+
+
+func test_vent_fans_point_flow_to_vent() -> void:
+	for p in EcoVent.FANS:
+		ok(EcoFan.default_spots().has(p), "веерник курильщика — в местах EcoFan")
+		var d := p.distance_to(EcoVent.CENTER)
+		ok(d > 12.0 and d < EcoVent.PULL_IN, "в %.1f м от трубы — не в цоколе и в полной тяге" % d)
+		near(EcoFan.vent_pull(p), 1.0, 1e-6, "тяга к жерлу полная")
+	near(EcoFan.vent_pull(EcoFan.START), 0.0, 1e-6, "у старта тяги нет")
+	var w := _fan_world()
+	var fans := _fans(w)
+	var cur: EcoCurrent
+	for s in w.systems:
+		if s is EcoCurrent:
+			cur = s
+	var vent_fans: Array[EcoFan.Fan] = []
+	for f in fans.fans:
+		if f.pull > 0.0:
+			vent_fans.append(f)
+	eq(vent_fans.size(), EcoVent.FANS.size(), "тянет только веера курильщика")
+	for f in vent_fans:
+		ok(_faces_vent(f) > 0.999, "с начала плоскостью к жерлу: %f" % _faces_vent(f))
+	w.run(310.0)   # течение сменилось (180 с) и веера доворачиваются
+	ok(cur.turns >= 1, "течение сменилось")
+	for f in vent_fans:
+		ok(_faces_vent(f) > 0.999, "у курильщика течение мира веер не разворачивает: %f" % _faces_vent(f))
+	var far := fans.fans[0]
+	ok(EcoFan.facing(far).distance_to(cur.vel().normalized()) < 0.05, "веерник у огнецвета — поперёк течения, как раньше")
+
+
+func test_vent_fan_message() -> void:
+	var w := _fan_world()
+	var fans := _fans(w)
+	var vf: EcoFan.Fan
+	for f in fans.fans:
+		if f.pull > 0.5:
+			vf = f
+	w.ship.pos = vf.top + Vector3(0, 8, 6)
+	w.step(0.05)
+	var texts: Array[String] = []
+	for e in w.take_link():
+		if e["type"] == EcoLink.MESSAGE and e["text"] != "":
+			texts.append(e["text"])
+	ok(texts.any(func(t: String) -> bool: return t.contains("повёрнут к жерлу")), "рядом — строка про поток к жерлу: %s" % str(texts))
+	ok(not texts.any(func(t: String) -> bool: return t.contains("поперёк течения")), "не «поперёк течения»")
