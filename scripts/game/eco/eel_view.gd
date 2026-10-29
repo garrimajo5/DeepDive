@@ -39,11 +39,15 @@ var organs: MultiMeshInstance3D
 var rings: MultiMeshInstance3D
 ## Глаза вдали (#970): мягкое красное пятно лицом к камере на каждом глазу (EcoEel.glint), общий шейдер мути
 ## EcoShaders.MIST (INK) — своего шейдера нет. Корабль ближе GLINT_NEAR или дальше GLINT_OFF — узел скрыт.
+## Цвет пятна ярче единицы (GLINT_GAIN): туман воды на 45 м смешивает его с цветом воды, и обычный красный
+## становится розовой точкой на светлом песке; с запасом красный остаётся красным, а на устройстве ещё и светится
+## (bloom). Сложение цвета (SPOT) не годится: в луче прожектора песок почти белый, к белому красное не прибавить.
 var glints: MultiMeshInstance3D
 var glint_buffer := PackedFloat32Array()
 ## Пятно ярче самого глаза: в мути у дна вода съедает часть красного.
-const GLINT_COLOR := Color(1.0, 0.36, 0.34)
-const GLINT_ALPHA := 0.9
+const GLINT_COLOR := Color(1.0, 0.16, 0.12)
+const GLINT_GAIN := 4.0
+const GLINT_ALPHA := 0.95
 ## Пятно чуть впереди глаза к кораблю, чтобы голова его не закрывала.
 const GLINT_LIFT := 0.25
 ## Последние буферы (для тестов).
@@ -230,9 +234,9 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground
 			var o := (e.index * EYES.size() + j) * CSTRIDE
 			EcoMM.put(glint_buffer, o, Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * g.x * 2.0),
 				eye + to.normalized() * GLINT_LIFT))
-			glint_buffer[o + STRIDE] = GLINT_COLOR.r
-			glint_buffer[o + STRIDE + 1] = GLINT_COLOR.g
-			glint_buffer[o + STRIDE + 2] = GLINT_COLOR.b
+			glint_buffer[o + STRIDE] = GLINT_COLOR.r * GLINT_GAIN
+			glint_buffer[o + STRIDE + 1] = GLINT_COLOR.g * GLINT_GAIN
+			glint_buffer[o + STRIDE + 2] = GLINT_COLOR.b * GLINT_GAIN
 			glint_buffer[o + STRIDE + 3] = GLINT_ALPHA * g.y
 		var rb := hb * Basis(Vector3.RIGHT, PI / 2.0)
 		if e.latched():

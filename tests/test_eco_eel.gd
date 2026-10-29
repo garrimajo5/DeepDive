@@ -524,7 +524,9 @@ func test_view_four_multimeshes() -> void:
 		if c is MultiMeshInstance3D:
 			mm += 1
 			eq((c as MultiMeshInstance3D).layers, OceanView.LAYER_WORLD, "%s — на слое отмели" % c.name)
-	eq(mm, 5, "камни, оболочка, внутренности с глазами, присоска и муть — пять вызовов (#849)")
+	eq(mm, 6, "камни, оболочка, внутренности с глазами, присоска, муть и глаза вдали (#849, #970)")
+	view.sync(w.time)
+	ok(not view.glints.visible, "без корабля глаз вдали не рисуется — лишнего вызова нет")
 	eq(view.rocks.multimesh.instance_count, 5, "пять камней логова")
 	eq(view.shell.multimesh.instance_count, EcoEel.SEGS, "голова и 13 звеньев")
 	var e := eels.eels[0]
@@ -542,6 +544,47 @@ func test_view_four_multimeshes() -> void:
 	ok(ring.basis.get_scale().x > 1.2, "на стекле кольцо расплющено")
 	var l := EcoHull.to_ship(ring.origin, w.ship.pos, w.ship.yaw)
 	ok(l.z < HullPlan.NOSE_CUT and l.z > HullPlan.NOSE_CUT - 0.2, "кольцо прижато к стеклу снаружи")
+	view.queue_free()
+	await frames(1)
+
+
+## Глаз вдали (#970): шар глаза 0,07 м с 45 м меньше пикселя — поверх него пятно постоянного углового размера,
+## только пока корабль в полосе знака (не вблизи — там глаз виден сам, не дальше GLINT_OFF).
+func test_eye_glint_by_distance() -> void:
+	eq(EcoEel.glint(5.0).y, 0.0, "вблизи пятна нет")
+	near(EcoEel.glint(45.0).y, 1.0, 1e-6, "с 45 м (шаг 32k) — в полную силу")
+	near(EcoEel.glint(45.0).x / 45.0, EcoEel.glint(30.0).x / 30.0, 1e-6, "угловой размер постоянный")
+	ok(EcoEel.glint(45.0).x >= 0.5, "с 45 м радиус %.2f м — пятно в окне видно" % EcoEel.glint(45.0).x)
+	ok(EcoEel.glint(EcoEel.WARN_R).y > 0.5, "у края знака (55 м) пятно ещё видно")
+	eq(EcoEel.glint(EcoEel.GLINT_OFF + 1.0).y, 0.0, "далеко — гаснет")
+
+
+func test_view_eye_glint() -> void:
+	var w := _world()
+	var eels := _eels(w)
+	var view := EelView.new(eels)
+	tree.root.add_child(view)
+	var e := eels.eels[0]
+	w.ship.pos = e.lair + Vector3(0, 6, -45)
+	view.sync(w.time, w.ship)
+	ok(view.glints.visible, "корабль в 45 м — пятна глаз в сцене")
+	var g := EelView.transform_at(view.glint_buffer, 0, EelView.CSTRIDE)
+	var head := e.segs[0]
+	ok(g.origin.distance_to(head) < 1.0, "пятно у головы, %.2f м" % g.origin.distance_to(head))
+	var eye := EelView.transform_at(view.organ_buffer, eels.eels.size() * (EcoEel.SEGS - 1), EelView.CSTRIDE).origin
+	near(eye.distance_to(w.ship.pos) - g.origin.distance_to(w.ship.pos), EelView.GLINT_LIFT, 1e-3,
+		"на GLINT_LIFT ближе к кораблю, чем глаз")
+	ok(g.basis.get_scale().x > 0.9, "пятно крупное: %.2f м" % g.basis.get_scale().x)
+	var red := view.glint_buffer[EelView.STRIDE]
+	ok(red > 1.0, "красный с запасом на туман воды: %.1f" % red)
+	ok(red > view.glint_buffer[EelView.STRIDE + 1] * 4.0, "пятно красное")
+	near(view.glint_buffer[EelView.STRIDE + 3], EelView.GLINT_ALPHA, 1e-4, "непрозрачное")
+	w.ship.pos = e.lair + Vector3(0, 6, -150)
+	view.sync(w.time, w.ship)
+	ok(not view.glints.visible, "корабль далеко — узел скрыт")
+	w.ship.pos = e.lair + Vector3(0, 3, -6)
+	view.sync(w.time, w.ship)
+	ok(not view.glints.visible, "корабль рядом — глаз виден сам, пятна нет")
 	view.queue_free()
 	await frames(1)
 
