@@ -2,7 +2,7 @@ class_name EcoFish
 extends EcoSystem
 ## Светляки-полосники (initFish/updateFish в js/creatures.js, Unity `Core/EcoFish.cs`): шесть стай по 22 рыбки у кораллов
 ## рифа, ещё две — у кроны Каменного цветка (ART-027) и молодь (14 мелких) в клетке Костей левиафана. Стая бродит у дома, держится вместе (к центру, в ногу,
-## не толкаясь), рыбки не опускаются на дно и не поднимаются ко льду. Серпохвост ближе 16 м — тревога: стая уходит к дому в кораллы и там прячется (медленно, ≤ 1 м/с), событие
+## не толкаясь), рыбки не опускаются на дно и не поднимаются ко льду. Серпохвост ближе 16 м (стаям у кроны цветка — 50 м, CROWN_ALARM) — тревога: стая уходит к дому в кораллы и там прячется (медленно, ≤ 1 м/с), событие
 ## «flee» раз в 30 с. Корабль ближе 11 м на ходу быстрее 1,2 м/с пугает без события: рыбки шарахаются, но домой не уходят.
 ## Хищники берут рыбок через nearest_fish и kill; съеденная появляется у дома через 25–40 с.
 
@@ -11,6 +11,10 @@ const ID := "fish"
 const PER_SHOAL := 22
 ## Ближе этого хищник поднимает тревогу (м).
 const PRED_ALARM := 16.0
+## Стаи у кроны Каменного цветка чуют серпохвоста раньше — ближе этого (м, по горизонтали от оси кроны): прячутся в чашу, пока хищника ещё не
+## видно из корабля, и это знак, что он рядом (#834, «читаемая встреча» у 01; хищник держится за кольцом рифа
+## EcoPred.REEF_EDGE — 42 м от оси).
+const CROWN_ALARM := 50.0
 ## Ближе этого корабль на ходу пугает стаю (м).
 const SHIP_ALARM := 11.0
 ## Быстрее этого корабль пугает (м/с, вперёд или назад).
@@ -419,9 +423,9 @@ func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
 
 	sh.has_threat = false
 	sh.threat_is_ship = false
-	var best := PRED_ALARM
+	var best := CROWN_ALARM if sh.crown else PRED_ALARM
 	for a in _preds:
-		var d := a.p.distance_to(sh.center)
+		var d := Vector2(a.p.x - sh.axis.x, a.p.z - sh.axis.z).length() if sh.crown else a.p.distance_to(sh.center)
 		if d < best:
 			best = d
 			sh.has_threat = true
@@ -429,7 +433,7 @@ func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
 	if sh.has_threat:
 		if sh.alarm <= 0.0 and sh.flee_cd <= 0.0:
 			sh.flee_cd = FLEE_COOLDOWN
-			world.emit(ID, "flee", sh.center, _flee_text(world))
+			world.emit(ID, "flee", sh.center, _crown_text(world) if sh.crown else _flee_text(world))
 		sh.alarm = 3.0
 	elif world.ship.pos.distance_to(sh.center) < SHIP_ALARM and absf(world.ship.speed) > SHIP_FAST:
 		sh.has_threat = true
@@ -470,6 +474,15 @@ static func _flee_text(world: EcoWorld) -> Callable:
 		var w: EcoWorld = wr.get_ref()
 		var name := w.nm(ID) if w else Species.called(ID)
 		return "%s: стая уходит в кораллы — рядом хищник" % Species.cap(name)
+
+
+## «Светляки у Каменного цветка прячутся в крону» — знак раньше хищника (#834).
+static func _crown_text(world: EcoWorld) -> Callable:
+	var wr: WeakRef = weakref(world)
+	return func() -> String:
+		var w: EcoWorld = wr.get_ref()
+		var name := w.nm(ID) if w else Species.called(ID)
+		return "%s: стая у Каменного цветка прячется в крону — где-то рядом хищник" % Species.cap(name)
 
 
 ## Шаг рыбок стаи sh: всё общее для стаи (центр, цель, тревога, угроза, корабль) — в локальных один раз на стаю,
