@@ -180,3 +180,65 @@ func test_eco_view_has_vent() -> void:
 	ok(view.vent_view.rock != null, "порода собрана по дну")
 	view.queue_free()
 	await frames(1)
+
+
+## Строки MESSAGE мира для корабля.
+static func _messages(w: EcoWorld) -> Array[String]:
+	var out: Array[String] = []
+	for e in w.take_link():
+		if e.get("type", "") == EcoLink.MESSAGE:
+			out.append(str(e["text"]))
+	return out
+
+
+## #835, часть 2а: знак шлейфа приходит раньше перегрева реактора — корабль идёт к жерлу с востока на 5 м/с.
+func test_plume_sign_before_heat() -> void:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	w.add(EcoVent.new())
+	var at := -1.0
+	var heat := -1.0
+	for i in 300:
+		var d := 150.0 - i * 0.5
+		w.ship.pos = Vector3(EcoVent.CENTER.x + d, FLAT + 12.0, EcoVent.CENTER.y)
+		w.step(0.1)
+		if at < 0.0 and _messages(w).has(EcoVent.WARN_TEXT):
+			at = d
+		if heat < 0.0 and Reactor.near_vent(w.ship.pos.x, w.ship.pos.z):
+			heat = d
+	ok(at > 0.0, "знак шлейфа пришёл")
+	ok(heat > 0.0, "корабль дошёл до тёплой воды")
+	ok(at - heat >= 25.0, "знак на %.0f м раньше перегрева (≥ 25 м, на 5 м/с — 5 с)" % (at - heat))
+	ok(EcoVent.WARN_R > Reactor.VENT_R, "круг знака шире круга перегрева")
+
+
+## Знак — один раз за заход: стоять в круге — тишина; выйти и сразу вернуться — тишина до WARN_CD; потом снова.
+func test_plume_sign_once_per_visit() -> void:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	var v := w.add(EcoVent.new()) as EcoVent
+	var inside := Vector3(EcoVent.CENTER.x + 60.0, FLAT + 12.0, EcoVent.CENTER.y)
+	var outside := Vector3(EcoVent.CENTER.x + 100.0, FLAT + 12.0, EcoVent.CENTER.y)
+	var got: Array[String] = []
+	w.ship.pos = inside
+	for i in 50:
+		w.step(0.1)
+		got.append_array(_messages(w))
+	eq(got.size(), 1, "в круге — одна строка")
+	w.ship.pos = outside
+	w.step(0.1)
+	w.ship.pos = inside
+	for i in 10:
+		w.step(0.1)
+		got.append_array(_messages(w))
+	eq(got.size(), 1, "вернулся раньше WARN_CD — без повтора")
+	w.ship.pos = outside
+	for i in int(EcoVent.WARN_CD * 10.0):
+		w.step(0.1)
+		got.append_array(_messages(w))
+	w.ship.pos = inside
+	w.step(0.1)
+	got.append_array(_messages(w))
+	eq(got.size(), 2, "после WARN_CD новый заход — снова знак")
+	w.reset()
+	ok(v.warn_cd == 0.0, "новый забег — знак заново")
