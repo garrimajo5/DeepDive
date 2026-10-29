@@ -37,6 +37,19 @@ var shell: MultiMeshInstance3D
 ## Внутренности и глаза одним MultiMesh (#849): сначала n · (SEGS − 1) звеньев, потом n · 2 глаза.
 var organs: MultiMeshInstance3D
 var rings: MultiMeshInstance3D
+## Глаза вдали (#970): мягкое красное пятно лицом к камере на каждом глазу (EcoEel.glint), общий шейдер мути
+## EcoShaders.MIST (INK) — своего шейдера нет. Корабль ближе GLINT_NEAR или дальше GLINT_OFF — узел скрыт.
+## Цвет пятна ярче единицы (GLINT_GAIN): туман воды на 45 м смешивает его с цветом воды, и обычный красный
+## становится розовой точкой на светлом песке; с запасом красный остаётся красным, а на устройстве ещё и светится
+## (bloom). Сложение цвета (SPOT) не годится: в луче прожектора песок почти белый, к белому красное не прибавить.
+var glints: MultiMeshInstance3D
+var glint_buffer := PackedFloat32Array()
+## Пятно ярче самого глаза: в мути у дна вода съедает часть красного.
+const GLINT_COLOR := Color(1.0, 0.16, 0.12)
+const GLINT_GAIN := 4.0
+const GLINT_ALPHA := 0.95
+## Пятно чуть впереди глаза к кораблю, чтобы голова его не закрывала.
+const GLINT_LIFT := 0.25
 ## Последние буферы (для тестов).
 var shell_buffer := PackedFloat32Array()
 var ring_buffer := PackedFloat32Array()
@@ -63,6 +76,10 @@ func _init(system: EcoEel) -> void:
 		true)
 	_paint_organs(n)
 	rings = EcoMM.instance(self, "Присоска", _ring(), n, false)
+	var quad := QuadMesh.new()
+	quad.size = Vector2.ONE
+	quad.material = EcoShaders.mist(EcoShaders.Mist.INK)
+	glints = EcoMM.instance(self, "Глаза вдали", quad, n * EYES.size(), true)
 	dust_view = GrazerView.build_dust(EcoEelDust.POOL)
 	add_child(dust_view)
 	_place_rocks()
@@ -182,6 +199,8 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground
 	shell_buffer.resize(n * EcoEel.SEGS * STRIDE)
 	var eye0 := n * (EcoEel.SEGS - 1)
 	ring_buffer.resize(n * STRIDE)
+	glint_buffer.resize(n * EYES.size() * CSTRIDE)
+	var lit := false
 	for e in eels.eels:
 		var segs := e.segs
 		var wag := e.moving()
@@ -203,8 +222,22 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground
 		var head := Transform3D(hb, segs[0])
 		EcoMM.put(shell_buffer, e.index * EcoEel.SEGS * STRIDE, Transform3D(hb.scaled_local(HEAD), segs[0]))
 		for j in EYES.size():
+			var eye := head * EYES[j]
 			EcoMM.put(organ_buffer, (eye0 + e.index * EYES.size() + j) * CSTRIDE,
-				Transform3D(hb.scaled_local(Vector3.ONE * EYE_R), head * EYES[j]))
+				Transform3D(hb.scaled_local(Vector3.ONE * EYE_R), eye))
+			var g := Vector2.ZERO
+			var to := Vector3.ZERO
+			if ship:
+				to = ship.pos - eye
+				g = EcoEel.glint(to.length())
+			lit = lit or g.y > 0.0
+			var o := (e.index * EYES.size() + j) * CSTRIDE
+			EcoMM.put(glint_buffer, o, Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * g.x * 2.0),
+				eye + to.normalized() * GLINT_LIFT))
+			glint_buffer[o + STRIDE] = GLINT_COLOR.r * GLINT_GAIN
+			glint_buffer[o + STRIDE + 1] = GLINT_COLOR.g * GLINT_GAIN
+			glint_buffer[o + STRIDE + 2] = GLINT_COLOR.b * GLINT_GAIN
+			glint_buffer[o + STRIDE + 3] = GLINT_ALPHA * g.y
 		var rb := hb * Basis(Vector3.RIGHT, PI / 2.0)
 		if e.latched():
 			rb = hb.scaled_local(RING_FLAT) * Basis(Vector3.RIGHT, PI / 2.0)
@@ -212,6 +245,9 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground
 	EcoMM.send(shell, shell_buffer)
 	EcoMM.send(organs, organ_buffer)
 	EcoMM.send(rings, ring_buffer)
+	glints.visible = lit
+	if lit:
+		EcoMM.send(glints, glint_buffer)
 
 
 func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3, ground: Callable) -> void:

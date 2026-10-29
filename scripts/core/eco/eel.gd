@@ -21,6 +21,21 @@ const LAIR_CLEAR := 80.0
 const WARN_R := 55.0
 const WARN_CD := 120.0
 const WARN_TEXT := "В расщелине у трещины — красный глаз стеклоуста. Обходите стороной: ближе 28 м он бросится к стеклу."
+## Глаз вдали (#970): сам глаз — шар 0,07 м, с 45 м это меньше пикселя телефона, и знак WARN_TEXT в окне не
+## читается. Поверх глаза — мягкое красное пятно лицом к камере постоянного углового размера GLINT_ANG (радиус на
+## метр расстояния): с 45 м — 0,63 м (мягкий край — видимое ядро около трети), около 10 px в окне 1600 px. Ближе GLINT_NEAR пятна нет (глаз виден сам), к
+## GLINT_FULL оно набирает силу, дальше GLINT_FAR гаснет (дальше знака WARN_R).
+const GLINT_ANG := 0.014
+const GLINT_NEAR := 10.0
+const GLINT_FULL := 20.0
+const GLINT_FAR := 70.0
+const GLINT_OFF := 85.0
+
+
+## Пятно глаза с расстояния dist (м): (радиус, непрозрачность 0…1).
+static func glint(dist: float) -> Vector2:
+	var a := smoothstep(GLINT_NEAR, GLINT_FULL, dist) * (1.0 - smoothstep(GLINT_FAR, GLINT_OFF, dist))
+	return Vector2(dist * GLINT_ANG, a)
 const MOUTH_UP := 1.1
 const MOUTH_OUT := 0.3
 ## Камни логова (как в js/world.js): смещение вбок, вверх и размер; камни — на 2,4 м за устьем.
