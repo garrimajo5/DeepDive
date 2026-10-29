@@ -1,7 +1,7 @@
 class_name EcoEel
 extends EcoSystem
 ## Стеклоуст (eel в js/creatures.js: initEels, eelUpdate, onZap; логова — W.lairs в js/world.js; ART-006,
-## `docs/concept-art/stekloust-skrebun.md`): прозрачный угорь-засадчик 5 м. Три логова в каменных расщелинах; в логове
+## `docs/concept-art/stekloust-skrebun.md`): прозрачный угорь-засадчик 5 м. Одно логово в каменной расщелине; в логове
 ## снаружи только голова и красный глаз. Скребун ближе 9 м или светляк ближе 6 м к устью — бросок (11 м/с, 3 с),
 ## добыча съедена (наблюдение «eelcatch»). Корабль носом ближе 28 м к устью — плывёт к носу в обход корпуса (10 м/с,
 ## 6 с) и присасывается снаружи к панорамному стеклу (наблюдение «latch»): пока висит — тянет заряд корабля,
@@ -9,8 +9,18 @@ extends EcoSystem
 ## На корпусе прилипалы (EcoRemora) — к кораблю не плывёт. Заметен сонару и сканеру.
 
 const ID := "eel"
-## Логова (x, z) из js/world.js; устье — на 1,1 м над дном и на 0,3 м наружу.
-const LAIRS: Array[Vector2] = [Vector2(28, 52), Vector2(-62, -8), Vector2(62, -45)]
+## Логово (x, z); устье — на 1,1 м над дном и на 0,3 м наружу. Слой 1 (#834, `docs/sloj1-sad.md` «Стеклоуст»): один
+## читаемый эпизод — у трещины на подходе 02↔01, в 14 м от отрезка (из трёх логов js/world.js оставлено это). Два
+## других убраны: (28, 52) стоял на пути обучения 00→01, (62, −45) — в 23 м от Каменного цветка 01, где серпохвост, —
+## две угрозы сразу. Логово не ближе LAIR_CLEAR к местам сохранения и терминалу (00, 07, 09, 10) и к цветку 01.
+const LAIRS: Array[Vector2] = [Vector2(-62, -8)]
+const LAIR_CLEAR := 80.0
+## Знак раньше угрозы: корабль по горизонтали входит в WARN_R от логова, стеклоуст сидит — мир шлёт строку WARN_TEXT
+## (EcoLink.MESSAGE). К стеклу он плывёт, когда нос ближе SHIP_R (28 м), — знак приходит на 20 м раньше, обход стороной
+## (дальше SHIP_R) есть с обеих сторон трещины. Снова — после выхода из круга и не чаще WARN_CD.
+const WARN_R := 55.0
+const WARN_CD := 120.0
+const WARN_TEXT := "В расщелине у трещины — красный глаз стеклоуста. Обходите стороной: ближе 28 м он бросится к стеклу."
 const MOUTH_UP := 1.1
 const MOUTH_OUT := 0.3
 ## Камни логова (как в js/world.js): смещение вбок, вверх и размер; камни — на 2,4 м за устьем.
@@ -112,11 +122,14 @@ var fish: EcoFish
 
 var _spots: Array[Vector3]
 var _rnd: EcoRandom
+## Знак у логова: пауза до следующего; знак за этот заход в круг WARN_R уже был.
+var warn_cd := 0.0
+var _warned := false
 ## Шаги модуля с reset — очередь стеклоустов вдали (EcoLod).
 var _tick := 0
 
 
-## spots — свои устья (x, дно, z) для тестов; пусто — три логова из браузера на дне мира.
+## spots — свои устья (x, дно, z) для тестов; пусто — логова LAIRS на дне мира.
 func _init(prey_grazers: EcoGrazer = null, prey_fish: EcoFish = null, spots: Array[Vector3] = []) -> void:
 	grazers = prey_grazers
 	fish = prey_fish
@@ -132,6 +145,8 @@ func reset(world: EcoWorld) -> void:
 	eels.clear()
 	latched = null
 	_tick = 0
+	warn_cd = 0.0
+	_warned = false
 	var places := _spots.duplicate()
 	if places.is_empty():
 		for xz in LAIRS:
@@ -176,6 +191,7 @@ func step(world: EcoWorld, dt: float) -> void:
 		e.lag = 0.0
 		_update(world, e, h, t)
 	_tick += 1
+	_sign(world, dt)
 	if latched:
 		world.drain(Species.info(ID).name, DRAIN)
 
@@ -225,6 +241,24 @@ func _update(world: EcoWorld, e: Eel, dt: float, t: float) -> void:
 			a.p += d * minf(1.0, speed * dt / dl)
 		world.push_out(a, HEAD_PAD)
 	_pose(world, e, dt)
+
+
+## Знак раньше угрозы (WARN_R): корабль вошёл в круг логова, стеклоуст в нём сидит, на стекле никого — строка на
+## приборах. Пока корабль в круге, второй раз не шлёт.
+func _sign(world: EcoWorld, dt: float) -> void:
+	warn_cd -= dt
+	var p := Vector2(world.ship.pos.x, world.ship.pos.z)
+	var near: Eel = null
+	for e in eels:
+		if p.distance_to(Vector2(e.lair.x, e.lair.z)) < WARN_R:
+			near = e
+			break
+	if near == null:
+		_warned = false
+	elif not _warned and warn_cd <= 0.0 and latched == null and near.mode == Mode.HIDE:
+		_warned = true
+		warn_cd = WARN_CD
+		world.send(EcoLink.message(WARN_TEXT))
 
 
 ## В логове: добыча рядом — бросок; иначе корабль рядом — к носу (eelUpdate, case 'hide').
