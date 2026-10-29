@@ -4,7 +4,8 @@ extends EcoSystem
 ## огнецвета и один у старта корабля. Плоскость веера всегда стоит поперёк течения (EcoCurrent) — по нему пилот
 ## читает, куда сносит корабль; когда течение меняется, веерники медленно разворачиваются следом и не крутятся
 ## без дела. Заметны сонару и сканеру. Сообщения: «стоит поперёк течения» рядом с кораблём (раз в 150 с),
-## «разворачиваются — течение сменилось» (раз в 60 с, если веерник ближе 70 м).
+## «разворачиваются — течение сменилось» (раз в 60 с, если веерник ближе 70 м). У Чёрного курильщика (EcoVent.FANS,
+## #835) веера стоят к жерлу — вода у дна тянется к трубам; рядом с ними строка «повёрнут к жерлу» вместо «поперёк».
 
 const ID := "fan"
 ## Веер в 7 м от подножия огнецвета под углом i · 2,1 + 2,6 и один у старта, чтобы его увидеть сразу (в браузере —
@@ -24,6 +25,7 @@ const READ_R := 30.0
 const READ_CD := 150.0
 const TURN_R := 70.0
 const TURN_CD := 60.0
+const VENT_TEXT := "%s у курильщика повёрнут к жерлу — у дна вода тянется к трубам. Обходите сбоку"
 
 
 ## Один веерник.
@@ -37,6 +39,10 @@ class Fan:
 	var yaw := 0.0
 	## Фаза покачивания.
 	var phase := 0.0
+	## Тяга к жерлу курильщика 0…1 (EcoFan.vent_pull): 1 — плоскость к жерлу, 0 — поперёк течения.
+	var pull := 0.0
+	## Курс к жерлу (плоскость смотрит на трубы), если pull > 0.
+	var to_vent := 0.0
 
 
 var fans: Array[Fan] = []
@@ -54,8 +60,8 @@ func _init(sea: EcoCurrent, spots: Array[Vector2] = []) -> void:
 	_spots = spots.duplicate() if not spots.is_empty() else default_spots()
 
 
-## Места из браузера: у каждого огнецвета и у старта (последний); между ними — два по бокам площадки 08 (EcoField)
-## и два у сходов с террасы врат 07 (EcoGate).
+## Места из браузера: у каждого огнецвета и у старта (последний); между ними — два по бокам площадки 08 (EcoField),
+## два у сходов с террасы врат 07 (EcoGate) и три у Чёрного курильщика 02 (EcoVent).
 static func default_spots() -> Array[Vector2]:
 	var out: Array[Vector2] = []
 	for i in EcoCoral.BASES.size():
@@ -63,6 +69,7 @@ static func default_spots() -> Array[Vector2]:
 		out.append(EcoCoral.BASES[i] + Vector2(cos(a), sin(a)) * FROM_CORAL)
 	out.append_array(EcoField.FANS)
 	out.append_array(EcoGate.FANS)
+	out.append_array(EcoVent.FANS)
 	out.append(START)
 	return out
 
@@ -79,7 +86,10 @@ func reset(world: EcoWorld) -> void:
 		var y: float = world.ground.call(xz.x, xz.y) if world.ground.is_valid() else -40.0
 		f.pos = Vector3(xz.x, y - 0.05, xz.y)
 		f.top = f.pos + Vector3(0, TOP, 0)
-		f.yaw = current.angle
+		f.pull = vent_pull(xz)
+		var to := EcoVent.CENTER - xz
+		f.to_vent = atan2(to.x, to.y)
+		f.yaw = aim(f, current.angle)
 		f.phase = i * 1.3
 		fans.append(f)
 
@@ -94,11 +104,31 @@ func step(world: EcoWorld, dt: float) -> void:
 			turn_cd = TURN_CD
 			world.emit(ID, "turn", sp, _text(world, "%s разворачивается следом за течением — оно сменилось"))
 	for f in fans:
-		var dy := wrapf(current.angle - f.yaw, -PI, PI)
+		var dy := wrapf(aim(f, current.angle) - f.yaw, -PI, PI)
 		f.yaw += dy * minf(1.0, dt * TURN_RATE)
 	if read_cd <= 0.0 and _any_near(sp, READ_R):
 		read_cd = READ_CD
-		world.emit(ID, "across", sp, _text(world, "%s стоит поперёк течения — по нему видно, куда несёт"))
+		var near := _nearest(sp)
+		if near and near.pull > 0.5:
+			world.emit(ID, "vent", sp, _text(world, VENT_TEXT))
+		else:
+			world.emit(ID, "across", sp, _text(world, "%s стоит поперёк течения — по нему видно, куда несёт"))
+
+
+## Тяга к жерлу курильщика в точке (x, z): 1 ближе EcoVent.PULL_IN, 0 дальше EcoVent.PULL_OUT, между — плавно.
+static func vent_pull(xz: Vector2) -> float:
+	var d := xz.distance_to(EcoVent.CENTER)
+	return 1.0 - smoothstep(EcoVent.PULL_IN, EcoVent.PULL_OUT, d)
+
+
+## Курс плоскости веера: течение (angle), а у курильщика — к жерлу по доле pull (плоскость — без знака, ±π одно и то же).
+static func aim(f: Fan, angle: float) -> float:
+	if f.pull <= 0.0:
+		return angle
+	var a := angle
+	if absf(wrapf(f.to_vent - a, -PI, PI)) > PI / 2.0:   # ближняя из двух сторон плоскости
+		a += PI
+	return lerp_angle(a, f.to_vent, f.pull)
 
 
 ## Каждый веерник виден сонару и сканеру.
@@ -115,6 +145,14 @@ static func basis(f: Fan, t: float) -> Basis:
 ## Куда смотрит плоскость веера (нормаль).
 static func facing(f: Fan) -> Vector3:
 	return Vector3(sin(f.yaw), 0.0, cos(f.yaw))
+
+
+func _nearest(p: Vector3) -> Fan:
+	var best: Fan = null
+	for f in fans:
+		if best == null or f.pos.distance_to(p) < best.pos.distance_to(p):
+			best = f
+	return best
 
 
 func _any_near(p: Vector3, r: float) -> bool:
