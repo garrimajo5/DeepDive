@@ -4,7 +4,7 @@ extends RefCounted
 ## следующая точка и расстояние до неё, на голостоле — отметка точки. Точка пройдена, когда корабль ближе радиуса
 ## места (по горизонтали); порядок не важен, «следующая» — первая непройденная по списку. Все точки пройдены —
 ## маршрут закрыт — можно выбрать следующий. В кампании слоя (#824) пройденный маршрут голосования не открывает:
-## «глубже или наверх» — механика решений (`open_vote`), её откроет переход у 10 (#828).
+## «глубже или наверх» — механика решений (`open_vote`), её открывает переход у 10 (`descent`, #828).
 ## Места — из карты слоя `LayerMap` (#821; ориентиры ART-005 там же), радиусы — js/world.js.
 
 ## key → [название, (x, z), радиус м]
@@ -53,6 +53,14 @@ var ended := false        ## решили «наверх»: забег окон�
 var score := 0
 var start := {}           ## счётчики в начале забега: t, груз, виды, пробоины
 var _vote_held := true    ## голосование ждёт, пока отпустят крестовину
+var _at_descent := false  ## корабль в круге спуска 10 (`descent`): предупреждение — один раз на вход
+
+## Переход к Кристальному лесу у места 10 (#828, часть 1): корабль вошёл в круг места — предупреждение и голосование
+## «глубже или наверх» у голостола (`voting`); ушёл дальше DESCENT_LEAVE — голосование закрыто, если не решили.
+const DESCENT := "descent"   ## ключ места 10 в PLACES
+const DESCENT_LEAVE := 1.5     ## доля радиуса места 10: дальше — корабль ушёл от спуска
+const DESCENT_MSG := "Впереди более глубокий слой. Решение — у голостола"
+const DESCENT_OFF_MSG := "Спуск позади: голосование закрыто"
 
 
 static func place_name(key: String) -> String:
@@ -70,6 +78,7 @@ func begin(t: float, cargo_n: int, species_n: int, breaches_n: int) -> void:
 	seen.clear()
 	done = false
 	voting = false
+	_at_descent = false
 	depth = 0
 	routes = 0
 	ended = false
@@ -143,6 +152,30 @@ func update(x: float, z: float) -> String:
 		done = true
 		routes += 1
 		return "Маршрут «%s» пройден. Следующий — у голостола" % r["name"]
+	return ""
+
+
+## Шаг перехода у 10: корабль в (x, z). Вход в круг места 10 — голосование открыто, `DESCENT_MSG`; уход дальше
+## `DESCENT_LEAVE` радиусов — нерешённое голосование закрыто, `DESCENT_OFF_MSG`. Иначе "". После «глубже» корабль
+## ещё в круге — повторного предупреждения нет, пока он не выйдет и не вернётся.
+func descent(x: float, z: float) -> String:
+	if ended:
+		return ""
+	var d := Vector2(x, z).distance_to(place_xz(DESCENT))
+	var r := float(PLACES[DESCENT][2])
+	if not _at_descent and d < r:
+		_at_descent = true
+		if not seen.has(DESCENT):
+			seen.append(DESCENT)
+		if voting:
+			return ""
+		open_vote()
+		return DESCENT_MSG
+	if _at_descent and d > r * DESCENT_LEAVE:
+		_at_descent = false
+		if voting:
+			voting = false
+			return DESCENT_OFF_MSG
 	return ""
 
 
