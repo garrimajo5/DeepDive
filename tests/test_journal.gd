@@ -31,6 +31,9 @@ func test_layout_by_mockup() -> void:
 		var r := Journal.place_rect(k, SIZE)
 		ok(map.encloses(r), "%s — кнопка целиком на карте" % k)
 		var true_at := Vector2(360, 0) + Journal.MAP_CENTER + Run.place_xz(k) * Journal.PX_PER_M
+		# место за краем карты (10 на склоне, #822) — у края карты со своей стороны
+		var inset := Vector2.ONE * (Journal.PLACE_BUTTON * 0.5 + Journal.PLACE_GAP)
+		true_at = true_at.clamp(map.position + inset, map.end - inset)
 		ok(r.get_center().distance_to(true_at) < Journal.PLACE_BUTTON * 0.5,
 			"%s — кнопка раздвинута не дальше полукнопки от своей точки" % k)
 		ok(r.size.x >= 96.0, "кнопка места ≥ 96 px")

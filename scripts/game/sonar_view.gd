@@ -50,7 +50,7 @@ func _ready() -> void:
 	mat.set_shader_parameter("brief_side", Briefing.SIDE)
 	var pts := PackedVector2Array()
 	for k in Briefing.ORDER:
-		var t := Briefing.table_xz(Run.place_xz(k))
+		var t := Briefing.on_table(Run.place_xz(k))
 		pts.append(t)
 		var l := Label3D.new()
 		l.name = "Место %d" % Briefing.NUMBERS[k]
@@ -173,7 +173,7 @@ func show_briefing(k: float, run: Run, ship_pos: Vector3) -> void:
 		return
 	_put("sel_route", run.route)
 	_put("route_len", maxf(Briefing.route_length(run.route), 0.01) if run.route >= 0 else 1.0)
-	_put("ship_t", Briefing.table_xz(Vector2(ship_pos.x, ship_pos.z)))
+	_put("ship_t", Briefing.on_table(Vector2(ship_pos.x, ship_pos.z)))
 	_put("place_state", st)
 
 
