@@ -7,7 +7,8 @@ extends EcoSystem
 ## середина кроны выше краёв, а края загнуты вверх. На концах — 48 вытянутых светящихся кончиков. Своё зерно (форма
 ## одна при любом зерне мира), высота подгоняется ровно к 28 м, крона — не шире Ø 26 м (рядом логово стеклоуста
 ## и огнецвет). Кончики мерцают волной снизу вверх: период 6 с, от нижних к верхним за 2 с, яркость 15…100 % (одна
-## формула здесь и в шейдере FlowerView). Столкновение корабля — `solid`, подключить — поток А.
+## формула здесь и в шейдере FlowerView). Громкий импульс сонара рядом гасит все кончики (`light`), подержав темноту,
+## цветок разгорается снова (#834, «читаемая встреча» у 01). Столкновение корабля — `solid`, подключить — поток А.
 
 const ID := "flower"
 ## Подножие на карте отмели (karta-otmeli-mesta.json, место 1) — та же точка, что Run.PLACES["flower"].
@@ -55,6 +56,14 @@ const GLOW_RATE := TAU / 6.0
 const GLOW_WAVE := GLOW_RATE * 2.0
 const GLOW_MID := 0.575
 const GLOW_AMP := 0.425
+## Импульс сонара ближе PING_R к середине кроны (на HEIGHT/2 над подножием) гасит кончики до DARK_LIGHT; темнота
+## держится DARK_HOLD с, потом свет возвращается за RELIGHT_TIME с (#834). Сообщение — не чаще MSG_CD с.
+const PING_R := 60.0
+const DARK_LIGHT := 0.1
+const DARK_HOLD := 4.0
+const RELIGHT_TIME := 20.0
+const MSG_CD := 60.0
+const MSG_DARK := "Каменный цветок гасит огни после импульса сонара — в тишине разгорится снова"
 
 
 ## Ветвь — усечённый конус от p0 (радиус r0) к p1 (r1); depth — ярус (0 — ствол).
@@ -92,6 +101,12 @@ var base := Vector3.ZERO
 var ground: Callable
 ## Зерно формы (SEED; своё — для подбора формы).
 var shape_seed := SEED
+## Доля света кончиков: 1 — горят (мерцают по glow), DARK_LIGHT — погасли после импульса.
+var light := 1.0
+## Секунд темноты до того, как свет начнёт возвращаться.
+var dark_t := 0.0
+## Секунд до следующего сообщения.
+var msg_cd := 0.0
 
 var _center: Vector2
 
@@ -104,7 +119,34 @@ func _init(center: Vector2 = CENTER) -> void:
 func reset(world: EcoWorld) -> void:
 	ground = world.ground
 	base = Vector3(_center.x, floor_y(_center.x, _center.y), _center.y)
+	light = 1.0
+	dark_t = 0.0
+	msg_cd = 0.0
 	_grow()
+
+
+## Середина кроны — от неё меряется громкость импульса.
+func heart() -> Vector3:
+	return base + Vector3(0, HEIGHT * 0.5, 0)
+
+
+func on_ping(world: EcoWorld, pos: Vector3) -> void:
+	if pos.distance_to(heart()) >= PING_R:
+		return
+	var was := light
+	light = DARK_LIGHT
+	dark_t = DARK_HOLD
+	if was > 0.5 and msg_cd <= 0.0:
+		msg_cd = MSG_CD
+		world.send(EcoLink.message(MSG_DARK))
+
+
+func step(_world: EcoWorld, dt: float) -> void:
+	msg_cd -= dt
+	if dark_t > 0.0:
+		dark_t -= dt
+		return
+	light = minf(1.0, light + dt * (1.0 - DARK_LIGHT) / RELIGHT_TIME)
 
 
 ## Дно под (x, z): мир передаёт Seabed.height; без него — −40 м.

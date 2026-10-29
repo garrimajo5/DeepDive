@@ -5,7 +5,7 @@ extends MeshInstance3D
 ## #63465C, в кроне #D06A94, поры — пятнами в шейдере (без дыр в сетке и без текстуры); кончики — вытянутые
 ## многогранники #FFD6EC, светятся только они и мерцают волной снизу вверх (EcoFlower.glow — в шейдере по TIME,
 ## фаза кончика — в UV.x, доля свечения — в альфе цвета). Цоколь — камни #245B70 и трубочки, матовые, без пор
-## (UV.y = 1). Без источника света: OmniLight в Compatibility перерисовал бы дно ещё раз. Слой отмели.
+## (UV.y = 1). Погасание после импульса (EcoFlower.light) — uniform light, отдаёт `sync`. Без источника света: OmniLight в Compatibility перерисовал бы дно ещё раз. Слой отмели.
 
 const SHADER := """
 shader_type spatial;
@@ -15,10 +15,11 @@ uniform vec3 body_glow : source_color;
 uniform float glow_mid;
 uniform float glow_amp;
 uniform float glow_rate;
+uniform float light = 1.0;
 varying float lit;
 varying vec3 wp;
 void vertex() {
-	lit = COLOR.a * (glow_mid + glow_amp * sin(TIME * glow_rate + UV.x));
+	lit = COLOR.a * light * (glow_mid + glow_amp * sin(TIME * glow_rate + UV.x));
 	wp = VERTEX;
 }
 void fragment() {
@@ -56,6 +57,9 @@ var flower: EcoFlower
 var verts := PackedVector3Array()
 var normals := PackedVector3Array()
 var tris := 0
+## Свет, отданный шейдеру (−1 — ещё не отдавали), и сколько раз отдавали.
+var shown_light := -1.0
+var uploads := 0
 
 var _col := PackedColorArray()
 var _uv := PackedVector2Array()
@@ -94,6 +98,17 @@ func _init(system: EcoFlower) -> void:
 	m.surface_set_material(0, mat)
 	mesh = m
 	tris = verts.size() / 3
+	sync()
+
+
+## Отдать шейдеру свет кончиков, если заметно изменился. true — отдали.
+func sync() -> bool:
+	if mesh == null or absf(flower.light - shown_light) < 0.01 and not (flower.light >= 1.0 and shown_light < 1.0):
+		return false
+	shown_light = flower.light
+	(mesh.surface_get_material(0) as ShaderMaterial).set_shader_parameter("light", shown_light)
+	uploads += 1
+	return true
 
 
 ## Краска ветви на высоте y: у дна #63465C, к кроне — #D06A94.
