@@ -501,6 +501,30 @@ func test_fps_settles_after_shot() -> void:
 	r.free()
 
 
+## Issue #1013: кадры сразу после шага «ship» (выгрузка мест в видеокарту после переноса через отмель) не попадают
+## в худший кадр — пишутся отдельно «после прыжка», а следующий провал виден как обычно.
+func test_worst_frame_skips_ship_jump() -> void:
+	var r := QaRunner.new()
+	var t := 1000000
+	r._measure(t)
+	r._jump = QaRunner.JUMP_FRAMES   # так ставит шаг «ship»
+	t += 180000                      # первая выгрузка места
+	r._measure(t)
+	for i in QaRunner.JUMP_FRAMES - 1:
+		t += 20000
+		r._measure(t)
+	eq(roundi(r.worst_ms), 0, "кадр после прыжка не худший кадр")
+	eq(roundi(r.jump_ms), 180, "он записан отдельно")
+	t += 90000                       # провал уже после прыжка
+	r._measure(t)
+	eq(roundi(r.worst_ms), 90, "провал после окна виден")
+	ok(r.worst_text().contains("худший кадр 90 мс") and r.worst_text().ends_with(" · после прыжка 180 мс"),
+		"оба в строке скриншота: " + r.worst_text())
+	r.after_shot()
+	eq(roundi(r.jump_ms), 0, "после снимка сброс")
+	r.free()
+
+
 func test_worst_frame_names_step() -> void:   # issue #217: в логе видно, на каком шаге худший кадр
 	var r := QaRunner.new()
 	r.script_q = QaScript.parse('[{"do": "wait", "s": 1}, {"do": "press", "what": "action"}, {"do": "wait", "s": 1}]')
