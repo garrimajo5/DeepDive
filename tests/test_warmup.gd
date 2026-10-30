@@ -137,6 +137,10 @@ func test_scene_warmup() -> void:
 		ok(main.power_panel.visible and main.power_panel.reactor != null, "пульт энергии рисуется под шторкой (#217)")
 		ok(main.route_card.visible and main.route_card.lines == Briefing.goal_lines() and not main.route_card.code.is_empty(),
 				"карточка у стола рисует цели слоя и «Связь» под шторкой — кегли в кэше шрифта (09c0-route-celi)")
+		var sm := main.ship_map_panel
+		ok(sm != null and sm.visible and sm.map != null and sm.alarm != null and false in sm.doors
+				and sm.marks.size() == Crew.Role.size(),
+				"схема корабля рисуется под шторкой с тревогой, закрытым люком и всеми ролями (29-shema)")
 		if main.warm.outside() >= 0:
 			outside += 1
 			ok(main.flyby_cam.current, "кадр снаружи — камера с борта")
@@ -164,6 +168,9 @@ func test_scene_warmup() -> void:
 	ok(not main.power_panel.visible, "пульт энергии снова скрыт")
 	ok(main.route_card.lines.is_empty() and main.route_card.code.is_empty() and not main.route_card.visible,
 			"карточка у стола снова пуста и скрыта")
+	ok(main.ship_map_panel != null and not main.ship_map_panel.visible and main.ship_map_panel.map == null,
+			"схема снова скрыта и пуста, узел остался — первое открытие его не строит")
+	ok(not main.ship_map.open, "настоящая схема не открыта")
 	ok(main.camera.current, "глаза на мостике")
 	ok(yaws.size() >= 6, "камера обошла круг: %s" % str(yaws.keys()))
 	ok(main.curtain == null, "шторка снята")

@@ -167,8 +167,7 @@ func map_show() -> void:
 	if main.ship_map_panel == null:
 		if not main.ship_map.open:
 			return
-		main.ship_map_panel = ShipMapPanel.new()
-		main.add_child(main.ship_map_panel)
+		_map_panel()
 	var marks: Array = []
 	for m: Crew.Member in main.crew:
 		marks.append([m.x, m.z, ShipMap.letter(m.role)])
@@ -177,3 +176,30 @@ func map_show() -> void:
 		doors.append(d.passable())
 	var a := ShipMap.alarm(AlarmBoard.main_field(main.alarms_on()), main.breach.active)
 	main.ship_map_panel.show_map(main.ship_map, marks, main.crew.find(main.me), doors, a)
+
+
+## Панель схемы: создаётся один раз — при прогреве или при первом открытии.
+func _map_panel() -> ShipMapPanel:
+	if main.ship_map_panel == null:
+		main.ship_map_panel = ShipMapPanel.new()
+		main.add_child(main.ship_map_panel)
+	return main.ship_map_panel
+
+
+## Прогрев (WarmRunner; отчёт тестера `29-shema` 295 мс при первом открытии, код 4 мс): панель схемы создаётся
+## под шторкой и рисует план с тревогой, закрытым люком и отметками всех ролей — узел, атлас значков и глифы всех
+## кеглей в кэше шрифта до первого «Схема корабля». on = false — снова скрыта и пуста.
+func warm_map(on: bool) -> void:
+	var panel := _map_panel()
+	if not on:
+		panel.show_map(null, [], -1, [], null)
+		return
+	var m := ShipMap.new()
+	m.open_from("pause")
+	var marks: Array = []
+	for r in Crew.Role.size():
+		marks.append([main.me.x + r * 1.5, main.me.z, ShipMap.letter(r)])
+	var doors: Array[bool] = []
+	for i in ShipLayout.DOOR_Z.size():
+		doors.append(i != 0)   # один люк закрыт — подпись «Люк закрыт»
+	panel.show_map(m, marks, 0, doors, ShipMap.alarm(AlarmBoard.Field.HEAT, null))
