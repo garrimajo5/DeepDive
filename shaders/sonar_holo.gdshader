@@ -4,7 +4,8 @@ shader_type spatial;
 render_mode unshaded, blend_add, cull_disabled, depth_draw_never, fog_disabled, shadows_disabled;
 
 uniform sampler2D map_tex : source_color, filter_linear, repeat_disable;
-uniform float map_size = 700.0;
+uniform vec2 map_origin = vec2(-350.0, -350.0);   // Sonar.MAP_RECT: угол карты рельефа, м мира
+uniform vec2 map_extent = vec2(1050.0, 700.0);    // и её размер
 uniform vec2 ship_xz = vec2(0.0);
 uniform float ship_yaw = 0.0;
 uniform float range_m = 110.0;
@@ -20,11 +21,13 @@ uniform float jam_time = 4.0; // Silt.JAM_TIME: столько держится 
 uniform float time = 0.0;
 uniform vec2 wp_xz = vec2(0.0);  // точка маршрута (Run.waypoint), x, z мира
 uniform float wp_on = 0.0;
-// брифинг (Briefing, ART-016): карта всей отмели над столом, места и маршруты; brief_k — доля перехода 0…1
+// брифинг (Briefing, ART-016): карта всей отмели и склона за восточным краем (#829) над столом, места и маршруты; brief_k — доля перехода 0…1
 uniform float dim = 0.0;      // голосование над столом: рельеф гаснет (VoteHolo.DIM_SONAR)
 uniform float brief_k = 0.0;
 uniform float brief_scale = 0.0016143;  // Briefing.SCALE: м стола на м мира
 uniform float brief_side = 1.13;
+uniform float east_scale = 0.000514;            // Briefing.EAST_SCALE: склон за восточным краем — сжатый масштаб
+uniform vec4 east_rect = vec4(0.565, 0.0969, 0.745, 0.5489);   // Briefing.east_rect(): x0, z0, x1, z1 стола
 uniform vec4 segs[16];        // концы отрезков маршрутов на столе: a.x, a.z, b.x, b.z (м)
 uniform vec2 seg_info[16];    // индекс маршрута, путь от начала маршрута до a (м)
 uniform int seg_count = 0;
@@ -47,12 +50,20 @@ vec3 briefing(vec2 lm, float c, float s) {
 	vec3 pick = vec3(0.835, 0.894, 0.910);   // #D5E4E8
 	vec3 col = vec3(0.004, 0.035, 0.047);
 	float half_side = brief_side * 0.5;
-	if (abs(lm.x) < half_side && abs(lm.y) < half_side)
-		col = texture(map_tex, lm / brief_scale / map_size + 0.5).rgb * 0.26;
-	float edge = max(abs(lm.x), abs(lm.y));
-	col += soft * 0.22 * step(abs(edge - half_side), 0.003);
+	// карта — квадрат отмели и полоса склона за его ближним краем (Briefing.east_rect); рамка — по их общему контуру
+	vec2 ec = (east_rect.xy + east_rect.zw) * 0.5, eh = (east_rect.zw - east_rect.xy) * 0.5;
+	vec2 ds = abs(lm) - vec2(half_side), de = abs(lm - ec) - eh;
+	float edge = min(max(ds.x, ds.y), max(de.x, de.y));   // < 0 — внутри карты, 0 — рамка
+	if (edge < 0.0) {
+		vec2 w = lm / brief_scale;   // двойник Briefing.world_xz
+		if (lm.x > half_side)
+			w.x = half_side / brief_scale + (lm.x - half_side) / east_scale;
+		col = texture(map_tex, (w - map_origin) / map_extent).rgb * 0.26;
+		col += soft * 0.08 * step(abs(lm.x - half_side), 0.002) * step(0.0, -max(de.x, de.y));   // шов масштаба
+	}
+	col += soft * 0.22 * step(abs(edge), 0.003);
 	float scan = fract(time * 0.22) * half_side * 1.42;   // сканирующее кольцо
-	col += holo * 0.14 * step(abs(length(lm) - scan), 0.004) * step(edge, half_side);
+	col += holo * 0.14 * step(abs(length(lm) - scan), 0.004) * step(edge, 0.0);
 	for (int i = 0; i < 16; i++) {
 		if (i >= seg_count) break;
 		vec2 a = segs[i].xy, b = segs[i].zw;
@@ -105,7 +116,7 @@ void fragment() {
 	float c = cos(ship_yaw), s = sin(ship_yaw);
 	vec2 w = ship_xz + vec2(l.x * c + l.y * s, -l.x * s + l.y * c);
 	vec3 col = vec3(0.008, 0.07, 0.094);
-	vec2 uv = w / map_size + 0.5;
+	vec2 uv = (w - map_origin) / map_extent;
 	if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0)
 		col = texture(map_tex, uv).rgb * 0.45 * (0.3 + 0.7 * max(0.0, 1.0 - ping_age / 12.0));
 	vec3 teal = vec3(0.37, 0.95, 0.84);
