@@ -9,6 +9,8 @@ extends RefCounted
 ## пересылки у `Main`.
 
 var main: Main
+## Свои знания слоя до входа гостем (#823, часть 4): кадры хоста ставят его знания, `leave_net` возвращает свои.
+var own_lore: Array = []
 
 
 func _init(m: Main) -> void:
@@ -158,6 +160,9 @@ func join_game(to: String, port: int = NetLink.PORT, player: String = "", role: 
 
 ## Стать клиентом хоста: c уже подключается (`join_game`) или на борту (экран адреса ART-039).
 func enter_client(c: NetLink.Client) -> void:
+	main.save.flush(main.samples, main.scanner)   # своё несохранённое — в файл до кадров хоста
+	main.save.guest = true   # сохраняет хост (#823): кампания гостя не перетирается кадрами хоста
+	own_lore = main.lore.snapshot()
 	main.net_client = c
 	main.net_seq = -1
 	main.net_news = 0
@@ -365,11 +370,11 @@ func drop_taps(taps: Array[Vector2]) -> void:
 		match main.drop.press(main.drop.hit(p, main.get_viewport().get_visible_rect().size)):
 			"rejoin":
 				main.net_client.rejoin(NetDrop.WINDOW)
-			"solo":   # перенос забега в соло не сделан — новый одиночный забег
+			"solo":   # перенос забега в соло не сделан — своя кампания с последнего сохранения (#823)
 				leave_net()
 				if main.me.pilot.seated:
 					main.me.stand()
-				main._restart()
+				main._load_last()
 			"menu":   # «В меню» (ART-043): сетевой забег покинут, главное меню ART-037
 				leave_net()
 				main.menu_flow.to_menu()
@@ -383,6 +388,8 @@ func leave_net() -> void:
 	main.net_client.stop()
 	main.net_client = null
 	main.tutorial_guest = null
+	main.save.guest = false   # снова своя кампания: свои знания вместо пришедших от хоста (#823)
+	main.lore.apply(own_lore)
 	main.wreck.reset()   # шторка хоста — не своя: одиночный забег без неё
 	main._wreck_show()
 	main.trip.follow(-1.0)   # и шторка ухода к лесу (#828)

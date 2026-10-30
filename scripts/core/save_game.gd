@@ -38,6 +38,9 @@ var ship := {}                      ## корабль из файла или п�
 ## Корабль в игре — тот, что сохраняем (забег идёт). false — главное меню: корабль у начала спуска не перетирает
 ## сохранённое место, запись берёт прочитанный `ship` («Продолжить», #823).
 var live := true
+## Гость сетевого забега (#823, часть 4): сохраняет хост, у гостя запись выключена — корабль, знания и всё, что пришло
+## кадрами хоста, не перетирают его собственную кампанию. Ставит `NetGame.enter_client`, снимает `leave_net`.
+var guest := false
 
 
 ## Снимок того, что сохраняется.
@@ -171,7 +174,7 @@ func flush(samples: Samples, scanner: Scanner = null) -> void:
 func save(samples: Samples, scanner: Scanner = null) -> bool:
 	dirty = false
 	timer = 0.0
-	if not enabled():
+	if not enabled() or guest:
 		return false
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
