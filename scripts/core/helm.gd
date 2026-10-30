@@ -57,7 +57,7 @@ class Ship:
 	const EAST_END := 640.0    ## и не дальше этого x — у восточной стены котловины
 	const CLEARANCE := 3.0     ## над дном
 	const RUB_GAP := 0.15      ## м над нижним пределом — ещё трёмся о дно (rub)
-	const START := Vector3(0.0, -20.0, 95.0)
+	const START := Vector3(0.0, -30.0, 95.0)  ## место 00 `LayerMap` на 30 м (#827)
 
 	var pos := START
 	var yaw := 0.0

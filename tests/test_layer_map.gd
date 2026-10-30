@@ -71,3 +71,10 @@ func test_descent_on_slope() -> void:
 	var size := Vector2(1600, 720)
 	var c := Journal.place_center("descent", size)
 	ok(c.x > Journal.place_center("drop", size).x, "в журнале 10 правее Края отмели")
+
+
+func test_start_depth_is_point_00() -> void:
+	# корабль начинает слой у места 00 на 30 м (#827): та же точка, что на карте, и дно под ней с запасом
+	near(Helm.Ship.START.distance_to(LayerMap.at("00")), 0.0, 1e-6, "старт — место 00")
+	var h := Seabed.height(Helm.Ship.START.x, Helm.Ship.START.z)
+	ok(h <= Helm.Ship.START.y - Helm.Ship.CLEARANCE - 3.0, "дно под стартом %.1f — ниже корабля с запасом" % h)
