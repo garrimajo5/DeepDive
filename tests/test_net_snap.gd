@@ -295,3 +295,43 @@ func test_scorch_marks_reach_guest() -> void:   # следы разрядов у
 	ok(g.all.is_empty() and g.count == 0, "у гостя чистое дно")
 	ok(not NetSnap.apply_scorch(PackedFloat32Array([1.0, 2.0]), g, 0.0), "битый пакет не трогает")
 	ok(not NetSnap.apply_scorch(null, g, 0.0), "нет поля — не трогает")
+
+
+func _flat(_x: float, _z: float) -> float:
+	return -60.0
+
+
+## Трюм и изученные виды хоста (#823, часть 5): у гостя тот же груз, поднятые со дна, виды и наблюдения.
+func test_hold_round_trip() -> void:
+	var hs := Samples.new(_flat)
+	var hsc := Scanner.new()
+	hs.restore([1], [[hs.all[3].kind, 3], [0, -1]])
+	hsc.restore(["fish", "pred"], {"fish": ["flee"]})
+	var h := NetSnap.hold(hs, hsc)
+	ok(NetSnap.bytes(h) < 4000, "сообщение небольшое")
+	var gs := Samples.new(_flat)
+	var gsc := Scanner.new()
+	gs.restore([5], [])
+	gsc.restore(["moss"])
+	var key := NetSnap.hold_key(gs, gsc)
+	ok(NetSnap.apply_hold(bytes_to_var(var_to_bytes(h)), gs, gsc), "принято")
+	eq(gs.cargo, [[hs.all[3].kind, 3], [0, -1]], "груз хоста")
+	eq(gs.got.keys().size(), 2, "поднятые хоста: 1 и 3")
+	ok(gs.got.has(1) and gs.got.has(3) and not gs.got.has(5), "своего поднятого нет")
+	ok(gs.all[3].taken and not gs.all[5].taken, "на дне — как у хоста")
+	eq(gsc.list(), hsc.list(), "виды хоста")
+	eq(Array(gsc.seen_of("fish")), ["flee"], "наблюдения хоста")
+	ok(NetSnap.hold_key(gs, gsc) != key, "экраны трюма и лаборатории пересчитаются")
+
+
+func test_hold_empty_or_bad_ignored() -> void:   # нового нет ({}) или испорченный пакет — трюм гостя не тронут
+	var s := Samples.new(_flat)
+	var sc := Scanner.new()
+	s.restore([], [[0, -1]])
+	sc.restore(["fish"])
+	ok(not NetSnap.apply_hold({}, s, sc), "пусто — мимо")
+	ok(not NetSnap.apply_hold("мусор", s, sc), "не словарь — мимо")
+	eq(s.cargo.size(), 1, "груз на месте")
+	ok(NetSnap.apply_hold({"g": "x", "c": 7, "s": [42, "нет-такого"], "n": []}, s, sc), "кривые поля")
+	eq(s.cargo.size(), 0, "кривой груз — пустой трюм, без ошибки")
+	eq(sc.list().size(), 0, "чужие ключи видов пропущены")
