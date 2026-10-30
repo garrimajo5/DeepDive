@@ -28,6 +28,10 @@ var _wear_loss := -1.0
 var _screens := Vector4(-1.0, -1.0, -1.0, -1.0)
 var _surfaces: Array[ShaderMaterial] = []
 const SCANNER_TEXT := Color("67DDEB")
+## Ширина строк экрана сканера, px подписи: видимое стекло в рамке модели уже `SCANNER_SCREEN_SIZE` — строка шире
+## ложится на светящуюся рамку (отчёт тестера 30.10, «Обратный ход: неисправен» в 34 px — 472 px), длинные переносятся.
+const SCANNER_TEXT_W := 420.0
+const SCANNER_FONT := 30
 var scanner_text: Label3D          ## экран сканера биолога (Scanner.screen_lines)
 
 
@@ -198,7 +202,7 @@ func _add_scanner_screen() -> void:
 	scanner_text = Label3D.new()
 	scanner_text.name = "Экран сканера"
 	scanner_text.layers = OceanView.LAYER_SHIP
-	scanner_text.font_size = 34
+	scanner_text.font_size = SCANNER_FONT
 	scanner_text.outline_size = 0
 	scanner_text.pixel_size = 0.0014
 	scanner_text.modulate = SCANNER_TEXT
@@ -206,7 +210,7 @@ func _add_scanner_screen() -> void:
 	scanner_text.double_sided = true   # материал общий с подписями голограммы (issue #159)
 	scanner_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	scanner_text.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	scanner_text.width = BridgeProps.SCANNER_SCREEN_SIZE.x / scanner_text.pixel_size - 30.0
+	scanner_text.width = SCANNER_TEXT_W
 	scanner_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var top := BridgeProps.SCANNER_SCREEN + Vector3(-0.005, BridgeProps.SCANNER_SCREEN_SIZE.y / 2.0 - 0.12, 0.0)
 	scanner_text.transform = Transform3D(Basis(Vector3(0, 0, 1), Vector3.UP, Vector3(-1, 0, 0)), top)
