@@ -100,6 +100,8 @@ var fringe: EcoFringe
 ## Край отмели (место 6, ART-032): скальные клинья вдоль бровки, шрам оползня с осыпью, трещины на площадке.
 var drop: EcoDrop
 var drop_view: DropView
+## Купольник у террасы врат 07 (#837): рабочий Хранителя открывает створку гнезда; вид — по модели MOD-022.
+var dome: EcoDome
 ## Эхоловец (ART-007): засадчик с ушами-воронками лежит у Костей левиафана, уши поворачивает на корабль,
 ## затаившегося выдаёт только импульс сонара.
 var echo: EcoEcho
@@ -205,6 +207,7 @@ func _init() -> void:
 	add_child(moth_view)
 	fringe = world.add(EcoFringe.new()) as EcoFringe
 	drop = world.add(EcoDrop.new()) as EcoDrop
+	dome = world.add(EcoDome.new()) as EcoDome
 	echo = world.add(EcoEcho.new(bones, preds)) as EcoEcho
 	echo_view = EchoView.new(echo)
 	add_child(echo_view)
