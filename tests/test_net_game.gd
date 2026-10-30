@@ -90,3 +90,29 @@ func test_scene_guest_keeps_own_save() -> void:
 	near(main.helm.pos.x, 10.0, 0.01, "корабль на своём месте")
 	ok(main.save_now(), "запись снова идёт")
 	DirAccess.remove_absolute(SAVE_PATH)
+
+
+## Кооп в кампании (#823, часть 5): у гостя трюм и изученные виды хоста (полки, колбы, журнал лаборатории),
+## после ухода из сетевого забега — свои.
+func test_scene_guest_sees_host_hold() -> void:
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.samples.restore([], [[0, -1]])
+	main.scanner.restore(["fish"])
+	eq(main.join_game("127.0.0.1", PORT + 3), OK, "вошёл гостем")
+	var hs := Samples.new(main.samples._ground)
+	var hsc := Scanner.new()
+	hs.restore([], [[hs.all[2].kind, 2], [1, -1], [0, -1]])
+	hsc.restore(["fish", "pred"], {"pred": ["catch"]})
+	main.net_client._hold = NetSnap.hold(hs, hsc)   # как пришло от хоста (`Client.take_hold`)
+	main.step(DT)
+	eq(main.samples.cargo, hs.cargo, "в трюме гостя — груз хоста")
+	ok(main.samples.all[2].taken, "поднятый хостом камешек со дна у гостя убран")
+	eq(main.scanner.list(), hsc.list(), "изученные виды хоста")
+	main.step(DT)
+	eq(main.samples.cargo, hs.cargo, "второй шаг без сообщения — трюм тот же")
+	main.net_game.leave_net()
+	eq(main.samples.cargo, [[0, -1]], "связь кончилась — свой груз")
+	ok(not main.samples.all[2].taken, "и своё дно")
+	eq(main.scanner.list(), ["fish"], "и свои виды")

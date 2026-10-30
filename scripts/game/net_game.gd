@@ -11,6 +11,10 @@ extends RefCounted
 var main: Main
 ## Свои знания слоя до входа гостем (#823, часть 4): кадры хоста ставят его знания, `leave_net` возвращает свои.
 var own_lore: Array = []
+## Свои трюм и виды до входа гостем (#823, часть 5): гость видит трюм и виды хоста, `leave_net` возвращает свои.
+var own_hold := {}
+## Хост: ключ трюма и видов, уже отправленных гостям (`NetSnap.hold_key`); [] — отправить снова.
+var hold_sent: Array = []
 
 
 func _init(m: Main) -> void:
@@ -51,6 +55,7 @@ func net_poll(dt: float = 0.0) -> void:
 	for e: Dictionary in main.net_host.poll(dt):
 		var g: NetLink.Guest = e["guest"]
 		if e["k"] == "join":
+			hold_sent = []   # подключившемуся — трюм и виды хоста следующим кадром
 			var m := seat_guest(g)
 			if MateGhost.forget(main.ghosts, m.name):   # вернулся — прежняя фигура уходит, встаёт новая
 				ghosts_step(0.0, true)
@@ -131,6 +136,10 @@ func net_send(dt: float) -> void:
 		f["eco"] = EcoLink.pack_world(main.eco.world.agents, main.eco.world.systems, main.helm.pos, EcoLink.NET_R,
 			main.eco.world.time)   # существа и мох рядом — гостям отдельным пакетом
 		main.net_host.send_frame(f)
+		var key := NetSnap.hold_key(main.samples, main.scanner)
+		if key != hold_sent:   # трюм и виды — надёжно и только при изменении: в кадр они не влезут (#823)
+			hold_sent = key
+			main.net_host.send_hold(NetSnap.hold(main.samples, main.scanner))
 
 
 ## Маршрут, голосование и итог для гостей (NetSnap.run_state): мнения ролей — по кораблю сейчас; метки — голоса
@@ -163,6 +172,7 @@ func enter_client(c: NetLink.Client) -> void:
 	main.save.flush(main.samples, main.scanner)   # своё несохранённое — в файл до кадров хоста
 	main.save.guest = true   # сохраняет хост (#823): кампания гостя не перетирается кадрами хоста
 	own_lore = main.lore.snapshot()
+	own_hold = NetSnap.hold(main.samples, main.scanner)
 	main.net_client = c
 	main.net_seq = -1
 	main.net_news = 0
@@ -207,6 +217,7 @@ func client_step(dt: float) -> void:
 	var was := main.net_client.state
 	main.net_client.send_pad(main.net_pad)
 	var f := main.net_client.poll(dt)
+	NetSnap.apply_hold(main.net_client.take_hold() if main.net_client else {}, main.samples, main.scanner)
 	if not f.is_empty():
 		client_frame(f)
 		main.drop.restored()   # хост принял снова и кадр применён — управление вернулось
@@ -390,6 +401,7 @@ func leave_net() -> void:
 	main.tutorial_guest = null
 	main.save.guest = false   # снова своя кампания: свои знания вместо пришедших от хоста (#823)
 	main.lore.apply(own_lore)
+	NetSnap.apply_hold(own_hold, main.samples, main.scanner)   # и свои трюм и виды вместо хозяйских
 	main.wreck.reset()   # шторка хоста — не своя: одиночный забег без неё
 	main._wreck_show()
 	main.trip.follow(-1.0)   # и шторка ухода к лесу (#828)

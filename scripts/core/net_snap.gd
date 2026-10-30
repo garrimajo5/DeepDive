@@ -5,7 +5,7 @@ class_name NetSnap
 
 const SEND_DT := 0.05          ## хост шлёт кадр 20 раз в секунду
 const MAX_BYTES := 1200        ## кадр с четырьмя членами экипажа влезает в один UDP-пакет (MTU 1280 с запасом)
-const VERSION := 15            ## формат кадра и ввода; клиент другой версии не подключается (15 — канал голоса `NetLink.CH_VOICE`)
+const VERSION := 16            ## формат кадра и ввода; клиент другой версии не подключается (16 — трюм и виды хоста `hold`, #823)
 const NEWS_TIME := 1.0         ## сообщение события едет в кадрах столько секунд (20 кадров — потеря всех почти исключена)
 
 
@@ -340,6 +340,36 @@ static func _nan_pad(a: Array, n: int) -> PackedFloat32Array:
 
 static func _from_nan(f: PackedFloat32Array) -> Array:
 	return [] if is_nan(f[0]) else Array(f)
+
+
+## Трюм и изученные виды хоста для гостей (#823, часть 5): груз, поднятые со дна, виды и наблюдения — как в
+## сохранении. Едет не в кадре (не влезет в UDP-пакет), а надёжным сообщением `Host.send_hold` при изменении.
+static func hold(samples: Samples, scanner: Scanner) -> Dictionary:
+	var got: Array = samples.got.keys()
+	got.sort()
+	var seen := {}
+	for id: String in scanner.seen:
+		seen[id] = Array(scanner.seen_of(id))
+	return {"g": got, "c": samples.cargo.duplicate(true), "s": Array(scanner.list()), "n": seen}
+
+
+## Ключ того, что лежит в `hold`: хост шлёт снова, только когда он сменился.
+static func hold_key(samples: Samples, scanner: Scanner) -> Array:
+	return [samples.cargo_rev, scanner.rev]
+
+
+## Поставить трюм и виды из `hold` (проверки — в `Samples.restore`/`Scanner.restore`); false — не словарь или
+## пустой (нового нет — `Client.take_hold`), ничего не тронуто.
+static func apply_hold(h: Variant, samples: Samples, scanner: Scanner) -> bool:
+	if not (h is Dictionary) or (h as Dictionary).is_empty():
+		return false
+	var g: Variant = h.get("g", [])
+	var c: Variant = h.get("c", [])
+	var sp: Variant = h.get("s", [])
+	var n: Variant = h.get("n", {})
+	samples.restore(g if g is Array else [], c if c is Array else [])
+	scanner.restore(sp if sp is Array else [], n if n is Dictionary else {})
+	return true
 
 
 ## Размер кадра в байтах, как он уйдёт по сети.

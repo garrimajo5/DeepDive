@@ -206,6 +206,14 @@ class Host:
 		for g: Guest in guests.values():
 			NetLink._put(peer, g.id, NetLink.CH_CTRL, true, {"k": "room", "r": room})
 
+	## Трюм и изученные виды хоста (`NetSnap.hold`, #823) гостям на палубе — надёжно; to — одному гостю (peer id).
+	func send_hold(h: Dictionary, to: int = 0) -> void:
+		if peer == null:
+			return
+		for g: Guest in guests.values():
+			if g.index >= 0 and (to == 0 or g.id == to):
+				NetLink._put(peer, g.id, NetLink.CH_CTRL, true, {"k": "hold", "h": h})
+
 	## Ответ гостю id на его запрос комнаты q: why "" — принят, "taken" — роль занята (`Lobby.act`).
 	func answer(id: int, q: String, why: String) -> void:
 		if peer and guests.has(id):
@@ -274,6 +282,7 @@ class Client:
 	var _eco := PackedFloat32Array()   ## существа рядом, пришедшие отдельным пакетом, — к следующему кадру («eco»)
 	var _eco_seq := -1
 	var _room := {}        ## снимок комнаты сбора экипажа, ещё не отданный (`take_room`)
+	var _hold := {}        ## трюм и виды хоста, ещё не отданные (`take_hold`, #823)
 	var _answers: Array = []   ## ответы хоста на свои запросы комнаты [[q, why], …] (`take_answers`)
 	var _voice: Array = []     ## голос товарищей [[место в экипаже, пакет], …] (`take_voice`)
 
@@ -308,6 +317,7 @@ class Client:
 		_eco = PackedFloat32Array()
 		_eco_seq = -1
 		_room = {}
+		_hold = {}
 		_answers.clear()
 		_voice.clear()
 		peer.peer_connected.connect(func(pid: int) -> void:
@@ -362,6 +372,9 @@ class Client:
 					if state == NetLink.State.JOINED and msg.get("r") is Dictionary:
 						_room = msg["r"]
 						quiet = 0.0
+				"hold":   # трюм и виды хоста (`NetSnap.hold`) — полное состояние, важен последний
+					if state == NetLink.State.JOINED and msg.get("h") is Dictionary:
+						_hold = msg["h"]
 				"ans":
 					if state == NetLink.State.JOINED:
 						_answers.append([str(msg.get("q", "")), str(msg.get("why", ""))])
@@ -416,6 +429,12 @@ class Client:
 		var r := _room
 		_room = {}
 		return r
+
+	## Свежие трюм и виды хоста ({} — нового нет); отдаются один раз.
+	func take_hold() -> Dictionary:
+		var h := _hold
+		_hold = {}
+		return h
 
 	## Ответы хоста на свои запросы с прошлого вызова: [[q, why], …].
 	func take_answers() -> Array:
