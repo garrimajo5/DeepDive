@@ -27,6 +27,11 @@ const SCAN_R := 1.6
 ## Огнёвки догоняют своё место с долей dt·3 (lerp), кружат с частотой 0,8 рад/с.
 const FOLLOW := 3.0
 const SPIN := 0.8
+## Нос рачка `Shrimp.dir` догоняет ход долей угла LOOK_K в секунду, не быстрее LOOK_MAX рад/с (`turn`, Б3):
+## смена цели (станция → хищник на чистке → веерник) разворачивает рачка за ~0,4 с, а не за шаг; почти стоит —
+## держит курс (раньше нос щёлкал на касательную круга).
+const LOOK_K := 10.0
+const LOOK_MAX := 8.0
 
 
 ## Одна огнёвка: станция, фаза, радиус круга и высота над вершиной.
@@ -82,6 +87,7 @@ func reset(world: EcoWorld) -> void:
 			s.r = _rnd.range_f(0.6, 1.6)
 			s.h = _rnd.range_f(-0.6, 0.8)
 			s.p = st.top
+			s.dir = _tangent(s.phase)
 			shrimp.append(s)
 
 
@@ -133,8 +139,7 @@ func step(world: EcoWorld, dt: float) -> void:
 			goal = st.top + Vector3(cos(a) * s.r, s.h + sin(t * 3 + s.phase) * 0.15, sin(a) * s.r)
 		var was := s.p
 		s.p = s.p.lerp(goal, minf(1.0, sdt * FOLLOW))
-		var d := s.p - was
-		s.dir = d.normalized() if d.length_squared() > 1e-8 else Vector3(cos(a + PI / 2), 0, sin(a + PI / 2))
+		s.dir = turn(s.dir, s.p - was, sdt)
 	fan_cd -= dt
 	if fans and fan_cd <= 0.0:
 		for st in leeches.stations:
@@ -143,6 +148,27 @@ func step(world: EcoWorld, dt: float) -> void:
 				fan_cd = FAN_CD
 				world.emit(EcoFan.ID, "ognevka", f.top, _fan_text(world))
 				break
+
+
+## Нос from → по ходу move: доля угла LOOK_K·dt, не больше LOOK_MAX·dt; хода нет — держит курс.
+static func turn(from: Vector3, move: Vector3, dt: float) -> Vector3:
+	if move.length_squared() < 1e-10:
+		return from
+	var want := move.normalized()
+	if from.length_squared() < 1e-8:
+		return want
+	var ang := from.angle_to(want)
+	if ang < 1e-4:
+		return want
+	var axis := from.cross(want)
+	if axis.length_squared() < 1e-10:
+		axis = Vector3.UP if absf(from.y) < 0.9 else Vector3.RIGHT
+	return from.rotated(axis.normalized(), minf(ang * minf(1.0, LOOK_K * dt), LOOK_MAX * dt)).normalized()
+
+
+## Касательная круга над вершиной при фазе a (первый курс рачка).
+static func _tangent(a: float) -> Vector3:
+	return Vector3(cos(a + PI / 2), 0, sin(a + PI / 2))
 
 
 ## Станции видны сканеру (огнёвки 8 см — сонару нет).

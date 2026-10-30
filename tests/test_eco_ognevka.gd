@@ -74,6 +74,45 @@ func test_ten_shrimp_per_station() -> void:
 	eq(og.shrimp[0].p, tops[0], "снова на вершине")
 
 
+## Б3: нос рачка догоняет ход, а не прыгает за шаг; почти стоит — держит курс (раньше щёлкал на касательную).
+func test_nose_turns_smoothly() -> void:
+	var top := Vector3(0, -36, 0)
+	var tops: Array[Vector3] = [top]
+	var w := _world(tops)
+	var og := _sys(w, EcoOgnevka) as EcoOgnevka
+	_calm(_sys(w, EcoPred) as EcoPred)
+	for s in og.shrimp:
+		near(s.dir.length(), 1.0, 1e-4, "курс задан с начала")
+		near(s.dir.y, 0.0, 1e-4, "первый курс — по кругу над вершиной")
+	_run(w, 3.0)
+	var was: Array[Vector3] = []
+	var pos: Array[Vector3] = []
+	for s in og.shrimp:
+		s.dir = -s.dir  # развернули носом против хода
+		was.append(s.dir)
+		pos.append(s.p)
+	w.step(EcoWorld.MAX_STEP)
+	w.step(EcoWorld.MAX_STEP)
+	var cap := EcoOgnevka.LOOK_MAX * EcoWorld.MAX_STEP * 2.0 + 1e-3
+	for k in og.shrimp.size():
+		var s := og.shrimp[k]
+		ok(s.dir.angle_to(was[k]) <= cap, "за шаг рачка нос повернул на %.2f рад (не больше %.2f)" % [s.dir.angle_to(was[k]), cap])
+		near(s.dir.length(), 1.0, 1e-4)
+	_run(w, 1.5)
+	for k in og.shrimp.size():
+		var s := og.shrimp[k]
+		var p0 := s.p
+		w.step(EcoWorld.MAX_STEP)
+		w.step(EcoWorld.MAX_STEP)
+		var mv := s.p - p0
+		if mv.length() > 1e-3:
+			ok(s.dir.angle_to(mv) < 0.35, "через 1,5 с нос по ходу: %.2f рад" % s.dir.angle_to(mv))
+	var d := Vector3(0, 0, -1)
+	eq(EcoOgnevka.turn(d, Vector3.ZERO, 0.1), d, "хода нет — курс тот же")
+	near(EcoOgnevka.turn(d, Vector3(0, 0, 1), 0.1).angle_to(d), EcoOgnevka.LOOK_MAX * 0.1, 1e-4,
+		"навстречу — разворот не быстрее LOOK_MAX")
+
+
 func test_shrimp_swarm_pred_on_cleaning() -> void:
 	var top := Vector3(0, -36, 0)
 	var tops: Array[Vector3] = [top]
