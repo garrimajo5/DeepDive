@@ -200,6 +200,12 @@ func _draw_map(font: Font, size: Vector2, s: float, l: float) -> void:
 	for i in range(1, 5):
 		var y := map.position.y + map.size.y * i / 5.0
 		draw.draw_line(Vector2(map.position.x + 12.0 * s, y), Vector2(map.end.x - 12.0 * s, y), grid, maxf(1.0, 1.5 * s))
+	var east := Journal.east_rect(size)   # склон за восточным краем (#829) — сжатая полоса, как на голостоле
+	draw.draw_rect(east.grow_individual(0.0, -2.0 * s, 0.0, -2.0 * s), Color(Journal.EDGE, 0.12))
+	draw.draw_line(east.position + Vector2(0.0, 12.0 * s), Vector2(east.position.x, east.end.y - 12.0 * s),
+		Color(Journal.EDGE, 0.7), maxf(1.0, 2.0 * s))
+	UiStyle.text(draw, font, Journal.SLOPE, east.position + Vector2(0.0, 14.0 * s), Journal.SLOPE_PX * s, Journal.SOFT,
+		east.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 	if Journal.border_shown(lore):   # пояс поля замечен у 08 — тонкая подпись, не стена (#829)
 		var br := Journal.border_rect(size)
 		UiStyle.text(draw, font, Journal.BORDER, br.position, Journal.BORDER_PX * s, Journal.SOFT, br.size.x,

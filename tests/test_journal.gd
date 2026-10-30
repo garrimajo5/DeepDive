@@ -24,16 +24,13 @@ func test_layout_by_mockup() -> void:
 	eq(Journal.back_rect(SIZE), Rect2(1740, 52, 300, 112), "«Назад» у правого края контента")
 	eq(Journal.map_rect(SIZE), Rect2(360, 270, 730, 570), "карта")
 	var c := Journal.place_center("drop", SIZE)   # рядом никого — не раздвинута
-	ok(c.is_equal_approx(Vector2(360 + 360 + 0.95 * 215.0, 555 + 0.95 * 90.0)), "u = L + 360 + 0,95·x, v = 555 + 0,95·z")
+	ok(c.is_equal_approx(Vector2(360 + 290 + 0.95 * 215.0, 555 + 0.95 * 90.0)), "u = L + 290 + 0,95·x, v = 555 + 0,95·z")
 	var map := Journal.map_rect(SIZE)
 	eq(Run.PLACES.size(), 11, "на карте все 11 мест слоя 1 (#829)")
 	for k: String in Run.PLACES:
 		var r := Journal.place_rect(k, SIZE)
 		ok(map.encloses(r), "%s — кнопка целиком на карте" % k)
-		var true_at := Vector2(360, 0) + Journal.MAP_CENTER + Run.place_xz(k) * Journal.PX_PER_M
-		# место за краем карты (10 на склоне, #822) — у края карты со своей стороны
-		var inset := Vector2.ONE * (Journal.PLACE_BUTTON * 0.5 + Journal.PLACE_GAP)
-		true_at = true_at.clamp(map.position + inset, map.end - inset)
+		var true_at := Vector2(360, 0) + Journal.map_point(Run.place_xz(k))
 		ok(r.get_center().distance_to(true_at) < Journal.PLACE_BUTTON * 0.5,
 			"%s — кнопка раздвинута не дальше полукнопки от своей точки" % k)
 		ok(r.size.x >= 96.0, "кнопка места ≥ 96 px")
@@ -54,7 +51,8 @@ func test_border_label_at_08() -> void:
 		var br := Journal.border_rect(size)
 		ok(Journal.map_rect(size).encloses(br), "%s: подпись на карте" % size)
 		var b := Journal.place_rect("field", size)
-		ok(br.position.y >= b.end.y and absf(br.get_center().x - b.get_center().x) < 1.0, "%s: под кнопкой 08" % size)
+		ok(br.position.y >= b.end.y and br.position.x <= b.get_center().x and br.end.x >= b.get_center().x,
+			"%s: под кнопкой 08" % size)
 		for k: String in Run.PLACES:
 			ok(not br.intersects(Journal.place_rect(k, size)), "%s: подпись не на кнопке %s" % [size, k])
 
@@ -277,3 +275,16 @@ func test_scene_card_from_grid() -> void:
 	ok(main.logbook.open and main.logbook.card == "", "«Назад» — сначала карточка")
 	main.back_pressed()
 	ok(not main.logbook.open and main.main_menu.open, "потом журнал")
+
+
+func test_slope_band_holds_place_10() -> void:   # #829: склон за восточным краем — сжатая полоса, 10 на ней, не у края
+	var band := Journal.east_rect(SIZE)
+	var map := Journal.map_rect(SIZE)
+	ok(map.encloses(band), "полоса склона — внутри карты")
+	near(band.position.x, 360 + 290 + 0.95 * 350.0, 1e-3, "начинается у восточного края отмели (350 м)")
+	near(band.size.x, 350.0 * Journal.EAST_PX, 1e-3, "350 м склона в сжатом масштабе")
+	var c := Journal.place_center("descent", SIZE)
+	var want := Vector2(360, 0) + Journal.map_point(LayerMap.xz("10"))
+	ok(c.distance_to(want) < 1.0, "10 — на своей точке склона, не прижато к краю")
+	ok(band.has_point(c), "10 — на полосе склона")
+	near(Journal.map_point(Vector2(350.0, 0.0)).x, Journal.map_point(Vector2(350.001, 0.0)).x, 0.01, "без скачка на краю")
