@@ -187,3 +187,40 @@ func test_scene_world_sub_parts() -> void:
 		ok(w.has(k), "подчасть мира «%s»: %s" % [k, str(w.keys())])
 	main.queue_free()
 	await frames(1)
+
+
+## Issue #1020: «мир 113 [… ещё 43: 61]» — виновник или весь шаг разом медленнее. Худший кадр сравнивается
+## с обычным временем частей: долгая часть — «обычно N», подчасти — «×N».
+func test_usual_times() -> void:
+	var c := StepClock.new()
+	var t := 0
+	for i in StepClock.USUAL_FROM + 2:   # обычные шаги: мир 12 = EcoFish 3 + EcoKelp 2 + 4 модуля по 1 + 3 вне отметок
+		c.start(t, 1.0 / 30.0)
+		for p in [["EcoFish", 3], ["EcoKelp", 2], ["a", 1], ["b", 1], ["c", 1], ["d", 1]]:
+			t += int(p[1]) * 1000
+			c.lap("мир/" + p[0], t)
+		t += 3000
+		c.lap("мир", t)
+	ok(c.usual_ready(), "обычное время готово")
+	near(c.usual["мир"], 12.0, 1e-3, "обычный мир")
+	c.start(t, 1.0 / 30.0)   # всплеск: EcoFish ×10, прочие ×2
+	for p in [["EcoFish", 30], ["EcoKelp", 4], ["a", 2], ["b", 2], ["c", 2], ["d", 2]]:
+		t += int(p[1]) * 1000
+		c.lap("мир/" + p[0], t)
+	t += 3000
+	c.lap("мир", t)
+	c.start(t, 1.0 / 30.0)
+	eq(c.last_note(), "мир 45 (обычно 12) [EcoFish 30 ×10, EcoKelp 4 ×2, a 2 ×2, ещё 3: 6 ×2, без отметки 3]",
+		"всплеск — с обычным временем, виновник ×10 среди ×2")
+	near(c.usual["мир"], 12.0, 1e-3, "худший шаг ещё не в среднем — сравнивается не с собой")
+
+
+func test_usual_not_before_warm() -> void:
+	var c := StepClock.new()
+	c.start(0, 1.0 / 30.0)
+	c.lap("мир/EcoFish", 30000)
+	c.start(30000, 1.0 / 30.0)
+	eq(c.last_note(), "мир 30 [EcoFish 30]", "мало шагов — без «обычно»")
+	eq(StepClock.slower(5.0, 0.05), "", "обычное ~0 — подчасть по событию, без ×")
+	eq(StepClock.slower(3.0, 2.0), "", "меньше SLOW раз — без ×")
+	eq(StepClock.slower(9.0, 2.0), " ×5", "×N округляется")
