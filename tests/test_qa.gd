@@ -389,6 +389,7 @@ func test_sonar_card_shot_calm_and_clear() -> void:   # issue #882: укус х�
 	var mates: Array[Vector2] = []
 	var closed := false
 	var look := {}
+	var after: Array = []   # шаги между подходом к посту и снимком (#1018)
 	var shot := false
 	for st in steps:
 		if st["do"] == "mate" and st.has("x"):
@@ -400,10 +401,15 @@ func test_sonar_card_shot_calm_and_clear() -> void:   # issue #882: укус х�
 			closed = not bool(st.get("on", true))
 		if st["do"] == "goto":
 			look = st
+			after = []
+		elif not look.is_empty() and st["do"] != "shot":
+			after.append(st["do"])
 		if st["do"] == "shot" and st["name"] == "30-kartochka-sonar":
 			shot = true
 			break
 	ok(shot and not look.is_empty(), "снимок карточки после «Погрузиться» и подхода к посту")
+	ok(after.has("breach") and after.has("cards") and after.has("drain") and after.has("silt"),
+		"после подхода к посту — тревоги сняты и карточки с нуля: тревога по дороге не сворачивает карточку (#1018): %s" % [after])
 	ok(closed, "пробоина закрыта перед снимком — под тревогой карточка прячется")
 	var at := Vector2(float(look["x"]), float(look["z"]))
 	ok(Deck.can_stand(at.x, at.y), "на месте можно стоять")
