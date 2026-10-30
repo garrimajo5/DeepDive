@@ -128,5 +128,30 @@ func test_main_step_parts() -> void:
 	var subs: Array = main.clock.subs.get("интерфейс", {}).keys()
 	subs.sort()
 	eq(subs, ["карточка роли", "маршрут", "подсказки", "приборы", "рация", "связь"], "подчасти интерфейса")
+	var world: Dictionary = main.clock.subs.get("мир", {})   # #1020: модули и виды живого мира
+	ok(world.has("существа") and world.has("связь") and world.has("вид: рыбы, хищники") \
+		and world.has("вид: планктон, эхо, дальние"), "подчасти мира: %s" % [world.keys()])
+	ok(world.size() > 10, "модули мира по именам: %d" % world.size())
 	main.queue_free()
 	await frames(1)
+
+
+## Issue #1020: «мир 78» в худшем кадре не говорит, что внутри. Живой мир отмечает подчасти в идущем шаге
+## (`StepClock.active`), не зная `Main`: модуль мира по имени класса и существа.
+func test_world_marks_subparts() -> void:
+	var c := StepClock.new()
+	c.start(Time.get_ticks_usec())
+	ok(StepClock.active == c, "идущий шаг — последний start")
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float: return -40.0
+	w.ship.pos = Vector3(500, -10, 500)
+	w.add(EcoPred.new())
+	w.step(0.2)
+	c.lap("мир", Time.get_ticks_usec())
+	var of: Dictionary = c.subs.get("мир", {})
+	ok(of.has("существа"), "подчасть «существа» — шаг агентов")
+	ok(of.has("EcoPred"), "подчасть модуля по имени его класса")
+	ok(c.parts.has("мир") and not c.parts.has("EcoPred"), "подчасти идут в часть «мир», отдельной части нет")
+	StepClock.active = null
+	StepClock.mark("мир/ничего")   # без идущего шага — тихо
+	ok(not c.subs["мир"].has("ничего"), "без идущего шага отметка ничего не пишет")
