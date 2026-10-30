@@ -54,6 +54,24 @@ func show_card(k: float, route: int, cam: Camera3D, holo: Transform3D, word := "
 	queue_redraw()
 
 
+## Прогрев (WarmRunner, по отчёту `09c0-route-celi` 172 мс, отрисовка 82): под шторкой карточка рисует цели слоя
+## и страницу «Связь» — глифы всех её кеглей (26, 20, 36, 18) попадают в кэш шрифта до первого показа у стола.
+## on = false — снова пусто, первый настоящий показ перерисует.
+func warm(on: bool) -> void:
+	if on:
+		lines = Briefing.goal_lines()
+		code = Briefing.code_lines("ПРИМЕР")
+		rect = Rect2(Vector2(40, 40), card_size(lines, code))
+		alpha = 1.0
+	else:
+		lines = []
+		code = []
+		rect = Rect2()
+		alpha = 0.0
+		visible = false
+	queue_redraw()
+
+
 ## Прямоугольник карты брифинга с подписями на экране; угол за камерой — пусто (карточка встанет по точке привязки).
 static func map_rect(cam: Camera3D, holo: Transform3D) -> Rect2:
 	var r := Rect2()
