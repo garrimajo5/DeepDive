@@ -100,7 +100,7 @@ func test_scene_status_and_messages() -> void:
 	await frames(1)
 	main.step(0.1)
 	var line := Status.join(main.status_parts())
-	ok(line.begins_with("Мостик · глубина 20 м"), "на ногах: %s" % line)
+	ok(line.begins_with("Мостик · глубина 30 м"), "на ногах: %s" % line)
 	ok(line.contains("Сесть за штурвал"), "у кресла — подсказка поста")
 	main.sit_at_helm()
 	main.step(0.1)
