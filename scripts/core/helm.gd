@@ -81,6 +81,8 @@ class Ship:
 	var _last_floor := -INF
 	## Высота дна под (x, z); корабль держится на CLEARANCE выше. Пустой Callable — дна нет.
 	var ground: Callable
+	## Твёрдое над дном (`func(pos: Vector3, yaw: float) -> bool`): арка 07 `GateArch.hits` (#826). Корабль скользит вдоль.
+	var solid: Callable
 
 	func _init() -> void:
 		reset()
@@ -103,6 +105,9 @@ class Ship:
 	static func east_ok(x: float, z: float) -> bool:
 		return x <= EDGE or Seabed.Slope.open(x, z)
 
+	func _free(p: Vector3) -> bool:
+		return east_ok(p.x, p.z) and not (solid.is_valid() and bool(solid.call(p, yaw)))
+
 	func nose() -> Vector3:
 		return Vector3(-sin(yaw), 0.0, -cos(yaw))
 
@@ -122,12 +127,18 @@ class Ship:
 		pos.y += vy * dt
 		pos.x = clampf(pos.x, -EDGE, EAST_END)
 		pos.z = clampf(pos.z, -EDGE, EDGE)
-		if not east_ok(pos.x, pos.z):   # в стене за краем: скользим вдоль неё, иначе стоим
-			if east_ok(was.x, pos.z):
-				pos.x = was.x
-			elif east_ok(pos.x, was.z):
-				pos.z = was.z
-			else:
+		if not _free(pos):   # в стене за краем или в арке: скользим вдоль, иначе стоим
+			var tries: Array[Vector3] = [Vector3(was.x, pos.y, pos.z), Vector3(pos.x, pos.y, was.z),
+				Vector3(pos.x, was.y, pos.z), Vector3(was.x, pos.y, was.z), was]
+			var moved := false
+			for q in tries:
+				if _free(q):
+					if q.y != pos.y:
+						vy = 0.0
+					pos = q
+					moved = true
+					break
+			if not moved:
 				pos.x = minf(was.x, EDGE) if not east_ok(was.x, was.z) else was.x
 				pos.z = was.z
 		knock = 0.0
