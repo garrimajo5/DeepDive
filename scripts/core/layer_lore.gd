@@ -21,7 +21,8 @@ const FIELD08 := "field08"      ## поле 08 замечено: ритм на �
 const AUTH07 := "auth07"        ## терминал 07 авторизован локально (позже)
 const DOWN := "down"            ## экипаж ушёл в слой 2
 const BACK := "back"            ## вернулся из слоя 2
-const KEYS: Array[String] = [INTRO, D07_RETURN, D07_RELAY, D07_AUTH, K2, SHELL03, FIELD08, AUTH07, DOWN, BACK]
+const PETAL07 := "petal07"      ## купольник открыл створку гнезда 07 (событие мира `EcoLink.PETAL`, #837)
+const KEYS: Array[String] = [INTRO, D07_RETURN, D07_RELAY, D07_AUTH, K2, SHELL03, FIELD08, AUTH07, DOWN, BACK, PETAL07]
 const DIAGNOSTICS: Array[String] = [D07_RETURN, D07_RELAY, D07_AUTH]
 ## Поле 08 замечено, когда импульс сонара с площадки поймал ритм поля — событие мира `EcoLink.FIELD`
 ## (`EcoField.rhythm`, #833; ставит `Main.on_eco_event`), в журнале — подпись «граница» у 08 (#829).

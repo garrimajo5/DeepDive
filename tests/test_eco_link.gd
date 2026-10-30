@@ -947,3 +947,22 @@ func test_shell_inspected_learns_03() -> void:   # #835: Раковина осм
 	eq(main.message.text, "постройка", "строка мира на приборах")
 	main.queue_free()
 	await frames(1)
+
+
+func test_petal_opened_learns_07() -> void:   # #837: купольник открыл створку — знание в кампании, строка один раз
+	var e := EcoLink.petal(0, "створка")
+	eq([e["type"], e["nest"], e["text"]], [EcoLink.PETAL, 0, "створка"], "поля события")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	ok(not main.lore.knows(LayerLore.PETAL07), "до события створка закрыта")
+	ok(not main._fill_ship_state(true).petal_open, "мир не знает о створке")
+	main.on_eco_event(e)
+	ok(main.lore.knows(LayerLore.PETAL07), "событие ставит знание")
+	eq(main.message.text, "створка", "строка мира на приборах")
+	ok(main._fill_ship_state(false).petal_open, "мир (и у гостя) знает: створка открыта")
+	main.say("другое")
+	main.on_eco_event(e)
+	eq(main.message.text, "другое", "второе событие строку не повторяет")
+	main.queue_free()
+	await frames(1)
