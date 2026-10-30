@@ -19,6 +19,13 @@ const R := 3.2
 const SPEED := 0.45
 const TURN := 0.3
 const REACHED := 1.5
+## Плавный шаг (grafika-plan-eco, Б3 «Плавность поведения»): доля шага `stride` растёт не быстрее ACCEL в секунду —
+## трогается за ~2 с, а не с места на 0,45 м/с, — и сбавляется не быстрее BRAKE; цель — ноги (`lift`) на долю курса: цель сбоку или позади —
+## сперва доворачивает почти на месте (cos угла, не меньше TURN_STRIDE), а не идёт дугой мимо точки. Испуг
+## останавливает сразу — ноги прячутся под панцирь.
+const ACCEL := 0.5
+const BRAKE := 2.0
+const TURN_STRIDE := 0.25
 ## Высота: тело над дном FLOOR_UP + LEG_UP · lift; спина — на BACK_UP выше тела, верх рифа — на TOP_UP.
 const FLOOR_UP := 0.6
 const LEG_UP := 0.55
@@ -53,6 +60,8 @@ class Walker:
 	## Место на дне (x, z; y — дно под ним), курс (yaw = 0 — к +Z, как в браузере; растёт — поворот влево).
 	var p := Vector3.ZERO
 	var yaw := 0.0
+	## Доля шага 0…1 (скорость — SPEED · stride); ноги качаются в её меру.
+	var stride := 1.0
 	## Номер точки пути, к которой идёт.
 	var wp := 1
 	## Ноги: 1 — выпущены (идёт), 0 — спрятаны под панцирь; тянется к цели за ~0,5 с.
@@ -121,19 +130,29 @@ func step(world: EcoWorld, dt: float) -> void:
 		world.emit(ID, "shy", gr.back, _text(world, "%s прячет ноги под панцирь и замирает"))
 	var moving := gr.moving()
 	gr.lift += ((1.0 if moving else 0.0) - gr.lift) * minf(1.0, dt * 2.0)
+	if not moving:
+		gr.stride = 0.0
 	if moving:
 		var tg := ROUTE[gr.wp]
 		var to := Vector2(tg.x - gr.p.x, tg.y - gr.p.z)
 		if to.length() < REACHED:
 			gr.wp = (gr.wp + 1) % ROUTE.size()
 		else:
-			gr.yaw += wrapf(atan2(to.x, to.y) - gr.yaw, -PI, PI) * minf(1.0, dt * TURN)
-			gr.p.x += sin(gr.yaw) * SPEED * dt
-			gr.p.z += cos(gr.yaw) * SPEED * dt
+			var diff := wrapf(atan2(to.x, to.y) - gr.yaw, -PI, PI)
+			var want := want_stride(diff, gr.lift)
+			gr.stride = move_toward(gr.stride, want, (ACCEL if want > gr.stride else BRAKE) * dt)
+			gr.yaw += diff * minf(1.0, dt * TURN)
+			gr.p.x += sin(gr.yaw) * SPEED * gr.stride * dt
+			gr.p.z += cos(gr.yaw) * SPEED * gr.stride * dt
 		if gr.drift_cd <= 0.0 and s.distance_to(gr.back) < DRIFT_R:
 			gr.drift_cd = DRIFT_CD
 			world.emit(ID, "drift", gr.back, _text(world, "%s неспешно бредёт по отмели, на спине у него риф"))
 	place()
+
+
+## Цель доли шага: ноги выпущены на lift, до точки пути угол diff (рад) — сбоку и позади доворачивает почти на месте.
+static func want_stride(diff: float, lift: float) -> float:
+	return clampf(lift, 0.0, 1.0) * maxf(TURN_STRIDE, cos(diff))
 
 
 ## Поставить тело, спину и верх рифа по дну и ногам; дом стаи — над спиной (grotPlace).
