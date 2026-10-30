@@ -6,6 +6,7 @@ extends MeshInstance3D
 ## Стоит на слое отмели (OceanView.LAYER_WORLD). Кусты колышутся в течении мира (план реализма Б3): доля высоты
 ## вершины над подножием — UV2.x, подножие и высота куста — массивы foot/tall, формула — общий кусок EcoShaders.SWAY
 ## (двойник EcoCurrent.sway); коралл жёсткий — изгиб BEND меньше, чем у веерника. «Экономно» — EcoShaders.set_sway_lite.
+## Матовость — uniform rough/spec, числа «известь» ставит EcoSurface (мокрый известковый скелет, не камень).
 ## Куст рывком гасит кончики — у них облачка слизи (EcoCoralDust): дочерний MultiMesh «Муть», +1 вызов.
 
 const SHADER := """
@@ -18,6 +19,8 @@ uniform float glow[%d];
 uniform vec3 foot[%d];
 uniform float tall[%d];
 uniform vec3 bend = vec3(0.0);
+uniform float rough = 0.6;
+uniform float spec = 0.4;
 """ + EcoShaders.SWAY + """
 varying vec3 paint;
 varying float lit;
@@ -34,7 +37,8 @@ void vertex() {
 }
 void fragment() {
 	ALBEDO = paint;
-	ROUGHNESS = 0.8;
+	ROUGHNESS = rough;
+	SPECULAR = spec;
 	EMISSION = tip_glow * lit;
 }
 """

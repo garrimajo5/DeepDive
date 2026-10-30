@@ -16,6 +16,8 @@ uniform float glow_mid;
 uniform float glow_amp;
 uniform float glow_rate;
 uniform float light = 1.0;
+uniform float rough = 0.8;
+uniform float spec = 0.25;
 varying float lit;
 varying vec3 wp;
 void vertex() {
@@ -28,8 +30,8 @@ void fragment() {
 		* sin(p.z * 4.3 + 1.2 * sin(p.x * 1.9));
 	float pore = smoothstep(0.4, 0.55, s) * (1.0 - step(0.5, COLOR.a)) * (1.0 - UV.y);
 	ALBEDO = COLOR.rgb * (1.0 - 0.45 * pore);
-	ROUGHNESS = 0.85;
-	SPECULAR = 0.2;
+	ROUGHNESS = rough;
+	SPECULAR = spec;
 	EMISSION = tip_glow * lit * 1.8 + body_glow * (1.0 - UV.y);
 }
 """
