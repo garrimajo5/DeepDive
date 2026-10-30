@@ -342,6 +342,11 @@ func test_grazer_starts_and_stops_smoothly() -> void:
 	ok(prev_v < 0.35, "к пятну подходит тише (%.2f м/с)" % prev_v)
 
 
+func test_quiet_first_seconds() -> void:
+	for g in _grazers(_world()).all:
+		ok(g.graze_cd >= EcoGrazer.START_QUIET, "первые 8 с скребун молчит")
+
+
 func test_want_speed_slows_to_turn_and_arrive() -> void:
 	near(EcoGrazer.want_speed(20.0, 0.0), EcoGrazer.WALK_SPEED, 1e-5, "далеко и прямо — полный шаг")
 	near(EcoGrazer.want_speed(20.0, PI), EcoGrazer.WALK_SPEED * EcoGrazer.TURN_SLOW, 1e-5, "цель за спиной — почти на месте")

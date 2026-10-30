@@ -29,6 +29,9 @@ const EAT_RATE := 0.05
 const LEAVE := 0.08
 ## Пауза между сообщениями «объедает мох» у одного скребуна (с).
 const GRAZE_COOLDOWN := 45.0
+## Первые секунды мира скребуны молчат (как #1001: старт не перебивает строку приборов) — с плавным подходом к пятну
+## ближний к старту скребун начинает пастись на третьей секунде.
+const START_QUIET := 8.0
 ## Над дном (м).
 const LIFT := 0.1
 
@@ -87,7 +90,7 @@ func reset(world: EcoWorld) -> void:
 		g.agent = a
 		g.index = i
 		g.dir = _rnd.range_f(0, 6.28)
-		g.graze_cd = _rnd.range_f(0, 20)
+		g.graze_cd = maxf(START_QUIET, _rnd.range_f(0, 20))
 		a.set_state(EcoAgent.State.SEEK)
 		g.patch = _pick_patch(g)
 		if g.patch:
