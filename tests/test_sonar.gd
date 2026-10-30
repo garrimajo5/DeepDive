@@ -32,10 +32,25 @@ func test_contacts_from_near_events() -> void:
 
 func test_bathymetry_darker_deeper() -> void:
 	var img := Sonar.bathymetry(32)
+	eq(img.get_size(), Vector2i(48, 32), "по x — шире: отмель и склон за восточным краем (#829)")
 	# запад плато (x −120) мельче восточного склона (x 200)
-	var west := img.get_pixel(int((350 - 120) / 700.0 * 32), 16).v
-	var east := img.get_pixel(int((350 + 200) / 700.0 * 32), 16).v
+	var west := img.get_pixel(_px(-120.0, 48), 16).v
+	var east := img.get_pixel(_px(200.0, 48), 16).v
 	ok(west > east, "на склоне темнее: %.2f > %.2f" % [west, east])
+	var deep := img.get_pixel(_px(560.0, 48), int((200.0 + 350.0) / 700.0 * 32)).v
+	ok(deep < west, "у места 10 на склоне за краем — рельеф есть, глубже плато: %.2f" % deep)
+
+
+func _px(x: float, nx: int) -> int:
+	return int((x - Sonar.MAP_RECT.position.x) / Sonar.MAP_RECT.size.x * nx)
+
+
+## #829: точка мира на карте рельефа — одна и та же в сонаре и на столе брифинга (те же uniform шейдера).
+func test_map_rect_covers_slope() -> void:
+	ok(Sonar.MAP_RECT.encloses(Seabed.EAST), "склон Seabed.EAST — внутри карты")
+	ok(Sonar.MAP_RECT.has_point(LayerMap.xz("10")), "и место 10")
+	var src := FileAccess.get_file_as_string("res://shaders/sonar_holo.gdshader")
+	ok(not src.contains("map_size"), "в шейдере нет квадрата 700 м")
 
 
 class FakeEco:

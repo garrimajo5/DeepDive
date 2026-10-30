@@ -31,7 +31,8 @@ func _ready() -> void:
 	if _map == null:   # карта одна на все запуски сцены: считать её ~1 с
 		_map = ImageTexture.create_from_image(Sonar.bathymetry())
 	mat.set_shader_parameter("map_tex", _map)
-	mat.set_shader_parameter("map_size", Sonar.MAP_SIZE)
+	mat.set_shader_parameter("map_origin", Sonar.MAP_RECT.position)
+	mat.set_shader_parameter("map_extent", Sonar.MAP_RECT.size)
 	material_override = mat
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	layers = OceanView.LAYER_SHIP
@@ -48,6 +49,9 @@ func _ready() -> void:
 	mat.set_shader_parameter("seg_count", segs.size())
 	mat.set_shader_parameter("brief_scale", Briefing.SCALE)
 	mat.set_shader_parameter("brief_side", Briefing.SIDE)
+	mat.set_shader_parameter("east_scale", Briefing.EAST_SCALE)
+	var e := Briefing.east_rect()
+	mat.set_shader_parameter("east_rect", Vector4(e.position.x, e.position.y, e.end.x, e.end.y))
 	var pts := PackedVector2Array()
 	for k in Briefing.ORDER:
 		var t := Briefing.on_table(Run.place_xz(k))

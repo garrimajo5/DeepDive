@@ -10,8 +10,9 @@ const WAVE_TIME := 2.5       ## сколько секунд идёт волна 
 const COOLDOWN := 3.0        ## между импульсами
 const MAX_BLIPS := 32        ## столько отметок держит голограмма
 ## Карта рельефа: квадрат 700 м с центром в 0 (как Seabed), N×N точек.
-const MAP_SIZE := 700.0
-const MAP_N := 256
+## Карта рельефа, м мира: отмель 700 × 700 м и склон к месту 10 за восточным краем (`Seabed.EAST`, #829).
+const MAP_RECT := Rect2(-350.0, -350.0, 1050.0, 700.0)
+const MAP_N := 256             ## точек карты по z (по x — в MAP_RECT.size.x / size.y раз больше)
 
 var ping_time := -99.0
 var blip_time := -99.0  ## когда сняты нынешние отметки (завязший импульс их не обновляет)
@@ -80,15 +81,26 @@ static func color_of(species: String) -> Color:
 	return Color(c.get(species, "ffd26b"))
 
 
-## Карта рельефа для голограммы (js/sonar.js So.init): глубже — темнее, изолинии через 6 м.
+## Карта рельефа для голограммы (js/sonar.js So.init) на всю `MAP_RECT`: n точек по z, по x — пропорционально.
+## Глубже — темнее, изолинии через 6 м; на склоне ниже 110 м (#822) — через 30 м, частые слились бы в заливку.
 static func bathymetry(n: int = MAP_N) -> Image:
-	var img := Image.create(n, n, false, Image.FORMAT_RGB8)
+	var nx := map_width(n)
+	var img := Image.create(nx, n, false, Image.FORMAT_RGB8)
 	for j in n:
-		for i in n:
-			var wx := -MAP_SIZE / 2.0 + (i + 0.5) / n * MAP_SIZE
-			var wz := -MAP_SIZE / 2.0 + (j + 0.5) / n * MAP_SIZE
+		for i in nx:
+			var wx := MAP_RECT.position.x + (i + 0.5) / nx * MAP_RECT.size.x
+			var wz := MAP_RECT.position.y + (j + 0.5) / n * MAP_RECT.size.y
 			var h := Seabed.height(wx, wz)
 			var t := clampf((h + 110.0) / 104.0, 0.0, 1.0)
-			var line := 1.0 if fposmod(h, 6.0) < 0.9 else 0.0
+			var line := 0.0
+			if h > -110.0:
+				line = 1.0 if fposmod(h, 6.0) < 0.9 else 0.0
+			else:
+				line = 0.7 if fposmod(h, 30.0) < 2.0 else 0.0
 			img.set_pixel(i, j, Color8(int(6 + 28 * t + line * 35), int(38 + 150 * t + line * 60), int(48 + 110 * t + line * 50)))
 	return img
+
+
+## Ширина карты рельефа в точках при n точках по z.
+static func map_width(n: int = MAP_N) -> int:
+	return roundi(n * MAP_RECT.size.x / MAP_RECT.size.y)

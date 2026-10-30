@@ -9,7 +9,9 @@ func test_scale_and_places() -> void:
 	for k in Run.PLACES:
 		ok(Briefing.NUMBERS.has(k) and Briefing.ORDER.has(k), "у места %s есть номер" % k)
 		var t := Briefing.on_table(Run.place_xz(k))
-		ok(absf(t.x) < Briefing.SIDE / 2 and absf(t.y) < Briefing.SIDE / 2, "место %s на карте стола" % k)
+		var on_map := absf(t.x) < Briefing.SIDE / 2 and absf(t.y) < Briefing.SIDE / 2
+		ok(on_map or Briefing.east_rect().has_point(t), "место %s на карте стола" % k)
+		ok(t.is_equal_approx(Briefing.table_xz(Run.place_xz(k))), "место %s — на своём месте, не прижато к краю (#829)" % k)
 	eq(Briefing.NUMBERS["bones"], 4, "номера — по таблице ART-016")
 	eq(Briefing.ORDER.size(), 11, "все 11 мест слоя 1 (#829)")
 	eq(Briefing.ORDER, Array(Run.PLACES.keys()), "порядок шейдера — как Run.PLACES")
@@ -18,6 +20,27 @@ func test_scale_and_places() -> void:
 	var src := FileAccess.get_file_as_string("res://shaders/sonar_holo.gdshader")
 	ok(src.contains("places[%d]" % Briefing.ORDER.size()) and src.contains("place_state[%d]" % Briefing.ORDER.size())
 		and src.contains("i < %d;" % Briefing.ORDER.size()), "шейдер держит все места")
+
+
+## #829: склон за восточным краем — полоса у ближнего края стола в сжатом масштабе; отмель — как была.
+func test_east_slope_band() -> void:
+	var e := Briefing.east_rect()
+	near(e.position.x, Briefing.SIDE * 0.5, 1e-6, "полоса — сразу за краем квадрата (+X, к посту «Маршрут»)")
+	ok(Briefing.table_xz(Vector2(349.0, 200.0)).is_equal_approx(Vector2(349.0, 200.0) * Briefing.SCALE), "отмель — прежний масштаб")
+	near(Briefing.table_xz(Vector2(700.0, 200.0)).x, e.end.x, 1e-6, "700 м — дальний край полосы")
+	ok(Briefing.table_xz(Vector2(560.0, 200.0)).x > Briefing.table_xz(Vector2(400.0, 200.0)).x, "восточнее — дальше по полосе")
+	for x in [-200.0, 100.0, 360.0, 560.0, 690.0]:
+		var w := Vector2(x, 150.0)
+		ok(Briefing.world_xz(Briefing.table_xz(w)).is_equal_approx(w), "мир → стол → мир (x %.0f) — двойник шейдера" % x)
+	ok(Vector2(e.end.x, e.end.y).length() < 0.95, "угол полосы на диске голограммы (r 1,02)")
+	ok(e.position.y <= Seabed.EAST.position.y * Briefing.SCALE + 1e-6 and e.end.y >= Seabed.EAST.end.y * Briefing.SCALE - 1e-6,
+		"полоса покрывает Seabed.EAST по z")
+	var ship := Briefing.on_table(Vector2(900.0, 200.0))
+	near(ship.x, e.end.x - Briefing.EDGE_IN, 1e-6, "корабль восточнее склона — у края полосы")
+	var north := Briefing.on_table(Vector2(500.0, -200.0))
+	near(north.x, Briefing.SIDE * 0.5 - Briefing.EDGE_IN, 1e-6, "севернее полосы — у края квадрата, как было")
+	var src := FileAccess.get_file_as_string("res://shaders/sonar_holo.gdshader")
+	ok(src.contains("east_rect") and src.contains("east_scale"), "шейдер рисует полосу склона")
 
 
 ## #829: места слоя 1 на столе не налезают иконками друг на друга (по горизонтали стола, с запасом на номер).

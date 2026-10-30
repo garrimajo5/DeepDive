@@ -2,13 +2,20 @@ class_name Briefing
 extends RefCounted
 ## Голограмма брифинга над голостолом (ART-016, docs/concept-art/golostol-brifing.md): пока игрок у поста «Маршрут»,
 ## сонар над столом сменяет карта всей отмели — неподвижная, нос (−Z) вверх, +X вправо, 700 × 700 м во вписанный
-## квадрат 1,13 м. На ней все 11 мест слоя с номерами (#829) и маршруты `Run.ROUTES`: «Рифовый сад» — сплошная линия,
+## квадрат 1,13 м; склон к месту 10 за восточным краем — полосой `EAST_*` у ближнего (+X) края, в сжатом масштабе (#829). На ней все 11 мест слоя с номерами (#829) и маршруты `Run.ROUTES`: «Рифовый сад» — сплошная линия,
 ## «Тёплые трубы» — длинный пунктир, «Край отмели» — точки, маршруты слоя 1 — те же три типа по кругу (`dash`);
 ## выбранный ярче и толще, по нему бежит подсветка.
 ## Здесь — числа и геометрия без узлов; рисует `SonarView` (шейдер sonar_holo).
 
 const SIDE := 1.13             ## сторона квадрата карты на столе, м
 const SCALE := SIDE / 700.0    ## м стола на м мира
+## Склон за восточным краем отмели (`Seabed.EAST`, место 10, #822) — полоса за краем квадрата со стороны поста «Маршрут»:
+## x мира от 350 до 700 м — в EAST_DEPTH м стола (втрое мельче отмели, иначе не влезает в диск голограммы), z — как на
+## отмели, от EAST_Z.x до EAST_Z.y м мира. Отмель на столе — как была (#829).
+const EAST_X0 := 350.0
+const EAST_DEPTH := 0.18
+const EAST_SCALE := EAST_DEPTH / 350.0
+const EAST_Z := Vector2(60.0, 340.0)
 const FADE := 0.25             ## переход сонар ↔ брифинг, с
 const MAX_SEGS := 16           ## столько отрезков держит шейдер
 ## Номера мест — по таблице ART-016 и карте слоя 1 #818 (`LayerMap`, #829: все 11 мест, старт — «0»).
@@ -145,20 +152,39 @@ static func map_points() -> Array[Vector3]:
 enum Dash { SOLID, LONG, DOTS }
 
 
-## Точка мира (x, z) → точка на столе (x, z) от центра голостола, м.
+## Точка мира (x, z) → точка на столе (x, z) от центра голостола, м. Восточнее EAST_X0 — сжатый масштаб склона.
 static func table_xz(world: Vector2) -> Vector2:
-	return world * SCALE
+	var t := world * SCALE
+	if world.x > EAST_X0:
+		t.x = EAST_X0 * SCALE + (world.x - EAST_X0) * EAST_SCALE
+	return t
 
 
-## Не ближе к краю стола, м: место и корабль за краем карты 700 × 700 м (склон за восточным краем, место 10, #822)
-## стоят у края квадрата со стороны, где они есть, иконка не свешивается со стола.
+## Обратно: точка стола → мир (двойник шейдера sonar_holo, `briefing`).
+static func world_xz(t: Vector2) -> Vector2:
+	var w := t / SCALE
+	if t.x > SIDE * 0.5:
+		w.x = EAST_X0 + (t.x - SIDE * 0.5) / EAST_SCALE
+	return w
+
+
+## Полоса склона на столе, м: x от края квадрата на EAST_DEPTH, z по EAST_Z.
+static func east_rect() -> Rect2:
+	return Rect2(SIDE * 0.5, EAST_Z.x * SCALE, EAST_DEPTH, (EAST_Z.y - EAST_Z.x) * SCALE)
+
+
+## Не ближе к краю стола, м: место и корабль за краем карты стоят у края квадрата или полосы склона со стороны, где
+## они есть, иконка не свешивается со стола.
 const EDGE_IN := ICON_SIZE * 0.5
 
 
-## Точка мира (x, z) → точка на столе, прижатая внутрь квадрата карты (`EDGE_IN`). Внутри карты — как `table_xz`.
+## Точка мира (x, z) → точка на столе, прижатая внутрь карты (`EDGE_IN`). Внутри карты — как `table_xz`.
 static func on_table(world: Vector2) -> Vector2:
 	var h := SIDE * 0.5 - EDGE_IN
 	var t := table_xz(world)
+	var e := east_rect()
+	if t.x > h and t.y > e.position.y + EDGE_IN and t.y < e.end.y - EDGE_IN:
+		return Vector2(minf(t.x, e.end.x - EDGE_IN), t.y)   # в полосе склона
 	return Vector2(clampf(t.x, -h, h), clampf(t.y, -h, h))
 
 
