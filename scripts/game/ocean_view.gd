@@ -150,7 +150,27 @@ func _process(_dt: float) -> void:
 
 ## Материалы со слоями воды ART-069 (`shaders/water_layers.gdshaderinc`).
 func layer_mats() -> Array[ShaderMaterial]:
-	return [seabed_mat, ice_mat, far_mat]
+	var out: Array[ShaderMaterial] = [seabed_mat, ice_mat, far_mat]
+	out.append_array(extra_layer_mats)
+	return out
+
+
+## Материалы на дне со своим шейдером (арка врат 07 `GateView`): туман — слоями воды ART-069, как у дна. Со штатным
+## туманом остаётся только база ART-059 — вдали она темнее воды со слоями вокруг, и предмет проступает силуэтом.
+var extra_layer_mats: Array[ShaderMaterial] = []
+const LAYER_PARAMS: Array[String] = ["layer_base", "layer_density", "layer_gain", "layer_cam_above", "layer_floor_y",
+	"layer_ice_color", "layer_thermo_color", "layer_dust_color"]
+
+
+## Подключить материал к слоям воды: числа сразу как у дна (вода по глубине пишется только при её смене, #847).
+func add_layer_mat(m: ShaderMaterial) -> void:
+	if extra_layer_mats.has(m):
+		return
+	extra_layer_mats.append(m)
+	for p in LAYER_PARAMS:
+		var v: Variant = seabed_mat.get_shader_parameter(p)
+		if v != null:
+			m.set_shader_parameter(p, v)
 
 
 ## Цвета слоёв — один раз при сборке.

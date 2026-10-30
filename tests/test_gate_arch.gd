@@ -78,3 +78,33 @@ func test_scene_has_arch_and_helm_solid() -> void:
 	eq(main.gate_view.mesh.get_surface_count(), 2, "арка и гнёзда")
 	main.queue_free()
 	await frames(1)
+
+
+## Отчёт тестера c8b38fa, п. 4: со старта в окне вдали тёмный силуэт арки. Штатный туман давал ей базовый цвет ART-059
+## (темнее воды со слоями ART-069 вокруг) — материалы арки пишут FOG слоями воды, как дно, и получают их числа.
+func test_arch_fog_uses_water_layers() -> void:
+	var sh := FileAccess.get_file_as_string("res://shaders/gate_arch.gdshader")
+	ok(sh.contains("water_layers.gdshaderinc") and sh.contains("FOG = water_layers_fog("), "шейдер арки пишет слои в FOG")
+	var main: Node = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var gv: GateView = main.gate_view
+	var o: OceanView = main.ocean
+	for i in 2:
+		var m := gv.get_surface_override_material(i) as ShaderMaterial
+		ok(m != null, "поверхность %d — свой шейдер, не StandardMaterial3D" % i)
+		if m == null:
+			continue
+		ok(o.layer_mats().has(m), "материал %d в слоях воды" % i)
+		near(float(m.get_shader_parameter("layer_density")), main.env.fog_density, 0.00001, "плотность — как туман сцены")
+		var c: Vector3 = m.get_shader_parameter("layer_ice_color")
+		near(c.z, WaterLayers.ICE.color.srgb_to_linear().b, 0.0001, "цвета слоёв переданы")
+	o.apply_water(main.env, 45.0, Vector3.ZERO, 0.0)
+	var m0 := gv.get_surface_override_material(0) as ShaderMaterial
+	if m0:
+		near(float(m0.get_shader_parameter("layer_density")), main.env.fog_density, 0.00001, "новая глубина — новый туман")
+		near(float(m0.get_shader_parameter("layer_gain")), float(o.seabed_mat.get_shader_parameter("layer_gain")), 0.00001,
+			"сила слоёв как у дна")
+	eq(o.layer_mats().size(), 5, "дно, лёд, дальняя вода и два материала арки — без повторов")
+	main.queue_free()
+	await frames(1)
