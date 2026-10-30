@@ -100,7 +100,7 @@ func test_grazer_walks_to_patch_and_grazes() -> void:
 		if not g.grazing():
 			if not eq(g.agent.state, EcoAgent.State.SEEK):
 				return
-			if not near(g.agent.v.length(), EcoGrazer.WALK_SPEED, 1e-3, "идёт шагом 0,9 м/с"):
+			if not ok(g.agent.v.length() <= EcoGrazer.WALK_SPEED + 1e-4, "идёт не быстрее 0,9 м/с"):
 				return
 		if not near(g.agent.p.y, -40.0 + EcoGrazer.LIFT, 1e-4, "идёт по дну"):
 			return
@@ -210,7 +210,7 @@ func test_eaten_grazer_returns_at_patch() -> void:
 		return
 	eq(w.count("grazer"), 10)
 	ok(_flat(g.agent.p, moss.nearest(g.agent.p).pos) <= 4.3, "появился у пятна мха")
-	eq(g.agent.state, EcoAgent.State.SEEK)
+	ok(g.agent.state in [EcoAgent.State.SEEK, EcoAgent.State.GRAZE], "идёт к пятну или уже пасётся у ближнего")
 	ok(g.patch != null)
 
 
@@ -304,6 +304,65 @@ func test_parts_closed_faces_out_by_godot_rule() -> void:
 	ok(vol[0] < -0.3, "панцирь и нижний корпус: %f" % vol[0])
 	for p in range(1, 8):
 		ok(vol[p] < 0.0, "часть %d: %f" % [p - 1, vol[p]])
+
+
+## Плавность (grafika-plan-eco): трогается и тормозит без рывка, у пятна сбавляет шаг, курс доворачивает не быстрее
+## TURN_MAX; без ограничений скорость прыгала 0 → 0,9 м/с за шаг, нос — на долю 1,5 разницы курса в секунду.
+func test_grazer_starts_and_stops_smoothly() -> void:
+	var w := _pair()
+	w.ship.pos = Vector3(0, -30, 0)   # рядом: шаг каждый кадр, без догоняющих шагов дальних (EcoLod)
+	var g := _grazers(w).all[0]
+	var a := g.agent
+	a.p = Vector3(0, -40 + EcoGrazer.LIFT, -12)
+	a.v = Vector3.ZERO
+	g.patch = _moss(w).patches[1]   # (0, −40, 10): 22 м впереди по +z
+	g.dir = PI                      # нос на −z: цель за спиной
+	var dt := EcoWorld.MAX_STEP
+	var top := 0.0
+	var prev_v := 0.0
+	var prev_dir := g.dir
+	var t := 0.0
+	w.step(dt)
+	t += dt
+	ok(a.v.length() <= EcoGrazer.ACCEL * dt + 1e-4, "трогается с места, а не сразу 0,9 м/с")
+	while t < 60.0 and not g.grazing():
+		var v := a.v.length()
+		if not ok(absf(v - prev_v) <= EcoGrazer.ACCEL * dt + 1e-4, "скорость без рывка: %.3f → %.3f" % [prev_v, v]):
+			return
+		var dd := absf(angle_difference(prev_dir, g.dir))
+		if not ok(dd <= EcoGrazer.TURN_MAX * dt + 1e-4, "нос доворачивает не быстрее 1,2 рад/с"):
+			return
+		top = maxf(top, v)
+		prev_v = v
+		prev_dir = g.dir
+		w.step(dt)
+		t += dt
+	ok(g.grazing(), "дошёл до пятна")
+	near(top, EcoGrazer.WALK_SPEED, 1e-3, "на прямой — полный шаг 0,9 м/с")
+	ok(prev_v < 0.35, "к пятну подходит тише (%.2f м/с)" % prev_v)
+
+
+func test_want_speed_slows_to_turn_and_arrive() -> void:
+	near(EcoGrazer.want_speed(20.0, 0.0), EcoGrazer.WALK_SPEED, 1e-5, "далеко и прямо — полный шаг")
+	near(EcoGrazer.want_speed(20.0, PI), EcoGrazer.WALK_SPEED * EcoGrazer.TURN_SLOW, 1e-5, "цель за спиной — почти на месте")
+	ok(EcoGrazer.want_speed(20.0, 0.6) < EcoGrazer.WALK_SPEED, "в повороте — тише")
+	near(EcoGrazer.want_speed(EcoGrazer.REACH + 0.1, 0.0), EcoGrazer.WALK_SPEED * EcoGrazer.ARRIVE_MIN, 1e-5, "у пятна — медленно")
+	ok(EcoGrazer.want_speed(EcoGrazer.REACH + 1.5, 0.0) > EcoGrazer.want_speed(EcoGrazer.REACH + 0.8, 0.0))
+
+
+func test_legs_step_smaller_when_slow() -> void:
+	var g := _grazers(_world()).all[0]
+	g.agent.set_state(EcoAgent.State.SEEK)
+	var big := 0.0
+	var small := 0.0
+	for i in 100:
+		var t := i * 0.031
+		g.agent.v = Vector3(EcoGrazer.WALK_SPEED, 0, 0)
+		big = maxf(big, absf(EcoGrazerLook.stride(g, t)))
+		g.agent.v = Vector3(EcoGrazer.WALK_SPEED * 0.25, 0, 0)
+		small = maxf(small, absf(EcoGrazerLook.stride(g, t)))
+	ok(big > 0.95, "полный шаг — полный размах")
+	near(small, big * 0.25, 0.02, "трогаясь — лапы шагают мельче, а не замирают посреди шага")
 
 
 func test_legs_step_in_tripods() -> void:

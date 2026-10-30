@@ -13,6 +13,14 @@ const COUNT := 10
 ## Шаг (м/с), поворот (доля разницы курса в секунду).
 const WALK_SPEED := 0.9
 const TURN_RATE := 1.5
+## Плавность (grafika-plan-eco, «Плавность поведения»): поворот не быстрее TURN_MAX (рад/с); скорость меняется не
+## быстрее ACCEL (м/с²) — трогается и тормозит за секунду, а не рывком; за ARRIVE (м) до края пятна сбавляет шаг до
+## доли ARRIVE_MIN; цель за спиной — сначала доворачивает почти на месте (доля скорости cos угла, не меньше TURN_SLOW).
+const TURN_MAX := 1.2
+const ACCEL := 0.9
+const ARRIVE := 2.5
+const ARRIVE_MIN := 0.2
+const TURN_SLOW := 0.25
 ## Ближе этого к середине пятна — пасётся (м).
 const REACH := 1.6
 ## Сколько мха съедает за секунду.
@@ -85,6 +93,13 @@ func reset(world: EcoWorld) -> void:
 		if g.patch:
 			a.goal = g.patch.pos
 		all.append(g)
+
+
+## Шаг, к которому скребун разгоняется или тормозит: до пятна d (м) по середине, цель на угол da (рад) от курса.
+static func want_speed(d: float, da: float) -> float:
+	var arrive := clampf((d - REACH) / ARRIVE, ARRIVE_MIN, 1.0)
+	var aim := maxf(TURN_SLOW, cos(clampf(absf(da), 0.0, PI / 2.0)))
+	return WALK_SPEED * arrive * aim
 
 
 ## Высота скребуна: дно мира + 0,1 м; без дна мира — fallback + 0,1 м.
@@ -196,8 +211,9 @@ func _step_grazer(world: EcoWorld, g: Grazer, dt: float) -> void:
 		else:
 			var da := atan2(dx, dz) - g.dir
 			da = atan2(sin(da), cos(da))
-			g.dir += da * minf(1.0, dt * TURN_RATE)
-			a.v = Vector3(sin(g.dir) * WALK_SPEED, 0, cos(g.dir) * WALK_SPEED)
+			g.dir += clampf(da * minf(1.0, dt * TURN_RATE), -TURN_MAX * dt, TURN_MAX * dt)
+			var sp := move_toward(a.v.length(), want_speed(d, da), ACCEL * dt)
+			a.v = Vector3(sin(g.dir) * sp, 0, cos(g.dir) * sp)
 			a.p = Vector3(a.p.x + a.v.x * dt, a.p.y, a.p.z + a.v.z * dt)
 			moved = true
 	else:
