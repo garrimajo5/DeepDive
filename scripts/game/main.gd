@@ -108,6 +108,7 @@ var current := Helm.SeaCurrent.new()
 
 var ocean: OceanView
 var eco: EcoView            ## живой мир отмели (поток Б), связь — EcoLink
+var gate_view: GateView     ## временная арка врат 07 и чаши гнёзд (#826, `GateArch`) до MOD-023
 var step_ms := 0.0          ## сколько занял прошлый шаг игры (код), мс — для лога тестера (issue #217)
 var clock := StepClock.new()   ## части прошлого шага (корабль, мир, виды) — для лога тестера (issue #627)
 var eco_ship := EcoLink.ShipState.new()
@@ -256,6 +257,9 @@ func _build_outside() -> void:
 		return g
 	if eco.drop:
 		silt.slide_origin = eco.drop.slide_cloud_point()
+	gate_view = GateView.new()
+	ocean.add_child(gate_view)
+	helm.solid = GateArch.hits   # корабль сквозь опоры арки 07 не проходит (#826)
 
 
 ## Сборка: корабль — мостик, вспышка разряда, отсеки, экипаж, метки, посты, прожектор, корпус, камеры.
