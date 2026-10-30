@@ -17,6 +17,10 @@ var last := {}             ## части прошлого, законченно�
 var last_dt := 0.0         ## шаг времени прошлого шага, с
 var _from := 0
 
+## Часы шага, который идёт сейчас (последний `start`): живой мир отмечает в них свои подчасти `mark`, не зная `Main`
+## (issue #1020: «мир 78» в худшем кадре не говорит, какой модуль или вид мира дал всплеск).
+static var active: StepClock = null
+
 
 ## Новый шаг игры с момента now_us.
 ## Прошлый шаг уходит в `last`: замер кадра (`QaRunner._measure`) идёт уже внутри нового шага, после `start`,
@@ -29,6 +33,13 @@ func start(now_us: int, step_dt: float = 0.0) -> void:
 	subs = {}
 	dt = step_dt
 	_from = now_us
+	active = self
+
+
+## Подчасть идущего шага закончилась сейчас: `active.lap(name, …)`; нет идущего шага — ничего (тесты мира без `Main`).
+static func mark(name: String) -> void:
+	if active != null:
+		active.lap(name, Time.get_ticks_usec())
 
 
 ## Часть name закончилась в now_us: время с прошлой отметки — ей.

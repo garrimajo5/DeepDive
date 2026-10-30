@@ -132,8 +132,10 @@ func step(dt: float) -> void:
 		steps += 1
 		for a in agents:
 			a.tick(h)
+		StepClock.mark("мир/существа")   # подчасти «мира» в логе тестера (#1020)
 		for s in systems:
 			s.step(self, h)
+			StepClock.mark("мир/" + _sys_name(s))
 	for by in _drain:
 		_link.append(EcoLink.drain(by, _drain[by]))
 	_drain.clear()
@@ -142,6 +144,18 @@ func step(dt: float) -> void:
 	_drag.clear()
 	if ship.sonar_ping or ship.scan_range > 0.0:
 		_send_near()
+
+
+## Имя модуля для лога тестера: class_name его скрипта (#1020), запоминается.
+var _names := {}
+func _sys_name(s: EcoSystem) -> String:
+	var n: String = _names.get(s, "")
+	if n.is_empty():
+		n = str(s.get_script().get_global_name())
+		if n.is_empty():
+			n = "модуль"
+		_names[s] = n
+	return n
 
 
 ## Цель для сонара и сканера (элемент E.scanTargets): вид, где, размер для прицела r (м); sonar — видна ли сонару,
