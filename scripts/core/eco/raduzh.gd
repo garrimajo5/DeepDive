@@ -14,8 +14,9 @@ const PER_SWARM := 28
 const R := 4.0
 ## Дальше этого вспышку стаи хищник не видит (FLARE_REACH).
 const FLARE_REACH := 110.0
-## Дома стай (x, z) из браузера; высота — 9 м над дном, не выше CEILING.
-const HOMES: Array[Vector2] = [Vector2(-25, 40), Vector2(45, 0), Vector2(-70, -50)]
+## Дома стай (x, z) из браузера; высота — 9 м над дном, не выше CEILING. Первая — в браузере (−25, 40); здесь
+## на 30 м западнее: с места 00 на 30 м (#827) стая не попадает в луч в первые секунды (test_eco_start).
+const HOMES: Array[Vector2] = [Vector2(-55, 40), Vector2(45, 0), Vector2(-70, -50)]
 const ABOVE := 9.0
 const CEILING := -8.0
 ## Дрейф дома: ±10 м по x и z, ±1,2 м по высоте.
