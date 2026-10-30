@@ -93,7 +93,7 @@ func sync(t: float, ship: Vector3, info: EcoLink.ShipState = null, flow := Vecto
 	if not visible:
 		return
 	group.transform = Transform3D(Basis(Vector3.UP, gr.yaw), Vector3(gr.p.x, gr.body_y, gr.p.z))
-	legs.rotation = Vector3(sin(t * 2.2) * 0.08 if gr.moving() else 0.0, 0.0, 0.0)
+	legs.rotation = Vector3(sin(t * 2.2) * 0.08 * gr.stride, 0.0, 0.0)   # качаются в меру шага
 	legs.scale = Vector3(1.0, 0.35 + 0.65 * gr.lift, 1.0)
 
 

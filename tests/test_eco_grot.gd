@@ -69,6 +69,48 @@ func test_walks_route_in_order_slowly() -> void:
 		eq(seen[k], (seen[k - 1] + 1) % EcoGrot.ROUTE.size(), "точки по порядку")
 
 
+## Б3 «Плавность поведения»: цель позади — сперва доворачивает почти на месте, а не уходит дугой на полном шаге.
+func test_turns_nearly_in_place() -> void:
+	var w := _world()
+	var gr := (_sys(w, EcoGrot) as EcoGrot).grot
+	var tg := EcoGrot.ROUTE[gr.wp]
+	gr.yaw = atan2(tg.x - gr.p.x, tg.y - gr.p.z) + PI   # спиной к точке пути
+	var at := Vector2(gr.p.x, gr.p.z)
+	for i in 20:
+		w.step(0.05)
+	ok(Vector2(gr.p.x, gr.p.z).distance_to(at) < EcoGrot.SPEED * 0.5,
+		"за секунду разворота прошёл меньше 0,23 м: %.2f" % Vector2(gr.p.x, gr.p.z).distance_to(at))
+	ok(gr.stride <= EcoGrot.TURN_STRIDE + 0.05, "шаг мелкий: %.2f" % gr.stride)
+	near(EcoGrot.want_stride(0.0, 1.0), 1.0, 1e-6, "прямо — полный шаг")
+	near(EcoGrot.want_stride(PI, 1.0), EcoGrot.TURN_STRIDE, 1e-6, "позади — почти на месте")
+	near(EcoGrot.want_stride(0.0, 0.5), 0.5, 1e-6, "ноги наполовину — полшага")
+
+
+## Б3: после испуга трогается плавно — шаг растёт не быстрее ACCEL, ноги качаются в меру шага.
+func test_starts_gradually_after_shy() -> void:
+	var w := _world()
+	var g: EcoGrot = _sys(w, EcoGrot)
+	var gr := g.grot
+	w.run(20.0)   # вышел на прямую к точке
+	w.ship.pos = Vector3(gr.p.x + 8.0, gr.back.y, gr.p.z)
+	w.step(0.05)
+	ok(not gr.moving(), "испугался")
+	eq(gr.stride, 0.0, "встал сразу")
+	w.ship.pos = FAR
+	w.run(10.0)
+	ok(gr.moving(), "снова идёт")
+	var last := gr.stride
+	var at := Vector2(gr.p.x, gr.p.z)
+	for i in 20:
+		w.step(0.05)
+		ok(gr.stride - last <= EcoGrot.ACCEL * 0.05 + 1e-5, "шаг растёт плавно")
+		last = gr.stride
+	ok(Vector2(gr.p.x, gr.p.z).distance_to(at) < EcoGrot.SPEED * 0.6, "первую секунду — не на полном ходу: %.2f"
+		% Vector2(gr.p.x, gr.p.z).distance_to(at))
+	w.run(6.0)
+	ok(gr.stride > 0.8, "разошёлся до полного шага: %.2f" % gr.stride)
+
+
 func test_reset_returns_to_start() -> void:
 	var w := _world()
 	var g: EcoGrot = _sys(w, EcoGrot)
