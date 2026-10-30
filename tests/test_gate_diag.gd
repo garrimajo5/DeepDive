@@ -144,3 +144,25 @@ func test_scene_scanner_reads_gate() -> void:   # без купольника: �
 	eq(main.scanner.scanned.size(), 0, "вид при этом не сканировали")
 	main.queue_free()
 	await frames(1)
+
+
+## Отчёт тестера 30.10 (35-diag-07): «Обратный ход: неисправен» лёг на рамку экрана сканера. Подпись переносит
+## строки по ширине `SCANNER_TEXT_W`, и каждая строка экрана после переноса в неё помещается.
+func test_scanner_lines_fit_screen() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var label: Label3D = main.bridge.scanner_text
+	near(label.width, BridgeView.SCANNER_TEXT_W, 1e-3, "ширина подписи экрана")
+	ok(label.autowrap_mode != TextServer.AUTOWRAP_OFF, "перенос включён")
+	var f: Font = label.font if label.font != null else ThemeDB.fallback_font
+	var lines: Array = GateDiag.SHORT.values() + ["ДИАГНОСТИКА 07", "Гнездо 3 из 3 · 45 м", "Держать — перевод", "Видов изучено: 99 из 100", "Видов изучено: 100 из 100"]
+	for s in lines:
+		var w := f.get_multiline_string_size(s, HORIZONTAL_ALIGNMENT_CENTER, label.width, label.font_size, -1,
+				TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND).x
+		ok(w <= BridgeView.SCANNER_TEXT_W, "«%s» помещается: %.0f px" % [s, w])
+	ok(f.get_string_size(GateDiag.SHORT[LayerLore.D07_AUTH], HORIZONTAL_ALIGNMENT_LEFT, -1, label.font_size).x
+			> BridgeView.SCANNER_TEXT_W, "длинная строка переносится, а не лежит на рамке")
+	ok(f.get_string_size("Видов изучено: 100 из 100", HORIZONTAL_ALIGNMENT_LEFT, -1, label.font_size).x
+			<= BridgeView.SCANNER_TEXT_W, "строка сканера — одной строкой")
+	main.queue_free()
