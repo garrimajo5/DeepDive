@@ -48,6 +48,12 @@ var frames_us := 0
 ## считается как раньше (рывок сразу после снимка не прячем). Своих кадров нет — у строки «—».
 const SETTLE_FRAMES := 3
 var _settle := 0
+## Issue #1013: после шага «ship» (корабль перенесён через всю отмель) в кадр разом входят меши, текстуры и материалы
+## мест — первая выгрузка в видеокарту даёт 130–180 мс, которых в обычной игре нет (корабль плывёт, места входят
+## постепенно). Такие кадры идут не в худший кадр, а отдельно — « · после прыжка N мс» в строке скриншота.
+const JUMP_FRAMES := 30
+var _jump := 0
+var jump_ms := 0.0
 var _shot_taken := false
 var _warm_frames := 0   ## кадры прогрева шейдеров при старте (Warmup) — в лог, когда он кончится
 var _warm_from_us := 0
@@ -147,6 +153,7 @@ func tick(dt: float) -> void:
 					main.helm.yaw = deg_to_rad(c[4])
 					main.helm.turn = 0.0
 				main.park_at(Vector3(c[1], c[2], c[3]))
+				_jump = JUMP_FRAMES
 			"fly":   # тестовый полёт noclip: глаз на высоте c[2] в осях корабля, наклон c[3]
 				if main.walker.noclip != c[1]:
 					main.toggle_noclip()
@@ -257,6 +264,12 @@ static func graphics_line(level: int, msaa: int, scale: float, splits: int, adap
 func _measure(now_us: int) -> void:
 	if not _skip_frame and _last_us > 0:
 		var ms := (now_us - _last_us) / 1000.0
+		if _jump > 0:   # кадры сразу после переноса корабля — отдельно (issue #1013)
+			_jump -= 1
+			jump_ms = maxf(jump_ms, ms)
+			_skip_frame = false
+			_last_us = now_us
+			return
 		if ms > worst_ms:
 			worst_ms = ms
 			worst_at = worst_note(_step_label, render_ms(), code_ms(), gpu_ms(), ms, main.clock.last_note() if main else "", pipes)   # _measure — уже в новом шаге (issue #662)
@@ -362,7 +375,8 @@ func state() -> String:
 
 ## Худший кадр с прошлого скриншота для строки состояния: « · худший кадр 726 мс (шаг 53 press, логика 9 мс)».
 func worst_text() -> String:
-	return " · худший кадр %d мс (%s)" % [roundi(worst_ms), worst_at] if worst_ms > 0.0 else ""
+	return (" · худший кадр %d мс (%s)" % [roundi(worst_ms), worst_at] if worst_ms > 0.0 else "") \
+		+ (" · после прыжка %d мс" % roundi(jump_ms) if jump_ms > 0.0 else "")
 
 
 const PARTS_FROM := 20.0   ## код дольше, мс, — пишем его части (issue #627)
@@ -494,6 +508,7 @@ func _quit_after_frames() -> void:
 ## Сброс замеров после скриншота: кадр снимка не считается совсем, следующие SETTLE_FRAMES — только в худший кадр.
 func after_shot() -> void:
 	worst_ms = 0.0
+	jump_ms = 0.0
 	worst_at = ""
 	frames = 0
 	frames_us = 0
