@@ -95,6 +95,8 @@ var well_view: WellView
 ## Ледяная моль у колодца (#836, ART-080): 240 рачков тремя облаками под трещиной, тянутся к прожектору.
 var moth: EcoMoth
 var moth_view: MothView
+## Инеевая бахрома у колодца 05 (#836, часть 5): модуль мира, вид — после ART-083 (#922).
+var fringe: EcoFringe
 ## Край отмели (место 6, ART-032): скальные клинья вдоль бровки, шрам оползня с осыпью, трещины на площадке.
 var drop: EcoDrop
 var drop_view: DropView
@@ -201,6 +203,7 @@ func _init() -> void:
 	moth = world.add(EcoMoth.new()) as EcoMoth
 	moth_view = MothView.new(moth)
 	add_child(moth_view)
+	fringe = world.add(EcoFringe.new()) as EcoFringe
 	drop = world.add(EcoDrop.new()) as EcoDrop
 	echo = world.add(EcoEcho.new(bones, preds)) as EcoEcho
 	echo_view = EchoView.new(echo)
@@ -232,7 +235,7 @@ func _init() -> void:
 	dust_layer.gather(self)
 
 
-## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи и просвет листвы погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали нет, моли у колодца 80 — меняются
+## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи и просвет листвы погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали нет, моли у колодца 80, бахромы 24 — меняются
 ## только числа в uniform, шейдеры те же. Включает уровень графики — поток А (`Main._apply_graphics`).
 func set_lite(on: bool) -> void:
 	EcoShaders.set_sway_lite(on)
@@ -242,6 +245,7 @@ func set_lite(on: bool) -> void:
 	EcoGrazerDust.lite = on
 	far_view.set_lite(on)
 	moth.set_lite(on)
+	fringe.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
