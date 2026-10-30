@@ -187,8 +187,27 @@ static func color_at(x: float, y: float, z: float, ny: float) -> Color:
 	c = c.lerp(Color(0.20, 0.48, 0.44), m)
 	var d := HashNoise.smooth(-55.0, -110.0, y)
 	c = c.lerp(Color(0.08, 0.13, 0.22), d)
+	c = crust_tint(c, x, z)
 	var v := 0.82 + HashNoise.value(x * 0.4, z * 0.4) * 0.3
 	return Color(c.r * v, c.g * v, c.b * v)
+
+
+## Корка у Спуска 10 (#832): за волнистой границей `EcoBrink.share` (x ≈ 525 ± 10, полная — за 70 м к востоку) тёмный
+## песок котловины сменяется серо-лиловой породой, на пятнах корки (`EcoBrink.patch`) — бледной кварцевой. Цвет
+## вершин сетки дна — без новых вызовов и шейдеров; западнее границы цвет как был.
+const CRUST_ROCK := Color(0.17, 0.19, 0.26)
+const CRUST_QUARTZ := Color(0.40, 0.47, 0.55)
+const CRUST_ROCK_K := 0.85
+const CRUST_QUARTZ_K := 0.6
+
+static func crust_tint(c: Color, x: float, z: float) -> Color:
+	if x < EcoBrink.BORDER_X - EcoBrink.WAVE:
+		return c
+	var s := EcoBrink.share(x, z)
+	if s <= 0.0:
+		return c
+	c = c.lerp(CRUST_ROCK, s * CRUST_ROCK_K)
+	return c.lerp(CRUST_QUARTZ, s * EcoBrink.patch(x, z) * CRUST_QUARTZ_K)
 
 
 ## Сетка дна: массивы для ArrayMesh (вершины, нормали, цвета, индексы), лицевая сторона вверх.

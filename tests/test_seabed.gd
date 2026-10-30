@@ -137,3 +137,32 @@ func test_apply_water_final_values() -> void:
 	ok(env.fog_light_color.is_equal_approx(Seabed.Water.fog_color(20.0).lerp(Silt.FAR_COLOR, 0.75)), "ил главнее цвета глубины")
 	ov.queue_free()
 	await frames(1)
+
+
+## #832: за границей корки у Спуска 10 дно меняет цвет — западнее как было, к востоку серая порода и бледные пятна.
+func test_crust_color_at_brink() -> void:
+	var base := Color(0.08, 0.13, 0.22)
+	eq(Seabed.crust_tint(base, 300.0, 200.0), base, "проход 60 м — цвет как был")
+	var z := 200.0
+	var b := EcoBrink.border_x(z)
+	eq(Seabed.crust_tint(base, b - 1.0, z), base, "западнее границы — без корки")
+	var far := Seabed.crust_tint(base, b + EcoBrink.FULL + 5.0, z)
+	ok(far.get_luminance() > base.get_luminance() + 0.02, "за границей дно светлее тёмной глубины")
+	ok(absf(far.b - far.r) < absf(base.b - base.r), "порода серее синей глубины")
+	# пятна корки бледнее голой породы
+	var lit := 0
+	var bare := 0
+	for i in 60:
+		var x := b + EcoBrink.FULL + 2.0 + i * 1.5
+		var p := EcoBrink.patch(x, z)
+		var c := Seabed.crust_tint(base, x, z)
+		if p > 0.9:
+			lit += 1
+			ok(c.get_luminance() > Seabed.CRUST_ROCK.get_luminance() * 0.9, "пятно корки бледнее")
+		elif p < 0.05:
+			bare += 1
+	ok(lit + bare > 0, "есть и пятна, и голая порода на участке")
+	# в цвете вершин сетки (color_at) корка тоже есть
+	var y := Seabed.height(b + EcoBrink.FULL + 10.0, z)
+	var with := Seabed.color_at(b + EcoBrink.FULL + 10.0, y, z, 1.0)
+	ok(with.b - with.r < 0.14 * 1.12, "color_at за границей — не синяя глубина")
