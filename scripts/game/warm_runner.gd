@@ -42,6 +42,7 @@ func begin() -> void:
 	_particles(true)
 	main.power_panel.reactor = main.reactor   # пульт энергии рисует строки под шторкой: шрифты всех размеров (#217)
 	main.power_panel.panel = main.power
+	main.route_card.warm(true)   # карточка у стола рисует свои кегли под шторкой (09c0-route-celi)
 	frame()
 
 
@@ -135,6 +136,7 @@ func restore() -> void:
 		main.ghosts.clear()
 		main.net_game.ghosts_step(0.0, true)
 		_particles(false)
+		main.route_card.warm(false)
 		main.curtain.queue_free()   # вместе с текстурой фона
 		main.curtain = null
 		main._place_camera()

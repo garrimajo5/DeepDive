@@ -135,6 +135,8 @@ func test_scene_warmup() -> void:
 		prev = main.curtain.progress
 		ok(main.vote_panel.visible, "панель решения экипажа под шторкой")
 		ok(main.power_panel.visible and main.power_panel.reactor != null, "пульт энергии рисуется под шторкой (#217)")
+		ok(main.route_card.visible and main.route_card.lines == Briefing.goal_lines() and not main.route_card.code.is_empty(),
+				"карточка у стола рисует цели слоя и «Связь» под шторкой — кегли в кэше шрифта (09c0-route-celi)")
 		if main.warm.outside() >= 0:
 			outside += 1
 			ok(main.flyby_cam.current, "кадр снаружи — камера с борта")
@@ -160,6 +162,8 @@ func test_scene_warmup() -> void:
 	eq(main.valve_steam.puffs.size(), 0, "клубов пара прогрев не родил")
 	ok(not main.vote_panel.visible, "панель решения снова скрыта")
 	ok(not main.power_panel.visible, "пульт энергии снова скрыт")
+	ok(main.route_card.lines.is_empty() and main.route_card.code.is_empty() and not main.route_card.visible,
+			"карточка у стола снова пуста и скрыта")
 	ok(main.camera.current, "глаза на мостике")
 	ok(yaws.size() >= 6, "камера обошла круг: %s" % str(yaws.keys()))
 	ok(main.curtain == null, "шторка снята")
