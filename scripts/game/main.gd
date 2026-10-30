@@ -40,6 +40,7 @@ var autosave := Autosave.new()   ## автосохранение у мест-с�
 var expedition := Expedition.new()   ## история для журнала ART-047: места, забеги, рекорд глубины, прочитанное
 var lore := LayerLore.new()   ## знания слоя 1 (#825): диагностика 07, запись К-2, Раковина 03, поле 08…
 var scanner := Scanner.new()   ## сканер биолога: цели от живого мира, изученные виды
+var gate := GateDiag.new()     ## диагностика 07 сканером с борта (#826): гнёзда арки → факты `lore`
 var at_scanner := false        ## игрок у поста «Сканер»: мир шлёт цели (ShipState.scan_range)
 var near_post := ""            ## пост рядом с игроком на ногах (id), "" — нет или игрок занят постом
 var busy_said := {}           ## пост → «Пульт энергии занят: Инженер» на приборах; гаснет, когда пост освободился
@@ -461,6 +462,7 @@ func _load_state() -> void:
 	expedition.changed.connect(save.mark)
 	lore.changed.connect(save.mark)
 	scanner.message.connect(say)
+	gate.read.connect(func(f: String) -> void: announce(GateDiag.TEXT[f]))   # факт 07 видят все (#826)
 
 
 ## Идёт прогрев шейдеров: экран под шторкой, сценарий тестера ждёт.
@@ -751,9 +753,14 @@ func _step_posts(dt: float, h: Holds) -> void:
 	samples.update(dt)
 	samples_view.sync()
 	save.tick(dt, samples, scanner)
+	gate.aim(helm.pos, lore, float(scanner.target["dist"]) if not scanner.target.is_empty() else INF)
 	if h.scan or held.has("scanner"):
-		scanner.hold(dt)
+		if gate.active():
+			gate.hold(dt, lore)   # гнездо 07 ближе существа — сканер переводит его (#826)
+		else:
+			scanner.hold(dt)
 	scanner.update(dt)
+	gate.update(dt)
 	if h.weld or held.has("breach") or debug_weld:
 		breach.hold(dt)
 	for p in posts:
@@ -773,7 +780,7 @@ func _step_posts(dt: float, h: Holds) -> void:
 			p.at = breach.post_at()
 			p.label = breach.label()
 		elif p.id == "scanner":
-			p.label = scanner.label()
+			p.label = gate.label(lore) if gate.active() else scanner.label()
 		elif p.id == "route":
 			p.label = run.label()
 		elif p.id.begins_with("flask"):
@@ -876,7 +883,7 @@ func _step_view(dt: float) -> void:
 	rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(), carry_c)
 	rooms.set_lab(Lab.contents(samples.cargo), lab_screen.lines(samples, scanner, journal_page), time)
 	rooms.set_shelves(HoldShelves.contents(samples.cargo))
-	bridge.set_scanner_screen(scanner.screen_lines())
+	bridge.set_scanner_screen(gate.screen_lines(lore) if gate.active() else scanner.screen_lines())
 	message.update(dt)
 	me.back = CrewView.own_back(walker.pitch, me.holding())   # взгляд вниз — фигура дальше позади глаза, видны ступни (#108)
 	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt)
@@ -1002,7 +1009,10 @@ func use_post(id: String) -> void:
 			walker.yaw = -PI / 2.0   # щиток на правом борту (+X)
 			engine.press(reactor)
 		"scanner":
-			scanner.press()
+			if gate.active():
+				say(gate.press_text(lore))
+			else:
+				scanner.press()
 		"journal":   # листать: сводка → карточки видов → сводка
 			journal_page = (journal_page + 1) % Lab.pages(scanner)
 			say(Lab.journal_info(samples) if journal_page == 0 else Lab.card_info(scanner, Lab.cards(scanner)[journal_page - 1]))

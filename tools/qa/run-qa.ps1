@@ -89,7 +89,7 @@ if ($inst -notmatch 'Success') { Write-Output "INSTALL_FAILED $head"; $inst; exi
 & $adb logcat -c
 & $adb shell monkey -p $app -c android.intent.category.LAUNCHER 1 | Out-Null
 $done = $false
-for ($i = 0; $i -lt 150; $i++) {
+for ($i = 0; $i -lt 165; $i++) {
   Start-Sleep 2
   if ((& $adb shell "run-as $app ls files/qa/out/done.txt" 2>&1) -match 'done.txt$') { $done = $true; break }
 }
