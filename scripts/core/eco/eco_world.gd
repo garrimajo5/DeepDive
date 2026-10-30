@@ -125,6 +125,8 @@ func step(dt: float) -> void:
 		var r := ship.zap_radius if ship.zap_radius > 0.0 else ZAP_RADIUS
 		for s in systems:
 			s.on_zap(self, r)
+	if ship.sonar_ping or ship.zap:
+		StepClock.mark("мир/импульс, разряд")   # модули узнают импульс и разряд — своя подчасть (#1020)
 	var n := maxi(1, int(ceil(dt / SLOW_STEP - 1e-4)))
 	var h := dt / n
 	for i in n:
@@ -144,6 +146,7 @@ func step(dt: float) -> void:
 	_drag.clear()
 	if ship.sonar_ping or ship.scan_range > 0.0:
 		_send_near()
+	StepClock.mark("мир/события")   # сток, тяга и существа рядом — не в первую группу видов (#1020)
 
 
 ## Имя модуля для лога тестера: class_name его скрипта (#1020), запоминается.
