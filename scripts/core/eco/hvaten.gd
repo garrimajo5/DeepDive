@@ -61,13 +61,21 @@ class Tentacle:
 	var phase := 0.0
 
 
-## Пестрянка: фаза хоровода, радиус у щупалец, где плывёт и где была шаг назад (курс для отрисовки).
+## Пестрянка: фаза хоровода, радиус у щупалец, где плывёт и где была шаг назад; нос `look` догоняет путь (`turn`).
 class Pestr:
 	extends RefCounted
 	var phase := 0.0
 	var r := 0.4
 	var p := Vector3.ZERO
 	var prev := Vector3.ZERO
+	var look := Vector3.ZERO
+
+
+## Нос пестрянки догоняет путь (план реализма Б3, «плавность поведения»): доля угла `LOOK_K` в с, не быстрее
+## `LOOK_MAX` рад/с; стоит — держит курс. Раньше нос брался прямо из шага пути и щёлкал, когда цель прыгала
+## (хватень подманил стаю, отпустил её) или пестрянка вставала.
+const LOOK_K := 8.0
+const LOOK_MAX := 6.0
 
 
 ## Хватень.
@@ -222,6 +230,25 @@ func _lure(world: EcoWorld, hv: Anemone, dt: float) -> void:
 			hv.lure.goal_timer = maxf(hv.lure.goal_timer, 0.5)
 
 
+## Нос `from` к ходу `move` за шаг dt: доля угла `LOOK_K`, не быстрее `LOOK_MAX`; без хода — прежний курс.
+## Ровно назад — разворот по горизонтали. Нос ещё не задан — сразу по ходу.
+static func turn(from: Vector3, move: Vector3, dt: float) -> Vector3:
+	if move.length_squared() < 1e-10:
+		return from
+	var want := move.normalized()
+	if from.length_squared() < 1e-8:
+		return want
+	from = from.normalized()
+	var ang := from.angle_to(want)
+	if ang < 1e-4:
+		return want
+	var axis := from.cross(want)
+	if axis.length_squared() < 1e-10:
+		axis = Vector3.UP
+	var step := minf(ang * minf(1.0, LOOK_K * dt), LOOK_MAX * dt)
+	return from.rotated(axis.normalized(), step).normalized()
+
+
 ## Ловля: только раскрытые щупальца и только сытый хватень; рыбка ближе REACH · open ко рту.
 func _catch(world: EcoWorld, hv: Anemone, dt: float) -> void:
 	if hv.open <= CATCH_OPEN or hv.digest > 0.0:
@@ -259,6 +286,7 @@ func _swim_pestr(world: EcoWorld, hv: Anemone, dt: float) -> void:
 				hv.top.z + sin(a) * rr)
 		pe.prev = pe.p
 		pe.p = pe.p.lerp(to, minf(1.0, dt * 2.5))
+		pe.look = turn(pe.look, pe.p - pe.prev, dt)
 		c += pe.p
 	hv.pc = c / PESTR_N
 
@@ -310,7 +338,7 @@ static func body(hv: Anemone, t: float, live := true) -> Transform3D:
 ## Расстановка пестрянки: носом по ходу (по кругу хоровода, если стоит), виляет хвостом.
 static func pestr_pose(hv: Anemone, k: int, t: float) -> Transform3D:
 	var pe := hv.pestr[k]
-	var dir := pe.p - pe.prev
+	var dir := pe.look
 	if dir.length_squared() < 1e-8:
 		var a := t * 0.9 + pe.phase
 		dir = Vector3(-sin(a), 0.0, cos(a))

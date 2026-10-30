@@ -483,3 +483,32 @@ func test_pestr_view_shares_fish_shader() -> void:
 	eq(mat.get_shader_parameter("sway_k"), 1.0, "и возвращает")
 	view.queue_free()
 	await frames(1)
+
+
+# ---------- Плавность (Б3) ----------
+
+func test_pestr_turn_limited_and_holds_when_still() -> void:
+	var f := Vector3(0, 0, -1)
+	var back := EcoHvaten.turn(f, Vector3(0, 0, 1), 0.1)
+	near(f.angle_to(back), EcoHvaten.LOOK_MAX * 0.1, 1e-3, "ровно назад — не быстрее LOOK_MAX")
+	ok(absf(back.y) < 1e-4, "разворот по горизонтали")
+	var want := Vector3(sin(PI / 6.0), 0, -cos(PI / 6.0))
+	var side := EcoHvaten.turn(f, want, 0.05)
+	near(f.angle_to(side), PI / 6.0 * EcoHvaten.LOOK_K * 0.05, 1e-3, "доля угла за шаг")
+	ok(EcoHvaten.turn(f, Vector3.ZERO, 0.1).is_equal_approx(f), "стоит — держит курс")
+	ok(EcoHvaten.turn(Vector3.ZERO, Vector3(2, 0, 0), 0.1).is_equal_approx(Vector3.RIGHT), "курс не задан — сразу по ходу")
+
+
+func test_pestr_nose_does_not_snap_when_lure_starts() -> void:
+	var w := _world()
+	var hv := _system(w).anemones[0]
+	w.run(3.0)
+	var before: Array[Vector3] = []
+	for pe in hv.pestr:
+		before.append(EcoHvaten.pestr_pose(hv, hv.pestr.find(pe), w.time).basis.z)
+	hv.lure_cd = 0.0
+	w.step(EcoWorld.MAX_STEP)   # хватень подманил стаю — цель пестрянок прыгнула к ней
+	for k in hv.pestr.size():
+		var now := EcoHvaten.pestr_pose(hv, k, w.time).basis.z
+		ok(before[k].angle_to(now) <= EcoHvaten.LOOK_MAX * EcoWorld.MAX_STEP + 0.25,
+			"пестрянка %d: нос не щёлкнул (%.2f рад)" % [k, before[k].angle_to(now)])
