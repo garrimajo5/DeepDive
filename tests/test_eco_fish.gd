@@ -549,3 +549,29 @@ func test_young_hide_between_ribs() -> void:
 	ok(sh.alarm > 0.0, "хищник рядом — тревога")
 	ok(_mean_to(sh, sh.home) < 4.0, "прячется в середине клетки")
 	pred.alive = false
+
+
+## Б3: нос `Fish.look` догоняет скорость — рывок от хищника разворачивает тело за доли секунды, а не за кадр.
+func test_nose_turns_smoothly() -> void:
+	var dt := 1.0 / 30.0
+	near(EcoFish.turn(Vector3.ZERO, Vector3(0, 0, -2), dt).z, -1.0, 1e-6, "не плыла — нос сразу по скорости")
+	var look := Vector3(1, 0, 0)
+	var after := EcoFish.turn(look, Vector3(-3, 0, 0), dt)   # скорость развернулась навстречу за кадр
+	near(after.length(), 1.0, 1e-5, "нос единичный")
+	near(look.angle_to(after), EcoFish.LOOK_MAX * dt, 1e-4, "за кадр — не больше LOOK_MAX · dt")
+	var steps := 0
+	while look.angle_to(Vector3(-1, 0, 0)) > 0.05 and steps < 100:
+		look = EcoFish.turn(look, Vector3(-3, 0, 0), dt)
+		steps += 1
+	ok(steps > 6 and steps < 30, "разворот за 0,2–1 с: %d кадров" % steps)
+	eq(EcoFish.turn(look, Vector3.ZERO, dt), look, "скорости нет — держит нос")
+	var w := _world()
+	var fish := _fish(w)
+	for i in 60:
+		w.step(dt)
+	var f := fish.all[0]
+	ok(f.look.length_squared() > 0.9, "мир ведёт нос рыбки")
+	ok(f.look.angle_to(f.agent.v) < 0.6, "нос близко к курсу")
+	var fw := EcoFishLook.forward(f, 0.0)
+	var flat := Vector3(f.look.x, 0, f.look.z)
+	ok(flat.length() < 1e-3 or fw.angle_to(f.look) <= EcoFishLook.WIGGLE + 1e-3, "тело — по носу с вилянием")

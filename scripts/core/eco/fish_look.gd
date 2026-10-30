@@ -200,7 +200,7 @@ static func vertex_color(f: EcoFish.Fish, p: Paint) -> Color:
 
 ## Куда смотрит нос: по скорости (вверх-вниз тоже), с вилянием вокруг вертикали.
 static func forward(f: EcoFish.Fish, t: float) -> Vector3:
-	var v := f.agent.v
+	var v := f.look if f.look.length_squared() > 1e-8 else f.agent.v   # нос догоняет скорость (EcoFish.turn)
 	var dir := v.normalized() if v.length_squared() > 1e-8 else Vector3(0, 0, 1)
 	var w := sin(t * wiggle_rate(f) + f.phase) * WIGGLE
 	var cw := cos(w)

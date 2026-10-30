@@ -26,6 +26,10 @@ const HIDE_SPEED := 1.0
 const ALARM_SPEED := 6.5
 const CALM_SPEED := 2.4
 const MIN_SPEED := 0.5
+## Нос рыбки `Fish.look` догоняет скорость долей угла LOOK_K в секунду, не быстрее LOOK_MAX рад/с (`turn`, Б3):
+## в рывке от хищника и у дома тело разворачивается за доли секунды, а не щёлкает за кадр.
+const LOOK_K := 10.0
+const LOOK_MAX := 8.0
 ## Запас до корпуса корабля, м (S.pushOut(f.p, 0.3)).
 const HULL_GAP := 0.3
 ## Стая за ледокрылом: цель — в LEAD_BEHIND позади него и LEAD_BELOW ниже (sh.follow в js).
@@ -183,6 +187,8 @@ class Fish:
 	var bright := 1.0
 	## Размер от взрослой рыбки: 1 — взрослая, JUV_SIZE — молодь.
 	var size := 1.0
+	## Нос — догоняет скорость (`EcoFish.turn`); ноль — ещё не плыла (или вернулась после съедения): нос по скорости.
+	var look := Vector3.ZERO
 	var _shoal: WeakRef
 
 
@@ -292,6 +298,22 @@ static func cage_goal(sh: Shoal, rnd: EcoRandom, ground: Callable) -> Vector3:
 	var g := sh.frame * Vector3(rnd.range_f(-CAGE_X, CAGE_X), 0.0, rnd.range_f(-CAGE_Z, CAGE_Z))
 	g.y = cage_floor(ground, g.x, g.z) + rnd.range_f(CAGE_LIFT.x, CAGE_LIFT.y)
 	return g
+
+
+## Нос from доворачивает к курсу move долей угла LOOK_K/с, не быстрее LOOK_MAX рад/с; навстречу — через верх.
+static func turn(from: Vector3, move: Vector3, dt: float) -> Vector3:
+	if move.length_squared() < 1e-10:
+		return from
+	var want := move.normalized()
+	if from.length_squared() < 1e-8:
+		return want
+	var ang := from.angle_to(want)
+	if ang < 1e-4:
+		return want
+	var axis := from.cross(want)
+	if axis.length_squared() < 1e-10:
+		axis = Vector3.UP if absf(from.y) < 0.9 else Vector3.RIGHT
+	return from.rotated(axis.normalized(), minf(ang * minf(1.0, LOOK_K * dt), LOOK_MAX * dt)).normalized()
 
 
 ## Съесть рыбку: пропадает на 25–40 с, потом появляется у дома стаи.
@@ -518,6 +540,7 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 			a.alive = true
 			a.p = home + Vector3(sh.rnd.range_f(-2, 2), sh.rnd.range_f(0, 2), sh.rnd.range_f(-2, 2))
 			a.v = Vector3(0, 0.2, 0)
+			f.look = Vector3.ZERO
 		var p := a.p
 		var v := a.v
 		var acc := (center - p) * 0.5 + (velocity - v) * 0.6
@@ -555,6 +578,7 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 			v *= MIN_SPEED / (sp + 1e-3)
 		p += v * dt
 		a.v = v
+		f.look = turn(f.look, v, dt)
 		if p.distance_squared_to(ship_pos) < hull_r2:  # сквозь корпус не проплывают
 			a.p = p
 			if world.push_out(a, HULL_GAP):
