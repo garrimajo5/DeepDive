@@ -200,7 +200,7 @@ static func fill(out: PackedFloat32Array, system: EcoFish, t: float, moved_only:
 					out[i + c] = 0.0  # съеденная — нулевой basis
 				continue
 			# EcoFishLook.forward: нос по скорости с вилянием вокруг вертикали
-			var v := a.v
+			var v := f.look if f.look.length_squared() > 1e-8 else a.v   # нос догоняет скорость (EcoFish.turn)
 			var dir := v.normalized() if v.length_squared() > 1e-8 else Vector3(0, 0, 1)
 			var w := sin(t * vary[f.index * VARY + 1] + f.phase) * EcoFishLook.WIGGLE
 			var cw := cos(w)
