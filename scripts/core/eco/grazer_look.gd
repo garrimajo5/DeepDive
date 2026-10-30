@@ -166,9 +166,12 @@ static func tripod(leg: int) -> int:
 	return 1 if ((leg / 3) + (leg % 3)) % 2 == 0 else -1
 
 
-## Фаза шага скребуна в момент t: −1…1, у стоящего — 0. Поза лапы — фаза × tripod(leg).
+## Фаза шага скребуна в момент t: −1…1, у стоящего — 0. Поза лапы — фаза × tripod(leg). Размах — по доле шага
+## (EcoGrazer.WALK_SPEED): трогаясь и тормозя, лапы шагают мельче, а не замирают посреди шага.
 static func stride(g: EcoGrazer.Grazer, t: float) -> float:
-	return sin(t * STEP_RATE + g.index * 1.3) if walking(g) else 0.0
+	if not walking(g):
+		return 0.0
+	return sin(t * STEP_RATE + g.index * 1.3) * clampf(g.agent.v.length() / EcoGrazer.WALK_SPEED, 0.0, 1.0)
 
 
 ## Поворот лапы у бедра вокруг вертикали (рад) и подъём стопы (м) в момент t: [angle, lift].
