@@ -7,7 +7,11 @@ extends RefCounted
 const SHOW := 3            ## сколько частей в подписи
 const MIN_MS := 1.0        ## части короче — не пишем
 const SUB_MS := 10.0       ## часть дольше — с её долгими подчастями: «интерфейс 45 [связь 40]» (issue #745)
-const SUB_SHOW := 2        ## сколько подчастей в скобках
+const SUB_SHOW := 3        ## сколько подчастей в скобках
+## Остаток долгой части за показанными подчастями (issue #1020: «мир 91 [EcoFringe 15, EcoFish 13]» — где ещё 63 мс):
+## прочие подчасти одной суммой «ещё 12: 40» и время части вне подчастей «без отметки 13».
+const REST := "ещё %d: %d"
+const BARE := "без отметки %d"
 
 var parts := {}            ## часть → мс этого шага (части с одним именем складываются)
 var subs := {}             ## часть → {подчасть → мс}: отметки «часть/подчасть» (issue #745)
@@ -71,11 +75,36 @@ static func _top(of: Dictionary, n: int, min_ms: float, sub_of: Dictionary = {})
 	for k in keys.slice(0, n):
 		var t := "%s %d" % [k, roundi(float(of[k]))]
 		if float(of[k]) >= SUB_MS and sub_of.has(k):
-			var inner := _top(sub_of[k], SUB_SHOW, min_ms)
+			var inner := _inner(float(of[k]), sub_of[k], min_ms)
 			if not inner.is_empty():
 				t += " [%s]" % inner
 		out.append(t)
 	return ", ".join(out)
+
+
+## Подчасти долгой части total: SUB_SHOW самых долгих, затем остаток — прочие подчасти одной суммой (`REST`) и время
+## вне подчастей (`BARE`), если они не короче min_ms (issue #1020).
+static func _inner(total: float, sub: Dictionary, min_ms: float) -> String:
+	var t := _top(sub, SUB_SHOW, min_ms)
+	if t.is_empty():
+		return t
+	var keys: Array = sub.keys()
+	keys.sort_custom(func(a, b): return float(sub[a]) > float(sub[b]) or (is_equal_approx(sub[a], sub[b]) and str(a) < str(b)))
+	var shown := keys.filter(func(k): return float(sub[k]) >= min_ms).slice(0, SUB_SHOW)
+	var rest := 0.0
+	var marked := 0.0
+	var n := 0
+	for k in keys:
+		marked += float(sub[k])
+		if not shown.has(k):
+			rest += float(sub[k])
+			n += 1
+	if rest >= min_ms:
+		t += ", " + REST % [n, roundi(rest)]
+	var bare := total - marked
+	if bare >= min_ms:
+		t += ", " + BARE % roundi(bare)
+	return t
 
 
 ## Подпись для лога: части и шаг времени, если он больше обычного (1/30 с): «мир 80, виды 20; шаг 120 мс».
