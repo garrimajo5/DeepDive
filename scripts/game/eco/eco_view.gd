@@ -100,6 +100,9 @@ var fringe: EcoFringe
 ## Край отмели (место 6, ART-032): скальные клинья вдоль бровки, шрам оползня с осыпью, трещины на площадке.
 var drop: EcoDrop
 var drop_view: DropView
+## Граница у Спуска 10 (#832): кварцевая корка на дне котловины склона, к востоку гуще, кончики светятся.
+var brink: EcoBrink
+var brink_view: BrinkView
 ## Купольник у террасы врат 07 (#837): рабочий Хранителя открывает створку гнезда; вид — по модели MOD-022.
 var dome: EcoDome
 ## Эхоловец (ART-007): засадчик с ушами-воронками лежит у Костей левиафана, уши поворачивает на корабль,
@@ -136,6 +139,7 @@ var ground: Callable:
 		_rebuild_bones()
 		_rebuild_well()
 		_rebuild_drop()
+		_rebuild_brink()
 		_rebuild_plankton()
 		EcoRim.apply(self)
 		EcoSurface.apply(self)
@@ -208,6 +212,7 @@ func _init() -> void:
 	fringe = world.add(EcoFringe.new()) as EcoFringe
 	drop = world.add(EcoDrop.new()) as EcoDrop
 	dome = world.add(EcoDome.new()) as EcoDome
+	brink = world.add(EcoBrink.new()) as EcoBrink
 	echo = world.add(EcoEcho.new(bones, preds)) as EcoEcho
 	echo_view = EchoView.new(echo)
 	add_child(echo_view)
@@ -231,6 +236,7 @@ func _init() -> void:
 	_rebuild_bones()
 	_rebuild_well()
 	_rebuild_drop()
+	_rebuild_brink()
 	_rebuild_plankton()
 	EcoRim.apply(self)
 	EcoSurface.apply(self)
@@ -422,6 +428,15 @@ func _rebuild_drop() -> void:
 		drop_view.free()
 	drop_view = DropView.new(drop)
 	add_child(drop_view)
+
+
+## Корка у Спуска 10 по дну мира (друзы встают на дно при сбросе мира).
+func _rebuild_brink() -> void:
+	if brink_view:
+		remove_child(brink_view)
+		brink_view.free()
+	brink_view = BrinkView.new(brink)
+	add_child(brink_view)
 
 
 ## Планктон по дну мира (облака встают на 10 м над дном при сбросе мира).
