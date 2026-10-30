@@ -20,6 +20,12 @@ func test_nests_on_terrace_bottom() -> void:
 		near(p.y, Seabed.height(p.x, p.z), 1e-3, "гнездо %d на дне" % i)
 		ok(Vector2(p.x, p.z).distance_to(EcoGate.CENTER) < EcoGate.POCKET, "гнездо %d в кармане арки, обвязка дальше" % i)
 		ok(OVER.distance_to(p) < GateDiag.READ_R, "с 35 м над серединой гнездо %d читается" % i)
+	for i in GateDiag.NESTS.size():
+		var a: Vector2 = GateDiag.NESTS[i]["at"]
+		ok(a.x > 30.0, "гнездо %d у правой опоры, вне прохода X −30…+30 (ART-079)" % i)
+		for j in GateDiag.NESTS.size():
+			if j > i:
+				near(a.distance_to(GateDiag.NESTS[j]["at"]), 4.0, 0.1, "тройка — треугольник со стороной 4 м")
 	var facts: Array = GateDiag.NESTS.map(func(n): return n["fact"])
 	facts.sort()
 	var want := LayerLore.DIAGNOSTICS.duplicate()
