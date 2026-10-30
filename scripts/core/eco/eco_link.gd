@@ -23,6 +23,7 @@ class ShipState:
 	var claw_state := CLAW_IDLE  ## CLAW_IDLE — покой, CLAW_REACH — тянется к образцу, CLAW_BACK — поднимает его
 	var claw_target := Vector3.ZERO  ## где лежит (лежал) образец-цель захвата; при CLAW_IDLE — ноль
 	var claw_sample := -1        ## номер образца-цели (Samples.all), −1 — цели нет
+	var petal_open := false      ## створка гнезда 07 уже открыта (`LayerLore.PETAL07`, кампания): купольник не выходит
 
 	## Чутьё хищников на этом спуске (js/run.js R.predK): 1 + 0,15 за спуск. Мир множит на него дальность,
 	## с которой хищник замечает корабль (EcoPred.REACH).
@@ -87,6 +88,10 @@ const PRED_PER_DIVE := 0.15
 ## {"type": SHELL, "text": "…"}                                          — Раковина древних 03 осмотрена (#835): сканер
 ##     биолога видел контактные гнёзда и импульс сонара — рельеф спирали, в любом порядке (`EcoShell`). Корабль ставит
 ##     знание «осмотр 03» (`LayerLore.SHELL03`) и показывает строку. Один раз за забег.
+## {"type": PETAL, "nest": 0, "text": "…"}                              — купольник у террасы врат 07 поднял
+##     створку контактного гнезда nest (`GateDiag.NESTS`, #837). Корабль ставит знание «створка 07 открыта»
+##     (`LayerLore.PETAL07`, в сохранении) и показывает строку; дальше шлёт ShipState.petal_open — купольник больше
+##     не выходит. Один раз. Диагностика от створки не зависит.
 const HIT := "hit"
 const DRAIN := "drain"
 const NEAR := "near"
@@ -98,6 +103,7 @@ const DROP := "drop"
 const VOICE := "voice"
 const FIELD := "field"
 const SHELL := "shell"
+const PETAL := "petal"
 
 
 static func hit(by: String, damage: float, at: Vector3) -> Dictionary:
@@ -132,6 +138,10 @@ static func voice(role: int, text: String, fake := false, ask := "", silent := f
 
 static func shell(text: String) -> Dictionary:
 	return {"type": SHELL, "text": text}
+
+
+static func petal(nest: int, text: String) -> Dictionary:
+	return {"type": PETAL, "nest": nest, "text": text}
 
 
 static func field(period: float, text: String) -> Dictionary:

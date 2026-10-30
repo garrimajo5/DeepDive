@@ -1200,6 +1200,9 @@ func on_eco_event(e: Dictionary) -> void:
 		EcoLink.SHELL:   # Раковина 03: гнёзда на сканере и рельеф на сонаре (#835) — знание «осмотр 03»
 			lore.learn(LayerLore.SHELL03)
 			_world_say(str(e.get("text", "")))
+		EcoLink.PETAL:   # купольник у 07 поднял створку гнезда (#837) — знание в кампании, больше не выходит
+			if lore.learn(LayerLore.PETAL07):
+				_world_say(str(e.get("text", "")))
 		EcoLink.DROP:   # унесённый образец снова на дне (M.drop)
 			samples.drop(int(e.get("sample", -1)), e.get("at", Vector3.ZERO))
 		EcoLink.OBSERVE:   # наблюдение в журнал (handleEvents в js/game.js)
@@ -1844,6 +1847,7 @@ func _fill_ship_state(full: bool) -> EcoLink.ShipState:
 	s.light_on = Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP))
 	s.light_range = Searchlight.range_m(reactor.k(Reactor.Sys.LAMP)) * silt.beam_k() if s.light_on else 0.0
 	s.dive = run.depth
+	s.petal_open = lore.knows(LayerLore.PETAL07)   # у гостя — по знаниям хоста (кадр «k»)
 	if not full:
 		return s
 	s.hull_noise = engine.noise(clampf(absf(helm.speed) / 6.7, 0.0, 1.0))

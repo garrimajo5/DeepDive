@@ -170,3 +170,34 @@ func test_scene_has_dome_at_gate() -> void:
 	eq(v.dome.state, EcoDome.State.WAIT, "на старте ждёт в нише")
 	v.queue_free()
 	await frames(1)
+
+
+func test_petal_event_sent_once() -> void:   # часть 2: событие «створка открыта» — одно, с гнездом и строкой
+	var w := _world(_near())
+	var d := EcoDome.new()
+	d.reset(w)
+	var got: Array[Dictionary] = []
+	for i in 4000:
+		w.time += DT
+		d.step(w, DT)
+		for e in w.take_link():
+			if e["type"] == EcoLink.PETAL:
+				got.append(e)
+	eq(got.size(), 1, "событие пришло один раз")
+	eq([got[0]["nest"], got[0]["text"]], [EcoDome.NEST, EcoDome.PETAL_TEXT], "гнездо и строка")
+
+
+func test_petal_already_open_in_campaign() -> void:   # сохранение: створка открыта — купольник не выходит
+	var w := _world(_near())
+	w.ship.petal_open = true
+	var d := EcoDome.new()
+	d.reset(w)
+	var opens := _run(w, d, 200.0)
+	eq(opens, 0, "второй раз не открывает")
+	eq(d.state, EcoDome.State.GONE, "в нише, не выходит")
+	ok(d.opened and is_equal_approx(d.petal, 1.0), "створка поднята")
+	var sent := 0
+	for e in w.take_link():
+		if e["type"] == EcoLink.PETAL:
+			sent += 1
+	eq(sent, 0, "события нет")

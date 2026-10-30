@@ -8,7 +8,9 @@ extends EcoSystem
 ## отпускает, разворачивается и уходит обратно в нишу — и больше не выходит. Створка остаётся открытой (`petal`).
 ## Корабль на пути (ближе `KEEP`) — купольник стоит и ждёт, пока его пропустят. Диагностика от него не зависит
 ## (`GateDiag`): игрок может купольника пропустить. Здесь — числа и шаг без узлов, детерминированно (случая нет).
-## «Створка открыта» — флаг `opened` и `just_opened` на шаг (событие `EcoLink` и вид по модели MOD-022 — дальше).
+## «Створка открыта» — флаг `opened`, `just_opened` на шаг и событие `EcoLink.PETAL` (#837, часть 2). Створка уже
+## открыта в кампании (`ShipState.petal_open`) — купольник в нише не ждёт: ушёл, створка поднята, события нет.
+## Вид по модели MOD-022 — дальше.
 
 const ID := "dome"
 ## Ниша (x, z) — смещение от середины террасы `EcoGate.CENTER`: за правой опорой, к северо-востоку, вне прохода.
@@ -38,6 +40,8 @@ const LIFT := Vector2(1.2, 3.8)
 const GLOW_REST := 0.15
 const PULSE := 0.8
 const PULSE_TIME := 0.6
+## Строка на приборы, когда створка поднята (черновик; финальные строки — сюжет, TXT-001 #853).
+const PETAL_TEXT := "Терраса 07: рабочий открыл створку гнезда и ушёл"
 
 enum State { WAIT, GO, OPEN, BACK, GONE }
 
@@ -105,6 +109,8 @@ func step(world: EcoWorld, dt: float) -> void:
 	just_opened = false
 	t += dt
 	var sp := world.ship.pos
+	if world.ship.petal_open and state == State.WAIT:
+		_done()
 	match state:
 		State.WAIT:
 			if Vector2(sp.x, sp.z).distance_to(EcoGate.CENTER) < CALL_R:
@@ -118,6 +124,7 @@ func step(world: EcoWorld, dt: float) -> void:
 			if t >= LIFT.y and not opened:
 				opened = true
 				just_opened = true
+				world.send(EcoLink.petal(NEST, PETAL_TEXT))
 			if t >= OPEN_TIME:
 				_go(State.BACK, world)
 		State.BACK:
@@ -127,6 +134,16 @@ func step(world: EcoWorld, dt: float) -> void:
 				speed = 0.0
 	var k := (world.time - _pulse) / PULSE_TIME
 	glow = GLOW_REST + (PULSE - GLOW_REST) * (sin(PI * k) if k >= 0.0 and k <= 1.0 else 0.0)
+
+
+## Створка открыта раньше (сохранение кампании): ушёл, створка поднята.
+func _done() -> void:
+	state = State.GONE
+	petal = 1.0
+	opened = true
+	speed = 0.0
+	var h := home()
+	pos = Vector3(h.x, floor_y(h.x, h.y) + AT_NEST, h.y)
 
 
 func _go(s: State, world: EcoWorld) -> void:
