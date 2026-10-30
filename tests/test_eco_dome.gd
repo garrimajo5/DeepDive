@@ -113,6 +113,9 @@ func test_ship_in_the_way_waits() -> void:
 	_run(w, d, 20.0)
 	eq(d.state, EcoDome.State.GO, "в пути")
 	w.ship.pos = d.pos + Vector3(0.0, 4.0, 10.0)   # корабль у самого купольника
+	var from := d.pos
+	_run(w, d, 1.0)
+	ok(d.pos.distance_to(from) < 0.3, "тормозит, а не плывёт дальше (%.2f м)" % d.pos.distance_to(from))
 	var at := d.pos
 	_run(w, d, 15.0)
 	near(d.pos.distance_to(at), 0.0, 1e-4, "корабль на пути — стоит")
@@ -120,6 +123,33 @@ func test_ship_in_the_way_waits() -> void:
 	w.ship.pos = _near()
 	_run(w, d, 5.0)
 	ok(d.pos.distance_to(at) > 1.0, "пропустили — плывёт дальше")
+
+
+## Б3: трогается и встаёт плавно — скорость меняется не быстрее ACCEL/BRAKE, к гнезду подходит тихим ходом.
+func test_speed_eases() -> void:
+	var w := _world(_near())
+	var d := EcoDome.new()
+	d.reset(w)
+	var prev := 0.0
+	var worst := 0.0
+	var at_arrive := -1.0
+	var guard := 0
+	while d.state != EcoDome.State.OPEN and guard < 3000:
+		var was_go := d.state == EcoDome.State.GO
+		w.time += DT
+		d.step(w, DT)
+		if d.state == EcoDome.State.OPEN and was_go:
+			at_arrive = prev
+		worst = maxf(worst, absf(d.speed - prev))
+		if d.state == EcoDome.State.GO and guard < 5:
+			ok(d.speed <= EcoDome.ACCEL * DT * (guard + 1) + 1e-4, "трогается с места: %.2f м/с" % d.speed)
+		prev = d.speed
+		guard += 1
+	eq(d.state, EcoDome.State.OPEN, "дошёл до гнезда")
+	ok(worst <= EcoDome.BRAKE * DT + 1e-4, "скорость за шаг меняется не больше %.2f (было %.2f)" % [EcoDome.BRAKE * DT, worst])
+	ok(at_arrive >= 0.0 and at_arrive < 0.3, "к гнезду — тихим ходом (%.2f м/с)" % at_arrive)
+	near(EcoDome.want_speed(EcoDome.SWIM, 1.0, 50.0, true), 0.0, 1e-6, "корабль на пути — стоп")
+	near(EcoDome.want_speed(EcoDome.SWIM, 1.0, 50.0, false), EcoDome.SWIM, 1e-6, "далеко — полный ход")
 
 
 func test_does_not_close_in_on_ship() -> void:

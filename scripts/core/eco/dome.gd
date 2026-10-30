@@ -26,6 +26,12 @@ const CALL_R := 80.0
 const SWIM := 0.8
 const LEAVE := 1.2
 const TURN := 0.7
+## Разгон и торможение, м/с² (Б3): трогается за ~1,6 с, встаёт перед кораблём за ~0,5 с; ближе SLOW_R м к цели
+## сбавляет ход (не меньше доли SLOW_MIN), а не врезается в гнездо или нишу с полного хода.
+const ACCEL := 0.5
+const BRAKE := 1.6
+const SLOW_R := 2.0
+const SLOW_MIN := 0.15
 ## Высота над дном в пути, м; к гнезду опускается на последних DESCEND м.
 const CRUISE := 2.5
 const DESCEND := 6.0
@@ -166,7 +172,8 @@ func _swim(goal: Vector3, top: float, ship: Vector3, dt: float) -> bool:
 	yaw += clampf(wrapf(want - yaw, -PI, PI), -TURN * dt, TURN * dt)
 	var face := cos(wrapf(want - yaw, -PI, PI))
 	var blocked := pos.distance_to(ship) < KEEP
-	speed = 0.0 if blocked else top * clampf(face, 0.0, 1.0)
+	var want_v := want_speed(top, face, dist, blocked)
+	speed = move_toward(speed, want_v, (ACCEL if want_v > speed else BRAKE) * dt)
 	var go := minf(speed * dt, dist)
 	if dist > 1e-4:
 		pos.x += d.x / dist * go
@@ -174,6 +181,13 @@ func _swim(goal: Vector3, top: float, ship: Vector3, dt: float) -> bool:
 	var low := goal.y if dist < DESCEND else floor_y(pos.x, pos.z) + CRUISE
 	pos.y = move_toward(pos.y, maxf(low, floor_y(pos.x, pos.z) + AT_NEST * 0.5), top * 0.6 * dt if not blocked else 0.0)
 	return false
+
+
+## Ход, к которому тянется: почти носом вперёд (доля cos угла), у цели — тише, корабль на пути — стоп.
+static func want_speed(top: float, face: float, dist: float, blocked: bool) -> float:
+	if blocked:
+		return 0.0
+	return top * clampf(face, 0.0, 1.0) * clampf(dist / SLOW_R, SLOW_MIN, 1.0)
 
 
 ## Курс носом по направлению d (x, z) на карте.
