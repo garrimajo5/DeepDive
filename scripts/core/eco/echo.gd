@@ -33,11 +33,16 @@ const BED: Array[Vector3] = [Vector3.ZERO, Vector3(0, 0, 1.4), Vector3(0, 0, -1.
 	Vector3(-0.6, 0, 0)]
 ## Уши: основание стебля в теле (x вбок, y вверх, z вперёд — голова к +Z), предел поворота от носа и наклона (рад),
 ## скорость сустава (рад/с). Покой: уши обводят воду ± IDLE_SWEEP за IDLE_PERIOD с, левое и правое — вразнобой.
+## Сустав с инерцией (`ear_joint`): разгон и торможение не быстрее EAR_ACCEL рад/с², у цели — ход EAR_GAIN × отставание
+## (тянется за медленной целью без рывков, к неподвижной подходит без перелёта). Поворот — в пределах ±EAR_YAW, без
+## перехода через затылок (раньше разность бралась по кругу, и ухо уходило за предел сустава).
 const EAR_BASE: Array[Vector3] = [Vector3(0.42, 0.45, 0.75), Vector3(-0.42, 0.45, 0.75)]
 const EAR_YAW := 2.3
 const EAR_PITCH_MIN := -0.35
 const EAR_PITCH_MAX := 1.1
 const EAR_TURN := 1.2
+const EAR_ACCEL := 2.5
+const EAR_GAIN := 4.0
 const IDLE_SWEEP := 0.9
 const IDLE_PERIOD := 23.0
 const IDLE_PITCH := 0.35
@@ -83,6 +88,8 @@ class Lurker:
 	var yaw := 0.0
 	## Уши: (поворот от носа, наклон вверх) каждого, рад.
 	var ears: Array[Vector2] = [Vector2(0.6, IDLE_PITCH), Vector2(-0.6, IDLE_PITCH)]
+	## Скорость суставов ушей (поворот, наклон), рад/с.
+	var ear_vel: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
 	## Корабль ближе LISTEN_R — слушает его (Ec.near).
 	var near := false
 	## Сколько ещё раскрыт (с); ≤ 0 — затаился.
@@ -181,10 +188,25 @@ func step(world: EcoWorld, dt: float) -> void:
 	for i in 2:
 		var want := aim(i, s) if ec.near else idle(i, _t)
 		var e := ec.ears[i]
-		var turn := EAR_TURN * dt
-		e.x += clampf(wrapf(want.x - e.x, -PI, PI), -turn, turn)
-		e.y += clampf(want.y - e.y, -turn, turn)
-		ec.ears[i] = e
+		var v := ec.ear_vel[i]
+		var yaw := ear_joint(e.x, v.x, want.x, dt)
+		var pitch := ear_joint(e.y, v.y, want.y, dt)
+		ec.ears[i] = Vector2(clampf(yaw.x, -EAR_YAW, EAR_YAW), clampf(pitch.x, EAR_PITCH_MIN, EAR_PITCH_MAX))
+		ec.ear_vel[i] = Vector2(yaw.y, pitch.y)
+
+
+## Шаг сустава уха: угол a со скоростью v догоняет want за dt → (новый угол, новая скорость). Скорость к цели — не
+## больше EAR_TURN, EAR_GAIN × отставание и того, с какой можно остановиться вполсилы торможения (√(EAR_ACCEL ·
+## отставание) — запас на шаг мира; на стыке с EAR_GAIN торможение ровно EAR_ACCEL); меняется не быстрее EAR_ACCEL.
+## Шаг, что перелетел бы цель, кончается в ней.
+static func ear_joint(a: float, v: float, want: float, dt: float) -> Vector2:
+	var err := want - a
+	var reach := minf(EAR_TURN, minf(absf(err) * EAR_GAIN, sqrt(EAR_ACCEL * absf(err))))
+	v = move_toward(v, signf(err) * reach, EAR_ACCEL * dt)
+	var step := v * dt
+	if err != 0.0 and signf(step) == signf(err) and absf(step) > absf(err):
+		return Vector2(want, err / dt)
+	return Vector2(a + step, v)
 
 
 ## Куда смотрит ухо i, чтобы слушать точку target: поворот от носа и наклон, в пределах суставов.
