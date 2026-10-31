@@ -247,6 +247,10 @@ func _build_outside() -> void:
 	samples_view = SamplesView.new(samples)
 	samples_view.name = "Образцы"
 	add_child(samples_view)
+	var spots: Array[Vector3] = []
+	for sm in samples.all:
+		spots.append(sm.pos)
+	ocean.stones.stones.set_avoid(spots)   # камни на дне не ложатся у образцов
 	# Пол корпуса — дно плюс верх скальных клиньев Края отмели: корабль не проходит сквозь скалу и чиркает по ней
 	# существующим ударом о дно (helm.bump → Vitals.scrape). Облако оползня — из свежего шрама (issue #258).
 	var ecv := eco
@@ -1314,6 +1318,7 @@ func _apply_graphics(level: int) -> void:
 		ocean.set_shafts_lite(lite)   # лучи ART-052 без чтения глубины кадра (#852)
 		ocean.set_snow_lite(lite)     # взвесь ART-058 реже, без вращения
 		ocean.set_decals_lite(lite)   # декали дна ART-066 реже и ближе
+		ocean.set_stones_lite(lite)   # камни на дне ближе
 		ocean.set_layers_level(g["layers"])   # слои воды ART-069: 0 / 0,6 / 0,9
 		ocean.set_shadows(g["shadows"])
 	if hull:
