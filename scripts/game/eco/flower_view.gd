@@ -6,6 +6,9 @@ extends MeshInstance3D
 ## многогранники #FFD6EC, светятся только они и мерцают волной снизу вверх (EcoFlower.glow — в шейдере по TIME,
 ## фаза кончика — в UV.x, доля свечения — в альфе цвета). Цоколь — камни #245B70 и трубочки, матовые, без пор
 ## (UV.y = 1). Погасание после импульса (EcoFlower.light) — uniform light, отдаёт `sync`. Без источника света: OmniLight в Compatibility перерисовал бы дно ещё раз. Слой отмели.
+## «Экономно» (Б6, `set_lite`): ветви и трубочки — четыре грани вместо шести (LITE_SIDES), кончики — четыре грани и
+## два кольца (LITE_TIP_RINGS), камни цоколя — пять граней; меш пересобирается, материал, свет, мерцание, вызов и
+## силуэт те же. Сброс мира уровень не теряет (EcoView.set_lite).
 
 const SHADER := """
 shader_type spatial;
@@ -53,6 +56,12 @@ const FLAT_DEPTH := 2
 const FLAT := 1.3
 ## Кончик вдоль оси: кольца (доля половины длины, доля толщины).
 const TIP_RINGS := [Vector2(-0.55, 0.6), Vector2(0.1, 1.0), Vector2(0.6, 0.7)]
+## «Экономно»: граней у ветви и у кончика, кольца кончика, граней у камня цоколя.
+const LITE_SIDES := 4
+const LITE_TIP_SIDES := 4
+const LITE_TIP_RINGS := [Vector2(-0.3, 0.85), Vector2(0.35, 0.8)]
+const STONE_SIDES := 6
+const LITE_STONE_SIDES := 5
 
 var flower: EcoFlower
 ## Вершины по треугольникам (для тестов) и число треугольников.
@@ -62,26 +71,58 @@ var tris := 0
 ## Свет, отданный шейдеру (−1 — ещё не отдавали), и сколько раз отдавали.
 var shown_light := -1.0
 var uploads := 0
+## На «Экономно» — грубее сетка (set_lite).
+var lite := false
 
 var _col := PackedColorArray()
 var _uv := PackedVector2Array()
+var _mat: ShaderMaterial
 
 
-func _init(system: EcoFlower) -> void:
+func _init(system: EcoFlower, on_lite := false) -> void:
 	flower = system
+	lite = on_lite
 	name = "Каменный цветок"
 	layers = OceanView.LAYER_WORLD
 	EcoShadows.cast(self)   # место-ориентир 01 — тень на дно (Б1, EcoShadows.HEROES)
 	if flower.branches.is_empty():
 		return
+	_mat = ShaderMaterial.new()
+	_mat.shader = EcoShaders.shader(SHADER)
+	_mat.set_shader_parameter("tip_glow", TIP_GLOW)
+	_mat.set_shader_parameter("body_glow", BODY_GLOW)
+	_mat.set_shader_parameter("glow_mid", EcoFlower.GLOW_MID)
+	_mat.set_shader_parameter("glow_amp", EcoFlower.GLOW_AMP)
+	_mat.set_shader_parameter("glow_rate", EcoFlower.GLOW_RATE)
+	_build()
+	sync()
+
+
+## «Экономно» — меш пересобран грубее (тот же материал: свет и мерцание не сбиваются); назад — полный.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	if _mat:
+		_build()
+
+
+func _build() -> void:
+	verts.clear()
+	normals.clear()
+	_col.clear()
+	_uv.clear()
+	var sides := LITE_SIDES if lite else SIDES
 	for b in flower.branches:
-		_branch(b, _paint(b.p0.y), _paint(b.p1.y), 0.0)
+		_branch(b, _paint(b.p0.y), _paint(b.p1.y), 0.0, sides)
 	for t in flower.tubes:
-		_branch(t, BODY_LOW, BODY_LOW.lerp(BODY, 0.3), 1.0)
+		_branch(t, BODY_LOW, BODY_LOW.lerp(BODY, 0.3), 1.0, sides)
 	for st in flower.stones:
-		_stone(st)
+		_stone(st, LITE_STONE_SIDES if lite else STONE_SIDES)
+	var tip_sides := LITE_TIP_SIDES if lite else TIP_SIDES
+	var tip_rings: Array = LITE_TIP_RINGS if lite else TIP_RINGS
 	for i in flower.tips.size():
-		_tip(flower.tips[i], flower.tip_dir[i], flower.tip_r[i], flower.tip_phase[i])
+		_tip(flower.tips[i], flower.tip_dir[i], flower.tip_r[i], flower.tip_phase[i], tip_sides, tip_rings)
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
@@ -90,17 +131,9 @@ func _init(system: EcoFlower) -> void:
 	arrays[Mesh.ARRAY_TEX_UV] = _uv
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	var mat := ShaderMaterial.new()
-	mat.shader = EcoShaders.shader(SHADER)
-	mat.set_shader_parameter("tip_glow", TIP_GLOW)
-	mat.set_shader_parameter("body_glow", BODY_GLOW)
-	mat.set_shader_parameter("glow_mid", EcoFlower.GLOW_MID)
-	mat.set_shader_parameter("glow_amp", EcoFlower.GLOW_AMP)
-	mat.set_shader_parameter("glow_rate", EcoFlower.GLOW_RATE)
-	m.surface_set_material(0, mat)
+	m.surface_set_material(0, _mat)
 	mesh = m
 	tris = verts.size() / 3
-	sync()
 
 
 ## Отдать шейдеру свет кончиков, если заметно изменился. true — отдали.
@@ -108,7 +141,7 @@ func sync() -> bool:
 	if mesh == null or absf(flower.light - shown_light) < 0.01 and not (flower.light >= 1.0 and shown_light < 1.0):
 		return false
 	shown_light = flower.light
-	(mesh.surface_get_material(0) as ShaderMaterial).set_shader_parameter("light", shown_light)
+	_mat.set_shader_parameter("light", shown_light)
 	uploads += 1
 	return true
 
@@ -118,9 +151,9 @@ func _paint(y: float) -> Color:
 	return BODY_LOW.lerp(BODY, clampf((y - flower.base.y) / (EcoFlower.HEIGHT * 0.6), 0.0, 1.0))
 
 
-## Ветвь: шестигранная боковая стенка от p0 к p1 и крышка сверху (низ уходит в родителя или в дно). Нижние ярусы
+## Ветвь: боковая стенка из sides граней (шесть, на «Экономно» — четыре) от p0 к p1 и крышка сверху (низ уходит в родителя или в дно). Нижние ярусы
 ## (1…FLAT_DEPTH) сплюснуты: шире поперёк, тоньше вдоль вилки. stone — 1: без пор (цоколь).
-func _branch(b: EcoFlower.Branch, c0: Color, c1: Color, stone: float) -> void:
+func _branch(b: EcoFlower.Branch, c0: Color, c1: Color, stone: float, sides := SIDES) -> void:
 	var axis := (b.p1 - b.p0).normalized()
 	var side := axis.cross(Vector3.UP)
 	if side.length_squared() < 1e-4:
@@ -129,9 +162,9 @@ func _branch(b: EcoFlower.Branch, c0: Color, c1: Color, stone: float) -> void:
 	var up := side.cross(axis).normalized()
 	var wide := FLAT if b.depth >= 1 and b.depth <= FLAT_DEPTH else 1.0
 	var mid := (b.p0 + b.p1) * 0.5
-	for k in SIDES:
-		var a0 := TAU * k / SIDES
-		var a1 := TAU * (k + 1) / SIDES
+	for k in sides:
+		var a0 := TAU * k / sides
+		var a1 := TAU * (k + 1) / sides
 		var d0 := side * cos(a0) * wide + up * sin(a0) / wide
 		var d1 := side * cos(a1) * wide + up * sin(a1) / wide
 		var q0 := b.p0 + d0 * b.r0
@@ -143,15 +176,15 @@ func _branch(b: EcoFlower.Branch, c0: Color, c1: Color, stone: float) -> void:
 		_tri(w0, w1, b.p1 + axis * b.r1 * 0.3, b.p1 - axis * b.r1, [c1, c1, c1], 0.0, 0.0, stone)
 
 
-## Камень цоколя: шестигранная призма (стенки и верх; низ в дне).
-func _stone(st: EcoFlower.Stone) -> void:
+## Камень цоколя: призма из sides граней (стенки и верх; низ в дне).
+func _stone(st: EcoFlower.Stone, sides := STONE_SIDES) -> void:
 	var mid := st.c + Vector3(0, st.h * 0.5, 0)
 	var top := st.c + Vector3(0, st.h, 0)
 	var lo := STONE.darkened(0.25)
 	var paints := [lo, lo, STONE_TOP]
-	for k in 6:
-		var a0 := st.turn + TAU * k / 6.0
-		var a1 := st.turn + TAU * (k + 1) / 6.0
+	for k in sides:
+		var a0 := st.turn + TAU * k / sides
+		var a1 := st.turn + TAU * (k + 1) / sides
 		var d0 := Vector3(cos(a0), 0, sin(a0)) * st.r
 		var d1 := Vector3(cos(a1), 0, sin(a1)) * st.r
 		_tri(st.c + d0, st.c + d1, top + d1 * 0.8, mid, paints, 0.0, 0.0, 1.0)
@@ -159,25 +192,25 @@ func _stone(st: EcoFlower.Stone) -> void:
 		_tri(top + d0 * 0.8, top + d1 * 0.8, top, mid, [STONE_TOP, STONE_TOP, STONE_TOP], 0.0, 0.0, 1.0)
 
 
-## Кончик: вытянутый многогранник вдоль dir (острия на концах, три кольца по TIP_SIDES), светится с фазой ph.
-func _tip(c: Vector3, dir: Vector3, half: float, ph: float) -> void:
+## Кончик: вытянутый многогранник вдоль dir (острия на концах, кольца ring_list по sides вершин), светится с фазой ph.
+func _tip(c: Vector3, dir: Vector3, half: float, ph: float, sides := TIP_SIDES, ring_list: Array = TIP_RINGS) -> void:
 	var side := dir.cross(Vector3(0.3, 0.1, 1.0)).normalized()
 	var up := side.cross(dir).normalized()
 	var w := half * EcoFlower.TIP_WIDTH
 	var rings: Array[PackedVector3Array] = []
-	for j in TIP_RINGS.size():
-		var rg: Vector2 = TIP_RINGS[j]
+	for j in ring_list.size():
+		var rg: Vector2 = ring_list[j]
 		var row := PackedVector3Array()
-		for i in TIP_SIDES:
-			var a := TAU * i / TIP_SIDES + (0.5 if j % 2 == 1 else 0.0)
+		for i in sides:
+			var a := TAU * i / sides + (0.5 if j % 2 == 1 else 0.0)
 			row.append(c + dir * rg.x * half + (side * cos(a) + up * sin(a)) * rg.y * w)
 		rings.append(row)
 	var lo := c - dir * half
 	var hi := c + dir * half
 	var paint := [TIP_PAINT, TIP_PAINT, TIP_PAINT]
-	var last := TIP_RINGS.size() - 1
-	for i in TIP_SIDES:
-		var i2 := (i + 1) % TIP_SIDES
+	var last := ring_list.size() - 1
+	for i in sides:
+		var i2 := (i + 1) % sides
 		_tri(lo, rings[0][i], rings[0][i2], c, paint, 1.0, ph, 0.0)
 		_tri(hi, rings[last][i], rings[last][i2], c, paint, 1.0, ph, 0.0)
 		for j in last:

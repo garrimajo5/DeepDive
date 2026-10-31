@@ -5,6 +5,8 @@ extends TestCase
 ## Громкий импульс сонара рядом гасит огни, потом они возвращаются (#834).
 
 const FLAT := -40.0
+## Светящихся граней у кончика на «Экономно»: 4 грани × (2 острия + 2 между кольцами).
+const LITE_TIP_TRIS := 16
 
 
 static func _flat(_x: float, _z: float) -> float:
@@ -239,3 +241,66 @@ func test_view_takes_light() -> void:
 	ok(v.sync(), "после импульса отдаёт")
 	near(float(mat.get_shader_parameter("light")), EcoFlower.DARK_LIGHT, 1e-6, "шейдер гасит кончики")
 	v.free()
+
+
+func test_view_lite_coarser_mesh_same_material() -> void:
+	var pair := _ping_world()
+	var f: EcoFlower = pair[1]
+	var v := FlowerView.new(f)
+	tree.root.add_child(v)
+	await frames(1)
+	var full := v.tris
+	var mat := v.mesh.surface_get_material(0)
+	var box_full := v.mesh.get_aabb()
+	v.set_lite(true)
+	ok(v.lite, "цветок — на «Экономно»")
+	ok(v.tris * 10 <= full * 7, "треугольников не больше 70 %% (%d → %d)" % [full, v.tris])
+	eq(v.mesh.get_surface_count(), 1, "вызов тот же")
+	ok(v.mesh.surface_get_material(0) == mat, "материал тот же — свет и мерцание не сбиваются")
+	var box_lite := v.mesh.get_aabb()
+	ok(box_lite.size.y > box_full.size.y * 0.95 and box_lite.size.x > box_full.size.x * 0.9,
+		"силуэт тот же: %s → %s" % [box_full.size, box_lite.size])
+	# кончики светятся по-прежнему: у каждого есть грани со свечением
+	var glow := 0
+	for i in range(0, v.verts.size(), 3):
+		if v._col[i].a > 0.5:
+			glow += 1
+	eq(glow, f.tips.size() * LITE_TIP_TRIS, "у каждого кончика — светящиеся грани")
+	# грани ствола смотрят наружу и на «Экономно»
+	var trunk_top := f.branches[0].p1.y - 2.0
+	var outward := 0
+	var total := 0
+	for i in range(0, v.verts.size(), 3):
+		var c := (v.verts[i] + v.verts[i + 1] + v.verts[i + 2]) / 3.0
+		if c.y < trunk_top and c.y > f.base.y + 2.0 and Vector2(c.x - f.base.x, c.z - f.base.z).length() < 2.1:
+			total += 1
+			var cr := (v.verts[i + 1] - v.verts[i]).cross(v.verts[i + 2] - v.verts[i])
+			var out := Vector3(c.x - f.base.x, 0, c.z - f.base.z)
+			if cr.dot(out) < 0.0 and v.normals[i].dot(out) > 0.0:
+				outward += 1
+	ok(total > 0, "у ствола есть грани")
+	eq(outward, total, "лицевая сторона ствола — снаружи")
+	# импульс гасит кончики и на «Экономно»
+	var w: EcoWorld = pair[0]
+	_ping(w, f.heart())
+	ok(v.sync(), "после импульса отдаёт свет")
+	near(float((v.mesh.surface_get_material(0) as ShaderMaterial).get_shader_parameter("light")), EcoFlower.DARK_LIGHT,
+		1e-6, "шейдер гасит кончики")
+	v.set_lite(false)
+	eq(v.tris, full, "назад — полный меш")
+	v.queue_free()
+	await frames(1)
+
+
+func test_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = _flat
+	ev.set_lite(true)
+	ok(ev.flower_view.lite, "уровень дошёл до цветка")
+	var lite_tris := ev.flower_view.tris
+	ev.ground = Seabed.height
+	ok(ev.flower_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	ok(ev.flower_view.tris <= lite_tris * 1.05 + 10, "и меш грубый")
+	ev.set_lite(false)
+	ev.free()
+	EcoShaders.set_sway_lite(false)
