@@ -260,6 +260,7 @@ func set_lite(on: bool) -> void:
 	moth.set_lite(on)
 	fringe.set_lite(on)
 	plankton_view.set_lite(on)
+	fish_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).

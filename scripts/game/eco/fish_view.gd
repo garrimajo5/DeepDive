@@ -11,6 +11,9 @@ extends MultiMeshInstance3D
 ## сдвиг оттенка — от фазы особи; у пестрянок iris = 0, «Экономно» — EcoIris.set_lite. Стоит на слое отмели (OceanView.LAYER_WORLD).
 ## Муть у дна (EcoFishDust: всполошились у дна — облачка из-под хвостов, забились в коралл — клуб у дна под домом) —
 ## дочерний MultiMesh «Муть» (GrazerView.build_dust, общий шейдер мути, +1 вызов).
+## «Экономно» (Б6, `set_lite`): рисуются две рыбки из трёх в каждой стае (LITE_SKIP — каждая третья по месту в стае
+## `Fish.slot` не рисуется): видимые — в начале буфера (`order`), `visible_instance_count` отрезает остальных. Мир
+## (стаи, тревоги, хищники, сканер, у гостя) считает всех; на «Обычно» буфер по номеру рыбки, как раньше.
 
 const SHADER := """
 shader_type spatial;
@@ -52,6 +55,11 @@ void fragment() {
 """
 
 var fish: EcoFish
+## «Экономно»: в каждой стае не рисуется рыбка с местом в стае slot % LITE_SKIP == LITE_SKIP − 1.
+const LITE_SKIP := 3
+var lite := false
+## Место рыбки в буфере по её номеру (только «Экономно»; пусто — по номеру).
+var order := PackedInt32Array()
 ## Муть у дна от стай (Б3).
 var dust := EcoFishDust.new()
 var dust_view: MultiMeshInstance3D
@@ -77,6 +85,59 @@ func _init(system: EcoFish) -> void:
 	dust_view = GrazerView.build_dust(EcoFishDust.POOL)
 	add_child(dust_view)
 	sync(0.0)
+
+
+## «Экономно» — рисуются две рыбки из трёх в каждой стае; буфер переписывается целиком в следующем sync.
+func set_lite(on: bool) -> void:
+	lite = on
+	if on:
+		order = lite_order(fish)
+		multimesh.visible_instance_count = lite_count(fish)
+	else:
+		order = PackedInt32Array()
+		multimesh.visible_instance_count = -1
+	buffer = PackedFloat32Array()   # у дальних стай fill пропускает рыбок — места сменились, писать всех
+
+
+## Рисуется ли рыбка на «Экономно».
+static func lite_shown(f: EcoFish.Fish) -> bool:
+	return f.slot % LITE_SKIP != LITE_SKIP - 1
+
+
+## Сколько рыбок рисуется на «Экономно».
+static func lite_count(system: EcoFish) -> int:
+	var n := 0
+	for f: EcoFish.Fish in system.all:
+		if lite_shown(f):
+			n += 1
+	return n
+
+
+## Места в буфере на «Экономно»: сначала видимые по номеру, за ними — скрытые.
+static func lite_order(system: EcoFish) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	out.resize(system.all.size())
+	var k := 0
+	for f: EcoFish.Fish in system.all:
+		if lite_shown(f):
+			out[f.index] = k
+			k += 1
+	for f: EcoFish.Fish in system.all:
+		if not lite_shown(f):
+			out[f.index] = k
+			k += 1
+	return out
+
+
+## Сколько рыбок рисуется сейчас.
+func drawn() -> int:
+	var v := multimesh.visible_instance_count
+	return multimesh.instance_count if v < 0 else v
+
+
+## Место рыбки n (номер `Fish.index`) в буфере.
+func slot_of(n: int) -> int:
+	return order[n] if not order.is_empty() else n
 
 
 ## Меш одной рыбки по EcoFishLook: вершины, нормали, краска в цвете вершины.
@@ -125,10 +186,14 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground
 		dust.update(fish, t, ship.pos, ground)
 		_dust.pack(dust.dust, t, flow, ship, EcoFishDust.COLOR, EcoFishDust.LIT, Seabed.mesh_height)
 		_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
+	if order.size() != (fish.all.size() if lite else 0):
+		order = lite_order(fish) if lite else PackedInt32Array()   # мир пересобран — места заново
+		multimesh.visible_instance_count = lite_count(fish) if lite else -1
+		buffer = PackedFloat32Array()
 	if buffer.size() != fish.all.size() * STRIDE:
-		buffer = pack(fish, t)
+		buffer = pack(fish, t, order)
 	else:
-		fill(buffer, fish, t, true)
+		fill(buffer, fish, t, true, order)
 	multimesh.buffer = buffer
 
 
@@ -158,22 +223,25 @@ static func _vary_of(system: EcoFish) -> PackedFloat32Array:
 
 ## Буфер MultiMesh (TRANSFORM_3D + custom data) для всех рыбок в момент t. Те же числа, что EcoFishLook.basis
 ## и EcoFishLook.stripe, но без вызовов на каждую рыбку (132 за кадр): цвет и тревога — по стае, basis — на месте.
-static func pack(system: EcoFish, t: float) -> PackedFloat32Array:
+## at — места в буфере по номеру рыбки (`lite_order`), пусто — по номеру.
+static func pack(system: EcoFish, t: float, at := PackedInt32Array()) -> PackedFloat32Array:
 	var out := PackedFloat32Array()
 	out.resize(system.all.size() * STRIDE)
-	fill(out, system, t, false)
+	fill(out, system, t, false, at)
 	return out
 
 
 ## Переписать буфер out (размер — на всех рыбок). moved_only — только стаи, шагнувшие в этом кадре: дальняя стая
 ## копит время (lag > 0) и стоит на месте — её рыбки остаются как были, только съеденные гаснут (issue #133).
-static func fill(out: PackedFloat32Array, system: EcoFish, t: float, moved_only: bool) -> void:
+static func fill(out: PackedFloat32Array, system: EcoFish, t: float, moved_only: bool,
+		at := PackedInt32Array()) -> void:
 	var vary := _vary_of(system)
+	var by_slot := not at.is_empty()
 	for sh in system.shoals:
 		if moved_only and sh.lag > 0.0:
 			for f: EcoFish.Fish in sh.members:
 				if not f.agent.alive:
-					var j := f.index * STRIDE
+					var j := (at[f.index] if by_slot else f.index) * STRIDE
 					for c in [0, 1, 2, 4, 5, 6, 8, 9, 10]:
 						out[j + c] = 0.0
 			continue
@@ -181,7 +249,7 @@ static func fill(out: PackedFloat32Array, system: EcoFish, t: float, moved_only:
 		var col := sh.color
 		for f: EcoFish.Fish in sh.members:
 			var a := f.agent
-			var i := f.index * STRIDE
+			var i := (at[f.index] if by_slot else f.index) * STRIDE
 			var o := a.p
 			out[i + 3] = o.x
 			out[i + 7] = o.y
