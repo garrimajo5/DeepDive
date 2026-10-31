@@ -140,6 +140,57 @@ func test_ear_turn_speed_limited() -> void:
 	ok(absf(d.y) <= EcoEcho.EAR_TURN * 0.1 + 1e-4, "наклон не быстрее EAR_TURN")
 
 
+func test_ear_starts_and_stops_smoothly() -> void:
+	# Плавность (Б3): корабль подошёл — уши трогаются разгоном, а не сразу на EAR_TURN; скорость меняется не быстрее
+	# EAR_ACCEL; к неподвижному кораблю подходят без перелёта и встают.
+	var w := _world()
+	var e: EcoEcho = _sys(w, EcoEcho)
+	var ec := e.echo
+	w.run(3.0)
+	var ship := ec.xform() * Vector3(-14.0, 3.0, 6.0)
+	w.ship.pos = ship
+	var dt := 0.05
+	var want := e.aim(0, ship)
+	var prev := ec.ears[0]
+	var vel := ec.ear_vel[0]
+	var side := signf(want.x - prev.x)
+	var top := 0.0
+	for k in 120:
+		w.step(dt)
+		var now := ec.ears[0]
+		var v := (now - prev) / dt
+		ok(absf(v.x) <= EcoEcho.EAR_TURN + 1e-4, "шаг %d: поворот не быстрее EAR_TURN (%.3f)" % [k, v.x])
+		ok(absf(v.x - vel.x) <= EcoEcho.EAR_ACCEL * dt + 1e-4,
+			"шаг %d: разгон не быстрее EAR_ACCEL (%.3f → %.3f)" % [k, vel.x, v.x])
+		ok(signf(want.x - now.x) != -side, "шаг %d: без перелёта цели" % k)
+		top = maxf(top, absf(v.x))
+		prev = now
+		vel = v
+	ok(top > EcoEcho.EAR_TURN * 0.5, "разогналось: %.2f" % top)
+	near(ec.ears[0].x, want.x, 1e-3, "дошло до цели")
+	near(ec.ear_vel[0].x, 0.0, 1e-2, "и встало")
+
+
+func test_ear_does_not_swing_through_the_back() -> void:
+	# Ухо справа сзади, корабль слева сзади: поворот идёт через нос, а не через затылок за предел сустава.
+	var w := _world()
+	var e: EcoEcho = _sys(w, EcoEcho)
+	var ec := e.echo
+	ec.ears[0] = Vector2(2.1, EcoEcho.IDLE_PITCH)
+	var ship := ec.ear_base(0) + Basis(Vector3.UP, ec.yaw) * Vector3(sin(-2.1), 0.0, cos(-2.1)) * 20.0
+	w.ship.pos = ship
+	var want := e.aim(0, ship)
+	ok(want.x < -2.0, "цель — слева сзади: %.2f" % want.x)
+	var prev := ec.ears[0].x
+	for k in 160:
+		w.step(0.05)
+		var x := ec.ears[0].x
+		ok(x <= prev + 1e-5, "шаг %d: поворот только к носу и дальше влево" % k)
+		ok(absf(x) <= EcoEcho.EAR_YAW + 1e-5, "шаг %d: в пределах сустава" % k)
+		prev = x
+	near(ec.ears[0].x, want.x, 1e-3, "дошло через нос")
+
+
 func test_ear_joint_limits() -> void:
 	var w := _world()
 	var e: EcoEcho = _sys(w, EcoEcho)
