@@ -280,6 +280,7 @@ func set_lite(on: bool) -> void:
 	coral_view.set_lite(on)
 	vent_view.set_lite(on)
 	organ_view.set_lite(on)
+	krab_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -383,7 +384,7 @@ func _rebuild_kelp() -> void:
 	if krab_view:
 		remove_child(krab_view)
 		krab_view.free()
-	krab_view = KrabView.new(krab)
+	krab_view = KrabView.new(krab, lite)
 	add_child(krab_view)
 	# скальник живёт у норы — встаёт заново вместе с ней
 	if skalnik_view:
