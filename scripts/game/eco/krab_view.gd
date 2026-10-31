@@ -7,6 +7,10 @@ extends Node3D
 ## подпрыгивает на 3 см. Муть у дна из-под ног и от клешней (EcoKrabDust) — дочерний MultiMesh «Муть» в мировых
 ## координатах, общий шейдер EcoShaders.MIST (INK), бурый цвет EcoKrabDust.COLOR/LIT. Шесть вызовов отрисовки (у игл две поверхности); стоит на слое
 ## отмели (OceanView.LAYER_WORLD).
+## «Экономно» (Б6, `set_lite`): панцирь 7 × 4 вместо 10 × 6, щипцы 6 × 3 вместо 8 × 5 (LITE_*) — тело и клешни 324 →
+## 186 треугольников (с норой 424 → 286); меши пересобираются с теми же материалами (свечение панциря). Нора та же:
+## камни 4 × 2 становятся ромбами-кристаллами, а не камнями. Ноги, руки, иглы, муть и вызовы те же. Сброс мира
+## уровень не теряет (EcoView.set_lite).
 
 const ROCK := Color("4f4a5c")
 const SHELL := Color("8a4a2e")
@@ -22,6 +26,12 @@ const ROCKS: Array[Vector3] = [Vector3(-1.3, 0.3, -0.4), Vector3(1.3, 0.3, -0.4)
 	Vector3(-0.6, 1.3, -0.9), Vector3(0.7, 0.2, -1.6)]
 const ROCK_SIZES: Array[float] = [0.95, 1.05, 0.85, 0.9, 1.0]
 const CLAWS_AT := Vector3(0, 0.35, 0.3)
+## Граней эллипсоидов (по кругу × по высоте): панцирь, щипцы, камни норы; LITE_* — то же на «Экономно» (нора — нет).
+const SHELL_SEG := Vector2i(10, 6)
+const PINCER_SEG := Vector2i(8, 5)
+const ROCK_SEG := Vector2i(5, 3)
+const LITE_SHELL_SEG := Vector2i(7, 4)
+const LITE_PINCER_SEG := Vector2i(6, 3)
 
 var krab: EcoKrab
 var den: MeshInstance3D
@@ -41,15 +51,18 @@ var dust_buffer: PackedFloat32Array:
 	get:
 		return _dust.data
 var _dust := EcoDustBuffer.new()
+## На «Экономно» — грубее панцирь и щипцы (set_lite).
+var lite := false
 
 
-func _init(system: EcoKrab) -> void:
+func _init(system: EcoKrab, on_lite := false) -> void:
 	krab = system
+	lite = on_lite
 	name = "Кольчужник"
 	var cr := krab.crab
 	den = _mesh("Нора", build_den(), self)
-	body = _mesh("Тело", build_body(), self)
-	claws = _mesh("Клешни", build_claws(), body)
+	body = _mesh("Тело", build_body(lite), self)
+	claws = _mesh("Клешни", build_claws(lite), body)
 	claws.position = CLAWS_AT
 	spines = MultiMeshInstance3D.new()
 	spines.name = "Иглы"
@@ -70,6 +83,28 @@ func _init(system: EcoKrab) -> void:
 		den.transform = Transform3D(Basis(Vector3.UP, atan2(cr.out.x, cr.out.z)), cr.den)
 	krab.dirty = true
 	sync(0.0)
+
+
+## «Экономно» — панцирь и щипцы пересобраны грубее (материалы те же); назад — полные.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	_swap(body, build_body(lite))
+	_swap(claws, build_claws(lite))
+
+
+static func _swap(mi: MeshInstance3D, m: ArrayMesh) -> void:
+	m.surface_set_material(0, mi.mesh.surface_get_material(0))
+	mi.mesh = m
+
+
+## Треугольников в норе, теле и клешнях (без игл; для тестов).
+func tris() -> int:
+	var n := 0
+	for mi in [den, body, claws]:
+		n += (mi.mesh as ArrayMesh).surface_get_array_len(0) / 3
+	return n
 
 
 func _mesh(n: String, m: Mesh, parent: Node3D) -> MeshInstance3D:
@@ -122,16 +157,18 @@ static func spine_transform(k: int) -> Transform3D:
 ## Нора: пять гранёных камней, приплюснутых по высоте.
 static func build_den() -> ArrayMesh:
 	var st := _begin()
+	var g := ROCK_SEG
 	for i in ROCKS.size():
 		var s := ROCK_SIZES[i]
-		EcoMM.ellipsoid(st, ROCKS[i], Vector3(s, s * 0.6, s), 5, 3, ROCK, 0.17 * i)
+		EcoMM.ellipsoid(st, ROCKS[i], Vector3(s, s * 0.6, s), g.x, g.y, ROCK, 0.17 * i)
 	return _commit(st, false)
 
 
 ## Панцирь и шесть ног (по три с борта, разведены веером и опущены к дну).
-static func build_body() -> ArrayMesh:
+static func build_body(on_lite := false) -> ArrayMesh:
 	var st := _begin()
-	EcoMM.ellipsoid(st, Vector3(0, 0.35, 0), Vector3(0.55, 0.22, 0.42), 10, 6, SHELL)
+	var g := LITE_SHELL_SEG if on_lite else SHELL_SEG
+	EcoMM.ellipsoid(st, Vector3(0, 0.35, 0), Vector3(0.55, 0.22, 0.42), g.x, g.y, SHELL)
 	for sx in [-1.0, 1.0]:
 		for z in [-0.25, 0.0, 0.25]:
 			var yaw: float = -z * 1.5 if sx > 0 else PI + z * 1.5
@@ -142,11 +179,12 @@ static func build_body() -> ArrayMesh:
 
 
 ## Клешни: две руки вперёд и щипцы на концах.
-static func build_claws() -> ArrayMesh:
+static func build_claws(on_lite := false) -> ArrayMesh:
 	var st := _begin()
+	var g := LITE_PINCER_SEG if on_lite else PINCER_SEG
 	for sx in [-1.0, 1.0]:
 		_box(st, Transform3D.IDENTITY, Vector3(sx * 0.22, 0, 0.2), Vector3(0.08, 0.08, 0.4), ARM)
-		EcoMM.ellipsoid(st, Vector3(sx * 0.24, 0, 0.5), Vector3(0.11, 0.08, 0.2), 8, 5, PINCER)
+		EcoMM.ellipsoid(st, Vector3(sx * 0.24, 0, 0.5), Vector3(0.11, 0.08, 0.2), g.x, g.y, PINCER)
 	return _commit(st, true)
 
 

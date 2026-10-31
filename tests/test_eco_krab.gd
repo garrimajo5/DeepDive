@@ -402,3 +402,62 @@ func test_eco_view_has_krab() -> void:
 	view.step(0.1, ship)
 	view.queue_free()
 	await frames(1)
+
+
+# ---------- «Экономно» (Б6) ----------
+
+func test_view_lite_coarser_same_materials() -> void:
+	var w := _world()
+	var kr := _krab(w)
+	var v := KrabView.new(kr)
+	tree.root.add_child(v)
+	await frames(1)
+	var full := v.tris()
+	eq(full, 424, "полный краб (полюса эллипсоидов без вырожденных граней)")
+	var mats := [v.den.mesh.surface_get_material(0), v.body.mesh.surface_get_material(0),
+		v.claws.mesh.surface_get_material(0)]
+	var box := v.body.mesh.get_aabb()
+	var spines := v.spines.multimesh
+	var dust := v.dust_view
+	v.set_lite(true)
+	ok(v.lite, "краб — на «Экономно»")
+	eq(v.tris(), 286, "треугольников: %d → %d" % [full, v.tris()])
+	ok(v.tris() * 100 <= full * 70, "не больше 70 %")
+	ok(v.den.mesh.surface_get_material(0) == mats[0], "нора та же")
+	ok(v.body.mesh.surface_get_material(0) == mats[1], "материал панциря тот же (свечение)")
+	ok(v.claws.mesh.surface_get_material(0) == mats[2], "материал клешней тот же")
+	for mi: MeshInstance3D in [v.den, v.body, v.claws]:
+		eq(mi.mesh.get_surface_count(), 1, "%s — один вызов" % mi.name)
+	ok(v.spines.multimesh == spines and v.dust_view == dust, "иглы и муть те же")
+	var lb := v.body.mesh.get_aabb()
+	ok(lb.size.x > box.size.x * 0.9 and lb.size.y > box.size.y * 0.95, "силуэт тот же: %s → %s" % [box.size, lb.size])
+	ok(v.claws.get_parent() == v.body and v.spines.get_parent() == v.body, "клешни и иглы — на теле")
+	v.set_lite(false)
+	eq(v.tris(), full, "назад — полный краб")
+	v.queue_free()
+	await frames(1)
+
+
+func test_lite_meshes_face_outward() -> void:
+	for m: ArrayMesh in [KrabView.build_body(true), KrabView.build_claws(true)]:
+		var arr := m.surface_get_arrays(0)
+		var vv: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var n: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+		var bad := 0
+		for i in range(0, vv.size(), 3):
+			if (vv[i + 1] - vv[i]).cross(vv[i + 2] - vv[i]).dot(n[i]) > 0.0:
+				bad += 1
+		eq(bad, 0, "все грани наружу")
+
+
+func test_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = Seabed.height
+	ev.set_lite(true)
+	ok(ev.krab_view.lite, "уровень дошёл до краба")
+	var t := ev.krab_view.tris()
+	ev.ground = Seabed.height
+	ok(ev.krab_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(ev.krab_view.tris(), t, "и панцирь грубый")
+	ev.set_lite(false)
+	ev.free()
