@@ -22,6 +22,7 @@ var shafts: MultiMeshInstance3D   # лучи сквозь трещины льд�
 var shafts_mat: ShaderMaterial
 var shaft_list: Array[LightShafts.Shaft] = []
 var stones: StonesView   ## камни на дне вокруг корабля (`SeabedStones`, один MultiMesh)
+var shells: ShellsView   ## ракушки на дне вокруг корабля (`SeabedShells`, один MultiMesh)
 ## Слои воды ART-069 (`WaterLayers`) в материалах дна, льда и дальней воды: сила по уровню ART-044 и по илу.
 var layers_level := WaterLayers.GAIN_NORMAL
 var layers_silt := 0.0
@@ -38,6 +39,8 @@ var _ship_at := Transform3D(Basis(), Vector3(INF, INF, INF))   ## корабль
 func _ready() -> void:
 	stones = StonesView.new()
 	add_child(stones)
+	shells = ShellsView.new()
+	add_child(shells)
 	seabed = MeshInstance3D.new()
 	seabed.name = "Дно"
 	var mesh := ArrayMesh.new()
@@ -280,6 +283,7 @@ func _make_shafts() -> MultiMeshInstance3D:
 ## Где корабль: внутри корпуса шахты не светят и взвеси нет (вид с мостика и из отсеков).
 func set_ship(pos: Vector3, yaw: float) -> void:
 	stones.follow(pos)   # камни досчитываются и стоя: клетки радиуса — по нескольку за шаг
+	shells.follow(pos)
 	var t := Transform3D(Basis(Vector3.UP, yaw), pos)
 	if t.is_equal_approx(_ship_at):   # корабль стоит — матрицы в лучах и взвеси те же (#847)
 		return
@@ -432,9 +436,16 @@ func set_decals_lite(lite: bool) -> void:
 	_decals_level(seabed_mat, lite)
 
 
-## «Экономно» (ART-044): камни на дне ближе (`SeabedStones.LITE_RADIUS`).
+## «Экономно» (ART-044): камни и ракушки на дне ближе (`SeabedStones.LITE_RADIUS`, `SeabedShells.SHELL_LITE`).
 func set_stones_lite(lite: bool) -> void:
 	stones.set_lite(lite)
+	shells.set_lite(lite)
+
+
+## Образцы на дне: камней и ракушек вокруг них нет (светящиеся камешки не спутать с фоном).
+func set_floor_avoid(points: Array[Vector3]) -> void:
+	stones.stones.set_avoid(points)
+	shells.stones.set_avoid(points)
 
 
 ## Следы разрядов на дне (`Seabed.Scorch.uniforms`): [где, сила] по MAX — в тот же материал дна.

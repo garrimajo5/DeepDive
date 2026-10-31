@@ -69,6 +69,8 @@ SSAO/SSIL, MSAA, каустики/god rays, детальные карты, да�
   - [x] Камни на дне (`SeabedStones`, `StonesView`, `OceanView.stones`): россыпь вокруг корабля одним MultiMesh со
     светом, гуще на гальке ART-060, «Экономно» — ближе (`OceanView.set_stones_lite`). Тест — `test_seabed_stones`.
     Проверить на телефоне: видны ли в луче у дна, кадр/с на ходу у дна.
+  - [x] Ракушки на дне (`SeabedShells`, `ShellsView`, `OceanView.shells`): светлые створки наносами на песке тем же
+    порядком, что камни, один MultiMesh, «Экономно» — ближе. Тест — `test_seabed_shells`. Шаг тестера `32-rakushki`.
 - [x] Декали на дне (отметки, пятна, следы) — ART-066, фон; разряды по событию — в ROADMAP.
 
 ## Этап 5 — Потолок и уровни (ART-044)
