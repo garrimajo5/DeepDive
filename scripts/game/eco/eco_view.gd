@@ -181,7 +181,7 @@ func _init() -> void:
 	add_child(veil_view)
 	grot = world.add(EcoGrot.new(fish)) as EcoGrot
 	preds.grot = grot
-	grot_view = GrotView.new(grot)
+	grot_view = GrotView.new(grot, lite)
 	add_child(grot_view)
 	eels = world.add(EcoEel.new(grazers, fish)) as EcoEel
 	raduzh = world.add(EcoRaduzh.new()) as EcoRaduzh
@@ -273,6 +273,7 @@ func set_lite(on: bool) -> void:
 	brink_view.set_lite(on)
 	pred_view.set_lite(on)
 	skalnik_view.set_lite(on)
+	grot_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
