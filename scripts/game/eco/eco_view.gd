@@ -264,6 +264,7 @@ func set_lite(on: bool) -> void:
 	raduzh_view.set_lite(on)
 	bladder_view.set_lite(on)
 	cushion_view.set_lite(on)
+	coins_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -382,7 +383,7 @@ func _rebuild_coins() -> void:
 	if coins_view:
 		remove_child(coins_view)
 		coins_view.free()
-	coins_view = CoinsView.new(coins)
+	coins_view = CoinsView.new(coins, lite)
 	add_child(coins_view)
 
 
