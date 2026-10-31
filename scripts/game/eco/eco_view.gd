@@ -199,7 +199,7 @@ func _init() -> void:
 	add_child(ray_view)
 	remoras = world.add(EcoRemora.new(rays)) as EcoRemora
 	eels.remoras = remoras
-	remora_view = RemoraView.new(remoras)
+	remora_view = RemoraView.new(remoras, lite)
 	add_child(remora_view)
 	plankton = world.add(EcoPlankton.new(preds, rays)) as EcoPlankton
 	preds.plankton = plankton
@@ -282,6 +282,7 @@ func set_lite(on: bool) -> void:
 	organ_view.set_lite(on)
 	krab_view.set_lite(on)
 	ray_view.set_lite(on)
+	remora_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
