@@ -3,6 +3,10 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-10-31
+- Хватни на «Экономно» (поток Б, Б6 `docs/grafika-plan-eco.md`): у каждого хватня рисуется каждое второе щупальце
+  (88 → 44) — видимые в начале буфера (`HvatenView.tent_slot`), остальных отрезает `visible_instance_count`, скрытые
+  не пересчитываются (`HvatenView.set_lite`); тела и пестрянки — все, мир не меняется, сброс мира уровень не теряет.
+  Тест — `test_eco_hvaten.test_view_lite_draws_every_other_tentacle`.
 - Монетники на «Экономно» (поток Б, Б6 `docs/grafika-plan-eco.md`): в каждой стайке рисуются две рыбки из трёх
   (27 → 18) — видимые в начале буфера, остальных отрезает `visible_instance_count` (`CoinsView.set_lite`); глазуны —
   все, мир считает всех, сброс мира уровень не теряет. Тест — `test_eco_coins.test_view_lite_draws_two_of_three_per_school`.

@@ -265,6 +265,7 @@ func set_lite(on: bool) -> void:
 	bladder_view.set_lite(on)
 	cushion_view.set_lite(on)
 	coins_view.set_lite(on)
+	hvaten_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -353,7 +354,7 @@ func _rebuild_hvaten() -> void:
 	if hvaten_view:
 		remove_child(hvaten_view)
 		hvaten_view.free()
-	hvaten_view = HvatenView.new(hvaten)
+	hvaten_view = HvatenView.new(hvaten, lite)
 	add_child(hvaten_view)
 
 

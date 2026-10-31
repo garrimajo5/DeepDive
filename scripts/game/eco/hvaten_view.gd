@@ -7,6 +7,9 @@ extends Node3D
 ## (форма EcoPestrLook: тело 7 × 10 × 19 см, хвост-веер, спинной и грудные плавники; оранжевые и белая — цвет
 ## в INSTANCE_CUSTOM.rgb, фаза плавников — в альфе цвета экземпляра; рисует шейдер светляков FishView: хвост машет,
 ## грудные гребут, «Экономно» — sway_k через EcoShaders.follow). Стоят на слое отмели (OceanView.LAYER_WORLD).
+## «Экономно» (Б6, `set_lite`): у каждого хватня рисуется каждое второе щупальце (22 → 11, LITE_SKIP): видимые — в
+## начале буфера (`tent_slot`), `visible_instance_count` отрезает остальных. Мир (ловля, укрытие, приманка) не
+## меняется; тела и пестрянки — все. Вызовов столько же, вершинной работы щупалец вдвое меньше.
 
 ## Цвета пестрянок по порядку (pc в браузере).
 const PESTR_COLORS: Array[Color] = [Color("ff7a2a"), Color("fff1d0"), Color("ff9a4a")]
@@ -41,7 +44,12 @@ var dust_buffer: PackedFloat32Array:
 var _dust := EcoDustBuffer.new()
 
 
-func _init(system: EcoHvaten) -> void:
+## «Экономно»: у хватня не рисуется щупальце с номером k % LITE_SKIP != 0.
+const LITE_SKIP := 2
+var lite := false
+
+
+func _init(system: EcoHvaten, on_lite := false) -> void:
 	hvaten = system
 	name = "Хватни"
 	var n := hvaten.anemones.size()
@@ -64,7 +72,47 @@ func _init(system: EcoHvaten) -> void:
 	for hv in hvaten.anemones:
 		pts.append(hv.base)
 	EcoMM.fit([bodies, tents, pestr], pts, FRAME_GROW)
+	if on_lite:
+		set_lite(true)
 	sync(0.0)
+
+
+## «Экономно» — рисуется каждое второе щупальце; буфер щупалец переписывается целиком сразу.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	var n := hvaten.anemones.size()
+	tents.multimesh.visible_instance_count = lite_count(n) if on else -1
+	_sync_tents(_t)
+	EcoMM.send(tents, tent_buffer)
+
+
+## Рисуется ли на «Экономно» щупальце номер k.
+static func lite_shown(k: int) -> bool:
+	return k % LITE_SKIP == 0
+
+
+## Сколько щупалец рисуется на «Экономно» у n хватней.
+static func lite_count(n: int) -> int:
+	return n * ((EcoHvaten.TENT + LITE_SKIP - 1) / LITE_SKIP)
+
+
+## Место щупальца k хватня номер i в буфере (n хватней): на «Экономно» видимые — в начале, по хватням.
+static func tent_slot(i: int, k: int, n: int, on_lite: bool) -> int:
+	if not on_lite:
+		return i * EcoHvaten.TENT + k
+	var per := (EcoHvaten.TENT + LITE_SKIP - 1) / LITE_SKIP
+	if lite_shown(k):
+		return i * per + k / LITE_SKIP
+	var rest := EcoHvaten.TENT - per
+	return n * per + i * rest + (k - k / LITE_SKIP - 1)
+
+
+## Сколько щупалец рисуется сейчас.
+func drawn() -> int:
+	var v := tents.multimesh.visible_instance_count
+	return tents.multimesh.instance_count if v < 0 else v
 
 
 ## Запас рамки вокруг хватней (#849): щупальца тянутся на 1,9 м, пестрянки кружат рядом, течение гнёт.
@@ -170,14 +218,14 @@ var _frame := 0
 func sync(t: float, ship_pos := Vector3.ZERO, all := true, info: EcoLink.ShipState = null,
 		flow := Vector3.ZERO) -> void:
 	_frame += 1
+	_t = t
 	_sync_dust(t, ship_pos, info, flow)
 	var live := not EcoShaders.sway_lite
 	for hv in hvaten.anemones:
 		if not all and not due(hv, ship_pos, _frame):
 			continue
 		EcoMM.put(body_buffer, hv.index * STRIDE, EcoHvaten.body(hv, t, live))
-		for k in EcoHvaten.TENT:
-			EcoMM.put(tent_buffer, (hv.index * EcoHvaten.TENT + k) * STRIDE, EcoHvaten.tentacle(hv, k, t, live))
+		_put_tents(hv, t, live)
 		for k in EcoHvaten.PESTR_N:
 			var tr := EcoHvaten.pestr_pose(hv, k, t)
 			tr.basis = tr.basis * Basis.from_scale(Vector3.ONE * EcoPestrLook.SCALE)
@@ -185,6 +233,27 @@ func sync(t: float, ship_pos := Vector3.ZERO, all := true, info: EcoLink.ShipSta
 	EcoMM.send(bodies, body_buffer)
 	EcoMM.send(tents, tent_buffer)
 	EcoMM.send(pestr, pestr_buffer)
+
+
+## Время последнего sync — смена уровня переписывает щупальца в той же позе.
+var _t := 0.0
+
+
+func _sync_tents(t: float) -> void:
+	var live := not EcoShaders.sway_lite
+	for hv in hvaten.anemones:
+		_put_tents(hv, t, live)
+
+
+func _put_tents(hv: EcoHvaten.Anemone, t: float, live: bool) -> void:
+	if not lite:
+		var at := hv.index * EcoHvaten.TENT
+		for k in EcoHvaten.TENT:
+			EcoMM.put(tent_buffer, (at + k) * STRIDE, EcoHvaten.tentacle(hv, k, t, live))
+		return
+	var n := hvaten.anemones.size()
+	for k in range(0, EcoHvaten.TENT, LITE_SKIP):   # скрытые — за visible_instance_count, не пишем
+		EcoMM.put(tent_buffer, tent_slot(hv.index, k, n, true) * STRIDE, EcoHvaten.tentacle(hv, k, t, live))
 
 
 func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3) -> void:
