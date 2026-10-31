@@ -177,7 +177,7 @@ func _init() -> void:
 	veils = world.add(EcoVeil.new()) as EcoVeil
 	fish.veils = veils
 	preds.veils = veils
-	veil_view = VeilView.new(veils)
+	veil_view = VeilView.new(veils, lite)
 	add_child(veil_view)
 	grot = world.add(EcoGrot.new(fish)) as EcoGrot
 	preds.grot = grot
@@ -269,6 +269,7 @@ func set_lite(on: bool) -> void:
 	ognevka_view.set_lite(on)
 	kelp_view.set_lite(on)
 	eel_view.set_lite(on)
+	veil_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).

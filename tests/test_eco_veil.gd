@@ -470,3 +470,53 @@ func test_tentacle_shader_live_matches_cpu() -> void:
 	near(float(mat.get_shader_parameter("sway_k")), 1.0, 1e-6, "обратно")
 	view.queue_free()
 	await frames(1)
+
+
+## Б6: на «Экономно» у каждой вуали — каждое второе щупальце и огонёк кромки; оставшиеся нити — те же, что на
+## «Обычно» (чётные), и стоят по формуле шейдера; вызовов столько же; сброс мира уровень не теряет.
+func test_view_lite_draws_every_other_thread() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var vv := view.veil_view
+	eq(vv.threads(), EcoVeil.TENTACLES, "на «Обычно» — все щупальца")
+	eq(vv.rim_lights(), VeilView.RIM_N, "и все огоньки кромки")
+	view.set_lite(true)
+	ok(vv.lite, "вуали — на «Экономно»")
+	eq(vv.threads(), EcoVeil.TENTACLES / VeilView.LITE_STEP, "каждое второе щупальце")
+	eq(vv.rim_lights(), VeilView.RIM_N / VeilView.LITE_STEP, "каждый второй огонёк")
+	var arr := (vv.tentacles.multimesh.mesh as ArrayMesh).surface_get_arrays(0)
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	var uv2: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV2]
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var full := VeilView.build_tentacles_all(view.veils.veils).surface_get_arrays(0)
+	var fv: PackedVector3Array = full[Mesh.ARRAY_VERTEX]
+	var per := EcoVeil.TENTACLES * EcoVeil.SEGMENTS * 2
+	var seg := EcoVeil.SEGMENTS * 2
+	for i in v.size():
+		var k := int(uv[i].x)
+		eq(k % VeilView.LITE_STEP, 0, "только чётные нити (%d)" % i)
+		var j := i % seg
+		var src := int(uv2[i].x) * per + k * seg + j
+		ok(v[i].is_equal_approx(fv[src]), "нить — на своём месте (%d)" % i)
+		if i > 400:
+			break
+	ok(vv.tentacles.multimesh.mesh.custom_aabb == VeilView.TENT_BOX, "рамка нитей та же")
+	var calls := 0
+	for c in vv.get_children():
+		if c != vv.dust_view:
+			calls += 1
+	eq(calls, 3, "вызовов столько же")
+	var ship := EcoLink.ShipState.new()
+	ship.pos = view.veils.veils[0].p + Vector3(0, -5, 30)
+	view.step(0.05, ship)
+	eq(vv.tentacles.multimesh.visible_instance_count, vv.shown_count, "мир и показ вуалей не меняются")
+	view.ground = Seabed.height   # сброс мира
+	ok(view.veil_view.lite and view.veil_view.threads() == EcoVeil.TENTACLES / VeilView.LITE_STEP,
+		"сброс мира — снова «Экономно»")
+	view.set_lite(false)
+	eq(vv.threads(), EcoVeil.TENTACLES, "назад — все щупальца")
+	eq(vv.rim_lights(), VeilView.RIM_N, "и все огоньки")
+	view.queue_free()
+	await frames(1)
