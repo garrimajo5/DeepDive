@@ -512,3 +512,40 @@ func test_pestr_nose_does_not_snap_when_lure_starts() -> void:
 		var now := EcoHvaten.pestr_pose(hv, k, w.time).basis.z
 		ok(before[k].angle_to(now) <= EcoHvaten.LOOK_MAX * EcoWorld.MAX_STEP + 0.25,
 			"пестрянка %d: нос не щёлкнул (%.2f рад)" % [k, before[k].angle_to(now)])
+
+
+func test_view_lite_draws_every_other_tentacle() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var hv := view.hvaten_view
+	var n := view.hvaten.anemones.size()
+	eq(hv.drawn(), n * EcoHvaten.TENT, "на «Обычно» — все щупальца")
+	view.set_lite(true)
+	ok(hv.lite, "хватни — на «Экономно»")
+	eq(hv.drawn(), n * EcoHvaten.TENT / 2, "каждое второе щупальце")
+	eq(hv.bodies.multimesh.visible_instance_count, -1, "тела — все")
+	eq(hv.pestr.multimesh.visible_instance_count, -1, "пестрянки — все")
+	var seen := {}
+	for i in n:
+		for k in EcoHvaten.TENT:
+			var s := HvatenView.tent_slot(i, k, n, true)
+			seen[s] = true
+			eq(s < hv.drawn(), HvatenView.lite_shown(k), "видно только показанное (%d, %d)" % [i, k])
+	eq(seen.size(), n * EcoHvaten.TENT, "места в буфере не повторяются")
+	var a := view.hvaten.anemones[2]
+	hv.sync(view.world.time)
+	var tr := HvatenView.transform_at(hv.tent_buffer, HvatenView.tent_slot(2, 4, n, true))
+	ok(tr.is_equal_approx(EcoHvaten.tentacle(a, 4, view.world.time, not EcoShaders.sway_lite)),
+		"видимое щупальце — на своём месте буфера")
+	view.ground = Seabed.height   # сброс мира — виды пересобираются
+	ok(view.hvaten_view.lite and view.hvaten_view.drawn() < n * EcoHvaten.TENT, "сброс мира — снова «Экономно»")
+	view.set_lite(false)
+	hv = view.hvaten_view
+	eq(hv.drawn(), n * EcoHvaten.TENT, "назад — все")
+	a = view.hvaten.anemones[2]
+	var back := HvatenView.transform_at(hv.tent_buffer, 2 * EcoHvaten.TENT + 3)
+	ok(back.is_equal_approx(EcoHvaten.tentacle(a, 3, hv._t, not EcoShaders.sway_lite)), "буфер снова по номеру")
+	view.queue_free()
+	await frames(1)
