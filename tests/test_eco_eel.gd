@@ -619,3 +619,37 @@ func _check_organs(view: EelView, e: EcoEel.Eel) -> void:
 	var tr := EelView.transform_at(buf, eye, EelView.CSTRIDE)
 	near(tr.origin.distance_to(e.segs[0]), EelView.EYES[0].length(), 1e-3, "глаз у головы")
 	near(tr.basis.get_scale().x, EelView.EYE_R, 1e-4, "глаз маленький")
+
+
+## Б6: на «Экономно» оболочка звеньев — грубый шар (треугольников вдвое меньше), экземпляров и вызовов столько же,
+## расстановка та же; сброс мира уровень не теряет, назад — обычный шар.
+func test_view_lite_coarse_shell() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var ev := view.eel_view
+	var full := ev.shell.multimesh.mesh.get_faces().size()
+	var count := ev.shell.multimesh.instance_count
+	var children := ev.get_child_count()
+	view.set_lite(true)
+	ok(ev.lite, "стеклоусты — на «Экономно»")
+	var sm := ev.shell.multimesh.mesh as SphereMesh
+	eq(Vector2i(sm.radial_segments, sm.rings), EelView.SHELL_LITE, "грубый шар")
+	ok(sm.get_faces().size() * 2 <= full, "треугольников оболочки вдвое меньше: %d из %d" % [sm.get_faces().size() / 3, full / 3])
+	ok(sm.material == null or sm.material is StandardMaterial3D, "материал оболочки тот же вид")
+	eq(ev.shell.multimesh.instance_count, count, "звеньев столько же")
+	eq(ev.get_child_count(), children, "вызовов столько же")
+	var ship := EcoLink.ShipState.new()
+	ship.pos = view.eels.eels[0].segs[0] + Vector3(0, 3, 10)
+	view.step(0.05, ship)
+	near(EelView.transform_at(ev.shell_buffer, 0).origin.distance_to(view.eels.eels[0].segs[0]), 0.0, 1e-4,
+		"голова на месте")
+	view.ground = Seabed.height   # сброс мира — вид пересобирается
+	ev = view.eel_view
+	ok(ev.lite and (ev.shell.multimesh.mesh as SphereMesh).rings == EelView.SHELL_LITE.y, "сброс мира — снова «Экономно»")
+	view.set_lite(false)
+	eq((ev.shell.multimesh.mesh as SphereMesh).radial_segments, EelView.SHELL_SPHERE.x, "назад — обычный шар")
+	eq(ev.shell.multimesh.mesh.get_faces().size(), full, "треугольников как было")
+	view.queue_free()
+	await frames(1)

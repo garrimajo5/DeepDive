@@ -7,6 +7,9 @@ extends Node3D
 ## #849: было два вызова отрисовки) и кольцо присоски у пасти (на стекле расплющено). Муть у дна (EcoEelDust: клуб у устья при выходе и возвращении, след у дна в броске) —
 ## дочерний MultiMesh «Муть» в мировых координатах, общий шейдер EcoShaders.MIST (INK). Стоит на слое отмели
 ## (OceanView.LAYER_WORLD).
+## «Экономно» (`set_lite`, Б6): оболочка звеньев — шар грубее (SHELL_LITE: 7 × 4 вместо 10 × 6, треугольников вдвое
+## меньше; прозрачные звенья накладываются друг на друга — перерисовка у окна тоже меньше), внутренности, глаза, мир и
+## муть не меняются, вызовов столько же; сброс мира уровень не теряет.
 
 const SHELL := Color(0.604, 0.851, 0.91, 0.3)   ## #9AD9E8, прозрачный край
 const SHELL_GLOW := Color("16323a")
@@ -30,8 +33,13 @@ const WAG := 0.05
 const STRIDE := 12
 ## Запись экземпляра с цветом: трансформ и RGBA.
 const CSTRIDE := 16
+## Шар оболочки (меридианов, колец): обычный и на «Экономно».
+const SHELL_SPHERE := Vector2i(10, 6)
+const SHELL_LITE := Vector2i(7, 4)
 
 var eels: EcoEel
+## «Экономно» (set_lite).
+var lite := false
 var rocks: MultiMeshInstance3D
 var shell: MultiMeshInstance3D
 ## Внутренности и глаза одним MultiMesh (#849): сначала n · (SEGS − 1) звеньев, потом n · 2 глаза.
@@ -66,12 +74,13 @@ var dust_buffer: PackedFloat32Array:
 var _dust := EcoDustBuffer.new()
 
 
-func _init(system: EcoEel) -> void:
+func _init(system: EcoEel, lite_on := false) -> void:
 	eels = system
 	name = "Стеклоусты"
 	var n := eels.eels.size()
 	rocks = EcoMM.instance(self, "Камни логов", build_rock(), n * EcoEel.ROCKS.size(), false)
-	shell = EcoMM.instance(self, "Оболочка", _sphere(10, 6, _shell_material()), n * EcoEel.SEGS, false)
+	lite = lite_on
+	shell = EcoMM.instance(self, "Оболочка", build_shell(lite), n * EcoEel.SEGS, false)
 	organs = EcoMM.instance(self, "Внутренности", _sphere(6, 4, _organ_material()), n * (EcoEel.SEGS - 1 + EYES.size()),
 		true)
 	_paint_organs(n)
@@ -84,6 +93,20 @@ func _init(system: EcoEel) -> void:
 	add_child(dust_view)
 	_place_rocks()
 	sync(0.0)
+
+
+## «Экономно»: оболочка — грубый шар; назад — обычный.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	shell.multimesh.mesh = build_shell(on)
+
+
+## Шар оболочки звена (на «Экономно» — SHELL_LITE).
+static func build_shell(lite_on := false) -> SphereMesh:
+	var k := SHELL_LITE if lite_on else SHELL_SPHERE
+	return _sphere(k.x, k.y, _shell_material())
 
 
 static func _sphere(radial: int, rings_n: int, mat: Material, r: float = 1.0) -> SphereMesh:
