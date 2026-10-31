@@ -287,8 +287,7 @@ func test_view_one_multimesh() -> void:
 		"клетки и ореолы гребневиков — один шейдер")
 	ok(bool(pv.material.get_shader_parameter("cloud")), "режим облака")
 	var cl := view.plankton.clouds[1]
-	var j := 1 * EcoPlankton.PER_CLOUD + 7
-	near(pv.origin_at(j).distance_to(cl.home + cl.offsets[7]), 0.0, 1e-4, "дом клетки в буфере")
+	near(pv.origin_at(1, 7).distance_to(cl.home + cl.offsets[7]), 0.0, 1e-4, "дом клетки в буфере")
 	var ship := EcoLink.ShipState.new()
 	ship.pos = FAR
 	view.step(0.05, ship)
@@ -305,7 +304,44 @@ func test_view_one_multimesh() -> void:
 	for k in EcoPlankton.PER_CLOUD:
 		if cl.lit_at[k] > 0.0:
 			lit += 1
-			near(pv.lit_at(1 * EcoPlankton.PER_CLOUD + k), cl.lit_at[k], 1e-4, "время вспышки — в буфере")
+			near(pv.lit_at(1, k), cl.lit_at[k], 1e-4, "время вспышки — в буфере")
 	ok(lit > 25, "клетки вспыхнули: %d" % lit)
+	view.queue_free()
+	await frames(1)
+
+
+## «Экономно»: рисуется половина клеток — поровну из каждого облака, мир считает все; сброс мира уровень не теряет.
+func test_lite_draws_half_of_each_cloud() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var pv := view.plankton_view
+	eq(pv.drawn(), 1440, "на «Обычно» — все клетки")
+	view.set_lite(true)
+	eq(pv.drawn(), 720, "«Экономно» — половина")
+	var shown: Array[int] = [0, 0, 0, 0]
+	for c in view.plankton.clouds.size():
+		for k in EcoPlankton.PER_CLOUD:
+			if pv.slot(c, k) < pv.drawn():
+				shown[c] += 1
+	eq(shown, [180, 180, 180, 180] as Array[int], "из каждого облака поровну")
+	var cl := view.plankton.clouds[1]
+	var ship := EcoLink.ShipState.new()
+	ship.pos = cl.c - EcoHull.CENTER
+	ship.speed = 5.0
+	view.step(0.05, ship)
+	var lit := 0
+	for k in EcoPlankton.PER_CLOUD:
+		if cl.lit_at[k] > 0.0:
+			lit += 1
+			near(pv.lit_at(1, k), cl.lit_at[k], 1e-4, "вспышка — в буфере и у скрытых клеток")
+	ok(lit > 25, "мир зажигает клетки как раньше: %d" % lit)
+	view.ground = Seabed.height
+	ok(view.plankton_view != pv, "дно сменилось — вид пересобран")
+	ok(view.plankton_view.lite, "после пересборки — тоже «Экономно»")
+	eq(view.plankton_view.drawn(), 720, "после пересборки — половина")
+	view.set_lite(false)
+	eq(view.plankton_view.drawn(), 1440, "назад — все клетки")
 	view.queue_free()
 	await frames(1)
