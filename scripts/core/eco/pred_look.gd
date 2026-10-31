@@ -45,6 +45,11 @@ const ANIM_FAR_STEP := 0.2
 const HIDE_FAR := 160.0
 ## Набранное время отдаётся скелету разом не длиннее (с): фаза плавания вдали не важна, а длинный шаг дерева дорог.
 const LAG_MAX := 1.0
+## «Экономно» (Б6, `PredView.set_lite`): скелет реже уже ближе — дальше ANIM_MID_LITE (м) раз в ANIM_MID_STEP (с),
+## дальше ANIM_FAR_LITE — раз в ANIM_FAR_STEP. Укус и удар серпом (до CUE_FAR) не ждут позы: `Clock.flush`.
+const ANIM_MID_LITE := 25.0
+const ANIM_MID_STEP := 0.1
+const ANIM_FAR_LITE := 60.0
 
 
 ## Куда смотрит голова сейчас (плавный курс EcoPred.turn).
@@ -119,10 +124,23 @@ class Clock:
 	var lag := 0.0
 
 	## Сколько времени отдать дереву анимации в этот кадр: dt — шаг кадра, dist — до корабля (м); 0 — дерево не трогать.
-	func tick(dt: float, dist: float) -> float:
+	## lite — «Экономно»: шаг позы реже уже с ANIM_MID_LITE.
+	func tick(dt: float, dist: float, lite := false) -> float:
 		lag = minf(lag + dt, LAG_MAX)
-		if dist > HIDE_FAR or (dist > ANIM_FAR and lag < ANIM_FAR_STEP - 1e-6) or lag <= 0.0:
+		if dist > HIDE_FAR or lag < step_at(dist, lite) - 1e-6 or lag <= 0.0:
 			return 0.0
+		return flush()
+
+	## Отдать всё набранное сразу (разовый клип не ждёт следующей позы).
+	func flush() -> float:
 		var out := lag
 		lag = 0.0
 		return out
+
+	## Не чаще какого шага (с) меняется поза на расстоянии dist; 0 — каждый кадр.
+	static func step_at(dist: float, lite := false) -> float:
+		if dist > (ANIM_FAR_LITE if lite else ANIM_FAR):
+			return ANIM_FAR_STEP
+		if lite and dist > ANIM_MID_LITE:
+			return ANIM_MID_STEP
+		return 0.0

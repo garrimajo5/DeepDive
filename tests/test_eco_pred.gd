@@ -691,6 +691,73 @@ func test_clock_lod() -> void:
 	ok(EcoPredLook.CUE_FAR < EcoPredLook.ANIM_FAR, "укусы и удары — только там, где скелет идёт каждый кадр")
 
 
+## «Экономно» (Б6): поза реже уже с ANIM_MID_LITE, дальше ANIM_FAR_LITE — как вдали; вблизи — каждый кадр; время не
+## теряется; на «Обычно» прежний порядок.
+func test_clock_lite() -> void:
+	var c := EcoPredLook.Clock.new()
+	near(c.tick(0.05, 10.0, true), 0.05, 1e-6, "вблизи и на «Экономно» — каждый кадр")
+	eq(EcoPredLook.Clock.step_at(40.0), 0.0, "на «Обычно» в 40 м — каждый кадр")
+	eq(EcoPredLook.Clock.step_at(40.0, true), EcoPredLook.ANIM_MID_STEP, "на «Экономно» в 40 м — реже")
+	eq(EcoPredLook.Clock.step_at(70.0, true), EcoPredLook.ANIM_FAR_STEP, "дальше %.0f м — как вдали" % EcoPredLook.ANIM_FAR_LITE)
+	var got := 0.0
+	var calls := 0
+	for i in 20:
+		var s := c.tick(0.05, 40.0, true)
+		if s > 0.0:
+			calls += 1
+			got += s
+	eq(calls, 10, "в 40 м — раз в %.1f с" % EcoPredLook.ANIM_MID_STEP)
+	near(got + c.lag, 1.0, 1e-5, "время не теряется")
+	ok(EcoPredLook.ANIM_MID_LITE < EcoPredLook.ANIM_FAR_LITE and EcoPredLook.ANIM_FAR_LITE < EcoPredLook.ANIM_FAR,
+		"пороги «Экономно» ближе обычных")
+	c.lag = 0.0
+	c.tick(0.05, 40.0, true)
+	near(c.flush(), 0.05, 1e-6, "flush отдаёт набранное")
+	eq(c.lag, 0.0, "и обнуляет")
+
+
+## «Экономно» у сцены: EcoView.set_lite доходит до серпохвостов; в 40 м поза меняется реже кадра, а укус между
+## позами всё равно запускается.
+func test_view_lite_skeleton_slower() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var pv := view.pred_view
+	var pr := view.preds.all[1]
+	var ship := EcoLink.ShipState.new()
+	ship.pos = _beside(pr)
+	view.step(0.05, ship)
+	view.set_lite(true)
+	ok(pv.lite, "серпохвосты — на «Экономно»")
+	var sk: Skeleton3D = pv.bodies[1].find_children("*", "Skeleton3D", true, false)[0]
+	var tail := sk.find_bone("Tail03")
+	var mid := pr.agent.p + Vector3(40.0, 0, 0)
+	var t0 := view.world.time + 0.6
+	pv.sync(t0, mid)
+	var changes := 0
+	var last := sk.get_bone_pose_rotation(tail)
+	for i in range(1, 21):
+		pv.sync(t0 + 0.05 * i, mid)
+		var q := sk.get_bone_pose_rotation(tail)
+		if not q.is_equal_approx(last):
+			changes += 1
+		last = q
+	ok(changes >= 8 and changes <= 11, "поза в 40 м сменилась %d раз за 20 кадров" % changes)
+	# укус в такой кадр, где поза не меняется: клип всё равно идёт
+	t0 += 1.1
+	pv.sync(t0, mid)   # шаг 0,1 с — поза сменилась, набранного нет
+	eq(pv.clocks[1].lag, 0.0, "набранное отдано")
+	pr.mode = EcoPred.Mode.EAT
+	pv.cues[1].bite_at = -99.0
+	pv.sync(t0 + 0.05, mid)   # 0,05 с — между позами
+	ok(pv.trees[1].get(PredView.P_BITE_ON), "укус между позами не потерян")
+	view.set_lite(false)
+	ok(not pv.lite, "назад — «Обычно»")
+	view.queue_free()
+	await frames(1)
+
+
 ## Дальше HIDE_FAR хищник спрятан и его скелет не считается; вдали — поза меняется реже кадра.
 func test_view_far_hidden_and_still() -> void:
 	var view := EcoView.new()
