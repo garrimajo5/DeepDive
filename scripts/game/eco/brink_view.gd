@@ -5,6 +5,9 @@ extends MeshInstance3D
 ## шейдер камня `EcoShaders.STONE` — нового шейдера нет), один вызов отрисовки, рамка — по друзам (вдали от 10
 ## отсекается). Бледный камень; кончики светятся холодным светом в альфе вершинного цвета, к востоку ярче.
 ## Без источников света, слой отмели, без тени.
+## «Экономно» (`set_lite`, Б6): в друзе не больше LITE_CRYSTALS кристаллов (самый высокий и первые наклонные —
+## расклад тот же), грани — LITE_SIDES; треугольников вдвое меньше, меш пересобирается, вызов тот же; сброс мира
+## уровень не теряет.
 
 const FILL := 0.45
 const ROUGH := 0.35
@@ -21,6 +24,9 @@ const THICK := Vector2(0.12, 0.22)
 const LEAN := 0.6
 const SINK := 0.3
 const POINT := 0.28
+## «Экономно»: кристаллов в друзе не больше, граней кристалла.
+const LITE_CRYSTALS := 3
+const LITE_SIDES := 4
 
 var brink: EcoBrink
 ## Вершины по треугольникам (мир), нормали, число треугольников, сколько вершин светится.
@@ -28,15 +34,34 @@ var verts := PackedVector3Array()
 var normals := PackedVector3Array()
 var tris := 0
 var glowing := 0
+## «Экономно» (set_lite).
+var lite := false
 
 var _col := PackedColorArray()
 
 
-func _init(system: EcoBrink) -> void:
+func _init(system: EcoBrink, lite_on := false) -> void:
 	brink = system
 	name = "Граница у спуска"
 	layers = OceanView.LAYER_WORLD
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	lite = lite_on
+	_build()
+
+
+## «Экономно»: меньше кристаллов и граней; назад — полная корка.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	_build()
+
+
+func _build() -> void:
+	verts.clear()
+	normals.clear()
+	_col.clear()
+	glowing = 0
 	var roots := PackedVector3Array()
 	for d in brink.druses.size():
 		_druse(d)
@@ -44,6 +69,7 @@ func _init(system: EcoBrink) -> void:
 		roots.append(Vector3(v.x, v.y, v.z))
 	tris = verts.size() / 3
 	if tris == 0:
+		mesh = null
 		return
 	var m := EcoMM.tris(verts, normals, _col)
 	m.surface_set_material(0, EcoShaders.stone(LIGHT, FILL, ROUGH, SPEC))
@@ -59,6 +85,7 @@ func _druse(d: int) -> void:
 	var rnd := EcoRandom.new(9100 + d * 7)
 	var n := CRYSTALS.x + rnd.index(CRYSTALS.y - CRYSTALS.x + 1)
 	var root := Vector3(v.x, v.y - SINK, v.z)
+	var keep := mini(n, LITE_CRYSTALS) if lite else n
 	for c in n:
 		# первый — самый высокий и почти прямой, остальные ниже и наклонены в стороны
 		var lean := (0.15 if c == 0 else rnd.range_f(0.25, 1.0)) * LEAN
@@ -66,8 +93,10 @@ func _druse(d: int) -> void:
 		var dir := Vector3(sin(lean) * cos(turn), cos(lean), sin(lean) * sin(turn))
 		var length := r * EcoBrink.TALL * (1.0 if c == 0 else rnd.range_f(0.45, 0.85))
 		var off := Vector3(cos(turn), 0.0, sin(turn)) * r * rnd.range_f(0.0, 0.35)
-		_crystal(root + off, dir, length, r * rnd.range_f(THICK.x, THICK.y), rnd.range_f(0.0, TAU),
-			EcoBrink.glow(s))
+		var thick := r * rnd.range_f(THICK.x, THICK.y)
+		var spin := rnd.range_f(0.0, TAU)
+		if c < keep:   # случайные числа тянем и за пропущенные — расклад тот же
+			_crystal(root + off, dir, length, thick, spin, EcoBrink.glow(s))
 
 
 ## Кристалл: шестигранная призма от base вдоль dir (длина с верхушкой — length + SINK), верхушка — пирамида.
@@ -80,14 +109,15 @@ func _crystal(base: Vector3, dir: Vector3, length: float, w: float, spin: float,
 	var tip := base + dir * full
 	var low := PackedVector3Array()
 	var high := PackedVector3Array()
-	for i in SIDES:
-		var a := TAU * i / SIDES
+	var sides := LITE_SIDES if lite else SIDES
+	for i in sides:
+		var a := TAU * i / sides
 		var o := (side * cos(a) + other * sin(a)) * w
 		low.append(base + o)
 		high.append(shoulder + o)
 	var mid := base + dir * full * 0.5
-	for i in SIDES:
-		var j := (i + 1) % SIDES
+	for i in sides:
+		var j := (i + 1) % sides
 		_tri(low[i], low[j], high[j], mid, QUARTZ, TIP, 0.0, 0.0, full, base, dir)
 		_tri(low[i], high[j], high[i], mid, QUARTZ, TIP, 0.0, 0.0, full, base, dir)
 		_tri(high[i], high[j], tip, shoulder, QUARTZ, TIP, glow * 0.3, glow, full, base, dir)

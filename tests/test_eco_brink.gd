@@ -121,3 +121,42 @@ func test_scene_has_brink() -> void:
 	ok(main.eco.brink_view != null and main.eco.brink_view.is_inside_tree(), "вид корки в сцене")
 	main.queue_free()
 	await frames(1)
+
+
+## Б6: на «Экономно» в друзе не больше трёх кристаллов по четыре грани — треугольников вдвое меньше, меш один,
+## корни и рамка те же, кончики светятся; сброс мира уровень не теряет, назад — полная корка.
+func test_view_lite_fewer_crystals_and_faces() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var bv := view.brink_view
+	var full := bv.tris
+	var frame := bv.custom_aabb
+	view.set_lite(true)
+	ok(bv.lite, "корка — на «Экономно»")
+	ok(bv.tris * 2 <= full, "треугольников вдвое меньше: %d из %d" % [bv.tris, full])
+	eq(bv.mesh.get_faces().size() / 3, bv.tris, "меш пересобран")
+	eq(bv.mesh.get_surface_count(), 1, "одна поверхность — вызов тот же")
+	ok(bv.glowing > 0, "кончики светятся")
+	ok(bv.custom_aabb.is_equal_approx(frame), "рамка та же")
+	view.ground = Seabed.height   # сброс мира — вид пересобирается
+	bv = view.brink_view
+	ok(bv.lite and bv.tris * 2 <= full, "сброс мира — снова «Экономно»")
+	view.set_lite(false)
+	eq(bv.tris, full, "назад — полная корка")
+	view.queue_free()
+	await frames(1)
+
+
+## Б6: на «Экономно» кристаллы стоят там же — первый кристалл каждой друзы тот же, что в полной корке.
+func test_view_lite_keeps_layout() -> void:
+	var b := _brink()
+	var a := BrinkView.new(b)
+	var l := BrinkView.new(b, true)
+	# первый кристалл первой друзы — первые 3 · SIDES (полная) и 3 · LITE_SIDES (лёгкая) треугольников; кончик — общий
+	var tip_full := a.verts[(3 * BrinkView.SIDES - 1) * 3 + 2]
+	var tip_lite := l.verts[(3 * BrinkView.LITE_SIDES - 1) * 3 + 2]
+	ok(tip_full.distance_to(tip_lite) < 1e-4, "кончик первого кристалла на месте")
+	a.free()
+	l.free()
