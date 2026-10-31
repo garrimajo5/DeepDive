@@ -29,6 +29,26 @@ static func instance(parent: Node, n: String, mesh: Mesh, count: int, colors := 
 	return mi
 
 
+## Облака частиц нескольких хозяев в одном MultiMesh (споры пузырчатки, чернила подушечника; Б6). На «Обычно» —
+## облака подряд: частица j хозяина owner — на месте owner · per + j. На «Экономно» — вперемешку (j · owners + owner):
+## первые `cloud_shown` мест — первая доля CLOUD_LITE каждого облака, `visible_instance_count` отрезает остальное.
+const CLOUD_LITE := 0.5
+
+
+static func cloud_slot(owner: int, j: int, owners: int, per: int, lite: bool) -> int:
+	return j * owners + owner if lite else owner * per + j
+
+
+## Сколько частиц облаков рисуется: на «Экономно» — доля CLOUD_LITE каждого облака, иначе все (−1).
+static func cloud_shown(owners: int, per: int, lite: bool) -> int:
+	return cloud_per(per) * owners if lite else -1
+
+
+## Сколько частиц одного облака рисуется на «Экономно».
+static func cloud_per(per: int) -> int:
+	return int(per * CLOUD_LITE)
+
+
 ## Рамка вокруг точек `pts`, раздутая на `grow` м (#849): неподвижным видам — по местам их экземпляров, чтобы
 ## Godot отсекал вид за спиной и вдали и не пересчитывал границы при каждой записи буфера. Пусто — нулевая рамка.
 static func frame(pts: PackedVector3Array, grow: float) -> AABB:

@@ -246,7 +246,7 @@ func _init() -> void:
 	dust_layer.gather(self)
 
 
-## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи, просвет листвы и каустики на камне погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали нет, моли у колодца 80, бахромы 24, планктона рисуется половина клеток, светляков и гребневиков — двое из трёх в стае — меняются
+## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи, просвет листвы и каустики на камне погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали нет, моли у колодца 80, бахромы 24, планктона рисуется половина клеток, светляков и гребневиков — двое из трёх в стае, спор пузырчатки и чернил подушечника — половина облака — меняются
 ## только числа в uniform, шейдеры те же. Включает уровень графики — поток А (`Main._apply_graphics`).
 func set_lite(on: bool) -> void:
 	lite = on
@@ -262,6 +262,8 @@ func set_lite(on: bool) -> void:
 	plankton_view.set_lite(on)
 	fish_view.set_lite(on)
 	raduzh_view.set_lite(on)
+	bladder_view.set_lite(on)
+	cushion_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -296,7 +298,7 @@ func _rebuild_bladders() -> void:
 	if bladder_view:
 		remove_child(bladder_view)
 		bladder_view.free()
-	bladder_view = BladderView.new(bladders)
+	bladder_view = BladderView.new(bladders, lite)
 	add_child(bladder_view)
 
 
@@ -314,7 +316,7 @@ func _rebuild_cushions() -> void:
 	if cushion_view:
 		remove_child(cushion_view)
 		cushion_view.free()
-	cushion_view = CushionView.new(cushions)
+	cushion_view = CushionView.new(cushions, lite)
 	add_child(cushion_view)
 
 

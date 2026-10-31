@@ -309,3 +309,47 @@ func test_view_two_multimeshes() -> void:
 	near(cv.ink_buffer[EcoCushion.INK_N * CushionView.STRIDE_C + 15], CushionView.INK_ALPHA, 1e-4, "непрозрачность 0,85")
 	view.queue_free()
 	await frames(1)
+
+
+## «Экономно» (Б6): рисуется половина пятен каждого облака чернил — места вперемешку по подушкам, видимые в начале
+## буфера; назад — буфер снова по подушке; сброс мира уровень не теряет.
+func test_view_lite_draws_half_of_each_ink_cloud() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var cv := view.cushion_view
+	var n := view.cushions.cushions.size()
+	eq(cv.ink_drawn(), n * EcoCushion.INK_N, "на «Обычно» — все пятна")
+	view.set_lite(true)
+	ok(cv.lite, "подушечник — на «Экономно»")
+	var per := EcoMM.cloud_per(EcoCushion.INK_N)
+	eq(cv.ink_drawn(), per * n, "половина каждого облака")
+	ok(cv.ink_drawn() <= n * EcoCushion.INK_N / 2, "пятен вдвое меньше: %d" % cv.ink_drawn())
+	var seen := {}
+	for cu in view.cushions.cushions:
+		var shown := 0
+		for j in EcoCushion.INK_N:
+			var s := cv.ink_slot(cu.index, j)
+			seen[s] = true
+			if s < cv.ink_drawn():
+				shown += 1
+		eq(shown, per, "у подушки %d видно %d" % [cu.index, per])
+	eq(seen.size(), n * EcoCushion.INK_N, "места в буфере не повторяются")
+	var cu := view.cushions.cushions[1]
+	view.cushions.squeeze(view.world, cu, true)
+	view.world.run(1.0)
+	cv.sync(view.world.time)
+	var slot := cv.ink_slot(cu.index, 5)
+	ok(slot < cv.ink_drawn(), "пятно первой половины рисуется")
+	var ink5 := CushionView.transform_at(cv.ink_buffer, slot)
+	near(ink5.basis.get_scale().x, 1.0, 1e-4, "облако видно на своём месте")
+	near(ink5.origin.distance_to(EcoCushion.ink_point(cu, 5, view.world.time)), 0.0, 1e-4, "там, где его считает мир")
+	view.ground = Seabed.height   # сброс мира — виды пересобираются
+	ok(view.cushion_view.lite and view.cushion_view.ink_drawn() == per * n, "сброс мира — снова «Экономно»")
+	view.set_lite(false)
+	cv = view.cushion_view
+	eq(cv.ink_drawn(), n * EcoCushion.INK_N, "назад — все")
+	eq(cv.ink_slot(1, 5), EcoCushion.INK_N + 5, "буфер снова по подушке")
+	view.queue_free()
+	await frames(1)
