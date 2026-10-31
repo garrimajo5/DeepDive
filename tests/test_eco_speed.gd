@@ -226,10 +226,45 @@ static func slowness(ref: float) -> float:
 	return maxf(1.0, ref / REF_PC_MS)
 
 
+## Вторая мерка (issue #1086): 40 раз шаг 22 существ EcoAgent — чтение и запись свойств объектов, как в шаге мира.
+## Мерка ref — чистый счёт в упакованных массивах, а шаг мира — в основном обход объектов; на части машин (раннер
+## CI с меркой 0,78 мс, облачная сессия) объекты медленнее счёта, шаг упирался в порог по мерке ref. Порог берёт
+## бо́льшую из двух медленностей. Число на ПК — по раннеру CI с обычным отношением шага к мерке ref.
+const OBJ_PC_MS := 0.6
+
+
+static func _obj_ms() -> float:
+	var r := EcoRandom.new(7)
+	var agents: Array[EcoAgent] = []
+	for i in 22:
+		agents.append(EcoAgent.new("fish", Vector3(r.range_f(-3, 3), r.range_f(-31, -29), r.range_f(-3, 3))))
+	var home := Vector3(0, -30, 0)
+	var t0 := Time.get_ticks_usec()
+	for k in 40:
+		for a in agents:
+			var p := a.p
+			var v := a.v
+			v += (home - p) * 0.05 + Vector3(sin(p.x + k), 0.0, cos(p.z + k)) * 0.2
+			if a.alive and p.y < -40.0:
+				v.y += 1.0
+			a.v = v.limit_length(2.4)
+			a.p = p + a.v * 0.016
+			a.state = EcoAgent.State.GRAZE
+	return (Time.get_ticks_usec() - t0) / 1000.0
+
+
+## Медленность машины по обеим меркам: бо́льшая из двух, не меньше 1.
+static func slowness2(ref: float, obj: float) -> float:
+	return maxf(slowness(ref), obj / OBJ_PC_MS)
+
+
 func test_slowness() -> void:
 	near(slowness(REF_PC_MS), 1.0, 1e-6, "ПК")
 	near(slowness(REF_PC_MS * 0.5), 1.0, 1e-6, "быстрее ПК — порог не ниже ПК")
 	near(slowness(REF_PC_MS * 1.28), 1.28, 1e-6, "раннер CI")
+	near(slowness2(REF_PC_MS, OBJ_PC_MS * 1.3), 1.3, 1e-6, "объекты медленнее счёта — порог по объектам")
+	near(slowness2(REF_PC_MS * 1.5, OBJ_PC_MS), 1.5, 1e-6, "счёт медленнее объектов — порог по счёту")
+	near(slowness2(REF_PC_MS * 0.5, OBJ_PC_MS * 0.5), 1.0, 1e-6, "быстрее ПК по обеим — порог не ниже ПК")
 
 
 func test_view_step_fits_frame() -> void:
@@ -257,19 +292,21 @@ func test_view_step_fits_frame() -> void:
 	# Шаг и порог печатаются в лог всегда: рост виден до того, как тест покраснеет.
 	var best := INF
 	var ref := INF
+	var obj := INF
 	var slow := 1.0
 	var limit := LIMIT_PC_MS
 	for k in ROUNDS:
 		ref = minf(ref, _ref_ms())
+		obj = minf(obj, _obj_ms())
 		var t0 := Time.get_ticks_usec()
 		for i in 60:
 			view.step(1.0 / 60.0, ship)
 		best = minf(best, (Time.get_ticks_usec() - t0) / 60.0 / 1000.0)
-		slow = slowness(ref)
+		slow = slowness2(ref, obj)
 		limit = LIMIT_PC_MS * slow
 		if k >= 4 and best < limit:
 			break
-	print("    шаг живого мира %.2f мс, порог %.2f (мерка %.3f мс)" % [best, limit, ref])
+	print("    шаг живого мира %.2f мс, порог %.2f (мерка %.3f мс, объекты %.3f мс)" % [best, limit, ref, obj])
 	ok(best < limit, "шаг живого мира %.2f мс (< %.2f мс; машина медленнее ПК в %.2f раза)" % [best, limit, slow])
 	view.queue_free()
 	await frames(1)
