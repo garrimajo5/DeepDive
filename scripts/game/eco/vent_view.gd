@@ -78,6 +78,7 @@ func _build_rock() -> void:
 	rock.name = "Порода"
 	rock.mesh = m
 	_setup(rock)
+	EcoShadows.cast(rock)   # порода — тень на дно (Б1); пузыри и марево без тени
 	tris = verts.size() / 3
 
 
