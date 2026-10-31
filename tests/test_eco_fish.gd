@@ -510,6 +510,48 @@ func test_view_one_multimesh_follows_world() -> void:
 	await frames(1)
 
 
+
+## «Экономно» (Б6): в каждой стае рисуются две рыбки из трёх — видимые в начале буфера; мир считает всех, назад —
+## буфер снова по номеру рыбки.
+func test_view_lite_draws_two_of_three_per_shoal() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var fv := view.fish_view
+	eq(fv.drawn(), ALL, "на «Обычно» — все рыбки")
+	view.set_lite(true)
+	ok(fv.lite, "вид рыбок — на «Экономно»")
+	var shown := 0
+	for sh: EcoFish.Shoal in view.fish.shoals:
+		var n := 0
+		for f: EcoFish.Fish in sh.members:
+			if fv.slot_of(f.index) < fv.drawn():
+				n += 1
+		eq(n, sh.members.size() - sh.members.size() / FishView.LITE_SKIP, "в стае %d — две из трёх" % sh.members.size())
+		ok(n > 0, "каждая стая видна")
+		shown += n
+	eq(fv.drawn(), shown, "рисуются ровно видимые")
+	ok(fv.drawn() < ALL * 0.7, "рыбок меньше на треть: %d из %d" % [fv.drawn(), ALL])
+	var seen := {}
+	for f: EcoFish.Fish in view.fish.all:
+		seen[fv.slot_of(f.index)] = true
+	eq(seen.size(), ALL, "места в буфере не повторяются")
+	var f: EcoFish.Fish = view.fish.shoals[0].members[0]
+	var ship := EcoLink.ShipState.new()
+	ship.pos = f.shoal.home + Vector3(0, 0, 40)
+	for i in 10:
+		view.step(0.05, ship)
+	ok(FishView.transform_at(fv.buffer, fv.slot_of(f.index)).origin.distance_to(f.agent.p) < 1e-3,
+		"видимая рыбка — на своём месте буфера")
+	view.set_lite(false)
+	view.step(0.05, ship)
+	eq(fv.drawn(), ALL, "назад — все рыбки")
+	eq(fv.slot_of(f.index), f.index, "буфер снова по номеру")
+	ok(FishView.transform_at(fv.buffer, f.index).origin.distance_to(f.agent.p) < 1e-3, "и места переписаны")
+	view.queue_free()
+	await frames(1)
+
 ## «Между рёбрами прячется молодь» (ART-030): стайка мелких светляков бродит внутри чистого прохода клетки
 ## Костей левиафана, в кость не заходит, от хищника прячется в середине клетки.
 func test_young_hide_between_ribs() -> void:
