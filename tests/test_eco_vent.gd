@@ -365,3 +365,65 @@ func test_vent_fan_dwell_resets() -> void:
 	w.ship.pos = at
 	ok(not _stay(w, EcoFan.VENT_DWELL - 1.0).any(_to_vent), "после ухода — снова ждать VENT_DWELL")
 	ok(_stay(w, 1.5).any(_to_vent), "простояв — строка есть")
+
+
+# ---------- «Экономно» (Б6) ----------
+
+func test_view_lite_coarser_rock_same_material() -> void:
+	var v := _vent(_slope)
+	var view := VentView.new(v)
+	tree.root.add_child(view)
+	await frames(1)
+	var full := view.tris
+	var mat := view.rock.mesh.surface_get_material(0)
+	var box := view.rock.mesh.get_aabb()
+	var bubbles := view.bubbles.multimesh
+	var haze := view.haze.mesh
+	view.set_lite(true)
+	ok(view.lite, "курильщик — на «Экономно»")
+	ok(view.tris * 100 <= full * 60, "треугольников не больше 60 %% (%d → %d)" % [full, view.tris])
+	eq(view.rock.mesh.get_surface_count(), 1, "порода — один вызов")
+	ok(view.rock.mesh.surface_get_material(0) == mat, "материал тот же (жар, мерцание)")
+	ok(view.bubbles.multimesh == bubbles and view.haze.mesh == haze, "пузыри и марево те же")
+	var meshes := 0
+	for c in view.get_children():
+		if c is GeometryInstance3D:
+			meshes += 1
+	eq(meshes, 3, "вызовов столько же")
+	var lb := view.rock.mesh.get_aabb()
+	ok(lb.size.y > box.size.y * 0.98 and lb.size.x > box.size.x * 0.93, "силуэт тот же: %s → %s" % [box.size, lb.size])
+	var bad := 0
+	for t in view.tris:
+		var a := view.verts[t * 3]
+		var cr := (view.verts[t * 3 + 1] - a).cross(view.verts[t * 3 + 2] - a)
+		if cr.dot(view.normals[t * 3]) >= 0.0:
+			bad += 1
+	eq(bad, 0, "и на «Экономно» грани обходом по часовой стрелке")
+	# кромки жерл светятся и на «Экономно»; жерло главной трубы — на месте
+	var cols: PackedColorArray = view.rock.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	var lit := 0
+	for c in cols:
+		if c.a > 0.99:
+			lit += 1
+	ok(lit > 0, "кромки светятся: %d" % lit)
+	var top := -INF
+	for p in view.verts:
+		top = maxf(top, p.y)
+	near(top, v.tubes[0].mouth.y, 1e-3, "кромка главного жерла на той же высоте")
+	view.set_lite(false)
+	eq(view.tris, full, "назад — полная порода")
+	view.queue_free()
+	await frames(1)
+
+
+func test_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = Seabed.height
+	ev.set_lite(true)
+	ok(ev.vent_view.lite, "уровень дошёл до курильщика")
+	var t := ev.vent_view.tris
+	ev.ground = Seabed.height
+	ok(ev.vent_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(ev.vent_view.tris, t, "и порода грубая")
+	ev.set_lite(false)
+	ev.free()
