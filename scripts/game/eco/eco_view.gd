@@ -268,6 +268,7 @@ func set_lite(on: bool) -> void:
 	hvaten_view.set_lite(on)
 	ognevka_view.set_lite(on)
 	kelp_view.set_lite(on)
+	eel_view.set_lite(on)
 	veil_view.set_lite(on)
 
 
@@ -330,7 +331,7 @@ func _rebuild_eels() -> void:
 	if eel_view:
 		remove_child(eel_view)
 		eel_view.free()
-	eel_view = EelView.new(eels)
+	eel_view = EelView.new(eels, lite)
 	add_child(eel_view)
 
 
