@@ -8,6 +8,9 @@ extends Node3D
 ## слой отмели (OceanView.LAYER_WORLD); дальше FAR от корабля не виден в мути.
 ## Муть у дна (EcoGrotDust: облачко у ступни на каждом шаге, панцирь осел — клуб у обода, ноги снова выпущены — у
 ## ступней) — дочерний MultiMesh «Муть» на общем шейдере мира (+1 вызов).
+## «Экономно» (Б6, `set_lite`): панцирь, обод, голова, бугры рифа, кончики веток и глаза — грубее сетка (LITE_*,
+## треугольников меньше половины); ноги и ветки те же, мир, муть, вызовы и силуэт те же. Сброс мира уровень не теряет
+## (вид не пересоздаётся, EcoView.set_lite).
 
 const SHELL := Color("5b5a4a")
 const RIM := Color("3e3b30")
@@ -28,6 +31,12 @@ const LEG_TILT := 0.5
 const BRANCHES := 11
 const BUMPS := 6
 const FAR := 160.0
+## Сетка на «Экономно»: панцирь (сегменты × кольца), обод (сегменты × стороны трубки), голова, бугры, огоньки.
+const LITE_SHELL := Vector2i(10, 3)
+const LITE_RIM := Vector2i(12, 3)
+const LITE_HEAD := Vector2i(6, 4)
+const LITE_BUMP := Vector2i(5, 3)
+const LITE_TIP := Vector2i(4, 2)
 
 var grots: EcoGrot
 ## Узел гротовика: стоит на теле (низ панциря), повёрнут по курсу.
@@ -45,19 +54,24 @@ var dust_buffer: PackedFloat32Array:
 var _dust := EcoDustBuffer.new()
 
 
-func _init(system: EcoGrot) -> void:
+## На «Экономно» — грубее сетка (set_lite).
+var lite := false
+
+
+func _init(system: EcoGrot, on_lite := false) -> void:
 	grots = system
+	lite = on_lite
 	name = "Гротовик"
 	group = Node3D.new()
 	group.name = "Гротовик"
 	add_child(group)
-	body = _mesh("Панцирь", build_body(), _lit(BODY_GLOW))
+	body = _mesh("Панцирь", build_body(lite), _lit(BODY_GLOW))
 	legs = _mesh("Ноги", build_legs(), _lit(Color.BLACK))
-	reef = _mesh("Риф", build_reef(), _lit(REEF_GLOW))
+	reef = _mesh("Риф", build_reef(lite), _lit(REEF_GLOW))
 	var bright := StandardMaterial3D.new()
 	bright.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	bright.vertex_color_use_as_albedo = true
-	glow = _mesh("Огоньки", build_glow(), bright)
+	glow = _mesh("Огоньки", build_glow(lite), bright)
 	dust_view = GrazerView.build_dust(EcoGrotDust.POOL)
 	add_child(dust_view)
 	sync(0.0, Vector3.ZERO)
@@ -72,6 +86,18 @@ func _mesh(n: String, m: ArrayMesh, mat: Material) -> MeshInstance3D:
 	EcoShadows.cast(mi, n != "Огоньки")
 	group.add_child(mi)
 	return mi
+
+
+## «Экономно» — панцирь, риф и огоньки пересобраны грубее (материалы те же).
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	for pair in [[body, build_body(on)], [reef, build_reef(on)], [glow, build_glow(on)]]:
+		var mi: MeshInstance3D = pair[0]
+		var m: ArrayMesh = pair[1]
+		m.surface_set_material(0, mi.mesh.surface_get_material(0))
+		mi.mesh = m
 
 
 static func _lit(emission: Color) -> StandardMaterial3D:
@@ -105,11 +131,14 @@ func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3)
 
 
 ## Панцирь (верхняя половина эллипсоида), обод по краю и голова спереди.
-static func build_body() -> ArrayMesh:
+static func build_body(on_lite := false) -> ArrayMesh:
 	var st := KrabView._begin()
-	EcoMM.ellipsoid(st, Vector3.ZERO, EcoGrot.SHELL, 16, 5, SHELL, 0.0, 0.5)
-	_ring(st, Vector3(EcoGrot.SHELL.x, 1.0, EcoGrot.SHELL.z), 0.12, 20, 5, RIM)
-	EcoMM.ellipsoid(st, Vector3(0, 0.25, 3.4), Vector3(0.55, 0.385, 0.66), 10, 6, HEAD)
+	var sh := LITE_SHELL if on_lite else Vector2i(16, 5)
+	var rim := LITE_RIM if on_lite else Vector2i(20, 5)
+	var hd := LITE_HEAD if on_lite else Vector2i(10, 6)
+	EcoMM.ellipsoid(st, Vector3.ZERO, EcoGrot.SHELL, sh.x, sh.y, SHELL, 0.0, 0.5)
+	_ring(st, Vector3(EcoGrot.SHELL.x, 1.0, EcoGrot.SHELL.z), 0.12, rim.x, rim.y, RIM)
+	EcoMM.ellipsoid(st, Vector3(0, 0.25, 3.4), Vector3(0.55, 0.385, 0.66), hd.x, hd.y, HEAD)
 	return st.commit()
 
 
@@ -136,24 +165,26 @@ static func branch_len(k: int) -> float:
 
 
 ## Риф: ветки огнецвета (конусы 0,14 → 0,06) и приплюснутые мшистые бугры.
-static func build_reef() -> ArrayMesh:
+static func build_reef(on_lite := false) -> ArrayMesh:
 	var st := KrabView._begin()
+	var bump := LITE_BUMP if on_lite else Vector2i(8, 5)
 	for k in BRANCHES:
 		_cone(st, branch(k), 0.06, 0.14, branch_len(k), 5, WOOD, true)
 	for k in BUMPS:
 		var a := k * 1.1 + 0.4
-		EcoMM.ellipsoid(st, Vector3(cos(a) * 1.5, 0.8, sin(a) * 2.1), Vector3(0.45, 0.2, 0.45), 8, 5, MOSS)
+		EcoMM.ellipsoid(st, Vector3(cos(a) * 1.5, 0.8, sin(a) * 2.1), Vector3(0.45, 0.2, 0.45), bump.x, bump.y, MOSS)
 	return st.commit()
 
 
 ## Светящиеся кончики веток и глаза.
-static func build_glow() -> ArrayMesh:
+static func build_glow(on_lite := false) -> ArrayMesh:
 	var st := KrabView._begin()
+	var tp := LITE_TIP if on_lite else Vector2i(6, 4)
 	for k in BRANCHES:
 		var tip := branch(k) * Vector3(0, branch_len(k), 0)
-		EcoMM.ellipsoid(st, tip, Vector3.ONE * 0.16, 6, 4, TIP)
+		EcoMM.ellipsoid(st, tip, Vector3.ONE * 0.16, tp.x, tp.y, TIP)
 	for sx in [-1.0, 1.0]:
-		EcoMM.ellipsoid(st, Vector3(sx * 0.3, 0.45, 3.85), Vector3.ONE * 0.09, 6, 4, EYE)
+		EcoMM.ellipsoid(st, Vector3(sx * 0.3, 0.45, 3.85), Vector3.ONE * 0.09, tp.x, tp.y, EYE)
 	return st.commit()
 
 
