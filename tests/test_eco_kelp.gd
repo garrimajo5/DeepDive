@@ -353,3 +353,46 @@ func test_eco_view_has_kelp() -> void:
 	view.step(0.1, ship)
 	view.queue_free()
 	await frames(1)
+
+
+func test_view_lite_draws_every_other_stalk() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var kv := view.kelp_view
+	var n := view.kelp.groves.size()
+	var all := n * EcoKelp.KELP_N
+	ok(n > 0, "рощи есть")
+	eq(kv.drawn(), all, "на «Обычно» — все ленты")
+	view.set_lite(true)
+	ok(kv.lite, "ленточник — на «Экономно»")
+	eq(kv.drawn(), n * KelpView.lite_per_grove(), "каждая вторая лента")
+	ok(kv.drawn() < all * 0.6, "лент почти вдвое меньше")
+	var seen := {}
+	for g in n:
+		for k in EcoKelp.KELP_N:
+			var s := KelpView.slot(g, k, n, true)
+			seen[s] = true
+			eq(s < kv.drawn(), KelpView.lite_shown(k), "видно только показанное (%d, %d)" % [g, k])
+	eq(seen.size(), all, "места в буфере не повторяются")
+	var gr := view.kelp.groves[n - 1]
+	var st := gr.stalks[4]
+	ok(KelpView.transform_at(kv.stalk_buffer, KelpView.slot(gr.index, 4, n, true)).origin.is_equal_approx(st.pos),
+		"видимая лента — на своём месте буфера")
+	# объеденная видимая лента переписывается и на «Экономно»
+	st.f = 0.3
+	view.kelp.dirty = true
+	gr.redraw = true
+	kv.sync(1.0)
+	ok(KelpView.transform_at(kv.stalk_buffer, KelpView.slot(gr.index, 4, n, true)).basis.y.length() < st.height * 0.6,
+		"объеденная лента ниже")
+	view.ground = Seabed.height   # сброс мира — виды пересобираются
+	ok(view.kelp_view.lite and view.kelp_view.drawn() == n * KelpView.lite_per_grove(), "сброс мира — снова «Экономно»")
+	view.set_lite(false)
+	kv = view.kelp_view
+	eq(kv.drawn(), all, "назад — все")
+	gr = view.kelp.groves[0]
+	ok(KelpView.transform_at(kv.stalk_buffer, 5).origin.is_equal_approx(gr.stalks[5].pos), "буфер снова по номеру")
+	view.queue_free()
+	await frames(1)
