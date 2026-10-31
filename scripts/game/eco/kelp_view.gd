@@ -9,6 +9,10 @@ extends Node3D
 ## когда ёж их объел или они отросли (EcoKelp.dirty). Ленты — общий шейдер растений (EcoShaders.PLANT). Муть у дна
 ## от ежей (EcoUrchinDust) — дочерний MultiMesh «Муть» в мировых координатах, общий шейдер EcoShaders.MIST (INK).
 ## Стоит на слое отмели (OceanView.LAYER_WORLD).
+## «Экономно» (Б6, `set_lite`): в каждой роще рисуется каждая вторая лента (34 → 17, LITE_STEP; ленты стоят по
+## спирали подсолнуха — чётные покрывают рощу так же ровно): видимые — в начале буфера (`slot`),
+## `visible_instance_count` отрезает остальных, скрытые не пересчитываются. Ежи, муть и мир (объедание, укрытие
+## стаи, сонар) не меняются. Вызовов столько же.
 
 const KELP_GLOW := Color("0b1a10")
 ## Колыхание ленты в течении (EcoCurrent.sway): крен, волна вверх, поперёк — доли высоты ленты.
@@ -47,9 +51,12 @@ var dust_buffer: PackedFloat32Array:
 	get:
 		return _dust.data
 var _dust := EcoDustBuffer.new()
+## «Экономно»: в роще рисуется лента номер k, если k % LITE_STEP == 0.
+const LITE_STEP := 2
+var lite := false
 
 
-func _init(system: EcoKelp) -> void:
+func _init(system: EcoKelp, on_lite := false) -> void:
 	kelp = system
 	name = "Ленточник"
 	stalks = EcoMM.instance(self, "Ленты", build_stalk(), kelp.groves.size() * EcoKelp.KELP_N, true)
@@ -62,7 +69,54 @@ func _init(system: EcoKelp) -> void:
 		for st in g.stalks:
 			pts.append(st.pos)
 	EcoMM.fit([stalks], pts, FRAME_GROW)
+	if on_lite:
+		set_lite(true)
+	else:
+		sync(0.0)
+
+
+## «Экономно» — каждая вторая лента рощи; буфер лент переписывается целиком сразу.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	stalks.multimesh.visible_instance_count = lite_count(kelp.groves.size()) if on else -1
+	for gr in kelp.groves:
+		gr.redraw = true
+	kelp.dirty = true
 	sync(0.0)
+
+
+## Рисуется ли на «Экономно» лента номер k своей рощи.
+static func lite_shown(k: int) -> bool:
+	return k % LITE_STEP == 0
+
+
+## Сколько лент рощи рисуется на «Экономно».
+static func lite_per_grove() -> int:
+	return (EcoKelp.KELP_N + LITE_STEP - 1) / LITE_STEP
+
+
+## Сколько лент рисуется на «Экономно» у n рощ.
+static func lite_count(n: int) -> int:
+	return n * lite_per_grove()
+
+
+## Место ленты k рощи g (n рощ) в буфере: на «Экономно» видимые — в начале, по рощам.
+static func slot(g: int, k: int, n: int, on_lite: bool) -> int:
+	if not on_lite:
+		return g * EcoKelp.KELP_N + k
+	var keep := lite_per_grove()
+	if lite_shown(k):
+		return g * keep + k / LITE_STEP
+	var rest := EcoKelp.KELP_N - keep
+	return n * keep + g * rest + k - k / LITE_STEP - 1
+
+
+## Сколько лент рисуется сейчас.
+func drawn() -> int:
+	var v := stalks.multimesh.visible_instance_count
+	return stalks.multimesh.instance_count if v < 0 else v
 
 
 ## Запас рамки вокруг оснований лент (#849): лента до 5,5 м вверх с наклоном и качанием. Ежи ходят между
@@ -184,6 +238,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 	if kelp.dirty:
 		kelp.dirty = false
 		stalk_buffer.resize(stalks.multimesh.instance_count * STRIDE_C)
+		var n := kelp.groves.size()
 		for gr in kelp.groves:
 			if not gr.redraw:   # роща не менялась — её ленты в буфере верны
 				continue
@@ -191,7 +246,9 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 			for k in gr.stalks.size():
 				var s := gr.stalks[k]
 				s.drawn = s.f
-				var i := (gr.index * EcoKelp.KELP_N + k) * STRIDE_C
+				if lite and not lite_shown(k):
+					continue   # на «Экономно» скрытая лента не пересчитывается
+				var i := slot(gr.index, k, n, lite) * STRIDE_C
 				EcoMM.put(stalk_buffer, i, Transform3D(EcoKelp.stalk_basis(s), s.pos))
 				var c := EcoKelp.stalk_color(s)
 				stalk_buffer[i + 12] = c.r; stalk_buffer[i + 13] = c.g; stalk_buffer[i + 14] = c.b; stalk_buffer[i + 15] = 1.0
