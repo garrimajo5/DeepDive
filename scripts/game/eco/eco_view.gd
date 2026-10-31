@@ -276,6 +276,7 @@ func set_lite(on: bool) -> void:
 	grot_view.set_lite(on)
 	echo_view.set_lite(on)
 	flower_view.set_lite(on)
+	bones_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -430,7 +431,7 @@ func _rebuild_bones() -> void:
 	if bones_view:
 		remove_child(bones_view)
 		bones_view.free()
-	bones_view = BonesView.new(bones)
+	bones_view = BonesView.new(bones, lite)
 	add_child(bones_view)
 
 
