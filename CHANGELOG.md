@@ -3,6 +3,9 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-10-31
+- Монетники на «Экономно» (поток Б, Б6 `docs/grafika-plan-eco.md`): в каждой стайке рисуются две рыбки из трёх
+  (27 → 18) — видимые в начале буфера, остальных отрезает `visible_instance_count` (`CoinsView.set_lite`); глазуны —
+  все, мир считает всех, сброс мира уровень не теряет. Тест — `test_eco_coins.test_view_lite_draws_two_of_three_per_school`.
 - Споры пузырчатки и чернила подушечника на «Экономно» (поток Б, Б6 `docs/grafika-plan-eco.md`): рисуется половина
   каждого облака — буфер вперемешку по кустам и подушкам (`EcoMM.cloud_slot`), вторую половину отрезает
   `visible_instance_count` (`BladderView.set_lite`, `CushionView.set_lite`); споры 180 → 90, крупные пятна чернил

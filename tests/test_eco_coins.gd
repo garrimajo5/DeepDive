@@ -573,3 +573,51 @@ func test_eco_view_has_coins() -> void:
 	view.step(0.1, ship)
 	view.queue_free()
 	await frames(1)
+
+
+## «Экономно» (Б6): в каждой стайке рисуются две рыбки из трёх — видимые в начале буфера; мир считает всех, глазуны —
+## все; назад — буфер снова по номеру; сброс мира уровень не теряет.
+func test_view_lite_draws_two_of_three_per_school() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var cv := view.coins_view
+	var n := view.coins.coins.size()
+	eq(cv.drawn(), n, "на «Обычно» — все монетники")
+	view.set_lite(true)
+	ok(cv.lite, "монетники — на «Экономно»")
+	var per := EcoCoins.PER - EcoCoins.PER / CoinsView.LITE_SKIP
+	eq(cv.drawn(), per * view.coins.schools.size(), "две трети в каждой стайке")
+	ok(cv.drawn() < n * 0.7, "рыбок меньше на треть: %d" % cv.drawn())
+	eq(cv.bodies.multimesh.visible_instance_count, -1, "глазуны — все")
+	var seen := {}
+	for sc in view.coins.schools:
+		var shown := 0
+		for k in sc.members.size():
+			var cn: EcoCoins.Coin = sc.members[k]
+			seen[cv.slot_of(cn.index)] = true
+			if cv.slot_of(cn.index) < cv.drawn():
+				shown += 1
+				ok(CoinsView.lite_shown(k), "видна только показанная")
+		eq(shown, per, "в стайке %d видно %d" % [sc.index, per])
+	eq(seen.size(), n, "места в буфере не повторяются")
+	var ship := EcoLink.ShipState.new()
+	ship.pos = FAR
+	view.step(0.05, ship)
+	var cn4: EcoCoins.Coin = view.coins.schools[1].members[4]
+	ok(cv.slot_of(cn4.index) != cn4.index, "место в буфере сдвинуто")
+	ok(KelpView.transform_at(cv.coin_buffer, cv.slot_of(cn4.index), CoinsView.STRIDE_C).origin.is_equal_approx(
+		cn4.pos), "видимая рыбка — на своём месте буфера")
+	view.ground = Seabed.height   # сброс мира — виды пересобираются
+	ok(view.coins_view.lite and view.coins_view.drawn() < n, "сброс мира — снова «Экономно»")
+	view.set_lite(false)
+	cv = view.coins_view
+	view.step(0.05, ship)
+	eq(cv.drawn(), n, "назад — все")
+	cn4 = view.coins.schools[1].members[4]
+	eq(cv.slot_of(cn4.index), cn4.index, "буфер снова по номеру")
+	ok(KelpView.transform_at(cv.coin_buffer, cn4.index, CoinsView.STRIDE_C).origin.is_equal_approx(cn4.pos),
+		"и места переписаны")
+	view.queue_free()
+	await frames(1)

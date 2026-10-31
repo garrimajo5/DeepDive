@@ -12,6 +12,9 @@ extends Node3D
 ## стайка не клоны, мир не меняется.
 ## Муть у дна (EcoCoinsDust: бросок глазуна — клуб песка кольцом у тела, сонар рассыпал стайку — облачка из-под
 ## низко висевших рыбок) — дочерний MultiMesh «Муть» на общем шейдере EcoShaders.MIST: +1 вызов.
+## «Экономно» (Б6, `set_lite`): в каждой стайке рисуются две рыбки из трёх (каждой третьей по месту в стайке —
+## LITE_SKIP — нет; 27 → 18): видимые — в начале буфера (`order`), `visible_instance_count` отрезает остальных. Мир
+## (стайка, испуг, глазун, сонар, гость) считает всех; глазуны — все. Вызовов столько же.
 
 const COIN := Color("e8d48a")
 const FIN := Color("b59a50")
@@ -53,9 +56,14 @@ var dust_buffer: PackedFloat32Array:
 	get:
 		return _dust.data
 var _dust := EcoDustBuffer.new()
+## «Экономно»: в каждой стайке не рисуется монетник с местом k % LITE_SKIP == LITE_SKIP − 1.
+const LITE_SKIP := 3
+var lite := false
+## Место монетника в буфере по его номеру (стайка · PER + место; только «Экономно», пусто — по номеру).
+var order := PackedInt32Array()
 
 
-func _init(system: EcoCoins) -> void:
+func _init(system: EcoCoins, on_lite := false) -> void:
 	coins = system
 	name = "Монетники"
 	fish = EcoMM.instance(self, "Монетники", build_coin(), coins.coins.size(), true)
@@ -73,7 +81,55 @@ func _init(system: EcoCoins) -> void:
 	for gz in coins.glazuns:
 		pts.append(gz.pos)
 	EcoMM.fit([bodies], pts, GLAZUN_GROW)
+	if on_lite:
+		set_lite(true)
 	sync(0.0)
+
+
+## «Экономно» — рисуются две рыбки из трёх в каждой стайке; буфер переписывается в следующем sync.
+func set_lite(on: bool) -> void:
+	lite = on
+	var n := coins.coins.size()
+	order = lite_order(n) if on else PackedInt32Array()
+	fish.multimesh.visible_instance_count = lite_count(n) if on else -1
+
+
+## Рисуется ли на «Экономно» монетник с местом k в стайке.
+static func lite_shown(k: int) -> bool:
+	return k % LITE_SKIP != LITE_SKIP - 1
+
+
+## Сколько монетников рисуется на «Экономно» из n (стайки по EcoCoins.PER).
+static func lite_count(n: int) -> int:
+	var k := 0
+	for i in n:
+		if lite_shown(i % EcoCoins.PER):
+			k += 1
+	return k
+
+
+## Места в буфере на «Экономно»: сначала видимые по номеру, за ними — скрытые.
+static func lite_order(n: int) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	out.resize(n)
+	var at := 0
+	for pass_shown: bool in [true, false]:
+		for i in n:
+			if lite_shown(i % EcoCoins.PER) == pass_shown:
+				out[i] = at
+				at += 1
+	return out
+
+
+## Место монетника номер n в буфере.
+func slot_of(n: int) -> int:
+	return order[n] if not order.is_empty() else n
+
+
+## Сколько монетников рисуется сейчас.
+func drawn() -> int:
+	var v := fish.multimesh.visible_instance_count
+	return fish.multimesh.instance_count if v < 0 else v
 
 
 ## Запас рамки глазунов (#849): стоят на месте, стебель с глазами до 2,2 м вверх.
@@ -84,12 +140,14 @@ const GLAZUN_GROW := 4.0
 ## светлее в луче прожектора; null — мути нет), flow — течение мира (уносит муть).
 func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> void:
 	_sync_dust(t, ship, flow)
+	if lite and order.size() != coins.coins.size():
+		set_lite(true)   # мир пересобран — места заново
 	coin_buffer.resize(coins.coins.size() * STRIDE_C)
 	for cn in coins.coins:
 		var q := cn.index * 5
 		var tr := Transform3D(EcoCoins.coin_basis(cn, t, _vary[q + 1]) * _vary[q], cn.pos) if cn.alive \
 			else Transform3D(Basis.from_scale(Vector3.ZERO), Vector3(0, -999, 0))
-		var j := cn.index * STRIDE_C
+		var j := slot_of(cn.index) * STRIDE_C
 		EcoMM.put(coin_buffer, j, tr)
 		coin_buffer[j + 12] = _vary[q + 2]; coin_buffer[j + 13] = _vary[q + 3]; coin_buffer[j + 14] = _vary[q + 4]
 		coin_buffer[j + 15] = 1.0
