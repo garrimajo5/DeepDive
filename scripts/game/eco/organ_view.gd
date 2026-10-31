@@ -7,6 +7,9 @@ extends MeshInstance3D
 ## Стоит на слое отмели (OceanView.LAYER_WORLD).
 ## Выдох губки (EcoOrganDust: в такт гулу трубы выпускают над устьями облачка отцеженной мути, корабль рядом —
 ## чаще и гуще) — дочерний MultiMesh «Муть» на общем шейдере EcoShaders.MIST (INK) — +1 вызов отрисовки.
+## «Экономно» (Б6, `set_lite`): трубы — шесть граней вместо десяти, обод — 6 × 3 вместо 10 × 4 (LITE_*) — 100 → 48
+## треугольников на трубу; меш пересобирается с тем же материалом (тление, оттенки труб), устья на тех же местах,
+## муть и вызовы те же. Сброс мира уровень не теряет (EcoView.set_lite).
 
 const LIGHT := Color("9a7f6a")
 const DARK := Color("6f5b4c")
@@ -20,6 +23,9 @@ const GLOW_WAVE := Vector3(0.05, 0.0, 0.0)
 const SIDES := 10
 const RIM_TUBE := 0.05
 const RIM_SIDES := 4
+## То же на «Экономно»: шесть граней — устье ещё читается кругом, обод — треугольник в сечении.
+const LITE_SIDES := 6
+const LITE_RIM_SIDES := 3
 
 var organs: EcoOrgan
 var dust := EcoOrganDust.new()
@@ -36,13 +42,46 @@ var tris := 0
 var _nor := PackedVector3Array()
 var _col := PackedColorArray()
 var _idx := PackedInt32Array()
+## На «Экономно» — грубее трубы и ободы (set_lite).
+var lite := false
+var _mat: Material
 
 
-func _init(system: EcoOrgan) -> void:
+func _init(system: EcoOrgan, on_lite := false) -> void:
 	organs = system
+	lite = on_lite
 	name = "Трубный орган"
 	layers = OceanView.LAYER_WORLD
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_mat = EcoShaders.plant(EcoShaders.Plant.ORGAN, {"shade": PAINT_K, "rough": 1.0,
+		"spec": 0.1, "glow": GLOW, "glow_wave": GLOW_WAVE})
+	_build()
+	dust_view = GrazerView.build_dust(EcoOrganDust.POOL)
+	add_child(dust_view)
+
+
+## «Экономно» — трубы и ободы пересобраны грубее (тот же материал); назад — полные.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	_build()
+
+
+## Граней у трубы и обода по уровню.
+func sides() -> int:
+	return LITE_SIDES if lite else SIDES
+
+
+func rim_sides() -> int:
+	return LITE_RIM_SIDES if lite else RIM_SIDES
+
+
+func _build() -> void:
+	verts.clear()
+	_nor.clear()
+	_col.clear()
+	_idx.clear()
 	for og in organs.organs:
 		for k in EcoOrgan.TUBES:
 			var b := og.tube_base[k]
@@ -58,12 +97,9 @@ func _init(system: EcoOrgan) -> void:
 		arrays[Mesh.ARRAY_COLOR] = _col
 		arrays[Mesh.ARRAY_INDEX] = _idx
 		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-		m.surface_set_material(0, EcoShaders.plant(EcoShaders.Plant.ORGAN, {"shade": PAINT_K, "rough": 1.0,
-			"spec": 0.1, "glow": GLOW, "glow_wave": GLOW_WAVE}))
+		m.surface_set_material(0, _mat)
 	mesh = m
 	tris = _idx.size() / 3
-	dust_view = GrazerView.build_dust(EcoOrganDust.POOL)
-	add_child(dust_view)
 
 
 ## Выдохи губок в момент t (время мира); ship — корабль (близость, дальность и луч), flow — течение.
@@ -115,9 +151,10 @@ func pack(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> int
 ## Открытый конус от основания b (радиус TUBE_BASE_R) до устья top (TUBE_TOP_R).
 func _tube(b: Vector3, top: Vector3, c: Color) -> void:
 	var v0 := verts.size()
+	var n_sides := sides()
 	var slope := (EcoOrgan.TUBE_BASE_R - EcoOrgan.TUBE_TOP_R) / maxf(0.01, top.y - b.y)
-	for i in SIDES + 1:
-		var a := TAU * i / SIDES
+	for i in n_sides + 1:
+		var a := TAU * i / n_sides
 		var d := Vector3(cos(a), 0, sin(a))
 		var n := (d + Vector3(0, slope, 0)).normalized()
 		verts.append(b + d * EcoOrgan.TUBE_BASE_R)
@@ -125,7 +162,7 @@ func _tube(b: Vector3, top: Vector3, c: Color) -> void:
 		for j in 2:
 			_nor.append(n)
 			_col.append(c)
-	for i in SIDES:
+	for i in n_sides:
 		var q := v0 + i * 2
 		# обход не важен: труба видна с обеих сторон (cull_disabled)
 		_idx.append_array([q, q + 1, q + 2, q + 2, q + 1, q + 3])
@@ -134,17 +171,19 @@ func _tube(b: Vector3, top: Vector3, c: Color) -> void:
 ## Обод у устья: тор радиусом TUBE_TOP_R, толщина RIM_TUBE.
 func _rim(c: Vector3) -> void:
 	var v0 := verts.size()
-	for i in SIDES + 1:
-		var a := TAU * i / SIDES
+	var n_sides := sides()
+	var n_rim := rim_sides()
+	for i in n_sides + 1:
+		var a := TAU * i / n_sides
 		var d := Vector3(cos(a), 0, sin(a))
-		for j in RIM_SIDES + 1:
-			var b := TAU * j / RIM_SIDES
+		for j in n_rim + 1:
+			var b := TAU * j / n_rim
 			var n := d * cos(b) + Vector3(0, sin(b), 0)
 			verts.append(c + d * EcoOrgan.TUBE_TOP_R + n * RIM_TUBE)
 			_nor.append(n)
 			_col.append(RIM)
-	var row := RIM_SIDES + 1
-	for i in SIDES:
-		for j in RIM_SIDES:
+	var row := n_rim + 1
+	for i in n_sides:
+		for j in n_rim:
 			var q := v0 + i * row + j
 			_idx.append_array([q, q + row, q + 1, q + 1, q + row, q + row + 1])
