@@ -270,6 +270,7 @@ func set_lite(on: bool) -> void:
 	kelp_view.set_lite(on)
 	eel_view.set_lite(on)
 	veil_view.set_lite(on)
+	brink_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -450,7 +451,7 @@ func _rebuild_brink() -> void:
 	if brink_view:
 		remove_child(brink_view)
 		brink_view.free()
-	brink_view = BrinkView.new(brink)
+	brink_view = BrinkView.new(brink, lite)
 	add_child(brink_view)
 
 
