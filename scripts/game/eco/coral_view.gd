@@ -8,6 +8,8 @@ extends MeshInstance3D
 ## (двойник EcoCurrent.sway); коралл жёсткий — изгиб BEND меньше, чем у веерника. «Экономно» — EcoShaders.set_sway_lite.
 ## Матовость — uniform rough/spec, числа «известь» ставит EcoSurface (мокрый известковый скелет, не камень).
 ## Куст рывком гасит кончики — у них облачка слизи (EcoCoralDust): дочерний MultiMesh «Муть», +1 вызов.
+## «Экономно» (Б6, `set_lite`): кусты из грубой формы EcoCoralLook.lite — ветви и кончики четырёхгранные, камни одним
+## поясом; меш пересобирается с тем же материалом (свет кончиков, колыхание, муть те же), сброс мира уровень не теряет.
 
 const SHADER := """
 shader_type spatial;
@@ -76,14 +78,42 @@ var dust_buffer: PackedFloat32Array:
 var _dust := EcoDustBuffer.new()
 
 var _mat: ShaderMaterial
+## На «Экономно» — грубая форма куста (set_lite); форма, из которой собран меш.
+var lite := false
+var form: EcoCoralLook.Form
+## Треугольников во всём меше.
+var tris := 0
 
 
-func _init(system: EcoCoral) -> void:
+func _init(system: EcoCoral, on_lite := false) -> void:
 	coral = system
+	lite = on_lite
 	name = "Огнецвет"
 	layers = OceanView.LAYER_WORLD
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var n := EcoCoralLook.verts.size()
+	_build()
+	dust_view = GrazerView.build_dust(EcoCoralDust.POOL)
+	add_child(dust_view)
+	glows.resize(coral.bushes.size())
+	glows.fill(-1.0)
+	sync()
+
+
+## «Экономно» — меш из грубой формы (тот же материал); назад — полный.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	_build()
+
+
+func _build() -> void:
+	form = EcoCoralLook.form(lite)
+	verts.clear()
+	heights.clear()
+	feet.clear()
+	talls.clear()
+	var n := form.verts.size()
 	var nor := PackedVector3Array()
 	var col := PackedColorArray()
 	var uv := PackedVector2Array()
@@ -95,14 +125,14 @@ func _init(system: EcoCoral) -> void:
 		feet.append(b.base)
 		talls.append(EcoCoral.HEIGHT * b.scale)
 		for i in n:
-			verts.append(tr * EcoCoralLook.verts[i])
-			var h := clampf(EcoCoralLook.verts[i].y / EcoCoral.HEIGHT, 0.0, 1.0)
+			verts.append(tr * form.verts[i])
+			var h := clampf(form.verts[i].y / EcoCoral.HEIGHT, 0.0, 1.0)
 			heights.append(h)
 			uv2.append(Vector2(h, 0.0))
-			nor.append((tr.basis * EcoCoralLook.normals[i]).normalized())
-			col.append(EcoCoralLook.colors[i])
-			uv.append(Vector2(b.index, 1.0 if EcoCoralLook.parts[i] == EcoCoralLook.Part.TIP else 0.0))
-		for t in EcoCoralLook.tris:
+			nor.append((tr.basis * form.normals[i]).normalized())
+			col.append(form.colors[i])
+			uv.append(Vector2(b.index, 1.0 if form.parts[i] == EcoCoralLook.Part.TIP else 0.0))
+		for t in form.tris:
 			idx.append(v0 + t)
 	var m := ArrayMesh.new()
 	if not verts.is_empty():
@@ -115,6 +145,11 @@ func _init(system: EcoCoral) -> void:
 		arrays[Mesh.ARRAY_TEX_UV2] = uv2
 		arrays[Mesh.ARRAY_INDEX] = idx
 		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		if _mat:
+			m.surface_set_material(0, _mat)
+			mesh = m
+			tris = idx.size() / 3
+			return
 		_mat = ShaderMaterial.new()
 		var nb := maxi(1, coral.bushes.size())
 		_mat.shader = EcoShaders.shader(SHADER % [nb, nb, nb])
@@ -127,11 +162,7 @@ func _init(system: EcoCoral) -> void:
 		EcoShaders.follow(_mat)
 		m.surface_set_material(0, _mat)
 	mesh = m
-	dust_view = GrazerView.build_dust(EcoCoralDust.POOL)
-	add_child(dust_view)
-	glows.resize(coral.bushes.size())
-	glows.fill(-1.0)
-	sync()
+	tris = idx.size() / 3
 
 
 ## Отдать шейдеру свет кустов, если хоть один заметно изменился. true — отдали.
@@ -156,7 +187,7 @@ func sync_dust(t: float, ship: EcoLink.ShipState, flow := Vector3.ZERO) -> void:
 
 ## Смещение вершины i в течении flow в момент t — двойник шейдера (EcoCurrent.sway с подножием и высотой куста).
 func offset(i: int, t: float, flow: Vector3 = EcoShaders.flow) -> Vector3:
-	var b := i / maxi(1, EcoCoralLook.verts.size())
+	var b := i / maxi(1, form.verts.size())
 	return EcoCurrent.sway(feet[b], heights[i], talls[b], t, flow, BEND)
 
 
