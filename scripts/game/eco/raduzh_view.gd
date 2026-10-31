@@ -10,6 +10,9 @@ extends Node3D
 ## uniform iris, «Экономно» — EcoIris.set_lite.
 ## Слизь гребневиков (EcoRaduzhDust: вспыхнули в луче — облачка у нескольких гребневиков, корпус упёрся в стаю —
 ## облачко у задетого) — дочерний MultiMesh «Муть» на общем шейдере EcoShaders.MIST (INK) — +1 вызов отрисовки.
+## «Экономно» (Б6, `set_lite`): в каждой стае рисуются два гребневика из трёх и их ореолы (каждого третьего по месту в
+## стае — LITE_SKIP — нет): видимые — в начале буферов тел и ореолов (`order`), `visible_instance_count` отрезает
+## остальных. Мир (вспышки, слизь, сонар, у гостя) считает всех; на «Обычно» буфер по номеру гребневика, как раньше.
 
 const BODY_SHADER := """
 shader_type spatial;
@@ -66,9 +69,14 @@ var dust_buffer: PackedFloat32Array:
 	get:
 		return _dust.data
 var _dust := EcoDustBuffer.new()
+## «Экономно»: в каждой стае не рисуется гребневик с местом k % LITE_SKIP == LITE_SKIP − 1.
+const LITE_SKIP := 3
+var lite := false
+## Место гребневика в буферах по его номеру (стая · PER_SWARM + место; только «Экономно», пусто — по номеру).
+var order := PackedInt32Array()
 
 
-func _init(system: EcoRaduzh) -> void:
+func _init(system: EcoRaduzh, on_lite := false) -> void:
 	raduzh = system
 	name = "Радужники"
 	var n := raduzh.swarms.size() * EcoRaduzh.PER_SWARM
@@ -81,7 +89,58 @@ func _init(system: EcoRaduzh) -> void:
 	halos = EcoMM.instance(self, "Ореолы", build_halo(), n, true)
 	dust_view = GrazerView.build_dust(EcoRaduzhDust.POOL)
 	add_child(dust_view)
+	if on_lite:
+		set_lite(true)
 	sync(0.0, Vector3(1e6, 0, 1e6), 0.0)
+
+
+## «Экономно» — рисуются два гребневика из трёх в каждой стае (тела и ореолы); буферы переписываются целиком
+## в следующем sync.
+func set_lite(on: bool) -> void:
+	lite = on
+	order = lite_order(raduzh.swarms.size()) if on else PackedInt32Array()
+	var shown := lite_count(raduzh.swarms.size()) if on else -1
+	bodies.multimesh.visible_instance_count = shown
+	halos.multimesh.visible_instance_count = shown
+	body_buffer = PackedFloat32Array()   # дальние стаи пишутся не каждый кадр — места сменились, писать всех
+
+
+## Рисуется ли на «Экономно» гребневик с местом k в стае.
+static func lite_shown(k: int) -> bool:
+	return k % LITE_SKIP != LITE_SKIP - 1
+
+
+## Сколько гребневиков рисуется на «Экономно» при swarms стаях.
+static func lite_count(swarms: int) -> int:
+	var per := 0
+	for k in EcoRaduzh.PER_SWARM:
+		if lite_shown(k):
+			per += 1
+	return per * swarms
+
+
+## Места в буферах на «Экономно»: сначала видимые по номеру, за ними — скрытые.
+static func lite_order(swarms: int) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	out.resize(swarms * EcoRaduzh.PER_SWARM)
+	var at := 0
+	for pass_shown: bool in [true, false]:
+		for i in out.size():
+			if lite_shown(i % EcoRaduzh.PER_SWARM) == pass_shown:
+				out[i] = at
+				at += 1
+	return out
+
+
+## Место гребневика n (стая · PER_SWARM + место) в буферах.
+func slot_of(n: int) -> int:
+	return order[n] if not order.is_empty() else n
+
+
+## Сколько гребневиков рисуется сейчас.
+func drawn() -> int:
+	var v := bodies.multimesh.visible_instance_count
+	return bodies.multimesh.instance_count if v < 0 else v
 
 
 static func _material(code: String) -> ShaderMaterial:
@@ -133,13 +192,14 @@ func sync(t: float, ship_pos: Vector3, ship_yaw: float, all := false) -> void:
 	body_buffer.resize(n * STRIDE_C)
 	halo_buffer.resize(n * STRIDE_C)
 	_frame += 1
+	var by_slot := not order.is_empty()
 	for sw in raduzh.swarms:
 		if not full and not due(sw, ship_pos, _frame):
 			continue
 		var gg := sw.glow * sw.glow * HALO_K
 		for k in EcoRaduzh.PER_SWARM:
 			var idx := sw.index * EcoRaduzh.PER_SWARM + k
-			var j := idx * STRIDE_C
+			var j := (order[idx] if by_slot else idx) * STRIDE_C
 			var m := sw.members[k]
 			var p := EcoRaduzh.member_pos_outside(sw, k, t, ship_pos, ship_yaw)
 			var b := Basis.from_euler(Vector3(sin(t * 0.7 + m.phase) * 0.4, m.phase, 0.0))

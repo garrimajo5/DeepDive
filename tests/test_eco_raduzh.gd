@@ -306,3 +306,52 @@ func test_view_two_multimeshes() -> void:
 	ok(RaduzhView.color_at(rv.halo_buffer, j).get_luminance() > 0.1, "вспышка — ореол горит")
 	view.queue_free()
 	await frames(1)
+
+
+## «Экономно» (Б6): в каждой стае рисуются два гребневика из трёх и их ореолы — видимые в начале буферов; мир считает
+## всех, назад — буфер снова по номеру; сброс мира уровень не теряет.
+func test_view_lite_draws_two_of_three_per_swarm() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var rv := view.raduzh_view
+	eq(rv.drawn(), 84, "на «Обычно» — все гребневики")
+	view.set_lite(true)
+	ok(rv.lite, "радужники — на «Экономно»")
+	var per := EcoRaduzh.PER_SWARM - EcoRaduzh.PER_SWARM / RaduzhView.LITE_SKIP
+	eq(rv.drawn(), per * view.raduzh.swarms.size(), "две трети в каждой стае")
+	eq(rv.halos.multimesh.visible_instance_count, rv.drawn(), "ореолы — тех же")
+	ok(rv.drawn() < 84 * 0.7, "гребневиков меньше на треть: %d" % rv.drawn())
+	var seen := {}
+	for sw in view.raduzh.swarms:
+		var n := 0
+		for k in EcoRaduzh.PER_SWARM:
+			var idx := sw.index * EcoRaduzh.PER_SWARM + k
+			seen[rv.slot_of(idx)] = true
+			if rv.slot_of(idx) < rv.drawn():
+				n += 1
+				ok(RaduzhView.lite_shown(k), "видим только показанный")
+		eq(n, per, "в стае %d видно %d" % [sw.index, per])
+	eq(seen.size(), 84, "места в буфере не повторяются")
+	var ship := EcoLink.ShipState.new()
+	ship.pos = FAR
+	view.step(0.05, ship)
+	var sw := view.raduzh.swarms[2]
+	var idx := 2 * EcoRaduzh.PER_SWARM + 4
+	near(RaduzhView.origin_at(rv.body_buffer, rv.slot_of(idx)).distance_to(
+		EcoRaduzh.member_pos(sw, 4, view.world.time)), 0.0, 1e-4, "видимый гребневик — на своём месте буфера")
+	sw.glow = 1.0
+	rv.sync(view.world.time, FAR, 0.0)
+	ok(RaduzhView.color_at(rv.halo_buffer, rv.slot_of(idx)).get_luminance() > 0.1, "ореол — на том же месте")
+	view.ground = Seabed.height   # сброс мира — виды пересобираются
+	ok(view.raduzh_view.lite and view.raduzh_view.drawn() < 84, "сброс мира — снова «Экономно»")
+	view.set_lite(false)
+	rv = view.raduzh_view
+	view.step(0.05, ship)
+	eq(rv.drawn(), 84, "назад — все")
+	eq(rv.slot_of(idx), idx, "буфер снова по номеру")
+	near(RaduzhView.origin_at(rv.body_buffer, idx).distance_to(
+		EcoRaduzh.member_pos(view.raduzh.swarms[2], 4, view.world.time)), 0.0, 1e-4, "и места переписаны")
+	view.queue_free()
+	await frames(1)
