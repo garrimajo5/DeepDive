@@ -803,3 +803,61 @@ func test_layer_shots_look_out_window() -> void:   # issue #967: 32i–32m сн�
 				if name == "33-kondensat-obychno":
 					ok(cooled, "33 — реактор остужен после курильщика (нагрев сушит конденсат)")
 	eq(seen.size(), 5, "все снимки 32i–32m на месте")
+
+
+func test_shell_shot_through_window() -> void:   # отчёт 2026-10-31-0330: каустики на камне (#1047) — Раковина в окне, а не стена сканера
+	var raw := FileAccess.get_file_as_string("res://tools/qa/scenario.json")
+	var steps: Array = JSON.parse_string(raw)
+	var ship := {}
+	var look := {}
+	var fly := false
+	var shot := false
+	for st in steps:
+		match st["do"]:
+			"ship":
+				ship = st
+				look = {}
+			"goto":
+				look = st
+			"fly":
+				fly = st.get("on", true)
+			"shot":
+				if st["name"] == "32h2-rakovina-okno":
+					shot = true
+					break
+	ok(shot, "в сценарии есть снимок Раковины в окно")
+	ok(not fly, "с мостика, не полётом")
+	ok(not look.is_empty() and float(look["z"]) < -2.5 and absf(float(look["x"])) < 1.5
+			and is_zero_approx(float(look["yaw"])), "у носового окна, взгляд по носу")
+	var at := Vector2(float(ship["x"]), float(ship["z"]))
+	var p: Dictionary = LayerMap.POINTS["03"]
+	var shell := Vector2(float(p["x"]), float(p["z"]))
+	ok(at.distance_to(shell) < 30.0, "Раковина близко (%.0f м)" % at.distance_to(shell))
+	var nose := Vector2(0, -1).rotated(-deg_to_rad(float(ship["yaw"])))
+	ok(nose.dot((shell - at).normalized()) > 0.95, "Раковина впереди по носу")
+
+
+func test_crust_shot_beam_on_floor() -> void:   # отчёт 2026-10-31-0330: у 10 в окно дна в луче не видно (#1045) — снимок из-под днища
+	var raw := FileAccess.get_file_as_string("res://tools/qa/scenario.json")
+	var steps: Array = JSON.parse_string(raw)
+	var ship := {}
+	var fly := {}
+	var shot := false
+	for st in steps:
+		match st["do"]:
+			"ship":
+				ship = st
+			"fly":
+				fly = st if st.get("on", true) else {}
+			"shot":
+				if st["name"] == "34d2-korka-luch":
+					shot = true
+					break
+	ok(shot and not fly.is_empty(), "в сценарии есть снимок дна у 10 полётом")
+	var at := Vector2(float(ship["x"]), float(ship["z"]))
+	var p: Dictionary = LayerMap.POINTS["10"]
+	ok(at.distance_to(Vector2(float(p["x"]), float(p["z"]))) < 60.0, "у Спуска 10")
+	var floor_y := Seabed.height(at.x, at.y)
+	var eye_y := maxf(float(ship["y"]), floor_y + Helm.Ship.CLEARANCE) + float(fly["y"])   # корабль не ниже дна + зазор
+	ok(eye_y > floor_y + 5.0, "глаз над дном (%.1f > %.1f + 5) — пятно луча впереди, а не под носом" % [eye_y, floor_y])
+	ok(float(fly["pitch"]) < -10.0, "взгляд вниз — на пятно луча")
