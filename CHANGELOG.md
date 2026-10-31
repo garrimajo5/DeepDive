@@ -3,6 +3,10 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-10-31
+- Скальник на «Экономно» (поток Б, Б6 `docs/grafika-plan-eco.md`): шары щупалец грубее — 4 × 2 вместо 6 × 4
+  (`SkalnikView.ARM_SIDES_LITE`/`ARM_RINGS_LITE`, `arm_mesh`), неподвижный камень не шевелит щупальцами уже дальше
+  40 м (`FAR_LITE`, `still_far`); тело, цвет, мир и муть те же, вызовов столько же, сброс мира уровень не теряет.
+  Тест — `test_eco_skalnik.test_view_lite_coarse_arms_and_still_closer`.
 - Серпохвосты на «Экономно» (поток Б, Б6 `docs/grafika-plan-eco.md`): скелет считается реже уже ближе — дальше 25 м
   поза раз в 0,1 с, дальше 60 м — раз в 0,2 с (`EcoPredLook.ANIM_MID_LITE`/`ANIM_FAR_LITE`, `Clock.step_at`,
   `PredView.set_lite`); вблизи — каждый кадр, время не теряется, укус и удар серпом между позами не пропадают

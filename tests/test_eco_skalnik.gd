@@ -476,6 +476,49 @@ func test_view_two_draws_color_follows_camo() -> void:
 	await frames(1)
 
 
+## «Экономно» (Б6): шары щупалец грубее, неподвижный камень замирает уже дальше FAR_LITE; EcoView.set_lite доходит
+## до скальника и переживает сброс мира.
+func test_view_lite_coarse_arms_and_still_closer() -> void:
+	var w := _world()
+	var s := _sk(w)
+	var v := SkalnikView.new(s)
+	tree.root.add_child(v)
+	await frames(1)
+	var full := _tris(v.arms.multimesh.mesh)
+	v.set_lite(true)
+	ok(v.lite, "скальник — на «Экономно»")
+	var lite := _tris(v.arms.multimesh.mesh)
+	ok(lite * 2 <= full, "треугольников щупалец не больше половины (%d → %d)" % [full, lite])
+	eq(v.arms.multimesh.instance_count, SkalnikView.ARMS * SkalnikView.SEG, "звеньев столько же")
+	var mid := s.octo.home + Vector3(0, 0, (SkalnikView.FAR_LITE + SkalnikView.FAR) * 0.5)
+	var writes := v.arm_writes
+	v.sync(1.0, mid)
+	eq(v.arm_writes, writes, "на «Экономно» в %.0f м камень не шевелится" % mid.distance_to(s.octo.home))
+	v.sync(1.0, s.octo.home + Vector3(0, 0, 10))
+	eq(v.arm_writes, writes + 1, "рядом — колышется")
+	v.set_lite(false)
+	ok(_tris(v.arms.multimesh.mesh) == full, "назад — прежние шары")
+	v.sync(1.5, mid)
+	eq(v.arm_writes, writes + 2, "на «Обычно» там же — колышется")
+	v.queue_free()
+	await frames(1)
+	var view := EcoView.new()
+	tree.root.add_child(view)
+	view.ground = Seabed.height
+	view.set_lite(true)
+	ok(view.skalnik_view.lite, "EcoView.set_lite — до скальника")
+	view.ground = Seabed.height   # сброс мира — вид пересобирается
+	ok(view.skalnik_view.lite, "сброс мира — снова «Экономно»")
+	view.queue_free()
+	await frames(1)
+
+
+func _tris(m: Mesh) -> int:
+	var arr := m.surface_get_arrays(0)
+	var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+	return idx.size() / 3 if idx.size() > 0 else (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3
+
+
 func test_body_faces_outward() -> void:
 	for m in [SkalnikView.build_body(), SkalnikView.build_carry()]:
 		_faces_out(m)

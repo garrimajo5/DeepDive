@@ -8,6 +8,9 @@ extends Node3D
 ## клуб, когда «камень» снимается с места и оседает, след щупалец у дна) — дочерний MultiMesh «Муть» в мировых
 ## координатах, общий шейдер EcoShaders.MIST (INK). Три вызова отрисовки (с добычей — четыре), слой отмели
 ## (OceanView.LAYER_WORLD).
+## «Экономно» (Б6, `set_lite`): шары щупалец грубее (ARM_SIDES_LITE × ARM_RINGS_LITE вместо ARM_SIDES × ARM_RINGS —
+## треугольников щупалец втрое меньше), неподвижный камень не шевелит щупальцами уже дальше FAR_LITE. Тело, цвет,
+## мир и муть те же, вызовов столько же; сброс мира уровень не теряет (EcoView.lite).
 
 const ROCK := Color("4f4a5c")
 const SKIN := Color("b8553c")
@@ -20,6 +23,13 @@ const SEG := 6
 const STRIDE := 12
 ## Дальше этого от корабля неподвижный камень не шевелит щупальцами (не видно).
 const FAR := 80.0
+## Шар звена щупальца: граней по кругу и поясов — «Обычно» и «Экономно».
+const ARM_SIDES := 6
+const ARM_RINGS := 4
+const ARM_SIDES_LITE := 4
+const ARM_RINGS_LITE := 2
+## «Экономно»: дальше этого неподвижный камень щупальца не переписывает.
+const FAR_LITE := 40.0
 
 var skalnik: EcoSkalnik
 var body: MeshInstance3D
@@ -36,6 +46,7 @@ var _buf := PackedFloat32Array()
 var _floor := PackedFloat32Array()
 var _floor_at := Vector3.INF
 var _camo := 1.0
+var lite := false
 ## Муть от скальника и её MultiMesh; буфер мути — для тестов.
 var dust := EcoSkalnikDust.new()
 var dust_view: MultiMeshInstance3D
@@ -46,7 +57,7 @@ var dust_buffer: PackedFloat32Array:
 var _dust := EcoDustBuffer.new()
 
 
-func _init(system: EcoSkalnik) -> void:
+func _init(system: EcoSkalnik, on_lite := false) -> void:
 	skalnik = system
 	name = "Скальник"
 	material = StandardMaterial3D.new()
@@ -68,12 +79,8 @@ func _init(system: EcoSkalnik) -> void:
 	arms.material_override = material
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
-	var sphere := SphereMesh.new()
-	sphere.radius = 1.0
-	sphere.height = 2.0
-	sphere.radial_segments = 6
-	sphere.rings = 4
-	mm.mesh = sphere
+	lite = on_lite
+	mm.mesh = arm_mesh(lite)
 	mm.instance_count = ARMS * SEG
 	arms.multimesh = mm
 	add_child(arms)
@@ -93,6 +100,29 @@ func _init(system: EcoSkalnik) -> void:
 	_buf.resize(ARMS * SEG * STRIDE)
 	visible = skalnik.octo != null
 	sync(0.0, Vector3(INF, INF, INF), true)
+
+
+## Шар звена щупальца радиусом 1 (масштаб — в расстановке); lite — грубее.
+static func arm_mesh(on_lite: bool) -> SphereMesh:
+	var sphere := SphereMesh.new()
+	sphere.radius = 1.0
+	sphere.height = 2.0
+	sphere.radial_segments = ARM_SIDES_LITE if on_lite else ARM_SIDES
+	sphere.rings = ARM_RINGS_LITE if on_lite else ARM_RINGS
+	return sphere
+
+
+## «Экономно» — грубее шары щупалец и ближе предел шевеления.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	arms.multimesh.mesh = arm_mesh(on)
+
+
+## Дальше скольких метров неподвижный камень не шевелит щупальцами.
+func still_far() -> float:
+	return FAR_LITE if lite else FAR
 
 
 ## Цвет кожи при маскировке camo (1 — камень).
@@ -116,7 +146,7 @@ func sync(t: float, ship: Vector3, force := false, info: EcoLink.ShipState = nul
 		material.albedo_color = skin_color(sk.camo)
 		material.emission = GLOW * (1.0 - sk.camo)
 	var moving := sk.vel.length_squared() > 0.01
-	if not force and not moving and sk.state == EcoSkalnik.State.ROCK and sk.pos.distance_to(ship) > FAR:
+	if not force and not moving and sk.state == EcoSkalnik.State.ROCK and sk.pos.distance_to(ship) > still_far():
 		return
 	var spread := 0.55 if sk.state == EcoSkalnik.State.ROCK else 1.0
 	var back := sk.vel.normalized() if moving else Vector3.ZERO
