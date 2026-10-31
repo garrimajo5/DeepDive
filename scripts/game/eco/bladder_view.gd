@@ -6,6 +6,8 @@ extends Node3D
 ## зелёные (#8EE87E), своя эмиссия; стебли #3f7a5a. Стоит на слое отмели (OceanView.LAYER_WORLD).
 ## Пузырьки газа с луковиц (EcoBladderBubbles: лопнули — со всех луковиц, спелые сочатся) — четвёртый MultiMesh
 ## «Пузырьки» на общем шейдере EcoShaders.MIST (BUBBLE, `placed`) — +1 вызов отрисовки, шейдеров не прибавилось.
+## «Экономно» (Б6, `set_lite`): рисуется половина спор каждого облака (`EcoMM.cloud_slot` — буфер вперемешку по
+## кустам, `visible_instance_count` отрезает вторую половину). Мир (лопнула, свечение, сканер) не меняется.
 
 const STEM := Color("3f7a5a")
 ## Луковица — сфера 0,16 м, вытянутая в 1,3 раза; спора — точка 0,35 м (в браузере 0,5 с ореолом — здесь ореол внутри точки).
@@ -33,9 +35,11 @@ var spore_buffer := PackedFloat32Array()
 ## Кусты, чьи споры в буфере ещё видны (облако было на прошлом кадре): нераскрытые кусты буфер спор не пишут
 ## и не грузят заново (issue #133).
 var _spores_shown := PackedByteArray()
+## «Экономно»: рисуется половина спор каждого облака.
+var lite := false
 
 
-func _init(system: EcoBladder) -> void:
+func _init(system: EcoBladder, on_lite := false) -> void:
 	bladders = system
 	name = "Пузырчатка"
 	var n := bladders.bushes.size()
@@ -52,7 +56,26 @@ func _init(system: EcoBladder) -> void:
 			EcoMM.put(buf, (bl.index * EcoBladder.STEMS + k) * STRIDE, Transform3D(_along(up), a + up * 0.5))  # конус стоит серединой в нуле
 	stems.multimesh.buffer = buf
 	EcoMM.fit([stems, bulbs, spores], places(bladders), FRAME_GROW)
+	set_lite(on_lite)
 	sync(0.0)
+
+
+## «Экономно» — половина спор каждого облака; буфер спор переписывается целиком в следующем sync.
+func set_lite(on: bool) -> void:
+	lite = on
+	spores.multimesh.visible_instance_count = EcoMM.cloud_shown(bladders.bushes.size(), EcoBladder.SPORES, on)
+	spore_buffer = PackedFloat32Array()
+
+
+## Место споры j куста bush в буфере спор.
+func spore_slot(bush: int, j: int) -> int:
+	return EcoMM.cloud_slot(bush, j, bladders.bushes.size(), EcoBladder.SPORES, lite)
+
+
+## Сколько спор рисуется сейчас.
+func spores_drawn() -> int:
+	var v := spores.multimesh.visible_instance_count
+	return spores.multimesh.instance_count if v < 0 else v
 
 
 ## Запас рамки вокруг подножий (#849): стебли, луковицы и облако спор (2,2 м вверх, 2,5 м вширь, тянется к кораблю).
@@ -158,7 +181,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 		_spores_shown[bl.index] = 1 if popped else 0
 		var g := EcoBladder.spore_glow(bl)
 		for j in EcoBladder.SPORES:
-			var i := (bl.index * EcoBladder.SPORES + j) * STRIDE_C
+			var i := spore_slot(bl.index, j) * STRIDE_C
 			if popped:
 				EcoMM.put(spore_buffer, i, Transform3D(Basis.IDENTITY, EcoBladder.spore(bl, j, t)))
 			else:

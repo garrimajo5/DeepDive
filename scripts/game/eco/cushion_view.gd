@@ -6,6 +6,9 @@ extends Node3D
 ## по прозрачности, без записи глубины, общий шейдер EcoShaders.MIST): тёмно-синие, тают последние 2 с. Стоит на слое отмели (OceanView.LAYER_WORLD).
 ## Муть у дна (EcoCushionDust: сжалась — клуб ила кольцом вокруг основания) — дочерний MultiMesh «Муть» на том же
 ## шейдере MIST, +1 вызов.
+## «Экономно» (Б6, `set_lite`): рисуется половина пятен каждого облака чернил (`EcoMM.cloud_slot` — буфер вперемешку
+## по подушкам, `visible_instance_count` отрезает вторую половину) — вдвое меньше крупных полупрозрачных пятен у
+## камеры. Мир (облако, укрытие, сонар) не меняется.
 
 ## Подушка: полусфера радиуса 1 м, сплюснутая по ширине и высоте (g.scale(1.1, 0.75, 1)).
 const SHAPE := Vector3(1.1, 0.75, 1.0)
@@ -36,9 +39,11 @@ var dust_buffer: PackedFloat32Array:
 	get:
 		return _dust.data
 var _dust := EcoDustBuffer.new()
+## «Экономно»: рисуется половина пятен каждого облака.
+var lite := false
 
 
-func _init(system: EcoCushion) -> void:
+func _init(system: EcoCushion, on_lite := false) -> void:
 	cushions = system
 	name = "Подушечник"
 	var n := cushions.cushions.size()
@@ -50,7 +55,26 @@ func _init(system: EcoCushion) -> void:
 	for c in cushions.cushions:
 		pts.append(c.base)
 	EcoMM.fit([pads, ink], pts, FRAME_GROW)
+	set_lite(on_lite)
 	sync(0.0)
+
+
+## «Экономно» — половина пятен каждого облака чернил; буфер переписывается целиком в следующем sync.
+func set_lite(on: bool) -> void:
+	lite = on
+	ink.multimesh.visible_instance_count = EcoMM.cloud_shown(cushions.cushions.size(), EcoCushion.INK_N, on)
+	ink_buffer = PackedFloat32Array()
+
+
+## Место пятна j подушки cushion в буфере чернил.
+func ink_slot(cushion: int, j: int) -> int:
+	return EcoMM.cloud_slot(cushion, j, cushions.cushions.size(), EcoCushion.INK_N, lite)
+
+
+## Сколько пятен чернил рисуется сейчас.
+func ink_drawn() -> int:
+	var v := ink.multimesh.visible_instance_count
+	return ink.multimesh.instance_count if v < 0 else v
 
 
 ## Запас рамки вокруг подушек (#849): облако чернил — 2 м вверх и 5,5 м вширь, его сносит течением.
@@ -115,7 +139,7 @@ func sync(t: float, ship_pos := Vector3.ZERO, info: EcoLink.ShipState = null, fl
 		_ink_shown[cu.index] = 1 if inked else 0
 		var c := Color(INK.r, INK.g, INK.b, INK_ALPHA * EcoCushion.ink_fade(cu))
 		for j in EcoCushion.INK_N:
-			var i := (cu.index * EcoCushion.INK_N + j) * STRIDE_C
+			var i := ink_slot(cu.index, j) * STRIDE_C
 			if inked:
 				EcoMM.put(ink_buffer, i, Transform3D(Basis.IDENTITY, EcoCushion.ink_point(cu, j, t)))
 			else:

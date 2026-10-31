@@ -307,3 +307,46 @@ func test_view_three_multimeshes() -> void:
 	ok(s0.origin.distance_to(bl.cloud) < EcoBladder.CLOUD_R * 1.5, "в облаке над кустом")
 	view.queue_free()
 	await frames(1)
+
+
+## «Экономно» (Б6): рисуется половина спор каждого облака — места вперемешку по кустам, видимые в начале буфера;
+## назад — буфер снова по кусту; сброс мира уровень не теряет.
+func test_view_lite_draws_half_of_each_spore_cloud() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var bv := view.bladder_view
+	var n := view.bladders.bushes.size()
+	eq(bv.spores_drawn(), n * EcoBladder.SPORES, "на «Обычно» — все споры")
+	view.set_lite(true)
+	ok(bv.lite, "пузырчатка — на «Экономно»")
+	var per := EcoMM.cloud_per(EcoBladder.SPORES)
+	eq(bv.spores_drawn(), per * n, "половина каждого облака")
+	var seen := {}
+	for bl in view.bladders.bushes:
+		var shown := 0
+		for j in EcoBladder.SPORES:
+			var s := bv.spore_slot(bl.index, j)
+			seen[s] = true
+			if s < bv.spores_drawn():
+				shown += 1
+		eq(shown, per, "у куста %d видно %d" % [bl.index, per])
+	eq(seen.size(), n * EcoBladder.SPORES, "места в буфере не повторяются")
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Vector3(500, 0, 500)
+	var bl := view.bladders.bushes[1]
+	view.bladders.pop(view.world, bl, false)
+	view.step(0.05, ship)
+	var s0 := BladderView.transform_at(bv.spore_buffer, bv.spore_slot(bl.index, 3))
+	near(s0.basis.x.length(), 1.0, 1e-6, "лопнула — видимая спора на своём месте")
+	near(s0.origin.distance_to(EcoBladder.spore(bl, 3, view.world.time)), 0.0, 1e-4, "там, где её считает мир")
+	ok(bv.spore_slot(bl.index, 3) < bv.spores_drawn(), "и она рисуется")
+	view.ground = Seabed.height   # сброс мира — виды пересобираются
+	ok(view.bladder_view.lite and view.bladder_view.spores_drawn() == per * n, "сброс мира — снова «Экономно»")
+	view.set_lite(false)
+	bv = view.bladder_view
+	eq(bv.spores_drawn(), n * EcoBladder.SPORES, "назад — все")
+	eq(bv.spore_slot(1, 3), 1 * EcoBladder.SPORES + 3, "буфер снова по кусту")
+	view.queue_free()
+	await frames(1)
