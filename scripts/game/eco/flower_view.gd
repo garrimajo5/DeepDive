@@ -71,7 +71,7 @@ func _init(system: EcoFlower) -> void:
 	flower = system
 	name = "Каменный цветок"
 	layers = OceanView.LAYER_WORLD
-	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	EcoShadows.cast(self)   # место-ориентир 01 — тень на дно (Б1, EcoShadows.HEROES)
 	if flower.branches.is_empty():
 		return
 	for b in flower.branches:
