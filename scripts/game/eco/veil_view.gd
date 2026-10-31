@@ -14,6 +14,10 @@ extends Node3D
 ## вуали идут первыми, `visible_instance_count` отрезает прочие; рамка видимости — по видимым вуалям.
 ## Выдох купола и слизь ужаливания (EcoVeilDust: на сокращении купола из-под кромки — облачка, ужалила светляка —
 ## клуб у рыбки) — дочерний MultiMesh «Муть» на общем шейдере EcoShaders.MIST (INK) — +1 вызов отрисовки.
+## «Экономно» (`set_lite`, Б6): у каждой вуали рисуется каждое второе щупальце (40 → 20) и каждый второй огонёк кромки
+## (48 → 24) — меши нитей и кромки пересобираются с шагом LITE_STEP (огоньки стоят ровно по кругу, нити — по углу,
+## чётные покрывают купол так же ровно). Купола, мир (ужаливание, укрытие, сонар) и муть не меняются; вызовов столько же,
+## линий и пятен со сложением цвета вдвое меньше.
 
 const RIM_SHADER := """
 shader_type spatial;
@@ -43,6 +47,8 @@ const SMALL_RING := 1.2
 ## Огоньков на кромке, их размер (м).
 const RIM_N := 48
 const RIM_SIZE := 0.5
+## «Экономно»: рисуется каждое LITE_STEP-е щупальце и каждый LITE_STEP-й огонёк кромки.
+const LITE_STEP := 2
 ## Полусфера купола.
 const SEGMENTS := 24
 const RINGS := 8
@@ -65,6 +71,8 @@ var tentacles: MultiMeshInstance3D
 ## Видна ли вуаль (по EcoVeil.Veil.index) и сколько видно.
 var shown: Array[bool] = []
 var shown_count := 0
+## «Экономно» (set_lite).
+var lite := false
 ## Последние буферы куполов, кромок и щупалец (для тестов): видимые вуали — по порядку.
 var bell_buffer := PackedFloat32Array()
 var rim_buffer := PackedFloat32Array()
@@ -78,7 +86,7 @@ var dust_buffer: PackedFloat32Array:
 var _dust := EcoDustBuffer.new()
 
 
-func _init(system: EcoVeil) -> void:
+func _init(system: EcoVeil, lite_on := false) -> void:
 	veils = system
 	name = "Вуали"
 	var n := veils.veils.size()
@@ -93,7 +101,29 @@ func _init(system: EcoVeil) -> void:
 	tent_buffer.resize(n * TENT_STRIDE)
 	dust_view = GrazerView.build_dust(EcoVeilDust.POOL)
 	add_child(dust_view)
+	set_lite(lite_on)
 	sync(0.0, Vector3.ZERO)
+
+
+## «Экономно»: каждое второе щупальце и огонёк кромки (меши с шагом LITE_STEP); назад — все.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	var step := LITE_STEP if on else 1
+	rims.multimesh.mesh = build_rim(step)
+	tentacles.multimesh.mesh = build_tentacles_all(veils.veils, step)
+
+
+## Сколько щупалец одной вуали рисуется (на «Экономно» — каждое LITE_STEP-е).
+func threads() -> int:
+	var verts := (tentacles.multimesh.mesh as ArrayMesh).surface_get_array_len(0)
+	return verts / (EcoVeil.SEGMENTS * 2 * maxi(1, veils.veils.size()))
+
+
+## Сколько огоньков на кромке рисуется.
+func rim_lights() -> int:
+	return (rims.multimesh.mesh as ArrayMesh).surface_get_array_len(0) / 4
 
 
 func _multi(title: String, mesh: Mesh, count: int, colors: bool, custom: bool) -> MultiMeshInstance3D:
@@ -140,12 +170,13 @@ static func build_bell() -> ArrayMesh:
 	return m
 
 
-## Кромка: RIM_N огоньков по кругу радиуса r на высоте 0 — по четыре вершины в одной точке, угол — в UV.
-static func build_rim() -> ArrayMesh:
+## Кромка: RIM_N огоньков по кругу радиуса r на высоте 0 — по четыре вершины в одной точке, угол — в UV; step —
+## каждый step-й огонёк («Экономно»).
+static func build_rim(step := 1) -> ArrayMesh:
 	var v := PackedVector3Array()
 	var uv := PackedVector2Array()
 	var idx := PackedInt32Array()
-	for k in RIM_N:
+	for k in range(0, RIM_N, step):
 		var a := k / float(RIM_N) * TAU
 		var c := Vector3(cos(a) * EcoVeil.R, 0.0, sin(a) * EcoVeil.R)
 		var b := v.size()
@@ -171,21 +202,22 @@ static func build_tentacles(vl: EcoVeil.Veil, vi := 0) -> ArrayMesh:
 	return m
 
 
-## Нити всех вуалей одним мешем: у вуали i в UV2.x — i (экземпляр щупалец рисует только свои).
-static func build_tentacles_all(list: Array[EcoVeil.Veil]) -> ArrayMesh:
+## Нити всех вуалей одним мешем: у вуали i в UV2.x — i (экземпляр щупалец рисует только свои); step — каждая
+## step-я нить («Экономно»).
+static func build_tentacles_all(list: Array[EcoVeil.Veil], step := 1) -> ArrayMesh:
 	var m := ArrayMesh.new()
-	m.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, _tentacle_arrays(list, 0))
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, _tentacle_arrays(list, 0, step))
 	m.custom_aabb = TENT_BOX
 	return m
 
 
-static func _tentacle_arrays(list: Array, first: int) -> Array:
+static func _tentacle_arrays(list: Array, first: int, step := 1) -> Array:
 	var v := PackedVector3Array()
 	var uv := PackedVector2Array()
 	var uv2 := PackedVector2Array()
 	for i in list.size():
 		var vl: EcoVeil.Veil = list[i]
-		for k in EcoVeil.TENTACLES:
+		for k in range(0, EcoVeil.TENTACLES, step):
 			var x0 := cos(vl.tent_a[k]) * vl.tent_r[k]
 			var z0 := sin(vl.tent_a[k]) * vl.tent_r[k]
 			var step_len := vl.tent_len[k] / EcoVeil.SEGMENTS
