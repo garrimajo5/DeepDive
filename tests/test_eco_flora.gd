@@ -264,3 +264,99 @@ func test_view_one_coral_mesh_and_one_fan_multimesh() -> void:
 	eq(cv.uploads, up, "медленное разгорание не гоняет шейдер каждый кадр")
 	view.queue_free()
 	await frames(1)
+
+
+# ---------- «Экономно» (Б6) ----------
+
+func test_coral_lite_form_coarser_same_layout() -> void:
+	var f := EcoCoralLook.full
+	var l := EcoCoralLook.lite
+	ok(EcoCoralLook.form(false) == f and EcoCoralLook.form(true) == l)
+	eq(EcoCoralLook.verts.size(), f.verts.size(), "поля класса — полная форма")
+	eq(l.branch_count, f.branch_count, "ветвей столько же")
+	eq(l.tip_count, f.tip_count, "кончиков столько же")
+	ok(l.tris.size() * 100 <= f.tris.size() * 62, "треугольников не больше 62 %% (%d → %d)" % [f.tris.size() / 3,
+		l.tris.size() / 3])
+	eq(l.normals.size(), l.verts.size())
+	eq(l.colors.size(), l.verts.size())
+	eq(l.parts.size(), l.verts.size())
+	# силуэт тот же: высота и разлёт куста
+	var fb := AABB(f.verts[0], Vector3.ZERO)
+	for p in f.verts:
+		fb = fb.expand(p)
+	var lb := AABB(l.verts[0], Vector3.ZERO)
+	for p in l.verts:
+		lb = lb.expand(p)
+	near(lb.end.y, fb.end.y, 0.02, "верх куста тот же")
+	ok(lb.size.x > fb.size.x * 0.93 and lb.size.z > fb.size.z * 0.93, "разлёт тот же: %s → %s" % [fb.size, lb.size])
+	# центры кончиков те же: случайные числа не зависят от граней
+	ok(absf(_tip_center(l).distance_to(_tip_center(f))) < 0.02, "кончики на тех же местах")
+	ok(l.colors.has(EcoCoralLook.TIP), "оранжевые кончики")
+	# лицевая сторона по правилу Godot и на «Экономно»: кончики и камни замкнуты, объём со знаком минус
+	for part in [EcoCoralLook.Part.TIP, EcoCoralLook.Part.STONE]:
+		var vol := 0.0
+		for i in range(0, l.tris.size(), 3):
+			if l.parts[l.tris[i]] == part:
+				var a := l.verts[l.tris[i]]
+				vol += a.dot(l.verts[l.tris[i + 1]].cross(l.verts[l.tris[i + 2]])) / 6.0
+		ok(vol < 0.0, "часть %d: объём со знаком минус (%f)" % [part, vol])
+
+
+static func _tip_center(f: EcoCoralLook.Form) -> Vector3:
+	var s := Vector3.ZERO
+	var n := 0
+	for i in f.verts.size():
+		if f.parts[i] == EcoCoralLook.Part.TIP:
+			s += f.verts[i]
+			n += 1
+	return s / maxf(1.0, n)
+
+
+func test_coral_view_lite_same_material_and_glow() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var cv := view.coral_view
+	var full := cv.tris
+	var mat := cv.mesh.surface_get_material(0)
+	var dust := cv._dust
+	eq(full, EcoCoralLook.full.tris.size() / 3 * view.coral.bushes.size(), "полный меш — все кусты")
+	view.set_lite(true)
+	ok(cv.lite, "огнецвет — на «Экономно»")
+	eq(cv.tris, EcoCoralLook.lite.tris.size() / 3 * view.coral.bushes.size(), "грубая форма у всех кустов")
+	ok(cv.tris < full, "треугольников меньше: %d → %d" % [full, cv.tris])
+	eq(cv.mesh.get_surface_count(), 1, "вызов тот же")
+	ok(cv.mesh.surface_get_material(0) == mat, "материал тот же")
+	ok(cv._dust == dust, "муть та же (в общем слое EcoDustLayer)")
+	eq(cv.verts.size(), cv.heights.size(), "доля высоты у каждой вершины")
+	eq(cv.feet.size(), view.coral.bushes.size(), "подножие у каждого куста")
+	# колыхание: двойник шейдера считает по грубой форме (номер куста — по её числу вершин)
+	var last := cv.verts.size() - 1
+	var b := view.coral.bushes[-1]
+	near(cv.verts[last].distance_to(b.base), EcoCoralLook.lite.verts[-1].length() * b.scale, 1e-3,
+		"последняя вершина — у последнего куста")
+	var o := cv.offset(last, 3.0, Vector3(0.4, 0, 0))
+	ok(o.is_finite(), "смещение в течении считается")
+	# свет кончиков отдаётся как прежде
+	var up := cv.uploads
+	view.coral.bushes[0].glow = EcoCoral.MIN_GLOW
+	cv.sync()
+	ok(cv.uploads > up, "свет отдан шейдеру")
+	view.set_lite(false)
+	eq(cv.tris, full, "назад — полный меш")
+	view.queue_free()
+	await frames(1)
+
+
+func test_coral_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = Seabed.height
+	ev.set_lite(true)
+	ok(ev.coral_view.lite, "уровень дошёл до огнецвета")
+	var t := ev.coral_view.tris
+	ev.ground = Seabed.height
+	ok(ev.coral_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(ev.coral_view.tris, t, "и меш грубый")
+	ev.set_lite(false)
+	ev.free()

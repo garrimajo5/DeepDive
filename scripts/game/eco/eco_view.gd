@@ -277,6 +277,7 @@ func set_lite(on: bool) -> void:
 	echo_view.set_lite(on)
 	flower_view.set_lite(on)
 	bones_view.set_lite(on)
+	coral_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -293,7 +294,7 @@ func _rebuild_coral() -> void:
 	if coral_view:
 		remove_child(coral_view)
 		coral_view.free()
-	coral_view = CoralView.new(coral)
+	coral_view = CoralView.new(coral, lite)
 	add_child(coral_view)
 
 
