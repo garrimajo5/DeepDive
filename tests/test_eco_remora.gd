@@ -408,3 +408,55 @@ func test_hull_rider_turns_with_ship() -> void:
 	for r in rm.remoras:
 		if r.mode == EcoRemora.Mode.HULL:
 			near(r.dir.dot(w.ship.nose()), 1.0, 1e-4, "нос по носу корабля сразу")
+
+
+# ---------- «Экономно» (Б6) ----------
+
+func test_view_lite_coarser_same_material() -> void:
+	var w := _world()
+	var view := RemoraView.new(_remoras(w))
+	tree.root.add_child(view)
+	await frames(1)
+	var full := view.tris
+	var mat := view.multimesh.mesh.surface_get_material(0)
+	var box := view.multimesh.mesh.get_aabb()
+	var dust := view.dust_view
+	view.set_lite(true)
+	ok(view.lite, "присоски — на «Экономно»")
+	eq(full, 120, "полная рыба")
+	eq(view.tris, 72, "треугольников: %d → %d" % [full, view.tris])
+	ok(view.multimesh.mesh.surface_get_material(0) == mat, "материал тот же (свой свет)")
+	eq(view.multimesh.mesh.get_surface_count(), 1, "один вызов отрисовки")
+	eq(view.multimesh.instance_count, 6, "все рыбы на месте")
+	ok(view.dust_view == dust, "муть та же")
+	var lb := view.multimesh.mesh.get_aabb()
+	near(lb.size.z, box.size.z, 0.01, "длина с хвостом та же")
+	ok(lb.size.y > box.size.y * 0.9, "присоска на темени: %s → %s" % [box.size, lb.size])
+	var cols: PackedColorArray = view.multimesh.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	ok(cols.has(RemoraView.DISC) and cols.has(RemoraView.TAIL), "диск и хвост на месте")
+	# грубый меш тоже лицом наружу
+	var v: PackedVector3Array = view.multimesh.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	eq(view.mids.size(), v.size() / 3)
+	var bad := 0
+	for i in range(0, v.size(), 3):
+		var c := (v[i] + v[i + 1] + v[i + 2]) / 3.0
+		if (v[i + 1] - v[i]).cross(v[i + 2] - v[i]).dot(c - view.mids[i / 3]) > 0.0:
+			bad += 1
+	eq(bad, 0, "все грани наружу")
+	view.set_lite(false)
+	eq(view.tris, full, "назад — полный меш")
+	view.queue_free()
+	await frames(1)
+
+
+func test_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = Seabed.height
+	ev.set_lite(true)
+	ok(ev.remora_view.lite, "уровень дошёл до присосок")
+	var t := ev.remora_view.tris
+	ev.ground = Seabed.height
+	ok(ev.remora_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(ev.remora_view.tris, t, "и меш грубый")
+	ev.set_lite(false)
+	ev.free()

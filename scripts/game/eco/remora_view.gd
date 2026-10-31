@@ -7,6 +7,9 @@ extends MultiMeshInstance3D
 ## Разброс (Б4, EcoVary по номеру рыбы): свой размер, частота виляния и оттенок — цвет экземпляра × цвет вершины.
 ## Слизь присосок (EcoRemoraDust: легла, снялась, сорвана разрядом — облачка) — дочерний MultiMesh «Муть» в мировых
 ## координатах на общем шейдере EcoShaders.MIST (INK): +1 вызов, шейдеров не прибавилось.
+## «Экономно» (Б6, `set_lite`): тело 8 × 4 вместо 8 × 5, присоска — плоский диск 8 × 2 вместо 8 × 4 (LITE_*; по кругу
+## восемь граней — нос и края диска на месте) — 120 → 72 треугольника на рыбу, пересобирается с тем же материалом; хвост,
+## места, виляние, муть и вызовы те же. Сброс мира уровень не теряет (EcoView.set_lite).
 
 const BODY := Color("55606a")
 const DISC := Color("d8e6ea")
@@ -21,6 +24,11 @@ const TAIL_R := 0.05
 const TAIL_L := 0.1
 const TAIL_Z := -0.24
 const SCALE := 1.6
+## Граней эллипсоидов (по кругу × по высоте): тело и диск присоски; LITE_* — на «Экономно».
+const BODY_SEG := Vector2i(8, 5)
+const DISC_SEG := Vector2i(8, 4)
+const LITE_BODY_SEG := Vector2i(8, 4)
+const LITE_DISC_SEG := Vector2i(8, 2)
 const WAG := 0.3
 const WAG_RATE := 14.0
 ## Разброс: размер ±15 %, частота виляния ±20 %, светлее-темнее ±12 %.
@@ -46,10 +54,14 @@ var dust_buffer: PackedFloat32Array:
 var _dust := EcoDustBuffer.new()
 
 var _st := SurfaceTool.new()
+## На «Экономно» — тело и диск грубее (set_lite).
+var lite := false
+var _mat: StandardMaterial3D
 
 
-func _init(system: EcoRemora) -> void:
+func _init(system: EcoRemora, on_lite := false) -> void:
 	remoras = system
+	lite = on_lite
 	name = "Присоски"
 	layers = OceanView.LAYER_WORLD
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -65,21 +77,33 @@ func _init(system: EcoRemora) -> void:
 	sync(0.0)
 
 
+## «Экономно» — меш рыбы пересобран грубее (тот же материал); назад — полный.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	multimesh.mesh = build()
+
+
 ## Меш одной рыбы: три части одним мешем с цветом вершин.
 func build() -> ArrayMesh:
+	mids.clear()
 	_st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	_ellipsoid(Vector3.ZERO, BODY_R, 8, 5, BODY)
-	_ellipsoid(DISC_AT, DISC_R, 8, 4, DISC)
+	var b := LITE_BODY_SEG if lite else BODY_SEG
+	var d := LITE_DISC_SEG if lite else DISC_SEG
+	_ellipsoid(Vector3.ZERO, BODY_R, b.x, b.y, BODY)
+	_ellipsoid(DISC_AT, DISC_R, d.x, d.y, DISC)
 	_cone(TAIL)
 	_st.generate_normals()
 	var m := _st.commit()
 	tris = m.surface_get_array_len(0) / 3
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.roughness = 0.7
-	mat.emission_enabled = true
-	mat.emission = GLOW
-	m.surface_set_material(0, mat)
+	if _mat == null:
+		_mat = StandardMaterial3D.new()
+		_mat.vertex_color_use_as_albedo = true
+		_mat.roughness = 0.7
+		_mat.emission_enabled = true
+		_mat.emission = GLOW
+	m.surface_set_material(0, _mat)
 	return m
 
 
