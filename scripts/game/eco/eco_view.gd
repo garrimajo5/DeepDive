@@ -266,6 +266,7 @@ func set_lite(on: bool) -> void:
 	cushion_view.set_lite(on)
 	coins_view.set_lite(on)
 	hvaten_view.set_lite(on)
+	ognevka_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -345,7 +346,7 @@ func _rebuild_ognevka() -> void:
 	if ognevka_view:
 		remove_child(ognevka_view)
 		ognevka_view.free()
-	ognevka_view = OgnevkaView.new(ognevka)
+	ognevka_view = OgnevkaView.new(ognevka, lite)
 	add_child(ognevka_view)
 
 
