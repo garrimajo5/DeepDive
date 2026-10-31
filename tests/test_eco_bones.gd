@@ -332,3 +332,71 @@ func test_inspect_text_no_new_lore() -> void:
 	for word in ["убит", "поле", "К-6", "левиафан", "метр", "лет"]:
 		ok(not t.contains(word), "без новых сюжетных фактов: %s" % word)
 	ok(t.length() <= 110, "коротко: %d" % t.length())
+
+
+func test_view_lite_coarser_same_material() -> void:
+	var b := _bones(Seabed.height)
+	var v := BonesView.new(b)
+	tree.root.add_child(v)
+	await frames(1)
+	var full := v.tris
+	var full_skull := v.skull_tris
+	var full_glow := v.glowing
+	var full_ribs := v.rib_tris
+	var mat := v.mesh.surface_get_material(0)
+	var box := v.mesh.get_aabb()
+	v.set_lite(true)
+	ok(v.lite, "кости — на «Экономно»")
+	ok(v.tris * 100 <= full * 86, "треугольников не больше 86 %% (%d → %d)" % [full, v.tris])
+	ok(v.rib_tris < full_ribs, "рёбра грубее: %d → %d" % [full_ribs, v.rib_tris])
+	eq(v.skull_tris, full_skull, "череп с окнами тот же")
+	eq(v.glowing, full_glow, "обрастание светится то же")
+	eq(v.mesh.get_surface_count(), 1, "вызов тот же")
+	ok(v.mesh.surface_get_material(0) == mat, "материал тот же")
+	var lb := v.mesh.get_aabb()
+	ok(lb.size.y > box.size.y * 0.97 and lb.size.x > box.size.x * 0.95, "силуэт тот же: %s → %s" % [box.size, lb.size])
+	# рёбра наружу и на «Экономно»: грань смотрит от осевой линии своего ребра
+	var per_rib := v.rib_tris / (EcoBones.PAIRS * 2)
+	eq(per_rib * EcoBones.PAIRS * 2, v.rib_tris, "у каждого ребра поровну граней")
+	var n := EcoBones.rib_points()
+	var outward := 0
+	for t in v.rib_tris:
+		var a := v.verts[t * 3]
+		var c := (a + v.verts[t * 3 + 1] + v.verts[t * 3 + 2]) / 3.0
+		var lc := b.to_local(c)
+		var r := t / per_rib
+		var best := INF
+		var axis := Vector3.ZERO
+		for i in n - 1:
+			var p0 := b.rib_point(r, i)
+			var p1 := b.rib_point(r, i + 1)
+			var d := EcoBones.seg_dist(lc, p0, p1)
+			if d < best:
+				best = d
+				var ab := p1 - p0
+				axis = p0 + ab * clampf((lc - p0).dot(ab) / ab.length_squared(), 0.0, 1.0)
+		var out := c - b.to_world(axis)
+		if t % per_rib >= (n - 1) * BonesView.LITE_RIB_SIDES * 2:
+			out = b.basis * (b.rib_point(r, n - 1) - b.rib_point(r, n - 2))
+		var cr := (v.verts[t * 3 + 1] - a).cross(v.verts[t * 3 + 2] - a)
+		if cr.dot(out) < 0.0 and v.normals[t * 3].dot(out) > 0.0:
+			outward += 1
+	eq(outward, v.rib_tris, "лицевая сторона рёбер — снаружи")
+	ok(v.moss_view == null or v.moss_view.get_parent() == v, "мох на месте")
+	v.set_lite(false)
+	eq(v.tris, full, "назад — полный меш")
+	v.queue_free()
+	await frames(1)
+
+
+func test_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = Seabed.height
+	ev.set_lite(true)
+	ok(ev.bones_view.lite, "уровень дошёл до костей")
+	var t := ev.bones_view.tris
+	ev.ground = Seabed.height
+	ok(ev.bones_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(ev.bones_view.tris, t, "и меш грубый")
+	ev.set_lite(false)
+	ev.free()

@@ -5,6 +5,9 @@ extends MeshInstance3D
 ## вызов отрисовки, плоские грани. Кость матовая: светятся только кустики обрастания #67DDEB — альфа вершинного
 ## цвета в том же материале; кости — подсветка FILL (выше, чем у раковины: отвесные рёбра в тени от света сверху), чтобы светлый известняк читался в мути отмели.
 ## Без источников света, слой отмели.
+## «Экономно» (Б6, `set_lite`): рёбра и челюсть — пять граней вместо шести, тела позвонков — четыре, отростки —
+## трёхгранные пирамидки (LITE_*); меш пересобирается, череп с окнами, обрастание, материал, вызов, мох и силуэт те же.
+## Сброс мира уровень не теряет (EcoView.set_lite).
 
 ## Подсветка камня, шероховатость и блик — в общем шейдере камня (EcoShaders.STONE).
 const FILL := 0.45
@@ -21,6 +24,12 @@ const GROWTH := Color("67ddeb")
 const VERT_LEN := 1.1
 const SPINOUS := 1.7
 const TRANSVERSE := 1.9
+## Граней по кругу: тело позвонка, челюсть; на «Экономно» — рёбра, челюсть, тело позвонка.
+const VERT_SIDES := 6
+const JAW_SIDES := 6
+const LITE_RIB_SIDES := 5
+const LITE_JAW_SIDES := 5
+const LITE_VERT_SIDES := 4
 
 var bones: EcoBones
 ## Вершины по треугольникам (мир, для тестов), нормали и число треугольников.
@@ -35,15 +44,41 @@ var skull_tris := 0
 var _col := PackedColorArray()
 ## Мох у ног рёбер — свой меш пятен (EcoBones.moss), один вызов отрисовки.
 var moss_view: MossView
+## На «Экономно» — грубее сетка (set_lite).
+var lite := false
+var _mat: Material
 
 
-func _init(system: EcoBones) -> void:
+func _init(system: EcoBones, on_lite := false) -> void:
 	bones = system
+	lite = on_lite
 	name = "Кости левиафана"
 	layers = OceanView.LAYER_WORLD
 	EcoShadows.cast(self)
 	if bones.rib_pts.is_empty():
 		return
+	_mat = EcoShaders.stone(GROWTH, FILL, ROUGH, SPEC)
+	_build()
+	if bones.moss:
+		moss_view = MossView.new(bones.moss, bones.ground)
+		moss_view.name = "Мох на костях"
+		add_child(moss_view)
+
+
+## «Экономно» — меш пересобран грубее (тот же материал); назад — полный.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	if _mat:
+		_build()
+
+
+func _build() -> void:
+	verts.clear()
+	normals.clear()
+	_col.clear()
+	glowing = 0
 	_ribs()
 	rib_tris = verts.size() / 3
 	_spine()
@@ -53,13 +88,9 @@ func _init(system: EcoBones) -> void:
 	_jaw()
 	_tufts()
 	var m := EcoMM.tris(verts, normals, _col)
-	m.surface_set_material(0, EcoShaders.stone(GROWTH, FILL, ROUGH, SPEC))
+	m.surface_set_material(0, _mat)
 	mesh = m
 	tris = verts.size() / 3
-	if bones.moss:
-		moss_view = MossView.new(bones.moss, bones.ground)
-		moss_view.name = "Мох на костях"
-		add_child(moss_view)
 
 
 static func _hash(i: int, j: int) -> float:
@@ -79,7 +110,7 @@ func _ribs() -> void:
 			var up := float(i) / (n - 1)
 			paint.append(SHADE.lerp(HALF, minf(1.0, up * 2.0)).lerp(LIME, maxf(0.0, up * 1.6 - 0.6))
 				.lerp(HALF, _hash(r, i) * 0.25))
-		_tube(pts, rad, paint, EcoBones.RIB_SIDES, Vector3(0, 0, 1), false, true)
+		_tube(pts, rad, paint, LITE_RIB_SIDES if lite else EcoBones.RIB_SIDES, Vector3(0, 0, 1), false, true)
 
 
 ## Позвонки: тело — шестигранный цилиндр вдоль хребта, остистый отросток вверх и два поперечных — пирамидки.
@@ -94,7 +125,8 @@ func _spine() -> void:
 			step = c.distance_to(prev)
 		var half := minf(step * 0.5 * VERT_LEN, r * 2.2) * 0.5 + r * 0.35
 		var paint := LIME.lerp(HALF, 0.15 + _hash(v, 3) * 0.35)
-		_tube([c - d * half, c + d * half], [r, r], [paint, paint], 6, Vector3.UP, true, false)
+		_tube([c - d * half, c + d * half], [r, r], [paint, paint], LITE_VERT_SIDES if lite else VERT_SIDES, Vector3.UP,
+			true, false)
 		var up := (Vector3.UP - d * d.dot(Vector3.UP)).normalized()
 		var side := d.cross(up).normalized()
 		_spike(c + up * r * 0.7, up, r * SPINOUS, r * 0.45, d, paint)
@@ -161,7 +193,7 @@ func _jaw() -> void:
 		var t := float(q) / (bones.jaw.size() - 1)
 		rad.append(EcoBones.JAW_R * (1.0 - 0.45 * t))
 		paint.append(HALF.lerp(LIME, 0.4 + 0.3 * _hash(q, 5)))
-	_tube(pts, rad, paint, 6, Vector3.UP, true, true)
+	_tube(pts, rad, paint, LITE_JAW_SIDES if lite else JAW_SIDES, Vector3.UP, true, true)
 
 
 ## Обрастание: кустик из трёх тонких лопастей, светится (альфа 1) — единственный свет скелета.
@@ -217,16 +249,19 @@ func _tube(pts: Array, rad: Array, paint: Array, sides: int, ref: Vector3, cap0:
 			_tri(rings[i][0], rings[i][j + 1], rings[i][j + 2], out, paint[i], 0.0)
 
 
-## Отросток позвонка: четырёхгранная пирамидка от основания c в сторону dir, длина len, ширина w.
+## Отросток позвонка: пирамидка (четыре грани, на «Экономно» — три) от основания c в сторону dir, длина len, ширина w.
 func _spike(c: Vector3, dir: Vector3, len: float, w: float, along: Vector3, paint: Color) -> void:
 	dir = dir.normalized()
 	var s1 := along.normalized() * w
 	var s2 := dir.cross(along).normalized() * w * 0.6
 	var tip := c + dir * len
 	var base: Array[Vector3] = [c + s1, c + s2, c - s1, c - s2]
-	for q in 4:
+	if lite:
+		base = [c + s1, c + s2, c - s1 * 0.5 - s2 * 0.6]
+	var k := base.size()
+	for q in k:
 		var p0 := base[q]
-		var p1 := base[(q + 1) % 4]
+		var p1 := base[(q + 1) % k]
 		_tri(p0, p1, tip, (p0 + p1) * 0.5 - c, paint, 0.0)
 
 
