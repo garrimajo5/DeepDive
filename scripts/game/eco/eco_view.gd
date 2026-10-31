@@ -272,6 +272,7 @@ func set_lite(on: bool) -> void:
 	veil_view.set_lite(on)
 	brink_view.set_lite(on)
 	pred_view.set_lite(on)
+	skalnik_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -381,7 +382,7 @@ func _rebuild_kelp() -> void:
 	if skalnik_view:
 		remove_child(skalnik_view)
 		skalnik_view.free()
-	skalnik_view = SkalnikView.new(skalnik)
+	skalnik_view = SkalnikView.new(skalnik, lite)
 	add_child(skalnik_view)
 
 
