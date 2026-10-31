@@ -244,13 +244,14 @@ func _init() -> void:
 	dust_layer.gather(self)
 
 
-## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи и просвет листвы погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали нет, моли у колодца 80, бахромы 24 — меняются
+## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи, просвет листвы и каустики на камне погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали нет, моли у колодца 80, бахромы 24 — меняются
 ## только числа в uniform, шейдеры те же. Включает уровень графики — поток А (`Main._apply_graphics`).
 func set_lite(on: bool) -> void:
 	EcoShaders.set_sway_lite(on)
 	EcoRim.set_lite(on)
 	EcoIris.set_lite(on)
 	EcoBack.set_lite(on)
+	EcoCaustic.set_lite(on)
 	EcoGrazerDust.lite = on
 	far_view.set_lite(on)
 	moth.set_lite(on)
@@ -472,6 +473,7 @@ func step_client(dt: float, ship: EcoLink.ShipState, near: PackedFloat32Array = 
 
 func _sync(ship: EcoLink.ShipState) -> void:
 	EcoShaders.set_flow(current.vel())
+	EcoCaustic.set_depth(-ship.pos.y)
 	fish_view.sync(world.time, ship, current.vel(), world.ground)
 	grazer_view.sync(world.time, ship, current.vel())
 	pred_view.sync(world.time, ship.pos, ship, current.vel(), world.ground)

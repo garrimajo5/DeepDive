@@ -9,7 +9,8 @@ extends RefCounted
 
 ## Камень с обрастанием #67DDEB в альфе цвета вершины: раковина древних, кости левиафана, край отмели, порода
 ## курильщика. `fill` — подсветка камня, `glow_k` — яркость обрастания, `cut` — сколько альбедо гасит свет,
-## `flicker` — мерцание жара (EcoVent.flicker, 0 — ровный свет).
+## `flicker` — мерцание жара (EcoVent.flicker, 0 — ровный свет). Каустики света сквозь лёд по верху камня — `caustic`
+## (сила ставит `EcoCaustic` по глубине корабля, «Экономно» — 0; узор — двойник `EcoCaustic.pattern`, как у дна).
 const STONE := """
 shader_type spatial;
 render_mode cull_back;
@@ -20,9 +21,28 @@ uniform float cut = 0.5;
 uniform float rough = 0.95;
 uniform float spec = 0.15;
 uniform float flicker = 0.0;
+uniform float caustic = 0.0;
+uniform float caustic_scale = 0.16;
+uniform float caustic_speed = 0.32;
+uniform vec3 caustic_tint : source_color = vec3(0.60, 0.85, 0.91);
 varying float lit;
+varying vec3 w_pos;
+varying float w_up;
+float c_hash(vec2 p) {
+	p = fract(p * vec2(127.1, 311.7));
+	p += dot(p, p + 34.5);
+	return fract(p.x * p.y);
+}
+float c_noise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(c_hash(i), c_hash(i + vec2(1.0, 0.0)), f.x), mix(c_hash(i + vec2(0.0, 1.0)), c_hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
 void vertex() {
 	lit = COLOR.a;
+	w_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	w_up = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz).y;
 }
 void fragment() {
 	float f = 0.8 + 0.1 * sin(TIME * 2.3) + 0.06 * sin(TIME * 5.7 + 1.3) + 0.04 * sin(TIME * 13.1 + 0.4);
@@ -30,6 +50,18 @@ void fragment() {
 	ROUGHNESS = rough;
 	SPECULAR = spec;
 	EMISSION = growth * lit * glow_k * mix(1.0, f, flicker) + COLOR.rgb * (1.0 - lit) * fill;
+	if (caustic > 0.001) {
+		vec2 cp = w_pos.xz * caustic_scale;
+		float t = TIME * caustic_speed;
+		float l1 = c_noise(cp + vec2(t, t * 0.6));
+		float l2 = c_noise(cp * 1.6 + vec2(-t * 0.8, t * 0.5));
+		float l3 = c_noise(cp * 2.3 + vec2(t * 0.4, -t * 0.9));
+		float c = abs(l1 - l2) * 0.6 + abs(l2 - l3) * 0.4;
+		c = pow(1.0 - smoothstep(0.0, 0.16, c), 1.6);
+		float m = caustic * smoothstep(0.15, 0.85, w_up) * (1.0 - lit);
+		ALBEDO += caustic_tint * c * m * 0.45;
+		EMISSION += caustic_tint * c * m * 0.22;
+	}
 }
 """
 
@@ -395,6 +427,8 @@ static func material(code: String, params: Dictionary = {}) -> ShaderMaterial:
 	mat.shader = shader(code)
 	for k in params:
 		mat.set_shader_parameter(k, params[k])
+	if code == STONE:
+		EcoCaustic.track(mat)
 	return mat
 
 
