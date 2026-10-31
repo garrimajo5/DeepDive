@@ -329,3 +329,51 @@ func test_eco_view_has_ognevka() -> void:
 	ok(ev.ognevka_view.placed.size() > 0)
 	ev.queue_free()
 	await frames(1)
+
+
+## Место рачка из буфера вида (строки transform 3 × 4).
+static func _at(buf: PackedFloat32Array, slot: int) -> Vector3:
+	var o := slot * 12
+	return Vector3(buf[o + 3], buf[o + 7], buf[o + 11])
+
+
+func test_view_lite_draws_half_per_station() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var ov := view.ognevka_view
+	var n := view.leeches.stations.size()
+	var all := n * EcoOgnevka.PER_STATION
+	ok(n > 0, "станции есть")
+	eq(ov.drawn(), all, "на «Обычно» — все рачки")
+	view.set_lite(true)
+	ok(ov.lite, "огнёвки — на «Экономно»")
+	eq(ov.drawn(), all / 2, "половина рачков")
+	var seen := {}
+	for i in all:
+		var s := OgnevkaView.slot(i, n, true)
+		seen[s] = true
+		eq(s < ov.drawn(), OgnevkaView.lite_shown(i % EcoOgnevka.PER_STATION), "видно только показанное (%d)" % i)
+	eq(seen.size(), all, "места в буфере не повторяются")
+	var even := 0
+	var odd := 0
+	for k in EcoOgnevka.PER_STATION:
+		if OgnevkaView.lite_shown(k):
+			even += 1 if k % 2 == 0 else 0
+			odd += 1 if k % 2 == 1 else 0
+	ok(even > 0 and odd > 0, "видны и рачки у вершины (чётные), и кормящиеся на веернике (нечётные)")
+	for k in 4:
+		view.step(EcoWorld.MAX_STEP, EcoLink.ShipState.new())
+	var i := EcoOgnevka.PER_STATION + 2   # вторая станция, показанный рачок
+	near(_at(ov._buffer, OgnevkaView.slot(i, n, true)).distance_to(view.ognevka.shrimp[i].p), 0.0, 1e-4,
+		"видимый рачок — на своём месте буфера")
+	view.ground = Seabed.height   # сброс мира — виды пересобираются
+	ok(view.ognevka_view.lite and view.ognevka_view.drawn() == all / 2, "сброс мира — снова «Экономно»")
+	view.set_lite(false)
+	ov = view.ognevka_view
+	eq(ov.drawn(), all, "назад — все")
+	i = EcoOgnevka.PER_STATION + 3
+	near(_at(ov._buffer, i).distance_to(view.ognevka.shrimp[i].p), 0.0, 1e-4, "буфер снова по номеру")
+	view.queue_free()
+	await frames(1)

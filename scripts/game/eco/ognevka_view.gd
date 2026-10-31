@@ -4,6 +4,10 @@ extends Node3D
 ## один MultiMesh на всех рачков всех станций, капсула вытянута по ходу. Стоит на слое отмели (OceanView.LAYER_WORLD).
 ## Рачки обирают веерник пустой станции — у кружева облачка взвеси (EcoOgnevkaDust): дочерний MultiMesh «Муть»
 ## в мировых координатах на общем шейдере EcoShaders.MIST, +1 вызов.
+## «Экономно» (Б6, `set_lite`): на каждой станции рисуется половина рачков (10 → 5, LITE_KEEP — и у вершины, и на
+## веернике): видимые — в начале буфера (`slot`), `visible_instance_count` отрезает остальных, скрытые не
+## пересчитываются. Мир (рой на хищнике, кормёжка на веернике, укрытие) не меняется; облачка мути — как были.
+## Вызовов столько же.
 
 const RADIUS := 0.06
 const LENGTH := 0.2
@@ -23,8 +27,12 @@ var dust_buffer: PackedFloat32Array:
 		return _dust.data
 var _dust := EcoDustBuffer.new()
 
+## «Экономно»: у станции рисуются рачки с номерами k < LITE_KEEP.
+const LITE_KEEP := EcoOgnevka.PER_STATION / 2
+var lite := false
 
-func _init(system: EcoOgnevka) -> void:
+
+func _init(system: EcoOgnevka, on_lite := false) -> void:
 	ognevka = system
 	name = "Огнёвки"
 	mesh = MultiMeshInstance3D.new()
@@ -40,7 +48,48 @@ func _init(system: EcoOgnevka) -> void:
 	add_child(mesh)
 	dust_view = GrazerView.build_dust(EcoOgnevkaDust.POOL)
 	add_child(dust_view)
+	if on_lite:
+		set_lite(true)
+	else:
+		sync(true)
+
+
+## «Экономно» — половина рачков каждой станции; буфер переписывается целиком сразу.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	var n := ognevka.leeches.stations.size()
+	mesh.multimesh.visible_instance_count = lite_count(n) if on else -1
 	sync(true)
+
+
+## Рисуется ли на «Экономно» рачок номер k своей станции: первые LITE_KEEP — в них и чётные (кружат у вершины), и
+## нечётные (кормятся на веернике пустой станции), так что на «Экономно» рачки остаются в обоих местах.
+static func lite_shown(k: int) -> bool:
+	return k < LITE_KEEP
+
+
+## Сколько рачков рисуется на «Экономно» у n станций.
+static func lite_count(n: int) -> int:
+	return n * LITE_KEEP
+
+
+## Место рачка номер i (n станций) в буфере: на «Экономно» видимые — в начале, по станциям.
+static func slot(i: int, n: int, on_lite: bool) -> int:
+	if not on_lite:
+		return i
+	var st := i / EcoOgnevka.PER_STATION
+	var k := i % EcoOgnevka.PER_STATION
+	if lite_shown(k):
+		return st * LITE_KEEP + k
+	return n * LITE_KEEP + st * (EcoOgnevka.PER_STATION - LITE_KEEP) + k - LITE_KEEP
+
+
+## Сколько рачков рисуется сейчас.
+func drawn() -> int:
+	var v := mesh.multimesh.visible_instance_count
+	return mesh.multimesh.instance_count if v < 0 else v
 
 
 static func build() -> CapsuleMesh:
@@ -67,6 +116,7 @@ static func place(s: EcoOgnevka.Shrimp) -> Transform3D:
 
 
 ## Переписывает только рачков, шагнувших в этом шаге мира (EcoOgnevka шагает их половинами); all — всех.
+## На «Экономно» скрытые рачки не пересчитываются.
 func sync(all := false) -> void:
 	var mm := mesh.multimesh
 	var n := mini(ognevka.shrimp.size(), mm.instance_count)
@@ -77,11 +127,14 @@ func sync(all := false) -> void:
 		all = true
 	var from := 0 if all else ognevka.moved_half()
 	var stride := 1 if all else 2
+	var stations := ognevka.leeches.stations.size()
 	for i in range(from, n, stride):
+		if lite and not lite_shown(i % EcoOgnevka.PER_STATION):
+			continue
 		var x := place(ognevka.shrimp[i])
 		placed[i] = x
 		var b := x.basis
-		var o := i * 12
+		var o := slot(i, stations, lite) * 12
 		_buffer[o] = b.x.x; _buffer[o + 1] = b.y.x; _buffer[o + 2] = b.z.x; _buffer[o + 3] = x.origin.x
 		_buffer[o + 4] = b.x.y; _buffer[o + 5] = b.y.y; _buffer[o + 6] = b.z.y; _buffer[o + 7] = x.origin.y
 		_buffer[o + 8] = b.x.z; _buffer[o + 9] = b.y.z; _buffer[o + 10] = b.z.z; _buffer[o + 11] = x.origin.z
