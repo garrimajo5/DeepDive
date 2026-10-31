@@ -195,7 +195,7 @@ func _init() -> void:
 	coins.bladders = bladders
 	bladders.coins = coins
 	rays = world.add(EcoRay.new(fish)) as EcoRay
-	ray_view = RayView.new(rays)
+	ray_view = RayView.new(rays, lite)
 	add_child(ray_view)
 	remoras = world.add(EcoRemora.new(rays)) as EcoRemora
 	eels.remoras = remoras
@@ -281,6 +281,7 @@ func set_lite(on: bool) -> void:
 	vent_view.set_lite(on)
 	organ_view.set_lite(on)
 	krab_view.set_lite(on)
+	ray_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).

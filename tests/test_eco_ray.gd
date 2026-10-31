@@ -407,3 +407,62 @@ func test_passes_far_from_well() -> void:
 				closest = minf(closest, Vector2(ry.p.x - ship.x, ry.p.z - ship.z).length())
 		ok(closest > EcoRay.WING + 6.0, "проходит вдалеке: ближе всего %.0f м" % closest)
 		ok(closest < 60.0, "но в виду из окна: %.0f м" % closest)
+
+
+# ---------- «Экономно» (Б6) ----------
+
+func _hump(rv: RayView) -> float:
+	var top := 0.0
+	for v in rv.verts:
+		top = maxf(top, v.y if absf(v.z) < 5.0 and absf(v.x) < 3.0 else 0.0)
+	return top
+
+
+func test_view_lite_coarser_same_material() -> void:
+	var w := _world()
+	var rv := RayView.new(_rays(w))
+	tree.root.add_child(rv)
+	await frames(1)
+	var full := rv.tris
+	eq(full, 480, "полный скат: пластина 288, хвост 80, пятнышки 112")
+	var mat := rv.multimesh.mesh.surface_get_material(0)
+	var box := rv.multimesh.mesh.get_aabb()
+	var hump := _hump(rv)
+	var dust := rv.dust_view
+	var placed := rv.placed.duplicate()
+	rv.set_lite(true)
+	ok(rv.lite, "скаты — на «Экономно»")
+	eq(rv.tris, RayView.LITE_CELLS_X * RayView.LITE_CELLS_Z * 2 + (RayView.LITE_TAIL_RINGS - 1) * 10
+		+ RayView.SPOTS * 8, "треугольников: %d → %d" % [full, rv.tris])
+	ok(rv.tris * 100 <= full * 65, "не больше 65 %")
+	ok(rv.multimesh.mesh.surface_get_material(0) == mat, "материал тот же (взмах, хлыст, пятнышки)")
+	eq(rv.multimesh.mesh.get_surface_count(), 1, "один вызов отрисовки")
+	eq(rv.multimesh.instance_count, 2, "оба ската на месте")
+	ok(rv.dust_view == dust, "муть та же")
+	var lb := rv.multimesh.mesh.get_aabb()
+	near(lb.size.x, box.size.x, 0.15, "размах тот же")
+	near(lb.size.z, box.size.z, 0.01, "длина с хвостом та же")
+	near(_hump(rv), hump, 0.05, "горб посередине не срезан")
+	var spots := 0
+	for c in rv.multimesh.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]:
+		spots += 1 if c.a > 0.5 else 0
+	eq(spots, RayView.SPOTS * 6, "все пятнышки светятся")
+	rv.sync()
+	eq(rv.placed, placed, "места скатов те же")
+	rv.set_lite(false)
+	eq(rv.tris, full, "назад — полный скат")
+	rv.queue_free()
+	await frames(1)
+
+
+func test_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = Seabed.height
+	ev.set_lite(true)
+	ok(ev.ray_view.lite, "уровень дошёл до скатов")
+	var t := ev.ray_view.tris
+	ev.ground = Seabed.height
+	ok(ev.ray_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(ev.ray_view.tris, t, "и пластина грубая")
+	ev.set_lite(false)
+	ev.free()
