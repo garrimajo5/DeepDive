@@ -215,3 +215,54 @@ func test_view_one_mesh() -> void:
 	ok(best < 0.06, "устье трубы — в меше")
 	view.queue_free()
 	await frames(1)
+
+
+# ---------- «Экономно» (Б6) ----------
+
+func test_view_lite_coarser_tubes_same_material() -> void:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	var organs := w.add(EcoOrgan.new()) as EcoOrgan
+	var ov := OrganView.new(organs)
+	tree.root.add_child(ov)
+	await frames(1)
+	var full := ov.tris
+	var mat := ov.mesh.surface_get_material(0)
+	var box := ov.mesh.get_aabb()
+	var dust := ov.dust_view
+	ov.set_lite(true)
+	ok(ov.lite, "органы — на «Экономно»")
+	var per_tube := OrganView.LITE_SIDES * 2 + OrganView.LITE_SIDES * OrganView.LITE_RIM_SIDES * 2
+	eq(ov.tris, organs.organs.size() * EcoOrgan.TUBES * per_tube, "треугольников: %d → %d" % [full, ov.tris])
+	ok(ov.tris * 100 <= full * 50, "не больше половины")
+	eq(ov.mesh.get_surface_count(), 1, "один вызов отрисовки")
+	ok(ov.mesh.surface_get_material(0) == mat, "материал тот же (тление губки)")
+	ok(ov.dust_view == dust and dust.get_parent() == ov, "муть та же")
+	var lb := ov.mesh.get_aabb()
+	ok(lb.size.y > box.size.y * 0.99 and lb.size.x > box.size.x * 0.9, "силуэт тот же: %s → %s" % [box.size, lb.size])
+	# устье каждой трубы на месте и обод светлый
+	var og := organs.organs[0]
+	var top := og.tube_base[2] + Vector3(0, og.tube_len[2], 0)
+	var best := INF
+	for v in ov.verts:
+		best = minf(best, v.distance_to(top + Vector3(EcoOrgan.TUBE_TOP_R, 0, 0)))
+	ok(best < 0.06, "устье трубы — в меше")
+	var cols: PackedColorArray = ov.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	ok(cols.has(OrganView.RIM), "обод — светлый")
+	ov.set_lite(false)
+	eq(ov.tris, full, "назад — полные трубы")
+	ov.queue_free()
+	await frames(1)
+
+
+func test_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = Seabed.height
+	ev.set_lite(true)
+	ok(ev.organ_view.lite, "уровень дошёл до органов")
+	var t := ev.organ_view.tris
+	ev.ground = Seabed.height
+	ok(ev.organ_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(ev.organ_view.tris, t, "и трубы грубые")
+	ev.set_lite(false)
+	ev.free()

@@ -279,6 +279,7 @@ func set_lite(on: bool) -> void:
 	bones_view.set_lite(on)
 	coral_view.set_lite(on)
 	vent_view.set_lite(on)
+	organ_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -322,7 +323,7 @@ func _rebuild_organs() -> void:
 	if organ_view:
 		remove_child(organ_view)
 		organ_view.free()
-	organ_view = OrganView.new(organs)
+	organ_view = OrganView.new(organs, lite)
 	add_child(organ_view)
 
 
