@@ -597,5 +597,6 @@ func test_view_lite_coarser_body_sac_and_ears() -> void:
 	ok(view.echo_view.lite, "EcoView.set_lite — до эхоловца")
 	view.ground = Seabed.height   # сброс мира — вид тот же
 	ok(view.echo_view.lite, "сброс мира — снова «Экономно»")
+	view.set_lite(false)   # общие выключатели мира (EcoShaders, EcoRim…) — назад для следующих тестов
 	view.queue_free()
 	await frames(1)

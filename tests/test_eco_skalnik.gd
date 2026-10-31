@@ -509,6 +509,7 @@ func test_view_lite_coarse_arms_and_still_closer() -> void:
 	ok(view.skalnik_view.lite, "EcoView.set_lite — до скальника")
 	view.ground = Seabed.height   # сброс мира — вид пересобирается
 	ok(view.skalnik_view.lite, "сброс мира — снова «Экономно»")
+	view.set_lite(false)   # общие выключатели мира (EcoShaders, EcoRim…) — назад для следующих тестов
 	view.queue_free()
 	await frames(1)
 
