@@ -154,7 +154,7 @@ func _init() -> void:
 	add_child(fish_view)
 	moss = world.add(EcoMoss.new()) as EcoMoss
 	grazers = world.add(EcoGrazer.new(moss)) as EcoGrazer
-	grazer_view = GrazerView.new(grazers)
+	grazer_view = GrazerView.new(grazers, lite)
 	add_child(grazer_view)
 	preds = world.add(EcoPred.new(fish)) as EcoPred
 	pred_view = PredView.new(preds)
@@ -283,6 +283,7 @@ func set_lite(on: bool) -> void:
 	krab_view.set_lite(on)
 	ray_view.set_lite(on)
 	remora_view.set_lite(on)
+	grazer_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
