@@ -390,5 +390,6 @@ func test_view_lite_coarser_shell_reef_and_glow() -> void:
 	ok(view.grot_view.lite, "EcoView.set_lite — до гротовика")
 	view.ground = Seabed.height   # сброс мира — вид тот же
 	ok(view.grot_view.lite, "сброс мира — снова «Экономно»")
+	view.set_lite(false)   # общие выключатели мира (EcoShaders, EcoRim…) — назад для следующих тестов
 	view.queue_free()
 	await frames(1)
