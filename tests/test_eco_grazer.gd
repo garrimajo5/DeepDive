@@ -522,3 +522,80 @@ func test_view_one_moss_mesh_and_one_grazer_multimesh() -> void:
 		"съеденный стянут в точку")
 	view.queue_free()
 	await frames(1)
+
+
+# ---------- «Экономно» (Б6) ----------
+
+func test_lite_form_coarser_same_parts() -> void:
+	var r := EcoGrazerLook.lite_rest
+	eq(EcoGrazerLook.lite_paint.size(), r.size())
+	eq(EcoGrazerLook.lite_part.size(), r.size())
+	eq(EcoGrazerLook.tris.size() / 3, 312, "полный скребун")
+	eq(EcoGrazerLook.lite_tris.size() / 3, 200, "на «Экономно»: купол 8 × 2, лапы без подушек")
+	for i in EcoGrazerLook.lite_tris:
+		if not ok(i >= 0 and i < r.size(), "номер вершины"):
+			return
+	var legs := [false, false, false, false, false, false]
+	var scraper := false
+	var min_y := INF
+	var max_x := 0.0
+	var vol := [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+	for i in r.size():
+		var p := EcoGrazerLook.lite_part[i]
+		if p >= 0 and p < 6:
+			legs[p] = true
+		scraper = scraper or p == EcoGrazerLook.SCRAPER
+		min_y = minf(min_y, r[i].y)
+		max_x = maxf(max_x, absf(r[i].x))
+	ok(not legs.has(false) and scraper, "шесть лап и скребок на месте")
+	ok(min_y < 0.02, "лапы достают до дна: %f" % min_y)
+	ok(max_x >= 0.9, "размах лап тот же")
+	ok(EcoGrazerLook.lite_paint.has(EcoGrazerLook.RIM), "кромка панциря")
+	var t := EcoGrazerLook.lite_tris
+	for i in range(0, t.size(), 3):
+		vol[EcoGrazerLook.lite_part[t[i]] + 1] += r[t[i]].dot(r[t[i + 1]].cross(r[t[i + 2]])) / 6.0
+	for p in 8:
+		ok(vol[p] < 0.0, "часть %d закрыта и лицом наружу: %f" % [p - 1, vol[p]])
+	# бёдра общие: лапы шагают в шейдере так же
+	var leg_v := EcoGrazerLook.lite_part.find(3)
+	ok(leg_v >= 0, "вершина лапы")
+
+
+func test_view_lite_coarser_same_material() -> void:
+	var w := _world()
+	var view := GrazerView.new(_grazers(w))
+	tree.root.add_child(view)
+	await frames(1)
+	var full := view.tris
+	var mat := view.multimesh.mesh.surface_get_material(0)
+	var dust := view.dust_view
+	view.set_lite(true)
+	ok(view.lite, "скребуны — на «Экономно»")
+	eq(full, 312, "полный меш")
+	eq(view.tris, 200, "треугольников: %d → %d" % [full, view.tris])
+	ok(view.multimesh.mesh.surface_get_material(0) == mat, "материал тот же")
+	eq(view.multimesh.mesh.get_surface_count(), 1, "один вызов отрисовки")
+	eq(view.multimesh.instance_count, 10, "все скребуны на месте")
+	ok(view.dust_view == dust, "муть та же")
+	var uv: PackedVector2Array = view.multimesh.mesh.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
+	var has_scraper := false
+	for u in uv:
+		has_scraper = has_scraper or u.y > 0.5
+	ok(has_scraper, "скребок двигается шейдером")
+	view.set_lite(false)
+	eq(view.tris, full, "назад — полный меш")
+	view.queue_free()
+	await frames(1)
+
+
+func test_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = Seabed.height
+	ev.set_lite(true)
+	ok(ev.grazer_view.lite, "уровень дошёл до скребунов")
+	var t := ev.grazer_view.tris
+	ev.ground = Seabed.height
+	ok(ev.grazer_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(ev.grazer_view.tris, t, "и меш грубый")
+	ev.set_lite(false)
+	ev.free()

@@ -44,9 +44,24 @@ static var part := PackedInt32Array()
 static var tris := PackedInt32Array()
 ## Бёдра шести лап: 0–2 борт −x спереди назад, 3–5 борт +x.
 static var hips := PackedVector3Array()
+## Форма на «Экономно» (Б6, GrazerView.set_lite): купол 8 долек × 2 кольца вместо 12 × 3, лапы без подушек стоп —
+## 312 → 200 треугольников; те же части, бёдра и краски, лапы и скребок двигает тот же шейдер.
+const AROUND := 12
+const RINGS := 3
+const LITE_AROUND := 8
+const LITE_RINGS := 2
+static var lite_rest := PackedVector3Array()
+static var lite_paint := PackedColorArray()
+static var lite_part := PackedInt32Array()
+static var lite_tris := PackedInt32Array()
 
 
 static func _static_init() -> void:
+	_build(true)
+	lite_rest = rest.duplicate()
+	lite_paint = paint.duplicate()
+	lite_part = part.duplicate()
+	lite_tris = tris.duplicate()
 	_build()
 
 
@@ -77,13 +92,13 @@ static func _quad(a: int, b: int, c: int, d: int, center: Vector3) -> void:
 	_tri(a, c, d, center)
 
 
-static func _build() -> void:
+static func _build(lite := false) -> void:
 	rest.clear()
 	paint.clear()
 	part.clear()
 	tris.clear()
 	hips.clear()
-	_build_shell()
+	_build_shell(LITE_AROUND if lite else AROUND, LITE_RINGS if lite else RINGS)
 	_add_box(Vector3(0, (0.15 + SHELL_BASE) / 2.0, 0), Vector3(0.4, (SHELL_BASE - 0.15) / 2.0, 0.55), UNDER, BODY)
 	_add_box(Vector3(0, 0.13, 0.66), Vector3(0.18, 0.08, 0.1), RIM, SCRAPER)
 	for side in 2:
@@ -97,31 +112,30 @@ static func _build() -> void:
 			hips.append(hip)
 			_add_beam(hip, knee, 0.04, LEG, leg)
 			_add_beam(knee, foot, 0.035, LEG, leg)
-			_add_box(Vector3(foot.x, 0.015, foot.z), Vector3(0.1, 0.015, 0.1), LEG, leg)
+			if not lite:
+				_add_box(Vector3(foot.x, 0.015, foot.z), Vector3(0.1, 0.015, 0.1), LEG, leg)
 
 
-## Купол: 12 долек × 3 кольца и макушка, снизу закрыт плоским дном.
-static func _build_shell() -> void:
-	const AROUND := 12
-	const RINGS := 3
+## Купол: around долек × rings колец (12 × 3, на «Экономно» 8 × 2) и макушка, снизу закрыт плоским дном.
+static func _build_shell(around: int, rings: int) -> void:
 	var center := Vector3(0, SHELL_BASE + SHELL_Y * 0.35, 0)
 	var first := rest.size()
-	for r in RINGS:
-		var phi := r * (PI / 2.0) / RINGS
-		for i in AROUND:
-			var th := i * TAU / AROUND
+	for r in rings:
+		var phi := r * (PI / 2.0) / rings
+		for i in around:
+			var th := i * TAU / around
 			var p := Vector3(SHELL_X * cos(phi) * sin(th), SHELL_BASE + SHELL_Y * sin(phi), SHELL_Z * cos(phi) * cos(th))
 			_add(p, RIM if r == 0 else SHELL, BODY)
 	var top := _add(Vector3(0, SHELL_BASE + SHELL_Y, 0), SHELL, BODY)
 	var bottom := _add(Vector3(0, SHELL_BASE, 0), UNDER, BODY)
-	for r in RINGS - 1:
-		for i in AROUND:
-			var j := (i + 1) % AROUND
-			_quad(first + r * AROUND + i, first + r * AROUND + j, first + (r + 1) * AROUND + j,
-				first + (r + 1) * AROUND + i, center)
-	for i in AROUND:
-		var j := (i + 1) % AROUND
-		_tri(first + (RINGS - 1) * AROUND + i, first + (RINGS - 1) * AROUND + j, top, center)
+	for r in rings - 1:
+		for i in around:
+			var j := (i + 1) % around
+			_quad(first + r * around + i, first + r * around + j, first + (r + 1) * around + j,
+				first + (r + 1) * around + i, center)
+	for i in around:
+		var j := (i + 1) % around
+		_tri(first + (rings - 1) * around + i, first + (rings - 1) * around + j, top, center)
 		_tri(first + i, first + j, bottom, center)
 
 
