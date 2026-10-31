@@ -275,6 +275,7 @@ func set_lite(on: bool) -> void:
 	skalnik_view.set_lite(on)
 	grot_view.set_lite(on)
 	echo_view.set_lite(on)
+	flower_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -411,7 +412,7 @@ func _rebuild_flower() -> void:
 	if flower_view:
 		remove_child(flower_view)
 		flower_view.free()
-	flower_view = FlowerView.new(flower)
+	flower_view = FlowerView.new(flower, lite)
 	add_child(flower_view)
 
 
