@@ -24,6 +24,9 @@ var trees: Array[AnimationTree] = []
 var cues: Array[EcoPredLook.Cues] = []
 ## Часы скелета каждого (LOD анимации: вдали реже, дальше EcoPredLook.HIDE_FAR — спрятан и стоит, #850).
 var clocks: Array[EcoPredLook.Clock] = []
+## «Экономно» (Б6, `set_lite`): скелет реже уже с EcoPredLook.ANIM_MID_LITE — поза раз в ANIM_MID_STEP, дальше
+## ANIM_FAR_LITE — раз в ANIM_FAR_STEP. Модель, место, курс, укусы и удары те же.
+var lite := false
 
 ## Муть от броска у дна и её MultiMesh; буфер мути — для тестов.
 var dust := EcoPredDust.new()
@@ -64,6 +67,11 @@ func _init(system: EcoPred) -> void:
 	dust_view = GrazerView.build_dust(EcoPredDust.POOL)
 	add_child(dust_view)
 	sync(0.0, Vector3(1e6, 0, 1e6))
+
+
+## «Экономно» — скелет реже (EcoPredLook.Clock.step_at).
+func set_lite(on: bool) -> void:
+	lite = on
 
 
 ## Общее дерево: Swim и SwimFast (каждый со своей скоростью, фаза одна) → Blend2 → удар серпом → укус (челюсть).
@@ -127,11 +135,13 @@ func sync(t: float, ship: Vector3, state: EcoLink.ShipState = null, flow := Vect
 		root.transform = Transform3D(EcoPredLook.basis(pr), pr.agent.p)
 		var at := trees[i]
 		var cue := cues[i].update(pr, ship, t, dist > EcoPredLook.CUE_FAR)
-		var step := clocks[i].tick(dt, dist)
+		var step := clocks[i].tick(dt, dist, lite)
 		if not _started:  # у каждого своя фаза плавания — не машут хвостами в лад
 			step = pr.index * 0.83
 		elif not root.visible:
 			step = 0.0
+		elif step <= 0.0 and (cue["strike"] or cue["bite"]):
+			step = clocks[i].flush()   # на «Экономно» между позами: разовый клип не теряется
 		if step <= 0.0:
 			continue  # спрятан или вдали между позами — дерево не трогаем: укусов и ударов там нет (CUE_FAR < ANIM_FAR)
 		var rate := EcoPredLook.swim_rate(pr)

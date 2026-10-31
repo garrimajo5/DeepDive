@@ -271,6 +271,7 @@ func set_lite(on: bool) -> void:
 	eel_view.set_lite(on)
 	veil_view.set_lite(on)
 	brink_view.set_lite(on)
+	pred_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
