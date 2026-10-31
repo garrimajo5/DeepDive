@@ -71,6 +71,8 @@ var remora_view: RemoraView
 ## Мерцающий планктон: четыре светящихся облака, вспыхивают от быстрого — след корабля выдаёт его серпохвосту.
 var plankton: EcoPlankton
 var plankton_view: PlanktonView
+## «Экономно» (set_lite): виды, что пересоздаются при сбросе мира, берут его заново.
+var lite := false
 ## Фонарные вуали: две колонии медуз дрейфуют над рифом, жалят светляков, под куполом серпохвост теряет корабль.
 var veils: EcoVeil
 var veil_view: VeilView
@@ -244,9 +246,10 @@ func _init() -> void:
 	dust_layer.gather(self)
 
 
-## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи, просвет листвы и каустики на камне погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали нет, моли у колодца 80, бахромы 24 — меняются
+## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи, просвет листвы и каустики на камне погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали нет, моли у колодца 80, бахромы 24, планктона рисуется половина клеток — меняются
 ## только числа в uniform, шейдеры те же. Включает уровень графики — поток А (`Main._apply_graphics`).
 func set_lite(on: bool) -> void:
+	lite = on
 	EcoShaders.set_sway_lite(on)
 	EcoRim.set_lite(on)
 	EcoIris.set_lite(on)
@@ -256,6 +259,7 @@ func set_lite(on: bool) -> void:
 	far_view.set_lite(on)
 	moth.set_lite(on)
 	fringe.set_lite(on)
+	plankton_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -445,7 +449,7 @@ func _rebuild_plankton() -> void:
 	if plankton_view:
 		remove_child(plankton_view)
 		plankton_view.free()
-	plankton_view = PlanktonView.new(plankton)
+	plankton_view = PlanktonView.new(plankton, lite)
 	add_child(plankton_view)
 
 

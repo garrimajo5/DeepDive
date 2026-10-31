@@ -5,6 +5,9 @@ extends Node3D
 ## (дрейф облака и покачивание) и её свечение шейдер считает сам по времени мира: в буфере — дом клетки и
 ## INSTANCE_CUSTOM = (фаза облака, номер клетки, время вспышки). Буфер переписывается, только когда в облаке
 ## вспыхнули новые клетки (EcoPlankton.Cloud.version). Клетки выталкиваются из коробки корпуса корабля. Слой отмели.
+## Клетки в буфере — вперемешку по облакам (место клетки k облака c — `slot(c, k)` = k × облаков + c), поэтому первая
+## половина буфера — половина каждого облака. «Экономно» — рисуется только она (`set_lite`, `LITE_SHARE`):
+## вдвое меньше пятен со сложением цвета, мир (вспышки, след корабля, у гостя сети) считает все клетки как раньше.
 
 const SIZE := 0.8
 ## Дальше этого клетки не видны (м от камеры).
@@ -12,6 +15,8 @@ const FADE_FAR := 60.0
 ## Чисел на экземпляр: transform 3 × 4 и свои данные (4).
 const STRIDE := 16
 const CUSTOM := 12
+## Доля клеток, что рисуется на «Экономно».
+const LITE_SHARE := 0.5
 
 var plankton: EcoPlankton
 var cells: MultiMeshInstance3D
@@ -19,11 +24,13 @@ var material: ShaderMaterial
 ## Последний буфер (для тестов) и сколько раз его переписывали.
 var buffer := PackedFloat32Array()
 var writes := 0
+## «Экономно»: рисуется доля LITE_SHARE клеток каждого облака.
+var lite := false
 
 var _versions: Array[int] = []
 
 
-func _init(system: EcoPlankton) -> void:
+func _init(system: EcoPlankton, lite_on := false) -> void:
 	plankton = system
 	name = "Мерцающий планктон"
 	cells = MultiMeshInstance3D.new()
@@ -41,7 +48,26 @@ func _init(system: EcoPlankton) -> void:
 	cells.custom_aabb = AABB(Vector3(-400, -200, -400), Vector3(800, 400, 800))
 	add_child(cells)
 	_fill()
+	set_lite(lite_on)
 	sync(0.0, Vector3(1e6, 0, 1e6), 0.0)
+
+
+## «Экономно» — рисуется только первая доля буфера (в ней — каждое облако поровну).
+func set_lite(on: bool) -> void:
+	lite = on
+	var n := cells.multimesh.instance_count
+	cells.multimesh.visible_instance_count = int(n * LITE_SHARE) if on else -1
+
+
+## Сколько клеток рисуется.
+func drawn() -> int:
+	var v := cells.multimesh.visible_instance_count
+	return cells.multimesh.instance_count if v < 0 else v
+
+
+## Место в буфере клетки k облака c.
+func slot(c: int, k: int) -> int:
+	return k * plankton.clouds.size() + c
 
 
 static func build_mesh() -> QuadMesh:
@@ -65,7 +91,7 @@ func _fill() -> void:
 	for cl in plankton.clouds:
 		_versions.append(-1)
 		for k in EcoPlankton.PER_CLOUD:
-			var i := (cl.index * EcoPlankton.PER_CLOUD + k) * STRIDE
+			var i := slot(cl.index, k) * STRIDE
 			var o := cl.home + cl.offsets[k]
 			buffer[i] = 1.0; buffer[i + 1] = 0.0; buffer[i + 2] = 0.0; buffer[i + 3] = o.x
 			buffer[i + 4] = 0.0; buffer[i + 5] = 1.0; buffer[i + 6] = 0.0; buffer[i + 7] = o.y
@@ -87,20 +113,19 @@ func sync(t: float, ship_pos: Vector3, ship_yaw: float) -> void:
 			continue
 		_versions[cl.index] = cl.version
 		dirty = true
-		var base := cl.index * EcoPlankton.PER_CLOUD
 		for k in EcoPlankton.PER_CLOUD:
-			buffer[(base + k) * STRIDE + CUSTOM + 2] = cl.lit_at[k]
+			buffer[slot(cl.index, k) * STRIDE + CUSTOM + 2] = cl.lit_at[k]
 	if dirty:
 		cells.multimesh.buffer = buffer
 		writes += 1
 
 
-## Время вспышки клетки n из буфера.
-func lit_at(n: int) -> float:
-	return buffer[n * STRIDE + CUSTOM + 2]
+## Время вспышки клетки k облака c из буфера.
+func lit_at(c: int, k: int) -> float:
+	return buffer[slot(c, k) * STRIDE + CUSTOM + 2]
 
 
-## Дом клетки n из буфера.
-func origin_at(n: int) -> Vector3:
-	var i := n * STRIDE
+## Дом клетки k облака c из буфера.
+func origin_at(c: int, k: int) -> Vector3:
+	var i := slot(c, k) * STRIDE
 	return Vector3(buffer[i + 3], buffer[i + 7], buffer[i + 11])
