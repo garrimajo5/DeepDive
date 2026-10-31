@@ -216,7 +216,7 @@ func _init() -> void:
 	dome = world.add(EcoDome.new()) as EcoDome
 	brink = world.add(EcoBrink.new()) as EcoBrink
 	echo = world.add(EcoEcho.new(bones, preds)) as EcoEcho
-	echo_view = EchoView.new(echo)
+	echo_view = EchoView.new(echo, lite)
 	add_child(echo_view)
 	far_view = FarLifeView.new()
 	add_child(far_view)
@@ -274,6 +274,7 @@ func set_lite(on: bool) -> void:
 	pred_view.set_lite(on)
 	skalnik_view.set_lite(on)
 	grot_view.set_lite(on)
+	echo_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).

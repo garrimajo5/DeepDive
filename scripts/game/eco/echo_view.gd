@@ -9,6 +9,8 @@ extends Node3D
 ## дальше FAR от корабля не виден в мути. Материалы как у гротовика — новых шейдеров нет.
 ## Муть у дна (EcoEchoDust: раскрыт сонаром — клуб ила вокруг тела, удар по корпусу — под головой) — дочерний
 ## MultiMesh «Муть» на общем шейдере мира (+1 вызов).
+## «Экономно» (Б6, `set_lite`): тело, мешок и уши — грубее сетка (LITE_*, треугольников меньше половины); полосы,
+## складки, суставы, мир, муть, вызовы и силуэт те же. Сброс мира уровень не теряет (EcoView.set_lite).
 
 const SKIN := Color("344A59")
 const SKIN_LIT := Color("667A87")
@@ -42,6 +44,14 @@ const SEG := 12
 const SAC_BREATH := 0.1
 const SAC_PERIOD := 6.0
 const FAR := 160.0
+## Сетка на «Экономно»: капсулы тела, голова, челюсть, мешок (сегменты × кольца), уши — сегментов и колец воронки.
+const LITE_TRUNK := Vector2i(12, 4)
+const LITE_HEAD := Vector2i(6, 4)
+const LITE_JAW := Vector2i(6, 3)
+const LITE_SAC := Vector2i(6, 3)
+const LITE_EAR := Vector2i(8, 3)
+## Воронка на «Обычно»: колец вдоль оси.
+const FUNNEL_RINGS := 4
 
 var echoes: EcoEcho
 ## Узел тела: в центре тела, повёрнут по курсу (голова к +Z).
@@ -59,20 +69,23 @@ var dust_buffer: PackedFloat32Array:
 	get:
 		return _dust.data
 var _dust := EcoDustBuffer.new()
+## На «Экономно» — грубее сетка (set_lite).
+var lite := false
 
 
-func _init(system: EcoEcho) -> void:
+func _init(system: EcoEcho, on_lite := false) -> void:
 	echoes = system
+	lite = on_lite
 	name = "Эхоловец"
 	group = Node3D.new()
 	group.name = "Эхоловец"
 	add_child(group)
 	var skin := GrotView._lit(Color.BLACK)
-	body = _mesh(group, "Тело", build_body(), skin)
-	sac = _mesh(group, "Голосовой мешок", build_sac(), skin)
+	body = _mesh(group, "Тело", build_body(lite), skin)
+	sac = _mesh(group, "Голосовой мешок", build_sac(lite), skin)
 	sac.position = SAC
 	fold_mat = GrotView._lit(FOLD * HUSH)
-	var ear_mesh := build_ear()
+	var ear_mesh := build_ear(lite)
 	ear_mesh.surface_set_material(1, fold_mat)
 	for i in 2:
 		var joint := Node3D.new()
@@ -95,6 +108,24 @@ static func _mesh(parent: Node3D, n: String, m: ArrayMesh, mat: Material) -> Mes
 	EcoShadows.cast(mi)
 	parent.add_child(mi)
 	return mi
+
+
+## «Экономно» — тело, мешок и уши пересобраны грубее (материалы те же, свечение складок — тот же fold_mat).
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	_swap(body, build_body(on))
+	_swap(sac, build_sac(on))
+	var ear_mesh := build_ear(on)
+	for joint in ears:
+		_swap(joint.get_child(0) as MeshInstance3D, ear_mesh)
+
+
+static func _swap(mi: MeshInstance3D, m: ArrayMesh) -> void:
+	for k in m.get_surface_count():
+		m.surface_set_material(k, mi.mesh.surface_get_material(k))
+	mi.mesh = m
 
 
 ## Поворот сустава уха: (поворот от носа, наклон вверх) → базис, где +Z — ось воронки.
@@ -131,12 +162,15 @@ func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3)
 
 
 ## Тело: две капсулы, голова, челюсть, лапы и хвост; бледные полосы поперёк спины.
-static func build_body() -> ArrayMesh:
+static func build_body(on_lite := false) -> ArrayMesh:
 	var st := KrabView._begin()
-	_blob(st, FRONT[0], FRONT[1], 14, 7, true)
-	_blob(st, BACK[0], BACK[1], 14, 7, true)
-	_blob(st, HEAD[0], HEAD[1], 10, 5, false)
-	_blob(st, JAW[0], JAW[1], 8, 4, false, SHADE)
+	var tr_ := LITE_TRUNK if on_lite else Vector2i(14, 7)
+	var hd := LITE_HEAD if on_lite else Vector2i(10, 5)
+	var jw := LITE_JAW if on_lite else Vector2i(8, 4)
+	_blob(st, FRONT[0], FRONT[1], tr_.x, tr_.y, true)
+	_blob(st, BACK[0], BACK[1], tr_.x, tr_.y, true)
+	_blob(st, HEAD[0], HEAD[1], hd.x, hd.y, false)
+	_blob(st, JAW[0], JAW[1], jw.x, jw.y, false, SHADE)
 	for l in LEGS:
 		var out := signf(l.x)
 		var tr := Transform3D(Basis(Vector3.BACK, out * 0.6), l)
@@ -147,43 +181,44 @@ static func build_body() -> ArrayMesh:
 
 
 ## Голосовой мешок (у начала своего узла — масштаб дыхания от середины).
-static func build_sac() -> ArrayMesh:
+static func build_sac(on_lite := false) -> ArrayMesh:
 	var st := KrabView._begin()
-	_blob(st, Vector3.ZERO, SAC_R, 10, 5, false, SKIN_LIT)
+	var sc := LITE_SAC if on_lite else Vector2i(10, 5)
+	_blob(st, Vector3.ZERO, SAC_R, sc.x, sc.y, false, SKIN_LIT)
 	return st.commit()
 
 
 ## Ухо вдоль +Z: стебель и воронка снаружи (поверхность 0, кожа), слуховые складки внутри (поверхность 1, свечение).
-static func build_ear() -> ArrayMesh:
+static func build_ear(on_lite := false) -> ArrayMesh:
+	var ear := LITE_EAR if on_lite else Vector2i(SEG, FUNNEL_RINGS)
 	var st := KrabView._begin()
 	GrotView._cone(st, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3.ZERO), 0.1, 0.13, STALK, 6, SKIN, true)
-	_funnel(st, MOUTH, SKIN, false)
+	_funnel(st, MOUTH, SKIN, false, ear.x, ear.y)
 	var m := st.commit()
 	st = KrabView._begin()
-	_funnel(st, MOUTH - FOLD_IN, FOLD.darkened(FOLD_DARK), true)
+	_funnel(st, MOUTH - FOLD_IN, FOLD.darkened(FOLD_DARK), true, ear.x, ear.y)
 	return st.commit(m)
 
 
 ## Воронка от STALK до STALK + FUNNEL, раструб NECK → mouth; inner — лицом к оси (видна изнутри), складки —
-## волной по краю.
-static func _funnel(st: SurfaceTool, mouth: float, col: Color, inner: bool) -> void:
-	var rings := 4
+## волной по краю; seg — сегментов по кругу, rings — колец вдоль оси.
+static func _funnel(st: SurfaceTool, mouth: float, col: Color, inner: bool, seg := SEG, rings := FUNNEL_RINGS) -> void:
 	var pts: Array = []
 	for i in rings + 1:
 		var u := float(i) / rings
 		var r := lerpf(NECK, mouth, u * u)
 		var row: Array[Vector3] = []
-		for j in SEG:
-			var a := TAU * float(j) / SEG
+		for j in seg:
+			var a := TAU * float(j) / seg
 			var fold := 1.0 + (0.08 * sin(a * 5.0) * u if inner else 0.0)
 			row.append(Vector3(cos(a) * r * fold, sin(a) * r * fold, STALK + FUNNEL * u))
 		pts.append(row)
 	for i in rings:
-		for j in SEG:
+		for j in seg:
 			var a: Vector3 = pts[i][j]
-			var b: Vector3 = pts[i][(j + 1) % SEG]
+			var b: Vector3 = pts[i][(j + 1) % seg]
 			var d: Vector3 = pts[i + 1][j]
-			var e: Vector3 = pts[i + 1][(j + 1) % SEG]
+			var e: Vector3 = pts[i + 1][(j + 1) % seg]
 			var mid := (a + b + d + e) * 0.25
 			var axis := Vector3(0, 0, mid.z)
 			# снаружи — лицом от оси (середина на оси), внутри — лицом к оси (середина далеко снаружи)

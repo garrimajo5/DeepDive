@@ -543,3 +543,59 @@ func test_view_six_draw_calls() -> void:
 	ok(not ev.visible, "далеко — спрятан")
 	view.queue_free()
 	await frames(1)
+
+
+func _echo_tris(ev: EchoView) -> Dictionary:
+	var out := {}
+	for mi in ev.find_children("*", "MeshInstance3D", true, false):
+		var m := (mi as MeshInstance3D).mesh
+		var n := 0
+		for s in m.get_surface_count():
+			n += m.surface_get_array_len(s) / 3
+		out[String(mi.get_path())] = n
+	return out
+
+
+func test_view_lite_coarser_body_sac_and_ears() -> void:
+	var w := _world()
+	var e: EcoEcho = _sys(w, EcoEcho)
+	var ev := EchoView.new(e)
+	tree.root.add_child(ev)
+	await frames(1)
+	var full := _echo_tris(ev)
+	ev.set_lite(true)
+	ok(ev.lite, "эхоловец — на «Экономно»")
+	var lite := _echo_tris(ev)
+	var sum_full := 0
+	var sum_lite := 0
+	for k in full:
+		ok(lite[k] < full[k], "%s грубее (%d → %d)" % [k, full[k], lite[k]])
+		sum_full += full[k]
+		sum_lite += lite[k]
+	ok(sum_lite * 10 <= sum_full * 6, "треугольников не больше 60 %% (%d → %d)" % [sum_full, sum_lite])
+	var calls := 0
+	for mi in ev.find_children("*", "MeshInstance3D", true, false):
+		var m := (mi as MeshInstance3D).mesh
+		calls += m.get_surface_count()
+		for s in m.get_surface_count():
+			ok(m.surface_get_material(s) != null, "материал на месте: %s/%d" % [mi.name, s])
+	eq(calls, 6, "вызовов столько же")
+	var ear := ev.ears[0].get_child(0) as MeshInstance3D
+	ok(ear.mesh.surface_get_material(1) == ev.fold_mat, "складки — тот же материал (свечение по сонару)")
+	var a_full := EchoView.build_body(false).get_aabb()
+	var a_lite := EchoView.build_body(true).get_aabb()
+	near(a_lite.size.z, a_full.size.z, 0.05, "длина тела та же")
+	near(a_lite.size.y, a_full.size.y, 0.05, "высота та же")
+	ev.set_lite(false)
+	eq(_echo_tris(ev), full, "назад — прежняя сетка")
+	ev.queue_free()
+	await frames(1)
+	var view := EcoView.new()
+	tree.root.add_child(view)
+	view.ground = Seabed.height
+	view.set_lite(true)
+	ok(view.echo_view.lite, "EcoView.set_lite — до эхоловца")
+	view.ground = Seabed.height   # сброс мира — вид тот же
+	ok(view.echo_view.lite, "сброс мира — снова «Экономно»")
+	view.queue_free()
+	await frames(1)
