@@ -810,7 +810,7 @@ func test_shell_shot_through_window() -> void:   # отчёт 2026-10-31-0330: �
 	var steps: Array = JSON.parse_string(raw)
 	var ship := {}
 	var look := {}
-	var fly := false
+	var fly := {}
 	var shot := false
 	for st in steps:
 		match st["do"]:
@@ -820,13 +820,15 @@ func test_shell_shot_through_window() -> void:   # отчёт 2026-10-31-0330: �
 			"goto":
 				look = st
 			"fly":
-				fly = st.get("on", true)
+				fly = st if st.get("on", true) else {}
 			"shot":
 				if st["name"] == "32h2-rakovina-okno":
 					shot = true
 					break
 	ok(shot, "в сценарии есть снимок Раковины в окно")
-	ok(not fly, "с мостика, не полётом")
+	# отчёт 2026-10-31-0430 (#1052): с роста игрока низ Раковины закрыт пультом пилота — глаз поднят над пультом
+	ok(not fly.is_empty() and float(fly["y"]) >= 2.0 and float(fly["pitch"]) < -10.0,
+			"глаз над пультом пилота, взгляд вниз в окно")
 	ok(not look.is_empty() and float(look["z"]) < -2.5 and absf(float(look["x"])) < 1.5
 			and is_zero_approx(float(look["yaw"])), "у носового окна, взгляд по носу")
 	var at := Vector2(float(ship["x"]), float(ship["z"]))
@@ -859,5 +861,7 @@ func test_crust_shot_beam_on_floor() -> void:   # отчёт 2026-10-31-0330: у
 	ok(at.distance_to(Vector2(float(p["x"]), float(p["z"]))) < 60.0, "у Спуска 10")
 	var floor_y := Seabed.height(at.x, at.y)
 	var eye_y := maxf(float(ship["y"]), floor_y + Helm.Ship.CLEARANCE) + float(fly["y"])   # корабль не ниже дна + зазор
-	ok(eye_y > floor_y + 5.0, "глаз над дном (%.1f > %.1f + 5) — пятно луча впереди, а не под носом" % [eye_y, floor_y])
+	ok(eye_y > floor_y + 2.5, "глаз над дном (%.1f > %.1f + 2,5) — пятно луча впереди, а не под носом" % [eye_y, floor_y])
+	# отчёт 2026-10-31-0430 (#1052): с 12 м пятна на дне в кадре не видно — глаз ближе ко дну
+	ok(eye_y < floor_y + 6.0, "глаз у дна (%.1f < %.1f + 6) — пятно луча яркое и крупное" % [eye_y, floor_y])
 	ok(float(fly["pitch"]) < -10.0, "взгляд вниз — на пятно луча")
