@@ -278,6 +278,7 @@ func set_lite(on: bool) -> void:
 	flower_view.set_lite(on)
 	bones_view.set_lite(on)
 	coral_view.set_lite(on)
+	vent_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -405,7 +406,7 @@ func _rebuild_vent() -> void:
 	if vent_view:
 		remove_child(vent_view)
 		vent_view.free()
-	vent_view = VentView.new(vent)
+	vent_view = VentView.new(vent, lite)
 	add_child(vent_view)
 
 
