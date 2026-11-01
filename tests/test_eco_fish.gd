@@ -59,6 +59,25 @@ func test_six_shoals_of_22_at_corals() -> void:
 			near(sh.home.y - Seabed.height(sh.home.x, sh.home.z), 3.5, 0.25, "дом стаи на 3,5 м над дном")
 
 
+
+## Б3 «плавность»: центр стаи после сброса — среднее рыбок, как в шаге; раньше стоял в доме, а рыбки — выше и
+## вразброс, и на первом шаге центр (цель сканера и сонара, испуг, охота) прыгал до 1,9 м.
+func test_center_is_mean_after_reset() -> void:
+	var w := _world()
+	var fish := _fish(w)
+	for sh in fish.shoals:
+		var sum := Vector3.ZERO
+		for f: EcoFish.Fish in sh.members:
+			sum += f.agent.p
+		near(sh.center.distance_to(sum / sh.members.size()), 0.0, 1e-3, "центр стаи %d — среднее рыбок" % sh.index)
+	w.reset()
+	var sh0 := fish.shoals[0]
+	var sum0 := Vector3.ZERO
+	for f: EcoFish.Fish in sh0.members:
+		sum0 += f.agent.p
+	near(sh0.center.distance_to(sum0 / sh0.members.size()), 0.0, 1e-3, "и после сброса мира")
+
+
 func test_shoal_roams_near_home_and_keeps_together() -> void:
 	var w := _world()
 	var fish := _fish(w)

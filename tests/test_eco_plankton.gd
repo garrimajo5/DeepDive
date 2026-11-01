@@ -93,6 +93,24 @@ func test_cloud_drifts_around_home() -> void:
 	near(EcoPlankton.cell_pos(cl, 5, t).distance_to(cl.c + cl.offsets[5]), 0.0, 0.5, "клетка покачивается рядом")
 
 
+
+## Б3 «плавность»: центр облака после сброса — уже по дрейфу; раньше стоял в доме и на первом шаге прыгал до 6 м.
+func test_no_jump_after_reset() -> void:
+	var w := _world()
+	var pl := _sys(w, EcoPlankton) as EcoPlankton
+	var dt := 1.0 / 30.0
+	var was: Array[Vector3] = []
+	for cl in pl.clouds:
+		was.append(cl.c)
+	var worst := 0.0
+	for i in 30 * 5:
+		w.step(dt)
+		for k in pl.clouds.size():
+			worst = maxf(worst, pl.clouds[k].c.distance_to(was[k]) / dt)
+			was[k] = pl.clouds[k].c
+	ok(worst < 1.0, "центр облака без рывков: %.2f м/с" % worst)
+
+
 # ---------- Корабль ----------
 
 func test_fast_ship_leaves_glowing_wake() -> void:

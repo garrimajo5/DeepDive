@@ -278,6 +278,13 @@ func reset(world: EcoWorld) -> void:
 			all.append(f)
 			sh.members.append(f)
 		sh.alive = count
+		# центр — среднее рыбок, как в шаге: рыбки встают выше и вразброс от дома, и раньше центр на первом шаге
+		# прыгал до 1,9 м (до 57 м/с) — с ним цель сканера и сонара, испуг и охота
+		var sum := Vector3.ZERO
+		for f: Fish in sh.members:
+			sum += f.agent.p
+		if count > 0:
+			sh.center = sum / count
 		sh.pos.resize(count)
 		sh.live.resize(count)
 		sh.sep.resize(count)
