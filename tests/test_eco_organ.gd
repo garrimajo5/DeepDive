@@ -266,3 +266,103 @@ func test_lite_kept_after_world_reset() -> void:
 	eq(ev.organ_view.tris, t, "и трубы грубые")
 	ev.set_lite(false)
 	ev.free()
+
+
+# ---------- «Дыхание» губки (Б3) ----------
+
+func test_view_breath_mesh_attributes() -> void:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	var organs := w.add(EcoOrgan.new()) as EcoOrgan
+	var ov := OrganView.new(organs)
+	var arrays := ov.mesh.surface_get_arrays(0)
+	var vs: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var uv2: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
+	eq(uv.size(), vs.size(), "UV у каждой вершины")
+	eq(uv2.size(), vs.size(), "UV2 у каждой вершины")
+	# первая труба первой губки: фаза — как у выдоха, подножие 0, устье и обод 1, UV2 — наружу от оси
+	var og := organs.organs[0]
+	var ph := EcoOrganDust.phase(EcoOrganDust.tube_id(og, 0))
+	var b := og.tube_base[0]
+	var per_tube := OrganView.SIDES * 2 + 2 + (OrganView.SIDES + 1) * (OrganView.RIM_SIDES + 1)
+	var foot := 0
+	var mouth := 0
+	for i in per_tube:
+		near(uv[i].x, ph, 1e-5, "фаза трубы в UV.x (%d)" % i)
+		ok(absf(uv2[i].length() - 1.0) < 1e-4, "UV2 — единичный (%d)" % i)
+		var out := Vector2(vs[i].x - b.x, vs[i].z - b.z)
+		ok(out.dot(uv2[i]) > 0.0, "UV2 смотрит наружу от оси (%d)" % i)
+		if uv[i].y == 0.0:
+			foot += 1
+			near(vs[i].y, b.y, 1e-4, "доля 0 — подножие")
+		else:
+			mouth += 1
+			near(uv[i].y, 1.0, 1e-6, "доля 1 — устье и обод")
+	eq(foot, OrganView.SIDES + 1, "у подножия — одно кольцо вершин")
+	var other := EcoOrganDust.phase(EcoOrganDust.tube_id(og, 1))
+	near(uv[per_tube].x, other, 1e-5, "у следующей трубы — своя фаза")
+	ok(absf(other - ph) > 1e-3, "трубы дышат вразнобой")
+	var mat := ov.mesh.surface_get_material(0) as ShaderMaterial
+	eq(mat.get_shader_parameter("breath"), Vector2(OrganView.BREATH, EcoOrganDust.RATE), "размах и такт — в шейдер")
+	ok(mat.shader.code.contains("uniform vec2 breath"), "дышит общий шейдер растений")
+	ov.set_lite(true)
+	var lite_uv: PackedVector2Array = ov.mesh.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
+	eq(lite_uv.size(), ov.verts.size(), "и на «Экономно» UV у каждой вершины")
+	ov.free()
+
+
+func test_breath_squeezes_at_puff() -> void:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	var organs := w.add(EcoOrgan.new()) as EcoOrgan
+	var og := organs.organs[0]
+	var ship := og.base + Vector3(3, 2, 0)
+	var dust := EcoOrganDust.new()
+	dust.update(organs, 10.0, ship)
+	var t := 10.0
+	var born := -1.0
+	while t < 20.0 and born < 0.0:
+		t += 0.05
+		dust.update(organs, t, ship)
+		for p in dust.dust.puffs:
+			if p.born > 10.0:
+				born = p.born
+	ok(born > 0.0, "корабль рядом — труба выдохнула")
+	# какая труба выдохнула: у её фазы в миг выдоха начало такта
+	var hit := -1
+	for k in EcoOrgan.TUBES:
+		var j := EcoOrganDust.tube_id(og, k)
+		if absf(EcoOrganDust.cycle_start(j, EcoOrganDust.cycle(j, born + 1e-4)) - born) < 1e-3:
+			hit = j
+	ok(hit >= 0, "облачко — в начале такта трубы")
+	var ph := EcoOrganDust.phase(hit)
+	near(OrganView.breath_offset(ph, 1.0, born), -OrganView.BREATH, 1e-4, "в миг выдоха устье сжато")
+	var half := 0.5 / EcoOrganDust.RATE
+	near(OrganView.breath_offset(ph, 1.0, born + half), OrganView.BREATH, 1e-4, "через полтакта — набрало воды")
+	near(OrganView.breath_offset(ph, 0.5, born), -OrganView.BREATH * 0.5, 1e-4, "к подножию — меньше")
+	near(OrganView.breath_offset(ph, 0.0, born + half), 0.0, 1e-6, "подножие стоит")
+	near(OrganView.breath_offset(ph, 1.0, born + half, 0.0), 0.0, 1e-6, "«Экономно» — не дышит")
+	# плавно: за кадр 1/30 с устье сдвигается меньше чем на 1 см
+	var worst := 0.0
+	for i in 200:
+		var a := born + i / 30.0
+		worst = maxf(worst, absf(OrganView.breath_offset(ph, 1.0, a + 1.0 / 30.0) - OrganView.breath_offset(ph, 1.0, a)))
+	ok(worst < 0.01, "без рывков: %.4f м за кадр" % worst)
+
+
+func test_view_sync_passes_world_time() -> void:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	var organs := w.add(EcoOrgan.new()) as EcoOrgan
+	var ov := OrganView.new(organs)
+	tree.root.add_child(ov)
+	await frames(1)
+	var ship := EcoLink.ShipState.new()
+	ship.pos = FAR
+	ov.sync(123.5, ship)
+	var mat := ov.mesh.surface_get_material(0) as ShaderMaterial
+	near(float(mat.get_shader_parameter("t")), 123.5, 1e-6, "время мира — в шейдер (у гостя — то же)")
+	ok(ov.extra_cull_margin >= OrganView.BREATH, "раздутые устья не обрезает рамка")
+	ov.queue_free()
+	await frames(1)
