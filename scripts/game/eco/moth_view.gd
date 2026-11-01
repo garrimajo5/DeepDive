@@ -8,7 +8,9 @@ extends Node3D
 ## (`EcoMoth.near`); дальше узел скрыт и ничего не пишет. «Экономно» — первые COUNT_LITE рачков. Слой отмели.
 ## Моль на стекле (#836, часть 4) — тот же MultiMesh: после рачков в воде идут сидящие на наружном стекле (до GLASS),
 ## место — из осей корабля в мир (`Swarm.glass_world`); корабль их не освещает изнутри — на светлой воде они тёмные
-## точки, в луче — блики.
+## точки, в луче — блики. Сидящий садится и слетает размером карточки (`Swarm.glass_k`), клетка атласа у места на
+## стекле своя и не прыгает, когда слетел сосед; корабль ушёл от колодца — рисуются только слетающие со стекла
+## (рамка — вокруг корабля).
 
 const ATLAS := "res://models/ledyanaya-mol-atlas.png"
 ## Карточка, м: рачок 5 мм с лапками; на экране телефона он был бы меньше пикселя, поэтому карточка крупнее
@@ -51,6 +53,11 @@ void fragment() {
 }
 """
 
+## Рамка роя у колодца: круг ACTIVE с запасом на корпус; вдали — SHIP_BOX вокруг корабля (слетают со стекла).
+const WELL_BOX := AABB(Vector3(EcoMoth.WELL.x - EcoMoth.ACTIVE - 20.0, -80.0, EcoMoth.WELL.y - EcoMoth.ACTIVE - 20.0),
+		Vector3((EcoMoth.ACTIVE + 20.0) * 2.0, 80.0, (EcoMoth.ACTIVE + 20.0) * 2.0))
+const SHIP_BOX := 30.0
+
 var moth: EcoMoth
 var cards: MultiMeshInstance3D
 var material: ShaderMaterial
@@ -74,9 +81,7 @@ func _init(system: EcoMoth) -> void:
 	mm.instance_count = moth.swarm.pos.size() + EcoMoth.GLASS
 	cards.multimesh = mm
 	# рой ходит у колодца, стекло — с кораблём ближе ACTIVE: рамка — круг ACTIVE с запасом на корпус
-	var w := EcoMoth.WELL
-	var r := EcoMoth.ACTIVE + 20.0
-	cards.custom_aabb = AABB(Vector3(w.x - r, -80.0, w.y - r), Vector3(r * 2.0, 80.0, r * 2.0))
+	cards.custom_aabb = WELL_BOX
 	add_child(cards)
 	buffer.resize(mm.instance_count * STRIDE)
 	for i in mm.instance_count:
@@ -98,30 +103,50 @@ static func build_mesh() -> QuadMesh:
 ## Рой у колодца — места в буфер; корабль далеко — узел скрыт.
 func sync(ship: EcoLink.ShipState) -> void:
 	var sw := moth.swarm
-	if not EcoMoth.near(ship):
+	var at_well := EcoMoth.near(ship)
+	if not at_well and sw.on_glass == 0:
 		visible = false
 		return
 	visible = true
 	var mm := cards.multimesh
 	if mm.instance_count != sw.pos.size() + EcoMoth.GLASS:
 		return
-	for i in sw.active:
-		_put(i, sw.pos[i])
-	var n := sw.active
+	var n := 0
+	if at_well:
+		cards.custom_aabb = WELL_BOX
+		for i in sw.active:
+			_put(i, sw.pos[i], 1.0, i % 4)
+		n = sw.active
+	else:
+		cards.custom_aabb = AABB(ship.pos - Vector3.ONE * SHIP_BOX, Vector3.ONE * SHIP_BOX * 2.0)
 	for k in sw.glass_max:
 		if sw.glass_life[k] > 0.0:
-			_put(n, sw.glass_world(ship, k))
+			_put(n, sw.glass_world(ship, k), sw.glass_k(k), (EcoMoth.COUNT + k) % 4)
 			n += 1
 	mm.buffer = buffer
 	mm.visible_instance_count = n
 	writes += 1
 
 
-func _put(i: int, p: Vector3) -> void:
+## Карточка i: место, доля размера s и клетка атласа cell.
+func _put(i: int, p: Vector3, s: float, cell: int) -> void:
 	var b := i * STRIDE
+	buffer[b] = s
+	buffer[b + 5] = s
+	buffer[b + 10] = s
+	buffer[b + CUSTOM] = float(cell)
 	buffer[b + 3] = p.x
 	buffer[b + 7] = p.y
 	buffer[b + 11] = p.z
+
+
+## Место, размер и клетка атласа карточки n из буфера.
+func scale_at(n: int) -> float:
+	return buffer[n * STRIDE]
+
+
+func cell_at(n: int) -> int:
+	return int(buffer[n * STRIDE + CUSTOM])
 
 
 ## Место рачка n из буфера.

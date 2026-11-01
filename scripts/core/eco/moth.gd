@@ -49,8 +49,13 @@ const WASH_K := 4.0
 const CRAWL := 0.02
 ## Сдвиг к краям окна: x = ±GLASS_HALF · |u|^EDGE_POW (u — равномерно в −1…1): меньше 1 — гуще у стоек.
 const EDGE_POW := 0.55
-## Дальше этого от середины колодца (м по горизонтали) рой стоит и не рисуется.
+## Дальше этого от середины колодца (м по горизонтали) рой стоит и не рисуется; моль на стекле тогда не пропадает
+## разом, а слетает, как без света (время сидения — DARK_K раз быстрее).
 const ACTIVE := 110.0
+## Садится и слетает без щелчка: карточка растёт за LAND_RISE с после посадки и тает за последние LEAVE с сидения
+## (`glass_k`; без света и на ходу эти секунды идут быстрее — слетает быстрее).
+const LAND_RISE := 0.4
+const LEAVE := 2.0
 
 ## Рой модуля мира и уровень «Экономно».
 var swarm: Swarm
@@ -66,7 +71,7 @@ func step(world: EcoWorld, dt: float) -> void:
 	if near(world.ship):
 		swarm.step(world.ship, dt)
 	elif swarm.on_glass > 0:
-		swarm.clear_glass()
+		swarm.step_glass(world.ship, dt, 0, true)
 
 
 ## «Экономно»: шагают и рисуются первые COUNT_LITE рачков (по облакам поровну — облако рачка i — i % 3).
@@ -95,6 +100,8 @@ class Swarm:
 	## первые glass_max; на стекле сейчас — on_glass; land — накопленная доля следующей посадки.
 	var glass := PackedVector3Array()
 	var glass_life := PackedFloat32Array()
+	## Сколько секунд рачок k уже сидит (для `glass_k`).
+	var glass_age := PackedFloat32Array()
 	var glass_max := GLASS
 	var on_glass := 0
 	var land := 0.0
@@ -117,6 +124,7 @@ class Swarm:
 		active = n
 		glass.resize(GLASS)
 		glass_life.resize(GLASS)
+		glass_age.resize(GLASS)
 		glass_max = GLASS_LITE if lite else GLASS
 
 	func set_lite(on: bool) -> void:
@@ -159,10 +167,11 @@ class Swarm:
 			pos[i] = p
 		step_glass(ship, dt, lit_n)
 
-	## Стекло на dt с: сидящие ползают и стареют (без света и на ходу — быстрее), из луча садятся новые.
-	func step_glass(ship: EcoLink.ShipState, dt: float, lit_n: int) -> void:
+	## Стекло на dt с: сидящие ползают и стареют (без света, на ходу и вдали от колодца `away` — быстрее), из луча
+	## садятся новые.
+	func step_glass(ship: EcoLink.ShipState, dt: float, lit_n: int, away := false) -> void:
 		var age := dt
-		if not ship.light_on:
+		if not ship.light_on or away:
 			age *= DARK_K
 		if absf(ship.speed) > WASH:
 			age *= WASH_K
@@ -170,6 +179,7 @@ class Swarm:
 			if glass_life[k] <= 0.0:
 				continue
 			glass_life[k] -= age
+			glass_age[k] += dt
 			if glass_life[k] <= 0.0:
 				glass_life[k] = 0.0
 				on_glass -= 1
@@ -177,7 +187,7 @@ class Swarm:
 			var a := rng.range_f(0.0, TAU)
 			var g := glass[k] + Vector3(cos(a), sin(a), 0.0) * CRAWL * dt
 			glass[k] = Vector3(clampf(g.x, -GLASS_HALF, GLASS_HALF), clampf(g.y, GLASS_Y.x, GLASS_Y.y), g.z)
-		if not ship.light_on or lit_n == 0:
+		if not ship.light_on or lit_n == 0 or away:
 			land = 0.0
 			return
 		land += minf(lit_n * LAND_PER, LAND_MAX) * dt
@@ -187,16 +197,16 @@ class Swarm:
 				if glass_life[k] <= 0.0:
 					glass[k] = EcoMoth.glass_spot(rng.range_f(-1.0, 1.0), rng.next())
 					glass_life[k] = rng.range_f(STAY.x, STAY.y)
+					glass_age[k] = 0.0
 					on_glass += 1
 					break
 		land = minf(land, 1.0)
 
-	## Стекло чистое (корабль ушёл от колодца).
-	func clear_glass() -> void:
-		for k in GLASS:
-			glass_life[k] = 0.0
-		on_glass = 0
-		land = 0.0
+	## Доля размера рачка k на стекле: 0 → 1 за LAND_RISE с после посадки, 1 → 0 за последние LEAVE с сидения.
+	func glass_k(k: int) -> float:
+		if glass_life[k] <= 0.0:
+			return 0.0
+		return smoothstep(0.0, LAND_RISE, glass_age[k]) * smoothstep(0.0, LEAVE, glass_life[k])
 
 	## Рачок на стекле k — в мире.
 	func glass_world(ship: EcoLink.ShipState, k: int) -> Vector3:
