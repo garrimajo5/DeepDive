@@ -14,6 +14,7 @@ extends RefCounted
 const STONE := """
 shader_type spatial;
 render_mode cull_back;
+""" + EcoGlow.GLSL + """
 uniform vec3 growth : source_color;
 uniform float fill = 0.3;
 uniform float glow_k = 1.4;
@@ -49,7 +50,7 @@ void fragment() {
 	ALBEDO = COLOR.rgb * (1.0 - lit * cut);
 	ROUGHNESS = rough;
 	SPECULAR = spec;
-	EMISSION = growth * lit * glow_k * mix(1.0, f, flicker) + COLOR.rgb * (1.0 - lit) * fill;
+	EMISSION = eco_bio(growth * lit * glow_k * mix(1.0, f, flicker)) + COLOR.rgb * (1.0 - lit) * fill;
 	if (caustic > 0.001) {
 		vec2 cp = w_pos.xz * caustic_scale;
 		float t = TIME * caustic_speed;
@@ -307,6 +308,7 @@ enum Plant { KELP, LEAF, FAN, ORGAN, TENTACLE }
 const PLANT := """
 shader_type spatial;
 render_mode cull_disabled;
+""" + EcoGlow.GLSL + """
 uniform int mode = 0;
 uniform vec3 paint : source_color = vec3(1.0);
 uniform vec3 edge : source_color = vec3(1.0);
@@ -394,7 +396,7 @@ void fragment() {
 	if (mode == 4) {
 		e += COLOR.rgb * mix(tip_glow.x, tip_glow.y, COLOR.a * COLOR.a);
 	}
-	EMISSION = e;
+	EMISSION = eco_bio(e);
 	// просвет: щупальце к кончику тоньше (EcoBack.through — двойник)
 	vec3 b = back * back_k;
 	if (mode == 4) {

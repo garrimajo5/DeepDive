@@ -145,6 +145,7 @@ var ground: Callable:
 		_rebuild_plankton()
 		EcoRim.apply(self)
 		EcoSurface.apply(self)
+		EcoGlow.apply(self)
 		dust_layer.gather(self)
 
 
@@ -242,6 +243,7 @@ func _init() -> void:
 	_rebuild_plankton()
 	EcoRim.apply(self)
 	EcoSurface.apply(self)
+	EcoGlow.apply(self)
 	add_child(dust_layer)
 	dust_layer.gather(self)
 
