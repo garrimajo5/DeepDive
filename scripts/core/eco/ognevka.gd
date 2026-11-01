@@ -27,6 +27,9 @@ const SCAN_R := 1.6
 ## Огнёвки догоняют своё место с долей dt·3 (lerp), кружат с частотой 0,8 рад/с.
 const FOLLOW := 3.0
 const SPIN := 0.8
+## Быстрее этого (м/с) рачок не плывёт: хищник встал на чистку в 8 м — доля lerp дала бы рывок 26 м/с за шаг
+## (Б3, `test_eco_reset_jumps`); теперь стая перебирается к нему и обратно к вершине за пару секунд.
+const DART := 4.0
 ## Нос рачка `Shrimp.dir` догоняет ход долей угла LOOK_K в секунду, не быстрее LOOK_MAX рад/с (`turn`, Б3):
 ## смена цели (станция → хищник на чистке → веерник) разворачивает рачка за ~0,4 с, а не за шаг; почти стоит —
 ## держит курс (раньше нос щёлкал на касательную круга).
@@ -132,7 +135,7 @@ func step(world: EcoWorld, dt: float) -> void:
 		var pr: EcoPred.Pred = ps.all[st.busy] if ps and st.busy >= 0 and st.busy < ps.all.size() else null
 		var goal := goal_of(s, k, t, pr)
 		var was := s.p
-		s.p = s.p.lerp(goal, minf(1.0, sdt * FOLLOW))
+		s.p = follow(s.p, goal, sdt)
 		s.dir = turn(s.dir, s.p - was, sdt)
 	fan_cd -= dt
 	if fans and fan_cd <= 0.0:
@@ -155,6 +158,12 @@ func goal_of(s: Shrimp, k: int, t: float, pr: EcoPred.Pred) -> Vector3:
 	if fan:  # половина кормится на веернике
 		return fan.top + Vector3(cos(a) * s.r * 0.8, s.h + sin(t * 3 + s.phase) * 0.3, sin(a) * s.r * 0.3)
 	return st.top + Vector3(cos(a) * s.r, s.h + sin(t * 3 + s.phase) * 0.15, sin(a) * s.r)
+
+
+## Шаг к цели на dt с: доля FOLLOW·dt пути, не дальше DART·dt.
+static func follow(from: Vector3, goal: Vector3, dt: float) -> Vector3:
+	var step := (goal - from) * minf(1.0, dt * FOLLOW)
+	return from + step.limit_length(DART * dt)
 
 
 ## Нос from → по ходу move: доля угла LOOK_K·dt, не больше LOOK_MAX·dt; хода нет — держит курс.
