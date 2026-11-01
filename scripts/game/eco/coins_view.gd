@@ -15,6 +15,11 @@ extends Node3D
 ## «Экономно» (Б6, `set_lite`): в каждой стайке рисуются две рыбки из трёх (каждой третьей по месту в стайке —
 ## LITE_SKIP — нет; 27 → 18): видимые — в начале буфера (`order`), `visible_instance_count` отрезает остальных. Мир
 ## (стайка, испуг, глазун, сонар, гость) считает всех; глазуны — все. Вызовов столько же.
+## Хвост монетника машет (Б3): хвост-конус и задний край диска гнутся вбок бегущей волной к кончику (±4 см на
+## кончике, 1,2 взмаха в секунду, у рыбки своя фаза — альфа цвета экземпляра). Рисует общий шейдер растений
+## `EcoShaders.PLANT` (режим `TENTACLE` без светящихся кончиков; волна — uniform `breath`, время мира `t`, в меше
+## UV.x — сдвиг фазы вдоль хвоста, UV.y — доля изгиба, UV2 — вбок), шейдеров не прибавилось; двойник на CPU —
+## `tail_offset`. «Экономно» — `sway_k` (EcoShaders.set_sway_lite).
 
 const COIN := Color("e8d48a")
 const FIN := Color("b59a50")
@@ -39,6 +44,13 @@ const SHADE_SPREAD := 0.15
 const HUE_SPREAD := 0.06
 const RATE_SPREAD := 0.25
 const ROCK_RATE := 2.0
+## Хвост: гнётся всё, что позади TAIL_FROM (м по оси меша, нос +Z), доля изгиба — квадрат пути к кончику TAIL_TIP;
+## размах на кончике TAIL_AMP (м), взмахов в секунду TAIL_RATE, длина бегущей волны TAIL_WAVE (м).
+const TAIL_FROM := -0.05
+const TAIL_TIP := -0.24
+const TAIL_AMP := 0.04
+const TAIL_RATE := 1.2
+const TAIL_WAVE := 0.5
 
 var coins: EcoCoins
 var fish: MultiMeshInstance3D
@@ -61,12 +73,15 @@ const LITE_SKIP := 3
 var lite := false
 ## Место монетника в буфере по его номеру (стайка · PER + место; только «Экономно», пусто — по номеру).
 var order := PackedInt32Array()
+## Материал монетников (общий шейдер растений): время мира для волны хвоста.
+var mat: ShaderMaterial
 
 
 func _init(system: EcoCoins, on_lite := false) -> void:
 	coins = system
 	name = "Монетники"
 	fish = EcoMM.instance(self, "Монетники", build_coin(), coins.coins.size(), true)
+	mat = fish.multimesh.mesh.surface_get_material(0)
 	_vary.resize(coins.coins.size() * 5)
 	for cn in coins.coins:
 		var tn := coin_tint(cn)
@@ -142,6 +157,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 	_sync_dust(t, ship, flow)
 	if lite and order.size() != coins.coins.size():
 		set_lite(true)   # мир пересобран — места заново
+	mat.set_shader_parameter("t", t)
 	coin_buffer.resize(coins.coins.size() * STRIDE_C)
 	for cn in coins.coins:
 		var q := cn.index * 5
@@ -150,7 +166,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 		var j := slot_of(cn.index) * STRIDE_C
 		EcoMM.put(coin_buffer, j, tr)
 		coin_buffer[j + 12] = _vary[q + 2]; coin_buffer[j + 13] = _vary[q + 3]; coin_buffer[j + 14] = _vary[q + 4]
-		coin_buffer[j + 15] = 1.0
+		coin_buffer[j + 15] = tail_phase(cn)
 	fish.multimesh.buffer = coin_buffer
 	body_buffer.resize(coins.glazuns.size() * STRIDE_C)
 	for gz in coins.glazuns:
@@ -185,7 +201,32 @@ static func coin_tint(cn: EcoCoins.Coin) -> Color:
 	return Color(k * (1.0 + h), k, k * (1.0 - h))
 
 
-## Монетник: диск радиусом 0,15 м толщиной 3,5 см боком (ось — x), хвост-конус назад (−Z), нос — +Z.
+## Фаза волны хвоста рыбки (доля оборота, 0…1): от её фазы покачивания — соседки машут вразнобой.
+static func tail_phase(cn: EcoCoins.Coin) -> float:
+	return fposmod(cn.phase / TAU, 1.0)
+
+
+## Доля изгиба точки формы с z: 0 — жёсткая передняя часть диска, 1 — кончик хвоста.
+static func tail_bend(z: float) -> float:
+	var s := clampf((TAIL_FROM - z) / (TAIL_FROM - TAIL_TIP), 0.0, 1.0)
+	return s * s
+
+
+## Сдвиг фазы волны вдоль хвоста (доля оборота) у точки с z: к кончику волна приходит позже.
+static func tail_lag(z: float) -> float:
+	return minf(0.0, z - TAIL_FROM) / TAIL_WAVE
+
+
+## Сдвиг вбок (м, по оси x формы) точки формы с z в момент t времени мира у рыбки с фазой a (tail_phase); sway_k —
+## 0 на «Экономно». Двойник вершинного шейдера (EcoShaders.PLANT, ветка breath).
+static func tail_offset(z: float, t: float, a: float, sway_k := 1.0) -> float:
+	var f := fposmod(t * TAIL_RATE + tail_lag(z) + a, 1.0)
+	return -TAIL_AMP * tail_bend(z) * cos(TAU * f) * sway_k
+
+
+## Монетник: диск радиусом 0,15 м толщиной 3,5 см боком (ось — x), хвост-конус назад (−Z), нос — +Z. Общий шейдер
+## растений (TENTACLE без светящихся кончиков и просвета); для волны хвоста — UV (сдвиг фазы, доля изгиба) и UV2
+## (вбок по x).
 static func build_coin() -> ArrayMesh:
 	var st := KrabView._begin()
 	EcoMM.ellipsoid(st, Vector3.ZERO, Vector3(0.0175, 0.15, 0.15), 12, 6, COIN)
@@ -198,7 +239,20 @@ static func build_coin() -> ArrayMesh:
 	for j in 4:
 		EcoMM.tri(st, ring[j], ring[(j + 1) % 4], tip, FIN, mid)
 		EcoMM.tri(st, ring[(j + 1) % 4], ring[j], Vector3(0, 0, -0.12), FIN, mid + Vector3(0, 0, -0.01))
-	return _commit(st, COIN_GLOW)
+	var arr := st.commit_to_arrays()
+	var vv: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var uv := PackedVector2Array()
+	var uv2 := PackedVector2Array()
+	for p in vv:
+		uv.append(Vector2(tail_lag(p.z), tail_bend(p.z)))
+		uv2.append(Vector2(1.0, 0.0))
+	arr[Mesh.ARRAY_TEX_UV] = uv
+	arr[Mesh.ARRAY_TEX_UV2] = uv2
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	m.surface_set_material(0, EcoShaders.plant(EcoShaders.Plant.TENTACLE, {"rough": 0.8, "spec": 0.5,
+		"glow": COIN_GLOW.srgb_to_linear(), "back": Vector3.ZERO, "breath": Vector2(TAIL_AMP, TAIL_RATE)}))
+	return m
 
 
 ## Альфа экземпляра глазуна — свет глаз: альфа² = (k + 0,25) / 1,25 по яркости EcoCoins.eye_k (в луче 1 —
@@ -250,14 +304,3 @@ static func _smooth_tri(st: SurfaceTool, a: Vector3, b: Vector3, d: Vector3, c: 
 		st.set_normal((p - c).normalized())
 		st.add_vertex(p)
 
-
-static func _commit(st: SurfaceTool, glow: Color) -> ArrayMesh:
-	var m := st.commit()
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.roughness = 0.8
-	if glow != Color.BLACK:
-		mat.emission_enabled = true
-		mat.emission = glow
-	m.surface_set_material(0, mat)
-	return m

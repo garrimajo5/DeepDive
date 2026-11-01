@@ -621,3 +621,67 @@ func test_view_lite_draws_two_of_three_per_school() -> void:
 		"и места переписаны")
 	view.queue_free()
 	await frames(1)
+
+
+## Хвост машет (Б3): хвост-конус гнётся вбок бегущей волной, передняя часть диска стоит; у рыбки своя фаза —
+## альфа цвета экземпляра; общий шейдер растений с волной `breath` и временем мира `t`.
+func test_tail_wave_mesh_and_shader() -> void:
+	var m := CoinsView.build_coin()
+	var arr := m.surface_get_arrays(0)
+	var vv: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	var uv2: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV2]
+	eq(uv.size(), vv.size(), "UV у каждой вершины")
+	eq(uv2.size(), vv.size(), "UV2 у каждой вершины")
+	var tip := 0.0
+	for i in vv.size():
+		near(uv[i].y, CoinsView.tail_bend(vv[i].z), 1e-6, "доля изгиба — по z")
+		near(uv[i].x, CoinsView.tail_lag(vv[i].z), 1e-6, "сдвиг фазы — по z")
+		eq(uv2[i], Vector2(1, 0), "гнётся вбок")
+		if vv[i].z > 0.0:
+			eq(uv[i].y, 0.0, "передняя половина диска жёсткая")
+		tip = maxf(tip, uv[i].y)
+	near(tip, 1.0, 1e-6, "кончик хвоста гнётся целиком")
+	var mat := m.surface_get_material(0) as ShaderMaterial
+	ok(mat != null and mat.shader.code.contains("UV.x + COLOR.a"), "общий шейдер растений, фаза — альфа цвета")
+	eq(mat.get_shader_parameter("breath"), Vector2(CoinsView.TAIL_AMP, CoinsView.TAIL_RATE), "размах и ритм — в шейдер")
+	eq(mat.get_shader_parameter("back"), Vector3.ZERO, "без просвета")
+	eq(mat.get_shader_parameter("tip_glow"), null, "без светящихся кончиков")
+
+
+func test_tail_offset_twin() -> void:
+	var z := CoinsView.TAIL_TIP
+	var t0 := -CoinsView.tail_lag(z) / CoinsView.TAIL_RATE
+	near(CoinsView.tail_offset(z, t0, 0.0), -CoinsView.TAIL_AMP, 1e-5, "кончик на полном размахе")
+	near(CoinsView.tail_offset(z, t0 + 0.5 / CoinsView.TAIL_RATE, 0.0), CoinsView.TAIL_AMP, 1e-5,
+		"через полвзмаха — в другую сторону")
+	near(CoinsView.tail_offset(0.1, 0.3, 0.2), 0.0, 1e-6, "нос стоит")
+	near(CoinsView.tail_offset(z, 0.0, 0.0, 0.0), 0.0, 1e-6, "«Экономно» — не машет")
+	ok(absf(CoinsView.tail_offset(-0.15, 0.0, 0.0)) < CoinsView.TAIL_AMP * 0.35, "задний край диска — слабее кончика")
+	# волна бежит к кончику: кончик повторяет середину хвоста с опозданием
+	var lag := (CoinsView.tail_lag(-0.12) - CoinsView.tail_lag(z)) / CoinsView.TAIL_RATE
+	ok(lag > 0.0, "к кончику волна приходит позже")
+	near(CoinsView.tail_offset(z, 0.7 + lag, 0.3) / CoinsView.tail_bend(z),
+		CoinsView.tail_offset(-0.12, 0.7, 0.3) / CoinsView.tail_bend(-0.12), 1e-5, "та же фаза — позже")
+	# за кадр 1/30 с кончик сдвигается плавно
+	var worst := 0.0
+	for k in 60:
+		var t := k / 30.0
+		worst = maxf(worst, absf(CoinsView.tail_offset(z, t + 1.0 / 30.0, 0.4) - CoinsView.tail_offset(z, t, 0.4)))
+	ok(worst < 0.012, "без рывков: %.4f м за кадр" % worst)
+
+
+func test_view_tail_phase_and_time() -> void:
+	var w := _world()
+	var c := _coins(w)
+	var v := CoinsView.new(c)
+	v.sync(3.5)
+	near(float(v.mat.get_shader_parameter("t")), 3.5, 1e-6, "время мира — в шейдер")
+	var phases := {}
+	for cn in c.coins:
+		var a := v.coin_buffer[v.slot_of(cn.index) * CoinsView.STRIDE_C + 15]
+		near(a, CoinsView.tail_phase(cn), 1e-6, "фаза рыбки — альфа экземпляра")
+		ok(a >= 0.0 and a < 1.0)
+		phases[snappedf(a, 0.05)] = true
+	ok(phases.size() >= 8, "машут вразнобой: %d разных фаз" % phases.size())
+	v.free()
