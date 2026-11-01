@@ -83,7 +83,7 @@ func frame() -> void:
 		if not main.camera.current:   # облёт с борта ждёт: прогрев смотрит глазами на мостике
 			main.camera.make_current()
 	for root: Node in [main.ship, main.ocean, main.silt_view, main.samples_view, main.vote_panel.get_parent(),
-			main.wreck_view]:
+			main.wreck_view, main.trip_view]:
 		_show(root)
 	var s := warm.stage()
 	if s >= 0:   # первый взгляд по слоям (#424): слои после s на этот кадр скрыты
