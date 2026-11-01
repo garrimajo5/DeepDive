@@ -334,13 +334,14 @@ uniform vec2 tip_grow = vec2(0.0);
 uniform vec3 back = vec3(0.0);
 uniform float back_k = 1.0;
 // дыхание труб органа (OrganView.breath_offset — двойник): x — размах у устья, м; y — тактов в секунду; t — время
-// мира; в меше UV.x — фаза трубы, UV.y — доля высоты, UV2 — наружу от оси; 0 — не дышит
+// мира; в меше UV.x — фаза трубы, UV.y — доля высоты, UV2 — наружу от оси; 0 — не дышит. Фаза ещё и + альфа цвета
+// (вершина × экземпляр): у органа 1 — без сдвига, у хвостов монетников — фаза рыбки (CoinsView.tail_offset)
 uniform vec2 breath = vec2(0.0);
 uniform float t = 0.0;
 """ + SWAY + """
 void vertex() {
 	if (breath.x > 0.0) {
-		float f = fract(t * breath.y + UV.x);
+		float f = fract(t * breath.y + UV.x + COLOR.a);
 		VERTEX.xz += UV2 * (-breath.x * UV.y * cos(6.2831853 * f) * sway_k);
 	}
 	if (tip_grow.y > 0.0 && COLOR.a > 0.9) {
