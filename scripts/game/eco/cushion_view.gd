@@ -9,6 +9,7 @@ extends Node3D
 ## «Экономно» (Б6, `set_lite`): рисуется половина пятен каждого облака чернил (`EcoMM.cloud_slot` — буфер вперемешку
 ## по подушкам, `visible_instance_count` отрезает вторую половину) — вдвое меньше крупных полупрозрачных пятен у
 ## камеры. Мир (облако, укрытие, сонар) не меняется.
+## У корабля подушки «дышат» — `breath` (Б3).
 
 ## Подушка: полусфера радиуса 1 м, сплюснутая по ширине и высоте (g.scale(1.1, 0.75, 1)).
 const SHAPE := Vector3(1.1, 0.75, 1.0)
@@ -19,6 +20,15 @@ const GLOW := Color("1a0a14")
 const INK_SIZE := 2.4
 const INK := Color(0.05, 0.04, 0.12)
 const INK_ALPHA := 0.85
+## «Дыхание» полипов (Б3): подушка медленно набирает воду и опадает — ширина ± BREATH_W, высота ± BREATH_H за
+## BREATH_T с (у каждой свой ритм ± BREATH_SPREAD и фаза — `EcoVary`, у гостя то же). Только ближе BREATH_FAR м к
+## кораблю (размах гаснет к краю плавно, дальше — ровно 1: буфер неподвижен и не грузится заново, #850); сжатая —
+## не дышит; «Экономно» (`EcoShaders.sway_lite`) — не дышит.
+const BREATH_W := 0.03
+const BREATH_H := 0.06
+const BREATH_T := 9.0
+const BREATH_SPREAD := 0.2
+const BREATH_FAR := 45.0
 ## Чисел на экземпляр: transform 3 × 4, у чернил ещё цвет (4).
 const STRIDE := 12
 const STRIDE_C := 16
@@ -130,7 +140,9 @@ func sync(t: float, ship_pos := Vector3.ZERO, info: EcoLink.ShipState = null, fl
 	_ink_shown.resize(cushions.cushions.size())
 	var ink_changed := fresh
 	for cu in cushions.cushions:
-		var b := Basis(Vector3.UP, float(cu.index)) * Basis.from_scale(EcoCushion.squash(cu))
+		var sc := EcoCushion.squash(cu) * breath(cu.index, cu.squeeze, t, ship_pos.distance_to(cu.base),
+				not EcoShaders.sway_lite)
+		var b := Basis(Vector3.UP, float(cu.index)) * Basis.from_scale(sc)
 		EcoMM.put(pad_buffer, cu.index * STRIDE, Transform3D(b, cu.base))
 		var inked := cu.inked()
 		if not inked and not fresh and _ink_shown[cu.index] == 0:
@@ -148,6 +160,19 @@ func sync(t: float, ship_pos := Vector3.ZERO, info: EcoLink.ShipState = null, fl
 	EcoMM.send(pads, pad_buffer)
 	if ink_changed:
 		ink.multimesh.buffer = ink_buffer
+
+
+## Множитель размера подушки index в момент t («дыхание» полипов): squeeze — насколько сжата (0…1), dist — до
+## корабля, м; live = false («Экономно») — ровно 1.
+static func breath(index: int, squeeze: float, t: float, dist: float, live := true) -> Vector3:
+	if not live or dist >= BREATH_FAR:
+		return Vector3.ONE
+	var k := (1.0 - clampf(squeeze, 0.0, 1.0)) * smoothstep(BREATH_FAR, BREATH_FAR * 0.7, dist)
+	if k <= 0.0:
+		return Vector3.ONE
+	var rate := TAU / (BREATH_T * EcoVary.spread(index, EcoVary.RATE, BREATH_SPREAD))
+	var s := sin(t * rate + EcoVary.unit(index, EcoVary.HUE) * TAU) * k
+	return Vector3(1.0 + BREATH_W * s, 1.0 + BREATH_H * s, 1.0 + BREATH_W * s)
 
 
 func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3) -> void:
