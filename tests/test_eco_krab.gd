@@ -360,6 +360,42 @@ func test_view_four_draws_spines_follow_meals() -> void:
 	await frames(1)
 
 
+## Вплетённая игла вырастает из панциря за SPINE_RISE, а не появляется за кадр (раньше кончик прыгал на 0,3 м).
+func test_view_new_spine_grows_smoothly() -> void:
+	var w := _world()
+	var kr := _krab(w)
+	var v := KrabView.new(kr)
+	tree.root.add_child(v)
+	await frames(1)
+	var tip := Vector3(0, 0.3, 0)
+	var n := EcoKrab.SPINES_START
+	kr.crab.spines = n + EcoKrab.SPINES_PER_MEAL
+	kr.dirty = true
+	var dt := 1.0 / 30.0
+	var t := 1.0
+	v.sync(t)
+	var last := KelpView.transform_at(v.spine_buffer, n, KelpView.STRIDE) * tip
+	var worst := 0.0
+	for i in int(KrabView.SPINE_RISE / dt) + 3:
+		t += dt
+		v.sync(t)
+		var p := KelpView.transform_at(v.spine_buffer, n, KelpView.STRIDE) * tip
+		worst = maxf(worst, p.distance_to(last))
+		last = p
+	ok(worst < 0.03, "кончик новой иглы за шаг %.3f м < 0,03" % worst)
+	near(v.spine_k[n], 1.0, 1e-6, "выросла во всю длину")
+	ok(last.is_equal_approx(KrabView.spine_transform(n) * tip), "кончик на месте целой иглы")
+	var writes := v.spine_writes
+	v.sync(t + 1.0)
+	eq(v.spine_writes, writes, "выросла — буфер больше не переписывается")
+	kr.crab.spines = n
+	v.sync(t + 0.5)
+	v.sync(t + 0.1)
+	eq(v.spine_k[n], 0.0, "время назад — сразу к цели")
+	v.queue_free()
+	await frames(1)
+
+
 func test_view_without_crab_hidden() -> void:
 	var w := EcoWorld.new()
 	var kr := w.add(EcoKrab.new(w.add(EcoKelp.new()) as EcoKelp)) as EcoKrab
