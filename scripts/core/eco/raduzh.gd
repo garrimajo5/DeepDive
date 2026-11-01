@@ -88,8 +88,9 @@ func reset(world: EcoWorld) -> void:
 		if world.ground.is_valid():
 			y = minf(float(world.ground.call(h.x, h.y)) + ABOVE, CEILING)
 		sw.home = Vector3(h.x, y, h.y)
-		sw.c = sw.home
 		sw.phase = rnd.range_f(0.0, 6.0)
+		# центр — сразу по дрейфу, как в шаге: раньше стоял в доме и на первом шаге прыгал до 10 м
+		sw.c = center(sw, world.time)
 		for k in PER_SWARM:
 			var m := Member.new()
 			var dir := Vector3(rnd.range_f(-1, 1), rnd.range_f(-0.6, 0.6), rnd.range_f(-1, 1))

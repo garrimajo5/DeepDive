@@ -85,6 +85,25 @@ func test_swarm_drifts_around_home() -> void:
 	ok(far > 3.0, "стая дрейфует: %.1f м" % far)
 
 
+## Б3 «плавность»: центр стаи после сброса — уже по дрейфу; раньше стоял в доме и на первом шаге прыгал до 10 м.
+func test_no_jump_after_reset() -> void:
+	var w := EcoWorld.new()
+	w.ground = Seabed.height
+	w.ship.pos = FAR
+	var r := w.add(EcoRaduzh.new()) as EcoRaduzh
+	var dt := 1.0 / 30.0
+	var was: Array[Vector3] = []
+	for sw in r.swarms:
+		was.append(sw.c)
+	var worst := 0.0
+	for i in 30 * 5:
+		w.step(dt)
+		for k in r.swarms.size():
+			worst = maxf(worst, r.swarms[k].c.distance_to(was[k]) / dt)
+			was[k] = r.swarms[k].c
+	ok(worst < 1.0, "центр стаи без рывков: %.2f м/с" % worst)
+
+
 # ---------- Вспышка ----------
 
 func test_flares_in_beam_and_fades() -> void:
