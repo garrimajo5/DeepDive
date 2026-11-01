@@ -602,3 +602,47 @@ func _arm_points(v: SkalnikView) -> Array[Vector3]:
 	for i in v.arms.multimesh.instance_count:
 		out.append(v.arms.multimesh.get_instance_transform(i).origin)
 	return out
+
+
+## Б3: добыча не прыгает — схваченный образец плывёт от захвата к мантии за CARRY_MOVE (раньше — с захвата сразу
+## на 1,2 м над скальником), у дома опускается к тайнику и к сбросу стоит там, где Samples.drop положит камешек
+## (раньше пропадал на 1,2 м выше и в 1,2 м вбок).
+func test_view_loot_moves_from_claw_and_lowers_to_stash() -> void:
+	var w := _world()
+	var s := _sk(w)
+	var sk := s.octo
+	var v := SkalnikView.new(s)
+	tree.root.add_child(v)
+	await frames(1)
+	_claw(w, Vector3(4, 0, 0))
+	w.run(2.0)
+	w.ship.claw_state = EcoLink.CLAW_BACK
+	w.step(0.05)
+	eq(sk.loot, 5, "сорвал")
+	v.sync(w.time, w.ship.pos, false, w.ship)
+	ok(v.carry.visible)
+	ok(v.carry.global_position.distance_to(w.ship.claw) < 0.3, "в миг захвата — у захвата лебёдки")
+	w.ship.claw_state = EcoLink.CLAW_IDLE
+	w.ship.claw_sample = -1
+	var last := v.carry.global_position
+	var jump := 0.0
+	var moved := false
+	for i in 200:
+		w.step(0.05)
+		w.take_link()
+		v.sync(w.time, w.ship.pos, false, w.ship)
+		if not v.carry.visible:
+			break
+		jump = maxf(jump, v.carry.global_position.distance_to(last))
+		last = v.carry.global_position
+		if w.time - 2.05 > SkalnikView.CARRY_MOVE and not moved and sk.pos.distance_to(sk.home) > SkalnikView.LOWER_R:
+			moved = true
+			ok(last.is_equal_approx(sk.pos + Vector3(0, SkalnikView.CARRY_UP, 0)), "доплыл — над мантией")
+	eq(sk.state, EcoSkalnik.State.ROCK, "унёс домой")
+	ok(not v.carry.visible, "сбросил — не несёт")
+	ok(jump < 0.5, "за шаг добыча не прыгает (%.2f м)" % jump)
+	var stash := EcoSkalnik.stash_point(sk.home, 5)
+	var drop_at := Vector3(stash.x, FLAT + SkalnikView.SAMPLE_LIFT, stash.z)
+	ok(last.distance_to(drop_at) < 0.15, "перед сбросом — у тайника, где ляжет камешек (%.2f м)" % last.distance_to(drop_at))
+	v.queue_free()
+	await frames(1)

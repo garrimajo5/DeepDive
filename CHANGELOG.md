@@ -3,6 +3,9 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-01
+- Добыча скальника не прыгает (поток Б, Б3 `docs/grafika-plan-eco.md`): схваченный образец за 0,4 с плывёт от
+  захвата лебёдки к мантии (`SkalnikView.CARRY_MOVE`), у дома опускается к тайнику и к сбросу стоит там, где ляжет
+  камешек (`LOWER_R`, `carry_at`). Тест — `test_eco_skalnik.test_view_loot_moves_from_claw_and_lowers_to_stash`.
 - `run-qa.ps1` не ставит старый APK, если скачивание из релиза упало (по issue #1125, отчёт #1124): прошлый файл
   удаляется до скачивания, ошибка — выход `DOWNLOAD_FAILED`/`NO_ASSET` до установки, `last-commit.txt` не меняется.
   Тест — `test_qa_tools.test_run_qa_stops_when_download_fails`.
