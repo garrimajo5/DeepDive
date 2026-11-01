@@ -235,8 +235,11 @@ func test_glass_lite_and_leaving_well() -> void:
 	w.run(20.0)
 	ok(m.swarm.on_glass <= EcoMoth.GLASS_LITE, "и не садятся сверх 16")
 	w.ship = _ship(Vector3(0, -20, 0), 0.0, true)
+	var was := m.swarm.on_glass
 	w.run(0.5)
-	eq(m.swarm.on_glass, 0, "ушли от колодца — стекло чистое")
+	ok(m.swarm.on_glass > 0, "ушли от колодца — не пропали разом: %d из %d" % [m.swarm.on_glass, was])
+	w.run(EcoMoth.STAY.y / EcoMoth.DARK_K + 1.0)
+	eq(m.swarm.on_glass, 0, "вдали слетели, как без света — стекло чистое")
 
 
 func _alive(sw: EcoMoth.Swarm) -> int:
@@ -263,5 +266,72 @@ func test_view_draws_glass_after_water() -> void:
 	while m.swarm.glass_life[k] <= 0.0:
 		k += 1
 	ok(v.origin_at(EcoMoth.COUNT).is_equal_approx(m.swarm.glass_world(ship, k)), "первая на стекле — сразу после воды")
+	v.queue_free()
+	await frames(1)
+
+
+## Садится и слетает без щелчка: доля размера сидящего за шаг 0,1 с меняется не больше чем на 0,5 — при посадке, на
+## свету, без света и когда корабль ушёл от колодца; только что севший — меньше половины.
+func test_glass_lands_and_leaves_smoothly() -> void:
+	var ship := _ship(Vector3(EcoMoth.WELL.x + 30.0, -6.0, EcoMoth.WELL.y), PI / 2.0, true)
+	var sw := EcoMoth.Swarm.new()
+	var prev := PackedFloat32Array()
+	prev.resize(EcoMoth.GLASS)
+	var worst := 0.0
+	var fresh := 0
+	var phases: Array = [[true, true, 60.0], [false, true, 10.0], [true, true, 20.0], [true, false, 10.0]]
+	for ph in phases:
+		ship.light_on = ph[0]
+		if not ph[1]:
+			ship.pos = Vector3(0, -20, 0)
+		var t := 0.0
+		while t < ph[2]:
+			if EcoMoth.near(ship):
+				sw.step(ship, 0.1)
+			else:
+				sw.step_glass(ship, 0.1, 0, true)
+			for k in EcoMoth.GLASS:
+				var g := sw.glass_k(k)
+				if prev[k] == 0.0 and g > 0.0:
+					fresh += 1
+					ok(g < 0.5, "только что сел — карточка ещё мала: %.2f" % g)
+				worst = maxf(worst, absf(g - prev[k]))
+				prev[k] = g
+			t += 0.1
+	ok(fresh > 20, "садились: %d" % fresh)
+	ok(worst <= 0.5, "размер за шаг меняется плавно: худший скачок %.2f" % worst)
+	eq(sw.on_glass, 0, "в конце слетели все")
+
+
+## Вид: клетка атласа у места на стекле своя — не прыгает, когда слетел сосед; вдали от колодца рисуются только
+## слетающие со стекла, рамка — вокруг корабля.
+func test_view_glass_cells_and_leaving() -> void:
+	var m := EcoMoth.new()
+	m.reset(null)
+	var v := MothView.new(m)
+	tree.root.add_child(v)
+	var ship := _ship(Vector3(EcoMoth.WELL.x + 30.0, -6.0, EcoMoth.WELL.y), PI / 2.0, true)
+	for i in 300:
+		m.swarm.step(ship, 0.1)
+	v.sync(ship)
+	var n := EcoMoth.COUNT
+	for k in EcoMoth.GLASS:
+		if m.swarm.glass_life[k] > 0.0:
+			eq(v.cell_at(n), (EcoMoth.COUNT + k) % 4, "клетка атласа — по месту на стекле")
+			near(v.scale_at(n), m.swarm.glass_k(k), 1e-5, "размер — доля посадки")
+			n += 1
+	eq(v.scale_at(0), 1.0, "рачок в воде — полный размер")
+	var far := _ship(Vector3(0, -20, 0), 0.0, true)
+	m.swarm.step_glass(far, 0.1, 0, true)
+	var left := m.swarm.on_glass
+	ok(left > 0, "ещё сидят")
+	v.sync(far)
+	ok(v.visible, "вдали виден, пока на стекле моль")
+	eq(v.cards.multimesh.visible_instance_count, left, "только моль на стекле")
+	ok(v.cards.custom_aabb.has_point(v.origin_at(0)), "рамка вокруг корабля")
+	for i in 100:
+		m.swarm.step_glass(far, 0.1, 0, true)
+	v.sync(far)
+	ok(not v.visible, "слетели — скрыт")
 	v.queue_free()
 	await frames(1)
