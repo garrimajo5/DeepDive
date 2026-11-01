@@ -196,6 +196,73 @@ func test_view_one_mesh_faces_out() -> void:
 	await frames(1)
 
 
+## «Экономно»: трубка вне разлома — через сечение, разлом, пластина, гнёзда, осыпь и обрастание — как в полном.
+func test_view_lite_coarser_same_material() -> void:
+	var sh := _shell(_flat)
+	var v := ShellView.new(sh)
+	var full := v.tris
+	var full_tube := v.tube_tris
+	var full_glow := v.glowing
+	var mat := v.mesh.surface_get_material(0)
+	var box_full := v.mesh.get_aabb()
+	v.set_lite(true)
+	ok(v.lite, "раковина — на «Экономно»")
+	ok(v.tris * 100 <= full * 80, "треугольников не больше 80 %% (%d → %d)" % [full, v.tris])
+	ok(v.tube_tris * 100 <= full_tube * 65, "трубка грубее: %d → %d" % [full_tube, v.tube_tris])
+	eq(v.tris - v.tube_tris, full - full_tube, "разлом, пластина, гнёзда, осыпь — те же")
+	eq(v.glowing, full_glow, "обрастание то же")
+	eq(v.mesh.get_surface_count(), 1, "вызов тот же")
+	ok(v.mesh.surface_get_material(0) == mat, "материал тот же")
+	var box := v.mesh.get_aabb()
+	ok(box.size.distance_to(box_full.size) < 0.05, "силуэт тот же: %s → %s" % [box_full.size, box.size])
+	# ряды стыкуются без щелей, разлом — по сечению, борозды остаются вершинами
+	var rows := v.rows()
+	eq(rows[0].x, 0, "с середины спирали")
+	eq(rows[-1].y, EcoShell.SECTIONS - 1, "до конца трубки")
+	var cuts := {}
+	for k in rows.size():
+		if k > 0:
+			eq(rows[k].x, rows[k - 1].y, "ряд %d стыкуется с прошлым" % k)
+		ok(rows[k].y - rows[k].x <= ShellView.LITE_STEP, "ряд не шире двух сечений")
+		if sh.in_break(rows[k].x):
+			eq(rows[k].y, rows[k].x + 1, "в разломе — каждое сечение")
+		cuts[rows[k].x] = true
+	for i in range(1, EcoShell.SECTIONS - 1):
+		if EcoShell.groove(i):
+			ok(cuts.has(i), "борозда %d — на стыке рядов" % i)
+	# грани по-прежнему наружу от оси ряда
+	var outward := 0
+	for t in v.tube_tris:
+		var a := v.verts[t * 3]
+		var c := (a + v.verts[t * 3 + 1] + v.verts[t * 3 + 2]) / 3.0
+		var cr := (v.verts[t * 3 + 1] - a).cross(v.verts[t * 3 + 2] - a)
+		var axis := sh.surface((sh.theta[v.tube_row[t]] + sh.theta[v.tube_end[t]]) * 0.5, 0.0, 0.0)
+		var out := c - sh.to_world(axis)
+		if cr.dot(out) < 0.0 and v.normals[t * 3].dot(out) > 0.0:
+			outward += 1
+	eq(outward, v.tube_tris, "лицевая сторона трубки — снаружи")
+	v.set_lite(false)
+	eq(v.tris, full, "назад — полный меш")
+	eq(v.glowing, full_glow, "и обрастание не задвоилось")
+	v.free()
+
+
+func test_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = _flat
+	var full := ev.shell_view.tris
+	ev.set_lite(true)
+	ok(ev.shell_view.lite and ev.shell_view.tris < full, "уровень дошёл до раковины: %d → %d" % [full, ev.shell_view.tris])
+	var lite_tris := ev.shell_view.tris
+	ev.ground = _flat
+	ok(ev.shell_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(ev.shell_view.tris, lite_tris, "и меш грубый")
+	ev.set_lite(false)
+	eq(ev.shell_view.tris, full, "назад — полный")
+	ev.free()
+	EcoShaders.set_sway_lite(false)
+
+
 func test_in_eco_view() -> void:
 	var ev := EcoView.new()
 	ev.ground = _flat

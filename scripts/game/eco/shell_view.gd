@@ -24,6 +24,9 @@ const KIN_W := 0.2
 const KIN_H := 0.16
 const BUD := 0.2
 const NEST_SIDES := 6
+## «Экономно» (ART-044): вне разлома ряд трубки — через сечение (два ряда в один; борозды — на сечениях, кратных
+## BAND, т. е. чётных, и остаются вершинами), разлом и всё остальное — как в полном.
+const LITE_STEP := 2
 
 var shell: EcoShell
 ## Вершины по треугольникам (мир, для тестов), нормали и число треугольников.
@@ -35,17 +38,43 @@ var glowing := 0
 ## Сколько треугольников у трубки (первые в verts) и ряд каждого — для проверки граней наружу.
 var tube_tris := 0
 var tube_row := PackedInt32Array()
+## Последнее сечение ряда (tube_row[t] … tube_end[t]) — на «Экономно» ряд шире одного сечения.
+var tube_end := PackedInt32Array()
+## На «Экономно» — трубка грубее (set_lite).
+var lite := false
 
 var _col := PackedColorArray()
+var _mat: Material
 
 
-func _init(system: EcoShell) -> void:
+func _init(system: EcoShell, on_lite := false) -> void:
 	shell = system
+	lite = on_lite
 	name = "Раковина древних"
 	layers = OceanView.LAYER_WORLD
 	EcoShadows.cast(self)
 	if shell.ring.is_empty():
 		return
+	_mat = EcoShaders.stone(GROWTH, FILL, ROUGH, SPEC)
+	_build()
+
+
+## «Экономно» — меш пересобран грубее (тот же материал); назад — полный.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	if not shell.ring.is_empty():
+		_build()
+
+
+func _build() -> void:
+	verts.clear()
+	normals.clear()
+	_col.clear()
+	tube_row.clear()
+	tube_end.clear()
+	glowing = 0
 	_tube()
 	tube_tris = verts.size() / 3
 	_lip()
@@ -55,7 +84,7 @@ func _init(system: EcoShell) -> void:
 	_rocks()
 	_tufts()
 	var m := EcoMM.tris(verts, normals, _col)
-	m.surface_set_material(0, EcoShaders.stone(GROWTH, FILL, ROUGH, SPEC))
+	m.surface_set_material(0, _mat)
 	mesh = m
 	tris = verts.size() / 3
 
@@ -64,11 +93,31 @@ static func _hash(i: int, j: int) -> float:
 	return fposmod(sin(float(i * 57 + j * 13) * 78.233) * 43758.5453, 1.0)
 
 
-## Трубка: SECTIONS − 1 рядов × SIDES граней, кроме снятых разломом; грань наружу от оси трубки.
+## Ряды трубки: пары сечений [i, i2]. Полный — каждое сечение; «Экономно» — вне разлома через LITE_STEP, ряд не
+## заходит в разлом и за конец трубки, начинается на чётном сечении — борозды остаются вершинами (сечения на стыках
+## общие — без щелей).
+func rows() -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	var last := EcoShell.SECTIONS - 1
+	var i := 0
+	while i < last:
+		var i2 := i + 1
+		if lite and not shell.in_break(i) and i % LITE_STEP == 0:
+			i2 = mini(i + LITE_STEP, last)
+			if shell.break_from > i and i2 > shell.break_from:
+				i2 = shell.break_from
+		out.append(Vector2i(i, i2))
+		i = i2
+	return out
+
+
+## Трубка: ряды × SIDES граней, кроме снятых разломом; грань наружу от оси трубки.
 func _tube() -> void:
 	var n := EcoShell.SECTIONS
-	for i in n - 1:
-		var axis := shell.surface((shell.theta[i] + shell.theta[i + 1]) * 0.5, 0.0, 0.0)
+	for r in rows():
+		var i := r.x
+		var i2 := r.y
+		var axis := shell.surface((shell.theta[i] + shell.theta[i2]) * 0.5, 0.0, 0.0)
 		var depth := sqrt(float(i) / (n - 2))
 		for j in EcoShell.SIDES:
 			if shell.broken(i, j):
@@ -76,8 +125,8 @@ func _tube() -> void:
 			var j2 := (j + 1) % EcoShell.SIDES
 			var a := shell.vertex(i, j)
 			var b := shell.vertex(i, j2)
-			var c := shell.vertex(i + 1, j2)
-			var d := shell.vertex(i + 1, j)
+			var c := shell.vertex(i2, j2)
+			var d := shell.vertex(i2, j)
 			var paint := MASS.lerp(MINERAL, 0.55 + 0.45 * depth).lerp(RELIEF_PAINT, _hash(i, j) * 0.45)
 			if EcoShell.groove(i):
 				paint = MASS.lerp(FURROW, 0.5 + 0.3 * _hash(j, i))
@@ -85,6 +134,7 @@ func _tube() -> void:
 			_quad(a, b, c, d, out, paint, 0.0)
 			while tube_row.size() < verts.size() / 3:
 				tube_row.append(i)
+				tube_end.append(i2)
 
 
 ## Изнанка рваного края: у оставшейся передней стенки разлома — тёмная внутренняя сторона.
