@@ -16,9 +16,13 @@ func test_gain_moves_shader_and_standard() -> void:
 	ok(not EcoGlow.track(dark), "без свечения — мимо")
 	var plain := ShaderMaterial.new()
 	plain.shader = EcoShaders.shader(EcoShaders.MIST)
-	ok(not EcoGlow.track(plain), "шейдер без uniform bio — мимо (часть 2)")
+	ok(not EcoGlow.track(plain), "прозрачное без свечения (MIST) — мимо")
+	var spot := ShaderMaterial.new()
+	spot.shader = EcoShaders.shader(EcoShaders.SPOT)
+	ok(EcoGlow.track(spot), "светлые точки (SPOT) — общий приём (часть 2)")
 	EcoGlow.set_gain(2.0)
 	near(float(own.get_shader_parameter("bio")), 2.0, 1e-6, "ручка — в uniform")
+	near(float(spot.get_shader_parameter("bio")), 2.0, 1e-6, "и у светлых точек")
 	near(std.emission_energy_multiplier, 3.0, 1e-6, "у модели — от своей энергии")
 	EcoGlow.track(std)
 	near(std.emission_energy_multiplier, 3.0, 1e-6, "повторный учёт не умножает дважды")
@@ -31,6 +35,8 @@ func test_gain_moves_shader_and_standard() -> void:
 func test_shader_code_routes_emission() -> void:
 	var codes := {"ледокрыл": RayView.SHADER, "светляки": FishView.shader_code(), "цветок": FlowerView.SHADER,
 		"огнецвет": CoralView.SHADER, "камень": EcoShaders.STONE, "растения": EcoShaders.PLANT}
+	var spot := EcoShaders.SPOT
+	ok(spot.contains("uniform float bio") and spot.contains("ALBEDO = eco_bio("), "светлые точки: цвет через eco_bio")
 	for who in codes:
 		var code: String = codes[who]
 		ok(code.contains("uniform float bio"), "%s: общий приём свечения" % who)
@@ -62,6 +68,14 @@ func test_scene_glow_is_one_knob() -> void:
 	EcoGlow.set_gain(1.5)
 	var ray: ShaderMaterial = ev.find_child("Ледокрылы", true, false).multimesh.mesh.surface_get_material(0)
 	near(float(ray.get_shader_parameter("bio")), 1.5, 1e-6, "ручка доходит до ледокрыла в мире")
+	var spots := 0   # часть 2: гребневики, планктон и споры — той же ручкой
+	for gi in ev.find_children("*", "GeometryInstance3D", true, false):
+		for m in EcoRim.materials(gi as GeometryInstance3D):
+			var sm := m as ShaderMaterial
+			if sm != null and sm.shader != null and sm.shader.code.contains("blend_add") and EcoGlow.has_uniform(sm):
+				near(float(sm.get_shader_parameter("bio")), 1.5, 1e-6, "%s: ручка у светлых точек" % gi.name)
+				spots += 1
+	ok(spots >= 2, "светлые точки в мире найдены (%d)" % spots)
 	EcoGlow.set_gain(EcoGlow.GAIN)
 	near(float(ray.get_shader_parameter("bio")), 1.0, 1e-6, "и обратно")
 	main.queue_free()
