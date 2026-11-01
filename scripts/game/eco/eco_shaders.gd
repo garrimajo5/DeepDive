@@ -90,6 +90,7 @@ void fragment() {
 const SPOT := """
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
+""" + EcoGlow.GLSL + """
 uniform float fade_far = 60.0;
 uniform float halo = 0.0;
 // cloud — облако планктона (PlanktonView): место клетки — дом + дрейф облака + покачивание по времени мира now,
@@ -136,7 +137,7 @@ void fragment() {
 	float d = clamp(length(UV - vec2(0.5)) * 2.0, 0.0, 1.0);
 	float spot = (1.0 - d) * (1.0 - d);
 	float ring = d < 0.35 ? mix(1.0, 0.45, d / 0.35) : mix(0.45, 0.0, (d - 0.35) / 0.65);
-	ALBEDO = tint * mix(spot, ring, halo);
+	ALBEDO = eco_bio(tint * mix(spot, ring, halo));   // точка — само свечение: общий приём (EcoGlow, Б1 часть 2)
 }
 """
 
