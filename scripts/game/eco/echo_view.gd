@@ -3,7 +3,7 @@ extends Node3D
 ## Эхоловец в сцене по концепту ART-007 (`docs/concept-art/eholovec.md`): приплюснутое тело около 3 м из двух
 ## капсул (кожа #344A59, бледные костяные полосы #B5B5A5 по спине — под рисунок рёбер), клин головы с нижней
 ## челюстью, четыре короткие лапы, короткий хвост — один меш; голосовой мешок под горлом — свой узел, медленно
-## дышит; два уха-воронки на стеблях — по узлу на ухо с двумя суставами (поворот и наклон, EcoEcho.Lurker.ears):
+## дышит, тело — в противофазе (воздух из тела в мешок, `body_breath`; раскрытый дышит чаще); два уха-воронки на стеблях — по узлу на ухо с двумя суставами (поворот и наклон, EcoEcho.Lurker.ears):
 ## кожа снаружи и слуховые складки внутри со слабым свечением #67DDEB — две поверхности. Раскрытый сонаром — складки
 ## пульсируют ярче. Шесть вызовов отрисовки, ≈ 1,3 тыс. треугольников; слой отмели (OceanView.LAYER_WORLD);
 ## дальше FAR от корабля не виден в мути. Материалы как у гротовика — новых шейдеров нет.
@@ -43,6 +43,14 @@ const SEG := 12
 ## Мешок дышит: ± SAC_BREATH за SAC_PERIOD с.
 const SAC_BREATH := 0.1
 const SAC_PERIOD := 6.0
+## «Дыхание» тела (Б3): воздух гонится из тела в мешок и обратно — тело в противофазе с мешком: высота ± BODY_H,
+## ширина ± BODY_W за тот же SAC_PERIOD; подошвы лап (низ тела, BODY_FOOT) стоят на дне. Раскрытый сонаром дышит
+## чаще — ритм ×ALARM_RATE, разгоняется и успокаивается за ~RATE_EASE с (фаза копится в sync, без скачка). Масштаб
+## узла — даром для кадра, поэтому и на «Экономно».
+const BODY_H := 0.035
+const BODY_W := 0.02
+const ALARM_RATE := 2.0
+const RATE_EASE := 1.5
 const FAR := 160.0
 ## Сетка на «Экономно»: капсулы тела, голова, челюсть, мешок (сегменты × кольца), уши — сегментов и колец воронки.
 const LITE_TRUNK := Vector2i(12, 4)
@@ -71,6 +79,12 @@ var dust_buffer: PackedFloat32Array:
 var _dust := EcoDustBuffer.new()
 ## На «Экономно» — грубее сетка (set_lite).
 var lite := false
+## Фаза дыхания (доля оборота SAC_PERIOD) и её скорость (1 — покой, ALARM_RATE — раскрыт); время прошлого sync.
+var breath_phase := 0.0
+var breath_rate := 1.0
+var _last_t := NAN
+## Низ тела (y подошв в осях узла) — от него тело дышит вверх.
+var body_foot := 0.0
 
 
 func _init(system: EcoEcho, on_lite := false) -> void:
@@ -82,6 +96,7 @@ func _init(system: EcoEcho, on_lite := false) -> void:
 	add_child(group)
 	var skin := GrotView._lit(Color.BLACK)
 	body = _mesh(group, "Тело", build_body(lite), skin)
+	body_foot = body.mesh.get_aabb().position.y
 	sac = _mesh(group, "Голосовой мешок", build_sac(lite), skin)
 	sac.position = SAC
 	fold_mat = GrotView._lit(FOLD * HUSH)
@@ -116,6 +131,7 @@ func set_lite(on: bool) -> void:
 		return
 	lite = on
 	_swap(body, build_body(on))
+	body_foot = body.mesh.get_aabb().position.y
 	_swap(sac, build_sac(on))
 	var ear_mesh := build_ear(on)
 	for joint in ears:
@@ -144,14 +160,38 @@ func sync(t: float, ship: Vector3, info: EcoLink.ShipState = null, flow := Vecto
 	group.transform = ec.xform()
 	for i in 2:
 		ears[i].basis = ear_basis(ec.ears[i])
-	var b := 1.0 + SAC_BREATH * sin(TAU * t / SAC_PERIOD)
+	_breathe(t, ec.is_revealed())
+	var s := sin(TAU * breath_phase)
+	var b := 1.0 + SAC_BREATH * s
 	sac.scale = Vector3(b, b, b)
+	var sc := body_breath(s)
+	body.scale = sc
+	body.position.y = body_foot * (1.0 - sc.y)
 	var k := HUSH
 	if ec.is_revealed():
 		k = HUSH + (LOUD - HUSH) * (0.5 + 0.5 * sin(t * 3.0))
 	if k != _glow:  # затаился — материал не трогаем каждый кадр
 		_glow = k
 		fold_mat.emission = FOLD * k
+
+
+## Фаза дыхания догоняет время мира t: ритм к 1 (затаился) или ALARM_RATE (раскрыт) за ~RATE_EASE с. Время назад
+## (сброс мира) или большой скачок — фаза по t заново, без накопления.
+func _breathe(t: float, alarmed: bool) -> void:
+	var dt := t - _last_t
+	_last_t = t
+	if is_nan(dt) or dt < 0.0 or dt > 1.0:
+		breath_rate = ALARM_RATE if alarmed else 1.0
+		breath_phase = fposmod(t / SAC_PERIOD, 1.0)
+		return
+	var want := ALARM_RATE if alarmed else 1.0
+	breath_rate = lerpf(breath_rate, want, 1.0 - exp(-dt / RATE_EASE))
+	breath_phase = fposmod(breath_phase + breath_rate * dt / SAC_PERIOD, 1.0)
+
+
+## Масштаб тела при дыхании: s — синус фазы мешка (−1…1); мешок надут (s > 0) — тело опало.
+static func body_breath(s: float) -> Vector3:
+	return Vector3(1.0 - BODY_W * s, 1.0 - BODY_H * s, 1.0)
 
 
 func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3) -> void:
