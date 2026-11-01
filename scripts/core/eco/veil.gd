@@ -107,6 +107,7 @@ func reset(world: EcoWorld) -> void:
 		vl.p = Vector3(x, top, z)
 		vl.home = vl.p
 		vl.ph = i * 2.1
+		vl.p.y = height(world, vl, world.time)
 		for k in SMALL:
 			vl.small_size.append(_rnd.range_f(0.5, 1.0))
 			vl.small_y.append(_rnd.range_f(-3.0, -1.0))
@@ -123,8 +124,15 @@ func step(world: EcoWorld, dt: float) -> void:
 	for vl in veils:
 		vl.p.x += sin(t * 0.031 + vl.ph) * DRIFT * dt + (vl.home.x - vl.p.x) * HOME_PULL * dt
 		vl.p.z += cos(t * 0.027 + vl.ph * 1.7) * DRIFT * dt + (vl.home.z - vl.p.z) * HOME_PULL * dt
-		var low := _floor(world, vl.p.x, vl.p.z, vl.home.y - LEN - FLOOR_PAD) + LEN + FLOOR_PAD
-		vl.p.y = minf(maxf(vl.home.y, low), CEIL_Y) + sin(t * 0.3 + vl.ph) * BOB
+		vl.p.y = height(world, vl, t)
+
+
+## Высота купола над (p.x, p.z) в момент t: своё место, но щупальца не ниже FLOOR_PAD над дном и купол не выше
+## CEIL_Y, плюс покачивание ± BOB. Сброс ставит ту же высоту — раньше купол стоял без покачивания и на первом шаге
+## прыгал до 1,2 м (у второй вуали — на 1 м за кадр).
+static func height(world: EcoWorld, vl: Veil, t: float) -> float:
+	var low := _floor(world, vl.p.x, vl.p.z, vl.home.y - LEN - FLOOR_PAD) + LEN + FLOOR_PAD
+	return minf(maxf(vl.home.y, low), CEIL_Y) + sin(t * 0.3 + vl.ph) * BOB
 
 
 ## Пульс купола в момент t: (наружный, внутренний) масштаб по ширине (по высоте — обратный).
