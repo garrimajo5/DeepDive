@@ -63,6 +63,25 @@ func _run_until_latched(w: EcoWorld, limit := 60.0) -> bool:
 
 # ---------- Расстановка ----------
 
+## Б3 «плавность»: после сброса голова и звенья уже там, где их держит шаг в логове, — раньше на первом шаге голова
+## прыгала на 0,3 м (9 м/с), звенья доезжали за SETTLE. Спрятанный стеклоуст качается не быстрее 0,6 м/с.
+func test_no_jump_after_reset() -> void:
+	var w := _world()
+	var e := _eels(w).eels[0]
+	var dt := 1.0 / 30.0
+	var head := e.agent.p
+	var segs := e.segs.duplicate()
+	var worst := 0.0
+	for i in 30 * 5:
+		w.step(dt)
+		worst = maxf(worst, e.agent.p.distance_to(head) / dt)
+		for k in EcoEel.SEGS:
+			worst = maxf(worst, e.segs[k].distance_to(segs[k]) / dt)
+		head = e.agent.p
+		segs = e.segs.duplicate()
+	ok(worst < 0.6, "в логове без рывков: %.2f м/с" % worst)
+
+
 func test_lair_on_ground() -> void:
 	var w := EcoWorld.new()
 	w.ground = Seabed.height

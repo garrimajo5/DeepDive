@@ -180,12 +180,18 @@ func reset(world: EcoWorld) -> void:
 			var c := back + side * r.x + Vector3(0, r.y, 0)
 			e.rocks.append(Vector4(c.x, c.y, c.z, r.z))
 		e.cd = _rnd.range_f(10, 25)
-		e.agent = world.spawn(ID, e.lair)
+		e.agent = world.spawn(ID, hide_point(e, world.time))
 		e.agent.set_state(EcoAgent.State.HIDE)
 		e.segs.resize(SEGS)
 		for k in SEGS:
-			e.segs[k] = e.lair - e.out * (k * SEG_HIDE)
+			e.segs[k] = e.agent.p - e.out * ((k + 0.5) * SEG_HIDE)
 		eels.append(e)
+
+
+## Голова в логове в момент t: выглядывает из расщелины на 0,3 ± 0,15 м. Сброс ставит голову и звенья туда же, где
+## их держит шаг, — раньше на первом шаге голова прыгала на 0,3 м (9 м/с), а звенья доезжали за `SETTLE`.
+static func hide_point(e: Eel, t: float) -> Vector3:
+	return e.lair + e.out * (0.3 + sin(t * 0.8 + e.index) * 0.15)
 
 
 ## Нос корабля для стеклоуста (S.front) в мире.
@@ -222,7 +228,7 @@ func _update(world: EcoWorld, e: Eel, dt: float, t: float) -> void:
 	var has_goal := false
 	match e.mode:
 		Mode.HIDE:
-			a.p = e.lair + e.out * (0.3 + sin(t * 0.8 + e.index) * 0.15)
+			a.p = hide_point(e, t)
 			if e.cd <= 0.0:
 				_look_around(world, e, dt)
 		Mode.STRIKE:
