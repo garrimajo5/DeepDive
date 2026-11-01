@@ -96,6 +96,46 @@ func test_no_jump_after_reset() -> void:
 	ok(worst < 6.0, "рачки без рывков после сброса: %.2f м/с" % worst)
 
 
+## Б3: хищник встал на чистку в 8 м от вершины — стая плывёт к нему не быстрее DART (раньше доля lerp давала
+## 26 м/с за шаг — нашла `test_eco_reset_jumps`), но всё равно облепляет его за пару секунд.
+func test_no_dart_to_pred_on_cleaning() -> void:
+	var top := Vector3(0, -36, 0)
+	var tops: Array[Vector3] = [top]
+	var w := _world(tops)
+	var ps := _sys(w, EcoPred) as EcoPred
+	var og := _sys(w, EcoOgnevka) as EcoOgnevka
+	_calm(ps)
+	_run(w, 1.0)
+	var pr := ps.all[0]
+	pr.leech = true
+	pr.hunger = 0.2
+	pr.agent.p = top + Vector3(8, 0, 0)
+	var dt := EcoWorld.MAX_STEP
+	var was: Array[Vector3] = []
+	for s in og.shrimp:
+		was.append(s.p)
+	var worst := 0.0
+	var t := 0.0
+	while t < 4.0:
+		w.step(dt)
+		t += dt
+		for k in og.shrimp.size():
+			worst = maxf(worst, og.shrimp[k].p.distance_to(was[k]) / dt)
+			was[k] = og.shrimp[k].p
+	eq((_sys(w, EcoLeech) as EcoLeech).stations[0].busy, pr.index, "хищник на чистке")
+	# рачок шагает через шаг мира: за свой шаг (2 dt) — не дальше DART · 2 dt
+	ok(worst <= EcoOgnevka.DART * 2.0 + 1e-3, "к хищнику без рывка: %.2f м/с за шаг мира" % worst)
+	for s in og.shrimp:
+		ok(s.p.distance_to(pr.agent.p) < 1.8, "облепили: %.2f м" % s.p.distance_to(pr.agent.p))
+
+
+func test_follow_capped() -> void:
+	var p := EcoOgnevka.follow(Vector3.ZERO, Vector3(10, 0, 0), 0.1)
+	near(p.x, EcoOgnevka.DART * 0.1, 1e-5, "далеко — не быстрее DART")
+	p = EcoOgnevka.follow(Vector3.ZERO, Vector3(0.5, 0, 0), 0.1)
+	near(p.x, 0.5 * 0.1 * EcoOgnevka.FOLLOW, 1e-5, "близко — прежняя доля lerp")
+
+
 ## Б3: нос рачка догоняет ход, а не прыгает за шаг; почти стоит — держит курс (раньше щёлкал на касательную).
 func test_nose_turns_smoothly() -> void:
 	var top := Vector3(0, -36, 0)
