@@ -268,6 +268,71 @@ func test_view_one_coral_mesh_and_one_fan_multimesh() -> void:
 
 # ---------- «Экономно» (Б6) ----------
 
+static func _in_tri(p: Vector2, a: Vector2, b: Vector2, c: Vector2) -> bool:
+	var d1 := (b - a).cross(p - a)
+	var d2 := (c - b).cross(p - b)
+	var d3 := (a - c).cross(p - c)
+	return not ((d1 < -1e-6 or d2 < -1e-6 or d3 < -1e-6) and (d1 > 1e-6 or d2 > 1e-6 or d3 > 1e-6))
+
+
+## Веерник — многоугольник по контуру кружева: всё, что рисует маска шейдера, внутри меша; углов прямоугольника нет.
+func test_fan_mesh_hugs_lace() -> void:
+	var tri := FanView.outline_tris()
+	ok(tri.size() % 3 == 0 and tri.size() / 3 <= 16, "треугольников немного: %d" % (tri.size() / 3))
+	var w := EcoFan.WIDTH * 0.5
+	var area := 0.0
+	for i in range(0, tri.size(), 3):
+		var a := tri[i]
+		var b := tri[i + 1]
+		var c := tri[i + 2]
+		var z := (b - a).cross(c - a)
+		ok(z < 0.0, "лицом к +Z: (b − a) × (c − a) смотрит в −Z, треугольник %d" % (i / 3))
+		area += -z * 0.5
+		for p in [a, b, c]:
+			ok(absf(p.x) <= w + 1e-4 and p.y >= -1e-4 and p.y <= EcoFan.HEIGHT + 1e-4, "в прямоугольнике веера")
+	ok(area < EcoFan.WIDTH * EcoFan.HEIGHT * 0.7, "площадь %.2f м² — заметно меньше прямоугольника" % area)
+	var lace := 0
+	var missed := 0
+	var step := 0.02
+	var y := step * 0.5
+	while y < EcoFan.HEIGHT:
+		var x := -w + step * 0.5
+		while x < w:
+			var p := Vector2(x, y)
+			if FanView.lace(p):
+				lace += 1
+				var inside := false
+				for i in range(0, tri.size(), 3):
+					if _in_tri(p, tri[i], tri[i + 1], tri[i + 2]):
+						inside = true
+						break
+				if not inside:
+					missed += 1
+			x += step
+		y += step
+	ok(lace > 1500, "маска рисует кружево: %d точек" % lace)
+	eq(missed, 0, "ни одна точка кружева не за краем меша")
+	ok(FanView.lace(Vector2(0, 0.1)), "ствол")
+	ok(not FanView.lace(Vector2(-w + 0.05, EcoFan.HEIGHT - 0.05)), "верхний угол прямоугольника пуст")
+
+
+func test_fan_mesh_uv_matches_quad() -> void:
+	var mesh := FanView.build_mesh()
+	var arr := mesh.surface_get_arrays(0)
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	eq(v.size(), FanView.outline_tris().size())
+	for i in v.size():
+		near(uv[i].x, v[i].x / EcoFan.WIDTH + 0.5, 1e-5, "UV.x поперёк, как у прямоугольника")
+		near(uv[i].y, 1.0 - v[i].y / EcoFan.HEIGHT, 1e-5, "UV.y от верха")
+		eq(v[i].z, 0.0)
+	var mat := mesh.surface_get_material(0) as ShaderMaterial
+	eq(mat.get_shader_parameter("mode"), int(EcoShaders.Plant.FAN), "тот же шейдер растений")
+	ok(EcoShaders.PLANT.contains("vec2(0.0, 0.35)") and EcoShaders.PLANT.contains("vec2(d.x / 0.55, d.y / 0.95)")
+		and EcoShaders.PLANT.contains("abs(a) < 1.3") and EcoShaders.PLANT.contains("step(el, 2.6)"),
+		"числа маски — как FanView.HUB/AXES/SPREAD/EDGE_EL")
+
+
 func test_coral_lite_form_coarser_same_layout() -> void:
 	var f := EcoCoralLook.full
 	var l := EcoCoralLook.lite
