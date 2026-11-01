@@ -600,3 +600,71 @@ func test_view_lite_coarser_body_sac_and_ears() -> void:
 	view.set_lite(false)   # общие выключатели мира (EcoShaders, EcoRim…) — назад для следующих тестов
 	view.queue_free()
 	await frames(1)
+
+
+func test_body_breathes_against_sac() -> void:
+	var w := _world()
+	var e: EcoEcho = _sys(w, EcoEcho)
+	var ev := EchoView.new(e)
+	tree.root.add_child(ev)
+	await frames(1)
+	var ec := e.echo
+	var ship := ec.p + Vector3(30, 10, 30)
+	var foot := ev.body_foot
+	ok(foot < -0.3, "низ тела — подошвы: %.2f" % foot)
+	var lo_h := 9.0
+	var hi_h := 0.0
+	var against := 0
+	var n := 0
+	for i in 240:
+		var t := i * 0.05
+		ev.sync(t, ship)
+		var sac := ev.sac.scale.y
+		var h := ev.body.scale.y
+		lo_h = minf(lo_h, h)
+		hi_h = maxf(hi_h, h)
+		# низ тела стоит на месте при любом вдохе
+		near(foot * ev.body.scale.y + ev.body.position.y, foot, 1e-5, "подошвы на дне (t %.2f)" % t)
+		if absf(sac - 1.0) > 0.03:
+			n += 1
+			if signf(sac - 1.0) != signf(h - 1.0):
+				against += 1
+	ok(hi_h - lo_h > EchoView.BODY_H * 1.6, "тело дышит: высота %.3f…%.3f" % [lo_h, hi_h])
+	ok(hi_h - lo_h < EchoView.BODY_H * 2.0 + 1e-4, "не больше ± BODY_H")
+	ok(n > 0 and against == n, "мешок надут — тело опало (%d из %d)" % [against, n])
+	# покой: фаза — по времени мира, как прежний мешок (у гостя то же)
+	near(ev.breath_phase, fposmod(239 * 0.05 / EchoView.SAC_PERIOD, 1.0), 1e-3, "покой — фаза по t")
+	ev.queue_free()
+	await frames(1)
+
+
+func test_revealed_breathes_faster_without_jump() -> void:
+	var w := _world()
+	var e: EcoEcho = _sys(w, EcoEcho)
+	var ev := EchoView.new(e)
+	tree.root.add_child(ev)
+	await frames(1)
+	var ec := e.echo
+	var ship := ec.p + Vector3(30, 10, 30)
+	for i in 20:
+		ev.sync(i * 0.05, ship)
+	near(ev.breath_rate, 1.0, 1e-6, "затаился — обычный ритм")
+	ec.revealed = EcoEcho.REVEAL_T
+	var prev := ev.sac.scale.y
+	var t := 1.0
+	var max_jump := 0.0
+	for i in 200:
+		t += 0.05
+		ev.sync(t, ship)
+		max_jump = maxf(max_jump, absf(ev.sac.scale.y - prev))
+		prev = ev.sac.scale.y
+	ok(ev.breath_rate > EchoView.ALARM_RATE * 0.95, "раскрыт — ритм ×%.1f" % ev.breath_rate)
+	# шаг 0,05 с при ритме ×2: мешок меняется не больше 2π·0,1·2·0,05/6 ≈ 0,011 за шаг — скачка фазы нет
+	ok(max_jump < 0.012, "без скачка: %.4f" % max_jump)
+	ec.revealed = 0.0
+	for i in 200:
+		t += 0.05
+		ev.sync(t, ship)
+	ok(ev.breath_rate < 1.05, "успокоился: ×%.2f" % ev.breath_rate)
+	ev.queue_free()
+	await frames(1)
