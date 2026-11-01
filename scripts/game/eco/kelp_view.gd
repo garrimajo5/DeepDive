@@ -8,7 +8,8 @@ extends Node3D
 ## цвет вершины в альбедо, кончики светятся по альфе вершины (`TIP_A`), тело — общим `glow`. Ленты переписываются, только
 ## когда ёж их объел или они отросли (EcoKelp.dirty). Ленты — общий шейдер растений (EcoShaders.PLANT). Муть у дна
 ## от ежей (EcoUrchinDust) — дочерний MultiMesh «Муть» в мировых координатах, общий шейдер EcoShaders.MIST (INK).
-## Стоит на слое отмели (OceanView.LAYER_WORLD).
+## Стоит на слое отмели (OceanView.LAYER_WORLD). Съеденный ёж сжимается за URCHIN_FADE, появившийся — вырастает за
+## URCHIN_RISE (доля urchin_k по времени мира), а не пропадает и не возникает за кадр.
 ## «Экономно» (Б6, `set_lite`): в каждой роще рисуется каждая вторая лента (34 → 17, LITE_STEP; ленты стоят по
 ## спирали подсолнуха — чётные покрывают рощу так же ровно): видимые — в начале буфера (`slot`),
 ## `visible_instance_count` отрезает остальных, скрытые не пересчитываются. Ежи, муть и мир (объедание, укрытие
@@ -32,6 +33,9 @@ const SPINE_TIP := Color(0.55, 0.95, 1.0)
 const TIP_A := 1.0
 ## Чисел на экземпляр: transform 3 × 4, у лент ещё цвет (4).
 const STRIDE := 12
+## За сколько секунд съеденный ёж сжимается в точку и появившийся вырастает во весь размер.
+const URCHIN_FADE := 0.5
+const URCHIN_RISE := 1.5
 const STRIDE_C := 16
 
 var kelp: EcoKelp
@@ -41,6 +45,11 @@ var bodies: MultiMeshInstance3D
 ## Последние буферы лент и ежей (для тестов).
 var stalk_buffer := PackedFloat32Array()
 var urchin_buffer := PackedFloat32Array()
+## Доля размера каждого ежа 0…1 (живой — к 1, съеденный — к 0) и последнее место, где он был виден.
+var urchin_k := PackedFloat32Array()
+var _urchin_at := PackedVector3Array()
+var _urchin_t := 0.0
+var _urchin_fresh := true
 ## Сколько раз переписан буфер лент (для тестов: без перемен — не переписывается).
 var stalk_writes := 0
 ## Муть от ежей и её MultiMesh; буфер мути — для тестов.
@@ -255,12 +264,38 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 		stalks.multimesh.buffer = stalk_buffer
 		stalk_writes += 1
 	urchin_buffer.resize(kelp.urchins.size() * STRIDE)
+	_grow_urchins(t)
 	for u in kelp.urchins:
-		var tr := Transform3D(EcoKelp.urchin_basis(u, t), u.pos) if u.alive \
-			else Transform3D(Basis.from_scale(Vector3.ZERO), Vector3(0, -999, 0))
+		var g := urchin_k[u.index]
+		var tr := Transform3D(Basis.from_scale(Vector3.ZERO), Vector3(0, -999, 0))
+		if g > 0.0:
+			tr = Transform3D(EcoKelp.urchin_basis(u, t) * Basis.from_scale(Vector3.ONE * smoothstep(0.0, 1.0, g)),
+					_urchin_at[u.index])
 		EcoMM.put(urchin_buffer, u.index * STRIDE, tr)
 	bodies.multimesh.buffer = urchin_buffer
 	_sync_dust(t, ship, flow)
+
+
+## Доли размера ежей к моменту t: живой растёт за URCHIN_RISE, съеденный сжимается за URCHIN_FADE на месте, где
+## его съели. Первый шаг и время назад — сразу к цели.
+func _grow_urchins(t: float) -> void:
+	var n := kelp.urchins.size()
+	if urchin_k.size() != n:
+		urchin_k.resize(n)
+		_urchin_at.resize(n)
+		_urchin_fresh = true
+	var dt := t - _urchin_t
+	_urchin_t = t
+	var snap := _urchin_fresh or dt < 0.0
+	_urchin_fresh = false
+	for u in kelp.urchins:
+		var i := u.index
+		var g := urchin_k[i]
+		if u.alive:
+			_urchin_at[i] = u.pos   # живой — где он есть; съеденный остаётся сжиматься там, где был
+			urchin_k[i] = 1.0 if snap else minf(1.0, g + dt / URCHIN_RISE)
+		else:
+			urchin_k[i] = 0.0 if snap else maxf(0.0, g - dt / URCHIN_FADE)
 
 
 func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3) -> void:

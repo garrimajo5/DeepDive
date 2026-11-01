@@ -341,6 +341,53 @@ func test_view_two_multimeshes() -> void:
 	await frames(1)
 
 
+## Съеденный ёж сжимается на месте за URCHIN_FADE, появившийся вырастает за URCHIN_RISE — не за кадр.
+func test_view_urchin_fades_and_grows() -> void:
+	var w := EcoWorld.new()
+	w.ship.pos = Vector3(500, -30, 500)
+	var k := w.add(EcoKelp.new(null, [Vector3(0, -40, 0)] as Array[Vector3])) as EcoKelp
+	w.reset()
+	var v := KelpView.new(k)
+	tree.root.add_child(v)
+	await frames(1)
+	var u := k.urchins[2]
+	var t := 1.0
+	v.sync(t)
+	var at := u.pos
+	var size0 := KelpView.transform_at(v.urchin_buffer, 2, KelpView.STRIDE).basis.x.length()
+	ok(size0 > 0.9, "живой ёж во весь размер")
+	k.kill(u, 100.0)
+	var dt := 1.0 / 30.0
+	var last := size0
+	var worst := 0.0
+	for i in int(KelpView.URCHIN_FADE / dt) + 2:
+		t += dt
+		v.sync(t)
+		var tr := KelpView.transform_at(v.urchin_buffer, 2, KelpView.STRIDE)
+		var sz := tr.basis.x.length()
+		worst = maxf(worst, last - sz)
+		last = sz
+		if sz > 0.0:
+			ok(tr.origin.is_equal_approx(at), "сжимается там, где съеден")
+	ok(worst < 0.15, "за шаг меньше на %.3f < 0,15" % worst)
+	near(last, 0.0, 1e-6, "съеденного не видно")
+	u.respawn = 0.0
+	for i in 8:
+		if not u.alive:
+			w.step(1e-4)
+	ok(u.alive, "появился снова")
+	t += dt
+	v.sync(t)
+	var grow := KelpView.transform_at(v.urchin_buffer, 2, KelpView.STRIDE)
+	ok(grow.basis.x.length() < 0.05, "появился крошечным: %.3f" % grow.basis.x.length())
+	ok(grow.origin.is_equal_approx(u.pos), "растёт на новом месте")
+	t += KelpView.URCHIN_RISE
+	v.sync(t)
+	ok(KelpView.transform_at(v.urchin_buffer, 2, KelpView.STRIDE).basis.x.length() > 0.9, "вырос во весь размер")
+	v.queue_free()
+	await frames(1)
+
+
 func test_eco_view_has_kelp() -> void:
 	var view := EcoView.new()
 	tree.root.add_child(view)
