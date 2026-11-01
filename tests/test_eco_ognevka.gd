@@ -71,7 +71,29 @@ func test_ten_shrimp_per_station() -> void:
 		near(s.dir.length(), 1.0, 1e-4)
 	w.reset()
 	eq(og.shrimp.size(), 20, "сброс мира — те же рачки")
-	eq(og.shrimp[0].p, tops[0], "снова на вершине")
+	ok(og.shrimp[0].p.distance_to(tops[0]) < 2.0, "снова над вершиной")
+
+
+## Б3 «плавность»: после сброса рачок уже там, куда его ведёт шаг (круг над вершиной, веерник); раньше все стояли
+## в вершине и на первом шаге прыгали к веернику до 1,5 м за кадр (44 м/с).
+func test_no_jump_after_reset() -> void:
+	var top := Vector3(0, -40 + EcoLeech.TOP, 0)
+	var tops: Array[Vector3] = [top]
+	var fan_spots: Array[Vector2] = [Vector2(7, 0)]
+	var w := _world(tops, fan_spots)
+	var og := _sys(w, EcoOgnevka) as EcoOgnevka
+	_calm(_sys(w, EcoPred) as EcoPred)
+	var dt := 1.0 / 30.0
+	var was: Array[Vector3] = []
+	for s in og.shrimp:
+		was.append(s.p)
+	var worst := 0.0
+	for i in 30 * 3:
+		w.step(dt)
+		for k in og.shrimp.size():
+			worst = maxf(worst, og.shrimp[k].p.distance_to(was[k]) / dt)
+			was[k] = og.shrimp[k].p
+	ok(worst < 6.0, "рачки без рывков после сброса: %.2f м/с" % worst)
 
 
 ## Б3: нос рачка догоняет ход, а не прыгает за шаг; почти стоит — держит курс (раньше щёлкал на касательную).
