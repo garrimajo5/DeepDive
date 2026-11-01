@@ -86,9 +86,11 @@ func reset(world: EcoWorld) -> void:
 			s.phase = _rnd.range_f(0, TAU)
 			s.r = _rnd.range_f(0.6, 1.6)
 			s.h = _rnd.range_f(-0.6, 0.8)
-			s.p = st.top
-			s.dir = _tangent(s.phase)
 			shrimp.append(s)
+			# с начала — там, куда его ведёт шаг (круг над вершиной или веерник); раньше все стояли в вершине и на
+			# первом шаге прыгали к веернику до 1,5 м за кадр (44 м/с)
+			s.p = goal_of(s, shrimp.size() - 1, world.time, null)
+			s.dir = _tangent(s.phase)
 
 
 ## Чётность рачков, шагнувших в последнем шаге (для вида: переписать только их).
@@ -127,16 +129,8 @@ func step(world: EcoWorld, dt: float) -> void:
 	for k in range(_half, shrimp.size(), 2):
 		var s := shrimp[k]
 		var st := leeches.stations[s.station]
-		var a := t * SPIN + s.phase
-		var goal: Vector3
 		var pr: EcoPred.Pred = ps.all[st.busy] if ps and st.busy >= 0 and st.busy < ps.all.size() else null
-		var fan := fan_at(st) if k % 2 == 1 else null
-		if pr:  # облепили хищника на чистке
-			goal = pr.agent.p + Vector3(cos(a * 2) * s.r * 0.5, 0.4 + s.h * 0.4, sin(a * 2) * s.r * 0.5)
-		elif fan:  # половина кормится на веернике
-			goal = fan.top + Vector3(cos(a) * s.r * 0.8, s.h + sin(t * 3 + s.phase) * 0.3, sin(a) * s.r * 0.3)
-		else:
-			goal = st.top + Vector3(cos(a) * s.r, s.h + sin(t * 3 + s.phase) * 0.15, sin(a) * s.r)
+		var goal := goal_of(s, k, t, pr)
 		var was := s.p
 		s.p = s.p.lerp(goal, minf(1.0, sdt * FOLLOW))
 		s.dir = turn(s.dir, s.p - was, sdt)
@@ -148,6 +142,19 @@ func step(world: EcoWorld, dt: float) -> void:
 				fan_cd = FAN_CD
 				world.emit(EcoFan.ID, "ognevka", f.top, _fan_text(world))
 				break
+
+
+## Куда тянется рачок k в момент t: облепил хищника pr на чистке, кормится на веернике (нечётные у пустой станции
+## с веерником) или кружит над вершиной. Общее для сброса и шага.
+func goal_of(s: Shrimp, k: int, t: float, pr: EcoPred.Pred) -> Vector3:
+	var st := leeches.stations[s.station]
+	var a := t * SPIN + s.phase
+	var fan := fan_at(st) if k % 2 == 1 else null
+	if pr:  # облепили хищника на чистке
+		return pr.agent.p + Vector3(cos(a * 2) * s.r * 0.5, 0.4 + s.h * 0.4, sin(a * 2) * s.r * 0.5)
+	if fan:  # половина кормится на веернике
+		return fan.top + Vector3(cos(a) * s.r * 0.8, s.h + sin(t * 3 + s.phase) * 0.3, sin(a) * s.r * 0.3)
+	return st.top + Vector3(cos(a) * s.r, s.h + sin(t * 3 + s.phase) * 0.15, sin(a) * s.r)
 
 
 ## Нос from → по ходу move: доля угла LOOK_K·dt, не больше LOOK_MAX·dt; хода нет — держит курс.
