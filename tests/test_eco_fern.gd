@@ -266,3 +266,43 @@ func test_view_two_multimeshes() -> void:
 	near(sh.origin.y, Seabed.height(sh.origin.x, sh.origin.z) + 0.02, 1e-3, "моллюск на дне")
 	view.queue_free()
 	await frames(1)
+
+
+func test_view_lite_coarser_same_material() -> void:   # Б6 «Экономно»
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var fv := view.fern_view
+	var leaf_mat := fv.leaves.multimesh.mesh.surface_get_material(0)
+	var shell_mat := (fv.shells.multimesh.mesh as SphereMesh).material
+	var leaf_box := fv.leaves.multimesh.mesh.get_aabb()
+	var leaf_full := fv.leaves.multimesh.mesh.get_faces().size() / 3
+	var shell_full := fv.shells.multimesh.mesh.get_faces().size() / 3
+	var dust := fv.dust_view
+	view.set_lite(true)
+	ok(fv.lite, "волнолист — на «Экономно»")
+	var leaf_lite := fv.leaves.multimesh.mesh.get_faces().size() / 3
+	var shell_lite := fv.shells.multimesh.mesh.get_faces().size() / 3
+	eq(leaf_full, 12, "полный лист")
+	eq(leaf_lite, FernView.LITE_SEGMENTS * 2, "лист: %d → %d треугольников" % [leaf_full, leaf_lite])
+	ok(shell_lite < shell_full * 0.6, "моллюск: %d → %d" % [shell_full, shell_lite])
+	ok(fv.leaves.multimesh.mesh.surface_get_material(0) == leaf_mat, "материал листа тот же (колыхание)")
+	ok((fv.shells.multimesh.mesh as SphereMesh).material == shell_mat, "материал моллюска тот же")
+	eq(fv.leaves.multimesh.instance_count, 8 * EcoFern.LEAVES, "все листья на месте")
+	ok(fv.dust_view == dust, "муть та же")
+	var lb := fv.leaves.multimesh.mesh.get_aabb()
+	near(lb.size.y, leaf_box.size.y, 1e-3, "длина листа та же")
+	near(lb.position.z, leaf_box.position.z, 1e-3, "кончик загнут так же")
+	# грубый лист тоже лицом к +Z (как полный)
+	var f := fv.leaves.multimesh.mesh.get_faces()
+	for i in range(0, f.size(), 3):
+		ok((f[i + 1] - f[i]).cross(f[i + 2] - f[i]).z <= 0.0, "треугольник %d лицом к +Z (у основания и кончика — вырожден)" % (i / 3))
+	# сброс мира уровень не теряет
+	view.ground = Seabed.height
+	ok(view.fern_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(view.fern_view.leaves.multimesh.mesh.get_faces().size() / 3, leaf_lite, "и лист грубый")
+	view.set_lite(false)
+	eq(view.fern_view.leaves.multimesh.mesh.get_faces().size() / 3, leaf_full, "назад — полный лист")
+	view.queue_free()
+	await frames(1)
