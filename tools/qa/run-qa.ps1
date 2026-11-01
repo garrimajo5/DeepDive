@@ -70,7 +70,15 @@ if ($Pr) {
   # эмулятору — x86_64-сборка (#844); в релизах до неё — один общий DeepDive.apk
   $asset = $rel.assets | Where-Object name -eq 'DeepDive-emulator.apk' | Select -First 1
   if (-not $asset) { $asset = $rel.assets | Where-Object name -eq 'DeepDive.apk' | Select -First 1 }
-  Invoke-WebRequest $asset.browser_download_url -OutFile $apk -Headers @{ 'User-Agent' = 'run-qa' }
+  if (-not $asset) { Write-Output "NO_ASSET ${head}: в релизе apk-latest нет APK (перезаливается?) — повторите позже"; exit 1 }
+  # Старый APK не ставим: релиз мог перезаливаться, и скачивание упадёт (BlobNotFound, #1125)
+  Remove-Item $apk -Force -ErrorAction SilentlyContinue
+  try {
+    Invoke-WebRequest $asset.browser_download_url -OutFile $apk -Headers @{ 'User-Agent' = 'run-qa' } -ErrorAction Stop
+  } catch {
+    Write-Output "DOWNLOAD_FAILED ${head}: $($_.Exception.Message) — повторите позже"; exit 1
+  }
+  if (-not (Test-Path $apk) -or (Get-Item $apk).Length -lt 1MB) { Write-Output "DOWNLOAD_FAILED ${head}: APK не скачан"; exit 1 }
 }
 
 if (-not ((& $adb devices) -match 'emulator-\d+\s+device')) {

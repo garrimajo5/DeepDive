@@ -68,3 +68,20 @@ func test_two_apks_phone_and_emulator() -> void:
 	ok(ci.contains("build/DeepDive.apk build/DeepDive-emulator.apk --clobber"), "в релиз — оба")
 	var run := FileAccess.get_file_as_string("res://tools/qa/run-qa.ps1")
 	ok(run.contains("'DeepDive-emulator.apk'"), "run-qa.ps1 ставит на эмулятор x86_64-сборку")
+
+
+## #1125: релиз перезаливался, скачивание упало (BlobNotFound), а скрипт поставил прошлый APK из папки
+## и записал прогон под новым коммитом. Теперь старый файл удаляется до скачивания, ошибка — выход до установки.
+func test_run_qa_stops_when_download_fails() -> void:
+	var ps := FileAccess.get_file_as_bytes(DIR.path_join("run-qa.ps1")).slice(3).get_string_from_utf8()
+	var dl := ps.find("Invoke-WebRequest $asset")
+	ok(dl > 0, "скачивание APK из релиза есть")
+	var rm := ps.rfind("Remove-Item $apk", dl)
+	ok(rm > 0 and rm < dl, "старый APK удаляется до скачивания")
+	var line_end := ps.find("\n", dl)
+	ok(ps.substr(dl, line_end - dl).contains("-ErrorAction Stop"), "ошибка скачивания ловится")
+	var fail := ps.find("DOWNLOAD_FAILED", dl)
+	var inst := ps.find("adb install")
+	ok(fail > 0 and fail < inst, "при ошибке — выход до установки")
+	ok(ps.find("exit 1", fail) < inst, "выход с кодом 1")
+	ok(ps.find("last-commit.txt\" $head") > inst, "коммит записывается только после установки")
