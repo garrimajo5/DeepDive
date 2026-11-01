@@ -300,6 +300,55 @@ func test_view_ribbon_on_infected() -> void:
 	view.free()
 
 
+func test_view_ribbon_grows_and_shrinks() -> void:
+	# Б3: заразился — лента вырастает за LEECH_RISE, огнёвки сняли — сжимается за LEECH_FADE, а не за кадр.
+	var w := _world()
+	w.reset()
+	var ps := _preds(w)
+	var v := LeechView.new(_leeches(w))
+	tree.root.add_child(v)
+	await frames(1)
+	var pr := ps.all[1]
+	var full := LeechView.leech_scale(pr.index)
+	var t := 1.0
+	v.sync(t)
+	near(v.placed[1].basis.get_scale().y, 0.0, 1e-6, "здоровый — без ленты")
+	pr.leech = true
+	var dt := 1.0 / 30.0
+	var last := 0.0
+	var worst := 0.0
+	for i in int(LeechView.LEECH_RISE / dt) + 2:
+		t += dt
+		v.sync(t)
+		var sz := v.placed[1].basis.get_scale().y
+		worst = maxf(worst, absf(sz - last))
+		last = sz
+		if i == 0:
+			ok(sz < full * 0.05, "заразился — лента крошечная: %.4f" % sz)
+	ok(worst < full * 0.1, "за шаг растёт на %.4f < 10 %%" % worst)
+	near(last, full, 1e-4, "выросла во весь размер")
+	pr.leech = false
+	worst = 0.0
+	for i in int(LeechView.LEECH_FADE / dt) + 2:
+		t += dt
+		v.sync(t)
+		var sz := v.placed[1].basis.get_scale().y
+		worst = maxf(worst, absf(sz - last))
+		last = sz
+		if i == 0:
+			ok(sz > full * 0.9, "сняли — сразу не пропала: %.4f" % sz)
+	ok(worst < full * 0.2, "за шаг сжимается на %.4f < 20 %%" % worst)
+	near(last, 0.0, 1e-6, "очищенного не видно")
+	pr.leech = true
+	v.sync(t - 5.0)
+	near(v.placed[1].basis.get_scale().y, full, 1e-4, "время назад — сразу к цели")
+	pr.leech = false
+	v.sync(t + 10.0)
+	near(v.placed[1].basis.get_scale().y, 0.0, 1e-6, "скачок времени — сразу к цели")
+	v.queue_free()
+	await frames(1)
+
+
 # ---------- «Экономно» (Б6) ----------
 
 func test_view_lite_coarser_same_material() -> void:
