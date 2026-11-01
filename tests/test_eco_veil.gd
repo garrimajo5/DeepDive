@@ -83,6 +83,26 @@ func test_drifts_near_home_above_floor() -> void:
 	ok(moved > 3.0, "дрейфует: %.1f м" % moved)
 
 
+## Б3 «плавность»: купол сразу после сброса стоит на высоте шага (с покачиванием) — раньше на первом шаге вторая
+## вуаль прыгала на 1 м за кадр (сброс ставил купол без покачивания). Дальше по высоте — не быстрее 1,5 м/с (покачивание и склон дна).
+func test_no_jump_after_reset() -> void:
+	var w := EcoWorld.new()
+	w.ground = Seabed.height
+	w.ship.pos = FAR
+	var v := w.add(EcoVeil.new()) as EcoVeil
+	var dt := 1.0 / 30.0
+	var prev: Array[Vector3] = []
+	for vl in v.veils:
+		prev.append(vl.p)
+	var worst := 0.0
+	for i in 30 * 60:
+		w.step(dt)
+		for k in v.veils.size():
+			worst = maxf(worst, absf(v.veils[k].p.y - prev[k].y) / dt)
+			prev[k] = v.veils[k].p
+	ok(worst < 1.5, "купол по высоте без рывков: %.2f м/с" % worst)
+
+
 func test_high_floor_lifts_veil() -> void:
 	var w := EcoWorld.new()
 	w.ground = func(_x: float, _z: float) -> float: return -28.0
