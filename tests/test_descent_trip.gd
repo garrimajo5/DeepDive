@@ -47,8 +47,12 @@ func test_scene_deeper_at_ten_returns_with_lore() -> void:
 	ok(main.trip_view.visible, "шторка на экране")
 	ok(not main.run.voting, "голосование закрыто")
 	ok(not main.lore.knows(LayerLore.DOWN), "знание — только после ухода")
+	var worst := 0   # #1090: камни и ракушки у 10 — заранее, по CELLS_STEP за шаг, а не весь радиус в кадре возвращения
 	for i in int((DescentTrip.SINK + DescentTrip.HOLD + DescentTrip.RISE) * 30.0) + 5:
+		var done := main.ocean.stones.stones.cells_done + main.ocean.shells.stones.cells_done
 		main.step(1.0 / 30.0)
+		worst = maxi(worst, main.ocean.stones.stones.cells_done + main.ocean.shells.stones.cells_done - done)
+	ok(worst <= 4 * SeabedStones.CELLS_STEP, "за шаг клеток не больше 4 × CELLS_STEP: %d" % worst)
 	ok(not main.trip.active and not main.trip_view.visible, "шторка убрана")
 	var back := DescentTrip.return_spot()
 	ok(Vector2(main.helm.pos.x, main.helm.pos.z).distance_to(Vector2(back.x, back.z)) < 3.0, "корабль — у 10")

@@ -2,6 +2,12 @@
 
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
+## 2026-11-01
+- Возвращение к 10 без провала кадра (поток А, по issue #1090): под шторкой «Кристальный лес» камни и ракушки у
+  `DescentTrip.return_spot` досчитываются заранее по `CELLS_STEP` клеток за шаг (`SeabedStones.prefetch`,
+  `OceanView.prefetch`), в кадре «arrive» — только пересборка списка (было ~170 мс разом). Тесты —
+  `test_seabed_stones.test_prefetch_before_jump`, `test_descent_trip.test_scene_deeper_at_ten_returns_with_lore`.
+
 ## 2026-10-31
 - Тест шага живого мира не краснеет от железа (поток Б, issue #1086): у машины две мерки — счёт (`_ref_ms`) и обход
   объектов EcoAgent (`_obj_ms`, `OBJ_PC_MS`), порог — по бо́льшей медленности (`slowness2`). На раннере CI, где объекты

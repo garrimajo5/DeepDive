@@ -45,6 +45,7 @@ var _cache := {}                 ## Vector2i → Array[Stone]
 var _center := Vector3(INF, INF, INF)
 var _dirty := true
 var _full_at := Vector2i(1 << 30, 0)   ## клетка центра, у которой все клетки радиуса уже посчитаны
+var _ahead := Vector2i(1 << 30, 0)     ## клетка будущего центра (`prefetch`): её клетки кэш не забывает
 
 
 func radius() -> float:
@@ -140,6 +141,30 @@ func update(at: Vector3) -> bool:
 	if c == _full_at and not moved and not _dirty:
 		return false   # стоим в той же клетке, всё посчитано — шаг почти даром
 	var n := int(ceilf(r / CELL)) + 1
+	var todo := _fill(at, budget)
+	_full_at = c if todo.size() <= budget else Vector2i(1 << 30, 0)
+	if not (moved or _dirty or not todo.is_empty()):
+		return false
+	_center = at
+	_dirty = false
+	_rebuild(c, n, r)
+	return true
+
+
+## Заранее досчитать клетки у будущего центра at, не больше budget за шаг (ближние первыми), список не трогать.
+## Перескок под шторкой (возвращение к 10, #1090): клетки в кэше к прыжку — `update` тогда только пересобирает
+## список, а не считает весь радиус в одном кадре. Клетки у этого места кэш не забывает (`_rebuild`). true — все
+## клетки радиуса у at уже в кэше.
+func prefetch(at: Vector3, budget := CELLS_STEP) -> bool:
+	_ahead = cell_of(at.x, at.z)
+	return _fill(at, budget).size() <= budget
+
+
+## Клетки радиуса у at, которых нет в кэше ([расстояние, ключ], ближние первыми); первые budget посчитать.
+func _fill(at: Vector3, budget: int) -> Array:
+	var r := radius()
+	var c := cell_of(at.x, at.z)
+	var n := int(ceilf(r / CELL)) + 1
 	var todo: Array = []
 	for dz in range(-n, n + 1):
 		for dx in range(-n, n + 1):
@@ -155,13 +180,7 @@ func update(at: Vector3) -> bool:
 			var key: Vector2i = todo[i][1]
 			_cache[key] = cell(key.x, key.y)
 			cells_done += 1
-	_full_at = c if todo.size() <= budget else Vector2i(1 << 30, 0)
-	if not (moved or _dirty or not todo.is_empty()):
-		return false
-	_center = at
-	_dirty = false
-	_rebuild(c, n, r)
-	return true
+	return todo
 
 
 ## Все ли клетки радиуса у центра посчитаны.
@@ -197,7 +216,8 @@ func _rebuild(c: Vector2i, n: int, r: float) -> void:
 	if _cache.size() > 4 * (2 * n + 1) * (2 * n + 1):
 		for key: Vector2i in _cache.keys():
 			if absi(key.x - c.x) > 2 * n or absi(key.y - c.y) > 2 * n:
-				_cache.erase(key)
+				if absi(key.x - _ahead.x) > n or absi(key.y - _ahead.y) > n:   # заготовка под прыжок (prefetch)
+					_cache.erase(key)
 	rev += 1
 
 
