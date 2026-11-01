@@ -289,6 +289,8 @@ func set_lite(on: bool) -> void:
 	moss_view.set_lite(on)
 	if well_view.moss_view:
 		well_view.moss_view.set_lite(on)
+	if drop_view:
+		drop_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -460,7 +462,7 @@ func _rebuild_drop() -> void:
 	if drop_view:
 		remove_child(drop_view)
 		drop_view.free()
-	drop_view = DropView.new(drop)
+	drop_view = DropView.new(drop, lite)
 	add_child(drop_view)
 
 

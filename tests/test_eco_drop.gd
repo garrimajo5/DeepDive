@@ -228,3 +228,52 @@ func test_in_eco_view() -> void:
 	ok(ev.drop != null and ev.drop_view != null, "край отмели в живом мире")
 	ok(ev.drop_view.tris > 1000, "меш собран по дну мира")
 	ev.free()
+
+
+func test_view_lite_coarser_same_material() -> void:
+	var d := _drop()
+	var v := DropView.new(d)
+	var full := v.tris
+	var full_wedge := v.wedge_tris
+	var full_glow := v.glowing
+	var mat := v.mesh.surface_get_material(0)
+	var box_full := v.mesh.get_aabb()
+	v.set_lite(true)
+	ok(v.lite, "край — на «Экономно»")
+	ok(v.tris * 10 <= full * 7, "треугольников не больше 70 %% (%d → %d)" % [full, v.tris])
+	ok(v.wedge_tris * 100 <= full_wedge * 65, "клинья грубее: %d → %d" % [full_wedge, v.wedge_tris])
+	eq(v.mesh.get_surface_count(), 1, "вызов тот же")
+	ok(v.mesh.surface_get_material(0) == mat, "материал тот же")
+	eq(v.glowing, full_glow, "обрастание то же")
+	var box := v.mesh.get_aabb()
+	ok(box.size.z > box_full.size.z * 0.97 and box.size.x > box_full.size.x * 0.9
+		and box.size.y > box_full.size.y * 0.9, "силуэт тот же: %s → %s" % [box_full.size, box.size])
+	# полки по-прежнему вверх, стенки — к глубине
+	var up := 0
+	var east := 0
+	for t in v.wedge_tris:
+		var n := v.normals[t * 3]
+		if n.y > 0.5:
+			up += 1
+		if n.x > 0.5:
+			east += 1
+	ok(up > v.wedge_tris / 5 and east > v.wedge_tris / 4, "грани наружу: %d вверх, %d к глубине" % [up, east])
+	v.set_lite(false)
+	eq(v.tris, full, "назад — полный меш")
+	eq(v.glowing, full_glow, "и обрастание не задвоилось")
+	v.free()
+
+
+func test_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = Seabed.height
+	var full := ev.drop_view.tris
+	ev.set_lite(true)
+	ok(ev.drop_view.lite and ev.drop_view.tris < full, "уровень дошёл до края: %d → %d" % [full, ev.drop_view.tris])
+	var lite_tris := ev.drop_view.tris
+	ev.ground = Seabed.height
+	ok(ev.drop_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(ev.drop_view.tris, lite_tris, "и меш грубый")
+	ev.set_lite(false)
+	ev.free()
+	EcoShaders.set_sway_lite(false)
