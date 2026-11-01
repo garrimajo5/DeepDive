@@ -280,6 +280,13 @@ func _make_shafts() -> MultiMeshInstance3D:
 	return node
 
 
+## Корабль скоро перескочит в at (возвращение к 10 под шторкой, #1090): камни и ракушки там досчитываются заранее,
+## по `SeabedStones.CELLS_STEP` клеток за шаг. true — всё в кэше.
+func prefetch(at: Vector3) -> bool:
+	var a := stones.stones.prefetch(at)
+	return shells.stones.prefetch(at) and a
+
+
 ## Где корабль: внутри корпуса шахты не светят и взвеси нет (вид с мостика и из отсеков).
 func set_ship(pos: Vector3, yaw: float) -> void:
 	stones.follow(pos)   # камни досчитываются и стоя: клетки радиуса — по нескольку за шаг

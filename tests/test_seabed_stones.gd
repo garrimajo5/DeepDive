@@ -155,3 +155,24 @@ func test_view_writes_on_change() -> void:
 	eq(view.layers, OceanView.LAYER_WORLD, "слой отмели")
 	view.queue_free()
 	await frames(1)
+
+
+func test_prefetch_before_jump() -> void:   # #1090: перескок под шторкой не считает радиус разом
+	var s := SeabedStones.new()
+	_filled(s, AT)
+	var to := AT + Vector3(-60.0, 0, 0)
+	var done := s.cells_done
+	ok(not s.prefetch(to), "первый шаг заготовки — радиус ещё не весь")
+	eq(s.cells_done - done, SeabedStones.CELLS_STEP, "заготовка — не больше CELLS_STEP клеток за шаг")
+	var rev := s.rev
+	var steps := 1
+	while not s.prefetch(to) and steps < 500:
+		s.update(AT)   # корабль ещё стоит у старта — его кэш не вытесняет заготовку
+		steps += 1
+	ok(steps > 10, "заготовка растянута на шаги: %d" % steps)
+	eq(s.rev, rev, "список камней заготовка не трогает")
+	ok(s.complete(to), "к прыжку все клетки у цели в кэше")
+	done = s.cells_done
+	s.update(to)
+	eq(s.cells_done, done, "прыжок — ни одной новой клетки")
+	_check_still(s, to)

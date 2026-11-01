@@ -1260,6 +1260,8 @@ func _on_hit(percent: int, kind: String) -> void:
 func _trip_step(dt: float) -> void:
 	if not trip.active:
 		return
+	if trip.t < DescentTrip.SINK + DescentTrip.HOLD * 0.5:   # и у гостя: его корабль приходит кадром хоста
+		ocean.prefetch(DescentTrip.return_spot())   # камни у 10 — заранее, не разом в кадре возвращения (#1090)
 	match trip.update(dt):
 		"arrive":
 			park_at(DescentTrip.return_spot())
