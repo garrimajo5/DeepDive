@@ -27,7 +27,7 @@ var column_verts := PackedVector3Array()
 var tris := 0
 
 
-func _init(system: EcoWell) -> void:
+func _init(system: EcoWell, on_lite := false) -> void:
 	well = system
 	name = "Световой колодец"
 	if well.moss == null:
@@ -37,7 +37,7 @@ func _init(system: EcoWell) -> void:
 	(column.mesh.surface_get_material(0) as ShaderMaterial).set_shader_parameter("strength", STRENGTH)
 	(column.mesh.surface_get_material(0) as ShaderMaterial).set_shader_parameter("near", EcoWell.NEAR)
 	tris = (crack_verts.size() + column_verts.size()) / 3
-	moss_view = MossView.new(well.moss, well.ground)
+	moss_view = MossView.new(well.moss, well.ground, on_lite)   # «Экономно» — пятна грубее (Б6)
 	moss_view.name = "Мох колодца"
 	add_child(moss_view)
 

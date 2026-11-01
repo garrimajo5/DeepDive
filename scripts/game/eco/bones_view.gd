@@ -60,7 +60,7 @@ func _init(system: EcoBones, on_lite := false) -> void:
 	_mat = EcoShaders.stone(GROWTH, FILL, ROUGH, SPEC)
 	_build()
 	if bones.moss:
-		moss_view = MossView.new(bones.moss, bones.ground)
+		moss_view = MossView.new(bones.moss, bones.ground, lite)
 		moss_view.name = "Мох на костях"
 		add_child(moss_view)
 
@@ -70,6 +70,8 @@ func set_lite(on: bool) -> void:
 	if lite == on:
 		return
 	lite = on
+	if moss_view:
+		moss_view.set_lite(on)
 	if _mat:
 		_build()
 
