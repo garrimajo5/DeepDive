@@ -70,14 +70,22 @@ func test_same_split_everywhere() -> void:
 
 
 func test_table_in_repo() -> void:
-	# таблица в репозитории читается и покрывает большую часть файлов (новые весят как средний)
+	# таблица в репозитории читается и покрывает 9 из 10 файлов (новые весят как средний — раскладка плывёт)
 	var t := TestShards.load_times()
 	var files: Array[String] = []
 	for f in DirAccess.get_files_at("res://tests"):
 		if f.begins_with("test_") and f.ends_with(".gd"):
 			files.append(f)
 	var known := files.filter(func(f): return t.has(f)).size()
-	ok(known >= files.size() * 0.8, "в tests/vremya.txt %d из %d файлов — обновить замером" % [known, files.size()])
+	ok(known >= files.size() * 0.9, "в tests/vremya.txt %d из %d файлов — обновить замером" % [known, files.size()])
+
+
+func test_table_has_no_gone_files() -> void:
+	# в таблице нет строк удалённых файлов: их время не ушло бы ни в одну часть, а среднее для новых — съехало
+	var t := TestShards.load_times()
+	ok(not t.is_empty(), "таблица читается")
+	for f in t:
+		ok(FileAccess.file_exists("res://tests/" + f), "%s есть в tests/ — иначе убрать из tests/vremya.txt" % f)
 
 
 func test_ci_runs_every_part() -> void:
