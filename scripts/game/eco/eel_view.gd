@@ -28,8 +28,12 @@ const EYE_R := 0.07
 const EYES: Array[Vector3] = [Vector3(-0.24, 0.2, 0.3), Vector3(0.24, 0.2, 0.3)]
 const RING_AT := Vector3(0, 0, 0.56)
 const RING_FLAT := Vector3(1.35, 1.35, 0.5)
-## На ходу тело виляет: смещение вбок sin(10t − 0,9k) · 0,05k.
+## На ходу тело виляет: смещение вбок sin(10t − 0,9k) · 0,05k · доля виляния.
 const WAG := 0.05
+## Доля виляния набирается и гаснет за WAG_RISE с (плавный шаг smoothstep): выплыл из логова, лёг на стекло —
+## хвост раскачивается или успокаивается. Раньше виляние включалось сразу — хвост (звено 13) прыгал вбок до 0,65 м
+## за кадр. Своё у каждого стеклоуста, считает вид по времени мира (у гостя — то же); время назад — сразу к цели.
+const WAG_RISE := 0.5
 const STRIDE := 12
 ## Запись экземпляра с цветом: трансформ и RGBA.
 const CSTRIDE := 16
@@ -38,6 +42,9 @@ const SHELL_SPHERE := Vector2i(10, 6)
 const SHELL_LITE := Vector2i(7, 4)
 
 var eels: EcoEel
+## Доля виляния каждого стеклоуста 0…1 и время мира прошлой расстановки (NAN — ещё не было).
+var wag_k := PackedFloat32Array()
+var _wag_t := NAN
 ## «Экономно» (set_lite).
 var lite := false
 var rocks: MultiMeshInstance3D
@@ -209,6 +216,20 @@ func _place_rocks() -> void:
 	EcoMM.fit([rocks], pts, ROCK_GROW)
 
 
+## Доля виляния через dt: к 1 на ходу, к 0 в логове и на стекле, не быстрее 1 / WAG_RISE в секунду (dt больше
+## 0,25 с — как 0,25: после паузы не прыгает); snap — сразу к цели (первая расстановка, сброс мира).
+static func wag_step(k: float, on: bool, dt: float, snap := false) -> float:
+	var goal := 1.0 if on else 0.0
+	if snap:
+		return goal
+	return move_toward(k, goal, minf(dt, 0.25) / WAG_RISE)
+
+
+## Размах виляния по доле: мягкий вход и выход (smoothstep).
+static func wag_amp(k: float) -> float:
+	return k * k * (3.0 - 2.0 * k)
+
+
 ## Запас рамки камней логов (#849): камни неподвижны, запас — их размер. Тело угря выплывает к кораблю —
 ## ему рамка на всю отмель.
 const ROCK_GROW := 3.0
@@ -224,9 +245,14 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground
 	ring_buffer.resize(n * STRIDE)
 	glint_buffer.resize(n * EYES.size() * CSTRIDE)
 	var lit := false
+	var dt := t - _wag_t
+	var snap := is_nan(_wag_t) or dt < 0.0 or wag_k.size() != n
+	_wag_t = t
+	wag_k.resize(n)
 	for e in eels.eels:
 		var segs := e.segs
-		var wag := e.moving()
+		wag_k[e.index] = wag_step(wag_k[e.index], e.moving(), dt, snap)
+		var amp := wag_amp(wag_k[e.index])
 		for k in range(1, EcoEel.SEGS):
 			var dir := segs[k - 1] - segs[k]
 			if dir.length_squared() < 1e-6:
@@ -234,7 +260,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground
 			dir = dir.normalized()
 			var side := Vector3(dir.z, 0.0, -dir.x)
 			side = side.normalized() if side.length_squared() > 1e-6 else Vector3.RIGHT
-			var pos := segs[k] + side * (sin(t * 10.0 - k * 0.9) * WAG * k if wag else 0.0)
+			var pos := segs[k] + side * (sin(t * 10.0 - k * 0.9) * WAG * k * amp)
 			var r := SEG_R * (1.0 - float(k) / EcoEel.SEGS * 0.7)
 			var b := _look(dir)
 			EcoMM.put(shell_buffer, (e.index * EcoEel.SEGS + k) * STRIDE,

@@ -672,3 +672,54 @@ func test_view_lite_coarse_shell() -> void:
 	eq(ev.shell.multimesh.mesh.get_faces().size(), full, "треугольников как было")
 	view.queue_free()
 	await frames(1)
+
+
+## Плавность (grafika-plan-eco, Б3): виляние набирается за WAG_RISE, а не включается сразу. Раньше в первый кадр хода
+## хвост (звено 13) прыгал вбок до 0,65 м.
+func test_wag_ramps_in_and_out() -> void:
+	var w := _world()
+	var eels := _eels(w)
+	var view := EelView.new(eels)
+	tree.root.add_child(view)
+	var e := eels.eels[0]
+	var k := EcoEel.SEGS - 1
+	# время, где волна на хвосте в полном размахе: sin(10t − 0,9k) = 1
+	var t0 := (PI / 2.0 + 0.9 * k) / 10.0 + TAU
+	e.mode = EcoEel.Mode.HIDE
+	view.sync(t0)
+	near(_tail_off(view, e), 0.0, 1e-4, "в логове хвост не виляет")
+	e.mode = EcoEel.Mode.STRIKE
+	var dt := 1.0 / 30.0
+	var t := t0
+	var prev := 0.0
+	var worst := 0.0
+	for i in 60:
+		t += dt
+		view.sync(t)
+		var amp := EelView.wag_amp(view.wag_k[0])
+		near(_tail_off(view, e), absf(sin(t * 10.0 - k * 0.9)) * EelView.WAG * k * amp, 1e-3, "хвост по доле виляния")
+		worst = maxf(worst, amp - prev)
+		prev = amp
+		if i == 0:
+			ok(_tail_off(view, e) < 0.02, "первый кадр хода — хвост почти на месте: %.3f м" % _tail_off(view, e))
+	ok(worst < 0.11, "размах растёт плавно: доля %.3f за кадр" % worst)
+	near(view.wag_k[0], 1.0, 1e-6, "за 2 с — полное виляние")
+	e.mode = EcoEel.Mode.LATCHED
+	t += dt
+	view.sync(t)
+	ok(view.wag_k[0] > 0.9, "лёг на стекло — виляние гаснет, а не обрывается: %.2f" % view.wag_k[0])
+	for i in 16:
+		t += dt
+		view.sync(t)
+	near(view.wag_k[0], 0.0, 1e-6, "за WAG_RISE погасло")
+	view.sync(t + 5.0)
+	near(view.wag_k[0], 0.0, 1e-6, "после паузы — без прыжка, на месте")
+	view.sync(0.0)
+	near(view.wag_k[0], 0.0, 1e-6, "время назад — сразу к цели")
+	near(EelView.wag_amp(0.5), 0.5, 1e-6, "середина — половина размаха")
+
+
+## Сдвиг вбок звена хвоста от его места в мире.
+func _tail_off(view: EelView, e: EcoEel.Eel) -> float:
+	var k := EcoEel.SEGS - 1
+	return EelView.transform_at(view.shell_buffer, e.index * EcoEel.SEGS + k).origin.distance_to(e.segs[k])
