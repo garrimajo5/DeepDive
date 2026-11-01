@@ -6,6 +6,8 @@ extends Node3D
 ## хищника): свой размер ленты, ритм изгиба и оттенок — цвет экземпляра. Облачка слизи на станции чистки
 ## (EcoLeechDust: огнёвки обирают жабры, паразит снят — клуб) — дочерний MultiMesh «Муть» в мировых координатах на
 ## общем шейдере EcoShaders.MIST (INK), +1 вызов.
+## «Экономно» (set_lite, Б6): лента — капсула 4 грани × 1 кольцо вместо 6 × 2 (`LITE_SIDES`/`LITE_RINGS`), тот же
+## материал, размер и место; облачка слизи гасит общий EcoGrazerDust.lite.
 
 ## Лента: капсула 0,2 м длиной и 0,06 м шириной, сплющена к боку хищника; наклонена вдоль жаберной щели.
 const LENGTH := 0.2
@@ -20,9 +22,18 @@ const COLOR := Color("7a4636")
 const SIZE_SPREAD := 0.15
 const RATE_SPREAD := 0.25
 const SHADE_SPREAD := 0.15
+## Сечение капсулы: полное и на «Экономно».
+const SIDES := 6
+const RINGS := 2
+const LITE_SIDES := 4
+const LITE_RINGS := 1
 
 var leeches: EcoLeech
 var mesh: MultiMeshInstance3D
+## «Экономно» — лента грубее (Б6).
+var lite := false
+## Треугольников в одной ленте (для тестов и замера).
+var tris := 0
 ## Последние места лент (по хищнику; для тестов — сервер отрисовки без экрана экземпляры не хранит).
 var placed: Array[Transform3D] = []
 var _buffer := PackedFloat32Array()
@@ -38,8 +49,9 @@ var _dust := EcoDustBuffer.new()
 const STRIDE := 16
 
 
-func _init(system: EcoLeech) -> void:
+func _init(system: EcoLeech, on_lite := false) -> void:
 	leeches = system
+	lite = on_lite
 	name = "Пиявники"
 	mesh = MultiMeshInstance3D.new()
 	mesh.name = "Ленты"
@@ -48,7 +60,8 @@ func _init(system: EcoLeech) -> void:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
-	mm.mesh = build()
+	mm.mesh = build(lite)
+	tris = count_tris(mm.mesh)
 	var ps := leeches.preds()
 	mm.instance_count = maxi(1, ps.all.size() if ps else 0)
 	mesh.multimesh = mm
@@ -59,18 +72,40 @@ func _init(system: EcoLeech) -> void:
 	sync(0.0)
 
 
-static func build() -> CapsuleMesh:
+## Капсула ленты; on_lite — грубое сечение, mat — материал (на смену уровня — тот же).
+static func build(on_lite := false, mat: Material = null) -> CapsuleMesh:
 	var m := CapsuleMesh.new()
 	m.radius = RADIUS
 	m.height = LENGTH
-	m.radial_segments = 6
-	m.rings = 2
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = COLOR
-	mat.vertex_color_use_as_albedo = true
-	mat.roughness = 0.8
+	m.radial_segments = LITE_SIDES if on_lite else SIDES
+	m.rings = LITE_RINGS if on_lite else RINGS
+	if mat == null:
+		var sm := StandardMaterial3D.new()
+		sm.albedo_color = COLOR
+		sm.vertex_color_use_as_albedo = true
+		sm.roughness = 0.8
+		mat = sm
 	m.material = mat
 	return m
+
+
+## «Экономно»: лента грубее, материал и места те же.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	var old := mesh.multimesh.mesh as CapsuleMesh
+	mesh.multimesh.mesh = build(on, old.material)
+	tris = count_tris(mesh.multimesh.mesh)
+
+
+## Треугольников в меше (первая поверхность).
+static func count_tris(m: Mesh) -> int:
+	var a := m.surface_get_arrays(0)
+	var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+	if idx.is_empty():
+		return (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3
+	return idx.size() / 3
 
 
 ## Где и как стоит лента на хищнике в момент t (нулевой масштаб — паразита нет).

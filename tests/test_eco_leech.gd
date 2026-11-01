@@ -298,3 +298,53 @@ func test_view_ribbon_on_infected() -> void:
 	near(view.leech_view.placed[1].basis.get_scale().length(), 0.0, 1e-6, "у здорового — нет")
 	tree.root.remove_child(view)
 	view.free()
+
+
+# ---------- «Экономно» (Б6) ----------
+
+func test_view_lite_coarser_same_material() -> void:
+	var view := EcoView.new()
+	tree.root.add_child(view)
+	await frames(1)
+	var lv := view.leech_view
+	var full := lv.tris
+	var cap := lv.mesh.multimesh.mesh as CapsuleMesh
+	var mat := cap.material
+	var box := cap.get_aabb()
+	var dust := lv.dust_view
+	var count := lv.mesh.multimesh.instance_count
+	view.set_lite(true)
+	ok(lv.lite, "ленты — на «Экономно»")
+	var lc := lv.mesh.multimesh.mesh as CapsuleMesh
+	ok(lv.tris < full * 0.6, "треугольников: %d → %d" % [full, lv.tris])
+	eq(lc.radial_segments, LeechView.LITE_SIDES)
+	eq(lc.rings, LeechView.LITE_RINGS)
+	ok(lc.material == mat, "материал тот же")
+	eq(lc.get_surface_count(), 1, "один вызов отрисовки")
+	eq(lv.mesh.multimesh.instance_count, count, "по ленте на хищника")
+	ok(lv.dust_view == dust, "муть та же")
+	near(lc.get_aabb().size.y, box.size.y, 1e-4, "длина ленты та же")
+	ok(EcoGrazerDust.lite, "облачка слизи гасит общий выключатель")
+	var ship := EcoLink.ShipState.new()
+	ship.pos = FAR
+	view.step(0.05, ship)
+	near(lv.placed[0].basis.get_scale().y, LeechView.leech_scale(view.preds.all[0].index), 1e-4, "лента на месте")
+	view.set_lite(false)
+	eq(lv.tris, full, "назад — полная лента")
+	tree.root.remove_child(view)
+	view.free()
+	EcoShaders.set_sway_lite(false)
+	EcoGrazerDust.lite = false
+
+
+func test_lite_kept_from_start() -> void:
+	var ev := EcoView.new()
+	ev.set_lite(true)
+	var t := ev.leech_view.tris
+	ev.ground = Seabed.height
+	ok(ev.leech_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(ev.leech_view.tris, t, "и лента грубая")
+	ev.set_lite(false)
+	ev.free()
+	EcoShaders.set_sway_lite(false)
+	EcoGrazerDust.lite = false

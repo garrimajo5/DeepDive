@@ -162,7 +162,7 @@ func _init() -> void:
 	current = world.add(EcoCurrent.new()) as EcoCurrent
 	coral = world.add(EcoCoral.new()) as EcoCoral
 	leeches = world.add(EcoLeech.new(preds, coral)) as EcoLeech
-	leech_view = LeechView.new(leeches)
+	leech_view = LeechView.new(leeches, lite)
 	add_child(leech_view)
 	fans = world.add(EcoFan.new(current)) as EcoFan
 	fan_view = FanView.new(fans)
@@ -269,6 +269,7 @@ func set_lite(on: bool) -> void:
 	ognevka_view.set_lite(on)
 	kelp_view.set_lite(on)
 	eel_view.set_lite(on)
+	leech_view.set_lite(on)
 	veil_view.set_lite(on)
 	brink_view.set_lite(on)
 	pred_view.set_lite(on)
