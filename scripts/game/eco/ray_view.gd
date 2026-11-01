@@ -16,6 +16,7 @@ extends MultiMeshInstance3D
 const SHADER := """
 shader_type spatial;
 render_mode cull_disabled;
+""" + EcoGlow.GLSL + """
 uniform float rim = 0.0;
 uniform float rim_tint = 0.0;
 uniform float sway_k = 1.0;
@@ -40,7 +41,7 @@ void fragment() {
 	SPECULAR = spec;
 	RIM = rim;
 	RIM_TINT = rim_tint;
-	EMISSION = vec3(0.07, 0.22, 0.28) * (1.0 - glow) + COLOR.rgb * glow * 1.6;
+	EMISSION = vec3(0.07, 0.22, 0.28) * (1.0 - glow) + eco_bio(COLOR.rgb * glow * 1.6);
 }
 """
 

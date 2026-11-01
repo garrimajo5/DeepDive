@@ -13,6 +13,7 @@ extends MeshInstance3D
 const SHADER := """
 shader_type spatial;
 render_mode cull_back;
+""" + EcoGlow.GLSL + """
 uniform vec3 tip_glow : source_color;
 uniform vec3 body_glow : source_color;
 uniform float glow_mid;
@@ -35,7 +36,7 @@ void fragment() {
 	ALBEDO = COLOR.rgb * (1.0 - 0.45 * pore);
 	ROUGHNESS = rough;
 	SPECULAR = spec;
-	EMISSION = tip_glow * lit * 1.8 + body_glow * (1.0 - UV.y);
+	EMISSION = eco_bio(tip_glow * lit * 1.8 + body_glow * (1.0 - UV.y));
 }
 """
 

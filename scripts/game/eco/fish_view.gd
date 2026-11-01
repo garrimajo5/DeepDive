@@ -18,6 +18,7 @@ extends MultiMeshInstance3D
 const SHADER := """
 shader_type spatial;
 render_mode cull_back;
+""" + EcoGlow.GLSL + """
 uniform vec3 body_color : source_color;
 uniform float sway_k = 1.0;
 uniform float rough = 0.6;
@@ -50,7 +51,7 @@ void fragment() {
 	ALBEDO = mix(body, glow * 0.3, clamp(p, 0.0, 1.0));
 	ROUGHNESS = rough;
 	SPECULAR = spec;
-	EMISSION = glow * p * 1.8;
+	EMISSION = eco_bio(glow * p * 1.8);
 }
 """
 
