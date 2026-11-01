@@ -353,3 +353,43 @@ func test_view_lite_draws_half_of_each_ink_cloud() -> void:
 	eq(cv.ink_slot(1, 5), EcoCushion.INK_N + 5, "буфер снова по подушке")
 	view.queue_free()
 	await frames(1)
+
+
+## «Дыхание» полипов (Б3): у корабля подушка медленно раздувается и опадает, у каждой свой ритм; дальше BREATH_FAR,
+## сжатая и на «Экономно» — ровно 1 (буфер неподвижен, #850).
+func test_breath_near_ship_only() -> void:
+	var lo := INF
+	var hi := -INF
+	for i in 200:
+		var s := CushionView.breath(0, 0.0, i * 0.1, 5.0)
+		lo = minf(lo, s.y)
+		hi = maxf(hi, s.y)
+		near(s.x, s.z, 1e-6, "ширина по x и z одна")
+		ok(absf(s.x - 1.0) <= CushionView.BREATH_W + 1e-6, "ширина в пределах")
+	ok(hi > 1.0 + CushionView.BREATH_H * 0.9 and lo < 1.0 - CushionView.BREATH_H * 0.9, "дышит в полный размах: %.3f…%.3f" % [lo, hi])
+	ok(CushionView.breath(0, 0.0, 3.0, 5.0) != CushionView.breath(1, 0.0, 3.0, 5.0), "у соседней — свой ритм")
+	eq(CushionView.breath(0, 0.0, 3.0, CushionView.BREATH_FAR), Vector3.ONE, "дальше BREATH_FAR — ровно 1")
+	eq(CushionView.breath(0, 1.0, 3.0, 5.0), Vector3.ONE, "сжатая не дышит")
+	eq(CushionView.breath(0, 0.0, 3.0, 5.0, false), Vector3.ONE, "«Экономно» — не дышит")
+	# к краю размах гаснет плавно — без скачка на границе
+	var edge := CushionView.breath(0, 0.0, 2.2, CushionView.BREATH_FAR - 0.5)
+	ok(absf(edge.y - 1.0) < 0.002, "у края почти 1: %.4f" % edge.y)
+
+
+## В сцене: подушка у корабля дышит в буфере, кадр за кадром разная; далеко — та же.
+func test_scene_breath_in_buffer() -> void:
+	var w := _world()
+	w.reset()
+	var c := _cushions(w)
+	var cv := CushionView.new(c)
+	var ys := []
+	for i in 3:
+		cv.sync(1.0 + i * 1.5, c.cushions[0].base + Vector3(10, 0, 0))
+		ys.append(CushionView.transform_at(cv.pad_buffer, 0, CushionView.STRIDE).basis.get_scale().y)
+	ok(absf(ys[0] - ys[1]) > 1e-3 or absf(ys[1] - ys[2]) > 1e-3, "у корабля высота меняется: %s" % [ys])
+	cv.sync(1.0, Vector3(500, 0, 500))
+	var a := cv.pad_buffer.duplicate()
+	cv.sync(4.0, Vector3(500, 0, 500))
+	eq(cv.pad_buffer, a, "корабль далеко — буфер тот же")
+	near(CushionView.transform_at(cv.pad_buffer, 0, CushionView.STRIDE).basis.get_scale().y, 1.0, 1e-4, "далеко — не дышит")
+	cv.free()
