@@ -8,6 +8,8 @@ extends Node3D
 ## клуб, когда «камень» снимается с места и оседает, след щупалец у дна) — дочерний MultiMesh «Муть» в мировых
 ## координатах, общий шейдер EcoShaders.MIST (INK). Три вызова отрисовки (с добычей — четыре), слой отмели
 ## (OceanView.LAYER_WORLD).
+## Добыча не прыгает (Б3): схваченный образец за CARRY_MOVE плывёт от захвата лебёдки к месту над мантией, а у дома
+## (ближе LOWER_R) опускается к тайнику — к мигу сброса стоит там, где Samples.drop положит камешек (`carry_at`).
 ## «Экономно» (Б6, `set_lite`): шары щупалец грубее (ARM_SIDES_LITE × ARM_RINGS_LITE вместо ARM_SIDES × ARM_RINGS —
 ## треугольников щупалец втрое меньше), неподвижный камень не шевелит щупальцами уже дальше FAR_LITE. Тело, цвет,
 ## мир и муть те же, вызовов столько же; сброс мира уровень не теряет (EcoView.lite).
@@ -18,6 +20,9 @@ const GLOW := Color(0.12, 0.03, 0.02)
 ## Добыча: цвет и высота над скальником.
 const CARRY := Color("9dffd0")   # светится, как камешки образцов на дне
 const CARRY_UP := 1.2
+const CARRY_MOVE := 0.4   # с: схваченный образец плывёт от захвата к мантии
+const LOWER_R := 3.0      # м до дома: добыча опускается к тайнику
+const SAMPLE_LIFT := 0.15 # как Samples.drop: камешек над дном
 const ARMS := 8
 const SEG := 6
 const STRIDE := 12
@@ -43,6 +48,9 @@ var arms: MultiMeshInstance3D
 var material: StandardMaterial3D
 ## Украденный образец в щупальцах.
 var carry: MeshInstance3D
+var _loot_was := -1
+var _grab_from := Vector3.ZERO
+var _grab_t := -INF
 ## Сколько раз переписаны щупальца (тесты).
 var arm_writes := 0
 ## Сколько раз мерили дно под щупальцами (дорого: Seabed.height — шум).
@@ -139,6 +147,22 @@ static func arm_step(k: float, goal: float, dt: float, snap := false) -> float:
 	return move_toward(k, goal, minf(dt, 0.25) / ARM_RISE)
 
 
+## Где добыча: над мантией (CARRY_UP); since с мига захвата меньше CARRY_MOVE — ещё плывёт от from (захват лебёдки);
+## stash (не INF) — тайник у дома: ближе LOWER_R добыча опускается к нему и на LOOT_HOME стоит ровно там.
+static func carry_at(pos: Vector3, home: Vector3, stash: Vector3, from: Vector3, since: float) -> Vector3:
+	var at := pos + Vector3(0, CARRY_UP, 0)
+	if stash != Vector3.INF:
+		var w := clampf((_flat(pos, home) - EcoSkalnik.LOOT_HOME) / (LOWER_R - EcoSkalnik.LOOT_HOME), 0.0, 1.0)
+		at = stash.lerp(at, smoothstep(0.0, 1.0, w))
+	if since < CARRY_MOVE:
+		at = from.lerp(at, smoothstep(0.0, 1.0, maxf(since, 0.0) / CARRY_MOVE))
+	return at
+
+
+static func _flat(a: Vector3, b: Vector3) -> float:
+	return Vector2(a.x - b.x, a.z - b.z).length()
+
+
 ## Дальше скольких метров неподвижный камень не шевелит щупальцами.
 func still_far() -> float:
 	return FAR_LITE if lite else FAR
@@ -157,9 +181,20 @@ func sync(t: float, ship: Vector3, force := false, info: EcoLink.ShipState = nul
 		return
 	_sync_dust(t, ship, info, flow)
 	body.transform = Transform3D(Basis(Vector3.UP, atan2(sk.dir.x, sk.dir.z)), sk.pos)
+	if sk.loot >= 0 and _loot_was < 0:
+		# схватил — плывёт от захвата; первая расстановка (гость вошёл, сброс) — сразу на месте
+		_grab_t = -INF if force or info == null else t
+		_grab_from = info.claw if info else Vector3.ZERO
+	_loot_was = sk.loot
 	carry.visible = sk.loot >= 0
 	if carry.visible:
-		carry.transform = Transform3D(Basis(Vector3.UP, t * 1.5), sk.pos + Vector3(0, CARRY_UP, 0))
+		var stash := Vector3.INF
+		if sk.state == EcoSkalnik.State.LOOT and _flat(sk.pos, sk.home) < LOWER_R:
+			stash = EcoSkalnik.stash_point(sk.home, sk.loot)
+			var g := skalnik.ground
+			stash.y = (float(g.call(stash.x, stash.z)) if g.is_valid() else sk.home.y) + SAMPLE_LIFT
+		carry.transform = Transform3D(Basis(Vector3.UP, t * 1.5),
+			carry_at(sk.pos, sk.home, stash, _grab_from, t - _grab_t))
 	if absf(sk.camo - _camo) > 0.002:
 		_camo = sk.camo
 		material.albedo_color = skin_color(sk.camo)
