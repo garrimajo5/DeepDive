@@ -816,6 +816,8 @@ func _step_ship(dt: float, h: Holds) -> void:
 			for m: Crew.Member in crew:
 				m.at_vote = false
 			vote_panel.visible = false
+	if run.at_descent() and not trip.active:   # решают у 10 — камни у места возвращения заранее (#1095)
+		ocean.prefetch(DescentTrip.return_spot())
 	expedition.visit(helm.pos.x, helm.pos.z)   # журнал ART-047: места и рекорд глубины
 	timeline.place(time, helm.pos.x, helm.pos.z)   # хронометраж по участкам слоя (#824)
 	var spot := autosave.update(helm.pos.x, helm.pos.z)   # кампания #823: вошли к месту-стоянке — записать

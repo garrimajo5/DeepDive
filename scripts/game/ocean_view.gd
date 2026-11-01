@@ -34,6 +34,9 @@ var water_writes := 0                          ## сколько раз вода
 var _water_at := Vector2(INF, INF)             ## глубина и ил последней записи
 var _layers_cam := Vector3(INF, INF, INF)      ## камера последней записи придонной пыли
 var _ship_at := Transform3D(Basis(), Vector3(INF, INF, INF))   ## корабль последней записи лучей и взвеси
+var _ahead_done := []                          ## заготовка камней (`prefetch`) готова: [место, lite камней, ракушек]
+var _ahead_at := Vector3.ZERO                  ## куда просили заготовку
+var _ahead_on := false                         ## просили в этот шаг
 
 
 func _ready() -> void:
@@ -280,17 +283,35 @@ func _make_shafts() -> MultiMeshInstance3D:
 	return node
 
 
-## Корабль скоро перескочит в at (возвращение к 10 под шторкой, #1090): камни и ракушки там досчитываются заранее,
-## по `SeabedStones.CELLS_STEP` клеток за шаг. true — всё в кэше.
+## Корабль скоро перескочит в at (решают у 10 и шторка возвращения, #1090): камни и ракушки там досчитываются заранее
+## в `set_ship` этого или следующего шага — только когда своя россыпь корабля в этот шаг клеток не считала, и не больше
+## `SeabedStones.CELLS_STEP` клеток на обе россыпи, сначала камни, потом ракушки (обе разом и вместе с ходом давали
+## всплеск «интерфейс/маршрут» 9 мс у 34b, #1095). Просить каждый шаг; готово — шаг даром. true — всё в кэше.
 func prefetch(at: Vector3) -> bool:
-	var a := stones.stones.prefetch(at)
-	return shells.stones.prefetch(at) and a
+	_ahead_at = at
+	_ahead_on = true
+	return [at, stones.stones.lite, shells.stones.lite] == _ahead_done
+
+
+func _prefetch_step() -> void:
+	var key := [_ahead_at, stones.stones.lite, shells.stones.lite]
+	if key == _ahead_done:
+		return
+	for v: SeabedStones in [stones.stones, shells.stones]:
+		var before := v.cells_done
+		if not v.prefetch(_ahead_at) or v.cells_done != before:
+			return   # эта россыпь считала в этот шаг — следующая подождёт
+	_ahead_done = key
 
 
 ## Где корабль: внутри корпуса шахты не светят и взвеси нет (вид с мостика и из отсеков).
 func set_ship(pos: Vector3, yaw: float) -> void:
+	var cells := stones.stones.cells_done + shells.stones.cells_done
 	stones.follow(pos)   # камни досчитываются и стоя: клетки радиуса — по нескольку за шаг
 	shells.follow(pos)
+	if _ahead_on and stones.stones.cells_done + shells.stones.cells_done == cells:
+		_prefetch_step()   # заготовка под прыжок — в шаг, когда своя россыпь стоит (#1095)
+	_ahead_on = false
 	var t := Transform3D(Basis(Vector3.UP, yaw), pos)
 	if t.is_equal_approx(_ship_at):   # корабль стоит — матрицы в лучах и взвеси те же (#847)
 		return
