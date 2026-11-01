@@ -246,7 +246,7 @@ func _init() -> void:
 	dust_layer.gather(self)
 
 
-## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи, просвет листвы и каустики на камне погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали нет, моли у колодца 80, бахромы 24, планктона рисуется половина клеток, светляков и гребневиков — двое из трёх в стае, спор пузырчатки и чернил подушечника — половина облака, лент ленточника — каждая вторая — меняются
+## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи, просвет листвы и каустики на камне погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали нет, моли у колодца 80, бахромы 24, планктона рисуется половина клеток, светляков и гребневиков — двое из трёх в стае, спор пузырчатки и чернил подушечника — половина облака, лент ленточника — каждая вторая, пятна мха (и у колодца, на костях) — 4 × 4 клетки — меняются
 ## только числа в uniform, шейдеры те же. Включает уровень графики — поток А (`Main._apply_graphics`).
 func set_lite(on: bool) -> void:
 	lite = on
@@ -286,6 +286,9 @@ func set_lite(on: bool) -> void:
 	ray_view.set_lite(on)
 	remora_view.set_lite(on)
 	grazer_view.set_lite(on)
+	moss_view.set_lite(on)
+	if well_view.moss_view:
+		well_view.moss_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -293,7 +296,7 @@ func _rebuild_moss() -> void:
 	if moss_view:
 		remove_child(moss_view)
 		moss_view.free()
-	moss_view = MossView.new(moss, world.ground)
+	moss_view = MossView.new(moss, world.ground, lite)
 	add_child(moss_view)
 
 
@@ -449,7 +452,7 @@ func _rebuild_well() -> void:
 	if well_view:
 		remove_child(well_view)
 		well_view.free()
-	well_view = WellView.new(well)
+	well_view = WellView.new(well, lite)
 	add_child(well_view)
 
 

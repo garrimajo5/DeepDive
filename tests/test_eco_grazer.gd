@@ -599,3 +599,51 @@ func test_lite_kept_after_world_reset() -> void:
 	eq(ev.grazer_view.tris, t, "и меш грубый")
 	ev.set_lite(false)
 	ev.free()
+
+
+## Б6 «Экономно»: пятна мха — 4 × 4 клетки вместо 8 × 8 (и у колодца, и на костях), материал и яркость пятен те же,
+## край и середина пятна по дну на месте, грани вверх; сброс мира уровень не теряет.
+func test_view_moss_lite_coarser_same_material() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var mv := view.moss_view
+	var mat := mv.mesh.surface_get_material(0)
+	var n := view.moss.patches.size()
+	var full := mv.mesh.get_faces().size() / 3
+	eq(full, n * EcoMossLook.TRIS_PER_PATCH, "полный мох: 128 треугольников на пятно")
+	var box := mv.mesh.get_aabb()
+	view.moss.patches[1].food = 0.2   # объели — яркость отдана шейдеру
+	mv.sync()
+	var glow := mv.glows[1]
+	view.set_lite(true)
+	ok(mv.lite, "мох — на «Экономно»")
+	var cells := EcoMossLook.LITE_CELLS
+	eq(mv.mesh.get_faces().size() / 3, n * cells * cells * 2, "мох: %d → %d треугольников" % [full, n * cells * cells * 2])
+	eq(mv.look.verts.size(), n * (cells + 1) * (cells + 1), "вершин меньше")
+	ok(mv.mesh.surface_get_material(0) == mat, "материал тот же — яркость пятен в нём")
+	near(mv.glows[1], glow, 1e-6, "яркость объеденного пятна сохранена")
+	var lb := mv.mesh.get_aabb()
+	near(lb.size.x, box.size.x, 1e-3, "пятна той же ширины")
+	near(lb.size.z, box.size.z, 1e-3, "и длины")
+	var p0 := view.moss.patches[0]
+	var mid := (cells / 2) * (cells + 1) + cells / 2
+	near(mv.look.verts[mid].y, Seabed.height(p0.pos.x, p0.pos.z) + EcoMossLook.ABOVE, 1e-3, "середина пятна — по дну")
+	var f := mv.mesh.get_faces()
+	for i in range(0, f.size(), 3):
+		if (f[i + 1] - f[i]).cross(f[i + 2] - f[i]).y > 0.0:
+			ok(false, "треугольник %d смотрит вниз" % (i / 3))
+			break
+	var wm := view.well_view.moss_view
+	ok(wm.lite and wm.look.verts.size() == EcoWell.MOSS.size() * (cells + 1) * (cells + 1), "мох колодца тоже грубее")
+	var bm := view.bones_view.moss_view
+	ok(bm == null or bm.lite, "мох на костях тоже")
+	view.ground = Seabed.height   # сброс мира
+	ok(view.moss_view.lite and view.well_view.moss_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(view.moss_view.mesh.get_faces().size() / 3, n * cells * cells * 2, "и мох грубый")
+	view.set_lite(false)
+	eq(view.moss_view.mesh.get_faces().size() / 3, full, "назад — полный мох")
+	ok(not view.well_view.moss_view.lite, "и у колодца")
+	view.queue_free()
+	await frames(1)

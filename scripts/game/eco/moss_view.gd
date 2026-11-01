@@ -5,6 +5,8 @@ extends MeshInstance3D
 ## шейдере мха (EcoShaders.MOSS, один на все места), обновляется, только когда пятно заметно разгорелось или
 ## потускнело. Свет свой (без освещения), полупрозрачный.
 ## Стоит на слое отмели (OceanView.LAYER_WORLD).
+## «Экономно» (Б6, `set_lite`): пятно — 4 × 4 клетки вместо 8 × 8 (`EcoMossLook.LITE_CELLS`, 128 → 32 треугольника,
+## меньше вершин под полупрозрачным мхом), материал и яркость пятен те же; сброс мира уровень не теряет.
 
 ## Меньше этой разницы яркость пятна не обновляем (как mossAlpha в браузере).
 const EPS := 0.002
@@ -16,15 +18,36 @@ var glows := PackedFloat32Array()
 ## Сколько раз отдавали яркость шейдеру.
 var uploads := 0
 
+## На «Экономно» — сетка пятна грубее (set_lite).
+var lite := false
+
 var _mat: ShaderMaterial
+var _ground: Callable
 
 
-func _init(system: EcoMoss, ground: Callable = Callable()) -> void:
+func _init(system: EcoMoss, ground: Callable = Callable(), on_lite := false) -> void:
 	moss = system
 	name = "Мох"
 	layers = OceanView.LAYER_WORLD
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	look = EcoMossLook.build(moss.patches, ground)
+	_ground = ground
+	lite = on_lite
+	_build()
+	glows.resize(moss.patches.size())
+	glows.fill(-1.0)
+	sync()
+
+
+## «Экономно» — меш пересобран грубее тем же материалом (яркость пятен остаётся); назад — полный.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	_build()
+
+
+func _build() -> void:
+	look = EcoMossLook.build(moss.patches, _ground, EcoMossLook.LITE_CELLS if lite else EcoMossLook.CELLS)
 	var colors := PackedColorArray()
 	var uv := PackedVector2Array()
 	colors.resize(look.verts.size())
@@ -41,14 +64,12 @@ func _init(system: EcoMoss, ground: Callable = Callable()) -> void:
 	var m := ArrayMesh.new()
 	if not look.verts.is_empty():
 		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-		_mat = ShaderMaterial.new()
-		_mat.shader = EcoShaders.shader(EcoShaders.MOSS)
-		_mat.set_shader_parameter("moss_color", EcoMossLook.COLOR)
+		if _mat == null:
+			_mat = ShaderMaterial.new()
+			_mat.shader = EcoShaders.shader(EcoShaders.MOSS)
+			_mat.set_shader_parameter("moss_color", EcoMossLook.COLOR)
 		m.surface_set_material(0, _mat)
 	mesh = m
-	glows.resize(moss.patches.size())
-	glows.fill(-1.0)
-	sync()
 
 
 ## Отдать шейдеру яркость пятен, если хоть одно заметно изменилось. true — отдали.
