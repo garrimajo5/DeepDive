@@ -550,3 +550,55 @@ func test_eco_view_has_skalnik() -> void:
 	view.step(0.1, ship)
 	view.queue_free()
 	await frames(1)
+
+
+## Плавность (grafika-plan-eco, Б3): тронулся и встал, раскрылся из камня и сжался — щупальца тянутся за ARM_RISE,
+## а не за кадр. Раньше кончики прыгали на 1,1 м (отставание на ходу) и на 0,7 м (поджаты у камня).
+func test_view_arms_ease_between_rock_and_move() -> void:
+	var w := _world()
+	var s := _sk(w)
+	var v := SkalnikView.new(s)
+	tree.root.add_child(v)
+	await frames(1)
+	var near_ship := s.octo.home + Vector3(0, 0, 10)
+	var dt := 1.0 / 30.0
+	var t := 1.0
+	v.sync(t, near_ship)
+	near(v.spread_k, SkalnikView.ROCK_SPREAD, 1e-6, "камень — щупальца поджаты")
+	var prev := _arm_points(v)
+	s.octo.state = EcoSkalnik.State.STALK
+	s.octo.vel = Vector3(1.0, 0, 0)
+	var worst := 0.0
+	for i in 30:
+		t += dt
+		v.sync(t, near_ship)
+		var now := _arm_points(v)
+		for k in now.size():
+			worst = maxf(worst, now[k].distance_to(prev[k]))
+		prev = now
+	ok(worst < 0.15, "раскрылся и пошёл — щупальца без прыжка: %.3f м за кадр" % worst)
+	near(v.trail_k, 1.0, 1e-6, "за 1 с — тянутся за телом полностью")
+	near(v.spread_k, 1.0, 1e-6, "и раскрыты")
+	s.octo.state = EcoSkalnik.State.ROCK
+	s.octo.vel = Vector3.ZERO
+	worst = 0.0
+	for i in 30:
+		t += dt
+		v.sync(t, near_ship)
+		var now := _arm_points(v)
+		for k in now.size():
+			worst = maxf(worst, now[k].distance_to(prev[k]))
+		prev = now
+	ok(worst < 0.15, "встал камнем — щупальца без прыжка: %.3f м за кадр" % worst)
+	near(v.trail_k, 0.0, 1e-6, "отставания нет")
+	near(v.spread_k, SkalnikView.ROCK_SPREAD, 1e-6, "поджаты")
+	near(SkalnikView.arm_step(0.0, 1.0, 5.0), 0.25 / SkalnikView.ARM_RISE, 1e-6, "после паузы — шаг не больше 0,25 с")
+	v.queue_free()
+	await frames(1)
+
+
+func _arm_points(v: SkalnikView) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for i in v.arms.multimesh.instance_count:
+		out.append(v.arms.multimesh.get_instance_transform(i).origin)
+	return out
