@@ -280,6 +280,8 @@ func set_lite(on: bool) -> void:
 	coral_view.set_lite(on)
 	vent_view.set_lite(on)
 	organ_view.set_lite(on)
+	if fern_view:
+		fern_view.set_lite(on)
 	krab_view.set_lite(on)
 	ray_view.set_lite(on)
 	remora_view.set_lite(on)
@@ -309,7 +311,7 @@ func _rebuild_ferns() -> void:
 	if fern_view:
 		remove_child(fern_view)
 		fern_view.free()
-	fern_view = FernView.new(ferns, world.ground)
+	fern_view = FernView.new(ferns, world.ground, lite)
 	add_child(fern_view)
 
 

@@ -5,6 +5,9 @@ extends Node3D
 ## светлее (#68E6DC, ART-004) — отражённый свет, своей эмиссии нет; виден с обеих сторон;
 ## лист — общий шейдер растений (EcoShaders.PLANT). Стоит на слое отмели (OceanView.LAYER_WORLD). Моллюски не двигаются — расставлены один раз.
 ## Муть (EcoFernDust) — третий MultiMesh «Муть» на общем шейдере EcoShaders.MIST.
+## «Экономно» (Б6, `set_lite`): лист — 3 отрезка вместо 6 (6 треугольников вместо 12, `LITE_SEGMENTS`), моллюск —
+## полусфера 5 × 2 вместо 7 × 3 (`LITE_SHELL_SEG`); материалы, места, колыхание, муть и вызовы те же. Сброс мира
+## уровень не теряет (EcoView.set_lite).
 
 const LEAF := Color("3D9D91")
 const EDGE := Color("68E6DC")
@@ -13,7 +16,11 @@ const SHELL := Color("9a8fb2")
 const BEND := Vector3(0.1, 0.06, 0.04)
 ## Отрезков листа по длине и загиб кончика наружу (м при длине 1,4).
 const SEGMENTS := 6
+const LITE_SEGMENTS := 3
 const CURL := 0.22
+## Граней полусферы моллюска (по кругу × колец); LITE_* — на «Экономно».
+const SHELL_SEG := Vector2i(7, 3)
+const LITE_SHELL_SEG := Vector2i(5, 2)
 ## Чисел на экземпляр в буфере: transform 3 × 4 по строкам.
 const STRIDE := 12
 
@@ -31,14 +38,19 @@ var dust_buffer: PackedFloat32Array:
 		return _dust.data
 var _dust := EcoDustBuffer.new()
 var _ground := Callable()
+## На «Экономно» — лист и моллюск грубее (set_lite).
+var lite := false
 
 
-func _init(system: EcoFern, ground: Callable = Callable()) -> void:
+func _init(system: EcoFern, ground: Callable = Callable(), on_lite := false) -> void:
 	ferns = system
 	_ground = ground
+	lite = on_lite
 	name = "Волнолист"
-	leaves = EcoMM.instance(self, "Листья", build_leaf(), ferns.ferns.size() * EcoFern.LEAVES, false, false, false)
-	shells = EcoMM.instance(self, "Моллюски", build_shell(), ferns.ferns.size() * EcoFern.SHELLS, false, false, false)
+	leaves = EcoMM.instance(self, "Листья", build_leaf(LITE_SEGMENTS if lite else SEGMENTS),
+		ferns.ferns.size() * EcoFern.LEAVES, false, false, false)
+	shells = EcoMM.instance(self, "Моллюски", build_shell(LITE_SHELL_SEG if lite else SHELL_SEG),
+		ferns.ferns.size() * EcoFern.SHELLS, false, false, false)
 	var buf := PackedFloat32Array()
 	buf.resize(shells.multimesh.instance_count * STRIDE)
 	for fe in ferns.ferns:
@@ -53,14 +65,25 @@ func _init(system: EcoFern, ground: Callable = Callable()) -> void:
 	sync(0.0)
 
 
+## «Экономно» — лист и моллюск пересобраны грубее с теми же материалами; назад — полные.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	leaves.multimesh.mesh = build_leaf(LITE_SEGMENTS if lite else SEGMENTS, leaves.multimesh.mesh.surface_get_material(0))
+	shells.multimesh.mesh = build_shell(LITE_SHELL_SEG if lite else SHELL_SEG,
+		(shells.multimesh.mesh as SphereMesh).material)
+
+
 ## Лист-перо 0,28 × 1,4 м (PlaneGeometry с шириной sin(y/1,4 · π) · 1,2, как в браузере): основание у подножия,
 ## растёт по +Y, кончик загнут в −Z — туда же лист ложится при раскрытии (EcoFern.leaf_basis).
-static func build_leaf() -> ArrayMesh:
+## segments — отрезков по длине, mat — готовый материал (иначе новый).
+static func build_leaf(segments := SEGMENTS, mat: Material = null) -> ArrayMesh:
 	var v := PackedVector3Array()
 	var uv := PackedVector2Array()
 	var nr := PackedVector3Array()
-	for i in SEGMENTS + 1:
-		var k := float(i) / SEGMENTS
+	for i in segments + 1:
+		var k := float(i) / segments
 		var y := k * EcoFern.LEAF_LEN
 		var w := EcoFern.LEAF_W / 2.0 * sin(minf(1.0, k) * PI) * 1.2
 		var z := -CURL * k * k
@@ -69,7 +92,7 @@ static func build_leaf() -> ArrayMesh:
 			uv.append(Vector2(0.5 + s * 0.5, 1.0 - k))
 			nr.append(Vector3(0, 2.0 * CURL * k / EcoFern.LEAF_LEN, 1).normalized())
 	var idx := PackedInt32Array()
-	for i in SEGMENTS:
+	for i in segments:
 		var a := i * 2
 		# лицом к +Z по правилу Godot: (b − a) × (c − a) смотрит в −Z
 		idx.append_array([a, a + 3, a + 1, a, a + 2, a + 3])
@@ -81,22 +104,27 @@ static func build_leaf() -> ArrayMesh:
 	arrays[Mesh.ARRAY_INDEX] = idx
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	mesh.surface_set_material(0, EcoShaders.plant(EcoShaders.Plant.LEAF, {"paint": LEAF, "edge": EDGE, "rough": 0.7,
-		"bend": BEND, "reach": EcoFern.LEAF_LEN}))
+	if mat == null:
+		mat = EcoShaders.plant(EcoShaders.Plant.LEAF, {"paint": LEAF, "edge": EDGE, "rough": 0.7, "bend": BEND,
+			"reach": EcoFern.LEAF_LEN})
+	mesh.surface_set_material(0, mat)
 	return mesh
 
 
-## Моллюск — полусфера радиусом 0,11 м (сплющена в расстановке).
-static func build_shell() -> SphereMesh:
+## Моллюск — полусфера радиусом 0,11 м (сплющена в расстановке); seg — граней по кругу × колец, mat — готовый
+## материал (иначе новый).
+static func build_shell(seg := SHELL_SEG, mat: Material = null) -> SphereMesh:
 	var m := SphereMesh.new()
 	m.radius = 0.11
 	m.height = 0.11
 	m.is_hemisphere = true
-	m.radial_segments = 7
-	m.rings = 3
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = SHELL
-	mat.roughness = 0.5
+	m.radial_segments = seg.x
+	m.rings = seg.y
+	if mat == null:
+		var sm := StandardMaterial3D.new()
+		sm.albedo_color = SHELL
+		sm.roughness = 0.5
+		mat = sm
 	m.material = mat
 	return m
 
