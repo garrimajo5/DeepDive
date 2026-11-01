@@ -3,7 +3,8 @@ extends Node3D
 ## Кольчужник в сцене (initKelp — нора, crabUpdate, crabSpines в js/creatures.js): нора из пяти приплюснутых камней
 ## (#4f4a5c, гранёные), тело — панцирь-эллипсоид (#8a4a2e, слабое свечение #1a0804) и шесть ног одним мешем,
 ## клешни отдельным мешем (поднимаются на 0,9 · raise), иглы ежей на панцире — MultiMesh на 10 игл (стержень со
-## светом, кончик светится сам; лишние сжаты в точку), переписывается, только когда игл стало больше (EcoKrab.dirty). Тело в 1,25 раза крупнее, на ходу
+## светом, кончик светится сам; лишние сжаты в точку), переписывается, только когда игл стало больше (EcoKrab.dirty) и пока новая игла растёт:
+## вплетённая игла вырастает из панциря за SPINE_RISE (доля spine_k, по времени мира), а не появляется за кадр. Тело в 1,25 раза крупнее, на ходу
 ## подпрыгивает на 3 см. Муть у дна из-под ног и от клешней (EcoKrabDust) — дочерний MultiMesh «Муть» в мировых
 ## координатах, общий шейдер EcoShaders.MIST (INK), бурый цвет EcoKrabDust.COLOR/LIT. Шесть вызовов отрисовки (у игл две поверхности); стоит на слое
 ## отмели (OceanView.LAYER_WORLD).
@@ -21,6 +22,8 @@ const GLOW := Color("1a0804")
 const SPINE_BASE := Color(0.3, 0.15, 0.4)
 const SPINE_TIP := Color(0.55, 0.95, 1.0)
 const SCALE := 1.25
+## За сколько секунд вплетённая игла вырастает из панциря (и уходит, если игл стало меньше).
+const SPINE_RISE := 0.6
 ## Камни норы: смещение (нос норы — наружу от рощи, +Z) и размер 0,8…1,1 м, приплюснуты до 0,6 по высоте.
 const ROCKS: Array[Vector3] = [Vector3(-1.3, 0.3, -0.4), Vector3(1.3, 0.3, -0.4), Vector3(0, 0.8, -1.1),
 	Vector3(-0.6, 1.3, -0.9), Vector3(0.7, 0.2, -1.6)]
@@ -43,6 +46,10 @@ var shown_spines := 0
 var spine_writes := 0
 ## Последний буфер игл (KelpView.transform_at с шагом KelpView.STRIDE).
 var spine_buffer := PackedFloat32Array()
+## Доля роста каждой иглы 0…1 (1 — во всю длину).
+var spine_k := PackedFloat32Array()
+var _spine_t := 0.0
+var _spine_fresh := true
 ## Муть от краба и её MultiMesh; буфер мути — для тестов.
 var dust := EcoKrabDust.new()
 var dust_view: MultiMeshInstance3D
@@ -129,15 +136,43 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 		p.y += absf(sin(t * 8.0)) * 0.03
 	body.transform = Transform3D(Basis(Vector3.UP, atan2(cr.dir.x, cr.dir.z)).scaled(Vector3.ONE * SCALE), p)
 	claws.rotation = Vector3(-cr.raise * 0.9, 0, 0)
-	if krab.dirty:
+	var grew := _grow_spines(t, cr.spines)
+	if krab.dirty or grew:
 		krab.dirty = false
 		spine_buffer.resize(EcoKrab.SPINE_MAX * KelpView.STRIDE)
 		for k in EcoKrab.SPINE_MAX:
-			var tr := spine_transform(k) if k < cr.spines else Transform3D(Basis.from_scale(Vector3.ZERO), Vector3.ZERO)
-			EcoMM.put(spine_buffer, k * KelpView.STRIDE, tr)
+			EcoMM.put(spine_buffer, k * KelpView.STRIDE, spine_at(k, spine_k[k]))
 		spines.multimesh.buffer = spine_buffer
 		shown_spines = cr.spines
 		spine_writes += 1
+
+
+## Доли роста игл к моменту t: первые count — к 1, остальные — к 0, за SPINE_RISE. Первый шаг и время назад — сразу.
+## true — какая-то доля сдвинулась (буфер переписать).
+func _grow_spines(t: float, count: int) -> bool:
+	if spine_k.size() != EcoKrab.SPINE_MAX:
+		spine_k.resize(EcoKrab.SPINE_MAX)
+		_spine_fresh = true
+	var dt := t - _spine_t
+	_spine_t = t
+	var snap := _spine_fresh or dt < 0.0
+	_spine_fresh = false
+	var moved := false
+	for k in EcoKrab.SPINE_MAX:
+		var goal := 1.0 if k < count else 0.0
+		var v := goal if snap else move_toward(spine_k[k], goal, dt / SPINE_RISE)
+		if v != spine_k[k]:
+			moved = true
+			spine_k[k] = v
+	return moved
+
+
+## Игла k при доле роста grow 0…1: растёт из панциря от основания (мягкий вход и выход); 0 — сжата в точку.
+static func spine_at(k: int, grow: float) -> Transform3D:
+	if grow <= 0.0:
+		return Transform3D(Basis.from_scale(Vector3.ZERO), Vector3.ZERO)
+	var tr := spine_transform(k)
+	return Transform3D(tr.basis * Basis.from_scale(Vector3.ONE * smoothstep(0.0, 1.0, grow)), tr.origin)
 
 
 func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3) -> void:
