@@ -3,6 +3,9 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-01
+- Радужники без рывка после сброса (поток Б, Б3 «плавность» `docs/grafika-plan-eco.md`): центр стаи с начала по
+  дрейфу (`EcoRaduzh.center`), раньше на первом шаге стая прыгала до 10 м. Тест —
+  `test_eco_raduzh.test_no_jump_after_reset`.
 - Стеклоуст без рывка после сброса (поток Б, Б3 «плавность» `docs/grafika-plan-eco.md`): голова и звенья с начала в
   позе логова (`EcoEel.hide_point`), раньше голова на первом шаге прыгала на 0,3 м. Тест —
   `test_eco_eel.test_no_jump_after_reset`.
