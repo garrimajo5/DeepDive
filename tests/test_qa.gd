@@ -872,3 +872,8 @@ func test_crust_shot_beam_on_floor() -> void:   # отчёт 2026-10-31-0330: у
 	ok(absf(Seabed.height(ahead.x, ahead.y) - floor_y) < 4.0,
 			"дно впереди не уходит из-под луча (%.1f м на 30 м)" % (Seabed.height(ahead.x, ahead.y) - floor_y))
 	ok(EcoBrink.share(at.x, at.y) > 0.3, "за границей корки — цвет дна #1045 виден")
+
+
+func test_count_note() -> void:   # issue #1156: узлы и объекты в строке скриншота — видно, копится ли что-то за забег
+	eq(QaRunner.count_note(4210, 18344), " · узлы 4210, объекты 18344")
+	eq(QaRunner.count_note(4210, 18344, 3), " · узлы 4210, объекты 18344 (сирот 3)", "сироты — только если есть")

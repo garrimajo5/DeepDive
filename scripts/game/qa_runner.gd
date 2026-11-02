@@ -379,6 +379,12 @@ func worst_text() -> String:
 		+ (" · после прыжка %d мс" % roundi(jump_ms) if jump_ms > 0.0 else "")
 
 
+## Сколько узлов и объектов живёт к снимку (issue #1156): копится ли что-то за забег — худший кадр на `09d-vote`
+## растёт от прогона к прогону при малых коде и отрисовке. « · узлы 4210, объекты 18344» и « (сирот 3)», если они есть.
+static func count_note(nodes: int, objects: int, orphans: int = 0) -> String:
+	return " · узлы %d, объекты %d%s" % [nodes, objects, " (сирот %d)" % orphans if orphans > 0 else ""]
+
+
 const PARTS_FROM := 20.0   ## код дольше, мс, — пишем его части (issue #627)
 
 
@@ -473,7 +479,8 @@ func _shot(name: String) -> void:
 		return
 	img.save_png("%s/%s.png" % [OUT, name])
 	shots.append(name)
-	_log("скриншот %s | %s" % [name, state()])
+	_log("скриншот %s | %s" % [name, state() + count_note(int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
+		int(Performance.get_monitor(Performance.OBJECT_COUNT)), int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)))])
 	after_shot()
 
 
