@@ -239,8 +239,30 @@ func test_view_takes_light() -> void:
 	ok(not v.sync(), "без перемен шейдеру не отдаёт")
 	_ping(w, f.heart())
 	ok(v.sync(), "после импульса отдаёт")
+	ok(float(mat.get_shader_parameter("light")) > 0.4, "гаснет не за кадр")
+	w.step(EcoFlower.DIM_TIME)
+	ok(v.sync(), "и дальше отдаёт")
 	near(float(mat.get_shader_parameter("light")), EcoFlower.DARK_LIGHT, 1e-6, "шейдер гасит кончики")
 	v.free()
+
+
+## Б3: импульс гасит кончики на виду за DIM_TIME с, а не за кадр (свет мира — сразу); разгораются вместе со светом.
+func test_dims_smoothly() -> void:
+	var pair := _ping_world()
+	var w: EcoWorld = pair[0]
+	var f: EcoFlower = pair[1]
+	_ping(w, f.heart())   # шаг 0,1 с
+	ok(f.light <= EcoFlower.DARK_LIGHT + 1e-6 and f.seen > 0.7, "свет мира погас сразу, на виду — ещё нет: %.3f" % f.seen)
+	var was := f.seen
+	var worst := 0.0
+	for i in int(EcoFlower.DIM_TIME * 60.0) + 2:
+		w.step(1.0 / 60.0)
+		worst = maxf(worst, absf(f.seen - was))
+		was = f.seen
+	ok(worst <= 0.05, "за шаг 1/60 с — не больше 0,05: %.3f" % worst)
+	near(f.seen, EcoFlower.DARK_LIGHT, 1e-6, "через DIM_TIME — погас")
+	w.step(EcoFlower.DARK_HOLD + EcoFlower.RELIGHT_TIME * 0.5)
+	near(f.seen, f.light, 1e-6, "разгорается вместе со светом")
 
 
 func test_view_lite_coarser_mesh_same_material() -> void:
@@ -283,6 +305,7 @@ func test_view_lite_coarser_mesh_same_material() -> void:
 	# импульс гасит кончики и на «Экономно»
 	var w: EcoWorld = pair[0]
 	_ping(w, f.heart())
+	w.step(EcoFlower.DIM_TIME)
 	ok(v.sync(), "после импульса отдаёт свет")
 	near(float((v.mesh.surface_get_material(0) as ShaderMaterial).get_shader_parameter("light")), EcoFlower.DARK_LIGHT,
 		1e-6, "шейдер гасит кончики")

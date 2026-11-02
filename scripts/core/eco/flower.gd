@@ -62,6 +62,8 @@ const PING_R := 60.0
 const DARK_LIGHT := 0.1
 const DARK_HOLD := 4.0
 const RELIGHT_TIME := 20.0
+## Видно кончики гаснут за 0,4 с (Б3, `seen`), а не за кадр: биолюм тухнет волной, а не щелчком выключателя.
+const DIM_TIME := 0.4
 const MSG_CD := 60.0
 const MSG_DARK := "Каменный цветок гасит огни после импульса сонара — в тишине разгорится снова"
 
@@ -103,6 +105,8 @@ var ground: Callable
 var shape_seed := SEED
 ## Доля света кончиков: 1 — горят (мерцают по glow), DARK_LIGHT — погасли после импульса.
 var light := 1.0
+## Свет кончиков на виду (шейдеру — `FlowerView.sync`): догоняет light вниз за DIM_TIME, вверх — сразу с ним.
+var seen := 1.0
 ## Секунд темноты до того, как свет начнёт возвращаться.
 var dark_t := 0.0
 ## Секунд до следующего сообщения.
@@ -120,6 +124,7 @@ func reset(world: EcoWorld) -> void:
 	ground = world.ground
 	base = Vector3(_center.x, floor_y(_center.x, _center.y), _center.y)
 	light = 1.0
+	seen = 1.0
 	dark_t = 0.0
 	msg_cd = 0.0
 	_grow()
@@ -145,8 +150,9 @@ func step(_world: EcoWorld, dt: float) -> void:
 	msg_cd -= dt
 	if dark_t > 0.0:
 		dark_t -= dt
-		return
-	light = minf(1.0, light + dt * (1.0 - DARK_LIGHT) / RELIGHT_TIME)
+	else:
+		light = minf(1.0, light + dt * (1.0 - DARK_LIGHT) / RELIGHT_TIME)
+	seen = maxf(light, seen - dt * (1.0 - DARK_LIGHT) / DIM_TIME) if seen > light else light
 
 
 ## Дно под (x, z): мир передаёт Seabed.height; без него — −40 м.

@@ -5,7 +5,7 @@ extends MeshInstance3D
 ## #63465C, в кроне #D06A94, поры — пятнами в шейдере (без дыр в сетке и без текстуры); кончики — вытянутые
 ## многогранники #FFD6EC, светятся только они и мерцают волной снизу вверх (EcoFlower.glow — в шейдере по TIME,
 ## фаза кончика — в UV.x, доля свечения — в альфе цвета). Цоколь — камни #245B70 и трубочки, матовые, без пор
-## (UV.y = 1). Погасание после импульса (EcoFlower.light) — uniform light, отдаёт `sync`. Без источника света: OmniLight в Compatibility перерисовал бы дно ещё раз. Слой отмели.
+## (UV.y = 1). Погасание после импульса (EcoFlower.seen — за DIM_TIME) — uniform light, отдаёт `sync`. Без источника света: OmniLight в Compatibility перерисовал бы дно ещё раз. Слой отмели.
 ## «Экономно» (Б6, `set_lite`): ветви и трубочки — четыре грани вместо шести (LITE_SIDES), кончики — четыре грани и
 ## два кольца (LITE_TIP_RINGS), камни цоколя — пять граней; меш пересобирается, материал, свет, мерцание, вызов и
 ## силуэт те же. Сброс мира уровень не теряет (EcoView.set_lite).
@@ -139,9 +139,9 @@ func _build() -> void:
 
 ## Отдать шейдеру свет кончиков, если заметно изменился. true — отдали.
 func sync() -> bool:
-	if mesh == null or absf(flower.light - shown_light) < 0.01 and not (flower.light >= 1.0 and shown_light < 1.0):
+	if mesh == null or absf(flower.seen - shown_light) < 0.01 and not (flower.seen >= 1.0 and shown_light < 1.0):
 		return false
-	shown_light = flower.light
+	shown_light = flower.seen
 	_mat.set_shader_parameter("light", shown_light)
 	uploads += 1
 	return true

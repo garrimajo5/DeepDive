@@ -3,6 +3,8 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-02
+- Каменный цветок гаснет после импульса за 0,4 с, а не за кадр (поток Б, Б3 `docs/grafika-plan-eco.md`): свет на виду
+  `EcoFlower.seen` догоняет свет мира вниз за `DIM_TIME`, разгорается вместе с ним. Тест — `test_eco_flower.test_dims_smoothly`.
 - Подушечник не сжимается за кадр (поток Б, Б3 `docs/grafika-plan-eco.md`): от касания корабля или стаи подушка
   сжимается за 0,3 с мягким входом (`EcoCushion.SQUEEZE_IN`, `squeeze_k`), раньше ширина 1 → 0,55 за кадр; облако,
   муть и хищники — по-прежнему сразу. Тест — `test_eco_cushion.test_squeeze_eases_in`.
