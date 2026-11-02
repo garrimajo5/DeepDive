@@ -44,6 +44,9 @@ const WANDER_SPEED := 0.15
 const ACCEL := 0.3
 const ARRIVE := 0.6
 const CREEP := 0.03
+## Первые секунды мира ежи пасутся молча — без «graze» и строки «Новое наблюдение» (как EcoGrazer.START_QUIET): с
+## плавным разгоном ближний к старту ёж доходит до ленты на 5-й с и перебивал строку приборов.
+const START_QUIET := 8.0
 ## Ёж — на 0,15 м над дном; появляется в кольце 0,6 · KELP_R … KELP_R + 2 м от середины рощи.
 const UP := 0.15
 ## Наблюдение «graze» — раз в 60 с от ежа, текст — раз в 90 с у рощи; «kelp» и «bare» — раз в 40 с у рощи.
@@ -185,6 +188,7 @@ func reset(world: EcoWorld) -> void:
 			u.grove = gi
 			u.phase = _rnd.range_f(0, 6)
 			_spawn(u)
+			u.graze_cd = START_QUIET
 			urchins.append(u)
 
 

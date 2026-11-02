@@ -488,3 +488,13 @@ func test_urchin_want_speed_slows_to_creep() -> void:
 	near(EcoKelp.want_speed(EcoKelp.SPEED, 5.0), EcoKelp.SPEED, 1e-6, "вдали — полный ход")
 	near(EcoKelp.want_speed(EcoKelp.SPEED, EcoKelp.ARRIVE * 0.5), EcoKelp.SPEED * 0.5, 1e-6, "у места — вполовину")
 	near(EcoKelp.want_speed(EcoKelp.SPEED, 0.0), EcoKelp.CREEP, 1e-6, "у самого места — доползает")
+
+
+## Первые START_QUIET с ежи пасутся молча: ни наблюдения «graze», ни строки (с разгоном первый доходит позже и
+## перебивал строку приборов в test_status).
+func test_urchins_quiet_at_start() -> void:
+	var w := _world()
+	w.ship.pos = SPOT + Vector3(0, 10, 0)
+	w.reset()
+	w.run(EcoKelp.START_QUIET - 0.5, 1.0 / 30.0)
+	eq(_notes(w, EcoKelp.ID, "graze").size(), 0, "в начале ежи молчат")
