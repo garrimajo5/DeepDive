@@ -107,3 +107,9 @@ func test_no_jump_after_reset_far_from_start() -> void:
 	# у Светового колодца 05: рядом моль и ледокрыл, а стаи у старта — дальние, шагают по LOD
 	var r := _worst_after_reset(LayerMap.at("05"), 2.0)
 	ok(r[0] < MAX_SPEED, "у колодца 05 после сброса без рывков: %.1f м/с (%s)" % r)
+
+
+func test_no_jump_after_reset_at_bones() -> void:
+	# у Костей 04 корабль стоит в клетке молоди: рыбки встают снаружи корпуса, а не выпрыгивают из него
+	var r := _worst_after_reset(LayerMap.at("04"), 2.0)
+	ok(r[0] < MAX_SPEED, "у Костей 04 после сброса без рывков: %.1f м/с (%s)" % r)

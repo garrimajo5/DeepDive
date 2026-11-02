@@ -78,6 +78,26 @@ func test_center_is_mean_after_reset() -> void:
 	near(sh0.center.distance_to(sum0 / sh0.members.size()), 0.0, 1e-3, "и после сброса мира")
 
 
+## Сброс мира, когда корабль стоит у стаи (у Костей 04 — в клетке молоди): рыбки встают снаружи корпуса сразу,
+## а не выпрыгивают из него на первом шаге (было до 2,9 м за шаг — 86 м/с).
+func test_no_jump_out_of_hull_after_reset() -> void:
+	var w := _world()
+	var fish := _fish(w)
+	w.ship.pos = LayerMap.at("04")
+	w.reset()
+	var cage: EcoFish.Shoal = fish.shoals[fish.shoals.size() - 1]
+	ok(cage.cage, "последняя стая — молодь в клетке")
+	var before: Array[Vector3] = []
+	for f in fish.all:
+		before.append(f.agent.p)
+		ok(not w.touches_ship(f.agent.p), "рыбка %d после сброса — снаружи корпуса" % f.index)
+	w.step(1.0 / 30.0)
+	var worst := 0.0
+	for f in fish.all:
+		worst = maxf(worst, f.agent.p.distance_to(before[f.index]))
+	ok(worst < 0.5, "на первом шаге никто не прыгает: %.2f м" % worst)
+
+
 func test_shoal_roams_near_home_and_keeps_together() -> void:
 	var w := _world()
 	var fish := _fish(w)

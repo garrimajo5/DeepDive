@@ -3,6 +3,10 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-02
+- Светляки после сброса мира у корабля встают снаружи корпуса, а не выпрыгивают из него на первом шаге (поток Б, Б3
+  `docs/grafika-plan-eco.md`): у Костей 04 молодь в клетке под кораблём прыгала до 2,9 м за шаг, центр стаи — на 2,1 м;
+  теперь `EcoFish.reset` сразу выталкивает её (`push_out`). Тесты — `test_eco_fish.test_no_jump_out_of_hull_after_reset`,
+  `test_eco_reset_jumps.test_no_jump_after_reset_at_bones`.
 - Инеевая бахрома у колодца 05: задетая корпусом нить отходит от него за полсекунды, а не прыгает концом на 1,2 м
   за кадр (поток Б, Б3 `docs/grafika-plan-eco.md`): корпус ставит цель отвода `EcoFringe.Curtain.push_goal`, нить
   догоняет её с постоянной `PUSH_IN` = 0,18 с. Тест — `test_eco_fringe.test_push_eases_away_from_hull`.

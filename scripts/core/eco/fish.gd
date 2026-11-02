@@ -229,6 +229,7 @@ func reset(world: EcoWorld) -> void:
 	if world.ground.is_valid():
 		foot.y = world.ground.call(foot.x, foot.z)
 	var reef_crown := HOMES.size() + CROWN_SHOALS
+	var hull_r2 := (EcoHull.BOUND + HULL_GAP) * (EcoHull.BOUND + HULL_GAP)
 	for si in reef_crown + CAGE_SHOALS:
 		var sh := Shoal.new()
 		sh.rnd = _rnd
@@ -269,6 +270,11 @@ func reset(world: EcoWorld) -> void:
 			var a := world.spawn(ID, p)
 			a.home = h
 			a.clearance = 0.4 * size
+			# встала в корпусе (сброс у корабля: загрузка, перестройка по дну) — сразу снаружи, как её вытолкнет шаг;
+			# раньше молодь в клетке Костей 04 под кораблём на первом шаге прыгала из корпуса до 2,9 м (86 м/с)
+			if p.distance_squared_to(world.ship.pos) < hull_r2:
+				world.push_out(a, HULL_GAP)
+				a.confine(world.ground)
 			a.v = Vector3(sh.rnd.range_f(-1, 1), 0, sh.rnd.range_f(-1, 1))
 			var f := Fish.new()
 			f.agent = a
