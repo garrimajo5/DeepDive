@@ -254,6 +254,24 @@ func test_act_step() -> void:   # товарищ жмёт свою кнопку 
 	eq(q.advance(0.1)[0], ["act"], "команда сцене")
 
 
+func test_mate_same_role_replaces() -> void:   # #1162: второй «биолог» сценария встаёт вместо первого
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.start_qa('[{"do": "mate", "x": 0.9, "z": -2.3, "yaw": 90, "role": 3, "look": 0},'
+		+ ' {"do": "mate", "x": 0.2, "z": -2.6, "yaw": 60, "role": 2, "look": 1},'
+		+ ' {"do": "mate", "x": 1.85, "z": -0.75, "yaw": 90, "role": 3, "look": 0}, {"do": "wait", "s": 0.3}]')
+	for i in 20:
+		main.step(1.0 / 30.0)
+	eq(main.crew.size(), 3, "свой игрок, инженер и один биолог")
+	var bios := main.crew.filter(func(m: Crew.Member) -> bool: return m.role == Crew.Role.BIOLOGIST)
+	eq(bios.size(), 1, "биолог один")
+	eq((main.crew[-1] as Crew.Member).role, Crew.Role.BIOLOGIST, "новый — последним, его ведут act/gone")
+	near((main.crew[-1] as Crew.Member).walker.z, -0.75, 0.3, "стоит на новом месте")
+	main.queue_free()
+	await frames(1)
+
+
 func test_gone_step() -> void:   # товарищ отключился, как гость сети: у хоста плашка ART-043
 	var q := QaScript.parse('[{"do": "gone"}]')
 	eq(q.errors.size(), 0, "шаг gone известен")
