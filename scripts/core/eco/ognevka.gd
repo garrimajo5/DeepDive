@@ -35,6 +35,10 @@ const DART := 4.0
 ## держит курс (раньше нос щёлкал на касательную круга).
 const LOOK_K := 10.0
 const LOOK_MAX := 8.0
+## Запас до обшивки, м: корпус не пускает рачка внутрь (`EcoHull.push_out`, как светляков `EcoFish.HULL_GAP`).
+## Корабль на высоте дна + 3 м проходит над огнецветом (вершина — 4,2 м), раньше стая кружила внутри корпуса —
+## светящиеся рачки в отсеках и на мостике; теперь сидят на обшивке и возвращаются к вершине, когда корабль ушёл.
+const HULL_GAP := 0.15
 
 
 ## Одна огнёвка: станция, фаза, радиус круга и высота над вершиной.
@@ -92,7 +96,7 @@ func reset(world: EcoWorld) -> void:
 			shrimp.append(s)
 			# с начала — там, куда его ведёт шаг (круг над вершиной или веерник); раньше все стояли в вершине и на
 			# первом шаге прыгали к веернику до 1,5 м за кадр (44 м/с)
-			s.p = goal_of(s, shrimp.size() - 1, world.time, null)
+			s.p = outside(world, goal_of(s, shrimp.size() - 1, world.time, null))
 			s.dir = _tangent(s.phase)
 
 
@@ -135,7 +139,7 @@ func step(world: EcoWorld, dt: float) -> void:
 		var pr: EcoPred.Pred = ps.all[st.busy] if ps and st.busy >= 0 and st.busy < ps.all.size() else null
 		var goal := goal_of(s, k, t, pr)
 		var was := s.p
-		s.p = follow(s.p, goal, sdt)
+		s.p = outside(world, follow(s.p, goal, sdt))
 		s.dir = turn(s.dir, s.p - was, sdt)
 	fan_cd -= dt
 	if fans and fan_cd <= 0.0:
@@ -158,6 +162,12 @@ func goal_of(s: Shrimp, k: int, t: float, pr: EcoPred.Pred) -> Vector3:
 	if fan:  # половина кормится на веернике
 		return fan.top + Vector3(cos(a) * s.r * 0.8, s.h + sin(t * 3 + s.phase) * 0.3, sin(a) * s.r * 0.3)
 	return st.top + Vector3(cos(a) * s.r, s.h + sin(t * 3 + s.phase) * 0.15, sin(a) * s.r)
+
+
+## Место p снаружи корпуса корабля (с запасом HULL_GAP): внутри — ближайшая точка на обшивке.
+static func outside(world: EcoWorld, p: Vector3) -> Vector3:
+	var res := EcoHull.push_out(p, world.ship.pos, world.ship.yaw, HULL_GAP)
+	return p if res.is_empty() else res[0]
 
 
 ## Шаг к цели на dt с: доля FOLLOW·dt пути, не дальше DART·dt.

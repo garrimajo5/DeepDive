@@ -96,6 +96,47 @@ func test_no_jump_after_reset() -> void:
 	ok(worst < 6.0, "рачки без рывков после сброса: %.2f м/с" % worst)
 
 
+## Корабль на высоте дна + 3 м (`Helm.Ship.CLEARANCE`) проходит над огнецветом с вершиной 4,2 м: рачки не кружат
+## внутри корпуса (светились в отсеках и на мостике), а держатся снаружи обшивки — и сразу после сброса, и на ходу;
+## корабль ушёл — стая возвращается к вершине.
+func test_shrimp_stay_outside_hull() -> void:
+	var top := Vector3(0, FLAT + EcoLeech.TOP, 0)
+	var tops: Array[Vector3] = [top]
+	var w := _world(tops)
+	var og := _sys(w, EcoOgnevka) as EcoOgnevka
+	_calm(_sys(w, EcoPred) as EcoPred)
+	var dt := 1.0 / 30.0
+	# корабль стоит над станцией: вершина — у самого днища
+	w.ship.pos = Vector3(0, FLAT + Helm.Ship.CLEARANCE, -9)
+	w.ship.yaw = 0.0
+	ok(w.touches_ship(top), "проверка честная: вершина огнецвета внутри корпуса")
+	w.reset()
+	for s in og.shrimp:
+		ok(not w.touches_ship(s.p), "после сброса рачок снаружи корпуса")
+	var inside := 0
+	var was: Array[Vector3] = []
+	for s in og.shrimp:
+		was.append(s.p)
+	var worst := 0.0
+	# стоит 2 с, затем проходит над станцией на 6 м/с (нос в −Z)
+	for i in 30 * 6:
+		if i >= 60:
+			w.ship.pos += Vector3(0, 0, -6.0 * dt)
+		w.step(dt)
+		for k in og.shrimp.size():
+			if w.touches_ship(og.shrimp[k].p):
+				inside += 1
+			worst = maxf(worst, og.shrimp[k].p.distance_to(was[k]) / dt)
+			was[k] = og.shrimp[k].p
+	eq(inside, 0, "рачки ни на шаге не внутри корпуса")
+	ok(worst < 15.0, "обшивка толкает без рывков: %.1f м/с" % worst)
+	_run(w, 6.0)
+	var far := 0.0
+	for s in og.shrimp:
+		far = maxf(far, s.p.distance_to(top))
+	ok(far < 2.5, "корабль ушёл — стая снова над вершиной: %.2f м" % far)
+
+
 ## Б3: хищник встал на чистку в 8 м от вершины — стая плывёт к нему не быстрее DART (раньше доля lerp давала
 ## 26 м/с за шаг — нашла `test_eco_reset_jumps`), но всё равно облепляет его за пару секунд.
 func test_no_dart_to_pred_on_cleaning() -> void:
