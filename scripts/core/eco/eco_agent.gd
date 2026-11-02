@@ -130,9 +130,12 @@ const LOOK_ACCEL := 8.0
 
 ## Вертикальная скорость, с которой к каждой точке пути впереди (горизонтальный ход за долю LOOK_AT от look) существо
 ## уже будет на clearance + LOOK_GAP над дном. Отрицательная — вниз не быстрее её: в нырке к дну тормозит заранее.
+## Высоко над дном (дальше, чем подъём 2:1 на всём пути и запас) — не смотрит: −INF без лишних вызовов дна.
 func climb_for(ground: Callable) -> float:
 	var flat := Vector3(v.x, 0.0, v.z)
 	var need := -INF
+	if p.y - ground_y(ground) - clearance > 2.0 * flat.length() * look + 2.0 - minf(v.y, 0.0) * look:
+		return need
 	for f: float in LOOK_AT:
 		var t := look * f
 		var q := p + flat * t
