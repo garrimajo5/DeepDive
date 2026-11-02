@@ -671,6 +671,45 @@ func test_tail_offset_twin() -> void:
 	ok(worst < 0.012, "без рывков: %.4f м за кадр" % worst)
 
 
+## Б3: появившаяся над мхом рыбка вырастает за COIN_RISE, а не возникает за кадр; схваченная — пропадает сразу.
+func test_view_new_coin_grows() -> void:
+	var w := _world()
+	var c := _coins(w)
+	var v := CoinsView.new(c)
+	var cn := c.coins[4]
+	var t := 1.0
+	v.sync(t)
+	var full := KelpView.transform_at(v.coin_buffer, v.slot_of(4), CoinsView.STRIDE_C).basis.x.length()
+	ok(full > 0.05, "живая во весь размер: %.3f" % full)
+	cn.alive = false
+	t += 0.1
+	v.sync(t)
+	ok(KelpView.transform_at(v.coin_buffer, v.slot_of(4), CoinsView.STRIDE_C).basis.x.length() < 1e-6, "схваченная — сразу")
+	cn.alive = true
+	var dt := 1.0 / 30.0
+	var last := 0.0
+	var worst := 0.0
+	for i in int(CoinsView.COIN_RISE / dt) + 2:
+		t += dt
+		v.sync(t)
+		var tr := KelpView.transform_at(v.coin_buffer, v.slot_of(4), CoinsView.STRIDE_C)
+		var sz := tr.basis.x.length()
+		if i == 0:
+			ok(sz < full * 0.05, "появилась крошечной: %.4f" % sz)
+			ok(tr.origin.is_equal_approx(cn.pos), "растёт на своём месте")
+		worst = maxf(worst, sz - last)
+		last = sz
+	ok(worst < full * 0.15, "за шаг растёт на %.4f < 15 %%" % worst)
+	near(last, full, 1e-4, "выросла во весь размер")
+	cn.alive = false
+	v.sync(t)
+	cn.alive = true
+	v.sync(t + 5.0)
+	near(KelpView.transform_at(v.coin_buffer, v.slot_of(4), CoinsView.STRIDE_C).basis.x.length(), full, 1e-4,
+			"скачок времени — сразу к цели")
+	v.free()
+
+
 func test_view_tail_phase_and_time() -> void:
 	var w := _world()
 	var c := _coins(w)

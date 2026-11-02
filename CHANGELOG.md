@@ -3,6 +3,9 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-02
+- Монетник не возникает над мхом за кадр (поток Б, Б3 `docs/grafika-plan-eco.md`): новая рыбка вырастает за 1 с
+  (`CoinsView.COIN_RISE`, доли `coin_k`), схваченная глазуном пропадает сразу. Тест —
+  `test_eco_coins.test_view_new_coin_grows`.
 - Пиявник не возникает и не пропадает за кадр (поток Б, Б3 `docs/grafika-plan-eco.md`): заразился — лента у жабр
   серпохвоста вырастает за 2 с (`LeechView.LEECH_RISE`), огнёвки сняли — сжимается за 0,6 с (`LEECH_FADE`, доли
   `leech_k`). Тест — `test_eco_leech.test_view_ribbon_grows_and_shrinks`.
