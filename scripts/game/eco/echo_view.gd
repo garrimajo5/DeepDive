@@ -22,6 +22,12 @@ const FOLD_DARK := 0.55
 ## Свечение складок: затаился — FOLD · HUSH, раскрыт — пульс до FOLD · LOUD (3 рад/с, как в браузере).
 const HUSH := 0.12
 const LOUD := 0.9
+## Пульс складок набирается и гаснет плавно (Б3): доля `loud_k` растёт за LOUD_RISE с после импульса, гаснет за
+## LOUD_FADE с, когда раскрытие кончилось (мягкий вход, `loud_step`/`fold_k`); раньше свечение прыгало 0,12 → до 0,9
+## за кадр. По времени мира (у гостя то же); время назад или скачок дальше SNAP_DT с (сброс, вход гостя) — сразу.
+const LOUD_RISE := 0.5
+const LOUD_FADE := 1.5
+const SNAP_DT := 1.0
 ## Тело: передняя и задняя капсулы (центр, полуоси), голова, челюсть, мешок (под горлом), лапы, хвост.
 const FRONT := [Vector3(0, 0.0, 0.45), Vector3(0.62, 0.38, 0.85)]
 const BACK := [Vector3(0, -0.05, -0.6), Vector3(0.55, 0.33, 0.8)]
@@ -70,6 +76,8 @@ var sac: MeshInstance3D
 var ears: Array[Node3D] = []
 var fold_mat: StandardMaterial3D
 var _glow := HUSH
+## Доля пульса складок 0…1 (0 — затаился, 1 — раскрыт во всю силу).
+var loud_k := 0.0
 var dust := EcoEchoDust.new()
 var dust_view: MultiMeshInstance3D
 ## Буфер мути (EcoDustBuffer, issue #732).
@@ -160,6 +168,8 @@ func sync(t: float, ship: Vector3, info: EcoLink.ShipState = null, flow := Vecto
 	group.transform = ec.xform()
 	for i in 2:
 		ears[i].basis = ear_basis(ec.ears[i])
+	var dt := t - _last_t
+	loud_k = loud_step(loud_k, ec.is_revealed(), dt, is_nan(dt) or dt < 0.0 or dt > SNAP_DT)
 	_breathe(t, ec.is_revealed())
 	var s := sin(TAU * breath_phase)
 	var b := 1.0 + SAC_BREATH * s
@@ -167,12 +177,26 @@ func sync(t: float, ship: Vector3, info: EcoLink.ShipState = null, flow := Vecto
 	var sc := body_breath(s)
 	body.scale = sc
 	body.position.y = body_foot * (1.0 - sc.y)
-	var k := HUSH
-	if ec.is_revealed():
-		k = HUSH + (LOUD - HUSH) * (0.5 + 0.5 * sin(t * 3.0))
+	var k := fold_k(t, loud_k)
 	if k != _glow:  # затаился — материал не трогаем каждый кадр
 		_glow = k
 		fold_mat.emission = FOLD * k
+
+
+## Доля пульса складок за шаг dt: к 1 за LOUD_RISE раскрытым, к 0 за LOUD_FADE затаившимся; snap — сразу к цели.
+static func loud_step(k: float, on: bool, dt: float, snap := false) -> float:
+	if snap:
+		return 1.0 if on else 0.0
+	return minf(1.0, k + dt / LOUD_RISE) if on else maxf(0.0, k - dt / LOUD_FADE)
+
+
+## Свечение складок (доля FOLD) в миг t при доле пульса loud: затаился — HUSH, раскрыт — пульс 3 рад/с до LOUD;
+## доля — с мягким входом (smoothstep), без излома в начале и в конце.
+static func fold_k(t: float, loud: float) -> float:
+	if loud <= 0.0:
+		return HUSH
+	var e := loud * loud * (3.0 - 2.0 * loud)
+	return HUSH + (LOUD - HUSH) * e * (0.5 + 0.5 * sin(t * 3.0))
 
 
 ## Фаза дыхания догоняет время мира t: ритм к 1 (затаился) или ALARM_RATE (раскрыт) за ~RATE_EASE с. Время назад
