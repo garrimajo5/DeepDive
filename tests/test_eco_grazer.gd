@@ -343,6 +343,42 @@ func test_grazer_starts_and_stops_smoothly() -> void:
 	ok(prev_v < 0.35, "к пятну подходит тише (%.2f м/с)" % prev_v)
 
 
+func test_walks_up_steep_bump_at_its_pace() -> void:
+	# бугор рифа 4 м на 3 м, уклон до 2:1 (как у (−40, 6) на отмели): вдоль дна — не быстрее шага 0,9 м/с (уклон — с
+	# прошлого шага, запас 10 %), раньше по склону — до 2 м/с (Б3: взбегал и скатывался); на ровном — полный шаг
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, z: float) -> float: return -40.0 + 4.0 * smoothstep(0.0, 3.0, z)
+	w.ship.pos = Vector3(0, -30, 0)   # рядом: шаг каждый кадр (EcoLod)
+	var m := w.add(EcoMoss.new([Vector3(0, -36, 12)] as Array[Vector3])) as EcoMoss
+	m.patches[0].food = 1.0
+	w.add(EcoGrazer.new(m, 1))
+	var g := _grazers(w).all[0]
+	var a := g.agent
+	a.p = Vector3(0, -40 + EcoGrazer.LIFT, -6)
+	a.v = Vector3(0, 0, EcoGrazer.WALK_SPEED)
+	g.dir = 0.0
+	g.patch = m.patches[0]
+	var dt := EcoWorld.MAX_STEP
+	var top := 0.0
+	var on_slope := 0.0
+	var t := 0.0
+	while t < 40.0 and not g.grazing():
+		var was := a.p
+		w.step(dt)
+		t += dt
+		var sp := a.p.distance_to(was) / dt
+		top = maxf(top, sp)
+		if was.z > 0.3 and a.p.z < 2.7:
+			on_slope = maxf(on_slope, (a.p.y - was.y) / dt)
+	ok(g.grazing(), "перешёл бугор и дошёл до пятна")
+	ok(top <= EcoGrazer.WALK_SPEED * 1.1, "вдоль дна не быстрее шага: %.2f м/с" % top)
+	ok(on_slope > 0.6, "на склоне идёт вверх своим шагом (%.2f м/с), а не стоит" % on_slope)
+	near(a.p.y, -36.0 + EcoGrazer.LIFT, 1e-4, "на верху бугра — на дне")
+	near(EcoGrazer.walk(w, Vector3(0, -39.9, -5), Vector3(0, 0, 0.03), 0.0).z, -4.97, 1e-6, "на ровном — шаг целиком")
+	near(EcoGrazer.walk(w, Vector3(0, -39.9, -5), Vector3(0, 0, 0.03), 0.0, 2.0).z, -5.0 + 0.03 / sqrt(5.0), 1e-6,
+			"на уклоне 2:1 — шаг по горизонтали в √5 раз короче")
+
+
 func test_quiet_first_seconds() -> void:
 	for g in _grazers(_world()).all:
 		ok(g.graze_cd >= EcoGrazer.START_QUIET, "первые 8 с скребун молчит")

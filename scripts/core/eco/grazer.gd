@@ -48,6 +48,10 @@ class Grazer:
 	var graze_cd := 0.0
 	## Набранное время вдали (EcoLod): шагает реже, догоняя пропущенное.
 	var lag := 0.0
+	## Уклон дна по прошлому шагу (подъём к шагу по горизонтали): шаг идёт вдоль дна (`walk`, Б3) — раньше на
+	## буграх рифа (уклон до 2:1) скребун взбегал и скатывался до 2 м/с при шаге 0,9 м/с. Уклон берётся с прошлого
+	## шага, а не лишней выборкой дна: шум fbm — самое дорогое в шаге (issue #133).
+	var slope := 0.0
 
 	func grazing() -> bool:
 		return agent.alive and agent.state == EcoAgent.State.GRAZE
@@ -191,6 +195,7 @@ func _step_grazer(world: EcoWorld, g: Grazer, dt: float) -> void:
 		var pt: EcoMoss.Patch = _rnd.pick(moss.patches)
 		a.p = Vector3(pt.pos.x + _rnd.range_f(-3, 3), pt.pos.y, pt.pos.z + _rnd.range_f(-3, 3))
 		a.alive = true
+		g.slope = 0.0
 		moved = true
 		g.patch = _pick_patch(g)
 		a.set_state(EcoAgent.State.SEEK)
@@ -217,15 +222,31 @@ func _step_grazer(world: EcoWorld, g: Grazer, dt: float) -> void:
 			g.dir += clampf(da * minf(1.0, dt * TURN_RATE), -TURN_MAX * dt, TURN_MAX * dt)
 			var sp := move_toward(a.v.length(), want_speed(d, da), ACCEL * dt)
 			a.v = Vector3(sin(g.dir) * sp, 0, cos(g.dir) * sp)
-			a.p = Vector3(a.p.x + a.v.x * dt, a.p.y, a.p.z + a.v.z * dt)
-			moved = true
+			var was := a.p
+			a.p = walk(world, a.p, a.v * dt, g.patch.pos.y if g.patch else a.p.y - LIFT, g.slope)
+			var fl := _flat(a.p, was)
+			if fl > 1e-5:
+				g.slope = (a.p.y - was.y) / fl
 	else:
 		EcoMoss.eat(g.patch, dt * EAT_RATE)
 		if a.expired() or g.patch.food < LEAVE:
 			g.patch = _pick_patch(g)
 			a.set_state(EcoAgent.State.SEEK)
 	if not moved:
-		return   # стоит (ест или только что дошёл): дно под ним то же — шум fbm не пересчитываем (issue #133)
+		return   # стоит, ест или идёт (`walk` уже поставил на дно): шум fbm не пересчитываем (issue #133)
 	a.p.x = clampf(a.p.x, -EcoAgent.EDGE, EcoAgent.EDGE)
 	a.p.z = clampf(a.p.z, -EcoAgent.EDGE, EcoAgent.EDGE)
 	a.p.y = _ground_y(world, a.p.x, a.p.z, g.patch.pos.y if g.patch else a.p.y - LIFT)
+
+
+## Шаг по дну из from на move (по горизонтали, м) при уклоне slope (подъём к шагу по горизонтали, с прошлого шага):
+## новое место на дне + LIFT. Шаг по горизонтали укорачивается в √(1 + slope²) раз — путь вдоль дна длиной move:
+## скребун идёт по бугру своим шагом, а не взбегает. fallback — высота дна без дна мира (тесты).
+static func walk(world: EcoWorld, from: Vector3, move: Vector3, fallback: float, slope: float = 0.0) -> Vector3:
+	return _on_ground(world, from, move / sqrt(1.0 + slope * slope), fallback)
+
+
+static func _on_ground(world: EcoWorld, from: Vector3, move: Vector3, fallback: float) -> Vector3:
+	var x := clampf(from.x + move.x, -EcoAgent.EDGE, EcoAgent.EDGE)
+	var z := clampf(from.z + move.z, -EcoAgent.EDGE, EcoAgent.EDGE)
+	return Vector3(x, _ground_y(world, x, z, fallback), z)
