@@ -41,7 +41,8 @@ const VEIL_PAD := EcoVeil.FISH_PAD + 20.0
 ## Стая дальше FAR от корабля (в тумане, плотность ≥ 0,0135 — видна на четверть) ходит реже: раз в FAR_EVERY
 ## шагов мира (при 60 к/с — каждый третий кадр, шагом ≈ FAR_STEP), набирая пропущенное время. Очередь — по счётчику
 ## шагов и номеру стаи, а не по набранному времени: при неровном кадре время сводило все дальние стаи в один кадр
-## (issue #803: мир 51 мс вместо 15). Дальние стаи сдвинуты по фазе, чтобы не считались в одном кадре.
+## (issue #803: мир 51 мс вместо 15). Дальние стаи сдвинуты по фазе, чтобы не считались в одном кадре. На медленном
+## кадре очередь короче (`EcoLod.wait`, #1135), а не все разом раньше очереди.
 const FAR := 100.0
 const FAR_STEP := 0.05
 const FAR_EVERY := 3
@@ -394,8 +395,7 @@ func step(world: EcoWorld, dt: float) -> void:
 		var h := dt
 		var d := sh.center.distance_to(world.ship.pos)
 		if d > MID:
-			var every := FAR_EVERY if d > FAR else MID_EVERY
-			if (_tick + sh.index) % every != 0 and sh.lag + 2.0 * dt <= LAG_MAX + 1e-6:
+			if EcoLod.wait(d, _tick, sh.index, sh.lag, dt):   # очередь дальних — одна на весь мир (EcoLod, #1135)
 				sh.lag += dt
 				continue
 			h += sh.lag
