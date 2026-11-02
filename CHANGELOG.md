@@ -3,6 +3,10 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-02
+- Огнецвет гасит кончики от импульса сонара и разряда за 0,4 с, а не за кадр (поток Б, Б3 `docs/grafika-plan-eco.md`):
+  свет на виду `EcoCoral.Bush.seen` догоняет свет мира вниз за `DIM_TIME` (`ease_seen`), вверх — сразу; шейдеру —
+  `CoralView.sync` по `seen`. Свет мира, строка и облачка слизи — сразу, как раньше. Тест —
+  `test_eco_flora.test_coral_dims_smoothly`.
 - Присоска стеклоуста ложится на стекло и собирается за 0,4 с, а не за кадр (поток Б, Б3 `docs/grafika-plan-eco.md`):
   доля `EelView.ring_k` тем же шагом, что виляние (`wag_step`, `RING_RISE`), масштаб — `ring_scale`; раньше кольцо
   сразу становилось шире на 35 % и вдвое тоньше. Тест — `test_eco_eel.test_ring_flattens_smoothly`.
