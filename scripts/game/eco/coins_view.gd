@@ -22,6 +22,9 @@ extends Node3D
 ## `tail_offset`. «Экономно» — `sway_k` (EcoShaders.set_sway_lite).
 ## Новая рыбка над мхом не возникает за кадр (Б3): вырастает за COIN_RISE (доли coin_k по времени мира, у гостя то же);
 ## схваченная глазуном пропадает сразу — её проглотили.
+## Глаза глазуна в луче не щёлкают (Б3): доля луча eye_lit (по времени мира, у гостя то же) растёт за EYE_RISE и гаснет
+## за EYE_FADE; альфа экземпляра (`eye_alpha`) и раздувание шарика в шейдере (`tip_grow` — по альфе выше EYE_FROM)
+## идут за ней плавно. Строка на приборах и мир (`EcoCoins.Glazun.lit`) — сразу, как раньше.
 
 const COIN := Color("e8d48a")
 const FIN := Color("b59a50")
@@ -72,6 +75,8 @@ var dust_buffer: PackedFloat32Array:
 var _dust := EcoDustBuffer.new()
 ## Доля размера монетника по номеру рыбки: 0 — съеден, 1 — во весь размер.
 var coin_k := PackedFloat32Array()
+## Доля луча на глазах глазуна по его номеру: 0 — без света (мерцают), 1 — в луче (раздуты и ярки).
+var eye_lit := PackedFloat32Array()
 var _k_t := 0.0
 var _k_fresh := true
 ## «Экономно»: в каждой стайке не рисуется монетник с местом k % LITE_SKIP == LITE_SKIP − 1.
@@ -158,6 +163,9 @@ const COIN_RISE := 1.0
 const SNAP_DT := 1.0
 ## Запас рамки глазунов (#849): стоят на месте, стебель с глазами до 2,2 м вверх.
 const GLAZUN_GROW := 4.0
+## Глаза глазуна: попал в луч — раздуваются и разгораются за EYE_RISE с, вышел — гаснут за EYE_FADE с.
+const EYE_RISE := 0.3
+const EYE_FADE := 0.6
 
 
 ## Расставить монетников и глазунов в момент t (время мира). ship — корабль (муть — ближе EcoGrazerDust.NEAR,
@@ -184,7 +192,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 		var j := gz.index * STRIDE_C
 		EcoMM.put(body_buffer, j, EcoCoins.glazun_transform(gz))
 		body_buffer[j + 12] = 1.0; body_buffer[j + 13] = 1.0; body_buffer[j + 14] = 1.0
-		body_buffer[j + 15] = eye_alpha(gz, t)
+		body_buffer[j + 15] = eye_alpha(gz, t, eye_lit[gz.index])
 	EcoMM.send(bodies, body_buffer)
 
 
@@ -205,6 +213,18 @@ func grow(t: float) -> void:
 			coin_k[i] = 0.0
 		else:
 			coin_k[i] = 1.0 if snap else minf(1.0, coin_k[i] + dt / COIN_RISE)
+	if eye_lit.size() != coins.glazuns.size():
+		eye_lit.resize(coins.glazuns.size())
+		snap = true
+	for gz in coins.glazuns:
+		eye_lit[gz.index] = eye_step(eye_lit[gz.index], gz.lit, dt, snap)
+
+
+## Доля луча на глазах за шаг dt: к 1 за EYE_RISE в луче, к 0 за EYE_FADE без него; snap — сразу к цели.
+static func eye_step(k: float, lit: bool, dt: float, snap := false) -> float:
+	if snap:
+		return 1.0 if lit else 0.0
+	return minf(1.0, k + dt / EYE_RISE) if lit else maxf(0.0, k - dt / EYE_FADE)
 
 
 func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3) -> void:
@@ -285,10 +305,21 @@ static func build_coin() -> ArrayMesh:
 	return m
 
 
-## Альфа экземпляра глазуна — свет глаз: альфа² = (k + 0,25) / 1,25 по яркости EcoCoins.eye_k (в луче 1 —
-## глаза раздуваются, шейдер ждёт альфу больше 0,9; вне луча — не больше 0,75).
-static func eye_alpha(gz: EcoCoins.Glazun, t: float) -> float:
-	return 1.0 if gz.lit else sqrt((EcoCoins.eye_k(gz, t) + 0.25) / 1.25)
+## Альфа экземпляра глазуна — свет глаз: без света альфа² = (k + 0,25) / 1,25 по мерцанию EcoCoins.eye_k (не больше
+## 0,75), в луче — 1; между ними — по доле луча lit (мягкий вход). Шейдер раздувает шарик по альфе выше EYE_FROM.
+static func eye_alpha(gz: EcoCoins.Glazun, t: float, lit: float) -> float:
+	var dim := sqrt((0.35 + 0.1 * sin(t * 1.3 + gz.index) + 0.25) / 1.25)
+	return lerpf(dim, 1.0, smoothstep(0.0, 1.0, clampf(lit, 0.0, 1.0)))
+
+
+## Альфа, выше которой шейдер раздувает глаз: доля раздувания = (альфа − EYE_FROM) / (1 − EYE_FROM). Мерцание без
+## света — не выше 0,75, глаз не дышит.
+const EYE_FROM := 0.76
+
+
+## Доля раздувания глаза при альфе a — двойник шейдера.
+static func eye_grow(a: float) -> float:
+	return clampf((a - EYE_FROM) / (1.0 - EYE_FROM), 0.0, 1.0)
 
 
 ## Глазун одним мешем и одной поверхностью: сплющенное тело 0,9 × 0,16 × 0,6 м и два стебелька впереди (+Z) —
@@ -304,7 +335,7 @@ static func build_glazun() -> ArrayMesh:
 		_eye(st, Vector3(sx * EcoCoins.EYE.x, EcoCoins.EYE.y, EcoCoins.EYE.z))
 	var m := st.commit()
 	m.surface_set_material(0, EcoShaders.plant(EcoShaders.Plant.TENTACLE, {"rough": 0.42, "spec": 0.55,
-		"tip_glow": Vector2(0.0, EYE_GLOW), "tip_grow": Vector2(EYE_R, EYE_LIT - 1.0), "back": Vector3.ZERO}))
+		"tip_glow": Vector2(0.0, EYE_GLOW), "tip_grow": Vector2(EYE_R, EYE_LIT - 1.0), "tip_from": EYE_FROM, "back": Vector3.ZERO}))
 	return m
 
 

@@ -453,10 +453,10 @@ func test_glazun_eyes_where_world_sees() -> void:
 			var local := Vector3((-1.0 if e == 0 else 1.0) * EcoCoins.EYE.x, EcoCoins.EYE.y, EcoCoins.EYE.z)
 			ok((tr * local).distance_to(gz.eyes[e]) < 1e-4, "глаз %d глазуна %d" % [e, gz.index])
 	var gz := c.glazuns[0]
-	gz.lit = false
-	ok(CoinsView.eye_alpha(gz, 3.0) < 0.9, "вне луча шейдер глаза не раздувает")
-	gz.lit = true
-	eq(CoinsView.eye_alpha(gz, 3.0), 1.0)
+	for t in [0.0, 1.0, 3.0, 7.7]:
+		ok(CoinsView.eye_grow(CoinsView.eye_alpha(gz, t, 0.0)) == 0.0, "вне луча шейдер глаза не раздувает (t %.1f)" % t)
+	eq(CoinsView.eye_alpha(gz, 3.0, 1.0), 1.0)
+	eq(CoinsView.eye_grow(1.0), 1.0)
 
 
 func test_meshes_face_outward() -> void:
@@ -707,6 +707,46 @@ func test_view_new_coin_grows() -> void:
 	v.sync(t + 5.0)
 	near(KelpView.transform_at(v.coin_buffer, v.slot_of(4), CoinsView.STRIDE_C).basis.x.length(), full, 1e-4,
 			"скачок времени — сразу к цели")
+	v.free()
+
+
+## Глаза глазуна в луче раздуваются и разгораются за EYE_RISE, гаснут за EYE_FADE — не за кадр (Б3).
+func test_view_glazun_eyes_ease() -> void:
+	var w := _world()
+	var c := _coins(w)
+	var v := CoinsView.new(c)
+	var gz := c.glazuns[0]
+	gz.lit = false
+	var t := 1.0
+	v.sync(t)
+	var a0 := v.body_buffer[gz.index * CoinsView.STRIDE_C + 15]
+	ok(a0 <= 0.75, "без света альфа не выше 0,75: %.3f" % a0)
+	near(CoinsView.eye_grow(a0), 0.0, 1e-6, "без света глаз не раздут")
+	gz.lit = true
+	var dt := 1.0 / 30.0
+	var last := a0
+	var worst := 0.0
+	for i in int(CoinsView.EYE_RISE / dt) + 2:
+		t += dt
+		v.sync(t)
+		var a := v.body_buffer[gz.index * CoinsView.STRIDE_C + 15]
+		if i == 0:
+			ok(a < 0.85, "первый кадр в луче — ещё не во всю силу: %.3f" % a)
+		worst = maxf(worst, absf(CoinsView.eye_grow(a) - CoinsView.eye_grow(last)))
+		last = a
+	near(last, 1.0, 1e-5, "в луче — во всю силу")
+	ok(worst < 0.35, "раздувание за кадр %.3f < 0,35 (было 1)" % worst)
+	gz.lit = false
+	t += dt
+	v.sync(t)
+	ok(v.body_buffer[gz.index * CoinsView.STRIDE_C + 15] > 0.95, "вышел из луча — гаснет не за кадр")
+	for i in int(CoinsView.EYE_FADE / dt) + 2:
+		t += dt
+		v.sync(t)
+	ok(v.body_buffer[gz.index * CoinsView.STRIDE_C + 15] <= 0.75, "погас за EYE_FADE")
+	gz.lit = true
+	v.sync(t + 5.0)
+	near(v.body_buffer[gz.index * CoinsView.STRIDE_C + 15], 1.0, 1e-5, "скачок времени — сразу к цели")
 	v.free()
 
 
