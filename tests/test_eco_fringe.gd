@@ -112,6 +112,31 @@ func test_new_touch_refreshes_without_blink() -> void:
 	eq(c.touches, first, "это то же касание, не новое")
 
 
+## Задетая нить отходит от корпуса за доли секунды, а не прыгает концом на PUSH (1,2 м) за кадр.
+func test_push_eases_away_from_hull() -> void:
+	var c := EcoFringe.Curtain.new()
+	var pair := _under_longest(c)
+	var i: int = pair[0]
+	var ship: EcoLink.ShipState = pair[1]
+	var dt := 1.0 / 30.0
+	var t := 0.0
+	var prev := c.push[i]
+	var jump := 0.0
+	var peak := 0.0
+	var touched_at := -1.0
+	while t < 3.0:
+		c.step(ship, t, dt)
+		if touched_at < 0.0 and c.touches > 0:
+			touched_at = t
+		jump = maxf(jump, c.push[i].distance_to(prev))
+		peak = maxf(peak, c.push[i].length())
+		prev = c.push[i]
+		t += dt
+	ok(touched_at >= 0.0, "корпус задел нить")
+	ok(jump < 0.25, "конец за кадр сдвигается меньше 0,25 м: %.2f" % jump)
+	ok(peak > 0.6, "но отходит заметно: %.2f м" % peak)
+
+
 func test_far_ship_does_not_touch_and_world_skips() -> void:
 	var c := EcoFringe.Curtain.new()
 	c.step(_ship(Vector3(EcoFringe.WELL.x, -20.0, EcoFringe.WELL.y + 40.0), 0.0), 1.0, 0.1)
