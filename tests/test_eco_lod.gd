@@ -30,6 +30,15 @@ func test_wait_by_distance() -> void:
 	ok(EcoLod.wait(EcoLod.FAR + 10.0, 0, 1, 0.0, 0.03) != EcoLod.wait(EcoLod.FAR + 10.0, 0, 0, 0.0, 0.03))
 	# набранное не больше LAG_MAX: длинный кадр — шаг раньше очереди
 	ok(not EcoLod.wait(EcoLod.FAR + 10.0, 1, 0, EcoLod.LAG_MAX, 0.05), "шаг не длиннее LAG_MAX")
+	# медленный кадр (#1135): очередь короче — дальше FAR при 45 мс через шаг, а не все сразу раньше очереди
+	var slow := 0
+	for t in 12:
+		if not EcoLod.wait(EcoLod.FAR + 10.0, t, 0, 0.0, 0.045):
+			slow += 1
+	eq(slow, 6, "при 45 мс — через шаг")
+	ok(EcoLod.wait(EcoLod.FAR + 10.0, 0, 1, 0.0, 0.045) != EcoLod.wait(EcoLod.FAR + 10.0, 0, 0, 0.0, 0.045),
+		"и фазы по-прежнему разнесены")
+	ok(not EcoLod.wait(EcoLod.FAR + 10.0, 1, 0, 0.0, EcoLod.LAG_MAX), "кадр длиннее половины предела — шаг каждый раз")
 
 
 ## Один скребун на ровном дне между двумя пятнами; корабль в ship.

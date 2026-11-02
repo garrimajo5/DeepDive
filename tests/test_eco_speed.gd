@@ -140,6 +140,30 @@ func _check_step_cap(dt: float) -> void:
 				return
 
 
+## Issue #1135 (`09d-vote`, шаг 90 мс → подшаги по 45 мс): очередь дальних оставалась «раз в три», и после одного
+## ожидания стая шагала раньше очереди — шесть стай из девяти в каждом подшаге, EcoFish 54 мс. Теперь на медленном
+## кадре очередь короче (раз в два), фазы разнесены — не больше половины стай за шаг, и шаг стаи не длиннее LAG_MAX.
+func test_far_shoals_stay_apart_on_slow_frames() -> void:
+	for dt: float in [0.045, 0.06]:
+		var w := _world(Vector3(500, 0, 500))
+		var fish := w.systems[0] as EcoFish
+		var n := fish.shoals.size()
+		var most := 0
+		for i in 60:
+			var lags: Array[float] = []
+			for sh in fish.shoals:
+				lags.append(sh.lag)
+			w.step(dt)
+			var moved := 0
+			for k in n:
+				if fish.shoals[k].lag == 0.0:
+					moved += 1
+					ok(lags[k] + dt <= EcoFish.LAG_MAX + 1e-6, "шаг стаи %.3f с, предел %.3f" % [lags[k] + dt, EcoFish.LAG_MAX])
+			most = maxi(most, moved)
+		ok(most <= ceili(n / 2.0), "кадр %.3f с: стай за шаг %d из %d" % [dt, most, n])
+		ok(most > 0, "стаи шагают")
+
+
 func test_near_shoal_steps_every_frame() -> void:
 	var w := _world(EcoFish.HOMES[0] + Vector3(0, 0, 30))
 	var f := ((w.systems[0] as EcoFish).shoals[0].members[0] as EcoFish.Fish).agent

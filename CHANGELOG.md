@@ -3,6 +3,9 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-02
+- Медленный кадр не сводит дальние стаи в один подшаг (поток Б, по issue #1135): на кадре 45–60 мс очередь
+  дальних (`EcoLod.wait`, теперь и у `EcoFish`) короче — раз в два, фазы разнесены; раньше после одного ожидания
+  шагали шесть стай из девяти разом (`09d-vote`: EcoFish 54 мс). Тесты `test_far_shoals_stay_apart_on_slow_frames`, `test_wait_by_distance`.
 - Светляк не возникает у дома стаи за кадр (поток Б, Б3 `docs/grafika-plan-eco.md`): съеденная рыбка возвращается
   через 25–40 с крошечной и вырастает за 0,8 с (`FishView.FISH_RISE`, `grow_k` от `EcoFish.Fish.born`). Тест —
   `test_eco_fish.test_view_returned_fish_grows`.

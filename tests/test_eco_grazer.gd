@@ -126,7 +126,8 @@ func test_moss_dims_under_grazer_and_regrows() -> void:
 
 	# объеденное пятно бросает сразу и идёт к другому
 	eaten.food = 0.05
-	w.step(EcoWorld.MAX_STEP)
+	# корабль далеко — скребун шагает по очереди дальних (EcoLod): бросит пятно в свой ближайший шаг, не позже LAG_MAX
+	_run_until(w, func() -> bool: return g.agent.state == EcoAgent.State.SEEK, EcoLod.LAG_MAX + EcoWorld.MAX_STEP)
 	eq(g.agent.state, EcoAgent.State.SEEK)
 	ok(g.patch == other, "выбрал другое пятно")
 	var low := eaten.food
