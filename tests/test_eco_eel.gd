@@ -723,3 +723,53 @@ func test_wag_ramps_in_and_out() -> void:
 func _tail_off(view: EelView, e: EcoEel.Eel) -> float:
 	var k := EcoEel.SEGS - 1
 	return EelView.transform_at(view.shell_buffer, e.index * EcoEel.SEGS + k).origin.distance_to(e.segs[k])
+
+
+func test_ring_flattens_smoothly() -> void:
+	# Б3: присоска ложится на стекло и собирается за RING_RISE, а не за кадр (раньше — сразу RING_FLAT)
+	var w := _world()
+	var eels := _eels(w)
+	var view := EelView.new(eels)
+	tree.root.add_child(view)
+	var e := eels.eels[0]
+	e.mode = EcoEel.Mode.STRIKE
+	view.sync(1.0)
+	near(view.ring_k[0], 0.0, 1e-6, "на ходу присоска круглая")
+	e.mode = EcoEel.Mode.LATCHED
+	var dt := 1.0 / 30.0
+	var t := 1.0
+	var prev := _ring_width(view)
+	var worst := 0.0
+	for i in 30:
+		t += dt
+		view.sync(t)
+		var wd := _ring_width(view)
+		worst = maxf(worst, absf(wd - prev))
+		prev = wd
+		if i == 0:
+			ok(view.ring_k[0] < 0.2, "первый кадр на стекле — ещё почти круглая: %.2f" % view.ring_k[0])
+	near(view.ring_k[0], 1.0, 1e-6, "за RING_RISE расплющилась")
+	near(_ring_width(view), EelView.RING_FLAT.x, 1e-3, "ширина — RING_FLAT")
+	e.mode = EcoEel.Mode.FLEE
+	for i in 30:
+		t += dt
+		view.sync(t)
+		var wd := _ring_width(view)
+		worst = maxf(worst, absf(wd - prev))
+		prev = wd
+	near(view.ring_k[0], 0.0, 1e-6, "отпустил — собралась")
+	# 0,35 ширины за 0,4 с мягко — не больше ≈ 0,35 · 1,5 · dt / 0,4 за кадр (раньше 0,35 за кадр)
+	ok(worst < 0.35 * 1.5 * dt / EelView.RING_RISE + 1e-3, "ширина без скачка: %.3f за кадр" % worst)
+	view.queue_free()
+
+
+## Ширина присоски первого стеклоуста по отношению к голове (1 — круглая).
+func _ring_width(view: EelView) -> float:
+	var b := _basis(view.ring_buffer, 0)
+	var hb := EelView._look(view.eels.eels[0].face)
+	return (hb.inverse() * b).x.length()
+
+
+func _basis(buf: PackedFloat32Array, o: int) -> Basis:
+	return Basis(Vector3(buf[o], buf[o + 4], buf[o + 8]), Vector3(buf[o + 1], buf[o + 5], buf[o + 9]),
+		Vector3(buf[o + 2], buf[o + 6], buf[o + 10]))
