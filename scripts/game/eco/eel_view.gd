@@ -34,6 +34,9 @@ const WAG := 0.05
 ## хвост раскачивается или успокаивается. Раньше виляние включалось сразу — хвост (звено 13) прыгал вбок до 0,65 м
 ## за кадр. Своё у каждого стеклоуста, считает вид по времени мира (у гостя — то же); время назад — сразу к цели.
 const WAG_RISE := 0.5
+## Присоска расплющивается по стеклу (RING_FLAT) и собирается обратно за RING_RISE с (Б3; раньше — за кадр:
+## кольцо шире на 35 % и вдвое тоньше, как только лёг на стекло или отпустил). Доля — `ring_k`, тем же шагом, что виляние.
+const RING_RISE := 0.4
 const STRIDE := 12
 ## Запись экземпляра с цветом: трансформ и RGBA.
 const CSTRIDE := 16
@@ -44,6 +47,8 @@ const SHELL_LITE := Vector2i(7, 4)
 var eels: EcoEel
 ## Доля виляния каждого стеклоуста 0…1 и время мира прошлой расстановки (NAN — ещё не было).
 var wag_k := PackedFloat32Array()
+## Доля «присоска расплющена» каждого стеклоуста 0…1 (RING_RISE).
+var ring_k := PackedFloat32Array()
 var _wag_t := NAN
 ## «Экономно» (set_lite).
 var lite := false
@@ -216,13 +221,19 @@ func _place_rocks() -> void:
 	EcoMM.fit([rocks], pts, ROCK_GROW)
 
 
-## Доля виляния через dt: к 1 на ходу, к 0 в логове и на стекле, не быстрее 1 / WAG_RISE в секунду (dt больше
-## 0,25 с — как 0,25: после паузы не прыгает); snap — сразу к цели (первая расстановка, сброс мира).
-static func wag_step(k: float, on: bool, dt: float, snap := false) -> float:
+## Доля виляния через dt: к 1 на ходу, к 0 в логове и на стекле, не быстрее 1 / rise в секунду (dt больше
+## 0,25 с — как 0,25: после паузы не прыгает); snap — сразу к цели (первая расстановка, сброс мира). Присоска —
+## тем же шагом с RING_RISE.
+static func wag_step(k: float, on: bool, dt: float, snap := false, rise := WAG_RISE) -> float:
 	var goal := 1.0 if on else 0.0
 	if snap:
 		return goal
-	return move_toward(k, goal, minf(dt, 0.25) / WAG_RISE)
+	return move_toward(k, goal, minf(dt, 0.25) / rise)
+
+
+## Масштаб присоски по доле ring_k: от круглой (1) к расплющенной RING_FLAT, мягко.
+static func ring_scale(k: float) -> Vector3:
+	return Vector3.ONE.lerp(RING_FLAT, wag_amp(k))
 
 
 ## Размах виляния по доле: мягкий вход и выход (smoothstep).
@@ -249,9 +260,11 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground
 	var snap := is_nan(_wag_t) or dt < 0.0 or wag_k.size() != n
 	_wag_t = t
 	wag_k.resize(n)
+	ring_k.resize(n)
 	for e in eels.eels:
 		var segs := e.segs
 		wag_k[e.index] = wag_step(wag_k[e.index], e.moving(), dt, snap)
+		ring_k[e.index] = wag_step(ring_k[e.index], e.latched(), dt, snap, RING_RISE)
 		var amp := wag_amp(wag_k[e.index])
 		for k in range(1, EcoEel.SEGS):
 			var dir := segs[k - 1] - segs[k]
@@ -287,9 +300,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground
 			glint_buffer[o + STRIDE + 1] = GLINT_COLOR.g * GLINT_GAIN
 			glint_buffer[o + STRIDE + 2] = GLINT_COLOR.b * GLINT_GAIN
 			glint_buffer[o + STRIDE + 3] = GLINT_ALPHA * g.y
-		var rb := hb * Basis(Vector3.RIGHT, PI / 2.0)
-		if e.latched():
-			rb = hb.scaled_local(RING_FLAT) * Basis(Vector3.RIGHT, PI / 2.0)
+		var rb := hb.scaled_local(ring_scale(ring_k[e.index])) * Basis(Vector3.RIGHT, PI / 2.0)
 		EcoMM.put(ring_buffer, e.index * STRIDE, Transform3D(rb, head * RING_AT))
 	EcoMM.send(shell, shell_buffer)
 	EcoMM.send(organs, organ_buffer)
