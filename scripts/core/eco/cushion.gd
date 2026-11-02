@@ -35,6 +35,8 @@ const SHIP_INK_PAD := 2.0
 const HIDE_CD := 30.0
 ## Сжатие спадает на 0,15 в секунду.
 const RELAX := 0.15
+## Подушка сжимается за 0,3 с мягким входом (Б3, `squeeze_k`), а не за кадр: ширина 1 → 0,55 прыгала на 0,9 м.
+const SQUEEZE_IN := 0.3
 
 
 ## Подушка подушечника.
@@ -198,10 +200,20 @@ static func ink_point(cu: Cushion, j: int, t: float) -> Vector3:
 	return cu.ink_c + o + Vector3(sin(t * 0.5 + j) * 0.3, 0.0, cos(t * 0.4 + j) * 0.3)
 
 
-## Масштаб подушки: сжатая — ниже и уже (s = 1 − 0,45 · squeeze, по высоте ещё × (1 − 0,2 · squeeze)).
+## Видимое сжатие (0…1): после касания набирается за SQUEEZE_IN с (smoothstep по времени с касания — RECHARGE − cd),
+## дальше — squeeze, что спадает само. Мир (облако, муть, хищники) смотрит squeeze — касание действует сразу.
+static func squeeze_k(cu: Cushion) -> float:
+	var age := RECHARGE - cu.cd
+	if age < 0.0 or age >= SQUEEZE_IN:
+		return cu.squeeze
+	return cu.squeeze * smoothstep(0.0, 1.0, age / SQUEEZE_IN)
+
+
+## Масштаб подушки: сжатая — ниже и уже (s = 1 − 0,45 · k, по высоте ещё × (1 − 0,2 · k), k — `squeeze_k`).
 static func squash(cu: Cushion) -> Vector3:
-	var s := 1.0 - cu.squeeze * 0.45
-	return Vector3(s, s * (1.0 - cu.squeeze * 0.2), s)
+	var k := squeeze_k(cu)
+	var s := 1.0 - k * 0.45
+	return Vector3(s, s * (1.0 - k * 0.2), s)
 
 
 static func _floor(world: EcoWorld, x: float, z: float, fallback: float) -> float:

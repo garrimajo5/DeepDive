@@ -140,7 +140,7 @@ func sync(t: float, ship_pos := Vector3.ZERO, info: EcoLink.ShipState = null, fl
 	_ink_shown.resize(cushions.cushions.size())
 	var ink_changed := fresh
 	for cu in cushions.cushions:
-		var sc := EcoCushion.squash(cu) * breath(cu.index, cu.squeeze, t, ship_pos.distance_to(cu.base),
+		var sc := EcoCushion.squash(cu) * breath(cu.index, EcoCushion.squeeze_k(cu), t, ship_pos.distance_to(cu.base),
 				not EcoShaders.sway_lite)
 		var b := Basis(Vector3.UP, float(cu.index)) * Basis.from_scale(sc)
 		EcoMM.put(pad_buffer, cu.index * STRIDE, Transform3D(b, cu.base))
