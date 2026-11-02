@@ -36,6 +36,13 @@ const TURN_MAX := 2.5
 const HOME_SPEED := 0.8
 const SCARED_SPEED := 2.0
 const HOME_DIST := 0.4
+## Ход (план реализма Б3): скорость — вектор `Crab.vel`, догоняет нужную не быстрее ACCEL (м/с²; напуганный —
+## RUN_ACCEL): трогается и встаёт за полсекунды, разворот на ходу — через остановку, а не 0,9 м/с туда → обратно за
+## шаг. К месту, где встанет (ёж — на CRACK_DIST, нора), — не быстрее √(2·BRAKE·остаток), но не медленнее CREEP.
+const ACCEL := 2.0
+const RUN_ACCEL := 5.0
+const BRAKE := 1.5
+const CREEP := 0.05
 ## Охрана: корабль ближе 12 м к норе — к входу 1,2 м/с, клешни вверх; щипок ближе 7 м раз в 8 с;
 ## уходит, когда корабль дальше 14 м; «guard» — раз в 40 с.
 const GUARD_R := 12.0
@@ -69,8 +76,10 @@ class Crab:
 	var raise := 0.0
 	## Напуган скальником, секунд.
 	var scared := 0.0
-	## Идёт в этот шаг (рисунок: подпрыгивает).
+	## Идёт в этот шаг (рисунок: подпрыгивает; муть из-под ног) — ход быстрее 1 см/с.
 	var moving := false
+	## Скорость по дну (м/с), догоняет нужную не быстрее ACCEL.
+	var vel := Vector3.ZERO
 
 
 ## Краб; null — рощ нет, краба нет.
@@ -183,18 +192,28 @@ func step(world: EcoWorld, dt: float) -> void:
 				world.emit(ID, "guard", cr.pos, _guard_text(world, true))
 			if d_ship > LEAVE_R:
 				cr.state = State.HOME
-	cr.moving = goal != Vector3.INF
 	if cr.state == State.DEN:
 		cr.dir = EcoAgent.turn_flat(cr.dir, cr.out, dt, TURN_K, TURN_MAX)   # в норе — лицом наружу, доворотом
-	if cr.moving:
+	var want := Vector3.ZERO
+	if goal != Vector3.INF:
 		var to := Vector3(goal.x - cr.pos.x, 0.0, goal.z - cr.pos.z)
 		var dist := to.length()
 		if dist > 0.05:
-			cr.pos += to * (minf(dist, speed * dt) / dist)
+			var stop := CRACK_DIST if cr.state == State.HUNT else 0.0
+			want = to / dist * want_speed(speed, dist - stop)
 			if cr.state != State.GUARD:
 				cr.dir = EcoAgent.turn_flat(cr.dir, to, dt, TURN_K, TURN_MAX)
-			cr.pos.y = _floor(world, cr.pos.x, cr.pos.z, cr.pos.y)   # стоящему — дно то же (issue #133)
+	cr.vel = cr.vel.move_toward(want, (RUN_ACCEL if cr.scared > 0.0 else ACCEL) * dt)
+	cr.moving = cr.vel.length_squared() > 1e-4
+	if cr.moving:
+		cr.pos += cr.vel * dt
+		cr.pos.y = _floor(world, cr.pos.x, cr.pos.z, cr.pos.y)   # стоящему — дно то же (issue #133)
 	cr.raise += (raise - cr.raise) * minf(1.0, dt * 5.0)
+
+
+## Нужная скорость: full — ход по состоянию, rest — сколько осталось до места, где встанет (м).
+static func want_speed(full: float, rest: float) -> float:
+	return maxf(minf(full, sqrt(2.0 * BRAKE * maxf(rest, 0.0))), CREEP)
 
 
 ## Кольчужник виден сонару и сканеру (E.scanTargets: r 0,9).

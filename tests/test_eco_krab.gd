@@ -145,6 +145,57 @@ func test_crab_turns_smoothly_and_faces_out_at_home() -> void:
 	ok(cr.dir.dot(cr.out) > 0.99, "в норе лицом наружу")
 
 
+## Ход по дну (Б3): скорость меняется не быстрее ACCEL (напуганный — RUN_ACCEL) — трогается из норы, встаёт у ежа
+## и в норе, разворачивается от ежа бегом без рывка; раньше 0 → 0,9 м/с за шаг, а при испуге — 0,9 туда → 2 обратно.
+func test_crab_speeds_up_and_stops_smoothly() -> void:
+	var w := _world()
+	var kr := _krab(w)
+	var cr := kr.crab
+	cr.hunger = 1.05
+	var dt := 0.05
+	var prev := cr.pos
+	var v_prev := Vector3.ZERO
+	var worst := 0.0
+	var top := 0.0
+	var scared := false
+	var saw_crack := false
+	var crack_v := INF
+	var t := 0.0
+	while t < 80.0:
+		if not scared and cr.state == EcoKrab.State.HUNT and t > 4.0:
+			kr.scare(6.0)   # разворот посреди охоты
+			scared = true
+		w.step(dt)
+		t += dt
+		var v := Vector3(cr.pos.x - prev.x, 0.0, cr.pos.z - prev.z) / dt
+		prev = cr.pos
+		var lim := EcoKrab.RUN_ACCEL if cr.scared > 0.0 else EcoKrab.ACCEL
+		worst = maxf(worst, (v - v_prev).length() / dt / lim)
+		top = maxf(top, v.length())
+		v_prev = v
+		if cr.state == EcoKrab.State.CRACK and not saw_crack:
+			saw_crack = true
+			crack_v = v.length()
+		if saw_crack and cr.state == EcoKrab.State.DEN:
+			break
+	ok(scared, "испуг посреди охоты")
+	ok(saw_crack, "после испуга вышел снова и расколол ежа")
+	eq(cr.state, EcoKrab.State.DEN, "вернулся в нору")
+	ok(worst <= 1.0 + 1e-3, "ускорение не больше предела: %.2f предела" % worst)
+	ok(top > EcoKrab.SCARED_SPEED * 0.95, "бегом — почти 2 м/с: %.2f" % top)
+	ok(crack_v < 0.3, "к ежу подходит медленно: %.2f м/с" % crack_v)
+	w.run(1.0)
+	near(cr.vel.length(), 0.0, 1e-4, "в норе стоит")
+	ok(not cr.moving, "не идёт")
+
+
+func test_want_speed_brakes_to_creep() -> void:
+	near(EcoKrab.want_speed(0.9, 10.0), 0.9, 1e-6, "далеко — полный ход")
+	near(EcoKrab.want_speed(0.9, 0.12), sqrt(2.0 * EcoKrab.BRAKE * 0.12), 1e-6, "близко — тормозит")
+	near(EcoKrab.want_speed(0.9, 0.0), EcoKrab.CREEP, 1e-6, "на месте — доползает")
+	near(EcoKrab.want_speed(0.9, -1.0), EcoKrab.CREEP, 1e-6, "перешёл — тоже")
+
+
 func test_crack_takes_three_seconds() -> void:
 	var w := _world()
 	var k := _kelp(w)
@@ -282,7 +333,7 @@ func test_scared_crab_runs_home_and_skips_hunt() -> void:
 	var away := Vector2(cr.pos.x - cr.den.x, cr.pos.z - cr.den.z).length()
 	kr.scare(10.0)
 	eq(cr.state, EcoKrab.State.HOME, "бросил охоту")
-	w.step(0.5)
+	w.run(1.0)   # разворот через остановку (RUN_ACCEL), потом бегом
 	var now := Vector2(cr.pos.x - cr.den.x, cr.pos.z - cr.den.z).length()
 	ok(now < away - 0.8 or now < EcoKrab.HOME_DIST, "удирает бегом: %.2f → %.2f" % [away, now])
 	w.run(5.0)
