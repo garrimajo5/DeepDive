@@ -184,6 +184,55 @@ func test_turns_smoothly_through_pounce_and_back() -> void:
 	ok(worst <= EcoSkalnik.TURN_MAX * dt + 1e-4, "поворот за шаг %.3f ≤ %.3f" % [worst, EcoSkalnik.TURN_MAX * dt])
 
 
+## Ход (Б3): скорость меняется не быстрее ACCEL (бросок к захвату — LUNGE_ACCEL), дома оседает без прыжка — через
+## подстерегание краба, бросок вора к захвату, унос добычи и возвращение. Раньше 0 → 5 м/с за шаг и прыжок на дом с 0,5 м.
+func test_speeds_up_and_settles_home_smoothly() -> void:
+	var w := _world()
+	var kr := _krab(w)
+	var sk := _sk(w).octo
+	kr.crab.hunger = 1.2
+	var dt := 0.05
+	var prev := sk.pos
+	var v_prev := Vector3.ZERO
+	var worst := 0.0
+	var jump := 0.0
+	var top := 0.0
+	var t := 0.0
+	var stage := 0
+	while t < 120.0:
+		if stage == 0 and kr.crab.scared > 0.0 and sk.state == EcoSkalnik.State.ROCK:
+			stage = 1
+			_claw(w, Vector3(4, 0, 0))   # вор: захват у норы
+		elif stage == 1 and sk.state == EcoSkalnik.State.THIEF and t > 0.0 and sk.pos.distance_to(w.ship.claw) < EcoSkalnik.GRAB:
+			stage = 2
+			w.ship.claw_state = EcoLink.CLAW_BACK
+		elif stage == 2 and sk.state == EcoSkalnik.State.LOOT:
+			stage = 3
+			w.ship.claw_state = EcoLink.CLAW_IDLE
+			w.ship.claw_sample = -1
+		var state := sk.state
+		w.step(dt)
+		t += dt
+		w.take_link()
+		var v := (sk.pos - prev) / dt
+		jump = maxf(jump, (sk.pos - prev).length())
+		prev = sk.pos
+		var lim := EcoSkalnik.LUNGE_ACCEL if state == EcoSkalnik.State.THIEF or sk.state == EcoSkalnik.State.THIEF \
+				else EcoSkalnik.ACCEL
+		worst = maxf(worst, (v - v_prev).length() / dt / lim)
+		top = maxf(top, v.length())
+		v_prev = v
+		if stage == 3 and sk.state == EcoSkalnik.State.ROCK and sk.vel.length() < 0.01:
+			break
+	eq(stage, 3, "подстерёг краба, сорвал образец и унёс")
+	eq(sk.state, EcoSkalnik.State.ROCK, "дома")
+	ok(worst <= 1.0 + 0.02, "ускорение не больше предела: %.2f предела" % worst)
+	ok(top > 4.0, "к захвату — бросок: %.2f м/с" % top)
+	ok(jump < EcoSkalnik.THIEF_SPEED * dt + 1e-3, "без прыжков: %.3f м за шаг" % jump)
+	w.run(5.0)
+	ok(sk.pos.distance_to(sk.home) < 0.01, "осел на место дома")
+
+
 func test_backs_off_armored_crab() -> void:
 	var w := _world()
 	var kr := _krab(w)
