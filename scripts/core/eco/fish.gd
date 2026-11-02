@@ -189,6 +189,8 @@ class Fish:
 	var size := 1.0
 	## Нос — догоняет скорость (`EcoFish.turn`); ноль — ещё не плыла (или вернулась после съедения): нос по скорости.
 	var look := Vector3.ZERO
+	## Время мира, когда вернулась после съедения (−INF — не съедали): с него рыбка вырастает (`FishView.grow_k`).
+	var born := -INF
 	var _shoal: WeakRef
 
 
@@ -548,6 +550,7 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 			a.p = home + Vector3(sh.rnd.range_f(-2, 2), sh.rnd.range_f(0, 2), sh.rnd.range_f(-2, 2))
 			a.v = Vector3(0, 0.2, 0)
 			f.look = Vector3.ZERO
+			f.born = t
 		var p := a.p
 		var v := a.v
 		var acc := (center - p) * 0.5 + (velocity - v) * 0.6

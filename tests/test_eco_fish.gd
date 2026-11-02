@@ -636,3 +636,42 @@ func test_nose_turns_smoothly() -> void:
 	var fw := EcoFishLook.forward(f, 0.0)
 	var flat := Vector3(f.look.x, 0, f.look.z)
 	ok(flat.length() < 1e-3 or fw.angle_to(f.look) <= EcoFishLook.WIGGLE + 1e-3, "тело — по носу с вилянием")
+
+
+## Б3: съеденная рыбка возвращается у дома стаи не во весь размер за кадр — вырастает за FishView.FISH_RISE; откат
+## времени (сброс) — сразу во весь размер.
+func test_view_returned_fish_grows() -> void:
+	var w := _world()
+	var fish := _fish(w)
+	w.run(1.0)
+	var f := fish.all[5]
+	var full := FishView.transform_at(FishView.pack(fish, w.time), f.index).basis.x.length()
+	ok(full > 0.01, "живая во весь размер: %.4f" % full)
+	near(FishView.grow_k(f, w.time), 1.0, 1e-6, "не съедали — во весь размер")
+	fish.kill(f)
+	w.run(24.0)
+	ok(_run_until_alive(w, f, 20.0), "вернулась")
+	near(f.born, w.time, 0.2, "время возвращения — время мира")
+	var first := FishView.transform_at(FishView.pack(fish, f.born), f.index).basis.x.length()
+	ok(first < full * 0.05, "появилась крошечной: %.4f" % first)
+	var dt := 1.0 / 30.0
+	var last := first
+	var worst := 0.0
+	var t := f.born
+	for i in int(FishView.FISH_RISE / dt) + 2:
+		t += dt
+		var sz := FishView.grow_k(f, t)
+		worst = maxf(worst, sz - last / full)
+		last = sz * full
+	ok(worst < 0.1, "за кадр растёт на %.3f < 10 %%" % worst)
+	near(FishView.grow_k(f, f.born + FishView.FISH_RISE), 1.0, 1e-6, "выросла за FISH_RISE")
+	near(FishView.grow_k(f, f.born - 3.0), 1.0, 1e-6, "время назад — сразу во весь размер")
+	ok(FishView.grow_k(fish.all[6], t) == 1.0, "соседи не тронуты")
+
+
+func _run_until_alive(w: EcoWorld, f: EcoFish.Fish, max_s: float) -> bool:
+	var s := 0.0
+	while s < max_s and not f.agent.alive:
+		w.step(EcoWorld.MAX_STEP)
+		s += EcoWorld.MAX_STEP
+	return f.agent.alive

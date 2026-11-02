@@ -3,6 +3,9 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-02
+- Светляк не возникает у дома стаи за кадр (поток Б, Б3 `docs/grafika-plan-eco.md`): съеденная рыбка возвращается
+  через 25–40 с крошечной и вырастает за 0,8 с (`FishView.FISH_RISE`, `grow_k` от `EcoFish.Fish.born`). Тест —
+  `test_eco_fish.test_view_returned_fish_grows`.
 - Скребун не возникает у пятна мха за кадр (поток Б, Б3 `docs/grafika-plan-eco.md`): съеденный стеклоустом
   возвращается через 40–60 с крошечным и вырастает за 1,2 с (`GrazerView.GRAZER_RISE`, доли `grow_k`); съеденный
   пропадает сразу. Тест — `test_eco_grazer.test_view_returned_grazer_grows`.
