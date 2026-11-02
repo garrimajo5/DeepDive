@@ -460,3 +460,41 @@ func test_lite_kept_after_world_reset() -> void:
 	eq(ev.remora_view.tris, t, "и меш грубый")
 	ev.set_lite(false)
 	ev.free()
+
+
+## Сколько раз за seconds ход прилипалы (сдвиг за шаг 0,05 с) поменялся больше, чем на limit м/с; last — прошлые
+## места и скорости (по индексу прилипалы), корабль идёт под первым скатом.
+func _jerks(w: EcoWorld, seconds: float, last: Dictionary, limit: float) -> int:
+	var ry := _rays(w).rays[0]
+	var bad := 0
+	for i in int(round(seconds / 0.05)):
+		w.ship.pos = Vector3(ry.p.x, -20.0, ry.p.z)
+		w.ship.yaw = 0.3
+		w.step(0.05)
+		w.take_link()
+		for r in _remoras(w).remoras:
+			if last.has(r.index):
+				var v: Vector3 = (r.p - last[r.index][0]) / 0.05
+				if last[r.index][1] != null and (v - last[r.index][1]).length() > limit:
+					bad += 1
+				last[r.index] = [r.p, v]
+			else:
+				last[r.index] = [r.p, null]
+	return bad
+
+
+func test_swim_speeds_up_and_brakes_smoothly() -> void:
+	var w := _world()
+	var rm := _remoras(w)
+	# разгон ACCEL · 0,05 = 0,8 м/с за шаг, плюс поворот хода ската и шаг у места (ARRIVE 0,05 м — 1 м/с);
+	# раньше — 8 м/с с места и стоп у места (скачок 4–6 м/с)
+	var limit := EcoRemora.ACCEL * 0.05 + 1.5
+	var last := {}
+	eq(_jerks(w, 12.0, last, limit), 0, "снимается со ската и садится на корпус без рывка хода")
+	eq(rm.on_hull, EcoRemora.PER_RAY, "все три дошли")
+	w.ship.zap = true
+	eq(_jerks(w, 0.05, last, limit), 0, "разряд не дёргает ход")
+	w.ship.zap = false
+	eq(_jerks(w, 30.0, last, limit), 0, "обратно на ската — с разгоном и торможением")
+	eq(_count(w, EcoRemora.Mode.RAY), 6, "вернулись на скатов")
+
