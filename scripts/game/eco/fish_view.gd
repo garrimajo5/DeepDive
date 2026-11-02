@@ -279,6 +279,9 @@ static func fill(out: PackedFloat32Array, system: EcoFish, t: float, moved_only:
 			side = side.normalized() if side.length() > 1e-4 else Vector3(1, 0, 0)
 			var up := fw.cross(side)
 			var sz := f.size * vary[f.index * VARY]  # своя у особи, молодь мельче
+			var age := t - f.born   # вернувшаяся после съедения растёт (grow_k); не съедали — born = −INF
+			if age < FISH_RISE and age >= 0.0:
+				sz *= smoothstep(0.0, 1.0, age / FISH_RISE)
 			if sz != 1.0:
 				fw *= sz
 				side *= sz
@@ -292,6 +295,19 @@ static func fill(out: PackedFloat32Array, system: EcoFish, t: float, moved_only:
 			out[i + 8] = side.z
 			out[i + 9] = up.z
 			out[i + 10] = fw.z
+
+
+## Вернувшаяся после съедения рыбка вырастает у дома стаи за FISH_RISE с (Б3), а не возникает за кадр.
+const FISH_RISE := 0.8
+
+
+## Доля размера рыбки в момент t (время мира): от `Fish.born` за FISH_RISE с мягким входом; не съедали или время
+## назад (сброс) — 1.
+static func grow_k(f: EcoFish.Fish, t: float) -> float:
+	var age := t - f.born
+	if age < 0.0 or age >= FISH_RISE:
+		return 1.0
+	return smoothstep(0.0, 1.0, age / FISH_RISE)
 
 
 ## Расстановка рыбки n из буфера.
