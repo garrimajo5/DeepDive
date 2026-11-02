@@ -943,3 +943,67 @@ func test_patrol_goes_around_reef() -> void:
 		reached = reached or Vector2(p.x - target.x, p.z - target.z).length() < 5.0
 	ok(closest > EcoPred.REEF_KEEP - 4.0, "огибает риф, а не плывёт сквозь крону (ближе всего %.1f м)" % closest)
 	ok(reached, "и доплывает до цели на той стороне (%s)" % pr.agent.p)
+
+
+## Самый резкий вертикальный разгон (м/с², по окну 3 шага) и шагов вплотную ко дну у серпохвостов за seconds с мира
+## у места id.
+static func _vertical_jerk(id: String, seconds: float) -> Array:
+	var dt := 1.0 / 30.0
+	var ev := EcoView.new()
+	ev.world.ship.pos = LayerMap.at(id)
+	ev.ground = Seabed.height
+	var preds: EcoPred
+	for s in ev.world.systems:
+		if s is EcoPred:
+			preds = s
+	var hist := {}
+	var worst := 0.0
+	var touch := 0
+	for i in int(seconds / dt):
+		ev.world.step(dt)
+		for k in preds.all.size():
+			var a := preds.all[k].agent
+			var h: Array = hist.get(k, [])
+			h.append(a.p.y)
+			if h.size() > 7:
+				h.pop_front()
+			hist[k] = h
+			if a.p.y - (Seabed.height(a.p.x, a.p.z) + a.clearance) < 0.01:
+				touch += 1
+			if h.size() == 7 and i > 60:
+				var v1: float = (h[3] - h[0]) / (3.0 * dt)
+				var v2: float = (h[6] - h[3]) / (3.0 * dt)
+				worst = maxf(worst, absf(v2 - v1) / (3.0 * dt))
+	ev.free()
+	return [worst, touch]
+
+
+func test_looks_ahead_at_rising_floor() -> void:
+	# дно — ступенька 3 м через 12 м пути: смотрит вперёд — набирает высоту заранее и не касается её
+	var ground := func(x: float, _z: float) -> float: return -40.0 if x < 12.0 else -37.0
+	for look in [0.0, EcoPred.LOOK]:
+		var a := EcoAgent.new(EcoPred.ID, Vector3(0, -40.0 + 1.8, 0))
+		a.look = look
+		a.v = Vector3(6, 0, 0)
+		var touch := 0
+		var vy_jump := 0.0
+		for i in 90:
+			var vy0 := a.v.y
+			var y0 := a.p.y
+			a.drive(Vector3(6, 0, 0), 1.0 / 30.0, ground)
+			vy_jump = maxf(vy_jump, absf((a.p.y - y0) * 30.0 - vy0))
+			if a.p.y - (float(ground.call(a.p.x, a.p.z)) + a.clearance) < 0.01 and a.p.x > 12.0:
+				touch += 1
+		if look == 0.0:
+			ok(touch > 0, "без взгляда вперёд — вплотную ко дну на ступеньке")
+		else:
+			eq(touch, 0, "смотрит вперёд — над ступенькой с запасом")
+			ok(vy_jump < 0.5, "без скачка вертикальной скорости за шаг (%.2f м/с)" % vy_jump)
+
+
+func test_no_vertical_jerk_over_reef_and_ridges() -> void:
+	# у 01 и 02 серпохвосты охотятся у склонов: раньше взлетали по дну до 12 м/с вверх и вставали за кадр (107 м/с²)
+	for id in ["01", "02"]:
+		var r := _vertical_jerk(id, 50.0)
+		ok(r[0] < 15.0, "у %s вертикальный разгон серпохвоста плавный: %.1f м/с²" % [id, r[0]])
+		eq(r[1], 0, "у %s не ползёт вплотную по дну" % id)

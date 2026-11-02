@@ -167,6 +167,7 @@ func reset(world: EcoWorld) -> void:
 		a.set_state(EcoAgent.State.GRAZE)
 		var pr := Pred.new()
 		pr.agent = a
+		a.look = LOOK
 		pr.index = i
 		pr.hunger = _rnd.range_f(0.1, 0.5)
 		pr.cooldown = 20.0
@@ -307,6 +308,9 @@ func _skip_now() -> Callable:
 ## Плавный поворот (Б3, «плавность поведения»): тело не щёлкает за скоростью, а догоняет её — доля угла за секунду
 ## TURN_FOLLOW, но не быстрее TURN_MAX (рад/с); в повороте ложится на бок: крен BANK_K на 1 рад/с поворота, не больше
 ## BANK_MAX, догоняет нужный за BANK_FOLLOW (1/с). Остановился — держит курс, нос выравнивается к горизонту.
+## На сколько секунд хода вперёд смотрит на дно (`EcoAgent.look`): раньше на склоне рифа и у гребня взлетал вплотную ко
+## дну до 12 м/с вверх и вставал на вершине за кадр (рывок до 107 м/с²).
+const LOOK := 1.5
 const TURN_FOLLOW := 4.0
 const TURN_MAX := 3.0
 const BANK_K := 0.35

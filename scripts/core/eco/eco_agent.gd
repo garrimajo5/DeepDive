@@ -33,6 +33,9 @@ var agility := 1.1
 var clearance := 1.8
 ## Потолок по Y (подо льдом).
 var ceiling := -4.0
+## На сколько секунд хода вперёд смотрит на дно (0 — не смотрит): подъём дна впереди — набирает высоту заранее
+## (`climb_for`), а не взлетает по склону вплотную ко дну. Серпохвост — `EcoPred.LOOK`.
+var look := 0.0
 ## Кого преследует или от кого бежит. Слабая ссылка: хищник и добыча смотрят друг на друга, а держит существ мир.
 var target: EcoAgent:
 	get:
@@ -111,9 +114,31 @@ func hold(dt: float, ground: Callable = Callable()) -> void:
 
 ## Скорость тянется к want, затем шаг и ограничения.
 func drive(want: Vector3, dt: float, ground: Callable = Callable()) -> void:
+	var need := climb_for(ground) if look > 0.0 and ground.is_valid() else -INF
 	v = v.lerp(want, minf(1.0, dt * agility))
+	if need > v.y:  # дно впереди выше: вверх — не быстрее LOOK_ACCEL, но не медленнее lerp
+		v.y = minf(need, v.y + LOOK_ACCEL * dt)
 	p += v * dt
 	confine(ground)
+
+
+## Доли look, на которых смотрит дно впереди, и запас над clearance там.
+const LOOK_AT := [0.1, 0.2, 0.3, 0.45, 0.6, 0.8, 1.0]
+const LOOK_GAP := 0.6
+## Разгон вверх перед подъёмом дна, м/с².
+const LOOK_ACCEL := 8.0
+
+## Вертикальная скорость, с которой к каждой точке пути впереди (горизонтальный ход за долю LOOK_AT от look) существо
+## уже будет на clearance + LOOK_GAP над дном. Отрицательная — вниз не быстрее её: в нырке к дну тормозит заранее.
+func climb_for(ground: Callable) -> float:
+	var flat := Vector3(v.x, 0.0, v.z)
+	var need := -INF
+	for f: float in LOOK_AT:
+		var t := look * f
+		var q := p + flat * t
+		var top: float = float(ground.call(q.x, q.z)) + clearance + LOOK_GAP
+		need = maxf(need, (top - p.y) / t)
+	return need
 
 
 ## Высота дна под существом (ground — (x, z) -> float, должен быть задан): из запомненной, пока не отплыло
