@@ -164,3 +164,67 @@ func test_in_eco_view() -> void:
 	eq(ev.fringe.curtain.active, EcoFringe.COUNT, "обратно — 48")
 	ev.queue_free()
 	await frames(1)
+
+
+## Коробка корпуса (EcoHull.box) содержит каждую точку, которая касается корпуса: отсечка по ней ничего не теряет.
+func test_hull_box_holds_every_touching_point() -> void:
+	var rng := EcoRandom.new(1174)
+	var b := EcoHull.box(EcoFringe.TOUCH_R)
+	var hit := 0
+	var lost := 0
+	for n in 4000:
+		var l := Vector3(rng.range_f(-12.0, 12.0), rng.range_f(-10.0, 10.0), rng.range_f(-20.0, 34.0))
+		if EcoHull.touches(l, Vector3.ZERO, 0.0, EcoFringe.TOUCH_R):
+			hit += 1
+			if not b.has_point(l):
+				lost += 1
+	ok(hit > 300, "точки у корпуса нашлись: %d" % hit)
+	eq(lost, 0, "ни одна касающаяся точка не лежит вне коробки")
+
+
+## Нити касаются так же, как при проверке каждой точки каждой нити (как до #1174): корабль проходит сквозь бахрому.
+func test_box_cut_keeps_touches() -> void:
+	var c := EcoFringe.Curtain.new()
+	var ref := EcoFringe.Curtain.new()
+	var t := 0.0
+	for n in 300:
+		t += 0.05
+		var s := _ship(Vector3(-200.0 + n * 0.2, -12.0, -72.0 + sin(n * 0.03) * 6.0), deg_to_rad(90.0))
+		c.step(s, t, 0.05)
+		_brute_step(ref, s, t, 0.05)
+	ok(ref.touches > 5, "бахрома задета: %d" % ref.touches)
+	eq(c.touches, ref.touches, "касаний столько же")
+	eq(c.touched, ref.touched, "время касаний то же")
+	eq(c.mid, ref.mid, "участки следа те же")
+	eq(c.half, ref.half, "ширина следа та же")
+
+
+## У Светового колодца 05, как в кадре тестера 32o-mol-steklo (корабль в 20 м восточнее, носом к колодцу), шаг
+## бахромы проверяет детали корпуса реже: без отсечки коробкой — ~400 проверок за шаг (issue #1174).
+func test_well_step_checks_few_parts() -> void:
+	var c := EcoFringe.Curtain.new()
+	var s := _ship(Vector3(-150.0, -14.0, -72.0), deg_to_rad(90.0))
+	EcoHull.checks = 0
+	for n in 100:
+		c.step(s, n * 0.033, 0.033)
+	var per := EcoHull.checks / 100.0
+	ok(per < 200.0, "проверок деталей за шаг: %.0f" % per)
+
+
+## Шаг нитей по-старому: каждая точка каждой близкой нити — EcoHull.touches.
+func _brute_step(c: EcoFringe.Curtain, ship: EcoLink.ShipState, t: float, dt: float) -> void:
+	c.time = t
+	var back := exp(-dt / EcoFringe.RETURN)
+	var follow := 1.0 - exp(-dt / EcoFringe.PUSH_IN)
+	for i in c.active:
+		c.push_goal[i] *= back
+		c.push[i] = c.push[i].lerp(c.push_goal[i], follow)
+		var lo := 2.0
+		var hi := -1.0
+		for k in EcoFringe.SAMPLES:
+			var v := float(k) / (EcoFringe.SAMPLES - 1)
+			if EcoHull.touches(c.point(i, v, t), ship.pos, ship.yaw, EcoFringe.TOUCH_R):
+				lo = minf(lo, v)
+				hi = maxf(hi, v)
+		if hi >= 0.0:
+			c._touch(i, lo, hi, ship, t)
