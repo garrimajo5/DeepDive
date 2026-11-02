@@ -41,12 +41,15 @@ const GLASS_OUT := 0.06
 const LAND_PER := 0.04
 const LAND_MAX := 3.0
 ## Сколько секунд сидит (случайно в пределах); без света время идёт DARK_K раз быстрее, на ходу быстрее WASH м/с —
-## WASH_K раз. Ползает со скоростью CRAWL м/с.
+## WASH_K раз. Ползает со скоростью CRAWL м/с по своему курсу (`glass_dir`), а не дрожит на месте: курс блуждает —
+## за шаг dt доворачивает случайно не больше чем на WANDER · √dt рад (одинаково при любом шаге: ≈ 10 см почти прямо),
+## у края стекла отражается внутрь.
 const STAY := Vector2(25.0, 45.0)
 const DARK_K := 6.0
 const WASH := 1.5
 const WASH_K := 4.0
 const CRAWL := 0.02
+const WANDER := 0.8
 ## Сдвиг к краям окна: x = ±GLASS_HALF · |u|^EDGE_POW (u — равномерно в −1…1): меньше 1 — гуще у стоек.
 const EDGE_POW := 0.55
 ## Дальше этого от середины колодца (м по горизонтали) рой стоит и не рисуется; моль на стекле тогда не пропадает
@@ -102,6 +105,8 @@ class Swarm:
 	var glass_life := PackedFloat32Array()
 	## Сколько секунд рачок k уже сидит (для `glass_k`).
 	var glass_age := PackedFloat32Array()
+	## Курс ползания рачка k по стеклу, рад (0 — вдоль +x окна, π/2 — вверх).
+	var glass_dir := PackedFloat32Array()
 	var glass_max := GLASS
 	var on_glass := 0
 	var land := 0.0
@@ -125,6 +130,7 @@ class Swarm:
 		glass.resize(GLASS)
 		glass_life.resize(GLASS)
 		glass_age.resize(GLASS)
+		glass_dir.resize(GLASS)
 		glass_max = GLASS_LITE if lite else GLASS
 
 	func set_lite(on: bool) -> void:
@@ -184,8 +190,13 @@ class Swarm:
 				glass_life[k] = 0.0
 				on_glass -= 1
 				continue
-			var a := rng.range_f(0.0, TAU)
+			var a := glass_dir[k] + rng.range_f(-1.0, 1.0) * WANDER * sqrt(dt)
 			var g := glass[k] + Vector3(cos(a), sin(a), 0.0) * CRAWL * dt
+			if absf(g.x) > GLASS_HALF:  # упёрся в стойку — разворачивается внутрь окна
+				a = PI - a
+			if g.y < GLASS_Y.x or g.y > GLASS_Y.y:
+				a = -a
+			glass_dir[k] = wrapf(a, -PI, PI)
 			glass[k] = Vector3(clampf(g.x, -GLASS_HALF, GLASS_HALF), clampf(g.y, GLASS_Y.x, GLASS_Y.y), g.z)
 		if not ship.light_on or lit_n == 0 or away:
 			land = 0.0
@@ -198,6 +209,7 @@ class Swarm:
 					glass[k] = EcoMoth.glass_spot(rng.range_f(-1.0, 1.0), rng.next())
 					glass_life[k] = rng.range_f(STAY.x, STAY.y)
 					glass_age[k] = 0.0
+					glass_dir[k] = rng.range_f(-PI, PI)
 					on_glass += 1
 					break
 		land = minf(land, 1.0)
