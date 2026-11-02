@@ -253,6 +253,38 @@ func test_bulb_size_color_and_spores() -> void:
 	near(EcoBladder.spore_glow(bl), 0.5, 1e-6, "гаснет за последние 3 с")
 
 
+func test_bulbs_shrink_and_regrow_smoothly() -> void:
+	# Б3: лопнула — луковица опадает за SHRINK, к концу облака набухает до завязи за REGROW; раньше размер прыгал
+	# 1 → 0,2 и 0,2 → 0,35 за кадр, цвет сока — с ярко-зелёного на тусклый
+	var w := _world()
+	var bl := _bl(w).bushes[0]
+	bl.ripe = 1.0 - 0.01 / EcoBladder.RIPEN
+	var dt := 1.0 / 30.0
+	var size := EcoBladder.bulb_size(bl)
+	var green := EcoBladder.bulb_color(bl).g
+	var popped := false
+	var worst := 0.0
+	var worst_g := 0.0
+	for i in int((EcoBladder.LIFE + 2.0) / dt):
+		w.step(dt)
+		popped = popped or bl.popped()
+		var s := EcoBladder.bulb_size(bl)
+		var g := EcoBladder.bulb_color(bl).g
+		worst = maxf(worst, absf(s - size))
+		worst_g = maxf(worst_g, absf(g - green))
+		size = s
+		green = g
+	ok(popped, "лопнула и облако прошло")
+	ok(not bl.popped(), "облако рассеялось")
+	# 0,8 доли размера за 0,25 с мягко — не больше ≈ 0,8 · 1,5 · dt / 0,25 за кадр
+	ok(worst < 0.8 * 1.5 * dt / EcoBladder.SHRINK + 1e-3, "размер без скачка: %.3f за кадр" % worst)
+	ok(worst_g < 0.4 * 1.5 * dt / EcoBladder.SHRINK + 1e-3, "цвет без скачка: %.3f за кадр" % worst_g)
+	bl.life = EcoBladder.LIFE - EcoBladder.SHRINK - 0.1
+	near(EcoBladder.bulb_size(bl), 0.2, 1e-6, "опала до 0,2")
+	bl.life = 1e-4
+	near(EcoBladder.bulb_size(bl), 0.35, 1e-3, "к концу облака — размер завязи")
+
+
 func test_bladder_does_not_shift_other_species() -> void:
 	# своё зерно: светляки без спор (облаков нет первые 10 с) идут как без пузырчатки
 	var a := EcoWorld.new()

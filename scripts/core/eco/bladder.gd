@@ -16,6 +16,10 @@ const SPORES := 60
 ## Облако спор живёт 12 с; от лопнувших до спелых луковиц — 70 с (PZ_LIFE, PZ_RIPEN).
 const LIFE := 12.0
 const RIPEN := 70.0
+## Лопнувшие луковицы опадают за SHRINK с (а не за кадр) и к концу облака набухают до завязи за последние REGROW с
+## (раньше размер прыгал 1 → 0,2 при лопании и 0,2 → 0,35, когда облако гасло; цвет сока — так же).
+const SHRINK := 0.25
+const REGROW := 2.0
 ## Стаи ближе 35 м плывут к спорам; ближе 6 м — «приплыли» (PZ_CALL_R).
 const CALL_R := 35.0
 const CAME_R := 6.0
@@ -44,6 +48,8 @@ class Bush:
 	var ripe := 0.0
 	var life := 0.0
 	var feed_cd := 0.0
+	## Спелость в миг, когда лопнули (от неё луковицы опадают за SHRINK).
+	var burst := 0.0
 	## Стебли: основание на дне, вершина (там луковица), фаза покачивания.
 	var stem_base := PackedVector3Array()
 	var stem_top := PackedVector3Array()
@@ -141,6 +147,7 @@ func step(world: EcoWorld, dt: float) -> void:
 
 ## Луковицы лопаются: облако спор на LIFE с, спелость с нуля. by_ship — задел корабль (другой текст).
 func pop(world: EcoWorld, bl: Bush, by_ship: bool) -> void:
+	bl.burst = bl.ripe
 	bl.ripe = 0.0
 	bl.life = LIFE
 	world.emit(ID, "pop", bl.cloud, _pop_text(world, by_ship))
@@ -170,18 +177,41 @@ func targets(_world: EcoWorld, out: Array[Dictionary]) -> void:
 
 
 ## Луковица стебля k в момент t: место (покачивается по x на 5 см) и радиус-множитель — 0,2 у лопнувших,
-## от 0,35 до 1 по спелости.
+## от 0,35 до 1 по спелости; переходы — за SHRINK и REGROW (`shrink_k`, `regrow_k`).
 static func bulb(bl: Bush, k: int, t: float) -> Vector3:
 	return bl.stem_top[k] + Vector3(sin(t * 0.8 + bl.stem_phase[k]) * 0.05, 0, 0)
 
 
 static func bulb_size(bl: Bush) -> float:
-	return 0.2 if bl.life > 0.0 else 0.35 + 0.65 * bl.ripe
+	if bl.life <= 0.0:
+		return 0.35 + 0.65 * bl.ripe
+	var low := lerpf(0.2, 0.35, regrow_k(bl))
+	return lerpf(low, 0.35 + 0.65 * bl.burst, shrink_k(bl))
 
 
-## Цвет сока по спелости (зелёный #8EE87E у спелых, ART-004).
+## Доля «ещё не опала» сразу после лопания: 1 → 0 за SHRINK с мягко; потом и без облака — 0.
+static func shrink_k(bl: Bush) -> float:
+	if bl.life <= 0.0:
+		return 0.0
+	return 1.0 - _smooth((LIFE - bl.life) / SHRINK)
+
+
+## Доля «набухла снова» к концу облака: 0 → 1 за последние REGROW с мягко.
+static func regrow_k(bl: Bush) -> float:
+	if bl.life <= 0.0:
+		return 1.0
+	return _smooth(1.0 - bl.life / REGROW)
+
+
+static func _smooth(x: float) -> float:
+	var k := clampf(x, 0.0, 1.0)
+	return k * k * (3.0 - 2.0 * k)
+
+
+## Цвет сока по спелости (зелёный #8EE87E у спелых, ART-004); только лопнули — тускнеет за SHRINK.
 static func bulb_color(bl: Bush) -> Color:
-	return Color(0.3 + 0.5 * bl.ripe, 0.6 + 0.4 * bl.ripe, 0.35 + 0.2 * bl.ripe)
+	var r := bl.ripe if bl.life <= 0.0 else bl.burst * shrink_k(bl)
+	return Color(0.3 + 0.5 * r, 0.6 + 0.4 * r, 0.35 + 0.2 * r)
 
 
 ## Спора j облака в момент t: облако расходится от 0,3 до 1,3 размера за 1,7 с и всплывает 8 см/с.
