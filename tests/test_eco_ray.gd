@@ -134,6 +134,36 @@ func test_climbs_nose_up_over_ship_smoothly() -> void:
 	near(Vector2(nose.x, nose.z).normalized().dot(Vector2(ry.dir.x, ry.dir.z)), 1.0, 1e-4, "и по курсу")
 
 
+## Б3, плавность: корабль у самого льда — скат поднимается над ним ходом не больше CLIMB_MAX (раньше lerp 3/с срывал
+## его вверх до 21 м/с за кадр), к высоте подходит без рывка и корпус не задевает.
+func test_climb_over_ship_near_ice_without_jerk() -> void:
+	for ship_y in [-8.0, -10.0]:
+		var w := _world()
+		var ry := _rays(w).rays[0]
+		var at := ry.ang + 25.0 / ry.radius
+		w.ship.pos = Vector3(ry.center.x + cos(at) * ry.radius, ship_y, ry.center.z + sin(at) * ry.radius)
+		var dt := 1.0 / 30.0
+		var prev := ry.p
+		var prev_vy := 0.0
+		var top := ry.p.y
+		var was_over := false
+		var limit := Vector2(ry.speed, EcoRay.CLIMB_MAX).length() + 0.2
+		for i in 400:
+			w.step(dt)
+			var v := (ry.p - prev) / dt
+			ok(v.length() <= limit, "корабль на %.0f м, шаг %d: ход %.1f м/с" % [ship_y, i, v.length()])
+			# + 0,7 м/с: у самого льда обшивка (push_out) держит ската на сантиметр выше нужной высоты — дрожь в 1 см
+			ok(absf(v.y - prev_vy) <= EcoRay.CLIMB_ACCEL * dt + 0.7, "вертикальный ход без рывка (шаг %d): %.2f → %.2f, y %.2f, over %s" % [i, prev_vy, v.y, ry.p.y, ry.over])
+			ok(not EcoHull.touches(ry.p, w.ship.pos, w.ship.yaw, 0.5), "тело не в корпусе (шаг %d)" % i)
+			was_over = was_over or ry.over
+			top = maxf(top, ry.p.y)
+			prev_vy = v.y
+			prev = ry.p
+		ok(was_over, "шёл над кораблём (%.0f м)" % ship_y)
+		ok(top >= minf(EcoRay.CEIL_Y, ship_y + EcoRay.SHIP_TOP + EcoRay.OVER) - 0.3,
+			"поднялся над корпусом: %.2f" % top)
+
+
 func test_level_far_from_ship() -> void:
 	var w := _world()
 	var r := _rays(w)

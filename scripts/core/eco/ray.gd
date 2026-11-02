@@ -47,6 +47,11 @@ const BANK := 0.22
 ## над кораблём скат не всплывает «лифтом», а взмывает и плавно выравнивается.
 const PITCH_MAX := deg_to_rad(20.0)
 const PITCH_FOLLOW := 4.0
+## Высота (Б3, «плавность поведения»): вертикальный ход догоняет нужный (3 или 0,5 × остаток высоты, как раньше)
+## не быстрее CLIMB_ACCEL м/с² и не больше CLIMB_MAX м/с, к нужной высоте тормозит заранее (√(2·a·d)). Раньше
+## lerp 3/с срывал ската с места: корабль у льда — до 21 м/с вверх за кадр («лифт» при тангаже 20°).
+const CLIMB_MAX := 4.0
+const CLIMB_ACCEL := 6.0
 
 
 ## Ледокрыл.
@@ -66,6 +71,8 @@ class Ray:
 	var over := false
 	## Тангаж тела (рад, > 0 — нос вверх), плавный.
 	var pitch := 0.0
+	## Вертикальный ход (м/с), плавный.
+	var vy := 0.0
 	var lead_cd := 0.0
 	var placed := false
 
@@ -135,8 +142,12 @@ func _place(world: EcoWorld, ry: Ray, dt: float) -> void:
 	ry.over = EcoHull.touches(Vector3(x, s.pos.y + 1.6, z), s.pos, s.yaw, WING)
 	if ry.over:
 		ty = minf(CEIL_Y, maxf(ty, s.pos.y + SHIP_TOP + OVER))
-	var y := lerpf(ry.p.y, ty, minf(1.0, dt * (3.0 if ry.over else 0.5))) if ry.placed else ty
 	var y0 := ry.p.y
+	var y := ty
+	if ry.placed:
+		y = climb(ry, ty, 3.0 if ry.over else 0.5, dt)
+	else:
+		ry.vy = 0.0
 	var was := ry.placed
 	ry.placed = true
 	ry.p = Vector3(x, y, z)
@@ -148,6 +159,21 @@ func _place(world: EcoWorld, ry: Ray, dt: float) -> void:
 		ry.pitch = 0.0
 	else:
 		ry.pitch = lerpf(ry.pitch, pitch_for((ry.p.y - y0) / dt, ry.speed), 1.0 - exp(-PITCH_FOLLOW * dt))
+
+
+## Шаг высоты к ty: нужный ход — follow × остаток, не больше CLIMB_MAX и не больше √(2·CLIMB_ACCEL·остаток) (успеть
+## встать), сам ход ry.vy меняется не быстрее CLIMB_ACCEL; проскочил цель — встаёт на ней. Возвращает новую высоту.
+static func climb(ry: Ray, ty: float, follow: float, dt: float) -> float:
+	if dt <= 0.0:
+		return ry.p.y
+	var d := ty - ry.p.y
+	var want := signf(d) * minf(minf(absf(d) * follow, CLIMB_MAX), sqrt(2.0 * CLIMB_ACCEL * absf(d)))
+	ry.vy = move_toward(ry.vy, want, CLIMB_ACCEL * dt)
+	var y := ry.p.y + ry.vy * dt
+	if (ty - y) * d < 0.0:
+		y = ty
+		ry.vy = 0.0
+	return y
 
 
 ## Нужный тангаж при вертикальной скорости vy (м/с) и скорости по кругу speed (м/с): наклон пути, ± PITCH_MAX.
