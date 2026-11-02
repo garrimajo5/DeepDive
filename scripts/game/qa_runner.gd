@@ -202,6 +202,7 @@ func tick(dt: float) -> void:
 				main.role_card.reset_run()
 				main.role_card.on = c[1]
 			"mate":
+				_drop_role(clampi(c[4], 0, 3))   # роль у одного человека, как в коопе (#1162)
 				var mate: Crew.Member
 				if c[6]:   # за штурвалом
 					mate = main.add_mate(0.0, Deck.SEAT_Z, 0.0, clampi(c[4], 0, 3), clampi(c[5], 0, 1), true)
@@ -502,6 +503,16 @@ func _play(n: int) -> void:
 	var cap: Image = await PlayCaption.render(self, PlayFrame.caption(n))
 	PlayFrame.compose(img, cap).save_png("%s/%s.png" % [OUT, name])
 	composing -= 1
+
+
+## «mate» с ролью, которая уже есть у товарища: прежний уходит с палубы, новый встаёт на его место в списке
+## последним (его ведут «act»/«gone»). В коопе роль у одного телефона — двух биологов в кадре не бывает (#1162).
+func _drop_role(role: int) -> void:
+	for m: Crew.Member in main.crew:
+		if m != main.me and m.role == role:
+			main.crew.erase(m)
+			main.crew_view.set_members(main.crew, main.me)
+			return
 
 
 ## «quit»: дождаться сборки кадров Google Play (подпись рисуется кадр спустя), затем итог и выход.
