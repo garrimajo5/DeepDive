@@ -42,10 +42,12 @@ const EDGE := 0.04
 ## Точек проверки касания на нить (корень — 0, конец — SAMPLES − 1), запас к корпусу, м.
 const SAMPLES := 17
 const TOUCH_R := 0.1
-## Отвод задетой нити корпусом: конец сдвигается на PUSH м от корабля, возвращается с постоянной RETURN с
-## (за 3 · RETURN ≈ 4 с почти на месте).
+## Отвод задетой нити корпусом: цель отвода конца — PUSH м от корабля, возвращается с постоянной RETURN с
+## (за 3 · RETURN ≈ 4 с почти на месте); сама нить догоняет цель с постоянной PUSH_IN с — отходит от корпуса за
+## ≈ 0,5 с, а не прыгает концом на 1,2 м за кадр.
 const PUSH := 1.2
 const RETURN := 1.3
+const PUSH_IN := 0.18
 ## Дальше этого от середины колодца (м по горизонтали) нити стоят и не рисуются.
 const ACTIVE := 110.0
 
@@ -108,8 +110,9 @@ class Curtain:
 	var touched := PackedFloat32Array()
 	var mid := PackedFloat32Array()
 	var half := PackedFloat32Array()
-	## Отвод конца корпусом (м, по горизонтали).
+	## Отвод конца корпусом (м, по горизонтали) и его цель — куда корпус отвёл бы нить сейчас.
 	var push := PackedVector3Array()
+	var push_goal := PackedVector3Array()
 	## Сколько первых нитей живёт и рисуется; время мира последнего шага; касаний всего (для теста).
 	var active := 0
 	var time := 0.0
@@ -128,6 +131,7 @@ class Curtain:
 		root.resize(n)
 		sway_dir.resize(n)
 		push.resize(n)
+		push_goal.resize(n)
 		for i in n:
 			var g := i % GROUPS
 			var a := GROUP_ANGLE + g * TAU / GROUPS + rng.range_f(-GROUP_SPREAD, GROUP_SPREAD)
@@ -177,9 +181,11 @@ class Curtain:
 	func step(ship: EcoLink.ShipState, t: float, dt: float) -> void:
 		time = t
 		var back := exp(-dt / RETURN)
+		var follow := 1.0 - exp(-maxf(dt, 0.0) / PUSH_IN)
 		var reach := EcoHull.BOUND + TOUCH_R
 		for i in active:
-			push[i] *= back
+			push_goal[i] *= back
+			push[i] = push[i].lerp(push_goal[i], follow)
 			var flat := Vector2(root[i].x - ship.pos.x, root[i].z - ship.pos.z)
 			if flat.length() > reach + SWAY.y + PUSH:
 				continue
@@ -214,4 +220,4 @@ class Curtain:
 			touched[i] = t - RISE if since < FADE else t
 		var away := Vector3(root[i].x - ship.pos.x, 0.0, root[i].z - ship.pos.z)
 		if away.length() > 1e-3:
-			push[i] = away.normalized() * PUSH
+			push_goal[i] = away.normalized() * PUSH
