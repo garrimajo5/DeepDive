@@ -105,8 +105,10 @@ func test_ship_touch_squeezes_ink_9s_recharge_40s() -> void:
 	var ev := _notes(w, EcoCushion.ID, "touch")
 	eq(ev.size(), 1, "наблюдение «touch»")
 	eq(ev[0].text(), "Мягкая подушка сжимается и выпускает облако чернил — корабль его задел", "не изучен — по виду")
+	near(EcoCushion.squash(cu).x, 1.0, 1e-6, "в шаг касания ещё не сжалась — набирает за SQUEEZE_IN")
+	w.run(EcoCushion.SQUEEZE_IN)
 	near(EcoCushion.squash(cu).x, 1.0 - cu.squeeze * 0.45, 1e-6, "ниже и уже")
-	w.run(8.8)
+	w.run(8.8 - EcoCushion.SQUEEZE_IN)
 	ok(cu.inked(), "облако ещё держится")
 	w.run(0.3)
 	ok(not cu.inked(), "через 9 с облако растаяло")
@@ -115,6 +117,30 @@ func test_ship_touch_squeezes_ink_9s_recharge_40s() -> void:
 	near(cu.squeeze, 0.0, 1e-6, "расправилась")
 	w.run(1.0)
 	eq(_notes(w, EcoCushion.ID, "touch").size(), 2, "через 40 с — снова")
+
+
+## Б3: от касания подушка сжимается за SQUEEZE_IN с мягким входом — ширина за шаг меняется не больше чем на 0,1 (раньше
+## 1 → 0,55 за кадр, у подушки 2 м — на 0,9 м), в середине — на полпути, потом спадает по RELAX.
+func test_squeeze_eases_in() -> void:
+	var w := _world()
+	var cu := _cushions(w).cushions[0]
+	w.ship.pos = Vector3(6.0, FLAT + 2.0, 0.0)
+	var was := EcoCushion.squash(cu).x
+	var worst := 0.0
+	var mid := 0.0
+	for i in 20:
+		w.step(1.0 / 60.0)
+		var x := EcoCushion.squash(cu).x
+		worst = maxf(worst, absf(x - was))
+		was = x
+		if i == 9:
+			mid = x
+	ok(worst <= 0.1, "за шаг 1/60 с ширина меняется не больше чем на 0,1: %.3f" % worst)
+	ok(mid < 0.85 and mid > 0.65, "через 0,15 с — на полпути: %.3f" % mid)
+	near(was, 1.0 - cu.squeeze * 0.45, 1e-6, "через SQUEEZE_IN — сжата полностью")
+	near(EcoCushion.squeeze_k(cu), cu.squeeze, 1e-6, "дальше видимое сжатие — squeeze")
+	cu.cd = 0.0
+	near(EcoCushion.squeeze_k(cu), cu.squeeze, 1e-6, "без недавнего касания — squeeze как есть")
 
 
 func test_ship_far_or_high_does_not_touch() -> void:
