@@ -20,6 +20,8 @@ extends Node3D
 ## `EcoShaders.PLANT` (режим `TENTACLE` без светящихся кончиков; волна — uniform `breath`, время мира `t`, в меше
 ## UV.x — сдвиг фазы вдоль хвоста, UV.y — доля изгиба, UV2 — вбок), шейдеров не прибавилось; двойник на CPU —
 ## `tail_offset`. «Экономно» — `sway_k` (EcoShaders.set_sway_lite).
+## Новая рыбка над мхом не возникает за кадр (Б3): вырастает за COIN_RISE (доли coin_k по времени мира, у гостя то же);
+## схваченная глазуном пропадает сразу — её проглотили.
 
 const COIN := Color("e8d48a")
 const FIN := Color("b59a50")
@@ -68,6 +70,10 @@ var dust_buffer: PackedFloat32Array:
 	get:
 		return _dust.data
 var _dust := EcoDustBuffer.new()
+## Доля размера монетника по номеру рыбки: 0 — съеден, 1 — во весь размер.
+var coin_k := PackedFloat32Array()
+var _k_t := 0.0
+var _k_fresh := true
 ## «Экономно»: в каждой стайке не рисуется монетник с местом k % LITE_SKIP == LITE_SKIP − 1.
 const LITE_SKIP := 3
 var lite := false
@@ -147,6 +153,9 @@ func drawn() -> int:
 	return fish.multimesh.instance_count if v < 0 else v
 
 
+## Появилась — вырастает за COIN_RISE с; время назад или скачок дальше SNAP_DT (сброс, вход гостя) — сразу.
+const COIN_RISE := 1.0
+const SNAP_DT := 1.0
 ## Запас рамки глазунов (#849): стоят на месте, стебель с глазами до 2,2 м вверх.
 const GLAZUN_GROW := 4.0
 
@@ -159,10 +168,12 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 		set_lite(true)   # мир пересобран — места заново
 	mat.set_shader_parameter("t", t)
 	coin_buffer.resize(coins.coins.size() * STRIDE_C)
+	grow(t)
 	for cn in coins.coins:
 		var q := cn.index * 5
-		var tr := Transform3D(EcoCoins.coin_basis(cn, t, _vary[q + 1]) * _vary[q], cn.pos) if cn.alive \
-			else Transform3D(Basis.from_scale(Vector3.ZERO), Vector3(0, -999, 0))
+		var g := coin_k[cn.index]
+		var tr := Transform3D(EcoCoins.coin_basis(cn, t, _vary[q + 1]) * (_vary[q] * smoothstep(0.0, 1.0, g)), cn.pos) \
+			if cn.alive and g > 0.0 else Transform3D(Basis.from_scale(Vector3.ZERO), Vector3(0, -999, 0))
 		var j := slot_of(cn.index) * STRIDE_C
 		EcoMM.put(coin_buffer, j, tr)
 		coin_buffer[j + 12] = _vary[q + 2]; coin_buffer[j + 13] = _vary[q + 3]; coin_buffer[j + 14] = _vary[q + 4]
@@ -175,6 +186,25 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 		body_buffer[j + 12] = 1.0; body_buffer[j + 13] = 1.0; body_buffer[j + 14] = 1.0
 		body_buffer[j + 15] = eye_alpha(gz, t)
 	EcoMM.send(bodies, body_buffer)
+
+
+## Доли размера монетников к моменту t: живой растёт за COIN_RISE, съеденный — сразу 0. Первый шаг, время назад и
+## скачок дальше SNAP_DT — сразу к цели.
+func grow(t: float) -> void:
+	var n := coins.coins.size()
+	if coin_k.size() != n:
+		coin_k.resize(n)
+		_k_fresh = true
+	var dt := t - _k_t
+	_k_t = t
+	var snap := _k_fresh or dt < 0.0 or dt > SNAP_DT
+	_k_fresh = false
+	for cn in coins.coins:
+		var i := cn.index
+		if not cn.alive:
+			coin_k[i] = 0.0
+		else:
+			coin_k[i] = 1.0 if snap else minf(1.0, coin_k[i] + dt / COIN_RISE)
 
 
 func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3) -> void:
