@@ -166,12 +166,12 @@ func _build() -> void:
 	tris = idx.size() / 3
 
 
-## Отдать шейдеру свет кустов, если хоть один заметно изменился. true — отдали.
+## Отдать шейдеру свет кустов на виду (`EcoCoral.Bush.seen` — гаснет за DIM_TIME, Б3), если хоть один заметно изменился. true — отдали.
 func sync() -> bool:
 	var dirty := false
 	for b in coral.bushes:
-		if absf(b.glow - glows[b.index]) >= EPS or (b.glow >= 1.0 and glows[b.index] < 1.0):
-			glows[b.index] = b.glow
+		if absf(b.seen - glows[b.index]) >= EPS or (b.seen >= 1.0 and glows[b.index] < 1.0):
+			glows[b.index] = b.seen
 			dirty = true
 	if dirty and _mat:
 		_mat.set_shader_parameter("glow", glows)

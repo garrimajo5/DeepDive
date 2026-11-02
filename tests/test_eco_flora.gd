@@ -112,6 +112,48 @@ func test_coral_dims_from_ping_and_zap() -> void:
 	ok(_texts(w.take_link()).has("Огнецвет гаснет от разряда"))
 
 
+## Б3: импульс и разряд гасят кончики на виду за DIM_TIME с, а не за кадр (свет мира и строка — сразу);
+## разгораются вместе со светом, шумный ход (0,8/с) — на виду так же, как в мире.
+func test_coral_dims_smoothly() -> void:
+	var w := _coral_world()
+	var co: EcoCoral = _sys(w, EcoCoral)
+	var b := co.bushes[2]
+	w.ship.pos = b.top + Vector3(0, 0, 15)
+	w.ship.zap = true
+	w.ship.zap_radius = 20.0
+	w.step(1.0 / 60.0)
+	w.ship.zap = false
+	near(b.glow, EcoCoral.MIN_GLOW, 0.01, "свет мира погас сразу")
+	ok(b.seen > 0.9, "на виду — ещё нет: %.3f" % b.seen)
+	var was := b.seen
+	var worst := 0.0
+	for i in int(EcoCoral.DIM_TIME * 60.0) + 2:
+		w.step(1.0 / 60.0)
+		worst = maxf(worst, absf(b.seen - was))
+		was = b.seen
+	ok(worst < 0.05, "за кадр — не больше 0,05: %.3f" % worst)
+	near(b.seen, b.glow, 1e-6, "через DIM_TIME — погас")
+	w.ship.pos = Vector3(500, 0, 500)
+	w.step(1.0)
+	near(b.seen, b.glow, 1e-6, "разгорается вместе со светом")
+	ok(b.glow > EcoCoral.MIN_GLOW, "разгорается")
+	b.glow = 1.0   # разгорелся (25 с) — импульс гасит половину
+	b.seen = 1.0
+	w.ship.pos = b.top + Vector3(0, 0, 25)
+	w.ship.sonar_ping = true
+	w.step(1.0 / 60.0)
+	w.ship.sonar_ping = false
+	ok(b.seen - b.glow > 0.4, "импульс: на виду гаснет не за кадр")
+	w.step(EcoCoral.DIM_TIME)
+	near(b.seen, b.glow, 1e-6, "и догоняет")
+	w.ship.pos = b.top + Vector3(0, 0, 5)
+	w.ship.speed = 5.0
+	for i in 30:
+		w.step(1.0 / 60.0)
+		near(b.seen, b.glow, 1e-6, "шумный ход гасит медленнее — на виду как в мире")
+	w.ship.speed = 0.0
+
+
 # ---------- Веерники ----------
 
 func test_fans_by_coral_and_at_start() -> void:
@@ -256,6 +298,7 @@ func test_view_one_coral_mesh_and_one_fan_multimesh() -> void:
 
 	var up := cv.uploads
 	b0.glow = EcoCoral.MIN_GLOW
+	b0.seen = EcoCoral.MIN_GLOW   # на виду — уже погас (гаснет за DIM_TIME — test_coral_dims_smoothly)
 	view.step(0.05, ship)
 	ok(cv.uploads > up, "свет отдан шейдеру")
 	near(cv.glows[0], b0.glow, 0.01, "погасший куст")
@@ -406,6 +449,7 @@ func test_coral_view_lite_same_material_and_glow() -> void:
 	# свет кончиков отдаётся как прежде
 	var up := cv.uploads
 	view.coral.bushes[0].glow = EcoCoral.MIN_GLOW
+	view.coral.bushes[0].seen = EcoCoral.MIN_GLOW   # шейдер берёт свет на виду (Б3)
 	cv.sync()
 	ok(cv.uploads > up, "свет отдан шейдеру")
 	view.set_lite(false)

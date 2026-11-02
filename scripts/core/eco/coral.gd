@@ -26,6 +26,9 @@ const RELIGHT := 0.04
 const MSG_CD := 40.0
 ## Свет ниже этого — куст «погас» (для сообщения).
 const DARK := 0.5
+## Видно кончики гаснут от импульса и разряда за DIM_TIME с (Б3, `Bush.seen`), а не за кадр: полипы втягивают
+## огни волной, а не щелчком выключателя (как у Каменного цветка, EcoFlower.DIM_TIME).
+const DIM_TIME := 0.4
 
 
 ## Куст огнецвета.
@@ -41,6 +44,8 @@ class Bush:
 	var scale := 1.0
 	## Свет кончиков: 1 — горит, MIN_GLOW — погас.
 	var glow := 1.0
+	## Свет кончиков на виду (шейдеру — `CoralView.sync`): догоняет glow вниз за DIM_TIME, вверх — сразу с ним.
+	var seen := 1.0
 
 
 var bushes: Array[Bush] = []
@@ -88,6 +93,7 @@ func step(world: EcoWorld, dt: float) -> void:
 			b.glow = minf(1.0, b.glow + dt * RELIGHT)
 		if was >= DARK and b.glow < DARK:
 			dimmed = true
+		b.seen = ease_seen(b.seen, b.glow, dt)
 	if dimmed:
 		_say(world, "Огнецвет гасит огни — корабль шумит рядом")
 
@@ -112,6 +118,11 @@ func on_zap(world: EcoWorld, radius: float) -> void:
 	if hit:
 		msg_cd = 0.0
 		_say(world, "Огнецвет гаснет от разряда")
+
+
+## Свет на виду за шаг dt: вниз — не быстрее (1 − MIN_GLOW) / DIM_TIME в секунду, вверх и на месте — сразу glow.
+static func ease_seen(seen: float, glow: float, dt: float) -> float:
+	return maxf(glow, seen - dt * (1.0 - MIN_GLOW) / DIM_TIME) if seen > glow else glow
 
 
 ## Свет куста i (для сцены).
