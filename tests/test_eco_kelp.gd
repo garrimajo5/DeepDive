@@ -443,3 +443,58 @@ func test_view_lite_draws_every_other_stalk() -> void:
 	ok(KelpView.transform_at(kv.stalk_buffer, 5).origin.is_equal_approx(gr.stalks[5].pos), "буфер снова по номеру")
 	view.queue_free()
 	await frames(1)
+
+
+## Б3: ёж трогается и встаёт за секунду — ход меняется не быстрее ACCEL (раньше 0 → 0,3 м/с за шаг и обратно),
+## к ленте и точке блуждания всё равно доходит.
+func test_urchin_speed_eases() -> void:
+	var w := _world()
+	w.ship.pos = SPOT + Vector3(0, 10, 0)   # рядом: ежи шагают каждый кадр (EcoLod)
+	var k := _kelp(w)
+	w.reset()
+	var dt := 1.0 / 30.0
+	var last: Array[Vector3] = []
+	var vel: Array[float] = []
+	for u in k.urchins:
+		last.append(u.pos)
+		vel.append(0.0)
+	var worst := 0.0
+	var top := 0.0
+	var ate := false
+	for i in 1800:
+		w.step(dt)
+		for u in k.urchins:
+			var j := u.index
+			var d := Vector2(u.pos.x - last[j].x, u.pos.z - last[j].z).length()
+			last[j] = u.pos
+			if not u.alive or d > 0.5:   # съеден или появился заново
+				vel[j] = 0.0
+				continue
+			var v := d / dt
+			worst = maxf(worst, absf(v - vel[j]))
+			top = maxf(top, v)
+			vel[j] = v
+			if u.goal >= 0 and Vector2(u.pos.x - k.groves[0].stalks[u.goal].pos.x,
+					u.pos.z - k.groves[0].stalks[u.goal].pos.z).length() < EcoKelp.EAT_DIST:
+				ate = true
+	ok(worst <= maxf(EcoKelp.ACCEL * dt, EcoKelp.CREEP) + 1e-3,
+		"ход меняется плавно: худший скачок %.3f м/с за шаг" % worst)
+	ok(top > EcoKelp.WANDER_SPEED * 0.9, "разгоняется до своего хода: %.2f м/с" % top)
+	ok(top <= EcoKelp.SPEED + 1e-3, "не быстрее SPEED: %.2f" % top)
+	ok(ate, "ёж дошёл до ленты и ест")
+
+
+func test_urchin_want_speed_slows_to_creep() -> void:
+	near(EcoKelp.want_speed(EcoKelp.SPEED, 5.0), EcoKelp.SPEED, 1e-6, "вдали — полный ход")
+	near(EcoKelp.want_speed(EcoKelp.SPEED, EcoKelp.ARRIVE * 0.5), EcoKelp.SPEED * 0.5, 1e-6, "у места — вполовину")
+	near(EcoKelp.want_speed(EcoKelp.SPEED, 0.0), EcoKelp.CREEP, 1e-6, "у самого места — доползает")
+
+
+## Первые START_QUIET с ежи пасутся молча: ни наблюдения «graze», ни строки (с разгоном первый доходит позже и
+## перебивал строку приборов в test_status).
+func test_urchins_quiet_at_start() -> void:
+	var w := _world()
+	w.ship.pos = SPOT + Vector3(0, 10, 0)
+	w.reset()
+	w.run(EcoKelp.START_QUIET - 0.5, 1.0 / 30.0)
+	eq(_notes(w, EcoKelp.ID, "graze").size(), 0, "в начале ежи молчат")

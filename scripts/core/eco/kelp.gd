@@ -39,6 +39,14 @@ const PICK_F := 0.3
 const EAT_DIST := 0.45
 const SPEED := 0.3
 const WANDER_SPEED := 0.15
+## Скорость ежа меняется не быстрее ACCEL (м/с²): трогается и останавливается за секунду, а не рывком 0 → 0,3 м/с
+## за шаг (план реализма Б3); за ARRIVE (м) до места, где встанет, сбавляет ход, но не медленнее CREEP — доползает.
+const ACCEL := 0.3
+const ARRIVE := 0.6
+const CREEP := 0.03
+## Первые секунды мира ежи пасутся молча — без «graze» и строки «Новое наблюдение» (как EcoGrazer.START_QUIET): с
+## плавным разгоном ближний к старту ёж доходит до ленты на 5-й с и перебивал строку приборов.
+const START_QUIET := 8.0
 ## Ёж — на 0,15 м над дном; появляется в кольце 0,6 · KELP_R … KELP_R + 2 м от середины рощи.
 const UP := 0.15
 ## Наблюдение «graze» — раз в 60 с от ежа, текст — раз в 90 с у рощи; «kelp» и «bare» — раз в 40 с у рощи.
@@ -101,6 +109,8 @@ class Urchin:
 	var wander := Vector3.ZERO
 	var wander_t := 0.0
 	var graze_cd := 0.0
+	## Скорость сейчас (м/с), догоняет want_speed не быстрее ACCEL.
+	var speed := 0.0
 	## Фаза покачивания (рисунок).
 	var phase := 0.0
 	## Набранное время вдали (EcoLod): шагает реже, догоняя пропущенное.
@@ -178,6 +188,7 @@ func reset(world: EcoWorld) -> void:
 			u.grove = gi
 			u.phase = _rnd.range_f(0, 6)
 			_spawn(u)
+			u.graze_cd = START_QUIET
 			urchins.append(u)
 
 
@@ -217,6 +228,7 @@ func _spawn(u: Urchin) -> void:
 	u.goal = -1
 	u.wander_t = 0.0
 	u.graze_cd = 0.0
+	u.speed = 0.0
 
 
 func _step_urchin(world: EcoWorld, u: Urchin, dt: float) -> void:
@@ -255,6 +267,9 @@ func _step_urchin(world: EcoWorld, u: Urchin, dt: float) -> void:
 		speed = WANDER_SPEED
 	var d := Vector3(to.x - u.pos.x, 0.0, to.z - u.pos.z)
 	var dist := d.length()
+	var stop := EAT_DIST if u.goal >= 0 else 0.05
+	if dist < stop:
+		u.speed = move_toward(u.speed, 0.0, ACCEL * dt)   # доползает на CREEP — гаснет без рывка
 	if u.goal >= 0 and dist < EAT_DIST:
 		var s := gr.stalks[u.goal]
 		s.f = maxf(F_MIN, s.f - dt * EAT_RATE)
@@ -265,9 +280,15 @@ func _step_urchin(world: EcoWorld, u: Urchin, dt: float) -> void:
 				gr.graze_cd = GRAZE_SAY_CD
 			world.emit(ID, "graze", u.pos, _graze_text(world) if say else Callable())
 	elif dist > 0.05:
-		u.pos += d * (minf(dist, speed * dt) / dist)
+		u.speed = move_toward(u.speed, want_speed(speed, dist - stop), ACCEL * dt)
+		u.pos += d * (minf(dist, u.speed * dt) / dist)
 		# высоту дна — только когда ёж сдвинулся: дно — шум fbm, стоящему ежу пересчитывать нечего (issue #133)
 		u.pos.y = _floor(u.pos.x, u.pos.z, u.pos.y - UP) + UP
+
+
+## Нужная скорость ежа: full — ход к ленте или блуждание, rest — сколько осталось до места, где он встанет (м).
+static func want_speed(full: float, rest: float) -> float:
+	return maxf(full * clampf(rest / ARRIVE, 0.0, 1.0), CREEP)
 
 
 ## Съесть ежа (кольчужник): пропадает на respawn секунд, лента свободна.
