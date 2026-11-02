@@ -327,9 +327,10 @@ uniform float reach = 1.0;
 uniform float phase_axis = 0.0;
 // щупальце: свечение у основания и у кончика (доля длины — COLOR.a, по квадрату)
 uniform vec2 tip_glow = vec2(0.0);
-// светящийся кончик крупнее (глаза глазуна, #849): x — радиус шарика, м; y — прибавка доли, если альфа цвета
-// (вершина × экземпляр) больше 0,9 — шарик раздувается по гладкой нормали; 0 — не трогать
+// светящийся кончик крупнее (глаза глазуна, #849): x — радиус шарика, м; y — прибавка доли; раздувается по гладкой
+// нормали плавно, по альфе цвета (вершина × экземпляр) от tip_from до 1 (CoinsView.eye_grow — двойник); 0 — не трогать
 uniform vec2 tip_grow = vec2(0.0);
+uniform float tip_from = 0.9;
 // просвет (EcoBack): доля альбедо по каналам, что светится против огня; back_k — 0 на «Экономно»
 uniform vec3 back = vec3(0.0);
 uniform float back_k = 1.0;
@@ -344,8 +345,8 @@ void vertex() {
 		float f = fract(t * breath.y + UV.x + COLOR.a);
 		VERTEX.xz += UV2 * (-breath.x * UV.y * cos(6.2831853 * f) * sway_k);
 	}
-	if (tip_grow.y > 0.0 && COLOR.a > 0.9) {
-		VERTEX += NORMAL * tip_grow.x * tip_grow.y;
+	if (tip_grow.y > 0.0 && COLOR.a > tip_from) {
+		VERTEX += NORMAL * tip_grow.x * tip_grow.y * clamp((COLOR.a - tip_from) / (1.0 - tip_from), 0.0, 1.0);
 	}
 	if (sway_k > 0.0 && dot(bend, bend) > 0.0) {
 		vec3 o = MODEL_MATRIX[3].xyz;
