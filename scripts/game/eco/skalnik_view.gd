@@ -13,6 +13,10 @@ extends Node3D
 ## «Экономно» (Б6, `set_lite`): шары щупалец грубее (ARM_SIDES_LITE × ARM_RINGS_LITE вместо ARM_SIDES × ARM_RINGS —
 ## треугольников щупалец втрое меньше), неподвижный камень не шевелит щупальцами уже дальше FAR_LITE. Тело, цвет,
 ## мир и муть те же, вызовов столько же; сброс мира уровень не теряет (EcoView.lite).
+## «Дыхание» мантии (Б3, `breath`): мантия набирает воду и выталкивает её — высота ± BREATH_H, ширина ± BREATH_W за
+## BREATH_T с, подошва на дне (масштаб от низа узла). «Камень» дышит едва заметно — ROCK_BREATH от размаха (зоркий
+## заметит), раскрытый — во весь размах; доля — по маскировке `camo`, она меняется плавно, размах не прыгает. По
+## времени мира (у гостя то же), масштаб узла — даром, и на «Экономно».
 
 const ROCK := Color("4f4a5c")
 const SKIN := Color("b8553c")
@@ -41,6 +45,10 @@ const FAR_LITE := 40.0
 const ARM_RISE := 0.6
 const TRAIL := 0.22
 const ROCK_SPREAD := 0.55
+const BREATH_H := 0.05
+const BREATH_W := 0.025
+const BREATH_T := 4.5
+const ROCK_BREATH := 0.3
 
 var skalnik: EcoSkalnik
 var body: MeshInstance3D
@@ -168,6 +176,12 @@ func still_far() -> float:
 	return FAR_LITE if lite else FAR
 
 
+## Масштаб мантии в момент t при маскировке camo (1 — камень): вдох — выше и шире, «камень» — ROCK_BREATH размаха.
+static func breath(camo: float, t: float) -> Vector3:
+	var k := lerpf(1.0, ROCK_BREATH, clampf(camo, 0.0, 1.0)) * sin(t * TAU / BREATH_T)
+	return Vector3(1.0 + BREATH_W * k, 1.0 + BREATH_H * k, 1.0 + BREATH_W * k)
+
+
 ## Цвет кожи при маскировке camo (1 — камень).
 static func skin_color(camo: float) -> Color:
 	return ROCK.lerp(SKIN, 1.0 - camo)
@@ -180,7 +194,8 @@ func sync(t: float, ship: Vector3, force := false, info: EcoLink.ShipState = nul
 	if sk == null:
 		return
 	_sync_dust(t, ship, info, flow)
-	body.transform = Transform3D(Basis(Vector3.UP, atan2(sk.dir.x, sk.dir.z)), sk.pos)
+	body.transform = Transform3D(Basis(Vector3.UP, atan2(sk.dir.x, sk.dir.z)) * Basis.from_scale(breath(sk.camo, t)),
+		sk.pos)
 	if sk.loot >= 0 and _loot_was < 0:
 		# схватил — плывёт от захвата; первая расстановка (гость вошёл, сброс) — сразу на месте
 		_grab_t = -INF if force or info == null else t
