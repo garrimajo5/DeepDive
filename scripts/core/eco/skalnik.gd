@@ -36,6 +36,12 @@ const GLASS_DOWN := 0.8
 ## Домой 1,8 м/с, дома ближе 0,5 м.
 const BACK_SPEED := 1.8
 const HOME_DIST := 0.5
+## Ход (план реализма Б3): скорость `vel` догоняет нужную не быстрее ACCEL (м/с²), бросок к захвату — LUNGE_ACCEL:
+## трогается и встаёт за долю секунды, а не 0 → 5 м/с за шаг; к цели — тише (не быстрее 2·остаток, как было). Дома
+## (ROCK) оседает на место сам — SETTLE доля/с, раньше прыгал на дом с 0,5 м за кадр.
+const ACCEL := 4.0
+const LUNGE_ACCEL := 15.0
+const SETTLE := 2.0
 ## Поворот тела по ходу: доля угла 3/с, не быстрее 2,5 рад/с (EcoAgent.turn_flat) — бросок назад к дому без щелчка.
 const TURN_K := 3.0
 const TURN_MAX := 2.5
@@ -182,7 +188,6 @@ func step(world: EcoWorld, dt: float) -> void:
 			sk.seen = false
 			if sk.pos.distance_to(sk.home) < HOME_DIST:
 				sk.state = State.ROCK
-				sk.pos = sk.home
 		State.THIEF:
 			speed = THIEF_SPEED
 			if s.claw_state == EcoLink.CLAW_IDLE:
@@ -199,7 +204,6 @@ func step(world: EcoWorld, dt: float) -> void:
 			speed = LOOT_SPEED
 			if sk.pos.distance_to(sk.home) < LOOT_HOME:
 				sk.state = State.ROCK
-				sk.pos = sk.home
 				speed = 0.0
 				if sk.loot >= 0:
 					world.send(EcoLink.drop(sk.loot, stash_point(sk.home, sk.loot)))
@@ -209,17 +213,27 @@ func step(world: EcoWorld, dt: float) -> void:
 			and s.claw_sample >= 0 and s.claw_target.distance_to(sk.home) < THIEF_R:
 		sk.state = State.THIEF
 		sk.reveal = SPOOKED
+	var want_vel := Vector3.ZERO
 	if speed > 0.0:
 		var to := EcoHull.detour(sk.pos, goal, s.pos, s.yaw, PAD) - sk.pos
 		var d := to.length()
 		if d > 0.05:
-			sk.vel = to * (minf(speed, d * 2.0) / d)
-			sk.pos += sk.vel * dt
-			var flat := Vector3(sk.vel.x, 0.0, sk.vel.z)
-			if flat.length_squared() > 1e-4:
-				sk.dir = EcoAgent.turn_flat(sk.dir, flat, dt, TURN_K, TURN_MAX)
-		else:
+			want_vel = to * (minf(speed, d * 2.0) / d)
+		if sk.state == State.STALK or sk.state == State.BACK:   # над дном на 0,2 м — тоже ходом, не рывком
+			var hh := EcoKrab._floor(world, sk.pos.x, sk.pos.z, sk.home.y)
+			want_vel.y = (hh + 0.2 - sk.pos.y) * 3.0
+	elif sk.state == State.ROCK:
+		if sk.pos.distance_squared_to(sk.home) > 1e-6:
+			want_vel = (sk.home - sk.pos) * SETTLE   # оседает на место дома, не прыжком
+		elif sk.vel.length_squared() < 1e-4:
+			sk.pos = sk.home   # дошёл (мм) — стоит, дно больше не считает
 			sk.vel = Vector3.ZERO
+	sk.vel = sk.vel.move_toward(want_vel, (LUNGE_ACCEL if sk.state == State.THIEF else ACCEL) * dt)
+	if sk.vel.length_squared() > 1e-8:
+		sk.pos += sk.vel * dt
+		var flat := Vector3(sk.vel.x, 0.0, sk.vel.z)
+		if flat.length_squared() > 1e-4 and sk.state != State.ROCK:
+			sk.dir = EcoAgent.turn_flat(sk.dir, flat, dt, TURN_K, TURN_MAX)
 		var res := EcoHull.push_out(sk.pos, s.pos, s.yaw, PAD)
 		if not res.is_empty():
 			sk.pos = res[0]
@@ -230,10 +244,7 @@ func step(world: EcoWorld, dt: float) -> void:
 		var h := EcoKrab._floor(world, sk.pos.x, sk.pos.z, sk.home.y)
 		if sk.pos.y < h:
 			sk.pos.y = h
-		if sk.state == State.STALK or sk.state == State.BACK:
-			sk.pos.y = maxf(h, sk.pos.y + (h + 0.2 - sk.pos.y) * minf(1.0, dt * 3.0))
-	else:
-		sk.vel = Vector3.ZERO
+			sk.vel.y = maxf(sk.vel.y, 0.0)
 	var want := 1.0 if sk.state == State.ROCK and sk.reveal <= 0.0 else 0.0
 	sk.camo += (want - sk.camo) * minf(1.0, dt * (0.5 if want > 0.0 else 4.0))
 
