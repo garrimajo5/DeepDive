@@ -1,6 +1,6 @@
 extends TestCase
 ## Ледяная моль у колодца 05 (#836): рой под льдом, ход с рывками, тяга к прожектору (часть 1); модуль мира и вид
-## одним MultiMesh атласа ART-080 (часть 2); моль на стекле (часть 4).
+## одним MultiMesh атласа ART-080 (часть 2); моль на стекле (часть 4), ползёт по курсу (Б3).
 
 
 func _ship(at: Vector3, yaw: float, light: bool) -> EcoLink.ShipState:
@@ -335,3 +335,54 @@ func test_view_glass_cells_and_leaving() -> void:
 	ok(not v.visible, "слетели — скрыт")
 	v.queue_free()
 	await frames(1)
+
+
+## Б3: сидящий рачок ползёт по своему курсу, а не дрожит на месте — за 15 с уходит заметно дальше случайного блуждания
+## (раньше новое направление каждый шаг: ≈ 3 см), ход за шаг — CRAWL · dt, курс за шаг доворачивает не больше
+## WANDER · √dt (кроме отражения у края), из окна не выходит. Тот же итог при шаге 1/60 с.
+func test_glass_crawl_keeps_course() -> void:
+	for dt in [0.1, 1.0 / 60.0]:
+		var ship := _ship(Vector3(EcoMoth.WELL.x + 30.0, -6.0, EcoMoth.WELL.y), PI / 2.0, true)
+		var sw := EcoMoth.Swarm.new()
+		_run(sw, ship, 30.0)
+		ok(sw.on_glass > 10, "на стекле есть моль: %d" % sw.on_glass)
+		var start := PackedVector3Array(sw.glass)
+		var life0 := PackedFloat32Array(sw.glass_life)
+		var prev := PackedVector3Array(sw.glass)
+		var prev_step: Array[Vector3] = []
+		prev_step.resize(EcoMoth.GLASS)
+		var worst_turn := 0.0
+		var worst_len := 0.0
+		var t := 0.0
+		while t < 15.0:
+			sw.step(ship, dt)
+			for k in EcoMoth.GLASS:
+				if sw.glass_life[k] <= 0.0 or life0[k] <= 15.0 + 1.0:
+					continue
+				var g := sw.glass[k]
+				ok(absf(g.x) <= EcoMoth.GLASS_HALF + 1e-4 and g.y >= EcoMoth.GLASS_Y.x - 1e-4
+						and g.y <= EcoMoth.GLASS_Y.y + 1e-4, "в пределах стекла")
+				var d := g - prev[k]
+				var edge := absf(g.x) > EcoMoth.GLASS_HALF - 0.01 or g.y < EcoMoth.GLASS_Y.x + 0.01 \
+						or g.y > EcoMoth.GLASS_Y.y - 0.01
+				if not edge:
+					worst_len = maxf(worst_len, absf(d.length() - EcoMoth.CRAWL * dt))
+					var was: Vector3 = prev_step[k]
+					if was != Vector3.ZERO and d.length() > 1e-6:
+						worst_turn = maxf(worst_turn, was.angle_to(d))
+				prev_step[k] = d if not edge else Vector3.ZERO
+				prev[k] = g
+			t += dt
+		var far := 0.0
+		var n := 0
+		for k in EcoMoth.GLASS:
+			if sw.glass_life[k] > 0.0 and life0[k] > 16.0:
+				far += (sw.glass[k] - start[k]).length()
+				n += 1
+		ok(n > 5, "досидели до конца: %d" % n)
+		far /= maxf(n, 1)
+		ok(far > 0.12, "за 15 с уходит по курсу в среднем на %.2f м (шаг %.3f)" % [far, dt])
+		ok(far <= EcoMoth.CRAWL * 15.0 + 1e-3, "не быстрее CRAWL")
+		ok(worst_len < 1e-4, "ход за шаг — CRAWL · dt: отклонение %.5f" % worst_len)
+		ok(worst_turn <= EcoMoth.WANDER * sqrt(dt) + 1e-3,
+				"курс за шаг доворачивает плавно: %.3f рад (шаг %.3f)" % [worst_turn, dt])
