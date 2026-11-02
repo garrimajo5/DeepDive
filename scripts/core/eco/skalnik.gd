@@ -223,7 +223,11 @@ func step(world: EcoWorld, dt: float) -> void:
 			var hh := EcoKrab._floor(world, sk.pos.x, sk.pos.z, sk.home.y)
 			want_vel.y = (hh + 0.2 - sk.pos.y) * 3.0
 	elif sk.state == State.ROCK:
-		want_vel = (sk.home - sk.pos) * SETTLE   # оседает на место дома, не прыжком
+		if sk.pos.distance_squared_to(sk.home) > 1e-6:
+			want_vel = (sk.home - sk.pos) * SETTLE   # оседает на место дома, не прыжком
+		elif sk.vel.length_squared() < 1e-4:
+			sk.pos = sk.home   # дошёл (мм) — стоит, дно больше не считает
+			sk.vel = Vector3.ZERO
 	sk.vel = sk.vel.move_toward(want_vel, (LUNGE_ACCEL if sk.state == State.THIEF else ACCEL) * dt)
 	if sk.vel.length_squared() > 1e-8:
 		sk.pos += sk.vel * dt
