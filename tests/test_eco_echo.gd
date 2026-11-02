@@ -668,3 +668,46 @@ func test_revealed_breathes_faster_without_jump() -> void:
 	ok(ev.breath_rate < 1.05, "успокоился: ×%.2f" % ev.breath_rate)
 	ev.queue_free()
 	await frames(1)
+
+
+## Б3: раскрытый импульсом — складки ушей разгораются за LOUD_RISE, а не за кадр (было 0,12 → до 0,9);
+## раскрытие кончилось — гаснут за LOUD_FADE; скачок времени — сразу к цели.
+func test_folds_glow_eases_in_and_out() -> void:
+	var w := _world()
+	var e: EcoEcho = _sys(w, EcoEcho)
+	var ev := EchoView.new(e)
+	var ec := e.echo
+	var ship := ec.p + Vector3(30, 10, 30)
+	var dt := 1.0 / 30.0
+	# пик пульса sin(3t) = 1 — у t = π/6: худший миг для скачка
+	var t := PI / 6.0 - 0.5
+	for i in 15:
+		t += dt
+		ev.sync(t, ship)
+	near(ev.fold_mat.emission.b, (EchoView.FOLD * EchoView.HUSH).b, 1e-5, "затаился — тихо")
+	ec.revealed = EcoEcho.REVEAL_T
+	var last := ev.fold_mat.emission.b
+	var worst := 0.0
+	for i in int(EchoView.LOUD_RISE / dt) + 4:
+		t += dt
+		ev.sync(t, ship)
+		var g := ev.fold_mat.emission.b
+		worst = maxf(worst, absf(g - last))
+		last = g
+	near(ev.loud_k, 1.0, 1e-6, "раскрыт — пульс во всю силу")
+	var full := EchoView.FOLD.b * (EchoView.LOUD - EchoView.HUSH)
+	ok(worst < full * 0.2, "свечение за кадр %.3f < %.3f (было %.3f)" % [worst, full * 0.2, full])
+	ec.revealed = 0.0
+	t += dt
+	ev.sync(t, ship)
+	ok(ev.loud_k > 0.9, "раскрытие кончилось — гаснет не за кадр: %.3f" % ev.loud_k)
+	for i in int(EchoView.LOUD_FADE / dt) + 2:
+		t += dt
+		ev.sync(t, ship)
+	near(ev.fold_mat.emission.b, (EchoView.FOLD * EchoView.HUSH).b, 1e-5, "погас за LOUD_FADE")
+	ec.revealed = EcoEcho.REVEAL_T
+	ev.sync(t + 5.0, ship)
+	near(ev.loud_k, 1.0, 1e-6, "скачок времени — сразу к цели")
+	near(EchoView.loud_step(0.3, true, -1.0, true), 1.0, 1e-6, "snap — к цели")
+	near(EchoView.fold_k(1.0, 0.0), EchoView.HUSH, 1e-6, "без пульса — HUSH")
+	ev.free()
