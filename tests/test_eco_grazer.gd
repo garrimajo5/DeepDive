@@ -647,3 +647,45 @@ func test_view_moss_lite_coarser_same_material() -> void:
 	ok(not view.well_view.moss_view.lite, "и у колодца")
 	view.queue_free()
 	await frames(1)
+
+
+## Б3: съеденный скребун возвращается у пятна мха не во весь размер за кадр — вырастает за GRAZER_RISE; съеденный
+## стеклоустом пропадает сразу; скачок времени — сразу к цели.
+func test_view_returned_grazer_grows() -> void:
+	var w := _world()
+	var gr := _grazers(w)
+	var v := GrazerView.new(gr)
+	var g := gr.all[4]
+	var t := 1.0
+	v.sync(t)
+	var full := GrazerView.transform_at(v.buffer, 4).basis.x.length()
+	ok(full > 0.3, "живой во весь размер: %.3f" % full)
+	gr.kill(g)
+	t += 0.1
+	v.sync(t)
+	ok(GrazerView.transform_at(v.buffer, 4).basis.x.length() < 1e-6, "съеденный — сразу")
+	g.agent.alive = true
+	var dt := 1.0 / 30.0
+	var last := 0.0
+	var worst := 0.0
+	for i in int(GrazerView.GRAZER_RISE / dt) + 2:
+		t += dt
+		v.sync(t)
+		var tr := GrazerView.transform_at(v.buffer, 4)
+		var sz := tr.basis.x.length()
+		if i == 0:
+			ok(sz < full * 0.05, "появился крошечным: %.4f" % sz)
+			ok(tr.origin.is_equal_approx(EcoGrazerLook.origin(g)), "растёт на своём месте")
+		worst = maxf(worst, sz - last)
+		last = sz
+	ok(worst < full * 0.12, "за шаг растёт на %.4f < 12 %%" % worst)
+	near(last, full, 1e-4, "вырос во весь размер")
+	ok(GrazerView.transform_at(v.buffer, 3).basis.x.length() > 0.3, "соседи не тронуты")
+	gr.kill(g)
+	v.sync(t)
+	g.agent.alive = true
+	v.sync(t + 5.0)
+	near(GrazerView.transform_at(v.buffer, 4).basis.x.length(), full, 1e-4, "скачок времени — сразу к цели")
+	v.sync(1.0)
+	near(GrazerView.transform_at(v.buffer, 4).basis.x.length(), full, 1e-4, "время назад (сброс) — сразу")
+	v.free()

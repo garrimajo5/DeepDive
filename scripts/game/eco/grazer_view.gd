@@ -10,6 +10,8 @@ extends MultiMeshInstance3D
 ## «Экономно» (Б6, `set_lite`): форма EcoGrazerLook.lite_* — купол 8 × 2 вместо 12 × 3, лапы без подушек стоп,
 ## 312 → 200 треугольников на скребуна; меш пересобирается с тем же материалом, места, позы, муть и вызовы те же.
 ## Сброс мира уровень не теряет (EcoView.set_lite).
+## Новый скребун у пятна мха не возникает за кадр (Б3): вырастает за GRAZER_RISE (доли grow_k по времени мира, у
+## гостя то же); съеденный стеклоустом пропадает сразу — его проглотили.
 
 const SHADER := """
 shader_type spatial;
@@ -60,6 +62,14 @@ var lite := false
 var tris := 0
 ## Чисел на облачко в буфере мути: transform 3 × 4 и цвет.
 const DUST_STRIDE := 16
+## Появился после съедения — вырастает за GRAZER_RISE с; время назад или скачок дальше SNAP_DT (сброс, вход гостя) —
+## сразу во весь размер.
+const GRAZER_RISE := 1.2
+const SNAP_DT := 1.0
+## Доли размера скребунов (0 — не видно, 1 — во весь размер), по номеру особи.
+var grow_k := PackedFloat32Array()
+var _k_t := 0.0
+var _k_fresh := true
 
 
 func _init(system: EcoGrazer, on_lite := false) -> void:
@@ -150,13 +160,33 @@ static func build_mesh(lite := false, mat: ShaderMaterial = null) -> ArrayMesh:
 ## Расставить скребунов по миру в момент t (время мира): один буфер MultiMesh за раз. ship — корабль (муть
 ## дальше EcoGrazerDust.NEAR не поднимается, в луче прожектора светлее), flow — течение мира (уносит муть).
 func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO) -> void:
-	buffer = pack(grazers, t)
+	grow(t)
+	buffer = pack(grazers, t, grow_k)
 	multimesh.buffer = buffer
 	dust.update(grazers, t, ship.pos if ship else Vector3.ZERO)
 	_dust.pack(dust, t, flow, ship, EcoGrazerDust.COLOR, EcoGrazerDust.LIT, Seabed.mesh_height)
 	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 
 
+
+
+## Доли размера скребунов к моменту t: живой растёт за GRAZER_RISE, съеденный — сразу 0. Первый шаг, время назад и
+## скачок дальше SNAP_DT — сразу к цели.
+func grow(t: float) -> void:
+	var n := grazers.all.size()
+	if grow_k.size() != n:
+		grow_k.resize(n)
+		_k_fresh = true
+	var dt := t - _k_t
+	_k_t = t
+	var snap := _k_fresh or dt < 0.0 or dt > SNAP_DT
+	_k_fresh = false
+	for g in grazers.all:
+		var i := g.index
+		if not g.agent.alive:
+			grow_k[i] = 0.0
+		else:
+			grow_k[i] = 1.0 if snap else minf(1.0, grow_k[i] + dt / GRAZER_RISE)
 
 
 ## Буфер мути (TRANSFORM_3D + цвет): растаявшие облачка стянуты в точку, в луче прожектора — светлее (от dark к lit;
@@ -185,12 +215,15 @@ static func pack_dust(d: EcoGrazerDust, t: float, flow: Vector3, ship: EcoLink.S
 	return out
 
 
-## Буфер MultiMesh (TRANSFORM_3D + custom data) для всех скребунов в момент t.
-static func pack(system: EcoGrazer, t: float) -> PackedFloat32Array:
+## Буфер MultiMesh (TRANSFORM_3D + custom data) для всех скребунов в момент t. sizes — доли размера (`grow`, мягкий вход);
+## пустой — все во весь размер.
+static func pack(system: EcoGrazer, t: float, sizes := PackedFloat32Array()) -> PackedFloat32Array:
 	var out := PackedFloat32Array()
 	out.resize(system.all.size() * STRIDE)
 	for g in system.all:
 		var b := EcoGrazerLook.basis(g)
+		if g.index < sizes.size():
+			b = b * smoothstep(0.0, 1.0, sizes[g.index])
 		var o := EcoGrazerLook.origin(g)
 		var c := EcoGrazerLook.custom(g, t)
 		var tn := EcoGrazerLook.tint(g)

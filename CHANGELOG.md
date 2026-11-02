@@ -3,6 +3,9 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-02
+- Скребун не возникает у пятна мха за кадр (поток Б, Б3 `docs/grafika-plan-eco.md`): съеденный стеклоустом
+  возвращается через 40–60 с крошечным и вырастает за 1,2 с (`GrazerView.GRAZER_RISE`, доли `grow_k`); съеденный
+  пропадает сразу. Тест — `test_eco_grazer.test_view_returned_grazer_grows`.
 - Монетник не возникает над мхом за кадр (поток Б, Б3 `docs/grafika-plan-eco.md`): новая рыбка вырастает за 1 с
   (`CoinsView.COIN_RISE`, доли `coin_k`), схваченная глазуном пропадает сразу. Тест —
   `test_eco_coins.test_view_new_coin_grows`.
