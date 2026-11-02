@@ -646,3 +646,46 @@ func test_view_loot_moves_from_claw_and_lowers_to_stash() -> void:
 	ok(last.distance_to(drop_at) < 0.15, "перед сбросом — у тайника, где ляжет камешек (%.2f м)" % last.distance_to(drop_at))
 	v.queue_free()
 	await frames(1)
+
+
+## «Дыхание» мантии (grafika-plan-eco, Б3): тело набирает воду и выталкивает её — выше и шире на вдохе, подошва на
+## дне; «камень» дышит едва заметно (ROCK_BREATH), раскрытый — во весь размах; доля по маскировке, без скачков.
+func test_mantle_breathes_rock_barely() -> void:
+	var top := 0.0
+	var low := 2.0
+	var rock_top := 0.0
+	for i in 90:
+		var t := i * SkalnikView.BREATH_T / 90.0
+		var s := SkalnikView.breath(0.0, t)
+		top = maxf(top, s.y)
+		low = minf(low, s.y)
+		rock_top = maxf(rock_top, SkalnikView.breath(1.0, t).y)
+		near(s.x - 1.0, (s.y - 1.0) * SkalnikView.BREATH_W / SkalnikView.BREATH_H, 1e-6, "шире вместе с высотой")
+	near(top, 1.0 + SkalnikView.BREATH_H, 2e-3, "вдох — выше")
+	near(low, 1.0 - SkalnikView.BREATH_H, 2e-3, "выдох — ниже")
+	near(rock_top - 1.0, SkalnikView.BREATH_H * SkalnikView.ROCK_BREATH, 2e-3, "камень дышит едва")
+	ok(rock_top > 1.005, "но дышит — зоркий заметит")
+	var w := _world()
+	var sk := _sk(w)
+	var v := SkalnikView.new(sk)
+	tree.root.add_child(v)
+	await frames(1)
+	var near_ship := sk.octo.home + Vector3(0, 0, 10)
+	var dt := 1.0 / 30.0
+	var hs: Array[float] = []
+	var worst := 0.0
+	var prev := -1.0
+	for i in int(SkalnikView.BREATH_T / dt):
+		# раскрывается посреди вдоха — размах растёт с маскировкой, не прыжком
+		sk.octo.camo = clampf(1.0 - i * dt * 0.5, 0.0, 1.0)
+		v.sync(1.0 + i * dt, near_ship)
+		var h: float = v.body.transform.basis.get_scale().y
+		hs.append(h)
+		if prev > 0.0:
+			worst = maxf(worst, absf(h - prev))
+		prev = h
+		ok(v.body.transform.origin.is_equal_approx(sk.octo.pos), "подошва на месте")
+	ok(hs.max() - hs.min() > SkalnikView.BREATH_H, "тело в сцене дышит: %.3f" % (hs.max() - hs.min()))
+	ok(worst < 0.01, "без скачков за шаг: %.4f" % worst)
+	v.queue_free()
+	await frames(1)
