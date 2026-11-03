@@ -93,6 +93,35 @@ static func shapes(r: float) -> Array:
 	return out
 
 
+## Коробка в осях корабля, в которой лежат все детали shapes(r) (кэш по r): единичная форма каждой детали —
+## не больше x, z ∈ [−0,5; 0,5], y ∈ [−1; 1]; её углы в осях корабля. Точка вне коробки корпуса не касается —
+## проверка дешевле, чем обход деталей (бахрома у колодца 05, issue #1174).
+static var _boxes := {}
+static func box(r: float) -> AABB:
+	var key := snappedf(r, 0.001)
+	if _boxes.has(key):
+		return _boxes[key]
+	var out := AABB()
+	var first := true
+	for sh: Shape in shapes(key):
+		var back := sh.to_unit.inverse()
+		for k in 8:
+			var u := Vector3(0.5 if k & 1 else -0.5, 1.0 if k & 2 else -1.0, 0.5 if k & 4 else -0.5)
+			var l := sh.pos + back * u
+			if first:
+				out = AABB(l, Vector3.ZERO)
+				first = false
+			else:
+				out = out.expand(l)
+	_boxes[key] = out
+	return out
+
+
+## Касается ли корпуса (раздутого на r) точка l в осях корабля: сначала коробка box(r), потом детали.
+static func touches_local(l: Vector3, r: float) -> bool:
+	return box(r).has_point(l) and _shape_at(l, shapes(r)) != null
+
+
 static func _shape_at(l: Vector3, list: Array) -> Shape:
 	for sh: Shape in list:  # Shape.contains без вызова метода — его цена здесь заметна
 		checks += 1

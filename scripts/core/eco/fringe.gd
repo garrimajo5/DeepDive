@@ -50,6 +50,8 @@ const RETURN := 1.3
 const PUSH_IN := 0.18
 ## Дальше этого от середины колодца (м по горизонтали) нити стоят и не рисуются.
 const ACTIVE := 110.0
+## Дальше этого вбок от отвеса (м) нить не уходит: качание SWAY.y, волна WAVE, отвод PUSH, с запасом.
+const SIDE := SWAY.y + WAVE + PUSH + 0.1
 
 ## Занавес модуля мира и уровень «Экономно».
 var curtain: Curtain
@@ -182,20 +184,26 @@ class Curtain:
 		time = t
 		var back := exp(-dt / RETURN)
 		var follow := 1.0 - exp(-maxf(dt, 0.0) / PUSH_IN)
-		var reach := EcoHull.BOUND + TOUCH_R
+		# нить — отвес от корня вниз, качание, волна и отвод уводят её вбок не дальше SIDE: если отвес с этим запасом
+		# не входит в коробку корпуса (EcoHull.box), точки нити не проверяем — у колодца 05 корабль рядом всегда,
+		# а задевает две-три нити (issue #1174)
+		var hull := EcoHull.box(TOUCH_R)
 		for i in active:
 			push_goal[i] *= back
 			push[i] = push[i].lerp(push_goal[i], follow)
-			var flat := Vector2(root[i].x - ship.pos.x, root[i].z - ship.pos.z)
-			if flat.length() > reach + SWAY.y + PUSH:
-				continue
-			if ship.pos.y - reach > 0.0 or ship.pos.y + reach < -length[i]:
+			var lr := EcoHull.to_ship(root[i], ship.pos, ship.yaw)
+			var span := AABB(lr - Vector3(SIDE, length[i], SIDE), Vector3(SIDE * 2.0, length[i] + 0.2, SIDE * 2.0)).grow(0.01)
+			if not span.intersects(hull):
 				continue
 			var lo := 2.0
 			var hi := -1.0
-			for k in SAMPLES:
+			# по высоте корпус занимает только часть нити: точки выше и ниже коробки не проверяем
+			var k0 := maxi(0, int(floor((lr.y - hull.end.y) / length[i] * (SAMPLES - 1))))
+			var k1 := mini(SAMPLES - 1, int(ceil((lr.y - hull.position.y) / length[i] * (SAMPLES - 1))))
+			for k in range(k0, k1 + 1):
 				var v := float(k) / (SAMPLES - 1)
-				if EcoHull.touches(point(i, v, t), ship.pos, ship.yaw, TOUCH_R):
+				var l := EcoHull.to_ship(point(i, v, t), ship.pos, ship.yaw)
+				if EcoHull.touches_local(l, TOUCH_R):
 					lo = minf(lo, v)
 					hi = maxf(hi, v)
 			if hi < 0.0:
