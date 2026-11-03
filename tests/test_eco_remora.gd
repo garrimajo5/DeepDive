@@ -498,3 +498,51 @@ func test_swim_speeds_up_and_brakes_smoothly() -> void:
 	eq(_jerks(w, 30.0, last, limit), 0, "обратно на ската — с разгоном и торможением")
 	eq(_count(w, EcoRemora.Mode.RAY), 6, "вернулись на скатов")
 
+
+
+func test_view_wags_round_head() -> void:
+	var rm := EcoRemora.Remora.new()
+	rm.index = 2
+	rm.p = Vector3(3, -20, 5)
+	rm.dir = Vector3(0, 0, -1)
+	rm.mode = EcoRemora.Mode.SWIM
+	var s := RemoraView.SCALE * RemoraView.remora_scale(2)
+	var still := RemoraView.place(rm, 0.0, 0.0)
+	var head_d := 0.0
+	var tail_d := 0.0
+	for i in 20:
+		var x := RemoraView.place(rm, i * 0.037)
+		head_d = maxf(head_d, (x * RemoraView.HEAD).distance_to(still * RemoraView.HEAD))
+		var tail := Vector3(0, 0, RemoraView.TAIL_Z - RemoraView.TAIL_L)
+		tail_d = maxf(tail_d, (x * tail).distance_to(still * tail))
+	ok(head_d < 1e-4, "голова стоит (%.5f м)" % head_d)
+	ok(tail_d > 0.1 * s, "машет хвост (%.3f м)" % tail_d)
+
+
+func test_view_wag_fades_when_landed() -> void:
+	var w := _world()
+	var rm := _remoras(w).remoras[0]
+	rm.mode = EcoRemora.Mode.SWIM
+	var view := RemoraView.new(_remoras(w))   # первая расстановка — в конструкторе, t = 0
+	var dt := 1.0 / 30.0
+	var t := 0.0
+	eq(view.wag_k[0], 1.0, "первая расстановка — сразу во весь размах")
+	rm.mode = EcoRemora.Mode.HULL
+	var prev := view.placed[0].basis.orthonormalized()
+	var worst := 0.0
+	for i in 30:
+		t += dt
+		view.sync(t)
+		var b := view.placed[0].basis.orthonormalized()
+		worst = maxf(worst, b.get_rotation_quaternion().angle_to(prev.get_rotation_quaternion()))
+		prev = b
+		if i == 5:
+			ok(view.wag_k[0] > 0.3 and view.wag_k[0] < 1.0, "легла — виляние гаснет, а не пропадает (%.2f)" % view.wag_k[0])
+	eq(view.wag_k[0], 0.0, "за WAG_RISE успокоилась")
+	# 14 рад/с × 0,3 рад — до ~0,14 рад за кадр от самого виляния; скачка 0,3 рад нет
+	ok(worst < 0.2, "поворот за кадр ≤ 0,2 рад (%.3f)" % worst)
+	rm.mode = EcoRemora.Mode.SWIM
+	t += dt
+	view.sync(t)
+	ok(view.wag_k[0] > 0.0 and view.wag_k[0] < 0.2, "снялась — виляние набирается (%.2f)" % view.wag_k[0])
+	view.free()
