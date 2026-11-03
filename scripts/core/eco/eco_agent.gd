@@ -151,7 +151,9 @@ func swim(want: Vector3, dt: float, turn_k: float, turn_max: float, slow_min: fl
 		turn = Vector3(wf.x, 0.0, wf.y) * (flat.length() / s_want)
 	v = Vector3(flat.x, v.y, flat.y)
 	var need := climb_for(ground, turn) if look > 0.0 and ground.is_valid() else -INF
-	v.y = lerpf(v.y, want.y, k)
+	# вниз хочет не круче, чем пускает дно впереди: иначе lerp к want.y съедал торможение LOOK_ACCEL, и в нырке за
+	# добычей у дна (цель ниже clearance) хищник ложился на дно и отскакивал (Б3)
+	v.y = lerpf(v.y, maxf(want.y, minf(need, 0.0)), k)
 	if need > v.y:
 		if need > v.y + LOOK_ACCEL * dt:  # вверх не успевает: и по горизонтали тормозит, как в drive lerp
 			var fs := flat.length()

@@ -26,6 +26,10 @@ const HIDE_SPEED := 1.0
 const ALARM_SPEED := 6.5
 const CALM_SPEED := 2.4
 const MIN_SPEED := 0.5
+## Б3: тормозит рыбка не быстрее этого (м/с²) — тревога прошла (6,5 → 2,4 м/с) или доплыла до дома (→ 1 м/с),
+## и скорость гаснет за ~0,5–0,7 с скольжением. Раньше предел скорости срезал её за кадр (до 165 м/с²): стая с
+## разлёта вставала как вкопанная. Разгон по-прежнему не выше предела.
+const BRAKE := 8.0
 ## Нос рыбки `Fish.look` догоняет скорость долей угла LOOK_K в секунду, не быстрее LOOK_MAX рад/с (`turn`, Б3):
 ## в рывке от хищника и у дома тело разворачивается за доли секунды, а не щёлкает за кадр.
 const LOOK_K := 10.0
@@ -507,6 +511,12 @@ func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
 		sh.alarm = maxf(sh.alarm, 1.5)
 
 
+## Б3: скорость рыбки после шага при пределе max_s: sp — после ускорения, was — до шага. Выше предела — не больше
+## прежней минус BRAKE · dt (тормозит скольжением), но и не выше sp; разгоняться за предел нельзя.
+static func cap_speed(sp: float, was: float, max_s: float, dt: float) -> float:
+	return minf(sp, maxf(max_s, was - BRAKE * dt))
+
+
 ## Скачок центра стаи: прошлый shift гаснет за dt с постоянной CENTER_EASE, к нему прибавляется jump — разница
 ## между центром, куда стая доплыла бы прежним составом, и новым средним.
 static func glide(shift: Vector3, jump: Vector3, dt: float) -> Vector3:
@@ -623,7 +633,7 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 		var max_s := HIDE_SPEED if hide else calm_s
 		var sp := v.length()
 		if sp > max_s:
-			v *= max_s / sp
+			v *= cap_speed(sp, a.v.length(), max_s, dt) / sp
 		elif sp < MIN_SPEED:
 			v *= MIN_SPEED / (sp + 1e-3)
 		p += v * dt
