@@ -514,6 +514,70 @@ func test_pestr_nose_does_not_snap_when_lure_starts() -> void:
 			"пестрянка %d: нос не щёлкнул (%.2f рад)" % [k, before[k].angle_to(now)])
 
 
+## Б3: хватень подманил стаю — пестрянки не срываются к ней за кадр (раньше lerp 2,5/с: до 30 м/с) и так же
+## плавно возвращаются; ход не больше SWIM_MAX, меняется не быстрее SWIM_ACCEL.
+func test_pestr_swim_speed_and_accel_limited() -> void:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	w.ship.pos = FAR
+	var f := w.add(EcoFish.new()) as EcoFish
+	var home := EcoFish.HOMES[0]
+	var h := w.add(EcoHvaten.new(f, [Vector3(home.x + 22.0, FLAT, home.z)] as Array[Vector3])) as EcoHvaten
+	_hungry(h)
+	var hv := h.anemones[0]
+	w.run(3.0)
+	hv.lure_cd = 0.0
+	var dt := EcoWorld.MAX_STEP
+	var prev_v: Array[Vector3] = []
+	for pe in hv.pestr:
+		prev_v.append((pe.p - pe.prev) / dt)
+	var top_speed := 0.0
+	var top_accel := 0.0
+	var lured := false
+	for i in int((EcoHvaten.LURE_T + 4.0) / dt):
+		w.step(dt)
+		lured = lured or hv.lure != null
+		for k in hv.pestr.size():
+			var pe := hv.pestr[k]
+			var v := (pe.p - pe.prev) / dt
+			top_speed = maxf(top_speed, v.length())
+			top_accel = maxf(top_accel, (v - prev_v[k]).length() / dt)
+			prev_v[k] = v
+	ok(lured, "стаю подманили")
+	ok(top_speed <= EcoHvaten.SWIM_MAX + 1e-3, "ход не больше SWIM_MAX (%.2f м/с)" % top_speed)
+	ok(top_accel <= EcoHvaten.SWIM_ACCEL + 1e-2, "разгон не больше SWIM_ACCEL (%.2f м/с²)" % top_accel)
+	ok(top_speed > 1.0, "к стае всё же плывут")
+
+
+## Бугор между хватнем и стаей: на пути к ней и у неё пестрянки идут над дном, а не сквозь бугор
+## (у старта 00 средина пестрянок была на 3 м под дном).
+static func _ridge(x: float, _z: float) -> float:
+	var x0 := EcoFish.HOMES[0].x + 11.0
+	return FLAT + 12.0 * exp(-pow((x - x0) / 5.0, 2.0))
+
+
+func test_pestr_swim_over_ridge_to_shoal() -> void:
+	var w := EcoWorld.new()
+	w.ground = _ridge
+	w.ship.pos = FAR
+	var f := w.add(EcoFish.new()) as EcoFish
+	var home := EcoFish.HOMES[0]
+	var h := w.add(EcoHvaten.new(f, [Vector3(home.x + 22.0, FLAT, home.z)] as Array[Vector3])) as EcoHvaten
+	_hungry(h)
+	var hv := h.anemones[0]
+	w.run(3.0)
+	hv.lure_cd = 0.0
+	var lowest := INF
+	var away := 0.0
+	for i in int(EcoHvaten.LURE_T / EcoWorld.MAX_STEP):
+		w.step(EcoWorld.MAX_STEP)
+		away = maxf(away, hv.pc.distance_to(hv.top))
+		for pe in hv.pestr:
+			lowest = minf(lowest, pe.p.y - _ridge(pe.p.x, pe.p.z))
+	ok(away > 4.0, "пестрянки ушли от хватня к стае (%.1f м)" % away)
+	ok(lowest > 0.0, "ни одна не под дном (%.2f м)" % lowest)
+
+
 func test_view_lite_draws_every_other_tentacle() -> void:
 	var view := EcoView.new()
 	view.ground = Seabed.height
