@@ -197,3 +197,46 @@ func test_fewer_at_place_10() -> void:
 					deep += 1
 	ok(shelf > 0, "на ровной отмели вокруг кто-то есть")
 	ok(deep * 10 < shelf * 7, "у 10 жизни меньше на треть и больше (%d против %d)" % [deep, shelf])
+
+
+## Б3: стайка у стены склона не идёт лифтом — у 10 (стена 6:1) раньше взлетала в кадре до 17 м/с вслед за дном
+## прямо под ней. Высота — от огибающей дна вдоль круга (не круче CLIMB на метр пути): видимые стайки по всему
+## слою — не быстрее 1,6 м/с вверх-вниз, и над дном.
+func test_no_lift_on_slope_wall() -> void:
+	for at in [Vector3(560, -290, 200), Vector3(215, -60, 90), Vector3(0, -30, 95), Vector3(-250, -40, -210)]:
+		var worst := 0.0
+		var low := 999.0
+		for i in EcoFarLife.schools():
+			var prev := NAN
+			for k in 1200:
+				var t := k * 0.25
+				var s := EcoFarLife.school_at(i, t, at, Seabed.height)
+				if s[4] <= 0.0:
+					prev = NAN
+					continue
+				low = minf(low, s[1] - s[5])
+				if not is_nan(prev):
+					worst = maxf(worst, absf(s[1] - prev) / 0.25)
+				prev = s[1]
+		ok(worst < 1.6, "у %s стайки не быстрее 1,6 м/с по высоте: %.2f" % [at, worst])
+		ok(low > EcoFarLife.ABOVE, "у %s стайки над дном: %.1f" % [at, low])
+
+
+## Огибающая: не ниже дна в точках круга, не круче CLIMB на метр пути; на ровном дне — само дно.
+func test_floor_ring_envelope() -> void:
+	var shift := Vector2(2.0, 1.0) * EcoFarLife.TILE   # копия у 10
+	for i in EcoFarLife.schools():
+		var r := EcoFarLife.circle(i).x
+		var ring := EcoFarLife.floor_ring(i, shift, Seabed.height)
+		eq(ring.size(), EcoFarLife.RING)
+		var mid := EcoFarLife.base(i) + shift
+		var step := TAU * r / EcoFarLife.RING
+		for k in EcoFarLife.RING:
+			var a := TAU * k / EcoFarLife.RING
+			var p := mid + Vector2(cos(a), sin(a)) * r
+			ok(ring[k] >= Seabed.height(p.x, p.y) - 1e-3, "стайка %d точка %d — не ниже дна" % [i, k])
+			var d := absf(ring[k] - ring[(k + 1) % EcoFarLife.RING])
+			ok(d <= step * EcoFarLife.CLIMB + 1e-3, "стайка %d точка %d — не круче: %.2f" % [i, k, d / step])
+		var flat := EcoFarLife.floor_ring(i, Vector2.ZERO, _flat)
+		for k in EcoFarLife.RING:
+			near(flat[k], FLAT, 1e-4, "ровное дно — огибающая на дне")
