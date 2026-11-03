@@ -4,6 +4,8 @@ extends Node3D
 ## конуса (ставятся один раз), луковицы — второй MultiMesh со своим цветом сока у каждой, облака спор — третий
 ## MultiMesh из плоских светящихся точек лицом к камере (сложение цвета, без записи глубины). Сок и споры —
 ## зелёные (#8EE87E), своя эмиссия; стебли #3f7a5a. Стоит на слое отмели (OceanView.LAYER_WORLD).
+## Стебли колышутся в течении, луковицы — на их вершинах (`EcoBladder.sway`, Б3): буфер стеблей переписывается с
+## луковицами, на процессоре; «Экономно» — стоят.
 ## Пузырьки газа с луковиц (EcoBladderBubbles: лопнули — со всех луковиц, спелые сочатся) — четвёртый MultiMesh
 ## «Пузырьки» на общем шейдере EcoShaders.MIST (BUBBLE, `placed`) — +1 вызов отрисовки, шейдеров не прибавилось.
 ## «Экономно» (Б6, `set_lite`): рисуется половина спор каждого облака (`EcoMM.cloud_slot` — буфер вперемешку по
@@ -29,6 +31,9 @@ var _bubbles_empty := false
 ## Места пула, что видны или ждут своего мгновения, и сколько пузырьков пул уже принял (EcoBladderBubbles.added).
 var _bubbles_live := PackedInt32Array()
 var _bubbles_seen := 0
+## Буфер стеблей: стебли колышутся в течении (`EcoBladder.sway`) — 21 экземпляр переписывается вместе с луковицами,
+## на процессоре; шейдеров и вызовов не прибавилось. «Экономно» (`EcoShaders.sway_lite`) — стебли стоят.
+var stem_buffer := PackedFloat32Array()
 ## Последние буферы луковиц и спор (для тестов).
 var bulb_buffer := PackedFloat32Array()
 var spore_buffer := PackedFloat32Array()
@@ -47,14 +52,7 @@ func _init(system: EcoBladder, on_lite := false) -> void:
 	bulbs = EcoMM.instance(self, "Луковицы", build_bulb(), n * EcoBladder.STEMS, true)
 	spores = EcoMM.instance(self, "Споры", build_spore(), n * EcoBladder.SPORES, true)
 	bubbles = EcoMM.instance(self, "Пузырьки", build_bubble(), EcoBladderBubbles.POOL, true)
-	var buf := PackedFloat32Array()
-	buf.resize(stems.multimesh.instance_count * STRIDE)
-	for bl in bladders.bushes:
-		for k in EcoBladder.STEMS:
-			var a := bl.stem_base[k]
-			var up := bl.stem_top[k] - a
-			EcoMM.put(buf, (bl.index * EcoBladder.STEMS + k) * STRIDE, Transform3D(_along(up), a + up * 0.5))  # конус стоит серединой в нуле
-	stems.multimesh.buffer = buf
+	stem_buffer.resize(stems.multimesh.instance_count * STRIDE)
 	EcoMM.fit([stems, bulbs, spores], places(bladders), FRAME_GROW)
 	set_lite(on_lite)
 	sync(0.0)
@@ -161,6 +159,9 @@ static func pack_bubbles(d: EcoBladderBubbles, t: float, flow: Vector3,
 
 ## Расставить луковицы, споры и пузырьки в момент t (время мира); ship — корабль (дальность и луч), flow — течение.
 func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> void:
+	var amount := 0.0 if EcoShaders.sway_lite else 1.0
+	bubble.flow = flow
+	bubble.sway = amount
 	_sync_bubbles(t, ship, flow)
 	bulb_buffer.resize(bulbs.multimesh.instance_count * STRIDE_C)
 	var fresh := spore_buffer.size() != spores.multimesh.instance_count * STRIDE_C
@@ -172,8 +173,12 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 		var c := EcoBladder.bulb_color(bl)
 		for k in EcoBladder.STEMS:
 			var i := (bl.index * EcoBladder.STEMS + k) * STRIDE_C
-			EcoMM.put(bulb_buffer, i, Transform3D(Basis.from_scale(Vector3.ONE * r), EcoBladder.bulb(bl, k, t)))
+			var top := EcoBladder.bulb(bl, k, t, flow, amount)
+			EcoMM.put(bulb_buffer, i, Transform3D(Basis.from_scale(Vector3.ONE * r), top))
 			_color(bulb_buffer, i + STRIDE, c)
+			var a := bl.stem_base[k]
+			var up := top - a
+			EcoMM.put(stem_buffer, (bl.index * EcoBladder.STEMS + k) * STRIDE, Transform3D(_along(up), a + up * 0.5))  # конус стоит серединой в нуле
 		var popped := bl.popped()
 		if not popped and not fresh and _spores_shown[bl.index] == 0:
 			continue
@@ -188,6 +193,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 				EcoMM.put(spore_buffer, i, Transform3D(Basis.from_scale(Vector3.ZERO), bl.cloud))
 			_color(spore_buffer, i + STRIDE, SPORE * g)
 	EcoMM.send(bulbs, bulb_buffer)
+	EcoMM.send(stems, stem_buffer)
 	if spores_changed:
 		spores.multimesh.buffer = spore_buffer
 

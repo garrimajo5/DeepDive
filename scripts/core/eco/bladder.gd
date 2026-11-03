@@ -176,10 +176,27 @@ func targets(_world: EcoWorld, out: Array[Dictionary]) -> void:
 		out.append(EcoWorld.target(ID, bl.stem_top[0], 0.9))
 
 
-## Луковица стебля k в момент t: место (покачивается по x на 5 см) и радиус-множитель — 0,2 у лопнувших,
+## Стебель колышется в течении (Б3, как ленточник и веерники — `EcoCurrent.sway`): крен по потоку, волна вверх и
+## поперёк — доли длины стебля на полном течении. Тяжёлая луковица на конце — стебель твёрже ленты (у ленточника
+## 0,12 / 0,1 / 0,06). Фаза — от подножия стебля, сдвинутого на `stem_phase` · PHASE_SHIFT м: стебли одного куста
+## гнутся почти вместе, но не в лад.
+const BEND := Vector3(0.09, 0.07, 0.045)
+const PHASE_SHIFT := 0.5
+
+
+## Смещение вершины стебля k в момент t: течение мира flow (м/с), amount — доля размаха (0 на «Экономно»).
+static func sway(bl: Bush, k: int, t: float, flow := Vector3.ZERO, amount := 1.0) -> Vector3:
+	if amount <= 0.0:
+		return Vector3.ZERO
+	var a := bl.stem_base[k]
+	var o := a + Vector3(bl.stem_phase[k] * PHASE_SHIFT, 0.0, 0.0)
+	return EcoCurrent.sway(o, 1.0, a.distance_to(bl.stem_top[k]), t, flow, BEND) * amount
+
+
+## Луковица стебля k в момент t: на вершине колышущегося стебля (`sway`); радиус-множитель — 0,2 у лопнувших,
 ## от 0,35 до 1 по спелости; переходы — за SHRINK и REGROW (`shrink_k`, `regrow_k`).
-static func bulb(bl: Bush, k: int, t: float) -> Vector3:
-	return bl.stem_top[k] + Vector3(sin(t * 0.8 + bl.stem_phase[k]) * 0.05, 0, 0)
+static func bulb(bl: Bush, k: int, t: float, flow := Vector3.ZERO, amount := 1.0) -> Vector3:
+	return bl.stem_top[k] + sway(bl, k, t, flow, amount)
 
 
 static func bulb_size(bl: Bush) -> float:
