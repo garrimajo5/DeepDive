@@ -695,3 +695,61 @@ func _run_until_alive(w: EcoWorld, f: EcoFish.Fish, max_s: float) -> bool:
 		w.step(EcoWorld.MAX_STEP)
 		s += EcoWorld.MAX_STEP
 	return f.agent.alive
+
+
+
+## Б3: центр стаи — цель сканера и сонара, испуг, охота — не прыгает, когда меняется состав: съеденная рыбка и
+## вернувшаяся у дома сдвигают среднее разом, центр доплывает к нему за CENTER_EASE (было до 0,25–0,6 м за шаг).
+func test_center_glides_when_fish_eaten_or_back() -> void:
+	var w := _world()
+	var fish := _fish(w)
+	w.ship.pos = fish.shoals[0].home + Vector3(0, 0, 40)  # ближе MID: стая шагает каждый шаг мира
+	w.reset()
+	var sh := fish.shoals[0]
+	for i in 240:
+		w.step(DT)
+	# съедена самая дальняя от центра
+	var far: EcoFish.Fish = null
+	for f: EcoFish.Fish in sh.members:
+		if far == null or f.agent.p.distance_to(sh.center) > far.agent.p.distance_to(sh.center):
+			far = f
+	var jump := _center_jump(w, sh, func(): fish.kill(far))
+	ok(jump[1] > 0.05, "среднее рыбок прыгнуло: %.3f м" % jump[1])
+	ok(jump[0] < jump[1] * 0.2, "съели рыбку — центр не прыгает: %.3f м при скачке среднего %.3f" % jump)
+	for i in 60:
+		w.step(DT)
+	near(sh.center.distance_to(sh.mean), 0.0, 0.01, "через 2 с центр — снова среднее рыбок")
+	# вернулась у дома, а стая ушла от него
+	ok(sh.mean.distance_to(sh.home) > 3.0, "стая ушла от дома")
+	far.agent.timer = 0.0
+	jump = _center_jump(w, sh, func(): pass)
+	ok(far.agent.alive, "рыбка вернулась")
+	ok(jump[1] > 0.3, "среднее рыбок прыгнуло: %.3f м" % jump[1])
+	ok(jump[0] < jump[1] * 0.2, "вернулась у дома — центр не прыгает: %.3f м при скачке среднего %.3f" % jump)
+
+
+const DT := 1.0 / 30.0
+
+
+## Перемена состава стаи и три шага мира: насколько ход за шаг отличается от хода на шаге до перемены (м) — у центра
+## и у среднего рыбок `Shoal.mean`: у плывущей стаи ход за шаг меняется на миллиметры, у среднего это скачок
+## состава. Перемена — до шага (kill) или в шаге (возвращение у дома — в шаге рыбок, центр увидит её на следующем).
+func _center_jump(w: EcoWorld, sh: EcoFish.Shoal, change: Callable) -> Array[float]:
+	var c0 := sh.center
+	var m0 := sh.mean
+	w.step(DT)
+	var last := sh.center - c0
+	var last_m := sh.mean - m0
+	change.call()
+	var worst: Array[float] = [0.0, 0.0]
+	for k in 3:
+		var c := sh.center
+		var m := sh.mean
+		w.step(DT)
+		var d := sh.center - c
+		var dm := sh.mean - m
+		worst[0] = maxf(worst[0], (d - last).length())
+		worst[1] = maxf(worst[1], (dm - last_m).length())
+		last = d
+		last_m = dm
+	return worst

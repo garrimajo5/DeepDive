@@ -30,6 +30,10 @@ const MIN_SPEED := 0.5
 ## в рывке от хищника и у дома тело разворачивается за доли секунды, а не щёлкает за кадр.
 const LOOK_K := 10.0
 const LOOK_MAX := 8.0
+## Центр стаи после смены состава (рыбку съели, вернулась у дома) не прыгает на новое среднее, а доплывает к нему:
+## скачок уходит в `Shoal.shift` и гаснет с постоянной CENTER_EASE, с (Б3). Раньше съеденная в 5 м от центра стаи из
+## 22 сдвигала центр — цель сканера и сонара, испуг, охоту — на 0,25 м за шаг, вернувшаяся у дома — до 0,6 м.
+const CENTER_EASE := 0.4
 ## Запас до корпуса корабля, м (S.pushOut(f.p, 0.3)).
 const HULL_GAP := 0.3
 ## Стая за ледокрылом: цель — в LEAD_BEHIND позади него и LEAD_BELOW ниже (sh.follow в js).
@@ -111,6 +115,9 @@ class Shoal:
 	var home := Vector3.ZERO
 	var goal := Vector3.ZERO
 	var center := Vector3.ZERO
+	## Среднее живых рыбок на последнем шаге стаи; center = mean + shift, shift гаснет (CENTER_EASE).
+	var mean := Vector3.ZERO
+	var shift := Vector3.ZERO
 	var velocity := Vector3.ZERO
 	## Радиус блуждания вокруг дома (м).
 	var range_m := 14.0
@@ -294,9 +301,14 @@ func reset(world: EcoWorld) -> void:
 			sum += f.agent.p
 		if count > 0:
 			sh.center = sum / count
+		sh.mean = sh.center
+		sh.shift = Vector3.ZERO
 		sh.pos.resize(count)
 		sh.live.resize(count)
 		sh.sep.resize(count)
+		for f: Fish in sh.members:  # прошлые места и жизнь — для смены состава на первом шаге
+			sh.pos[f.slot] = f.agent.p
+			sh.live[f.slot] = 1
 
 
 ## Оси клетки костей (как EcoBones: +Z — к голове), начало — центр клетки на высоте 0.
@@ -418,8 +430,17 @@ func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
 	var c := Vector3.ZERO
 	var v := Vector3.ZERO
 	var n := 0
+	var moved := Vector3.ZERO  # сдвиг рыбок, живых и на прошлом шаге, — ход самой стаи
+	var kept := 0
+	var changed := false
 	for f: Fish in sh.members:
 		var a := f.agent
+		var was := sh.live[f.slot] == 1
+		if a.alive and was:
+			moved += a.p - sh.pos[f.slot]
+			kept += 1
+		elif a.alive != was:
+			changed = true
 		sh.pos[f.slot] = a.p
 		sh.live[f.slot] = 1 if a.alive else 0
 		if a.alive:
@@ -430,9 +451,16 @@ func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
 	sh.sep = _separation(sh.pos, sh.live)
 	sh.near_veil = veils != null and veils.near_any(sh.center, VEIL_PAD)
 	if n > 0:
-		sh.center = c / n
+		var mean := c / n
+		sh.shift = glide(sh.shift, sh.mean + moved / kept - mean if changed and kept > 0 else Vector3.ZERO, dt)
+		if changed and kept == 0:
+			sh.shift = Vector3.ZERO  # вся стая сменилась — прежнего центра нет
+		sh.mean = mean
+		sh.center = mean + sh.shift
 		sh.velocity = v / n
 	else:
+		sh.mean = sh.home
+		sh.shift = Vector3.ZERO
 		sh.center = sh.home
 		sh.velocity = Vector3.ZERO
 	sh.alarm = maxf(0.0, sh.alarm - dt)
@@ -477,6 +505,12 @@ func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
 		sh.threat = world.ship.pos
 		sh.threat_is_ship = true
 		sh.alarm = maxf(sh.alarm, 1.5)
+
+
+## Скачок центра стаи: прошлый shift гаснет за dt с постоянной CENTER_EASE, к нему прибавляется jump — разница
+## между центром, куда стая доплыла бы прежним составом, и новым средним.
+static func glide(shift: Vector3, jump: Vector3, dt: float) -> Vector3:
+	return shift * exp(-dt / CENTER_EASE) + jump
 
 
 ## Следующая цель стаи у кроны: дальше по кругу от нынешнего центра стаи в свою сторону, на кольце вокруг кроны.
