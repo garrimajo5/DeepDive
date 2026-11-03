@@ -549,6 +549,31 @@ func test_worst_frame_skips_ship_jump() -> void:
 	r.free()
 
 
+## Issue #1204: корабль возвращается к 10 посреди тёмного экрана кат-сцены «глубже» — кадр выгрузки мест у 10
+## под закрытой шторкой не худший кадр, а «после прыжка»; провал, когда шторка уже открывается, виден как обычно.
+func test_worst_frame_skips_dark_trip() -> void:
+	var r := QaRunner.new()
+	r.trip = DescentTrip.new()
+	r.trip.start()
+	var t := 1000000
+	r._measure(t)
+	t += 70000                       # затемнение ещё идёт — кадр виден
+	r._measure(t)
+	eq(roundi(r.worst_ms), 70, "кадр в затемнении — худший")
+	r.trip.update(DescentTrip.SINK + DescentTrip.HOLD * 0.5)   # возвращение корабля: шторка закрыта
+	ok(QaRunner.dark_trip(r.trip), "шторка закрыта")
+	t += 186000                      # мир и места у 10 разом
+	r._measure(t)
+	eq(roundi(r.worst_ms), 70, "кадр под шторкой не худший")
+	eq(roundi(r.jump_ms), 186, "он записан «после прыжка»")
+	r.trip.update(DescentTrip.HOLD * 0.5 + 0.1)   # шторка открывается
+	ok(not QaRunner.dark_trip(r.trip), "шторка открывается")
+	t += 90000
+	r._measure(t)
+	eq(roundi(r.worst_ms), 90, "провал при открытой шторке виден")
+	r.free()
+
+
 func test_worst_frame_names_step() -> void:   # issue #217: в логе видно, на каком шаге худший кадр
 	var r := QaRunner.new()
 	r.script_q = QaScript.parse('[{"do": "wait", "s": 1}, {"do": "press", "what": "action"}, {"do": "wait", "s": 1}]')
