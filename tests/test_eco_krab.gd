@@ -447,6 +447,52 @@ func test_view_new_spine_grows_smoothly() -> void:
 	await frames(1)
 
 
+func test_hop_follows_speed() -> void:
+	var t := PI / 2.0 / KrabView.HOP_RATE   # |sin| = 1
+	near(KrabView.hop(t, 0.0), 0.0, 1e-9, "стоит — не подпрыгивает")
+	ok(KrabView.hop(t, EcoKrab.CREEP) < 0.002, "ползком 5 см/с — подскок меньше 2 мм: %.4f" % KrabView.hop(t, EcoKrab.CREEP))
+	near(KrabView.hop(t, KrabView.HOP_FULL), KrabView.HOP, 1e-6, "на ходу к норе — во весь размах")
+	near(KrabView.hop(t, EcoKrab.SCARED_SPEED), KrabView.HOP, 1e-6, "бегом — не выше")
+
+
+## Краб подходит ползком и встаёт: тело не опускается скачком (раньше на 5 см/с — полный подскок 3 см и сброс за кадр).
+func test_view_hop_settles_without_jump() -> void:
+	var w := _world()
+	var kr := _krab(w)
+	var cr := kr.crab
+	var v := KrabView.new(kr)
+	tree.root.add_child(v)
+	await frames(1)
+	var dt := 1.0 / 30.0
+	var t := 0.0
+	var speed := KrabView.HOP_FULL
+	var last := INF
+	var worst := 0.0
+	var top := 0.0
+	var stop := PI / 2.0 / KrabView.HOP_RATE + PI / KrabView.HOP_RATE * 12.0   # встаёт на гребне подскока
+	while t < stop + 1.0:
+		if t < 1.0:
+			speed = KrabView.HOP_FULL
+		elif t < stop:
+			speed = move_toward(speed, EcoKrab.CREEP, EcoKrab.BRAKE * dt)
+		else:
+			speed = 0.0
+		cr.vel = Vector3(speed, 0, 0)
+		cr.moving = cr.vel.length_squared() > 1e-4
+		v.sync(t)
+		var y := v.body.position.y - cr.pos.y
+		if last != INF:
+			worst = maxf(worst, absf(y - last))
+		top = maxf(top, y)
+		last = y
+		t += dt
+	ok(top > KrabView.HOP * 0.9, "на ходу подпрыгивает: %.3f м" % top)
+	ok(worst < 0.009, "за кадр тело сдвигается не больше 9 мм: %.4f" % worst)
+	near(last, 0.0, 1e-9, "встал — на дне")
+	v.queue_free()
+	await frames(1)
+
+
 func test_view_without_crab_hidden() -> void:
 	var w := EcoWorld.new()
 	var kr := w.add(EcoKrab.new(w.add(EcoKelp.new()) as EcoKelp)) as EcoKrab

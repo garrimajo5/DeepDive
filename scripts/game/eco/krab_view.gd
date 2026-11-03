@@ -5,7 +5,8 @@ extends Node3D
 ## клешни отдельным мешем (поднимаются на 0,9 · raise), иглы ежей на панцире — MultiMesh на 10 игл (стержень со
 ## светом, кончик светится сам; лишние сжаты в точку), переписывается, только когда игл стало больше (EcoKrab.dirty) и пока новая игла растёт:
 ## вплетённая игла вырастает из панциря за SPINE_RISE (доля spine_k, по времени мира), а не появляется за кадр. Тело в 1,25 раза крупнее, на ходу
-## подпрыгивает на 3 см. Муть у дна из-под ног и от клешней (EcoKrabDust) — дочерний MultiMesh «Муть» в мировых
+## подпрыгивает до HOP = 3 см — размах по доле хода (hop: полный с HOP_FULL м/с), трогаясь и вставая, шаг мельче, а не
+## включается и пропадает за кадр. Муть у дна из-под ног и от клешней (EcoKrabDust) — дочерний MultiMesh «Муть» в мировых
 ## координатах, общий шейдер EcoShaders.MIST (INK), бурый цвет EcoKrabDust.COLOR/LIT. Шесть вызовов отрисовки (у игл две поверхности); стоит на слое
 ## отмели (OceanView.LAYER_WORLD).
 ## «Экономно» (Б6, `set_lite`): панцирь 7 × 4 вместо 10 × 6, щипцы 6 × 3 вместо 8 × 5 (LITE_*) — тело и клешни 324 →
@@ -24,6 +25,10 @@ const SPINE_TIP := Color(0.55, 0.95, 1.0)
 const SCALE := 1.25
 ## За сколько секунд вплетённая игла вырастает из панциря (и уходит, если игл стало меньше).
 const SPINE_RISE := 0.6
+## Подскок тела на ходу (м), с какой скорости по дну он во весь размах (м/с — ход к норе) и ритм (рад/с).
+const HOP := 0.03
+const HOP_FULL := 0.8
+const HOP_RATE := 8.0
 ## Камни норы: смещение (нос норы — наружу от рощи, +Z) и размер 0,8…1,1 м, приплюснуты до 0,6 по высоте.
 const ROCKS: Array[Vector3] = [Vector3(-1.3, 0.3, -0.4), Vector3(1.3, 0.3, -0.4), Vector3(0, 0.8, -1.1),
 	Vector3(-0.6, 1.3, -0.9), Vector3(0.7, 0.2, -1.6)]
@@ -132,8 +137,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 		return
 	_sync_dust(t, ship, flow)
 	var p := cr.pos
-	if cr.moving:
-		p.y += absf(sin(t * 8.0)) * 0.03
+	p.y += hop(t, Vector2(cr.vel.x, cr.vel.z).length())
 	body.transform = Transform3D(Basis(Vector3.UP, atan2(cr.dir.x, cr.dir.z)).scaled(Vector3.ONE * SCALE), p)
 	claws.rotation = Vector3(-cr.raise * 0.9, 0, 0)
 	var grew := _grow_spines(t, cr.spines)
@@ -145,6 +149,13 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 		spines.multimesh.buffer = spine_buffer
 		shown_spines = cr.spines
 		spine_writes += 1
+
+
+## Подскок тела в момент t при скорости по дну speed (м/с): |sin| ритма HOP_RATE, размах — по доле хода до HOP_FULL
+## с мягким входом; стоит — 0. Раньше подскок включался по EcoKrab.Crab.moving (ход > 1 см/с): на подходе к ежу и в
+## нору краб ползёт 5 см/с и прыгал во весь размах, а встав — опускался на 3 см за кадр.
+static func hop(t: float, speed: float) -> float:
+	return absf(sin(t * HOP_RATE)) * HOP * smoothstep(0.0, 1.0, clampf(speed / HOP_FULL, 0.0, 1.0))
 
 
 ## Доли роста игл к моменту t: первые count — к 1, остальные — к 0, за SPINE_RISE. Первый шаг и время назад — сразу.
