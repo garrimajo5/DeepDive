@@ -895,3 +895,41 @@ func test_crust_shot_beam_on_floor() -> void:   # отчёт 2026-10-31-0330: у
 func test_count_note() -> void:   # issue #1156: узлы и объекты в строке скриншота — видно, копится ли что-то за забег
 	eq(QaRunner.count_note(4210, 18344), " · узлы 4210, объекты 18344")
 	eq(QaRunner.count_note(4210, 18344, 3), " · узлы 4210, объекты 18344 (сирот 3)", "сироты — только если есть")
+
+
+## Корабль и полёт перед снимком name в сценарии: [ship, fly] (fly — {} без полёта); нет снимка — [].
+static func _before_shot(name: String) -> Array:
+	var steps: Array = JSON.parse_string(FileAccess.get_file_as_string("res://tools/qa/scenario.json"))
+	var ship := {}
+	var fly := {}
+	for st in steps:
+		match st["do"]:
+			"ship":
+				ship = st
+			"fly":
+				fly = st if st.get("on", true) else {}
+			"shot":
+				if st["name"] == name:
+					return [ship, fly]
+	return []
+
+
+func test_slope_shots_edge_and_rocks() -> void:   # отчёт #1182: склон 06→10 (#832) сценарий не проходил — нечего проверить
+	var edge := _before_shot("34e-kraj-06")
+	ok(not edge.is_empty() and not edge[1].is_empty(), "снимок Края отмели 06 из-под днища")
+	var at := Vector2(float(edge[0]["x"]), float(edge[0]["z"]))
+	ok(at.x < EcoDrop.BROW_X and at.x > EcoDrop.BROW_X - 40.0, "на плато перед бровкой (x %.0f)" % at.x)
+	ok(at.y > EcoDrop.Z_FROM and at.y < EcoDrop.Z_TO, "напротив клиньев (z %.0f)" % at.y)
+	near(float(edge[0]["yaw"]), -90.0, 1e-6, "носом на восток — на бровку")
+	var slope := _before_shot("34f-sklon")
+	ok(not slope.is_empty() and not slope[1].is_empty(), "снимок склона из-под днища")
+	var p := Vector2(float(slope[0]["x"]), float(slope[0]["z"]))
+	ok(Seabed.Slope.open(p.x, p.y), "корабль в проходе склона, а не в стене")
+	var floor_y := Seabed.height(p.x, p.y)
+	ok(floor_y < -130.0 and floor_y > -250.0, "середина склона (дно %.0f м)" % floor_y)
+	var eye_y := maxf(float(slope[0]["y"]), floor_y + Helm.Ship.CLEARANCE) + float(slope[1]["y"])
+	ok(eye_y > floor_y + 2.5 and eye_y < floor_y + 10.0, "глаз у дна (%.1f над дном) — пятно луча на скале" % (eye_y - floor_y))
+	var yaw := deg_to_rad(float(slope[0].get("yaw", 0.0)))
+	var ahead := p + Vector2(-sin(yaw), -cos(yaw)) * 30.0
+	ok(absf(Seabed.height(ahead.x, ahead.y) - floor_y) < 15.0,
+			"носом вдоль склона: дно впереди не уходит из-под луча (%.1f м на 30 м)" % (Seabed.height(ahead.x, ahead.y) - floor_y))
