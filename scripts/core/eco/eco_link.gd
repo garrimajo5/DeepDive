@@ -408,6 +408,8 @@ static func apply_shoals(agents: Array[EcoAgent], systems: Array, data: PackedFl
 			for a in free:
 				a.p += shift
 		sh.center = c
+		sh.mean = c  # рыбки сдвинуты к центру хоста — среднее и есть он, скачок центра хост уже сгладил
+		sh.shift = Vector3.ZERO
 		sh.velocity = Vector3(data[k + 4], data[k + 5], data[k + 6])
 		sh.goal = Vector3(data[k + 7], data[k + 8], data[k + 9])
 		sh.goal_timer = data[k + 10]
