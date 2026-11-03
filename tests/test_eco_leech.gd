@@ -349,6 +349,76 @@ func test_view_ribbon_grows_and_shrinks() -> void:
 	await frames(1)
 
 
+## Наклон ленты вокруг оси «вправо» в осях тела хищника (TILT ± изгиб).
+static func _bend(pr: EcoPred.Pred, x: Transform3D) -> float:
+	var local := EcoPredLook.basis(pr).inverse() * x.basis
+	return atan2(-local.z.y, local.z.z)
+
+
+## Наибольшее отклонение изгиба от TILT за полный период ритма, начиная с t.
+func _swing(v: LeechView, pr: EcoPred.Pred, t: float) -> float:
+	var top := 0.0
+	var period := TAU / LeechView.leech_rate(pr.index)
+	var dt := 1.0 / 60.0
+	var s := 0.0
+	while s < period:
+		v.sync(t + s)
+		top = maxf(top, absf(_bend(pr, v.placed[0]) - LeechView.TILT))
+		s += dt
+	return top
+
+
+func test_view_writhes_while_cleaned() -> void:
+	# Б3: огнёвки обирают жабры — лента извивается втрое сильнее, размах набирается и гаснет за WRITHE_RISE.
+	var probe := _preds(_world()).all[0]
+	var top := probe.agent.p + Vector3(30, 0, 0)
+	var tops: Array[Vector3] = [top]
+	var w := _world(tops)
+	w.reset()
+	var pr := _preds(w).all[0]
+	var lv := _leeches(w)
+	var v := LeechView.new(lv)
+	tree.root.add_child(v)
+	await frames(1)
+	ok(pr.leech, "первый хищник заражён")
+	var t := 1.0
+	v.sync(t)
+	ok(not LeechView.cleaning(pr, lv), "в патруле не чистится")
+	near(_swing(v, pr, t), LeechView.WIGGLE, 0.01, "спокойная лента — ±WIGGLE")
+	t += 2.0
+	pr.mode = EcoPred.Mode.CLEAN
+	pr.station = 0
+	pr.agent.p = top + Vector3(1, 0, 0)
+	ok(LeechView.cleaning(pr, lv), "у вершины своей станции — чистится")
+	var dt := 1.0 / 30.0
+	v.sync(t)
+	var last := v.writhe_k[0]
+	var worst := 0.0
+	for i in int(LeechView.WRITHE_RISE / dt) + 2:
+		t += dt
+		v.sync(t)
+		worst = maxf(worst, v.writhe_k[0] - last)
+		last = v.writhe_k[0]
+	ok(worst <= dt / LeechView.WRITHE_RISE + 1e-5, "размах набирается плавно: %.3f за шаг" % worst)
+	near(last, 1.0, 1e-6, "за WRITHE_RISE — во весь размах")
+	near(_swing(v, pr, t), LeechView.WIGGLE * LeechView.WRITHE, 0.02, "на чистке — втрое сильнее")
+	t += 2.0
+	pr.agent.p = top + Vector3(EcoLeech.CLEAN_R + 2.0, 0, 0)
+	ok(not LeechView.cleaning(pr, lv), "отплыл от вершины — не чистится")
+	v.sync(t)
+	for i in int(LeechView.WRITHE_RISE / dt) + 2:
+		t += dt
+		v.sync(t)
+	near(v.writhe_k[0], 0.0, 1e-6, "успокоилась")
+	near(_swing(v, pr, t), LeechView.WIGGLE, 0.01, "снова ±WIGGLE")
+	pr.agent.p = top
+	near(LeechView.wiggle_amp(0.5), LeechView.WIGGLE * 2.0, 1e-5, "середина — мягкий вход")
+	v.sync(t + 10.0)
+	near(v.writhe_k[0], 1.0, 1e-6, "скачок времени — сразу к цели")
+	v.queue_free()
+	await frames(1)
+
+
 # ---------- «Экономно» (Б6) ----------
 
 func test_view_lite_coarser_same_material() -> void:
