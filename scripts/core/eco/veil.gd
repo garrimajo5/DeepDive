@@ -34,6 +34,7 @@ const CLIMB_MAX := 1.2
 const CLIMB_ACCEL := 0.3
 const CLIMB_FOLLOW := 0.5
 const HARD_PAD := 1.0
+const LOW_MOVE := 0.5
 ## Пульс купола: 1 ± PULSE (1,3 рад/с); внутренний купол — 1 ± PULSE_IN, отстаёт на 0,6 рад.
 const PULSE := 0.07
 const PULSE_IN := 0.09
@@ -86,6 +87,9 @@ class Veil:
 	## Высота купола без покачивания и её ход (м/с): купол поднимается и опускается над дном плавно (`climb`).
 	var base_y := 0.0
 	var vy := 0.0
+	## Дно под куполом (`floor_low`) и где его брали: заново — сдвинувшись дальше LOW_MOVE (7 выборок дна дороги).
+	var low := 0.0
+	var low_at := Vector2(INF, INF)
 
 	## Цель сонара и сканера (vl.scanP).
 	func scan_point() -> Vector3:
@@ -138,7 +142,11 @@ func step(world: EcoWorld, dt: float) -> void:
 	for vl in veils:
 		vl.p.x += sin(t * 0.031 + vl.ph) * DRIFT * dt + (vl.home.x - vl.p.x) * HOME_PULL * dt
 		vl.p.z += cos(t * 0.027 + vl.ph * 1.7) * DRIFT * dt + (vl.home.z - vl.p.z) * HOME_PULL * dt
-		var low := floor_low(world, vl)
+		var at := Vector2(vl.p.x, vl.p.z)
+		if at.distance_squared_to(vl.low_at) > LOW_MOVE * LOW_MOVE:
+			vl.low = floor_low(world, vl)
+			vl.low_at = at
+		var low := vl.low
 		var ty := minf(maxf(vl.home.y, low), CEIL_Y)
 		vl.base_y = climb(vl, ty, dt)
 		var hard := minf(low - FLOOR_PAD + HARD_PAD, CEIL_Y)
@@ -166,16 +174,13 @@ static func floor_low(world: EcoWorld, vl: Veil) -> float:
 
 
 ## Шаг высоты без покачивания к ty: нужный ход — CLIMB_FOLLOW × остаток, не больше CLIMB_MAX и √(2·CLIMB_ACCEL·остаток),
-## ход vl.vy меняется не быстрее CLIMB_ACCEL; проскочил — встаёт на ty. Возвращает новую высоту.
+## ход vl.vy меняется не быстрее CLIMB_ACCEL — и у самой высоты: не встаёт за кадр, проскочив её (дно берётся
+## шагами по LOW_MOVE, нужная высота меняется ступеньками). Возвращает новую высоту.
 static func climb(vl: Veil, ty: float, dt: float) -> float:
 	var d := ty - vl.base_y
 	var want := signf(d) * minf(minf(absf(d) * CLIMB_FOLLOW, CLIMB_MAX), sqrt(2.0 * CLIMB_ACCEL * absf(d)))
 	vl.vy = move_toward(vl.vy, want, CLIMB_ACCEL * dt)
-	var y := vl.base_y + vl.vy * dt
-	if (ty - y) * d < 0.0:
-		y = ty
-		vl.vy = 0.0
-	return y
+	return vl.base_y + vl.vy * dt
 
 
 ## Высота купола в момент t, как её ставит сброс: нужная высота (`target`) плюс покачивание ± BOB.
