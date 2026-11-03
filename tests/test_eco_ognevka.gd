@@ -170,11 +170,52 @@ func test_no_dart_to_pred_on_cleaning() -> void:
 		ok(s.p.distance_to(pr.agent.p) < 1.8, "облепили: %.2f м" % s.p.distance_to(pr.agent.p))
 
 
-func test_follow_capped() -> void:
-	var p := EcoOgnevka.follow(Vector3.ZERO, Vector3(10, 0, 0), 0.1)
-	near(p.x, EcoOgnevka.DART * 0.1, 1e-5, "далеко — не быстрее DART")
-	p = EcoOgnevka.follow(Vector3.ZERO, Vector3(0.5, 0, 0), 0.1)
-	near(p.x, 0.5 * 0.1 * EcoOgnevka.FOLLOW, 1e-5, "близко — прежняя доля lerp")
+func test_swim_capped() -> void:
+	var v := EcoOgnevka.swim(Vector3.ZERO, Vector3.ZERO, Vector3(10, 0, 0), 0.1)
+	near(v.x, EcoOgnevka.ACCEL * 0.1, 1e-5, "с места — не быстрее ACCEL")
+	v = EcoOgnevka.swim(Vector3.ZERO, Vector3(EcoOgnevka.DART, 0, 0), Vector3(10, 0, 0), 0.1)
+	near(v.x, EcoOgnevka.DART, 1e-5, "далеко — не быстрее DART")
+	v = EcoOgnevka.swim(Vector3.ZERO, Vector3(1.5, 0, 0), Vector3(0.5, 0, 0), 0.1)
+	near(v.x, 0.5 * EcoOgnevka.FOLLOW, 1e-5, "близко — ход по остатку")
+
+
+## Б3: хищник встал на чистку — стая трогается к нему и встаёт у него без рывка: ход меняется не быстрее ACCEL.
+## Раньше ход прыгал с 0,7 до 4 м/с за шаг рачка (58 м/с², нашёл обход мира по ускорениям у старта 00).
+func test_no_jerk_to_pred_on_cleaning() -> void:
+	var top := Vector3(0, -36, 0)
+	var tops: Array[Vector3] = [top]
+	var w := _world(tops)
+	var ps := _sys(w, EcoPred) as EcoPred
+	var og := _sys(w, EcoOgnevka) as EcoOgnevka
+	_calm(ps)
+	_run(w, 2.0)
+	var pr := ps.all[0]
+	pr.leech = true
+	pr.hunger = 0.2
+	pr.agent.p = top + Vector3(8, 0, 0)
+	var dt := EcoWorld.MAX_STEP
+	var pos: Array[Vector3] = []
+	var vel: Array[Vector3] = []
+	for s in og.shrimp:
+		pos.append(s.p)
+		vel.append(Vector3.INF)
+	var worst := 0.0
+	var fastest := 0.0
+	# рачок шагает через шаг мира: ход и ускорение — по его шагу (2 dt)
+	for i in int(4.0 / dt / 2.0):
+		w.step(dt)
+		w.step(dt)
+		for k in og.shrimp.size():
+			var v := (og.shrimp[k].p - pos[k]) / (dt * 2.0)
+			if vel[k].is_finite():
+				worst = maxf(worst, (v - vel[k]).length() / (dt * 2.0))
+			fastest = maxf(fastest, v.length())
+			vel[k] = v
+			pos[k] = og.shrimp[k].p
+	ok(fastest > EcoOgnevka.DART * 0.9, "к хищнику плывут полным ходом: %.2f м/с" % fastest)
+	ok(worst <= EcoOgnevka.ACCEL + 0.5, "ход меняется плавно: %.1f м/с² (не больше %.0f)" % [worst, EcoOgnevka.ACCEL])
+	for s in og.shrimp:
+		ok(s.p.distance_to(pr.agent.p) < 1.8, "облепили: %.2f м" % s.p.distance_to(pr.agent.p))
 
 
 ## Б3: нос рачка догоняет ход, а не прыгает за шаг; почти стоит — держит курс (раньше щёлкал на касательную).
