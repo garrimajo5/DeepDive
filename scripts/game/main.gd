@@ -651,7 +651,6 @@ func step(dt: float) -> void:
 	clock.lap("корабль", Time.get_ticks_usec())
 	_step_eco(dt)
 	_step_view(dt)
-	clock.lap("виды", Time.get_ticks_usec())
 	_step_ui(dt)
 	_step_marks(dt, r)
 	clock.lap("метки и сеть", Time.get_ticks_usec())
@@ -873,12 +872,15 @@ func _step_zap(dt: float) -> void:
 		ocean.set_scorch(scorch.uniforms(time))
 
 
-## Шаг: виды корабля — пульты, голограммы, отсеки, своя фигура, корабль и камера.
+## Шаг: виды корабля — пульты, голограммы, отсеки, своя фигура, корабль и камера (подчасти «виды/…» — в худшем кадре
+## лога тестера: «виды 57» у колодца 05 в отчёте #1182 не говорил, что внутри).
 func _step_view(dt: float) -> void:
 	_flicker(dt)
+	clock.lap("виды/свет", Time.get_ticks_usec())
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	bridge.set_hatch(layout.doors[0].offset())
+	clock.lap("виды/пульты", Time.get_ticks_usec())
 	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0, silt.noise(time))
 	sonar_view.show_waypoint(run.waypoint())
 	alarm_board.show_alarms(alarms_on(), time, breach.active)
@@ -888,20 +890,24 @@ func _step_view(dt: float) -> void:
 		ballot.seconds() if coop else -1, ballot.fraction() if coop else -1.0)
 	sonar_view.show_result(result_fade.update(dt, VoteHolo.result_wanted(at_vote, run.ended)), result_rows,
 		camera.global_position)
+	clock.lap("виды/голограммы", Time.get_ticks_usec())
 	rooms.apply(layout, reactor, airlock, engine)
 	var carry_c: Color = Samples.COLORS[samples.target.kind] if samples.target else Color.WHITE
 	rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(), carry_c)
 	rooms.set_lab(Lab.contents(samples.cargo), lab_screen.lines(samples, scanner, journal_page), time)
 	rooms.set_shelves(HoldShelves.contents(samples.cargo))
 	bridge.set_scanner_screen(gate.screen_lines(lore) if gate.active() else scanner.screen_lines())
+	clock.lap("виды/отсеки и экраны", Time.get_ticks_usec())
 	message.update(dt)
 	me.back = CrewView.own_back(walker.pitch, me.holding())   # взгляд вниз — фигура дальше позади глаза, видны ступни (#108)
 	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt)
 	me.sync_post()
 	crew_view.pitch = walker.pitch
 	_apply_crew_view(dt)
+	clock.lap("виды/экипаж", Time.get_ticks_usec())
 	_place_ship()
 	_place_camera()
+	clock.lap("виды/корабль и камера", Time.get_ticks_usec())
 
 
 ## Шаг: интерфейс — карточка маршрута, приборы, подсказки, связь, рация (подчасти — в худшем кадре лога тестера, #745).

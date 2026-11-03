@@ -128,6 +128,10 @@ func test_main_step_parts() -> void:
 	var subs: Array = main.clock.subs.get("интерфейс", {}).keys()
 	subs.sort()
 	eq(subs, ["карточка роли", "маршрут", "подсказки", "приборы", "рация", "связь"], "подчасти интерфейса")
+	var views: Array = main.clock.subs.get("виды", {}).keys()   # отчёт #1182: «виды 57» у колодца 05 — что внутри
+	views.sort()
+	eq(views, ["голограммы", "корабль и камера", "отсеки и экраны", "пульты", "свет", "экипаж"], "подчасти видов")
+	near(float(main.clock.parts["виды"]), _sum(main.clock.subs["виды"]), 0.001, "виды — ровно сумма подчастей")
 	var world: Dictionary = main.clock.subs.get("мир", {})   # #1020: модули и виды живого мира
 	ok(world.has("существа") and world.has("связь") and world.has("вид: рыбы, хищники") \
 		and world.has("вид: планктон, эхо, дальние"), "подчасти мира: %s" % [world.keys()])
@@ -283,3 +287,10 @@ func test_stall_counts_world_substeps() -> void:
 		c.lap("мир/" + p[0], t)
 	c.start(t, 1.0 / 30.0)
 	ok(c.last_note().ends_with("— разом ×12, заминка; шаг 133 мс"), "в подписи — заминка: " + c.last_note())
+
+
+static func _sum(of: Dictionary) -> float:
+	var t := 0.0
+	for k in of:
+		t += float(of[k])
+	return t
