@@ -24,6 +24,16 @@ const HOME_PULL := 0.004
 const FLOOR_PAD := 3.0
 const CEIL_Y := -7.0
 const BOB := 1.2
+## План реализма Б3 «плавность»: высоту дна берём под всем куполом (середина и FOOT_N точек на FOOT · r), а купол
+## догоняет нужную высоту ходом `Veil.vy` — не быстрее CLIMB_MAX, разгон не больше CLIMB_ACCEL, к высоте — не больше
+## √(2·a·остаток). Раньше высота шла прямо по дну под серединой: на склоне купол-«автобус» ехал лифтом 0,7 м/с и
+## вставал за кадр (6,5 м/с²) на перегибе. Щупальца — не ближе HARD_PAD к дну и на крутом подъёме.
+const FOOT := 0.9
+const FOOT_N := 6
+const CLIMB_MAX := 1.2
+const CLIMB_ACCEL := 0.3
+const CLIMB_FOLLOW := 0.5
+const HARD_PAD := 1.0
 ## Пульс купола: 1 ± PULSE (1,3 рад/с); внутренний купол — 1 ± PULSE_IN, отстаёт на 0,6 рад.
 const PULSE := 0.07
 const PULSE_IN := 0.09
@@ -73,6 +83,9 @@ class Veil:
 	## Сколько раз ужалила светляка и где последний (облачка слизи — EcoVeilDust).
 	var stings := 0
 	var sting_at := Vector3.ZERO
+	## Высота купола без покачивания и её ход (м/с): купол поднимается и опускается над дном плавно (`climb`).
+	var base_y := 0.0
+	var vy := 0.0
 
 	## Цель сонара и сканера (vl.scanP).
 	func scan_point() -> Vector3:
@@ -107,6 +120,7 @@ func reset(world: EcoWorld) -> void:
 		vl.p = Vector3(x, top, z)
 		vl.home = vl.p
 		vl.ph = i * 2.1
+		vl.base_y = target(world, vl)
 		vl.p.y = height(world, vl, world.time)
 		for k in SMALL:
 			vl.small_size.append(_rnd.range_f(0.5, 1.0))
@@ -124,15 +138,49 @@ func step(world: EcoWorld, dt: float) -> void:
 	for vl in veils:
 		vl.p.x += sin(t * 0.031 + vl.ph) * DRIFT * dt + (vl.home.x - vl.p.x) * HOME_PULL * dt
 		vl.p.z += cos(t * 0.027 + vl.ph * 1.7) * DRIFT * dt + (vl.home.z - vl.p.z) * HOME_PULL * dt
-		vl.p.y = height(world, vl, t)
+		var low := floor_low(world, vl)
+		var ty := minf(maxf(vl.home.y, low), CEIL_Y)
+		vl.base_y = climb(vl, ty, dt)
+		var hard := minf(low - FLOOR_PAD + HARD_PAD, CEIL_Y)
+		if vl.base_y < hard:
+			vl.base_y = hard
+			vl.vy = maxf(vl.vy, 0.0)
+		vl.p.y = vl.base_y + sin(t * 0.3 + vl.ph) * BOB
 
 
-## Высота купола над (p.x, p.z) в момент t: своё место, но щупальца не ниже FLOOR_PAD над дном и купол не выше
-## CEIL_Y, плюс покачивание ± BOB. Сброс ставит ту же высоту — раньше купол стоял без покачивания и на первом шаге
-## прыгал до 1,2 м (у второй вуали — на 1 м за кадр).
+## Нужная высота купола без покачивания: своё место, но щупальца не ниже FLOOR_PAD над дном под куполом и купол не
+## выше CEIL_Y.
+static func target(world: EcoWorld, vl: Veil) -> float:
+	return minf(maxf(vl.home.y, floor_low(world, vl)), CEIL_Y)
+
+
+## Самая низкая высота купола, при которой щупальца не ниже FLOOR_PAD над дном: дно — самое высокое из середины и
+## FOOT_N точек по кругу FOOT · r.
+static func floor_low(world: EcoWorld, vl: Veil) -> float:
+	var fb := vl.home.y - LEN - FLOOR_PAD
+	var top := _floor(world, vl.p.x, vl.p.z, fb)
+	for k in FOOT_N:
+		var a := k * TAU / FOOT_N
+		top = maxf(top, _floor(world, vl.p.x + cos(a) * FOOT * R, vl.p.z + sin(a) * FOOT * R, fb))
+	return top + LEN + FLOOR_PAD
+
+
+## Шаг высоты без покачивания к ty: нужный ход — CLIMB_FOLLOW × остаток, не больше CLIMB_MAX и √(2·CLIMB_ACCEL·остаток),
+## ход vl.vy меняется не быстрее CLIMB_ACCEL; проскочил — встаёт на ty. Возвращает новую высоту.
+static func climb(vl: Veil, ty: float, dt: float) -> float:
+	var d := ty - vl.base_y
+	var want := signf(d) * minf(minf(absf(d) * CLIMB_FOLLOW, CLIMB_MAX), sqrt(2.0 * CLIMB_ACCEL * absf(d)))
+	vl.vy = move_toward(vl.vy, want, CLIMB_ACCEL * dt)
+	var y := vl.base_y + vl.vy * dt
+	if (ty - y) * d < 0.0:
+		y = ty
+		vl.vy = 0.0
+	return y
+
+
+## Высота купола в момент t, как её ставит сброс: нужная высота (`target`) плюс покачивание ± BOB.
 static func height(world: EcoWorld, vl: Veil, t: float) -> float:
-	var low := _floor(world, vl.p.x, vl.p.z, vl.home.y - LEN - FLOOR_PAD) + LEN + FLOOR_PAD
-	return minf(maxf(vl.home.y, low), CEIL_Y) + sin(t * 0.3 + vl.ph) * BOB
+	return target(world, vl) + sin(t * 0.3 + vl.ph) * BOB
 
 
 ## Пульс купола в момент t: (наружный, внутренний) масштаб по ширине (по высоте — обратный).
