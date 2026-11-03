@@ -29,6 +29,18 @@ const SPINE_RISE := 0.6
 const HOP := 0.03
 const HOP_FULL := 0.8
 const HOP_RATE := 8.0
+## Шаг ног на ходу (Б3): ноги ходят вперёд-назад вокруг бедра двумя тройками вразнобой (передняя и задняя одного
+## борта с средней другого) — до LEG_SWING рад, вперёд — с подъёмом стопы до LEG_LIFT м; ритм — HOP_RATE, полшага на
+## подскок тела; размах — по доле хода, как подскок. Стоит — ноги на месте. На CPU: меш тела пересобирается из
+## готовых массивов, только пока ноги двигаются; шейдеров и вызовов не прибавилось.
+const LEG_SWING := 0.35
+const LEG_LIFT := 0.05
+## Ноги в построении тела: борт (−1, +1) × место вдоль тела; бедро — у панциря.
+const LEG_Z: Array[float] = [-0.25, 0.0, 0.25]
+const HIP_X := 0.4
+const HIP_Y := 0.33
+## Дальше LEG_FAR м от корабля ноги не шагают (их не разглядеть) — меш не пересобирается.
+const LEG_FAR := 50.0
 ## Камни норы: смещение (нос норы — наружу от рощи, +Z) и размер 0,8…1,1 м, приплюснуты до 0,6 по высоте.
 const ROCKS: Array[Vector3] = [Vector3(-1.3, 0.3, -0.4), Vector3(1.3, 0.3, -0.4), Vector3(0, 0.8, -1.1),
 	Vector3(-0.6, 1.3, -0.9), Vector3(0.7, 0.2, -1.6)]
@@ -65,6 +77,9 @@ var dust_buffer: PackedFloat32Array:
 var _dust := EcoDustBuffer.new()
 ## На «Экономно» — грубее панцирь и щипцы (set_lite).
 var lite := false
+## Поза ног: углы ног в последнем меше тела и готовые массивы тела в покое (body_rest).
+var leg_angles := PackedFloat32Array()
+var _rest: Dictionary = {}
 
 
 func _init(system: EcoKrab, on_lite := false) -> void:
@@ -73,7 +88,8 @@ func _init(system: EcoKrab, on_lite := false) -> void:
 	name = "Кольчужник"
 	var cr := krab.crab
 	den = _mesh("Нора", build_den(), self)
-	body = _mesh("Тело", build_body(lite), self)
+	_rest = body_rest(lite)
+	body = _mesh("Тело", _rest["mesh"], self)
 	claws = _mesh("Клешни", build_claws(lite), body)
 	claws.position = CLAWS_AT
 	spines = MultiMeshInstance3D.new()
@@ -102,7 +118,9 @@ func set_lite(on: bool) -> void:
 	if lite == on:
 		return
 	lite = on
-	_swap(body, build_body(lite))
+	_rest = body_rest(lite)
+	_swap(body, _rest["mesh"])
+	leg_angles = PackedFloat32Array()
 	_swap(claws, build_claws(lite))
 
 
@@ -137,7 +155,10 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 		return
 	_sync_dust(t, ship, flow)
 	var p := cr.pos
-	p.y += hop(t, Vector2(cr.vel.x, cr.vel.z).length())
+	var speed := Vector2(cr.vel.x, cr.vel.z).length()
+	p.y += hop(t, speed)
+	var far := ship != null and ship.pos.distance_to(cr.pos) > LEG_FAR
+	_step_legs(t, 0.0 if far else speed)
 	body.transform = Transform3D(Basis(Vector3.UP, atan2(cr.dir.x, cr.dir.z)).scaled(Vector3.ONE * SCALE), p)
 	claws.rotation = Vector3(-cr.raise * 0.9, 0, 0)
 	var grew := _grow_spines(t, cr.spines)
@@ -156,6 +177,65 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 ## нору краб ползёт 5 см/с и прыгал во весь размах, а встав — опускался на 3 см за кадр.
 static func hop(t: float, speed: float) -> float:
 	return absf(sin(t * HOP_RATE)) * HOP * smoothstep(0.0, 1.0, clampf(speed / HOP_FULL, 0.0, 1.0))
+
+
+## Ход ноги i (0…5: борт −1 — 0…2, +1 — 3…5; вдоль тела — LEG_Z) в момент t при скорости speed: x — доля шага
+## −1…1 (вперёд — к носу +Z), y — подъём стопы 0…1 (на ходу вперёд). Размах — по доле хода, как hop.
+static func leg_step(i: int, t: float, speed: float) -> Vector2:
+	var k := smoothstep(0.0, 1.0, clampf(speed / HOP_FULL, 0.0, 1.0))
+	if k <= 0.0:
+		return Vector2.ZERO
+	var ph := t * HOP_RATE + PI * float((int(i / 3.0) + i % 3) % 2)
+	return Vector2(sin(ph) * k, maxf(0.0, cos(ph)) * k)
+
+
+## Угол поворота ноги i вокруг бедра (по вертикали) при доле шага s: стопа вперёд к носу при s > 0.
+static func leg_yaw(i: int, s: float) -> float:
+	var sx := -1.0 if i < 3 else 1.0
+	return -sx * s * LEG_SWING
+
+
+## Поставить ноги к моменту t: меш тела пересобирается, только если углы сдвинулись (стоит — один раз в покой).
+func _step_legs(t: float, speed: float) -> void:
+	var a := PackedFloat32Array()
+	a.resize(12)
+	for i in 6:
+		var st := leg_step(i, t, speed)
+		a[i * 2] = leg_yaw(i, st.x)
+		a[i * 2 + 1] = st.y * LEG_LIFT
+	if a == leg_angles:
+		return
+	leg_angles = a
+	var m := body.mesh as ArrayMesh
+	var mat := m.surface_get_material(0)
+	m.clear_surfaces()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, pose_arrays(_rest, a))
+	m.surface_set_material(0, mat)
+
+
+## Массивы тела с ногами в позе a (по две числа на ногу: угол вокруг бедра, подъём стопы в м): вершины ноги
+## поворачиваются вокруг вертикали через бедро, стопа поднимается пропорционально выносу от бедра.
+static func pose_arrays(rest: Dictionary, a: PackedFloat32Array) -> Array:
+	var arr: Array = (rest["arrays"] as Array).duplicate()
+	var v: PackedVector3Array = (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).duplicate()
+	var n: PackedVector3Array = (arr[Mesh.ARRAY_NORMAL] as PackedVector3Array).duplicate()
+	var leg: PackedInt32Array = rest["leg"]
+	var hips: Array = rest["hips"]
+	var reach := 0.55
+	for j in v.size():
+		var i := leg[j]
+		if i < 0:
+			continue
+		var yaw := a[i * 2]
+		var hip: Vector3 = hips[i]
+		var d := v[j] - hip
+		var out := Vector2(d.x, d.z).length()
+		var b := Basis(Vector3.UP, yaw)
+		v[j] = hip + b * d + Vector3(0, a[i * 2 + 1] * out / reach, 0)
+		n[j] = b * n[j]
+	arr[Mesh.ARRAY_VERTEX] = v
+	arr[Mesh.ARRAY_NORMAL] = n
+	return arr
 
 
 ## Доли роста игл к моменту t: первые count — к 1, остальные — к 0, за SPINE_RISE. Первый шаг и время назад — сразу.
@@ -210,18 +290,56 @@ static func build_den() -> ArrayMesh:
 	return _commit(st, false)
 
 
-## Панцирь и шесть ног (по три с борта, разведены веером и опущены к дну).
+## Панцирь и шесть ног (по три с борта, разведены веером и опущены к дну) — в покое.
 static func build_body(on_lite := false) -> ArrayMesh:
-	var st := _begin()
+	return body_rest(on_lite)["mesh"]
+
+
+## Тело в покое: меш, его массивы, номер ноги у каждой вершины (−1 — панцирь) и бёдра ног (для pose_arrays).
+static func body_rest(on_lite := false) -> Dictionary:
 	var g := LITE_SHELL_SEG if on_lite else SHELL_SEG
+	var st := _begin()
 	EcoMM.ellipsoid(st, Vector3(0, 0.35, 0), Vector3(0.55, 0.22, 0.42), g.x, g.y, SHELL)
+	var arr := st.commit_to_arrays()
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var n: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+	var c: PackedColorArray = arr[Mesh.ARRAY_COLOR]
+	var leg := PackedInt32Array()
+	leg.resize(v.size())
+	leg.fill(-1)
+	var hips: Array[Vector3] = []
+	var i := 0
 	for sx in [-1.0, 1.0]:
-		for z in [-0.25, 0.0, 0.25]:
+		for z: float in LEG_Z:
 			var yaw: float = -z * 1.5 if sx > 0 else PI + z * 1.5
 			var b := Basis(Vector3.UP, yaw) * Basis(Vector3.BACK, -0.5)
-			var tr := Transform3D(b, Vector3(sx * 0.4, 0.33, z))
-			_box(st, tr, Vector3(0.27, 0, 0), Vector3(0.55, 0.05, 0.06), LEG)
-	return _commit(st, true)
+			var hip := Vector3(sx * HIP_X, HIP_Y, z)
+			hips.append(hip)
+			var ls := _begin()
+			_box(ls, Transform3D(b, hip), Vector3(0.27, 0, 0), Vector3(0.55, 0.05, 0.06), LEG)
+			var la := ls.commit_to_arrays()
+			v.append_array(la[Mesh.ARRAY_VERTEX])
+			n.append_array(la[Mesh.ARRAY_NORMAL])
+			c.append_array(la[Mesh.ARRAY_COLOR])
+			var add := PackedInt32Array()
+			add.resize((la[Mesh.ARRAY_VERTEX] as PackedVector3Array).size())
+			add.fill(i)
+			leg.append_array(add)
+			i += 1
+	var out := []
+	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = v
+	out[Mesh.ARRAY_NORMAL] = n
+	out[Mesh.ARRAY_COLOR] = c
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.roughness = 0.95
+	mat.emission_enabled = true
+	mat.emission = GLOW
+	m.surface_set_material(0, mat)
+	return {"mesh": m, "arrays": out, "leg": leg, "hips": hips}
 
 
 ## Клешни: две руки вперёд и щипцы на концах.
