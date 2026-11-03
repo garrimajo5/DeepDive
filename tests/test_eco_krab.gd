@@ -594,3 +594,71 @@ func test_lite_kept_after_world_reset() -> void:
 	eq(ev.krab_view.tris(), t, "и панцирь грубый")
 	ev.set_lite(false)
 	ev.free()
+
+
+## Б3: ноги шагают двумя тройками вразнобой, размах — по доле хода; стоит — ноги на месте.
+func test_legs_step_in_tripods() -> void:
+	var t := 0.3
+	for i in 6:
+		eq(KrabView.leg_step(i, t, 0.0), Vector2.ZERO, "стоит — нога %d на месте" % i)
+	var a := KrabView.leg_step(0, t, KrabView.HOP_FULL)
+	for i in [2, 4]:
+		near(KrabView.leg_step(i, t, KrabView.HOP_FULL).x, a.x, 1e-6, "нога %d — в тройке с первой" % i)
+	for i in [1, 3, 5]:
+		near(KrabView.leg_step(i, t, KrabView.HOP_FULL).x, -a.x, 1e-6, "нога %d — в другой тройке" % i)
+	ok(absf(KrabView.leg_step(0, t, EcoKrab.CREEP).x) < absf(a.x) * 0.05, "ползком — шаг мельче")
+	# вперёд к носу (+Z) — с обоих бортов
+	for i in [0, 3]:
+		var foot := Vector3(-1.0 if i < 3 else 1.0, 0, 0)
+		ok((Basis(Vector3.UP, KrabView.leg_yaw(i, 1.0)) * foot).z > 0.0, "нога %d вперёд — к носу" % i)
+
+
+## Б3: в меше тела ноги двигаются на ходу без рывков и встают в покой, когда краб остановился; стоящий краб меш
+## не пересобирает. Грани в позе по-прежнему наружу.
+func test_view_legs_walk_and_settle() -> void:
+	var w := _world()
+	var kr := _krab(w)
+	var cr := kr.crab
+	var v := KrabView.new(kr)
+	tree.root.add_child(v)
+	await frames(1)
+	var rest: PackedVector3Array = (v.body.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var dt := 1.0 / 30.0
+	var t := 0.0
+	var last := PackedVector3Array()
+	var worst := 0.0
+	var moved := 0.0
+	cr.vel = Vector3(KrabView.HOP_FULL, 0, 0)
+	while t < 2.0:
+		v.sync(t)
+		var now: PackedVector3Array = (v.body.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		eq(now.size(), rest.size(), "вершин столько же")
+		for j in now.size():
+			moved = maxf(moved, now[j].distance_to(rest[j]))
+			if not last.is_empty():
+				worst = maxf(worst, now[j].distance_to(last[j]))
+		last = now
+		t += dt
+	ok(moved > 0.1, "на ходу стопы выносятся: %.3f м" % moved)
+	ok(worst < 0.06, "за кадр стопа сдвигается не больше 6 см: %.3f" % worst)
+	var arr := (v.body.mesh as ArrayMesh).surface_get_arrays(0)
+	var pv: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var pn: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+	var bad := 0
+	for i in range(0, pv.size(), 3):
+		if (pv[i + 1] - pv[i]).cross(pv[i + 2] - pv[i]).dot(pn[i]) > 0.0:
+			bad += 1
+	eq(bad, 0, "в позе грани наружу")
+	ok(v.body.mesh.surface_get_material(0) != null, "материал тела на месте")
+	cr.vel = Vector3.ZERO
+	v.sync(t)
+	var still: PackedVector3Array = (v.body.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var off := 0.0
+	for j in still.size():
+		off = maxf(off, still[j].distance_to(rest[j]))
+	near(off, 0.0, 1e-5, "встал — ноги в покое")
+	var angles := v.leg_angles
+	v.sync(t + 0.5)
+	ok(v.leg_angles == angles, "стоит — меш не пересобирается")
+	v.queue_free()
+	await frames(1)
