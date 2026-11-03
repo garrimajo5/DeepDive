@@ -1074,3 +1074,27 @@ func test_never_swims_tail_first() -> void:
 					worst = maxf(worst, absf(Vector2(pr.look.x, pr.look.z).angle_to(f)))
 		ev.free()
 		ok(worst < deg_to_rad(90.0), "у %s нос не дальше 90° от хода: %.0f°" % [id, rad_to_deg(worst)])
+
+
+func test_dive_to_prey_at_floor_brakes_above_floor() -> void:
+	# Б3: добыча у самого дна (ниже clearance) — нырок тормозит над дном, а не ложится на него с отскоком: раньше lerp
+	# к want.y съедал торможение LOOK_ACCEL, у 02 серпохвост бился о дно (17,8 м/с²), найдено после EcoFish.BRAKE
+	var dt := 1.0 / 30.0
+	var ground := func(_x: float, _z: float) -> float: return -40.0
+	var a := EcoAgent.new(EcoPred.ID, Vector3(0, -40.0 + 1.8 + 4.0, 0))
+	a.look = EcoPred.LOOK
+	a.agility = 1.6
+	a.v = Vector3(0.3, -2.0, 0)
+	var prey := Vector3(1.5, -39.8, 0)  # почти под носом, у дна
+	var touch := 0
+	var bounce := false
+	for i in int(3.0 / dt):
+		var want := (prey - a.p).normalized() * EcoPred.HUNT_SPEED
+		var vy0 := a.v.y
+		a.swim(want, dt, EcoPred.SWIM_TURN, EcoPred.SWIM_TURN_SHARP, EcoPred.SWIM_SLOW, ground)
+		if a.p.y - (-40.0 + a.clearance) < 0.01:
+			touch += 1
+		if vy0 < -0.5 and a.v.y > 0.0:
+			bounce = true
+	eq(touch, 0, "не ложится на дно")
+	ok(not bounce, "без отскока от дна")

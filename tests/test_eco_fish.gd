@@ -753,3 +753,34 @@ func _center_jump(w: EcoWorld, sh: EcoFish.Shoal, change: Callable) -> Array[flo
 		last = d
 		last_m = dm
 	return worst
+
+
+## Б3: тревога прошла или стая доплыла до дома — рыбки тормозят скольжением, не быстрее EcoFish.BRAKE, а не встают
+## за кадр: раньше предел скорости срезал 6,5 → 2,4 и 6,5 → 1 м/с за шаг (до 165 м/с²).
+func test_brakes_smoothly_after_alarm() -> void:
+	var dt := 1.0 / 30.0
+	near(EcoFish.cap_speed(6.5, 6.5, 1.0, dt), 6.5 - EcoFish.BRAKE * dt, 1e-6, "выше предела — гаснет на BRAKE · dt")
+	near(EcoFish.cap_speed(3.0, 0.9, 1.0, dt), 1.0, 1e-6, "разгон за предел — срезан до предела")
+	near(EcoFish.cap_speed(7.0, 6.5, 6.5, dt), 6.5, 1e-6, "на пределе — предел")
+	near(EcoFish.cap_speed(1.05, 1.2, 1.0, dt), 1.0, 1e-6, "почти у предела — не ниже предела")
+	var w := _world()
+	var fish := _fish(w)
+	var sh := fish.shoals[0]
+	w.ship.pos = sh.home + Vector3(0, 0, 40)  # ближе MID: стая шагает каждый шаг мира
+	w.run(8.0)
+	var pred := w.spawn("pred", sh.center + Vector3(5, 0, 0))
+	var was := {}
+	var worst := 0.0
+	var fast := 0.0
+	for i in int(14.0 / dt):
+		if i == int(6.0 / dt):
+			pred.alive = false  # хищник ушёл — тревога спадает, стая разгоняется из кораллов спокойно
+		w.step(dt)
+		for f: EcoFish.Fish in sh.members:
+			var s := f.agent.v.length()
+			fast = maxf(fast, s)
+			if was.has(f) and f.agent.alive:
+				worst = maxf(worst, (was[f] - s) / dt)
+			was[f] = s if f.agent.alive else 0.0
+	ok(fast > EcoFish.CALM_SPEED + 1.0, "в тревоге рыбки разгонялись: %.1f м/с" % fast)
+	ok(worst < 2.5 * EcoFish.BRAKE, "тормозят не за кадр: %.1f м/с²" % worst)
