@@ -540,3 +540,52 @@ func test_view_lite_draws_every_other_thread() -> void:
 	eq(vv.rim_lights(), VeilView.RIM_N, "и все огоньки")
 	view.queue_free()
 	await frames(1)
+
+
+## Б3 «плавность»: купол поднимается над склоном и опускается ходом — разгон не больше CLIMB_ACCEL (с покачиванием —
+## чуть больше), а не лифтом по дну под серединой с остановкой за кадр (было 6,5 м/с² у второй вуали над склоном у
+## (90, 19)); щупальца над дном под всем куполом не ближе HARD_PAD.
+func test_climbs_over_slope_smoothly() -> void:
+	var w := EcoWorld.new()
+	w.ground = Seabed.height
+	w.ship.pos = FAR
+	var v := w.add(EcoVeil.new()) as EcoVeil
+	var dt := 1.0 / 30.0
+	var n := v.veils.size()
+	var y0: Array[float] = []
+	var y1: Array[float] = []
+	for vl in v.veils:
+		y0.append(vl.p.y)
+		y1.append(vl.p.y)
+	var worst := 0.0
+	var climbed := 0.0
+	var gap := INF
+	for i in 30 * 90:
+		w.step(dt)
+		for k in n:
+			var vl := v.veils[k]
+			if i > 0:
+				worst = maxf(worst, absf(vl.p.y - 2.0 * y1[k] + y0[k]) / (dt * dt))
+			y0[k] = y1[k]
+			y1[k] = vl.p.y
+			climbed = maxf(climbed, absf(vl.vy))
+			gap = minf(gap, vl.base_y - (EcoVeil.floor_low(w, vl) - EcoVeil.FLOOR_PAD))
+	ok(climbed > 0.1, "купол и правда ходит по высоте над склоном: %.2f м/с" % climbed)
+	ok(worst < EcoVeil.CLIMB_ACCEL + 0.15, "по высоте без рывков: %.2f м/с²" % worst)
+	ok(gap >= EcoVeil.HARD_PAD - 1e-3, "щупальца над дном под куполом: %.2f м" % gap)
+
+
+func test_climb_eases_to_raised_floor() -> void:
+	var w := EcoWorld.new()
+	var floor_y := [-40.0]
+	w.ground = func(_x: float, _z: float) -> float: return floor_y[0]
+	w.ship.pos = FAR
+	var v := w.add(EcoVeil.new([SPOT] as Array[Vector2])) as EcoVeil
+	var vl := v.veils[0]
+	var start := vl.base_y
+	floor_y[0] = -36.0  # дно поднялось на 4 м: купол должен подняться, но не за кадр
+	w.step(1.0 / 30.0)
+	ok(vl.base_y - start < 0.05, "не прыгает за кадр: %.3f м" % (vl.base_y - start))
+	w.run(40.0)
+	near(vl.base_y, EcoVeil.target(w, vl), 0.05, "дошёл до нужной высоты")
+	ok(vl.base_y - start > 0.9, "поднялся над поднявшимся дном: %.2f м" % (vl.base_y - start))
