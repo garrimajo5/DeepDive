@@ -8,16 +8,28 @@ extends Node3D
 ## веернике): видимые — в начале буфера (`slot`), `visible_instance_count` отрезает остальных, скрытые не
 ## пересчитываются. Мир (рой на хищнике, кормёжка на веернике, укрытие) не меняется; облачка мути — как были.
 ## Вызовов столько же.
+## Рачок гребёт (Б3, `stroke`): капсула толчком короче и толще (на STROKE_SHORT длины за четверть гребка) и плавно
+## распрямляется, STROKE_RATE гребков в секунду (у каждого чуть свой ритм и фаза); висящий у вершины гребёт на
+## STROKE_STILL размаха, бросок к хищнику — во весь. По времени мира (у гостя то же), на CPU — шейдеров и вызовов
+## не прибавилось, и на «Экономно».
 
 const RADIUS := 0.06
 const LENGTH := 0.2
 const COLOR := Color("ffa040")
+## Гребок: сколько в секунду, на какую долю короче и толще в толчке, доля гребка на толчок, размах у висящего.
+const STROKE_RATE := 2.2
+const STROKE_SHORT := 0.18
+const STROKE_WIDE := 0.08
+const STROKE_HIT := 0.25
+const STROKE_STILL := 0.35
 
 var ognevka: EcoOgnevka
 var mesh: MultiMeshInstance3D
 ## Последние места рачков (для тестов — сервер отрисовки без экрана экземпляры не хранит).
 var placed: Array[Transform3D] = []
 var _buffer := PackedFloat32Array()
+## Время мира прошлого `sync` (гребок при пересборке на «Экономно»).
+var _t := 0.0
 
 ## Облачка у веерника (EcoOgnevkaDust); буфер — для тестов.
 var dust := EcoOgnevkaDust.new()
@@ -105,19 +117,35 @@ static func build() -> CapsuleMesh:
 	return m
 
 
-## Капсула вдоль хода рачка: ось капсулы (Y меша) — по направлению dir.
-static func place(s: EcoOgnevka.Shrimp) -> Transform3D:
+## Сжатие рачка в гребке (0 — распрямлён, 1 — толчок во весь размах) в момент t: фаза phase, ход speed, м/с.
+## Толчок — за STROKE_HIT гребка, распрямление — плавно остаток; ритм — STROKE_RATE ±15 % по фазе.
+static func stroke(t: float, phase: float, speed: float) -> float:
+	var rate := STROKE_RATE * (0.85 + 0.3 * fposmod(phase * 3.7, 1.0))
+	var k := fposmod(t * rate + phase / TAU, 1.0)
+	var c := sin(k / STROKE_HIT * PI * 0.5) if k < STROKE_HIT \
+			else 0.5 + 0.5 * cos(PI * (k - STROKE_HIT) / (1.0 - STROKE_HIT))
+	var amp := clampf(STROKE_STILL + (1.0 - STROKE_STILL) * speed / EcoOgnevka.DART, 0.0, 1.0)
+	return c * amp
+
+
+## Капсула вдоль хода рачка: ось капсулы (Y меша) — по направлению dir; в гребке (момент t) короче и толще.
+static func place(s: EcoOgnevka.Shrimp, t := 0.0) -> Transform3D:
 	var y := s.dir
 	var x := y.cross(Vector3.UP)
 	if x.length_squared() < 1e-6:
 		x = Vector3.RIGHT
 	x = x.normalized()
-	return Transform3D(Basis(x, y, x.cross(y)), s.p)
+	var c := stroke(t, s.phase, s.v.length())
+	var w := 1.0 + STROKE_WIDE * c
+	return Transform3D(Basis(x * w, y * (1.0 - STROKE_SHORT * c), x.cross(y) * w), s.p)
 
 
-## Переписывает только рачков, шагнувших в этом шаге мира (EcoOgnevka шагает их половинами); all — всех.
-## На «Экономно» скрытые рачки не пересчитываются.
-func sync(all := false) -> void:
+## Переписывает только рачков, шагнувших в этом шаге мира (EcoOgnevka шагает их половинами); all — всех;
+## t — время мира (гребок; меньше нуля — прошлое). На «Экономно» скрытые рачки не пересчитываются.
+func sync(all := false, t := -1.0) -> void:
+	if t < 0.0:
+		t = _t
+	_t = t
 	var mm := mesh.multimesh
 	var n := mini(ognevka.shrimp.size(), mm.instance_count)
 	if placed.size() != n or _buffer.size() != mm.instance_count * 12:
@@ -131,7 +159,7 @@ func sync(all := false) -> void:
 	for i in range(from, n, stride):
 		if lite and not lite_shown(i % EcoOgnevka.PER_STATION):
 			continue
-		var x := place(ognevka.shrimp[i])
+		var x := place(ognevka.shrimp[i], t)
 		placed[i] = x
 		var b := x.basis
 		var o := slot(i, stations, lite) * 12
