@@ -321,14 +321,15 @@ func test_view_three_multimeshes() -> void:
 	var bottom := st * Vector3(0, -0.5, 0)
 	var top := st * Vector3(0, 0.5, 0)
 	ok(bottom.distance_to(bl.stem_base[3]) < 1e-3, "стебель — от дна")
-	ok(top.distance_to(bl.stem_top[3]) < 1e-3, "до луковицы")
+	ok(top.distance_to(bl.stem_top[3]) < 0.3, "до вершины (колышется)")
 	var ship := EcoLink.ShipState.new()
 	ship.pos = Vector3(500, 0, 500)
 	bl.ripe = 0.5
 	view.step(0.05, ship)
 	var n := bl.index * EcoBladder.STEMS + 2
 	var tr := BladderView.transform_at(bv.bulb_buffer, n)
-	ok(tr.origin.distance_to(bl.stem_top[2]) < 0.06, "луковица на стебле")
+	var st2 := BladderView.transform_at(bv.stems.multimesh.buffer, n, BladderView.STRIDE)
+	ok(tr.origin.distance_to(st2 * Vector3(0, 0.5, 0)) < 1e-3, "луковица на вершине своего стебля")
 	near(tr.basis.x.length(), EcoBladder.bulb_size(bl), 1e-3)
 	var s0 := BladderView.transform_at(bv.spore_buffer, bl.index * EcoBladder.SPORES)
 	near(s0.basis.x.length(), 0.0, 1e-6, "облака нет — споры спрятаны")
@@ -380,5 +381,70 @@ func test_view_lite_draws_half_of_each_spore_cloud() -> void:
 	bv = view.bladder_view
 	eq(bv.spores_drawn(), n * EcoBladder.SPORES, "назад — все")
 	eq(bv.spore_slot(1, 3), 1 * EcoBladder.SPORES + 3, "буфер снова по кусту")
+	view.queue_free()
+	await frames(1)
+
+
+# ---------- Колыхание (Б3) ----------
+
+## Стебли колышутся в течении (`EcoBladder.sway`): по потоку кренятся сильнее, чем в стоячей воде, длина стебля та же,
+## на «Экономно» (amount = 0) стоят; пузырёк срывается с луковицы там, где она нарисована.
+func test_stems_sway_in_current() -> void:
+	var b := _bl(_world())
+	var bl := b.bushes[0]
+	var k := 4
+	var flow := Vector3(EcoCurrent.SPEED, 0, 0)
+	var calm := 0.0
+	var lean := 0.0
+	var moved := 0.0
+	var steps := 120
+	for i in steps:
+		var t := i * 0.25
+		var top := EcoBladder.bulb(bl, k, t, flow)
+		calm += (EcoBladder.bulb(bl, k, t) - bl.stem_top[k]).x
+		lean += (top - bl.stem_top[k]).x
+		moved = maxf(moved, top.distance_to(bl.stem_top[k]))
+		var h := bl.stem_base[k].distance_to(bl.stem_top[k])
+		near(top.distance_to(bl.stem_base[k]), h, h * 0.03, "стебель не вытягивается")
+		eq(EcoBladder.bulb(bl, k, t, flow, 0.0), bl.stem_top[k], "«Экономно» — стоит")
+		var sp := EcoBladderBubbles.spot(bl, k, t, flow)
+		ok(sp.distance_to(top + Vector3(0, EcoBladderBubbles.LIFT, 0)) < 1e-5, "пузырёк — с нарисованной луковицы")
+	ok(lean / steps > 0.05, "по течению кренится в среднем на %.3f м" % (lean / steps))
+	ok(absf(calm / steps) < 0.03, "в стоячей воде крена нет (%.3f)" % (calm / steps))
+	ok(moved > 0.08 and moved < 0.35, "размах вершины %.2f м" % moved)
+	# стебли одного куста не в лад
+	var d0 := EcoBladder.sway(bl, 1, 3.0, flow)
+	var d1 := EcoBladder.sway(bl, 2, 3.0, flow)
+	ok(d0.distance_to(d1) > 1e-3, "соседние стебли гнутся по-своему")
+
+
+## В сцене стебель и луковица идут вместе: за кадры вершина стебля уходит с места, луковица на ней; на «Экономно»
+## стебли стоят.
+func test_view_stem_follows_bulb() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var bv := view.bladder_view
+	var bl := view.bladders.bushes[0]
+	var n := bl.index * EcoBladder.STEMS + 5
+	var flow := Vector3(0, 0, EcoCurrent.SPEED)
+	var span := 0.0
+	var first := Vector3.ZERO
+	for f in 20:
+		bv.sync(f * 0.4, null, flow)
+		var st := BladderView.transform_at(bv.stems.multimesh.buffer, n, BladderView.STRIDE)
+		var top := st * Vector3(0, 0.5, 0)
+		ok((st * Vector3(0, -0.5, 0)).distance_to(bl.stem_base[5]) < 1e-3, "подножие стоит")
+		ok(top.distance_to(BladderView.transform_at(bv.bulb_buffer, n).origin) < 1e-3, "луковица на вершине")
+		if f == 0:
+			first = top
+		span = maxf(span, top.distance_to(first))
+	ok(span > 0.03, "вершина стебля колышется (%.3f м)" % span)
+	EcoShaders.set_sway_lite(true)
+	bv.sync(9.0, null, flow)
+	var still := BladderView.transform_at(bv.stems.multimesh.buffer, n, BladderView.STRIDE) * Vector3(0, 0.5, 0)
+	EcoShaders.set_sway_lite(false)
+	ok(still.distance_to(bl.stem_top[5]) < 1e-3, "«Экономно» — стебель стоит")
 	view.queue_free()
 	await frames(1)
