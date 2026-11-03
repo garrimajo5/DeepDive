@@ -69,6 +69,10 @@ class Pestr:
 	var p := Vector3.ZERO
 	var prev := Vector3.ZERO
 	var look := Vector3.ZERO
+	## Ход (м/с): догоняет нужный не быстрее `SWIM_ACCEL`, не больше `SWIM_MAX`.
+	var v := Vector3.ZERO
+	## Дно под пестрянкой + `CLEAR` (м), пересчёт по очереди; −INF — в хороводе, дно не нужно.
+	var floor_y := -INF
 
 
 ## Нос пестрянки догоняет путь (план реализма Б3, «плавность поведения»): доля угла `LOOK_K` в с, не быстрее
@@ -76,6 +80,19 @@ class Pestr:
 ## (хватень подманил стаю, отпустил её) или пестрянка вставала.
 const LOOK_K := 8.0
 const LOOK_MAX := 6.0
+## Ход пестрянки (Б3): нужный ход — `FOLLOW` × остаток до места в хороводе или у стаи, не больше `SWIM_MAX`, сам ход
+## меняется не быстрее `SWIM_ACCEL`. Раньше шаг был lerp 2,5/с к месту: хватень подманил стаю в 25 м — 15-сантиметровая
+## рыбка срывалась к ней на 30 м/с за кадр и так же неслась обратно.
+const FOLLOW := 2.5
+const SWIM_MAX := 3.0
+const SWIM_ACCEL := 6.0
+## Вне хоровода (у стаи или на пути к ней) пестрянки идут не ниже `CLEAR` м над дном под собой: путь от макушки к
+## стае прямой и раньше проходил сквозь бугор (у старта 00 — на 3 м под дном). Дно под пестрянкой пересчитывается по
+## очереди — одна пестрянка хватня за шаг, а ближе `NEAR_FLOOR` м к дну — каждый шаг.
+const CLEAR := 0.5
+const NEAR_FLOOR := 1.0
+## Вне хоровода — дальше этого от макушки (м) или при подманивании; ближе дно не считаем (шум fbm дорогой, #133).
+const AWAY := 1.0
 
 
 ## Хватень.
@@ -275,7 +292,15 @@ func _swim_pestr(world: EcoWorld, hv: Anemone, dt: float) -> void:
 	var t := world.time
 	var o := hv.open
 	var c := Vector3.ZERO
-	for pe in hv.pestr:
+	var away := world.ground.is_valid() and (hv.lure != null or hv.pc.distance_squared_to(hv.top) > AWAY * AWAY)
+	var turn_k := world.steps % PESTR_N
+	for k in hv.pestr.size():
+		var pe := hv.pestr[k]
+		if not away:
+			pe.floor_y = -INF
+		elif k == turn_k or pe.p.y < pe.floor_y + NEAR_FLOOR:
+			pe.floor_y = float(world.ground.call(pe.p.x, pe.p.z)) + CLEAR
+		var floor_y := pe.floor_y
 		var a := t * (1.6 if hv.lure else 0.9) + pe.phase
 		var to: Vector3
 		if hv.lure:
@@ -284,11 +309,25 @@ func _swim_pestr(world: EcoWorld, hv: Anemone, dt: float) -> void:
 			var rr := pe.r * (0.4 + 0.6 * o)
 			to = Vector3(hv.top.x + cos(a) * rr, hv.top.y + 0.25 + 0.35 * o + sin(t * 2.3 + pe.phase) * 0.08,
 				hv.top.z + sin(a) * rr)
+		to.y = maxf(to.y, floor_y)
 		pe.prev = pe.p
-		pe.p = pe.p.lerp(to, minf(1.0, dt * 2.5))
+		pe.p = swim(pe, to, dt)
+		if pe.p.y < floor_y:
+			pe.p.y = floor_y
+			pe.v.y = maxf(pe.v.y, 0.0)
 		pe.look = turn(pe.look, pe.p - pe.prev, dt)
 		c += pe.p
 	hv.pc = c / PESTR_N
+
+
+## Шаг пестрянки к месту to за dt: нужный ход `FOLLOW` × остаток, не больше `SWIM_MAX`, ход `pe.v` догоняет его не
+## быстрее `SWIM_ACCEL`. Возвращает новое место.
+static func swim(pe: Pestr, to: Vector3, dt: float) -> Vector3:
+	if dt <= 0.0:
+		return pe.p
+	var want := ((to - pe.p) * FOLLOW).limit_length(SWIM_MAX)
+	pe.v = pe.v.move_toward(want, SWIM_ACCEL * dt)
+	return pe.p + pe.v * dt
 
 
 ## Хватень и его пестрянки видны сонару и сканеру: хватень — по макушке, пестрянки — по их середине.
