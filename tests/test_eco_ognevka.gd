@@ -521,3 +521,66 @@ func test_view_lite_draws_half_per_station() -> void:
 	near(_at(ov._buffer, i).distance_to(view.ognevka.shrimp[i].p), 0.0, 1e-4, "буфер снова по номеру")
 	view.queue_free()
 	await frames(1)
+
+
+func test_view_shrimp_stroke() -> void:
+	# гребок: толчок быстро, распрямление плавно, без скачков; висящий гребёт слабее бросающегося
+	var ph := 1.3
+	var top := 0.0
+	var low := 1.0
+	var prev := OgnevkaView.stroke(0.0, ph, EcoOgnevka.DART)
+	var jump := 0.0
+	var rise := 0
+	var fall := 0
+	for i in range(1, 2000):
+		var c := OgnevkaView.stroke(i * 0.001, ph, EcoOgnevka.DART)
+		jump = maxf(jump, absf(c - prev))
+		if c > prev:
+			rise += 1
+		elif c < prev:
+			fall += 1
+		prev = c
+		top = maxf(top, c)
+		low = minf(low, c)
+	near(top, 1.0, 0.01, "бросок — во весь размах")
+	near(low, 0.0, 0.01, "между гребками распрямлён")
+	ok(jump < 0.02, "без скачков за 1 мс (%.3f)" % jump)
+	ok(rise * 2 < fall, "толчок быстрее распрямления (%d против %d)" % [rise, fall])
+	var still := 0.0
+	for i in 2000:
+		still = maxf(still, OgnevkaView.stroke(i * 0.001, ph, 0.0))
+	near(still, OgnevkaView.STROKE_STILL, 0.01, "висящий гребёт на долю размаха")
+	ok(OgnevkaView.stroke(0.4, 0.2, 1.0) != OgnevkaView.stroke(0.4, 2.9, 1.0), "у рачков своя фаза")
+
+
+func test_view_capsule_shortens_in_stroke() -> void:
+	var s := EcoOgnevka.Shrimp.new()
+	s.dir = Vector3(0, 0, -1)
+	s.v = Vector3(0, 0, -EcoOgnevka.DART)
+	s.phase = 0.7
+	var lens: Array[float] = []
+	for i in 60:
+		var t := i * 0.01
+		var x := OgnevkaView.place(s, t)
+		var c := OgnevkaView.stroke(t, s.phase, EcoOgnevka.DART)
+		near(x.basis.y.length(), 1.0 - OgnevkaView.STROKE_SHORT * c, 1e-5, "короче в толчке")
+		near(x.basis.x.length(), 1.0 + OgnevkaView.STROKE_WIDE * c, 1e-5, "толще в толчке")
+		near(absf(x.basis.y.normalized().dot(s.dir)), 1.0, 1e-4, "ось — по ходу")
+		lens.append(x.basis.y.length())
+	ok(lens.min() < 1.0 - OgnevkaView.STROKE_SHORT * 0.9, "сжался в гребке")
+	ok(lens.max() > 0.99, "распрямился")
+
+
+func test_eco_view_strokes_by_world_time() -> void:
+	var ev := EcoView.new()
+	tree.root.add_child(ev)
+	await frames(1)
+	var ship := EcoLink.ShipState.new()
+	ev.step(0.1, ship)
+	ev.step(0.1, ship)
+	var i := ev.ognevka.moved_half()  # шагнувшие в этом шаге переписаны с временем мира
+	var s := ev.ognevka.shrimp[i]
+	var want := 1.0 - OgnevkaView.STROKE_SHORT * OgnevkaView.stroke(ev.world.time, s.phase, s.v.length())
+	near(ev.ognevka_view.placed[i].basis.y.length(), want, 1e-5, "гребок — по времени мира")
+	ev.queue_free()
+	await frames(1)

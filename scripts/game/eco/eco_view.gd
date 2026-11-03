@@ -537,7 +537,7 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	eel_view.sync(world.time, ship, current.vel(), world.ground)
 	raduzh_view.sync(world.time, ship.pos, ship.yaw)
 	raduzh_view.sync_dust(world.time, ship, current.vel())
-	ognevka_view.sync()
+	ognevka_view.sync(false, world.time)
 	ognevka_view.sync_dust(world.time, ship, current.vel())
 	StepClock.mark("мир/вид: угри, радужники")
 	hvaten_view.sync(world.time, ship.pos, false, ship, current.vel())
