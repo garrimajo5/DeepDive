@@ -554,7 +554,7 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	grot_view.sync(world.time, ship.pos, ship, current.vel())
 	StepClock.mark("мир/вид: скаты, вуаль, грот")
 	plankton_view.sync(world.time, ship.pos, ship.yaw)
-	moth_view.sync(ship)
+	moth_view.sync(ship, world.time)
 	echo_view.sync(world.time, ship.pos, ship, current.vel())
 	far_view.sync(world.time, ship.pos, world.ground)
 	dust_layer.sync()
