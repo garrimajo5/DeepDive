@@ -122,6 +122,52 @@ func drive(want: Vector3, dt: float, ground: Callable = Callable()) -> void:
 	confine(ground)
 
 
+## Как drive, но ход по горизонтали поворачивает, а не проходит через ноль (Б3, «плавность»): курс скорости
+## догоняет курс want долей угла turn_k/с, не быстрее turn_max рад/с, величина тянется (lerp agility) к |want|,
+## в крутом повороте — к |want| · cos угла, не меньше slow_min доли. Раньше lerp векторов на развороте (цель патруля
+## за спиной) гасил ход до нуля и разгонял обратно: серпохвост ~1 с плыл хвостом вперёд, пока нос доворачивал.
+## Вертикаль — как в drive (lerp и подъём перед дном). Почти стоит — курс сразу по want.
+func swim(want: Vector3, dt: float, turn_k: float, turn_max: float, slow_min: float,
+		ground: Callable = Callable()) -> void:
+	var k := minf(1.0, dt * agility)
+	var vf := Vector2(v.x, v.z)
+	var wf := Vector2(want.x, want.z)
+	var s_now := vf.length()
+	var s_want := wf.length()
+	var flat := Vector2.ZERO
+	if s_want < 1e-4:
+		flat = vf.lerp(Vector2.ZERO, k)
+	elif s_now < SWIM_STILL:
+		flat = vf.lerp(wf, k)
+	else:
+		var da := vf.angle_to(wf)
+		var step := signf(da) * minf(absf(da) * minf(1.0, turn_k * dt), turn_max * dt)
+		var dir := vf.rotated(step) / s_now
+		var s_goal := s_want * maxf(cos(da), slow_min)
+		flat = dir * lerpf(s_now, s_goal, k)
+	# в повороте путь идёт дугой к курсу want: дно впереди смотрим и по нему, с нынешним ходом
+	var turn := Vector3.ZERO
+	if s_want >= 1e-4 and flat.length_squared() > 1e-6 and absf(flat.angle_to(wf)) > 0.05:
+		turn = Vector3(wf.x, 0.0, wf.y) * (flat.length() / s_want)
+	v = Vector3(flat.x, v.y, flat.y)
+	var need := climb_for(ground, turn) if look > 0.0 and ground.is_valid() else -INF
+	v.y = lerpf(v.y, want.y, k)
+	if need > v.y:
+		if need > v.y + LOOK_ACCEL * dt:  # вверх не успевает: и по горизонтали тормозит, как в drive lerp
+			var fs := flat.length()
+			if fs > SWIM_STILL:
+				var slow := maxf(fs - LOOK_ACCEL * dt, SWIM_STILL) / fs
+				v.x *= slow
+				v.z *= slow
+		v.y = minf(need, v.y + LOOK_ACCEL * dt)
+	p += v * dt
+	confine(ground)
+
+
+## Медленнее этого (м/с) ход ещё не держит курс: swim тянет его к want, как drive.
+const SWIM_STILL := 0.3
+
+
 ## Доли look, на которых смотрит дно впереди, и запас над clearance там.
 const LOOK_AT := [0.1, 0.2, 0.3, 0.45, 0.6, 0.8, 1.0]
 const LOOK_GAP := 0.6
@@ -131,7 +177,8 @@ const LOOK_ACCEL := 8.0
 ## Вертикальная скорость, с которой к каждой точке пути впереди (горизонтальный ход за долю LOOK_AT от look) существо
 ## уже будет на clearance + LOOK_GAP над дном. Отрицательная — вниз не быстрее её: в нырке к дну тормозит заранее.
 ## Высоко над дном (дальше, чем подъём 1:1 на всём пути и запас) — не смотрит: −INF без лишних вызовов дна.
-func climb_for(ground: Callable) -> float:
+## turn — ход, к которому поворачивает (`swim`): путь дугой смотрит и по нему.
+func climb_for(ground: Callable, turn := Vector3.ZERO) -> float:
 	var flat := Vector3(v.x, 0.0, v.z)
 	var need := -INF
 	if p.y - ground_y(ground) - clearance > flat.length() * look + 2.0 - minf(v.y, 0.0) * look:
@@ -141,6 +188,12 @@ func climb_for(ground: Callable) -> float:
 		var q := p + flat * t
 		var top: float = float(ground.call(q.x, q.z)) + clearance + LOOK_GAP
 		need = maxf(need, (top - p.y) / t)
+	if turn != Vector3.ZERO:
+		for f: float in LOOK_AT:
+			var t := look * f
+			var q := p + turn * t
+			var top: float = float(ground.call(q.x, q.z)) + clearance + LOOK_GAP
+			need = maxf(need, (top - p.y) / t)
 	return need
 
 
