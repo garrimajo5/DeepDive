@@ -24,12 +24,16 @@ const FAN_CD := 120.0
 const FAN_OF := 10.0
 ## Цель сканера на вершине станции.
 const SCAN_R := 1.6
-## Огнёвки догоняют своё место с долей dt·3 (lerp), кружат с частотой 0,8 рад/с.
+## Огнёвки плывут к своему месту с ходом FOLLOW · остаток (`swim`), кружат с частотой 0,8 рад/с.
 const FOLLOW := 3.0
 const SPIN := 0.8
 ## Быстрее этого (м/с) рачок не плывёт: хищник встал на чистку в 8 м — доля lerp дала бы рывок 26 м/с за шаг
 ## (Б3, `test_eco_reset_jumps`); теперь стая перебирается к нему и обратно к вершине за пару секунд.
 const DART := 4.0
+## Ход рачка `Shrimp.v` меняется не быстрее ACCEL м/с² (`swim`, Б3): хищник встал на чистку — стая трогается к нему
+## за ~0,3 с, а не срывается с 0,7 до 4 м/с за шаг (рывок 58 м/с², нашёл обход мира по ускорениям); к цели тормозит
+## заранее — нужный ход FOLLOW · остаток.
+const ACCEL := 12.0
 ## Нос рачка `Shrimp.dir` догоняет ход долей угла LOOK_K в секунду, не быстрее LOOK_MAX рад/с (`turn`, Б3):
 ## смена цели (станция → хищник на чистке → веерник) разворачивает рачка за ~0,4 с, а не за шаг; почти стоит —
 ## держит курс (раньше нос щёлкал на касательную круга).
@@ -51,6 +55,8 @@ class Shrimp:
 	var p := Vector3.ZERO
 	## Куда смотрит (по движению).
 	var dir := Vector3(1, 0, 0)
+	## Ход, м/с (`swim`).
+	var v := Vector3.ZERO
 
 
 var shrimp: Array[Shrimp] = []
@@ -139,7 +145,10 @@ func step(world: EcoWorld, dt: float) -> void:
 		var pr: EcoPred.Pred = ps.all[st.busy] if ps and st.busy >= 0 and st.busy < ps.all.size() else null
 		var goal := goal_of(s, k, t, pr)
 		var was := s.p
-		s.p = outside(world, follow(s.p, goal, sdt))
+		s.v = swim(s.p, s.v, goal, sdt)
+		s.p = outside(world, s.p + s.v * sdt)
+		# обшивка сдвинула — ход тот, что вышел на деле (не давит в корпус), не быстрее DART
+		s.v = ((s.p - was) / sdt).limit_length(DART)
 		s.dir = turn(s.dir, s.p - was, sdt)
 	fan_cd -= dt
 	if fans and fan_cd <= 0.0:
@@ -170,10 +179,11 @@ static func outside(world: EcoWorld, p: Vector3) -> Vector3:
 	return p if res.is_empty() else res[0]
 
 
-## Шаг к цели на dt с: доля FOLLOW·dt пути, не дальше DART·dt.
-static func follow(from: Vector3, goal: Vector3, dt: float) -> Vector3:
-	var step := (goal - from) * minf(1.0, dt * FOLLOW)
-	return from + step.limit_length(DART * dt)
+## Ход рачка в from с ходом v к цели goal через dt с: нужный — FOLLOW · остаток, не быстрее DART; ход догоняет
+## нужный не быстрее ACCEL · dt.
+static func swim(from: Vector3, v: Vector3, goal: Vector3, dt: float) -> Vector3:
+	var want := ((goal - from) * FOLLOW).limit_length(DART)
+	return v + (want - v).limit_length(ACCEL * dt)
 
 
 ## Нос from → по ходу move: доля угла LOOK_K·dt, не больше LOOK_MAX·dt; хода нет — держит курс.
