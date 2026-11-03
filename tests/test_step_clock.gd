@@ -224,3 +224,38 @@ func test_usual_not_before_warm() -> void:
 	eq(StepClock.slower(5.0, 0.05), "", "обычное ~0 — подчасть по событию, без ×")
 	eq(StepClock.slower(3.0, 2.0), "", "меньше SLOW раз — без ×")
 	eq(StepClock.slower(9.0, 2.0), " ×5", "×N округляется")
+
+
+## Обычный шаг мира: EcoFish 3, EcoKelp 2, EcoVent 1, a 1, b 1 — и всё (#1174).
+func _warm_world(c: StepClock, t: int) -> int:
+	for i in StepClock.USUAL_FROM + 2:
+		c.start(t, 1.0 / 30.0)
+		for p in [["EcoFish", 3], ["EcoKelp", 2], ["EcoVent", 1], ["a", 1], ["b", 1]]:
+			t += int(p[1]) * 1000
+			c.lap("мир/" + p[0], t)
+	return t
+
+
+## Issue #1174: в провале эмулятора раздуты все подчасти разом (даже EcoVent в три строки) — лог говорит «заминка»,
+## а не ищет вид-виновник; один виновник среди ×1–×2 — без «заминки»; долгий шаг (подшаги мира) — не заминка.
+func test_stall_all_parts_at_once() -> void:
+	var c := StepClock.new()
+	var t := _warm_world(c, 0)
+	c.start(t, 1.0 / 30.0)   # всё ×12 разом
+	for p in [["EcoFish", 36], ["EcoKelp", 24], ["EcoVent", 12], ["a", 12], ["b", 12]]:
+		t += int(p[1]) * 1000
+		c.lap("мир/" + p[0], t)
+	c.start(t, 1.0 / 30.0)
+	eq(c.last_note(), "мир 96 (обычно 8) [EcoFish 36 ×12, EcoKelp 24 ×12, EcoVent 12 ×12, ещё 2: 24 ×12]"
+		+ " — разом ×12, заминка", "все подчасти ×12 — заминка машины")
+	c.start(t, 1.0 / 30.0)   # виновник: EcoFish ×20, прочие как обычно
+	for p in [["EcoFish", 60], ["EcoKelp", 2], ["EcoVent", 1], ["a", 1], ["b", 1]]:
+		t += int(p[1]) * 1000
+		c.lap("мир/" + p[0], t)
+	c.start(t, 1.0 / 30.0)
+	ok(not c.last_note().contains("заминка"), "один виновник — не заминка: " + c.last_note())
+	eq(StepClock.stall({"a": 12.0, "b": 12.0, "c": 12.0}, {"a": 1.0, "b": 1.0, "c": 1.0}, 0.2), 0,
+		"шаг 200 мс — мир считает его по частям, ×12 ожидаемо — не заминка")
+	eq(StepClock.stall({"a": 12.0, "b": 12.0}, {"a": 1.0, "b": 1.0}), 0, "две подчасти — мало для вывода")
+	eq(StepClock.stall({"a": 12.0, "b": 12.0, "c": 12.0}, {"a": 1.0, "b": 1.0, "c": 0.01}), 0,
+		"подчасть по событию (обычное ~0) не считается — осталось две")
