@@ -324,6 +324,9 @@ func test_view_four_draw_calls() -> void:
 	ok(gv.visible, "рядом — виден")
 	near(gv.group.position.distance_to(Vector3(gr.p.x, gr.body_y, gr.p.z)), 0.0, 1e-4, "узел на теле")
 	near(gv.legs.scale.y, 0.35 + 0.65 * gr.lift, 1e-4, "ноги по lift")
+	var b := GrotView.breath(gr.lift, view.world.time)
+	for mi in [gv.body, gv.reef, gv.glow]:
+		near((mi as Node3D).scale.distance_to(b), 0.0, 1e-5, "дышит по времени мира: %s" % mi.name)
 	var calls := 0
 	var tris := 0
 	for c in gv.group.get_children():
@@ -339,6 +342,30 @@ func test_view_four_draw_calls() -> void:
 	ok(not gv.visible, "далеко — спрятан")
 	view.queue_free()
 	await frames(1)
+
+
+func test_shell_breathes_held_when_hidden() -> void:
+	var top := 0.0
+	var low := 9.0
+	var held := 0.0
+	var t := 0.0
+	while t < GrotView.BREATH_T:
+		var s := GrotView.breath(1.0, t)
+		top = maxf(top, s.y)
+		low = minf(low, s.y)
+		held = maxf(held, GrotView.breath(0.0, t).y)
+		eq(s.z, 1.0, "длина не меняется — голова на месте")
+		ok(s.x > 1.0 == (s.y > 1.0) or is_equal_approx(s.y, 1.0), "вдох — выше и шире разом")
+		t += 0.05
+	near(top, 1.0 + GrotView.BREATH_H, 1e-3, "вдох — выше на BREATH_H")
+	near(low, 1.0 - GrotView.BREATH_H, 1e-3, "выдох — ниже на BREATH_H")
+	near(held - 1.0, GrotView.BREATH_H * GrotView.HELD, 1e-3, "ноги спрятаны — затаил дыхание")
+	var step := 0.0
+	for i in 200:
+		var a := GrotView.breath(1.0 - i / 200.0, i * 0.05)
+		var c := GrotView.breath(1.0 - (i + 1) / 200.0, (i + 1) * 0.05)
+		step = maxf(step, absf(c.y - a.y))
+	ok(step < 0.004, "размах меняется плавно: %.4f за кадр" % step)
 
 
 func _grot_tris(gv: GrotView) -> Dictionary:

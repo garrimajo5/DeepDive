@@ -11,6 +11,10 @@ extends Node3D
 ## «Экономно» (Б6, `set_lite`): панцирь, обод, голова, бугры рифа, кончики веток и глаза — грубее сетка (LITE_*,
 ## треугольников меньше половины); ноги и ветки те же, мир, муть, вызовы и силуэт те же. Сброс мира уровень не теряет
 ## (вид не пересоздаётся, EcoView.set_lite).
+## «Дыхание» (Б3, `breath`): панцирь с рифом и огоньками набирает воду и выталкивает её — высота ± BREATH_H, ширина
+## ± BREATH_W за BREATH_T с, низ панциря стоит (масштаб от узла на теле), длина не меняется — голова и глаза на месте.
+## Ноги спрятаны (испуг, `lift` → 0) — затаил дыхание: HELD размаха; доля по `lift` плавная — размах не прыгает.
+## По времени мира (у гостя то же), масштаб узлов — даром, и на «Экономно».
 
 const SHELL := Color("5b5a4a")
 const RIM := Color("3e3b30")
@@ -31,6 +35,10 @@ const LEG_TILT := 0.5
 const BRANCHES := 11
 const BUMPS := 6
 const FAR := 160.0
+const BREATH_H := 0.04
+const BREATH_W := 0.02
+const BREATH_T := 6.0
+const HELD := 0.3
 ## Сетка на «Экономно»: панцирь (сегменты × кольца), обод (сегменты × стороны трубки), голова, бугры, огоньки.
 const LITE_SHELL := Vector2i(10, 3)
 const LITE_RIM := Vector2i(12, 3)
@@ -121,6 +129,17 @@ func sync(t: float, ship: Vector3, info: EcoLink.ShipState = null, flow := Vecto
 	group.transform = Transform3D(Basis(Vector3.UP, gr.yaw), Vector3(gr.p.x, gr.body_y, gr.p.z))
 	legs.rotation = Vector3(sin(t * 2.2) * 0.08 * gr.stride, 0.0, 0.0)   # качаются в меру шага
 	legs.scale = Vector3(1.0, 0.35 + 0.65 * gr.lift, 1.0)
+	var b := breath(gr.lift, t)
+	body.scale = b
+	reef.scale = b
+	glow.scale = b
+
+
+## Масштаб панциря с рифом в момент t при выпущенных ногах lift (0 — спрятаны): вдох — выше и шире, длина та же;
+## ноги спрятаны — HELD размаха.
+static func breath(lift: float, t: float) -> Vector3:
+	var k := lerpf(HELD, 1.0, clampf(lift, 0.0, 1.0)) * sin(t * TAU / BREATH_T)
+	return Vector3(1.0 + BREATH_W * k, 1.0 + BREATH_H * k, 1.0)
 
 
 func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3) -> void:
