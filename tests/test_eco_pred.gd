@@ -1007,3 +1007,70 @@ func test_no_vertical_jerk_over_reef_and_ridges() -> void:
 		var r := _vertical_jerk(id, 50.0)
 		ok(r[0] < 15.0, "у %s вертикальный разгон серпохвоста плавный: %.1f м/с²" % [id, r[0]])
 		eq(r[1], 0, "у %s не ползёт вплотную по дну" % id)
+
+
+func test_swim_turns_round_instead_of_backing() -> void:
+	# цель патруля за спиной: ход поворачивает дугой (`EcoAgent.swim`), а не гаснет до нуля и не идёт назад
+	var dt := 1.0 / 30.0
+	var a := EcoAgent.new(EcoPred.ID, Vector3(0, -20, 0))
+	a.agility = 1.1
+	a.v = Vector3(0, 0, EcoPred.PATROL_SPEED)
+	var slowest := INF
+	var worst_turn := 0.0
+	for i in int(4.0 / dt):
+		var before := Vector2(a.v.x, a.v.z)
+		a.swim(Vector3(0, 0, -EcoPred.PATROL_SPEED), dt, EcoPred.SWIM_TURN, EcoPred.SWIM_TURN_MAX, EcoPred.SWIM_SLOW)
+		var after := Vector2(a.v.x, a.v.z)
+		slowest = minf(slowest, after.length())
+		worst_turn = maxf(worst_turn, absf(before.angle_to(after)) / dt)
+	ok(slowest > 0.5, "в развороте не встаёт: самый медленный ход %.2f м/с" % slowest)
+	ok(worst_turn <= EcoPred.SWIM_TURN_MAX + 1e-3, "курс хода — не быстрее %.1f рад/с: %.2f" % [EcoPred.SWIM_TURN_MAX, worst_turn])
+	ok(a.v.z < -0.9 * EcoPred.PATROL_SPEED, "развернулся и идёт к цели: %.2f м/с" % a.v.z)
+	# drive (lerp векторов) — проходит через ноль: так было у серпохвоста
+	var b := EcoAgent.new(EcoPred.ID, Vector3(0, -20, 0))
+	b.agility = 1.1
+	b.v = Vector3(0, 0, EcoPred.PATROL_SPEED)
+	var b_slowest := INF
+	for i in int(4.0 / dt):
+		b.drive(Vector3(0, 0, -EcoPred.PATROL_SPEED), dt)
+		b_slowest = minf(b_slowest, b.v.length())
+	ok(b_slowest < 0.2, "lerp векторов гасит ход до нуля: %.2f м/с" % b_slowest)
+
+
+func test_swim_arrives_without_circling() -> void:
+	# вне охоты у цели — встаёт, а не кружит дугой разворота вокруг неё
+	var dt := 1.0 / 30.0
+	var a := EcoAgent.new(EcoPred.ID, Vector3(0, -20, 0))
+	a.agility = 1.1
+	a.v = Vector3(0, 0, EcoPred.RETREAT_SPEED)
+	var goal := Vector3(0, -20, 20)
+	for i in int(20.0 / dt):
+		var d := goal - a.p
+		var want := d.normalized() * EcoPred.RETREAT_SPEED * minf(1.0, d.length() * EcoPred.ARRIVE_K / EcoPred.RETREAT_SPEED) \
+			if d.length_squared() > 1e-4 else Vector3.ZERO
+		a.swim(want, dt, EcoPred.SWIM_TURN, EcoPred.SWIM_TURN_MAX, EcoPred.SWIM_SLOW)
+	ok(a.p.distance_to(goal) < 2.0, "встал у цели: %.1f м" % a.p.distance_to(goal))
+	ok(a.v.length() < 0.5, "почти стоит: %.2f м/с" % a.v.length())
+
+
+func test_never_swims_tail_first() -> void:
+	# у 01 и 02 за минуту: на ходу быстрее 1 м/с нос (`Pred.look`) не дальше 90° от хода. Раньше на развороте
+	# патруля ход шёл через ноль и обратно — до 176°, десятки шагов хвостом вперёд
+	var dt := 1.0 / 30.0
+	for id in ["01", "02"]:
+		var ev := EcoView.new()
+		ev.world.ship.pos = LayerMap.at(id)
+		ev.ground = Seabed.height
+		var preds: EcoPred
+		for s in ev.world.systems:
+			if s is EcoPred:
+				preds = s
+		var worst := 0.0
+		for i in int(60.0 / dt):
+			ev.world.step(dt)
+			for pr in preds.all:
+				var f := Vector2(pr.agent.v.x, pr.agent.v.z)
+				if f.length() >= 1.0:
+					worst = maxf(worst, absf(Vector2(pr.look.x, pr.look.z).angle_to(f)))
+		ev.free()
+		ok(worst < deg_to_rad(90.0), "у %s нос не дальше 90° от хода: %.0f°" % [id, rad_to_deg(worst)])

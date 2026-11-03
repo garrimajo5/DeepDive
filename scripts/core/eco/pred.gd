@@ -318,6 +318,15 @@ const BANK_MAX := deg_to_rad(25.0)
 const BANK_FOLLOW := 3.0
 ## Наклон тела вверх-вниз не больше (рад).
 const PITCH_MAX := deg_to_rad(30.0)
+## Ход разворачивается дугой, а не через остановку (`EcoAgent.swim`): курс скорости — доля угла SWIM_TURN/с, не
+## быстрее SWIM_TURN_MAX рад/с (в охоте и броске — SWIM_TURN_SHARP); в крутом повороте ход сбавляется до cos угла,
+## не меньше SWIM_SLOW доли. Раньше цель патруля за спиной гасила ход до нуля и хищник ~1 с плыл хвостом вперёд.
+const SWIM_TURN := 3.0
+const SWIM_TURN_MAX := 1.5
+const SWIM_TURN_SHARP := 3.0
+const SWIM_SLOW := 0.3
+## Вне охоты и броска у цели ход — не больше ARRIVE_K × остаток (м/с на метр): встаёт у неё, а не кружит.
+const ARRIVE_K := 0.5
 
 
 ## Куда хочет смотреть голова: по скорости, наклон — не больше PITCH_MAX; почти стоит — прежний курс без наклона.
@@ -637,6 +646,9 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 	# прямо к цели с постоянной скоростью; в охоте и броске поворачивает резче
 	var d := a.goal - a.p
 	var want := d.normalized() * speed if d.length_squared() > 1e-4 else d
+	var sharp := pr.mode == Mode.HUNT or pr.mode == Mode.CHARGE
+	if not sharp:  # у цели сбавляет ход и встаёт, а не кружит над ней дугой разворота
+		want *= minf(1.0, d.length() * ARRIVE_K / maxf(speed, 0.01))
 	if veils:  # фонарные вуали обходит стороной
 		var push := veils.pred_push(a.p)
 		if push != Vector3.ZERO:
@@ -646,8 +658,8 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 				veils.avoided(world, a.p)
 	if _reef.is_finite() and pr.mode != Mode.CHARGE:
 		want = reef_steer(_reef, a.p, want)
-	a.agility = 1.6 if pr.mode == Mode.HUNT or pr.mode == Mode.CHARGE else 1.1
-	a.drive(want, dt, world.ground)
+	a.agility = 1.6 if sharp else 1.1
+	a.swim(want, dt, SWIM_TURN, SWIM_TURN_SHARP if sharp else SWIM_TURN_MAX, SWIM_SLOW, world.ground)
 	world.push_out(a, HULL_GAP) # корпус не пускает внутрь
 
 
