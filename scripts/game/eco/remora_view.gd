@@ -3,7 +3,8 @@ extends MultiMeshInstance3D
 ## Присоски в сцене (initRemoras/remorasUpdate в js/creatures.js): все прилипалы — один MultiMesh (один вызов
 ## отрисовки). Рыба 35 см: серое тело-веретено (#55606a), светлая присоска-диск на темени (#d8e6ea), тёмный хвост
 ## (#3a444c); слабый свой свет (#0c1418), чтобы не пропадали в темноте. Масштаб 1,6 как в браузере. Нос — +Z меша
-## по EcoRemora.Remora.dir; на плаву виляет хвостом (sin(14 t + ph) · 0,3 рад). Слой отмели (OceanView.LAYER_WORLD).
+## по EcoRemora.Remora.dir; на плаву виляет хвостом (sin(14 t + ph) · 0,3 рад) вокруг головы (HEAD — нос почти
+## стоит, машет корма), виляние набирается и гаснет за WAG_RISE (`wag_k`, Б3). Слой отмели (OceanView.LAYER_WORLD).
 ## Разброс (Б4, EcoVary по номеру рыбы): свой размер, частота виляния и оттенок — цвет экземпляра × цвет вершины.
 ## Слизь присосок (EcoRemoraDust: легла, снялась, сорвана разрядом — облачка) — дочерний MultiMesh «Муть» в мировых
 ## координатах на общем шейдере EcoShaders.MIST (INK): +1 вызов, шейдеров не прибавилось.
@@ -31,12 +32,22 @@ const LITE_BODY_SEG := Vector2i(8, 4)
 const LITE_DISC_SEG := Vector2i(8, 2)
 const WAG := 0.3
 const WAG_RATE := 14.0
+## Виляние — поворот вокруг головы (точка меша у носа, м до масштаба): голова почти стоит, машет корма с хвостом.
+## Раньше рыба крутилась вокруг середины — нос мотало так же, как хвост.
+const HEAD := Vector3(0, 0, 0.15)
+## Доля виляния набирается и гаснет за WAG_RISE с (EelView.wag_step/wag_amp): снялась со ската или корпуса —
+## хвост раскачивается, легла — успокаивается. Раньше легла — виляние (до 0,3 рад) пропадало за кадр. Своя у каждой
+## рыбы, по времени мира (у гостя — то же).
+const WAG_RISE := 0.5
 ## Разброс: размер ±15 %, частота виляния ±20 %, светлее-темнее ±12 %.
 const SIZE_SPREAD := 0.15
 const RATE_SPREAD := 0.2
 const SHADE_SPREAD := 0.12
 
 var remoras: EcoRemora
+## Доля виляния каждой рыбы 0…1 (по Remora.index) и время мира прошлой расстановки (NAN — ещё не было).
+var wag_k := PackedFloat32Array()
+var _wag_t := NAN
 ## Треугольников в меше одной рыбы (для тестов и бюджета).
 var tris := 0
 ## Последние места (для тестов: без видеокарты MultiMesh их не хранит).
@@ -112,12 +123,17 @@ func sync(t: float, state: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZER
 	_sync_dust(t, state, flow)
 	var n := multimesh.instance_count
 	placed.resize(n)
+	var dt := t - _wag_t
+	var snap := is_nan(_wag_t) or dt < 0.0 or wag_k.size() != n
+	_wag_t = t
+	wag_k.resize(n)
 	for i in n:
 		var x := Transform3D(Basis.from_scale(Vector3.ZERO), Vector3.ZERO)
 		var c := Color.WHITE
 		if i < remoras.remoras.size():
 			var rm := remoras.remoras[i]
-			x = place(rm, t)
+			wag_k[i] = EelView.wag_step(wag_k[i], rm.mode == EcoRemora.Mode.SWIM, dt, snap, WAG_RISE)
+			x = place(rm, t, EelView.wag_amp(wag_k[i]))
 			var k := remora_shade(rm.index)
 			c = Color(k, k, k)
 		placed[i] = x
@@ -133,14 +149,21 @@ func _sync_dust(t: float, state: EcoLink.ShipState, flow: Vector3) -> void:
 	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 
 
-## Место рыбы: нос (+Z) — по dir, на плаву виляет.
-static func place(rm: EcoRemora.Remora, t: float) -> Transform3D:
+## Место рыбы: нос (+Z) — по dir, виляет вокруг головы HEAD с долей amp (0…1); NAN — по режиму: на плаву во весь
+## размах, сидя — нет.
+static func place(rm: EcoRemora.Remora, t: float, amp := NAN) -> Transform3D:
+	if is_nan(amp):
+		amp = 1.0 if rm.mode == EcoRemora.Mode.SWIM else 0.0
 	var fwd := rm.dir if rm.dir.length_squared() > 1e-6 else Vector3.BACK
 	var up := Vector3.UP if absf(fwd.normalized().y) < 0.99 else Vector3.BACK
 	var b := Basis.looking_at(-fwd, up)  # looking_at смотрит в −Z: меш смотрит носом в +Z
-	if rm.mode == EcoRemora.Mode.SWIM:
-		b = b * Basis(Vector3.UP, sin(t * remora_rate(rm.index) + rm.ph) * WAG)
-	return Transform3D(b.scaled_local(Vector3.ONE * SCALE * remora_scale(rm.index)), rm.p)
+	var s := SCALE * remora_scale(rm.index)
+	var o := rm.p
+	if amp > 0.0:
+		var w := Basis(Vector3.UP, sin(t * remora_rate(rm.index) + rm.ph) * WAG * amp)
+		o += b * (HEAD - w * HEAD) * s   # голова стоит: поворот вокруг неё, а не середины тела
+		b = b * w
+	return Transform3D(b.scaled_local(Vector3.ONE * s), o)
 
 
 ## Размер рыбы n (множитель к SCALE).
