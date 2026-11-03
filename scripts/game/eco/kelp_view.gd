@@ -10,6 +10,10 @@ extends Node3D
 ## от ежей (EcoUrchinDust) — дочерний MultiMesh «Муть» в мировых координатах, общий шейдер EcoShaders.MIST (INK).
 ## Стоит на слое отмели (OceanView.LAYER_WORLD). Съеденный ёж сжимается за URCHIN_FADE, появившийся — вырастает за
 ## URCHIN_RISE (доля urchin_k по времени мира), а не пропадает и не возникает за кадр.
+## Иглы шевелятся (Б3, «вершинная анимация»): каждая качается вбок от основания — кончик на SPINE_AMP, SPINE_RATE
+## качаний в секунду, фаза иглы своя (SPINE_PHASE по номеру — волна обегает ежа). Ветка `breath` общего шейдера
+## растений: в меше UV.x — фаза иглы, UV.y — доля длины (0 у основания и у тела), UV2 — вбок по горизонтали;
+## время мира — uniform `t` (у гостя то же). Двойник на CPU — `spine_offset`. «Экономно» — `sway_k` = 0.
 ## «Экономно» (Б6, `set_lite`): в каждой роще рисуется каждая вторая лента (34 → 17, LITE_STEP; ленты стоят по
 ## спирали подсолнуха — чётные покрывают рощу так же ровно): видимые — в начале буфера (`slot`),
 ## `visible_instance_count` отрезает остальных, скрытые не пересчитываются. Ежи, муть и мир (объедание, укрытие
@@ -36,6 +40,10 @@ const STRIDE := 12
 ## За сколько секунд съеденный ёж сжимается в точку и появившийся вырастает во весь размер.
 const URCHIN_FADE := 0.5
 const URCHIN_RISE := 1.5
+## Иглы шевелятся: размах кончика вбок (м), качаний в секунду, сдвиг фазы соседней иглы (доля оборота).
+const SPINE_AMP := 0.035
+const SPINE_RATE := 0.3
+const SPINE_PHASE := 0.382
 const STRIDE_C := 16
 
 var kelp: EcoKelp
@@ -185,6 +193,8 @@ static func build_urchin() -> ArrayMesh:
 	var sn: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
 	var si: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
 	var body := Color(BODY, 0.0)
+	st.set_uv(Vector2.ZERO)   # тело не качается: доля длины 0
+	st.set_uv2(Vector2.ZERO)
 	for i in range(0, si.size(), 3):
 		var a := sv[si[i]]
 		var b := sv[si[i + 1]]
@@ -197,10 +207,7 @@ static func build_urchin() -> ArrayMesh:
 			st.add_vertex(sv[si[i + j]])
 	var tip_c := Color(SPINE_TIP, TIP_A)
 	for k in SPINES:
-		var y := 1.0 - (k + 0.5) / SPINES * 1.2
-		var rr := sqrt(maxf(0.0, 1.0 - y * y))
-		var a := k * 2.39996
-		var dir := Vector3(cos(a) * rr, maxf(y, -0.15), sin(a) * rr).normalized()
+		var dir := spine_dir(k)
 		var side := dir.cross(Vector3.UP if absf(dir.y) < 0.9 else Vector3.RIGHT).normalized()
 		var up := side.cross(dir)
 		var base := dir * SPINE_R * 0.8
@@ -210,23 +217,55 @@ static func build_urchin() -> ArrayMesh:
 			var t := j * TAU / 4.0
 			ring.append(base + (side * cos(t) + up * sin(t)) * 0.02)
 		var axis := base + dir * SPINE_LEN / 3.0   # ось на высоте середины грани — грань смотрит от неё
+		var ph := spine_phase(k)
+		st.set_uv2(spine_side(dir))
 		for j in 4:
-			_shaft_tri(st, ring[j], ring[(j + 1) % 4], tip, axis)
-		# кончик — маленький ромб 3 см
+			_shaft_tri(st, ring[j], ring[(j + 1) % 4], tip, axis, ph)
+		# кончик — маленький ромб 3 см, качается вместе с кончиком
 		var e := 0.03
 		var c := tip
 		var pts: Array[Vector3] = [c + side * e, c + up * e, c - side * e, c - up * e]
+		st.set_uv(Vector2(ph, 1.0))
 		for j in 4:
 			EcoMM.tri(st, pts[j], pts[(j + 1) % 4], c + dir * e, tip_c, c)
 			EcoMM.tri(st, pts[(j + 1) % 4], pts[j], c - dir * e, tip_c, c)
 	var m := st.commit()
 	m.surface_set_material(0, EcoShaders.plant(EcoShaders.Plant.TENTACLE, {"rough": 0.35, "spec": 0.6,
-		"tip_glow": Vector2(0.0, 1.0), "glow": _linear(BODY_GLOW), "back": Vector3.ZERO}))
+		"tip_glow": Vector2(0.0, 1.0), "glow": _linear(BODY_GLOW), "back": Vector3.ZERO,
+		"breath": Vector2(SPINE_AMP, SPINE_RATE)}))
 	return m
 
 
-## Грань стержня иглы: основание a, b цвета SPINE_BASE, кончик c — SPINE_TIP; лицом наружу от точки оси inside.
-static func _shaft_tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, inside: Vector3) -> void:
+## Фаза качания иглы k (доля оборота): соседние иглы спирали — со сдвигом SPINE_PHASE.
+static func spine_phase(k: int) -> float:
+	return fposmod(k * SPINE_PHASE, 1.0)
+
+
+## Вбок по горизонтали от иглы с направлением dir (x, z в осях меша): поперёк иглы; почти вертикальная — по x.
+static func spine_side(dir: Vector3) -> Vector2:
+	var s := Vector2(-dir.z, dir.x)
+	return s.normalized() if s.length_squared() > 1e-6 else Vector2(1.0, 0.0)
+
+
+## Сдвиг (м, в осях меша) точки иглы k на доле длины frac в момент t времени мира; sway_k — 0 на «Экономно».
+## Двойник вершинного шейдера (EcoShaders.PLANT, ветка breath: фаза + альфа вершины — у кончика 1, без сдвига).
+static func spine_offset(dir: Vector3, k: int, frac: float, t: float, sway_k := 1.0) -> Vector3:
+	var f := fposmod(t * SPINE_RATE + spine_phase(k), 1.0)
+	var s := spine_side(dir) * (-SPINE_AMP * frac * cos(TAU * f) * sway_k)
+	return Vector3(s.x, 0.0, s.y)
+
+
+## Направление иглы k ежа (как в build_urchin).
+static func spine_dir(k: int) -> Vector3:
+	var y := 1.0 - (k + 0.5) / SPINES * 1.2
+	var rr := sqrt(maxf(0.0, 1.0 - y * y))
+	var a := k * 2.39996
+	return Vector3(cos(a) * rr, maxf(y, -0.15), sin(a) * rr).normalized()
+
+
+## Грань стержня иглы: основание a, b цвета SPINE_BASE, кончик c — SPINE_TIP; лицом наружу от точки оси inside;
+## фаза качания ph — в UV.x, доля длины (0 у основания, 1 у кончика) — в UV.y.
+static func _shaft_tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, inside: Vector3, ph: float) -> void:
 	var top := c
 	var n := (b - a).cross(c - a)
 	if n.dot((a + b + c) / 3.0 - inside) > 0.0:
@@ -237,6 +276,7 @@ static func _shaft_tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, insi
 	n = -n.normalized()
 	for p in [a, b, c]:
 		st.set_color(Color(SPINE_TIP if p == top else SPINE_BASE, 0.0))
+		st.set_uv(Vector2(ph, 1.0 if p == top else 0.0))
 		st.set_normal(n)
 		st.add_vertex(p)
 
@@ -264,6 +304,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 		stalks.multimesh.buffer = stalk_buffer
 		stalk_writes += 1
 	urchin_buffer.resize(kelp.urchins.size() * STRIDE)
+	(bodies.multimesh.mesh.surface_get_material(0) as ShaderMaterial).set_shader_parameter("t", t)
 	_grow_urchins(t)
 	for u in kelp.urchins:
 		var g := urchin_k[u.index]

@@ -498,3 +498,57 @@ func test_urchins_quiet_at_start() -> void:
 	w.reset()
 	w.run(EcoKelp.START_QUIET - 0.5, 1.0 / 30.0)
 	eq(_notes(w, EcoKelp.ID, "graze").size(), 0, "в начале ежи молчат")
+
+
+## Б3 «вершинная анимация»: иглы ежей качаются вбок от основания — ветка breath общего шейдера растений; в меше UV
+## (фаза иглы, доля длины), UV2 — вбок поперёк иглы; тело не качается; время мира — uniform t.
+func test_view_urchin_spines_sway() -> void:
+	var m := KelpView.build_urchin()
+	var mat := m.surface_get_material(0) as ShaderMaterial
+	eq(mat.get_shader_parameter("breath"), Vector2(KelpView.SPINE_AMP, KelpView.SPINE_RATE), "иглы качаются — breath")
+	var arr := m.surface_get_arrays(0)
+	var vv: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	var uv2: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV2]
+	var cc: PackedColorArray = arr[Mesh.ARRAY_COLOR]
+	eq(uv.size(), vv.size(), "UV у каждой вершины")
+	eq(uv2.size(), vv.size(), "UV2 у каждой вершины")
+	var tips := 0
+	var phases := {}
+	for i in vv.size():
+		var r := vv[i].length()
+		if uv[i].y > 0.5:
+			tips += 1
+			phases[snappedf(uv[i].x, 1e-4)] = true
+			ok(r > 0.2 + KelpView.SPINE_LEN * 0.5, "качается только кончик иглы: %.3f м" % r)
+			ok(cc[i].a == 0.0 or cc[i].a == 1.0, "альфа кончика 0 или 1 — фаза не сдвигается")
+			near(uv2[i].length(), 1.0, 1e-4, "вбок — единичный")
+			# вбок — поперёк иглы (горизонталь иглы не трогает её длину)
+			var d := vv[i].normalized()
+			ok(absf(Vector2(d.x, d.z).dot(uv2[i])) < 0.15, "вбок поперёк иглы")
+		else:
+			eq(uv[i].y, 0.0, "тело и основания игл стоят")
+	ok(tips > KelpView.SPINES * 10, "у каждой иглы кончик и ромбик: %d" % tips)
+	eq(phases.size(), KelpView.SPINES, "фаза у каждой иглы своя")
+	# двойник: размах на кончике, через полкачания — в другую сторону, у основания — стоит, «Экономно» — стоит
+	var dir := KelpView.spine_dir(5)
+	var t0 := (1.0 - KelpView.spine_phase(5)) / KelpView.SPINE_RATE
+	near(KelpView.spine_offset(dir, 5, 1.0, t0).length(), KelpView.SPINE_AMP, 1e-5, "кончик на полном размахе")
+	ok(KelpView.spine_offset(dir, 5, 1.0, t0 + 0.5 / KelpView.SPINE_RATE).dot(KelpView.spine_offset(dir, 5, 1.0, t0)) < 0.0,
+		"через полкачания — в другую сторону")
+	near(KelpView.spine_offset(dir, 5, 0.0, t0).length(), 0.0, 1e-6, "основание стоит")
+	near(KelpView.spine_offset(dir, 5, 1.0, t0, 0.0).length(), 0.0, 1e-6, "«Экономно» — стоит")
+	ok(KelpView.spine_offset(KelpView.spine_dir(6), 6, 1.0, t0).distance_to(
+		KelpView.spine_offset(KelpView.spine_dir(6), 6, 1.0, t0 + 1.0 / KelpView.SPINE_RATE)) < 1e-5, "период качания")
+	var worst := 0.0
+	for k in 90:
+		var t := k / 30.0
+		worst = maxf(worst, KelpView.spine_offset(dir, 5, 1.0, t + 1.0 / 30.0).distance_to(KelpView.spine_offset(dir, 5, 1.0, t)))
+	ok(worst < 0.004, "без рывков: %.4f м за кадр" % worst)
+	# в сцене время мира уходит в шейдер
+	var w := _world()
+	var v := KelpView.new(_kelp(w))
+	v.sync(12.5)
+	near(float((v.bodies.multimesh.mesh.surface_get_material(0) as ShaderMaterial).get_shader_parameter("t")), 12.5, 1e-6,
+		"время мира — в шейдере ежей")
+	v.free()
