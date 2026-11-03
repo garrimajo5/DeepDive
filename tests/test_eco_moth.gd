@@ -386,3 +386,32 @@ func test_glass_crawl_keeps_course() -> void:
 		ok(worst_len < 1e-4, "ход за шаг — CRAWL · dt: отклонение %.5f" % worst_len)
 		ok(worst_turn <= EcoMoth.WANDER * sqrt(dt) + 1e-3,
 				"курс за шаг доворачивает плавно: %.3f рад (шаг %.3f)" % [worst_turn, dt])
+
+
+## Кувырок: блик плавно вспыхивает и гаснет до GLINT_LOW, у рачков свой ритм; в буфере фаза — у рачка.
+func test_glint_tumbles() -> void:
+	var top := 0.0
+	var low := 1.0
+	var jump := 0.0
+	var prev := MothView.glint(0.0, 0.9)
+	for i in range(1, 8000):
+		var g := MothView.glint(i * 0.001, 0.9)
+		jump = maxf(jump, absf(g - prev))
+		prev = g
+		top = maxf(top, g)
+		low = minf(low, g)
+	near(top, 1.0, 0.01, "панцирь к свету — во всю яркость")
+	near(low, MothView.GLINT_LOW, 0.01, "отвернулся — тусклее, но не пропал")
+	ok(jump < 0.01, "без скачков (%.4f)" % jump)
+	ok(absf(MothView.glint(2.0, MothView.phase_of(1)) - MothView.glint(2.0, MothView.phase_of(2))) > 0.01, "соседи вразнобой")
+	var m := EcoMoth.new()
+	m.reset(null)
+	var v := MothView.new(m)
+	tree.root.add_child(v)
+	ok(v.material.shader.code.contains("glint"), "блик — в шейдере моли")
+	var ship := _ship(Vector3(EcoMoth.WELL.x + 30.0, -6.0, EcoMoth.WELL.y), PI / 2.0, true)
+	v.sync(ship, 12.5)
+	near(float(v.material.get_shader_parameter("world_t")), 12.5, 1e-6, "время мира — в шейдер")
+	near(v.phase_at(7), MothView.phase_of(7), 1e-6, "фаза рачка в буфере")
+	v.queue_free()
+	await frames(1)
