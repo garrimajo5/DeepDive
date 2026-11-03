@@ -54,6 +54,10 @@ var _settle := 0
 const JUMP_FRAMES := 30
 var _jump := 0
 var jump_ms := 0.0
+## Issue #1204: кат-сцена «глубже» у 10 (`DescentTrip`) возвращает корабль к спуску посреди тёмного экрана — тот же
+## прыжок через отмель (мир и места у 10 входят разом, 120–186 мс на `34c-les-vozvrat`), но игрок его не видит: шторка
+## закрыта. Кадры под закрытой шторкой тоже идут «после прыжка», а не в худший кадр. Без `main` — `trip` теста.
+var trip: DescentTrip
 var _shot_taken := false
 var _warm_frames := 0   ## кадры прогрева шейдеров при старте (Warmup) — в лог, когда он кончится
 var _warm_from_us := 0
@@ -261,12 +265,19 @@ static func graphics_line(level: int, msaa: int, scale: float, splits: int, adap
 		("%.2f" % scale).replace(".", ","), sh, adapter if not adapter.is_empty() else "—"]
 
 
+## Шторка кат-сцены «глубже» закрыта целиком — кадр не виден игроку (issue #1204).
+static func dark_trip(t: DescentTrip) -> bool:
+	return t != null and t.active and t.alpha() >= 1.0
+
+
 ## Учесть кадр, начавшийся в момент now_us (мкс).
 func _measure(now_us: int) -> void:
 	if not _skip_frame and _last_us > 0:
 		var ms := (now_us - _last_us) / 1000.0
-		if _jump > 0:   # кадры сразу после переноса корабля — отдельно (issue #1013)
-			_jump -= 1
+		var dark := dark_trip(trip if trip else (main.trip if main else null))
+		if _jump > 0 or dark:   # кадры сразу после переноса корабля и под шторкой кат-сцены — отдельно (#1013, #1204)
+			if not dark:
+				_jump -= 1
 			jump_ms = maxf(jump_ms, ms)
 			_skip_frame = false
 			_last_us = now_us
