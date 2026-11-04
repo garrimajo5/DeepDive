@@ -9,6 +9,8 @@ extends Node3D
 ## включается и пропадает за кадр. Муть у дна из-под ног и от клешней (EcoKrabDust) — дочерний MultiMesh «Муть» в мировых
 ## координатах, общий шейдер EcoShaders.MIST (INK), бурый цвет EcoKrabDust.COLOR/LIT. Шесть вызовов отрисовки (у игл две поверхности); стоит на слое
 ## отмели (OceanView.LAYER_WORLD).
+## Иглы не клоны (Б4, `EcoVary`): у иглы своя длина (±SPINE_LEN_SPREAD) и толщина (±SPINE_THICK_SPREAD) по её номеру —
+## в `spine_transform`, вызовов и шейдеров столько же.
 ## «Экономно» (Б6, `set_lite`): панцирь 7 × 4 вместо 10 × 6, щипцы 6 × 3 вместо 8 × 5 (LITE_*) — тело и клешни 324 →
 ## 186 треугольников (с норой 424 → 286); меши пересобираются с теми же материалами (свечение панциря). Нора та же:
 ## камни 4 × 2 становятся ромбами-кристаллами, а не камнями. Ноги, руки, иглы, муть и вызовы те же. Сброс мира
@@ -25,6 +27,9 @@ const SPINE_TIP := Color(0.55, 0.95, 1.0)
 const SCALE := 1.25
 ## За сколько секунд вплетённая игла вырастает из панциря (и уходит, если игл стало меньше).
 const SPINE_RISE := 0.6
+## Разброс игл: длина и толщина.
+const SPINE_LEN_SPREAD := 0.2
+const SPINE_THICK_SPREAD := 0.12
 ## Подскок тела на ходу (м), с какой скорости по дну он во весь размах (м/с — ход к норе) и ритм (рад/с).
 const HOP := 0.03
 const HOP_FULL := 0.8
@@ -273,11 +278,17 @@ func _sync_dust(t: float, ship: EcoLink.ShipState, flow: Vector3) -> void:
 	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 
 
-## Место иглы k на панцире: по кругу, наклонена наружу (crab spineM).
+## Место иглы k на панцире: по кругу, наклонена наружу (crab spineM); длина и толщина — свои (spine_size).
 static func spine_transform(k: int) -> Transform3D:
 	var a := float(k) / EcoKrab.SPINE_MAX * TAU + 0.3
 	var b := Basis(Vector3.RIGHT, sin(a) * 0.9) * Basis(Vector3.BACK, -cos(a) * 0.9)
-	return Transform3D(b, Vector3(cos(a) * 0.38, 0.45, sin(a) * 0.3))
+	return Transform3D(b * Basis.from_scale(spine_size(k)), Vector3(cos(a) * 0.38, 0.45, sin(a) * 0.3))
+
+
+## Масштаб иглы k: x и z — толщина, y — длина (стержень растёт по оси y); один и тот же при каждом вызове.
+static func spine_size(k: int) -> Vector3:
+	var th := EcoVary.spread(k, EcoVary.SHADE, SPINE_THICK_SPREAD)
+	return Vector3(th, EcoVary.spread(k, EcoVary.SIZE, SPINE_LEN_SPREAD), th)
 
 
 ## Нора: пять гранёных камней, приплюснутых по высоте.
