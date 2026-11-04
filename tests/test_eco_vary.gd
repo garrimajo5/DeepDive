@@ -627,3 +627,37 @@ func test_organ_tubes_differ() -> void:
 			best = minf(best, v.distance_to(want))
 		ok(best < 1e-4, "устье трубы %d — своей толщины (%.4f)" % [k, best])
 	ov.free()
+
+
+## Бахрома колодца 05: у нити своя ширина ±15 % и тон тела ±12 % по номеру — и в буфере MultiMesh они у каждой свои.
+func test_fringe_strands_differ() -> void:
+	var widths := []
+	var shades := []
+	for i in EcoFringe.COUNT:
+		widths.append(FringeView.strand_width(i) / FringeView.WIDTH)
+		shades.append(FringeView.strand_shade(i))
+		eq(FringeView.strand_width(i), FringeView.strand_width(i), "одна и та же нить — одна ширина")
+	var w := _span(widths)
+	ok(w.x >= 0.85 - 1e-5 and w.y <= 1.15 + 1e-5 and w.y - w.x > 0.15, "ширина ±15 %%: %s" % w)
+	var s := _span(shades)
+	ok(s.x >= 0.88 - 1e-5 and s.y <= 1.12 + 1e-5 and s.y - s.x > 0.12, "тон ±12 %%: %s" % s)
+	var f := EcoFringe.new()
+	f.reset(null)
+	var v := FringeView.new(f)
+	tree.root.add_child(v)
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Vector3(EcoFringe.WELL.x, -20.0, EcoFringe.WELL.y)
+	v.sync(ship, 0.0)
+	ok(v.visible, "у колодца — виден")
+	var sizes := {}
+	for i in f.curtain.active:
+		var b := i * FringeView.STRIDE
+		near(v.buffer[b], FringeView.strand_width(i), 1e-6, "ширина нити %d — в базисе экземпляра" % i)
+		near(v.buffer[b + 4], FringeView.strand_shade(i), 1e-6, "тон нити %d — там же" % i)
+		sizes[snappedf(v.buffer[b], 0.001)] = true
+	ok(sizes.size() > 10, "нити разной ширины: %d" % sizes.size())
+	var code := v.material.shader.code
+	ok(code.contains("shade = MODEL_MATRIX[0].y"), "шейдер берёт тон нити из экземпляра")
+	ok(code.contains("* shade;"), "и красит им тело")
+	v.queue_free()
+	await frames(1)
