@@ -15,6 +15,10 @@ extends Node3D
 ## 186 треугольников (с норой 424 → 286); меши пересобираются с теми же материалами (свечение панциря). Нора та же:
 ## камни 4 × 2 становятся ромбами-кристаллами, а не камнями. Ноги, руки, иглы, муть и вызовы те же. Сброс мира
 ## уровень не теряет (EcoView.set_lite).
+## «Дыхание» (Б3, `breath`): панцирь набирает воду и выталкивает её — высота ± BREATH_H, ширина ± BREATH_W за
+## BREATH_T с, длина та же (клешни и иглы на месте), низ тела на дне (масштаб от узла тела). Напуган (скальник,
+## `EcoKrab.Crab.scared`) — затаил дыхание: HELD размаха; доля `calm` догоняет цель за CALM_T с — размах не прыгает.
+## По времени мира (у гостя то же), масштаб узла — даром, и на «Экономно».
 
 const ROCK := Color("4f4a5c")
 const SHELL := Color("8a4a2e")
@@ -57,6 +61,12 @@ const PINCER_SEG := Vector2i(8, 5)
 const ROCK_SEG := Vector2i(5, 3)
 const LITE_SHELL_SEG := Vector2i(7, 4)
 const LITE_PINCER_SEG := Vector2i(6, 3)
+## Дыхание панциря: доли высоты и ширины, период (с), размах затаившегося и за сколько секунд доля меняется целиком.
+const BREATH_H := 0.035
+const BREATH_W := 0.018
+const BREATH_T := 5.0
+const HELD := 0.25
+const CALM_T := 1.0
 
 var krab: EcoKrab
 var den: MeshInstance3D
@@ -85,6 +95,9 @@ var lite := false
 ## Поза ног: углы ног в последнем меше тела и готовые массивы тела в покое (body_rest).
 var leg_angles := PackedFloat32Array()
 var _rest: Dictionary = {}
+## Доля размаха дыхания 0…1 (HELD…1): 1 — спокоен, 0 — затаился; и время прошлого sync.
+var calm := 1.0
+var _last_t := 0.0
 
 
 func _init(system: EcoKrab, on_lite := false) -> void:
@@ -164,7 +177,11 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 	p.y += hop(t, speed)
 	var far := ship != null and ship.pos.distance_to(cr.pos) > LEG_FAR
 	_step_legs(t, 0.0 if far else speed)
-	body.transform = Transform3D(Basis(Vector3.UP, atan2(cr.dir.x, cr.dir.z)).scaled(Vector3.ONE * SCALE), p)
+	var dt := clampf(t - _last_t, 0.0, 0.25)
+	_last_t = t
+	calm = move_toward(calm, 0.0 if cr.scared > 0.0 else 1.0, dt / CALM_T)
+	var yaw := Basis(Vector3.UP, atan2(cr.dir.x, cr.dir.z))
+	body.transform = Transform3D(yaw * Basis.from_scale(breath(calm, t) * SCALE), p)
 	claws.rotation = Vector3(-cr.raise * 0.9, 0, 0)
 	var grew := _grow_spines(t, cr.spines)
 	if krab.dirty or grew:
@@ -182,6 +199,13 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 ## нору краб ползёт 5 см/с и прыгал во весь размах, а встав — опускался на 3 см за кадр.
 static func hop(t: float, speed: float) -> float:
 	return absf(sin(t * HOP_RATE)) * HOP * smoothstep(0.0, 1.0, clampf(speed / HOP_FULL, 0.0, 1.0))
+
+
+## Масштаб панциря в момент t при спокойствии calm (0 — затаился): вдох — выше и шире, длина та же; затаился — HELD
+## размаха.
+static func breath(calm_k: float, t: float) -> Vector3:
+	var k := lerpf(HELD, 1.0, clampf(calm_k, 0.0, 1.0)) * sin(t * TAU / BREATH_T)
+	return Vector3(1.0 + BREATH_W * k, 1.0 + BREATH_H * k, 1.0)
 
 
 ## Ход ноги i (0…5: борт −1 — 0…2, +1 — 3…5; вдоль тела — LEG_Z) в момент t при скорости speed: x — доля шага
