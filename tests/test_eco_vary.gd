@@ -513,7 +513,8 @@ func test_bladder_bulbs_differ() -> void:
 	for k in EcoBladder.STEMS:
 		var n := bl.index * EcoBladder.STEMS + k
 		var b := BladderView.transform_at(v.bulb_buffer, n).basis
-		near(b.x.length(), r * BladderView.bulb_scale(n), 1e-4, "луковица %d — своего размера" % k)
+		var pw := 1.0 + BladderView.PULSE_W * BladderView.pulse(n, 1.0) * BladderView.pulse_k(r)
+		near(b.x.length(), r * BladderView.bulb_scale(n) * pw, 1e-4, "луковица %d — своего размера" % k)
 		radii.append(b.x.length())
 		var st := BladderView.transform_at(v.stems.multimesh.buffer, n, BladderView.STRIDE).basis
 		near(st.x.length(), BladderView.stem_thick(n), 1e-4, "стебель %d — своей толщины" % k)
