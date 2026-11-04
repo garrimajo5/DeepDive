@@ -254,12 +254,12 @@ func test_view_two_multimeshes() -> void:
 	ship.pos = Vector3(500, 0, 500)
 	view.step(0.05, ship)
 	var n := fe.index * EcoFern.LEAVES + 2
-	var tr := FernView.transform_at(fv.buffer, n)
+	var tr := FernView.transform_at(fv.buffer, n, FernView.STRIDE_C)
 	ok(tr.origin.distance_to(fe.pos) < 1e-4, "лист растёт из подножия")
 	var closed_up := (tr.basis * Vector3.UP).normalized().y
 	fe.open = 1.0
 	view.step(0.05, ship)
-	tr = FernView.transform_at(fv.buffer, n)
+	tr = FernView.transform_at(fv.buffer, n, FernView.STRIDE_C)
 	var open_up := (tr.basis * Vector3.UP).normalized().y
 	ok(closed_up > 0.95 and open_up < 0.7, "раскрытый лист ложится наружу: %f → %f" % [closed_up, open_up])
 	var sh := FernView.transform_at(fv.shells.multimesh.buffer, fe.index * EcoFern.SHELLS)

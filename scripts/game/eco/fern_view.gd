@@ -21,8 +21,17 @@ const CURL := 0.22
 ## Граней полусферы моллюска (по кругу × колец); LITE_* — на «Экономно».
 const SHELL_SEG := Vector2i(7, 3)
 const LITE_SHELL_SEG := Vector2i(5, 2)
-## Чисел на экземпляр в буфере: transform 3 × 4 по строкам.
+## Чисел на экземпляр в буфере: transform 3 × 4 по строкам; у листьев ещё цвет экземпляра (4).
 const STRIDE := 12
+const STRIDE_C := 16
+## Б4 «не клоны»: у каждого листа своя длина (±15 %), ширина (±8 %), поворот вокруг стебля (±0,2 рад при шаге
+## 1,05 рад) и оттенок (светлее/темнее ±12 %, зеленее/синее ±0,06) — хешем от номера листа (`EcoVary`), мир (раскрытие,
+## свет, сканер) не меняется. Оттенок — цвет экземпляра, ветка листа в PLANT умножает краски на COLOR.
+const LEAF_LEN_SPREAD := 0.15
+const LEAF_W_SPREAD := 0.08
+const LEAF_TURN := 0.2
+const LEAF_SHADE_SPREAD := 0.12
+const LEAF_HUE_SPREAD := 0.06
 
 var ferns: EcoFern
 var leaves: MultiMeshInstance3D
@@ -40,6 +49,9 @@ var _dust := EcoDustBuffer.new()
 var _ground := Callable()
 ## На «Экономно» — лист и моллюск грубее (set_lite).
 var lite := false
+## Поворот и размер каждого листа (Б4) — считаются один раз, с первым буфером.
+var _turn: Array[Basis] = []
+var _size := PackedVector3Array()
 
 
 func _init(system: EcoFern, ground: Callable = Callable(), on_lite := false) -> void:
@@ -48,7 +60,7 @@ func _init(system: EcoFern, ground: Callable = Callable(), on_lite := false) -> 
 	lite = on_lite
 	name = "Волнолист"
 	leaves = EcoMM.instance(self, "Листья", build_leaf(LITE_SEGMENTS if lite else SEGMENTS),
-		ferns.ferns.size() * EcoFern.LEAVES, false, false, false)
+		ferns.ferns.size() * EcoFern.LEAVES, true, false, false)
 	shells = EcoMM.instance(self, "Моллюски", build_shell(LITE_SHELL_SEG if lite else SHELL_SEG),
 		ferns.ferns.size() * EcoFern.SHELLS, false, false, false)
 	var buf := PackedFloat32Array()
@@ -136,15 +148,49 @@ func sync(t: float, info: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 		dust.update(ferns, t, info.pos, _ground)
 		_dust.pack(dust.dust, t, flow, info, EcoFernDust.COLOR, EcoFernDust.LIT, Seabed.mesh_height)
 		_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
-	buffer.resize(leaves.multimesh.instance_count * STRIDE)
+	var fresh := buffer.size() != leaves.multimesh.instance_count * STRIDE_C
+	buffer.resize(leaves.multimesh.instance_count * STRIDE_C)
+	if fresh:
+		_turn.resize(leaves.multimesh.instance_count)
+		_size.resize(leaves.multimesh.instance_count)
 	for fe in ferns.ferns:
 		for j in EcoFern.LEAVES:
-			EcoMM.put(buffer, (fe.index * EcoFern.LEAVES + j) * STRIDE, Transform3D(EcoFern.leaf_basis(fe, j, t), fe.pos))
+			var n := fe.index * EcoFern.LEAVES + j
+			var i := n * STRIDE_C
+			if fresh:
+				_turn[n] = leaf_turn(n)
+				_size[n] = leaf_size(n)
+			EcoMM.put(buffer, i, Transform3D((_turn[n] * EcoFern.leaf_basis(fe, j, t)).scaled_local(_size[n]), fe.pos))
+			if fresh:
+				var c := leaf_tint(n)
+				buffer[i + 12] = c.r; buffer[i + 13] = c.g; buffer[i + 14] = c.b; buffer[i + 15] = 1.0
 	EcoMM.send(leaves, buffer)
 
 
+## Лист n своей формы: повёрнут вокруг стебля на свой угол, длиннее или короче, шире или уже (оси листа).
+static func leaf_shape(n: int, b: Basis) -> Basis:
+	return (leaf_turn(n) * b).scaled_local(leaf_size(n))
+
+
+## Поворот листа n вокруг стебля.
+static func leaf_turn(n: int) -> Basis:
+	return Basis(Vector3.UP, (EcoVary.unit(n, EcoVary.TURN) * 2.0 - 1.0) * LEAF_TURN)
+
+
+## Ширина и длина листа n (множители по осям листа X и Y).
+static func leaf_size(n: int) -> Vector3:
+	return Vector3(EcoVary.spread(n, EcoVary.RATE, LEAF_W_SPREAD), EcoVary.spread(n, EcoVary.SIZE, LEAF_LEN_SPREAD), 1.0)
+
+
+## Множитель красок листа n — цвет экземпляра.
+static func leaf_tint(n: int) -> Color:
+	var k := EcoVary.spread(n, EcoVary.SHADE, LEAF_SHADE_SPREAD)
+	var h := (EcoVary.unit(n, EcoVary.HUE) * 2.0 - 1.0) * LEAF_HUE_SPREAD
+	return Color(k * (1.0 - h * 0.5), k * (1.0 + h * 0.5), k * (1.0 - h))
+
+
 ## Расстановка экземпляра n из буфера.
-static func transform_at(buf: PackedFloat32Array, n: int) -> Transform3D:
-	var i := n * STRIDE
+static func transform_at(buf: PackedFloat32Array, n: int, stride := STRIDE) -> Transform3D:
+	var i := n * stride
 	return Transform3D(Vector3(buf[i], buf[i + 4], buf[i + 8]), Vector3(buf[i + 1], buf[i + 5], buf[i + 9]),
 		Vector3(buf[i + 2], buf[i + 6], buf[i + 10]), Vector3(buf[i + 3], buf[i + 7], buf[i + 11]))
