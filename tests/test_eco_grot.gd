@@ -420,3 +420,84 @@ func test_view_lite_coarser_shell_reef_and_glow() -> void:
 	view.set_lite(false)   # общие выключатели мира (EcoShaders, EcoRim…) — назад для следующих тестов
 	view.queue_free()
 	await frames(1)
+
+
+func _pose(t: float, k: float) -> PackedFloat32Array:
+	var a := PackedFloat32Array()
+	a.resize(12)
+	for i in 6:
+		var s := GrotView.leg_step(i, t, k)
+		a[i * 2] = -s.x * GrotView.LEG_SWING
+		a[i * 2 + 1] = s.y * GrotView.LEG_LIFT
+	return a
+
+
+func test_legs_step_in_tripods_without_slip() -> void:
+	# треноги: 0, 2, 4 (левые передняя и задняя, правая средняя) против 1, 3, 5
+	for t in [0.3, 1.1, 2.7]:
+		var a := GrotView.leg_step(0, t, 1.0)
+		for i in [2, 4]:
+			near(GrotView.leg_step(i, t, 1.0).distance_to(a), 0.0, 1e-6, "нога %d — в треноге с 0" % i)
+		for i in [1, 3, 5]:
+			near(GrotView.leg_step(i, t, 1.0).x, -a.x, 1e-6, "нога %d — в противофазе" % i)
+	eq(GrotView.leg_step(0, 0.0, 1.0).y, 1.0, "на выносе вперёд стопа поднята")
+	for i in 6:
+		eq(GrotView.leg_step(i, 1.3, 0.0), Vector2.ZERO, "стоит — ноги в покое")
+	near(GrotView.leg_step(0, 0.5, 0.5).x, GrotView.leg_step(0, 0.5, 1.0).x * 0.5, 1e-6, "размах — по доле шага")
+	# стопа на дне (без подъёма) уходит назад почти со скоростью хода
+	var dt := 0.01
+	var back := 0.0
+	var span := 0.0
+	var t := 0.0
+	while t < TAU / GrotView.LEG_RATE:
+		var p0 := GrotView.foot(0, _pose(t, 1.0))
+		var p1 := GrotView.foot(0, _pose(t + dt, 1.0))
+		if GrotView.leg_step(0, t, 1.0).y == 0.0 and GrotView.leg_step(0, t + dt, 1.0).y == 0.0:
+			back += p1.z - p0.z
+			span += dt
+		else:
+			ok(p1.z >= p0.z - 1e-6 or absf(p1.z - p0.z) < 1e-3, "поднятая стопа идёт вперёд")
+		t += dt
+	ok(span > 1.0, "полцикла на дне: %.2f с" % span)
+	near(-back / span, EcoGrot.SPEED, EcoGrot.SPEED * 0.1, "стопа на дне — назад со скоростью хода")
+	var f := GrotView.foot(1, _pose(0.0, 1.0))
+	near(f.y, GrotView.LEG_Y - GrotView.LEG_LEN * cos(GrotView.LEG_TILT), 1e-4,
+			"опорная стопа внизу")
+	ok(GrotView.foot(0, _pose(0.0, 1.0)).y > f.y + GrotView.LEG_LIFT * 0.9, "вынесенная — поднята")
+
+
+func test_view_legs_mesh_walks_and_rests() -> void:
+	var w := _world()
+	var g: EcoGrot = _sys(w, EcoGrot)
+	var gv := GrotView.new(g)
+	tree.root.add_child(gv)
+	await frames(1)
+	var gr := g.grot
+	var ship := Vector3(gr.p.x, gr.body_y, gr.p.z) + Vector3(0, 5, 20)
+	var rest := (gv.legs.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+	gr.stride = 1.0
+	gv.sync(PI * 0.5 / GrotView.LEG_RATE, ship)
+	eq(gv.legs.rotation, Vector3.ZERO, "узел ног не качается целиком")
+	var v := (gv.legs.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+	eq(v.size(), rest.size(), "те же вершины")
+	var leg: PackedInt32Array = gv._rest["leg"]
+	var dz := [0.0, 0.0]
+	for j in v.size():
+		dz[(int(leg[j] / 3.0) + leg[j] % 3) % 2] += v[j].z - rest[j].z
+	ok(dz[0] > 0.1 and dz[1] < -0.1, "треноги врозь: вперёд %.2f, назад %.2f" % dz)
+	near(GrotView.foot(0, gv.leg_pose).z - GrotView.hip(0).z, GrotView.LEG_LEN * cos(GrotView.LEG_TILT)
+			* sin(GrotView.LEG_SWING), 1e-3, "нога 0 вынесена вперёд")
+	var writes := gv.leg_pose
+	gr.stride = 0.0
+	gv.sync(0.3, ship)
+	for x in gv.leg_pose:
+		eq(x, 0.0, "встал — ноги в покое")
+	ok(gv.leg_pose != writes, "меш переписан в покой")
+	var still := (gv.legs.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+	near(still[5].distance_to(rest[5]), 0.0, 1e-5, "покой — как построен")
+	gr.stride = 1.0
+	gv.sync(0.6, ship + Vector3(0, 0, GrotView.LEG_FAR + 10))
+	for x in gv.leg_pose:
+		eq(x, 0.0, "далеко — ноги не шагают")
+	gv.queue_free()
+	await frames(1)
