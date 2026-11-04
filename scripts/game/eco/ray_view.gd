@@ -3,7 +3,9 @@ extends MultiMeshInstance3D
 ## Ледокрылы в сцене (rayGeo/initRays в js/creatures.js; концепт icewing.jpg): оба ската — один MultiMesh (один вызов
 ## отрисовки). Тело — пластина 14 × 9 м (18 × 8 клеток), сужается к хвосту и носу, горб по середине 0,5 м, края
 ## светлее; хвост-хлыст 9 м назад; на спине два ряда по 7 светящихся пятнышек (#9ffcff). Взмах крыльев — в шейдере
-## (как в браузере: sin(1,3 t + i − 0,32 |x|) · (|x| / 7)^1,4 · 1,8, номер ската — в INSTANCE_CUSTOM), крен 0,22 рад.
+## (как в браузере: sin(ф − 0,32 |x|) · (|x| / 7)^1,4 · 1,8 · доля), крен 0,22 рад. Фаза ф и доля размаха — с мира
+## (EcoRay.flap_step: над кораблём машет сильнее и чаще, опускаясь — планирует), в INSTANCE_CUSTOM.y/z; номер ската —
+## в INSTANCE_CUSTOM.x (сдвиг хвоста). Двойник взмаха на CPU — EcoRay.wing_lift.
 ## Хвост-хлыст извивается волной от корня к кончику (TAIL_*, доля длины хвоста — в UV.x; двойник на CPU — tail_wave);
 ## «Экономно» — sway_k = 0 через EcoShaders.follow / set_sway_lite.
 ## Свет сквозь лёд падает на спину; брюхо снизу темнее; края крыльев — ободок света (EcoRim, uniform rim). Стоит на слое отмели (OceanView.LAYER_WORLD).
@@ -25,11 +27,12 @@ uniform float spec = 0.2;
 varying float glow;
 void vertex() {
 	float ax = abs(VERTEX.x);
-	float ph = TIME * 1.3 + INSTANCE_CUSTOM.x - ax * 0.32;
-	float k = pow(ax / 7.0, 1.4) * 1.8;
+	// фаза и доля размаха взмаха — с мира (EcoRay.flap_step), двойник — EcoRay.wing_lift
+	float ph = INSTANCE_CUSTOM.y - ax * 0.32;
+	float k = pow(ax / 7.0, 1.4) * 1.8 * INSTANCE_CUSTOM.z;
 	VERTEX.y += sin(ph) * k;
 	// наклон крыла от взмаха: d(y)/d|x|
-	float slope = -cos(ph) * 0.32 * k + sin(ph) * 1.8 * 1.4 * pow(ax / 7.0, 0.4) / 7.0;
+	float slope = -cos(ph) * 0.32 * k + sin(ph) * 1.8 * INSTANCE_CUSTOM.z * 1.4 * pow(ax / 7.0, 0.4) / 7.0;
 	NORMAL = normalize(NORMAL - vec3(sign(VERTEX.x) * slope, 0.0, 0.0));
 	// хвост-хлыст: волна бежит к кончику, размах растёт как квадрат доли длины (UV.x; у тела UV.x = 0)
 	VERTEX.x += sin(TIME * 2.4 + INSTANCE_CUSTOM.x * 2.1 - UV.x * 5.0) * 0.8 * UV.x * UV.x * sway_k;
@@ -80,6 +83,8 @@ var verts := PackedVector3Array()
 var tris := 0
 ## Последние места скатов (для тестов: без видеокарты MultiMesh их не хранит).
 var placed: Array[Transform3D] = []
+## Последние данные экземпляров (номер, фаза взмаха, доля размаха) — для тестов.
+var customs: Array[Color] = []
 ## Вихри с кончиков крыльев (EcoRayDust); буфер — для тестов.
 var dust := EcoRayDust.new()
 var dust_view: MultiMeshInstance3D
@@ -170,11 +175,14 @@ func _build() -> ArrayMesh:
 ## Поставить скатов по миру.
 func sync() -> void:
 	placed.resize(rays.rays.size())
+	customs.resize(rays.rays.size())
 	for ry in rays.rays:
 		var x := xform(ry)
 		placed[ry.index] = x
 		multimesh.set_instance_transform(ry.index, x)
-		multimesh.set_instance_custom_data(ry.index, Color(float(ry.index), 0, 0, 0))
+		var c := Color(float(ry.index), ry.flap, ry.flap_k, 0)
+		customs[ry.index] = c
+		multimesh.set_instance_custom_data(ry.index, c)
 
 
 ## Вихри с кончиков крыльев в момент t (время мира); flow — течение (сносит облачка).
