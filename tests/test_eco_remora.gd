@@ -546,3 +546,57 @@ func test_view_wag_fades_when_landed() -> void:
 	view.sync(t)
 	ok(view.wag_k[0] > 0.0 and view.wag_k[0] < 0.2, "снялась — виляние набирается (%.2f)" % view.wag_k[0])
 	view.free()
+
+
+func test_view_breathes_when_sitting() -> void:
+	var rm := EcoRemora.Remora.new()
+	rm.index = 3
+	rm.p = Vector3(3, -20, 5)
+	rm.dir = Vector3(0, 0, -1)
+	rm.mode = EcoRemora.Mode.HULL
+	var s := RemoraView.SCALE * RemoraView.remora_scale(3)
+	var wmin := INF
+	var wmax := 0.0
+	var hmin := INF
+	var hmax := 0.0
+	for i in 120:
+		var x := RemoraView.place(rm, i * 0.05)
+		near(x.basis.z.length(), s, 1e-5, "длина та же")
+		near(x.origin.distance_to(rm.p), 0.0, 1e-6, "место то же")
+		wmin = minf(wmin, x.basis.x.length() / s)
+		wmax = maxf(wmax, x.basis.x.length() / s)
+		hmin = minf(hmin, x.basis.y.length() / s)
+		hmax = maxf(hmax, x.basis.y.length() / s)
+	ok(wmax > 1.0 + RemoraView.BREATH_W * 0.9 and wmin < 1.0 - RemoraView.BREATH_W * 0.9,
+		"сидя шире и уже на ±%.0f %% (%.3f…%.3f)" % [RemoraView.BREATH_W * 100.0, wmin, wmax])
+	ok(hmax > 1.0 + RemoraView.BREATH_H * 0.9 and hmax < 1.0 + RemoraView.BREATH_H + 1e-4,
+		"и выше (%.3f…%.3f)" % [hmin, hmax])
+	# на плаву не дышит: размах гаснет с долей виляния
+	rm.mode = EcoRemora.Mode.SWIM
+	for i in 40:
+		var x := RemoraView.place(rm, i * 0.07)
+		near(x.basis.x.length(), s, 1e-5, "на плаву не дышит")
+	near(RemoraView.breath(3, 1.3, 0.5), RemoraView.breath(3, 1.3, 0.0) * 0.5, 1e-6, "полвиляния — полдыхания")
+	ok(not is_equal_approx(RemoraView.breath(3, 1.0, 0.0), RemoraView.breath(4, 1.0, 0.0)), "у рыб свои фазы")
+
+
+func test_view_breath_smooth_on_landing() -> void:
+	var w := _world()
+	var rm := _remoras(w).remoras[0]
+	rm.mode = EcoRemora.Mode.SWIM
+	var view := RemoraView.new(_remoras(w))
+	var dt := 1.0 / 30.0
+	var t := 0.0
+	rm.mode = EcoRemora.Mode.HULL
+	var prev := view.placed[0].basis.x.length()
+	var worst := 0.0
+	for i in 60:
+		t += dt
+		view.sync(t)
+		var wdt := view.placed[0].basis.x.length()
+		worst = maxf(worst, absf(wdt - prev))
+		prev = wdt
+	var s := RemoraView.SCALE * RemoraView.remora_scale(rm.index)
+	# дыхание 2,5 с: за кадр ширина меняется не больше 2π/2,5 · 1,2 · 5 % / 30 ≈ 0,5 % — скачка нет
+	ok(worst < 0.01 * s, "ширина за кадр без скачка (%.4f м)" % worst)
+	view.free()
