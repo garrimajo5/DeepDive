@@ -12,6 +12,10 @@ extends Node3D
 ## распрямляется, STROKE_RATE гребков в секунду (у каждого чуть свой ритм и фаза); висящий у вершины гребёт на
 ## STROKE_STILL размаха, бросок к хищнику — во весь. По времени мира (у гостя то же), на CPU — шейдеров и вызовов
 ## не прибавилось, и на «Экономно».
+## Рачки не клоны (Б4, «Вариативность в MultiMesh»): у каждого свой размер (±SIZE_SPREAD), яркость (±SHADE_SPREAD) и
+## оттенок от красно-оранжевого до янтарного (±HUE_SPREAD) — хешем `EcoVary` от номера рачка, мир и его случай не
+## меняются, у гостя тот же вид. Цвет — цвет экземпляра MultiMesh (в буфере линейный — как прежний albedo в sRGB;
+## флаги материала — как у огоньков гротовика, без нового шейдера): вызовов и шейдеров столько же, и на «Экономно».
 
 const RADIUS := 0.06
 const LENGTH := 0.2
@@ -22,6 +26,12 @@ const STROKE_SHORT := 0.18
 const STROKE_WIDE := 0.08
 const STROKE_HIT := 0.25
 const STROKE_STILL := 0.35
+## Разброс по рачкам: размер, яркость, сдвиг тона (доля круга цветов).
+const SIZE_SPREAD := 0.15
+const SHADE_SPREAD := 0.2
+const HUE_SPREAD := 0.035
+## Чисел на рачка в буфере: матрица 3×4 и цвет.
+const STRIDE := 16
 
 var ognevka: EcoOgnevka
 var mesh: MultiMeshInstance3D
@@ -53,6 +63,7 @@ func _init(system: EcoOgnevka, on_lite := false) -> void:
 	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
 	mm.mesh = build()
 	mm.instance_count = maxi(1, ognevka.leeches.stations.size() * EcoOgnevka.PER_STATION)
 	mesh.multimesh = mm
@@ -112,7 +123,7 @@ static func build() -> CapsuleMesh:
 	m.rings = 1
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.albedo_color = COLOR
+	mat.vertex_color_use_as_albedo = true   # цвет — у каждого рачка свой (shrimp_color, в буфере — линейный)
 	m.material = mat
 	return m
 
@@ -128,16 +139,36 @@ static func stroke(t: float, phase: float, speed: float) -> float:
 	return c * amp
 
 
-## Капсула вдоль хода рачка: ось капсулы (Y меша) — по направлению dir; в гребке (момент t) короче и толще.
-static func place(s: EcoOgnevka.Shrimp, t := 0.0) -> Transform3D:
+## Размер рачка номер i (множитель капсулы).
+static func shrimp_scale(i: int) -> float:
+	return EcoVary.spread(i, EcoVary.SIZE, SIZE_SPREAD)
+
+
+## Цвет рачка номер i: COLOR со сдвигом тона и яркости (sRGB, цвет экземпляра).
+static func shrimp_color(i: int) -> Color:
+	var c := COLOR
+	c.h = fposmod(c.h + (EcoVary.unit(i, EcoVary.HUE) * 2.0 - 1.0) * HUE_SPREAD, 1.0)
+	var k := EcoVary.spread(i, EcoVary.SHADE, SHADE_SPREAD)
+	return Color(c.r * k, c.g * k, c.b * k, 1.0)
+
+
+## Цвет рачка в буфере на месте slot (sRGB, для тестов).
+func color_at(slot: int) -> Color:
+	var o := slot * STRIDE + 12
+	return Color(_buffer[o], _buffer[o + 1], _buffer[o + 2], _buffer[o + 3]).linear_to_srgb()
+
+
+## Капсула вдоль хода рачка: ось капсулы (Y меша) — по направлению dir; в гребке (момент t) короче и толще;
+## size — размер рачка (shrimp_scale).
+static func place(s: EcoOgnevka.Shrimp, t := 0.0, size := 1.0) -> Transform3D:
 	var y := s.dir
 	var x := y.cross(Vector3.UP)
 	if x.length_squared() < 1e-6:
 		x = Vector3.RIGHT
 	x = x.normalized()
 	var c := stroke(t, s.phase, s.v.length())
-	var w := 1.0 + STROKE_WIDE * c
-	return Transform3D(Basis(x * w, y * (1.0 - STROKE_SHORT * c), x.cross(y) * w), s.p)
+	var w := (1.0 + STROKE_WIDE * c) * size
+	return Transform3D(Basis(x * w, y * (1.0 - STROKE_SHORT * c) * size, x.cross(y) * w), s.p)
 
 
 ## Переписывает только рачков, шагнувших в этом шаге мира (EcoOgnevka шагает их половинами); all — всех;
@@ -148,9 +179,9 @@ func sync(all := false, t := -1.0) -> void:
 	_t = t
 	var mm := mesh.multimesh
 	var n := mini(ognevka.shrimp.size(), mm.instance_count)
-	if placed.size() != n or _buffer.size() != mm.instance_count * 12:
+	if placed.size() != n or _buffer.size() != mm.instance_count * STRIDE:
 		placed.resize(n)
-		_buffer.resize(mm.instance_count * 12)
+		_buffer.resize(mm.instance_count * STRIDE)
 		_buffer.fill(0.0)
 		all = true
 	var from := 0 if all else ognevka.moved_half()
@@ -159,10 +190,12 @@ func sync(all := false, t := -1.0) -> void:
 	for i in range(from, n, stride):
 		if lite and not lite_shown(i % EcoOgnevka.PER_STATION):
 			continue
-		var x := place(ognevka.shrimp[i], t)
+		var x := place(ognevka.shrimp[i], t, shrimp_scale(i))
 		placed[i] = x
 		var b := x.basis
-		var o := slot(i, stations, lite) * 12
+		var o := slot(i, stations, lite) * STRIDE
+		var col := shrimp_color(i).srgb_to_linear()
+		_buffer[o + 12] = col.r; _buffer[o + 13] = col.g; _buffer[o + 14] = col.b; _buffer[o + 15] = 1.0
 		_buffer[o] = b.x.x; _buffer[o + 1] = b.y.x; _buffer[o + 2] = b.z.x; _buffer[o + 3] = x.origin.x
 		_buffer[o + 4] = b.x.y; _buffer[o + 5] = b.y.y; _buffer[o + 6] = b.z.y; _buffer[o + 7] = x.origin.y
 		_buffer[o + 8] = b.x.z; _buffer[o + 9] = b.y.z; _buffer[o + 10] = b.z.z; _buffer[o + 11] = x.origin.z
