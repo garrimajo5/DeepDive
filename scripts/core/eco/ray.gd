@@ -52,6 +52,16 @@ const PITCH_FOLLOW := 4.0
 ## lerp 3/с срывал ската с места: корабль у льда — до 21 м/с вверх за кадр («лифт» при тангаже 20°).
 const CLIMB_MAX := 4.0
 const CLIMB_ACCEL := 6.0
+## Взмах крыльев (Б3, «плавность поведения»): фаза идёт по времени мира со скоростью FLAP_RATE рад/с (как sin(1,3 t)
+## в браузере). Взмывает над кораблём — машет сильнее (размах до FLAP_HARD при подъёме CLIMB_MAX) и чаще (до
+## FLAP_FAST), опускается — планирует (размах до FLAP_GLIDE); доля размаха догоняет нужную за FLAP_FOLLOW (1/с), фаза
+## копится шагом — частота меняется без скачка. Раньше крылья махали одинаково по TIME шейдера, и «сильный взмах»,
+## что срывает вихри с кончиков (EcoRayDust), был только в облачках.
+const FLAP_RATE := 1.3
+const FLAP_HARD := 1.6
+const FLAP_FAST := 1.5
+const FLAP_GLIDE := 0.5
+const FLAP_FOLLOW := 2.0
 
 
 ## Ледокрыл.
@@ -73,6 +83,9 @@ class Ray:
 	var pitch := 0.0
 	## Вертикальный ход (м/с), плавный.
 	var vy := 0.0
+	## Фаза взмаха (рад, 0…TAU) и доля размаха (1 — обычный, плавная).
+	var flap := 0.0
+	var flap_k := 1.0
 	var lead_cd := 0.0
 	var placed := false
 
@@ -112,6 +125,7 @@ func reset(world: EcoWorld) -> void:
 		ry.ang = _rnd.range_f(0.0, 6.28)
 		ry.ang0 = ry.ang
 		ry.lead_cd = _rnd.range_f(5.0, 15.0)
+		ry.flap = float(ry.index)   # сдвиг между скатами — как номер ската в браузере
 		rays.append(ry)
 		_place(world, ry, 0.0)
 
@@ -159,6 +173,31 @@ func _place(world: EcoWorld, ry: Ray, dt: float) -> void:
 		ry.pitch = 0.0
 	else:
 		ry.pitch = lerpf(ry.pitch, pitch_for((ry.p.y - y0) / dt, ry.speed), 1.0 - exp(-PITCH_FOLLOW * dt))
+	flap_step(ry, dt)
+
+
+## Шаг взмаха: доля размаха к нужной по вертикальному ходу, фаза — по частоте от доли.
+static func flap_step(ry: Ray, dt: float) -> void:
+	if dt <= 0.0:
+		return
+	ry.flap_k = lerpf(ry.flap_k, flap_want(ry.vy), 1.0 - exp(-FLAP_FOLLOW * dt))
+	ry.flap = fposmod(ry.flap + flap_rate(ry.flap_k) * dt, TAU)
+
+
+## Нужная доля размаха при вертикальном ходе vy (м/с): вверх — до FLAP_HARD, вниз — до FLAP_GLIDE, ровно — 1.
+static func flap_want(vy: float) -> float:
+	var u := clampf(vy / CLIMB_MAX, -1.0, 1.0)
+	return 1.0 + (FLAP_HARD - 1.0) * u if u >= 0.0 else 1.0 + (1.0 - FLAP_GLIDE) * u
+
+
+## Частота взмаха (рад/с) при доле размаха k: сильнее обычного — чаще, до FLAP_FAST; планирует — как обычно.
+static func flap_rate(k: float) -> float:
+	return FLAP_RATE * lerpf(1.0, FLAP_FAST, clampf((k - 1.0) / (FLAP_HARD - 1.0), 0.0, 1.0))
+
+
+## Подъём крыла (м) на расстоянии ax от середины (по x меша) — двойник шейдера RayView.
+static func wing_lift(ax: float, flap: float, flap_k: float) -> float:
+	return sin(flap - ax * 0.32) * pow(ax / 7.0, 1.4) * 1.8 * flap_k
 
 
 ## Шаг высоты к ty: нужный ход — follow × остаток, не больше CLIMB_MAX и не больше √(2·CLIMB_ACCEL·остаток) (успеть

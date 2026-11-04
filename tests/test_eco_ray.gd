@@ -164,6 +164,51 @@ func test_climb_over_ship_near_ice_without_jerk() -> void:
 			"поднялся над корпусом: %.2f" % top)
 
 
+## Б3, плавность: взмывая над кораблём, скат машет сильнее и чаще, прошёл и опускается — планирует; доля размаха и
+## частота меняются плавно, фаза не прыгает. Без этого крылья махали одинаково по TIME шейдера.
+func test_flaps_harder_climbing_over_ship() -> void:
+	var w := _world()
+	var ry := _rays(w).rays[0]
+	var at := ry.ang + 25.0 / ry.radius
+	w.ship.pos = Vector3(ry.center.x + cos(at) * ry.radius, -10.0, ry.center.z + sin(at) * ry.radius)
+	var dt := 1.0 / 30.0
+	var top := 1.0
+	var low := 1.0
+	var prev_k := ry.flap_k
+	var prev_ph := ry.flap
+	var fast := 0.0
+	for i in 900:
+		w.step(dt)
+		ok(absf(ry.flap_k - prev_k) <= (EcoRay.FLAP_HARD - EcoRay.FLAP_GLIDE) * EcoRay.FLAP_FOLLOW * dt + 1e-5,
+			"размах меняется плавно (шаг %d): %.3f → %.3f" % [i, prev_k, ry.flap_k])
+		var adv := fposmod(ry.flap - prev_ph, TAU)
+		ok(adv >= EcoRay.FLAP_RATE * dt - 1e-5 and adv <= EcoRay.FLAP_RATE * EcoRay.FLAP_FAST * dt + 1e-5,
+			"фаза идёт вперёд без скачка (шаг %d): %.4f" % [i, adv])
+		fast = maxf(fast, adv / dt)
+		top = maxf(top, ry.flap_k)
+		low = minf(low, ry.flap_k)
+		prev_k = ry.flap_k
+		prev_ph = ry.flap
+	ok(top > 1.3, "над кораблём машет сильнее: ×%.2f" % top)
+	ok(fast > EcoRay.FLAP_RATE * 1.2, "и чаще: %.2f рад/с" % fast)
+	ok(low < 0.9, "прошёл и опускается — планирует: ×%.2f" % low)
+
+
+func test_flap_even_far_from_ship() -> void:
+	var w := _world()
+	w.run(30.0)
+	for ry in _rays(w).rays:
+		near(ry.flap_k, 1.0, 0.1, "корабль далеко — машет как обычно")
+	eq(EcoRay.flap_want(0.0), 1.0, "ровно — обычный размах")
+	near(EcoRay.flap_want(EcoRay.CLIMB_MAX * 2.0), EcoRay.FLAP_HARD, 1e-6, "вверх — не сильнее предела")
+	near(EcoRay.flap_want(-EcoRay.CLIMB_MAX * 2.0), EcoRay.FLAP_GLIDE, 1e-6, "вниз — планирует")
+	near(EcoRay.flap_rate(EcoRay.FLAP_GLIDE), EcoRay.FLAP_RATE, 1e-6, "планирует — частота обычная")
+	near(EcoRay.flap_rate(EcoRay.FLAP_HARD), EcoRay.FLAP_RATE * EcoRay.FLAP_FAST, 1e-6, "сильный взмах — чаще")
+	var w2 := _world()
+	var r2 := _rays(w2)
+	near(r2.rays[1].flap - r2.rays[0].flap, 1.0, 1e-6, "скаты машут вразнобой — сдвиг как номер ската")
+
+
 func test_level_far_from_ship() -> void:
 	var w := _world()
 	var r := _rays(w)
@@ -364,6 +409,33 @@ func test_view_one_multimesh() -> void:
 	for v in rv.verts:
 		span = maxf(span, absf(v.x))
 	near(span * 2.0, RayView.SPAN, 0.8, "размах около 14 м")
+	view.queue_free()
+	await frames(1)
+
+
+## Взмах в шейдере — по фазе и доле размаха мира (INSTANCE_CUSTOM.y/z), а не по TIME; двойник — EcoRay.wing_lift.
+func test_view_flap_from_world() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var rv := view.ray_view
+	var ship := EcoLink.ShipState.new()
+	ship.pos = FAR
+	for i in 10:
+		view.step(0.05, ship)
+	for ry in view.rays.rays:
+		var c := rv.customs[ry.index]
+		eq(c.r, float(ry.index), "номер ската — для хвоста")
+		near(c.g, ry.flap, 1e-6, "фаза взмаха — с мира")
+		near(c.b, ry.flap_k, 1e-6, "доля размаха — с мира")
+	var code := (rv.multimesh.mesh.surface_get_material(0) as ShaderMaterial).shader.code
+	ok(code.contains("float ph = INSTANCE_CUSTOM.y - ax * 0.32;"), "фаза — из экземпляра")
+	ok(code.contains("float k = pow(ax / 7.0, 1.4) * 1.8 * INSTANCE_CUSTOM.z;"), "размах — из экземпляра")
+	ok(not code.contains("TIME * 1.3"), "не по часам шейдера")
+	near(EcoRay.wing_lift(0.0, 1.0, 1.0), 0.0, 1e-9, "середина не машет")
+	near(EcoRay.wing_lift(7.0, 2.24 + PI * 0.5, 1.0), 1.8, 1e-5, "кончик крыла — на 1,8 м")
+	near(EcoRay.wing_lift(7.0, 2.24 + PI * 0.5, EcoRay.FLAP_HARD), 1.8 * EcoRay.FLAP_HARD, 1e-5, "сильный взмах — выше")
 	view.queue_free()
 	await frames(1)
 
