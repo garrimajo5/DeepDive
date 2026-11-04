@@ -32,6 +32,12 @@ const LEG := Color("2E4148")
 const SIZE_SPREAD := 0.1
 const SHADE_SPREAD := 0.12
 const HUE_SPREAD := 0.06
+## «Дыхание» (Б3, `breath`): купол панциря набирает воду и выталкивает её — высота ± BREATH_H за BREATH_T с, ритм
+## ± BREATH_SPREAD и фаза у каждой особи свои (EcoVary). Только по высоте: стопы стоят на дне (начало формы под ними),
+## по бокам лапы не разъезжаются.
+const BREATH_H := 0.035
+const BREATH_T := 3.5
+const BREATH_SPREAD := 0.2
 
 ## Часть, к которой относится вершина: лапа 0–5, скребок или корпус.
 const BODY := -1
@@ -213,6 +219,13 @@ static func basis(g: EcoGrazer.Grazer) -> Basis:
 	return Basis(Vector3(fw.z, 0, -fw.x) * k, Vector3.UP * k, fw * k)
 
 
+## Множитель высоты особи i в момент t (время мира; у гостя то же): 1 ± BREATH_H.
+static func breath(i: int, t: float) -> float:
+	var rate := EcoVary.spread(i, EcoVary.RATE, BREATH_SPREAD)
+	var ph := EcoVary.unit(i, EcoVary.TURN) * TAU
+	return 1.0 + BREATH_H * sin(t * TAU / BREATH_T * rate + ph)
+
+
 ## Размер скребуна: свой у каждой особи (EcoVary); стопы остаются на дне — начало формы под ними.
 static func scale(g: EcoGrazer.Grazer) -> float:
 	return EcoVary.spread(g.index, EcoVary.SIZE, SIZE_SPREAD)
@@ -255,4 +268,11 @@ static func posed(i: int, pose: Vector2) -> Vector3:
 
 ## Место вершины i скребуна в мире в момент t (то, что нарисует MultiMesh).
 static func place(g: EcoGrazer.Grazer, t: float, i: int) -> Vector3:
-	return origin(g) + basis(g) * posed(i, custom(g, t))
+	return origin(g) + breathing(g, t) * posed(i, custom(g, t))
+
+
+## Расстановка формы в момент t: basis с дыханием купола (высота × breath).
+static func breathing(g: EcoGrazer.Grazer, t: float) -> Basis:
+	var b := basis(g)
+	b.y *= breath(g.index, t)
+	return b
