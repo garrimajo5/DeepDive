@@ -55,6 +55,11 @@ const TIP_GLOW := Color(0.95, 0.42, 0.1)
 ## (FanView.BEND), вершина со станцией огнёвок уходит не дальше пары десятков сантиметров.
 const BEND := Vector3(0.035, 0.02, 0.012)
 
+## Кусты не клоны (Б4): у куста своя краска ветвей и камня — светлее-темнее ± SHADE_SPREAD, теплее-холоднее
+## ± HUE_SPREAD по номеру куста (`EcoVary`, `bush_paint`); цвет вершин — вызовов и шейдеров столько же.
+const SHADE_SPREAD := 0.14
+const HUE_SPREAD := 0.05
+
 ## Меньше этой разницы свет куста не обновляем.
 const EPS := 0.01
 
@@ -131,7 +136,7 @@ func _build() -> void:
 			heights.append(h)
 			uv2.append(Vector2(h, 0.0))
 			nor.append((tr.basis * form.normals[i]).normalized())
-			col.append(form.colors[i])
+			col.append(bush_paint(b.index, form.colors[i]))
 			uv.append(Vector2(b.index, 1.0 if form.parts[i] == EcoCoralLook.Part.TIP else 0.0))
 		for t in form.tris:
 			idx.append(v0 + t)
@@ -190,6 +195,13 @@ func sync_dust(t: float, ship: EcoLink.ShipState, flow := Vector3.ZERO) -> void:
 func offset(i: int, t: float, flow: Vector3 = EcoShaders.flow) -> Vector3:
 	var b := i / maxi(1, form.verts.size())
 	return EcoCurrent.sway(feet[b], heights[i], talls[b], t, flow, BEND)
+
+
+## Краска c на кусте номер j: светлее-темнее и теплее-холоднее по номеру (у гостя сети та же).
+static func bush_paint(j: int, c: Color) -> Color:
+	var s := EcoVary.spread(j, EcoVary.SHADE, SHADE_SPREAD)
+	var h := (EcoVary.unit(j, EcoVary.HUE) * 2.0 - 1.0) * HUE_SPREAD
+	return Color(minf(1.0, c.r * s * (1.0 + h)), minf(1.0, c.g * s), minf(1.0, c.b * s * (1.0 - h)), c.a)
 
 
 ## Материал кустов (для тестов).
