@@ -318,9 +318,9 @@ func test_view_glass_cells_and_leaving() -> void:
 	for k in EcoMoth.GLASS:
 		if m.swarm.glass_life[k] > 0.0:
 			eq(v.cell_at(n), (EcoMoth.COUNT + k) % 4, "клетка атласа — по месту на стекле")
-			near(v.scale_at(n), m.swarm.glass_k(k), 1e-5, "размер — доля посадки")
+			near(v.scale_at(n), m.swarm.glass_k(k) * MothView.moth_scale(EcoMoth.COUNT + k), 1e-5, "размер — доля посадки")
 			n += 1
-	eq(v.scale_at(0), 1.0, "рачок в воде — полный размер")
+	near(v.scale_at(0), MothView.moth_scale(0), 1e-6, "рачок в воде — полный свой размер")
 	var far := _ship(Vector3(0, -20, 0), 0.0, true)
 	m.swarm.step_glass(far, 0.1, 0, true)
 	var left := m.swarm.on_glass
