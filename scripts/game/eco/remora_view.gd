@@ -11,6 +11,7 @@ extends MultiMeshInstance3D
 ## «Экономно» (Б6, `set_lite`): тело 8 × 4 вместо 8 × 5, присоска — плоский диск 8 × 2 вместо 8 × 4 (LITE_*; по кругу
 ## восемь граней — нос и края диска на месте) — 120 → 72 треугольника на рыбу, пересобирается с тем же материалом; хвост,
 ## места, виляние, муть и вызовы те же. Сброс мира уровень не теряет (EcoView.set_lite).
+## Сидящая на скате или корпусе дышит жабрами — тело шире и выше в такт (`breath`, Б3), на плаву — нет.
 
 const BODY := Color("55606a")
 const DISC := Color("d8e6ea")
@@ -39,6 +40,14 @@ const HEAD := Vector3(0, 0, 0.15)
 ## хвост раскачивается, легла — успокаивается. Раньше легла — виляние (до 0,3 рад) пропадало за кадр. Своя у каждой
 ## рыбы, по времени мира (у гостя — то же).
 const WAG_RISE := 0.5
+## «Дыхание» (Б3, `breath`): рыба качает воду через жабры — тело шире на ± BREATH_W и выше на ± BREATH_H за
+## BREATH_T с (ритм ± BREATH_SPREAD и фаза — у каждой свои, `EcoVary`); длина та же — нос, диск и хвост на месте.
+## Дышит, пока сидит на скате или корпусе: на плаву размах гаснет вместе с ростом виляния (1 − доля виляния — без
+## скачка). По времени мира (у гостя то же); масштаб экземпляра MultiMesh — даром, и на «Экономно».
+const BREATH_T := 2.5
+const BREATH_W := 0.05
+const BREATH_H := 0.035
+const BREATH_SPREAD := 0.2
 ## Разброс: размер ±15 %, частота виляния ±20 %, светлее-темнее ±12 %.
 const SIZE_SPREAD := 0.15
 const RATE_SPREAD := 0.2
@@ -150,7 +159,7 @@ func _sync_dust(t: float, state: EcoLink.ShipState, flow: Vector3) -> void:
 
 
 ## Место рыбы: нос (+Z) — по dir, виляет вокруг головы HEAD с долей amp (0…1); NAN — по режиму: на плаву во весь
-## размах, сидя — нет.
+## размах, сидя — нет. Дышит с долей 1 − amp (`breath`, `breath_scale`).
 static func place(rm: EcoRemora.Remora, t: float, amp := NAN) -> Transform3D:
 	if is_nan(amp):
 		amp = 1.0 if rm.mode == EcoRemora.Mode.SWIM else 0.0
@@ -163,7 +172,21 @@ static func place(rm: EcoRemora.Remora, t: float, amp := NAN) -> Transform3D:
 		var w := Basis(Vector3.UP, sin(t * remora_rate(rm.index) + rm.ph) * WAG * amp)
 		o += b * (HEAD - w * HEAD) * s   # голова стоит: поворот вокруг неё, а не середины тела
 		b = b * w
-	return Transform3D(b.scaled_local(Vector3.ONE * s), o)
+	var k := breath(rm.index, t, amp)
+	return Transform3D(b.scaled_local(breath_scale(k) * s), o)
+
+
+## Доля дыхания рыбы n в момент t: −1…1 · размах (BREATH_T, ритм и фаза — EcoVary); amp — доля
+## виляния после смягчения (на плаву не дышит).
+static func breath(n: int, t: float, amp: float) -> float:
+	var rate := EcoVary.spread(n, EcoVary.RATE, BREATH_SPREAD)
+	var phase := EcoVary.unit(n, EcoVary.SHADE) * TAU
+	return sin(t * TAU / BREATH_T * rate + phase) * (1.0 - clampf(amp, 0.0, 1.0))
+
+
+## Множитель размера тела по доле дыхания: шире и выше, длина та же.
+static func breath_scale(k: float) -> Vector3:
+	return Vector3(1.0 + BREATH_W * k, 1.0 + BREATH_H * k, 1.0)
 
 
 ## Размер рыбы n (множитель к SCALE).
