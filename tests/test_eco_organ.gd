@@ -248,7 +248,10 @@ func test_view_lite_coarser_tubes_same_material() -> void:
 		best = minf(best, v.distance_to(top + Vector3(EcoOrgan.TUBE_TOP_R, 0, 0)))
 	ok(best < 0.06, "устье трубы — в меше")
 	var cols: PackedColorArray = ov.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
-	ok(cols.has(OrganView.RIM), "обод — светлый")
+	var lit := 0.0
+	for c in cols:
+		lit = maxf(lit, c.g)
+	ok(lit > OrganView.RIM.g * (1.0 - OrganView.RIM_DIM) - 0.01, "обод — светлый (%.3f)" % lit)
 	ov.set_lite(false)
 	eq(ov.tris, full, "назад — полные трубы")
 	ov.queue_free()
