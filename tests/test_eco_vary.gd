@@ -587,3 +587,43 @@ func test_veils_differ_in_glow_and_rate() -> void:
 	eq(VeilView.glow(VeilView.CORE, g1).r, VeilView.CORE.r, "тон тот же")
 	near(VeilView.veil_glow(1), g1, 0.0, "каждый раз то же")
 	ok(absf(EcoVeil.pulse_rate(0) - EcoVeil.pulse_rate(1)) > 0.03, "ритм пульса разный")
+
+
+## Трубные органы (Б4): у трубы своя краска (светлее-темнее ±12 %, теплее-холоднее ±4 %), толщина ±10 % и обод тусклее
+## до 15 % по номеру трубы; в меше устье — своей толщины. Без исправления все светлые трубы одного цвета и радиуса.
+static func _flat_organ(_x: float, _z: float) -> float:
+	return 0.0
+
+
+func test_organ_tubes_differ() -> void:
+	var widths := []
+	var shades := []
+	var rims := []
+	for j in 40:
+		widths.append(OrganView.tube_width(j))
+		var c := OrganView.tube_color(j, 1)
+		shades.append(c.g / OrganView.LIGHT.g)
+		ok(c.r <= 1.0 and c.g <= 1.0 and c.b <= 1.0, "краска не ярче 1 (%d)" % j)
+		rims.append(OrganView.rim_color(j).g / OrganView.RIM.g)
+		eq(OrganView.tube_color(j, 1), OrganView.tube_color(j, 1), "одна и та же труба — одна краска")
+	var w := _span(widths)
+	ok(w.x >= 0.9 - 1e-5 and w.y <= 1.1 + 1e-5 and w.y - w.x > 0.1, "толщина ±10 %%: %s" % w)
+	var s := _span(shades)
+	ok(s.x >= 0.88 - 1e-5 and s.y <= 1.12 + 1e-5 and s.y - s.x > 0.12, "краска ±12 %%: %s" % s)
+	var r := _span(rims)
+	ok(r.x >= 0.85 - 1e-5 and r.y <= 1.0 + 1e-5 and r.y - r.x > 0.08, "обод тусклее до 15 %%: %s" % r)
+	ok(OrganView.tube_color(3, 0).g < OrganView.tube_color(3, 1).g, "тёмная и светлая через одну остаются")
+	var world := EcoWorld.new()
+	world.ground = _flat_organ
+	var organs := world.add(EcoOrgan.new()) as EcoOrgan
+	var ov := OrganView.new(organs)
+	var og := organs.organs[0]
+	for k in 2:
+		var j := EcoOrganDust.tube_id(og, k)
+		var top := og.tube_base[k] + Vector3(0, og.tube_len[k], 0)
+		var want := top + Vector3(EcoOrgan.TUBE_TOP_R * OrganView.tube_width(j), 0, 0)
+		var best := INF
+		for v in ov.verts:
+			best = minf(best, v.distance_to(want))
+		ok(best < 1e-4, "устье трубы %d — своей толщины (%.4f)" % [k, best])
+	ov.free()
