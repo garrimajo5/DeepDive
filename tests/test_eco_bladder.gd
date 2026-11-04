@@ -330,7 +330,7 @@ func test_view_three_multimeshes() -> void:
 	var tr := BladderView.transform_at(bv.bulb_buffer, n)
 	var st2 := BladderView.transform_at(bv.stems.multimesh.buffer, n, BladderView.STRIDE)
 	ok(tr.origin.distance_to(st2 * Vector3(0, 0.5, 0)) < 1e-3, "луковица на вершине своего стебля")
-	near(tr.basis.x.length(), EcoBladder.bulb_size(bl), 1e-3)
+	near(tr.basis.x.length(), EcoBladder.bulb_size(bl) * BladderView.bulb_scale(n), 1e-3)
 	var s0 := BladderView.transform_at(bv.spore_buffer, bl.index * EcoBladder.SPORES)
 	near(s0.basis.x.length(), 0.0, 1e-6, "облака нет — споры спрятаны")
 	view.bladders.pop(view.world, bl, false)

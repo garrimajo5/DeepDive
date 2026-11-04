@@ -10,6 +10,9 @@ extends Node3D
 ## «Пузырьки» на общем шейдере EcoShaders.MIST (BUBBLE, `placed`) — +1 вызов отрисовки, шейдеров не прибавилось.
 ## «Экономно» (Б6, `set_lite`): рисуется половина спор каждого облака (`EcoMM.cloud_slot` — буфер вперемешку по
 ## кустам, `visible_instance_count` отрезает вторую половину). Мир (лопнула, свечение, сканер) не меняется.
+## Луковицы не клоны (Б4, `EcoVary`): у луковицы свой размер (±BULB_SIZE_SPREAD) и яркость сока (±BULB_SHADE_SPREAD),
+## у стебля — толщина (±STEM_THICK_SPREAD), по номеру луковицы; спелость куста видна по-прежнему (множители поверх
+## `EcoBladder.bulb_size`/`bulb_color`). Вызовов и шейдеров столько же.
 
 const STEM := Color("3f7a5a")
 ## Луковица — сфера 0,16 м, вытянутая в 1,3 раза; спора — точка 0,35 м (в браузере 0,5 с ореолом — здесь ореол внутри точки).
@@ -19,6 +22,10 @@ const SPORE := Color(0.5, 1.0, 0.55)
 ## Чисел на экземпляр: transform 3 × 4, у луковиц и спор ещё цвет (4).
 const STRIDE := 12
 const STRIDE_C := 16
+## Разброс луковиц и стеблей куста.
+const BULB_SIZE_SPREAD := 0.15
+const BULB_SHADE_SPREAD := 0.12
+const STEM_THICK_SPREAD := 0.15
 
 var bladders: EcoBladder
 var stems: MultiMeshInstance3D
@@ -172,13 +179,14 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 		var r := EcoBladder.bulb_size(bl)
 		var c := EcoBladder.bulb_color(bl)
 		for k in EcoBladder.STEMS:
-			var i := (bl.index * EcoBladder.STEMS + k) * STRIDE_C
+			var n := bl.index * EcoBladder.STEMS + k
+			var i := n * STRIDE_C
 			var top := EcoBladder.bulb(bl, k, t, flow, amount)
-			EcoMM.put(bulb_buffer, i, Transform3D(Basis.from_scale(Vector3.ONE * r), top))
-			_color(bulb_buffer, i + STRIDE, c)
+			EcoMM.put(bulb_buffer, i, Transform3D(Basis.from_scale(Vector3.ONE * r * bulb_scale(n)), top))
+			_color(bulb_buffer, i + STRIDE, bulb_tint(c, n))
 			var a := bl.stem_base[k]
 			var up := top - a
-			EcoMM.put(stem_buffer, (bl.index * EcoBladder.STEMS + k) * STRIDE, Transform3D(_along(up), a + up * 0.5))  # конус стоит серединой в нуле
+			EcoMM.put(stem_buffer, n * STRIDE, Transform3D(_along(up, stem_thick(n)), a + up * 0.5))  # конус стоит серединой в нуле
 		var popped := bl.popped()
 		if not popped and not fresh and _spores_shown[bl.index] == 0:
 			continue
@@ -254,14 +262,30 @@ func pack_bubbles_into(t: float, flow: Vector3, ship: EcoLink.ShipState = null) 
 	return shown
 
 
-## Базис, что ставит единичный стебель (ось +Y, середина в нуле) от основания по вектору up.
-static func _along(up: Vector3) -> Basis:
+## Множитель размера луковицы n (номер — куст · STEMS + стебель); один и тот же при каждом вызове.
+static func bulb_scale(n: int) -> float:
+	return EcoVary.spread(n, EcoVary.SIZE, BULB_SIZE_SPREAD)
+
+
+## Сок луковицы n: цвет спелости куста, ярче или тусклее на ±BULB_SHADE_SPREAD.
+static func bulb_tint(c: Color, n: int) -> Color:
+	var k := EcoVary.spread(n, EcoVary.SHADE, BULB_SHADE_SPREAD)
+	return Color(c.r * k, c.g * k, c.b * k, c.a)
+
+
+## Толщина стебля n (множитель радиуса конуса).
+static func stem_thick(n: int) -> float:
+	return EcoVary.spread(n, EcoVary.WIDTH, STEM_THICK_SPREAD)
+
+
+## Базис, что ставит единичный стебель (ось +Y, середина в нуле) от основания по вектору up; thick — толщина.
+static func _along(up: Vector3, thick := 1.0) -> Basis:
 	var y := up.normalized()
 	var x := y.cross(Vector3.FORWARD).normalized()
 	if x.length_squared() < 0.5:
 		x = Vector3.RIGHT
 	var z := x.cross(y)
-	return Basis(x, y * up.length(), z)
+	return Basis(x * thick, y * up.length(), z * thick)
 
 
 static func _color(buf: PackedFloat32Array, i: int, c: Color) -> void:

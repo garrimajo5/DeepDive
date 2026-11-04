@@ -677,6 +677,9 @@ Compatibility-снимке).
     `test_eco_vary.test_moths_differ_in_size_and_shade`
   - [x] Иглы кольчужника: у иглы длина (±20 %) и толщина (±12 %) по её номеру (`KrabView.spine_size` в
     `spine_transform`). Вызовов и шейдеров столько же. Тест — `test_eco_vary.test_krab_spines_differ`
+  - [x] Пузырчатка: у луковицы размер (±15 %) и яркость сока (±12 %), у стебля толщина (±15 %) по номеру луковицы
+    (`BladderView.bulb_scale`/`bulb_tint`/`stem_thick`), поверх спелости куста. Вызовов и шейдеров столько же. Тест —
+    `test_eco_vary.test_bladder_bulbs_differ`
 - [ ] Читаемые силуэты крупных существ в полумраке (форма важнее числа полигонов).
 
 ## Этап Б5 — Населённость и разнообразие
