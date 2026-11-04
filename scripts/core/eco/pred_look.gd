@@ -50,6 +50,14 @@ const LAG_MAX := 1.0
 const ANIM_MID_LITE := 25.0
 const ANIM_MID_STEP := 0.1
 const ANIM_FAR_LITE := 60.0
+## «Дыхание» (Б3, `breath`): зверь качает воду жабрами — тело шире на ± BREATH_W и выше на ± BREATH_H за BREATH_T с
+## (ритм ± BREATH_SPREAD и фаза — у каждого свои, `EcoVary`); длина та же — пасть и серп на месте. В броске (доля
+## SwimFast, `swim_mix`) вода идёт сквозь жабры сама — размах гаснет вместе с ростом смеси, без скачка. По времени
+## мира (у гостя то же); масштаб корня модели — даром, и на «Экономно».
+const BREATH_T := 4.0
+const BREATH_W := 0.035
+const BREATH_H := 0.02
+const BREATH_SPREAD := 0.2
 
 
 ## Куда смотрит голова сейчас (плавный курс EcoPred.turn).
@@ -61,6 +69,18 @@ static func forward(pr: EcoPred.Pred) -> Vector3:
 ## (> 0 — левым боком вниз).
 static func basis(pr: EcoPred.Pred) -> Basis:
 	return Basis.looking_at(forward(pr), Vector3.UP) * Basis(Vector3.BACK, pr.bank)
+
+
+## Доля дыхания зверя в момент t: −1…1 · размах; в броске (swim_mix → 1) — 0.
+static func breath(pr: EcoPred.Pred, t: float) -> float:
+	var rate := EcoVary.spread(pr.index, EcoVary.RATE, BREATH_SPREAD)
+	var phase := EcoVary.unit(pr.index, EcoVary.SHADE) * TAU
+	return sin(t * TAU / BREATH_T * rate + phase) * (1.0 - swim_mix(pr))
+
+
+## Множитель размера тела по доле дыхания: шире и выше, длина (ось −Z модели) та же.
+static func breath_scale(k: float) -> Vector3:
+	return Vector3(1.0 + BREATH_W * k, 1.0 + BREATH_H * k, 1.0)
 
 
 ## Доля броска в смеси плавания 0…1: 0 — Swim, 1 — SwimFast.

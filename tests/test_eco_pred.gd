@@ -649,6 +649,68 @@ func test_view_models_in_scene() -> void:
 	await frames(1)
 
 
+## Дыхание (Б3): тело шире и выше в такт, длина та же; в броске размах гаснет; у зверей ритм и фаза свои.
+func test_look_breath() -> void:
+	var w := _alone()
+	var all := _preds(w).all
+	var pr := all[0]
+	pr.agent.v = Vector3.ZERO
+	var lo := 1.0
+	var hi := -1.0
+	for i in 200:
+		var k := EcoPredLook.breath(pr, i * 0.05)
+		lo = minf(lo, k)
+		hi = maxf(hi, k)
+	ok(hi > 0.95 and lo < -0.95, "в покое дышит во весь размах: %.2f…%.2f" % [lo, hi])
+	var sc := EcoPredLook.breath_scale(1.0)
+	near(sc.x, 1.0 + EcoPredLook.BREATH_W, 1e-6, "шире")
+	near(sc.y, 1.0 + EcoPredLook.BREATH_H, 1e-6, "выше")
+	eq(sc.z, 1.0, "длина та же")
+	# плавно: за 0,05 с доля не прыгает
+	for i in 100:
+		var d := absf(EcoPredLook.breath(pr, i * 0.05 + 0.05) - EcoPredLook.breath(pr, i * 0.05))
+		ok(d < 0.1, "дыхание плавное")
+		if d >= 0.1:
+			break
+	pr.agent.v = Vector3(EcoPredLook.MIX_TO, 0, 0)
+	for i in 50:
+		near(EcoPredLook.breath(pr, i * 0.1), 0.0, 1e-6, "в броске не дышит")
+	if all.size() > 1:
+		all[1].agent.v = Vector3.ZERO
+		pr.agent.v = Vector3.ZERO
+		var same := true
+		for i in 20:
+			if absf(EcoPredLook.breath(pr, i * 0.3) - EcoPredLook.breath(all[1], i * 0.3)) > 0.05:
+				same = false
+		ok(not same, "звери дышат не в лад")
+
+
+## В сцене корень модели дышит: ширина по EcoPredLook.breath, голова по курсу.
+func test_view_breathes() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var pv := view.pred_view
+	var pr := view.preds.all[1]
+	var ship := EcoLink.ShipState.new()
+	var lo := 9.0
+	var hi := 0.0
+	for i in 60:
+		ship.pos = _beside(pr)
+		view.step(0.05, ship)
+		var root := pv.bodies[1]
+		var want := EcoPredLook.breath_scale(EcoPredLook.breath(pr, view.world.time))
+		near(root.basis.x.length(), want.x, 1e-4, "ширина — по дыханию")
+		near(root.basis.z.length(), 1.0, 1e-4, "длина та же")
+		ok((root.basis * Vector3(0, 0, -1)).normalized().distance_to(EcoPredLook.forward(pr)) < 1e-3, "голова по курсу")
+		lo = minf(lo, root.basis.x.length())
+		hi = maxf(hi, root.basis.x.length())
+	ok(hi - lo > 0.005 or EcoPredLook.swim_mix(pr) > 0.9, "тело шире и уже за 3 с: %.3f…%.3f" % [lo, hi])
+	view.queue_free()
+	await frames(1)
+
+
 ## Вдали (дальше CUE_FAR) клипы не меняются — только плавание.
 func test_view_far_keeps_swimming() -> void:
 	var view := EcoView.new()
