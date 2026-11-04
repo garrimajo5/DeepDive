@@ -185,18 +185,48 @@ func climb_for(ground: Callable, turn := Vector3.ZERO) -> float:
 	var need := -INF
 	if p.y - ground_y(ground) - clearance > flat.length() * look + 2.0 - minf(v.y, 0.0) * look:
 		return need
-	for f: float in LOOK_AT:
-		var t := look * f
+	var n := LOOK_AT.size()
+	for i in n:
+		var t: float = look * LOOK_AT[i]
 		var q := p + flat * t
-		var top: float = float(ground.call(q.x, q.z)) + clearance + LOOK_GAP
+		var top := _look_ground(ground, i, q.x, q.z) + clearance + LOOK_GAP
 		need = maxf(need, (top - p.y) / t)
 	if turn != Vector3.ZERO:
-		for f: float in LOOK_AT:
-			var t := look * f
+		for i in n:
+			var t: float = look * LOOK_AT[i]
 			var q := p + turn * t
-			var top: float = float(ground.call(q.x, q.z)) + clearance + LOOK_GAP
+			var top := _look_ground(ground, n + i, q.x, q.z) + clearance + LOOK_GAP
 			need = maxf(need, (top - p.y) / t)
 	return need
+
+
+## Точки взгляда вперёд (`climb_for`) помнят дно, как `ground_y`: точка slot пересчитывает его, только когда ушла
+## дальше GROUND_STEP от прошлой или сменился ground (issue #1247: семь вызовов fbm на шаг серпохвоста — треть шага
+## хищников; медленный и стоящий у станции чистки смотрит в те же точки). Взгляд — запас, сетка дна в сцене 5 м.
+var _look_q := PackedVector2Array()
+var _look_h := PackedFloat32Array()
+var _look_call: Callable
+
+
+func _look_ground(ground: Callable, slot: int, x: float, z: float) -> float:
+	if ground != _look_call:
+		_look_call = ground
+		_look_q = PackedVector2Array()
+	if _look_q.size() <= slot:
+		var was := _look_q.size()
+		_look_q.resize(LOOK_AT.size() * 2)
+		_look_h.resize(LOOK_AT.size() * 2)
+		for k in range(was, _look_q.size()):
+			_look_q[k] = Vector2(INF, INF)
+	var q := _look_q[slot]
+	var dx := x - q.x
+	var dz := z - q.y
+	if dx * dx + dz * dz <= GROUND_STEP * GROUND_STEP:
+		return _look_h[slot]
+	var h := float(ground.call(x, z))
+	_look_q[slot] = Vector2(x, z)
+	_look_h[slot] = h
+	return h
 
 
 ## Высота дна под существом (ground — (x, z) -> float, должен быть задан): из запомненной, пока не отплыло

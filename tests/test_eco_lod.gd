@@ -168,10 +168,13 @@ func test_far_urchins_step_less_often() -> void:
 		near.step(1.0 / 30.0)
 		far.step(1.0 / 30.0)
 	ok(near_calls[0] > 0, "вблизи ежи ползут — дно под ними считается")
-	ok(far_calls[0] * 2 <= near_calls[0] + 1, "вдали дно реже: %d против %d" % [far_calls[0], near_calls[0]])
-	# путь тот же: набранное время догоняется, ежи уходят от появления так же далеко
 	var kn: EcoKelp = near.systems[0]
 	var kf: EcoKelp = far.systems[0]
+	# дно под ежом — по пройденному пути (`EcoKelp.urchin_floor`, issue #1247), не по шагам: и вблизи редко, вдали
+	# не чаще, чем вблизи
+	ok(near_calls[0] * 3 < 60 * kn.urchins.size(), "вблизи дно редко: %d за 60 шагов" % near_calls[0])
+	ok(far_calls[0] <= near_calls[0] + kn.urchins.size(), "вдали не чаще: %d против %d" % [far_calls[0], near_calls[0]])
+	# путь тот же: набранное время догоняется, ежи уходят от появления так же далеко
 	for i in kn.urchins.size():
 		var a := kn.urchins[i]
 		var b := kf.urchins[i]
