@@ -574,3 +574,16 @@ func test_hvaten_and_pestr_differ() -> void:
 	ok(_span(bw).y - _span(bw).x > 0.01, "хватни не одной ширины: %s" % [bw])
 	ok(n > 0)
 	v.free()
+
+
+## Фонарные вуали: у каждой своя яркость куполов, ядра и колокольчиков (альфа цвета экземпляра) и свой ритм пульса.
+func test_veils_differ_in_glow_and_rate() -> void:
+	var g0 := VeilView.veil_glow(0)
+	var g1 := VeilView.veil_glow(1)
+	ok(absf(g0 - g1) > 0.03, "яркость разная: %.3f и %.3f" % [g0, g1])
+	for g in [g0, g1]:
+		ok(absf(g - 1.0) <= VeilView.GLOW_SPREAD + 1e-6, "в пределах ± GLOW_SPREAD")
+	near(VeilView.glow(VeilView.CORE, g1).a, VeilView.CORE.a * g1, 1e-6, "ядро — с яркостью вуали")
+	eq(VeilView.glow(VeilView.CORE, g1).r, VeilView.CORE.r, "тон тот же")
+	near(VeilView.veil_glow(1), g1, 0.0, "каждый раз то же")
+	ok(absf(EcoVeil.pulse_rate(0) - EcoVeil.pulse_rate(1)) > 0.03, "ритм пульса разный")

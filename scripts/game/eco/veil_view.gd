@@ -18,6 +18,9 @@ extends Node3D
 ## (48 → 24) — меши нитей и кромки пересобираются с шагом LITE_STEP (огоньки стоят ровно по кругу, нити — по углу,
 ## чётные покрывают купол так же ровно). Купола, мир (ужаливание, укрытие, сонар) и муть не меняются; вызовов столько же,
 ## линий и пятен со сложением цвета вдвое меньше.
+## Не клоны (Б4, `EcoVary` по номеру вуали): свой ритм пульса (`EcoVeil.pulse_rate`, в INSTANCE_CUSTOM.a щупалец —
+## доля от PULSE_W) и своя яркость куполов и ядра ± GLOW_SPREAD (`veil_glow`, альфа цвета экземпляра). Вызовов и
+## шейдеров столько же, и на «Экономно».
 
 const RIM_SHADER := """
 shader_type spatial;
@@ -49,6 +52,8 @@ const RIM_N := 48
 const RIM_SIZE := 0.5
 ## «Экономно»: рисуется каждое LITE_STEP-е щупальце и каждый LITE_STEP-й огонёк кромки.
 const LITE_STEP := 2
+## Разброс яркости куполов, ядра и колокольчиков по вуали.
+const GLOW_SPREAD := 0.2
 ## Полусфера купола.
 const SEGMENTS := 24
 const RINGS := 8
@@ -234,10 +239,11 @@ static func _tentacle_arrays(list: Array, first: int, step := 1) -> Array:
 	return arr
 
 
-## Числа щупалец для шейдера: цвет, волна пульса вниз (EcoVeil.WAVE_*), снос течением TRAIL. Фаза в wave.z — фаза
-## вуали vl (для shader_point); у общего материала она 0 — фазу каждой вуали шейдер прибавляет из INSTANCE_CUSTOM.g.
+## Числа щупалец для шейдера: цвет, волна пульса вниз (EcoVeil.WAVE_*), снос течением TRAIL. Фаза в wave.z и ритм
+## в wave.y — вуали vl (для shader_point); у общего материала фаза 0 и ритм PULSE_W — фазу каждой вуали шейдер
+## прибавляет из INSTANCE_CUSTOM.g, ритм умножает на INSTANCE_CUSTOM.a.
 static func tentacle_params(vl: EcoVeil.Veil = null) -> Dictionary:
-	return {"tint": TENTACLE, "wave": Vector4(EcoVeil.PULSE, EcoVeil.PULSE_W, vl.ph if vl else 0.0, EcoVeil.WAVE_LAG),
+	return {"tint": TENTACLE, "wave": Vector4(EcoVeil.PULSE, vl.w if vl else EcoVeil.PULSE_W, vl.ph if vl else 0.0, EcoVeil.WAVE_LAG),
 		"grow": EcoVeil.WAVE_GROW, "seg": float(EcoVeil.SEGMENTS), "trail": EcoVeil.TRAIL}
 
 
@@ -261,7 +267,8 @@ static func shader_point(rest: Vector3, k: int, j: int, t: float, pulse: float, 
 
 
 ## Вершина меша щупалец в экземпляре по формуле шейдера (двойник ветки TENTACLE в EcoShaders.MIST, для тестов):
-## rest — VERTEX, kj — UV, vi — UV2.x, custom — INSTANCE_CUSTOM (пульс, фаза, номер вуали), at — место экземпляра.
+## rest — VERTEX, kj — UV, vi — UV2.x, custom — INSTANCE_CUSTOM (пульс, фаза, номер вуали, доля ритма — 0 как 1),
+## at — место экземпляра.
 ## Нить чужой вуали сжимается в точку экземпляра.
 static func instance_point(rest: Vector3, kj: Vector2, vi: float, custom: Color, at: Vector3, t: float,
 		m: Dictionary, flow := Vector3.ZERO, sway_k := 1.0) -> Vector3:
@@ -270,6 +277,7 @@ static func instance_point(rest: Vector3, kj: Vector2, vi: float, custom: Color,
 	var mm := m.duplicate()
 	var w: Vector4 = mm.get("wave", Vector4.ZERO)
 	w.z += custom.g
+	w.y *= custom.a if custom.a > 0.0 else 1.0
 	mm["wave"] = w
 	return at + shader_point(rest, int(kj.x), int(kj.y), t, custom.r, mm, flow, sway_k)
 
@@ -285,17 +293,18 @@ func sync(t: float, ship: Vector3) -> void:
 		if not show:
 			continue
 		var s := EcoVeil.pulse(vl, t)
+		var g := veil_glow(vl.index)
 		var b0 := n * BELLS
-		_put(bell_buffer, b0, Basis.from_scale(Vector3(s.x, 1.0 / s.x, s.x) * EcoVeil.R), vl.p, BELL)
-		_put(bell_buffer, b0 + 1, Basis.from_scale(Vector3(s.y, 1.0 / s.y, s.y) * EcoVeil.R * CORE_K), vl.p, CORE)
+		_put(bell_buffer, b0, Basis.from_scale(Vector3(s.x, 1.0 / s.x, s.x) * EcoVeil.R), vl.p, glow(BELL, g))
+		_put(bell_buffer, b0 + 1, Basis.from_scale(Vector3(s.y, 1.0 / s.y, s.y) * EcoVeil.R * CORE_K), vl.p, glow(CORE, g))
 		for k in EcoVeil.SMALL:
 			var a := k / float(EcoVeil.SMALL) * TAU
 			var q := 1.0 + sin(t * 2.0 + vl.small_ph[k]) * 0.15
 			var at := Vector3(cos(a) * (EcoVeil.R + SMALL_RING), vl.small_y[k], sin(a) * (EcoVeil.R + SMALL_RING))
-			_put(bell_buffer, b0 + 2 + k, Basis.from_scale(Vector3(q, 1.0 / q, q) * vl.small_size[k]), vl.p + at, SMALL)
+			_put(bell_buffer, b0 + 2 + k, Basis.from_scale(Vector3(q, 1.0 / q, q) * vl.small_size[k]), vl.p + at, glow(SMALL, g))
 		_put(rim_buffer, n, Basis.from_scale(Vector3(s.x, 1.0, s.x)), vl.p,
 			Color(1.0, 1.0, 1.0, EcoVeil.rim_glow(vl, t)))
-		_put(tent_buffer, n, Basis.IDENTITY, vl.p, Color(s.x, vl.ph, vl.index, 0.0))
+		_put(tent_buffer, n, Basis.IDENTITY, vl.p, Color(s.x, vl.ph, vl.index, vl.w / EcoVeil.PULSE_W))
 		if n == 0:
 			bell_box = AABB(vl.p + BELL_BOX.position, BELL_BOX.size)
 			tent_box = AABB(vl.p + TENT_BOX.position, TENT_BOX.size)
@@ -325,6 +334,16 @@ func sync_dust(t: float, ship: EcoLink.ShipState, flow := Vector3.ZERO) -> void:
 	dust.update(veils, t, ship.pos if ship != null else Vector3.ZERO)
 	_dust.pack(dust.dust, t, flow, ship, EcoVeilDust.COLOR, EcoVeilDust.LIT)
 	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
+
+
+## Яркость куполов вуали с номером i: 1 ± GLOW_SPREAD.
+static func veil_glow(i: int) -> float:
+	return EcoVary.spread(i, EcoVary.SHADE, GLOW_SPREAD)
+
+
+## Цвет купола c с яркостью g (по прозрачности — купола складывают свет).
+static func glow(c: Color, g: float) -> Color:
+	return Color(c.r, c.g, c.b, minf(1.0, c.a * g))
 
 
 static func _put(buf: PackedFloat32Array, n: int, b: Basis, o: Vector3, c: Color) -> void:

@@ -45,12 +45,12 @@ var _due := -1e9
 
 ## Такт вуали vl в момент t: растёт на 1, когда купол шире всего (sin(W t + ph) = 1) и начинает сжиматься.
 static func cycle(vl: EcoVeil.Veil, t: float) -> int:
-	return int(floor((t * EcoVeil.PULSE_W + vl.ph - PI * 0.5) / TAU))
+	return int(floor((t * vl.w + vl.ph - PI * 0.5) / TAU))
 
 
 ## Когда начался такт c вуали vl (время мира).
 static func cycle_start(vl: EcoVeil.Veil, c: int) -> float:
-	return (float(c) * TAU + PI * 0.5 - vl.ph) / EcoVeil.PULSE_W
+	return (float(c) * TAU + PI * 0.5 - vl.ph) / vl.w
 
 
 ## Где встаёт k-е облачко выдоха такта c у вуали vl: у кромки купола (радиус R × пульс в начале сжатия), под ней.

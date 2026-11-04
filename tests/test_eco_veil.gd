@@ -327,7 +327,7 @@ func test_view_three_draw_calls_for_all_veils() -> void:
 	var buf := vv.bell_buffer
 	near(buf[0], EcoVeil.R * EcoVeil.pulse(p0, view.world.time).x, 1e-4, "купол 6 м с пульсом")
 	near(Vector3(buf[3], buf[7], buf[11]).distance_to(p0.p), 0.0, 1e-4, "купол на месте вуали")
-	near(buf[15], VeilView.BELL.a, 1e-4, "прозрачный купол")
+	near(buf[15], VeilView.BELL.a * VeilView.veil_glow(p0.index), 1e-4, "прозрачный купол")
 	near(vv.rim_buffer[15], EcoVeil.rim_glow(p0, view.world.time), 1e-4, "мерцание кромки — в альфе экземпляра")
 	ok(vv.bells.custom_aabb.has_point(p0.p) and vv.tentacles.custom_aabb.has_point(p0.p - Vector3(0, 10, 0)),
 		"рамка видимости — у видимой вуали")
@@ -365,7 +365,7 @@ func test_tentacles_all_veils_one_mesh() -> void:
 	var flow := Vector3(0.2, 0, -0.22)
 	var t := 41.3
 	for vl in list:
-		var custom := Color(EcoVeil.pulse(vl, t).x, vl.ph, vl.index, 0.0)
+		var custom := Color(EcoVeil.pulse(vl, t).x, vl.ph, vl.index, vl.w / EcoVeil.PULSE_W)
 		for i in [0, 1, 19, 238, 799]:
 			var own: int = vl.index * per + i
 			eq(int(uv2[own].x), vl.index, "номер вуали в UV2")
@@ -376,7 +376,7 @@ func test_tentacles_all_veils_one_mesh() -> void:
 			near(VeilView.instance_point(v[other], uv[other], uv2[other].x, custom, vl.p, t, params, flow, 1.0)
 				.distance_to(vl.p), 0.0, 1e-6, "чужая нить — в точку")
 	var code := EcoShaders.MIST
-	for u in ["INSTANCE_CUSTOM.g", "UV2.x - INSTANCE_CUSTOM.b"]:
+	for u in ["INSTANCE_CUSTOM.g", "UV2.x - INSTANCE_CUSTOM.b", "INSTANCE_CUSTOM.a"]:
 		ok(code.contains(u), "в шейдере: %s" % u)
 
 
@@ -422,8 +422,8 @@ func test_pulse_wave_runs_down_tentacles() -> void:
 				top = r
 				at = t
 		best[j] = [at, hi - lo]
-	var lag: float = fposmod(best[EcoVeil.SEGMENTS][0] - best[1][0], TAU / EcoVeil.PULSE_W)
-	near(lag, (EcoVeil.SEGMENTS - 1) * EcoVeil.WAVE_LAG / EcoVeil.PULSE_W, 0.05, "кончик раздувается позже")
+	var lag: float = fposmod(best[EcoVeil.SEGMENTS][0] - best[1][0], TAU / vl.w)
+	near(lag, (EcoVeil.SEGMENTS - 1) * EcoVeil.WAVE_LAG / vl.w, 0.05, "кончик раздувается позже")
 	ok(best[EcoVeil.SEGMENTS][1] > best[1][1] * 1.6, "к кончику размах больше: %s" % [best])
 	var plain := EcoVeil.tentacle_point(vl, k, 6, 50.0)
 	var lite := VeilView.shader_point(Vector3(rest.x, -6 * vl.tent_len[k] / EcoVeil.SEGMENTS, rest.y), k, 6, 50.0,
@@ -589,3 +589,39 @@ func test_climb_eases_to_raised_floor() -> void:
 	w.run(40.0)
 	near(vl.base_y, EcoVeil.target(w, vl), 0.05, "дошёл до нужной высоты")
 	ok(vl.base_y - start > 0.9, "поднялся над поднявшимся дном: %.2f м" % (vl.base_y - start))
+
+
+## Б4 «не клоны»: у каждой вуали свой ритм пульса — купол, волна по щупальцам и такт выдоха идут по нему; в шейдер
+## щупалец ритм приходит долей в INSTANCE_CUSTOM.a, и вершина совпадает с EcoVeil.tentacle_point.
+func test_each_veil_pulses_own_rate() -> void:
+	var w := _world([SPOT, SPOT + Vector2(40, 10)])
+	var list := _veils(w).veils
+	var a := list[0]
+	var b := list[1]
+	near(a.w, EcoVeil.pulse_rate(0), 1e-6, "ритм — по номеру")
+	ok(absf(a.w - b.w) > EcoVeil.PULSE_W * 0.03, "ритмы разные: %.3f и %.3f" % [a.w, b.w])
+	for vl in list:
+		ok(absf(vl.w / EcoVeil.PULSE_W - 1.0) <= EcoVeil.RATE_SPREAD + 1e-6, "в пределах ± RATE_SPREAD")
+		# период купола — 2π / w: через период пульс тот же, через полпериода — обратный
+		var t := 30.0
+		near(EcoVeil.pulse(vl, t + TAU / vl.w).x, EcoVeil.pulse(vl, t).x, 1e-4, "период купола — по ритму вуали")
+		near(EcoVeil.pulse(vl, t + PI / vl.w).x - 1.0, -(EcoVeil.pulse(vl, t).x - 1.0), 1e-4, "полпериода — обратный")
+		var c0 := EcoVeilDust.cycle(vl, 100.0)
+		near(EcoVeilDust.cycle_start(vl, c0 + 1) - EcoVeilDust.cycle_start(vl, c0), TAU / vl.w, 1e-4, "такт выдоха — по ритму")
+	var m := VeilView.build_tentacles_all(list)
+	var arr := m.surface_get_arrays(0)
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	var uv2: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV2]
+	var per := EcoVeil.TENTACLES * EcoVeil.SEGMENTS * 2
+	var params := VeilView.tentacle_params()
+	var t2 := 77.7
+	var vl := b
+	var i: int = vl.index * per + 199
+	var with_rate := VeilView.instance_point(v[i], uv[i], uv2[i].x, Color(EcoVeil.pulse(vl, t2).x, vl.ph, vl.index,
+		vl.w / EcoVeil.PULSE_W), vl.p, t2, params, Vector3.ZERO, 1.0)
+	var want := vl.p + EcoVeil.tentacle_point(vl, int(uv[i].x), int(uv[i].y), t2, Vector3.ZERO, true)
+	near(with_rate.distance_to(want), 0.0, 1e-4, "нить в шейдере — по ритму своей вуали")
+	var plain := VeilView.instance_point(v[i], uv[i], uv2[i].x, Color(EcoVeil.pulse(vl, t2).x, vl.ph, vl.index, 1.0),
+		vl.p, t2, params, Vector3.ZERO, 1.0)
+	ok(plain.distance_to(want) > 1e-3, "без доли ритма нить шла бы не в такт")
