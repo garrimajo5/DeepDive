@@ -139,6 +139,18 @@ func test_scene_no_breach_during_intro() -> void:   # issue #506
 	ok(main.breach.active != null, "и пробивает корпус")
 
 
+## Issue #1249: на итоге забега (экипаж поднялся) хищник корпус не кусает — «Корпус на финише» на карточке верен.
+func test_scene_no_hit_after_summary() -> void:
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var hull := main.vitals.hull
+	main.run.ended = true
+	main.on_eco_event({"type": EcoLink.HIT, "damage": 0.12, "by": "Серпохвост"})
+	eq(main.vitals.hull, hull, "после итога удар не снял корпус")
+	ok(main.breach.active == null, "пробоины нет")
+
+
 func test_scene_surface_skipped_by_action() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
