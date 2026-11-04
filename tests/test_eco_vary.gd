@@ -481,3 +481,43 @@ func test_krab_spines_differ() -> void:
 	var t := _span(ths)
 	ok(t.x >= 0.88 - 1e-5 and t.y <= 1.12 + 1e-5 and t.y - t.x > 0.08, "толщина ±12 %%: %s" % t)
 	near(KrabView.spine_at(4, 1.0).basis.y.length(), lens[4], 1e-5, "выросшая игла — своей длины")
+## Пузырчатка (Б4): у луковицы свой размер ±15 % и яркость сока ±12 %, у стебля — толщина ±15 % по номеру луковицы;
+## буфер несёт их поверх спелости куста. Без исправления семь луковиц куста — одного размера и цвета.
+func test_bladder_bulbs_differ() -> void:
+	var sizes := []
+	var thick := []
+	for n in 21:
+		sizes.append(BladderView.bulb_scale(n))
+		thick.append(BladderView.stem_thick(n))
+	var s := _span(sizes)
+	ok(s.x >= 0.85 - 1e-5 and s.y <= 1.15 + 1e-5 and s.y - s.x > 0.15, "размер ±15 %%: %s" % s)
+	var w := _span(thick)
+	ok(w.x >= 0.85 - 1e-5 and w.y <= 1.15 + 1e-5 and w.y - w.x > 0.15, "толщина ±15 %%: %s" % w)
+	var c := Color(0.5, 0.8, 0.4)
+	var lum := []
+	for n in 21:
+		var t := BladderView.bulb_tint(c, n)
+		near(t.g / t.r, c.g / c.r, 1e-5, "тон сока тот же (%d)" % n)
+		lum.append(t.g / c.g)
+	var l := _span(lum)
+	ok(l.x >= 0.88 - 1e-5 and l.y <= 1.12 + 1e-5 and l.y - l.x > 0.1, "яркость ±12 %%: %s" % l)
+	var w2 := EcoWorld.new()
+	w2.ground = Seabed.height
+	w2.ship.pos = Vector3(500, 0, 500)
+	var sys: EcoBladder = w2.add(EcoBladder.new(null)) as EcoBladder
+	var v := BladderView.new(sys)
+	v.sync(1.0)
+	var bl: EcoBladder.Bush = sys.bushes[0]
+	var r := EcoBladder.bulb_size(bl)
+	var radii := []
+	for k in EcoBladder.STEMS:
+		var n := bl.index * EcoBladder.STEMS + k
+		var b := BladderView.transform_at(v.bulb_buffer, n).basis
+		near(b.x.length(), r * BladderView.bulb_scale(n), 1e-4, "луковица %d — своего размера" % k)
+		radii.append(b.x.length())
+		var st := BladderView.transform_at(v.stems.multimesh.buffer, n, BladderView.STRIDE).basis
+		near(st.x.length(), BladderView.stem_thick(n), 1e-4, "стебель %d — своей толщины" % k)
+		near(st.z.length(), st.x.length(), 1e-4, "стебель круглый (%d)" % k)
+	var rs := _span(radii)
+	ok(rs.y - rs.x > 0.01 * r, "луковицы куста не одного размера: %s" % rs)
+	v.free()
