@@ -330,3 +330,46 @@ func test_leeches_differ() -> void:
 	var k := LeechView.leech_shade(pr.index)
 	ok(v.color_at(0).is_equal_approx(Color(k, k, k, 1.0)), "оттенок — цвет экземпляра")
 	v.free()
+
+
+## Огнёвки (Б4): у рачка свой размер, яркость и тон — от красно-оранжевого до янтарного; цвет — экземпляра в буфере,
+## на «Экономно» — у видимых тоже свой.
+func test_ognevka_differ_and_carry_tint() -> void:
+	var sizes := []
+	var hues := []
+	var lums := []
+	for n in 20:
+		sizes.append(OgnevkaView.shrimp_scale(n))
+		var c := OgnevkaView.shrimp_color(n)
+		hues.append(c.h)
+		lums.append(c.get_luminance())
+	var s := _span(sizes)
+	ok(s.x >= 0.85 - 1e-5 and s.y <= 1.15 + 1e-5 and s.y - s.x > 0.12, "размер ±15 %%: %s" % s)
+	var h := _span(hues)
+	var base := OgnevkaView.COLOR.h
+	ok(h.x >= base - OgnevkaView.HUE_SPREAD - 1e-4 and h.y <= base + OgnevkaView.HUE_SPREAD + 1e-4, "тон рядом с оранжевым: %s" % h)
+	ok(h.y - h.x > 0.03, "тона разные: %s" % h)
+	var l := _span(lums)
+	ok(l.y - l.x > 0.1, "яркость разная: %s" % l)
+	eq(OgnevkaView.shrimp_color(7), OgnevkaView.shrimp_color(7), "один и тот же рачок — один цвет")
+	var w := EcoWorld.new(EcoRandom.WORLD_SEED)
+	w.ground = Seabed.height
+	w.ship.pos = Vector3(500, 0, 500)
+	var ps := w.add(EcoPred.new()) as EcoPred
+	var tops: Array[Vector3] = [Vector3(0, -36, 0), Vector3(80, -36, 0)]
+	var lc := w.add(EcoLeech.new(ps, null, tops)) as EcoLeech
+	var og := w.add(EcoOgnevka.new(lc)) as EcoOgnevka
+	w.step(0.1)
+	var v := OgnevkaView.new(og)
+	ok(v.mesh.multimesh.use_colors, "у рачка цвет экземпляра")
+	var mat := (v.mesh.multimesh.mesh as CapsuleMesh).material as StandardMaterial3D
+	ok(mat.vertex_color_use_as_albedo and mat.vertex_color_is_srgb, "цвет экземпляра — как прежний albedo, в sRGB")
+	v.sync(true, 1.0)
+	for i in [0, 3, 14]:
+		near(v.placed[i].basis.z.length() / OgnevkaView.shrimp_scale(i), v.placed[i].basis.x.length() / OgnevkaView.shrimp_scale(i), 1e-4, "толщина по размеру (%d)" % i)
+		ok(v.color_at(i).is_equal_approx(OgnevkaView.shrimp_color(i)), "цвет рачка %d в буфере" % i)
+	near(v.placed[3].basis.y.length(), (1.0 - OgnevkaView.STROKE_SHORT * OgnevkaView.stroke(1.0, og.shrimp[3].phase, og.shrimp[3].v.length())) * OgnevkaView.shrimp_scale(3), 1e-4, "длина — своя")
+	v.set_lite(true)
+	var n := lc.stations.size()
+	ok(v.color_at(OgnevkaView.slot(1, n, true)).is_equal_approx(OgnevkaView.shrimp_color(1)), "на «Экономно» цвет у своего рачка")
+	v.free()

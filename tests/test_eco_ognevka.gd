@@ -477,7 +477,7 @@ func test_eco_view_has_ognevka() -> void:
 
 ## Место рачка из буфера вида (строки transform 3 × 4).
 static func _at(buf: PackedFloat32Array, slot: int) -> Vector3:
-	var o := slot * 12
+	var o := slot * OgnevkaView.STRIDE
 	return Vector3(buf[o + 3], buf[o + 7], buf[o + 11])
 
 
@@ -580,7 +580,8 @@ func test_eco_view_strokes_by_world_time() -> void:
 	ev.step(0.1, ship)
 	var i := ev.ognevka.moved_half()  # шагнувшие в этом шаге переписаны с временем мира
 	var s := ev.ognevka.shrimp[i]
-	var want := 1.0 - OgnevkaView.STROKE_SHORT * OgnevkaView.stroke(ev.world.time, s.phase, s.v.length())
+	var want := (1.0 - OgnevkaView.STROKE_SHORT * OgnevkaView.stroke(ev.world.time, s.phase, s.v.length())) \
+			* OgnevkaView.shrimp_scale(i)
 	near(ev.ognevka_view.placed[i].basis.y.length(), want, 1e-5, "гребок — по времени мира")
 	ev.queue_free()
 	await frames(1)
