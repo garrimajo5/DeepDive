@@ -7,6 +7,7 @@ extends Node3D
 ## Глаза и фотофоры светятся сами (карта свечения в GLB). Муть у дна от броска (EcoPredDust) — дочерний MultiMesh
 ## «Муть» в мировых координатах на общем шейдере EcoShaders.MIST (INK), +1 вызов. Стоит на слое отмели
 ## (OceanView.LAYER_WORLD).
+## Дышит жабрами — тело шире и выше в такт (`EcoPredLook.breath`, Б3), в броске — нет.
 
 ## Узлы дерева анимации (parameters/<узел>/…) — StringName: строка не разбирается в путь каждый кадр (#850).
 const P_SWIM := &"parameters/ts_swim/scale"
@@ -132,7 +133,8 @@ func sync(t: float, ship: Vector3, state: EcoLink.ShipState = null, flow := Vect
 		var root := bodies[i]
 		var dist := pr.agent.distance_to(ship)
 		root.visible = pr.agent.alive and dist <= EcoPredLook.HIDE_FAR
-		root.transform = Transform3D(EcoPredLook.basis(pr), pr.agent.p)
+		var breath := EcoPredLook.breath_scale(EcoPredLook.breath(pr, t))
+		root.transform = Transform3D(EcoPredLook.basis(pr).scaled_local(breath), pr.agent.p)
 		var at := trees[i]
 		var cue := cues[i].update(pr, ship, t, dist > EcoPredLook.CUE_FAR)
 		var step := clocks[i].tick(dt, dist, lite)
