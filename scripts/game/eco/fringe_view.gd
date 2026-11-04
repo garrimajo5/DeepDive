@@ -5,7 +5,8 @@ extends Node3D
 ## одна полоса (лист ART-080: 1536 / 384 треуг., один вызов). Корень — на льду, качание, мелкая волна и отвод корпусом
 ## считает вершинный шейдер теми же формулами, что `EcoFringe.Curtain.point` (двойник — `strand_point`): постоянные
 ## нити (ритм, фаза, размах, плоскость качания) — uniform-массивы, отвод конца — третий столбец базиса экземпляра
-## (полоса плоская, он свободен), длина — второй. След касания — `Curtain.custom` в INSTANCE_CUSTOM: фрагментный
+## (полоса плоская, он свободен), длина — второй, ширина нити и тон тела — первый (x, y; свои у каждой нити,
+## `strand_width`/`strand_shade`). След касания — `Curtain.custom` в INSTANCE_CUSTOM: фрагментный
 ## шейдер гасит его по `EcoFringe.envelope` и `band` (двойник — `glow_at`) и светит `#67DDEB` по узлам и щели.
 ## Тело освещается (прожектор, свет сквозь лёд), полупрозрачное, без теней; свечение — общий приём `eco_bio`.
 ## Рисунок пряди — процедурный (щель посередине, узлы-утолщения по NODES, конец тоньше): лист ART-080 разрешает
@@ -28,6 +29,9 @@ const GLOW := Color("67ddeb")
 const GLOW_K := 1.6
 const IDLE := 0.03
 const ALPHA := 0.6
+## Нити не клоны (Б4): у нити своя ширина и свой тон тела — по её номеру (`EcoVary`), разброс ±.
+const WIDTH_SPREAD := 0.15
+const SHADE_SPREAD := 0.12
 ## Чисел на экземпляр: transform 3 × 4 и INSTANCE_CUSTOM (4).
 const STRIDE := 16
 const CUSTOM := 12
@@ -58,6 +62,7 @@ uniform float rough = 0.55;
 uniform float spec = 0.35;
 %s
 varying vec4 trail;
+varying float shade;
 float node_at(float v) {
 	float n = 0.0;
 	for (int k = 0; k < 7; k++) {
@@ -71,6 +76,7 @@ void vertex() {
 	vec3 root = MODEL_MATRIX[3].xyz;
 	float len = MODEL_MATRIX[1].y;
 	float width = MODEL_MATRIX[0].x;
+	shade = MODEL_MATRIX[0].y;
 	vec3 push = MODEL_MATRIX[2].xyz;
 	float v = UV.y;
 	float bend = v * v;
@@ -111,7 +117,7 @@ void fragment() {
 	float d = abs(v - trail.y) - trail.z;
 	float band = d <= 0.0 ? 1.0 : clamp(1.0 - d / edge, 0.0, 1.0);
 	float mask = 0.3 + 0.7 * max(node, slit);
-	ALBEDO = mix(body, edge_tint, smoothstep(0.5, 1.0, u)) * (1.0 - 0.35 * slit);
+	ALBEDO = mix(body, edge_tint, smoothstep(0.5, 1.0, u)) * (1.0 - 0.35 * slit) * shade;
 	ROUGHNESS = rough;
 	SPECULAR = spec;
 	EMISSION = eco_bio(glow * (glow_k * env * band + idle) * mask);
@@ -201,6 +207,16 @@ static func build_mesh(strips: int) -> ArrayMesh:
 	return m
 
 
+## Ширина нити i у корня, м: WIDTH ± WIDTH_SPREAD по номеру нити (основание и узлы — с ней).
+static func strand_width(i: int) -> float:
+	return WIDTH * EcoVary.spread(i, EcoVary.WIDTH, WIDTH_SPREAD)
+
+
+## Тон тела нити i: множитель цвета тела и края, 1 ± SHADE_SPREAD (свечение следа — общее).
+static func strand_shade(i: int) -> float:
+	return EcoVary.spread(i, EcoVary.SHADE, SHADE_SPREAD)
+
+
 ## «Экономно»: одна полоса вместо двух (нитей — сколько живёт в мире, `Curtain.active`).
 func set_lite(on: bool) -> void:
 	lite = on
@@ -219,7 +235,8 @@ func sync(ship: EcoLink.ShipState, t: float) -> void:
 	material.set_shader_parameter("world_t", t)
 	for i in c.active:
 		var b := i * STRIDE
-		buffer[b] = WIDTH
+		buffer[b] = strand_width(i)
+		buffer[b + 4] = strand_shade(i)
 		buffer[b + 5] = c.length[i]
 		var p: Vector3 = c.push[i]
 		buffer[b + 2] = p.x
