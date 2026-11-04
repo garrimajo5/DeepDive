@@ -13,6 +13,10 @@ extends Node3D
 ## Луковицы не клоны (Б4, `EcoVary`): у луковицы свой размер (±BULB_SIZE_SPREAD) и яркость сока (±BULB_SHADE_SPREAD),
 ## у стебля — толщина (±STEM_THICK_SPREAD), по номеру луковицы; спелость куста видна по-прежнему (множители поверх
 ## `EcoBladder.bulb_size`/`bulb_color`). Вызовов и шейдеров столько же.
+## Луковицы дышат соком (Б3, `pulse`): луковица набухает и опадает — ширина ± PULSE_W, высота ± PULSE_H за PULSE_T с
+## (ритм ± PULSE_SPREAD и фаза — `EcoVary`), сок в набухшей ярче на PULSE_GLOW. Размах — по размеру луковицы
+## (`pulse_k`): спелая — во весь, молодая едва, опавшая после лопания — нет (доля плавная — размах не прыгает).
+## По времени мира (у гостя то же), масштаб и цвет экземпляра MultiMesh — даром, и на «Экономно».
 
 const STEM := Color("3f7a5a")
 ## Луковица — сфера 0,16 м, вытянутая в 1,3 раза; спора — точка 0,35 м (в браузере 0,5 с ореолом — здесь ореол внутри точки).
@@ -26,6 +30,12 @@ const STRIDE_C := 16
 const BULB_SIZE_SPREAD := 0.15
 const BULB_SHADE_SPREAD := 0.12
 const STEM_THICK_SPREAD := 0.15
+## Пульс сока (Б3).
+const PULSE_W := 0.06
+const PULSE_H := 0.03
+const PULSE_T := 3.2
+const PULSE_SPREAD := 0.2
+const PULSE_GLOW := 0.15
 
 var bladders: EcoBladder
 var stems: MultiMeshInstance3D
@@ -186,12 +196,16 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 	for bl in bladders.bushes:
 		var r := EcoBladder.bulb_size(bl)
 		var c := EcoBladder.bulb_color(bl)
+		var pk := pulse_k(r)
 		for k in EcoBladder.STEMS:
 			var n := bl.index * EcoBladder.STEMS + k
 			var i := n * STRIDE_C
 			var top := EcoBladder.bulb(bl, k, t, flow, amount)
-			EcoMM.put(bulb_buffer, i, Transform3D(Basis.from_scale(Vector3.ONE * (r * _size_k[n])), top))
-			var sk := _shade_k[n]
+			var p := pulse(n, t) * pk
+			var rr := r * _size_k[n]
+			EcoMM.put(bulb_buffer, i, Transform3D(Basis.from_scale(Vector3(
+				rr * (1.0 + PULSE_W * p), rr * (1.0 + PULSE_H * p), rr * (1.0 + PULSE_W * p))), top))
+			var sk := _shade_k[n] * (1.0 + PULSE_GLOW * p)
 			_color(bulb_buffer, i + STRIDE, Color(c.r * sk, c.g * sk, c.b * sk))
 			var a := bl.stem_base[k]
 			var up := top - a
@@ -280,6 +294,18 @@ static func bulb_scale(n: int) -> float:
 static func bulb_tint(c: Color, n: int) -> Color:
 	var k := EcoVary.spread(n, EcoVary.SHADE, BULB_SHADE_SPREAD)
 	return Color(c.r * k, c.g * k, c.b * k, c.a)
+
+
+## Фаза пульса луковицы n в момент t (время мира): −1…1, ритм и фаза у каждой свои.
+static func pulse(n: int, t: float) -> float:
+	var rate := EcoVary.spread(n, EcoVary.RATE, PULSE_SPREAD)
+	var ph := EcoVary.unit(n, EcoVary.TURN) * TAU
+	return sin(t * TAU / PULSE_T * rate + ph)
+
+
+## Доля размаха пульса по размеру луковицы куста (EcoBladder.bulb_size: 0,2 опавшая … 1 спелая): 0…1.
+static func pulse_k(size: float) -> float:
+	return clampf((size - 0.2) / 0.8, 0.0, 1.0)
 
 
 ## Толщина стебля n (множитель радиуса конуса).

@@ -330,7 +330,8 @@ func test_view_three_multimeshes() -> void:
 	var tr := BladderView.transform_at(bv.bulb_buffer, n)
 	var st2 := BladderView.transform_at(bv.stems.multimesh.buffer, n, BladderView.STRIDE)
 	ok(tr.origin.distance_to(st2 * Vector3(0, 0.5, 0)) < 1e-3, "луковица на вершине своего стебля")
-	near(tr.basis.x.length(), EcoBladder.bulb_size(bl) * BladderView.bulb_scale(n), 1e-3)
+	var rest := EcoBladder.bulb_size(bl) * BladderView.bulb_scale(n)
+	ok(absf(tr.basis.x.length() / rest - 1.0) <= BladderView.PULSE_W + 1e-4, "размер луковицы — с пульсом сока")
 	var s0 := BladderView.transform_at(bv.spore_buffer, bl.index * EcoBladder.SPORES)
 	near(s0.basis.x.length(), 0.0, 1e-6, "облака нет — споры спрятаны")
 	view.bladders.pop(view.world, bl, false)
@@ -448,3 +449,47 @@ func test_view_stem_follows_bulb() -> void:
 	ok(still.distance_to(bl.stem_top[5]) < 1e-3, "«Экономно» — стебель стоит")
 	view.queue_free()
 	await frames(1)
+
+
+## Луковицы дышат соком (Б3): ширина ± PULSE_W, высота ± PULSE_H, сок в набухшей ярче; размах по размеру луковицы —
+## спелая во весь, опавшая не дышит; ритм у каждой свой. Без исправления луковица стоит одного размера во времени.
+func test_view_bulbs_pulse_with_sap() -> void:
+	var w := _world()
+	var sys := _bl(w)
+	var v := BladderView.new(sys)
+	var bl: EcoBladder.Bush = sys.bushes[0]
+	bl.ripe = 1.0
+	var r := EcoBladder.bulb_size(bl)
+	near(BladderView.pulse_k(r), 1.0, 1e-5, "спелая — во весь размах")
+	var n := bl.index * EcoBladder.STEMS + 2
+	var widths := []
+	var heights := []
+	var lum := []
+	for s in 40:
+		var t := s * 0.2
+		v.sync(t)
+		var b := BladderView.transform_at(v.bulb_buffer, n).basis
+		var rest := r * BladderView.bulb_scale(n)
+		var p := BladderView.pulse(n, t)
+		near(b.x.length(), rest * (1.0 + BladderView.PULSE_W * p), 1e-4, "ширина по пульсу (t=%.1f)" % t)
+		near(b.y.length(), rest * (1.0 + BladderView.PULSE_H * p), 1e-4, "высота по пульсу (t=%.1f)" % t)
+		near(b.z.length(), b.x.length(), 1e-5, "круглая")
+		widths.append(b.x.length() / rest)
+		heights.append(b.y.length() / rest)
+		lum.append(v.bulb_buffer[n * BladderView.STRIDE_C + 13])
+	ok(widths.max() - widths.min() > BladderView.PULSE_W * 1.5, "ширина гуляет: %s…%s" % [widths.min(), widths.max()])
+	ok(widths.max() <= 1.0 + BladderView.PULSE_W + 1e-5 and widths.min() >= 1.0 - BladderView.PULSE_W - 1e-5, "в пределах")
+	ok(heights.max() - heights.min() < widths.max() - widths.min(), "по высоте слабее, чем вширь")
+	var bright := widths.find(widths.max())
+	var dim := widths.find(widths.min())
+	ok(lum[bright] > lum[dim], "сок ярче в набухшей")
+	# ритм у луковиц свой
+	var same := 0
+	for k in EcoBladder.STEMS:
+		if absf(BladderView.pulse(k, 2.0) - BladderView.pulse(0, 2.0)) < 0.05:
+			same += 1
+	ok(same <= 2, "луковицы куста дышат вразнобой")
+	# опавшая после лопания — не дышит, молодая — едва
+	near(BladderView.pulse_k(0.2), 0.0, 1e-6, "опавшая не дышит")
+	ok(BladderView.pulse_k(0.35) < 0.25, "молодая — едва")
+	v.free()
