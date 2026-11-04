@@ -662,3 +662,66 @@ func test_view_legs_walk_and_settle() -> void:
 	ok(v.leg_angles == angles, "стоит — меш не пересобирается")
 	v.queue_free()
 	await frames(1)
+
+
+## Дыхание панциря (Б3): высота и ширина ходят за BREATH_T, длина та же; затаился — HELD размаха.
+func test_shell_breathes_held_when_scared() -> void:
+	var top := 0.0
+	var low := INF
+	var held := 0.0
+	for i in 200:
+		var t := i * KrabView.BREATH_T / 200.0
+		var s := KrabView.breath(1.0, t)
+		top = maxf(top, s.y)
+		low = minf(low, s.y)
+		near(s.z, 1.0, 1e-9, "длина та же")
+		near(s.x - 1.0, (s.y - 1.0) * KrabView.BREATH_W / KrabView.BREATH_H, 1e-6, "шире вместе с высотой")
+		held = maxf(held, KrabView.breath(0.0, t).y)
+	near(top, 1.0 + KrabView.BREATH_H, 1e-3, "вдох — выше на BREATH_H")
+	near(low, 1.0 - KrabView.BREATH_H, 1e-3, "выдох — ниже")
+	near(held, 1.0 + KrabView.BREATH_H * KrabView.HELD, 1e-3, "затаился — HELD размаха")
+	eq(KrabView.breath(1.0, 3.0), KrabView.breath(1.0, 3.0), "по времени мира — у гостя то же")
+
+
+## В сцене: панцирь дышит (масштаб узла тела поверх SCALE), напуганный затаивается плавно, без скачка размера.
+func test_view_breathes_and_holds_smoothly() -> void:
+	var w := _world()
+	var kr := _krab(w)
+	var cr := kr.crab
+	var v := KrabView.new(kr)
+	tree.root.add_child(v)
+	await frames(1)
+	var dt := 1.0 / 30.0
+	var t := 0.0
+	var hi := 0.0
+	var lo := INF
+	var worst := 0.0
+	var last := -1.0
+	while t < KrabView.BREATH_T:
+		v.sync(t)
+		var b := v.body.transform.basis
+		var h := b.y.length() / KrabView.SCALE
+		near(b.z.length(), KrabView.SCALE, 1e-5, "длина тела та же")
+		hi = maxf(hi, h)
+		lo = minf(lo, h)
+		t += dt
+	ok(hi - lo > KrabView.BREATH_H * 1.8, "спокойный дышит во весь размах: %.4f" % (hi - lo))
+	cr.scared = 10.0
+	hi = 0.0
+	lo = INF
+	var stop := t + KrabView.CALM_T + KrabView.BREATH_T
+	while t < stop:
+		v.sync(t)
+		var h := v.body.transform.basis.y.length() / KrabView.SCALE
+		if last >= 0.0:
+			worst = maxf(worst, absf(h - last))
+		last = h
+		if t > stop - KrabView.BREATH_T:
+			hi = maxf(hi, h)
+			lo = minf(lo, h)
+		t += dt
+	near(v.calm, 0.0, 1e-6, "затаился")
+	ok(hi - lo < KrabView.BREATH_H * 2.0 * KrabView.HELD + 1e-3, "затаился — дыхание мельче: %.4f" % (hi - lo))
+	ok(worst < 0.003, "размер за кадр не прыгает: %.4f" % worst)
+	v.queue_free()
+	await frames(1)
