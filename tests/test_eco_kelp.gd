@@ -355,7 +355,7 @@ func test_view_urchin_fades_and_grows() -> void:
 	v.sync(t)
 	var at := u.pos
 	var size0 := KelpView.transform_at(v.urchin_buffer, 2, KelpView.STRIDE).basis.x.length()
-	ok(size0 > 0.9, "живой ёж во весь размер")
+	ok(size0 > 0.9 * KelpView.urchin_scale(2), "живой ёж во весь свой размер")
 	k.kill(u, 100.0)
 	var dt := 1.0 / 30.0
 	var last := size0
@@ -383,7 +383,7 @@ func test_view_urchin_fades_and_grows() -> void:
 	ok(grow.origin.is_equal_approx(u.pos), "растёт на новом месте")
 	t += KelpView.URCHIN_RISE
 	v.sync(t)
-	ok(KelpView.transform_at(v.urchin_buffer, 2, KelpView.STRIDE).basis.x.length() > 0.9, "вырос во весь размер")
+	ok(KelpView.transform_at(v.urchin_buffer, 2, KelpView.STRIDE).basis.x.length() > 0.9 * KelpView.urchin_scale(2), "вырос во весь свой размер")
 	v.queue_free()
 	await frames(1)
 

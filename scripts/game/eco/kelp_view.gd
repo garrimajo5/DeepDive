@@ -40,6 +40,8 @@ const STRIDE := 12
 ## За сколько секунд съеденный ёж сжимается в точку и появившийся вырастает во весь размер.
 const URCHIN_FADE := 0.5
 const URCHIN_RISE := 1.5
+## Разброс размера ежей (urchin_scale).
+const URCHIN_SPREAD := 0.1
 ## Иглы шевелятся: размах кончика вбок (м), качаний в секунду, сдвиг фазы соседней иглы (доля оборота).
 const SPINE_AMP := 0.035
 const SPINE_RATE := 0.3
@@ -255,6 +257,12 @@ static func spine_offset(dir: Vector3, k: int, frac: float, t: float, sway_k := 
 	return Vector3(s.x, 0.0, s.y)
 
 
+## Размер ежа номер n (Б4, «Вариативность в MultiMesh»): ±URCHIN_SPREAD хешем `EcoVary` от номера — ежи у ленточника
+## не одного размера; мир не меняется, у гостя тот же вид, вызовов и шейдеров столько же.
+static func urchin_scale(n: int) -> float:
+	return EcoVary.spread(n, EcoVary.SIZE, URCHIN_SPREAD)
+
+
 ## Направление иглы k ежа (как в build_urchin).
 static func spine_dir(k: int) -> Vector3:
 	var y := 1.0 - (k + 0.5) / SPINES * 1.2
@@ -310,7 +318,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow: Vector3 = Vector3.ZERO
 		var g := urchin_k[u.index]
 		var tr := Transform3D(Basis.from_scale(Vector3.ZERO), Vector3(0, -999, 0))
 		if g > 0.0:
-			tr = Transform3D(EcoKelp.urchin_basis(u, t) * Basis.from_scale(Vector3.ONE * smoothstep(0.0, 1.0, g)),
+			tr = Transform3D(EcoKelp.urchin_basis(u, t) * Basis.from_scale(Vector3.ONE * smoothstep(0.0, 1.0, g) * urchin_scale(u.index)),
 					_urchin_at[u.index])
 		EcoMM.put(urchin_buffer, u.index * STRIDE, tr)
 	bodies.multimesh.buffer = urchin_buffer

@@ -377,3 +377,25 @@ func test_ognevka_differ_and_carry_tint() -> void:
 	var w1 := OgnevkaView.shrimp_color(1)
 	near(Vector3(c1.r, c1.g, c1.b).distance_to(Vector3(w1.r, w1.g, w1.b)), 0.0, 1e-3, "на «Экономно» цвет у своего рачка")
 	v.free()
+
+
+## Шипоежи у ленточника (Б4): у ежа свой размер ±10 % — во весь рост буфер несёт его, мир не меняется.
+func test_urchins_differ_in_size() -> void:
+	var sizes := []
+	for n in 12:
+		sizes.append(KelpView.urchin_scale(n))
+	var s := _span(sizes)
+	ok(s.x >= 0.9 - 1e-5 and s.y <= 1.1 + 1e-5 and s.y - s.x > 0.08, "размер ±10 %%: %s" % s)
+	var w := EcoWorld.new()
+	w.ship.pos = Vector3(500, -30, 500)
+	var k := w.add(EcoKelp.new(null, [Vector3(0, -40, 0)] as Array[Vector3])) as EcoKelp
+	w.reset()
+	var v := KelpView.new(k)
+	v.sync(1.0)
+	v.sync(1.0 + KelpView.URCHIN_RISE + 0.1)
+	var t := 1.0 + KelpView.URCHIN_RISE + 0.1
+	for u in k.urchins:
+		var tr := KelpView.transform_at(v.urchin_buffer, u.index, KelpView.STRIDE)
+		var want := EcoKelp.urchin_basis(u, t).x.length() * KelpView.urchin_scale(u.index)
+		near(tr.basis.x.length(), want, 1e-4, "ёж %d — своего размера" % u.index)
+	v.free()
