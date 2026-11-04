@@ -113,6 +113,10 @@ class Urchin:
 	var speed := 0.0
 	## Фаза покачивания (рисунок).
 	var phase := 0.0
+	## Где последний раз смотрели дно под ежом и его высота (`EcoKelp.urchin_floor`, issue #1247).
+	var gx := INF
+	var gz := INF
+	var gh := 0.0
 	## Набранное время вдали (EcoLod): шагает реже, догоняя пропущенное.
 	var lag := 0.0
 
@@ -283,7 +287,7 @@ func _step_urchin(world: EcoWorld, u: Urchin, dt: float) -> void:
 		u.speed = move_toward(u.speed, want_speed(speed, dist - stop), ACCEL * dt)
 		u.pos += d * (minf(dist, u.speed * dt) / dist)
 		# высоту дна — только когда ёж сдвинулся: дно — шум fbm, стоящему ежу пересчитывать нечего (issue #133)
-		u.pos.y = _floor(u.pos.x, u.pos.z, u.pos.y - UP) + UP
+		u.pos.y = urchin_floor(u) + UP
 
 
 ## Нужная скорость ежа: full — ход к ленте или блуждание, rest — сколько осталось до места, где он встанет (м).
@@ -380,6 +384,20 @@ static func stalk_color(s: Stalk) -> Color:
 ## Ёж в момент t: медленно поворачивается и чуть дышит (urchinRender).
 static func urchin_basis(u: Urchin, t: float) -> Basis:
 	return Basis(Vector3.UP, t * 0.1 + u.phase) * Basis.from_scale(Vector3.ONE * (1.0 + sin(t * 1.5 + u.phase) * 0.04))
+
+
+## Дно под ежом u: пересчитывается, только когда ёж отполз дальше URCHIN_GROUND_STEP от прошлой точки (issue #1247:
+## ползущие ежи звали fbm каждый шаг — 14 вызовов за кадр при 0,005 м хода за кадр). Отличие — не больше уклона дна
+## на 0,1 м: на глаз незаметно, ёж и так стоит на UP над дном.
+const URCHIN_GROUND_STEP := 0.1
+func urchin_floor(u: Urchin) -> float:
+	var dx := u.pos.x - u.gx
+	var dz := u.pos.z - u.gz
+	if dx * dx + dz * dz > URCHIN_GROUND_STEP * URCHIN_GROUND_STEP:
+		u.gx = u.pos.x
+		u.gz = u.pos.z
+		u.gh = _floor(u.pos.x, u.pos.z, u.pos.y - UP)
+	return u.gh
 
 
 func _floor(x: float, z: float, fallback: float) -> float:

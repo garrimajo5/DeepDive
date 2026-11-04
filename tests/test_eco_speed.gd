@@ -49,6 +49,50 @@ func test_agent_ground_cache() -> void:
 	near(a.ground_y(flat), -10.0, 1e-6, "другое дно — читает заново")
 
 
+## Issue #1247: взгляд вперёд (`climb_for`) помнит дно в своих точках — стоящий у дна хищник не зовёт fbm семь раз
+## за шаг; ушёл дальше GROUND_STEP — читает заново, другое дно — тоже.
+func test_look_ahead_ground_cache() -> void:
+	var calls := [0]
+	var slope := func(x: float, _z: float) -> float:
+		calls[0] += 1
+		return x * 0.5
+	var a := EcoAgent.new("pred", Vector3(0, 0.5, 0))
+	a.look = 1.5
+	a.v = Vector3(2, 0, 0)
+	var first := a.climb_for(slope)
+	var n: int = calls[0]
+	eq(n, EcoAgent.LOOK_AT.size() + 1, "первый раз — дно под собой и в каждой точке взгляда")
+	near(a.climb_for(slope), first, 1e-6, "на месте — тот же ответ")
+	eq(calls[0], n, "на месте дно не читали заново")
+	a.p.x += EcoAgent.GROUND_STEP * 2.0
+	a.climb_for(slope)
+	eq(calls[0], n * 2, "отплыло — читает заново")
+	var flat := func(_x: float, _z: float) -> float:
+		calls[0] += 1
+		return 0.0
+	a.climb_for(flat)
+	eq(calls[0], n * 3, "другое дно — читает заново")
+
+
+## Issue #1247: ползущий ёж ленточника читает дно, только когда отполз дальше URCHIN_GROUND_STEP (раньше — каждый шаг).
+func test_urchin_ground_cache() -> void:
+	var calls := [0]
+	var kelp := EcoKelp.new()
+	kelp._ground = func(x: float, _z: float) -> float:
+		calls[0] += 1
+		return x * 0.2
+	var u := EcoKelp.Urchin.new()
+	u.pos = Vector3(1, 0, 0)
+	near(kelp.urchin_floor(u), 0.2, 1e-6, "первый раз — по дну")
+	for i in 10:
+		u.pos.x += 0.005   # ход ежа за кадр
+		kelp.urchin_floor(u)
+	eq(calls[0], 1, "отполз на 5 см — дно не читали заново")
+	u.pos.x += EcoKelp.URCHIN_GROUND_STEP
+	near(kelp.urchin_floor(u), u.pos.x * 0.2, 1e-6, "дальше шага — читает заново")
+	eq(calls[0], 2)
+
+
 func test_far_shoals_step_every_third_frame() -> void:
 	var w := _world(Vector3(500, 0, 500))  # все стаи дальше FAR
 	var fish := w.systems[0] as EcoFish
