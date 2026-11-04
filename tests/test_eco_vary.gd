@@ -521,3 +521,55 @@ func test_bladder_bulbs_differ() -> void:
 	var rs := _span(radii)
 	ok(rs.y - rs.x > 0.01 * r, "луковицы куста не одного размера: %s" % rs)
 	v.free()
+
+## Хватни и пестрянки (Б4): у хватня своя ширина тела ±12 % (основания щупалец на диске — с ней), у пестрянки —
+## размер ±15 % и яркость свечения ±20 % (тон тот же); буферы несут их. Без исправления четыре хватня и двенадцать
+## пестрянок — одного размера и одной яркости.
+func test_hvaten_and_pestr_differ() -> void:
+	var widths := []
+	var sizes := []
+	for i in 24:
+		widths.append(HvatenView.body_width(i))
+		sizes.append(HvatenView.pestr_size(i))
+	var w := _span(widths)
+	ok(w.x >= 0.88 - 1e-5 and w.y <= 1.12 + 1e-5 and w.y - w.x > 0.1, "ширина тела ±12 %%: %s" % w)
+	var s := _span(sizes)
+	ok(s.x >= 0.85 - 1e-5 and s.y <= 1.15 + 1e-5 and s.y - s.x > 0.15, "размер пестрянки ±15 %%: %s" % s)
+	var c := Color(1.0, 0.48, 0.16)
+	var lum := []
+	for n in 24:
+		var g := HvatenView.pestr_glow(c, n)
+		near(g.g / g.r, c.g / c.r, 1e-5, "тон тот же (%d)" % n)
+		lum.append(g.r / c.r)
+	var l := _span(lum)
+	ok(l.x >= 0.8 - 1e-5 and l.y <= 1.2 + 1e-5 and l.y - l.x > 0.2, "яркость ±20 %%: %s" % l)
+	var w2 := EcoWorld.new()
+	w2.ground = func(_x: float, _z: float) -> float: return -40.0
+	w2.ship.pos = Vector3(500, -30, 500)
+	var f := w2.add(EcoFish.new()) as EcoFish
+	var homes: Array[Vector3] = []
+	for j in 4:
+		homes.append(Vector3(EcoFish.HOMES[j].x + 3.0, -40.0, EcoFish.HOMES[j].z))
+	var h := w2.add(EcoHvaten.new(f, homes)) as EcoHvaten
+	var v := HvatenView.new(h)
+	var t := 3.0
+	v.sync(t)
+	var n := h.anemones.size()
+	var bw := []
+	for hv in h.anemones:
+		var b := HvatenView.transform_at(v.body_buffer, hv.index).basis
+		var raw := EcoHvaten.body(hv, t).basis
+		near(b.x.length() / raw.x.length(), HvatenView.body_width(hv.index), 1e-5, "тело %d — своей ширины" % hv.index)
+		near(b.y.length(), raw.y.length(), 1e-5, "высота та же — диск на месте (%d)" % hv.index)
+		bw.append(b.x.length() / raw.x.length())
+		var tr := HvatenView.transform_at(v.tent_buffer, hv.index * EcoHvaten.TENT + 5)
+		near(Vector2(tr.origin.x - hv.top.x, tr.origin.z - hv.top.z).length(),
+			EcoHvaten.TENT_R * EcoHvaten.breath(hv, t) * HvatenView.body_width(hv.index), 1e-4,
+			"щупальце растёт из диска своей ширины (%d)" % hv.index)
+		for k in EcoHvaten.PESTR_N:
+			var m := hv.index * EcoHvaten.PESTR_N + k
+			var pe := HvatenView.transform_at(v.pestr_buffer, m, HvatenView.STRIDE_P)
+			near(pe.basis.x.length(), EcoPestrLook.SCALE * HvatenView.pestr_size(m), 1e-5, "пестрянка %d — своего размера" % m)
+	ok(_span(bw).y - _span(bw).x > 0.01, "хватни не одной ширины: %s" % [bw])
+	ok(n > 0)
+	v.free()
