@@ -14,8 +14,8 @@ extends Node3D
 ## не прибавилось, и на «Экономно».
 ## Рачки не клоны (Б4, «Вариативность в MultiMesh»): у каждого свой размер (±SIZE_SPREAD), яркость (±SHADE_SPREAD) и
 ## оттенок от красно-оранжевого до янтарного (±HUE_SPREAD) — хешем `EcoVary` от номера рачка, мир и его случай не
-## меняются, у гостя тот же вид. Цвет — цвет экземпляра MultiMesh (sRGB, как прежний albedo): вызовов и шейдеров
-## столько же, и на «Экономно».
+## меняются, у гостя тот же вид. Цвет — цвет экземпляра MultiMesh (в буфере линейный — как прежний albedo в sRGB;
+## флаги материала — как у огоньков гротовика, без нового шейдера): вызовов и шейдеров столько же, и на «Экономно».
 
 const RADIUS := 0.06
 const LENGTH := 0.2
@@ -123,9 +123,7 @@ static func build() -> CapsuleMesh:
 	m.rings = 1
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.albedo_color = Color.WHITE
-	mat.vertex_color_use_as_albedo = true   # цвет — у каждого рачка свой (shrimp_color)
-	mat.vertex_color_is_srgb = true
+	mat.vertex_color_use_as_albedo = true   # цвет — у каждого рачка свой (shrimp_color, в буфере — линейный)
 	m.material = mat
 	return m
 
@@ -154,10 +152,10 @@ static func shrimp_color(i: int) -> Color:
 	return Color(c.r * k, c.g * k, c.b * k, 1.0)
 
 
-## Цвет рачка в буфере на месте slot (для тестов).
+## Цвет рачка в буфере на месте slot (sRGB, для тестов).
 func color_at(slot: int) -> Color:
 	var o := slot * STRIDE + 12
-	return Color(_buffer[o], _buffer[o + 1], _buffer[o + 2], _buffer[o + 3])
+	return Color(_buffer[o], _buffer[o + 1], _buffer[o + 2], _buffer[o + 3]).linear_to_srgb()
 
 
 ## Капсула вдоль хода рачка: ось капсулы (Y меша) — по направлению dir; в гребке (момент t) короче и толще;
@@ -196,7 +194,7 @@ func sync(all := false, t := -1.0) -> void:
 		placed[i] = x
 		var b := x.basis
 		var o := slot(i, stations, lite) * STRIDE
-		var col := shrimp_color(i)
+		var col := shrimp_color(i).srgb_to_linear()
 		_buffer[o + 12] = col.r; _buffer[o + 13] = col.g; _buffer[o + 14] = col.b; _buffer[o + 15] = 1.0
 		_buffer[o] = b.x.x; _buffer[o + 1] = b.y.x; _buffer[o + 2] = b.z.x; _buffer[o + 3] = x.origin.x
 		_buffer[o + 4] = b.x.y; _buffer[o + 5] = b.y.y; _buffer[o + 6] = b.z.y; _buffer[o + 7] = x.origin.y
