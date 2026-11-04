@@ -49,6 +49,9 @@ var _dust := EcoDustBuffer.new()
 var _ground := Callable()
 ## На «Экономно» — лист и моллюск грубее (set_lite).
 var lite := false
+## Поворот и размер каждого листа (Б4) — считаются один раз, с первым буфером.
+var _turn: Array[Basis] = []
+var _size := PackedVector3Array()
 
 
 func _init(system: EcoFern, ground: Callable = Callable(), on_lite := false) -> void:
@@ -147,11 +150,17 @@ func sync(t: float, info: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 		_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 	var fresh := buffer.size() != leaves.multimesh.instance_count * STRIDE_C
 	buffer.resize(leaves.multimesh.instance_count * STRIDE_C)
+	if fresh:
+		_turn.resize(leaves.multimesh.instance_count)
+		_size.resize(leaves.multimesh.instance_count)
 	for fe in ferns.ferns:
 		for j in EcoFern.LEAVES:
 			var n := fe.index * EcoFern.LEAVES + j
 			var i := n * STRIDE_C
-			EcoMM.put(buffer, i, Transform3D(leaf_shape(n, EcoFern.leaf_basis(fe, j, t)), fe.pos))
+			if fresh:
+				_turn[n] = leaf_turn(n)
+				_size[n] = leaf_size(n)
+			EcoMM.put(buffer, i, Transform3D((_turn[n] * EcoFern.leaf_basis(fe, j, t)).scaled_local(_size[n]), fe.pos))
 			if fresh:
 				var c := leaf_tint(n)
 				buffer[i + 12] = c.r; buffer[i + 13] = c.g; buffer[i + 14] = c.b; buffer[i + 15] = 1.0
@@ -160,9 +169,17 @@ func sync(t: float, info: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 
 ## Лист n своей формы: повёрнут вокруг стебля на свой угол, длиннее или короче, шире или уже (оси листа).
 static func leaf_shape(n: int, b: Basis) -> Basis:
-	var turn := (EcoVary.unit(n, EcoVary.TURN) * 2.0 - 1.0) * LEAF_TURN
-	var k := Vector3(EcoVary.spread(n, EcoVary.RATE, LEAF_W_SPREAD), EcoVary.spread(n, EcoVary.SIZE, LEAF_LEN_SPREAD), 1.0)
-	return (Basis(Vector3.UP, turn) * b).scaled_local(k)
+	return (leaf_turn(n) * b).scaled_local(leaf_size(n))
+
+
+## Поворот листа n вокруг стебля.
+static func leaf_turn(n: int) -> Basis:
+	return Basis(Vector3.UP, (EcoVary.unit(n, EcoVary.TURN) * 2.0 - 1.0) * LEAF_TURN)
+
+
+## Ширина и длина листа n (множители по осям листа X и Y).
+static func leaf_size(n: int) -> Vector3:
+	return Vector3(EcoVary.spread(n, EcoVary.RATE, LEAF_W_SPREAD), EcoVary.spread(n, EcoVary.SIZE, LEAF_LEN_SPREAD), 1.0)
 
 
 ## Множитель красок листа n — цвет экземпляра.
