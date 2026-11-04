@@ -608,7 +608,8 @@ func test_slow_frame_one_substep() -> void:
 	near(w.time, 1.0 / 60.0 + 0.055 + EcoWorld.SLOW_STEP + 0.1, 1e-6, "время мира — всё время кадров")
 
 
-## После долгой заминки мир в кадре догоняет не больше FRAME_CAP — не десяток подшагов разом (issue #713).
+## После долгой заминки мир не догоняет десятком подшагов (issue #713): кадр срезан до FRAME_CAP, за кадр — один подшаг
+## ≤ SLOW_STEP, остаток в долг — его отдают следующие быстрые кадры (#1253).
 func test_view_caps_long_frame() -> void:
 	var view := EcoView.new()
 	tree.root.add_child(view)
@@ -619,10 +620,38 @@ func test_view_caps_long_frame() -> void:
 	var t := view.world.time
 	var s := view.world.steps
 	view.step(1.5, ship)
-	near(view.world.time - t, EcoWorld.FRAME_CAP, 1e-6, "заминка 1,5 с — мир прошёл FRAME_CAP")
-	ok(view.world.steps - s <= int(ceil(EcoWorld.FRAME_CAP / EcoWorld.SLOW_STEP)), "подшагов не больше 4")
-	view.step(0.1, ship)
-	near(view.world.time - t, EcoWorld.FRAME_CAP + 0.1, 1e-6, "обычный кадр — всё время")
+	near(view.world.time - t, EcoWorld.SLOW_STEP, 1e-6, "заминка 1,5 с — мир прошёл один подшаг")
+	eq(view.world.steps - s, 1, "один подшаг")
+	near(view.lag, EcoWorld.FRAME_CAP - EcoWorld.SLOW_STEP, 1e-6, "кадр срезан до FRAME_CAP, остаток — в долг")
+	for i in 20:
+		view.step(1.0 / 30.0, ship)
+	near(view.lag, 0.0, 1e-6, "быстрые кадры отдали долг")
+	near(view.world.time - t, EcoWorld.FRAME_CAP + 20.0 / 30.0, 1e-5, "мир прошёл всё, кроме срезанного")
+	eq(view.world.steps - s, 21, "по подшагу на кадр")
+	view.queue_free()
+	await frames(1)
+
+
+## Медленный кадр (97–120 мс) не даёт миру два подшага на кадре — провал не тянет провал (issue #1253, сцена 32o/33a).
+func test_view_slow_frame_one_substep() -> void:
+	var view := EcoView.new()
+	tree.root.add_child(view)
+	view.ground = Seabed.height
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Helm.Ship.START
+	view.step(1.0 / 30.0, ship)
+	var t := view.world.time
+	var s := view.world.steps
+	var frames_dt := [0.097, 0.12, 1.0 / 30.0, 0.1, 1.0 / 30.0, 1.0 / 30.0, 1.0 / 30.0, 1.0 / 30.0, 1.0 / 30.0, 1.0 / 30.0]
+	var total := 0.0
+	for d in frames_dt:
+		var before := view.world.steps
+		view.step(d, ship)
+		eq(view.world.steps - before, 1, "кадр %d мс — один подшаг мира" % roundi(d * 1000.0))
+		total += d
+	near(view.lag, 0.0, 1e-6, "долг отдан")
+	near(view.world.time - t, total, 1e-5, "время мира не потеряно")
+	eq(view.world.steps - s, frames_dt.size(), "подшагов столько же, сколько кадров")
 	view.queue_free()
 	await frames(1)
 

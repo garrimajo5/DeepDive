@@ -2,6 +2,12 @@
 
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
+## 2026-11-05
+- Медленный кадр не удваивает шаг мира (поток Б, по issue #1253): кадр 97–120 мс давал живому миру два подшага на
+  следующем кадре (мир ×2 на `32o-mol-steklo`, `33a-kondensat-krasivo`). Теперь `EcoView.world_dt` — один подшаг
+  ≤ `EcoWorld.SLOW_STEP` за кадр, остаток в долг `EcoView.lag` (не больше `FRAME_CAP`), его отдают быстрые кадры.
+  Тесты — `test_eco_speed.test_view_slow_frame_one_substep`, `test_view_caps_long_frame`.
+
 ## 2026-11-04
 - Итог забега: корпус больше не теряет прочность после «наверх» (по issue #1249) — удар мира при `Run.ended` не
   доходит до корпуса, «Корпус на финише» на карточке совпадает с приборами. Тест — `test_flyby.test_scene_no_hit_after_summary`.
