@@ -426,7 +426,9 @@ func test_view_flap_from_world() -> void:
 		view.step(0.05, ship)
 	for ry in view.rays.rays:
 		var c := rv.customs[ry.index]
-		eq(c.r, float(ry.index), "номер ската — для хвоста")
+		eq(c.r, float(ry.index), "номер ската")
+		near(c.a, RayView.tail_phase(view.world.time, ry.index), 1e-5, "фаза хлыста — по времени мира")
+		ok(c.a >= 0.0 and c.a < TAU, "по модулю TAU — точность на долгом забеге")
 		near(c.g, ry.flap, 1e-6, "фаза взмаха — с мира")
 		near(c.b, ry.flap_k, 1e-6, "доля размаха — с мира")
 	var code := (rv.multimesh.mesh.surface_get_material(0) as ShaderMaterial).shader.code
@@ -461,8 +463,9 @@ func test_tail_whips() -> void:
 	ok(tail >= (RayView.TAIL_RINGS - 1) * 6, "хвост из %d колец гнётся: %d вершин" % [RayView.TAIL_RINGS, tail])
 	var mat := mesh.surface_get_material(0) as ShaderMaterial
 	ok(mat.shader.code.contains(
-		"VERTEX.x += sin(TIME * 2.4 + INSTANCE_CUSTOM.x * 2.1 - UV.x * 5.0) * 0.8 * UV.x * UV.x * sway_k"),
+		"VERTEX.x += sin(INSTANCE_CUSTOM.w - UV.x * 5.0) * 0.8 * UV.x * UV.x * sway_k"),
 		"волна хвоста — в шейдере, числа как у двойника")
+	ok(not mat.shader.code.contains("TIME"), "хлыст — по времени мира, не по часам шейдера")
 	near(RayView.TAIL_RATE, 2.4, 1e-6, "частота")
 	near(RayView.TAIL_PHASE, 2.1, 1e-6, "сдвиг между скатами")
 	near(RayView.TAIL_K, 5.0, 1e-6, "волн на длину")
