@@ -486,6 +486,53 @@ func test_pestr_view_shares_fish_shader() -> void:
 	await frames(1)
 
 
+# ---------- Дыхание пестрянок (Б3) ----------
+
+func test_view_pestr_breathe_in_round_dance() -> void:
+	# В хороводе (ход 0,3 м/с) — во весь размах: за период шире и уже на PESTR_BREATH_W.
+	var lo := 1.0
+	var hi := -1.0
+	for i in 60:
+		var b := HvatenView.pestr_breath(5, i * HvatenView.PESTR_BREATH_T / 60.0 * 1.3, 0.3)
+		lo = minf(lo, b)
+		hi = maxf(hi, b)
+	ok(hi > 0.95 and lo < -0.95, "в хороводе дышит во весь размах")
+	var s := HvatenView.pestr_breath_scale(1.0)
+	near(s.x, 1.0 + HvatenView.PESTR_BREATH_W, 1e-6, "шире")
+	near(s.y, 1.0 + HvatenView.PESTR_BREATH_H, 1e-6, "выше")
+	near(s.z, 1.0, 1e-6, "длина та же — нос и хвост на месте")
+	# На ходу к стае — не дышит; между порогами — плавно.
+	for i in 20:
+		near(HvatenView.pestr_breath(5, i * 0.37, HvatenView.PESTR_RUSH), 0.0, 1e-6, "на ходу размах погас")
+	var mid := absf(HvatenView.pestr_breath(5, 0.4, (HvatenView.PESTR_CALM + HvatenView.PESTR_RUSH) / 2.0))
+	ok(mid <= absf(HvatenView.pestr_breath(5, 0.4, 0.0)) + 1e-6, "между порогами — меньше")
+	# Не в такт: у рыбок свои фазы.
+	var at0 := {}
+	for n in 12:
+		at0[snappedf(HvatenView.pestr_breath(n, 0.0), 0.05)] = true
+	ok(at0.size() > 6, "пестрянки дышат вразнобой")
+	# В сцене: ширина в буфере дышит, длина нет.
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var hv := view.hvaten_view
+	var a := view.hvaten.anemones[0]
+	a.pestr[0].v = Vector3.ZERO
+	var widths := []
+	for i in 8:
+		var t := i * HvatenView.PESTR_BREATH_T / 8.0
+		hv.sync(t)
+		var tr := HvatenView.transform_at(hv.pestr_buffer, 0, HvatenView.STRIDE_P)
+		near(tr.basis.z.length(), EcoPestrLook.SCALE * HvatenView.pestr_size(0), 1e-4, "длина та же")
+		near(tr.basis.x.length(), EcoPestrLook.SCALE * HvatenView.pestr_size(0)
+			* (1.0 + HvatenView.PESTR_BREATH_W * HvatenView.pestr_breath(0, t, 0.0)), 1e-4, "ширина — по дыханию")
+		widths.append(tr.basis.x.length())
+	ok(widths.max() - widths.min() > EcoPestrLook.SCALE * 0.05, "в буфере ширина меняется")
+	view.queue_free()
+	await frames(1)
+
+
 # ---------- Плавность (Б3) ----------
 
 func test_pestr_turn_limited_and_holds_when_still() -> void:

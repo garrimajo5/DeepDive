@@ -13,6 +13,11 @@ extends Node3D
 ## Не клоны (Б4, `EcoVary`): у хватня своя ширина тела ±12 % (`body_width`, основания щупалец на диске — с ним), у
 ## пестрянки — размер ±15 % (`pestr_size`) и яркость свечения ±20 % (`pestr_glow`) по номеру рыбки. Хешем от номера —
 ## мир и его случай не меняются, у гостя сети тот же вид. Вызовов и шейдеров столько же, и на «Экономно».
+## «Дыхание» пестрянок (Б3, `pestr_breath`): рыбка качает воду жабрами — тело шире на ± PESTR_BREATH_W и выше на
+## ± PESTR_BREATH_H за PESTR_BREATH_T с (ритм ± PESTR_BREATH_SPREAD и фаза — у каждой свои, `EcoVary`); длина та же —
+## нос и хвост-веер на месте. Дышит, пока висит в хороводе у хватня: на ходу к стае размах гаснет между
+## PESTR_CALM и PESTR_RUSH м/с (ход `Pestr.v` сам меняется плавно — без скачка). По времени мира (у гостя то же),
+## масштаб экземпляра MultiMesh — даром, и на «Экономно».
 
 ## Цвета пестрянок по порядку (pc в браузере).
 const PESTR_COLORS: Array[Color] = [Color("ff7a2a"), Color("fff1d0"), Color("ff9a4a")]
@@ -31,6 +36,13 @@ const TIP_GLOW := Vector2(0.15, 0.9)
 const BODY_SPREAD := 0.12
 const PESTR_SIZE_SPREAD := 0.15
 const PESTR_GLOW_SPREAD := 0.2
+## Дыхание пестрянки: период, размах по ширине и высоте, разброс ритма; ход, с которого размах гаснет, и до нуля.
+const PESTR_BREATH_T := 2.2
+const PESTR_BREATH_W := 0.05
+const PESTR_BREATH_H := 0.035
+const PESTR_BREATH_SPREAD := 0.2
+const PESTR_CALM := 0.6
+const PESTR_RUSH := 1.8
 
 var hvaten: EcoHvaten
 var bodies: MultiMeshInstance3D
@@ -155,11 +167,27 @@ static func tentacle_pose(hv: EcoHvaten.Anemone, k: int, t: float, live := true,
 	return tr
 
 
-## Пестрянка k хватня в момент t: поза мира, размер EcoPestrLook.SCALE × `pestr_size`.
+## Пестрянка k хватня в момент t: поза мира, размер EcoPestrLook.SCALE × `pestr_size`, дышит (`pestr_breath`).
 static func pestr_pose(hv: EcoHvaten.Anemone, k: int, t: float) -> Transform3D:
 	var tr := EcoHvaten.pestr_pose(hv, k, t)
-	tr.basis = tr.basis * Basis.from_scale(Vector3.ONE * EcoPestrLook.SCALE * pestr_size(hv.index * EcoHvaten.PESTR_N + k))
+	var n := hv.index * EcoHvaten.PESTR_N + k
+	var b := pestr_breath(n, t, hv.pestr[k].v.length())
+	tr.basis = tr.basis * Basis.from_scale(pestr_breath_scale(b) * EcoPestrLook.SCALE * pestr_size(n))
 	return tr
+
+
+## Доля дыхания пестрянки n в момент t: −1…1 · размах (PESTR_BREATH_T, ритм и фаза — EcoVary); speed — ход, м/с
+## (в хороводе дышит во весь размах, на ходу к стае — нет).
+static func pestr_breath(n: int, t: float, speed := 0.0) -> float:
+	var rate := EcoVary.spread(n, EcoVary.RATE, PESTR_BREATH_SPREAD)
+	var phase := EcoVary.unit(n, EcoVary.HUE) * TAU
+	var calm := 1.0 - smoothstep(PESTR_CALM, PESTR_RUSH, speed)
+	return sin(t * TAU / PESTR_BREATH_T * rate + phase) * calm
+
+
+## Множитель размера пестрянки по доле дыхания: шире и выше, длина та же.
+static func pestr_breath_scale(k: float) -> Vector3:
+	return Vector3(1.0 + PESTR_BREATH_W * k, 1.0 + PESTR_BREATH_H * k, 1.0)
 
 
 ## Сколько щупалец рисуется сейчас.
