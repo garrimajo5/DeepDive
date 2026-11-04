@@ -1188,8 +1188,8 @@ func _step_eco(dt: float) -> void:
 func on_eco_event(e: Dictionary) -> void:
 	match e.get("type", ""):
 		EcoLink.HIT:
-			if flyby.shields() or events_held():
-				return   # облёт в начале забега (#506) и обучение у старта (#827): удар не доходит до корпуса
+			if flyby.shields() or events_held() or run.ended:
+				return   # облёт в начале забега (#506), обучение у старта (#827) и итог забега (#1249): удар не доходит до корпуса
 			var at: Variant = e.get("at")
 			hit_local = hit_local_of(at) if at is Vector3 else null   # откуда бьёт — для звука удара (#656)
 			vitals.hit(roundi(float(e.get("damage", 0.0)) * 100.0), str(e.get("by", "")))
