@@ -374,3 +374,65 @@ func test_view_lite_draws_two_of_three_per_swarm() -> void:
 		EcoRaduzh.member_pos(view.raduzh.swarms[2], 4, view.world.time)), 0.0, 1e-4, "и места переписаны")
 	view.queue_free()
 	await frames(1)
+
+
+## Ряды ресничек бьют (Б3): на ряду под гребнем волны тело ярче, между рядами — тусклее; волна бежит со временем
+## от верха ко рту; в среднем по телу яркость прежняя; фаза особи — в альфе цвета тела, время мира — в шейдере.
+func test_view_comb_rows_beat() -> void:
+	var on_row := Vector3(0.0, 0.0, 1.0)            # atan2(0, 1) = 0 — середина ряда
+	var between := Vector3(sin(PI / 8.0), 0.0, cos(PI / 8.0))  # между рядами (8 рядов — через π/4)
+	var best := 0.0
+	var worst := 99.0
+	for i in 40:
+		var t := i * 0.02
+		best = maxf(best, RaduzhView.comb_k(on_row, t, 0.0))
+		worst = minf(worst, RaduzhView.comb_k(on_row, t, 0.0))
+		near(RaduzhView.comb_k(between, t, 0.0), lerpf(1.0, RaduzhView.COMB_BASE, RaduzhView.COMB), 1e-4,
+			"между рядами — ровно тускло")
+	ok(best > 2.5, "на ряду под гребнем волны — вспыхивает (%.2f)" % best)
+	ok(worst < 0.7, "на ряду меж гребнями — гаснет (%.2f)" % worst)
+	# гребень волны со временем уходит вниз по телу (ко рту)
+	var t0 := (PI / 2.0) / RaduzhView.COMB_RATE   # в t0 на экваторе гребень
+	var top_y := 0.0
+	var later := t0 + 0.05
+	var y_peak := -INF
+	var k_peak := -INF
+	for s in 41:
+		var y := -1.0 + s * 0.05
+		var k := RaduzhView.comb_k(Vector3(0.0, y, sqrt(maxf(0.0, 1.0 - y * y))), later, 0.0)
+		if absf(y) < 0.6 and k > k_peak:
+			k_peak = k
+			y_peak = y
+	ok(y_peak < top_y, "гребень сместился вниз (%.2f)" % y_peak)
+	# среднее по сфере ≈ 1
+	var sum := 0.0
+	var n := 0
+	for a in 64:
+		for b in 32:
+			var y := -1.0 + (b + 0.5) / 16.0
+			var r := sqrt(1.0 - y * y)
+			var ang := a * TAU / 64.0
+			sum += RaduzhView.comb_k(Vector3(sin(ang) * r, y, cos(ang) * r), 0.37, 1.1)
+			n += 1
+	near(sum / n, 1.0, 0.08, "в среднем по телу яркость прежняя")
+	near(RaduzhView.beat_alpha(TAU * 0.25), 0.25, 1e-6, "фаза — доля оборота")
+	# сцена: фаза особи в альфе тела, время мира — uniform
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var rv := view.raduzh_view
+	var ship := EcoLink.ShipState.new()
+	ship.pos = FAR
+	view.step(0.05, ship)
+	rv.sync(view.world.time, FAR, 0.0, true)
+	var sw := view.raduzh.swarms[1]
+	var j := rv.slot_of(1 * EcoRaduzh.PER_SWARM + 5)
+	near(RaduzhView.color_at(rv.body_buffer, j).a, RaduzhView.beat_alpha(sw.members[5].phase), 1e-5,
+		"фаза биения — в альфе тела")
+	near(RaduzhView.color_at(rv.halo_buffer, j).a, 1.0, 1e-6, "ореол не тронут")
+	var mat := (rv.bodies.multimesh.mesh as PrimitiveMesh).material as ShaderMaterial
+	near(float(mat.get_shader_parameter("world_t")), view.world.time, 1e-5, "время мира — в шейдере тела")
+	ok(RaduzhView.body_code().contains("comb_rows"), "ряды — в шейдере тела")
+	view.queue_free()
+	await frames(1)
