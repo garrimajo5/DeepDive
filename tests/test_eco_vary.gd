@@ -570,7 +570,7 @@ func test_hvaten_and_pestr_differ() -> void:
 		for k in EcoHvaten.PESTR_N:
 			var m := hv.index * EcoHvaten.PESTR_N + k
 			var pe := HvatenView.transform_at(v.pestr_buffer, m, HvatenView.STRIDE_P)
-			near(pe.basis.x.length(), EcoPestrLook.SCALE * HvatenView.pestr_size(m), 1e-5, "пестрянка %d — своего размера" % m)
+			near(pe.basis.z.length(), EcoPestrLook.SCALE * HvatenView.pestr_size(m), 1e-5, "пестрянка %d — своего размера (длина — дыхание её не меняет)" % m)
 	ok(_span(bw).y - _span(bw).x > 0.01, "хватни не одной ширины: %s" % [bw])
 	ok(n > 0)
 	v.free()
