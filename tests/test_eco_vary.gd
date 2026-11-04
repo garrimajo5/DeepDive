@@ -465,3 +465,19 @@ func test_moths_differ_in_size_and_shade() -> void:
 		near(v.shade_at(i), MothView.moth_shade(i), 1e-6, "яркость рачка %d" % i)
 	ok(absf(v.scale_at(0) - v.scale_at(5)) + absf(v.scale_at(5) - v.scale_at(17)) > 0.01, "карточки не одного размера")
 	v.free()
+## Иглы кольчужника (Б4): у иглы своя длина ±20 % и толщина ±12 % — в месте иглы на панцире, буфер несёт её
+## размер; без исправления все десять игл одной длины.
+func test_krab_spines_differ() -> void:
+	var lens := []
+	var ths := []
+	for k in EcoKrab.SPINE_MAX:
+		var b := KrabView.spine_transform(k).basis
+		lens.append(b.y.length())
+		ths.append(b.x.length())
+		near(b.x.length(), b.z.length(), 1e-5, "игла круглая (%d)" % k)
+		eq(KrabView.spine_transform(k), KrabView.spine_transform(k), "одна и та же игла — один размер")
+	var l := _span(lens)
+	ok(l.x >= 0.8 - 1e-5 and l.y <= 1.2 + 1e-5 and l.y - l.x > 0.15, "длина ±20 %%: %s" % l)
+	var t := _span(ths)
+	ok(t.x >= 0.88 - 1e-5 and t.y <= 1.12 + 1e-5 and t.y - t.x > 0.08, "толщина ±12 %%: %s" % t)
+	near(KrabView.spine_at(4, 1.0).basis.y.length(), lens[4], 1e-5, "выросшая игла — своей длины")
