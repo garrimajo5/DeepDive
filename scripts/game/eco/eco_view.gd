@@ -124,6 +124,7 @@ var ground: Callable:
 		ground = value
 		world.ground = value
 		world.reset()
+		lag = 0.0
 		_rebuild_moss()
 		_rebuild_coral()
 		_rebuild_ferns()
@@ -493,11 +494,25 @@ func _rebuild_plankton() -> void:
 	add_child(plankton_view)
 
 
-## Шаг мира: dt — время кадра (мир берёт не больше EcoWorld.FRAME_CAP), ship — состояние корабля. Возвращает
-## события для корабля (EcoLink).
+## Долг времени мира (с): за кадр мир идёт одним подшагом не длиннее EcoWorld.SLOW_STEP, остаток медленного кадра
+## переходит на следующие быстрые кадры, но не больше EcoWorld.FRAME_CAP (issue #1253: кадр 97–120 мс давал миру два
+## подшага на следующем кадре — мир ×2, и провал тянул провал). Сброс мира долг обнуляет.
+var lag := 0.0
+
+
+## Сколько мир пройдёт в этом кадре: время кадра плюс долг, не больше SLOW_STEP — один подшаг (#1253).
+func world_dt(dt: float) -> float:
+	var want := lag + clampf(dt, 0.0, EcoWorld.FRAME_CAP)
+	var h := minf(want, EcoWorld.SLOW_STEP)
+	lag = minf(want - h, EcoWorld.FRAME_CAP)
+	return h
+
+
+## Шаг мира: dt — время кадра (мир берёт его через world_dt — одним подшагом, остаток в долг), ship — состояние
+## корабля. Возвращает события для корабля (EcoLink).
 func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	world.ship = ship
-	world.step(minf(dt, EcoWorld.FRAME_CAP))
+	world.step(world_dt(dt))
 	_sync(ship)
 	var out := world.take_link()
 	StepClock.mark("мир/связь")
@@ -508,7 +523,7 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 ## разбирает хост); near — существа и мох рядом из свежего кадра хоста (`EcoLink.pack_world`), пустой — кадра не было.
 func step_client(dt: float, ship: EcoLink.ShipState, near: PackedFloat32Array = PackedFloat32Array()) -> void:
 	world.ship = ship
-	world.step(minf(dt, EcoWorld.FRAME_CAP))
+	world.step(world_dt(dt))
 	world.take_link()
 	if not near.is_empty():
 		EcoLink.apply_world(world.agents, world.systems, near, world)

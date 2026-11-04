@@ -51,7 +51,8 @@ func test_still_life_not_reuploaded() -> void:
 	# изменилось — грузится: подушку сжали
 	var cu := view.cushions.cushions[0]
 	view.cushions.squeeze(view.world, cu, true)
-	view.step(0.5, ship)
+	for i in 10:   # мир за кадр — один подшаг (EcoView.world_dt, #1253): 0,5 с — десять кадров
+		view.step(0.05, ship)
 	var tr := CushionView.transform_at(view.cushion_view.pads.multimesh.buffer, 0, CushionView.STRIDE)
 	ok(tr.basis.get_scale().y > 0.1 and tr.basis.get_scale().y < 0.7, "сжатая подушка — в MultiMesh")
 	view.queue_free()
