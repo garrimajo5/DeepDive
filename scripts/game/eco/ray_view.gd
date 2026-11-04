@@ -6,7 +6,8 @@ extends MultiMeshInstance3D
 ## (как в браузере: sin(ф − 0,32 |x|) · (|x| / 7)^1,4 · 1,8 · доля), крен 0,22 рад. Фаза ф и доля размаха — с мира
 ## (EcoRay.flap_step: над кораблём машет сильнее и чаще, опускаясь — планирует), в INSTANCE_CUSTOM.y/z; номер ската —
 ## в INSTANCE_CUSTOM.x (сдвиг хвоста). Двойник взмаха на CPU — EcoRay.wing_lift.
-## Хвост-хлыст извивается волной от корня к кончику (TAIL_*, доля длины хвоста — в UV.x; двойник на CPU — tail_wave);
+## Хвост-хлыст извивается волной от корня к кончику (TAIL_*, доля длины хвоста — в UV.x; фаза — по времени мира в
+## INSTANCE_CUSTOM.w, `tail_phase`, а не по TIME шейдера; двойник на CPU — tail_wave);
 ## «Экономно» — sway_k = 0 через EcoShaders.follow / set_sway_lite.
 ## Свет сквозь лёд падает на спину; брюхо снизу темнее; края крыльев — ободок света (EcoRim, uniform rim). Стоит на слое отмели (OceanView.LAYER_WORLD).
 ## Скат взмывает над кораблём — с кончиков крыльев срываются облачка взвеси (EcoRayDust): дочерний MultiMesh «Муть»
@@ -35,7 +36,8 @@ void vertex() {
 	float slope = -cos(ph) * 0.32 * k + sin(ph) * 1.8 * INSTANCE_CUSTOM.z * 1.4 * pow(ax / 7.0, 0.4) / 7.0;
 	NORMAL = normalize(NORMAL - vec3(sign(VERTEX.x) * slope, 0.0, 0.0));
 	// хвост-хлыст: волна бежит к кончику, размах растёт как квадрат доли длины (UV.x; у тела UV.x = 0)
-	VERTEX.x += sin(TIME * 2.4 + INSTANCE_CUSTOM.x * 2.1 - UV.x * 5.0) * 0.8 * UV.x * UV.x * sway_k;
+	// фаза хлыста — по времени мира (INSTANCE_CUSTOM.w = 2,4 t + 2,1 · номер, по модулю TAU), у гостя та же
+	VERTEX.x += sin(INSTANCE_CUSTOM.w - UV.x * 5.0) * 0.8 * UV.x * UV.x * sway_k;
 	glow = COLOR.a;
 }
 void fragment() {
@@ -83,7 +85,7 @@ var verts := PackedVector3Array()
 var tris := 0
 ## Последние места скатов (для тестов: без видеокарты MultiMesh их не хранит).
 var placed: Array[Transform3D] = []
-## Последние данные экземпляров (номер, фаза взмаха, доля размаха) — для тестов.
+## Последние данные экземпляров (номер, фаза взмаха, доля размаха, фаза хлыста) — для тестов.
 var customs: Array[Color] = []
 ## Вихри с кончиков крыльев (EcoRayDust); буфер — для тестов.
 var dust := EcoRayDust.new()
@@ -172,15 +174,15 @@ func _build() -> ArrayMesh:
 	return m
 
 
-## Поставить скатов по миру.
-func sync() -> void:
+## Поставить скатов по миру; t — время мира (фаза хлыста).
+func sync(t := 0.0) -> void:
 	placed.resize(rays.rays.size())
 	customs.resize(rays.rays.size())
 	for ry in rays.rays:
 		var x := xform(ry)
 		placed[ry.index] = x
 		multimesh.set_instance_transform(ry.index, x)
-		var c := Color(float(ry.index), ry.flap, ry.flap_k, 0)
+		var c := Color(float(ry.index), ry.flap, ry.flap_k, tail_phase(t, ry.index))
 		customs[ry.index] = c
 		multimesh.set_instance_custom_data(ry.index, c)
 
@@ -243,9 +245,14 @@ func _tail() -> void:
 			_idx.append_array([q, q + 6, q + 1, q + 1, q + 6, q + 7])
 
 
+## Фаза хлыста у ската номер index в момент t (время мира), по модулю TAU — в INSTANCE_CUSTOM.w.
+static func tail_phase(t: float, index: int) -> float:
+	return fposmod(t * TAIL_RATE + index * TAIL_PHASE, TAU)
+
+
 ## Сдвиг вбок (м, по x меша) точки хвоста на доле длины s в момент t у ската номер index — двойник шейдера.
 static func tail_wave(s: float, t: float, index: int, sway_k := 1.0) -> float:
-	return sin(t * TAIL_RATE + index * TAIL_PHASE - s * TAIL_K) * TAIL_AMP * s * s * sway_k
+	return sin(tail_phase(t, index) - s * TAIL_K) * TAIL_AMP * s * s * sway_k
 
 
 ## Светящееся пятнышко: октаэдр радиуса SPOT_R (альфа 1 — светится в шейдере).
