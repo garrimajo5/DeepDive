@@ -228,3 +228,76 @@ func _brute_step(c: EcoFringe.Curtain, ship: EcoLink.ShipState, t: float, dt: fl
 				hi = maxf(hi, v)
 		if hi >= 0.0:
 			c._touch(i, lo, hi, ship, t)
+
+
+## Вид (часть 6): один MultiMesh пряди, буфер и uniform дают ту же нить, что мир (двойник шейдера), след — тот же.
+func test_view_matches_world_strands() -> void:
+	var f := EcoFringe.new()
+	f.reset(null)
+	var v := FringeView.new(f)
+	tree.root.add_child(v)
+	var c := f.curtain
+	v.sync(_ship(Vector3(0, -20, 0), 0.0), 0.0)
+	ok(not v.visible, "далеко от колодца — скрыт")
+	eq(v.writes, 0, "и буфер не пишется")
+	var pair := _under_longest(c)
+	var i: int = pair[0]
+	var ship: EcoLink.ShipState = pair[1]
+	var t := 0.0
+	while t < 2.0:
+		c.step(ship, t, 0.1)
+		t += 0.1
+	v.sync(ship, t)
+	ok(v.visible, "у колодца — виден")
+	eq(v.strands.multimesh.visible_instance_count, EcoFringe.COUNT, "48 нитей одним MultiMesh")
+	var worst := 0.0
+	for n in c.active:
+		for k in 5:
+			var vv := k / 4.0
+			worst = maxf(worst, v.strand_point(n, vv, t).distance_to(c.point(n, vv, t)))
+	ok(worst < 1e-4, "нить в шейдере — там же, где в мире (качание, волна, отвод): %.6f м" % worst)
+	ok(c.push[i].length() > 0.3, "отвод корпусом — в буфере")
+	ok(v.glow_at(i, 1.0) > 0.99, "след у конца задетой нити светится")
+	ok(absf(v.glow_at(i, 1.0) - c.glow(i, 1.0)) < 1e-4, "как в мире")
+	eq(v.glow_at(i, 0.05), 0.0, "у льда — нет")
+	var other := (i + 1) % c.active
+	eq(v.glow_at(other, 1.0), 0.0, "незадетая нить не светится")
+	v.queue_free()
+	await frames(1)
+
+
+## Бюджет листа ART-080: прядь — две полосы по 8 сегментов (32 треуг., 48 нитей — 1536), «Экономно» — одна полоса
+## и 24 нити (384); тени выключены, тело со светом, свечение — общий приём eco_bio.
+func test_view_budget_and_lite() -> void:
+	var f := EcoFringe.new()
+	f.reset(null)
+	var v := FringeView.new(f)
+	tree.root.add_child(v)
+	var tris := func(m: Mesh) -> int: return m.surface_get_arrays(0)[Mesh.ARRAY_INDEX].size() / 3
+	eq(tris.call(v.mesh_full), 32, "прядь — 32 треугольника")
+	eq(tris.call(v.mesh_lite), 16, "«Экономно» — одна полоса, 16")
+	eq(v.strands.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "без теней")
+	var code := v.material.shader.code
+	ok(not code.contains("unshaded"), "тело освещается")
+	ok(code.contains("EMISSION = eco_bio("), "след светит через общий приём свечения")
+	f.set_lite(true)
+	v.set_lite(true)
+	v.sync(_ship(Vector3(EcoFringe.WELL.x, -20.0, EcoFringe.WELL.y), 0.0), 1.0)
+	eq(v.strands.multimesh.visible_instance_count, EcoFringe.COUNT_LITE, "«Экономно» — 24 нити")
+	eq(v.strands.multimesh.mesh, v.mesh_lite, "по одной полосе")
+	eq(EcoFringe.COUNT_LITE * tris.call(v.mesh_lite), 384, "384 треугольника")
+	v.queue_free()
+	await frames(1)
+
+
+## В живом мире сцены вид бахромы есть и берёт «Экономно» вместе с миром.
+func test_view_in_eco_view() -> void:
+	var ev := EcoView.new()
+	tree.root.add_child(ev)
+	ok(ev.fringe_view != null and ev.fringe_view.get_parent() == ev, "вид бахромы в живом мире")
+	ev.set_lite(true)
+	eq(ev.fringe_view.strands.multimesh.mesh, ev.fringe_view.mesh_lite, "«Экономно» — одна полоса")
+	ev.set_lite(false)
+	eq(ev.fringe_view.strands.multimesh.mesh, ev.fringe_view.mesh_full, "обратно — две")
+	ev.queue_free()
+	await frames(1)

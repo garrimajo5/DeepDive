@@ -99,6 +99,7 @@ var moth: EcoMoth
 var moth_view: MothView
 ## Инеевая бахрома у колодца 05 (#836, часть 5): модуль мира, вид — после ART-083 (#922).
 var fringe: EcoFringe
+var fringe_view: FringeView
 ## Край отмели (место 6, ART-032): скальные клинья вдоль бровки, шрам оползня с осыпью, трещины на площадке.
 var drop: EcoDrop
 var drop_view: DropView
@@ -213,6 +214,8 @@ func _init() -> void:
 	moth_view = MothView.new(moth)
 	add_child(moth_view)
 	fringe = world.add(EcoFringe.new()) as EcoFringe
+	fringe_view = FringeView.new(fringe, lite)
+	add_child(fringe_view)
 	drop = world.add(EcoDrop.new()) as EcoDrop
 	dome = world.add(EcoDome.new()) as EcoDome
 	brink = world.add(EcoBrink.new()) as EcoBrink
@@ -261,6 +264,7 @@ func set_lite(on: bool) -> void:
 	far_view.set_lite(on)
 	moth.set_lite(on)
 	fringe.set_lite(on)
+	fringe_view.set_lite(on)
 	plankton_view.set_lite(on)
 	fish_view.set_lite(on)
 	raduzh_view.set_lite(on)
@@ -555,6 +559,7 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	StepClock.mark("мир/вид: скаты, вуаль, грот")
 	plankton_view.sync(world.time, ship.pos, ship.yaw)
 	moth_view.sync(ship, world.time)
+	fringe_view.sync(ship, world.time)
 	echo_view.sync(world.time, ship.pos, ship, current.vel())
 	far_view.sync(world.time, ship.pos, world.ground)
 	dust_layer.sync()

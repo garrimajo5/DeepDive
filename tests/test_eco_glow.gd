@@ -34,7 +34,7 @@ func test_gain_moves_shader_and_standard() -> void:
 
 func test_shader_code_routes_emission() -> void:
 	var codes := {"ледокрыл": RayView.SHADER, "светляки": FishView.shader_code(), "цветок": FlowerView.SHADER,
-		"огнецвет": CoralView.SHADER, "камень": EcoShaders.STONE, "растения": EcoShaders.PLANT}
+		"огнецвет": CoralView.SHADER, "камень": EcoShaders.STONE, "растения": EcoShaders.PLANT, "бахрома": FringeView.shader_code()}
 	var spot := EcoShaders.SPOT
 	ok(spot.contains("uniform float bio") and spot.contains("ALBEDO = eco_bio("), "светлые точки: цвет через eco_bio")
 	for who in codes:
