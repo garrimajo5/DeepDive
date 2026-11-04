@@ -184,18 +184,19 @@ void vertex() {
 	wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	if (mode == 1) {
 		// щупальца вуали (EcoVeil.tentacle_point): в VERTEX — точка без колыхания, в UV — (щупальце k, точка j),
-		// в UV2.x — номер вуали; экземпляр на вуаль, в INSTANCE_CUSTOM — (пульс купола, фаза, номер вуали):
+		// в UV2.x — номер вуали; экземпляр на вуаль, в INSTANCE_CUSTOM — (пульс купола, фаза, номер вуали, доля ритма):
 		// чужие нити сжимаются в точку (#849)
 		float k = UV.x;
 		float j = UV.y;
 		float sw = INSTANCE_CUSTOM.r;
 		float ph = wave.z + INSTANCE_CUSTOM.g;
+		float rate = INSTANCE_CUSTOM.a > 0.0 ? INSTANCE_CUSTOM.a : 1.0;   // ритм вуали (Б4), доля PULSE_W
 		vec3 p = vec3(VERTEX.x * sw, VERTEX.y, VERTEX.z * sw);
 		if (abs(UV2.x - INSTANCE_CUSTOM.b) > 0.5) {
 			p = vec3(0.0);
 		} else if (j > 0.5) {
 			float h = j / seg;
-			float sj = mix(sw, 1.0 + sin(t * wave.y + ph - j * wave.w) * wave.x * (1.0 + grow * h), sway_k);
+			float sj = mix(sw, 1.0 + sin(t * wave.y * rate + ph - j * wave.w) * wave.x * (1.0 + grow * h), sway_k);
 			p.xz = VERTEX.xz * sj;
 			p.x += sin(t * 0.9 + (j - 1.0) * 0.45 + k) * j * 0.12;
 			p.z += cos(t * 0.7 + (j - 1.0) * 0.4 + k * 1.3) * j * 0.12;

@@ -56,7 +56,7 @@ func test_exhale_each_contraction_at_rim() -> void:
 	var d := EcoVeilDust.new()
 	var ship := _near(v)
 	d.update(v, 0.0, ship)
-	var period := TAU / EcoVeil.PULSE_W
+	var period := TAU / v.veils[0].w
 	_run(d, v, 0.0, period * 5.0, ship)
 	# корабль у первой вуали, вторая в 113 м — дальше 80 м
 	var made := d._made

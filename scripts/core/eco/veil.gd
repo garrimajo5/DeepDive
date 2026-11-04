@@ -3,7 +3,7 @@ extends EcoSystem
 ## Фонарные вуали (initVeils/veilUpdate в js/creatures.js; бестиарий): колонии медуз размером с автобус — купол 6 м,
 ## щупальца на 15 м вниз. Две вуали на местах браузера, купол в 21 м над дном (не выше −9 м); дрейфуют у своего места
 ## (± 0,6 м/с, тянет домой 0,004 /с), не опускаются щупальцами ниже 3 м над дном, качаются по высоте ± 1,2 м,
-## купол пульсирует (1 ± 0,07, 1,3 рад/с) и мерцает кромкой.
+## купол пульсирует (1 ± 0,07, 1,3 рад/с ± 15 % — у каждой свой ритм) и мерцает кромкой.
 ## Светляки обходят вуаль (толчок 2,2 вбок в цилиндре r + 3 под куполом), а подплывшую под купол рыбку
 ## (ближе 0,85 r) вуаль жалит — с вероятностью 0,22 в секунду, наблюдение «sting». Серпохвост обходит вуаль стороной
 ## (толчок 8 в цилиндре r + 9; EcoPred, поле veils), наблюдение хищника «avoid» — раз в 40 с на хищника. Корабль под
@@ -39,6 +39,9 @@ const LOW_MOVE := 0.5
 const PULSE := 0.07
 const PULSE_IN := 0.09
 const PULSE_W := 1.3
+## Не клоны (Б4, `EcoVary` по номеру вуали): у каждой свой ритм пульса — PULSE_W ± RATE_SPREAD (`pulse_rate`); пульс
+## купола, волна по щупальцам и такт выдоха (`EcoVeilDust`) — по нему. Хешем от номера — у гостя сети тот же ритм.
+const RATE_SPREAD := 0.15
 ## Светляки: толкает вбок в цилиндре r + FISH_PAD от FISH_UP над куполом до низа щупалец; жалит под куполом ближе
 ## STING_R · r и ниже 0,5 м под ним, с вероятностью STING_RATE в секунду.
 const FISH_PAD := 3.0
@@ -73,6 +76,8 @@ class Veil:
 	var p := Vector3.ZERO
 	var home := Vector3.ZERO
 	var ph := 0.0
+	## Ритм пульса купола (рад/с) — `pulse_rate(index)`.
+	var w := PULSE_W
 	## Щупальца: угол, расстояние от середины (доля r уже умножена), длина.
 	var tent_a := PackedFloat32Array()
 	var tent_r := PackedFloat32Array()
@@ -124,6 +129,7 @@ func reset(world: EcoWorld) -> void:
 		vl.p = Vector3(x, top, z)
 		vl.home = vl.p
 		vl.ph = i * 2.1
+		vl.w = pulse_rate(i)
 		vl.base_y = target(world, vl)
 		vl.p.y = height(world, vl, world.time)
 		for k in SMALL:
@@ -188,9 +194,14 @@ static func height(world: EcoWorld, vl: Veil, t: float) -> float:
 	return target(world, vl) + sin(t * 0.3 + vl.ph) * BOB
 
 
+## Ритм пульса вуали с номером i (рад/с): PULSE_W ± RATE_SPREAD.
+static func pulse_rate(i: int) -> float:
+	return PULSE_W * EcoVary.spread(i, EcoVary.RATE, RATE_SPREAD)
+
+
 ## Пульс купола в момент t: (наружный, внутренний) масштаб по ширине (по высоте — обратный).
 static func pulse(vl: Veil, t: float) -> Vector2:
-	return Vector2(1.0 + sin(t * PULSE_W + vl.ph) * PULSE, 1.0 + sin(t * PULSE_W + vl.ph - 0.6) * PULSE_IN)
+	return Vector2(1.0 + sin(t * vl.w + vl.ph) * PULSE, 1.0 + sin(t * vl.w + vl.ph - 0.6) * PULSE_IN)
 
 
 ## Яркость кромки 0,2…1 (0,6 + 0,4 sin(2,6 t + ph)).
@@ -218,7 +229,7 @@ static func tentacle_point(vl: Veil, k: int, j: int, t: float, flow := Vector3.Z
 	var h := j / float(SEGMENTS)
 	var sj := s
 	if live:
-		sj = 1.0 + sin(t * PULSE_W + vl.ph - j * WAVE_LAG) * PULSE * (1.0 + WAVE_GROW * h)
+		sj = 1.0 + sin(t * vl.w + vl.ph - j * WAVE_LAG) * PULSE * (1.0 + WAVE_GROW * h)
 	var step_len := vl.tent_len[k] / SEGMENTS
 	var p := Vector3(x0 * sj + sin(t * 0.9 + (j - 1) * 0.45 + k) * j * 0.12, -j * step_len,
 		z0 * sj + cos(t * 0.7 + (j - 1) * 0.4 + k * 1.3) * j * 0.12)
