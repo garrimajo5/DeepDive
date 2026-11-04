@@ -13,15 +13,31 @@ extends Node3D
 ## «Экономно» (Б6, `set_lite`): в каждой стае рисуются два гребневика из трёх и их ореолы (каждого третьего по месту в
 ## стае — LITE_SKIP — нет): видимые — в начале буферов тел и ореолов (`order`), `visible_instance_count` отрезает
 ## остальных. Мир (вспышки, слизь, сонар, у гостя) считает всех; на «Обычно» буфер по номеру гребневика, как раньше.
+## Ряды ресничек бьют (Б3, `comb`): восемь гребных рядов вдоль тела — светлые полосы, по ним от верха ко рту бежит
+## волна биения (метахрональная), в луче ряды переливаются бегущими штрихами, в темноте — едва. Своя фаза — в альфе
+## цвета экземпляра тела, время мира — uniform `world_t` (у гостя то же). Шейдеров и вызовов не прибавилось.
 
 const BODY_SHADER := """
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_back, shadows_disabled, fog_disabled;
 uniform float fade_far = 70.0;
 uniform float iris = 0.0;
+uniform float world_t = 0.0;
+uniform float comb = %s;
+uniform float comb_rows = %s;
+uniform float comb_sharp = %s;
+uniform float comb_k = %s;
+uniform float comb_rate = %s;
+uniform float comb_base = %s;
+uniform float comb_gain = %s;
 varying vec3 tint;
 varying float phase;
+varying vec3 lp;
+varying float beat_ph;
 void vertex() {
+	// место на теле (сфера радиуса 1) и фаза биения особи — в альфе цвета
+	lp = VERTEX;
+	beat_ph = COLOR.a * 6.2831853;
 	// сдвиг оттенка особи — от места гребневика (свой у каждого)
 	phase = fract(dot(MODEL_MATRIX[3].xyz, vec3(0.173, 0.311, 0.257)));
 	float far = length((VIEW_MATRIX * vec4(MODEL_MATRIX[3].xyz, 1.0)).xyz);
@@ -33,6 +49,10 @@ void fragment() {
 	float ndv = abs(dot(NORMAL, VIEW));
 	float rim = 1.0 - ndv;
 	ALBEDO = tint * (0.45 + rim * 0.9);
+	// ряды ресничек: полосы вдоль тела, по ним к низу бежит волна биения (RaduzhView.comb_k — двойник)
+	float rows = pow(abs(cos(atan(lp.x, lp.z) * comb_rows * 0.5)), comb_sharp);
+	float beat = 0.5 + 0.5 * sin(lp.y * comb_k + world_t * comb_rate + beat_ph);
+	ALBEDO *= mix(1.0, comb_base + comb_gain * rows * beat, comb);
 	// радуга по краю (EcoIris, Б2): доля своей яркости — в темноте силуэт тусклый, перелив тоже
 	float lum = max(tint.r, max(tint.g, tint.b));
 	ALBEDO += iris_film(ndv, phase * %s) * iris_weight(ndv) * rim * lum * iris;
@@ -53,6 +73,16 @@ const SIZE_SPREAD := 0.15
 const RATE_SPREAD := 0.2
 const SHADE_SPREAD := 0.25
 const BREATH_RATE := 2.4
+## Ряды ресничек (Б3): рядов COMB_ROWS вокруг оси тела, острота полосы COMB_SHARP, волна — COMB_K рад на радиус тела
+## вдоль оси, COMB_RATE рад/с (бежит от верха ко рту); множитель яркости — COMB_BASE + COMB_GAIN · ряд · волна,
+## доля приёма COMB (в среднем по телу яркость прежняя).
+const COMB := 0.6
+const COMB_ROWS := 8.0
+const COMB_SHARP := 6.0
+const COMB_K := 6.0
+const COMB_RATE := 8.0
+const COMB_BASE := 0.4
+const COMB_GAIN := 3.84
 
 var raduzh: EcoRaduzh
 var bodies: MultiMeshInstance3D
@@ -163,7 +193,21 @@ static func build_body() -> SphereMesh:
 
 ## Код шейдера тела с куском переливов EcoIris.
 static func body_code() -> String:
-	return BODY_SHADER % [EcoIris.glsl(), EcoIris._f(EcoIris.SHIFT)]
+	return BODY_SHADER % [EcoIris._f(COMB), EcoIris._f(COMB_ROWS), EcoIris._f(COMB_SHARP), EcoIris._f(COMB_K),
+		EcoIris._f(COMB_RATE), EcoIris._f(COMB_BASE), EcoIris._f(COMB_GAIN), EcoIris.glsl(), EcoIris._f(EcoIris.SHIFT)]
+
+
+## Множитель яркости тела в точке lp (сфера радиуса 1, оси тела) в момент t при фазе биения ph (двойник шейдера):
+## на ряду ресничек под гребнем волны — ярче, между рядами — тусклее.
+static func comb_k(lp: Vector3, t: float, ph: float) -> float:
+	var rows := pow(absf(cos(atan2(lp.x, lp.z) * COMB_ROWS * 0.5)), COMB_SHARP)
+	var beat := 0.5 + 0.5 * sin(lp.y * COMB_K + t * COMB_RATE + ph)
+	return lerpf(1.0, COMB_BASE + COMB_GAIN * rows * beat, COMB)
+
+
+## Фаза биения ресничек гребневика с фазой m_phase (рад) — доля оборота, пишется в альфу цвета тела.
+static func beat_alpha(m_phase: float) -> float:
+	return fposmod(m_phase / TAU, 1.0)
 
 
 static func build_halo() -> QuadMesh:
@@ -193,6 +237,7 @@ func sync(t: float, ship_pos: Vector3, ship_yaw: float, all := false) -> void:
 	halo_buffer.resize(n * STRIDE_C)
 	_frame += 1
 	var by_slot := not order.is_empty()
+	((bodies.multimesh.mesh as PrimitiveMesh).material as ShaderMaterial).set_shader_parameter("world_t", t)
 	for sw in raduzh.swarms:
 		if not full and not due(sw, ship_pos, _frame):
 			continue
@@ -207,7 +252,7 @@ func sync(t: float, ship_pos: Vector3, ship_yaw: float, all := false) -> void:
 			# свой силуэт без света; во вспышке радуга одна на всех
 			var c := EcoRaduzh.member_color(sw, k, t) * lerpf(_vary[idx * 3 + 2], 1.0, sw.glow)
 			EcoMM.put_basis(body_buffer, j, b, p)
-			_color(body_buffer, j + STRIDE, c)
+			_color(body_buffer, j + STRIDE, c, beat_alpha(m.phase))
 			# без вспышки ореол не нужен — схлопнут в точку, фрагментов не рисует
 			EcoMM.put_basis(halo_buffer, j, Basis.IDENTITY if gg > 0.0 else Basis.from_scale(Vector3.ZERO), p)
 			_color(halo_buffer, j + STRIDE, c * gg)
@@ -250,8 +295,8 @@ static func due(sw: EcoRaduzh.Swarm, ship_pos: Vector3, frame: int) -> bool:
 	return (frame + sw.index) % (MID_EVERY if d < FAR else FAR_EVERY) == 0
 
 
-static func _color(buf: PackedFloat32Array, i: int, c: Color) -> void:
-	buf[i] = c.r; buf[i + 1] = c.g; buf[i + 2] = c.b; buf[i + 3] = 1.0
+static func _color(buf: PackedFloat32Array, i: int, c: Color, a := 1.0) -> void:
+	buf[i] = c.r; buf[i + 1] = c.g; buf[i + 2] = c.b; buf[i + 3] = a
 
 
 ## Место экземпляра n из буфера.

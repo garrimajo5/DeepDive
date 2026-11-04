@@ -200,7 +200,9 @@ func test_raduzh_differ_in_size_rhythm_and_shade() -> void:
 	sw.glow = 1.0
 	rv.sync(3.0, Vector3(1e6, 0, 1e6), 0.0, true)
 	var n0 := sw.index * EcoRaduzh.PER_SWARM
-	ok(RaduzhView.color_at(rv.body_buffer, n0).is_equal_approx(EcoRaduzh.member_color(sw, 0, 3.0)), "вспышка — без разброса")
+	var flash := RaduzhView.color_at(rv.body_buffer, n0)
+	flash.a = 1.0   # в альфе тела — фаза биения ресничек (Б3), не цвет
+	ok(flash.is_equal_approx(EcoRaduzh.member_color(sw, 0, 3.0)), "вспышка — без разброса")
 	eq(rv.bodies.multimesh.instance_count, r.swarms.size() * EcoRaduzh.PER_SWARM, "те же экземпляры")
 	rv.free()
 
