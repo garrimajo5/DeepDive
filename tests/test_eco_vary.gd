@@ -690,3 +690,39 @@ func test_coral_bushes_differ_in_paint() -> void:
 		firsts[got.to_html()] = true
 	ok(firsts.size() == coral.bushes.size(), "кусты не одной краски: %d" % firsts.size())
 	view.free()
+
+
+func test_moss_patches_differ_in_paint() -> void:
+	var shades := []
+	var hues := []
+	for j in 40:
+		var t := MossView.patch_tint(j)
+		shades.append(t.g)
+		hues.append(t.r / t.g - 1.0)
+		eq(MossView.patch_tint(j), MossView.patch_tint(j), "одно пятно — одна краска")
+		ok(t.r * 0.5 <= 1.0 and t.g * 0.5 <= 1.0 and t.b * 0.5 <= 1.0, "краска ÷ 2 влезает в цвет вершины (%d)" % j)
+	var s := _span(shades)
+	ok(s.x >= 0.85 - 1e-5 and s.y <= 1.15 + 1e-5 and s.y - s.x > 0.15, "светлее-темнее ±15 %%: %s" % s)
+	var h := _span(hues)
+	ok(h.x >= -0.06 - 1e-5 and h.y <= 0.06 + 1e-5 and h.y - h.x > 0.06, "желтее-голубее ±6 %%: %s" % h)
+	var w := EcoWorld.new()
+	w.ground = _flat_organ
+	var spots: Array[Vector3] = [Vector3(0, 0, 0), Vector3(20, 0, 0), Vector3(40, 0, 0), Vector3(60, 0, 0)]
+	var moss := w.add(EcoMoss.new(spots)) as EcoMoss
+	for lite in [false, true]:
+		var view := MossView.new(moss, _flat_organ, lite)
+		var cols: PackedColorArray = view.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+		var per := view.look.verts.size() / moss.patches.size()
+		var seen := {}
+		for k in moss.patches.size():
+			var want := MossView.patch_tint(moss.patches[k].index)
+			for v in [k * per, k * per + per - 1]:
+				var got := cols[v]
+				var d := Vector3(got.g * 2.0 - want.r, got.b * 2.0 - want.g, got.a * 2.0 - want.b).length()
+				ok(d < 0.02, "пятно %d — своей краски (%.4f, lite %s)" % [k, d, lite])
+				near(got.r, view.look.base[v], 0.01, "яркость вершины — в красном, как была")
+			seen[cols[k * per].to_html()] = true
+		ok(seen.size() == moss.patches.size(), "пятна не одной краски: %d" % seen.size())
+		eq(view.mesh.get_surface_count(), 1, "мох — по-прежнему один меш")
+		view.free()
+	ok(EcoShaders.MOSS.contains("moss_color * tint"), "шейдер красит пятно")
