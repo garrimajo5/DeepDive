@@ -10,6 +10,9 @@ extends Node3D
 ## «Экономно» (Б6, `set_lite`): у каждого хватня рисуется каждое второе щупальце (22 → 11, LITE_SKIP): видимые — в
 ## начале буфера (`tent_slot`), `visible_instance_count` отрезает остальных. Мир (ловля, укрытие, приманка) не
 ## меняется; тела и пестрянки — все. Вызовов столько же, вершинной работы щупалец вдвое меньше.
+## Не клоны (Б4, `EcoVary`): у хватня своя ширина тела ±12 % (`body_width`, основания щупалец на диске — с ним), у
+## пестрянки — размер ±15 % (`pestr_size`) и яркость свечения ±20 % (`pestr_glow`) по номеру рыбки. Хешем от номера —
+## мир и его случай не меняются, у гостя сети тот же вид. Вызовов и шейдеров столько же, и на «Экономно».
 
 ## Цвета пестрянок по порядку (pc в браузере).
 const PESTR_COLORS: Array[Color] = [Color("ff7a2a"), Color("fff1d0"), Color("ff9a4a")]
@@ -24,6 +27,10 @@ const BEND := Vector3(0.1, 0.16, 0.12)
 const PHASE_AXIS := 10.0
 ## Свечение щупальца: у диска — доля цвета, у кончика — почти полный (раньше светилось целиком, MeshBasicMaterial).
 const TIP_GLOW := Vector2(0.15, 0.9)
+## Разброс (Б4): ширина тела хватня, размер и яркость пестрянки.
+const BODY_SPREAD := 0.12
+const PESTR_SIZE_SPREAD := 0.15
+const PESTR_GLOW_SPREAD := 0.2
 
 var hvaten: EcoHvaten
 var bodies: MultiMeshInstance3D
@@ -57,14 +64,18 @@ func _init(system: EcoHvaten, on_lite := false) -> void:
 	tents = EcoMM.instance(self, "Щупальца", build_tentacle(), n * EcoHvaten.TENT, false)
 	pestr = EcoMM.instance(self, "Пестрянки", build_pestr(), n * EcoHvaten.PESTR_N, true, true)
 	body_buffer.resize(n * STRIDE)
+	_width.resize(n)
+	for i in n:
+		_width[i] = body_width(i)
 	tent_buffer.resize(n * EcoHvaten.TENT * STRIDE)
 	pestr_buffer.resize(n * EcoHvaten.PESTR_N * STRIDE_P)
 	dust_view = GrazerView.build_dust(EcoHvatenDust.POOL)
 	add_child(dust_view)
 	for hv in hvaten.anemones:
 		for k in EcoHvaten.PESTR_N:
-			var c := PESTR_COLORS[k % PESTR_COLORS.size()] * EcoPestrLook.GLOW
-			var i := (hv.index * EcoHvaten.PESTR_N + k) * STRIDE_P
+			var m := hv.index * EcoHvaten.PESTR_N + k
+			var c := pestr_glow(PESTR_COLORS[k % PESTR_COLORS.size()] * EcoPestrLook.GLOW, m)
+			var i := m * STRIDE_P
 			pestr_buffer[i + 12] = 1.0; pestr_buffer[i + 13] = 1.0; pestr_buffer[i + 14] = 1.0
 			pestr_buffer[i + 15] = EcoPestrLook.phase(hv, k)
 			pestr_buffer[i + 16] = c.r; pestr_buffer[i + 17] = c.g; pestr_buffer[i + 18] = c.b; pestr_buffer[i + 19] = 1.0
@@ -107,6 +118,48 @@ static func tent_slot(i: int, k: int, n: int, on_lite: bool) -> int:
 		return i * per + k / LITE_SKIP
 	var rest := EcoHvaten.TENT - per
 	return n * per + i * rest + (k - k / LITE_SKIP - 1)
+
+
+## Ширина тела хватня номер i (доля): одна и та же при каждом вызове.
+static func body_width(i: int) -> float:
+	return EcoVary.spread(i, EcoVary.WIDTH, BODY_SPREAD)
+
+
+## Размер пестрянки номер n (доля от EcoPestrLook.SCALE).
+static func pestr_size(n: int) -> float:
+	return EcoVary.spread(n, EcoVary.SIZE, PESTR_SIZE_SPREAD)
+
+
+## Свечение пестрянки номер n: цвет c ярче или тусклее ±20 %, тон тот же.
+static func pestr_glow(c: Color, n: int) -> Color:
+	var k := EcoVary.spread(n, EcoVary.SHADE, PESTR_GLOW_SPREAD)
+	return Color(c.r * k, c.g * k, c.b * k, c.a)
+
+
+## Тело хватня в момент t — расстановка мира, шире или уже на `body_width` поперёк оси.
+static func body_pose(hv: EcoHvaten.Anemone, t: float, live := true) -> Transform3D:
+	var tr := EcoHvaten.body(hv, t, live)
+	var w := body_width(hv.index)
+	tr.basis = tr.basis * Basis.from_scale(Vector3(w, 1.0, w))
+	return tr
+
+
+## Щупальце k хватня в момент t: основание на диске своей ширины (`body_width`) — дальше или ближе к оси.
+## w — ширина тела, если уже известна (шаг вида берёт её из запаса `_width`, не считает хеш на каждое щупальце).
+static func tentacle_pose(hv: EcoHvaten.Anemone, k: int, t: float, live := true, w := -1.0) -> Transform3D:
+	var tr := EcoHvaten.tentacle(hv, k, t, live)
+	if w < 0.0:
+		w = body_width(hv.index)
+	tr.origin.x = hv.top.x + (tr.origin.x - hv.top.x) * w
+	tr.origin.z = hv.top.z + (tr.origin.z - hv.top.z) * w
+	return tr
+
+
+## Пестрянка k хватня в момент t: поза мира, размер EcoPestrLook.SCALE × `pestr_size`.
+static func pestr_pose(hv: EcoHvaten.Anemone, k: int, t: float) -> Transform3D:
+	var tr := EcoHvaten.pestr_pose(hv, k, t)
+	tr.basis = tr.basis * Basis.from_scale(Vector3.ONE * EcoPestrLook.SCALE * pestr_size(hv.index * EcoHvaten.PESTR_N + k))
+	return tr
 
 
 ## Сколько щупалец рисуется сейчас.
@@ -224,16 +277,17 @@ func sync(t: float, ship_pos := Vector3.ZERO, all := true, info: EcoLink.ShipSta
 	for hv in hvaten.anemones:
 		if not all and not due(hv, ship_pos, _frame):
 			continue
-		EcoMM.put(body_buffer, hv.index * STRIDE, EcoHvaten.body(hv, t, live))
+		EcoMM.put(body_buffer, hv.index * STRIDE, body_pose(hv, t, live))
 		_put_tents(hv, t, live)
 		for k in EcoHvaten.PESTR_N:
-			var tr := EcoHvaten.pestr_pose(hv, k, t)
-			tr.basis = tr.basis * Basis.from_scale(Vector3.ONE * EcoPestrLook.SCALE)
-			EcoMM.put(pestr_buffer, (hv.index * EcoHvaten.PESTR_N + k) * STRIDE_P, tr)
+			EcoMM.put(pestr_buffer, (hv.index * EcoHvaten.PESTR_N + k) * STRIDE_P, pestr_pose(hv, k, t))
 	EcoMM.send(bodies, body_buffer)
 	EcoMM.send(tents, tent_buffer)
 	EcoMM.send(pestr, pestr_buffer)
 
+
+## Ширина тела хватня по номеру (`body_width`), посчитана один раз.
+var _width := PackedFloat32Array()
 
 ## Время последнего sync — смена уровня переписывает щупальца в той же позе.
 var _t := 0.0
@@ -246,14 +300,15 @@ func _sync_tents(t: float) -> void:
 
 
 func _put_tents(hv: EcoHvaten.Anemone, t: float, live: bool) -> void:
+	var w := _width[hv.index]
 	if not lite:
 		var at := hv.index * EcoHvaten.TENT
 		for k in EcoHvaten.TENT:
-			EcoMM.put(tent_buffer, (at + k) * STRIDE, EcoHvaten.tentacle(hv, k, t, live))
+			EcoMM.put(tent_buffer, (at + k) * STRIDE, tentacle_pose(hv, k, t, live, w))
 		return
 	var n := hvaten.anemones.size()
 	for k in range(0, EcoHvaten.TENT, LITE_SKIP):   # скрытые — за visible_instance_count, не пишем
-		EcoMM.put(tent_buffer, tent_slot(hv.index, k, n, true) * STRIDE, EcoHvaten.tentacle(hv, k, t, live))
+		EcoMM.put(tent_buffer, tent_slot(hv.index, k, n, true) * STRIDE, tentacle_pose(hv, k, t, live, w))
 
 
 func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3) -> void:

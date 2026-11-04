@@ -312,7 +312,7 @@ func test_view_three_multimeshes() -> void:
 	eq(hv.pestr.multimesh.instance_count, 4 * EcoHvaten.PESTR_N, "пестрянки одним MultiMesh")
 	var a := view.hvaten.anemones[2]
 	var tr := HvatenView.transform_at(hv.tent_buffer, 2 * EcoHvaten.TENT + 3)
-	near(tr.origin.distance_to(a.top), EcoHvaten.TENT_R * EcoHvaten.breath(a, view.world.time), 1e-4,
+	near(tr.origin.distance_to(a.top), EcoHvaten.TENT_R * EcoHvaten.breath(a, view.world.time) * HvatenView.body_width(2), 1e-4,
 		"щупальце растёт из диска")
 	var tip := tr * Vector3(0, 1, 0)
 	ok(Vector2(tip.x - a.top.x, tip.z - a.top.z).length() > Vector2(tr.origin.x - a.top.x, tr.origin.z - a.top.z).length(),
@@ -324,7 +324,8 @@ func test_view_three_multimeshes() -> void:
 	ok((closed * Vector3(0, 1, 0)).distance_to(closed.origin) < 0.2, "спрятанное — короткое")
 	var pe := HvatenView.transform_at(hv.pestr_buffer, 2 * EcoHvaten.PESTR_N, HvatenView.STRIDE_P)
 	ok(pe.origin.is_equal_approx(a.pestr[0].p), "пестрянка на месте")
-	near(hv.pestr_buffer[2 * EcoHvaten.PESTR_N * HvatenView.STRIDE_P + 16], HvatenView.PESTR_COLORS[0].r * EcoPestrLook.GLOW,
+	near(hv.pestr_buffer[2 * EcoHvaten.PESTR_N * HvatenView.STRIDE_P + 16],
+		HvatenView.pestr_glow(HvatenView.PESTR_COLORS[0] * EcoPestrLook.GLOW, 2 * EcoHvaten.PESTR_N).r,
 		1e-4, "оранжевая — свечение в INSTANCE_CUSTOM")
 	view.queue_free()
 	await frames(1)
@@ -380,7 +381,7 @@ func test_body_and_tentacles_breathe_in_view() -> void:
 		var body := HvatenView.transform_at(hv.body_buffer, 1)
 		ok(body.origin.is_equal_approx(a.base), "тело стоит у подножия")
 		near(body.basis.y.length(), 1.0, 1e-5, "высота не меняется — диск на месте")
-		near(body.basis.x.length(), EcoHvaten.breath(a, t), 1e-5, "ширина тела — дыхание")
+		near(body.basis.x.length(), EcoHvaten.breath(a, t) * HvatenView.body_width(1), 1e-5, "ширина тела — дыхание × своя ширина")
 		widths.append(body.basis.x.length())
 		var tent := HvatenView.transform_at(hv.tent_buffer, EcoHvaten.TENT + 5)
 		var r := Vector2(tent.origin.x - a.top.x, tent.origin.z - a.top.z).length()
@@ -476,7 +477,7 @@ func test_pestr_view_shares_fish_shader() -> void:
 		phases[snappedf(a, 0.01)] = true
 	ok(phases.size() > hv.pestr.multimesh.instance_count / 2, "пестрянки машут вразнобой")
 	var tr := HvatenView.transform_at(hv.pestr_buffer, 0, HvatenView.STRIDE_P)
-	near(tr.basis.z.length(), EcoPestrLook.SCALE, 1e-4, "форма уменьшена до пестрянки")
+	near(tr.basis.z.length(), EcoPestrLook.SCALE * HvatenView.pestr_size(0), 1e-4, "форма уменьшена до пестрянки (свой размер)")
 	EcoShaders.set_sway_lite(true)
 	eq(mat.get_shader_parameter("sway_k"), 0.0, "«Экономно» гасит плавники")
 	EcoShaders.set_sway_lite(false)
@@ -601,7 +602,7 @@ func test_view_lite_draws_every_other_tentacle() -> void:
 	var a := view.hvaten.anemones[2]
 	hv.sync(view.world.time)
 	var tr := HvatenView.transform_at(hv.tent_buffer, HvatenView.tent_slot(2, 4, n, true))
-	ok(tr.is_equal_approx(EcoHvaten.tentacle(a, 4, view.world.time, not EcoShaders.sway_lite)),
+	ok(tr.is_equal_approx(HvatenView.tentacle_pose(a, 4, view.world.time, not EcoShaders.sway_lite)),
 		"видимое щупальце — на своём месте буфера")
 	view.ground = Seabed.height   # сброс мира — виды пересобираются
 	ok(view.hvaten_view.lite and view.hvaten_view.drawn() < n * EcoHvaten.TENT, "сброс мира — снова «Экономно»")
@@ -610,6 +611,6 @@ func test_view_lite_draws_every_other_tentacle() -> void:
 	eq(hv.drawn(), n * EcoHvaten.TENT, "назад — все")
 	a = view.hvaten.anemones[2]
 	var back := HvatenView.transform_at(hv.tent_buffer, 2 * EcoHvaten.TENT + 3)
-	ok(back.is_equal_approx(EcoHvaten.tentacle(a, 3, hv._t, not EcoShaders.sway_lite)), "буфер снова по номеру")
+	ok(back.is_equal_approx(HvatenView.tentacle_pose(a, 3, hv._t, not EcoShaders.sway_lite)), "буфер снова по номеру")
 	view.queue_free()
 	await frames(1)
