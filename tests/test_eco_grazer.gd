@@ -726,3 +726,40 @@ func test_view_returned_grazer_grows() -> void:
 	v.sync(1.0)
 	near(GrazerView.transform_at(v.buffer, 4).basis.x.length(), full, 1e-4, "время назад (сброс) — сразу")
 	v.free()
+
+
+## «Дыхание» (Б3): купол дышит только по высоте ± BREATH_H, ширина и длина те же (лапы не разъезжаются), стопы
+## на дне; у особей ритм и фаза разные; плавно — за кадр высота меняется на доли процента.
+func test_view_shell_breathes_height_only() -> void:
+	var lo := INF
+	var hi := -INF
+	for s in 100:
+		var k := EcoGrazerLook.breath(0, s * 0.1)
+		lo = minf(lo, k)
+		hi = maxf(hi, k)
+	ok(hi > 1.0 + EcoGrazerLook.BREATH_H * 0.95 and lo < 1.0 - EcoGrazerLook.BREATH_H * 0.95, "дышит во весь размах")
+	ok(hi <= 1.0 + EcoGrazerLook.BREATH_H + 1e-6 and lo >= 1.0 - EcoGrazerLook.BREATH_H - 1e-6, "не больше размаха")
+	ok(absf(EcoGrazerLook.breath(0, 2.0) - EcoGrazerLook.breath(1, 2.0)) > 0.005, "у каждого своя фаза")
+	var w := _world()
+	var gr := _grazers(w)
+	var v := GrazerView.new(gr)
+	var g := gr.all[2]
+	var k := EcoGrazerLook.scale(g)
+	var hs: Array[float] = []
+	var prev := -1.0
+	var worst := 0.0
+	for s in 120:
+		var t := 1.0 + s / 30.0
+		v.sync(t)
+		var tr := GrazerView.transform_at(v.buffer, 2)
+		near(tr.basis.x.length(), k, 1e-4, "ширина та же")
+		near(tr.basis.z.length(), k, 1e-4, "длина та же")
+		near(tr.basis.y.length(), k * EcoGrazerLook.breath(2, t), 1e-4, "высота — по дыханию")
+		ok(tr.origin.is_equal_approx(EcoGrazerLook.origin(g)), "стопы на дне")
+		hs.append(tr.basis.y.length())
+		if prev > 0.0:
+			worst = maxf(worst, absf(tr.basis.y.length() - prev))
+		prev = tr.basis.y.length()
+	ok(hs.max() - hs.min() > k * EcoGrazerLook.BREATH_H, "купол в сцене поднимается и опадает")
+	ok(worst < k * 0.01, "плавно: %.4f за кадр" % worst)
+	v.free()

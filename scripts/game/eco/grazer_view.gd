@@ -10,6 +10,7 @@ extends MultiMeshInstance3D
 ## «Экономно» (Б6, `set_lite`): форма EcoGrazerLook.lite_* — купол 8 × 2 вместо 12 × 3, лапы без подушек стоп,
 ## 312 → 200 треугольников на скребуна; меш пересобирается с тем же материалом, места, позы, муть и вызовы те же.
 ## Сброс мира уровень не теряет (EcoView.set_lite).
+## Купол дышит — высота формы ± EcoGrazerLook.BREATH_H по времени мира (Б3, `EcoGrazerLook.breath`), стопы на дне.
 ## Новый скребун у пятна мха не возникает за кадр (Б3): вырастает за GRAZER_RISE (доли grow_k по времени мира, у
 ## гостя то же); съеденный стеклоустом пропадает сразу — его проглотили.
 
@@ -221,7 +222,7 @@ static func pack(system: EcoGrazer, t: float, sizes := PackedFloat32Array()) -> 
 	var out := PackedFloat32Array()
 	out.resize(system.all.size() * STRIDE)
 	for g in system.all:
-		var b := EcoGrazerLook.basis(g)
+		var b := EcoGrazerLook.breathing(g, t)   # дыхание купола (Б3): только высота
 		if g.index < sizes.size():
 			b = b * smoothstep(0.0, 1.0, sizes[g.index])
 		var o := EcoGrazerLook.origin(g)
