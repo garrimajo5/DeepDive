@@ -49,6 +49,10 @@ var spore_buffer := PackedFloat32Array()
 var _spores_shown := PackedByteArray()
 ## «Экономно»: рисуется половина спор каждого облака.
 var lite := false
+## Разброс луковиц по номеру — считан один раз (bulb_scale, bulb_tint, stem_thick), шаг не хеширует.
+var _size_k := PackedFloat32Array()
+var _shade_k := PackedFloat32Array()
+var _thick_k := PackedFloat32Array()
 
 
 func _init(system: EcoBladder, on_lite := false) -> void:
@@ -60,6 +64,10 @@ func _init(system: EcoBladder, on_lite := false) -> void:
 	spores = EcoMM.instance(self, "Споры", build_spore(), n * EcoBladder.SPORES, true)
 	bubbles = EcoMM.instance(self, "Пузырьки", build_bubble(), EcoBladderBubbles.POOL, true)
 	stem_buffer.resize(stems.multimesh.instance_count * STRIDE)
+	for i in n * EcoBladder.STEMS:
+		_size_k.append(bulb_scale(i))
+		_shade_k.append(EcoVary.spread(i, EcoVary.SHADE, BULB_SHADE_SPREAD))
+		_thick_k.append(stem_thick(i))
 	EcoMM.fit([stems, bulbs, spores], places(bladders), FRAME_GROW)
 	set_lite(on_lite)
 	sync(0.0)
@@ -182,11 +190,12 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 			var n := bl.index * EcoBladder.STEMS + k
 			var i := n * STRIDE_C
 			var top := EcoBladder.bulb(bl, k, t, flow, amount)
-			EcoMM.put(bulb_buffer, i, Transform3D(Basis.from_scale(Vector3.ONE * r * bulb_scale(n)), top))
-			_color(bulb_buffer, i + STRIDE, bulb_tint(c, n))
+			EcoMM.put(bulb_buffer, i, Transform3D(Basis.from_scale(Vector3.ONE * (r * _size_k[n])), top))
+			var sk := _shade_k[n]
+			_color(bulb_buffer, i + STRIDE, Color(c.r * sk, c.g * sk, c.b * sk))
 			var a := bl.stem_base[k]
 			var up := top - a
-			EcoMM.put(stem_buffer, n * STRIDE, Transform3D(_along(up, stem_thick(n)), a + up * 0.5))  # конус стоит серединой в нуле
+			EcoMM.put(stem_buffer, n * STRIDE, Transform3D(_along(up, _thick_k[n]), a + up * 0.5))  # конус стоит серединой в нуле
 		var popped := bl.popped()
 		if not popped and not fresh and _spores_shown[bl.index] == 0:
 			continue
