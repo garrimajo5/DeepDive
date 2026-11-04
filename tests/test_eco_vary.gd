@@ -661,3 +661,32 @@ func test_fringe_strands_differ() -> void:
 	ok(code.contains("* shade;"), "и красит им тело")
 	v.queue_free()
 	await frames(1)
+
+
+## Огнецвет: у куста своя краска ветвей — светлее-темнее ±14 %, теплее-холоднее ±5 % по номеру; в меше она у куста своя.
+func test_coral_bushes_differ_in_paint() -> void:
+	var base := EcoCoralLook.BODY
+	var shades := []
+	for j in 40:
+		var c := CoralView.bush_paint(j, base)
+		shades.append(c.g / base.g)
+		ok(c.r <= 1.0 and c.g <= 1.0 and c.b <= 1.0, "краска не ярче 1 (%d)" % j)
+		eq(CoralView.bush_paint(j, base), CoralView.bush_paint(j, base), "один куст — одна краска")
+	var s := _span(shades)
+	ok(s.x >= 0.86 - 1e-5 and s.y <= 1.14 + 1e-5 and s.y - s.x > 0.14, "краска ±14 %%: %s" % s)
+	var w := EcoWorld.new()
+	w.ground = _flat_organ
+	var coral := w.add(EcoCoral.new([Vector2(0, 0), Vector2(20, 0), Vector2(40, 0)] as Array[Vector2])) as EcoCoral
+	var view := CoralView.new(coral)
+	var cols: PackedColorArray = view.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	var n := view.form.verts.size()
+	var firsts := {}
+	for k in coral.bushes.size():
+		var b := coral.bushes[k]
+		var got := cols[k * n]
+		var want := CoralView.bush_paint(b.index, view.form.colors[0])
+		var d := Vector3(got.r - want.r, got.g - want.g, got.b - want.b).length()
+		ok(d < 0.01, "куст %d — своей краски (%.4f)" % [k, d])
+		firsts[got.to_html()] = true
+	ok(firsts.size() == coral.bushes.size(), "кусты не одной краски: %d" % firsts.size())
+	view.free()
