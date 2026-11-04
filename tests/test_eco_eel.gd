@@ -567,6 +567,49 @@ func test_view_four_multimeshes() -> void:
 	await frames(1)
 
 
+## «Дыхание» (Б3): в логове голова-присоска шире и выше в такт (длина та же, глаза едут с головой), на ходу
+## не дышит, на стекле сосёт сильнее и кольцо присоски пульсирует; у двух стеклоустов ритм и фаза разные.
+func test_view_head_breathes_in_lair() -> void:
+	var lo := INF
+	var hi := -INF
+	for s in 80:
+		var k := EelView.breath_k(0, s * 0.1, 0.0, 0.0)
+		lo = minf(lo, k)
+		hi = maxf(hi, k)
+	ok(hi > 0.95 and lo < -0.95, "в логове дышит во весь размах")
+	var hs := EelView.head_scale(1.0)
+	near(hs.x, 1.0 + EelView.BREATH_W, 1e-6, "вдох — шире")
+	near(hs.y, 1.0 + EelView.BREATH_H, 1e-6, "и выше")
+	near(hs.z, 1.0, 1e-6, "длина та же — пасть на месте")
+	for s in 40:
+		near(EelView.breath_k(0, s * 0.1, 1.0, 0.0), 0.0, 1e-6, "на ходу не дышит")
+		var a := absf(EelView.breath_k(0, s * 0.1, 0.0, 0.0))
+		near(absf(EelView.breath_k(0, s * 0.1, 0.0, 1.0)), a * EelView.SUCK, 1e-5, "на стекле сосёт сильнее")
+	near(EelView.breath_k(0, 1.3, 0.5, 0.0), EelView.breath_k(0, 1.3, 0.0, 0.0) * 0.5, 1e-5,
+		"на полпути к ходу — полразмаха, без скачка")
+	eq(EelView.ring_pulse(1.0, 0.0), Vector3.ONE, "вне стекла кольцо не пульсирует")
+	near(EelView.ring_pulse(1.0, 1.0).x, 1.0 + EelView.RING_PULSE, 1e-6, "на стекле кольцо в такт шире")
+	ok(absf(EelView.breath_k(0, 2.0, 0.0, 0.0) - EelView.breath_k(1, 2.0, 0.0, 0.0)) > 0.05, "у каждого своя фаза")
+	# В сцене: голова в буфере дышит, глаз держится на голове.
+	var w := _world()
+	var eels := _eels(w)
+	var view := EelView.new(eels)
+	tree.root.add_child(view)
+	var widths: Array[float] = []
+	for s in 41:
+		view.sync(s * 0.1)
+		var hb := EelView.transform_at(view.shell_buffer, 0).basis
+		widths.append(hb.x.length() / EelView.HEAD.x)
+		near(hb.z.length(), EelView.HEAD.z, 1e-4, "длина головы не меняется")
+		var eye := EelView.transform_at(view.organ_buffer, eels.eels.size() * (EcoEel.SEGS - 1), EelView.CSTRIDE).origin
+		var bk := EelView.breath_k(0, s * 0.1, view.wag_k[0], view.ring_k[0])
+		var head := Transform3D(hb.orthonormalized(), eels.eels[0].segs[0])
+		near(eye.distance_to(head * (EelView.EYES[0] * EelView.head_scale(bk))), 0.0, 1e-3, "глаз на дышащей голове")
+	ok(widths.max() - widths.min() > EelView.BREATH_W * 1.5, "голова в сцене раздувается и опадает")
+	view.queue_free()
+	await frames(1)
+
+
 ## Глаз вдали (#970): шар глаза 0,07 м с 45 м меньше пикселя — поверх него пятно постоянного углового размера,
 ## только пока корабль в полосе знака (не вблизи — там глаз виден сам, не дальше GLINT_OFF).
 func test_eye_glint_by_distance() -> void:
@@ -636,7 +679,10 @@ func _check_organs(view: EelView, e: EcoEel.Eel) -> void:
 	near(buf[eye * EelView.CSTRIDE + EelView.STRIDE], EelView.EYE.r, 1e-6, "глаз красный")
 	near(buf[EelView.STRIDE], EelView.ORGANS.r, 1e-6, "звено — цвета внутренностей")
 	var tr := EelView.transform_at(buf, eye, EelView.CSTRIDE)
-	near(tr.origin.distance_to(e.segs[0]), EelView.EYES[0].length(), 1e-3, "глаз у головы")
+	# голова дышит (Б3): глаз едет с ней — не дальше вдоха и не ближе выдоха
+	var d := tr.origin.distance_to(e.segs[0])
+	ok(d <= (EelView.EYES[0] * EelView.head_scale(1.0)).length() + 1e-3
+		and d >= (EelView.EYES[0] * EelView.head_scale(-1.0)).length() - 1e-3, "глаз у головы: %.3f" % d)
 	near(tr.basis.get_scale().x, EelView.EYE_R, 1e-4, "глаз маленький")
 
 
@@ -749,7 +795,8 @@ func test_ring_flattens_smoothly() -> void:
 		if i == 0:
 			ok(view.ring_k[0] < 0.2, "первый кадр на стекле — ещё почти круглая: %.2f" % view.ring_k[0])
 	near(view.ring_k[0], 1.0, 1e-6, "за RING_RISE расплющилась")
-	near(_ring_width(view), EelView.RING_FLAT.x, 1e-3, "ширина — RING_FLAT")
+	var pulse := EelView.ring_pulse(EelView.breath_k(0, t, view.wag_k[0], view.ring_k[0]), view.ring_k[0]).x
+	near(_ring_width(view), EelView.RING_FLAT.x * pulse, 1e-3, "ширина — RING_FLAT (и такт присоски)")
 	e.mode = EcoEel.Mode.FLEE
 	for i in 30:
 		t += dt
