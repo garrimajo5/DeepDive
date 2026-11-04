@@ -438,3 +438,30 @@ func test_fern_leaves_differ_and_carry_tint() -> void:
 		near(v.buffer[i + 14], c.b, 1e-5)
 	ok(EcoShaders.PLANT.contains("* mix(0.55, 1.0, 1.0 - UV.y * 0.6) * COLOR.rgb"), "ветка листа берёт цвет экземпляра")
 	v.free()
+
+
+## Ледяная моль (Б4): у рачка свой размер ±15 % и яркость панциря ±20 % — в буфере по номеру рачка, сидящий на
+## стекле — по своему месту; без исправления все карточки одного размера и яркости.
+func test_moths_differ_in_size_and_shade() -> void:
+	var sizes := []
+	var shades := []
+	for n in 30:
+		sizes.append(MothView.moth_scale(n))
+		shades.append(MothView.moth_shade(n))
+	var s := _span(sizes)
+	ok(s.x >= 0.85 - 1e-5 and s.y <= 1.15 + 1e-5 and s.y - s.x > 0.15, "размер ±15 %%: %s" % s)
+	var l := _span(shades)
+	ok(l.x >= 0.8 - 1e-5 and l.y <= 1.2 + 1e-5 and l.y - l.x > 0.2, "яркость ±20 %%: %s" % l)
+	ok(MothView.CODE.contains("INSTANCE_CUSTOM.z"), "яркость — из своих данных экземпляра, шейдер тот же")
+	var m := EcoMoth.new()
+	m.reset(null)
+	var v := MothView.new(m)
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Vector3(EcoMoth.WELL.x, -6.0, EcoMoth.WELL.y)
+	v.sync(ship, 1.0)
+	ok(v.visible, "у колодца виден")
+	for i in [0, 5, 17]:
+		near(v.scale_at(i), MothView.moth_scale(i), 1e-6, "размер рачка %d" % i)
+		near(v.shade_at(i), MothView.moth_shade(i), 1e-6, "яркость рачка %d" % i)
+	ok(absf(v.scale_at(0) - v.scale_at(5)) + absf(v.scale_at(5) - v.scale_at(17)) > 0.01, "карточки не одного размера")
+	v.free()

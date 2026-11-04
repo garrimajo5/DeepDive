@@ -14,6 +14,8 @@ extends Node3D
 ## Рачки кувыркаются (Б3, `glint`): панцирь то ловит свет, то отворачивается — карточка плавно вспыхивает и гаснет
 ## до GLINT_LOW яркости, у каждого свой ритм и фаза (INSTANCE_CUSTOM.y), время мира — uniform `world_t` (у гостя то же).
 ## Шейдеров и вызовов не прибавилось, и на «Экономно».
+## Рачки не клоны (Б4, `EcoVary`): у каждого свой размер (±SIZE_SPREAD) и яркость панциря (±SHADE_SPREAD,
+## INSTANCE_CUSTOM.z) — по номеру рачка (сидящий на стекле — COUNT + место), мир и его случай не меняются.
 
 const ATLAS := "res://models/ledyanaya-mol-atlas.png"
 ## Карточка, м: рачок 5 мм с лапками; на экране телефона он был бы меньше пикселя, поэтому карточка крупнее
@@ -31,6 +33,9 @@ const GLINT_RATE := 1.6
 const GLINT_SPREAD := 1.2
 const GLINT_SHARP := 3.0
 const GLINT_LOW := 0.45
+## Разброс особей: размер карточки и яркость панциря.
+const SIZE_SPREAD := 0.15
+const SHADE_SPREAD := 0.2
 
 const CODE := """
 shader_type spatial;
@@ -45,11 +50,13 @@ uniform float glint_sharp = 3.0;
 uniform float glint_low = 0.45;
 varying float fade;
 varying float glint;
+varying float shade;
 varying vec2 cell;
 void vertex() {
 	float ph = INSTANCE_CUSTOM.y;
 	float w = 0.5 + 0.5 * sin(world_t * (glint_rate + glint_spread * fract(ph * 0.159155)) + ph);
 	glint = mix(glint_low, 1.0, pow(w, glint_sharp));
+	shade = INSTANCE_CUSTOM.z;
 	vec3 o = MODEL_MATRIX[3].xyz;
 	float s = length(MODEL_MATRIX[0].xyz);
 	float c = INSTANCE_CUSTOM.x;
@@ -63,7 +70,7 @@ void fragment() {
 	// клетка 128² из 256², UV зажаты внутри клетки (поля 32 px) — без подтекания соседа на мипах
 	vec2 uv = (cell + clamp(UV, vec2(0.02), vec2(0.98))) * 0.5;
 	vec4 t = texture(atlas, uv);
-	ALBEDO = tint * t.rgb * glint;
+	ALBEDO = tint * t.rgb * glint * shade;
 	ROUGHNESS = 0.35;
 	SPECULAR = 0.7 * glint;
 	ALPHA = t.a * fade * 0.9;
@@ -108,6 +115,7 @@ func _init(system: EcoMoth) -> void:
 		buffer[b + 10] = 1.0
 		buffer[b + CUSTOM] = float(i % 4)
 		buffer[b + CUSTOM + 1] = phase_of(i)
+		buffer[b + CUSTOM + 2] = moth_shade(i)
 	visible = false
 
 
@@ -122,6 +130,16 @@ static func build_mesh() -> QuadMesh:
 ## Фаза кувырка карточки i, рад (золотое сечение — соседи вразнобой).
 static func phase_of(i: int) -> float:
 	return fposmod(i * 0.618034, 1.0) * TAU
+
+
+## Размер рачка с номером id (доля SIZE): свой у каждого, один и тот же при каждом вызове.
+static func moth_scale(id: int) -> float:
+	return EcoVary.spread(id, EcoVary.SIZE, SIZE_SPREAD)
+
+
+## Яркость панциря рачка с номером id (множитель цвета в шейдере).
+static func moth_shade(id: int) -> float:
+	return EcoVary.spread(id, EcoVary.SHADE, SHADE_SPREAD)
 
 
 ## Яркость блика рачка с фазой ph в момент t (двойник шейдера): 1 — панцирь к свету, GLINT_LOW — отвернулся.
@@ -146,23 +164,26 @@ func sync(ship: EcoLink.ShipState, t := 0.0) -> void:
 	if at_well:
 		cards.custom_aabb = WELL_BOX
 		for i in sw.active:
-			_put(i, sw.pos[i], 1.0, i % 4, phase_of(i))
+			_put(i, sw.pos[i], 1.0, i % 4, i)
 		n = sw.active
 	else:
 		cards.custom_aabb = AABB(ship.pos - Vector3.ONE * SHIP_BOX, Vector3.ONE * SHIP_BOX * 2.0)
 	for k in sw.glass_max:
 		if sw.glass_life[k] > 0.0:
-			_put(n, sw.glass_world(ship, k), sw.glass_k(k), (EcoMoth.COUNT + k) % 4, phase_of(EcoMoth.COUNT + k))
+			_put(n, sw.glass_world(ship, k), sw.glass_k(k), (EcoMoth.COUNT + k) % 4, EcoMoth.COUNT + k)
 			n += 1
 	mm.buffer = buffer
 	mm.visible_instance_count = n
 	writes += 1
 
 
-## Карточка i: место, доля размера s, клетка атласа cell и фаза кувырка ph (своя у рачка, не у места в буфере).
-func _put(i: int, p: Vector3, s: float, cell: int, ph: float) -> void:
+## Карточка i: место, доля размера s, клетка атласа cell; фаза кувырка, размер и яркость — по номеру рачка id
+## (свои у рачка, не у места в буфере).
+func _put(i: int, p: Vector3, s: float, cell: int, id: int) -> void:
 	var b := i * STRIDE
-	buffer[b + CUSTOM + 1] = ph
+	buffer[b + CUSTOM + 1] = phase_of(id)
+	buffer[b + CUSTOM + 2] = moth_shade(id)
+	s *= moth_scale(id)
 	buffer[b] = s
 	buffer[b + 5] = s
 	buffer[b + 10] = s
@@ -183,6 +204,10 @@ func cell_at(n: int) -> int:
 
 func phase_at(n: int) -> float:
 	return buffer[n * STRIDE + CUSTOM + 1]
+
+
+func shade_at(n: int) -> float:
+	return buffer[n * STRIDE + CUSTOM + 2]
 
 
 ## Место рачка n из буфера.
