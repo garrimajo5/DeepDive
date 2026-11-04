@@ -37,6 +37,18 @@ const WAG_RISE := 0.5
 ## Присоска расплющивается по стеклу (RING_FLAT) и собирается обратно за RING_RISE с (Б3; раньше — за кадр:
 ## кольцо шире на 35 % и вдвое тоньше, как только лёг на стекло или отпустил). Доля — `ring_k`, тем же шагом, что виляние.
 const RING_RISE := 0.4
+## «Дыхание» (Б3, `breath`): пасть-присоска стеклоуста набирает воду и выталкивает её — голова шире на ± BREATH_W
+## и выше на ± BREATH_H за BREATH_T с (ритм ± BREATH_SPREAD и фаза — у каждого свои, `EcoVary`); длина та же —
+## пасть и кольцо присоски на месте, глаза едут с головой. Дышит, пока стоит (в логове или на стекле): на ходу
+## размах гаснет вместе с ростом виляния (1 − доля виляния — без скачка). На стекле присоска сосёт: голова дышит
+## в SUCK раз сильнее, кольцо в такт шире на ± RING_PULSE. По времени мира (у гостя то же); масштаб экземпляров
+## MultiMesh — даром, и на «Экономно».
+const BREATH_T := 4.0
+const BREATH_W := 0.06
+const BREATH_H := 0.04
+const BREATH_SPREAD := 0.15
+const SUCK := 1.6
+const RING_PULSE := 0.08
 const STRIDE := 12
 ## Запись экземпляра с цветом: трансформ и RGBA.
 const CSTRIDE := 16
@@ -236,6 +248,26 @@ static func ring_scale(k: float) -> Vector3:
 	return Vector3.ONE.lerp(RING_FLAT, wag_amp(k))
 
 
+## Доля дыхания стеклоуста i в момент t: −1…1 · размах (BREATH_T, ритм и фаза — EcoVary); wag — доля виляния (на
+## ходу не дышит), ring — доля «на стекле» (сосёт, SUCK).
+static func breath_k(i: int, t: float, wag: float, ring: float) -> float:
+	var rate := EcoVary.spread(i, EcoVary.RATE, BREATH_SPREAD)
+	var ph := EcoVary.unit(i, EcoVary.SHADE) * TAU
+	var amp := (1.0 - wag_amp(wag)) * lerpf(1.0, SUCK, wag_amp(ring))
+	return sin(t * TAU / BREATH_T * rate + ph) * amp
+
+
+## Множитель размера головы по доле дыхания: шире и выше, длина та же.
+static func head_scale(k: float) -> Vector3:
+	return Vector3(1.0 + BREATH_W * k, 1.0 + BREATH_H * k, 1.0)
+
+
+## Множитель кольца присоски: на стекле (ring) — в такт дыханию шире, вне стекла — круглое как было.
+static func ring_pulse(k: float, ring: float) -> Vector3:
+	var w := 1.0 + RING_PULSE * k * wag_amp(ring)
+	return Vector3(w, w, 1.0)
+
+
 ## Размах виляния по доле: мягкий вход и выход (smoothstep).
 static func wag_amp(k: float) -> float:
 	return k * k * (3.0 - 2.0 * k)
@@ -282,9 +314,11 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground
 				Transform3D(b.scaled_local(Vector3(r, r * 0.8, r * SEG_STRETCH) * ORGAN_K), pos - Vector3(0, r * 0.15, 0)))
 		var hb := _look(e.face)
 		var head := Transform3D(hb, segs[0])
-		EcoMM.put(shell_buffer, e.index * EcoEel.SEGS * STRIDE, Transform3D(hb.scaled_local(HEAD), segs[0]))
+		var bk := breath_k(e.index, t, wag_k[e.index], ring_k[e.index])
+		var hs := head_scale(bk)
+		EcoMM.put(shell_buffer, e.index * EcoEel.SEGS * STRIDE, Transform3D(hb.scaled_local(HEAD * hs), segs[0]))
 		for j in EYES.size():
-			var eye := head * EYES[j]
+			var eye := head * (EYES[j] * hs)
 			EcoMM.put(organ_buffer, (eye0 + e.index * EYES.size() + j) * CSTRIDE,
 				Transform3D(hb.scaled_local(Vector3.ONE * EYE_R), eye))
 			var g := Vector2.ZERO
@@ -300,7 +334,7 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO, ground
 			glint_buffer[o + STRIDE + 1] = GLINT_COLOR.g * GLINT_GAIN
 			glint_buffer[o + STRIDE + 2] = GLINT_COLOR.b * GLINT_GAIN
 			glint_buffer[o + STRIDE + 3] = GLINT_ALPHA * g.y
-		var rb := hb.scaled_local(ring_scale(ring_k[e.index])) * Basis(Vector3.RIGHT, PI / 2.0)
+		var rb := hb.scaled_local(ring_scale(ring_k[e.index]) * ring_pulse(bk, ring_k[e.index])) * Basis(Vector3.RIGHT, PI / 2.0)
 		EcoMM.put(ring_buffer, e.index * STRIDE, Transform3D(rb, head * RING_AT))
 	EcoMM.send(shell, shell_buffer)
 	EcoMM.send(organs, organ_buffer)
