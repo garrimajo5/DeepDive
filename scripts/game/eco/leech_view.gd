@@ -9,7 +9,9 @@ extends Node3D
 ## «Экономно» (set_lite, Б6): лента — капсула 4 грани × 1 кольцо вместо 6 × 2 (`LITE_SIDES`/`LITE_RINGS`), тот же
 ## материал, размер и место; облачка слизи гасит общий EcoGrazerDust.lite.
 ## Паразит не возникает и не пропадает за кадр (Б3): заразился — лента вырастает у жабр за LEECH_RISE, огнёвки сняли —
-## сжимается за LEECH_FADE (доли leech_k по времени мира, у гостя то же).
+## сжимается за LEECH_FADE (доли leech_k по времени мира, у гостя то же). Огнёвки обирают жабры (хищник у вершины
+## станции, ближе EcoLeech.CLEAN_R) — лента извивается втрое сильнее, размах набирается и гаснет за WRITHE_RISE
+## (доли writhe_k): паразит сопротивляется, а не висит ровно.
 
 ## Лента: капсула 0,2 м длиной и 0,06 м шириной, сплющена к боку хищника; наклонена вдоль жаберной щели.
 const LENGTH := 0.2
@@ -34,6 +36,9 @@ const LITE_RINGS := 1
 const LEECH_RISE := 2.0
 const LEECH_FADE := 0.6
 const SNAP_DT := 1.0
+## На чистке размах изгиба — WRITHE × WIGGLE; доля набирается и гаснет за WRITHE_RISE с (ритм тот же — фаза не прыгает).
+const WRITHE := 3.0
+const WRITHE_RISE := 0.5
 
 var leeches: EcoLeech
 var mesh: MultiMeshInstance3D
@@ -45,6 +50,8 @@ var tris := 0
 var placed: Array[Transform3D] = []
 ## Доля размера ленты по хищнику: 0 — нет, 1 — во весь размер.
 var leech_k := PackedFloat32Array()
+## Доля «извивается на чистке» по хищнику: 0 — спокойно, 1 — во весь размах WRITHE.
+var writhe_k := PackedFloat32Array()
 var _k_t := 0.0
 var _k_fresh := true
 var _buffer := PackedFloat32Array()
@@ -120,13 +127,13 @@ static func count_tris(m: Mesh) -> int:
 
 
 ## Где и как стоит лента на хищнике в момент t (нулевой масштаб — паразита нет); k — доля размера (leech_k),
-## меньше нуля — по pr.leech сразу.
-static func place(pr: EcoPred.Pred, t: float, k := -1.0) -> Transform3D:
+## меньше нуля — по pr.leech сразу; w — доля «извивается на чистке» (writhe_k).
+static func place(pr: EcoPred.Pred, t: float, k := -1.0, w := 0.0) -> Transform3D:
 	if k < 0.0:
 		k = 1.0 if pr.leech else 0.0
 	if k <= 0.0 or not pr.agent.alive:
 		return Transform3D(Basis.from_scale(Vector3.ZERO), pr.agent.p)
-	var bend := TILT + sin(t * leech_rate(pr.index) + float(pr.index)) * WIGGLE
+	var bend := TILT + sin(t * leech_rate(pr.index) + float(pr.index)) * wiggle_amp(w)
 	var size_k := smoothstep(0.0, 1.0, k)
 	var local := Basis(Vector3.RIGHT, bend) * Basis.from_scale(Vector3(FLAT, 1, 1) * leech_scale(pr.index) * size_k)
 	return Transform3D(EcoPredLook.basis(pr) * local, EcoLeech.position_on(pr))
@@ -144,7 +151,7 @@ func sync(t: float, state: EcoLink.ShipState = null, flow := Vector3.ZERO) -> vo
 	_buffer.resize(mm.instance_count * STRIDE)
 	grow(t, ps)
 	for i in n:
-		var x := place(ps.all[i], t, leech_k[i])
+		var x := place(ps.all[i], t, leech_k[i], writhe_k[i])
 		placed[i] = x
 		var b := x.basis
 		var o := i * STRIDE
@@ -162,6 +169,7 @@ func grow(t: float, ps: EcoPred) -> void:
 	var n := ps.all.size()
 	if leech_k.size() != n:
 		leech_k.resize(n)
+		writhe_k.resize(n)
 		_k_fresh = true
 	var dt := t - _k_t
 	_k_t = t
@@ -174,6 +182,22 @@ func grow(t: float, ps: EcoPred) -> void:
 			leech_k[i] = 1.0 if snap else minf(1.0, g + dt / LEECH_RISE)
 		else:
 			leech_k[i] = 0.0 if snap else maxf(0.0, g - dt / LEECH_FADE)
+		var aim := 1.0 if cleaning(pr, leeches) else 0.0
+		writhe_k[i] = aim if snap else move_toward(writhe_k[i], aim, dt / WRITHE_RISE)
+
+
+## Огнёвки обирают жабры: заражённый на чистке у вершины своей станции (ближе EcoLeech.CLEAN_R).
+static func cleaning(pr: EcoPred.Pred, system: EcoLeech) -> bool:
+	if not pr.leech or pr.mode != EcoPred.Mode.CLEAN or system == null:
+		return false
+	if pr.station < 0 or pr.station >= system.stations.size():
+		return false
+	return pr.agent.distance_to(system.stations[pr.station].top) < EcoLeech.CLEAN_R
+
+
+## Размах изгиба ленты при доле «извивается» w (мягкий вход): WIGGLE … WRITHE × WIGGLE.
+static func wiggle_amp(w: float) -> float:
+	return WIGGLE * lerpf(1.0, WRITHE, smoothstep(0.0, 1.0, clampf(w, 0.0, 1.0)))
 
 
 ## Размер ленты на хищнике n.
