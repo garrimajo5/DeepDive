@@ -426,7 +426,7 @@ func test_view_flap_from_world() -> void:
 		view.step(0.05, ship)
 	for ry in view.rays.rays:
 		var c := rv.customs[ry.index]
-		eq(c.r, float(ry.index), "номер ската")
+		near(c.r, RayView.breath(ry.index, view.world.time), 1e-6, "доля дыхания — по времени мира")
 		near(c.a, RayView.tail_phase(view.world.time, ry.index), 1e-5, "фаза хлыста — по времени мира")
 		ok(c.a >= 0.0 and c.a < TAU, "по модулю TAU — точность на долгом забеге")
 		near(c.g, ry.flap, 1e-6, "фаза взмаха — с мира")
@@ -440,6 +440,36 @@ func test_view_flap_from_world() -> void:
 	near(EcoRay.wing_lift(7.0, 2.24 + PI * 0.5, EcoRay.FLAP_HARD), 1.8 * EcoRay.FLAP_HARD, 1e-5, "сильный взмах — выше")
 	view.queue_free()
 	await frames(1)
+
+
+## Б3: ледокрыл дышит брызгальцами — горб спины поднимается и опадает (± BREATH_H), края крыльев и хвост стоят;
+## у скатов свой ритм и фаза, по времени мира (у гостя то же), в шейдере — по INSTANCE_CUSTOM.x.
+func test_view_hump_breathes() -> void:
+	var rv := RayView.new(_rays(_world()))
+	tree.root.add_child(rv)
+	await frames(1)
+	var lo := 1.0
+	var hi := -1.0
+	for i in 200:
+		var k := RayView.breath(0, i * 0.05)
+		lo = minf(lo, k)
+		hi = maxf(hi, k)
+	ok(lo < -0.95 and hi > 0.95, "за 10 с — полный вдох и выдох")
+	ok(absf(RayView.breath(0, 1.0) - RayView.breath(1, 1.0)) > 0.05, "скаты дышат вразнобой")
+	for i in 100:
+		var t := i * 0.1
+		ok(absf(RayView.breath(0, t + 0.05) - RayView.breath(0, t)) < 0.1, "плавно, без скачков")
+	near(RayView.hump(0.5, 1.0), 0.5 * (1.0 + RayView.BREATH_H), 1e-9, "горб выше на вдохе")
+	near(RayView.hump(0.5, -1.0), 0.5 * (1.0 - RayView.BREATH_H), 1e-9, "и ниже на выдохе")
+	near(RayView.hump(0.0, 1.0), 0.0, 1e-9, "кромка крыла стоит")
+	near(RayView.hump(0.1, 1.0, 0.5), 0.1, 1e-9, "хвост не дышит")
+	ok(RayView.BREATH_H * 0.5 < 0.06, "спина на 0,5 м поднимается не больше 6 см — присоски на спине не отрываются")
+	rv.sync(3.0)
+	for ry in rv.rays.rays:
+		near(rv.customs[ry.index].r, RayView.breath(ry.index, 3.0), 1e-6, "доля — в экземпляре")
+	var code := (rv.multimesh.mesh.surface_get_material(0) as ShaderMaterial).shader.code
+	ok(code.contains("VERTEX.y *= 1.0 + %s * INSTANCE_CUSTOM.x" % str(RayView.BREATH_H)), "шейдер — с тем же размахом")
+	rv.queue_free()
 
 
 func test_tail_whips() -> void:

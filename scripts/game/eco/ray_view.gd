@@ -5,7 +5,10 @@ extends MultiMeshInstance3D
 ## светлее; хвост-хлыст 9 м назад; на спине два ряда по 7 светящихся пятнышек (#9ffcff). Взмах крыльев — в шейдере
 ## (как в браузере: sin(ф − 0,32 |x|) · (|x| / 7)^1,4 · 1,8 · доля), крен 0,22 рад. Фаза ф и доля размаха — с мира
 ## (EcoRay.flap_step: над кораблём машет сильнее и чаще, опускаясь — планирует), в INSTANCE_CUSTOM.y/z; номер ската —
-## в INSTANCE_CUSTOM.x (сдвиг хвоста). Двойник взмаха на CPU — EcoRay.wing_lift.
+## раньше был в INSTANCE_CUSTOM.x, теперь там доля дыхания (ниже). Двойник взмаха на CPU — EcoRay.wing_lift.
+## «Дыхание» (Б3, `breath`): скат качает воду через брызгальца — горб спины с пятнышками поднимается и опадает на
+## ± BREATH_H за BREATH_T с (ритм ± BREATH_SPREAD и фаза — у каждого свои, EcoVary), края крыльев и хвост стоят.
+## Доля −1…1 считается по времени мира (у гостя то же) и лежит в INSTANCE_CUSTOM.x; двойник шейдера — `hump`.
 ## Хвост-хлыст извивается волной от корня к кончику (TAIL_*, доля длины хвоста — в UV.x; фаза — по времени мира в
 ## INSTANCE_CUSTOM.w, `tail_phase`, а не по TIME шейдера; двойник на CPU — tail_wave);
 ## «Экономно» — sway_k = 0 через EcoShaders.follow / set_sway_lite.
@@ -28,6 +31,8 @@ uniform float spec = 0.2;
 varying float glow;
 void vertex() {
 	float ax = abs(VERTEX.x);
+	// дыхание: горб тела (y ≥ 0, у кромки 0) выше и ниже в такт; хвост (UV.x > 0) — нет; двойник — RayView.hump
+	VERTEX.y *= 1.0 + 0.08 * INSTANCE_CUSTOM.x * (1.0 - step(0.0001, UV.x));
 	// фаза и доля размаха взмаха — с мира (EcoRay.flap_step), двойник — EcoRay.wing_lift
 	float ph = INSTANCE_CUSTOM.y - ax * 0.32;
 	float k = pow(ax / 7.0, 1.4) * 1.8 * INSTANCE_CUSTOM.z;
@@ -50,6 +55,10 @@ void fragment() {
 }
 """
 
+## Дыхание: размах по высоте горба (доля), период (с), разброс ритма.
+const BREATH_H := 0.08
+const BREATH_T := 5.5
+const BREATH_SPREAD := 0.2
 ## Пластина: размах и длина (м), клеток поперёк и вдоль.
 const SPAN := 14.0
 const LENGTH := 9.0
@@ -85,7 +94,7 @@ var verts := PackedVector3Array()
 var tris := 0
 ## Последние места скатов (для тестов: без видеокарты MultiMesh их не хранит).
 var placed: Array[Transform3D] = []
-## Последние данные экземпляров (номер, фаза взмаха, доля размаха, фаза хлыста) — для тестов.
+## Последние данные экземпляров (доля дыхания, фаза взмаха, доля размаха, фаза хлыста) — для тестов.
 var customs: Array[Color] = []
 ## Вихри с кончиков крыльев (EcoRayDust); буфер — для тестов.
 var dust := EcoRayDust.new()
@@ -174,7 +183,7 @@ func _build() -> ArrayMesh:
 	return m
 
 
-## Поставить скатов по миру; t — время мира (фаза хлыста).
+## Поставить скатов по миру; t — время мира (фаза хлыста и дыхание).
 func sync(t := 0.0) -> void:
 	placed.resize(rays.rays.size())
 	customs.resize(rays.rays.size())
@@ -182,7 +191,7 @@ func sync(t := 0.0) -> void:
 		var x := xform(ry)
 		placed[ry.index] = x
 		multimesh.set_instance_transform(ry.index, x)
-		var c := Color(float(ry.index), ry.flap, ry.flap_k, tail_phase(t, ry.index))
+		var c := Color(breath(ry.index, t), ry.flap, ry.flap_k, tail_phase(t, ry.index))
 		customs[ry.index] = c
 		multimesh.set_instance_custom_data(ry.index, c)
 
@@ -253,6 +262,18 @@ static func tail_phase(t: float, index: int) -> float:
 ## Сдвиг вбок (м, по x меша) точки хвоста на доле длины s в момент t у ската номер index — двойник шейдера.
 static func tail_wave(s: float, t: float, index: int, sway_k := 1.0) -> float:
 	return sin(tail_phase(t, index) - s * TAIL_K) * TAIL_AMP * s * s * sway_k
+
+
+## Доля дыхания ската номер index в момент t (время мира): −1…1 (BREATH_T, ритм и фаза — EcoVary).
+static func breath(index: int, t: float) -> float:
+	var rate := EcoVary.spread(index, EcoVary.RATE, BREATH_SPREAD)
+	var phase := EcoVary.unit(index, EcoVary.SHADE) * TAU
+	return sin(t * TAU / BREATH_T * rate + phase)
+
+
+## Высота точки тела y (м, в осях меша, до взмаха) при доле дыхания k — двойник шейдера; хвост (s > 0) не дышит.
+static func hump(y: float, k: float, s := 0.0) -> float:
+	return y * (1.0 + BREATH_H * k) if s <= 0.0 else y
 
 
 ## Светящееся пятнышко: октаэдр радиуса SPOT_R (альфа 1 — светится в шейдере).
