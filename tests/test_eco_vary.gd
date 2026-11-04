@@ -399,3 +399,42 @@ func test_urchins_differ_in_size() -> void:
 		var want := EcoKelp.urchin_basis(u, t).x.length() * KelpView.urchin_scale(u.index)
 		near(tr.basis.x.length(), want, 1e-4, "ёж %d — своего размера" % u.index)
 	v.free()
+
+
+func test_fern_leaves_differ_and_carry_tint() -> void:
+	var lens := []
+	var turns := []
+	var lums := []
+	var base := Basis.IDENTITY
+	for n in 24:
+		var b := FernView.leaf_shape(n, base)
+		lens.append(b.y.length())
+		turns.append(atan2(b.x.z, b.x.x))
+		lums.append(FernView.leaf_tint(n).get_luminance())
+	var s := _span(lens)
+	ok(s.x >= 0.85 - 1e-5 and s.y <= 1.15 + 1e-5 and s.y - s.x > 0.12, "длина листа ±15 %%: %s" % s)
+	var tr := _span(turns)
+	ok(tr.x >= -FernView.LEAF_TURN - 1e-4 and tr.y <= FernView.LEAF_TURN + 1e-4 and tr.y - tr.x > 0.2,
+		"поворот вокруг стебля ±0,2 рад: %s" % tr)
+	ok(_span(lums).y - _span(lums).x > 0.1, "листья разной яркости")
+	eq(FernView.leaf_tint(5), FernView.leaf_tint(5), "тот же лист — тот же цвет")
+	var w := EcoWorld.new()
+	w.ground = Seabed.height
+	var fr := w.add(EcoFern.new()) as EcoFern
+	w.reset()
+	var v := FernView.new(fr)
+	ok(v.leaves.multimesh.use_colors, "у листа цвет экземпляра")
+	v.sync(2.0)
+	var fe := fr.ferns[2]
+	for j in EcoFern.LEAVES:
+		var n := fe.index * EcoFern.LEAVES + j
+		var got := FernView.transform_at(v.buffer, n, FernView.STRIDE_C)
+		var want := FernView.leaf_shape(n, EcoFern.leaf_basis(fe, j, 2.0))
+		ok(got.basis.is_equal_approx(want), "лист %d — своей формы" % j)
+		ok(got.origin.is_equal_approx(fe.pos), "из подножия куста")
+		var i := n * FernView.STRIDE_C
+		var c := FernView.leaf_tint(n)
+		near(v.buffer[i + 12], c.r, 1e-5, "оттенок листа %d в буфере" % j)
+		near(v.buffer[i + 14], c.b, 1e-5)
+	ok(EcoShaders.PLANT.contains("* mix(0.55, 1.0, 1.0 - UV.y * 0.6) * COLOR.rgb"), "ветка листа берёт цвет экземпляра")
+	v.free()

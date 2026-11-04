@@ -370,7 +370,8 @@ void fragment() {
 		// лист: UV.x поперёк (0,5 — жилка), UV.y — от кончика (0) к основанию (1)
 		float e = smoothstep(0.25, 0.5, abs(UV.x - 0.5)) * 0.8 + smoothstep(0.45, 0.0, UV.y) * 0.5;
 		float vein = 1.0 - smoothstep(0.0, 0.04, abs(UV.x - 0.5));
-		ALBEDO = mix(paint, edge, clamp(e + vein * 0.3, 0.0, 1.0)) * mix(0.55, 1.0, 1.0 - UV.y * 0.6);
+		// цвет экземпляра — разброс листьев волнолиста (FernView.leaf_tint), без него белый
+		ALBEDO = mix(paint, edge, clamp(e + vein * 0.3, 0.0, 1.0)) * mix(0.55, 1.0, 1.0 - UV.y * 0.6) * COLOR.rgb;
 	} else if (mode == 2) {
 		// веерник (fanTex): метры от подножия, лучи расходятся из точки на высоте 0,35 м
 		vec2 p = vec2((UV.x - 0.5) * size.x, (1.0 - UV.y) * size.y);
