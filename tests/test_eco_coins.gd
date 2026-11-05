@@ -764,3 +764,56 @@ func test_view_tail_phase_and_time() -> void:
 		phases[snappedf(a, 0.05)] = true
 	ok(phases.size() >= 8, "машут вразнобой: %d разных фаз" % phases.size())
 	v.free()
+
+
+## Глазун дышит в песке (Б3): тело выше и шире в такт, длина та же; в луче затаился, в броске не дышит, плавно.
+func test_view_glazun_breathes_held_in_beam() -> void:
+	var w := _world()
+	var c := _coins(w)
+	var v := CoinsView.new(c)
+	var gz := c.glazuns[0]
+	gz.lit = false
+	gz.lunge = 0.0
+	var hs: Array[float] = []
+	var prev := -1.0
+	var worst := 0.0
+	for s in 180:
+		var t := 1.0 + s / 30.0
+		v.sync(t)
+		var tr := KelpView.transform_at(v.body_buffer, gz.index, CoinsView.STRIDE_C)
+		var b := CoinsView.glazun_breath(gz, t, 0.0)
+		near(tr.basis.z.length(), 1.0, 1e-4, "длина та же")
+		near(tr.basis.y.length(), b.y, 1e-4, "высота — по дыханию")
+		near(tr.basis.x.length(), b.x, 1e-4, "ширина — по дыханию")
+		ok(tr.origin.is_equal_approx(EcoCoins.glazun_transform(gz).origin), "тело на месте")
+		hs.append(tr.basis.y.length())
+		if prev > 0.0:
+			worst = maxf(worst, absf(hs[-1] - prev))
+		prev = hs[-1]
+	ok(hs.max() - hs.min() > CoinsView.GLAZUN_BREATH_H * 1.5, "тело поднимается и опадает: %.4f" % (hs.max() - hs.min()))
+	ok(hs.max() <= 1.0 + CoinsView.GLAZUN_BREATH_H + 1e-5 and hs.min() >= 1.0 - CoinsView.GLAZUN_BREATH_H - 1e-5,
+			"не больше размаха")
+	ok(worst < 0.01, "плавно: %.4f за кадр" % worst)
+	# в луче — затаился, в броске — не дышит
+	var t0 := 2.3
+	var free := CoinsView.glazun_breath(gz, t0, 0.0).y - 1.0
+	near(CoinsView.glazun_breath(gz, t0, 1.0).y - 1.0, free * CoinsView.GLAZUN_HELD, 1e-6, "в луче — доля размаха")
+	gz.lunge = 1.0
+	eq(CoinsView.glazun_breath(gz, t0, 0.0), Vector3.ONE, "в броске не дышит")
+	gz.lunge = 0.0
+	ok(absf(CoinsView.glazun_breath(c.glazuns[0], t0, 0.0).y - CoinsView.glazun_breath(c.glazuns[1], t0, 0.0).y) > 1e-3
+			if c.glazuns.size() > 1 else true, "у каждого своя фаза")
+	# свет приходит плавно: размах не прыгает за кадр
+	gz.lit = true
+	var t := 7.0
+	v.sync(t)
+	var last := KelpView.transform_at(v.body_buffer, gz.index, CoinsView.STRIDE_C).basis.y.length()
+	var jump := 0.0
+	for i in 30:
+		t += 1.0 / 30.0
+		v.sync(t)
+		var y := KelpView.transform_at(v.body_buffer, gz.index, CoinsView.STRIDE_C).basis.y.length()
+		jump = maxf(jump, absf(y - last))
+		last = y
+	ok(jump < 0.01, "вход в луч без скачка: %.4f" % jump)
+	v.free()

@@ -25,6 +25,11 @@ extends Node3D
 ## Глаза глазуна в луче не щёлкают (Б3): доля луча eye_lit (по времени мира, у гостя то же) растёт за EYE_RISE и гаснет
 ## за EYE_FADE; альфа экземпляра (`eye_alpha`) и раздувание шарика в шейдере (`tip_grow` — по альфе выше EYE_FROM)
 ## идут за ней плавно. Строка на приборах и мир (`EcoCoins.Glazun.lit`) — сразу, как раньше.
+## «Дыхание» глазуна (Б3, `glazun_breath`): тело в песке набирает воду и выталкивает её — высота ± GLAZUN_BREATH_H,
+## ширина ± GLAZUN_BREATH_W за GLAZUN_BREATH_T с (ритм ± GLAZUN_BREATH_SPREAD и фаза — EcoVary), длина та же —
+## стебельки и глаза едут с телом на миллиметры. В луче затаился — GLAZUN_HELD размаха (по плавной доле eye_lit),
+## в броске размах гаснет вместе с `lunge` — без скачка. Масштаб экземпляра по времени мира (у гостя то же) — даром,
+## и на «Экономно»; мир (глаза для луча и сканера) не меняется.
 
 const COIN := Color("e8d48a")
 const FIN := Color("b59a50")
@@ -166,6 +171,14 @@ const GLAZUN_GROW := 4.0
 ## Глаза глазуна: попал в луч — раздуваются и разгораются за EYE_RISE с, вышел — гаснут за EYE_FADE с.
 const EYE_RISE := 0.3
 const EYE_FADE := 0.6
+## Дыхание глазуна: высота и ширина тела (доли), период, с, разброс ритма; в луче — доля размаха.
+const GLAZUN_BREATH_H := 0.04
+const GLAZUN_BREATH_W := 0.02
+const GLAZUN_BREATH_T := 5.0
+const GLAZUN_BREATH_SPREAD := 0.2
+const GLAZUN_HELD := 0.3
+## Соль номера глазуна для EcoVary — не в фазе с монетниками тех же номеров.
+const GLAZUN_SALT := 1000
 
 
 ## Расставить монетников и глазунов в момент t (время мира). ship — корабль (муть — ближе EcoGrazerDust.NEAR,
@@ -190,7 +203,9 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 	body_buffer.resize(coins.glazuns.size() * STRIDE_C)
 	for gz in coins.glazuns:
 		var j := gz.index * STRIDE_C
-		EcoMM.put(body_buffer, j, EcoCoins.glazun_transform(gz))
+		var gtr := EcoCoins.glazun_transform(gz)
+		gtr.basis = gtr.basis * Basis.from_scale(glazun_breath(gz, t, eye_lit[gz.index]))
+		EcoMM.put(body_buffer, j, gtr)
 		body_buffer[j + 12] = 1.0; body_buffer[j + 13] = 1.0; body_buffer[j + 14] = 1.0
 		body_buffer[j + 15] = eye_alpha(gz, t, eye_lit[gz.index])
 	EcoMM.send(bodies, body_buffer)
@@ -303,6 +318,17 @@ static func build_coin() -> ArrayMesh:
 	m.surface_set_material(0, EcoShaders.plant(EcoShaders.Plant.TENTACLE, {"rough": 0.8, "spec": 0.5,
 		"glow": COIN_GLOW.srgb_to_linear(), "back": Vector3.ZERO, "breath": Vector2(TAIL_AMP, TAIL_RATE)}))
 	return m
+
+
+## Масштаб тела глазуна (в осях тела: x — ширина, y — высота, z — длина) в момент t при доле луча lit: вдох — выше и
+## шире, длина та же; в луче затаился (GLAZUN_HELD), в броске (`lunge`) не дышит.
+static func glazun_breath(gz: EcoCoins.Glazun, t: float, lit: float) -> Vector3:
+	var i := gz.index + GLAZUN_SALT
+	var rate := EcoVary.spread(i, EcoVary.RATE, GLAZUN_BREATH_SPREAD)
+	var ph := EcoVary.unit(i, EcoVary.TURN) * TAU
+	var amp := lerpf(1.0, GLAZUN_HELD, smoothstep(0.0, 1.0, clampf(lit, 0.0, 1.0))) * (1.0 - clampf(gz.lunge, 0.0, 1.0))
+	var k := amp * sin(t * TAU / GLAZUN_BREATH_T * rate + ph)
+	return Vector3(1.0 + GLAZUN_BREATH_W * k, 1.0 + GLAZUN_BREATH_H * k, 1.0)
 
 
 ## Альфа экземпляра глазуна — свет глаз: без света альфа² = (k + 0,25) / 1,25 по мерцанию EcoCoins.eye_k (не больше
