@@ -287,6 +287,26 @@ func test_stall_long_step_one_world_substep() -> void:
 	ok(not c.last_note().contains("заминка"), "один виновник в долгом шаге — не заминка: " + c.last_note())
 
 
+## Отчёт тестера `2026-11-05-0415` (#1253, `32o-mol-steklo`): «мир 230 (обычно 16) [EcoFish 79 ×40, рыбы 21 ×11,
+## EcoDome 19 ×41, ещё 43: 111 ×10]» — раздуто всё, но медиану тянули вниз мелкие подчасти ×2, и заминка не
+## отмечалась. Без двух самых долгих остальные вместе ×N — это заминка; два виновника среди ×1 — нет.
+func test_stall_by_rest_sum() -> void:
+	var sub := {"EcoFish": 79.0, "рыбы": 21.0, "EcoDome": 19.0}
+	var us := {"EcoFish": 2.0, "рыбы": 2.0, "EcoDome": 0.46}
+	for i in 5:
+		sub["big%d" % i] = 18.0
+		us["big%d" % i] = 1.5
+	for i in 10:
+		sub["small%d" % i] = 0.4
+		us["small%d" % i] = 0.2
+	ok(StepClock.stall(sub, us) >= int(StepClock.STALL_K), "остальные вместе ×11 — заминка: %d" % StepClock.stall(sub, us))
+	var two := {"EcoFish": 80.0, "EcoKelp": 40.0, "a": 1.0, "b": 1.0, "c": 1.2}
+	var one := {"EcoFish": 2.0, "EcoKelp": 2.0, "a": 1.0, "b": 1.0, "c": 1.0}
+	eq(StepClock.stall(two, one), 0, "два виновника, остальные как обычно — не заминка")
+	eq(StepClock.rest_stall({"a": 50.0, "b": 50.0, "c": 50.0}, {"a": 1.0, "b": 1.0, "c": 1.0}), 0,
+		"без двух долгих осталась одна подчасть — мало для вывода")
+
+
 static func _sum(of: Dictionary) -> float:
 	var t := 0.0
 	for k in of:
