@@ -10,6 +10,8 @@ extends Node3D
 ## по подушкам, `visible_instance_count` отрезает вторую половину) — вдвое меньше крупных полупрозрачных пятен у
 ## камеры. Мир (облако, укрытие, сонар) не меняется.
 ## У корабля подушки «дышат» — `breath` (Б3).
+## Подушки не клоны (Б4): у каждой свой размер ± SIZE_SPREAD по номеру (`pad_scale`, EcoVary, у гостя то же) — поверх
+## сжатия и дыхания. Мир (касание корабля, укрытие стаи, чернила) не меняется, вызовов и шейдеров столько же.
 
 ## Подушка: полусфера радиуса 1 м, сплюснутая по ширине и высоте (g.scale(1.1, 0.75, 1)).
 const SHAPE := Vector3(1.1, 0.75, 1.0)
@@ -29,6 +31,9 @@ const BREATH_H := 0.06
 const BREATH_T := 9.0
 const BREATH_SPREAD := 0.2
 const BREATH_FAR := 45.0
+## Разброс размера подушек (pad_scale) и соль номера — не в фазе с дыханием.
+const SIZE_SPREAD := 0.1
+const SIZE_SALT := 5000
 ## Чисел на экземпляр: transform 3 × 4, у чернил ещё цвет (4).
 const STRIDE := 12
 const STRIDE_C := 16
@@ -141,7 +146,7 @@ func sync(t: float, ship_pos := Vector3.ZERO, info: EcoLink.ShipState = null, fl
 	var ink_changed := fresh
 	for cu in cushions.cushions:
 		var sc := EcoCushion.squash(cu) * breath(cu.index, EcoCushion.squeeze_k(cu), t, ship_pos.distance_to(cu.base),
-				not EcoShaders.sway_lite)
+				not EcoShaders.sway_lite) * pad_scale(cu.index)
 		var b := Basis(Vector3.UP, float(cu.index)) * Basis.from_scale(sc)
 		EcoMM.put(pad_buffer, cu.index * STRIDE, Transform3D(b, cu.base))
 		var inked := cu.inked()
@@ -160,6 +165,11 @@ func sync(t: float, ship_pos := Vector3.ZERO, info: EcoLink.ShipState = null, fl
 	EcoMM.send(pads, pad_buffer)
 	if ink_changed:
 		ink.multimesh.buffer = ink_buffer
+
+
+## Размер подушки index (доля, Б4): 1 ± SIZE_SPREAD — EcoVary по номеру.
+static func pad_scale(index: int) -> float:
+	return EcoVary.spread(index + SIZE_SALT, EcoVary.SIZE, SIZE_SPREAD)
 
 
 ## Множитель размера подушки index в момент t («дыхание» полипов): squeeze — насколько сжата (0…1), dist — до

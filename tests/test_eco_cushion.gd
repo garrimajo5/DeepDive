@@ -322,13 +322,13 @@ func test_view_two_multimeshes() -> void:
 	var cu := view.cushions.cushions[1]
 	var tr := CushionView.transform_at(cv.pad_buffer, 1, CushionView.STRIDE)
 	ok(tr.origin.is_equal_approx(cu.base), "подушка на месте")
-	near(tr.basis.get_scale().y, 1.0, 1e-4, "не сжата")
+	near(tr.basis.get_scale().y, CushionView.pad_scale(1), 1e-4, "не сжата — своего размера")
 	near(CushionView.transform_at(cv.ink_buffer, EcoCushion.INK_N).basis.get_scale().x, 0.0, 1e-6, "чернил нет — пятна скрыты")
 	view.cushions.squeeze(view.world, cu, true)
 	view.world.run(1.0)
 	cv.sync(view.world.time)
 	tr = CushionView.transform_at(cv.pad_buffer, 1, CushionView.STRIDE)
-	ok(tr.basis.get_scale().y < 0.7, "сжатая — ниже")
+	ok(tr.basis.get_scale().y < 0.7 * CushionView.pad_scale(1), "сжатая — ниже")
 	var ink0 := CushionView.transform_at(cv.ink_buffer, EcoCushion.INK_N)
 	near(ink0.basis.get_scale().x, 1.0, 1e-4, "облако видно")
 	ok(ink0.origin.distance_to(cu.ink_c) < EcoCushion.INK_R + 0.5, "пятно в облаке")
@@ -417,5 +417,6 @@ func test_scene_breath_in_buffer() -> void:
 	var a := cv.pad_buffer.duplicate()
 	cv.sync(4.0, Vector3(500, 0, 500))
 	eq(cv.pad_buffer, a, "корабль далеко — буфер тот же")
-	near(CushionView.transform_at(cv.pad_buffer, 0, CushionView.STRIDE).basis.get_scale().y, 1.0, 1e-4, "далеко — не дышит")
+	near(CushionView.transform_at(cv.pad_buffer, 0, CushionView.STRIDE).basis.get_scale().y, CushionView.pad_scale(0), 1e-4,
+		"далеко — не дышит")
 	cv.free()

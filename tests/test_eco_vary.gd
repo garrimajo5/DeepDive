@@ -281,6 +281,30 @@ func test_glazuns_differ_in_size_and_paint() -> void:
 	v.free()
 
 
+## Подушечники (Б4): у подушки свой размер ±10 % — в буфере вида поверх сжатия; без исправления обе подушки одного
+## размера.
+func test_cushions_differ_in_size() -> void:
+	var sizes := []
+	for n in 16:
+		sizes.append(CushionView.pad_scale(n))
+	var s := _span(sizes)
+	ok(s.x >= 0.9 - 1e-5 and s.y <= 1.1 + 1e-5 and s.y - s.x > 0.1, "размер ±10 %%: %s" % s)
+	ok(absf(CushionView.pad_scale(0) - CushionView.pad_scale(1)) > 0.1, "две подушки отмели — заметно разного размера")
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float: return -40.0
+	w.ship.pos = Vector3(500, 0, 500)
+	var c := w.add(EcoCushion.new(null, [Vector3(0, -40, 0), Vector3(30, -40, 0)] as Array[Vector3])) as EcoCushion
+	w.reset()
+	if not ok(c.cushions.size() > 1, "подушки есть: %d" % c.cushions.size()):
+		return
+	var v := CushionView.new(c)
+	v.sync(1.0, Vector3(500, 0, 500))
+	for cu in c.cushions:
+		var tr := CushionView.transform_at(v.pad_buffer, cu.index, CushionView.STRIDE)
+		near(tr.basis.get_scale().z, CushionView.pad_scale(cu.index), 1e-4, "размер подушки %d в буфере" % cu.index)
+	v.free()
+
+
 func test_fans_differ_and_carry_tint() -> void:
 	var w := EcoWorld.new(EcoRandom.WORLD_SEED)
 	w.ground = Seabed.height
