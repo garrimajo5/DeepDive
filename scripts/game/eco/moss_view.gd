@@ -9,12 +9,18 @@ extends MeshInstance3D
 ## Стоит на слое отмели (OceanView.LAYER_WORLD).
 ## «Экономно» (Б6, `set_lite`): пятно — 4 × 4 клетки вместо 8 × 8 (`EcoMossLook.LITE_CELLS`, 128 → 32 треугольника,
 ## меньше вершин под полупрозрачным мхом), материал и яркость пятен те же; сброс мира уровень не теряет.
+## Колония мерцает (Б3): по пятну бегут две медленные волны свечения (период ≈ 7 и 11 с, длина ≈ 6–9 м) — ± SHIMMER
+## яркости вершины по её месту и времени мира (`shimmer` — двойник шейдера, `set_time` — uniform `now`, у гостя то же).
+## Яркость пятна целиком (объели — потускнело) остаётся миром: мерцание только множит её. Шейдеров и вызовов не
+## прибавилось, и на «Экономно».
 
 ## Меньше этой разницы яркость пятна не обновляем (как mossAlpha в браузере).
 const EPS := 0.002
 ## Разброс краски пятна: светлее-темнее и желтее-голубее (доля красного против синего).
 const SHADE_SPREAD := 0.15
 const HUE_SPREAD := 0.06
+## Размах мерцания колонии: яркость вершины ± SHIMMER.
+const SHIMMER := 0.22
 
 var moss: EcoMoss
 var look: EcoMossLook.MossMesh
@@ -78,6 +84,7 @@ func _build() -> void:
 			_mat = ShaderMaterial.new()
 			_mat.shader = EcoShaders.shader(EcoShaders.MOSS)
 			_mat.set_shader_parameter("moss_color", EcoMossLook.COLOR)
+			_mat.set_shader_parameter("shimmer", SHIMMER)
 		m.surface_set_material(0, _mat)
 	mesh = m
 
@@ -95,6 +102,18 @@ static func patch_color(j: int) -> Color:
 	var t := patch_tint(j)
 	var c := EcoMossLook.COLOR
 	return Color(c.r * t.r, c.g * t.g, c.b * t.b)
+
+
+## Множитель яркости вершины в точке (x, z) мира в момент t (время мира) — двойник шейдера `EcoShaders.MOSS`.
+static func shimmer(x: float, z: float, t: float) -> float:
+	var w := 0.6 * sin(t * 0.9 + x * 0.8 + z * 0.55) + 0.4 * sin(t * 0.55 - x * 0.35 + z * 0.9)
+	return 1.0 + SHIMMER * w
+
+
+## Время мира t — в шейдер (мерцание колонии).
+func set_time(t: float) -> void:
+	if _mat:
+		_mat.set_shader_parameter("now", t)
 
 
 ## Отдать шейдеру яркость пятен, если хоть одно заметно изменилось. true — отдали.

@@ -69,16 +69,22 @@ void fragment() {
 ## Мох пятнами: яркость вершины — в COLOR.r, номер пятна — в UV.x, яркость пятна — glow[номер]. Пятен у одного
 ## меша не больше MOSS_MAX (массив дополняется нулями — `moss_glow`). Краска пятна (Б4, `MossView.patch_tint`) —
 ## множитель цвета ÷ 2 в COLOR.gba (8 бит на канал вершины хватает: шаг 0,8 %).
+## Мерцание колонии (Б3, `MossView.shimmer` — двойник): по пятну бегут две медленные волны свечения по месту вершины
+## (меш — в мировых координатах), время мира — uniform `now` (у гостя то же), размах — `shimmer` (0 — ровно).
 const MOSS_MAX := 32
 const MOSS := """
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_back;
 uniform vec3 moss_color : source_color;
 uniform float glow[32];
+uniform float now = 0.0;
+uniform float shimmer = 0.0;
 varying float a;
 varying vec3 tint;
 void vertex() {
-	a = COLOR.r * glow[int(UV.x + 0.5)];
+	vec2 q = VERTEX.xz;
+	float w = 0.6 * sin(now * 0.9 + q.x * 0.8 + q.y * 0.55) + 0.4 * sin(now * 0.55 - q.x * 0.35 + q.y * 0.9);
+	a = COLOR.r * glow[int(UV.x + 0.5)] * (1.0 + shimmer * w);
 	tint = vec3(COLOR.g, COLOR.b, COLOR.a) * 2.0;
 }
 void fragment() {
