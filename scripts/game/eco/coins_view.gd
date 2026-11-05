@@ -9,7 +9,8 @@ extends Node3D
 ## (`eye_alpha` — мерцание и луч), в луче раздуваются по гладкой нормали (`tip_grow`, альфа экземпляра 1).
 ## Два MultiMesh — два вызова отрисовки; стоят на слое отмели (OceanView.LAYER_WORLD). Разброс монетников (Б4,
 ## EcoVary по номеру рыбки): свой размер, ритм покачивания и оттенок диска (цвет экземпляра × краска вершины) —
-## стайка не клоны, мир не меняется.
+## стайка не клоны, мир не меняется. У глазуна — свой размер и краска песка (`glazun_scale`/`glazun_tint`, цвет
+## экземпляра; глаза — той же долей), вызовов и шейдеров столько же.
 ## Муть у дна (EcoCoinsDust: бросок глазуна — клуб песка кольцом у тела, сонар рассыпал стайку — облачка из-под
 ## низко висевших рыбок) — дочерний MultiMesh «Муть» на общем шейдере EcoShaders.MIST: +1 вызов.
 ## «Экономно» (Б6, `set_lite`): в каждой стайке рисуются две рыбки из трёх (каждой третьей по месту в стайке —
@@ -186,6 +187,11 @@ const GLAZUN_BREATH_SPREAD := 0.2
 const GLAZUN_HELD := 0.3
 ## Соль номера глазуна для EcoVary — не в фазе с монетниками тех же номеров.
 const GLAZUN_SALT := 1000
+## Глазуны не клоны (Б4): размер тела со стебельками и глазами ± GLAZUN_SIZE_SPREAD, краска песка светлее-темнее
+## ± GLAZUN_SHADE_SPREAD и теплее-холоднее ± GLAZUN_HUE_SPREAD — по номеру (`glazun_scale`/`glazun_tint`).
+const GLAZUN_SIZE_SPREAD := 0.12
+const GLAZUN_SHADE_SPREAD := 0.12
+const GLAZUN_HUE_SPREAD := 0.04
 ## Дыхание монетника: толщина диска и высота (доли), период, с, разброс ритма; на бегу — доля размаха между
 ## COIN_CALM и COIN_RUSH м/с; соль номера — не в фазе с покачиванием и хвостом.
 const COIN_BREATH_W := 0.08
@@ -222,9 +228,10 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 	for gz in coins.glazuns:
 		var j := gz.index * STRIDE_C
 		var gtr := EcoCoins.glazun_transform(gz)
-		gtr.basis = gtr.basis * Basis.from_scale(glazun_breath(gz, t, eye_lit[gz.index]))
+		gtr.basis = gtr.basis * Basis.from_scale(glazun_breath(gz, t, eye_lit[gz.index]) * glazun_scale(gz.index))
 		EcoMM.put(body_buffer, j, gtr)
-		body_buffer[j + 12] = 1.0; body_buffer[j + 13] = 1.0; body_buffer[j + 14] = 1.0
+		var tn := glazun_tint(gz.index)
+		body_buffer[j + 12] = tn.r; body_buffer[j + 13] = tn.g; body_buffer[j + 14] = tn.b
 		body_buffer[j + 15] = eye_alpha(gz, t, eye_lit[gz.index])
 	EcoMM.send(bodies, body_buffer)
 
@@ -356,6 +363,19 @@ static func coin_breath_rate(cn: EcoCoins.Coin) -> Vector2:
 static func breath_at(w: float, ph: float, speed: float, t: float) -> Vector3:
 	var k := lerpf(1.0, COIN_RUSH_K, smoothstep(COIN_CALM, COIN_RUSH, speed)) * sin(t * w + ph)
 	return Vector3(1.0 + COIN_BREATH_W * k, 1.0 + COIN_BREATH_H * k, 1.0)
+
+
+## Размер глазуна номер i (доля): тело, стебельки и глаза вместе — EcoVary, у гостя тот же.
+static func glazun_scale(i: int) -> float:
+	return EcoVary.spread(i + GLAZUN_SALT, EcoVary.SIZE, GLAZUN_SIZE_SPREAD)
+
+
+## Краска глазуна номер i — цвет экземпляра (шейдер умножает на него цвет вершин): песок светлее-темнее и
+## теплее-холоднее. Глаза — той же долей (свет глаз ± GLAZUN_SHADE_SPREAD), альфа — свет глаз, её не трогает.
+static func glazun_tint(i: int) -> Color:
+	var k := EcoVary.spread(i + GLAZUN_SALT, EcoVary.SHADE, GLAZUN_SHADE_SPREAD)
+	var h := (EcoVary.unit(i + GLAZUN_SALT, EcoVary.HUE) * 2.0 - 1.0) * GLAZUN_HUE_SPREAD
+	return Color(k * (1.0 + h), k, k * (1.0 - h))
 
 
 ## Масштаб тела глазуна (в осях тела: x — ширина, y — высота, z — длина) в момент t при доле луча lit: вдох — выше и

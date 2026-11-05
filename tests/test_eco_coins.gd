@@ -408,7 +408,7 @@ func test_view_two_draws() -> void:
 	ok(KelpView.transform_at(v.coin_buffer, 4, CoinsView.STRIDE_C).basis.x.length() < 1e-6, "съеденная сжата")
 	eq(v.body_buffer[1 * CoinsView.STRIDE_C + 15], 1.0, "глаза в луче: альфа 1 — ярко и крупнее")
 	ok(v.body_buffer[0 * CoinsView.STRIDE_C + 15] < 0.8, "вне луча — тусклее, не раздуваются")
-	near(v.body_buffer[0 * CoinsView.STRIDE_C + 12], 1.0, 1e-6, "цвет экземпляра белый — тело своей краски")
+	near(v.body_buffer[0 * CoinsView.STRIDE_C + 12], CoinsView.glazun_tint(0).r, 1e-6, "цвет экземпляра — краска глазуна")
 	v.queue_free()
 	await frames(1)
 
@@ -782,11 +782,12 @@ func test_view_glazun_breathes_held_in_beam() -> void:
 		v.sync(t)
 		var tr := KelpView.transform_at(v.body_buffer, gz.index, CoinsView.STRIDE_C)
 		var b := CoinsView.glazun_breath(gz, t, 0.0)
-		near(tr.basis.z.length(), 1.0, 1e-4, "длина та же")
-		near(tr.basis.y.length(), b.y, 1e-4, "высота — по дыханию")
-		near(tr.basis.x.length(), b.x, 1e-4, "ширина — по дыханию")
+		var sz := CoinsView.glazun_scale(gz.index)
+		near(tr.basis.z.length(), sz, 1e-4, "длина та же")
+		near(tr.basis.y.length(), b.y * sz, 1e-4, "высота — по дыханию")
+		near(tr.basis.x.length(), b.x * sz, 1e-4, "ширина — по дыханию")
 		ok(tr.origin.is_equal_approx(EcoCoins.glazun_transform(gz).origin), "тело на месте")
-		hs.append(tr.basis.y.length())
+		hs.append(tr.basis.y.length() / sz)
 		if prev > 0.0:
 			worst = maxf(worst, absf(hs[-1] - prev))
 		prev = hs[-1]

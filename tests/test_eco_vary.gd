@@ -246,6 +246,41 @@ func test_coins_differ_and_carry_tint() -> void:
 	v.free()
 
 
+## Глазуны (Б4): у каждого свой размер ±12 % и краска песка (светлее-темнее ±12 %) — в буфере вида; альфа экземпляра
+## — по-прежнему свет глаз. Без исправления все глазуны одного размера и белого цвета экземпляра.
+func test_glazuns_differ_in_size_and_paint() -> void:
+	var sizes := []
+	var lums := []
+	for n in 24:
+		sizes.append(CoinsView.glazun_scale(n))
+		var tn := CoinsView.glazun_tint(n)
+		lums.append(tn.g)
+		ok(tn.r >= tn.g * 0.96 - 1e-5 and tn.r <= tn.g * 1.04 + 1e-5, "теплее-холоднее ±4 %%: %s" % tn)
+		eq(CoinsView.glazun_tint(n), CoinsView.glazun_tint(n), "один и тот же глазун — одна краска")
+	var s := _span(sizes)
+	ok(s.x >= 0.88 - 1e-5 and s.y <= 1.12 + 1e-5 and s.y - s.x > 0.12, "размер ±12 %%: %s" % s)
+	var l := _span(lums)
+	ok(l.x >= 0.88 - 1e-5 and l.y <= 1.12 + 1e-5 and l.y - l.x > 0.12, "светлее-темнее ±12 %%: %s" % l)
+	var w := EcoWorld.new(EcoRandom.WORLD_SEED)
+	w.ground = Seabed.height
+	w.ship.pos = Vector3(500, 0, 500)
+	var m := w.add(EcoMoss.new()) as EcoMoss
+	var c := w.add(EcoCoins.new(m)) as EcoCoins
+	if not ok(c.glazuns.size() > 1, "глазуны есть: %d" % c.glazuns.size()):
+		return
+	var v := CoinsView.new(c)
+	v.sync(2.0)
+	ok(v.bodies.multimesh.use_colors, "у глазуна цвет экземпляра")
+	for gz in c.glazuns:
+		var tr := KelpView.transform_at(v.body_buffer, gz.index, CoinsView.STRIDE_C)
+		near(tr.basis.z.length(), CoinsView.glazun_scale(gz.index), 1e-4, "размер глазуна %d в буфере" % gz.index)
+		var i := gz.index * CoinsView.STRIDE_C + 12
+		ok(Color(v.body_buffer[i], v.body_buffer[i + 1], v.body_buffer[i + 2]).is_equal_approx(
+				CoinsView.glazun_tint(gz.index)), "краска — цвет экземпляра")
+		near(v.body_buffer[i + 3], CoinsView.eye_alpha(gz, 2.0, v.eye_lit[gz.index]), 1e-6, "альфа — свет глаз")
+	v.free()
+
+
 func test_fans_differ_and_carry_tint() -> void:
 	var w := EcoWorld.new(EcoRandom.WORLD_SEED)
 	w.ground = Seabed.height
