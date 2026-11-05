@@ -306,3 +306,48 @@ func test_view_lite_coarser_same_material() -> void:   # Б6 «Экономно�
 	eq(view.fern_view.leaves.multimesh.mesh.get_faces().size() / 3, leaf_full, "назад — полный лист")
 	view.queue_free()
 	await frames(1)
+
+
+func test_view_shells_breathe_near_ship() -> void:   # Б3: моллюски дышат у корабля
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var fv := view.fern_view
+	var fe := view.ferns.ferns[2]
+	var n := fe.index * EcoFern.SHELLS + 1
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Vector3(900, 0, 900)
+	view.step(0.05, ship)
+	var rest := FernView.transform_at(fv.shells.multimesh.buffer, n)
+	var writes := fv.shell_writes
+	view.step(0.05, ship)
+	eq(fv.shell_writes, writes, "вдали буфер моллюсков не переписывается")
+	ship.pos = fe.pos + Vector3(5, 3, 0)
+	var hs := []
+	for i in 60:
+		view.step(0.1, ship)
+		var tr := FernView.transform_at(fv.shells.multimesh.buffer, n)
+		near(tr.origin.y, rest.origin.y, 1e-5, "низ моллюска на дне")
+		hs.append(tr.basis.y.length() / rest.basis.y.length())
+	var lo: float = hs.min()
+	var hi: float = hs.max()
+	ok(hi > 1.08 and lo < 0.92, "створки приоткрываются и смыкаются: %.3f…%.3f" % [lo, hi])
+	ok(hi <= 1.0 + FernView.SHELL_BREATH_H + 1e-4 and lo >= 1.0 - FernView.SHELL_BREATH_H - 1e-4, "в пределах размаха")
+	for i in range(1, hs.size()):
+		ok(absf(hs[i] - hs[i - 1]) < 0.05, "без скачков (шаг %d)" % i)
+	# другой моллюск того же куста — вразнобой
+	ok(not is_equal_approx(FernView.shell_breath(n, 3.0, 5.0).y, FernView.shell_breath(n + 1, 3.0, 5.0).y), "не в такт")
+	# ушёл — моллюски встают в покой одним переписыванием, дальше буфер стоит
+	ship.pos = Vector3(900, 0, 900)
+	view.step(0.05, ship)
+	var back := FernView.transform_at(fv.shells.multimesh.buffer, n)
+	ok(back.basis.is_equal_approx(rest.basis), "вдали — в покое")
+	writes = fv.shell_writes
+	view.step(0.05, ship)
+	eq(fv.shell_writes, writes, "затихли — буфер стоит")
+	# «Экономно» — не дышат
+	eq(FernView.shell_breath(n, 1.0, 5.0, false), Vector3.ONE, "«Экономно» — в покое")
+	near(FernView.shell_breath(n, 1.0, FernView.SHELL_BREATH_FAR + 1.0).y, 1.0, 1e-6, "дальше предела — в покое")
+	view.queue_free()
+	await frames(1)

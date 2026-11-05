@@ -3,11 +3,16 @@ extends Node3D
 ## Волнолист в сцене: все листья — один MultiMesh из одного листа-пера (12 треугольников, загнут наружу), моллюски
 ## у подножий — второй MultiMesh из полусферы (initFerns в js/creatures.js). Цвет листа #3D9D91, края и кончик
 ## светлее (#68E6DC, ART-004) — отражённый свет, своей эмиссии нет; виден с обеих сторон;
-## лист — общий шейдер растений (EcoShaders.PLANT). Стоит на слое отмели (OceanView.LAYER_WORLD). Моллюски не двигаются — расставлены один раз.
+## лист — общий шейдер растений (EcoShaders.PLANT). Стоит на слое отмели (OceanView.LAYER_WORLD). Моллюски у корабля дышат (ниже).
 ## Муть (EcoFernDust) — третий MultiMesh «Муть» на общем шейдере EcoShaders.MIST.
 ## «Экономно» (Б6, `set_lite`): лист — 3 отрезка вместо 6 (6 треугольников вместо 12, `LITE_SEGMENTS`), моллюск —
 ## полусфера 5 × 2 вместо 7 × 3 (`LITE_SHELL_SEG`); материалы, места, колыхание, муть и вызовы те же. Сброс мира
 ## уровень не теряет (EcoView.set_lite).
+## Моллюски дышат (Б3, `shell_breath`): створки приоткрываются и смыкаются — высота ± SHELL_BREATH_H, ширина
+## ± SHELL_BREATH_W за SHELL_BREATH_T с (ритм ± SHELL_BREATH_SPREAD и фаза — `EcoVary` по номеру моллюска), низ на дне.
+## Только ближе SHELL_BREATH_FAR м к кораблю (размах гаснет к краю); дальше и на «Экономно» (`EcoShaders.sway_lite`) —
+## в покое, буфер моллюсков переписывается, только пока хоть один куст дышит или только что затих. По времени мира
+## (у гостя то же), масштаб экземпляра MultiMesh — шейдеров и вызовов не прибавилось.
 
 const LEAF := Color("3D9D91")
 const EDGE := Color("68E6DC")
@@ -32,6 +37,12 @@ const LEAF_W_SPREAD := 0.08
 const LEAF_TURN := 0.2
 const LEAF_SHADE_SPREAD := 0.12
 const LEAF_HUE_SPREAD := 0.06
+## «Дыхание» моллюсков: размах по высоте и ширине, период, разброс ритма, дальность от корабля, м.
+const SHELL_BREATH_H := 0.12
+const SHELL_BREATH_W := 0.03
+const SHELL_BREATH_T := 5.0
+const SHELL_BREATH_SPREAD := 0.2
+const SHELL_BREATH_FAR := 40.0
 
 var ferns: EcoFern
 var leaves: MultiMeshInstance3D
@@ -52,6 +63,12 @@ var lite := false
 ## Поворот и размер каждого листа (Б4) — считаются один раз, с первым буфером.
 var _turn: Array[Basis] = []
 var _size := PackedVector3Array()
+## Расстановка моллюсков в покое и буфер, отданный MultiMesh (для тестов); сколько раз его переписывали.
+var _shell_rest: Array[Transform3D] = []
+var shell_buffer := PackedFloat32Array()
+var shell_writes := 0
+## Куст дышал в прошлом кадре — его моллюски не в покое.
+var _shell_live: Array[bool] = []
 
 
 func _init(system: EcoFern, ground: Callable = Callable(), on_lite := false) -> void:
@@ -63,15 +80,19 @@ func _init(system: EcoFern, ground: Callable = Callable(), on_lite := false) -> 
 		ferns.ferns.size() * EcoFern.LEAVES, true, false, false)
 	shells = EcoMM.instance(self, "Моллюски", build_shell(LITE_SHELL_SEG if lite else SHELL_SEG),
 		ferns.ferns.size() * EcoFern.SHELLS, false, false, false)
-	var buf := PackedFloat32Array()
-	buf.resize(shells.multimesh.instance_count * STRIDE)
+	shell_buffer.resize(shells.multimesh.instance_count * STRIDE)
+	_shell_rest.resize(shells.multimesh.instance_count)
+	_shell_live.resize(ferns.ferns.size())
+	_shell_live.fill(false)
 	for fe in ferns.ferns:
 		for j in EcoFern.SHELLS:
 			var p := EcoFern.shell_pos(fe, j, ground)
 			var a := float(j) / EcoFern.SHELLS * TAU + fe.yaw
 			var b := Basis(Vector3.UP, a).scaled_local(Vector3(1.0, 0.5, 1.3) * fe.scale)
-			EcoMM.put(buf, (fe.index * EcoFern.SHELLS + j) * STRIDE, Transform3D(b, p))
-	shells.multimesh.buffer = buf
+			var n := fe.index * EcoFern.SHELLS + j
+			_shell_rest[n] = Transform3D(b, p)
+			EcoMM.put(shell_buffer, n * STRIDE, _shell_rest[n])
+	shells.multimesh.buffer = shell_buffer
 	dust_view = GrazerView.build_dust(EcoFernDust.POOL)
 	add_child(dust_view)
 	sync(0.0)
@@ -148,6 +169,7 @@ func sync(t: float, info: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 		dust.update(ferns, t, info.pos, _ground)
 		_dust.pack(dust.dust, t, flow, info, EcoFernDust.COLOR, EcoFernDust.LIT, Seabed.mesh_height)
 		_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
+	_sync_shells(t, info)
 	var fresh := buffer.size() != leaves.multimesh.instance_count * STRIDE_C
 	buffer.resize(leaves.multimesh.instance_count * STRIDE_C)
 	if fresh:
@@ -165,6 +187,38 @@ func sync(t: float, info: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 				var c := leaf_tint(n)
 				buffer[i + 12] = c.r; buffer[i + 13] = c.g; buffer[i + 14] = c.b; buffer[i + 15] = 1.0
 	EcoMM.send(leaves, buffer)
+
+
+## Моллюски дышат у корабля (info — корабль; без него — в покое). Буфер — только если кто-то двигался.
+func _sync_shells(t: float, info: EcoLink.ShipState) -> void:
+	var dirty := false
+	for fe in ferns.ferns:
+		var d := INF if info == null else info.pos.distance_to(fe.pos)
+		var live := not EcoShaders.sway_lite and d < SHELL_BREATH_FAR
+		if not live and not _shell_live[fe.index]:
+			continue
+		_shell_live[fe.index] = live
+		dirty = true
+		for j in EcoFern.SHELLS:
+			var n := fe.index * EcoFern.SHELLS + j
+			var r := _shell_rest[n]
+			var sc := shell_breath(n, t, d, live)
+			EcoMM.put(shell_buffer, n * STRIDE, Transform3D(r.basis.scaled_local(sc), r.origin))
+	if dirty:
+		shells.multimesh.buffer = shell_buffer
+		shell_writes += 1
+
+
+## Множитель размера моллюска n в осях раковины в момент t: dist — от куста до корабля, м; live = false — ровно 1.
+static func shell_breath(n: int, t: float, dist: float, live := true) -> Vector3:
+	if not live or dist >= SHELL_BREATH_FAR:
+		return Vector3.ONE
+	var k := smoothstep(SHELL_BREATH_FAR, SHELL_BREATH_FAR * 0.7, dist)
+	if k <= 0.0:
+		return Vector3.ONE
+	var rate := TAU / (SHELL_BREATH_T * EcoVary.spread(n, EcoVary.RATE, SHELL_BREATH_SPREAD))
+	var s := sin(t * rate + EcoVary.unit(n, EcoVary.HUE) * TAU) * k
+	return Vector3(1.0 + SHELL_BREATH_W * s, 1.0 + SHELL_BREATH_H * s, 1.0 + SHELL_BREATH_W * s)
 
 
 ## Лист n своей формы: повёрнут вокруг стебля на свой угол, длиннее или короче, шире или уже (оси листа).
