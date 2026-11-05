@@ -8,6 +8,9 @@ extends Node3D
 ## Клетки в буфере — вперемешку по облакам (место клетки k облака c — `slot(c, k)` = k × облаков + c), поэтому первая
 ## половина буфера — половина каждого облака. «Экономно» — рисуется только она (`set_lite`, `LITE_SHARE`):
 ## вдвое меньше пятен со сложением цвета, мир (вспышки, след корабля, у гостя сети) считает все клетки как раньше.
+## Б4 «Вариативность в MultiMesh»: у клетки свой размер (± SIZE_SPREAD, масштаб базиса — шейдер берёт его) и яркость
+## (± GLOW_SPREAD, INSTANCE_CUSTOM.w — множитель цвета в ветке cloud) по её номеру хешем `EcoVary` — облако не из
+## одинаковых точек. Мир не меняется, у гостя то же. Вызовов и шейдеров столько же, и на «Экономно».
 
 const SIZE := 0.8
 ## Дальше этого клетки не видны (м от камеры).
@@ -17,6 +20,9 @@ const STRIDE := 16
 const CUSTOM := 12
 ## Доля клеток, что рисуется на «Экономно».
 const LITE_SHARE := 0.5
+## Разброс размера и яркости клеток.
+const SIZE_SPREAD := 0.25
+const GLOW_SPREAD := 0.2
 
 var plankton: EcoPlankton
 var cells: MultiMeshInstance3D
@@ -83,7 +89,22 @@ static func build_mesh() -> QuadMesh:
 	return m
 
 
-## Дома клеток, фазы облаков и номера клеток — один раз.
+## Номер клетки k облака c во всём планктоне (для разброса).
+static func cell_id(c: int, k: int) -> int:
+	return c * EcoPlankton.PER_CLOUD + k
+
+
+## Множитель размера клетки с номером id: 1 ± SIZE_SPREAD.
+static func cell_scale(id: int) -> float:
+	return EcoVary.spread(id, EcoVary.SIZE, SIZE_SPREAD)
+
+
+## Множитель яркости клетки с номером id: 1 ± GLOW_SPREAD.
+static func cell_glow(id: int) -> float:
+	return EcoVary.spread(id, EcoVary.SHADE, GLOW_SPREAD)
+
+
+## Дома клеток, фазы облаков, номера клеток, размер и яркость — один раз.
 func _fill() -> void:
 	var n := cells.multimesh.instance_count
 	buffer.resize(n * STRIDE)
@@ -93,13 +114,15 @@ func _fill() -> void:
 		for k in EcoPlankton.PER_CLOUD:
 			var i := slot(cl.index, k) * STRIDE
 			var o := cl.home + cl.offsets[k]
-			buffer[i] = 1.0; buffer[i + 1] = 0.0; buffer[i + 2] = 0.0; buffer[i + 3] = o.x
-			buffer[i + 4] = 0.0; buffer[i + 5] = 1.0; buffer[i + 6] = 0.0; buffer[i + 7] = o.y
-			buffer[i + 8] = 0.0; buffer[i + 9] = 0.0; buffer[i + 10] = 1.0; buffer[i + 11] = o.z
+			var id := cell_id(cl.index, k)
+			var sc := cell_scale(id)
+			buffer[i] = sc; buffer[i + 1] = 0.0; buffer[i + 2] = 0.0; buffer[i + 3] = o.x
+			buffer[i + 4] = 0.0; buffer[i + 5] = sc; buffer[i + 6] = 0.0; buffer[i + 7] = o.y
+			buffer[i + 8] = 0.0; buffer[i + 9] = 0.0; buffer[i + 10] = sc; buffer[i + 11] = o.z
 			buffer[i + CUSTOM] = cl.phase
 			buffer[i + CUSTOM + 1] = float(k)
 			buffer[i + CUSTOM + 2] = cl.lit_at[k]
-			buffer[i + CUSTOM + 3] = 0.0
+			buffer[i + CUSTOM + 3] = cell_glow(id)
 
 
 ## Время мира и корпус корабля — в шейдер; облако с новыми вспышками — в буфер.
@@ -129,3 +152,13 @@ func lit_at(c: int, k: int) -> float:
 func origin_at(c: int, k: int) -> Vector3:
 	var i := slot(c, k) * STRIDE
 	return Vector3(buffer[i + 3], buffer[i + 7], buffer[i + 11])
+
+
+## Размер клетки k облака c из буфера (масштаб базиса — шейдер берёт его как размер пятна).
+func scale_at(c: int, k: int) -> float:
+	return buffer[slot(c, k) * STRIDE]
+
+
+## Множитель яркости клетки k облака c из буфера.
+func glow_at(c: int, k: int) -> float:
+	return buffer[slot(c, k) * STRIDE + CUSTOM + 3]
