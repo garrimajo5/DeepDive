@@ -86,3 +86,38 @@ func test_scene_stones_tracked() -> void:
 	main.eco.set_lite(false)
 	main.queue_free()
 	await frames(1)
+
+
+func test_growth_shimmers_by_world_time() -> void:
+	# Обрастание на камне (Б3) мерцает волнами по месту и времени мира: ± SHIMMER, не целиком, бежит со временем.
+	var m := EcoShaders.stone(Color.CYAN, 0.3, 0.9, 0.2)
+	near(float(m.get_shader_parameter("shimmer")), EcoCaustic.SHIMMER, 1e-6, "камень с обрастанием мерцает")
+	ok(m.shader.code.contains("uniform float now") and m.shader.code.contains("now * 0.7 + w_pos.x * 0.6"),
+		"мерцание — в шейдере камня по времени мира, формула двойника")
+	EcoCaustic.set_time(12.5)
+	near(float(m.get_shader_parameter("now")), 12.5, 1e-6, "время мира — всем камням")
+	var late := EcoShaders.stone(Color.CYAN, 0.3, 0.9, 0.2)
+	near(float(late.get_shader_parameter("now")), 12.5, 1e-6, "и собранному после")
+	var lo := 9.0
+	var hi := 0.0
+	var moved := 0
+	for i in 30:
+		var x := i * 1.7
+		var z := i * 0.9 - 10.0
+		var k := EcoCaustic.shimmer(x, z, 4.0)
+		ok(k >= 1.0 - EcoCaustic.SHIMMER - 1e-6 and k <= 1.0 + EcoCaustic.SHIMMER + 1e-6, "в пределах размаха")
+		lo = minf(lo, k)
+		hi = maxf(hi, k)
+		if absf(k - EcoCaustic.shimmer(x, z, 8.0)) > 0.05:
+			moved += 1
+	ok(hi - lo > EcoCaustic.SHIMMER, "по камню свечение разное — не мигает целиком (%.2f)" % (hi - lo))
+	ok(moved > 10, "волна бежит со временем")
+	near(EcoCaustic.shimmer(3.0, 4.0, 5.0), EcoCaustic.shimmer(3.0, 4.0, 5.0 + 0.016) , 0.01, "за кадр — плавно")
+	EcoCaustic.set_time(0.0)
+
+
+func test_vent_heat_does_not_shimmer() -> void:
+	# Жар курильщика мерцает своим `flicker` (материал камня без `stone()`), волны обрастания ему не нужны.
+	var heat := EcoShaders.material(EcoShaders.STONE, {"growth": VentView.HEAT, "flicker": 1.0})
+	ok(heat.shader.code.contains("uniform float shimmer = 0.0"), "по умолчанию камень не мерцает волнами")
+	eq(heat.get_shader_parameter("shimmer"), null, "жару курильщика размах не поставлен")

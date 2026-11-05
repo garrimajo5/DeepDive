@@ -14,11 +14,17 @@ const SCALE := 0.16
 const SPEED := 0.32
 ## Меньше этого изменения силы uniform не переписываем.
 const STEP := 0.005
+## Обрастание на камне мерцает (Б3): яркость ± SHIMMER по месту и времени мира (`shimmer` — двойник шейдера, время —
+## `set_time`, у гостя то же). Медленнее и шире волн мха (период ≈ 9 и 15 с, длина ≈ 9–19 м) — свечение «дышит» по
+## камню, не мигает целиком. Шейдеров и вызовов не прибавилось, и на «Экономно» (только множитель яркости).
+const SHIMMER := 0.18
 
 static var lite := false
 ## Сила сейчас (без «Экономно»).
 static var strength := 0.0
 static var _mats: Array[WeakRef] = []
+## Время мира в uniform `now`.
+static var now := 0.0
 
 
 ## Материал камня под каустики: сразу получает текущую силу.
@@ -26,6 +32,7 @@ static func track(mat: ShaderMaterial) -> void:
 	_mats = _mats.filter(func(r: WeakRef) -> bool: return r.get_ref() != null)
 	_mats.append(weakref(mat))
 	mat.set_shader_parameter("caustic", applied())
+	mat.set_shader_parameter("now", now)
 
 
 ## Сила для глубины корабля (м, вниз — больше).
@@ -59,6 +66,21 @@ static func _push() -> void:
 		var m: ShaderMaterial = r.get_ref()
 		if m:
 			m.set_shader_parameter("caustic", v)
+
+
+## Время мира t — всем камням (мерцание обрастания).
+static func set_time(t: float) -> void:
+	now = t
+	for r in _mats:
+		var m: ShaderMaterial = r.get_ref()
+		if m:
+			m.set_shader_parameter("now", t)
+
+
+## Множитель яркости обрастания в точке (x, z) мира в момент t (время мира) — двойник шейдера `EcoShaders.STONE`.
+static func shimmer(x: float, z: float, t: float) -> float:
+	var w := 0.6 * sin(t * 0.7 + x * 0.6 + z * 0.4) + 0.4 * sin(t * 0.43 - x * 0.3 + z * 0.7)
+	return 1.0 + SHIMMER * w
 
 
 ## Двойник узора шейдера: яркость сети 0…1 в точке дна (x, z) в момент t (мир, с).

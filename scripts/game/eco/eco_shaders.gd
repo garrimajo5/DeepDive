@@ -11,6 +11,9 @@ extends RefCounted
 ## курильщика. `fill` — подсветка камня, `glow_k` — яркость обрастания, `cut` — сколько альбедо гасит свет,
 ## `flicker` — мерцание жара (EcoVent.flicker, 0 — ровный свет). Каустики света сквозь лёд по верху камня — `caustic`
 ## (сила ставит `EcoCaustic` по глубине корабля, «Экономно» — 0; узор — двойник `EcoCaustic.pattern`, как у дна).
+## Обрастание мерцает (Б3): по камню бегут две медленные волны свечения по мировому месту — ± `shimmer` яркости
+## обрастания (`stone()` ставит `EcoCaustic.SHIMMER`, жар курильщика — 0), время мира — uniform `now` (ставит
+## `EcoCaustic.set_time`, у гостя то же); двойник — `EcoCaustic.shimmer`.
 const STONE := """
 shader_type spatial;
 render_mode cull_back;
@@ -22,6 +25,8 @@ uniform float cut = 0.5;
 uniform float rough = 0.95;
 uniform float spec = 0.15;
 uniform float flicker = 0.0;
+uniform float now = 0.0;
+uniform float shimmer = 0.0;
 uniform float caustic = 0.0;
 uniform float caustic_scale = 0.16;
 uniform float caustic_speed = 0.32;
@@ -50,7 +55,8 @@ void fragment() {
 	ALBEDO = COLOR.rgb * (1.0 - lit * cut);
 	ROUGHNESS = rough;
 	SPECULAR = spec;
-	EMISSION = eco_bio(growth * lit * glow_k * mix(1.0, f, flicker)) + COLOR.rgb * (1.0 - lit) * fill;
+	float sw = 0.6 * sin(now * 0.7 + w_pos.x * 0.6 + w_pos.z * 0.4) + 0.4 * sin(now * 0.43 - w_pos.x * 0.3 + w_pos.z * 0.7);
+	EMISSION = eco_bio(growth * lit * glow_k * mix(1.0, f, flicker) * (1.0 + shimmer * sw)) + COLOR.rgb * (1.0 - lit) * fill;
 	if (caustic > 0.001) {
 		vec2 cp = w_pos.xz * caustic_scale;
 		float t = TIME * caustic_speed;
@@ -459,7 +465,7 @@ static func material(code: String, params: Dictionary = {}) -> ShaderMaterial:
 ## Камень с обрастанием (STONE).
 static func stone(growth: Color, fill: float, rough: float, spec: float) -> ShaderMaterial:
 	return material(STONE, {"growth": growth, "fill": fill, "glow_k": 1.4, "cut": 0.5, "rough": rough,
-		"spec": spec, "flicker": 0.0})
+		"spec": spec, "flicker": 0.0, "shimmer": EcoCaustic.SHIMMER})
 
 
 ## Яркости пятен мха для массива glow[MOSS_MAX]: дополнить нулями.
