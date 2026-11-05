@@ -3,7 +3,7 @@ extends MeshInstance3D
 ## Каменный цветок в сцене по ART-027 (`docs/concept-art/kamennyy-tsvetok.md`): весь коралл с цоколем — один меш,
 ## один вызов отрисовки. Ствол и ветви — шестигранные усечённые конусы (нижние ярусы шире и сплюснуты), снизу
 ## #63465C, в кроне #D06A94, поры — пятнами в шейдере (без дыр в сетке и без текстуры); кончики — вытянутые
-## многогранники #FFD6EC, светятся только они и мерцают волной снизу вверх (EcoFlower.glow — в шейдере по TIME,
+## многогранники #FFD6EC, светятся только они и мерцают волной снизу вверх (EcoFlower.glow — в шейдере по времени мира `sway_t`,
 ## фаза кончика — в UV.x, доля свечения — в альфе цвета). Цоколь — камни #245B70 и трубочки, матовые, без пор
 ## (UV.y = 1). Погасание после импульса (EcoFlower.seen — за DIM_TIME) — uniform light, отдаёт `sync`. Без источника света: OmniLight в Compatibility перерисовал бы дно ещё раз. Слой отмели.
 ## «Экономно» (Б6, `set_lite`): ветви и трубочки — четыре грани вместо шести (LITE_SIDES), кончики — четыре грани и
@@ -32,7 +32,7 @@ uniform float tip_len = 2.6;
 varying float lit;
 varying vec3 wp;
 void vertex() {
-	lit = COLOR.a * light * (glow_mid + glow_amp * sin(TIME * glow_rate + UV.x));
+	lit = COLOR.a * light * (glow_mid + glow_amp * sin(sway_t * glow_rate + UV.x));
 	wp = VERTEX;
 	if (sway_k > 0.0 && CUSTOM0.w > 0.0) {
 		VERTEX += eco_sway(CUSTOM0.xyz, CUSTOM0.w, tip_len, bend);
