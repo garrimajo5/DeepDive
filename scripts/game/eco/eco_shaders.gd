@@ -159,14 +159,15 @@ void fragment() {
 ## Прозрачное без света (смешение по альфе, без записи глубины, обе стороны): один код на купола и щупальца вуалей,
 ## чернила подушечника, пузыри и марево курильщика, пузырьки существ (BUBBLE с `placed`), трещину и столб света
 ## колодца. Что рисовать — `mode` (Mist), числа каждого вида — в своих uniform; формулы — прежние формулы видов.
-## Ветка по uniform одна на весь вызов отрисовки.
+## Ветка по uniform одна на весь вызов отрисовки. Пузыри, марево, трещина и столб колодца идут по времени мира `t`
+## (`set_sway_time`), а не по времени шейдера: у гостя в такт хосту, в 3600 с не прыгают.
 enum Mist { BELL, TENTACLE, INK, BUBBLE, HAZE, CRACK, COLUMN }
 const MIST := """
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
 uniform int mode = 0;
 uniform vec4 tint : source_color = vec4(1.0);
-// щупальца: время (пульс купола и фаза вуали — в INSTANCE_CUSTOM); волна пульса вниз — (размах, рад/с, фаза вуали, отставание на звено), рост к
+// время мира t (все виды: EcoShaders.set_sway_time, у гостя то же). Щупальца: пульс купола и фаза вуали — в INSTANCE_CUSTOM); волна пульса вниз — (размах, рад/с, фаза вуали, отставание на звено), рост к
 // кончику grow, звеньев seg; снос течением flow (м/с) на долю trail длины; sway_k — 0 на «Экономно»
 uniform float t = 0.0;
 uniform vec4 wave = vec4(0.0);
@@ -236,10 +237,10 @@ void vertex() {
 	} else if (mode == 3) {
 		// EcoVent.bubble_pos: скорость, фаза, высота столба, своё число — в INSTANCE_CUSTOM, выход — в экземпляре
 		float h = INSTANCE_CUSTOM.b;
-		float f = fract(INSTANCE_CUSTOM.g + TIME * INSTANCE_CUSTOM.r / h);
+		float f = fract(INSTANCE_CUSTOM.g + t * INSTANCE_CUSTOM.r / h);
 		float sd = INSTANCE_CUSTOM.a * 6.2831853;
 		vec3 o = MODEL_MATRIX[3].xyz;
-		vec3 p = vec3(o.x + sin(TIME * 0.9 + sd) * drift * f, o.y + f * h, o.z + cos(TIME * 0.7 + sd) * drift * f);
+		vec3 p = vec3(o.x + sin(t * 0.9 + sd) * drift * f, o.y + f * h, o.z + cos(t * 0.7 + sd) * drift * f);
 		float size = mix(size_low, size_high, f);
 		fade = 0.85 * (1.0 - 0.6 * f) * smoothstep(0.0, 0.03, f) * (1.0 - smoothstep(0.9, 1.0, f));
 		MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * size, INV_VIEW_MATRIX[1] * size,
@@ -248,7 +249,7 @@ void vertex() {
 }
 void fragment() {
 	float d = length(UV - vec2(0.5)) * 2.0;
-	float k = 1.0 + pulse * sin(TAU * TIME / period);
+	float k = 1.0 + pulse * sin(TAU * t / period);
 	if (mode == 0) {
 		// купол: кромка ярче — по углу к взгляду
 		float edge = 1.0 - abs(dot(normalize(NORMAL), normalize(VIEW)));
@@ -269,13 +270,13 @@ void fragment() {
 	} else if (mode == 4) {
 		// марево: шум из синусов бежит вверх, слабеет вверх и к краям полосы
 		float v = 1.0 - UV.y;
-		float n = 0.5 + 0.25 * sin(UV.x * 9.0 + UV.y * 23.0 - TIME * 1.3) + 0.25 * sin(UV.x * 17.0 - UV.y * 41.0 - TIME * 2.1);
+		float n = 0.5 + 0.25 * sin(UV.x * 9.0 + UV.y * 23.0 - t * 1.3) + 0.25 * sin(UV.x * 17.0 - UV.y * 41.0 - t * 2.1);
 		float side = smoothstep(0.0, 0.3, UV.x) * smoothstep(1.0, 0.7, UV.x);
 		ALBEDO = mix(water, heat, 0.35 * (1.0 - v));
 		ALPHA = 0.11 * n * side * pow(1.0 - v, 1.4) * smoothstep(0.0, 0.04, v);
 	} else if (mode == 5) {
 		// трещина: светлые полосы медленно ползут вдоль неё
-		float dr = 0.94 + 0.06 * sin(TIME * 0.35 + dot(wp.xz, vec2(0.45, 0.2)));
+		float dr = 0.94 + 0.06 * sin(t * 0.35 + dot(wp.xz, vec2(0.45, 0.2)));
 		ALBEDO = tone.rgb * k * dr;
 		ALPHA = clamp(tone.a, 0.0, 1.0);
 	} else {
@@ -484,6 +485,9 @@ static func moss_glow(glows: PackedFloat32Array) -> PackedFloat32Array:
 static func mist(kind: Mist, params: Dictionary = {}) -> ShaderMaterial:
 	var mat := material(MIST, params)
 	mat.set_shader_parameter("mode", int(kind))
+	mat.set_shader_parameter("t", sway_time)
+	_mists = _mists.filter(func(r: WeakRef) -> bool: return r.get_ref() != null)
+	_mists.append(weakref(mat))
 	return mat
 
 
@@ -513,6 +517,8 @@ static var sway_time := 0.0
 static var sway_lite := false
 ## Материалы растений — слабые ссылки, чтобы при выходе не оставалось ресурсов в статике.
 static var _plants: Array[WeakRef] = []
+## Материалы прозрачного (MIST) — им время мира в uniform `t`.
+static var _mists: Array[WeakRef] = []
 
 
 ## Отдать поток всем живым материалам растений; меняется заметно — только тогда пишем uniform.
@@ -534,6 +540,10 @@ static func set_sway_time(t: float) -> void:
 		var mat: ShaderMaterial = r.get_ref()
 		if mat:
 			mat.set_shader_parameter("sway_t", t)
+	for r in _mists:
+		var mat: ShaderMaterial = r.get_ref()
+		if mat:
+			mat.set_shader_parameter("t", t)
 
 
 ## Выключатель колыхания для «Экономно» (ART-044): true — растения стоят (только качание листьев и вееров на CPU).

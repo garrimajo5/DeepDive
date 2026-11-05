@@ -105,7 +105,7 @@ func test_breathes_slowly() -> void:
 	var v := WellView.new(w)
 	for mi in [v.crack, v.column]:
 		var code: String = mi.mesh.surface_get_material(0).shader.code
-		ok(code.contains("TIME") and code.contains("pulse") and code.contains("period"), "дыхание в шейдере")
+		ok(code.contains("sin(TAU * t / period)") and code.contains("pulse") and code.contains("period"), "дыхание в шейдере — по времени мира")
 		near(float(mi.mesh.surface_get_material(0).get_shader_parameter("pulse")), EcoWell.PULSE, 1e-6, "размах")
 		near(float(mi.mesh.surface_get_material(0).get_shader_parameter("period")), EcoWell.PERIOD, 1e-6, "период")
 		ok(code.contains("unshaded") and code.contains("depth_draw_never"), "мягкий свет без записи глубины")
