@@ -231,3 +231,45 @@ func test_petal_already_open_in_campaign() -> void:   # сохранение: с
 		if e["type"] == EcoLink.PETAL:
 			sent += 1
 	eq(sent, 0, "события нет")
+
+
+func test_turn_eases_without_jerk() -> void:   # Б3: поворот с инерцией — не трогается рывком на TURN рад/с
+	var w := _world(_near())
+	var d := EcoDome.new()
+	d.reset(w)
+	var prev_v := 0.0
+	var worst := 0.0
+	var top := 0.0
+	var steps := 0
+	var guard := 0
+	while d.state != EcoDome.State.GONE and guard < 6000:
+		w.time += DT
+		d.step(w, DT)
+		worst = maxf(worst, absf(d.turn_v - prev_v))
+		top = maxf(top, absf(d.turn_v))
+		if d.state == EcoDome.State.BACK and steps < 3:
+			ok(absf(d.turn_v) <= EcoDome.TURN_ACCEL * DT * (steps + 1) + 1e-4, "разворот к нише — не рывком: %.2f рад/с" % d.turn_v)
+			steps += 1
+		prev_v = d.turn_v
+		guard += 1
+	eq(d.state, EcoDome.State.GONE, "открыл створку и ушёл в нишу")
+	ok(worst <= EcoDome.TURN_ACCEL * DT + 1e-3, "скорость поворота за шаг меняется не больше %.3f (было %.3f)" % [EcoDome.TURN_ACCEL * DT, worst])
+	ok(top <= EcoDome.TURN + 1e-4 and top > 0.1, "поворачивает, не быстрее TURN (%.2f рад/с)" % top)
+
+
+func test_turn_settles_on_course() -> void:   # доворачивает без перелёта, коротким путём через ±PI
+	for want in [1.5, -2.0, 3.0]:
+		var yaw := -2.9 if want > 2.0 else 0.0
+		var v := 0.0
+		var err0 := wrapf(want - yaw, -PI, PI)
+		var over := 0.0
+		for i in 400:
+			var r := EcoDome.turn(yaw, v, want, DT)
+			yaw = r.x
+			v = r.y
+			var err := wrapf(want - yaw, -PI, PI)
+			if signf(err) != signf(err0) and err != 0.0:
+				over = maxf(over, absf(err))
+		near(wrapf(want - yaw, -PI, PI), 0.0, 1e-3, "встал на курс %.1f" % want)
+		near(v, 0.0, 1e-2, "и остановил поворот")
+		ok(over < 0.01, "без перелёта (%.3f рад)" % over)
