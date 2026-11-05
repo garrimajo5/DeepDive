@@ -28,6 +28,7 @@ const SLOW := 2.0          ## во сколько раз дольше обычн
 ## после #1255 настоящая заминка мира в `33a` («флора ×7, EcoPred ×6, EcoCoins ×15») не отмечалась (#1253).
 const STALL_K := 5.0
 const STALL_N := 3
+const REST_SKIP := 2     ## заминка по сумме — без стольких самых долгих подчастей (#1253)
 const STALL := " — разом ×%d, заминка"
 
 var parts := {}            ## часть → мс этого шага (части с одним именем складываются)
@@ -163,9 +164,28 @@ static func stall(sub: Dictionary, us: Dictionary) -> int:
 	ratios.sort()
 	var mid := ratios.size() / 2
 	var med := ratios[mid] if ratios.size() % 2 == 1 else (ratios[mid - 1] + ratios[mid]) * 0.5
-	if med < STALL_K:
+	if med >= STALL_K:
+		return roundi(med)
+	return rest_stall(sub, us)
+
+
+## Заминка по сумме (#1253, `32o-mol-steklo`: «мир 230 (обычно 16) [EcoFish 79 ×40, рыбы 21 ×11, EcoDome 19 ×41,
+## ещё 43: 111 ×10]» без пометки): медиану тянут вниз мелкие подчасти ×1–×3 (вызов в пару строк машина почти не
+## замедляет), а раздутое время сидит в подчастях покрупнее. Без двух самых долгих (возможных виновников, `REST_SKIP`)
+## остальные вместе — не меньше STALL_K раз дольше обычного и их не меньше STALL_N: это «разом ×N», а не вид.
+static func rest_stall(sub: Dictionary, us: Dictionary) -> int:
+	var keys: Array = sub.keys().filter(func(k): return float(us.get(k, 0.0)) >= USUAL_MIN)
+	keys.sort_custom(func(a, b): return float(sub[a]) > float(sub[b]) or (is_equal_approx(sub[a], sub[b]) and str(a) < str(b)))
+	var rest := keys.slice(REST_SKIP)
+	if rest.size() < STALL_N:
 		return 0
-	return roundi(med)
+	var ms := 0.0
+	var usual_ms := 0.0
+	for k in rest:
+		ms += float(sub[k])
+		usual_ms += float(us[k])
+	var x := ms / usual_ms
+	return roundi(x) if x >= STALL_K else 0
 
 
 ## Подчасти долгой части total: SUB_SHOW самых долгих, затем остаток — прочие подчасти одной суммой (`REST`) и время
