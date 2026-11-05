@@ -96,6 +96,20 @@ func test_sway_runs_on_world_time() -> void:
 	EcoCaustic.set_time(0.0)
 
 
+## Прозрачное без света (MIST: пузыри и марево курильщика, трещина и столб колодца, купола и щупальца вуалей) — тоже
+## по времени мира `t`, а не по TIME шейдера; новый материал получает текущее время сразу.
+func test_mist_runs_on_world_time() -> void:
+	ok(not EcoShaders.MIST.contains("TIME"), "в MIST нет TIME")
+	ok(EcoShaders.MIST.contains("fract(INSTANCE_CUSTOM.g + t * INSTANCE_CUSTOM.r / h)"), "пузыри курильщика — по t")
+	var bubble := EcoShaders.mist(EcoShaders.Mist.BUBBLE)
+	var haze := EcoShaders.mist(EcoShaders.Mist.HAZE)
+	EcoShaders.set_sway_time(42.25)
+	for m in [bubble, haze]:
+		near(float(m.get_shader_parameter("t")), 42.25, 1e-6, "время мира дошло")
+	near(float(EcoShaders.mist(EcoShaders.Mist.COLUMN).get_shader_parameter("t")), 42.25, 1e-6, "и новому материалу")
+	EcoShaders.set_sway_time(0.0)
+
+
 func test_views_bend_and_flow() -> void:
 	var kelp := EcoShaders.plant(EcoShaders.Plant.KELP, {"bend": KelpView.BEND, "reach": 1.0})
 	var organ := EcoShaders.plant(EcoShaders.Plant.ORGAN)
