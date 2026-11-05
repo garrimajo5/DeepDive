@@ -9,7 +9,7 @@ extends RefCounted
 
 ## Камень с обрастанием #67DDEB в альфе цвета вершины: раковина древних, кости левиафана, край отмели, порода
 ## курильщика. `fill` — подсветка камня, `glow_k` — яркость обрастания, `cut` — сколько альбедо гасит свет,
-## `flicker` — мерцание жара (EcoVent.flicker, 0 — ровный свет). Каустики света сквозь лёд по верху камня — `caustic`
+## `flicker` — мерцание жара (EcoVent.flicker по времени мира `now`, 0 — ровный свет). Каустики света сквозь лёд по верху камня — `caustic`
 ## (сила ставит `EcoCaustic` по глубине корабля, «Экономно» — 0; узор — двойник `EcoCaustic.pattern`, как у дна).
 ## Обрастание мерцает (Б3): по камню бегут две медленные волны свечения по мировому месту — ± `shimmer` яркости
 ## обрастания (`stone()` ставит `EcoCaustic.SHIMMER`, жар курильщика — 0), время мира — uniform `now` (ставит
@@ -51,7 +51,7 @@ void vertex() {
 	w_up = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz).y;
 }
 void fragment() {
-	float f = 0.8 + 0.1 * sin(TIME * 2.3) + 0.06 * sin(TIME * 5.7 + 1.3) + 0.04 * sin(TIME * 13.1 + 0.4);
+	float f = 0.8 + 0.1 * sin(now * 2.3) + 0.06 * sin(now * 5.7 + 1.3) + 0.04 * sin(now * 13.1 + 0.4);
 	ALBEDO = COLOR.rgb * (1.0 - lit * cut);
 	ROUGHNESS = rough;
 	SPECULAR = spec;
@@ -296,15 +296,17 @@ const SWAY := """
 // в долях высоты на полном течении; sway_k — 0 на «Экономно»
 uniform vec3 flow = vec3(0.0);
 uniform float sway_k = 1.0;
+// время мира (EcoShaders.set_sway_time, у гостя то же), не время шейдера: двойник совпадает с картинкой, без скачка в 3600 с
+uniform float sway_t = 0.0;
 vec3 eco_sway(vec3 o, float h, float height, vec3 bn) {
 	float v = length(flow);
 	float s = v / 0.3;
 	vec3 d = v > 1e-5 ? flow / v : vec3(0.0, 0.0, 1.0);
 	vec3 c = vec3(-d.z, 0.0, d.x);
 	float ph = o.x * 0.23 + o.z * 0.19;
-	float gust = 0.65 + 0.35 * sin(TIME * 0.45 + ph);
-	float fl = sin(TIME * 1.6 + ph * 1.3 - h * 2.2);
-	float cr = sin(TIME * 1.1 + ph * 0.7 - h * 1.5);
+	float gust = 0.65 + 0.35 * sin(sway_t * 0.45 + ph);
+	float fl = sin(sway_t * 1.6 + ph * 1.3 - h * 2.2);
+	float cr = sin(sway_t * 1.1 + ph * 0.7 - h * 1.5);
 	float w = 0.4 + 0.6 * s;
 	float k = h * h * height;
 	vec3 off = (d * (bn.x * s * gust + bn.y * w * fl) * k + c * (bn.z * w * cr) * k) * sway_k;
@@ -317,7 +319,7 @@ vec3 eco_sway(vec3 o, float h, float height, vec3 bn) {
 ## щупальца хватней (тело со светом, к кончикам светится само — `tip_glow`, доля длины — в COLOR.a; кончик в луче
 ## крупнее — `tip_grow`, глаза глазуна). Что
 ## рисовать — `mode` (Plant), краски и числа каждого вида — в своих uniform; формулы — прежние формулы видов.
-## Общее: шероховатость `rough`, блик `spec`, своё свечение `glow` (линейный цвет) плюс волна `glow_wave` · sin(TIME · 1,7);
+## Общее: шероховатость `rough`, блик `spec`, своё свечение `glow` (линейный цвет) плюс волна `glow_wave` · sin(t · 1,7) по времени мира `sway_t`;
 ## просвет против огня — `back`/`back_k` (EcoBack, `BACKLIGHT`);
 ## колыхание в течении мира — `bend`/`reach` вида и общий поток `flow` (`set_flow`), формула — EcoCurrent.sway;
 ## `phase_axis` — сдвиг фазы по углу оси экземпляра вокруг вертикали (щупальца одного диска вразнобой, у растений 0).
@@ -420,7 +422,7 @@ void fragment() {
 	}
 	ROUGHNESS = rough;
 	SPECULAR = spec;
-	vec3 e = glow + glow_wave * sin(TIME * 1.7);
+	vec3 e = glow + glow_wave * sin(sway_t * 1.7);
 	if (mode == 4) {
 		e += COLOR.rgb * mix(tip_glow.x, tip_glow.y, COLOR.a * COLOR.a);
 	}
@@ -496,6 +498,7 @@ static func plant(kind: Plant, params: Dictionary = {}) -> ShaderMaterial:
 ## Материал с куском SWAY (растения, огнецвет) — получает текущий поток и выключатель «Экономно» сразу и дальше.
 static func follow(mat: ShaderMaterial) -> ShaderMaterial:
 	mat.set_shader_parameter("flow", flow)
+	mat.set_shader_parameter("sway_t", sway_time)
 	mat.set_shader_parameter("sway_k", 0.0 if sway_lite else 1.0)
 	_plants = _plants.filter(func(r: WeakRef) -> bool: return r.get_ref() != null)
 	_plants.append(weakref(mat))
@@ -504,6 +507,8 @@ static func follow(mat: ShaderMaterial) -> ShaderMaterial:
 
 ## Поток течения мира для колыхания растений (EcoView каждый шаг: EcoCurrent.vel()).
 static var flow := Vector3.ZERO
+## Время мира для колыхания и тления растений (uniform `sway_t`; EcoView каждый шаг: world.time, у гостя — то же).
+static var sway_time := 0.0
 ## «Экономно»: растения не колышутся в шейдере (sway_k = 0). Включает уровень графики — set_sway_lite.
 static var sway_lite := false
 ## Материалы растений — слабые ссылки, чтобы при выходе не оставалось ресурсов в статике.
@@ -519,6 +524,16 @@ static func set_flow(v: Vector3) -> void:
 		var mat: ShaderMaterial = r.get_ref()
 		if mat:
 			mat.set_shader_parameter("flow", v)
+
+
+## Отдать время мира t всем живым материалам растений (колыхание SWAY и волна тления PLANT идут по нему, а не по
+## TIME шейдера: у гостя в такт хосту, двойник EcoCurrent.sway совпадает с картинкой, в 3600 с нет скачка).
+static func set_sway_time(t: float) -> void:
+	sway_time = t
+	for r in _plants:
+		var mat: ShaderMaterial = r.get_ref()
+		if mat:
+			mat.set_shader_parameter("sway_t", t)
 
 
 ## Выключатель колыхания для «Экономно» (ART-044): true — растения стоят (только качание листьев и вееров на CPU).
