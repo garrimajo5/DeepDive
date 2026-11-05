@@ -9,6 +9,10 @@ extends MeshInstance3D
 ## «Экономно» (Б6, `set_lite`): ветви и трубочки — четыре грани вместо шести (LITE_SIDES), кончики — четыре грани и
 ## два кольца (LITE_TIP_RINGS), камни цоколя — пять граней; меш пересобирается, материал, свет, мерцание, вызов и
 ## силуэт те же. Сброс мира уровень не теряет (EcoView.set_lite).
+## Кончики-полипы колышутся в течении мира (Б3): каменные ветви стоят, мягкий кончик гнётся от основания — подножие
+## кончика в CUSTOM0.xyz, доля длины от основания — CUSTOM0.w (у ветвей и цоколя 0 — не двигаются), формула — общий
+## кусок EcoShaders.SWAY (двойник EcoCurrent.sway, `tip_offset`), изгиб TIP_BEND, длина кончика — uniform tip_len.
+## «Экономно» — EcoShaders.set_sway_lite. Шейдеров и вызовов не прибавилось.
 
 const SHADER := """
 shader_type spatial;
@@ -22,11 +26,17 @@ uniform float glow_rate;
 uniform float light = 1.0;
 uniform float rough = 0.8;
 uniform float spec = 0.25;
+uniform vec3 bend = vec3(0.0);
+uniform float tip_len = 2.6;
+""" + EcoShaders.SWAY + """
 varying float lit;
 varying vec3 wp;
 void vertex() {
 	lit = COLOR.a * light * (glow_mid + glow_amp * sin(TIME * glow_rate + UV.x));
 	wp = VERTEX;
+	if (sway_k > 0.0 && CUSTOM0.w > 0.0) {
+		VERTEX += eco_sway(CUSTOM0.xyz, CUSTOM0.w, tip_len, bend);
+	}
 }
 void fragment() {
 	vec3 p = wp;
@@ -63,6 +73,9 @@ const LITE_TIP_SIDES := 4
 const LITE_TIP_RINGS := [Vector2(-0.3, 0.85), Vector2(0.35, 0.8)]
 const STONE_SIDES := 6
 const LITE_STONE_SIDES := 5
+## Изгиб кончика в течении (крен, волна, поперёк — доли длины кончика на полном течении): полип мягче огнецвета
+## (CoralView.BEND), конец кончика уходит на 15–20 см — крона «дышит» в потоке, ветви стоят.
+const TIP_BEND := Vector3(0.055, 0.04, 0.02)
 
 var flower: EcoFlower
 ## Вершины по треугольникам (для тестов) и число треугольников.
@@ -77,6 +90,12 @@ var lite := false
 
 var _col := PackedColorArray()
 var _uv := PackedVector2Array()
+## CUSTOM0 по вершинам: подножие кончика (x, y, z) и доля длины от него (w; 0 — не колышется).
+var sway := PackedFloat32Array()
+## Подножие, направление и длина кончика, который _tri пишет сейчас (у ветвей и цоколя длина 0).
+var _foot := Vector3.ZERO
+var _foot_dir := Vector3.ZERO
+var _foot_len := 0.0
 var _mat: ShaderMaterial
 
 
@@ -95,6 +114,9 @@ func _init(system: EcoFlower, on_lite := false) -> void:
 	_mat.set_shader_parameter("glow_mid", EcoFlower.GLOW_MID)
 	_mat.set_shader_parameter("glow_amp", EcoFlower.GLOW_AMP)
 	_mat.set_shader_parameter("glow_rate", EcoFlower.GLOW_RATE)
+	_mat.set_shader_parameter("bend", TIP_BEND)
+	_mat.set_shader_parameter("tip_len", tip_len())
+	EcoShaders.follow(_mat)
 	_build()
 	sync()
 
@@ -113,6 +135,8 @@ func _build() -> void:
 	normals.clear()
 	_col.clear()
 	_uv.clear()
+	sway.clear()
+	_foot_len = 0.0
 	var sides := LITE_SIDES if lite else SIDES
 	for b in flower.branches:
 		_branch(b, _paint(b.p0.y), _paint(b.p1.y), 0.0, sides)
@@ -124,14 +148,17 @@ func _build() -> void:
 	var tip_rings: Array = LITE_TIP_RINGS if lite else TIP_RINGS
 	for i in flower.tips.size():
 		_tip(flower.tips[i], flower.tip_dir[i], flower.tip_r[i], flower.tip_phase[i], tip_sides, tip_rings)
+	_foot_len = 0.0
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	arrays[Mesh.ARRAY_NORMAL] = normals
 	arrays[Mesh.ARRAY_COLOR] = _col
 	arrays[Mesh.ARRAY_TEX_UV] = _uv
+	arrays[Mesh.ARRAY_CUSTOM0] = sway
 	var m := ArrayMesh.new()
-	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {},
+		Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT)
 	m.surface_set_material(0, _mat)
 	mesh = m
 	tris = verts.size() / 3
@@ -145,6 +172,20 @@ func sync() -> bool:
 	_mat.set_shader_parameter("light", shown_light)
 	uploads += 1
 	return true
+
+
+## Длина кончика, м (после подгонки все кончики одной длины) — высота колыхания в шейдере.
+func tip_len() -> float:
+	return flower.tip_r[0] * 2.0 if flower.tip_r.size() > 0 else EcoFlower.TIP_HALF * 2.0
+
+
+## Смещение вершины v (номер в verts) в течении flow в момент t — двойник шейдера (EcoCurrent.sway с подножием
+## кончика и долей длины из CUSTOM0); у ветвей и цоколя — ноль.
+func tip_offset(v: int, t: float, flow: Vector3 = EcoShaders.flow) -> Vector3:
+	var h := sway[v * 4 + 3]
+	if h <= 0.0:
+		return Vector3.ZERO
+	return EcoCurrent.sway(Vector3(sway[v * 4], sway[v * 4 + 1], sway[v * 4 + 2]), h, tip_len(), t, flow, TIP_BEND)
 
 
 ## Краска ветви на высоте y: у дна #63465C, к кроне — #D06A94.
@@ -208,6 +249,9 @@ func _tip(c: Vector3, dir: Vector3, half: float, ph: float, sides := TIP_SIDES, 
 		rings.append(row)
 	var lo := c - dir * half
 	var hi := c + dir * half
+	_foot = lo
+	_foot_dir = dir
+	_foot_len = half * 2.0
 	var paint := [TIP_PAINT, TIP_PAINT, TIP_PAINT]
 	var last := ring_list.size() - 1
 	for i in sides:
@@ -241,3 +285,8 @@ func _tri(a: Vector3, b: Vector3, c: Vector3, center: Vector3, paints: Array, gl
 		var p: Color = (paints[k] as Color).srgb_to_linear()
 		_col.append(Color(p.r, p.g, p.b, glow))
 		_uv.append(Vector2(ph, stone))
+		if _foot_len > 0.0:
+			var h := clampf(((pts[k] as Vector3) - _foot).dot(_foot_dir) / _foot_len, 0.0, 1.0)
+			sway.append_array([_foot.x, _foot.y, _foot.z, maxf(h, 1e-4)])
+		else:
+			sway.append_array([0.0, 0.0, 0.0, 0.0])

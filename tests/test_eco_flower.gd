@@ -327,3 +327,68 @@ func test_lite_kept_after_world_reset() -> void:
 	ev.set_lite(false)
 	ev.free()
 	EcoShaders.set_sway_lite(false)
+
+
+## Б3: кончики-полипы колышутся в течении, каменные ветви и цоколь стоят; двойник шейдера — tip_offset;
+## «Экономно» гасит колыхание (sway_k = 0), вызовов не прибавилось.
+func test_view_tips_sway_in_current() -> void:
+	EcoShaders.set_sway_lite(false)
+	var fl := _flower(_flat)
+	var v := FlowerView.new(fl)
+	tree.root.add_child(v)
+	await frames(1)
+	eq(v.mesh.get_surface_count(), 1, "один вызов, как и был")
+	eq(v.sway.size(), v.verts.size() * 4, "CUSTOM0 у каждой вершины")
+	var mat := v.mesh.surface_get_material(0) as ShaderMaterial
+	ok(mat.shader.code.contains("eco_sway"), "шейдер берёт общий кусок колыхания")
+	near(float(mat.get_shader_parameter("tip_len")), fl.tip_r[0] * 2.0, 1e-4, "длина кончика — в шейдере")
+	var flow := Vector3(0.3, 0.0, 0.0)
+	var tip_max := 0.0
+	var foot_max := 0.0
+	var still := 0
+	var moving := 0
+	for i in v.verts.size():
+		var glow := v._col[i].a > 0.5
+		if not glow:
+			# ветви и цоколь — без колыхания при любом времени
+			if v.tip_offset(i, 1.7, flow).length() == 0.0 and v.tip_offset(i, 5.2, flow).length() == 0.0:
+				still += 1
+			continue
+		moving += 1
+		var h := v.sway[i * 4 + 3]
+		var best := 0.0
+		for t in [0.0, 0.8, 1.6, 2.4, 3.2, 4.0]:
+			best = maxf(best, v.tip_offset(i, t, flow).length())
+		if h > 0.95:
+			tip_max = maxf(tip_max, best)
+		if h < 0.05:
+			foot_max = maxf(foot_max, best)
+	eq(still, v.verts.size() - moving, "ветви и цоколь стоят")
+	ok(moving > 0, "у кончиков есть вершины")
+	ok(tip_max > 0.1 and tip_max < 0.35, "конец кончика уходит на 10–35 см: %.3f" % tip_max)
+	ok(foot_max < 0.01, "основание кончика держится на ветви: %.4f" % foot_max)
+	# двойник совпадает с формулой EcoCurrent.sway от подножия
+	var j := -1
+	for i in v.verts.size():
+		if v.sway[i * 4 + 3] > 0.9:
+			j = i
+			break
+	var o := Vector3(v.sway[j * 4], v.sway[j * 4 + 1], v.sway[j * 4 + 2])
+	var want := EcoCurrent.sway(o, v.sway[j * 4 + 3], v.tip_len(), 2.0, flow, FlowerView.TIP_BEND)
+	ok(v.tip_offset(j, 2.0, flow).is_equal_approx(want), "двойник шейдера — EcoCurrent.sway")
+	# подножие кончика — на его оси, позади центра
+	var k := 0
+	var c := fl.tips[k]
+	near(o.distance_to(c), fl.tip_r[k], 0.5, "подножие ≈ на полдлины от центра кончика")
+	# поток мира доходит до материала, «Экономно» выключает колыхание
+	EcoShaders.set_flow(Vector3(0.12, 0.0, 0.05))
+	ok((mat.get_shader_parameter("flow") as Vector3).is_equal_approx(Vector3(0.12, 0.0, 0.05)), "поток мира — в шейдере")
+	EcoShaders.set_sway_lite(true)
+	eq(float(mat.get_shader_parameter("sway_k")), 0.0, "«Экономно» — кончики стоят")
+	EcoShaders.set_sway_lite(false)
+	eq(float(mat.get_shader_parameter("sway_k")), 1.0, "назад — колышутся")
+	v.set_lite(true)
+	eq(v.sway.size(), v.verts.size() * 4, "грубый меш — тоже с CUSTOM0")
+	EcoShaders.set_flow(Vector3.ZERO)
+	v.queue_free()
+	await frames(1)
