@@ -53,6 +53,10 @@ var _gx := INF
 var _gz := INF
 var _gh := 0.0
 var _gcall: Callable
+## Наклон дна (dh/dx, dh/dz) по переходам между выборками: каждый поправляет его вдоль своего смещения (Бройден),
+## поперёк — прежний; для `ground_est`/`floor_rate` без новых вызовов ground; переход длиннее SLOPE_GAP (прыжок, возврат домой) или смена ground — наклон 0.
+const SLOPE_GAP := 1.0
+var _slope := Vector2.ZERO
 
 
 ## Неизвестный вид (нет в Species) — предупреждение, существо сразу неживое: мир его не двигает.
@@ -234,12 +238,30 @@ func _look_ground(ground: Callable, slot: int, x: float, z: float) -> float:
 func ground_y(ground: Callable) -> float:
 	var dx := p.x - _gx
 	var dz := p.z - _gz
-	if dx * dx + dz * dz > GROUND_STEP * GROUND_STEP or ground != _gcall:
+	var d2 := dx * dx + dz * dz
+	if d2 > GROUND_STEP * GROUND_STEP or ground != _gcall:
+		var h: float = ground.call(p.x, p.z)
+		if ground == _gcall and d2 <= SLOPE_GAP * SLOPE_GAP:
+			_slope += Vector2(dx, dz) * ((h - _gh - _slope.x * dx - _slope.y * dz) / d2)
+		else:
+			_slope = Vector2.ZERO
 		_gx = p.x
 		_gz = p.z
-		_gh = ground.call(p.x, p.z)
+		_gh = h
 		_gcall = ground
 	return _gh
+
+
+## Дно под существом без ступенек кэша: запомненная высота плюс наклон с прошлой выборки на отплытое от неё
+## (на склоне 1:1 ступенька `ground_y` — до GROUND_STEP; здесь остаётся только кривизна дна).
+func ground_est(ground: Callable) -> float:
+	var h := ground_y(ground)
+	return h + _slope.x * (p.x - _gx) + _slope.y * (p.z - _gz)
+
+
+## С какой скоростью дно под существом поднимается (м/с, вниз — минус), если плыть по горизонтали со (vx, vz).
+func floor_rate(vx: float, vz: float) -> float:
+	return _slope.x * vx + _slope.y * vz
 
 
 ## Не под дном, не выше потолка, не за краем отмели (как после шага серпохвоста); крупные — не в поясе поля (#833).

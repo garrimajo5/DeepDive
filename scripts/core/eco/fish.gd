@@ -30,6 +30,9 @@ const MIN_SPEED := 0.5
 ## и скорость гаснет за ~0,5–0,7 с скольжением. Раньше предел скорости срезал её за кадр (до 165 м/с²): стая с
 ## разлёта вставала как вкопанная. Разгон по-прежнему не выше предела.
 const BRAKE := 8.0
+## У дна рыбка гасит скорость к дну (с учётом подъёма дна под ней, `EcoAgent.floor_rate`) не резче FLOOR_BRAKE м/с²:
+## вниз на зазоре g — не быстрее √(2 · FLOOR_BRAKE · g), в гору поднимается вместе с дном, а не прыжком на зажиме.
+const FLOOR_BRAKE := 12.0
 ## Нос рыбки `Fish.look` догоняет скорость долей угла LOOK_K в секунду, не быстрее LOOK_MAX рад/с (`turn`, Б3):
 ## в рывке от хищника и у дома тело разворачивается за доли секунды, а не щёлкает за кадр.
 const LOOK_K := 10.0
@@ -511,6 +514,32 @@ func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
 		sh.alarm = maxf(sh.alarm, 1.5)
 
 
+## Наименьшая вертикальная скорость у дна: зазор gap над зажимом clearance, дно под рыбкой поднимается со
+## скоростью rate — к дну не быстрее, чем гасится на FLOOR_BRAKE за оставшийся зазор.
+static func floor_floor(gap: float, rate: float) -> float:
+	return rate - sqrt(2.0 * FLOOR_BRAKE * maxf(gap, 0.0))
+
+
+## Скорость v у дна: вертикаль — не ниже floor_floor(gap, rate); подняли — по горизонтали рыбка замедляется так,
+## чтобы общая скорость не выросла выше s (в гору 1:1 — ход вдоль склона, а не разгон вверх). rate — подъём дна при
+## нынешней горизонтали, при доле k горизонтали он k · rate.
+static func floor_hold(v: Vector3, gap: float, rate: float, s: float) -> Vector3:
+	var b := sqrt(2.0 * FLOOR_BRAKE * maxf(gap, 0.0))
+	var lo := rate - b
+	if v.y >= lo:
+		return v
+	var h2 := v.x * v.x + v.z * v.z
+	if lo * lo + h2 <= s * s:
+		return Vector3(v.x, lo, v.z)
+	# (k · rate − b)² + k² · h2 = s²: большая из долей k ≤ 1
+	var qa := rate * rate + h2
+	var disc := rate * rate * b * b - qa * (b * b - s * s)
+	if qa < 1e-6 or disc < 0.0:
+		return Vector3(v.x, lo, v.z)
+	var k := clampf((rate * b + sqrt(disc)) / qa, 0.0, 1.0)
+	return Vector3(v.x * k, k * rate - b, v.z * k)
+
+
 ## Б3: скорость рыбки после шага при пределе max_s: sp — после ускорения, was — до шага. Выше предела — не больше
 ## прежней минус BRAKE · dt (тормозит скольжением), но и не выше sp; разгоняться за предел нельзя.
 static func cap_speed(sp: float, was: float, max_s: float, dt: float) -> float:
@@ -621,7 +650,7 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 			acc += cage_push(frame, p)
 		var ph := f.phase
 		acc += Vector3(sin(wave_x + ph) * 0.6, sin(wave_y + ph * 2.0) * 0.3, cos(wave_z + ph) * 0.6)
-		var h := a.ground_y(ground) if has_ground else 0.0
+		var h := a.ground_est(ground) if has_ground else 0.0
 		var low := 1.2 * f.size
 		if has_ground and p.y < h + low:
 			acc.y += (h + low - p.y) * 6.0
@@ -636,6 +665,8 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 			v *= cap_speed(sp, a.v.length(), max_s, dt) / sp
 		elif sp < MIN_SPEED:
 			v *= MIN_SPEED / (sp + 1e-3)
+		if has_ground:
+			v = floor_hold(v, p.y - h - a.clearance, a.floor_rate(v.x, v.z), v.length())
 		p += v * dt
 		a.v = v
 		f.look = turn(f.look, v, dt)
