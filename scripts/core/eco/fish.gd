@@ -526,6 +526,27 @@ static func cap_speed(sp: float, was: float, max_s: float, dt: float) -> float:
 	return minf(sp, maxf(max_s, was - BRAKE * dt))
 
 
+## Б3: скорость v у дна — вертикаль не ниже rate − √(2 · FLOOR_BRAKE · gap): gap — зазор над зажимом clearance,
+## rate — подъём дна под рыбкой при нынешней горизонтали (`EcoAgent.floor_rate`). Подняли — горизонталь гаснет так,
+## чтобы общая скорость не выросла выше s: на крутом склоне рыбка идёт вдоль дна, а не догоняет его на зажиме
+## прыжками (при доле k горизонтали подъём дна — k · rate; приём из закрытой PR #1271).
+static func floor_hold(v: Vector3, gap: float, rate: float, s: float) -> Vector3:
+	var b := sqrt(2.0 * FLOOR_BRAKE * maxf(gap, 0.0))
+	var lo := rate - b
+	if v.y >= lo:
+		return v
+	var h2 := v.x * v.x + v.z * v.z
+	if lo * lo + h2 <= s * s:
+		return Vector3(v.x, lo, v.z)
+	# (k · rate − b)² + k² · h2 = s²: большая из долей k ≤ 1
+	var qa := rate * rate + h2
+	var disc := rate * rate * b * b - qa * (b * b - s * s)
+	if qa < 1e-6 or disc < 0.0:
+		return Vector3(v.x, lo, v.z)
+	var k := clampf((rate * b + sqrt(disc)) / qa, 0.0, 1.0)
+	return Vector3(v.x * k, k * rate - b, v.z * k)
+
+
 ## Б3: ход вниз у дна (vy, м/с) — не быстрее, чем успевает погасить FLOOR_BRAKE до зажима clearance: gap — запас над
 ## зажимом (м), rise — как дно под рыбкой идёт по ходу (м/с, по дну впереди); дно уходит вниз — можно и быстрее.
 static func floor_brake(vy: float, gap: float, rise: float) -> float:
@@ -654,7 +675,7 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 			acc += cage_push(frame, p)
 		var ph := f.phase
 		acc += Vector3(sin(wave_x + ph) * 0.6, sin(wave_y + ph * 2.0) * 0.3, cos(wave_z + ph) * 0.6)
-		var h := a.ground_y(ground) if has_ground else 0.0
+		var h := a.ground_est(ground) if has_ground else 0.0
 		var low := 1.2 * f.size
 		if has_ground and p.y < h + low:
 			acc.y += (h + low - p.y) * 6.0
@@ -682,6 +703,7 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 			var need := maxf(near_h + cl - p.y, 0.0) / FLOOR_NEAR
 			v.y = floor_lift(v.y, maxf(need, (ahead + cl - p.y) / FLOOR_LOOK), dt)
 			v = climb_cap(v, maxf(max_s, was_s))
+			v = floor_hold(v, gap, a.floor_rate(v.x, v.z), v.length())
 		p += v * dt
 		f.look = turn(f.look, v, dt)
 		if p.distance_squared_to(ship_pos) < hull_r2:  # сквозь корпус не проплывают

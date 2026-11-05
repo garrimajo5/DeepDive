@@ -1160,3 +1160,18 @@ func test_dive_to_prey_at_floor_brakes_above_floor() -> void:
 			bounce = true
 	eq(touch, 0, "не ложится на дно")
 	ok(not bounce, "без отскока от дна")
+
+
+## Светляк, прижатый к дну (clearance 0,4), ловится сверху: хищник сам ниже clearance + LOOK_GAP над дном не
+## опускается — бросок вниз добирает разницу (план Б3; раньше ловил, только когда светляк подскакивал на зажиме).
+func test_catches_fish_pressed_to_floor() -> void:
+	var a := EcoAgent.new("pred", Vector3(0, -30.0 + 1.8 + EcoAgent.LOOK_GAP, 0))
+	var b := EcoAgent.new("fish", Vector3(0.5, -30.0 + 0.4, 0))
+	b.clearance = 0.4
+	ok(EcoPred.can_catch(a, b), "прямо над прижатым к дну — достаёт")
+	b.p.x = 2.0
+	ok(not EcoPred.can_catch(a, b), "в стороне дальше CATCH_DIST — нет")
+	b.p = a.p + Vector3(0, 2.5, 0)
+	ok(not EcoPred.can_catch(a, b), "выше хищника на 2,5 м — бросок вниз не помогает")
+	b.p = a.p + Vector3(0, 1.2, 0)
+	ok(EcoPred.can_catch(a, b), "ближе CATCH_DIST — как прежде")

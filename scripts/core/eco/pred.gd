@@ -41,6 +41,17 @@ const HUNT_TO_SHIP_HUNGER := 0.6
 ## Видит светляка не дальше (м), хватает ближе (м).
 const HUNT_RADIUS := 50.0
 const CATCH_DIST := 1.6
+
+
+## Достаёт ли хищник a добычу b: ближе CATCH_DIST, а у дна по высоте — с броском вниз на то, на что сам не
+## опускается (свой clearance + LOOK_GAP над дном против clearance светляка): светляк, прижатый к дну, ловится сверху,
+## а не только когда подскочит (план Б3: светляки больше не прыгают на зажиме).
+static func can_catch(a: EcoAgent, b: EcoAgent) -> bool:
+	var d := a.p - b.p
+	var reach := maxf(a.clearance + EcoAgent.LOOK_GAP - b.clearance, 0.0)
+	if d.y > 0.0:
+		d.y = maxf(d.y - reach, 0.0)
+	return d.length_squared() < CATCH_DIST * CATCH_DIST
 ## Видит свет прожектора и слышит сонар корабля не дальше (м).
 const REACH := 32.0
 ## Слышит двигатели ближе (м) и быстрее (м/с).
@@ -558,7 +569,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 					grot.hid_fish(world)
 				else:
 					a.goal = pr.prey.agent.p + pr.prey.agent.v * 0.4
-					if a.distance_to(pr.prey.agent.p) < CATCH_DIST:
+					if can_catch(a, pr.prey.agent):
 						var caught := pr.prey.agent.p
 						fish.kill(pr.prey)
 						pr.hunger = 0.0
