@@ -679,12 +679,12 @@ func test_view_new_coin_grows() -> void:
 	var cn := c.coins[4]
 	var t := 1.0
 	v.sync(t)
-	var full := KelpView.transform_at(v.coin_buffer, v.slot_of(4), CoinsView.STRIDE_C).basis.x.length()
+	var full := KelpView.transform_at(v.coin_buffer, v.slot_of(4), CoinsView.STRIDE_C).basis.z.length()
 	ok(full > 0.05, "живая во весь размер: %.3f" % full)
 	cn.alive = false
 	t += 0.1
 	v.sync(t)
-	ok(KelpView.transform_at(v.coin_buffer, v.slot_of(4), CoinsView.STRIDE_C).basis.x.length() < 1e-6, "схваченная — сразу")
+	ok(KelpView.transform_at(v.coin_buffer, v.slot_of(4), CoinsView.STRIDE_C).basis.z.length() < 1e-6, "схваченная — сразу")
 	cn.alive = true
 	var dt := 1.0 / 30.0
 	var last := 0.0
@@ -693,7 +693,7 @@ func test_view_new_coin_grows() -> void:
 		t += dt
 		v.sync(t)
 		var tr := KelpView.transform_at(v.coin_buffer, v.slot_of(4), CoinsView.STRIDE_C)
-		var sz := tr.basis.x.length()
+		var sz := tr.basis.z.length()
 		if i == 0:
 			ok(sz < full * 0.05, "появилась крошечной: %.4f" % sz)
 			ok(tr.origin.is_equal_approx(cn.pos), "растёт на своём месте")
@@ -705,7 +705,7 @@ func test_view_new_coin_grows() -> void:
 	v.sync(t)
 	cn.alive = true
 	v.sync(t + 5.0)
-	near(KelpView.transform_at(v.coin_buffer, v.slot_of(4), CoinsView.STRIDE_C).basis.x.length(), full, 1e-4,
+	near(KelpView.transform_at(v.coin_buffer, v.slot_of(4), CoinsView.STRIDE_C).basis.z.length(), full, 1e-4,
 			"скачок времени — сразу к цели")
 	v.free()
 
@@ -816,4 +816,51 @@ func test_view_glazun_breathes_held_in_beam() -> void:
 		jump = maxf(jump, absf(y - last))
 		last = y
 	ok(jump < 0.01, "вход в луч без скачка: %.4f" % jump)
+	v.free()
+
+
+## Монетник дышит (Б3): диск толще и выше по дыханию, длина та же; плавно; на бегу размах гаснет; у каждой своя фаза.
+func test_view_coin_breathes() -> void:
+	var w := _world()
+	var c := _coins(w)
+	var v := CoinsView.new(c)
+	var cn := c.coins[3]
+	cn.vel = Vector3.ZERO
+	var xs: Array[float] = []
+	var worst := 0.0
+	var k := CoinsView.coin_scale(cn)
+	for s in 120:
+		var t := 3.0 + s / 30.0
+		v.sync(t)
+		var tr := KelpView.transform_at(v.coin_buffer, v.slot_of(3), CoinsView.STRIDE_C)
+		var b := CoinsView.coin_breath(cn, t)
+		near(tr.basis.z.length(), k, 1e-4, "длина та же")
+		near(tr.basis.x.length(), k * b.x, 1e-4, "толщина — по дыханию")
+		near(tr.basis.y.length(), k * b.y, 1e-4, "высота — по дыханию")
+		ok(tr.origin.is_equal_approx(cn.pos), "рыбка на месте")
+		var x := tr.basis.x.length() / k
+		if not xs.is_empty():
+			worst = maxf(worst, absf(x - xs[-1]))
+		xs.append(x)
+	ok(xs.max() - xs.min() > CoinsView.COIN_BREATH_W * 1.5, "диск набирает воду и опадает: %.4f" % (xs.max() - xs.min()))
+	ok(xs.max() <= 1.0 + CoinsView.COIN_BREATH_W + 1e-5 and xs.min() >= 1.0 - CoinsView.COIN_BREATH_W - 1e-5,
+			"не больше размаха")
+	ok(worst < 0.02, "плавно: %.4f за кадр" % worst)
+	# на бегу — доля размаха, между — плавно по ходу
+	var t0 := 4.4
+	var calm := CoinsView.coin_breath(cn, t0).x - 1.0
+	ok(absf(calm) > 1e-3, "в момент проверки дышит: %.4f" % calm)
+	cn.vel = Vector3(CoinsView.COIN_RUSH + 1.0, 0, 0)
+	near(CoinsView.coin_breath(cn, t0).x - 1.0, calm * CoinsView.COIN_RUSH_K, 1e-6, "на бегу — доля размаха")
+	var last := calm
+	var jump := 0.0
+	for i in 41:
+		cn.vel = Vector3(i * 0.1 + 0.5, 0, 0)
+		var y := CoinsView.coin_breath(cn, t0).x - 1.0
+		jump = maxf(jump, absf(y - last))
+		last = y
+	ok(jump < 0.01, "размах по ходу без скачка: %.4f" % jump)
+	cn.vel = Vector3.ZERO
+	ok(absf(CoinsView.coin_breath(c.coins[0], t0).x - CoinsView.coin_breath(c.coins[1], t0).x) > 1e-3,
+			"у каждой своя фаза")
 	v.free()
