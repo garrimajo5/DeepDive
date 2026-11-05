@@ -966,3 +966,45 @@ func test_petal_opened_learns_07() -> void:   # #837: купольник отк�
 	eq(main.message.text, "другое", "второе событие строку не повторяет")
 	main.queue_free()
 	await frames(1)
+
+
+## Отчёт QA 2026-11-05-2015: на итоге забега «Крупный хищник укусил корпус», а удара нет (#1249 гасил только удар).
+## Корабль под защитой — `ShipState.shielded`: в мире нет ни удара, ни строки «укусил корпус».
+func test_shielded_ship_no_bite_text() -> void:
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float: return -40.0
+	var preds := w.add(EcoPred.new()) as EcoPred
+	var pr := preds.all[0]
+	pr.hunger = 0.5
+	pr.cooldown = 0.0
+	w.ship.pos = pr.agent.p + Vector3(9, 0, 0)
+	w.ship.light_on = true
+	w.ship.shielded = true
+	var link: Array[Dictionary] = []
+	for i in 200:
+		w.step(EcoWorld.MAX_STEP)
+		link.append_array(w.take_link())
+	eq(w.hits, 0, "под защитой хищник не бьёт")
+	ok(not link.any(func(e: Dictionary) -> bool: return e["type"] == EcoLink.HIT), "удара кораблю нет")
+	ok(not link.any(func(e: Dictionary) -> bool: return str(e.get("text", "")).contains("укусил")),
+		"и строки «укусил корпус» нет")
+	ok(not w.hit_ship("Серпохвост", 0.12, w.ship.pos), "hit_ship под защитой — false")
+	w.ship.shielded = false
+	ok(w.hit_ship("Серпохвост", 0.12, w.ship.pos), "без защиты удар засчитан")
+	eq(w.hits, 1)
+
+
+func test_ship_shielded_after_summary() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var fake := FakeEco.new()
+	main.eco.queue_free()
+	main.eco = fake
+	main.add_child(fake)
+	main.step(0.1)
+	ok(not fake.got.shielded, "в забеге существа бьют")
+	main.run.ended = true
+	main.step(0.1)
+	ok(fake.got.shielded, "на итоге забега мир знает: корабль под защитой")
+	main.queue_free()

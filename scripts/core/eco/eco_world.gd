@@ -290,10 +290,14 @@ func emit(species: String, note: String, pos: Vector3, message: Callable = Calla
 
 
 ## Существо ударило по корпусу (Game.hullHit): мир только сообщает кораблю, урон — доля прочности 0…1.
-func hit_ship(by: String, damage: float, at: Vector3) -> void:
+## Корабль под защитой (`ShipState.shielded`) — удара нет, false: строку об ударе вид тогда не шлёт.
+func hit_ship(by: String, damage: float, at: Vector3) -> bool:
+	if ship.shielded:
+		return false
 	hits += 1
 	last_hit = EcoLink.hit(by, damage, at)
 	_link.append(last_hit)
+	return true
 
 
 ## Корпус корабля не пускает существо внутрь (S.pushOut): место наружу с запасом r, скорость внутрь гасится.

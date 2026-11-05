@@ -312,8 +312,8 @@ func on_ping(world: EcoWorld, pos: Vector3) -> void:
 		if d < STRIKE_R:
 			ec.bait = ""
 			ec.strikes += 1
-			world.hit_ship(Species.cap(world.nm(ID)), STRIKE, ec.p)
-			world.emit(ID, "strike", ec.p, _strike_text(world))
+			if world.hit_ship(Species.cap(world.nm(ID)), STRIKE, ec.p):
+				world.emit(ID, "strike", ec.p, _strike_text(world))
 		return
 	if d >= REVEAL_R:
 		return
