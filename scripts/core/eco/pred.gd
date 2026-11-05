@@ -625,8 +625,8 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 				else:  # под куполом вуали
 					veils.hid_ship(world, a.p)
 			elif d_ship < BITE_DIST or world.touches_ship(a.p, BITE_REACH):
-				world.hit_ship(Species.cap(world.nm(ID)), BITE_DAMAGE, a.p)
-				world.emit(ID, "bite", a.p, _text(world, "%s укусил корпус"))
+				if world.hit_ship(Species.cap(world.nm(ID)), BITE_DAMAGE, a.p):
+					world.emit(ID, "bite", a.p, _text(world, "%s укусил корпус"))
 				pr.bit_at = world.time
 				_set_mode(pr, Mode.RETREAT, 14.0)
 				pr.cooldown = BITE_COOLDOWN

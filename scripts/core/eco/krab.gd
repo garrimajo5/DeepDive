@@ -188,8 +188,8 @@ func step(world: EcoWorld, dt: float) -> void:
 				world.emit(ID, "guard", cr.pos, _guard_text(world, false))
 			if d_ship < PINCH_R and cr.pinch_cd <= 0.0:
 				cr.pinch_cd = PINCH_CD
-				world.hit_ship(Species.cap(world.nm(ID)), PINCH_DAMAGE, cr.pos)
-				world.emit(ID, "guard", cr.pos, _guard_text(world, true))
+				if world.hit_ship(Species.cap(world.nm(ID)), PINCH_DAMAGE, cr.pos):
+					world.emit(ID, "guard", cr.pos, _guard_text(world, true))
 			if d_ship > LEAVE_R:
 				cr.state = State.HOME
 	if cr.state == State.DEN:

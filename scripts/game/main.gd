@@ -1188,7 +1188,7 @@ func _step_eco(dt: float) -> void:
 func on_eco_event(e: Dictionary) -> void:
 	match e.get("type", ""):
 		EcoLink.HIT:
-			if flyby.shields() or events_held() or run.ended:
+			if hits_shielded():
 				return   # облёт в начале забега (#506), обучение у старта (#827) и итог забега (#1249): удар не доходит до корпуса
 			var at: Variant = e.get("at")
 			hit_local = hit_local_of(at) if at is Vector3 else null   # откуда бьёт — для звука удара (#656)
@@ -1236,6 +1236,12 @@ func on_eco_event(e: Dictionary) -> void:
 func _world_say(text: String) -> void:
 	if flyby.kind != Flyby.Kind.START:
 		message.say(text, Status.MESSAGE_SECONDS, true)   # не стирает строку, видную меньше 1 с (issue #979)
+
+
+## Удар существа не дойдёт до корпуса: облёт в начале забега (#506), обучение у старта (#827), итог забега (#1249).
+## Мир знает это из `ShipState.shielded` и не шлёт ни удара, ни строки о нём.
+func hits_shielded() -> bool:
+	return flyby.shields() or events_held() or run.ended
 
 
 ## Идёт обучение у старта 00 (#827, `Tutorial.holds_events`): события слоя ждут его конца.
@@ -1867,6 +1873,7 @@ func _fill_ship_state(full: bool) -> EcoLink.ShipState:
 	s.light_range = Searchlight.range_m(reactor.k(Reactor.Sys.LAMP)) * silt.beam_k() if s.light_on else 0.0
 	s.dive = run.depth
 	s.petal_open = lore.knows(LayerLore.PETAL07)   # у гостя — по знаниям хоста (кадр «k»)
+	s.shielded = hits_shielded()   # существа не бьют и не пишут «укусил корпус» (отчёт QA 2026-11-05-2015)
 	if not full:
 		return s
 	s.hull_noise = engine.noise(clampf(absf(helm.speed) / 6.7, 0.0, 1.0))
