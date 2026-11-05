@@ -30,6 +30,10 @@ extends Node3D
 ## стебельки и глаза едут с телом на миллиметры. В луче затаился — GLAZUN_HELD размаха (по плавной доле eye_lit),
 ## в броске размах гаснет вместе с `lunge` — без скачка. Масштаб экземпляра по времени мира (у гостя то же) — даром,
 ## и на «Экономно»; мир (глаза для луча и сканера) не меняется.
+## «Дыхание» монетника (Б3, `coin_breath`): рыбка качает воду жабрами — диск толще на ± COIN_BREATH_W и выше на
+## ± COIN_BREATH_H за COIN_BREATH_T с (ритм ± COIN_BREATH_SPREAD и фаза — EcoVary), длина та же — нос и хвост на месте.
+## Пасётся — во весь размах, на бегу (ход Coin.vel меняется плавно) размах гаснет до COIN_RUSH_K между COIN_CALM и
+## COIN_RUSH м/с — без скачка. Масштаб экземпляра по времени мира (у гостя то же) — даром, и на «Экономно».
 
 const COIN := Color("e8d48a")
 const FIN := Color("b59a50")
@@ -71,6 +75,8 @@ var coin_buffer := PackedFloat32Array()
 var body_buffer := PackedFloat32Array()
 ## Разброс по номеру монетника: размер, ритм, оттенок r g b (хеш — раз, не в каждом кадре).
 var _vary := PackedFloat32Array()
+## Чисел разброса на рыбку в _vary: размер, ритм покачивания, оттенок (3), частота и фаза дыхания.
+const VARY := 7
 var dust := EcoCoinsDust.new()
 var dust_view: MultiMeshInstance3D
 ## Буфер мути (EcoDustBuffer, issue #732).
@@ -98,12 +104,13 @@ func _init(system: EcoCoins, on_lite := false) -> void:
 	name = "Монетники"
 	fish = EcoMM.instance(self, "Монетники", build_coin(), coins.coins.size(), true)
 	mat = fish.multimesh.mesh.surface_get_material(0)
-	_vary.resize(coins.coins.size() * 5)
+	_vary.resize(coins.coins.size() * VARY)
 	for cn in coins.coins:
 		var tn := coin_tint(cn)
-		var row := [coin_scale(cn), coin_rate(cn), tn.r, tn.g, tn.b]
-		for q in 5:
-			_vary[cn.index * 5 + q] = row[q]
+		var br := coin_breath_rate(cn)
+		var row := [coin_scale(cn), coin_rate(cn), tn.r, tn.g, tn.b, br.x, br.y]
+		for q in VARY:
+			_vary[cn.index * VARY + q] = row[q]
 	bodies = EcoMM.instance(self, "Глазуны", build_glazun(), coins.glazuns.size(), true)
 	dust_view = GrazerView.build_dust(EcoCoinsDust.POOL)
 	add_child(dust_view)
@@ -179,6 +186,16 @@ const GLAZUN_BREATH_SPREAD := 0.2
 const GLAZUN_HELD := 0.3
 ## Соль номера глазуна для EcoVary — не в фазе с монетниками тех же номеров.
 const GLAZUN_SALT := 1000
+## Дыхание монетника: толщина диска и высота (доли), период, с, разброс ритма; на бегу — доля размаха между
+## COIN_CALM и COIN_RUSH м/с; соль номера — не в фазе с покачиванием и хвостом.
+const COIN_BREATH_W := 0.08
+const COIN_BREATH_H := 0.03
+const COIN_BREATH_T := 1.8
+const COIN_BREATH_SPREAD := 0.2
+const COIN_RUSH_K := 0.3
+const COIN_CALM := 1.0
+const COIN_RUSH := 4.0
+const COIN_SALT := 2000
 
 
 ## Расставить монетников и глазунов в момент t (время мира). ship — корабль (муть — ближе EcoGrazerDust.NEAR,
@@ -191,9 +208,10 @@ func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> voi
 	coin_buffer.resize(coins.coins.size() * STRIDE_C)
 	grow(t)
 	for cn in coins.coins:
-		var q := cn.index * 5
+		var q := cn.index * VARY
 		var g := coin_k[cn.index]
-		var tr := Transform3D(EcoCoins.coin_basis(cn, t, _vary[q + 1]) * (_vary[q] * smoothstep(0.0, 1.0, g)), cn.pos) \
+		var tr := Transform3D(EcoCoins.coin_basis(cn, t, _vary[q + 1]) * Basis.from_scale(
+				breath_at(_vary[q + 5], _vary[q + 6], cn.vel.length(), t) * (_vary[q] * smoothstep(0.0, 1.0, g))), cn.pos) \
 			if cn.alive and g > 0.0 else Transform3D(Basis.from_scale(Vector3.ZERO), Vector3(0, -999, 0))
 		var j := slot_of(cn.index) * STRIDE_C
 		EcoMM.put(coin_buffer, j, tr)
@@ -318,6 +336,26 @@ static func build_coin() -> ArrayMesh:
 	m.surface_set_material(0, EcoShaders.plant(EcoShaders.Plant.TENTACLE, {"rough": 0.8, "spec": 0.5,
 		"glow": COIN_GLOW.srgb_to_linear(), "back": Vector3.ZERO, "breath": Vector2(TAIL_AMP, TAIL_RATE)}))
 	return m
+
+
+## Масштаб монетника (в осях формы: x — толщина диска, y — высота, z — длина) в момент t: вдох — толще и выше,
+## длина та же; на бегу размах гаснет до COIN_RUSH_K.
+static func coin_breath(cn: EcoCoins.Coin, t: float) -> Vector3:
+	var br := coin_breath_rate(cn)
+	return breath_at(br.x, br.y, cn.vel.length(), t)
+
+
+## Частота дыхания рыбки (рад/с, с разбросом ритма) и фаза (рад) — EcoVary по номеру; считаются раз (в _vary).
+static func coin_breath_rate(cn: EcoCoins.Coin) -> Vector2:
+	var i := cn.index + COIN_SALT
+	return Vector2(TAU / COIN_BREATH_T * EcoVary.spread(i, EcoVary.RATE, COIN_BREATH_SPREAD),
+			EcoVary.unit(i, EcoVary.TURN) * TAU)
+
+
+## Масштаб дыхания при частоте w (рад/с), фазе ph и ходе speed (м/с) в момент t.
+static func breath_at(w: float, ph: float, speed: float, t: float) -> Vector3:
+	var k := lerpf(1.0, COIN_RUSH_K, smoothstep(COIN_CALM, COIN_RUSH, speed)) * sin(t * w + ph)
+	return Vector3(1.0 + COIN_BREATH_W * k, 1.0 + COIN_BREATH_H * k, 1.0)
 
 
 ## Масштаб тела глазуна (в осях тела: x — ширина, y — высота, z — длина) в момент t при доле луча lit: вдох — выше и

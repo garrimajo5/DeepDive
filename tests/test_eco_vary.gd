@@ -229,9 +229,10 @@ func test_coins_differ_and_carry_tint() -> void:
 		tints[Vector3i(roundi(tn.r * 40), roundi(tn.g * 40), roundi(tn.b * 40))] = true
 		ok(tn.g >= 0.85 - 1e-5 and tn.g <= 1.15 + 1e-5, "светлее-темнее ±15 %%: %s" % tn)
 		var tr := KelpView.transform_at(v.coin_buffer, cn.index, CoinsView.STRIDE_C)
-		if not near(tr.basis.x.length(), k, 1e-4, "размер монетника %d в буфере" % cn.index):
+		if not near(tr.basis.z.length(), k, 1e-4, "размер монетника %d в буфере" % cn.index):
 			return
-		ok(tr.basis.is_equal_approx(EcoCoins.coin_basis(cn, 2.0, CoinsView.coin_rate(cn)).scaled_local(Vector3.ONE * k)),
+		ok(tr.basis.is_equal_approx(EcoCoins.coin_basis(cn, 2.0, CoinsView.coin_rate(cn))
+				.scaled_local(CoinsView.coin_breath(cn, 2.0) * k)),
 			"покачивание — в своём ритме")
 		var i := cn.index * CoinsView.STRIDE_C + 12
 		ok(Color(v.coin_buffer[i], v.coin_buffer[i + 1], v.coin_buffer[i + 2]).is_equal_approx(tn), "оттенок — цвет экземпляра")
