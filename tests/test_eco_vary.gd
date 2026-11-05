@@ -789,3 +789,36 @@ func _sk_at(v: SkalnikView, i: int) -> Transform3D:
 	var o := i * SkalnikView.STRIDE
 	return Transform3D(Basis(Vector3(b[o], b[o + 4], b[o + 8]), Vector3(b[o + 1], b[o + 5], b[o + 9]),
 		Vector3(b[o + 2], b[o + 6], b[o + 10])), Vector3(b[o + 3], b[o + 7], b[o + 11]))
+
+
+## Планктон: у клетки свой размер (±25 %) и яркость (±20 %) по номеру — в масштабе базиса и INSTANCE_CUSTOM.w буфера.
+func test_plankton_cells_differ() -> void:
+	var sizes := []
+	var glows := []
+	for id in 200:
+		sizes.append(PlanktonView.cell_scale(id))
+		glows.append(PlanktonView.cell_glow(id))
+	eq(PlanktonView.cell_scale(7), PlanktonView.cell_scale(7), "одна клетка — один размер")
+	var s := _span(sizes)
+	ok(s.x >= 0.75 - 1e-5 and s.y <= 1.25 + 1e-5 and s.y - s.x > 0.3, "размер ±25 %%: %s" % s)
+	var g := _span(glows)
+	ok(g.x >= 0.8 - 1e-5 and g.y <= 1.2 + 1e-5 and g.y - g.x > 0.25, "яркость ±20 %%: %s" % g)
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float: return -50.0
+	w.ship.pos = Vector3(1e5, -30, 1e5)
+	var spots: Array[Vector2] = [Vector2(0, 0), Vector2(80, 0)]
+	var pl := w.add(EcoPlankton.new(null, null, spots)) as EcoPlankton
+	var v := PlanktonView.new(pl)
+	var seen := []
+	for c in pl.clouds.size():
+		for k in [0, 5, EcoPlankton.PER_CLOUD - 1]:
+			var id := PlanktonView.cell_id(c, k)
+			near(v.scale_at(c, k), PlanktonView.cell_scale(id), 1e-6, "размер клетки %d/%d — в базисе" % [c, k])
+			near(v.glow_at(c, k), PlanktonView.cell_glow(id), 1e-6, "яркость клетки %d/%d — в буфере" % [c, k])
+			seen.append(v.scale_at(c, k))
+	ok(_span(seen).y - _span(seen).x > 0.05, "клетки разного размера: %s" % _span(seen))
+	var cl := pl.clouds[1]
+	near(v.origin_at(1, 3).distance_to(cl.home + cl.offsets[3]), 0.0, 1e-4, "дом клетки на месте")
+	eq(v.cells.multimesh.instance_count, pl.clouds.size() * EcoPlankton.PER_CLOUD, "клеток столько же — один MultiMesh")
+	ok(EcoShaders.SPOT.contains("* INSTANCE_CUSTOM.w"), "шейдер облака умножает свечение на яркость клетки")
+	v.free()

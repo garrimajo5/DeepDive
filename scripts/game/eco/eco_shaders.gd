@@ -109,7 +109,7 @@ render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabl
 uniform float fade_far = 60.0;
 uniform float halo = 0.0;
 // cloud — облако планктона (PlanktonView): место клетки — дом + дрейф облака + покачивание по времени мира now,
-// INSTANCE_CUSTOM = (фаза облака, номер клетки, время вспышки); клетки выталкиваются из коробки корпуса корабля.
+// INSTANCE_CUSTOM = (фаза облака, номер клетки, время вспышки, яркость клетки — EcoVary); клетки выталкиваются из коробки корпуса корабля.
 uniform bool cloud = false;
 uniform float now = 0.0;
 uniform vec3 ship_pos = vec3(0.0, 1e6, 0.0);
@@ -140,7 +140,7 @@ void vertex() {
 		}
 		float g = clamp(1.0 - (now - INSTANCE_CUSTOM.z) * 0.45, 0.0, 1.0);
 		float b = 0.05 + 0.03 * sin(now * 1.1 + k * 1.7);
-		col = vec3(b * 0.4 + g * 0.35, b + g, b * 1.1 + g * 0.85);
+		col = vec3(b * 0.4 + g * 0.35, b + g, b * 1.1 + g * 0.85) * INSTANCE_CUSTOM.w;
 	}
 	float far = length((VIEW_MATRIX * vec4(o, 1.0)).xyz);
 	tint = col * clamp(1.0 - far / fade_far, 0.0, 1.0);
