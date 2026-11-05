@@ -30,6 +30,15 @@ const MIN_SPEED := 0.5
 ## и скорость гаснет за ~0,5–0,7 с скольжением. Раньше предел скорости срезал её за кадр (до 165 м/с²): стая с
 ## разлёта вставала как вкопанная. Разгон по-прежнему не выше предела.
 const BRAKE := 8.0
+## Б3: у дна рыбка смотрит на дно впереди по ходу — в FLOOR_NEAR и FLOOR_LOOK секунд хода (две точки, кэш агента
+## `EcoAgent.ground_ahead`, без семи выборок `climb_for`): вниз тормозит не быстрее FLOOR_BRAKE (м/с², `floor_brake`),
+## вверх к гребню впереди набирает ход не быстрее FLOOR_LIFT (`floor_lift`). Раньше зажим clearance держал место, а не
+## скорость: в тревоге у 01 рыбка вставала на дне за кадр (107 м/с²), в нырке к дому по склону — до 450 м/с²,
+## на гребне подскакивала на зажиме (до 116 м/с² по местам).
+const FLOOR_BRAKE := 10.0
+const FLOOR_LIFT := 20.0
+const FLOOR_LOOK := 0.6
+const FLOOR_NEAR := 0.25
 ## Нос рыбки `Fish.look` догоняет скорость долей угла LOOK_K в секунду, не быстрее LOOK_MAX рад/с (`turn`, Б3):
 ## в рывке от хищника и у дома тело разворачивается за доли секунды, а не щёлкает за кадр.
 const LOOK_K := 10.0
@@ -517,6 +526,30 @@ static func cap_speed(sp: float, was: float, max_s: float, dt: float) -> float:
 	return minf(sp, maxf(max_s, was - BRAKE * dt))
 
 
+## Б3: ход вниз у дна (vy, м/с) — не быстрее, чем успевает погасить FLOOR_BRAKE до зажима clearance: gap — запас над
+## зажимом (м), rise — как дно под рыбкой идёт по ходу (м/с, по дну впереди); дно уходит вниз — можно и быстрее.
+static func floor_brake(vy: float, gap: float, rise: float) -> float:
+	return maxf(vy, minf(rise, 0.0) - sqrt(2.0 * FLOOR_BRAKE * maxf(gap, 0.0)))
+
+
+## Б3: дно впереди выше рыбки — вверх заранее: need — скорость, с которой рыбка будет над зажимом у точки впереди
+## через FLOOR_LOOK (м/с); набирает её не быстрее FLOOR_LIFT, а не на зажиме за кадр.
+static func floor_lift(vy: float, need: float, dt: float) -> float:
+	return vy if vy >= need else minf(need, vy + FLOOR_LIFT * dt)
+
+
+## Б3: ход у дна после взгляда на дно — не быстрее cap (м/с): вверх к гребню рыбка идёт за счёт хода вперёд, а не
+## разгоняется за предел стаи; вертикаль — как есть (не выше cap).
+static func climb_cap(v: Vector3, cap: float) -> Vector3:
+	var s2 := v.length_squared()
+	if s2 <= cap * cap:
+		return v
+	var vy := clampf(v.y, -cap, cap)
+	var flat := Vector2(v.x, v.z)
+	var k := sqrt(maxf(cap * cap - vy * vy, 0.0)) / maxf(flat.length(), 1e-6)
+	return Vector3(v.x * k, vy, v.z * k)
+
+
 ## Скачок центра стаи: прошлый shift гаснет за dt с постоянной CENTER_EASE, к нему прибавляется jump — разница
 ## между центром, куда стая доплыла бы прежним составом, и новым средним.
 static func glide(shift: Vector3, jump: Vector3, dt: float) -> Vector3:
@@ -636,15 +669,32 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 			v *= cap_speed(sp, a.v.length(), max_s, dt) / sp
 		elif sp < MIN_SPEED:
 			v *= MIN_SPEED / (sp + 1e-3)
+		var cl := a.clearance
+		var gap := p.y - h - cl
+		# к дну — тормозит заранее, по дну впереди по ходу (Б3); sp — не меньше хода после предела
+		if has_ground and gap < sp * (sp * (0.5 / FLOOR_BRAKE) + FLOOR_LOOK * 1.5) + 0.5:
+			var was_s := v.length()
+			var fx := v.x
+			var fz := v.z
+			var near_h := a.ground_ahead(ground, 0, p.x + fx * FLOOR_NEAR, p.z + fz * FLOOR_NEAR)
+			var ahead := a.ground_ahead(ground, 1, p.x + fx * FLOOR_LOOK, p.z + fz * FLOOR_LOOK)
+			v.y = floor_brake(v.y, gap, (near_h - h) / FLOOR_NEAR)
+			var need := maxf(near_h + cl - p.y, 0.0) / FLOOR_NEAR
+			v.y = floor_lift(v.y, maxf(need, (ahead + cl - p.y) / FLOOR_LOOK), dt)
+			v = climb_cap(v, maxf(max_s, was_s))
 		p += v * dt
-		a.v = v
 		f.look = turn(f.look, v, dt)
 		if p.distance_squared_to(ship_pos) < hull_r2:  # сквозь корпус не проплывают
 			a.p = p
 			if world.push_out(a, HULL_GAP):
 				p = a.p
-		if has_ground and p.y < h + a.clearance:
-			p.y = h + a.clearance
+		if has_ground and p.y < h + cl + 0.7:
+			# у зажима — дно точно: запомненное (на старом месте) на крутом склоне ошибается до полуметра (Б3)
+			var floor_y := float(ground.call(p.x, p.z)) + cl
+			if p.y < floor_y:
+				p.y = floor_y
+				v.y = maxf(v.y, 0.0)  # на зажиме скорость вниз не копится
+		a.v = v
 		p.x = clampf(p.x, -edge, edge)
 		p.z = clampf(p.z, -edge, edge)
 		a.p = p

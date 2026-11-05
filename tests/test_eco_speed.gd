@@ -125,13 +125,15 @@ func _far_moves_per_frame(w: EcoWorld, frames_n: int) -> Array[int]:
 	out.fill(0)
 	for i in frames_n:
 		var before: Array[Vector3] = []
+		var far: Array[bool] = []  # дальше MID — по центру до шага: по нему стая и ждёт очереди (EcoLod.wait)
 		for sh in fish.shoals:
 			before.append((sh.members[0] as EcoFish.Fish).agent.p)
+			far.append(sh.center.distance_to(w.ship.pos) > EcoFish.MID)
 		w.step(r.range_f(0.014, 0.04))
 		var n := 0
 		for k in fish.shoals.size():
 			var sh := fish.shoals[k]
-			if sh.center.distance_to(w.ship.pos) > EcoFish.MID and (sh.members[0] as EcoFish.Fish).agent.p != before[k]:
+			if far[k] and (sh.members[0] as EcoFish.Fish).agent.p != before[k]:
 				n += 1
 		out[n] += 1
 	return out
