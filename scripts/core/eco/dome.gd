@@ -26,6 +26,11 @@ const CALL_R := 80.0
 const SWIM := 0.8
 const LEAVE := 1.2
 const TURN := 0.7
+## Поворот с инерцией (Б3): скорость поворота меняется не быстрее TURN_ACCEL рад/с² (клапаны сифонов не
+## перекладываются за миг), у курса — не больше TURN_GAIN × остаток и того, с какой можно встать вполсилы торможения,
+## — доворачивает без перелёта и не трогается рывком на полные TURN рад/с.
+const TURN_ACCEL := 0.6
+const TURN_GAIN := 3.0
 ## Разгон и торможение, м/с² (Б3): трогается за ~1,6 с, встаёт перед кораблём за ~0,5 с; ближе SLOW_R м к цели
 ## сбавляет ход (не меньше доли SLOW_MIN), а не врезается в гнездо или нишу с полного хода.
 const ACCEL := 0.5
@@ -55,6 +60,7 @@ var state := State.WAIT
 var pos := Vector3.ZERO
 var yaw := 0.0             ## нос в (−sin yaw, 0, −cos yaw), как у корабля
 var speed := 0.0
+var turn_v := 0.0          ## скорость поворота, рад/с (+ — влево)
 var petal := 0.0           ## створка 0 — закрыта, 1 — поднята на 1,4 м
 var opened := false        ## створка открыта (раз за слой)
 var just_opened := false   ## открылась в этот шаг
@@ -73,6 +79,7 @@ func reset(world: EcoWorld) -> void:
 	t = 0.0
 	_pulse = -INF
 	speed = 0.0
+	turn_v = 0.0
 	var h := home()
 	pos = Vector3(h.x, floor_y(h.x, h.y) + AT_NEST, h.y)
 	var s := stand()
@@ -126,6 +133,7 @@ func step(world: EcoWorld, dt: float) -> void:
 				_go(State.OPEN, world)
 		State.OPEN:
 			speed = 0.0
+			turn_v = 0.0
 			petal = maxf(petal, HashNoise.smooth(LIFT.x, LIFT.y, t))
 			if t >= LIFT.y and not opened:
 				opened = true
@@ -148,6 +156,7 @@ func _done() -> void:
 	petal = 1.0
 	opened = true
 	speed = 0.0
+	turn_v = 0.0
 	var h := home()
 	pos = Vector3(h.x, floor_y(h.x, h.y) + AT_NEST, h.y)
 
@@ -167,9 +176,12 @@ func _swim(goal: Vector3, top: float, ship: Vector3, dt: float) -> bool:
 	var dist := d.length()
 	if dist < ARRIVE and absf(goal.y - pos.y) < ARRIVE:
 		pos = goal
+		turn_v = 0.0
 		return true
 	var want := _yaw_to(d) if dist > 1e-4 else yaw
-	yaw += clampf(wrapf(want - yaw, -PI, PI), -TURN * dt, TURN * dt)
+	var r := turn(yaw, turn_v, want, dt)
+	yaw = wrapf(r.x, -PI, PI)
+	turn_v = r.y
 	var face := cos(wrapf(want - yaw, -PI, PI))
 	var blocked := pos.distance_to(ship) < KEEP
 	var want_v := want_speed(top, face, dist, blocked)
@@ -181,6 +193,19 @@ func _swim(goal: Vector3, top: float, ship: Vector3, dt: float) -> bool:
 	var low := goal.y if dist < DESCEND else floor_y(pos.x, pos.z) + CRUISE
 	pos.y = move_toward(pos.y, maxf(low, floor_y(pos.x, pos.z) + AT_NEST * 0.5), top * 0.6 * dt if not blocked else 0.0)
 	return false
+
+
+## Шаг поворота: курс yaw со скоростью v догоняет want (по кругу, коротким путём) за dt → (новый курс, новая
+## скорость). Скорость к курсу — не больше TURN, TURN_GAIN × остаток и √(TURN_ACCEL · остаток); меняется не быстрее
+## TURN_ACCEL. Шаг, что перелетел бы курс, кончается в нём.
+static func turn(yaw_now: float, v: float, want: float, dt: float) -> Vector2:
+	var err := wrapf(want - yaw_now, -PI, PI)
+	var reach := minf(TURN, minf(absf(err) * TURN_GAIN, sqrt(TURN_ACCEL * absf(err))))
+	v = move_toward(v, signf(err) * reach, TURN_ACCEL * dt)
+	var go := v * dt
+	if err != 0.0 and signf(go) == signf(err) and absf(go) > absf(err):
+		return Vector2(yaw_now + err, err / dt)
+	return Vector2(yaw_now + go, v)
 
 
 ## Ход, к которому тянется: почти носом вперёд (доля cos угла), у цели — тише, корабль на пути — стоп.
