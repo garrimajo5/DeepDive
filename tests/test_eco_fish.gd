@@ -112,7 +112,7 @@ func test_shoal_roams_near_home_and_keeps_together() -> void:
 					and p.y - Seabed.height(p.x, p.z) > -0.5 and p.y < -3.0 \
 					and f.agent.v.length() <= EcoFish.CALM_SPEED + 1e-3 and f.agent.state == EcoAgent.State.GRAZE
 				if not ok(good, "стая %d, %d с: у дома, вместе, над дном, подо льдом, спокойно (p=%s, центр=%s)"
-						% [sh.index, (s + 1) * 30, p, sh.center]):
+						% [sh.index, (s + 1) * 30, p, sh.center] + " v=%s" % f.agent.v):
 					return
 	eq(w.bus.pending.size(), 0, "спокойная стая молчит")
 
@@ -784,3 +784,55 @@ func test_brakes_smoothly_after_alarm() -> void:
 			was[f] = s if f.agent.alive else 0.0
 	ok(fast > EcoFish.CALM_SPEED + 1.0, "в тревоге рыбки разгонялись: %.1f м/с" % fast)
 	ok(worst < 2.5 * EcoFish.BRAKE, "тормозят не за кадр: %.1f м/с²" % worst)
+
+
+## Б3: у дна рыбка тормозит вниз заранее, по дну впереди по ходу (`EcoFish.floor_brake`), а не встаёт на зажиме
+## clearance за кадр. Раньше в тревоге у 01 рыбка шла вниз 5,7 м/с и вставала на дне за кадр (107 м/с²), в нырке
+## к дому по склону — до 450 м/с². Ускорение — по местам рыбок (зажим двигает место, а не скорость), окно 3 шага.
+func test_no_bounce_on_floor_clamp() -> void:
+	var dt := 1.0 / 30.0
+	near(EcoFish.floor_brake(-6.0, 10.0, 0.0), -6.0, 1e-6, "высоко над дном — ход не трогаем")
+	ok(EcoFish.floor_brake(-6.0, 0.3, 0.0) > -3.0, "у самого дна вниз быстро нельзя")
+	near(EcoFish.floor_brake(-6.0, 0.0, 2.0), 0.0, 1e-6, "на зажиме вниз нельзя")
+	near(EcoFish.floor_lift(0.0, 3.0, 0.1), EcoFish.FLOOR_LIFT * 0.1, 1e-6, "вверх к дну впереди — не за кадр")
+	near(EcoFish.floor_lift(2.0, 1.0, 0.1), 2.0, 1e-6, "уже поднимается быстрее — не трогаем")
+	var up := EcoFish.climb_cap(Vector3(2.4, 1.5, 0), 2.4)
+	near(up.length(), 2.4, 1e-5, "вверх к гребню — не быстрее предела стаи")
+	near(up.y, 1.5, 1e-6, "подъём сохранён, ход вперёд меньше")
+	var worst := 0.0
+	var under := -INF
+	var fast := 0.0
+	for k in 6:
+		var w := _world()
+		var fish := _fish(w)
+		var sh := fish.shoals[k]
+		w.ship.pos = sh.home + Vector3(0, 0, 40)  # ближе MID: стая шагает каждый шаг мира
+		w.run(4.0)
+		var pred := w.spawn("pred", sh.center + Vector3(6, 3, 0))
+		var hist := {}
+		for i in int(10.0 / dt):
+			if i == int(5.0 / dt):
+				pred.alive = false
+				for f: EcoFish.Fish in sh.members:  # пробный нырок всей стаи к дому
+					f.agent.v = (sh.home - f.agent.p).normalized() * 6.0
+			w.step(dt)
+			for f: EcoFish.Fish in sh.members:
+				var a := f.agent
+				if not a.alive:
+					hist.erase(f)
+					continue
+				under = maxf(under, Seabed.height(a.p.x, a.p.z) + 0.05 - a.p.y)
+				var ps: Array = hist.get(f, [])
+				ps.append(a.p)
+				if ps.size() > 7:
+					ps.pop_front()
+				hist[f] = ps
+				if ps.size() == 7 and absi(i - int(5.0 / dt)) > 7:  # кроме самого толчка нырка
+					var v0: float = (ps[3].y - ps[0].y) / (3.0 * dt)
+					var v1: float = (ps[6].y - ps[3].y) / (3.0 * dt)
+					fast = maxf(fast, -v0)
+					var acc := absf(v1 - v0) / (3.0 * dt)
+					worst = maxf(worst, acc)
+	ok(fast > 2.0, "рыбки шли вниз: %.1f м/с" % fast)
+	ok(worst < 40.0, "у дна не подскакивают: %.1f м/с²" % worst)
+	ok(under < 0.0, "под дно не уходят: %.2f м" % under)

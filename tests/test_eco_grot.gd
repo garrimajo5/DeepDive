@@ -145,10 +145,15 @@ func test_riders_travel_with_grot() -> void:
 	var g: EcoGrot = _sys(w, EcoGrot)
 	var sh := g.shoal
 	var start := g.grot.back
-	w.run(120.0)
+	w.run(100.0)
+	# стая бродит у дома на спине (до ~10 м в отдельные мгновения) — среднее за последние 20 с, а не один снимок
+	var d := 0.0
+	for i in 40:
+		w.run(0.5)
+		d += sh.center.distance_to(g.grot.back) / 40.0
 	ok(g.grot.back.distance_to(start) > 30.0, "гротовик ушёл: %.1f м" % g.grot.back.distance_to(start))
 	near(sh.home.distance_to(g.grot.back + Vector3(0, 0.6, 0)), 0.0, 1e-4, "дом едет на спине")
-	ok(sh.center.distance_to(g.grot.back) < 9.0, "стая рядом с рифом: %.1f м" % sh.center.distance_to(g.grot.back))
+	ok(d < 7.0, "стая рядом с рифом: в среднем %.1f м" % d)
 
 
 func test_riders_skip_spores_ferns_and_rays() -> void:

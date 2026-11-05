@@ -229,6 +229,12 @@ func _look_ground(ground: Callable, slot: int, x: float, z: float) -> float:
 	return h
 
 
+## Высота дна в точке (x, z) впереди по ходу — точка взгляда slot, из запомненной, пока точка не сдвинулась дальше
+## GROUND_STEP (светляки у дна, `EcoFish.floor_brake`; общий кэш с `climb_for`).
+func ground_ahead(ground: Callable, slot: int, x: float, z: float) -> float:
+	return _look_ground(ground, slot, x, z)
+
+
 ## Высота дна под существом (ground — (x, z) -> float, должен быть задан): из запомненной, пока не отплыло
 ## дальше GROUND_STEP.
 func ground_y(ground: Callable) -> float:
