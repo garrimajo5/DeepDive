@@ -17,6 +17,9 @@ extends Node3D
 ## BREATH_T с, подошва на дне (масштаб от низа узла). «Камень» дышит едва заметно — ROCK_BREATH от размаха (зоркий
 ## заметит), раскрытый — во весь размах; доля — по маскировке `camo`, она меняется плавно, размах не прыгает. По
 ## времени мира (у гостя то же), масштаб узла — даром, и на «Экономно».
+## Щупальца разные (Б4, `EcoVary`): у каждого из восьми своя длина ± ARM_REACH, толщина звеньев ± ARM_THICK и ритм
+## колыхания ± ARM_RATE по номеру щупальца — мантия не «звезда» из восьми одинаковых лучей. Хеш от номера: мир и
+## его случай не меняются, у гостя то же; вызовов и шейдеров столько же, и на «Экономно».
 
 const ROCK := Color("4f4a5c")
 const SKIN := Color("b8553c")
@@ -32,6 +35,10 @@ const SEG := 6
 const STRIDE := 12
 ## Дальше этого от корабля неподвижный камень не шевелит щупальцами (не видно).
 const FAR := 80.0
+## Разброс щупалец (Б4): длина, толщина звеньев и ритм колыхания — доли ±.
+const ARM_REACH := 0.15
+const ARM_THICK := 0.12
+const ARM_RATE := 0.2
 ## Шар звена щупальца: граней по кругу и поясов — «Обычно» и «Экономно».
 const ARM_SIDES := 6
 const ARM_RINGS := 4
@@ -127,6 +134,21 @@ func _init(system: EcoSkalnik, on_lite := false) -> void:
 	_buf.resize(ARMS * SEG * STRIDE)
 	visible = skalnik.octo != null
 	sync(0.0, Vector3(INF, INF, INF), true)
+
+
+## Длина щупальца a — множитель шага звеньев 1 ± ARM_REACH (основание у мантии на месте).
+static func arm_reach(a: int) -> float:
+	return EcoVary.spread(a, EcoVary.SIZE, ARM_REACH)
+
+
+## Толщина звеньев щупальца a — 1 ± ARM_THICK.
+static func arm_thick(a: int) -> float:
+	return EcoVary.spread(a, EcoVary.WIDTH, ARM_THICK)
+
+
+## Ритм колыхания щупальца a — 1 ± ARM_RATE.
+static func arm_rate(a: int) -> float:
+	return EcoVary.spread(a, EcoVary.RATE, ARM_RATE)
 
 
 ## Шар звена щупальца радиусом 1 (масштаб — в расстановке); lite — грубее.
@@ -235,15 +257,18 @@ func sync(t: float, ship: Vector3, force := false, info: EcoLink.ShipState = nul
 		var ang := float(a) / ARMS * TAU + 0.2
 		var ca := cos(ang)
 		var sa := sin(ang)
+		var reach := arm_reach(a)
+		var thick := arm_thick(a)
+		var rate := arm_rate(a)
 		for j in SEG:
-			var r := (0.35 + j * 0.24) * spread
-			var w := sin(t * 2.5 + a + j * 0.7) * 0.06 * j
+			var r := (0.35 + j * 0.24 * reach) * spread
+			var w := sin(t * 2.5 * rate + a + j * 0.7) * 0.06 * j
 			var p := Vector3(sk.pos.x + ca * r + w, sk.pos.y + 0.25 - j * 0.05, sk.pos.z + sa * r - w)
 			p -= back * (j * TRAIL)
 			var h := _floor[a] + 0.06
 			if p.y < h:
 				p.y = h
-			var sc := 0.2 * (1.0 - float(j) / SEG * 0.65)
+			var sc := 0.2 * (1.0 - float(j) / SEG * 0.65) * thick
 			EcoMM.put_basis(_buf, (a * SEG + j) * STRIDE, Basis.from_scale(Vector3(sc, sc * 0.75, sc)), p)
 			aabb = aabb.expand(p)
 	arms.multimesh.buffer = _buf

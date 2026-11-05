@@ -727,3 +727,65 @@ func test_moss_patches_differ_in_paint() -> void:
 		eq(view.mesh.get_surface_count(), 1, "мох — по-прежнему один меш")
 		view.free()
 	ok(EcoShaders.MOSS.contains("moss_color * tint"), "шейдер красит пятно")
+
+
+static func _flat_sk(_x: float, _z: float) -> float:
+	return -40.0
+
+
+## Скальник (Б4): у каждого из восьми щупалец своя длина ±15 %, толщина звеньев ±12 % и ритм колыхания ±20 % по
+## номеру щупальца. Без исправления концы всех щупалец — на одном расстоянии от мантии, шары одной толщины.
+func test_skalnik_arms_differ() -> void:
+	var reach := []
+	var thick := []
+	var rate := []
+	for a in SkalnikView.ARMS:
+		reach.append(SkalnikView.arm_reach(a))
+		thick.append(SkalnikView.arm_thick(a))
+		rate.append(SkalnikView.arm_rate(a))
+		eq(SkalnikView.arm_reach(a), SkalnikView.arm_reach(a), "одно щупальце — одна длина")
+	var r := _span(reach)
+	ok(r.x >= 0.85 - 1e-5 and r.y <= 1.15 + 1e-5 and r.y - r.x > 0.1, "длина ±15 %%: %s" % r)
+	var th := _span(thick)
+	ok(th.x >= 0.88 - 1e-5 and th.y <= 1.12 + 1e-5 and th.y - th.x > 0.06, "толщина ±12 %%: %s" % th)
+	var ra := _span(rate)
+	ok(ra.x >= 0.8 - 1e-5 and ra.y <= 1.2 + 1e-5 and ra.y - ra.x > 0.1, "ритм ±20 %%: %s" % ra)
+	var w := EcoWorld.new()
+	w.ground = _flat_sk
+	w.ship.pos = Vector3(500, -30, 500)
+	var spots: Array[Vector3] = [Vector3(-60, -40, 0), Vector3(0, -40, 0)]
+	var k := w.add(EcoKelp.new(null, spots)) as EcoKelp
+	var kr := w.add(EcoKrab.new(k)) as EcoKrab
+	var s := w.add(EcoSkalnik.new(kr)) as EcoSkalnik
+	var v := SkalnikView.new(s)
+	s.octo.camo = 0.0
+	s.octo.state = EcoSkalnik.State.STALK   # раскрытый: щупальца во всю длину
+	v.spread_k = 1.0
+	v.sync(1.0, s.octo.pos + Vector3(0, 0, 10), true)
+	var tips := []
+	var sizes := []
+	var mm := v.arms.multimesh
+	for a in SkalnikView.ARMS:
+		var tip := _sk_at(v, a * SkalnikView.SEG + SkalnikView.SEG - 1)
+		var base := _sk_at(v, a * SkalnikView.SEG)
+		var ang := float(a) / SkalnikView.ARMS * TAU + 0.2
+		var j := SkalnikView.SEG - 1
+		var rr := 0.35 + j * 0.24 * SkalnikView.arm_reach(a)
+		var ww := sin(1.0 * 2.5 * SkalnikView.arm_rate(a) + a + j * 0.7) * 0.06 * j
+		near(tip.origin.x - s.octo.pos.x, cos(ang) * rr + ww, 1e-3, "конец щупальца %d — своей длины и ритма (x)" % a)
+		near(tip.origin.z - s.octo.pos.z, sin(ang) * rr - ww, 1e-3, "конец щупальца %d — своей длины и ритма (z)" % a)
+		tips.append(rr)
+		sizes.append(base.basis.x.length())
+		near(base.basis.x.length(), 0.2 * SkalnikView.arm_thick(a), 1e-4, "звено — толщины своего щупальца (%d)" % a)
+	var tp := _span(tips)
+	ok(tp.y - tp.x > 0.1, "концы щупалец на разном расстоянии: %s" % tp)
+	eq(mm.instance_count, SkalnikView.ARMS * SkalnikView.SEG, "звеньев столько же — один MultiMesh")
+	v.free()
+
+
+## Звено щупальца скальника из буфера вида (в headless MultiMesh своих трансформов не возвращает).
+func _sk_at(v: SkalnikView, i: int) -> Transform3D:
+	var b := v._buf
+	var o := i * SkalnikView.STRIDE
+	return Transform3D(Basis(Vector3(b[o], b[o + 4], b[o + 8]), Vector3(b[o + 1], b[o + 5], b[o + 9]),
+		Vector3(b[o + 2], b[o + 6], b[o + 10])), Vector3(b[o + 3], b[o + 7], b[o + 11]))
