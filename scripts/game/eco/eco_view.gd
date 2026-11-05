@@ -539,10 +539,13 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	leech_view.sync(world.time, ship, current.vel())
 	StepClock.mark("мир/вид: рыбы, хищники")
 	moss_view.sync()
+	moss_view.set_time(world.time)
 	if bones_view.moss_view:
 		bones_view.moss_view.sync()
+		bones_view.moss_view.set_time(world.time)
 	if well_view.moss_view:
 		well_view.moss_view.sync()
+		well_view.moss_view.set_time(world.time)
 	coral_view.sync()
 	flower_view.sync()
 	coral_view.sync_dust(world.time, ship, current.vel())
