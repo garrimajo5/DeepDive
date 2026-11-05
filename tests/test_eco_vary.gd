@@ -881,3 +881,24 @@ func test_plankton_cells_differ() -> void:
 	eq(v.cells.multimesh.instance_count, pl.clouds.size() * EcoPlankton.PER_CLOUD, "клеток столько же — один MultiMesh")
 	ok(EcoShaders.SPOT.contains("* INSTANCE_CUSTOM.w"), "шейдер облака умножает свечение на яркость клетки")
 	v.free()
+
+
+func test_vent_bubbles_differ_in_size() -> void:
+	var sizes := []
+	for i in EcoVent.BUBBLES:
+		sizes.append(VentView.bubble_scale(i))
+	var s := _span(sizes)
+	ok(s.x >= 0.7 - 1e-5 and s.y <= 1.3 + 1e-5 and s.y - s.x > 0.4, "размер пузырей ±30 %%: %s" % s)
+	ok(absf(VentView.bubble_scale(0) - VentView.bubble_scale(1)) > 0.02, "соседние пузыри разного размера")
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float: return -40.0
+	var vent := w.add(EcoVent.new()) as EcoVent
+	var v := VentView.new(vent)
+	for i in [0, 77, 179]:
+		var k: int = i * VentView.STRIDE
+		var x := Vector3(v.bubble_buffer[k], v.bubble_buffer[k + 4], v.bubble_buffer[k + 8])
+		near(x.length(), VentView.bubble_scale(i), 1e-4, "размер пузыря %d в буфере" % i)
+		near(v.bubble_buffer[k + 3], vent.b_origin[i].x, 1e-4, "точка выхода та же")
+	ok(EcoShaders.MIST.contains("mix(size_low, size_high, f) * length(MODEL_MATRIX[0].xyz)"),
+		"шейдер умножает размер по высоте на масштаб пузыря")
+	v.free()

@@ -235,13 +235,14 @@ void vertex() {
 		MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * s, INV_VIEW_MATRIX[1] * s, INV_VIEW_MATRIX[2] * s,
 			MODEL_MATRIX[3]);
 	} else if (mode == 3) {
-		// EcoVent.bubble_pos: скорость, фаза, высота столба, своё число — в INSTANCE_CUSTOM, выход — в экземпляре
+		// EcoVent.bubble_pos: скорость, фаза, высота столба, своё число — в INSTANCE_CUSTOM, выход — в экземпляре;
+		// масштаб базиса — свой размер пузыря (VentView.bubble_scale)
 		float h = INSTANCE_CUSTOM.b;
 		float f = fract(INSTANCE_CUSTOM.g + t * INSTANCE_CUSTOM.r / h);
 		float sd = INSTANCE_CUSTOM.a * 6.2831853;
 		vec3 o = MODEL_MATRIX[3].xyz;
 		vec3 p = vec3(o.x + sin(t * 0.9 + sd) * drift * f, o.y + f * h, o.z + cos(t * 0.7 + sd) * drift * f);
-		float size = mix(size_low, size_high, f);
+		float size = mix(size_low, size_high, f) * length(MODEL_MATRIX[0].xyz);
 		fade = 0.85 * (1.0 - 0.6 * f) * smoothstep(0.0, 0.03, f) * (1.0 - smoothstep(0.9, 1.0, f));
 		MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * size, INV_VIEW_MATRIX[1] * size,
 			INV_VIEW_MATRIX[2] * size, vec4(p, 1.0));
