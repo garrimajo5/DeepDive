@@ -21,11 +21,11 @@ const USUAL_MIN := 0.1     ## обычное короче, мс — отноше
 const SLOW := 2.0          ## во сколько раз дольше обычного — пишем «×N»
 ## Заминка машины (issue #1174, #1156: в провалах эмулятора «мир 230 [EcoVent 34 ×…, EcoCoins 33 ×129]» — раздуты все
 ## подчасти, даже EcoVent, у которого в шаге три строки, а тестер и разбор гадали, какой вид виноват). Медиана «×»
-## подчастей с известным обычным — не меньше STALL_K раз сверх того, что даёт сам долгий шаг (`work_k`: живой мир
-## дробит его на подшаги по `EcoWorld.SLOW_STEP` — шаг 133 мс — два подшага, вдвое больше работы; прочие части шаг
-## не дробят), и таких подчастей не меньше STALL_N — после скобок пишем «— разом ×N, заминка»: виновника среди
-## подчастей нет, время отняла машина (эмулятор, система). Раньше долю долгого шага считали как dt · 30 (шаг 133 мс —
-## ×4 вместо ×2), и в провале `26-mate-gone` (отчёт #1182) заминки не было ни разу.
+## подчастей с известным обычным — не меньше STALL_K, и таких подчастей не меньше STALL_N — после скобок пишем
+## «— разом ×N, заминка»: виновника среди подчастей нет, время отняла машина (эмулятор, система). Долгий шаг работы не
+## прибавляет: живой мир за кадр идёт одним подшагом ≤ `EcoWorld.SLOW_STEP`, остаток — в долг `EcoView.lag` (#1255),
+## прочие части шаг не дробят. Раньше порог умножали на число подшагов долгого шага (шаг 117 мс — ×2, порог 10), и
+## после #1255 настоящая заминка мира в `33a` («флора ×7, EcoPred ×6, EcoCoins ×15») не отмечалась (#1253).
 const STALL_K := 5.0
 const STALL_N := 3
 const STALL := " — разом ×%d, заминка"
@@ -114,7 +114,7 @@ func lap(name: String, now_us: int) -> void:
 ## Самые долгие части по убыванию: «мир 80, виды 20, корабль 5»; пусто — нечего показать.
 ## Долгая часть (≥ SUB_MS) — с подчастями в квадратных скобках: «интерфейс 45 [связь 40], мир 30».
 func top(n: int = SHOW, min_ms: float = MIN_MS) -> String:
-	return _top(parts, n, min_ms, subs, _usual_now(), dt)
+	return _top(parts, n, min_ms, subs, _usual_now())
 
 
 ## Обычное время для подписи: {} — пока шагов мало.
@@ -129,8 +129,7 @@ static func slower(ms: float, usual_ms: float) -> String:
 	return " ×%d" % roundi(ms / usual_ms)
 
 
-static func _top(of: Dictionary, n: int, min_ms: float, sub_of: Dictionary = {}, us: Dictionary = {},
-		step_dt: float = 0.0) -> String:
+static func _top(of: Dictionary, n: int, min_ms: float, sub_of: Dictionary = {}, us: Dictionary = {}) -> String:
 	var keys: Array = of.keys().filter(func(k): return float(of[k]) >= min_ms)
 	keys.sort_custom(func(a, b): return float(of[a]) > float(of[b]) or (is_equal_approx(of[a], of[b]) and str(a) < str(b)))
 	var out := PackedStringArray()
@@ -143,17 +142,17 @@ static func _top(of: Dictionary, n: int, min_ms: float, sub_of: Dictionary = {},
 			var inner := _inner(float(of[k]), sub_of[k], min_ms, us.get("/", {}).get(k, {}))
 			if not inner.is_empty():
 				t += " [%s]" % inner
-				var x := stall(sub_of[k], us.get("/", {}).get(k, {}), step_dt, str(k))
+				var x := stall(sub_of[k], us.get("/", {}).get(k, {}))
 				if x > 0:
 					t += STALL % x
 		out.append(t)
 	return ", ".join(out)
 
 
-## Во сколько раз разом медленнее обычного все подчасти sub (us — их обычное время, мс) в шаге step_dt, с:
-## медиана «×» подчастей с известным обычным, если она не меньше STALL_K раз сверх работы долгого шага части part
-## (`work_k`) и таких подчастей не меньше STALL_N; иначе 0 — есть виновник или мало данных.
-static func stall(sub: Dictionary, us: Dictionary, step_dt: float = 0.0, part := "мир") -> int:
+## Во сколько раз разом медленнее обычного все подчасти sub (us — их обычное время, мс): медиана «×» подчастей с
+## известным обычным, если она не меньше STALL_K и таких подчастей не меньше STALL_N; иначе 0 — есть виновник или мало
+## данных. Долгий шаг кадра порог не меняет: мир идёт одним подшагом (#1255), прочие части шаг не дробят (#1253).
+static func stall(sub: Dictionary, us: Dictionary) -> int:
 	var ratios: Array[float] = []
 	for key in sub.keys():
 		var u := float(us.get(key, 0.0))
@@ -164,17 +163,9 @@ static func stall(sub: Dictionary, us: Dictionary, step_dt: float = 0.0, part :=
 	ratios.sort()
 	var mid := ratios.size() / 2
 	var med := ratios[mid] if ratios.size() % 2 == 1 else (ratios[mid - 1] + ratios[mid]) * 0.5
-	if med < STALL_K * work_k(part, step_dt):
+	if med < STALL_K:
 		return 0
 	return roundi(med)
-
-
-## Во сколько раз больше работы у части part в шаге step_dt, с, чем в обычном: живой мир («мир») считает шаг равными
-## подшагами не длиннее `EcoWorld.SLOW_STEP` (обычный кадр — один подшаг), прочие части — одним разом.
-static func work_k(part: String, step_dt: float) -> float:
-	if part != "мир":
-		return 1.0
-	return float(maxi(1, int(ceil(step_dt / EcoWorld.SLOW_STEP - 1e-4))))
 
 
 ## Подчасти долгой части total: SUB_SHOW самых долгих, затем остаток — прочие подчасти одной суммой (`REST`) и время
@@ -221,7 +212,7 @@ func last_note() -> String:
 
 
 static func _note(of: Dictionary, step_dt: float, sub_of: Dictionary = {}, us: Dictionary = {}) -> String:
-	var t := _top(of, SHOW, MIN_MS, sub_of, us, step_dt)
+	var t := _top(of, SHOW, MIN_MS, sub_of, us)
 	if step_dt > 0.05:
 		t += ("; " if not t.is_empty() else "") + "шаг %d мс" % roundi(step_dt * 1000.0)
 	return t
