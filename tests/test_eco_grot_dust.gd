@@ -61,6 +61,17 @@ func test_feet_match_view() -> void:
 	near(EcoGrotDust.FOOT_X, GrotView.LEG_X + tip.x, 0.1, "ступня — у конца разваленной ноги")
 
 
+## Панцирь на склоне (Б3): муть встаёт у ступней по дну, а не на высоте середины.
+func test_feet_on_slope() -> void:
+	var gr := EcoGrot.Walker.new()
+	gr.p = Vector3(0, -40, 0)
+	gr.yaw = 0.0
+	gr.tilt = Vector2(0.0, atan(0.3))  # левый борт (+X) выше: дно y = −40 + 0,3 x
+	for side in [-1, 1]:
+		var at := EcoGrotDust.foot_spot(gr, Vector2i(side, 0), 0)
+		near(at.y - EcoGrotDust.BASE_LIFT, -40.0 + at.x * 0.3, 0.05, "ступня борта %d — на дне" % side)
+
+
 func test_walking_puffs_at_feet_in_tripod_order() -> void:
 	EcoGrazerDust.lite = false
 	var w := _world()

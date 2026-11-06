@@ -59,16 +59,16 @@ var _last := -1e9
 static func foot_spot(gr: EcoGrot.Walker, leg: Vector2i, n: int) -> Vector3:
 	var local := Vector3(leg.x * FOOT_X, 0.0, FOOT_Z[leg.y])
 	local += Vector3((EcoVary.unit(n, SALT) * 2.0 - 1.0) * SCATTER, 0.0, (EcoVary.unit(n, SALT + 1) * 2.0 - 1.0) * SCATTER)
-	var w := Basis(Vector3.UP, gr.yaw) * local
-	return Vector3(gr.p.x + w.x, gr.p.y + BASE_LIFT, gr.p.z + w.z)
+	var w := gr.basis() * local
+	return Vector3(gr.p.x + w.x, gr.p.y + w.y + BASE_LIFT, gr.p.z + w.z)
 
 
 ## Где встаёт облачко n (c-е из count) клуба оседания: по кольцу у обода ровно, с разбросом угла и радиуса.
 static func ring_spot(gr: EcoGrot.Walker, n: int, c: int = 0, count: int = 1) -> Vector3:
 	var ang := (float(c) / maxi(1, count) + (EcoVary.unit(n, SALT + 2) - 0.5) * 0.3) * TAU
 	var k := 1.0 + (EcoVary.unit(n, SALT + 3) * 2.0 - 1.0) * RING_SCATTER
-	var w := Basis(Vector3.UP, gr.yaw) * Vector3(cos(ang) * RING.x * k, 0.0, sin(ang) * RING.y * k)
-	return Vector3(gr.p.x + w.x, gr.p.y + BASE_LIFT, gr.p.z + w.z)
+	var w := gr.basis() * Vector3(cos(ang) * RING.x * k, 0.0, sin(ang) * RING.y * k)
+	return Vector3(gr.p.x + w.x, gr.p.y + w.y + BASE_LIFT, gr.p.z + w.z)
 
 
 ## Гротовик gr шагает (ноги выпущены, не замер).

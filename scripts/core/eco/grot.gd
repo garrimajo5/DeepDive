@@ -52,6 +52,17 @@ const TARGET_R := 3.0
 const SHELL := Vector3(2.4, 1.1, 3.2)
 ## Без дна (тесты без ground) тело стоит на этой высоте.
 const FALLBACK_FLOOR := -40.0
+## Панцирь ложится по склону (grafika-plan-eco, Б3 «Плавность поведения»): дно щупается под ступнями — спереди и сзади
+## на TILT_REACH.y, по бортам на TILT_REACH.x от середины; тангаж и крен — по разнице высот, не круче TILT_MAX (рад),
+## догоняют за TILT_FOLLOW в секунду. Раньше тело стояло ровно: на буграх у (8, 8) и (−14, 12) (уклон до 1:1) верхний
+## край панциря уходил в дно на 2–3 м, нижний висел.
+const TILT_REACH := Vector2(2.4, 3.0)
+const TILT_MAX := 0.35
+const TILT_FOLLOW := 1.5
+## Дно под ступнями щупается заново, когда тело ушло дальше TILT_STEP (м) или повернуло больше TILT_TURN (рад) —
+## на 0,45 м/с раз в ~0,4 с, а не каждый кадр.
+const TILT_STEP := 0.2
+const TILT_TURN := 0.05
 
 
 ## Сам гротовик.
@@ -71,6 +82,11 @@ class Walker:
 	var shy_cd := 0.0
 	var hide_cd := 0.0
 	var drift_cd := 0.0
+	## Наклон по склону: x — тангаж (нос вверх +), y — крен (левый борт, +X, вверх +); want — по дну под ступнями.
+	var tilt := Vector2.ZERO
+	var tilt_want := Vector2.ZERO
+	## Где (x, z) и при каком курсе (y→z) дно щупали последний раз.
+	var tilt_at := Vector3(INF, 0.0, 0.0)
 	## Высота тела (низ панциря), спина (риф) и верх рифа — ставит place().
 	var body_y := 0.0
 	var back := Vector3.ZERO
@@ -79,6 +95,10 @@ class Walker:
 	## Идёт (не замер).
 	func moving() -> bool:
 		return shy <= 0.0
+
+	## Поворот тела: курс, затем наклон по склону.
+	func basis() -> Basis:
+		return EcoGrot.body_basis(yaw, tilt)
 
 
 var grot: Walker
@@ -98,6 +118,8 @@ func reset(world: EcoWorld) -> void:
 	grot = Walker.new()
 	var s := ROUTE[0]
 	grot.p = Vector3(s.x, _floor(s.x, s.y), s.y)
+	_feel(grot)
+	grot.tilt = grot.tilt_want
 	shoal = null
 	if _fish and _fish.shoals.size() > RIDERS:
 		shoal = _fish.shoals[RIDERS]
@@ -144,10 +166,41 @@ func step(world: EcoWorld, dt: float) -> void:
 			gr.yaw += diff * minf(1.0, dt * TURN)
 			gr.p.x += sin(gr.yaw) * SPEED * gr.stride * dt
 			gr.p.z += cos(gr.yaw) * SPEED * gr.stride * dt
+			if Vector2(gr.p.x - gr.tilt_at.x, gr.p.z - gr.tilt_at.y).length() > TILT_STEP \
+					or absf(wrapf(gr.yaw - gr.tilt_at.z, -PI, PI)) > TILT_TURN:
+				_feel(gr)
 		if gr.drift_cd <= 0.0 and s.distance_to(gr.back) < DRIFT_R:
 			gr.drift_cd = DRIFT_CD
 			world.emit(ID, "drift", gr.back, _text(world, "%s неспешно бредёт по отмели, на спине у него риф"))
+	gr.tilt = gr.tilt.lerp(gr.tilt_want, minf(1.0, dt * TILT_FOLLOW))
 	place()
+
+
+## Пощупать дно под ступнями: нужный наклон и где щупали.
+func _feel(gr: Walker) -> void:
+	gr.tilt_want = slope_tilt(_ground, gr.p.x, gr.p.z, gr.yaw)
+	gr.tilt_at = Vector3(gr.p.x, gr.p.z, gr.yaw)
+
+
+## Наклон панциря по дну ground у (x, z) при курсе yaw: (тангаж, крен) по разнице высот под ступнями, не круче
+## TILT_MAX. Без дна — ровно.
+static func slope_tilt(ground: Callable, x: float, z: float, yaw: float) -> Vector2:
+	if not ground.is_valid():
+		return Vector2.ZERO
+	var f := Vector2(sin(yaw), cos(yaw)) * TILT_REACH.y
+	var l := Vector2(cos(yaw), -sin(yaw)) * TILT_REACH.x
+	var front: float = ground.call(x + f.x, z + f.y)
+	var rear: float = ground.call(x - f.x, z - f.y)
+	var left: float = ground.call(x + l.x, z + l.y)
+	var right: float = ground.call(x - l.x, z - l.y)
+	var pitch := atan2(front - rear, 2.0 * TILT_REACH.y)
+	var roll := atan2(left - right, 2.0 * TILT_REACH.x)
+	return Vector2(clampf(pitch, -TILT_MAX, TILT_MAX), clampf(roll, -TILT_MAX, TILT_MAX))
+
+
+## Поворот тела по курсу yaw и наклону tilt (тангаж, крен): нос (+Z) поднимается на тангаж, левый борт (+X) — на крен.
+static func body_basis(yaw: float, tilt: Vector2) -> Basis:
+	return Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, -tilt.x) * Basis(Vector3.BACK, tilt.y)
 
 
 ## Цель доли шага: ноги выпущены на lift, до точки пути угол diff (рад) — сбоку и позади доворачивает почти на месте.
@@ -160,7 +213,7 @@ func place() -> void:
 	var gr := grot
 	gr.p.y = _floor(gr.p.x, gr.p.z)
 	gr.body_y = gr.p.y + FLOOR_UP + LEG_UP * gr.lift
-	gr.back = Vector3(gr.p.x, gr.body_y + BACK_UP, gr.p.z)
+	gr.back = Vector3(gr.p.x, gr.body_y, gr.p.z) + gr.basis() * Vector3(0, BACK_UP, 0)
 	gr.top = gr.body_y + TOP_UP
 	if shoal:
 		_follow(shoal)
@@ -191,7 +244,7 @@ func solid(p: Vector3) -> bool:
 	var gr := grot
 	if gr == null:
 		return false
-	var q := Basis(Vector3.UP, gr.yaw).inverse() * (p - Vector3(gr.p.x, gr.body_y, gr.p.z))
+	var q := gr.basis().inverse() * (p - Vector3(gr.p.x, gr.body_y, gr.p.z))
 	if q.y < gr.p.y - gr.body_y:
 		return false
 	var e := Vector3(q.x / SHELL.x, maxf(q.y, 0.0) / SHELL.y, q.z / (SHELL.z + 0.6))
