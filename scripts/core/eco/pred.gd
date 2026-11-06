@@ -120,6 +120,8 @@ class Pred:
 	## левым боком вниз).
 	var look := Vector3(0, 0, 1)
 	var bank := 0.0
+	## Скорость поворота тела (вектор вдоль оси, рад/с): набирается и гаснет не быстрее TURN_ACCEL (`turn`).
+	var spin := Vector3.ZERO
 	## Секунды до следующего поиска добычи в патруле (раз в SEEK_EVERY, issue #848); 0 — ищет сразу.
 	var seek_t := 0.0
 	## Пауза сообщения «не идёт в риф у цветка» (#834).
@@ -319,11 +321,15 @@ func _skip_now() -> Callable:
 ## Плавный поворот (Б3, «плавность поведения»): тело не щёлкает за скоростью, а догоняет её — доля угла за секунду
 ## TURN_FOLLOW, но не быстрее TURN_MAX (рад/с); в повороте ложится на бок: крен BANK_K на 1 рад/с поворота, не больше
 ## BANK_MAX, догоняет нужный за BANK_FOLLOW (1/с). Остановился — держит курс, нос выравнивается к горизонту.
+## Сам поворот — с инерцией: скорость поворота `Pred.spin` меняется не быстрее TURN_ACCEL рад/с², к курсу — не быстрее
+## √(2 · TURN_ACCEL · угол), и тормозит заранее. Раньше хищник встал у точки патруля, а следующая — в 1,5 рад: тело
+## срывалось с 0,05 до 3 рад/с за кадр (88 рад/с², нашёл обход мира по угловым ускорениям), так же — смена цели.
 ## На сколько секунд хода вперёд смотрит на дно (`EcoAgent.look`): раньше на склоне рифа и у гребня взлетал вплотную ко
 ## дну до 12 м/с вверх и вставал на вершине за кадр (рывок до 107 м/с²).
 const LOOK := 1.5
 const TURN_FOLLOW := 4.0
 const TURN_MAX := 3.0
+const TURN_ACCEL := 8.0
 const BANK_K := 0.35
 const BANK_MAX := deg_to_rad(25.0)
 const BANK_FOLLOW := 3.0
@@ -360,19 +366,31 @@ static func yaw_of(d: Vector3) -> float:
 	return atan2(-d.x, -d.z)
 
 
-## Шаг поворота тела за dt: look догоняет aim, крен — скорость поворота по горизонтали.
+## Шаг поворота тела за dt: look догоняет aim со скоростью поворота spin (инерция), крен — скорость поворота по
+## горизонтали.
 static func turn(pr: Pred, dt: float) -> void:
 	if dt <= 0.0:
 		return
 	var from := pr.look
 	var want := aim(pr)
 	var ang := from.angle_to(want)
+	var goal := Vector3.ZERO
 	if ang > 1e-5:
 		var axis := from.cross(want)
 		if axis.length_squared() < 1e-10:  # ровно назад — разворот по горизонтали
-			axis = Vector3.UP
-		var step := minf(ang * (1.0 - exp(-TURN_FOLLOW * dt)), TURN_MAX * dt)
-		pr.look = from.rotated(axis.normalized(), step).normalized()
+			axis = pr.spin if absf(pr.spin.normalized().dot(Vector3.UP)) > 0.5 else Vector3.UP
+		var rate := minf(minf(ang * TURN_FOLLOW, TURN_MAX), sqrt(2.0 * TURN_ACCEL * ang))
+		goal = axis.normalized() * rate
+	pr.spin += (goal - pr.spin).limit_length(TURN_ACCEL * dt)
+	var sp := pr.spin.length()
+	if sp > 1e-6:
+		var ax := pr.spin / sp
+		# только составляющая к курсу: ось сменилась — не уводит нос в сторону от want
+		var step := minf(sp * dt, ang)
+		var to := from.cross(want)
+		if to.length_squared() > 1e-10 and ax.dot(to.normalized()) < 0.0:
+			step = sp * dt  # ещё крутит прочь — гасит ход по инерции
+		pr.look = from.rotated(ax, step).normalized()
 	var rate := wrapf(yaw_of(pr.look) - yaw_of(from), -PI, PI) / dt
 	var bank_want := clampf(rate * BANK_K, -BANK_MAX, BANK_MAX)
 	pr.bank = lerpf(pr.bank, bank_want, 1.0 - exp(-BANK_FOLLOW * dt))

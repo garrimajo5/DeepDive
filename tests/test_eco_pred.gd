@@ -561,6 +561,56 @@ func test_look_turns_smoothly_and_banks() -> void:
 	ok(pr.look.angle_to(Vector3(0, 0, -1)) <= EcoPred.TURN_MAX * 0.05 + 1e-5, "и не щелчком")
 
 
+## Б3, плавность: поворот тела с инерцией — скорость поворота набирается и гаснет не быстрее TURN_ACCEL. Раньше
+## хищник стоял у точки патруля, следующая — в 1,5 рад: тело срывалось с 0 до 3 рад/с за кадр (88 рад/с²).
+func test_turn_rate_eases_in_and_out() -> void:
+	var w := _alone()
+	var pr := _preds(w).all[0]
+	var dt := 1.0 / 30.0
+	pr.look = Vector3(0, 0, 1)
+	pr.spin = Vector3.ZERO
+	pr.agent.v = Vector3(sin(1.5), 0, cos(1.5)) * 0.5  # тронулся к точке в 1,5 рад от носа
+	var prev := pr.look
+	var prev_rate := 0.0
+	var max_rate := 0.0
+	var max_acc := 0.0
+	for i in 90:
+		EcoPred.turn(pr, dt)
+		var rate := prev.angle_to(pr.look) / dt
+		max_acc = maxf(max_acc, absf(rate - prev_rate) / dt)
+		max_rate = maxf(max_rate, rate)
+		prev = pr.look
+		prev_rate = rate
+	ok(max_acc <= EcoPred.TURN_ACCEL * 1.02, "скорость поворота меняется плавно: %.1f рад/с²" % max_acc)
+	ok(max_rate > 1.5 and max_rate <= EcoPred.TURN_MAX + 1e-4, "и всё же поворачивает быстро: %.2f рад/с" % max_rate)
+	ok(pr.look.angle_to(EcoPred.aim(pr)) < 0.01, "довернул к курсу без перелёта")
+	near(pr.spin.length(), 0.0, 0.05, "встал на курс — поворот погас")
+
+
+## Мир сам: у старта 00 хищник встаёт у точек патруля и разворачивается — угловое ускорение тела по окну в 6 шагов
+## не больше TURN_ACCEL (с запасом на окно); было до 14,6 рад/с² по окну, 88 — за кадр.
+func test_world_turns_without_snap() -> void:
+	var ev := EcoView.new()  # весь мир, как в игре: стаи, станции чистки, риф
+	ev.world.ship.pos = LayerMap.at("00")
+	ev.ground = Seabed.height
+	var w := ev.world
+	var pr := _preds(w).all[0]
+	var dt := 1.0 / 30.0
+	var hist: Array[Vector3] = []
+	var worst := 0.0
+	for i in 300:
+		w.step(dt)
+		hist.append(pr.look)
+		if hist.size() > 13:
+			hist.pop_front()
+		if hist.size() == 13 and i > 30:
+			var w1 := hist[0].angle_to(hist[6]) / (6 * dt)
+			var w2 := hist[6].angle_to(hist[12]) / (6 * dt)
+			worst = maxf(worst, absf(w2 - w1) / (6 * dt))
+	ev.free()
+	ok(worst <= EcoPred.TURN_ACCEL * 1.1, "угловое ускорение тела у 00: %.1f рад/с²" % worst)
+
+
 ## Мир ведёт поворот сам: после шагов курс близок к скорости, пиявник на теле — по тому же курсу.
 func test_world_turns_preds() -> void:
 	var w := _alone()
