@@ -146,6 +146,7 @@ var ground: Callable:
 		_rebuild_brink()
 		_rebuild_plankton()
 		EcoRim.apply(self)
+		EcoSilhouette.apply(self)
 		EcoSurface.apply(self)
 		EcoGlow.apply(self)
 		dust_layer.gather(self)
@@ -246,18 +247,20 @@ func _init() -> void:
 	_rebuild_brink()
 	_rebuild_plankton()
 	EcoRim.apply(self)
+	EcoSilhouette.apply(self)
 	EcoSurface.apply(self)
 	EcoGlow.apply(self)
 	add_child(dust_layer)
 	dust_layer.gather(self)
 
 
-## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи, просвет листвы и каустики на камне погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали нет, моли у колодца 80, бахромы 24, планктона рисуется половина клеток, светляков и гребневиков — двое из трёх в стае, спор пузырчатки и чернил подушечника — половина облака, лент ленточника — каждая вторая, пятна мха (и у колодца, на костях) — 4 × 4 клетки, трубка Раковины вне разлома — через сечение — меняются
+## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок и ореол силуэта героев, переливы чешуи, просвет листвы и каустики на камне погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали нет, моли у колодца 80, бахромы 24, планктона рисуется половина клеток, светляков и гребневиков — двое из трёх в стае, спор пузырчатки и чернил подушечника — половина облака, лент ленточника — каждая вторая, пятна мха (и у колодца, на костях) — 4 × 4 клетки, трубка Раковины вне разлома — через сечение — меняются
 ## только числа в uniform, шейдеры те же. Включает уровень графики — поток А (`Main._apply_graphics`).
 func set_lite(on: bool) -> void:
 	lite = on
 	EcoShaders.set_sway_lite(on)
 	EcoRim.set_lite(on)
+	EcoSilhouette.set_lite(on)
 	EcoIris.set_lite(on)
 	EcoBack.set_lite(on)
 	EcoCaustic.set_lite(on)
@@ -534,6 +537,7 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	EcoShaders.set_flow(current.vel())
 	EcoShaders.set_sway_time(world.time)
 	EcoCaustic.set_depth(-ship.pos.y)
+	EcoSilhouette.set_depth(-ship.pos.y)
 	EcoCaustic.set_time(world.time)
 	fish_view.sync(world.time, ship, current.vel(), world.ground)
 	grazer_view.sync(world.time, ship, current.vel())
