@@ -447,6 +447,13 @@ Compatibility-снимке).
     `SIDE_HOLD`), — у оси нить не перескакивает. В шейдер — `hull_pos`/`hull_yaw`/`hull_on` и борта нитей
     `hull_side[160]` (`VeilView.sides`), включено, только пока корабль ближе `VeilView.HULL_NEAR`. Шейдеров и вызовов
     столько же. Тест — `test_eco_veil.test_hull_parts_tentacles`, `test_hull_part_covers_hull`, `test_view_hull_on_near_ship`
+  - [x] Ленточник и корпус: корабль, опустившийся к роще (ленты 3…5,5 м), шёл сквозь ленты — они проходили сквозь
+    обшивку. Теперь лента клонится от основания к своему борту и по ходу (`EcoKelp.hull_lean`: наименьший угол, при
+    котором точки ленты на 45/70/100 % длины вне корпуса с запасом 0,15 м, не круче `LEAN_MAX` = 1,35 рад), быстро
+    (`LEAN_IN` = 4 рад/с) и пружинит назад медленно (`LEAN_OUT` = 0,6 рад/с); роща дальше `HULL_NEAR` не считается.
+    Наклон — поворотом экземпляра (`stalk_basis`), роща переписывается в буфер, только пока ленты движутся. Мир ведёт и
+    у гостя; шейдеров и вызовов столько же. Тест — `test_eco_kelp.test_hull_parts_stalks`, `test_hull_lean_goes_to_own_side`,
+    `test_stalks_spring_back_after_ship`, `test_view_draws_lean`
   - [x] Стеклоуст в логове: сброс ставит голову и звенья туда, где их держит шаг (`EcoEel.hide_point`); раньше на
     первом шаге голова прыгала на 0,3 м (9 м/с), звенья доезжали за `SETTLE`. Тест —
     `test_eco_eel.test_no_jump_after_reset`

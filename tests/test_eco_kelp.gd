@@ -552,3 +552,89 @@ func test_view_urchin_spines_sway() -> void:
 	near(float((v.bodies.multimesh.mesh.surface_get_material(0) as ShaderMaterial).get_shader_parameter("t")), 12.5, 1e-6,
 		"время мира — в шейдере ежей")
 	v.free()
+
+
+# ---------- Корпус раздвигает ленты (Б3) ----------
+## Корабль опустился на рощу (низ корпуса ≈ 1,9 м над дном): ленты клонятся, ни одна точка ленты не в обшивке.
+func test_hull_parts_stalks() -> void:
+	var w := _world()
+	var k := _kelp(w)
+	w.ship.pos = SPOT + Vector3(0, 3.5, 0)
+	w.ship.yaw = 0.4
+	var hit := 0
+	for s in k.groves[0].stalks:
+		if EcoKelp._stalk_hits(s.pos, EcoKelp.stalk_basis(s).y.normalized(), EcoKelp.stalk_len(s), w.ship):
+			hit += 1
+	ok(hit >= 10, "без раздвигания ленты в обшивке (%d)" % hit)
+	w.run(2.0)
+	var leaned := 0
+	for s in k.groves[0].stalks:
+		if s.lean > 0.0:
+			leaned += 1
+		if s.lean < EcoKelp.LEAN_MAX - 1e-3:
+			ok(not EcoKelp._stalk_hits(s.pos, EcoKelp.stalk_basis(s).y.normalized(), EcoKelp.stalk_len(s), w.ship),
+					"лента в обшивке: lean %.2f" % s.lean)
+	ok(leaned >= hit, "клонятся задетые (%d из %d)" % [leaned, hit])
+
+
+## Лента клонится к своему борту и по ходу корабля, а не сквозь корпус.
+func test_hull_lean_goes_to_own_side() -> void:
+	var w := _world()
+	var k := _kelp(w)
+	w.ship.pos = SPOT + Vector3(0, 3.5, 0)
+	var right := 0
+	var left := 0
+	for s in k.groves[0].stalks:
+		var l := EcoKelp.hull_lean(s, w.ship)
+		if l.x <= 0.0:
+			continue
+		var side := EcoHull.to_ship(s.pos, w.ship.pos, w.ship.yaw).x
+		ok(l.z < 0.0, "по ходу — к носу (−Z)")
+		if side > 0.5:
+			ok(l.y > 0.0, "правый борт — вправо")
+			right += 1
+		elif side < -0.5:
+			ok(l.y < 0.0, "левый борт — влево")
+			left += 1
+	ok(right > 0 and left > 0, "есть ленты у обоих бортов (%d / %d)" % [right, left])
+
+
+## Корабль ушёл — ленты медленно выпрямляются; роща вдали больше не считается.
+func test_stalks_spring_back_after_ship() -> void:
+	var w := _world()
+	var k := _kelp(w)
+	w.ship.pos = SPOT + Vector3(0, 3.5, 0)
+	w.run(2.0)
+	var top := 0.0
+	for s in k.groves[0].stalks:
+		top = maxf(top, s.lean)
+	ok(top > 0.3, "клонились: %.2f" % top)
+	w.ship.pos = FAR
+	w.run(0.5)
+	var mid := 0.0
+	for s in k.groves[0].stalks:
+		mid = maxf(mid, s.lean)
+	ok(mid > 0.0 and mid < top, "выпрямляются не за кадр: %.2f" % mid)
+	w.run(EcoKelp.LEAN_MAX / EcoKelp.LEAN_OUT + 1.0)
+	for s in k.groves[0].stalks:
+		eq(s.lean, 0.0, "выпрямилась")
+	ok(not k.groves[0].bent, "роща прямая")
+
+
+## Наклон доходит до вида: роща перерисовывается, ось ленты в буфере наклонена.
+func test_view_draws_lean() -> void:
+	var w := _world()
+	var k := _kelp(w)
+	var v := KelpView.new(k)
+	tree.root.add_child(v)
+	v.sync(0.0)
+	w.ship.pos = SPOT + Vector3(0, 3.5, 0)
+	w.run(2.0)
+	ok(k.dirty, "роща помечена к перерисовке")
+	v.sync(1.0)
+	var most := 1.0
+	for i in k.groves[0].stalks.size():
+		var tr := KelpView.transform_at(v.stalks.multimesh.buffer, i)
+		most = minf(most, tr.basis.y.normalized().y)
+	ok(most < cos(0.3), "в буфере лента наклонена (cos %.2f)" % most)
+	v.free()

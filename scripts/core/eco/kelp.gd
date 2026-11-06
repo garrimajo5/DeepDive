@@ -19,6 +19,24 @@ const EXTRA: Array[Vector2] = [EcoCove.KELP, EcoGate.KELP[0], EcoGate.KELP[1]]
 const KELP_N := 34
 const KELP_R := 7.0
 const URCH_N := 7
+## Корпус раздвигает ленты (Б3): корабль, опустившийся к роще, шёл сквозь ленты — они проходили сквозь обшивку.
+## Лента клонится от основания так, чтобы её точки на долях LEAN_PROBE длины были вне корпуса с запасом LEAN_GAP
+## (`EcoHull.touches`), — к борту, у которого стоит, и по ходу корабля (LEAN_ALONG). Не круче LEAN_MAX; клонится
+## быстро (LEAN_IN рад/с), выпрямляется медленно (LEAN_OUT) — лента пружинит. Рощи дальше HULL_NEAR от корабля
+## не проверяются; в вид — только сдвиг больше LEAN_REDRAW.
+const LEAN_PROBE: Array[float] = [0.45, 0.7, 1.0]
+const LEAN_GAP := 0.15
+const LEAN_MAX := 1.35
+const LEAN_IN := 4.0
+const LEAN_OUT := 0.6
+const LEAN_ALONG := 0.8
+const LEAN_TURN := 6.0
+const LEAN_REDRAW := 0.01
+const LEAN_STEPS := 7
+## Полуширина корпуса для выбора борта (меньше — лента у киля клонится больше по ходу).
+const LEAN_SIDE := 2.5
+## Дальше этого от середины рощи до корабля ленты не достать: корпус + круг рощи + самая высокая лента.
+const HULL_NEAR := EcoHull.BOUND + KELP_R + H_MAX
 ## Густота рощи, ниже которой стае негде спрятаться (COVER_MIN).
 const COVER_MIN := 0.45
 ## Лента: высота 3…5,5 м, ширина 0,45 м; основание на 0,1 м в дне; наклон до ±0,08 рад.
@@ -77,6 +95,11 @@ class Stalk:
 	var eater := -1
 	## Густота, с которой лента нарисована.
 	var drawn := 1.0
+	## Корпус клонит ленту (Б3, `EcoKelp.part_hull`): угол от вертикали, рад, и куда — горизонталь мира.
+	var lean := 0.0
+	var lean_dir := Vector3.FORWARD
+	## Наклон, с которым лента нарисована.
+	var lean_drawn := 0.0
 
 
 ## Роща ленточника у стаи.
@@ -93,6 +116,8 @@ class Grove:
 	var stalks: Array[Stalk] = []
 	## Ленты рощи пора переписать в буфер вида (KelpView.sync переписывает только такие рощи).
 	var redraw := true
+	## Хоть одна лента рощи наклонена корпусом — рощу шагать, даже когда корабль ушёл.
+	var bent := false
 
 
 ## Шипоёж.
@@ -218,6 +243,75 @@ func step(world: EcoWorld, dt: float) -> void:
 				gr.redraw = true
 			sum += s.f
 		gr.cover = (sum / KELP_N - F_MIN) / (1.0 - F_MIN)
+		part_hull(world, gr, dt)
+
+
+## Корпус раздвигает ленты рощи gr (Б3): наклон каждой ленты догоняет нужный (`hull_lean`) — быстро к большему,
+## медленно назад. Роща далеко от корабля и прямая — ничего не считаем.
+func part_hull(world: EcoWorld, gr: Grove, dt: float) -> void:
+	var near := gr.center.distance_to(world.ship.pos) < HULL_NEAR
+	if not near and not gr.bent:
+		return
+	gr.bent = false
+	for s in gr.stalks:
+		var want := 0.0
+		if near:
+			var lean := hull_lean(s, world.ship)
+			want = lean.x
+			if want > 0.0:
+				var d := Vector3(lean.y, 0.0, lean.z)
+				if s.lean < 0.02:
+					s.lean_dir = d
+				else:
+					s.lean_dir = s.lean_dir.lerp(d, minf(1.0, LEAN_TURN * dt)).normalized()
+		if want > s.lean:
+			s.lean = minf(want, s.lean + LEAN_IN * dt)
+		else:
+			s.lean = maxf(want, s.lean - LEAN_OUT * dt)
+		if s.lean > 0.0:
+			gr.bent = true
+		if absf(s.lean - s.lean_drawn) > LEAN_REDRAW or (s.lean == 0.0 and s.lean_drawn != 0.0):
+			s.lean_drawn = s.lean
+			dirty = true
+			gr.redraw = true
+
+
+## Высота ленты s по густоте — как в `stalk_basis`.
+static func stalk_len(s: Stalk) -> float:
+	return s.height * (0.35 + 0.65 * s.f)
+
+
+## Куда ленте s клониться от корпуса корабля ship: (угол, направление x, 0, z). Угол 0 — корпус ленту не задевает.
+## Направление — к своему борту (по x ленты в осях корабля) и по ходу; угол — наименьший, при котором точки
+## LEAN_PROBE вне корпуса (делением отрезка пополам, LEAN_STEPS раз); не выходит и при LEAN_MAX — LEAN_MAX.
+static func hull_lean(s: Stalk, ship: EcoLink.ShipState) -> Vector3:
+	var ln := stalk_len(s)
+	var up := stalk_basis(s, false).y.normalized()
+	if not _stalk_hits(s.pos, up, ln, ship):
+		return Vector3.ZERO
+	var l := EcoHull.to_ship(s.pos, ship.pos, ship.yaw)
+	var fwd := -1.0 if ship.speed >= -0.05 else 1.0   # по ходу корабля: нос в −Z
+	var dl := Vector3(clampf(l.x / LEAN_SIDE, -1.0, 1.0), 0.0, fwd * LEAN_ALONG).normalized()
+	var d := dl.rotated(Vector3.UP, ship.yaw)
+	var axis := Vector3.UP.cross(d).normalized()
+	var lo := 0.0
+	var hi := LEAN_MAX
+	if _stalk_hits(s.pos, up.rotated(axis, hi), ln, ship):
+		return Vector3(LEAN_MAX, d.x, d.z)
+	for i in LEAN_STEPS:
+		var mid := (lo + hi) * 0.5
+		if _stalk_hits(s.pos, up.rotated(axis, mid), ln, ship):
+			lo = mid
+		else:
+			hi = mid
+	return Vector3(hi, d.x, d.z)
+
+
+static func _stalk_hits(base: Vector3, up: Vector3, ln: float, ship: EcoLink.ShipState) -> bool:
+	for k in LEAN_PROBE:
+		if EcoHull.touches(base + up * (ln * k), ship.pos, ship.yaw, LEAN_GAP):
+			return true
+	return false
 
 
 ## Ёж появляется в кольце вокруг рощи и бродит (urchSpawn).
@@ -371,9 +465,12 @@ func alive_count() -> int:
 
 
 ## Наклон и масштаб ленты (setKelp): повороты X · Y · Z, ширина 0,12 + 0,88f, высота h · (0,35 + 0,65f).
-static func stalk_basis(s: Stalk) -> Basis:
+## Наклон корпусом (`Stalk.lean`) — поворотом мира от вертикали к `lean_dir`; with_lean = false — своя стойка ленты.
+static func stalk_basis(s: Stalk, with_lean := true) -> Basis:
 	var r := Basis(Vector3.RIGHT, s.tilt_x) * Basis(Vector3.UP, s.yaw) * Basis(Vector3.BACK, s.tilt_z)
-	return r * Basis.from_scale(Vector3(0.12 + 0.88 * s.f, s.height * (0.35 + 0.65 * s.f), 1.0))
+	if with_lean and s.lean > 0.0:
+		r = Basis(Vector3.UP.cross(s.lean_dir).normalized(), s.lean) * r
+	return r * Basis.from_scale(Vector3(0.12 + 0.88 * s.f, stalk_len(s), 1.0))
 
 
 ## Цвет ленты: от голого стебля к своему цвету по густоте.
