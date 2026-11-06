@@ -134,11 +134,12 @@ func test_climbs_nose_up_over_ship_smoothly() -> void:
 	near(Vector2(nose.x, nose.z).normalized().dot(Vector2(ry.dir.x, ry.dir.z)), 1.0, 1e-4, "и по курсу")
 
 
-## Б3, плавность: корабль у самого льда — скат поднимается над ним ходом не больше CLIMB_MAX (раньше lerp 3/с срывал
+## Б3, плавность: корабль у самого льда (дно близко — под килем не пройти) — скат поднимается над ним ходом не больше CLIMB_MAX (раньше lerp 3/с срывал
 ## его вверх до 21 м/с за кадр), к высоте подходит без рывка и корпус не задевает.
 func test_climb_over_ship_near_ice_without_jerk() -> void:
 	for ship_y in [-8.0, -10.0]:
 		var w := _world()
+		w.ground = func(_x: float, _z: float) -> float: return -17.0   # под килем места нет — только поверху
 		var ry := _rays(w).rays[0]
 		var at := ry.ang + 25.0 / ry.radius
 		w.ship.pos = Vector3(ry.center.x + cos(at) * ry.radius, ship_y, ry.center.z + sin(at) * ry.radius)
@@ -162,6 +163,85 @@ func test_climb_over_ship_near_ice_without_jerk() -> void:
 		ok(was_over, "шёл над кораблём (%.0f м)" % ship_y)
 		ok(top >= minf(EcoRay.CEIL_Y, ship_y + EcoRay.SHIP_TOP + EcoRay.OVER) - 0.3,
 			"поднялся над корпусом: %.2f" % top)
+
+
+## Корабль идёт навстречу ходом 3 м/с из 40 м впереди ската (yaw — курс корабля). Возвращает худшее ускорение тела
+## (м/с², по трём точкам пути после 10-го шага) и было ли касание корпуса.
+func _head_on(yaw: float, ship_y: float) -> Dictionary:
+	var w := _world()
+	var ry := _rays(w).rays[0]
+	var at := ry.ang + 40.0 / ry.radius
+	var c := Vector3(ry.center.x + cos(at) * ry.radius, ship_y, ry.center.z + sin(at) * ry.radius)
+	var fwd := Vector3(-sin(yaw), 0, -cos(yaw))
+	w.ship.yaw = yaw
+	w.ship.speed = 3.0
+	w.ship.pos = c - fwd * 40.0
+	var dt := 1.0 / 30.0
+	var prev := ry.p
+	var prev_v := Vector3.ZERO
+	var worst := 0.0
+	var touched := false
+	var under := false
+	for i in 400:
+		w.ship.pos += fwd * w.ship.speed * dt
+		w.step(dt)
+		var v := (ry.p - prev) / dt
+		if i > 10:
+			worst = maxf(worst, (v - prev_v).length() / dt)
+		touched = touched or EcoHull.touches(ry.p, w.ship.pos, w.ship.yaw, 0.5)
+		under = under or ry.under
+		prev_v = v
+		prev = ry.p
+	return {"a": worst, "touch": touched, "under": under}
+
+
+## Б3, плавность: корабль идёт навстречу — скат видит его за LOOK вперёд и уходит с пути заранее; обшивка его не
+## сдвигает. Раньше скат замечал корпус только под крылом, не успевал подняться, и push_out двигал тело до метра за
+## кадр (ускорение 881 м/с² при курсе 7/8 оборота; снизу — 114…138 м/с²: скат тёрся под днищем и выскакивал у носа).
+func test_ship_head_on_without_jerk() -> void:
+	for c in [[7.0, -8.0], [3.0, -8.0], [3.0, -12.0], [0.0, -16.0], [5.0, -12.0]]:
+		var r := _head_on(c[0] * TAU / 8.0, c[1])
+		ok(r["a"] <= 40.0, "курс %d/8, корабль на %.0f м: ускорение тела %.1f м/с²" % [c[0], c[1], r["a"]])
+		ok(not r["touch"], "курс %d/8, корабль на %.0f м: тело не в корпусе" % [c[0], c[1]])
+
+
+## Скат ниже середины корпуса при встрече уходит под киль (OVER ниже низа), если над дном хватает места; у дна — поверху.
+func test_passes_under_from_below() -> void:
+	var r := _head_on(3.0 * TAU / 8.0, -8.0)
+	ok(r["under"], "ниже корабля — проходит под килем")
+	var w := _world()
+	var ry := _rays(w).rays[0]
+	ry.p.y = -12.0
+	w.ship.pos = Vector3(ry.p.x, -8.0, ry.p.z)
+	w.step(0.05)
+	ok(ry.over and ry.under, "корпус над скатом — под киль")
+	var low := EcoWorld.new()
+	low.ground = func(_x: float, _z: float) -> float: return -18.0
+	low.ship.pos = FAR
+	low.add(EcoRay.new())
+	var lr := _rays(low).rays[0]
+	lr.p.y = -11.0
+	low.ship.pos = Vector3(lr.p.x, -8.0, lr.p.z)
+	low.step(0.05)
+	ok(lr.over and not lr.under, "дно близко (под килем нет %.0f м) — поверху" % EcoRay.ABOVE_FLOOR)
+
+
+## Корабль впереди по кругу ската — встреча видна заранее; корабль далеко в стороне — нет.
+func test_foresees_ship_ahead() -> void:
+	var w := _world()
+	var ry := _rays(w).rays[0]
+	var s := EcoLink.ShipState.new()
+	s.pos = Vector3(ry.p.x, -10.0, ry.p.z) + ry.dir * 45.0   # впереди по ходу ската, носом к нему, ход 6 м/с
+	var back := -ry.dir
+	s.yaw = atan2(-back.x, -back.z)
+	s.speed = 6.0
+	ok(not EcoHull.touches(Vector3(ry.p.x, s.pos.y + 1.6, ry.p.z), s.pos, s.yaw, EcoRay.WING), "сейчас ещё не под крылом")
+	ok(EcoRay.foresees(ry, s), "встреча за %.0f с видна заранее" % EcoRay.LOOK)
+	s.speed = 0.0
+	ok(not EcoRay.foresees(ry, s), "корабль стоит в 45 м — за %.0f с скат до него не дойдёт" % EcoRay.LOOK)
+	var far := EcoLink.ShipState.new()
+	far.pos = ry.p + Vector3(80, 0, 0)
+	ok(not EcoRay.foresees(ry, far), "в 80 м в стороне — нет")
 
 
 ## Б3, плавность: взмывая над кораблём, скат машет сильнее и чаще, прошёл и опускается — планирует; доля размаха и
