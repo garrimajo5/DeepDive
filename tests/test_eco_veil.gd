@@ -706,3 +706,104 @@ func test_shader_drag_per_veil() -> void:
 	near(got_d[0].distance_to(view.veils.veils[0].drag), 0.0, 1e-5, "материал получает ход купола")
 	view.queue_free()
 	await frames(1)
+
+
+## Б3: корабль на ходу 6 м/с идёт сквозь завесу нитей — точки щупалец не уходят внутрь корпуса (раньше нити
+## проходили сквозь обшивку и мостик), а ложатся вбок к борту своего корня и соскальзывают за кормой без рывков;
+## вдали от корабля нити как были.
+func test_hull_parts_tentacles() -> void:
+	var w := _world()
+	var vl := _veils(w).veils[0]
+	var m := VeilView.build_tentacles_all([vl])
+	var arr := m.surface_get_arrays(0)
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	var uv2: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV2]
+	var params := VeilView.tentacle_params()
+	var flow := Vector3(0.2, 0, -0.22)
+	var dt := 1.0 / 30.0
+	var yaw := 0.35
+	var fwd := Vector3(-sin(yaw), 0.0, -cos(yaw))
+	var inside := 0
+	var moved := 0
+	var jump := 0
+	var prev := PackedVector3Array()
+	prev.resize(v.size())
+	var view := VeilView.new(_veils(w))
+	tree.root.add_child(view)
+	var n := int(100.0 / 6.0 / dt)
+	for s in n:
+		var t := 30.0 + s * dt
+		var ship := vl.p + Vector3(1.2, -10.0, 0.0) - fwd * 50.0 + fwd * (s * 6.0 * dt)
+		var custom := Color(EcoVeil.pulse(vl, t).x, vl.ph, vl.index, vl.w / EcoVeil.PULSE_W)
+		view.sync(t, ship, yaw, flow)
+		for i in v.size():
+			var plain := VeilView.instance_point(v[i], uv[i], uv2[i].x, custom, vl.p, t, params, flow, 1.0, vl.drag)
+			var got := VeilView.instance_point(v[i], uv[i], uv2[i].x, custom, vl.p, t, params, flow, 1.0, vl.drag,
+				true, ship, yaw, view.sides[int(uv[i].x)])
+			if EcoHull.touches(plain, ship, yaw, 0.0):
+				inside += 1
+			if EcoHull.touches(got, ship, yaw, 0.0):
+				ok(false, "нить в корпусе: шаг %d, вершина %d" % [s, i])
+				view.queue_free()
+				return
+			if got != plain:
+				moved += 1
+				near(got.y, plain.y, 1e-4, "сдвиг — по горизонтали")
+			if s > 0 and got.distance_to(prev[i]) > 1.5:
+				jump += 1
+			prev[i] = got
+	ok(inside > 500, "без раздвигания нити шли сквозь корпус: %d" % inside)
+	ok(moved > inside, "раздвинуто: %d" % moved)
+	# рывок больше 1,5 м за кадр — только у нити, что пересекает ось корабля по высоте (корпус встречает её края по
+	# разные борта): за проход — одна вершина; с колпаками-эллипсоидами (носовая волна без конуса) — десятки
+	ok(jump <= 2, "нити за шаг не прыгают: %d вершин" % jump)
+	ok(view.hull_on, "корабль у вуали — раздвигание в материале")
+	view.queue_free()
+	var custom0 := Color(EcoVeil.pulse(vl, 37.0).x, vl.ph, vl.index, vl.w / EcoVeil.PULSE_W)
+	var far := VeilView.instance_point(v[50], uv[50], uv2[50].x, custom0, vl.p, 37.0, params, flow, 1.0, vl.drag,
+		true, vl.p + Vector3(60, 0, 0), 0.0)
+	near(far.distance_to(VeilView.instance_point(v[50], uv[50], uv2[50].x, custom0, vl.p, 37.0, params, flow, 1.0,
+		vl.drag)), 0.0, 1e-6, "корабль далеко — нить как была")
+	var code := EcoShaders.MIST
+	for u in ["uniform vec3 hull_pos", "uniform float hull_yaw", "uniform float hull_on", "hull_ab", "hull_z"]:
+		ok(code.contains(u), "в шейдере: %s" % u)
+	near(EcoVeil.hull_part(Vector3(0, HullPlan.CENTER_Y, 40), 1.0, Vector3.ZERO, 0.0).z, 40.0, 1e-6, "за кормой — как есть")
+	var side := EcoVeil.hull_part(Vector3(0.5, HullPlan.CENTER_Y, 5), -1.0, Vector3.ZERO, 0.0)
+	near(side.x, -EcoVeil.HULL_A, 1e-4, "к своему борту")
+	eq(EcoVeil.side_of(Vector3(-2, 0, 5), Vector3.ZERO, 0.0), -1.0, "борт по корню")
+	var probe := Vector3(-0.4, HullPlan.CENTER_Y, 5.0)
+	eq(EcoVeil.keep_side(1.0, probe, Vector3.ZERO, 0.0), 1.0, "нить на обшивке — борт держится")
+	eq(EcoVeil.keep_side(1.0, probe + Vector3(0, 30, 0), Vector3.ZERO, 0.0), -1.0, "не у корпуса — по нити")
+	eq(EcoVeil.keep_side(0.0, probe, Vector3.ZERO, 0.0), -1.0, "не задан — по нити")
+	ok(code.contains("* %d +" % EcoVeil.TENTACLES), "в шейдере нитей на вуаль — EcoVeil.TENTACLES")
+	await frames(1)
+
+
+## Корпус целиком внутри эллипса раздвигания: точка обшивки EcoHull сдвигается всегда (иначе нить прошла бы сквозь).
+func test_hull_part_covers_hull() -> void:
+	var miss := 0
+	for zi in range(-80, 300, 6):
+		for xi in range(0, 75, 3):
+			for yi in range(-18, 50, 3):
+				var l := Vector3(xi * 0.1, yi * 0.1, zi * 0.1)
+				if EcoHull.touches_local(l, 0.05) and EcoVeil.hull_part(l, 1.0, Vector3.ZERO, 0.0) == l:
+					miss += 1
+	eq(miss, 0, "все точки корпуса — внутри эллипса")
+
+
+## Корабль у вуали включает раздвигание в материале нитей, вдали — выключает.
+func test_view_hull_on_near_ship() -> void:
+	var w := _world()
+	var view := VeilView.new(_veils(w))
+	tree.root.add_child(view)
+	var vl := _veils(w).veils[0]
+	view.sync(10.0, vl.p + Vector3(0, -9, 0), 0.4)
+	ok(view.hull_on, "корабль под куполом — раздвигает")
+	var mat := view.tentacles.material_override as ShaderMaterial
+	near(float(mat.get_shader_parameter("hull_on")), 1.0, 1e-6, "uniform hull_on")
+	near(float(mat.get_shader_parameter("hull_yaw")), 0.4, 1e-6, "курс корабля")
+	view.sync(10.0, vl.p + Vector3(VeilView.HULL_NEAR + 5.0, 0, 0))
+	ok(not view.hull_on, "корабль далеко — выключено")
+	view.queue_free()
+	await frames(1)

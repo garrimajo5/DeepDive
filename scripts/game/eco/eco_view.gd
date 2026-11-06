@@ -577,7 +577,7 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	ray_view.sync(world.time)
 	ray_view.sync_dust(world.time, ship, current.vel())
 	remora_view.sync(world.time, ship, current.vel())
-	veil_view.sync(world.time, ship.pos)
+	veil_view.sync(world.time, ship.pos, ship.yaw, current.vel())
 	veil_view.sync_dust(world.time, ship, current.vel())
 	grot_view.sync(world.time, ship.pos, ship, current.vel())
 	StepClock.mark("мир/вид: скаты, вуаль, грот")

@@ -178,6 +178,14 @@ uniform vec3 flow = vec3(0.0);
 uniform float sway_k = 1.0;
 // ход купола каждой вуали (EcoVeil.Veil.drag): щупальца сносит вода относительно купола (EcoVeil.rel_water)
 uniform vec3 drag[4];
+// корпус раздвигает щупальца (EcoVeil.hull_part): точка корабля, курс, 1 — корабль у вуалей; эллипс сечения и колпаки
+uniform vec3 hull_pos = vec3(0.0);
+uniform float hull_yaw = 0.0;
+uniform float hull_on = 0.0;
+uniform vec4 hull_ab = vec4(7.4, 3.9, 1.6, 0.0);
+uniform vec4 hull_z = vec4(-4.0, 20.0, 20.0, 16.0);
+// борт нити (EcoVeil.keep_side): по номеру вуали × EcoVeil.TENTACLES + номер нити; 0 — по корню
+uniform float hull_side[160];
 // пузыри
 uniform float drift = 0.0;
 uniform float size_low = 0.1;
@@ -226,6 +234,28 @@ void vertex() {
 			vec3 off = rel / 0.3 * (trail * (0.85 + 0.15 * sin(t * 0.4 + ph)) * h * depth) * sway_k;
 			off.y = dot(off, off) / (2.0 * max(depth / max(h, 0.01), 0.1));
 			p += off;
+			if (hull_on > 0.5) {
+				// EcoVeil.hull_part: внутри корпуса — на обшивку к борту нити; экземпляр без поворота и масштаба
+				vec3 o = MODEL_MATRIX[3].xyz;
+				float cy = cos(hull_yaw);
+				float sy = sin(hull_yaw);
+				vec3 d = o + p - hull_pos;
+				float lx = d.x * cy - d.z * sy;
+				float lz = d.x * sy + d.z * cy;
+				float c = lz < hull_z.x ? 1.0 - (hull_z.x - lz) / hull_z.z : (lz > hull_z.y ? 1.0 - (lz - hull_z.y) / hull_z.w : 1.0);
+				float yy = (d.y - hull_ab.z) / hull_ab.y;
+				float half_w = (c > 0.0 && yy * yy < 1.0) ? hull_ab.x * c * sqrt(1.0 - yy * yy) : 0.0;
+				if (abs(lx) < half_w) {
+					float side = hull_side[clamp(int(UV2.x + 0.5) * 40 + int(k + 0.5), 0, 159)];
+					if (side == 0.0) {
+						vec3 r = o + vec3(VERTEX.x * sw, 0.0, VERTEX.z * sw) - hull_pos;
+						side = r.x * cy - r.z * sy;
+					}
+					// из осей корабля обратно в мир (EcoVeil.hull_part: rotated(UP, yaw)), сдвиг только поперёк оси
+					float dx = (side >= 0.0 ? half_w : -half_w) - lx;
+					p += vec3(dx * cy, 0.0, -dx * sy);
+				}
+			}
 		}
 		VERTEX = p;
 	} else if (mode == 2) {
