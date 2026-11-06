@@ -295,6 +295,97 @@ func test_solid_shell() -> void:
 	ok(g.solid(base + fwd), "голова спереди по курсу")
 
 
+# ---------- Наклон по склону (Б3) ----------
+
+## Склон: дно поднимается к +X на SLOPE_K метров на метр.
+const SLOPE_K := 0.3
+
+
+static func _slope_x(x: float, _z: float) -> float:
+	return FLAT + x * SLOPE_K
+
+
+func _slope_world(ground: Callable) -> EcoWorld:
+	var w := EcoWorld.new()
+	w.ground = ground
+	w.ship.pos = FAR
+	var f := w.add(EcoFish.new()) as EcoFish
+	w.add(EcoGrot.new(f))
+	return w
+
+
+## Раньше панцирь стоял ровно: на склоне верхний край уходил в дно, нижний висел. Теперь нос и борта ложатся по дну.
+func test_shell_lies_along_slope() -> void:
+	var w := _slope_world(_slope_x)
+	var gr := (_sys(w, EcoGrot) as EcoGrot).grot
+	var want := atan(SLOPE_K)
+	for i in 120:  # 60 с — курс меняется, наклон догоняет
+		w.run(0.5)
+	var b := gr.basis()
+	var up := b * Vector3.UP
+	near(up.x, -sin(want), 0.06, "ось тела наклонена от склона (вверх по +X — нормаль к −X)")
+	near(up.dot(Vector3(-SLOPE_K, 1, 0).normalized()), 1.0, 0.01, "спина — по нормали к дну")
+	var nose := b * Vector3.BACK
+	near(nose.dot(Vector3(-SLOPE_K, 1, 0).normalized()), 0.0, 0.01, "нос идёт вдоль дна, не в него")
+	var spine := gr.back - Vector3(gr.p.x, gr.body_y, gr.p.z)
+	near(spine.normalized().dot(up), 1.0, 1e-4, "спина над телом по оси тела")
+
+
+func test_tilt_flat_and_capped() -> void:
+	var w := _world()
+	var gr := (_sys(w, EcoGrot) as EcoGrot).grot
+	w.run(0.5)
+	near(gr.tilt.length(), 0.0, 1e-6, "ровное дно — ровно")
+	var steep := func(x: float, _z: float) -> float: return FLAT + x * 3.0
+	var t := EcoGrot.slope_tilt(steep, 0.0, 0.0, PI / 2.0)
+	near(t.x, EcoGrot.TILT_MAX, 1e-6, "носом в крутой склон — не круче TILT_MAX")
+	near(t.y, 0.0, 1e-4, "борта на одной высоте")
+	t = EcoGrot.slope_tilt(steep, 0.0, 0.0, 0.0)
+	near(t.y, EcoGrot.TILT_MAX, 1e-6, "левым бортом (+X) к склону — крен вверх, не круче TILT_MAX")
+	near(t.x, 0.0, 1e-4)
+	eq(EcoGrot.slope_tilt(Callable(), 0.0, 0.0, 0.0), Vector2.ZERO, "без дна — ровно")
+
+
+## Дно под ступнями щупается не каждый кадр (шум дорог, #133): за 1 с хода на 0,45 м/с — несколько раз, не 60.
+func test_tilt_feels_ground_rarely() -> void:
+	var calls := [0]
+	var counted := func(x: float, z: float) -> float:
+		calls[0] += 1
+		return FLAT + x * SLOPE_K
+	var w := _slope_world(counted)
+	for i in 120:
+		w.run(0.5)  # разогнался, курс выровнялся
+	calls[0] = 0
+	for i in 60:
+		w.run(1.0 / 60.0)
+	ok(calls[0] < 60 + 4 * 5, "щупает редко: %d выборок за 60 кадров" % calls[0])
+
+
+## Наклон догоняет плавно, а не щелчком: за шаг 0,1 с — не больше TILT_FOLLOW · dt разницы.
+func test_tilt_follows_smoothly() -> void:
+	var w := _world()
+	var g: EcoGrot = _sys(w, EcoGrot)
+	var gr := g.grot
+	gr.shy = 100.0  # замер: дно не щупает, тянется к заданному
+	gr.tilt_want = Vector2(0.3, 0.0)
+	var was := gr.tilt
+	w.run(0.1)
+	ok(gr.tilt.x > was.x, "тянется к склону")
+	ok(gr.tilt.x <= 0.3 * EcoGrot.TILT_FOLLOW * 0.1 + 1e-4, "не щелчком: %.3f" % gr.tilt.x)
+
+
+## Панцирь для столкновения наклонён вместе с телом.
+func test_solid_follows_tilt() -> void:
+	var w := _world()
+	var g: EcoGrot = _sys(w, EcoGrot)
+	var gr := g.grot
+	var base := Vector3(gr.p.x, gr.body_y, gr.p.z)
+	var side := Basis(Vector3.UP, gr.yaw) * Vector3(2.0, 1.0, 0.0)
+	ok(not g.solid(base + side), "ровный панцирь: точка над бортом снаружи")
+	gr.tilt = Vector2(0.0, 0.3)
+	ok(g.solid(base + side), "левый борт поднят — та же точка внутри")
+
+
 func test_scan_target_and_texts() -> void:
 	var w := _world()
 	var g: EcoGrot = _sys(w, EcoGrot)

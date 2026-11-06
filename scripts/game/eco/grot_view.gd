@@ -145,7 +145,7 @@ func sync(t: float, ship: Vector3, info: EcoLink.ShipState = null, flow := Vecto
 	visible = gr != null and Vector3(gr.p.x, gr.body_y, gr.p.z).distance_to(ship) < FAR
 	if not visible:
 		return
-	group.transform = Transform3D(Basis(Vector3.UP, gr.yaw), Vector3(gr.p.x, gr.body_y, gr.p.z))
+	group.transform = Transform3D(gr.basis(), Vector3(gr.p.x, gr.body_y, gr.p.z))
 	var far := Vector3(gr.p.x, gr.body_y, gr.p.z).distance_to(ship) > LEG_FAR
 	_step_legs(t, 0.0 if far else gr.stride)
 	legs.scale = Vector3(1.0, 0.35 + 0.65 * gr.lift, 1.0)
