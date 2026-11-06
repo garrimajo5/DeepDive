@@ -26,8 +26,19 @@ const WING := 11.0
 const SHIP_TOP := 3.5
 const OVER := 2.6
 const CEIL_Y := -1.0
+## Низ корпуса над точкой корабля (EcoHull.box: −1,6 м). Скат ниже середины корпуса (между низом и SHIP_TOP) при
+## встрече ныряет под киль на OVER ниже низа, если над дном хватает ABOVE_FLOOR; иначе — поверху. Раньше шёл только
+## поверху: снизу его прижимало к днищу (push_out), он тёрся под кораблём, пока тот не проходил, и выскакивал на
+## метр за кадр.
+const SHIP_BOTTOM := -1.6
 ## Запас до корпуса (S.pushOut(ry.p, 1.5)).
 const HULL_GAP := 1.5
+## Скат видит корабль на пути заранее: на LOOK с хода вперёд (свой круг и ход корабля по носу, LOOK_STEPS взглядов
+## через равные доли) — взмывает, пока корпус ещё не под крылом. Без этого корабль, идущий навстречу, накрывал ската
+## раньше, чем тот успевал подняться (ход вверх не больше CLIMB_MAX), и обшивка (push_out) сдвигала тело рывком до
+## метра за кадр.
+const LOOK := 3.0
+const LOOK_STEPS := 3
 ## Ведёт стаю: ближе LEAD_R, на LEAD_T с, звать — раз в LEAD_CD с (первый раз через 5–15 с).
 const LEAD_R := 45.0
 const LEAD_T := 18.0
@@ -77,8 +88,10 @@ class Ray:
 	var p := Vector3.ZERO
 	## Куда плывёт (касательная к кругу против часовой, если смотреть сверху в осях браузера).
 	var dir := Vector3.ZERO
-	## Над кораблём сейчас (поднялся над корпусом).
+	## Корабль на пути (под крылом или будет через EcoRay.LOOK): скат обходит его по высоте.
 	var over := false
+	## Обходит снизу (под килем), а не поверху; решается в начале встречи.
+	var under := false
 	## Тангаж тела (рад, > 0 — нос вверх), плавный.
 	var pitch := 0.0
 	## Вертикальный ход (м/с), плавный.
@@ -149,12 +162,20 @@ func _place(world: EcoWorld, ry: Ray, dt: float) -> void:
 	var x := ry.center.x + cos(ry.ang) * ry.radius
 	var z := ry.center.z + sin(ry.ang) * ry.radius
 	var ty := ry.center.y + sin(world.time * 0.2 + ry.index) * SWAY
-	if world.ground.is_valid():
-		ty = maxf(ty, float(world.ground.call(x, z)) + ABOVE_FLOOR)
-	ty = minf(TOP_Y, ty)
+	var floor_y := float(world.ground.call(x, z)) if world.ground.is_valid() else -INF
+	ty = minf(TOP_Y, maxf(ty, floor_y + ABOVE_FLOOR))
 	var s := world.ship
-	ry.over = EcoHull.touches(Vector3(x, s.pos.y + 1.6, z), s.pos, s.yaw, WING)
-	if ry.over:
+	var met := not ry.over
+	ry.over = EcoHull.touches(Vector3(x, s.pos.y + 1.6, z), s.pos, s.yaw, WING) or foresees(ry, s)
+	var keel := s.pos.y + SHIP_BOTTOM - OVER
+	if not ry.over:
+		ry.under = false
+	elif met:
+		ry.under = ry.placed and ry.p.y < s.pos.y + (SHIP_BOTTOM + SHIP_TOP) * 0.5 and keel >= floor_y + ABOVE_FLOOR
+	if ry.over and ry.under and keel >= floor_y + ABOVE_FLOOR:
+		ty = minf(ty, keel)
+	elif ry.over:
+		ry.under = false
 		ty = minf(CEIL_Y, maxf(ty, s.pos.y + SHIP_TOP + OVER))
 	var y0 := ry.p.y
 	var y := ty
@@ -174,6 +195,19 @@ func _place(world: EcoWorld, ry: Ray, dt: float) -> void:
 	else:
 		ry.pitch = lerpf(ry.pitch, pitch_for((ry.p.y - y0) / dt, ry.speed), 1.0 - exp(-PITCH_FOLLOW * dt))
 	flap_step(ry, dt)
+
+
+## Корабль окажется под крылом за LOOK с хода вперёд: точка круга ската через t против корабля, ушедшего по носу на
+## speed · t (t — LOOK / LOOK_STEPS, 2 · LOOK / LOOK_STEPS … LOOK).
+static func foresees(ry: Ray, s: EcoLink.ShipState) -> bool:
+	var nose := Vector3(-sin(s.yaw), 0.0, -cos(s.yaw)) * s.speed
+	for k in LOOK_STEPS:
+		var t := LOOK * float(k + 1) / LOOK_STEPS
+		var a := ry.ang + ry.speed / ry.radius * t
+		var at := Vector3(ry.center.x + cos(a) * ry.radius, s.pos.y + 1.6, ry.center.z + sin(a) * ry.radius)
+		if EcoHull.touches(at, s.pos + nose * t, s.yaw, WING):
+			return true
+	return false
 
 
 ## Шаг взмаха: доля размаха к нужной по вертикальному ходу, фаза — по частоте от доли.
