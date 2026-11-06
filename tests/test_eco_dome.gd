@@ -273,3 +273,34 @@ func test_turn_settles_on_course() -> void:   # доворачивает без 
 		near(wrapf(want - yaw, -PI, PI), 0.0, 1e-3, "встал на курс %.1f" % want)
 		near(v, 0.0, 1e-2, "и остановил поворот")
 		ok(over < 0.01, "без перелёта (%.3f рад)" % over)
+
+
+## Б3: у гнезда не прыгает — прийти (ближе ARRIVE) не значит встать в точку разом: раньше за шаг прихода купол
+## переставлялся в stand() на остаток до 0,3 м (3 м/с при ходе 0,12), теперь доходит в OPEN ходом SETTLE.
+func test_no_jump_at_nest() -> void:
+	var w := _world(_near())
+	var d := EcoDome.new()
+	d.reset(w)
+	var prev := d.pos
+	var worst := 0.0
+	var guard := 0
+	while d.state != EcoDome.State.GONE and guard < 6000:
+		w.time += DT
+		d.step(w, DT)
+		if d.shown():
+			worst = maxf(worst, d.pos.distance_to(prev))
+		prev = d.pos
+		guard += 1
+	eq(d.state, EcoDome.State.GONE, "открыл створку и ушёл")
+	ok(worst <= EcoDome.LEAVE * 1.2 * DT, "за шаг сдвиг не больше %.2f м (было %.2f)" % [EcoDome.LEAVE * 1.2 * DT, worst])
+	# у гнезда доходит в точку до подъёма створки
+	var d2 := EcoDome.new()
+	d2.reset(w)
+	w.ship.pos = _near()
+	guard = 0
+	while d2.state != EcoDome.State.OPEN and guard < 3000:
+		w.time += DT
+		d2.step(w, DT)
+		guard += 1
+	_run(w, d2, EcoDome.LIFT.x)
+	near(d2.pos.distance_to(d2.stand()), 0.0, 1e-3, "к подъёму створки стоит у гнезда")
