@@ -28,6 +28,12 @@ const LURE_OPEN := 0.85
 ## Прячет щупальца со скоростью 2,5 в секунду, раскрывает — 0,35; переваривая, держит раскрытыми наполовину.
 const CLOSE_RATE := 2.5
 const OPEN_RATE := 0.35
+## Ход раскрытия с инерцией (план реализма Б3, «плавность поведения»): скорость `Anemone.open_v` набирается не быстрее
+## `OPEN_ACCEL` в 1/с² (раскрытие — за ≈ 0,35 с до OPEN_RATE) и `CLOSE_ACCEL` (прячет рефлексом — за 0,1 с до
+## CLOSE_RATE), к нужному раскрытию подходит не быстрее √(2·a·остаток) и тормозит — `CLOSE_ACCEL`. Раньше скорость
+## включалась сразу: луч застал хватня — кончики щупалец за кадр срывались с места на полном ходу, раскрылся — вставал.
+const OPEN_ACCEL := 1.0
+const CLOSE_ACCEL := 25.0
 const DIGEST_OPEN := 0.5
 ## Переваривает 35 с; пестрянки доедают остатки через 3 с после поимки.
 const DIGEST := 35.0
@@ -107,6 +113,8 @@ class Anemone:
 	var mouth := Vector3.ZERO
 	## Раскрытие щупалец 0…1; в луче в этот шаг.
 	var open := DIGEST_OPEN
+	## Скорость раскрытия (1/с, < 0 — прячет): `open_step`.
+	var open_v := 0.0
 	var lit := false
 	## Секунды: переваривает; ведут стаю; до следующего подманивания; до «leftovers»; паузы «hide» и текстов.
 	var digest := 0.0
@@ -167,6 +175,7 @@ func reset(world: EcoWorld) -> void:
 		hv.lure_cd = _rnd.range_f(4, 12)
 		hv.digest = START_FED
 		hv.open = DIGEST_OPEN
+		hv.open_v = 0.0
 		for k in TENT:
 			var tn := Tentacle.new()
 			tn.a = float(k) / TENT * TAU + _rnd.range_f(-0.1, 0.1)
@@ -199,10 +208,7 @@ func _step_anemone(world: EcoWorld, hv: Anemone, dt: float) -> void:
 	hv.lit = world.in_beam(hv.top)
 	# щупальца: в луче быстро прячутся, в темноте медленно раскрываются
 	var want := 0.0 if hv.lit else (DIGEST_OPEN if hv.digest > 0.0 else 1.0)
-	if want < hv.open:
-		hv.open = maxf(want, hv.open - dt * CLOSE_RATE)
-	else:
-		hv.open = minf(want, hv.open + dt * OPEN_RATE)
+	open_step(hv, want, dt)
 	if hv.lit and not was_lit and hv.open > HIDE_OPEN and hv.hide_cd <= 0.0:
 		hv.hide_cd = HIDE_CD
 		world.emit(ID, "hide", hv.top, _text(world, "%s прячет щупальца от прожектора", [[ID, Species.Case.NOM]]))
@@ -285,6 +291,32 @@ func _catch(world: EcoWorld, hv: Anemone, dt: float) -> void:
 				world.emit(ID, "catch", hv.mouth, _say(world, hv, "%s поймал %s щупальцами",
 					[[ID, Species.Case.NOM], [EcoFish.ID, Species.Case.ACC]]))
 				return
+
+
+## Шаг раскрытия к want за dt с инерцией: нужная скорость — к want, не больше OPEN_RATE / CLOSE_RATE и
+## √(2·a·остаток) (подход без перелёта), `open_v` догоняет её не быстрее OPEN_ACCEL (раскрытие) или CLOSE_ACCEL
+## (прячет и тормозит). Дошёл до want или края 0…1 — встаёт.
+static func open_step(hv: Anemone, want: float, dt: float) -> void:
+	if dt <= 0.0:
+		return
+	var d := want - hv.open
+	var v_want := 0.0
+	if d > 0.0:
+		v_want = minf(OPEN_RATE, sqrt(2.0 * OPEN_ACCEL * d))
+	elif d < 0.0:
+		v_want = -minf(CLOSE_RATE, sqrt(2.0 * CLOSE_ACCEL * -d))
+	var a := CLOSE_ACCEL
+	if v_want > 0.0 and hv.open_v >= 0.0 and v_want > hv.open_v:
+		a = OPEN_ACCEL
+	hv.open_v = move_toward(hv.open_v, v_want, a * dt)
+	var o := hv.open + hv.open_v * dt
+	if d != 0.0 and signf(o - want) != signf(d * -1.0):
+		o = want
+		hv.open_v = 0.0
+	if o <= 0.0 or o >= 1.0:
+		o = clampf(o, 0.0, 1.0)
+		hv.open_v = 0.0
+	hv.open = o
 
 
 ## Пестрянки: хоровод среди щупалец, при подманивании — у стаи, на полпути от хозяина.
