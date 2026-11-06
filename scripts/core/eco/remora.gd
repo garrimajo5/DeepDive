@@ -176,7 +176,9 @@ func _swim(world: EcoWorld, rm: Remora, dt: float) -> void:
 	var want := carry + dir * minf(SWIM_SPEED, sqrt(2.0 * BRAKE * d))
 	rm.vel = rm.vel.move_toward(want, ACCEL * dt)
 	var step := rm.vel * dt
-	if (step - carry * dt).dot(dir) >= d - ARRIVE:   # за этот шаг доходит до места
+	# за этот шаг доходит до места — садится; не дошла на ARRIVE — ещё шаг (прыжок к месту на ARRIVE поверх шага
+	# дёргал ход до 2,4 м/с за кадр, садясь на ската с креном)
+	if (step - carry * dt).dot(dir) >= d:
 		rm.vel = rm.vel.move_toward(carry, ACCEL * dt)
 		_arrive(world, rm, a)
 		return

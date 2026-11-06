@@ -62,6 +62,30 @@ func test_speed_along_circle() -> void:
 	near((r.rays[0].ang - a0) * EcoRay.PATHS[0]["r"], EcoRay.PATHS[0]["sp"] * 10.0, 1e-3, "4,2 м/с по кругу")
 
 
+## Б3, «плавность поведения»: скат на круге ложится на внутреннее крыло — крыло к центру круга ниже внешнего. Раньше
+## крен был постоянный rotateZ(−0,22) браузера и опускал внешнее крыло: скат «падал» из поворота наружу. Тесный круг
+## (35 м) — крен круче, чем на широком (85 м); оба не круче BANK_MAX.
+func test_banks_into_turn() -> void:
+	var w := _world()
+	var r := _rays(w)
+	w.run(7.0)
+	var banks: Array[float] = []
+	for ry in r.rays:
+		var c: Vector3 = EcoRay.PATHS[ry.index]["c"]
+		var x := EcoRay.xform(ry)
+		var tip_l := x * Vector3(7.0, 0, 0)    # +X меша — левое крыло
+		var tip_r := x * Vector3(-7.0, 0, 0)
+		var to_c := Vector2(c.x - ry.p.x, c.z - ry.p.z)
+		var inner := tip_l if Vector2(tip_l.x - ry.p.x, tip_l.z - ry.p.z).dot(to_c) > 0.0 else tip_r
+		var outer := tip_r if inner == tip_l else tip_l
+		ok(inner.y < outer.y - 0.5, "скат %d: крыло к центру круга ниже (%.2f против %.2f)" % [ry.index, inner.y, outer.y])
+		ok(EcoRay.turn_rate(ry) < 0.0, "по кругу курс уходит вправо")
+		ok(EcoRay.bank(ry) < 0.0, "крен на правое крыло — в поворот")
+		ok(absf(EcoRay.bank(ry)) <= EcoRay.BANK_MAX + 1e-6, "не круче BANK_MAX")
+		banks.append(absf(EcoRay.bank(ry)))
+	ok(banks[1] > banks[0] * 1.4, "тесный круг — крен круче: %.2f против %.2f" % [banks[1], banks[0]])
+
+
 func test_high_floor_lifts_ray() -> void:
 	var w := EcoWorld.new()
 	w.ground = func(_x: float, _z: float) -> float: return -14.0
