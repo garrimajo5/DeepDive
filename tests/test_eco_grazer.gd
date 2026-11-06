@@ -375,8 +375,41 @@ func test_walks_up_steep_bump_at_its_pace() -> void:
 	ok(on_slope > 0.6, "на склоне идёт вверх своим шагом (%.2f м/с), а не стоит" % on_slope)
 	near(a.p.y, -36.0 + EcoGrazer.LIFT, 1e-4, "на верху бугра — на дне")
 	near(EcoGrazer.walk(w, Vector3(0, -39.9, -5), Vector3(0, 0, 0.03), 0.0).z, -4.97, 1e-6, "на ровном — шаг целиком")
-	near(EcoGrazer.walk(w, Vector3(0, -39.9, -5), Vector3(0, 0, 0.03), 0.0, 2.0).z, -5.0 + 0.03 / sqrt(5.0), 1e-6,
+	var ramp := EcoWorld.new()
+	ramp.ground = func(_x: float, z: float) -> float: return -40.0 + 2.0 * z
+	near(EcoGrazer.walk(ramp, Vector3(0, -39.9, 0), Vector3(0, 0, 0.03), 0.0, 2.0).z, 0.03 / sqrt(5.0), 1e-6,
 			"на уклоне 2:1 — шаг по горизонтали в √5 раз короче")
+	near(EcoGrazer.walk(w, Vector3(0, -39.9, -5), Vector3(0, 0, 0.03), 0.0, 2.0).z, -4.97, 1e-6,
+			"прошлый уклон 2:1, а под шагом ровно — шаг целиком по найденному уклону")
+
+
+func test_crosses_sharp_ridge_at_its_pace() -> void:
+	# острый гребень: вверх 2:1, перегиб, вниз 2:1 (как у (−40, 6) у Раковины 02): уклон с прошлого шага отстаёт на
+	# перегибе — раньше первый шаг вниз шёл полным шагом по горизонтали, вдоль дна до 2 м/с (Б3: соскакивал)
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, z: float) -> float: return -40.0 + maxf(0.0, 4.0 - 2.0 * absf(z - 2.0))
+	w.ship.pos = Vector3(0, -30, 0)   # рядом: шаг каждый кадр (EcoLod)
+	var m := w.add(EcoMoss.new([Vector3(0, -40, 9)] as Array[Vector3])) as EcoMoss
+	m.patches[0].food = 1.0
+	w.add(EcoGrazer.new(m, 1))
+	var g := _grazers(w).all[0]
+	var a := g.agent
+	a.p = Vector3(0, -40 + EcoGrazer.LIFT, -3)
+	a.v = Vector3(0, 0, EcoGrazer.WALK_SPEED)
+	g.dir = 0.0
+	g.patch = m.patches[0]
+	var dt := EcoWorld.MAX_STEP
+	var top := 0.0
+	var t := 0.0
+	var crossed := false
+	while t < 40.0 and not g.grazing():
+		var was := a.p
+		w.step(dt)
+		t += dt
+		top = maxf(top, a.p.distance_to(was) / dt)
+		crossed = crossed or a.p.z > 4.5
+	ok(crossed and g.grazing(), "перешёл гребень и дошёл до пятна")
+	ok(top <= EcoGrazer.WALK_SPEED * 1.15, "вдоль дна через гребень не быстрее шага: %.2f м/с" % top)
 
 
 func test_quiet_first_seconds() -> void:
