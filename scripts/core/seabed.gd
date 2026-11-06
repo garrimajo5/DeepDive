@@ -56,6 +56,7 @@ class Layer:
 	const POCKET_R := 46.0
 	## Отрезки, которые режем: все маршруты слоя, кроме спуска 06→10 к лесу (склон глубже — отдельная задача).
 	static var _lanes: Array = []
+	static var _pockets: Array[Vector2] = []
 
 	## Дно гребня в (x, z) поверх прежнего h: только поднимает и не выше `RIDGE_FLOOR` + пологие бугры ±3 м.
 	static func ridge(x: float, z: float, h: float) -> float:
@@ -80,13 +81,20 @@ class Layer:
 		for s: Array in segments():
 			d = minf(d, _seg_dist(q, s[0], s[1]))
 		var w := 1.0 - HashNoise.smooth(LANE_HALF, LANE_HALF + LANE_FADE, d)
-		for id: String in POCKETS:
-			var dp := q.distance_to(LayerMap.xz(id))
+		for c: Vector2 in pockets():
+			var dp := q.distance_to(c)
 			w = maxf(w, 1.0 - HashNoise.smooth(POCKET_R, POCKET_R + LANE_FADE, dp))
 		if w <= 0.0:
 			return h
 		var cap := LANE_CAP - HashNoise.value(x * 0.05 - 1.3, z * 0.05 + 4.7) * LANE_RIPPLE
 		return lerpf(h, minf(h, cap), w)
+
+	## Середины карманов `POCKETS` — один раз (#1300: дно зовут ~50 раз за кадр, словарь `LayerMap` — не на каждый).
+	static func pockets() -> Array[Vector2]:
+		if _pockets.is_empty():
+			for id: String in POCKETS:
+				_pockets.append(LayerMap.xz(id))
+		return _pockets
 
 	## Отрезки проходов [Vector2, Vector2] из `LayerMap.segments()` без спуска к лесу (место 10).
 	static func segments() -> Array:

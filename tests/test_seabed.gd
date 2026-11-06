@@ -16,6 +16,69 @@ func test_fbm_as_browser() -> void:
 	near(HashNoise.fbm(-250.0 * 0.006, 300.0 * 0.006, 4), 0.539113016285, 1e-9, "fbm(-250,300)")
 
 
+## Прежний хеш (до #1300): Math.imul по 16 бит — образец, с которым быстрый `HashNoise.hash2`/`value` совпадает
+## бит в бит (дно, камни, ракушки и кочки стоят на тех же местах).
+static func _hash2_ref(ix: int, iz: int) -> float:
+	var h: int = (ix * 374761393 + iz * 668265263) & 0xFFFFFFFF
+	var a: int = (h ^ (h >> 13)) & 0xFFFFFFFF
+	var lo: int = a * (1274126177 & 0xFFFF)
+	var hi: int = ((a * (1274126177 >> 16)) & 0xFFFF) << 16
+	h = (lo + hi) & 0xFFFFFFFF
+	h ^= h >> 16
+	return float(h) / 4294967295.0
+
+
+static func _value_ref(x: float, z: float) -> float:
+	var fx0 := floorf(x)
+	var fz0 := floorf(z)
+	var ix := int(fx0)
+	var iz := int(fz0)
+	var fx := x - fx0
+	var fz := z - fz0
+	var ux := fx * fx * (3.0 - 2.0 * fx)
+	var uz := fz * fz * (3.0 - 2.0 * fz)
+	var a := _hash2_ref(ix, iz)
+	var b := _hash2_ref(ix + 1, iz)
+	var c := _hash2_ref(ix, iz + 1)
+	var d := _hash2_ref(ix + 1, iz + 1)
+	return a + (b - a) * ux + (c - a) * uz + (a - b - c + d) * ux * uz
+
+
+func test_fast_hash_same_bits() -> void:
+	var r := EcoRandom.new(1301)
+	var bad := 0
+	for i in 4000:
+		var ix := int(r.range_f(-3.0e6, 3.0e6))
+		var iz := int(r.range_f(-3.0e6, 3.0e6))
+		if HashNoise.hash2(ix, iz) != _hash2_ref(ix, iz):
+			bad += 1
+		var x := r.range_f(-2000.0, 2000.0)
+		var z := r.range_f(-2000.0, 2000.0)
+		if HashNoise.value(x, z) != _value_ref(x, z):
+			bad += 1
+	for e: Vector2i in [Vector2i(0, 0), Vector2i(-1, -1), Vector2i(2147483647, -2147483648), Vector2i(-2147483648, 2147483647)]:
+		if HashNoise.hash2(e.x, e.y) != _hash2_ref(e.x, e.y):
+			bad += 1
+	eq(bad, 0, "быстрый хеш и шум — те же числа, что прежние")
+
+
+func test_height_fast_enough() -> void:
+	# шаг живого мира зовёт дно ~50 раз за кадр (#1300): дно стоило ≈ 12 мкс, с быстрым хешем — заметно меньше,
+	# чем по прежнему хешу; сравниваем с образцом на той же машине — тест ловит возврат медленного хеша
+	var best_new := INF
+	var best_ref := INF
+	for k in 5:
+		var t0 := Time.get_ticks_usec()
+		for i in 2000:
+			HashNoise.value(i * 0.37 - 300.0, i * 0.21 - 200.0)
+		best_new = minf(best_new, Time.get_ticks_usec() - t0)
+		t0 = Time.get_ticks_usec()
+		for i in 2000:
+			_value_ref(i * 0.37 - 300.0, i * 0.21 - 200.0)
+		best_ref = minf(best_ref, Time.get_ticks_usec() - t0)
+	ok(best_new < best_ref * 0.8, "шум быстрее прежнего: %.0f против %.0f мкс" % [best_new, best_ref])
+
+
 func test_height_as_browser() -> void:
 	near(Seabed.height(0, 95), -42.382790764, 1e-6, "старт корабля")
 	near(Seabed.height(-10, -10), -44.238212313, 1e-6, "центр плато")

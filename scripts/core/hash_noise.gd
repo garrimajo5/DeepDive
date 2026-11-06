@@ -6,19 +6,17 @@ const MASK := 0xFFFFFFFF
 
 
 ## Хеш узла решётки (hash2 из util.js): 32-битная арифметика как Math.imul.
+## Множитель меньше 2^31, а h — меньше 2^32: произведение меньше 2^63 и в 64-битном int не переполняется, поэтому
+## `(h * MUL) & MASK` — то же, что Math.imul, без разбора на половины (шаг мира зовёт дно ~50 раз за кадр, `value` —
+## 4 хеша, `fbm` — 4 `value`: прежнее умножение по 16 бит было половиной времени `Seabed.height`).
+const MUL := 1274126177
+
+
 static func hash2(ix: int, iz: int) -> float:
 	var h: int = (ix * 374761393 + iz * 668265263) & MASK
-	h = _mul32(h ^ (h >> 13), 1274126177)
+	h = ((h ^ (h >> 13)) * MUL) & MASK
 	h ^= h >> 16
 	return float(h) / 4294967295.0
-
-
-## Умножение по модулю 2^32 без переполнения 64-битного целого.
-static func _mul32(a: int, b: int) -> int:
-	a &= MASK
-	var lo: int = a * (b & 0xFFFF)
-	var hi: int = ((a * (b >> 16)) & 0xFFFF) << 16
-	return (lo + hi) & MASK
 
 
 ## Гладкий шум 0..1 (G.noise).
@@ -31,10 +29,19 @@ static func value(x: float, z: float) -> float:
 	var fz := z - fz0
 	var ux := fx * fx * (3.0 - 2.0 * fx)
 	var uz := fz * fz * (3.0 - 2.0 * fz)
-	var a := hash2(ix, iz)
-	var b := hash2(ix + 1, iz)
-	var c := hash2(ix, iz + 1)
-	var d := hash2(ix + 1, iz + 1)
+	# четыре узла — hash2 без вызова функции (то же число): строки hash2 — на каждый узел
+	var h0: int = (ix * 374761393 + iz * 668265263) & MASK
+	var h1: int = (h0 + 374761393) & MASK
+	var h2: int = (h0 + 668265263) & MASK
+	var h3: int = (h1 + 668265263) & MASK
+	h0 = ((h0 ^ (h0 >> 13)) * MUL) & MASK
+	h1 = ((h1 ^ (h1 >> 13)) * MUL) & MASK
+	h2 = ((h2 ^ (h2 >> 13)) * MUL) & MASK
+	h3 = ((h3 ^ (h3 >> 13)) * MUL) & MASK
+	var a := float(h0 ^ (h0 >> 16)) / 4294967295.0
+	var b := float(h1 ^ (h1 >> 16)) / 4294967295.0
+	var c := float(h2 ^ (h2 >> 16)) / 4294967295.0
+	var d := float(h3 ^ (h3 >> 16)) / 4294967295.0
 	return a + (b - a) * ux + (c - a) * uz + (a - b - c + d) * ux * uz
 
 
