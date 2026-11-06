@@ -32,6 +32,16 @@ const FADE_NEAR := 60.0
 ## Ближе этого к кораблю гребневики расступаются перед корпусом (RD_R + 26).
 const NEAR_SHIP := R + 26.0
 const HULL_GAP := 0.3
+## Отодвинутый корпусом гребневик возвращается на своё место по дрейфу: сдвиг `Member.d` тает долей RETURN в
+## секунду (за ~5 с). Корпус толкает сдвиг шагом мира (`push`) — коротким путём от обшивки, а не
+## от свободного места: раньше гребневик внутри корпуса выталкивался к ближней стенке от точки дрейфа и, когда корабль
+## проходил сквозь стаю, перескакивал на другой борт до 6 м за кадр.
+## Назад сдвиг тает не быстрее RETURN_V м/с — гребневик не летит к месту. Прижатый к обшивке скользит вдоль неё
+## вбок от оси корабля со скоростью SLIP + SLIP_K × ход корабля — не едет на носу.
+const RETURN := 0.45
+const RETURN_V := 1.2
+const SLIP := 1.0
+const SLIP_K := 0.8
 
 
 ## Гребневик: смещение от центра стаи, фаза покачивания и оттенок радуги.
@@ -40,6 +50,8 @@ class Member:
 	var o := Vector3.ZERO
 	var phase := 0.0
 	var hue := 0.0
+	## Сдвиг корпусом от места по дрейфу, м (мир; ставит шаг мира — `EcoRaduzh.push`).
+	var d := Vector3.ZERO
 
 
 ## Стая гребневиков.
@@ -101,6 +113,8 @@ func reset(world: EcoWorld) -> void:
 			m.hue = rnd.next()
 			sw.members.append(m)
 		swarms.append(sw)
+		# сдвиг корпусом — сразу, как в шаге: сброс у корабля не оставляет гребневиков в корпусе
+		push(sw, world.time, 0.0, world.ship.pos, world.ship.yaw)
 
 
 func step(world: EcoWorld, dt: float) -> void:
@@ -127,6 +141,40 @@ func step(world: EcoWorld, dt: float) -> void:
 		if sw.glow > flare:
 			flare = sw.glow
 			flare_swarm = sw
+		push(sw, t, dt, s.pos, s.yaw, s.speed)
+
+
+## Корпус отодвигает гребневиков стаи в шаг мира: сдвиг тает к месту по дрейфу, затем точку с прошлым сдвигом
+## выталкиваем из корпуса — от обшивки, где он и был, коротким путём. Стаю дальше NEAR_SHIP не толкаем.
+static func push(sw: Swarm, t: float, dt: float, ship_pos: Vector3, ship_yaw: float, ship_speed := 0.0) -> void:
+	dt = maxf(dt, 0.0)
+	var keep := exp(-RETURN * dt)
+	var slip := (SLIP + SLIP_K * absf(ship_speed)) * dt
+	var near := ship_pos.distance_to(sw.c) < NEAR_SHIP
+	for k in sw.members.size():
+		var m := sw.members[k]
+		if m.d != Vector3.ZERO:
+			var l := m.d.length()
+			m.d *= maxf(l * keep, l - RETURN_V * dt) / l
+			if m.d.length_squared() < 1e-6:
+				m.d = Vector3.ZERO
+		if not near:
+			continue
+		var free := member_pos(sw, k, t)
+		var res := EcoHull.push_out(free + m.d, ship_pos, ship_yaw, HULL_GAP)
+		if res.is_empty():
+			continue
+		var p: Vector3 = res[0]
+		var n: Vector3 = res[1]
+		# вбок по обшивке — к своему борту (поперёк оси корабля, на свою сторону; у самой оси — по номеру), только
+		# на том, что обшивка оставляет вдоль себя: на носу — во всю силу, на борту — почти ничего
+		var right := Vector3.RIGHT.rotated(Vector3.UP, ship_yaw)
+		var side := (p - ship_pos).dot(right)
+		if absf(side) < 0.05:
+			side = 1.0 if k % 2 == 0 else -1.0
+		var away := right * signf(side)
+		away -= n * away.dot(n)
+		m.d = p - free + away * slip
 
 
 ## Луч задевает стаю: проверяем каждого третьего гребневика (k % 3 == 0, как в браузере). Стаю дальше луча
@@ -159,9 +207,10 @@ static func member_pos(sw: Swarm, k: int, t: float) -> Vector3:
 	return p
 
 
-## То же, но гребневик не заходит в корпус корабля (S.pushOut у стаи ближе NEAR_SHIP).
+## То же, но гребневик не заходит в корпус корабля (S.pushOut у стаи ближе NEAR_SHIP): место по дрейфу со сдвигом
+## корпусом из шага мира (`push`); корпус сдвинулся после шага (показ между шагами) — ещё выталкиваем от обшивки.
 static func member_pos_outside(sw: Swarm, k: int, t: float, ship_pos: Vector3, ship_yaw: float) -> Vector3:
-	var p := member_pos(sw, k, t)
+	var p := member_pos(sw, k, t) + sw.members[k].d
 	if ship_pos.distance_to(sw.c) < NEAR_SHIP:
 		var res := EcoHull.push_out(p, ship_pos, ship_yaw, HULL_GAP)
 		if not res.is_empty():

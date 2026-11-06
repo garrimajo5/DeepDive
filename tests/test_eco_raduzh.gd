@@ -300,6 +300,50 @@ func test_member_outside_hull() -> void:
 	near(EcoRaduzh.member_pos_outside(sw, 3, 0.0, FAR, 0.0).distance_to(p), 0.0, 1e-6, "вдали — на месте")
 
 
+## Корабль проходит сквозь стаю: гребневики расступаются вдоль обшивки, а не перескакивают на другой борт (раньше
+## до 6 м за кадр), в корпусе не остаются, а когда корабль ушёл — возвращаются на места по дрейфу.
+func test_ship_through_swarm_no_jump() -> void:
+	for spd in [1.0, 4.0, 8.0]:
+		var w := _world()
+		var r := _sys(w, EcoRaduzh) as EcoRaduzh
+		var sw := r.swarms[0]
+		var dt := 1.0 / 30.0
+		var c0 := sw.c
+		var prev: Array[Vector3] = []
+		var worst := 0.0
+		var inside := 0
+		var pushed := 0.0
+		for i in int((60.0 / spd) / dt):
+			w.ship.pos = Vector3(c0.x, c0.y + 0.5, c0.z + 30.0 - spd * w.time)
+			w.ship.yaw = 0.0
+			w.ship.speed = spd
+			w.step(dt)
+			var cur: Array[Vector3] = []
+			for k in EcoRaduzh.PER_SWARM:
+				var q := EcoRaduzh.member_pos_outside(sw, k, w.time, w.ship.pos, 0.0)
+				cur.append(q - EcoRaduzh.member_pos(sw, k, w.time))
+				if EcoHull.touches(q, w.ship.pos, 0.0, 0.2):
+					inside += 1
+				pushed = maxf(pushed, sw.members[k].d.length())
+			if not prev.is_empty():
+				for k in EcoRaduzh.PER_SWARM:
+					worst = maxf(worst, (cur[k] - prev[k]).length())
+			prev = cur
+		ok(pushed > 1.0, "корпус отодвигал гребневиков (%.1f м) на %.0f м/с" % [pushed, spd])
+		ok(worst < spd * dt + 0.3, "сдвиг за кадр %.2f м на %.0f м/с — без скачка через корпус" % [worst, spd])
+		eq(inside, 0, "в корпусе не остаются на %.0f м/с" % spd)
+		# корабль ушёл — за 25 с сдвиг растаял, назад — не быстрее RETURN_V
+		w.ship.pos = FAR
+		w.ship.speed = 0.0
+		for i in 25 * 30:
+			w.step(dt)
+		var left := 0.0
+		ok(pushed < 20.0, "не едут на носу (сдвиг до %.1f м)" % pushed)
+		for m in sw.members:
+			left = maxf(left, m.d.length())
+		ok(left < 0.05, "вернулись на места (%.3f м)" % left)
+
+
 func test_view_two_multimeshes() -> void:
 	var view := EcoView.new()
 	view.ground = Seabed.height
