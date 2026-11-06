@@ -23,6 +23,7 @@ var shafts_mat: ShaderMaterial
 var shaft_list: Array[LightShafts.Shaft] = []
 var stones: StonesView   ## камни на дне вокруг корабля (`SeabedStones`, один MultiMesh)
 var shells: ShellsView   ## ракушки на дне вокруг корабля (`SeabedShells`, один MultiMesh)
+var tufts: TuftsView   ## кочки водорослей на дне вокруг корабля (`SeabedTufts`, один MultiMesh)
 ## Слои воды ART-069 (`WaterLayers`) в материалах дна, льда и дальней воды: сила по уровню ART-044 и по илу.
 var layers_level := WaterLayers.GAIN_NORMAL
 var layers_silt := 0.0
@@ -34,7 +35,7 @@ var water_writes := 0                          ## сколько раз вода
 var _water_at := Vector2(INF, INF)             ## глубина и ил последней записи
 var _layers_cam := Vector3(INF, INF, INF)      ## камера последней записи придонной пыли
 var _ship_at := Transform3D(Basis(), Vector3(INF, INF, INF))   ## корабль последней записи лучей и взвеси
-var _ahead_done := []                          ## заготовка камней (`prefetch`) готова: [место, lite камней, ракушек]
+var _ahead_done := []                          ## заготовка россыпей (`prefetch`) готова: [место, lite каждой россыпи]
 var _ahead_at := Vector3.ZERO                  ## куда просили заготовку
 var _ahead_on := false                         ## просили в этот шаг
 
@@ -44,6 +45,8 @@ func _ready() -> void:
 	add_child(stones)
 	shells = ShellsView.new()
 	add_child(shells)
+	tufts = TuftsView.new()
+	add_child(tufts)
 	seabed = MeshInstance3D.new()
 	seabed.name = "Дно"
 	var mesh := ArrayMesh.new()
@@ -283,21 +286,41 @@ func _make_shafts() -> MultiMeshInstance3D:
 	return node
 
 
-## Корабль скоро перескочит в at (решают у 10 и шторка возвращения, #1090): камни и ракушки там досчитываются заранее
+## Россыпи мелочи на дне вокруг корабля: камни, ракушки, кочки (`SeabedStones` и наследники).
+func scatters() -> Array[SeabedStones]:
+	return [stones.stones, shells.stones, tufts.stones]
+
+
+## Клеток посчитано всего во всех россыпях (тесты и заготовка под прыжок).
+func scatter_cells() -> int:
+	var n := 0
+	for v in scatters():
+		n += v.cells_done
+	return n
+
+
+## Корабль скоро перескочит в at (решают у 10 и шторка возвращения, #1090): россыпи там досчитываются заранее
 ## в `set_ship` этого или следующего шага — только когда своя россыпь корабля в этот шаг клеток не считала, и не больше
-## `SeabedStones.CELLS_STEP` клеток на обе россыпи, сначала камни, потом ракушки (обе разом и вместе с ходом давали
+## `SeabedStones.CELLS_STEP` клеток на все россыпи, по очереди: камни, ракушки, кочки (разом и вместе с ходом давали
 ## всплеск «интерфейс/маршрут» 9 мс у 34b, #1095). Просить каждый шаг; готово — шаг даром. true — всё в кэше.
 func prefetch(at: Vector3) -> bool:
 	_ahead_at = at
 	_ahead_on = true
-	return [at, stones.stones.lite, shells.stones.lite] == _ahead_done
+	return _ahead_key(at) == _ahead_done
+
+
+func _ahead_key(at: Vector3) -> Array:
+	var key: Array = [at]
+	for v in scatters():
+		key.append(v.lite)
+	return key
 
 
 func _prefetch_step() -> void:
-	var key := [_ahead_at, stones.stones.lite, shells.stones.lite]
+	var key := _ahead_key(_ahead_at)
 	if key == _ahead_done:
 		return
-	for v: SeabedStones in [stones.stones, shells.stones]:
+	for v: SeabedStones in scatters():
 		var before := v.cells_done
 		if not v.prefetch(_ahead_at) or v.cells_done != before:
 			return   # эта россыпь считала в этот шаг — следующая подождёт
@@ -306,10 +329,11 @@ func _prefetch_step() -> void:
 
 ## Где корабль: внутри корпуса шахты не светят и взвеси нет (вид с мостика и из отсеков).
 func set_ship(pos: Vector3, yaw: float) -> void:
-	var cells := stones.stones.cells_done + shells.stones.cells_done
+	var cells := scatter_cells()
 	stones.follow(pos)   # камни досчитываются и стоя: клетки радиуса — по нескольку за шаг
 	shells.follow(pos)
-	if _ahead_on and stones.stones.cells_done + shells.stones.cells_done == cells:
+	tufts.follow(pos)
+	if _ahead_on and scatter_cells() == cells:
 		_prefetch_step()   # заготовка под прыжок — в шаг, когда своя россыпь стоит (#1095)
 	_ahead_on = false
 	var t := Transform3D(Basis(Vector3.UP, yaw), pos)
@@ -464,16 +488,18 @@ func set_decals_lite(lite: bool) -> void:
 	_decals_level(seabed_mat, lite)
 
 
-## «Экономно» (ART-044): камни и ракушки на дне ближе (`SeabedStones.LITE_RADIUS`, `SeabedShells.SHELL_LITE`).
+## «Экономно» (ART-044): камни, ракушки и кочки на дне ближе (`SeabedStones.LITE_RADIUS`, `SeabedShells.SHELL_LITE`,
+## `SeabedTufts.TUFT_LITE`).
 func set_stones_lite(lite: bool) -> void:
 	stones.set_lite(lite)
 	shells.set_lite(lite)
+	tufts.set_lite(lite)
 
 
-## Образцы на дне: камней и ракушек вокруг них нет (светящиеся камешки не спутать с фоном).
+## Образцы на дне: камней, ракушек и кочек вокруг них нет (светящиеся камешки не спутать с фоном).
 func set_floor_avoid(points: Array[Vector3]) -> void:
-	stones.stones.set_avoid(points)
-	shells.stones.set_avoid(points)
+	for v in scatters():
+		v.set_avoid(points)
 
 
 ## Следы разрядов на дне (`Seabed.Scorch.uniforms`): [где, сила] по MAX — в тот же материал дна.
