@@ -47,11 +47,11 @@ func test_scene_deeper_at_ten_returns_with_lore() -> void:
 	ok(main.trip_view.shown(), "шторка на экране")
 	ok(not main.run.voting, "голосование закрыто")
 	ok(not main.lore.knows(LayerLore.DOWN), "знание — только после ухода")
-	var worst := 0   # #1090, #1095: камни и ракушки у 10 — заранее, по CELLS_STEP за шаг на обе россыпи, не весь радиус разом
+	var worst := 0   # #1090, #1095: камни, ракушки и кочки у 10 — заранее, по CELLS_STEP за шаг на все россыпи, не весь радиус разом
 	for i in int((DescentTrip.SINK + DescentTrip.HOLD + DescentTrip.RISE) * 30.0) + 5:
-		var done := main.ocean.stones.stones.cells_done + main.ocean.shells.stones.cells_done
+		var done := main.ocean.scatter_cells()
 		main.step(1.0 / 30.0)
-		worst = maxi(worst, main.ocean.stones.stones.cells_done + main.ocean.shells.stones.cells_done - done)
+		worst = maxi(worst, main.ocean.scatter_cells() - done)
 	ok(worst <= SeabedStones.CELLS_STEP, "за шаг клеток не больше CELLS_STEP: %d" % worst)
 	ok(not main.trip.active and not main.trip_view.shown(), "шторка убрана")
 	var back := DescentTrip.return_spot()
@@ -76,18 +76,18 @@ func test_scene_prefetch_while_voting_at_ten() -> void:
 	var stay := main.helm.pos
 	for i in 300:
 		main.helm.pos = stay   # корабль стоит: своя россыпь не считает, всё — заготовка
-		var done := main.ocean.stones.stones.cells_done + main.ocean.shells.stones.cells_done
+		var done := main.ocean.scatter_cells()
 		main.step(1.0 / 30.0)
-		worst = maxi(worst, main.ocean.stones.stones.cells_done + main.ocean.shells.stones.cells_done - done)
+		worst = maxi(worst, main.ocean.scatter_cells() - done)
 	ok(worst <= SeabedStones.CELLS_STEP, "за шаг клеток не больше CELLS_STEP: %d" % worst)
-	ok(main.ocean.stones.stones.complete(back) and main.ocean.shells.stones.complete(back),
-		"к решению клетки у места возвращения в кэше")
+	for v in main.ocean.scatters():
+		ok(v.complete(back), "к решению клетки у места возвращения в кэше: %s" % v.get_script().get_global_name())
 	ok(main.ocean.prefetch(back), "заготовка готова")
 	main.decide("deep")
-	var done := main.ocean.stones.stones.cells_done + main.ocean.shells.stones.cells_done
+	var done := main.ocean.scatter_cells()
 	for i in int((DescentTrip.SINK + DescentTrip.HOLD) * 30.0):
 		main.step(1.0 / 30.0)
-	eq(main.ocean.stones.stones.cells_done + main.ocean.shells.stones.cells_done, done,
+	eq(main.ocean.scatter_cells(), done,
 		"кат-сцена и возвращение — ни одной новой клетки")
 	main.queue_free()
 	await frames(1)
