@@ -49,6 +49,13 @@ const LOOK_MAX := 8.0
 const CENTER_EASE := 0.4
 ## Запас до корпуса корабля, м (S.pushOut(f.p, 0.3)).
 const HULL_GAP := 0.3
+## Б3: рыбка, задевшая обшивку, отплывает от неё, а не едет по корпусу. Корабль идёт сквозь стаю — центр и цель
+## стаи оказываются в корпусе, и стая тянула рыбок в обшивку: на ходу 6 м/с рыбка скользила по борту от носа до
+## кормы до 5 с. Теперь касание помнится HULL_KEEP с (`Fish.hull_n`, `hull_t`): тяга в корпус снимается, от обшивки —
+## HULL_SHED м/с² (`hull_steer`); цель стаи в корпусе выносится наружу на GOAL_PAD (`goal_clear`).
+const HULL_KEEP := 0.6
+const HULL_SHED := 6.0
+const GOAL_PAD := 2.0
 ## Стая за ледокрылом: цель — в LEAD_BEHIND позади него и LEAD_BELOW ниже (sh.follow в js).
 const LEAD_BEHIND := 12.0
 const LEAD_BELOW := 3.0
@@ -214,6 +221,9 @@ class Fish:
 	var wag := -1.0
 	## Время мира, когда вернулась после съедения (−INF — не съедали): с него рыбка вырастает (`FishView.grow_k`).
 	var born := -INF
+	## Б3: нормаль обшивки при последнем касании (мир) и сколько ещё её помнить, с (`EcoFish.hull_steer`).
+	var hull_n := Vector3.ZERO
+	var hull_t := 0.0
 	var _shoal: WeakRef
 
 
@@ -522,6 +532,33 @@ func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
 		sh.alarm = maxf(sh.alarm, 1.5)
 
 
+## Б3: ускорение рыбки у обшивки — тяга в корпус (по нормали n наружу) снята, от обшивки — HULL_SHED, слабея к
+## концу памяти касания left (с).
+static func hull_steer(acc: Vector3, n: Vector3, left: float) -> Vector3:
+	var into := acc.dot(n)
+	if into < 0.0:
+		acc -= n * into
+	return acc + n * (HULL_SHED * clampf(left / HULL_KEEP, 0.0, 1.0))
+
+
+## Б3: куда отплывать от обшивки с нормалью n (мир); rel — место рыбки от точки корабля. Под днищем (n вниз) рыбку
+## прижимает к дну, перед носом (n вперёд) корабль её толкает быстрее, чем она плывёт, — в обоих случаях уходит вбок
+## к своему борту (поперёк оси корабля): раньше зажатая под днищем или на носу ехала с кораблём секундами.
+static func shed_dir(n: Vector3, rel: Vector3, yaw: float) -> Vector3:
+	var fwd := Vector3(-sin(yaw), 0.0, -cos(yaw))
+	if n.y > -0.3 and n.dot(fwd) < 0.5:
+		return n
+	var right := Vector3.RIGHT.rotated(Vector3.UP, yaw)
+	var side := rel.dot(right)
+	return (Vector3(n.x, 0.0, n.z) * 0.5 + right * (1.0 if side >= 0.0 else -1.0)).normalized()
+
+
+## Б3: цель стаи, попавшая в корпус (с запасом GOAL_PAD), — у обшивки снаружи; иначе как есть.
+static func goal_clear(goal: Vector3, ship_pos: Vector3, yaw: float) -> Vector3:
+	var res := EcoHull.push_out(goal, ship_pos, yaw, GOAL_PAD)
+	return goal if res.is_empty() else res[0]
+
+
 ## Б3: скорость рыбки после шага при пределе max_s: sp — после ускорения, was — до шага. Выше предела — не больше
 ## прежней минус BRAKE · dt (тормозит скольжением), но и не выше sp; разгоняться за предел нельзя.
 static func cap_speed(sp: float, was: float, max_s: float, dt: float) -> float:
@@ -631,6 +668,7 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 	var velocity := sh.velocity
 	var home := sh.home
 	var goal := home if alarm and not sh.threat_is_ship else sh.goal
+	goal = goal_clear(goal, world.ship.pos, world.ship.yaw)
 	var pull := 1.2 if alarm else 0.35
 	var sep := sh.sep
 	var has_threat := sh.has_threat
@@ -676,6 +714,9 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 				continue
 		if cage:
 			acc += cage_push(frame, p)
+		if f.hull_t > 0.0:
+			acc = hull_steer(acc, f.hull_n, f.hull_t)
+			f.hull_t -= dt
 		var ph := f.phase
 		acc += Vector3(sin(wave_x + ph) * 0.6, sin(wave_y + ph * 2.0) * 0.3, cos(wave_z + ph) * 0.6)
 		var h := a.ground_est(ground) if has_ground else 0.0
@@ -713,6 +754,10 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 		if p.distance_squared_to(ship_pos) < hull_r2:  # сквозь корпус не проплывают
 			a.p = p
 			if world.push_out(a, HULL_GAP):
+				var off := a.p - p
+				if off.length_squared() > 1e-10:
+					f.hull_n = shed_dir(off.normalized(), p - ship_pos, world.ship.yaw)
+					f.hull_t = HULL_KEEP
 				p = a.p
 		if has_ground and p.y < h + cl + 0.7:
 			# у зажима — дно точно: запомненное (на старом месте) на крутом склоне ошибается до полуметра (Б3)
