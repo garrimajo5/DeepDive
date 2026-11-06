@@ -40,8 +40,10 @@ const SLOW_MIN := 0.15
 ## Высота над дном в пути, м; к гнезду опускается на последних DESCEND м.
 const CRUISE := 2.5
 const DESCEND := 6.0
-## Ближе этого (м) — пришёл.
+## Ближе этого (м) — пришёл; остаток до места у гнезда доходит в OPEN ходом SETTLE м/с (≈ 1 с, до подъёма
+## створки LIFT.x), а не переставляется разом (Б3: раньше прыжок до 0,3 м за шаг).
 const ARRIVE := 0.3
+const SETTLE := 0.25
 ## Корабль (центр) ближе этого — купольник стоит (корпус 32 м: половина + запас).
 const KEEP := 22.0
 ## Клип OpenPetal: длина, когда створка начинает и кончает подниматься (с от начала).
@@ -134,6 +136,7 @@ func step(world: EcoWorld, dt: float) -> void:
 		State.OPEN:
 			speed = 0.0
 			turn_v = 0.0
+			pos = pos.move_toward(stand(), SETTLE * dt)
 			petal = maxf(petal, HashNoise.smooth(LIFT.x, LIFT.y, t))
 			if t >= LIFT.y and not opened:
 				opened = true
@@ -175,7 +178,6 @@ func _swim(goal: Vector3, top: float, ship: Vector3, dt: float) -> bool:
 	var d := Vector2(goal.x - pos.x, goal.z - pos.z)
 	var dist := d.length()
 	if dist < ARRIVE and absf(goal.y - pos.y) < ARRIVE:
-		pos = goal
 		turn_v = 0.0
 		return true
 	var want := _yaw_to(d) if dist > 1e-4 else yaw
