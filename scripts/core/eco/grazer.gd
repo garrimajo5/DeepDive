@@ -34,6 +34,8 @@ const GRAZE_COOLDOWN := 45.0
 const START_QUIET := 8.0
 ## Над дном (м).
 const LIFT := 0.1
+## Уклон под шагом разошёлся с прошлым больше этого — шаг пересчитывается по найденному (`walk`, перегиб дна).
+const SLOPE_REDO := 0.3
 
 
 ## Скребун: существо мира, курс и пятно, к которому идёт или на котором пасётся.
@@ -242,8 +244,18 @@ func _step_grazer(world: EcoWorld, g: Grazer, dt: float) -> void:
 ## Шаг по дну из from на move (по горизонтали, м) при уклоне slope (подъём к шагу по горизонтали, с прошлого шага):
 ## новое место на дне + LIFT. Шаг по горизонтали укорачивается в √(1 + slope²) раз — путь вдоль дна длиной move:
 ## скребун идёт по бугру своим шагом, а не взбегает. fallback — высота дна без дна мира (тесты).
+## Уклон с прошлого шага отстаёт на перегибе: на гребне бугра (вверх 2:1 → вниз 2:1) и у подножия шаг по уклону
+## ≈ 0 шёл полным шагом по горизонтали — вдоль дна до 2 м/с вместо 0,9 (Б3: скребун на гребне соскакивал). Если
+## уклон под шагом разошёлся с прошлым больше SLOPE_REDO, шаг пересчитывается по уклону, что он нашёл (одна выборка
+## дна сверх обычной — только на перегибе).
 static func walk(world: EcoWorld, from: Vector3, move: Vector3, fallback: float, slope: float = 0.0) -> Vector3:
-	return _on_ground(world, from, move / sqrt(1.0 + slope * slope), fallback)
+	var p := _on_ground(world, from, move / sqrt(1.0 + slope * slope), fallback)
+	var fl := _flat(p, from)
+	if fl > 1e-5:
+		var found := (p.y - from.y) / fl
+		if absf(found - slope) > SLOPE_REDO:
+			p = _on_ground(world, from, move / sqrt(1.0 + found * found), fallback)
+	return p
 
 
 static func _on_ground(world: EcoWorld, from: Vector3, move: Vector3, fallback: float) -> Vector3:
