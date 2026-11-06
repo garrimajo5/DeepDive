@@ -95,6 +95,8 @@ class Veil:
 	## Дно под куполом (`floor_low`) и где его брали: заново — сдвинувшись дальше LOW_MOVE (7 выборок дна дороги).
 	var low := 0.0
 	var low_at := Vector2(INF, INF)
+	## Ход купола по горизонтали (м/с) с отставанием DRAG_FOLLOW: щупальца тянутся против него (`rel_water`).
+	var drag := Vector3.ZERO
 
 	## Цель сонара и сканера (vl.scanP).
 	func scan_point() -> Vector3:
@@ -132,6 +134,7 @@ func reset(world: EcoWorld) -> void:
 		vl.w = pulse_rate(i)
 		vl.base_y = target(world, vl)
 		vl.p.y = height(world, vl, world.time)
+		vl.drag = drift_velocity(vl, world.time)
 		for k in SMALL:
 			vl.small_size.append(_rnd.range_f(0.5, 1.0))
 			vl.small_y.append(_rnd.range_f(-3.0, -1.0))
@@ -146,8 +149,10 @@ func reset(world: EcoWorld) -> void:
 func step(world: EcoWorld, dt: float) -> void:
 	var t := world.time
 	for vl in veils:
-		vl.p.x += sin(t * 0.031 + vl.ph) * DRIFT * dt + (vl.home.x - vl.p.x) * HOME_PULL * dt
-		vl.p.z += cos(t * 0.027 + vl.ph * 1.7) * DRIFT * dt + (vl.home.z - vl.p.z) * HOME_PULL * dt
+		var v := drift_velocity(vl, t)
+		vl.p.x += v.x * dt
+		vl.p.z += v.z * dt
+		vl.drag = vl.drag.lerp(v, 1.0 - exp(-DRAG_FOLLOW * dt))
 		var at := Vector2(vl.p.x, vl.p.z)
 		if at.distance_squared_to(vl.low_at) > LOW_MOVE * LOW_MOVE:
 			vl.low = floor_low(world, vl)
@@ -194,6 +199,19 @@ static func height(world: EcoWorld, vl: Veil, t: float) -> float:
 	return target(world, vl) + sin(t * 0.3 + vl.ph) * BOB
 
 
+## Дрейф купола у своего места (м/с, по горизонтали): покачивание ± DRIFT и тяга домой HOME_PULL.
+static func drift_velocity(vl: Veil, t: float) -> Vector3:
+	return Vector3(sin(t * 0.031 + vl.ph) * DRIFT + (vl.home.x - vl.p.x) * HOME_PULL, 0.0,
+		cos(t * 0.027 + vl.ph * 1.7) * DRIFT + (vl.home.z - vl.p.z) * HOME_PULL)
+
+
+## Вода относительно купола: поток flow минус ход купола drag, не быстрее REL_MAX (двойник шейдера щупалец).
+static func rel_water(flow: Vector3, drag: Vector3) -> Vector3:
+	var rel := flow - drag
+	var len := rel.length()
+	return rel * (REL_MAX / len) if len > REL_MAX else rel
+
+
 ## Ритм пульса вуали с номером i (рад/с): PULSE_W ± RATE_SPREAD.
 static func pulse_rate(i: int) -> float:
 	return PULSE_W * EcoVary.spread(i, EcoVary.RATE, RATE_SPREAD)
@@ -216,6 +234,13 @@ static func rim_glow(vl: Veil, t: float) -> float:
 const WAVE_LAG := 0.35
 const WAVE_GROW := 1.0
 const TRAIL := 0.12
+## Вторичное движение (Б3): купол-«автобус» дрейфует до ≈ 0,85 м/с, а вода стоит — щупальца сносит не потоком, а
+## водой относительно купола (`rel_water`: поток минус ход купола `Veil.drag`), и тянутся они за куполом. Ход для
+## щупалец догоняет ход купола долей DRAG_FOLLOW в секунду (нити отстают, не поворачивают за кадр); вода для сноса —
+## не быстрее REL_MAX м/с (кончик — не дальше 2 · TRAIL длины). Шейдеру — по вуали в uniform `drag[DRAG_SLOTS]`.
+const DRAG_FOLLOW := 0.5
+const REL_MAX := 0.6
+const DRAG_SLOTS := 4
 
 
 ## Точка j (0…SEGMENTS) щупальца k относительно середины купола в момент t — как veilUpdate, плюс волна пульса и
@@ -234,11 +259,12 @@ static func tentacle_point(vl: Veil, k: int, j: int, t: float, flow := Vector3.Z
 	var p := Vector3(x0 * sj + sin(t * 0.9 + (j - 1) * 0.45 + k) * j * 0.12, -j * step_len,
 		z0 * sj + cos(t * 0.7 + (j - 1) * 0.4 + k * 1.3) * j * 0.12)
 	if live:
-		p += trail(vl, h, j * step_len, t, flow)
+		p += trail(vl, h, j * step_len, t, rel_water(flow, vl.drag))
 	return p
 
 
-## Снос звена течением: h — доля длины щупальца, depth — глубина звена под куполом (м) — двойник шейдера.
+## Снос звена течением: h — доля длины щупальца, depth — глубина звена под куполом (м), flow — вода относительно
+## купола (`rel_water`) — двойник шейдера.
 static func trail(vl: Veil, h: float, depth: float, t: float, flow: Vector3) -> Vector3:
 	var gust := 0.85 + 0.15 * sin(t * 0.4 + vl.ph)
 	var off := flow / EcoCurrent.SPEED * (TRAIL * gust * h * depth)

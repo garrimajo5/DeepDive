@@ -8,7 +8,7 @@ extends Node3D
 ## (40 по 10 звеньев линиями, #ff9ae6, 0,6), номер вуали — UV2.x: экземпляр рисует только свои (в INSTANCE_CUSTOM —
 ## пульс, фаза, номер вуали), прочие сжимаются в точку. Колышутся в шейдере по той же формуле, что
 ## EcoVeil.tentacle_point, — пульс купола бежит по ним волной вниз, течение (`EcoShaders.follow`, поток мира) сносит
-## кончики; «Экономно» — только колыхание браузера (`sway_k` = 0, `EcoShaders.set_sway_lite`). Купола и щупальца —
+## кончики, а дрейфующий купол тянет их за собой (вода относительно купола, uniform `drag` — `drags`); «Экономно» — только колыхание браузера (`sway_k` = 0, `EcoShaders.set_sway_lite`). Купола и щупальца —
 ## общий шейдер прозрачного (EcoShaders.MIST). Всё без света, прозрачное, без записи глубины, на слое отмели
 ## (OceanView.LAYER_WORLD). Дальше FAR от корабля вуаль не видна в мути — не рисуется и не пересчитывается: видимые
 ## вуали идут первыми, `visible_instance_count` отрезает прочие; рамка видимости — по видимым вуалям.
@@ -248,10 +248,11 @@ static func tentacle_params(vl: EcoVeil.Veil = null) -> Dictionary:
 
 
 ## Точка j щупальца k из меша по формуле шейдера (для тестов: совпадает с EcoVeil.tentacle_point); m — материал
-## щупалец (его волна и снос), flow — поток, sway_k — 0 на «Экономно».
+## щупалец (его волна и снос), flow — поток, sway_k — 0 на «Экономно», drag — ход купола (uniform `drag` вуали).
 static func shader_point(rest: Vector3, k: int, j: int, t: float, pulse: float, m: Dictionary = {},
-		flow := Vector3.ZERO, sway_k := 0.0) -> Vector3:
+		flow := Vector3.ZERO, sway_k := 0.0, drag := Vector3.ZERO) -> Vector3:
 	var p := Vector3(rest.x * pulse, rest.y, rest.z * pulse)
+	flow = EcoVeil.rel_water(flow, drag)
 	if j > 0:
 		var h := j / float(m.get("seg", 10.0))
 		var wave: Vector4 = m.get("wave", Vector4.ZERO)
@@ -271,7 +272,7 @@ static func shader_point(rest: Vector3, k: int, j: int, t: float, pulse: float, 
 ## at — место экземпляра.
 ## Нить чужой вуали сжимается в точку экземпляра.
 static func instance_point(rest: Vector3, kj: Vector2, vi: float, custom: Color, at: Vector3, t: float,
-		m: Dictionary, flow := Vector3.ZERO, sway_k := 1.0) -> Vector3:
+		m: Dictionary, flow := Vector3.ZERO, sway_k := 1.0, drag := Vector3.ZERO) -> Vector3:
 	if absf(vi - custom.b) > 0.5:
 		return at
 	var mm := m.duplicate()
@@ -279,7 +280,17 @@ static func instance_point(rest: Vector3, kj: Vector2, vi: float, custom: Color,
 	w.z += custom.g
 	w.y *= custom.a if custom.a > 0.0 else 1.0
 	mm["wave"] = w
-	return at + shader_point(rest, int(kj.x), int(kj.y), t, custom.r, mm, flow, sway_k)
+	return at + shader_point(rest, int(kj.x), int(kj.y), t, custom.r, mm, flow, sway_k, drag)
+
+
+## Ход куполов для uniform `drag` щупалец: по номеру вуали (INSTANCE_CUSTOM.b), EcoVeil.DRAG_SLOTS мест.
+static func drags(list: Array[EcoVeil.Veil]) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	out.resize(EcoVeil.DRAG_SLOTS)
+	for vl in list:
+		if vl.index < EcoVeil.DRAG_SLOTS:
+			out[vl.index] = vl.drag
+	return out
 
 
 ## Расставить вуали в момент t (время мира); ship — где корабль (дальние вуали не рисуются).
@@ -326,7 +337,9 @@ func sync(t: float, ship: Vector3) -> void:
 	EcoMM.send(tentacles, tent_buffer)
 	tentacles.multimesh.visible_instance_count = n
 	tentacles.custom_aabb = tent_box
-	(tentacles.material_override as ShaderMaterial).set_shader_parameter("t", t)
+	var mat := tentacles.material_override as ShaderMaterial
+	mat.set_shader_parameter("t", t)
+	mat.set_shader_parameter("drag", drags(veils.veils))
 
 
 ## Облачка выдоха и слизи в момент t (время мира): ship — корабль (дальность и луч), flow — течение мира.
