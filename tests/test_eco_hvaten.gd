@@ -129,7 +129,9 @@ func test_hides_in_beam_and_reopens_in_dark() -> void:
 	ok(w.in_beam(hv.top), "хватень в луче")
 	w.run(0.2)
 	ok(hv.lit, "освещён")
-	near(hv.open, 1.0 - 0.2 * EcoHvaten.CLOSE_RATE, 1e-3, "щупальца прячутся быстро")
+	# прячет рефлексом: до CLOSE_RATE за CLOSE_RATE / CLOSE_ACCEL = 0,1 с, дальше на полном ходу
+	var ramp := EcoHvaten.CLOSE_RATE / EcoHvaten.CLOSE_ACCEL
+	near(hv.open, 1.0 - (0.2 - ramp * 0.5) * EcoHvaten.CLOSE_RATE, 0.07, "щупальца прячутся быстро")
 	eq(_notes(w, "hvaten", "hide").size(), 1, "«прячет щупальца»")
 	eq(_notes(w, "pestr", "immune").size(), 1, "пестрянка ныряет в щупальца")
 	ok(_notes(w, "hvaten", "hide")[0].text().contains("прожектор"), "текст про прожектор")
@@ -137,10 +139,78 @@ func test_hides_in_beam_and_reopens_in_dark() -> void:
 	near(hv.open, 0.0, 1e-6, "спрятал совсем")
 	w.ship.light_on = false
 	w.run(1.0)
-	near(hv.open, EcoHvaten.OPEN_RATE, 1e-3, "в темноте раскрывается медленно")
+	var ramp_in := EcoHvaten.OPEN_RATE / EcoHvaten.OPEN_ACCEL
+	near(hv.open, (1.0 - ramp_in * 0.5) * EcoHvaten.OPEN_RATE, 0.01, "в темноте раскрывается медленно")
 	_aim(w, hv.top)
 	w.run(0.1)
 	eq(_notes(w, "hvaten", "hide").size(), 1, "приоткрытый хватень — без нового «hide»")
+
+
+## Плавность (Б3): раскрытие меняет скорость не быстрее OPEN_ACCEL / CLOSE_ACCEL — кончики щупалец не срываются с
+## места на полном ходу за кадр, ни в луче, ни в темноте, ни на развороте; дошёл до нужного — встаёт без перелёта.
+func test_open_eases_without_jerk() -> void:
+	var w := EcoWorld.new()  # без светляков: только свет
+	w.ground = _flat
+	w.ship.pos = FAR
+	_hungry(w.add(EcoHvaten.new(null, [Vector3(0, FLAT, 0)] as Array[Vector3])) as EcoHvaten)
+	var hv := _system(w).anemones[0]
+	var dt := EcoWorld.MAX_STEP
+	var prev_v := 0.0
+	var worst := 0.0
+	var top := 0.0
+	var plan := [[true, 0.25], [false, 0.6], [true, 0.6], [false, 4.0]]  # прячет, не дорыв — раскрывает, снова прячет
+	for leg: Array in plan:
+		if leg[0]:
+			_aim(w, hv.top)
+		else:
+			w.ship.light_on = false
+		for i in int(float(leg[1]) / dt):
+			var o0 := hv.open
+			w.step(dt)
+			var v := (hv.open - o0) / dt
+			worst = maxf(worst, absf(v - prev_v) / dt)
+			top = maxf(top, absf(v))
+			ok(hv.open >= 0.0 and hv.open <= 1.0, "раскрытие в 0…1")
+			prev_v = v
+	# остановка на месте — в пределах шага разгона (раньше полный CLOSE_RATE за шаг — 50 1/с²)
+	ok(worst <= EcoHvaten.CLOSE_ACCEL * 1.3, "скорость раскрытия меняется не быстрее CLOSE_ACCEL (%.1f)" % worst)
+	ok(top <= EcoHvaten.CLOSE_RATE + 1e-3, "не быстрее CLOSE_RATE")
+	ok(hv.open > 0.9 and hv.open <= 1.0, "в темноте раскрылся снова (%.2f)" % hv.open)
+	# раскрытие из покоя: первый кадр — не на полном OPEN_RATE
+	w = EcoWorld.new()
+	w.ground = _flat
+	w.ship.pos = FAR
+	var h2 := w.add(EcoHvaten.new(null, [Vector3(0, FLAT, 0)] as Array[Vector3])) as EcoHvaten
+	var a2 := h2.anemones[0]
+	a2.digest = 0.0
+	a2.open = 0.0
+	w.step(dt)
+	ok(a2.open < EcoHvaten.OPEN_RATE * dt * 0.5, "трогается мягко, а не сразу на OPEN_RATE")
+	for i in int(1.0 / dt):
+		w.step(dt)
+	near(a2.open_v, EcoHvaten.OPEN_RATE, 1e-3, "за секунду набрал ход раскрытия")
+
+
+func test_open_step_arrives_without_overshoot() -> void:
+	# от 1 к половине (переваривает) — подход тормозит √(2·a·остаток), не перелетает DIGEST_OPEN
+	var hv := EcoHvaten.Anemone.new()
+	hv.open = 1.0
+	var low := 1.0
+	for i in 200:
+		EcoHvaten.open_step(hv, EcoHvaten.DIGEST_OPEN, 1.0 / 60.0)
+		low = minf(low, hv.open)
+	near(hv.open, EcoHvaten.DIGEST_OPEN, 1e-6, "встал на половине")
+	ok(low >= EcoHvaten.DIGEST_OPEN - 1e-6, "без перелёта ниже половины")
+	eq(hv.open_v, 0.0, "стоит")
+	# раскрывался и попал в луч — сперва тормозит, потом прячет; ход не дальше чем на OPEN_RATE² / (2·CLOSE_ACCEL)
+	hv.open = 0.5
+	hv.open_v = EcoHvaten.OPEN_RATE
+	var high := 0.5
+	for i in 120:
+		EcoHvaten.open_step(hv, 0.0, 1.0 / 60.0)
+		high = maxf(high, hv.open)
+	ok(high - 0.5 <= EcoHvaten.OPEN_RATE * EcoHvaten.OPEN_RATE / (2.0 * EcoHvaten.CLOSE_ACCEL) + 0.01, "тормозит рефлексом")
+	near(hv.open, 0.0, 1e-6, "спрятал")
 
 
 func test_hide_message_once_in_30_s() -> void:
