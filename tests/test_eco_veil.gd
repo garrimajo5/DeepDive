@@ -369,7 +369,7 @@ func test_tentacles_all_veils_one_mesh() -> void:
 		for i in [0, 1, 19, 238, 799]:
 			var own: int = vl.index * per + i
 			eq(int(uv2[own].x), vl.index, "номер вуали в UV2")
-			var got := VeilView.instance_point(v[own], uv[own], uv2[own].x, custom, vl.p, t, params, flow, 1.0)
+			var got := VeilView.instance_point(v[own], uv[own], uv2[own].x, custom, vl.p, t, params, flow, 1.0, vl.drag)
 			var want := vl.p + EcoVeil.tentacle_point(vl, int(uv[own].x), int(uv[own].y), t, flow, true)
 			near(got.distance_to(want), 0.0, 1e-4, "вуаль %d, вершина %d" % [vl.index, i])
 			var other: int = (1 - vl.index) * per + i
@@ -401,6 +401,7 @@ func test_tentacle_mesh_matches_shader_formula() -> void:
 ## Б3: сокращение купола бежит волной вниз по щупальцам — кончик раздувается позже основания и шире.
 func test_pulse_wave_runs_down_tentacles() -> void:
 	var vl := _veils(_world()).veils[0]
+	vl.drag = Vector3.ZERO
 	var k := 3
 	var rest := Vector2(cos(vl.tent_a[k]), sin(vl.tent_a[k])) * vl.tent_r[k]
 	var best := {}
@@ -434,6 +435,7 @@ func test_pulse_wave_runs_down_tentacles() -> void:
 ## Б3: течение сносит щупальца — кончик уходит по потоку, основание стоит, нить не вытягивается.
 func test_current_trails_tentacles() -> void:
 	var vl := _veils(_world()).veils[0]
+	vl.drag = Vector3.ZERO
 	var flow := Vector3(0, 0, -EcoCurrent.SPEED)
 	var t := 31.0
 	for k in [0, 17]:
@@ -466,7 +468,7 @@ func test_tentacle_shader_live_matches_cpu() -> void:
 		for i in [0, 1, 19, 238, 799]:
 			var k := int(uv[i].x)
 			var j := int(uv[i].y)
-			var got := VeilView.shader_point(v[i], k, j, t, s, params, flow, 1.0)
+			var got := VeilView.shader_point(v[i], k, j, t, s, params, flow, 1.0, vl.drag)
 			near(got.distance_to(EcoVeil.tentacle_point(vl, k, j, t, flow, true)), 0.0, 1e-4,
 				"точка %d щупальца %d в %.1f с" % [j, k, t])
 	var code := EcoShaders.MIST
@@ -619,9 +621,88 @@ func test_each_veil_pulses_own_rate() -> void:
 	var vl := b
 	var i: int = vl.index * per + 199
 	var with_rate := VeilView.instance_point(v[i], uv[i], uv2[i].x, Color(EcoVeil.pulse(vl, t2).x, vl.ph, vl.index,
-		vl.w / EcoVeil.PULSE_W), vl.p, t2, params, Vector3.ZERO, 1.0)
+		vl.w / EcoVeil.PULSE_W), vl.p, t2, params, Vector3.ZERO, 1.0, vl.drag)
 	var want := vl.p + EcoVeil.tentacle_point(vl, int(uv[i].x), int(uv[i].y), t2, Vector3.ZERO, true)
 	near(with_rate.distance_to(want), 0.0, 1e-4, "нить в шейдере — по ритму своей вуали")
 	var plain := VeilView.instance_point(v[i], uv[i], uv2[i].x, Color(EcoVeil.pulse(vl, t2).x, vl.ph, vl.index, 1.0),
-		vl.p, t2, params, Vector3.ZERO, 1.0)
+		vl.p, t2, params, Vector3.ZERO, 1.0, vl.drag)
 	ok(plain.distance_to(want) > 1e-3, "без доли ритма нить шла бы не в такт")
+
+
+## Б3, вторичное движение: дрейфующий купол тянет щупальца за собой — их сносит вода относительно купола, а не
+## поток мира. В стоячей воде кончик отстаёт против хода купола; ход для нитей догоняет ход купола плавно.
+func test_drifting_bell_drags_tentacles() -> void:
+	var w := _world()
+	var vl := _veils(w).veils[0]
+	near(vl.drag.distance_to(EcoVeil.drift_velocity(vl, w.time)), 0.0, 1e-6, "после сброса — ход купола, без рывка")
+	var dt := 0.05
+	var worst := 0.0
+	for i in 2400:
+		var before := vl.drag
+		w.step(dt)
+		worst = maxf(worst, (vl.drag - before).length() / dt)
+	ok(worst < 0.1, "ход для нитей меняется плавно: %.3f м/с²" % worst)
+	var v := EcoVeil.drift_velocity(vl, w.time)
+	ok(v.length() > 0.2, "купол дрейфует: %.2f м/с" % v.length())
+	near(vl.drag.distance_to(v), 0.0, 0.08, "ход нитей догнал ход купола")
+	var t := w.time
+	var k := 5
+	vl.drag = Vector3(0.5, 0, 0)
+	var tip := EcoVeil.tentacle_point(vl, k, EcoVeil.SEGMENTS, t, Vector3.ZERO, true)
+	vl.drag = Vector3.ZERO
+	var still := EcoVeil.tentacle_point(vl, k, EcoVeil.SEGMENTS, t, Vector3.ZERO, true)
+	var d := tip - still
+	ok(d.x < -0.5 * EcoVeil.TRAIL * vl.tent_len[k], "кончик отстаёт против хода купола: %.2f м" % d.x)
+	near(d.z, 0.0, 1e-4, "вбок не сносит")
+	ok(d.y > 0.0, "кончик приподнят — нить не вытягивается")
+	# купол идёт вместе с потоком — нити висят, как в стоячей воде
+	vl.drag = Vector3(0.2, 0, -0.1)
+	near(EcoVeil.tentacle_point(vl, k, EcoVeil.SEGMENTS, t, Vector3(0.2, 0, -0.1), true).distance_to(still), 0.0, 1e-4,
+		"плывёт с потоком — не сносит")
+	# быстрая вода — не дальше REL_MAX
+	vl.drag = Vector3(-5.0, 0, 0)
+	var far := EcoVeil.tentacle_point(vl, k, EcoVeil.SEGMENTS, t, Vector3.ZERO, true) - still
+	ok(far.x <= EcoVeil.REL_MAX / EcoCurrent.SPEED * EcoVeil.TRAIL * vl.tent_len[k] + 1e-4, "снос не больше REL_MAX: %.2f" % far.x)
+
+
+## Шейдер берёт ход купола своей вуали из uniform `drag` по номеру и сносит нити так же, как процессор.
+func test_shader_drag_per_veil() -> void:
+	var w := _world([SPOT, SPOT + Vector2(40, 10)])
+	var list := _veils(w).veils
+	list[0].drag = Vector3(0.4, 0, 0.1)
+	list[1].drag = Vector3(-0.3, 0, 0.2)
+	var d := VeilView.drags(list)
+	eq(d.size(), EcoVeil.DRAG_SLOTS, "мест в uniform")
+	near(d[1].distance_to(list[1].drag), 0.0, 1e-6, "по номеру вуали")
+	var m := VeilView.build_tentacles_all(list)
+	var arr := m.surface_get_arrays(0)
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	var uv2: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV2]
+	var per := EcoVeil.TENTACLES * EcoVeil.SEGMENTS * 2
+	var params := VeilView.tentacle_params()
+	var flow := Vector3(0.1, 0, -0.2)
+	var t := 52.0
+	for vl in list:
+		var custom := Color(EcoVeil.pulse(vl, t).x, vl.ph, vl.index, vl.w / EcoVeil.PULSE_W)
+		var i: int = vl.index * per + 19
+		var got := VeilView.instance_point(v[i], uv[i], uv2[i].x, custom, vl.p, t, params, flow, 1.0, d[vl.index])
+		var want := vl.p + EcoVeil.tentacle_point(vl, int(uv[i].x), int(uv[i].y), t, flow, true)
+		near(got.distance_to(want), 0.0, 1e-4, "вуаль %d — как процессор" % vl.index)
+	var code := EcoShaders.MIST
+	for u in ["uniform vec3 drag[4]", "drag[clamp(int(INSTANCE_CUSTOM.b + 0.5), 0, 3)]", "0.6 / rl"]:
+		ok(code.contains(u), "в шейдере: %s" % u)
+	eq(EcoVeil.DRAG_SLOTS, 4, "мест — как в шейдере")
+	near(EcoVeil.REL_MAX, 0.6, 1e-6, "предел — как в шейдере")
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var ship := EcoLink.ShipState.new()
+	ship.pos = view.veils.veils[0].p + Vector3(0, -5, 30)
+	view.step(0.05, ship)
+	var mat := view.veil_view.tentacles.material_override as ShaderMaterial
+	var got_d: PackedVector3Array = mat.get_shader_parameter("drag")
+	near(got_d[0].distance_to(view.veils.veils[0].drag), 0.0, 1e-5, "материал получает ход купола")
+	view.queue_free()
+	await frames(1)

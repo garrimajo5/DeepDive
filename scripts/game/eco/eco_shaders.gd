@@ -176,6 +176,8 @@ uniform float seg = 10.0;
 uniform float trail = 0.0;
 uniform vec3 flow = vec3(0.0);
 uniform float sway_k = 1.0;
+// ход купола каждой вуали (EcoVeil.Veil.drag): щупальца сносит вода относительно купола (EcoVeil.rel_water)
+uniform vec3 drag[4];
 // пузыри
 uniform float drift = 0.0;
 uniform float size_low = 0.1;
@@ -218,7 +220,10 @@ void vertex() {
 			p.z += cos(t * 0.7 + (j - 1.0) * 0.4 + k * 1.3) * j * 0.12;
 			// снос течением (EcoVeil.trail): глубина звена — -VERTEX.y, длина нити — она же / h
 			float depth = -VERTEX.y;
-			vec3 off = flow / 0.3 * (trail * (0.85 + 0.15 * sin(t * 0.4 + ph)) * h * depth) * sway_k;
+			vec3 rel = flow - drag[clamp(int(INSTANCE_CUSTOM.b + 0.5), 0, 3)];
+			float rl = length(rel);
+			rel *= rl > 0.6 ? 0.6 / rl : 1.0;
+			vec3 off = rel / 0.3 * (trail * (0.85 + 0.15 * sin(t * 0.4 + ph)) * h * depth) * sway_k;
 			off.y = dot(off, off) / (2.0 * max(depth / max(h, 0.01), 0.1));
 			p += off;
 		}
