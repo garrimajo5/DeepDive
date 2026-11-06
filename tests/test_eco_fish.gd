@@ -836,3 +836,59 @@ func test_no_bounce_on_floor_clamp() -> void:
 	ok(fast > 2.0, "рыбки шли вниз: %.1f м/с" % fast)
 	ok(worst < 40.0, "у дна не подскакивают: %.1f м/с²" % worst)
 	ok(under < 0.0, "под дно не уходят: %.2f м" % under)
+
+
+## Б3, плавность: размах виляния тела — по ходу. Медленная рыбка едва шевелит телом, от спокойного хода — полный.
+func test_wiggle_follows_speed() -> void:
+	near(EcoFishLook.wag_want(0.0), EcoFishLook.WIGGLE_SLOW, 1e-6, "стоит — малая доля")
+	near(EcoFishLook.wag_want(EcoFish.MIN_SPEED), EcoFishLook.WIGGLE_SLOW, 1e-6, "самый тихий ход — малая доля")
+	near(EcoFishLook.wag_want(EcoFish.CALM_SPEED), 1.0, 1e-6, "спокойный ход — полный размах")
+	near(EcoFishLook.wag_want(EcoFish.ALARM_SPEED), 1.0, 1e-6, "в тревоге не больше полного")
+	var prev := 0.0
+	for i in 40:
+		var k := EcoFishLook.wag_want(i * 0.1)
+		ok(k >= prev - 1e-6, "растёт с ходом")
+		prev = k
+	var w := _world()
+	var f := _fish(w).all[3]
+	f.agent.v = Vector3(0, 0, -EcoFish.MIN_SPEED)
+	f.wag = EcoFishLook.wag_step(f.wag, f.agent.v.length(), 0.1)
+	near(f.wag, EcoFishLook.WIGGLE_SLOW, 1e-6, "первый шаг — сразу нужная доля")
+	var mx := 0.0
+	for i in 200:
+		mx = maxf(mx, acos(clampf(-EcoFishLook.forward(f, i * 0.013).z, -1.0, 1.0)))
+	ok(mx < EcoFishLook.WIGGLE * 0.5, "медленная рыбка виляет слабо: %.3f рад" % mx)
+	ok(mx > EcoFishLook.WIGGLE * EcoFishLook.WIGGLE_SLOW * 0.8, "но виляет: %.3f рад" % mx)
+	var buf := FishView.pack(_fish(w), 0.7)
+	var fw := FishView.transform_at(buf, f.index).basis.z.normalized()
+	_close(EcoFishLook.forward(f, 0.7), fw, "буфер вида — та же доля, что двойник")
+
+
+## Доля размаха меняется не быстрее WAG_FOLLOW в секунду: рванула или встала — тело разгоняет виляние плавно.
+func test_wag_eases_in_world() -> void:
+	near(EcoFishLook.wag_step(EcoFishLook.WIGGLE_SLOW, EcoFish.ALARM_SPEED, 0.1),
+		EcoFishLook.WIGGLE_SLOW + EcoFishLook.WAG_FOLLOW * 0.1, 1e-6, "рывок — разгон долей, не за кадр")
+	var w := _world()
+	var fish := _fish(w)
+	w.ship.pos = EcoFish.HOMES[0] + Vector3(0, 6, 8)   # корабль у стаи — стая шагает каждый кадр
+	w.run(1.0)
+	var was := PackedFloat32Array()
+	for f in fish.all:
+		was.append(f.wag)
+	var dt := 1.0 / 30.0
+	var lo := 1.0
+	var worst := 0.0
+	for s in 600:
+		if s == 200:
+			w.ship.pos = EcoFish.HOMES[0] + Vector3(0, 2, 2)   # подошёл вплотную — тревога, рывок
+			w.ship.speed = 3.0
+		w.step(dt)
+		for f in fish.all:
+			if f.agent.alive and was[f.index] >= 0.0 and f.wag >= 0.0 and f.shoal.lag <= 0.0:
+				worst = maxf(worst, absf(f.wag - was[f.index]))
+			if f.wag >= 0.0:
+				ok(f.wag >= EcoFishLook.WIGGLE_SLOW - 1e-6 and f.wag <= 1.0 + 1e-6, "доля в пределах")
+				lo = minf(lo, f.wag)
+			was[f.index] = f.wag
+	ok(worst <= EcoFishLook.WAG_FOLLOW * (dt + EcoFish.LAG_MAX) + 1e-5, "за шаг не больше WAG_FOLLOW · dt: %.4f" % worst)
+	ok(lo < 0.99, "есть рыбки на тихом ходу — виляют слабее: %.3f" % lo)
