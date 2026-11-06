@@ -360,6 +360,7 @@ func sync(t: float, ship: Vector3, yaw := 0.0, flow := Vector3.ZERO) -> void:
 	var mat := tentacles.material_override as ShaderMaterial
 	mat.set_shader_parameter("t", t)
 	mat.set_shader_parameter("drag", drags(veils.veils))
+	var was := hull_on
 	hull_on = false
 	if sides.size() != EcoVeil.DRAG_SLOTS * EcoVeil.TENTACLES:
 		sides.resize(EcoVeil.DRAG_SLOTS * EcoVeil.TENTACLES)
@@ -368,18 +369,21 @@ func sync(t: float, ship: Vector3, yaw := 0.0, flow := Vector3.ZERO) -> void:
 			continue
 		var i0 := vl.index * EcoVeil.TENTACLES
 		if not shown[vl.index] or vl.p.distance_to(ship) >= HULL_NEAR:
-			for k in EcoVeil.TENTACLES:
-				sides[i0 + k] = 0.0
+			if was:
+				for k in EcoVeil.TENTACLES:
+					sides[i0 + k] = 0.0
 			continue
 		hull_on = true
 		for k in EcoVeil.TENTACLES:
 			var probe := vl.p + EcoVeil.tentacle_point(vl, k, EcoVeil.probe_j(vl, k, ship.y), t, flow, true)
 			sides[i0 + k] = EcoVeil.keep_side(sides[i0 + k], probe, ship, yaw)
+	# корабль далеко — uniform корпуса не трогаем каждый кадр (шаг вида у старта, test_view_step_fits_frame)
+	if hull_on or was:
+		mat.set_shader_parameter("hull_on", 1.0 if hull_on else 0.0)
 	if hull_on:
 		mat.set_shader_parameter("hull_side", sides)
-	mat.set_shader_parameter("hull_on", 1.0 if hull_on else 0.0)
-	mat.set_shader_parameter("hull_pos", ship)
-	mat.set_shader_parameter("hull_yaw", yaw)
+		mat.set_shader_parameter("hull_pos", ship)
+		mat.set_shader_parameter("hull_yaw", yaw)
 
 
 ## Облачка выдоха и слизи в момент t (время мира): ship — корабль (дальность и луч), flow — течение мира.
