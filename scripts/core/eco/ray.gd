@@ -51,8 +51,13 @@ const SONG_FIRST := 8.0
 const SCALE: Array[float] = [110.0, 123.5, 146.8, 164.8, 196.0, 220.0]
 ## Размер цели сонара и сканера (r: 7).
 const TARGET_R := 7.0
-## Крен ската (rotateZ(−0,22)), рад.
-const BANK := 0.22
+## Крен в поворот (Б3, «плавность поведения»): скат ложится на внутреннее крыло, как самолёт, — tan крена = боковое
+## ускорение на круге (скорость × скорость поворота) / BANK_ACC, не круче BANK_MAX. Раньше крен был один на всех,
+## rotateZ(−0,22) браузера, и клал ската на внешнее крыло: на круге он «падал» наружу. Тесный круг второго ската
+## (35 м) — круче первого (85 м).
+const BANK := 0.22   ## прежний постоянный крен браузера, рад — ориентир величины
+const BANK_ACC := 1.0
+const BANK_MAX := deg_to_rad(22.0)
 ## Тангаж (Б3, «плавность поведения»): идёт вверх — нос вверх, вниз — нос вниз, по наклону пути
 ## (atan2(вертикальная скорость, скорость по кругу)), не круче PITCH_MAX; догоняет нужный за PITCH_FOLLOW (1/с) —
 ## над кораблём скат не всплывает «лифтом», а взмывает и плавно выравнивается.
@@ -300,14 +305,25 @@ func _sing(world: EcoWorld) -> void:
 		world.emit(ID, "song", at, _text(world, "%s поёт где-то " + side + " — низкий голос слышен сквозь корпус"))
 
 
-## Место ската в мире: +Z — по курсу, нос поднят на pitch, крен BANK в повороте (как меш RayView). По нему же сидят
+## Место ската в мире: +Z — по курсу, нос поднят на pitch, крен `bank` в поворот (как меш RayView). По нему же сидят
 ## присоски на спине.
 static func xform(ry: Ray) -> Transform3D:
 	var fwd := ry.dir if ry.dir.length_squared() > 1e-6 else Vector3.BACK
 	fwd = fwd * cos(ry.pitch) + Vector3.UP * sin(ry.pitch)
 	var b := Basis.looking_at(-fwd, Vector3.UP)  # looking_at смотрит в −Z: меш смотрит носом в +Z
-	b = b * Basis(Vector3.BACK, -BANK)
+	# +X меша — левое крыло: крен влево (bank > 0) опускает его — поворот вокруг носа на −bank
+	b = b * Basis(Vector3.BACK, -bank(ry))
 	return Transform3D(b, ry.p)
+
+
+## Скорость поворота курса (рад/с, + — влево, к +X меша): по кругу угол ang растёт, курс (−sin, 0, cos) уходит вправо.
+static func turn_rate(ry: Ray) -> float:
+	return -ry.speed / ry.radius if ry.radius > 0.0 else 0.0
+
+
+## Крен ската (рад, + — на левое крыло): в сторону поворота, atan(скорость × поворот / BANK_ACC), ± BANK_MAX.
+static func bank(ry: Ray) -> float:
+	return clampf(atan(ry.speed * turn_rate(ry) / BANK_ACC), -BANK_MAX, BANK_MAX)
 
 
 ## Каждый скат виден сонару и сканеру.

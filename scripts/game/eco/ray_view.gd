@@ -3,7 +3,7 @@ extends MultiMeshInstance3D
 ## Ледокрылы в сцене (rayGeo/initRays в js/creatures.js; концепт icewing.jpg): оба ската — один MultiMesh (один вызов
 ## отрисовки). Тело — пластина 14 × 9 м (18 × 8 клеток), сужается к хвосту и носу, горб по середине 0,5 м, края
 ## светлее; хвост-хлыст 9 м назад; на спине два ряда по 7 светящихся пятнышек (#9ffcff). Взмах крыльев — в шейдере
-## (как в браузере: sin(ф − 0,32 |x|) · (|x| / 7)^1,4 · 1,8 · доля), крен 0,22 рад. Фаза ф и доля размаха — с мира
+## (как в браузере: sin(ф − 0,32 |x|) · (|x| / 7)^1,4 · 1,8 · доля), крен в поворот — `EcoRay.bank`. Фаза ф и доля размаха — с мира
 ## (EcoRay.flap_step: над кораблём машет сильнее и чаще, опускаясь — планирует), в INSTANCE_CUSTOM.y/z; номер ската —
 ## раньше был в INSTANCE_CUSTOM.x, теперь там доля дыхания (ниже). Двойник взмаха на CPU — EcoRay.wing_lift.
 ## «Дыхание» (Б3, `breath`): скат качает воду через брызгальца — горб спины с пятнышками поднимается и опадает на
@@ -84,9 +84,8 @@ const TAIL_PHASE := 2.1
 const SPOTS := 14
 const SPOT_R := 0.12
 const SPOT := Color("9ffcff")
-## Цвет тела (#a8cfe0) и крен в повороте (rotateZ(−0,22)).
+## Цвет тела (#a8cfe0); крен в поворот — `EcoRay.bank`.
 const BODY := Color("a8cfe0")
-const BANK := EcoRay.BANK
 
 var rays: EcoRay
 ## Вершины и треугольники меша одного ската (для тестов).
@@ -203,7 +202,7 @@ func sync_dust(t: float, ship: EcoLink.ShipState, flow := Vector3.ZERO) -> void:
 	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 
 
-## Место ската: +Z меша — по курсу, крен BANK.
+## Место ската: +Z меша — по курсу, крен в поворот (`EcoRay.bank`).
 static func xform(ry: EcoRay.Ray) -> Transform3D:
 	return EcoRay.xform(ry)
 

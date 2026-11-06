@@ -486,9 +486,10 @@ func _jerks(w: EcoWorld, seconds: float, last: Dictionary, limit: float) -> int:
 func test_swim_speeds_up_and_brakes_smoothly() -> void:
 	var w := _world()
 	var rm := _remoras(w)
-	# разгон ACCEL · 0,05 = 0,8 м/с за шаг, плюс поворот хода ската и шаг у места (ARRIVE 0,05 м — 1 м/с);
-	# раньше — 8 м/с с места и стоп у места (скачок 4–6 м/с)
-	var limit := EcoRemora.ACCEL * 0.05 + 1.5
+	# разгон ACCEL · 0,05 = 0,8 м/с за шаг, плюс поворот хода ската и шаг у места (до ARRIVE 0,05 м — 1 м/с);
+	# раньше — 8 м/с с места и стоп у места (скачок 4–6 м/с). Садится, только дойдя до места за шаг, а не за шаг
+	# + ARRIVE: прыжок к месту на ARRIVE поверх шага давал на скате с креном в поворот 2,4 м/с за шаг, теперь ≤ 1,6
+	var limit := EcoRemora.ACCEL * 0.05 + 1.0
 	var last := {}
 	eq(_jerks(w, 12.0, last, limit), 0, "снимается со ската и садится на корпус без рывка хода")
 	eq(rm.on_hull, EcoRemora.PER_RAY, "все три дошли")
