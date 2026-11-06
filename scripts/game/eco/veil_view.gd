@@ -76,6 +76,10 @@ var tentacles: MultiMeshInstance3D
 ## Видна ли вуаль (по EcoVeil.Veil.index) и сколько видно.
 var shown: Array[bool] = []
 var shown_count := 0
+## Корабль у вуалей — корпус раздвигает щупальца (uniform `hull_on`, `sync`).
+var hull_on := false
+## Борт каждой нити у корпуса (EcoVeil.keep_side): вуаль × EcoVeil.TENTACLES + нить, 0 — не задан (uniform `hull_side`).
+var sides := PackedFloat32Array()
 ## «Экономно» (set_lite).
 var lite := false
 ## Последние буферы куполов, кромок и щупалец (для тестов): видимые вуали — по порядку.
@@ -244,7 +248,9 @@ static func _tentacle_arrays(list: Array, first: int, step := 1) -> Array:
 ## прибавляет из INSTANCE_CUSTOM.g, ритм умножает на INSTANCE_CUSTOM.a.
 static func tentacle_params(vl: EcoVeil.Veil = null) -> Dictionary:
 	return {"tint": TENTACLE, "wave": Vector4(EcoVeil.PULSE, vl.w if vl else EcoVeil.PULSE_W, vl.ph if vl else 0.0, EcoVeil.WAVE_LAG),
-		"grow": EcoVeil.WAVE_GROW, "seg": float(EcoVeil.SEGMENTS), "trail": EcoVeil.TRAIL}
+		"grow": EcoVeil.WAVE_GROW, "seg": float(EcoVeil.SEGMENTS), "trail": EcoVeil.TRAIL,
+		"hull_ab": Vector4(EcoVeil.HULL_A, EcoVeil.HULL_B, HullPlan.CENTER_Y, 0.0),
+		"hull_z": Vector4(EcoVeil.HULL_Z0, EcoVeil.HULL_Z1, EcoVeil.HULL_NOSE, EcoVeil.HULL_STERN)}
 
 
 ## Точка j щупальца k из меша по формуле шейдера (для тестов: совпадает с EcoVeil.tentacle_point); m — материал
@@ -271,8 +277,11 @@ static func shader_point(rest: Vector3, k: int, j: int, t: float, pulse: float, 
 ## rest — VERTEX, kj — UV, vi — UV2.x, custom — INSTANCE_CUSTOM (пульс, фаза, номер вуали, доля ритма — 0 как 1),
 ## at — место экземпляра.
 ## Нить чужой вуали сжимается в точку экземпляра.
+## hull — корабль у вуалей (uniform `hull_on`): точка нити внутри корпуса на ship_pos с курсом yaw — вбок
+## (`EcoVeil.hull_part`) к борту side (uniform `hull_side`; 0 — по корню rest.xz · пульс).
 static func instance_point(rest: Vector3, kj: Vector2, vi: float, custom: Color, at: Vector3, t: float,
-		m: Dictionary, flow := Vector3.ZERO, sway_k := 1.0, drag := Vector3.ZERO) -> Vector3:
+		m: Dictionary, flow := Vector3.ZERO, sway_k := 1.0, drag := Vector3.ZERO, hull := false,
+		ship_pos := Vector3.ZERO, yaw := 0.0, side := 0.0) -> Vector3:
 	if absf(vi - custom.b) > 0.5:
 		return at
 	var mm := m.duplicate()
@@ -280,7 +289,12 @@ static func instance_point(rest: Vector3, kj: Vector2, vi: float, custom: Color,
 	w.z += custom.g
 	w.y *= custom.a if custom.a > 0.0 else 1.0
 	mm["wave"] = w
-	return at + shader_point(rest, int(kj.x), int(kj.y), t, custom.r, mm, flow, sway_k, drag)
+	var p := at + shader_point(rest, int(kj.x), int(kj.y), t, custom.r, mm, flow, sway_k, drag)
+	if hull and int(kj.y) > 0:
+		if side == 0.0:
+			side = EcoVeil.side_of(at + Vector3(rest.x * custom.r, 0.0, rest.z * custom.r), ship_pos, yaw)
+		p = EcoVeil.hull_part(p, side, ship_pos, yaw)
+	return p
 
 
 ## Ход куполов для uniform `drag` щупалец: по номеру вуали (INSTANCE_CUSTOM.b), EcoVeil.DRAG_SLOTS мест.
@@ -293,8 +307,14 @@ static func drags(list: Array[EcoVeil.Veil]) -> PackedVector3Array:
 	return out
 
 
-## Расставить вуали в момент t (время мира); ship — где корабль (дальние вуали не рисуются).
-func sync(t: float, ship: Vector3) -> void:
+## Корабль ближе этого к куполу (м) — корпус раздвигает щупальца (uniform `hull_on`); дальше нити до него не
+## достают: купол R, нити LEN, корпус от точки корабля — до EcoHull.BOUND.
+const HULL_NEAR := EcoVeil.R + EcoVeil.LEN + EcoHull.BOUND
+
+
+## Расставить вуали в момент t (время мира); ship — где корабль (дальние вуали не рисуются), yaw — его курс,
+## flow — течение мира (борт нитей у корпуса, `EcoVeil.keep_side`).
+func sync(t: float, ship: Vector3, yaw := 0.0, flow := Vector3.ZERO) -> void:
 	var n := 0
 	var bell_box := AABB()
 	var tent_box := AABB()
@@ -340,6 +360,26 @@ func sync(t: float, ship: Vector3) -> void:
 	var mat := tentacles.material_override as ShaderMaterial
 	mat.set_shader_parameter("t", t)
 	mat.set_shader_parameter("drag", drags(veils.veils))
+	hull_on = false
+	if sides.size() != EcoVeil.DRAG_SLOTS * EcoVeil.TENTACLES:
+		sides.resize(EcoVeil.DRAG_SLOTS * EcoVeil.TENTACLES)
+	for vl in veils.veils:
+		if vl.index >= EcoVeil.DRAG_SLOTS:
+			continue
+		var i0 := vl.index * EcoVeil.TENTACLES
+		if not shown[vl.index] or vl.p.distance_to(ship) >= HULL_NEAR:
+			for k in EcoVeil.TENTACLES:
+				sides[i0 + k] = 0.0
+			continue
+		hull_on = true
+		for k in EcoVeil.TENTACLES:
+			var probe := vl.p + EcoVeil.tentacle_point(vl, k, EcoVeil.probe_j(vl, k, ship.y), t, flow, true)
+			sides[i0 + k] = EcoVeil.keep_side(sides[i0 + k], probe, ship, yaw)
+	if hull_on:
+		mat.set_shader_parameter("hull_side", sides)
+	mat.set_shader_parameter("hull_on", 1.0 if hull_on else 0.0)
+	mat.set_shader_parameter("hull_pos", ship)
+	mat.set_shader_parameter("hull_yaw", yaw)
 
 
 ## Облачка выдоха и слизи в момент t (время мира): ship — корабль (дальность и луч), flow — течение мира.

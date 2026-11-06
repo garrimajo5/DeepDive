@@ -272,6 +272,75 @@ static func trail(vl: Veil, h: float, depth: float, t: float, flow: Vector3) -> 
 	return off
 
 
+## Б3: корпус раздвигает щупальца. Корабль шёл сквозь завесу нитей (низ щупалец — в 6 м над дном, корабль на ходу —
+## в 3 м), и нити проходили сквозь обшивку и мостик. Теперь точка нити внутри корпуса уходит вбок к борту нити, на
+## край сечения, — как занавес: нить ложится по обшивке и соскальзывает с неё за кормой. Борт нити — по её точке на
+## высоте корпуса поперёк оси корабля, где её встретил корпус, и держится, пока нить на обшивке (`keep_side`): нить
+## у оси не перескакивает с борта на борт, колышась. Корпус для нитей — эллипс сечения HULL_A × HULL_B вокруг оси на
+## HullPlan.CENTER_Y от HULL_Z0 до HULL_Z1, к носу и корме сечение сужается конусом длиной HULL_NOSE и HULL_STERN:
+## у тупого колпака нить у оси за кадр срывалась бы вбок на 2 м, конус раздвигает её заранее — носовой волной, на
+## ходу 6 м/с — не быстрее ≈ 2,2 м/с вбок. Двойник шейдера щупалец.
+const HULL_A := 7.4
+const HULL_B := 3.9
+const HULL_Z0 := -4.0
+const HULL_Z1 := 20.0
+const HULL_NOSE := 20.0
+const HULL_STERN := 16.0
+
+
+## Половина ширины корпуса для нитей (м) в точке l (оси корабля): 0 — точка вне корпуса по высоте или длине.
+static func hull_half(l: Vector3) -> float:
+	var c := 1.0
+	if l.z < HULL_Z0:
+		c = 1.0 - (HULL_Z0 - l.z) / HULL_NOSE
+	elif l.z > HULL_Z1:
+		c = 1.0 - (l.z - HULL_Z1) / HULL_STERN
+	var y := (l.y - HullPlan.CENTER_Y) / HULL_B
+	if c <= 0.0 or y * y >= 1.0:
+		return 0.0
+	return HULL_A * c * sqrt(1.0 - y * y)
+
+
+## Точка нити p (мир) вне корпуса корабля на ship_pos с курсом yaw: внутри — сдвиг по горизонтали поперёк оси к
+## борту side (≥ 0 — правый, +X корабля), на край сечения (`hull_half`); снаружи — как есть.
+static func hull_part(p: Vector3, side: float, ship_pos: Vector3, yaw: float) -> Vector3:
+	var l := (p - ship_pos).rotated(Vector3.UP, -yaw)
+	var half := hull_half(l)
+	if absf(l.x) >= half:
+		return p
+	l.x = half if side >= 0.0 else -half
+	return ship_pos + l.rotated(Vector3.UP, yaw)
+
+
+## Борт точки нити root (мир) у корабля на ship_pos с курсом yaw: +1 — правый (+X корабля), −1 — левый.
+static func side_of(root: Vector3, ship_pos: Vector3, yaw: float) -> float:
+	return 1.0 if (root - ship_pos).rotated(Vector3.UP, -yaw).x >= 0.0 else -1.0
+
+
+## Борт нити на этом шаге: точка нити probe на высоте середины корпуса (`probe_j`) у корпуса — прежний prev (нить уже
+## лежит на обшивке и не перескакивает на другой борт, когда колышется у оси); у корпуса — с запасом SIDE_HOLD м
+## вбок и за корму и на всю высоту сечения: кончик и верх нити, отнесённые течением, сходят с кормы позже точки на
+## высоте середины. Иначе — по probe (`side_of`): нить уходит к тому борту, где её встретил корпус. prev = 0 — ещё не
+## задан.
+const SIDE_HOLD := 3.0
+static func keep_side(prev: float, probe: Vector3, ship_pos: Vector3, yaw: float) -> float:
+	if prev != 0.0:
+		var l := (probe - ship_pos).rotated(Vector3.UP, -yaw)
+		var hold := l
+		hold.z = maxf(HULL_Z0, l.z - SIDE_HOLD)
+		hold.y = HullPlan.CENTER_Y + clampf(l.y - HullPlan.CENTER_Y, -HULL_B * 0.9, HULL_B * 0.9)
+		if l.z > HULL_Z0 - HULL_NOSE and absf(l.y - HullPlan.CENTER_Y) < HULL_B + SIDE_HOLD \
+				and absf(l.x) < hull_half(hold) + SIDE_HOLD:
+			return prev
+	return side_of(probe, ship_pos, yaw)
+
+
+## Звено нити k вуали vl на высоте середины корпуса корабля ship_y (1…SEGMENTS): по ней `keep_side` выбирает борт.
+static func probe_j(vl: Veil, k: int, ship_y: float) -> int:
+	var step_len := vl.tent_len[k] / SEGMENTS
+	return clampi(roundi((vl.p.y - ship_y - HullPlan.CENTER_Y) / step_len), 1, SEGMENTS)
+
+
 ## Близко ли к вуали хоть что-то в радиусе pad по горизонтали (для отбора стай перед обходом рыбок).
 func near_any(p: Vector3, pad: float) -> bool:
 	for vl in veils:
