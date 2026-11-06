@@ -892,3 +892,52 @@ func test_wag_eases_in_world() -> void:
 			was[f.index] = f.wag
 	ok(worst <= EcoFishLook.WAG_FOLLOW * (dt + EcoFish.LAG_MAX) + 1e-5, "за шаг не больше WAG_FOLLOW · dt: %.4f" % worst)
 	ok(lo < 0.99, "есть рыбки на тихом ходу — виляют слабее: %.3f" % lo)
+
+
+## Б3: корабль на ходу 6 м/с (дно + 3 м) идёт сквозь стаи от 01 к 07 — рыбки отплывают от обшивки, а не едут по
+## ней: центр и цель стаи оказывались в корпусе, рыбку тянуло в обшивку, и она скользила по борту и под днищем
+## (без хищников — до 19 с подряд, 3,1 тыс. шагов касаний на пути; с исправлением — 2,3 с и 0,6 тыс.).
+func test_fish_shed_off_hull_under_way() -> void:
+	var w := _world()
+	w.ground = Seabed.height
+	var fish := _fish(w)
+	var a0 := LayerMap.at("01")
+	var b0 := LayerMap.at("07")
+	w.ship.pos = a0
+	w.reset()
+	var dt := 1.0 / 30.0
+	var dir := Vector3(b0.x - a0.x, 0, b0.z - a0.z).normalized()
+	var n := int(Vector2(a0.x, a0.z).distance_to(Vector2(b0.x, b0.z)) / 6.0 / dt)
+	var run := {}
+	var worst := 0
+	var total := 0
+	for j in n:
+		var q := a0.lerp(b0, float(j) / n)
+		q.y = Seabed.height(q.x, q.z) + Helm.Ship.CLEARANCE
+		w.ship.pos = q
+		w.ship.yaw = atan2(-dir.x, -dir.z)
+		w.ship.speed = 6.0
+		w.step(dt)
+		for f in fish.all:
+			if f.agent.alive and w.touches_ship(f.agent.p, EcoFish.HULL_GAP + 0.05):
+				run[f.index] = int(run.get(f.index, 0)) + 1
+				worst = maxi(worst, run[f.index])
+				total += 1
+			else:
+				run[f.index] = 0
+	ok(total > 0, "корабль прошёл сквозь стаю")
+	ok(worst * dt < 3.0, "рыбка у обшивки не дольше 3 с подряд: %.2f с" % (worst * dt))
+	ok(total < 1200, "касаний обшивки меньше прежнего: %d шагов" % total)
+
+
+func test_shed_dir_under_keel_and_at_nose_goes_aside() -> void:
+	var up := EcoFish.shed_dir(Vector3.UP, Vector3(1, 2, 0), 0.0)
+	near(up.distance_to(Vector3.UP), 0.0, 1e-6, "над корпусом — по нормали")
+	var keel := EcoFish.shed_dir(Vector3.DOWN, Vector3(-0.5, -2, 3), 0.0)
+	ok(keel.x < -0.9 and absf(keel.y) < 1e-6, "под днищем — вбок к своему борту: %s" % keel)
+	var nose := EcoFish.shed_dir(Vector3.FORWARD, Vector3(0.4, 0, -8), 0.0)
+	ok(nose.x > 0.8, "на носу — вбок, а не вперёд перед кораблём: %s" % nose)
+	var steer := EcoFish.hull_steer(Vector3(0, 0, -5), Vector3.BACK, EcoFish.HULL_KEEP)
+	near(steer.z, EcoFish.HULL_SHED, 1e-5, "тяга в корпус снята, от обшивки — HULL_SHED")
+	var goal := EcoFish.goal_clear(Vector3(0, HullPlan.CENTER_Y, 9), Vector3.ZERO, 0.0)
+	ok(not EcoHull.touches(goal, Vector3.ZERO, 0.0, EcoFish.GOAL_PAD - 0.1), "цель стаи из корпуса — наружу")
