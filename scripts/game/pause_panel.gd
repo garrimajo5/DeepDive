@@ -38,7 +38,7 @@ func _draw_pause() -> void:
 		UiStyle.center(draw, font, pause.subtitle(), Pause.SUB_TOP, Pause.SUB_PX * s, Color(MainMenu.SOFT, k), size)
 	for it: Array in pause.items():
 		var on: bool = pause.enabled.get(it[0], false)
-		_button(font, pause.rect(it[0], size), it[1], it[0] == Pause.MAIN_ITEM and on, on, k, s)
+		_button(font, pause.rect(it[0], size), pause.label_of(it), it[0] == Pause.MAIN_ITEM and on, on, k, s)
 	if not faded:
 		return
 	draw.draw_rect(Rect2(Vector2.ZERO, size), Color(MainMenu.DARK, 0.45))

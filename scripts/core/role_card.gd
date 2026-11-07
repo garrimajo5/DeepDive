@@ -16,6 +16,7 @@ const LEFT_X := 70.0           ## карточка слева
 const RIGHT_FROM := 1360.0     ## справа: x = W − 1360
 const TOP := 180.0
 const GAP := 12.0
+const PAD_GAP := 16.0           ## зазор до крестовины и кнопок (`Touch.Layout.rects`, #1345)
 const ICON := Rect2(24, 24, 72, 72)       ## значок в карточке
 const TITLE_AT := Vector2(116, 74)        ## базовая линия названия
 const TITLE_PX := 40.0

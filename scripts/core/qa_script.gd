@@ -23,12 +23,14 @@ extends RefCounted
 ##   {"do": "breach", "n": 0}                       — пробоина в месте n (0 мостик, 1 коридор, 2 лаборатория, 3 машинное),
 ##                                                     игрок встаёт у неё лицом к борту; "on": false — закрыть
 ##                                                     пробоину и убрать воду (чистый кадр после случайных ударов)
-##   {"do": "route"}                                 — пройти выбранный маршрут разом (нет — первый): «глубже или наверх»
+##   {"do": "route"}                                 — пройти выбранный маршрут разом (нет — первый) и открыть
+##                                                     «глубже или наверх» (в слое его откроет переход у 10, #828)
 ##   {"do": "silt"}                                  — облако ила вокруг корабля (сонарная тьма); "on": false — убрать ил
 ##   {"do": "drain", "s": 4}                        — стеклоуст «на корпусе» s секунд: мир будто шлёт EcoLink.DRAIN
 ##                                                     (тревога и расход заряда без самого существа)
 ##   {"do": "hull", "pct": 30}                       — прочность корпуса, % (следы повреждений ART-049 снаружи)
 ##   {"do": "charge", "units": 100}                  — заряд корабля, ед. (разряд по шагам не зависит от длины прогона)
+##   {"do": "ping"}                                  — импульс сонара (`Main.ping_sonar`, как с поста): у 08 — ритм поля
 ##   {"do": "ship", "x": 38, "y": -20, "z": -25}     — поставить корабль в точку мира (y — высота, глубина со знаком
 ##                                                     минус), корабль стоит: вид на дно под трещинами льда (#445)
 ##                                                     "yaw": 0 — ещё и курс (°, как у goto: 0 — нос к −Z), без него
@@ -45,8 +47,13 @@ extends RefCounted
 ##                                                     (Crew.Pad.hold: сварка пробоины, вентиль, лебёдка, сканер), false — отпустил
 ##   {"do": "gone"}                                  — последний добавленный член экипажа отключился, как гость сети:
 ##                                                     уходит с палубы, у хоста «… отключился» (HostNotice, ART-043)
-##   {"do": "wreck"}                                 — корпус разрушен: шторка ART-036 3,5 с, затем забег с начала
-##   {"do": "tutorial", "on": true}                 — подсказки первого забега ART-038 с первого шага (false — убрать)
+##   {"do": "save"}                                  — место для гибели (#824): корабль сейчас — в память сохранения,
+##                                                     как автосохранение; файл прогона не пишется ("on": false — забыть
+##                                                     место: меню снова без «Продолжить»)
+##   {"do": "wreck"}                                 — корпус разрушен: шторка ART-036 3,5 с, затем загрузка места
+##                                                     последнего «save» (нет его — подъём к началу спуска)
+##   {"do": "tutorial", "on": true}                 — подсказки первого забега ART-038 с первого шага (false — убрать;
+##                                                     "step": n — сразу с шага n, 1…7)
 ##   {"do": "cards", "on": true}                    — карточки ролей у постов ART-045 с нуля (false — убрать)
 ##   {"do": "voice", "role": 2, "text": "Сбросьте ход", "fake": false} — голос во внутренней связи ART-040, как
 ##                                                     событие мира EcoLink.VOICE ("silent": true — подделка молчит
@@ -59,9 +66,9 @@ extends RefCounted
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z[, yaw°]], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["route"], ["act"], ["mate_hold", on], ["gone"], ["wreck"], ["back"], ["tutorial", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z[, yaw°]], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["ping"], ["route"], ["act"], ["mate_hold", on], ["gone"], ["save", on], ["wreck"], ["back"], ["tutorial", on, шаг 1…7], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
-const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "ship", "fly", "route", "gone", "wreck", "back", "tutorial", "cards", "voice", "slow", "hud", "play", "log", "quit"]
+const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "ping", "ship", "fly", "route", "gone", "save", "wreck", "back", "tutorial", "cards", "voice", "slow", "hud", "play", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "map", "map_back", "hint_map", "new", "exit", "yes", "no", "crew", "journal", "settings", "graphics", "g0", "g1", "g2", "fps", "golos", "zvuk", "s0", "v_hold", "v_voice", "v_hear", "v_mic", "lite_yes", "lite_no", "ask", "join", "last", "lobby_new", "lobby_addr", "lobby_refresh",
 	"jcell0", "jcell1", "jcell2", "jcell3", "jcell4", "jcell5", "jprev", "jnext", "jclose",
 	"key0", "key1", "key2", "key3", "key4", "key5", "key6", "key7", "key8", "key9", "key.", "keydel"]
@@ -111,6 +118,15 @@ static func duration(st: Dictionary) -> float:
 		"press":
 			return PRESS_TIME
 	return 0.0
+
+
+## Сколько секунд игры идёт весь сценарий — сумма длительностей шагов (#1379: от неё — предел шагов `test_qa`,
+## а не число в цикле; снимки сверх этого ждут по кадру).
+func total_time() -> float:
+	var t := 0.0
+	for st: Dictionary in steps:
+		t += duration(st)
+	return t
 
 
 ## Шаг времени: команды, которые сцена должна выполнить сейчас.
@@ -185,6 +201,8 @@ func _begin(st: Dictionary, out: Array) -> void:
 			out.append(["drain", float(st.get("s", 4.0))])
 		"hull":
 			out.append(["hull", clampf(float(st.get("pct", 100.0)), 0.0, 100.0)])
+		"ping":
+			out.append(["ping"])
 		"charge":
 			out.append(["charge", clampf(float(st.get("units", Vitals.MAX)), 0.0, Vitals.MAX)])
 		"ship":
@@ -203,12 +221,14 @@ func _begin(st: Dictionary, out: Array) -> void:
 			out.append(["mate_hold", bool(st.get("on", true))])
 		"gone":
 			out.append(["gone"])
+		"save":
+			out.append(["save", bool(st.get("on", true))])
 		"wreck":
 			out.append(["wreck"])
 		"back":
 			out.append(["back"])
 		"tutorial":
-			out.append(["tutorial", bool(st.get("on", true))])
+			out.append(["tutorial", bool(st.get("on", true)), clampi(int(st.get("step", 1)), 1, Tutorial.STEPS.size())])
 		"cards":
 			out.append(["cards", bool(st.get("on", true))])
 		"slow":

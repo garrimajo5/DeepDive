@@ -90,7 +90,7 @@ func test_scene_relief_toggle() -> void:
 	var r := RoomsView.new()
 	tree.root.add_child(r)
 	await frames(1)
-	var m := _mat(r.mesh_instance.mesh, P.DECK)
+	var m := _mat(r.mesh, P.DECK)
 	ok(m.get_shader_parameter("relief"), "по умолчанию рельеф")
 	r.set_relief(false)
 	ok(not m.get_shader_parameter("relief"), "«Экономно» — без нормалей и ORM")

@@ -355,3 +355,25 @@ func test_voice_rejected_bad_or_off_deck() -> void:
 	eq((q[0][1] as PackedByteArray).decode_u16(0), 5, "выброшены самые старые")
 	ok(not NetLink._queue_voice(q, 1, PackedByteArray([0, 0])), "короткий пакет — мимо")
 	ok(not NetLink._queue_voice(q, 9, _voice_packet(0, 0.1)), "место вне экипажа — мимо")
+
+
+## Трюм и виды хоста (#823): надёжно, только гостям на палубе, отдаются один раз.
+func test_hold_reaches_guest() -> void:
+	var h := _host()
+	var c := _client()
+	ok(_pump(func() -> bool: return c.joined() and not events.is_empty()), "на борту")
+	h.send_hold({"g": [1], "c": [], "s": ["fish"], "n": {}})
+	for i in 20:
+		h.poll()
+		c.poll(0.0)
+		OS.delay_msec(2)
+	eq(c.take_hold(), {}, "без места на палубе — не шлётся")
+	(events[0]["guest"] as NetLink.Guest).index = 0
+	var sent := {"g": [1], "c": [[0, -1]], "s": ["fish"], "n": {"fish": ["flee"]}}
+	h.send_hold(sent)
+	var got: Array = []   # лямбда видит локальные по значению — копим в массив
+	ok(_pump(func() -> bool:
+		got.append(c.take_hold())
+		return not got[-1].is_empty()), "дошло")
+	eq(got[-1], sent, "то же, что послал хост")
+	eq(c.take_hold(), {}, "второй раз не отдаётся")

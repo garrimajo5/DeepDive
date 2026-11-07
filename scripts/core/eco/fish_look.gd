@@ -14,6 +14,12 @@ const ALARM_GLOW := 1.6
 ## Виляние: размах (рад) и частота (рад/с).
 const WIGGLE := 0.25
 const WIGGLE_RATE := 12.0
+## Размах виляния по ходу (Б3, плавность поведения): медленнее EcoFish.MIN_SPEED — доля WIGGLE_SLOW, от
+## EcoFish.CALM_SPEED и быстрее — полный WIGGLE; между — плавно. Доля `Fish.wag` догоняет нужную не быстрее
+## WAG_FOLLOW в секунду (шаг мира, `wag_step`): рыбка, что зависла у дома или в кроне, едва шевелит телом, рванула —
+## машет во всю ширь, а не одинаково всегда. Ритм тот же (фаза не прыгает).
+const WIGGLE_SLOW := 0.4
+const WAG_FOLLOW := 1.5
 ## Тело: полуширина, полувысота, нос и корма по z (м).
 const HALF_WIDTH := 0.07
 const HALF_HEIGHT := 0.1
@@ -184,6 +190,23 @@ static func fin_flap(x: float, w: float, t: float, a: float, sway_k := 1.0) -> f
 	return sin(t * PEC_RATE + a * TAU + signf(x) * PEC_SKEW) * PEC_AMP * w * sway_k
 
 
+## Нужная доля размаха виляния на ходу speed (м/с): WIGGLE_SLOW … 1.
+static func wag_want(speed: float) -> float:
+	return lerpf(WIGGLE_SLOW, 1.0, smoothstep(EcoFish.MIN_SPEED, EcoFish.CALM_SPEED, speed))
+
+
+## Доля размаха wag шагом мира dt к нужной на ходу speed; wag < 0 (ещё не плыла, вернулась после съедения) —
+## сразу нужная.
+static func wag_step(wag: float, speed: float, dt: float) -> float:
+	var want := wag_want(speed)
+	return want if wag < 0.0 else move_toward(wag, want, WAG_FOLLOW * dt)
+
+
+## Доля размаха рыбки сейчас: `Fish.wag`, а до первого шага — по её ходу.
+static func wag_of(f: EcoFish.Fish) -> float:
+	return f.wag if f.wag >= 0.0 else wag_want(f.agent.v.length())
+
+
 ## Цвет тела особи: BODY_COLOR × shade().
 static func body_color(f: EcoFish.Fish) -> Color:
 	var k := shade(f)
@@ -200,9 +223,9 @@ static func vertex_color(f: EcoFish.Fish, p: Paint) -> Color:
 
 ## Куда смотрит нос: по скорости (вверх-вниз тоже), с вилянием вокруг вертикали.
 static func forward(f: EcoFish.Fish, t: float) -> Vector3:
-	var v := f.agent.v
+	var v := f.look if f.look.length_squared() > 1e-8 else f.agent.v   # нос догоняет скорость (EcoFish.turn)
 	var dir := v.normalized() if v.length_squared() > 1e-8 else Vector3(0, 0, 1)
-	var w := sin(t * wiggle_rate(f) + f.phase) * WIGGLE
+	var w := sin(t * wiggle_rate(f) + f.phase) * WIGGLE * wag_of(f)
 	var cw := cos(w)
 	var sw := sin(w)
 	return Vector3(dir.x * cw + dir.z * sw, dir.y, -dir.x * sw + dir.z * cw)

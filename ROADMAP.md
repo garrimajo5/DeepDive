@@ -389,7 +389,9 @@
         «Голоса», громкость `Radio.volume`), пакеты из `Voice.Room` → `Radio.heard` с уровнем, `Radio.link`; «По голосу» —
         тишина не уходит (`Voice.Station`, `VoiceIO`, `OverlayFlow.voice_step`; микрофон — только при
         `audio/driver/enable_input`, его включает следующая часть)
-      - [ ] Разрешение `RECORD_AUDIO` Android (`Radio.mic`, «В настройки»), включить `Radio.enabled`; проверка вдвоём — тестер
+      - [x] Разрешение `RECORD_AUDIO` Android (`MicPermit`, `Radio.mic`, «В настройки»), `audio/driver/enable_input`,
+        `Radio.enabled` — PR #876 (`test_radio`, `test_mic_permit`)
+      - [ ] Проверка вдвоём на двух телефонах — тестер (эпик #634)
   - Экран сбора экипажа по ART-028 (принят, `sbor-ekipazha.md`): 2D поверх мостика, роли П/С/И/Б, «Готов»,
     старт у хоста; табличка над фигурой — заказ ART-033 (#235) — разделено:
     - [x] Комната и её экран без сети: четыре строки ролей (галочка «Готов», кольцо «Ждём», прочерк «Свободно» и

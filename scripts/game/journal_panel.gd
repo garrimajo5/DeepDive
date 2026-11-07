@@ -16,6 +16,7 @@ var scanner: Scanner
 var species_total := 0
 var cargo_n := 0
 var broken := false
+var lore: LayerLore   ## знания слоя: подпись «граница» у 08 (#829)
 var draw: Control
 var _icons := {}
 
@@ -26,8 +27,10 @@ func _init() -> void:
 	draw = UiStyle.screen(self, "Страница", _draw_page, Journal.DARK, Color(Journal.DARK, DIM))
 
 
-func show_journal(j: Journal, e: Expedition, sc: Scanner, total: int, cargo: int, was_broken: bool) -> void:
+func show_journal(j: Journal, e: Expedition, sc: Scanner, total: int, cargo: int, was_broken: bool,
+		known: LayerLore = null) -> void:
 	journal = j
+	lore = known
 	expedition = e
 	scanner = sc
 	species_n = sc.scanned.size() if sc else 0
@@ -197,6 +200,16 @@ func _draw_map(font: Font, size: Vector2, s: float, l: float) -> void:
 	for i in range(1, 5):
 		var y := map.position.y + map.size.y * i / 5.0
 		draw.draw_line(Vector2(map.position.x + 12.0 * s, y), Vector2(map.end.x - 12.0 * s, y), grid, maxf(1.0, 1.5 * s))
+	var east := Journal.east_rect(size)   # склон за восточным краем (#829) — сжатая полоса, как на голостоле
+	draw.draw_rect(east.grow_individual(0.0, -2.0 * s, 0.0, -2.0 * s), Color(Journal.EDGE, 0.12))
+	draw.draw_line(east.position + Vector2(0.0, 12.0 * s), Vector2(east.position.x, east.end.y - 12.0 * s),
+		Color(Journal.EDGE, 0.7), maxf(1.0, 2.0 * s))
+	UiStyle.text(draw, font, Journal.SLOPE, east.position + Vector2(0.0, 14.0 * s), Journal.SLOPE_PX * s, Journal.SOFT,
+		east.size.x, HORIZONTAL_ALIGNMENT_CENTER)
+	if Journal.border_shown(lore):   # пояс поля замечен у 08 — тонкая подпись, не стена (#829)
+		var br := Journal.border_rect(size)
+		UiStyle.text(draw, font, Journal.BORDER, br.position, Journal.BORDER_PX * s, Journal.SOFT, br.size.x,
+			HORIZONTAL_ALIGNMENT_CENTER)
 	for k: String in Run.PLACES:
 		var b := Journal.place_rect(k, size)
 		var seen := expedition.visited(k)

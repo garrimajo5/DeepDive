@@ -58,3 +58,37 @@ func test_smooth_matches_smoothstep() -> void:
 			near(HashNoise.smooth(e[0], e[1], x), smoothstep(e[0], e[1], x), 1e-12, "smooth %s при %s" % [e, x])
 	ok(not ValveSteam.new().has_method("S"), "у ValveSteam нет своей копии")
 	ok(not BreachSpray.new().has_method("S"), "у BreachSpray нет своей копии")
+
+
+## #847: рой пишет кадр одним буфером (16 чисел на карточку); пустой — ставит прозрачную карточку один раз.
+func test_cards_one_buffer_and_park_once() -> void:
+	var n := MultiMeshInstance3D.new()
+	var mm := CardSwarm.setup(n, CardSwarm.material("res://shaders/steam.gdshader", {}), 3, OceanView.LAYER_SHIP)
+	var c := CardSwarm.Cards.new(mm)
+	eq(c.buf.size(), 3 * 16, "буфер на весь рой")
+	c.begin()
+	c.add(Vector3(0.4, 0, 0), Vector3(0, 0.6, 0), Vector3(1, 2, 3), Color(0.1, 0.2, 0.3, 4.0))
+	c.add(Vector3.RIGHT * 0.2, Vector3(0, 0, 0.9), Vector3(-1, 0, 0), Color(0.5, 0.5, 0.5, 0.0))
+	eq(c.commit(Vector3.ZERO), 2, "две карточки")
+	eq(c.writes, 1, "один вызов на кадр")
+	eq(mm.visible_instance_count, 2, "видно две")
+	var t := c.card(0)
+	ok(t.origin.is_equal_approx(Vector3(1, 2, 3)), "центр")
+	near(t.basis.x.length(), 0.4, 1e-6, "ширина — ось x")
+	near(t.basis.y.length(), 0.6, 1e-6, "высота — ось y")
+	ok(c.card(1).basis.y.is_equal_approx(Vector3(0, 0, 0.9)), "вектор длины (искры, струя) — ось y")
+	ok(c.custom(0).is_equal_approx(Color(0.1, 0.2, 0.3, 4.0)), "данные кадра в custom")
+	c.begin()
+	for i in 5:
+		c.add(Vector3.RIGHT, Vector3.UP, Vector3.ZERO, Color())
+	eq(c.n, 3, "сверх предела не пишет")
+	c.commit(Vector3.ZERO)
+	c.begin()
+	eq(c.commit(Vector3(7, 8, 9)), 0, "пусто")
+	eq(mm.visible_instance_count, 1, "одна карточка для прогрева")
+	ok(c.card(0).origin.is_equal_approx(Vector3(7, 8, 9)) and c.custom(0).a == 0.0, "прозрачная, на месте")
+	var w := c.writes
+	c.begin()
+	c.commit(Vector3(7, 8, 9))
+	eq(c.writes, w, "пустой рой второй кадр подряд не пишет")
+	n.free()

@@ -85,6 +85,25 @@ func test_swarm_drifts_around_home() -> void:
 	ok(far > 3.0, "стая дрейфует: %.1f м" % far)
 
 
+## Б3 «плавность»: центр стаи после сброса — уже по дрейфу; раньше стоял в доме и на первом шаге прыгал до 10 м.
+func test_no_jump_after_reset() -> void:
+	var w := EcoWorld.new()
+	w.ground = Seabed.height
+	w.ship.pos = FAR
+	var r := w.add(EcoRaduzh.new()) as EcoRaduzh
+	var dt := 1.0 / 30.0
+	var was: Array[Vector3] = []
+	for sw in r.swarms:
+		was.append(sw.c)
+	var worst := 0.0
+	for i in 30 * 5:
+		w.step(dt)
+		for k in r.swarms.size():
+			worst = maxf(worst, r.swarms[k].c.distance_to(was[k]) / dt)
+			was[k] = r.swarms[k].c
+	ok(worst < 1.0, "центр стаи без рывков: %.2f м/с" % worst)
+
+
 # ---------- Вспышка ----------
 
 func test_flares_in_beam_and_fades() -> void:
@@ -281,6 +300,50 @@ func test_member_outside_hull() -> void:
 	near(EcoRaduzh.member_pos_outside(sw, 3, 0.0, FAR, 0.0).distance_to(p), 0.0, 1e-6, "вдали — на месте")
 
 
+## Корабль проходит сквозь стаю: гребневики расступаются вдоль обшивки, а не перескакивают на другой борт (раньше
+## до 6 м за кадр), в корпусе не остаются, а когда корабль ушёл — возвращаются на места по дрейфу.
+func test_ship_through_swarm_no_jump() -> void:
+	for spd in [1.0, 4.0, 8.0]:
+		var w := _world()
+		var r := _sys(w, EcoRaduzh) as EcoRaduzh
+		var sw := r.swarms[0]
+		var dt := 1.0 / 30.0
+		var c0 := sw.c
+		var prev: Array[Vector3] = []
+		var worst := 0.0
+		var inside := 0
+		var pushed := 0.0
+		for i in int((60.0 / spd) / dt):
+			w.ship.pos = Vector3(c0.x, c0.y + 0.5, c0.z + 30.0 - spd * w.time)
+			w.ship.yaw = 0.0
+			w.ship.speed = spd
+			w.step(dt)
+			var cur: Array[Vector3] = []
+			for k in EcoRaduzh.PER_SWARM:
+				var q := EcoRaduzh.member_pos_outside(sw, k, w.time, w.ship.pos, 0.0)
+				cur.append(q - EcoRaduzh.member_pos(sw, k, w.time))
+				if EcoHull.touches(q, w.ship.pos, 0.0, 0.2):
+					inside += 1
+				pushed = maxf(pushed, sw.members[k].d.length())
+			if not prev.is_empty():
+				for k in EcoRaduzh.PER_SWARM:
+					worst = maxf(worst, (cur[k] - prev[k]).length())
+			prev = cur
+		ok(pushed > 1.0, "корпус отодвигал гребневиков (%.1f м) на %.0f м/с" % [pushed, spd])
+		ok(worst < spd * dt + 0.3, "сдвиг за кадр %.2f м на %.0f м/с — без скачка через корпус" % [worst, spd])
+		eq(inside, 0, "в корпусе не остаются на %.0f м/с" % spd)
+		# корабль ушёл — за 25 с сдвиг растаял, назад — не быстрее RETURN_V
+		w.ship.pos = FAR
+		w.ship.speed = 0.0
+		for i in 25 * 30:
+			w.step(dt)
+		var left := 0.0
+		ok(pushed < 20.0, "не едут на носу (сдвиг до %.1f м)" % pushed)
+		for m in sw.members:
+			left = maxf(left, m.d.length())
+		ok(left < 0.05, "вернулись на места (%.3f м)" % left)
+
+
 func test_view_two_multimeshes() -> void:
 	var view := EcoView.new()
 	view.ground = Seabed.height
@@ -304,5 +367,116 @@ func test_view_two_multimeshes() -> void:
 	sw.glow = 1.0
 	rv.sync(view.world.time, FAR, 0.0)
 	ok(RaduzhView.color_at(rv.halo_buffer, j).get_luminance() > 0.1, "вспышка — ореол горит")
+	view.queue_free()
+	await frames(1)
+
+
+## «Экономно» (Б6): в каждой стае рисуются два гребневика из трёх и их ореолы — видимые в начале буферов; мир считает
+## всех, назад — буфер снова по номеру; сброс мира уровень не теряет.
+func test_view_lite_draws_two_of_three_per_swarm() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var rv := view.raduzh_view
+	eq(rv.drawn(), 84, "на «Обычно» — все гребневики")
+	view.set_lite(true)
+	ok(rv.lite, "радужники — на «Экономно»")
+	var per := EcoRaduzh.PER_SWARM - EcoRaduzh.PER_SWARM / RaduzhView.LITE_SKIP
+	eq(rv.drawn(), per * view.raduzh.swarms.size(), "две трети в каждой стае")
+	eq(rv.halos.multimesh.visible_instance_count, rv.drawn(), "ореолы — тех же")
+	ok(rv.drawn() < 84 * 0.7, "гребневиков меньше на треть: %d" % rv.drawn())
+	var seen := {}
+	for sw in view.raduzh.swarms:
+		var n := 0
+		for k in EcoRaduzh.PER_SWARM:
+			var idx := sw.index * EcoRaduzh.PER_SWARM + k
+			seen[rv.slot_of(idx)] = true
+			if rv.slot_of(idx) < rv.drawn():
+				n += 1
+				ok(RaduzhView.lite_shown(k), "видим только показанный")
+		eq(n, per, "в стае %d видно %d" % [sw.index, per])
+	eq(seen.size(), 84, "места в буфере не повторяются")
+	var ship := EcoLink.ShipState.new()
+	ship.pos = FAR
+	view.step(0.05, ship)
+	var sw := view.raduzh.swarms[2]
+	var idx := 2 * EcoRaduzh.PER_SWARM + 4
+	near(RaduzhView.origin_at(rv.body_buffer, rv.slot_of(idx)).distance_to(
+		EcoRaduzh.member_pos(sw, 4, view.world.time)), 0.0, 1e-4, "видимый гребневик — на своём месте буфера")
+	sw.glow = 1.0
+	rv.sync(view.world.time, FAR, 0.0)
+	ok(RaduzhView.color_at(rv.halo_buffer, rv.slot_of(idx)).get_luminance() > 0.1, "ореол — на том же месте")
+	view.ground = Seabed.height   # сброс мира — виды пересобираются
+	ok(view.raduzh_view.lite and view.raduzh_view.drawn() < 84, "сброс мира — снова «Экономно»")
+	view.set_lite(false)
+	rv = view.raduzh_view
+	view.step(0.05, ship)
+	eq(rv.drawn(), 84, "назад — все")
+	eq(rv.slot_of(idx), idx, "буфер снова по номеру")
+	near(RaduzhView.origin_at(rv.body_buffer, idx).distance_to(
+		EcoRaduzh.member_pos(view.raduzh.swarms[2], 4, view.world.time)), 0.0, 1e-4, "и места переписаны")
+	view.queue_free()
+	await frames(1)
+
+
+## Ряды ресничек бьют (Б3): на ряду под гребнем волны тело ярче, между рядами — тусклее; волна бежит со временем
+## от верха ко рту; в среднем по телу яркость прежняя; фаза особи — в альфе цвета тела, время мира — в шейдере.
+func test_view_comb_rows_beat() -> void:
+	var on_row := Vector3(0.0, 0.0, 1.0)            # atan2(0, 1) = 0 — середина ряда
+	var between := Vector3(sin(PI / 8.0), 0.0, cos(PI / 8.0))  # между рядами (8 рядов — через π/4)
+	var best := 0.0
+	var worst := 99.0
+	for i in 40:
+		var t := i * 0.02
+		best = maxf(best, RaduzhView.comb_k(on_row, t, 0.0))
+		worst = minf(worst, RaduzhView.comb_k(on_row, t, 0.0))
+		near(RaduzhView.comb_k(between, t, 0.0), lerpf(1.0, RaduzhView.COMB_BASE, RaduzhView.COMB), 1e-4,
+			"между рядами — ровно тускло")
+	ok(best > 2.5, "на ряду под гребнем волны — вспыхивает (%.2f)" % best)
+	ok(worst < 0.7, "на ряду меж гребнями — гаснет (%.2f)" % worst)
+	# гребень волны со временем уходит вниз по телу (ко рту)
+	var t0 := (PI / 2.0) / RaduzhView.COMB_RATE   # в t0 на экваторе гребень
+	var top_y := 0.0
+	var later := t0 + 0.05
+	var y_peak := -INF
+	var k_peak := -INF
+	for s in 41:
+		var y := -1.0 + s * 0.05
+		var k := RaduzhView.comb_k(Vector3(0.0, y, sqrt(maxf(0.0, 1.0 - y * y))), later, 0.0)
+		if absf(y) < 0.6 and k > k_peak:
+			k_peak = k
+			y_peak = y
+	ok(y_peak < top_y, "гребень сместился вниз (%.2f)" % y_peak)
+	# среднее по сфере ≈ 1
+	var sum := 0.0
+	var n := 0
+	for a in 64:
+		for b in 32:
+			var y := -1.0 + (b + 0.5) / 16.0
+			var r := sqrt(1.0 - y * y)
+			var ang := a * TAU / 64.0
+			sum += RaduzhView.comb_k(Vector3(sin(ang) * r, y, cos(ang) * r), 0.37, 1.1)
+			n += 1
+	near(sum / n, 1.0, 0.08, "в среднем по телу яркость прежняя")
+	near(RaduzhView.beat_alpha(TAU * 0.25), 0.25, 1e-6, "фаза — доля оборота")
+	# сцена: фаза особи в альфе тела, время мира — uniform
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var rv := view.raduzh_view
+	var ship := EcoLink.ShipState.new()
+	ship.pos = FAR
+	view.step(0.05, ship)
+	rv.sync(view.world.time, FAR, 0.0, true)
+	var sw := view.raduzh.swarms[1]
+	var j := rv.slot_of(1 * EcoRaduzh.PER_SWARM + 5)
+	near(RaduzhView.color_at(rv.body_buffer, j).a, RaduzhView.beat_alpha(sw.members[5].phase), 1e-5,
+		"фаза биения — в альфе тела")
+	near(RaduzhView.color_at(rv.halo_buffer, j).a, 1.0, 1e-6, "ореол не тронут")
+	var mat := (rv.bodies.multimesh.mesh as PrimitiveMesh).material as ShaderMaterial
+	near(float(mat.get_shader_parameter("world_t")), view.world.time, 1e-5, "время мира — в шейдере тела")
+	ok(RaduzhView.body_code().contains("comb_rows"), "ряды — в шейдере тела")
 	view.queue_free()
 	await frames(1)

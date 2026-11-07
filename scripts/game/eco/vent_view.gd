@@ -3,10 +3,16 @@ extends Node3D
 ## Чёрный курильщик в сцене (ART-012, docs/concept-art/kurilshchik.md): три вызова отрисовки.
 ## «Порода» — один меш: главная и малые трубы (усечённые конусы с неровной стенкой, плоские грани), внутренняя стенка
 ## и тёмное дно просвета, цоколь и две наплывные пластины; на склонах главной трубы — две минеральные ленты #C5BFA7.
-## Кромки жерл и верх просвета светятся #FF8A3C с мерцанием (EcoVent.flicker — в шейдере по TIME), порода #3A2A2E
+## Кромки жерл и верх просвета светятся #FF8A3C с мерцанием (EcoVent.flicker — в шейдере по времени мира `now`), порода #3A2A2E
 ## не светится. «Пузыри» — MultiMesh квадратов лицом к камере, движутся в шейдере по формуле EcoVent.bubble_pos
 ## (процессор их не трогает). «Марево» — три вертикальные полупрозрачные полосы с бегущим вверх шумом над главным
 ## жерлом. Пузыри и марево — общий шейдер прозрачного без света (EcoShaders.MIST). Без источника света: OmniLight в Compatibility перерисовал бы дно ещё раз. Слой отмели (LAYER_WORLD).
+## «Экономно» (Б6, `set_lite`): порода грубее — главная труба 12 граней × 4 ряда вместо 18 × 6, малые 9 × 2 вместо
+## 14 × 3, цоколь и пластины — по граням своих труб (LITE_*); меш пересобирается с тем же материалом (жар кромок,
+## мерцание, тень), пузыри, марево, вызовы и места жерл те же. Сброс мира уровень не теряет (EcoView.set_lite).
+## Пузыри не клоны (Б4): у каждого свой размер ± BUBBLE_SPREAD по номеру (`bubble_scale`, EcoVary, у гостя то же) —
+## масштаб базиса экземпляра, шейдер умножает на него размер по высоте (EcoVent.bubble_size). Путь, скорость и
+## прозрачность те же, вызовов и шейдеров столько же, и на «Экономно».
 
 const ROCK := Color("3a2a2e")
 const MINERAL := Color("c5bfa7")
@@ -22,6 +28,11 @@ const SIDES := 18
 const SMALL_SIDES := 14
 const ROWS := 6
 const SMALL_ROWS := 3
+## То же на «Экономно».
+const LITE_SIDES := 12
+const LITE_SMALL_SIDES := 9
+const LITE_ROWS := 4
+const LITE_SMALL_ROWS := 2
 ## Неровность стенки (js: G.jitter 0,35), м; кромка и низ у дна ровные.
 const JITTER := 0.3
 ## Марево: три полосы шириной 5 м на 16 м вверх от жерла.
@@ -32,6 +43,9 @@ const HAZE_STRIPS := 3
 const FAR := 160.0
 ## Чисел на пузырь: transform 3 × 4 и свои числа (4).
 const STRIDE := 16
+## Разброс размера пузырей (bubble_scale) и соль номера.
+const BUBBLE_SPREAD := 0.3
+const BUBBLE_SALT := 6000
 
 var vent: EcoVent
 var rock: MeshInstance3D
@@ -45,13 +59,23 @@ var tris := 0
 var bubble_buffer := PackedFloat32Array()
 
 var _col := PackedColorArray()
+## На «Экономно» — грубее порода (set_lite).
+var lite := false
+var _mat: Material
 
 
-func _init(system: EcoVent) -> void:
+func _init(system: EcoVent, on_lite := false) -> void:
 	vent = system
+	lite = on_lite
 	name = "Чёрный курильщик"
 	if vent.tubes.is_empty():
 		return
+	_mat = EcoShaders.material(EcoShaders.STONE, {"growth": HEAT, "fill": 0.0, "glow_k": 1.6, "cut": 1.0,
+		"rough": 0.95, "spec": 0.15, "flicker": 1.0})
+	rock = MeshInstance3D.new()
+	rock.name = "Порода"
+	_setup(rock)
+	EcoShadows.cast(rock)   # порода — тень на дно (Б1); пузыри и марево без тени
 	_build_rock()
 	_build_bubbles()
 	_build_haze()
@@ -59,25 +83,36 @@ func _init(system: EcoVent) -> void:
 
 # ---------- Порода ----------
 
+## «Экономно» — порода пересобрана грубее (тот же материал); назад — полная.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	if rock:
+		_build_rock()
+
+
 func _build_rock() -> void:
+	verts.clear()
+	normals.clear()
+	_col.clear()
+	var sides := LITE_SIDES if lite else SIDES
+	var small := LITE_SMALL_SIDES if lite else SMALL_SIDES
 	var c0 := vent.center()
 	for k in vent.tubes.size():
 		var tb := vent.tubes[k]
 		var main := k == 0
-		_tube(tb, SIDES if main else SMALL_SIDES, ROWS if main else SMALL_ROWS, main)
+		var rows := (LITE_ROWS if main else LITE_SMALL_ROWS) if lite else (ROWS if main else SMALL_ROWS)
+		_tube(tb, sides if main else small, rows, main)
 	# цоколь вокруг главной трубы и пластины под малыми
-	_skirt(Vector2(c0.x, c0.z), EcoVent.PLINTH[0], EcoVent.PLINTH[1], EcoVent.PLINTH[2], SIDES, 1)
+	_skirt(Vector2(c0.x, c0.z), EcoVent.PLINTH[0], EcoVent.PLINTH[1], EcoVent.PLINTH[2], sides, 1)
 	for i in EcoVent.PLATES.size():
 		var tb := vent.tubes[i + 1]
 		_skirt(Vector2(tb.floor_c.x, tb.floor_c.z), EcoVent.PLATES[i][0], tb.base_r * 0.9, EcoVent.PLATES[i][1],
-			SMALL_SIDES, 2 + i)
+			small, 2 + i)
 	var m := EcoMM.tris(verts, normals, _col)
-	m.surface_set_material(0, EcoShaders.material(EcoShaders.STONE, {"growth": HEAT, "fill": 0.0, "glow_k": 1.6, "cut": 1.0,
-		"rough": 0.95, "spec": 0.15, "flicker": 1.0}))
-	rock = MeshInstance3D.new()
-	rock.name = "Порода"
+	m.surface_set_material(0, _mat)
 	rock.mesh = m
-	_setup(rock)
 	tris = verts.size() / 3
 
 
@@ -231,7 +266,8 @@ func _build_bubbles() -> void:
 	for i in EcoVent.BUBBLES:
 		var o := vent.b_origin[i]
 		var k := i * STRIDE
-		var tr := [1.0, 0.0, 0.0, o.x, 0.0, 1.0, 0.0, o.y, 0.0, 0.0, 1.0, o.z,
+		var sc := bubble_scale(i)
+		var tr := [sc, 0.0, 0.0, o.x, 0.0, sc, 0.0, o.y, 0.0, 0.0, sc, o.z,
 			vent.b_speed[i], vent.b_phase[i], vent.b_height[i], vent.b_seed[i]]
 		for q in STRIDE:
 			bubble_buffer[k + q] = tr[q]
@@ -244,6 +280,11 @@ func _build_bubbles() -> void:
 	var m := vent.tubes[0].mouth
 	bubbles.custom_aabb = AABB(Vector3(m.x - 12.0, m.y - 2.0, m.z - 12.0), Vector3(24.0, EcoVent.ICE_Y - m.y + 4.0, 24.0))
 	bubbles.visibility_range_end = FAR
+
+
+## Множитель размера пузыря i: 1 ± BUBBLE_SPREAD, один и тот же у хоста и гостя.
+static func bubble_scale(i: int) -> float:
+	return EcoVary.spread(i + BUBBLE_SALT, EcoVary.SIZE, BUBBLE_SPREAD)
 
 
 # ---------- Марево ----------

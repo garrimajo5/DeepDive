@@ -124,9 +124,16 @@ static func pos(b: Bubble, t: float, flow: Vector3) -> Vector3:
 	return b.at + Vector3(0, b.rise * dt, 0) + side * w + Vector3(flow.x, 0.0, flow.z) * DRIFT * dt
 
 
-## Откуда срывается пузырёк: верх луковицы стебля k куста bl в момент t.
-static func spot(bl: EcoBladder.Bush, k: int, t: float) -> Vector3:
-	return EcoBladder.bulb(bl, k, t) + Vector3(0, LIFT, 0)
+## Откуда срывается пузырёк: верх луковицы стебля k куста bl в момент t (стебель колышется в течении flow
+## с долей размаха amount — как его рисует BladderView).
+static func spot(bl: EcoBladder.Bush, k: int, t: float, flow := Vector3.ZERO, amount := 1.0) -> Vector3:
+	return EcoBladder.bulb(bl, k, t, flow, amount) + Vector3(0, LIFT, 0)
+
+
+## Течение и доля колыхания стеблей на этом шаге (ставит BladderView перед update): пузырёк срывается с луковицы
+## там, где она сейчас нарисована.
+var flow := Vector3.ZERO
+var sway := 1.0
 
 
 ## Пауза до следующего пузырька спелых луковиц куста i.
@@ -169,7 +176,7 @@ func update(system: EcoBladder, t: float, ship: Vector3) -> void:
 			_made += 1
 			var key := _made
 			var k := int(EcoVary.unit(key, SALT + 5) * EcoBladder.STEMS) % EcoBladder.STEMS
-			add(spot(bl, k, t), t, SEEP_ALPHA * EcoVary.spread(key, SALT + 6, 0.2), key)
+			add(spot(bl, k, t, flow, sway), t, SEEP_ALPHA * EcoVary.spread(key, SALT + 6, 0.2), key)
 
 
 ## Луковицы лопнули: с каждой — POP_N пузырьков вразнобой за POP_SPAN с.
@@ -179,7 +186,7 @@ func _pop(bl: EcoBladder.Bush, t: float) -> void:
 			_made += 1
 			var key := _made
 			var born := t + POP_SPAN * EcoVary.unit(key, SALT + 7)
-			add(spot(bl, k, t), born, POP_ALPHA * EcoVary.spread(key, SALT + 6, 0.15), key)
+			add(spot(bl, k, t, flow, sway), born, POP_ALPHA * EcoVary.spread(key, SALT + 6, 0.15), key)
 
 
 ## Сколько пузырьков видно в момент t.

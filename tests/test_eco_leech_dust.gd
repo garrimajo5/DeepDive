@@ -134,10 +134,10 @@ func test_view_dust_mesh() -> void:
 	tree.root.add_child(view)
 	await frames(1)
 	var lv := view.leech_view
-	ok(lv.dust_view != null and lv.dust_view.get_parent() == lv, "у пиявников — MultiMesh «Муть»")
-	eq(lv.dust_view.multimesh.instance_count, EcoLeechDust.POOL)
-	eq(lv.dust_view.layers, OceanView.LAYER_WORLD)
-	var mat := (lv.dust_view.multimesh.mesh as QuadMesh).material as ShaderMaterial
+	ok(lv.dust_view == null and view.dust_layer.parts.has(lv._dust), "у пиявников — MultiMesh «Муть» — кусок общего слоя (#849)")
+	eq(view.dust_layer.pools[view.dust_layer.parts.find(lv._dust)], EcoLeechDust.POOL)
+	eq(view.dust_layer.layers, OceanView.LAYER_WORLD)
+	var mat := (view.dust_layer.multimesh.mesh as QuadMesh).material as ShaderMaterial
 	ok(mat.shader == EcoShaders.mist(EcoShaders.Mist.INK).shader, "общий шейдер MIST — шейдеров не прибавилось")
 	var pr := view.preds.all[0]
 	var ship := EcoLink.ShipState.new()

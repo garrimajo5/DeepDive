@@ -6,11 +6,15 @@ extends MeshInstance3D
 ## Стоит на слое отмели (OceanView.LAYER_WORLD). Кусты колышутся в течении мира (план реализма Б3): доля высоты
 ## вершины над подножием — UV2.x, подножие и высота куста — массивы foot/tall, формула — общий кусок EcoShaders.SWAY
 ## (двойник EcoCurrent.sway); коралл жёсткий — изгиб BEND меньше, чем у веерника. «Экономно» — EcoShaders.set_sway_lite.
+## Матовость — uniform rough/spec, числа «известь» ставит EcoSurface (мокрый известковый скелет, не камень).
 ## Куст рывком гасит кончики — у них облачка слизи (EcoCoralDust): дочерний MultiMesh «Муть», +1 вызов.
+## «Экономно» (Б6, `set_lite`): кусты из грубой формы EcoCoralLook.lite — ветви и кончики четырёхгранные, камни одним
+## поясом; меш пересобирается с тем же материалом (свет кончиков, колыхание, муть те же), сброс мира уровень не теряет.
 
 const SHADER := """
 shader_type spatial;
 render_mode cull_back;
+""" + EcoGlow.GLSL + """
 uniform vec3 tip_paint : source_color;
 uniform vec3 tip_glow : source_color;
 uniform vec3 dark_color : source_color;
@@ -18,6 +22,8 @@ uniform float glow[%d];
 uniform vec3 foot[%d];
 uniform float tall[%d];
 uniform vec3 bend = vec3(0.0);
+uniform float rough = 0.6;
+uniform float spec = 0.4;
 """ + EcoShaders.SWAY + """
 varying vec3 paint;
 varying float lit;
@@ -34,8 +40,9 @@ void vertex() {
 }
 void fragment() {
 	ALBEDO = paint;
-	ROUGHNESS = 0.8;
-	EMISSION = tip_glow * lit;
+	ROUGHNESS = rough;
+	SPECULAR = spec;
+	EMISSION = eco_bio(tip_glow * lit);
 }
 """
 
@@ -47,6 +54,11 @@ const TIP_GLOW := Color(0.95, 0.42, 0.1)
 ## Изгиб куста в течении (крен, волна, поперёк — доли высоты на полном течении): коралл твёрже веерника
 ## (FanView.BEND), вершина со станцией огнёвок уходит не дальше пары десятков сантиметров.
 const BEND := Vector3(0.035, 0.02, 0.012)
+
+## Кусты не клоны (Б4): у куста своя краска ветвей и камня — светлее-темнее ± SHADE_SPREAD, теплее-холоднее
+## ± HUE_SPREAD по номеру куста (`EcoVary`, `bush_paint`); цвет вершин — вызовов и шейдеров столько же.
+const SHADE_SPREAD := 0.14
+const HUE_SPREAD := 0.05
 
 ## Меньше этой разницы свет куста не обновляем.
 const EPS := 0.01
@@ -72,14 +84,42 @@ var dust_buffer: PackedFloat32Array:
 var _dust := EcoDustBuffer.new()
 
 var _mat: ShaderMaterial
+## На «Экономно» — грубая форма куста (set_lite); форма, из которой собран меш.
+var lite := false
+var form: EcoCoralLook.Form
+## Треугольников во всём меше.
+var tris := 0
 
 
-func _init(system: EcoCoral) -> void:
+func _init(system: EcoCoral, on_lite := false) -> void:
 	coral = system
+	lite = on_lite
 	name = "Огнецвет"
 	layers = OceanView.LAYER_WORLD
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var n := EcoCoralLook.verts.size()
+	_build()
+	dust_view = GrazerView.build_dust(EcoCoralDust.POOL)
+	add_child(dust_view)
+	glows.resize(coral.bushes.size())
+	glows.fill(-1.0)
+	sync()
+
+
+## «Экономно» — меш из грубой формы (тот же материал); назад — полный.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	_build()
+
+
+func _build() -> void:
+	form = EcoCoralLook.form(lite)
+	verts.clear()
+	heights.clear()
+	feet.clear()
+	talls.clear()
+	var n := form.verts.size()
 	var nor := PackedVector3Array()
 	var col := PackedColorArray()
 	var uv := PackedVector2Array()
@@ -91,14 +131,14 @@ func _init(system: EcoCoral) -> void:
 		feet.append(b.base)
 		talls.append(EcoCoral.HEIGHT * b.scale)
 		for i in n:
-			verts.append(tr * EcoCoralLook.verts[i])
-			var h := clampf(EcoCoralLook.verts[i].y / EcoCoral.HEIGHT, 0.0, 1.0)
+			verts.append(tr * form.verts[i])
+			var h := clampf(form.verts[i].y / EcoCoral.HEIGHT, 0.0, 1.0)
 			heights.append(h)
 			uv2.append(Vector2(h, 0.0))
-			nor.append((tr.basis * EcoCoralLook.normals[i]).normalized())
-			col.append(EcoCoralLook.colors[i])
-			uv.append(Vector2(b.index, 1.0 if EcoCoralLook.parts[i] == EcoCoralLook.Part.TIP else 0.0))
-		for t in EcoCoralLook.tris:
+			nor.append((tr.basis * form.normals[i]).normalized())
+			col.append(bush_paint(b.index, form.colors[i]))
+			uv.append(Vector2(b.index, 1.0 if form.parts[i] == EcoCoralLook.Part.TIP else 0.0))
+		for t in form.tris:
 			idx.append(v0 + t)
 	var m := ArrayMesh.new()
 	if not verts.is_empty():
@@ -111,6 +151,11 @@ func _init(system: EcoCoral) -> void:
 		arrays[Mesh.ARRAY_TEX_UV2] = uv2
 		arrays[Mesh.ARRAY_INDEX] = idx
 		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		if _mat:
+			m.surface_set_material(0, _mat)
+			mesh = m
+			tris = idx.size() / 3
+			return
 		_mat = ShaderMaterial.new()
 		var nb := maxi(1, coral.bushes.size())
 		_mat.shader = EcoShaders.shader(SHADER % [nb, nb, nb])
@@ -123,19 +168,15 @@ func _init(system: EcoCoral) -> void:
 		EcoShaders.follow(_mat)
 		m.surface_set_material(0, _mat)
 	mesh = m
-	dust_view = GrazerView.build_dust(EcoCoralDust.POOL)
-	add_child(dust_view)
-	glows.resize(coral.bushes.size())
-	glows.fill(-1.0)
-	sync()
+	tris = idx.size() / 3
 
 
-## Отдать шейдеру свет кустов, если хоть один заметно изменился. true — отдали.
+## Отдать шейдеру свет кустов на виду (`EcoCoral.Bush.seen` — гаснет за DIM_TIME, Б3), если хоть один заметно изменился. true — отдали.
 func sync() -> bool:
 	var dirty := false
 	for b in coral.bushes:
-		if absf(b.glow - glows[b.index]) >= EPS or (b.glow >= 1.0 and glows[b.index] < 1.0):
-			glows[b.index] = b.glow
+		if absf(b.seen - glows[b.index]) >= EPS or (b.seen >= 1.0 and glows[b.index] < 1.0):
+			glows[b.index] = b.seen
 			dirty = true
 	if dirty and _mat:
 		_mat.set_shader_parameter("glow", glows)
@@ -147,14 +188,20 @@ func sync() -> bool:
 func sync_dust(t: float, ship: EcoLink.ShipState, flow := Vector3.ZERO) -> void:
 	dust.update(coral, t, ship.pos if ship != null else Vector3.ZERO)
 	_dust.pack(dust.dust, t, flow, ship, EcoCoralDust.COLOR, EcoCoralDust.LIT)
-	if _dust.changed:   # облачков нет и не было — буфер тот же, не грузим (issue #133)
-		dust_view.multimesh.buffer = _dust.data
+	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 
 
 ## Смещение вершины i в течении flow в момент t — двойник шейдера (EcoCurrent.sway с подножием и высотой куста).
 func offset(i: int, t: float, flow: Vector3 = EcoShaders.flow) -> Vector3:
-	var b := i / maxi(1, EcoCoralLook.verts.size())
+	var b := i / maxi(1, form.verts.size())
 	return EcoCurrent.sway(feet[b], heights[i], talls[b], t, flow, BEND)
+
+
+## Краска c на кусте номер j: светлее-темнее и теплее-холоднее по номеру (у гостя сети та же).
+static func bush_paint(j: int, c: Color) -> Color:
+	var s := EcoVary.spread(j, EcoVary.SHADE, SHADE_SPREAD)
+	var h := (EcoVary.unit(j, EcoVary.HUE) * 2.0 - 1.0) * HUE_SPREAD
+	return Color(minf(1.0, c.r * s * (1.0 + h)), minf(1.0, c.g * s), minf(1.0, c.b * s * (1.0 - h)), c.a)
 
 
 ## Материал кустов (для тестов).

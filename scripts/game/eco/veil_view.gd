@@ -1,17 +1,26 @@
 class_name VeilView
 extends Node3D
-## Фонарные вуали в сцене (initVeils/veilUpdate в js/creatures.js): у каждой вуали — узел на месте купола и в нём три
-## вызова отрисовки. Купола — MultiMesh из полусферы: наружный голубой купол 6 м (#7ff5ff, 0,22), розовое ядро 0,6 r
-## (#ff8ae0, 0,28) и девять колокольчиков по кругу (#bff8ff, 0,35); все пульсируют, кромка купола ярче (по краю
-## прозрачности). Кромка — 48 огоньков-точек лицом к камере (#cffcff), мерцают. Щупальца — 40 нитей по 10 звеньев
-## одним мешем линий (#ff9ae6, 0,6): колышутся в шейдере по той же формуле, что EcoVeil.tentacle_point, — пульс купола
-## бежит по ним волной вниз, течение (`EcoShaders.follow`, поток мира) сносит кончики; «Экономно» — только колыхание
-## браузера (`sway_k` = 0, `EcoShaders.set_sway_lite`). Купола и щупальца — общий
-## шейдер прозрачного (EcoShaders.MIST). Всё без света,
-## прозрачное, без записи глубины, на слое отмели (OceanView.LAYER_WORLD). Дальше FAR от корабля вуаль не видна в мути —
-## узел прячется и не пересчитывается.
+## Фонарные вуали в сцене (initVeils/veilUpdate в js/creatures.js): все вуали — три вызова отрисовки на всех (#849,
+## раньше по три на каждую). Купола — один MultiMesh из полусферы: у каждой вуали наружный голубой купол 6 м (#7ff5ff,
+## 0,22), розовое ядро 0,6 r (#ff8ae0, 0,28) и девять колокольчиков по кругу (#bff8ff, 0,35); все пульсируют, кромка
+## купола ярче (по краю прозрачности). Кромка — MultiMesh колец по 48 огоньков-точек лицом к камере (#cffcff), экземпляр
+## на вуаль, мерцание — альфа цвета экземпляра. Щупальца — MultiMesh, экземпляр на вуаль, в меше нити всех вуалей
+## (40 по 10 звеньев линиями, #ff9ae6, 0,6), номер вуали — UV2.x: экземпляр рисует только свои (в INSTANCE_CUSTOM —
+## пульс, фаза, номер вуали), прочие сжимаются в точку. Колышутся в шейдере по той же формуле, что
+## EcoVeil.tentacle_point, — пульс купола бежит по ним волной вниз, течение (`EcoShaders.follow`, поток мира) сносит
+## кончики, а дрейфующий купол тянет их за собой (вода относительно купола, uniform `drag` — `drags`); «Экономно» — только колыхание браузера (`sway_k` = 0, `EcoShaders.set_sway_lite`). Купола и щупальца —
+## общий шейдер прозрачного (EcoShaders.MIST). Всё без света, прозрачное, без записи глубины, на слое отмели
+## (OceanView.LAYER_WORLD). Дальше FAR от корабля вуаль не видна в мути — не рисуется и не пересчитывается: видимые
+## вуали идут первыми, `visible_instance_count` отрезает прочие; рамка видимости — по видимым вуалям.
 ## Выдох купола и слизь ужаливания (EcoVeilDust: на сокращении купола из-под кромки — облачка, ужалила светляка —
 ## клуб у рыбки) — дочерний MultiMesh «Муть» на общем шейдере EcoShaders.MIST (INK) — +1 вызов отрисовки.
+## «Экономно» (`set_lite`, Б6): у каждой вуали рисуется каждое второе щупальце (40 → 20) и каждый второй огонёк кромки
+## (48 → 24) — меши нитей и кромки пересобираются с шагом LITE_STEP (огоньки стоят ровно по кругу, нити — по углу,
+## чётные покрывают купол так же ровно). Купола, мир (ужаливание, укрытие, сонар) и муть не меняются; вызовов столько же,
+## линий и пятен со сложением цвета вдвое меньше.
+## Не клоны (Б4, `EcoVary` по номеру вуали): свой ритм пульса (`EcoVeil.pulse_rate`, в INSTANCE_CUSTOM.a щупалец —
+## доля от PULSE_W) и своя яркость куполов и ядра ± GLOW_SPREAD (`veil_glow`, альфа цвета экземпляра). Вызовов и
+## шейдеров столько же, и на «Экономно».
 
 const RIM_SHADER := """
 shader_type spatial;
@@ -26,7 +35,7 @@ void fragment() {
 	float d = length(UV - vec2(0.5)) * 2.0;
 	float a = clamp(1.0 - d, 0.0, 1.0);
 	ALBEDO = tint.rgb;
-	ALPHA = tint.a * a;
+	ALPHA = tint.a * COLOR.a * a;
 }
 """
 
@@ -41,6 +50,10 @@ const SMALL_RING := 1.2
 ## Огоньков на кромке, их размер (м).
 const RIM_N := 48
 const RIM_SIZE := 0.5
+## «Экономно»: рисуется каждое LITE_STEP-е щупальце и каждый LITE_STEP-й огонёк кромки.
+const LITE_STEP := 2
+## Разброс яркости куполов, ядра и колокольчиков по вуали.
+const GLOW_SPREAD := 0.2
 ## Полусфера купола.
 const SEGMENTS := 24
 const RINGS := 8
@@ -49,15 +62,30 @@ const FAR := 170.0
 ## Экземпляров куполов на вуаль: наружный, ядро и колокольчики; чисел на экземпляр — transform 3 × 4 и цвет.
 const BELLS := 2 + EcoVeil.SMALL
 const STRIDE := 16
+## Чисел на экземпляр щупалец: transform 3 × 4 и INSTANCE_CUSTOM (пульс, фаза, номер вуали, 0).
+const TENT_STRIDE := 16
+## Рамки видимости вокруг купола вуали: купола с колокольчиками и щупальца (с пульсом и сносом течением).
+const BELL_BOX := AABB(Vector3(-10, -6, -10), Vector3(20, 14, 20))
+const TENT_BOX := AABB(Vector3(-8, -EcoVeil.LEN - 2, -8), Vector3(16, EcoVeil.LEN + 3, 16))
 
 var veils: EcoVeil
-## Узлы вуалей по EcoVeil.Veil.index и их части.
-var groups: Array[Node3D] = []
-var bells: Array[MultiMeshInstance3D] = []
-var rims: Array[MeshInstance3D] = []
-var tentacles: Array[MeshInstance3D] = []
-## Последний буфер куполов каждой вуали (для тестов).
-var bell_buffers: Array[PackedFloat32Array] = []
+## Купола (MultiMesh), кромки (MultiMesh колец) и щупальца (MultiMesh нитей) всех вуалей.
+var bells: MultiMeshInstance3D
+var rims: MultiMeshInstance3D
+var tentacles: MultiMeshInstance3D
+## Видна ли вуаль (по EcoVeil.Veil.index) и сколько видно.
+var shown: Array[bool] = []
+var shown_count := 0
+## Корабль у вуалей — корпус раздвигает щупальца (uniform `hull_on`, `sync`).
+var hull_on := false
+## Борт каждой нити у корпуса (EcoVeil.keep_side): вуаль × EcoVeil.TENTACLES + нить, 0 — не задан (uniform `hull_side`).
+var sides := PackedFloat32Array()
+## «Экономно» (set_lite).
+var lite := false
+## Последние буферы куполов, кромок и щупалец (для тестов): видимые вуали — по порядку.
+var bell_buffer := PackedFloat32Array()
+var rim_buffer := PackedFloat32Array()
+var tent_buffer := PackedFloat32Array()
 ## Выдох купола и слизь ужаливания (EcoVeilDust); буфер — для тестов.
 var dust := EcoVeilDust.new()
 var dust_view: MultiMeshInstance3D
@@ -67,49 +95,59 @@ var dust_buffer: PackedFloat32Array:
 var _dust := EcoDustBuffer.new()
 
 
-func _init(system: EcoVeil) -> void:
+func _init(system: EcoVeil, lite_on := false) -> void:
 	veils = system
 	name = "Вуали"
-	var bell_mesh := build_bell()
-	var rim_mesh := build_rim()
-	for vl in veils.veils:
-		var g := Node3D.new()
-		g.name = "Вуаль%d" % vl.index
-		add_child(g)
-		groups.append(g)
-		var mi := MultiMeshInstance3D.new()
-		mi.name = "Купола"
-		_layer(mi)
-		var mm := MultiMesh.new()
-		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.use_colors = true
-		mm.mesh = bell_mesh
-		mm.instance_count = BELLS
-		mi.multimesh = mm
-		mi.custom_aabb = AABB(Vector3(-10, -6, -10), Vector3(20, 14, 20))
-		g.add_child(mi)
-		bells.append(mi)
-		var buf := PackedFloat32Array()
-		buf.resize(BELLS * STRIDE)
-		bell_buffers.append(buf)
-		var rim := MeshInstance3D.new()
-		rim.name = "Кромка"
-		_layer(rim)
-		rim.mesh = rim_mesh
-		rim.material_override = _material(RIM_SHADER, {"tint": RIM, "size": RIM_SIZE})
-		g.add_child(rim)
-		rims.append(rim)
-		var tm := MeshInstance3D.new()
-		tm.name = "Щупальца"
-		_layer(tm)
-		tm.mesh = build_tentacles(vl)
-		tm.material_override = EcoShaders.follow(EcoShaders.mist(EcoShaders.Mist.TENTACLE, tentacle_params(vl)))
-		tm.custom_aabb = AABB(Vector3(-8, -EcoVeil.LEN - 2, -8), Vector3(16, EcoVeil.LEN + 3, 16))
-		g.add_child(tm)
-		tentacles.append(tm)
+	var n := veils.veils.size()
+	shown.resize(n)
+	bells = _multi("Купола", build_bell(), n * BELLS, true, false)
+	rims = _multi("Кромка", build_rim(), n, true, false)
+	rims.material_override = _material(RIM_SHADER, {"tint": RIM, "size": RIM_SIZE})
+	tentacles = _multi("Щупальца", build_tentacles_all(veils.veils), n, false, true)
+	tentacles.material_override = EcoShaders.follow(EcoShaders.mist(EcoShaders.Mist.TENTACLE, tentacle_params()))
+	bell_buffer.resize(n * BELLS * STRIDE)
+	rim_buffer.resize(n * STRIDE)
+	tent_buffer.resize(n * TENT_STRIDE)
 	dust_view = GrazerView.build_dust(EcoVeilDust.POOL)
 	add_child(dust_view)
+	set_lite(lite_on)
 	sync(0.0, Vector3.ZERO)
+
+
+## «Экономно»: каждое второе щупальце и огонёк кромки (меши с шагом LITE_STEP); назад — все.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	var step := LITE_STEP if on else 1
+	rims.multimesh.mesh = build_rim(step)
+	tentacles.multimesh.mesh = build_tentacles_all(veils.veils, step)
+
+
+## Сколько щупалец одной вуали рисуется (на «Экономно» — каждое LITE_STEP-е).
+func threads() -> int:
+	var verts := (tentacles.multimesh.mesh as ArrayMesh).surface_get_array_len(0)
+	return verts / (EcoVeil.SEGMENTS * 2 * maxi(1, veils.veils.size()))
+
+
+## Сколько огоньков на кромке рисуется.
+func rim_lights() -> int:
+	return (rims.multimesh.mesh as ArrayMesh).surface_get_array_len(0) / 4
+
+
+func _multi(title: String, mesh: Mesh, count: int, colors: bool, custom: bool) -> MultiMeshInstance3D:
+	var mi := MultiMeshInstance3D.new()
+	mi.name = title
+	_layer(mi)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = colors
+	mm.use_custom_data = custom
+	mm.mesh = mesh
+	mm.instance_count = count
+	mi.multimesh = mm
+	add_child(mi)
+	return mi
 
 
 func _layer(gi: GeometryInstance3D) -> void:
@@ -141,12 +179,13 @@ static func build_bell() -> ArrayMesh:
 	return m
 
 
-## Кромка: RIM_N огоньков по кругу радиуса r на высоте 0 — по четыре вершины в одной точке, угол — в UV.
-static func build_rim() -> ArrayMesh:
+## Кромка: RIM_N огоньков по кругу радиуса r на высоте 0 — по четыре вершины в одной точке, угол — в UV; step —
+## каждый step-й огонёк («Экономно»).
+static func build_rim(step := 1) -> ArrayMesh:
 	var v := PackedVector3Array()
 	var uv := PackedVector2Array()
 	var idx := PackedInt32Array()
-	for k in RIM_N:
+	for k in range(0, RIM_N, step):
 		var a := k / float(RIM_N) * TAU
 		var c := Vector3(cos(a) * EcoVeil.R, 0.0, sin(a) * EcoVeil.R)
 		var b := v.size()
@@ -164,38 +203,62 @@ static func build_rim() -> ArrayMesh:
 	return m
 
 
-## Щупальца вуали — отрезки линий: точка j без пульса и колыхания (x0, −j · шаг, z0), в UV — (k, j).
-static func build_tentacles(vl: EcoVeil.Veil) -> ArrayMesh:
+## Щупальца вуали — отрезки линий: точка j без пульса и колыхания (x0, −j · шаг, z0), в UV — (k, j), в UV2 —
+## (номер вуали vi, 0).
+static func build_tentacles(vl: EcoVeil.Veil, vi := 0) -> ArrayMesh:
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, _tentacle_arrays([vl], vi))
+	return m
+
+
+## Нити всех вуалей одним мешем: у вуали i в UV2.x — i (экземпляр щупалец рисует только свои); step — каждая
+## step-я нить («Экономно»).
+static func build_tentacles_all(list: Array[EcoVeil.Veil], step := 1) -> ArrayMesh:
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, _tentacle_arrays(list, 0, step))
+	m.custom_aabb = TENT_BOX
+	return m
+
+
+static func _tentacle_arrays(list: Array, first: int, step := 1) -> Array:
 	var v := PackedVector3Array()
 	var uv := PackedVector2Array()
-	for k in EcoVeil.TENTACLES:
-		var x0 := cos(vl.tent_a[k]) * vl.tent_r[k]
-		var z0 := sin(vl.tent_a[k]) * vl.tent_r[k]
-		var step_len := vl.tent_len[k] / EcoVeil.SEGMENTS
-		for j in EcoVeil.SEGMENTS:
-			for jj in [j, j + 1]:
-				v.append(Vector3(x0, -0.1 if jj == 0 else -jj * step_len, z0))
-				uv.append(Vector2(k, jj))
+	var uv2 := PackedVector2Array()
+	for i in list.size():
+		var vl: EcoVeil.Veil = list[i]
+		for k in range(0, EcoVeil.TENTACLES, step):
+			var x0 := cos(vl.tent_a[k]) * vl.tent_r[k]
+			var z0 := sin(vl.tent_a[k]) * vl.tent_r[k]
+			var step_len := vl.tent_len[k] / EcoVeil.SEGMENTS
+			for j in EcoVeil.SEGMENTS:
+				for jj in [j, j + 1]:
+					v.append(Vector3(x0, -0.1 if jj == 0 else -jj * step_len, z0))
+					uv.append(Vector2(k, jj))
+					uv2.append(Vector2(first + i, 0))
 	var arr := []
 	arr.resize(Mesh.ARRAY_MAX)
 	arr[Mesh.ARRAY_VERTEX] = v
 	arr[Mesh.ARRAY_TEX_UV] = uv
-	var m := ArrayMesh.new()
-	m.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, arr)
-	return m
+	arr[Mesh.ARRAY_TEX_UV2] = uv2
+	return arr
 
 
-## Числа щупалец вуали для шейдера: цвет, волна пульса вниз (EcoVeil.WAVE_*) с фазой вуали, снос течением TRAIL.
-static func tentacle_params(vl: EcoVeil.Veil) -> Dictionary:
-	return {"tint": TENTACLE, "wave": Vector4(EcoVeil.PULSE, EcoVeil.PULSE_W, vl.ph, EcoVeil.WAVE_LAG),
-		"grow": EcoVeil.WAVE_GROW, "seg": float(EcoVeil.SEGMENTS), "trail": EcoVeil.TRAIL}
+## Числа щупалец для шейдера: цвет, волна пульса вниз (EcoVeil.WAVE_*), снос течением TRAIL. Фаза в wave.z и ритм
+## в wave.y — вуали vl (для shader_point); у общего материала фаза 0 и ритм PULSE_W — фазу каждой вуали шейдер
+## прибавляет из INSTANCE_CUSTOM.g, ритм умножает на INSTANCE_CUSTOM.a.
+static func tentacle_params(vl: EcoVeil.Veil = null) -> Dictionary:
+	return {"tint": TENTACLE, "wave": Vector4(EcoVeil.PULSE, vl.w if vl else EcoVeil.PULSE_W, vl.ph if vl else 0.0, EcoVeil.WAVE_LAG),
+		"grow": EcoVeil.WAVE_GROW, "seg": float(EcoVeil.SEGMENTS), "trail": EcoVeil.TRAIL,
+		"hull_ab": Vector4(EcoVeil.HULL_A, EcoVeil.HULL_B, HullPlan.CENTER_Y, 0.0),
+		"hull_z": Vector4(EcoVeil.HULL_Z0, EcoVeil.HULL_Z1, EcoVeil.HULL_NOSE, EcoVeil.HULL_STERN)}
 
 
 ## Точка j щупальца k из меша по формуле шейдера (для тестов: совпадает с EcoVeil.tentacle_point); m — материал
-## щупалец (его волна и снос), flow — поток, sway_k — 0 на «Экономно».
+## щупалец (его волна и снос), flow — поток, sway_k — 0 на «Экономно», drag — ход купола (uniform `drag` вуали).
 static func shader_point(rest: Vector3, k: int, j: int, t: float, pulse: float, m: Dictionary = {},
-		flow := Vector3.ZERO, sway_k := 0.0) -> Vector3:
+		flow := Vector3.ZERO, sway_k := 0.0, drag := Vector3.ZERO) -> Vector3:
 	var p := Vector3(rest.x * pulse, rest.y, rest.z * pulse)
+	flow = EcoVeil.rel_water(flow, drag)
 	if j > 0:
 		var h := j / float(m.get("seg", 10.0))
 		var wave: Vector4 = m.get("wave", Vector4.ZERO)
@@ -210,39 +273,134 @@ static func shader_point(rest: Vector3, k: int, j: int, t: float, pulse: float, 
 	return p
 
 
-## Расставить вуали в момент t (время мира); ship — где корабль (дальние вуали прячутся).
-func sync(t: float, ship: Vector3) -> void:
+## Вершина меша щупалец в экземпляре по формуле шейдера (двойник ветки TENTACLE в EcoShaders.MIST, для тестов):
+## rest — VERTEX, kj — UV, vi — UV2.x, custom — INSTANCE_CUSTOM (пульс, фаза, номер вуали, доля ритма — 0 как 1),
+## at — место экземпляра.
+## Нить чужой вуали сжимается в точку экземпляра.
+## hull — корабль у вуалей (uniform `hull_on`): точка нити внутри корпуса на ship_pos с курсом yaw — вбок
+## (`EcoVeil.hull_part`) к борту side (uniform `hull_side`; 0 — по корню rest.xz · пульс).
+static func instance_point(rest: Vector3, kj: Vector2, vi: float, custom: Color, at: Vector3, t: float,
+		m: Dictionary, flow := Vector3.ZERO, sway_k := 1.0, drag := Vector3.ZERO, hull := false,
+		ship_pos := Vector3.ZERO, yaw := 0.0, side := 0.0) -> Vector3:
+	if absf(vi - custom.b) > 0.5:
+		return at
+	var mm := m.duplicate()
+	var w: Vector4 = mm.get("wave", Vector4.ZERO)
+	w.z += custom.g
+	w.y *= custom.a if custom.a > 0.0 else 1.0
+	mm["wave"] = w
+	var p := at + shader_point(rest, int(kj.x), int(kj.y), t, custom.r, mm, flow, sway_k, drag)
+	if hull and int(kj.y) > 0:
+		if side == 0.0:
+			side = EcoVeil.side_of(at + Vector3(rest.x * custom.r, 0.0, rest.z * custom.r), ship_pos, yaw)
+		p = EcoVeil.hull_part(p, side, ship_pos, yaw)
+	return p
+
+
+## Ход куполов для uniform `drag` щупалец: по номеру вуали (INSTANCE_CUSTOM.b), EcoVeil.DRAG_SLOTS мест.
+static func drags(list: Array[EcoVeil.Veil]) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	out.resize(EcoVeil.DRAG_SLOTS)
+	for vl in list:
+		if vl.index < EcoVeil.DRAG_SLOTS:
+			out[vl.index] = vl.drag
+	return out
+
+
+## Корабль ближе этого к куполу (м) — корпус раздвигает щупальца (uniform `hull_on`); дальше нити до него не
+## достают: купол R, нити LEN, корпус от точки корабля — до EcoHull.BOUND.
+const HULL_NEAR := EcoVeil.R + EcoVeil.LEN + EcoHull.BOUND
+
+
+## Расставить вуали в момент t (время мира); ship — где корабль (дальние вуали не рисуются), yaw — его курс,
+## flow — течение мира (борт нитей у корпуса, `EcoVeil.keep_side`).
+func sync(t: float, ship: Vector3, yaw := 0.0, flow := Vector3.ZERO) -> void:
+	var n := 0
+	var bell_box := AABB()
+	var tent_box := AABB()
 	for vl in veils.veils:
-		var g := groups[vl.index]
 		var show := vl.p.distance_to(ship) < FAR
-		g.visible = show
+		shown[vl.index] = show
 		if not show:
 			continue
-		g.position = vl.p
 		var s := EcoVeil.pulse(vl, t)
-		var buf := bell_buffers[vl.index]
-		_put(buf, 0, Basis.from_scale(Vector3(s.x, 1.0 / s.x, s.x) * EcoVeil.R), Vector3.ZERO, BELL)
-		_put(buf, 1, Basis.from_scale(Vector3(s.y, 1.0 / s.y, s.y) * EcoVeil.R * CORE_K), Vector3.ZERO, CORE)
+		var g := veil_glow(vl.index)
+		var b0 := n * BELLS
+		_put(bell_buffer, b0, Basis.from_scale(Vector3(s.x, 1.0 / s.x, s.x) * EcoVeil.R), vl.p, glow(BELL, g))
+		_put(bell_buffer, b0 + 1, Basis.from_scale(Vector3(s.y, 1.0 / s.y, s.y) * EcoVeil.R * CORE_K), vl.p, glow(CORE, g))
 		for k in EcoVeil.SMALL:
 			var a := k / float(EcoVeil.SMALL) * TAU
 			var q := 1.0 + sin(t * 2.0 + vl.small_ph[k]) * 0.15
 			var at := Vector3(cos(a) * (EcoVeil.R + SMALL_RING), vl.small_y[k], sin(a) * (EcoVeil.R + SMALL_RING))
-			_put(buf, 2 + k, Basis.from_scale(Vector3(q, 1.0 / q, q) * vl.small_size[k]), at, SMALL)
-		bells[vl.index].multimesh.buffer = buf
-		rims[vl.index].scale = Vector3(s.x, 1.0, s.x)
-		var rm := rims[vl.index].material_override as ShaderMaterial
-		rm.set_shader_parameter("tint", Color(RIM.r, RIM.g, RIM.b, EcoVeil.rim_glow(vl, t)))
-		var tmat := tentacles[vl.index].material_override as ShaderMaterial
-		tmat.set_shader_parameter("t", t)
-		tmat.set_shader_parameter("swell", s.x)
+			_put(bell_buffer, b0 + 2 + k, Basis.from_scale(Vector3(q, 1.0 / q, q) * vl.small_size[k]), vl.p + at, glow(SMALL, g))
+		_put(rim_buffer, n, Basis.from_scale(Vector3(s.x, 1.0, s.x)), vl.p,
+			Color(1.0, 1.0, 1.0, EcoVeil.rim_glow(vl, t)))
+		_put(tent_buffer, n, Basis.IDENTITY, vl.p, Color(s.x, vl.ph, vl.index, vl.w / EcoVeil.PULSE_W))
+		if n == 0:
+			bell_box = AABB(vl.p + BELL_BOX.position, BELL_BOX.size)
+			tent_box = AABB(vl.p + TENT_BOX.position, TENT_BOX.size)
+		else:
+			bell_box = bell_box.merge(AABB(vl.p + BELL_BOX.position, BELL_BOX.size))
+			tent_box = tent_box.merge(AABB(vl.p + TENT_BOX.position, TENT_BOX.size))
+		n += 1
+	shown_count = n
+	for mi: MultiMeshInstance3D in [bells, rims, tentacles]:
+		mi.visible = n > 0
+	if n == 0:
+		return
+	EcoMM.send(bells, bell_buffer)
+	bells.multimesh.visible_instance_count = n * BELLS
+	bells.custom_aabb = bell_box
+	EcoMM.send(rims, rim_buffer)
+	rims.multimesh.visible_instance_count = n
+	rims.custom_aabb = bell_box
+	EcoMM.send(tentacles, tent_buffer)
+	tentacles.multimesh.visible_instance_count = n
+	tentacles.custom_aabb = tent_box
+	var mat := tentacles.material_override as ShaderMaterial
+	mat.set_shader_parameter("t", t)
+	mat.set_shader_parameter("drag", drags(veils.veils))
+	var was := hull_on
+	hull_on = false
+	if sides.size() != EcoVeil.DRAG_SLOTS * EcoVeil.TENTACLES:
+		sides.resize(EcoVeil.DRAG_SLOTS * EcoVeil.TENTACLES)
+	for vl in veils.veils:
+		if vl.index >= EcoVeil.DRAG_SLOTS:
+			continue
+		var i0 := vl.index * EcoVeil.TENTACLES
+		if not shown[vl.index] or vl.p.distance_to(ship) >= HULL_NEAR:
+			if was:
+				for k in EcoVeil.TENTACLES:
+					sides[i0 + k] = 0.0
+			continue
+		hull_on = true
+		for k in EcoVeil.TENTACLES:
+			var probe := vl.p + EcoVeil.tentacle_point(vl, k, EcoVeil.probe_j(vl, k, ship.y), t, flow, true)
+			sides[i0 + k] = EcoVeil.keep_side(sides[i0 + k], probe, ship, yaw)
+	# корабль далеко — uniform корпуса не трогаем каждый кадр (шаг вида у старта, test_view_step_fits_frame)
+	if hull_on or was:
+		mat.set_shader_parameter("hull_on", 1.0 if hull_on else 0.0)
+	if hull_on:
+		mat.set_shader_parameter("hull_side", sides)
+		mat.set_shader_parameter("hull_pos", ship)
+		mat.set_shader_parameter("hull_yaw", yaw)
 
 
 ## Облачка выдоха и слизи в момент t (время мира): ship — корабль (дальность и луч), flow — течение мира.
 func sync_dust(t: float, ship: EcoLink.ShipState, flow := Vector3.ZERO) -> void:
 	dust.update(veils, t, ship.pos if ship != null else Vector3.ZERO)
 	_dust.pack(dust.dust, t, flow, ship, EcoVeilDust.COLOR, EcoVeilDust.LIT)
-	if _dust.changed:   # облачков нет и не было — буфер тот же, не грузим (issue #133)
-		dust_view.multimesh.buffer = _dust.data
+	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
+
+
+## Яркость куполов вуали с номером i: 1 ± GLOW_SPREAD.
+static func veil_glow(i: int) -> float:
+	return EcoVary.spread(i, EcoVary.SHADE, GLOW_SPREAD)
+
+
+## Цвет купола c с яркостью g (по прозрачности — купола складывают свет).
+static func glow(c: Color, g: float) -> Color:
+	return Color(c.r, c.g, c.b, minf(1.0, c.a * g))
 
 
 static func _put(buf: PackedFloat32Array, n: int, b: Basis, o: Vector3, c: Color) -> void:

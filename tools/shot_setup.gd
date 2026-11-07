@@ -81,6 +81,13 @@ static func apply(g: Main, kv: Dictionary) -> void:
 	if kv.get("drain", "0") == "1":  # drain=1 — стеклоуст на корпусе (табло и рамка у щитка разряда)
 		g.vitals.drain("Стеклоуст", 0.01)
 		g.vitals.drain_left = 60.0
+	if kv.has("kamen"):  # kamen=<n> — у каждого ряда каменщиков первые n гнёзд спрятали венчики (#1337)
+		for r in g.eco.kamen.rows:
+			for i in mini(int(kv["kamen"]), r.worms.size()):
+				r.worms[i].open = 0.0
+				r.worms[i].quiet = 999.0
+			r.calm = false
+		g.eco.kamen.changed = true
 	if kv.get("steam", "0") == "1":  # пар из вентиля и открытая крышка щитка (для снимка машинного)
 		g.debug_vent = true
 		g.engine.pressed = 30.0
@@ -113,7 +120,10 @@ static func apply(g: Main, kv: Dictionary) -> void:
 		for id in kv["scanned"].split(",", false):
 			g.scanner.scanned[id] = true
 	if kv.has("route"):   # маршрут n (0…2) выбран у голостола
-		g.run.choose(int(kv["route"]))
+		g.say(g.run.choose(int(kv["route"])))   # как нажатие у стола: строка на приборах (#938)
+	if kv.has("goal_yaw") and g.run.next_key() != "":   # плашка цели за штурвалом (#1344): цель на столько ° левее (− — правее)
+		var d := Run.place_xz(g.run.next_key()) - Vector2(g.helm.pos.x, g.helm.pos.z)
+		g.helm.yaw = atan2(-d.x, -d.y) - deg_to_rad(float(kv["goal_yaw"]))
 	if kv.get("vote", "") in ["1", "up"]:   # маршрут пройден, решение у голостола; vote=up — итог забега
 		g.complete_route()
 		g.open_vote()
@@ -146,9 +156,44 @@ static func apply(g: Main, kv: Dictionary) -> void:
 			g.breach.welding = g.debug_weld
 			g.breach_view.apply(1.0 / 60.0)
 		g.breach.time = 0.25
-	if kv.has("ship"):  # ship=x,y,z — поставить корабль (y — высота, глубина со знаком минус)
+	if kv.has("ship"):  # ship=x,y,z[,курс°] — поставить корабль (y — высота, глубина со знаком минус)
 		var p: PackedFloat64Array = kv["ship"].split_floats(",")
+		if p.size() > 3:   # ship=x,y,z,курс° — курс корабля, как шаг «ship» сценария тестера
+			g.helm.yaw = deg_to_rad(p[3])
+			g.helm.turn = 0.0
 		g.park_at(Vector3(p[0], p[1], p[2]))
+	if kv.has("place"):  # place=NN|ключ — корабль у места слоя 1 носом к ориентиру, камера снаружи корпуса (#1358);
+		# place_cam=front|back — перед носом / позади и выше корабля, place_dist=<м> — от ориентира, place_side=<°> — откуда
+		var pose := place_pose(kv["place"], kv.get("place_cam", "front"), float(kv.get("place_dist", str(PLACE_DIST))),
+			float(kv["place_side"]) if kv.has("place_side") else NAN)
+		if not pose.is_empty():
+			g.helm.yaw = pose["yaw"]
+			g.helm.turn = 0.0
+			g.park_at(pose["ship"])
+			var cam := Camera3D.new()
+			cam.fov = Deck.FOV
+			cam.far = 400.0
+			g.add_child(cam)
+			cam.global_position = pose["cam"]
+			cam.look_at(pose["look"])
+			cam.make_current()
+	if kv.has("lore"):  # lore=d07_return,shell03 — знания слоя 1 (#825; ключи LayerLore.KEYS)
+		for k in kv["lore"].split(",", false):
+			g.lore.learn(k)
+	if kv.get("spusk_vote", "") in ["1", "later", "coop"]:   # корабль в круге 10 — панель спуска у стола (#1362); later — «позже»
+		if not kv.has("ship"):
+			var p10 := Run.place_xz(Run.DESCENT)
+			g.park_at(Vector3(p10.x, Seabed.height(p10.x, p10.y) + 15.0, p10.y))
+		g.say(g.run.descent(g.helm.pos.x, g.helm.pos.z))
+		g.walker.x = Main.ROUTE_POST.x   # у поста «Маршрут» справа от голостола
+		g.walker.z = Main.ROUTE_POST.y
+		g.walker.yaw = PI / 2.0
+		if kv["spusk_vote"] != "later":
+			g.open_vote()
+		if kv["spusk_vote"] == "coop":   # с mate=…: все у стола, свой голос «вниз», ждём товарищей
+			for m: Crew.Member in g.crew:
+				m.at_vote = true
+			g.ballot.cast(g.me.get_instance_id(), g.me.role, "deep")
 	if kv.has("scorch"):  # scorch=n — n следов разряда на дне перед носом через 4 м (первый — старое пятно)
 		var n := int(kv["scorch"])
 		for i in n:
@@ -203,3 +248,35 @@ static func apply(g: Main, kv: Dictionary) -> void:
 		mate.pad.hold = true
 		for i in int(float(kv.get("hold_s", "1.5")) * 10.0):
 			g.step(0.1)
+
+
+## Ракурс place=NN (#1358): от ориентира до середины корпуса, м.
+const PLACE_DIST := 38.0
+## Камера в осях корабля: перед носом (front) и позади-выше (back) — вне корпуса HullPlan.
+const PLACE_CAM := {"front": Vector3(0.0, 3.0, -17.0), "back": Vector3(0.0, 16.0, 62.0)}
+## Над дном: корабль и камера не ниже стольких метров.
+const PLACE_FLOOR := 7.0
+
+
+## Поза снимка места слоя 1: id из LayerMap.POINTS ("03") или ключ Run.PLACES ("shell"). Корабль на глубине ориентира
+## (не ниже PLACE_FLOOR над дном) в dist м от него, со стороны середины карты (side — пеленг от ориентира, °,
+## 0 — с юга, +z), носом к ориентиру. {ship, yaw, cam, look}; пусто — нет такого места.
+static func place_pose(name: String, kind: String = "front", dist: float = PLACE_DIST, side: float = NAN) -> Dictionary:
+	var id := name if LayerMap.POINTS.has(name) else LayerMap.id_of(name)
+	if id == "":
+		return {}
+	var at := LayerMap.at(id)
+	var away := Vector2(-at.x, -at.z).normalized()   # к середине карты
+	if not is_nan(side):
+		away = Vector2(sin(deg_to_rad(side)), cos(deg_to_rad(side)))
+	elif away == Vector2.ZERO:
+		away = Vector2(0.0, 1.0)
+	var sx := at.x + away.x * dist
+	var sz := at.z + away.y * dist
+	var ship := Vector3(sx, maxf(at.y, Seabed.height(sx, sz) + PLACE_FLOOR), sz)
+	var yaw := atan2(away.x, away.y)   # нос (−sin, −cos) — от корабля к ориентиру
+	var local: Vector3 = PLACE_CAM.get(kind, PLACE_CAM["front"])
+	var cam := ship + local.rotated(Vector3.UP, yaw)
+	cam.y = maxf(cam.y, Seabed.height(cam.x, cam.z) + PLACE_FLOOR)
+	var look := Vector3(at.x, maxf(at.y - 4.0, Seabed.height(at.x, at.z) + 2.0), at.z)
+	return {"ship": ship, "yaw": yaw, "cam": cam, "look": look}

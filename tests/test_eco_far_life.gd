@@ -110,7 +110,7 @@ func test_view_one_mesh_no_new_shader() -> void:
 	eq(fv.mm.layers, OceanView.LAYER_WORLD)
 	eq(fv.mm.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "без тени")
 	var mat := fv.mm.multimesh.mesh.surface_get_material(0)
-	eq(ShaderKey.of(mat), ShaderKey.of(CoinsView.build_eye().material), "шейдер глаз глазуна — нового нет")
+	eq(ShaderKey.of(mat), ShaderKey.of(KrabView.build_spine().surface_get_material(1)), "шейдер кончиков игл — нового нет")
 	var ship := EcoLink.ShipState.new()
 	for k in FarLifeView.EVERY:
 		view.step(0.05, ship)
@@ -151,3 +151,92 @@ func test_view_schools_take_turns() -> void:
 			visible += 1
 	ok(seen.size() >= visible - 1 and visible > 0, "за круг переписаны видимые: %d из %d" % [seen.size(), visible])
 	fv.free()
+
+
+## Склон 06→10 (#832): жизнь редеет с глубиной дна — на отмели все стайки, внизу склона — около четверти, крупных
+## пар нет; стайка гаснет плавно.
+func test_thins_with_depth() -> void:
+	var n := EcoFarLife.schools()
+	for i in n:
+		eq(EcoFarLife.thin(i, -40.0), 1.0, "на отмели стайка %d целиком" % i)
+		eq(EcoFarLife.thin(i, EcoFarLife.THIN_FROM + 1.0), 1.0, "до начала склона — тоже")
+	var prev := float(n) + 1.0
+	for y in [-120.0, -160.0, -200.0, -250.0, -300.0]:
+		var sum := 0.0
+		for i in n:
+			sum += EcoFarLife.thin(i, y)
+		ok(sum <= prev + 1e-6, "глубже — не больше жизни (%.0f м: %.2f)" % [y, sum])
+		prev = sum
+	var bottom := 0.0
+	for i in n:
+		bottom += EcoFarLife.thin(i, -306.0)
+		if EcoFarLife.is_big(i):
+			eq(EcoFarLife.thin(i, -306.0), 0.0, "крупные пары внизу склона уходят")
+	ok(bottom < n * 0.45, "внизу склона жизни меньше половины (%.2f из %d)" % [bottom, n])
+	var mid := 0
+	for i in n:
+		for y in range(-120, -310, -2):
+			var k := EcoFarLife.thin(i, float(y))
+			if k > 0.0 and k < 1.0:
+				mid += 1
+	ok(mid > 0, "есть промежуточные доли — гаснет плавно")
+
+
+## У места 10 на дне склона силуэтов вокруг корабля заметно меньше, чем на отмели (над стенами котловины дно
+## высоко — там стайки остаются).
+func test_fewer_at_place_10() -> void:
+	var shelf := 0
+	var deep := 0
+	var ship := Vector3(560, -290, 200)
+	for t in [0.0, 40.0, 90.0, 160.0]:
+		for i in EcoFarLife.schools():
+			for j in EcoFarLife.size_of(i):
+				if _shown(EcoFarLife.xform(i, j, t, ship, Callable(self, "_flat"))):
+					shelf += 1
+				if _shown(EcoFarLife.xform(i, j, t, ship, Seabed.height)):
+					deep += 1
+	ok(shelf > 0, "на ровной отмели вокруг кто-то есть")
+	ok(deep * 10 < shelf * 7, "у 10 жизни меньше на треть и больше (%d против %d)" % [deep, shelf])
+
+
+## Б3: стайка у стены склона не идёт лифтом — у 10 (стена 6:1) раньше взлетала в кадре до 17 м/с вслед за дном
+## прямо под ней. Высота — от огибающей дна вдоль круга (не круче CLIMB на метр пути): видимые стайки по всему
+## слою — не быстрее 1,6 м/с вверх-вниз, и над дном.
+func test_no_lift_on_slope_wall() -> void:
+	for at in [Vector3(560, -290, 200), Vector3(215, -60, 90), Vector3(0, -30, 95), Vector3(-250, -40, -210)]:
+		var worst := 0.0
+		var low := 999.0
+		for i in EcoFarLife.schools():
+			var prev := NAN
+			for k in 1200:
+				var t := k * 0.25
+				var s := EcoFarLife.school_at(i, t, at, Seabed.height)
+				if s[4] <= 0.0:
+					prev = NAN
+					continue
+				low = minf(low, s[1] - s[5])
+				if not is_nan(prev):
+					worst = maxf(worst, absf(s[1] - prev) / 0.25)
+				prev = s[1]
+		ok(worst < 1.6, "у %s стайки не быстрее 1,6 м/с по высоте: %.2f" % [at, worst])
+		ok(low > EcoFarLife.ABOVE, "у %s стайки над дном: %.1f" % [at, low])
+
+
+## Огибающая: не ниже дна в точках круга, не круче CLIMB на метр пути; на ровном дне — само дно.
+func test_floor_ring_envelope() -> void:
+	var shift := Vector2(2.0, 1.0) * EcoFarLife.TILE   # копия у 10
+	for i in EcoFarLife.schools():
+		var r := EcoFarLife.circle(i).x
+		var ring := EcoFarLife.floor_ring(i, shift, Seabed.height)
+		eq(ring.size(), EcoFarLife.RING)
+		var mid := EcoFarLife.base(i) + shift
+		var step := TAU * r / EcoFarLife.RING
+		for k in EcoFarLife.RING:
+			var a := TAU * k / EcoFarLife.RING
+			var p := mid + Vector2(cos(a), sin(a)) * r
+			ok(ring[k] >= Seabed.height(p.x, p.y) - 1e-3, "стайка %d точка %d — не ниже дна" % [i, k])
+			var d := absf(ring[k] - ring[(k + 1) % EcoFarLife.RING])
+			ok(d <= step * EcoFarLife.CLIMB + 1e-3, "стайка %d точка %d — не круче: %.2f" % [i, k, d / step])
+		var flat := EcoFarLife.floor_ring(i, Vector2.ZERO, _flat)
+		for k in EcoFarLife.RING:
+			near(flat[k], FLAT, 1e-4, "ровное дно — огибающая на дне")

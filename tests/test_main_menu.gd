@@ -31,6 +31,34 @@ func test_layout_fits_phones() -> void:
 	near(Splash.to_screen(Vector2(1200, 0), Vector2(1920, 1080)).x, 960.0, 0.01, "центр макета — центр экрана")
 
 
+## Есть сохранённый корабль (#823): пять кнопок с «Продолжить» сверху — на экране, не налезают, над строкой версии.
+func test_continue_layout() -> void:
+	var list := MainMenu.items_of(true)
+	eq(list[0][0], "continue", "«Продолжить» — первая")
+	eq(list.size(), 5, "пять кнопок")
+	for size: Vector2 in [Vector2(2400, 1080), Vector2(1600, 720), Vector2(1920, 1080), Vector2(2340, 1080)]:
+		var prev := Rect2()
+		for it: Array in list:
+			var r := MainMenu.screen_rect(it[0], size, true)
+			ok(r.size.x > 0.0 and Rect2(Vector2.ZERO, size).encloses(r), "%s на экране %s" % [it[1], size])
+			if prev.size.x > 0.0:
+				ok(not prev.intersects(r), "кнопки не налезают")
+			prev = r
+	ok(MainMenu.button_rect(4, 5).end.y < MainMenu.VERSION_TOP, "низ пятой кнопки над версией")
+	ok(MainMenu.button_rect(0, 5).position.y > MainMenu.TITLE_AT.y + MainMenu.TITLE_PX, "первая — под заголовком")
+	var m := MainMenu.new()
+	m.open = true
+	var size := Vector2(1600, 720)
+	ok(m.hit(MainMenu.screen_rect("continue", size, true).get_center(), size) != "continue", "без сохранения «Продолжить» нет")
+	eq(m.press("continue"), "", "и не нажимается")
+	eq(m.main_item(), "dive", "главная — «Погрузиться»")
+	m.can_continue = true
+	eq(m.hit(m.rect("continue", size).get_center(), size), "continue", "касание «Продолжить»")
+	eq(m.hit(m.rect("dive", size).get_center(), size), "dive", "«Погрузиться» ниже")
+	eq(m.press("continue"), "continue", "«Продолжить» — забег с места")
+	ok(not m.open, "меню закрыто")
+
+
 func test_buttons() -> void:
 	var m := MainMenu.new()
 	var size := Vector2(1600, 720)

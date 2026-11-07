@@ -21,6 +21,11 @@ const LEGS_PITCH := -0.6
 ## DOWN_PITCH; иначе пояс у самой камеры заслоняет ступни.
 const DOWN_BACK := 0.38
 const DOWN_PITCH := -1.3
+## Суставы фигуры для `shown`: имя сустава → кость модели (таблица одна, не собирается в цикле каждый кадр, #847).
+const SHOWN_BONES := [["hip", "Hips"], ["neck", "neck"], ["shoulder_l", "LeftArm"],
+		["shoulder_r", "RightArm"], ["elbow_l", "LeftForeArm"], ["elbow_r", "RightForeArm"],
+		["wrist_l", "LeftHand"], ["wrist_r", "RightHand"], ["knee_l", "LeftLeg"], ["knee_r", "RightLeg"],
+		["ankle_l", "LeftFoot"], ["ankle_r", "RightFoot"], ["toe_l", "LeftToeBase"], ["toe_r", "RightToeBase"]]
 
 
 ## Насколько своя фигура стоя позади глаза при наклоне взгляда pitch (рад): OWN_BACK, вниз — плавно до DOWN_BACK.
@@ -147,6 +152,7 @@ func _dress(i: int, role: int) -> void:
 		att.add_child(node)
 		gear[i][g] = node
 	gear_roles[i] = role
+	(patches[i].mesh.material as StandardMaterial3D).albedo_color = Crew.role_color(role)   # нашивка — с ролью
 
 
 ## Покой скелета для CrewRig.
@@ -236,13 +242,9 @@ func apply() -> void:
 			node.visible = not (own and gn in CrewRig.GEAR_OWN_HIDDEN)
 			if gn == "gear-shchitok":   # щиток поднят, на сварке опущен
 				node.transform = CrewRig.visor_xform(_rest[looks[i]], looks[i], not m.welding())
-		(patches[i].mesh.material as StandardMaterial3D).albedo_color = Crew.role_color(m.role)
 		var rest: CrewRig.Rest = _rest[looks[i]]
 		var at := {}
-		for pair in [["hip", "Hips"], ["neck", "neck"], ["shoulder_l", "LeftArm"],
-				["shoulder_r", "RightArm"], ["elbow_l", "LeftForeArm"], ["elbow_r", "RightForeArm"],
-				["wrist_l", "LeftHand"], ["wrist_r", "RightHand"], ["knee_l", "LeftLeg"], ["knee_r", "RightLeg"],
-				["ankle_l", "LeftFoot"], ["ankle_r", "RightFoot"], ["toe_l", "LeftToeBase"], ["toe_r", "RightToeBase"]]:
+		for pair in SHOWN_BONES:
 			var bn: String = pair[1]
 			if own and (bn in CrewRig.HIDE_HEAD or bn in CrewRig.HIDE_CHEST):
 				continue

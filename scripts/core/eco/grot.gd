@@ -9,7 +9,8 @@ extends EcoSystem
 ## Корабль задел панцирь (ближе R + SHIP_PAD по горизонтали и ниже верха рифа) — гротовик прячет ноги и замирает
 ## на 10 с («shy», не чаще раза в 25 с), стая на спине пугается на 3 с. На ходу рядом с кораблём (спина ближе 35 м)
 ## — наблюдение «drift» раз в 90 с. Заметен сонару и сканеру — у спины, размер 3 м.
-## Столкновение корабля с панцирем — `solid` (World.obstacles в браузере), подключить — поток А.
+## Корабль не проходит сквозь панцирь и риф (World.obstacles в браузере): `blocks` — для `Helm.Ship.solid` через
+## `EcoLink.solid`; сам гротовик в корабль не шагает — стоит, пока шаг вёл бы панцирь в обшивку.
 
 const ID := "grot"
 ## Круг по отмели (x, z) — как в браузере (js: [[-22, 62], [18, 44], [30, 4], [-14, 12]]).
@@ -19,6 +20,13 @@ const R := 3.2
 const SPEED := 0.45
 const TURN := 0.3
 const REACHED := 1.5
+## Плавный шаг (grafika-plan-eco, Б3 «Плавность поведения»): доля шага `stride` растёт не быстрее ACCEL в секунду —
+## трогается за ~2 с, а не с места на 0,45 м/с, — и сбавляется не быстрее BRAKE; цель — ноги (`lift`) на долю курса: цель сбоку или позади —
+## сперва доворачивает почти на месте (cos угла, не меньше TURN_STRIDE), а не идёт дугой мимо точки. Испуг
+## останавливает сразу — ноги прячутся под панцирь.
+const ACCEL := 0.5
+const BRAKE := 2.0
+const TURN_STRIDE := 0.25
 ## Высота: тело над дном FLOOR_UP + LEG_UP · lift; спина — на BACK_UP выше тела, верх рифа — на TOP_UP.
 const FLOOR_UP := 0.6
 const LEG_UP := 0.55
@@ -43,8 +51,27 @@ const DRIFT_R := 35.0
 const TARGET_R := 3.0
 ## Панцирь для столкновения: полуэллипсоид SHELL (ширина, высота, длина) над телом, с запасом на голову спереди.
 const SHELL := Vector3(2.4, 1.1, 3.2)
+## Корабль и гротовик: точки панциря и рифа (`body_points`, оси тела над низом панциря) ближе HULL_PAD к обшивке
+## (`EcoHull.touches`) — задел. Риф — два кольца веток REEF_R на высотах REEF_H и макушка REEF_TOP (ветки
+## `GrotView.branch` — до ~2,7 м над телом). Дальше HULL_FAR по горизонтали — без счёта.
+const HULL_PAD := 0.3
+const REEF_R := Vector2(1.5, 2.0)
+const REEF_H: Array[float] = [1.4, 2.2]
+const REEF_TOP := 2.7
+const HULL_FAR := EcoHull.BOUND + 4.0
 ## Без дна (тесты без ground) тело стоит на этой высоте.
 const FALLBACK_FLOOR := -40.0
+## Панцирь ложится по склону (grafika-plan-eco, Б3 «Плавность поведения»): дно щупается под ступнями — спереди и сзади
+## на TILT_REACH.y, по бортам на TILT_REACH.x от середины; тангаж и крен — по разнице высот, не круче TILT_MAX (рад),
+## догоняют за TILT_FOLLOW в секунду. Раньше тело стояло ровно: на буграх у (8, 8) и (−14, 12) (уклон до 1:1) верхний
+## край панциря уходил в дно на 2–3 м, нижний висел.
+const TILT_REACH := Vector2(2.4, 3.0)
+const TILT_MAX := 0.35
+const TILT_FOLLOW := 1.5
+## Дно под ступнями щупается заново, когда тело ушло дальше TILT_STEP (м) или повернуло больше TILT_TURN (рад) —
+## на 0,45 м/с раз в ~0,4 с, а не каждый кадр.
+const TILT_STEP := 0.2
+const TILT_TURN := 0.05
 
 
 ## Сам гротовик.
@@ -53,6 +80,8 @@ class Walker:
 	## Место на дне (x, z; y — дно под ним), курс (yaw = 0 — к +Z, как в браузере; растёт — поворот влево).
 	var p := Vector3.ZERO
 	var yaw := 0.0
+	## Доля шага 0…1 (скорость — SPEED · stride); ноги качаются в её меру.
+	var stride := 1.0
 	## Номер точки пути, к которой идёт.
 	var wp := 1
 	## Ноги: 1 — выпущены (идёт), 0 — спрятаны под панцирь; тянется к цели за ~0,5 с.
@@ -62,6 +91,11 @@ class Walker:
 	var shy_cd := 0.0
 	var hide_cd := 0.0
 	var drift_cd := 0.0
+	## Наклон по склону: x — тангаж (нос вверх +), y — крен (левый борт, +X, вверх +); want — по дну под ступнями.
+	var tilt := Vector2.ZERO
+	var tilt_want := Vector2.ZERO
+	## Где (x, z) и при каком курсе (y→z) дно щупали последний раз.
+	var tilt_at := Vector3(INF, 0.0, 0.0)
 	## Высота тела (низ панциря), спина (риф) и верх рифа — ставит place().
 	var body_y := 0.0
 	var back := Vector3.ZERO
@@ -70,6 +104,10 @@ class Walker:
 	## Идёт (не замер).
 	func moving() -> bool:
 		return shy <= 0.0
+
+	## Поворот тела: курс, затем наклон по склону.
+	func basis() -> Basis:
+		return EcoGrot.body_basis(yaw, tilt)
 
 
 var grot: Walker
@@ -89,6 +127,8 @@ func reset(world: EcoWorld) -> void:
 	grot = Walker.new()
 	var s := ROUTE[0]
 	grot.p = Vector3(s.x, _floor(s.x, s.y), s.y)
+	_feel(grot)
+	grot.tilt = grot.tilt_want
 	shoal = null
 	if _fish and _fish.shoals.size() > RIDERS:
 		shoal = _fish.shoals[RIDERS]
@@ -121,19 +161,68 @@ func step(world: EcoWorld, dt: float) -> void:
 		world.emit(ID, "shy", gr.back, _text(world, "%s прячет ноги под панцирь и замирает"))
 	var moving := gr.moving()
 	gr.lift += ((1.0 if moving else 0.0) - gr.lift) * minf(1.0, dt * 2.0)
+	if not moving:
+		gr.stride = 0.0
 	if moving:
 		var tg := ROUTE[gr.wp]
 		var to := Vector2(tg.x - gr.p.x, tg.y - gr.p.z)
 		if to.length() < REACHED:
 			gr.wp = (gr.wp + 1) % ROUTE.size()
 		else:
-			gr.yaw += wrapf(atan2(to.x, to.y) - gr.yaw, -PI, PI) * minf(1.0, dt * TURN)
-			gr.p.x += sin(gr.yaw) * SPEED * dt
-			gr.p.z += cos(gr.yaw) * SPEED * dt
+			var diff := wrapf(atan2(to.x, to.y) - gr.yaw, -PI, PI)
+			var want := want_stride(diff, gr.lift)
+			gr.stride = move_toward(gr.stride, want, (ACCEL if want > gr.stride else BRAKE) * dt)
+			gr.yaw += diff * minf(1.0, dt * TURN)
+			var was := gr.p
+			gr.p.x += sin(gr.yaw) * SPEED * gr.stride * dt
+			gr.p.z += cos(gr.yaw) * SPEED * gr.stride * dt
+			if touches_ship(gr, world.ship.pos, world.ship.yaw):   # в корабль не шагает — стоит
+				var p_new := gr.p
+				gr.p = was
+				if touches_ship(gr, world.ship.pos, world.ship.yaw):
+					gr.p = p_new   # уже в обшивке (корабль сел сверху) — не держим, уходит
+				else:
+					gr.stride = 0.0
+			if Vector2(gr.p.x - gr.tilt_at.x, gr.p.z - gr.tilt_at.y).length() > TILT_STEP \
+					or absf(wrapf(gr.yaw - gr.tilt_at.z, -PI, PI)) > TILT_TURN:
+				_feel(gr)
 		if gr.drift_cd <= 0.0 and s.distance_to(gr.back) < DRIFT_R:
 			gr.drift_cd = DRIFT_CD
 			world.emit(ID, "drift", gr.back, _text(world, "%s неспешно бредёт по отмели, на спине у него риф"))
+	gr.tilt = gr.tilt.lerp(gr.tilt_want, minf(1.0, dt * TILT_FOLLOW))
 	place()
+
+
+## Пощупать дно под ступнями: нужный наклон и где щупали.
+func _feel(gr: Walker) -> void:
+	gr.tilt_want = slope_tilt(_ground, gr.p.x, gr.p.z, gr.yaw)
+	gr.tilt_at = Vector3(gr.p.x, gr.p.z, gr.yaw)
+
+
+## Наклон панциря по дну ground у (x, z) при курсе yaw: (тангаж, крен) по разнице высот под ступнями, не круче
+## TILT_MAX. Без дна — ровно.
+static func slope_tilt(ground: Callable, x: float, z: float, yaw: float) -> Vector2:
+	if not ground.is_valid():
+		return Vector2.ZERO
+	var f := Vector2(sin(yaw), cos(yaw)) * TILT_REACH.y
+	var l := Vector2(cos(yaw), -sin(yaw)) * TILT_REACH.x
+	var front: float = ground.call(x + f.x, z + f.y)
+	var rear: float = ground.call(x - f.x, z - f.y)
+	var left: float = ground.call(x + l.x, z + l.y)
+	var right: float = ground.call(x - l.x, z - l.y)
+	var pitch := atan2(front - rear, 2.0 * TILT_REACH.y)
+	var roll := atan2(left - right, 2.0 * TILT_REACH.x)
+	return Vector2(clampf(pitch, -TILT_MAX, TILT_MAX), clampf(roll, -TILT_MAX, TILT_MAX))
+
+
+## Поворот тела по курсу yaw и наклону tilt (тангаж, крен): нос (+Z) поднимается на тангаж, левый борт (+X) — на крен.
+static func body_basis(yaw: float, tilt: Vector2) -> Basis:
+	return Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, -tilt.x) * Basis(Vector3.BACK, tilt.y)
+
+
+## Цель доли шага: ноги выпущены на lift, до точки пути угол diff (рад) — сбоку и позади доворачивает почти на месте.
+static func want_stride(diff: float, lift: float) -> float:
+	return clampf(lift, 0.0, 1.0) * maxf(TURN_STRIDE, cos(diff))
 
 
 ## Поставить тело, спину и верх рифа по дну и ногам; дом стаи — над спиной (grotPlace).
@@ -141,7 +230,7 @@ func place() -> void:
 	var gr := grot
 	gr.p.y = _floor(gr.p.x, gr.p.z)
 	gr.body_y = gr.p.y + FLOOR_UP + LEG_UP * gr.lift
-	gr.back = Vector3(gr.p.x, gr.body_y + BACK_UP, gr.p.z)
+	gr.back = Vector3(gr.p.x, gr.body_y, gr.p.z) + gr.basis() * Vector3(0, BACK_UP, 0)
 	gr.top = gr.body_y + TOP_UP
 	if shoal:
 		_follow(shoal)
@@ -172,11 +261,49 @@ func solid(p: Vector3) -> bool:
 	var gr := grot
 	if gr == null:
 		return false
-	var q := Basis(Vector3.UP, gr.yaw).inverse() * (p - Vector3(gr.p.x, gr.body_y, gr.p.z))
+	var q := gr.basis().inverse() * (p - Vector3(gr.p.x, gr.body_y, gr.p.z))
 	if q.y < gr.p.y - gr.body_y:
 		return false
 	var e := Vector3(q.x / SHELL.x, maxf(q.y, 0.0) / SHELL.y, q.z / (SHELL.z + 0.6))
 	return e.length_squared() < 1.0
+
+
+## Точки панциря и рифа для столкновения с кораблём — в осях тела (y = 0 — низ панциря): полуэллипсоид SHELL
+## (с головой спереди, как в `solid`) тремя кольцами и верхом, риф — кольцами REEF_R и макушкой.
+static var _points := PackedVector3Array()
+
+
+static func body_points() -> PackedVector3Array:
+	if _points.is_empty():
+		for h: float in [0.0, 0.55, 0.9]:
+			var k := sqrt(1.0 - h * h)
+			for i in 10:
+				var a := TAU * i / 10.0
+				_points.append(Vector3(sin(a) * SHELL.x * k, h * SHELL.y, cos(a) * (SHELL.z + 0.6) * k))
+		_points.append(Vector3(0, SHELL.y, 0))
+		for h: float in REEF_H:
+			for i in 8:
+				var a := TAU * i / 8.0
+				_points.append(Vector3(sin(a) * REEF_R.x, h, cos(a) * REEF_R.y))
+		_points.append(Vector3(0, REEF_TOP, 0))
+	return _points
+
+
+## Задевает ли корабль в позе (ship_pos, ship_yaw) панцирь или риф гротовика gr.
+static func touches_ship(gr: Walker, ship_pos: Vector3, ship_yaw: float) -> bool:
+	if Vector2(ship_pos.x - gr.p.x, ship_pos.z - gr.p.z).length() > HULL_FAR:
+		return false
+	var base := Vector3(gr.p.x, gr.body_y, gr.p.z)
+	var b := gr.basis()
+	for q in body_points():
+		if EcoHull.touches(base + b * q, ship_pos, ship_yaw, HULL_PAD):
+			return true
+	return false
+
+
+## Корабль в позе (pos, yaw) упёрся бы в гротовика — для `Helm.Ship.solid` (через `EcoLink.solid`).
+func blocks(pos: Vector3, yaw: float) -> bool:
+	return grot != null and touches_ship(grot, pos, yaw)
 
 
 ## Гротовик виден сонару и сканеру.

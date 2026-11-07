@@ -14,7 +14,7 @@ $repo  = 'D:\AI\DeepDive'
 $out   = 'D:\AI\qa-build'
 $run   = "$out\run"
 $app   = 'com.garrimajo5.deepdive'
-$apk   = "$out\DeepDive.apk"
+$apk   = "$out\DeepDive-emulator.apk"   # эмулятору — x86_64-сборка (#844); телефону — DeepDive.apk
 if (-not $Scenario) { $Scenario = "$repo\tools\qa\scenario.json" }
 New-Item -ItemType Directory -Force $out | Out-Null
 Remove-Item -Recurse -Force $run -ErrorAction SilentlyContinue
@@ -57,8 +57,9 @@ if ($Pr) {
   $dir = "$out\pr$Pr"
   Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
   gh run download $rid -n deepdive-apk -D $dir
-  if (-not (Test-Path "$dir\DeepDive.apk")) { Write-Output "NO_ARTIFACT: в прогоне PR #$Pr нет deepdive-apk (сборка APK не шла — в PR нет кода?)"; exit 1 }
-  $apk = "$dir\DeepDive.apk"
+  # эмулятору — x86_64-сборка; в артефактах до #844 был один общий DeepDive.apk
+  $apk = @("$dir\DeepDive-emulator.apk", "$dir\DeepDive.apk") | Where-Object { Test-Path $_ } | Select -First 1
+  if (-not $apk) { Write-Output "NO_ARTIFACT: в прогоне PR #$Pr нет deepdive-apk (сборка APK не шла — в PR нет кода?)"; exit 1 }
   $head = "PR#$Pr $($sha.Substring(0,7))"
 } else {
   # APK из релиза apk-latest (то, что собрал CI из main)
@@ -66,8 +67,18 @@ if ($Pr) {
   $head = if ($rel.body -match 'коммит ([0-9a-f]{7})') { $Matches[1] } else { $rel.published_at }
   $last = if (Test-Path "$out\last-commit.txt") { (Get-Content "$out\last-commit.txt").Trim() } else { '' }
   if ($head -eq $last -and -not $Force) { Write-Output "NO_CHANGES $head"; exit 0 }
-  $asset = $rel.assets | Where-Object name -eq 'DeepDive.apk' | Select -First 1
-  Invoke-WebRequest $asset.browser_download_url -OutFile $apk -Headers @{ 'User-Agent' = 'run-qa' }
+  # эмулятору — x86_64-сборка (#844); в релизах до неё — один общий DeepDive.apk
+  $asset = $rel.assets | Where-Object name -eq 'DeepDive-emulator.apk' | Select -First 1
+  if (-not $asset) { $asset = $rel.assets | Where-Object name -eq 'DeepDive.apk' | Select -First 1 }
+  if (-not $asset) { Write-Output "NO_ASSET ${head}: в релизе apk-latest нет APK (перезаливается?) — повторите позже"; exit 1 }
+  # Старый APK не ставим: релиз мог перезаливаться, и скачивание упадёт (BlobNotFound, #1125)
+  Remove-Item $apk -Force -ErrorAction SilentlyContinue
+  try {
+    Invoke-WebRequest $asset.browser_download_url -OutFile $apk -Headers @{ 'User-Agent' = 'run-qa' } -ErrorAction Stop
+  } catch {
+    Write-Output "DOWNLOAD_FAILED ${head}: $($_.Exception.Message) — повторите позже"; exit 1
+  }
+  if (-not (Test-Path $apk) -or (Get-Item $apk).Length -lt 1MB) { Write-Output "DOWNLOAD_FAILED ${head}: APK не скачан"; exit 1 }
 }
 
 if (-not ((& $adb devices) -match 'emulator-\d+\s+device')) {
@@ -86,7 +97,7 @@ if ($inst -notmatch 'Success') { Write-Output "INSTALL_FAILED $head"; $inst; exi
 & $adb logcat -c
 & $adb shell monkey -p $app -c android.intent.category.LAUNCHER 1 | Out-Null
 $done = $false
-for ($i = 0; $i -lt 150; $i++) {
+for ($i = 0; $i -lt 165; $i++) {
   Start-Sleep 2
   if ((& $adb shell "run-as $app ls files/qa/out/done.txt" 2>&1) -match 'done.txt$') { $done = $true; break }
 }

@@ -27,8 +27,19 @@ const HIGH := 18.0
 const CEIL := -7.0
 ## Ниже этого над дном силуэт не опускается, м.
 const ABOVE := 1.5
+## Стайка не идёт лифтом по стене склона (Б3): высота — от огибающей дна вдоль её круга, что поднимается и
+## опускается не круче CLIMB м на метр пути (≈ 1 м/с вверх-вниз), а не от дна прямо под ней — у 10 на стене 6:1
+## стайка в кадре взлетала до 17 м/с. Огибающая считается раз на копию стайки по RING точкам круга (`floor_ring`).
+const CLIMB := 0.6
+const RING := 32
 ## Без дна (мир ещё не встал) — эта глубина дна.
 const NO_GROUND := -24.0
+## Склон 06→10 (#832): жизнь редеет с глубиной дна. До THIN_FROM м остаются все стайки, к THIN_TO — доля
+## THIN_KEEP (крупные пары уходят первыми); стайка гаснет плавно, а не исчезает, — по доле THIN_SOFT.
+const THIN_FROM := -120.0
+const THIN_TO := -300.0
+const THIN_KEEP := 0.25
+const THIN_SOFT := 0.08
 ## Цвет силуэта (почти чёрная вода) и разброс тона стайки.
 const COLOR := Color(0.025, 0.05, 0.065)
 const SHADE := 0.35
@@ -41,6 +52,7 @@ const _SPEED := 15
 const _DIR := 16
 const _OFF := 20
 const _PHASE := 30
+const _THIN := 31
 
 
 static func count() -> int:
@@ -86,10 +98,16 @@ static func circle(i: int) -> Vector3:
 	return Vector3(r, sp, dir)
 
 
+## Угол стайки на её круге во время t, рад.
+static func angle(i: int, t: float) -> float:
+	var c := circle(i)
+	return t * c.y / c.x * c.z + EcoVary.unit(i, _PHASE) * TAU
+
+
 ## Центр стайки (x, z) в плитке и курс по кругу (рад, yaw: нос в (−sin, 0, −cos)) во время t.
 static func center(i: int, t: float) -> Vector3:
 	var c := circle(i)
-	var a := t * c.y / c.x * c.z + EcoVary.unit(i, _PHASE) * TAU
+	var a := angle(i, t)
 	var b := base(i)
 	var p := b + Vector2(cos(a), sin(a)) * c.x
 	# касательная к кругу: d(p)/da · знак обхода
@@ -100,6 +118,19 @@ static func center(i: int, t: float) -> Vector3:
 ## Доля размера по горизонтальному расстоянию d от корабля: 0 вне кольца, 1 внутри.
 static func fade(d: float) -> float:
 	return smoothstep(NEAR_IN, NEAR_FULL, d) * (1.0 - smoothstep(FAR_FULL, FAR_OUT, d))
+
+
+## Какая доля стаек живёт над дном floor_y (м, y мира): 1 на отмели, THIN_KEEP внизу склона.
+static func alive(floor_y: float) -> float:
+	return lerpf(1.0, THIN_KEEP, smoothstep(THIN_FROM, THIN_TO, floor_y))
+
+
+## Доля размера стайки i над дном floor_y: 1 — живёт, 0 — здесь её нет. Порог стайки — хеш; у крупных пар он
+## выше (уходят первыми), между — плавно на THIN_SOFT.
+static func thin(i: int, floor_y: float) -> float:
+	var r := EcoVary.unit(i, _THIN)
+	var u := lerpf(0.55, 1.0 - THIN_SOFT, r) if is_big(i) else r * (1.0 - THIN_SOFT)
+	return clampf((alive(floor_y) - u) / THIN_SOFT, 0.0, 1.0)
 
 
 ## Длина силуэта j стайки i, м.
@@ -148,8 +179,53 @@ static func school_at(i: int, t: float, ship: Vector3, ground: Callable) -> Pack
 	if k <= 0.0:
 		return PackedFloat32Array([at.x, NO_GROUND, at.y, c.y, 0.0, NO_GROUND])
 	var floor_y := float(ground.call(at.x, at.y)) if ground.is_valid() else NO_GROUND
+	k *= thin(i, floor_y)
+	if k <= 0.0:
+		return PackedFloat32Array([at.x, NO_GROUND, at.y, c.y, 0.0, NO_GROUND])
 	var h := lerpf(LOW, HIGH, EcoVary.unit(i, _H)) + sin(t * 0.13 + float(i)) * 1.5
-	return PackedFloat32Array([at.x, floor_y + h, at.y, c.y, k, floor_y])
+	var ring := floor_ring(i, at - Vector2(c.x, c.z), ground)
+	var level := ring_at(ring, angle(i, t))   # дно прямо под ней не берём: бугорок между точками дёргал бы
+	return PackedFloat32Array([at.x, level + h, at.y, c.y, k, floor_y])
+
+
+## Огибающие дна по копиям стаек: ключ — стайка, сдвиг копии в плитках и дно. Копия меняется, только когда корабль
+## уходит на полплитки, — RING выборок дна на стайку редко; старые выкидываются целиком (MEMO).
+static var _rings := {}
+const MEMO := 96
+
+
+## Огибающая дна вдоль круга стайки i в копии со сдвигом shift (м, кратен TILE): RING точек по углу,
+## e[k] = max по m (дно[m] − CLIMB · путь по кругу k→m) — не ниже дна в точках и не круче CLIMB по пути.
+static func floor_ring(i: int, shift: Vector2, ground: Callable) -> PackedFloat32Array:
+	var key := Vector4i(i, roundi(shift.x / TILE), roundi(shift.y / TILE), ground.hash())
+	if _rings.has(key):
+		return _rings[key]
+	var c := circle(i)
+	var mid := base(i) + shift
+	var raw := PackedFloat32Array()
+	raw.resize(RING)
+	for m in RING:
+		var a := TAU * m / RING
+		var p := mid + Vector2(cos(a), sin(a)) * c.x
+		raw[m] = float(ground.call(p.x, p.y)) if ground.is_valid() else NO_GROUND
+	# конус по кругу — два обхода в каждую сторону (каждая точка дотягивается до любой)
+	var step := TAU * c.x / RING * CLIMB
+	var out := raw.duplicate()
+	for k in range(1, 2 * RING):
+		out[k % RING] = maxf(out[k % RING], out[(k - 1) % RING] - step)
+	for k in range(2 * RING - 2, -1, -1):
+		out[k % RING] = maxf(out[k % RING], out[(k + 1) % RING] - step)
+	if _rings.size() >= MEMO:
+		_rings.clear()
+	_rings[key] = out
+	return out
+
+
+## Высота огибающей ring на угле a (рад) — между точками по прямой.
+static func ring_at(ring: PackedFloat32Array, a: float) -> float:
+	var u := fposmod(a, TAU) / TAU * RING
+	var k := int(u) % RING
+	return lerpf(ring[k], ring[(k + 1) % RING], u - floorf(u))
 
 
 ## Трансформ силуэта j стайки s = school_at(i, …) во время t (меш — длина 1, нос в −Z). Не видна — сжат в точку.

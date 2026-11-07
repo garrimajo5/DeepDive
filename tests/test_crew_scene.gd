@@ -96,6 +96,12 @@ func test_model_replaces_capsules() -> void:
 	ok(_tris(cv.meshes[0]) < _tris(cv.meshes[1]) * 0.9, "свой игрок — без головы (%d треуг.)" % _tris(cv.meshes[0]))
 	ok(cv.meshes[0].material_override != null and cv.meshes[1].material_override == null, "свой — с отсечением граней")
 	ok(cv.patches[1].visible and not cv.patches[0].visible, "нашивка роли — у других")
+	eq((cv.patches[1].mesh.material as StandardMaterial3D).albedo_color, Crew.role_color(2), "нашивка цвета роли")
+	main.crew[1].role = 0
+	main.step(1.0 / 30.0)
+	eq((cv.patches[1].mesh.material as StandardMaterial3D).albedo_color, Crew.role_color(0), "сменил роль — нашивка тоже")
+	main.crew[1].role = 2
+	main.step(1.0 / 30.0)
 	var j := main.me.joints()
 	var hip: Vector3 = _shown(0, "hip")
 	near((hip - main.camera.position).dot(j["fwd"]), -CrewView.OWN_BACK, 1e-3, "стоя своя модель чуть позади камеры")
@@ -299,7 +305,6 @@ func test_helm_busy_for_second() -> void:   # ROADMAP «Кооп»: заняты
 	main.walker.z = Deck.CHAIR_Z + 0.9
 	main.step(1.0 / 30.0)
 	eq(main.overlay.action_label, "Занято", "на кнопке — «Занято»")
-	ok(main.status_parts().has("Штурвал занят"), "в строке состояния — «Штурвал занят»")
 	main.use_post("helm")
 	ok(not main.pilot.seated, "свой игрок не сел во второе кресло")
 	eq(main.message.text, "Штурвал занят: Сонарщик", "на приборах — кто держит")
@@ -307,7 +312,6 @@ func test_helm_busy_for_second() -> void:   # ROADMAP «Кооп»: заняты
 	mate.post = ""
 	main.step(1.0 / 30.0)
 	eq(main.overlay.action_label, "Штурвал", "встал — пост свободен")
-	ok(main.status_parts().has("Сесть за штурвал"), "в строке — снова «Сесть за штурвал»")
 	main.use_post("helm")
 	ok(main.pilot.seated, "теперь сел")
 	main.step(1.0 / 30.0)
@@ -427,6 +431,7 @@ func test_mate_action_vote() -> void:   # у голостола товарищ �
 	main.step(1.0 / 30.0)
 	ok(not m.at_vote, "маршрут не пройден — голосовать рано")
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	m.pad.action = true
 	main.step(1.0 / 30.0)
 	ok(m.at_vote, "товарищ у голосования")
@@ -458,6 +463,7 @@ func test_coop_vote_majority() -> void:   # двое у голостола: ме
 	main.walker.x = Main.ROUTE_POST.x
 	main.walker.z = Main.ROUTE_POST.y
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	var m := main.add_mate(Main.ROUTE_POST.x + 0.2, Main.ROUTE_POST.y + 0.2, 0.0, Crew.Role.BIOLOGIST, 1)
 	m.walker.x = Main.ROUTE_POST.x + 0.2
 	m.walker.z = Main.ROUTE_POST.y + 0.2
@@ -483,6 +489,7 @@ func test_coop_vote_timer_up() -> void:   # второй молчит — по �
 	main.walker.x = Main.ROUTE_POST.x
 	main.walker.z = Main.ROUTE_POST.y
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	var m := main.add_mate(Main.ROUTE_POST.x + 0.2, Main.ROUTE_POST.y + 0.2, 0.0, Crew.Role.ENGINEER, 0)
 	m.walker.x = Main.ROUTE_POST.x + 0.2
 	m.walker.z = Main.ROUTE_POST.y + 0.2

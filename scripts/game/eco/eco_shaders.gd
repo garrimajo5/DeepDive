@@ -9,10 +9,15 @@ extends RefCounted
 
 ## Камень с обрастанием #67DDEB в альфе цвета вершины: раковина древних, кости левиафана, край отмели, порода
 ## курильщика. `fill` — подсветка камня, `glow_k` — яркость обрастания, `cut` — сколько альбедо гасит свет,
-## `flicker` — мерцание жара (EcoVent.flicker, 0 — ровный свет).
+## `flicker` — мерцание жара (EcoVent.flicker по времени мира `now`, 0 — ровный свет). Каустики света сквозь лёд по верху камня — `caustic`
+## (сила ставит `EcoCaustic` по глубине корабля, «Экономно» — 0; узор — двойник `EcoCaustic.pattern`, как у дна).
+## Обрастание мерцает (Б3): по камню бегут две медленные волны свечения по мировому месту — ± `shimmer` яркости
+## обрастания (`stone()` ставит `EcoCaustic.SHIMMER`, жар курильщика — 0), время мира — uniform `now` (ставит
+## `EcoCaustic.set_time`, у гостя то же); двойник — `EcoCaustic.shimmer`.
 const STONE := """
 shader_type spatial;
 render_mode cull_back;
+""" + EcoGlow.GLSL + """
 uniform vec3 growth : source_color;
 uniform float fill = 0.3;
 uniform float glow_k = 1.4;
@@ -20,33 +25,76 @@ uniform float cut = 0.5;
 uniform float rough = 0.95;
 uniform float spec = 0.15;
 uniform float flicker = 0.0;
+uniform float now = 0.0;
+uniform float shimmer = 0.0;
+uniform float caustic = 0.0;
+uniform float caustic_scale = 0.16;
+uniform float caustic_speed = 0.32;
+uniform vec3 caustic_tint : source_color = vec3(0.60, 0.85, 0.91);
 varying float lit;
+varying vec3 w_pos;
+varying float w_up;
+float c_hash(vec2 p) {
+	p = fract(p * vec2(127.1, 311.7));
+	p += dot(p, p + 34.5);
+	return fract(p.x * p.y);
+}
+float c_noise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(c_hash(i), c_hash(i + vec2(1.0, 0.0)), f.x), mix(c_hash(i + vec2(0.0, 1.0)), c_hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
 void vertex() {
 	lit = COLOR.a;
+	w_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	w_up = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz).y;
 }
 void fragment() {
-	float f = 0.8 + 0.1 * sin(TIME * 2.3) + 0.06 * sin(TIME * 5.7 + 1.3) + 0.04 * sin(TIME * 13.1 + 0.4);
+	float f = 0.8 + 0.1 * sin(now * 2.3) + 0.06 * sin(now * 5.7 + 1.3) + 0.04 * sin(now * 13.1 + 0.4);
 	ALBEDO = COLOR.rgb * (1.0 - lit * cut);
 	ROUGHNESS = rough;
 	SPECULAR = spec;
-	EMISSION = growth * lit * glow_k * mix(1.0, f, flicker) + COLOR.rgb * (1.0 - lit) * fill;
+	float sw = 0.6 * sin(now * 0.7 + w_pos.x * 0.6 + w_pos.z * 0.4) + 0.4 * sin(now * 0.43 - w_pos.x * 0.3 + w_pos.z * 0.7);
+	EMISSION = eco_bio(growth * lit * glow_k * mix(1.0, f, flicker) * (1.0 + shimmer * sw)) + COLOR.rgb * (1.0 - lit) * fill;
+	if (caustic > 0.001) {
+		vec2 cp = w_pos.xz * caustic_scale;
+		float t = TIME * caustic_speed;
+		float l1 = c_noise(cp + vec2(t, t * 0.6));
+		float l2 = c_noise(cp * 1.6 + vec2(-t * 0.8, t * 0.5));
+		float l3 = c_noise(cp * 2.3 + vec2(t * 0.4, -t * 0.9));
+		float c = abs(l1 - l2) * 0.6 + abs(l2 - l3) * 0.4;
+		c = pow(1.0 - smoothstep(0.0, 0.16, c), 1.6);
+		float m = caustic * smoothstep(0.15, 0.85, w_up) * (1.0 - lit);
+		ALBEDO += caustic_tint * c * m * 0.45;
+		EMISSION += caustic_tint * c * m * 0.22;
+	}
 }
 """
 
 ## Мох пятнами: яркость вершины — в COLOR.r, номер пятна — в UV.x, яркость пятна — glow[номер]. Пятен у одного
-## меша не больше MOSS_MAX (массив дополняется нулями — `moss_glow`).
+## меша не больше MOSS_MAX (массив дополняется нулями — `moss_glow`). Краска пятна (Б4, `MossView.patch_tint`) —
+## множитель цвета ÷ 2 в COLOR.gba (8 бит на канал вершины хватает: шаг 0,8 %).
+## Мерцание колонии (Б3, `MossView.shimmer` — двойник): по пятну бегут две медленные волны свечения по месту вершины
+## (меш — в мировых координатах), время мира — uniform `now` (у гостя то же), размах — `shimmer` (0 — ровно).
 const MOSS_MAX := 32
 const MOSS := """
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_back;
 uniform vec3 moss_color : source_color;
 uniform float glow[32];
+uniform float now = 0.0;
+uniform float shimmer = 0.0;
 varying float a;
+varying vec3 tint;
 void vertex() {
-	a = COLOR.r * glow[int(UV.x + 0.5)];
+	vec2 q = VERTEX.xz;
+	float w = 0.6 * sin(now * 0.9 + q.x * 0.8 + q.y * 0.55) + 0.4 * sin(now * 0.55 - q.x * 0.35 + q.y * 0.9);
+	a = COLOR.r * glow[int(UV.x + 0.5)] * (1.0 + shimmer * w);
+	tint = vec3(COLOR.g, COLOR.b, COLOR.a) * 2.0;
 }
 void fragment() {
-	ALBEDO = moss_color;
+	ALBEDO = moss_color * tint;
 	ALPHA = clamp(a, 0.0, 1.0);
 }
 """
@@ -57,10 +105,11 @@ void fragment() {
 const SPOT := """
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
+""" + EcoGlow.GLSL + """
 uniform float fade_far = 60.0;
 uniform float halo = 0.0;
 // cloud — облако планктона (PlanktonView): место клетки — дом + дрейф облака + покачивание по времени мира now,
-// INSTANCE_CUSTOM = (фаза облака, номер клетки, время вспышки); клетки выталкиваются из коробки корпуса корабля.
+// INSTANCE_CUSTOM = (фаза облака, номер клетки, время вспышки, яркость клетки — EcoVary); клетки выталкиваются из коробки корпуса корабля.
 uniform bool cloud = false;
 uniform float now = 0.0;
 uniform vec3 ship_pos = vec3(0.0, 1e6, 0.0);
@@ -91,7 +140,7 @@ void vertex() {
 		}
 		float g = clamp(1.0 - (now - INSTANCE_CUSTOM.z) * 0.45, 0.0, 1.0);
 		float b = 0.05 + 0.03 * sin(now * 1.1 + k * 1.7);
-		col = vec3(b * 0.4 + g * 0.35, b + g, b * 1.1 + g * 0.85);
+		col = vec3(b * 0.4 + g * 0.35, b + g, b * 1.1 + g * 0.85) * INSTANCE_CUSTOM.w;
 	}
 	float far = length((VIEW_MATRIX * vec4(o, 1.0)).xyz);
 	tint = col * clamp(1.0 - far / fade_far, 0.0, 1.0);
@@ -103,30 +152,40 @@ void fragment() {
 	float d = clamp(length(UV - vec2(0.5)) * 2.0, 0.0, 1.0);
 	float spot = (1.0 - d) * (1.0 - d);
 	float ring = d < 0.35 ? mix(1.0, 0.45, d / 0.35) : mix(0.45, 0.0, (d - 0.35) / 0.65);
-	ALBEDO = tint * mix(spot, ring, halo);
+	ALBEDO = eco_bio(tint * mix(spot, ring, halo));   // точка — само свечение: общий приём (EcoGlow, Б1 часть 2)
 }
 """
 
 ## Прозрачное без света (смешение по альфе, без записи глубины, обе стороны): один код на купола и щупальца вуалей,
 ## чернила подушечника, пузыри и марево курильщика, пузырьки существ (BUBBLE с `placed`), трещину и столб света
 ## колодца. Что рисовать — `mode` (Mist), числа каждого вида — в своих uniform; формулы — прежние формулы видов.
-## Ветка по uniform одна на весь вызов отрисовки.
+## Ветка по uniform одна на весь вызов отрисовки. Пузыри, марево, трещина и столб колодца идут по времени мира `t`
+## (`set_sway_time`), а не по времени шейдера: у гостя в такт хосту, в 3600 с не прыгают.
 enum Mist { BELL, TENTACLE, INK, BUBBLE, HAZE, CRACK, COLUMN }
 const MIST := """
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
 uniform int mode = 0;
 uniform vec4 tint : source_color = vec4(1.0);
-// щупальца: время и пульс купола; волна пульса вниз — (размах, рад/с, фаза вуали, отставание на звено), рост к
+// время мира t (все виды: EcoShaders.set_sway_time, у гостя то же). Щупальца: пульс купола и фаза вуали — в INSTANCE_CUSTOM); волна пульса вниз — (размах, рад/с, фаза вуали, отставание на звено), рост к
 // кончику grow, звеньев seg; снос течением flow (м/с) на долю trail длины; sway_k — 0 на «Экономно»
 uniform float t = 0.0;
-uniform float swell = 1.0;
 uniform vec4 wave = vec4(0.0);
 uniform float grow = 0.0;
 uniform float seg = 10.0;
 uniform float trail = 0.0;
 uniform vec3 flow = vec3(0.0);
 uniform float sway_k = 1.0;
+// ход купола каждой вуали (EcoVeil.Veil.drag): щупальца сносит вода относительно купола (EcoVeil.rel_water)
+uniform vec3 drag[4];
+// корпус раздвигает щупальца (EcoVeil.hull_part): точка корабля, курс, 1 — корабль у вуалей; эллипс сечения и колпаки
+uniform vec3 hull_pos = vec3(0.0);
+uniform float hull_yaw = 0.0;
+uniform float hull_on = 0.0;
+uniform vec4 hull_ab = vec4(7.4, 3.9, 1.6, 0.0);
+uniform vec4 hull_z = vec4(-4.0, 20.0, 20.0, 16.0);
+// борт нити (EcoVeil.keep_side): по номеру вуали × EcoVeil.TENTACLES + номер нити; 0 — по корню
+uniform float hull_side[160];
 // пузыри
 uniform float drift = 0.0;
 uniform float size_low = 0.1;
@@ -140,6 +199,8 @@ uniform vec3 heat : source_color;
 uniform float pulse = 0.0;
 uniform float period = 10.0;
 uniform float strength = 1.0;
+// колодец: столб тает у камеры (EcoWell.near_fade): прозрачен ближе near.x, в полную силу дальше near.y, м
+uniform vec2 near = vec2(0.0);
 varying vec4 tone;
 varying float fade;
 varying vec3 wp;
@@ -148,21 +209,53 @@ void vertex() {
 	fade = 1.0;
 	wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	if (mode == 1) {
-		// щупальца вуали (EcoVeil.tentacle_point): в VERTEX — точка без колыхания, в UV — (щупальце k, точка j)
+		// щупальца вуали (EcoVeil.tentacle_point): в VERTEX — точка без колыхания, в UV — (щупальце k, точка j),
+		// в UV2.x — номер вуали; экземпляр на вуаль, в INSTANCE_CUSTOM — (пульс купола, фаза, номер вуали, доля ритма):
+		// чужие нити сжимаются в точку (#849)
 		float k = UV.x;
 		float j = UV.y;
-		vec3 p = vec3(VERTEX.x * swell, VERTEX.y, VERTEX.z * swell);
-		if (j > 0.5) {
+		float sw = INSTANCE_CUSTOM.r;
+		float ph = wave.z + INSTANCE_CUSTOM.g;
+		float rate = INSTANCE_CUSTOM.a > 0.0 ? INSTANCE_CUSTOM.a : 1.0;   // ритм вуали (Б4), доля PULSE_W
+		vec3 p = vec3(VERTEX.x * sw, VERTEX.y, VERTEX.z * sw);
+		if (abs(UV2.x - INSTANCE_CUSTOM.b) > 0.5) {
+			p = vec3(0.0);
+		} else if (j > 0.5) {
 			float h = j / seg;
-			float sj = mix(swell, 1.0 + sin(t * wave.y + wave.z - j * wave.w) * wave.x * (1.0 + grow * h), sway_k);
+			float sj = mix(sw, 1.0 + sin(t * wave.y * rate + ph - j * wave.w) * wave.x * (1.0 + grow * h), sway_k);
 			p.xz = VERTEX.xz * sj;
 			p.x += sin(t * 0.9 + (j - 1.0) * 0.45 + k) * j * 0.12;
 			p.z += cos(t * 0.7 + (j - 1.0) * 0.4 + k * 1.3) * j * 0.12;
 			// снос течением (EcoVeil.trail): глубина звена — -VERTEX.y, длина нити — она же / h
 			float depth = -VERTEX.y;
-			vec3 off = flow / 0.3 * (trail * (0.85 + 0.15 * sin(t * 0.4 + wave.z)) * h * depth) * sway_k;
+			vec3 rel = flow - drag[clamp(int(INSTANCE_CUSTOM.b + 0.5), 0, 3)];
+			float rl = length(rel);
+			rel *= rl > 0.6 ? 0.6 / rl : 1.0;
+			vec3 off = rel / 0.3 * (trail * (0.85 + 0.15 * sin(t * 0.4 + ph)) * h * depth) * sway_k;
 			off.y = dot(off, off) / (2.0 * max(depth / max(h, 0.01), 0.1));
 			p += off;
+			if (hull_on > 0.5) {
+				// EcoVeil.hull_part: внутри корпуса — на обшивку к борту нити; экземпляр без поворота и масштаба
+				vec3 o = MODEL_MATRIX[3].xyz;
+				float cy = cos(hull_yaw);
+				float sy = sin(hull_yaw);
+				vec3 d = o + p - hull_pos;
+				float lx = d.x * cy - d.z * sy;
+				float lz = d.x * sy + d.z * cy;
+				float c = lz < hull_z.x ? 1.0 - (hull_z.x - lz) / hull_z.z : (lz > hull_z.y ? 1.0 - (lz - hull_z.y) / hull_z.w : 1.0);
+				float yy = (d.y - hull_ab.z) / hull_ab.y;
+				float half_w = (c > 0.0 && yy * yy < 1.0) ? hull_ab.x * c * sqrt(1.0 - yy * yy) : 0.0;
+				if (abs(lx) < half_w) {
+					float side = hull_side[clamp(int(UV2.x + 0.5) * 40 + int(k + 0.5), 0, 159)];
+					if (side == 0.0) {
+						vec3 r = o + vec3(VERTEX.x * sw, 0.0, VERTEX.z * sw) - hull_pos;
+						side = r.x * cy - r.z * sy;
+					}
+					// из осей корабля обратно в мир (EcoVeil.hull_part: rotated(UP, yaw)), сдвиг только поперёк оси
+					float dx = (side >= 0.0 ? half_w : -half_w) - lx;
+					p += vec3(dx * cy, 0.0, -dx * sy);
+				}
+			}
 		}
 		VERTEX = p;
 	} else if (mode == 2) {
@@ -177,13 +270,14 @@ void vertex() {
 		MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * s, INV_VIEW_MATRIX[1] * s, INV_VIEW_MATRIX[2] * s,
 			MODEL_MATRIX[3]);
 	} else if (mode == 3) {
-		// EcoVent.bubble_pos: скорость, фаза, высота столба, своё число — в INSTANCE_CUSTOM, выход — в экземпляре
+		// EcoVent.bubble_pos: скорость, фаза, высота столба, своё число — в INSTANCE_CUSTOM, выход — в экземпляре;
+		// масштаб базиса — свой размер пузыря (VentView.bubble_scale)
 		float h = INSTANCE_CUSTOM.b;
-		float f = fract(INSTANCE_CUSTOM.g + TIME * INSTANCE_CUSTOM.r / h);
+		float f = fract(INSTANCE_CUSTOM.g + t * INSTANCE_CUSTOM.r / h);
 		float sd = INSTANCE_CUSTOM.a * 6.2831853;
 		vec3 o = MODEL_MATRIX[3].xyz;
-		vec3 p = vec3(o.x + sin(TIME * 0.9 + sd) * drift * f, o.y + f * h, o.z + cos(TIME * 0.7 + sd) * drift * f);
-		float size = mix(size_low, size_high, f);
+		vec3 p = vec3(o.x + sin(t * 0.9 + sd) * drift * f, o.y + f * h, o.z + cos(t * 0.7 + sd) * drift * f);
+		float size = mix(size_low, size_high, f) * length(MODEL_MATRIX[0].xyz);
 		fade = 0.85 * (1.0 - 0.6 * f) * smoothstep(0.0, 0.03, f) * (1.0 - smoothstep(0.9, 1.0, f));
 		MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * size, INV_VIEW_MATRIX[1] * size,
 			INV_VIEW_MATRIX[2] * size, vec4(p, 1.0));
@@ -191,7 +285,7 @@ void vertex() {
 }
 void fragment() {
 	float d = length(UV - vec2(0.5)) * 2.0;
-	float k = 1.0 + pulse * sin(TAU * TIME / period);
+	float k = 1.0 + pulse * sin(TAU * t / period);
 	if (mode == 0) {
 		// купол: кромка ярче — по углу к взгляду
 		float edge = 1.0 - abs(dot(normalize(NORMAL), normalize(VIEW)));
@@ -212,20 +306,21 @@ void fragment() {
 	} else if (mode == 4) {
 		// марево: шум из синусов бежит вверх, слабеет вверх и к краям полосы
 		float v = 1.0 - UV.y;
-		float n = 0.5 + 0.25 * sin(UV.x * 9.0 + UV.y * 23.0 - TIME * 1.3) + 0.25 * sin(UV.x * 17.0 - UV.y * 41.0 - TIME * 2.1);
+		float n = 0.5 + 0.25 * sin(UV.x * 9.0 + UV.y * 23.0 - t * 1.3) + 0.25 * sin(UV.x * 17.0 - UV.y * 41.0 - t * 2.1);
 		float side = smoothstep(0.0, 0.3, UV.x) * smoothstep(1.0, 0.7, UV.x);
 		ALBEDO = mix(water, heat, 0.35 * (1.0 - v));
 		ALPHA = 0.11 * n * side * pow(1.0 - v, 1.4) * smoothstep(0.0, 0.04, v);
 	} else if (mode == 5) {
 		// трещина: светлые полосы медленно ползут вдоль неё
-		float dr = 0.94 + 0.06 * sin(TIME * 0.35 + dot(wp.xz, vec2(0.45, 0.2)));
+		float dr = 0.94 + 0.06 * sin(t * 0.35 + dot(wp.xz, vec2(0.45, 0.2)));
 		ALBEDO = tone.rgb * k * dr;
 		ALPHA = clamp(tone.a, 0.0, 1.0);
 	} else {
 		// столб света: грань под острым углом к взгляду почти прозрачна, без яркого контура
 		float face = abs(dot(normalize(NORMAL), normalize(VIEW)));
 		ALBEDO = tone.rgb * k;
-		ALPHA = clamp(tone.a * face * face * strength * k, 0.0, 1.0);
+		float close = near.y > 0.0 ? smoothstep(near.x, near.y, distance(wp, CAMERA_POSITION_WORLD)) : 1.0;
+		ALPHA = clamp(tone.a * face * face * strength * k * close, 0.0, 1.0);
 	}
 }
 """
@@ -238,15 +333,17 @@ const SWAY := """
 // в долях высоты на полном течении; sway_k — 0 на «Экономно»
 uniform vec3 flow = vec3(0.0);
 uniform float sway_k = 1.0;
+// время мира (EcoShaders.set_sway_time, у гостя то же), не время шейдера: двойник совпадает с картинкой, без скачка в 3600 с
+uniform float sway_t = 0.0;
 vec3 eco_sway(vec3 o, float h, float height, vec3 bn) {
 	float v = length(flow);
 	float s = v / 0.3;
 	vec3 d = v > 1e-5 ? flow / v : vec3(0.0, 0.0, 1.0);
 	vec3 c = vec3(-d.z, 0.0, d.x);
 	float ph = o.x * 0.23 + o.z * 0.19;
-	float gust = 0.65 + 0.35 * sin(TIME * 0.45 + ph);
-	float fl = sin(TIME * 1.6 + ph * 1.3 - h * 2.2);
-	float cr = sin(TIME * 1.1 + ph * 0.7 - h * 1.5);
+	float gust = 0.65 + 0.35 * sin(sway_t * 0.45 + ph);
+	float fl = sin(sway_t * 1.6 + ph * 1.3 - h * 2.2);
+	float cr = sin(sway_t * 1.1 + ph * 0.7 - h * 1.5);
 	float w = 0.4 + 0.6 * s;
 	float k = h * h * height;
 	vec3 off = (d * (bn.x * s * gust + bn.y * w * fl) * k + c * (bn.z * w * cr) * k) * sway_k;
@@ -256,9 +353,10 @@ vec3 eco_sway(vec3 o, float h, float height, vec3 bn) {
 """
 
 ## Растения на дне со светом (обе стороны): ленты ленточника, листья волнолиста, кружево веерника, трубы органа,
-## щупальца хватней (тело со светом, к кончикам светится само — `tip_glow`, доля длины — в COLOR.a). Что
+## щупальца хватней (тело со светом, к кончикам светится само — `tip_glow`, доля длины — в COLOR.a; кончик в луче
+## крупнее — `tip_grow`, глаза глазуна). Что
 ## рисовать — `mode` (Plant), краски и числа каждого вида — в своих uniform; формулы — прежние формулы видов.
-## Общее: шероховатость `rough`, блик `spec`, своё свечение `glow` (линейный цвет) плюс волна `glow_wave` · sin(TIME · 1,7);
+## Общее: шероховатость `rough`, блик `spec`, своё свечение `glow` (линейный цвет) плюс волна `glow_wave` · sin(t · 1,7) по времени мира `sway_t`;
 ## просвет против огня — `back`/`back_k` (EcoBack, `BACKLIGHT`);
 ## колыхание в течении мира — `bend`/`reach` вида и общий поток `flow` (`set_flow`), формула — EcoCurrent.sway;
 ## `phase_axis` — сдвиг фазы по углу оси экземпляра вокруг вертикали (щупальца одного диска вразнобой, у растений 0).
@@ -266,6 +364,7 @@ enum Plant { KELP, LEAF, FAN, ORGAN, TENTACLE }
 const PLANT := """
 shader_type spatial;
 render_mode cull_disabled;
+""" + EcoGlow.GLSL + """
 uniform int mode = 0;
 uniform vec3 paint : source_color = vec3(1.0);
 uniform vec3 edge : source_color = vec3(1.0);
@@ -283,11 +382,27 @@ uniform float reach = 1.0;
 uniform float phase_axis = 0.0;
 // щупальце: свечение у основания и у кончика (доля длины — COLOR.a, по квадрату)
 uniform vec2 tip_glow = vec2(0.0);
+// светящийся кончик крупнее (глаза глазуна, #849): x — радиус шарика, м; y — прибавка доли; раздувается по гладкой
+// нормали плавно, по альфе цвета (вершина × экземпляр) от tip_from до 1 (CoinsView.eye_grow — двойник); 0 — не трогать
+uniform vec2 tip_grow = vec2(0.0);
+uniform float tip_from = 0.9;
 // просвет (EcoBack): доля альбедо по каналам, что светится против огня; back_k — 0 на «Экономно»
 uniform vec3 back = vec3(0.0);
 uniform float back_k = 1.0;
+// дыхание труб органа (OrganView.breath_offset — двойник): x — размах у устья, м; y — тактов в секунду; t — время
+// мира; в меше UV.x — фаза трубы, UV.y — доля высоты, UV2 — наружу от оси; 0 — не дышит. Фаза ещё и + альфа цвета
+// (вершина × экземпляр): у органа 1 — без сдвига, у хвостов монетников — фаза рыбки (CoinsView.tail_offset)
+uniform vec2 breath = vec2(0.0);
+uniform float t = 0.0;
 """ + SWAY + """
 void vertex() {
+	if (breath.x > 0.0) {
+		float f = fract(t * breath.y + UV.x + COLOR.a);
+		VERTEX.xz += UV2 * (-breath.x * UV.y * cos(6.2831853 * f) * sway_k);
+	}
+	if (tip_grow.y > 0.0 && COLOR.a > tip_from) {
+		VERTEX += NORMAL * tip_grow.x * tip_grow.y * clamp((COLOR.a - tip_from) / (1.0 - tip_from), 0.0, 1.0);
+	}
 	if (sway_k > 0.0 && dot(bend, bend) > 0.0) {
 		vec3 o = MODEL_MATRIX[3].xyz;
 		vec3 ax = MODEL_MATRIX[0].xyz;
@@ -310,7 +425,8 @@ void fragment() {
 		// лист: UV.x поперёк (0,5 — жилка), UV.y — от кончика (0) к основанию (1)
 		float e = smoothstep(0.25, 0.5, abs(UV.x - 0.5)) * 0.8 + smoothstep(0.45, 0.0, UV.y) * 0.5;
 		float vein = 1.0 - smoothstep(0.0, 0.04, abs(UV.x - 0.5));
-		ALBEDO = mix(paint, edge, clamp(e + vein * 0.3, 0.0, 1.0)) * mix(0.55, 1.0, 1.0 - UV.y * 0.6);
+		// цвет экземпляра — разброс листьев волнолиста (FernView.leaf_tint), без него белый
+		ALBEDO = mix(paint, edge, clamp(e + vein * 0.3, 0.0, 1.0)) * mix(0.55, 1.0, 1.0 - UV.y * 0.6) * COLOR.rgb;
 	} else if (mode == 2) {
 		// веерник (fanTex): метры от подножия, лучи расходятся из точки на высоте 0,35 м
 		vec2 p = vec2((UV.x - 0.5) * size.x, (1.0 - UV.y) * size.y);
@@ -343,11 +459,11 @@ void fragment() {
 	}
 	ROUGHNESS = rough;
 	SPECULAR = spec;
-	vec3 e = glow + glow_wave * sin(TIME * 1.7);
+	vec3 e = glow + glow_wave * sin(sway_t * 1.7);
 	if (mode == 4) {
 		e += COLOR.rgb * mix(tip_glow.x, tip_glow.y, COLOR.a * COLOR.a);
 	}
-	EMISSION = e;
+	EMISSION = eco_bio(e);
 	// просвет: щупальце к кончику тоньше (EcoBack.through — двойник)
 	vec3 b = back * back_k;
 	if (mode == 4) {
@@ -380,13 +496,15 @@ static func material(code: String, params: Dictionary = {}) -> ShaderMaterial:
 	mat.shader = shader(code)
 	for k in params:
 		mat.set_shader_parameter(k, params[k])
+	if code == STONE:
+		EcoCaustic.track(mat)
 	return mat
 
 
 ## Камень с обрастанием (STONE).
 static func stone(growth: Color, fill: float, rough: float, spec: float) -> ShaderMaterial:
 	return material(STONE, {"growth": growth, "fill": fill, "glow_k": 1.4, "cut": 0.5, "rough": rough,
-		"spec": spec, "flicker": 0.0})
+		"spec": spec, "flicker": 0.0, "shimmer": EcoCaustic.SHIMMER})
 
 
 ## Яркости пятен мха для массива glow[MOSS_MAX]: дополнить нулями.
@@ -403,6 +521,9 @@ static func moss_glow(glows: PackedFloat32Array) -> PackedFloat32Array:
 static func mist(kind: Mist, params: Dictionary = {}) -> ShaderMaterial:
 	var mat := material(MIST, params)
 	mat.set_shader_parameter("mode", int(kind))
+	mat.set_shader_parameter("t", sway_time)
+	_mists = _mists.filter(func(r: WeakRef) -> bool: return r.get_ref() != null)
+	_mists.append(weakref(mat))
 	return mat
 
 
@@ -417,6 +538,7 @@ static func plant(kind: Plant, params: Dictionary = {}) -> ShaderMaterial:
 ## Материал с куском SWAY (растения, огнецвет) — получает текущий поток и выключатель «Экономно» сразу и дальше.
 static func follow(mat: ShaderMaterial) -> ShaderMaterial:
 	mat.set_shader_parameter("flow", flow)
+	mat.set_shader_parameter("sway_t", sway_time)
 	mat.set_shader_parameter("sway_k", 0.0 if sway_lite else 1.0)
 	_plants = _plants.filter(func(r: WeakRef) -> bool: return r.get_ref() != null)
 	_plants.append(weakref(mat))
@@ -425,10 +547,14 @@ static func follow(mat: ShaderMaterial) -> ShaderMaterial:
 
 ## Поток течения мира для колыхания растений (EcoView каждый шаг: EcoCurrent.vel()).
 static var flow := Vector3.ZERO
+## Время мира для колыхания и тления растений (uniform `sway_t`; EcoView каждый шаг: world.time, у гостя — то же).
+static var sway_time := 0.0
 ## «Экономно»: растения не колышутся в шейдере (sway_k = 0). Включает уровень графики — set_sway_lite.
 static var sway_lite := false
 ## Материалы растений — слабые ссылки, чтобы при выходе не оставалось ресурсов в статике.
 static var _plants: Array[WeakRef] = []
+## Материалы прозрачного (MIST) — им время мира в uniform `t`.
+static var _mists: Array[WeakRef] = []
 
 
 ## Отдать поток всем живым материалам растений; меняется заметно — только тогда пишем uniform.
@@ -440,6 +566,20 @@ static func set_flow(v: Vector3) -> void:
 		var mat: ShaderMaterial = r.get_ref()
 		if mat:
 			mat.set_shader_parameter("flow", v)
+
+
+## Отдать время мира t всем живым материалам растений (колыхание SWAY и волна тления PLANT идут по нему, а не по
+## TIME шейдера: у гостя в такт хосту, двойник EcoCurrent.sway совпадает с картинкой, в 3600 с нет скачка).
+static func set_sway_time(t: float) -> void:
+	sway_time = t
+	for r in _plants:
+		var mat: ShaderMaterial = r.get_ref()
+		if mat:
+			mat.set_shader_parameter("sway_t", t)
+	for r in _mists:
+		var mat: ShaderMaterial = r.get_ref()
+		if mat:
+			mat.set_shader_parameter("t", t)
 
 
 ## Выключатель колыхания для «Экономно» (ART-044): true — растения стоят (только качание листьев и вееров на CPU).

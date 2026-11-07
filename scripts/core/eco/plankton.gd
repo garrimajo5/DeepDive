@@ -116,8 +116,9 @@ func reset(world: EcoWorld) -> void:
 		if world.ground.is_valid():
 			y = minf(float(world.ground.call(h.x, h.y)) + ABOVE, CEILING)
 		cl.home = Vector3(h.x, y, h.y)
-		cl.c = cl.home
 		cl.phase = rnd.range_f(0.0, 6.0)
+		# центр — сразу по дрейфу, как в шаге: раньше стоял в доме и на первом шаге прыгал до 6 м
+		cl.c = center(cl, world.time)
 		cl.offsets.resize(PER_CLOUD)
 		cl.lit_at.resize(PER_CLOUD)
 		cl.lit_at.fill(-99.0)

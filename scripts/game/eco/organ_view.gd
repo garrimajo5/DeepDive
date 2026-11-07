@@ -2,30 +2,52 @@ class_name OrganView
 extends MeshInstance3D
 ## Трубные органы в сцене (organGeo в js/creatures.js; ART-004): все губки — один меш (один вызов отрисовки).
 ## Труба — открытый усечённый конус (10 граней, видна с обеих сторон), у устья светлый обод-кольцо. Трубы через одну
-## #9a7f6a и #6f5b4c, обод #ffd9a0; губка чуть тлеет тёплым (EcoOrgan.glow — в общем шейдере растений
-## EcoShaders.PLANT по TIME).
+## #9a7f6a и #6f5b4c (у каждой трубы свой оттенок и толщина — tube_color/tube_width), обод #ffd9a0; губка чуть тлеет тёплым (EcoOrgan.glow — в общем шейдере растений
+## EcoShaders.PLANT по времени мира `sway_t`).
 ## Стоит на слое отмели (OceanView.LAYER_WORLD).
 ## Выдох губки (EcoOrganDust: в такт гулу трубы выпускают над устьями облачка отцеженной мути, корабль рядом —
 ## чаще и гуще) — дочерний MultiMesh «Муть» на общем шейдере EcoShaders.MIST (INK) — +1 вызов отрисовки.
+## «Экономно» (Б6, `set_lite`): трубы — шесть граней вместо десяти, обод — 6 × 3 вместо 10 × 4 (LITE_*) — 100 → 48
+## треугольников на трубу; меш пересобирается с тем же материалом (тление, оттенки труб), устья на тех же местах,
+## муть и вызовы те же. Сброс мира уровень не теряет (EcoView.set_lite).
+## «Дыхание» губки (Б3): каждая труба в такт своего выдоха (EcoOrganDust: фаза трубы, такт 1,7 / 2π в секунду)
+## сжимается — устье уже на BREATH м в миг выдоха облачка, через полтакта набрало воды и шире; подножие неподвижно,
+## размах растёт к устью, обод едет с устьем. В шейдере растений (EcoShaders.PLANT, uniform `breath` и время мира
+## `t` — у гостя то же); в меше доля такта трубы — UV.x, доля высоты — UV.y, наружу от оси — UV2. Двойник на CPU —
+## `breath_offset`. Шейдеров и вызовов не прибавилось; «Экономно» — `sway_k` (EcoShaders.set_sway_lite).
 
 const LIGHT := Color("9a7f6a")
 const DARK := Color("6f5b4c")
 const RIM := Color("ffd9a0")
 ## Краска гуще: при ярком свете сквозь лёд светлая губка выгорает в белый (как у огнецвета).
 const PAINT_K := 0.45
-## Тление губки (линейный цвет): GLOW + GLOW_WAVE · sin(TIME · 1,7).
+## Тление губки (линейный цвет): GLOW + GLOW_WAVE · sin(t · 1,7), t — время мира.
 const GLOW := Vector3(0.1, 0.06, 0.03)
 const GLOW_WAVE := Vector3(0.05, 0.0, 0.0)
 ## Граней у трубы, у обода — 10 × 4 (CylinderGeometry(…, 10), TorusGeometry(0,32, 0,05, 4, 10)).
 const SIDES := 10
 const RIM_TUBE := 0.05
 const RIM_SIDES := 4
+## То же на «Экономно»: шесть граней — устье ещё читается кругом, обод — треугольник в сечении.
+const LITE_SIDES := 6
+const LITE_RIM_SIDES := 3
+## Разброс труб (Б4, EcoVary по номеру трубы EcoOrganDust.tube_id — у гостя тот же): светлее-темнее ±12 %, теплее-
+## холоднее ±4 %, толщина ±10 % (основание и устье вместе, обод с устьем), обод тусклее до 15 % (вершинный цвет
+## не ярче 1). Две краски «через одну» остаются — губка не рябит пятнами. Вызовов и шейдеров столько же.
+const SHADE_SPREAD := 0.12
+const HUE_SPREAD := 0.04
+const WIDTH_SPREAD := 0.1
+const RIM_DIM := 0.15
+## Размах «дыхания» у устья (м): радиус 0,32 ± 0,035 — заметно у самой губки, издали не дрожит.
+const BREATH := 0.035
 
 var organs: EcoOrgan
 var dust := EcoOrganDust.new()
 var dust_view: MultiMeshInstance3D
 var dust_buffer := PackedFloat32Array()
 var _dust_empty := false
+## Буфер мути для общего слоя EcoDustLayer (#849): свой рисунок губок (pack), сюда — готовые числа.
+var _dust := EcoDustBuffer.new()
 var _packed := PackedByteArray()
 ## Вершины и треугольники всего меша (для тестов).
 var verts := PackedVector3Array()
@@ -34,19 +56,60 @@ var tris := 0
 var _nor := PackedVector3Array()
 var _col := PackedColorArray()
 var _idx := PackedInt32Array()
+var _uv := PackedVector2Array()
+var _uv2 := PackedVector2Array()
+## На «Экономно» — грубее трубы и ободы (set_lite).
+var lite := false
+var _mat: ShaderMaterial
 
 
-func _init(system: EcoOrgan) -> void:
+func _init(system: EcoOrgan, on_lite := false) -> void:
 	organs = system
+	lite = on_lite
 	name = "Трубный орган"
 	layers = OceanView.LAYER_WORLD
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	extra_cull_margin = BREATH   # дыхание раздувает устья за рамку меша
+	_mat = EcoShaders.plant(EcoShaders.Plant.ORGAN, {"shade": PAINT_K, "rough": 1.0,
+		"spec": 0.1, "glow": GLOW, "glow_wave": GLOW_WAVE, "breath": Vector2(BREATH, EcoOrganDust.RATE)})
+	_build()
+	dust_view = GrazerView.build_dust(EcoOrganDust.POOL)
+	add_child(dust_view)
+
+
+## «Экономно» — трубы и ободы пересобраны грубее (тот же материал); назад — полные.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	_build()
+
+
+## Граней у трубы и обода по уровню.
+func sides() -> int:
+	return LITE_SIDES if lite else SIDES
+
+
+func rim_sides() -> int:
+	return LITE_RIM_SIDES if lite else RIM_SIDES
+
+
+func _build() -> void:
+	verts.clear()
+	_nor.clear()
+	_col.clear()
+	_idx.clear()
+	_uv.clear()
+	_uv2.clear()
 	for og in organs.organs:
 		for k in EcoOrgan.TUBES:
 			var b := og.tube_base[k]
 			var top := b + Vector3(0, og.tube_len[k], 0)
-			_tube(b, top, LIGHT if k % 2 else DARK)
-			_rim(top)
+			var j := EcoOrganDust.tube_id(og, k)
+			var ph := EcoOrganDust.phase(j)
+			var w := tube_width(j)
+			_tube(b, top, tube_color(j, k), ph, w)
+			_rim(top, ph, w, rim_color(j))
 	var m := ArrayMesh.new()
 	if not verts.is_empty():
 		var arrays := []
@@ -54,24 +117,26 @@ func _init(system: EcoOrgan) -> void:
 		arrays[Mesh.ARRAY_VERTEX] = verts
 		arrays[Mesh.ARRAY_NORMAL] = _nor
 		arrays[Mesh.ARRAY_COLOR] = _col
+		arrays[Mesh.ARRAY_TEX_UV] = _uv
+		arrays[Mesh.ARRAY_TEX_UV2] = _uv2
 		arrays[Mesh.ARRAY_INDEX] = _idx
 		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-		m.surface_set_material(0, EcoShaders.plant(EcoShaders.Plant.ORGAN, {"shade": PAINT_K, "rough": 1.0,
-			"spec": 0.1, "glow": GLOW, "glow_wave": GLOW_WAVE}))
+		m.surface_set_material(0, _mat)
 	mesh = m
 	tris = _idx.size() / 3
-	dust_view = GrazerView.build_dust(EcoOrganDust.POOL)
-	add_child(dust_view)
 
 
 ## Выдохи губок в момент t (время мира); ship — корабль (близость, дальность и луч), flow — течение.
 func sync(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> void:
+	_mat.set_shader_parameter("t", t)
 	dust.update(organs, t, ship.pos if ship else Vector3.ZERO)
 	var shown := pack(t, ship, flow)
-	if shown == 0 and _dust_empty:
-		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
-	dust_view.multimesh.buffer = dust_buffer
+	_dust.shown = shown
+	_dust.changed = not (shown == 0 and _dust_empty)   # мути нет и в буфере пусто — не грузим заново (issue #133)
 	_dust_empty = shown == 0
+	if _dust.changed:
+		_dust.data = dust_buffer
+	_dust.upload(dust_view)   # пустой слой мути не рисуется (issue #849); в живом мире — общий слой
 
 
 ## Переписать буфер мути (TRANSFORM_3D + цвет): живые облачка — на месте, растаявшие стянуты в точку один раз.
@@ -108,39 +173,76 @@ func pack(t: float, ship: EcoLink.ShipState = null, flow := Vector3.ZERO) -> int
 	return shown
 
 
-## Открытый конус от основания b (радиус TUBE_BASE_R) до устья top (TUBE_TOP_R).
-func _tube(b: Vector3, top: Vector3, c: Color) -> void:
+## Сдвиг наружу от оси трубы (м) у вершины на доле высоты h трубы с фазой ph (EcoOrganDust.phase) в момент t
+## времени мира — двойник шейдера: в миг выдоха (начало такта) устье сжато на BREATH, через полтакта — шире.
+## sway_k — 0 на «Экономно».
+static func breath_offset(ph: float, h: float, t: float, sway_k := 1.0) -> float:
+	var f := fposmod(t * EcoOrganDust.RATE + ph, 1.0)
+	return -BREATH * h * cos(TAU * f) * sway_k
+
+
+## Толщина трубы j (множитель радиусов основания и устья).
+static func tube_width(j: int) -> float:
+	return EcoVary.spread(j, EcoVary.WIDTH, WIDTH_SPREAD)
+
+
+## Краска трубы j (k — место в губке: светлая и тёмная через одну) — светлее-темнее, теплее-холоднее.
+static func tube_color(j: int, k: int) -> Color:
+	var base := LIGHT if k % 2 else DARK
+	var s := EcoVary.spread(j, EcoVary.SHADE, SHADE_SPREAD)
+	var h := (EcoVary.unit(j, EcoVary.HUE) * 2.0 - 1.0) * HUE_SPREAD
+	return Color(minf(1.0, base.r * s * (1.0 + h)), minf(1.0, base.g * s), minf(1.0, base.b * s * (1.0 - h)))
+
+
+## Обод трубы j: светлый RIM, тусклее до RIM_DIM.
+static func rim_color(j: int) -> Color:
+	var s := 1.0 - EcoVary.unit(j, EcoVary.SHADE + 16) * RIM_DIM
+	return Color(RIM.r * s, RIM.g * s, RIM.b * s)
+
+
+## Открытый конус от основания b (радиус TUBE_BASE_R · w) до устья top (TUBE_TOP_R · w); ph — фаза дыхания трубы.
+func _tube(b: Vector3, top: Vector3, c: Color, ph: float, w := 1.0) -> void:
 	var v0 := verts.size()
-	var slope := (EcoOrgan.TUBE_BASE_R - EcoOrgan.TUBE_TOP_R) / maxf(0.01, top.y - b.y)
-	for i in SIDES + 1:
-		var a := TAU * i / SIDES
+	var n_sides := sides()
+	var r0 := EcoOrgan.TUBE_BASE_R * w
+	var r1 := EcoOrgan.TUBE_TOP_R * w
+	var slope := (r0 - r1) / maxf(0.01, top.y - b.y)
+	for i in n_sides + 1:
+		var a := TAU * i / n_sides
 		var d := Vector3(cos(a), 0, sin(a))
 		var n := (d + Vector3(0, slope, 0)).normalized()
-		verts.append(b + d * EcoOrgan.TUBE_BASE_R)
-		verts.append(top + d * EcoOrgan.TUBE_TOP_R)
+		verts.append(b + d * r0)
+		verts.append(top + d * r1)
+		_uv.append(Vector2(ph, 0.0))
+		_uv.append(Vector2(ph, 1.0))
 		for j in 2:
 			_nor.append(n)
 			_col.append(c)
-	for i in SIDES:
+			_uv2.append(Vector2(d.x, d.z))
+	for i in n_sides:
 		var q := v0 + i * 2
 		# обход не важен: труба видна с обеих сторон (cull_disabled)
 		_idx.append_array([q, q + 1, q + 2, q + 2, q + 1, q + 3])
 
 
-## Обод у устья: тор радиусом TUBE_TOP_R, толщина RIM_TUBE.
-func _rim(c: Vector3) -> void:
+## Обод у устья: тор радиусом TUBE_TOP_R · w, толщина RIM_TUBE, краска col; едет с устьем (доля высоты 1, фаза ph).
+func _rim(c: Vector3, ph: float, w := 1.0, col := RIM) -> void:
 	var v0 := verts.size()
-	for i in SIDES + 1:
-		var a := TAU * i / SIDES
+	var n_sides := sides()
+	var n_rim := rim_sides()
+	for i in n_sides + 1:
+		var a := TAU * i / n_sides
 		var d := Vector3(cos(a), 0, sin(a))
-		for j in RIM_SIDES + 1:
-			var b := TAU * j / RIM_SIDES
+		for j in n_rim + 1:
+			var b := TAU * j / n_rim
 			var n := d * cos(b) + Vector3(0, sin(b), 0)
-			verts.append(c + d * EcoOrgan.TUBE_TOP_R + n * RIM_TUBE)
+			verts.append(c + d * EcoOrgan.TUBE_TOP_R * w + n * RIM_TUBE)
 			_nor.append(n)
-			_col.append(RIM)
-	var row := RIM_SIDES + 1
-	for i in SIDES:
-		for j in RIM_SIDES:
+			_col.append(col)
+			_uv.append(Vector2(ph, 1.0))
+			_uv2.append(Vector2(d.x, d.z))
+	var row := n_rim + 1
+	for i in n_sides:
+		for j in n_rim:
 			var q := v0 + i * row + j
 			_idx.append_array([q, q + row, q + 1, q + 1, q + row, q + row + 1])
