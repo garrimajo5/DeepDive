@@ -286,10 +286,11 @@ static func _ref_ms() -> float:
 	for i in 22:
 		pos.append(Vector3(r.range_f(-1.5, 1.5), r.range_f(-1, 1), r.range_f(-1.5, 1.5)))
 		live.append(1)
-	var t0 := Time.get_ticks_usec()
-	for i in 40:
-		EcoFish._separation(pos, live)
-	return (Time.get_ticks_usec() - t0) / 1000.0
+	var t0 := now_ms()
+	for n in REPS:
+		for i in 40:
+			EcoFish._separation(pos, live)
+	return (now_ms() - t0) / REPS
 
 
 ## Во сколько раз машина медленнее ПК по мерке ref (мс), не меньше 1.
@@ -312,8 +313,8 @@ static func _obj_ms() -> float:
 	for i in 22:
 		agents.append(EcoAgent.new("fish", Vector3(r.range_f(-3, 3), r.range_f(-31, -29), r.range_f(-3, 3))))
 	var home := Vector3(0, -30, 0)
-	var t0 := Time.get_ticks_usec()
-	for k in 40:
+	var t0 := now_ms()
+	for k in 40 * REPS:
 		for a in agents:
 			var p := a.p
 			var v := a.v
@@ -323,8 +324,50 @@ static func _obj_ms() -> float:
 			a.v = v.limit_length(2.4)
 			a.p = p + a.v * 0.016
 			a.state = EcoAgent.State.GRAZE
-	return (Time.get_ticks_usec() - t0) / 1000.0
+	return (now_ms() - t0) / REPS
 
+
+## Повторов мерок за замер (issue #1357): часы процессора `now_ms` идут шагами такта ядра (до 4 мс), мерка в 0,7 мс
+## их не видит — 200 повторов ≈ 140 мс, ошибка такта ≈ 3 %. Мерка — среднее одного повтора, как прежде.
+const REPS := 200
+
+
+## Время процессора потока (мс) из строки /proc/<…>/schedstat: первое число — наносекунды на процессоре.
+static func schedstat_ms(line: String) -> float:
+	var head := line.strip_edges().get_slice(" ", 0)
+	return float(head.to_int()) / 1e6 if head.is_valid_int() else -1.0
+
+
+## Время процессора главного потока (мс), −1 — нет /proc (не Linux).
+static func _cpu_clock() -> float:
+	for path in ["/proc/thread-self/schedstat", "/proc/self/schedstat"]:
+		var f := FileAccess.open(path, FileAccess.READ)
+		if f == null:
+			continue
+		var ms := schedstat_ms(f.get_line())
+		if ms >= 0.0:
+			return ms
+	return -1.0
+
+
+## Часы замеров шага живого мира (issue #1357): время процессора потока — вытеснение процесса на шумной машине
+## (параллельные тесты, снимки, соседи по раннеру CI) его не растит, а рост самого шага растит; шаг мира идёт
+## в главном потоке. Нет /proc — стенные часы, как до #1357.
+static func now_ms() -> float:
+	var cpu := _cpu_clock()
+	return cpu if cpu >= 0.0 else Time.get_ticks_usec() / 1000.0
+
+
+func test_cpu_clock() -> void:
+	near(schedstat_ms("96892547 266689 10"), 96.892547, 1e-9, "наносекунды → мс")
+	near(schedstat_ms("0 0 1\n"), 0.0, 1e-9, "ноль")
+	eq(schedstat_ms(""), -1.0, "пустая строка — нет часов")
+	eq(schedstat_ms("abc 1 2"), -1.0, "не число — нет часов")
+	var a := now_ms()
+	var x := 0.0
+	for i in 20000:
+		x += sin(i)
+	ok(now_ms() >= a, "часы не идут назад (%.1f)" % x)
 
 ## Медленность машины по обеим меркам: бо́льшая из двух, не меньше 1.
 static func slowness2(ref: float, obj: float) -> float:
@@ -369,6 +412,9 @@ func test_view_step_fits_frame() -> void:
 	# Issue #1086: на раннере CI с меркой 0,78 мс и в облачной сессии шаг упирался в порог (3,60 при 3,25), хотя
 	# на обычном раннере держит запас ~10 %: мерка ref — чистый счёт, шаг — обход объектов. Вторая мерка `_obj_ms`
 	# (объекты EcoAgent) — порог по бо́льшей из двух медленностей.
+	# Issue #1357: в CI краснел без изменений мира (5,30 при пороге 5,07), локально — под нагрузкой. Мерки по 0,7 мс
+	# проскакивают между вытеснениями процесса, а 60 кадров шага по 4 мс — нет: шаг рос, порог — нет. Мерки и шаг
+	# теперь меряются временем процессора этого потока (`now_ms`), вытеснение в него не входит.
 	var best := INF
 	var ref := INF
 	var obj := INF
@@ -377,15 +423,16 @@ func test_view_step_fits_frame() -> void:
 	for k in ROUNDS:
 		ref = minf(ref, _ref_ms())
 		obj = minf(obj, _obj_ms())
-		var t0 := Time.get_ticks_usec()
+		var t0 := now_ms()
 		for i in 60:
 			view.step(1.0 / 60.0, ship)
-		best = minf(best, (Time.get_ticks_usec() - t0) / 60.0 / 1000.0)
+		best = minf(best, (now_ms() - t0) / 60.0)
 		slow = slowness2(ref, obj)
 		limit = LIMIT_PC_MS * slow
 		if k >= 4 and best < limit:
 			break
-	print("    шаг живого мира %.2f мс, порог %.2f (мерка %.3f мс, объекты %.3f мс)" % [best, limit, ref, obj])
+	print("    шаг живого мира %.2f мс, порог %.2f (мерка %.3f мс, объекты %.3f мс; часы: %s)" % [
+		best, limit, ref, obj, "процессора" if _cpu_clock() >= 0.0 else "стенные"])
 	ok(best < limit, "шаг живого мира %.2f мс (< %.2f мс; машина медленнее ПК в %.2f раза)" % [best, limit, slow])
 	view.queue_free()
 	await frames(1)
