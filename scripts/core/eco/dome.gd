@@ -46,6 +46,10 @@ const ARRIVE := 0.3
 const SETTLE := 0.25
 ## Корабль (центр) ближе этого — купольник стоит (корпус 32 м: половина + запас).
 const KEEP := 22.0
+## Корпус не проходит сквозь купольника (Б3): KEEP меряет от центра корабля, а корма — до 29 м от него, и корабль,
+## прошедший над ним в пути (днище ниже купола на CRUISE), шёл сквозь тело. Обшивка, раздутая на HULL_R м (купол
+## 1,2 м), отодвигает его (`_clear_hull`) — не ниже половины AT_NEST над дном; корабль ушёл — продолжает своё дело.
+const HULL_R := 0.6
 ## Клип OpenPetal: длина, когда створка начинает и кончает подниматься (с от начала).
 const OPEN_TIME := 5.0
 const LIFT := Vector2(1.2, 3.8)
@@ -149,8 +153,49 @@ func step(world: EcoWorld, dt: float) -> void:
 			if _swim(Vector3(h.x, floor_y(h.x, h.y) + AT_NEST, h.y), LEAVE, sp, dt):
 				_go(State.GONE, world)
 				speed = 0.0
+	if state != State.GONE:
+		_clear_hull(world)
 	var k := (world.time - _pulse) / PULSE_TIME
 	glow = GLOW_REST + (PULSE - GLOW_REST) * (sin(PI * k) if k >= 0.0 and k <= 1.0 else 0.0)
+
+
+## Тело внутри обшивки (раздутой на HULL_R) — наружу по горизонтали, на той же высоте: в сторону нормали обшивки
+## (`EcoHull.push_out`) без её вертикали — нос толкает вперёд, борт вбок; под днищем (нормаль вниз) — вбок от оси
+## корабля. До первого места снаружи шагом SIDE_STEP, уточнение пополам; ход гаснет — толкнули. Раньше `push_out` как
+## есть вёз тело по обводу носа поверх корпуса — на 10 м вверх со скоростью 10 м/с: купол «ехал» на палубе.
+const SLIP := 0.6
+const SIDE_STEP := 0.25
+const SIDE_MAX := 16.0
+
+
+func _clear_hull(world: EcoWorld) -> void:
+	var sp := world.ship.pos
+	var yaw_s := world.ship.yaw
+	var res := EcoHull.push_out(pos, sp, yaw_s, HULL_R)
+	if res.is_empty():
+		return
+	var dir: Vector3 = res[0] - pos
+	dir.y = 0.0
+	if dir.length_squared() > 1e-6:
+		dir = dir.normalized()
+	var l := EcoHull.to_ship(pos, sp, yaw_s)
+	dir = (dir + Vector3(1.0 if l.x >= 0.0 else -1.0, 0.0, 0.0).rotated(Vector3.UP, yaw_s) * SLIP).normalized()
+	var inn := 0.0
+	var out := 0.0
+	while out < SIDE_MAX:
+		out += SIDE_STEP
+		if not EcoHull.touches(pos + dir * out, sp, yaw_s, HULL_R):
+			break
+		inn = out
+	for i in 5:
+		var mid := (inn + out) * 0.5
+		if EcoHull.touches(pos + dir * mid, sp, yaw_s, HULL_R):
+			inn = mid
+		else:
+			out = mid
+	pos += dir * out
+	pos.y = maxf(pos.y, floor_y(pos.x, pos.z) + AT_NEST * 0.5)
+	speed = 0.0
 
 
 ## Створка открыта раньше (сохранение кампании): ушёл, створка поднята.

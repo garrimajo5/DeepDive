@@ -304,3 +304,49 @@ func test_no_jump_at_nest() -> void:
 		guard += 1
 	_run(w, d2, EcoDome.LIFT.x)
 	near(d2.pos.distance_to(d2.stand()), 0.0, 1e-3, "к подъёму створки стоит у гнезда")
+
+
+## Б3: корпус не проходит сквозь купольника. Раньше он лишь вставал, когда центр корабля ближе KEEP, — корма (до 29 м
+## от центра) задевала его, а корабль, прошедший над ним в пути (купольник — на CRUISE над дном, днище корабля на
+## CLEARANCE — ниже его купола), шёл сквозь тело. Теперь обшивка отодвигает его по горизонтали (`HULL_R`, нос — вперёд
+## и вбок `SLIP`), без рывков и не в дно; корабль ушёл — плывёт дальше.
+func test_hull_pushes_dome_aside() -> void:
+	var w := _world(_near())
+	var d := EcoDome.new()
+	d.reset(w)
+	_run(w, d, 20.0)
+	eq(d.state, EcoDome.State.GO, "в пути")
+	ok(Vector2(d.pos.x - d.stand().x, d.pos.z - d.stand().z).length() > EcoDome.DESCEND, "ещё на высоте пути")
+	# корабль на высоте дна + CLEARANCE идёт над купольником носом в −Z: от 40 м позади до 40 м впереди
+	var at := d.pos
+	var fy := d.floor_y(at.x, at.z)
+	w.ship.yaw = 0.0
+	ok(EcoHull.touches(at, Vector3(at.x, fy + Helm.Ship.CLEARANCE, at.z), 0.0, EcoDome.HULL_R),
+			"проверка честная: над ним корпус задевает купольника")
+	w.ship.pos = Vector3(at.x, fy + Helm.Ship.CLEARANCE, at.z + 40.0)
+	var dt := 1.0 / 30.0
+	var ship_v := 6.0
+	var inside := 0
+	var worst := 0.0
+	var low := INF
+	var prev := d.pos
+	for i in int(80.0 / ship_v / dt):
+		w.ship.pos += Vector3(0.0, 0.0, -ship_v * dt)
+		w.ship.pos.y = d.floor_y(w.ship.pos.x, w.ship.pos.z) + Helm.Ship.CLEARANCE
+		w.time += dt
+		d.step(w, dt)
+		if w.touches_ship(d.pos):
+			inside += 1
+		worst = maxf(worst, d.pos.distance_to(prev) / dt)
+		low = minf(low, d.pos.y - d.floor_y(d.pos.x, d.pos.z))
+		prev = d.pos
+	eq(inside, 0, "ни на шаге не внутри корпуса")
+	ok(worst < 15.0, "обшивка толкает без рывков (как в test_eco_reset_jumps): %.1f м/с" % worst)
+	ok(low >= 0.0, "не уходит в дно: %.2f м над дном" % low)
+	w.ship.pos = _near()
+	var guard := 0
+	while not d.opened and guard < 3000:
+		w.time += DT
+		d.step(w, DT)
+		guard += 1
+	ok(d.opened, "корабль ушёл — дошёл до гнезда и открыл створку")
