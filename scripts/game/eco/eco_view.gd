@@ -164,7 +164,7 @@ func _init() -> void:
 	pred_view = PredView.new(preds)
 	add_child(pred_view)
 	current = world.add(EcoCurrent.new()) as EcoCurrent
-	coral = world.add(EcoCoral.new()) as EcoCoral
+	coral = world.add(EcoCoral.new([], preds)) as EcoCoral
 	leeches = world.add(EcoLeech.new(preds, coral)) as EcoLeech
 	leech_view = LeechView.new(leeches, lite)
 	add_child(leech_view)
