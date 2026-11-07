@@ -1,0 +1,48 @@
+{
+  "status": "draft_budget_unresolved",
+  "new_lights": 0,
+  "new_textures_bytes": 0,
+  "emissive_elements": 11,
+  "draw_calls_45m": {
+    "baseline": 144,
+    "after": 197,
+    "accepted": false
+  },
+  "native_images": [
+    {
+      "name": "12",
+      "size": [
+        1600,
+        720
+      ]
+    },
+    {
+      "name": "45",
+      "size": [
+        1600,
+        720
+      ]
+    },
+    {
+      "name": "surface",
+      "size": [
+        1600,
+        720
+      ]
+    },
+    {
+      "name": "inside",
+      "size": [
+        1600,
+        720
+      ]
+    },
+    {
+      "name": "beacon-off",
+      "size": [
+        1600,
+        720
+      ]
+    }
+  ]
+}
