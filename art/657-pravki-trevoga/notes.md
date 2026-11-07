@@ -32,3 +32,15 @@ Flow YACKoAuI8Hf838740LcE, node ijvaEWE7qTBpyzGl1Ucm. eleven_text_to_sound_v2; d
 Измерения готовых файлов: rev2-1 — -16.25 LUFS, -9.01 dBTP; rev2-2 — -18.27 LUFS, -15.90 dBTP. Оба около 98 КБ, ниже 6 МБ, декодируются без ошибок, пик ниже -1 дБ. Переход через границу смягчён fade; бесшовность и соответствие характеру на слух не подтверждены. Владелец/тестер проверяют минутное повторение и слышимость в миксе. Необязательная пробоина не менялась, разряд принят.
 Комплект из двух новых кандидатов передан на прослушивание; старый раздел «Осталось» выше — история rev1, его узел повторно не запускать.
 
+
+
+## Правки rev3 — повторяющееся «уи-у», 07.11.2026
+Новый прямой отзыв владельца заменяет требование редких гудков: непрерывные одинаковые подъёмы и спады тона, без длинных пауз. Два кандидата одного промпта. Начать сравнение можно с rev3-1; предпочтение на слух не установлено.
+Urgent industrial submarine alarm: WEE-OO WEE-OO WEE-OO WEE-OO. A clear bright tone glides up then down once per second, repeating evenly without silent gaps. Four identical rising-falling cycles in four seconds. Strong focused midrange, rounded non-piercing timbre, dry close sound. Seamless loop. No voice, no music, no horn blasts, no long pauses, no background ambience.
+Инструмент ElevenLabs Creative Studio, eleven_text_to_sound_v2; loop=true, duration_seconds=4, prompt_influence=0.9. Flow YACKoAuI8Hf838740LcE, node ik0RtTsgRMJM5iv9hDD0.
+rev3-1: session QkjeYS0bvNdGP29GkRml, generation fBXn2UTRZ3TfZzCCeYOI.
+rev3-2: session gizRilaC2sn3R9kDKZl2, generation 01jOB8y8JZNP2KLs18bw.
+Оба: сделано на Creator по подтверждению владельца. Исходники — source/alarm-siren-rev3-1.mp3 и source/alarm-siren-rev3-2.mp3. Итоговые файлы с теми же именами в папке заказа. MP3 44100 Гц / 192 кбит/с, 4.00 с, около 98 КБ каждый. Обработка: loudnorm I=-18 TP=-2 LRA=7; fade краёв по 5 мс. Измерено: rev3-1 -18.07 LUFS, -14.97 dBTP; rev3-2 -18.21 LUFS, -13.90 dBTP. Клиппинга нет; плавность стыка и характер проверить на слух, игровая проверка не проводилась.
+### Уточнение учёта кредитов
+Владелец сообщил доступный баланс около 121 000 кредитов перед этой переделкой. Это сообщение владельца, не показание API. Поле price.credits возвращает 13.332 для каждого нового варианта (26.664 суммарно); единицы и соответствие списанию с баланса не проверены. Ранее названный «фактический расход» 13.332 следует считать метаданными инструмента, а не подтверждённым списанием. Остаток после генерации неизвестен; не вычитать эти значения из 121 000 автоматически.
+
