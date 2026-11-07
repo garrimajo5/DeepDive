@@ -1,0 +1,114 @@
+{
+  "issue": 719,
+  "flow_id": "7qOl1oDCJzBRoZiqdyIZ",
+  "items": [
+    {
+      "name": "weld-1",
+      "prompt": "Seamless loop of underwater electric welding on a steel hull seam: focused arc hiss, dry irregular spark crackles and small steam bubbles close to the weld. Dense practical repair tool sound heard in a flooded steel compartment. No fireworks, angle grinder, frying pan, music, speech or animal sounds.",
+      "node_id": "C5Od412b5IgPTT7HbnoR",
+      "duration": 4,
+      "loop": true,
+      "prompt_influence": 0.85,
+      "model": "eleven_text_to_sound_v2",
+      "run": {
+        "success": true,
+        "node_id": "C5Od412b5IgPTT7HbnoR",
+        "session_id": "OdRlN2ZrdVnRsmRX6aFu",
+        "credit_costs": {
+          "SKIVJoyETgzYH4kFFWlx": 40
+        }
+      },
+      "generation_id": "SKIVJoyETgzYH4kFFWlx",
+      "credits": 40,
+      "downloaded": true
+    },
+    {
+      "name": "weld-2",
+      "duration": 4,
+      "loop": true,
+      "prompt": "Seamless loop. Underwater arc welding: coarse electric crackle over a steady narrow sizzling arc, bubbling vapor at a steel repair seam, slightly more bubbles and less sharp sparks. Close tool in a steel compartment. No frying food, fireworks, grinding wheels, music or voices.",
+      "prompt_influence": 0.85,
+      "model": "eleven_text_to_sound_v2",
+      "node_id": "U51DSIbOfDOlqUAHjdSw",
+      "run": {
+        "success": true,
+        "node_id": "U51DSIbOfDOlqUAHjdSw",
+        "session_id": "ihOl80vROIVrgvXGawcj",
+        "credit_costs": {
+          "BXvMtFJGvxRsmQHMk0fI": 40
+        }
+      },
+      "generation_id": "BXvMtFJGvxRsmQHMk0fI",
+      "credits": 40,
+      "downloaded": true
+    },
+    {
+      "name": "scanner-hold-1",
+      "duration": 3,
+      "loop": true,
+      "prompt": "Seamless loop. Quiet handheld scientific instrument scanning inside a steel submersible. Soft low electronic stepping texture over a gently swelling warm hum, restrained working device, smooth treble below 4 kHz. No alarm beeps, science fiction laser, melody, speech or music.",
+      "prompt_influence": 0.85,
+      "model": "eleven_text_to_sound_v2",
+      "node_id": "R7gRcau6acmrKNZLxD3Z",
+      "run": {
+        "success": true,
+        "node_id": "R7gRcau6acmrKNZLxD3Z",
+        "session_id": "V85Tie5qbopdiNULg2ZC",
+        "credit_costs": {
+          "5WPJEQ4Zfr8HAHHfvRVX": 30.000000000000004
+        }
+      },
+      "generation_id": "5WPJEQ4Zfr8HAHHfvRVX",
+      "credits": 30.000000000000004,
+      "downloaded": true
+    },
+    {
+      "name": "scanner-hold-2",
+      "duration": 3,
+      "loop": true,
+      "prompt": "Seamless loop. Subtle scanning instrument: muted electronic flutter and a rounded gently rising mid-low hum, calm precise measurement, dry close sound with a tiny metal room reflection. No high pitched squeaks, alarm clock beeps, lasers, voices or music.",
+      "prompt_influence": 0.85,
+      "model": "eleven_text_to_sound_v2",
+      "node_id": "qaVCGc8l6aMSGg6vT3Rd",
+      "run": {
+        "error": "429: {'type': 'rate_limit_error', 'code': 'rate_limited', 'message': 'You have made too many requests. Please try again later.', 'status': 'rate_limited', 'request_id': '83c139be34807329e6c839cf14374ed4', 'docs_url': 'https://elevenlabs.io/docs/eleven-api/resources/errors#rate-limiting-and-concurrency'}"
+      }
+    },
+    {
+      "name": "scanner-done-1",
+      "duration": 1.2,
+      "loop": false,
+      "prompt": "One short warm confirmation from a scientific instrument, two rounded electronic tones ascending, clean soft onset and gentle decay to silence, modest dry device sound. No fanfare, game coin, ringtone, tune, voices or music.",
+      "prompt_influence": 0.85,
+      "model": "eleven_text_to_sound_v2",
+      "node_id": "RAFZpnU7U3e3AM4uBE0L"
+    },
+    {
+      "name": "scanner-done-2",
+      "duration": 1.2,
+      "loop": false,
+      "prompt": "Single compact scientific scanner success signal: three soft warm ascending tones closely grouped, restrained midrange and short smooth tail fading to silence. Quiet practical instrument, no melody, fanfare, video game coin, telephone ring, voices or music.",
+      "prompt_influence": 0.85,
+      "model": "eleven_text_to_sound_v2",
+      "node_id": "XcFySrXBClHHOn73HHLi"
+    },
+    {
+      "name": "sonar-jam-1",
+      "duration": 2,
+      "loop": false,
+      "prompt": "One clear rounded metallic submarine sonar ping at the start, immediately muffled and swallowed by dense underwater silt. Dark low-pass resonance decays quickly into silence, no returning echo. Audible restrained onset, no bang, squeal, alarm, voices or music.",
+      "prompt_influence": 0.85,
+      "model": "eleven_text_to_sound_v2",
+      "node_id": "V5Xt8ekMw7BBZcBQ1bLh"
+    },
+    {
+      "name": "sonar-jam-2",
+      "duration": 2,
+      "loop": false,
+      "prompt": "Single rounded resonant metallic sonar pulse, recognizable brief ping onset followed by thick muddy low resonance that is abruptly absorbed into a soft silent tail. Underwater silt blocks the echo completely. No loud impact, shriek, multiple pings, music or speech.",
+      "prompt_influence": 0.85,
+      "model": "eleven_text_to_sound_v2",
+      "node_id": "QsGmk1Rr07S7SFS4FT0M"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "file": "weld-1.mp3",
+  "duration_seconds": 3.95,
+  "stream": "Audio: mp3 (mp3float), 44100 Hz, stereo, fltp, 192 kb/s",
+  "source_stream": "Audio: mp3 (mp3float), 44100 Hz, stereo, fltp, 128 kb/s",
+  "gain_db": -10.02,
+  "source_loudness": {
+    "input_i": "-7.98",
+    "input_tp": "0.78",
+    "input_lra": "0.00",
+    "input_thresh": "-17.98",
+    "output_i": "-17.91",
+    "output_tp": "-9.17",
+    "output_lra": "0.10",
+    "output_thresh": "-27.91",
+    "normalization_type": "dynamic",
+    "target_offset": "-0.09"
+  },
+  "final_loudness": {
+    "input_i": "-18.18",
+    "input_tp": "-9.90",
+    "input_lra": "0.00",
+    "input_thresh": "-28.18",
+    "output_i": "-17.90",
+    "output_tp": "-9.67",
+    "output_lra": "0.00",
+    "output_thresh": "-27.90",
+    "normalization_type": "dynamic",
+    "target_offset": "-0.10"
+  },
+  "sample_peak_dbfs": -10.119400652148645,
+  "boundary_jump_dbfs": [
+    -32.06625653352503,
+    -39.50344396371805
+  ],
+  "bytes": 96591,
+  "sha256": "ebb7a5efcb248041ad3400fe82676334701ddd3be3f4c6b21134efe4b617fd82"
+}

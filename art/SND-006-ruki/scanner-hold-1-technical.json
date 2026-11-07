@@ -1,0 +1,38 @@
+{
+  "file": "scanner-hold-1.mp3",
+  "duration_seconds": 2.95,
+  "stream": "Audio: mp3 (mp3float), 44100 Hz, stereo, fltp, 192 kb/s",
+  "source_stream": "Audio: mp3 (mp3float), 44100 Hz, stereo, fltp, 128 kb/s",
+  "gain_db": -8.16,
+  "source_loudness": {
+    "input_i": "-9.84",
+    "input_tp": "-0.01",
+    "input_lra": "0.10",
+    "input_thresh": "-19.84",
+    "output_i": "-17.81",
+    "output_tp": "-8.03",
+    "output_lra": "0.00",
+    "output_thresh": "-27.81",
+    "normalization_type": "dynamic",
+    "target_offset": "-0.19"
+  },
+  "final_loudness": {
+    "input_i": "-18.16",
+    "input_tp": "-8.43",
+    "input_lra": "0.00",
+    "input_thresh": "-28.16",
+    "output_i": "-17.98",
+    "output_tp": "-8.27",
+    "output_lra": "0.00",
+    "output_thresh": "-27.98",
+    "normalization_type": "linear",
+    "target_offset": "-0.02"
+  },
+  "sample_peak_dbfs": -8.4275024825651,
+  "boundary_jump_dbfs": [
+    -68.49888816337871,
+    -47.07489929245775
+  ],
+  "bytes": 72141,
+  "sha256": "55cb4ea483e11cc1a0bd33b1a59ff9c07070575acecfcc1d10d86543b51d9d9a"
+}
