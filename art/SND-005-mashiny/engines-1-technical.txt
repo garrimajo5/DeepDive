@@ -1,0 +1,32 @@
+Input #0, mp3, from 'art/SND-005-mashiny/engines-1.mp3':
+  Metadata:
+    encoder         : Lavf61.7.100
+  Duration: 00:00:15.05, start: 0.025057, bitrate: 192 kb/s
+  Stream #0:0: Audio: mp3 (mp3float), 44100 Hz, stereo, fltp, 192 kb/s
+      Metadata:
+        encoder         : Lavc61.19
+Stream mapping:
+  Stream #0:0 -> #0:0 (mp3 (mp3float) -> pcm_s16le (native))
+Press [q] to stop, [?] for help
+Output #0, null, to 'pipe:':
+  Metadata:
+    encoder         : Lavf61.7.100
+  Stream #0:0: Audio: pcm_s16le, 192000 Hz, stereo, s16, 6144 kb/s
+      Metadata:
+        encoder         : Lavc61.19.100 pcm_s16le
+[Parsed_loudnorm_0 @ 0000026d2bcc6f40] 
+{
+	"input_i" : "-18.19",
+	"input_tp" : "-8.19",
+	"input_lra" : "0.60",
+	"input_thresh" : "-28.19",
+	"output_i" : "-17.92",
+	"output_tp" : "-7.95",
+	"output_lra" : "0.50",
+	"output_thresh" : "-27.92",
+	"normalization_type" : "dynamic",
+	"target_offset" : "-0.08"
+}
+[out#0/null @ 0000026d2d5ff080] video:0KiB audio:11250KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+size=N/A time=00:00:15.00 bitrate=N/A speed=36.8x    
+
