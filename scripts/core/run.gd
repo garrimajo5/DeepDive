@@ -89,7 +89,7 @@ func begin(t: float, cargo_n: int, species_n: int, breaches_n: int) -> void:
 ## Подпись поста у голостола.
 func label() -> String:
 	if voting:
-		return "Глубже или наверх?"
+		return DescentVote.TITLE if _at_descent else "Глубже или наверх?"
 	return "Маршрут: выбрать" if route < 0 or done else "Маршрут: сменить"
 
 
@@ -184,8 +184,20 @@ func at_descent() -> bool:
 	return _at_descent
 
 
+## Гость сети: круг 10 — по кадру хоста (`NetSnap.apply_run`).
+func set_at_descent(v: bool) -> void:
+	_at_descent = v
+
+
+## Годится ли голос choice: у 10 (#1362) «наверх» нет — спуститься сейчас или позже, «вверх» ничего не делает.
+func vote_ok(choice: String) -> bool:
+	return choice != "" and not (choice == "up" and _at_descent)
+
+
 ## Часть строки состояния: «Рифовый сад 1/3 · Кости левиафана 120 м», пусто без маршрута.
 func status(x: float, z: float) -> String:
+	if _at_descent and not ended:   # у 10 — имя места, не строка маршрута (#1362)
+		return place_name(DESCENT)
 	if route < 0:
 		return ""
 	var r: Dictionary = ROUTES[route]
