@@ -155,6 +155,21 @@ static func apply(g: Main, kv: Dictionary) -> void:
 			g.helm.yaw = deg_to_rad(p[3])
 			g.helm.turn = 0.0
 		g.park_at(Vector3(p[0], p[1], p[2]))
+	if kv.has("place"):  # place=NN|ключ — корабль у места слоя 1 носом к ориентиру, камера снаружи корпуса (#1358);
+		# place_cam=front|back — перед носом / позади и выше корабля, place_dist=<м> — от ориентира, place_side=<°> — откуда
+		var pose := place_pose(kv["place"], kv.get("place_cam", "front"), float(kv.get("place_dist", str(PLACE_DIST))),
+			float(kv["place_side"]) if kv.has("place_side") else NAN)
+		if not pose.is_empty():
+			g.helm.yaw = pose["yaw"]
+			g.helm.turn = 0.0
+			g.park_at(pose["ship"])
+			var cam := Camera3D.new()
+			cam.fov = Deck.FOV
+			cam.far = 400.0
+			g.add_child(cam)
+			cam.global_position = pose["cam"]
+			cam.look_at(pose["look"])
+			cam.make_current()
 	if kv.has("lore"):  # lore=d07_return,shell03 — знания слоя 1 (#825; ключи LayerLore.KEYS)
 		for k in kv["lore"].split(",", false):
 			g.lore.learn(k)
@@ -226,3 +241,35 @@ static func apply(g: Main, kv: Dictionary) -> void:
 		mate.pad.hold = true
 		for i in int(float(kv.get("hold_s", "1.5")) * 10.0):
 			g.step(0.1)
+
+
+## Ракурс place=NN (#1358): от ориентира до середины корпуса, м.
+const PLACE_DIST := 38.0
+## Камера в осях корабля: перед носом (front) и позади-выше (back) — вне корпуса HullPlan.
+const PLACE_CAM := {"front": Vector3(0.0, 3.0, -17.0), "back": Vector3(0.0, 16.0, 62.0)}
+## Над дном: корабль и камера не ниже стольких метров.
+const PLACE_FLOOR := 7.0
+
+
+## Поза снимка места слоя 1: id из LayerMap.POINTS ("03") или ключ Run.PLACES ("shell"). Корабль на глубине ориентира
+## (не ниже PLACE_FLOOR над дном) в dist м от него, со стороны середины карты (side — пеленг от ориентира, °,
+## 0 — с юга, +z), носом к ориентиру. {ship, yaw, cam, look}; пусто — нет такого места.
+static func place_pose(name: String, kind: String = "front", dist: float = PLACE_DIST, side: float = NAN) -> Dictionary:
+	var id := name if LayerMap.POINTS.has(name) else LayerMap.id_of(name)
+	if id == "":
+		return {}
+	var at := LayerMap.at(id)
+	var away := Vector2(-at.x, -at.z).normalized()   # к середине карты
+	if not is_nan(side):
+		away = Vector2(sin(deg_to_rad(side)), cos(deg_to_rad(side)))
+	elif away == Vector2.ZERO:
+		away = Vector2(0.0, 1.0)
+	var sx := at.x + away.x * dist
+	var sz := at.z + away.y * dist
+	var ship := Vector3(sx, maxf(at.y, Seabed.height(sx, sz) + PLACE_FLOOR), sz)
+	var yaw := atan2(away.x, away.y)   # нос (−sin, −cos) — от корабля к ориентиру
+	var local: Vector3 = PLACE_CAM.get(kind, PLACE_CAM["front"])
+	var cam := ship + local.rotated(Vector3.UP, yaw)
+	cam.y = maxf(cam.y, Seabed.height(cam.x, cam.z) + PLACE_FLOOR)
+	var look := Vector3(at.x, maxf(at.y - 4.0, Seabed.height(at.x, at.z) + 2.0), at.z)
+	return {"ship": ship, "yaw": yaw, "cam": cam, "look": look}
