@@ -8,6 +8,10 @@ const MESSAGE_SECONDS := 4.2
 const RUMBS: Array[String] = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"]
 ## Сколько строк самое большее у одной длинной части (описание вида из журнала); дальше — «…».
 const PART_LINES := 4
+## Строка приборов — не больше стольких строк на любом посту (#1345): место и общие приборы, данные поста, сообщение.
+const MAX_ROWS := 3
+## Течение пишем строкой поста за штурвалом только с такой скорости (м/с); слабее — лишь сообщением при смене.
+const CURRENT_SHOWN := 0.5
 
 
 ## Разложить части по строкам ширины width; measure — ширина текста (в сцене — шрифт, в тестах — число букв).
@@ -48,7 +52,7 @@ static func lines(parts: Array, measure: Callable, width: float) -> PackedString
 
 ## Текст по словам в строки ширины width, не больше PART_LINES; не влезло — последняя строка кончается «…».
 ## Слово шире строки стоит одно.
-static func wrap_words(text: String, measure: Callable, width: float) -> PackedStringArray:
+static func wrap_words(text: String, measure: Callable, width: float, limit: int = PART_LINES) -> PackedStringArray:
 	var out := PackedStringArray()
 	var cur := ""
 	for word in text.split(" ", false):
@@ -60,12 +64,37 @@ static func wrap_words(text: String, measure: Callable, width: float) -> PackedS
 			cur = word
 	if not cur.is_empty():
 		out.append(cur)
-	if out.size() > PART_LINES:
-		var last := out[PART_LINES - 1]
+	limit = maxi(1, limit)
+	if out.size() > limit:
+		var last := out[limit - 1]
 		while last.contains(" ") and float(measure.call(last + "…")) > width:
 			last = last.substr(0, last.rfind(" "))
-		out.resize(PART_LINES)
-		out[PART_LINES - 1] = last.rstrip(" ,.;:—") + "…"
+		out.resize(limit)
+		out[limit - 1] = last.rstrip(" ,.;:—") + "…"
+	return out
+
+
+## Строки по рядам приборов (#1345): каждый ряд, кроме последнего, — своими строками (`lines`, обычно одна);
+## последний (тревога и сообщение) — одним текстом по словам на оставшиеся до max_rows строки (хотя бы одну), хвост — «…».
+## Повтор части в другом ряду не пишется.
+static func rows(by_row: Array, measure: Callable, width: float, max_rows: int = MAX_ROWS) -> PackedStringArray:
+	var out := PackedStringArray()
+	var seen := {}
+	for i in by_row.size():
+		var parts: Array = []
+		for raw in by_row[i]:
+			var p := str(raw).strip_edges()
+			if p.is_empty() or seen.has(p.to_lower()):
+				continue
+			seen[p.to_lower()] = true
+			parts.append(p)
+		if parts.is_empty():
+			continue
+		if i < by_row.size() - 1:
+			out.append_array(lines(parts, measure, width))
+		else:
+			out.append_array(wrap_words(SEPARATOR.join(PackedStringArray(parts)), measure, width,
+				maxi(1, max_rows - out.size())))
 	return out
 
 
@@ -108,6 +137,18 @@ class Lines:
 			return false
 		key = k
 		text = "\n".join(Status.lines(parts, measure, width))
+		return true
+
+	## То же по рядам приборов (`Status.rows`, #1345).
+	func update_rows(by_row: Array, measure: Callable, width: float, size: int = 0) -> bool:
+		var flat := PackedStringArray()
+		for r: Array in by_row:
+			flat.append("\u001f".join(PackedStringArray(r.map(func(p): return str(p)))))
+		var k := "%s|%d|%s" % [width, size, "\u001e".join(flat)]
+		if k == key:
+			return false
+		key = k
+		text = "\n".join(Status.rows(by_row, measure, width))
 		return true
 
 

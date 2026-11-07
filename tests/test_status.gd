@@ -101,14 +101,15 @@ func test_scene_status_and_messages() -> void:
 	main.step(0.1)
 	var line := Status.join(main.status_parts())
 	ok(line.begins_with("Мостик · глубина 30 м"), "на ногах: %s" % line)
-	ok(line.contains("Сесть за штурвал"), "у кресла — подсказка поста")
+	ok(not line.contains("Сесть за штурвал"), "подписи поста в строке нет — она на кнопке (#1345): %s" % line)
+	ok(not line.contains("течение"), "слабое течение не висит в строке (#1345)")
 	main.sit_at_helm()
 	main.step(0.1)
 	line = Status.join(main.status_parts())
 	ok(line.contains("За штурвалом") and line.contains("курс 0°") and line.contains("до дна") and line.contains("Вы за штурвалом"), line)
 	main.toggle_light()
 	main.step(0.1)
-	ok(Status.join(main.status_parts()).contains("прожектор выкл · реактор 100/100 · течение на ЮВ 0,3 м/с · Прожектор погашен"), Status.join(main.status_parts()))
+	ok(Status.join(main.status_parts()).contains("прожектор выкл · реактор 100/100 · Прожектор погашен"), Status.join(main.status_parts()))
 	main.stand_up()
 	main.step(0.1)
 	ok(not main.message.visible() or main.message.text != Main.SAT_MSG, "после «Встать» «Вы за штурвалом» не висит")
@@ -155,3 +156,42 @@ func test_lines_cached_until_change() -> void:
 	ok(l.update(["Мостик", "глубина 21 м", "ход 1,5 м/с"], counted, 12.0, 24), "другой размер шрифта — пересчёт")
 	ok(l.update(["Мостик", "глубина 21 м"], counted, 12.0, 24), "часть ушла — пересчёт")
 	ok(l.update(["Мостик глубина 21 м"], counted, 12.0, 24), "склейка частей — другая строка")
+
+
+## #1345: ряды приборов — последний (тревога и сообщение) по словам на оставшиеся строки, всего не больше трёх.
+func test_rows_at_most_three() -> void:
+	var m := func(t: String) -> float: return float(t.length())
+	var rows := [["За штурвалом", "глубина 120 м", "ход 2,4 м/с"], ["до дна 8 м", "курс 90°"],
+		["ПРОБОИНА · МОСТИК", "Пробоина: мостик — держите «Сварка» у пробоины, вода прибывает, плафоны гаснут"]]
+	var out := Status.rows(rows, m, 50.0)
+	eq(out.size(), 3, "три строки: %s" % [out])
+	eq(out[0], "За штурвалом · глубина 120 м · ход 2,4 м/с", "ряд 1")
+	eq(out[1], "до дна 8 м · курс 90°", "ряд 2")
+	ok(out[2].begins_with("ПРОБОИНА · МОСТИК · Пробоина") and out[2].ends_with("…"), "ряд 3 ужат: %s" % out[2])
+	eq(Status.rows([["а"], [], ["б"]], m, 50.0), PackedStringArray(["а", "б"]), "пустой ряд не строка")
+	eq(Status.rows([["а"], ["а", "в"]], m, 50.0), PackedStringArray(["а", "в"]), "повтор в другом ряду не пишется")
+
+
+## #1345: за штурвалом с маршрутом, сообщением и сменой течения строка приборов на экране — не больше трёх строк;
+## течение — сообщением с направлением.
+func test_scene_pilot_status_three_lines() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.run.choose(0)
+	main.sit_at_helm()
+	main.current.timer = 0.05
+	main.step(0.1)
+	ok(main.message.text.begins_with("Течение сменилось: на ") and main.message.text.ends_with(" 0,3 м/с"),
+		"смена течения — сообщением: %s" % main.message.text)
+	main.on_eco_event(EcoLink.message(EcoVent.WARN_TEXT))
+	main.open_silt()
+	for i in 3:
+		main.step(0.1)
+	var rows := main.status_rows()
+	eq(rows.size(), 3, "три ряда")
+	eq(str(rows[0][0]), "За штурвалом", "якорь «где я» — первым")
+	eq(rows[2][0], Silt.ALARM, "тревога — в третьем ряду")
+	ok(main.hint.text.split("\n").size() <= 3, "на экране ≤ 3 строк:\n%s" % main.hint.text)
+	main.queue_free()
+	await frames(1)

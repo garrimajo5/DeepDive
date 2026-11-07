@@ -368,7 +368,8 @@ func _build_ui() -> void:
 	hint.add_theme_constant_override("outline_size", 6)
 	hint.add_theme_constant_override("line_spacing", -2)
 	ui.add_child(hint)
-	current.changed.connect(func(_i: int) -> void: say("Течение сменилось"))
+	current.changed.connect(func(_i: int) -> void:   # куда и как сильно — сообщением, не постоянной частью строки (#1345)
+		say("Течение сменилось: " + _current_text(current.target_vel()).trim_prefix("течение ")))
 	power_panel = PowerPanel.new()
 	power_panel.name = "Пульт энергии"
 	ui.add_child(power_panel)
@@ -1717,7 +1718,7 @@ func _update_ui() -> void:
 	var font := hint.get_theme_font("font")
 	var fs := hint.get_theme_font_size("font_size")
 	var width := minf(900.0, get_viewport().get_visible_rect().size.x - 48.0)
-	if status_lines.update(status_parts(),   # шрифтом меряем только новую строку (#847)
+	if status_lines.update_rows(status_rows(),   # шрифтом меряем только новую строку (#847)
 			func(t: String) -> float: return font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x, width, fs):
 		hint.text = status_lines.text
 		hint.reset_size()   # Label сам растёт, но не ужимается: после длинного сообщения плашка оставалась высокой
@@ -1783,35 +1784,46 @@ func alarms_on() -> Array[bool]:
 		vitals.energy < Vitals.LOW_ENERGY)
 
 
-## Части строки состояния: где игрок, глубина, ход, у штурвала — до дна, курс и прожектор, течение, пост рядом, сообщение.
-func status_parts() -> Array:
-	var parts: Array = []
+## Ряды строки приборов, не больше трёх строк (#1345): 1 — где я · глубина · ход · корпус · энергия; 2 — данные поста
+## (за штурвалом: до дна · курс · прожектор · реактор, течение — только сильное; на палубе: маршрут · реактор · шлюз);
+## 3 — тревога и сообщение. Подписи постов здесь нет — они на кнопке действия; цель за штурвалом — в плашке (#1344).
+func status_rows() -> Array:
+	var where := "За штурвалом" if pilot.seated else ShipLayout.ROOM_NAMES[ShipLayout.room_at(walker.z)]
+	var row1: Array = [where, "глубина %d м" % roundi(helm.depth()), "ход %s м/с" % _num(helm.speed),
+		"корпус %d%%" % roundi(vitals.hull), "энергия %d" % floori(vitals.energy)]
+	var row2: Array = []
+	if pilot.seated:
+		row2.append("до дна %d м" % roundi(helm.pos.y - Seabed.height(helm.pos.x, helm.pos.z)))
+		row2.append("курс %d°" % Status.course_deg(helm.yaw))
+		row2.append("прожектор %s" % ("вкл" if light_on else "выкл"))
+	else:
+		row2.append(run.status(helm.pos.x, helm.pos.z))
+	if reactor.alert().is_empty():
+		row2.append("реактор %d/%d" % [reactor.used(), reactor.limit()])
+	if pilot.seated and current.vel().length() >= Status.CURRENT_SHOWN:
+		row2.append(_current_text(current.vel()))
+	if not airlock.closed():
+		row2.append("шлюз открыт" if airlock.fully_open() else "шлюз в движении")
+	var row3: Array = []
 	var alarm := Status.alarm([breach.status(), vitals.drain_alarm(), reactor.alert(), silt.alarm(), vitals.warning()])
 	if not alarm.is_empty():
-		parts.append(alarm)
-	parts.append("За штурвалом" if pilot.seated else ShipLayout.ROOM_NAMES[ShipLayout.room_at(walker.z)])
-	parts.append("глубина %d м" % roundi(helm.depth()))
-	parts.append("ход %s м/с" % _num(helm.speed))
-	parts.append("корпус %d%%" % roundi(vitals.hull))
-	parts.append("энергия %d" % floori(vitals.energy))
-	if pilot.seated:
-		parts.append("до дна %d м" % roundi(helm.pos.y - Seabed.height(helm.pos.x, helm.pos.z)))
-		parts.append("курс %d°" % Status.course_deg(helm.yaw))
-		parts.append("прожектор %s" % ("вкл" if light_on else "выкл"))
-	if not pilot.seated:   # за штурвалом цель — в плашке `GoalPlate` (#1344), строка приборов короче
-		parts.append(run.status(helm.pos.x, helm.pos.z))
-	if reactor.alert().is_empty():
-		parts.append("реактор %d/%d" % [reactor.used(), reactor.limit()])
-	parts.append("течение на %s %s м/с" % [Status.rumb(current.vel()), _num(Helm.SeaCurrent.SPEED)])
-	if not airlock.closed():
-		parts.append("шлюз открыт" if airlock.fully_open() else "шлюз в движении")
-	if not pilot.seated and not at_power and not at_vote:
-		var post := Deck.nearest(posts, walker.x, walker.z)
-		if post:
-			parts.append(post.label)
+		row3.append(alarm)
 	if message.visible():
-		parts.append(message.text)
+		row3.append(message.text)
+	return [row1, row2, row3]
+
+
+## Все части строки приборов подряд (лог, тесты): ряды `status_rows` один за другим.
+func status_parts() -> Array:
+	var parts: Array = []
+	for r: Array in status_rows():
+		parts.append_array(r)
 	return parts
+
+
+## «на ЮВ 0,3 м/с» — течение для приборов и сообщения о смене.
+static func _current_text(v: Vector3) -> String:
+	return "течение на %s %s м/с" % [Status.rumb(v), _num(Vector2(v.x, v.z).length())]
 
 
 static func _num(v: float) -> String:

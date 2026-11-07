@@ -90,7 +90,7 @@ func test_scene_silt_blinds_sonar() -> void:
 	main.open_silt()
 	main.step(1.0 / 30.0)
 	ok(main.silt.inside != null, "корабль в облаке")
-	ok(main.status_parts()[0] == Silt.ALARM, "табло тревог — первой частью строки")
+	ok(main.status_rows()[2][0] == Silt.ALARM, "тревога — первой в ряду сообщений")
 	ok(main.silt_view.shown > 0, "хлопья ила видны")
 	ok(main.silt_view.near_bow >= 60, "перед мостиком рой хлопьев (ART-048), а не пусто: %d" % main.silt_view.near_bow)
 	var mi := main.silt_view.multimesh
@@ -114,7 +114,7 @@ func test_scene_silt_blinds_sonar() -> void:
 	ok(main.eco_ship.light_range < full * 0.6, "луч в иле короче")
 	main.silt.reset()
 	main.step(1.0 / 30.0)
-	ok(not main.status_parts()[0].begins_with("СОНАРНАЯ"), "ил ушёл — тревоги нет")
+	ok(not Status.join(main.status_parts()).contains("СОНАРНАЯ"), "ил ушёл — тревоги нет")
 	main.queue_free()
 	await frames(1)
 

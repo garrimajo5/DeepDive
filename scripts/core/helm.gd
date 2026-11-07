@@ -30,6 +30,10 @@ class SeaCurrent:
 	func vel() -> Vector3:
 		return Vector3(sin(angle) * SPEED, 0.0, cos(angle) * SPEED)
 
+	## Куда течение поворачивает (после смены `angle` догоняет `target` не сразу).
+	func target_vel() -> Vector3:
+		return Vector3(sin(target) * SPEED, 0.0, cos(target) * SPEED)
+
 	func update(dt: float) -> void:
 		timer -= dt
 		if timer <= 0.0:
