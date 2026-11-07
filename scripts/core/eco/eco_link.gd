@@ -237,6 +237,15 @@ const NET_SHOAL := -2
 const NET_SHOAL_STRIDE := 12
 
 
+## Корабль в позе (pos, yaw) упёрся бы в твёрдое существо мира — гротовика с рифом (`EcoGrot.blocks`). Ставит
+## `Helm.Ship.solid` (вместе с аркой 07): корабль скользит вдоль, как у стены. Нет мира — ничего твёрдого.
+static func solid(systems: Array, pos: Vector3, yaw: float) -> bool:
+	for s in systems:
+		if s is EcoGrot and (s as EcoGrot).blocks(pos, yaw):
+			return true
+	return false
+
+
 ## Система светляков из списка систем мира или null.
 static func fish_of(systems: Array) -> EcoFish:
 	for s in systems:

@@ -9,7 +9,8 @@ extends EcoSystem
 ## Корабль задел панцирь (ближе R + SHIP_PAD по горизонтали и ниже верха рифа) — гротовик прячет ноги и замирает
 ## на 10 с («shy», не чаще раза в 25 с), стая на спине пугается на 3 с. На ходу рядом с кораблём (спина ближе 35 м)
 ## — наблюдение «drift» раз в 90 с. Заметен сонару и сканеру — у спины, размер 3 м.
-## Столкновение корабля с панцирем — `solid` (World.obstacles в браузере), подключить — поток А.
+## Корабль не проходит сквозь панцирь и риф (World.obstacles в браузере): `blocks` — для `Helm.Ship.solid` через
+## `EcoLink.solid`; сам гротовик в корабль не шагает — стоит, пока шаг вёл бы панцирь в обшивку.
 
 const ID := "grot"
 ## Круг по отмели (x, z) — как в браузере (js: [[-22, 62], [18, 44], [30, 4], [-14, 12]]).
@@ -50,6 +51,14 @@ const DRIFT_R := 35.0
 const TARGET_R := 3.0
 ## Панцирь для столкновения: полуэллипсоид SHELL (ширина, высота, длина) над телом, с запасом на голову спереди.
 const SHELL := Vector3(2.4, 1.1, 3.2)
+## Корабль и гротовик: точки панциря и рифа (`body_points`, оси тела над низом панциря) ближе HULL_PAD к обшивке
+## (`EcoHull.touches`) — задел. Риф — два кольца веток REEF_R на высотах REEF_H и макушка REEF_TOP (ветки
+## `GrotView.branch` — до ~2,7 м над телом). Дальше HULL_FAR по горизонтали — без счёта.
+const HULL_PAD := 0.3
+const REEF_R := Vector2(1.5, 2.0)
+const REEF_H: Array[float] = [1.4, 2.2]
+const REEF_TOP := 2.7
+const HULL_FAR := EcoHull.BOUND + 4.0
 ## Без дна (тесты без ground) тело стоит на этой высоте.
 const FALLBACK_FLOOR := -40.0
 ## Панцирь ложится по склону (grafika-plan-eco, Б3 «Плавность поведения»): дно щупается под ступнями — спереди и сзади
@@ -164,8 +173,16 @@ func step(world: EcoWorld, dt: float) -> void:
 			var want := want_stride(diff, gr.lift)
 			gr.stride = move_toward(gr.stride, want, (ACCEL if want > gr.stride else BRAKE) * dt)
 			gr.yaw += diff * minf(1.0, dt * TURN)
+			var was := gr.p
 			gr.p.x += sin(gr.yaw) * SPEED * gr.stride * dt
 			gr.p.z += cos(gr.yaw) * SPEED * gr.stride * dt
+			if touches_ship(gr, world.ship.pos, world.ship.yaw):   # в корабль не шагает — стоит
+				var p_new := gr.p
+				gr.p = was
+				if touches_ship(gr, world.ship.pos, world.ship.yaw):
+					gr.p = p_new   # уже в обшивке (корабль сел сверху) — не держим, уходит
+				else:
+					gr.stride = 0.0
 			if Vector2(gr.p.x - gr.tilt_at.x, gr.p.z - gr.tilt_at.y).length() > TILT_STEP \
 					or absf(wrapf(gr.yaw - gr.tilt_at.z, -PI, PI)) > TILT_TURN:
 				_feel(gr)
@@ -249,6 +266,44 @@ func solid(p: Vector3) -> bool:
 		return false
 	var e := Vector3(q.x / SHELL.x, maxf(q.y, 0.0) / SHELL.y, q.z / (SHELL.z + 0.6))
 	return e.length_squared() < 1.0
+
+
+## Точки панциря и рифа для столкновения с кораблём — в осях тела (y = 0 — низ панциря): полуэллипсоид SHELL
+## (с головой спереди, как в `solid`) тремя кольцами и верхом, риф — кольцами REEF_R и макушкой.
+static var _points := PackedVector3Array()
+
+
+static func body_points() -> PackedVector3Array:
+	if _points.is_empty():
+		for h: float in [0.0, 0.55, 0.9]:
+			var k := sqrt(1.0 - h * h)
+			for i in 10:
+				var a := TAU * i / 10.0
+				_points.append(Vector3(sin(a) * SHELL.x * k, h * SHELL.y, cos(a) * (SHELL.z + 0.6) * k))
+		_points.append(Vector3(0, SHELL.y, 0))
+		for h: float in REEF_H:
+			for i in 8:
+				var a := TAU * i / 8.0
+				_points.append(Vector3(sin(a) * REEF_R.x, h, cos(a) * REEF_R.y))
+		_points.append(Vector3(0, REEF_TOP, 0))
+	return _points
+
+
+## Задевает ли корабль в позе (ship_pos, ship_yaw) панцирь или риф гротовика gr.
+static func touches_ship(gr: Walker, ship_pos: Vector3, ship_yaw: float) -> bool:
+	if Vector2(ship_pos.x - gr.p.x, ship_pos.z - gr.p.z).length() > HULL_FAR:
+		return false
+	var base := Vector3(gr.p.x, gr.body_y, gr.p.z)
+	var b := gr.basis()
+	for q in body_points():
+		if EcoHull.touches(base + b * q, ship_pos, ship_yaw, HULL_PAD):
+			return true
+	return false
+
+
+## Корабль в позе (pos, yaw) упёрся бы в гротовика — для `Helm.Ship.solid` (через `EcoLink.solid`).
+func blocks(pos: Vector3, yaw: float) -> bool:
+	return grot != null and touches_ship(grot, pos, yaw)
 
 
 ## Гротовик виден сонару и сканеру.

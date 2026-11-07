@@ -263,7 +263,7 @@ func _build_outside() -> void:
 		silt.slide_origin = eco.drop.slide_cloud_point()
 	gate_view = GateView.new()
 	ocean.add_child(gate_view)
-	helm.solid = GateArch.hits   # корабль сквозь опоры арки 07 не проходит (#826)
+	helm.solid = _solid   # корабль сквозь опоры арки 07 (#826) и гротовика с рифом (EcoLink.solid) не проходит
 
 
 ## Сборка: корабль — мостик, вспышка разряда, отсеки, экипаж, метки, посты, прожектор, корпус, камеры.
@@ -1168,6 +1168,11 @@ func fire_zap() -> void:
 
 
 ## Шаг живого мира: корабль отдаёт своё состояние, получает события (EcoLink) и решает, что с ними делать.
+## Твёрдое для хода корабля: арка 07 и существа мира (`Helm.Ship.solid`).
+func _solid(pos: Vector3, yaw: float) -> bool:
+	return GateArch.hits(pos, yaw) or (eco != null and EcoLink.solid(eco.world.systems, pos, yaw))
+
+
 func _step_eco(dt: float) -> void:
 	var s := _fill_ship_state(true)
 	var events := eco.step(dt, s)

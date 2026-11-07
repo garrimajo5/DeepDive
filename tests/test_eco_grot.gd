@@ -597,3 +597,59 @@ func test_view_legs_mesh_walks_and_rests() -> void:
 		eq(x, 0.0, "далеко — ноги не шагают")
 	gv.queue_free()
 	await frames(1)
+
+
+# ---------- Корабль не проходит сквозь панцирь и риф ----------
+
+func _helm(w: EcoWorld) -> Helm.Ship:
+	var s := Helm.Ship.new()
+	s.ground = _flat
+	s.solid = func(p: Vector3, yaw: float) -> bool: return EcoLink.solid(w.systems, p, yaw)
+	return s
+
+
+func test_ship_at_grot_touches_reef() -> void:
+	var w := _world()
+	var g: EcoGrot = _sys(w, EcoGrot)
+	var gr := g.grot
+	var low := FLAT + Helm.Ship.CLEARANCE
+	ok(g.blocks(Vector3(gr.p.x, low, gr.p.z), 0.0), "корабль у дна над гротовиком задевает риф")
+	ok(not g.blocks(Vector3(gr.p.x, gr.top + 12.0, gr.p.z), 0.0), "высоко над рифом — свободно")
+	ok(not g.blocks(Vector3(gr.p.x + 60.0, low, gr.p.z), 0.0), "в 60 м — свободно")
+
+
+func test_ship_cannot_pass_through_grot() -> void:
+	var w := _world()
+	var g: EcoGrot = _sys(w, EcoGrot)
+	var gr := g.grot
+	gr.shy = 1e9   # стоит на месте
+	var s := _helm(w)
+	s.pos = Vector3(gr.p.x, FLAT + Helm.Ship.CLEARANCE, gr.p.z + 45.0)
+	s.yaw = 0.0   # нос к −Z — прямо на гротовика
+	s.in_thrust = 1.0
+	var dt := 1.0 / 60.0
+	for i in int(20.0 / dt):
+		s.update(dt)
+		w.ship.pos = s.pos
+		w.ship.yaw = s.yaw
+		if g.blocks(s.pos, s.yaw):
+			ok(false, "корабль вошёл в гротовика на %.1f с" % (i * dt))
+			return
+	ok(s.pos.z > gr.p.z, "не прошёл насквозь: z %.1f" % s.pos.z)
+
+
+func test_grot_does_not_walk_into_ship() -> void:
+	var w := _world()
+	var g: EcoGrot = _sys(w, EcoGrot)
+	var gr := g.grot
+	# корабль стоит на пути ко второй точке круга, в 20 м впереди
+	var to := (EcoGrot.ROUTE[1] - EcoGrot.ROUTE[0]).normalized()
+	var at := EcoGrot.ROUTE[0] + to * 20.0
+	w.ship.pos = Vector3(at.x, FLAT + Helm.Ship.CLEARANCE, at.y)
+	w.ship.yaw = atan2(to.x, to.y)   # бортом к нему не важно — корпус длинный
+	for i in 1200:   # 60 с
+		w.step(0.05)
+		if EcoGrot.touches_ship(gr, w.ship.pos, w.ship.yaw):
+			ok(false, "гротовик вошёл в корабль на %.1f с" % (i * 0.05))
+			return
+	ok(Vector2(gr.p.x, gr.p.z).distance_to(EcoGrot.ROUTE[0]) > 2.0, "дошёл до корабля и встал")

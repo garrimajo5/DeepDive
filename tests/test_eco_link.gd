@@ -1008,3 +1008,26 @@ func test_ship_shielded_after_summary() -> void:
 	main.step(0.1)
 	ok(fake.got.shielded, "на итоге забега мир знает: корабль под защитой")
 	main.queue_free()
+
+
+func test_solid_grot_blocks_ship() -> void:   # гротовик с рифом — твёрдый для хода корабля (EcoLink.solid)
+	eq(EcoLink.solid([], Vector3.ZERO, 0.0), false, "нет мира — ничего твёрдого")
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float: return -40.0
+	w.ship.pos = Vector3(500, -30, 500)
+	var g := w.add(EcoGrot.new()) as EcoGrot
+	var at := Vector3(g.grot.p.x, -40.0 + Helm.Ship.CLEARANCE, g.grot.p.z)
+	ok(EcoLink.solid(w.systems, at, 0.0), "корабль в гротовике — твёрдое")
+	ok(not EcoLink.solid(w.systems, at + Vector3(80, 0, 0), 0.0), "в 80 м — свободно")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var gr: EcoGrot = null
+	for s in main.eco.world.systems:
+		if s is EcoGrot:
+			gr = s
+	ok(gr != null, "гротовик в мире")
+	var p := Vector3(gr.grot.p.x, gr.grot.body_y + 2.0, gr.grot.p.z)
+	ok(main.helm.solid.call(p, 0.0), "ход корабля упирается в гротовика")
+	main.queue_free()
+	await frames(1)
