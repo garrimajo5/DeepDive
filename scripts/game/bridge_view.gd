@@ -257,12 +257,14 @@ static func light_texture(n: Node3D) -> void:
 
 
 ## Экраны пульта светятся ровным голубым (пока на них ничего не рисуем); три экрана — своя яркость у каждого
-## (`shaders/console_screens.gdshader`, помехи — `set_screens`).
+## (`shaders/console_screens.gdshader`, помехи — `set_screens`); сетка — `BridgeProps.screen_mesh` вместо плоскости
+## из GLB (#1388).
 func _light_screens(n: Node3D) -> void:
 	screens_mat = ShaderMaterial.new()
 	screens_mat.shader = load("res://shaders/console_screens.gdshader")
 	screens_mat.set_shader_parameter("glow", BridgeProps.SCREEN_GLOW)
 	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).mesh = BridgeProps.screen_mesh()   # стёкла по рамкам корпуса (#1388)
 		(mi as MeshInstance3D).material_override = screens_mat
 
 
