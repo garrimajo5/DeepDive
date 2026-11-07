@@ -1,0 +1,64 @@
+[
+  {
+    "model": "muzhchina",
+    "original_payload_equal": true,
+    "triangles": 7899,
+    "clips": {
+      "Idle": {
+        "mesh_min_y": -0.0010323119443276228,
+        "loop_max_vertex_error_m": 0.0,
+        "Left_sole_motion_m": 0.00034691658327316264,
+        "Right_sole_motion_m": 0.00036356119181845124
+      },
+      "Walk": {
+        "mesh_min_y": -0.02710934205135087,
+        "loop_max_vertex_error_m": 0.0,
+        "Left_sole_world_slip_m": 0.05744169271078485,
+        "Right_sole_world_slip_m": 0.05963773337147958
+      },
+      "SitIdle": {
+        "mesh_min_y": -0.004312795438631964,
+        "loop_max_vertex_error_m": 0.0,
+        "Left_sole_motion_m": 0.00046665864297197336,
+        "Right_sole_motion_m": 0.00047092783247678423
+      },
+      "PostIdle": {
+        "mesh_min_y": -0.001027141919865232,
+        "loop_max_vertex_error_m": 0.0,
+        "Left_sole_motion_m": 0.00036030489447554115,
+        "Right_sole_motion_m": 0.0003567091825612692
+      }
+    }
+  },
+  {
+    "model": "zhenshchina",
+    "original_payload_equal": true,
+    "triangles": 7981,
+    "clips": {
+      "Idle": {
+        "mesh_min_y": -4.361910099043332e-05,
+        "loop_max_vertex_error_m": 0.0,
+        "Left_sole_motion_m": 7.380504548012566e-05,
+        "Right_sole_motion_m": 0.00011316218306422709
+      },
+      "Walk": {
+        "mesh_min_y": -0.0006800956638469078,
+        "loop_max_vertex_error_m": 0.0,
+        "Left_sole_world_slip_m": 0.008775713907073891,
+        "Right_sole_world_slip_m": 0.014839620185860068
+      },
+      "SitIdle": {
+        "mesh_min_y": 2.826497964204214e-05,
+        "loop_max_vertex_error_m": 0.0,
+        "Left_sole_motion_m": 0.00011549672833981151,
+        "Right_sole_motion_m": 0.0001635323307540279
+      },
+      "PostIdle": {
+        "mesh_min_y": -5.959992483267138e-06,
+        "loop_max_vertex_error_m": 0.0,
+        "Left_sole_motion_m": 7.290474784768825e-05,
+        "Right_sole_motion_m": 0.00011263668359360144
+      }
+    }
+  }
+]

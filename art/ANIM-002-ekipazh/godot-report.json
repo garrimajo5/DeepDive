@@ -1,0 +1,62 @@
+[
+  {
+    "all_meshes_skinned": true,
+    "bones": 24,
+    "clips": {
+      "Idle": {
+        "length": 4.0,
+        "loop_mode": 1,
+        "tracks": 15
+      },
+      "PostIdle": {
+        "length": 4.0,
+        "loop_mode": 1,
+        "tracks": 15
+      },
+      "SitIdle": {
+        "length": 4.0,
+        "loop_mode": 1,
+        "tracks": 15
+      },
+      "Walk": {
+        "length": 0.800000011920929,
+        "loop_mode": 1,
+        "tracks": 15
+      }
+    },
+    "file": "ekipazh-muzhchina.glb",
+    "mesh_count": 1,
+    "rest_max_delta": 0.0,
+    "skeleton_count": 1
+  },
+  {
+    "all_meshes_skinned": true,
+    "bones": 24,
+    "clips": {
+      "Idle": {
+        "length": 4.0,
+        "loop_mode": 1,
+        "tracks": 16
+      },
+      "PostIdle": {
+        "length": 4.0,
+        "loop_mode": 1,
+        "tracks": 16
+      },
+      "SitIdle": {
+        "length": 4.0,
+        "loop_mode": 1,
+        "tracks": 16
+      },
+      "Walk": {
+        "length": 0.800000011920929,
+        "loop_mode": 1,
+        "tracks": 16
+      }
+    },
+    "file": "ekipazh-zhenshchina.glb",
+    "mesh_count": 1,
+    "rest_max_delta": 0.0,
+    "skeleton_count": 1
+  }
+]
