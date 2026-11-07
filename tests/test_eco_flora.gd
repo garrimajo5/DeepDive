@@ -469,3 +469,92 @@ func test_coral_lite_kept_after_world_reset() -> void:
 	eq(ev.coral_view.tris, t, "и меш грубый")
 	ev.set_lite(false)
 	ev.free()
+
+
+# ---------- Огнецвет: проход хищника (#1339) ----------
+
+## Огнецвет с одним серпохвостом, которого двигает тест (в мир не добавлен — сам не плывёт).
+func _pred_coral() -> Array:
+	var w := EcoWorld.new()
+	w.ground = Seabed.height
+	w.ship.pos = Vector3(500, 0, 500)
+	var ps := EcoPred.new()
+	var pr := EcoPred.Pred.new()
+	pr.agent = EcoAgent.new(EcoPred.ID, Vector3(500, -20, -500))
+	ps.all.append(pr)
+	var co := w.add(EcoCoral.new([], ps)) as EcoCoral
+	return [w, co, pr, ps]
+
+
+## Тихий неподвижный корабль: хищник проходит у куста — ближний гаснет и снова разгорается, дальний горит;
+## строка не называет хищника и не путает с кораблём.
+func test_coral_dims_from_passing_pred() -> void:
+	var a := _pred_coral()
+	var w: EcoWorld = a[0]
+	var co: EcoCoral = a[1]
+	var pr: EcoPred.Pred = a[2]
+	var b := co.bushes[1]
+	w.ship.pos = b.top + Vector3(30, 5, 0)
+	w.ship.speed = 0.0
+	w.run(1.0)
+	near(b.glow, 1.0, 1e-6, "до прохода — горит")
+	# хищник проплывает мимо вершины за ~6 с со скоростью патруля
+	var spooked := false
+	for i in 120:
+		pr.agent.p = b.top + Vector3(-9.0 + i * 0.15, 2.0, 6.0)
+		w.step(0.05)
+		spooked = spooked or b.spooked
+	ok(b.glow < EcoCoral.DARK, "ближний куст погас: %.2f" % b.glow)
+	ok(spooked, "гас от хищника, не от корабля")
+	for i in [0, 2, 3]:
+		near(co.bushes[i].glow, 1.0, 1e-6, "дальний куст %d горит" % i)
+	var msgs := _texts(w.take_link())
+	eq(msgs, ["Огнецвет гасит огни — рядом прошёл кто-то крупный"] as Array[String], "строка без «хищник»")
+	pr.agent.p = Vector3(500, -20, -500)
+	w.run(26.0)
+	near(b.glow, 1.0, 1e-6, "ушёл — разгорается")
+	ok(not b.spooked)
+
+
+## Хищник на чистке у станции не гасит куст (перемирие); мёртвый — тоже; далеко от корабля — без строки.
+func test_coral_ignores_cleaning_pred_and_far_ship() -> void:
+	var a := _pred_coral()
+	var w: EcoWorld = a[0]
+	var co: EcoCoral = a[1]
+	var pr: EcoPred.Pred = a[2]
+	var b := co.bushes[0]
+	pr.agent.p = b.top + Vector3(0, 1, 0)
+	pr.mode = EcoPred.Mode.CLEAN
+	w.run(3.0)
+	near(b.glow, 1.0, 1e-6, "на чистке — горит")
+	pr.mode = EcoPred.Mode.PATROL
+	pr.agent.alive = false
+	w.run(3.0)
+	near(b.glow, 1.0, 1e-6, "мёртвый не гасит")
+	pr.agent.alive = true
+	w.run(3.0)
+	ok(b.glow < EcoCoral.DARK, "живой в патруле гасит")
+	eq(_texts(w.take_link()).size(), 0, "корабль далеко — кустов не видно, строки нет")
+
+
+## Шум корабля — своя строка, хищник рядом её не перебивает.
+func test_coral_ship_noise_wins_message() -> void:
+	var a := _pred_coral()
+	var w: EcoWorld = a[0]
+	var co: EcoCoral = a[1]
+	var pr: EcoPred.Pred = a[2]
+	var b := co.bushes[2]
+	w.ship.pos = b.top + Vector3(10, 0, 0)
+	w.ship.speed = 5.0
+	pr.agent.p = b.top + Vector3(-5, 0, 0)
+	w.run(2.0)
+	ok(not b.spooked, "гаснет от корабля")
+	var msgs := _texts(w.take_link())
+	eq(msgs.size(), 1)
+	ok(msgs[0].ends_with("корабль шумит рядом"), msgs[0])
+
+
+## В сцене огнецвет видит серпохвостов мира.
+func test_coral_wired_to_preds_in_view() -> void:
+	var src := FileAccess.get_file_as_string("res://scripts/game/eco/eco_view.gd")
+	ok(src.contains("EcoCoral.new([], preds)"))
