@@ -7,6 +7,8 @@
   `KELP_R + MUFFLE_PAD`, не выше `MUFFLE_UP` над дном, густота ≥ `COVER_MIN`) — `EcoPred.hears_ship` не слышит шум;
   в выеденной шипоежами роще снова слышит; свет, сонар и светящийся след не прячутся. Наблюдение серпохвоста «kelp»
   в журнал раз в 40 с (`EcoKelp.muffled`). Тесты `test_eco_kelp.test_*muffle*`.
+- «QA на эмуляторе» — только ручной запуск (#1393): первая проба на `main` — игра стартует (Vulkan 1.3 SwiftShader,
+  Forward Mobile), но за 50 мин ни одного снимка; не занимаем раннер на час после каждого слияния до решения.
 - Проба QA на эмуляторе в Actions (#1393): workflow «QA на эмуляторе» (`.github/workflows/qa-emulator.yml`) после
   «Godot» на `main` и вручную (`pr` — APK из артефакта PR) гоняет сценарий тестера на Android 34 x86_64
   (`reactivecircus/android-emulator-runner@v2.33.0`, SwiftShader) шагами `tools/qa/emulator.sh` — как `run-qa.ps1`;

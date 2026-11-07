@@ -3,11 +3,9 @@ name: QA на эмуляторе
 # в Actions — снимки после каждого слияния. Тестер на компьютере владельца остаётся для телефона (кадры, Vulkan, касания).
 # Шаги — tools/qa/emulator.sh (как tools/qa/run-qa.ps1). Внешний action эмулятора разрешён владельцем на пробу.
 # Замеры кадров отсюда — не показатель телефона: Vulkan в эмуляторе программный (SwiftShader).
+# Первая проба (прогон 42395403631): игра стартует на SwiftShader, но за 50 мин ни одного снимка — после каждого
+# слияния не гоняем, пока менеджер с владельцем не решат по итогам (#1393). Только ручной запуск.
 on:
-  workflow_run:
-    workflows: [Godot]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       pr:
@@ -26,8 +24,6 @@ concurrency:
 jobs:
   emulator:
     name: Сценарий тестера на эмуляторе
-    # после «Godot» на main — только по пушу и когда APK собран (без кода сборки нет — и прогона тоже)
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     timeout-minutes: 75
     permissions:
