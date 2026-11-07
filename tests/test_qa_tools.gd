@@ -101,7 +101,7 @@ func test_emulator_ci_matches_run_qa() -> void:
 	ok(wf.contains("DeepDive-emulator.apk"), "ставится x86_64-сборка")
 	ok(RegEx.create_from_string("reactivecircus/android-emulator-runner@v\\d+\\.\\d+\\.\\d+").search(wf) != null,
 		"action эмулятора закреплён тегом версии")
-	ok(wf.contains("workflows: [Godot]") and wf.contains("branches: [main]"), "после «Godot» на main")
+	ok(wf.contains("workflow_dispatch:") and not wf.contains("workflow_run:"), "пока только вручную (проба не дала снимков)")
 	var limit := RegEx.create_from_string("emulator\\.sh .* qa-out (\\d+)").search(wf)
 	ok(limit != null, "предел ожидания задан")
 	if limit == null:
