@@ -81,6 +81,13 @@ static func apply(g: Main, kv: Dictionary) -> void:
 	if kv.get("drain", "0") == "1":  # drain=1 — стеклоуст на корпусе (табло и рамка у щитка разряда)
 		g.vitals.drain("Стеклоуст", 0.01)
 		g.vitals.drain_left = 60.0
+	if kv.has("kamen"):  # kamen=<n> — у каждого ряда каменщиков первые n гнёзд спрятали венчики (#1337)
+		for r in g.eco.kamen.rows:
+			for i in mini(int(kv["kamen"]), r.worms.size()):
+				r.worms[i].open = 0.0
+				r.worms[i].quiet = 999.0
+			r.calm = false
+		g.eco.kamen.changed = true
 	if kv.get("steam", "0") == "1":  # пар из вентиля и открытая крышка щитка (для снимка машинного)
 		g.debug_vent = true
 		g.engine.pressed = 30.0

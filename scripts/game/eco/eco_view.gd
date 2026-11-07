@@ -21,6 +21,9 @@ var pred_view: PredView
 var current: EcoCurrent
 var coral: EcoCoral
 var coral_view: CoralView
+## Каменщики (#1337): ряды трубок у кустов огнецвета, венчики прячутся от вибрации крупного.
+var kamen: EcoKamen
+var kamen_view: KamenView
 var fans: EcoFan
 var fan_view: FanView
 ## Пиявники на жабрах серпохвостов и станции чистки на вершинах огнецвета.
@@ -127,6 +130,7 @@ var ground: Callable:
 		lag = 0.0
 		_rebuild_moss()
 		_rebuild_coral()
+		_rebuild_kamen()
 		_rebuild_ferns()
 		_rebuild_bladders()
 		_rebuild_organs()
@@ -166,6 +170,7 @@ func _init() -> void:
 	current = world.add(EcoCurrent.new()) as EcoCurrent
 	coral = world.add(EcoCoral.new([], preds)) as EcoCoral
 	leeches = world.add(EcoLeech.new(preds, coral)) as EcoLeech
+	kamen = world.add(EcoKamen.new()) as EcoKamen
 	leech_view = LeechView.new(leeches, lite)
 	add_child(leech_view)
 	fans = world.add(EcoFan.new(current)) as EcoFan
@@ -228,6 +233,7 @@ func _init() -> void:
 	add_child(far_view)
 	_rebuild_moss()
 	_rebuild_coral()
+	_rebuild_kamen()
 	_rebuild_ferns()
 	_rebuild_bladders()
 	_rebuild_organs()
@@ -289,6 +295,7 @@ func set_lite(on: bool) -> void:
 	flower_view.set_lite(on)
 	bones_view.set_lite(on)
 	coral_view.set_lite(on)
+	kamen_view.set_lite(on)
 	vent_view.set_lite(on)
 	organ_view.set_lite(on)
 	if fern_view:
@@ -316,6 +323,14 @@ func _rebuild_moss() -> void:
 
 
 ## Меш огнецвета по дну мира (кусты встают на дно при сбросе мира).
+func _rebuild_kamen() -> void:
+	if kamen_view:
+		remove_child(kamen_view)
+		kamen_view.free()
+	kamen_view = KamenView.new(kamen, lite)
+	add_child(kamen_view)
+
+
 func _rebuild_coral() -> void:
 	if coral_view:
 		remove_child(coral_view)
@@ -553,6 +568,7 @@ func _sync(ship: EcoLink.ShipState) -> void:
 		well_view.moss_view.sync()
 		well_view.moss_view.set_time(world.time)
 	coral_view.sync()
+	kamen_view.sync()
 	flower_view.sync()
 	coral_view.sync_dust(world.time, ship, current.vel())
 	StepClock.mark("мир/вид: мох, кораллы")
