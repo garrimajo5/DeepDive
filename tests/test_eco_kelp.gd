@@ -638,3 +638,100 @@ func test_view_draws_lean() -> void:
 		most = minf(most, tr.basis.y.normalized().y)
 	ok(most < cos(0.3), "в буфере лента наклонена (cos %.2f)" % most)
 	v.free()
+
+
+# ---------- Ленточник глушит двигатели (#1338) ----------
+
+## Серпохвост голоден и готов напасть, роща — в 20 м по +X от него, корабль в её середине идёт быстро (5 м/с)
+## без света, сонара и следа. with_kelp = false — рощи нет (та же точка).
+func _muffle_world(with_kelp := true) -> Array:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	w.ship.pos = FAR
+	var p := w.add(EcoPred.new()) as EcoPred
+	var pr: EcoPred.Pred = p.all[0]
+	var spot := Vector3(pr.agent.p.x + 20.0, FLAT, pr.agent.p.z)
+	var k: EcoKelp = null
+	if with_kelp:
+		k = w.add(EcoKelp.new(null, [spot] as Array[Vector3])) as EcoKelp
+		p.kelp = k
+	pr.hunger = 0.5
+	pr.cooldown = 0.0
+	w.ship.pos = spot + Vector3(0, Helm.Ship.CLEARANCE, 0)
+	w.ship.speed = 5.0
+	w.ship.light_on = false
+	w.last_ping = -1000.0
+	return [w, pr, k]
+
+
+func test_dense_kelp_muffles_engines() -> void:
+	var a := _muffle_world(false)
+	var w: EcoWorld = a[0]
+	var pr: EcoPred.Pred = a[1]
+	w.step(EcoWorld.MAX_STEP)
+	eq(pr.mode, EcoPred.Mode.CHARGE, "вне рощи серпохвост слышит двигатели")
+	eq(_notes(w, EcoPred.ID, "hear").size(), 1)
+
+	a = _muffle_world()
+	w = a[0]
+	pr = a[1]
+	var k: EcoKelp = a[2]
+	ok(k.muffling(w) == k.groves[0], "корабль в густой роще")
+	w.run(3.0)
+	eq(pr.mode, EcoPred.Mode.PATROL, "в густом ленточнике не слышит")
+	eq(_notes(w, EcoPred.ID, "hear").size(), 0)
+	var ev := _notes(w, EcoPred.ID, "kelp")
+	eq(ev.size(), 1, "наблюдение серпохвоста «kelp» для журнала")
+	ok(ev[0].text().begins_with("Ленточник глушит двигатели — ") and ev[0].text().ends_with(" не слышит корабль"), ev[0].text())
+	w.run(30.0)
+	eq(_notes(w, EcoPred.ID, "kelp").size(), 1, "раз в 40 с у рощи")
+
+
+func test_grazed_kelp_does_not_muffle() -> void:
+	var a := _muffle_world()
+	var w: EcoWorld = a[0]
+	var pr: EcoPred.Pred = a[1]
+	var k: EcoKelp = a[2]
+	for s in k.groves[0].stalks:
+		s.f = EcoKelp.F_MIN
+	k.groves[0].cover = 0.0   # густоту роща пересчитывает в своём шаге, после хищника
+	eq(k.muffling(w), null, "голые стебли шум не глушат")
+	w.step(EcoWorld.MAX_STEP)
+	ok(k.groves[0].cover < EcoKelp.COVER_MIN, "роща выедена шипоежами")
+	eq(pr.mode, EcoPred.Mode.CHARGE, "в выеденной роще снова слышит")
+	eq(_notes(w, EcoPred.ID, "kelp").size(), 0)
+
+
+func test_kelp_does_not_hide_light_or_ping() -> void:
+	var a := _muffle_world()
+	var w: EcoWorld = a[0]
+	var pr: EcoPred.Pred = a[1]
+	w.ship.light_on = true
+	w.step(EcoWorld.MAX_STEP)
+	eq(pr.mode, EcoPred.Mode.CHARGE, "свет прожектора заросли не прячут")
+	eq(_notes(w, EcoPred.ID, "ship").size(), 1)
+
+	a = _muffle_world()
+	w = a[0]
+	pr = a[1]
+	w.last_ping = w.time
+	w.step(EcoWorld.MAX_STEP)
+	eq(pr.mode, EcoPred.Mode.CHARGE, "недавний сонар заросли не прячут")
+	eq(_notes(w, EcoPred.ID, "ping").size(), 1)
+
+
+func test_muffle_only_inside_low_grove() -> void:
+	var a := _muffle_world()
+	var w: EcoWorld = a[0]
+	var k: EcoKelp = a[2]
+	var c := k.groves[0].center
+	w.ship.pos = c + Vector3(0, EcoKelp.MUFFLE_UP + 0.5, 0)
+	eq(k.muffling(w), null, "над рощей — не в зарослях")
+	w.ship.pos = c + Vector3(EcoKelp.KELP_R + EcoKelp.MUFFLE_PAD + 0.5, 3, 0)
+	eq(k.muffling(w), null, "за краем рощи")
+	w.ship.pos = c + Vector3(EcoKelp.KELP_R, 3, 0)
+	ok(k.muffling(w) != null, "у края, в лентах")
+
+
+func test_muffle_note_in_registry() -> void:
+	ok(Species.is_observation(EcoPred.ID, "kelp"), "заметка журнала: биолог объясняет укрытие")
