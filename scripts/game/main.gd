@@ -1776,6 +1776,13 @@ func tag_blocks() -> Array:
 		out.append(tutorial_panel.box())
 	if alarm_pointer_panel != null and alarm_pointer_panel.visible:   # подпись указателя тревоги (#1361)
 		out.append(alarm_pointer_panel.box())
+	# подписи мостика: поля голосования над столом и горящее табло тревог (#1376)
+	if sonar_view != null and sonar_view.vote != null:
+		out.append_array(sonar_view.vote.word_rects(get_viewport().get_camera_3d()))
+	if alarms_on().has(true):
+		var board := board_screen_rect()
+		if board.has_area():
+			out.append(board)
 	return out
 
 

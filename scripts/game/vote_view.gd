@@ -269,6 +269,38 @@ func show_vote(k: float, votes: Dictionary, seconds: int = -1, frac: float = -1.
 			l.modulate = Color(c.r, c.g, c.b, k)
 
 
+## Подписи и счёт видимых полей на экране (#1376): табличка товарища на них не ложится (`Main.tag_blocks`).
+## Подпись повёрнута к камере только по вертикали — берём коробку её размера по ширине в обе стороны (x и z),
+## так прямоугольник не меньше подписи при любом повороте. Пусто, если голосования нет или подпись за камерой.
+func word_rects(cam: Camera3D) -> Array:
+	var out: Array = []
+	if cam == null or not is_visible_in_tree():
+		return out
+	var view := cam.get_viewport().get_visible_rect()
+	for f: Dictionary in fields.values():
+		for key in ["word", "count"]:
+			var l: Label3D = f[key]
+			if not l.visible or l.modulate.a <= 0.0 or l.text.is_empty():
+				continue
+			var box := l.get_aabb()
+			var s := l.global_basis.get_scale()
+			var hw := maxf(box.size.x * s.x, box.size.z * s.z) * 0.5
+			var hh := box.size.y * s.y * 0.5
+			var c := l.global_transform * box.get_center()
+			var pts := PackedVector2Array()
+			var behind := false
+			for dx in [-hw, hw]:
+				for dz in [-hw, hw]:
+					for dy in [-hh, hh]:
+						var g := c + Vector3(dx, dy, dz)
+						behind = behind or cam.is_position_behind(g)
+						pts.append(cam.unproject_position(g))
+			var r := AlarmBoard.screen_rect(pts, behind, view)
+			if r.has_area():
+				out.append(r)
+	return out
+
+
 ## Поля и кольцо таймера — по раскладке: два поля или одно «ВНИЗ» у 10 (`descent`).
 func _lay_out() -> void:
 	for choice: String in fields:
