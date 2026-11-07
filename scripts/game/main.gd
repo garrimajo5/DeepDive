@@ -150,6 +150,8 @@ var voice_io: VoiceIO   ## голос рации (#634): захват и про�
 var _code_rng := RandomNumberGenerator.new()   ## кодовое слово нового забега
 var tutorial_guest: Tutorial.Guest   ## у гостя сети: свои шаги по своему нажатию и кадру хоста; в своей игре — null
 var hint_pointer: HintPointerView   ## указатель над постом-целью подсказки (ART-038, HintPointer); вне кадра — стрелка у края
+var alarm_pointer: AlarmWay.Pointer   ## указатель на цель тревоги в соло этого кадра (#1361) или null
+var alarm_pointer_panel: AlarmPointerPanel   ## его стрелка у края и подпись
 var main_menu := MainMenu.new()   ## «Погрузиться» / «Экипаж» / «Настройки»: пока открыто — игра стоит под меню
 var menu_panel: MenuPanel
 var address := AddressScreen.new()   ## «Войти по адресу» ART-039 поверх меню («Экипаж»): пока открыт — меню ждёт
@@ -417,6 +419,9 @@ func _build_ui() -> void:
 	tutorial_panel.name = "Подсказка"
 	tutorial_panel.layout = overlay.router.layout
 	ui.add_child(tutorial_panel)
+	alarm_pointer_panel = AlarmPointerPanel.new()   # указатель тревоги в соло (#1361): стрелка у края и подпись
+	alarm_pointer_panel.name = "Указатель тревоги"
+	ui.add_child(alarm_pointer_panel)
 	goal_plate_view = GoalPlateView.new()   # плашка цели маршрута за штурвалом (#1344)
 	goal_plate_view.name = "Цель маршрута"
 	ui.add_child(goal_plate_view)
@@ -1763,6 +1768,8 @@ func tag_blocks() -> Array:
 		out.append(route_card.rect)
 	if tutorial_panel != null and tutorial_panel.visible:   # плашка подсказки ART-038
 		out.append(tutorial_panel.box())
+	if alarm_pointer_panel != null and alarm_pointer_panel.visible:   # подпись указателя тревоги (#1361)
+		out.append(alarm_pointer_panel.box())
 	return out
 
 

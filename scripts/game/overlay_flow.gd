@@ -49,11 +49,33 @@ func tutorial_step(dt: float) -> void:
 		m.power_panel.box() if m.power_panel.visible else (m.route_card.rect if m.route_card.visible else Rect2()), edge,
 		not hidden and m.tutorial.map_wanted(target, near, m.at_power),
 		m.goal_plate_view.rect if m.goal_plate_view.visible else Rect2())
+	alarm_step(dt)
 	var map := m.tutorial_panel.map_rect()
 	for p in m.overlay.router.taps:
 		if map.has_point(p):
 			m.open_hint_map()
 			return
+
+
+## Указатель на цель тревоги в соло (#1361, часть B): после подсказок (их указатель этого кадра уже скрыт — подсказки
+## под тревогой не видны, а указатель тревоги — только когда они кончились, `AlarmWay.pointer`), янтарём тот же
+## `HintPointerView`; стрелка у края и подпись — `main.alarm_pointer_panel`. Скрыт паузой, меню, облётом, шторками,
+## голосованием и итогом.
+func alarm_step(dt: float) -> void:
+	var m := main
+	var hidden := m.at_vote or m.run.ended or m.pause.open or m.main_menu.open or m.settings.open \
+		or m.flyby.active() or m.warm.active() or m.wreck.active() or m.walker.noclip or m.trip.active
+	var p: AlarmWay.Pointer = null
+	if not hidden:
+		p = AlarmWay.pointer(m.breach, m.reactor, ShipLayout.room_at(m.walker.z), m.crew.size() == 1,
+			m.tutorial.active())
+	m.alarm_pointer = p
+	if p == null:
+		m.alarm_pointer_panel.show_way(null, [], Rect2(), null)
+		return
+	var edge := m.hint_pointer.show_at(p.anchor, false, 1.0, dt, m.get_viewport().get_camera_3d(), m.camera,
+		AlarmBoard.WORD_ON, AlarmWay.TIP_MIN_Y)
+	m.alarm_pointer_panel.show_way(p, edge, m.hint_pointer.symbol, m.hint_pointer.amber)
 
 
 ## Плашка цели маршрута за штурвалом (#1344): видна, пока свой игрок сидит за штурвалом; скрыта тем же, что карточка
@@ -235,5 +257,7 @@ func hide_all() -> void:
 		m.hint_pointer.show_pointer("", false, 0.0, 0.0, null, null)
 	if m.tutorial_panel != null and m.tutorial_panel.visible:
 		m.tutorial_panel.visible = false
+	if m.alarm_pointer_panel != null and m.alarm_pointer_panel.visible:
+		m.alarm_pointer_panel.visible = false
 	if m.goal_plate_view != null:
 		m.goal_plate_view.show_plate(m.goal_plate, Rect2(), false)

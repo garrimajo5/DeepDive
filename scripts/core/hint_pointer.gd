@@ -102,3 +102,26 @@ static func mode(local: Vector3, p: Vector2, size: Vector2) -> String:
 	if depth > 0.0 and depth < MIN_DEPTH and Rect2(Vector2.ZERO, size).has_point(p):
 		return ""
 	return "edge"
+
+
+## Атлас белым по его альфе (#1361): цвет символа задаёт модуляция — янтарь тревоги вместо голубого подсказок.
+## Голубой атлас ярок во всех каналах, поэтому без насыщенности и с яркостью ×4 он упирается в белый, альфа — как была.
+static func white_image(src: Image) -> Image:
+	var img := src.duplicate() as Image
+	if img.is_compressed():
+		img.decompress()
+	img.convert(Image.FORMAT_RGBA8)
+	img.adjust_bcs(4.0, 1.0, 0.0)
+	return img
+
+
+## Остриё p перед камерой (depth) по ширине в кадре, но выше min_y (px при H = 1080) — опустить его до min_y: кольцо
+## встаёт у верхнего края, а не уходит стрелкой вбок (#1361: люк вплотную над головой). Иначе — p как есть.
+static func lower_tip(p: Vector2, depth: float, size: Vector2, min_y: float) -> Vector2:
+	if depth < MIN_DEPTH:
+		return p
+	var s := size.y / REF_H
+	var mx := PX_MIN * 0.5 * s
+	if p.x < mx or p.x > size.x - mx or p.y >= min_y * s:
+		return p
+	return Vector2(p.x, min_y * s)
