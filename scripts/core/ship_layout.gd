@@ -7,6 +7,8 @@ extends RefCounted
 enum Room { BRIDGE, CORRIDOR, LAB, ENGINE, CARGO }
 
 const ROOM_NAMES: Array[String] = ["Мостик", "Коридор", "Лаборатория", "Машинное отделение", "Трюм"]
+## Короткие имена — для строки приборов «где я» (одна строка, #1361).
+const ROOM_SHORT: Array[String] = ["Мостик", "Коридор", "Лаборатория", "Машинное", "Трюм"]
 const DOOR_Z: Array[float] = [2.0, 8.0, 14.0, 19.5]
 const DOOR_HALF := BridgePlan.HATCH_HALF   ## полуширина проёма люка
 const DOOR_H := BridgePlan.HATCH_H

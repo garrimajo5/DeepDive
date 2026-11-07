@@ -195,3 +195,15 @@ func test_scene_pilot_status_three_lines() -> void:
 	ok(main.hint.text.split("\n").size() <= 3, "на экране ≤ 3 строк:\n%s" % main.hint.text)
 	main.queue_free()
 	await frames(1)
+
+
+## #1361: длинный ряд в середине (сообщение во время тревоги) не вытесняет тревогу — ужат до своей строки.
+func test_rows_middle_leaves_line_for_alarm() -> void:
+	var m := func(t: String) -> float: return float(t.length())
+	var rows := [["Мостик", "глубина 30 м"], ["Вода теплеет: впереди шлейф Чёрного курильщика, обходите сбоку жерла"],
+		["СОНАРНАЯ ТЬМА"]]
+	var out := Status.rows(rows, m, 40.0)
+	eq(out.size(), 3, "три строки: %s" % [out])
+	ok(out[1].ends_with("…"), "сообщение ужато: %s" % out[1])
+	eq(out[2], "СОНАРНАЯ ТЬМА", "тревога на месте")
+	eq(Status.rows([["а"], ["б в г д"], []], m, 3.0).size(), 3, "без тревоги середина берёт свободные строки")

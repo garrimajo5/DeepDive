@@ -1787,8 +1787,11 @@ func alarms_on() -> Array[bool]:
 ## Ряды строки приборов, не больше трёх строк (#1345): 1 — где я · глубина · ход · корпус · энергия; 2 — данные поста
 ## (за штурвалом: до дна · курс · прожектор · реактор, течение — только сильное; на палубе: маршрут · реактор · шлюз);
 ## 3 — тревога и сообщение. Подписи постов здесь нет — они на кнопке действия; цель за штурвалом — в плашке (#1344).
+## Пробоина и перегрев говорят «куда» и «что делать» по месту игрока (`AlarmWay`, #1361); сообщение во время
+## тревоги не клеится к ней — на свои секунды встаёт рядом 2 вместо данных поста.
 func status_rows() -> Array:
-	var where := "За штурвалом" if pilot.seated else ShipLayout.ROOM_NAMES[ShipLayout.room_at(walker.z)]
+	var room := ShipLayout.room_at(walker.z)
+	var where := "За штурвалом" if pilot.seated else ShipLayout.ROOM_SHORT[room]
 	var row1: Array = [where, "глубина %d м" % roundi(helm.depth()), "ход %s м/с" % _num(helm.speed),
 		"корпус %d%%" % roundi(vitals.hull), "энергия %d" % floori(vitals.energy)]
 	var row2: Array = []
@@ -1805,10 +1808,13 @@ func status_rows() -> Array:
 	if not airlock.closed():
 		row2.append("шлюз открыт" if airlock.fully_open() else "шлюз в движении")
 	var row3: Array = []
-	var alarm := Status.alarm([breach.status(), vitals.drain_alarm(), reactor.alert(), silt.alarm(), vitals.warning()])
+	var alarm := Status.alarm([AlarmWay.breach_line(breach, room), vitals.drain_alarm(),
+		AlarmWay.heat_line(reactor, room), silt.alarm(), vitals.warning()])
 	if not alarm.is_empty():
 		row3.append(alarm)
-	if message.visible():
+		if message.visible():
+			row2 = [message.text]
+	elif message.visible():
 		row3.append(message.text)
 	return [row1, row2, row3]
 
