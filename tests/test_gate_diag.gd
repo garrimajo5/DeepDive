@@ -139,7 +139,7 @@ func test_scene_scanner_reads_gate() -> void:   # без купольника: �
 	r.end(5)
 	main.step(1.0 / 30.0)
 	eq(main.lore.facts.size(), 1, "держали больше READ_TIME — один факт")
-	ok(main.message.text.begins_with("Диагностика 07: "), main.message.text)
+	eq(main.message.text, GateDiag.TEXT[main.lore.facts[0]], "перевод — текст TXT-001")
 	ok(main.bridge.scanner_text.text.contains(GateDiag.SHORT[main.lore.facts[0]]), "перевод на экране мостика")
 	eq(main.scanner.scanned.size(), 0, "вид при этом не сканировали")
 	main.queue_free()
@@ -156,7 +156,7 @@ func test_scanner_lines_fit_screen() -> void:
 	near(label.width, BridgeView.SCANNER_TEXT_W, 1e-3, "ширина подписи экрана")
 	ok(label.autowrap_mode != TextServer.AUTOWRAP_OFF, "перенос включён")
 	var f: Font = label.font if label.font != null else ThemeDB.fallback_font
-	var lines: Array = GateDiag.SHORT.values() + ["ДИАГНОСТИКА 07", "Гнездо 3 из 3 · 45 м", "Держать — перевод", "Видов изучено: 99 из 100", "Видов изучено: 100 из 100"]
+	var lines: Array = GateDiag.SHORT.values() + [GateDiag.HEADER, "ДИАГНОСТИКА 07", "Гнездо 3 из 3 · 45 м", "Держать — перевод", "Видов изучено: 99 из 100", "Видов изучено: 100 из 100"]
 	for s in lines:
 		var w := f.get_multiline_string_size(s, HORIZONTAL_ALIGNMENT_CENTER, label.width, label.font_size, -1,
 				TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND).x
@@ -166,3 +166,25 @@ func test_scanner_lines_fit_screen() -> void:
 	ok(f.get_string_size("Видов изучено: 100 из 100", HORIZONTAL_ALIGNMENT_LEFT, -1, label.font_size).x
 			<= BridgeView.SCANNER_TEXT_W, "строка сканера — одной строкой")
 	main.queue_free()
+
+
+## Тексты TXT-001 (#853): перевод, заголовок и реакции — слово в слово из принятого `docs/teksty/TXT-001-sloj1.md`,
+## строки не длиннее 60 знаков; заголовок на экране — перед переведёнными фактами, до перевода его нет.
+func test_texts_from_txt001() -> void:
+	var doc := FileAccess.get_file_as_string("res://docs/teksty/TXT-001-sloj1.md")
+	ok(doc != "", "файл текстов есть")
+	var all: Array = GateDiag.TEXT.values() + [GateDiag.HEADER]
+	for r in GateDiag.REACTION.values():
+		all.append(r[1])
+	for s in all:
+		ok(doc.contains("| %s |" % s), "«%s» — из TXT-001" % s)
+		ok(s.length() <= 60, "«%s» короче 60 знаков" % s)
+	eq(GateDiag.TEXT.size(), LayerLore.DIAGNOSTICS.size(), "текст на каждый факт")
+	var lore := LayerLore.new()
+	var g := GateDiag.new()
+	g.nest = 0
+	ok(not g.screen_lines(lore).has(GateDiag.HEADER), "до перевода заголовка нет")
+	lore.learn(LayerLore.D07_RELAY)
+	var lines := g.screen_lines(lore)
+	ok(lines.find(GateDiag.HEADER) >= 0 and lines.find(GateDiag.HEADER) < lines.find(GateDiag.TEXT[LayerLore.D07_RELAY]),
+			"заголовок над фактами: %s" % str(lines))
