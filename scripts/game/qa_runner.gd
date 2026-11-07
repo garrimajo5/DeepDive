@@ -194,9 +194,10 @@ func tick(dt: float) -> void:
 				main.vitals.destroyed.emit()
 			"back":   # системная «Назад»: пауза ART-037
 				main.back_pressed()
-			"tutorial":   # подсказки первого забега ART-038: с первого шага или убрать
+			"tutorial":   # подсказки первого забега ART-038: с шага c[2] (обычно с первого) или убрать
 				main.tutorial.reset()
 				main.tutorial.on = c[1]
+				main.tutorial.step = c[2] - 1
 			"voice":   # голос во внутренней связи ART-040 — как событие мира EcoLink.VOICE
 				main.on_eco_event(EcoLink.voice(c[1], c[2], c[3], c[4], c[5]))
 			"slow":   # предложение «Экономно» ART-044 — как после нескольких секунд низких кадр/с

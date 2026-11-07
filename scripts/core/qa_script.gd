@@ -52,7 +52,8 @@ extends RefCounted
 ##                                                     место: меню снова без «Продолжить»)
 ##   {"do": "wreck"}                                 — корпус разрушен: шторка ART-036 3,5 с, затем загрузка места
 ##                                                     последнего «save» (нет его — подъём к началу спуска)
-##   {"do": "tutorial", "on": true}                 — подсказки первого забега ART-038 с первого шага (false — убрать)
+##   {"do": "tutorial", "on": true}                 — подсказки первого забега ART-038 с первого шага (false — убрать;
+##                                                     "step": n — сразу с шага n, 1…7)
 ##   {"do": "cards", "on": true}                    — карточки ролей у постов ART-045 с нуля (false — убрать)
 ##   {"do": "voice", "role": 2, "text": "Сбросьте ход", "fake": false} — голос во внутренней связи ART-040, как
 ##                                                     событие мира EcoLink.VOICE ("silent": true — подделка молчит
@@ -65,7 +66,7 @@ extends RefCounted
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z[, yaw°]], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["ping"], ["route"], ["act"], ["mate_hold", on], ["gone"], ["save", on], ["wreck"], ["back"], ["tutorial", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z[, yaw°]], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["ping"], ["route"], ["act"], ["mate_hold", on], ["gone"], ["save", on], ["wreck"], ["back"], ["tutorial", on, шаг 1…7], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
 const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "ping", "ship", "fly", "route", "gone", "save", "wreck", "back", "tutorial", "cards", "voice", "slow", "hud", "play", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "map", "map_back", "hint_map", "new", "exit", "yes", "no", "crew", "journal", "settings", "graphics", "g0", "g1", "g2", "fps", "golos", "zvuk", "s0", "v_hold", "v_voice", "v_hear", "v_mic", "lite_yes", "lite_no", "ask", "join", "last", "lobby_new", "lobby_addr", "lobby_refresh",
@@ -218,7 +219,7 @@ func _begin(st: Dictionary, out: Array) -> void:
 		"back":
 			out.append(["back"])
 		"tutorial":
-			out.append(["tutorial", bool(st.get("on", true))])
+			out.append(["tutorial", bool(st.get("on", true)), clampi(int(st.get("step", 1)), 1, Tutorial.STEPS.size())])
 		"cards":
 			out.append(["cards", bool(st.get("on", true))])
 		"slow":

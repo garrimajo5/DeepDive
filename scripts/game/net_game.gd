@@ -183,6 +183,7 @@ func enter_client(c: NetLink.Client) -> void:
 	main.drop.menu_ready = true   # главное меню ART-037 есть: «В меню» в диалоге обрыва связи
 	main.flyby.stop()   # клиент входит в идущий забег — облёта нет
 	main.tutorial_guest = Tutorial.Guest.new()
+	main.tutorial.set_guest(true)   # маршрута у гостя нет — без шага 7 (#1346)
 	main.sonar.count = -1   # первый кадр хоста ставит его сонар, даже если счёт импульсов совпал со своим
 	main.comms.reset_run(0)
 	main.comms.code = ""   # кодовое слово — хоста, до первого кадра страницы «Связь» нет
@@ -399,6 +400,7 @@ func leave_net() -> void:
 	main.net_client.stop()
 	main.net_client = null
 	main.tutorial_guest = null
+	main.tutorial.set_guest(false)
 	main.save.guest = false   # снова своя кампания: свои знания вместо пришедших от хоста (#823)
 	main.lore.apply(own_lore)
 	NetSnap.apply_hold(own_hold, main.samples, main.scanner)   # и свои трюм и виды вместо хозяйских

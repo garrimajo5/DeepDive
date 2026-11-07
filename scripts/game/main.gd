@@ -134,7 +134,7 @@ static var intro := true
 static var menu := true
 ## Подсказки первого забега ART-038 (тесты и снимки выключают: tests/run.gd, tools/shot.gd; прогон тестера — шаг `tutorial`).
 static var hints := true
-var tutorial := Tutorial.new()   ## шаги «штурвал → ход → свет → энергия → сонар → маршрут»; пройдено — Settings.hints_done
+var tutorial := Tutorial.new()   ## шаги «штурвал → ход → свет → энергия → сонар → маршрут → курс к цели»; пройдено — Settings.hints_done
 var tutorial_panel: TutorialPanel
 ## Карточка роли у поста ART-045 (выключают те же `hints`; тестер — шаг `cards`): прочитанное — Settings.cards.
 var role_card := RoleCard.new()
@@ -924,10 +924,10 @@ func _step_ui(dt: float) -> void:
 	clock.lap("интерфейс/маршрут", Time.get_ticks_usec())   # подчасти — в худшем кадре лога тестера (#745)
 	_update_ui()   # до меток: плашка строки уже на месте этого кадра (#387)
 	clock.lap("интерфейс/приборы", Time.get_ticks_usec())
+	overlay_flow.goal_step(dt)   # раньше подсказок: шаг 7 и место подсказки — по плашке цели этого кадра (#1346)
+	clock.lap("интерфейс/цель маршрута", Time.get_ticks_usec())
 	overlay_flow.tutorial_step(dt)
 	clock.lap("интерфейс/подсказки", Time.get_ticks_usec())
-	overlay_flow.goal_step(dt)
-	clock.lap("интерфейс/цель маршрута", Time.get_ticks_usec())
 	overlay_flow.card_step(dt)
 	clock.lap("интерфейс/карточка роли", Time.get_ticks_usec())
 	overlay_flow.comms_step(dt)
