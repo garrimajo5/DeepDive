@@ -34,6 +34,8 @@ func tutorial_step(dt: float) -> void:
 	var hidden := m.alarms_on().has(true) or m.at_vote or m.run.ended or m.pause.open \
 		or m.main_menu.open or m.settings.open or m.flyby.active() or m.warm.active() or m.wreck.active() \
 		or m.walker.noclip
+	if brief_step(dt, hidden):
+		hidden = true   # пока идёт брифинг прибытия, подсказки ждут
 	# шаг 7 (#1346): 2 с ходом к точке маршрута — «Выполнено»
 	m.tutorial.steer(dt, m.pilot.seated, m.helm.speed, m.goal_plate.kind == GoalPlate.Kind.AHEAD and not hidden)
 	if m.tutorial.update(dt, hidden):
@@ -55,6 +57,25 @@ func tutorial_step(dt: float) -> void:
 		if map.has_point(p):
 			m.open_hint_map()
 			return
+
+
+## Брифинг прибытия TXT-001 (#827): после облёта, до подсказок. Касание мимо крестовины листает экран; плашка не
+## крутит взгляд (`Router.blocks`). Прочитан — знание `LayerLore.BRIEF`. true — брифинг ещё идёт (подсказки ждут).
+func brief_step(dt: float, hidden: bool) -> bool:
+	var m := main
+	var b := m.arrival
+	b.update(dt, hidden)
+	if b.shown() and not hidden:
+		var router := m.overlay.router
+		for p in router.taps:
+			if router.layout.pad.has(p):
+				continue
+			if b.tap():
+				m.lore.learn(LayerLore.BRIEF)
+			break
+		router.blocks.append(ArrivalBrief.box(_size()))
+	m.arrival_panel.show_brief(b)
+	return b.active()
 
 
 ## Указатель на цель тревоги в соло (#1361, часть B): после подсказок (их указатель этого кадра уже скрыт — подсказки
@@ -172,7 +193,7 @@ func comms_step(dt: float) -> void:
 func hidden() -> bool:
 	var m := main
 	return m.at_vote or m.run.ended or m.pause.open or m.main_menu.open or m.settings.open or m.ship_map.open \
-		or m.brief.k > 0.0 or m.flyby.active() or m.warm.active() or m.wreck.active() \
+		or m.brief.k > 0.0 or m.arrival.shown() or m.flyby.active() or m.warm.active() or m.wreck.active() \
 		or (m.net_client != null and m.drop.active())
 
 

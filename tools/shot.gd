@@ -93,6 +93,14 @@ func _go() -> void:
 		main.step(0.0)
 		if kv.get("done", "0") != "0":
 			main.set_process(false)   # кадр — на «Выполнено», а не на следующем шаге
+	if kv.has("brif"):   # brif=<1…8> — брифинг прибытия TXT-001 (#827) на этом экране
+		main.tutorial.on = true
+		main.tutorial.a = 0.0
+		main.arrival.on = true
+		main.arrival.screen = clampi(int(kv["brif"]) - 1, 0, ArrivalBrief.count() - 1)
+		main.arrival.a = 1.0
+		main.arrival.t = 1.0
+		main.step(0.0)
 	if kv.has("kartochka"):   # kartochka=1|ask|foreign — карточка роли ART-045 у поста под игроком (x/z), «?», чужая роль
 		main.tutorial.on = false
 		main.role_card.on = true

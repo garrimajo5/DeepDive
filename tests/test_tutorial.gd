@@ -214,6 +214,7 @@ func test_scene_route_hint_beside_card() -> void:   # #1346: у поста «М�
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
+	main.arrival.on = false   # брифинг прибытия до подсказок — test_arrival_brief
 	main.tutorial.step = 5
 	main.walker.x = Main.ROUTE_POST.x + 0.1
 	main.walker.z = Main.ROUTE_POST.y
@@ -230,6 +231,7 @@ func test_scene_six_steps() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
+	main.arrival.on = false   # брифинг прибытия до подсказок — test_arrival_brief
 	var t := main.tutorial
 	ok(t.on, "в первом забеге включено")
 	_tick(10)
@@ -295,6 +297,7 @@ func test_scene_light_by_mate_not_counted() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
+	main.arrival.on = false   # брифинг прибытия до подсказок — test_arrival_brief
 	main.tutorial.step = 2
 	main.toggle_light()
 	_tick(20)
@@ -310,6 +313,7 @@ func test_scene_off_in_tests_and_done() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
+	main.arrival.on = false   # брифинг прибытия до подсказок — test_arrival_brief
 	ok(not main.tutorial.on, "раннер выключил подсказки")
 	_tick(5)
 	ok(not main.tutorial_panel.visible, "плашки нет")
@@ -403,6 +407,7 @@ func test_scene_map_from_hint_and_back() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
+	main.arrival.on = false   # брифинг прибытия до подсказок — test_arrival_brief
 	main.walker.x = 2.0   # далеко от штурвала: шаг 1 — найдите пост
 	main.walker.z = 1.0
 	_tick(10)
@@ -452,6 +457,7 @@ func test_scene_no_events_during_hints() -> void:   # #827: ни нападен�
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
+	main.arrival.on = false   # брифинг прибытия до подсказок — test_arrival_brief
 	ok(main.tutorial.on and main.events_held(), "первый забег: подсказки, события ждут")
 	var hull := main.vitals.hull
 	main.on_eco_event({"type": EcoLink.HIT, "damage": 0.12, "by": "Серпохвост"})
@@ -485,6 +491,7 @@ func test_scene_finish_learns_intro() -> void:   # #827: пройденное о
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
+	main.arrival.on = false   # брифинг прибытия до подсказок — test_arrival_brief
 	main.tutorial.step = Tutorial.STEPS.size() - 1
 	ok(main.tutorial.note(Tutorial.Ev.COURSE), "последний шаг засчитан")
 	_tick(30)
@@ -502,6 +509,7 @@ func test_scene_loaded_campaign_no_hints() -> void:   # #827: загрузка �
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
+	main.arrival.on = false   # брифинг прибытия до подсказок — test_arrival_brief
 	SaveGame.default_path = ""
 	DirAccess.remove_absolute(PATH)
 	ok(main.lore.knows(LayerLore.INTRO), "знание прочитано из сохранения")

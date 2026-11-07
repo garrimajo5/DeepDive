@@ -136,6 +136,8 @@ static var menu := true
 static var hints := true
 var tutorial := Tutorial.new()   ## шаги «штурвал → ход → свет → энергия → сонар → маршрут → курс к цели»; пройдено — Settings.hints_done
 var tutorial_panel: TutorialPanel
+var arrival := ArrivalBrief.new()   ## брифинг прибытия TXT-001 до подсказок (#827); прочитан — `LayerLore.BRIEF`
+var arrival_panel: ArrivalBriefPanel
 ## Карточка роли у поста ART-045 (выключают те же `hints`; тестер — шаг `cards`): прочитанное — Settings.cards.
 var role_card := RoleCard.new()
 var role_card_panel: RoleCardPanel
@@ -415,6 +417,9 @@ func _build_ui() -> void:
 	ver.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE, 4)
 	ver.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	ui.add_child(ver)
+	arrival_panel = ArrivalBriefPanel.new()   # брифинг прибытия (#827): касания — Router.taps (`OverlayFlow.brief_step`)
+	arrival_panel.name = "Брифинг прибытия"
+	ui.add_child(arrival_panel)
 	tutorial_panel = TutorialPanel.new()   # поверх кнопок: обводка нужной ложится на них, касания проходят
 	tutorial_panel.name = "Подсказка"
 	tutorial_panel.layout = overlay.router.layout
@@ -475,6 +480,7 @@ func _load_state() -> void:
 	# обучение — пока не пройдено ни в настройках, ни в кампании (знание «обучение просмотрено», #827); тестер
 	# включает шагом `tutorial`
 	tutorial.on = hints and not settings.hints_done and not lore.knows(LayerLore.INTRO) and not QaRunner.pending()
+	arrival.on = tutorial.on and not lore.knows(LayerLore.BRIEF)   # брифинг прибытия — перед подсказками (#827)
 	_begin_run()
 	samples.changed.connect(save.mark)
 	scanner.changed.connect(save.mark)
@@ -1264,7 +1270,7 @@ func hits_shielded() -> bool:
 
 ## Идёт обучение у старта 00 (#827, `Tutorial.holds_events`): события слоя ждут его конца.
 func events_held() -> bool:
-	return tutorial.holds_events()
+	return tutorial.holds_events() or arrival.active()
 
 
 ## Точка удара at (мир) в осях корабля: нос −Z, правый борт +X (`HullSound.side`).
