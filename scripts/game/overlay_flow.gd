@@ -21,6 +21,7 @@ func _size() -> Vector2:
 ## Все четыре по порядку: подсказки, карточка роли, связь, рация (шаг гостя; у хоста — по одному, с замерами).
 func step(dt: float) -> void:
 	tutorial_step(dt)
+	goal_step(dt)
 	card_step(dt)
 	comms_step(dt)   # гость: нажатие — `net_pad.ask` со следующим вводом
 	radio_step(dt)
@@ -52,6 +53,24 @@ func tutorial_step(dt: float) -> void:
 			return
 
 
+## Плашка цели маршрута за штурвалом (#1344): видна, пока свой игрок сидит за штурвалом; скрыта тем же, что карточка
+## роли (тревога, голосование у стола, итог, пауза, меню, облёт, шторки). Сонарная тьма не гасит — курс по счислению.
+func goal_step(dt: float) -> void:
+	var m := main
+	var hidden := not m.pilot.seated or m.alarms_on().has(true) or m.at_vote or m.run.ended or m.pause.open \
+		or m.main_menu.open or m.settings.open or m.flyby.active() or m.warm.active() or m.wreck.active() \
+		or m.walker.noclip or m.trip.active or (m.net_client != null and m.drop.active())
+	m.goal_plate.update(dt, m.run, m.helm.yaw, Vector2(m.helm.pos.x, m.helm.pos.z))
+	if hidden:
+		m.goal_plate_view.show_plate(m.goal_plate, Rect2(), false)
+		return
+	var size := _size()
+	var nc: Touch.Circle = m.overlay.router.layout.noclip
+	var fit := m.goal_plate.fit(m.goal_plate_view.text_width(m.goal_plate, size.y), size, m.status_rect(),
+		Rect2(nc.c - Vector2(nc.r, nc.r), Vector2(nc.r, nc.r) * 2.0))
+	m.goal_plate_view.show_plate(m.goal_plate, fit[0], true, fit[1])
+
+
 ## Карточка роли у поста ART-045: пост, у которого стоит свой игрок, своей ли он роли (в одиночном забеге — все
 ## свои), что её скрывает; касания карточки и «?» — из `Router.taps`, взгляд под ними не крутится (`Router.blocks`).
 func card_step(dt: float) -> void:
@@ -71,6 +90,8 @@ func card_step(dt: float) -> void:
 		avoid.append(m.power_panel.box())
 	if m.route_card.visible:
 		avoid.append(m.route_card.rect)
+	if m.goal_plate_view.visible:   # плашка цели за штурвалом (#1344)
+		avoid.append(m.goal_plate_view.rect)
 	var rect := RoleCard.card_rect(card.post, size, avoid, m.status_rect()) if card.open else Rect2()
 	if card.open and not rect.has_area():   # места нет — сразу «?»
 		changed = card.fold() or changed
@@ -210,3 +231,5 @@ func hide_all() -> void:
 		m.hint_pointer.show_pointer("", false, 0.0, 0.0, null, null)
 	if m.tutorial_panel != null and m.tutorial_panel.visible:
 		m.tutorial_panel.visible = false
+	if m.goal_plate_view != null:
+		m.goal_plate_view.show_plate(m.goal_plate, Rect2(), false)

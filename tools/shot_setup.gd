@@ -114,6 +114,9 @@ static func apply(g: Main, kv: Dictionary) -> void:
 			g.scanner.scanned[id] = true
 	if kv.has("route"):   # маршрут n (0…2) выбран у голостола
 		g.say(g.run.choose(int(kv["route"])))   # как нажатие у стола: строка на приборах (#938)
+	if kv.has("goal_yaw") and g.run.next_key() != "":   # плашка цели за штурвалом (#1344): цель на столько ° левее (− — правее)
+		var d := Run.place_xz(g.run.next_key()) - Vector2(g.helm.pos.x, g.helm.pos.z)
+		g.helm.yaw = atan2(-d.x, -d.y) - deg_to_rad(float(kv["goal_yaw"]))
 	if kv.get("vote", "") in ["1", "up"]:   # маршрут пройден, решение у голостола; vote=up — итог забега
 		g.complete_route()
 		g.open_vote()
