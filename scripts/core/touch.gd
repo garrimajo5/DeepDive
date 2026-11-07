@@ -43,6 +43,17 @@ class Layout:
 			down.c.y -= over
 		light = Circle.new(Vector2(action.c.x, action.c.y - action.r - gap - br), br)
 
+	## Прямоугольники вокруг органов под пальцами с зазором gap (#1345): крестовина и кнопка действия, у пилота — ещё
+	## «Всплыть», «Вниз», «Свет». На них не ложатся плашки, которые ловят касания (карточка роли).
+	func rects(pilot: bool, gap: float = 0.0) -> Array:
+		var cs: Array = [pad, action]
+		if pilot:
+			cs.append_array([up, down, light])
+		var out: Array = []
+		for c: Circle in cs:
+			out.append(Rect2(c.c - Vector2(c.r, c.r), Vector2(c.r, c.r) * 2.0).grow(gap))
+		return out
+
 
 class Circle:
 	var c := Vector2.ZERO

@@ -85,7 +85,8 @@ func card_step(dt: float) -> void:
 	var changed := card.update(dt, at, RoleCard.is_own(at, m.me.role, solo), hidden, quiet)
 	var size := _size()
 	card.status = m.status_rect()
-	var avoid: Array = []
+	# крестовина и кнопки под пальцами: карточка на них не ложится, палец к «вверх» не попадёт в «Понятно» (#1345)
+	var avoid: Array = m.overlay.router.layout.rects(m.overlay.router.pilot_buttons, RoleCard.PAD_GAP * size.y / RoleCard.REF_H)
 	if m.power_panel.visible:
 		avoid.append(m.power_panel.box())
 	if m.route_card.visible:
