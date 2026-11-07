@@ -1,0 +1,49 @@
+{
+  "items": [
+    {
+      "name": "alarm-siren-rev1-1",
+      "prompt": "Seamless loop of an urgent mechanical submarine emergency klaxon inside a steel compartment. Forceful repeated rising and falling midrange horn blasts, sharp immediate attacks, unmistakable danger signal, dense resonant body and short metallic room echo. Insistent but rounded, not painfully shrill. No music, speech, beeps, ambience or gentle chimes. Maintain the alarm continuously across the loop.",
+      "node_id": "KAMfnDiuh5spEoakzSUm",
+      "loop": true,
+      "duration": 3.56,
+      "run": {
+        "session_ids": [
+          "n1z7pCAf4SvbFjPeirpX"
+        ],
+        "results": [
+          {
+            "success": true,
+            "node_id": "KAMfnDiuh5spEoakzSUm",
+            "session_id": "n1z7pCAf4SvbFjPeirpX",
+            "credit_costs": {
+              "sLbYPw8eLBsv9NGbNRdY": 36.00000000000001
+            }
+          }
+        ],
+        "pending": [
+          {
+            "generation_id": "sLbYPw8eLBsv9NGbNRdY",
+            "kind": "audio"
+          }
+        ]
+      },
+      "downloaded": true,
+      "generation_id": "sLbYPw8eLBsv9NGbNRdY",
+      "credits": 36.00000000000001
+    },
+    {
+      "name": "alarm-siren-rev1-2",
+      "prompt": "Seamless loop of a serious ship flooding alarm: emphatic alternating high-low electronic siren tones in a steel compartment. Fast clean attacks, steady urgent two-tone repetition, strong audible midrange harmonics, short room reflections, smooth edges without piercing treble. Clearly signals immediate danger over engine rumble. No melody, voices, clock beeps, music or background noise.",
+      "node_id": "LMrsVQiyZeNVGJR2Ufls",
+      "loop": true,
+      "duration": 3.6,
+      "run": {},
+      "status": "not_run confirmed by creative_get_flow; run returned no structured identifiers"
+    }
+  ],
+  "prompts": [
+    "Seamless loop of an urgent mechanical submarine emergency klaxon inside a steel compartment. Forceful repeated rising and falling midrange horn blasts, sharp immediate attacks, unmistakable danger signal, dense resonant body and short metallic room echo. Insistent but rounded, not painfully shrill. No music, speech, beeps, ambience or gentle chimes. Maintain the alarm continuously across the loop.",
+    "Seamless loop of a serious ship flooding alarm: emphatic alternating high-low electronic siren tones in a steel compartment. Fast clean attacks, steady urgent two-tone repetition, strong audible midrange harmonics, short room reflections, smooth edges without piercing treble. Clearly signals immediate danger over engine rumble. No melody, voices, clock beeps, music or background noise."
+  ],
+  "flow_id": "toAB3lvW3t9PpdRO2wY5"
+}
