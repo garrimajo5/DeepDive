@@ -9,26 +9,31 @@ extends Node3D
 ## `strand_width`/`strand_shade`). След касания — `Curtain.custom` в INSTANCE_CUSTOM: фрагментный
 ## шейдер гасит его по `EcoFringe.envelope` и `band` (двойник — `glow_at`) и светит `#67DDEB` по узлам и щели.
 ## Тело освещается (прожектор, свет сквозь лёд), полупрозрачное, без теней; свечение — общий приём `eco_bio`.
-## Рисунок пряди — процедурный (щель посередине, узлы-утолщения по NODES, конец тоньше): лист ART-080 разрешает
-## сделать текстуру при встройке; карты ART-083 (#922) лягут на те же UV (u — поперёк, v — от корня к концу).
+## Рисунок пряди — карты ART-083 (#922, `docs/concept-art/inevaya-bahroma-pryad.md`): цвет с альфой-силуэтом, маска
+## следа (узлы и щель ярче), нормали OpenGL; UV: u — поперёк, v — от корня к концу. Силуэт (узлы, сужение к концу) —
+## в альфе, поэтому полоса ровная шириной SPAN × ширина нити: стебель пряди на карте — восьмая часть полосы.
 ## Корабль дальше `EcoFringe.ACTIVE` от колодца — узел скрыт и ничего не пишет.
 
-## Ширина нити у корня, м (лист: 0,08–0,15, узлы-ромбы до 0,20); к концу — TIP доли.
+## Ширина нити, м (лист ART-080: 0,08–0,15, узлы-ромбы до 0,20). На карте ART-083 стебель — ≈ 0,125 полосы, узлы —
+## 0,3…0,9: полоса в SPAN раз шире нити — стебель ≈ 3,5 см, средние узлы 0,1–0,2 м, верхний у льда до 0,25 м.
 const WIDTH := 0.14
-const TIP := 0.35
+const SPAN := 2.0
 ## Сегментов по длине одной полосы.
 const SEGMENTS := 8
-## Узлы-утолщения по длине (доли от корня), полуширина узла по v и насколько он шире нити.
-const NODES: Array[float] = [0.11, 0.24, 0.36, 0.5, 0.63, 0.77, 0.9]
-const NODE_HALF := 0.025
-const NODE_WIDE := 0.45
-## Цвета листа ART-080: тело, холодный край, свечение следа; сила следа и тлеющий фон незадетой нити.
-const BODY := Color("86bccb")
-const EDGE_TINT := Color("9ad9e8")
+## Карты пряди ART-083 (сжаты для видеокарты; нормали — режимом нормалей, шейдер берёт .rg).
+const MAP_COLOR := "res://models/inevaya-bahroma-pryad-cvet.png"
+const MAP_GLOW := "res://models/inevaya-bahroma-pryad-maska.png"
+const MAP_NORMAL := "res://models/inevaya-bahroma-pryad-normal.png"
+## Узлы на карте ART-083 (доли длины от корня, notes художника) — где след светит ярче всего.
+const NODES: Array[float] = [0.09, 0.27, 0.41, 0.54, 0.66, 0.80, 0.91]
+## Свечение следа `#67DDEB` (лист ART-080), сила следа и тлеющий фон незадетой нити.
 const GLOW := Color("67ddeb")
 const GLOW_K := 1.6
 const IDLE := 0.03
-const ALPHA := 0.6
+## Прозрачность тела: альфа карты (до 0,8) × ALPHA_K — до 0,6, как у процедурной пряди.
+const ALPHA_K := 0.75
+## Сила рельефа узлов и щели.
+const RELIEF := 0.8
 ## Нити не клоны (Б4): у нити своя ширина и свой тон тела — по её номеру (`EcoVary`), разброс ±.
 const WIDTH_SPREAD := 0.15
 const SHADE_SPREAD := 0.12
@@ -44,32 +49,24 @@ uniform vec4 motion[COUNT];
 uniform float world_t = 0.0;
 uniform float wave_amp = 0.08;
 uniform float wave_len = 0.3;
-uniform float tip = 0.35;
-uniform vec3 body : source_color;
-uniform vec3 edge_tint : source_color;
+uniform float span = 2.0;
+uniform sampler2D map_color : source_color, filter_linear_mipmap, repeat_disable;
+uniform sampler2D map_glow : hint_default_black, filter_linear_mipmap, repeat_disable;
+uniform sampler2D map_normal : hint_normal, filter_linear_mipmap, repeat_disable;
 uniform vec3 glow : source_color;
 uniform float glow_k = 1.6;
 uniform float idle = 0.03;
-uniform float alpha_k = 0.6;
+uniform float alpha_k = 0.75;
+uniform float relief = 0.8;
 uniform float rise = 0.3;
 uniform float hold = 10.0;
 uniform float fade = 60.0;
 uniform float edge = 0.04;
-uniform float nodes[7];
-uniform float node_half = 0.025;
-uniform float node_wide = 0.45;
 uniform float rough = 0.55;
 uniform float spec = 0.35;
 %s
 varying vec4 trail;
 varying float shade;
-float node_at(float v) {
-	float n = 0.0;
-	for (int k = 0; k < 7; k++) {
-		n = max(n, 1.0 - smoothstep(0.0, node_half, abs(v - nodes[k])));
-	}
-	return n;
-}
 void vertex() {
 	// UV.x — поперёк (0…1), UV.y — доля длины от корня; UV2 — ось полосы по горизонтали (x, z)
 	vec4 m = motion[INSTANCE_ID];
@@ -85,7 +82,7 @@ void vertex() {
 	float s = sin(m.x * world_t + m.y) * m.z * bend;
 	float w = sin(m.x * 3.1 * world_t - v / wave_len * 6.2831853 + m.y) * wave_amp * v;
 	vec3 c = root + vec3(0.0, -len * v, 0.0) + dir * s + side * w + push * bend;
-	float wide = width * mix(1.0, tip, v) * (1.0 + node_wide * node_at(v));
+	float wide = width * span;
 	vec3 across = vec3(UV2.x, 0.0, UV2.y);
 	VERTEX = c + across * (UV.x - 0.5) * wide;
 	NORMAL = vec3(UV2.y, 0.0, -UV2.x);
@@ -97,10 +94,8 @@ void vertex() {
 	trail = INSTANCE_CUSTOM;
 }
 void fragment() {
-	float u = abs(UV.x - 0.5) * 2.0;
-	float v = UV.y;
-	float slit = 1.0 - smoothstep(0.04, 0.14, u);
-	float node = node_at(v);
+	vec4 tex = texture(map_color, UV);
+	float mask = texture(map_glow, UV).r;
 	// след: подъём, ровно, затухание (EcoFringe.envelope) на задетом участке с мягкими краями (EcoFringe.band)
 	float t = trail.x;
 	float env = 0.0;
@@ -114,15 +109,16 @@ void fragment() {
 			env = k * k * (3.0 - 2.0 * k);
 		}
 	}
-	float d = abs(v - trail.y) - trail.z;
+	float d = abs(UV.y - trail.y) - trail.z;
 	float band = d <= 0.0 ? 1.0 : clamp(1.0 - d / edge, 0.0, 1.0);
-	float mask = 0.3 + 0.7 * max(node, slit);
-	ALBEDO = mix(body, edge_tint, smoothstep(0.5, 1.0, u)) * (1.0 - 0.35 * slit) * shade;
+	ALBEDO = tex.rgb * shade;
 	ROUGHNESS = rough;
 	SPECULAR = spec;
+	NORMAL_MAP = texture(map_normal, UV).rgb;
+	NORMAL_MAP_DEPTH = relief;
 	EMISSION = eco_bio(glow * (glow_k * env * band + idle) * mask);
-	// края мягкие, конец разлохмачен: прядь тает к самому концу
-	ALPHA = alpha_k * (1.0 - smoothstep(0.7, 1.0, u)) * (1.0 - smoothstep(0.9, 1.0, v)) * (0.75 + 0.25 * node);
+	// силуэт пряди — альфа карты: узлы, щель, тонкий разлохмаченный конец
+	ALPHA = tex.a * alpha_k;
 }
 """
 
@@ -154,10 +150,10 @@ func _init(system: EcoFringe, is_lite := false) -> void:
 	strands.layers = OceanView.LAYER_WORLD
 	strands.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	material = EcoShaders.material(shader_code(), {"world_t": 0.0, "wave_amp": EcoFringe.WAVE,
-			"wave_len": EcoFringe.WAVE_LEN, "tip": TIP, "body": BODY, "edge_tint": EDGE_TINT, "glow": GLOW,
-			"glow_k": GLOW_K, "idle": IDLE, "alpha_k": ALPHA, "rise": EcoFringe.RISE, "hold": EcoFringe.HOLD,
-			"fade": EcoFringe.FADE, "edge": EcoFringe.EDGE, "nodes": PackedFloat32Array(NODES),
-			"node_half": NODE_HALF, "node_wide": NODE_WIDE})
+			"wave_len": EcoFringe.WAVE_LEN, "span": SPAN, "map_color": load(MAP_COLOR), "map_glow": load(MAP_GLOW),
+			"map_normal": load(MAP_NORMAL), "glow": GLOW, "glow_k": GLOW_K, "idle": IDLE, "alpha_k": ALPHA_K,
+			"relief": RELIEF, "rise": EcoFringe.RISE, "hold": EcoFringe.HOLD, "fade": EcoFringe.FADE,
+			"edge": EcoFringe.EDGE})
 	mesh_full = build_mesh(2)
 	mesh_lite = build_mesh(1)
 	var mm := MultiMesh.new()
@@ -280,7 +276,7 @@ func strand_point(n: int, v: float, t: float) -> Vector3:
 	return root + Vector3(0.0, -buffer[b + 5] * v, 0.0) + dir * s + side * w + push * bend
 
 
-## Двойник фрагментного шейдера: сила следа нити n на доле длины v (без узлов и щели).
+## Двойник фрагментного шейдера: сила следа нити n на доле длины v (без маски узлов и щели — она на карте).
 func glow_at(n: int, v: float) -> float:
 	var b := n * STRIDE + CUSTOM
 	return EcoFringe.envelope(buffer[b]) * EcoFringe.band(v, buffer[b + 1], buffer[b + 2])

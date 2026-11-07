@@ -762,3 +762,9 @@ ORM = AO/шероховатость/металл, в существующие `P
 **Принято 28.10.2026** (PR #910, ветка `art/ART-082-ikonki-mest`): иконки `ikonka-start.png`, `ikonka-tihaya-zavod.png`,
 `ikonka-spusk-k-lesu.png` (256² RGBA), лист `ikonki-mest-sloj1-list.png`; решения — `ikonki-mest-sloj1.md`. В игре
 заменили временные значки: `textures/places/start.png`, `cove.png`, `descent.png`.
+## ART-083 Прядь инеевой бахромы — принято
+- Исходник: ART-080 (`inevaya-bahroma-list.png`, `inevaya-bahroma-i-mol.md`), #836 (место 05).
+
+**Принято 07.11.2026** (PR #1353, ветка `art/ART-083-bahroma-pryad`): карты пряди `models/inevaya-bahroma-pryad-cvet.png`,
+`-maska.png`, `-normal.png` (256 × 1024), лист `inevaya-bahroma-pryad.png`; решения — `inevaya-bahroma-pryad.md`. В игре
+заменили процедурный рисунок нитей `FringeView` (полоса в 2 раза шире нити, силуэт — альфа карты).
