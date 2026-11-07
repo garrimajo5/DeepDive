@@ -20,8 +20,8 @@ func _size() -> Vector2:
 
 ## Все четыре по порядку: подсказки, карточка роли, связь, рация (шаг гостя; у хоста — по одному, с замерами).
 func step(dt: float) -> void:
+	goal_step(dt)       # раньше подсказок: шаг 7 и место плашки подсказки — по плашке цели этого кадра
 	tutorial_step(dt)
-	goal_step(dt)
 	card_step(dt)
 	comms_step(dt)   # гость: нажатие — `net_pad.ask` со следующим вводом
 	radio_step(dt)
@@ -34,6 +34,8 @@ func tutorial_step(dt: float) -> void:
 	var hidden := m.alarms_on().has(true) or m.at_vote or m.run.ended or m.pause.open \
 		or m.main_menu.open or m.settings.open or m.flyby.active() or m.warm.active() or m.wreck.active() \
 		or m.walker.noclip
+	# шаг 7 (#1346): 2 с ходом к точке маршрута — «Выполнено»
+	m.tutorial.steer(dt, m.pilot.seated, m.helm.speed, m.goal_plate.kind == GoalPlate.Kind.AHEAD and not hidden)
 	if m.tutorial.update(dt, hidden):
 		m.settings.hints_done = true
 		m.settings.write()
@@ -44,8 +46,9 @@ func tutorial_step(dt: float) -> void:
 		m.tutorial.a, dt, m.get_viewport().get_camera_3d(), m.camera)
 	m.tutorial_panel.show_tutorial(m.tutorial, m.tutorial.text(m.pilot.seated, near),
 		m.tutorial.highlight(m.pilot.seated, m.at_power, near), m.status_rect(),
-		m.power_panel.box() if m.power_panel.visible else Rect2(), edge,
-		not hidden and m.tutorial.map_wanted(target, near, m.at_power))
+		m.power_panel.box() if m.power_panel.visible else (m.route_card.rect if m.route_card.visible else Rect2()), edge,
+		not hidden and m.tutorial.map_wanted(target, near, m.at_power),
+		m.goal_plate_view.rect if m.goal_plate_view.visible else Rect2())
 	var map := m.tutorial_panel.map_rect()
 	for p in m.overlay.router.taps:
 		if map.has_point(p):
