@@ -81,7 +81,8 @@ class Ship:
 	var _last_floor := -INF
 	## Высота дна под (x, z); корабль держится на CLEARANCE выше. Пустой Callable — дна нет.
 	var ground: Callable
-	## Твёрдое над дном (`func(pos: Vector3, yaw: float) -> bool`): арка 07 `GateArch.hits` (#826). Корабль скользит вдоль.
+	## Твёрдое над дном (`func(pos: Vector3, yaw: float) -> bool`): арка 07 `GateArch.hits` (#826), гротовик с рифом
+	## (`EcoLink.solid`). Корабль скользит вдоль; уже застрял в твёрдом (загрузка, существо подошло) — выходит свободно.
 	var solid: Callable
 
 	func _init() -> void:
@@ -106,7 +107,10 @@ class Ship:
 		return x <= EDGE or Seabed.Slope.open(x, z)
 
 	func _free(p: Vector3) -> bool:
-		return east_ok(p.x, p.z) and not (solid.is_valid() and bool(solid.call(p, yaw)))
+		return east_ok(p.x, p.z) and not _in_solid(p)
+
+	func _in_solid(p: Vector3) -> bool:
+		return solid.is_valid() and bool(solid.call(p, yaw))
 
 	func nose() -> Vector3:
 		return Vector3(-sin(yaw), 0.0, -cos(yaw))
@@ -127,7 +131,7 @@ class Ship:
 		pos.y += vy * dt
 		pos.x = clampf(pos.x, -EDGE, EAST_END)
 		pos.z = clampf(pos.z, -EDGE, EDGE)
-		if not _free(pos):   # в стене за краем или в арке: скользим вдоль, иначе стоим
+		if not _free(pos) and not (east_ok(pos.x, pos.z) and _in_solid(was)):   # в стене за краем или в арке: скользим вдоль, иначе стоим
 			var tries: Array[Vector3] = [Vector3(was.x, pos.y, pos.z), Vector3(pos.x, pos.y, was.z),
 				Vector3(pos.x, was.y, pos.z), Vector3(was.x, pos.y, was.z), was]
 			var moved := false
