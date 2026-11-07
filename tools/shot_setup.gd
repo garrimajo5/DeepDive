@@ -155,6 +155,23 @@ static func apply(g: Main, kv: Dictionary) -> void:
 			g.helm.yaw = deg_to_rad(p[3])
 			g.helm.turn = 0.0
 		g.park_at(Vector3(p[0], p[1], p[2]))
+	if kv.has("lore"):  # lore=d07_return,shell03 — знания слоя 1 (#825; ключи LayerLore.KEYS)
+		for k in kv["lore"].split(",", false):
+			g.lore.learn(k)
+	if kv.get("spusk_vote", "") in ["1", "later", "coop"]:   # корабль в круге 10 — панель спуска у стола (#1362); later — «позже»
+		if not kv.has("ship"):
+			var p10 := Run.place_xz(Run.DESCENT)
+			g.park_at(Vector3(p10.x, Seabed.height(p10.x, p10.y) + 15.0, p10.y))
+		g.say(g.run.descent(g.helm.pos.x, g.helm.pos.z))
+		g.walker.x = Main.ROUTE_POST.x   # у поста «Маршрут» справа от голостола
+		g.walker.z = Main.ROUTE_POST.y
+		g.walker.yaw = PI / 2.0
+		if kv["spusk_vote"] != "later":
+			g.open_vote()
+		if kv["spusk_vote"] == "coop":   # с mate=…: все у стола, свой голос «вниз», ждём товарищей
+			for m: Crew.Member in g.crew:
+				m.at_vote = true
+			g.ballot.cast(g.me.get_instance_id(), g.me.role, "deep")
 	if kv.has("scorch"):  # scorch=n — n следов разряда на дне перед носом через 4 м (первый — старое пятно)
 		var n := int(kv["scorch"])
 		for i in n:

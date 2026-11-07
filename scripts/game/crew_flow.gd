@@ -74,7 +74,7 @@ func drive(dt: float) -> void:
 				mate_action(m)
 			if m.at_vote and g.run.voting and not g.run.ended:   # голос своей крестовиной
 				var c := g.ballot.nav(m.get_instance_id(), m.pad.move, true)
-				if c != "":
+				if g.run.vote_ok(c):   # у 10 «вверх» не голос (#1362)
 					g.ballot.cast(m.get_instance_id(), m.role, c)
 			m.drive(dt, g.breach.slow(ShipLayout.room_at(m.walker.z)))
 

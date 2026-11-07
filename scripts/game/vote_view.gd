@@ -10,6 +10,10 @@ var timer: Node3D        ## кольцо таймера между полями 
 var timer_arc: MeshInstance3D
 var timer_label: Label3D
 var _arc_segs := -1
+var descent := false     ## у 10 — одно поле «ВНИЗ» по центру (#1362, `VoteHolo.choices`)
+## Высота над голограммой у частей поля — чтобы переставить поля при смене раскладки (`_lay_out`).
+const PART_Y := {"disc": VoteHolo.DISC_Y, "beam": VoteHolo.DISC_Y * 0.5, "arrow": VoteHolo.ARROW_Y,
+	"word": VoteHolo.WORD_Y, "count": VoteHolo.COUNT_Y}
 var board: Node3D        ## итог забега над столом (VoteHolo.BOARD_*)
 var board_rows: Array = []   ## [[Label3D название, Label3D значение, Sprite3D иконка ART-026]…]
 var _mats: Array[StandardMaterial3D] = []
@@ -219,14 +223,22 @@ func show_result(k: float, rows: Array, eye: Vector3) -> void:
 
 ## k — доля перехода (Briefing.Fade), votes — VoteHolo.votes(Run.opinions(...)); seconds и frac — таймер Ballot
 ## (seconds() и fraction(); -1 — таймера нет, кольцо скрыто).
-func show_vote(k: float, votes: Dictionary, seconds: int = -1, frac: float = -1.0) -> void:
+func show_vote(k: float, votes: Dictionary, seconds: int = -1, frac: float = -1.0, at_descent: bool = false) -> void:
 	visible = k > 0.0 or board.visible
 	if k <= 0.0:
 		timer.visible = false
 		return
-	for f: Dictionary in fields.values():
-		for key in ["disc", "beam", "arrow", "word", "count"]:
-			(f[key] as Node3D).visible = true
+	if at_descent != descent:
+		descent = at_descent
+		_lay_out()
+	var shown := VoteHolo.choices(descent)
+	for choice: String in fields:
+		var f: Dictionary = fields[choice]
+		for key in PART_Y:
+			(f[key] as Node3D).visible = choice in shown
+		if not choice in shown:
+			for m: Array in f["marks"]:
+				(m[0] as Node3D).visible = false
 	timer.visible = VoteHolo.timer_wanted(seconds)
 	if timer.visible:
 		timer_label.text = VoteHolo.timer_text(seconds)
@@ -239,7 +251,7 @@ func show_vote(k: float, votes: Dictionary, seconds: int = -1, frac: float = -1.
 	for l in _labels:
 		l.modulate.a = k
 		l.outline_modulate.a = k
-	for choice in VoteHolo.CHOICES:
+	for choice in shown:
 		var f: Dictionary = fields[choice]
 		var roles: Array = votes.get(choice, [])
 		(f["count"] as Label3D).text = str(roles.size())
@@ -251,10 +263,20 @@ func show_vote(k: float, votes: Dictionary, seconds: int = -1, frac: float = -1.
 			if not s.visible:
 				continue
 			var c := Crew.role_color(roles[i])
-			s.position = VoteHolo.mark_pos(choice, i, roles.size())
+			s.position = VoteHolo.mark_pos(choice, i, roles.size(), descent)
 			s.modulate = Color(c.r, c.g, c.b, k)
 			l.text = VoteHolo.letter(roles[i])
 			l.modulate = Color(c.r, c.g, c.b, k)
+
+
+## Поля и кольцо таймера — по раскладке: два поля или одно «ВНИЗ» у 10 (`descent`).
+func _lay_out() -> void:
+	for choice: String in fields:
+		var f: Dictionary = fields[choice]
+		for key in PART_Y:
+			(f[key] as Node3D).position = VoteHolo.field_pos(choice, PART_Y[key], descent)
+		(f["word"] as Label3D).text = VoteHolo.word(choice, descent)
+	timer.position = VoteHolo.ring_pos(descent)
 
 
 func _add(n: Node3D, nm: String) -> Node3D:

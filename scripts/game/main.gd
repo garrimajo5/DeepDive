@@ -733,7 +733,7 @@ func _step_input(dt: float, r: Touch.Router, wrecked: bool) -> Holds:
 		helm.in_vert = 0.0
 		walker.look(overlay.look_points())
 		var choice := "" if run.ended else run.vote_nav(r.move)
-		if choice != "":
+		if run.vote_ok(choice):   # у 10 «вверх» ничего не делает (#1362)
 			ballot.cast(me.get_instance_id(), me.role, choice)   # решает _tick_vote: один у стола — сразу
 		if r.action_pressed and flyby.kind == Flyby.Kind.SURFACE:
 			flyby.stop()   # вид с борта при всплытии: кнопка — к итогу на голограмме, новый забег — следующим нажатием
@@ -898,7 +898,7 @@ func _step_view(dt: float) -> void:
 	sonar_view.show_briefing(brief.update(dt, Briefing.wanted(near_post, at_vote, run.ended)), run, helm.pos)
 	var coop := vote_ids().size() > 1   # таймер — только у голосов игроков (Ballot), в одиночной игре его нет
 	sonar_view.show_vote(vote_fade.update(dt, VoteHolo.wanted(at_vote, run.ended)), vote_marks(),
-		ballot.seconds() if coop else -1, ballot.fraction() if coop else -1.0)
+		ballot.seconds() if coop else -1, ballot.fraction() if coop else -1.0, run.at_descent())
 	sonar_view.show_result(result_fade.update(dt, VoteHolo.result_wanted(at_vote, run.ended)), result_rows,
 		camera.global_position)
 	clock.lap("виды/голограммы", Time.get_ticks_usec())
@@ -1556,7 +1556,11 @@ func open_vote() -> void:
 	run.open_vote()
 	var ops := Run.opinions(vitals.hull, vitals.energy, reactor.hot, silt.inside != null, samples.cargo.size())
 	votes = VoteHolo.votes(ops)
-	vote_panel.show_vote(run.depth, ops)
+	if run.at_descent():   # у 10 — «спуститься сейчас или позже», что не узнано на слое (#1362)
+		votes.erase("up")
+		vote_panel.show_descent(DescentVote.unknown(lore), DescentVote.opinions(ops))
+	else:
+		vote_panel.show_vote(run.depth, ops)
 	if not pilot.seated:   # взгляд с карты брифинга — на поля голосования (#193)
 		var v := VoteHolo.look(Vector3(walker.x, Deck.Walker.EYE, walker.z), sonar_view.position)
 		walker.yaw = v.x
@@ -1717,6 +1721,8 @@ func _update_ui() -> void:
 		var label := ""
 		if post:
 			label = POST_BUTTON.get(post.id, "Люк" if post.id.begins_with("door") else "Колба" if post.id.begins_with("flask") else "")
+			if post.id == "route" and run.voting and run.at_descent() and not run.ended:
+				label = DescentVote.BUTTON   # спуск отложен «позже»: кнопка у стола снова открывает панель (#1362)
 			if Crew.holder(crew, me, post.id):
 				label = "Занято"
 		overlay.set_action_label(label)

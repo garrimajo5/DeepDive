@@ -296,13 +296,16 @@ func client_run_view(dt: float) -> void:
 	main.sonar_view.show_waypoint(main.run.waypoint())
 	main.sonar_view.show_briefing(main.brief.update(dt, Briefing.wanted(main.near_post, main.at_vote, main.run.ended)), main.run, main.helm.pos)
 	main.sonar_view.show_vote(main.vote_fade.update(dt, VoteHolo.wanted(main.at_vote, main.run.ended)), main.votes, int(main.net_vote["secs"]),
-		float(main.net_vote["frac"]))
+		float(main.net_vote["frac"]), main.run.at_descent())
 	main.sonar_view.show_result(main.result_fade.update(dt, VoteHolo.result_wanted(main.at_vote, main.run.ended)), main.result_rows,
 		main.camera.global_position)
 	if not main.at_vote:
 		main.vote_panel.visible = false
 	elif main.run.ended:
 		main.vote_panel.show_results(main.result_detail, main.run.score)
+	elif main.run.at_descent():   # у 10 — панель спуска по знаниям слоя (кадр «k») и мнениям хоста (#1362)
+		main.vote_panel.show_descent(DescentVote.unknown(main.lore), DescentVote.opinions(main.net_vote["ops"]))
+		main.vote_panel.set_tally(main.net_vote["tally"])
 	else:
 		main.vote_panel.show_vote(main.run.depth, main.net_vote["ops"])
 		main.vote_panel.set_tally(main.net_vote["tally"])
