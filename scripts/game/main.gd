@@ -245,7 +245,7 @@ func _build_outside() -> void:
 	ocean.add_child(wake_view)
 	eco = EcoView.new()
 	eco.name = "Живой мир"
-	eco.ground = Seabed.height
+	eco.ground = Seabed.mesh_height   # живой мир стоит на видимой сетке дна (#1386)
 	eco.world.scanned = scanner.is_scanned
 	add_child(eco)
 	samples_view = SamplesView.new(samples)

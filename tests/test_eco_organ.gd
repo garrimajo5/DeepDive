@@ -369,3 +369,20 @@ func test_view_sync_passes_world_time() -> void:
 	ok(ov.extra_cull_margin >= OrganView.BREATH, "раздутые устья не обрезает рамка")
 	ov.queue_free()
 	await frames(1)
+
+
+func test_main_organs_stand_on_visible_floor() -> void:
+	# #1386: мир ставил трубы на шум Seabed.height, а сетка дна между вершинами (клетка 5 м) ниже на 2–3 м —
+	# губки у (−38, 78) и (52, 30) висели над грунтом. Живой мир в игре стоит на видимой сетке (Seabed.mesh_height).
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	for og in main.eco.organs.organs:
+		for k in og.tube_base.size():
+			var b := og.tube_base[k]
+			var floor_y := Seabed.mesh_height(b.x, b.z)
+			near(b.y, floor_y - EcoOrgan.SINK, 0.05, "губка %d, труба %d — основание в грунте видимого дна" % [og.index, k])
+	var p := Vector2(52, 30)
+	near(float(main.eco.world.ground.call(p.x, p.y)), Seabed.mesh_height(p.x, p.y), 1e-4, "дно мира — сетка")
+	main.queue_free()
+	await frames(1)

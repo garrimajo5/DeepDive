@@ -229,3 +229,17 @@ func test_crust_color_at_brink() -> void:
 	var y := Seabed.height(b + EcoBrink.FULL + 10.0, z)
 	var with := Seabed.color_at(b + EcoBrink.FULL + 10.0, y, z, 1.0)
 	ok(with.b - with.r < 0.14 * 1.12, "color_at за границей — не синяя глубина")
+
+
+func test_mesh_height_vertex_cache() -> void:
+	# #1386: вершины сетки запоминаются — в вершине и между ними та же высота, что по шуму, и по треугольникам клетки.
+	var step := Seabed.SIZE / Seabed.SEGMENTS
+	for q in [Vector2(-40, 75), Vector2(50, 30), Vector2(360, 200), Vector2(-345, 345)]:
+		var x0 := floorf((q.x + Seabed.SIZE / 2.0) / step) * step - Seabed.SIZE / 2.0
+		var z0 := floorf((q.y + Seabed.SIZE / 2.0) / step) * step - Seabed.SIZE / 2.0
+		near(Seabed.mesh_height(x0, z0), Seabed.height(x0, z0), 1e-3, "вершина у %s" % q)
+		var h00 := Seabed.height(x0, z0)
+		var h10 := Seabed.height(x0 + step, z0)
+		var h01 := Seabed.height(x0, z0 + step)
+		near(Seabed.mesh_height(x0 + step * 0.25, z0 + step * 0.25),
+				h00 + (h10 - h00) * 0.25 + (h01 - h00) * 0.25, 1e-3, "внутри клетки у %s" % q)

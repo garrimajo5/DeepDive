@@ -178,13 +178,35 @@ static func mesh_height(x: float, z: float) -> float:
 	var z0 := -half + j * step
 	var a := (x - x0) / step
 	var b := (z - z0) / step
-	var h10 := height(x0 + step, z0)
-	var h01 := height(x0, z0 + step)
+	var vi := int(i)
+	var vj := int(j)
+	var h10 := _vertex(vi + 1, vj)
+	var h01 := _vertex(vi, vj + 1)
 	if a + b <= 1.0:
-		var h00 := height(x0, z0)
+		var h00 := _vertex(vi, vj)
 		return h00 + (h10 - h00) * a + (h01 - h00) * b
-	var h11 := height(x0 + step, z0 + step)
+	var h11 := _vertex(vi + 1, vj + 1)
 	return h11 + (h01 - h11) * (1.0 - a) + (h10 - h11) * (1.0 - b)
+
+
+## Высоты вершин сетки дна по запросу (рельеф неизменен): вершина (i, j) — `height` в (−SIZE/2 + i·шаг, −SIZE/2 + j·шаг),
+## i до края полосы `EAST`. Живой мир ставит на дно по `mesh_height` (#1386) — каждое чтение не считает шум трижды.
+const _VERT_I := int((EAST.end.x + SIZE / 2.0) / (SIZE / SEGMENTS)) + 1
+const _VERT_J := SEGMENTS + 1
+static var _verts := PackedFloat32Array()
+
+
+static func _vertex(i: int, j: int) -> float:
+	if _verts.is_empty():
+		_verts.resize(_VERT_I * _VERT_J)
+		_verts.fill(NAN)
+	var k := j * _VERT_I + i
+	var h := _verts[k]
+	if is_nan(h):
+		var step := SIZE / SEGMENTS
+		h = height(-SIZE / 2.0 + i * step, -SIZE / 2.0 + j * step)
+		_verts[k] = h
+	return h
 
 
 ## Цвет дна (js/world.js): песок, на крутых склонах скала, пятнами мох, в глубине темнеет. ny — y нормали.
