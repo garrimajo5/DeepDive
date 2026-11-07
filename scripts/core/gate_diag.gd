@@ -24,18 +24,23 @@ const READ_R := 45.0       ## гнездо читается не дальше э
 const READ_TIME := 3.0     ## удержание до перевода одного гнезда, с
 const DECAY := 1.0         ## спад прогресса без удержания, доля в с
 
-## Перевод на экран мостика — черновик; финальные строки пишет сюжет (TXT-001, #853).
+## Перевод на экран мостика — тексты TXT-001 (`docs/teksty/TXT-001-sloj1.md`, раздел 2): заголовок и три
+## состояния раздельно; человеческий интерфейс корабля переводит состояние чужого узла.
+const HEADER := "Перевод состояния узла"
 const TEXT := {
-	LayerLore.D07_RETURN: "Диагностика 07: обратный ход неисправен",
-	LayerLore.D07_RELAY: "Диагностика 07: ретранслятор без питания",
-	LayerLore.D07_AUTH: "Диагностика 07: изменение настроек требует авторизации",
+	LayerLore.D07_RETURN: "Обратный ход врат неисправен.",
+	LayerLore.D07_RELAY: "Ретранслятор: нет питания.",
+	LayerLore.D07_AUTH: "Изменение настроек требует авторизации.",
 }
 
-## Строки экрана сканера — коротко, экран узкий.
-const SHORT := {
-	LayerLore.D07_RETURN: "Обратный ход: неисправен",
-	LayerLore.D07_RELAY: "Ретранслятор: нет питания",
-	LayerLore.D07_AUTH: "Настройки: нужна авторизация",
+## Строки экрана сканера — те же тексты; длинные экран переносит.
+const SHORT := TEXT
+
+## Реакции экипажа TXT-001 (роль `Crew.Role`, текст): необязательны для понимания фактов, подача — по UX
+## (`docs/ux/put-novichka-sloj1.md`, п. 8); в соло невидимых говорящих напарников не создавать.
+const REACTION := {
+	LayerLore.D07_RETURN: [Crew.Role.SONAR, "Состояние прочитали. Обратный ход пока не работает."],
+	LayerLore.D07_AUTH: [Crew.Role.BIOLOGIST, "Настройки закрыты. Нужно разрешение системы."],
 }
 
 ## Действия терминала 07 на будущее (#826): локальная авторизация кодами и ремонт питания.
@@ -138,7 +143,11 @@ func screen_lines(lore: LayerLore) -> PackedStringArray:
 		lines.append("Перевод %d %%" % int(progress * 100.0))
 	elif not lore.knows(fact()):
 		lines.append("Держать — перевод")
+	var head := false
 	for k in LayerLore.DIAGNOSTICS:
 		if lore.knows(k):
+			if not head:
+				lines.append(HEADER)
+				head = true
 			lines.append(SHORT[k])
 	return lines
