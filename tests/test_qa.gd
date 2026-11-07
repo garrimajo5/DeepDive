@@ -922,6 +922,11 @@ func test_count_note() -> void:   # issue #1156: узлы и объекты в �
 	eq(QaRunner.count_note(4210, 18344, 3), " · узлы 4210, объекты 18344 (сирот 3)", "сироты — только если есть")
 
 
+func test_draw_note() -> void:   # #822: вызовы и треугольники кадра снимка — сверить бюджет у 10 и на отмели
+	eq(QaRunner.draw_note(168, 290787), " · вызовов 168, треуг. 291 тыс.")
+	eq(QaRunner.draw_note(0, 0), "", "нет замера (headless) — ничего")
+
+
 ## Корабль и полёт перед снимком name в сценарии: [ship, fly] (fly — {} без полёта); нет снимка — [].
 static func _before_shot(name: String) -> Array:
 	var steps: Array = JSON.parse_string(FileAccess.get_file_as_string("res://tools/qa/scenario.json"))

@@ -397,6 +397,14 @@ static func count_note(nodes: int, objects: int, orphans: int = 0) -> String:
 	return " · узлы %d, объекты %d%s" % [nodes, objects, " (сирот %d)" % orphans if orphans > 0 else ""]
 
 
+## Сколько рисует кадр снимка (#822): вызовы отрисовки и треугольники — бюджет уровня графики ART-044 («Обычно» ≲ 300
+## вызовов, ≲ 700 тыс. треуг.) сверяем по местам на устройстве. « · вызовов 168, треуг. 291 тыс.»; нет замера — "".
+static func draw_note(calls: int, prims: int) -> String:
+	if calls <= 0:
+		return ""
+	return " · вызовов %d, треуг. %d тыс." % [calls, roundi(prims / 1000.0)]
+
+
 const PARTS_FROM := 20.0   ## код дольше, мс, — пишем его части (issue #627)
 
 
@@ -489,9 +497,11 @@ func _shot(name: String) -> void:
 	if img == null or img.is_empty():
 		_log("скриншот %s: нет картинки (headless)" % name)
 		return
+	var calls := RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME)
+	var prims := RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME)
 	img.save_png("%s/%s.png" % [OUT, name])
 	shots.append(name)
-	_log("скриншот %s | %s" % [name, state() + count_note(int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
+	_log("скриншот %s | %s" % [name, state() + draw_note(calls, prims) + count_note(int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
 		int(Performance.get_monitor(Performance.OBJECT_COUNT)), int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)))])
 	after_shot()
 
