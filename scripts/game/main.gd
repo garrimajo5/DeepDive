@@ -139,6 +139,8 @@ var tutorial_panel: TutorialPanel
 ## Карточка роли у поста ART-045 (выключают те же `hints`; тестер — шаг `cards`): прочитанное — Settings.cards.
 var role_card := RoleCard.new()
 var role_card_panel: RoleCardPanel
+var goal_plate := GoalPlate.new()   ## плашка цели маршрута за штурвалом (#1344)
+var goal_plate_view: GoalPlateView
 ## Внутренняя связь ART-040: плашка внизу по центру, кодовое слово забега, «Спросить код» (голоса — `EcoLink.VOICE`).
 var comms := Comms.new()
 var comms_panel: CommsPanel
@@ -414,6 +416,9 @@ func _build_ui() -> void:
 	tutorial_panel.name = "Подсказка"
 	tutorial_panel.layout = overlay.router.layout
 	ui.add_child(tutorial_panel)
+	goal_plate_view = GoalPlateView.new()   # плашка цели маршрута за штурвалом (#1344)
+	goal_plate_view.name = "Цель маршрута"
+	ui.add_child(goal_plate_view)
 	role_card_panel = RoleCardPanel.new()   # карточка роли ART-045: касания — через Router.blocks/taps
 	role_card_panel.name = "Карточка роли"
 	ui.add_child(role_card_panel)
@@ -920,6 +925,8 @@ func _step_ui(dt: float) -> void:
 	clock.lap("интерфейс/приборы", Time.get_ticks_usec())
 	overlay_flow.tutorial_step(dt)
 	clock.lap("интерфейс/подсказки", Time.get_ticks_usec())
+	overlay_flow.goal_step(dt)
+	clock.lap("интерфейс/цель маршрута", Time.get_ticks_usec())
 	overlay_flow.card_step(dt)
 	clock.lap("интерфейс/карточка роли", Time.get_ticks_usec())
 	overlay_flow.comms_step(dt)
@@ -1791,7 +1798,8 @@ func status_parts() -> Array:
 		parts.append("до дна %d м" % roundi(helm.pos.y - Seabed.height(helm.pos.x, helm.pos.z)))
 		parts.append("курс %d°" % Status.course_deg(helm.yaw))
 		parts.append("прожектор %s" % ("вкл" if light_on else "выкл"))
-	parts.append(run.status(helm.pos.x, helm.pos.z))
+	if not pilot.seated:   # за штурвалом цель — в плашке `GoalPlate` (#1344), строка приборов короче
+		parts.append(run.status(helm.pos.x, helm.pos.z))
 	if reactor.alert().is_empty():
 		parts.append("реактор %d/%d" % [reactor.used(), reactor.limit()])
 	parts.append("течение на %s %s м/с" % [Status.rumb(current.vel()), _num(Helm.SeaCurrent.SPEED)])
