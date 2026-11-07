@@ -1,0 +1,26 @@
+[
+  {
+    "variant": "baseline",
+    "floor_m": -0.027109264143283577,
+    "Left_slip_m": 0.05744207689346212,
+    "Right_slip_m": 0.05963748165494553
+  },
+  {
+    "variant": "full_sole",
+    "floor_m": -0.02688221064077518,
+    "Left_slip_m": 0.058374006563980244,
+    "Right_slip_m": 0.05959507335182937
+  },
+  {
+    "variant": "minimax",
+    "floor_m": -0.032685553638757595,
+    "Left_slip_m": 0.10819453583333712,
+    "Right_slip_m": 0.10303232867654064
+  },
+  {
+    "variant": "minimax_linesearch",
+    "floor_m": -0.0327391214552305,
+    "Left_slip_m": 0.10821881154620919,
+    "Right_slip_m": 0.10310718809520124
+  }
+]
