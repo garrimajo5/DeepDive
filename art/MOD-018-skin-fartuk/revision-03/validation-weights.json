@@ -1,0 +1,83 @@
+[
+  {
+    "name": "gear-fartuk-m",
+    "max_influences": 4,
+    "max_weight_sum_error": 4.0978193283081055e-08,
+    "bone_max_weights": {
+      "LeftUpLeg": 0.9980243444442749,
+      "LeftLeg": 0.017744744196534157,
+      "RightUpLeg": 1.0,
+      "Hips": 0.49996939301490784,
+      "RightLeg": 0.016123224049806595,
+      "Spine02": 0.630652904510498,
+      "RightArm": 0.5097507238388062,
+      "LeftArm": 0.5677562952041626,
+      "Spine01": 0.4565620720386505,
+      "LeftShoulder": 0.7604404091835022,
+      "RightShoulder": 0.7777934670448303,
+      "Head": 0.6853596568107605,
+      "neck": 0.028363436460494995,
+      "headfront": 0.008312691934406757
+    },
+    "lower_thigh_max": 1.0
+  },
+  {
+    "name": "gear-fartuk-zh",
+    "max_influences": 4,
+    "max_weight_sum_error": 3.725290298461914e-08,
+    "bone_max_weights": {
+      "LeftUpLeg": 1.0,
+      "Hips": 0.8387673497200012,
+      "RightUpLeg": 1.0,
+      "LeftLeg": 0.04861730337142944,
+      "Spine02": 0.7128371000289917,
+      "LeftArm": 0.8189535140991211,
+      "Spine01": 0.8009284734725952,
+      "LeftShoulder": 0.8257362842559814,
+      "RightArm": 0.8011007308959961,
+      "RightShoulder": 0.8511596322059631,
+      "RightLeg": 0.062092430889606476,
+      "Head": 0.15159595012664795
+    },
+    "lower_thigh_max": 1.0
+  },
+  {
+    "name": "gear-tunika-m",
+    "max_influences": 4,
+    "max_weight_sum_error": 7.450580596923828e-08,
+    "bone_max_weights": {
+      "LeftUpLeg": 0.9923068881034851,
+      "RightUpLeg": 0.9882568717002869,
+      "Hips": 0.5041494965553284,
+      "Spine02": 0.7259111404418945,
+      "Spine01": 0.43643084168434143,
+      "LeftShoulder": 0.8884010910987854,
+      "RightShoulder": 0.8927983045578003,
+      "LeftArm": 0.5677562952041626,
+      "Head": 0.686238169670105,
+      "neck": 0.028341492637991905,
+      "headfront": 0.008316278457641602,
+      "RightArm": 0.5097507238388062
+    },
+    "lower_thigh_max": 0.9923068881034851
+  },
+  {
+    "name": "gear-tunika-zh",
+    "max_influences": 4,
+    "max_weight_sum_error": 4.0046870708465576e-08,
+    "bone_max_weights": {
+      "LeftUpLeg": 0.9936037659645081,
+      "Hips": 0.5995985865592957,
+      "RightUpLeg": 0.9954619407653809,
+      "Spine02": 0.6796223521232605,
+      "Spine01": 0.6283499002456665,
+      "LeftShoulder": 1.0,
+      "RightShoulder": 0.9964835047721863,
+      "LeftArm": 0.7072088122367859,
+      "neck": 0.02496451325714588,
+      "Head": 0.23806354403495789,
+      "RightArm": 0.6705077290534973
+    },
+    "lower_thigh_max": 0.9954619407653809
+  }
+]

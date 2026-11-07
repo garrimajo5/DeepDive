@@ -1,0 +1,74 @@
+[
+  {
+    "name": "gear-fartuk-m",
+    "max_influences": 4,
+    "max_weight_sum_error": 4.0978193283081055e-08,
+    "bone_max_weights": {
+      "LeftUpLeg": 0.9980243444442749,
+      "RightUpLeg": 1.0,
+      "LeftLeg": 0.017744744196534157,
+      "Hips": 0.49996939301490784,
+      "RightLeg": 0.016123224049806595,
+      "Spine02": 0.7275872230529785,
+      "LeftArm": 0.8682423233985901,
+      "RightArm": 0.8434354066848755,
+      "Spine01": 0.4565620720386505,
+      "LeftShoulder": 0.6329584121704102,
+      "RightShoulder": 0.6678924560546875
+    },
+    "lower_thigh_max": 1.0
+  },
+  {
+    "name": "gear-fartuk-zh",
+    "max_influences": 4,
+    "max_weight_sum_error": 3.725290298461914e-08,
+    "bone_max_weights": {
+      "LeftUpLeg": 1.0,
+      "Hips": 0.8387673497200012,
+      "RightUpLeg": 1.0,
+      "LeftLeg": 0.04861730337142944,
+      "Spine02": 0.7128371000289917,
+      "LeftArm": 0.9603402614593506,
+      "Spine01": 0.7281752228736877,
+      "RightArm": 0.9561800360679626,
+      "LeftShoulder": 0.5743986368179321,
+      "RightShoulder": 0.587252676486969,
+      "RightLeg": 0.062092430889606476
+    },
+    "lower_thigh_max": 1.0
+  },
+  {
+    "name": "gear-tunika-m",
+    "max_influences": 4,
+    "max_weight_sum_error": 7.450580596923828e-08,
+    "bone_max_weights": {
+      "LeftUpLeg": 0.9923068881034851,
+      "RightUpLeg": 0.9882568717002869,
+      "Hips": 0.581525444984436,
+      "Spine02": 0.7275872230529785,
+      "Spine01": 0.43643084168434143,
+      "LeftShoulder": 0.8884010910987854,
+      "RightShoulder": 0.8927983045578003,
+      "LeftArm": 0.8682423233985901,
+      "RightArm": 0.8434354066848755
+    },
+    "lower_thigh_max": 0.9923068881034851
+  },
+  {
+    "name": "gear-tunika-zh",
+    "max_influences": 4,
+    "max_weight_sum_error": 3.91155481338501e-08,
+    "bone_max_weights": {
+      "LeftUpLeg": 0.9936037659645081,
+      "Hips": 0.5995985865592957,
+      "RightUpLeg": 0.9954619407653809,
+      "Spine02": 0.6796223521232605,
+      "Spine01": 0.7299163937568665,
+      "LeftShoulder": 1.0,
+      "RightShoulder": 0.9964835047721863,
+      "LeftArm": 0.9603402614593506,
+      "RightArm": 0.9561800360679626
+    },
+    "lower_thigh_max": 0.9954619407653809
+  }
+]

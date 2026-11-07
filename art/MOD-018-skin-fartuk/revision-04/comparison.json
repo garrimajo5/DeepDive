@@ -1,0 +1,62 @@
+[
+  {
+    "name": "gear-fartuk-m",
+    "poses": 15,
+    "previous_pairs": 1054,
+    "current_pairs": 238,
+    "previous_max_m": 0.04188881441950798,
+    "current_max_m": 0.03463262319564819,
+    "rest": {
+      "min": -0.01842709444463253,
+      "max": 0.02500590682029724,
+      "inside": 1,
+      "far": 0,
+      "intersections": 0
+    }
+  },
+  {
+    "name": "gear-fartuk-zh",
+    "poses": 15,
+    "previous_pairs": 144,
+    "current_pairs": 60,
+    "previous_max_m": 0.03972727432847023,
+    "current_max_m": 0.039004500955343246,
+    "rest": {
+      "min": 0.007341356948018074,
+      "max": 0.02541476860642433,
+      "inside": 0,
+      "far": 0,
+      "intersections": 3
+    }
+  },
+  {
+    "name": "gear-tunika-m",
+    "poses": 15,
+    "previous_pairs": 2033,
+    "current_pairs": 627,
+    "previous_max_m": 0.07070914655923843,
+    "current_max_m": 0.044855404645204544,
+    "rest": {
+      "min": 0.007501077372580767,
+      "max": 0.030781975015997887,
+      "inside": 0,
+      "far": 0,
+      "intersections": 0
+    }
+  },
+  {
+    "name": "gear-tunika-zh",
+    "poses": 15,
+    "previous_pairs": 4280,
+    "current_pairs": 1029,
+    "previous_max_m": 0.07565835118293762,
+    "current_max_m": 0.05269155278801918,
+    "rest": {
+      "min": -0.017709417268633842,
+      "max": 0.026911888271570206,
+      "inside": 2,
+      "far": 0,
+      "intersections": 25
+    }
+  }
+]

@@ -1,0 +1,54 @@
+[
+  {
+    "name": "gear-fartuk-m",
+    "vertices": [
+      62,
+      72,
+      74,
+      101,
+      103,
+      119
+    ]
+  },
+  {
+    "name": "gear-fartuk-m",
+    "vertices": [
+      46,
+      61,
+      62
+    ]
+  },
+  {
+    "name": "gear-fartuk-zh",
+    "vertices": [
+      36,
+      130,
+      157,
+      159,
+      174,
+      175,
+      176
+    ]
+  },
+  {
+    "name": "gear-tunika-m",
+    "vertices": [
+      22,
+      50,
+      51,
+      67,
+      160,
+      173,
+      174
+    ]
+  },
+  {
+    "name": "gear-tunika-zh",
+    "vertices": [
+      60,
+      61,
+      62,
+      195
+    ]
+  }
+]
