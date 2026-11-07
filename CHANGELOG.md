@@ -3,6 +3,10 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-07
+- Проба QA на эмуляторе в Actions (#1393): workflow «QA на эмуляторе» (`.github/workflows/qa-emulator.yml`) после
+  «Godot» на `main` и вручную (`pr` — APK из артефакта PR) гоняет сценарий тестера на Android 34 x86_64
+  (`reactivecircus/android-emulator-runner@v2.33.0`, SwiftShader) шагами `tools/qa/emulator.sh` — как `run-qa.ps1`;
+  снимки, лог, logcat и кадры adb — артефакт `qa-emulator`. Тест `test_qa_tools.test_emulator_ci_matches_run_qa`.
 - Сценовый прогон сценария тестера (`test_qa.test_scene_runs_scenario`) берёт предел шагов от длины сценария
   (`QaScript.total_time` + 10 % и 20 с), а не числом 250 с: сценарий уже 240 с, новые шаги роняли тест (#1379).
 - Табличка товарища не ложится на подписи мостика (по issue #1376): подпись и счёт полей голосования над голостолом

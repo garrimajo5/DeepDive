@@ -85,3 +85,32 @@ func test_run_qa_stops_when_download_fails() -> void:
 	ok(fail > 0 and fail < inst, "при ошибке — выход до установки")
 	ok(ps.find("exit 1", fail) < inst, "выход с кодом 1")
 	ok(ps.find("last-commit.txt\" $head") > inst, "коммит записывается только после установки")
+
+
+## #1393: проба сценария тестера на эмуляторе в Actions — те же шаги, что run-qa.ps1: x86_64-сборка, пакет игры,
+## сценарий в files/qa, ожидание done.txt не короче сценария; action эмулятора закреплён тегом версии.
+func test_emulator_ci_matches_run_qa() -> void:
+	var sh := FileAccess.get_file_as_string(DIR.path_join("emulator.sh"))
+	var cfg := ConfigFile.new()
+	eq(cfg.load("res://export_presets.cfg"), OK, "пресеты читаются")
+	var pkg: String = cfg.get_value("preset.1.options", "package/unique_name")
+	ok(sh.contains("APP=" + pkg), "пакет игры как в пресете эмулятора: " + pkg)
+	ok(sh.contains("files/qa/scenario.json") and sh.contains("files/qa/out/done.txt"), "сценарий и done.txt — как run-qa.ps1")
+	ok(sh.contains("\"do\": \"quit\""), "в конце сценария — quit")
+	var wf := FileAccess.get_file_as_string("res://.github/workflows/qa-emulator.yml")
+	ok(wf.contains("DeepDive-emulator.apk"), "ставится x86_64-сборка")
+	ok(RegEx.create_from_string("reactivecircus/android-emulator-runner@v\\d+\\.\\d+\\.\\d+").search(wf) != null,
+		"action эмулятора закреплён тегом версии")
+	ok(wf.contains("workflows: [Godot]") and wf.contains("branches: [main]"), "после «Godot» на main")
+	var limit := RegEx.create_from_string("emulator\\.sh .* qa-out (\\d+)").search(wf)
+	ok(limit != null, "предел ожидания задан")
+	if limit == null:
+		return
+	var steps: Array = JSON.parse_string(FileAccess.get_file_as_string(DIR.path_join("scenario.json")))
+	var timed := 0.0
+	for st in steps:
+		if st.get("do", "") in ["wait", "hold", "drain", "swipe"]:
+			timed += float(st.get("s", 0.0))
+	ok(timed * 1.25 + 30.0 <= int(limit.get_string(1)), "ожидание покрывает сценарий")
+	var tm := RegEx.create_from_string("timeout-minutes: (\\d+)").search(wf)
+	ok(tm != null and int(tm.get_string(1)) * 60 > int(limit.get_string(1)) + 600, "job дольше ожидания: есть время на загрузку эмулятора")
