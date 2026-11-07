@@ -87,6 +87,11 @@
   - картинка: `xvfb-run -a -s "-screen 0 1600x720x24" godot --path . --rendering-method gl_compatibility --rendering-driver opengl3 --resolution 1600x720 -s tools/shot.gd -- out.png z=-3 yaw=0`
     (`--rendering-method gl_compatibility` обязателен: игра теперь на Forward Mobile/Vulkan, а в облаке Vulkan нет; снимок — в Compatibility, свечение видно, тени/SSAO — нет)
     (ключи — в `tools/shot.gd`, сцену по ключам готовит `tools/shot_setup.gd`), смотреть через Read. Сцену после изменений смотреть глазами, не только тестами.
+  - картинки макетов из issue: `raw.githubusercontent.com` из сессии закрыт — брать из ветки `issue-img`:
+    `git fetch origin issue-img && git show origin/issue-img:<номер>/<файл> > макет.png`;
+  - полный прогон (~15 мин в облаке) не запускать одновременно со снимками: замерные тесты (`test_eco_speed`) под
+    нагрузкой ложно краснеют — красный замерный тест перепроверить отдельно фильтром; полный прогон можно отдать CI,
+    локально гонять тесты по фильтру.
 - Поставить Godot в сессии: скачать `Godot_v4.7.2-stable_linux.x86_64.zip` с GitHub releases godotengine/godot,
   распаковать, `ln -s …/Godot_v4.7.2-stable_linux.x86_64 /usr/local/bin/godot`. Android SDK в сессии нет (`dl.google.com` закрыт),
   APK собирает только CI.
