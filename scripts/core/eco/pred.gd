@@ -438,7 +438,8 @@ func ship_sheltered(world: EcoWorld) -> bool:
 	return ognevka != null and ognevka.shelter(world.ship.pos) != null
 
 
-## Слышит ли двигатели корабля (hearsShip): ближе 24 м и быстрее 3 м/с, если корабль не в гуле трубного органа.
+## Слышит ли двигатели корабля (hearsShip): ближе 24 м и быстрее 3 м/с, если корабль не в гуле трубного органа
+## и не в густом ленточнике (`EcoKelp.muffling`, #1338).
 ## Гул спрятал корабль от патрулирующего или проверяющего звук хищника — наблюдение органа «mask».
 func hears_ship(world: EcoWorld, pr: Pred, d_ship: float) -> bool:
 	if d_ship >= HEAR_RADIUS or absf(world.ship.speed) <= HEAR_SPEED:
@@ -447,6 +448,11 @@ func hears_ship(world: EcoWorld, pr: Pred, d_ship: float) -> bool:
 		var og := organs.masking(world)
 		if og:
 			organs.masked(world, og, pr.mode == Mode.PATROL or pr.mode == Mode.INVESTIGATE)
+			return false
+	if kelp:
+		var gr := kelp.muffling(world)
+		if gr:
+			kelp.muffled(world, gr, pr.mode == Mode.PATROL or pr.mode == Mode.INVESTIGATE)
 			return false
 	return true
 

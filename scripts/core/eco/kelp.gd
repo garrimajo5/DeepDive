@@ -78,6 +78,13 @@ const SHELTER_UP := 5.0
 const GROVE_PAD := 1.5
 ## Изменение ленты, после которого её надо перерисовать (s.drawn).
 const REDRAW := 0.01
+## Ленточник глушит шум (бестиарий, #1338): корабль в густой роще — ближе KELP_R + MUFFLE_PAD к середине по
+## горизонтали и не выше MUFFLE_UP над её дном (лента до 5,5 м, корабль держится в 3 м над дном) — хищник не слышит
+## двигатели. Свет, сонар и светящийся след ленты не прячут. Объеденная роща (cover < COVER_MIN) не глушит.
+const MUFFLE_PAD := 1.5
+const MUFFLE_UP := 7.5
+## Наблюдение «kelp» у серпохвоста — раз в MUFFLE_CD у рощи.
+const MUFFLE_CD := 40.0
 
 
 ## Лента ленточника.
@@ -113,6 +120,8 @@ class Grove:
 	var cover := 1.0
 	var msg_cd := 0.0
 	var graze_cd := 0.0
+	## Пауза наблюдения «ленточник заглушил двигатели» (muffled).
+	var muffle_cd := 0.0
 	var stalks: Array[Stalk] = []
 	## Ленты рощи пора переписать в буфер вида (KelpView.sync переписывает только такие рощи).
 	var redraw := true
@@ -234,6 +243,7 @@ func step(world: EcoWorld, dt: float) -> void:
 	for gr in groves:
 		gr.msg_cd -= dt
 		gr.graze_cd -= dt
+		gr.muffle_cd -= dt
 		var sum := 0.0
 		for s in gr.stalks:
 			if s.eater < 0:
@@ -422,6 +432,26 @@ func grove_at(p: Vector3) -> Grove:
 	return null
 
 
+## Густая роща, в которой корабль (#1338): шум его двигателей хищникам не слышен. null — корабль не в роще
+## или роща объедена шипоежами.
+func muffling(world: EcoWorld) -> Grove:
+	var p := world.ship.pos
+	for gr in groves:
+		if gr.cover < COVER_MIN or p.y - gr.center.y > MUFFLE_UP:
+			continue
+		if Vector2(p.x - gr.center.x, p.z - gr.center.z).length() < KELP_R + MUFFLE_PAD:
+			return gr
+	return null
+
+
+## Ленточник спрятал двигатели от серпохвоста: watching — тот патрулирует или проверяет звук. Наблюдение
+## серпохвоста «kelp» — раз в MUFFLE_CD у рощи (биолог объясняет укрытие по журналу).
+func muffled(world: EcoWorld, gr: Grove, watching: bool) -> void:
+	if watching and gr.muffle_cd <= 0.0:
+		gr.muffle_cd = MUFFLE_CD
+		world.emit(EcoPred.ID, "kelp", gr.center, _muffle_text(world))
+
+
 ## Серпохвост потерял стаю в ленточнике: наблюдение светляка «kelp», раз в MSG_CD у рощи.
 func hid_fish(world: EcoWorld, gr: Grove) -> void:
 	if gr.msg_cd <= 0.0:
@@ -517,6 +547,14 @@ static func _kelp_text(world: EcoWorld) -> Callable:
 		var fish_n := w.nm(EcoFish.ID) if w else Species.called(EcoFish.ID)
 		var pred := w.nm(EcoPred.ID) if w else Species.called(EcoPred.ID)
 		return "%s: стая спряталась в ленточнике, %s её потерял" % [Species.cap(fish_n), pred]
+
+
+static func _muffle_text(world: EcoWorld) -> Callable:
+	var wr: WeakRef = weakref(world)
+	return func() -> String:
+		var w: EcoWorld = wr.get_ref()
+		var pred := w.nm(EcoPred.ID) if w else Species.called(EcoPred.ID)
+		return "Ленточник глушит двигатели — %s не слышит корабль" % pred
 
 
 static func _bare_text(world: EcoWorld) -> Callable:
