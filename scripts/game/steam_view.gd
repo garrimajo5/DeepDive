@@ -5,13 +5,16 @@ extends MultiMeshInstance3D
 
 var mat: ShaderMaterial
 var shown := 0   ## сколько карточек видно (для тестов)
+var cards: CardSwarm.Cards   ## буфер карточек (#847)
+var _tint := Color(-1, -1, -1)
 
 
 func _init() -> void:
 	name = "Пар вентиля"
 	mat = CardSwarm.material("res://shaders/steam.gdshader", {"atlas": load(ValveSteam.ATLAS), "tint": ValveSteam.COLD})
 	var mm := CardSwarm.setup(self, mat, ValveSteam.LIMIT, OceanView.LAYER_SHIP)
-	CardSwarm.park(mm, ValveSteam.NOZZLE)
+	cards = CardSwarm.Cards.new(mm)
+	cards.commit(ValveSteam.NOZZLE)
 	# весь путь пара: от сопла до +0,3 м по x и +0,6 м вверх, с запасом на карточку
 	mm.custom_aabb = AABB(ValveSteam.NOZZLE + Vector3(-0.4, -0.4, -0.4), Vector3(1.2, 1.4, 0.8))
 	visible = false
@@ -19,17 +22,17 @@ func _init() -> void:
 
 ## Каждый кадр: частицы и оттенок (ValveSteam.tint). Пусто — узел скрыт (прогрев покажет пустую карточку на кадр).
 func apply(st: ValveSteam, tint: Color) -> void:
-	var mm := multimesh
-	var n := mini(st.puffs.size(), mm.instance_count)
-	for i in n:
-		var p: ValveSteam.Puff = st.puffs[i]
+	cards.begin()
+	for p: ValveSteam.Puff in st.puffs:
+		if cards.full():
+			break
 		var a := p.age / ValveSteam.LIFE
 		var s := ValveSteam.size(a)
-		mm.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3(s.x, s.y, 1.0)), ValveSteam.pos(p.age, p.angle)))
-		mm.set_instance_custom_data(i, Color(a, ValveSteam.alpha(a), 0.0, float(ValveSteam.LAST)))   # кадры 0…15
-	shown = n
-	if n == 0:
-		CardSwarm.park(mm, ValveSteam.NOZZLE)
-	mm.visible_instance_count = maxi(n, 1)
-	mat.set_shader_parameter("tint", tint)
-	visible = n > 0
+		cards.add(Vector3(s.x, 0, 0), Vector3(0, s.y, 0), ValveSteam.pos(p.age, p.angle),
+				Color(a, ValveSteam.alpha(a), 0.0, float(ValveSteam.LAST)))   # кадры 0…15
+	shown = cards.n
+	cards.commit(ValveSteam.NOZZLE)
+	if shown > 0 and tint != _tint:
+		_tint = tint
+		mat.set_shader_parameter("tint", tint)
+	visible = shown > 0

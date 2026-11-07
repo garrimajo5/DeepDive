@@ -196,9 +196,167 @@ func test_view_one_mesh_faces_out() -> void:
 	await frames(1)
 
 
+## «Экономно»: трубка вне разлома — через сечение, разлом, пластина, гнёзда, осыпь и обрастание — как в полном.
+func test_view_lite_coarser_same_material() -> void:
+	var sh := _shell(_flat)
+	var v := ShellView.new(sh)
+	var full := v.tris
+	var full_tube := v.tube_tris
+	var full_glow := v.glowing
+	var mat := v.mesh.surface_get_material(0)
+	var box_full := v.mesh.get_aabb()
+	v.set_lite(true)
+	ok(v.lite, "раковина — на «Экономно»")
+	ok(v.tris * 100 <= full * 80, "треугольников не больше 80 %% (%d → %d)" % [full, v.tris])
+	ok(v.tube_tris * 100 <= full_tube * 65, "трубка грубее: %d → %d" % [full_tube, v.tube_tris])
+	eq(v.tris - v.tube_tris, full - full_tube, "разлом, пластина, гнёзда, осыпь — те же")
+	eq(v.glowing, full_glow, "обрастание то же")
+	eq(v.mesh.get_surface_count(), 1, "вызов тот же")
+	ok(v.mesh.surface_get_material(0) == mat, "материал тот же")
+	var box := v.mesh.get_aabb()
+	ok(box.size.distance_to(box_full.size) < 0.05, "силуэт тот же: %s → %s" % [box_full.size, box.size])
+	# ряды стыкуются без щелей, разлом — по сечению, борозды остаются вершинами
+	var rows := v.rows()
+	eq(rows[0].x, 0, "с середины спирали")
+	eq(rows[-1].y, EcoShell.SECTIONS - 1, "до конца трубки")
+	var cuts := {}
+	for k in rows.size():
+		if k > 0:
+			eq(rows[k].x, rows[k - 1].y, "ряд %d стыкуется с прошлым" % k)
+		ok(rows[k].y - rows[k].x <= ShellView.LITE_STEP, "ряд не шире двух сечений")
+		if sh.in_break(rows[k].x):
+			eq(rows[k].y, rows[k].x + 1, "в разломе — каждое сечение")
+		cuts[rows[k].x] = true
+	for i in range(1, EcoShell.SECTIONS - 1):
+		if EcoShell.groove(i):
+			ok(cuts.has(i), "борозда %d — на стыке рядов" % i)
+	# грани по-прежнему наружу от оси ряда
+	var outward := 0
+	for t in v.tube_tris:
+		var a := v.verts[t * 3]
+		var c := (a + v.verts[t * 3 + 1] + v.verts[t * 3 + 2]) / 3.0
+		var cr := (v.verts[t * 3 + 1] - a).cross(v.verts[t * 3 + 2] - a)
+		var axis := sh.surface((sh.theta[v.tube_row[t]] + sh.theta[v.tube_end[t]]) * 0.5, 0.0, 0.0)
+		var out := c - sh.to_world(axis)
+		if cr.dot(out) < 0.0 and v.normals[t * 3].dot(out) > 0.0:
+			outward += 1
+	eq(outward, v.tube_tris, "лицевая сторона трубки — снаружи")
+	v.set_lite(false)
+	eq(v.tris, full, "назад — полный меш")
+	eq(v.glowing, full_glow, "и обрастание не задвоилось")
+	v.free()
+
+
+func test_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = _flat
+	var full := ev.shell_view.tris
+	ev.set_lite(true)
+	ok(ev.shell_view.lite and ev.shell_view.tris < full, "уровень дошёл до раковины: %d → %d" % [full, ev.shell_view.tris])
+	var lite_tris := ev.shell_view.tris
+	ev.ground = _flat
+	ok(ev.shell_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(ev.shell_view.tris, lite_tris, "и меш грубый")
+	ev.set_lite(false)
+	eq(ev.shell_view.tris, full, "назад — полный")
+	ev.free()
+	EcoShaders.set_sway_lite(false)
+
+
 func test_in_eco_view() -> void:
 	var ev := EcoView.new()
 	ev.ground = _flat
 	ok(ev.shell != null and ev.shell_view != null, "раковина в живом мире")
 	near(ev.shell.base.y, FLAT - EcoShell.SINK, 1e-4, "встала на дно мира")
 	ev.free()
+
+
+## Мир с Раковиной на ровном дне и кораблём в 20 м западнее, 10 м над дном.
+func _inspect_world() -> Array:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	var s := w.add(EcoShell.new()) as EcoShell
+	w.ship.pos = Vector3(EcoShell.CENTER.x - 20.0, FLAT + 10.0, EcoShell.CENTER.y)
+	w.ship.sonar_range = Sonar.BASE_RANGE
+	return [w, s]
+
+
+static func _take(w: EcoWorld) -> Array[String]:
+	var out: Array[String] = []
+	for e in w.take_link():
+		var t: String = e.get("type", "")
+		if t == EcoLink.MESSAGE or t == EcoLink.SHELL:
+			out.append(t + ":" + str(e["text"]))
+	return out
+
+
+func _scan(w: EcoWorld, s: float) -> Array[String]:
+	var got: Array[String] = []
+	w.ship.scan_range = Scanner.RANGE
+	for i in roundi(s / 0.1):
+		w.step(0.1)
+		got.append_array(_take(w))
+	w.ship.scan_range = 0.0
+	return got
+
+
+func _ping(w: EcoWorld) -> Array[String]:
+	w.ship.sonar_ping = true
+	w.step(0.1)
+	w.ship.sonar_ping = false
+	return _take(w)
+
+
+func test_scan_then_ping_confirms() -> void:
+	var r := _inspect_world()
+	var w: EcoWorld = r[0]
+	var sh: EcoShell = r[1]
+	eq(_scan(w, 2.0), [] as Array[String], "сканер короче SCAN_TIME — строки нет")
+	var got := _scan(w, 1.5)
+	eq(got, ["message:" + EcoShell.SCAN_TEXT] as Array[String], "гнёзда на сканере — только строка, знания ещё нет")
+	got = _ping(w)
+	eq(got, ["message:" + EcoShell.PING_TEXT, "shell:" + EcoShell.DONE_TEXT] as Array[String], "сонар добавил рельеф — осмотр")
+	ok(sh.confirmed, "подтверждено")
+	eq(_ping(w) + _scan(w, 4.0), [] as Array[String], "второй раз за забег — ничего")
+	w.reset()
+	ok(not sh.scanned and not sh.pinged and not sh.confirmed, "новый забег — осмотр заново")
+
+
+func test_ping_then_scan_confirms() -> void:
+	var r := _inspect_world()
+	var w: EcoWorld = r[0]
+	eq(_ping(w), ["message:" + EcoShell.PING_TEXT] as Array[String], "сначала сонар — только строка")
+	eq(_scan(w, 3.5), ["message:" + EcoShell.SCAN_TEXT, "shell:" + EcoShell.DONE_TEXT] as Array[String],
+		"потом сканер — осмотр, в любом порядке")
+
+
+func test_far_or_high_no_observation() -> void:
+	var r := _inspect_world()
+	var w: EcoWorld = r[0]
+	w.ship.pos.x = EcoShell.CENTER.x - EcoShell.PING_R - 5.0
+	eq(_ping(w) + _scan(w, 4.0), [] as Array[String], "далеко — ни сонара, ни сканера")
+	r = _inspect_world()
+	w = r[0]
+	w.ship.pos.y = FLAT + EcoShell.SCAN_UP + 5.0
+	eq(_scan(w, 4.0), [] as Array[String], "высоко над дном — сканер гнёзд не видит")
+	w.ship.sonar_range = 15.0   # корабль в 20 м
+	eq(_ping(w), [] as Array[String], "импульс короче расстояния — не дотянулся")
+
+
+func test_scan_decays_when_left() -> void:
+	var r := _inspect_world()
+	var w: EcoWorld = r[0]
+	var sh: EcoShell = r[1]
+	_scan(w, 2.5)
+	for i in 10:
+		w.step(0.1)
+	near(sh.scan_t, 0.5, 0.05, "сканер выключили — набранное спадает вдвое быстрее")
+
+
+func test_inspect_texts_short() -> void:
+	ok(EcoShell.SCAN_TEXT.begins_with("Сканер: "), "строка сканера")
+	ok(EcoShell.PING_TEXT.begins_with("Сонар: "), "строка сонара")
+	for t in [EcoShell.SCAN_TEXT, EcoShell.PING_TEXT, EcoShell.DONE_TEXT]:
+		ok(t.length() <= 110, "коротко: %d" % t.length())
+		for word in ["Складчат", "код", "К-2", "К-6"]:
+			ok(not t.contains(word), "без новых сюжетных фактов: %s" % word)

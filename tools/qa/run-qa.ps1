@@ -70,7 +70,15 @@ if ($Pr) {
   # эмулятору — x86_64-сборка (#844); в релизах до неё — один общий DeepDive.apk
   $asset = $rel.assets | Where-Object name -eq 'DeepDive-emulator.apk' | Select -First 1
   if (-not $asset) { $asset = $rel.assets | Where-Object name -eq 'DeepDive.apk' | Select -First 1 }
-  Invoke-WebRequest $asset.browser_download_url -OutFile $apk -Headers @{ 'User-Agent' = 'run-qa' }
+  if (-not $asset) { Write-Output "NO_ASSET ${head}: в релизе apk-latest нет APK (перезаливается?) — повторите позже"; exit 1 }
+  # Старый APK не ставим: релиз мог перезаливаться, и скачивание упадёт (BlobNotFound, #1125)
+  Remove-Item $apk -Force -ErrorAction SilentlyContinue
+  try {
+    Invoke-WebRequest $asset.browser_download_url -OutFile $apk -Headers @{ 'User-Agent' = 'run-qa' } -ErrorAction Stop
+  } catch {
+    Write-Output "DOWNLOAD_FAILED ${head}: $($_.Exception.Message) — повторите позже"; exit 1
+  }
+  if (-not (Test-Path $apk) -or (Get-Item $apk).Length -lt 1MB) { Write-Output "DOWNLOAD_FAILED ${head}: APK не скачан"; exit 1 }
 }
 
 if (-not ((& $adb devices) -match 'emulator-\d+\s+device')) {
@@ -89,7 +97,7 @@ if ($inst -notmatch 'Success') { Write-Output "INSTALL_FAILED $head"; $inst; exi
 & $adb logcat -c
 & $adb shell monkey -p $app -c android.intent.category.LAUNCHER 1 | Out-Null
 $done = $false
-for ($i = 0; $i -lt 150; $i++) {
+for ($i = 0; $i -lt 165; $i++) {
   Start-Sleep 2
   if ((& $adb shell "run-as $app ls files/qa/out/done.txt" 2>&1) -match 'done.txt$') { $done = $true; break }
 }

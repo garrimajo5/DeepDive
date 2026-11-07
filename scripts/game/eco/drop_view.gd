@@ -5,6 +5,9 @@ extends MeshInstance3D
 ## диагональная осыпь, три тёмные трещины по площадке. Один меш, один материал, один вызов отрисовки, плоские
 ## грани (камень). Светится только редкое обрастание #67DDEB — альфа вершинного цвета в том же материале;
 ## скале — слабая подсветка FILL, чтобы кромка читалась в мути. Без источников света, слой отмели.
+## «Экономно» (Б6, `set_lite`): клинья вдвое реже вдоль бровки (LITE_STEP_Z), ложе шрама 4 × 6 вместо 8 × 12
+## (LITE_SCAR_*) — меш пересобирается с тем же материалом; ряды профиля (уступы пластов), осыпь, трещины, обрастание,
+## вызов и силуэт те же. Сброс мира уровень не теряет (EcoView.set_lite).
 
 ## Подсветка камня, шероховатость и блик — в общем шейдере камня (EcoShaders.STONE).
 const FILL := 0.22
@@ -31,6 +34,10 @@ const JITTER := 0.35
 const SCAR_COLS := 8
 const SCAR_ROWS := 12
 const FURROW := 0.25
+## «Экономно»: шаг вдоль z и сетка ложа шрама.
+const LITE_STEP_Z := 3.6
+const LITE_SCAR_COLS := 4
+const LITE_SCAR_ROWS := 6
 ## Обрастания на клин (в верхних рядах стенки), высота кустика.
 const TUFTS := 7
 const TUFT_H := 0.5
@@ -44,15 +51,36 @@ var normals := PackedVector3Array()
 var tris := 0
 var wedge_tris := 0
 var glowing := 0
+## На «Экономно» — грубее сетка (set_lite).
+var lite := false
 
 var _col := PackedColorArray()
+var _mat: Material
 
 
-func _init(system: EcoDrop) -> void:
+func _init(system: EcoDrop, on_lite := false) -> void:
 	drop = system
+	lite = on_lite
 	name = "Край отмели"
 	layers = OceanView.LAYER_WORLD
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_mat = EcoShaders.stone(GROWTH, FILL, ROUGH, SPEC)
+	_build()
+
+
+## «Экономно» — меш пересобран грубее (тот же материал); назад — полный.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	_build()
+
+
+func _build() -> void:
+	verts.clear()
+	normals.clear()
+	_col.clear()
+	glowing = 0
 	for w in EcoDrop.WEDGES.size():
 		_wedge(w)
 	wedge_tris = verts.size() / 3
@@ -60,7 +88,7 @@ func _init(system: EcoDrop) -> void:
 	_scree()
 	_cracks()
 	var m := EcoMM.tris(verts, normals, _col)
-	m.surface_set_material(0, EcoShaders.stone(GROWTH, FILL, ROUGH, SPEC))
+	m.surface_set_material(0, _mat)
 	mesh = m
 	tris = verts.size() / 3
 
@@ -105,7 +133,7 @@ func _paint(w: int, r: int, iz: int, y_brow: float, y: float) -> Color:
 ## Клин: сетка по рядам профиля и шагам вдоль z, торцы — веером; у шрама торец — светлый скол.
 func _wedge(w: int) -> void:
 	var zr := EcoDrop.wedge_z(w)
-	var nz := maxi(2, ceili((zr.y - zr.x) / STEP_Z))
+	var nz := maxi(2, ceili((zr.y - zr.x) / (LITE_STEP_Z if lite else STEP_Z)))
 	var n := rows()
 	var grid: Array[PackedVector3Array] = []
 	for i in nz + 1:
@@ -144,8 +172,8 @@ func _wedge(w: int) -> void:
 ## Шрам оползня: головная стенка скола и площадка над ней, ложе по склону от скола к илу.
 func _scar() -> void:
 	var half := EcoDrop.SCAR_W * 0.5
-	var nc := SCAR_COLS
-	var nr := SCAR_ROWS
+	var nc := LITE_SCAR_COLS if lite else SCAR_COLS
+	var nr := LITE_SCAR_ROWS if lite else SCAR_ROWS
 	var bed: Array[PackedVector3Array] = []
 	for j in nc + 1:
 		var u := lerpf(-1.0, 1.0, float(j) / nc)

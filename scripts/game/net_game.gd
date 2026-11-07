@@ -9,6 +9,12 @@ extends RefCounted
 ## пересылки у `Main`.
 
 var main: Main
+## Свои знания слоя до входа гостем (#823, часть 4): кадры хоста ставят его знания, `leave_net` возвращает свои.
+var own_lore: Array = []
+## Свои трюм и виды до входа гостем (#823, часть 5): гость видит трюм и виды хоста, `leave_net` возвращает свои.
+var own_hold := {}
+## Хост: ключ трюма и видов, уже отправленных гостям (`NetSnap.hold_key`); [] — отправить снова.
+var hold_sent: Array = []
 
 
 func _init(m: Main) -> void:
@@ -49,6 +55,7 @@ func net_poll(dt: float = 0.0) -> void:
 	for e: Dictionary in main.net_host.poll(dt):
 		var g: NetLink.Guest = e["guest"]
 		if e["k"] == "join":
+			hold_sent = []   # подключившемуся — трюм и виды хоста следующим кадром
 			var m := seat_guest(g)
 			if MateGhost.forget(main.ghosts, m.name):   # вернулся — прежняя фигура уходит, встаёт новая
 				ghosts_step(0.0, true)
@@ -120,20 +127,26 @@ func net_send(dt: float) -> void:
 		var ev := NetSnap.events(main.breach, main.silt, main.time, welding, main.news if main.news_age < NetSnap.NEWS_TIME else [])
 		ev["r"] = net_run()
 		ev["w"] = main.wreck.t   # шторка «Корпус разрушен» — у всех (ART-036)
+		ev["d"] = main.trip.pack()   # уход к Кристальному лесу у 10 (#828) — шторка у всех
 		ev["z"] = NetSnap.scorch(main.scorch, main.time)   # следы разрядов на дне — тот же след у гостя
 		ev["so"] = NetSnap.sonar(main.sonar, main.time)   # импульс и отметки голограммы — те же у гостя
 		ev["c"] = main.comms.pack()   # связь ART-040: код забега, плашка и ход проверки — те же у гостя
+		ev["k"] = main.lore.pack()    # знания слоя 1 (#825) — общие, подключившийся получает их сразу
 		var f := NetSnap.frame(main.net_host.seq, main.time, main.helm, main.reactor, main.vitals, main.light_on, main.crew, ev)
 		f["eco"] = EcoLink.pack_world(main.eco.world.agents, main.eco.world.systems, main.helm.pos, EcoLink.NET_R,
 			main.eco.world.time)   # существа и мох рядом — гостям отдельным пакетом
 		main.net_host.send_frame(f)
+		var key := NetSnap.hold_key(main.samples, main.scanner)
+		if key != hold_sent:   # трюм и виды — надёжно и только при изменении: в кадр они не влезут (#823)
+			hold_sent = key
+			main.net_host.send_hold(NetSnap.hold(main.samples, main.scanner))
 
 
 ## Маршрут, голосование и итог для гостей (NetSnap.run_state): мнения ролей — по кораблю сейчас; метки — голоса
 ## у стола, а если голосует один — мнения ролей, как у своего игрока у стола.
 func net_run() -> Dictionary:
 	var ops := []
-	if main.run.done and not main.run.ended:
+	if main.run.voting and not main.run.ended:
 		ops = Run.opinions(main.vitals.hull, main.vitals.energy, main.reactor.hot, main.silt.inside != null, main.samples.cargo.size())
 	var coop := main.vote_ids().size() > 1
 	var marks: Dictionary = main.vote_marks() if coop or main.at_vote else VoteHolo.votes(ops)
@@ -156,6 +169,10 @@ func join_game(to: String, port: int = NetLink.PORT, player: String = "", role: 
 
 ## Стать клиентом хоста: c уже подключается (`join_game`) или на борту (экран адреса ART-039).
 func enter_client(c: NetLink.Client) -> void:
+	main.save.flush(main.samples, main.scanner)   # своё несохранённое — в файл до кадров хоста
+	main.save.guest = true   # сохраняет хост (#823): кампания гостя не перетирается кадрами хоста
+	own_lore = main.lore.snapshot()
+	own_hold = NetSnap.hold(main.samples, main.scanner)
 	main.net_client = c
 	main.net_seq = -1
 	main.net_news = 0
@@ -166,6 +183,7 @@ func enter_client(c: NetLink.Client) -> void:
 	main.drop.menu_ready = true   # главное меню ART-037 есть: «В меню» в диалоге обрыва связи
 	main.flyby.stop()   # клиент входит в идущий забег — облёта нет
 	main.tutorial_guest = Tutorial.Guest.new()
+	main.tutorial.set_guest(true)   # маршрута у гостя нет — без шага 7 (#1346)
 	main.sonar.count = -1   # первый кадр хоста ставит его сонар, даже если счёт импульсов совпал со своим
 	main.comms.reset_run(0)
 	main.comms.code = ""   # кодовое слово — хоста, до первого кадра страницы «Связь» нет
@@ -179,6 +197,8 @@ func client_step(dt: float) -> void:
 	var lk := main.overlay.look_points()
 	main.wreck.update(dt)   # между кадрами хоста шторка идёт сама; кадр ставит время хоста
 	main._wreck_show()
+	main.trip.update(dt)   # шторка ухода к лесу (#828) — так же; корабль возвращает кадр хоста
+	main.trip_view.apply(main.trip)
 	if main.wreck.active() and not main.drop.blocks():   # шторка «Корпус разрушен»: ввод не идёт хосту
 		main.net_pad.clear()
 	elif main.drop.blocks():   # связь потеряна: управление остановлено, касания — кнопкам диалога
@@ -198,6 +218,7 @@ func client_step(dt: float) -> void:
 	var was := main.net_client.state
 	main.net_client.send_pad(main.net_pad)
 	var f := main.net_client.poll(dt)
+	NetSnap.apply_hold(main.net_client.take_hold() if main.net_client else {}, main.samples, main.scanner)
 	if not f.is_empty():
 		client_frame(f)
 		main.drop.restored()   # хост принял снова и кадр применён — управление вернулось
@@ -248,7 +269,7 @@ func client_step(dt: float) -> void:
 	main._apply_crew_view()
 	main._place_ship()
 	main._place_camera()
-	main.route_card.show_card(main.brief.k, main.run.route, main.get_viewport().get_camera_3d(), main.sonar_view.to_global(Briefing.CARD_ANCHOR),
+	main.route_card.show_card(main.brief.k, main.run.route, main.get_viewport().get_camera_3d(), main.sonar_view.global_transform,
 		main.comms.code)   # код забега — из кадра хоста (`Comms.apply`)
 	main._update_ui()   # до меток: плашка строки уже на месте этого кадра (#387)
 	main.busy_marks.plate = main.status_rect()
@@ -275,13 +296,16 @@ func client_run_view(dt: float) -> void:
 	main.sonar_view.show_waypoint(main.run.waypoint())
 	main.sonar_view.show_briefing(main.brief.update(dt, Briefing.wanted(main.near_post, main.at_vote, main.run.ended)), main.run, main.helm.pos)
 	main.sonar_view.show_vote(main.vote_fade.update(dt, VoteHolo.wanted(main.at_vote, main.run.ended)), main.votes, int(main.net_vote["secs"]),
-		float(main.net_vote["frac"]))
+		float(main.net_vote["frac"]), main.run.at_descent())
 	main.sonar_view.show_result(main.result_fade.update(dt, VoteHolo.result_wanted(main.at_vote, main.run.ended)), main.result_rows,
 		main.camera.global_position)
 	if not main.at_vote:
 		main.vote_panel.visible = false
 	elif main.run.ended:
 		main.vote_panel.show_results(main.result_detail, main.run.score)
+	elif main.run.at_descent():   # у 10 — панель спуска по знаниям слоя (кадр «k») и мнениям хоста (#1362)
+		main.vote_panel.show_descent(DescentVote.unknown(main.lore), DescentVote.opinions(main.net_vote["ops"]))
+		main.vote_panel.set_tally(main.net_vote["tally"])
 	else:
 		main.vote_panel.show_vote(main.run.depth, main.net_vote["ops"])
 		main.vote_panel.set_tally(main.net_vote["tally"])
@@ -304,10 +328,12 @@ func client_frame(f: Dictionary) -> void:
 		var evd: Variant = f.get("ev", {})
 		if evd is Dictionary:
 			main.wreck.follow(float(evd.get("w", -1.0)))
+			main.trip.follow(float(evd.get("d", -1.0)))
 			if NetSnap.apply_scorch(evd.get("z"), main.scorch, main.time):
 				main.ocean.set_scorch(main.scorch.uniforms(main.time))   # разряд хоста у дна или новый забег
 			NetSnap.apply_sonar(evd.get("so"), main.sonar, main.time)
 			main.comms.apply(evd.get("c"))
+			main.lore.apply_net(evd.get("k"))
 		var rs := NetSnap.apply_run(evd.get("r") if evd is Dictionary else null, main.run)
 		if not rs.is_empty():   # маршрут хоста уже в run; метки, таймер и итог — для показа
 			main.votes = rs["marks"]
@@ -359,11 +385,11 @@ func drop_taps(taps: Array[Vector2]) -> void:
 		match main.drop.press(main.drop.hit(p, main.get_viewport().get_visible_rect().size)):
 			"rejoin":
 				main.net_client.rejoin(NetDrop.WINDOW)
-			"solo":   # перенос забега в соло не сделан — новый одиночный забег
+			"solo":   # перенос забега в соло не сделан — своя кампания с последнего сохранения (#823)
 				leave_net()
 				if main.me.pilot.seated:
 					main.me.stand()
-				main._restart()
+				main._load_last()
 			"menu":   # «В меню» (ART-043): сетевой забег покинут, главное меню ART-037
 				leave_net()
 				main.menu_flow.to_menu()
@@ -377,8 +403,14 @@ func leave_net() -> void:
 	main.net_client.stop()
 	main.net_client = null
 	main.tutorial_guest = null
+	main.tutorial.set_guest(false)
+	main.save.guest = false   # снова своя кампания: свои знания вместо пришедших от хоста (#823)
+	main.lore.apply(own_lore)
+	NetSnap.apply_hold(own_hold, main.samples, main.scanner)   # и свои трюм и виды вместо хозяйских
 	main.wreck.reset()   # шторка хоста — не своя: одиночный забег без неё
 	main._wreck_show()
+	main.trip.follow(-1.0)   # и шторка ухода к лесу (#828)
+	main.trip_view.apply(main.trip)
 	main.weak.reset()
 	main.drop_panel.show_weak(main.weak)
 	main.crew = [main.me]

@@ -54,7 +54,23 @@ const SIZE_HIGH := 0.42
 ## Зерно пузырей (своё, чтобы не трогать случай мира).
 const BUBBLE_SEED := 1261045
 
+## Знак шлейфа раньше урона (#835, часть 2а, `docs/sloj1-sad.md` «02»): корабль по горизонтали входит в WARN_R от
+## жерла — мир шлёт строку WARN_TEXT (EcoLink.MESSAGE). Перегрев реактора — у корабля ближе Reactor.VENT_R (45 м),
+## так что знак приходит на 30 м раньше. Снова — только после выхода из круга и не чаще WARN_CD. Урона мир не добавляет.
+const WARN_R := 75.0
+const WARN_CD := 120.0
+const WARN_TEXT := "Вода теплеет: впереди шлейф Чёрного курильщика. Обходите сбоку — у жерл перегреется реактор."
+
+## Веерники у курильщика (#835, часть 2б): три веера в 14–16 м от главной трубы стоят не поперёк течения, а к жерлу —
+## у дна вода тянется к трубам и уходит вверх шлейфом (EcoFan.vent_pull, EcoFan.default_spots). Обход — сбоку, мимо них.
+const FANS: Array[Vector2] = [Vector2(-111.0, 51.0), Vector2(-138.0, 56.0), Vector2(-130.0, 29.0)]
+## Сила тяги к жерлу для веера: до PULL_IN — веер весь к жерлу, к PULL_OUT — снова поперёк течения.
+const PULL_IN := 20.0
+const PULL_OUT := 35.0
+
 var tubes: Array[Tube] = []
+var warn_cd := 0.0
+var _inside := false   ## корабль в круге WARN_R (знак уже был за этот заход)
 ## Высота дна (мир передаёт при сбросе; без дна — ровно −40 м).
 var ground: Callable
 ## Пузыри: точка выхода (в жерле), скорость, фаза 0…1, высота столба до льда, своё число для сноса.
@@ -74,6 +90,8 @@ func _init(center: Vector2 = CENTER) -> void:
 
 func reset(world: EcoWorld) -> void:
 	ground = world.ground
+	warn_cd = 0.0
+	_inside = false
 	tubes.clear()
 	var y0 := floor_y(_center.x, _center.y)
 	for t in TUBES:
@@ -92,6 +110,15 @@ func reset(world: EcoWorld) -> void:
 		tb.mouth = Vector3(x, base_y + tb.height, z)
 		tubes.append(tb)
 	_place_bubbles()
+
+
+func step(world: EcoWorld, dt: float) -> void:
+	warn_cd -= dt
+	var near := Vector2(world.ship.pos.x - _center.x, world.ship.pos.z - _center.y).length() < WARN_R
+	if near and not _inside and warn_cd <= 0.0:
+		warn_cd = WARN_CD
+		world.send(EcoLink.message(WARN_TEXT))
+	_inside = near
 
 
 ## Дно под (x, z): мир передаёт Seabed.height; без него — −40 м.

@@ -21,7 +21,7 @@ func test_upload_hides_empty_layer() -> void:
 	mi.free()
 
 
-## Корабль высоко над отмелью — мути нигде нет: в живом мире не виден ни один слой «Муть».
+## Корабль высоко над отмелью — мути нигде нет: общий слой «Муть» живого мира не виден, своих слоёв у видов нет.
 func test_world_without_dust_draws_no_layer() -> void:
 	var view := EcoView.new()
 	view.ground = Seabed.height
@@ -32,11 +32,8 @@ func test_world_without_dust_draws_no_layer() -> void:
 	for i in 10:
 		view.step(0.1, ship)
 	var layers: Array[Node] = view.find_children("Муть", "MultiMeshInstance3D", true, false)
-	ok(layers.size() >= 15, "слоёв мути у видов (%d)" % layers.size())
-	var drawn := 0
-	for mi: MultiMeshInstance3D in layers:
-		if mi.is_visible_in_tree():
-			drawn += 1
-	eq(drawn, 0, "пустые слои мути не рисуются")
+	eq(layers.size(), 1, "один слой мути на весь живой мир (#849)")
+	ok(view.dust_layer.parts.size() >= 15, "в нём муть видов (%d)" % view.dust_layer.parts.size())
+	ok(not view.dust_layer.is_visible_in_tree(), "пустой слой мути не рисуется")
 	view.queue_free()
 	await frames(1)

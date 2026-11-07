@@ -104,8 +104,25 @@ class Render(unittest.TestCase):
         self.assertIn("2/4", page)                       # 1 галочка + 1 подзадача из 2+2
         self.assertIn("#11 Вопрос", page)                # ждёт владельца — issue
         self.assertIn("два — эпик #10", page)            # ждёт владельца — задача чек-листа
-        self.assertIn("Сюжет и тексты (Codex пишет, владелец утверждает)", page)  # тексты — Codex, 27.10
+        self.assertIn("Сценарист: сюжет и тексты (Codex)", page)       # роли паспорта 07.11
+        self.assertIn("Проект-менеджер (Claude)", page)
         self.assertNotIn("нет исполнителя-агента", page)
+
+    def test_stage_zero_first_and_earlier_stages_wait(self):
+        # «Этап 0» заведён позже (milestone 8), а стоит первым; этапы без эпиков до работы — ждут приёмки
+        ms = [{"number": 8, "title": "Этап 0. Лор, сюжет, цели", "state": "open"},
+              {"number": 1, "title": "Этап 1. Старт работ", "state": "open"},
+              {"number": 4, "title": "Этап 4. Первый слой", "state": "open"}]
+        ep0 = {"number": 9, "title": "Эпик: сюжет", "state": "open", "milestone": {"number": 8},
+               "labels": [{"name": "эпик"}], "body": "- [ ] сюжет — сюжет\n", "sub_issues_summary": {}}
+        ep4 = {"number": 10, "title": "Эпик: слой", "state": "open", "milestone": {"number": 4},
+               "labels": [{"name": "эпик"}], "body": "- [x] раз — поток А\n- [ ] два — поток А\n",
+               "sub_issues_summary": {}}
+        page = status.render(ms, [ep0, ep4], [ep0, ep4], [], {})
+        rows = [l for l in page.splitlines() if l.startswith("| Этап ") and l[7:8].isdigit()]
+        self.assertTrue(rows[0].startswith("| Этап 0."))
+        self.assertIn("ждёт приёмки", rows[1])           # этап 1 без эпиков, дальше работа есть
+        self.assertIn("**Сейчас:** Этап 4. Первый слой", page)
 
     def test_on_hold_not_waiting_owner_and_verify_is_qa(self):
         ms = [{"number": 4, "title": "Этап 4. Забег", "state": "open"}]

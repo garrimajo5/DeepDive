@@ -16,6 +16,9 @@ extends EcoSystem
 ## Фонарные вуали (EcoVeil, поле veils) обходит стороной, корабль под куполом вуали теряет.
 ## Напуганную стаю в рифе на спине гротовика (EcoGrot, поле grot) теряет.
 ## Сквозь корпус не проходят (EcoWorld.push_out).
+## Риф у Каменного цветка 01 (#834, «читаемая встреча»): хищник патрулирует снаружи кольца REEF_KEEP и в него не
+## заходит; импульс сонара у цветка зовёт его к внешнему краю рифа со своей стороны (REEF_EDGE), а не к кораблю;
+## корабль в рифе он не атакует — туда можно отступить. Стаи у кроны прячутся раньше (EcoFish.CROWN_ALARM).
 
 const ID := "pred"
 
@@ -38,6 +41,17 @@ const HUNT_TO_SHIP_HUNGER := 0.6
 ## Видит светляка не дальше (м), хватает ближе (м).
 const HUNT_RADIUS := 50.0
 const CATCH_DIST := 1.6
+
+
+## Достаёт ли хищник a добычу b: ближе CATCH_DIST, а у дна по высоте — с броском вниз на то, на что сам не
+## опускается (свой clearance + LOOK_GAP над дном против clearance светляка): светляк, прижатый к дну, ловится сверху,
+## а не только когда подскочит (план Б3: светляки больше не прыгают на зажиме).
+static func can_catch(a: EcoAgent, b: EcoAgent) -> bool:
+	var d := a.p - b.p
+	var reach := maxf(a.clearance + EcoAgent.LOOK_GAP - b.clearance, 0.0)
+	if d.y > 0.0:
+		d.y = maxf(d.y - reach, 0.0)
+	return d.length_squared() < CATCH_DIST * CATCH_DIST
 ## Видит свет прожектора и слышит сонар корабля не дальше (м).
 const REACH := 32.0
 ## Слышит двигатели ближе (м) и быстрее (м/с).
@@ -59,6 +73,17 @@ const GOAL_CEILING := -6.0
 ## Запас до корпуса корабля, м (S.pushOut(pr.p, 0.7)), и до какого зазора дотягивается укусом (hullDist < 1,2).
 const HULL_GAP := 0.7
 const BITE_REACH := 1.2
+## Риф у Каменного цветка (ось — подножие цветка, EcoFish.Shoal.axis стай кроны): внутрь кольца REEF_KEEP (м по
+## горизонтали; крона Ø 26 м и кусты коралла вокруг) хищник не заходит, импульс ближе REEF_PING к оси зовёт его на
+## REEF_EDGE от оси со своей стороны. Отталкивание от кольца — REEF_PUSH (м/с на долю заступа). Сообщение «не идёт
+## в риф» — не чаще REEF_CD с на хищника.
+const REEF_KEEP := 32.0
+const REEF_EDGE := 42.0
+const REEF_PING := EcoFlower.PING_R
+const REEF_PUSH := 8.0
+## С какого запаса до кольца хищник начинает огибать риф, м.
+const REEF_MARGIN := 8.0
+const REEF_CD := 30.0
 
 ## Режим хищника (pr.state в браузере); общее EcoAgent.State — у его существа.
 enum Mode { PATROL, HUNT, EAT, INVESTIGATE, CHARGE, RETREAT, FLEE, CLEAN }
@@ -95,8 +120,12 @@ class Pred:
 	## левым боком вниз).
 	var look := Vector3(0, 0, 1)
 	var bank := 0.0
+	## Скорость поворота тела (вектор вдоль оси, рад/с): набирается и гаснет не быстрее TURN_ACCEL (`turn`).
+	var spin := Vector3.ZERO
 	## Секунды до следующего поиска добычи в патруле (раз в SEEK_EVERY, issue #848); 0 — ищет сразу.
 	var seek_t := 0.0
+	## Пауза сообщения «не идёт в риф у цветка» (#834).
+	var reef_cd := 0.0
 
 
 var all: Array[Pred] = []
@@ -125,6 +154,8 @@ var grot: EcoGrot
 var plankton: EcoPlankton
 
 var _rnd: EcoRandom
+## Ось рифа у цветка на этот шаг (reef_axis).
+var _reef := Vector3.INF
 
 
 func _init(prey_fish: EcoFish = null) -> void:
@@ -149,6 +180,7 @@ func reset(world: EcoWorld) -> void:
 		a.set_state(EcoAgent.State.GRAZE)
 		var pr := Pred.new()
 		pr.agent = a
+		a.look = LOOK
 		pr.index = i
 		pr.hunger = _rnd.range_f(0.1, 0.5)
 		pr.cooldown = 20.0
@@ -160,6 +192,8 @@ func reset(world: EcoWorld) -> void:
 func on_ping(world: EcoWorld, pos: Vector3) -> void:
 	world.last_ping = world.time
 	var heard := false
+	var reef := reef_axis()
+	var at_reef := reef.is_finite() and _flat_dist(pos, reef) < REEF_PING
 	for pr in all:
 		if pr.mode == Mode.CHARGE or pr.mode == Mode.RETREAT or pr.mode == Mode.FLEE:
 			continue
@@ -169,9 +203,15 @@ func on_ping(world: EcoWorld, pos: Vector3) -> void:
 		_set_mode(pr, Mode.INVESTIGATE, 25.0)
 		pr.prey = null
 		pr.agent.goal = pos
+		if at_reef:  # у цветка — к краю рифа со своей стороны, не к кораблю
+			var g := reef_edge(reef, pr.agent.p, REEF_EDGE)
+			g.y = minf(_floor(world, g.x, g.z, GOAL_CEILING - 8.0) + 8.0, GOAL_CEILING)
+			pr.agent.goal = g
 		if d < PING_HEARD:
 			heard = true
-	if heard:
+	if heard and at_reef:
+		world.emit(ID, "ping", pos, _text(world, "%s услышал сонар и кружит у внешнего края рифа — в риф он не заходит"))
+	elif heard:
 		world.emit(ID, "ping", pos, _text(world, "%s услышал сонар и плывёт на звук"))
 
 
@@ -206,7 +246,63 @@ func targets(_world: EcoWorld, out: Array[Dictionary]) -> void:
 const SEEK_EVERY := 0.25
 
 
+## Ось рифа у Каменного цветка — подножие, вокруг которого кружат стаи кроны; Vector3.INF — рифа нет (нет светляков).
+func reef_axis() -> Vector3:
+	if fish:
+		for sh in fish.shoals:
+			if sh.crown:
+				return sh.axis
+	return Vector3.INF
+
+
+## Расстояние по горизонтали.
+static func _flat_dist(a: Vector3, b: Vector3) -> float:
+	return Vector2(a.x - b.x, a.z - b.z).length()
+
+
+## Точка на кольце радиуса r вокруг оси рифа в сторону from (по горизонтали; высота — from).
+static func reef_edge(axis: Vector3, from: Vector3, r: float) -> Vector3:
+	var off := Vector2(from.x - axis.x, from.z - axis.z)
+	off = off.normalized() if off.length_squared() > 1e-6 else Vector2(1, 0)
+	return Vector3(axis.x + off.x * r, from.y, axis.z + off.y * r)
+
+
+## Цель за кольцом рифа: внутри кольца keep — вынесена на кольцо по горизонтали.
+static func outside_reef(axis: Vector3, g: Vector3, keep: float) -> Vector3:
+	if not axis.is_finite() or _flat_dist(g, axis) >= keep:
+		return g
+	return reef_edge(axis, g, keep)
+
+
+## Обход рифа у цветка: ближе REEF_KEEP + REEF_MARGIN к оси скорость внутрь кольца поворачивает вдоль него (в лоб —
+## против часовой, если смотреть сверху), заступившего за кольцо выталкивает (REEF_PUSH). Скорость по горизонтали
+## не меняется по величине — хищник огибает риф, а не тормозит у него.
+static func reef_steer(axis: Vector3, p: Vector3, want: Vector3) -> Vector3:
+	var off := Vector2(p.x - axis.x, p.z - axis.z)
+	var r := off.length()
+	if r >= REEF_KEEP + REEF_MARGIN:
+		return want
+	var out := off / r if r > 1e-4 else Vector2(1, 0)
+	var w2 := Vector2(want.x, want.z)
+	var sp := w2.length()
+	var radial := w2.dot(out)
+	if radial < 0.0:
+		var tang := w2 - out * radial
+		if tang.length() < 0.2 * sp:
+			tang = Vector2(-out.y, out.x) * (signf(tang.dot(Vector2(-out.y, out.x))) if tang.length() > 1e-4 else 1.0)
+		w2 = tang.normalized() * sp
+	if r < REEF_KEEP:
+		w2 += out * (REEF_PUSH * (REEF_KEEP - r) / REEF_KEEP + 1.0)
+	return Vector3(w2.x, want.y, w2.y)
+
+
+## Корабль в рифе у цветка: хищник его там не атакует (#834).
+func ship_in_reef(world: EcoWorld, reef: Vector3) -> bool:
+	return reef.is_finite() and _flat_dist(world.ship.pos, reef) < REEF_KEEP
+
+
 func step(world: EcoWorld, dt: float) -> void:
+	_reef = reef_axis()
 	for pr in all:
 		_step_pred(world, pr, dt)
 		turn(pr, dt)
@@ -225,13 +321,29 @@ func _skip_now() -> Callable:
 ## Плавный поворот (Б3, «плавность поведения»): тело не щёлкает за скоростью, а догоняет её — доля угла за секунду
 ## TURN_FOLLOW, но не быстрее TURN_MAX (рад/с); в повороте ложится на бок: крен BANK_K на 1 рад/с поворота, не больше
 ## BANK_MAX, догоняет нужный за BANK_FOLLOW (1/с). Остановился — держит курс, нос выравнивается к горизонту.
+## Сам поворот — с инерцией: скорость поворота `Pred.spin` меняется не быстрее TURN_ACCEL рад/с², к курсу — не быстрее
+## √(2 · TURN_ACCEL · угол), и тормозит заранее. Раньше хищник встал у точки патруля, а следующая — в 1,5 рад: тело
+## срывалось с 0,05 до 3 рад/с за кадр (88 рад/с², нашёл обход мира по угловым ускорениям), так же — смена цели.
+## На сколько секунд хода вперёд смотрит на дно (`EcoAgent.look`): раньше на склоне рифа и у гребня взлетал вплотную ко
+## дну до 12 м/с вверх и вставал на вершине за кадр (рывок до 107 м/с²).
+const LOOK := 1.5
 const TURN_FOLLOW := 4.0
 const TURN_MAX := 3.0
+const TURN_ACCEL := 8.0
 const BANK_K := 0.35
 const BANK_MAX := deg_to_rad(25.0)
 const BANK_FOLLOW := 3.0
 ## Наклон тела вверх-вниз не больше (рад).
 const PITCH_MAX := deg_to_rad(30.0)
+## Ход разворачивается дугой, а не через остановку (`EcoAgent.swim`): курс скорости — доля угла SWIM_TURN/с, не
+## быстрее SWIM_TURN_MAX рад/с (в охоте и броске — SWIM_TURN_SHARP); в крутом повороте ход сбавляется до cos угла,
+## не меньше SWIM_SLOW доли. Раньше цель патруля за спиной гасила ход до нуля и хищник ~1 с плыл хвостом вперёд.
+const SWIM_TURN := 3.0
+const SWIM_TURN_MAX := 1.5
+const SWIM_TURN_SHARP := 3.0
+const SWIM_SLOW := 0.3
+## Вне охоты и броска у цели ход — не больше ARRIVE_K × остаток (м/с на метр): встаёт у неё, а не кружит.
+const ARRIVE_K := 0.5
 
 
 ## Куда хочет смотреть голова: по скорости, наклон — не больше PITCH_MAX; почти стоит — прежний курс без наклона.
@@ -254,19 +366,31 @@ static func yaw_of(d: Vector3) -> float:
 	return atan2(-d.x, -d.z)
 
 
-## Шаг поворота тела за dt: look догоняет aim, крен — скорость поворота по горизонтали.
+## Шаг поворота тела за dt: look догоняет aim со скоростью поворота spin (инерция), крен — скорость поворота по
+## горизонтали.
 static func turn(pr: Pred, dt: float) -> void:
 	if dt <= 0.0:
 		return
 	var from := pr.look
 	var want := aim(pr)
 	var ang := from.angle_to(want)
+	var goal := Vector3.ZERO
 	if ang > 1e-5:
 		var axis := from.cross(want)
 		if axis.length_squared() < 1e-10:  # ровно назад — разворот по горизонтали
-			axis = Vector3.UP
-		var step := minf(ang * (1.0 - exp(-TURN_FOLLOW * dt)), TURN_MAX * dt)
-		pr.look = from.rotated(axis.normalized(), step).normalized()
+			axis = pr.spin if absf(pr.spin.normalized().dot(Vector3.UP)) > 0.5 else Vector3.UP
+		var rate := minf(minf(ang * TURN_FOLLOW, TURN_MAX), sqrt(2.0 * TURN_ACCEL * ang))
+		goal = axis.normalized() * rate
+	pr.spin += (goal - pr.spin).limit_length(TURN_ACCEL * dt)
+	var sp := pr.spin.length()
+	if sp > 1e-6:
+		var ax := pr.spin / sp
+		# только составляющая к курсу: ось сменилась — не уводит нос в сторону от want
+		var step := minf(sp * dt, ang)
+		var to := from.cross(want)
+		if to.length_squared() > 1e-10 and ax.dot(to.normalized()) < 0.0:
+			step = sp * dt  # ещё крутит прочь — гасит ход по инерции
+		pr.look = from.rotated(ax, step).normalized()
 	var rate := wrapf(yaw_of(pr.look) - yaw_of(from), -PI, PI) / dt
 	var bank_want := clampf(rate * BANK_K, -BANK_MAX, BANK_MAX)
 	pr.bank = lerpf(pr.bank, bank_want, 1.0 - exp(-BANK_FOLLOW * dt))
@@ -314,7 +438,8 @@ func ship_sheltered(world: EcoWorld) -> bool:
 	return ognevka != null and ognevka.shelter(world.ship.pos) != null
 
 
-## Слышит ли двигатели корабля (hearsShip): ближе 24 м и быстрее 3 м/с, если корабль не в гуле трубного органа.
+## Слышит ли двигатели корабля (hearsShip): ближе 24 м и быстрее 3 м/с, если корабль не в гуле трубного органа
+## и не в густом ленточнике (`EcoKelp.muffling`, #1338).
 ## Гул спрятал корабль от патрулирующего или проверяющего звук хищника — наблюдение органа «mask».
 func hears_ship(world: EcoWorld, pr: Pred, d_ship: float) -> bool:
 	if d_ship >= HEAR_RADIUS or absf(world.ship.speed) <= HEAR_SPEED:
@@ -323,6 +448,11 @@ func hears_ship(world: EcoWorld, pr: Pred, d_ship: float) -> bool:
 		var og := organs.masking(world)
 		if og:
 			organs.masked(world, og, pr.mode == Mode.PATROL or pr.mode == Mode.INVESTIGATE)
+			return false
+	if kelp:
+		var gr := kelp.muffling(world)
+		if gr:
+			kelp.muffled(world, gr, pr.mode == Mode.PATROL or pr.mode == Mode.INVESTIGATE)
 			return false
 	return true
 
@@ -343,6 +473,9 @@ func lure(world: EcoWorld, pr: Pred) -> void:
 
 
 func _start_charge(world: EcoWorld, pr: Pred) -> void:
+	if not world.threat_free(pr):   # у корабля уже идёт другой эпизод угрозы (#834) — бросок позже
+		return
+	world.hold_threat(pr)
 	_set_mode(pr, Mode.CHARGE, 10.0)
 	pr.prey = null
 	var at := pr.agent.p
@@ -383,13 +516,15 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 	pr.flare_cd -= dt
 	pr.truce_cd -= dt
 	pr.avoid_cd -= dt
+	pr.reef_cd -= dt
 	var ship := world.ship.pos
 	var d_ship := a.distance_to(ship)
 	var at_station := leeches.near_station(a.p) != null if leeches else false
 	var lure := lured(world, pr, d_ship)  # и голодного, и сытого: гул органа прячет корабль от каждого
 	var sheltered := ship_sheltered(world)
+	var in_reef := ship_in_reef(world, _reef)
 	var can_attack := pr.cooldown <= 0.0 and pr.hunger > (EcoLeech.ATTACK_HUNGER if pr.leech else ATTACK_HUNGER) \
-		and lure and not at_station and not sheltered
+		and lure and not at_station and not sheltered and not in_reef
 	if raduzh and not sheltered:
 		_step_flare(world, pr, d_ship)
 	if lure and sheltered and pr.cooldown <= 0.0 and pr.truce_cd <= 0.0 \
@@ -414,6 +549,9 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 				else:
 					gx = _rnd.range_f(-170, 150)
 					gz = _rnd.range_f(-170, 150)
+				var gp := outside_reef(_reef, Vector3(gx, 0.0, gz), REEF_KEEP)  # патруль — снаружи рифа у цветка
+				gx = gp.x
+				gz = gp.z
 				var gy := minf(_floor(world, gx, gz, GOAL_CEILING - 14.0) + _rnd.range_f(4, 14), GOAL_CEILING)
 				a.goal = Vector3(gx, gy, gz)
 			pr.seek_t = maxf(pr.seek_t - dt, 0.0)
@@ -455,7 +593,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 					grot.hid_fish(world)
 				else:
 					a.goal = pr.prey.agent.p + pr.prey.agent.v * 0.4
-					if a.distance_to(pr.prey.agent.p) < CATCH_DIST:
+					if can_catch(a, pr.prey.agent):
 						var caught := pr.prey.agent.p
 						fish.kill(pr.prey)
 						pr.hunger = 0.0
@@ -482,7 +620,17 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 		Mode.CHARGE:
 			speed = CHARGE_SPEED
 			a.goal = ship
-			if sheltered:  # корабль у станции чистки — хищник отворачивает
+			world.hold_threat(pr)
+			if in_reef:  # корабль ушёл в риф у цветка — хищник отворачивает к краю рифа
+				_set_mode(pr, Mode.RETREAT, 8.0)
+				pr.cooldown = maxf(pr.cooldown, 10.0)
+				var g := reef_edge(_reef, a.p, REEF_EDGE)
+				g.y = minf(_floor(world, g.x, g.z, GOAL_CEILING - 8.0) + 8.0, GOAL_CEILING)
+				a.goal = g
+				if pr.reef_cd <= 0.0:
+					pr.reef_cd = REEF_CD
+					world.emit(ID, "reef", a.p, _text(world, "%s не идёт за кораблём в риф у Каменного цветка"))
+			elif sheltered:  # корабль у станции чистки — хищник отворачивает
 				_set_mode(pr, Mode.RETREAT, EcoOgnevka.TURN_AWAY_TIME)
 				pr.cooldown = maxf(pr.cooldown, EcoOgnevka.TURN_AWAY_PAUSE)
 				var g := a.p + Vector3(_rnd.range_f(-40, 40), 4.0, _rnd.range_f(-40, 40))
@@ -501,8 +649,8 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 				else:  # под куполом вуали
 					veils.hid_ship(world, a.p)
 			elif d_ship < BITE_DIST or world.touches_ship(a.p, BITE_REACH):
-				world.hit_ship(Species.cap(world.nm(ID)), BITE_DAMAGE, a.p)
-				world.emit(ID, "bite", a.p, _text(world, "%s укусил корпус"))
+				if world.hit_ship(Species.cap(world.nm(ID)), BITE_DAMAGE, a.p):
+					world.emit(ID, "bite", a.p, _text(world, "%s укусил корпус"))
 				pr.bit_at = world.time
 				_set_mode(pr, Mode.RETREAT, 14.0)
 				pr.cooldown = BITE_COOLDOWN
@@ -533,6 +681,9 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 	# прямо к цели с постоянной скоростью; в охоте и броске поворачивает резче
 	var d := a.goal - a.p
 	var want := d.normalized() * speed if d.length_squared() > 1e-4 else d
+	var sharp := pr.mode == Mode.HUNT or pr.mode == Mode.CHARGE
+	if not sharp:  # у цели сбавляет ход и встаёт, а не кружит над ней дугой разворота
+		want *= minf(1.0, d.length() * ARRIVE_K / maxf(speed, 0.01))
 	if veils:  # фонарные вуали обходит стороной
 		var push := veils.pred_push(a.p)
 		if push != Vector3.ZERO:
@@ -540,8 +691,10 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 			if pr.avoid_cd <= 0.0:
 				pr.avoid_cd = EcoVeil.AVOID_CD
 				veils.avoided(world, a.p)
-	a.agility = 1.6 if pr.mode == Mode.HUNT or pr.mode == Mode.CHARGE else 1.1
-	a.drive(want, dt, world.ground)
+	if _reef.is_finite() and pr.mode != Mode.CHARGE:
+		want = reef_steer(_reef, a.p, want)
+	a.agility = 1.6 if sharp else 1.1
+	a.swim(want, dt, SWIM_TURN, SWIM_TURN_SHARP if sharp else SWIM_TURN_MAX, SWIM_SLOW, world.ground)
 	world.push_out(a, HULL_GAP) # корпус не пускает внутрь
 
 
@@ -650,10 +803,15 @@ func _hidden_fish() -> Callable:
 	var truce := ognevka != null and leeches != null and not leeches.stations.is_empty()
 	var grove := kelp != null and not kelp.groves.is_empty()
 	var reef := grot != null and grot.shoal != null and grot.shoal.alarm > 0.0
-	if not ink and not truce and not grove and not reef:
+	var crown := false  # стая в чаше кроны цветка (#834)
+	if fish:
+		for sh in fish.shoals:
+			if sh.crown and sh.alarm > 0.0:
+				crown = true
+	if not ink and not truce and not grove and not reef and not crown:
 		return Callable()
 	return func(f: EcoFish.Fish) -> bool:
-		return (truce and leeches.near_station(f.agent.p) != null) or (grove and kelp.shelter(f) != null) \
+		return (crown and f.shoal.crown and f.shoal.alarm > 0.0) or (truce and leeches.near_station(f.agent.p) != null) or (grove and kelp.shelter(f) != null) \
 			or (reef and grot.shelter(f) != null) or (ink and _in_ink(f))
 
 

@@ -31,11 +31,16 @@ var breach := Breach.new()     ## событие «пробоина»: стру�
 var silt := Silt.new()         ## событие «сонарная тьма»: облака ила (на дне от удара, у Края отмели — оползни)
 var silt_view: SiltView
 var run := Run.new()           ## маршрут забега: выбор у голостола, точки по местам отмели
+var trip := DescentTrip.new()  ## уход к Кристальному лесу у 10 после «глубже» (#828), шторка — `trip_view`
+var trip_view: DescentView
 var breach_view: BreachView
 var debug_weld := false        ## снимок: сварку держат без пальца
 var save := SaveGame.new()     ## груз трюма, поднятые образцы и изученные виды в user:// (js/save.js)
+var autosave := Autosave.new()   ## автосохранение у мест-стоянок 00, 07, 09, 10 (#823)
 var expedition := Expedition.new()   ## история для журнала ART-047: места, забеги, рекорд глубины, прочитанное
+var lore := LayerLore.new()   ## знания слоя 1 (#825): диагностика 07, запись К-2, Раковина 03, поле 08…
 var scanner := Scanner.new()   ## сканер биолога: цели от живого мира, изученные виды
+var gate := GateDiag.new()     ## диагностика 07 сканером с борта (#826): гнёзда арки → факты `lore`
 var at_scanner := false        ## игрок у поста «Сканер»: мир шлёт цели (ShipState.scan_range)
 var near_post := ""            ## пост рядом с игроком на ногах (id), "" — нет или игрок занят постом
 var busy_said := {}           ## пост → «Пульт энергии занят: Инженер» на приборах; гаснет, когда пост освободился
@@ -103,6 +108,7 @@ var current := Helm.SeaCurrent.new()
 
 var ocean: OceanView
 var eco: EcoView            ## живой мир отмели (поток Б), связь — EcoLink
+var gate_view: GateView     ## временная арка врат 07 и чаши гнёзд (#826, `GateArch`) до MOD-023
 var step_ms := 0.0          ## сколько занял прошлый шаг игры (код), мс — для лога тестера (issue #217)
 var clock := StepClock.new()   ## части прошлого шага (корабль, мир, виды) — для лога тестера (issue #627)
 var eco_ship := EcoLink.ShipState.new()
@@ -128,20 +134,24 @@ static var intro := true
 static var menu := true
 ## Подсказки первого забега ART-038 (тесты и снимки выключают: tests/run.gd, tools/shot.gd; прогон тестера — шаг `tutorial`).
 static var hints := true
-var tutorial := Tutorial.new()   ## шаги «штурвал → ход → свет → энергия → сонар → маршрут»; пройдено — Settings.hints_done
+var tutorial := Tutorial.new()   ## шаги «штурвал → ход → свет → энергия → сонар → маршрут → курс к цели»; пройдено — Settings.hints_done
 var tutorial_panel: TutorialPanel
 ## Карточка роли у поста ART-045 (выключают те же `hints`; тестер — шаг `cards`): прочитанное — Settings.cards.
 var role_card := RoleCard.new()
 var role_card_panel: RoleCardPanel
+var goal_plate := GoalPlate.new()   ## плашка цели маршрута за штурвалом (#1344)
+var goal_plate_view: GoalPlateView
 ## Внутренняя связь ART-040: плашка внизу по центру, кодовое слово забега, «Спросить код» (голоса — `EcoLink.VOICE`).
 var comms := Comms.new()
 var comms_panel: CommsPanel
-var radio := Radio.new()   ## рация ART-041 (в игре скрыта до решения по голосу — `Radio.enabled`)
+var radio := Radio.new()   ## рация ART-041 (в коопе; разрешение микрофона — `OverlayFlow.mic_permit`)
 var radio_panel: RadioPanel
 var voice_io: VoiceIO   ## голос рации (#634): захват и проигрыватели товарищей, шаг — `OverlayFlow.voice_step`
 var _code_rng := RandomNumberGenerator.new()   ## кодовое слово нового забега
 var tutorial_guest: Tutorial.Guest   ## у гостя сети: свои шаги по своему нажатию и кадру хоста; в своей игре — null
 var hint_pointer: HintPointerView   ## указатель над постом-целью подсказки (ART-038, HintPointer); вне кадра — стрелка у края
+var alarm_pointer: AlarmWay.Pointer   ## указатель на цель тревоги в соло этого кадра (#1361) или null
+var alarm_pointer_panel: AlarmPointerPanel   ## его стрелка у края и подпись
 var main_menu := MainMenu.new()   ## «Погрузиться» / «Экипаж» / «Настройки»: пока открыто — игра стоит под меню
 var menu_panel: MenuPanel
 var address := AddressScreen.new()   ## «Войти по адресу» ART-039 поверх меню («Экипаж»): пока открыт — меню ждёт
@@ -175,8 +185,10 @@ var flyby := Flyby.new()   ## камера с борта: облёт в нача
 var flyby_cam: Camera3D
 var overlay: TouchOverlay
 var hint: Label            ## строка состояния на приборах (Status), по строкам экрана
+var status_lines := Status.Lines.new()   ## раскладка строки состояния — пересчёт только при смене (#847)
 var message := Status.Message.new()
 const SAT_MSG := "Вы за штурвалом"
+const LOADED_MSG := "Корпус разрушен. Ковчег у последнего сохранения"   ## гибель в кампании (#824)
 const DRAIN_DB := -12.0   ## шипение присоски: js/audio.js 0,12 против 0,05 у сирены (−16 дБ)
 var env: Environment
 var qa: QaRunner           ## прогон сценария тестера, если он есть (docs/QA.md)
@@ -194,6 +206,23 @@ const NET_SPAWN := Vector3(0.0, 1.0, 0.0)   ## гость встаёт на мо
 
 
 func _ready() -> void:
+	_build_audio()
+	_build_world()
+	_build_outside()
+	_build_ship()
+	_build_ui()
+	_load_state()
+	_place_ship()
+	_place_camera()
+	warm_run.begin()
+	if menu:
+		open_menu()
+	if QaRunner.pending():
+		start_qa()
+
+
+## Сборка: шины звука и плееры — до всего остального.
+func _build_audio() -> void:
 	SoundMix.ensure()   # шины звука — до первых плееров
 	ambience = Ambience.new()
 	add_child(ambience)
@@ -203,7 +232,10 @@ func _ready() -> void:
 	add_child(music)
 	ship_sounds = ShipSounds.new()
 	add_child(ship_sounds)
-	_build_world()
+
+
+## Сборка: за бортом — отмель, ил, след, живой мир, образцы; пол корпуса для хода.
+func _build_outside() -> void:
 	ocean = OceanView.new()
 	ocean.name = "Отмель"
 	add_child(ocean)
@@ -213,12 +245,16 @@ func _ready() -> void:
 	ocean.add_child(wake_view)
 	eco = EcoView.new()
 	eco.name = "Живой мир"
-	eco.ground = Seabed.height
+	eco.ground = Seabed.mesh_height   # живой мир стоит на видимой сетке дна (#1386)
 	eco.world.scanned = scanner.is_scanned
 	add_child(eco)
 	samples_view = SamplesView.new(samples)
 	samples_view.name = "Образцы"
 	add_child(samples_view)
+	var spots: Array[Vector3] = []
+	for sm in samples.all:
+		spots.append(sm.pos)
+	ocean.set_floor_avoid(spots)   # камни и ракушки на дне не ложатся у образцов
 	# Пол корпуса — дно плюс верх скальных клиньев Края отмели: корабль не проходит сквозь скалу и чиркает по ней
 	# существующим ударом о дно (helm.bump → Vitals.scrape). Облако оползня — из свежего шрама (issue #258).
 	var ecv := eco
@@ -229,6 +265,13 @@ func _ready() -> void:
 		return g
 	if eco.drop:
 		silt.slide_origin = eco.drop.slide_cloud_point()
+	gate_view = GateView.new()
+	ocean.add_child(gate_view)
+	helm.solid = _solid   # корабль сквозь опоры арки 07 (#826) и гротовика с рифом (EcoLink.solid) не проходит
+
+
+## Сборка: корабль — мостик, вспышка разряда, отсеки, экипаж, метки, посты, прожектор, корпус, камеры.
+func _build_ship() -> void:
 	ship = Node3D.new()
 	ship.name = "Корабль"
 	add_child(ship)
@@ -308,6 +351,10 @@ func _ready() -> void:
 	flyby_cam.near = 0.2
 	flyby_cam.far = 400.0
 	ship.add_child(flyby_cam)
+
+
+## Сборка: экранный интерфейс — приборы, панели, вспышки, управление, подсказки, связь, шторки.
+func _build_ui() -> void:
 	grade = GradeView.new()
 	add_child(grade)
 	var ui := CanvasLayer.new()
@@ -323,10 +370,13 @@ func _ready() -> void:
 	hint.add_theme_constant_override("outline_size", 6)
 	hint.add_theme_constant_override("line_spacing", -2)
 	ui.add_child(hint)
-	current.changed.connect(func(_i: int) -> void: say("Течение сменилось"))
+	current.changed.connect(func(_i: int) -> void:   # куда и как сильно — сообщением, не постоянной частью строки (#1345)
+		say("Течение сменилось: " + _current_text(current.target_vel()).trim_prefix("течение ")))
 	power_panel = PowerPanel.new()
 	power_panel.name = "Пульт энергии"
 	ui.add_child(power_panel)
+	trip_view = DescentView.new()
+	add_child(trip_view)
 	vote_panel = VotePanel.new()
 	vote_panel.name = "Решение экипажа"
 	ui.add_child(vote_panel)
@@ -369,6 +419,12 @@ func _ready() -> void:
 	tutorial_panel.name = "Подсказка"
 	tutorial_panel.layout = overlay.router.layout
 	ui.add_child(tutorial_panel)
+	alarm_pointer_panel = AlarmPointerPanel.new()   # указатель тревоги в соло (#1361): стрелка у края и подпись
+	alarm_pointer_panel.name = "Указатель тревоги"
+	ui.add_child(alarm_pointer_panel)
+	goal_plate_view = GoalPlateView.new()   # плашка цели маршрута за штурвалом (#1344)
+	goal_plate_view.name = "Цель маршрута"
+	ui.add_child(goal_plate_view)
 	role_card_panel = RoleCardPanel.new()   # карточка роли ART-045: касания — через Router.blocks/taps
 	role_card_panel.name = "Карточка роли"
 	ui.add_child(role_card_panel)
@@ -386,6 +442,10 @@ func _ready() -> void:
 	add_child(wreck_view)
 	power_panel.layout = overlay.router.layout   # панель пульта не ложится под noclip и кнопку действия (#349)
 	busy_marks.layout = overlay.router.layout    # метка «Занято» тоже (#373)
+
+
+## Сборка: сигналы систем, настройки, сохранение и первый забег.
+func _load_state() -> void:
 	reactor.message.connect(func(title: String, _text: String) -> void: say(title))
 	airlock.message.connect(say)
 	samples.message.connect(say)
@@ -405,23 +465,23 @@ func _ready() -> void:
 		print("графика: автовыбор «%s» (%s, %d МБ)" % [Graphics.NAMES[settings.graphics], d["adapter"], d["memory_mb"]])
 	settings.read()
 	_apply_settings()
-	tutorial.on = hints and not settings.hints_done and not QaRunner.pending()   # тестер включает шагом `tutorial`
 	role_card.on = hints and not QaRunner.pending()   # тестер включает шагом `cards`
 	role_card.set_read(settings.cards)
 	save.expedition = expedition
+	save.lore = lore       # знания слоя 1 — ключ "lore" (#825)
+	save.helm = helm       # место, курс, корпус и заряд — ключ "ship" для кампании (#823)
+	save.vitals = vitals
 	save.load_into(samples, scanner)
+	# обучение — пока не пройдено ни в настройках, ни в кампании (знание «обучение просмотрено», #827); тестер
+	# включает шагом `tutorial`
+	tutorial.on = hints and not settings.hints_done and not lore.knows(LayerLore.INTRO) and not QaRunner.pending()
 	_begin_run()
 	samples.changed.connect(save.mark)
 	scanner.changed.connect(save.mark)
 	expedition.changed.connect(save.mark)
+	lore.changed.connect(save.mark)
 	scanner.message.connect(say)
-	_place_ship()
-	_place_camera()
-	warm_run.begin()
-	if menu:
-		open_menu()
-	if QaRunner.pending():
-		start_qa()
+	gate.read.connect(func(f: String) -> void: announce(GateDiag.TEXT[f]))   # факт 07 видят все (#826)
 
 
 ## Идёт прогрев шейдеров: экран под шторкой, сценарий тестера ждёт.
@@ -594,13 +654,34 @@ func step(dt: float) -> void:
 	net_game.net_poll(dt)
 	var r := overlay.router
 	var wrecked := _wreck_step(dt)
+	var h := _step_input(dt, r, wrecked)
+	h.held = crew_flow.holds()   # товарищи держат кнопку у постов удержания — то же, что свой игрок
+	_step_posts(dt, h)
+	_step_ship(dt, h)
+	_step_zap(dt)
+	clock.lap("корабль", Time.get_ticks_usec())
+	_step_eco(dt)
+	_step_view(dt)
+	_step_ui(dt)
+	_step_marks(dt, r)
+	clock.lap("метки и сеть", Time.get_ticks_usec())
+
+
+## Кнопки удержания в этом кадре: свой игрок у поста (`valve`…) и товарищи (`held` — `CrewFlow.holds`).
+class Holds:
+	var valve := false
+	var winch := false
+	var weld := false
+	var scan := false
+	var held := {}
+
+
+## Шаг: свой ввод — посты, ход, взгляд; что держит свой игрок (`Holds`).
+func _step_input(dt: float, r: Touch.Router, wrecked: bool) -> Holds:
 	crew_flow.mark_presses(r, dt)
 	if r.noclip_pressed and not wrecked:
 		toggle_noclip()
-	var hold_valve := false
-	var hold_winch := false
-	var hold_weld := false
-	var hold_scan := false
+	var h := Holds.new()
 	at_scanner = false
 	near_post = ""
 	flyby.update(0.0 if warm.active() else dt)   # облёт ждёт конца прогрева шейдеров (под шторкой)
@@ -652,7 +733,7 @@ func step(dt: float) -> void:
 		helm.in_vert = 0.0
 		walker.look(overlay.look_points())
 		var choice := "" if run.ended else run.vote_nav(r.move)
-		if choice != "":
+		if run.vote_ok(choice):   # у 10 «вверх» ничего не делает (#1362)
 			ballot.cast(me.get_instance_id(), me.role, choice)   # решает _tick_vote: один у стола — сразу
 		if r.action_pressed and flyby.kind == Flyby.Kind.SURFACE:
 			flyby.stop()   # вид с борта при всплытии: кнопка — к итогу на голограмме, новый забег — следующим нажатием
@@ -668,27 +749,37 @@ func step(dt: float) -> void:
 		var post := Deck.nearest(posts, walker.x, walker.z)
 		if post and r.action_pressed:
 			use_post(post.id)
-		hold_valve = post != null and post.id == "valve" and r.action_down
-		hold_winch = post != null and post.id == "winch" and r.action_down
-		hold_weld = post != null and post.id == "breach" and r.action_down
+		h.valve = post != null and post.id == "valve" and r.action_down
+		h.winch = post != null and post.id == "winch" and r.action_down
+		h.weld = post != null and post.id == "breach" and r.action_down
 		at_scanner = post != null and post.id == "scanner"
 		near_post = post.id if post else ""
-		hold_scan = at_scanner and r.action_down
-	var held := crew_flow.holds()   # товарищи держат кнопку у постов удержания — то же, что свой игрок
+		h.scan = at_scanner and r.action_down
+	return h
+
+
+## Шаг: товарищи на постах, отсеки, лебёдка, сканер, сварка, подписи постов.
+func _step_posts(dt: float, h: Holds) -> void:
+	var held := h.held
 	crew_flow.posts(dt)
 	layout.update(dt)
 	airlock.update(dt)
 	lock_water.update(dt, airlock.t, samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying())
 	var ship_xf := Samples.ship_xform(helm.pos, helm.yaw)
-	if (hold_winch or held.has("winch") or debug_winch) and airlock.fully_open():
+	if (h.winch or held.has("winch") or debug_winch) and airlock.fully_open():
 		samples.hold(Samples.lock_point(ship_xf), dt)
 	samples.update(dt)
 	samples_view.sync()
 	save.tick(dt, samples, scanner)
-	if hold_scan or held.has("scanner"):
-		scanner.hold(dt)
+	gate.aim(helm.pos, lore, float(scanner.target["dist"]) if not scanner.target.is_empty() else INF)
+	if h.scan or held.has("scanner"):
+		if gate.active():
+			gate.hold(dt, lore)   # гнездо 07 ближе существа — сканер переводит его (#826)
+		else:
+			scanner.hold(dt)
 	scanner.update(dt)
-	if hold_weld or held.has("breach") or debug_weld:
+	gate.update(dt)
+	if h.weld or held.has("breach") or debug_weld:
 		breach.hold(dt)
 	for p in posts:
 		if p.id.begins_with("door"):
@@ -707,11 +798,16 @@ func step(dt: float) -> void:
 			p.at = breach.post_at()
 			p.label = breach.label()
 		elif p.id == "scanner":
-			p.label = scanner.label()
+			p.label = gate.label(lore) if gate.active() else scanner.label()
 		elif p.id == "route":
 			p.label = run.label()
 		elif p.id.begins_with("flask"):
 			p.label = Lab.flask_label(samples.cargo, int(p.id.substr(5)))
+
+
+## Шаг: течение, ил, маршрут, реактор, ход, корпус, пробоина, руки экипажа.
+func _step_ship(dt: float, h: Holds) -> void:
+	var held := h.held
 	current.update(dt)
 	var silt_msg := silt.update(dt, helm.pos, current.vel())
 	if not silt_msg.is_empty():
@@ -721,10 +817,25 @@ func step(dt: float) -> void:
 	if not run_msg.is_empty():
 		announce(run_msg)
 		timeline.mark(time, run_msg)
+	var deep_msg := run.descent(helm.pos.x, helm.pos.z)   # переход у 10: голосование «глубже или наверх» (#828)
+	if not deep_msg.is_empty():
+		announce(deep_msg)
+		timeline.mark(time, deep_msg)
+		if not run.voting:   # ушли от спуска, не решив: голоса и панель — прочь
+			ballot.clear()
+			for m: Crew.Member in crew:
+				m.at_vote = false
+			vote_panel.visible = false
+	if run.at_descent() and not trip.active:   # решают у 10 — камни у места возвращения заранее (#1095)
+		ocean.prefetch(DescentTrip.return_spot())
 	expedition.visit(helm.pos.x, helm.pos.z)   # журнал ART-047: места и рекорд глубины
+	timeline.place(time, helm.pos.x, helm.pos.z)   # хронометраж по участкам слоя (#824)
+	var spot := autosave.update(helm.pos.x, helm.pos.z)   # кампания #823: вошли к месту-стоянке — записать
+	if spot != "" and save.live and not wreck.active() and save_now():
+		say(Autosave.message(spot))
 	expedition.dive_depth(helm.depth())
 	reactor.update(dt, Reactor.near_vent(helm.pos.x, helm.pos.z))
-	engine.update(dt, reactor, hold_valve or held.has("valve") or debug_vent)
+	engine.update(dt, reactor, h.valve or held.has("valve") or debug_vent)
 	valve_steam.update(dt, engine.venting)
 	helm.update(dt, reactor.k(Reactor.Sys.ENGINES), current.vel())
 	hull_motion.update(dt, helm.in_thrust, helm.in_vert, reactor.k(Reactor.Sys.ENGINES))
@@ -745,13 +856,17 @@ func step(dt: float) -> void:
 	breach_view.apply(dt)   # и частицы ART-072
 	crew_flow.drive(dt)
 	_tick_vote(dt)
-	crew_flow.hands(dt, hold_valve, hold_winch, hold_scan, held)
-	if (hold_weld or debug_weld) and breach.welding and breach.active:   # свой игрок варит: резак в руке, щиток опущен
+	crew_flow.hands(dt, h.valve, h.winch, h.scan, held)
+	if (h.weld or debug_weld) and breach.welding and breach.active:   # свой игрок варит: резак в руке, щиток опущен
 		me.weld(breach.active.p, breach.active.n)
 	else:
 		me.weld(Vector3.INF)
 	visor.visible = me.welding()
 	breach.end_step()
+
+
+## Шаг: прожектор и разряд — вспышка, рычаг, дуги и следы у дна.
+func _step_zap(dt: float) -> void:
 	searchlight.apply(light_on, reactor.k(Reactor.Sys.LAMP), silt.beam_k())
 	zap.update(dt)
 	if zap.flicker > 0.0:
@@ -766,41 +881,56 @@ func step(dt: float) -> void:
 		hull.set_zap_cards(Zap.arc_time(zap.flicker), Zap.ground_contact(ship.global_transform))
 	if not scorch.all.is_empty():   # свежий след темнеет в «старое пятно»
 		ocean.set_scorch(scorch.uniforms(time))
-	clock.lap("корабль", Time.get_ticks_usec())
-	_step_eco(dt)
+
+
+## Шаг: виды корабля — пульты, голограммы, отсеки, своя фигура, корабль и камера (подчасти «виды/…» — в худшем кадре
+## лога тестера: «виды 57» у колодца 05 в отчёте #1182 не говорил, что внутри).
+func _step_view(dt: float) -> void:
 	_flicker(dt)
+	clock.lap("виды/свет", Time.get_ticks_usec())
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	bridge.set_hatch(layout.doors[0].offset())
+	clock.lap("виды/пульты", Time.get_ticks_usec())
 	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0, silt.noise(time))
 	sonar_view.show_waypoint(run.waypoint())
 	alarm_board.show_alarms(alarms_on(), time, breach.active)
 	sonar_view.show_briefing(brief.update(dt, Briefing.wanted(near_post, at_vote, run.ended)), run, helm.pos)
 	var coop := vote_ids().size() > 1   # таймер — только у голосов игроков (Ballot), в одиночной игре его нет
 	sonar_view.show_vote(vote_fade.update(dt, VoteHolo.wanted(at_vote, run.ended)), vote_marks(),
-		ballot.seconds() if coop else -1, ballot.fraction() if coop else -1.0)
+		ballot.seconds() if coop else -1, ballot.fraction() if coop else -1.0, run.at_descent())
 	sonar_view.show_result(result_fade.update(dt, VoteHolo.result_wanted(at_vote, run.ended)), result_rows,
 		camera.global_position)
+	clock.lap("виды/голограммы", Time.get_ticks_usec())
 	rooms.apply(layout, reactor, airlock, engine)
 	var carry_c: Color = Samples.COLORS[samples.target.kind] if samples.target else Color.WHITE
 	rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(), carry_c)
 	rooms.set_lab(Lab.contents(samples.cargo), lab_screen.lines(samples, scanner, journal_page), time)
 	rooms.set_shelves(HoldShelves.contents(samples.cargo))
-	bridge.set_scanner_screen(scanner.screen_lines())
+	bridge.set_scanner_screen(gate.screen_lines(lore) if gate.active() else scanner.screen_lines())
+	clock.lap("виды/отсеки и экраны", Time.get_ticks_usec())
 	message.update(dt)
 	me.back = CrewView.own_back(walker.pitch, me.holding())   # взгляд вниз — фигура дальше позади глаза, видны ступни (#108)
 	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt)
 	me.sync_post()
 	crew_view.pitch = walker.pitch
 	_apply_crew_view(dt)
+	clock.lap("виды/экипаж", Time.get_ticks_usec())
 	_place_ship()
 	_place_camera()
-	clock.lap("виды", Time.get_ticks_usec())
-	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.to_global(Briefing.CARD_ANCHOR),
+	clock.lap("виды/корабль и камера", Time.get_ticks_usec())
+
+
+## Шаг: интерфейс — карточка маршрута, приборы, подсказки, связь, рация (подчасти — в худшем кадре лога тестера, #745).
+func _step_ui(dt: float) -> void:
+	_trip_step(dt)
+	route_card.show_card(brief.k, run.route, get_viewport().get_camera_3d(), sonar_view.global_transform,
 		comms.code)   # страница «Связь» — кодовое слово забега (ART-040)
 	clock.lap("интерфейс/маршрут", Time.get_ticks_usec())   # подчасти — в худшем кадре лога тестера (#745)
 	_update_ui()   # до меток: плашка строки уже на месте этого кадра (#387)
 	clock.lap("интерфейс/приборы", Time.get_ticks_usec())
+	overlay_flow.goal_step(dt)   # раньше подсказок: шаг 7 и место подсказки — по плашке цели этого кадра (#1346)
+	clock.lap("интерфейс/цель маршрута", Time.get_ticks_usec())
 	overlay_flow.tutorial_step(dt)
 	clock.lap("интерфейс/подсказки", Time.get_ticks_usec())
 	overlay_flow.card_step(dt)
@@ -809,6 +939,10 @@ func step(dt: float) -> void:
 	clock.lap("интерфейс/связь", Time.get_ticks_usec())
 	overlay_flow.radio_step(dt)
 	clock.lap("интерфейс/рация", Time.get_ticks_usec())
+
+
+## Шаг: метки «Занято», таблички, ушедшие, прогрев, сеть.
+func _step_marks(dt: float, r: Touch.Router) -> void:
 	busy_marks.plate = status_rect()
 	var busy := busy_marks.show_marks(crew, me, get_viewport().get_camera_3d(), camera)
 	name_tags.show_tags(crew, me, crew_view, get_viewport().get_camera_3d(), camera, tag_blocks(), dt, busy,
@@ -817,7 +951,6 @@ func step(dt: float) -> void:
 	warm_run.frame()
 	net_game.net_send(dt)
 	r.end_frame()
-	clock.lap("метки и сеть", Time.get_ticks_usec())
 
 
 ## Подложка строк на приборах: тёмная полупрозрачная плашка с отступом HINT_PAD — белые плафоны потолка не съедают
@@ -880,7 +1013,7 @@ func use_post(id: String) -> void:
 			if run.ended:   # итог, решённый без своего игрока
 				at_vote = true
 				vote_panel.visible = true
-			elif run.done:
+			elif run.voting:   # голосование открыто (переход у 10, #828): вернуться к нему
 				open_vote()
 			else:
 				announce(run.cycle())   # маршрут выбран — гостям тоже
@@ -905,7 +1038,10 @@ func use_post(id: String) -> void:
 			walker.yaw = -PI / 2.0   # щиток на правом борту (+X)
 			engine.press(reactor)
 		"scanner":
-			scanner.press()
+			if gate.active():
+				say(gate.press_text(lore))
+			else:
+				scanner.press()
 		"journal":   # листать: сводка → карточки видов → сводка
 			journal_page = (journal_page + 1) % Lab.pages(scanner)
 			say(Lab.journal_info(samples) if journal_page == 0 else Lab.card_info(scanner, Lab.cards(scanner)[journal_page - 1]))
@@ -1045,6 +1181,11 @@ func fire_zap() -> void:
 
 
 ## Шаг живого мира: корабль отдаёт своё состояние, получает события (EcoLink) и решает, что с ними делать.
+## Твёрдое для хода корабля: арка 07 и существа мира (`Helm.Ship.solid`).
+func _solid(pos: Vector3, yaw: float) -> bool:
+	return GateArch.hits(pos, yaw) or (eco != null and EcoLink.solid(eco.world.systems, pos, yaw))
+
+
 func _step_eco(dt: float) -> void:
 	var s := _fill_ship_state(true)
 	var events := eco.step(dt, s)
@@ -1065,24 +1206,37 @@ func _step_eco(dt: float) -> void:
 func on_eco_event(e: Dictionary) -> void:
 	match e.get("type", ""):
 		EcoLink.HIT:
-			if flyby.shields():
-				return   # облёт в начале забега: удар не доходит до корпуса (#506)
+			if hits_shielded():
+				return   # облёт в начале забега (#506), обучение у старта (#827) и итог забега (#1249): удар не доходит до корпуса
 			var at: Variant = e.get("at")
 			hit_local = hit_local_of(at) if at is Vector3 else null   # откуда бьёт — для звука удара (#656)
 			vitals.hit(roundi(float(e.get("damage", 0.0)) * 100.0), str(e.get("by", "")))
 			hit_local = null
 		EcoLink.DRAIN:
+			if events_held():
+				return   # обучение (#827): присоски энергию не тянут
 			vitals.drain(str(e.get("by", "")), float(e.get("units", 0.0)))
 		EcoLink.MESSAGE:
-			say(str(e.get("text", "")))
+			_world_say(str(e.get("text", "")))
 		EcoLink.VOICE:   # голос во внутренней связи ART-040; просьбу не исполняем — решает игрок
+			if bool(e.get("fake", false)) and events_held():
+				return   # обучение (#827): подделок в эфире нет, свои доклады идут
 			comms.push(int(e.get("role", Crew.Role.ENGINEER)), str(e.get("text", "")), bool(e.get("fake", false)),
 				str(e.get("ask", "")), bool(e.get("silent", false)))
 		EcoLink.DRAG:   # присоски на корпусе тормозят корабль (js/ship.js: drag = 0.45 + 0.025 * hullRemoras)
-			helm.extra_drag = float(e.get("k", 0.0))
+			helm.extra_drag = 0.0 if events_held() else float(e.get("k", 0.0))   # обучение (#827) — не тормозят
 		EcoLink.STEAL:   # образец сорван с захвата (M.steal в js/manip.js)
 			if samples.steal(int(e.get("sample", -1))):
 				say("Образец украден: %s выхватил его из захвата и уносит в нору" % str(e.get("by", "Кто-то")))
+		EcoLink.FIELD:   # импульс с площадки 08 поймал ритм поля (#833) — «граница» в журнале (#829)
+			lore.learn(LayerLore.FIELD08)
+			_world_say(str(e.get("text", "")))
+		EcoLink.SHELL:   # Раковина 03: гнёзда на сканере и рельеф на сонаре (#835) — знание «осмотр 03»
+			lore.learn(LayerLore.SHELL03)
+			_world_say(str(e.get("text", "")))
+		EcoLink.PETAL:   # купольник у 07 поднял створку гнезда (#837) — знание в кампании, больше не выходит
+			if lore.learn(LayerLore.PETAL07):
+				_world_say(str(e.get("text", "")))
 		EcoLink.DROP:   # унесённый образец снова на дне (M.drop)
 			samples.drop(int(e.get("sample", -1)), e.get("at", Vector3.ZERO))
 		EcoLink.OBSERVE:   # наблюдение в журнал (handleEvents в js/game.js)
@@ -1090,9 +1244,27 @@ func on_eco_event(e: Dictionary) -> void:
 			var fresh := scanner.observe(sp, str(e.get("note", "")))
 			var text := str(e.get("text", ""))
 			if text != "":
-				say(text)
+				_world_say(text)
 			elif fresh:
-				say("Новое наблюдение: %s" % Species.called(sp, Species.Case.NOM, scanner.is_scanned(sp)))
+				_world_say("Новое наблюдение: %s" % Species.called(sp, Species.Case.NOM, scanner.is_scanned(sp)))
+
+
+## Строка живого мира на приборы. Пока идёт облёт в начале забега, она не перебивает `Flyby.START_MSG` — игрок ещё
+## ничего не делает, а сцена у старта сразу в луче (#827); наблюдение в журнал при этом записано.
+func _world_say(text: String) -> void:
+	if flyby.kind != Flyby.Kind.START:
+		message.say(text, Status.MESSAGE_SECONDS, true)   # не стирает строку, видную меньше 1 с (issue #979)
+
+
+## Удар существа не дойдёт до корпуса: облёт в начале забега (#506), обучение у старта (#827), итог забега (#1249).
+## Мир знает это из `ShipState.shielded` и не шлёт ни удара, ни строки о нём.
+func hits_shielded() -> bool:
+	return flyby.shields() or events_held() or run.ended
+
+
+## Идёт обучение у старта 00 (#827, `Tutorial.holds_events`): события слоя ждут его конца.
+func events_held() -> bool:
+	return tutorial.holds_events()
 
 
 ## Точка удара at (мир) в осях корабля: нос −Z, правый борт +X (`HullSound.side`).
@@ -1103,9 +1275,10 @@ func hit_local_of(at: Vector3) -> Vector3:
 func _on_hit(percent: int, kind: String) -> void:
 	ship_sounds.play_hit(percent, kind, hit_local)   # SND-002: удар (по стороне) или удар о дно со скрежетом (#656)
 	lock_water.on_hit()   # рябь в шахте шлюза вспыхивает (ART-073)
-	if kind == "scrape":   # удар о дно поднимает ил
+	var held := events_held()   # обучение у старта (#827): ни сонарной тьмы, ни пробоины от удара о дно
+	if kind == "scrape" and not held:   # удар о дно поднимает ил
 		silt.on_scrape(helm.pos, Seabed.height(helm.pos.x, helm.pos.z))
-	if breach.on_hit(percent, vitals.hull):
+	if not held and breach.on_hit(percent, vitals.hull):
 		return   # о пробоине скажет Breach
 	if kind == "scrape":
 		say("Удар о дно: корпус −%d%%" % percent)
@@ -1113,6 +1286,36 @@ func _on_hit(percent: int, kind: String) -> void:
 		say("Удар по корпусу: −%d%%" % percent)
 	else:
 		say("%s бьёт по корпусу: −%d%%" % [kind, percent])
+
+
+## Уход к Кристальному лесу (#828): посреди экрана «в разработке» корабль — снова у 10, знания и сохранение.
+func _trip_step(dt: float) -> void:
+	if not trip.active:
+		return
+	if trip.t < DescentTrip.SINK + DescentTrip.HOLD * 0.5:   # и у гостя: его корабль приходит кадром хоста
+		ocean.prefetch(DescentTrip.return_spot())   # камни у 10 — заранее, не разом в кадре возвращения (#1090)
+	match trip.update(dt):
+		"arrive":
+			park_at(DescentTrip.return_spot())
+			helm.yaw = 0.5 * PI   # носом на запад — к террасе 07
+			_place_ship()
+			lore.learn(LayerLore.DOWN)
+			lore.learn(LayerLore.BACK)
+			save_now()
+			timeline.mark(time, "вернулись к спуску 10")
+		"done":
+			announce(DescentTrip.BACK_MSG)
+	trip_view.apply(trip)
+
+
+## «Сохранить» в паузе (#823): записать сейчас — груз, виды, журнал и корабль на месте.
+func save_now() -> bool:
+	return save.save(samples, scanner)
+
+
+## «Продолжить» в главном меню (#823) — `MenuFlow.continue_run`.
+func continue_run() -> void:
+	menu_flow.continue_run()
 
 
 ## Главное меню ART-037 поверх сцены — `MenuFlow.open_menu` (#753).
@@ -1146,8 +1349,10 @@ func _apply_graphics(level: int) -> void:
 	if ocean:
 		ocean.set_far(g["wall"])
 		ocean.set_relief(not lite)    # лёд ART-056
+		ocean.set_shafts_lite(lite)   # лучи ART-052 без чтения глубины кадра (#852)
 		ocean.set_snow_lite(lite)     # взвесь ART-058 реже, без вращения
 		ocean.set_decals_lite(lite)   # декали дна ART-066 реже и ближе
+		ocean.set_stones_lite(lite)   # камни и ракушки на дне ближе
 		ocean.set_layers_level(g["layers"])   # слои воды ART-069: 0 / 0,6 / 0,9
 		ocean.set_shadows(g["shadows"])
 	if hull:
@@ -1236,8 +1441,8 @@ func close_menu() -> void:
 	menu_flow.close_menu()
 
 
-## Корпус разрушен: забег проигран — шторка ART-036 3,5 с (`Wreck`), под сплошной шторкой подъём к старту с целым
-## корпусом (`_wreck_step` → `_restart`). Ввод на это время не идёт в игру.
+## Корпус разрушен: шторка ART-036 3,5 с (`Wreck`), под сплошной шторкой — загрузка последнего сохранения кампании
+## (#824, `_load_last`); сохранения нет — подъём к старту с целым корпусом. Ввод на это время не идёт в игру.
 func _on_destroyed() -> void:
 	if wreck.active():
 		return
@@ -1252,18 +1457,22 @@ func _on_destroyed() -> void:
 	if pause_panel:
 		pause_panel.show_pause(pause)
 	wreck.start()
+	wreck_view.sub.text = Wreck.sub(has_saved_ship())
 	_wreck_show()
 
 
-## Шаг шторки «Корпус разрушен»: сплошная — забег с начала. true — шторка идёт (ввод не идёт в игру).
+## Шаг шторки «Корпус разрушен»: сплошная — загрузка последнего сохранения (#824). true — шторка идёт (ввод не
+## идёт в игру).
 func _wreck_step(dt: float) -> bool:
 	if not wreck.active():
 		return false
 	if wreck.update(dt):
 		expedition.end_run()
 		timeline.finish(time, "корпус разрушен", Time.get_datetime_string_from_system(false, true))
-		_restart()
-		say("Корпус разрушен. Ковчег поднят к началу спуска")
+		if _load_last():
+			say(LOADED_MSG)
+		else:
+			say("Корпус разрушен. Ковчег поднят к началу спуска")
 	_wreck_show()
 	return wreck.active()
 
@@ -1277,8 +1486,33 @@ func _wreck_show() -> void:
 	drop_panel.set_quiet(on)
 
 
-## Корабль у начала спуска, целый и заряженный, забег с нуля (корпус разрушен или новый забег после итога).
+## Есть сохранённое место кампании (#823), к которому вернёт гибель (#824).
+func has_saved_ship() -> bool:
+	return save.live and not save.ship.is_empty()
+
+
+## Гибель в кампании (#824): системы и события как на старте, корабль — место, курс, корпус и заряд последнего
+## сохранения, без облёта. Груз, изученные виды, знания слоя и журнал не трогаются (они в памяти те же, что в
+## файле). false — сохранённого места нет: корабль у начала спуска, как `_restart`.
+func _load_last() -> bool:
+	_reset_ship()
+	if not has_saved_ship() or not SaveGame.ship_apply(save.ship, helm, vitals):
+		_begin_run()
+		return false
+	wear.snap(vitals.hull)
+	window_fog.snap(helm.depth(), vitals.hull, reactor.heat, reactor.scram)
+	_begin_run(false)
+	return true
+
+
+## Корабль у начала спуска, целый и заряженный, забег с нуля (новый забег из паузы, после итога, в меню).
 func _restart() -> void:
+	_reset_ship()
+	_begin_run()
+
+
+## Корабль у начала спуска, целый и заряженный; события, посты и связь — с нуля.
+func _reset_ship() -> void:
 	ballot.clear()
 	role_card.reset_run()
 	comms.reset_run(_code_rng.randi())   # новый забег — новое кодовое слово, очередь связи пуста
@@ -1305,13 +1539,13 @@ func _restart() -> void:
 	walker.z = spawn.y
 	light_on = true
 	overlay.set_light(true)
-	_begin_run()
 
 
-func _begin_run() -> void:
+func _begin_run(fly := true) -> void:
+	autosave.reset()   # место под кораблём на старте или после «Продолжить» — не повод записать
 	run.begin(time, samples.cargo.size(), scanner.scanned.size(), breach.count)
 	timeline.begin(time)
-	if intro and settings.intro:
+	if fly and intro and settings.intro:
 		flyby.start(Flyby.Kind.START)   # облёт корабля с борта, затем — глаза на мостике
 		say(Flyby.START_MSG)
 
@@ -1322,7 +1556,11 @@ func open_vote() -> void:
 	run.open_vote()
 	var ops := Run.opinions(vitals.hull, vitals.energy, reactor.hot, silt.inside != null, samples.cargo.size())
 	votes = VoteHolo.votes(ops)
-	vote_panel.show_vote(run.depth, ops)
+	if run.at_descent():   # у 10 — «спуститься сейчас или позже», что не узнано на слое (#1362)
+		votes.erase("up")
+		vote_panel.show_descent(DescentVote.unknown(lore), DescentVote.opinions(ops))
+	else:
+		vote_panel.show_vote(run.depth, ops)
 	if not pilot.seated:   # взгляд с карты брифинга — на поля голосования (#193)
 		var v := VoteHolo.look(Vector3(walker.x, Deck.Walker.EYE, walker.z), sonar_view.position)
 		walker.yaw = v.x
@@ -1346,7 +1584,12 @@ func decide(choice: String) -> void:
 			m.at_vote = false
 		vote_panel.visible = false
 		timeline.mark(time, "решили: глубже")
-		announce(run.go_deeper())   # гостям — тоже
+		var at_ten := run.at_descent()
+		var msg := run.go_deeper()
+		if at_ten:   # у спуска 10 — кат-сцена и экран «Кристальный лес — в разработке» (#828)
+			trip.start()
+			msg = DescentTrip.START_MSG
+		announce(msg)   # гостям — тоже
 		return
 	var rows := run.finish(time, samples.cargo.size(), scanner.scanned.size(), breach.count, vitals.hull)
 	expedition.end_run()
@@ -1478,15 +1721,18 @@ func _update_ui() -> void:
 		var label := ""
 		if post:
 			label = POST_BUTTON.get(post.id, "Люк" if post.id.begins_with("door") else "Колба" if post.id.begins_with("flask") else "")
+			if post.id == "route" and run.voting and run.at_descent() and not run.ended:
+				label = DescentVote.BUTTON   # спуск отложен «позже»: кнопка у стола снова открывает панель (#1362)
 			if Crew.holder(crew, me, post.id):
 				label = "Занято"
 		overlay.set_action_label(label)
 	var font := hint.get_theme_font("font")
 	var fs := hint.get_theme_font_size("font_size")
 	var width := minf(900.0, get_viewport().get_visible_rect().size.x - 48.0)
-	hint.text = "\n".join(Status.lines(status_parts(),
-		func(t: String) -> float: return font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x, width))
-	hint.reset_size()   # Label сам растёт, но не ужимается: после длинного сообщения плашка оставалась высокой
+	if status_lines.update_rows(status_rows(),   # шрифтом меряем только новую строку (#847)
+			func(t: String) -> float: return font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x, width, fs):
+		hint.text = status_lines.text
+		hint.reset_size()   # Label сам растёт, но не ужимается: после длинного сообщения плашка оставалась высокой
 	var plate := Rect2(HINT_POS, hint.size)
 	hint.position.y = AlarmBoard.status_y(plate, board_screen_rect())   # плашка под табло, а не поверх (#376)
 
@@ -1528,6 +1774,15 @@ func tag_blocks() -> Array:
 		out.append(route_card.rect)
 	if tutorial_panel != null and tutorial_panel.visible:   # плашка подсказки ART-038
 		out.append(tutorial_panel.box())
+	if alarm_pointer_panel != null and alarm_pointer_panel.visible:   # подпись указателя тревоги (#1361)
+		out.append(alarm_pointer_panel.box())
+	# подписи мостика: поля голосования над столом и горящее табло тревог (#1376)
+	if sonar_view != null and sonar_view.vote != null:
+		out.append_array(sonar_view.vote.word_rects(get_viewport().get_camera_3d()))
+	if alarms_on().has(true):
+		var board := board_screen_rect()
+		if board.has_area():
+			out.append(board)
 	return out
 
 
@@ -1549,34 +1804,52 @@ func alarms_on() -> Array[bool]:
 		vitals.energy < Vitals.LOW_ENERGY)
 
 
-## Части строки состояния: где игрок, глубина, ход, у штурвала — до дна, курс и прожектор, течение, пост рядом, сообщение.
+## Ряды строки приборов, не больше трёх строк (#1345): 1 — где я · глубина · ход · корпус · энергия; 2 — данные поста
+## (за штурвалом: до дна · курс · прожектор · реактор, течение — только сильное; на палубе: маршрут · реактор · шлюз);
+## 3 — тревога и сообщение. Подписи постов здесь нет — они на кнопке действия; цель за штурвалом — в плашке (#1344).
+## Пробоина и перегрев говорят «куда» и «что делать» по месту игрока (`AlarmWay`, #1361); сообщение во время
+## тревоги не клеится к ней — на свои секунды встаёт рядом 2 вместо данных поста.
+func status_rows() -> Array:
+	var room := ShipLayout.room_at(walker.z)
+	var where := "За штурвалом" if pilot.seated else ShipLayout.ROOM_SHORT[room]
+	var row1: Array = [where, "глубина %d м" % roundi(helm.depth()), "ход %s м/с" % _num(helm.speed),
+		"корпус %d%%" % roundi(vitals.hull), "энергия %d" % floori(vitals.energy)]
+	var row2: Array = []
+	if pilot.seated:
+		row2.append("до дна %d м" % roundi(helm.pos.y - Seabed.height(helm.pos.x, helm.pos.z)))
+		row2.append("курс %d°" % Status.course_deg(helm.yaw))
+		row2.append("прожектор %s" % ("вкл" if light_on else "выкл"))
+	else:
+		row2.append(run.status(helm.pos.x, helm.pos.z))
+	if reactor.alert().is_empty():
+		row2.append("реактор %d/%d" % [reactor.used(), reactor.limit()])
+	if pilot.seated and current.vel().length() >= Status.CURRENT_SHOWN:
+		row2.append(_current_text(current.vel()))
+	if not airlock.closed():
+		row2.append("шлюз открыт" if airlock.fully_open() else "шлюз в движении")
+	var row3: Array = []
+	var alarm := Status.alarm([AlarmWay.breach_line(breach, room), vitals.drain_alarm(),
+		AlarmWay.heat_line(reactor, room), silt.alarm(), vitals.warning()])
+	if not alarm.is_empty():
+		row3.append(alarm)
+		if message.visible():
+			row2 = [message.text]
+	elif message.visible():
+		row3.append(message.text)
+	return [row1, row2, row3]
+
+
+## Все части строки приборов подряд (лог, тесты): ряды `status_rows` один за другим.
 func status_parts() -> Array:
 	var parts: Array = []
-	var alarm := Status.alarm([breach.status(), vitals.drain_alarm(), reactor.alert(), silt.alarm(), vitals.warning()])
-	if not alarm.is_empty():
-		parts.append(alarm)
-	parts.append("За штурвалом" if pilot.seated else ShipLayout.ROOM_NAMES[ShipLayout.room_at(walker.z)])
-	parts.append("глубина %d м" % roundi(helm.depth()))
-	parts.append("ход %s м/с" % _num(helm.speed))
-	parts.append("корпус %d%%" % roundi(vitals.hull))
-	parts.append("энергия %d" % floori(vitals.energy))
-	if pilot.seated:
-		parts.append("до дна %d м" % roundi(helm.pos.y - Seabed.height(helm.pos.x, helm.pos.z)))
-		parts.append("курс %d°" % Status.course_deg(helm.yaw))
-		parts.append("прожектор %s" % ("вкл" if light_on else "выкл"))
-	parts.append(run.status(helm.pos.x, helm.pos.z))
-	if reactor.alert().is_empty():
-		parts.append("реактор %d/%d" % [reactor.used(), reactor.limit()])
-	parts.append("течение на %s %s м/с" % [Status.rumb(current.vel()), _num(Helm.SeaCurrent.SPEED)])
-	if not airlock.closed():
-		parts.append("шлюз открыт" if airlock.fully_open() else "шлюз в движении")
-	if not pilot.seated and not at_power and not at_vote:
-		var post := Deck.nearest(posts, walker.x, walker.z)
-		if post:
-			parts.append(post.label)
-	if message.visible():
-		parts.append(message.text)
+	for r: Array in status_rows():
+		parts.append_array(r)
 	return parts
+
+
+## «на ЮВ 0,3 м/с» — течение для приборов и сообщения о смене.
+static func _current_text(v: Vector3) -> String:
+	return "течение на %s %s м/с" % [Status.rumb(v), _num(Vector2(v.x, v.z).length())]
 
 
 static func _num(v: float) -> String:
@@ -1596,7 +1869,7 @@ func open_silt() -> void:
 ## Другие члены экипажа идут своим ходоком по своему вводу (`Member.pad`; позже — по сети). Ввод с экрана — только `me`.
 ## Голосование у голостола: голоса тех, кто у стола (Ballot), решение — большинством или по таймеру.
 func _tick_vote(dt: float) -> void:
-	if not run.done or run.ended:
+	if not run.voting or run.ended:
 		ballot.clear()
 		return
 	var ids := vote_ids()
@@ -1650,6 +1923,8 @@ func _fill_ship_state(full: bool) -> EcoLink.ShipState:
 	s.light_on = Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP))
 	s.light_range = Searchlight.range_m(reactor.k(Reactor.Sys.LAMP)) * silt.beam_k() if s.light_on else 0.0
 	s.dive = run.depth
+	s.petal_open = lore.knows(LayerLore.PETAL07)   # у гостя — по знаниям хоста (кадр «k»)
+	s.shielded = hits_shielded()   # существа не бьют и не пишут «укусил корпус» (отчёт QA 2026-11-05-2015)
 	if not full:
 		return s
 	s.hull_noise = engine.noise(clampf(absf(helm.speed) / 6.7, 0.0, 1.0))

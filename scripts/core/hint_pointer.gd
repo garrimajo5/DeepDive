@@ -34,13 +34,14 @@ const EDGE := 60.0       ## отступ стрелки от края
 const EDGE_Y := Vector2(260.0, 560.0)   ## центр стрелки по y — не в нижних углах и не на строке приборов
 
 ## Остриё шеврона над постом, оси корабля (y — над палубой). Штурвал — над креслом пилота (как в макете), пульт
-## энергии — перед его лицом (не в стене, как метка «Занято»), сонар — над голостолом, «Маршрут» — над своим постом
-## справа от стола.
+## энергии — перед его лицом (не в стене, как метка «Занято»), сонар — над голостолом, «Маршрут» — на кромке стола
+## (край корпуса r 1,1 м на высоте 0,9 м, `CrewHands.TABLE_*`) со стороны поста справа: стрелка показывает на стол,
+## а не на стену (#1346).
 const ANCHORS := {
 	"helm": Vector3(0.0, 1.75, Deck.CHAIR_Z),
 	"energy": Vector3(BridgeProps.ENERGY_POS.x + 0.4, 1.9, BridgeProps.ENERGY_POS.z),
 	"sonar": Vector3(0.0, 1.65, BridgeProps.TABLE_Z),
-	"route": Vector3(1.5, 1.5, BridgeProps.TABLE_Z),
+	"route": Vector3(1.1, 1.0, BridgeProps.TABLE_Z),
 }
 
 
@@ -101,3 +102,26 @@ static func mode(local: Vector3, p: Vector2, size: Vector2) -> String:
 	if depth > 0.0 and depth < MIN_DEPTH and Rect2(Vector2.ZERO, size).has_point(p):
 		return ""
 	return "edge"
+
+
+## Атлас белым по его альфе (#1361): цвет символа задаёт модуляция — янтарь тревоги вместо голубого подсказок.
+## Голубой атлас ярок во всех каналах, поэтому без насыщенности и с яркостью ×4 он упирается в белый, альфа — как была.
+static func white_image(src: Image) -> Image:
+	var img := src.duplicate() as Image
+	if img.is_compressed():
+		img.decompress()
+	img.convert(Image.FORMAT_RGBA8)
+	img.adjust_bcs(4.0, 1.0, 0.0)
+	return img
+
+
+## Остриё p перед камерой (depth) по ширине в кадре, но выше min_y (px при H = 1080) — опустить его до min_y: кольцо
+## встаёт у верхнего края, а не уходит стрелкой вбок (#1361: люк вплотную над головой). Иначе — p как есть.
+static func lower_tip(p: Vector2, depth: float, size: Vector2, min_y: float) -> Vector2:
+	if depth < MIN_DEPTH:
+		return p
+	var s := size.y / REF_H
+	var mx := PX_MIN * 0.5 * s
+	if p.x < mx or p.x > size.x - mx or p.y >= min_y * s:
+		return p
+	return Vector2(p.x, min_y * s)

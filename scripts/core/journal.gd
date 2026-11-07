@@ -20,10 +20,20 @@ const MAP_NAME := "Подлёдный сад"
 const MAP_NAME_TOP := 215.0
 const NORTH := "север вверх"
 const LABEL_PX := 34.0
-const PLACE_BUTTON := 112.0                ## кнопка места на карте
-const PLACE_ICON := 80.0
-const PX_PER_M := 1.25                     ## 1 px макета = 0,8 м
-const MAP_CENTER := Vector2(365, 560)      ## от (L, 0): точка (0, 0) отмели
+## Карта — все 11 мест слоя 1 (#829, `LayerMap`, вместе с террасой врат и спуском к лесу у 10): масштаб мельче макета
+## (0,95 px/м), кнопки 96 px; близкие (старт 00 и заводь 09) раздвинуты `place_spot` — точки не налезают.
+## Склон за восточным краем (место 10, #822) — полоса справа от отмели в сжатом масштабе `EAST_PX`, как на голостоле
+## (`Briefing.EAST_X0`): x мира 350…700 м — в 88 px (`east_rect`), отмель сдвинута влево, подпись `SLOPE`.
+const PLACE_BUTTON := 96.0                 ## кнопка места на карте (не меньше 96 px — палец)
+const PLACE_ICON := 70.0
+const PLACE_GAP := 6.0                     ## между кнопками мест, px
+const PX_PER_M := 0.95                     ## 1 px макета ≈ 1,05 м (отмель)
+const MAP_CENTER := Vector2(290, 555)      ## от (L, 0): точка (0, 0) отмели
+const EAST_X0 := Briefing.EAST_X0          ## восточный край отмели, м мира
+const EAST_PX := 0.25                      ## склон: px макета на м мира (вчетверо мельче отмели)
+const EAST_END := 700.0                    ## дальний край склона, м мира
+const SLOPE := "склон"
+const SLOPE_PX := 24.0
 const SUMMARY_AT := Vector2(64, 219)       ## от (R, 0): верх глифов первой строки
 const SUMMARY_STEP := 67.0
 const SUMMARY_PX := 36.0
@@ -103,11 +113,86 @@ static func map_rect(size: Vector2) -> Rect2:
 	return to_screen(MAP, size)
 
 
-## Центр места key на экране: u = L + 365 + 1,25·x, v = 560 + 1,25·z (север −Z вверх).
+## Центр места key на экране: точка макета `place_spot` от (L, 0) (север −Z вверх).
 static func place_center(key: String, size: Vector2) -> Vector2:
-	var p := Run.place_xz(key)
-	var at := MAP_CENTER + p * PX_PER_M
-	return (at + Vector2(left(size), 0.0)) * scale(size)
+	return (place_spot(key) + Vector2(left(size), 0.0)) * scale(size)
+
+
+static var _spots := {}
+
+
+## Точка мира (x, z) → точка карты, px макета от (L, 0): отмель — PX_PER_M, восточнее EAST_X0 — сжатый склон.
+static func map_point(xz: Vector2) -> Vector2:
+	var p := MAP_CENTER + xz * PX_PER_M
+	if xz.x > EAST_X0:
+		p.x = MAP_CENTER.x + EAST_X0 * PX_PER_M + (xz.x - EAST_X0) * EAST_PX
+	return p
+
+
+## Полоса склона на экране: от восточного края отмели до EAST_END по x, во всю высоту карты.
+static func east_rect(size: Vector2) -> Rect2:
+	var x0 := MAP_CENTER.x + EAST_X0 * PX_PER_M
+	var x1 := MAP_CENTER.x + EAST_X0 * PX_PER_M + (EAST_END - EAST_X0) * EAST_PX
+	return to_screen(Rect2(x0, MAP.position.y, x1 - x0, MAP.size.y), size)
+
+
+## Центр кнопки места key на карте, px макета от (L, 0): `map_point` (u = 290 + 0,95·x, v = 555 + 0,95·z), затем кнопки, что
+## налезают, раздвинуты по оси меньшего перекрытия (поровну) и оставлены внутри карты. Детерминированно, один раз.
+static func place_spot(key: String) -> Vector2:
+	if _spots.is_empty():
+		_spots = _layout()
+	return _spots[key]
+
+
+static func _layout() -> Dictionary:
+	var keys: Array = Run.PLACES.keys()
+	var at: Array[Vector2] = []
+	for k: String in keys:
+		at.append(map_point(Run.place_xz(k)))
+	var need := PLACE_BUTTON + PLACE_GAP
+	var half := PLACE_BUTTON * 0.5 + PLACE_GAP
+	for _pass in 40:
+		var moved := false
+		for i in at.size():
+			for j in range(i + 1, at.size()):
+				var d := at[j] - at[i]
+				var ox := need - absf(d.x)
+				var oy := need - absf(d.y)
+				if ox <= 0.0 or oy <= 0.0:
+					continue
+				moved = true
+				var push := Vector2(signf(d.x) if d.x != 0.0 else 1.0, 0.0) * ox if ox < oy \
+					else Vector2(0.0, signf(d.y) if d.y != 0.0 else 1.0) * oy
+				at[i] -= push * 0.5
+				at[j] += push * 0.5
+		for i in at.size():
+			at[i] = at[i].clamp(MAP.position + Vector2(half, half), MAP.end - Vector2(half, half))
+		if not moved:
+			break
+	var out := {}
+	for i in keys.size():
+		out[keys[i]] = at[i]
+	return out
+
+
+## Подпись «граница» у площадки 08 (#829): тонкая строка под её кнопкой, только когда поле замечено
+## (`LayerLore.FIELD08`) — пояс поля на карте не рисуется стеной.
+const BORDER := "граница"
+const BORDER_PX := 24.0
+const BORDER_H := 30.0
+const BORDER_W := 140.0
+
+
+static func border_shown(lore: LayerLore) -> bool:
+	return lore != null and lore.knows(LayerLore.FIELD08)
+
+
+static func border_rect(size: Vector2) -> Rect2:
+	var b := place_rect(LayerMap.POINTS["08"]["key"], size)
+	var s := scale(size)
+	var map := map_rect(size)   # 08 у западного края карты — подпись не вылезает за карту
+	var x := clampf(b.get_center().x - BORDER_W * 0.5 * s, map.position.x, map.end.x - BORDER_W * s)
+	return Rect2(Vector2(x, b.end.y + 2.0 * s), Vector2(BORDER_W, BORDER_H) * s)
 
 
 static func place_rect(key: String, size: Vector2) -> Rect2:

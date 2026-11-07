@@ -254,15 +254,100 @@ func test_view_two_multimeshes() -> void:
 	ship.pos = Vector3(500, 0, 500)
 	view.step(0.05, ship)
 	var n := fe.index * EcoFern.LEAVES + 2
-	var tr := FernView.transform_at(fv.buffer, n)
+	var tr := FernView.transform_at(fv.buffer, n, FernView.STRIDE_C)
 	ok(tr.origin.distance_to(fe.pos) < 1e-4, "лист растёт из подножия")
 	var closed_up := (tr.basis * Vector3.UP).normalized().y
 	fe.open = 1.0
 	view.step(0.05, ship)
-	tr = FernView.transform_at(fv.buffer, n)
+	tr = FernView.transform_at(fv.buffer, n, FernView.STRIDE_C)
 	var open_up := (tr.basis * Vector3.UP).normalized().y
 	ok(closed_up > 0.95 and open_up < 0.7, "раскрытый лист ложится наружу: %f → %f" % [closed_up, open_up])
 	var sh := FernView.transform_at(fv.shells.multimesh.buffer, fe.index * EcoFern.SHELLS)
 	near(sh.origin.y, Seabed.height(sh.origin.x, sh.origin.z) + 0.02, 1e-3, "моллюск на дне")
+	view.queue_free()
+	await frames(1)
+
+
+func test_view_lite_coarser_same_material() -> void:   # Б6 «Экономно»
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var fv := view.fern_view
+	var leaf_mat := fv.leaves.multimesh.mesh.surface_get_material(0)
+	var shell_mat := (fv.shells.multimesh.mesh as SphereMesh).material
+	var leaf_box := fv.leaves.multimesh.mesh.get_aabb()
+	var leaf_full := fv.leaves.multimesh.mesh.get_faces().size() / 3
+	var shell_full := fv.shells.multimesh.mesh.get_faces().size() / 3
+	var dust := fv.dust_view
+	view.set_lite(true)
+	ok(fv.lite, "волнолист — на «Экономно»")
+	var leaf_lite := fv.leaves.multimesh.mesh.get_faces().size() / 3
+	var shell_lite := fv.shells.multimesh.mesh.get_faces().size() / 3
+	eq(leaf_full, 12, "полный лист")
+	eq(leaf_lite, FernView.LITE_SEGMENTS * 2, "лист: %d → %d треугольников" % [leaf_full, leaf_lite])
+	ok(shell_lite < shell_full * 0.6, "моллюск: %d → %d" % [shell_full, shell_lite])
+	ok(fv.leaves.multimesh.mesh.surface_get_material(0) == leaf_mat, "материал листа тот же (колыхание)")
+	ok((fv.shells.multimesh.mesh as SphereMesh).material == shell_mat, "материал моллюска тот же")
+	eq(fv.leaves.multimesh.instance_count, 8 * EcoFern.LEAVES, "все листья на месте")
+	ok(fv.dust_view == dust, "муть та же")
+	var lb := fv.leaves.multimesh.mesh.get_aabb()
+	near(lb.size.y, leaf_box.size.y, 1e-3, "длина листа та же")
+	near(lb.position.z, leaf_box.position.z, 1e-3, "кончик загнут так же")
+	# грубый лист тоже лицом к +Z (как полный)
+	var f := fv.leaves.multimesh.mesh.get_faces()
+	for i in range(0, f.size(), 3):
+		ok((f[i + 1] - f[i]).cross(f[i + 2] - f[i]).z <= 0.0, "треугольник %d лицом к +Z (у основания и кончика — вырожден)" % (i / 3))
+	# сброс мира уровень не теряет
+	view.ground = Seabed.height
+	ok(view.fern_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(view.fern_view.leaves.multimesh.mesh.get_faces().size() / 3, leaf_lite, "и лист грубый")
+	view.set_lite(false)
+	eq(view.fern_view.leaves.multimesh.mesh.get_faces().size() / 3, leaf_full, "назад — полный лист")
+	view.queue_free()
+	await frames(1)
+
+
+func test_view_shells_breathe_near_ship() -> void:   # Б3: моллюски дышат у корабля
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var fv := view.fern_view
+	var fe := view.ferns.ferns[2]
+	var n := fe.index * EcoFern.SHELLS + 1
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Vector3(900, 0, 900)
+	view.step(0.05, ship)
+	var rest := FernView.transform_at(fv.shells.multimesh.buffer, n)
+	var writes := fv.shell_writes
+	view.step(0.05, ship)
+	eq(fv.shell_writes, writes, "вдали буфер моллюсков не переписывается")
+	ship.pos = fe.pos + Vector3(5, 3, 0)
+	var hs := []
+	for i in 60:
+		view.step(0.1, ship)
+		var tr := FernView.transform_at(fv.shells.multimesh.buffer, n)
+		near(tr.origin.y, rest.origin.y, 1e-5, "низ моллюска на дне")
+		hs.append(tr.basis.y.length() / rest.basis.y.length())
+	var lo: float = hs.min()
+	var hi: float = hs.max()
+	ok(hi > 1.08 and lo < 0.92, "створки приоткрываются и смыкаются: %.3f…%.3f" % [lo, hi])
+	ok(hi <= 1.0 + FernView.SHELL_BREATH_H + 1e-4 and lo >= 1.0 - FernView.SHELL_BREATH_H - 1e-4, "в пределах размаха")
+	for i in range(1, hs.size()):
+		ok(absf(hs[i] - hs[i - 1]) < 0.05, "без скачков (шаг %d)" % i)
+	# другой моллюск того же куста — вразнобой
+	ok(not is_equal_approx(FernView.shell_breath(n, 3.0, 5.0).y, FernView.shell_breath(n + 1, 3.0, 5.0).y), "не в такт")
+	# ушёл — моллюски встают в покой одним переписыванием, дальше буфер стоит
+	ship.pos = Vector3(900, 0, 900)
+	view.step(0.05, ship)
+	var back := FernView.transform_at(fv.shells.multimesh.buffer, n)
+	ok(back.basis.is_equal_approx(rest.basis), "вдали — в покое")
+	writes = fv.shell_writes
+	view.step(0.05, ship)
+	eq(fv.shell_writes, writes, "затихли — буфер стоит")
+	# «Экономно» — не дышат
+	eq(FernView.shell_breath(n, 1.0, 5.0, false), Vector3.ONE, "«Экономно» — в покое")
+	near(FernView.shell_breath(n, 1.0, FernView.SHELL_BREATH_FAR + 1.0).y, 1.0, 1e-6, "дальше предела — в покое")
 	view.queue_free()
 	await frames(1)

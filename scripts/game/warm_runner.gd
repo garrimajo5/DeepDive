@@ -23,9 +23,9 @@ func begin() -> void:
 		return
 	main.curtain = WarmSplash.new()   # заставка ART-034: фон, полоса по доле прогрева, подсказки
 	main.add_child(main.curtain)
-	for look in CrewRig.MODELS.size():
-		var at: Vector2 = Warmup.MATE_AT[look % Warmup.MATE_AT.size()]
-		_mates.append(main.add_mate(at.x, at.y, PI, Crew.Role.PILOT, look))
+	for r in Warmup.mate_count():   # каждая роль со снаряжением и каждая внешность (#883)
+		var at: Vector2 = Warmup.MATE_AT[r % Warmup.MATE_AT.size()]
+		_mates.append(main.add_mate(at.x, at.y, PI, r % Crew.Role.size(), r % CrewRig.MODELS.size()))
 	for look in CrewRig.MODELS.size():   # и материалом своего игрока: свои руки у пульта энергии (#217)
 		var at: Vector2 = Warmup.OWN_AT[look % Warmup.OWN_AT.size()]
 		var m := main.add_mate(at.x, at.y, PI, Crew.Role.PILOT, look)
@@ -42,6 +42,9 @@ func begin() -> void:
 	_particles(true)
 	main.power_panel.reactor = main.reactor   # пульт энергии рисует строки под шторкой: шрифты всех размеров (#217)
 	main.power_panel.panel = main.power
+	main.route_card.warm(true)   # карточка у стола рисует свои кегли под шторкой (09c0-route-celi)
+	main.goal_plate_view.warm(true)   # плашка цели за штурвалом (#1344) — её кегль
+	main.pause_flow.warm_map(true)   # схема корабля — узел, значки и кегли под шторкой (29-shema)
 	frame()
 
 
@@ -81,7 +84,7 @@ func frame() -> void:
 		if not main.camera.current:   # облёт с борта ждёт: прогрев смотрит глазами на мостике
 			main.camera.make_current()
 	for root: Node in [main.ship, main.ocean, main.silt_view, main.samples_view, main.vote_panel.get_parent(),
-			main.wreck_view]:
+			main.wreck_view, main.trip_view]:
 		_show(root)
 	var s := warm.stage()
 	if s >= 0:   # первый взгляд по слоям (#424): слои после s на этот кадр скрыты
@@ -135,6 +138,9 @@ func restore() -> void:
 		main.ghosts.clear()
 		main.net_game.ghosts_step(0.0, true)
 		_particles(false)
+		main.route_card.warm(false)
+		main.goal_plate_view.warm(false)
+		main.pause_flow.warm_map(false)
 		main.curtain.queue_free()   # вместе с текстурой фона
 		main.curtain = null
 		main._place_camera()

@@ -112,6 +112,8 @@ class School:
 	var from := Vector3.ZERO
 	var graze_cd := 0.0
 	var scatter_cd := 0.0
+	## Набранное время рыбок стайки вдали (EcoLod): шагают реже, догоняя пропущенное.
+	var lag := 0.0
 
 	func alive_count() -> int:
 		var n := 0
@@ -131,6 +133,10 @@ var bladders: EcoBladder
 
 var _spots: Array[Vector3]
 var _rnd: EcoRandom
+## Шаги модуля с reset — очередь стаек вдали (EcoLod).
+var _tick := 0
+## Шаг рыбок стайки i на этом шаге мира (0 — ждёт очереди, EcoLod).
+var _h: PackedFloat32Array = PackedFloat32Array()
 
 
 ## moss_system — пятна мха (подключены раньше); pred_system — серпохвосты, от них стайка тоже рассыпается;
@@ -165,6 +171,7 @@ static func seed_for(world_seed: int) -> int:
 
 func reset(world: EcoWorld) -> void:
 	_rnd = EcoWorld.seeded_for(seed_for(world.seed_value))
+	_tick = 0
 	schools.clear()
 	coins.clear()
 	glazuns.clear()
@@ -197,6 +204,7 @@ func reset(world: EcoWorld) -> void:
 			_spawn(cn)
 			sc.members.append(cn)
 			coins.append(cn)
+	_h.resize(schools.size())
 
 
 ## Монетник появляется над мхом, но не прямо над глазуном (coinSpawn).
@@ -229,13 +237,24 @@ func step(world: EcoWorld, dt: float) -> void:
 			world.emit(ID, "graze", sc.center, _graze_text(world))
 		if sc.scatter <= 0.0 and sc.patch:
 			EcoMoss.eat(sc.patch, dt * EAT)
+		# рыбки стайки вдали шагают реже (EcoLod): пара точек в мути, сдвиг за кадр не виден
+		if EcoLod.wait(sc.center.distance_to(world.ship.pos), _tick, sc.index, sc.lag, dt):
+			sc.lag += dt
+			_h[sc.index] = 0.0
+		else:
+			_h[sc.index] = dt + sc.lag
+			sc.lag = 0.0
+	_tick += 1
 	for cn in coins:
+		var h := _h[cn.school]
+		if h <= 0.0:
+			continue
 		if not cn.alive:
-			cn.respawn -= dt
+			cn.respawn -= h
 			if cn.respawn > 0.0:
 				continue
 			_spawn(cn)
-		_step_coin(world, cn, dt)
+		_step_coin(world, cn, h)
 	for gz in glazuns:
 		_step_glazun(world, gz, dt)
 

@@ -3,16 +3,26 @@ extends MultiMeshInstance3D
 ## Ледокрылы в сцене (rayGeo/initRays в js/creatures.js; концепт icewing.jpg): оба ската — один MultiMesh (один вызов
 ## отрисовки). Тело — пластина 14 × 9 м (18 × 8 клеток), сужается к хвосту и носу, горб по середине 0,5 м, края
 ## светлее; хвост-хлыст 9 м назад; на спине два ряда по 7 светящихся пятнышек (#9ffcff). Взмах крыльев — в шейдере
-## (как в браузере: sin(1,3 t + i − 0,32 |x|) · (|x| / 7)^1,4 · 1,8, номер ската — в INSTANCE_CUSTOM), крен 0,22 рад.
-## Хвост-хлыст извивается волной от корня к кончику (TAIL_*, доля длины хвоста — в UV.x; двойник на CPU — tail_wave);
+## (как в браузере: sin(ф − 0,32 |x|) · (|x| / 7)^1,4 · 1,8 · доля), крен в поворот — `EcoRay.bank`. Фаза ф и доля размаха — с мира
+## (EcoRay.flap_step: над кораблём машет сильнее и чаще, опускаясь — планирует), в INSTANCE_CUSTOM.y/z; номер ската —
+## раньше был в INSTANCE_CUSTOM.x, теперь там доля дыхания (ниже). Двойник взмаха на CPU — EcoRay.wing_lift.
+## «Дыхание» (Б3, `breath`): скат качает воду через брызгальца — горб спины с пятнышками поднимается и опадает на
+## ± BREATH_H за BREATH_T с (ритм ± BREATH_SPREAD и фаза — у каждого свои, EcoVary), края крыльев и хвост стоят.
+## Доля −1…1 считается по времени мира (у гостя то же) и лежит в INSTANCE_CUSTOM.x; двойник шейдера — `hump`.
+## Хвост-хлыст извивается волной от корня к кончику (TAIL_*, доля длины хвоста — в UV.x; фаза — по времени мира в
+## INSTANCE_CUSTOM.w, `tail_phase`, а не по TIME шейдера; двойник на CPU — tail_wave);
 ## «Экономно» — sway_k = 0 через EcoShaders.follow / set_sway_lite.
 ## Свет сквозь лёд падает на спину; брюхо снизу темнее; края крыльев — ободок света (EcoRim, uniform rim). Стоит на слое отмели (OceanView.LAYER_WORLD).
 ## Скат взмывает над кораблём — с кончиков крыльев срываются облачка взвеси (EcoRayDust): дочерний MultiMesh «Муть»
 ## в мировых координатах (у самого RayView преобразование единичное) на общем шейдере EcoShaders.MIST, +1 вызов.
+## «Экономно» (Б6, `set_lite`): пластина 12 × 6 клеток вместо 18 × 8, хвост 6 колец вместо 9 (LITE_*) — 480 → 306
+## треугольников на ската; меш пересобирается с тем же материалом (взмах, хлыст, пятнышки, ободок), размах, горб по
+## середине и пятнышки те же, муть и вызовы те же. Сброс мира уровень не теряет (EcoView.set_lite).
 
 const SHADER := """
 shader_type spatial;
 render_mode cull_disabled;
+""" + EcoGlow.GLSL + """
 uniform float rim = 0.0;
 uniform float rim_tint = 0.0;
 uniform float sway_k = 1.0;
@@ -21,14 +31,18 @@ uniform float spec = 0.2;
 varying float glow;
 void vertex() {
 	float ax = abs(VERTEX.x);
-	float ph = TIME * 1.3 + INSTANCE_CUSTOM.x - ax * 0.32;
-	float k = pow(ax / 7.0, 1.4) * 1.8;
+	// дыхание: горб тела (y ≥ 0, у кромки 0) выше и ниже в такт; хвост (UV.x > 0) — нет; двойник — RayView.hump
+	VERTEX.y *= 1.0 + 0.08 * INSTANCE_CUSTOM.x * (1.0 - step(0.0001, UV.x));
+	// фаза и доля размаха взмаха — с мира (EcoRay.flap_step), двойник — EcoRay.wing_lift
+	float ph = INSTANCE_CUSTOM.y - ax * 0.32;
+	float k = pow(ax / 7.0, 1.4) * 1.8 * INSTANCE_CUSTOM.z;
 	VERTEX.y += sin(ph) * k;
 	// наклон крыла от взмаха: d(y)/d|x|
-	float slope = -cos(ph) * 0.32 * k + sin(ph) * 1.8 * 1.4 * pow(ax / 7.0, 0.4) / 7.0;
+	float slope = -cos(ph) * 0.32 * k + sin(ph) * 1.8 * INSTANCE_CUSTOM.z * 1.4 * pow(ax / 7.0, 0.4) / 7.0;
 	NORMAL = normalize(NORMAL - vec3(sign(VERTEX.x) * slope, 0.0, 0.0));
 	// хвост-хлыст: волна бежит к кончику, размах растёт как квадрат доли длины (UV.x; у тела UV.x = 0)
-	VERTEX.x += sin(TIME * 2.4 + INSTANCE_CUSTOM.x * 2.1 - UV.x * 5.0) * 0.8 * UV.x * UV.x * sway_k;
+	// фаза хлыста — по времени мира (INSTANCE_CUSTOM.w = 2,4 t + 2,1 · номер, по модулю TAU), у гостя та же
+	VERTEX.x += sin(INSTANCE_CUSTOM.w - UV.x * 5.0) * 0.8 * UV.x * UV.x * sway_k;
 	glow = COLOR.a;
 }
 void fragment() {
@@ -37,10 +51,14 @@ void fragment() {
 	SPECULAR = spec;
 	RIM = rim;
 	RIM_TINT = rim_tint;
-	EMISSION = vec3(0.07, 0.22, 0.28) * (1.0 - glow) + COLOR.rgb * glow * 1.6;
+	EMISSION = vec3(0.07, 0.22, 0.28) * (1.0 - glow) + eco_bio(COLOR.rgb * glow * 1.6);
 }
 """
 
+## Дыхание: размах по высоте горба (доля), период (с), разброс ритма.
+const BREATH_H := 0.08
+const BREATH_T := 5.5
+const BREATH_SPREAD := 0.2
 ## Пластина: размах и длина (м), клеток поперёк и вдоль.
 const SPAN := 14.0
 const LENGTH := 9.0
@@ -54,6 +72,10 @@ const TAIL_R := Vector2(0.12, 0.03)
 const TAIL_Z := -8.5
 ## Колец вдоль хвоста (чтобы гнулся) и волна хлыста: размах на кончике (м), частота (рад/с), волн на длину (рад).
 const TAIL_RINGS := 9
+## То же на «Экономно»: клеток по размаху — чётное (середина спины — ряд вершин, горб не срезан).
+const LITE_CELLS_X := 12
+const LITE_CELLS_Z := 6
+const LITE_TAIL_RINGS := 6
 const TAIL_AMP := 0.8
 const TAIL_RATE := 2.4
 const TAIL_K := 5.0
@@ -62,9 +84,8 @@ const TAIL_PHASE := 2.1
 const SPOTS := 14
 const SPOT_R := 0.12
 const SPOT := Color("9ffcff")
-## Цвет тела (#a8cfe0) и крен в повороте (rotateZ(−0,22)).
+## Цвет тела (#a8cfe0); крен в поворот — `EcoRay.bank`.
 const BODY := Color("a8cfe0")
-const BANK := EcoRay.BANK
 
 var rays: EcoRay
 ## Вершины и треугольники меша одного ската (для тестов).
@@ -72,6 +93,8 @@ var verts := PackedVector3Array()
 var tris := 0
 ## Последние места скатов (для тестов: без видеокарты MultiMesh их не хранит).
 var placed: Array[Transform3D] = []
+## Последние данные экземпляров (доля дыхания, фаза взмаха, доля размаха, фаза хлыста) — для тестов.
+var customs: Array[Color] = []
 ## Вихри с кончиков крыльев (EcoRayDust); буфер — для тестов.
 var dust := EcoRayDust.new()
 var dust_view: MultiMeshInstance3D
@@ -85,13 +108,61 @@ var _col := PackedColorArray()
 ## Доля длины хвоста у вершины (у тела и пятнышек — 0).
 var _uv := PackedVector2Array()
 var _idx := PackedInt32Array()
+## На «Экономно» — пластина и хвост грубее (set_lite).
+var lite := false
+var _mat: ShaderMaterial
 
 
-func _init(system: EcoRay) -> void:
+func _init(system: EcoRay, on_lite := false) -> void:
 	rays = system
+	lite = on_lite
 	name = "Ледокрылы"
 	layers = OceanView.LAYER_WORLD
 	EcoShadows.cast(self)
+	_mat = ShaderMaterial.new()
+	_mat.shader = EcoShaders.shader(SHADER)
+	EcoShaders.follow(_mat)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_custom_data = true
+	mm.mesh = _build()
+	mm.instance_count = rays.rays.size()
+	multimesh = mm
+	# скаты огромные и плывут по кругу 110–170 м: границу не считаем, отсечение по камере — по всей отмели
+	custom_aabb = AABB(Vector3(-400, -120, -400), Vector3(800, 240, 800))
+	dust_view = GrazerView.build_dust(EcoRayDust.POOL)
+	add_child(dust_view)
+	sync()
+
+
+## «Экономно» — меш ската пересобран грубее (тот же материал); назад — полный. Места и номера скатов в буфере
+## MultiMesh не меняются (меняется только меш).
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	multimesh.mesh = _build()
+
+
+## Клеток пластины и колец хвоста по уровню.
+func cells_x() -> int:
+	return LITE_CELLS_X if lite else CELLS_X
+
+
+func cells_z() -> int:
+	return LITE_CELLS_Z if lite else CELLS_Z
+
+
+func tail_rings() -> int:
+	return LITE_TAIL_RINGS if lite else TAIL_RINGS
+
+
+func _build() -> ArrayMesh:
+	verts.clear()
+	_nor.clear()
+	_col.clear()
+	_uv.clear()
+	_idx.clear()
 	_body()
 	_tail()
 	for k in SPOTS:
@@ -106,32 +177,22 @@ func _init(system: EcoRay) -> void:
 	arrays[Mesh.ARRAY_TEX_UV] = _uv
 	arrays[Mesh.ARRAY_INDEX] = _idx
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	var mat := ShaderMaterial.new()
-	mat.shader = EcoShaders.shader(SHADER)
-	EcoShaders.follow(mat)
-	m.surface_set_material(0, mat)
+	m.surface_set_material(0, _mat)
 	tris = _idx.size() / 3
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_custom_data = true
-	mm.mesh = m
-	mm.instance_count = rays.rays.size()
-	multimesh = mm
-	# скаты огромные и плывут по кругу 110–170 м: границу не считаем, отсечение по камере — по всей отмели
-	custom_aabb = AABB(Vector3(-400, -120, -400), Vector3(800, 240, 800))
-	dust_view = GrazerView.build_dust(EcoRayDust.POOL)
-	add_child(dust_view)
-	sync()
+	return m
 
 
-## Поставить скатов по миру.
-func sync() -> void:
+## Поставить скатов по миру; t — время мира (фаза хлыста и дыхание).
+func sync(t := 0.0) -> void:
 	placed.resize(rays.rays.size())
+	customs.resize(rays.rays.size())
 	for ry in rays.rays:
 		var x := xform(ry)
 		placed[ry.index] = x
 		multimesh.set_instance_transform(ry.index, x)
-		multimesh.set_instance_custom_data(ry.index, Color(float(ry.index), 0, 0, 0))
+		var c := Color(breath(ry.index, t), ry.flap, ry.flap_k, tail_phase(t, ry.index))
+		customs[ry.index] = c
+		multimesh.set_instance_custom_data(ry.index, c)
 
 
 ## Вихри с кончиков крыльев в момент t (время мира); flow — течение (сносит облачка).
@@ -141,7 +202,7 @@ func sync_dust(t: float, ship: EcoLink.ShipState, flow := Vector3.ZERO) -> void:
 	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 
 
-## Место ската: +Z меша — по курсу, крен BANK.
+## Место ската: +Z меша — по курсу, крен в поворот (`EcoRay.bank`).
 static func xform(ry: EcoRay.Ray) -> Transform3D:
 	return EcoRay.xform(ry)
 
@@ -149,11 +210,13 @@ static func xform(ry: EcoRay.Ray) -> Transform3D:
 ## Пластина тела (rayGeo): x сужается к носу и хвосту, горб посередине, края светлее, концы крыльев назад (SWEEP).
 func _body() -> void:
 	var v0 := verts.size()
-	for j in CELLS_Z + 1:
-		var z := LENGTH * 0.5 - LENGTH * j / CELLS_Z
+	var cx := cells_x()
+	var cz := cells_z()
+	for j in cz + 1:
+		var z := LENGTH * 0.5 - LENGTH * j / cz
 		var f := maxf(0.05, 1.0 - pow(absf(z + 0.6) / 5.1, 1.6))
-		for i in CELLS_X + 1:
-			var x := -SPAN * 0.5 + SPAN * i / CELLS_X
+		for i in cx + 1:
+			var x := -SPAN * 0.5 + SPAN * i / cx
 			var nx := x * f
 			var y := maxf(0.0, 1.0 - absf(nx) / 2.2) * 0.5 * maxf(0.0, 1.0 - absf(z) / 4.5)
 			# крылья стреловидные, концы отогнуты назад (концепт icewing.jpg); у браузера — прямые
@@ -162,9 +225,9 @@ func _body() -> void:
 			_uv.append(Vector2.ZERO)
 			var c := 0.4 + absf(x) / 7.0 * 0.6
 			_col.append(Color(BODY.r * c * 0.75, BODY.g * c, minf(1.0, BODY.b * c * 1.15), 0.0))
-	var row := CELLS_X + 1
-	for j in CELLS_Z:
-		for i in CELLS_X:
+	var row := cx + 1
+	for j in cz:
+		for i in cx:
 			var q := v0 + j * row + i
 			_idx.append_array([q, q + 1, q + row, q + 1, q + row + 1, q + row])
 
@@ -173,8 +236,9 @@ func _body() -> void:
 func _tail() -> void:
 	var v0 := verts.size()
 	var z0 := TAIL_Z + TAIL_L * 0.5
-	for r in TAIL_RINGS:
-		var s := r / float(TAIL_RINGS - 1)
+	var rings := tail_rings()
+	for r in rings:
+		var s := r / float(rings - 1)
 		var rad := lerpf(TAIL_R.x, TAIL_R.y, s)
 		for i in 6:
 			var a := TAU * i / 5.0
@@ -183,15 +247,32 @@ func _tail() -> void:
 			_nor.append(d)
 			_uv.append(Vector2(s, 0.0))
 			_col.append(Color(BODY.r * 0.6, BODY.g * 0.6, BODY.b * 0.6, 0.0))
-	for r in TAIL_RINGS - 1:
+	for r in rings - 1:
 		for i in 5:
 			var q := v0 + r * 6 + i
 			_idx.append_array([q, q + 6, q + 1, q + 1, q + 6, q + 7])
 
 
+## Фаза хлыста у ската номер index в момент t (время мира), по модулю TAU — в INSTANCE_CUSTOM.w.
+static func tail_phase(t: float, index: int) -> float:
+	return fposmod(t * TAIL_RATE + index * TAIL_PHASE, TAU)
+
+
 ## Сдвиг вбок (м, по x меша) точки хвоста на доле длины s в момент t у ската номер index — двойник шейдера.
 static func tail_wave(s: float, t: float, index: int, sway_k := 1.0) -> float:
-	return sin(t * TAIL_RATE + index * TAIL_PHASE - s * TAIL_K) * TAIL_AMP * s * s * sway_k
+	return sin(tail_phase(t, index) - s * TAIL_K) * TAIL_AMP * s * s * sway_k
+
+
+## Доля дыхания ската номер index в момент t (время мира): −1…1 (BREATH_T, ритм и фаза — EcoVary).
+static func breath(index: int, t: float) -> float:
+	var rate := EcoVary.spread(index, EcoVary.RATE, BREATH_SPREAD)
+	var phase := EcoVary.unit(index, EcoVary.SHADE) * TAU
+	return sin(t * TAU / BREATH_T * rate + phase)
+
+
+## Высота точки тела y (м, в осях меша, до взмаха) при доле дыхания k — двойник шейдера; хвост (s > 0) не дышит.
+static func hump(y: float, k: float, s := 0.0) -> float:
+	return y * (1.0 + BREATH_H * k) if s <= 0.0 else y
 
 
 ## Светящееся пятнышко: октаэдр радиуса SPOT_R (альфа 1 — светится в шейдере).

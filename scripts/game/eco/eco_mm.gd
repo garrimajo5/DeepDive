@@ -29,6 +29,62 @@ static func instance(parent: Node, n: String, mesh: Mesh, count: int, colors := 
 	return mi
 
 
+## Облака частиц нескольких хозяев в одном MultiMesh (споры пузырчатки, чернила подушечника; Б6). На «Обычно» —
+## облака подряд: частица j хозяина owner — на месте owner · per + j. На «Экономно» — вперемешку (j · owners + owner):
+## первые `cloud_shown` мест — первая доля CLOUD_LITE каждого облака, `visible_instance_count` отрезает остальное.
+const CLOUD_LITE := 0.5
+
+
+static func cloud_slot(owner: int, j: int, owners: int, per: int, lite: bool) -> int:
+	return j * owners + owner if lite else owner * per + j
+
+
+## Сколько частиц облаков рисуется: на «Экономно» — доля CLOUD_LITE каждого облака, иначе все (−1).
+static func cloud_shown(owners: int, per: int, lite: bool) -> int:
+	return cloud_per(per) * owners if lite else -1
+
+
+## Сколько частиц одного облака рисуется на «Экономно».
+static func cloud_per(per: int) -> int:
+	return int(per * CLOUD_LITE)
+
+
+## Рамка вокруг точек `pts`, раздутая на `grow` м (#849): неподвижным видам — по местам их экземпляров, чтобы
+## Godot отсекал вид за спиной и вдали и не пересчитывал границы при каждой записи буфера. Пусто — нулевая рамка.
+static func frame(pts: PackedVector3Array, grow: float) -> AABB:
+	if pts.is_empty():
+		return AABB()
+	var box := AABB(pts[0], Vector3.ZERO)
+	for p in pts:
+		box = box.expand(p)
+	return box.grow(grow)
+
+
+## Поставить всем `mis` одну рамку по точкам `pts` с запасом `grow` (см. frame).
+static func fit(mis: Array, pts: PackedVector3Array, grow: float) -> void:
+	var box := frame(pts, grow)
+	for mi: MultiMeshInstance3D in mis:
+		mi.custom_aabb = box
+
+
+## Сколько раз send загрузил буфер в MultiMesh (для тестов: неподвижное не грузится каждый кадр, #850).
+static var uploads := 0
+const _SENT := &"eco_sent"
+
+
+## Загрузить `buf` в MultiMesh `mi`, только если он отличается от загруженного прошлый раз (#850): буферы
+## неподвижного (подушки, листья волнолиста, угри в норах, хватни и радужники без «due») не уходят в видеокарту
+## каждый кадр. Сравнение — в движке, дешевле загрузки; копия — только при загрузке. Буфер `mi` писать только через
+## send. true — загрузил.
+static func send(mi: MultiMeshInstance3D, buf: PackedFloat32Array) -> bool:
+	if mi.has_meta(_SENT) and mi.get_meta(_SENT) == buf:
+		return false
+	mi.multimesh.buffer = buf
+	mi.set_meta(_SENT, buf.duplicate())   # массивы Packed в Variant общие по ссылке — храним свою копию
+	uploads += 1
+	return true
+
+
 ## Трансформ в буфер MultiMesh с позиции `i` (порядок строк — как у `MultiMesh.buffer`).
 ## Тело повторено в put_basis: вызов функции в GDScript дорог, а это — горячий цикл каждого вида.
 static func put(buf: PackedFloat32Array, i: int, tr: Transform3D) -> void:

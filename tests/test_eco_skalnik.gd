@@ -184,6 +184,55 @@ func test_turns_smoothly_through_pounce_and_back() -> void:
 	ok(worst <= EcoSkalnik.TURN_MAX * dt + 1e-4, "поворот за шаг %.3f ≤ %.3f" % [worst, EcoSkalnik.TURN_MAX * dt])
 
 
+## Ход (Б3): скорость меняется не быстрее ACCEL (бросок к захвату — LUNGE_ACCEL), дома оседает без прыжка — через
+## подстерегание краба, бросок вора к захвату, унос добычи и возвращение. Раньше 0 → 5 м/с за шаг и прыжок на дом с 0,5 м.
+func test_speeds_up_and_settles_home_smoothly() -> void:
+	var w := _world()
+	var kr := _krab(w)
+	var sk := _sk(w).octo
+	kr.crab.hunger = 1.2
+	var dt := 0.05
+	var prev := sk.pos
+	var v_prev := Vector3.ZERO
+	var worst := 0.0
+	var jump := 0.0
+	var top := 0.0
+	var t := 0.0
+	var stage := 0
+	while t < 120.0:
+		if stage == 0 and kr.crab.scared > 0.0 and sk.state == EcoSkalnik.State.ROCK:
+			stage = 1
+			_claw(w, Vector3(4, 0, 0))   # вор: захват у норы
+		elif stage == 1 and sk.state == EcoSkalnik.State.THIEF and t > 0.0 and sk.pos.distance_to(w.ship.claw) < EcoSkalnik.GRAB:
+			stage = 2
+			w.ship.claw_state = EcoLink.CLAW_BACK
+		elif stage == 2 and sk.state == EcoSkalnik.State.LOOT:
+			stage = 3
+			w.ship.claw_state = EcoLink.CLAW_IDLE
+			w.ship.claw_sample = -1
+		var state := sk.state
+		w.step(dt)
+		t += dt
+		w.take_link()
+		var v := (sk.pos - prev) / dt
+		jump = maxf(jump, (sk.pos - prev).length())
+		prev = sk.pos
+		var lim := EcoSkalnik.LUNGE_ACCEL if state == EcoSkalnik.State.THIEF or sk.state == EcoSkalnik.State.THIEF \
+				else EcoSkalnik.ACCEL
+		worst = maxf(worst, (v - v_prev).length() / dt / lim)
+		top = maxf(top, v.length())
+		v_prev = v
+		if stage == 3 and sk.state == EcoSkalnik.State.ROCK and sk.vel.length() < 0.01:
+			break
+	eq(stage, 3, "подстерёг краба, сорвал образец и унёс")
+	eq(sk.state, EcoSkalnik.State.ROCK, "дома")
+	ok(worst <= 1.0 + 0.02, "ускорение не больше предела: %.2f предела" % worst)
+	ok(top > 4.0, "к захвату — бросок: %.2f м/с" % top)
+	ok(jump < EcoSkalnik.THIEF_SPEED * dt + 1e-3, "без прыжков: %.3f м за шаг" % jump)
+	w.run(5.0)
+	ok(sk.pos.distance_to(sk.home) < 0.01, "осел на место дома")
+
+
 func test_backs_off_armored_crab() -> void:
 	var w := _world()
 	var kr := _krab(w)
@@ -476,6 +525,50 @@ func test_view_two_draws_color_follows_camo() -> void:
 	await frames(1)
 
 
+## «Экономно» (Б6): шары щупалец грубее, неподвижный камень замирает уже дальше FAR_LITE; EcoView.set_lite доходит
+## до скальника и переживает сброс мира.
+func test_view_lite_coarse_arms_and_still_closer() -> void:
+	var w := _world()
+	var s := _sk(w)
+	var v := SkalnikView.new(s)
+	tree.root.add_child(v)
+	await frames(1)
+	var full := _tris(v.arms.multimesh.mesh)
+	v.set_lite(true)
+	ok(v.lite, "скальник — на «Экономно»")
+	var lite := _tris(v.arms.multimesh.mesh)
+	ok(lite * 2 <= full, "треугольников щупалец не больше половины (%d → %d)" % [full, lite])
+	eq(v.arms.multimesh.instance_count, SkalnikView.ARMS * SkalnikView.SEG, "звеньев столько же")
+	var mid := s.octo.home + Vector3(0, 0, (SkalnikView.FAR_LITE + SkalnikView.FAR) * 0.5)
+	var writes := v.arm_writes
+	v.sync(1.0, mid)
+	eq(v.arm_writes, writes, "на «Экономно» в %.0f м камень не шевелится" % mid.distance_to(s.octo.home))
+	v.sync(1.0, s.octo.home + Vector3(0, 0, 10))
+	eq(v.arm_writes, writes + 1, "рядом — колышется")
+	v.set_lite(false)
+	ok(_tris(v.arms.multimesh.mesh) == full, "назад — прежние шары")
+	v.sync(1.5, mid)
+	eq(v.arm_writes, writes + 2, "на «Обычно» там же — колышется")
+	v.queue_free()
+	await frames(1)
+	var view := EcoView.new()
+	tree.root.add_child(view)
+	view.ground = Seabed.height
+	view.set_lite(true)
+	ok(view.skalnik_view.lite, "EcoView.set_lite — до скальника")
+	view.ground = Seabed.height   # сброс мира — вид пересобирается
+	ok(view.skalnik_view.lite, "сброс мира — снова «Экономно»")
+	view.set_lite(false)   # общие выключатели мира (EcoShaders, EcoRim…) — назад для следующих тестов
+	view.queue_free()
+	await frames(1)
+
+
+func _tris(m: Mesh) -> int:
+	var arr := m.surface_get_arrays(0)
+	var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+	return idx.size() / 3 if idx.size() > 0 else (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3
+
+
 func test_body_faces_outward() -> void:
 	for m in [SkalnikView.build_body(), SkalnikView.build_carry()]:
 		_faces_out(m)
@@ -505,4 +598,143 @@ func test_eco_view_has_skalnik() -> void:
 	ship.pos = Helm.Ship.START
 	view.step(0.1, ship)
 	view.queue_free()
+	await frames(1)
+
+
+## Плавность (grafika-plan-eco, Б3): тронулся и встал, раскрылся из камня и сжался — щупальца тянутся за ARM_RISE,
+## а не за кадр. Раньше кончики прыгали на 1,1 м (отставание на ходу) и на 0,7 м (поджаты у камня).
+func test_view_arms_ease_between_rock_and_move() -> void:
+	var w := _world()
+	var s := _sk(w)
+	var v := SkalnikView.new(s)
+	tree.root.add_child(v)
+	await frames(1)
+	var near_ship := s.octo.home + Vector3(0, 0, 10)
+	var dt := 1.0 / 30.0
+	var t := 1.0
+	v.sync(t, near_ship)
+	near(v.spread_k, SkalnikView.ROCK_SPREAD, 1e-6, "камень — щупальца поджаты")
+	var prev := _arm_points(v)
+	s.octo.state = EcoSkalnik.State.STALK
+	s.octo.vel = Vector3(1.0, 0, 0)
+	var worst := 0.0
+	for i in 30:
+		t += dt
+		v.sync(t, near_ship)
+		var now := _arm_points(v)
+		for k in now.size():
+			worst = maxf(worst, now[k].distance_to(prev[k]))
+		prev = now
+	ok(worst < 0.15, "раскрылся и пошёл — щупальца без прыжка: %.3f м за кадр" % worst)
+	near(v.trail_k, 1.0, 1e-6, "за 1 с — тянутся за телом полностью")
+	near(v.spread_k, 1.0, 1e-6, "и раскрыты")
+	s.octo.state = EcoSkalnik.State.ROCK
+	s.octo.vel = Vector3.ZERO
+	worst = 0.0
+	for i in 30:
+		t += dt
+		v.sync(t, near_ship)
+		var now := _arm_points(v)
+		for k in now.size():
+			worst = maxf(worst, now[k].distance_to(prev[k]))
+		prev = now
+	ok(worst < 0.15, "встал камнем — щупальца без прыжка: %.3f м за кадр" % worst)
+	near(v.trail_k, 0.0, 1e-6, "отставания нет")
+	near(v.spread_k, SkalnikView.ROCK_SPREAD, 1e-6, "поджаты")
+	near(SkalnikView.arm_step(0.0, 1.0, 5.0), 0.25 / SkalnikView.ARM_RISE, 1e-6, "после паузы — шаг не больше 0,25 с")
+	v.queue_free()
+	await frames(1)
+
+
+func _arm_points(v: SkalnikView) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for i in v.arms.multimesh.instance_count:
+		out.append(v.arms.multimesh.get_instance_transform(i).origin)
+	return out
+
+
+## Б3: добыча не прыгает — схваченный образец плывёт от захвата к мантии за CARRY_MOVE (раньше — с захвата сразу
+## на 1,2 м над скальником), у дома опускается к тайнику и к сбросу стоит там, где Samples.drop положит камешек
+## (раньше пропадал на 1,2 м выше и в 1,2 м вбок).
+func test_view_loot_moves_from_claw_and_lowers_to_stash() -> void:
+	var w := _world()
+	var s := _sk(w)
+	var sk := s.octo
+	var v := SkalnikView.new(s)
+	tree.root.add_child(v)
+	await frames(1)
+	_claw(w, Vector3(4, 0, 0))
+	w.run(2.0)
+	w.ship.claw_state = EcoLink.CLAW_BACK
+	w.step(0.05)
+	eq(sk.loot, 5, "сорвал")
+	v.sync(w.time, w.ship.pos, false, w.ship)
+	ok(v.carry.visible)
+	ok(v.carry.global_position.distance_to(w.ship.claw) < 0.3, "в миг захвата — у захвата лебёдки")
+	w.ship.claw_state = EcoLink.CLAW_IDLE
+	w.ship.claw_sample = -1
+	var last := v.carry.global_position
+	var jump := 0.0
+	var moved := false
+	for i in 200:
+		w.step(0.05)
+		w.take_link()
+		v.sync(w.time, w.ship.pos, false, w.ship)
+		if not v.carry.visible:
+			break
+		jump = maxf(jump, v.carry.global_position.distance_to(last))
+		last = v.carry.global_position
+		if w.time - 2.05 > SkalnikView.CARRY_MOVE and not moved and sk.pos.distance_to(sk.home) > SkalnikView.LOWER_R:
+			moved = true
+			ok(last.is_equal_approx(sk.pos + Vector3(0, SkalnikView.CARRY_UP, 0)), "доплыл — над мантией")
+	eq(sk.state, EcoSkalnik.State.ROCK, "унёс домой")
+	ok(not v.carry.visible, "сбросил — не несёт")
+	ok(jump < 0.5, "за шаг добыча не прыгает (%.2f м)" % jump)
+	var stash := EcoSkalnik.stash_point(sk.home, 5)
+	var drop_at := Vector3(stash.x, FLAT + SkalnikView.SAMPLE_LIFT, stash.z)
+	ok(last.distance_to(drop_at) < 0.15, "перед сбросом — у тайника, где ляжет камешек (%.2f м)" % last.distance_to(drop_at))
+	v.queue_free()
+	await frames(1)
+
+
+## «Дыхание» мантии (grafika-plan-eco, Б3): тело набирает воду и выталкивает её — выше и шире на вдохе, подошва на
+## дне; «камень» дышит едва заметно (ROCK_BREATH), раскрытый — во весь размах; доля по маскировке, без скачков.
+func test_mantle_breathes_rock_barely() -> void:
+	var top := 0.0
+	var low := 2.0
+	var rock_top := 0.0
+	for i in 90:
+		var t := i * SkalnikView.BREATH_T / 90.0
+		var s := SkalnikView.breath(0.0, t)
+		top = maxf(top, s.y)
+		low = minf(low, s.y)
+		rock_top = maxf(rock_top, SkalnikView.breath(1.0, t).y)
+		near(s.x - 1.0, (s.y - 1.0) * SkalnikView.BREATH_W / SkalnikView.BREATH_H, 1e-6, "шире вместе с высотой")
+	near(top, 1.0 + SkalnikView.BREATH_H, 2e-3, "вдох — выше")
+	near(low, 1.0 - SkalnikView.BREATH_H, 2e-3, "выдох — ниже")
+	near(rock_top - 1.0, SkalnikView.BREATH_H * SkalnikView.ROCK_BREATH, 2e-3, "камень дышит едва")
+	ok(rock_top > 1.005, "но дышит — зоркий заметит")
+	var w := _world()
+	var sk := _sk(w)
+	var v := SkalnikView.new(sk)
+	tree.root.add_child(v)
+	await frames(1)
+	var near_ship := sk.octo.home + Vector3(0, 0, 10)
+	var dt := 1.0 / 30.0
+	var hs: Array[float] = []
+	var worst := 0.0
+	var prev := -1.0
+	for i in int(SkalnikView.BREATH_T / dt):
+		# раскрывается посреди вдоха — размах растёт с маскировкой, не прыжком
+		sk.octo.camo = clampf(1.0 - i * dt * 0.5, 0.0, 1.0)
+		v.sync(1.0 + i * dt, near_ship)
+		var h: float = v.body.transform.basis.get_scale().y
+		hs.append(h)
+		if prev > 0.0:
+			worst = maxf(worst, absf(h - prev))
+		prev = h
+		ok(v.body.transform.origin.is_equal_approx(sk.octo.pos), "подошва на месте")
+	ok(hs.max() - hs.min() > SkalnikView.BREATH_H, "тело в сцене дышит: %.3f" % (hs.max() - hs.min()))
+	ok(worst < 0.01, "без скачков за шаг: %.4f" % worst)
+	v.queue_free()
 	await frames(1)

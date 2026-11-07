@@ -64,7 +64,7 @@ func test_species_cards() -> void:
 	sc.observe("pred", "zap")
 	pred = Lab.page_lines(s, sc, 2)
 	eq(pred.size(), 3 + Lab.CARD_NOTES, "только последняя заметка")
-	eq(pred[2], "Наблюдений 3 из 6", "счёт")
+	eq(pred[2], "Наблюдений 3 из 7", "счёт")
 	eq(pred[-1], "· Разряд по корпусу отпугивает его.", "последняя — внизу")
 	ok(Lab.card_info(sc, "fish").begins_with("Светляк-полосник: Мелкая рыба"), "сведения изученного")
 	eq(Lab.card_info(sc, "pred"), "Неизвестный вид: изучите его сканером на мостике", "подсказка")
@@ -107,7 +107,7 @@ func test_scene_flasks_and_journal() -> void:
 		main.step(1.0 / 30.0)
 		eq(main.message.text, want, "листать журнал")
 		if main.journal_page == 1:
-			ok(main.rooms.journal_text.text.contains("Наблюдений 1 из 6"), "карточка: %s" % main.rooms.journal_text.text)
+			ok(main.rooms.journal_text.text.contains("Наблюдений 1 из 7"), "карточка: %s" % main.rooms.journal_text.text)
 	eq(main.journal_page, 0, "снова сводка")
 	main.queue_free()
 	await frames(1)
@@ -170,7 +170,7 @@ func test_screen_cache() -> void:   # #847: строки журнала не с�
 	eq(scr.lines(s, sc, 1), Lab.page_lines(s, sc, 1), "страница карточки — как без кэша")
 	eq(scr.builds, 4, "смена страницы — пересчёт")
 	sc.observe("pred", "catch")   # число карточек то же, заметка новая
-	eq(scr.lines(s, sc, 1)[2], "Наблюдений 2 из 6", "новая заметка видна на той же странице")
+	eq(scr.lines(s, sc, 1)[2], "Наблюдений 2 из 7", "новая заметка видна на той же странице")
 	sc.complete("pred")
 	eq(scr.lines(s, sc, 1), Lab.page_lines(s, sc, 1), "изучен — карточка с именем")
 	var before := scr.builds
@@ -197,6 +197,6 @@ func test_scene_journal_not_every_frame() -> void:   # #847: в шаге игр�
 	main.scanner.observe("pred", "ping")
 	main.journal_page = 1
 	main.step(1.0 / 30.0)
-	ok(main.rooms.journal_text.text.contains("Наблюдений 1 из 6"), "экран обновился: %s" % main.rooms.journal_text.text)
+	ok(main.rooms.journal_text.text.contains("Наблюдений 1 из 7"), "экран обновился: %s" % main.rooms.journal_text.text)
 	main.queue_free()
 	await frames(1)

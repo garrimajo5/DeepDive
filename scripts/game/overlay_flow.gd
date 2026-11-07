@@ -7,6 +7,7 @@ extends RefCounted
 ## Живёт полем `main.overlay_flow`; `Main.comms_area` — пересылка для тестов, `tools/` и `QaRunner`.
 
 var main: Main
+var mic_permit := MicPermit.here()   ## разрешение микрофона Android для рации (#634)
 
 
 func _init(m: Main) -> void:
@@ -19,6 +20,7 @@ func _size() -> Vector2:
 
 ## Все четыре по порядку: подсказки, карточка роли, связь, рация (шаг гостя; у хоста — по одному, с замерами).
 func step(dt: float) -> void:
+	goal_step(dt)       # раньше подсказок: шаг 7 и место плашки подсказки — по плашке цели этого кадра
 	tutorial_step(dt)
 	card_step(dt)
 	comms_step(dt)   # гость: нажатие — `net_pad.ask` со следующим вводом
@@ -32,22 +34,66 @@ func tutorial_step(dt: float) -> void:
 	var hidden := m.alarms_on().has(true) or m.at_vote or m.run.ended or m.pause.open \
 		or m.main_menu.open or m.settings.open or m.flyby.active() or m.warm.active() or m.wreck.active() \
 		or m.walker.noclip
+	# шаг 7 (#1346): 2 с ходом к точке маршрута — «Выполнено»
+	m.tutorial.steer(dt, m.pilot.seated, m.helm.speed, m.goal_plate.kind == GoalPlate.Kind.AHEAD and not hidden)
 	if m.tutorial.update(dt, hidden):
 		m.settings.hints_done = true
 		m.settings.write()
+		m.lore.learn(LayerLore.INTRO)   # знание кампании «обучение просмотрено» (#827): загрузка его не повторит
 	var near := m.near_post
 	var target := m.tutorial.pointer_target(m.pilot.seated) if m.tutorial.shown() else ""
 	var edge := m.hint_pointer.show_pointer(target, near == target or (m.at_power and target == "energy"),
 		m.tutorial.a, dt, m.get_viewport().get_camera_3d(), m.camera)
 	m.tutorial_panel.show_tutorial(m.tutorial, m.tutorial.text(m.pilot.seated, near),
 		m.tutorial.highlight(m.pilot.seated, m.at_power, near), m.status_rect(),
-		m.power_panel.box() if m.power_panel.visible else Rect2(), edge,
-		not hidden and m.tutorial.map_wanted(target, near, m.at_power))
+		m.power_panel.box() if m.power_panel.visible else (m.route_card.rect if m.route_card.visible else Rect2()), edge,
+		not hidden and m.tutorial.map_wanted(target, near, m.at_power),
+		m.goal_plate_view.rect if m.goal_plate_view.visible else Rect2())
+	alarm_step(dt)
 	var map := m.tutorial_panel.map_rect()
 	for p in m.overlay.router.taps:
 		if map.has_point(p):
 			m.open_hint_map()
 			return
+
+
+## Указатель на цель тревоги в соло (#1361, часть B): после подсказок (их указатель этого кадра уже скрыт — подсказки
+## под тревогой не видны, а указатель тревоги — только когда они кончились, `AlarmWay.pointer`), янтарём тот же
+## `HintPointerView`; стрелка у края и подпись — `main.alarm_pointer_panel`. Скрыт паузой, меню, облётом, шторками,
+## голосованием и итогом.
+func alarm_step(dt: float) -> void:
+	var m := main
+	var hidden := m.at_vote or m.run.ended or m.pause.open or m.main_menu.open or m.settings.open \
+		or m.flyby.active() or m.warm.active() or m.wreck.active() or m.walker.noclip or m.trip.active
+	var p: AlarmWay.Pointer = null
+	if not hidden:
+		p = AlarmWay.pointer(m.breach, m.reactor, ShipLayout.room_at(m.walker.z), m.crew.size() == 1,
+			m.tutorial.active())
+	m.alarm_pointer = p
+	if p == null:
+		m.alarm_pointer_panel.show_way(null, [], Rect2(), null)
+		return
+	var edge := m.hint_pointer.show_at(p.anchor, false, 1.0, dt, m.get_viewport().get_camera_3d(), m.camera,
+		AlarmBoard.WORD_ON, AlarmWay.TIP_MIN_Y)
+	m.alarm_pointer_panel.show_way(p, edge, m.hint_pointer.symbol, m.hint_pointer.amber)
+
+
+## Плашка цели маршрута за штурвалом (#1344): видна, пока свой игрок сидит за штурвалом; скрыта тем же, что карточка
+## роли (тревога, голосование у стола, итог, пауза, меню, облёт, шторки). Сонарная тьма не гасит — курс по счислению.
+func goal_step(dt: float) -> void:
+	var m := main
+	var hidden := not m.pilot.seated or m.alarms_on().has(true) or m.at_vote or m.run.ended or m.pause.open \
+		or m.main_menu.open or m.settings.open or m.flyby.active() or m.warm.active() or m.wreck.active() \
+		or m.walker.noclip or m.trip.active or (m.net_client != null and m.drop.active())
+	m.goal_plate.update(dt, m.run, m.helm.yaw, Vector2(m.helm.pos.x, m.helm.pos.z))
+	if hidden:
+		m.goal_plate_view.show_plate(m.goal_plate, Rect2(), false)
+		return
+	var size := _size()
+	var nc: Touch.Circle = m.overlay.router.layout.noclip
+	var fit := m.goal_plate.fit(m.goal_plate_view.text_width(m.goal_plate, size.y), size, m.status_rect(),
+		Rect2(nc.c - Vector2(nc.r, nc.r), Vector2(nc.r, nc.r) * 2.0))
+	m.goal_plate_view.show_plate(m.goal_plate, fit[0], true, fit[1])
 
 
 ## Карточка роли у поста ART-045: пост, у которого стоит свой игрок, своей ли он роли (в одиночном забеге — все
@@ -64,11 +110,14 @@ func card_step(dt: float) -> void:
 	var changed := card.update(dt, at, RoleCard.is_own(at, m.me.role, solo), hidden, quiet)
 	var size := _size()
 	card.status = m.status_rect()
-	var avoid: Array = []
+	# крестовина и кнопки под пальцами: карточка на них не ложится, палец к «вверх» не попадёт в «Понятно» (#1345)
+	var avoid: Array = m.overlay.router.layout.rects(m.overlay.router.pilot_buttons, RoleCard.PAD_GAP * size.y / RoleCard.REF_H)
 	if m.power_panel.visible:
 		avoid.append(m.power_panel.box())
 	if m.route_card.visible:
 		avoid.append(m.route_card.rect)
+	if m.goal_plate_view.visible:   # плашка цели за штурвалом (#1344)
+		avoid.append(m.goal_plate_view.rect)
 	var rect := RoleCard.card_rect(card.post, size, avoid, m.status_rect()) if card.open else Rect2()
 	if card.open and not rect.has_area():   # места нет — сразу «?»
 		changed = card.fold() or changed
@@ -128,8 +177,8 @@ func hidden() -> bool:
 
 
 ## Рация ART-041 в коопе: «Нажать и держать» — палец на кнопке (`Router.held_in`), меню и пауза обрывают передачу;
-## кнопка не крутит взгляд (`Router.blocks`). Голос — `voice_step`; пока нет разрешения микрофона Android — `Radio.enabled`
-## выключено.
+## кнопка не крутит взгляд (`Router.blocks`). Голос — `voice_step`; разрешение микрофона Android — `mic_permit`: нет
+## доступа — `Radio.mic` = false, первое нажатие и «В настройки» показывают системный запрос.
 func radio_step(dt: float) -> void:
 	var m := main
 	var radio := m.radio
@@ -137,13 +186,16 @@ func radio_step(dt: float) -> void:
 		m.radio_panel.show_radio(radio, m.time)
 		return
 	radio.on = Radio.enabled and (m.net_client != null or not m.net_mates.is_empty())
+	radio.mic = mic_permit.ok()
 	var size := _size()
 	radio.update(dt, m.overlay.router.held_in(Radio.button_rect(size)), hidden())
 	voice_step(dt)
 	radio_sight()
 	for p in m.overlay.router.taps:
 		radio.tap(p, size)
-	radio.settings_wanted = false   # запрос разрешения микрофона Android — вместе с голосом
+	if mic_permit.step(dt, radio.on, radio.begged, radio.settings_wanted, OS.get_granted_permissions):
+		OS.request_permission(MicPermit.NAME)   # ответ — в списке разрешений, `mic_permit` опросит
+	radio.settings_wanted = false
 	m.overlay.router.blocks.append_array(radio.blocks(size))
 	m.radio_panel.show_radio(radio, m.time)
 
@@ -205,3 +257,7 @@ func hide_all() -> void:
 		m.hint_pointer.show_pointer("", false, 0.0, 0.0, null, null)
 	if m.tutorial_panel != null and m.tutorial_panel.visible:
 		m.tutorial_panel.visible = false
+	if m.alarm_pointer_panel != null and m.alarm_pointer_panel.visible:
+		m.alarm_pointer_panel.visible = false
+	if m.goal_plate_view != null:
+		m.goal_plate_view.show_plate(m.goal_plate, Rect2(), false)

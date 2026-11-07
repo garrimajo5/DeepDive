@@ -742,3 +742,29 @@ ORM = AO/шероховатость/металл, в существующие `P
 схема `terrasa-vrat-gabarity.png`, иконки `ikonka-terrasa-vrat.png`, `ikonka-nablyudenie-polya.png`; решения — `terrasa-vrat.md`:
 арка 120 × 58 × 23 м, проход 60 × 36 м, карман Ø 100 м, бюджет модели 59 тыс. треуг. с LOD, 3 материала. Глубина пола 65 м —
 предложение, проверить при сборке места 07. Модель — следующий заказ MOD.
+## ART-080 Инеевая бахрома и ледяная моль — принято
+- Исходник: `docs/bestiary.md`, `svetovoy-kolodets.md`, `ledokryl.md`, `led-snizu.md`, #818 (место 05).
+
+**Принято 27.10.2026** (PR #864, ветка `art/ART-080-bahroma-mol`): листы `inevaya-bahroma-list.png`, `ledyanaya-mol-list.png`,
+атлас `ledyanaya-mol-atlas.png` (RGBA 256², 2×2); решения — `inevaya-bahroma-i-mol.md`: бахрома 48 нитей одним MultiMesh
+(24 на «Экономно»), след касания #67DDEB до 60 с без bloom, моль ≤ 300 карточек одним MultiMesh (96 на «Экономно»), часть
+на наружном стекле, тревогу не закрывает. Встройка — поток Б (#836).
+## ART-081 Купольник — рабочий Хранителя — принято
+- Исходник: `docs/world.md` (раздел 5), `warden.jpg` (материал), ART-079 (`terrasa-vrat.md`), #818 (место 07).
+
+**Принято 27.10.2026** (PR #871, ветка `art/ART-081-kupolnik`): листы `kupolnik-rakursy.png`, `kupolnik-stvorka.png`;
+решения — `kupolnik.md`: габарит 3 × 1,8 × 1,2 м, три захвата веером под передней кромкой (вид сбоку неточен), два
+сифона, фотофоры #67DDEB с общим импульсом команды; модель ≤ 8000 треуг., один материал, ≈ 20 костей, клипы `Swim`,
+`OpenPetal`, `Idle`. Дальше — заказы MOD и ANIM, встройка — поток Б (#837).
+## ART-082 Иконки мест 00, 09, 10 — принято
+- Исходник: иконки ART-005 и ART-079, `karta-sloj1.md`, #818 (места 00, 09, 10).
+
+**Принято 28.10.2026** (PR #910, ветка `art/ART-082-ikonki-mest`): иконки `ikonka-start.png`, `ikonka-tihaya-zavod.png`,
+`ikonka-spusk-k-lesu.png` (256² RGBA), лист `ikonki-mest-sloj1-list.png`; решения — `ikonki-mest-sloj1.md`. В игре
+заменили временные значки: `textures/places/start.png`, `cove.png`, `descent.png`.
+## ART-083 Прядь инеевой бахромы — принято
+- Исходник: ART-080 (`inevaya-bahroma-list.png`, `inevaya-bahroma-i-mol.md`), #836 (место 05).
+
+**Принято 07.11.2026** (PR #1353, ветка `art/ART-083-bahroma-pryad`): карты пряди `models/inevaya-bahroma-pryad-cvet.png`,
+`-maska.png`, `-normal.png` (256 × 1024), лист `inevaya-bahroma-pryad.png`; решения — `inevaya-bahroma-pryad.md`. В игре
+заменили процедурный рисунок нитей `FringeView` (полоса в 2 раза шире нити, силуэт — альфа карты).

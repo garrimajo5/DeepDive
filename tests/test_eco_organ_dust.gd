@@ -48,7 +48,7 @@ func test_breath_over_tube_mouths() -> void:
 	var per_tube := float(d._made) / EcoOrgan.TUBES
 	ok(per_tube < cycles * 0.8, "вдали не каждый такт (%.1f из %d)" % [per_tube, cycles])
 	ok(per_tube > cycles * 0.15, "но дышит (%.1f из %d)" % [per_tube, cycles])
-	ok(tubes == 14, "две губки по семь труб")
+	ok(tubes == 21, "три губки по семь труб")
 	for p in d.dust.puffs:
 		if p.born < -1e8:
 			continue

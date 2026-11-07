@@ -24,6 +24,8 @@ var spray_mat: ShaderMaterial    ## общий материал трёх MultiMe
 var jet_mm: MultiMeshInstance3D      ## струя
 var splash_mm: MultiMeshInstance3D   ## брызги там, где струя бьёт в воду
 var spark_mm: MultiMeshInstance3D    ## искры сварки и вспышка электрода
+var _water_k := -1.0
+var _cards := {}                     ## узел роя → CardSwarm.Cards: буфер карточек (#847)
 var lamp_k := 1.0                ## свет отсеков (Vitals.lamp_k × шторка): вода в темноте не светится
 var weld_light: OmniLight3D
 var water: MeshInstance3D
@@ -130,62 +132,67 @@ func _spray_node(nm: String, cap: int) -> MultiMeshInstance3D:
 	n.name = nm
 	var mm := CardSwarm.setup(n, spray_mat, cap, OceanView.LAYER_SHIP)
 	mm.custom_aabb = AABB(Vector3(-2.0, -1.6, -0.2), Vector3(4.0, 3.2, 5.0))   # отсек перед пробоиной
-	_fill(n, [])
+	_cards[n] = CardSwarm.Cards.new(mm)
+	_done(n)
 	spot_node.add_child(n)
 	return n
 
 
-## Карточки: [центр, ширина, вектор длины, custom] в осях пробоины.
-static func _fill(n: MultiMeshInstance3D, cards: Array) -> void:
-	var mm := n.multimesh
-	var c := mini(cards.size(), mm.instance_count)
-	for i in c:
-		var d: Array = cards[i]
-		var along: Vector3 = d[2]
-		var wv := Vector3.RIGHT * float(d[1])
-		mm.set_instance_transform(i, Transform3D(Basis(wv, along, Vector3.BACK), d[0]))
-		mm.set_instance_custom_data(i, d[3])
-	if c == 0:
-		CardSwarm.park(mm, Vector3.ZERO)
-	mm.visible_instance_count = maxi(c, 1)
-	n.visible = c > 0
+## Карточки роя узла n (в осях пробоины): `add` — центр, ширина, вектор длины, custom; `_done` — отправить кадр.
+func cards_of(n: MultiMeshInstance3D) -> CardSwarm.Cards:
+	return _cards[n]
+
+
+func _card(c: CardSwarm.Cards, at: Vector3, width: float, along: Vector3, data: Color) -> void:
+	c.add(Vector3.RIGHT * width, along, at, data)
+
+
+## Пусто — одна прозрачная карточка (прогрев покажет её на кадр), узел скрыт.
+func _done(n: MultiMeshInstance3D) -> void:
+	var c: CardSwarm.Cards = _cards[n]
+	n.visible = c.commit(Vector3.ZERO) > 0
 
 
 ## Нарисовать пулы BreachSpray: струя по скорости, брызги стоя, искры по скорости и электрод.
 func draw_parts() -> void:
-	var jets := []
+	var jc: CardSwarm.Cards = _cards[jet_mm]
+	jc.begin()
 	for p in parts.jet:
 		var a := p.age / p.life
 		var sz := BreachSpray.jet_size(a, parts.lite)
-		jets.append([BreachSpray.jet_pos(p.age, p.angle), sz.x, BreachSpray.jet_vel(p.age).normalized() * sz.y,
-			Color(BreachSpray.frame(a, BreachSpray.JET_FRAMES), BreachSpray.jet_alpha(a), BreachSpray.JET_FRAMES.y, 0.0)])
-	_fill(jet_mm, jets)
-	var spl := []
+		_card(jc, BreachSpray.jet_pos(p.age, p.angle), sz.x, BreachSpray.jet_vel(p.age).normalized() * sz.y,
+			Color(BreachSpray.frame(a, BreachSpray.JET_FRAMES), BreachSpray.jet_alpha(a), BreachSpray.JET_FRAMES.y, 0.0))
+	_done(jet_mm)
+	var sc: CardSwarm.Cards = _cards[splash_mm]
+	sc.begin()
 	var s := breach.last
 	if s:
 		var c := BreachSpray.splash_at(s, breach.water)
 		for p in parts.splash:
 			var a := p.age / p.life
 			var sz := BreachSpray.splash_size(a)
-			spl.append([BreachSpray.splash_pos(c, p.age, p.angle, p.k) + Vector3(0.0, sz.y * 0.5, 0.0), sz.x,
+			_card(sc, BreachSpray.splash_pos(c, p.age, p.angle, p.k) + Vector3(0.0, sz.y * 0.5, 0.0), sz.x,
 				Vector3.UP * sz.y, Color(BreachSpray.frame(a, BreachSpray.SPLASH_FRAMES), BreachSpray.splash_alpha(a),
-				BreachSpray.SPLASH_FRAMES.y, 0.0)])
-	_fill(splash_mm, spl)
-	var spk := []
+				BreachSpray.SPLASH_FRAMES.y, 0.0))
+	_done(splash_mm)
+	var kc: CardSwarm.Cards = _cards[spark_mm]
+	kc.begin()
 	for p in parts.sparks:
 		var a := p.age / BreachSpray.SPARK_LIFE
 		var v := BreachSpray.spark_vel(p.v, p.age, p.floor_y)
 		var sz := BreachSpray.spark_size(v)
-		spk.append([BreachSpray.spark_pos(p.v, p.age, p.floor_y) - v.normalized() * sz.y * 0.5, sz.x,
+		_card(kc, BreachSpray.spark_pos(p.v, p.age, p.floor_y) - v.normalized() * sz.y * 0.5, sz.x,
 			v.normalized() * sz.y, Color(BreachSpray.frame(a, BreachSpray.SPARK_FRAMES), BreachSpray.spark_alpha(a),
-			BreachSpray.SPARK_FRAMES.y, 1.0 + HashNoise.smooth(0.05, 0.70, a))])
+			BreachSpray.SPARK_FRAMES.y, 1.0 + HashNoise.smooth(0.05, 0.70, a)))
 	if parts.flash:
 		var f := 0.2 * (0.85 + 0.15 * sin(breach.time * 53.0))
-		spk.append([BreachSpray.SPARK_FROM, f, Vector3.UP * f,
-			Color(BreachSpray.FLASH_FRAME, 0.9, BreachSpray.FLASH_FRAME, 3.0)])   # 3 — вспышка, тон HOT
-	_fill(spark_mm, spk)
+		_card(kc, BreachSpray.SPARK_FROM, f, Vector3.UP * f,
+			Color(BreachSpray.FLASH_FRAME, 0.9, BreachSpray.FLASH_FRAME, 3.0))   # 3 — вспышка, тон HOT
+	_done(spark_mm)
 	var k := maxf(lamp_k, BreachSpray.DARK)
-	spray_mat.set_shader_parameter("water", Color(BreachSpray.WATER.r * k, BreachSpray.WATER.g * k, BreachSpray.WATER.b * k))
+	if not is_equal_approx(k, _water_k):
+		_water_k = k
+		spray_mat.set_shader_parameter("water", Color(BreachSpray.WATER.r * k, BreachSpray.WATER.g * k, BreachSpray.WATER.b * k))
 
 
 ## Узел пробоины в осях корабля: начало — точка на борту, +Z — нормаль внутрь отсека.

@@ -93,9 +93,9 @@ func test_sub_parts() -> void:
 	c.lap("интерфейс/рация", 72500)        # 0,5 мс — меньше MIN_MS
 	c.lap("интерфейс", 75000)              # 2,5 мс без подчасти — в часть
 	near(c.parts["интерфейс"], 45.0, 1e-6, "подчасти и остаток складываются в часть")
-	eq(c.note(), "интерфейс 45 [связь 40, подсказки 2], мир 30", "долгая часть — с долгими подчастями")
+	eq(c.note(), "интерфейс 45 [связь 40, подсказки 2, без отметки 3], мир 30", "долгая часть — с долгими подчастями")
 	c.start(80000, 1.0 / 30.0)
-	eq(c.last_note(), "интерфейс 45 [связь 40, подсказки 2], мир 30", "подчасти прошлого шага не пропали")
+	eq(c.last_note(), "интерфейс 45 [связь 40, подсказки 2, без отметки 3], мир 30", "подчасти прошлого шага не пропали")
 	c.lap("интерфейс/связь", 85000)
 	eq(c.note(), "интерфейс 5", "короткая часть (< SUB_MS) — без подчастей")
 	c.start(90000, 1.0 / 30.0)
@@ -113,3 +113,202 @@ func test_scene_ui_sub_parts() -> void:
 		ok(main.clock.subs.get("интерфейс", {}).has(k), "подчасть интерфейса «%s»: %s" % [k, str(main.clock.subs)])
 	main.queue_free()
 	await frames(1)
+
+
+## Issue #759: `step()` разбит на шаги по системам — части кадра в логе тестера те же, что до разбиения.
+func test_main_step_parts() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.step(1.0 / 30.0)
+	var parts: Array = main.clock.parts.keys()
+	parts.sort()
+	var want := ["виды", "интерфейс", "корабль", "метки и сеть", "мир", "события мира"]
+	eq(parts, want, "части шага: %s" % [parts])
+	var subs: Array = main.clock.subs.get("интерфейс", {}).keys()
+	subs.sort()
+	eq(subs, ["карточка роли", "маршрут", "подсказки", "приборы", "рация", "связь", "цель маршрута"], "подчасти интерфейса")
+	var views: Array = main.clock.subs.get("виды", {}).keys()   # отчёт #1182: «виды 57» у колодца 05 — что внутри
+	views.sort()
+	eq(views, ["голограммы", "корабль и камера", "отсеки и экраны", "пульты", "свет", "экипаж"], "подчасти видов")
+	near(float(main.clock.parts["виды"]), _sum(main.clock.subs["виды"]), 0.001, "виды — ровно сумма подчастей")
+	var world: Dictionary = main.clock.subs.get("мир", {})   # #1020: модули и виды живого мира
+	ok(world.has("существа") and world.has("связь") and world.has("вид: рыбы, хищники") \
+		and world.has("вид: планктон, эхо, дальние"), "подчасти мира: %s" % [world.keys()])
+	ok(world.size() > 10, "модули мира по именам: %d" % world.size())
+	main.queue_free()
+	await frames(1)
+
+
+## Issue #1020: «мир 78» в худшем кадре не говорит, что внутри. Живой мир отмечает подчасти в идущем шаге
+## (`StepClock.active`), не зная `Main`: модуль мира по имени класса и существа.
+func test_world_marks_subparts() -> void:
+	var c := StepClock.new()
+	c.start(Time.get_ticks_usec())
+	ok(StepClock.active == c, "идущий шаг — последний start")
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float: return -40.0
+	w.ship.pos = Vector3(500, -10, 500)
+	w.add(EcoPred.new())
+	w.step(0.2)
+	c.lap("мир", Time.get_ticks_usec())
+	var of: Dictionary = c.subs.get("мир", {})
+	ok(of.has("существа"), "подчасть «существа» — шаг агентов")
+	ok(of.has("EcoPred"), "подчасть модуля по имени его класса")
+	ok(c.parts.has("мир") and not c.parts.has("EcoPred"), "подчасти идут в часть «мир», отдельной части нет")
+	StepClock.active = null
+	StepClock.mark("мир/ничего")   # без идущего шага — тихо
+	ok(not c.subs["мир"].has("ничего"), "без идущего шага отметка ничего не пишет")
+
+
+## Issue #1020: «мир 91 [EcoFringe 15, EcoFish 13]» — 63 мс «мира» не видно; прочие подчасти идут одной суммой.
+func test_sub_rest() -> void:
+	var c := StepClock.new()
+	c.start(0, 0.093)
+	var t := 0
+	for p in [["EcoFringe", 15], ["EcoFish", 13], ["существа", 9], ["EcoDome", 7], ["EcoCoins", 6], ["связь", 5]]:
+		t += int(p[1]) * 1000
+		c.lap("мир/" + p[0], t)
+	c.lap("мир", t + 4000)   # 4 мс «мира» вне подчастей
+	near(c.parts["мир"], 59.0, 1e-6, "мир — сумма подчастей и остатка")
+	eq(c.note(), "мир 59 [EcoFringe 15, EcoFish 13, существа 9, ещё 3: 18, без отметки 4]; шаг 93 мс",
+		"три долгие подчасти, остальные одной суммой и время вне отметок")
+	c.start(t + 4000, 0.03)
+	c.lap("мир/EcoFish", t + 16000)
+	c.lap("мир/связь", t + 16200)
+	eq(c.note(), "мир 12 [EcoFish 12]", "короткий остаток (< MIN_MS) не пишем")
+
+
+## Issue #1020: импульс сонара и события мира — свои подчасти «мира», не в «существах» и не в первой группе видов.
+func test_scene_world_sub_parts() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.eco_ship.sonar_ping = true
+	main.step(1.0 / 30.0)
+	var w: Dictionary = main.clock.subs.get("мир", {})
+	for k in ["события", "существа", "связь"]:
+		ok(w.has(k), "подчасть мира «%s»: %s" % [k, str(w.keys())])
+	main.queue_free()
+	await frames(1)
+
+
+## Issue #1020: «мир 113 [… ещё 43: 61]» — виновник или весь шаг разом медленнее. Худший кадр сравнивается
+## с обычным временем частей: долгая часть — «обычно N», подчасти — «×N».
+func test_usual_times() -> void:
+	var c := StepClock.new()
+	var t := 0
+	for i in StepClock.USUAL_FROM + 2:   # обычные шаги: мир 12 = EcoFish 3 + EcoKelp 2 + 4 модуля по 1 + 3 вне отметок
+		c.start(t, 1.0 / 30.0)
+		for p in [["EcoFish", 3], ["EcoKelp", 2], ["a", 1], ["b", 1], ["c", 1], ["d", 1]]:
+			t += int(p[1]) * 1000
+			c.lap("мир/" + p[0], t)
+		t += 3000
+		c.lap("мир", t)
+	ok(c.usual_ready(), "обычное время готово")
+	near(c.usual["мир"], 12.0, 1e-3, "обычный мир")
+	c.start(t, 1.0 / 30.0)   # всплеск: EcoFish ×10, прочие ×2
+	for p in [["EcoFish", 30], ["EcoKelp", 4], ["a", 2], ["b", 2], ["c", 2], ["d", 2]]:
+		t += int(p[1]) * 1000
+		c.lap("мир/" + p[0], t)
+	t += 3000
+	c.lap("мир", t)
+	c.start(t, 1.0 / 30.0)
+	eq(c.last_note(), "мир 45 (обычно 12) [EcoFish 30 ×10, EcoKelp 4 ×2, a 2 ×2, ещё 3: 6 ×2, без отметки 3]",
+		"всплеск — с обычным временем, виновник ×10 среди ×2")
+	near(c.usual["мир"], 12.0, 1e-3, "худший шаг ещё не в среднем — сравнивается не с собой")
+
+
+func test_usual_not_before_warm() -> void:
+	var c := StepClock.new()
+	c.start(0, 1.0 / 30.0)
+	c.lap("мир/EcoFish", 30000)
+	c.start(30000, 1.0 / 30.0)
+	eq(c.last_note(), "мир 30 [EcoFish 30]", "мало шагов — без «обычно»")
+	eq(StepClock.slower(5.0, 0.05), "", "обычное ~0 — подчасть по событию, без ×")
+	eq(StepClock.slower(3.0, 2.0), "", "меньше SLOW раз — без ×")
+	eq(StepClock.slower(9.0, 2.0), " ×5", "×N округляется")
+
+
+## Обычный шаг мира: EcoFish 3, EcoKelp 2, EcoVent 1, a 1, b 1 — и всё (#1174).
+func _warm_world(c: StepClock, t: int) -> int:
+	for i in StepClock.USUAL_FROM + 2:
+		c.start(t, 1.0 / 30.0)
+		for p in [["EcoFish", 3], ["EcoKelp", 2], ["EcoVent", 1], ["a", 1], ["b", 1]]:
+			t += int(p[1]) * 1000
+			c.lap("мир/" + p[0], t)
+	return t
+
+
+## Issue #1174: в провале эмулятора раздуты все подчасти разом (даже EcoVent в три строки) — лог говорит «заминка»,
+## а не ищет вид-виновник; один виновник среди ×1–×2 — без «заминки».
+func test_stall_all_parts_at_once() -> void:
+	var c := StepClock.new()
+	var t := _warm_world(c, 0)
+	c.start(t, 1.0 / 30.0)   # всё ×12 разом
+	for p in [["EcoFish", 36], ["EcoKelp", 24], ["EcoVent", 12], ["a", 12], ["b", 12]]:
+		t += int(p[1]) * 1000
+		c.lap("мир/" + p[0], t)
+	c.start(t, 1.0 / 30.0)
+	eq(c.last_note(), "мир 96 (обычно 8) [EcoFish 36 ×12, EcoKelp 24 ×12, EcoVent 12 ×12, ещё 2: 24 ×12]"
+		+ " — разом ×12, заминка", "все подчасти ×12 — заминка машины")
+	c.start(t, 1.0 / 30.0)   # виновник: EcoFish ×20, прочие как обычно
+	for p in [["EcoFish", 60], ["EcoKelp", 2], ["EcoVent", 1], ["a", 1], ["b", 1]]:
+		t += int(p[1]) * 1000
+		c.lap("мир/" + p[0], t)
+	c.start(t, 1.0 / 30.0)
+	ok(not c.last_note().contains("заминка"), "один виновник — не заминка: " + c.last_note())
+	eq(StepClock.stall({"a": 12.0, "b": 12.0}, {"a": 1.0, "b": 1.0}), 0, "две подчасти — мало для вывода")
+	eq(StepClock.stall({"a": 12.0, "b": 12.0, "c": 12.0}, {"a": 1.0, "b": 1.0, "c": 0.01}), 0,
+		"подчасть по событию (обычное ~0) не считается — осталось две")
+
+
+## Отчёт тестера `2026-11-05-0315` (#1253, `33a-kondensat-krasivo`, шаг 133 мс): после #1255 мир за кадр идёт
+## одним подшагом ≤ `EcoWorld.SLOW_STEP`, остаток — в долг. Порог заминки ещё умножали на два подшага долгого шага
+## (×10), и «флора ×7, EcoPred ×6, EcoCoins ×15» не отмечались заминкой — разбор искал виновника в мире.
+func test_stall_long_step_one_world_substep() -> void:
+	var x7 := {"a": 7.0, "b": 6.0, "c": 15.0}
+	var one := {"a": 1.0, "b": 1.0, "c": 1.0}
+	eq(StepClock.stall(x7, one), 7, "медиана ×7 — заминка, какой бы долгий ни был шаг")
+	eq(StepClock.stall({"a": 4.0, "b": 4.0, "c": 4.0}, one), 0, "×4 — меньше STALL_K — не заминка")
+	var c := StepClock.new()
+	var t := _warm_world(c, 0)
+	c.start(t, 0.133)
+	for p in [["EcoFish", 56], ["EcoKelp", 42], ["EcoVent", 7], ["a", 7], ["b", 7]]:
+		t += int(p[1]) * 1000
+		c.lap("мир/" + p[0], t)
+	c.start(t, 1.0 / 30.0)
+	ok(c.last_note().ends_with("— разом ×7, заминка; шаг 133 мс"), "шаг 133 мс, всё ×7 — заминка: " + c.last_note())
+	c.start(t, 0.133)   # виновник в долгом шаге: EcoFish ×20, прочие как обычно
+	for p in [["EcoFish", 80], ["EcoKelp", 3], ["EcoVent", 1], ["a", 1], ["b", 1]]:
+		t += int(p[1]) * 1000
+		c.lap("мир/" + p[0], t)
+	c.start(t, 1.0 / 30.0)
+	ok(not c.last_note().contains("заминка"), "один виновник в долгом шаге — не заминка: " + c.last_note())
+
+
+## Отчёт тестера `2026-11-05-0415` (#1253, `32o-mol-steklo`): «мир 230 (обычно 16) [EcoFish 79 ×40, рыбы 21 ×11,
+## EcoDome 19 ×41, ещё 43: 111 ×10]» — раздуто всё, но медиану тянули вниз мелкие подчасти ×2, и заминка не
+## отмечалась. Без двух самых долгих остальные вместе ×N — это заминка; два виновника среди ×1 — нет.
+func test_stall_by_rest_sum() -> void:
+	var sub := {"EcoFish": 79.0, "рыбы": 21.0, "EcoDome": 19.0}
+	var us := {"EcoFish": 2.0, "рыбы": 2.0, "EcoDome": 0.46}
+	for i in 5:
+		sub["big%d" % i] = 18.0
+		us["big%d" % i] = 1.5
+	for i in 10:
+		sub["small%d" % i] = 0.4
+		us["small%d" % i] = 0.2
+	ok(StepClock.stall(sub, us) >= int(StepClock.STALL_K), "остальные вместе ×11 — заминка: %d" % StepClock.stall(sub, us))
+	var two := {"EcoFish": 80.0, "EcoKelp": 40.0, "a": 1.0, "b": 1.0, "c": 1.2}
+	var one := {"EcoFish": 2.0, "EcoKelp": 2.0, "a": 1.0, "b": 1.0, "c": 1.0}
+	eq(StepClock.stall(two, one), 0, "два виновника, остальные как обычно — не заминка")
+	eq(StepClock.rest_stall({"a": 50.0, "b": 50.0, "c": 50.0}, {"a": 1.0, "b": 1.0, "c": 1.0}), 0,
+		"без двух долгих осталась одна подчасть — мало для вывода")
+
+
+static func _sum(of: Dictionary) -> float:
+	var t := 0.0
+	for k in of:
+		t += float(of[k])
+	return t

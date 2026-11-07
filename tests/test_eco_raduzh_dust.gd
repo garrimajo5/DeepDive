@@ -166,11 +166,11 @@ func test_view_dust_mesh() -> void:
 	tree.root.add_child(view)
 	await frames(1)
 	var rv := view.raduzh_view
-	ok(rv.dust_view != null and rv.dust_view.get_parent() == rv, "у радужников — MultiMesh «Муть»")
-	eq(rv.dust_view.multimesh.instance_count, EcoRaduzhDust.POOL)
-	eq(rv.dust_view.layers, OceanView.LAYER_WORLD)
+	ok(rv.dust_view == null and view.dust_layer.parts.has(rv._dust), "у радужников — MultiMesh «Муть» — кусок общего слоя (#849)")
+	eq(view.dust_layer.pools[view.dust_layer.parts.find(rv._dust)], EcoRaduzhDust.POOL)
+	eq(view.dust_layer.layers, OceanView.LAYER_WORLD)
 	eq(rv.transform, Transform3D.IDENTITY, "облачка в мировых координатах")
-	var mat := (rv.dust_view.multimesh.mesh as QuadMesh).material as ShaderMaterial
+	var mat := (view.dust_layer.multimesh.mesh as QuadMesh).material as ShaderMaterial
 	ok(mat.shader == EcoShaders.mist(EcoShaders.Mist.INK).shader, "общий шейдер MIST — шейдеров не прибавилось")
 	var ship := EcoLink.ShipState.new()
 	var sw := view.raduzh.swarms[0]

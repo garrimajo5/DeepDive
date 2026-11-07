@@ -145,6 +145,57 @@ func test_crab_turns_smoothly_and_faces_out_at_home() -> void:
 	ok(cr.dir.dot(cr.out) > 0.99, "в норе лицом наружу")
 
 
+## Ход по дну (Б3): скорость меняется не быстрее ACCEL (напуганный — RUN_ACCEL) — трогается из норы, встаёт у ежа
+## и в норе, разворачивается от ежа бегом без рывка; раньше 0 → 0,9 м/с за шаг, а при испуге — 0,9 туда → 2 обратно.
+func test_crab_speeds_up_and_stops_smoothly() -> void:
+	var w := _world()
+	var kr := _krab(w)
+	var cr := kr.crab
+	cr.hunger = 1.05
+	var dt := 0.05
+	var prev := cr.pos
+	var v_prev := Vector3.ZERO
+	var worst := 0.0
+	var top := 0.0
+	var scared := false
+	var saw_crack := false
+	var crack_v := INF
+	var t := 0.0
+	while t < 80.0:
+		if not scared and cr.state == EcoKrab.State.HUNT and t > 4.0:
+			kr.scare(6.0)   # разворот посреди охоты
+			scared = true
+		w.step(dt)
+		t += dt
+		var v := Vector3(cr.pos.x - prev.x, 0.0, cr.pos.z - prev.z) / dt
+		prev = cr.pos
+		var lim := EcoKrab.RUN_ACCEL if cr.scared > 0.0 else EcoKrab.ACCEL
+		worst = maxf(worst, (v - v_prev).length() / dt / lim)
+		top = maxf(top, v.length())
+		v_prev = v
+		if cr.state == EcoKrab.State.CRACK and not saw_crack:
+			saw_crack = true
+			crack_v = v.length()
+		if saw_crack and cr.state == EcoKrab.State.DEN:
+			break
+	ok(scared, "испуг посреди охоты")
+	ok(saw_crack, "после испуга вышел снова и расколол ежа")
+	eq(cr.state, EcoKrab.State.DEN, "вернулся в нору")
+	ok(worst <= 1.0 + 1e-3, "ускорение не больше предела: %.2f предела" % worst)
+	ok(top > EcoKrab.SCARED_SPEED * 0.95, "бегом — почти 2 м/с: %.2f" % top)
+	ok(crack_v < 0.3, "к ежу подходит медленно: %.2f м/с" % crack_v)
+	w.run(1.0)
+	near(cr.vel.length(), 0.0, 1e-4, "в норе стоит")
+	ok(not cr.moving, "не идёт")
+
+
+func test_want_speed_brakes_to_creep() -> void:
+	near(EcoKrab.want_speed(0.9, 10.0), 0.9, 1e-6, "далеко — полный ход")
+	near(EcoKrab.want_speed(0.9, 0.12), sqrt(2.0 * EcoKrab.BRAKE * 0.12), 1e-6, "близко — тормозит")
+	near(EcoKrab.want_speed(0.9, 0.0), EcoKrab.CREEP, 1e-6, "на месте — доползает")
+	near(EcoKrab.want_speed(0.9, -1.0), EcoKrab.CREEP, 1e-6, "перешёл — тоже")
+
+
 func test_crack_takes_three_seconds() -> void:
 	var w := _world()
 	var k := _kelp(w)
@@ -282,7 +333,7 @@ func test_scared_crab_runs_home_and_skips_hunt() -> void:
 	var away := Vector2(cr.pos.x - cr.den.x, cr.pos.z - cr.den.z).length()
 	kr.scare(10.0)
 	eq(cr.state, EcoKrab.State.HOME, "бросил охоту")
-	w.step(0.5)
+	w.run(1.0)   # разворот через остановку (RUN_ACCEL), потом бегом
 	var now := Vector2(cr.pos.x - cr.den.x, cr.pos.z - cr.den.z).length()
 	ok(now < away - 0.8 or now < EcoKrab.HOME_DIST, "удирает бегом: %.2f → %.2f" % [away, now])
 	w.run(5.0)
@@ -360,6 +411,88 @@ func test_view_four_draws_spines_follow_meals() -> void:
 	await frames(1)
 
 
+## Вплетённая игла вырастает из панциря за SPINE_RISE, а не появляется за кадр (раньше кончик прыгал на 0,3 м).
+func test_view_new_spine_grows_smoothly() -> void:
+	var w := _world()
+	var kr := _krab(w)
+	var v := KrabView.new(kr)
+	tree.root.add_child(v)
+	await frames(1)
+	var tip := Vector3(0, 0.3, 0)
+	var n := EcoKrab.SPINES_START
+	kr.crab.spines = n + EcoKrab.SPINES_PER_MEAL
+	kr.dirty = true
+	var dt := 1.0 / 30.0
+	var t := 1.0
+	v.sync(t)
+	var last := KelpView.transform_at(v.spine_buffer, n, KelpView.STRIDE) * tip
+	var worst := 0.0
+	for i in int(KrabView.SPINE_RISE / dt) + 3:
+		t += dt
+		v.sync(t)
+		var p := KelpView.transform_at(v.spine_buffer, n, KelpView.STRIDE) * tip
+		worst = maxf(worst, p.distance_to(last))
+		last = p
+	ok(worst < 0.03, "кончик новой иглы за шаг %.3f м < 0,03" % worst)
+	near(v.spine_k[n], 1.0, 1e-6, "выросла во всю длину")
+	ok(last.is_equal_approx(KrabView.spine_transform(n) * tip), "кончик на месте целой иглы")
+	var writes := v.spine_writes
+	v.sync(t + 1.0)
+	eq(v.spine_writes, writes, "выросла — буфер больше не переписывается")
+	kr.crab.spines = n
+	v.sync(t + 0.5)
+	v.sync(t + 0.1)
+	eq(v.spine_k[n], 0.0, "время назад — сразу к цели")
+	v.queue_free()
+	await frames(1)
+
+
+func test_hop_follows_speed() -> void:
+	var t := PI / 2.0 / KrabView.HOP_RATE   # |sin| = 1
+	near(KrabView.hop(t, 0.0), 0.0, 1e-9, "стоит — не подпрыгивает")
+	ok(KrabView.hop(t, EcoKrab.CREEP) < 0.002, "ползком 5 см/с — подскок меньше 2 мм: %.4f" % KrabView.hop(t, EcoKrab.CREEP))
+	near(KrabView.hop(t, KrabView.HOP_FULL), KrabView.HOP, 1e-6, "на ходу к норе — во весь размах")
+	near(KrabView.hop(t, EcoKrab.SCARED_SPEED), KrabView.HOP, 1e-6, "бегом — не выше")
+
+
+## Краб подходит ползком и встаёт: тело не опускается скачком (раньше на 5 см/с — полный подскок 3 см и сброс за кадр).
+func test_view_hop_settles_without_jump() -> void:
+	var w := _world()
+	var kr := _krab(w)
+	var cr := kr.crab
+	var v := KrabView.new(kr)
+	tree.root.add_child(v)
+	await frames(1)
+	var dt := 1.0 / 30.0
+	var t := 0.0
+	var speed := KrabView.HOP_FULL
+	var last := INF
+	var worst := 0.0
+	var top := 0.0
+	var stop := PI / 2.0 / KrabView.HOP_RATE + PI / KrabView.HOP_RATE * 12.0   # встаёт на гребне подскока
+	while t < stop + 1.0:
+		if t < 1.0:
+			speed = KrabView.HOP_FULL
+		elif t < stop:
+			speed = move_toward(speed, EcoKrab.CREEP, EcoKrab.BRAKE * dt)
+		else:
+			speed = 0.0
+		cr.vel = Vector3(speed, 0, 0)
+		cr.moving = cr.vel.length_squared() > 1e-4
+		v.sync(t)
+		var y := v.body.position.y - cr.pos.y
+		if last != INF:
+			worst = maxf(worst, absf(y - last))
+		top = maxf(top, y)
+		last = y
+		t += dt
+	ok(top > KrabView.HOP * 0.9, "на ходу подпрыгивает: %.3f м" % top)
+	ok(worst < 0.009, "за кадр тело сдвигается не больше 9 мм: %.4f" % worst)
+	near(last, 0.0, 1e-9, "встал — на дне")
+	v.queue_free()
+	await frames(1)
+
+
 func test_view_without_crab_hidden() -> void:
 	var w := EcoWorld.new()
 	var kr := w.add(EcoKrab.new(w.add(EcoKelp.new()) as EcoKelp)) as EcoKrab
@@ -401,4 +534,194 @@ func test_eco_view_has_krab() -> void:
 	ship.pos = Helm.Ship.START
 	view.step(0.1, ship)
 	view.queue_free()
+	await frames(1)
+
+
+# ---------- «Экономно» (Б6) ----------
+
+func test_view_lite_coarser_same_materials() -> void:
+	var w := _world()
+	var kr := _krab(w)
+	var v := KrabView.new(kr)
+	tree.root.add_child(v)
+	await frames(1)
+	var full := v.tris()
+	eq(full, 424, "полный краб (полюса эллипсоидов без вырожденных граней)")
+	var mats := [v.den.mesh.surface_get_material(0), v.body.mesh.surface_get_material(0),
+		v.claws.mesh.surface_get_material(0)]
+	var box := v.body.mesh.get_aabb()
+	var spines := v.spines.multimesh
+	var dust := v.dust_view
+	v.set_lite(true)
+	ok(v.lite, "краб — на «Экономно»")
+	eq(v.tris(), 286, "треугольников: %d → %d" % [full, v.tris()])
+	ok(v.tris() * 100 <= full * 70, "не больше 70 %")
+	ok(v.den.mesh.surface_get_material(0) == mats[0], "нора та же")
+	ok(v.body.mesh.surface_get_material(0) == mats[1], "материал панциря тот же (свечение)")
+	ok(v.claws.mesh.surface_get_material(0) == mats[2], "материал клешней тот же")
+	for mi: MeshInstance3D in [v.den, v.body, v.claws]:
+		eq(mi.mesh.get_surface_count(), 1, "%s — один вызов" % mi.name)
+	ok(v.spines.multimesh == spines and v.dust_view == dust, "иглы и муть те же")
+	var lb := v.body.mesh.get_aabb()
+	ok(lb.size.x > box.size.x * 0.9 and lb.size.y > box.size.y * 0.95, "силуэт тот же: %s → %s" % [box.size, lb.size])
+	ok(v.claws.get_parent() == v.body and v.spines.get_parent() == v.body, "клешни и иглы — на теле")
+	v.set_lite(false)
+	eq(v.tris(), full, "назад — полный краб")
+	v.queue_free()
+	await frames(1)
+
+
+func test_lite_meshes_face_outward() -> void:
+	for m: ArrayMesh in [KrabView.build_body(true), KrabView.build_claws(true)]:
+		var arr := m.surface_get_arrays(0)
+		var vv: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var n: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+		var bad := 0
+		for i in range(0, vv.size(), 3):
+			if (vv[i + 1] - vv[i]).cross(vv[i + 2] - vv[i]).dot(n[i]) > 0.0:
+				bad += 1
+		eq(bad, 0, "все грани наружу")
+
+
+func test_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = Seabed.height
+	ev.set_lite(true)
+	ok(ev.krab_view.lite, "уровень дошёл до краба")
+	var t := ev.krab_view.tris()
+	ev.ground = Seabed.height
+	ok(ev.krab_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(ev.krab_view.tris(), t, "и панцирь грубый")
+	ev.set_lite(false)
+	ev.free()
+
+
+## Б3: ноги шагают двумя тройками вразнобой, размах — по доле хода; стоит — ноги на месте.
+func test_legs_step_in_tripods() -> void:
+	var t := 0.3
+	for i in 6:
+		eq(KrabView.leg_step(i, t, 0.0), Vector2.ZERO, "стоит — нога %d на месте" % i)
+	var a := KrabView.leg_step(0, t, KrabView.HOP_FULL)
+	for i in [2, 4]:
+		near(KrabView.leg_step(i, t, KrabView.HOP_FULL).x, a.x, 1e-6, "нога %d — в тройке с первой" % i)
+	for i in [1, 3, 5]:
+		near(KrabView.leg_step(i, t, KrabView.HOP_FULL).x, -a.x, 1e-6, "нога %d — в другой тройке" % i)
+	ok(absf(KrabView.leg_step(0, t, EcoKrab.CREEP).x) < absf(a.x) * 0.05, "ползком — шаг мельче")
+	# вперёд к носу (+Z) — с обоих бортов
+	for i in [0, 3]:
+		var foot := Vector3(-1.0 if i < 3 else 1.0, 0, 0)
+		ok((Basis(Vector3.UP, KrabView.leg_yaw(i, 1.0)) * foot).z > 0.0, "нога %d вперёд — к носу" % i)
+
+
+## Б3: в меше тела ноги двигаются на ходу без рывков и встают в покой, когда краб остановился; стоящий краб меш
+## не пересобирает. Грани в позе по-прежнему наружу.
+func test_view_legs_walk_and_settle() -> void:
+	var w := _world()
+	var kr := _krab(w)
+	var cr := kr.crab
+	var v := KrabView.new(kr)
+	tree.root.add_child(v)
+	await frames(1)
+	var rest: PackedVector3Array = (v.body.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var dt := 1.0 / 30.0
+	var t := 0.0
+	var last := PackedVector3Array()
+	var worst := 0.0
+	var moved := 0.0
+	cr.vel = Vector3(KrabView.HOP_FULL, 0, 0)
+	while t < 2.0:
+		v.sync(t)
+		var now: PackedVector3Array = (v.body.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		eq(now.size(), rest.size(), "вершин столько же")
+		for j in now.size():
+			moved = maxf(moved, now[j].distance_to(rest[j]))
+			if not last.is_empty():
+				worst = maxf(worst, now[j].distance_to(last[j]))
+		last = now
+		t += dt
+	ok(moved > 0.1, "на ходу стопы выносятся: %.3f м" % moved)
+	ok(worst < 0.06, "за кадр стопа сдвигается не больше 6 см: %.3f" % worst)
+	var arr := (v.body.mesh as ArrayMesh).surface_get_arrays(0)
+	var pv: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var pn: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+	var bad := 0
+	for i in range(0, pv.size(), 3):
+		if (pv[i + 1] - pv[i]).cross(pv[i + 2] - pv[i]).dot(pn[i]) > 0.0:
+			bad += 1
+	eq(bad, 0, "в позе грани наружу")
+	ok(v.body.mesh.surface_get_material(0) != null, "материал тела на месте")
+	cr.vel = Vector3.ZERO
+	v.sync(t)
+	var still: PackedVector3Array = (v.body.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var off := 0.0
+	for j in still.size():
+		off = maxf(off, still[j].distance_to(rest[j]))
+	near(off, 0.0, 1e-5, "встал — ноги в покое")
+	var angles := v.leg_angles
+	v.sync(t + 0.5)
+	ok(v.leg_angles == angles, "стоит — меш не пересобирается")
+	v.queue_free()
+	await frames(1)
+
+
+## Дыхание панциря (Б3): высота и ширина ходят за BREATH_T, длина та же; затаился — HELD размаха.
+func test_shell_breathes_held_when_scared() -> void:
+	var top := 0.0
+	var low := INF
+	var held := 0.0
+	for i in 200:
+		var t := i * KrabView.BREATH_T / 200.0
+		var s := KrabView.breath(1.0, t)
+		top = maxf(top, s.y)
+		low = minf(low, s.y)
+		near(s.z, 1.0, 1e-9, "длина та же")
+		near(s.x - 1.0, (s.y - 1.0) * KrabView.BREATH_W / KrabView.BREATH_H, 1e-6, "шире вместе с высотой")
+		held = maxf(held, KrabView.breath(0.0, t).y)
+	near(top, 1.0 + KrabView.BREATH_H, 1e-3, "вдох — выше на BREATH_H")
+	near(low, 1.0 - KrabView.BREATH_H, 1e-3, "выдох — ниже")
+	near(held, 1.0 + KrabView.BREATH_H * KrabView.HELD, 1e-3, "затаился — HELD размаха")
+	eq(KrabView.breath(1.0, 3.0), KrabView.breath(1.0, 3.0), "по времени мира — у гостя то же")
+
+
+## В сцене: панцирь дышит (масштаб узла тела поверх SCALE), напуганный затаивается плавно, без скачка размера.
+func test_view_breathes_and_holds_smoothly() -> void:
+	var w := _world()
+	var kr := _krab(w)
+	var cr := kr.crab
+	var v := KrabView.new(kr)
+	tree.root.add_child(v)
+	await frames(1)
+	var dt := 1.0 / 30.0
+	var t := 0.0
+	var hi := 0.0
+	var lo := INF
+	var worst := 0.0
+	var last := -1.0
+	while t < KrabView.BREATH_T:
+		v.sync(t)
+		var b := v.body.transform.basis
+		var h := b.y.length() / KrabView.SCALE
+		near(b.z.length(), KrabView.SCALE, 1e-5, "длина тела та же")
+		hi = maxf(hi, h)
+		lo = minf(lo, h)
+		t += dt
+	ok(hi - lo > KrabView.BREATH_H * 1.8, "спокойный дышит во весь размах: %.4f" % (hi - lo))
+	cr.scared = 10.0
+	hi = 0.0
+	lo = INF
+	var stop := t + KrabView.CALM_T + KrabView.BREATH_T
+	while t < stop:
+		v.sync(t)
+		var h := v.body.transform.basis.y.length() / KrabView.SCALE
+		if last >= 0.0:
+			worst = maxf(worst, absf(h - last))
+		last = h
+		if t > stop - KrabView.BREATH_T:
+			hi = maxf(hi, h)
+			lo = minf(lo, h)
+		t += dt
+	near(v.calm, 0.0, 1e-6, "затаился")
+	ok(hi - lo < KrabView.BREATH_H * 2.0 * KrabView.HELD + 1e-3, "затаился — дыхание мельче: %.4f" % (hi - lo))
+	ok(worst < 0.003, "размер за кадр не прыгает: %.4f" % worst)
+	v.queue_free()
 	await frames(1)

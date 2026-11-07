@@ -59,6 +59,28 @@ static func seeded_for(s: int) -> EcoRandom:
 	return EcoRandom.new(s)
 
 
+## Один постановочный эпизод угрозы у корабля за раз (#834): бросок серпохвоста к кораблю, стеклоуст к стеклу и на
+## стекле. Кто идёт к кораблю, держит эпизод (`hold_threat` каждый шаг); другой начинает свой, только когда эпизод
+## свободен (`threat_free`) — через THREAT_HOLD с после конца прежнего.
+const THREAT_HOLD := 1.0
+var _threat := 0
+var _threat_until := -INF
+
+
+func threat_free(who: Object) -> bool:
+	return _threat == 0 or _threat == who.get_instance_id() or time > _threat_until
+
+
+func hold_threat(who: Object) -> void:
+	_threat = who.get_instance_id()
+	_threat_until = time + THREAT_HOLD
+
+
+## Кто держит эпизод угрозы сейчас (id объекта, 0 — никто).
+func threat_holder() -> int:
+	return _threat if time <= _threat_until else 0
+
+
 ## Подключить модуль: он сразу расставляет своих существ.
 func add(system: EcoSystem) -> EcoSystem:
 	systems.append(system)
@@ -81,6 +103,8 @@ func reset(world_seed: int = -1) -> void:
 	hits = 0
 	last_hit = {}
 	last_ping = -99.0
+	_threat = 0
+	_threat_until = -INF
 	for s in systems:
 		s.reset(self)
 
@@ -94,10 +118,15 @@ func step(dt: float) -> void:
 		last_ping = time
 		for s in systems:
 			s.on_ping(self, ship.pos)
+		var f := EcoField.rhythm(ship)   # ритм пограничного поля — только с площадки 08 (#833)
+		if not f.is_empty():
+			_link.append(f)
 	if ship.zap:
 		var r := ship.zap_radius if ship.zap_radius > 0.0 else ZAP_RADIUS
 		for s in systems:
 			s.on_zap(self, r)
+	if ship.sonar_ping or ship.zap:
+		StepClock.mark("мир/импульс, разряд")   # модули узнают импульс и разряд — своя подчасть (#1020)
 	var n := maxi(1, int(ceil(dt / SLOW_STEP - 1e-4)))
 	var h := dt / n
 	for i in n:
@@ -105,8 +134,10 @@ func step(dt: float) -> void:
 		steps += 1
 		for a in agents:
 			a.tick(h)
+		StepClock.mark("мир/существа")   # подчасти «мира» в логе тестера (#1020)
 		for s in systems:
 			s.step(self, h)
+			StepClock.mark("мир/" + _sys_name(s))
 	for by in _drain:
 		_link.append(EcoLink.drain(by, _drain[by]))
 	_drain.clear()
@@ -115,6 +146,19 @@ func step(dt: float) -> void:
 	_drag.clear()
 	if ship.sonar_ping or ship.scan_range > 0.0:
 		_send_near()
+	StepClock.mark("мир/события")   # сток, тяга и существа рядом — не в первую группу видов (#1020)
+
+
+## Имя модуля для лога тестера: class_name его скрипта (#1020), запоминается.
+var _names := {}
+func _sys_name(s: EcoSystem) -> String:
+	var n: String = _names.get(s, "")
+	if n.is_empty():
+		n = str(s.get_script().get_global_name())
+		if n.is_empty():
+			n = "модуль"
+		_names[s] = n
+	return n
 
 
 ## Цель для сонара и сканера (элемент E.scanTargets): вид, где, размер для прицела r (м); sonar — видна ли сонару,
@@ -246,10 +290,14 @@ func emit(species: String, note: String, pos: Vector3, message: Callable = Calla
 
 
 ## Существо ударило по корпусу (Game.hullHit): мир только сообщает кораблю, урон — доля прочности 0…1.
-func hit_ship(by: String, damage: float, at: Vector3) -> void:
+## Корабль под защитой (`ShipState.shielded`) — удара нет, false: строку об ударе вид тогда не шлёт.
+func hit_ship(by: String, damage: float, at: Vector3) -> bool:
+	if ship.shielded:
+		return false
 	hits += 1
 	last_hit = EcoLink.hit(by, damage, at)
 	_link.append(last_hit)
+	return true
 
 
 ## Корпус корабля не пускает существо внутрь (S.pushOut): место наружу с запасом r, скорость внутрь гасится.

@@ -2,12 +2,24 @@ class_name SkalnikView
 extends Node3D
 ## Скальник в сцене (initSkalnik, skRender в js/creatures.js): мантия-эллипсоид с двумя рогами и глазами — один
 ## гранёный меш, восемь щупалец по шесть шаров — MultiMesh. Цвет общий: камень #4f4a5c, без маскировки — кожа
-## #b8553c и слабое свечение. Щупальца колышутся, у камня поджаты (0,55), на ходу тянутся за телом и ложатся
+## #b8553c и слабое свечение. Щупальца колышутся, у камня поджаты (0,55), на ходу тянутся за телом (за ARM_RISE) и ложатся
 ## на дно. Вдали (дальше FAR от корабля) неподвижный камень щупальца не переписывает. Украденный образец —
 ## светящийся октаэдр 0,22 м над мантией между рогами (carryM), виден, только пока несёт. Муть у дна (EcoSkalnikDust:
 ## клуб, когда «камень» снимается с места и оседает, след щупалец у дна) — дочерний MultiMesh «Муть» в мировых
 ## координатах, общий шейдер EcoShaders.MIST (INK). Три вызова отрисовки (с добычей — четыре), слой отмели
 ## (OceanView.LAYER_WORLD).
+## Добыча не прыгает (Б3): схваченный образец за CARRY_MOVE плывёт от захвата лебёдки к месту над мантией, а у дома
+## (ближе LOWER_R) опускается к тайнику — к мигу сброса стоит там, где Samples.drop положит камешек (`carry_at`).
+## «Экономно» (Б6, `set_lite`): шары щупалец грубее (ARM_SIDES_LITE × ARM_RINGS_LITE вместо ARM_SIDES × ARM_RINGS —
+## треугольников щупалец втрое меньше), неподвижный камень не шевелит щупальцами уже дальше FAR_LITE. Тело, цвет,
+## мир и муть те же, вызовов столько же; сброс мира уровень не теряет (EcoView.lite).
+## «Дыхание» мантии (Б3, `breath`): мантия набирает воду и выталкивает её — высота ± BREATH_H, ширина ± BREATH_W за
+## BREATH_T с, подошва на дне (масштаб от низа узла). «Камень» дышит едва заметно — ROCK_BREATH от размаха (зоркий
+## заметит), раскрытый — во весь размах; доля — по маскировке `camo`, она меняется плавно, размах не прыгает. По
+## времени мира (у гостя то же), масштаб узла — даром, и на «Экономно».
+## Щупальца разные (Б4, `EcoVary`): у каждого из восьми своя длина ± ARM_REACH, толщина звеньев ± ARM_THICK и ритм
+## колыхания ± ARM_RATE по номеру щупальца — мантия не «звезда» из восьми одинаковых лучей. Хеш от номера: мир и
+## его случай не меняются, у гостя то же; вызовов и шейдеров столько же, и на «Экономно».
 
 const ROCK := Color("4f4a5c")
 const SKIN := Color("b8553c")
@@ -15,11 +27,35 @@ const GLOW := Color(0.12, 0.03, 0.02)
 ## Добыча: цвет и высота над скальником.
 const CARRY := Color("9dffd0")   # светится, как камешки образцов на дне
 const CARRY_UP := 1.2
+const CARRY_MOVE := 0.4   # с: схваченный образец плывёт от захвата к мантии
+const LOWER_R := 3.0      # м до дома: добыча опускается к тайнику
+const SAMPLE_LIFT := 0.15 # как Samples.drop: камешек над дном
 const ARMS := 8
 const SEG := 6
 const STRIDE := 12
 ## Дальше этого от корабля неподвижный камень не шевелит щупальцами (не видно).
 const FAR := 80.0
+## Разброс щупалец (Б4): длина, толщина звеньев и ритм колыхания — доли ±.
+const ARM_REACH := 0.15
+const ARM_THICK := 0.12
+const ARM_RATE := 0.2
+## Шар звена щупальца: граней по кругу и поясов — «Обычно» и «Экономно».
+const ARM_SIDES := 6
+const ARM_RINGS := 4
+const ARM_SIDES_LITE := 4
+const ARM_RINGS_LITE := 2
+## «Экономно»: дальше этого неподвижный камень щупальца не переписывает.
+const FAR_LITE := 40.0
+## Щупальца тянутся за телом на ходу (доля trail_k, звено j отстаёт на j · TRAIL) и поджимаются у камня (доля
+## spread_k: 1 → ROCK_SPREAD) не сразу, а за ARM_RISE с. Раньше переключались за кадр: тронулся или встал —
+## кончики прыгали на 1,1 м, сжался в камень — на 0,7 м. По времени мира (у гостя то же); время назад — сразу к цели.
+const ARM_RISE := 0.6
+const TRAIL := 0.22
+const ROCK_SPREAD := 0.55
+const BREATH_H := 0.05
+const BREATH_W := 0.025
+const BREATH_T := 4.5
+const ROCK_BREATH := 0.3
 
 var skalnik: EcoSkalnik
 var body: MeshInstance3D
@@ -27,6 +63,9 @@ var arms: MultiMeshInstance3D
 var material: StandardMaterial3D
 ## Украденный образец в щупальцах.
 var carry: MeshInstance3D
+var _loot_was := -1
+var _grab_from := Vector3.ZERO
+var _grab_t := -INF
 ## Сколько раз переписаны щупальца (тесты).
 var arm_writes := 0
 ## Сколько раз мерили дно под щупальцами (дорого: Seabed.height — шум).
@@ -36,6 +75,12 @@ var _buf := PackedFloat32Array()
 var _floor := PackedFloat32Array()
 var _floor_at := Vector3.INF
 var _camo := 1.0
+## Доли отставания рук на ходу (0…1) и раскрытия (ROCK_SPREAD…1), куда тянутся руки, время прошлой расстановки.
+var trail_k := 0.0
+var spread_k := 1.0
+var _back := Vector3.ZERO
+var _arm_t := NAN
+var lite := false
 ## Муть от скальника и её MultiMesh; буфер мути — для тестов.
 var dust := EcoSkalnikDust.new()
 var dust_view: MultiMeshInstance3D
@@ -46,7 +91,7 @@ var dust_buffer: PackedFloat32Array:
 var _dust := EcoDustBuffer.new()
 
 
-func _init(system: EcoSkalnik) -> void:
+func _init(system: EcoSkalnik, on_lite := false) -> void:
 	skalnik = system
 	name = "Скальник"
 	material = StandardMaterial3D.new()
@@ -68,12 +113,8 @@ func _init(system: EcoSkalnik) -> void:
 	arms.material_override = material
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
-	var sphere := SphereMesh.new()
-	sphere.radius = 1.0
-	sphere.height = 2.0
-	sphere.radial_segments = 6
-	sphere.rings = 4
-	mm.mesh = sphere
+	lite = on_lite
+	mm.mesh = arm_mesh(lite)
 	mm.instance_count = ARMS * SEG
 	arms.multimesh = mm
 	add_child(arms)
@@ -95,6 +136,74 @@ func _init(system: EcoSkalnik) -> void:
 	sync(0.0, Vector3(INF, INF, INF), true)
 
 
+## Длина щупальца a — множитель шага звеньев 1 ± ARM_REACH (основание у мантии на месте).
+static func arm_reach(a: int) -> float:
+	return EcoVary.spread(a, EcoVary.SIZE, ARM_REACH)
+
+
+## Толщина звеньев щупальца a — 1 ± ARM_THICK.
+static func arm_thick(a: int) -> float:
+	return EcoVary.spread(a, EcoVary.WIDTH, ARM_THICK)
+
+
+## Ритм колыхания щупальца a — 1 ± ARM_RATE.
+static func arm_rate(a: int) -> float:
+	return EcoVary.spread(a, EcoVary.RATE, ARM_RATE)
+
+
+## Шар звена щупальца радиусом 1 (масштаб — в расстановке); lite — грубее.
+static func arm_mesh(on_lite: bool) -> SphereMesh:
+	var sphere := SphereMesh.new()
+	sphere.radius = 1.0
+	sphere.height = 2.0
+	sphere.radial_segments = ARM_SIDES_LITE if on_lite else ARM_SIDES
+	sphere.rings = ARM_RINGS_LITE if on_lite else ARM_RINGS
+	return sphere
+
+
+## «Экономно» — грубее шары щупалец и ближе предел шевеления.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	arms.multimesh.mesh = arm_mesh(on)
+
+
+## Шаг доли к цели через dt: не быстрее 1 / ARM_RISE в секунду (dt больше 0,25 с — как 0,25: после паузы не
+## прыгает); snap — сразу к цели (первая расстановка, сброс мира).
+static func arm_step(k: float, goal: float, dt: float, snap := false) -> float:
+	if snap:
+		return goal
+	return move_toward(k, goal, minf(dt, 0.25) / ARM_RISE)
+
+
+## Где добыча: над мантией (CARRY_UP); since с мига захвата меньше CARRY_MOVE — ещё плывёт от from (захват лебёдки);
+## stash (не INF) — тайник у дома: ближе LOWER_R добыча опускается к нему и на LOOT_HOME стоит ровно там.
+static func carry_at(pos: Vector3, home: Vector3, stash: Vector3, from: Vector3, since: float) -> Vector3:
+	var at := pos + Vector3(0, CARRY_UP, 0)
+	if stash != Vector3.INF:
+		var w := clampf((_flat(pos, home) - EcoSkalnik.LOOT_HOME) / (LOWER_R - EcoSkalnik.LOOT_HOME), 0.0, 1.0)
+		at = stash.lerp(at, smoothstep(0.0, 1.0, w))
+	if since < CARRY_MOVE:
+		at = from.lerp(at, smoothstep(0.0, 1.0, maxf(since, 0.0) / CARRY_MOVE))
+	return at
+
+
+static func _flat(a: Vector3, b: Vector3) -> float:
+	return Vector2(a.x - b.x, a.z - b.z).length()
+
+
+## Дальше скольких метров неподвижный камень не шевелит щупальцами.
+func still_far() -> float:
+	return FAR_LITE if lite else FAR
+
+
+## Масштаб мантии в момент t при маскировке camo (1 — камень): вдох — выше и шире, «камень» — ROCK_BREATH размаха.
+static func breath(camo: float, t: float) -> Vector3:
+	var k := lerpf(1.0, ROCK_BREATH, clampf(camo, 0.0, 1.0)) * sin(t * TAU / BREATH_T)
+	return Vector3(1.0 + BREATH_W * k, 1.0 + BREATH_H * k, 1.0 + BREATH_W * k)
+
+
 ## Цвет кожи при маскировке camo (1 — камень).
 static func skin_color(camo: float) -> Color:
 	return ROCK.lerp(SKIN, 1.0 - camo)
@@ -107,35 +216,59 @@ func sync(t: float, ship: Vector3, force := false, info: EcoLink.ShipState = nul
 	if sk == null:
 		return
 	_sync_dust(t, ship, info, flow)
-	body.transform = Transform3D(Basis(Vector3.UP, atan2(sk.dir.x, sk.dir.z)), sk.pos)
+	body.transform = Transform3D(Basis(Vector3.UP, atan2(sk.dir.x, sk.dir.z)) * Basis.from_scale(breath(sk.camo, t)),
+		sk.pos)
+	if sk.loot >= 0 and _loot_was < 0:
+		# схватил — плывёт от захвата; первая расстановка (гость вошёл, сброс) — сразу на месте
+		_grab_t = -INF if force or info == null else t
+		_grab_from = info.claw if info else Vector3.ZERO
+	_loot_was = sk.loot
 	carry.visible = sk.loot >= 0
 	if carry.visible:
-		carry.transform = Transform3D(Basis(Vector3.UP, t * 1.5), sk.pos + Vector3(0, CARRY_UP, 0))
+		var stash := Vector3.INF
+		if sk.state == EcoSkalnik.State.LOOT and _flat(sk.pos, sk.home) < LOWER_R:
+			stash = EcoSkalnik.stash_point(sk.home, sk.loot)
+			var g := skalnik.ground
+			stash.y = (float(g.call(stash.x, stash.z)) if g.is_valid() else sk.home.y) + SAMPLE_LIFT
+		carry.transform = Transform3D(Basis(Vector3.UP, t * 1.5),
+			carry_at(sk.pos, sk.home, stash, _grab_from, t - _grab_t))
 	if absf(sk.camo - _camo) > 0.002:
 		_camo = sk.camo
 		material.albedo_color = skin_color(sk.camo)
 		material.emission = GLOW * (1.0 - sk.camo)
 	var moving := sk.vel.length_squared() > 0.01
-	if not force and not moving and sk.state == EcoSkalnik.State.ROCK and sk.pos.distance_to(ship) > FAR:
+	var dt := t - _arm_t
+	var snap := is_nan(_arm_t) or dt < 0.0
+	_arm_t = t
+	if moving:
+		_back = sk.vel.normalized()
+	var spread_goal := ROCK_SPREAD if sk.state == EcoSkalnik.State.ROCK else 1.0
+	trail_k = arm_step(trail_k, 1.0 if moving else 0.0, dt, snap)
+	spread_k = arm_step(spread_k, spread_goal, dt * (1.0 - ROCK_SPREAD), snap)
+	var settled := trail_k == 0.0 and spread_k == spread_goal
+	if not force and not moving and settled and sk.state == EcoSkalnik.State.ROCK \
+			and sk.pos.distance_to(ship) > still_far():
 		return
-	var spread := 0.55 if sk.state == EcoSkalnik.State.ROCK else 1.0
-	var back := sk.vel.normalized() if moving else Vector3.ZERO
+	var spread := spread_k
+	var back := _back * trail_k
 	_measure_floor(sk)
 	var aabb := AABB(sk.pos, Vector3.ZERO)
 	for a in ARMS:
 		var ang := float(a) / ARMS * TAU + 0.2
 		var ca := cos(ang)
 		var sa := sin(ang)
+		var reach := arm_reach(a)
+		var thick := arm_thick(a)
+		var rate := arm_rate(a)
 		for j in SEG:
-			var r := (0.35 + j * 0.24) * spread
-			var w := sin(t * 2.5 + a + j * 0.7) * 0.06 * j
+			var r := (0.35 + j * 0.24 * reach) * spread
+			var w := sin(t * 2.5 * rate + a + j * 0.7) * 0.06 * j
 			var p := Vector3(sk.pos.x + ca * r + w, sk.pos.y + 0.25 - j * 0.05, sk.pos.z + sa * r - w)
-			if moving:
-				p -= back * (j * 0.22)
+			p -= back * (j * TRAIL)
 			var h := _floor[a] + 0.06
 			if p.y < h:
 				p.y = h
-			var sc := 0.2 * (1.0 - float(j) / SEG * 0.65)
+			var sc := 0.2 * (1.0 - float(j) / SEG * 0.65) * thick
 			EcoMM.put_basis(_buf, (a * SEG + j) * STRIDE, Basis.from_scale(Vector3(sc, sc * 0.75, sc)), p)
 			aabb = aabb.expand(p)
 	arms.multimesh.buffer = _buf
