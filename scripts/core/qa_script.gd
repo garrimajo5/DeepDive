@@ -120,6 +120,15 @@ static func duration(st: Dictionary) -> float:
 	return 0.0
 
 
+## Сколько секунд игры идёт весь сценарий — сумма длительностей шагов (#1379: от неё — предел шагов `test_qa`,
+## а не число в цикле; снимки сверх этого ждут по кадру).
+func total_time() -> float:
+	var t := 0.0
+	for st: Dictionary in steps:
+		t += duration(st)
+	return t
+
+
 ## Шаг времени: команды, которые сцена должна выполнить сейчас.
 func advance(dt: float) -> Array:
 	var out: Array = []

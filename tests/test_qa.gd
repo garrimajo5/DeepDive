@@ -71,6 +71,20 @@ func test_swipe_moves_full_distance() -> void:
 	ok(sum.distance_to(Vector2(300, -40)) < 0.01, "свайп прошёл всё расстояние: %s" % str(sum))
 
 
+## Предел шагов сценового прогона при 30 кадрах/с: длина сценария с запасом 10 % и 20 с на снимки (каждый ждёт кадр)
+## и прогрев. Раньше стояло число 7500 (250 с) — новые шаги тестера доводили сценарий до 240 с и роняли тест (#1379).
+static func scene_frames(q: QaScript) -> int:
+	return ceili((q.total_time() * 1.1 + 20.0) * 30.0)
+
+
+func test_total_time() -> void:
+	var q := QaScript.parse('[{"do": "wait", "s": 2}, {"do": "hold", "what": "pad", "dir": [0, 1], "s": 0.5},'
+			+ ' {"do": "shot", "name": "a"}, {"do": "press", "what": "action"}, {"do": "swipe", "dx": 10, "dy": 0}]')
+	near(q.total_time(), 2.0 + 0.5 + QaScript.PRESS_TIME + 0.5, 1e-6, "длина — сумма шагов: ожидание, удержание, нажатие, свайп")
+	var full := QaScript.parse(FileAccess.get_file_as_string("res://tools/qa/scenario.json"))
+	ok(scene_frames(full) / 30.0 > full.total_time() + 20.0, "предел прогона длиннее сценария с запасом (#1379)")
+
+
 func test_scene_runs_scenario() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
@@ -100,7 +114,7 @@ func test_scene_runs_scenario() -> void:
 	var bones_seen := false   # 32g: сканер у Костей 04 — строка о минерализации (#840)
 	var shell_known := false   # 32h: сонар и сканер у Раковины 03 — знание «осмотр 03» (#835)
 	ok(not main.lore.knows(LayerLore.FIELD08), "до прогона поле 08 не замечено")
-	for i in 7500:  # 250 с игры (сценарий идёт ~240 с)
+	for i in scene_frames(qa.script_q):   # предел — от длины сценария (#1379)
 		# снимок берёт уже нарисованный кадр — камеру до шага, в котором он снят
 		var cam := main.camera
 		var table_vis := cam.is_position_in_frustum(table.global_position + table.global_basis.y * 0.9)
