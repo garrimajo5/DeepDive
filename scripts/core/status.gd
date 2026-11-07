@@ -74,7 +74,8 @@ static func wrap_words(text: String, measure: Callable, width: float, limit: int
 	return out
 
 
-## Строки по рядам приборов (#1345): каждый ряд, кроме последнего, — своими строками (`lines`, обычно одна);
+## Строки по рядам приборов (#1345): каждый ряд, кроме последнего, — своими строками (`lines`, обычно одна), но так,
+## чтобы следующим непустым рядам осталось по строке (иначе — по словам с «…»);
 ## последний (тревога и сообщение) — одним текстом по словам на оставшиеся до max_rows строки (хотя бы одну), хвост — «…».
 ## Повтор части в другом ряду не пишется.
 static func rows(by_row: Array, measure: Callable, width: float, max_rows: int = MAX_ROWS) -> PackedStringArray:
@@ -91,7 +92,14 @@ static func rows(by_row: Array, measure: Callable, width: float, max_rows: int =
 		if parts.is_empty():
 			continue
 		if i < by_row.size() - 1:
-			out.append_array(lines(parts, measure, width))
+			var later := 0   # каждому следующему непустому ряду — хотя бы строка (#1361: сообщение во 2-м ряду)
+			for j in range(i + 1, by_row.size()):
+				later += 1 if not (by_row[j] as Array).is_empty() else 0
+			var budget := maxi(1, max_rows - out.size() - later)
+			var ls := lines(parts, measure, width)
+			if ls.size() > budget:
+				ls = wrap_words(SEPARATOR.join(PackedStringArray(parts)), measure, width, budget)
+			out.append_array(ls)
 		else:
 			out.append_array(wrap_words(SEPARATOR.join(PackedStringArray(parts)), measure, width,
 				maxi(1, max_rows - out.size())))
