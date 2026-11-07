@@ -44,3 +44,11 @@ rev3-2: session gizRilaC2sn3R9kDKZl2, generation 01jOB8y8JZNP2KLs18bw.
 ### Уточнение учёта кредитов
 Владелец сообщил доступный баланс около 121 000 кредитов перед этой переделкой. Это сообщение владельца, не показание API. Поле price.credits возвращает 13.332 для каждого нового варианта (26.664 суммарно); единицы и соответствие списанию с баланса не проверены. Ранее названный «фактический расход» 13.332 следует считать метаданными инструмента, а не подтверждённым списанием. Остаток после генерации неизвестен; не вычитать эти значения из 121 000 автоматически.
 
+
+## Rev4 — мягкий вариант, 07.11.2026
+По прямой просьбе владельца один более мягкий вариант: alarm-siren-rev4-soft.mp3; оригинал в source/. Сделано на Creator. Рекомендуется для проверки мягкости; оценка на слух остаётся владельцу.
+Промпт: Soft submarine warning siren: WEE-OO WEE-OO, one cycle per second. Smooth rising and falling pitch. Warm mellow low-midrange tone with rounded sine-like timbre and subtle harmonics. Clearly audible, comfortable during long repetition. No harsh buzz, piercing highs, sharp attacks or distortion. Continuous regular cycles without gaps. Four-second seamless loop. No voice, music or ambience.
+ElevenLabs Creative Studio, eleven_text_to_sound_v2, duration_seconds=4, loop=true, prompt_influence=0.9. Flow YACKoAuI8Hf838740LcE; node 8DxkaVxq9XbNnmbE5ffH; session fiBo236Qys13Adf7qhZ8; generation vOdwY5RyENqUj0CnGCuD.
+Первый вызов завершился ошибкой длины промпта (469 > 450), generation oATWOIYXhbdjsH5EvlS6; аудио не создано. После сокращения промпта успешная генерация. price.credits=13.332 возвращено и для неудачного, и для успешного вызова: это дополнительно показывает, что поле нельзя считать подтверждённым списанием. Реальный расход и текущий баланс неизвестны.
+Обработка: lowpass 2200 Гц для смягчения верхов, loudnorm I=-20 TP=-2 LRA=7, fade краёв 10 мс. Итог MP3 44100 Гц / 192 кбит/с, 4.00 с, 97845 байт, -20.14 LUFS, -18.07 dBTP. Без клиппинга, мягче по спектру и примерно на 2 LU тише rev3. Бесшовность и характер на слух не подтверждены; проверить повторение в игре. Старые версии сохранены.
+
