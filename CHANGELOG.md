@@ -3,6 +3,9 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-08
+- Пробоина (#1428, решение UX): в начале пробоины строка 2 больше не повторяет тревогу — `Breach.start` не шлёт
+  сообщение «Пробоина: … — держите «Сварка»», что и где говорят строка 3 (`AlarmWay`), табло, сирена и указатель.
+  Тест `test_breach` (`test_hit_opens_by_rules`, `test_scene_bite_breach_weld`).
 - Брифинг прибытия (#1429, отчёт тестера `1840-brif`): строка мира, ждавшая своей секунды в `Status.Message` до
   брифинга, больше не выходит под плашкой — `Status.Message.take_world` отдаёт её в `Main.world_wait`, после 8/8 она
   на приборах. Тесты `test_status.test_message_take_world`, `test_arrival_brief.test_scene_queued_world_line_waits_for_brief`.
