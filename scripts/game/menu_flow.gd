@@ -20,6 +20,12 @@ func _size() -> Vector2:
 	return main.get_viewport().get_visible_rect().size
 
 
+## Палец попал в кнопку меню, паузы, настроек или журнала — щелчок SND-007 (`UiSounds.tap`).
+func tap_sound(id: String) -> void:
+	if id != "" and main.ui_sounds:
+		main.ui_sounds.tap()
+
+
 ## Главное меню ART-037 поверх сцены (после заставки прогрева — сразу под ней). Игра под меню стоит.
 func open_menu() -> void:
 	main.main_menu.open = true
@@ -55,7 +61,9 @@ func menu_step(dt: float = 0.0) -> void:
 		r.end_frame()
 		return
 	for p in r.taps:
-		var what := main.main_menu.press(main.main_menu.hit(p, _size()))
+		var id := main.main_menu.hit(p, _size())
+		tap_sound(id)
+		var what := main.main_menu.press(id)
 		if what == "dive":
 			close_menu()
 			main.save.live = true
@@ -145,6 +153,7 @@ func settings_step(r: Touch.Router) -> void:
 	var settings := main.settings
 	for p in r.taps:
 		var id := settings.hit(p, size)
+		tap_sound(id)
 		var what := settings.press(id, p, size)
 		if id == "swipe" or Settings.is_volume(id):
 			apply_settings()
@@ -258,7 +267,9 @@ func journal_show() -> void:
 func journal_step(r: Touch.Router) -> void:
 	var m := main
 	for p in r.taps:
-		var did := m.logbook.press(m.logbook.hit(p, _size()), m.scanner.scanned, m.expedition)
+		var id := m.logbook.hit(p, _size())
+		tap_sound(id)
+		var did := m.logbook.press(id, m.scanner.scanned, m.expedition)
 		if did in ["card", "back"]:   # карточка открыта/закрыта, журнал закрыт: палец не нажмёт то, что под ним
 			m.overlay.router.clear()
 			break
