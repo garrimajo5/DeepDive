@@ -21,6 +21,8 @@ from urllib.parse import quote
 REPO = os.environ.get("STATUS_REPO", "garrimajo5/DeepDive")
 STATUS_LABEL = "статус"
 STATUS_TITLE = "Где мы — статус разработки"
+## «Кодекс игры» (#1417): справочник для команды, собирает `tools/codex.py`, публикует `.github/workflows/codex.yml`.
+CODEX_URL = "https://garrimajo5.github.io/DeepDive/"
 ROLES = ["менеджер", "геймдизайн", "сюжет", "уровни", "ux", "поток А", "поток Б", "art", "model", "анимация", "qa",
          "звук", "владелец"]
 ROLE_NAMES = {
@@ -237,7 +239,8 @@ def render(ms, epics, open_issues, recent, blocked, prs=None, now=None):
 
     L = [f"# {STATUS_TITLE}",
          f"_Обновлено автоматически {now:%d.%m.%Y %H:%M} МСК (`tools/status.py`). Не редактировать руками — "
-         f"меняйте эпики, метки и milestones._", ""]
+         f"меняйте эпики, метки и milestones._",
+         f"📖 [Кодекс игры]({CODEX_URL}) — справочник: мир, слой 1, существа (со спойлерами).", ""]
 
     # --- где мы ---
     stage_lines, current = [], []

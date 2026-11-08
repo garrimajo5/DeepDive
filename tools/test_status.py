@@ -153,6 +153,10 @@ class Render(unittest.TestCase):
         self.assertNotIn("Сварка", owner)                # не роль владельца
         self.assertNotIn("Решения", owner)               # решений не ждут — заголовка нет
 
+    def test_codex_link(self):
+        page = status.render([], [], [], [], {})
+        self.assertIn(f"[Кодекс игры]({status.CODEX_URL})", page.split("## ")[0])
+
     def test_short_drops_code_marks(self):
         self.assertEqual(status.short("Кадры по `tools/qa/play-kadry.json` для Google Play", 20), "Кадры по tools/qa/pl…")
 
