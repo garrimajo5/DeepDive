@@ -139,6 +139,7 @@ var tutorial := Tutorial.new()   ## шаги «штурвал → ход → с�
 var tutorial_panel: TutorialPanel
 var arrival := ArrivalBrief.new()   ## брифинг прибытия TXT-001 до подсказок (#827); прочитан — `LayerLore.BRIEF`
 var arrival_panel: ArrivalBriefPanel
+var world_wait := ""   ## строка мира, отложенная до конца брифинга прибытия (#1429, `_world_say`)
 ## Карточка роли у поста ART-045 (выключают те же `hints`; тестер — шаг `cards`): прочитанное — Settings.cards.
 var role_card := RoleCard.new()
 var role_card_panel: RoleCardPanel
@@ -1259,10 +1260,23 @@ func on_eco_event(e: Dictionary) -> void:
 
 
 ## Строка живого мира на приборы. Пока идёт облёт в начале забега, она не перебивает `Flyby.START_MSG` — игрок ещё
-## ничего не делает, а сцена у старта сразу в луче (#827); наблюдение в журнал при этом записано.
+## ничего не делает, а сцена у старта сразу в луче (#827); наблюдение в журнал при этом записано. Пока открыт брифинг
+## прибытия, последняя строка ждёт его конца (`world_wait`, #1429): мир не перебивает лор.
 func _world_say(text: String) -> void:
-	if flyby.kind != Flyby.Kind.START:
-		message.say(text, Status.MESSAGE_SECONDS, true)   # не стирает строку, видную меньше 1 с (issue #979)
+	if flyby.kind == Flyby.Kind.START:
+		return
+	if arrival.active():
+		world_wait = text   # одна, последняя — не очередь
+		return
+	message.say(text, Status.MESSAGE_SECONDS, true)   # не стирает строку, видную меньше 1 с (issue #979)
+
+
+## Брифинг прибытия кончился — отложенная строка мира на приборы (#1429; `OverlayFlow.brief_step`).
+func release_world_say() -> void:
+	if world_wait != "" and not arrival.active():
+		var text := world_wait
+		world_wait = ""
+		_world_say(text)
 
 
 ## Удар существа не дойдёт до корпуса: облёт в начале забега (#506), обучение у старта (#827), итог забега (#1249).
