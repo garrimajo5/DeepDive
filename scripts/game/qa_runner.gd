@@ -200,6 +200,12 @@ func tick(dt: float) -> void:
 				main.tutorial.reset()
 				main.tutorial.on = c[1]
 				main.tutorial.step = c[2] - 1
+			"brief":   # брифинг прибытия TXT-001 (#827) с первого экрана: знание «прочитан» забыто, как в первом забеге
+				main.arrival.on = c[1]
+				main.arrival.screen = 0
+				main.arrival.t = 0.0
+				if c[1]:
+					main.lore.facts.erase(LayerLore.BRIEF)
 			"voice":   # голос во внутренней связи ART-040 — как событие мира EcoLink.VOICE
 				main.on_eco_event(EcoLink.voice(c[1], c[2], c[3], c[4], c[5]))
 			"slow":   # предложение «Экономно» ART-044 — как после нескольких секунд низких кадр/с
@@ -313,6 +319,8 @@ func _point(what: String, dir: Vector2) -> Vector2:
 			return l.light.c
 		"dive":   # «Погрузиться» в главном меню ART-037
 			return main.main_menu.rect("dive", main.get_viewport().get_visible_rect().size).get_center()
+		"brief":   # касание плашки брифинга прибытия (#827) — листает экран
+			return ArrivalBrief.box(main.get_viewport().get_visible_rect().size).get_center()
 		"hint_map":   # кнопка «Схема» на плашке подсказки ART-038
 			return main.tutorial_panel.map_rect().get_center()
 		"map_back":   # «Назад» схемы корабля ART-042
