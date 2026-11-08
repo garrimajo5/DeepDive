@@ -56,7 +56,7 @@
 | ambient-shelf | Подлёдный сад за бортом: толща воды, далёкий треск льда, редкие щелчки жизни (`OceanView`, по глубине) | петля 20–30 с | П1 | **готов** — `audio/ambient/ambient-shelf.mp3` (SND-001 вар. 1, `Ambience`) |
 | ambient-deep | Глубже 200 м: темнее, давление, низкий гул, почти без высоких | петля 20–30 с | П2 | нужен |
 | ship-hum | Корабль изнутри: вентиляция, электрика, тихий гул (мостик и отсеки) | петля 20–30 с | П1 | **готов** — `audio/ship/ship-hum.mp3` (SND-001 вар. 2 со швом, `Ambience`) |
-| reactor-hum | Машинное: реактор, сильнее при перегреве (`Reactor`, `EngineRoom`) | петля 20–30 с | П2 | заказан SND-005 #706 |
+| reactor-hum | Машинное: реактор, сильнее при перегреве (`Reactor`, `EngineRoom`) | петля 20–30 с | П2 | **готов** — `audio/ship/reactor-hum.wav` (SND-005 вар. 1, `MachineSounds`, 3D у реактора) |
 | music-menu | Тема главного меню: таинственная глубина, медленно, инструментал | музыка 90–150 с, петля | П1 | **готов** — `audio/music/music-menu.mp3` (SND-004 вар. 1, `Music`) |
 | music-tension | Напряжение: пробоина, хищник рядом, перегрев — слой поверх эмбиента | петля 45–60 с | П1 | **готов** — `audio/music/music-tension.mp3` (SND-004 вар. 2, `Music`) |
 | sting-discovery | Находка: вид изучен сканером, место открыто (`Scanner`, `Run`) | один раз 3–6 с | П2 | нужен |
@@ -68,7 +68,7 @@
 |---|---|---|---|---|
 | sonar-ping | Импульс сонара и эхо (`Sonar.ping`) | один раз 3–4 с | П1 | **готов** — `audio/ship/sonar-ping.wav` (SND-002 вар. 1, `ShipSounds`) |
 | sonar-jam | Импульс завяз в иле — глухой, обрывается (`Silt.jam_ping`) | один раз 2 с | П2 | заказан SND-006 #719 |
-| engines | Роторы на ходу, тон по тяге (`Helm`, `HullMesh.Motion.spin`) | петля 10–20 с | П1 | заказан SND-005 #706 |
+| engines | Роторы на ходу, тон по тяге (`Helm`, `HullMesh.Motion.spin`) | петля 10–20 с | П1 | **готов** — `audio/ship/engines.wav` (SND-005 вар. 1, `MachineSounds`) |
 | hull-hit | Удар по корпусу, 3 варианта (`Vitals.hit`, `EcoLink.HIT`): прямой — в нос и о лёд, косой — в борт, снизу — из-под днища и о дно (`HullSound.side`) | один раз 1–2 с | П1 | **готов** — `audio/ship/hull-hit-1…3.wav` (SND-002, `HullSound`) |
 | hull-scrape | Скрежет обшивки о дно и скалу — хвостом под ударом о дно (`Vitals.scrape`), по кругу — пока трёмся о дно на ходу (`Helm.Ship.rub`, `ShipSounds.set_rub`) | один раз 2–3 с | П1 | **готов** — `audio/ship/hull-scrape.wav` (SND-002, правка #700: вар. rev1-1 — сталь о скалу, 3,7 с) |
 | hull-creak | Скрип корпуса под давлением, 4–6 коротких (случайно, чаще глубже) | один раз 1–3 с | П2 | нужен |
@@ -76,8 +76,8 @@
 | alarm-siren | Сирена тревоги (`BreachView.siren`) | петля 2–4 с | П1 | **готов** — `audio/ship/alarm-siren.wav` (выбор владельца, PR #709, 2,25 с) |
 | weld | Сварка пробоины: шипение и треск искр (`Breach.hold`) | петля 3–5 с | П2 | заказан SND-006 #719 |
 | zap | Разряд по корпусу (`main.fire_zap`, `ShipSounds.play_zap`) | один раз 1–2 с | П1 | **готов** — `audio/ship/zap.wav` (SND-003 вар. 2) |
-| steam-valve | Вентиль сброса пара (`EngineRoom.venting`) | петля 4–8 с | П2 | заказан SND-005 #706 |
-| overheat-buzz | Перегрев реактора — зуммер | петля 1–2 с | П2 | заказан SND-005 #706 |
+| steam-valve | Вентиль сброса пара (`EngineRoom.venting`) | петля 4–8 с | П2 | **готов** — `audio/ship/steam-valve.wav` (SND-005 вар. 1, `MachineSounds`, 3D у сопла) |
+| overheat-buzz | Перегрев реактора — зуммер | петля 1–2 с | П2 | **готов** — `audio/ship/overheat-buzz.wav` (SND-005 вар. 1, `MachineSounds`) |
 | searchlight | Прожектор: включение и гудение лампы (`Searchlight`) | один раз + петля | П3 | нужен |
 | hatch | Люк: открыть и закрыть (`ShipLayout.Door`) | один раз 1–2 с | П3 | нужен |
 | winch | Лебёдка трюма, крышка шлюза, всплеск троса (`Samples`, `Airlock`, `LockWater`) | петля + один раз | П3 | нужен |

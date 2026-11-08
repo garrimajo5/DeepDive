@@ -63,6 +63,7 @@ var drain_hisses := 0                ## сколько раз шипела тр�
 var ambience: Ambience   ## фон забега: эмбиент за бортом и гул корабля (SND-001), доли по глубине — Main._sound
 var music: Music   ## музыка SND-004: тема меню и напряжение, какая звучит — Main._sound (SoundMix.Mix.music_pair)
 var ship_sounds: ShipSounds   ## разовые звуки корабля SND-002: импульс сонара, удары, скрежет (`HullSound`)
+var machine_sounds: MachineSounds   ## машины корабля SND-005: роторы, реактор, перегрев, пар (`MachineSound`)
 var hit_local: Variant = null   ## точка удара существа в осях корабля, пока идёт vitals.hit (звук по стороне, #656)
 var sound_mix := SoundMix.Mix.new()  ## сведение шин звука (docs/zvuk.md): меню, пауза, вид с борта, тревога — Main._sound
 ## Прогрев шейдеров при старте (Warmup, issue #50): шторка, камера оглядывает корабль, скрытое показано на кадр.
@@ -306,6 +307,8 @@ func _build_ship() -> void:
 	ship.add_child(rooms)
 	breach_view = BreachView.new(breach)
 	ship.add_child(breach_view)
+	machine_sounds = MachineSounds.new()   # SND-005: реактор и пар — из своих мест в осях корабля
+	ship.add_child(machine_sounds)
 	crew_view = CrewView.new()
 	ship.add_child(crew_view)
 	crew_view.set_members(crew, me)
@@ -1802,6 +1805,7 @@ func _sound(dt: float) -> void:
 	SoundMix.apply(sound_mix.update(dt), settings.buses)   # × громкости шин из настроек («Звук»)
 	ambience.set_pair(sound_mix.ambient_pair())
 	music.set_pair(sound_mix.music_pair())
+	machine_sounds.update(dt, hull_motion.spin, reactor.hot, reactor.heat, reactor.scram, engine.venting)   # SND-005
 
 
 ## Активные поля табло тревог (AlarmBoard.Field) — из тех же строк, что тревога в строке состояния.
