@@ -17,7 +17,7 @@ var _since_tap := INF
 
 
 func _init() -> void:
-	name = "Интерфейс"
+	name = "Звуки интерфейса"   # не «Интерфейс»: так зовут CanvasLayer панелей
 	tap_p = _player("Касание", UiSound.TAP, SoundMix.UI, UiSound.TAP_DB)
 	post_p = _player("Пост", UiSound.POST, SoundMix.UI, UiSound.POST_DB)
 	comms_p = _player("Связь", UiSound.COMMS, SoundMix.VOICE, UiSound.COMMS_DB)

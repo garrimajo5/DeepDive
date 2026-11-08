@@ -95,3 +95,14 @@ func test_scene_comms_line() -> void:
 	eq(main.ui_sounds.heard, main.comms.cur, "линия щёлкнула на этом сообщении")
 	main.queue_free()
 	await frames(1)
+
+
+## Узел звуков не отнимает имя у слоя панелей «Интерфейс» (`test_grade.test_view_in_scene` падал на CI).
+func test_scene_name_keeps_ui_layer() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	ok(main.get_node("Интерфейс") is CanvasLayer, "«Интерфейс» — слой панелей")
+	ok(main.ui_sounds.name != "Интерфейс", "звуки — под своим именем")
+	main.queue_free()
+	await frames(1)
