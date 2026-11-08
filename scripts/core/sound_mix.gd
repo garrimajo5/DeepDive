@@ -21,6 +21,9 @@ const MENU_MUSIC_K := 1.0    ## главное меню: тема меню на 
 const OUTSIDE_SHIP_K := 0.4  ## вид с борта (облёт): корабль слышен снаружи глуше (−8 дБ), мир и эмбиент — полностью
 const INSIDE_WORLD_K := 0.7  ## изнутри корабля мир за обшивкой чуть глуше (−3 дБ)
 const TENSION_AMBIENT_K := 0.6  ## напряжение: эмбиент уступает место музыке (−4,4 дБ)
+## Тревога: мир за бортом (гул и бульканье курильщика `vent-bubble`, существа) уступает сирене ещё на −6 дБ — гул
+## шлейфа не прячет корабельную тревогу (#835, часть 2в, `docs/sloj1-sad.md` «02»). Снаружи (вид с борта) — как есть.
+const TENSION_WORLD_K := 0.5
 ## Эмбиент по глубине: до DEEP_FROM — петля отмели, глубже DEEP_TO — петля глубины, между — перекрёстно.
 const DEEP_FROM := 150.0
 const DEEP_TO := 250.0
@@ -114,6 +117,7 @@ class Mix extends RefCounted:
 		if tension:
 			t[MUSIC] = 1.0
 			t[AMBIENT] = TENSION_AMBIENT_K
+			t[WORLD] = INSIDE_WORLD_K * TENSION_WORLD_K
 		if outside:
 			t[SHIP] = OUTSIDE_SHIP_K
 			t[WORLD] = 1.0

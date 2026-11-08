@@ -95,13 +95,7 @@ const LITE_K := 0.55                    ## и доля отражения × 0,5
 
 ## Строка LUT (0…15, дробная — между строками фильтр) по глубине корабля: кусочно-линейно по ключам 0/8/20/45/90 м.
 static func row(depth: float) -> float:
-	var d := clampf(depth, 0.0, 90.0)
-	for i in range(1, ROW_KEYS.size()):
-		var a: Array = ROW_KEYS[i - 1]
-		var b: Array = ROW_KEYS[i]
-		if d <= b[0]:
-			return lerpf(a[1], b[1], (d - a[0]) / (b[0] - a[0]))
-	return 15.0
+	return HashNoise.keyed(ROW_KEYS, depth)
 
 
 ## Куда смотреть в LUT: шершавая грань (smooth → 0) прижимает косинус к критическому — граница окна мягче.

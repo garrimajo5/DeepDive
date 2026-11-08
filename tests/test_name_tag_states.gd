@@ -96,7 +96,7 @@ func test_mate_press_lights_tag() -> void:
 
 func test_own_press_marks_me() -> void:
 	main.overlay.router.action_pressed = true
-	main._mark_presses(main.overlay.router, 1.0 / 30.0)
+	main.crew_flow.mark_presses(main.overlay.router, 1.0 / 30.0)
 	main.overlay.router.action_pressed = false
 	ok(main.me.active(), "свой нажал — гости увидят «нажимает» в кадре")
 
@@ -188,6 +188,8 @@ func test_under_plate() -> void:
 	near(NameTag.under_plate(Rect2(400, 110, 200, 40), plate, 30.0), 129.0 + NameTag.GAP * 40.0 - 110.0, 1e-4,
 			"задела низ — под плашку с зазором")
 	eq(NameTag.under_plate(Rect2(400, 60, 200, 40), plate, 30.0), NameTag.HIDDEN, "опускать далеко — скрыта")
+	near(NameTag.under_plate(Rect2(400, 130, 200, 40), plate, 30.0), 129.0 + NameTag.GAP * 40.0 - 130.0, 1e-4,
+			"вплотную под плашкой (ближе зазора) — тоже на зазор: углы таблички в кадре чуть выше центра (#1345)")
 
 
 func _tag_rect(cam: Camera3D, i: int) -> Rect2:

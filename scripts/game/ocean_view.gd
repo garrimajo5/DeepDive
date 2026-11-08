@@ -21,16 +21,36 @@ var snow_mat: ShaderMaterial   # взвесь ART-058: атлас, доли ка
 var shafts: MultiMeshInstance3D   # лучи сквозь трещины льда (ART-052)
 var shafts_mat: ShaderMaterial
 var shaft_list: Array[LightShafts.Shaft] = []
+var stones: StonesView   ## камни на дне вокруг корабля (`SeabedStones`, один MultiMesh)
+var shells: ShellsView   ## ракушки на дне вокруг корабля (`SeabedShells`, один MultiMesh)
+var tufts: TuftsView   ## кочки водорослей на дне вокруг корабля (`SeabedTufts`, один MultiMesh)
 ## Слои воды ART-069 (`WaterLayers`) в материалах дна, льда и дальней воды: сила по уровню ART-044 и по илу.
 var layers_level := WaterLayers.GAIN_NORMAL
 var layers_silt := 0.0
+## #847: вода, туман и лёд по глубине пишутся, только когда глубина или ил сдвинулись больше порога —
+## иначе ≈20 свойств окружения и ≈25 значений шейдеров уходили каждый кадр, хотя корабль стоит.
+const WATER_EPS_DEPTH := 0.005   ## м
+const WATER_EPS_SILT := 0.0005
+var water_writes := 0                          ## сколько раз вода записана (тесты)
+var _water_at := Vector2(INF, INF)             ## глубина и ил последней записи
+var _layers_cam := Vector3(INF, INF, INF)      ## камера последней записи придонной пыли
+var _ship_at := Transform3D(Basis(), Vector3(INF, INF, INF))   ## корабль последней записи лучей и взвеси
+var _ahead_done := []                          ## заготовка россыпей (`prefetch`) готова: [место, lite каждой россыпи]
+var _ahead_at := Vector3.ZERO                  ## куда просили заготовку
+var _ahead_on := false                         ## просили в этот шаг
 
 
 func _ready() -> void:
+	stones = StonesView.new()
+	add_child(stones)
+	shells = ShellsView.new()
+	add_child(shells)
+	tufts = TuftsView.new()
+	add_child(tufts)
 	seabed = MeshInstance3D.new()
 	seabed.name = "Дно"
 	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, Seabed.build_arrays())
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, Seabed.map_arrays())   # отмель и склон за краем (#822)
 	var m := ShaderMaterial.new()   # цвет вершин + процедурная детализация дна (shaders/seabed.gdshader)
 	m.shader = load("res://shaders/seabed.gdshader")
 	m.set_shader_parameter("caustic", 0.6)   # каустики включены; уровень «Экономно» выключит (ART-044)
@@ -49,13 +69,16 @@ func _ready() -> void:
 	mesh.surface_set_material(0, m)
 	seabed.mesh = mesh
 	seabed.layers = LAYER_WORLD
+	# тень не отбрасывает (#842): сетка ≈39 тыс. треуг. в каскадах солнца и тени прожектора, а солнце под −70° —
+	# самозатенения дна почти не видно; тени существ, камней и корабля дно по-прежнему принимает
+	seabed.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(seabed)
 
 	# лёд: плоскость на y = 0 лицом вниз; карты, трещины и свечение по ART-056 (IceSheet, shaders/ice.gdshader)
 	ice = MeshInstance3D.new()
 	ice.name = "Лёд"
 	var q := PlaneMesh.new()
-	q.size = Vector2(Seabed.SIZE, Seabed.SIZE)
+	q.size = Vector2(Seabed.SIZE + Seabed.EAST.size.x, Seabed.SIZE)   # и над склоном за восточным краем (#822)
 	q.flip_faces = true
 	ice.mesh = q
 	var im := ShaderMaterial.new()
@@ -77,7 +100,7 @@ func _ready() -> void:
 	im.set_shader_parameter("reflect_lite", 0.0)
 	ice_mat = im
 	ice.material_override = im
-	ice.position.y = Seabed.ICE_Y
+	ice.position = Vector3(Seabed.EAST.size.x / 2.0, Seabed.ICE_Y, 0.0)
 	ice.layers = LAYER_WORLD
 	add_child(ice)
 
@@ -92,6 +115,7 @@ func _ready() -> void:
 	sun.directional_shadow_max_distance = 110.0   # за туманом тени не нужны
 	sun.light_angular_distance = 1.5              # мягкие края — рассеянный свет сквозь лёд
 	sun.shadow_blur = 1.3
+	sun.shadow_caster_mask = LAYER_WORLD   # мостик и отсеки изнутри (слой 2) тень на дно не кладут (отчёт #945)
 	add_child(sun)
 
 	far_wall = _make_far_wall()
@@ -130,13 +154,35 @@ func _make_far_wall() -> MeshInstance3D:
 func _process(_dt: float) -> void:
 	var cam := get_viewport().get_camera_3d()
 	if cam:
-		far_wall.global_position = cam.global_position
-		set_layers_camera(cam.global_position)
+		var at := cam.global_position
+		if not at.is_equal_approx(_layers_cam):   # камера стоит — дальняя вода и пыль на месте (#847)
+			far_wall.global_position = at
+			set_layers_camera(at)
 
 
 ## Материалы со слоями воды ART-069 (`shaders/water_layers.gdshaderinc`).
 func layer_mats() -> Array[ShaderMaterial]:
-	return [seabed_mat, ice_mat, far_mat]
+	var out: Array[ShaderMaterial] = [seabed_mat, ice_mat, far_mat]
+	out.append_array(extra_layer_mats)
+	return out
+
+
+## Материалы на дне со своим шейдером (арка врат 07 `GateView`): туман — слоями воды ART-069, как у дна. Со штатным
+## туманом остаётся только база ART-059 — вдали она темнее воды со слоями вокруг, и предмет проступает силуэтом.
+var extra_layer_mats: Array[ShaderMaterial] = []
+const LAYER_PARAMS: Array[String] = ["layer_base", "layer_density", "layer_gain", "layer_cam_above", "layer_floor_y",
+	"layer_ice_color", "layer_thermo_color", "layer_dust_color"]
+
+
+## Подключить материал к слоям воды: числа сразу как у дна (вода по глубине пишется только при её смене, #847).
+func add_layer_mat(m: ShaderMaterial) -> void:
+	if extra_layer_mats.has(m):
+		return
+	extra_layer_mats.append(m)
+	for p in LAYER_PARAMS:
+		var v: Variant = seabed_mat.get_shader_parameter(p)
+		if v != null:
+			m.set_shader_parameter(p, v)
 
 
 ## Цвета слоёв — один раз при сборке.
@@ -156,6 +202,7 @@ static func _lin(c: Color) -> Vector3:
 
 ## Высота камеры над дном — для придонной пыли (дно под камерой считаем ровным).
 func set_layers_camera(cam: Vector3) -> void:
+	_layers_cam = cam
 	var floor_y := Seabed.mesh_height(cam.x, cam.z)
 	for m in layer_mats():
 		m.set_shader_parameter("layer_cam_above", maxf(cam.y - floor_y, 0.0))
@@ -203,7 +250,7 @@ func _make_shafts() -> MultiMeshInstance3D:
 	var cone := ArrayMesh.new()
 	cone.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, LightShafts.cone_arrays())
 	var m := ShaderMaterial.new()
-	m.shader = load("res://shaders/light_shafts.gdshader")
+	m.shader = SHAFTS_SHADER
 	m.set_shader_parameter("mask_tex", load("res://textures/luchi/maska.png"))
 	m.set_shader_parameter("noise_tex", load("res://textures/luchi/shum.png"))
 	m.set_shader_parameter("ice_y", Seabed.ICE_Y)
@@ -239,9 +286,60 @@ func _make_shafts() -> MultiMeshInstance3D:
 	return node
 
 
+## Россыпи мелочи на дне вокруг корабля: камни, ракушки, кочки (`SeabedStones` и наследники).
+func scatters() -> Array[SeabedStones]:
+	return [stones.stones, shells.stones, tufts.stones]
+
+
+## Клеток посчитано всего во всех россыпях (тесты и заготовка под прыжок).
+func scatter_cells() -> int:
+	var n := 0
+	for v in scatters():
+		n += v.cells_done
+	return n
+
+
+## Корабль скоро перескочит в at (решают у 10 и шторка возвращения, #1090): россыпи там досчитываются заранее
+## в `set_ship` этого или следующего шага — только когда своя россыпь корабля в этот шаг клеток не считала, и не больше
+## `SeabedStones.CELLS_STEP` клеток на все россыпи, по очереди: камни, ракушки, кочки (разом и вместе с ходом давали
+## всплеск «интерфейс/маршрут» 9 мс у 34b, #1095). Просить каждый шаг; готово — шаг даром. true — всё в кэше.
+func prefetch(at: Vector3) -> bool:
+	_ahead_at = at
+	_ahead_on = true
+	return _ahead_key(at) == _ahead_done
+
+
+func _ahead_key(at: Vector3) -> Array:
+	var key: Array = [at]
+	for v in scatters():
+		key.append(v.lite)
+	return key
+
+
+func _prefetch_step() -> void:
+	var key := _ahead_key(_ahead_at)
+	if key == _ahead_done:
+		return
+	for v: SeabedStones in scatters():
+		var before := v.cells_done
+		if not v.prefetch(_ahead_at) or v.cells_done != before:
+			return   # эта россыпь считала в этот шаг — следующая подождёт
+	_ahead_done = key
+
+
 ## Где корабль: внутри корпуса шахты не светят и взвеси нет (вид с мостика и из отсеков).
 func set_ship(pos: Vector3, yaw: float) -> void:
+	var cells := scatter_cells()
+	stones.follow(pos)   # камни досчитываются и стоя: клетки радиуса — по нескольку за шаг
+	shells.follow(pos)
+	tufts.follow(pos)
+	if _ahead_on and scatter_cells() == cells:
+		_prefetch_step()   # заготовка под прыжок — в шаг, когда своя россыпь стоит (#1095)
+	_ahead_on = false
 	var t := Transform3D(Basis(Vector3.UP, yaw), pos)
+	if t.is_equal_approx(_ship_at):   # корабль стоит — матрицы в лучах и взвеси те же (#847)
+		return
+	_ship_at = t
 	shafts_mat.set_shader_parameter("ship_inv", Projection(t.affine_inverse()))
 	snow_mat.set_shader_parameter("ship_inv", Projection(t.affine_inverse()))
 
@@ -291,9 +389,24 @@ func set_snow_lite(lite: bool) -> void:
 	snow_mat.set_shader_parameter("spin_k", 0.0 if lite else 1.0)
 
 
+## «Экономно» (#852): лучи сквозь лёд без чтения глубины кадра (`light_shafts_lite.gdshader`) — движку не нужна
+## копия буфера глубины каждый кадр; край шахты у дна и корпуса резче. Параметры материала остаются.
+const SHAFTS_SHADER := preload("res://shaders/light_shafts.gdshader")
+const SHAFTS_LITE := preload("res://shaders/light_shafts_lite.gdshader")
+
+
+func set_shafts_lite(lite: bool) -> void:
+	shafts_mat.shader = SHAFTS_LITE if lite else SHAFTS_SHADER
+
+
 ## Вода по глубине: цвет и плотность тумана, рассеянный свет, свет сквозь лёд. around — где корабль.
 ## silt — корабль в облаке ила 0…1 (Silt.k): вода бурая и мутная.
 func apply_water(env: Environment, depth: float, around: Vector3, silt: float = 0.0) -> void:
+	snow.position = around
+	if absf(depth - _water_at.x) < WATER_EPS_DEPTH and absf(silt - _water_at.y) < WATER_EPS_SILT:
+		return   # глубина и ил те же — всё ниже уже записано (#847)
+	_water_at = Vector2(depth, silt)
+	water_writes += 1
 	var fog := Seabed.Water.fog_color(depth).lerp(Silt.FAR_COLOR, 0.75 * silt)   # серо-зелёная муть (ART-048)
 	env.background_color = fog
 	far_mat.set_shader_parameter("water", fog)   # дальняя вода — того же цвета, туман её доведёт до фона (#456)
@@ -316,7 +429,6 @@ func apply_water(env: Environment, depth: float, around: Vector3, silt: float = 
 	sun.light_energy = Seabed.Water.sun(depth)
 	# Каустики на дне гаснут по глубине (меньше света сквозь лёд) и в облаке ила (свет рассеивается).
 	seabed_mat.set_shader_parameter("light", clampf(Seabed.Water.caustic(depth) * (1.0 - 0.85 * silt), 0.0, 1.0))
-	snow.position = around
 	ice_mat.set_shader_parameter("water", fog)
 	ice_mat.set_shader_parameter("glow_k", exp(-maxf(depth, 0.0) / IceSheet.GLOW_DEPTH))
 	ice_mat.set_shader_parameter("contrast", IceSheet.contrast(depth))
@@ -376,6 +488,20 @@ func set_decals_lite(lite: bool) -> void:
 	_decals_level(seabed_mat, lite)
 
 
+## «Экономно» (ART-044): камни, ракушки и кочки на дне ближе (`SeabedStones.LITE_RADIUS`, `SeabedShells.SHELL_LITE`,
+## `SeabedTufts.TUFT_LITE`).
+func set_stones_lite(lite: bool) -> void:
+	stones.set_lite(lite)
+	shells.set_lite(lite)
+	tufts.set_lite(lite)
+
+
+## Образцы на дне: камней, ракушек и кочек вокруг них нет (светящиеся камешки не спутать с фоном).
+func set_floor_avoid(points: Array[Vector3]) -> void:
+	for v in scatters():
+		v.set_avoid(points)
+
+
 ## Следы разрядов на дне (`Seabed.Scorch.uniforms`): [где, сила] по MAX — в тот же материал дна.
 func set_scorch(u: Array) -> void:
 	seabed_mat.set_shader_parameter("scorch_at", u[0])
@@ -384,6 +510,7 @@ func set_scorch(u: Array) -> void:
 
 func set_relief(on: bool) -> void:
 	ice_relief = on
+	_water_at = Vector2(INF, INF)   # рельеф льда — из apply_water: записать заново на следующем шаге
 	ice_mat.set_shader_parameter("reflect_lite", 0.0 if on else 1.0)   # «Экономно» ART-075: без маски, × 0,55
 	seabed_mat.set_shader_parameter("relief", 1.0 if on else 0.0)
 	if not on:

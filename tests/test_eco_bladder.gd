@@ -253,6 +253,38 @@ func test_bulb_size_color_and_spores() -> void:
 	near(EcoBladder.spore_glow(bl), 0.5, 1e-6, "гаснет за последние 3 с")
 
 
+func test_bulbs_shrink_and_regrow_smoothly() -> void:
+	# Б3: лопнула — луковица опадает за SHRINK, к концу облака набухает до завязи за REGROW; раньше размер прыгал
+	# 1 → 0,2 и 0,2 → 0,35 за кадр, цвет сока — с ярко-зелёного на тусклый
+	var w := _world()
+	var bl := _bl(w).bushes[0]
+	bl.ripe = 1.0 - 0.01 / EcoBladder.RIPEN
+	var dt := 1.0 / 30.0
+	var size := EcoBladder.bulb_size(bl)
+	var green := EcoBladder.bulb_color(bl).g
+	var popped := false
+	var worst := 0.0
+	var worst_g := 0.0
+	for i in int((EcoBladder.LIFE + 2.0) / dt):
+		w.step(dt)
+		popped = popped or bl.popped()
+		var s := EcoBladder.bulb_size(bl)
+		var g := EcoBladder.bulb_color(bl).g
+		worst = maxf(worst, absf(s - size))
+		worst_g = maxf(worst_g, absf(g - green))
+		size = s
+		green = g
+	ok(popped, "лопнула и облако прошло")
+	ok(not bl.popped(), "облако рассеялось")
+	# 0,8 доли размера за 0,25 с мягко — не больше ≈ 0,8 · 1,5 · dt / 0,25 за кадр
+	ok(worst < 0.8 * 1.5 * dt / EcoBladder.SHRINK + 1e-3, "размер без скачка: %.3f за кадр" % worst)
+	ok(worst_g < 0.4 * 1.5 * dt / EcoBladder.SHRINK + 1e-3, "цвет без скачка: %.3f за кадр" % worst_g)
+	bl.life = EcoBladder.LIFE - EcoBladder.SHRINK - 0.1
+	near(EcoBladder.bulb_size(bl), 0.2, 1e-6, "опала до 0,2")
+	bl.life = 1e-4
+	near(EcoBladder.bulb_size(bl), 0.35, 1e-3, "к концу облака — размер завязи")
+
+
 func test_bladder_does_not_shift_other_species() -> void:
 	# своё зерно: светляки без спор (облаков нет первые 10 с) идут как без пузырчатки
 	var a := EcoWorld.new()
@@ -289,15 +321,17 @@ func test_view_three_multimeshes() -> void:
 	var bottom := st * Vector3(0, -0.5, 0)
 	var top := st * Vector3(0, 0.5, 0)
 	ok(bottom.distance_to(bl.stem_base[3]) < 1e-3, "стебель — от дна")
-	ok(top.distance_to(bl.stem_top[3]) < 1e-3, "до луковицы")
+	ok(top.distance_to(bl.stem_top[3]) < 0.3, "до вершины (колышется)")
 	var ship := EcoLink.ShipState.new()
 	ship.pos = Vector3(500, 0, 500)
 	bl.ripe = 0.5
 	view.step(0.05, ship)
 	var n := bl.index * EcoBladder.STEMS + 2
 	var tr := BladderView.transform_at(bv.bulb_buffer, n)
-	ok(tr.origin.distance_to(bl.stem_top[2]) < 0.06, "луковица на стебле")
-	near(tr.basis.x.length(), EcoBladder.bulb_size(bl), 1e-3)
+	var st2 := BladderView.transform_at(bv.stems.multimesh.buffer, n, BladderView.STRIDE)
+	ok(tr.origin.distance_to(st2 * Vector3(0, 0.5, 0)) < 1e-3, "луковица на вершине своего стебля")
+	var rest := EcoBladder.bulb_size(bl) * BladderView.bulb_scale(n)
+	ok(absf(tr.basis.x.length() / rest - 1.0) <= BladderView.PULSE_W + 1e-4, "размер луковицы — с пульсом сока")
 	var s0 := BladderView.transform_at(bv.spore_buffer, bl.index * EcoBladder.SPORES)
 	near(s0.basis.x.length(), 0.0, 1e-6, "облака нет — споры спрятаны")
 	view.bladders.pop(view.world, bl, false)
@@ -307,3 +341,155 @@ func test_view_three_multimeshes() -> void:
 	ok(s0.origin.distance_to(bl.cloud) < EcoBladder.CLOUD_R * 1.5, "в облаке над кустом")
 	view.queue_free()
 	await frames(1)
+
+
+## «Экономно» (Б6): рисуется половина спор каждого облака — места вперемешку по кустам, видимые в начале буфера;
+## назад — буфер снова по кусту; сброс мира уровень не теряет.
+func test_view_lite_draws_half_of_each_spore_cloud() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var bv := view.bladder_view
+	var n := view.bladders.bushes.size()
+	eq(bv.spores_drawn(), n * EcoBladder.SPORES, "на «Обычно» — все споры")
+	view.set_lite(true)
+	ok(bv.lite, "пузырчатка — на «Экономно»")
+	var per := EcoMM.cloud_per(EcoBladder.SPORES)
+	eq(bv.spores_drawn(), per * n, "половина каждого облака")
+	var seen := {}
+	for bl in view.bladders.bushes:
+		var shown := 0
+		for j in EcoBladder.SPORES:
+			var s := bv.spore_slot(bl.index, j)
+			seen[s] = true
+			if s < bv.spores_drawn():
+				shown += 1
+		eq(shown, per, "у куста %d видно %d" % [bl.index, per])
+	eq(seen.size(), n * EcoBladder.SPORES, "места в буфере не повторяются")
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Vector3(500, 0, 500)
+	var bl := view.bladders.bushes[1]
+	view.bladders.pop(view.world, bl, false)
+	view.step(0.05, ship)
+	var s0 := BladderView.transform_at(bv.spore_buffer, bv.spore_slot(bl.index, 3))
+	near(s0.basis.x.length(), 1.0, 1e-6, "лопнула — видимая спора на своём месте")
+	near(s0.origin.distance_to(EcoBladder.spore(bl, 3, view.world.time)), 0.0, 1e-4, "там, где её считает мир")
+	ok(bv.spore_slot(bl.index, 3) < bv.spores_drawn(), "и она рисуется")
+	view.ground = Seabed.height   # сброс мира — виды пересобираются
+	ok(view.bladder_view.lite and view.bladder_view.spores_drawn() == per * n, "сброс мира — снова «Экономно»")
+	view.set_lite(false)
+	bv = view.bladder_view
+	eq(bv.spores_drawn(), n * EcoBladder.SPORES, "назад — все")
+	eq(bv.spore_slot(1, 3), 1 * EcoBladder.SPORES + 3, "буфер снова по кусту")
+	view.queue_free()
+	await frames(1)
+
+
+# ---------- Колыхание (Б3) ----------
+
+## Стебли колышутся в течении (`EcoBladder.sway`): по потоку кренятся сильнее, чем в стоячей воде, длина стебля та же,
+## на «Экономно» (amount = 0) стоят; пузырёк срывается с луковицы там, где она нарисована.
+func test_stems_sway_in_current() -> void:
+	var b := _bl(_world())
+	var bl := b.bushes[0]
+	var k := 4
+	var flow := Vector3(EcoCurrent.SPEED, 0, 0)
+	var calm := 0.0
+	var lean := 0.0
+	var moved := 0.0
+	var steps := 120
+	for i in steps:
+		var t := i * 0.25
+		var top := EcoBladder.bulb(bl, k, t, flow)
+		calm += (EcoBladder.bulb(bl, k, t) - bl.stem_top[k]).x
+		lean += (top - bl.stem_top[k]).x
+		moved = maxf(moved, top.distance_to(bl.stem_top[k]))
+		var h := bl.stem_base[k].distance_to(bl.stem_top[k])
+		near(top.distance_to(bl.stem_base[k]), h, h * 0.03, "стебель не вытягивается")
+		eq(EcoBladder.bulb(bl, k, t, flow, 0.0), bl.stem_top[k], "«Экономно» — стоит")
+		var sp := EcoBladderBubbles.spot(bl, k, t, flow)
+		ok(sp.distance_to(top + Vector3(0, EcoBladderBubbles.LIFT, 0)) < 1e-5, "пузырёк — с нарисованной луковицы")
+	ok(lean / steps > 0.05, "по течению кренится в среднем на %.3f м" % (lean / steps))
+	ok(absf(calm / steps) < 0.03, "в стоячей воде крена нет (%.3f)" % (calm / steps))
+	ok(moved > 0.08 and moved < 0.35, "размах вершины %.2f м" % moved)
+	# стебли одного куста не в лад
+	var d0 := EcoBladder.sway(bl, 1, 3.0, flow)
+	var d1 := EcoBladder.sway(bl, 2, 3.0, flow)
+	ok(d0.distance_to(d1) > 1e-3, "соседние стебли гнутся по-своему")
+
+
+## В сцене стебель и луковица идут вместе: за кадры вершина стебля уходит с места, луковица на ней; на «Экономно»
+## стебли стоят.
+func test_view_stem_follows_bulb() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var bv := view.bladder_view
+	var bl := view.bladders.bushes[0]
+	var n := bl.index * EcoBladder.STEMS + 5
+	var flow := Vector3(0, 0, EcoCurrent.SPEED)
+	var span := 0.0
+	var first := Vector3.ZERO
+	for f in 20:
+		bv.sync(f * 0.4, null, flow)
+		var st := BladderView.transform_at(bv.stems.multimesh.buffer, n, BladderView.STRIDE)
+		var top := st * Vector3(0, 0.5, 0)
+		ok((st * Vector3(0, -0.5, 0)).distance_to(bl.stem_base[5]) < 1e-3, "подножие стоит")
+		ok(top.distance_to(BladderView.transform_at(bv.bulb_buffer, n).origin) < 1e-3, "луковица на вершине")
+		if f == 0:
+			first = top
+		span = maxf(span, top.distance_to(first))
+	ok(span > 0.03, "вершина стебля колышется (%.3f м)" % span)
+	EcoShaders.set_sway_lite(true)
+	bv.sync(9.0, null, flow)
+	var still := BladderView.transform_at(bv.stems.multimesh.buffer, n, BladderView.STRIDE) * Vector3(0, 0.5, 0)
+	EcoShaders.set_sway_lite(false)
+	ok(still.distance_to(bl.stem_top[5]) < 1e-3, "«Экономно» — стебель стоит")
+	view.queue_free()
+	await frames(1)
+
+
+## Луковицы дышат соком (Б3): ширина ± PULSE_W, высота ± PULSE_H, сок в набухшей ярче; размах по размеру луковицы —
+## спелая во весь, опавшая не дышит; ритм у каждой свой. Без исправления луковица стоит одного размера во времени.
+func test_view_bulbs_pulse_with_sap() -> void:
+	var w := _world()
+	var sys := _bl(w)
+	var v := BladderView.new(sys)
+	var bl: EcoBladder.Bush = sys.bushes[0]
+	bl.ripe = 1.0
+	var r := EcoBladder.bulb_size(bl)
+	near(BladderView.pulse_k(r), 1.0, 1e-5, "спелая — во весь размах")
+	var n := bl.index * EcoBladder.STEMS + 2
+	var widths := []
+	var heights := []
+	var lum := []
+	for s in 40:
+		var t := s * 0.2
+		v.sync(t)
+		var b := BladderView.transform_at(v.bulb_buffer, n).basis
+		var rest := r * BladderView.bulb_scale(n)
+		var p := BladderView.pulse(n, t)
+		near(b.x.length(), rest * (1.0 + BladderView.PULSE_W * p), 1e-4, "ширина по пульсу (t=%.1f)" % t)
+		near(b.y.length(), rest * (1.0 + BladderView.PULSE_H * p), 1e-4, "высота по пульсу (t=%.1f)" % t)
+		near(b.z.length(), b.x.length(), 1e-5, "круглая")
+		widths.append(b.x.length() / rest)
+		heights.append(b.y.length() / rest)
+		lum.append(v.bulb_buffer[n * BladderView.STRIDE_C + 13])
+	ok(widths.max() - widths.min() > BladderView.PULSE_W * 1.5, "ширина гуляет: %s…%s" % [widths.min(), widths.max()])
+	ok(widths.max() <= 1.0 + BladderView.PULSE_W + 1e-5 and widths.min() >= 1.0 - BladderView.PULSE_W - 1e-5, "в пределах")
+	ok(heights.max() - heights.min() < widths.max() - widths.min(), "по высоте слабее, чем вширь")
+	var bright := widths.find(widths.max())
+	var dim := widths.find(widths.min())
+	ok(lum[bright] > lum[dim], "сок ярче в набухшей")
+	# ритм у луковиц свой
+	var same := 0
+	for k in EcoBladder.STEMS:
+		if absf(BladderView.pulse(k, 2.0) - BladderView.pulse(0, 2.0)) < 0.05:
+			same += 1
+	ok(same <= 2, "луковицы куста дышат вразнобой")
+	# опавшая после лопания — не дышит, молодая — едва
+	near(BladderView.pulse_k(0.2), 0.0, 1e-6, "опавшая не дышит")
+	ok(BladderView.pulse_k(0.35) < 0.25, "молодая — едва")
+	v.free()

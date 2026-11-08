@@ -70,6 +70,23 @@ func test_scene_intro_skipped_by_touch() -> void:
 	r.end(1)
 
 
+## Строки живого мира во время облёта не перебивают подсказку «коснитесь экрана» (#827): сцена у старта сразу в луче.
+## Наблюдение при этом записано; после облёта строки мира снова на приборах.
+func test_scene_world_lines_wait_for_intro() -> void:
+	Main.intro = true
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	ok(main.flyby.kind == Flyby.Kind.START, "в начале забега — облёт")
+	main.on_eco_event({"type": EcoLink.MESSAGE, "text": "Стая гребневиков вспыхивает радугой"})
+	main.on_eco_event({"type": EcoLink.OBSERVE, "species": "raduzh", "note": "flare", "text": "Гребневики вспыхнули"})
+	eq(main.message.text, Flyby.START_MSG, "подсказка облёта на приборах")
+	ok(main.scanner.seen.has("raduzh"), "наблюдение записано")
+	main.flyby.stop()
+	main.on_eco_event({"type": EcoLink.MESSAGE, "text": "Стая гребневиков вспыхивает радугой"})
+	eq(main.message.text, "Стая гребневиков вспыхивает радугой", "после облёта — строка мира")
+
+
 func test_scene_intro_ends_and_surface_view() -> void:
 	Main.intro = true
 	main = load("res://scenes/main.tscn").instantiate()
@@ -122,6 +139,18 @@ func test_scene_no_breach_during_intro() -> void:   # issue #506
 	ok(main.breach.active != null, "и пробивает корпус")
 
 
+## Issue #1249: на итоге забега (экипаж поднялся) хищник корпус не кусает — «Корпус на финише» на карточке верен.
+func test_scene_no_hit_after_summary() -> void:
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var hull := main.vitals.hull
+	main.run.ended = true
+	main.on_eco_event({"type": EcoLink.HIT, "damage": 0.12, "by": "Серпохвост"})
+	eq(main.vitals.hull, hull, "после итога удар не снял корпус")
+	ok(main.breach.active == null, "пробоины нет")
+
+
 func test_scene_surface_skipped_by_action() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
@@ -130,6 +159,7 @@ func test_scene_surface_skipped_by_action() -> void:
 	main.walker.z = Main.ROUTE_POST.y
 	main.use_post("route")
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	main.use_post("route")
 	main.step(1.0 / 30.0)
 	main.decide("up")

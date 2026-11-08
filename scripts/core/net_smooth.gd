@@ -128,7 +128,7 @@ func member(i: int) -> PackedFloat32Array:
 
 
 ## Показать на часах: корабль в helm, фигуры в crew (место, курс, шаг, руль). Курс своего игрока `own`
-## не трогаем — взгляд у него свой (`Main._client_frame`).
+## не трогаем — взгляд у него свой (`NetGame.client_frame`).
 func apply(helm: Helm.Ship, crew: Array, own: Crew.Member) -> void:
 	if shots.is_empty():
 		return

@@ -6,7 +6,7 @@ extends RefCounted
 ## кадров копится окнами по 0,5 с (`push`, из `Main._process`), окно ниже `LOW` добавляет `HOLD`-счёт, быстрое — отнимает
 ## вдвое. Только когда можно (`update`): не на «Экономно», не во время тревоги, меню, паузы, настроек, облёта, шторок;
 ## раз за сеанс (`asked`), отказ запоминается в настройках (`Settings.lite_no`). «Да» — уровень «Экономно»
-## (`Main._offer_do`). Рисует `scripts/game/lite_offer_panel.gd` (`main.lite_offer_panel`), шаг — `Main._offer_step`.
+## (`MenuFlow.offer_do`). Рисует `scripts/game/lite_offer_panel.gd` (`main.lite_offer_panel`), шаг — `MenuFlow.offer_step`.
 ## Тесты и снимки выключают (`Main.offer = false`), прогон тестера — тоже, кроме шага `slow` (`force`).
 
 const LOW := 22.0      ## кадр/с окна ниже этого — «низкие» (цель — 30)
@@ -96,10 +96,7 @@ static func screen_rect(id: String, size: Vector2) -> Rect2:
 func hit(p: Vector2, size: Vector2) -> String:
 	if not open:
 		return ""
-	for id: String in ["yes", "no"]:
-		if screen_rect(id, size).has_point(p):
-			return id
-	return ""
+	return Splash.hit_ids(p, size, ["yes", "no"], screen_rect)
 
 
 ## Нажатие: "yes" — включить «Экономно», "no" — отказ (запомнить); диалог закрывается. Иначе — "".

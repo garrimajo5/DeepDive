@@ -5,9 +5,9 @@ extends Control
 ## «Игорь отключился» / «Игорь вернулся» (`HostNotice`). У гостя — плашка «Слабая связь» (`WeakLink`). Палитра ART-028,
 ## ничего красного.
 
-const TEXT := Color("D5E4E8")
-const DIM := Color("9AD9E8")
-const ACCENT := Color("67DDEB")
+const TEXT := UiStyle.TEXT
+const DIM := UiStyle.DIM
+const ACCENT := UiStyle.ACCENT
 const BACK := Color("0B1C24")
 const BTN := Color("11293A")
 const DARK_TEXT := Color("0B1C24")

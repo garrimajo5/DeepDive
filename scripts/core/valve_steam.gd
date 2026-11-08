@@ -53,28 +53,24 @@ func update(dt: float, venting: bool) -> void:
 		puffs.append(p)
 
 
-static func S(e0: float, e1: float, x: float) -> float:
-	return smoothstep(e0, e1, x)
-
-
 ## Положение частицы возраста s (с) с углом разброса angle — в осях корабля.
 static func pos(s: float, angle: float) -> Vector3:
 	var a := clampf(s / LIFE, 0.0, 1.0)
 	var x := 0.70 * s / (1.0 + 2.5 * s)
-	var y := 0.75 * s - 0.10 * s * s - 0.30 * S(0.62, 1.0, a)
+	var y := 0.75 * s - 0.10 * s * s - 0.30 * HashNoise.smooth(0.62, 1.0, a)
 	var w := sin(PI * a) * SPREAD
 	return NOZZLE + Vector3(x, y + cos(angle) * w, sin(angle) * w)
 
 
 ## Размер карточки (ширина, высота), м по доле жизни a.
 static func size(a: float) -> Vector2:
-	var h := 0.09 + 0.33 * S(0.0, 0.85, a)
+	var h := 0.09 + 0.33 * HashNoise.smooth(0.0, 0.85, a)
 	return Vector2(h * (0.6 + 0.4 * a), h)
 
 
 ## Альфа по доле жизни: ≤ 0,25, быстро появляется, с 0,55 тает.
 static func alpha(a: float) -> float:
-	return 0.25 * S(0.0, 0.045, a) * (1.0 - S(0.55, 1.0, a))
+	return 0.25 * HashNoise.smooth(0.0, 0.045, a) * (1.0 - HashNoise.smooth(0.55, 1.0, a))
 
 
 ## Кадры атласа и вес второго: [floor(n), min(floor(n)+1, 15), smoothstep(fract(n))], n = a·15 (двойник шейдера).

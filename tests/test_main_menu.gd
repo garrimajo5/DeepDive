@@ -31,6 +31,34 @@ func test_layout_fits_phones() -> void:
 	near(Splash.to_screen(Vector2(1200, 0), Vector2(1920, 1080)).x, 960.0, 0.01, "центр макета — центр экрана")
 
 
+## Есть сохранённый корабль (#823): пять кнопок с «Продолжить» сверху — на экране, не налезают, над строкой версии.
+func test_continue_layout() -> void:
+	var list := MainMenu.items_of(true)
+	eq(list[0][0], "continue", "«Продолжить» — первая")
+	eq(list.size(), 5, "пять кнопок")
+	for size: Vector2 in [Vector2(2400, 1080), Vector2(1600, 720), Vector2(1920, 1080), Vector2(2340, 1080)]:
+		var prev := Rect2()
+		for it: Array in list:
+			var r := MainMenu.screen_rect(it[0], size, true)
+			ok(r.size.x > 0.0 and Rect2(Vector2.ZERO, size).encloses(r), "%s на экране %s" % [it[1], size])
+			if prev.size.x > 0.0:
+				ok(not prev.intersects(r), "кнопки не налезают")
+			prev = r
+	ok(MainMenu.button_rect(4, 5).end.y < MainMenu.VERSION_TOP, "низ пятой кнопки над версией")
+	ok(MainMenu.button_rect(0, 5).position.y > MainMenu.TITLE_AT.y + MainMenu.TITLE_PX, "первая — под заголовком")
+	var m := MainMenu.new()
+	m.open = true
+	var size := Vector2(1600, 720)
+	ok(m.hit(MainMenu.screen_rect("continue", size, true).get_center(), size) != "continue", "без сохранения «Продолжить» нет")
+	eq(m.press("continue"), "", "и не нажимается")
+	eq(m.main_item(), "dive", "главная — «Погрузиться»")
+	m.can_continue = true
+	eq(m.hit(m.rect("continue", size).get_center(), size), "continue", "касание «Продолжить»")
+	eq(m.hit(m.rect("dive", size).get_center(), size), "dive", "«Погрузиться» ниже")
+	eq(m.press("continue"), "continue", "«Продолжить» — забег с места")
+	ok(not m.open, "меню закрыто")
+
+
 func test_buttons() -> void:
 	var m := MainMenu.new()
 	var size := Vector2(1600, 720)
@@ -106,3 +134,25 @@ func test_net_closes_menu() -> void:
 	main.host_game(NetLink.PORT + 41)
 	ok(not main.main_menu.open, "сетевой забег — без меню")
 	ok(main.overlay.visible, "управление на экране")
+
+
+## Экраны меню — у `MenuFlow` (`main.menu_flow`, #753): шаги не в `Main`, входы для тестов и `tools/` — пересылки.
+func test_scene_menu_flow() -> void:
+	Main.menu = true
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	ok(main.menu_flow is MenuFlow and main.menu_flow.main == main, "экраны меню — поле main.menu_flow")
+	for f in ["_menu_step", "_settings_step", "_settings_do", "_offer_step", "_offer_do", "_journal_step", "_to_menu"]:
+		ok(not main.has_method(f), "%s больше не в Main" % f)
+	ok(main.main_menu.open, "меню открыто через пересылку open_menu")
+	main.open_settings()
+	ok(main.settings.open and main.settings_panel.visible, "open_settings — экран настроек")
+	main.menu_flow.settings_do("back")
+	main.settings.open = false
+	main._settings_show()
+	main.open_journal()
+	ok(main.logbook.open and main.logbook_panel.visible, "open_journal — журнал")
+	main.close_menu()
+	ok(not main.main_menu.open and not main.logbook.open, "close_menu закрыл меню и журнал")
+	ok(main.overlay.visible, "крестовина снова на экране")

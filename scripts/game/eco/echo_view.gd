@@ -3,12 +3,14 @@ extends Node3D
 ## Эхоловец в сцене по концепту ART-007 (`docs/concept-art/eholovec.md`): приплюснутое тело около 3 м из двух
 ## капсул (кожа #344A59, бледные костяные полосы #B5B5A5 по спине — под рисунок рёбер), клин головы с нижней
 ## челюстью, четыре короткие лапы, короткий хвост — один меш; голосовой мешок под горлом — свой узел, медленно
-## дышит; два уха-воронки на стеблях — по узлу на ухо с двумя суставами (поворот и наклон, EcoEcho.Lurker.ears):
+## дышит, тело — в противофазе (воздух из тела в мешок, `body_breath`; раскрытый дышит чаще); два уха-воронки на стеблях — по узлу на ухо с двумя суставами (поворот и наклон, EcoEcho.Lurker.ears):
 ## кожа снаружи и слуховые складки внутри со слабым свечением #67DDEB — две поверхности. Раскрытый сонаром — складки
 ## пульсируют ярче. Шесть вызовов отрисовки, ≈ 1,3 тыс. треугольников; слой отмели (OceanView.LAYER_WORLD);
 ## дальше FAR от корабля не виден в мути. Материалы как у гротовика — новых шейдеров нет.
 ## Муть у дна (EcoEchoDust: раскрыт сонаром — клуб ила вокруг тела, удар по корпусу — под головой) — дочерний
 ## MultiMesh «Муть» на общем шейдере мира (+1 вызов).
+## «Экономно» (Б6, `set_lite`): тело, мешок и уши — грубее сетка (LITE_*, треугольников меньше половины); полосы,
+## складки, суставы, мир, муть, вызовы и силуэт те же. Сброс мира уровень не теряет (EcoView.set_lite).
 
 const SKIN := Color("344A59")
 const SKIN_LIT := Color("667A87")
@@ -20,6 +22,12 @@ const FOLD_DARK := 0.55
 ## Свечение складок: затаился — FOLD · HUSH, раскрыт — пульс до FOLD · LOUD (3 рад/с, как в браузере).
 const HUSH := 0.12
 const LOUD := 0.9
+## Пульс складок набирается и гаснет плавно (Б3): доля `loud_k` растёт за LOUD_RISE с после импульса, гаснет за
+## LOUD_FADE с, когда раскрытие кончилось (мягкий вход, `loud_step`/`fold_k`); раньше свечение прыгало 0,12 → до 0,9
+## за кадр. По времени мира (у гостя то же); время назад или скачок дальше SNAP_DT с (сброс, вход гостя) — сразу.
+const LOUD_RISE := 0.5
+const LOUD_FADE := 1.5
+const SNAP_DT := 1.0
 ## Тело: передняя и задняя капсулы (центр, полуоси), голова, челюсть, мешок (под горлом), лапы, хвост.
 const FRONT := [Vector3(0, 0.0, 0.45), Vector3(0.62, 0.38, 0.85)]
 const BACK := [Vector3(0, -0.05, -0.6), Vector3(0.55, 0.33, 0.8)]
@@ -41,7 +49,23 @@ const SEG := 12
 ## Мешок дышит: ± SAC_BREATH за SAC_PERIOD с.
 const SAC_BREATH := 0.1
 const SAC_PERIOD := 6.0
+## «Дыхание» тела (Б3): воздух гонится из тела в мешок и обратно — тело в противофазе с мешком: высота ± BODY_H,
+## ширина ± BODY_W за тот же SAC_PERIOD; подошвы лап (низ тела, BODY_FOOT) стоят на дне. Раскрытый сонаром дышит
+## чаще — ритм ×ALARM_RATE, разгоняется и успокаивается за ~RATE_EASE с (фаза копится в sync, без скачка). Масштаб
+## узла — даром для кадра, поэтому и на «Экономно».
+const BODY_H := 0.035
+const BODY_W := 0.02
+const ALARM_RATE := 2.0
+const RATE_EASE := 1.5
 const FAR := 160.0
+## Сетка на «Экономно»: капсулы тела, голова, челюсть, мешок (сегменты × кольца), уши — сегментов и колец воронки.
+const LITE_TRUNK := Vector2i(12, 4)
+const LITE_HEAD := Vector2i(6, 4)
+const LITE_JAW := Vector2i(6, 3)
+const LITE_SAC := Vector2i(6, 3)
+const LITE_EAR := Vector2i(8, 3)
+## Воронка на «Обычно»: колец вдоль оси.
+const FUNNEL_RINGS := 4
 
 var echoes: EcoEcho
 ## Узел тела: в центре тела, повёрнут по курсу (голова к +Z).
@@ -52,24 +76,39 @@ var sac: MeshInstance3D
 var ears: Array[Node3D] = []
 var fold_mat: StandardMaterial3D
 var _glow := HUSH
+## Доля пульса складок 0…1 (0 — затаился, 1 — раскрыт во всю силу).
+var loud_k := 0.0
 var dust := EcoEchoDust.new()
 var dust_view: MultiMeshInstance3D
-var dust_buffer := PackedFloat32Array()
-var _dust_empty := false
+## Буфер мути (EcoDustBuffer, issue #732).
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
+## На «Экономно» — грубее сетка (set_lite).
+var lite := false
+## Фаза дыхания (доля оборота SAC_PERIOD) и её скорость (1 — покой, ALARM_RATE — раскрыт); время прошлого sync.
+var breath_phase := 0.0
+var breath_rate := 1.0
+var _last_t := NAN
+## Низ тела (y подошв в осях узла) — от него тело дышит вверх.
+var body_foot := 0.0
 
 
-func _init(system: EcoEcho) -> void:
+func _init(system: EcoEcho, on_lite := false) -> void:
 	echoes = system
+	lite = on_lite
 	name = "Эхоловец"
 	group = Node3D.new()
 	group.name = "Эхоловец"
 	add_child(group)
 	var skin := GrotView._lit(Color.BLACK)
-	body = _mesh(group, "Тело", build_body(), skin)
-	sac = _mesh(group, "Голосовой мешок", build_sac(), skin)
+	body = _mesh(group, "Тело", build_body(lite), skin)
+	body_foot = body.mesh.get_aabb().position.y
+	sac = _mesh(group, "Голосовой мешок", build_sac(lite), skin)
 	sac.position = SAC
 	fold_mat = GrotView._lit(FOLD * HUSH)
-	var ear_mesh := build_ear()
+	var ear_mesh := build_ear(lite)
 	ear_mesh.surface_set_material(1, fold_mat)
 	for i in 2:
 		var joint := Node3D.new()
@@ -94,6 +133,25 @@ static func _mesh(parent: Node3D, n: String, m: ArrayMesh, mat: Material) -> Mes
 	return mi
 
 
+## «Экономно» — тело, мешок и уши пересобраны грубее (материалы те же, свечение складок — тот же fold_mat).
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	_swap(body, build_body(on))
+	body_foot = body.mesh.get_aabb().position.y
+	_swap(sac, build_sac(on))
+	var ear_mesh := build_ear(on)
+	for joint in ears:
+		_swap(joint.get_child(0) as MeshInstance3D, ear_mesh)
+
+
+static func _swap(mi: MeshInstance3D, m: ArrayMesh) -> void:
+	for k in m.get_surface_count():
+		m.surface_set_material(k, mi.mesh.surface_get_material(k))
+	mi.mesh = m
+
+
 ## Поворот сустава уха: (поворот от носа, наклон вверх) → базис, где +Z — ось воронки.
 static func ear_basis(e: Vector2) -> Basis:
 	return Basis(Vector3.UP, e.x) * Basis(Vector3.RIGHT, -e.y)
@@ -110,34 +168,73 @@ func sync(t: float, ship: Vector3, info: EcoLink.ShipState = null, flow := Vecto
 	group.transform = ec.xform()
 	for i in 2:
 		ears[i].basis = ear_basis(ec.ears[i])
-	var b := 1.0 + SAC_BREATH * sin(TAU * t / SAC_PERIOD)
+	var dt := t - _last_t
+	loud_k = loud_step(loud_k, ec.is_revealed(), dt, is_nan(dt) or dt < 0.0 or dt > SNAP_DT)
+	_breathe(t, ec.is_revealed())
+	var s := sin(TAU * breath_phase)
+	var b := 1.0 + SAC_BREATH * s
 	sac.scale = Vector3(b, b, b)
-	var k := HUSH
-	if ec.is_revealed():
-		k = HUSH + (LOUD - HUSH) * (0.5 + 0.5 * sin(t * 3.0))
+	var sc := body_breath(s)
+	body.scale = sc
+	body.position.y = body_foot * (1.0 - sc.y)
+	var k := fold_k(t, loud_k)
 	if k != _glow:  # затаился — материал не трогаем каждый кадр
 		_glow = k
 		fold_mat.emission = FOLD * k
 
 
+## Доля пульса складок за шаг dt: к 1 за LOUD_RISE раскрытым, к 0 за LOUD_FADE затаившимся; snap — сразу к цели.
+static func loud_step(k: float, on: bool, dt: float, snap := false) -> float:
+	if snap:
+		return 1.0 if on else 0.0
+	return minf(1.0, k + dt / LOUD_RISE) if on else maxf(0.0, k - dt / LOUD_FADE)
+
+
+## Свечение складок (доля FOLD) в миг t при доле пульса loud: затаился — HUSH, раскрыт — пульс 3 рад/с до LOUD;
+## доля — с мягким входом (smoothstep), без излома в начале и в конце.
+static func fold_k(t: float, loud: float) -> float:
+	if loud <= 0.0:
+		return HUSH
+	var e := loud * loud * (3.0 - 2.0 * loud)
+	return HUSH + (LOUD - HUSH) * e * (0.5 + 0.5 * sin(t * 3.0))
+
+
+## Фаза дыхания догоняет время мира t: ритм к 1 (затаился) или ALARM_RATE (раскрыт) за ~RATE_EASE с. Время назад
+## (сброс мира) или большой скачок — фаза по t заново, без накопления.
+func _breathe(t: float, alarmed: bool) -> void:
+	var dt := t - _last_t
+	_last_t = t
+	if is_nan(dt) or dt < 0.0 or dt > 1.0:
+		breath_rate = ALARM_RATE if alarmed else 1.0
+		breath_phase = fposmod(t / SAC_PERIOD, 1.0)
+		return
+	var want := ALARM_RATE if alarmed else 1.0
+	breath_rate = lerpf(breath_rate, want, 1.0 - exp(-dt / RATE_EASE))
+	breath_phase = fposmod(breath_phase + breath_rate * dt / SAC_PERIOD, 1.0)
+
+
+## Масштаб тела при дыхании: s — синус фазы мешка (−1…1); мешок надут (s > 0) — тело опало.
+static func body_breath(s: float) -> Vector3:
+	return Vector3(1.0 - BODY_W * s, 1.0 - BODY_H * s, 1.0)
+
+
 func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3) -> void:
 	dust.update(echoes, t, ship)
-	var shown := dust.dust.shown(t)
-	if shown == 0 and _dust_empty and dust_buffer.size() == EcoEchoDust.POOL * GrazerView.DUST_STRIDE:
-		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
-	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, info, EcoEchoDust.COLOR, EcoEchoDust.LIT,
+	_dust.pack(dust.dust, t, flow, info, EcoEchoDust.COLOR, EcoEchoDust.LIT,
 			Seabed.mesh_height)
-	dust_view.multimesh.buffer = dust_buffer
-	_dust_empty = shown == 0
+	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 
 
 ## Тело: две капсулы, голова, челюсть, лапы и хвост; бледные полосы поперёк спины.
-static func build_body() -> ArrayMesh:
+static func build_body(on_lite := false) -> ArrayMesh:
 	var st := KrabView._begin()
-	_blob(st, FRONT[0], FRONT[1], 14, 7, true)
-	_blob(st, BACK[0], BACK[1], 14, 7, true)
-	_blob(st, HEAD[0], HEAD[1], 10, 5, false)
-	_blob(st, JAW[0], JAW[1], 8, 4, false, SHADE)
+	var tr_ := LITE_TRUNK if on_lite else Vector2i(14, 7)
+	var hd := LITE_HEAD if on_lite else Vector2i(10, 5)
+	var jw := LITE_JAW if on_lite else Vector2i(8, 4)
+	_blob(st, FRONT[0], FRONT[1], tr_.x, tr_.y, true)
+	_blob(st, BACK[0], BACK[1], tr_.x, tr_.y, true)
+	_blob(st, HEAD[0], HEAD[1], hd.x, hd.y, false)
+	_blob(st, JAW[0], JAW[1], jw.x, jw.y, false, SHADE)
 	for l in LEGS:
 		var out := signf(l.x)
 		var tr := Transform3D(Basis(Vector3.BACK, out * 0.6), l)
@@ -148,62 +245,56 @@ static func build_body() -> ArrayMesh:
 
 
 ## Голосовой мешок (у начала своего узла — масштаб дыхания от середины).
-static func build_sac() -> ArrayMesh:
+static func build_sac(on_lite := false) -> ArrayMesh:
 	var st := KrabView._begin()
-	_blob(st, Vector3.ZERO, SAC_R, 10, 5, false, SKIN_LIT)
+	var sc := LITE_SAC if on_lite else Vector2i(10, 5)
+	_blob(st, Vector3.ZERO, SAC_R, sc.x, sc.y, false, SKIN_LIT)
 	return st.commit()
 
 
 ## Ухо вдоль +Z: стебель и воронка снаружи (поверхность 0, кожа), слуховые складки внутри (поверхность 1, свечение).
-static func build_ear() -> ArrayMesh:
+static func build_ear(on_lite := false) -> ArrayMesh:
+	var ear := LITE_EAR if on_lite else Vector2i(SEG, FUNNEL_RINGS)
 	var st := KrabView._begin()
 	GrotView._cone(st, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3.ZERO), 0.1, 0.13, STALK, 6, SKIN, true)
-	_funnel(st, MOUTH, SKIN, false)
+	_funnel(st, MOUTH, SKIN, false, ear.x, ear.y)
 	var m := st.commit()
 	st = KrabView._begin()
-	_funnel(st, MOUTH - FOLD_IN, FOLD.darkened(FOLD_DARK), true)
+	_funnel(st, MOUTH - FOLD_IN, FOLD.darkened(FOLD_DARK), true, ear.x, ear.y)
 	return st.commit(m)
 
 
 ## Воронка от STALK до STALK + FUNNEL, раструб NECK → mouth; inner — лицом к оси (видна изнутри), складки —
-## волной по краю.
-static func _funnel(st: SurfaceTool, mouth: float, col: Color, inner: bool) -> void:
-	var rings := 4
+## волной по краю; seg — сегментов по кругу, rings — колец вдоль оси.
+static func _funnel(st: SurfaceTool, mouth: float, col: Color, inner: bool, seg := SEG, rings := FUNNEL_RINGS) -> void:
 	var pts: Array = []
 	for i in rings + 1:
 		var u := float(i) / rings
 		var r := lerpf(NECK, mouth, u * u)
 		var row: Array[Vector3] = []
-		for j in SEG:
-			var a := TAU * float(j) / SEG
+		for j in seg:
+			var a := TAU * float(j) / seg
 			var fold := 1.0 + (0.08 * sin(a * 5.0) * u if inner else 0.0)
 			row.append(Vector3(cos(a) * r * fold, sin(a) * r * fold, STALK + FUNNEL * u))
 		pts.append(row)
 	for i in rings:
-		for j in SEG:
+		for j in seg:
 			var a: Vector3 = pts[i][j]
-			var b: Vector3 = pts[i][(j + 1) % SEG]
+			var b: Vector3 = pts[i][(j + 1) % seg]
 			var d: Vector3 = pts[i + 1][j]
-			var e: Vector3 = pts[i + 1][(j + 1) % SEG]
+			var e: Vector3 = pts[i + 1][(j + 1) % seg]
 			var mid := (a + b + d + e) * 0.25
 			var axis := Vector3(0, 0, mid.z)
 			# снаружи — лицом от оси (середина на оси), внутри — лицом к оси (середина далеко снаружи)
 			var inside := axis + (mid - axis) * 4.0 if inner else axis
-			KrabView._tri(st, a, b, d, col, inside)
-			KrabView._tri(st, b, e, d, col, inside)
+			EcoMM.tri(st, a, b, d, col, inside)
+			EcoMM.tri(st, b, e, d, col, inside)
 
 
 ## Эллипсоид с центром c и полуосями r; stripes — бледные полосы поперёк спины (по z), col — цвет без полос.
 static func _blob(st: SurfaceTool, c: Vector3, r: Vector3, seg: int, rings: int, stripes: bool,
 		col: Color = SKIN) -> void:
-	var pts: Array = []
-	for i in rings + 1:
-		var th := PI * float(i) / rings
-		var row: Array[Vector3] = []
-		for j in seg:
-			var ph := TAU * float(j) / seg
-			row.append(c + Vector3(sin(th) * cos(ph) * r.x, cos(th) * r.y, sin(th) * sin(ph) * r.z))
-		pts.append(row)
+	var pts := EcoMM.ellipsoid_rows(c, r, seg, rings)
 	for i in rings:
 		for j in seg:
 			var a: Vector3 = pts[i][j]
@@ -216,5 +307,5 @@ static func _blob(st: SurfaceTool, c: Vector3, r: Vector3, seg: int, rings: int,
 				k = STRIPE if posmod(int(floor(mid.z / 0.32)), 2) == 0 else SKIN_LIT
 			elif mid.y < c.y - r.y * 0.4:
 				k = col.darkened(0.35)
-			KrabView._tri(st, a, b, d, k, c)
-			KrabView._tri(st, b, e, d, k, c)
+			EcoMM.tri(st, a, b, d, k, c)
+			EcoMM.tri(st, b, e, d, k, c)

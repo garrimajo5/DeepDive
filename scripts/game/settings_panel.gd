@@ -3,7 +3,7 @@ extends CanvasLayer
 ## Настройки ART-037 поверх затемнённой сцены (`main.settings_panel`, `menyu-nastrojki.png`): заголовок, «Назад»,
 ## ползунки громкости и свайпа со значениями, страницы «Графика», «Звук» (шины `SoundPage`) и «Голос», «Камера с борта в начале забега» Вкл/Выкл, «Сбросить сохранение» и его
 ## подтверждение с выделенным «Нет». Состояние и места — `Settings`, масштаб — `Splash`, палитра — `MainMenu`.
-## Слой выше главного меню и паузы (их 90), ниже заставки прогрева (100). Касания — `Main._settings_step`.
+## Слой выше главного меню и паузы (их 90), ниже заставки прогрева (100). Касания — `MenuFlow.settings_step`.
 
 const LAYER := 91
 
@@ -15,12 +15,7 @@ func _init() -> void:
 	name = "Настройки"
 	layer = LAYER
 	visible = false
-	draw = Control.new()
-	draw.name = "Поля"
-	draw.set_anchors_preset(Control.PRESET_FULL_RECT)
-	draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	draw.draw.connect(_draw_settings)
-	add_child(draw)
+	draw = UiStyle.canvas(self, "Поля", _draw_settings)
 
 
 func show_settings(s: Settings) -> void:
@@ -63,18 +58,12 @@ func _draw_settings() -> void:
 	if not settings.ask:
 		return
 	draw.draw_rect(Rect2(Vector2.ZERO, size), Color(MainMenu.DARK, 0.45))
-	var sb := StyleBoxFlat.new()
-	sb.set_corner_radius_all(roundi(MainMenu.RADIUS * s))
-	sb.anti_aliasing = true
-	sb.bg_color = Color(MainMenu.PANEL, 0.97)
-	sb.set_border_width_all(maxi(1, roundi(2.0 * s)))
-	sb.border_color = MainMenu.EDGE
-	draw.draw_style_box(sb, Splash.rect_to_screen(Pause.BOX, size))
+	draw.draw_style_box(UiStyle.dialog(s), Splash.rect_to_screen(Pause.BOX, size))
 	for i in Settings.ASK.size():
 		if i == 0:
-			_center(font, Settings.ASK[0], Pause.ASK_TOP, Pause.ASK_PX * s, MainMenu.INK, size)
+			UiStyle.center(draw, font, Settings.ASK[0], Pause.ASK_TOP, Pause.ASK_PX * s, MainMenu.INK, size)
 		else:
-			_center(font, Settings.ASK[i], Pause.LINE_TOP + Pause.LINE_STEP * (i - 1), Pause.LINE_PX * s,
+			UiStyle.center(draw, font, Settings.ASK[i], Pause.LINE_TOP + Pause.LINE_STEP * (i - 1), Pause.LINE_PX * s,
 				MainMenu.SOFT, size)
 	_button(font, Settings.screen_rect("yes", size), "Да", false, 1.0, s)
 	_button(font, Settings.screen_rect("no", size), "Нет", true, 1.0, s)   # выделено «Нет»
@@ -153,27 +142,15 @@ func _slider(y: float, f: float, held: bool, k: float, s: float, size: Vector2,
 
 
 func _button(font: Font, r: Rect2, text: String, main_btn: bool, k: float, s: float) -> void:
-	var sb := StyleBoxFlat.new()
-	sb.set_corner_radius_all(roundi(MainMenu.RADIUS * s))
-	sb.anti_aliasing = true
-	if main_btn:
-		sb.bg_color = Color(MainMenu.MAIN, k)
-	else:
-		sb.bg_color = Color(MainMenu.PANEL, 0.92 * k)
-		sb.set_border_width_all(maxi(1, roundi(2.0 * s)))
-		sb.border_color = Color(MainMenu.EDGE, k)
-	draw.draw_style_box(sb, r)
+	draw.draw_style_box(UiStyle.menu_button(main_btn, s, 0.92, 1.0, k), r)
 	var col := MainMenu.DARK if main_btn else MainMenu.INK
 	var px := Settings.BUTTON_PX * s
-	var base := r.position.y + r.size.y * 0.5 + Splash.CAP_H * px * 0.5
-	draw.draw_string(font, Vector2(r.position.x, base), text, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, roundi(px),
-		Color(col, k))
+	UiStyle.label(draw, font, text, r, px, Color(col, k))
 
 
 ## Строка от левого края at.x макета, at.y — верх видимых глифов.
 func _text(font: Font, text: String, at: Vector2, px: float, color: Color, size: Vector2) -> void:
-	var p := Splash.to_screen(at, size)
-	draw.draw_string(font, Vector2(p.x, p.y + Splash.CAP_H * px), text, HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(px), color)
+	UiStyle.text(draw, font, text, Splash.to_screen(at, size), px, color)
 
 
 ## Значение ползунка: правый край — `Settings.VALUE_RIGHT`.
@@ -185,11 +162,4 @@ func _value(font: Font, text: String, top: float, px: float, color: Color, size:
 func _value_at(font: Font, text: String, right: float, top: float, px: float, color: Color, size: Vector2) -> void:
 	var p := Splash.to_screen(Vector2(right, top), size)
 	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(px)).x
-	draw.draw_string(font, Vector2(p.x - w, p.y + Splash.CAP_H * px), text, HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(px),
-		color)
-
-
-func _center(font: Font, text: String, top: float, px: float, color: Color, size: Vector2) -> void:
-	var y := Splash.to_screen(Vector2(0.0, top), size).y
-	draw.draw_string(font, Vector2(0.0, y + Splash.CAP_H * px), text, HORIZONTAL_ALIGNMENT_CENTER, size.x, roundi(px),
-		color)
+	UiStyle.text(draw, font, text, Vector2(p.x - w, p.y), px, color)

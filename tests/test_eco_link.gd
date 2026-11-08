@@ -171,6 +171,16 @@ class Probe:
 		out.append(EcoWorld.target("fish", Vector3(0, 0, 5), 2.5, true, true))
 
 
+## Стая: много целей одного вида — сканеру нужна только ближняя (#738).
+class Crowd:
+	extends EcoSystem
+	func targets(_world: EcoWorld, out: Array[Dictionary]) -> void:
+		for i in 40:
+			out.append(EcoWorld.target("fish", Vector3(0, 0, 50.0 - i), 1.0))
+		out.append(EcoWorld.target("grazer", Vector3(20, 0, 0), 1.4, false))
+		out.append(EcoWorld.target("grazer", Vector3(5, 0, 0), 1.4, false))
+
+
 static func _near(events: Array[Dictionary]) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for e in events:
@@ -266,6 +276,40 @@ func test_near_sonar_hidden_and_scanner() -> void:
 	w.ship.sonar_ping = false
 	w.step(0.05)
 	eq(_near(w.take_link()).size(), 1, "дальность прицела 10 м: только скребун")
+
+
+## Всплеск шага мира у сканера (#738): раньше сканер получал NEAR на каждое существо ближе 80 м (сотня событий
+## в шаг) — теперь одно на вид, ближнее. Импульс сонара по-прежнему отмечает всех.
+func test_scanner_gets_nearest_per_species() -> void:
+	var w := EcoWorld.new()
+	w.add(Crowd.new())
+	w.ship.scan_range = 80.0
+	w.step(0.05)
+	var got := _near(w.take_link())
+	eq(got.size(), 2, "одно событие на вид")
+	eq(got[0]["species"], "grazer", "ближняя первой")
+	near(got[0]["dist"], 5.0, 1e-4, "ближний скребун")
+	near(got[1]["dist"], 11.0, 1e-4, "ближняя рыба стаи")
+	for e in got:
+		ok(e["scan"] and not e["sonar"], "только сканеру")
+	w.ship.sonar_ping = true
+	w.ship.sonar_range = 100.0
+	w.step(0.05)
+	got = _near(w.take_link())
+	var sonar := 0
+	var scan := 0
+	for e in got:
+		sonar += int(e["sonar"])
+		scan += int(e["scan"])
+	eq(sonar, 40, "импульс: все рыбы стаи на сонаре")
+	eq(scan, 2, "сканеру — по одной на вид")
+	eq(got.size(), 41, "одно существо — одно событие (скребун сонару не виден, дальний — не нужен)")
+	ok(got[0]["scan"] and got[0]["species"] == "grazer", "ближний скребун — прицелу")
+
+
+func test_species_info_shared() -> void:
+	ok(Species.info("fish") == Species.info("fish"), "обёртка вида одна — названия не создают объектов каждый шаг")
+	eq(Species.info("нет такого"), null)
 
 
 func test_near_reaches_sonar_table() -> void:
@@ -830,5 +874,160 @@ func test_echo_fake_reaches_comms() -> void:   # подделка эхоловц
 	eq(main.comms.cur.ask, EcoEcho.ASK_PING, "просит импульс")
 	eq(main.comms.cur.reply, "", "первый спуск — молчит на «Спросить код»")
 	eq(main.sonar.count, 0, "импульса корабль сам не дал")
+	main.queue_free()
+	await frames(1)
+
+
+func test_world_packet_parsed_once() -> void:   # #850: гость размечает пакет один раз, не по разу на каждую часть
+	var h := _moss_world()
+	h.add(EcoFish.new())
+	var spots: Array[Vector3] = [Vector3(0, -20, 0)]
+	h.add(EcoKelp.new(null, spots))
+	var rd_homes: Array[Vector2] = [Vector2(0, 0)]
+	var pl_homes: Array[Vector2] = [Vector2(0, 10)]
+	h.add(EcoRaduzh.new(rd_homes))
+	var pl := h.add(EcoPlankton.new(null, null, pl_homes)) as EcoPlankton
+	h.reset()
+	h.run(5.0)
+	pl.clouds[0].cut_at = h.time - 0.2   # облако светится — едет
+	var spot := EcoLink.mosses(h.systems)[0].patches[0].pos
+	var d := EcoLink.pack_world(h.agents, h.systems, Vector3(spot.x, -20, spot.z), 5000.0, h.time)
+	var at := EcoLink.parts(d)
+	for m in [EcoLink.NET_MOSS, EcoLink.NET_SHOAL, EcoLink.NET_COINS, EcoLink.NET_KELP, EcoLink.NET_RADUZH,
+			EcoLink.NET_PLANKTON, EcoLink.NET_TIME]:
+		var from: int = at[-2 * m]
+		var to: int = at[-2 * m + 1]
+		ok(from > 0 and to > from, "часть %d в пакете" % m)
+		eq(int(d[from - 1]), m, "перед частью %d — её метка" % m)
+		eq((to - from) % EcoLink._stride(m), 0, "в части %d целые записи" % m)
+		ok(to == d.size() or int(d[to]) < 0, "часть %d кончается меткой или концом" % m)
+	near(EcoLink.net_time(d, at), h.time, 1e-3, "время из разметки")
+	var g := _moss_world()
+	g.add(EcoFish.new())
+	g.add(EcoKelp.new(null, spots))
+	g.add(EcoRaduzh.new(rd_homes))
+	g.add(EcoPlankton.new(null, null, pl_homes))
+	g.reset(EcoRandom.WORLD_SEED + 3)
+	var before := EcoLink.scans
+	ok(EcoLink.apply_world(g.agents, g.systems, d, g) > 0, "мох поставлен")
+	eq(EcoLink.scans - before, 1, "пакет размечен один раз")
+	eq(EcoLink.parts(PackedFloat32Array())[-2 * EcoLink.NET_MOSS], -1, "пустой пакет — частей нет")
+
+
+func test_world_packet_has_no_empty_parts() -> void:   # метка без записей снимается — пакет как прежде
+	var h := _moss_world()
+	var d := EcoLink.pack_world(h.agents, h.systems, Vector3(5000, 0, 5000))
+	eq(d.size(), 0, "вдали — пустой пакет, без голых меток")
+
+
+func test_field_rhythm_learns_08() -> void:   # #833: ритм поля из мира — знание «поле 08» и строка на приборах
+	var e := EcoLink.field(2.4, "ритм")
+	eq([e["type"], e["period"], e["text"]], [EcoLink.FIELD, 2.4, "ритм"], "поля события")
+	near(float(EcoLink.field(-1.0, "")["period"]), 0.0, 1e-6, "период не отрицательный")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	ok(not main.lore.knows(LayerLore.FIELD08), "до события поле не замечено")
+	main.on_eco_event(e)
+	ok(main.lore.knows(LayerLore.FIELD08), "событие ставит знание")
+	eq(main.message.text, "ритм", "строка мира на приборах")
+	main.queue_free()
+	await frames(1)
+
+
+func test_shell_inspected_learns_03() -> void:   # #835: Раковина осмотрена сканером и сонаром — знание «осмотр 03»
+	var e := EcoLink.shell("постройка")
+	eq([e["type"], e["text"]], [EcoLink.SHELL, "постройка"], "поля события")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	ok(not main.lore.knows(LayerLore.SHELL03), "до события Раковина не осмотрена")
+	main.on_eco_event(e)
+	ok(main.lore.knows(LayerLore.SHELL03), "событие ставит знание")
+	eq(main.message.text, "постройка", "строка мира на приборах")
+	main.queue_free()
+	await frames(1)
+
+
+func test_petal_opened_learns_07() -> void:   # #837: купольник открыл створку — знание в кампании, строка один раз
+	var e := EcoLink.petal(0, "створка")
+	eq([e["type"], e["nest"], e["text"]], [EcoLink.PETAL, 0, "створка"], "поля события")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	ok(not main.lore.knows(LayerLore.PETAL07), "до события створка закрыта")
+	ok(not main._fill_ship_state(true).petal_open, "мир не знает о створке")
+	main.on_eco_event(e)
+	ok(main.lore.knows(LayerLore.PETAL07), "событие ставит знание")
+	eq(main.message.text, "створка", "строка мира на приборах")
+	ok(main._fill_ship_state(false).petal_open, "мир (и у гостя) знает: створка открыта")
+	main.say("другое")
+	main.on_eco_event(e)
+	eq(main.message.text, "другое", "второе событие строку не повторяет")
+	main.queue_free()
+	await frames(1)
+
+
+## Отчёт QA 2026-11-05-2015: на итоге забега «Крупный хищник укусил корпус», а удара нет (#1249 гасил только удар).
+## Корабль под защитой — `ShipState.shielded`: в мире нет ни удара, ни строки «укусил корпус».
+func test_shielded_ship_no_bite_text() -> void:
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float: return -40.0
+	var preds := w.add(EcoPred.new()) as EcoPred
+	var pr := preds.all[0]
+	pr.hunger = 0.5
+	pr.cooldown = 0.0
+	w.ship.pos = pr.agent.p + Vector3(9, 0, 0)
+	w.ship.light_on = true
+	w.ship.shielded = true
+	var link: Array[Dictionary] = []
+	for i in 200:
+		w.step(EcoWorld.MAX_STEP)
+		link.append_array(w.take_link())
+	eq(w.hits, 0, "под защитой хищник не бьёт")
+	ok(not link.any(func(e: Dictionary) -> bool: return e["type"] == EcoLink.HIT), "удара кораблю нет")
+	ok(not link.any(func(e: Dictionary) -> bool: return str(e.get("text", "")).contains("укусил")),
+		"и строки «укусил корпус» нет")
+	ok(not w.hit_ship("Серпохвост", 0.12, w.ship.pos), "hit_ship под защитой — false")
+	w.ship.shielded = false
+	ok(w.hit_ship("Серпохвост", 0.12, w.ship.pos), "без защиты удар засчитан")
+	eq(w.hits, 1)
+
+
+func test_ship_shielded_after_summary() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var fake := FakeEco.new()
+	main.eco.queue_free()
+	main.eco = fake
+	main.add_child(fake)
+	main.step(0.1)
+	ok(not fake.got.shielded, "в забеге существа бьют")
+	main.run.ended = true
+	main.step(0.1)
+	ok(fake.got.shielded, "на итоге забега мир знает: корабль под защитой")
+	main.queue_free()
+
+
+func test_solid_grot_blocks_ship() -> void:   # гротовик с рифом — твёрдый для хода корабля (EcoLink.solid)
+	eq(EcoLink.solid([], Vector3.ZERO, 0.0), false, "нет мира — ничего твёрдого")
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float: return -40.0
+	w.ship.pos = Vector3(500, -30, 500)
+	var g := w.add(EcoGrot.new()) as EcoGrot
+	var at := Vector3(g.grot.p.x, -40.0 + Helm.Ship.CLEARANCE, g.grot.p.z)
+	ok(EcoLink.solid(w.systems, at, 0.0), "корабль в гротовике — твёрдое")
+	ok(not EcoLink.solid(w.systems, at + Vector3(80, 0, 0), 0.0), "в 80 м — свободно")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var gr: EcoGrot = null
+	for s in main.eco.world.systems:
+		if s is EcoGrot:
+			gr = s
+	ok(gr != null, "гротовик в мире")
+	var p := Vector3(gr.grot.p.x, gr.grot.body_y + 2.0, gr.grot.p.z)
+	ok(main.helm.solid.call(p, 0.0), "ход корабля упирается в гротовика")
 	main.queue_free()
 	await frames(1)

@@ -4,7 +4,7 @@ extends RefCounted
 ## громкость товарищей (ползунок), микрофон — статус разрешения Android, режим «Нажать и держать» / «По голосу» с
 ## подписью, переключатели «Звук товарищей» и «Микрофон» (приём и микрофон независимы). Значения хранит `Settings`
 ## (`mates`, `voice_mode`, `hear`, `mic_on`), страницу открывает `Settings.page` = "golos", в рацию переносит
-## `Main._apply_settings` (`Radio.mode`, `hear`, `mic_on`, `volume`), рисует `SettingsPanel`. Макет 2400×1080 через
+## `MenuFlow.apply_settings` (`Radio.mode`, `hear`, `mic_on`, `volume`), рисует `SettingsPanel`. Макет 2400×1080 через
 ## `Splash`; заголовок и «Назад» — на местах страницы «Графика» ART-044.
 
 const TITLE := "Настройки · Голос"

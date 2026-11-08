@@ -119,6 +119,23 @@ static func page_lines(s: Samples, sc: Scanner, page: int) -> PackedStringArray:
 	return card_lines(sc, ids[page - 1], page, ids.size())
 
 
+
+## Экран журнала без пересчёта каждый кадр (#847): строки (сводка — перебор груза, карточки — 100 видов реестра)
+## считаются заново, только когда сменились груз (`Samples.cargo_rev`), изученное (`Scanner.rev`) или страница.
+class Screen:
+	extends RefCounted
+	var builds := 0                      ## сколько раз строки считались (для теста)
+	var _key := []
+	var _lines := PackedStringArray()
+
+	func lines(s: Samples, sc: Scanner, page: int) -> PackedStringArray:
+		var key := [s.cargo_rev, s.cargo.size(), s.got.size(), sc.rev, sc.scanned.size(), page]
+		if key != _key:
+			_key = key
+			_lines = Lab.page_lines(s, sc, page)
+			builds += 1
+		return _lines
+
 ## Сообщение по кнопке у журнала.
 static func journal_info(s: Samples) -> String:
 	var kinds := {}

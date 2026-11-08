@@ -59,6 +59,28 @@ static func seeded_for(s: int) -> EcoRandom:
 	return EcoRandom.new(s)
 
 
+## Один постановочный эпизод угрозы у корабля за раз (#834): бросок серпохвоста к кораблю, стеклоуст к стеклу и на
+## стекле. Кто идёт к кораблю, держит эпизод (`hold_threat` каждый шаг); другой начинает свой, только когда эпизод
+## свободен (`threat_free`) — через THREAT_HOLD с после конца прежнего.
+const THREAT_HOLD := 1.0
+var _threat := 0
+var _threat_until := -INF
+
+
+func threat_free(who: Object) -> bool:
+	return _threat == 0 or _threat == who.get_instance_id() or time > _threat_until
+
+
+func hold_threat(who: Object) -> void:
+	_threat = who.get_instance_id()
+	_threat_until = time + THREAT_HOLD
+
+
+## Кто держит эпизод угрозы сейчас (id объекта, 0 — никто).
+func threat_holder() -> int:
+	return _threat if time <= _threat_until else 0
+
+
 ## Подключить модуль: он сразу расставляет своих существ.
 func add(system: EcoSystem) -> EcoSystem:
 	systems.append(system)
@@ -81,6 +103,8 @@ func reset(world_seed: int = -1) -> void:
 	hits = 0
 	last_hit = {}
 	last_ping = -99.0
+	_threat = 0
+	_threat_until = -INF
 	for s in systems:
 		s.reset(self)
 
@@ -94,10 +118,15 @@ func step(dt: float) -> void:
 		last_ping = time
 		for s in systems:
 			s.on_ping(self, ship.pos)
+		var f := EcoField.rhythm(ship)   # ритм пограничного поля — только с площадки 08 (#833)
+		if not f.is_empty():
+			_link.append(f)
 	if ship.zap:
 		var r := ship.zap_radius if ship.zap_radius > 0.0 else ZAP_RADIUS
 		for s in systems:
 			s.on_zap(self, r)
+	if ship.sonar_ping or ship.zap:
+		StepClock.mark("мир/импульс, разряд")   # модули узнают импульс и разряд — своя подчасть (#1020)
 	var n := maxi(1, int(ceil(dt / SLOW_STEP - 1e-4)))
 	var h := dt / n
 	for i in n:
@@ -105,8 +134,10 @@ func step(dt: float) -> void:
 		steps += 1
 		for a in agents:
 			a.tick(h)
+		StepClock.mark("мир/существа")   # подчасти «мира» в логе тестера (#1020)
 		for s in systems:
 			s.step(self, h)
+			StepClock.mark("мир/" + _sys_name(s))
 	for by in _drain:
 		_link.append(EcoLink.drain(by, _drain[by]))
 	_drain.clear()
@@ -115,6 +146,19 @@ func step(dt: float) -> void:
 	_drag.clear()
 	if ship.sonar_ping or ship.scan_range > 0.0:
 		_send_near()
+	StepClock.mark("мир/события")   # сток, тяга и существа рядом — не в первую группу видов (#1020)
+
+
+## Имя модуля для лога тестера: class_name его скрипта (#1020), запоминается.
+var _names := {}
+func _sys_name(s: EcoSystem) -> String:
+	var n: String = _names.get(s, "")
+	if n.is_empty():
+		n = str(s.get_script().get_global_name())
+		if n.is_empty():
+			n = "модуль"
+		_names[s] = n
+	return n
 
 
 ## Цель для сонара и сканера (элемент E.scanTargets): вид, где, размер для прицела r (м); sonar — видна ли сонару,
@@ -133,16 +177,47 @@ func scan_targets() -> Array[Dictionary]:
 
 ## NEAR для корабля в конце шага: отметки сонара (импульс в этот шаг, по горизонтали ближе sonar_range — как
 ## So.blips в js/sonar.js) и цели сканера (ближе scan_range, не спрятавшиеся). Ближние первыми.
+## Сканеру нужна только ближняя цель каждого вида (Scanner.take выбирает по виду), поэтому для сканера идёт одно
+## событие на вид — ближнее; без импульса это десятки событий в шаг вместо сотни (issue #738: всплеск «мира» у поста).
 func _send_near() -> void:
 	var sp := ship.pos
-	var found: Array[Dictionary] = []
+	var scan2 := ship.scan_range * ship.scan_range if ship.scan_range > 0.0 else -1.0
+	var sonar2 := ship.sonar_range * ship.sonar_range if ship.sonar_ping else -1.0
+	var best := {}   # вид → [квадрат расстояния, номер цели] — ближняя цель вида для сканера
+	var cand: Array[Dictionary] = []
+	var d2s: PackedFloat32Array = []
+	var sonar_hit: Array[bool] = []
 	for t in scan_targets():
 		var p: Vector3 = t["pos"]
-		var on_sonar: bool = ship.sonar_ping and t["sonar"] \
-				and Vector2(p.x - sp.x, p.z - sp.z).length() < ship.sonar_range
-		var on_scan: bool = ship.scan_range > 0.0 and not t["hidden"] and p.distance_to(sp) <= ship.scan_range
-		if on_sonar or on_scan:
-			found.append(EcoLink.near(t["species"], nm(t["species"]), p, sp, t["r"], on_sonar, on_scan))
+		var dx := p.x - sp.x
+		var dz := p.z - sp.z
+		var on_sonar: bool = sonar2 >= 0.0 and t["sonar"] and dx * dx + dz * dz < sonar2
+		var d2 := p.distance_squared_to(sp)
+		var on_scan: bool = scan2 >= 0.0 and not t["hidden"] and d2 <= scan2
+		if not on_sonar and not on_scan:
+			continue
+		if on_scan:
+			var sk: String = t["species"]
+			var b: Variant = best.get(sk)
+			if b == null or d2 < b[0]:
+				best[sk] = [d2, cand.size()]
+		cand.append(t)
+		d2s.append(d2)
+		sonar_hit.append(on_sonar)
+	var scan_at := {}
+	for sk in best:
+		scan_at[best[sk][1]] = true
+	var names := {}
+	var found: Array[Dictionary] = []
+	for i in cand.size():
+		var on_scan := scan_at.has(i)
+		if not sonar_hit[i] and not on_scan:
+			continue
+		var t := cand[i]
+		var sk: String = t["species"]
+		if not names.has(sk):
+			names[sk] = nm(sk)
+		found.append(EcoLink.near(sk, names[sk], t["pos"], sp, t["r"], sonar_hit[i], on_scan))
 	found.sort_custom(func(a, b): return a["dist"] < b["dist"])
 	_link.append_array(found)
 
@@ -215,10 +290,14 @@ func emit(species: String, note: String, pos: Vector3, message: Callable = Calla
 
 
 ## Существо ударило по корпусу (Game.hullHit): мир только сообщает кораблю, урон — доля прочности 0…1.
-func hit_ship(by: String, damage: float, at: Vector3) -> void:
+## Корабль под защитой (`ShipState.shielded`) — удара нет, false: строку об ударе вид тогда не шлёт.
+func hit_ship(by: String, damage: float, at: Vector3) -> bool:
+	if ship.shielded:
+		return false
 	hits += 1
 	last_hit = EcoLink.hit(by, damage, at)
 	_link.append(last_hit)
+	return true
 
 
 ## Корпус корабля не пускает существо внутрь (S.pushOut): место наружу с запасом r, скорость внутрь гасится.

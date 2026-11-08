@@ -5,7 +5,7 @@ extends CanvasLayer
 ## «Далее», карточка вида поверх; пустой журнал — одна строка. Рисунков видов пока нет — в карточке на месте картинки
 ## описание вида (`Species.Info.desc`). Состояние и
 ## места — `Journal`, история — `Expedition`. Слой над главным меню (его 90), ниже заставки прогрева (100); касания —
-## `Touch.Router.taps` (`Main._journal_step`).
+## `Touch.Router.taps` (`MenuFlow.journal_step`).
 
 const DIM := 0.7   ## затемнение фона: текст читается на любом месте
 
@@ -16,6 +16,7 @@ var scanner: Scanner
 var species_total := 0
 var cargo_n := 0
 var broken := false
+var lore: LayerLore   ## знания слоя: подпись «граница» у 08 (#829)
 var draw: Control
 var _icons := {}
 
@@ -23,34 +24,13 @@ var _icons := {}
 func _init() -> void:
 	name = "Журнал экспедиции"
 	layer = 91
-	var dark := ColorRect.new()
-	dark.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dark.color = Journal.DARK
-	add_child(dark)
-	var bg := TextureRect.new()
-	bg.name = "Фон"
-	bg.texture = load(Splash.BG)
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
-	var dim := ColorRect.new()
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dim.color = Color(Journal.DARK, DIM)
-	add_child(dim)
-	draw = Control.new()
-	draw.name = "Страница"
-	draw.set_anchors_preset(Control.PRESET_FULL_RECT)
-	draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	draw.draw.connect(_draw_page)
-	add_child(draw)
+	draw = UiStyle.screen(self, "Страница", _draw_page, Journal.DARK, Color(Journal.DARK, DIM))
 
 
-func show_journal(j: Journal, e: Expedition, sc: Scanner, total: int, cargo: int, was_broken: bool) -> void:
+func show_journal(j: Journal, e: Expedition, sc: Scanner, total: int, cargo: int, was_broken: bool,
+		known: LayerLore = null) -> void:
 	journal = j
+	lore = known
 	expedition = e
 	scanner = sc
 	species_n = sc.scanned.size() if sc else 0
@@ -71,19 +51,7 @@ func _icon(path: String) -> Texture2D:
 
 
 func _box(r: Rect2, s: float, edge: Color, width: float, fill := Color(Journal.PANEL, 0.92)) -> void:
-	var sb := StyleBoxFlat.new()
-	sb.set_corner_radius_all(roundi(12.0 * s))
-	sb.anti_aliasing = true
-	sb.bg_color = fill
-	sb.set_border_width_all(maxi(1, roundi(width * s)))
-	sb.border_color = edge
-	draw.draw_style_box(sb, r)
-
-
-## Строка: at — левый край и верх видимых глифов на экране.
-func _text(font: Font, text: String, at: Vector2, px: float, color: Color, width := -1.0,
-		align := HORIZONTAL_ALIGNMENT_LEFT) -> void:
-	draw.draw_string(font, at + Vector2(0.0, Splash.CAP_H * px), text, align, width, roundi(px), color)
+	draw.draw_style_box(UiStyle.box(fill, 12.0 * s, edge, width * s), r)
 
 
 func _draw_page() -> void:
@@ -93,16 +61,16 @@ func _draw_page() -> void:
 	var s := Journal.scale(size)
 	var l := Journal.left(size) * s
 	var font := draw.get_theme_default_font()
-	_text(font, Journal.TITLE, Vector2(l, Journal.TITLE_AT.y * s), Journal.TITLE_PX * s, Journal.INK)
+	UiStyle.text(draw, font, Journal.TITLE, Vector2(l, Journal.TITLE_AT.y * s), Journal.TITLE_PX * s, Journal.INK)
 	var back := Journal.back_rect(size)
 	_box(back, s, Journal.EDGE, 2.0)
 	var bpx := Journal.LABEL_PX * s
-	_text(font, "Назад", Vector2(back.position.x, back.get_center().y - Splash.CAP_H * bpx * 0.5), bpx, Journal.INK,
-		back.size.x, HORIZONTAL_ALIGNMENT_CENTER)
+	UiStyle.text(draw, font, "Назад", Vector2(back.position.x, back.get_center().y - Splash.CAP_H * bpx * 0.5), bpx,
+		Journal.INK, back.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 	if broken:
-		_text(font, Journal.BROKEN_LINE, Vector2(l, 150.0 * s), 28.0 * s, Journal.SOFT)
+		UiStyle.text(draw, font, Journal.BROKEN_LINE, Vector2(l, 150.0 * s), 28.0 * s, Journal.SOFT)
 	if Journal.empty(expedition, species_n, cargo_n):
-		_text(font, Journal.EMPTY_LINE, Vector2(0.0, 480.0 * s), 38.0 * s, Journal.INK, size.x,
+		UiStyle.text(draw, font, Journal.EMPTY_LINE, Vector2(0.0, 480.0 * s), 38.0 * s, Journal.INK, size.x,
 			HORIZONTAL_ALIGNMENT_CENTER)
 		return
 	_draw_map(font, size, s, l)
@@ -115,11 +83,11 @@ func _draw_page() -> void:
 		if tex:
 			var side := Journal.SUMMARY_ICON * s
 			draw.draw_texture_rect(tex, Rect2(r, top + Splash.CAP_H * px * 0.5 - side * 0.5, side, side), false)
-		_text(font, rows[i][1], Vector2(r + Journal.SUMMARY_AT.x * s, top), px, Journal.INK)
+		UiStyle.text(draw, font, rows[i][1], Vector2(r + Journal.SUMMARY_AT.x * s, top), px, Journal.INK)
 	var foot := journal.footer(expedition)
 	for i in foot.size():
-		_text(font, foot[i][0], Vector2(l + Journal.FOOT_AT.x * s, (Journal.FOOT_AT.y + Journal.FOOT_STEP[i]) * s),
-			Journal.FOOT_PX[i] * s, foot[i][1])
+		UiStyle.text(draw, font, foot[i][0], Vector2(l + Journal.FOOT_AT.x * s,
+			(Journal.FOOT_AT.y + Journal.FOOT_STEP[i]) * s), Journal.FOOT_PX[i] * s, foot[i][1])
 	_draw_grid(font, size, s, r)
 	if journal.card != "" and scanner:
 		_draw_card(font, size, s)
@@ -130,7 +98,7 @@ func _button(font: Font, rect: Rect2, s: float, label: String, off := false) -> 
 	_box(rect, s, Color(Journal.EDGE, 0.5) if off else Journal.EDGE, 2.0,
 		Color(Journal.PANEL, 0.5 if off else 0.92))
 	var px := Journal.LABEL_PX * s
-	_text(font, label, Vector2(rect.position.x, rect.get_center().y - Splash.CAP_H * px * 0.5), px,
+	UiStyle.text(draw, font, label, Vector2(rect.position.x, rect.get_center().y - Splash.CAP_H * px * 0.5), px,
 		Journal.OFF if off else Journal.INK, rect.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 
 
@@ -140,12 +108,12 @@ func _fit(font: Font, text: String, rect: Rect2, top: float, px: float, color: C
 	var pad := rect.size.x * 0.06
 	if w > rect.size.x - pad * 2.0:
 		px *= (rect.size.x - pad * 2.0) / w
-	_text(font, text, Vector2(rect.position.x, top), px, color, rect.size.x, HORIZONTAL_ALIGNMENT_CENTER)
+	UiStyle.text(draw, font, text, Vector2(rect.position.x, top), px, color, rect.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 
 
 func _draw_grid(font: Font, size: Vector2, s: float, r: float) -> void:
-	_text(font, Journal.grid_title(journal.page), Vector2(r, Journal.GRID_TITLE_TOP * s), Journal.GRID_TITLE_PX * s,
-		Journal.SOFT)
+	UiStyle.text(draw, font, Journal.grid_title(journal.page), Vector2(r, Journal.GRID_TITLE_TOP * s),
+		Journal.GRID_TITLE_PX * s, Journal.SOFT)
 	var scanned: Dictionary = scanner.scanned if scanner else {}
 	var ids := Journal.page_ids(journal.page)
 	for i in ids.size():
@@ -162,21 +130,22 @@ func _draw_grid(font: Font, size: Vector2, s: float, r: float) -> void:
 					Journal.NEW_BADGE.x * s, Journal.NEW_BADGE.y * s)
 				_box(b, s, Journal.MAIN, 1.0, Journal.MAIN)
 				var bpx := 24.0 * s
-				_text(font, Journal.NEW_TEXT, Vector2(b.position.x, b.get_center().y - Splash.CAP_H * bpx * 0.5), bpx,
+				UiStyle.text(draw, font, Journal.NEW_TEXT, Vector2(b.position.x,
+					b.get_center().y - Splash.CAP_H * bpx * 0.5), bpx,
 					Journal.DARK, b.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 		elif journal.asked == id:
 			_fit(font, Journal.CELL_HINT[0], c, c.position.y + 46.0 * s, Journal.CELL_NAME_PX * s, Journal.SOFT)
 			_fit(font, Journal.CELL_HINT[1], c, c.position.y + 90.0 * s, Journal.CELL_NAME_PX * s, Journal.SOFT)
 		else:
-			_text(font, "?", Vector2(c.position.x, c.position.y + 30.0 * s), Journal.CELL_ASK_PX * s, Journal.OFF,
-				c.size.x, HORIZONTAL_ALIGNMENT_CENTER)
+			UiStyle.text(draw, font, "?", Vector2(c.position.x, c.position.y + 30.0 * s), Journal.CELL_ASK_PX * s,
+				Journal.OFF, c.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 			_fit(font, Journal.CELL_OFF, c, c.end.y - 48.0 * s, Journal.CELL_NAME_PX * s, Journal.OFF)
 	_button(font, Journal.prev_rect(size), s, "Ранее", journal.page <= 0)
 	_button(font, Journal.next_rect(size), s, "Далее", journal.page >= Journal.pages() - 1)
 	var pc := Journal.page_center(size)
 	var px := Journal.LABEL_PX * s
-	_text(font, "%d / %d" % [journal.page + 1, Journal.pages()], Vector2(pc.x - 120.0 * s, pc.y - Splash.CAP_H * px * 0.5),
-		px, Journal.INK, 240.0 * s, HORIZONTAL_ALIGNMENT_CENTER)
+	UiStyle.text(draw, font, "%d / %d" % [journal.page + 1, Journal.pages()], Vector2(pc.x - 120.0 * s,
+		pc.y - Splash.CAP_H * px * 0.5), px, Journal.INK, 240.0 * s, HORIZONTAL_ALIGNMENT_CENTER)
 
 
 ## Текст с переносом по словам; at — верх глифов первой строки. Возвращает верх следующего абзаца.
@@ -186,8 +155,8 @@ func _wrap(font: Font, text: String, at: Vector2, width: float, px: float, color
 	para.add_string(text, font, roundi(px))
 	var top := at.y
 	for i in para.get_line_count():
-		_text(font, text.substr(para.get_line_range(i).x, para.get_line_range(i).y - para.get_line_range(i).x).strip_edges(),
-			Vector2(at.x, top), px, color)
+		UiStyle.text(draw, font, text.substr(para.get_line_range(i).x,
+			para.get_line_range(i).y - para.get_line_range(i).x).strip_edges(), Vector2(at.x, top), px, color)
 		top += px * 1.35
 	return top + gap
 
@@ -199,18 +168,18 @@ func _draw_card(font: Font, size: Vector2, s: float) -> void:
 	_box(rect, s, Journal.EDGE, 2.0, Color(Journal.PANEL, 0.98))
 	var lines := Journal.card_text(scanner, journal.card)
 	var o := rect.position
-	_text(font, lines[0], o + Vector2(48, 48) * s, 24.0 * s, Journal.SOFT)
-	_text(font, lines[1], o + Vector2(48, 100) * s, 44.0 * s, Journal.INK)
+	UiStyle.text(draw, font, lines[0], o + Vector2(48, 48) * s, 24.0 * s, Journal.SOFT)
+	UiStyle.text(draw, font, lines[1], o + Vector2(48, 100) * s, 44.0 * s, Journal.INK)
 	var pic := Journal.in_card(Journal.CARD_PIC, size)   # рисунков видов нет — на месте картинки описание вида
 	_wrap(font, Species.info(journal.card).desc, Vector2(pic.position.x, pic.position.y), pic.size.x, 28.0 * s,
 		Journal.SOFT, 10.0 * s)
 	var tx := o.x + Journal.CARD_TEXT.x * s
 	var top := o.y + Journal.CARD_TEXT.y * s
-	_text(font, lines[2], Vector2(tx, top), 32.0 * s, Journal.INK)
+	UiStyle.text(draw, font, lines[2], Vector2(tx, top), 32.0 * s, Journal.INK)
 	top += 64.0 * s
 	var notes := lines.slice(3)
 	if not notes.is_empty() and not notes[0].begins_with("Наблюдения пишутся"):
-		_text(font, Journal.CARD_LAST, Vector2(tx, top), 24.0 * s, Journal.SOFT)
+		UiStyle.text(draw, font, Journal.CARD_LAST, Vector2(tx, top), 24.0 * s, Journal.SOFT)
 		top += 44.0 * s
 	for line in notes:
 		top = _wrap(font, line, Vector2(tx, top), Journal.CARD_TEXT_W * s, 30.0 * s, Journal.INK, 12.0 * s)
@@ -219,9 +188,9 @@ func _draw_card(font: Font, size: Vector2, s: float) -> void:
 
 func _draw_map(font: Font, size: Vector2, s: float, l: float) -> void:
 	var px := Journal.LABEL_PX * s
-	_text(font, Journal.MAP_NAME, Vector2(l, Journal.MAP_NAME_TOP * s), px, Journal.INK)
+	UiStyle.text(draw, font, Journal.MAP_NAME, Vector2(l, Journal.MAP_NAME_TOP * s), px, Journal.INK)
 	var map := Journal.map_rect(size)
-	_text(font, Journal.NORTH, Vector2(map.position.x, Journal.MAP_NAME_TOP * s), 26.0 * s, Journal.SOFT,
+	UiStyle.text(draw, font, Journal.NORTH, Vector2(map.position.x, Journal.MAP_NAME_TOP * s), 26.0 * s, Journal.SOFT,
 		map.size.x, HORIZONTAL_ALIGNMENT_RIGHT)
 	_box(map, s, Journal.EDGE, 2.0, Color(Journal.PANEL, 0.85))
 	var grid := Color(Journal.EDGE, 0.35)   # сетка карты: 6 × 5 клеток
@@ -231,6 +200,16 @@ func _draw_map(font: Font, size: Vector2, s: float, l: float) -> void:
 	for i in range(1, 5):
 		var y := map.position.y + map.size.y * i / 5.0
 		draw.draw_line(Vector2(map.position.x + 12.0 * s, y), Vector2(map.end.x - 12.0 * s, y), grid, maxf(1.0, 1.5 * s))
+	var east := Journal.east_rect(size)   # склон за восточным краем (#829) — сжатая полоса, как на голостоле
+	draw.draw_rect(east.grow_individual(0.0, -2.0 * s, 0.0, -2.0 * s), Color(Journal.EDGE, 0.12))
+	draw.draw_line(east.position + Vector2(0.0, 12.0 * s), Vector2(east.position.x, east.end.y - 12.0 * s),
+		Color(Journal.EDGE, 0.7), maxf(1.0, 2.0 * s))
+	UiStyle.text(draw, font, Journal.SLOPE, east.position + Vector2(0.0, 14.0 * s), Journal.SLOPE_PX * s, Journal.SOFT,
+		east.size.x, HORIZONTAL_ALIGNMENT_CENTER)
+	if Journal.border_shown(lore):   # пояс поля замечен у 08 — тонкая подпись, не стена (#829)
+		var br := Journal.border_rect(size)
+		UiStyle.text(draw, font, Journal.BORDER, br.position, Journal.BORDER_PX * s, Journal.SOFT, br.size.x,
+			HORIZONTAL_ALIGNMENT_CENTER)
 	for k: String in Run.PLACES:
 		var b := Journal.place_rect(k, size)
 		var seen := expedition.visited(k)

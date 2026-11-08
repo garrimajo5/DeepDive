@@ -1,5 +1,5 @@
 extends TestCase
-## Голосование экипажа у голостола (Ballot): у каждого своя крестовина, большинство, таймер, ничья — наверх.
+## Голосование экипажа у голостола (Ballot): у каждого своя крестовина, большинство, таймер, ничья — решает пилот.
 
 
 func test_solo_decides_at_once() -> void:
@@ -21,7 +21,7 @@ func test_majority_when_all_voted() -> void:
 	eq(b.tally(3), "голосов 3 из 3 · %d с" % b.seconds())
 
 
-func test_tie_waits_then_up() -> void:
+func test_tie_waits_then_pilot() -> void:
 	var b := Ballot.new()
 	b.cast(1, Crew.Role.PILOT, "deep")
 	b.cast(2, Crew.Role.SONAR, "up")
@@ -33,7 +33,28 @@ func test_tie_waits_then_up() -> void:
 	b.cast(1, Crew.Role.PILOT, "deep")
 	b.cast(2, Crew.Role.SONAR, "up")
 	eq(b.update(Ballot.TIME - 0.5, [1, 2]), "")
-	eq(b.update(0.6, [1, 2]), "up", "время вышло при ничьей — наверх")
+	eq(b.update(0.6, [1, 2]), "deep", "время вышло при ничьей — решает пилот (#828)")
+	b.clear()
+	b.cast(1, Crew.Role.PILOT, "up")
+	b.cast(2, Crew.Role.SONAR, "deep")
+	b.update(Ballot.TIME + 0.1, [1, 2])
+	eq(b.winner(), "up", "пилот за «наверх» — наверх")
+
+
+func test_tie_without_pilot_up() -> void:
+	var b := Ballot.new()
+	b.cast(1, Crew.Role.ENGINEER, "deep")
+	b.cast(2, Crew.Role.SONAR, "up")
+	eq(b.update(Ballot.TIME + 0.1, [1, 2, 3]), "up", "пилот молчит — ничья наверх")
+	b.clear()
+	b.cast(1, Crew.Role.PILOT, "deep")
+	b.cast(2, Crew.Role.SONAR, "up")
+	b.cast(3, Crew.Role.ENGINEER, "deep")
+	b.cast(4, Crew.Role.BIOLOGIST, "up")
+	eq(b.update(Ballot.TIME + 0.1, [1, 2, 3, 4]), "deep", "двое на двое — голос пилота")
+	b.update(0.0, [2, 3, 4])
+	eq(b.pilot_pick(), "", "пилот отключился — его голос снят")
+	eq(b.winner(), "up", "без пилота — большинство оставшихся")
 
 
 func test_timer_decides_without_absent() -> void:

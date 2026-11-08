@@ -5,6 +5,8 @@ extends CanvasLayer
 ## `apply(depth, silt)` — каждый шаг (глубина камеры), `set_lite(true)` — «Экономно», `set_on(false)` — проход выключен.
 
 const SHADER := preload("res://shaders/grade.gdshader")
+## «Экономно»: овал умножением, без копии экрана (#842).
+const LITE_SHADER := preload("res://shaders/grade_lite.gdshader")
 
 var rect := ColorRect.new()
 var mat := ShaderMaterial.new()
@@ -45,7 +47,10 @@ func apply(depth: float, silt: float = 0.0) -> void:
 
 func set_lite(on: bool) -> void:
 	lite = on
-	mat.set_shader_parameter("lite", on)
+	mat.shader = LITE_SHADER if on else SHADER
+	if not on:
+		mat.set_shader_parameter("lut_tex", tex)
+		mat.set_shader_parameter("blue_column", mix.blue())
 	mat.set_shader_parameter("strength", Grade.LITE if on else mix.strength)
 
 

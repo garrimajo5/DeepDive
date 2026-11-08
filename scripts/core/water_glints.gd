@@ -26,13 +26,7 @@ var lite := false    ## «Экономно» (ART-044): бликов нет
 
 ## Сила по глубине корабля, м.
 static func strength(depth: float) -> float:
-	if depth <= KEYS[0][0]:
-		return KEYS[0][1]
-	for i in KEYS.size() - 1:
-		if depth <= KEYS[i + 1][0]:
-			var t: float = (depth - KEYS[i][0]) / (KEYS[i + 1][0] - KEYS[i][0])
-			return lerpf(KEYS[i][1], KEYS[i + 1][1], t)
-	return 0.0
+	return HashNoise.keyed(KEYS, depth, 1, 0.0)
 
 
 ## Оттенок бликов: цвет воды на глубине (`Seabed.Water.fog_color`), нормированный на max RGB, 65 % белого.

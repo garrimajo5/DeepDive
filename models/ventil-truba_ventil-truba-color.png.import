@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ddpwcj3q3xojj"
-path="res://.godot/imported/ventil-truba_ventil-truba-color.png-6f14e76c7cd09afd4d1a6fd1fe6cb726.ctex"
+path.s3tc="res://.godot/imported/ventil-truba_ventil-truba-color.png-6f14e76c7cd09afd4d1a6fd1fe6cb726.s3tc.ctex"
+path.etc2="res://.godot/imported/ventil-truba_ventil-truba-color.png-6f14e76c7cd09afd4d1a6fd1fe6cb726.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "6d1de169b872c763e13a3b8ceb512060"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/ventil-truba_ventil-truba-color.png"
-dest_files=["res://.godot/imported/ventil-truba_ventil-truba-color.png-6f14e76c7cd09afd4d1a6fd1fe6cb726.ctex"]
+dest_files=["res://.godot/imported/ventil-truba_ventil-truba-color.png-6f14e76c7cd09afd4d1a6fd1fe6cb726.s3tc.ctex", "res://.godot/imported/ventil-truba_ventil-truba-color.png-6f14e76c7cd09afd4d1a6fd1fe6cb726.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

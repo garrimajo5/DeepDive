@@ -37,6 +37,27 @@ const CHEW_EVERY := 1.5
 const STRIKE_TIME := 0.6
 ## Дальше от корабля (м) — без смены клипов: только плавание (LOD).
 const CUE_FAR := 80.0
+## Дальше ANIM_FAR (м) скелет считается реже: раз в ANIM_FAR_STEP (с) набранным временем — зверь в тумане
+## (как дальние стаи, EcoFish.FAR), пять поз в секунду там не видно (issue #850).
+const ANIM_FAR := 100.0
+const ANIM_FAR_STEP := 0.2
+## Дальше HIDE_FAR (м) зверь спрятан, как гротовик и эхоловец (GrotView.FAR): не рисуется, скелет стоит.
+const HIDE_FAR := 160.0
+## Набранное время отдаётся скелету разом не длиннее (с): фаза плавания вдали не важна, а длинный шаг дерева дорог.
+const LAG_MAX := 1.0
+## «Экономно» (Б6, `PredView.set_lite`): скелет реже уже ближе — дальше ANIM_MID_LITE (м) раз в ANIM_MID_STEP (с),
+## дальше ANIM_FAR_LITE — раз в ANIM_FAR_STEP. Укус и удар серпом (до CUE_FAR) не ждут позы: `Clock.flush`.
+const ANIM_MID_LITE := 25.0
+const ANIM_MID_STEP := 0.1
+const ANIM_FAR_LITE := 60.0
+## «Дыхание» (Б3, `breath`): зверь качает воду жабрами — тело шире на ± BREATH_W и выше на ± BREATH_H за BREATH_T с
+## (ритм ± BREATH_SPREAD и фаза — у каждого свои, `EcoVary`); длина та же — пасть и серп на месте. В броске (доля
+## SwimFast, `swim_mix`) вода идёт сквозь жабры сама — размах гаснет вместе с ростом смеси, без скачка. По времени
+## мира (у гостя то же); масштаб корня модели — даром, и на «Экономно».
+const BREATH_T := 4.0
+const BREATH_W := 0.035
+const BREATH_H := 0.02
+const BREATH_SPREAD := 0.2
 
 
 ## Куда смотрит голова сейчас (плавный курс EcoPred.turn).
@@ -48,6 +69,18 @@ static func forward(pr: EcoPred.Pred) -> Vector3:
 ## (> 0 — левым боком вниз).
 static func basis(pr: EcoPred.Pred) -> Basis:
 	return Basis.looking_at(forward(pr), Vector3.UP) * Basis(Vector3.BACK, pr.bank)
+
+
+## Доля дыхания зверя в момент t: −1…1 · размах; в броске (swim_mix → 1) — 0.
+static func breath(pr: EcoPred.Pred, t: float) -> float:
+	var rate := EcoVary.spread(pr.index, EcoVary.RATE, BREATH_SPREAD)
+	var phase := EcoVary.unit(pr.index, EcoVary.SHADE) * TAU
+	return sin(t * TAU / BREATH_T * rate + phase) * (1.0 - swim_mix(pr))
+
+
+## Множитель размера тела по доле дыхания: шире и выше, длина (ось −Z модели) та же.
+static func breath_scale(k: float) -> Vector3:
+	return Vector3(1.0 + BREATH_W * k, 1.0 + BREATH_H * k, 1.0)
 
 
 ## Доля броска в смеси плавания 0…1: 0 — Swim, 1 — SwimFast.
@@ -101,3 +134,33 @@ class Cues:
 		elif out["bite"]:
 			bite_at = t
 		return out
+
+
+## Часы скелета одного зверя (LOD анимации, issue #850): вблизи — каждый кадр, вдали — реже набранным временем,
+## спрятанный — стоит, а пропущенное (не больше LAG_MAX) отдаёт, когда снова покажется.
+class Clock:
+	extends RefCounted
+	## Пропущенное время, ещё не отданное дереву анимации (с).
+	var lag := 0.0
+
+	## Сколько времени отдать дереву анимации в этот кадр: dt — шаг кадра, dist — до корабля (м); 0 — дерево не трогать.
+	## lite — «Экономно»: шаг позы реже уже с ANIM_MID_LITE.
+	func tick(dt: float, dist: float, lite := false) -> float:
+		lag = minf(lag + dt, LAG_MAX)
+		if dist > HIDE_FAR or lag < step_at(dist, lite) - 1e-6 or lag <= 0.0:
+			return 0.0
+		return flush()
+
+	## Отдать всё набранное сразу (разовый клип не ждёт следующей позы).
+	func flush() -> float:
+		var out := lag
+		lag = 0.0
+		return out
+
+	## Не чаще какого шага (с) меняется поза на расстоянии dist; 0 — каждый кадр.
+	static func step_at(dist: float, lite := false) -> float:
+		if dist > (ANIM_FAR_LITE if lite else ANIM_FAR):
+			return ANIM_FAR_STEP
+		if lite and dist > ANIM_MID_LITE:
+			return ANIM_MID_STEP
+		return 0.0

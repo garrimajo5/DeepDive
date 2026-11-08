@@ -16,7 +16,7 @@ extends RefCounted
 ## вверху — тот же поиск заново. Итог прошлой попытки (`why`) — вместо заголовка.
 ## Связь с хостом пропала у гостя в комнате (лист ART-028 «05 · Связь потеряна», `lose`) — вместо строк ролей карточка
 ## «Связь потеряна»: «Повторить» — к тому же хосту (`retrying`, итог `rejoined` / `retry_failed`), «К списку забегов» —
-## поиск; своя готовность сброшена. Системная «Назад» из комнаты — тоже к списку (`Main._lobby_back`).
+## поиск; своя готовность сброшена. Системная «Назад» из комнаты — тоже к списку (`LobbyFlow.lobby_back`).
 
 const W := 2400.0
 const H := 1080.0
@@ -267,7 +267,7 @@ func address_text() -> String:
 
 
 func address_hint() -> String:
-	return "Скажите его товарищам" if address != "" else "Подключитесь к сети"
+	return "Скажите его товарищам" if address != "" else AddressPad.NO_ADDRESS_HINT
 
 
 ## Масштаб макета на экран size: вписан целиком, по центру.
@@ -537,10 +537,7 @@ func hit(p: Vector2, size: Vector2) -> String:
 		ids.append("pick%d" % i)
 	for i in RUN_ROWS:
 		ids.append("join%d" % i)
-	for id: String in ids:
-		if enabled(id) and rect(id, size).has_point(p):
-			return id
-	return ""
+	return Splash.hit_ids(p, size, ids, rect, enabled)
 
 
 ## Нажатие кнопки id. Возвращает запрос хосту для `act` ("role:<i>", "ready", "unready", "start"), "back" — выйти

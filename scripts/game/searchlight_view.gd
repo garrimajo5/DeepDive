@@ -53,6 +53,11 @@ func _ready() -> void:
 
 ## Включён ли и сколько энергии (доля «Прожектор» реактора, 1 — штатно).
 ## reach — доля длины луча (ил рассеивает свет, Silt.beam_k).
+var _k := -1.0      ## сила, по которой записаны дальность и конус (#852)
+var _reach := -1.0
+var _dim := -1.0
+
+
 func apply(is_on: bool, k: float, reach: float = 1.0) -> void:
 	on = is_on
 	lit = Searchlight.lit(is_on, k)
@@ -62,12 +67,18 @@ func apply(is_on: bool, k: float, reach: float = 1.0) -> void:
 	spot.visible = true
 	beam.visible = lit
 	_energy()
-	if lit:
+	# дальность, размер конуса и плотность — только при изменении (#852): запись дальности обновляет свет,
+	# а с ним и его тень, даже когда корабль стоит
+	if lit and (not is_equal_approx(k, _k) or not is_equal_approx(reach, _reach)):
+		_k = k
+		_reach = reach
 		var s := Searchlight.scale(k)
 		spot.spot_range = Searchlight.range_m(k) * reach
 		beam.scale = Vector3(s, s, s) * reach
-	# ил укоротил луч (reach) — длину в шейдере не множим, только плотность (ART-062)
-	beam_mat().set_shader_parameter("silt_dim", Searchlight.SILT_DIM * Searchlight.silt_k(reach))
+	var dim := Searchlight.SILT_DIM * Searchlight.silt_k(reach)   # ил укоротил луч — плотность, не длина (ART-062)
+	if not is_equal_approx(dim, _dim):
+		_dim = dim
+		beam_mat().set_shader_parameter("silt_dim", dim)
 
 
 func beam_mat() -> ShaderMaterial:
@@ -86,4 +97,6 @@ func set_flicker(k: float) -> void:
 
 
 func _energy() -> void:
-	spot.light_energy = Searchlight.ENERGY * flicker if lit else Searchlight.DARK
+	var e := Searchlight.ENERGY * flicker if lit else Searchlight.DARK
+	if not is_equal_approx(e, spot.light_energy):
+		spot.light_energy = e
