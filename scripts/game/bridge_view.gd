@@ -56,6 +56,7 @@ func _ready() -> void:
 	wp.pos = Vector3.ZERO
 	wheel = _add_model(wp, wheel_mount)
 	props[BridgeProps.WHEEL] = wheel
+	set_wheel_turn(0.0)
 	_light_screens(props[BridgeProps.SCREENS])
 	for p in BridgeProps.side_props():
 		props[p.model] = _add_model(p, self)
@@ -194,7 +195,7 @@ func set_zap_lever(deg: float, ready: bool) -> void:
 ## Поворот колеса вслед за штурвалом: turn −1…1 (вправо — по часовой, если смотреть из кресла).
 func set_wheel_turn(turn: float) -> void:
 	if wheel:
-		wheel.rotation_degrees.z = -turn * BridgeProps.WHEEL_TURN_DEG
+		wheel.rotation_degrees.z = BridgeProps.wheel_deg(turn)
 
 
 ## Текст на экране сканера: лицом в −X (к мостику), текст вправо — к +Z.
