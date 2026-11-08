@@ -49,6 +49,8 @@ enum Act { CODES, POWER }
 var nest := -1             ## гнездо в прицеле (-1 — нет)
 var dist := 0.0            ## до него, м
 var progress := 0.0
+var busy := false          ## в прошлый шаг переводили гнездо (звук сканера SND-006)
+var done := 0              ## сколько гнёзд прочитано за сеанс («вид изучен» — тот же сигнал)
 var _holding := false
 
 
@@ -111,10 +113,12 @@ func hold(dt: float, lore: LayerLore) -> void:
 		var f := fact()
 		progress = 0.0
 		if lore.learn(f):
+			done += 1
 			read.emit(f)
 
 
 func update(dt: float) -> void:
+	busy = _holding
 	if not _holding:
 		progress = maxf(0.0, progress - dt * DECAY)
 	_holding = false

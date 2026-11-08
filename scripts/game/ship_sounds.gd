@@ -19,7 +19,7 @@ var last_tail := ""             ## скрежет под последним уд
 
 func _init() -> void:
 	name = "Звуки корабля"
-	for path in [HullSound.PING, HullSound.SCRAPE, HullSound.ZAP] + HullSound.HITS:
+	for path in [HullSound.PING, HullSound.JAM, HullSound.SCRAPE, HullSound.ZAP] + HullSound.HITS:
 		var s := load(path) as AudioStream
 		if s:
 			streams[path] = s
@@ -51,9 +51,9 @@ func _player(title: String) -> AudioStreamPlayer:
 	return p
 
 
-## Импульс сонара прошёл; jam — завяз в иле (глуше).
+## Импульс сонара прошёл; jam — завяз в иле: свой файл `HullSound.JAM` (SND-006).
 func play_ping(jam := false) -> void:
-	_play(ping, HullSound.PING, HullSound.JAM_DB if jam else HullSound.PING_DB)
+	_play(ping, HullSound.JAM if jam else HullSound.PING, HullSound.JAM_DB if jam else HullSound.PING_DB)
 
 
 ## Удар по корпусу (`Vitals.hit_taken`); at — точка удара в осях корабля (`HullSound.side`), null — не знаем.

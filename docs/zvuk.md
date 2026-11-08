@@ -47,6 +47,7 @@
 | `audio/ship/breach-jet.wav` | SND-003 |
 | `audio/ship/alarm-siren.wav` — файл владельца, источник и лицензия не установлены (08.11.2026) | SND-003, правки PR #709 |
 | `audio/music/music-menu.mp3`, `music-tension.mp3` | SND-004 |
+| `audio/ship/weld.wav` (сварка; сканер и сонар в иле — уже Creator) | SND-006 |
 
 ## Опись
 
@@ -67,21 +68,21 @@
 | Ключ | Что и где | Тип, длина | Пр. | Статус |
 |---|---|---|---|---|
 | sonar-ping | Импульс сонара и эхо (`Sonar.ping`) | один раз 3–4 с | П1 | **готов** — `audio/ship/sonar-ping.wav` (SND-002 вар. 1, `ShipSounds`) |
-| sonar-jam | Импульс завяз в иле — глухой, обрывается (`Silt.jam_ping`) | один раз 2 с | П2 | заказан SND-006 #719 |
+| sonar-jam | Импульс завяз в иле — глухой, обрывается (`Silt.jam_ping`) | один раз 2 с | П2 | **готов** — `audio/ship/sonar-jam.wav` (SND-006 вар. 1, `ShipSounds.play_ping`) |
 | engines | Роторы на ходу, тон по тяге (`Helm`, `HullMesh.Motion.spin`) | петля 10–20 с | П1 | **готов** — `audio/ship/engines.wav` (SND-005 вар. 1, `MachineSounds`) |
 | hull-hit | Удар по корпусу, 3 варианта (`Vitals.hit`, `EcoLink.HIT`): прямой — в нос и о лёд, косой — в борт, снизу — из-под днища и о дно (`HullSound.side`) | один раз 1–2 с | П1 | **готов** — `audio/ship/hull-hit-1…3.wav` (SND-002, `HullSound`) |
 | hull-scrape | Скрежет обшивки о дно и скалу — хвостом под ударом о дно (`Vitals.scrape`), по кругу — пока трёмся о дно на ходу (`Helm.Ship.rub`, `ShipSounds.set_rub`) | один раз 2–3 с | П1 | **готов** — `audio/ship/hull-scrape.wav` (SND-002, правка #700: вар. rev1-1 — сталь о скалу, 3,7 с) |
 | hull-creak | Скрип корпуса под давлением, 4–6 коротких (случайно, чаще глубже) | один раз 1–3 с | П2 | нужен |
 | breach-jet | Струя воды в пробоину (`Breach`, `BreachView.jet_sound`) | петля 5–10 с | П1 | **готов** — `audio/ship/breach-jet.wav` (SND-003 вар. 1) |
 | alarm-siren | Сирена тревоги (`BreachView.siren`) | петля 2–4 с | П1 | **готов** — `audio/ship/alarm-siren.wav` (выбор владельца, PR #709, 2,25 с) |
-| weld | Сварка пробоины: шипение и треск искр (`Breach.hold`) | петля 3–5 с | П2 | заказан SND-006 #719 |
+| weld | Сварка пробоины: шипение и треск искр (`Breach.hold`) | петля 3–5 с | П2 | **готов** — `audio/ship/weld.wav` (SND-006 вар. 1, Free; `HandSounds`, 3D у шва) |
 | zap | Разряд по корпусу (`main.fire_zap`, `ShipSounds.play_zap`) | один раз 1–2 с | П1 | **готов** — `audio/ship/zap.wav` (SND-003 вар. 2) |
 | steam-valve | Вентиль сброса пара (`EngineRoom.venting`) | петля 4–8 с | П2 | **готов** — `audio/ship/steam-valve.wav` (SND-005 вар. 1, `MachineSounds`, 3D у сопла) |
 | overheat-buzz | Перегрев реактора — зуммер | петля 1–2 с | П2 | **готов** — `audio/ship/overheat-buzz.wav` (SND-005 вар. 1, `MachineSounds`) |
 | searchlight | Прожектор: включение и гудение лампы (`Searchlight`) | один раз + петля | П3 | нужен |
 | hatch | Люк: открыть и закрыть (`ShipLayout.Door`) | один раз 1–2 с | П3 | нужен |
 | winch | Лебёдка трюма, крышка шлюза, всплеск троса (`Samples`, `Airlock`, `LockWater`) | петля + один раз | П3 | нужен |
-| scanner | Сканирование и «изучено» (`Scanner.hold`) | петля + один раз | П2 | заказан SND-006 #719 |
+| scanner | Сканирование и «изучено» (`Scanner.hold`) | петля + один раз | П2 | **готов** — `audio/ship/scanner-hold.wav` (вар. 2), `scanner-done.wav` (вар. 1), `HandSounds` у поста |
 | vent-surface | Продувка балласта при всплытии (`Wake.vent`) | один раз 5–8 с | П3 | нужен |
 | steps | Шаги по палубе, 4 варианта (`Deck.Walker`) | один раз 0,3 с | П3 | нужен |
 
