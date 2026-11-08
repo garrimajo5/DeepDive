@@ -321,3 +321,115 @@ static func scena_pose(n: int) -> Dictionary:
 	var to := LayerMap.xz(SCENA_GOAL) - at
 	var ship := Vector3(at.x, Seabed.mesh_height(at.x, at.y) + SCENA_FLOOR, at.y)
 	return {"ship": ship, "yaw": atan2(-to.x, -to.y)}   # нос (−sin, −cos) — к 01
+
+
+## С какого расстояния впереди виден грунт в окне пилота (#1400, дизайнер уровней — границу видимости снять заново
+## после #1402): по столбцам кадра GROUND_COLS снизу вверх с шагом GROUND_STEP пикселей ищем первый луч, который
+## доходит до видимого дна (`Seabed.mesh_height`), не задев мостик и корпус (пульт, штурвал, рама, нос).
+## Печатает shot.gd с scena=, чтобы ближний план ставить без проб.
+const GROUND_COLS: Array[float] = [0.25, 0.5, 0.75]
+const GROUND_STEP := 8
+## Шаг луча до дна, м, и дальше этого дна в кадре нет (дальняя вода).
+const GROUND_MARCH := 0.5
+const GROUND_FAR := 300.0
+
+
+## Заслоны взгляда: видимые несглаженные сетки под узлами roots в мировых координатах — [{aabb, faces}].
+## Стекло окна прозрачно — не заслон; экипаж (сетки со скином) не берём: поза рук меняется.
+static func occluders(roots: Array) -> Array:
+	var out := []
+	for r in roots:
+		if r == null:
+			continue
+		for n in (r as Node).find_children("*", "MeshInstance3D", true, false):
+			var mi := n as MeshInstance3D
+			if mi.mesh == null or not mi.is_visible_in_tree() or mi.skin != null or _is_glass(mi):
+				continue
+			var faces: PackedVector3Array = mi.global_transform * mi.mesh.get_faces()
+			if faces.is_empty():
+				continue
+			out.append({"aabb": mi.global_transform * mi.get_aabb(), "faces": faces})
+	return out
+
+
+static func _is_glass(mi: MeshInstance3D) -> bool:
+	var m := mi.material_override as ShaderMaterial
+	return m != null and m.shader in [BridgeView.GLASS_SHADER, BridgeView.GLASS_WET_SHADER]
+
+
+## Луч заслонён ближе reach: попал в лицевую сторону треугольника (обход по часовой, (b − a) × (c − a) — внутрь,
+## то есть по лучу); изнанку движок не рисует — она не заслон.
+static func blocked(from: Vector3, dir: Vector3, reach: float, occ: Array) -> bool:
+	var to := from + dir * reach
+	for o in occ:
+		if not (o["aabb"] as AABB).grow(0.01).intersects_segment(from, to):
+			continue
+		var f: PackedVector3Array = o["faces"]
+		for i in range(0, f.size() - 2, 3):
+			var a := f[i]
+			var b := f[i + 1]
+			var c := f[i + 2]
+			if (b - a).cross(c - a).dot(dir) <= 0.0:
+				continue
+			var hit: Variant = Geometry3D.ray_intersects_triangle(from, dir, a, b, c)
+			if hit != null and from.distance_to(hit) < reach:
+				return true
+	return false
+
+
+## Расстояние вдоль луча до дна floor(x, z) → y, м; INF — дна нет ближе GROUND_FAR (луч вверх или в дальнюю воду).
+static func ground_hit(from: Vector3, dir: Vector3, floor_y: Callable) -> float:
+	if dir.y >= 0.0:
+		return INF
+	var t := 0.0
+	while t < GROUND_FAR:
+		var t2 := t + GROUND_MARCH
+		var p := from + dir * t2
+		if p.y <= float(floor_y.call(p.x, p.z)):
+			var a := t
+			var b := t2
+			for k in 12:
+				var m := (a + b) / 2.0
+				var q := from + dir * m
+				if q.y <= float(floor_y.call(q.x, q.z)):
+					b = m
+				else:
+					a = m
+			return b
+		t = t2
+	return INF
+
+
+## Ближний видимый грунт в столбце u (0…1 по ширине кадра) камеры cam: {row — строка кадра сверху, dist — по
+## горизонтали от глаза, м}; пусто — в столбце дна не видно.
+static func ground_ahead(cam: Camera3D, u: float, occ: Array, floor_y: Callable) -> Dictionary:
+	var size := cam.get_viewport().get_visible_rect().size
+	var y := int(size.y) - 1
+	while y > 0:
+		var px := Vector2(size.x * u, y)
+		var o := cam.project_ray_origin(px)
+		var d := cam.project_ray_normal(px)
+		var t := ground_hit(o, d, floor_y)
+		if t == INF:
+			return {}
+		if not blocked(o, d, t, occ):
+			var p := o + d * t
+			return {"row": y, "dist": Vector2(p.x - o.x, p.z - o.z).length()}
+		y -= GROUND_STEP
+	return {}
+
+
+## Строка для лога снимка: «грунт в окне (#1400): слева с 14 м, по центру с 18 м, справа с 15 м · кромка на 35/30/35 %
+## кадра снизу».
+static func ground_line(g: Node) -> String:
+	var cam := g.get_viewport().get_camera_3d()
+	var occ := occluders([g.bridge, g.hull])
+	var h := cam.get_viewport().get_visible_rect().size.y
+	var names := ["слева", "по центру", "справа"]
+	var dist: Array[String] = []
+	var edge: Array[String] = []
+	for i in GROUND_COLS.size():
+		var r := ground_ahead(cam, GROUND_COLS[i], occ, Seabed.mesh_height)
+		dist.append("%s %s" % [names[i], "нет" if r.is_empty() else "с %d м" % roundi(r["dist"])])
+		edge.append("—" if r.is_empty() else str(roundi((h - r["row"]) / h * 100.0)))
+	return "грунт в окне (#1400): %s · кромка на %s %% кадра снизу" % [", ".join(dist), "/".join(edge)]
