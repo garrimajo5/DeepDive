@@ -96,3 +96,34 @@ func test_qa_step_parsed() -> void:
 		if cmd[0] == "pred":
 			got.append(cmd)
 	eq(got, [["pred", 1, 2, false], ["pred", 0, 0, true]], "команды pred")
+
+
+## main 1ca7c20: шаг «away» уводил только серпохвоста n — другой, охотясь рядом, гасил куст и прятал каменщиков
+## на кадрах 36/36b, тест сценария краснел от случая. Теперь от куста уходят все, каждый своим путём прочь.
+func test_qa_away_moves_every_pred() -> void:
+	var a := _world()
+	var w: EcoWorld = a[0]
+	var ps: EcoPred = a[1]
+	var c: EcoCoral = a[2]
+	var k: EcoKamen = a[3]
+	ok(ps.all.size() >= 2, "серпохвостов несколько: %d" % ps.all.size())
+	var top := c.bushes[0].top + Vector3(0, 2, 0)
+	for pr in ps.all:   # все толкутся у куста
+		pr.agent.p = top
+		pr.agent.goal = top
+	var path := QaRunner.pred_away(ps, 0, top, w.ship.pos)
+	eq(path.size(), 2, "путь серпохвоста 0")
+	near((path[0] as Vector3).distance_to(top), 2.0 * QaScript.PRED_SPAN, 1e-3, "n — за 2·PRED_SPAN")
+	var starts: Array[float] = []
+	for pr in ps.all:
+		eq(pr.mode, EcoPred.Mode.INVESTIGATE, "серпохвост %d уходит" % pr.index)
+		starts.append(pr.agent.p.distance_to(top))
+	for d in starts:
+		ok(d >= 2.0 * QaScript.PRED_SPAN - 1e-3, "никто не остался у куста: %s" % str(starts))
+	_run(w, 13.0)
+	for pr in ps.all:
+		ok(pr.agent.p.distance_to(c.bushes[0].top) > EcoCoral.PRED_R * 2.0, "серпохвост %d далеко: %.0f м"
+				% [pr.index, pr.agent.p.distance_to(c.bushes[0].top)])
+	ok(c.bushes[0].glow >= EcoCoral.DARK, "куст горит: %.2f" % c.bushes[0].glow)
+	eq(_hidden(k.rows[0]), 0, "ряд раскрыт")
+	eq(QaRunner.pred_away(ps, ps.all.size(), top, w.ship.pos), [], "нет такого n — пусто")

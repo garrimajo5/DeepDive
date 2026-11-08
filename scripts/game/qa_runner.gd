@@ -610,11 +610,36 @@ static func pred_pass(main: Main, n: int, bush: int, away := false) -> Array:
 	if eco == null or eco.coral == null or eco.preds == null or bush < 0 or bush >= eco.coral.bushes.size():
 		return []
 	var top := eco.coral.bushes[bush].top + Vector3(0, 2, 0)
-	var look := Vector2(top.x - main.helm.pos.x, top.z - main.helm.pos.z)
-	var across := Vector2(1, 0) if look.length() < 1.0 else look.normalized().orthogonal()
-	var off := Vector3(across.x, 0, across.y) * QaScript.PRED_SPAN
-	var from := top + off * 2.0 if away else top - off
-	var to := top + off * 8.0 if away else top + off
-	if not eco.preds.pass_by(n, from, to):
+	if away:
+		return pred_away(eco.preds, n, top, main.helm.pos)
+	var off := pred_off(top, main.helm.pos)
+	if not eco.preds.pass_by(n, top - off, top + off):
 		return []
-	return [from, to]
+	return [top - off, top + off]
+
+
+## Поперёк взгляда с корабля ship на точку top, длиной PRED_SPAN.
+static func pred_off(top: Vector3, ship: Vector3) -> Vector3:
+	var look := Vector2(top.x - ship.x, top.z - ship.z)
+	var across := Vector2(1, 0) if look.length() < 1.0 else look.normalized().orthogonal()
+	return Vector3(across.x, 0, across.y) * QaScript.PRED_SPAN
+
+
+## Кадр «до» и «после» (#1401): уводит от куста всех живых серпохвостов, а не только n — иначе другой, бродящий
+## или охотящийся рядом, гасит куст и прячет каменщиков на кадре, и тест сценария краснеет от случая (main 1ca7c20).
+## n уходит за 2·PRED_SPAN, остальные — каждый следующий ещё на PRED_SPAN дальше, все прочь от куста.
+## Возвращает путь n ([] — нет такого).
+static func pred_away(ps: EcoPred, n: int, top: Vector3, ship: Vector3) -> Array:
+	var off := pred_off(top, ship)
+	var out: Array = []
+	var k := 0
+	for pr in ps.all:
+		if not pr.agent.alive:
+			continue
+		var from := top + off * (2.0 + (0.0 if pr.index == n else 1.0 + k))
+		var to := from + off * 6.0
+		if pr.index != n:
+			k += 1
+		if ps.pass_by(pr.index, from, to) and pr.index == n:
+			out = [from, to]
+	return out
