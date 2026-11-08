@@ -85,6 +85,16 @@ const REEF_PUSH := 8.0
 const REEF_MARGIN := 8.0
 const REEF_CD := 30.0
 
+## Проба расстановки сцены 00 → 01 (#1400, вариант 3 потока Б, гипотеза гейм-дизайнера, дуга — дизайнер уровней):
+## цели патруля — вне тихого круга QUIET_R вокруг спокойной остановки QUIET (как вне кольца рифа), хищник ARC_PRED
+## появляется в ARC[0] и ходит по дуге ARC за внешней стороной 01 туда и обратно (±ARC_JITTER). Чувства, скорости,
+## охота и бросок — те же. Включает `probe` до reset мира; в игре пока выключено — ждёт сравнения (tools/patrol.gd).
+const QUIET := Vector2(20.0, 22.5)
+const QUIET_R := 55.0
+const ARC_PRED := 1
+const ARC: Array[Vector2] = [Vector2(90, -90), Vector2(65, -100), Vector2(15, -95)]
+const ARC_JITTER := 5.0
+
 ## Режим хищника (pr.state в браузере); общее EcoAgent.State — у его существа.
 enum Mode { PATROL, HUNT, EAT, INVESTIGATE, CHARGE, RETREAT, FLEE, CLEAN }
 
@@ -126,6 +136,9 @@ class Pred:
 	var seek_t := 0.0
 	## Пауза сообщения «не идёт в риф у цветка» (#834).
 	var reef_cd := 0.0
+	## Точка дуги ARC (проба #1400) и куда идёт по ней: +1 — к концу, −1 — назад.
+	var arc_i := 0
+	var arc_dir := 1
 
 
 var all: Array[Pred] = []
@@ -154,6 +167,8 @@ var grot: EcoGrot
 var plankton: EcoPlankton
 
 var _rnd: EcoRandom
+## Проба расстановки #1400 (QUIET, ARC): ставить до reset мира.
+var probe := false
 ## Ось рифа у цветка на этот шаг (reef_axis).
 var _reef := Vector3.INF
 
@@ -171,8 +186,9 @@ func reset(world: EcoWorld) -> void:
 	_rnd = EcoWorld.seeded_for(seed_for(world.seed_value))
 	all.clear()
 	for i in STARTS.size():
-		var x := STARTS[i].x
-		var z := STARTS[i].y
+		var at := ARC[0] if probe and i == ARC_PRED else STARTS[i]
+		var x := at.x
+		var z := at.y
 		var y := minf(float(world.ground.call(x, z)) + 8.0, GOAL_CEILING) if world.ground.is_valid() else GOAL_CEILING
 		var p := Vector3(x, y, z)
 		var a := world.spawn(ID, p)
@@ -317,6 +333,19 @@ static func reef_steer(axis: Vector3, p: Vector3, want: Vector3) -> Vector3:
 	if r < REEF_KEEP:
 		w2 += out * (REEF_PUSH * (REEF_KEEP - r) / REEF_KEEP + 1.0)
 	return Vector3(w2.x, want.y, w2.y)
+
+
+## Следующая точка дуги ARC для патруля (проба #1400): туда и обратно по тем же отрезкам, концы — разворот.
+static func arc_next(pr: Pred) -> Vector2:
+	var n := ARC.size()
+	if n == 1:
+		return ARC[0]
+	var j := pr.arc_i + pr.arc_dir
+	if j < 0 or j >= n:
+		pr.arc_dir = -pr.arc_dir
+		j = pr.arc_i + pr.arc_dir
+	pr.arc_i = j
+	return ARC[j]
 
 
 ## Корабль в рифе у цветка: хищник его там не атакует (#834).
@@ -565,7 +594,11 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 				a.timer = _rnd.range_f(10, 20)
 				var gx: float
 				var gz: float
-				if fish and fish.shoals.size() > 0 and _rnd.chance(0.6):
+				if probe and pr.index == ARC_PRED:
+					var g2 := arc_next(pr)
+					gx = g2.x + _rnd.range_f(-ARC_JITTER, ARC_JITTER)
+					gz = g2.y + _rnd.range_f(-ARC_JITTER, ARC_JITTER)
+				elif fish and fish.shoals.size() > 0 and _rnd.chance(0.6):
 					var h: Vector3 = (_rnd.pick(fish.shoals) as EcoFish.Shoal).home
 					gx = h.x + _rnd.range_f(-25, 25)
 					gz = h.z + _rnd.range_f(-25, 25)
@@ -573,6 +606,8 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 					gx = _rnd.range_f(-170, 150)
 					gz = _rnd.range_f(-170, 150)
 				var gp := outside_reef(_reef, Vector3(gx, 0.0, gz), REEF_KEEP)  # патруль — снаружи рифа у цветка
+				if probe:  # и снаружи тихого круга у спокойной остановки
+					gp = outside_reef(Vector3(QUIET.x, 0.0, QUIET.y), gp, QUIET_R)
 				gx = gp.x
 				gz = gp.z
 				var gy := minf(_floor(world, gx, gz, GOAL_CEILING - 14.0) + _rnd.range_f(4, 14), GOAL_CEILING)

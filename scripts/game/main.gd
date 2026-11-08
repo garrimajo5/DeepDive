@@ -1279,9 +1279,16 @@ func _world_say(text: String) -> void:
 	message.say(text, Status.MESSAGE_SECONDS, true)   # не стирает строку, видную меньше 1 с (issue #979)
 
 
-## Брифинг прибытия кончился — отложенная строка мира на приборы (#1429; `OverlayFlow.brief_step`).
+## Брифинг прибытия кончился — отложенная строка мира на приборы (#1429; `OverlayFlow.brief_step`). Пока идёт —
+## строка мира, видная или ждущая очереди в `Status.Message` с его начала, тоже уходит в `world_wait` (тестер: строка
+## сменилась уже под плашкой — ждала своей секунды до брифинга).
 func release_world_say() -> void:
-	if world_wait != "" and not arrival.active():
+	if arrival.active():
+		var parked := message.take_world()
+		if parked != "" and world_wait == "":
+			world_wait = parked
+		return
+	if world_wait != "":
 		var text := world_wait
 		world_wait = ""
 		_world_say(text)
