@@ -86,3 +86,49 @@ func test_scene_scena_motion_holds_ship() -> void:   # scena_t=<с> — мир �
 	ok(main.pilot.seated, "за штурвалом")
 	main.queue_free()
 	await frames(1)
+
+
+func test_ground_hit_flat_floor() -> void:   # грунт в окне (#1400): луч до дна
+	var flat := func(_x: float, _z: float) -> float: return 0.0
+	var d := Vector3(0, -1, -1).normalized()
+	near(ShotSetup.ground_hit(Vector3(0, 7, 0), d, flat), 7.0 * sqrt(2.0), 0.01, "под 45° с 7 м — 9,9 м вдоль луча")
+	ok(ShotSetup.ground_hit(Vector3(0, 7, 0), Vector3(0, 0.1, -1).normalized(), flat) == INF, "луч вверх — дна нет")
+	ok(ShotSetup.ground_hit(Vector3(0, 7, 0), Vector3(0, -0.001, -1).normalized(), flat) == INF, "дальше GROUND_FAR — дна нет")
+
+
+func test_blocked_front_face_only() -> void:   # заслон — лицевая сторона по часовой, изнанка не заслоняет
+	var front := PackedVector3Array([Vector3(-1, -1, -5), Vector3(0, 1, -5), Vector3(1, -1, -5)])
+	var back := PackedVector3Array([Vector3(-1, -1, -5), Vector3(1, -1, -5), Vector3(0, 1, -5)])
+	var occ := func(f: PackedVector3Array) -> Array:
+		var box := AABB(f[0], Vector3.ZERO)
+		for p in f:
+			box = box.expand(p)
+		return [{"aabb": box, "faces": f}]
+	var dir := Vector3(0, 0, -1)
+	ok(ShotSetup.blocked(Vector3.ZERO, dir, 10.0, occ.call(front)), "лицевая сторона на пути — заслон")
+	ok(not ShotSetup.blocked(Vector3.ZERO, dir, 10.0, occ.call(back)), "изнанка — не заслон")
+	ok(not ShotSetup.blocked(Vector3.ZERO, dir, 4.0, occ.call(front)), "дно ближе заслона — видно")
+	ok(not ShotSetup.blocked(Vector3(3, 0, 0), dir, 10.0, occ.call(front)), "мимо треугольника")
+
+
+func test_scene_scena_ground_in_window() -> void:   # scena=n печатает, с какого расстояния виден грунт в окне (#1400)
+	var main: Node = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	ShotSetup.apply(main, {"scena": "1"})
+	await frames(1)
+	var cam: Camera3D = main.get_viewport().get_camera_3d()
+	var occ := ShotSetup.occluders([main.bridge, main.hull])
+	ok(not occ.is_empty(), "мостик заслоняет")
+	var r := ShotSetup.ground_ahead(cam, 0.5, occ, Seabed.mesh_height)
+	ok(not r.is_empty(), "грунт по центру виден")
+	var bottom := int(main.get_viewport().get_visible_rect().size.y) - 1
+	ok(r["row"] < bottom, "низ кадра закрыт пультом и штурвалом — кромка выше")
+	ok(r["dist"] > ShotSetup.SCENA_FLOOR and r["dist"] < ShotSetup.GROUND_FAR, "грунт впереди дальше высоты над дном: %.1f" % r["dist"])
+	var px := Vector2(main.get_viewport().get_visible_rect().size.x * 0.5, bottom)
+	var o := cam.project_ray_origin(px)
+	var d := cam.project_ray_normal(px)
+	ok(ShotSetup.blocked(o, d, ShotSetup.ground_hit(o, d, Seabed.mesh_height), occ), "нижний луч упирается в мостик")
+	ok(ShotSetup.ground_line(main).begins_with("грунт в окне (#1400): слева "), "строка для лога")
+	main.queue_free()
+	await frames(1)
