@@ -9,7 +9,7 @@ var world := EcoWorld.new()
 ## Светляки-полосники: шесть стай у кораллов и их MultiMesh.
 var fish: EcoFish
 var fish_view: FishView
-## Светящийся мох (22 пятна) и скребуны (10), что его объедают.
+## Светящийся мох (24 пятна) и скребуны (10), что его объедают.
 var moss: EcoMoss
 var moss_view: MossView
 var grazers: EcoGrazer
