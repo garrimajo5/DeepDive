@@ -44,7 +44,8 @@
 |---|---|
 | `audio/ambient/ambient-shelf.mp3`, `audio/ship/ship-hum.mp3` | SND-001 |
 | `audio/ship/sonar-ping.wav`, `hull-hit-1…3.wav`, `hull-scrape.wav`, `zap.wav` | SND-002 |
-| `audio/ship/alarm-siren.wav`, `breach-jet.wav` | SND-003 |
+| `audio/ship/breach-jet.wav` | SND-003 |
+| `audio/ship/alarm-siren.wav` — файл владельца, источник и лицензия не установлены (08.11.2026) | SND-003, правки PR #709 |
 | `audio/music/music-menu.mp3`, `music-tension.mp3` | SND-004 |
 
 ## Опись
@@ -72,7 +73,7 @@
 | hull-scrape | Скрежет обшивки о дно и скалу — хвостом под ударом о дно (`Vitals.scrape`), по кругу — пока трёмся о дно на ходу (`Helm.Ship.rub`, `ShipSounds.set_rub`) | один раз 2–3 с | П1 | **готов** — `audio/ship/hull-scrape.wav` (SND-002, правка #700: вар. rev1-1 — сталь о скалу, 3,7 с) |
 | hull-creak | Скрип корпуса под давлением, 4–6 коротких (случайно, чаще глубже) | один раз 1–3 с | П2 | нужен |
 | breach-jet | Струя воды в пробоину (`Breach`, `BreachView.jet_sound`) | петля 5–10 с | П1 | **готов** — `audio/ship/breach-jet.wav` (SND-003 вар. 1) |
-| alarm-siren | Сирена тревоги (`BreachView.siren`) | петля 2–4 с | П1 | **готов** — `audio/ship/alarm-siren.wav` (SND-003 вар. 1) |
+| alarm-siren | Сирена тревоги (`BreachView.siren`) | петля 2–4 с | П1 | **готов** — `audio/ship/alarm-siren.wav` (выбор владельца, PR #709, 2,25 с) |
 | weld | Сварка пробоины: шипение и треск искр (`Breach.hold`) | петля 3–5 с | П2 | заказан SND-006 #719 |
 | zap | Разряд по корпусу (`main.fire_zap`, `ShipSounds.play_zap`) | один раз 1–2 с | П1 | **готов** — `audio/ship/zap.wav` (SND-003 вар. 2) |
 | steam-valve | Вентиль сброса пара (`EngineRoom.venting`) | петля 4–8 с | П2 | заказан SND-005 #706 |
