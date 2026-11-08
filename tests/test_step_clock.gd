@@ -307,6 +307,28 @@ func test_stall_by_rest_sum() -> void:
 		"без двух долгих осталась одна подчасть — мало для вывода")
 
 
+## Отчёт тестера `2026-11-08-1715` (#1317, `32h-rakovina-osmotr`): «мир 51 (обычно 10) [EcoKelp 9 ×24, EcoCoins 9
+## ×44, EcoGrazer 9 ×80, ещё 44: 24 ×3]» — три несвязанных модуля по 9 мс разом, остальные ×3, и заминка не
+## отмечалась: тестер снова искал виновника в мире. Три подчасти ×10 и дольше в кадре без импульса — заминка, весь
+## замер ×6; в кадре импульса или с двумя такими — нет.
+func test_stall_three_spikes() -> void:
+	var sub := {"EcoKelp": 9.0, "EcoCoins": 9.0, "EcoGrazer": 9.0}
+	var us := {"EcoKelp": 0.375, "EcoCoins": 0.2, "EcoGrazer": 0.11}
+	for i in 44:
+		sub["m%d" % i] = 24.0 / 44.0
+		us["m%d" % i] = 8.0 / 44.0
+	eq(StepClock.rest_stall(sub, us), 0, "по сумме остальных — ×4, раньше заминки не было")
+	eq(StepClock.stall(sub, us), 6, "три модуля ×24…×80 разом — заминка, весь мир ×6")
+	var ping := sub.duplicate()
+	ping[StepClock.PING_MARK] = 0.5
+	var ping_us := us.duplicate()
+	ping_us[StepClock.PING_MARK] = 0.2
+	eq(StepClock.stall(ping, ping_us), 0, "в кадре импульса модули вправе дорожать разом — не заминка")
+	var two := sub.duplicate()
+	two["EcoGrazer"] = 0.2
+	eq(StepClock.stall(two, us), 0, "два виновника — не заминка")
+
+
 static func _sum(of: Dictionary) -> float:
 	var t := 0.0
 	for k in of:
