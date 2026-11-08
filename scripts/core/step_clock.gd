@@ -30,6 +30,15 @@ const STALL_K := 5.0
 const STALL_N := 3
 const REST_SKIP := 2     ## заминка по сумме — без стольких самых долгих подчастей (#1253)
 const STALL := " — разом ×%d, заминка"
+## Три виновника разом (#1317, `32h-rakovina-osmotr`: «мир 51 (обычно 10) [EcoKelp 9 ×24, EcoCoins 9 ×44, EcoGrazer 9
+## ×80, ещё 44: 24 ×3]» без пометки): машина отняла по куску времени у нескольких несвязанных модулей, остальные —
+## ×3. За кадр мир идёт одним подшагом, и без импульса или разряда (`PING_MARK`) у трёх несвязанных модулей нет общей
+## причины стать в SPIKE_K раз дольше разом (в облаке у Раковины 03 со сканером и импульсом ни один модуль за 840
+## кадров не дольше 1,6 мс). Тогда «разом ×N» — во сколько раз дольше обычного весь замер, не меньше SPIKE_MIN.
+const SPIKE_K := 10.0      ## во сколько раз дольше обычного — подчасть-«виновник»
+const SPIKE_MS := 3.0      ## и не короче, мс
+const SPIKE_MIN := 2       ## «разом ×N» не меньше
+const PING_MARK := "импульс, разряд"   ## подчасть мира в кадре импульса или разряда (`EcoWorld.step`)
 
 var parts := {}            ## часть → мс этого шага (части с одним именем складываются)
 var subs := {}             ## часть → {подчасть → мс}: отметки «часть/подчасть» (issue #745)
@@ -166,7 +175,31 @@ static func stall(sub: Dictionary, us: Dictionary) -> int:
 	var med := ratios[mid] if ratios.size() % 2 == 1 else (ratios[mid - 1] + ratios[mid]) * 0.5
 	if med >= STALL_K:
 		return roundi(med)
-	return rest_stall(sub, us)
+	var r := rest_stall(sub, us)
+	return r if r > 0 else spike_stall(sub, us)
+
+
+## Заминка по трём «виновникам» сразу (#1317): не меньше STALL_N подчастей с известным обычным — каждая не короче
+## SPIKE_MS и в SPIKE_K раз дольше обычного, в кадре без импульса и разряда. Итог — весь замер к обычному, не меньше
+## SPIKE_MIN; иначе 0. Два таких — ещё виновники (`test_stall_by_rest_sum`).
+static func spike_stall(sub: Dictionary, us: Dictionary) -> int:
+	if sub.has(PING_MARK):
+		return 0
+	var spikes := 0
+	var ms := 0.0
+	var usual_ms := 0.0
+	for key in sub.keys():
+		var u := float(us.get(key, 0.0))
+		if u < USUAL_MIN:
+			continue
+		var m := float(sub[key])
+		ms += m
+		usual_ms += u
+		if m >= SPIKE_MS and m >= SPIKE_K * u:
+			spikes += 1
+	if spikes < STALL_N:
+		return 0
+	return maxi(SPIKE_MIN, roundi(ms / usual_ms))
 
 
 ## Заминка по сумме (#1253, `32o-mol-steklo`: «мир 230 (обычно 16) [EcoFish 79 ×40, рыбы 21 ×11, EcoDome 19 ×41,
