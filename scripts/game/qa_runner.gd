@@ -600,8 +600,10 @@ func _finish() -> void:
 
 
 ## Шаг «pred» (#1401): серпохвост n проходит мимо вершины куста огнецвета bush поперёк линии «корабль — куст»,
-## в 2 м над вершиной, от −PRED_SPAN до +PRED_SPAN; away — уводит его дальше по той же линии, от 2 до 3 PRED_SPAN
-## (до прохода хищник мог стоять у куста на чистке — ряд каменщиков был бы спрятан в кадре «до»).
+## в 2 м над вершиной, от −PRED_SPAN до +PRED_SPAN; away — уводит его дальше по той же линии, от 2 до 8 PRED_SPAN
+## (до прохода хищник мог стоять у куста на чистке — ряд каменщиков был бы спрятан в кадре «до»). Уводит далеко:
+## 180 м на скорости проверки — дольше 25 с проверки, иначе он доплывал за 5 с и возвращался к станции чистки у куста
+## раньше кадра «после» (CI, PR #1419).
 ## Возвращает [откуда, куда] или пусто, если куста/хищника нет.
 static func pred_pass(main: Main, n: int, bush: int, away := false) -> Array:
 	var eco: EcoView = main.eco
@@ -612,7 +614,7 @@ static func pred_pass(main: Main, n: int, bush: int, away := false) -> Array:
 	var across := Vector2(1, 0) if look.length() < 1.0 else look.normalized().orthogonal()
 	var off := Vector3(across.x, 0, across.y) * QaScript.PRED_SPAN
 	var from := top + off * 2.0 if away else top - off
-	var to := top + off * 3.0 if away else top + off
+	var to := top + off * 8.0 if away else top + off
 	if not eco.preds.pass_by(n, from, to):
 		return []
 	return [from, to]
