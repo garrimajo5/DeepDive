@@ -9,6 +9,7 @@
 и числа, но не код один в один. `js/…` в комментариях — файлы браузерного прототипа (`archive/web/js/…` в pogrujenie),
 `Core/…cs` — Unity-версия там же. Клонировать при переносе: `git clone --depth 1 https://github.com/garrimajo5/pogrujenie`.
 Мир (утверждён владельцем, главный источник по лору, ведёт гейм-дизайнер): `docs/world.md`. Контекст: `docs/context.txt`, бестиарий на 100 видов: `docs/bestiary.md`, концепт-арт: `docs/concept-art/`,
+**«Кодекс игры»** (справочник для команды со спойлерами, собирается из этих файлов — `tools/codex.py`, CI `codex.yml`; правка — в исходниках): <https://garrimajo5.github.io/DeepDive/>,
 заказы художнику и ошибки — GitHub Issues, план: `ROADMAP.md`, поэтапный план игры: `docs/plan.md`, план графики: `docs/grafika-plan.md`, реализм живого мира (поток Б): `docs/grafika-plan-eco.md`.
 
 ## Правила
