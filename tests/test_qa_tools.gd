@@ -114,3 +114,22 @@ func test_emulator_ci_matches_run_qa() -> void:
 	ok(timed * 1.25 + 30.0 <= int(limit.get_string(1)), "ожидание покрывает сценарий")
 	var tm := RegEx.create_from_string("timeout-minutes: (\\d+)").search(wf)
 	ok(tm != null and int(tm.get_string(1)) * 60 > int(limit.get_string(1)) + 600, "job дольше ожидания: есть время на загрузку эмулятора")
+
+
+## #1350: `publish-qa.ps1 -Shots a,b,c` через `powershell -File` приходит одной строкой — фильтр не находил ни
+## одного снимка, и отчёт уходил без скриншотов молча. Теперь строка разбивается по запятой, без снимков — ошибка.
+func test_publish_qa_splits_shots() -> void:
+	var ps := FileAccess.get_file_as_bytes(DIR.path_join("publish-qa.ps1")).slice(3).get_string_from_utf8()
+	var split := ps.find("-split ','")
+	var filt := ps.find("$Shots -contains")
+	ok(split > 0 and split < filt, "-Shots разбивается по запятой до фильтра")
+	var fail := ps.find("throw", filt)
+	ok(fail > 0 and fail < ps.find("foreach ($f in $pngs)"), "без снимков — ошибка до сжатия и коммита")
+
+
+## #1350: эмулятор закрывался вместе с фоновым run-qa.ps1 посреди ручной проверки. Запуск — через WMI
+## (процесс не потомок скрипта), а не Start-Process.
+func test_run_qa_emulator_outlives_script() -> void:
+	var ps := FileAccess.get_file_as_bytes(DIR.path_join("run-qa.ps1")).slice(3).get_string_from_utf8()
+	ok(ps.contains("Invoke-CimMethod Win32_Process -MethodName Create"), "эмулятор — отвязанным процессом")
+	ok(not ps.contains("Start-Process \"$sdk\\emulator"), "не потомком скрипта")

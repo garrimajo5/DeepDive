@@ -16,7 +16,14 @@ $codec = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Obj
 $ep = New-Object System.Drawing.Imaging.EncoderParameters 1
 $ep.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality), 80L
 $pngs = Get-ChildItem 'D:\AI\qa-build\run\*.png'
-if ($Shots) { $pngs = $pngs | Where-Object { $Shots -contains $_.BaseName } }
+# -Shots a,b,c через `powershell -File` приходит одной строкой «a,b,c» (#1350): разбиваем по запятой сами.
+$Shots = @($Shots | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+if ($Shots) {
+  $pngs = $pngs | Where-Object { $Shots -contains $_.BaseName }
+  $miss = $Shots | Where-Object { $_ -notin @($pngs | ForEach-Object BaseName) }
+  if (-not $pngs) { throw "Ни одного снимка из -Shots ($($Shots -join ', ')) нет в D:\AI\qa-build\run" }
+  if ($miss) { Write-Warning "Нет снимков: $($miss -join ', ')" }
+}
 foreach ($f in $pngs) {
   $img = [System.Drawing.Image]::FromFile($f.FullName)
   $w = [Math]::Min(1600, $img.Width); $h = [int]($img.Height * $w / $img.Width)
