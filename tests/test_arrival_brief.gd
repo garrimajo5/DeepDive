@@ -177,3 +177,21 @@ func test_scene_world_lines_wait_for_brief() -> void:
 	ok(pending != "", "строка ждала")
 	ok(main.message.text != before and main.message.text != "", "после брифинга — отложенная строка на приборах")
 	eq(main.world_wait, "", "отложенной больше нет")
+
+
+func test_scene_queued_world_line_waits_for_brief() -> void:
+	# #1429, отчёт 1840-brif: строка мира ждала своей секунды в Status.Message до брифинга и вышла уже под плашкой
+	Main.hints = true
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	for i in 30:
+		main.step(1.0 / 30.0)
+	ok(main.arrival.shown(), "брифинг на экране")
+	main.world_wait = ""
+	main.message.say("Из песка что-то схватило круглую рыбку", Status.MESSAGE_SECONDS, true)
+	main.message.say("Стайка круглых рыбок пасётся на светящемся мху", Status.MESSAGE_SECONDS, true)   # в очереди
+	for i in 60:
+		main.step(1.0 / 30.0)
+		ok(not main.message.text.contains("рыб"), "строка мира не выходит под брифингом (кадр %d)" % i)
+	eq(main.world_wait, "Стайка круглых рыбок пасётся на светящемся мху", "ждёт последняя из очереди")

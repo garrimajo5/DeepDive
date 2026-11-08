@@ -191,6 +191,20 @@ class Message:
 		_show(msg, seconds)
 		world = wait
 
+	## Забрать строки мира с приборов (брифинг прибытия, #1429): видимая строка мира и ждущая гаснут, отдаётся последняя
+	## («» — их нет). Свои сообщения игрока не трогает.
+	func take_world() -> String:
+		var out := next
+		next = ""
+		next_left = 0.0
+		if world and not text.is_empty():
+			if out.is_empty():
+				out = text
+			text = ""
+			left = 0.0
+			world = false
+		return out
+
 	func clear(msg: String) -> void:
 		if next == msg:
 			next = ""
