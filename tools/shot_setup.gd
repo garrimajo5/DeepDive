@@ -177,6 +177,14 @@ static func apply(g: Main, kv: Dictionary) -> void:
 			cam.global_position = pose["cam"]
 			cam.look_at(pose["look"])
 			cam.make_current()
+	if kv.has("scena"):  # scena=1|2|3 — контрольный ракурс сцены 00 → 01 (#1400): штатная камера пилота, нос к 01
+		var sp := scena_pose(int(kv["scena"]))
+		if not sp.is_empty():
+			g.helm.yaw = sp["yaw"]
+			g.helm.turn = 0.0
+			g.park_at(sp["ship"])
+			if not g.pilot.seated:
+				g.sit_at_helm()
 	if kv.has("lore"):  # lore=d07_return,shell03 — знания слоя 1 (#825; ключи LayerLore.KEYS)
 		for k in kv["lore"].split(",", false):
 			g.lore.learn(k)
@@ -280,3 +288,23 @@ static func place_pose(name: String, kind: String = "front", dist: float = PLACE
 	cam.y = maxf(cam.y, Seabed.height(cam.x, cam.z) + PLACE_FLOOR)
 	var look := Vector3(at.x, maxf(at.y - 4.0, Seabed.height(at.x, at.z) + 2.0), at.z)
 	return {"ship": ship, "yaw": yaw, "cam": cam, "look": look}
+
+
+## Контрольные ракурсы сцены 00 → 01 (#1400, docs/urovni/sloj-1.md «Пакет сравнения»): выход из 00, середина
+## перехода, подход к 01 — точки (x, z), на них сняты кадры «до» в #1400 (main 9b26569).
+const SCENA: Array[Vector2] = [Vector2(4.0, 80.0), Vector2(20.0, 22.5), Vector2(33.0, -22.0)]
+## Цель взгляда сцены — место 01 (Каменный цветок).
+const SCENA_GOAL := "01"
+## Корабль над видимым дном в ракурсе сцены, м (как кадры «до»: 6–8 м).
+const SCENA_FLOOR := 7.0
+
+
+## Поза ракурса scena=n (1…3): корабль в точке SCENA[n − 1] на SCENA_FLOOR над видимым дном, носом к 01.
+## {ship, yaw}; пусто — нет такого ракурса.
+static func scena_pose(n: int) -> Dictionary:
+	if n < 1 or n > SCENA.size():
+		return {}
+	var at := SCENA[n - 1]
+	var to := LayerMap.xz(SCENA_GOAL) - at
+	var ship := Vector3(at.x, Seabed.mesh_height(at.x, at.y) + SCENA_FLOOR, at.y)
+	return {"ship": ship, "yaw": atan2(-to.x, -to.y)}   # нос (−sin, −cos) — к 01
