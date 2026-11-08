@@ -1,0 +1,30 @@
+[aist#0:0/pcm_s16le @ 000001f14075e600] Guessed Channel Layout: stereo
+Input #0, wav, from 'C:\Users\FEDYA\Documents\ChatGPT\Pogrujenie\work\sound-schedule-20261107\art\SND-007-interfejs/comms-in-2.wav':
+  Metadata:
+    encoder         : Lavf61.7.100
+  Duration: 00:00:00.88, bitrate: 1536 kb/s
+  Stream #0:0: Audio: pcm_s16le ([1][0][0][0] / 0x0001), 48000 Hz, stereo, s16, 1536 kb/s
+Stream mapping:
+  Stream #0:0 -> #0:0 (pcm_s16le (native) -> pcm_s16le (native))
+Press [q] to stop, [?] for help
+Output #0, null, to 'pipe:':
+  Metadata:
+    encoder         : Lavf61.7.100
+  Stream #0:0: Audio: pcm_s16le, 192000 Hz, stereo, s16, 6144 kb/s
+      Metadata:
+        encoder         : Lavc61.19.100 pcm_s16le
+[Parsed_loudnorm_1 @ 000001f140750ec0]
+{
+	"input_i" : "-20.03",
+	"input_tp" : "-12.10",
+	"input_lra" : "0.00",
+	"input_thresh" : "-31.78",
+	"output_i" : "-24.03",
+	"output_tp" : "-16.07",
+	"output_lra" : "0.00",
+	"output_thresh" : "-35.78",
+	"normalization_type" : "linear",
+	"target_offset" : "0.03"
+}
+[out#0/null @ 000001f1407a8800] video:0KiB audio:660KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+size=N/A time=00:00:00.88 bitrate=N/A speed=33.2x
