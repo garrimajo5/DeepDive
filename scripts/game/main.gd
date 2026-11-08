@@ -65,6 +65,7 @@ var music: Music   ## музыка SND-004: тема меню и напряже�
 var ship_sounds: ShipSounds   ## разовые звуки корабля SND-002: импульс сонара, удары, скрежет (`HullSound`)
 var machine_sounds: MachineSounds   ## машины корабля SND-005: роторы, реактор, перегрев, пар (`MachineSound`)
 var hand_sounds: HandSounds   ## руки экипажа SND-006: сварка, сканер, «вид изучен» (`HandSound`)
+var ui_sounds: UiSounds   ## интерфейс и связь SND-007: касания, кнопка поста, сообщение связи, тангента (`UiSound`)
 var hit_local: Variant = null   ## точка удара существа в осях корабля, пока идёт vitals.hit (звук по стороне, #656)
 var sound_mix := SoundMix.Mix.new()  ## сведение шин звука (docs/zvuk.md): меню, пауза, вид с борта, тревога — Main._sound
 ## Прогрев шейдеров при старте (Warmup, issue #50): шторка, камера оглядывает корабль, скрытое показано на кадр.
@@ -237,6 +238,8 @@ func _build_audio() -> void:
 	add_child(music)
 	ship_sounds = ShipSounds.new()
 	add_child(ship_sounds)
+	ui_sounds = UiSounds.new()   # SND-007
+	add_child(ui_sounds)
 
 
 ## Сборка: за бортом — отмель, ил, след, живой мир, образцы; пол корпуса для хода.
@@ -1005,6 +1008,8 @@ const ROUTE_POST_R := 0.6
 
 ## Кнопка действия у поста.
 func use_post(id: String) -> void:
+	if ui_sounds:
+		ui_sounds.post()   # SND-007: щелчок кнопки поста — и когда пост занят
 	var other := Crew.holder(crew, me, id)
 	if other:   # пост держит другой член экипажа
 		say(Crew.busy_text(id, other))
@@ -1831,6 +1836,7 @@ func _sound(dt: float) -> void:
 	music.set_pair(sound_mix.music_pair())
 	machine_sounds.update(dt, hull_motion.spin, reactor.hot, reactor.heat, reactor.scram, engine.venting)   # SND-005
 	hand_sounds.update(dt, HandSound.weld_point(crew), scanner.busy or gate.busy, scanner.done + gate.done)   # SND-006
+	ui_sounds.update(comms.cur, comms.shown, radio.wants())   # SND-007: связь и тангента
 
 
 ## Активные поля табло тревог (AlarmBoard.Field) — из тех же строк, что тревога в строке состояния.
