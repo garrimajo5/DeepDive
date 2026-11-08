@@ -238,7 +238,7 @@ func test_moss_at_rib_feet() -> void:
 	eq(sides, [3, 3], "по три пятна с каждой стороны")
 	var ev := EcoView.new()
 	ev.ground = Seabed.height
-	eq(ev.moss.patches.size(), 22, "пятна рифа — прежние 22, скребуны их не делят с костями")
+	eq(ev.moss.patches.size(), EcoMoss.SPOTS.size(), "пятна рифа — только EcoMoss.SPOTS, скребуны их не делят с костями")
 	var mv := ev.bones_view.moss_view
 	ok(mv != null and mv.get_parent() == ev.bones_view, "мох на костях — в сцене")
 	eq(mv.look.verts.size(), EcoBones.MOSS_PAIRS.size() * EcoMossLook.VERTS_PER_PATCH, "один меш на все пятна")

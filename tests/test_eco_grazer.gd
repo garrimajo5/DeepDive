@@ -53,11 +53,11 @@ func _flat(a: Vector3, b: Vector3) -> float:
 
 # ---------- Мох и скребуны (EcoMoss, EcoGrazer) ----------
 
-func test_22_patches_and_10_grazers() -> void:
+func test_24_patches_and_10_grazers() -> void:
 	var w := _world()
 	var moss := _moss(w)
 	var gr := _grazers(w)
-	eq(moss.patches.size(), 22, "22 пятна")
+	eq(moss.patches.size(), 24, "24 пятна: 22 из браузера и два у Каменного цветка (#1400)")
 	near(moss.patches[0].pos.x, 30.831, 0.01, "первое пятно — как в браузере")
 	near(moss.patches[0].pos.z, 94.437, 0.01)
 	for p in moss.patches:
@@ -507,11 +507,31 @@ func test_eaten_grazer_invisible() -> void:
 			return
 
 
+## #1400, подход к 01: два последних пятна — у цоколя Каменного цветка со стороны прохода 00 → 01. Край пятна касается
+## цоколя (основание рифа связано с грунтом), в крону и под цоколь пятно не заходит; оба — по бокам цоколя, как его
+## видно с подхода от 00 (ближняя сторона в кадре пилота закрыта пультом), одно слева, другое справа.
+func test_flower_patches_touch_plinth_on_approach_side() -> void:
+	var c := EcoFlower.CENTER
+	var from00 := Vector2(LayerMap.POINTS["00"]["x"], LayerMap.POINTS["00"]["z"])
+	var n := EcoMoss.SPOTS.size()
+	var sides: Array[float] = []
+	for i in range(n - EcoMoss.FLOWER_SPOTS, n):
+		var s := EcoMoss.SPOTS[i]
+		var d := Vector2(s.x, s.z).distance_to(c)
+		var edge := d - EcoMoss.RADIUS
+		ok(edge > 0.0 and edge <= EcoFlower.PLINTH_R + 0.5, "пятно %d касается цоколя: край в %.1f м от оси" % [i, edge])
+		ok(d < EcoFlower.SPREAD, "под кроной, а не в стороне")
+		var ang := rad_to_deg((Vector2(s.x, s.z) - c).angle_to(from00 - c))
+		ok(absf(ang) >= 60.0 and absf(ang) <= 120.0, "пятно %d сбоку цоколя: %.0f° от направления на 00" % [i, ang])
+		sides.append(signf(ang))
+	ok(sides[0] != sides[1], "одно слева, другое справа")
+
+
 func test_moss_patches_lie_on_ground() -> void:
 	var moss := _moss(_world())
 	var m := EcoMossLook.build(moss.patches, Seabed.height)
-	eq(m.verts.size(), 22 * 81)
-	eq(m.tris.size(), 22 * 128 * 3)
+	eq(m.verts.size(), 24 * 81)
+	eq(m.tris.size(), 24 * 128 * 3)
 	for i in range(0, m.verts.size(), 7):
 		var p := m.verts[i]
 		if not near(p.y, Seabed.height(p.x, p.z) + EcoMossLook.ABOVE, 1e-3, "по дну"):
