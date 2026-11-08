@@ -12,9 +12,14 @@ const ID := "ezh"
 ## Рощи — у этих стай светляков (E.shoals[gi + 1]); стай должно быть хотя бы три.
 const SHOALS: Array[int] = [1, 2]
 const MIN_SHOALS := 3
+## Две рощи на переходе 00 → 01 (#1400, постановка в docs/urovni/sloj-1.md): густая сторона прохода — восточная, от
+## Каменного цветка у старта (EcoCoral.BASES[1]) мимо трубного органа (EcoOrgan.SPOTS[1]) к стае 5 у 01; западная остаётся
+## открытым обходом. Края рощ — в ROUTE_GAP от прямой 00 → 01, свободный габарит прохода не трогают.
+const ROUTE: Array[Vector2] = [Vector2(36.0, 38.0), Vector2(45.0, 14.0)]
+const ROUTE_GAP := 11.0
 ## Рощи без своей стаи (x, z): Тихая заводь 09 (EcoCove, #831) — ежи там пасутся, а прятаться в ней некому;
-## две у террасы врат 07 — рама позади арки (EcoGate, #831).
-const EXTRA: Array[Vector2] = [EcoCove.KELP, EcoGate.KELP[0], EcoGate.KELP[1]]
+## две у террасы врат 07 — рама позади арки (EcoGate, #831); две — на переходе 00 → 01 (ROUTE).
+const EXTRA: Array[Vector2] = [EcoCove.KELP, EcoGate.KELP[0], EcoGate.KELP[1], ROUTE[0], ROUTE[1]]
 ## Лент в роще и радиус рощи (KELP_N, KELP_R); ежей у рощи (URCH_N).
 const KELP_N := 34
 const KELP_R := 7.0

@@ -65,12 +65,37 @@ func _hunt(w: EcoWorld) -> Array:
 
 # ---------- Расстановка ----------
 
+## #1400: рощи перехода 00 → 01 — с восточной стороны прямой между местами, краем не ближе ROUTE_GAP;
+## западная сторона остаётся открытым обходом.
+func test_route_groves_east_of_passage() -> void:
+	var a := Vector2(LayerMap.POINTS["00"]["x"], LayerMap.POINTS["00"]["z"])
+	var b := Vector2(LayerMap.POINTS["01"]["x"], LayerMap.POINTS["01"]["z"])
+	var d := (b - a).normalized()
+	var right := Vector2(-d.y, d.x)
+	ok(right.x > 0.0, "правая нормаль к курсу на север смотрит на восток (+X)")
+	for p in EcoKelp.ROUTE:
+		ok(EcoKelp.EXTRA.has(p), "роща перехода — в рощах EcoKelp")
+		var t := (p - a).dot(d) / a.distance_to(b)
+		ok(t > 0.1 and t < 0.9, "роща посередине перехода, не у самих мест")
+		var side := (p - a).dot(right)
+		ok(side - EcoKelp.KELP_R >= EcoKelp.ROUTE_GAP, "край рощи %s в %.1f м от прямой 00 → 01" % [p, side - EcoKelp.KELP_R])
+	var w := EcoWorld.new()
+	w.ground = Seabed.height
+	var f := w.add(EcoFish.new()) as EcoFish
+	var k := w.add(EcoKelp.new(f)) as EcoKelp
+	for gr in k.groves:
+		var c := Vector2(gr.center.x, gr.center.z)
+		var t := (c - a).dot(d) / a.distance_to(b)
+		if t > 0.0 and t < 1.0:
+			ok((c - a).dot(right) > 0.0 or absf((c - a).dot(right)) > 30.0, "на западе у прохода рощ нет: %s" % c)
+
+
 func test_two_groves_by_shoals_on_ground() -> void:
 	var w := EcoWorld.new()
 	w.ground = Seabed.height
 	var f := w.add(EcoFish.new()) as EcoFish
 	var k := w.add(EcoKelp.new(f)) as EcoKelp
-	eq(k.groves.size(), 2 + EcoKelp.EXTRA.size(), "две рощи у стай, роща в Тихой заводи и две у врат 07 (#831)")
+	eq(k.groves.size(), 2 + EcoKelp.EXTRA.size(), "две рощи у стай, роща в Тихой заводи, две у врат 07 (#831) и две на переходе 00 → 01 (#1400)")
 	eq(k.urchins.size(), k.groves.size() * EcoKelp.URCH_N, "по 7 ежей у рощи")
 	eq(k.groves[2].shoal, null, "у рощи заводи своей стаи нет")
 	near(k.groves[2].center.x, EcoKelp.EXTRA[0].x, 1e-4)
