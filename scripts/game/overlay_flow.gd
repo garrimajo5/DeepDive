@@ -75,6 +75,7 @@ func brief_step(dt: float, hidden: bool) -> bool:
 			break
 		router.blocks.append(ArrivalBrief.box(_size()))
 	m.arrival_panel.show_brief(b)
+	m.release_world_say()   # брифинг пройден — отложенная строка мира (#1429)
 	return b.active()
 
 

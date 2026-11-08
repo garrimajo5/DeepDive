@@ -142,3 +142,38 @@ func test_scene_off_in_tests() -> void:
 	await frames(1)
 	ok(not main.arrival.active(), "в тестах и снимках брифинга нет (Main.hints = false)")
 	ok(not main.events_held(), "события не ждут")
+
+
+## Табло тревог ART-025 под плашкой не читается: заливка почти глухая (#1429).
+func test_fill_hides_alarm_board() -> void:
+	ok(ArrivalBriefPanel.FILL >= 0.97, "заливка плашки не ниже 0,97")
+
+
+## Строки живого мира не перебивают брифинг: последняя ждёт его конца и выходит после 8/8 (#1429).
+func test_scene_world_lines_wait_for_brief() -> void:
+	Main.hints = true
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	for i in 30:
+		main.step(1.0 / 30.0)
+	ok(main.arrival.shown(), "брифинг на экране")
+	var before: String = main.message.text
+	main.on_eco_event({"type": EcoLink.MESSAGE, "text": "Из песка что-то схватило рыбу"})
+	main.on_eco_event({"type": EcoLink.MESSAGE, "text": "На светящиеся споры слетаются рыбы"})
+	eq(main.message.text, before, "во время брифинга строка мира не выходит")
+	eq(main.world_wait, "На светящиеся споры слетаются рыбы", "ждёт одна, последняя")
+	var size := main.get_viewport().get_visible_rect().size
+	var pending := ""
+	for i in ArrivalBrief.count():
+		for j in 15:
+			main.step(1.0 / 30.0)
+		ok(main.arrival.active(), "брифинг ещё идёт")
+		eq(main.message.text, before, "строка приборов под брифингом не меняется (экран %d)" % (i + 1))
+		pending = main.world_wait   # живой мир может сменить отложенную строку на свежую — ждёт последняя
+		main.overlay.router.taps.append(ArrivalBrief.box(size).get_center())
+		main.step(1.0 / 30.0)
+	ok(not main.arrival.active(), "брифинг пройден")
+	ok(pending != "", "строка ждала")
+	ok(main.message.text != before and main.message.text != "", "после брифинга — отложенная строка на приборах")
+	eq(main.world_wait, "", "отложенной больше нет")

@@ -4,6 +4,7 @@ extends Control
 ## дальше». Состояние, строки и места — `ArrivalBrief`; касания — `Touch.Router.taps` (`OverlayFlow.brief_step`), сам
 ## узел их не ловит. Палитра ART-028/040: заливка #0B1C24, контур #67DDEB, текст #D5E4E8/#9AD9E8.
 
+const FILL := 0.97   ## непрозрачность заливки: табло тревог ART-025 под плашкой не читается (#1429)
 const GLYPH_TOP := 0.76   ## от верха видимых глифов до базовой линии, доля кегля (DejaVu Sans)
 
 var brief: ArrivalBrief
@@ -44,7 +45,7 @@ func _draw() -> void:
 	var a := brief.a
 	var font := get_theme_default_font()
 	var plate := ArrivalBrief.box(size)
-	draw_style_box(UiStyle.box(Color(UiStyle.DARK, 0.92 * a), 14.0 * s, Color(UiStyle.ACCENT, a), 2.0 * s), plate)
+	draw_style_box(UiStyle.box(Color(UiStyle.DARK, FILL * a), 14.0 * s, Color(UiStyle.ACCENT, a), 2.0 * s), plate)
 	var width := plate.size.x - 2.0 * ArrivalBrief.LINE1_AT.x * s
 	_text(font, ArrivalBrief.at(ArrivalBrief.SOURCE_AT, size), ArrivalBrief.SOURCE, int(ArrivalBrief.SOURCE_PX * s),
 		Color(UiStyle.DIM, a))
