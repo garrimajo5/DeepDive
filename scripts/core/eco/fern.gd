@@ -1,7 +1,7 @@
 class_name EcoFern
 extends EcoSystem
 ## Волнолист (fern в js/creatures.js: initFerns, fernsUpdate; ART-004 «Волнолист: закрыт / раскрыт»): спиральный
-## папоротник около 1,5 м, две куртины по четыре куста — у стаи светляков рядом со стартом и у третьей стаи.
+## папоротник около 1,5 м, три куртины по четыре куста — у стаи светляков рядом со стартом, у третьей стаи и на переходе 00 → 01.
 ## В луче прожектора (EcoWorld.in_beam) листья разворачиваются и ложатся наружу (за ~1,7 с), после луча держатся
 ## раскрытыми ещё 5 с и сворачиваются за ~4 с. Под раскрытыми листьями видны моллюски: спокойные стаи светляков
 ## ближе 25 м плывут к ним. Сообщения (наблюдения журнала): «разворачивает листья к свету» (раз в 40 с),
@@ -19,6 +19,10 @@ const SPREAD := 2.5
 const START_CLUSTER := Vector2(14, 68)
 const SHOAL_CLUSTER := 2
 const SHOAL_OFFSET := Vector2(-6, 4)
+## Третья — на переходе 00 → 01 (#1400): опушка восточной рощи ленточника (EcoKelp.ROUTE[2]) со стороны прохода, в 25 м
+## впереди середины перехода и в 14 м от прямой 00 → 01 — ближний план у оси взгляда пилота, куст в 1,5 м под
+## килем не мешает ходу; западная сторона остаётся открытой.
+const ROUTE_CLUSTER := Vector2(40.0, 2.0)
 ## Ширина и длина листа (м) и вершина куста над подножием (top в браузере).
 const LEAF_W := 0.42
 const LEAF_LEN := 1.4
@@ -78,7 +82,7 @@ func _init(prey_fish: EcoFish = null, clusters: Array[Vector2] = []) -> void:
 
 static func default_clusters() -> Array[Vector2]:
 	var h := EcoFish.HOMES[SHOAL_CLUSTER]
-	return [START_CLUSTER, Vector2(h.x, h.z) + SHOAL_OFFSET]
+	return [START_CLUSTER, Vector2(h.x, h.z) + SHOAL_OFFSET, ROUTE_CLUSTER]
 
 
 static func seed_for(world_seed: int) -> int:

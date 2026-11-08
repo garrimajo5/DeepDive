@@ -64,15 +64,16 @@ func test_beam_cone() -> void:
 
 # ---------- Расстановка ----------
 
-func test_two_clusters_of_four_on_ground() -> void:
+func test_three_clusters_of_four_on_ground() -> void:
 	var w := _world()
 	var fr := _fern(w)
-	eq(fr.ferns.size(), 8, "две куртины по четыре")
+	eq(fr.ferns.size(), 12, "три куртины по четыре")
 	var c := EcoFern.default_clusters()
 	near(c[1].x, EcoFish.HOMES[2].x - 6.0, 1e-4, "вторая — у третьей стаи")
+	eq(c[2], EcoFern.ROUTE_CLUSTER, "третья — на переходе 00 → 01 (#1400)")
 	for fe in fr.ferns:
 		near(fe.pos.y, Seabed.height(fe.pos.x, fe.pos.z), 1e-4, "на дне")
-		var cl := c[0] if fe.index < 4 else c[1]
+		var cl := c[fe.index / EcoFern.PER_CLUSTER]
 		ok(absf(fe.pos.x - cl.x) <= 2.5 and absf(fe.pos.z - cl.y) <= 2.5, "в куртине")
 		ok(fe.scale >= 0.8 and fe.scale <= 1.2, "разброс ±20 %")
 		near(fe.open, 0.0, 1e-6, "свёрнут")
@@ -80,6 +81,24 @@ func test_two_clusters_of_four_on_ground() -> void:
 	other.ground = Seabed.height
 	other.add(EcoFern.new())
 	eq(_fern(other).ferns[3].pos, fr.ferns[3].pos, "то же зерно — те же места")
+
+
+## #1400: куртина перехода 00 → 01 — на опушке восточной рощи ленточника, впереди середины перехода, с восточной
+## стороны прямой и не ближе EcoKelp.ROUTE_GAP − SPREAD к ней: ближний план у оси взгляда, западный обход открыт.
+func test_route_cluster_at_grove_edge_east_of_passage() -> void:
+	var a := Vector2(LayerMap.POINTS["00"]["x"], LayerMap.POINTS["00"]["z"])
+	var b := Vector2(LayerMap.POINTS["01"]["x"], LayerMap.POINTS["01"]["z"])
+	var d := (b - a).normalized()
+	var right := Vector2(-d.y, d.x)
+	var p := EcoFern.ROUTE_CLUSTER
+	var t := (p - a).dot(d) / a.distance_to(b)
+	ok(t > 0.5 and t < 0.8, "впереди середины перехода: t = %.2f" % t)
+	var side := (p - a).dot(right)
+	ok(side - EcoFern.SPREAD * sqrt(2.0) >= EcoKelp.ROUTE_GAP - 1.0, "куст не ближе %.1f м к прямой" % (side - EcoFern.SPREAD * sqrt(2.0)))
+	var grove := EcoKelp.ROUTE[2]
+	var gap := p.distance_to(grove) - EcoKelp.KELP_R
+	ok(gap > 0.0 and gap < EcoFern.SPREAD * 2.0, "на опушке рощи, а не в ней и не отдельно: %.1f м от края" % gap)
+	ok((grove - a).dot(right) > side, "роща дальше от прохода, чем куртина")
 
 
 func test_start_cluster_not_nearest_scan_target() -> void:
@@ -245,8 +264,8 @@ func test_view_two_multimeshes() -> void:
 	ok(fv != null and fv.get_parent() == view, "волнолист — в живом мире")
 	eq(fv.leaves.layers, OceanView.LAYER_WORLD, "слой отмели")
 	eq(fv.shells.layers, OceanView.LAYER_WORLD)
-	eq(fv.leaves.multimesh.instance_count, 8 * EcoFern.LEAVES, "все листья — один MultiMesh")
-	eq(fv.shells.multimesh.instance_count, 8 * EcoFern.SHELLS, "все моллюски — один MultiMesh")
+	eq(fv.leaves.multimesh.instance_count, 12 * EcoFern.LEAVES, "все листья — один MultiMesh")
+	eq(fv.shells.multimesh.instance_count, 12 * EcoFern.SHELLS, "все моллюски — один MultiMesh")
 	var tris := fv.leaves.multimesh.mesh.get_faces().size() / 3
 	eq(tris, FernView.SEGMENTS * 2, "лист — 12 треугольников")
 	var fe := view.ferns.ferns[3]
@@ -289,7 +308,7 @@ func test_view_lite_coarser_same_material() -> void:   # Б6 «Экономно�
 	ok(shell_lite < shell_full * 0.6, "моллюск: %d → %d" % [shell_full, shell_lite])
 	ok(fv.leaves.multimesh.mesh.surface_get_material(0) == leaf_mat, "материал листа тот же (колыхание)")
 	ok((fv.shells.multimesh.mesh as SphereMesh).material == shell_mat, "материал моллюска тот же")
-	eq(fv.leaves.multimesh.instance_count, 8 * EcoFern.LEAVES, "все листья на месте")
+	eq(fv.leaves.multimesh.instance_count, 12 * EcoFern.LEAVES, "все листья на месте")
 	ok(fv.dust_view == dust, "муть та же")
 	var lb := fv.leaves.multimesh.mesh.get_aabb()
 	near(lb.size.y, leaf_box.size.y, 1e-3, "длина листа та же")
