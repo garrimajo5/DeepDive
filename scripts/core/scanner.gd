@@ -20,6 +20,8 @@ var targets: Array[Dictionary] = []   ## NEAR с "scan": true этого шаг�
 var target: Dictionary = {}  ## текущая цель ({} — никого)
 var key := ""                ## вид, который сканируется
 var progress := 0.0
+var busy := false            ## в прошлый шаг сканер работал — держали кнопку на цели (звук SND-006, `HandSound`)
+var done := 0                ## сколько видов изучено за сеанс (растёт — «вид изучен», не из сохранения)
 var _holding := false
 
 signal message(text: String)
@@ -74,11 +76,13 @@ func complete(species: String) -> void:
 		return
 	scanned[species] = true
 	rev += 1
+	done += 1
 	changed.emit()
 	message.emit("Новый вид: %s" % Species.info(species).name)
 
 
 func update(dt: float) -> void:
+	busy = _holding
 	if not _holding:
 		progress = maxf(0.0, progress - dt * DECAY)
 		if progress <= 0.0:
