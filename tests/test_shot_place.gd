@@ -45,3 +45,29 @@ func test_scene_camera_at_pose() -> void:
 	ok(cam.global_position.is_equal_approx(p["cam"]), "текущая камера — ракурс места")
 	main.queue_free()
 	await frames(1)
+
+
+func test_scena_poses_nose_to_flower() -> void:   # scena=1|2|3 — ракурсы сцены 00 → 01 (#1400)
+	for n in range(1, ShotSetup.SCENA.size() + 1):
+		var p: Dictionary = ShotSetup.scena_pose(n)
+		ok(not p.is_empty(), "ракурс есть: %d" % n)
+		var at: Vector2 = ShotSetup.SCENA[n - 1]
+		near(p["ship"].y, Seabed.mesh_height(at.x, at.y) + ShotSetup.SCENA_FLOOR, 1e-4, "над видимым дном: %d" % n)
+		ok(p["ship"].y < 0.0, "подо льдом: %d" % n)
+		var to := LayerMap.xz("01") - at
+		var nose := Vector2(-sin(p["yaw"]), -cos(p["yaw"]))
+		near(nose.dot(to.normalized()), 1.0, 1e-4, "нос к 01: %d" % n)
+	ok(ShotSetup.scena_pose(0).is_empty() and ShotSetup.scena_pose(4).is_empty(), "нет ракурса — пусто")
+
+
+func test_scene_scena_at_helm() -> void:
+	var main: Node = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	ShotSetup.apply(main, {"scena": "2"})
+	var p: Dictionary = ShotSetup.scena_pose(2)
+	ok(main.helm.pos.is_equal_approx(p["ship"]), "корабль в точке ракурса")
+	near(main.helm.yaw, p["yaw"], 1e-6, "курс к 01")
+	ok(main.pilot.seated, "штатная камера пилота — за штурвалом")
+	main.queue_free()
+	await frames(1)
