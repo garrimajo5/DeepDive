@@ -3,6 +3,9 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-08
+- Брифинг прибытия (#1429, отчёт тестера `1840-brif`): строка мира, ждавшая своей секунды в `Status.Message` до
+  брифинга, больше не выходит под плашкой — `Status.Message.take_world` отдаёт её в `Main.world_wait`, после 8/8 она
+  на приборах. Тесты `test_status.test_message_take_world`, `test_arrival_brief.test_scene_queued_world_line_waits_for_brief`.
 - Кодекс игры (#1417), первая версия: `tools/codex.py` собирает HTML-справочник из `docs/world.md`, `LayerMap`,
   `docs/urovni/sloj-1.md`, реестра `Species`, `docs/bestiary.md` и заметок концептов (мир, карта слоя 1 с 11 местами,
   карточки видов слоя 1 со статусом); CI `codex.yml` — тесты, артефакт «kodeks», Pages с `main`; ссылка — в `CLAUDE.md`
