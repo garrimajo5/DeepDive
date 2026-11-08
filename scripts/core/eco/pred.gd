@@ -234,6 +234,29 @@ func on_zap(world: EcoWorld, radius: float = ZAP_RADIUS) -> void:
 		world.emit(ID, "zap", a.p, _text(world, "Разряд отпугнул %s", Species.Case.ACC, false))
 
 
+## Сценарий тестера (#1401): серпохвост n ставится в from и плывёт к to, как на звук (INVESTIGATE), PASS_CALM с
+## не нападает, со станции чистки уходит. Так проход хищника мимо куста огнецвета и ряда каменщиков (#1337, #1339)
+## виден в кадрах прогона без ожидания случайной встречи. Возвращает false, если такого серпохвоста нет.
+const PASS_CALM := 40.0
+
+
+func pass_by(n: int, from: Vector3, to: Vector3) -> bool:
+	if n < 0 or n >= all.size() or not all[n].agent.alive:
+		return false
+	var pr := all[n]
+	if pr.station >= 0 and leeches and pr.station < leeches.stations.size() \
+			and leeches.stations[pr.station].busy == pr.index:
+		leeches.stations[pr.station].busy = -1
+	pr.station = -1
+	pr.prey = null
+	pr.cooldown = maxf(pr.cooldown, PASS_CALM)
+	pr.agent.p = from
+	pr.agent.v = (to - from).normalized() * INVESTIGATE_SPEED
+	_set_mode(pr, Mode.INVESTIGATE, 25.0)
+	pr.agent.goal = to
+	return true
+
+
 ## Каждый серпохвост виден сонару и сканеру.
 func targets(_world: EcoWorld, out: Array[Dictionary]) -> void:
 	for pr in all:

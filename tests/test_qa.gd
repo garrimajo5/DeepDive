@@ -77,6 +77,18 @@ static func scene_frames(q: QaScript) -> int:
 	return ceili((q.total_time() * 1.1 + 20.0) * 30.0)
 
 
+## Кадр 36… (#1401): ряд каменщиков ближе всех к кусту огнецвета 0 — сколько венчиков спрятано, и горит ли куст.
+static func _ognecvet(main: Main, shot: String) -> String:
+	var eco: EcoView = main.eco
+	var bush: EcoCoral.Bush = eco.coral.bushes[0]
+	var row: EcoKamen.Row = null
+	for r in eco.kamen.rows:
+		if row == null or r.center.distance_to(bush.top) < row.center.distance_to(bush.top):
+			row = r
+	var hidden := eco.kamen.hidden_in(row)
+	return "%s: %s %s" % [shot, "0" if hidden == 0 else "спрятаны", "погас" if bush.glow < EcoCoral.DARK else "свет"]
+
+
 func test_total_time() -> void:
 	var q := QaScript.parse('[{"do": "wait", "s": 2}, {"do": "hold", "what": "pad", "dir": [0, 1], "s": 0.5},'
 			+ ' {"do": "shot", "name": "a"}, {"do": "press", "what": "action"}, {"do": "swipe", "dx": 10, "dy": 0}]')
@@ -113,6 +125,7 @@ func test_scene_runs_scenario() -> void:
 	var field_known := false   # 32e2: импульс с площадки 08 поймал ритм поля (#833)
 	var bones_seen := false   # 32g: сканер у Костей 04 — строка о минерализации (#840)
 	var shell_known := false   # 32h: сонар и сканер у Раковины 03 — знание «осмотр 03» (#835)
+	var ogon: Array[String] = []   # 36/36a/36b (#1401): спрятано венчиков у куста огнецвета 0 и его свечение по кадрам
 	ok(not main.lore.knows(LayerLore.FIELD08), "до прогона поле 08 не замечено")
 	for i in scene_frames(qa.script_q):   # предел — от длины сценария (#1379)
 		# снимок берёт уже нарисованный кадр — камеру до шага, в котором он снят
@@ -172,6 +185,8 @@ func test_scene_runs_scenario() -> void:
 				zap_seen = zap_vis
 			if qa.log_lines[k].begins_with("скриншот 10a-zap-okno"):
 				arc_seen = arc_vis
+			if qa.log_lines[k].begins_with("скриншот 36"):
+				ogon.append(_ognecvet(main, qa.log_lines[k].split(" ")[1].trim_suffix(":")))
 			if qa.log_lines[k].begins_with("скриншот 30-kartochka-sonar"):
 				card_seen = card_vis
 			if qa.log_lines[k].begins_with("скриншот 33") and screens > 0:
@@ -198,6 +213,8 @@ func test_scene_runs_scenario() -> void:
 	ok(field_known, "32e2: импульс у 08 — ритм поля, знание «поле 08»")
 	ok(bones_seen, "32g: сканер у Костей 04 — строка о минерализации")
 	ok(shell_known, "32h: сонар и сканер у Раковины 03 — знание «осмотр 03»")
+	eq(ogon, ["36-ognecvet-do: 0 свет", "36a-ognecvet-prohod: спрятаны погас", "36b-ognecvet-posle: 0 свет"],
+			"#1401: до прохода ряд раскрыт и куст горит, на проходе — спрятан и погас, после — снова раскрыт")
 	ok(not main.pilot.seated, "и встали")
 	ok(ahead > 20.0, "корабль прошёл вперёд: %.1f м" % ahead)
 	ok(FileAccess.file_exists(QaRunner.OUT + "/done.txt"), "done.txt записан")

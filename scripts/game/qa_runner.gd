@@ -186,6 +186,8 @@ func tick(dt: float) -> void:
 				main.vitals.energy = c[1]
 			"ping":   # импульс сонара, как с поста (у площадки 08 — ритм пограничного поля, #833)
 				main.ping_sonar()
+			"pred":   # серпохвост мимо куста огнецвета поперёк взгляда с корабля (#1401)
+				pred_pass(main, c[1], c[2], c[3])
 			"save":   # место для гибели (#824): как автосохранение, но только в памяти — файл прогона не пишется
 				main.save.ship = SaveGame.ship_read(SaveGame.ship_snapshot(main.helm, main.vitals)) if c[1] else {}
 			"wreck":   # корпус разрушен — как от удара (шторка ART-036)
@@ -595,3 +597,24 @@ func _finish() -> void:
 	var f := FileAccess.open(OUT + "/done.txt", FileAccess.WRITE)
 	if f:
 		f.store_string("ok\n")
+
+
+## Шаг «pred» (#1401): серпохвост n проходит мимо вершины куста огнецвета bush поперёк линии «корабль — куст»,
+## в 2 м над вершиной, от −PRED_SPAN до +PRED_SPAN; away — уводит его дальше по той же линии, от 2 до 8 PRED_SPAN
+## (до прохода хищник мог стоять у куста на чистке — ряд каменщиков был бы спрятан в кадре «до»). Уводит далеко:
+## 180 м на скорости проверки — дольше 25 с проверки, иначе он доплывал за 5 с и возвращался к станции чистки у куста
+## раньше кадра «после» (CI, PR #1419).
+## Возвращает [откуда, куда] или пусто, если куста/хищника нет.
+static func pred_pass(main: Main, n: int, bush: int, away := false) -> Array:
+	var eco: EcoView = main.eco
+	if eco == null or eco.coral == null or eco.preds == null or bush < 0 or bush >= eco.coral.bushes.size():
+		return []
+	var top := eco.coral.bushes[bush].top + Vector3(0, 2, 0)
+	var look := Vector2(top.x - main.helm.pos.x, top.z - main.helm.pos.z)
+	var across := Vector2(1, 0) if look.length() < 1.0 else look.normalized().orthogonal()
+	var off := Vector3(across.x, 0, across.y) * QaScript.PRED_SPAN
+	var from := top + off * 2.0 if away else top - off
+	var to := top + off * 8.0 if away else top + off
+	if not eco.preds.pass_by(n, from, to):
+		return []
+	return [from, to]

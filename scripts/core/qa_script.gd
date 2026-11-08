@@ -30,6 +30,10 @@ extends RefCounted
 ##                                                     (тревога и расход заряда без самого существа)
 ##   {"do": "hull", "pct": 30}                       — прочность корпуса, % (следы повреждений ART-049 снаружи)
 ##   {"do": "charge", "units": 100}                  — заряд корабля, ед. (разряд по шагам не зависит от длины прогона)
+##   {"do": "pred", "n": 0, "bush": 0}             — серпохвост n проходит мимо куста огнецвета bush (EcoCoral.BASES)
+##                                                     поперёк взгляда с корабля, в 2 м над вершиной, по PRED_SPAN м
+##                                                     в обе стороны (#1401: гаснут кончики #1339, прячется ряд каменщиков #1337);
+##                                                     "away": true — увести его от куста за 2·PRED_SPAN (кадр «до»)
 ##   {"do": "ping"}                                  — импульс сонара (`Main.ping_sonar`, как с поста): у 08 — ритм поля
 ##   {"do": "ship", "x": 38, "y": -20, "z": -25}     — поставить корабль в точку мира (y — высота, глубина со знаком
 ##                                                     минус), корабль стоит: вид на дно под трещинами льда (#445)
@@ -66,12 +70,14 @@ extends RefCounted
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z[, yaw°]], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["ping"], ["route"], ["act"], ["mate_hold", on], ["gone"], ["save", on], ["wreck"], ["back"], ["tutorial", on, шаг 1…7], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z[, yaw°]], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["ping"], ["pred", n, bush, away], ["route"], ["act"], ["mate_hold", on], ["gone"], ["save", on], ["wreck"], ["back"], ["tutorial", on, шаг 1…7], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
-const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "ping", "ship", "fly", "route", "gone", "save", "wreck", "back", "tutorial", "cards", "voice", "slow", "hud", "play", "log", "quit"]
+const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "ping", "pred", "ship", "fly", "route", "gone", "save", "wreck", "back", "tutorial", "cards", "voice", "slow", "hud", "play", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "map", "map_back", "hint_map", "new", "exit", "yes", "no", "crew", "journal", "settings", "graphics", "g0", "g1", "g2", "fps", "golos", "zvuk", "s0", "v_hold", "v_voice", "v_hear", "v_mic", "lite_yes", "lite_no", "ask", "join", "last", "lobby_new", "lobby_addr", "lobby_refresh",
 	"jcell0", "jcell1", "jcell2", "jcell3", "jcell4", "jcell5", "jprev", "jnext", "jclose",
 	"key0", "key1", "key2", "key3", "key4", "key5", "key6", "key7", "key8", "key9", "key.", "keydel"]
+## Шаг «pred»: полпути серпохвоста мимо куста (м) — с запасом за PRED_R огнецвета и HIDE_R каменщиков.
+const PRED_SPAN := 30.0
 const PRESS_TIME := 0.15   ## сколько держать кнопку при «press», с
 const FINGER := 900        ## номер пальца для касаний сценария (не пересекается с настоящими)
 ## После этих команд скриншот ждёт следующего шага: снимок берёт уже нарисованный кадр, и без кадра между ними
@@ -203,6 +209,8 @@ func _begin(st: Dictionary, out: Array) -> void:
 			out.append(["hull", clampf(float(st.get("pct", 100.0)), 0.0, 100.0)])
 		"ping":
 			out.append(["ping"])
+		"pred":
+			out.append(["pred", int(st.get("n", 0)), int(st.get("bush", 0)), bool(st.get("away", false))])
 		"charge":
 			out.append(["charge", clampf(float(st.get("units", Vitals.MAX)), 0.0, Vitals.MAX)])
 		"ship":
