@@ -3,3 +3,4 @@
 *.jpg binary
 *.glb binary
 *.keystore binary
+CHANGELOG.md merge=union
