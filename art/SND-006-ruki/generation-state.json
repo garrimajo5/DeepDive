@@ -20,7 +20,8 @@
       },
       "generation_id": "SKIVJoyETgzYH4kFFWlx",
       "credits": 40,
-      "downloaded": true
+      "downloaded": true,
+      "plan": "Free"
     },
     {
       "name": "weld-2",
@@ -40,7 +41,8 @@
       },
       "generation_id": "BXvMtFJGvxRsmQHMk0fI",
       "credits": 40,
-      "downloaded": true
+      "downloaded": true,
+      "plan": "Free"
     },
     {
       "name": "scanner-hold-1",
@@ -60,7 +62,8 @@
       },
       "generation_id": "5WPJEQ4Zfr8HAHHfvRVX",
       "credits": 30.000000000000004,
-      "downloaded": true
+      "downloaded": true,
+      "plan": "Free"
     },
     {
       "name": "scanner-hold-2",
@@ -75,9 +78,9 @@
       },
       "generation_id": "NXdqmN4BR0T1L9JbkH4l",
       "session_id": "k2KUxSBf11NkV6cVtglt",
-      "downloaded": false,
+      "downloaded": true,
       "plan": "Creator",
-      "download_error": "HTTP 403 Forbidden; generation completed, file not downloaded"
+      "previous_download_error": "HTTP 403 Forbidden; generation completed, file not downloaded"
     },
     {
       "name": "scanner-done-1",
@@ -89,9 +92,9 @@
       "node_id": "RAFZpnU7U3e3AM4uBE0L",
       "generation_id": "Thb4hnBw55NFn44VVAON",
       "session_id": "tHZgNNgfVexUE5tqxej7",
-      "downloaded": false,
+      "downloaded": true,
       "plan": "Creator",
-      "download_error": "HTTP 403 Forbidden; generation completed, file not downloaded"
+      "previous_download_error": "HTTP 403 Forbidden; generation completed, file not downloaded"
     },
     {
       "name": "scanner-done-2",
@@ -103,9 +106,9 @@
       "node_id": "XcFySrXBClHHOn73HHLi",
       "generation_id": "Wqz3GqtGIdoYk7qH315y",
       "session_id": "IBBXVOGefvNNcSNe64Uy",
-      "downloaded": false,
+      "downloaded": true,
       "plan": "Creator",
-      "download_error": "HTTP 403 Forbidden; generation completed, file not downloaded"
+      "previous_download_error": "HTTP 403 Forbidden; generation completed, file not downloaded"
     },
     {
       "name": "sonar-jam-1",
@@ -117,9 +120,9 @@
       "node_id": "V5Xt8ekMw7BBZcBQ1bLh",
       "generation_id": "0z4sGQqAT9tazvODMdC8",
       "session_id": "Cq1nV2nNWGYg75KEr3Ab",
-      "downloaded": false,
+      "downloaded": true,
       "plan": "Creator",
-      "download_error": "HTTP 403 Forbidden; generation completed, file not downloaded"
+      "previous_download_error": "HTTP 403 Forbidden; generation completed, file not downloaded"
     },
     {
       "name": "sonar-jam-2",
@@ -131,9 +134,9 @@
       "node_id": "QsGmk1Rr07S7SFS4FT0M",
       "generation_id": "wfM4G5FcO4eAbawDne9W",
       "session_id": "wqInAW0AL1ghbxX6B5fR",
-      "downloaded": false,
+      "downloaded": true,
       "plan": "Creator",
-      "download_error": "HTTP 403 Forbidden; generation completed, file not downloaded"
+      "previous_download_error": "HTTP 403 Forbidden; generation completed, file not downloaded"
     }
   ]
 }
