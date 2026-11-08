@@ -8,6 +8,7 @@
 #   -Pr <номер>         — проверить фикс из открытой PR ДО слияния: берёт APK из артефакта deepdive-apk
 #                         последнего прогона CI этой PR (нужен gh), ставит на эмулятор и гоняет сценарий
 #   -Force              — прогнать APK, даже если коммит тот же; -Scenario <файл> — свой сценарий
+#   Эмулятор после прогона не закрывается (запущен отдельно от скрипта): ручная проверка — adb, закрыть — adb emu kill
 param([switch]$Pc, [switch]$Force, [string]$Scenario, [int]$Pr)
 $ErrorActionPreference = 'Continue'
 $repo  = 'D:\AI\DeepDive'
@@ -82,7 +83,10 @@ if ($Pr) {
 }
 
 if (-not ((& $adb devices) -match 'emulator-\d+\s+device')) {
-  Start-Process "$sdk\emulator\emulator.exe" -ArgumentList '-avd', 'Pixel_8' -WindowStyle Minimized
+  # Эмулятор — отвязанным процессом (WMI, не потомок скрипта): живёт после прогона, даже если фоновый
+  # run-qa.ps1 закрыли вместе с деревом процессов, — можно досматривать руками через adb (#1350)
+  Invoke-CimMethod Win32_Process -MethodName Create -Arguments @{
+    CommandLine = "`"$sdk\emulator\emulator.exe`" -avd Pixel_8" } | Out-Null
   & $adb wait-for-device
   for ($i = 0; $i -lt 60; $i++) { if ((& $adb shell getprop sys.boot_completed).Trim() -eq '1') { break }; Start-Sleep 5 }
 }
