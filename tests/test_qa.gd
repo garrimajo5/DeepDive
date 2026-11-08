@@ -387,6 +387,33 @@ func test_menu_press_with_continue() -> void:
 	await frames(1)
 
 
+## Предложение тестера (#1350, 08.11): брифинг прибытия #827 — шагом сценария, а не руками через adb.
+func test_brief_step_pages_to_end() -> void:
+	var q := QaScript.parse('[{"do": "brief"}, {"do": "press", "what": "brief"}, {"do": "brief", "on": false}]')
+	eq(q.errors.size(), 0, "шаг brief и кнопка brief известны")
+	eq(q.advance(0.01)[0], ["brief", true], "команда сцене")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.lore.learn(LayerLore.BRIEF)   # прочитан в прошлом забеге — шаг всё равно показывает с начала
+	var steps := '{"do": "brief"}, {"do": "wait", "s": 0.8}'
+	for i in ArrivalBrief.count():
+		steps += ', {"do": "press", "what": "brief"}, {"do": "wait", "s": 0.8}'
+	var qa := main.start_qa("[" + steps + "]")
+	main.step(1.0 / 30.0)
+	ok(main.arrival.active(), "брифинг идёт")
+	ok(not main.lore.knows(LayerLore.BRIEF), "знание «прочитан» забыто")
+	eq(main.arrival.screen, 0, "с первого экрана")
+	var size := main.get_viewport().get_visible_rect().size
+	ok(ArrivalBrief.box(size).has_point(qa._point("brief", Vector2.ZERO)), "касание — в плашке")
+	for i in int((0.8 + ArrivalBrief.count() * (QaScript.PRESS_TIME + 0.8) + 0.5) * 30.0):
+		main.step(1.0 / 30.0)
+	ok(not main.arrival.active(), "пролистан до конца")
+	ok(main.lore.knows(LayerLore.BRIEF), "прочитан — как от касаний игрока")
+	main.queue_free()
+	await frames(1)
+
+
 func test_silt_step() -> void:
 	var q := QaScript.parse('[{"do": "silt"}, {"do": "silt", "on": false}]')
 	eq(q.errors.size(), 0, "шаг silt известен")
