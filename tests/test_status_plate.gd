@@ -27,11 +27,14 @@ func test_plate_shrinks_after_long_message() -> void:
 	await frames(1)
 	var long_h := main.hint.size.y
 	ok(long_h > short_h + 20.0, "длинное сообщение — плашка выше (%.0f > %.0f)" % [long_h, short_h])
+	ok(main.hint.text.split("\n").size() <= Status.MAX_ROWS, "длинное сообщение — не больше трёх строк (#1345)")
 	for i in 150:   # 5 с — сообщение (4,2 с) сошло
 		main.step(1.0 / 30.0)
+	main.message.clear(main.message.text)   # строка мира, пришедшая за эти 5 с, — тоже
+	main.step(1.0 / 30.0)
 	await frames(1)
 	var min_h := main.hint.get_combined_minimum_size().y
-	ok(min_h < long_h - 20.0, "строк снова меньше (%.0f)" % min_h)
+	ok(min_h < long_h - 20.0, "строк снова меньше (%.0f): %s" % [min_h, main.hint.text])
 	near(main.hint.size.y, min_h, 0.5, "плашка ужалась по тексту, без пустой полосы")
 	near(main.status_rect().size.y, main.hint.size.y, 0.5, "status_rect — та плашка, что на экране")
 	tree.root.size = was

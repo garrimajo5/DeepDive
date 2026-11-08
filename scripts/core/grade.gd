@@ -119,7 +119,8 @@ static func shade(c: Color, uv: Vector2, mix: Mix, lite: bool = false) -> Color:
 		g = (mix.m * src + mix.off).clamp(Vector3.ZERO, Vector3.ONE)
 		g *= maxf(1.0, luma(src) / maxf(luma(g), 0.00001))   # не темнее исходной яркости
 		g = g.lerp(src, pr)
-	var amount := strength * edge(uv) * (1.0 - pr) * smoothstep(0.015, 0.09, luma(src))
+	# «Экономно» — овал умножением, без чтения кадра (`grade_lite.gdshader`, #842): без защиты ярких и тёмных
+	var amount := strength * edge(uv) if lite else strength * edge(uv) * (1.0 - pr) * smoothstep(0.015, 0.09, luma(src))
 	g *= Vector3(1.0 - amount, 1.0 - amount * 0.88, 1.0 - amount * 0.65)
 	g = g.clamp(Vector3.ZERO, Vector3.ONE)
 	return Color(g.x, g.y, g.z, 1.0)

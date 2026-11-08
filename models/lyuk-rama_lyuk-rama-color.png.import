@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bx5ci4iebhr3t"
-path="res://.godot/imported/lyuk-rama_lyuk-rama-color.png-362d100ccb02b87a8edda99c1c37f174.ctex"
+path.s3tc="res://.godot/imported/lyuk-rama_lyuk-rama-color.png-362d100ccb02b87a8edda99c1c37f174.s3tc.ctex"
+path.etc2="res://.godot/imported/lyuk-rama_lyuk-rama-color.png-362d100ccb02b87a8edda99c1c37f174.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "79457992d344edcd225a9836c56ce960"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/lyuk-rama_lyuk-rama-color.png"
-dest_files=["res://.godot/imported/lyuk-rama_lyuk-rama-color.png-362d100ccb02b87a8edda99c1c37f174.ctex"]
+dest_files=["res://.godot/imported/lyuk-rama_lyuk-rama-color.png-362d100ccb02b87a8edda99c1c37f174.s3tc.ctex", "res://.godot/imported/lyuk-rama_lyuk-rama-color.png-362d100ccb02b87a8edda99c1c37f174.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

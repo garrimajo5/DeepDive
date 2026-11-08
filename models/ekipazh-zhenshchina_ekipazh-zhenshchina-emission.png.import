@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bycakueefefbc"
-path="res://.godot/imported/ekipazh-zhenshchina_ekipazh-zhenshchina-emission.png-e6e009ef55289a403ba526a2ee1042ec.ctex"
+path.s3tc="res://.godot/imported/ekipazh-zhenshchina_ekipazh-zhenshchina-emission.png-e6e009ef55289a403ba526a2ee1042ec.s3tc.ctex"
+path.etc2="res://.godot/imported/ekipazh-zhenshchina_ekipazh-zhenshchina-emission.png-e6e009ef55289a403ba526a2ee1042ec.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "b663e64916709a906529348cb465257d"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/ekipazh-zhenshchina_ekipazh-zhenshchina-emission.png"
-dest_files=["res://.godot/imported/ekipazh-zhenshchina_ekipazh-zhenshchina-emission.png-e6e009ef55289a403ba526a2ee1042ec.ctex"]
+dest_files=["res://.godot/imported/ekipazh-zhenshchina_ekipazh-zhenshchina-emission.png-e6e009ef55289a403ba526a2ee1042ec.s3tc.ctex", "res://.godot/imported/ekipazh-zhenshchina_ekipazh-zhenshchina-emission.png-e6e009ef55289a403ba526a2ee1042ec.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -97,6 +97,7 @@ func test_scene_world_and_edge() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
+	main.arrival.on = false   # брифинг прибытия до подсказок — test_arrival_brief
 	var spr := main.hint_pointer.sprite
 	main.walker.x = 0.0
 	main.walker.z = 1.0

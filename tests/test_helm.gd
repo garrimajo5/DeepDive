@@ -62,3 +62,17 @@ func test_current_changes_every_three_minutes() -> void:
 	for i in 600:
 		c.update(1.0)
 	near(wrapf(c.angle - Helm.SeaCurrent.DIRS[c.index], -PI, PI), 0.0, 0.05, "довернуло к новому направлению")
+
+
+func test_trapped_in_solid_moves_out() -> void:
+	var s := Helm.Ship.new()
+	s.pos = Vector3.ZERO
+	s.solid = func(p: Vector3, _yaw: float) -> bool: return Vector2(p.x, p.z).length() < 10.0
+	s.in_thrust = 1.0
+	_run(s, 6.0)
+	ok(s.pos.z < -10.0, "застрявший в твёрдом (существо подошло) выходит: z %.1f" % s.pos.z)
+	var z := s.pos.z
+	s.yaw = PI   # назад к твёрдому — снова не пускает
+	_run(s, 10.0)
+	ok(Vector2(s.pos.x, s.pos.z).length() >= 10.0, "обратно внутрь не пускает: %.1f" % Vector2(s.pos.x, s.pos.z).length())
+	ok(z < 0.0)

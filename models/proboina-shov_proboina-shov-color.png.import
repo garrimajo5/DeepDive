@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bpbpxklwhyxp4"
-path="res://.godot/imported/proboina-shov_proboina-shov-color.png-e0aab950b65e1c05837b378892af1444.ctex"
+path.s3tc="res://.godot/imported/proboina-shov_proboina-shov-color.png-e0aab950b65e1c05837b378892af1444.s3tc.ctex"
+path.etc2="res://.godot/imported/proboina-shov_proboina-shov-color.png-e0aab950b65e1c05837b378892af1444.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "66deea3282b6c32feeda573853fd05e6"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/proboina-shov_proboina-shov-color.png"
-dest_files=["res://.godot/imported/proboina-shov_proboina-shov-color.png-e0aab950b65e1c05837b378892af1444.ctex"]
+dest_files=["res://.godot/imported/proboina-shov_proboina-shov-color.png-e0aab950b65e1c05837b378892af1444.s3tc.ctex", "res://.godot/imported/proboina-shov_proboina-shov-color.png-e0aab950b65e1c05837b378892af1444.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -149,3 +149,36 @@ func test_pred_bites_stern_not_through() -> void:
 	ok(bit, "укусил корпус")
 	ok(pr.agent.p.distance_to(w.ship.pos) > 20.0, "укусил у кормы, а не у мостика")
 	eq(pr.mode, EcoPred.Mode.RETREAT, "после укуса уходит")
+
+
+# ---------- Цена ----------
+
+## Рыбка, заплывшая в корпус, стоила ~0,25 мс на ПК: семь путей наружу делились пополам по 14 раз, а каждая
+## проверка детали заново считала синусы её поворотов (issue #653 — всплески шага мира, когда стая у корабля).
+## Теперь пути сравниваются грубо и точно досчитывается только лучший: проверок на точку — меньше 85 (было 115).
+func test_push_out_checks_few_parts() -> void:
+	var n := 0
+	var before := EcoHull.checks
+	for l in _grid():
+		if not EcoHull.push_local(l, 0.7).is_empty():
+			n += 1
+	var per := float(EcoHull.checks - before) / n
+	ok(n > 200, "внутри было %d точек" % n)
+	ok(per < 85.0, "проверок деталей на точку внутри: %.1f" % per)
+
+
+## Детали с готовой матрицей — та же форма, что HullPlan.Part.contains (повороты и размер собраны верно).
+func test_shape_matches_part() -> void:
+	for r in [0.0, 0.7]:
+		var list := EcoHull.shapes(r)
+		for l in _grid():
+			for d in [Vector3.ZERO, Vector3(0.37, 0.21, 0.53)]:
+				var p: Vector3 = l + d
+				var want := false
+				for part: HullPlan.Part in EcoHull.parts(r):
+					want = want or part.contains(p)
+				var sh := EcoHull._shape_at(p, list)
+				if (sh != null) != want or (sh != null and not sh.part.contains(p)):
+					ok(false, "запас %.1f: %s" % [r, p])
+					return
+	ok(true)

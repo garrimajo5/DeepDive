@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bhkimhwvsggfg"
-path="res://.godot/imported/lebedka-opora_lebedka-opora-emission.png-83c7d26af4720f00a5cacdb964e1cba0.ctex"
+path.s3tc="res://.godot/imported/lebedka-opora_lebedka-opora-emission.png-83c7d26af4720f00a5cacdb964e1cba0.s3tc.ctex"
+path.etc2="res://.godot/imported/lebedka-opora_lebedka-opora-emission.png-83c7d26af4720f00a5cacdb964e1cba0.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "dcdd1199a7aad88ccb85d36bfd748fa5"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/lebedka-opora_lebedka-opora-emission.png"
-dest_files=["res://.godot/imported/lebedka-opora_lebedka-opora-emission.png-83c7d26af4720f00a5cacdb964e1cba0.ctex"]
+dest_files=["res://.godot/imported/lebedka-opora_lebedka-opora-emission.png-83c7d26af4720f00a5cacdb964e1cba0.s3tc.ctex", "res://.godot/imported/lebedka-opora_lebedka-opora-emission.png-83c7d26af4720f00a5cacdb964e1cba0.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -132,10 +132,7 @@ static func screen_rect(id: String, size: Vector2) -> Rect2:
 
 ## Что под касанием p на странице ("" — ничего).
 static func hit(p: Vector2, size: Vector2) -> String:
-	for id: String in ["back", "g0", "g1", "g2", "fps"]:
-		if screen_rect(id, size).has_point(p):
-			return id
-	return ""
+	return Splash.hit_ids(p, size, ["back", "g0", "g1", "g2", "fps"], screen_rect)
 
 
 ## Плашка счётчика на экране size: от правого края, масштаб по высоте.

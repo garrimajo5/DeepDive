@@ -3,7 +3,7 @@ extends EcoSystem
 ## Фонарные вуали (initVeils/veilUpdate в js/creatures.js; бестиарий): колонии медуз размером с автобус — купол 6 м,
 ## щупальца на 15 м вниз. Две вуали на местах браузера, купол в 21 м над дном (не выше −9 м); дрейфуют у своего места
 ## (± 0,6 м/с, тянет домой 0,004 /с), не опускаются щупальцами ниже 3 м над дном, качаются по высоте ± 1,2 м,
-## купол пульсирует (1 ± 0,07, 1,3 рад/с) и мерцает кромкой.
+## купол пульсирует (1 ± 0,07, 1,3 рад/с ± 15 % — у каждой свой ритм) и мерцает кромкой.
 ## Светляки обходят вуаль (толчок 2,2 вбок в цилиндре r + 3 под куполом), а подплывшую под купол рыбку
 ## (ближе 0,85 r) вуаль жалит — с вероятностью 0,22 в секунду, наблюдение «sting». Серпохвост обходит вуаль стороной
 ## (толчок 8 в цилиндре r + 9; EcoPred, поле veils), наблюдение хищника «avoid» — раз в 40 с на хищника. Корабль под
@@ -24,10 +24,24 @@ const HOME_PULL := 0.004
 const FLOOR_PAD := 3.0
 const CEIL_Y := -7.0
 const BOB := 1.2
+## План реализма Б3 «плавность»: высоту дна берём под всем куполом (середина и FOOT_N точек на FOOT · r), а купол
+## догоняет нужную высоту ходом `Veil.vy` — не быстрее CLIMB_MAX, разгон не больше CLIMB_ACCEL, к высоте — не больше
+## √(2·a·остаток). Раньше высота шла прямо по дну под серединой: на склоне купол-«автобус» ехал лифтом 0,7 м/с и
+## вставал за кадр (6,5 м/с²) на перегибе. Щупальца — не ближе HARD_PAD к дну и на крутом подъёме.
+const FOOT := 0.9
+const FOOT_N := 6
+const CLIMB_MAX := 1.2
+const CLIMB_ACCEL := 0.3
+const CLIMB_FOLLOW := 0.5
+const HARD_PAD := 1.0
+const LOW_MOVE := 0.5
 ## Пульс купола: 1 ± PULSE (1,3 рад/с); внутренний купол — 1 ± PULSE_IN, отстаёт на 0,6 рад.
 const PULSE := 0.07
 const PULSE_IN := 0.09
 const PULSE_W := 1.3
+## Не клоны (Б4, `EcoVary` по номеру вуали): у каждой свой ритм пульса — PULSE_W ± RATE_SPREAD (`pulse_rate`); пульс
+## купола, волна по щупальцам и такт выдоха (`EcoVeilDust`) — по нему. Хешем от номера — у гостя сети тот же ритм.
+const RATE_SPREAD := 0.15
 ## Светляки: толкает вбок в цилиндре r + FISH_PAD от FISH_UP над куполом до низа щупалец; жалит под куполом ближе
 ## STING_R · r и ниже 0,5 м под ним, с вероятностью STING_RATE в секунду.
 const FISH_PAD := 3.0
@@ -62,6 +76,8 @@ class Veil:
 	var p := Vector3.ZERO
 	var home := Vector3.ZERO
 	var ph := 0.0
+	## Ритм пульса купола (рад/с) — `pulse_rate(index)`.
+	var w := PULSE_W
 	## Щупальца: угол, расстояние от середины (доля r уже умножена), длина.
 	var tent_a := PackedFloat32Array()
 	var tent_r := PackedFloat32Array()
@@ -70,6 +86,17 @@ class Veil:
 	var small_size := PackedFloat32Array()
 	var small_y := PackedFloat32Array()
 	var small_ph := PackedFloat32Array()
+	## Сколько раз ужалила светляка и где последний (облачка слизи — EcoVeilDust).
+	var stings := 0
+	var sting_at := Vector3.ZERO
+	## Высота купола без покачивания и её ход (м/с): купол поднимается и опускается над дном плавно (`climb`).
+	var base_y := 0.0
+	var vy := 0.0
+	## Дно под куполом (`floor_low`) и где его брали: заново — сдвинувшись дальше LOW_MOVE (7 выборок дна дороги).
+	var low := 0.0
+	var low_at := Vector2(INF, INF)
+	## Ход купола по горизонтали (м/с) с отставанием DRAG_FOLLOW: щупальца тянутся против него (`rel_water`).
+	var drag := Vector3.ZERO
 
 	## Цель сонара и сканера (vl.scanP).
 	func scan_point() -> Vector3:
@@ -104,6 +131,10 @@ func reset(world: EcoWorld) -> void:
 		vl.p = Vector3(x, top, z)
 		vl.home = vl.p
 		vl.ph = i * 2.1
+		vl.w = pulse_rate(i)
+		vl.base_y = target(world, vl)
+		vl.p.y = height(world, vl, world.time)
+		vl.drag = drift_velocity(vl, world.time)
 		for k in SMALL:
 			vl.small_size.append(_rnd.range_f(0.5, 1.0))
 			vl.small_y.append(_rnd.range_f(-3.0, -1.0))
@@ -118,15 +149,77 @@ func reset(world: EcoWorld) -> void:
 func step(world: EcoWorld, dt: float) -> void:
 	var t := world.time
 	for vl in veils:
-		vl.p.x += sin(t * 0.031 + vl.ph) * DRIFT * dt + (vl.home.x - vl.p.x) * HOME_PULL * dt
-		vl.p.z += cos(t * 0.027 + vl.ph * 1.7) * DRIFT * dt + (vl.home.z - vl.p.z) * HOME_PULL * dt
-		var low := _floor(world, vl.p.x, vl.p.z, vl.home.y - LEN - FLOOR_PAD) + LEN + FLOOR_PAD
-		vl.p.y = minf(maxf(vl.home.y, low), CEIL_Y) + sin(t * 0.3 + vl.ph) * BOB
+		var v := drift_velocity(vl, t)
+		vl.p.x += v.x * dt
+		vl.p.z += v.z * dt
+		vl.drag = vl.drag.lerp(v, 1.0 - exp(-DRAG_FOLLOW * dt))
+		var at := Vector2(vl.p.x, vl.p.z)
+		if at.distance_squared_to(vl.low_at) > LOW_MOVE * LOW_MOVE:
+			vl.low = floor_low(world, vl)
+			vl.low_at = at
+		var low := vl.low
+		var ty := minf(maxf(vl.home.y, low), CEIL_Y)
+		vl.base_y = climb(vl, ty, dt)
+		var hard := minf(low - FLOOR_PAD + HARD_PAD, CEIL_Y)
+		if vl.base_y < hard:
+			vl.base_y = hard
+			vl.vy = maxf(vl.vy, 0.0)
+		vl.p.y = vl.base_y + sin(t * 0.3 + vl.ph) * BOB
+
+
+## Нужная высота купола без покачивания: своё место, но щупальца не ниже FLOOR_PAD над дном под куполом и купол не
+## выше CEIL_Y.
+static func target(world: EcoWorld, vl: Veil) -> float:
+	return minf(maxf(vl.home.y, floor_low(world, vl)), CEIL_Y)
+
+
+## Самая низкая высота купола, при которой щупальца не ниже FLOOR_PAD над дном: дно — самое высокое из середины и
+## FOOT_N точек по кругу FOOT · r.
+static func floor_low(world: EcoWorld, vl: Veil) -> float:
+	var fb := vl.home.y - LEN - FLOOR_PAD
+	var top := _floor(world, vl.p.x, vl.p.z, fb)
+	for k in FOOT_N:
+		var a := k * TAU / FOOT_N
+		top = maxf(top, _floor(world, vl.p.x + cos(a) * FOOT * R, vl.p.z + sin(a) * FOOT * R, fb))
+	return top + LEN + FLOOR_PAD
+
+
+## Шаг высоты без покачивания к ty: нужный ход — CLIMB_FOLLOW × остаток, не больше CLIMB_MAX и √(2·CLIMB_ACCEL·остаток),
+## ход vl.vy меняется не быстрее CLIMB_ACCEL — и у самой высоты: не встаёт за кадр, проскочив её (дно берётся
+## шагами по LOW_MOVE, нужная высота меняется ступеньками). Возвращает новую высоту.
+static func climb(vl: Veil, ty: float, dt: float) -> float:
+	var d := ty - vl.base_y
+	var want := signf(d) * minf(minf(absf(d) * CLIMB_FOLLOW, CLIMB_MAX), sqrt(2.0 * CLIMB_ACCEL * absf(d)))
+	vl.vy = move_toward(vl.vy, want, CLIMB_ACCEL * dt)
+	return vl.base_y + vl.vy * dt
+
+
+## Высота купола в момент t, как её ставит сброс: нужная высота (`target`) плюс покачивание ± BOB.
+static func height(world: EcoWorld, vl: Veil, t: float) -> float:
+	return target(world, vl) + sin(t * 0.3 + vl.ph) * BOB
+
+
+## Дрейф купола у своего места (м/с, по горизонтали): покачивание ± DRIFT и тяга домой HOME_PULL.
+static func drift_velocity(vl: Veil, t: float) -> Vector3:
+	return Vector3(sin(t * 0.031 + vl.ph) * DRIFT + (vl.home.x - vl.p.x) * HOME_PULL, 0.0,
+		cos(t * 0.027 + vl.ph * 1.7) * DRIFT + (vl.home.z - vl.p.z) * HOME_PULL)
+
+
+## Вода относительно купола: поток flow минус ход купола drag, не быстрее REL_MAX (двойник шейдера щупалец).
+static func rel_water(flow: Vector3, drag: Vector3) -> Vector3:
+	var rel := flow - drag
+	var len := rel.length()
+	return rel * (REL_MAX / len) if len > REL_MAX else rel
+
+
+## Ритм пульса вуали с номером i (рад/с): PULSE_W ± RATE_SPREAD.
+static func pulse_rate(i: int) -> float:
+	return PULSE_W * EcoVary.spread(i, EcoVary.RATE, RATE_SPREAD)
 
 
 ## Пульс купола в момент t: (наружный, внутренний) масштаб по ширине (по высоте — обратный).
 static func pulse(vl: Veil, t: float) -> Vector2:
-	return Vector2(1.0 + sin(t * PULSE_W + vl.ph) * PULSE, 1.0 + sin(t * PULSE_W + vl.ph - 0.6) * PULSE_IN)
+	return Vector2(1.0 + sin(t * vl.w + vl.ph) * PULSE, 1.0 + sin(t * vl.w + vl.ph - 0.6) * PULSE_IN)
 
 
 ## Яркость кромки 0,2…1 (0,6 + 0,4 sin(2,6 t + ph)).
@@ -134,17 +227,118 @@ static func rim_glow(vl: Veil, t: float) -> float:
 	return 0.6 + 0.4 * sin(t * 2.6 + vl.ph)
 
 
-## Точка j (0…SEGMENTS) щупальца k относительно середины купола в момент t — как veilUpdate; та же формула —
-## в шейдере VeilView.
-static func tentacle_point(vl: Veil, k: int, j: int, t: float) -> Vector3:
+## Жизнь щупалец (план реализма Б3): сокращение купола бежит волной вниз по щупальцам — звено j повторяет пульс
+## купола с отставанием WAVE_LAG рад на звено, размах к кончику растёт в (1 + WAVE_GROW) раз; течение сносит нити —
+## кончик по потоку на TRAIL длины на полном течении (растёт как доля длины², порыв 0,7…1 за ~16 с), звено
+## поднимается, чтобы нить не вытягивалась. Без этого (live = false, «Экономно») — колыхание браузера.
+const WAVE_LAG := 0.35
+const WAVE_GROW := 1.0
+const TRAIL := 0.12
+## Вторичное движение (Б3): купол-«автобус» дрейфует до ≈ 0,85 м/с, а вода стоит — щупальца сносит не потоком, а
+## водой относительно купола (`rel_water`: поток минус ход купола `Veil.drag`), и тянутся они за куполом. Ход для
+## щупалец догоняет ход купола долей DRAG_FOLLOW в секунду (нити отстают, не поворачивают за кадр); вода для сноса —
+## не быстрее REL_MAX м/с (кончик — не дальше 2 · TRAIL длины). Шейдеру — по вуали в uniform `drag[DRAG_SLOTS]`.
+const DRAG_FOLLOW := 0.5
+const REL_MAX := 0.6
+const DRAG_SLOTS := 4
+
+
+## Точка j (0…SEGMENTS) щупальца k относительно середины купола в момент t — как veilUpdate, плюс волна пульса и
+## снос течением flow (м/с) при live; та же формула — в шейдере VeilView (EcoShaders.MIST, режим TENTACLE).
+static func tentacle_point(vl: Veil, k: int, j: int, t: float, flow := Vector3.ZERO, live := false) -> Vector3:
 	var s := pulse(vl, t).x
-	var x0 := cos(vl.tent_a[k]) * vl.tent_r[k] * s
-	var z0 := sin(vl.tent_a[k]) * vl.tent_r[k] * s
+	var x0 := cos(vl.tent_a[k]) * vl.tent_r[k]
+	var z0 := sin(vl.tent_a[k]) * vl.tent_r[k]
 	if j == 0:
-		return Vector3(x0, -0.1, z0)
+		return Vector3(x0 * s, -0.1, z0 * s)
+	var h := j / float(SEGMENTS)
+	var sj := s
+	if live:
+		sj = 1.0 + sin(t * vl.w + vl.ph - j * WAVE_LAG) * PULSE * (1.0 + WAVE_GROW * h)
 	var step_len := vl.tent_len[k] / SEGMENTS
-	return Vector3(x0 + sin(t * 0.9 + (j - 1) * 0.45 + k) * j * 0.12, -j * step_len,
-		z0 + cos(t * 0.7 + (j - 1) * 0.4 + k * 1.3) * j * 0.12)
+	var p := Vector3(x0 * sj + sin(t * 0.9 + (j - 1) * 0.45 + k) * j * 0.12, -j * step_len,
+		z0 * sj + cos(t * 0.7 + (j - 1) * 0.4 + k * 1.3) * j * 0.12)
+	if live:
+		p += trail(vl, h, j * step_len, t, rel_water(flow, vl.drag))
+	return p
+
+
+## Снос звена течением: h — доля длины щупальца, depth — глубина звена под куполом (м), flow — вода относительно
+## купола (`rel_water`) — двойник шейдера.
+static func trail(vl: Veil, h: float, depth: float, t: float, flow: Vector3) -> Vector3:
+	var gust := 0.85 + 0.15 * sin(t * 0.4 + vl.ph)
+	var off := flow / EcoCurrent.SPEED * (TRAIL * gust * h * depth)
+	off.y = off.length_squared() / (2.0 * maxf(depth / maxf(h, 0.01), 0.1))
+	return off
+
+
+## Б3: корпус раздвигает щупальца. Корабль шёл сквозь завесу нитей (низ щупалец — в 6 м над дном, корабль на ходу —
+## в 3 м), и нити проходили сквозь обшивку и мостик. Теперь точка нити внутри корпуса уходит вбок к борту нити, на
+## край сечения, — как занавес: нить ложится по обшивке и соскальзывает с неё за кормой. Борт нити — по её точке на
+## высоте корпуса поперёк оси корабля, где её встретил корпус, и держится, пока нить на обшивке (`keep_side`): нить
+## у оси не перескакивает с борта на борт, колышась. Корпус для нитей — эллипс сечения HULL_A × HULL_B вокруг оси на
+## HullPlan.CENTER_Y от HULL_Z0 до HULL_Z1, к носу и корме сечение сужается конусом длиной HULL_NOSE и HULL_STERN:
+## у тупого колпака нить у оси за кадр срывалась бы вбок на 2 м, конус раздвигает её заранее — носовой волной, на
+## ходу 6 м/с — не быстрее ≈ 2,2 м/с вбок. Двойник шейдера щупалец.
+const HULL_A := 7.4
+const HULL_B := 3.9
+const HULL_Z0 := -4.0
+const HULL_Z1 := 20.0
+const HULL_NOSE := 20.0
+const HULL_STERN := 16.0
+
+
+## Половина ширины корпуса для нитей (м) в точке l (оси корабля): 0 — точка вне корпуса по высоте или длине.
+static func hull_half(l: Vector3) -> float:
+	var c := 1.0
+	if l.z < HULL_Z0:
+		c = 1.0 - (HULL_Z0 - l.z) / HULL_NOSE
+	elif l.z > HULL_Z1:
+		c = 1.0 - (l.z - HULL_Z1) / HULL_STERN
+	var y := (l.y - HullPlan.CENTER_Y) / HULL_B
+	if c <= 0.0 or y * y >= 1.0:
+		return 0.0
+	return HULL_A * c * sqrt(1.0 - y * y)
+
+
+## Точка нити p (мир) вне корпуса корабля на ship_pos с курсом yaw: внутри — сдвиг по горизонтали поперёк оси к
+## борту side (≥ 0 — правый, +X корабля), на край сечения (`hull_half`); снаружи — как есть.
+static func hull_part(p: Vector3, side: float, ship_pos: Vector3, yaw: float) -> Vector3:
+	var l := (p - ship_pos).rotated(Vector3.UP, -yaw)
+	var half := hull_half(l)
+	if absf(l.x) >= half:
+		return p
+	l.x = half if side >= 0.0 else -half
+	return ship_pos + l.rotated(Vector3.UP, yaw)
+
+
+## Борт точки нити root (мир) у корабля на ship_pos с курсом yaw: +1 — правый (+X корабля), −1 — левый.
+static func side_of(root: Vector3, ship_pos: Vector3, yaw: float) -> float:
+	return 1.0 if (root - ship_pos).rotated(Vector3.UP, -yaw).x >= 0.0 else -1.0
+
+
+## Борт нити на этом шаге: точка нити probe на высоте середины корпуса (`probe_j`) у корпуса — прежний prev (нить уже
+## лежит на обшивке и не перескакивает на другой борт, когда колышется у оси); у корпуса — с запасом SIDE_HOLD м
+## вбок и за корму и на всю высоту сечения: кончик и верх нити, отнесённые течением, сходят с кормы позже точки на
+## высоте середины. Иначе — по probe (`side_of`): нить уходит к тому борту, где её встретил корпус. prev = 0 — ещё не
+## задан.
+const SIDE_HOLD := 3.0
+static func keep_side(prev: float, probe: Vector3, ship_pos: Vector3, yaw: float) -> float:
+	if prev != 0.0:
+		var l := (probe - ship_pos).rotated(Vector3.UP, -yaw)
+		var hold := l
+		hold.z = maxf(HULL_Z0, l.z - SIDE_HOLD)
+		hold.y = HullPlan.CENTER_Y + clampf(l.y - HullPlan.CENTER_Y, -HULL_B * 0.9, HULL_B * 0.9)
+		if l.z > HULL_Z0 - HULL_NOSE and absf(l.y - HullPlan.CENTER_Y) < HULL_B + SIDE_HOLD \
+				and absf(l.x) < hull_half(hold) + SIDE_HOLD:
+			return prev
+	return side_of(probe, ship_pos, yaw)
+
+
+## Звено нити k вуали vl на высоте середины корпуса корабля ship_y (1…SEGMENTS): по ней `keep_side` выбирает борт.
+static func probe_j(vl: Veil, k: int, ship_y: float) -> int:
+	var step_len := vl.tent_len[k] / SEGMENTS
+	return clampi(roundi((vl.p.y - ship_y - HullPlan.CENTER_Y) / step_len), 1, SEGMENTS)
 
 
 ## Близко ли к вуали хоть что-то в радиусе pad по горизонтали (для отбора стай перед обходом рыбок).
@@ -168,6 +362,8 @@ func fish_push(world: EcoWorld, p: Vector3, dt: float, sting: Array) -> Vector3:
 			acc.z += dz / dh * FISH_PUSH
 			if dh < R * STING_R and p.y < vl.p.y - 0.5 and _rnd.next() < dt * STING_RATE:
 				sting.append(vl)
+				vl.stings += 1
+				vl.sting_at = p
 				world.emit(ID, "sting", p, _sting_text(world))
 				return acc
 	return acc

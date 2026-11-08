@@ -31,6 +31,9 @@ func test_targets_by_state() -> void:
 	t = m.target()
 	eq(t[SoundMix.MUSIC], 1.0, "тревога — музыка напряжения")
 	eq(t[SoundMix.AMBIENT], SoundMix.TENSION_AMBIENT_K, "эмбиент уступает")
+	ok(t[SoundMix.WORLD] < SoundMix.INSIDE_WORLD_K - 0.1, "мир за бортом (гул курильщика) уступает тревоге (#835)")
+	near(SoundMix.to_db(t[SoundMix.WORLD]) - SoundMix.to_db(SoundMix.INSIDE_WORLD_K), -6.0, 0.1, "на −6 дБ")
+	eq(t[SoundMix.SHIP], 1.0, "сирена — шина корабля — на полную")
 	m.tension = false
 	m.outside = true
 	t = m.target()

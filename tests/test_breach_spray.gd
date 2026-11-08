@@ -170,7 +170,7 @@ func test_scene_three_multimesh_one_material() -> void:
 		eq(n.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "без теней")
 		mats[n.multimesh.mesh.surface_get_material(0)] = true
 	eq(mats.size(), 1, "один общий материал")
-	eq(v.find_children("*", "Light3D", true, false).size(), 2, "без новых огней: свет сварки и тревога")
+	eq(v.find_children("*", "Light3D", true, false).size(), 1, "без новых огней: только свет сварки (пустая лампа тревоги убрана, #842)")
 	main.open_breach(0)
 	main.debug_weld = true
 	for i in 30:

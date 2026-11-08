@@ -2,8 +2,11 @@ extends TestCase
 ## Каменный цветок (место 1 карты отмели, концепт ART-027): место с карты, коралл 28 м стоит на дне, крона Ø 26 м
 ## не задевает логово стеклоуста и огнецвет, три ветви × четыре вилки = 48 кончиков, середина кроны выше краёв,
 ## кончики мерцают волной снизу вверх (6 с, 15…100 %), цоколь твёрдый, меш — один вызов отрисовки, грани наружу.
+## Громкий импульс сонара рядом гасит огни, потом они возвращаются (#834).
 
 const FLAT := -40.0
+## Светящихся граней у кончика на «Экономно»: 4 грани × (2 острия + 2 между кольцами).
+const LITE_TIP_TRIS := 16
 
 
 static func _flat(_x: float, _z: float) -> float:
@@ -50,8 +53,8 @@ func test_giant_on_ground() -> void:
 		var e := fl.tip_end(i)
 		reach = maxf(reach, Vector2(e.x - fl.base.x, e.z - fl.base.z).length())
 	ok(reach > EcoFlower.SPREAD - 1.5, "крона раскрыта почти на Ø 26 м: радиус %f" % reach)
-	# соседи: логово стеклоуста (62; −45) и огнецвет (54,88; −68,69) — дальше кроны
-	for xz in [EcoEel.LAIRS[2], EcoCoral.BASES[2]]:
+	# соседи: логово стеклоуста (#834 — у трещины 02↔01) и огнецвет (54,88; −68,69) — дальше кроны
+	for xz in [EcoEel.LAIRS[0], EcoCoral.BASES[2]]:
 		ok(Vector2(xz.x - fl.base.x, xz.y - fl.base.z).length() > EcoFlower.SPREAD + 6.0, "сосед %s не в кроне" % xz)
 
 
@@ -163,3 +166,229 @@ func test_in_eco_view() -> void:
 	ok(ev.flower != null and ev.flower_view != null, "цветок в живом мире")
 	near(ev.flower.base.y, FLAT, 1e-4, "встал на дно мира")
 	ev.free()
+
+
+func _ping_world() -> Array:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	var f := w.add(EcoFlower.new()) as EcoFlower
+	w.reset()
+	return [w, f]
+
+
+func _ping(w: EcoWorld, pos: Vector3) -> void:
+	w.ship.pos = pos
+	w.ship.sonar_ping = true
+	w.step(0.1)
+	w.ship.sonar_ping = false
+
+
+func _texts(w: EcoWorld) -> Array:
+	var out := []
+	for e in w.take_link():
+		if e.get("type", "") == EcoLink.MESSAGE:
+			out.append(e.get("text", ""))
+	return out
+
+
+func test_ping_dims_and_light_returns() -> void:
+	var pair := _ping_world()
+	var w: EcoWorld = pair[0]
+	var f: EcoFlower = pair[1]
+	near(f.light, 1.0, 1e-6, "до импульса горит")
+	_ping(w, f.heart() + Vector3(35, 0, 0))
+	ok(f.light <= EcoFlower.DARK_LIGHT + 1e-6, "импульс в 35 м гасит кончики")
+	ok(EcoFlower.MSG_DARK in _texts(w), "на приборах — строка о погасшем цветке")
+	for i in int(EcoFlower.DARK_HOLD / 0.5) - 1:
+		w.step(0.5)
+	ok(f.light <= EcoFlower.DARK_LIGHT + 1e-6, "темнота держится %s с" % EcoFlower.DARK_HOLD)
+	w.step(1.0 + EcoFlower.RELIGHT_TIME * 0.5)
+	ok(f.light > 0.3 and f.light < 0.9, "свет возвращается постепенно: %s" % f.light)
+	w.step(EcoFlower.RELIGHT_TIME)
+	near(f.light, 1.0, 1e-6, "через %s с цветок горит снова" % (EcoFlower.DARK_HOLD + EcoFlower.RELIGHT_TIME))
+
+
+func test_far_ping_keeps_light() -> void:
+	var pair := _ping_world()
+	var w: EcoWorld = pair[0]
+	var f: EcoFlower = pair[1]
+	_ping(w, f.heart() + Vector3(0, 0, EcoFlower.PING_R + 5.0))
+	near(f.light, 1.0, 1e-6, "импульс дальше %s м цветок не гасит" % EcoFlower.PING_R)
+	ok(not (EcoFlower.MSG_DARK in _texts(w)), "и строки нет")
+
+
+func test_dark_message_not_spammed() -> void:
+	var pair := _ping_world()
+	var w: EcoWorld = pair[0]
+	var f: EcoFlower = pair[1]
+	_ping(w, f.heart())
+	_texts(w)
+	w.step(EcoFlower.DARK_HOLD + EcoFlower.RELIGHT_TIME + 1.0)
+	_ping(w, f.heart())
+	ok(f.light <= EcoFlower.DARK_LIGHT + 1e-6, "второй импульс снова гасит")
+	ok(not (EcoFlower.MSG_DARK in _texts(w)), "строка не чаще раза в %s с" % EcoFlower.MSG_CD)
+
+
+func test_view_takes_light() -> void:
+	var pair := _ping_world()
+	var w: EcoWorld = pair[0]
+	var f: EcoFlower = pair[1]
+	var v := FlowerView.new(f)
+	var mat := v.mesh.surface_get_material(0) as ShaderMaterial
+	near(float(mat.get_shader_parameter("light")), 1.0, 1e-6, "сначала горит")
+	ok(not v.sync(), "без перемен шейдеру не отдаёт")
+	_ping(w, f.heart())
+	ok(v.sync(), "после импульса отдаёт")
+	ok(float(mat.get_shader_parameter("light")) > 0.4, "гаснет не за кадр")
+	w.step(EcoFlower.DIM_TIME)
+	ok(v.sync(), "и дальше отдаёт")
+	near(float(mat.get_shader_parameter("light")), EcoFlower.DARK_LIGHT, 1e-6, "шейдер гасит кончики")
+	v.free()
+
+
+## Б3: импульс гасит кончики на виду за DIM_TIME с, а не за кадр (свет мира — сразу); разгораются вместе со светом.
+func test_dims_smoothly() -> void:
+	var pair := _ping_world()
+	var w: EcoWorld = pair[0]
+	var f: EcoFlower = pair[1]
+	_ping(w, f.heart())   # шаг 0,1 с
+	ok(f.light <= EcoFlower.DARK_LIGHT + 1e-6 and f.seen > 0.7, "свет мира погас сразу, на виду — ещё нет: %.3f" % f.seen)
+	var was := f.seen
+	var worst := 0.0
+	for i in int(EcoFlower.DIM_TIME * 60.0) + 2:
+		w.step(1.0 / 60.0)
+		worst = maxf(worst, absf(f.seen - was))
+		was = f.seen
+	ok(worst <= 0.05, "за шаг 1/60 с — не больше 0,05: %.3f" % worst)
+	near(f.seen, EcoFlower.DARK_LIGHT, 1e-6, "через DIM_TIME — погас")
+	w.step(EcoFlower.DARK_HOLD + EcoFlower.RELIGHT_TIME * 0.5)
+	near(f.seen, f.light, 1e-6, "разгорается вместе со светом")
+
+
+func test_view_lite_coarser_mesh_same_material() -> void:
+	var pair := _ping_world()
+	var f: EcoFlower = pair[1]
+	var v := FlowerView.new(f)
+	tree.root.add_child(v)
+	await frames(1)
+	var full := v.tris
+	var mat := v.mesh.surface_get_material(0)
+	var box_full := v.mesh.get_aabb()
+	v.set_lite(true)
+	ok(v.lite, "цветок — на «Экономно»")
+	ok(v.tris * 10 <= full * 7, "треугольников не больше 70 %% (%d → %d)" % [full, v.tris])
+	eq(v.mesh.get_surface_count(), 1, "вызов тот же")
+	ok(v.mesh.surface_get_material(0) == mat, "материал тот же — свет и мерцание не сбиваются")
+	var box_lite := v.mesh.get_aabb()
+	ok(box_lite.size.y > box_full.size.y * 0.95 and box_lite.size.x > box_full.size.x * 0.9,
+		"силуэт тот же: %s → %s" % [box_full.size, box_lite.size])
+	# кончики светятся по-прежнему: у каждого есть грани со свечением
+	var glow := 0
+	for i in range(0, v.verts.size(), 3):
+		if v._col[i].a > 0.5:
+			glow += 1
+	eq(glow, f.tips.size() * LITE_TIP_TRIS, "у каждого кончика — светящиеся грани")
+	# грани ствола смотрят наружу и на «Экономно»
+	var trunk_top := f.branches[0].p1.y - 2.0
+	var outward := 0
+	var total := 0
+	for i in range(0, v.verts.size(), 3):
+		var c := (v.verts[i] + v.verts[i + 1] + v.verts[i + 2]) / 3.0
+		if c.y < trunk_top and c.y > f.base.y + 2.0 and Vector2(c.x - f.base.x, c.z - f.base.z).length() < 2.1:
+			total += 1
+			var cr := (v.verts[i + 1] - v.verts[i]).cross(v.verts[i + 2] - v.verts[i])
+			var out := Vector3(c.x - f.base.x, 0, c.z - f.base.z)
+			if cr.dot(out) < 0.0 and v.normals[i].dot(out) > 0.0:
+				outward += 1
+	ok(total > 0, "у ствола есть грани")
+	eq(outward, total, "лицевая сторона ствола — снаружи")
+	# импульс гасит кончики и на «Экономно»
+	var w: EcoWorld = pair[0]
+	_ping(w, f.heart())
+	w.step(EcoFlower.DIM_TIME)
+	ok(v.sync(), "после импульса отдаёт свет")
+	near(float((v.mesh.surface_get_material(0) as ShaderMaterial).get_shader_parameter("light")), EcoFlower.DARK_LIGHT,
+		1e-6, "шейдер гасит кончики")
+	v.set_lite(false)
+	eq(v.tris, full, "назад — полный меш")
+	v.queue_free()
+	await frames(1)
+
+
+func test_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = _flat
+	ev.set_lite(true)
+	ok(ev.flower_view.lite, "уровень дошёл до цветка")
+	var lite_tris := ev.flower_view.tris
+	ev.ground = Seabed.height
+	ok(ev.flower_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	ok(ev.flower_view.tris <= lite_tris * 1.05 + 10, "и меш грубый")
+	ev.set_lite(false)
+	ev.free()
+	EcoShaders.set_sway_lite(false)
+
+
+## Б3: кончики-полипы колышутся в течении, каменные ветви и цоколь стоят; двойник шейдера — tip_offset;
+## «Экономно» гасит колыхание (sway_k = 0), вызовов не прибавилось.
+func test_view_tips_sway_in_current() -> void:
+	EcoShaders.set_sway_lite(false)
+	var fl := _flower(_flat)
+	var v := FlowerView.new(fl)
+	tree.root.add_child(v)
+	await frames(1)
+	eq(v.mesh.get_surface_count(), 1, "один вызов, как и был")
+	eq(v.sway.size(), v.verts.size() * 4, "CUSTOM0 у каждой вершины")
+	var mat := v.mesh.surface_get_material(0) as ShaderMaterial
+	ok(mat.shader.code.contains("eco_sway"), "шейдер берёт общий кусок колыхания")
+	near(float(mat.get_shader_parameter("tip_len")), fl.tip_r[0] * 2.0, 1e-4, "длина кончика — в шейдере")
+	var flow := Vector3(0.3, 0.0, 0.0)
+	var tip_max := 0.0
+	var foot_max := 0.0
+	var still := 0
+	var moving := 0
+	for i in v.verts.size():
+		var glow := v._col[i].a > 0.5
+		if not glow:
+			# ветви и цоколь — без колыхания при любом времени
+			if v.tip_offset(i, 1.7, flow).length() == 0.0 and v.tip_offset(i, 5.2, flow).length() == 0.0:
+				still += 1
+			continue
+		moving += 1
+		var h := v.sway[i * 4 + 3]
+		var best := 0.0
+		for t in [0.0, 0.8, 1.6, 2.4, 3.2, 4.0]:
+			best = maxf(best, v.tip_offset(i, t, flow).length())
+		if h > 0.95:
+			tip_max = maxf(tip_max, best)
+		if h < 0.05:
+			foot_max = maxf(foot_max, best)
+	eq(still, v.verts.size() - moving, "ветви и цоколь стоят")
+	ok(moving > 0, "у кончиков есть вершины")
+	ok(tip_max > 0.1 and tip_max < 0.35, "конец кончика уходит на 10–35 см: %.3f" % tip_max)
+	ok(foot_max < 0.01, "основание кончика держится на ветви: %.4f" % foot_max)
+	# двойник совпадает с формулой EcoCurrent.sway от подножия
+	var j := -1
+	for i in v.verts.size():
+		if v.sway[i * 4 + 3] > 0.9:
+			j = i
+			break
+	var o := Vector3(v.sway[j * 4], v.sway[j * 4 + 1], v.sway[j * 4 + 2])
+	var want := EcoCurrent.sway(o, v.sway[j * 4 + 3], v.tip_len(), 2.0, flow, FlowerView.TIP_BEND)
+	ok(v.tip_offset(j, 2.0, flow).is_equal_approx(want), "двойник шейдера — EcoCurrent.sway")
+	# подножие кончика — на его оси, позади центра
+	var k := 0
+	var c := fl.tips[k]
+	near(o.distance_to(c), fl.tip_r[k], 0.5, "подножие ≈ на полдлины от центра кончика")
+	# поток мира доходит до материала, «Экономно» выключает колыхание
+	EcoShaders.set_flow(Vector3(0.12, 0.0, 0.05))
+	ok((mat.get_shader_parameter("flow") as Vector3).is_equal_approx(Vector3(0.12, 0.0, 0.05)), "поток мира — в шейдере")
+	EcoShaders.set_sway_lite(true)
+	eq(float(mat.get_shader_parameter("sway_k")), 0.0, "«Экономно» — кончики стоят")
+	EcoShaders.set_sway_lite(false)
+	eq(float(mat.get_shader_parameter("sway_k")), 1.0, "назад — колышутся")
+	v.set_lite(true)
+	eq(v.sway.size(), v.verts.size() * 4, "грубый меш — тоже с CUSTOM0")
+	EcoShaders.set_flow(Vector3.ZERO)
+	v.queue_free()
+	await frames(1)

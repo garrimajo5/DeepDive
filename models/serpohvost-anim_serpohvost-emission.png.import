@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://5y21otr3clec"
-path="res://.godot/imported/serpohvost-anim_serpohvost-emission.png-2810b196183378a998a975a67c9b7b03.ctex"
+path.s3tc="res://.godot/imported/serpohvost-anim_serpohvost-emission.png-2810b196183378a998a975a67c9b7b03.s3tc.ctex"
+path.etc2="res://.godot/imported/serpohvost-anim_serpohvost-emission.png-2810b196183378a998a975a67c9b7b03.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "e3b3cd0dcd5cf3175f76b7d33f7c233c"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/serpohvost-anim_serpohvost-emission.png"
-dest_files=["res://.godot/imported/serpohvost-anim_serpohvost-emission.png-2810b196183378a998a975a67c9b7b03.ctex"]
+dest_files=["res://.godot/imported/serpohvost-anim_serpohvost-emission.png-2810b196183378a998a975a67c9b7b03.s3tc.ctex", "res://.godot/imported/serpohvost-anim_serpohvost-emission.png-2810b196183378a998a975a67c9b7b03.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

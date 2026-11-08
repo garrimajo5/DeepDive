@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c0dpbv754quuv"
-path="res://.godot/imported/razryad-shchitok_razryad-shchitok-emission.png-5f051bf41f8bc8057aa59cb4bd4ffa37.ctex"
+path.s3tc="res://.godot/imported/razryad-shchitok_razryad-shchitok-emission.png-5f051bf41f8bc8057aa59cb4bd4ffa37.s3tc.ctex"
+path.etc2="res://.godot/imported/razryad-shchitok_razryad-shchitok-emission.png-5f051bf41f8bc8057aa59cb4bd4ffa37.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "e596e997f34c1d830f37fc7cbfb53d08"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/razryad-shchitok_razryad-shchitok-emission.png"
-dest_files=["res://.godot/imported/razryad-shchitok_razryad-shchitok-emission.png-5f051bf41f8bc8057aa59cb4bd4ffa37.ctex"]
+dest_files=["res://.godot/imported/razryad-shchitok_razryad-shchitok-emission.png-5f051bf41f8bc8057aa59cb4bd4ffa37.s3tc.ctex", "res://.godot/imported/razryad-shchitok_razryad-shchitok-emission.png-5f051bf41f8bc8057aa59cb4bd4ffa37.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

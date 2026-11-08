@@ -68,3 +68,26 @@ func test_scene_splash() -> void:
 	eq(s.line.text, "Готово к погружению")
 	s.queue_free()
 	await frames(1)
+
+
+## #766: общий поиск кнопки под пальцем — первая подходящая, выключенная не отвечает, мимо — "".
+func test_hit_ids() -> void:
+	var rects := {"a": Rect2(0, 0, 10, 10), "b": Rect2(5, 5, 10, 10)}
+	var rect_of := func(id: String, _size: Vector2) -> Rect2: return rects[id]
+	var size := Vector2(100, 100)
+	eq(Splash.hit_ids(Vector2(7, 7), size, ["a", "b"], rect_of), "a", "первая в списке")
+	eq(Splash.hit_ids(Vector2(7, 7), size, ["b", "a"], rect_of), "b", "порядок списка решает")
+	eq(Splash.hit_ids(Vector2(12, 12), size, ["a", "b"], rect_of), "b")
+	eq(Splash.hit_ids(Vector2(50, 50), size, ["a", "b"], rect_of), "", "мимо кнопок")
+	var only_b := func(id: String) -> bool: return id == "b"
+	eq(Splash.hit_ids(Vector2(7, 7), size, ["a", "b"], rect_of, only_b), "b", "выключенная не отвечает")
+	eq(Splash.hit_ids(Vector2(2, 2), size, ["a", "b"], rect_of, only_b), "")
+	# Тот же поиск в экранах: центр каждой кнопки меню и графики попадает в неё.
+	var screen := Vector2(1600, 720)
+	for id: String in ["back", "g0", "g1", "g2", "fps"]:
+		eq(Graphics.hit(Graphics.screen_rect(id, screen).get_center(), screen), id)
+	var m := MainMenu.new()
+	m.open = true
+	for it: Array in MainMenu.ITEMS:
+		if m.enabled.get(it[0], false):
+			eq(m.hit(MainMenu.screen_rect(it[0], screen).get_center(), screen), it[0])

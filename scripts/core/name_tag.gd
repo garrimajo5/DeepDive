@@ -123,7 +123,8 @@ static func spread(rects: Array) -> Array:
 ## GAP высоты — но не больше max_down px (столько, чтобы не легла на макушку, см. LIFT); нужно больше — HIDDEN
 ## (плашка — интерфейс, на него табличка не ложится, как в #319). Возвращает сдвиг вниз, px (≥ 0), или HIDDEN.
 static func under_plate(r: Rect2, plate: Rect2, max_down: float) -> float:
-	if not plate.has_area() or not plate.intersects(r):
+	# ближе GAP под плашкой — тоже опустить: оценка по центру таблички не ловит наклон её углов в кадре (#1345)
+	if not plate.has_area() or not plate.grow_side(SIDE_BOTTOM, GAP * r.size.y).intersects(r):
 		return 0.0
 	var down := plate.end.y + GAP * r.size.y - r.position.y
 	return down if down <= max_down else HIDDEN
@@ -190,6 +191,48 @@ static func letter_x(w: float) -> float:
 
 ## Текстура плашки: скруглённый фон, контур, кольцо роли слева (буква и имя — подписи поверх). w — ширина в высотах.
 static func plate_image(w: float, ring: Color, edge: Color = EDGE) -> Image:
+	var key := "%s|%s" % [ring.to_html(), edge.to_html()]
+	if not _plates.has(key):
+		_plates[key] = _plate_full(float(PLATE_CAP.x + 1 + PLATE_CAP.y) / TEX_H, ring, edge)
+	return stretch(_plates[key], roundi(w * TEX_H), PLATE_CAP, func() -> Image: return _plate_full(w, ring, edge))
+
+
+## Слой «нажимает» поверх плашки: яркий контур #67DDEB (толще обычного) и три вертикальных штриха у правого края;
+## остальное прозрачно. Прозрачность слоя — яркость `glow_step`.
+static func glow_image(w: float) -> Image:
+	if _glow == null:
+		_glow = _glow_full(float(GLOW_CAP.x + 1 + GLOW_CAP.y) / TEX_H)
+	return stretch(_glow, roundi(w * TEX_H), GLOW_CAP, func() -> Image: return _glow_full(w))
+
+
+## Плашка по ширине собирается из готовой узкой заготовки (#725): левый край с кружком, один средний столбец
+## (в середине картинка по x не меняется — до краёв и кружка дальше их влияния) и правый край со штрихами —
+## копированием, без попиксельного счёта в GDScript (было ~18 мс на табличку при появлении товарища).
+## Попиксельно совпадает с полным расчётом `_plate_full`/`_glow_full` (тест). Края, px: x — слева, y — справа.
+const PLATE_CAP := Vector2i(60, 16)
+const GLOW_CAP := Vector2i(18, 38)
+static var _plates := {}       ## заготовки плашек по цветам кружка и контура
+static var _glow: Image = null  ## заготовка слоя «нажимает»
+
+
+static func stretch(part: Image, wp: int, cap: Vector2i, full: Callable) -> Image:
+	if wp < cap.x + 1 + cap.y:
+		return full.call()
+	var h := part.get_height()
+	var img := Image.create_empty(wp, h, false, Image.FORMAT_RGBA8)
+	img.blit_rect(part, Rect2i(0, 0, cap.x + 1, h), Vector2i.ZERO)
+	var x := cap.x + 1
+	var mid := wp - cap.y   # конец середины
+	while x < mid:   # середина — удвоением уже собранного куска
+		var n := mini(x - cap.x, mid - x)
+		img.blit_rect(img, Rect2i(cap.x, 0, n, h), Vector2i(x, 0))
+		x += n
+	img.blit_rect(part, Rect2i(cap.x + 1, 0, cap.y, h), Vector2i(mid, 0))
+	return img
+
+
+## Полный попиксельный расчёт плашки — заготовка и эталон для теста.
+static func _plate_full(w: float, ring: Color, edge: Color = EDGE) -> Image:
 	var h := TEX_H
 	var wp := roundi(w * h)
 	var img := Image.create_empty(wp, h, false, Image.FORMAT_RGBA8)
@@ -216,9 +259,8 @@ static func plate_image(w: float, ring: Color, edge: Color = EDGE) -> Image:
 	return img
 
 
-## Слой «нажимает» поверх плашки: яркий контур #67DDEB (толще обычного) и три вертикальных штриха у правого края;
-## остальное прозрачно. Прозрачность слоя — яркость `glow_step`.
-static func glow_image(w: float) -> Image:
+## Полный попиксельный расчёт слоя «нажимает» — заготовка и эталон для теста.
+static func _glow_full(w: float) -> Image:
 	var h := TEX_H
 	var wp := roundi(w * h)
 	var img := Image.create_empty(wp, h, false, Image.FORMAT_RGBA8)

@@ -58,12 +58,17 @@ jobs:
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "Изменения кода: $code"
 
-  tests:
-    name: Тесты
+  # Тесты — тремя частями параллельно (#845): файлы делятся по сумме времени из tests/vremya.txt (TestShards).
+  test-parts:
+    name: Тесты (часть ${{ matrix.part }} из 3)
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3]
     steps:
       - uses: actions/checkout@v5
       - name: Godot из кэша
@@ -87,7 +92,21 @@ jobs:
       - name: Импорт проекта
         run: ~/godot/godot --headless --path . --import
       - name: Тесты
-        run: ~/godot/godot --headless --path . -s tests/run.gd
+        run: ~/godot/godot --headless --path . -s tests/run.gd -- --shard ${{ matrix.part }}/3
+
+  # Итог «Тесты» — зелёный, только когда зелёные все части. always(): иначе при упавшей части итог «skipped»,
+  # а пропуск GitHub считает успехом. Без изменений кода части пропущены — итог тоже пропущен (зелёный).
+  tests:
+    name: Тесты
+    needs: [changes, test-parts]
+    if: always() && needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Все части зелёные
+        run: |
+          echo "Части тестов: ${{ needs.test-parts.result }}"
+          test "${{ needs.test-parts.result }}" = "success"
 
   apk:
     name: Сборка APK
@@ -163,15 +182,19 @@ jobs:
           GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
         run: |
           mkdir -p build
+          # Два APK (#844): телефон — только arm64-v8a, эмулятор тестера (Pixel_8 на Windows) — только x86_64.
+          # Раньше обе библиотеки шли в одном APK, и телефон тащил лишние ~27 МБ.
           ~/godot/godot --headless --path . --export-debug "Android" build/DeepDive.apk 2>&1 | tee build/export.log
-          test -s build/DeepDive.apk
-          ls -la build/DeepDive.apk
+          ~/godot/godot --headless --path . --export-debug "Android эмулятор" build/DeepDive-emulator.apk 2>&1 | tee -a build/export.log
+          test -s build/DeepDive.apk && test -s build/DeepDive-emulator.apk
+          ls -la build/*.apk
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: deepdive-apk
           path: |
             build/DeepDive.apk
+            build/DeepDive-emulator.apk
             build/export.log
           if-no-files-found: warn
 
@@ -197,8 +220,8 @@ jobs:
         run: |
           notes="APK из main, коммит ${GITHUB_SHA::7}: $(git log -1 --format=%s)"
           if gh release view apk-latest >/dev/null 2>&1; then
-            gh release upload apk-latest build/DeepDive.apk --clobber
+            gh release upload apk-latest build/DeepDive.apk build/DeepDive-emulator.apk --clobber
             gh release edit apk-latest --notes "$notes"
           else
-            gh release create apk-latest build/DeepDive.apk --title "Свежий APK" --notes "$notes" --prerelease --target "$GITHUB_SHA"
+            gh release create apk-latest build/DeepDive.apk build/DeepDive-emulator.apk --title "Свежий APK" --notes "$notes" --prerelease --target "$GITHUB_SHA"
           fi

@@ -1,7 +1,7 @@
 class_name EcoEel
 extends EcoSystem
 ## Стеклоуст (eel в js/creatures.js: initEels, eelUpdate, onZap; логова — W.lairs в js/world.js; ART-006,
-## `docs/concept-art/stekloust-skrebun.md`): прозрачный угорь-засадчик 5 м. Три логова в каменных расщелинах; в логове
+## `docs/concept-art/stekloust-skrebun.md`): прозрачный угорь-засадчик 5 м. Одно логово в каменной расщелине; в логове
 ## снаружи только голова и красный глаз. Скребун ближе 9 м или светляк ближе 6 м к устью — бросок (11 м/с, 3 с),
 ## добыча съедена (наблюдение «eelcatch»). Корабль носом ближе 28 м к устью — плывёт к носу в обход корпуса (10 м/с,
 ## 6 с) и присасывается снаружи к панорамному стеклу (наблюдение «latch»): пока висит — тянет заряд корабля,
@@ -9,8 +9,33 @@ extends EcoSystem
 ## На корпусе прилипалы (EcoRemora) — к кораблю не плывёт. Заметен сонару и сканеру.
 
 const ID := "eel"
-## Логова (x, z) из js/world.js; устье — на 1,1 м над дном и на 0,3 м наружу.
-const LAIRS: Array[Vector2] = [Vector2(28, 52), Vector2(-62, -8), Vector2(62, -45)]
+## Логово (x, z); устье — на 1,1 м над дном и на 0,3 м наружу. Слой 1 (#834, `docs/sloj1-sad.md` «Стеклоуст»): один
+## читаемый эпизод — у трещины на подходе 02↔01, в 14 м от отрезка (из трёх логов js/world.js оставлено это). Два
+## других убраны: (28, 52) стоял на пути обучения 00→01, (62, −45) — в 23 м от Каменного цветка 01, где серпохвост, —
+## две угрозы сразу. Логово не ближе LAIR_CLEAR к местам сохранения и терминалу (00, 07, 09, 10) и к цветку 01.
+const LAIRS: Array[Vector2] = [Vector2(-62, -8)]
+const LAIR_CLEAR := 80.0
+## Знак раньше угрозы: корабль по горизонтали входит в WARN_R от логова, стеклоуст сидит — мир шлёт строку WARN_TEXT
+## (EcoLink.MESSAGE). К стеклу он плывёт, когда нос ближе SHIP_R (28 м), — знак приходит на 20 м раньше, обход стороной
+## (дальше SHIP_R) есть с обеих сторон трещины. Снова — после выхода из круга и не чаще WARN_CD.
+const WARN_R := 55.0
+const WARN_CD := 120.0
+const WARN_TEXT := "В расщелине у трещины — красный глаз стеклоуста. Обходите стороной: ближе 28 м он бросится к стеклу."
+## Глаз вдали (#970): сам глаз — шар 0,07 м, с 45 м это меньше пикселя телефона, и знак WARN_TEXT в окне не
+## читается. Поверх глаза — мягкое красное пятно лицом к камере постоянного углового размера GLINT_ANG (радиус на
+## метр расстояния): с 45 м — 0,63 м (мягкий край — видимое ядро около трети), около 10 px в окне 1600 px. Ближе GLINT_NEAR пятна нет (глаз виден сам), к
+## GLINT_FULL оно набирает силу, дальше GLINT_FAR гаснет (дальше знака WARN_R).
+const GLINT_ANG := 0.014
+const GLINT_NEAR := 10.0
+const GLINT_FULL := 20.0
+const GLINT_FAR := 70.0
+const GLINT_OFF := 85.0
+
+
+## Пятно глаза с расстояния dist (м): (радиус, непрозрачность 0…1).
+static func glint(dist: float) -> Vector2:
+	var a := smoothstep(GLINT_NEAR, GLINT_FULL, dist) * (1.0 - smoothstep(GLINT_FAR, GLINT_OFF, dist))
+	return Vector2(dist * GLINT_ANG, a)
 const MOUTH_UP := 1.1
 const MOUTH_OUT := 0.3
 ## Камни логова (как в js/world.js): смещение вбок, вверх и размер; камни — на 2,4 м за устьем.
@@ -56,6 +81,13 @@ const FRONT := Vector3(0, 1.75, HullPlan.NOSE_CUT - 0.65)
 const LATCH_X0 := -3.4
 const LATCH_DX := 0.5
 const LATCH_WAVE := 0.3
+## Плавность (Б3): тело переходит в позу логова и стекла не прыжком, а за SETTLE с (смягчённо, к движущейся цели —
+## стекло едет с кораблём); голова доворачивает к своему курсу долей угла FACE_FOLLOW в секунду, не быстрее FACE_MAX
+## рад/с. Раньше на входе в логово 14 звеньев перескакивали из-за головы в расщелину, а на стекле — на окно за шаг,
+## голова щёлкала на пол-оборота.
+const SETTLE := 0.7
+const FACE_FOLLOW := 10.0
+const FACE_MAX := 7.0
 ## Запас от корпуса на ходу: голова 0,3 м, звенья 0,25 м.
 const HEAD_PAD := 0.3
 const SEG_PAD := 0.25
@@ -76,12 +108,16 @@ class Eel:
 	## Звенья тела: 0 — голова; куда смотрит голова (единичный): на стекле — в стекло, иначе — от первого звена.
 	var segs := PackedVector3Array()
 	var face := Vector3.FORWARD
+	## Доля перехода тела в позу логова или стекла: 0 — только вошёл в режим, 1 — лежит как надо (SETTLE).
+	var settle := 1.0
 	## Пауза до следующего броска; секунды до конца броска или пути к кораблю.
 	var cd := 0.0
 	var timer := 0.0
 	## Добыча броска: скребун или светляк (одно из двух).
 	var prey_grazer: EcoGrazer.Grazer
 	var prey_fish: EcoFish.Fish
+	## Набранное время вдали (EcoLod): шагает реже, догоняя пропущенное.
+	var lag := 0.0
 
 	func latched() -> bool:
 		return mode == Mode.LATCHED
@@ -101,9 +137,14 @@ var fish: EcoFish
 
 var _spots: Array[Vector3]
 var _rnd: EcoRandom
+## Знак у логова: пауза до следующего; знак за этот заход в круг WARN_R уже был.
+var warn_cd := 0.0
+var _warned := false
+## Шаги модуля с reset — очередь стеклоустов вдали (EcoLod).
+var _tick := 0
 
 
-## spots — свои устья (x, дно, z) для тестов; пусто — три логова из браузера на дне мира.
+## spots — свои устья (x, дно, z) для тестов; пусто — логова LAIRS на дне мира.
 func _init(prey_grazers: EcoGrazer = null, prey_fish: EcoFish = null, spots: Array[Vector3] = []) -> void:
 	grazers = prey_grazers
 	fish = prey_fish
@@ -118,6 +159,9 @@ func reset(world: EcoWorld) -> void:
 	_rnd = EcoWorld.seeded_for(seed_for(world.seed_value))
 	eels.clear()
 	latched = null
+	_tick = 0
+	warn_cd = 0.0
+	_warned = false
 	var places := _spots.duplicate()
 	if places.is_empty():
 		for xz in LAIRS:
@@ -136,12 +180,18 @@ func reset(world: EcoWorld) -> void:
 			var c := back + side * r.x + Vector3(0, r.y, 0)
 			e.rocks.append(Vector4(c.x, c.y, c.z, r.z))
 		e.cd = _rnd.range_f(10, 25)
-		e.agent = world.spawn(ID, e.lair)
+		e.agent = world.spawn(ID, hide_point(e, world.time))
 		e.agent.set_state(EcoAgent.State.HIDE)
 		e.segs.resize(SEGS)
 		for k in SEGS:
-			e.segs[k] = e.lair - e.out * (k * SEG_HIDE)
+			e.segs[k] = e.agent.p - e.out * ((k + 0.5) * SEG_HIDE)
 		eels.append(e)
+
+
+## Голова в логове в момент t: выглядывает из расщелины на 0,3 ± 0,15 м. Сброс ставит голову и звенья туда же, где
+## их держит шаг, — раньше на первом шаге голова прыгала на 0,3 м (9 м/с), а звенья доезжали за `SETTLE`.
+static func hide_point(e: Eel, t: float) -> Vector3:
+	return e.lair + e.out * (0.3 + sin(t * 0.8 + e.index) * 0.15)
 
 
 ## Нос корабля для стеклоуста (S.front) в мире.
@@ -149,10 +199,22 @@ static func front(s: EcoLink.ShipState) -> Vector3:
 	return s.pos + FRONT.rotated(Vector3.UP, s.yaw)
 
 
+## Стеклоуст вдали шагает реже (EcoLod): в логове в мути или на броске за скребуном сдвиг за кадр не виден, а поиск
+## добычи и звенья мимо корпуса — каждый шаг. К кораблю и на стекле — каждый шаг (он у носа, ближе MID).
 func step(world: EcoWorld, dt: float) -> void:
 	var t := world.time
 	for e in eels:
-		_update(world, e, dt, t)
+		var far := e.mode != Mode.TO_SHIP and e.mode != Mode.LATCHED
+		if far and EcoLod.wait(e.agent.p.distance_to(world.ship.pos), _tick, e.index, e.lag, dt):
+			e.lag += dt
+			continue
+		var h := dt + e.lag
+		e.lag = 0.0
+		_update(world, e, h, t)
+		if e.mode == Mode.TO_SHIP or e.mode == Mode.LATCHED:   # к стеклу и на стекле — эпизод угрозы (#834)
+			world.hold_threat(e)
+	_tick += 1
+	_sign(world, dt)
 	if latched:
 		world.drain(Species.info(ID).name, DRAIN)
 
@@ -166,7 +228,7 @@ func _update(world: EcoWorld, e: Eel, dt: float, t: float) -> void:
 	var has_goal := false
 	match e.mode:
 		Mode.HIDE:
-			a.p = e.lair + e.out * (0.3 + sin(t * 0.8 + e.index) * 0.15)
+			a.p = hide_point(e, t)
 			if e.cd <= 0.0:
 				_look_around(world, e, dt)
 		Mode.STRIKE:
@@ -201,7 +263,25 @@ func _update(world: EcoWorld, e: Eel, dt: float, t: float) -> void:
 		if dl > 0.01:
 			a.p += d * minf(1.0, speed * dt / dl)
 		world.push_out(a, HEAD_PAD)
-	_pose(world, e, t)
+	_pose(world, e, dt)
+
+
+## Знак раньше угрозы (WARN_R): корабль вошёл в круг логова, стеклоуст в нём сидит, на стекле никого — строка на
+## приборах. Пока корабль в круге, второй раз не шлёт.
+func _sign(world: EcoWorld, dt: float) -> void:
+	warn_cd -= dt
+	var p := Vector2(world.ship.pos.x, world.ship.pos.z)
+	var near: Eel = null
+	for e in eels:
+		if p.distance_to(Vector2(e.lair.x, e.lair.z)) < WARN_R:
+			near = e
+			break
+	if near == null:
+		_warned = false
+	elif not _warned and warn_cd <= 0.0 and latched == null and near.mode == Mode.HIDE:
+		_warned = true
+		warn_cd = WARN_CD
+		world.send(EcoLink.message(WARN_TEXT))
 
 
 ## В логове: добыча рядом — бросок; иначе корабль рядом — к носу (eelUpdate, case 'hide').
@@ -215,13 +295,15 @@ func _look_around(world: EcoWorld, e: Eel, dt: float) -> void:
 		e.prey_fish = f
 		_set_mode(e, Mode.STRIKE)
 		e.timer = STRIKE_TIME
-	elif latched == null and front(world.ship).distance_to(e.lair) < SHIP_R and _rnd.next() < dt * SHIP_CHANCE:
+	elif latched == null and front(world.ship).distance_to(e.lair) < SHIP_R and world.threat_free(e) \
+			and _rnd.next() < dt * SHIP_CHANCE:
 		if remoras and remoras.on_hull > 0:   # на корпусе уже прилипалы — не садится
 			e.cd = CD_REMORA
 			remoras.scare_eel(world, e.lair)
 		else:
 			_set_mode(e, Mode.TO_SHIP)
 			e.timer = TO_SHIP_TIME
+			world.hold_threat(e)
 
 
 func _prey_agent(e: Eel) -> EcoAgent:
@@ -254,6 +336,8 @@ func _go_home(e: Eel, m: Mode, cd: float) -> void:
 
 
 func _set_mode(e: Eel, m: Mode) -> void:
+	if (m == Mode.HIDE or m == Mode.LATCHED) and m != e.mode:
+		e.settle = 0.0   # тело было на ходу — в позу переходит за SETTLE
 	e.mode = m
 	if m != Mode.STRIKE:
 		e.prey_grazer = null
@@ -276,20 +360,26 @@ func on_zap(world: EcoWorld, _radius: float) -> void:
 
 
 ## Звенья тела: в логове — в расщелину, на стекле — поперёк окна, на ходу — тянутся за головой мимо корпуса.
-func _pose(world: EcoWorld, e: Eel, t: float) -> void:
+## В логово и на стекло тело переходит за SETTLE (settle_frac), голова доворачивает (turn_face).
+func _pose(world: EcoWorld, e: Eel, dt: float) -> void:
 	var a := e.agent
+	var want := e.face
 	match e.mode:
 		Mode.LATCHED:
+			var k_in := settle_frac(e, dt)
 			for k in SEGS:
-				e.segs[k] = latch_point(world.ship, k, t)
+				var q := e.segs[k].lerp(latch_point(world.ship, k, world.time), k_in)
+				if k_in < 1.0:   # по пути на стекло — мимо корпуса
+					var res := EcoHull.push_out(q, world.ship.pos, world.ship.yaw, SEG_PAD)
+					q = res[0] if not res.is_empty() else q
+				e.segs[k] = q
 			a.p = e.segs[0]
-			e.face = Vector3.BACK.rotated(Vector3.UP, world.ship.yaw)
-			return
+			want = Vector3.BACK.rotated(Vector3.UP, world.ship.yaw)
 		Mode.HIDE:
+			var k_in := settle_frac(e, dt)
 			for k in SEGS:
-				e.segs[k] = a.p - e.out * ((k + 0.5) * SEG_HIDE)
-			e.face = e.out
-			return
+				e.segs[k] = e.segs[k].lerp(a.p - e.out * ((k + 0.5) * SEG_HIDE), k_in)
+			want = e.out
 		_:
 			e.segs[0] = a.p
 			for k in range(1, SEGS):
@@ -300,9 +390,38 @@ func _pose(world: EcoWorld, e: Eel, t: float) -> void:
 					q = e.segs[k - 1] + d * (SEG_FOLLOW / dl)
 				var res := EcoHull.push_out(q, world.ship.pos, world.ship.yaw, SEG_PAD)
 				e.segs[k] = res[0] if not res.is_empty() else q
-	var f := e.segs[0] - e.segs[1]
-	if f.length_squared() > 1e-6:
-		e.face = f.normalized()
+			var f := e.segs[0] - e.segs[1]
+			if f.length_squared() > 1e-6:
+				want = f.normalized()
+	# легло в логово или на стекло — голова стоит ровно (на стекле едет с кораблём, как бы он ни поворачивал)
+	var laid := e.settle >= 1.0 and not e.moving()
+	e.face = want if laid else turn_face(e.face, want, dt)
+
+
+## Доля пути звеньев к позе за этот шаг: смягчённый (smoothstep) переход за SETTLE к цели, которая может ехать (стекло
+## с кораблём). На последнем шаге — 1: тело ложится ровно в позу. settle растёт.
+static func settle_frac(e: Eel, dt: float) -> float:
+	if e.settle >= 1.0:
+		return 1.0
+	var s0 := e.settle
+	var s1 := minf(1.0, s0 + dt / SETTLE)
+	e.settle = s1
+	var e0 := smoothstep(0.0, 1.0, s0)
+	var e1 := smoothstep(0.0, 1.0, s1)
+	return 1.0 if s1 >= 1.0 else (e1 - e0) / maxf(1e-6, 1.0 - e0)
+
+
+## Курс головы from доворачивает к want: доля угла FACE_FOLLOW в секунду, не быстрее FACE_MAX рад/с; ровно назад —
+## разворот по горизонтали (вокруг вертикали). Оба — единичные.
+static func turn_face(from: Vector3, want: Vector3, dt: float) -> Vector3:
+	var ang := from.angle_to(want)
+	if ang < 1e-5 or dt <= 0.0:
+		return want if ang < 1e-5 else from
+	var axis := from.cross(want)
+	if axis.length_squared() < 1e-10:
+		axis = Vector3.UP
+	var step := minf(ang * (1.0 - exp(-FACE_FOLLOW * dt)), FACE_MAX * dt)
+	return from.rotated(axis.normalized(), step).normalized()
 
 
 ## Звено k стеклоуста на стекле в момент t (мир).

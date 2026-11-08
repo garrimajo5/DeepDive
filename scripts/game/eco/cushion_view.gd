@@ -6,6 +6,12 @@ extends Node3D
 ## по прозрачности, без записи глубины, общий шейдер EcoShaders.MIST): тёмно-синие, тают последние 2 с. Стоит на слое отмели (OceanView.LAYER_WORLD).
 ## Муть у дна (EcoCushionDust: сжалась — клуб ила кольцом вокруг основания) — дочерний MultiMesh «Муть» на том же
 ## шейдере MIST, +1 вызов.
+## «Экономно» (Б6, `set_lite`): рисуется половина пятен каждого облака чернил (`EcoMM.cloud_slot` — буфер вперемешку
+## по подушкам, `visible_instance_count` отрезает вторую половину) — вдвое меньше крупных полупрозрачных пятен у
+## камеры. Мир (облако, укрытие, сонар) не меняется.
+## У корабля подушки «дышат» — `breath` (Б3).
+## Подушки не клоны (Б4): у каждой свой размер ± SIZE_SPREAD по номеру (`pad_scale`, EcoVary, у гостя то же) — поверх
+## сжатия и дыхания. Мир (касание корабля, укрытие стаи, чернила) не меняется, вызовов и шейдеров столько же.
 
 ## Подушка: полусфера радиуса 1 м, сплюснутая по ширине и высоте (g.scale(1.1, 0.75, 1)).
 const SHAPE := Vector3(1.1, 0.75, 1.0)
@@ -16,6 +22,18 @@ const GLOW := Color("1a0a14")
 const INK_SIZE := 2.4
 const INK := Color(0.05, 0.04, 0.12)
 const INK_ALPHA := 0.85
+## «Дыхание» полипов (Б3): подушка медленно набирает воду и опадает — ширина ± BREATH_W, высота ± BREATH_H за
+## BREATH_T с (у каждой свой ритм ± BREATH_SPREAD и фаза — `EcoVary`, у гостя то же). Только ближе BREATH_FAR м к
+## кораблю (размах гаснет к краю плавно, дальше — ровно 1: буфер неподвижен и не грузится заново, #850); сжатая —
+## не дышит; «Экономно» (`EcoShaders.sway_lite`) — не дышит.
+const BREATH_W := 0.03
+const BREATH_H := 0.06
+const BREATH_T := 9.0
+const BREATH_SPREAD := 0.2
+const BREATH_FAR := 45.0
+## Разброс размера подушек (pad_scale) и соль номера — не в фазе с дыханием.
+const SIZE_SPREAD := 0.1
+const SIZE_SALT := 5000
 ## Чисел на экземпляр: transform 3 × 4, у чернил ещё цвет (4).
 const STRIDE := 12
 const STRIDE_C := 16
@@ -31,35 +49,51 @@ var _ink_shown := PackedByteArray()
 ## Муть у дна и её последний буфер (для тестов).
 var dust := EcoCushionDust.new()
 var dust_view: MultiMeshInstance3D
-var dust_buffer := PackedFloat32Array()
-var _dust_empty := false
+## Буфер мути (EcoDustBuffer, issue #732).
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
+## «Экономно»: рисуется половина пятен каждого облака.
+var lite := false
 
 
-func _init(system: EcoCushion) -> void:
+func _init(system: EcoCushion, on_lite := false) -> void:
 	cushions = system
 	name = "Подушечник"
 	var n := cushions.cushions.size()
-	pads = _instance("Подушки", build_pad(), n, false)
-	ink = _instance("Чернила", build_ink(), n * EcoCushion.INK_N, true)
+	pads = EcoMM.instance(self, "Подушки", build_pad(), n, false)
+	ink = EcoMM.instance(self, "Чернила", build_ink(), n * EcoCushion.INK_N, true)
 	dust_view = GrazerView.build_dust(EcoCushionDust.POOL)
 	add_child(dust_view)
+	var pts := PackedVector3Array()
+	for c in cushions.cushions:
+		pts.append(c.base)
+	EcoMM.fit([pads, ink], pts, FRAME_GROW)
+	set_lite(on_lite)
 	sync(0.0)
 
 
-func _instance(n: String, mesh: Mesh, count: int, colors: bool) -> MultiMeshInstance3D:
-	var mi := MultiMeshInstance3D.new()
-	mi.name = n
-	mi.layers = OceanView.LAYER_WORLD
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = colors
-	mm.mesh = mesh
-	mm.instance_count = count
-	mi.multimesh = mm
-	mi.custom_aabb = AABB(Vector3(-400, -200, -400), Vector3(800, 400, 800))
-	add_child(mi)
-	return mi
+## «Экономно» — половина пятен каждого облака чернил; буфер переписывается целиком в следующем sync.
+func set_lite(on: bool) -> void:
+	lite = on
+	ink.multimesh.visible_instance_count = EcoMM.cloud_shown(cushions.cushions.size(), EcoCushion.INK_N, on)
+	ink_buffer = PackedFloat32Array()
+
+
+## Место пятна j подушки cushion в буфере чернил.
+func ink_slot(cushion: int, j: int) -> int:
+	return EcoMM.cloud_slot(cushion, j, cushions.cushions.size(), EcoCushion.INK_N, lite)
+
+
+## Сколько пятен чернил рисуется сейчас.
+func ink_drawn() -> int:
+	var v := ink.multimesh.visible_instance_count
+	return ink.multimesh.instance_count if v < 0 else v
+
+
+## Запас рамки вокруг подушек (#849): облако чернил — 2 м вверх и 5,5 м вширь, его сносит течением.
+const FRAME_GROW := 12.0
 
 
 ## Полусфера подушки с цветом вершин по высоте (0,85 − 0,2y, 0,45 + 0,25y, 0,6 + 0,3y; y — высота сферы до сплющивания).
@@ -111,8 +145,10 @@ func sync(t: float, ship_pos := Vector3.ZERO, info: EcoLink.ShipState = null, fl
 	_ink_shown.resize(cushions.cushions.size())
 	var ink_changed := fresh
 	for cu in cushions.cushions:
-		var b := Basis(Vector3.UP, float(cu.index)) * Basis.from_scale(EcoCushion.squash(cu))
-		_put(pad_buffer, cu.index * STRIDE, Transform3D(b, cu.base))
+		var sc := EcoCushion.squash(cu) * breath(cu.index, EcoCushion.squeeze_k(cu), t, ship_pos.distance_to(cu.base),
+				not EcoShaders.sway_lite) * pad_scale(cu.index)
+		var b := Basis(Vector3.UP, float(cu.index)) * Basis.from_scale(sc)
+		EcoMM.put(pad_buffer, cu.index * STRIDE, Transform3D(b, cu.base))
 		var inked := cu.inked()
 		if not inked and not fresh and _ink_shown[cu.index] == 0:
 			continue
@@ -120,34 +156,40 @@ func sync(t: float, ship_pos := Vector3.ZERO, info: EcoLink.ShipState = null, fl
 		_ink_shown[cu.index] = 1 if inked else 0
 		var c := Color(INK.r, INK.g, INK.b, INK_ALPHA * EcoCushion.ink_fade(cu))
 		for j in EcoCushion.INK_N:
-			var i := (cu.index * EcoCushion.INK_N + j) * STRIDE_C
+			var i := ink_slot(cu.index, j) * STRIDE_C
 			if inked:
-				_put(ink_buffer, i, Transform3D(Basis.IDENTITY, EcoCushion.ink_point(cu, j, t)))
+				EcoMM.put(ink_buffer, i, Transform3D(Basis.IDENTITY, EcoCushion.ink_point(cu, j, t)))
 			else:
-				_put(ink_buffer, i, Transform3D(Basis.from_scale(Vector3.ZERO), cu.ink_c))
+				EcoMM.put(ink_buffer, i, Transform3D(Basis.from_scale(Vector3.ZERO), cu.ink_c))
 			ink_buffer[i + 12] = c.r; ink_buffer[i + 13] = c.g; ink_buffer[i + 14] = c.b; ink_buffer[i + 15] = c.a
-	pads.multimesh.buffer = pad_buffer
+	EcoMM.send(pads, pad_buffer)
 	if ink_changed:
 		ink.multimesh.buffer = ink_buffer
 
 
+## Размер подушки index (доля, Б4): 1 ± SIZE_SPREAD — EcoVary по номеру.
+static func pad_scale(index: int) -> float:
+	return EcoVary.spread(index + SIZE_SALT, EcoVary.SIZE, SIZE_SPREAD)
+
+
+## Множитель размера подушки index в момент t («дыхание» полипов): squeeze — насколько сжата (0…1), dist — до
+## корабля, м; live = false («Экономно») — ровно 1.
+static func breath(index: int, squeeze: float, t: float, dist: float, live := true) -> Vector3:
+	if not live or dist >= BREATH_FAR:
+		return Vector3.ONE
+	var k := (1.0 - clampf(squeeze, 0.0, 1.0)) * smoothstep(BREATH_FAR, BREATH_FAR * 0.7, dist)
+	if k <= 0.0:
+		return Vector3.ONE
+	var rate := TAU / (BREATH_T * EcoVary.spread(index, EcoVary.RATE, BREATH_SPREAD))
+	var s := sin(t * rate + EcoVary.unit(index, EcoVary.HUE) * TAU) * k
+	return Vector3(1.0 + BREATH_W * s, 1.0 + BREATH_H * s, 1.0 + BREATH_W * s)
+
+
 func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3) -> void:
 	dust.update(cushions, t, ship)
-	var shown := dust.dust.shown(t)
-	if shown == 0 and _dust_empty and dust_buffer.size() == EcoCushionDust.POOL * GrazerView.DUST_STRIDE:
-		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
-	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, info, EcoCushionDust.COLOR, EcoCushionDust.LIT,
+	_dust.pack(dust.dust, t, flow, info, EcoCushionDust.COLOR, EcoCushionDust.LIT,
 			Seabed.mesh_height)
-	dust_view.multimesh.buffer = dust_buffer
-	_dust_empty = shown == 0
-
-
-static func _put(buf: PackedFloat32Array, i: int, tr: Transform3D) -> void:
-	var b := tr.basis
-	var o := tr.origin
-	buf[i] = b.x.x; buf[i + 1] = b.y.x; buf[i + 2] = b.z.x; buf[i + 3] = o.x
-	buf[i + 4] = b.x.y; buf[i + 5] = b.y.y; buf[i + 6] = b.z.y; buf[i + 7] = o.y
-	buf[i + 8] = b.x.z; buf[i + 9] = b.y.z; buf[i + 10] = b.z.z; buf[i + 11] = o.z
+	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 
 
 ## Расстановка экземпляра n из буфера с шагом stride.
