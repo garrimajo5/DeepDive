@@ -100,7 +100,8 @@
     при жалобе переводить так же) — красный замерный тест перепроверить отдельно фильтром; полный прогон можно отдать CI,
     локально гонять тесты по фильтру.
 - Поставить Godot в сессии: скачать `Godot_v4.7.2-stable_linux.x86_64.zip` с GitHub releases godotengine/godot,
-  распаковать, `ln -s …/Godot_v4.7.2-stable_linux.x86_64 /usr/local/bin/godot`. Android SDK в сессии нет (`dl.google.com` закрыт),
+  распаковать, `ln -s …/Godot_v4.7.2-stable_linux.x86_64 /usr/local/bin/godot` (504 от прокси — повторять `curl` в цикле
+  с паузой 20 с; `gh release download` не годится — упирается в GraphQL). Android SDK в сессии нет (`dl.google.com` закрыт),
   APK собирает только CI.
 - CI «Godot» (`.github/workflows/godot.yml`): «Тесты» (три части матрицей по времени файлов — `tests/run.gd -- --shard i/3`, `TestShards`, таблица `tests/vremya.txt`; обновить — `-- --times tests/vremya.txt`) и «Сборка APK» (артефакт `deepdive-apk`) идут **параллельно**;
   релиз `apk-latest` — отдельный job «Релиз» после обоих зелёных, только на `main`. PR сливается, когда тесты и APK зелёные.
