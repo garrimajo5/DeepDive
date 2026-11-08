@@ -77,7 +77,9 @@ static func scene_frames(q: QaScript) -> int:
 	return ceili((q.total_time() * 1.1 + 20.0) * 30.0)
 
 
-## Кадр 36… (#1401): ряд каменщиков ближе всех к кусту огнецвета 0 — сколько венчиков спрятано, и горит ли куст.
+## Кадр 36… (#1401): ряд каменщиков ближе всех к кусту огнецвета 0 — сколько венчиков спрятано, и горит ли куст;
+## «присоска» — стеклоуст висит на стекле (корабль стоял в 15 м от его логова, тянул заряд и гасил прожектор к концу
+## прогона, а бросок мимо ряда прятал венчики — main 1ca7c20).
 static func _ognecvet(main: Main, shot: String) -> String:
 	var eco: EcoView = main.eco
 	var bush: EcoCoral.Bush = eco.coral.bushes[0]
@@ -86,7 +88,8 @@ static func _ognecvet(main: Main, shot: String) -> String:
 		if row == null or r.center.distance_to(bush.top) < row.center.distance_to(bush.top):
 			row = r
 	var hidden := eco.kamen.hidden_in(row)
-	return "%s: %s %s" % [shot, "0" if hidden == 0 else "спрятаны", "погас" if bush.glow < EcoCoral.DARK else "свет"]
+	return "%s: %s %s%s" % [shot, "0" if hidden == 0 else "спрятаны", "погас" if bush.glow < EcoCoral.DARK else "свет",
+			" присоска" if main.vitals.drain_left > 0.0 else ""]
 
 
 func test_total_time() -> void:
