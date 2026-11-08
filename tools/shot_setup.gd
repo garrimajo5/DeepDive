@@ -180,11 +180,13 @@ static func apply(g: Main, kv: Dictionary) -> void:
 	if kv.has("scena"):  # scena=1|2|3 — контрольный ракурс сцены 00 → 01 (#1400): штатная камера пилота, нос к 01
 		var sp := scena_pose(int(kv["scena"]))
 		if not sp.is_empty():
-			g.helm.yaw = sp["yaw"]
+			g.helm.yaw = sp["yaw"] + deg_to_rad(float(kv.get("scena_yaw", "0")))   # scena_yaw=<°> — левее, минус — правее
 			g.helm.turn = 0.0
 			g.park_at(sp["ship"])
 			if not g.pilot.seated:
 				g.sit_at_helm()
+			if kv.has("scena_t"):   # scena_t=<с> — мир идёт столько секунд, корабль висит в точке ракурса (кадры движения)
+				scena_run(g, sp["ship"], float(kv["scena_t"]))
 	if kv.has("lore"):  # lore=d07_return,shell03 — знания слоя 1 (#825; ключи LayerLore.KEYS)
 		for k in kv["lore"].split(",", false):
 			g.lore.learn(k)
@@ -297,6 +299,17 @@ const SCENA: Array[Vector2] = [Vector2(4.0, 80.0), Vector2(20.0, 22.5), Vector2(
 const SCENA_GOAL := "01"
 ## Корабль над видимым дном в ракурсе сцены, м (как кадры «до»: 6–8 м).
 const SCENA_FLOOR := 7.0
+
+
+## Кадры движения сцены (#1400): игра шагает seconds секунд ровным шагом SCENA_DT, корабль после каждого шага
+## возвращается в точку ракурса (течение не уносит взгляд), курс и свет — как поставлены; мир — стаи, луч на флоре — идёт сам.
+const SCENA_DT := 1.0 / 30.0
+
+
+static func scena_run(g: Node, ship: Vector3, seconds: float) -> void:
+	for i in int(round(seconds / SCENA_DT)):
+		g.step(SCENA_DT)
+		g.park_at(ship)
 
 
 ## Поза ракурса scena=n (1…3): корабль в точке SCENA[n − 1] на SCENA_FLOOR над видимым дном, носом к 01.

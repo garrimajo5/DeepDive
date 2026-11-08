@@ -71,3 +71,18 @@ func test_scene_scena_at_helm() -> void:
 	ok(main.pilot.seated, "штатная камера пилота — за штурвалом")
 	main.queue_free()
 	await frames(1)
+
+
+func test_scene_scena_motion_holds_ship() -> void:   # scena_t=<с> — мир идёт, корабль висит в точке ракурса (#1400)
+	var main: Node = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var t0: float = main.time
+	ShotSetup.apply(main, {"scena": "2", "scena_yaw": "-20", "scena_t": "2"})
+	var p: Dictionary = ShotSetup.scena_pose(2)
+	near(main.time - t0, 2.0, 0.05, "игра прошла 2 с")
+	ok(main.helm.pos.is_equal_approx(p["ship"]), "корабль не унесло течением")
+	near(main.helm.yaw, p["yaw"] - deg_to_rad(20.0), 1e-3, "курс правее на 20°")
+	ok(main.pilot.seated, "за штурвалом")
+	main.queue_free()
+	await frames(1)
