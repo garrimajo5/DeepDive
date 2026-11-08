@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://qrus06mkke7e"
-path="res://.godot/imported/golostol-korpus_golostol-korpus-color.png-39c6a62a20f621c6bff44b73f69d9087.ctex"
+path.s3tc="res://.godot/imported/golostol-korpus_golostol-korpus-color.png-39c6a62a20f621c6bff44b73f69d9087.s3tc.ctex"
+path.etc2="res://.godot/imported/golostol-korpus_golostol-korpus-color.png-39c6a62a20f621c6bff44b73f69d9087.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "2680138d616171ab95781254ef5e9f4b"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/golostol-korpus_golostol-korpus-color.png"
-dest_files=["res://.godot/imported/golostol-korpus_golostol-korpus-color.png-39c6a62a20f621c6bff44b73f69d9087.ctex"]
+dest_files=["res://.godot/imported/golostol-korpus_golostol-korpus-color.png-39c6a62a20f621c6bff44b73f69d9087.s3tc.ctex", "res://.godot/imported/golostol-korpus_golostol-korpus-color.png-39c6a62a20f621c6bff44b73f69d9087.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

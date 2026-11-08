@@ -69,6 +69,48 @@ func test_walks_route_in_order_slowly() -> void:
 		eq(seen[k], (seen[k - 1] + 1) % EcoGrot.ROUTE.size(), "точки по порядку")
 
 
+## Б3 «Плавность поведения»: цель позади — сперва доворачивает почти на месте, а не уходит дугой на полном шаге.
+func test_turns_nearly_in_place() -> void:
+	var w := _world()
+	var gr := (_sys(w, EcoGrot) as EcoGrot).grot
+	var tg := EcoGrot.ROUTE[gr.wp]
+	gr.yaw = atan2(tg.x - gr.p.x, tg.y - gr.p.z) + PI   # спиной к точке пути
+	var at := Vector2(gr.p.x, gr.p.z)
+	for i in 20:
+		w.step(0.05)
+	ok(Vector2(gr.p.x, gr.p.z).distance_to(at) < EcoGrot.SPEED * 0.5,
+		"за секунду разворота прошёл меньше 0,23 м: %.2f" % Vector2(gr.p.x, gr.p.z).distance_to(at))
+	ok(gr.stride <= EcoGrot.TURN_STRIDE + 0.05, "шаг мелкий: %.2f" % gr.stride)
+	near(EcoGrot.want_stride(0.0, 1.0), 1.0, 1e-6, "прямо — полный шаг")
+	near(EcoGrot.want_stride(PI, 1.0), EcoGrot.TURN_STRIDE, 1e-6, "позади — почти на месте")
+	near(EcoGrot.want_stride(0.0, 0.5), 0.5, 1e-6, "ноги наполовину — полшага")
+
+
+## Б3: после испуга трогается плавно — шаг растёт не быстрее ACCEL, ноги качаются в меру шага.
+func test_starts_gradually_after_shy() -> void:
+	var w := _world()
+	var g: EcoGrot = _sys(w, EcoGrot)
+	var gr := g.grot
+	w.run(20.0)   # вышел на прямую к точке
+	w.ship.pos = Vector3(gr.p.x + 8.0, gr.back.y, gr.p.z)
+	w.step(0.05)
+	ok(not gr.moving(), "испугался")
+	eq(gr.stride, 0.0, "встал сразу")
+	w.ship.pos = FAR
+	w.run(10.0)
+	ok(gr.moving(), "снова идёт")
+	var last := gr.stride
+	var at := Vector2(gr.p.x, gr.p.z)
+	for i in 20:
+		w.step(0.05)
+		ok(gr.stride - last <= EcoGrot.ACCEL * 0.05 + 1e-5, "шаг растёт плавно")
+		last = gr.stride
+	ok(Vector2(gr.p.x, gr.p.z).distance_to(at) < EcoGrot.SPEED * 0.6, "первую секунду — не на полном ходу: %.2f"
+		% Vector2(gr.p.x, gr.p.z).distance_to(at))
+	w.run(6.0)
+	ok(gr.stride > 0.8, "разошёлся до полного шага: %.2f" % gr.stride)
+
+
 func test_reset_returns_to_start() -> void:
 	var w := _world()
 	var g: EcoGrot = _sys(w, EcoGrot)
@@ -103,10 +145,15 @@ func test_riders_travel_with_grot() -> void:
 	var g: EcoGrot = _sys(w, EcoGrot)
 	var sh := g.shoal
 	var start := g.grot.back
-	w.run(120.0)
+	w.run(100.0)
+	# стая бродит у дома на спине (до ~10 м в отдельные мгновения) — среднее за последние 20 с, а не один снимок
+	var d := 0.0
+	for i in 40:
+		w.run(0.5)
+		d += sh.center.distance_to(g.grot.back) / 40.0
 	ok(g.grot.back.distance_to(start) > 30.0, "гротовик ушёл: %.1f м" % g.grot.back.distance_to(start))
 	near(sh.home.distance_to(g.grot.back + Vector3(0, 0.6, 0)), 0.0, 1e-4, "дом едет на спине")
-	ok(sh.center.distance_to(g.grot.back) < 9.0, "стая рядом с рифом: %.1f м" % sh.center.distance_to(g.grot.back))
+	ok(d < 7.0, "стая рядом с рифом: в среднем %.1f м" % d)
 
 
 func test_riders_skip_spores_ferns_and_rays() -> void:
@@ -248,6 +295,97 @@ func test_solid_shell() -> void:
 	ok(g.solid(base + fwd), "голова спереди по курсу")
 
 
+# ---------- Наклон по склону (Б3) ----------
+
+## Склон: дно поднимается к +X на SLOPE_K метров на метр.
+const SLOPE_K := 0.3
+
+
+static func _slope_x(x: float, _z: float) -> float:
+	return FLAT + x * SLOPE_K
+
+
+func _slope_world(ground: Callable) -> EcoWorld:
+	var w := EcoWorld.new()
+	w.ground = ground
+	w.ship.pos = FAR
+	var f := w.add(EcoFish.new()) as EcoFish
+	w.add(EcoGrot.new(f))
+	return w
+
+
+## Раньше панцирь стоял ровно: на склоне верхний край уходил в дно, нижний висел. Теперь нос и борта ложатся по дну.
+func test_shell_lies_along_slope() -> void:
+	var w := _slope_world(_slope_x)
+	var gr := (_sys(w, EcoGrot) as EcoGrot).grot
+	var want := atan(SLOPE_K)
+	for i in 120:  # 60 с — курс меняется, наклон догоняет
+		w.run(0.5)
+	var b := gr.basis()
+	var up := b * Vector3.UP
+	near(up.x, -sin(want), 0.06, "ось тела наклонена от склона (вверх по +X — нормаль к −X)")
+	near(up.dot(Vector3(-SLOPE_K, 1, 0).normalized()), 1.0, 0.01, "спина — по нормали к дну")
+	var nose := b * Vector3.BACK
+	near(nose.dot(Vector3(-SLOPE_K, 1, 0).normalized()), 0.0, 0.01, "нос идёт вдоль дна, не в него")
+	var spine := gr.back - Vector3(gr.p.x, gr.body_y, gr.p.z)
+	near(spine.normalized().dot(up), 1.0, 1e-4, "спина над телом по оси тела")
+
+
+func test_tilt_flat_and_capped() -> void:
+	var w := _world()
+	var gr := (_sys(w, EcoGrot) as EcoGrot).grot
+	w.run(0.5)
+	near(gr.tilt.length(), 0.0, 1e-6, "ровное дно — ровно")
+	var steep := func(x: float, _z: float) -> float: return FLAT + x * 3.0
+	var t := EcoGrot.slope_tilt(steep, 0.0, 0.0, PI / 2.0)
+	near(t.x, EcoGrot.TILT_MAX, 1e-6, "носом в крутой склон — не круче TILT_MAX")
+	near(t.y, 0.0, 1e-4, "борта на одной высоте")
+	t = EcoGrot.slope_tilt(steep, 0.0, 0.0, 0.0)
+	near(t.y, EcoGrot.TILT_MAX, 1e-6, "левым бортом (+X) к склону — крен вверх, не круче TILT_MAX")
+	near(t.x, 0.0, 1e-4)
+	eq(EcoGrot.slope_tilt(Callable(), 0.0, 0.0, 0.0), Vector2.ZERO, "без дна — ровно")
+
+
+## Дно под ступнями щупается не каждый кадр (шум дорог, #133): за 1 с хода на 0,45 м/с — несколько раз, не 60.
+func test_tilt_feels_ground_rarely() -> void:
+	var calls := [0]
+	var counted := func(x: float, z: float) -> float:
+		calls[0] += 1
+		return FLAT + x * SLOPE_K
+	var w := _slope_world(counted)
+	for i in 120:
+		w.run(0.5)  # разогнался, курс выровнялся
+	calls[0] = 0
+	for i in 60:
+		w.run(1.0 / 60.0)
+	ok(calls[0] < 60 + 4 * 5, "щупает редко: %d выборок за 60 кадров" % calls[0])
+
+
+## Наклон догоняет плавно, а не щелчком: за шаг 0,1 с — не больше TILT_FOLLOW · dt разницы.
+func test_tilt_follows_smoothly() -> void:
+	var w := _world()
+	var g: EcoGrot = _sys(w, EcoGrot)
+	var gr := g.grot
+	gr.shy = 100.0  # замер: дно не щупает, тянется к заданному
+	gr.tilt_want = Vector2(0.3, 0.0)
+	var was := gr.tilt
+	w.run(0.1)
+	ok(gr.tilt.x > was.x, "тянется к склону")
+	ok(gr.tilt.x <= 0.3 * EcoGrot.TILT_FOLLOW * 0.1 + 1e-4, "не щелчком: %.3f" % gr.tilt.x)
+
+
+## Панцирь для столкновения наклонён вместе с телом.
+func test_solid_follows_tilt() -> void:
+	var w := _world()
+	var g: EcoGrot = _sys(w, EcoGrot)
+	var gr := g.grot
+	var base := Vector3(gr.p.x, gr.body_y, gr.p.z)
+	var side := Basis(Vector3.UP, gr.yaw) * Vector3(2.0, 1.0, 0.0)
+	ok(not g.solid(base + side), "ровный панцирь: точка над бортом снаружи")
+	gr.tilt = Vector2(0.0, 0.3)
+	ok(g.solid(base + side), "левый борт поднят — та же точка внутри")
+
+
 func test_scan_target_and_texts() -> void:
 	var w := _world()
 	var g: EcoGrot = _sys(w, EcoGrot)
@@ -282,6 +420,9 @@ func test_view_four_draw_calls() -> void:
 	ok(gv.visible, "рядом — виден")
 	near(gv.group.position.distance_to(Vector3(gr.p.x, gr.body_y, gr.p.z)), 0.0, 1e-4, "узел на теле")
 	near(gv.legs.scale.y, 0.35 + 0.65 * gr.lift, 1e-4, "ноги по lift")
+	var b := GrotView.breath(gr.lift, view.world.time)
+	for mi in [gv.body, gv.reef, gv.glow]:
+		near((mi as Node3D).scale.distance_to(b), 0.0, 1e-5, "дышит по времени мира: %s" % mi.name)
 	var calls := 0
 	var tris := 0
 	for c in gv.group.get_children():
@@ -297,3 +438,218 @@ func test_view_four_draw_calls() -> void:
 	ok(not gv.visible, "далеко — спрятан")
 	view.queue_free()
 	await frames(1)
+
+
+func test_shell_breathes_held_when_hidden() -> void:
+	var top := 0.0
+	var low := 9.0
+	var held := 0.0
+	var t := 0.0
+	while t < GrotView.BREATH_T:
+		var s := GrotView.breath(1.0, t)
+		top = maxf(top, s.y)
+		low = minf(low, s.y)
+		held = maxf(held, GrotView.breath(0.0, t).y)
+		eq(s.z, 1.0, "длина не меняется — голова на месте")
+		ok(s.x > 1.0 == (s.y > 1.0) or is_equal_approx(s.y, 1.0), "вдох — выше и шире разом")
+		t += 0.05
+	near(top, 1.0 + GrotView.BREATH_H, 1e-3, "вдох — выше на BREATH_H")
+	near(low, 1.0 - GrotView.BREATH_H, 1e-3, "выдох — ниже на BREATH_H")
+	near(held - 1.0, GrotView.BREATH_H * GrotView.HELD, 1e-3, "ноги спрятаны — затаил дыхание")
+	var step := 0.0
+	for i in 200:
+		var a := GrotView.breath(1.0 - i / 200.0, i * 0.05)
+		var c := GrotView.breath(1.0 - (i + 1) / 200.0, (i + 1) * 0.05)
+		step = maxf(step, absf(c.y - a.y))
+	ok(step < 0.004, "размах меняется плавно: %.4f за кадр" % step)
+
+
+func _grot_tris(gv: GrotView) -> Dictionary:
+	var out := {}
+	for c in gv.group.get_children():
+		var mi := c as MeshInstance3D
+		out[String(c.name)] = mi.mesh.surface_get_array_len(0) / 3
+	return out
+
+
+func test_view_lite_coarser_shell_reef_and_glow() -> void:
+	var w := _world()
+	var g: EcoGrot = _sys(w, EcoGrot)
+	var gv := GrotView.new(g)
+	tree.root.add_child(gv)
+	await frames(1)
+	var full := _grot_tris(gv)
+	var mats := {}
+	for c in gv.group.get_children():
+		mats[String(c.name)] = (c as MeshInstance3D).mesh.surface_get_material(0)
+	gv.set_lite(true)
+	ok(gv.lite, "гротовик — на «Экономно»")
+	var lite := _grot_tris(gv)
+	var sum_full := 0
+	var sum_lite := 0
+	for k in full:
+		sum_full += full[k]
+		sum_lite += lite[k]
+	ok(sum_lite * 2 <= sum_full, "треугольников не больше половины (%d → %d)" % [sum_full, sum_lite])
+	for k in ["Панцирь", "Риф", "Огоньки"]:
+		ok(lite[k] < full[k], "%s грубее (%d → %d)" % [k, full[k], lite[k]])
+	eq(lite["Ноги"], full["Ноги"], "ноги те же")
+	eq(gv.group.get_child_count(), 4, "вызовов столько же")
+	for c in gv.group.get_children():
+		ok((c as MeshInstance3D).mesh.surface_get_material(0) == mats[String(c.name)], "материал тот же: %s" % c.name)
+	# силуэт тот же: высота купола и размах обода не меняются
+	var a_full := GrotView.build_body(false).get_aabb()
+	var a_lite := GrotView.build_body(true).get_aabb()
+	near(a_lite.size.y, a_full.size.y, 0.05, "высота панциря та же")
+	near(a_lite.size.x, a_full.size.x, 0.05, "ширина та же")
+	gv.set_lite(false)
+	eq(_grot_tris(gv), full, "назад — прежняя сетка")
+	gv.queue_free()
+	await frames(1)
+	var view := EcoView.new()
+	tree.root.add_child(view)
+	view.ground = Seabed.height
+	view.set_lite(true)
+	ok(view.grot_view.lite, "EcoView.set_lite — до гротовика")
+	view.ground = Seabed.height   # сброс мира — вид тот же
+	ok(view.grot_view.lite, "сброс мира — снова «Экономно»")
+	view.set_lite(false)   # общие выключатели мира (EcoShaders, EcoRim…) — назад для следующих тестов
+	view.queue_free()
+	await frames(1)
+
+
+func _pose(t: float, k: float) -> PackedFloat32Array:
+	var a := PackedFloat32Array()
+	a.resize(12)
+	for i in 6:
+		var s := GrotView.leg_step(i, t, k)
+		a[i * 2] = -s.x * GrotView.LEG_SWING
+		a[i * 2 + 1] = s.y * GrotView.LEG_LIFT
+	return a
+
+
+func test_legs_step_in_tripods_without_slip() -> void:
+	# треноги: 0, 2, 4 (левые передняя и задняя, правая средняя) против 1, 3, 5
+	for t in [0.3, 1.1, 2.7]:
+		var a := GrotView.leg_step(0, t, 1.0)
+		for i in [2, 4]:
+			near(GrotView.leg_step(i, t, 1.0).distance_to(a), 0.0, 1e-6, "нога %d — в треноге с 0" % i)
+		for i in [1, 3, 5]:
+			near(GrotView.leg_step(i, t, 1.0).x, -a.x, 1e-6, "нога %d — в противофазе" % i)
+	eq(GrotView.leg_step(0, 0.0, 1.0).y, 1.0, "на выносе вперёд стопа поднята")
+	for i in 6:
+		eq(GrotView.leg_step(i, 1.3, 0.0), Vector2.ZERO, "стоит — ноги в покое")
+	near(GrotView.leg_step(0, 0.5, 0.5).x, GrotView.leg_step(0, 0.5, 1.0).x * 0.5, 1e-6, "размах — по доле шага")
+	# стопа на дне (без подъёма) уходит назад почти со скоростью хода
+	var dt := 0.01
+	var back := 0.0
+	var span := 0.0
+	var t := 0.0
+	while t < TAU / GrotView.LEG_RATE:
+		var p0 := GrotView.foot(0, _pose(t, 1.0))
+		var p1 := GrotView.foot(0, _pose(t + dt, 1.0))
+		if GrotView.leg_step(0, t, 1.0).y == 0.0 and GrotView.leg_step(0, t + dt, 1.0).y == 0.0:
+			back += p1.z - p0.z
+			span += dt
+		else:
+			ok(p1.z >= p0.z - 1e-6 or absf(p1.z - p0.z) < 1e-3, "поднятая стопа идёт вперёд")
+		t += dt
+	ok(span > 1.0, "полцикла на дне: %.2f с" % span)
+	near(-back / span, EcoGrot.SPEED, EcoGrot.SPEED * 0.1, "стопа на дне — назад со скоростью хода")
+	var f := GrotView.foot(1, _pose(0.0, 1.0))
+	near(f.y, GrotView.LEG_Y - GrotView.LEG_LEN * cos(GrotView.LEG_TILT), 1e-4,
+			"опорная стопа внизу")
+	ok(GrotView.foot(0, _pose(0.0, 1.0)).y > f.y + GrotView.LEG_LIFT * 0.9, "вынесенная — поднята")
+
+
+func test_view_legs_mesh_walks_and_rests() -> void:
+	var w := _world()
+	var g: EcoGrot = _sys(w, EcoGrot)
+	var gv := GrotView.new(g)
+	tree.root.add_child(gv)
+	await frames(1)
+	var gr := g.grot
+	var ship := Vector3(gr.p.x, gr.body_y, gr.p.z) + Vector3(0, 5, 20)
+	var rest := (gv.legs.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+	gr.stride = 1.0
+	gv.sync(PI * 0.5 / GrotView.LEG_RATE, ship)
+	eq(gv.legs.rotation, Vector3.ZERO, "узел ног не качается целиком")
+	var v := (gv.legs.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+	eq(v.size(), rest.size(), "те же вершины")
+	var leg: PackedInt32Array = gv._rest["leg"]
+	var dz := [0.0, 0.0]
+	for j in v.size():
+		dz[(int(leg[j] / 3.0) + leg[j] % 3) % 2] += v[j].z - rest[j].z
+	ok(dz[0] > 0.1 and dz[1] < -0.1, "треноги врозь: вперёд %.2f, назад %.2f" % dz)
+	near(GrotView.foot(0, gv.leg_pose).z - GrotView.hip(0).z, GrotView.LEG_LEN * cos(GrotView.LEG_TILT)
+			* sin(GrotView.LEG_SWING), 1e-3, "нога 0 вынесена вперёд")
+	var writes := gv.leg_pose
+	gr.stride = 0.0
+	gv.sync(0.3, ship)
+	for x in gv.leg_pose:
+		eq(x, 0.0, "встал — ноги в покое")
+	ok(gv.leg_pose != writes, "меш переписан в покой")
+	var still := (gv.legs.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+	near(still[5].distance_to(rest[5]), 0.0, 1e-5, "покой — как построен")
+	gr.stride = 1.0
+	gv.sync(0.6, ship + Vector3(0, 0, GrotView.LEG_FAR + 10))
+	for x in gv.leg_pose:
+		eq(x, 0.0, "далеко — ноги не шагают")
+	gv.queue_free()
+	await frames(1)
+
+
+# ---------- Корабль не проходит сквозь панцирь и риф ----------
+
+func _helm(w: EcoWorld) -> Helm.Ship:
+	var s := Helm.Ship.new()
+	s.ground = _flat
+	s.solid = func(p: Vector3, yaw: float) -> bool: return EcoLink.solid(w.systems, p, yaw)
+	return s
+
+
+func test_ship_at_grot_touches_reef() -> void:
+	var w := _world()
+	var g: EcoGrot = _sys(w, EcoGrot)
+	var gr := g.grot
+	var low := FLAT + Helm.Ship.CLEARANCE
+	ok(g.blocks(Vector3(gr.p.x, low, gr.p.z), 0.0), "корабль у дна над гротовиком задевает риф")
+	ok(not g.blocks(Vector3(gr.p.x, gr.top + 12.0, gr.p.z), 0.0), "высоко над рифом — свободно")
+	ok(not g.blocks(Vector3(gr.p.x + 60.0, low, gr.p.z), 0.0), "в 60 м — свободно")
+
+
+func test_ship_cannot_pass_through_grot() -> void:
+	var w := _world()
+	var g: EcoGrot = _sys(w, EcoGrot)
+	var gr := g.grot
+	gr.shy = 1e9   # стоит на месте
+	var s := _helm(w)
+	s.pos = Vector3(gr.p.x, FLAT + Helm.Ship.CLEARANCE, gr.p.z + 45.0)
+	s.yaw = 0.0   # нос к −Z — прямо на гротовика
+	s.in_thrust = 1.0
+	var dt := 1.0 / 60.0
+	for i in int(20.0 / dt):
+		s.update(dt)
+		w.ship.pos = s.pos
+		w.ship.yaw = s.yaw
+		if g.blocks(s.pos, s.yaw):
+			ok(false, "корабль вошёл в гротовика на %.1f с" % (i * dt))
+			return
+	ok(s.pos.z > gr.p.z, "не прошёл насквозь: z %.1f" % s.pos.z)
+
+
+func test_grot_does_not_walk_into_ship() -> void:
+	var w := _world()
+	var g: EcoGrot = _sys(w, EcoGrot)
+	var gr := g.grot
+	# корабль стоит на пути ко второй точке круга, в 20 м впереди
+	var to := (EcoGrot.ROUTE[1] - EcoGrot.ROUTE[0]).normalized()
+	var at := EcoGrot.ROUTE[0] + to * 20.0
+	w.ship.pos = Vector3(at.x, FLAT + Helm.Ship.CLEARANCE, at.y)
+	w.ship.yaw = atan2(to.x, to.y)   # бортом к нему не важно — корпус длинный
+	for i in 1200:   # 60 с
+		w.step(0.05)
+		if EcoGrot.touches_ship(gr, w.ship.pos, w.ship.yaw):
+			ok(false, "гротовик вошёл в корабль на %.1f с" % (i * 0.05))
+			return
+	ok(Vector2(gr.p.x, gr.p.z).distance_to(EcoGrot.ROUTE[0]) > 2.0, "дошёл до корабля и встал")

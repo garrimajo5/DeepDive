@@ -13,6 +13,7 @@ const INK := Color("#D5E4E8")       ## подпись
 
 const TITLE := "Корпус разрушен"
 const SUB := "Ковчег поднимают к началу спуска"
+const SUB_LOAD := "Ковчег вернётся к последнему сохранению"   ## кампания #824: есть сохранённое место
 const TITLE_PX := 104.0
 const SUB_PX := 48.0
 const TITLE_TOP := 430.0   ## верх глифов заголовка, центр по x 1200
@@ -36,6 +37,11 @@ const LAMP_BACK := 0.55
 
 var t := -1.0          ## секунд с начала шторки; < 0 — шторки нет
 var restarted := false
+
+
+## Подпись под заголовком: есть сохранённое место — возврат к нему (#824), нет — к началу спуска.
+static func sub(saved: bool) -> String:
+	return SUB_LOAD if saved else SUB
 
 
 func start() -> void:

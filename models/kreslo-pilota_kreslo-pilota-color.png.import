@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://drjtj7lvo0510"
-path="res://.godot/imported/kreslo-pilota_kreslo-pilota-color.png-9995bb0e04c486fc3fa0b31366efde5b.ctex"
+path.s3tc="res://.godot/imported/kreslo-pilota_kreslo-pilota-color.png-9995bb0e04c486fc3fa0b31366efde5b.s3tc.ctex"
+path.etc2="res://.godot/imported/kreslo-pilota_kreslo-pilota-color.png-9995bb0e04c486fc3fa0b31366efde5b.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "f392d29d359c0a0d8a5c6967561235a3"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/kreslo-pilota_kreslo-pilota-color.png"
-dest_files=["res://.godot/imported/kreslo-pilota_kreslo-pilota-color.png-9995bb0e04c486fc3fa0b31366efde5b.ctex"]
+dest_files=["res://.godot/imported/kreslo-pilota_kreslo-pilota-color.png-9995bb0e04c486fc3fa0b31366efde5b.s3tc.ctex", "res://.godot/imported/kreslo-pilota_kreslo-pilota-color.png-9995bb0e04c486fc3fa0b31366efde5b.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

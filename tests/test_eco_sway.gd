@@ -69,8 +69,45 @@ func test_shader_twin() -> void:
 	ok(code.contains("o.x * %s + o.z * %s" % [EcoCurrent.PHASE_X, EcoCurrent.PHASE_Z]), "та же фаза")
 	ok(code.contains("v / %s" % EcoCurrent.SPEED), "полное течение — EcoCurrent.SPEED")
 	ok(code.contains("%s + %s * s" % [EcoCurrent.IDLE, 1.0 - EcoCurrent.IDLE]), "то же колыхание без течения")
-	for part in ["TIME * 0.45 + ph", "TIME * 1.6 + ph * 1.3 - h * 2.2", "TIME * 1.1 + ph * 0.7 - h * 1.5"]:
+	for part in ["sway_t * 0.45 + ph", "sway_t * 1.6 + ph * 1.3 - h * 2.2", "sway_t * 1.1 + ph * 0.7 - h * 1.5"]:
 		ok(code.contains(part), "та же волна: " + part)
+
+
+## Колыхание и тление растений идут по времени мира (uniform sway_t), а не по TIME шейдера: у гостя в такт хосту,
+## двойник EcoCurrent.sway совпадает с картинкой, в 3600 с (сброс TIME в Godot) стебли не прыгают. Жар курильщика —
+## по времени мира камня `now` (двойник EcoVent.flicker).
+func test_sway_runs_on_world_time() -> void:
+	var sway := EcoShaders.SWAY
+	ok(sway.contains("uniform float sway_t") and not sway.contains("TIME"), "кусок SWAY — без TIME")
+	ok(not EcoShaders.PLANT.contains("TIME"), "шейдер растений — без TIME (колыхание и волна тления)")
+	ok(not FlowerView.SHADER.contains("TIME"), "Каменный цветок мерцает по времени мира")
+	ok(not CoralView.SHADER.contains("TIME"), "огнецвет — тоже")
+	ok(EcoShaders.STONE.contains("sin(now * 2.3) + 0.06 * sin(now * 5.7 + 1.3) + 0.04 * sin(now * 13.1 + 0.4)"),
+		"жар курильщика — по времени мира, те же числа, что EcoVent.flicker")
+	var kelp := EcoShaders.plant(EcoShaders.Plant.KELP, {"bend": KelpView.BEND, "reach": 1.0})
+	EcoShaders.set_sway_time(123.5)
+	near(float(kelp.get_shader_parameter("sway_t")), 123.5, 1e-6, "время дошло до живого материала")
+	near(float(EcoShaders.plant(EcoShaders.Plant.LEAF).get_shader_parameter("sway_t")), 123.5, 1e-6,
+		"новый материал сразу с текущим временем")
+	EcoShaders.set_sway_time(0.0)
+	var heat := EcoShaders.material(EcoShaders.STONE, {"flicker": 1.0})
+	EcoCaustic.set_time(77.0)
+	near(float(heat.get_shader_parameter("now")), 77.0, 1e-6, "жар курильщика получает время мира камня")
+	EcoCaustic.set_time(0.0)
+
+
+## Прозрачное без света (MIST: пузыри и марево курильщика, трещина и столб колодца, купола и щупальца вуалей) — тоже
+## по времени мира `t`, а не по TIME шейдера; новый материал получает текущее время сразу.
+func test_mist_runs_on_world_time() -> void:
+	ok(not EcoShaders.MIST.contains("TIME"), "в MIST нет TIME")
+	ok(EcoShaders.MIST.contains("fract(INSTANCE_CUSTOM.g + t * INSTANCE_CUSTOM.r / h)"), "пузыри курильщика — по t")
+	var bubble := EcoShaders.mist(EcoShaders.Mist.BUBBLE)
+	var haze := EcoShaders.mist(EcoShaders.Mist.HAZE)
+	EcoShaders.set_sway_time(42.25)
+	for m in [bubble, haze]:
+		near(float(m.get_shader_parameter("t")), 42.25, 1e-6, "время мира дошло")
+	near(float(EcoShaders.mist(EcoShaders.Mist.COLUMN).get_shader_parameter("t")), 42.25, 1e-6, "и новому материалу")
+	EcoShaders.set_sway_time(0.0)
 
 
 func test_views_bend_and_flow() -> void:
@@ -105,8 +142,14 @@ func test_eco_view_gives_current() -> void:
 		ok((m.get_shader_parameter("bend") as Vector3).length() > 0.0, "у вида свой изгиб")
 	near(float(leaf.get_shader_parameter("reach")), EcoFern.LEAF_LEN, 1e-6, "лист — своя длина")
 	near(float(fan.get_shader_parameter("reach")), EcoFan.HEIGHT, 1e-6, "веер — своя высота")
+	for i in 5:
+		ev.step(0.1, EcoLink.ShipState.new())
+	for m in [fan, leaf, kelp]:
+		near(float(m.get_shader_parameter("sway_t")), ev.world.time, 1e-5, "колыхание — по времени мира")
+	ok(ev.world.time > 0.4, "время мира идёт")
 	ev.free()
 	EcoShaders.set_flow(Vector3.ZERO)
+	EcoShaders.set_sway_time(0.0)
 
 
 # ---------- Огнецвет ----------

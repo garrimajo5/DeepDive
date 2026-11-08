@@ -9,7 +9,7 @@ var world := EcoWorld.new()
 ## Светляки-полосники: шесть стай у кораллов и их MultiMesh.
 var fish: EcoFish
 var fish_view: FishView
-## Светящийся мох (22 пятна) и скребуны (10), что его объедают.
+## Светящийся мох (24 пятна) и скребуны (10), что его объедают.
 var moss: EcoMoss
 var moss_view: MossView
 var grazers: EcoGrazer
@@ -21,6 +21,9 @@ var pred_view: PredView
 var current: EcoCurrent
 var coral: EcoCoral
 var coral_view: CoralView
+## Каменщики (#1337): ряды трубок у кустов огнецвета, венчики прячутся от вибрации крупного.
+var kamen: EcoKamen
+var kamen_view: KamenView
 var fans: EcoFan
 var fan_view: FanView
 ## Пиявники на жабрах серпохвостов и станции чистки на вершинах огнецвета.
@@ -38,7 +41,7 @@ var organ_view: OrganView
 ## Подушечники: две подушки у стай светляков, от касания — облако чернил, в нём серпохвост теряет стаю и корабль.
 var cushions: EcoCushion
 var cushion_view: CushionView
-## Стеклоусты: три логова в расщелинах, бросок на скребунов и светляков, присоска на стекле носа — тянет заряд.
+## Стеклоуст: одно логово у трещины 02↔01 (#834), бросок на скребунов и светляков, присоска на стекле носа — тянет заряд.
 var eels: EcoEel
 var eel_view: EelView
 ## Радужники: три стаи гребневиков, вспыхивают в луче прожектора — вспышка зовёт серпохвостов издалека.
@@ -71,6 +74,8 @@ var remora_view: RemoraView
 ## Мерцающий планктон: четыре светящихся облака, вспыхивают от быстрого — след корабля выдаёт его серпохвосту.
 var plankton: EcoPlankton
 var plankton_view: PlanktonView
+## «Экономно» (set_lite): виды, что пересоздаются при сбросе мира, берут его заново.
+var lite := false
 ## Фонарные вуали: две колонии медуз дрейфуют над рифом, жалят светляков, под куполом серпохвост теряет корабль.
 var veils: EcoVeil
 var veil_view: VeilView
@@ -92,13 +97,28 @@ var bones_view: BonesView
 ## Световой колодец (место 5, ART-031): трещина во льду, наклонный столб солнечного света, пятно мха на дне.
 var well: EcoWell
 var well_view: WellView
+## Ледяная моль у колодца (#836, ART-080): 240 рачков тремя облаками под трещиной, тянутся к прожектору.
+var moth: EcoMoth
+var moth_view: MothView
+## Инеевая бахрома у колодца 05 (#836, часть 5): модуль мира, вид — после ART-083 (#922).
+var fringe: EcoFringe
+var fringe_view: FringeView
 ## Край отмели (место 6, ART-032): скальные клинья вдоль бровки, шрам оползня с осыпью, трещины на площадке.
 var drop: EcoDrop
 var drop_view: DropView
+## Граница у Спуска 10 (#832): кварцевая корка на дне котловины склона, к востоку гуще, кончики светятся.
+var brink: EcoBrink
+var brink_view: BrinkView
+## Купольник у террасы врат 07 (#837): рабочий Хранителя открывает створку гнезда; вид — по модели MOD-022.
+var dome: EcoDome
 ## Эхоловец (ART-007): засадчик с ушами-воронками лежит у Костей левиафана, уши поворачивает на корабль,
 ## затаившегося выдаёт только импульс сонара.
 var echo: EcoEcho
 var echo_view: EchoView
+## Жизнь вдали (Б5): тёмные силуэты рыб в мути за 40…125 м — фон, не вид мира (EcoFarLife).
+var far_view: FarLifeView
+## Муть всех видов — один слой и один вызов отрисовки (EcoDustLayer, issue #849).
+var dust_layer := EcoDustLayer.new()
 
 ## Высота дна под (x, z): Seabed.height. Даёт корабль при создании; уходит в мир. Мох и скребуны встают на дно
 ## заново (мир сбрасывается, меш мха собирается по новому дну).
@@ -107,8 +127,10 @@ var ground: Callable:
 		ground = value
 		world.ground = value
 		world.reset()
+		lag = 0.0
 		_rebuild_moss()
 		_rebuild_coral()
+		_rebuild_kamen()
 		_rebuild_ferns()
 		_rebuild_bladders()
 		_rebuild_organs()
@@ -125,9 +147,13 @@ var ground: Callable:
 		_rebuild_bones()
 		_rebuild_well()
 		_rebuild_drop()
+		_rebuild_brink()
 		_rebuild_plankton()
 		EcoRim.apply(self)
+		EcoSilhouette.apply(self)
 		EcoSurface.apply(self)
+		EcoGlow.apply(self)
+		dust_layer.gather(self)
 
 
 func _init() -> void:
@@ -136,15 +162,16 @@ func _init() -> void:
 	add_child(fish_view)
 	moss = world.add(EcoMoss.new()) as EcoMoss
 	grazers = world.add(EcoGrazer.new(moss)) as EcoGrazer
-	grazer_view = GrazerView.new(grazers)
+	grazer_view = GrazerView.new(grazers, lite)
 	add_child(grazer_view)
 	preds = world.add(EcoPred.new(fish)) as EcoPred
 	pred_view = PredView.new(preds)
 	add_child(pred_view)
 	current = world.add(EcoCurrent.new()) as EcoCurrent
-	coral = world.add(EcoCoral.new()) as EcoCoral
+	coral = world.add(EcoCoral.new([], preds)) as EcoCoral
 	leeches = world.add(EcoLeech.new(preds, coral)) as EcoLeech
-	leech_view = LeechView.new(leeches)
+	kamen = world.add(EcoKamen.new()) as EcoKamen
+	leech_view = LeechView.new(leeches, lite)
 	add_child(leech_view)
 	fans = world.add(EcoFan.new(current)) as EcoFan
 	fan_view = FanView.new(fans)
@@ -159,11 +186,11 @@ func _init() -> void:
 	veils = world.add(EcoVeil.new()) as EcoVeil
 	fish.veils = veils
 	preds.veils = veils
-	veil_view = VeilView.new(veils)
+	veil_view = VeilView.new(veils, lite)
 	add_child(veil_view)
 	grot = world.add(EcoGrot.new(fish)) as EcoGrot
 	preds.grot = grot
-	grot_view = GrotView.new(grot)
+	grot_view = GrotView.new(grot, lite)
 	add_child(grot_view)
 	eels = world.add(EcoEel.new(grazers, fish)) as EcoEel
 	raduzh = world.add(EcoRaduzh.new()) as EcoRaduzh
@@ -177,11 +204,11 @@ func _init() -> void:
 	coins.bladders = bladders
 	bladders.coins = coins
 	rays = world.add(EcoRay.new(fish)) as EcoRay
-	ray_view = RayView.new(rays)
+	ray_view = RayView.new(rays, lite)
 	add_child(ray_view)
 	remoras = world.add(EcoRemora.new(rays)) as EcoRemora
 	eels.remoras = remoras
-	remora_view = RemoraView.new(remoras)
+	remora_view = RemoraView.new(remoras, lite)
 	add_child(remora_view)
 	plankton = world.add(EcoPlankton.new(preds, rays)) as EcoPlankton
 	preds.plankton = plankton
@@ -190,12 +217,23 @@ func _init() -> void:
 	shell = world.add(EcoShell.new()) as EcoShell
 	bones = world.add(EcoBones.new()) as EcoBones
 	well = world.add(EcoWell.new()) as EcoWell
+	moth = world.add(EcoMoth.new()) as EcoMoth
+	moth_view = MothView.new(moth)
+	add_child(moth_view)
+	fringe = world.add(EcoFringe.new()) as EcoFringe
+	fringe_view = FringeView.new(fringe, lite)
+	add_child(fringe_view)
 	drop = world.add(EcoDrop.new()) as EcoDrop
+	dome = world.add(EcoDome.new()) as EcoDome
+	brink = world.add(EcoBrink.new()) as EcoBrink
 	echo = world.add(EcoEcho.new(bones, preds)) as EcoEcho
-	echo_view = EchoView.new(echo)
+	echo_view = EchoView.new(echo, lite)
 	add_child(echo_view)
+	far_view = FarLifeView.new()
+	add_child(far_view)
 	_rebuild_moss()
 	_rebuild_coral()
+	_rebuild_kamen()
 	_rebuild_ferns()
 	_rebuild_bladders()
 	_rebuild_organs()
@@ -212,19 +250,67 @@ func _init() -> void:
 	_rebuild_bones()
 	_rebuild_well()
 	_rebuild_drop()
+	_rebuild_brink()
 	_rebuild_plankton()
 	EcoRim.apply(self)
+	EcoSilhouette.apply(self)
 	EcoSurface.apply(self)
+	EcoGlow.apply(self)
+	add_child(dust_layer)
+	dust_layer.gather(self)
 
 
-## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок героев, переливы чешуи и просвет листвы погашены, скребуны и кольчужник не поднимают муть — меняются
+## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок и ореол силуэта героев, переливы чешуи, просвет листвы и каустики на камне погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали нет, моли у колодца 80, бахромы 24, планктона рисуется половина клеток, светляков и гребневиков — двое из трёх в стае, спор пузырчатки и чернил подушечника — половина облака, лент ленточника — каждая вторая, пятна мха (и у колодца, на костях) — 4 × 4 клетки, трубка Раковины вне разлома — через сечение — меняются
 ## только числа в uniform, шейдеры те же. Включает уровень графики — поток А (`Main._apply_graphics`).
 func set_lite(on: bool) -> void:
+	lite = on
 	EcoShaders.set_sway_lite(on)
 	EcoRim.set_lite(on)
+	EcoSilhouette.set_lite(on)
 	EcoIris.set_lite(on)
 	EcoBack.set_lite(on)
+	EcoCaustic.set_lite(on)
 	EcoGrazerDust.lite = on
+	far_view.set_lite(on)
+	moth.set_lite(on)
+	fringe.set_lite(on)
+	fringe_view.set_lite(on)
+	plankton_view.set_lite(on)
+	fish_view.set_lite(on)
+	raduzh_view.set_lite(on)
+	bladder_view.set_lite(on)
+	cushion_view.set_lite(on)
+	coins_view.set_lite(on)
+	hvaten_view.set_lite(on)
+	ognevka_view.set_lite(on)
+	kelp_view.set_lite(on)
+	eel_view.set_lite(on)
+	leech_view.set_lite(on)
+	veil_view.set_lite(on)
+	brink_view.set_lite(on)
+	pred_view.set_lite(on)
+	skalnik_view.set_lite(on)
+	grot_view.set_lite(on)
+	echo_view.set_lite(on)
+	flower_view.set_lite(on)
+	bones_view.set_lite(on)
+	coral_view.set_lite(on)
+	kamen_view.set_lite(on)
+	vent_view.set_lite(on)
+	organ_view.set_lite(on)
+	if fern_view:
+		fern_view.set_lite(on)
+	krab_view.set_lite(on)
+	ray_view.set_lite(on)
+	remora_view.set_lite(on)
+	grazer_view.set_lite(on)
+	moss_view.set_lite(on)
+	if well_view.moss_view:
+		well_view.moss_view.set_lite(on)
+	if drop_view:
+		drop_view.set_lite(on)
+	if shell_view:
+		shell_view.set_lite(on)
 
 
 ## Меш мха по дну мира (пятна плоские, пока дна нет).
@@ -232,16 +318,24 @@ func _rebuild_moss() -> void:
 	if moss_view:
 		remove_child(moss_view)
 		moss_view.free()
-	moss_view = MossView.new(moss, world.ground)
+	moss_view = MossView.new(moss, world.ground, lite)
 	add_child(moss_view)
 
 
 ## Меш огнецвета по дну мира (кусты встают на дно при сбросе мира).
+func _rebuild_kamen() -> void:
+	if kamen_view:
+		remove_child(kamen_view)
+		kamen_view.free()
+	kamen_view = KamenView.new(kamen, lite)
+	add_child(kamen_view)
+
+
 func _rebuild_coral() -> void:
 	if coral_view:
 		remove_child(coral_view)
 		coral_view.free()
-	coral_view = CoralView.new(coral)
+	coral_view = CoralView.new(coral, lite)
 	add_child(coral_view)
 
 
@@ -250,7 +344,7 @@ func _rebuild_ferns() -> void:
 	if fern_view:
 		remove_child(fern_view)
 		fern_view.free()
-	fern_view = FernView.new(ferns, world.ground)
+	fern_view = FernView.new(ferns, world.ground, lite)
 	add_child(fern_view)
 
 
@@ -259,7 +353,7 @@ func _rebuild_bladders() -> void:
 	if bladder_view:
 		remove_child(bladder_view)
 		bladder_view.free()
-	bladder_view = BladderView.new(bladders)
+	bladder_view = BladderView.new(bladders, lite)
 	add_child(bladder_view)
 
 
@@ -268,7 +362,7 @@ func _rebuild_organs() -> void:
 	if organ_view:
 		remove_child(organ_view)
 		organ_view.free()
-	organ_view = OrganView.new(organs)
+	organ_view = OrganView.new(organs, lite)
 	add_child(organ_view)
 
 
@@ -277,7 +371,7 @@ func _rebuild_cushions() -> void:
 	if cushion_view:
 		remove_child(cushion_view)
 		cushion_view.free()
-	cushion_view = CushionView.new(cushions)
+	cushion_view = CushionView.new(cushions, lite)
 	add_child(cushion_view)
 
 
@@ -286,7 +380,7 @@ func _rebuild_eels() -> void:
 	if eel_view:
 		remove_child(eel_view)
 		eel_view.free()
-	eel_view = EelView.new(eels)
+	eel_view = EelView.new(eels, lite)
 	add_child(eel_view)
 
 
@@ -295,7 +389,7 @@ func _rebuild_raduzh() -> void:
 	if raduzh_view:
 		remove_child(raduzh_view)
 		raduzh_view.free()
-	raduzh_view = RaduzhView.new(raduzh)
+	raduzh_view = RaduzhView.new(raduzh, lite)
 	add_child(raduzh_view)
 
 
@@ -304,7 +398,7 @@ func _rebuild_ognevka() -> void:
 	if ognevka_view:
 		remove_child(ognevka_view)
 		ognevka_view.free()
-	ognevka_view = OgnevkaView.new(ognevka)
+	ognevka_view = OgnevkaView.new(ognevka, lite)
 	add_child(ognevka_view)
 
 
@@ -313,7 +407,7 @@ func _rebuild_hvaten() -> void:
 	if hvaten_view:
 		remove_child(hvaten_view)
 		hvaten_view.free()
-	hvaten_view = HvatenView.new(hvaten)
+	hvaten_view = HvatenView.new(hvaten, lite)
 	add_child(hvaten_view)
 
 
@@ -322,19 +416,19 @@ func _rebuild_kelp() -> void:
 	if kelp_view:
 		remove_child(kelp_view)
 		kelp_view.free()
-	kelp_view = KelpView.new(kelp)
+	kelp_view = KelpView.new(kelp, lite)
 	add_child(kelp_view)
 	# нора кольчужника — у рощи, встаёт на дно заново вместе с ней
 	if krab_view:
 		remove_child(krab_view)
 		krab_view.free()
-	krab_view = KrabView.new(krab)
+	krab_view = KrabView.new(krab, lite)
 	add_child(krab_view)
 	# скальник живёт у норы — встаёт заново вместе с ней
 	if skalnik_view:
 		remove_child(skalnik_view)
 		skalnik_view.free()
-	skalnik_view = SkalnikView.new(skalnik)
+	skalnik_view = SkalnikView.new(skalnik, lite)
 	add_child(skalnik_view)
 
 
@@ -343,7 +437,7 @@ func _rebuild_coins() -> void:
 	if coins_view:
 		remove_child(coins_view)
 		coins_view.free()
-	coins_view = CoinsView.new(coins)
+	coins_view = CoinsView.new(coins, lite)
 	add_child(coins_view)
 
 
@@ -352,7 +446,7 @@ func _rebuild_vent() -> void:
 	if vent_view:
 		remove_child(vent_view)
 		vent_view.free()
-	vent_view = VentView.new(vent)
+	vent_view = VentView.new(vent, lite)
 	add_child(vent_view)
 
 
@@ -361,7 +455,7 @@ func _rebuild_flower() -> void:
 	if flower_view:
 		remove_child(flower_view)
 		flower_view.free()
-	flower_view = FlowerView.new(flower)
+	flower_view = FlowerView.new(flower, lite)
 	add_child(flower_view)
 
 
@@ -370,7 +464,7 @@ func _rebuild_shell() -> void:
 	if shell_view:
 		remove_child(shell_view)
 		shell_view.free()
-	shell_view = ShellView.new(shell)
+	shell_view = ShellView.new(shell, lite)
 	add_child(shell_view)
 
 
@@ -379,7 +473,7 @@ func _rebuild_bones() -> void:
 	if bones_view:
 		remove_child(bones_view)
 		bones_view.free()
-	bones_view = BonesView.new(bones)
+	bones_view = BonesView.new(bones, lite)
 	add_child(bones_view)
 
 
@@ -388,7 +482,7 @@ func _rebuild_well() -> void:
 	if well_view:
 		remove_child(well_view)
 		well_view.free()
-	well_view = WellView.new(well)
+	well_view = WellView.new(well, lite)
 	add_child(well_view)
 
 
@@ -396,8 +490,17 @@ func _rebuild_drop() -> void:
 	if drop_view:
 		remove_child(drop_view)
 		drop_view.free()
-	drop_view = DropView.new(drop)
+	drop_view = DropView.new(drop, lite)
 	add_child(drop_view)
+
+
+## Корка у Спуска 10 по дну мира (друзы встают на дно при сбросе мира).
+func _rebuild_brink() -> void:
+	if brink_view:
+		remove_child(brink_view)
+		brink_view.free()
+	brink_view = BrinkView.new(brink, lite)
+	add_child(brink_view)
 
 
 ## Планктон по дну мира (облака встают на 10 м над дном при сбросе мира).
@@ -405,23 +508,40 @@ func _rebuild_plankton() -> void:
 	if plankton_view:
 		remove_child(plankton_view)
 		plankton_view.free()
-	plankton_view = PlanktonView.new(plankton)
+	plankton_view = PlanktonView.new(plankton, lite)
 	add_child(plankton_view)
 
 
-## Шаг мира: dt — время, ship — состояние корабля. Возвращает события для корабля (EcoLink).
+## Долг времени мира (с): за кадр мир идёт одним подшагом не длиннее EcoWorld.SLOW_STEP, остаток медленного кадра
+## переходит на следующие быстрые кадры, но не больше EcoWorld.FRAME_CAP (issue #1253: кадр 97–120 мс давал миру два
+## подшага на следующем кадре — мир ×2, и провал тянул провал). Сброс мира долг обнуляет.
+var lag := 0.0
+
+
+## Сколько мир пройдёт в этом кадре: время кадра плюс долг, не больше SLOW_STEP — один подшаг (#1253).
+func world_dt(dt: float) -> float:
+	var want := lag + clampf(dt, 0.0, EcoWorld.FRAME_CAP)
+	var h := minf(want, EcoWorld.SLOW_STEP)
+	lag = minf(want - h, EcoWorld.FRAME_CAP)
+	return h
+
+
+## Шаг мира: dt — время кадра (мир берёт его через world_dt — одним подшагом, остаток в долг), ship — состояние
+## корабля. Возвращает события для корабля (EcoLink).
 func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	world.ship = ship
-	world.step(dt)
+	world.step(world_dt(dt))
 	_sync(ship)
-	return world.take_link()
+	var out := world.take_link()
+	StepClock.mark("мир/связь")
+	return out
 
 
 ## Шаг мира у гостя сетевого забега: мир идёт сам (стебли, огни, стаи между кадрами), события — не кораблю (их
 ## разбирает хост); near — существа и мох рядом из свежего кадра хоста (`EcoLink.pack_world`), пустой — кадра не было.
 func step_client(dt: float, ship: EcoLink.ShipState, near: PackedFloat32Array = PackedFloat32Array()) -> void:
 	world.ship = ship
-	world.step(dt)
+	world.step(world_dt(dt))
 	world.take_link()
 	if not near.is_empty():
 		EcoLink.apply_world(world.agents, world.systems, near, world)
@@ -430,31 +550,57 @@ func step_client(dt: float, ship: EcoLink.ShipState, near: PackedFloat32Array = 
 
 func _sync(ship: EcoLink.ShipState) -> void:
 	EcoShaders.set_flow(current.vel())
-	fish_view.sync(world.time)
+	EcoShaders.set_sway_time(world.time)
+	EcoCaustic.set_depth(-ship.pos.y)
+	EcoSilhouette.set_depth(-ship.pos.y)
+	EcoCaustic.set_time(world.time)
+	fish_view.sync(world.time, ship, current.vel(), world.ground)
 	grazer_view.sync(world.time, ship, current.vel())
 	pred_view.sync(world.time, ship.pos, ship, current.vel(), world.ground)
-	leech_view.sync(world.time)
+	leech_view.sync(world.time, ship, current.vel())
+	StepClock.mark("мир/вид: рыбы, хищники")
 	moss_view.sync()
+	moss_view.set_time(world.time)
 	if bones_view.moss_view:
 		bones_view.moss_view.sync()
+		bones_view.moss_view.set_time(world.time)
 	if well_view.moss_view:
 		well_view.moss_view.sync()
+		well_view.moss_view.set_time(world.time)
 	coral_view.sync()
+	kamen_view.sync()
+	flower_view.sync()
+	coral_view.sync_dust(world.time, ship, current.vel())
+	StepClock.mark("мир/вид: мох, кораллы")
 	fan_view.sync(world.time)
-	fern_view.sync(world.time)
-	bladder_view.sync(world.time)
+	fern_view.sync(world.time, ship, current.vel())
+	bladder_view.sync(world.time, ship, current.vel())
+	organ_view.sync(world.time, ship, current.vel())
 	cushion_view.sync(world.time, ship.pos, ship, current.vel())
+	StepClock.mark("мир/вид: флора")
 	eel_view.sync(world.time, ship, current.vel(), world.ground)
 	raduzh_view.sync(world.time, ship.pos, ship.yaw)
-	ognevka_view.sync()
+	raduzh_view.sync_dust(world.time, ship, current.vel())
+	ognevka_view.sync(false, world.time)
+	ognevka_view.sync_dust(world.time, ship, current.vel())
+	StepClock.mark("мир/вид: угри, радужники")
 	hvaten_view.sync(world.time, ship.pos, false, ship, current.vel())
 	kelp_view.sync(world.time, ship, current.vel())
 	krab_view.sync(world.time, ship, current.vel())
 	skalnik_view.sync(world.time, ship.pos, false, ship, current.vel())
 	coins_view.sync(world.time, ship, current.vel())
-	ray_view.sync()
-	remora_view.sync(world.time)
-	veil_view.sync(world.time, ship.pos)
+	StepClock.mark("мир/вид: хватень, краб, монетники")
+	ray_view.sync(world.time)
+	ray_view.sync_dust(world.time, ship, current.vel())
+	remora_view.sync(world.time, ship, current.vel())
+	veil_view.sync(world.time, ship.pos, ship.yaw, current.vel())
+	veil_view.sync_dust(world.time, ship, current.vel())
 	grot_view.sync(world.time, ship.pos, ship, current.vel())
+	StepClock.mark("мир/вид: скаты, вуаль, грот")
 	plankton_view.sync(world.time, ship.pos, ship.yaw)
+	moth_view.sync(ship, world.time)
+	fringe_view.sync(ship, world.time)
 	echo_view.sync(world.time, ship.pos, ship, current.vel())
+	far_view.sync(world.time, ship.pos, world.ground)
+	dust_layer.sync()
+	StepClock.mark("мир/вид: планктон, эхо, дальние")

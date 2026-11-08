@@ -76,3 +76,24 @@ func test_scene_heroes_cast_shadows() -> void:
 	print("  узлов мира с тенью: %d" % list.size())
 	main.queue_free()
 	await frames(1)
+
+
+## Места-ориентиры из камня (Б1): порода курильщика 02 и Каменный цветок 01 отбрасывают тень, пузыри и марево
+## курильщика — нет (прозрачные).
+func test_scene_landmarks_cast_shadows() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.step(0.1)
+	var ev: EcoView = main.eco
+	var vent: VentView = ev.find_child("Чёрный курильщик", false, false)
+	var flower: FlowerView = ev.find_child("Каменный цветок", false, false)
+	ok(vent != null and flower != null, "курильщик и Каменный цветок в сцене")
+	if vent and flower:
+		var list := EcoShadows.casters(ev)
+		ok(vent.rock in list, "порода курильщика отбрасывает тень")
+		ok(not vent.bubbles in list, "пузыри курильщика без тени")
+		ok(not vent.haze in list, "марево курильщика без тени")
+		ok(flower in list, "Каменный цветок отбрасывает тень")
+	main.queue_free()
+	await frames(1)

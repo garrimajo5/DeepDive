@@ -29,6 +29,9 @@ const HALO := 1.7
 ## Дыхание яркости: размах (доля) и период, с.
 const PULSE := 0.05
 const PERIOD := 10.0
+## Столб вблизи тает (#994): от камеры ближе NEAR.x м — прозрачен, дальше NEAR.y — в полную силу. Иначе у самого
+## колодца оболочка во всё окно — ровная белая плоскость с косой кромкой (корабль в 11 м от столба у 32n).
+const NEAR := Vector2(15.0, 40.0)
 ## Пятна мха в пятне света (локально: вдоль трещины, поперёк), м — середина и четыре вокруг, перекрываются.
 const MOSS: Array[Vector2] = [Vector2(0.0, 0.0), Vector2(-7.5, 0.6), Vector2(7.5, -0.6), Vector2(1.2, 4.5),
 	Vector2(-1.2, -4.5)]
@@ -60,6 +63,11 @@ static func sun_dir() -> Vector3:
 ## Яркость столба и трещины в момент t, с: 1 ± PULSE за PERIOD (то же — в шейдере WellView по TIME).
 static func glow(t: float) -> float:
 	return 1.0 + PULSE * sin(TAU * t / PERIOD)
+
+
+## Доля непрозрачности грани столба на расстоянии dist, м, от камеры (то же — в шейдере WellView, uniform near).
+static func near_fade(dist: float) -> float:
+	return smoothstep(NEAR.x, NEAR.y, dist)
 
 
 func reset(world: EcoWorld) -> void:

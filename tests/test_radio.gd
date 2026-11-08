@@ -11,7 +11,7 @@ var main: Main
 
 
 func after() -> void:
-	Radio.enabled = false
+	Radio.enabled = true
 	if main:
 		main.queue_free()
 		main = null
@@ -183,18 +183,18 @@ func test_router_held_in() -> void:
 	ok(not rt.held_in(b), "касание мимо кнопки — не рация")
 
 
-func test_scene_hidden_until_voice() -> void:
+func test_scene_hidden_solo() -> void:
+	ok(Radio.enabled, "голос готов (#634) — рация в игре включена")
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
 	main.step(DT)
-	ok(not main.radio_panel.visible, "голоса нет — рация в игре скрыта")
+	ok(not main.radio_panel.visible, "один на корабле — рации нет")
 	ok(not main.overlay.router.blocks.has(Radio.button_rect(main.get_viewport().get_visible_rect().size)),
 		"место кнопки — взгляду")
 
 
 func test_scene_coop_shows_and_pause_hides() -> void:
-	Radio.enabled = true
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)

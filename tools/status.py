@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Страница «Где мы»: собирает статус разработки из GitHub и пишет его в закреплённый issue с меткой «статус».
 
-Источник правды — issues: этап = milestone (7 этапов из docs/plan.md), эпик = issue с меткой «эпик»
+Источник правды — issues: этап = milestone (этапы 0–7 из docs/plan.md, порядок — по номеру в названии), эпик = issue с меткой «эпик»
 (чек-лист «- [ ] что — роль — ⛔ кто блокирует» в теле, настоящие задачи — подзадачами, у сквозных треков
 строка «План: `docs/…`» — прогресс считается по галочкам этого файла), роль = метка, блокер = зависимость
 «blocked by» или «⛔» в чек-листе. Только stdlib + `gh api` (есть и в сессии, и на раннере GitHub).
@@ -21,7 +21,8 @@ from urllib.parse import quote
 REPO = os.environ.get("STATUS_REPO", "garrimajo5/DeepDive")
 STATUS_LABEL = "статус"
 STATUS_TITLE = "Где мы — статус разработки"
-ROLES = ["поток А", "поток Б", "art", "model", "анимация", "qa", "звук", "сюжет", "владелец"]
+ROLES = ["менеджер", "геймдизайн", "сюжет", "уровни", "ux", "поток А", "поток Б", "art", "model", "анимация", "qa",
+         "звук", "владелец"]
 ROLE_NAMES = {
     "поток А": "Dev: корабль (Claude, поток А)",
     "поток Б": "Dev: живой мир (Claude, поток Б)",
@@ -30,7 +31,11 @@ ROLE_NAMES = {
     "анимация": "Анимации (Codex, Blender)",
     "qa": "Тестер",
     "звук": "Звук, музыка, голоса (Codex, ElevenLabs)",
-    "сюжет": "Сюжет и лор (владелец)",
+    "сюжет": "Сценарист: сюжет и тексты (Codex)",
+    "менеджер": "Проект-менеджер (Claude)",
+    "геймдизайн": "Гейм-дизайнер: лор, механики (Codex)",
+    "уровни": "Дизайнер уровней (Codex)",
+    "ux": "UX/UI-дизайнер (Claude)",
     "владелец": "Владелец: решения и приёмка",
 }
 TASK_RE = re.compile(r"^\s*[-*] \[( |x|X|~)\] (.+?)\s*$")
@@ -119,6 +124,12 @@ def week_stats(recent, prs):
             "done": len(done), "bugs": with_label("баг"), "art": with_label("art"), "model": with_label("model"),
             "epics": with_label("эпик"), "dropped": len(issues) - len(done),
             "list": sorted(done, key=lambda i: i.get("closed_at", ""), reverse=True)}
+
+
+def stage_no(title):
+    """Номер этапа из названия milestone «Этап N. …» (этап 0 заведён позже остальных — порядок не по номеру milestone)."""
+    m = re.match(r"Этап\s+(\d+)", title or "")
+    return int(m.group(1)) if m else 99
 
 
 def stage_status(closed, n_epics, done, total, has_later_work):
@@ -220,8 +231,9 @@ def render(ms, epics, open_issues, recent, blocked, prs=None, now=None):
     by_ms = {}
     for r in rows:
         by_ms.setdefault(r["ms"], []).append(r)
-    stages = sorted([m for m in ms if m["title"].startswith("Этап")], key=lambda m: m["number"])
-    first_with_epics = min([m["number"] for m in stages if by_ms.get(m["number"])], default=99)
+    stages = sorted([m for m in ms if m["title"].startswith("Этап")], key=lambda m: stage_no(m["title"]))
+    # этап без эпиков, после которого уже есть работа, считаем сделанным и ждущим приёмки
+    later = {m["number"]: any(by_ms.get(n["number"]) for n in stages[i + 1:]) for i, m in enumerate(stages)}
 
     L = [f"# {STATUS_TITLE}",
          f"_Обновлено автоматически {now:%d.%m.%Y %H:%M} МСК (`tools/status.py`). Не редактировать руками — "
@@ -233,14 +245,14 @@ def render(ms, epics, open_issues, recent, blocked, prs=None, now=None):
         er = by_ms.get(m["number"], [])
         d = sum(r["done"] for r in er)
         t = sum(r["total"] for r in er)
-        st = stage_status(m["state"] == "closed", len(er), d, t, m["number"] < first_with_epics)
+        st = stage_status(m["state"] == "closed", len(er), d, t, later[m["number"]])
         if st.startswith("🔄"):
             current.append(m["title"])
         prog = f"{bar(d, t)} {pct(d, t)}%" if er else "—"
         eps = ", ".join(f"#{r['n']}" for r in er) or "—"
         stage_lines.append(f"| {m['title']} | {st} | {prog} | {eps} |")
     waiting = [m["title"].split(". ", 1)[-1] for m in stages
-               if m["state"] == "open" and m["number"] < first_with_epics]
+               if m["state"] == "open" and not by_ms.get(m["number"]) and later[m["number"]]]
     head = "**Сейчас:** " + (current[0] if current else "активных этапов нет")
     if len(current) > 1:
         head += " · параллельно: " + ", ".join(c.split(". ", 1)[-1] for c in current[1:])
@@ -282,16 +294,23 @@ def render(ms, epics, open_issues, recent, blocked, prs=None, now=None):
         near = [f"#{i['number']}" + (" (в работе)" if "в работе" in labels_of(i) else "")
                 + (" (проверить)" if role == "qa" and "проверить" in labels_of(i) else "") for i in iss[:3]]
         near += [f"{short(t['text'])} (#{r['n']})" for r, t in tasks if not t["blocker"]][:max(0, 2 - len(near))]
-        flag = " ⚠️ нет исполнителя-агента" if role == "сюжет" else ""
-        L.append(f"| {ROLE_NAMES[role]}{flag} | {len(tasks)} | {len(iss)} | {'; '.join(near) or '—'} |")
+        L.append(f"| {ROLE_NAMES[role]} | {len(tasks)} | {len(iss)} | {'; '.join(near) or '—'} |")
 
     # --- ждёт владельца и заблокировано ---
     owner = [i for i in open_issues if "ждёт владельца" in labels_of(i)]
     owner_tasks = [(r, t) for r in rows if r["state"] == "open" for t in r["tasks"]
                    if not t["done"] and t["blocker"] and "владел" in t["blocker"] and "on-hold" not in t["blocker"]]
-    L += ["", f"## ⛔ Ждёт владельца ({len(owner) + len(owner_tasks)})"]
+    # приёмка и дела самого владельца: роль «владелец» без блокера (бета, контрольные точки этапов)
+    own = [(r, t) for r in rows if r["state"] == "open" for t in r["tasks"]
+           if not t["done"] and not t["blocker"] and "владелец" in t["roles"]]
+    L += ["", f"## ⛔ Ждёт владельца ({len(owner) + len(owner_tasks) + len(own)})"]
+    if owner or owner_tasks:
+        L += ["", "**Решения** — без них работа стоит:"]
     L += [f"- #{i['number']} {i['title']}" for i in owner]
     L += [f"- {t['text']} — эпик #{r['n']}" for r, t in owner_tasks]
+    if own:
+        L += ["", "**Приёмка и твои дела** — работу не держат, но без них этап не закрыть:"]
+        L += [f"- {t['text']} — эпик #{r['n']}" for r, t in own]
     blk_issues = [(n, ds) for n, ds in blocked.items() if n not in epic_nums]
     held = [i for i in open_issues if "on-hold" in labels_of(i)]
     if blk_issues or held:

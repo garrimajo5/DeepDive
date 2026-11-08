@@ -5,7 +5,7 @@ class_name NetSnap
 
 const SEND_DT := 0.05          ## хост шлёт кадр 20 раз в секунду
 const MAX_BYTES := 1200        ## кадр с четырьмя членами экипажа влезает в один UDP-пакет (MTU 1280 с запасом)
-const VERSION := 14            ## формат кадра и ввода; клиент другой версии не подключается (14 — связь «c», `Pad.ask`)
+const VERSION := 16            ## формат кадра и ввода; клиент другой версии не подключается (16 — трюм и виды хоста `hold`, #823)
 const NEWS_TIME := 1.0         ## сообщение события едет в кадрах столько секунд (20 кадров — потеря всех почти исключена)
 
 
@@ -206,12 +206,13 @@ static func run_state(run: Run, marks: Dictionary, secs: int, frac: float, tally
 	var seen := PackedByteArray()
 	for k in run.seen:
 		seen.append(keys.find(k))
-	var r := {"ru": PackedInt32Array([run.route, 1 if run.done else 0, run.depth, run.routes, 1 if run.ended else 0,
+	var flags := (1 if run.done else 0) | (2 if run.voting else 0) | (4 if run.at_descent() else 0)
+	var r := {"ru": PackedInt32Array([run.route, flags, run.depth, run.routes, 1 if run.ended else 0,
 		run.score, secs]), "rf": frac, "rv": vis, "rs": seen,
 		"vm": [PackedByteArray(marks.get("deep", [])), PackedByteArray(marks.get("up", []))]}
 	if tally != "":
 		r["ta"] = tally
-	if run.done and not run.ended:
+	if run.voting and not run.ended:
 		r["op"] = ops
 	if run.ended:
 		r["rr"] = rows
@@ -231,7 +232,9 @@ static func apply_run(r: Variant, run: Run) -> Dictionary:
 			and vm[0] is PackedByteArray and vm[1] is PackedByteArray):
 		return {}
 	run.route = ru[0] if ru[0] >= 0 and ru[0] < Run.ROUTES.size() else -1
-	run.done = ru[1] == 1
+	run.done = (ru[1] & 1) != 0
+	run.voting = (ru[1] & 2) != 0
+	run.set_at_descent((ru[1] & 4) != 0)   # круг 10: панель спуска и кнопка «Спуск» у гостя (#1362)
 	run.depth = maxi(0, ru[2])
 	run.routes = maxi(0, ru[3])
 	run.ended = ru[4] == 1
@@ -339,6 +342,36 @@ static func _nan_pad(a: Array, n: int) -> PackedFloat32Array:
 
 static func _from_nan(f: PackedFloat32Array) -> Array:
 	return [] if is_nan(f[0]) else Array(f)
+
+
+## Трюм и изученные виды хоста для гостей (#823, часть 5): груз, поднятые со дна, виды и наблюдения — как в
+## сохранении. Едет не в кадре (не влезет в UDP-пакет), а надёжным сообщением `Host.send_hold` при изменении.
+static func hold(samples: Samples, scanner: Scanner) -> Dictionary:
+	var got: Array = samples.got.keys()
+	got.sort()
+	var seen := {}
+	for id: String in scanner.seen:
+		seen[id] = Array(scanner.seen_of(id))
+	return {"g": got, "c": samples.cargo.duplicate(true), "s": Array(scanner.list()), "n": seen}
+
+
+## Ключ того, что лежит в `hold`: хост шлёт снова, только когда он сменился.
+static func hold_key(samples: Samples, scanner: Scanner) -> Array:
+	return [samples.cargo_rev, scanner.rev]
+
+
+## Поставить трюм и виды из `hold` (проверки — в `Samples.restore`/`Scanner.restore`); false — не словарь или
+## пустой (нового нет — `Client.take_hold`), ничего не тронуто.
+static func apply_hold(h: Variant, samples: Samples, scanner: Scanner) -> bool:
+	if not (h is Dictionary) or (h as Dictionary).is_empty():
+		return false
+	var g: Variant = h.get("g", [])
+	var c: Variant = h.get("c", [])
+	var sp: Variant = h.get("s", [])
+	var n: Variant = h.get("n", {})
+	samples.restore(g if g is Array else [], c if c is Array else [])
+	scanner.restore(sp if sp is Array else [], n if n is Dictionary else {})
+	return true
 
 
 ## Размер кадра в байтах, как он уйдёт по сети.

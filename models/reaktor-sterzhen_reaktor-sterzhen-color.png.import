@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cx381p2b5h21y"
-path="res://.godot/imported/reaktor-sterzhen_reaktor-sterzhen-color.png-14ec8a5cfe8d634a68383bb5316dd913.ctex"
+path.s3tc="res://.godot/imported/reaktor-sterzhen_reaktor-sterzhen-color.png-14ec8a5cfe8d634a68383bb5316dd913.s3tc.ctex"
+path.etc2="res://.godot/imported/reaktor-sterzhen_reaktor-sterzhen-color.png-14ec8a5cfe8d634a68383bb5316dd913.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "4e72f4a4e3359e91f44cd25fe63e7faf"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/reaktor-sterzhen_reaktor-sterzhen-color.png"
-dest_files=["res://.godot/imported/reaktor-sterzhen_reaktor-sterzhen-color.png-14ec8a5cfe8d634a68383bb5316dd913.ctex"]
+dest_files=["res://.godot/imported/reaktor-sterzhen_reaktor-sterzhen-color.png-14ec8a5cfe8d634a68383bb5316dd913.s3tc.ctex", "res://.godot/imported/reaktor-sterzhen_reaktor-sterzhen-color.png-14ec8a5cfe8d634a68383bb5316dd913.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

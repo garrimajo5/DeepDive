@@ -71,7 +71,190 @@ func test_ten_shrimp_per_station() -> void:
 		near(s.dir.length(), 1.0, 1e-4)
 	w.reset()
 	eq(og.shrimp.size(), 20, "сброс мира — те же рачки")
-	eq(og.shrimp[0].p, tops[0], "снова на вершине")
+	ok(og.shrimp[0].p.distance_to(tops[0]) < 2.0, "снова над вершиной")
+
+
+## Б3 «плавность»: после сброса рачок уже там, куда его ведёт шаг (круг над вершиной, веерник); раньше все стояли
+## в вершине и на первом шаге прыгали к веернику до 1,5 м за кадр (44 м/с).
+func test_no_jump_after_reset() -> void:
+	var top := Vector3(0, -40 + EcoLeech.TOP, 0)
+	var tops: Array[Vector3] = [top]
+	var fan_spots: Array[Vector2] = [Vector2(7, 0)]
+	var w := _world(tops, fan_spots)
+	var og := _sys(w, EcoOgnevka) as EcoOgnevka
+	_calm(_sys(w, EcoPred) as EcoPred)
+	var dt := 1.0 / 30.0
+	var was: Array[Vector3] = []
+	for s in og.shrimp:
+		was.append(s.p)
+	var worst := 0.0
+	for i in 30 * 3:
+		w.step(dt)
+		for k in og.shrimp.size():
+			worst = maxf(worst, og.shrimp[k].p.distance_to(was[k]) / dt)
+			was[k] = og.shrimp[k].p
+	ok(worst < 6.0, "рачки без рывков после сброса: %.2f м/с" % worst)
+
+
+## Корабль на высоте дна + 3 м (`Helm.Ship.CLEARANCE`) проходит над огнецветом с вершиной 4,2 м: рачки не кружат
+## внутри корпуса (светились в отсеках и на мостике), а держатся снаружи обшивки — и сразу после сброса, и на ходу;
+## корабль ушёл — стая возвращается к вершине.
+func test_shrimp_stay_outside_hull() -> void:
+	var top := Vector3(0, FLAT + EcoLeech.TOP, 0)
+	var tops: Array[Vector3] = [top]
+	var w := _world(tops)
+	var og := _sys(w, EcoOgnevka) as EcoOgnevka
+	_calm(_sys(w, EcoPred) as EcoPred)
+	var dt := 1.0 / 30.0
+	# корабль стоит над станцией: вершина — у самого днища
+	w.ship.pos = Vector3(0, FLAT + Helm.Ship.CLEARANCE, -9)
+	w.ship.yaw = 0.0
+	ok(w.touches_ship(top), "проверка честная: вершина огнецвета внутри корпуса")
+	w.reset()
+	for s in og.shrimp:
+		ok(not w.touches_ship(s.p), "после сброса рачок снаружи корпуса")
+	var inside := 0
+	var was: Array[Vector3] = []
+	for s in og.shrimp:
+		was.append(s.p)
+	var worst := 0.0
+	# стоит 2 с, затем проходит над станцией на 6 м/с (нос в −Z)
+	for i in 30 * 6:
+		if i >= 60:
+			w.ship.pos += Vector3(0, 0, -6.0 * dt)
+		w.step(dt)
+		for k in og.shrimp.size():
+			if w.touches_ship(og.shrimp[k].p):
+				inside += 1
+			worst = maxf(worst, og.shrimp[k].p.distance_to(was[k]) / dt)
+			was[k] = og.shrimp[k].p
+	eq(inside, 0, "рачки ни на шаге не внутри корпуса")
+	ok(worst < 15.0, "обшивка толкает без рывков: %.1f м/с" % worst)
+	_run(w, 6.0)
+	var far := 0.0
+	for s in og.shrimp:
+		far = maxf(far, s.p.distance_to(top))
+	ok(far < 2.5, "корабль ушёл — стая снова над вершиной: %.2f м" % far)
+
+
+## Б3: хищник встал на чистку в 8 м от вершины — стая плывёт к нему не быстрее DART (раньше доля lerp давала
+## 26 м/с за шаг — нашла `test_eco_reset_jumps`), но всё равно облепляет его за пару секунд.
+func test_no_dart_to_pred_on_cleaning() -> void:
+	var top := Vector3(0, -36, 0)
+	var tops: Array[Vector3] = [top]
+	var w := _world(tops)
+	var ps := _sys(w, EcoPred) as EcoPred
+	var og := _sys(w, EcoOgnevka) as EcoOgnevka
+	_calm(ps)
+	_run(w, 1.0)
+	var pr := ps.all[0]
+	pr.leech = true
+	pr.hunger = 0.2
+	pr.agent.p = top + Vector3(8, 0, 0)
+	var dt := EcoWorld.MAX_STEP
+	var was: Array[Vector3] = []
+	for s in og.shrimp:
+		was.append(s.p)
+	var worst := 0.0
+	var t := 0.0
+	while t < 4.0:
+		w.step(dt)
+		t += dt
+		for k in og.shrimp.size():
+			worst = maxf(worst, og.shrimp[k].p.distance_to(was[k]) / dt)
+			was[k] = og.shrimp[k].p
+	eq((_sys(w, EcoLeech) as EcoLeech).stations[0].busy, pr.index, "хищник на чистке")
+	# рачок шагает через шаг мира: за свой шаг (2 dt) — не дальше DART · 2 dt
+	ok(worst <= EcoOgnevka.DART * 2.0 + 1e-3, "к хищнику без рывка: %.2f м/с за шаг мира" % worst)
+	for s in og.shrimp:
+		ok(s.p.distance_to(pr.agent.p) < 1.8, "облепили: %.2f м" % s.p.distance_to(pr.agent.p))
+
+
+func test_swim_capped() -> void:
+	var v := EcoOgnevka.swim(Vector3.ZERO, Vector3.ZERO, Vector3(10, 0, 0), 0.1)
+	near(v.x, EcoOgnevka.ACCEL * 0.1, 1e-5, "с места — не быстрее ACCEL")
+	v = EcoOgnevka.swim(Vector3.ZERO, Vector3(EcoOgnevka.DART, 0, 0), Vector3(10, 0, 0), 0.1)
+	near(v.x, EcoOgnevka.DART, 1e-5, "далеко — не быстрее DART")
+	v = EcoOgnevka.swim(Vector3.ZERO, Vector3(1.5, 0, 0), Vector3(0.5, 0, 0), 0.1)
+	near(v.x, 0.5 * EcoOgnevka.FOLLOW, 1e-5, "близко — ход по остатку")
+
+
+## Б3: хищник встал на чистку — стая трогается к нему и встаёт у него без рывка: ход меняется не быстрее ACCEL.
+## Раньше ход прыгал с 0,7 до 4 м/с за шаг рачка (58 м/с², нашёл обход мира по ускорениям у старта 00).
+func test_no_jerk_to_pred_on_cleaning() -> void:
+	var top := Vector3(0, -36, 0)
+	var tops: Array[Vector3] = [top]
+	var w := _world(tops)
+	var ps := _sys(w, EcoPred) as EcoPred
+	var og := _sys(w, EcoOgnevka) as EcoOgnevka
+	_calm(ps)
+	_run(w, 2.0)
+	var pr := ps.all[0]
+	pr.leech = true
+	pr.hunger = 0.2
+	pr.agent.p = top + Vector3(8, 0, 0)
+	var dt := EcoWorld.MAX_STEP
+	var pos: Array[Vector3] = []
+	var vel: Array[Vector3] = []
+	for s in og.shrimp:
+		pos.append(s.p)
+		vel.append(Vector3.INF)
+	var worst := 0.0
+	var fastest := 0.0
+	# рачок шагает через шаг мира: ход и ускорение — по его шагу (2 dt)
+	for i in int(4.0 / dt / 2.0):
+		w.step(dt)
+		w.step(dt)
+		for k in og.shrimp.size():
+			var v := (og.shrimp[k].p - pos[k]) / (dt * 2.0)
+			if vel[k].is_finite():
+				worst = maxf(worst, (v - vel[k]).length() / (dt * 2.0))
+			fastest = maxf(fastest, v.length())
+			vel[k] = v
+			pos[k] = og.shrimp[k].p
+	ok(fastest > EcoOgnevka.DART * 0.9, "к хищнику плывут полным ходом: %.2f м/с" % fastest)
+	ok(worst <= EcoOgnevka.ACCEL + 0.5, "ход меняется плавно: %.1f м/с² (не больше %.0f)" % [worst, EcoOgnevka.ACCEL])
+	for s in og.shrimp:
+		ok(s.p.distance_to(pr.agent.p) < 1.8, "облепили: %.2f м" % s.p.distance_to(pr.agent.p))
+
+
+## Б3: нос рачка догоняет ход, а не прыгает за шаг; почти стоит — держит курс (раньше щёлкал на касательную).
+func test_nose_turns_smoothly() -> void:
+	var top := Vector3(0, -36, 0)
+	var tops: Array[Vector3] = [top]
+	var w := _world(tops)
+	var og := _sys(w, EcoOgnevka) as EcoOgnevka
+	_calm(_sys(w, EcoPred) as EcoPred)
+	for s in og.shrimp:
+		near(s.dir.length(), 1.0, 1e-4, "курс задан с начала")
+		near(s.dir.y, 0.0, 1e-4, "первый курс — по кругу над вершиной")
+	_run(w, 3.0)
+	var was: Array[Vector3] = []
+	var pos: Array[Vector3] = []
+	for s in og.shrimp:
+		s.dir = -s.dir  # развернули носом против хода
+		was.append(s.dir)
+		pos.append(s.p)
+	w.step(EcoWorld.MAX_STEP)
+	w.step(EcoWorld.MAX_STEP)
+	var cap := EcoOgnevka.LOOK_MAX * EcoWorld.MAX_STEP * 2.0 + 1e-3
+	for k in og.shrimp.size():
+		var s := og.shrimp[k]
+		ok(s.dir.angle_to(was[k]) <= cap, "за шаг рачка нос повернул на %.2f рад (не больше %.2f)" % [s.dir.angle_to(was[k]), cap])
+		near(s.dir.length(), 1.0, 1e-4)
+	_run(w, 1.5)
+	for k in og.shrimp.size():
+		var s := og.shrimp[k]
+		var p0 := s.p
+		w.step(EcoWorld.MAX_STEP)
+		w.step(EcoWorld.MAX_STEP)
+		var mv := s.p - p0
+		if mv.length() > 1e-3:
+			ok(s.dir.angle_to(mv) < 0.35, "через 1,5 с нос по ходу: %.2f рад" % s.dir.angle_to(mv))
+	var d := Vector3(0, 0, -1)
+	eq(EcoOgnevka.turn(d, Vector3.ZERO, 0.1), d, "хода нет — курс тот же")
+	near(EcoOgnevka.turn(d, Vector3(0, 0, 1), 0.1).angle_to(d), EcoOgnevka.LOOK_MAX * 0.1, 1e-4,
+		"навстречу — разворот не быстрее LOOK_MAX")
 
 
 func test_shrimp_swarm_pred_on_cleaning() -> void:
@@ -288,5 +471,117 @@ func test_eco_view_has_ognevka() -> void:
 	eq(ev.ognevka.shrimp.size(), ev.leeches.stations.size() * EcoOgnevka.PER_STATION)
 	ev.step(0.1, EcoLink.ShipState.new())
 	ok(ev.ognevka_view.placed.size() > 0)
+	ev.queue_free()
+	await frames(1)
+
+
+## Место рачка из буфера вида (строки transform 3 × 4).
+static func _at(buf: PackedFloat32Array, slot: int) -> Vector3:
+	var o := slot * OgnevkaView.STRIDE
+	return Vector3(buf[o + 3], buf[o + 7], buf[o + 11])
+
+
+func test_view_lite_draws_half_per_station() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var ov := view.ognevka_view
+	var n := view.leeches.stations.size()
+	var all := n * EcoOgnevka.PER_STATION
+	ok(n > 0, "станции есть")
+	eq(ov.drawn(), all, "на «Обычно» — все рачки")
+	view.set_lite(true)
+	ok(ov.lite, "огнёвки — на «Экономно»")
+	eq(ov.drawn(), all / 2, "половина рачков")
+	var seen := {}
+	for i in all:
+		var s := OgnevkaView.slot(i, n, true)
+		seen[s] = true
+		eq(s < ov.drawn(), OgnevkaView.lite_shown(i % EcoOgnevka.PER_STATION), "видно только показанное (%d)" % i)
+	eq(seen.size(), all, "места в буфере не повторяются")
+	var even := 0
+	var odd := 0
+	for k in EcoOgnevka.PER_STATION:
+		if OgnevkaView.lite_shown(k):
+			even += 1 if k % 2 == 0 else 0
+			odd += 1 if k % 2 == 1 else 0
+	ok(even > 0 and odd > 0, "видны и рачки у вершины (чётные), и кормящиеся на веернике (нечётные)")
+	for k in 4:
+		view.step(EcoWorld.MAX_STEP, EcoLink.ShipState.new())
+	var i := EcoOgnevka.PER_STATION + 2   # вторая станция, показанный рачок
+	near(_at(ov._buffer, OgnevkaView.slot(i, n, true)).distance_to(view.ognevka.shrimp[i].p), 0.0, 1e-4,
+		"видимый рачок — на своём месте буфера")
+	view.ground = Seabed.height   # сброс мира — виды пересобираются
+	ok(view.ognevka_view.lite and view.ognevka_view.drawn() == all / 2, "сброс мира — снова «Экономно»")
+	view.set_lite(false)
+	ov = view.ognevka_view
+	eq(ov.drawn(), all, "назад — все")
+	i = EcoOgnevka.PER_STATION + 3
+	near(_at(ov._buffer, i).distance_to(view.ognevka.shrimp[i].p), 0.0, 1e-4, "буфер снова по номеру")
+	view.queue_free()
+	await frames(1)
+
+
+func test_view_shrimp_stroke() -> void:
+	# гребок: толчок быстро, распрямление плавно, без скачков; висящий гребёт слабее бросающегося
+	var ph := 1.3
+	var top := 0.0
+	var low := 1.0
+	var prev := OgnevkaView.stroke(0.0, ph, EcoOgnevka.DART)
+	var jump := 0.0
+	var rise := 0
+	var fall := 0
+	for i in range(1, 2000):
+		var c := OgnevkaView.stroke(i * 0.001, ph, EcoOgnevka.DART)
+		jump = maxf(jump, absf(c - prev))
+		if c > prev:
+			rise += 1
+		elif c < prev:
+			fall += 1
+		prev = c
+		top = maxf(top, c)
+		low = minf(low, c)
+	near(top, 1.0, 0.01, "бросок — во весь размах")
+	near(low, 0.0, 0.01, "между гребками распрямлён")
+	ok(jump < 0.02, "без скачков за 1 мс (%.3f)" % jump)
+	ok(rise * 2 < fall, "толчок быстрее распрямления (%d против %d)" % [rise, fall])
+	var still := 0.0
+	for i in 2000:
+		still = maxf(still, OgnevkaView.stroke(i * 0.001, ph, 0.0))
+	near(still, OgnevkaView.STROKE_STILL, 0.01, "висящий гребёт на долю размаха")
+	ok(OgnevkaView.stroke(0.4, 0.2, 1.0) != OgnevkaView.stroke(0.4, 2.9, 1.0), "у рачков своя фаза")
+
+
+func test_view_capsule_shortens_in_stroke() -> void:
+	var s := EcoOgnevka.Shrimp.new()
+	s.dir = Vector3(0, 0, -1)
+	s.v = Vector3(0, 0, -EcoOgnevka.DART)
+	s.phase = 0.7
+	var lens: Array[float] = []
+	for i in 60:
+		var t := i * 0.01
+		var x := OgnevkaView.place(s, t)
+		var c := OgnevkaView.stroke(t, s.phase, EcoOgnevka.DART)
+		near(x.basis.y.length(), 1.0 - OgnevkaView.STROKE_SHORT * c, 1e-5, "короче в толчке")
+		near(x.basis.x.length(), 1.0 + OgnevkaView.STROKE_WIDE * c, 1e-5, "толще в толчке")
+		near(absf(x.basis.y.normalized().dot(s.dir)), 1.0, 1e-4, "ось — по ходу")
+		lens.append(x.basis.y.length())
+	ok(lens.min() < 1.0 - OgnevkaView.STROKE_SHORT * 0.9, "сжался в гребке")
+	ok(lens.max() > 0.99, "распрямился")
+
+
+func test_eco_view_strokes_by_world_time() -> void:
+	var ev := EcoView.new()
+	tree.root.add_child(ev)
+	await frames(1)
+	var ship := EcoLink.ShipState.new()
+	ev.step(0.1, ship)
+	ev.step(0.1, ship)
+	var i := ev.ognevka.moved_half()  # шагнувшие в этом шаге переписаны с временем мира
+	var s := ev.ognevka.shrimp[i]
+	var want := (1.0 - OgnevkaView.STROKE_SHORT * OgnevkaView.stroke(ev.world.time, s.phase, s.v.length())) \
+			* OgnevkaView.shrimp_scale(i)
+	near(ev.ognevka_view.placed[i].basis.y.length(), want, 1e-5, "гребок — по времени мира")
 	ev.queue_free()
 	await frames(1)

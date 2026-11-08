@@ -7,7 +7,6 @@ uniform sampler2D screen_tex : hint_screen_texture, repeat_disable, filter_neare
 uniform sampler2D lut_tex : repeat_disable, filter_linear;
 uniform vec3 blue_column = vec3(0.005, 0.012, 0.98);
 uniform float strength = 0.18;
-uniform bool lite = false;   // «Экономно»: без LUT, только овал
 
 void fragment() {
 	vec3 c = texture(screen_tex, SCREEN_UV).rgb;
@@ -17,7 +16,7 @@ void fragment() {
 	float cold = smoothstep(0.08, 0.22, min(c.g, c.b) - c.r) * smoothstep(0.16, 0.38, peak);
 	float protect = max(smoothstep(0.38, 0.72, peak), cold);
 	vec3 g = c;
-	if (!lite) {
+	{   // «Экономно» — свой шейдер без копии экрана, `grade_lite.gdshader` (#842)
 		float z = floor(clamp(c.b, 0.0, 1.0) * 15.0 + 0.5);
 		vec2 uv = vec2((16.0 * z + clamp(c.r, 0.0, 1.0) * 15.0 + 0.5) / 256.0, (clamp(c.g, 0.0, 1.0) * 15.0 + 0.5) / 16.0);
 		g = clamp(texture(lut_tex, uv).rgb + blue_column * (c.b - z / 15.0), vec3(0.0), vec3(1.0));

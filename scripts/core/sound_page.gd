@@ -96,10 +96,7 @@ static func ids() -> Array[String]:
 
 ## Что под касанием p на странице ("" — ничего).
 static func hit(p: Vector2, size: Vector2) -> String:
-	for id in ids():
-		if screen_rect(id, size).has_point(p):
-			return id
-	return ""
+	return Splash.hit_ids(p, size, ids(), screen_rect)
 
 
 ## Доли пользователя по всем шинам: 100 %, кроме переданных в user (шина → доля), — в пределах 0…1.

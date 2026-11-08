@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cjc7uf07uf1y"
-path="res://.godot/imported/polzunok_polzunok-color.png-96b6b77768ab3e15a18f6606be17d98c.ctex"
+path.s3tc="res://.godot/imported/polzunok_polzunok-color.png-96b6b77768ab3e15a18f6606be17d98c.s3tc.ctex"
+path.etc2="res://.godot/imported/polzunok_polzunok-color.png-96b6b77768ab3e15a18f6606be17d98c.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "8a985c56303f577ac8958b6f161a79f7"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/polzunok_polzunok-color.png"
-dest_files=["res://.godot/imported/polzunok_polzunok-color.png-96b6b77768ab3e15a18f6606be17d98c.ctex"]
+dest_files=["res://.godot/imported/polzunok_polzunok-color.png-96b6b77768ab3e15a18f6606be17d98c.s3tc.ctex", "res://.godot/imported/polzunok_polzunok-color.png-96b6b77768ab3e15a18f6606be17d98c.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

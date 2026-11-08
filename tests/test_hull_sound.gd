@@ -126,6 +126,17 @@ func test_snd003_files() -> void:
 	ok(z != null and z.loop_mode != AudioStreamWAV.LOOP_FORWARD, "разряд — один раз")
 
 
+## SND-003, правки тревоги (#657, PR #709): сирена — выбор владельца, петля 2,25 с (прежняя — 2,95 с), громкость как
+## у прежней (−18 LUFS, пик −10 дБ) — SIREN_DB в BreachView не менялся.
+func test_snd003_siren_owner_choice() -> void:
+	var s := load(HullSound.SIREN) as AudioStreamWAV
+	ok(s != null, "тревога загружается")
+	if s == null:
+		return
+	near(s.get_length(), 2.25, 0.01, "петля тревоги — выбор владельца, 2,25 с")
+	eq(s.loop_mode, AudioStreamWAV.LOOP_FORWARD, "петля вперёд")
+
+
 func test_snd003_scene() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)

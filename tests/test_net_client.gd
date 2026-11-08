@@ -248,7 +248,7 @@ func test_events_from_host_frame() -> void:
 	ok(main.breach.active == main.breach.all[1], "та же — в коридоре")
 	near(main.breach.water, 0.2, 0.001, "вода в отсеке")
 	ok(main.breach_view.water.visible, "вода видна")
-	ok(main.breach_view.alarm.visible, "тревога горит")
+	ok(main.breach_view.siren.playing, "сирена воет")
 	ok(main.alarms_on()[0], "табло: пробоина")
 	ok(main.silt.inside != null, "корабль в облаке ила")
 	near(main.silt.k, 1.0, 0.001)
@@ -265,7 +265,7 @@ func test_events_from_host_frame() -> void:
 	h_ev = NetSnap.events(b, sl, 0.0, false)
 	ok(_pump(func() -> bool: return main.breach.active == null), "шов заварен у хоста — и у клиента")
 	ok(main.silt.clouds.is_empty() and main.silt.inside == null, "ила нет")
-	ok(not main.breach_view.alarm.visible, "тревога погасла")
+	ok(not main.breach_view.siren.playing, "сирена смолкла")
 
 
 func test_scorch_from_host_frame() -> void:   # разряд хоста у дна — тот же след на дне у гостя (ART-066)
@@ -311,6 +311,7 @@ func test_route_vote_and_result_from_host() -> void:   # маршрут, гол�
 	eq(main.run.waypoint(), Run.place_xz("well"), "точка на голостоле — колодец")
 	for k in Run.ROUTES[2]["places"]:
 		run.update(Run.place_xz(k).x, Run.place_xz(k).y)
+	run.open_vote()   # в слое — переход у 10 (#828)
 	var ops := Run.opinions(30.0, 80.0, false, false, 0)
 	(h_crew[1] as Crew.Member).at_vote = true   # гость у голостола
 	h_ev["r"] = NetSnap.run_state(run, {"deep": [Crew.Role.PILOT], "up": [Crew.Role.BIOLOGIST]}, 9, 0.6,
@@ -476,3 +477,16 @@ func test_comms_from_host_and_ask_back() -> void:   # ART-040 у гостя: п�
 	ok(hc.press(guest.pad.ask), "хост начал проверку")
 	h_ev = {"c": hc.pack()}
 	ok(_pump(func() -> bool: return main.comms.state == Comms.Ask.WAIT), "«Ждём ответ…» у гостя")
+
+
+func test_lore_from_host_frame() -> void:   # #825: знания слоя общие — гость получает их кадром хоста
+	var host_lore := LayerLore.new()
+	host_lore.learn(LayerLore.D07_RELAY)
+	host_lore.learn(LayerLore.K2)
+	h_ev = {"k": host_lore.pack()}
+	ok(_pump(func() -> bool: return main.lore.knows(LayerLore.K2)), "знания хоста у гостя")
+	eq(main.lore.pack(), host_lore.pack(), "те же факты")
+	h_ev = {}
+	ok(_pump(func() -> bool: return main.net_seq > 3), "кадры без «k» идут")
+	ok(main.lore.knows(LayerLore.D07_RELAY), "без «k» знания не теряются")
+
