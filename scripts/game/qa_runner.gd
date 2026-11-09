@@ -629,6 +629,16 @@ static func warm_line(ms: Array[int]) -> String:
 	return "%s; кадры: %s; худший — кадр %d из %d" % [head, ", ".join(parts), worst, ms.size() - 1]
 
 
+## Строка в лог сценария от игры (не от шага): что случилось само, между шагами.
+func note(line: String) -> void:
+	_log(line)
+
+
+## Отложенная до конца брифинга прибытия строка мира вышла на приборы (#1429, `Main.release_world_say`).
+static func released_line(text: String) -> String:
+	return "отложенное сообщение выведено: «%s»" % text
+
+
 func _log(line: String) -> void:
 	log_lines.append(line)
 	print("QA ", line)

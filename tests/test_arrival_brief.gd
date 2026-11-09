@@ -195,3 +195,22 @@ func test_scene_queued_world_line_waits_for_brief() -> void:
 		main.step(1.0 / 30.0)
 		ok(not main.message.text.contains("рыб"), "строка мира не выходит под брифингом (кадр %d)" % i)
 	eq(main.world_wait, "Стайка круглых рыбок пасётся на светящемся мху", "ждёт последняя из очереди")
+
+
+## Отложенная строка вышла — строка в логе сценария тестера (#1429 п. 2 проверяется по логу, предложение в #1350).
+func test_scene_released_line_in_qa_log() -> void:
+	Main.hints = true
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var qa := main.start_qa('[{"do": "wait", "s": 60}]')
+	for i in 30:
+		main.step(1.0 / 30.0)
+	ok(main.arrival.active(), "брифинг на экране")
+	main.world_wait = "Из песка что-то схватило рыбу"
+	main.arrival.on = false   # брифинг кончился
+	main.release_world_say()
+	eq(main.world_wait, "", "строка ушла на приборы")
+	ok(Array(qa.log_lines).has("отложенное сообщение выведено: «Из песка что-то схватило рыбу»"), "строка в логе")
+	main.release_world_say()
+	eq(Array(qa.log_lines).count("отложенное сообщение выведено: «Из песка что-то схватило рыбу»"), 1, "один раз")
