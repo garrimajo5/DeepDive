@@ -182,9 +182,10 @@ static func apply(g: Main, kv: Dictionary) -> void:
 			cam.look_at(pose["look"])
 			cam.make_current()
 	if kv.has("scena"):  # scena=1|2|3 — контрольный ракурс сцены 00 → 01 (#1400): штатная камера пилота, нос к 01
-		var sp := scena_pose(int(kv["scena"]))
+		var back := float(kv.get("scena_back", "0"))   # scena_back=<м> — раньше по тому же пути
+		var sp := scena_pose(int(kv["scena"]), back)
 		if not sp.is_empty():
-			var ride := scena_ride(int(kv["scena"]), String(kv.get("scena_y", "")))   # scena_y=<y>|dno — высота хода
+			var ride := scena_ride(int(kv["scena"]), String(kv.get("scena_y", "")), back)   # scena_y=<y>|dno — высота хода
 			sp["ship"].y = ride["y"]
 			g.set_meta("scena_src", ride["src"])
 			g.helm.yaw = sp["yaw"] + deg_to_rad(float(kv.get("scena_yaw", "0")))   # scena_yaw=<°> — левее, минус — правее
@@ -195,7 +196,8 @@ static func apply(g: Main, kv: Dictionary) -> void:
 			if kv.has("zamer"):   # zamer=bok|korma|nos — проба фазы «замер» #1498, серпохвост №0 рядом с кораблём
 				zamer_setup(g, sp["ship"], g.helm.yaw, String(kv["zamer"]))
 			if kv.has("scena_t"):   # scena_t=<с> — мир идёт столько секунд, корабль висит в точке ракурса (кадры движения)
-				scena_run(g, sp["ship"], float(kv["scena_t"]), float(kv.get("zamer_off", "-1")))   # zamer_off=<с> — свет гаснет
+				scena_run(g, sp["ship"], float(kv["scena_t"]), float(kv.get("zamer_off", "-1")),   # zamer_off=<с> — свет гаснет
+						kv.has("zamer"))
 				if kv.has("zamer"):
 					zamer_log(g)
 	if kv.has("lore"):  # lore=d07_return,shell03 — знания слоя 1 (#825; ключи LayerLore.KEYS)
@@ -318,14 +320,46 @@ const SCENA_DT := 1.0 / 30.0
 
 
 ## light_off ≥ 0 — через столько секунд прожектор гаснет (ответ экипажа на «замер», zamer_off=).
-static func scena_run(g: Node, ship: Vector3, seconds: float, light_off := -1.0) -> void:
+## trace — с zamer=: в лог каждая смена режима хищника №0 и строк приборов с секундой мира (момент потери цели, #1400).
+static func scena_run(g: Node, ship: Vector3, seconds: float, light_off := -1.0, trace := false) -> void:
 	var n := int(round(seconds / SCENA_DT))
 	var off_at := int(round(light_off / SCENA_DT)) if light_off >= 0.0 else -1
+	var was := {"mode": -1, "parts": []}
 	for i in n:
 		if i == off_at and g.light_on:
 			g.toggle_light()
+			if trace:
+				print("zamer: %s с — прожектор погашен" % _num((i + 1) * SCENA_DT))
 		g.step(SCENA_DT)
 		g.park_at(ship)
+		if trace:
+			for line in zamer_trace(g, was, (i + 1) * SCENA_DT):
+				print(line)
+
+
+## Что сменилось за шаг (scena_run с trace): режим хищника №0 и строки приборов со словами (числа без слов —
+## глубина, курс — не печатаем). was — прошлое состояние {mode, parts}, обновляется. Строки для лога.
+static func zamer_trace(g: Node, was: Dictionary, t: float) -> Array[String]:
+	var out: Array[String] = []
+	var ps: EcoPred = g.eco.preds
+	if ps != null and not ps.all.is_empty():
+		var pr: EcoPred.Pred = ps.all[0]
+		if pr.mode != was["mode"]:
+			out.append("zamer: %s с — хищник №0: %s, до корабля %s м" % [_num(t), EcoPred.Mode.keys()[pr.mode],
+				_num(pr.agent.distance_to(g.helm.pos))])
+			was["mode"] = pr.mode
+	var parts: Array = []
+	for p in g.status_parts():
+		if String(p).length() > 12:
+			parts.append(String(p))
+	for p in parts:
+		if not was["parts"].has(p):
+			out.append("zamer: %s с — строка «%s»" % [_num(t), p])
+	for p in was["parts"]:
+		if not parts.has(p):
+			out.append("zamer: %s с — ушла «%s»" % [_num(t), p])
+	was["parts"] = parts
+	return out
 
 
 ## Кадры знака #1498 (zamer=): длина фазы и отход — как в рекомендации гейм-дизайнера (09.11), в игре пока выключено.
@@ -388,10 +422,11 @@ static func zamer_log(g: Node) -> void:
 
 ## Поза ракурса scena=n (1…3): корабль в точке SCENA[n − 1] на SCENA_FLOOR над видимым дном, носом к 01.
 ## {ship, yaw}; пусто — нет такого ракурса.
-static func scena_pose(n: int) -> Dictionary:
+## back > 0 — на столько метров раньше по тому же пути `tools/pass_plan.gd` (scena_back=, #1400).
+static func scena_pose(n: int, back := 0.0) -> Dictionary:
 	if n < 1 or n > SCENA.size():
 		return {}
-	var at := SCENA[n - 1]
+	var at := scena_at(n, back)
 	var to := LayerMap.xz(SCENA_GOAL) - at
 	var ship := Vector3(at.x, Seabed.mesh_height(at.x, at.y) + SCENA_FLOOR, at.y)
 	return {"ship": ship, "yaw": atan2(-to.x, -to.y)}   # нос (−sin, −cos) — к 01
@@ -399,14 +434,21 @@ static func scena_pose(n: int) -> Dictionary:
 
 ## Высота хода в ракурсе scena=n и откуда она: how — "" (плавный ход `tools/pass_box.gd`, контур 20×30: H+7 с
 ## уклоном ≤ SLOPE), "dno" — SCENA_FLOOR над видимым дном в точке (кадры «до» #1400), число — y руками. {y, src}.
-static func scena_ride(n: int, how := "") -> Dictionary:
-	var at := SCENA[clampi(n, 1, SCENA.size()) - 1]
+static func scena_ride(n: int, how := "", back := 0.0) -> Dictionary:
+	var at := scena_at(clampi(n, 1, SCENA.size()), back)
 	if how == "dno":
 		return {"y": Seabed.mesh_height(at.x, at.y) + SCENA_FLOOR, "src": "%.0f м над дном в точке (scena_y=dno)" % SCENA_FLOOR}
 	if how != "":
 		return {"y": float(how), "src": "руками (scena_y=%s)" % how}
-	var y: float = PassBox.smooth_at(PassPlan.arc_at(clampi(n, 1, SCENA.size()) - 1))
+	var y: float = PassBox.smooth_at(maxf(PassPlan.arc_at(clampi(n, 1, SCENA.size()) - 1) - maxf(back, 0.0), 0.0))
 	return {"y": y, "src": "плавный ход tools/pass_box.gd (H+%.0f, уклон ≤ %s)" % [PassBox.RIDE, _num(PassBox.SLOPE)]}
+
+
+## Точка ракурса scena=n: SCENA[n − 1] или на back м раньше по пути (не дальше начала у 00).
+static func scena_at(n: int, back := 0.0) -> Vector2:
+	if back <= 0.0:
+		return SCENA[n - 1]
+	return PassPlan.along(maxf(PassPlan.arc_at(n - 1) - back, 0.0))["at"]
 
 
 ## Подпись контрольного кадра scena= для лога (#1400): точка, фактический y корабля, до дна, курс, источник высоты.

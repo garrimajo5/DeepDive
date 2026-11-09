@@ -3,6 +3,10 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-09
+- Снимки: `scena_back=<м>` — ракурс `scena=` на столько метров раньше по тому же пути (`ShotSetup.scena_at`,
+  высота — плавный ход в новой точке), с `zamer=` и `scena_t` в лог — каждая смена режима хищника №0 и строк приборов
+  с секундой мира (`ShotSetup.zamer_trace`, #1400). Тесты `test_shot_place.test_scena_back_same_path`,
+  `test_scene_zamer_trace_logs_changes`.
 - Приборы: строка угрозы мира (`"urgent"` у `EcoLink.MESSAGE`/`OBSERVE`, «Серпохвост замер…» #1498) держится свои
   4,2 с — строки мира ждут очереди, свои сообщения игрока перебивают, как прежде; под брифингом прибытия ждёт его
   конца и обычной не сменяется (`Status.Message.say(…, urgent)`, `Message.hot`, `Main._world_say`, #1516).
