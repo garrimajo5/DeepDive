@@ -76,13 +76,16 @@ const PRED_PER_DIVE := 0.15
 ## {"type": DROP, "sample": n, "at": Vector3}                              — унесённый образец n брошен (M.drop):
 ##     снова лежит на дне в точке at (x, z; высоту над дном ставит корабль), его можно поднять заново. Не унесённый
 ##     образец корабль не трогает. Текст на приборы («бросил образец») мир шлёт своим MESSAGE/OBSERVE.
-## {"type": VOICE, "role": 2, "text": "Сбросьте ход, перегрев", "fake": true, "ask": "ping", "silent": false}
+## {"type": VOICE, "role": 2, "text": "Сбросьте ход, перегрев", "fake": true, "ask": "ping", "silent": false,
+##  "id": "RADIO_FAKE_PULSE03"}
 ##     — голос во внутренней связи ART-040: корабль показывает его на плашке связи (`Comms`, `Main.on_eco_event`).
 ##     role — заявленная роль (Crew.Role: 0 пилот, 1 сонарщик, 2 инженер, 3 биолог), text — команда одной-двумя
 ##     короткими строками. fake — подделка (эхоловец): на плашке «Код: …» вместо кодового слова забега, на «Спросить
 ##     код» отвечает чужим словом («Код не совпал» → «Это был не наш»), а с "silent": true — молчит («Нет ответа»,
 ##     не разоблачение). ask — о чём просит голос: "ping" — импульс сонара, "light" — свет, "" — ни о чём. Корабль
 ##     просьбу не исполняет сам; за исполненную просьбу подделки наказывает мир (по ShipState.sonar_ping / light_on).
+##     id — ID реплики TXT-002 (`EcoEcho.FAKES`/`REALS`, #1477): по нему корабль берёт файл голоса SND-009; "" — реплика
+##     без озвучки (только текст).
 ## {"type": FIELD, "period": 2.4, "text": "…"}                            — импульс сонара с площадки 08 поймал ритм
 ##     пограничного поля (`EcoField.rhythm`, #833): period — с между ударами, text — строка на приборы. Корабль
 ##     ставит знание «поле 08 замечено» (`LayerLore.FIELD08`) и показывает строку. Приходит только в шаг импульса
@@ -134,8 +137,9 @@ static func observe(species: String, note: String, text: String = "") -> Diction
 	return {"type": OBSERVE, "species": species, "note": note, "text": text}
 
 
-static func voice(role: int, text: String, fake := false, ask := "", silent := false) -> Dictionary:
-	return {"type": VOICE, "role": clampi(role, 0, 3), "text": text, "fake": fake, "ask": ask, "silent": silent}
+static func voice(role: int, text: String, fake := false, ask := "", silent := false, id := "") -> Dictionary:
+	return {"type": VOICE, "role": clampi(role, 0, 3), "text": text, "fake": fake, "ask": ask, "silent": silent,
+		"id": id}
 
 
 static func shell(text: String) -> Dictionary:
