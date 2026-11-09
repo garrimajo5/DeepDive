@@ -1,0 +1,92 @@
+{
+  "Stvorka0": [
+    {
+      "degrees": 0,
+      "overlapping_triangle_pairs": 0
+    },
+    {
+      "degrees": 15,
+      "overlapping_triangle_pairs": 0
+    },
+    {
+      "degrees": 30,
+      "overlapping_triangle_pairs": 0
+    },
+    {
+      "degrees": 45,
+      "overlapping_triangle_pairs": 0
+    },
+    {
+      "degrees": 60,
+      "overlapping_triangle_pairs": 0
+    },
+    {
+      "degrees": 75,
+      "overlapping_triangle_pairs": 0
+    },
+    {
+      "degrees": 90,
+      "overlapping_triangle_pairs": 0
+    }
+  ],
+  "Stvorka1": [
+    {
+      "degrees": 0,
+      "overlapping_triangle_pairs": 0
+    },
+    {
+      "degrees": 15,
+      "overlapping_triangle_pairs": 0
+    },
+    {
+      "degrees": 30,
+      "overlapping_triangle_pairs": 0
+    },
+    {
+      "degrees": 45,
+      "overlapping_triangle_pairs": 0
+    },
+    {
+      "degrees": 60,
+      "overlapping_triangle_pairs": 0
+    },
+    {
+      "degrees": 75,
+      "overlapping_triangle_pairs": 0
+    },
+    {
+      "degrees": 90,
+      "overlapping_triangle_pairs": 0
+    }
+  ],
+  "Stvorka2": [
+    {
+      "degrees": 0,
+      "overlapping_triangle_pairs": 0
+    },
+    {
+      "degrees": 15,
+      "overlapping_triangle_pairs": 0
+    },
+    {
+      "degrees": 30,
+      "overlapping_triangle_pairs": 0
+    },
+    {
+      "degrees": 45,
+      "overlapping_triangle_pairs": 0
+    },
+    {
+      "degrees": 60,
+      "overlapping_triangle_pairs": 0
+    },
+    {
+      "degrees": 75,
+      "overlapping_triangle_pairs": 0
+    },
+    {
+      "degrees": 90,
+      "overlapping_triangle_pairs": 0
+    }
+  ]
+}
