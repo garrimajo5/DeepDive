@@ -59,7 +59,18 @@ class Ship:
 	const DEEP := -310.0       ## ниже не уходим — дно склона за восточным краем (`Seabed.Slope.BOTTOM`, #822)
 	const EDGE := 300.0        ## край отмели; на восток дальше — только в проход и котловину склона (`east_ok`)
 	const EAST_END := 640.0    ## и не дальше этого x — у восточной стены котловины
-	const CLEARANCE := 3.0     ## над дном
+	const CLEARANCE := 3.0     ## над ровным дном (самая низкая точка днища — на CLEARANCE + `bottom()` выше грунта)
+	## Днище по всему корпусу (#1481): точки `foot()` под носом, кормой, бортами и кожухами держатся над грунтом
+	## с тем же зазором, что днище под центром. Не только центр — иначе на склоне корма уходит в грунт.
+	const FOOT_X: Array[float] = [-6.0, 0.0, 6.0]
+	const FOOT_Z0 := -9.0      ## от носа (срез носа — `HullPlan.NOSE_CUT`, линза ниже)
+	const FOOT_Z1 := 29.0      ## до кормы (`HullPlan.STERN_END`)
+	const FOOT_DZ := 2.5
+	## Стена: днище за шаг поднялось бы больше, чем пускает уклон GRADE (плюс STEP) на сдвиг дальней точки корпуса, —
+	## корабль не вспрыгивает на скалу, а стоит или скользит вдоль, как у края отмели.
+	const STEP := 0.5
+	const GRADE := 1.5
+	const REACH := 21.0        ## дальняя точка корпуса от центра, м (сдвиг при повороте — dyaw · REACH)
 	const RUB_GAP := 0.15      ## м над нижним пределом — ещё трёмся о дно (rub)
 	const START := Vector3(0.0, -30.0, 95.0)  ## место 00 `LayerMap` на 30 м (#827)
 
@@ -83,7 +94,7 @@ class Ship:
 	## и идёт; 0 — над дном. Петля скрежета — `HullSound.rub_db`, `ShipSounds.set_rub`.
 	var rub := 0.0
 	var _last_floor := -INF
-	## Высота дна под (x, z); корабль держится на CLEARANCE выше. Пустой Callable — дна нет.
+	## Высота дна под (x, z); днище всего корпуса держится над ним (`floor_at`). Пустой Callable — дна нет.
 	var ground: Callable
 	## Твёрдое над дном (`func(pos: Vector3, yaw: float) -> bool`): арка 07 `GateArch.hits` (#826), гротовик с рифом
 	## (`EcoLink.solid`). Корабль скользит вдоль; уже застрял в твёрдом (загрузка, существо подошло) — выходит свободно.
@@ -119,6 +130,55 @@ class Ship:
 	func nose() -> Vector3:
 		return Vector3(-sin(yaw), 0.0, -cos(yaw))
 
+	static var _foot: Array[Vector3] = []
+	static var _bottom := INF
+
+	## Точки днища в осях корабля (нос в −Z): x, z и низ корпуса y — по `HullPlan.inside` (корпус, носовая оболочка,
+	## кормовой переход), плюс кожухи двигателей и нижний стабилизатор (их формы `inside` не считает).
+	static func foot() -> Array[Vector3]:
+		if not _foot.is_empty():
+			return _foot
+		var z := FOOT_Z0
+		while z <= FOOT_Z1 + 0.01:
+			for x in FOOT_X:
+				var y := -2.5
+				while y < HullPlan.CENTER_Y + 0.01:
+					if HullPlan.inside(Vector3(x, y, z)):
+						_foot.append(Vector3(x, y, z))
+						break
+					y += 0.05
+			z += FOOT_DZ
+		var low := HullPlan.ENGINE_Y - HullPlan.SHROUD_D * 0.5
+		for sx: float in [-1.0, 1.0]:
+			for dz: float in [-1.0, 1.0]:
+				_foot.append(Vector3(sx * HullPlan.ENGINE_X, low, HullPlan.ENGINE_Z + dz))
+		for zz: float in [24.0, 26.0]:   # нижний стабилизатор: центр −0,8, размах 1,2
+			_foot.append(Vector3(0.0, -1.4, zz))
+		for q in _foot:
+			_bottom = minf(_bottom, q.y)
+		return _foot
+
+	## Самая низкая точка днища в осях корабля (под носовой оболочкой, ≈ −1,6 м).
+	static func bottom() -> float:
+		foot()
+		return _bottom
+
+	## Нижний предел хода центра в p с курсом y: днище в каждой точке `foot()` — не ниже грунта + один зазор.
+	## Без дна — `DEEP`. Над ровным грунтом g — g + CLEARANCE, как раньше (когда держался только центр).
+	func floor_at(p: Vector3, y: float) -> float:
+		var f := DEEP
+		if not ground.is_valid():
+			return f
+		var c := cos(y)
+		var sn := sin(y)
+		var gap := CLEARANCE + bottom()
+		for q in foot():
+			# поворот на yaw вокруг Y: (x, z) → (x·cos + z·sin, −x·sin + z·cos)
+			var wx := p.x + q.x * c + q.z * sn
+			var wz := p.z - q.x * sn + q.z * c
+			f = maxf(f, float(ground.call(wx, wz)) + gap - q.y)
+		return f
+
 	func depth() -> float:
 		return -pos.y
 
@@ -128,9 +188,11 @@ class Ship:
 		var vert := clampf(in_vert, -1.0, 1.0)
 		speed += (thrust * (REVERSE if thrust < 0.0 else FORWARD) * k - speed * (DRAG + extra_drag)) * dt
 		turn += (tr - turn) * minf(1.0, dt * TURN_LAG)
+		var yaw0 := yaw
 		yaw = wrapf(yaw - turn * TURN_RATE * dt, -PI, PI)
 		vy += (vert * CLIMB * k - vy) * minf(1.0, dt * CLIMB_LAG)
 		var was := pos
+		var was_yaw := yaw0
 		pos += (nose() * speed + current) * dt
 		pos.y += vy * dt
 		pos.x = clampf(pos.x, -EDGE, EAST_END)
@@ -155,9 +217,35 @@ class Ship:
 			if vy > 0.0:
 				knock = vy
 				vy = 0.0
-		var floor_y := DEEP
-		if ground.is_valid():
-			floor_y = maxf(floor_y, float(ground.call(pos.x, pos.z)) + CLEARANCE)
+		var floor_y := floor_at(pos, yaw)
+		# Стена под корпусом: днище поднялось бы круче, чем пускает уклон, — горизонтальный сдвиг и поворот не идут
+		# (скользим вдоль). Уже стояли в грунте (загрузка, дно поднялось) — выходим вверх свободно.
+		var reach := Vector2(pos.x - was.x, pos.z - was.z).length() + absf(wrapf(yaw - was_yaw, -PI, PI)) * REACH
+		var allow := STEP + reach * GRADE + maxf(0.0, -vy * dt)
+		if floor_y - pos.y > allow:
+			var stuck := floor_at(Vector3(was.x, pos.y, was.z), was_yaw) - pos.y
+			if floor_y - pos.y > stuck + STEP:
+				var opts: Array[Vector3] = [Vector3(was.x, pos.y, pos.z), Vector3(pos.x, pos.y, was.z),
+					Vector3(was.x, pos.y, was.z)]
+				var best := Vector3(was.x, pos.y, was.z)
+				var best_yaw := was_yaw
+				var found := false
+				for yy: float in [yaw, was_yaw]:
+					for q in opts:
+						if found or not _free(q):
+							continue
+						if floor_at(q, yy) - pos.y <= maxf(allow, stuck + STEP * 0.5):
+							best = q
+							best_yaw = yy
+							found = true
+				if best_yaw != yaw:
+					turn = 0.0
+				pos = best
+				yaw = best_yaw
+				if not found:
+					speed = 0.0
+				floor_y = floor_at(pos, yaw)
+		floor_y = maxf(floor_y, DEEP)
 		bump = 0.0
 		if pos.y < floor_y:
 			bump = maxf(0.0, floor_y - _last_floor) if _last_floor > -INF else 0.0
