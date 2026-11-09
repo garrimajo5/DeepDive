@@ -1195,7 +1195,8 @@ func fire_zap() -> void:
 		eco_ship.zap_radius = zap.radius
 		timeline.mark(time, "разряд")
 		ship_sounds.play_zap()   # SND-003
-		if scorch.add(helm.pos, Seabed.height(helm.pos.x, helm.pos.z), reactor.k(Reactor.Sys.ZAP), time):
+		# зазор — над нижним пределом хода всем днищем (#1481), а не над грунтом под центром
+		if scorch.add(helm.pos, helm.floor_at(helm.pos, helm.yaw) - Helm.Ship.CLEARANCE, reactor.k(Reactor.Sys.ZAP), time):
 			ocean.set_scorch(scorch.uniforms(time))   # разряд у дна — след под корпусом
 	say(msg)
 

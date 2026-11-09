@@ -207,7 +207,7 @@ func test_scene_rub_loop() -> void:
 	ok(s.rub.volume_db < HullSound.RUB_DB, "тише")
 	s.set_rub(0.0, HullSound.RUB_FADE)
 	ok(not s.rub.playing, "спала — петля стоит")
-	main.helm.pos.y = Seabed.height(main.helm.pos.x, main.helm.pos.z) + Helm.Ship.CLEARANCE - 1.0
+	main.helm.pos.y = main.helm.floor_at(main.helm.pos, main.helm.yaw) - 1.0   # днище всем корпусом (#1481)
 	main.helm.speed = 2.5
 	main.step(1.0 / 30.0)
 	ok(main.helm.rub > HullSound.RUB_SPEED, "в игре: на дне на ходу — трёмся (%.2f)" % main.helm.rub)
