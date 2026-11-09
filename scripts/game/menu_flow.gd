@@ -256,6 +256,7 @@ func journal_show() -> void:
 	if m.logbook_panel == null:
 		m.logbook_panel = JournalPanel.new()
 		m.add_child(m.logbook_panel)
+	m.logbook.lore = m.lore
 	m.logbook.blank = Journal.empty(m.expedition, m.scanner.scanned.size(), m.samples.cargo.size())
 	m.logbook_panel.show_journal(m.logbook, m.expedition, m.scanner, Species.count(), m.samples.cargo.size(),
 		m.save.state == SaveGame.Load.BROKEN, m.lore)

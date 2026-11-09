@@ -370,6 +370,10 @@ func _point(what: String, dir: Vector2) -> Vector2:
 			return Journal.close_rect(main.get_viewport().get_visible_rect().size).get_center()
 		"join", "last":
 			return AddressScreen.screen_rect(what, main.get_viewport().get_visible_rect().size).get_center()
+	if what.begins_with("jtab"):   # вкладка журнала «Виды» / «Узнано» (#825)
+		return Journal.tab_rect(int(what.substr(4)), main.get_viewport().get_visible_rect().size).get_center()
+	if what.begins_with("jlore"):   # строка вкладки «Узнано»
+		return Journal.lore_rect(int(what.substr(5)), main.get_viewport().get_visible_rect().size).get_center()
 	if what.begins_with("jcell"):   # ячейка сетки видов журнала ART-047
 		return Journal.cell_rect(int(what.substr(5)), main.get_viewport().get_visible_rect().size).get_center()
 	if what.begins_with("key"):   # клавиша экрана адреса: key0…key9, key., keydel
