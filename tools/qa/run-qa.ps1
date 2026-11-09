@@ -8,9 +8,40 @@
 #   -Pr <номер>         — проверить фикс из открытой PR ДО слияния: берёт APK из артефакта deepdive-apk
 #                         последнего прогона CI этой PR (нужен gh), ставит на эмулятор и гоняет сценарий
 #   -Force              — прогнать APK, даже если коммит тот же; -Scenario <файл> — свой сценарий
+#   -Phone              — только скачать DeepDive.apk (arm64, телефон) из apk-latest со сверкой длины
+#                         в D:\AI\qa-build\DeepDive.apk и выйти; на телефон ставить вручную
 #   Эмулятор после прогона не закрывается (запущен отдельно от скрипта): ручная проверка — adb, закрыть — adb emu kill
-param([switch]$Pc, [switch]$Force, [string]$Scenario, [int]$Pr)
+param([switch]$Pc, [switch]$Force, [string]$Scenario, [int]$Pr, [switch]$Phone)
 $ErrorActionPreference = 'Continue'
+$ProgressPreference = 'SilentlyContinue'   # полоса прогресса в PS 5.1 тормозит скачивание в разы
+
+# Скачать файл релиза и сверить длину с размером в релизе ($size). Invoke-WebRequest может молча оборвать
+# поток: APK эмулятора приходил ровно 110 МиБ из 114 и не ставился (INSTALL_PARSE_FAILED_NOT_APK, #1504).
+# Обрыв — докачка с места обрыва (curl.exe -C -, есть в Windows 10+), иначе заново; до 3 попыток.
+# Возвращает '' при успехе или текст ошибки (попытки — в Write-Host, чтобы не смешаться с ответом).
+function Get-Asset([string]$url, [string]$path, [long]$size) {
+  $why = ''; $err = ''
+  $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+  for ($try = 1; $try -le 3; $try++) {
+    $have = if (Test-Path $path) { (Get-Item $path).Length } else { 0 }
+    if ($have -gt $size) { Remove-Item $path -Force; $have = 0 }
+    try {
+      if ($curl -and $have -gt 0) {
+        & $curl.Source -sSL -C - -A 'run-qa' -o $path $url
+      } else {
+        Invoke-WebRequest $url -OutFile $path -Headers @{ 'User-Agent' = 'run-qa' } -ErrorAction Stop
+      }
+    } catch { $err = $_.Exception.Message }
+    $got = if (Test-Path $path) { (Get-Item $path).Length } else { 0 }
+    if ($got -eq $size) { return '' }
+    $why = "скачано $got байт из $size"
+    if ($err) { $why += " ($err)"; $err = '' }
+    Write-Host "  попытка ${try}: $why"
+    if (-not $curl) { Remove-Item $path -Force -ErrorAction SilentlyContinue }
+    Start-Sleep 5
+  }
+  return $why
+}
 $repo  = 'D:\AI\DeepDive'
 $out   = 'D:\AI\qa-build'
 $run   = "$out\run"
@@ -46,6 +77,19 @@ if ($Pc) {
   exit 0
 }
 
+if ($Phone) {
+  # ---- только APK телефона (arm64), со сверкой длины ----
+  $rel = Invoke-RestMethod 'https://api.github.com/repos/garrimajo5/DeepDive/releases/tags/apk-latest' -Headers @{ 'User-Agent' = 'run-qa' }
+  $asset = $rel.assets | Where-Object name -eq 'DeepDive.apk' | Select -First 1
+  if (-not $asset) { Write-Output 'NO_ASSET: в релизе apk-latest нет DeepDive.apk — повторите позже'; exit 1 }
+  $file = "$out\DeepDive.apk"
+  Remove-Item $file -Force -ErrorAction SilentlyContinue
+  $why = Get-Asset $asset.browser_download_url $file $asset.size
+  if ($why) { Write-Output "DOWNLOAD_FAILED DeepDive.apk: $why — повторите позже"; exit 1 }
+  Write-Output "OK $file ($($asset.size) байт) — $($rel.body)"
+  exit 0
+}
+
 # ---- Эмулятор; APK из релиза apk-latest, с -Pr — из артефакта прогона PR ----
 $sdk = "$env:LOCALAPPDATA\Android\Sdk"
 $adb = "$sdk\platform-tools\adb.exe"
@@ -74,12 +118,8 @@ if ($Pr) {
   if (-not $asset) { Write-Output "NO_ASSET ${head}: в релизе apk-latest нет APK (перезаливается?) — повторите позже"; exit 1 }
   # Старый APK не ставим: релиз мог перезаливаться, и скачивание упадёт (BlobNotFound, #1125)
   Remove-Item $apk -Force -ErrorAction SilentlyContinue
-  try {
-    Invoke-WebRequest $asset.browser_download_url -OutFile $apk -Headers @{ 'User-Agent' = 'run-qa' } -ErrorAction Stop
-  } catch {
-    Write-Output "DOWNLOAD_FAILED ${head}: $($_.Exception.Message) — повторите позже"; exit 1
-  }
-  if (-not (Test-Path $apk) -or (Get-Item $apk).Length -lt 1MB) { Write-Output "DOWNLOAD_FAILED ${head}: APK не скачан"; exit 1 }
+  $why = Get-Asset $asset.browser_download_url $apk $asset.size
+  if ($why) { Write-Output "DOWNLOAD_FAILED ${head}: $why — повторите позже"; exit 1 }
 }
 
 if (-not ((& $adb devices) -match 'emulator-\d+\s+device')) {
