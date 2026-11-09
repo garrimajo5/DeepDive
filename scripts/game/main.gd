@@ -1195,7 +1195,8 @@ func fire_zap() -> void:
 		eco_ship.zap_radius = zap.radius
 		timeline.mark(time, "разряд")
 		ship_sounds.play_zap()   # SND-003
-		if scorch.add(helm.pos, Seabed.height(helm.pos.x, helm.pos.z), reactor.k(Reactor.Sys.ZAP), time):
+		# зазор — над нижним пределом хода всем днищем (#1481), а не над грунтом под центром
+		if scorch.add(helm.pos, helm.floor_at(helm.pos, helm.yaw) - Helm.Ship.CLEARANCE, reactor.k(Reactor.Sys.ZAP), time):
 			ocean.set_scorch(scorch.uniforms(time))   # разряд у дна — след под корпусом
 	say(msg)
 
@@ -1313,6 +1314,7 @@ func hit_local_of(at: Vector3) -> Vector3:
 
 
 func _on_hit(percent: int, kind: String) -> void:
+	timeline.blame(kind)   # кто ударил — в строку «удар» хронометража (#1481)
 	ship_sounds.play_hit(percent, kind, hit_local)   # SND-002: удар (по стороне) или удар о дно со скрежетом (#656)
 	lock_water.on_hit()   # рябь в шахте шлюза вспыхивает (ART-073)
 	var held := events_held()   # обучение у старта (#827): ни сонарной тьмы, ни пробоины от удара о дно

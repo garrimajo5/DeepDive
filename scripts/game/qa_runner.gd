@@ -158,6 +158,14 @@ func tick(dt: float) -> void:
 					main.helm.turn = 0.0
 				main.park_at(Vector3(c[1], c[2], c[3]))
 				_jump = JUMP_FRAMES
+			"floor":   # на нижний предел хода над рельефом по курсу — корма и нос у грунта (#1481)
+				main.park_at(Vector3(main.helm.pos.x, main.helm.floor_at(main.helm.pos, main.helm.yaw), main.helm.pos.z))
+				_jump = JUMP_FRAMES
+			"outside":   # камера с борта стоит в точке облёта: корпус и грунт под ним снаружи (#1481)
+				if c[1]:
+					main.flyby.hold_at(c[2])
+				else:
+					main.flyby.stop()
 			"fly":   # тестовый полёт noclip: глаз на высоте c[2] в осях корабля, наклон c[3]
 				if main.walker.noclip != c[1]:
 					main.toggle_noclip()
@@ -362,6 +370,10 @@ func _point(what: String, dir: Vector2) -> Vector2:
 			return Journal.close_rect(main.get_viewport().get_visible_rect().size).get_center()
 		"join", "last":
 			return AddressScreen.screen_rect(what, main.get_viewport().get_visible_rect().size).get_center()
+	if what.begins_with("jtab"):   # вкладка журнала «Виды» / «Узнано» (#825)
+		return Journal.tab_rect(int(what.substr(4)), main.get_viewport().get_visible_rect().size).get_center()
+	if what.begins_with("jlore"):   # строка вкладки «Узнано»
+		return Journal.lore_rect(int(what.substr(5)), main.get_viewport().get_visible_rect().size).get_center()
 	if what.begins_with("jcell"):   # ячейка сетки видов журнала ART-047
 		return Journal.cell_rect(int(what.substr(5)), main.get_viewport().get_visible_rect().size).get_center()
 	if what.begins_with("key"):   # клавиша экрана адреса: key0…key9, key., keydel

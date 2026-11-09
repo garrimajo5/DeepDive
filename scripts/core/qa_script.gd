@@ -10,7 +10,8 @@ extends RefCounted
 ##                                                     graphics — страница «Графика» ART-044, на ней g0…g2 — уровень,
 ##                                                     fps — «Показывать кадры/с»; crew — «Экипаж»,
 ##                                                     journal — «Журнал экспедиции» ART-047 (закрывает back; в нём
-##                                                     jcell0…jcell5 — ячейка вида, jprev / jnext, jclose),
+##                                                     jcell0…jcell5 — ячейка вида, jprev / jnext, jclose,
+##                                                     jtab0 / jtab1 — вкладка «Виды» / «Узнано», jlore0…2 — её строка),
 ##                                                     на экране «Войти по адресу» ART-039: join, last, клавиши
 ##                                                     key0…key9, key., keydel; brief — плашка брифинга прибытия)
 ##   {"do": "back"}                                  — системная «Назад» Android: пауза ART-037 (в паузе — закрыть)
@@ -39,6 +40,10 @@ extends RefCounted
 ##                                                     минус), корабль стоит: вид на дно под трещинами льда (#445)
 ##                                                     "yaw": 0 — ещё и курс (°, как у goto: 0 — нос к −Z), без него
 ##                                                     курс прежний
+##   {"do": "floor"}                                 — опустить корабль на нижний предел хода над рельефом здесь
+##                                                     (`Helm.Ship.floor_at` по курсу): корма и нос у грунта (#1481)
+##   {"do": "outside", "at": 1.0}                    — камера с борта стоит в точке облёта at (0 — у носа, 1 — над
+##                                                     кормой, `Flyby.hold_at`); "on": false — глаза на мостике
 ##   {"do": "fly", "y": -8, "pitch": -55}            — тестовый полёт noclip: глаз на высоте y в осях корабля (над
 ##                                                     палубой — плюс), наклон взгляда в градусах; "on": false — на пол
 ##   {"do": "mate", "x": -1, "z": -2.5, "yaw": 90, "role": 2, "look": 1} — ещё один член экипажа на палубе (роль 0…3,
@@ -72,11 +77,11 @@ extends RefCounted
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z[, yaw°]], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["ping"], ["pred", n, bush, away], ["route"], ["act"], ["mate_hold", on], ["gone"], ["save", on], ["wreck"], ["back"], ["tutorial", on, шаг 1…7], ["brief", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z[, yaw°]], ["floor"], ["outside", on, at], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["ping"], ["pred", n, bush, away], ["route"], ["act"], ["mate_hold", on], ["gone"], ["save", on], ["wreck"], ["back"], ["tutorial", on, шаг 1…7], ["brief", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
-const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "ping", "pred", "ship", "fly", "route", "gone", "save", "wreck", "back", "tutorial", "brief", "cards", "voice", "slow", "hud", "play", "log", "quit"]
+const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "ping", "pred", "ship", "floor", "outside", "fly", "route", "gone", "save", "wreck", "back", "tutorial", "brief", "cards", "voice", "slow", "hud", "play", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "map", "map_back", "hint_map", "new", "exit", "yes", "no", "crew", "journal", "settings", "graphics", "g0", "g1", "g2", "fps", "golos", "zvuk", "s0", "v_hold", "v_voice", "v_hear", "v_mic", "lite_yes", "lite_no", "ask", "brief", "join", "last", "lobby_new", "lobby_addr", "lobby_refresh",
-	"jcell0", "jcell1", "jcell2", "jcell3", "jcell4", "jcell5", "jprev", "jnext", "jclose",
+	"jcell0", "jcell1", "jcell2", "jcell3", "jcell4", "jcell5", "jprev", "jnext", "jclose", "jtab0", "jtab1", "jlore0", "jlore1", "jlore2",
 	"key0", "key1", "key2", "key3", "key4", "key5", "key6", "key7", "key8", "key9", "key.", "keydel"]
 ## Шаг «pred»: полпути серпохвоста мимо куста (м) — с запасом за PRED_R огнецвета и HIDE_R каменщиков.
 const PRED_SPAN := 30.0
@@ -84,7 +89,7 @@ const PRESS_TIME := 0.15   ## сколько держать кнопку при 
 const FINGER := 900        ## номер пальца для касаний сценария (не пересекается с настоящими)
 ## После этих команд скриншот ждёт следующего шага: снимок берёт уже нарисованный кадр, и без кадра между ними
 ## на картинке было бы старое место (issue #216: 09g-tablo сразу после goto повторял 09e-eel-alarm).
-const NEEDS_FRAME := ["goto", "ship", "fly", "sample", "breach", "mate", "act", "gone", "route", "silt", "hot", "hud"]
+const NEEDS_FRAME := ["goto", "ship", "floor", "outside", "fly", "sample", "breach", "mate", "act", "gone", "route", "silt", "hot", "hud"]
 
 var steps: Array = []
 var errors: Array[String] = []
@@ -220,6 +225,10 @@ func _begin(st: Dictionary, out: Array) -> void:
 			if st.has("yaw"):   # курс корабля, как у goto: 0 — нос к −Z, плюс — поворот влево
 				sh.append(float(st["yaw"]))
 			out.append(sh)
+		"floor":
+			out.append(["floor"])
+		"outside":
+			out.append(["outside", bool(st.get("on", true)), clampf(float(st.get("at", 1.0)), 0.0, 1.0)])
 		"fly":
 			out.append(["fly", bool(st.get("on", true)), float(st.get("y", Deck.Walker.EYE)),
 				float(st.get("pitch", 0.0))])

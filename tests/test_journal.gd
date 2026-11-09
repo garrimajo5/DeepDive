@@ -176,7 +176,7 @@ func test_grid_pages() -> void:
 			ok(not c.intersects(map) and not c.intersects(Journal.back_rect(sz)), "%d: ячейка %d мимо карты и «Назад»" % [w, i])
 			ok(c.end.x <= w, "%d: ячейка %d в кадре" % [w, i])
 		var top := Journal.SUMMARY_AT.y + Journal.SUMMARY_STEP * 3 + Journal.SUMMARY_PX
-		ok(top < Journal.GRID_TITLE_TOP, "сводка над сеткой")
+		ok(top <= Journal.TAB[0].position.y, "сводка над вкладками")
 	var j := Journal.new()
 	j.show()
 	eq(j.press("prev"), "", "на первой странице «Ранее» неактивна")
@@ -288,3 +288,99 @@ func test_slope_band_holds_place_10() -> void:   # #829: склон за вос�
 	ok(c.distance_to(want) < 1.0, "10 — на своей точке склона, не прижато к краю")
 	ok(band.has_point(c), "10 — на полосе склона")
 	near(Journal.map_point(Vector2(350.0, 0.0)).x, Journal.map_point(Vector2(350.001, 0.0)).x, 0.01, "без скачка на краю")
+
+
+func test_lore_lines() -> void:   # #825 ч. 2, UX #1335 п. 8: «Узнано · n / 8», служебные отметки — не знания
+	eq(Journal.LORE_LINES.size(), 8, "восемь знаний слоя")
+	for k: String in [LayerLore.INTRO, LayerLore.BRIEF, LayerLore.DOWN, LayerLore.BACK]:
+		ok(not Journal.LORE_LINES.has(k), "%s — служебная отметка, не строка" % k)
+	for k: String in LayerLore.KEYS:
+		if not k in [LayerLore.INTRO, LayerLore.BRIEF, LayerLore.DOWN, LayerLore.BACK]:
+			ok(Journal.LORE_LINES.has(k), "%s — есть строка" % k)
+	for k: String in Journal.LORE_LINES:
+		var line: Array = Journal.LORE_LINES[k]
+		ok(line[1].length() <= Journal.LORE_MAX, "%s: ≤ 36 знаков" % k)
+		ok(line[0] == "" or Run.PLACES.has(line[0]), "%s: место из слоя" % k)
+	eq(Journal.lore_title(null), "Узнано · 0 / 8", "без знаний")
+	var l := LayerLore.new()
+	l.learn(LayerLore.INTRO)
+	l.learn(LayerLore.D07_RETURN)
+	l.learn(LayerLore.SHELL03)
+	l.learn(LayerLore.K2)
+	l.learn(LayerLore.FIELD08)
+	eq(Journal.lore_title(l), "Узнано · 4 / 8", "счёт без служебных")
+	eq(Journal.lore_facts(l), [LayerLore.FIELD08, LayerLore.K2, LayerLore.SHELL03, LayerLore.D07_RETURN], "новое сверху")
+	eq(Journal.lore_pages(l), 2, "по 3 на страницу")
+	eq(Journal.lore_page(l, 1), [LayerLore.D07_RETURN], "вторая страница")
+
+
+func test_lore_tab_layout() -> void:
+	for sz: Vector2 in [SIZE, Vector2(2340, 1080), Vector2(1920, 1080), Vector2(1280, 720)]:
+		var s := Journal.scale(sz)
+		var t0 := Journal.tab_rect(0, sz)
+		var t1 := Journal.tab_rect(1, sz)
+		ok(not t0.intersects(t1), "%s: вкладки не налезают" % sz)
+		var sum_bottom := (Journal.SUMMARY_AT.y + Journal.SUMMARY_STEP * 3 + Journal.SUMMARY_PX) * s
+		for t in [t0, t1]:
+			ok(t.position.y >= sum_bottom - 0.01, "%s: вкладка под сводкой" % sz)
+			ok(not t.intersects(Journal.cell_rect(0, sz)) and not t.intersects(Journal.map_rect(sz)), "%s: мимо сетки и карты" % sz)
+			ok(t.end.x <= sz.x, "%s: в кадре" % sz)
+		for i in Journal.LORE_PER_PAGE:
+			var row := Journal.lore_rect(i, sz)
+			ok(row.position.y >= t0.end.y and row.end.y <= Journal.prev_rect(sz).position.y, "%s: строка %d между вкладками и «Ранее»" % [sz, i])
+			ok(not row.intersects(Journal.map_rect(sz)), "%s: строка %d мимо карты" % [sz, i])
+			if i > 0:
+				ok(not row.intersects(Journal.lore_rect(i - 1, sz)), "%s: строки не налезают" % sz)
+
+
+func test_lore_tab_press() -> void:
+	var l := LayerLore.new()
+	for k: String in [LayerLore.D07_RETURN, LayerLore.D07_RELAY, LayerLore.SHELL03, LayerLore.K2]:
+		l.learn(k)
+	var j := Journal.new()
+	j.lore = l
+	j.show()
+	eq(j.tab, "species", "журнал открывается на «Виды»")
+	j.press("next")
+	eq(j.hit(Journal.tab_rect(1, SIZE).get_center(), SIZE), "tab:lore")
+	eq(j.press("tab:lore"), "tab")
+	eq(j.page, 0, "вкладка — с первой страницы")
+	eq(j.press("tab:lore"), "", "та же вкладка — ничего")
+	eq(j.hit(Journal.lore_rect(0, SIZE).get_center(), SIZE), "lore:" + LayerLore.K2, "первая строка — новое")
+	eq(j.press("lore:" + LayerLore.K2), "", "К-2 — на борту, места нет")
+	eq(j.press("lore:" + LayerLore.SHELL03), "place", "строка — её место на карте")
+	eq(j.picked, "shell")
+	eq(j.press("next"), "page")
+	eq(j.page, 1)
+	eq(j.press("next"), "", "4 знания — 2 страницы")
+	eq(j.hit(Journal.lore_rect(0, SIZE).get_center(), SIZE), "lore:" + LayerLore.D07_RETURN)
+	eq(j.hit(Journal.lore_rect(1, SIZE).get_center(), SIZE), "", "пустая строка — ничего")
+	eq(j.press("tab:species"), "tab")
+	eq(j.page, 0)
+	j.press("tab:lore")
+	j.back()
+	j.show()
+	eq(j.tab, "species", "закрыт и открыт — снова «Виды»")
+
+
+func test_scene_lore_tab() -> void:
+	Main.menu = true
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.lore.learn(LayerLore.FIELD08)
+	main.scanner.scanned["fish"] = true
+	main.open_journal()
+	main.step(1.0 / 30.0)
+	var r := main.overlay.router
+	var size := main.get_viewport().get_visible_rect().size
+	r.begin(1, Journal.tab_rect(1, size).get_center())
+	main.step(1.0 / 30.0)
+	r.end(1)
+	eq(main.logbook.tab, "lore", "касание вкладки — «Узнано»")
+	eq(main.logbook_panel.lore, main.lore, "панель видит знания")
+	r.begin(2, Journal.lore_rect(0, size).get_center())
+	main.step(1.0 / 30.0)
+	r.end(2)
+	eq(main.logbook.picked, "field", "строка поля 08 — место на карте")
+	await frames(1)

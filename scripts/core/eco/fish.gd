@@ -251,6 +251,11 @@ static func seed_for(world_seed: int) -> int:
 	return (world_seed * 31 + 7001) & 0xFFFFFFFF
 
 
+## Проба расстановки #1400: дом стаи рифа i → другое место (Vector3), ставить до reset мира. В игре пусто
+## (`tools/quiet_map.gd` — где на 00 → 01 тихо, если перенести дом к существующему рифу).
+var home_at := {}
+
+
 func reset(world: EcoWorld) -> void:
 	_rnd = EcoWorld.seeded_for(seed_for(world.seed_value))
 	_tick = 0
@@ -270,7 +275,7 @@ func reset(world: EcoWorld) -> void:
 		var count := PER_SHOAL
 		var size := 1.0
 		if si < HOMES.size():
-			h = HOMES[si]
+			h = home_at.get(si, HOMES[si])
 		elif si < reef_crown:
 			sh.crown = true
 			sh.rnd = crown_rnd
