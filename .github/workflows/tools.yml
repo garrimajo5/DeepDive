@@ -1,0 +1,32 @@
+name: Инструменты
+# Тесты python-инструментов (tools/test_*.py: страница «Где мы», картинки в issue, превью из CI, «Кодекс») — на PR,
+# где меняются tools/*.py. Раньше они шли только после слияния (status.yml, codex.yml) — поломка всплывала уже на main.
+# Новый tools/test_<что>.py подхватывается сам: шаг гоняет все по маске. Проверку этого файла держит tools/test_workflows.py.
+on:
+  pull_request:
+    paths: ["tools/*.py", ".github/workflows/tools.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: tools-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tools:
+    name: Тесты инструментов
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: tools/test_*.py
+        run: |
+          set -u
+          fail=0
+          for t in tools/test_*.py; do
+            echo "== $t"
+            python3 "$t" || { echo "::error file=$t::тест упал"; fail=1; }
+          done
+          exit $fail
