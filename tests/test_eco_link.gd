@@ -63,6 +63,33 @@ func test_observe_to_journal() -> void:
 	await frames(1)
 
 
+## Строка угрозы «замер» (#1498) идёт с "urgent", прочие — без ключа (корабль принимает поле — поток А).
+func test_urgent_alert_line() -> void:
+	eq(EcoLink.message("x"), {"type": EcoLink.MESSAGE, "text": "x"}, "обычная строка — без ключа")
+	ok(EcoLink.urgent("pred", "alert"), "замер хищника — срочно")
+	ok(not EcoLink.urgent("pred", "lost") and not EcoLink.urgent("fish", "alert"), "прочие — нет")
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float: return -40.0
+	var ps := EcoPred.new()
+	ps.alert = 2.0
+	w.add(ps)
+	var pr := ps.all[0]
+	pr.hunger = 0.5
+	pr.cooldown = 0.0
+	w.ship.pos = pr.agent.p + Vector3(25, 0, 0)
+	w.ship.light_on = true
+	w.step(EcoWorld.MAX_STEP)
+	var hot := 0
+	for e in w.take_link():
+		if e.get("type") == EcoLink.MESSAGE or e.get("type") == EcoLink.OBSERVE:
+			if str(e.get("text", "")).contains("замер"):
+				ok(e.get("urgent", false), "строка «замер» — срочная")
+				hot += 1
+			else:
+				ok(not e.has("urgent"), "прочие — без ключа: %s" % e.get("text", ""))
+	eq(hot, 1, "одна строка «замер»")
+
+
 func test_live_world_observation_reaches_journal() -> void:
 	# По issue #92: событие шины с заметкой вида рядом с кораблём приходит как OBSERVE и пишется в журнал.
 	var main: Main = load("res://scenes/main.tscn").instantiate()

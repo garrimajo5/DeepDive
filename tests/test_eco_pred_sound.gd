@@ -62,6 +62,17 @@ func test_investigate_clicks_and_far_is_silent() -> void:
 	eq(v.update(pr, 0.3, 30.0), EcoPredSound.Cue.CLICK, "плывёт на звук сонара — щёлкает")
 
 
+## Фаза «замер» (#1498): щелчок сразу при входе — знак до броска на слух, потом рык броска.
+func test_alert_clicks_then_roar() -> void:
+	var v := EcoPredSound.Call.new()
+	var pr := _pred(EcoPred.Mode.PATROL)
+	v.update(pr, 0.0, 25.0)
+	pr.mode = EcoPred.Mode.ALERT
+	eq(v.update(pr, 0.1, 25.0), EcoPredSound.Cue.CLICK, "замер — щёлкает сразу")
+	pr.mode = EcoPred.Mode.CHARGE
+	eq(v.update(pr, 4.1, 25.0), EcoPredSound.Cue.ROAR, "после замера — рык броска")
+
+
 func test_charge_roars_once() -> void:
 	var v := EcoPredSound.Call.new()
 	var pr := _pred(EcoPred.Mode.HUNT)

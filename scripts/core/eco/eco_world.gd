@@ -335,8 +335,9 @@ func take_link() -> Array[Dictionary]:
 	_link.clear()
 	for ev in bus.take_near(ship.pos):
 		var t := ev.text()
+		var hot := EcoLink.urgent(ev.species, ev.note)
 		if ev.is_observation():
-			out.append(EcoLink.observe(ev.species, ev.note, t))
+			out.append(EcoLink.observe(ev.species, ev.note, t, hot))
 		elif t != "":
-			out.append(EcoLink.message(t))
+			out.append(EcoLink.message(t, hot))
 	return out

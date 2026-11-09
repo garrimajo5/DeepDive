@@ -145,11 +145,65 @@ func test_alert_cancels_when_light_goes_out() -> void:
 	eq(pr.mode, EcoPred.Mode.PATROL, "манящее пропало — отворачивает")
 	ok(pr.cooldown >= EcoPred.ALERT_LOSE_CD - 0.1, "пауза перед новым замером")
 	ok(_has_note(w, "lost"), "строка «потерял корабль»")
-	for i in 150:   # 5 с: свет снова горит, но пауза ещё идёт
-		if i == 30:
-			w.ship.light_on = true
+	for i in 150:   # 5 с: корабль тёмный — пауза, не бросается
 		w.step(EcoWorld.MAX_STEP)
-		ok(pr.mode != EcoPred.Mode.CHARGE, "в паузе не бросается")
+		ok(pr.mode != EcoPred.Mode.CHARGE and pr.mode != EcoPred.Mode.ALERT, "тёмный корабль — не замирает и не бросается")
+
+
+## Свет снова рядом сразу после «потерял корабль» — новый «замер», а не скрытая неуязвимость паузы (#1498).
+func test_alert_relit_close_alerts_again() -> void:
+	var r := _alerted(2.0)
+	var w: EcoWorld = r[0]
+	var pr: EcoPred.Pred = r[1]
+	w.step(EcoWorld.MAX_STEP)
+	w.ship.light_on = false
+	w.step(EcoWorld.MAX_STEP)
+	eq(pr.mode, EcoPred.Mode.PATROL)
+	ok(pr.cooldown > 0.0 and pr.wary > 0.0, "пауза идёт, хищник насторожен")
+	w.ship.light_on = true
+	w.step(EcoWorld.MAX_STEP)
+	eq(pr.mode, EcoPred.Mode.ALERT, "свет снова в чутье — новый замер, пауза не спасает")
+	for i in 75:
+		w.step(EcoWorld.MAX_STEP)
+	eq(pr.mode, EcoPred.Mode.CHARGE, "свет так и горит — бросок")
+	eq(pr.wary, 0.0, "бросок сбрасывает настороженность")
+
+
+## Строка «замер» — с причиной: что убрать экипажу.
+func test_alert_line_names_lure() -> void:
+	var r := _alerted(2.0)
+	var w: EcoWorld = r[0]
+	w.step(EcoWorld.MAX_STEP)
+	var text := ""
+	for ev in w.bus.pending:
+		if ev.species == EcoPred.ID and ev.note == "alert":
+			text = ev.text()
+	ok(text.ends_with("его манит свет"), text)
+	ok(EcoPred.alert_fmt(EcoPred.Lure.NOISE).contains("двигатели"), "шум — двигатели")
+	ok(EcoPred.alert_fmt(EcoPred.Lure.PING).contains("сонар"), "импульс — сонар")
+
+
+## Замер начинается, откуда бы хищник ни подошёл: сбоку и сзади корабля тоже (не конус луча).
+func test_alert_from_behind() -> void:
+	var r := _alerted(2.0)
+	var w: EcoWorld = r[0]
+	var pr: EcoPred.Pred = r[1]
+	w.ship.pos = pr.agent.p + Vector3(0, 0, -25)   # нос корабля в −Z: хищник за кормой
+	w.step(EcoWorld.MAX_STEP)
+	eq(pr.mode, EcoPred.Mode.ALERT, "сзади — тоже замер")
+
+
+## Импульс сонара в «замере» не начинает фазу заново проверкой звука.
+func test_ping_keeps_alert() -> void:
+	var r := _alerted(2.0)
+	var w: EcoWorld = r[0]
+	var pr: EcoPred.Pred = r[1]
+	var ps: EcoPred = r[2]
+	w.step(EcoWorld.MAX_STEP)
+	var left := pr.agent.timer
+	ps.on_ping(w, w.ship.pos)
+	eq(pr.mode, EcoPred.Mode.ALERT, "замер держится")
+	near(pr.agent.timer, left, 1e-4, "таймер фазы не сброшен")
 
 
 ## Отход после «потерял корабль» (#1498, `alert_leave`): уходит прочь, а не кружит рядом, и не бросается в отходе.
@@ -166,12 +220,19 @@ func test_alert_lost_then_leaves() -> void:
 	ok(_has_note(w, "lost"), "строка «потерял корабль»")
 	ok(pr.cooldown >= 20.0 + EcoPred.ALERT_LOSE_CD - 0.1, "пауза на весь отход и после")
 	var d0 := pr.agent.distance_to(w.ship.pos)
-	for i in 300:   # 10 с: свет снова горит с 1 с, но хищник уходит
-		if i == 30:
-			w.ship.light_on = true
+	for i in 300:   # 10 с в темноте — уходит прочь
 		w.step(EcoWorld.MAX_STEP)
 		ok(pr.mode != EcoPred.Mode.CHARGE and pr.mode != EcoPred.Mode.ALERT, "в отходе не замирает и не бросается")
-	ok(pr.agent.distance_to(w.ship.pos) > d0 + 15.0, "ушёл прочь: %.0f → %.0f м" % [d0, pr.agent.distance_to(w.ship.pos)])
+	var d1 := pr.agent.distance_to(w.ship.pos)
+	ok(d1 > d0 + 15.0, "ушёл прочь: %.0f → %.0f м" % [d0, d1])
+	ok(d1 > EcoPred.REACH, "за 10 с — дальше чутья на свет")
+	w.ship.light_on = true   # свет снова горит, хищник далеко — отход идёт
+	for i in 30:
+		w.step(EcoWorld.MAX_STEP)
+	ok(pr.mode != EcoPred.Mode.ALERT and pr.mode != EcoPred.Mode.CHARGE, "далеко — свет не манит")
+	w.ship.pos = pr.agent.p + Vector3(20, 0, 0)   # корабль со светом догнал отходящего
+	w.step(EcoWorld.MAX_STEP)
+	eq(pr.mode, EcoPred.Mode.ALERT, "свет снова в чутье во время отхода — новый замер")
 
 
 ## tools/patrol.gd с ответом экипажа и замером (#1498): по сигналу свет гаснет, итог с промежутками и лучом.

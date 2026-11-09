@@ -145,6 +145,9 @@ class Pred:
 	## Точка дуги ARC (проба #1400) и куда идёт по ней: +1 — к концу, −1 — назад.
 	var arc_i := 0
 	var arc_dir := 1
+	## Секунды после «потерял корабль» (#1498, фаза «замер»): манящее снова в чутье — сразу новый «замер», пауза
+	## cooldown не спасает (скрытой неуязвимости нет); 0 — не терял. Бросок и разряд сбрасывают.
+	var wary := 0.0
 
 
 var all: Array[Pred] = []
@@ -221,8 +224,8 @@ func on_ping(world: EcoWorld, pos: Vector3) -> void:
 	var reef := reef_axis()
 	var at_reef := reef.is_finite() and _flat_dist(pos, reef) < REEF_PING
 	for pr in all:
-		if pr.mode == Mode.CHARGE or pr.mode == Mode.RETREAT or pr.mode == Mode.FLEE:
-			continue
+		if pr.mode == Mode.CHARGE or pr.mode == Mode.RETREAT or pr.mode == Mode.FLEE or pr.mode == Mode.ALERT:
+			continue   # в «замере» сонар только держит внимание (lured), фаза не начинается заново
 		var d := pr.agent.distance_to(pos)
 		if d >= PING_CALL:
 			continue
@@ -251,6 +254,7 @@ func on_zap(world: EcoWorld, radius: float = ZAP_RADIUS) -> void:
 		_set_mode(pr, Mode.FLEE, 8.0)
 		pr.prey = null
 		pr.cooldown = 30.0
+		pr.wary = 0.0
 		var away := a.p - c
 		if away.length_squared() < 0.01:
 			away = Vector3(1, 0, 0)
@@ -544,7 +548,33 @@ func _react(world: EcoWorld, pr: Pred) -> void:
 	world.hold_threat(pr)
 	_set_mode(pr, Mode.ALERT, alert)
 	pr.prey = null
-	world.emit(ID, "alert", pr.agent.p, _text(world, "%s замер и смотрит на корабль"))
+	world.emit(ID, "alert", pr.agent.p, _text(world, alert_fmt(_lure_kind(world))))
+
+
+enum Lure { LIGHT, PING, WAKE, NOISE }
+
+
+## Что манит корабль сейчас — в том же порядке, что строки броска (`_start_charge`).
+func _lure_kind(world: EcoWorld) -> Lure:
+	if world.ship.light_on:
+		return Lure.LIGHT
+	if world.time - world.last_ping < PING_MEMORY:
+		return Lure.PING
+	if plankton != null and plankton.betrays():
+		return Lure.WAKE
+	return Lure.NOISE
+
+
+## Строка «замер» (#1498) с причиной — экипаж видит, что убрать: свет, сонар, ход. Без обещаний «безопасно».
+static func alert_fmt(kind: Lure) -> String:
+	match kind:
+		Lure.LIGHT:
+			return "%s замер и смотрит на корабль — его манит свет"
+		Lure.PING:
+			return "%s замер и смотрит на корабль — услышал сонар"
+		Lure.WAKE:
+			return "%s замер и смотрит на корабль — видит светящийся след"
+	return "%s замер и смотрит на корабль — слышит двигатели"
 
 
 func _start_charge(world: EcoWorld, pr: Pred) -> void:
@@ -553,6 +583,7 @@ func _start_charge(world: EcoWorld, pr: Pred) -> void:
 	world.hold_threat(pr)
 	_set_mode(pr, Mode.CHARGE, 10.0)
 	pr.prey = null
+	pr.wary = 0.0
 	var at := pr.agent.p
 	if world.ship.light_on:
 		world.emit(ID, "ship", at, _text(world, "%s разворачивается к кораблю — его привлёк свет"))
@@ -592,13 +623,14 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 	pr.truce_cd -= dt
 	pr.avoid_cd -= dt
 	pr.reef_cd -= dt
+	pr.wary = maxf(pr.wary - dt, 0.0)
 	var ship := world.ship.pos
 	var d_ship := a.distance_to(ship)
 	var at_station := leeches.near_station(a.p) != null if leeches else false
 	var lure := lured(world, pr, d_ship)  # и голодного, и сытого: гул органа прячет корабль от каждого
 	var sheltered := ship_sheltered(world)
 	var in_reef := ship_in_reef(world, _reef)
-	var can_attack := pr.cooldown <= 0.0 and pr.hunger > (EcoLeech.ATTACK_HUNGER if pr.leech else ATTACK_HUNGER) \
+	var can_attack := (pr.cooldown <= 0.0 or pr.wary > 0.0) and pr.hunger > (EcoLeech.ATTACK_HUNGER if pr.leech else ATTACK_HUNGER) \
 		and lure and not at_station and not sheltered and not in_reef
 	if raduzh and not sheltered:
 		_step_flare(world, pr, d_ship)
@@ -704,6 +736,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 			var to := ship - a.p
 			a.goal = a.p + (to.normalized() * 3.0 if to.length_squared() > 1e-4 else Vector3.ZERO)
 			if not can_attack:  # свет погас, корабль затих или в укрытии — потерял
+				pr.wary = alert_leave + ALERT_LOSE_CD
 				if alert_leave > 0.0:
 					_set_mode(pr, Mode.RETREAT, alert_leave)
 					pr.cooldown = maxf(pr.cooldown, alert_leave + ALERT_LOSE_CD)
@@ -771,7 +804,9 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 
 		Mode.RETREAT, Mode.FLEE:
 			speed = FLEE_SPEED if pr.mode == Mode.FLEE else RETREAT_SPEED
-			if a.expired():
+			if pr.mode == Mode.RETREAT and pr.wary > 0.0 and can_attack:   # отходил, потеряв корабль, — манит снова
+				_react(world, pr)
+			elif a.expired():
 				_set_mode(pr, Mode.PATROL, 0.0)
 
 		Mode.CLEAN:
