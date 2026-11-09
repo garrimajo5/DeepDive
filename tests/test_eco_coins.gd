@@ -134,7 +134,40 @@ func test_glazun_grabs_coin_overhead() -> void:
 	eq(ev[0].text(), "Из песка что-то схватило круглую рыбку")
 	w.scanned = func(sp: String) -> bool: return true
 	eq(ev[0].text(), "Песчаный глазун схватил монетника")
-	near(EcoCoins.glazun_transform(gz).origin.y, gz.pos.y + 0.35 * gz.lunge, 1e-5, "тело приподнято")
+	near(EcoCoins.glazun_transform(gz).origin.y, gz.pos.y + 0.35 * EcoCoins.lunge_k(gz), 1e-5, "тело приподнято по позе")
+
+
+## Бросок из песка — за EcoCoins.RISE, а не за кадр: высота тела за кадр меняется не больше наклона smoothstep, тело
+## доходит до 0,35 м и опадает вместе с lunge (раньше 0 → 0,35 м и 0,4 рад за один шаг, tools/jerk.gd).
+func test_glazun_lunge_rises_without_snap() -> void:
+	var w := _world()
+	var c := _coins(w)
+	var sc := c.schools[0]
+	var gz := sc.glazun
+	gz.cd = 0.0
+	var cn := sc.members[0]
+	cn.pos = gz.pos + Vector3(0.3, 1.0, 0)
+	cn.goal = cn.pos
+	cn.goal_t = 10.0
+	var dt := 1.0 / 30.0
+	var prev := EcoCoins.glazun_transform(gz).origin.y - gz.pos.y
+	var worst := 0.0
+	var top := 0.0
+	var top_t := -1.0
+	for i in 45:
+		w.step(dt)
+		var h := EcoCoins.glazun_transform(gz).origin.y - gz.pos.y
+		worst = maxf(worst, absf(h - prev))
+		if h > top + 1e-4:
+			top = h
+			top_t = (i + 1) * dt
+		prev = h
+	ok(not cn.alive, "схвачен")
+	ok(worst <= 0.35 * 1.5 * dt / EcoCoins.RISE + 1e-3, "за кадр не больше %.3f м: %.3f" % [0.35 * 1.5 * dt / EcoCoins.RISE, worst])
+	ok(worst < 0.35 * 0.5, "не прыжком: %.3f" % worst)
+	ok(top > 0.3, "вышел из песка: %.2f м" % top)
+	ok(top_t <= EcoCoins.RISE + 2 * dt, "быстро — за %.2f с" % top_t)
+	ok(prev < 0.05, "к 1,5 с снова в песке: %.2f" % prev)
 
 
 func test_glazun_waits_and_ignores_high_coins() -> void:
@@ -800,8 +833,10 @@ func test_view_glazun_breathes_held_in_beam() -> void:
 	var free := CoinsView.glazun_breath(gz, t0, 0.0).y - 1.0
 	near(CoinsView.glazun_breath(gz, t0, 1.0).y - 1.0, free * CoinsView.GLAZUN_HELD, 1e-6, "в луче — доля размаха")
 	gz.lunge = 1.0
+	gz.rise = 1.0
 	eq(CoinsView.glazun_breath(gz, t0, 0.0), Vector3.ONE, "в броске не дышит")
 	gz.lunge = 0.0
+	gz.rise = 0.0
 	ok(absf(CoinsView.glazun_breath(c.glazuns[0], t0, 0.0).y - CoinsView.glazun_breath(c.glazuns[1], t0, 0.0).y) > 1e-3
 			if c.glazuns.size() > 1 else true, "у каждого своя фаза")
 	# свет приходит плавно: размах не прыгает за кадр
