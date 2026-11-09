@@ -44,13 +44,17 @@ func tutorial_step(dt: float) -> void:
 		m.lore.learn(LayerLore.INTRO)   # знание кампании «обучение просмотрено» (#827): загрузка его не повторит
 	var near := m.near_post
 	var target := m.tutorial.pointer_target(m.pilot.seated) if m.tutorial.shown() else ""
+	var status := m.status_rect()
+	var avoid := m.power_panel.box() if m.power_panel.visible else (m.route_card.rect if m.route_card.visible else Rect2())
+	var goal := m.goal_plate_view.rect if m.goal_plate_view.visible else Rect2()
+	# пост над головой — кольцо опускается под плашку подсказки, а не уходит стрелкой вбок (#1367)
+	var size := m.tutorial_panel.get_viewport_rect().size
+	var top := HintPointer.top_under(Tutorial.box(size, status, avoid, goal), size, AlarmWay.TIP_MIN_Y)
 	var edge := m.hint_pointer.show_pointer(target, near == target or (m.at_power and target == "energy"),
-		m.tutorial.a, dt, m.get_viewport().get_camera_3d(), m.camera)
+		m.tutorial.a, dt, m.get_viewport().get_camera_3d(), m.camera, top)
 	m.tutorial_panel.show_tutorial(m.tutorial, m.tutorial.text(m.pilot.seated, near),
-		m.tutorial.highlight(m.pilot.seated, m.at_power, near), m.status_rect(),
-		m.power_panel.box() if m.power_panel.visible else (m.route_card.rect if m.route_card.visible else Rect2()), edge,
-		not hidden and m.tutorial.map_wanted(target, near, m.at_power),
-		m.goal_plate_view.rect if m.goal_plate_view.visible else Rect2())
+		m.tutorial.highlight(m.pilot.seated, m.at_power, near), status, avoid, edge,
+		not hidden and m.tutorial.map_wanted(target, near, m.at_power), goal)
 	alarm_step(dt)
 	var map := m.tutorial_panel.map_rect()
 	for p in m.overlay.router.taps:

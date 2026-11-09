@@ -222,4 +222,6 @@ func test_lower_tip() -> void:
 	eq(HintPointer.mode(Vector3(0, 0.5, -1.8), low, size), "world", "кольцо в кадре")
 	eq(HintPointer.lower_tip(Vector2(800, 500), 1.8, size, AlarmWay.TIP_MIN_Y), Vector2(800, 500), "ниже — как есть")
 	eq(HintPointer.lower_tip(Vector2(-50, 10), 1.8, size, AlarmWay.TIP_MIN_Y), Vector2(-50, 10), "сбоку — стрелка")
-	eq(HintPointer.lower_tip(Vector2(800, 10), 0.1, size, AlarmWay.TIP_MIN_Y), Vector2(800, 10), "вплотную — как есть")
+	near(HintPointer.lower_tip(Vector2(800, 10), 0.1, size, AlarmWay.TIP_MIN_Y).y, AlarmWay.TIP_MIN_Y * s, 0.01,
+		"вплотную над головой — тоже опущено (#1367)")
+	eq(HintPointer.lower_tip(Vector2(800, 10), -0.1, size, AlarmWay.TIP_MIN_Y), Vector2(800, 10), "за спиной — как есть")

@@ -116,12 +116,25 @@ static func white_image(src: Image) -> Image:
 
 
 ## Остриё p перед камерой (depth) по ширине в кадре, но выше min_y (px при H = 1080) — опустить его до min_y: кольцо
-## встаёт у верхнего края, а не уходит стрелкой вбок (#1361: люк вплотную над головой). Иначе — p как есть.
+## встаёт у верхнего края, а не уходит стрелкой вбок (#1361: люк вплотную над головой). Иначе — p как есть. Пост
+## над самой головой (ближе MIN_DEPTH, но впереди) тоже опускается — ставить кольцо на MIN_DEPTH (#1367: у кресла
+## штурвал над головой, без этого — ни кольца, ни стрелки); за спиной (depth ≤ 0) — стрелка.
 static func lower_tip(p: Vector2, depth: float, size: Vector2, min_y: float) -> Vector2:
-	if depth < MIN_DEPTH:
+	if depth <= 0.0:
 		return p
 	var s := size.y / REF_H
 	var mx := PX_MIN * 0.5 * s
 	if p.x < mx or p.x > size.x - mx or p.y >= min_y * s:
 		return p
 	return Vector2(p.x, min_y * s)
+
+
+const GAP_TIP := 16.0   ## от низа плашки подсказки до символа указателя, px при H = 1080 (#1367)
+
+
+## Порог острия для подсказок первого забега (#1367), px при H = 1080: под плашкой подсказки b (экран size) — её низ
+## + GAP_TIP + PX_MAX (символ над остриём целиком под плашкой). Плашки нет — fallback (порог тревоги).
+static func top_under(b: Rect2, size: Vector2, fallback: float) -> float:
+	if not b.has_area() or size.y <= 0.0:
+		return fallback
+	return b.end.y * REF_H / size.y + GAP_TIP + PX_MAX

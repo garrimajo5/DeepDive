@@ -35,11 +35,13 @@ func _ready() -> void:
 
 ## Поставить указатель на пост target ("" — скрыть): near — игрок в радиусе поста, a — прозрачность подсказки,
 ## dt — шаг времени, cam — камера, которой смотрим (не своя — облёт: скрыт). Возвращает стрелку у края
-## [Rect2, зеркалить] или [] — её рисует TutorialPanel.
-func show_pointer(target: String, near: bool, a: float, dt: float, cam: Camera3D, own_cam: Camera3D) -> Array:
+## [Rect2, зеркалить] или [] — её рисует TutorialPanel. top — порог острия, как в `show_at` (#1367: под плашкой
+## подсказки, `HintPointer.top_under`).
+func show_pointer(target: String, near: bool, a: float, dt: float, cam: Camera3D, own_cam: Camera3D,
+		top := -1.0) -> Array:
 	if not HintPointer.ANCHORS.has(target):
 		return show_at(Vector3.ZERO, false, 0.0, dt, cam, own_cam)
-	return show_at(HintPointer.ANCHORS[target], near, a, dt, cam, own_cam)
+	return show_at(HintPointer.ANCHORS[target], near, a, dt, cam, own_cam, Color.WHITE, top)
 
 
 ## То же для любого места в осях корабля (`anchor` — остриё шеврона); tint — цвет символа: белый — атлас как есть
@@ -59,9 +61,10 @@ func show_at(anchor: Vector3, near: bool, a: float, dt: float, cam: Camera3D, ow
 	var p := cam.unproject_position(tip) if -local.z > 0.0 else Vector2(-1.0, -1.0)
 	if top >= 0.0:
 		var low := HintPointer.lower_tip(p, -local.z, size, top)
-		if low != p:
+		if low != p:   # вплотную над головой (ближе MIN_DEPTH) — кольцо на MIN_DEPTH перед камерой (#1367)
 			p = low
-			tip = cam.project_position(p, -local.z)
+			tip = cam.project_position(p, maxf(-local.z, HintPointer.MIN_DEPTH))
+			local = cam.global_transform.affine_inverse() * tip
 	match HintPointer.mode(local, p, size):
 		"world":
 			var depth := -local.z
