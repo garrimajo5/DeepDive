@@ -1314,6 +1314,7 @@ func hit_local_of(at: Vector3) -> Vector3:
 
 
 func _on_hit(percent: int, kind: String) -> void:
+	timeline.blame(kind)   # кто ударил — в строку «удар» хронометража (#1481)
 	ship_sounds.play_hit(percent, kind, hit_local)   # SND-002: удар (по стороне) или удар о дно со скрежетом (#656)
 	lock_water.on_hit()   # рябь в шахте шлюза вспыхивает (ART-073)
 	var held := events_held()   # обучение у старта (#827): ни сонарной тьмы, ни пробоины от удара о дно

@@ -24,6 +24,7 @@ var events: Array = []    ## [t от начала, текст] — по врем
 var spans: Array = []     ## [имя, начало, конец (−1 — ещё идёт)]
 var deepest := 0.0
 var hull := 100.0
+var cause := ""          ## кто или что ударил последним (`blame`): в строку «удар» следующего шага (#1481)
 var legs: Array = []      ## участки слоя (#824): [откуда id, куда id, с] — от прихода к месту до прихода к следующему
 var _on := {}             ## имя события → индекс в spans, пока идёт
 var _place := ""          ## id `LayerMap` места, где корабль был последним
@@ -54,6 +55,12 @@ func begin(t: float) -> void:
 	_add(0.0, "начало")
 
 
+## Кто ударил (`Vitals.hit` kind): "scrape" — «о дно», пусто — «?», иначе имя существа. Строка «удар» ближайшего шага
+## его назовёт — в хронометраже видно, откуда лишний удар в начале забега (#1481).
+func blame(kind: String) -> void:
+	cause = "о дно" if kind == "scrape" else (kind if kind != "" else "?")
+
+
 ## Шаг забега: on — какие события идут сейчас (имя → bool), корпус в %, глубина в м.
 func watch(t: float, on: Dictionary, hull_now: float, depth: float) -> void:
 	if not running:
@@ -76,7 +83,8 @@ func watch(t: float, on: Dictionary, hull_now: float, depth: float) -> void:
 			s[2] = at
 			_add(at, "%s — кончилось (%s)" % [name, clock(at - s[1])])
 	if hull - hull_now >= HIT_MIN:
-		_add(at, "удар: корпус %d%%" % roundi(hull_now))
+		_add(at, "удар: корпус %d%%" % roundi(hull_now) + (" · " + cause if cause != "" else ""))
+		cause = ""
 	hull = hull_now
 	deepest = maxf(deepest, depth)
 

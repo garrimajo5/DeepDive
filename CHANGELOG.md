@@ -5,8 +5,9 @@
 ## 2026-11-09
 - Корабль: сценарий тестера — днище снаружи (#1481): шаг `floor` (корабль на нижний предел хода `Helm.Ship.floor_at`
   над рельефом), шаг `outside` (камера с борта стоит в точке облёта, `Flyby.hold_at`); кадры `34o-korma-10` у 10 и
-  `34g-korma-sklon` на склоне 03 → 06 — корма у грунта видна без телефона. Тесты `test_flyby.test_hold_at_stays`,
-  `test_qa.test_floor_and_outside_steps`.
+  `34g-korma-sklon` на склоне 03 → 06 — корма у грунта видна без телефона. В хронометраже строка удара называет
+  причину — «удар: корпус 88% · о дно» / имя существа (`RunTimeline.blame`). Тесты `test_flyby.test_hold_at_stays`,
+  `test_qa.test_floor_and_outside_steps`, `test_run_timeline.test_hit_names_cause`/`test_main_blames_scrape`.
 - Живой мир: `tools/patrol.gd` — проход `arrive` (встреча у 01): со стоянки без остановки к 01 и 40 с там со светом;
   ближайший из трёх хищников, у 01 — хищник ближе 32 м, сигнал, бросок; итог — броски по номерам хищников, ключ
   `probe=1`. Тест `test_eco_pred_probe.test_patrol_tool_arrive` (#1400).
