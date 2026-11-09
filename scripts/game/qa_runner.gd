@@ -65,6 +65,11 @@ var _warm_last_us := 0
 var _warm_ms: Array[int] = []   ## длительность каждого кадра прогрева, мс (issue #159: какой взгляд дорогой)
 var composing := 0     ## кадры Google Play (шаг «play»), которые ещё собираются — «quit» их ждёт
 var graphics_seen := ""   ## последняя записанная строка графики (`graphics_now`): новая — в лог (по отчёту #742)
+## Свет тестера у камеры с борта (шаг «outside» с "lamp"): на 300 м корпус и грунт снаружи чёрные — без него у 10
+## виден только огонёк окна, зазор кормы над дном не оценить (#1481). Только в прогоне сценария, в игре его нет.
+const LAMP_ENERGY := 3.0
+const LAMP_RANGE := 90.0
+const LAMP_NAME := "Свет тестера"
 var drain_left := 0.0   ## шаг «drain»: столько секунд ещё слать в игру EcoLink.DRAIN от стеклоуста
 
 
@@ -166,6 +171,7 @@ func tick(dt: float) -> void:
 					main.flyby.hold_at(c[2])
 				else:
 					main.flyby.stop()
+				_set_lamp(c[1] and c[3])
 			"fly":   # тестовый полёт noclip: глаз на высоте c[2] в осях корабля, наклон c[3]
 				if main.walker.noclip != c[1]:
 					main.toggle_noclip()
@@ -683,3 +689,20 @@ static func pred_away(ps: EcoPred, n: int, top: Vector3, ship: Vector3) -> Array
 		if ps.pass_by(pr.index, from, to) and pr.index == n:
 			out = [from, to]
 	return out
+
+
+## Свет тестера у камеры с борта: включить (узел «Свет тестера» под камерой, светит только отмель и корпус снаружи —
+## слой `OceanView.LAYER_WORLD`) или убрать.
+func _set_lamp(on: bool) -> void:
+	var lamp := main.flyby_cam.get_node_or_null(LAMP_NAME) as OmniLight3D   # по имени: новый прогон сценария тоже уберёт
+	if on and lamp == null:
+		lamp = OmniLight3D.new()
+		lamp.name = LAMP_NAME
+		lamp.light_energy = LAMP_ENERGY
+		lamp.omni_range = LAMP_RANGE
+		lamp.omni_attenuation = 0.5
+		lamp.light_cull_mask = OceanView.LAYER_WORLD
+		lamp.shadow_enabled = false
+		main.flyby_cam.add_child(lamp)
+	elif not on and lamp != null:
+		lamp.free()
