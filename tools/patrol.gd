@@ -13,8 +13,8 @@ extends SceneTree
 ## stop — спокойное наблюдение без выхода из 00: 30 с без света на самой стоянке, затем свет, стоянка и путь к 01
 ## arrive — встреча у 01 (#1400): 30 с без света на стоянке, затем свет и без остановки к 01, там 40 с стоянки
 ## со светом; печатает, кто из трёх хищников подошёл ближе всех и когда (`modes=` — какие проходы считать).
-## Ответ экипажа (#1498) — `answer=signal|charge`: по первому сигналу экипажу (или по началу броска) свет гаснет,
-## корабль встаёт без хода (не шумит) и стоит ANSWER_HOLD с; `alert=<с>` — проба фазы «замер» `EcoPred.alert`.
+## Ответ экипажа (#1498) — `answer=signal|charge|alert` (`answer_now`): свет гаснет, корабль встаёт без хода (не
+## шумит) через `delay=` с после повода, через ANSWER_HOLD с свет снова горит и путь идёт дальше; `alert=<с>` — проба фазы «замер» `EcoPred.alert`.
 ## По каждому проходу ещё — когда хищник впервые в луче (ближе дальности света и в конусе `Searchlight.HALF_ANGLE`)
 ## и сколько секунд от сигнала до броска и от броска до укуса.
 
@@ -38,6 +38,8 @@ const THREAT_NOTES := ["ship", "ping", "hear", "bite", "fade", "alarm", "pred", 
 const ANSWER_HOLD := 25.0
 ## Ответ экипажа этого прогона ("" — нет) и фаза «замер» хищника, с (0 — как в игре).
 static var answer := ""
+## Через сколько секунд после повода экипаж гасит свет (реакция людей, `delay=`).
+static var delay := 0.0
 static var alert := 0.0
 
 
@@ -48,6 +50,7 @@ func _init() -> void:
 		kv[p[0]] = p[1] if p.size() > 1 else ""
 	var seeds := int(kv.get("seeds", "8"))
 	answer = kv.get("answer", "")
+	delay = float(kv.get("delay", "0"))
 	alert = float(kv.get("alert", "0"))
 	if kv.has("stop"):
 		var xz: PackedStringArray = kv["stop"].split(",")
@@ -62,7 +65,7 @@ func _init() -> void:
 		probes = [kv["probe"] == "1"]
 	var lines: Array[String] = []
 	if not move.is_empty() or kv.has("stop") or answer != "" or alert > 0.0:
-		lines.append("== переносы %s, стоянка %s, ответ «%s», замер %.1f с" % [str(move), str(path[1]), answer, alert])
+		lines.append("== переносы %s, стоянка %s, ответ «%s» через %.1f с, замер %.1f с" % [str(move), str(path[1]), answer, delay, alert])
 		print(lines[0])
 	for probe in probes:
 		for mode in modes:
@@ -72,6 +75,8 @@ func _init() -> void:
 			var by := [0, 0, 0]
 			var at01 := [0, 0, 0]
 			var beam_first := 0
+			var reached := 0
+			var answers := 0
 			var gaps_wc: Array[float] = []
 			var gaps_cb: Array[float] = []
 			for s in seeds:
@@ -85,6 +90,8 @@ func _init() -> void:
 				at01[1] += 1 if r["warn01"] else 0
 				at01[2] += 1 if r["charge01"] else 0
 				beam_first += 1 if r["beam_before"] else 0
+				reached += 1 if r["reached"] else 0
+				answers += int(r["answers"])
 				if r["wc"] >= 0.0:
 					gaps_wc.append(r["wc"])
 				if r["cb"] >= 0.0:
@@ -94,8 +101,8 @@ func _init() -> void:
 				lines.append(line)
 			var sum := "== %s %s: бросок %d/%d (№0 %d, №1 %d, №2 %d), укус %d/%d, сигнал до броска %d/%d" % [
 				"проба" if probe else "сейчас", mode, charges, seeds, by[0], by[1], by[2], bites, seeds, warned, seeds]
-			sum += "; в луче до броска %d/%d; сигнал→бросок %s; бросок→укус %s" % [beam_first, seeds,
-				span(gaps_wc), span(gaps_cb)]
+			sum += "; в луче до броска %d/%d; сигнал→бросок %s; бросок→укус %s; дошёл до 01 %d/%d, ответов %d" % [
+				beam_first, seeds, span(gaps_wc), span(gaps_cb), reached, seeds, answers]
 			if mode == "arrive":
 				sum += "; на стоянке у 01: хищник ближе %.0f м %d/%d, сигнал %d/%d, бросок %d/%d" % [
 					EcoPred.REACH, at01[0], seeds, at01[1], seeds, at01[2], seeds]
@@ -196,15 +203,19 @@ static func run(probe: bool, mode: String, seed_value: int) -> Dictionary:
 	var limit := 200.0
 	var beam := {}
 	var hushed := -1.0
+	var answers := 0
+	var cue := -1.0
 	while t < limit:
 		ship.sonar_ping = false
-		if hushed >= 0.0:  # ответ экипажа: без света и хода
-			ship.speed = 0.0
+		if hushed >= 0.0:  # ответ экипажа: без света и хода; через ANSWER_HOLD — свет и путь дальше
 			if t - hushed > ANSWER_HOLD:
-				break
-			_watch(ev, w, ship, tick(ev, ship, DT), t, warn, charge, bite, seen_pred)
-			t += DT
-			continue
+				hushed = -1.0
+				ship.light_on = true
+			else:
+				ship.speed = 0.0
+				_watch(ev, w, ship, tick(ev, ship, DT), t, warn, charge, bite, seen_pred)
+				t += DT
+				continue
 		var target: Vector2
 		if retreating:
 			target = path[0]
@@ -274,14 +285,18 @@ static func run(probe: bool, mode: String, seed_value: int) -> Dictionary:
 				beam = {"t": t, "n": pr.index, "d": dd}
 			if pr.mode == EcoPred.Mode.CHARGE and charge.is_empty():
 				charge = {"t": t, "ship": ship.pos, "at": pr.agent.p, "n": pr.index,
-					"d": pr.agent.p.distance_to(ship.pos)}
+					"d": pr.agent.p.distance_to(ship.pos), "why": lure_of(ev, ship)}
 			if pr.bit_at > 0.0 and bite.is_empty() and w.time - pr.bit_at < DT * 2:
 				bite = {"t": t, "ship": ship.pos, "n": pr.index}
 		if mode == "retreat" and not retreating and (not warn.is_empty() or not charge.is_empty()):
 			retreating = true
 			ship.light_on = false
-		if answer != "" and hushed < 0.0 and (not charge.is_empty() or (answer == "signal" and not warn.is_empty())):
+		if answer != "" and hushed < 0.0 and cue < 0.0 and answer_now(ev, answer, answers, warn):
+			cue = t
+		if cue >= 0.0 and t - cue >= delay - DT * 0.5:
+			cue = -1.0
 			hushed = t
+			answers += 1
 			ship.light_on = false
 			ship.speed = 0.0
 	var parts: Array[String] = []
@@ -290,11 +305,15 @@ static func run(probe: bool, mode: String, seed_value: int) -> Dictionary:
 	if not warn.is_empty():
 		parts.append("сигнал %.0f с у %s «%s»" % [warn["t"], fmt_xz(warn["ship"]), warn["text"]])
 	if not charge.is_empty():
-		parts.append("бросок №%d %.0f с у %s с %.0f м" % [charge["n"], charge["t"], fmt_xz(charge["ship"]), charge["d"]])
+		parts.append("бросок №%d %.0f с у %s с %.0f м (%s)" % [charge["n"], charge["t"], fmt_xz(charge["ship"]),
+			charge["d"], charge["why"]])
 	if not beam.is_empty():
 		parts.append("в луче №%d %.0f с с %.0f м" % [beam["n"], beam["t"], beam["d"]])
-	if hushed >= 0.0:
-		parts.append("ответ %.0f с" % hushed)
+	if answers > 0:
+		parts.append("ответов %d" % answers)
+	var reached := leg >= path.size() - 1
+	parts.append(("до 01 за %.0f с" % (t_at01 if t_at01 >= 0.0 else t)) if reached \
+		else "не дошёл до 01 за %.0f с, у %s" % [t, fmt_xz(ship.pos)])
 	if not bite.is_empty():
 		parts.append("укус №%d %.0f с у %s" % [bite["n"], bite["t"], fmt_xz(bite["ship"])])
 	if parts.is_empty():
@@ -313,10 +332,33 @@ static func run(probe: bool, mode: String, seed_value: int) -> Dictionary:
 	var cb := float(bite["t"]) - float(charge["t"]) if not bite.is_empty() and not charge.is_empty() else -1.0
 	var beam_before := not beam.is_empty() and (charge.is_empty() or float(beam["t"]) <= float(charge["t"]))
 	ev.free()
-	return {"wc": wc, "cb": cb, "beam_before": beam_before,"bite": not bite.is_empty(), "charge": not charge.is_empty(), "warn_before": before,
+	return {"wc": wc, "cb": cb, "beam_before": beam_before, "reached": reached, "answers": answers,"bite": not bite.is_empty(), "charge": not charge.is_empty(), "warn_before": before,
 		"by": int(charge.get("n", 0)), "seen01": not seen01.is_empty(), "warn01": not warn01.is_empty(),
 		"charge01": not charge.is_empty() and t_at01 >= 0.0 and float(charge["t"]) >= t_at01,
 		"text": "; ".join(parts)}
+
+
+## Что манит в миг броска: свет, ход быстрее EcoPred.HEAR_SPEED, след планктона (`EcoPlankton.betrays`).
+static func lure_of(ev: EcoView, ship: EcoLink.ShipState) -> String:
+	var why: Array[String] = []
+	if ship.light_on:
+		why.append("свет")
+	if absf(ship.speed) > EcoPred.HEAR_SPEED:
+		why.append("ход")
+	if ev.preds.plankton != null and ev.preds.plankton.betrays():
+		why.append("след планктона")
+	return ", ".join(why) if not why.is_empty() else "—"
+
+
+## Пора ли экипажу гасить свет: signal — один раз, по первому сигналу; charge — хищник в броске; alert — хищник
+## в «замере» или броске (каждый раз, после ANSWER_HOLD корабль снова со светом идёт дальше).
+static func answer_now(ev: EcoView, how: String, answers: int, warn: Dictionary) -> bool:
+	if how == "signal":
+		return answers == 0 and not warn.is_empty()
+	for pr in ev.preds.all:
+		if pr.mode == EcoPred.Mode.CHARGE or (how == "alert" and pr.mode == EcoPred.Mode.ALERT):
+			return true
+	return false
 
 
 ## Шаг после ответа экипажа: только сигнал, бросок и укус (корабль стоит, путь не идёт).

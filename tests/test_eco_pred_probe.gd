@@ -162,4 +162,4 @@ func test_patrol_tool_answer() -> void:
 	tool.set("alert", 0.0)
 	ok(r.has("wc") and r.has("cb") and r.has("beam_before"), "итог с промежутками и лучом")
 	var text := String(r["text"])
-	ok(text.contains("ответ ") or text == "тихо", "по сигналу — ответ экипажа: %s" % text)
+	ok(text.contains("ответов ") or text == "тихо", "по сигналу — ответ экипажа: %s" % text)
