@@ -158,6 +158,14 @@ func tick(dt: float) -> void:
 					main.helm.turn = 0.0
 				main.park_at(Vector3(c[1], c[2], c[3]))
 				_jump = JUMP_FRAMES
+			"floor":   # на нижний предел хода над рельефом по курсу — корма и нос у грунта (#1481)
+				main.park_at(Vector3(main.helm.pos.x, main.helm.floor_at(main.helm.pos, main.helm.yaw), main.helm.pos.z))
+				_jump = JUMP_FRAMES
+			"outside":   # камера с борта стоит в точке облёта: корпус и грунт под ним снаружи (#1481)
+				if c[1]:
+					main.flyby.hold_at(c[2])
+				else:
+					main.flyby.stop()
 			"fly":   # тестовый полёт noclip: глаз на высоте c[2] в осях корабля, наклон c[3]
 				if main.walker.noclip != c[1]:
 					main.toggle_noclip()
