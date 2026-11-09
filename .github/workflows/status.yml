@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Тесты страницы и картинок в issue
-        run: python3 tools/test_status.py && python3 tools/test_issue_img.py
+        run: python3 tools/test_status.py && python3 tools/test_issue_img.py && python3 tools/test_ci_preview.py
       - name: Обновить issue «Где мы»
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
