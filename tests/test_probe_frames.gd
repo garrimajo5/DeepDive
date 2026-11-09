@@ -22,6 +22,7 @@ func test_parse_defaults_and_unknown_seq() -> void:
 	eq(kv["cycles"], "2", "по умолчанию два цикла")
 	ok(not kv.has("error"), "ping — есть")
 	ok(Probe.parse(PackedStringArray(["seq=нет"])).has("error"), "неизвестная последовательность — ошибка")
+	ok(not Probe.parse(PackedStringArray([])).has("pre"), "по умолчанию — без кадров до цикла")
 	ok(Probe.SEQS.has(Probe.parse(PackedStringArray([]))["seq"]), "по умолчанию — известная")
 
 

@@ -8,6 +8,8 @@ extends SceneTree
 ##   `Wake.vent`, #519), start — облёт в начале забега, ping — импульс сонара
 ## warm=0 — без прогрева шейдеров (`Warmup.enabled`); сравнить с прогревом — два запуска, warm=0 и warm=1:
 ##   сборки шейдеров живут в процессе, второй цикл одного запуска их уже не собирает
+## pre=10 — столько кадров с мостика до первого цикла, без замера: с warm=0 сцена с мостика уже собрана, и кадр 0
+##   цикла показывает сборки только самого события (без pre — всей сцены)
 ## cycles=2 — сколько раз повторить последовательность (между циклами — новый забег)
 ## frames=60 — кадров на цикл (по умолчанию — пока идёт вид с борта и ещё `TAIL`, но не меньше 30)
 ## slow=50 — долгий кадр дольше стольких мс: в таблице, с частями шага `StepClock.note` (что тормозит в коде); по
@@ -126,6 +128,9 @@ func _go() -> void:
 	main.set_process(false)   # шаг ведёт замер: ровный DT, своё время
 	RenderingServer.frame_pre_draw.connect(func() -> void: _draw_from = Time.get_ticks_usec())
 	RenderingServer.frame_post_draw.connect(func() -> void: _draw_us += Time.get_ticks_usec() - _draw_from)
+	for p in int(kv.get("pre", "0")):
+		main.step(DT)
+		await process_frame
 	var lines: Array[String] = ["seq=%s (%s), прогрев %s" % [kv["seq"], SEQS[kv["seq"]], "да" if Warmup.enabled else "нет"], HEADER]
 	for c in int(kv["cycles"]):
 		var frames: Array = []
