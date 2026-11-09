@@ -175,3 +175,45 @@ func test_issue_img_ps1_mirrors_python() -> void:
 	ok(ps.contains("Get-Command gh"), "без gh — печатает текст комментария")
 	var qa := FileAccess.get_file_as_string("res://docs/QA.md")
 	ok(qa.contains("tools\\qa\\issue-img.ps1"), "docs/QA.md называет PowerShell-вариант")
+
+
+func _ps(name: String) -> String:
+	return FileAccess.get_file_as_bytes(DIR.path_join(name)).slice(3).get_string_from_utf8()
+
+
+## #1533: прогон 800+ шагов не укладывался в 195 × 2 с, скрипт не забирал последние снимки и done.txt —
+## тестер добирал их руками. Теперь ждём ≥ 600 с, добираем, пока снимков меньше строк «скриншот» в логе,
+## и в конце печатаем NOT_DONE со списком пропавших.
+func test_run_qa_waits_and_reports_not_done() -> void:
+	var ps := _ps("run-qa.ps1")
+	var m := RegEx.create_from_string("for \\(\\$i = 0; \\$i -lt (\\d+); \\$i\\+\\+\\) \\{\\s*\\n\\s*Start-Sleep (\\d+)").search(ps)
+	ok(m != null and int(m.get_string(1)) * int(m.get_string(2)) >= 600, "ожидание done.txt не меньше 600 с")
+	ok(ps.contains("Write-Output \"NOT_DONE $head"), "в конце — строка NOT_DONE")
+	ok(ps.rfind("NOT_DONE") > ps.rfind("Write-Output \"files: $run\""), "NOT_DONE — после всего вывода")
+	# шаблон строки снимка в скрипте ловит то, что пишет qa_runner.gd, и не ловит «нет картинки»
+	var pat := RegEx.create_from_string("-match '(\\^скриншот [^']+)'").search(ps)
+	ok(pat != null, "шаблон строки снимка найден")
+	if pat == null:
+		return
+	var runner := FileAccess.get_file_as_string("res://scripts/game/qa_runner.gd")
+	ok(runner.contains("_log(\"скриншот %s | %s\""), "qa_runner пишет «скриншот <имя> | …»")
+	var re := RegEx.create_from_string(pat.get_string(1))
+	var hit := re.search("скриншот 36b-ognecvet-posle | корабль (0, -30, 0)")
+	ok(hit != null and hit.get_string(1) == "36b-ognecvet-posle", "имя снимка из строки лога")
+	ok(re.search("скриншот 01-start: нет картинки (headless)") == null, "строка без картинки не в счёт")
+
+
+## #1533: SHA ветки отчёта — до возврата клона на main; -Shots принимает имена с .jpg/.png.
+func test_publish_qa_sha_and_extensions() -> void:
+	var ps := _ps("publish-qa.ps1")
+	var sha := ps.find("$sha = (git -C $repo rev-parse HEAD)")
+	ok(sha > 0 and sha < ps.find("git -C $repo checkout -q main"), "SHA берётся до возврата на main")
+	ok(ps.contains("Write-Output \"PUSHED $branch $sha\""), "PUSHED печатает SHA")
+	ok(ps.contains("raw.githubusercontent.com/garrimajo5/DeepDive/$sha/qa/$Folder/"), "готовый raw-префикс")
+	var m := RegEx.create_from_string("-replace '([^']+)', ''").search(ps)
+	ok(m != null, "расширение отрезается")
+	if m == null:
+		return
+	var re := RegEx.create_from_string(m.get_string(1))
+	for n in ["36b-ognecvet-posle.jpg", "36b-ognecvet-posle.png", "36b-ognecvet-posle.jpeg", "36b-ognecvet-posle"]:
+		eq(re.sub(n, ""), "36b-ognecvet-posle", "имя снимка: %s" % n)

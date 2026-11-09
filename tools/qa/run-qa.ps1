@@ -141,13 +141,29 @@ if ($inst -notmatch 'Success') { Write-Output "INSTALL_FAILED $head"; $inst; exi
 & $adb logcat -c
 & $adb shell monkey -p $app -c android.intent.category.LAUNCHER 1 | Out-Null
 $done = $false
-for ($i = 0; $i -lt 195; $i++) {
+# 300 × 2 с: прогон 800+ шагов с прогревом и установкой не укладывался в 195 × 2 с (#1533)
+for ($i = 0; $i -lt 300; $i++) {
   Start-Sleep 2
   if ((& $adb shell "run-as $app ls files/qa/out/done.txt" 2>&1) -match 'done.txt$') { $done = $true; break }
 }
-Start-Sleep 2
-$names = (& $adb shell "run-as $app ls files/qa/out") -split "`r?`n" | Where-Object { $_ -match '\.(png|txt)$' }
-foreach ($n in $names) { cmd /c "`"$adb`" exec-out run-as $app cat files/qa/out/$n > `"$run\$n`"" }
+# Забрать files/qa/out. Снимок пишется после строки «скриншот» в логе: пока снимков меньше строк или нет
+# done.txt — ещё до 4 попыток через 15 с (#1533: последние 2 снимка и done.txt добирались руками).
+function Get-Out {
+  $names = (& $adb shell "run-as $app ls files/qa/out") -split "`r?`n" | Where-Object { $_ -match '\.(png|txt)$' }
+  foreach ($n in $names) { cmd /c "`"$adb`" exec-out run-as $app cat files/qa/out/$n > `"$run\$n`"" }
+}
+$miss = @()
+for ($try = 0; $try -lt 5; $try++) {
+  Start-Sleep $(if ($try -eq 0) { 2 } else { 15 })
+  Get-Out
+  $done = Test-Path "$run\done.txt"
+  $want = if (Test-Path "$run\log.txt") {
+    @(Get-Content "$run\log.txt" -Encoding utf8 | ForEach-Object { if ($_ -match '^скриншот (\S+) \|') { $Matches[1] } })
+  } else { @() }
+  $have = @(Get-ChildItem "$run\*.png" | ForEach-Object BaseName)
+  $miss = @($want | Where-Object { $_ -notin $have })
+  if ($done -and -not $miss) { break }
+}
 & $adb logcat -d | Set-Content "$run\logcat.txt" -Encoding utf8
 $errs = Select-String -Path "$run\logcat.txt" -Pattern ' E godot|SCRIPT ERROR|AndroidRuntime|FATAL' |
   ForEach-Object { ($_.Line -split ': ', 2)[1] } | Where-Object { $_ -and $_ -notmatch '^\s*$' } |
@@ -163,3 +179,10 @@ else {
 Write-Output 'log:'; if (Test-Path "$run\log.txt") { Get-Content "$run\log.txt" -Encoding utf8 }
 Write-Output 'errors:'; $errs | Select -First 30
 Write-Output "files: $run"
+# Заметная строка в самом конце: прогон не дошёл до конца или не все снимки забраны (#1533)
+if (-not $done -or $miss) {
+  $why = @()
+  if (-not $done) { $why += 'нет done.txt' }
+  if ($miss) { $why += "нет снимков ($($miss.Count)): $($miss -join ', ')" }
+  Write-Output "NOT_DONE $head — $($why -join '; ')"
+}
