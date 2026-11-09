@@ -414,6 +414,35 @@ func test_brief_step_pages_to_end() -> void:
 	await frames(1)
 
 
+func test_row3_line() -> void:   # #1429: строка 3 приборов в лог у шагов брифинга
+	eq(QaRunner.row3_line([], "", ""), "строка 3: пусто", "пусто")
+	eq(QaRunner.row3_line(["Из песка что-то схватило"], "Стайка рыбок", ""),
+		"строка 3: «Из песка что-то схватило» · в очереди: «Стайка рыбок»", "видна и ждёт очереди")
+	eq(QaRunner.row3_line([], "", "Стайка рыбок"), "строка 3: пусто · ждёт конца брифинга: «Стайка рыбок»",
+		"отложена до конца брифинга")
+
+
+func test_brief_logs_world_line() -> void:   # #1429: в логе видно, пришла строка мира до плашки или под ней
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main._world_say("Из песка что-то схватило круглую рыбку")
+	var qa := main.start_qa('[{"do": "brief"}, {"do": "wait", "s": 0.5}, {"do": "log", "note": "02r"}, {"do": "wait", "s": 5}]')
+	for i in 30:
+		main.step(1.0 / 30.0)
+	var on := Array(qa.log_lines).filter(func(l): return l.begins_with("брифинг вкл"))
+	eq(on.size(), 1, "шаг brief пишет строку")
+	if on.size() == 1:
+		ok("строка 3: «Из песка что-то схватило круглую рыбку»" in on[0], "строка мира до плашки: " + on[0])
+	var note := Array(qa.log_lines).filter(func(l): return l.begins_with("02r |"))
+	eq(note.size(), 1, "заметка под брифингом")
+	if note.size() == 1:
+		ok("строка 3: пусто · ждёт конца брифинга: «Из песка что-то схватило круглую рыбку»" in note[0],
+			"под плашкой строка мира отложена: " + note[0])
+	main.queue_free()
+	await frames(1)
+
+
 func test_silt_step() -> void:
 	var q := QaScript.parse('[{"do": "silt"}, {"do": "silt", "on": false}]')
 	eq(q.errors.size(), 0, "шаг silt известен")
