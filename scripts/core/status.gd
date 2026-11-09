@@ -166,6 +166,8 @@ class Lines:
 ## Сообщение мира (`wait`) не перебивает другое сообщение мира, пока то видно меньше MIN_SHOW с: ждёт своей очереди (одно, последнее), —
 ## иначе строку мира («веер повёрнут к жерлу») стирал укус хищника в ту же секунду (issue #979). Свои действия
 ## игрока (`wait` = false) показываются сразу — отклик на кнопку не ждёт.
+## Строка угрозы мира (`urgent`, `EcoLink.URGENT`, #1516) выходит сразу и держится все свои секунды: обычная строка
+## мира в это время ждёт очереди (`next`), своё сообщение игрока перебивает её, как любую.
 class Message:
 	const MIN_SHOW := 1.0
 	var text := ""
@@ -176,12 +178,22 @@ class Message:
 	var next_left := 0.0
 	## Текущее — строка мира (её и бережём от следующей строки мира).
 	var world := false
+	## Текущее — строка угрозы мира (#1516): строки мира её не перебивают, пока она не погасла сама.
+	var hot := false
 
 	func visible() -> bool:
 		return not text.is_empty()
 
-	func say(msg: String, seconds: float = MESSAGE_SECONDS, wait := false) -> void:
-		if wait and world and not msg.is_empty() and not text.is_empty() and msg != text and shown < MIN_SHOW:
+	func say(msg: String, seconds: float = MESSAGE_SECONDS, wait := false, urgent := false) -> void:
+		if urgent and wait and not msg.is_empty():
+			if msg == next:
+				next = ""
+				next_left = 0.0
+			_show(msg, seconds)
+			world = true
+			hot = true
+			return
+		if wait and world and not msg.is_empty() and not text.is_empty() and msg != text and (hot or shown < MIN_SHOW):
 			next = msg
 			next_left = seconds
 			return
@@ -203,6 +215,7 @@ class Message:
 			text = ""
 			left = 0.0
 			world = false
+			hot = false
 		return out
 
 	func clear(msg: String) -> void:
@@ -220,17 +233,19 @@ class Message:
 			return
 		left -= dt
 		shown += dt
-		if not next.is_empty() and shown >= MIN_SHOW:
+		if not next.is_empty() and shown >= MIN_SHOW and not (hot and left > 0.0):
 			_take_next()
 		elif left <= 0.0:
 			text = ""
 			left = 0.0
+			hot = false
 			_take_next()
 
 	func _show(msg: String, seconds: float) -> void:
 		text = msg
 		left = seconds if not msg.is_empty() else 0.0
 		shown = 0.0
+		hot = false
 
 	func _take_next() -> void:
 		if next.is_empty():

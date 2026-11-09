@@ -214,3 +214,24 @@ func test_scene_released_line_in_qa_log() -> void:
 	ok(Array(qa.log_lines).has("отложенное сообщение выведено: «Из песка что-то схватило рыбу»"), "строка в логе")
 	main.release_world_say()
 	eq(Array(qa.log_lines).count("отложенное сообщение выведено: «Из песка что-то схватило рыбу»"), 1, "один раз")
+
+
+## Строка угрозы под брифингом ждёт его конца, обычная её не сменяет, а вышла — держится как срочная (#1516).
+func test_scene_urgent_line_waits_for_brief() -> void:
+	Main.hints = true
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	for i in 30:
+		main.step(1.0 / 30.0)
+	ok(main.arrival.active(), "брифинг на экране")
+	main.world_wait = ""
+	main.world_wait_hot = false
+	main.on_eco_event(EcoLink.message("Серпохвост замер и смотрит на корабль", true))
+	main.on_eco_event(EcoLink.message("Рыбы пасутся на мху"))
+	eq(main.world_wait, "Серпохвост замер и смотрит на корабль", "обычная не сменяет ждущую срочную")
+	main.arrival.on = false   # брифинг кончился
+	main.release_world_say()
+	eq(main.message.text, "Серпохвост замер и смотрит на корабль", "срочная на приборах")
+	ok(main.message.hot, "и держится как срочная")
+	ok(not main.world_wait_hot, "ожидание сброшено")
