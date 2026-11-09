@@ -43,7 +43,9 @@ extends RefCounted
 ##   {"do": "floor"}                                 — опустить корабль на нижний предел хода над рельефом здесь
 ##                                                     (`Helm.Ship.floor_at` по курсу): корма и нос у грунта (#1481)
 ##   {"do": "outside", "at": 1.0}                    — камера с борта стоит в точке облёта at (0 — у носа, 1 — над
-##                                                     кормой, `Flyby.hold_at`); "on": false — глаза на мостике
+##                                                     кормой, `Flyby.hold_at`); "on": false — глаза на мостике;
+##                                                     "lamp": true — ещё и свет тестера у камеры (`QaRunner.LAMP_*`):
+##                                                     в глубине корпус и грунт иначе не видны (#1481)
 ##   {"do": "fly", "y": -8, "pitch": -55}            — тестовый полёт noclip: глаз на высоте y в осях корабля (над
 ##                                                     палубой — плюс), наклон взгляда в градусах; "on": false — на пол
 ##   {"do": "mate", "x": -1, "z": -2.5, "yaw": 90, "role": 2, "look": 1} — ещё один член экипажа на палубе (роль 0…3,
@@ -77,7 +79,7 @@ extends RefCounted
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z[, yaw°]], ["floor"], ["outside", on, at], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["ping"], ["pred", n, bush, away], ["route"], ["act"], ["mate_hold", on], ["gone"], ["save", on], ["wreck"], ["back"], ["tutorial", on, шаг 1…7], ["brief", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z[, yaw°]], ["floor"], ["outside", on, at, lamp], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["ping"], ["pred", n, bush, away], ["route"], ["act"], ["mate_hold", on], ["gone"], ["save", on], ["wreck"], ["back"], ["tutorial", on, шаг 1…7], ["brief", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
 const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "ping", "pred", "ship", "floor", "outside", "fly", "route", "gone", "save", "wreck", "back", "tutorial", "brief", "cards", "voice", "slow", "hud", "play", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "map", "map_back", "hint_map", "new", "exit", "yes", "no", "crew", "journal", "settings", "graphics", "g0", "g1", "g2", "fps", "golos", "zvuk", "s0", "v_hold", "v_voice", "v_hear", "v_mic", "lite_yes", "lite_no", "ask", "brief", "join", "last", "lobby_new", "lobby_addr", "lobby_refresh",
@@ -228,7 +230,8 @@ func _begin(st: Dictionary, out: Array) -> void:
 		"floor":
 			out.append(["floor"])
 		"outside":
-			out.append(["outside", bool(st.get("on", true)), clampf(float(st.get("at", 1.0)), 0.0, 1.0)])
+			out.append(["outside", bool(st.get("on", true)), clampf(float(st.get("at", 1.0)), 0.0, 1.0),
+				bool(st.get("lamp", false))])
 		"fly":
 			out.append(["fly", bool(st.get("on", true)), float(st.get("y", Deck.Walker.EYE)),
 				float(st.get("pitch", 0.0))])

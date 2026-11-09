@@ -94,9 +94,15 @@ const QUIET_R := 55.0
 const ARC_PRED := 1
 const ARC: Array[Vector2] = [Vector2(90, -90), Vector2(65, -100), Vector2(15, -95)]
 const ARC_JITTER := 5.0
+## Проба #1498 — фаза «замер» перед броском (`alert` > 0): хищник почти стоит и разворачивается к кораблю; манящее
+## пропало (свет погас, корабль затих, ушёл в укрытие) — уходит в патруль с паузой ALERT_LOSE_CD.
+const ALERT_SPEED := 1.5
+const ALERT_LOSE_CD := 8.0
+## Проба #1498 — отход после «потерял корабль» (`alert_leave` > 0): уходит прочь от корабля на ALERT_LEAVE_DIST м.
+const ALERT_LEAVE_DIST := 45.0
 
 ## Режим хищника (pr.state в браузере); общее EcoAgent.State — у его существа.
-enum Mode { PATROL, HUNT, EAT, INVESTIGATE, CHARGE, RETREAT, FLEE, CLEAN }
+enum Mode { PATROL, HUNT, EAT, INVESTIGATE, CHARGE, RETREAT, FLEE, CLEAN, ALERT }
 
 
 ## Серпохвост: существо мира, режим, голод, пауза перед нападением и добыча.
@@ -169,6 +175,10 @@ var plankton: EcoPlankton
 var _rnd: EcoRandom
 ## Проба расстановки #1400 (QUIET, ARC): ставить до reset мира.
 var probe := false
+## Проба #1498: длина фазы «замер» перед броском на манящий корабль, с; 0 — бросок сразу (как в игре).
+var alert := 0.0
+## Проба #1498: сколько секунд после «потерял корабль» хищник отходит прочь (RETREAT); 0 — сразу патруль рядом.
+var alert_leave := 0.0
 ## Ось рифа у цветка на этот шаг (reef_axis).
 var _reef := Vector3.INF
 
@@ -454,7 +464,7 @@ static func _set_mode(pr: Pred, m: Mode, t: float) -> void:
 	match m:
 		Mode.HUNT, Mode.CHARGE:
 			pr.agent.state = EcoAgent.State.HUNT
-		Mode.INVESTIGATE, Mode.CLEAN:
+		Mode.INVESTIGATE, Mode.CLEAN, Mode.ALERT:
 			pr.agent.state = EcoAgent.State.SEEK
 		Mode.RETREAT, Mode.FLEE:
 			pr.agent.state = EcoAgent.State.FLEE
@@ -522,6 +532,19 @@ static func _text(world: EcoWorld, fmt: String, c: Species.Case = Species.Case.N
 ## Заманить хищника на корабль (E.lure: эхоловец выпросил свет) — бросок, как на свет прожектора.
 func lure(world: EcoWorld, pr: Pred) -> void:
 	_start_charge(world, pr)
+
+
+## Хищника поманил корабль: бросок сразу или, в пробе #1498 (`alert` > 0), сначала «замер».
+func _react(world: EcoWorld, pr: Pred) -> void:
+	if alert <= 0.0:
+		_start_charge(world, pr)
+		return
+	if not world.threat_free(pr):
+		return
+	world.hold_threat(pr)
+	_set_mode(pr, Mode.ALERT, alert)
+	pr.prey = null
+	world.emit(ID, "alert", pr.agent.p, _text(world, "%s замер и смотрит на корабль"))
 
 
 func _start_charge(world: EcoWorld, pr: Pred) -> void:
@@ -620,7 +643,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 					_set_mode(pr, Mode.HUNT, 12.0)
 					pr.prey = f
 			if can_attack:
-				_start_charge(world, pr)
+				_react(world, pr)
 
 		Mode.HUNT:
 			speed = HUNT_SPEED
@@ -661,7 +684,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 						if kelp:
 							kelp.caught_at(world, caught)
 					elif can_attack and pr.hunger > HUNT_TO_SHIP_HUNGER:
-						_start_charge(world, pr)
+						_react(world, pr)
 
 		Mode.EAT:
 			speed = EAT_SPEED
@@ -673,6 +696,29 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 			if a.distance_to(a.goal) < 10.0 or a.expired():
 				_set_mode(pr, Mode.PATROL, 0.0)
 			if can_attack:
+				_react(world, pr)
+
+		Mode.ALERT:
+			speed = ALERT_SPEED
+			world.hold_threat(pr)
+			var to := ship - a.p
+			a.goal = a.p + (to.normalized() * 3.0 if to.length_squared() > 1e-4 else Vector3.ZERO)
+			if not can_attack:  # свет погас, корабль затих или в укрытии — потерял
+				if alert_leave > 0.0:
+					_set_mode(pr, Mode.RETREAT, alert_leave)
+					pr.cooldown = maxf(pr.cooldown, alert_leave + ALERT_LOSE_CD)
+					var away := a.p - ship
+					away.y = 0.0
+					if away.length_squared() < 0.01:
+						away = Vector3(1, 0, 0)
+					var g := a.p + away.normalized() * ALERT_LEAVE_DIST
+					g.y = minf(_floor(world, g.x, g.z, GOAL_CEILING - 8.0) + 8.0, GOAL_CEILING)
+					a.goal = g
+				else:
+					_set_mode(pr, Mode.PATROL, 0.0)
+					pr.cooldown = maxf(pr.cooldown, ALERT_LOSE_CD)
+				world.emit(ID, "lost", a.p, _text(world, "%s потерял корабль и отворачивает"))
+			elif a.expired():
 				_start_charge(world, pr)
 
 		Mode.CHARGE:
@@ -731,7 +777,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 		Mode.CLEAN:
 			speed = _step_clean(world, pr, dt)
 			if pr.mode == Mode.CLEAN and can_attack and pr.hunger > HUNT_TO_SHIP_HUNGER:
-				_start_charge(world, pr)
+				_react(world, pr)
 
 	if pr.leech and pr.mode != Mode.CLEAN:
 		speed *= EcoLeech.SLOW  # пиявник замедляет хищника
@@ -856,6 +902,8 @@ static func _clean_text(world: EcoWorld) -> Callable:
 
 ## Каких светляков хищник не ловит: у станции чистки, в густом ленточнике (EcoKelp), в рифе гротовика (EcoGrot)
 ## и в чернилах подушечника (nearestFish пропускает nearStation, kelpShelter, grotShelter, inkAt).
+## Внутри кольца REEF_KEEP рифа у цветка — тоже: хищник туда не заходит, и бросок за рыбкой не ведёт его внутрь
+## (стая рифа (55; −69) живёт в кольце, #1400).
 func _hidden_fish() -> Callable:
 	var ink := cushions != null and cushions.any_ink()
 	var truce := ognevka != null and leeches != null and not leeches.stations.is_empty()
@@ -866,10 +914,12 @@ func _hidden_fish() -> Callable:
 		for sh in fish.shoals:
 			if sh.crown and sh.alarm > 0.0:
 				crown = true
-	if not ink and not truce and not grove and not reef and not crown:
+	var ring := _reef if _reef.is_finite() else Vector3.INF
+	if not ink and not truce and not grove and not reef and not crown and not ring.is_finite():
 		return Callable()
 	return func(f: EcoFish.Fish) -> bool:
-		return (crown and f.shoal.crown and f.shoal.alarm > 0.0) or (truce and leeches.near_station(f.agent.p) != null) or (grove and kelp.shelter(f) != null) \
+		return (ring.is_finite() and _flat_dist(f.agent.p, ring) < REEF_KEEP) \
+			or (crown and f.shoal.crown and f.shoal.alarm > 0.0) or (truce and leeches.near_station(f.agent.p) != null) or (grove and kelp.shelter(f) != null) \
 			or (reef and grot.shelter(f) != null) or (ink and _in_ink(f))
 
 
