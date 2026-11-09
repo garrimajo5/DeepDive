@@ -1,0 +1,308 @@
+{
+  "image_sizes": {
+    "MineralAtlas_color": [
+      2048,
+      2048
+    ],
+    "MineralAtlas_normal": [
+      2048,
+      2048
+    ],
+    "MineralAtlas_rough": [
+      2048,
+      2048
+    ],
+    "PolypEmissionMask": [
+      512,
+      512
+    ]
+  },
+  "pivots_gltf": {
+    "Stvorka0": [
+      48,
+      2.5,
+      11.1899995803833
+    ],
+    "Stvorka1": [
+      52,
+      2.5,
+      11.1899995803833
+    ],
+    "Stvorka2": [
+      50,
+      5.964101791381836,
+      11.1899995803833
+    ],
+    "Diagnostika": [
+      54.5,
+      3,
+      11.585000038146973
+    ]
+  },
+  "file_bytes": 4012232,
+  "lod_totals": [
+    41192,
+    11675,
+    4798
+  ],
+  "moving_triangles": 1458,
+  "objects": {
+    "LOD0_HumanCable": {
+      "triangles": 360,
+      "passage_intersections": 0,
+      "degenerate": 0,
+      "dimensions_gltf": [
+        5.449939727783203,
+        5.104101657867432,
+        0.12124443054199219
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "LOD0_Mineral": {
+      "triangles": 39246,
+      "passage_intersections": 0,
+      "degenerate": 0,
+      "dimensions_gltf": [
+        120.58704376220703,
+        57.961265563964844,
+        23.39058494567871
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "LOD0_Polyps": {
+      "triangles": 128,
+      "passage_intersections": 0,
+      "degenerate": 0,
+      "dimensions_gltf": [
+        4.6100006103515625,
+        0.8487732410430908,
+        0.33048534393310547
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "LOD1_HumanCable": {
+      "triangles": 360,
+      "passage_intersections": 0,
+      "degenerate": 0,
+      "dimensions_gltf": [
+        5.449939727783203,
+        5.104101657867432,
+        0.12124443054199219
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "LOD1_Mineral": {
+      "triangles": 9729,
+      "passage_intersections": 0,
+      "degenerate": 0,
+      "dimensions_gltf": [
+        120.56727600097656,
+        58.13628390431404,
+        23.50255012512207
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "LOD1_Polyps": {
+      "triangles": 128,
+      "passage_intersections": 0,
+      "degenerate": 0,
+      "dimensions_gltf": [
+        4.6100006103515625,
+        0.8487732410430908,
+        0.33048534393310547
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "LOD2_HumanCable": {
+      "triangles": 360,
+      "passage_intersections": 0,
+      "degenerate": 0,
+      "dimensions_gltf": [
+        5.449939727783203,
+        5.104101657867432,
+        0.12124443054199219
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "LOD2_Mineral": {
+      "triangles": 2852,
+      "passage_intersections": 0,
+      "degenerate": 0,
+      "dimensions_gltf": [
+        120.45900344848633,
+        58.09966281056404,
+        23.51840591430664
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "LOD2_Polyps": {
+      "triangles": 128,
+      "passage_intersections": 0,
+      "degenerate": 0,
+      "dimensions_gltf": [
+        4.6100006103515625,
+        0.8487732410430908,
+        0.33048534393310547
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "Stvorka0": {
+      "triangles": 454,
+      "passage_intersections": 0,
+      "degenerate": 0,
+      "dimensions_gltf": [
+        1.6999969482421875,
+        1.5,
+        0.12000083923339844
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "Stvorka1": {
+      "triangles": 454,
+      "passage_intersections": 0,
+      "degenerate": 0,
+      "dimensions_gltf": [
+        1.6999969482421875,
+        1.5,
+        0.12000083923339844
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "Stvorka2": {
+      "triangles": 454,
+      "passage_intersections": 0,
+      "degenerate": 0,
+      "dimensions_gltf": [
+        1.6999969482421875,
+        1.5,
+        0.12000083923339844
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "Diagnostika": {
+      "triangles": 96,
+      "passage_intersections": 0,
+      "degenerate": 0,
+      "dimensions_gltf": [
+        2.855255126953125,
+        1.8429760932922363,
+        0.06999969482421875
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  },
+  "materials": [
+    {
+      "doubleSided": true,
+      "name": "HumanCable",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.3319999873638153,
+          0.125,
+          0.04699999839067459,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 0.800000011920929
+      }
+    },
+    {
+      "doubleSided": true,
+      "name": "Mineral",
+      "normalTexture": {
+        "index": 0
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicFactor": 0,
+        "metallicRoughnessTexture": {
+          "index": 2
+        }
+      }
+    },
+    {
+      "doubleSided": true,
+      "emissiveFactor": [
+        1,
+        1,
+        1
+      ],
+      "emissiveTexture": {
+        "index": 3
+      },
+      "name": "Polyps",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.07999999821186066,
+          0.20000000298023224,
+          0.2199999988079071,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 0.800000011920929
+      }
+    }
+  ],
+  "animations": 0,
+  "skins": 0,
+  "lid_opening_elevation": 1.4183001518249512,
+  "overall_dimensions_gltf": [
+    120.58772659301758,
+    58.13628390431404,
+    23.51840591430664
+  ]
+}

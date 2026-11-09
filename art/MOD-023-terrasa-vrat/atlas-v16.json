@@ -1,0 +1,135 @@
+{
+  "source_maps": [
+    {
+      "lod": 0,
+      "map": "color",
+      "image": "texture_0",
+      "original_size": [
+        2048,
+        2048
+      ]
+    },
+    {
+      "lod": 0,
+      "map": "normal",
+      "image": "normal",
+      "original_size": [
+        2048,
+        2048
+      ]
+    },
+    {
+      "lod": 0,
+      "map": "rough",
+      "image": "texture_0_metallic_roughness",
+      "original_size": [
+        2048,
+        2048
+      ]
+    },
+    {
+      "lod": 1,
+      "map": "color",
+      "image": "texture_0.001",
+      "original_size": [
+        2048,
+        2048
+      ]
+    },
+    {
+      "lod": 1,
+      "map": "normal",
+      "image": "normal.001",
+      "original_size": [
+        2048,
+        2048
+      ]
+    },
+    {
+      "lod": 1,
+      "map": "rough",
+      "image": "texture_0_metallic_roughness.001",
+      "original_size": [
+        2048,
+        2048
+      ]
+    },
+    {
+      "lod": 2,
+      "map": "color",
+      "image": "texture_0.002",
+      "original_size": [
+        2048,
+        2048
+      ]
+    },
+    {
+      "lod": 2,
+      "map": "normal",
+      "image": "normal.002",
+      "original_size": [
+        2048,
+        2048
+      ]
+    },
+    {
+      "lod": 2,
+      "map": "rough",
+      "image": "texture_0_metallic_roughness.002",
+      "original_size": [
+        2048,
+        2048
+      ]
+    },
+    {
+      "source": "cluster-remesh-v16",
+      "map": "color",
+      "size": [
+        512,
+        1024
+      ]
+    },
+    {
+      "source": "cluster-remesh-v16",
+      "map": "normal",
+      "size": [
+        512,
+        1024
+      ]
+    },
+    {
+      "source": "cluster-remesh-v16",
+      "map": "rough",
+      "size": [
+        512,
+        1024
+      ]
+    },
+    {
+      "source": "lid-remesh-v15",
+      "map": "color",
+      "size": [
+        512,
+        768
+      ]
+    },
+    {
+      "source": "lid-remesh-v15",
+      "map": "normal",
+      "size": [
+        512,
+        768
+      ]
+    },
+    {
+      "source": "lid-remesh-v15",
+      "map": "rough",
+      "size": [
+        512,
+        768
+      ]
+    }
+  ],
+  "layout": "LOD0 lower-left; LOD1 lower-right; LOD2 upper-left; contact upper-right",
+  "bytes": 3283648
+}

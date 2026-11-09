@@ -1,3 +1,64 @@
+# MOD-023 - revision v16, 2026-11-09 (second review round)
+
+Current review files: **terrasa-vrat-v16.glb**, **preview-v16.png** (1024 square, four views with metre rulers). `view-v16-0..3.png` are individual views; `lods-v16.png` compares all LODs. Previous submissions remain unchanged.
+Issue: https://github.com/garrimajo5/DeepDive/issues/999; existing PR: https://github.com/garrimajo5/DeepDive/pull/1444.
+Rules and role read from origin/main **459caefa70e6af4e8bca4f98da874eae4fc425e1**. Existing order branch retained.
+
+## Review changes
+
+v15 trial reused the original arch and did not resolve the frontal silhouette. It was not submitted for acceptance. v16 uses a **new Meshy arch generation from the same accepted frontal extraction**, plus three new remeshes. A frontal radial contour cage fits the metric opening and body together, preserving the source pores and each remesh's own UV/map pair. This changes the frontal proportions; it is not the old v10 height-lifting function. Side depth tapers towards the crown. Artist review still determines whether the interpretation is acceptable.
+
+The opening now has lower lateral lobes, inset shoulders around 24-25 m, another widening around 29-30 m, and a central crown. `shape-v16.json` measures the exported LOD0 surface, not control points: side body width at heights 10/20/25/30/35/36 m is approximately **15.8 / 13.8 / 14.3 / 13.0 / 14.7 / 15.3 m**; upper body at x=20/25/30 m is **11.75 / 12.57 / 11.68 m**, excluding the central spike. Opening width at height 36 m is approximately **65 m**. These are projected cross-section measures, not uniform wall thickness or a substitute for visual review.
+
+The three lids now use a **Meshy-generated convex mineral shell with a porous edge**, replacing the procedural sphere/disc. All three share the same new geometry and UV. Bounding size remains 1.7 x 1.5 x 0.12 m. Closed lids sit inside a raised lower/lateral mineral lip; upper relief is recessed for the unchanged arc motion. Local clearance corrections follow each static LOD's simplification. The diagnostic support's radial fan was replaced with an irregular rounded mineral patch; its movable three veins, dimensions and pivot are unchanged.
+
+## Sources, tasks and actual cost
+
+Accepted ART-079: `docs/concept-art/terrasa-vrat-ansambl.png` for shape; `terrasa-vrat-gabarity.png` / issue #999 for measurements; `terrasa-vrat-kontakt.png` for cups/lids and diagnosis. Existing `reference-arch.png` is the extracted front without ship or labels. The lid was extracted from the accepted closed-socket panel via Imagegen; `reference-lid-v15.jpg` is a small JPEG archive of the exact PNG supplied to Meshy. PNG SHA256 is in `lid-generation-v15.json`; the original PNG remains local. No external artwork was used.
+
+| Meshy operation | Task ID | Actual credits |
+|---|---|---:|
+| Lid image-to-3D, standard, PBR 2k | 01a1c121-2352-77eb-b77c-d6d8043a3efe | 30 |
+| Lid triangle remesh, target 500, actual 454 | 01a1c123-7356-7417-826a-e7eff33f92ed | 5 |
+| New arch image-to-3D, standard, PBR 2k | 01a1c12a-dab8-719e-a21e-dc6df1502608 | 30 |
+| Arch LOD0, target 34000, actual 35513 | 01a1c12c-e244-7077-b1b0-b48da2470830 | 5 |
+| Arch LOD1, target 8000, actual 8229 | 01a1c130-da73-7285-acff-61092f9bdc2b | 5 |
+| Arch LOD2, target 1500, actual 1499 | 01a1c130-df2e-7274-a4a2-bbeda5fc5597 | 5 |
+
+**This run: 80 credits; cumulative order: 200 (120 previous + 80).** All tasks succeeded. No operation exceeded 100 credits; no regeneration was used for downloading. The connected cup cluster from task `01a1c060-da0f-720a-87db-15296c81a17d` was reused without charge. Raw large GLBs and signed URL sidecars are not committed.
+
+Lid prompt: `Thin slightly convex oval blue gray mineral shell with grown porous rim. Preserve pores, seams and matte stone material from reference. Single lid only, no supporting rock, nonmetal, no emission.`
+
+Arch prompt: `Grown porous matte blue gray mineral arch. Preserve thick folded body, wide spreading roots, two lobed shoulders in the cloud shaped opening, and tall sharp central spike exactly as the reference. The central passage is completely empty. No membranes, no floor, no cables, no emission, no metal.`
+
+## Final GLB
+
+**4,012,232 bytes**, glTF 2.0 binary. Overall x/y/z **120.588 / 58.136 / 23.518 m**, within issue tolerance. Metres; Y up; approach +Z; root pivot (0,0,0); every node scale 1. No skins or animations.
+
+LOD totals including shared moving parts: **41192 / 11675 / 4798** (caps 42000/12000/5000). Shared moving parts: **1458** (cap 2000). Static meshes: one per material under each LOD root, three per LOD. Display only one LOD; Stvorka0/1/2 and Diagnostika stay outside those roots.
+
+Socket centres glTF: (48,1.8,11.8), (52,1.8,11.8), (50,5.264102,11.8), equilateral 4 m. Mouth about 1.6 m with irregular grown lip; cup recess capped at 0.35 m. Lid pivots exactly retained: (48,2.5,11.19), (52,2.5,11.19), (50,5.964102,11.19). Rotation local X 0 to -90 degrees; vertex-centroid lift **1.418300 m** (about 1.4; slight asymmetry of the generated lid). Diagnostika pivot (54.5,3,11.585), footprint 2.855 x 1.843 m, relief 0.07 m. Cables diameter 0.08 m, length 5.967 and 6.065 m.
+
+Three materials, unchanged semantics:
+- Mineral: metallic 0; embedded 2048-square base color, tangent normal, metallic-roughness; no emission. Own 1024-square quadrant for each arch remesh, cup cluster 512 x 1024, new lid 512 x 768; remaining area for diagnostic stone. JPEG quality 65.
+- HumanCable: constant PBR #9C633D, roughness 0.8, no emission or image map.
+- Polyps: eight sparse colonies, 512-square emission mask, dark stalks and luminous tips, #67DDEB / #9AD9E8 source colours (JPEG approximates them), strength 1. No other emission. Palette also #0B1C24/#395361/#82999D/#86BCCB.
+
+## Validation and limitations
+
+`validation-v16.json`: full exported triangle clipping against x +/-30, y 0..36 (1 mm tolerance), zero passage intersections for every LOD; zero degenerate triangles; budgets, unit scales, dimensions, map sizes, pivots, no skins/animations checked.
+`lid-clearance-v16.json`: all three lids against all three static mineral LODs at 5-degree steps from 0 to 90; zero overlapping triangle pairs. Sampled test, not continuous proof.
+`godot-v16.json`: Godot 4.7.2 direct GLTFDocument import, 13 MeshInstance3D, correct maps/emission flags, unit scales, passage ray grid, no errors. No game scene changed, no on-device FPS measurement claimed.
+Visually inspected the four views and all LOD silhouettes. The reference front crop from the review is paired with the new front in the PR.
+
+Differences from the painting: wider upper passage to meet the metric clearance; different pores/asymmetry from Meshy; reduced pore detail in LOD2; contact surface and lid pores remain coarse at close distance. Clearance recesses affect the upper rim. No ship, ground terrace, sea floor or environment included. Numerical checks do not imply artistic acceptance.
+
+Reproduce in Blender 4.5.9: restore Meshy files by the IDs into folders named in the scripts, run `atlas_arch_v16.py`, `assemble_details_v16.py`, then render/validation scripts. Existing standalone Godot audit remains in this order's art folder.
+
+---
+
+## Previous submissions (preserved history)
+
 # MOD-023 - revision v14, 2026-11-09
 
 Current review asset: **terrasa-vrat-v14.glb**; **preview-v14.png** (1024 x 1024, front/side/three-quarter/contact with one lid open and metre rulers). Previous `terrasa-vrat.glb` and `preview.png` remain unchanged as v10.
