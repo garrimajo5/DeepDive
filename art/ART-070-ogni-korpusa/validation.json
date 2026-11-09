@@ -1,48 +1,53 @@
 {
-  "status": "draft_budget_unresolved",
-  "new_lights": 0,
-  "new_textures_bytes": 0,
-  "emissive_elements": 11,
-  "draw_calls_45m": {
-    "baseline": 144,
-    "after": 197,
-    "accepted": false
+  "phone_tested": false,
+  "status": "revision_v4_ready_for_review",
+  "base_main": "98a5d9d",
+  "texture": {
+    "bytes": 8324,
+    "height": 128,
+    "width": 128,
+    "file": "ogni.png"
   },
-  "native_images": [
-    {
-      "name": "12",
-      "size": [
-        1600,
-        720
-      ]
-    },
-    {
-      "name": "45",
-      "size": [
-        1600,
-        720
-      ]
-    },
-    {
-      "name": "surface",
-      "size": [
-        1600,
-        720
-      ]
-    },
-    {
-      "name": "inside",
-      "size": [
-        1600,
-        720
-      ]
-    },
-    {
-      "name": "beacon-off",
-      "size": [
-        1600,
-        720
-      ]
-    }
-  ]
+  "new_light3d": 0,
+  "distance_reference": {
+    "left": [
+      -36,
+      1.6,
+      37
+    ],
+    "right": [
+      36,
+      1.6,
+      37
+    ],
+    "target": [
+      0,
+      1.6,
+      10
+    ],
+    "meters": 45
+  },
+  "draw_calls": {
+    "left": [
+      97,
+      98
+    ],
+    "right": [
+      137,
+      138
+    ],
+    "beacon_off": [
+      137,
+      138
+    ],
+    "inside": [
+      43,
+      43
+    ]
+  },
+  "historical_v2": {
+    "after": 197,
+    "baseline": 196
+  },
+  "accepted": false
 }
