@@ -60,13 +60,37 @@ func test_scena_poses_nose_to_flower() -> void:   # scena=1|2|3 — ракурс
 	ok(ShotSetup.scena_pose(0).is_empty() and ShotSetup.scena_pose(4).is_empty(), "нет ракурса — пусто")
 
 
+func test_scena_ride_sources() -> void:   # высота хода scena=: плавный ход по умолчанию, dno, руками (#1400)
+	const Box := preload("res://tools/pass_box.gd")
+	const Plan := preload("res://tools/pass_plan.gd")
+	for n in range(1, ShotSetup.SCENA.size() + 1):
+		var r: Dictionary = ShotSetup.scena_ride(n)
+		var s := Plan.arc_at(n - 1)
+		var t := Box.station(s)
+		ok(r["y"] >= t["ride"] - 1e-4, "не ниже H+7 в точке %d" % n)
+		for u in Box.stations():
+			ok(r["y"] >= u["ride"] - Box.SLOPE * absf(u["s"] - s) - 1e-4, "огибающая станций: %d, s=%.0f" % [n, u["s"]])
+		ok(r["y"] < Seabed.ICE_Y, "подо льдом: %d" % n)
+		ok(String(r["src"]).contains("pass_box"), "источник — pass_box: %d" % n)
+	var at: Vector2 = ShotSetup.SCENA[1]
+	near(ShotSetup.scena_ride(2, "dno")["y"], Seabed.mesh_height(at.x, at.y) + ShotSetup.SCENA_FLOOR, 1e-4, "dno — 7 м над дном")
+	var hand: Dictionary = ShotSetup.scena_ride(2, "-30.5")
+	near(hand["y"], -30.5, 1e-4, "руками")
+	ok(String(hand["src"]).contains("scena_y=-30.5"), "источник — руками")
+
+
 func test_scene_scena_at_helm() -> void:
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(2)
 	ShotSetup.apply(main, {"scena": "2"})
 	var p: Dictionary = ShotSetup.scena_pose(2)
-	ok(main.helm.pos.is_equal_approx(p["ship"]), "корабль в точке ракурса")
+	var at: Vector2 = ShotSetup.SCENA[1]
+	ok(Vector2(main.helm.pos.x, main.helm.pos.z).is_equal_approx(at), "корабль в точке ракурса")
+	near(main.helm.pos.y, ShotSetup.scena_ride(2)["y"], 1e-4, "без scena_y — плавный ход tools/pass_box.gd")
+	var line := ShotSetup.scena_line(main)
+	ok(line.contains("плавный ход tools/pass_box.gd"), "в подписи — источник высоты: " + line)
+	ok(line.contains("y корабля " + ShotSetup._num(main.helm.pos.y)), "в подписи — фактический y: " + line)
 	near(main.helm.yaw, p["yaw"], 1e-6, "курс к 01")
 	ok(main.pilot.seated, "штатная камера пилота — за штурвалом")
 	main.queue_free()
@@ -78,10 +102,11 @@ func test_scene_scena_motion_holds_ship() -> void:   # scena_t=<с> — мир �
 	tree.root.add_child(main)
 	await frames(2)
 	var t0: float = main.time
-	ShotSetup.apply(main, {"scena": "2", "scena_yaw": "-20", "scena_t": "2"})
+	ShotSetup.apply(main, {"scena": "2", "scena_yaw": "-20", "scena_t": "2", "scena_y": "dno"})
 	var p: Dictionary = ShotSetup.scena_pose(2)
 	near(main.time - t0, 2.0, 0.05, "игра прошла 2 с")
-	ok(main.helm.pos.is_equal_approx(p["ship"]), "корабль не унесло течением")
+	ok(main.helm.pos.is_equal_approx(p["ship"]), "корабль не унесло течением (scena_y=dno — 7 м над дном)")
+	ok(ShotSetup.scena_line(main).contains("scena_y=dno"), "в подписи — источник dno")
 	near(main.helm.yaw, p["yaw"] - deg_to_rad(20.0), 1e-3, "курс правее на 20°")
 	ok(main.pilot.seated, "за штурвалом")
 	main.queue_free()

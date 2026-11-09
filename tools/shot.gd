@@ -34,7 +34,7 @@ extends SceneTree
 ## scena=1 — контрольный ракурс сцены 00 → 01 (#1400): 1 — выход из 00, 2 — середина, 3 — подход к 01; в лог — дальность грунта в окнах
 ## scena_yaw=10 — курс левее на столько градусов (минус — правее)
 ## scena_t=4 — мир идёт столько секунд, корабль висит в точке (кадры движения)
-## scena_y=-34.9 — высота хода, м, вместо 7 м над дном (контур 20×30, tools/pass_box.gd)
+## scena_y=-34.9 — высота хода руками, м; scena_y=dno — 7 м над дном в точке; без ключа — плавный ход tools/pass_box.gd (контур 20×30); в лог — фактический y и источник
 ## zamer=bok — с scena=: фаза «замер» #1498 включена в снимке (4 с, отход 20 с); серпохвост №0 за 26 м: bok — справа, korma — за кормой, nos — перед носом; остальные уведены
 ## zamer_off=2 — с zamer=: погасить прожектор через столько секунд мира (ответ экипажа, дальше отход)
 ## light=0 — погасить прожектор
@@ -475,6 +475,7 @@ func _go() -> void:
 		PlayFrame.compose(img, cap).save_png(out.get_basename() + "-kadr.png")
 	if kv.has("scena"):   # scena=n — с какого расстояния виден грунт в окне (#1400)
 		print(ShotSetup.ground_line(main))
+		print(ShotSetup.scena_line(main))
 	print("SHOT ", out, " ", img.get_size(), " вызовов отрисовки: ",
 		Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
 		", примитивов: ", Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
