@@ -163,3 +163,17 @@ func test_patrol_tool_answer() -> void:
 	ok(r.has("wc") and r.has("cb") and r.has("beam_before"), "итог с промежутками и лучом")
 	var text := String(r["text"])
 	ok(text.contains("ответов ") or text == "тихо", "по сигналу — ответ экипажа: %s" % text)
+
+
+## Бросок во время ответа экипажа (корабль стоит без света) — в итоге с тем, что манило (`_watch`, `lure_of`).
+func test_patrol_tool_charge_while_hushed() -> void:
+	var tool: GDScript = load("res://tools/patrol.gd")
+	var ev: EcoView = tool.make(false, 20261018)
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Vector3(4, -30, 80)
+	ev.preds.all[0].mode = EcoPred.Mode.CHARGE
+	var charge := {}
+	tool._watch(ev, ev.world, ship, [] as Array[Dictionary], 1.0, {}, charge, {}, {})
+	ev.free()
+	eq(charge.get("n", -1), 0, "бросок замечен")
+	eq(String(charge.get("why", "")), "—", "без света и хода манит только след: %s" % charge.get("why", ""))

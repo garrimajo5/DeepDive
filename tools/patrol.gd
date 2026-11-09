@@ -373,7 +373,7 @@ static func _watch(ev: EcoView, w: EcoWorld, ship: EcoLink.ShipState, evs: Array
 	for pr in ev.preds.all:
 		if pr.mode == EcoPred.Mode.CHARGE and charge.is_empty():
 			charge.merge({"t": t, "ship": ship.pos, "at": pr.agent.p, "n": pr.index,
-				"d": pr.agent.p.distance_to(ship.pos)})
+				"d": pr.agent.p.distance_to(ship.pos), "why": lure_of(ev, ship)})
 		if pr.bit_at > 0.0 and bite.is_empty() and w.time - pr.bit_at < DT * 2:
 			bite.merge({"t": t, "ship": ship.pos, "n": pr.index})
 
