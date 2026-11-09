@@ -1,0 +1,109 @@
+{
+  "errors": [],
+  "godot": "4.7.2-stable (official)",
+  "materials": {
+    "HumanCable": {
+      "emission": false,
+      "mask": false,
+      "metallic": 0.0,
+      "normal": false,
+      "roughness_map": false
+    },
+    "Mineral": {
+      "emission": false,
+      "mask": false,
+      "metallic": 0.0,
+      "normal": true,
+      "roughness_map": true
+    },
+    "Polyps": {
+      "emission": true,
+      "mask": true,
+      "metallic": 0.0,
+      "normal": false,
+      "roughness_map": false
+    }
+  },
+  "mesh_count": 13,
+  "meshes": [
+    {
+      "aabb": "[P: (47.93, 0.23, 11.91938), S: (5.44994, 5.104102, 0.121244)]",
+      "node": "LOD0_HumanCable",
+      "scale": "(1.0, 1.0, 1.0)",
+      "triangles": 360
+    },
+    {
+      "aabb": "[P: (-59.73805, 0.0, -11.20777), S: (119.5019, 57.719, 22.98777)]",
+      "node": "LOD0_Mineral",
+      "scale": "(1.0, 1.0, 1.0)",
+      "triangles": 40363
+    },
+    {
+      "aabb": "[P: (47.445, 0.609524, 11.16276), S: (4.610001, 0.848773, 0.330485)]",
+      "node": "LOD0_Polyps",
+      "scale": "(1.0, 1.0, 1.0)",
+      "triangles": 128
+    },
+    {
+      "aabb": "[P: (47.93, 0.23, 11.91938), S: (5.44994, 5.104102, 0.121244)]",
+      "node": "LOD1_HumanCable",
+      "scale": "(1.0, 1.0, 1.0)",
+      "triangles": 360
+    },
+    {
+      "aabb": "[P: (-59.79511, -0.173752, -11.16728), S: (119.5588, 58.17375, 22.92728)]",
+      "node": "LOD1_Mineral",
+      "scale": "(1.0, 1.0, 1.0)",
+      "triangles": 10807
+    },
+    {
+      "aabb": "[P: (47.445, 0.609524, 11.16276), S: (4.610001, 0.848773, 0.330485)]",
+      "node": "LOD1_Polyps",
+      "scale": "(1.0, 1.0, 1.0)",
+      "triangles": 128
+    },
+    {
+      "aabb": "[P: (47.93, 0.23, 11.91938), S: (5.44994, 5.104102, 0.121244)]",
+      "node": "LOD2_HumanCable",
+      "scale": "(1.0, 1.0, 1.0)",
+      "triangles": 360
+    },
+    {
+      "aabb": "[P: (-59.69305, -0.173752, -11.18219), S: (119.4722, 58.17375, 22.94219)]",
+      "node": "LOD2_Mineral",
+      "scale": "(1.0, 1.0, 1.0)",
+      "triangles": 3786
+    },
+    {
+      "aabb": "[P: (47.445, 0.609524, 11.16276), S: (4.610001, 0.848773, 0.330485)]",
+      "node": "LOD2_Polyps",
+      "scale": "(1.0, 1.0, 1.0)",
+      "triangles": 128
+    },
+    {
+      "aabb": "[P: (-0.849999, -1.45, 0.640001), S: (1.699999, 1.5, 0.12)]",
+      "node": "Stvorka0",
+      "scale": "(1.0, 1.0, 1.0)",
+      "triangles": 192
+    },
+    {
+      "aabb": "[P: (-0.849999, -1.45, 0.640001), S: (1.699999, 1.5, 0.12)]",
+      "node": "Stvorka1",
+      "scale": "(1.0, 1.0, 1.0)",
+      "triangles": 192
+    },
+    {
+      "aabb": "[P: (-0.849999, -1.45, 0.640001), S: (1.699999, 1.5, 0.12)]",
+      "node": "Stvorka2",
+      "scale": "(1.0, 1.0, 1.0)",
+      "triangles": 192
+    },
+    {
+      "aabb": "[P: (-1.427628, -0.921488, -0.035), S: (2.855255, 1.842976, 0.07)]",
+      "node": "Diagnostika",
+      "scale": "(1.0, 1.0, 1.0)",
+      "triangles": 96
+    }
+  ],
+  "ray_grid": "3 x 3 rays through each mesh; full triangle volume clipping is in Blender report"
+}

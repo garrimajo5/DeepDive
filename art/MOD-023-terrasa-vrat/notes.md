@@ -1,3 +1,62 @@
+# MOD-023 - revision v14, 2026-11-09
+
+Current review asset: **terrasa-vrat-v14.glb**; **preview-v14.png** (1024 x 1024, front/side/three-quarter/contact with one lid open and metre rulers). Previous `terrasa-vrat.glb` and `preview.png` remain unchanged as v10.
+Issue https://github.com/garrimajo5/DeepDive/issues/999; existing PR https://github.com/garrimajo5/DeepDive/pull/1444.
+Rules re-read from origin/main **98a5d9dd18bdb6ccc513c9363a6a31b3cdf028de**. Existing order branch retained.
+
+## Changes against the review
+
+- Replaced v10's height lifting at the passage with a horizontal mineral-body profile: wider lower lobes, inset shoulders and a curved upper opening. Heights below 36 m are unchanged from the normalized source. Long source edges were subdivided before shaping the crown; only the crown above 36 m was curved, with the apex retained near 58 m. Side thickness now tapers from the base to a pointed crown.
+- Replaced separate procedural socket washers with one image-to-3D porous mineral cluster. Rear mass intersects the support; the three bowls share folded mineral tissue. Preserved the three specified centres and all lid pivots/axes. Local circular scaling, socket depth limit and clearance recesses are in the assembly script.
+- Lids are 32-segment lenticular shells (192 triangles each), 1.7 x 1.5 x 0.12 m; planar UVs avoid the old sphere-UV streaking. The movement stays local X from 0 to -90 degrees, rise 1.400004 m.
+- Each original arch remesh retains its own UV/map pair. New cluster also retains the UV/map pair of its own fine remesh. Local simplifications preserve these UVs.
+
+## Meshy provenance and actual cost
+
+Accepted inputs: ART-079 `docs/concept-art/terrasa-vrat-ansambl.png`, `terrasa-vrat-kontakt.png`; dimensions from `terrasa-vrat-gabarity.png` and issue #999. Original arch extraction `reference-arch.png` and original image-to-3D `01a1b410-e1f4-75a8-baf8-0cb2b9ca718c` reused; its three existing remesh IDs are recorded below in v10 history. No repeated generation for downloading.
+
+This run used Imagegen to extract the accepted contact design, removing labels, people, cables and separate moving lids. `reference-socket-v13.png` was tried first; three separate copies looked disconnected and were rejected. `reference-cluster-v14.png` retains all three open sockets and their continuous mineral base. These are derived references, not new accepted concept sheets.
+
+| Operation | Task ID | Actual credits |
+|---|---|---:|
+| Single socket, standard image-to-3D, PBR 2k | 01a1c04e-2d68-77d9-bf7c-39f48e8a8ef5 | 30 |
+| Single socket, triangle remesh target 450 | 01a1c051-4bc8-761d-95bf-4413671d011d | 5 |
+| Connected cluster, standard image-to-3D, PBR 2k | 01a1c05b-e2b5-73c7-abd7-9b7ca083388d | 30 |
+| Cluster, triangle remesh target 1400 (too coarse at rims) | 01a1c05d-f08d-70a1-a3bc-4095d5dacbe0 | 5 |
+| Cluster, triangle remesh target 3600 (used) | 01a1c060-da0f-720a-87db-15296c81a17d | 5 |
+
+**This run: 75 credits. Order cumulative: 120 credits (previous 45 + 75).** All tasks succeeded; each operation was below the owner's 100-credit threshold. Exact prompts/settings/dispositions are in `socket-generation-v13.json` and `cluster-generation-v14.json`. Raw downloaded GLBs and signed metadata are intentionally not committed; reuse the IDs via Meshy CLI to restore them.
+
+Cluster prompt: `Three recessed mineral contact bowls joined by one continuous porous blue gray grown rock base. Preserve triangular layout, three ports inside each bowl, folded organic rims and natural holes. Matte nonmetal stone, no lids, no cables, no lights, no emission.`
+
+## Final metrics and materials
+
+GLB glTF 2.0, **4,597,380 bytes**; overall x/y/z **119.574 / 58.174 / 23.248 m**. Y up, approach +Z per order, root pivot (0,0,0), all node scales 1. No skeleton or animations.
+LOD totals including the shared moving parts: **41523 / 11967 / 4946**, within 42000 / 12000 / 5000. Moving total **672** (three lids and Diagnostika).
+Three static meshes per LOD, one per material; shared moving nodes outside LOD roots. Display one LOD at a time.
+
+- Mineral: metallic 0, embedded base color, tangent normal and metallic-roughness atlas 2048 x 2048; no emission. Arch LODs use separate 1024-square quadrants; the cluster uses 768 x 1024 within the fourth quadrant; remaining strip is procedural lid/diagnostic stone. JPEG image quality 65.
+- HumanCable: constant PBR ochre #9C633D, roughness 0.8, no emission; two cables 0.08 m diameter, lengths 5.967 / 6.065 m. Unchanged from accepted technical v10 setup.
+- Polyps: embedded 512 x 512 emission mask, stalks dark, tips #67DDEB / #9AD9E8 (JPEG encoding approximates the source colours), strength 1. No other material emits. Eight sparse colonies.
+
+Socket centres in glTF: (48,1.8,11.8), (52,1.8,11.8), (50,5.264102,11.8): equilateral 4 m. Target bowl mouth about 1.6 m, recess limited to 0.35 m. Irregular grown rim is not a machined circle.
+Lid pivots: (48,2.5,11.19), (52,2.5,11.19), (50,5.964102,11.19). Diagnostika pivot (54.5,3,11.585), relief 0.07 m, footprint 2.855 x 1.843 m. Exact exported pivots and dimensions in validation report.
+
+## Checks and limits
+
+- `validation-v14.json`: actual exported triangle counts, file bytes, dimensions, unit scales, maps, pivots; every triangle clipped against the through-passage x +/-30, y 0..36 with 1 mm tolerance: zero intersections on every LOD; zero degenerate triangles; no skins/animations.
+- `lid-clearance-v14.json`: all three lids against each LOD's mineral, 0..90 degrees at 5-degree steps: zero overlapping triangle pairs. This is sampled motion validation, not continuous collision proof.
+- `godot-v14.json`: direct GLTFDocument import in Godot 4.7.2, 13 mesh instances, correct normal/roughness/emission flags, unit scales, 3 x 3 passage rays per mesh, no errors. No game scene or code changed; no device FPS claim.
+- Visually inspected four views in `preview-v14.png` and LOD silhouettes in `lods-v14.png`. Reference sheet and individual views are linked side-by-side in the PR.
+
+Differences from concept: metric passage governs the opening; no ship, ground terrace or seabed is part of this asset. Meshy's pore arrangement and asymmetry differ from the painting; contact relief remains coarse at close range and is simpler in LOD1/2. Lid travel requires clearance recesses above the cups. These implementation choices were made within the model role; artistic acceptance remains with review.
+
+Reproduction: restore each Meshy remesh in the source folders named in the scripts; run `atlas_arch_v14.py`, then `assemble_details_v14.py` in Blender 4.5.9; validation/render scripts read `terrasa-vrat-v14.glb`. Godot audit is the existing standalone script under this order's art folder.
+
+---
+
+## Preserved v10 history
+
 # MOD-023 — сдача 09.11.2026 (v10)
 
 Актуальные файлы: **terrasa-vrat.glb**, **preview.png**. Исторические черновики ниже не являются файлами для встраивания.
