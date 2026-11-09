@@ -187,8 +187,12 @@ static func apply(g: Main, kv: Dictionary) -> void:
 			g.park_at(sp["ship"])
 			if not g.pilot.seated:
 				g.sit_at_helm()
+			if kv.has("zamer"):   # zamer=bok|korma|nos — проба фазы «замер» #1498, серпохвост №0 рядом с кораблём
+				zamer_setup(g, sp["ship"], g.helm.yaw, String(kv["zamer"]))
 			if kv.has("scena_t"):   # scena_t=<с> — мир идёт столько секунд, корабль висит в точке ракурса (кадры движения)
-				scena_run(g, sp["ship"], float(kv["scena_t"]))
+				scena_run(g, sp["ship"], float(kv["scena_t"]), float(kv.get("zamer_off", "-1")))   # zamer_off=<с> — свет гаснет
+				if kv.has("zamer"):
+					zamer_log(g)
 	if kv.has("lore"):  # lore=d07_return,shell03 — знания слоя 1 (#825; ключи LayerLore.KEYS)
 		for k in kv["lore"].split(",", false):
 			g.lore.learn(k)
@@ -308,10 +312,73 @@ const SCENA_FLOOR := 7.0
 const SCENA_DT := 1.0 / 30.0
 
 
-static func scena_run(g: Node, ship: Vector3, seconds: float) -> void:
-	for i in int(round(seconds / SCENA_DT)):
+## light_off ≥ 0 — через столько секунд прожектор гаснет (ответ экипажа на «замер», zamer_off=).
+static func scena_run(g: Node, ship: Vector3, seconds: float, light_off := -1.0) -> void:
+	var n := int(round(seconds / SCENA_DT))
+	var off_at := int(round(light_off / SCENA_DT)) if light_off >= 0.0 else -1
+	for i in n:
+		if i == off_at and g.light_on:
+			g.toggle_light()
 		g.step(SCENA_DT)
 		g.park_at(ship)
+
+
+## Кадры знака #1498 (zamer=): длина фазы и отход — как в рекомендации гейм-дизайнера (09.11), в игре пока выключено.
+const ZAMER_ALERT := 4.0
+const ZAMER_LEAVE := 20.0
+## На каком расстоянии от корабля ставим хищника, м (ближе EcoPred.REACH — свет его зовёт).
+const ZAMER_DIST := 26.0
+## Хищник не ниже этого над видимым дном, м.
+const ZAMER_FLOOR := 3.0
+const ZAMER_SIDES := ["bok", "korma", "nos"]
+
+
+## Где ставить хищника: bok — с правого борта (+X корабля), korma — за кормой (+Z), nos — перед носом (−Z);
+## на высоте корабля, не ниже ZAMER_FLOOR над видимым дном. Другая сторона — Vector3.INF.
+static func zamer_spot(ship: Vector3, yaw: float, side: String) -> Vector3:
+	var fwd := Vector3(-sin(yaw), 0.0, -cos(yaw))
+	var right := Vector3(cos(yaw), 0.0, -sin(yaw))
+	var dir: Vector3
+	match side:
+		"bok":
+			dir = right
+		"korma":
+			dir = -fwd
+		"nos":
+			dir = fwd
+		_:
+			return Vector3.INF
+	var p := ship + dir * ZAMER_DIST
+	p.y = maxf(ship.y, Seabed.mesh_height(p.x, p.z) + ZAMER_FLOOR)
+	return p
+
+
+## Включает фазу «замер» в мире снимка и ставит голодного хищника №0 в zamer_spot; остальных уводит за 400 м.
+static func zamer_setup(g: Node, ship: Vector3, yaw: float, side: String) -> void:
+	var at := zamer_spot(ship, yaw, side)
+	var ps: EcoPred = g.eco.preds
+	if at == Vector3.INF or ps == null or ps.all.is_empty():
+		push_warning("zamer=%s: нет стороны или хищников" % side)
+		return
+	ps.alert = ZAMER_ALERT
+	ps.alert_leave = ZAMER_LEAVE
+	for pr in ps.all:
+		pr.cooldown = 999.0 if pr.index != 0 else 0.0
+		pr.agent.v = Vector3.ZERO
+		pr.agent.p = at if pr.index == 0 else ship + Vector3(400.0 + 30.0 * pr.index, 0.0, 0.0)
+		pr.agent.goal = pr.agent.p
+		pr.prey = null
+		EcoPred._set_mode(pr, EcoPred.Mode.PATROL, 30.0)
+	ps.all[0].hunger = 0.5
+	if not g.light_on:
+		g.toggle_light()
+
+
+## В лог снимка — режим хищника №0 и расстояние до корабля (что поймал кадр).
+static func zamer_log(g: Node) -> void:
+	var pr: EcoPred.Pred = g.eco.preds.all[0]
+	print("zamer: хищник №0 — %s, до корабля %.1f м, свет %s" % [EcoPred.Mode.keys()[pr.mode],
+		pr.agent.distance_to(g.helm.pos), "горит" if g.light_on else "погашен"])
 
 
 ## Поза ракурса scena=n (1…3): корабль в точке SCENA[n − 1] на SCENA_FLOOR над видимым дном, носом к 01.
