@@ -1295,6 +1295,8 @@ func release_world_say() -> void:
 		var text := world_wait
 		world_wait = ""
 		_world_say(text)
+		if qa != null:   # п. 2 #1429 тестер проверяет по логу, а не догадкой по кадру (#1350)
+			qa.note(QaRunner.released_line(text))
 
 
 ## Удар существа не дойдёт до корпуса: облёт в начале забега (#506), обучение у старта (#827), итог забега (#1249).
