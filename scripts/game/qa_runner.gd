@@ -206,6 +206,7 @@ func tick(dt: float) -> void:
 				main.arrival.t = 0.0
 				if c[1]:
 					main.lore.facts.erase(LayerLore.BRIEF)
+				_log("брифинг %s · %s" % ["вкл" if c[1] else "выкл", row3_now()])   # строка мира до плашки (#1429)
 			"voice":   # голос во внутренней связи ART-040 — как событие мира EcoLink.VOICE
 				main.on_eco_event(EcoLink.voice(c[1], c[2], c[3], c[4], c[5]))
 			"slow":   # предложение «Экономно» ART-044 — как после нескольких секунд низких кадр/с
@@ -393,7 +394,26 @@ func state() -> String:
 	return "t %.1f с · %s · свет %s · глубина %.1f м · ход %.2f м/с · курс %d° · корабль (%.1f, %.1f, %.1f) · игрок (%.2f, %.2f) · реактор %s · %s кадр/с" % [
 		time, "за штурвалом" if main.pilot.seated else ("у пульта энергии" if main.at_power else "на ногах"), "вкл" if main.light_on else "выкл", h.depth(), h.speed, Status.course_deg(h.yaw),
 		h.pos.x, h.pos.y, h.pos.z, main.walker.x, main.walker.z, "%s %d°%s" % [str(main.reactor.share), roundi(main.reactor.heat), " сброс" if main.reactor.scram > 0.0 else ""], fps_text()] + worst_text() + ("" if main.breach.status().is_empty() else " · " + main.breach.status()) \
-		+ _run_state()
+		+ _run_state() + (" · " + row3_now() if main.arrival.active() else "")
+
+
+## Строка 3 приборов сейчас и строки мира, которые ждут: в лог у шагов брифинга прибытия (#1429, тестер в #1350 —
+## по кадрам `02r`/`02s` не понять, пришла строка мира до плашки или под ней).
+func row3_now() -> String:
+	return row3_line(main.status_rows()[2], main.message.next if main.message.world else "", main.world_wait)
+
+
+## «строка 3: «…»» или «строка 3: пусто», дальше — строка мира в очереди приборов и отложенная до конца брифинга.
+static func row3_line(row3: Array, queued: String, parked: String) -> String:
+	var parts := PackedStringArray()
+	for p in row3:
+		parts.append(str(p))
+	var out := "строка 3: " + ("пусто" if parts.is_empty() else "«%s»" % " · ".join(parts))
+	if queued != "":
+		out += " · в очереди: «%s»" % queued
+	if parked != "":
+		out += " · ждёт конца брифинга: «%s»" % parked
+	return out
 
 
 ## Худший кадр с прошлого скриншота для строки состояния: « · худший кадр 726 мс (шаг 53 press, логика 9 мс)».
