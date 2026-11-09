@@ -1759,6 +1759,10 @@ func _place_camera() -> void:
 	camera.rotation = Vector3(walker.pitch, cam_yaw, 0.0)
 	var eye := flyby_cam if flyby_cam.current else camera
 	grade.apply(-eye.global_position.y, silt.k)   # ART-065: по глубине камеры, не корабля
+	var view := get_viewport().get_camera_3d()   # огни корпуса ART-070 — по камере в кадре (облёт, с борта, снимки)
+	if view != null:
+		hull.set_lights(hull.to_local(view.global_position), time, vitals.energy,
+				vitals.lamp_k(time, zap.flicker > 0.0), wreck.t)
 
 
 func _update_ui() -> void:
