@@ -158,3 +158,57 @@ func test_buried_ship_comes_up() -> void:
 	s.pos = Vector3(0.0, -57.0, 0.0)
 	s.update(1.0 / 60.0)
 	ok(_dig(s) <= 1e-3, "вытолкнуло: %.3f м" % _dig(s))
+
+
+## Гряда поперёк хода (гаусс, гребень 8 м над дном): корабль у дна на ходу вперёд.
+func _ridge(z0: float) -> Callable:
+	return func(_x: float, z: float) -> float: return -40.0 + 8.0 * exp(-pow((z - z0) / 6.0, 2.0))
+
+
+## Гребень проходит под килём от носа к корме: днище сплошное, предел не «пилит» между точками днища (#1481) —
+## подъём за метр хода мал, пока гребень под серединой корпуса (не у носа и не у выступов кормы).
+func test_crest_under_keel_is_smooth() -> void:
+	var s := Helm.Ship.new()
+	s.ground = _ridge(0.0)
+	var worst := 0.0
+	var prev := s.floor_at(Vector3(0.0, 0.0, 4.0), 0.0)
+	var z := 4.0
+	while z > -14.0:   # гребень в осях корабля — от z −4 до +18 (носовая оболочка до кормового перехода)
+		z -= 0.1
+		var f := s.floor_at(Vector3(0.0, 0.0, z), 0.0)
+		worst = maxf(worst, (f - prev) / 0.1)
+		prev = f
+	ok(worst * 4.0 < Vitals.SCRAPE_LIFT, "на 4 м/с гребень под килём поднимает на %.2f м/с" % (worst * 4.0))
+
+
+## У места 00 корма стоит на гряде (#1481, отчёт тестера fe65b4e): полный ход вперёд — корму тянет через гребень,
+## корабль поднимается, но удара «о дно» нет. В гряду носом — удар есть.
+func test_stern_on_ridge_no_scrape() -> void:
+	var s := Helm.Ship.new()
+	s.ground = _ridge(26.0)
+	s.pos = Vector3(0.0, -20.0, 0.0)
+	s.in_vert = -1.0
+	_run(s, 10.0)
+	s.in_vert = 0.0
+	near(s.pos.y, s.floor_at(s.pos, s.yaw), 1e-3, "корма легла на гряду")
+	ok(s.top_z > 0.0, "держит корма: z %.1f" % s.top_z)
+	s.in_thrust = 1.0
+	var dt := 1.0 / 60.0
+	var hits := 0
+	var v := Vitals.new()
+	for i in 360:
+		s.update(dt)
+		v.update(dt, 1.0, 0.0, false, 1.0)
+		if v.scrape(s.bump / dt, s.speed) != s.speed:
+			hits += 1
+	eq(hits, 0, "через гряду кормой — без удара")
+	var r := Helm.Ship.new()
+	r.ground = _ridge(-30.0)
+	r.pos = Vector3(0.0, -33.0, 0.0)
+	r.in_thrust = 1.0
+	r.speed = 6.0
+	var worst := 0.0
+	for i in 240:
+		r.update(dt)
+		worst = maxf(worst, r.bump / dt)
+	ok(worst > Vitals.SCRAPE_LIFT, "носом в гряду — удар: %.2f м/с" % worst)
