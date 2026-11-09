@@ -10,6 +10,10 @@ var rudders: Array[MeshInstance3D] = []
 var _rotor_parts: Array = []
 var _rudder_parts: Array = []
 var _mats := {}
+var zap_cards: MeshInstance3D   ## дуги у окна и у дна ART-068 (Zap.card_strips), видны только в разряде
+var _cards_lite := false
+var _cards_contact := Vector3.INF
+var _rim_lite := false   ## «Экономно» ART-044: ободок ART-076 слабее, без примыканий
 
 
 func _ready() -> void:
@@ -22,6 +26,7 @@ func _ready() -> void:
 	body.mesh = mesh
 	_setup(body)
 	add_child(body)
+	_make_zap_cards()
 	for part in HullPlan.parts():
 		if not HullMesh.drawn(part) or not HullMesh.moving(part):
 			continue
@@ -40,6 +45,35 @@ func _ready() -> void:
 		else:
 			rudders.append(mi)
 			_rudder_parts.append(part)
+
+
+func _make_zap_cards() -> void:
+	zap_cards = MeshInstance3D.new()
+	zap_cards.name = "Дуги у окна и дна"
+	zap_cards.mesh = ArrayMesh.new()
+	var m := ShaderMaterial.new()
+	m.shader = load("res://shaders/zap_cards.gdshader")
+	m.set_shader_parameter("arc_tex", load(Zap.ARC_TEX))
+	m.set_shader_parameter("zap_dur", Zap.FLICKER)
+	m.set_shader_parameter("zap_fps", Zap.ARC_FPS)
+	m.set_shader_parameter("zap_flow", Zap.ARC_FLOW)
+	m.set_shader_parameter("window_gone", Zap.WINDOW_GONE)
+	m.set_shader_parameter("core_color", Zap.ARC_CORE_COLOR)
+	m.set_shader_parameter("halo_color", Zap.ARC_HALO_COLOR)
+	m.set_shader_parameter("core", Zap.ARC_CORE)
+	zap_cards.material_override = m
+	_cards_mesh(Vector3.INF)
+	_setup(zap_cards)
+	zap_cards.extra_cull_margin = 4.0   # дуга у окна сдвигается в шейдере
+	zap_cards.visible = false
+	add_child(zap_cards)
+
+
+func _cards_mesh(contact: Vector3) -> void:
+	_cards_contact = contact
+	var mesh: ArrayMesh = zap_cards.mesh
+	mesh.clear_surfaces()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, Zap.card_arrays(Zap.card_strips(contact)))
 
 
 func _setup(mi: MeshInstance3D) -> void:
@@ -78,6 +112,43 @@ static func plating() -> ShaderMaterial:
 	m.set_shader_parameter("damage_depth", HullMesh.DAMAGE_DEPTH)
 	m.set_shader_parameter("relief", true)
 	m.set_shader_parameter("wear", 0.0)
+	m.set_shader_parameter("arc_tex", load(Zap.ARC_TEX))   # разряд ART-068
+	m.set_shader_parameter("zap_t", -1.0)
+	m.set_shader_parameter("zap_dur", Zap.FLICKER)
+	m.set_shader_parameter("zap_from", Zap.ARC_FROM)
+	m.set_shader_parameter("zap_speed", Zap.ARC_SPEED)
+	m.set_shader_parameter("zap_width", Zap.ARC_WIDTH)
+	m.set_shader_parameter("zap_fps", Zap.ARC_FPS)
+	m.set_shader_parameter("zap_tile", Zap.ARC_TILE)
+	m.set_shader_parameter("zap_flow", Zap.ARC_FLOW)
+	m.set_shader_parameter("zap_core_color", Zap.ARC_CORE_COLOR)
+	m.set_shader_parameter("zap_halo_color", Zap.ARC_HALO_COLOR)
+	m.set_shader_parameter("zap_core", Zap.ARC_CORE)
+	m.set_shader_parameter("zap_seam", Zap.ARC_SEAM)
+	m.set_shader_parameter("rim_tex", load(HullMesh.RIM_TEX))   # ободок и щели ART-076
+	m.set_shader_parameter("rim_row", 0.0)
+	m.set_shader_parameter("rim_k", 1.0)
+	m.set_shader_parameter("rim_contact", HullMesh.RIM_CONTACT)
+	m.set_shader_parameter("rim_zap", HullMesh.RIM_ZAP)
+	m.set_shader_parameter("ao_contacts", true)
+	m.set_shader_parameter("ao_seam", HullMesh.AO_SEAM)
+	m.set_shader_parameter("ao_contact", HullMesh.AO_CONTACT)
+	m.set_shader_parameter("ao_min", HullMesh.AO_MIN)
+	m.set_shader_parameter("ao_albedo", HullMesh.AO_ALBEDO)
+	m.set_shader_parameter("ao_light", HullMesh.AO_LIGHT)
+	m.set_shader_parameter("ao_protect", HullMesh.AO_PROTECT)
+	m.set_shader_parameter("ao_mount", HullMesh.AO_MOUNT)
+	m.set_shader_parameter("ao_mount_half", HullMesh.AO_MOUNT_HALF)
+	m.set_shader_parameter("ao_mount_feather", HullMesh.AO_MOUNT_FEATHER)
+	m.set_shader_parameter("ao_recess", HullMesh.AO_RECESS)
+	m.set_shader_parameter("ao_recess_r", HullMesh.AO_RECESS_R)
+	m.set_shader_parameter("ao_recess_z", HullMesh.AO_RECESS_Z)
+	m.set_shader_parameter("ao_rudder", HullMesh.AO_RUDDER)
+	m.set_shader_parameter("ao_rudder_r", HullMesh.AO_RUDDER_R)
+	m.set_shader_parameter("ao_stab_up", HullMesh.AO_STAB_UP)
+	m.set_shader_parameter("ao_stab_up_r", HullMesh.AO_STAB_UP_R)
+	m.set_shader_parameter("ao_stab_down", HullMesh.AO_STAB_DOWN)
+	m.set_shader_parameter("ao_stab_down_r", HullMesh.AO_STAB_DOWN_R)
 	return m
 
 
@@ -87,6 +158,47 @@ func set_relief(on: bool) -> void:
 	var m: ShaderMaterial = _mats.get(-1)
 	if m != null:
 		m.set_shader_parameter("relief", on)
+		m.set_shader_parameter("zap_lite", not on)   # «Экономно»: дуги одним кадром
+		m.set_shader_parameter("ao_contacts", on)    # и щели ART-076 только по шву
+	_rim_lite = not on   # и ободок ART-076 слабее
+	_cards_lite = not on   # и без карточек у окна и дна
+
+
+## Разряд ART-068 по обшивке: t — время с начала разряда (Zap.arc_time), −1 — нет.
+func set_zap(t: float) -> void:
+	var m: ShaderMaterial = _mats.get(-1)
+	if m == null:
+		return
+	if not is_equal_approx(float(m.get_shader_parameter("zap_t")), t):
+		m.set_shader_parameter("zap_t", t)
+
+
+## Карточки разряда ART-068 у окна и у дна: t — Zap.arc_time (−1 — нет), contact — Zap.ground_contact (INF — дно
+## далеко, только дуга у окна). Вне разряда и на «Экономно» скрыты (+1 вызов только во время разряда).
+func set_zap_cards(t: float, contact: Vector3) -> void:
+	if zap_cards == null:
+		return
+	var on := t >= 0.0 and t < Zap.FLICKER and not _cards_lite
+	zap_cards.visible = on
+	if not on:
+		return
+	if contact != _cards_contact:
+		_cards_mesh(contact)
+	(zap_cards.material_override as ShaderMaterial).set_shader_parameter("zap_t", t)
+
+
+## Ободок и затенение щелей ART-076: строка LUT по глубине корабля (м), ил `Silt.k` гасит кромку, alive —
+## `HullMesh.rim_alive(wreck.t)` (шторка «Корпус разрушен»). Две uniform на материал обшивки, без новых вызовов.
+func set_rim(depth: float, silt_k: float, alive: float) -> void:
+	var m: ShaderMaterial = _mats.get(-1)
+	if m == null:
+		return
+	var row := HullMesh.rim_row(depth)
+	var k := HullMesh.rim_k(alive, silt_k, _rim_lite)
+	if not is_equal_approx(float(m.get_shader_parameter("rim_row")), row):
+		m.set_shader_parameter("rim_row", row)
+	if not is_equal_approx(float(m.get_shader_parameter("rim_k")), k):
+		m.set_shader_parameter("rim_k", k)
 
 
 ## Следы повреждений ART-049 по прочности корпуса (`Vitals.hull`, %): одна uniform на материал обшивки.

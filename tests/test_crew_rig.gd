@@ -22,6 +22,15 @@ func _pose(m: Crew.Member, look: int = 0) -> Dictionary:
 	return out
 
 
+## #847: номер кости по имени — из таблицы, а не поиском по списку (pose зовёт его десятки раз на фигуру за кадр).
+func test_rest_index_table() -> void:
+	var r := _rest(0)
+	eq(r.index.size(), r.names.size(), "все кости в таблице")
+	for i in r.names.size():
+		eq(r.idx(r.names[i]), i, r.names[i])
+	eq(r.idx("нет такой"), -1, "нет кости — −1, как find")
+
+
 func test_standing_matches_model_rest() -> void:
 	for look in CrewRig.MODELS.size():
 		var m := Crew.Member.new()
@@ -137,6 +146,22 @@ func test_hands_rest_on_rim_not_inside() -> void:   # #427: ладони не п
 					hands[side].size(), what])
 				eq(front, 0, "пальцы не проходят сквозь колесо (%s)" % what)
 				ok(gap < 0.015, "кисть лежит на ободе: зазор %.3f м (%s)" % [gap, what])
+
+
+func test_pilot_elbows_bent() -> void:   # #1387: руки не вытянуты в струну, предплечье идёт к ободу снизу
+	for turn in [0.0, 0.8, -0.8]:
+		var m := Crew.Member.new()
+		m.follow(0.0, Deck.SEAT_Z, 0.0, true, turn, 0.1)
+		var j := m.joints()
+		for k in ["l", "r"]:
+			var sh: Vector3 = j["shoulder_" + k]
+			var el: Vector3 = j["elbow_" + k]
+			var wr: Vector3 = j["wrist_" + k]
+			var bend := rad_to_deg((sh - el).angle_to(wr - el))
+			var what := "поворот %.1f, рука %s" % [turn, k]
+			ok(bend < 150.0, "локоть согнут: %.0f° (%s)" % [bend, what])
+			ok(el.y < sh.y - 0.04, "локоть ниже плеча (%s)" % what)
+			ok(wr.y > el.y + 0.03, "предплечье к ободу снизу (%s)" % what)
 
 
 func test_knees_forward_elbows_back() -> void:

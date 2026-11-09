@@ -232,6 +232,14 @@ y — высота, лёд на y = 0, метры. Упоминания Unity о
 `serpohvost-chelyust.glb`. Стыки и оси (хвост ±35° по Y, челюсть до −35° по X) — `serpohvost.md`, раздел MOD-011;
 превью — `serpohvost-modeli.png`. Ставит в сцену задача потока Б «Серпохвосты».
 
+## ANIM-001 Серпохвост — скелет и четыре клипа — принято
+- Исходник: MOD-011 (`models/serpohvost-*.glb`), уточнение владельца — удар серпом вертикальный.
+
+**Принято 25.10.2026** (PR #654, папка `art/ANIM-001-serpohvost`, v2): `models/serpohvost-anim.glb` — 10 костей,
+три сетки со skin, 5 719 треугольников, клипы `Swim` 2,4 с и `SwimFast` 1,2 с (цикл — в `.import`), `Bite` 1,2 с,
+`TailStrike` 0,6 с; кости, тайминги и подключение — `serpohvost.md`, раздел ANIM-001; превью — `serpohvost-anim.jpg`,
+`serpohvost-udar.gif`. Ставит в сцену задача потока Б в `docs/grafika-plan-eco.md` (Б3, плавность поведения).
+
 ## MOD-014 Щиток и рычаг разряда — принято
 - Исходник: ART-015, `razryad-shchitok.png`, решения — `razryad.md`.
 
@@ -658,3 +666,105 @@ ORM = AO/шероховатость/металл, в существующие `P
 лист `razryad-korpus-list.png`, кадры `razryad-okno.jpg`, `razryad-dno.jpg`; решения — `razryad-korpus.md`: дуги в шейдере
 обшивки бегут от носа к корме фронтом 50 м/с и гаснут к 0,8 с, 10 Гц, швы светятся; у окна и у дна — один общий меш
 карточек (+1 вызов), без новых огней; на «Экономно» статичный кадр. Встройка — задача ROADMAP потока А.
+## ART-069 Слои воды — принято
+- Исходник: ART-059 (`voda-glubina.md`, `Seabed.Water`), ART-052, ART-056, ART-058, ART-048.
+
+**Принято 23.10.2026** (PR #493, ветка `art/ART-069-sloi-vody`): профили `sloi-vody.json`, лист `sloi-vody-list.png`, кадры
+`sloi-vody-30m.jpg`, `sloi-vody-45m-vverh.jpg`; решения — `sloi-vody.md`: подлёдная муть 0…6 м, термоклин 28,5…31,5 м,
+пыль 0…3 м над дном по мировой глубине пикселя, аналитическая плотность вдоль луча в материалах дна, льда и дальней воды
+(0 новых вызовов, базу ART-059 восстанавливать в `FOG`), дрожание ±0,12 м; на «Экономно» выкл. Встройка — задача ROADMAP потока А.
+## ART-051 Ледокрыл — принято
+- Исходник: бестиарий («Подлёдье»), `scripts/core/eco/ray.gd`, `RayView`, ART-011 (светляки), `docs/world.md`.
+
+**Принято 23.10.2026** (PR #400, ветка `art/ART-051-ledokryl`): размерный лист `ledokryl-razmery.png` (главный для геометрии),
+анатомия `ledokryl-anatomiya.png`, сцена `ledokryl-pod-ledom.jpg`; решения — `ledokryl.md`: размах 14 м, тело 9 + хвост 9 м,
+14 слабых точек по кромкам, рот-щель со скребком и резонатор снизу, присоски отдельно (`EcoRemora`), взмах по формуле `RayView`.
+Модель — следующий заказ MOD потока Б.
+## ART-071 Пар вентиля сброса в машинном — принято
+- Исходник: ART-019/ART-055 (`mashinnoe.md`, `otseki-materialy.md`), ART-064 (`svet-vnutri.md`), ART-058, ART-063.
+
+**Принято 23.10.2026** (PR #502, ветка `art/ART-071-par-ventilya`): атлас `par-ventilya-atlas.png` (RGBA 512², 4×4, прямая альфа),
+лист `par-ventilya-list.png`, кадры `par-ventilya-obychno.jpg`, `par-ventilya-peregrev.jpg`, `par-ventilya-otsek.jpg`; решения —
+`par-ventilya.md`: один MultiMesh из 48 билбордов (24 на «Экономно»), жизнь 1,25 с, струя рвётся у 0,3 м на клубы, кадры
+смешиваются по возрасту, неосвещённый с подкраской #C6D6DE / #E8C49F по перегреву, без новых огней. Встройка — задача ROADMAP потока А.
+## ART-072 Пробоина изнутри: струя, брызги, искры — принято
+- Исходник: ART-013 (`proboina.md`), ART-064 (`svet-vnutri.md`), ART-071 (`par-ventilya.md`), ART-063.
+
+**Принято 23.10.2026** (PR #507, ветка `art/ART-072-proboina-chastitsy`): атлас `proboina-chastitsy-atlas.png` (RGBA 512², 4×4,
+прямая альфа), лист `proboina-chastitsy-list.png`, кадры `proboina-chastitsy-mostik.jpg`, `-svarka.jpg`, `-svarka-sboku.jpg`;
+решения — `proboina-chastitsy.md`: три MultiMesh с общим материалом вместо трёх `CPUParticles3D` в `BreachView` (≤ 112
+частиц, ≤ 3 вызова, 56 на «Экономно»), струя по баллистике `Breach.JET_*` до воды, брызги на воде, искры-чёрточки с отскоком,
+без новых огней. Встройка — задача ROADMAP потока А.
+## ART-073 Вода в шахте нижнего шлюза — принято
+- Исходник: ART-010 (`tryum.md`), ART-055, ART-059, ART-064, ART-067 (`bliki-vody.md`).
+
+**Принято 23.10.2026** (PR #512, ветка `art/ART-073-shlyuz-voda`): нормали `shlyuz-voda-normal.png` (512²), атлас колец
+`shlyuz-voda-kolca.png` (4×4, R — высота, A — маска), лист `shlyuz-voda-list.png`, кадры `shlyuz-voda-pokoy.jpg`, `-tros.jpg`,
+`-obrazec.jpg`; решения — `shlyuz-voda.md`: одна плоскость 2,2² м на `Airlock.Y + 0,03` (+1 вызов, скрыта при закрытом
+шлюзе), рябь двумя выборками, френель и аналитический блик полосы плафона, кольца и всплеск по входу/выходу захвата,
+без новых огней. Встройка — задача ROADMAP потока А.
+## ART-074 «Корабль устал» внутри: потёки, капли, искры, пар — принято
+- Исходник: ART-049 (`povrezhdeniya.md`), ART-054/055 (материалы), ART-064, ART-071, ART-072.
+
+**Принято 23.10.2026** (PR #515, ветка `art/ART-074-ustalost-korpusa`): маска `ustalost-maska.png` (RGB 512², R потёки, G пятна
+пола, B порог потери), атлас `ustalost-atlas.png` (RGBA 512², 4×4, прямая альфа), лист `ustalost-list.png`, проверка
+`ustalost-proverka.png`, кадры `ustalost-mostik-15.jpg`, `ustalost-mashinnoe-15.jpg`; решения — `ustalost-korpusa.md`: потёки
+и пятна по `Vitals.hull` в `ship_surface.gdshader` (0 вызовов), капли/искры/пар — один MultiMesh из 24 карточек (12 на
+«Экономно»), без новых огней и без красного. Встройка — задача ROADMAP потока А.
+## ART-075 Лёд снизу: окно Снелля и отражение воды — принято
+- Исходник: ART-056 (`led-snizu.md`), ART-052 (`luchi.md`), ART-057, ART-059, ART-069.
+
+**Принято 23.10.2026** (PR #523, ветка `art/ART-075-led-otrazhenie`): LUT `led-otrazhenie-gradient.png` (RGBA 256×16, линейные
+данные, A — френель + окно Снелля с затуханием по глубине), маска гладкости `led-otrazhenie-maska.png` (L8 512², плитка 16 м),
+лист `led-otrazhenie-list.png`, проверка `led-otrazhenie-proverka.png`, параметры `led-otrazhenie-parametry.json`; решения —
+`led-otrazhenie.md`: смешение в `ice.gdshader` двумя выборками (одна на «Экономно»), 0 вызовов, трещины пропускают, ил гасит.
+Встройка — задача ROADMAP потока А.
+## ART-076 Ободок и затенение щелей корпуса снаружи — принято
+- Исходник: ART-001/024 (корпус и обшивка), ART-049, ART-053, ART-059, ART-068, ART-069.
+
+**Принято 24.10.2026** (PR #529, ветка `art/ART-076-obodok-korpusa`): LUT `obodok-gradient.png` (RGBA 256×8, линейные данные,
+по `1 − dot(N,V)` и глубине, строка ила нулевая), лист `obodok-list.png`, проверка `obodok-proverka.png`, кадр `obodok-45m.jpg`,
+параметры `obodok-parametry.json`; решения — `obodok-korpusa.md`: ободок цвета воды в EMISSION `hull_plating.gdshader` по
+геометрической нормали (1 выборка), AO процедурный — швы по маске ART-024 и поля примыканий `HullPlan`, ил и разрушение
+гасят, 0 вызовов. Встройка — задача ROADMAP потока А.
+## ART-077 Конденсат и иней на окнах мостика — принято
+- Исходник: ART-057 (стекло окон), ART-064, ART-067, ART-059, ART-074.
+
+**Принято 24.10.2026** (PR #534, ветка `art/ART-077-kondensat-okon`): маска `kondensat-maska.png` (RGBA8 256², линейные
+данные, UV стекла: капли, дорожки, иней, порог от рамы; центр 56 % чистый), лист `kondensat-list.png`, проверка
+`kondensat-proverka.png`, параметры `kondensat-parametry.json`; решения — `kondensat-okon.md`: слой в `window_glass.gdshader`
+по глубине (с 8 м, полный к 45 м), корпусу и нагреву реактора, сначала вариант «Экономно» (1 выборка, без экранного буфера),
+0 вызовов. Встройка — задача ROADMAP потока А.
+## ART-079 Терраса врат — принято
+- Исходник: `uzel-terrasa-vrat.jpg`, `docs/world.md`, #818 (места 07/08), лист корабля `kovcheg-7-rakursy.png`.
+
+**Принято 27.10.2026** (PR #857, ветка `art/ART-079-terrasa-vrat`): листы `terrasa-vrat-ansambl.png`, `terrasa-vrat-kontakt.png`,
+схема `terrasa-vrat-gabarity.png`, иконки `ikonka-terrasa-vrat.png`, `ikonka-nablyudenie-polya.png`; решения — `terrasa-vrat.md`:
+арка 120 × 58 × 23 м, проход 60 × 36 м, карман Ø 100 м, бюджет модели 59 тыс. треуг. с LOD, 3 материала. Глубина пола 65 м —
+предложение, проверить при сборке места 07. Модель — следующий заказ MOD.
+## ART-080 Инеевая бахрома и ледяная моль — принято
+- Исходник: `docs/bestiary.md`, `svetovoy-kolodets.md`, `ledokryl.md`, `led-snizu.md`, #818 (место 05).
+
+**Принято 27.10.2026** (PR #864, ветка `art/ART-080-bahroma-mol`): листы `inevaya-bahroma-list.png`, `ledyanaya-mol-list.png`,
+атлас `ledyanaya-mol-atlas.png` (RGBA 256², 2×2); решения — `inevaya-bahroma-i-mol.md`: бахрома 48 нитей одним MultiMesh
+(24 на «Экономно»), след касания #67DDEB до 60 с без bloom, моль ≤ 300 карточек одним MultiMesh (96 на «Экономно»), часть
+на наружном стекле, тревогу не закрывает. Встройка — поток Б (#836).
+## ART-081 Купольник — рабочий Хранителя — принято
+- Исходник: `docs/world.md` (раздел 5), `warden.jpg` (материал), ART-079 (`terrasa-vrat.md`), #818 (место 07).
+
+**Принято 27.10.2026** (PR #871, ветка `art/ART-081-kupolnik`): листы `kupolnik-rakursy.png`, `kupolnik-stvorka.png`;
+решения — `kupolnik.md`: габарит 3 × 1,8 × 1,2 м, три захвата веером под передней кромкой (вид сбоку неточен), два
+сифона, фотофоры #67DDEB с общим импульсом команды; модель ≤ 8000 треуг., один материал, ≈ 20 костей, клипы `Swim`,
+`OpenPetal`, `Idle`. Дальше — заказы MOD и ANIM, встройка — поток Б (#837).
+## ART-082 Иконки мест 00, 09, 10 — принято
+- Исходник: иконки ART-005 и ART-079, `karta-sloj1.md`, #818 (места 00, 09, 10).
+
+**Принято 28.10.2026** (PR #910, ветка `art/ART-082-ikonki-mest`): иконки `ikonka-start.png`, `ikonka-tihaya-zavod.png`,
+`ikonka-spusk-k-lesu.png` (256² RGBA), лист `ikonki-mest-sloj1-list.png`; решения — `ikonki-mest-sloj1.md`. В игре
+заменили временные значки: `textures/places/start.png`, `cove.png`, `descent.png`.
+## ART-083 Прядь инеевой бахромы — принято
+- Исходник: ART-080 (`inevaya-bahroma-list.png`, `inevaya-bahroma-i-mol.md`), #836 (место 05).
+
+**Принято 07.11.2026** (PR #1353, ветка `art/ART-083-bahroma-pryad`): карты пряди `models/inevaya-bahroma-pryad-cvet.png`,
+`-maska.png`, `-normal.png` (256 × 1024), лист `inevaya-bahroma-pryad.png`; решения — `inevaya-bahroma-pryad.md`. В игре
+заменили процедурный рисунок нитей `FringeView` (полоса в 2 раза шире нити, силуэт — альфа карты).

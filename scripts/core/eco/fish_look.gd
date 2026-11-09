@@ -14,6 +14,12 @@ const ALARM_GLOW := 1.6
 ## Виляние: размах (рад) и частота (рад/с).
 const WIGGLE := 0.25
 const WIGGLE_RATE := 12.0
+## Размах виляния по ходу (Б3, плавность поведения): медленнее EcoFish.MIN_SPEED — доля WIGGLE_SLOW, от
+## EcoFish.CALM_SPEED и быстрее — полный WIGGLE; между — плавно. Доля `Fish.wag` догоняет нужную не быстрее
+## WAG_FOLLOW в секунду (шаг мира, `wag_step`): рыбка, что зависла у дома или в кроне, едва шевелит телом, рванула —
+## машет во всю ширь, а не одинаково всегда. Ритм тот же (фаза не прыгает).
+const WIGGLE_SLOW := 0.4
+const WAG_FOLLOW := 1.5
 ## Тело: полуширина, полувысота, нос и корма по z (м).
 const HALF_WIDTH := 0.07
 const HALF_HEIGHT := 0.1
@@ -25,6 +31,26 @@ const SLANT := 0.015
 const BODY_COLOR := Color("344F63")
 ## Доля цвета полос на концах хвоста.
 const FIN_GLOW := 0.6
+## Разброс особей (Б4, EcoVary): размер ±12 %, тело светлее-темнее ±20 %, частота виляния ±15 %.
+const SIZE_SPREAD := 0.12
+const SHADE_SPREAD := 0.2
+const RATE_SPREAD := 0.15
+## Волна хвоста (Б3): задняя часть тела и хвост гнутся вбок бегущей волной к кончику, поверх виляния всего тела.
+## Гнётся то, что за TAIL_FROM (м по z), сильнее к кончику TAIL_TIP (квадрат доли); размах кончика TAIL_AMP (м),
+## частота TAIL_RATE (рад/с, у особи ±TAIL_RATE_SPREAD по фазе), волна вдоль тела TAIL_K (рад/м). В шейдере FishView —
+## двойник tail_wave; фаза особи — tail_phase в альфе цвета экземпляра.
+const TAIL_FROM := 0.05
+const TAIL_TIP := -0.42
+const TAIL_AMP := 0.05
+const TAIL_RATE := 9.0
+const TAIL_RATE_SPREAD := 0.15
+const TAIL_K := 9.0
+## Взмах грудных плавников (Б3, у форм с весом в канале b цвета вершины — пестрянки EcoPestrLook; у светляка вес 0):
+## кончик ходит вверх-вниз на ±PEC_AMP (м формы) с частотой PEC_RATE (рад/с), правый и левый — со сдвигом PEC_SKEW
+## (рад) — гребут вразнобой. Двойник шейдера FishView — fin_flap.
+const PEC_AMP := 0.035
+const PEC_RATE := 6.0
+const PEC_SKEW := 1.2
 
 ## Чем окрашена вершина.
 enum Paint { BODY, STRIPE, FIN }
@@ -125,25 +151,87 @@ static func stripe(f: EcoFish.Fish) -> Color:
 	return Color(c.r * k, c.g * k, c.b * k)
 
 
-## Цвет вершины по краске: тело тёмное всегда, полосы и концы хвоста — светом стаи.
+## Размер рыбки в форме: свой у каждой особи (EcoVary) × размер возраста (молодь мельче).
+static func scale(f: EcoFish.Fish) -> float:
+	return f.size * EcoVary.spread(f.index, EcoVary.SIZE, SIZE_SPREAD)
+
+
+## Множитель цвета тела особи: одни рыбки светлее, другие темнее.
+static func shade(f: EcoFish.Fish) -> float:
+	return EcoVary.spread(f.index, EcoVary.SHADE, SHADE_SPREAD)
+
+
+## Частота виляния особи (рад/с): стая не машет хвостами в лад.
+static func wiggle_rate(f: EcoFish.Fish) -> float:
+	return WIGGLE_RATE * EcoVary.spread(f.index, EcoVary.RATE, RATE_SPREAD)
+
+
+## Доля изгиба точки формы с z (0 — жёсткая голова, 1 — кончик хвоста): квадрат доли пути от TAIL_FROM к TAIL_TIP.
+static func tail_bend(z: float) -> float:
+	var s := clampf((TAIL_FROM - z) / (TAIL_FROM - TAIL_TIP), 0.0, 1.0)
+	return s * s
+
+
+## Фаза волны хвоста особи (доля оборота 0…1): от её фазы виляния — соседки в стае машут вразнобой.
+static func tail_phase(f: EcoFish.Fish) -> float:
+	return fposmod(f.phase / TAU, 1.0)
+
+
+## Сдвиг вбок (м, по оси x формы) точки формы с z в момент t шейдера у особи с фазой a (tail_phase); sway_k — 0
+## на «Экономно». Двойник вершинного шейдера FishView.
+static func tail_wave(z: float, t: float, a: float, sway_k := 1.0) -> float:
+	var rate := TAIL_RATE * (1.0 - TAIL_RATE_SPREAD + 2.0 * TAIL_RATE_SPREAD * fposmod(a * 7.13, 1.0))
+	return sin(t * rate + a * TAU + z * TAIL_K) * TAIL_AMP * tail_bend(z) * sway_k
+
+
+## Сдвиг вверх (м, по оси y формы) точки плавника с боком x и весом взмаха w (канал b цвета вершины) в момент t
+## у особи с фазой a; sway_k — 0 на «Экономно». Двойник вершинного шейдера FishView.
+static func fin_flap(x: float, w: float, t: float, a: float, sway_k := 1.0) -> float:
+	return sin(t * PEC_RATE + a * TAU + signf(x) * PEC_SKEW) * PEC_AMP * w * sway_k
+
+
+## Нужная доля размаха виляния на ходу speed (м/с): WIGGLE_SLOW … 1.
+static func wag_want(speed: float) -> float:
+	return lerpf(WIGGLE_SLOW, 1.0, smoothstep(EcoFish.MIN_SPEED, EcoFish.CALM_SPEED, speed))
+
+
+## Доля размаха wag шагом мира dt к нужной на ходу speed; wag < 0 (ещё не плыла, вернулась после съедения) —
+## сразу нужная.
+static func wag_step(wag: float, speed: float, dt: float) -> float:
+	var want := wag_want(speed)
+	return want if wag < 0.0 else move_toward(wag, want, WAG_FOLLOW * dt)
+
+
+## Доля размаха рыбки сейчас: `Fish.wag`, а до первого шага — по её ходу.
+static func wag_of(f: EcoFish.Fish) -> float:
+	return f.wag if f.wag >= 0.0 else wag_want(f.agent.v.length())
+
+
+## Цвет тела особи: BODY_COLOR × shade().
+static func body_color(f: EcoFish.Fish) -> Color:
+	var k := shade(f)
+	return Color(BODY_COLOR.r * k, BODY_COLOR.g * k, BODY_COLOR.b * k)
+
+
+## Цвет вершины по краске: тело тёмное (своего оттенка, в тревоге не меняется), полосы и концы хвоста — светом стаи.
 static func vertex_color(f: EcoFish.Fish, p: Paint) -> Color:
 	if p == Paint.BODY:
-		return BODY_COLOR
+		return body_color(f)
 	var c := stripe(f)
 	return Color(c.r * FIN_GLOW, c.g * FIN_GLOW, c.b * FIN_GLOW) if p == Paint.FIN else c
 
 
 ## Куда смотрит нос: по скорости (вверх-вниз тоже), с вилянием вокруг вертикали.
 static func forward(f: EcoFish.Fish, t: float) -> Vector3:
-	var v := f.agent.v
+	var v := f.look if f.look.length_squared() > 1e-8 else f.agent.v   # нос догоняет скорость (EcoFish.turn)
 	var dir := v.normalized() if v.length_squared() > 1e-8 else Vector3(0, 0, 1)
-	var w := sin(t * WIGGLE_RATE + f.phase) * WIGGLE
+	var w := sin(t * wiggle_rate(f) + f.phase) * WIGGLE * wag_of(f)
 	var cw := cos(w)
 	var sw := sin(w)
 	return Vector3(dir.x * cw + dir.z * sw, dir.y, -dir.x * sw + dir.z * cw)
 
 
-## Расстановка рыбки в мире: столбцы — бок, спина, нос формы (× размер рыбки: молодь мельче). Съеденная — нулевой basis (стянута в точку).
+## Расстановка рыбки в мире: столбцы — бок, спина, нос формы (× scale(): своя у особи, молодь мельче). Съеденная — нулевой basis (стянута в точку).
 static func basis(f: EcoFish.Fish, t: float) -> Basis:
 	if not f.agent.alive:
 		return Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO)
@@ -152,7 +240,8 @@ static func basis(f: EcoFish.Fish, t: float) -> Basis:
 	var side := Vector3(fw.z, 0, -fw.x)
 	side = side.normalized() if side.length() > 1e-4 else Vector3(1, 0, 0)
 	var up := fw.cross(side)
-	return Basis(side * f.size, up * f.size, fw * f.size)
+	var k := scale(f)
+	return Basis(side * k, up * k, fw * k)
 
 
 ## Место вершины i формы для рыбки в момент t (то, что нарисует MultiMesh).

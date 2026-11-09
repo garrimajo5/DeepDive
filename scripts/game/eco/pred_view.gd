@@ -1,62 +1,205 @@
 class_name PredView
 extends Node3D
-## Серпохвосты в сцене: у каждого — тело, хвост со серпом и нижняя челюсть из моделей художника MOD-011
-## (3 вызова отрисовки на зверя, 5 719 треугольников). Место и курс — из мира, хвост и пасть — EcoPredLook.
-## Глаза и фотофоры светятся сами (карта свечения в GLB). Стоит на слое отмели (OceanView.LAYER_WORLD).
+## Серпохвосты в сцене: у каждого — модель MOD-011 на скелете ANIM-001 (`models/serpohvost-anim.glb`, три сетки со
+## skin — 3 вызова отрисовки на зверя, 5 719 треугольников). Место и курс — из мира, клипы выбирает EcoPredLook:
+## Swim и SwimFast смешиваются по скорости (Blend2 с общей фазой), Bite — поверх, только челюсть, TailStrike — после
+## укуса корпуса. Дерево анимации идёт вручную от времени мира (`sync`) — у гостя сети мир свой, клипы тоже.
+## Глаза и фотофоры светятся сами (карта свечения в GLB). Муть у дна от броска (EcoPredDust) — дочерний MultiMesh
+## «Муть» в мировых координатах на общем шейдере EcoShaders.MIST (INK), +1 вызов. Стоит на слое отмели
+## (OceanView.LAYER_WORLD).
+## Дышит жабрами — тело шире и выше в такт (`EcoPredLook.breath`, Б3), в броске — нет.
+## Голос SND-008 (`EcoPredSound`): у каждого два плеера `AudioStreamPlayer3D` на шине «Мир» — щелчки поиска и
+## разовые (рык броска, укус, уход после разряда), чтобы щелчок не обрывал рык.
 
-## Как быстро пасть догоняет нужное раскрытие (1/с).
-const JAW_FOLLOW := 8.0
+## Узлы дерева анимации (parameters/<узел>/…) — StringName: строка не разбирается в путь каждый кадр (#850).
+const P_SWIM := &"parameters/ts_swim/scale"
+const P_FAST := &"parameters/ts_fast/scale"
+const P_MIX := &"parameters/mix/blend_amount"
+const P_STRIKE := &"parameters/strike/request"
+const P_BITE := &"parameters/bite/request"
+const P_STRIKE_ON := &"parameters/strike/active"
+const P_BITE_ON := &"parameters/bite/active"
 
 var preds: EcoPred
-## Узел каждого хищника (в порядке preds.all) и его хвост и челюсть.
+## Узел каждого хищника (в порядке preds.all), его дерево анимации и выбор разовых клипов.
 var bodies: Array[Node3D] = []
-var tails: Array[Node3D] = []
-var jaws: Array[Node3D] = []
+var trees: Array[AnimationTree] = []
+var cues: Array[EcoPredLook.Cues] = []
+## Часы скелета каждого (LOD анимации: вдали реже, дальше EcoPredLook.HIDE_FAR — спрятан и стоит, #850).
+var clocks: Array[EcoPredLook.Clock] = []
+## Голос каждого (EcoPredSound.Call) и его плееры: щелчки и разовые звуки; last_cue — что прозвучало (для тестов).
+var voices: Array[EcoPredSound.Call] = []
+var clicks: Array[AudioStreamPlayer3D] = []
+var calls: Array[AudioStreamPlayer3D] = []
+var last_cue: Array[int] = []
+var _streams := {}
+## «Экономно» (Б6, `set_lite`): скелет реже уже с EcoPredLook.ANIM_MID_LITE — поза раз в ANIM_MID_STEP, дальше
+## ANIM_FAR_LITE — раз в ANIM_FAR_STEP. Модель, место, курс, укусы и удары те же.
+var lite := false
+
+## Муть от броска у дна и её MultiMesh; буфер мути — для тестов.
+var dust := EcoPredDust.new()
+var dust_view: MultiMeshInstance3D
+## Буфер мути (EcoDustBuffer, issue #732).
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
 
 var _last_t := 0.0
+var _started := false
 
 
 func _init(system: EcoPred) -> void:
 	preds = system
 	name = "Серпохвосты"
-	var body_scene: PackedScene = load(EcoPredLook.BODY_GLB)
-	var tail_scene: PackedScene = load(EcoPredLook.TAIL_GLB)
-	var jaw_scene: PackedScene = load(EcoPredLook.JAW_GLB)
+	var scene: PackedScene = load(EcoPredLook.RIG_GLB)
+	var blend := _blend_tree()
 	for pr in preds.all:
-		var root := Node3D.new()
+		var root: Node3D = scene.instantiate()
 		root.name = "Серпохвост %d" % (pr.index + 1)
 		add_child(root)
-		root.add_child(_part(body_scene, Vector3.ZERO))
-		var tail := _part(tail_scene, EcoPredLook.TAIL_ROOT)
-		root.add_child(tail)
-		var jaw := _part(jaw_scene, EcoPredLook.JAW_HINGE)
-		root.add_child(jaw)
+		for m: MeshInstance3D in root.find_children("*", "MeshInstance3D", true, false):
+			m.layers = OceanView.LAYER_WORLD
+			EcoShadows.cast(m)
+		var at := AnimationTree.new()
+		at.name = "Клипы"
+		root.add_child(at)
+		at.anim_player = NodePath("../AnimationPlayer")
+		at.tree_root = blend
+		at.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+		at.active = true
 		bodies.append(root)
-		tails.append(tail)
-		jaws.append(jaw)
+		trees.append(at)
+		cues.append(EcoPredLook.Cues.new())
+		clocks.append(EcoPredLook.Clock.new())
+		voices.append(EcoPredSound.Call.new(pr.index))
+		clicks.append(_player(root, "Щелчки", EcoPredSound.CLICK_FAR))
+		calls.append(_player(root, "Голос", EcoPredSound.LOUD_FAR))
+		last_cue.append(EcoPredSound.Cue.NONE)
+	dust_view = GrazerView.build_dust(EcoPredDust.POOL)
+	add_child(dust_view)
 	sync(0.0, Vector3(1e6, 0, 1e6))
 
 
-## Часть модели на своём месте; все меши — на слой отмели, без теней.
-static func _part(scene: PackedScene, at: Vector3) -> Node3D:
-	var n: Node3D = scene.instantiate()
-	n.position = at
-	for m: MeshInstance3D in n.find_children("*", "MeshInstance3D", true, false):
-		m.layers = OceanView.LAYER_WORLD
-		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	return n
+func _player(root: Node3D, title: String, far: float) -> AudioStreamPlayer3D:
+	var p := AudioStreamPlayer3D.new()
+	p.name = title
+	p.bus = SoundMix.WORLD
+	p.unit_size = EcoPredSound.UNIT
+	p.max_distance = far
+	p.attenuation_filter_cutoff_hz = EcoPredSound.MUFFLE_HZ
+	p.attenuation_filter_db = EcoPredSound.MUFFLE_DB
+	root.add_child(p)
+	return p
 
 
-## Поставить хищников по миру в момент t; ship — где корабль (пасть раскрывается в броске).
-func sync(t: float, ship: Vector3) -> void:
+## Сыграть звук cue зверя i (не в дереве сцены — только запомнить).
+func _voice(i: int, cue: EcoPredSound.Cue) -> void:
+	last_cue[i] = cue
+	if cue == EcoPredSound.Cue.NONE:
+		return
+	var p := clicks[i] if cue == EcoPredSound.Cue.CLICK else calls[i]
+	var path := EcoPredSound.path_of(cue)
+	if not _streams.has(path):
+		_streams[path] = load(path)
+	p.stream = _streams[path]
+	p.volume_db = EcoPredSound.CLICK_DB if cue == EcoPredSound.Cue.CLICK else EcoPredSound.LOUD_DB
+	if p.stream and p.is_inside_tree():
+		p.play()
+
+
+## «Экономно» — скелет реже (EcoPredLook.Clock.step_at).
+func set_lite(on: bool) -> void:
+	lite = on
+
+
+## Общее дерево: Swim и SwimFast (каждый со своей скоростью, фаза одна) → Blend2 → удар серпом → укус (челюсть).
+static func _blend_tree() -> AnimationNodeBlendTree:
+	var bt := AnimationNodeBlendTree.new()
+	var swim := AnimationNodeAnimation.new()
+	swim.animation = EcoPredLook.SWIM
+	var fast := AnimationNodeAnimation.new()
+	fast.animation = EcoPredLook.SWIM_FAST
+	var strike_clip := AnimationNodeAnimation.new()
+	strike_clip.animation = EcoPredLook.STRIKE
+	var bite_clip := AnimationNodeAnimation.new()
+	bite_clip.animation = EcoPredLook.BITE
+	var mix := AnimationNodeBlend2.new()
+	mix.sync = true  # бросок идёт и при нулевом весе — фазы не расходятся
+	var strike := _shot()
+	var bite := _shot()
+	bite.filter_enabled = true
+	for b in EcoPredLook.BITE_BONES:
+		bite.set_filter_path(NodePath("SerpohvostRig/Skeleton3D:" + b), true)
+	bt.add_node("swim", swim, Vector2(0, 0))
+	bt.add_node("fast", fast, Vector2(0, 200))
+	bt.add_node("ts_swim", AnimationNodeTimeScale.new(), Vector2(200, 0))
+	bt.add_node("ts_fast", AnimationNodeTimeScale.new(), Vector2(200, 200))
+	bt.add_node("mix", mix, Vector2(400, 100))
+	bt.add_node("strike_clip", strike_clip, Vector2(400, 300))
+	bt.add_node("strike", strike, Vector2(600, 100))
+	bt.add_node("bite_clip", bite_clip, Vector2(600, 300))
+	bt.add_node("bite", bite, Vector2(800, 100))
+	bt.connect_node("ts_swim", 0, "swim")
+	bt.connect_node("ts_fast", 0, "fast")
+	bt.connect_node("mix", 0, "ts_swim")
+	bt.connect_node("mix", 1, "ts_fast")
+	bt.connect_node("strike", 0, "mix")
+	bt.connect_node("strike", 1, "strike_clip")
+	bt.connect_node("bite", 0, "strike")
+	bt.connect_node("bite", 1, "bite_clip")
+	bt.connect_node("output", 0, "bite")
+	return bt
+
+
+static func _shot() -> AnimationNodeOneShot:
+	var s := AnimationNodeOneShot.new()
+	s.fadein_time = EcoPredLook.FADE_IN
+	s.fadeout_time = EcoPredLook.FADE_OUT
+	return s
+
+
+## Поставить хищников по миру в момент t; ship — где корабль (укус в броске, дальние — без смены клипов).
+## state — корабль для мути (в луче прожектора светлее), flow — течение (уносит муть), ground — дно мира.
+func sync(t: float, ship: Vector3, state: EcoLink.ShipState = null, flow := Vector3.ZERO,
+		ground := Callable()) -> void:
+	_sync_dust(t, ship, state, flow, ground)
 	var dt := clampf(t - _last_t, 0.0, 0.1)
 	_last_t = t
 	for i in preds.all.size():
 		var pr := preds.all[i]
 		var root := bodies[i]
-		root.visible = pr.agent.alive
-		root.transform = Transform3D(EcoPredLook.basis(pr), pr.agent.p)
-		tails[i].rotation.y = EcoPredLook.tail_angle(pr, t)
-		var want := EcoPredLook.jaw_angle(pr, ship, t)
-		var now := -jaws[i].rotation.x
-		jaws[i].rotation.x = -lerpf(now, want, minf(1.0, dt * JAW_FOLLOW)) if dt > 0.0 else -want
+		var dist := pr.agent.distance_to(ship)
+		root.visible = pr.agent.alive and dist <= EcoPredLook.HIDE_FAR
+		var breath := EcoPredLook.breath_scale(EcoPredLook.breath(pr, t))
+		root.transform = Transform3D(EcoPredLook.basis(pr).scaled_local(breath), pr.agent.p)
+		var at := trees[i]
+		var cue := cues[i].update(pr, ship, t, dist > EcoPredLook.CUE_FAR)
+		_voice(i, voices[i].update(pr, t, dist) if pr.agent.alive else EcoPredSound.Cue.NONE)
+		var step := clocks[i].tick(dt, dist, lite)
+		if not _started:  # у каждого своя фаза плавания — не машут хвостами в лад
+			step = pr.index * 0.83
+		elif not root.visible:
+			step = 0.0
+		elif step <= 0.0 and (cue["strike"] or cue["bite"]):
+			step = clocks[i].flush()   # на «Экономно» между позами: разовый клип не теряется
+		if step <= 0.0:
+			continue  # спрятан или вдали между позами — дерево не трогаем: укусов и ударов там нет (CUE_FAR < ANIM_FAR)
+		var rate := EcoPredLook.swim_rate(pr)
+		at.set(P_SWIM, rate * EcoPredLook.SWIM_LEN)
+		at.set(P_FAST, rate * EcoPredLook.SWIM_FAST_LEN)
+		at.set(P_MIX, EcoPredLook.swim_mix(pr))
+		if cue["strike"]:
+			at.set(P_STRIKE, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
+		if cue["bite"]:
+			at.set(P_BITE, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
+		at.advance(step)
+	_started = true
+
+
+func _sync_dust(t: float, ship: Vector3, state: EcoLink.ShipState, flow: Vector3, ground: Callable) -> void:
+	dust.update(preds, t, ship, ground)
+	_dust.pack(dust.dust, t, flow, state, EcoPredDust.COLOR, EcoPredDust.LIT,
+			Seabed.mesh_height)
+	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)

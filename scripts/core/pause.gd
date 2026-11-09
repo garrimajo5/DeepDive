@@ -1,17 +1,28 @@
 class_name Pause
 extends RefCounted
 ## Пауза одиночного забега по ART-037 (`docs/concept-art/menyu.md`, `menyu-pauza.png`, `menyu-sostoyaniya.png`):
-## системная «Назад» в забеге — «Продолжить», «Новый забег», «Настройки» (погашена до своей части), «Выйти в меню»;
+## системная «Назад» в забеге — «Продолжить», «Новый забег», «Настройки» (`Settings`, возврат в паузу), «Выйти в меню»;
 ## «Новый забег» и «Выйти в меню» — через подтверждение, в нём выделено «Нет». «Назад» закрывает сначала диалог,
 ## потом паузу. Здесь — состояние, кнопки и раскладка без узлов; рисует `scripts/game/pause_panel.gd`
-## (`main.pause_panel`), шаг — `Main._pause_step`, «Назад» — `Main.back_pressed`. Макет 2400×1080, масштаб и
+## (`main.pause_panel`), шаг — `PauseFlow.pause_step`, «Назад» — `Main.back_pressed`. Макет 2400×1080, масштаб и
 ## обрезка боков — `Splash`. Места текста — верх видимых глифов, по центру макета.
+## Кооп (`mode` "host" / "guest"): «Меню забега» с подписью «Вы — хост · забег продолжается» — общий мир не стоит
+## (`stops_world`); у гостя «Продолжить», «Настройки», «Покинуть экипаж», у хоста — четыре кнопки, «Новый забег» и
+## «Выйти в меню» предупреждают «Забег закончится у всех игроков» (`menyu-sostoyaniya.png`).
+## Кампания слоя 1 (#823): в одиночной паузе «Сохранить» после «Схемы корабля» (`SOLO_ITEMS`, шесть кнопок плотнее —
+## `BUTTON_6`, `STEP_6`); нажата — подпись «Сохранено» (`saved`), пауза остаётся открытой.
 
 const TITLE := "Пауза"
+const NET_TITLE := "Меню забега"
 const TITLE_TOP := 120.0
 const TITLE_PX := 64.0
+const SUB_TOP := 217.0   ## подпись коопа
+const SUB_PX := 32.0
+const SUB := {"host": "Вы — хост · забег продолжается", "guest": "Вы — гость · забег продолжается"}
 const BUTTON := Rect2(820, 310, 760, 112)   ## первая кнопка; следующие ниже на STEP
-const STEP := 142.0
+const STEP := 136.0   ## шаг пунктов со «Схемой корабля» ART-042
+const BUTTON_6 := Rect2(820, 290, 760, 104)   ## шесть кнопок (одиночная пауза с «Сохранить»): первая
+const STEP_6 := 120.0
 const BUTTON_PX := 38.0
 
 ## Подтверждение: окно, заголовок и строка (верх глифов), «Да» / «Нет».
@@ -20,6 +31,7 @@ const ASK_TOP := 352.0
 const ASK_PX := 48.0
 const LINE_TOP := 432.0
 const LINE_PX := 34.0
+const LINE_STEP := 52.0   ## вторая строка подтверждения ниже первой
 const YES := Rect2(780, 640, 380, 112)
 const NO := Rect2(1240, 640, 380, 112)
 ## Тексты подтверждений: заголовок, строка (замечание приёмки — у выхода одна строка «Забег будет потерян.»).
@@ -27,34 +39,103 @@ const ASK := {
 	"new": ["Начать новый забег?", "Текущий забег будет потерян."],
 	"exit": ["Выйти в меню?", "Забег будет потерян."],
 }
+## Кооп: подтверждения хоста (забег кончится у всех) и гостя.
+const ASK_NET := {
+	"new": ["Начать новый забег?", "Забег закончится у всех игроков.", "Экипаж начнёт спуск заново."],
+	"exit": ["Выйти в меню?", "Забег закончится у всех игроков.", "Завершить забег экипажа?"],
+	"leave": ["Покинуть экипаж?", "Вы выйдете из текущего забега."],
+}
 const DIM := 0.62   ## затемнение живой сцены под паузой
 
 ## Кнопки сверху вниз: id, подпись.
-const ITEMS := [["resume", "Продолжить"], ["new", "Новый забег"], ["settings", "Настройки"], ["exit", "Выйти в меню"]]
+## «Схема корабля» ART-042 — сразу после «Продолжить» (`ShipMap`, пауза остаётся открытой под схемой).
+const ITEMS := [["resume", "Продолжить"], ["map", "Схема корабля"], ["new", "Новый забег"], ["settings", "Настройки"],
+	["exit", "Выйти в меню"]]
+## Одиночная пауза: «Сохранить» (#823) после «Схемы корабля»; «Сохранено» — подпись после нажатия.
+const SOLO_ITEMS := [["resume", "Продолжить"], ["map", "Схема корабля"], ["save", "Сохранить"], ["new", "Новый забег"],
+	["settings", "Настройки"], ["exit", "Выйти в меню"]]
+const SAVED := "Сохранено"
+const GUEST_ITEMS := [["resume", "Продолжить"], ["map", "Схема корабля"], ["settings", "Настройки"],
+	["leave", "Покинуть экипаж"]]
 const MAIN_ITEM := "resume"
+const MODES := ["solo", "host", "guest"]
 
 var open := false
-var ask := ""   ## открытое подтверждение: "new" / "exit"; "" — нет
-## «Настройки» — следующей частью ART-037.
-var enabled := {"resume": true, "new": true, "settings": false, "exit": true}
+var ask := ""   ## открытое подтверждение: "new" / "exit" / "leave"; "" — нет
+var mode := "solo"   ## "solo" — пауза, игра стоит; "host" / "guest" — меню сетевого забега, мир идёт
+var enabled := {"resume": true, "map": true, "save": true, "new": true, "settings": true, "exit": true, "leave": true}
+var saved := false   ## «Сохранить» нажата в этой паузе — на кнопке «Сохранено»
 
 
-## Прямоугольник i-й кнопки в макете.
-static func button_rect(i: int) -> Rect2:
+## Кнопки режима m сверху вниз: [id, подпись].
+static func items_of(m: String) -> Array:
+	match m:
+		"guest":
+			return GUEST_ITEMS
+		"host":
+			return ITEMS
+	return SOLO_ITEMS
+
+
+## Подпись кнопки id: «Сохранить» после нажатия — «Сохранено».
+func label_of(it: Array) -> String:
+	return SAVED if it[0] == "save" and saved else it[1]
+
+
+func items() -> Array:
+	return items_of(mode)
+
+
+## Режим меню на следующее открытие (открытое не меняется).
+func set_mode(m: String) -> void:
+	if not open and m in MODES:
+		mode = m
+
+
+## Пауза одиночного забега останавливает игру; меню сетевого — нет: общий мир идёт.
+func stops_world() -> bool:
+	return mode == "solo"
+
+
+func title() -> String:
+	return TITLE if mode == "solo" else NET_TITLE
+
+
+func subtitle() -> String:
+	return SUB.get(mode, "")
+
+
+## Строки открытого подтверждения: заголовок и одна-две строки пояснения.
+func ask_lines() -> Array:
+	if ask == "":
+		return []
+	return (ASK if mode == "solo" else ASK_NET).get(ask, [])
+
+
+## Прямоугольник i-й из n кнопок в макете.
+static func button_rect(i: int, n: int = ITEMS.size()) -> Rect2:
+	if n > ITEMS.size():
+		return Rect2(BUTTON_6.position + Vector2(0.0, STEP_6 * i), BUTTON_6.size)
 	return Rect2(BUTTON.position + Vector2(0.0, STEP * i), BUTTON.size)
 
 
-## Прямоугольник кнопки id на экране size (и «yes» / «no» подтверждения).
-static func screen_rect(id: String, size: Vector2) -> Rect2:
+## Прямоугольник кнопки id на экране size в режиме m (и «yes» / «no» подтверждения).
+static func screen_rect(id: String, size: Vector2, m: String = "solo") -> Rect2:
 	match id:
 		"yes":
 			return Splash.rect_to_screen(YES, size)
 		"no":
 			return Splash.rect_to_screen(NO, size)
-	for i in ITEMS.size():
-		if ITEMS[i][0] == id:
-			return Splash.rect_to_screen(button_rect(i), size)
+	var list := items_of(m)
+	for i in list.size():
+		if list[i][0] == id:
+			return Splash.rect_to_screen(button_rect(i, list.size()), size)
 	return Rect2()
+
+
+## Прямоугольник кнопки id в текущем режиме.
+func rect(id: String, size: Vector2) -> Rect2:
+	return screen_rect(id, size, mode)
 
 
 ## Системная «Назад»: закрыть подтверждение, иначе закрыть паузу, иначе открыть её.
@@ -64,6 +145,7 @@ func back() -> String:
 		ask = ""
 		return ""
 	open = not open
+	saved = false
 	return "pause" if open else "resume"
 
 
@@ -72,18 +154,15 @@ func hit(p: Vector2, size: Vector2) -> String:
 	if not open:
 		return ""
 	if ask != "":
-		for id: String in ["yes", "no"]:
-			if screen_rect(id, size).has_point(p):
-				return id
-		return ""
-	for it: Array in ITEMS:
-		if enabled.get(it[0], false) and screen_rect(it[0], size).has_point(p):
-			return it[0]
-	return ""
+		return Splash.hit_ids(p, size, ["yes", "no"], screen_rect)
+	return Splash.hit_ids(p, size, items().map(func(it: Array) -> String: return it[0]), rect,
+			func(id: String) -> bool: return enabled.get(id, false))
 
 
 ## Нажатие кнопки id. Возвращает, что сделать игре: "resume" — играть дальше, "new" — новый забег, "exit" — в главное
-## меню (пауза закрыта); "" — ничего (открыто или закрыто подтверждение).
+## меню, "leave" — гость покидает экипаж (пауза закрыта), "settings" — настройки поверх паузы (пауза открыта), "map" —
+## схема корабля ART-042 поверх паузы;
+## "save" — записать сохранение (пауза открыта, на кнопке «Сохранено»); "" — ничего (открыто или закрыто подтверждение).
 func press(id: String) -> String:
 	if not open:
 		return ""
@@ -97,13 +176,18 @@ func press(id: String) -> String:
 			"no":
 				ask = ""
 		return ""
-	if not enabled.get(id, false):
+	if not enabled.get(id, false) or not items().any(func(it: Array) -> bool: return it[0] == id):
 		return ""
 	match id:
 		"resume":
 			open = false
 			return "resume"
-		"new", "exit":
+		"settings", "map":
+			return id
+		"save":
+			saved = true
+			return "save"
+		"new", "exit", "leave":
 			ask = id
 	return ""
 
@@ -111,3 +195,4 @@ func press(id: String) -> String:
 func close() -> void:
 	open = false
 	ask = ""
+	saved = false

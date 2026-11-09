@@ -98,9 +98,11 @@ func test_shafts_stand_on_cracks() -> void:
 
 
 func test_caustics_under_cracks() -> void:
-	near(IceSheet.caustic(0.0), 0.06, 1e-6, "у льда 0,06")
-	near(IceSheet.caustic(12.0), 0.06 / exp(1.0), 1e-6, "exp(−глубина дна / 12)")
-	ok(IceSheet.caustic(60.0) < 0.001, "глубоко — нет")
+	near(IceSheet.caustic(0.0), IceSheet.CAUSTIC, 1e-6, "у льда — полная сила")
+	near(IceSheet.caustic(IceSheet.CAUSTIC_DEPTH), IceSheet.CAUSTIC / exp(1.0), 1e-6, "exp(−глубина дна / CAUSTIC_DEPTH)")
+	ok(IceSheet.caustic(60.0) < IceSheet.caustic(30.0), "глубже — слабее")
+	near(IceSheet.caustic_net(0.0), 0.6, 1e-6, "сеть без трещины — как была")
+	ok(IceSheet.caustic_net(1.0) >= 3.0 * IceSheet.caustic_net(0.0), "под трещиной сеть втрое ярче")
 	var ocean := OceanView.new()
 	tree.root.add_child(ocean)
 	await frames(1)
@@ -108,5 +110,86 @@ func test_caustics_under_cracks() -> void:
 	eq((m.get_shader_parameter("crack_tex") as Texture2D).resource_path, IceSheet.CRACK_MASK, "дно — та же маска трещин")
 	near(float(m.get_shader_parameter("gate_scale")), IceSheet.GATE_SCALE, 1e-6, "и тот же шум открытости")
 	near(float(m.get_shader_parameter("crack_caustic")), IceSheet.CAUSTIC, 1e-6)
+	near(float(m.get_shader_parameter("crack_depth")), IceSheet.CAUSTIC_DEPTH, 1e-6)
+	near(float(m.get_shader_parameter("crack_net")), IceSheet.CAUSTIC_NET, 1e-6, "шейдер — та же сила сети")
 	ocean.queue_free()
 	await frames(1)
+
+
+## #445: свет под трещинами виден на настоящем дне отмели (30…47 м подо льдом), а не только у льда. При прежних
+## 0,06·exp(−d/12) на медиане дна было 0,002 — тестер не видел каустик.
+func test_caustics_visible_on_shallows_floor() -> void:
+	var hs: Array[float] = []
+	for x in range(-150, 151, 25):
+		for z in range(-150, 151, 25):
+			hs.append(Seabed.ICE_Y - Seabed.height(x, z))
+	hs.sort()
+	var median := hs[hs.size() / 2]
+	ok(median > 30.0, "дно отмели глубоко подо льдом (%.0f м)" % median)
+	ok(IceSheet.caustic(median) >= 0.04, "на медиане дна свет трещин ≥ 0,04 (%.4f)" % IceSheet.caustic(median))
+	ok(IceSheet.caustic(hs[-1]) >= 0.025, "и на самом глубоком месте рядом виден (%.4f)" % IceSheet.caustic(hs[-1]))
+	ok(IceSheet.caustic(0.0) <= 0.15, "у самого льда не выбеливает дно")
+
+
+## ART-075: строка LUT по глубине — ключи 0/8/20/45/90 м → строки 0/3/7/11/15, между ними линейно.
+func test_reflect_row() -> void:
+	near(IceSheet.row(0.0), 0.0, 1e-6)
+	near(IceSheet.row(8.0), 3.0, 1e-6)
+	near(IceSheet.row(20.0), 7.0, 1e-6)
+	near(IceSheet.row(45.0), 11.0, 1e-6)
+	near(IceSheet.row(90.0), 15.0, 1e-6)
+	near(IceSheet.row(4.0), 1.5, 1e-6, "между ключами — линейно")
+	near(IceSheet.row(32.5), 9.0, 1e-6, "строка 9 таблицы — 32,5 м")
+	near(IceSheet.row(-3.0), 0.0, 1e-6, "над льдом — строка поверхности")
+	near(IceSheet.row(200.0), 15.0, 1e-6, "глубже 90 м — последняя строка")
+
+
+## Окно Снелля: вне окна (вдоль льда) зеркало, сверху прозрачно; глубже — слабее; шершавая грань мягчит границу.
+func test_snell_lut() -> void:
+	var t: Texture2D = load(IceSheet.REFLECT_LUT)
+	var img := t.get_image()
+	eq(img.get_size(), Vector2i(256, 16), "LUT 256×16")
+	ok(not img.has_mipmaps(), "LUT без mipmap")
+	var a := func(mu: float, depth: float) -> float:
+		var lk := IceSheet.lookup(mu, 1.0)
+		return img.get_pixel(int(round(lk * 255.0)), int(round(IceSheet.row(depth)))).a
+	ok(a.call(0.2, 0.0) > 0.85, "вдоль льда у поверхности — почти зеркало")
+	ok(a.call(1.0, 0.0) < 0.05, "прямо вверх — окно, сквозь лёд")
+	ok(a.call(0.2, 20.0) < a.call(0.2, 8.0) and a.call(0.2, 8.0) < a.call(0.2, 0.0), "затухание по глубине уже в A")
+	ok(a.call(0.2, 45.0) < 0.03, "на 45 м почти незаметно")
+	near(a.call(0.2, 90.0), 0.0, 1e-3, "на 90 м нет")
+	near(IceSheet.lookup(IceSheet.CRIT_COS, 0.0), IceSheet.CRIT_COS, 1e-6, "критический угол на месте")
+	ok(IceSheet.lookup(1.0, 0.0) < IceSheet.lookup(1.0, 1.0), "шершавая грань прижимает к границе окна")
+	near(IceSheet.lookup(0.0, 1.0), 0.0, 1e-6, "гладкая — без сдвига")
+	var m: Texture2D = load(IceSheet.SMOOTH_MASK)
+	eq(m.get_image().get_width(), 512, "маска гладкости 512²")
+	ok(m.get_image().has_mipmaps(), "маска с mipmap")
+
+
+## Доля отражения: трещины пропускают, ил гасит, «Экономно» — константа гладкости и × 0,55.
+func test_mirror_share() -> void:
+	near(IceSheet.mirror(0.9, 1.0, 0.0, 1.0, 1.0, 0.0), 0.9, 1e-6, "гладкая целая грань — вся доля таблицы")
+	near(IceSheet.mirror(0.9, 0.0, 0.0, 1.0, 1.0, 0.0), 0.27, 1e-6, "шершавая — 30 %")
+	near(IceSheet.mirror(0.9, 1.0, 1.0, 1.0, 1.0, 0.0), 0.0, 1e-6, "открытая трещина не зеркалит")
+	near(IceSheet.mirror(0.9, 1.0, 1.0, 0.0, 1.0, 0.0), 0.9, 1e-6, "закрытая шумом сеть — зеркалит")
+	near(IceSheet.mirror(0.9, 1.0, 0.0, 1.0, 1.0, 1.0), 0.0, 1e-6, "в густом иле отражения нет")
+	near(IceSheet.mirror(0.9, 0.0, 0.0, 1.0, 1.0, 0.0, true), 0.9 * (0.30 + 0.70 * 0.55) * 0.55, 1e-6, "«Экономно»")
+
+
+func test_scene_ice_reflection() -> void:
+	var ocean := OceanView.new()
+	tree.root.add_child(ocean)
+	await frames(1)
+	var m := ocean.ice.material_override as ShaderMaterial
+	ok(m.get_shader_parameter("reflect_lut") != null and m.get_shader_parameter("smooth_tex") != null, "LUT и маска")
+	near(float(m.get_shader_parameter("crit_cos")), IceSheet.CRIT_COS, 1e-6)
+	var env := Environment.new()
+	ocean.apply_water(env, 20.0, Vector3.ZERO, 0.4)
+	near(float(m.get_shader_parameter("reflect_row")), 7.0, 1e-5, "строка по глубине корабля")
+	near(float(m.get_shader_parameter("silt_k")), 0.4, 1e-6, "ил — в лёд")
+	near(float(m.get_shader_parameter("reflect_lite")), 0.0, 1e-6)
+	ocean.set_relief(false)
+	near(float(m.get_shader_parameter("reflect_lite")), 1.0, 1e-6, "«Экономно» — без маски")
+	ocean.set_relief(true)
+	near(float(m.get_shader_parameter("reflect_lite")), 0.0, 1e-6)
+	ocean.queue_free()

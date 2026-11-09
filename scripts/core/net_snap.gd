@@ -5,7 +5,7 @@ class_name NetSnap
 
 const SEND_DT := 0.05          ## хост шлёт кадр 20 раз в секунду
 const MAX_BYTES := 1200        ## кадр с четырьмя членами экипажа влезает в один UDP-пакет (MTU 1280 с запасом)
-const VERSION := 12            ## формат кадра и ввода; клиент другой версии не подключается (12 — следы разрядов «z»)
+const VERSION := 16            ## формат кадра и ввода; клиент другой версии не подключается (16 — трюм и виды хоста `hold`, #823)
 const NEWS_TIME := 1.0         ## сообщение события едет в кадрах столько секунд (20 кадров — потеря всех почти исключена)
 
 
@@ -149,6 +149,50 @@ static func apply_scorch(v: Variant, sc: Seabed.Scorch, t: float) -> bool:
 	return true
 
 
+## Сонар хоста для гостей (кладётся в события: `events(...)["so"]`): [числа — импульсов за игру `Sonar.count`, возраст
+## импульса, возраст отметок, дальность, завяз ли; байты — отметки по 9 байт: x, y, z в дециметрах (int16) и цвет RGB].
+## Отметки едут только NEWS_TIME после импульса (20 кадров — потеря всех почти исключена; гость берёт их один раз, по
+## новому счёту), дальше — пять чисел. Возраст, а не момент: часы гостя свои.
+static func sonar(so: Sonar, t: float) -> Array:
+	var b := PackedByteArray()
+	if t - so.ping_time < NEWS_TIME and so.blip_alpha(t) > 0.0:
+		b.resize(so.blips.size() * 9)
+		for i in so.blips.size():
+			var p: Vector3 = so.blips[i]["pos"]
+			var c: Color = so.blips[i]["color"]
+			b.encode_s16(i * 9, clampi(roundi(p.x * 10.0), -32768, 32767))
+			b.encode_s16(i * 9 + 2, clampi(roundi(p.y * 10.0), -32768, 32767))
+			b.encode_s16(i * 9 + 4, clampi(roundi(p.z * 10.0), -32768, 32767))
+			b[i * 9 + 6] = c.r8
+			b[i * 9 + 7] = c.g8
+			b[i * 9 + 8] = c.b8
+	return [PackedFloat32Array([so.count, minf(t - so.ping_time, 99.0), minf(t - so.blip_time, 99.0), so.range_m,
+		1.0 if so.jammed else 0.0]), b]
+
+
+## Гость ставит сонар хоста (t — своё время). Меняет только при новом импульсе хоста (другой счёт — и при входе в
+## забег): между импульсами волна и отметки гаснут своими часами. true — пришёл новый импульс.
+static func apply_sonar(v: Variant, so: Sonar, t: float) -> bool:
+	if not (v is Array and v.size() == 2 and v[0] is PackedFloat32Array and v[1] is PackedByteArray):
+		return false
+	var f: PackedFloat32Array = v[0]
+	var b: PackedByteArray = v[1]
+	if f.size() != 5 or b.size() % 9 != 0 or b.size() / 9 > Sonar.MAX_BLIPS:
+		return false
+	if int(f[0]) == so.count:
+		return false
+	so.count = int(f[0])
+	so.ping_time = t - f[1]
+	so.blip_time = t - f[2]
+	so.range_m = f[3]
+	so.jammed = f[4] > 0.5
+	so.blips.clear()
+	for i in range(0, b.size(), 9):
+		so.blips.append({"pos": Vector3(b.decode_s16(i), b.decode_s16(i + 2), b.decode_s16(i + 4)) * 0.1,
+			"species": "", "color": Color8(b[i + 6], b[i + 7], b[i + 8])})
+	return true
+
+
 ## Маршрут, голосование и итог для клиента (кладётся в события: `events(...)["r"]`). marks — метки голограммы
 ## {"deep": [роль…], "up": [роль…]} (`Main.vote_marks`), secs/frac — таймер кооп-голосования (−1 — не идёт), tally —
 ## строка счёта панели; ops — мнения ролей (`Run.opinions`, пока решают), rows — итог на голограмме (`Run.summary`),
@@ -162,12 +206,13 @@ static func run_state(run: Run, marks: Dictionary, secs: int, frac: float, tally
 	var seen := PackedByteArray()
 	for k in run.seen:
 		seen.append(keys.find(k))
-	var r := {"ru": PackedInt32Array([run.route, 1 if run.done else 0, run.depth, run.routes, 1 if run.ended else 0,
+	var flags := (1 if run.done else 0) | (2 if run.voting else 0) | (4 if run.at_descent() else 0)
+	var r := {"ru": PackedInt32Array([run.route, flags, run.depth, run.routes, 1 if run.ended else 0,
 		run.score, secs]), "rf": frac, "rv": vis, "rs": seen,
 		"vm": [PackedByteArray(marks.get("deep", [])), PackedByteArray(marks.get("up", []))]}
 	if tally != "":
 		r["ta"] = tally
-	if run.done and not run.ended:
+	if run.voting and not run.ended:
 		r["op"] = ops
 	if run.ended:
 		r["rr"] = rows
@@ -187,7 +232,9 @@ static func apply_run(r: Variant, run: Run) -> Dictionary:
 			and vm[0] is PackedByteArray and vm[1] is PackedByteArray):
 		return {}
 	run.route = ru[0] if ru[0] >= 0 and ru[0] < Run.ROUTES.size() else -1
-	run.done = ru[1] == 1
+	run.done = (ru[1] & 1) != 0
+	run.voting = (ru[1] & 2) != 0
+	run.set_at_descent((ru[1] & 4) != 0)   # круг 10: панель спуска и кнопка «Спуск» у гостя (#1362)
 	run.depth = maxi(0, ru[2])
 	run.routes = maxi(0, ru[3])
 	run.ended = ru[4] == 1
@@ -295,6 +342,36 @@ static func _nan_pad(a: Array, n: int) -> PackedFloat32Array:
 
 static func _from_nan(f: PackedFloat32Array) -> Array:
 	return [] if is_nan(f[0]) else Array(f)
+
+
+## Трюм и изученные виды хоста для гостей (#823, часть 5): груз, поднятые со дна, виды и наблюдения — как в
+## сохранении. Едет не в кадре (не влезет в UDP-пакет), а надёжным сообщением `Host.send_hold` при изменении.
+static func hold(samples: Samples, scanner: Scanner) -> Dictionary:
+	var got: Array = samples.got.keys()
+	got.sort()
+	var seen := {}
+	for id: String in scanner.seen:
+		seen[id] = Array(scanner.seen_of(id))
+	return {"g": got, "c": samples.cargo.duplicate(true), "s": Array(scanner.list()), "n": seen}
+
+
+## Ключ того, что лежит в `hold`: хост шлёт снова, только когда он сменился.
+static func hold_key(samples: Samples, scanner: Scanner) -> Array:
+	return [samples.cargo_rev, scanner.rev]
+
+
+## Поставить трюм и виды из `hold` (проверки — в `Samples.restore`/`Scanner.restore`); false — не словарь или
+## пустой (нового нет — `Client.take_hold`), ничего не тронуто.
+static func apply_hold(h: Variant, samples: Samples, scanner: Scanner) -> bool:
+	if not (h is Dictionary) or (h as Dictionary).is_empty():
+		return false
+	var g: Variant = h.get("g", [])
+	var c: Variant = h.get("c", [])
+	var sp: Variant = h.get("s", [])
+	var n: Variant = h.get("n", {})
+	samples.restore(g if g is Array else [], c if c is Array else [])
+	scanner.restore(sp if sp is Array else [], n if n is Dictionary else {})
+	return true
 
 
 ## Размер кадра в байтах, как он уйдёт по сети.

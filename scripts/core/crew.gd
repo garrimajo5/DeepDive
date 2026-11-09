@@ -44,12 +44,13 @@ const SEAT_LEAN := 0.44  ## рад (≈25°)
 const RIM := 0.25
 const GRIP_DEG := 55.0
 const GRIP_FOLLOW_DEG := 35.0
-## Ладонь лежит на ободе, а не в нём (#427): середина кисти — на 1 см к пилоту и на 8 см снаружи кольца от оси
-## обода, кисть согнута в запястье на 75° к центру колеса — ладонь ложится на обод сверху, пальцы не проходят
-## насквозь (подбор по вершинам кистей MOD-012, `test_crew_rig.test_hands_rest_on_rim_not_inside`).
-const PALM_PILOT := 0.01
-const PALM_IN := -0.08
-const PALM_BEND_DEG := 75.0
+## Ладонь обхватывает обод со стороны пилота (#427, #1387): середина кисти — на 6 см к пилоту от оси обода и на 1 см
+## внутрь кольца, кисть согнута в запястье на 60° к центру колеса — кулак лежит на ободе спереди, как хват, а не
+## лапой сверху; пальцы не проходят сквозь обод и колесо (подбор по вершинам кистей MOD-012,
+## `test_crew_rig.test_hands_rest_on_rim_not_inside`).
+const PALM_PILOT := 0.06
+const PALM_IN := 0.01
+const PALM_BEND_DEG := 60.0
 ## Резак MOD-013 (`models/rezak.glb`, docs/concept-art/proboina.md): pivot в хвате, сопло — (0; 0,177; −0,143) от него.
 ## При сварке правая рука держит резак так, чтобы сопло было в 6 см от шва; не дотянуться — рука вытянута к нему.
 const TORCH_NOZZLE := Vector3(0.0, 0.1766, -0.1428)
@@ -64,6 +65,43 @@ const CROUCH_ARM_DROP := 0.35  ## на сколько хват может быт
 
 ## Посты, за которыми стоит один человек: второй не сядет и не встанет («Штурвал занят»). Остальные — для всех.
 const BUSY := {"helm": "Штурвал занят", "energy": "Пульт энергии занят"}
+
+
+## Между фигурами на палубе не меньше GAP (м, по центрам): товарищ не входит в другого, камера — в чужую голову
+## (issue #602). Тесно у постов, поэтому меньше двух радиусов шага (Deck.Walker.RADIUS).
+const GAP := 0.55
+
+
+## Можно ли m шагнуть в (x, z) по товарищам: не ближе GAP к другому члену экипажа. Уже стоящий вплотную (поставили
+## сценарием, сеть) может отходить — шаг, который не сближает, разрешён.
+static func room_for(crew: Array, m: Member, x: float, z: float) -> bool:
+	for o: Member in crew:
+		if o == m:
+			continue
+		var d := Vector2(x - o.walker.x, z - o.walker.z).length()
+		if d < GAP and d < Vector2(m.walker.x - o.walker.x, m.walker.z - o.walker.z).length():
+			return false
+	return true
+
+
+## Где поставить m рядом с (x, z), чтобы не стоять в другой фигуре: сама точка, если до всех не меньше GAP, иначе
+## ближайшая по кольцам (шаг 0,15 м, до 1,5 м), где stand(x, z) пускает. Новый забег ставит своего игрока к началу
+## спуска, а там может стоять товарищ, вставший из-за штурвала (#602).
+static func spawn_spot(crew: Array, m: Member, x: float, z: float, stand: Callable) -> Vector2:
+	for k in 11:
+		var d := k * 0.15
+		for a in (1 if k == 0 else 24):
+			var p := Vector2(x, z) + Vector2.from_angle(PI / 2.0 + TAU * a / 24.0) * d   # сначала назад, к корме
+			if k > 0 and not stand.call(p.x, p.y):
+				continue
+			var free := true
+			for o: Member in crew:
+				if o != m and Vector2(p.x - o.walker.x, p.y - o.walker.z).length() < GAP:
+					free = false
+					break
+			if free:
+				return p
+	return Vector2(x, z)
 
 
 ## Кто из других членов экипажа держит пост id (за штурвалом — сидящий); null — пост свободен или общий.
@@ -177,29 +215,36 @@ class Pad:
 	var move := Vector2.ZERO   ## крестовина: y — вперёд, x — вправо (как TouchRouter.move)
 	var look := Vector2.ZERO   ## свайп за кадр в «точках» экрана; съедается шагом
 	var left := INF            ## сколько секунд ещё держать move (сценарий); INF — пока не сменят
-	var action := false        ## кнопка действия нажата в этом кадре; съедается шагом (`Main._drive_mates`)
+	var action := false        ## кнопка действия нажата в этом кадре; съедается шагом (`CrewFlow.drive`)
+	var hold := false          ## кнопку действия держат (сварка, вентиль, лебёдка, сканер — `CrewFlow.holds`); не съедается
 	var vert := 0              ## за штурвалом: «Всплыть» 1, «Вниз» −1 (как TouchRouter.vert)
-	var light := false         ## за штурвалом нажали «Свет» в этом кадре; съедается шагом (`Main._mate_posts`)
+	var light := false         ## за штурвалом нажали «Свет» в этом кадре; съедается шагом (`CrewFlow.posts`)
+	var ask := 0               ## нажал «Спросить код» / «Понятно» сообщения связи с этим номером (`Comms.press`); 0 — нет
 
 	func clear() -> void:
 		move = Vector2.ZERO
 		look = Vector2.ZERO
 		left = INF
 		action = false
+		hold = false
 		vert = 0
 		light = false
+		ask = 0
 
 	## Ввод для сети: клиент шлёт хосту каждый кадр (свайп и нажатия копятся до отправки).
 	func snapshot() -> Dictionary:
-		return {"mx": move.x, "my": move.y, "lx": look.x, "ly": look.y, "act": action, "v": vert, "light": light}
+		return {"mx": move.x, "my": move.y, "lx": look.x, "ly": look.y, "act": action, "hold": hold, "v": vert, "light": light, "ask": ask}
 
 	## Хост принимает ввод клиента: крестовина и «вверх/вниз» — как есть, свайп и нажатия — добавляются до шага.
 	func apply(s: Dictionary) -> void:
 		move = Vector2(float(s.get("mx", 0.0)), float(s.get("my", 0.0))).limit_length(1.0)
 		look += Vector2(float(s.get("lx", 0.0)), float(s.get("ly", 0.0)))
 		action = action or bool(s.get("act", false))
+		hold = bool(s.get("hold", false))
 		vert = clampi(int(s.get("v", 0)), -1, 1)
 		light = light or bool(s.get("light", false))
+		if int(s.get("ask", 0)) > 0:
+			ask = int(s.get("ask", 0))
 		left = INF
 
 

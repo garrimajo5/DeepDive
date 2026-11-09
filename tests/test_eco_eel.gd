@@ -1,6 +1,6 @@
 extends TestCase
-## Стеклоуст (initEels, eelUpdate, onZap в js/creatures.js; ART-006): три логова, бросок на скребунов и светляков,
-## присоска на стекле носа — EcoLink.DRAIN 3,2 ед./с, разряд сбрасывает; пять MultiMesh в сцене.
+## Стеклоуст (initEels, eelUpdate, onZap в js/creatures.js; ART-006): одно логово у трещины 02↔01 (#834), бросок на скребунов и светляков,
+## присоска на стекле носа — EcoLink.DRAIN 3,2 ед./с, разряд сбрасывает; шесть MultiMesh в сцене (с мутью).
 
 const FLAT := -40.0
 const FAR := Vector3(500, -30, 500)
@@ -63,13 +63,32 @@ func _run_until_latched(w: EcoWorld, limit := 60.0) -> bool:
 
 # ---------- Расстановка ----------
 
-func test_three_lairs_on_ground() -> void:
+## Б3 «плавность»: после сброса голова и звенья уже там, где их держит шаг в логове, — раньше на первом шаге голова
+## прыгала на 0,3 м (9 м/с), звенья доезжали за SETTLE. Спрятанный стеклоуст качается не быстрее 0,6 м/с.
+func test_no_jump_after_reset() -> void:
+	var w := _world()
+	var e := _eels(w).eels[0]
+	var dt := 1.0 / 30.0
+	var head := e.agent.p
+	var segs := e.segs.duplicate()
+	var worst := 0.0
+	for i in 30 * 5:
+		w.step(dt)
+		worst = maxf(worst, e.agent.p.distance_to(head) / dt)
+		for k in EcoEel.SEGS:
+			worst = maxf(worst, e.segs[k].distance_to(segs[k]) / dt)
+		head = e.agent.p
+		segs = e.segs.duplicate()
+	ok(worst < 0.6, "в логове без рывков: %.2f м/с" % worst)
+
+
+func test_lair_on_ground() -> void:
 	var w := EcoWorld.new()
 	w.ground = Seabed.height
 	var eels := w.add(EcoEel.new()) as EcoEel
-	eq(eels.eels.size(), 3, "три логова, как W.lairs")
-	eq(w.count(EcoEel.ID), 3, "три стеклоуста в мире")
-	for i in 3:
+	eq(eels.eels.size(), EcoEel.LAIRS.size(), "по стеклоусту на логово")
+	eq(w.count(EcoEel.ID), EcoEel.LAIRS.size(), "стеклоусты в мире")
+	for i in EcoEel.LAIRS.size():
 		var e := eels.eels[i]
 		var xz := EcoEel.LAIRS[i]
 		near(e.lair.y, Seabed.height(xz.x, xz.y) + EcoEel.MOUTH_UP, 0.01, "устье %d на 1,1 м над дном" % i)
@@ -83,7 +102,126 @@ func test_three_lairs_on_ground() -> void:
 	var again := EcoWorld.new()
 	again.ground = Seabed.height
 	var e2 := again.add(EcoEel.new()) as EcoEel
-	eq(e2.eels[1].out, eels.eels[1].out, "при том же зерне — те же логова")
+	eq(e2.eels[0].out, eels.eels[0].out, "при том же зерне — то же логово")
+
+
+# ---------- Слой 1 (#834): один читаемый эпизод у трещины 02↔01 ----------
+
+## Ближайшая точка отрезка 02→01 к xz и доля пути по нему.
+static func _on_crack_path(xz: Vector2) -> Vector2:
+	var a := LayerMap.xz("02")
+	var b := LayerMap.xz("01")
+	var t := clampf((xz - a).dot(b - a) / (b - a).length_squared(), 0.0, 1.0)
+	return a.lerp(b, t)
+
+
+func test_single_lair_at_crack_02_01() -> void:
+	eq(EcoEel.LAIRS.size(), 1, "одно логово — один читаемый эпизод, не три")
+	var xz := EcoEel.LAIRS[0]
+	var off := xz.distance_to(_on_crack_path(xz))
+	ok(off < 20.0, "логово у трещины на подходе 02↔01: %.1f м от пути" % off)
+	ok(xz.distance_to(LayerMap.xz("02")) > 50.0 and xz.distance_to(LayerMap.xz("01")) > 50.0,
+		"посреди подхода, а не у самих мест")
+	for id: String in ["00", "07", "09", "10", "01"]:
+		var d := xz.distance_to(LayerMap.xz(id))
+		ok(d >= EcoEel.LAIR_CLEAR, "логово в %.0f м от %s (места сохранения, терминал и серпохвост у цветка)" % [d, id])
+	# путь обучения 00→01 мимо логова — дальше броска к стеклу
+	var a := LayerMap.xz("00")
+	var b := LayerMap.xz("01")
+	var t := clampf((xz - a).dot(b - a) / (b - a).length_squared(), 0.0, 1.0)
+	ok(xz.distance_to(a.lerp(b, t)) > EcoEel.WARN_R, "путь обучения 00→01 не задевает логово")
+
+
+## Знак раньше угрозы: корабль идёт к логову носом на 4 м/с — строка про красный глаз приходит, пока нос дальше
+## SHIP_R, к стеклу стеклоуст плывёт позже и ближе.
+func test_eye_sign_before_threat() -> void:
+	var w := _world()
+	var eels := _eels(w)
+	var e := eels.eels[0]
+	e.cd = 0.0
+	w.ship.yaw = PI   # нос к +z, логово впереди
+	var sign_at := -1.0
+	var go_at := -1.0
+	for i in 400:
+		var d := 90.0 - i * 0.4
+		w.ship.pos = e.lair + Vector3(0, 6, -d)
+		w.step(0.1)
+		var nose := EcoEel.front(w.ship).distance_to(e.lair)
+		if sign_at < 0.0 and _texts(w).has(EcoEel.WARN_TEXT):
+			sign_at = nose
+		if go_at < 0.0 and e.mode == EcoEel.Mode.TO_SHIP:
+			go_at = nose
+			break
+	ok(sign_at > 0.0, "знак пришёл")
+	ok(go_at > 0.0, "стеклоуст всё же поплыл к стеклу")
+	ok(sign_at > EcoEel.SHIP_R + 10.0, "знак пришёл при носе в %.0f м, дальше броска (28 м)" % sign_at)
+	ok(sign_at - go_at >= 15.0, "знак на %.0f м раньше угрозы" % (sign_at - go_at))
+
+
+## Знак — один раз за заход и не в разгар: в круге — тишина; вышел и вернулся — снова, но не раньше WARN_CD; висит на
+## стекле — знака нет.
+func test_eye_sign_once_per_visit() -> void:
+	var w := _world()
+	var e := _eels(w).eels[0]
+	e.cd = 999.0   # сидит, к стеклу не плывёт
+	var inside := e.lair + Vector3(0, 8, EcoEel.WARN_R - 10.0)
+	var outside := e.lair + Vector3(0, 8, EcoEel.WARN_R + 20.0)
+	var got := 0
+	w.ship.pos = inside
+	for i in 50:
+		w.step(0.1)
+		got += _texts(w).count(EcoEel.WARN_TEXT)
+	eq(got, 1, "в круге — одна строка")
+	w.ship.pos = outside
+	w.step(0.1)
+	w.ship.pos = inside
+	for i in 50:
+		w.step(0.1)
+		got += _texts(w).count(EcoEel.WARN_TEXT)
+	eq(got, 1, "вернулся сразу — тишина до WARN_CD")
+	w.ship.pos = outside
+	for i in int(EcoEel.WARN_CD * 10.0):
+		w.step(0.1)
+	w.ship.pos = inside
+	w.step(0.1)
+	got += _texts(w).count(EcoEel.WARN_TEXT)
+	eq(got, 2, "через WARN_CD — снова")
+
+
+## Обход есть: корабль идёт от 02 к 01 стороной, на 45 м от пути в сторону от логова, на 28 м глубины — дно ниже, нос
+## всё время дальше SHIP_R, стеклоуст сидит в расщелине (бросается только на прямом пути).
+func test_detour_past_lair() -> void:
+	var w := EcoWorld.new()
+	w.ground = Seabed.height
+	var eels := w.add(EcoEel.new()) as EcoEel
+	var e := eels.eels[0]
+	e.cd = 0.0
+	var a := LayerMap.xz("02")
+	var b := LayerMap.xz("01")
+	var lair := Vector2(e.lair.x, e.lair.z)
+	var n := (b - a).normalized().orthogonal()
+	if (lair - _on_crack_path(lair)).dot(n) > 0.0:
+		n = -n   # в сторону от логова
+	var dir := (b - a).normalized()
+	w.ship.yaw = atan2(-dir.x, -dir.y)
+	var closest := INF
+	for i in 400:
+		var p := a.lerp(b, i / 399.0) + n * 45.0
+		var floor_y := Seabed.height(p.x, p.y)
+		ok(floor_y < -32.0, "дно на обходе ниже корабля: %.1f м у (%.0f; %.0f)" % [floor_y, p.x, p.y])
+		w.ship.pos = Vector3(p.x, -28.0, p.y)
+		w.step(0.1)
+		closest = minf(closest, EcoEel.front(w.ship).distance_to(e.lair))
+		ok(e.mode == EcoEel.Mode.HIDE, "стеклоуст сидит в логове")
+	ok(closest > EcoEel.SHIP_R, "нос не ближе %.0f м к логову" % closest)
+
+
+static func _texts(w: EcoWorld) -> Array[String]:
+	var out: Array[String] = []
+	for ev in w.take_link():
+		if ev.get("type", "") == EcoLink.MESSAGE:
+			out.append(str(ev["text"]))
+	return out
 
 
 func test_hidden_body_in_crevice() -> void:
@@ -95,6 +233,76 @@ func test_hidden_body_in_crevice() -> void:
 	for k in range(1, EcoEel.SEGS):
 		ok((e.segs[k] - e.agent.p).dot(e.out) < 0.0, "звено %d — в глубине расщелины" % k)
 	near(e.face.dot(e.out), 1.0, 1e-4, "смотрит из расщелины")
+
+
+## Самый большой сдвиг звена и поворот головы за шаг 0,05 с, пока идёт мир (seconds с) или until() не true.
+func _max_jump(w: EcoWorld, e: EcoEel.Eel, seconds: float) -> Vector2:
+	var most := Vector2.ZERO
+	var t := 0.0
+	while t < seconds:
+		var was := e.segs.duplicate()
+		var face := e.face
+		w.step(0.05)
+		t += 0.05
+		for k in EcoEel.SEGS:
+			most.x = maxf(most.x, was[k].distance_to(e.segs[k]))
+		most.y = maxf(most.y, face.angle_to(e.face))
+	return most
+
+
+func test_returns_into_crevice_smoothly() -> void:
+	# Возвращается в логово, тело тянется за головой снаружи устья: в расщелину оно втягивается за SETTLE,
+	# а не перескакивает за шаг (раньше хвост прыгал на 11 м, голова — на пол-оборота).
+	var w := _world()
+	var e := _eels(w).eels[0]
+	w.ship.pos = e.lair + Vector3(0, 20, 40)   # корабль смотрит — ближе EcoLod.MID: стеклоуст шагает каждый кадр
+	e.mode = EcoEel.Mode.RETURN
+	e.cd = 30.0
+	e.agent.p = e.lair + e.out * 8.0
+	for k in EcoEel.SEGS:
+		e.segs[k] = e.agent.p + e.out * (k * EcoEel.SEG_FOLLOW)
+	e.face = -e.out
+	var most := _max_jump(w, e, 3.0)
+	eq(e.mode, EcoEel.Mode.HIDE, "вернулся в логово")
+	ok(most.x < 1.6, "звено за шаг сдвинулось не больше 1,6 м (%.2f)" % most.x)
+	ok(most.y < EcoEel.FACE_MAX * 0.05 + 1e-3, "голова за шаг повернулась не больше 0,35 рад (%.2f)" % most.y)
+	for k in range(1, EcoEel.SEGS):
+		ok((e.segs[k] - e.agent.p).dot(e.out) < 0.0, "звено %d — в глубине расщелины" % k)
+	near(e.face.dot(e.out), 1.0, 1e-4, "смотрит из расщелины")
+
+
+func test_latches_smoothly() -> void:
+	# На стекло тело ложится за SETTLE, а не прыгает на окно за шаг; по пути — мимо корпуса.
+	var w := _world()
+	var e := _eels(w).eels[0]
+	e.cd = 0.0
+	_ship_near(w, e)
+	var t := 0.0
+	var jump := 0.0   # самый большой сдвиг звена за последний шаг пути к носу и шаг, на котором присосался
+	while t < 60.0 and not e.latched():
+		var was := e.segs.duplicate()
+		w.step(0.05)
+		t += 0.05
+		jump = 0.0
+		for k in EcoEel.SEGS:
+			jump = maxf(jump, was[k].distance_to(e.segs[k]))
+	ok(e.latched(), "присосался")
+	ok(jump < 1.2, "на шаге, где присосался, звенья не прыгнули на стекло (%.2f м)" % jump)
+	var most := _max_jump(w, e, EcoEel.SETTLE + 0.2)
+	ok(most.x < 1.2, "звено за шаг сдвинулось не больше 1,2 м (%.2f)" % most.x)
+	ok(most.y < EcoEel.FACE_MAX * 0.05 + 1e-3, "голова за шаг повернулась не больше 0,35 рад (%.2f)" % most.y)
+	for k in EcoEel.SEGS:
+		ok(not EcoHull.touches(e.segs[k], w.ship.pos, w.ship.yaw), "звено %d не в корпусе" % k)
+		near(e.segs[k].distance_to(EcoEel.latch_point(w.ship, k, w.time)), 0.0, 1e-4, "звено %d на стекле" % k)
+
+
+func test_turn_face() -> void:
+	var f := EcoEel.turn_face(Vector3.FORWARD, Vector3.BACK, 0.05)
+	near(Vector3.FORWARD.angle_to(f), EcoEel.FACE_MAX * 0.05, 1e-4, "назад — не быстрее 7 рад/с")
+	near(f.y, 0.0, 1e-5, "ровно назад — разворот по горизонтали")
+	var g := EcoEel.turn_face(Vector3.FORWARD, Vector3.FORWARD.rotated(Vector3.UP, 0.1), 0.05)
+	near(Vector3.FORWARD.angle_to(g), 0.1 * (1.0 - exp(-EcoEel.FACE_FOLLOW * 0.05)), 1e-4, "малый угол — долей")
+	eq(EcoEel.turn_face(Vector3.RIGHT, Vector3.RIGHT, 0.05), Vector3.RIGHT, "уже смотрит — так и есть")
 
 
 # ---------- Охота ----------
@@ -193,6 +401,7 @@ func test_latched_pose_on_glass() -> void:
 	e.cd = 0.0
 	_ship_near(w, e)
 	ok(_run_until_latched(w), "присосался")
+	w.run(EcoEel.SETTLE + 0.1, 0.05)   # тело легло на стекло
 	for yaw in [0.0, 1.1, -2.3]:
 		w.ship.yaw = yaw
 		w.step(0.05)
@@ -298,7 +507,7 @@ func test_targets_for_sonar_and_scanner() -> void:
 	w.ground = Seabed.height
 	w.add(EcoEel.new())
 	var t := w.scan_targets()
-	eq(t.size(), 3, "три стеклоуста")
+	eq(t.size(), EcoEel.LAIRS.size(), "стеклоуст виден в логове")
 	ok(t[0]["sonar"] and not t[0]["hidden"], "видны сонару и сканеру и в логове")
 	eq(t[0]["r"], 1.3, "размер цели 1,3 м")
 
@@ -324,7 +533,7 @@ func test_same_seed_same_story() -> void:
 
 # ---------- Сцена ----------
 
-func test_view_five_multimeshes() -> void:
+func test_view_four_multimeshes() -> void:
 	var w := _world()
 	var eels := _eels(w)
 	var view := EelView.new(eels)
@@ -334,17 +543,21 @@ func test_view_five_multimeshes() -> void:
 		if c is MultiMeshInstance3D:
 			mm += 1
 			eq((c as MultiMeshInstance3D).layers, OceanView.LAYER_WORLD, "%s — на слое отмели" % c.name)
-	eq(mm, 5, "камни, оболочка, внутренности, глаза, присоска — пять вызовов")
+	eq(mm, 6, "камни, оболочка, внутренности с глазами, присоска, муть и глаза вдали (#849, #970)")
+	view.sync(w.time)
+	ok(not view.glints.visible, "без корабля глаз вдали не рисуется — лишнего вызова нет")
 	eq(view.rocks.multimesh.instance_count, 5, "пять камней логова")
 	eq(view.shell.multimesh.instance_count, EcoEel.SEGS, "голова и 13 звеньев")
 	var e := eels.eels[0]
 	view.sync(w.time)
 	near(EelView.transform_at(view.shell_buffer, 0).origin.distance_to(e.segs[0]), 0.0, 1e-4, "голова на месте")
+	_check_organs(view, e)
 	var ring := EelView.transform_at(view.ring_buffer, 0)
 	near(ring.basis.get_scale().x, 1.0, 1e-3, "в логове кольцо круглое")
 	e.cd = 0.0
 	_ship_near(w, e)
 	ok(_run_until_latched(w), "присосался")
+	w.run(EcoEel.SETTLE + 0.1, 0.05)   # тело легло на стекло
 	view.sync(w.time)
 	ring = EelView.transform_at(view.ring_buffer, 0)
 	ok(ring.basis.get_scale().x > 1.2, "на стекле кольцо расплющено")
@@ -354,11 +567,256 @@ func test_view_five_multimeshes() -> void:
 	await frames(1)
 
 
+## «Дыхание» (Б3): в логове голова-присоска шире и выше в такт (длина та же, глаза едут с головой), на ходу
+## не дышит, на стекле сосёт сильнее и кольцо присоски пульсирует; у двух стеклоустов ритм и фаза разные.
+func test_view_head_breathes_in_lair() -> void:
+	var lo := INF
+	var hi := -INF
+	for s in 80:
+		var k := EelView.breath_k(0, s * 0.1, 0.0, 0.0)
+		lo = minf(lo, k)
+		hi = maxf(hi, k)
+	ok(hi > 0.95 and lo < -0.95, "в логове дышит во весь размах")
+	var hs := EelView.head_scale(1.0)
+	near(hs.x, 1.0 + EelView.BREATH_W, 1e-6, "вдох — шире")
+	near(hs.y, 1.0 + EelView.BREATH_H, 1e-6, "и выше")
+	near(hs.z, 1.0, 1e-6, "длина та же — пасть на месте")
+	for s in 40:
+		near(EelView.breath_k(0, s * 0.1, 1.0, 0.0), 0.0, 1e-6, "на ходу не дышит")
+		var a := absf(EelView.breath_k(0, s * 0.1, 0.0, 0.0))
+		near(absf(EelView.breath_k(0, s * 0.1, 0.0, 1.0)), a * EelView.SUCK, 1e-5, "на стекле сосёт сильнее")
+	near(EelView.breath_k(0, 1.3, 0.5, 0.0), EelView.breath_k(0, 1.3, 0.0, 0.0) * 0.5, 1e-5,
+		"на полпути к ходу — полразмаха, без скачка")
+	eq(EelView.ring_pulse(1.0, 0.0), Vector3.ONE, "вне стекла кольцо не пульсирует")
+	near(EelView.ring_pulse(1.0, 1.0).x, 1.0 + EelView.RING_PULSE, 1e-6, "на стекле кольцо в такт шире")
+	ok(absf(EelView.breath_k(0, 2.0, 0.0, 0.0) - EelView.breath_k(1, 2.0, 0.0, 0.0)) > 0.05, "у каждого своя фаза")
+	# В сцене: голова в буфере дышит, глаз держится на голове.
+	var w := _world()
+	var eels := _eels(w)
+	var view := EelView.new(eels)
+	tree.root.add_child(view)
+	var widths: Array[float] = []
+	for s in 41:
+		view.sync(s * 0.1)
+		var hb := EelView.transform_at(view.shell_buffer, 0).basis
+		widths.append(hb.x.length() / EelView.HEAD.x)
+		near(hb.z.length(), EelView.HEAD.z, 1e-4, "длина головы не меняется")
+		var eye := EelView.transform_at(view.organ_buffer, eels.eels.size() * (EcoEel.SEGS - 1), EelView.CSTRIDE).origin
+		var bk := EelView.breath_k(0, s * 0.1, view.wag_k[0], view.ring_k[0])
+		var head := Transform3D(hb.orthonormalized(), eels.eels[0].segs[0])
+		near(eye.distance_to(head * (EelView.EYES[0] * EelView.head_scale(bk))), 0.0, 1e-3, "глаз на дышащей голове")
+	ok(widths.max() - widths.min() > EelView.BREATH_W * 1.5, "голова в сцене раздувается и опадает")
+	view.queue_free()
+	await frames(1)
+
+
+## Глаз вдали (#970): шар глаза 0,07 м с 45 м меньше пикселя — поверх него пятно постоянного углового размера,
+## только пока корабль в полосе знака (не вблизи — там глаз виден сам, не дальше GLINT_OFF).
+func test_eye_glint_by_distance() -> void:
+	eq(EcoEel.glint(5.0).y, 0.0, "вблизи пятна нет")
+	near(EcoEel.glint(45.0).y, 1.0, 1e-6, "с 45 м (шаг 32k) — в полную силу")
+	near(EcoEel.glint(45.0).x / 45.0, EcoEel.glint(30.0).x / 30.0, 1e-6, "угловой размер постоянный")
+	ok(EcoEel.glint(45.0).x >= 0.5, "с 45 м радиус %.2f м — пятно в окне видно" % EcoEel.glint(45.0).x)
+	ok(EcoEel.glint(EcoEel.WARN_R).y > 0.5, "у края знака (55 м) пятно ещё видно")
+	eq(EcoEel.glint(EcoEel.GLINT_OFF + 1.0).y, 0.0, "далеко — гаснет")
+
+
+func test_view_eye_glint() -> void:
+	var w := _world()
+	var eels := _eels(w)
+	var view := EelView.new(eels)
+	tree.root.add_child(view)
+	var e := eels.eels[0]
+	w.ship.pos = e.lair + Vector3(0, 6, -45)
+	view.sync(w.time, w.ship)
+	ok(view.glints.visible, "корабль в 45 м — пятна глаз в сцене")
+	var g := EelView.transform_at(view.glint_buffer, 0, EelView.CSTRIDE)
+	var head := e.segs[0]
+	ok(g.origin.distance_to(head) < 1.0, "пятно у головы, %.2f м" % g.origin.distance_to(head))
+	var eye := EelView.transform_at(view.organ_buffer, eels.eels.size() * (EcoEel.SEGS - 1), EelView.CSTRIDE).origin
+	near(eye.distance_to(w.ship.pos) - g.origin.distance_to(w.ship.pos), EelView.GLINT_LIFT, 1e-3,
+		"на GLINT_LIFT ближе к кораблю, чем глаз")
+	ok(g.basis.get_scale().x > 0.9, "пятно крупное: %.2f м" % g.basis.get_scale().x)
+	var red := view.glint_buffer[EelView.STRIDE]
+	ok(red > 1.0, "красный с запасом на туман воды: %.1f" % red)
+	ok(red > view.glint_buffer[EelView.STRIDE + 1] * 4.0, "пятно красное")
+	near(view.glint_buffer[EelView.STRIDE + 3], EelView.GLINT_ALPHA, 1e-4, "непрозрачное")
+	w.ship.pos = e.lair + Vector3(0, 6, -150)
+	view.sync(w.time, w.ship)
+	ok(not view.glints.visible, "корабль далеко — узел скрыт")
+	w.ship.pos = e.lair + Vector3(0, 3, -6)
+	view.sync(w.time, w.ship)
+	ok(not view.glints.visible, "корабль рядом — глаз виден сам, пятна нет")
+	view.queue_free()
+	await frames(1)
+
+
 func test_eco_view_has_eels() -> void:
 	var view := EcoView.new()
 	tree.root.add_child(view)
 	view.ground = Seabed.height
-	ok(view.eels != null and view.eels.eels.size() == 3, "три стеклоуста в живом мире")
+	ok(view.eels != null and view.eels.eels.size() == 1, "стеклоуст у трещины 02↔01 в живом мире")
 	ok(view.eel_view != null and view.eel_view.get_parent() == view, "и в сцене")
 	view.queue_free()
 	await frames(1)
+
+
+## Внутренности и глаза — один MultiMesh (#849): звенья без своего света, за ними глаза у головы, светятся сами.
+func _check_organs(view: EelView, e: EcoEel.Eel) -> void:
+	var mm := view.organs.multimesh
+	var n := view.eels.eels.size()
+	var organ_n := n * (EcoEel.SEGS - 1)
+	eq(mm.instance_count, organ_n + n * EelView.EYES.size(), "звенья и глаза в одном MultiMesh")
+	ok(mm.use_colors, "цвет экземпляра")
+	ok(view.find_child("Глаза", false, false) == null, "отдельного узла глаз нет")
+	var mat := (mm.mesh as SphereMesh).material as ShaderMaterial
+	ok(mat != null and mat.shader == EcoShaders.shader(EcoShaders.PLANT), "общий шейдер растений, нового нет")
+	var buf := view.organ_buffer
+	eq(buf.size(), mm.instance_count * EelView.CSTRIDE, "буфер с цветами")
+	near(buf[EelView.STRIDE + 3], 0.0, 1e-6, "звено без своего света")
+	var eye := organ_n + e.index * EelView.EYES.size()
+	near(buf[eye * EelView.CSTRIDE + EelView.STRIDE + 3], 1.0, 1e-6, "глаз светится сам")
+	near(buf[eye * EelView.CSTRIDE + EelView.STRIDE], EelView.EYE.r, 1e-6, "глаз красный")
+	near(buf[EelView.STRIDE], EelView.ORGANS.r, 1e-6, "звено — цвета внутренностей")
+	var tr := EelView.transform_at(buf, eye, EelView.CSTRIDE)
+	# голова дышит (Б3): глаз едет с ней — не дальше вдоха и не ближе выдоха
+	var d := tr.origin.distance_to(e.segs[0])
+	ok(d <= (EelView.EYES[0] * EelView.head_scale(1.0)).length() + 1e-3
+		and d >= (EelView.EYES[0] * EelView.head_scale(-1.0)).length() - 1e-3, "глаз у головы: %.3f" % d)
+	near(tr.basis.get_scale().x, EelView.EYE_R, 1e-4, "глаз маленький")
+
+
+## Б6: на «Экономно» оболочка звеньев — грубый шар (треугольников вдвое меньше), экземпляров и вызовов столько же,
+## расстановка та же; сброс мира уровень не теряет, назад — обычный шар.
+func test_view_lite_coarse_shell() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var ev := view.eel_view
+	var full := ev.shell.multimesh.mesh.get_faces().size()
+	var count := ev.shell.multimesh.instance_count
+	var children := ev.get_child_count()
+	view.set_lite(true)
+	ok(ev.lite, "стеклоусты — на «Экономно»")
+	var sm := ev.shell.multimesh.mesh as SphereMesh
+	eq(Vector2i(sm.radial_segments, sm.rings), EelView.SHELL_LITE, "грубый шар")
+	ok(sm.get_faces().size() * 2 <= full, "треугольников оболочки вдвое меньше: %d из %d" % [sm.get_faces().size() / 3, full / 3])
+	ok(sm.material == null or sm.material is StandardMaterial3D, "материал оболочки тот же вид")
+	eq(ev.shell.multimesh.instance_count, count, "звеньев столько же")
+	eq(ev.get_child_count(), children, "вызовов столько же")
+	var ship := EcoLink.ShipState.new()
+	ship.pos = view.eels.eels[0].segs[0] + Vector3(0, 3, 10)
+	view.step(0.05, ship)
+	near(EelView.transform_at(ev.shell_buffer, 0).origin.distance_to(view.eels.eels[0].segs[0]), 0.0, 1e-4,
+		"голова на месте")
+	view.ground = Seabed.height   # сброс мира — вид пересобирается
+	ev = view.eel_view
+	ok(ev.lite and (ev.shell.multimesh.mesh as SphereMesh).rings == EelView.SHELL_LITE.y, "сброс мира — снова «Экономно»")
+	view.set_lite(false)
+	eq((ev.shell.multimesh.mesh as SphereMesh).radial_segments, EelView.SHELL_SPHERE.x, "назад — обычный шар")
+	eq(ev.shell.multimesh.mesh.get_faces().size(), full, "треугольников как было")
+	view.queue_free()
+	await frames(1)
+
+
+## Плавность (grafika-plan-eco, Б3): виляние набирается за WAG_RISE, а не включается сразу. Раньше в первый кадр хода
+## хвост (звено 13) прыгал вбок до 0,65 м.
+func test_wag_ramps_in_and_out() -> void:
+	var w := _world()
+	var eels := _eels(w)
+	var view := EelView.new(eels)
+	tree.root.add_child(view)
+	var e := eels.eels[0]
+	var k := EcoEel.SEGS - 1
+	# время, где волна на хвосте в полном размахе: sin(10t − 0,9k) = 1
+	var t0 := (PI / 2.0 + 0.9 * k) / 10.0 + TAU
+	e.mode = EcoEel.Mode.HIDE
+	view.sync(t0)
+	near(_tail_off(view, e), 0.0, 1e-4, "в логове хвост не виляет")
+	e.mode = EcoEel.Mode.STRIKE
+	var dt := 1.0 / 30.0
+	var t := t0
+	var prev := 0.0
+	var worst := 0.0
+	for i in 60:
+		t += dt
+		view.sync(t)
+		var amp := EelView.wag_amp(view.wag_k[0])
+		near(_tail_off(view, e), absf(sin(t * 10.0 - k * 0.9)) * EelView.WAG * k * amp, 1e-3, "хвост по доле виляния")
+		worst = maxf(worst, amp - prev)
+		prev = amp
+		if i == 0:
+			ok(_tail_off(view, e) < 0.02, "первый кадр хода — хвост почти на месте: %.3f м" % _tail_off(view, e))
+	ok(worst < 0.11, "размах растёт плавно: доля %.3f за кадр" % worst)
+	near(view.wag_k[0], 1.0, 1e-6, "за 2 с — полное виляние")
+	e.mode = EcoEel.Mode.LATCHED
+	t += dt
+	view.sync(t)
+	ok(view.wag_k[0] > 0.9, "лёг на стекло — виляние гаснет, а не обрывается: %.2f" % view.wag_k[0])
+	for i in 16:
+		t += dt
+		view.sync(t)
+	near(view.wag_k[0], 0.0, 1e-6, "за WAG_RISE погасло")
+	view.sync(t + 5.0)
+	near(view.wag_k[0], 0.0, 1e-6, "после паузы — без прыжка, на месте")
+	view.sync(0.0)
+	near(view.wag_k[0], 0.0, 1e-6, "время назад — сразу к цели")
+	near(EelView.wag_amp(0.5), 0.5, 1e-6, "середина — половина размаха")
+
+
+## Сдвиг вбок звена хвоста от его места в мире.
+func _tail_off(view: EelView, e: EcoEel.Eel) -> float:
+	var k := EcoEel.SEGS - 1
+	return EelView.transform_at(view.shell_buffer, e.index * EcoEel.SEGS + k).origin.distance_to(e.segs[k])
+
+
+func test_ring_flattens_smoothly() -> void:
+	# Б3: присоска ложится на стекло и собирается за RING_RISE, а не за кадр (раньше — сразу RING_FLAT)
+	var w := _world()
+	var eels := _eels(w)
+	var view := EelView.new(eels)
+	tree.root.add_child(view)
+	var e := eels.eels[0]
+	e.mode = EcoEel.Mode.STRIKE
+	view.sync(1.0)
+	near(view.ring_k[0], 0.0, 1e-6, "на ходу присоска круглая")
+	e.mode = EcoEel.Mode.LATCHED
+	var dt := 1.0 / 30.0
+	var t := 1.0
+	var prev := _ring_width(view)
+	var worst := 0.0
+	for i in 30:
+		t += dt
+		view.sync(t)
+		var wd := _ring_width(view)
+		worst = maxf(worst, absf(wd - prev))
+		prev = wd
+		if i == 0:
+			ok(view.ring_k[0] < 0.2, "первый кадр на стекле — ещё почти круглая: %.2f" % view.ring_k[0])
+	near(view.ring_k[0], 1.0, 1e-6, "за RING_RISE расплющилась")
+	var pulse := EelView.ring_pulse(EelView.breath_k(0, t, view.wag_k[0], view.ring_k[0]), view.ring_k[0]).x
+	near(_ring_width(view), EelView.RING_FLAT.x * pulse, 1e-3, "ширина — RING_FLAT (и такт присоски)")
+	e.mode = EcoEel.Mode.FLEE
+	for i in 30:
+		t += dt
+		view.sync(t)
+		var wd := _ring_width(view)
+		worst = maxf(worst, absf(wd - prev))
+		prev = wd
+	near(view.ring_k[0], 0.0, 1e-6, "отпустил — собралась")
+	# 0,35 ширины за 0,4 с мягко — не больше ≈ 0,35 · 1,5 · dt / 0,4 за кадр (раньше 0,35 за кадр)
+	ok(worst < 0.35 * 1.5 * dt / EelView.RING_RISE + 1e-3, "ширина без скачка: %.3f за кадр" % worst)
+	view.queue_free()
+
+
+## Ширина присоски первого стеклоуста по отношению к голове (1 — круглая).
+func _ring_width(view: EelView) -> float:
+	var b := _basis(view.ring_buffer, 0)
+	var hb := EelView._look(view.eels.eels[0].face)
+	return (hb.inverse() * b).x.length()
+
+
+func _basis(buf: PackedFloat32Array, o: int) -> Basis:
+	return Basis(Vector3(buf[o], buf[o + 4], buf[o + 8]), Vector3(buf[o + 1], buf[o + 5], buf[o + 9]),
+		Vector3(buf[o + 2], buf[o + 6], buf[o + 10]))

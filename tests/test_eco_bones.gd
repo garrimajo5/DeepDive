@@ -238,9 +238,165 @@ func test_moss_at_rib_feet() -> void:
 	eq(sides, [3, 3], "по три пятна с каждой стороны")
 	var ev := EcoView.new()
 	ev.ground = Seabed.height
-	eq(ev.moss.patches.size(), 22, "пятна рифа — прежние 22, скребуны их не делят с костями")
+	eq(ev.moss.patches.size(), EcoMoss.SPOTS.size(), "пятна рифа — только EcoMoss.SPOTS, скребуны их не делят с костями")
 	var mv := ev.bones_view.moss_view
 	ok(mv != null and mv.get_parent() == ev.bones_view, "мох на костях — в сцене")
 	eq(mv.look.verts.size(), EcoBones.MOSS_PAIRS.size() * EcoMossLook.VERTS_PER_PATCH, "один меш на все пятна")
 	eq(mv.layers, OceanView.LAYER_WORLD, "слой отмели")
+	ev.free()
+
+
+## Строки MESSAGE из событий мира для корабля.
+static func _messages(w: EcoWorld) -> Array[String]:
+	var out: Array[String] = []
+	for e in w.take_link():
+		if e.get("type", "") == EcoLink.MESSAGE:
+			out.append(str(e["text"]))
+	return out
+
+
+## Мир с костями и кораблём у клетки (на 10 м над дном, 12 м от центра), сканер включён.
+func _inspect_world() -> Array:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	var b := w.add(EcoBones.new()) as EcoBones
+	w.ship.pos = Vector3(EcoBones.CENTER.x + 12.0, FLAT + 10.0, EcoBones.CENTER.y)
+	w.ship.scan_range = Scanner.RANGE
+	return [w, b]
+
+
+func test_scanner_shows_mineral_once() -> void:
+	var r := _inspect_world()
+	var w: EcoWorld = r[0]
+	var b: EcoBones = r[1]
+	var got: Array[String] = []
+	for i in 20:   # 2 с — ещё рано
+		w.step(0.1)
+		got.append_array(_messages(w))
+	eq(got.size(), 0, "осмотр короче INSPECT_TIME — строки нет")
+	for i in 15:
+		w.step(0.1)
+		got.append_array(_messages(w))
+	eq(got, [EcoBones.INSPECT_TEXT] as Array[String], "после 3 с сканера у костей — одна строка о минерализации")
+	ok(b.inspected, "осмотр отмечен")
+	for i in 100:
+		w.step(0.1)
+		got.append_array(_messages(w))
+	eq(got.size(), 1, "строка приходит один раз за забег")
+	w.reset()
+	ok(not b.inspected and b.inspect == 0.0, "новый забег — осмотр заново")
+
+
+func test_scanner_off_or_far_no_message() -> void:
+	var cases := {
+		"сканер выключен": func(w: EcoWorld) -> void: w.ship.scan_range = 0.0,
+		"далеко от клетки": func(w: EcoWorld) -> void: w.ship.pos.x = EcoBones.CENTER.x + EcoBones.INSPECT_R + 5.0,
+		"высоко над дном": func(w: EcoWorld) -> void: w.ship.pos.y = FLAT + EcoBones.INSPECT_UP + 5.0,
+	}
+	for why: String in cases:
+		var r := _inspect_world()
+		var w: EcoWorld = r[0]
+		(cases[why] as Callable).call(w)
+		var got: Array[String] = []
+		for i in 80:
+			w.step(0.1)
+			got.append_array(_messages(w))
+		eq(got.size(), 0, why)
+
+
+func test_leaving_early_decays() -> void:
+	var r := _inspect_world()
+	var w: EcoWorld = r[0]
+	var b: EcoBones = r[1]
+	for i in 25:   # 2,5 с у костей
+		w.step(0.1)
+	w.ship.scan_range = 0.0
+	for i in 10:   # 1 с без сканера — спало на 2 с
+		w.step(0.1)
+	near(b.inspect, 0.5, 0.05, "отошёл — набранное спадает вдвое быстрее")
+	w.ship.scan_range = Scanner.RANGE
+	var got: Array[String] = []
+	for i in 20:
+		w.step(0.1)
+		got.append_array(_messages(w))
+	eq(got.size(), 0, "после спада нужно снова почти все 3 с")
+	for i in 10:
+		w.step(0.1)
+		got.append_array(_messages(w))
+	eq(got.size(), 1, "досмотрел — строка пришла")
+
+
+func test_inspect_text_no_new_lore() -> void:
+	var t := EcoBones.INSPECT_TEXT
+	ok(t.begins_with("Сканер: "), "строка сканера")
+	for word in ["убит", "поле", "К-6", "левиафан", "метр", "лет"]:
+		ok(not t.contains(word), "без новых сюжетных фактов: %s" % word)
+	ok(t.length() <= 110, "коротко: %d" % t.length())
+
+
+func test_view_lite_coarser_same_material() -> void:
+	var b := _bones(Seabed.height)
+	var v := BonesView.new(b)
+	tree.root.add_child(v)
+	await frames(1)
+	var full := v.tris
+	var full_skull := v.skull_tris
+	var full_glow := v.glowing
+	var full_ribs := v.rib_tris
+	var mat := v.mesh.surface_get_material(0)
+	var box := v.mesh.get_aabb()
+	v.set_lite(true)
+	ok(v.lite, "кости — на «Экономно»")
+	ok(v.tris * 100 <= full * 86, "треугольников не больше 86 %% (%d → %d)" % [full, v.tris])
+	ok(v.rib_tris < full_ribs, "рёбра грубее: %d → %d" % [full_ribs, v.rib_tris])
+	eq(v.skull_tris, full_skull, "череп с окнами тот же")
+	eq(v.glowing, full_glow, "обрастание светится то же")
+	eq(v.mesh.get_surface_count(), 1, "вызов тот же")
+	ok(v.mesh.surface_get_material(0) == mat, "материал тот же")
+	var lb := v.mesh.get_aabb()
+	ok(lb.size.y > box.size.y * 0.97 and lb.size.x > box.size.x * 0.95, "силуэт тот же: %s → %s" % [box.size, lb.size])
+	# рёбра наружу и на «Экономно»: грань смотрит от осевой линии своего ребра
+	var per_rib := v.rib_tris / (EcoBones.PAIRS * 2)
+	eq(per_rib * EcoBones.PAIRS * 2, v.rib_tris, "у каждого ребра поровну граней")
+	var n := EcoBones.rib_points()
+	var outward := 0
+	for t in v.rib_tris:
+		var a := v.verts[t * 3]
+		var c := (a + v.verts[t * 3 + 1] + v.verts[t * 3 + 2]) / 3.0
+		var lc := b.to_local(c)
+		var r := t / per_rib
+		var best := INF
+		var axis := Vector3.ZERO
+		for i in n - 1:
+			var p0 := b.rib_point(r, i)
+			var p1 := b.rib_point(r, i + 1)
+			var d := EcoBones.seg_dist(lc, p0, p1)
+			if d < best:
+				best = d
+				var ab := p1 - p0
+				axis = p0 + ab * clampf((lc - p0).dot(ab) / ab.length_squared(), 0.0, 1.0)
+		var out := c - b.to_world(axis)
+		if t % per_rib >= (n - 1) * BonesView.LITE_RIB_SIDES * 2:
+			out = b.basis * (b.rib_point(r, n - 1) - b.rib_point(r, n - 2))
+		var cr := (v.verts[t * 3 + 1] - a).cross(v.verts[t * 3 + 2] - a)
+		if cr.dot(out) < 0.0 and v.normals[t * 3].dot(out) > 0.0:
+			outward += 1
+	eq(outward, v.rib_tris, "лицевая сторона рёбер — снаружи")
+	ok(v.moss_view == null or v.moss_view.get_parent() == v, "мох на месте")
+	v.set_lite(false)
+	eq(v.tris, full, "назад — полный меш")
+	v.queue_free()
+	await frames(1)
+
+
+func test_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = Seabed.height
+	ev.set_lite(true)
+	ok(ev.bones_view.lite, "уровень дошёл до костей")
+	var t := ev.bones_view.tris
+	ev.ground = Seabed.height
+	ok(ev.bones_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(ev.bones_view.tris, t, "и меш грубый")
+	ev.set_lite(false)
 	ev.free()

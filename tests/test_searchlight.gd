@@ -155,3 +155,37 @@ func test_scene_projector_and_beam() -> void:
 	ok(v.spot.light_projector != null, "маска пятна остаётся")
 	v.queue_free()
 	await frames(1)
+
+
+## Issue #489: полосы поперёк пятна на склоне — самозатенение дна (акне) при сдвиге тени по нормали 1,0.
+func test_spot_shadow_without_acne() -> void:
+	var v := SearchlightView.new()
+	tree.root.add_child(v)
+	await frames(1)
+	ok(v.spot.shadow_enabled, "тени прожектора остаются")
+	ok(v.spot.shadow_normal_bias >= 2.0, "сдвиг по нормали ≥ 2 — без полос на склоне")
+	near(v.spot.shadow_normal_bias, Searchlight.SHADOW_NORMAL_BIAS, 1e-6)
+	v.queue_free()
+	await frames(1)
+
+
+## #852: дальность, конус и плотность луча пишутся только при изменении — запись дальности обновляет свет и его тень.
+func test_range_written_only_on_change() -> void:
+	var v := SearchlightView.new()
+	tree.root.add_child(v)
+	await frames(1)
+	v.apply(true, 1.0, 1.0)
+	near(v.spot.spot_range, Searchlight.range_m(1.0), 1e-4, "дальность по силе")
+	v.spot.spot_range = 1.0   # метка: перепишется — значит, запись была
+	v.apply(true, 1.0, 1.0)
+	near(v.spot.spot_range, 1.0, 1e-6, "сила та же — дальность не переписана")
+	v.apply(true, 1.0, 0.5)
+	near(v.spot.spot_range, Searchlight.range_m(1.0) * 0.5, 1e-4, "ил укоротил — записано")
+	v.apply(true, 0.6, 0.5)
+	near(v.spot.spot_range, Searchlight.range_m(0.6) * 0.5, 1e-4, "сила меньше — записано")
+	near(float(v.beam_mat().get_shader_parameter("silt_dim")), Searchlight.SILT_DIM * Searchlight.silt_k(0.5), 1e-6,
+		"плотность по илу")
+	v.apply(false, 0.6, 0.5)
+	near(v.spot.light_energy, Searchlight.DARK, 1e-6, "выключен — гаснет энергией")
+	v.queue_free()
+	await frames(1)

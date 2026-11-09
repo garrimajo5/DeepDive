@@ -55,6 +55,37 @@ func test_clear_only_own_message() -> void:
 	eq(m.text, "Течение сменилось", "чужое не трогаем")
 
 
+func test_message_not_cut_right_away() -> void:
+	# issue #979: строку веера через 0,2 с перебивал укус хищника — тестер её не видел
+	var m := Status.Message.new()
+	m.say("Кружевной веер у курильщика повёрнут к жерлу", Status.MESSAGE_SECONDS, true)
+	m.update(0.2)
+	m.say("Крупный хищник укусил корпус", Status.MESSAGE_SECONDS, true)
+	eq(m.text, "Кружевной веер у курильщика повёрнут к жерлу", "первая строка видна MIN_SHOW")
+	m.update(0.5)
+	eq(m.text, "Кружевной веер у курильщика повёрнут к жерлу", "через 0,7 с ещё она")
+	m.update(0.4)
+	eq(m.text, "Крупный хищник укусил корпус", "после 1 с — ждущая")
+	m.update(4.1)
+	ok(m.visible(), "ждущая держит свои 4,2 с")
+	m.update(0.2)
+	ok(not m.visible(), "и гаснет")
+	m.say("А")
+	m.update(2.0)
+	m.say("Б", Status.MESSAGE_SECONDS, true)
+	eq(m.text, "Б", "после MIN_SHOW новое сразу")
+	m.say("Б", Status.MESSAGE_SECONDS, true)
+	eq(m.text, "Б", "то же самое — не в очередь")
+	m.say("В", Status.MESSAGE_SECONDS, true)
+	m.clear("В")
+	m.update(1.5)
+	eq(m.text, "Б", "погашенное ждущее не всплывает")
+	m.say("Свет")
+	eq(m.text, "Свет", "своё действие — сразу, без очереди")
+	m.say("Мир", Status.MESSAGE_SECONDS, true)
+	eq(m.text, "Мир", "своё строку мира не держит — она сразу")
+
+
 func test_rumbs_and_course() -> void:
 	eq(Status.rumb(Vector3(0, 0, -1)), "С", "к −Z — север")
 	eq(Status.rumb(Vector3(1, 0, 0)), "В", "+X — восток")
@@ -69,15 +100,16 @@ func test_scene_status_and_messages() -> void:
 	await frames(1)
 	main.step(0.1)
 	var line := Status.join(main.status_parts())
-	ok(line.begins_with("Мостик · глубина 20 м"), "на ногах: %s" % line)
-	ok(line.contains("Сесть за штурвал"), "у кресла — подсказка поста")
+	ok(line.begins_with("Мостик · глубина 30 м"), "на ногах: %s" % line)
+	ok(not line.contains("Сесть за штурвал"), "подписи поста в строке нет — она на кнопке (#1345): %s" % line)
+	ok(not line.contains("течение"), "слабое течение не висит в строке (#1345)")
 	main.sit_at_helm()
 	main.step(0.1)
 	line = Status.join(main.status_parts())
 	ok(line.contains("За штурвалом") and line.contains("курс 0°") and line.contains("до дна") and line.contains("Вы за штурвалом"), line)
 	main.toggle_light()
 	main.step(0.1)
-	ok(Status.join(main.status_parts()).contains("прожектор выкл · реактор 100/100 · течение на ЮВ 0,3 м/с · Прожектор погашен"), Status.join(main.status_parts()))
+	ok(Status.join(main.status_parts()).contains("прожектор выкл · реактор 100/100 · Прожектор погашен"), Status.join(main.status_parts()))
 	main.stand_up()
 	main.step(0.1)
 	ok(not main.message.visible() or main.message.text != Main.SAT_MSG, "после «Встать» «Вы за штурвалом» не висит")
@@ -100,3 +132,95 @@ func test_hint_has_backing() -> void:
 	near(main.hint.position.x + sb.content_margin_left, 24.0, 0.5, "текст на прежнем месте")
 	main.queue_free()
 	await frames(1)
+
+
+## #847: та же строка — без новых замеров шрифтом; смена части, ширины или размера — пересчёт.
+func test_lines_cached_until_change() -> void:
+	var calls := [0]
+	var counted := func(s: String) -> float:
+		calls[0] += 1
+		return float(s.length())
+	var l := Status.Lines.new()
+	var parts := ["Мостик", "глубина 20 м", "ход 1,5 м/с"]
+	ok(l.update(parts, counted, 30.0, 20), "первый раз — новая строка")
+	eq(l.text, "\n".join(Status.lines(parts, by_len, 30.0)), "текст как у Status.lines")
+	var first: int = calls[0]
+	ok(first > 0, "мерили шрифтом")
+	for i in 30:
+		ok(not l.update(["Мостик", "глубина 20 м", "ход 1,5 м/с"], counted, 30.0, 20), "та же строка — не новая")
+	eq(calls[0], first, "за 30 кадров без изменений — ни одного замера")
+	ok(l.update(["Мостик", "глубина 21 м", "ход 1,5 м/с"], counted, 30.0, 20), "глубина сменилась")
+	ok(calls[0] > first, "пересчитали")
+	ok(l.update(["Мостик", "глубина 21 м", "ход 1,5 м/с"], counted, 12.0, 20), "уже экран — пересчёт")
+	eq(l.text, "Мостик\nглубина 21 м\nход 1,5 м/с", "по новой ширине")
+	ok(l.update(["Мостик", "глубина 21 м", "ход 1,5 м/с"], counted, 12.0, 24), "другой размер шрифта — пересчёт")
+	ok(l.update(["Мостик", "глубина 21 м"], counted, 12.0, 24), "часть ушла — пересчёт")
+	ok(l.update(["Мостик глубина 21 м"], counted, 12.0, 24), "склейка частей — другая строка")
+
+
+## #1345: ряды приборов — последний (тревога и сообщение) по словам на оставшиеся строки, всего не больше трёх.
+func test_rows_at_most_three() -> void:
+	var m := func(t: String) -> float: return float(t.length())
+	var rows := [["За штурвалом", "глубина 120 м", "ход 2,4 м/с"], ["до дна 8 м", "курс 90°"],
+		["ПРОБОИНА · МОСТИК", "Пробоина: мостик — держите «Сварка» у пробоины, вода прибывает, плафоны гаснут"]]
+	var out := Status.rows(rows, m, 50.0)
+	eq(out.size(), 3, "три строки: %s" % [out])
+	eq(out[0], "За штурвалом · глубина 120 м · ход 2,4 м/с", "ряд 1")
+	eq(out[1], "до дна 8 м · курс 90°", "ряд 2")
+	ok(out[2].begins_with("ПРОБОИНА · МОСТИК · Пробоина") and out[2].ends_with("…"), "ряд 3 ужат: %s" % out[2])
+	eq(Status.rows([["а"], [], ["б"]], m, 50.0), PackedStringArray(["а", "б"]), "пустой ряд не строка")
+	eq(Status.rows([["а"], ["а", "в"]], m, 50.0), PackedStringArray(["а", "в"]), "повтор в другом ряду не пишется")
+
+
+## #1345: за штурвалом с маршрутом, сообщением и сменой течения строка приборов на экране — не больше трёх строк;
+## течение — сообщением с направлением.
+func test_scene_pilot_status_three_lines() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.run.choose(0)
+	main.sit_at_helm()
+	main.current.timer = 0.05
+	main.step(0.1)
+	ok(main.message.text.begins_with("Течение сменилось: на ") and main.message.text.ends_with(" 0,3 м/с"),
+		"смена течения — сообщением: %s" % main.message.text)
+	main.on_eco_event(EcoLink.message(EcoVent.WARN_TEXT))
+	main.open_silt()
+	for i in 3:
+		main.step(0.1)
+	var rows := main.status_rows()
+	eq(rows.size(), 3, "три ряда")
+	eq(str(rows[0][0]), "За штурвалом", "якорь «где я» — первым")
+	eq(rows[2][0], Silt.ALARM, "тревога — в третьем ряду")
+	ok(main.hint.text.split("\n").size() <= 3, "на экране ≤ 3 строк:\n%s" % main.hint.text)
+	main.queue_free()
+	await frames(1)
+
+
+## #1361: длинный ряд в середине (сообщение во время тревоги) не вытесняет тревогу — ужат до своей строки.
+func test_rows_middle_leaves_line_for_alarm() -> void:
+	var m := func(t: String) -> float: return float(t.length())
+	var rows := [["Мостик", "глубина 30 м"], ["Вода теплеет: впереди шлейф Чёрного курильщика, обходите сбоку жерла"],
+		["СОНАРНАЯ ТЬМА"]]
+	var out := Status.rows(rows, m, 40.0)
+	eq(out.size(), 3, "три строки: %s" % [out])
+	ok(out[1].ends_with("…"), "сообщение ужато: %s" % out[1])
+	eq(out[2], "СОНАРНАЯ ТЬМА", "тревога на месте")
+	eq(Status.rows([["а"], ["б в г д"], []], m, 3.0).size(), 3, "без тревоги середина берёт свободные строки")
+
+
+func test_message_take_world() -> void:
+	# #1429: брифинг прибытия забирает строки мира с приборов — видимую и ждущую очереди, отдаёт последнюю
+	var m := Status.Message.new()
+	m.say("Из песка что-то схватило круглую рыбку", Status.MESSAGE_SECONDS, true)
+	m.update(0.2)
+	m.say("Стайка круглых рыбок пасётся на светящемся мху", Status.MESSAGE_SECONDS, true)
+	eq(m.take_world(), "Стайка круглых рыбок пасётся на светящемся мху", "отдана ждущая, последняя")
+	ok(not m.visible(), "видимая строка мира погасла")
+	m.update(2.0)
+	ok(not m.visible(), "ждущая не вышла")
+	m.say("Течение сменилось", Status.MESSAGE_SECONDS, true)
+	eq(m.take_world(), "Течение сменилось", "одна видимая — отдана она")
+	m.say("Вы за штурвалом")
+	eq(m.take_world(), "", "своё сообщение игрока — не строка мира")
+	eq(m.text, "Вы за штурвалом", "и остаётся на приборах")

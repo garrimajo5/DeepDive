@@ -61,6 +61,7 @@ func test_models_on_bridge() -> void:
 			continue
 		ok(not n.find_children("*", "MeshInstance3D", true, false).is_empty(), "у %s есть меш" % name)
 	near(main.bridge.wheel.global_position.distance_to(main.ship.to_global(Vector3(0, BridgeProps.WHEEL_Y, BridgeProps.WHEEL_Z))), 0.0, 1e-3, "колесо на месте")
+	near(absf(main.bridge.wheel.rotation_degrees.z), BridgeProps.WHEEL_ZERO_DEG, 1e-3, "колесо в покое на 180°: верхней спицы на экране нет (#1402)")
 
 
 func test_sit_drive_and_stand() -> void:
@@ -79,7 +80,7 @@ func test_sit_drive_and_stand() -> void:
 	r.end(2)
 	ok(main.helm.pos.z < z0 - 0.5, "корабль пошёл к носу")
 	ok(main.helm.yaw < 0.0, "и повернул вправо")
-	ok(main.bridge.wheel.rotation_degrees.z < 0.0, "колесо повернулось")
+	ok(main.bridge.wheel.rotation_degrees.z < BridgeProps.WHEEL_ZERO_DEG - 1.0, "колесо повернулось от нуля 180°")
 	near(main.ship.position.z, main.helm.pos.z, 1e-4, "корабль в сцене там же, где в расчёте")
 	r.begin(3, r.layout.action.c)
 	r.end(3)

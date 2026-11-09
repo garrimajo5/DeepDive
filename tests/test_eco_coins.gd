@@ -134,7 +134,40 @@ func test_glazun_grabs_coin_overhead() -> void:
 	eq(ev[0].text(), "Из песка что-то схватило круглую рыбку")
 	w.scanned = func(sp: String) -> bool: return true
 	eq(ev[0].text(), "Песчаный глазун схватил монетника")
-	near(EcoCoins.glazun_transform(gz).origin.y, gz.pos.y + 0.35 * gz.lunge, 1e-5, "тело приподнято")
+	near(EcoCoins.glazun_transform(gz).origin.y, gz.pos.y + 0.35 * EcoCoins.lunge_k(gz), 1e-5, "тело приподнято по позе")
+
+
+## Бросок из песка — за EcoCoins.RISE, а не за кадр: высота тела за кадр меняется не больше наклона smoothstep, тело
+## доходит до 0,35 м и опадает вместе с lunge (раньше 0 → 0,35 м и 0,4 рад за один шаг, tools/jerk.gd).
+func test_glazun_lunge_rises_without_snap() -> void:
+	var w := _world()
+	var c := _coins(w)
+	var sc := c.schools[0]
+	var gz := sc.glazun
+	gz.cd = 0.0
+	var cn := sc.members[0]
+	cn.pos = gz.pos + Vector3(0.3, 1.0, 0)
+	cn.goal = cn.pos
+	cn.goal_t = 10.0
+	var dt := 1.0 / 30.0
+	var prev := EcoCoins.glazun_transform(gz).origin.y - gz.pos.y
+	var worst := 0.0
+	var top := 0.0
+	var top_t := -1.0
+	for i in 45:
+		w.step(dt)
+		var h := EcoCoins.glazun_transform(gz).origin.y - gz.pos.y
+		worst = maxf(worst, absf(h - prev))
+		if h > top + 1e-4:
+			top = h
+			top_t = (i + 1) * dt
+		prev = h
+	ok(not cn.alive, "схвачен")
+	ok(worst <= 0.35 * 1.5 * dt / EcoCoins.RISE + 1e-3, "за кадр не больше %.3f м: %.3f" % [0.35 * 1.5 * dt / EcoCoins.RISE, worst])
+	ok(worst < 0.35 * 0.5, "не прыжком: %.3f" % worst)
+	ok(top > 0.3, "вышел из песка: %.2f м" % top)
+	ok(top_t <= EcoCoins.RISE + 2 * dt, "быстро — за %.2f с" % top_t)
+	ok(prev < 0.05, "к 1,5 с снова в песке: %.2f" % prev)
 
 
 func test_glazun_waits_and_ignores_high_coins() -> void:
@@ -387,29 +420,76 @@ func test_reset_restores() -> void:
 
 # ---------- Сцена ----------
 
-func test_view_three_draws() -> void:
+## Два вызова отрисовки (#849): монетники и глазуны целиком (тело, стебли, глаза — один MultiMesh).
+func test_view_two_draws() -> void:
 	var w := _world()
 	var c := _coins(w)
 	var v := CoinsView.new(c)
 	tree.root.add_child(v)
 	await frames(1)
 	ok(v.visible)
-	for mi: MultiMeshInstance3D in [v.fish, v.bodies, v.eyes]:
+	for mi: MultiMeshInstance3D in [v.fish, v.bodies]:
 		eq(mi.layers, OceanView.LAYER_WORLD)
 	eq(v.fish.multimesh.instance_count, 27)
 	eq(v.bodies.multimesh.instance_count, 3)
-	eq(v.eyes.multimesh.instance_count, 6)
+	ok(v.find_child("Глаза", false, false) == null, "отдельного узла глаз нет")
 	var cn := c.coins[4]
-	ok(KelpView.transform_at(v.coin_buffer, 4, CoinsView.STRIDE).origin.is_equal_approx(cn.pos), "рыбка на месте")
+	ok(KelpView.transform_at(v.coin_buffer, 4, CoinsView.STRIDE_C).origin.is_equal_approx(cn.pos), "рыбка на месте")
 	cn.alive = false
 	c.glazuns[1].lit = true
 	v.sync(1.0)
-	ok(KelpView.transform_at(v.coin_buffer, 4, CoinsView.STRIDE).basis.x.length() < 1e-6, "съеденная сжата")
-	var i := (1 * 2 + 0) * CoinsView.STRIDE_C + 12
-	ok(v.eye_buffer[i] > 1.0, "глаза в луче яркие")
-	near(KelpView.transform_at(v.eye_buffer, 2, CoinsView.STRIDE_C).basis.x.length(), 1.6, 1e-4, "и крупнее")
+	ok(KelpView.transform_at(v.coin_buffer, 4, CoinsView.STRIDE_C).basis.x.length() < 1e-6, "съеденная сжата")
+	eq(v.body_buffer[1 * CoinsView.STRIDE_C + 15], 1.0, "глаза в луче: альфа 1 — ярко и крупнее")
+	ok(v.body_buffer[0 * CoinsView.STRIDE_C + 15] < 0.8, "вне луча — тусклее, не раздуваются")
+	near(v.body_buffer[0 * CoinsView.STRIDE_C + 12], CoinsView.glazun_tint(0).r, 1e-6, "цвет экземпляра — краска глазуна")
 	v.queue_free()
 	await frames(1)
+
+
+## Глазун одним мешем (#849): одна поверхность на общем шейдере растений; тело и стебли — альфа 0, глаза — 1,
+## свет глаз — по альфе, в луче шарик раздувается по нормали до прежних 1,6 радиуса.
+func test_glazun_one_mesh() -> void:
+	var m := CoinsView.build_glazun()
+	eq(m.get_surface_count(), 1, "одна поверхность")
+	var mat := m.surface_get_material(0) as ShaderMaterial
+	ok(mat != null and mat.get_shader_parameter("mode") == EcoShaders.Plant.TENTACLE, "шейдер растений, щупальце")
+	eq(ShaderKey.of(mat), ShaderKey.of(KelpView.build_urchin().surface_get_material(0)), "нового шейдера нет")
+	var grow: Vector2 = mat.get_shader_parameter("tip_grow")
+	near(CoinsView.EYE_R * (1.0 + grow.y), CoinsView.EYE_R * 1.6, 1e-6, "в луче глаз в 1,6 раза крупнее")
+	var arr := m.surface_get_arrays(0)
+	var vv: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var nn: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+	var cc: PackedColorArray = arr[Mesh.ARRAY_COLOR]
+	var eye_v := 0
+	var off := 0
+	for i in vv.size():
+		if cc[i].a > 0.5:
+			eye_v += 1
+			var ctr := Vector3(signf(vv[i].x) * EcoCoins.EYE.x, EcoCoins.EYE.y, EcoCoins.EYE.z)
+			if absf(vv[i].distance_to(ctr) - CoinsView.EYE_R) > 1e-4 \
+					or nn[i].distance_to((vv[i] - ctr).normalized()) > 1e-3:
+				off += 1
+		elif cc[i].a > 0.01:
+			off += 1
+	ok(eye_v > 0, "у глаз альфа 1")
+	eq(off, 0, "глаза — шарики на стебельках с нормалью от центра, у тела альфа 0")
+	# глаз светится: свет = краска · сила · альфа² — в луче как прежние (k = 1: зелёный 1,25)
+	near(CoinsView.EYE_PAINT.g * CoinsView.EYE_GLOW, 1.25, 1e-4, "в луче — прежняя яркость")
+
+
+## Без броска глаза шейдерного глазуна стоят там же, где мир считает глаза (gz.eyes — сканер, луч).
+func test_glazun_eyes_where_world_sees() -> void:
+	var c := _coins(_world())
+	for gz in c.glazuns:
+		var tr := EcoCoins.glazun_transform(gz)
+		for e in 2:
+			var local := Vector3((-1.0 if e == 0 else 1.0) * EcoCoins.EYE.x, EcoCoins.EYE.y, EcoCoins.EYE.z)
+			ok((tr * local).distance_to(gz.eyes[e]) < 1e-4, "глаз %d глазуна %d" % [e, gz.index])
+	var gz := c.glazuns[0]
+	for t in [0.0, 1.0, 3.0, 7.7]:
+		ok(CoinsView.eye_grow(CoinsView.eye_alpha(gz, t, 0.0)) == 0.0, "вне луча шейдер глаза не раздувает (t %.1f)" % t)
+	eq(CoinsView.eye_alpha(gz, 3.0, 1.0), 1.0)
+	eq(CoinsView.eye_grow(1.0), 1.0)
 
 
 func test_meshes_face_outward() -> void:
@@ -424,13 +504,88 @@ func test_meshes_face_outward() -> void:
 		eq(bad, 0, "все грани наружу")
 
 
+## Монетник плывёт со скоростью v n шагов по dt (только поворот тела).
+func _swim(cn: EcoCoins.Coin, v: Vector3, n: int, dt := 0.05) -> void:
+	cn.vel = v
+	for i in n:
+		EcoCoins.turn(cn, dt)
+
+
 func test_coin_faces_its_swim() -> void:
 	var cn := EcoCoins.Coin.new()
-	cn.vel = Vector3(1, 0, 0)
+	_swim(cn, Vector3(1, 0, 0), 60)
 	var b := EcoCoins.coin_basis(cn, 0.0)
-	ok(b.z.dot(Vector3.RIGHT) > 0.95, "нос (+Z) по скорости")
-	cn.vel = Vector3(0, 1, 0)
+	ok(b.z.dot(Vector3.RIGHT) > 0.95, "нос (+Z) догнал скорость")
+	_swim(cn, Vector3(0, 1, 0), 60)
 	ok(EcoCoins.coin_basis(cn, 0.0).is_finite(), "вертикально — без ошибки")
+
+
+# ---------- Плавность (Б3) ----------
+
+func test_coin_turns_smoothly() -> void:
+	var cn := EcoCoins.Coin.new()
+	cn.vel = Vector3(1, 0, 0)
+	var before := cn.look
+	EcoCoins.turn(cn, 0.05)
+	var a := before.angle_to(cn.look)
+	ok(a > 0.0 and a <= EcoCoins.TURN_MAX * 0.05 + 1e-4, "за шаг — не больше TURN_MAX·dt: %.3f" % a)
+	ok(cn.look.dot(Vector3.RIGHT) < 0.5, "на прямой угол сразу не щёлкает")
+	_swim(cn, Vector3(1, 0, 0), 40)
+	ok(cn.look.dot(Vector3.RIGHT) > 0.99, "за 2 с догнал путь")
+
+
+func test_coin_banks_into_turn() -> void:
+	var cn := EcoCoins.Coin.new()  # нос в +Z, phase 0: в t = 0 покачивания нет
+	_swim(cn, Vector3(1, 0, 0), 4)  # +X при носе в +Z — поворот влево
+	ok(cn.bank > 0.05, "в повороте влево — крен влево: %.3f" % cn.bank)
+	ok(cn.bank <= EcoCoins.BANK_MAX, "не круче BANK_MAX")
+	ok(EcoCoins.coin_basis(cn, 0.0).y.x > 0.02, "спина наклонена внутрь поворота (+X)")
+	_swim(cn, Vector3(1, 0, 0), 80)
+	ok(absf(cn.bank) < 0.02, "на прямой крен уходит: %.3f" % cn.bank)
+	var right := EcoCoins.Coin.new()
+	_swim(right, Vector3(-1, 0, 0), 4)
+	ok(right.bank < -0.05, "вправо — на правый бок")
+
+
+func test_coin_holds_course_when_stopped() -> void:
+	var cn := EcoCoins.Coin.new()
+	_swim(cn, Vector3(1, 0, 0), 60)
+	_swim(cn, Vector3.ZERO, 40)
+	ok(cn.look.dot(Vector3.RIGHT) > 0.99, "стоит — держит курс")
+	ok(EcoCoins.coin_basis(cn, 0.0).z.dot(Vector3.RIGHT) > 0.95, "меш не щёлкает носом на свой случайный угол")
+	_swim(cn, Vector3(0.02, 0.05, 0), 40)
+	ok(absf(cn.look.y) < 0.01, "медленный дрейф — нос выровнен к горизонту")
+
+
+func test_coin_pitch_limited() -> void:
+	var cn := EcoCoins.Coin.new()
+	_swim(cn, Vector3(0, 2, 0.01), 100)
+	ok(cn.look.y <= sin(EcoCoins.PITCH_MAX) + 1e-3, "вверх — не круче PITCH_MAX: %.3f" % cn.look.y)
+	ok(cn.look.y > sin(EcoCoins.PITCH_MAX) - 0.05, "но носом вверх")
+	_swim(cn, Vector3(0, -2, 0.01), 100)
+	ok(cn.look.y >= -sin(EcoCoins.PITCH_MAX) - 1e-3, "вниз — тоже")
+
+
+func test_coins_turn_smoothly_in_world() -> void:
+	var w := _world()
+	w.reset()
+	var c := _coins(w)
+	w.ship.pos = c.schools[1].center + Vector3(0, 30, 0)  # стайка 1 рядом — шагает каждый кадр (дальние — EcoLod)
+	var prev: Array[Vector3] = []
+	for cn in c.coins:
+		prev.append(cn.look)
+	var worst := 0.0
+	for i in 400:
+		if i == 200:
+			c.schools[1].scatter = EcoCoins.SCATTER_TIME  # рассыпались — резкий разворот
+			c.schools[1].from = c.schools[1].center + Vector3(1, 0, 0)
+		w.step(0.05)
+		for cn in c.coins:
+			if cn.alive and cn.school == 1:
+				worst = maxf(worst, prev[cn.index].angle_to(cn.look))
+				ok(absf(cn.look.length() - 1.0) < 1e-3 and absf(cn.bank) <= EcoCoins.BANK_MAX + 1e-4, "нос единичный, крен в пределе")
+			prev[cn.index] = cn.look
+	ok(worst <= EcoCoins.TURN_MAX * 0.05 + 1e-3, "за кадр 0,05 с — не больше TURN_MAX·dt: %.3f" % worst)
 
 
 func test_eco_view_has_coins() -> void:
@@ -451,3 +606,297 @@ func test_eco_view_has_coins() -> void:
 	view.step(0.1, ship)
 	view.queue_free()
 	await frames(1)
+
+
+## «Экономно» (Б6): в каждой стайке рисуются две рыбки из трёх — видимые в начале буфера; мир считает всех, глазуны —
+## все; назад — буфер снова по номеру; сброс мира уровень не теряет.
+func test_view_lite_draws_two_of_three_per_school() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var cv := view.coins_view
+	var n := view.coins.coins.size()
+	eq(cv.drawn(), n, "на «Обычно» — все монетники")
+	view.set_lite(true)
+	ok(cv.lite, "монетники — на «Экономно»")
+	var per := EcoCoins.PER - EcoCoins.PER / CoinsView.LITE_SKIP
+	eq(cv.drawn(), per * view.coins.schools.size(), "две трети в каждой стайке")
+	ok(cv.drawn() < n * 0.7, "рыбок меньше на треть: %d" % cv.drawn())
+	eq(cv.bodies.multimesh.visible_instance_count, -1, "глазуны — все")
+	var seen := {}
+	for sc in view.coins.schools:
+		var shown := 0
+		for k in sc.members.size():
+			var cn: EcoCoins.Coin = sc.members[k]
+			seen[cv.slot_of(cn.index)] = true
+			if cv.slot_of(cn.index) < cv.drawn():
+				shown += 1
+				ok(CoinsView.lite_shown(k), "видна только показанная")
+		eq(shown, per, "в стайке %d видно %d" % [sc.index, per])
+	eq(seen.size(), n, "места в буфере не повторяются")
+	var ship := EcoLink.ShipState.new()
+	ship.pos = FAR
+	view.step(0.05, ship)
+	var cn4: EcoCoins.Coin = view.coins.schools[1].members[4]
+	ok(cv.slot_of(cn4.index) != cn4.index, "место в буфере сдвинуто")
+	ok(KelpView.transform_at(cv.coin_buffer, cv.slot_of(cn4.index), CoinsView.STRIDE_C).origin.is_equal_approx(
+		cn4.pos), "видимая рыбка — на своём месте буфера")
+	view.ground = Seabed.height   # сброс мира — виды пересобираются
+	ok(view.coins_view.lite and view.coins_view.drawn() < n, "сброс мира — снова «Экономно»")
+	view.set_lite(false)
+	cv = view.coins_view
+	view.step(0.05, ship)
+	eq(cv.drawn(), n, "назад — все")
+	cn4 = view.coins.schools[1].members[4]
+	eq(cv.slot_of(cn4.index), cn4.index, "буфер снова по номеру")
+	ok(KelpView.transform_at(cv.coin_buffer, cn4.index, CoinsView.STRIDE_C).origin.is_equal_approx(cn4.pos),
+		"и места переписаны")
+	view.queue_free()
+	await frames(1)
+
+
+## Хвост машет (Б3): хвост-конус гнётся вбок бегущей волной, передняя часть диска стоит; у рыбки своя фаза —
+## альфа цвета экземпляра; общий шейдер растений с волной `breath` и временем мира `t`.
+func test_tail_wave_mesh_and_shader() -> void:
+	var m := CoinsView.build_coin()
+	var arr := m.surface_get_arrays(0)
+	var vv: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	var uv2: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV2]
+	eq(uv.size(), vv.size(), "UV у каждой вершины")
+	eq(uv2.size(), vv.size(), "UV2 у каждой вершины")
+	var tip := 0.0
+	for i in vv.size():
+		near(uv[i].y, CoinsView.tail_bend(vv[i].z), 1e-6, "доля изгиба — по z")
+		near(uv[i].x, CoinsView.tail_lag(vv[i].z), 1e-6, "сдвиг фазы — по z")
+		eq(uv2[i], Vector2(1, 0), "гнётся вбок")
+		if vv[i].z > 0.0:
+			eq(uv[i].y, 0.0, "передняя половина диска жёсткая")
+		tip = maxf(tip, uv[i].y)
+	near(tip, 1.0, 1e-6, "кончик хвоста гнётся целиком")
+	var mat := m.surface_get_material(0) as ShaderMaterial
+	ok(mat != null and mat.shader.code.contains("UV.x + COLOR.a"), "общий шейдер растений, фаза — альфа цвета")
+	eq(mat.get_shader_parameter("breath"), Vector2(CoinsView.TAIL_AMP, CoinsView.TAIL_RATE), "размах и ритм — в шейдер")
+	eq(mat.get_shader_parameter("back"), Vector3.ZERO, "без просвета")
+	eq(mat.get_shader_parameter("tip_glow"), null, "без светящихся кончиков")
+
+
+func test_tail_offset_twin() -> void:
+	var z := CoinsView.TAIL_TIP
+	var t0 := -CoinsView.tail_lag(z) / CoinsView.TAIL_RATE
+	near(CoinsView.tail_offset(z, t0, 0.0), -CoinsView.TAIL_AMP, 1e-5, "кончик на полном размахе")
+	near(CoinsView.tail_offset(z, t0 + 0.5 / CoinsView.TAIL_RATE, 0.0), CoinsView.TAIL_AMP, 1e-5,
+		"через полвзмаха — в другую сторону")
+	near(CoinsView.tail_offset(0.1, 0.3, 0.2), 0.0, 1e-6, "нос стоит")
+	near(CoinsView.tail_offset(z, 0.0, 0.0, 0.0), 0.0, 1e-6, "«Экономно» — не машет")
+	ok(absf(CoinsView.tail_offset(-0.15, 0.0, 0.0)) < CoinsView.TAIL_AMP * 0.35, "задний край диска — слабее кончика")
+	# волна бежит к кончику: кончик повторяет середину хвоста с опозданием
+	var lag := (CoinsView.tail_lag(-0.12) - CoinsView.tail_lag(z)) / CoinsView.TAIL_RATE
+	ok(lag > 0.0, "к кончику волна приходит позже")
+	near(CoinsView.tail_offset(z, 0.7 + lag, 0.3) / CoinsView.tail_bend(z),
+		CoinsView.tail_offset(-0.12, 0.7, 0.3) / CoinsView.tail_bend(-0.12), 1e-5, "та же фаза — позже")
+	# за кадр 1/30 с кончик сдвигается плавно
+	var worst := 0.0
+	for k in 60:
+		var t := k / 30.0
+		worst = maxf(worst, absf(CoinsView.tail_offset(z, t + 1.0 / 30.0, 0.4) - CoinsView.tail_offset(z, t, 0.4)))
+	ok(worst < 0.012, "без рывков: %.4f м за кадр" % worst)
+
+
+## Б3: появившаяся над мхом рыбка вырастает за COIN_RISE, а не возникает за кадр; схваченная — пропадает сразу.
+func test_view_new_coin_grows() -> void:
+	var w := _world()
+	var c := _coins(w)
+	var v := CoinsView.new(c)
+	var cn := c.coins[4]
+	var t := 1.0
+	v.sync(t)
+	var full := KelpView.transform_at(v.coin_buffer, v.slot_of(4), CoinsView.STRIDE_C).basis.z.length()
+	ok(full > 0.05, "живая во весь размер: %.3f" % full)
+	cn.alive = false
+	t += 0.1
+	v.sync(t)
+	ok(KelpView.transform_at(v.coin_buffer, v.slot_of(4), CoinsView.STRIDE_C).basis.z.length() < 1e-6, "схваченная — сразу")
+	cn.alive = true
+	var dt := 1.0 / 30.0
+	var last := 0.0
+	var worst := 0.0
+	for i in int(CoinsView.COIN_RISE / dt) + 2:
+		t += dt
+		v.sync(t)
+		var tr := KelpView.transform_at(v.coin_buffer, v.slot_of(4), CoinsView.STRIDE_C)
+		var sz := tr.basis.z.length()
+		if i == 0:
+			ok(sz < full * 0.05, "появилась крошечной: %.4f" % sz)
+			ok(tr.origin.is_equal_approx(cn.pos), "растёт на своём месте")
+		worst = maxf(worst, sz - last)
+		last = sz
+	ok(worst < full * 0.15, "за шаг растёт на %.4f < 15 %%" % worst)
+	near(last, full, 1e-4, "выросла во весь размер")
+	cn.alive = false
+	v.sync(t)
+	cn.alive = true
+	v.sync(t + 5.0)
+	near(KelpView.transform_at(v.coin_buffer, v.slot_of(4), CoinsView.STRIDE_C).basis.z.length(), full, 1e-4,
+			"скачок времени — сразу к цели")
+	v.free()
+
+
+## Глаза глазуна в луче раздуваются и разгораются за EYE_RISE, гаснут за EYE_FADE — не за кадр (Б3).
+func test_view_glazun_eyes_ease() -> void:
+	var w := _world()
+	var c := _coins(w)
+	var v := CoinsView.new(c)
+	var gz := c.glazuns[0]
+	gz.lit = false
+	var t := 1.0
+	v.sync(t)
+	var a0 := v.body_buffer[gz.index * CoinsView.STRIDE_C + 15]
+	ok(a0 <= 0.75, "без света альфа не выше 0,75: %.3f" % a0)
+	near(CoinsView.eye_grow(a0), 0.0, 1e-6, "без света глаз не раздут")
+	gz.lit = true
+	var dt := 1.0 / 30.0
+	var last := a0
+	var worst := 0.0
+	for i in int(CoinsView.EYE_RISE / dt) + 2:
+		t += dt
+		v.sync(t)
+		var a := v.body_buffer[gz.index * CoinsView.STRIDE_C + 15]
+		if i == 0:
+			ok(a < 0.85, "первый кадр в луче — ещё не во всю силу: %.3f" % a)
+		worst = maxf(worst, absf(CoinsView.eye_grow(a) - CoinsView.eye_grow(last)))
+		last = a
+	near(last, 1.0, 1e-5, "в луче — во всю силу")
+	ok(worst < 0.35, "раздувание за кадр %.3f < 0,35 (было 1)" % worst)
+	gz.lit = false
+	t += dt
+	v.sync(t)
+	ok(v.body_buffer[gz.index * CoinsView.STRIDE_C + 15] > 0.95, "вышел из луча — гаснет не за кадр")
+	for i in int(CoinsView.EYE_FADE / dt) + 2:
+		t += dt
+		v.sync(t)
+	ok(v.body_buffer[gz.index * CoinsView.STRIDE_C + 15] <= 0.75, "погас за EYE_FADE")
+	gz.lit = true
+	v.sync(t + 5.0)
+	near(v.body_buffer[gz.index * CoinsView.STRIDE_C + 15], 1.0, 1e-5, "скачок времени — сразу к цели")
+	v.free()
+
+
+func test_view_tail_phase_and_time() -> void:
+	var w := _world()
+	var c := _coins(w)
+	var v := CoinsView.new(c)
+	v.sync(3.5)
+	near(float(v.mat.get_shader_parameter("t")), 3.5, 1e-6, "время мира — в шейдер")
+	var phases := {}
+	for cn in c.coins:
+		var a := v.coin_buffer[v.slot_of(cn.index) * CoinsView.STRIDE_C + 15]
+		near(a, CoinsView.tail_phase(cn), 1e-6, "фаза рыбки — альфа экземпляра")
+		ok(a >= 0.0 and a < 1.0)
+		phases[snappedf(a, 0.05)] = true
+	ok(phases.size() >= 8, "машут вразнобой: %d разных фаз" % phases.size())
+	v.free()
+
+
+## Глазун дышит в песке (Б3): тело выше и шире в такт, длина та же; в луче затаился, в броске не дышит, плавно.
+func test_view_glazun_breathes_held_in_beam() -> void:
+	var w := _world()
+	var c := _coins(w)
+	var v := CoinsView.new(c)
+	var gz := c.glazuns[0]
+	gz.lit = false
+	gz.lunge = 0.0
+	var hs: Array[float] = []
+	var prev := -1.0
+	var worst := 0.0
+	for s in 180:
+		var t := 1.0 + s / 30.0
+		v.sync(t)
+		var tr := KelpView.transform_at(v.body_buffer, gz.index, CoinsView.STRIDE_C)
+		var b := CoinsView.glazun_breath(gz, t, 0.0)
+		var sz := CoinsView.glazun_scale(gz.index)
+		near(tr.basis.z.length(), sz, 1e-4, "длина та же")
+		near(tr.basis.y.length(), b.y * sz, 1e-4, "высота — по дыханию")
+		near(tr.basis.x.length(), b.x * sz, 1e-4, "ширина — по дыханию")
+		ok(tr.origin.is_equal_approx(EcoCoins.glazun_transform(gz).origin), "тело на месте")
+		hs.append(tr.basis.y.length() / sz)
+		if prev > 0.0:
+			worst = maxf(worst, absf(hs[-1] - prev))
+		prev = hs[-1]
+	ok(hs.max() - hs.min() > CoinsView.GLAZUN_BREATH_H * 1.5, "тело поднимается и опадает: %.4f" % (hs.max() - hs.min()))
+	ok(hs.max() <= 1.0 + CoinsView.GLAZUN_BREATH_H + 1e-5 and hs.min() >= 1.0 - CoinsView.GLAZUN_BREATH_H - 1e-5,
+			"не больше размаха")
+	ok(worst < 0.01, "плавно: %.4f за кадр" % worst)
+	# в луче — затаился, в броске — не дышит
+	var t0 := 2.3
+	var free := CoinsView.glazun_breath(gz, t0, 0.0).y - 1.0
+	near(CoinsView.glazun_breath(gz, t0, 1.0).y - 1.0, free * CoinsView.GLAZUN_HELD, 1e-6, "в луче — доля размаха")
+	gz.lunge = 1.0
+	gz.rise = 1.0
+	eq(CoinsView.glazun_breath(gz, t0, 0.0), Vector3.ONE, "в броске не дышит")
+	gz.lunge = 0.0
+	gz.rise = 0.0
+	ok(absf(CoinsView.glazun_breath(c.glazuns[0], t0, 0.0).y - CoinsView.glazun_breath(c.glazuns[1], t0, 0.0).y) > 1e-3
+			if c.glazuns.size() > 1 else true, "у каждого своя фаза")
+	# свет приходит плавно: размах не прыгает за кадр
+	gz.lit = true
+	var t := 7.0
+	v.sync(t)
+	var last := KelpView.transform_at(v.body_buffer, gz.index, CoinsView.STRIDE_C).basis.y.length()
+	var jump := 0.0
+	for i in 30:
+		t += 1.0 / 30.0
+		v.sync(t)
+		var y := KelpView.transform_at(v.body_buffer, gz.index, CoinsView.STRIDE_C).basis.y.length()
+		jump = maxf(jump, absf(y - last))
+		last = y
+	ok(jump < 0.01, "вход в луч без скачка: %.4f" % jump)
+	v.free()
+
+
+## Монетник дышит (Б3): диск толще и выше по дыханию, длина та же; плавно; на бегу размах гаснет; у каждой своя фаза.
+func test_view_coin_breathes() -> void:
+	var w := _world()
+	var c := _coins(w)
+	var v := CoinsView.new(c)
+	var cn := c.coins[3]
+	cn.vel = Vector3.ZERO
+	var xs: Array[float] = []
+	var worst := 0.0
+	var k := CoinsView.coin_scale(cn)
+	for s in 120:
+		var t := 3.0 + s / 30.0
+		v.sync(t)
+		var tr := KelpView.transform_at(v.coin_buffer, v.slot_of(3), CoinsView.STRIDE_C)
+		var b := CoinsView.coin_breath(cn, t)
+		near(tr.basis.z.length(), k, 1e-4, "длина та же")
+		near(tr.basis.x.length(), k * b.x, 1e-4, "толщина — по дыханию")
+		near(tr.basis.y.length(), k * b.y, 1e-4, "высота — по дыханию")
+		ok(tr.origin.is_equal_approx(cn.pos), "рыбка на месте")
+		var x := tr.basis.x.length() / k
+		if not xs.is_empty():
+			worst = maxf(worst, absf(x - xs[-1]))
+		xs.append(x)
+	ok(xs.max() - xs.min() > CoinsView.COIN_BREATH_W * 1.5, "диск набирает воду и опадает: %.4f" % (xs.max() - xs.min()))
+	ok(xs.max() <= 1.0 + CoinsView.COIN_BREATH_W + 1e-5 and xs.min() >= 1.0 - CoinsView.COIN_BREATH_W - 1e-5,
+			"не больше размаха")
+	ok(worst < 0.02, "плавно: %.4f за кадр" % worst)
+	# на бегу — доля размаха, между — плавно по ходу
+	var t0 := 4.4
+	var calm := CoinsView.coin_breath(cn, t0).x - 1.0
+	ok(absf(calm) > 1e-3, "в момент проверки дышит: %.4f" % calm)
+	cn.vel = Vector3(CoinsView.COIN_RUSH + 1.0, 0, 0)
+	near(CoinsView.coin_breath(cn, t0).x - 1.0, calm * CoinsView.COIN_RUSH_K, 1e-6, "на бегу — доля размаха")
+	var last := calm
+	var jump := 0.0
+	for i in 41:
+		cn.vel = Vector3(i * 0.1 + 0.5, 0, 0)
+		var y := CoinsView.coin_breath(cn, t0).x - 1.0
+		jump = maxf(jump, absf(y - last))
+		last = y
+	ok(jump < 0.01, "размах по ходу без скачка: %.4f" % jump)
+	cn.vel = Vector3.ZERO
+	ok(absf(CoinsView.coin_breath(c.coins[0], t0).x - CoinsView.coin_breath(c.coins[1], t0).x) > 1e-3,
+			"у каждой своя фаза")
+	v.free()

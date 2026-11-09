@@ -60,8 +60,16 @@ func test_sit_and_stand_behind_chair() -> void:
 	ok(pilot.seated, "сели")
 	eq(pilot.eye(w), Vector3(0, Deck.SEAT_EYE, Deck.SEAT_Z), "глаз над креслом")
 	near(w.yaw, 0.0, 1e-9, "лицом к носу")
+	near(w.pitch, deg_to_rad(-8.0), 1e-9, "взгляд чуть вниз — верх центрального экрана в кадре (#1402)")
 	pilot.stand(w)
 	ok(not pilot.seated, "встали")
 	ok(w.z > BridgeProps.CHAIR_Z + 0.5, "за креслом (ближе к корме)")
 	near(w.x, 0.0, 1e-9, "по оси мостика")
 	near(w.yaw, 0.0, 1e-9, "лицом к носу")
+
+
+## UX #1402: колесо стоит повёрнутым на 180° (верхней спицы на экране нет), руление — от этого нуля.
+func test_wheel_zero_turned_half() -> void:
+	near(BridgeProps.wheel_deg(0.0), 180.0, 1e-9, "в покое колесо на 180°")
+	near(BridgeProps.wheel_deg(1.0), 180.0 - BridgeProps.WHEEL_TURN_DEG, 1e-9, "вправо — по часовой от нуля")
+	near(BridgeProps.wheel_deg(-1.0), 180.0 + BridgeProps.WHEEL_TURN_DEG, 1e-9, "влево — против часовой")

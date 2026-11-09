@@ -53,11 +53,11 @@ func _flat(a: Vector3, b: Vector3) -> float:
 
 # ---------- Мох и скребуны (EcoMoss, EcoGrazer) ----------
 
-func test_22_patches_and_10_grazers() -> void:
+func test_24_patches_and_10_grazers() -> void:
 	var w := _world()
 	var moss := _moss(w)
 	var gr := _grazers(w)
-	eq(moss.patches.size(), 22, "22 пятна")
+	eq(moss.patches.size(), 24, "24 пятна: 22 из браузера и два у Каменного цветка (#1400)")
 	near(moss.patches[0].pos.x, 30.831, 0.01, "первое пятно — как в браузере")
 	near(moss.patches[0].pos.z, 94.437, 0.01)
 	for p in moss.patches:
@@ -100,7 +100,7 @@ func test_grazer_walks_to_patch_and_grazes() -> void:
 		if not g.grazing():
 			if not eq(g.agent.state, EcoAgent.State.SEEK):
 				return
-			if not near(g.agent.v.length(), EcoGrazer.WALK_SPEED, 1e-3, "идёт шагом 0,9 м/с"):
+			if not ok(g.agent.v.length() <= EcoGrazer.WALK_SPEED + 1e-4, "идёт не быстрее 0,9 м/с"):
 				return
 		if not near(g.agent.p.y, -40.0 + EcoGrazer.LIFT, 1e-4, "идёт по дну"):
 			return
@@ -126,7 +126,8 @@ func test_moss_dims_under_grazer_and_regrows() -> void:
 
 	# объеденное пятно бросает сразу и идёт к другому
 	eaten.food = 0.05
-	w.step(EcoWorld.MAX_STEP)
+	# корабль далеко — скребун шагает по очереди дальних (EcoLod): бросит пятно в свой ближайший шаг, не позже LAG_MAX
+	_run_until(w, func() -> bool: return g.agent.state == EcoAgent.State.SEEK, EcoLod.LAG_MAX + EcoWorld.MAX_STEP)
 	eq(g.agent.state, EcoAgent.State.SEEK)
 	ok(g.patch == other, "выбрал другое пятно")
 	var low := eaten.food
@@ -210,7 +211,7 @@ func test_eaten_grazer_returns_at_patch() -> void:
 		return
 	eq(w.count("grazer"), 10)
 	ok(_flat(g.agent.p, moss.nearest(g.agent.p).pos) <= 4.3, "появился у пятна мха")
-	eq(g.agent.state, EcoAgent.State.SEEK)
+	ok(g.agent.state in [EcoAgent.State.SEEK, EcoAgent.State.GRAZE], "идёт к пятну или уже пасётся у ближнего")
 	ok(g.patch != null)
 
 
@@ -306,6 +307,139 @@ func test_parts_closed_faces_out_by_godot_rule() -> void:
 		ok(vol[p] < 0.0, "часть %d: %f" % [p - 1, vol[p]])
 
 
+## Плавность (grafika-plan-eco): трогается и тормозит без рывка, у пятна сбавляет шаг, курс доворачивает не быстрее
+## TURN_MAX; без ограничений скорость прыгала 0 → 0,9 м/с за шаг, нос — на долю 1,5 разницы курса в секунду.
+func test_grazer_starts_and_stops_smoothly() -> void:
+	var w := _pair()
+	w.ship.pos = Vector3(0, -30, 0)   # рядом: шаг каждый кадр, без догоняющих шагов дальних (EcoLod)
+	var g := _grazers(w).all[0]
+	var a := g.agent
+	a.p = Vector3(0, -40 + EcoGrazer.LIFT, -12)
+	a.v = Vector3.ZERO
+	g.patch = _moss(w).patches[1]   # (0, −40, 10): 22 м впереди по +z
+	g.dir = PI                      # нос на −z: цель за спиной
+	var dt := EcoWorld.MAX_STEP
+	var top := 0.0
+	var prev_v := 0.0
+	var prev_dir := g.dir
+	var t := 0.0
+	w.step(dt)
+	t += dt
+	ok(a.v.length() <= EcoGrazer.ACCEL * dt + 1e-4, "трогается с места, а не сразу 0,9 м/с")
+	while t < 60.0 and not g.grazing():
+		var v := a.v.length()
+		if not ok(absf(v - prev_v) <= EcoGrazer.ACCEL * dt + 1e-4, "скорость без рывка: %.3f → %.3f" % [prev_v, v]):
+			return
+		var dd := absf(angle_difference(prev_dir, g.dir))
+		if not ok(dd <= EcoGrazer.TURN_MAX * dt + 1e-4, "нос доворачивает не быстрее 1,2 рад/с"):
+			return
+		top = maxf(top, v)
+		prev_v = v
+		prev_dir = g.dir
+		w.step(dt)
+		t += dt
+	ok(g.grazing(), "дошёл до пятна")
+	near(top, EcoGrazer.WALK_SPEED, 1e-3, "на прямой — полный шаг 0,9 м/с")
+	ok(prev_v < 0.35, "к пятну подходит тише (%.2f м/с)" % prev_v)
+
+
+func test_walks_up_steep_bump_at_its_pace() -> void:
+	# бугор рифа 4 м на 3 м, уклон до 2:1 (как у (−40, 6) на отмели): вдоль дна — не быстрее шага 0,9 м/с (уклон — с
+	# прошлого шага, запас 10 %), раньше по склону — до 2 м/с (Б3: взбегал и скатывался); на ровном — полный шаг
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, z: float) -> float: return -40.0 + 4.0 * smoothstep(0.0, 3.0, z)
+	w.ship.pos = Vector3(0, -30, 0)   # рядом: шаг каждый кадр (EcoLod)
+	var m := w.add(EcoMoss.new([Vector3(0, -36, 12)] as Array[Vector3])) as EcoMoss
+	m.patches[0].food = 1.0
+	w.add(EcoGrazer.new(m, 1))
+	var g := _grazers(w).all[0]
+	var a := g.agent
+	a.p = Vector3(0, -40 + EcoGrazer.LIFT, -6)
+	a.v = Vector3(0, 0, EcoGrazer.WALK_SPEED)
+	g.dir = 0.0
+	g.patch = m.patches[0]
+	var dt := EcoWorld.MAX_STEP
+	var top := 0.0
+	var on_slope := 0.0
+	var t := 0.0
+	while t < 40.0 and not g.grazing():
+		var was := a.p
+		w.step(dt)
+		t += dt
+		var sp := a.p.distance_to(was) / dt
+		top = maxf(top, sp)
+		if was.z > 0.3 and a.p.z < 2.7:
+			on_slope = maxf(on_slope, (a.p.y - was.y) / dt)
+	ok(g.grazing(), "перешёл бугор и дошёл до пятна")
+	ok(top <= EcoGrazer.WALK_SPEED * 1.1, "вдоль дна не быстрее шага: %.2f м/с" % top)
+	ok(on_slope > 0.6, "на склоне идёт вверх своим шагом (%.2f м/с), а не стоит" % on_slope)
+	near(a.p.y, -36.0 + EcoGrazer.LIFT, 1e-4, "на верху бугра — на дне")
+	near(EcoGrazer.walk(w, Vector3(0, -39.9, -5), Vector3(0, 0, 0.03), 0.0).z, -4.97, 1e-6, "на ровном — шаг целиком")
+	var ramp := EcoWorld.new()
+	ramp.ground = func(_x: float, z: float) -> float: return -40.0 + 2.0 * z
+	near(EcoGrazer.walk(ramp, Vector3(0, -39.9, 0), Vector3(0, 0, 0.03), 0.0, 2.0).z, 0.03 / sqrt(5.0), 1e-6,
+			"на уклоне 2:1 — шаг по горизонтали в √5 раз короче")
+	near(EcoGrazer.walk(w, Vector3(0, -39.9, -5), Vector3(0, 0, 0.03), 0.0, 2.0).z, -4.97, 1e-6,
+			"прошлый уклон 2:1, а под шагом ровно — шаг целиком по найденному уклону")
+
+
+func test_crosses_sharp_ridge_at_its_pace() -> void:
+	# острый гребень: вверх 2:1, перегиб, вниз 2:1 (как у (−40, 6) у Раковины 02): уклон с прошлого шага отстаёт на
+	# перегибе — раньше первый шаг вниз шёл полным шагом по горизонтали, вдоль дна до 2 м/с (Б3: соскакивал)
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, z: float) -> float: return -40.0 + maxf(0.0, 4.0 - 2.0 * absf(z - 2.0))
+	w.ship.pos = Vector3(0, -30, 0)   # рядом: шаг каждый кадр (EcoLod)
+	var m := w.add(EcoMoss.new([Vector3(0, -40, 9)] as Array[Vector3])) as EcoMoss
+	m.patches[0].food = 1.0
+	w.add(EcoGrazer.new(m, 1))
+	var g := _grazers(w).all[0]
+	var a := g.agent
+	a.p = Vector3(0, -40 + EcoGrazer.LIFT, -3)
+	a.v = Vector3(0, 0, EcoGrazer.WALK_SPEED)
+	g.dir = 0.0
+	g.patch = m.patches[0]
+	var dt := EcoWorld.MAX_STEP
+	var top := 0.0
+	var t := 0.0
+	var crossed := false
+	while t < 40.0 and not g.grazing():
+		var was := a.p
+		w.step(dt)
+		t += dt
+		top = maxf(top, a.p.distance_to(was) / dt)
+		crossed = crossed or a.p.z > 4.5
+	ok(crossed and g.grazing(), "перешёл гребень и дошёл до пятна")
+	ok(top <= EcoGrazer.WALK_SPEED * 1.15, "вдоль дна через гребень не быстрее шага: %.2f м/с" % top)
+
+
+func test_quiet_first_seconds() -> void:
+	for g in _grazers(_world()).all:
+		ok(g.graze_cd >= EcoGrazer.START_QUIET, "первые 8 с скребун молчит")
+
+
+func test_want_speed_slows_to_turn_and_arrive() -> void:
+	near(EcoGrazer.want_speed(20.0, 0.0), EcoGrazer.WALK_SPEED, 1e-5, "далеко и прямо — полный шаг")
+	near(EcoGrazer.want_speed(20.0, PI), EcoGrazer.WALK_SPEED * EcoGrazer.TURN_SLOW, 1e-5, "цель за спиной — почти на месте")
+	ok(EcoGrazer.want_speed(20.0, 0.6) < EcoGrazer.WALK_SPEED, "в повороте — тише")
+	near(EcoGrazer.want_speed(EcoGrazer.REACH + 0.1, 0.0), EcoGrazer.WALK_SPEED * EcoGrazer.ARRIVE_MIN, 1e-5, "у пятна — медленно")
+	ok(EcoGrazer.want_speed(EcoGrazer.REACH + 1.5, 0.0) > EcoGrazer.want_speed(EcoGrazer.REACH + 0.8, 0.0))
+
+
+func test_legs_step_smaller_when_slow() -> void:
+	var g := _grazers(_world()).all[0]
+	g.agent.set_state(EcoAgent.State.SEEK)
+	var big := 0.0
+	var small := 0.0
+	for i in 100:
+		var t := i * 0.031
+		g.agent.v = Vector3(EcoGrazer.WALK_SPEED, 0, 0)
+		big = maxf(big, absf(EcoGrazerLook.stride(g, t)))
+		g.agent.v = Vector3(EcoGrazer.WALK_SPEED * 0.25, 0, 0)
+		small = maxf(small, absf(EcoGrazerLook.stride(g, t)))
+	ok(big > 0.95, "полный шаг — полный размах")
+	near(small, big * 0.25, 0.02, "трогаясь — лапы шагают мельче, а не замирают посреди шага")
+
+
 func test_legs_step_in_tripods() -> void:
 	var a := 0
 	var b := 0
@@ -360,7 +494,8 @@ func test_stands_on_ground_nose_along_course() -> void:
 	near(min_y, p.y - EcoGrazer.LIFT, 1e-3, "стопы на дне")
 	near(min_y, Seabed.height(p.x, p.z), 0.01)
 	ok(max_x - p.x > 0.6, "скребок спереди, по курсу")
-	ok(EcoGrazerLook.basis(g).determinant() > 0.99, "поворот без зеркала (грани не выворачиваются)")
+	var k := EcoGrazerLook.scale(g)
+	near(EcoGrazerLook.basis(g).determinant(), k * k * k, 1e-3, "поворот без зеркала (грани не выворачиваются)")
 
 
 func test_eaten_grazer_invisible() -> void:
@@ -372,11 +507,31 @@ func test_eaten_grazer_invisible() -> void:
 			return
 
 
+## #1400, подход к 01: два последних пятна — у цоколя Каменного цветка со стороны прохода 00 → 01. Край пятна касается
+## цоколя (основание рифа связано с грунтом), в крону и под цоколь пятно не заходит; оба — по бокам цоколя, как его
+## видно с подхода от 00 (ближняя сторона в кадре пилота закрыта пультом), одно слева, другое справа.
+func test_flower_patches_touch_plinth_on_approach_side() -> void:
+	var c := EcoFlower.CENTER
+	var from00 := Vector2(LayerMap.POINTS["00"]["x"], LayerMap.POINTS["00"]["z"])
+	var n := EcoMoss.SPOTS.size()
+	var sides: Array[float] = []
+	for i in range(n - EcoMoss.FLOWER_SPOTS, n):
+		var s := EcoMoss.SPOTS[i]
+		var d := Vector2(s.x, s.z).distance_to(c)
+		var edge := d - EcoMoss.RADIUS
+		ok(edge > 0.0 and edge <= EcoFlower.PLINTH_R + 0.5, "пятно %d касается цоколя: край в %.1f м от оси" % [i, edge])
+		ok(d < EcoFlower.SPREAD, "под кроной, а не в стороне")
+		var ang := rad_to_deg((Vector2(s.x, s.z) - c).angle_to(from00 - c))
+		ok(absf(ang) >= 60.0 and absf(ang) <= 120.0, "пятно %d сбоку цоколя: %.0f° от направления на 00" % [i, ang])
+		sides.append(signf(ang))
+	ok(sides[0] != sides[1], "одно слева, другое справа")
+
+
 func test_moss_patches_lie_on_ground() -> void:
 	var moss := _moss(_world())
 	var m := EcoMossLook.build(moss.patches, Seabed.height)
-	eq(m.verts.size(), 22 * 81)
-	eq(m.tris.size(), 22 * 128 * 3)
+	eq(m.verts.size(), 24 * 81)
+	eq(m.tris.size(), 24 * 128 * 3)
 	for i in range(0, m.verts.size(), 7):
 		var p := m.verts[i]
 		if not near(p.y, Seabed.height(p.x, p.z) + EcoMossLook.ABOVE, 1e-3, "по дну"):
@@ -431,7 +586,9 @@ func test_view_one_moss_mesh_and_one_grazer_multimesh() -> void:
 	var g := view.grazers.all[2]
 	var tr := GrazerView.transform_at(gv.buffer, g.index)
 	ok(tr.origin.distance_to(EcoGrazerLook.origin(g)) < 1e-3, "место скребуна — из мира")
-	ok((tr.basis * Vector3(0, 0, 1)).distance_to(EcoGrazerLook.forward(g)) < 1e-3, "нос по курсу")
+	ok((tr.basis * Vector3(0, 0, 1)).distance_to(EcoGrazerLook.forward(g) * EcoGrazerLook.scale(g)) < 1e-3, "нос по курсу")
+	var tn := GrazerView.tint_at(gv.buffer, g.index)
+	ok(tn.is_equal_approx(EcoGrazerLook.tint(g)), "оттенок особи — цвет экземпляра")
 	var pose := GrazerView.custom_at(gv.buffer, g.index)
 	ok(pose.distance_to(EcoGrazerLook.custom(g, view.world.time)) < 1e-4, "поза — из мира")
 	# шейдер двигает вершины так же, как posed: проверим лапу по буферу
@@ -455,3 +612,207 @@ func test_view_one_moss_mesh_and_one_grazer_multimesh() -> void:
 		"съеденный стянут в точку")
 	view.queue_free()
 	await frames(1)
+
+
+# ---------- «Экономно» (Б6) ----------
+
+func test_lite_form_coarser_same_parts() -> void:
+	var r := EcoGrazerLook.lite_rest
+	eq(EcoGrazerLook.lite_paint.size(), r.size())
+	eq(EcoGrazerLook.lite_part.size(), r.size())
+	eq(EcoGrazerLook.tris.size() / 3, 312, "полный скребун")
+	eq(EcoGrazerLook.lite_tris.size() / 3, 200, "на «Экономно»: купол 8 × 2, лапы без подушек")
+	for i in EcoGrazerLook.lite_tris:
+		if not ok(i >= 0 and i < r.size(), "номер вершины"):
+			return
+	var legs := [false, false, false, false, false, false]
+	var scraper := false
+	var min_y := INF
+	var max_x := 0.0
+	var vol := [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+	for i in r.size():
+		var p := EcoGrazerLook.lite_part[i]
+		if p >= 0 and p < 6:
+			legs[p] = true
+		scraper = scraper or p == EcoGrazerLook.SCRAPER
+		min_y = minf(min_y, r[i].y)
+		max_x = maxf(max_x, absf(r[i].x))
+	ok(not legs.has(false) and scraper, "шесть лап и скребок на месте")
+	ok(min_y < 0.02, "лапы достают до дна: %f" % min_y)
+	ok(max_x >= 0.9, "размах лап тот же")
+	ok(EcoGrazerLook.lite_paint.has(EcoGrazerLook.RIM), "кромка панциря")
+	var t := EcoGrazerLook.lite_tris
+	for i in range(0, t.size(), 3):
+		vol[EcoGrazerLook.lite_part[t[i]] + 1] += r[t[i]].dot(r[t[i + 1]].cross(r[t[i + 2]])) / 6.0
+	for p in 8:
+		ok(vol[p] < 0.0, "часть %d закрыта и лицом наружу: %f" % [p - 1, vol[p]])
+	# бёдра общие: лапы шагают в шейдере так же
+	var leg_v := EcoGrazerLook.lite_part.find(3)
+	ok(leg_v >= 0, "вершина лапы")
+
+
+func test_view_lite_coarser_same_material() -> void:
+	var w := _world()
+	var view := GrazerView.new(_grazers(w))
+	tree.root.add_child(view)
+	await frames(1)
+	var full := view.tris
+	var mat := view.multimesh.mesh.surface_get_material(0)
+	var dust := view.dust_view
+	view.set_lite(true)
+	ok(view.lite, "скребуны — на «Экономно»")
+	eq(full, 312, "полный меш")
+	eq(view.tris, 200, "треугольников: %d → %d" % [full, view.tris])
+	ok(view.multimesh.mesh.surface_get_material(0) == mat, "материал тот же")
+	eq(view.multimesh.mesh.get_surface_count(), 1, "один вызов отрисовки")
+	eq(view.multimesh.instance_count, 10, "все скребуны на месте")
+	ok(view.dust_view == dust, "муть та же")
+	var uv: PackedVector2Array = view.multimesh.mesh.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
+	var has_scraper := false
+	for u in uv:
+		has_scraper = has_scraper or u.y > 0.5
+	ok(has_scraper, "скребок двигается шейдером")
+	view.set_lite(false)
+	eq(view.tris, full, "назад — полный меш")
+	view.queue_free()
+	await frames(1)
+
+
+func test_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = Seabed.height
+	ev.set_lite(true)
+	ok(ev.grazer_view.lite, "уровень дошёл до скребунов")
+	var t := ev.grazer_view.tris
+	ev.ground = Seabed.height
+	ok(ev.grazer_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(ev.grazer_view.tris, t, "и меш грубый")
+	ev.set_lite(false)
+	ev.free()
+
+
+## Б6 «Экономно»: пятна мха — 4 × 4 клетки вместо 8 × 8 (и у колодца, и на костях), материал и яркость пятен те же,
+## край и середина пятна по дну на месте, грани вверх; сброс мира уровень не теряет.
+func test_view_moss_lite_coarser_same_material() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var mv := view.moss_view
+	var mat := mv.mesh.surface_get_material(0)
+	var n := view.moss.patches.size()
+	var full := mv.mesh.get_faces().size() / 3
+	eq(full, n * EcoMossLook.TRIS_PER_PATCH, "полный мох: 128 треугольников на пятно")
+	var box := mv.mesh.get_aabb()
+	view.moss.patches[1].food = 0.2   # объели — яркость отдана шейдеру
+	mv.sync()
+	var glow := mv.glows[1]
+	view.set_lite(true)
+	ok(mv.lite, "мох — на «Экономно»")
+	var cells := EcoMossLook.LITE_CELLS
+	eq(mv.mesh.get_faces().size() / 3, n * cells * cells * 2, "мох: %d → %d треугольников" % [full, n * cells * cells * 2])
+	eq(mv.look.verts.size(), n * (cells + 1) * (cells + 1), "вершин меньше")
+	ok(mv.mesh.surface_get_material(0) == mat, "материал тот же — яркость пятен в нём")
+	near(mv.glows[1], glow, 1e-6, "яркость объеденного пятна сохранена")
+	var lb := mv.mesh.get_aabb()
+	near(lb.size.x, box.size.x, 1e-3, "пятна той же ширины")
+	near(lb.size.z, box.size.z, 1e-3, "и длины")
+	var p0 := view.moss.patches[0]
+	var mid := (cells / 2) * (cells + 1) + cells / 2
+	near(mv.look.verts[mid].y, Seabed.height(p0.pos.x, p0.pos.z) + EcoMossLook.ABOVE, 1e-3, "середина пятна — по дну")
+	var f := mv.mesh.get_faces()
+	for i in range(0, f.size(), 3):
+		if (f[i + 1] - f[i]).cross(f[i + 2] - f[i]).y > 0.0:
+			ok(false, "треугольник %d смотрит вниз" % (i / 3))
+			break
+	var wm := view.well_view.moss_view
+	ok(wm.lite and wm.look.verts.size() == EcoWell.MOSS.size() * (cells + 1) * (cells + 1), "мох колодца тоже грубее")
+	var bm := view.bones_view.moss_view
+	ok(bm == null or bm.lite, "мох на костях тоже")
+	view.ground = Seabed.height   # сброс мира
+	ok(view.moss_view.lite and view.well_view.moss_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(view.moss_view.mesh.get_faces().size() / 3, n * cells * cells * 2, "и мох грубый")
+	view.set_lite(false)
+	eq(view.moss_view.mesh.get_faces().size() / 3, full, "назад — полный мох")
+	ok(not view.well_view.moss_view.lite, "и у колодца")
+	view.queue_free()
+	await frames(1)
+
+
+## Б3: съеденный скребун возвращается у пятна мха не во весь размер за кадр — вырастает за GRAZER_RISE; съеденный
+## стеклоустом пропадает сразу; скачок времени — сразу к цели.
+func test_view_returned_grazer_grows() -> void:
+	var w := _world()
+	var gr := _grazers(w)
+	var v := GrazerView.new(gr)
+	var g := gr.all[4]
+	var t := 1.0
+	v.sync(t)
+	var full := GrazerView.transform_at(v.buffer, 4).basis.x.length()
+	ok(full > 0.3, "живой во весь размер: %.3f" % full)
+	gr.kill(g)
+	t += 0.1
+	v.sync(t)
+	ok(GrazerView.transform_at(v.buffer, 4).basis.x.length() < 1e-6, "съеденный — сразу")
+	g.agent.alive = true
+	var dt := 1.0 / 30.0
+	var last := 0.0
+	var worst := 0.0
+	for i in int(GrazerView.GRAZER_RISE / dt) + 2:
+		t += dt
+		v.sync(t)
+		var tr := GrazerView.transform_at(v.buffer, 4)
+		var sz := tr.basis.x.length()
+		if i == 0:
+			ok(sz < full * 0.05, "появился крошечным: %.4f" % sz)
+			ok(tr.origin.is_equal_approx(EcoGrazerLook.origin(g)), "растёт на своём месте")
+		worst = maxf(worst, sz - last)
+		last = sz
+	ok(worst < full * 0.12, "за шаг растёт на %.4f < 12 %%" % worst)
+	near(last, full, 1e-4, "вырос во весь размер")
+	ok(GrazerView.transform_at(v.buffer, 3).basis.x.length() > 0.3, "соседи не тронуты")
+	gr.kill(g)
+	v.sync(t)
+	g.agent.alive = true
+	v.sync(t + 5.0)
+	near(GrazerView.transform_at(v.buffer, 4).basis.x.length(), full, 1e-4, "скачок времени — сразу к цели")
+	v.sync(1.0)
+	near(GrazerView.transform_at(v.buffer, 4).basis.x.length(), full, 1e-4, "время назад (сброс) — сразу")
+	v.free()
+
+
+## «Дыхание» (Б3): купол дышит только по высоте ± BREATH_H, ширина и длина те же (лапы не разъезжаются), стопы
+## на дне; у особей ритм и фаза разные; плавно — за кадр высота меняется на доли процента.
+func test_view_shell_breathes_height_only() -> void:
+	var lo := INF
+	var hi := -INF
+	for s in 100:
+		var k := EcoGrazerLook.breath(0, s * 0.1)
+		lo = minf(lo, k)
+		hi = maxf(hi, k)
+	ok(hi > 1.0 + EcoGrazerLook.BREATH_H * 0.95 and lo < 1.0 - EcoGrazerLook.BREATH_H * 0.95, "дышит во весь размах")
+	ok(hi <= 1.0 + EcoGrazerLook.BREATH_H + 1e-6 and lo >= 1.0 - EcoGrazerLook.BREATH_H - 1e-6, "не больше размаха")
+	ok(absf(EcoGrazerLook.breath(0, 2.0) - EcoGrazerLook.breath(1, 2.0)) > 0.005, "у каждого своя фаза")
+	var w := _world()
+	var gr := _grazers(w)
+	var v := GrazerView.new(gr)
+	var g := gr.all[2]
+	var k := EcoGrazerLook.scale(g)
+	var hs: Array[float] = []
+	var prev := -1.0
+	var worst := 0.0
+	for s in 120:
+		var t := 1.0 + s / 30.0
+		v.sync(t)
+		var tr := GrazerView.transform_at(v.buffer, 2)
+		near(tr.basis.x.length(), k, 1e-4, "ширина та же")
+		near(tr.basis.z.length(), k, 1e-4, "длина та же")
+		near(tr.basis.y.length(), k * EcoGrazerLook.breath(2, t), 1e-4, "высота — по дыханию")
+		ok(tr.origin.is_equal_approx(EcoGrazerLook.origin(g)), "стопы на дне")
+		hs.append(tr.basis.y.length())
+		if prev > 0.0:
+			worst = maxf(worst, absf(tr.basis.y.length() - prev))
+		prev = tr.basis.y.length()
+	ok(hs.max() - hs.min() > k * EcoGrazerLook.BREATH_H, "купол в сцене поднимается и опадает")
+	ok(worst < k * 0.01, "плавно: %.4f за кадр" % worst)
+	v.free()

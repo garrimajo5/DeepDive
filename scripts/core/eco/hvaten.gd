@@ -28,6 +28,12 @@ const LURE_OPEN := 0.85
 ## Прячет щупальца со скоростью 2,5 в секунду, раскрывает — 0,35; переваривая, держит раскрытыми наполовину.
 const CLOSE_RATE := 2.5
 const OPEN_RATE := 0.35
+## Ход раскрытия с инерцией (план реализма Б3, «плавность поведения»): скорость `Anemone.open_v` набирается не быстрее
+## `OPEN_ACCEL` в 1/с² (раскрытие — за ≈ 0,35 с до OPEN_RATE) и `CLOSE_ACCEL` (прячет рефлексом — за 0,1 с до
+## CLOSE_RATE), к нужному раскрытию подходит не быстрее √(2·a·остаток) и тормозит — `CLOSE_ACCEL`. Раньше скорость
+## включалась сразу: луч застал хватня — кончики щупалец за кадр срывались с места на полном ходу, раскрылся — вставал.
+const OPEN_ACCEL := 1.0
+const CLOSE_ACCEL := 25.0
 const DIGEST_OPEN := 0.5
 ## Переваривает 35 с; пестрянки доедают остатки через 3 с после поимки.
 const DIGEST := 35.0
@@ -61,13 +67,38 @@ class Tentacle:
 	var phase := 0.0
 
 
-## Пестрянка: фаза хоровода, радиус у щупалец, где плывёт и где была шаг назад (курс для отрисовки).
+## Пестрянка: фаза хоровода, радиус у щупалец, где плывёт и где была шаг назад; нос `look` догоняет путь (`turn`).
 class Pestr:
 	extends RefCounted
 	var phase := 0.0
 	var r := 0.4
 	var p := Vector3.ZERO
 	var prev := Vector3.ZERO
+	var look := Vector3.ZERO
+	## Ход (м/с): догоняет нужный не быстрее `SWIM_ACCEL`, не больше `SWIM_MAX`.
+	var v := Vector3.ZERO
+	## Дно под пестрянкой + `CLEAR` (м), пересчёт по очереди; −INF — в хороводе, дно не нужно.
+	var floor_y := -INF
+
+
+## Нос пестрянки догоняет путь (план реализма Б3, «плавность поведения»): доля угла `LOOK_K` в с, не быстрее
+## `LOOK_MAX` рад/с; стоит — держит курс. Раньше нос брался прямо из шага пути и щёлкал, когда цель прыгала
+## (хватень подманил стаю, отпустил её) или пестрянка вставала.
+const LOOK_K := 8.0
+const LOOK_MAX := 6.0
+## Ход пестрянки (Б3): нужный ход — `FOLLOW` × остаток до места в хороводе или у стаи, не больше `SWIM_MAX`, сам ход
+## меняется не быстрее `SWIM_ACCEL`. Раньше шаг был lerp 2,5/с к месту: хватень подманил стаю в 25 м — 15-сантиметровая
+## рыбка срывалась к ней на 30 м/с за кадр и так же неслась обратно.
+const FOLLOW := 2.5
+const SWIM_MAX := 3.0
+const SWIM_ACCEL := 6.0
+## Вне хоровода (у стаи или на пути к ней) пестрянки идут не ниже `CLEAR` м над дном под собой: путь от макушки к
+## стае прямой и раньше проходил сквозь бугор (у старта 00 — на 3 м под дном). Дно под пестрянкой пересчитывается по
+## очереди — одна пестрянка хватня за шаг, а ближе `NEAR_FLOOR` м к дну — каждый шаг.
+const CLEAR := 0.5
+const NEAR_FLOOR := 1.0
+## Вне хоровода — дальше этого от макушки (м) или при подманивании; ближе дно не считаем (шум fbm дорогой, #133).
+const AWAY := 1.0
 
 
 ## Хватень.
@@ -82,6 +113,8 @@ class Anemone:
 	var mouth := Vector3.ZERO
 	## Раскрытие щупалец 0…1; в луче в этот шаг.
 	var open := DIGEST_OPEN
+	## Скорость раскрытия (1/с, < 0 — прячет): `open_step`.
+	var open_v := 0.0
 	var lit := false
 	## Секунды: переваривает; ведут стаю; до следующего подманивания; до «leftovers»; паузы «hide» и текстов.
 	var digest := 0.0
@@ -142,6 +175,7 @@ func reset(world: EcoWorld) -> void:
 		hv.lure_cd = _rnd.range_f(4, 12)
 		hv.digest = START_FED
 		hv.open = DIGEST_OPEN
+		hv.open_v = 0.0
 		for k in TENT:
 			var tn := Tentacle.new()
 			tn.a = float(k) / TENT * TAU + _rnd.range_f(-0.1, 0.1)
@@ -174,10 +208,7 @@ func _step_anemone(world: EcoWorld, hv: Anemone, dt: float) -> void:
 	hv.lit = world.in_beam(hv.top)
 	# щупальца: в луче быстро прячутся, в темноте медленно раскрываются
 	var want := 0.0 if hv.lit else (DIGEST_OPEN if hv.digest > 0.0 else 1.0)
-	if want < hv.open:
-		hv.open = maxf(want, hv.open - dt * CLOSE_RATE)
-	else:
-		hv.open = minf(want, hv.open + dt * OPEN_RATE)
+	open_step(hv, want, dt)
 	if hv.lit and not was_lit and hv.open > HIDE_OPEN and hv.hide_cd <= 0.0:
 		hv.hide_cd = HIDE_CD
 		world.emit(ID, "hide", hv.top, _text(world, "%s прячет щупальца от прожектора", [[ID, Species.Case.NOM]]))
@@ -222,6 +253,25 @@ func _lure(world: EcoWorld, hv: Anemone, dt: float) -> void:
 			hv.lure.goal_timer = maxf(hv.lure.goal_timer, 0.5)
 
 
+## Нос `from` к ходу `move` за шаг dt: доля угла `LOOK_K`, не быстрее `LOOK_MAX`; без хода — прежний курс.
+## Ровно назад — разворот по горизонтали. Нос ещё не задан — сразу по ходу.
+static func turn(from: Vector3, move: Vector3, dt: float) -> Vector3:
+	if move.length_squared() < 1e-10:
+		return from
+	var want := move.normalized()
+	if from.length_squared() < 1e-8:
+		return want
+	from = from.normalized()
+	var ang := from.angle_to(want)
+	if ang < 1e-4:
+		return want
+	var axis := from.cross(want)
+	if axis.length_squared() < 1e-10:
+		axis = Vector3.UP
+	var step := minf(ang * minf(1.0, LOOK_K * dt), LOOK_MAX * dt)
+	return from.rotated(axis.normalized(), step).normalized()
+
+
 ## Ловля: только раскрытые щупальца и только сытый хватень; рыбка ближе REACH · open ко рту.
 func _catch(world: EcoWorld, hv: Anemone, dt: float) -> void:
 	if hv.open <= CATCH_OPEN or hv.digest > 0.0:
@@ -243,12 +293,46 @@ func _catch(world: EcoWorld, hv: Anemone, dt: float) -> void:
 				return
 
 
+## Шаг раскрытия к want за dt с инерцией: нужная скорость — к want, не больше OPEN_RATE / CLOSE_RATE и
+## √(2·a·остаток) (подход без перелёта), `open_v` догоняет её не быстрее OPEN_ACCEL (раскрытие) или CLOSE_ACCEL
+## (прячет и тормозит). Дошёл до want или края 0…1 — встаёт.
+static func open_step(hv: Anemone, want: float, dt: float) -> void:
+	if dt <= 0.0:
+		return
+	var d := want - hv.open
+	var v_want := 0.0
+	if d > 0.0:
+		v_want = minf(OPEN_RATE, sqrt(2.0 * OPEN_ACCEL * d))
+	elif d < 0.0:
+		v_want = -minf(CLOSE_RATE, sqrt(2.0 * CLOSE_ACCEL * -d))
+	var a := CLOSE_ACCEL
+	if v_want > 0.0 and hv.open_v >= 0.0 and v_want > hv.open_v:
+		a = OPEN_ACCEL
+	hv.open_v = move_toward(hv.open_v, v_want, a * dt)
+	var o := hv.open + hv.open_v * dt
+	if d != 0.0 and signf(o - want) != signf(d * -1.0):
+		o = want
+		hv.open_v = 0.0
+	if o <= 0.0 or o >= 1.0:
+		o = clampf(o, 0.0, 1.0)
+		hv.open_v = 0.0
+	hv.open = o
+
+
 ## Пестрянки: хоровод среди щупалец, при подманивании — у стаи, на полпути от хозяина.
 func _swim_pestr(world: EcoWorld, hv: Anemone, dt: float) -> void:
 	var t := world.time
 	var o := hv.open
 	var c := Vector3.ZERO
-	for pe in hv.pestr:
+	var away := world.ground.is_valid() and (hv.lure != null or hv.pc.distance_squared_to(hv.top) > AWAY * AWAY)
+	var turn_k := world.steps % PESTR_N
+	for k in hv.pestr.size():
+		var pe := hv.pestr[k]
+		if not away:
+			pe.floor_y = -INF
+		elif k == turn_k or pe.p.y < pe.floor_y + NEAR_FLOOR:
+			pe.floor_y = float(world.ground.call(pe.p.x, pe.p.z)) + CLEAR
+		var floor_y := pe.floor_y
 		var a := t * (1.6 if hv.lure else 0.9) + pe.phase
 		var to: Vector3
 		if hv.lure:
@@ -257,10 +341,25 @@ func _swim_pestr(world: EcoWorld, hv: Anemone, dt: float) -> void:
 			var rr := pe.r * (0.4 + 0.6 * o)
 			to = Vector3(hv.top.x + cos(a) * rr, hv.top.y + 0.25 + 0.35 * o + sin(t * 2.3 + pe.phase) * 0.08,
 				hv.top.z + sin(a) * rr)
+		to.y = maxf(to.y, floor_y)
 		pe.prev = pe.p
-		pe.p = pe.p.lerp(to, minf(1.0, dt * 2.5))
+		pe.p = swim(pe, to, dt)
+		if pe.p.y < floor_y:
+			pe.p.y = floor_y
+			pe.v.y = maxf(pe.v.y, 0.0)
+		pe.look = turn(pe.look, pe.p - pe.prev, dt)
 		c += pe.p
 	hv.pc = c / PESTR_N
+
+
+## Шаг пестрянки к месту to за dt: нужный ход `FOLLOW` × остаток, не больше `SWIM_MAX`, ход `pe.v` догоняет его не
+## быстрее `SWIM_ACCEL`. Возвращает новое место.
+static func swim(pe: Pestr, to: Vector3, dt: float) -> Vector3:
+	if dt <= 0.0:
+		return pe.p
+	var want := ((to - pe.p) * FOLLOW).limit_length(SWIM_MAX)
+	pe.v = pe.v.move_toward(want, SWIM_ACCEL * dt)
+	return pe.p + pe.v * dt
 
 
 ## Хватень и его пестрянки видны сонару и сканеру: хватень — по макушке, пестрянки — по их середине.
@@ -270,22 +369,47 @@ func targets(_world: EcoWorld, out: Array[Dictionary]) -> void:
 		out.append(EcoWorld.target(PESTR, hv.pc, 0.6))
 
 
-## Расстановка щупальца k хватня в момент t (anemoneUpdate): основание на диске в 0,3 м от оси, наклон наружу
-## tilt · (0,25 + 0,75 · open) с покачиванием, длина × (0,12 + 0,88 · open), сжатое — вдвое толще.
-static func tentacle(hv: Anemone, k: int, t: float) -> Transform3D:
+## Дыхание тела (план реализма Б3): столб и диск медленно раздуваются и опадают — ±BREATH_AMP по ширине за BREATH_T с,
+## у каждого хватня своя фаза; спрятавший щупальца сжимается до CLOSED_W ширины. Высота не меняется — диск на месте.
+const BREATH_T := 5.5
+const BREATH_AMP := 0.05
+const CLOSED_W := 0.88
+## Основание щупальца на диске — в TENT_R м от оси (при ширине 1).
+const TENT_R := 0.3
+
+
+## Ширина тела хватня в момент t (доля от исходной): сжатие по open и дыхание; live = false — без дыхания
+## («Экономно»: тело не колышется, только сжимается).
+static func breath(hv: Anemone, t: float, live := true) -> float:
+	var w := lerpf(CLOSED_W, 1.0, hv.open)
+	if live:
+		w *= 1.0 + BREATH_AMP * sin(t * TAU / BREATH_T + hv.index * 2.1 + hv.yaw)
+	return w
+
+
+## Расстановка щупальца k хватня в момент t (anemoneUpdate): основание на диске в 0,3 м от оси (× ширина тела
+## `breath`), наклон наружу tilt · (0,25 + 0,75 · open) с покачиванием, длина × (0,12 + 0,88 · open), сжатое — вдвое толще.
+static func tentacle(hv: Anemone, k: int, t: float, live := true) -> Transform3D:
 	var tn := hv.tents[k]
 	var o := hv.open
 	var sway := sin(t * 1.4 + tn.phase) * 0.18 * o
 	var b := Basis(Vector3.UP, -tn.a) * Basis(Vector3.BACK, -(tn.tilt * (0.25 + 0.75 * o) + sway))
 	var w := 1.0 + (1.0 - o)
 	b = b * Basis.from_scale(Vector3(w, tn.length * (0.12 + 0.88 * o), w))
-	return Transform3D(b, hv.top + Vector3(cos(tn.a) * 0.3, 0.0, sin(tn.a) * 0.3))
+	var r := TENT_R * breath(hv, t, live)
+	return Transform3D(b, hv.top + Vector3(cos(tn.a) * r, 0.0, sin(tn.a) * r))
+
+
+## Расстановка тела хватня в момент t: поворот yaw у подножия, ширина — `breath`.
+static func body(hv: Anemone, t: float, live := true) -> Transform3D:
+	var w := breath(hv, t, live)
+	return Transform3D(Basis(Vector3.UP, hv.yaw) * Basis.from_scale(Vector3(w, 1.0, w)), hv.base)
 
 
 ## Расстановка пестрянки: носом по ходу (по кругу хоровода, если стоит), виляет хвостом.
 static func pestr_pose(hv: Anemone, k: int, t: float) -> Transform3D:
 	var pe := hv.pestr[k]
-	var dir := pe.p - pe.prev
+	var dir := pe.look
 	if dir.length_squared() < 1e-8:
 		var a := t * 0.9 + pe.phase
 		dir = Vector3(-sin(a), 0.0, cos(a))

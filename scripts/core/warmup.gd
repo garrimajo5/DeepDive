@@ -21,19 +21,34 @@ const VIEWS := [
 ]
 ## Issue #217: рывок при первом нажатии у пульта энергии — камера впервые вплотную к пульту и взглядом вниз (мелкие
 ## уровни текстур, ближние детали). Кадры глазами у постов: [x, y, z, курс°, наклон°] в осях корабля —
-## у пульта энергии (Main.POWER_STAND, Main.POWER_PITCH), за штурвалом сидя (Deck.SEAT_EYE), у сканера.
+## у открытого пульта энергии (ракурс ART-050: PowerScreen.CAM_AT, CAM_YAW, CAM_PITCH), за штурвалом сидя
+## (Deck.SEAT_EYE), у сканера.
 const POSTS := [
-	[-4.05, Deck.Walker.EYE, -2.0, 90.0, -45.84],
+	[-3.0, Deck.Walker.EYE, -2.0, 70.0, -32.0],
 	[0.0, Deck.SEAT_EYE, Deck.SEAT_Z, 0.0, -20.0],
 	[3.85, Deck.Walker.EYE, -2.0, -90.0, -30.0],
 ]
-## Кадры снаружи после взглядов с мостика: точки облёта `Flyby.START_PATH`, камера с борта смотрит на корпус.
-const OUTSIDE := [0, 2]
-## Члены экипажа на время прогрева — каждая внешность CrewRig.MODELS перед глазами (x, z на палубе).
-const MATE_AT := [Vector2(-0.6, -3.6), Vector2(0.6, -3.6)]
+## Кадры снаружи после взглядов с мостика: [вид облёта, точка пути] — камера с борта смотрит на корпус. Issue #519:
+## ещё вид при всплытии (`Flyby.Kind.SURFACE`, последняя точка — под бортом, взглядом вверх к льду): там идёт продувка
+## (выпуски `Wake.vent`), и без этого кадра первый вид снизу собирал шейдеры прямо на всплытии (провал 211 мс, `21a-vent`).
+## Issue #424: на холодном кэше (первый запуск после установки APK) почти вся сборка шейдеров шла в кадр 1 — 8,3 с из
+## 10,9 на эмуляторе, полоса заставки стояла. Первый взгляд показываем по слоям: STAGES кадров тем же взглядом VIEWS[0],
+## на кадре s скрыто то, что в Main.warm_layers() идёт после слоя s (интерьер → экипаж и корпус → вода → живой мир);
+## сборка делится на части, полоса заставки идёт. Шейдеров столько же — кадров на STAGES больше.
+const STAGES := 3
+const OUTSIDE := [[Flyby.Kind.START, 0], [Flyby.Kind.START, 2], [Flyby.Kind.SURFACE, 2]]
+## Члены экипажа на время прогрева — каждая роль (снаряжение MOD-016 CrewRig.ROLE_GEAR) и каждая внешность
+## CrewRig.MODELS перед глазами (x, z на палубе). Issue #883: раньше все были пилотами — фартук, щиток, туника, пробы и
+## планшет впервые рисовались непрозрачными при появлении товарища (провал 192–309 мс на `06c-crew-model`, инженер).
+const MATE_AT := [Vector2(-0.6, -3.6), Vector2(0.6, -3.6), Vector2(-0.6, -4.8), Vector2(0.6, -4.8)]
 ## Issue #217: ещё по фигуре каждой внешности материалом своего игрока (`CrewView.as_own`) — его шейдер иначе
 ## собирался при первом взгляде на свои руки у пульта энергии (рывок 0,8–1,4 с на шаге `08-power`).
 const OWN_AT := [Vector2(-1.3, -4.2), Vector2(1.3, -4.2)]
+
+
+## Сколько товарищей ставит прогрев: на каждую роль и каждую внешность хотя бы по одному (#883).
+static func mate_count() -> int:
+	return maxi(Crew.Role.size(), CrewRig.MODELS.size())
 
 var i := 0
 
@@ -49,21 +64,35 @@ static func frames() -> int:
 
 
 static func _inside() -> int:
-	return VIEWS.size() + POSTS.size()
+	return STAGES + VIEWS.size() + POSTS.size()
 
 
 func active() -> bool:
 	return i < frames()
 
 
-## Точка облёта (`Flyby.START_PATH`) для кадра снаружи; -1 — кадр с мостика или прогрев кончился.
+## Номер кадра снаружи в OUTSIDE; -1 — кадр с мостика или прогрев кончился.
 func outside() -> int:
-	return OUTSIDE[i - _inside()] if active() and i >= _inside() else -1
+	return i - _inside() if active() and i >= _inside() else -1
+
+
+## Слой первого взгляда (0…STAGES−1): показано только то, что в слоях до него; -1 — обычный кадр, всё видно.
+func stage() -> int:
+	return i if active() and i < STAGES else -1
+
+
+## Камера с борта для кадра снаружи k (оси корабля): точка пути облёта, взгляд как у самого облёта (`Flyby.pose`).
+static func outside_pose(k: int) -> Transform3D:
+	var kind: Flyby.Kind = OUTSIDE[k][0]
+	var path: Array = Flyby.START_PATH if kind == Flyby.Kind.START else Flyby.SURFACE_PATH
+	var p: Vector3 = path[OUTSIDE[k][1]]
+	var look := Flyby.LOOK_AT + (Vector3.UP * Flyby.SURFACE_LOOK_UP if kind == Flyby.Kind.SURFACE else Vector3.ZERO)
+	return Transform3D(Basis.looking_at(look - p, Vector3.UP), p)
 
 
 ## Взгляд с мостика текущего кадра: [x, y, z, курс°, наклон°].
 func _view() -> Array:
-	var k := mini(i, _inside() - 1)
+	var k := clampi(i - STAGES, 0, _inside() - STAGES - 1)   # кадры по слоям — тем же первым взглядом
 	if k < VIEWS.size():
 		return [EYE.x, EYE.y, EYE.z, VIEWS[k][0], VIEWS[k][1]]
 	return POSTS[k - VIEWS.size()]

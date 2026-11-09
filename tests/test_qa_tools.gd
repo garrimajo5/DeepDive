@@ -29,3 +29,127 @@ func test_ps1_valid_utf8() -> void:
 		var text := b.slice(3).get_string_from_utf8()
 		ok(text.length() > 0 and text.contains("\n"), "читается как UTF-8: %s" % path)
 		ok(not text.contains("﻿"), "BOM один, в начале: %s" % path)
+
+
+## run-qa.ps1 ждёт done.txt N × 2 с. Сценарий рос, и ожидания (90 × 2 с) перестало хватать:
+## при долгом прогреве после установки игра не доходила до конца (отчёт 2026-10-26-1233, done=False).
+## Время сценария — сумма ожиданий и удержаний; сверху четверть на шаги и кадры и 30 с на запуск и прогрев.
+func test_run_qa_waits_for_whole_scenario() -> void:
+	var ps := FileAccess.get_file_as_bytes(DIR.path_join("run-qa.ps1")).slice(3).get_string_from_utf8()
+	var re := RegEx.create_from_string("for \\(\\$i = 0; \\$i -lt (\\d+); \\$i\\+\\+\\) \\{\\s*\\n\\s*Start-Sleep (\\d+)")
+	var m := re.search(ps)
+	ok(m != null, "цикл ожидания done.txt найден")
+	if m == null:
+		return
+	var budget := int(m.get_string(1)) * int(m.get_string(2))
+	var steps: Array = JSON.parse_string(FileAccess.get_file_as_string(DIR.path_join("scenario.json")))
+	var timed := 0.0
+	for st in steps:
+		if st.get("do", "") in ["wait", "hold", "drain", "swipe"]:
+			timed += float(st.get("s", 0.0))
+	var need := timed * 1.25 + 30.0
+	ok(need <= budget, "ожидание %d с покрывает сценарий ~%.0f с" % [budget, need])
+
+
+## #844: телефону — APK только с arm64-v8a, эмулятору тестера — отдельный только с x86_64 (≈27 МБ меньше на телефоне).
+func test_two_apks_phone_and_emulator() -> void:
+	var cfg := ConfigFile.new()
+	eq(cfg.load("res://export_presets.cfg"), OK, "пресеты читаются")
+	var arch := {}
+	for i in 2:
+		var sec := "preset.%d" % i
+		var o := sec + ".options"
+		arch[cfg.get_value(sec, "name")] = [cfg.get_value(o, "architectures/arm64-v8a"),
+			cfg.get_value(o, "architectures/x86_64"), cfg.get_value(sec, "export_path")]
+	eq(arch.get("Android"), [true, false, "build/DeepDive.apk"], "телефон — только arm64-v8a")
+	eq(arch.get("Android эмулятор"), [false, true, "build/DeepDive-emulator.apk"], "эмулятор — только x86_64")
+	var ci := FileAccess.get_file_as_string("res://.github/workflows/godot.yml")
+	ok(ci.contains("--export-debug \"Android эмулятор\" build/DeepDive-emulator.apk"), "CI собирает APK эмулятора")
+	ok(ci.contains("build/DeepDive.apk build/DeepDive-emulator.apk --clobber"), "в релиз — оба")
+	var run := FileAccess.get_file_as_string("res://tools/qa/run-qa.ps1")
+	ok(run.contains("'DeepDive-emulator.apk'"), "run-qa.ps1 ставит на эмулятор x86_64-сборку")
+
+
+## #1125: релиз перезаливался, скачивание упало (BlobNotFound), а скрипт поставил прошлый APK из папки
+## и записал прогон под новым коммитом. Теперь старый файл удаляется до скачивания, ошибка — выход до установки.
+func test_run_qa_stops_when_download_fails() -> void:
+	var ps := FileAccess.get_file_as_bytes(DIR.path_join("run-qa.ps1")).slice(3).get_string_from_utf8()
+	var dl := ps.find("Invoke-WebRequest $asset")
+	ok(dl > 0, "скачивание APK из релиза есть")
+	var rm := ps.rfind("Remove-Item $apk", dl)
+	ok(rm > 0 and rm < dl, "старый APK удаляется до скачивания")
+	var line_end := ps.find("\n", dl)
+	ok(ps.substr(dl, line_end - dl).contains("-ErrorAction Stop"), "ошибка скачивания ловится")
+	var fail := ps.find("DOWNLOAD_FAILED", dl)
+	var inst := ps.find("adb install")
+	ok(fail > 0 and fail < inst, "при ошибке — выход до установки")
+	ok(ps.find("exit 1", fail) < inst, "выход с кодом 1")
+	ok(ps.find("last-commit.txt\" $head") > inst, "коммит записывается только после установки")
+
+
+## #1393: проба сценария тестера на эмуляторе в Actions — те же шаги, что run-qa.ps1: x86_64-сборка, пакет игры,
+## сценарий в files/qa, ожидание done.txt не короче сценария; action эмулятора закреплён тегом версии.
+func test_emulator_ci_matches_run_qa() -> void:
+	var sh := FileAccess.get_file_as_string(DIR.path_join("emulator.sh"))
+	var cfg := ConfigFile.new()
+	eq(cfg.load("res://export_presets.cfg"), OK, "пресеты читаются")
+	var pkg: String = cfg.get_value("preset.1.options", "package/unique_name")
+	ok(sh.contains("APP=" + pkg), "пакет игры как в пресете эмулятора: " + pkg)
+	ok(sh.contains("files/qa/scenario.json") and sh.contains("files/qa/out/done.txt"), "сценарий и done.txt — как run-qa.ps1")
+	ok(sh.contains("\"do\": \"quit\""), "в конце сценария — quit")
+	var wf := FileAccess.get_file_as_string("res://.github/workflows/qa-emulator.yml")
+	ok(wf.contains("DeepDive-emulator.apk"), "ставится x86_64-сборка")
+	ok(RegEx.create_from_string("reactivecircus/android-emulator-runner@v\\d+\\.\\d+\\.\\d+").search(wf) != null,
+		"action эмулятора закреплён тегом версии")
+	ok(wf.contains("workflow_dispatch:") and not wf.contains("workflow_run:"), "пока только вручную (проба не дала снимков)")
+	var limit := RegEx.create_from_string("emulator\\.sh .* qa-out (\\d+)").search(wf)
+	ok(limit != null, "предел ожидания задан")
+	if limit == null:
+		return
+	var steps: Array = JSON.parse_string(FileAccess.get_file_as_string(DIR.path_join("scenario.json")))
+	var timed := 0.0
+	for st in steps:
+		if st.get("do", "") in ["wait", "hold", "drain", "swipe"]:
+			timed += float(st.get("s", 0.0))
+	ok(timed * 1.25 + 30.0 <= int(limit.get_string(1)), "ожидание покрывает сценарий")
+	var tm := RegEx.create_from_string("timeout-minutes: (\\d+)").search(wf)
+	ok(tm != null and int(tm.get_string(1)) * 60 > int(limit.get_string(1)) + 600, "job дольше ожидания: есть время на загрузку эмулятора")
+
+
+## #1350: `publish-qa.ps1 -Shots a,b,c` через `powershell -File` приходит одной строкой — фильтр не находил ни
+## одного снимка, и отчёт уходил без скриншотов молча. Теперь строка разбивается по запятой, без снимков — ошибка.
+func test_publish_qa_splits_shots() -> void:
+	var ps := FileAccess.get_file_as_bytes(DIR.path_join("publish-qa.ps1")).slice(3).get_string_from_utf8()
+	var split := ps.find("-split ','")
+	var filt := ps.find("$Shots -contains")
+	ok(split > 0 and split < filt, "-Shots разбивается по запятой до фильтра")
+	var fail := ps.find("throw", filt)
+	ok(fail > 0 and fail < ps.find("foreach ($f in $pngs)"), "без снимков — ошибка до сжатия и коммита")
+
+
+## #1350: эмулятор закрывался вместе с фоновым run-qa.ps1 посреди ручной проверки. Запуск — через WMI
+## (процесс не потомок скрипта), а не Start-Process.
+func test_run_qa_emulator_outlives_script() -> void:
+	var ps := FileAccess.get_file_as_bytes(DIR.path_join("run-qa.ps1")).slice(3).get_string_from_utf8()
+	ok(ps.contains("Invoke-CimMethod Win32_Process -MethodName Create"), "эмулятор — отвязанным процессом")
+	ok(not ps.contains("Start-Process \"$sdk\\emulator"), "не потомком скрипта")
+
+
+## #1379: картинка в issue без Python — issue-img.ps1 делает то же, что tools/issue_img.py: ветка-сирота issue-img,
+## коммит во временном индексе (рабочая папка не трогается), ссылки raw.githubusercontent в той же папке номера.
+func test_issue_img_ps1_mirrors_python() -> void:
+	var path := DIR.path_join("issue-img.ps1")
+	ok(FileAccess.file_exists(path), "issue-img.ps1 есть")
+	var ps := FileAccess.get_file_as_bytes(path).slice(3).get_string_from_utf8()
+	var py := FileAccess.get_file_as_string("res://tools/issue_img.py")
+	ok(py.contains("BRANCH = \"issue-img\"") and ps.contains("$branch = 'issue-img'"), "та же ветка, что у issue_img.py")
+	ok(ps.contains("https://raw.githubusercontent.com/$repoSlug/$branch/$Issue/$name"), "ссылка как raw_url в Python")
+	ok(ps.contains("$repoSlug = 'garrimajo5/DeepDive'"), "тот же репозиторий")
+	for step in ["GIT_INDEX_FILE", "hash-object -w", "update-index --add --cacheinfo", "commit-tree", "push -q origin"]:
+		ok(ps.contains(step), "git без checkout: %s" % step)
+	ok(ps.contains("Remove-Item Env:\\GIT_INDEX_FILE"), "временный индекс снимается — следующий git работает с обычным")
+	ok(ps.contains("[^A-Za-z0-9._-]"), "имя в ветке — латиницей")
+	ok(ps.contains("UTF8Encoding $false"), "JSON комментария без BOM")
+	ok(ps.contains("Get-Command gh"), "без gh — печатает текст комментария")
+	var qa := FileAccess.get_file_as_string("res://docs/QA.md")
+	ok(qa.contains("tools\\qa\\issue-img.ps1"), "docs/QA.md называет PowerShell-вариант")

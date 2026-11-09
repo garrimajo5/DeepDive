@@ -25,6 +25,9 @@ const RESPAWN_MIN := 30.0
 const RESPAWN_MAX := 45.0
 ## Глаза в луче — наблюдение раз в 40 с; глаза — на стебельках (±0,07; 0,15; 0,16) в осях глазуна.
 const EYES_CD := 40.0
+## Тело выходит из песка в бросок за RISE секунд с мягким входом и концом (`glazun_transform`, smoothstep): раньше —
+## за кадр, на 0,35 м и 0,4 рад разом (tools/jerk.gd, 42 м/с² и 48 рад/с² у пятна мха).
+const RISE := 0.15
 const EYE := Vector3(0.07, 0.15, 0.16)
 ## Сонар: стайки ближе 70 м рассыпаются на 2,5 с, сообщение — раз в 30 с (SCATTER_R).
 const SCATTER_R := 70.0
@@ -48,6 +51,15 @@ const CLEAR := 0.3
 const HULL_R := 0.25
 ## Дно под рыбкой читается заново, когда она отплыла дальше 0,25 м (EcoAgent.GROUND_STEP).
 const GROUND_STEP := 0.25
+## Плавность (Б3): нос догоняет путь долей угла 6/с, не быстрее 5 рад/с; медленнее 0,1 м/с — держит курс и
+## выравнивается к горизонту; тангаж — не круче 0,6 рад; в повороте ложится на бок — 0,25 на 1 рад/с, до 0,4 рад.
+const TURN_FOLLOW := 6.0
+const TURN_MAX := 5.0
+const SLOW := 0.1
+const PITCH_MAX := 0.6
+const BANK_K := 0.25
+const BANK_MAX := 0.4
+const BANK_FOLLOW := 5.0
 
 
 ## Монетник.
@@ -64,6 +76,9 @@ class Coin:
 	var goal := Vector3.ZERO
 	var goal_t := 0.0
 	var phase := 0.0
+	## Куда смотрит нос (+Z меша, единичный) и крен (рад, + — на левый бок, в поворот влево): ведёт turn().
+	var look := Vector3(0, 0, 1)
+	var bank := 0.0
 	var gx := INF
 	var gz := INF
 	var gh := 0.0
@@ -78,6 +93,8 @@ class Glazun:
 	var cd := 0.0
 	## Бросок 0…1: тело приподнимается из песка и гаснет за полсекунды.
 	var lunge := 0.0
+	## Поза броска 0…1 для тела: догоняет lunge вверх за RISE (а не за кадр), вниз — вместе с ним.
+	var rise := 0.0
 	var lit := false
 	var eyes_cd := 0.0
 	## Глаза (левый, правый) и середина между ними — в мире.
@@ -100,6 +117,8 @@ class School:
 	var from := Vector3.ZERO
 	var graze_cd := 0.0
 	var scatter_cd := 0.0
+	## Набранное время рыбок стайки вдали (EcoLod): шагают реже, догоняя пропущенное.
+	var lag := 0.0
 
 	func alive_count() -> int:
 		var n := 0
@@ -119,6 +138,10 @@ var bladders: EcoBladder
 
 var _spots: Array[Vector3]
 var _rnd: EcoRandom
+## Шаги модуля с reset — очередь стаек вдали (EcoLod).
+var _tick := 0
+## Шаг рыбок стайки i на этом шаге мира (0 — ждёт очереди, EcoLod).
+var _h: PackedFloat32Array = PackedFloat32Array()
 
 
 ## moss_system — пятна мха (подключены раньше); pred_system — серпохвосты, от них стайка тоже рассыпается;
@@ -153,6 +176,7 @@ static func seed_for(world_seed: int) -> int:
 
 func reset(world: EcoWorld) -> void:
 	_rnd = EcoWorld.seeded_for(seed_for(world.seed_value))
+	_tick = 0
 	schools.clear()
 	coins.clear()
 	glazuns.clear()
@@ -185,6 +209,7 @@ func reset(world: EcoWorld) -> void:
 			_spawn(cn)
 			sc.members.append(cn)
 			coins.append(cn)
+	_h.resize(schools.size())
 
 
 ## Монетник появляется над мхом, но не прямо над глазуном (coinSpawn).
@@ -200,6 +225,8 @@ func _spawn(cn: Coin) -> void:
 	cn.alive = true
 	cn.respawn = 0.0
 	cn.vel = Vector3.ZERO
+	cn.look = Vector3(sin(cn.phase), 0.0, cos(cn.phase))
+	cn.bank = 0.0
 	cn.goal_t = 0.0
 	cn.goal = cn.pos
 
@@ -215,13 +242,24 @@ func step(world: EcoWorld, dt: float) -> void:
 			world.emit(ID, "graze", sc.center, _graze_text(world))
 		if sc.scatter <= 0.0 and sc.patch:
 			EcoMoss.eat(sc.patch, dt * EAT)
+		# рыбки стайки вдали шагают реже (EcoLod): пара точек в мути, сдвиг за кадр не виден
+		if EcoLod.wait(sc.center.distance_to(world.ship.pos), _tick, sc.index, sc.lag, dt):
+			sc.lag += dt
+			_h[sc.index] = 0.0
+		else:
+			_h[sc.index] = dt + sc.lag
+			sc.lag = 0.0
+	_tick += 1
 	for cn in coins:
+		var h := _h[cn.school]
+		if h <= 0.0:
+			continue
 		if not cn.alive:
-			cn.respawn -= dt
+			cn.respawn -= h
 			if cn.respawn > 0.0:
 				continue
 			_spawn(cn)
-		_step_coin(world, cn, dt)
+		_step_coin(world, cn, h)
 	for gz in glazuns:
 		_step_glazun(world, gz, dt)
 
@@ -265,6 +303,44 @@ func _step_coin(world: EcoWorld, cn: Coin, dt: float) -> void:
 		cn.pos.y = h + CLEAR
 	cn.pos.x = clampf(cn.pos.x, -EcoAgent.EDGE, EcoAgent.EDGE)
 	cn.pos.z = clampf(cn.pos.z, -EcoAgent.EDGE, EcoAgent.EDGE)
+	turn(cn, dt)
+
+
+## Куда хочет смотреть нос: по скорости с тангажом не круче PITCH_MAX; медленнее SLOW — прежний курс, ровно.
+static func aim(cn: Coin) -> Vector3:
+	var v := cn.vel
+	var hs := Vector2(v.x, v.z).length()
+	var flat := Vector3(cn.look.x, 0.0, cn.look.z)
+	if v.length() > SLOW and hs > 1e-3:
+		flat = Vector3(v.x, 0.0, v.z) / hs
+	elif flat.length_squared() < 1e-6:
+		flat = Vector3(sin(cn.phase), 0.0, cos(cn.phase))
+	else:
+		flat = flat.normalized()
+	var p := clampf(atan2(v.y, hs), -PITCH_MAX, PITCH_MAX) if v.length() > SLOW else 0.0
+	return flat * cos(p) + Vector3.UP * sin(p)
+
+
+## Курс по горизонтали (рад; растёт — поворот влево, как yaw корабля).
+static func yaw_of(d: Vector3) -> float:
+	return atan2(-d.x, -d.z)
+
+
+## Шаг поворота тела за dt: нос догоняет aim(), крен — по скорости поворота (как у серпохвоста, EcoPred.turn).
+static func turn(cn: Coin, dt: float) -> void:
+	if dt <= 0.0:
+		return
+	var from := cn.look
+	var want := aim(cn)
+	var ang := from.angle_to(want)
+	if ang > 1e-5:
+		var axis := from.cross(want)
+		if axis.length_squared() < 1e-10:  # ровно назад — разворот по горизонтали
+			axis = Vector3.UP
+		var step := minf(ang * (1.0 - exp(-TURN_FOLLOW * dt)), TURN_MAX * dt)
+		cn.look = from.rotated(axis.normalized(), step).normalized()
+	var rate := wrapf(yaw_of(cn.look) - yaw_of(from), -PI, PI) / dt
+	cn.bank = lerpf(cn.bank, clampf(rate * BANK_K, -BANK_MAX, BANK_MAX), 1.0 - exp(-BANK_FOLLOW * dt))
 
 
 func _step_glazun(world: EcoWorld, gz: Glazun, dt: float) -> void:
@@ -282,6 +358,7 @@ func _step_glazun(world: EcoWorld, gz: Glazun, dt: float) -> void:
 				gz.lunge = 1.0
 				world.emit(GLAZUN, "ambush", gz.pos, _ambush_text(world))
 				break
+	gz.rise = minf(gz.lunge, gz.rise + dt / RISE) if gz.lunge > gz.rise else gz.lunge
 	var was := gz.lit
 	gz.lit = world.in_beam(gz.eye_c)
 	if gz.lit and not was and gz.eyes_cd <= 0.0:
@@ -361,20 +438,29 @@ func came_to(i: int) -> bool:
 	return false
 
 
-## Наклон монетника в момент t: нос по скорости (+Z — вперёд), покачивание с боку на бок.
-static func coin_basis(cn: Coin, t: float) -> Basis:
+## Наклон монетника в момент t: нос по look (+Z — вперёд, плавно догоняет путь), крен в повороте и покачивание с
+## боку на бок. Остановился — держит курс (раньше щёлкал носом на свой случайный угол).
+static func coin_basis(cn: Coin, t: float, rate := 2.0) -> Basis:
+	var fw := cn.look
 	var b: Basis
-	if cn.vel.length_squared() > 1e-4 and Vector2(cn.vel.x, cn.vel.z).length_squared() > 1e-6:
-		b = Basis.looking_at(cn.vel, Vector3.UP, true)
+	if Vector2(fw.x, fw.z).length_squared() > 1e-6:
+		b = Basis.looking_at(fw, Vector3.UP, true)
 	else:
 		b = Basis(Vector3.UP, cn.phase)
-	return b * Basis(Vector3.BACK, sin(t * 2.0 + cn.phase) * 0.2)
+	# +X меша — левый бок: крен влево — поворот вокруг носа на −bank
+	return b * Basis(Vector3.BACK, sin(t * rate + cn.phase) * 0.2 - cn.bank)
 
 
-## Тело глазуна: приподнимается в броске на 0,35 м и задирает голову.
+## Тело глазуна: приподнимается в броске на 0,35 м и задирает голову — по позе `rise` с мягким входом.
 static func glazun_transform(gz: Glazun) -> Transform3D:
-	var b := Basis(Vector3.UP, gz.yaw) * Basis(Vector3.RIGHT, -gz.lunge * 0.4)
-	return Transform3D(b, gz.pos + Vector3(0, gz.lunge * 0.35, 0))
+	var k := lunge_k(gz)
+	var b := Basis(Vector3.UP, gz.yaw) * Basis(Vector3.RIGHT, -k * 0.4)
+	return Transform3D(b, gz.pos + Vector3(0, k * 0.35, 0))
+
+
+## Доля позы броска для тела и дыхания, 0…1.
+static func lunge_k(gz: Glazun) -> float:
+	return smoothstep(0.0, 1.0, gz.rise)
 
 
 ## Яркость глаз: 1 в луче, иначе чуть мерцает около 0,35.

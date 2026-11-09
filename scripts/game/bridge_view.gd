@@ -18,8 +18,20 @@ var lamps: Array[OmniLight3D] = []  ## огни мостика B1, B2 по ART-0
 var _lamp_data: Array[CabinLight.Lamp] = []
 var plafond_mat: StandardMaterial3D   ## рассеиватели плафонов ART-064 (set_cabin)
 const PLAFOND_TEX := preload("res://textures/svet/plafon.png")
+const GLINT_MASK := preload("res://textures/bridge/bliki-maska.png")   ## ART-067, L8 512², бесшовная
 var screens_mat: ShaderMaterial    ## экраны пульта пилота (помехи — set_screens)
+## Последние значения в материалы и огни (#847): то же самое каждый кадр не пишем.
+var _cabin_key := Vector3(-2.0, 0.0, -1.0)
+var _glint_k := -1.0
+var _glint_tint := Color(-1.0, -1.0, -1.0)
+var _wear_loss := -1.0
+var _screens := Vector4(-1.0, -1.0, -1.0, -1.0)
+var _surfaces: Array[ShaderMaterial] = []
 const SCANNER_TEXT := Color("67DDEB")
+## Ширина строк экрана сканера, px подписи: видимое стекло в рамке модели уже `SCANNER_SCREEN_SIZE` — строка шире
+## ложится на светящуюся рамку (отчёт тестера 30.10, «Обратный ход: неисправен» в 34 px — 472 px), длинные переносятся.
+const SCANNER_TEXT_W := 420.0
+const SCANNER_FONT := 30
 var scanner_text: Label3D          ## экран сканера биолога (Scanner.screen_lines)
 
 
@@ -30,6 +42,8 @@ func _ready() -> void:
 	mesh_instance.layers = OceanView.LAYER_SHIP
 	add_child(mesh_instance)
 	plafond_mat = plafond_material(mesh_instance.mesh)
+	for m in surface_materials():   # блики воды ART-067: маска в потолке и полу, сила — set_glints
+		m.set_shader_parameter("glint_mask", GLINT_MASK)
 	_add_glass()
 	for p in BridgeProps.fixed():
 		props[p.model] = _add_model(p, self)
@@ -42,6 +56,7 @@ func _ready() -> void:
 	wp.pos = Vector3.ZERO
 	wheel = _add_model(wp, wheel_mount)
 	props[BridgeProps.WHEEL] = wheel
+	set_wheel_turn(0.0)
 	_light_screens(props[BridgeProps.SCREENS])
 	for p in BridgeProps.side_props():
 		props[p.model] = _add_model(p, self)
@@ -70,10 +85,59 @@ func _ready() -> void:
 ## Огни мостика по ART-064 (CabinLight): breach_room — отсек открытой пробоины (−1 — нет), t — часы ритма,
 ## k — мигание Vitals.lamp_k поверх огибающей.
 func set_cabin(breach_room: int, t: float, k: float) -> void:
+	var key := CabinLight.key(breach_room, t, k)
+	if key == _cabin_key:
+		return
+	_cabin_key = key
 	for i in lamps.size():
 		lamps[i].light_color = CabinLight.color(_lamp_data[i], breach_room)
 		lamps[i].light_energy = CabinLight.energy(_lamp_data[i], breach_room, t, k)
 	set_plafond(plafond_mat, breach_room, t, k)
+
+
+## Блики воды ART-067 (WaterGlints): сила k (0 — маска не читается), оттенок воды, часы течения t, с.
+## Без изменений не пишем (#847): бликов нет (k = 0) — ни силы, ни часов; оттенок — только новый.
+func set_glints(k: float, tint: Color, t: float) -> void:
+	if k == 0.0 and _glint_k == 0.0:
+		return
+	if _surfaces.is_empty():
+		_surfaces = surface_materials()
+	var k_new := k != _glint_k
+	var tint_new := tint != _glint_tint
+	_glint_k = k
+	_glint_tint = tint
+	for m in _surfaces:
+		if k_new:
+			m.set_shader_parameter("glint_k", k)
+		if tint_new:
+			m.set_shader_parameter("glint_tint", tint)
+		m.set_shader_parameter("glint_time", t)
+
+
+## «Корабль устал» ART-074 (CabinWear): потёки и мокрый пол по сглаженной потере прочности 0…1.
+func set_wear(loss: float) -> void:
+	if loss == _wear_loss:   # потеря стоит почти всегда — не переписываем материалы (#847)
+		return
+	_wear_loss = loss
+	wear_on(mesh_instance.mesh, loss)
+
+
+## Потеря прочности в материалы ship_surface меша (мостик, отсеки).
+static func wear_on(mesh: Mesh, loss: float) -> void:
+	for i in mesh.get_surface_count():
+		var m := mesh.surface_get_material(i) as ShaderMaterial
+		if m:
+			m.set_shader_parameter("wear_loss", loss)
+
+
+## Материалы оболочки с картами ART-054 (шейдер ship_surface): пол, стены, потолок.
+func surface_materials() -> Array[ShaderMaterial]:
+	var out: Array[ShaderMaterial] = []
+	for i in mesh_instance.mesh.get_surface_count():
+		var m := mesh_instance.mesh.surface_get_material(i) as ShaderMaterial
+		if m:
+			out.append(m)
+	return out
 
 
 ## Плафоны мостика × k без аварии (мигание, Vitals.lamp_k).
@@ -131,7 +195,7 @@ func set_zap_lever(deg: float, ready: bool) -> void:
 ## Поворот колеса вслед за штурвалом: turn −1…1 (вправо — по часовой, если смотреть из кресла).
 func set_wheel_turn(turn: float) -> void:
 	if wheel:
-		wheel.rotation_degrees.z = -turn * BridgeProps.WHEEL_TURN_DEG
+		wheel.rotation_degrees.z = BridgeProps.wheel_deg(turn)
 
 
 ## Текст на экране сканера: лицом в −X (к мостику), текст вправо — к +Z.
@@ -139,7 +203,7 @@ func _add_scanner_screen() -> void:
 	scanner_text = Label3D.new()
 	scanner_text.name = "Экран сканера"
 	scanner_text.layers = OceanView.LAYER_SHIP
-	scanner_text.font_size = 34
+	scanner_text.font_size = SCANNER_FONT
 	scanner_text.outline_size = 0
 	scanner_text.pixel_size = 0.0014
 	scanner_text.modulate = SCANNER_TEXT
@@ -147,7 +211,7 @@ func _add_scanner_screen() -> void:
 	scanner_text.double_sided = true   # материал общий с подписями голограммы (issue #159)
 	scanner_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	scanner_text.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	scanner_text.width = BridgeProps.SCANNER_SCREEN_SIZE.x / scanner_text.pixel_size - 30.0
+	scanner_text.width = SCANNER_TEXT_W
 	scanner_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var top := BridgeProps.SCANNER_SCREEN + Vector3(-0.005, BridgeProps.SCANNER_SCREEN_SIZE.y / 2.0 - 0.12, 0.0)
 	scanner_text.transform = Transform3D(Basis(Vector3(0, 0, 1), Vector3.UP, Vector3(-1, 0, 0)), top)
@@ -194,17 +258,23 @@ static func light_texture(n: Node3D) -> void:
 
 
 ## Экраны пульта светятся ровным голубым (пока на них ничего не рисуем); три экрана — своя яркость у каждого
-## (`shaders/console_screens.gdshader`, помехи — `set_screens`).
+## (`shaders/console_screens.gdshader`, помехи — `set_screens`); сетка — `BridgeProps.screen_mesh` вместо плоскости
+## из GLB (#1388).
 func _light_screens(n: Node3D) -> void:
 	screens_mat = ShaderMaterial.new()
 	screens_mat.shader = load("res://shaders/console_screens.gdshader")
 	screens_mat.set_shader_parameter("glow", BridgeProps.SCREEN_GLOW)
 	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).mesh = BridgeProps.screen_mesh()   # стёкла по рамкам корпуса (#1388)
 		(mi as MeshInstance3D).material_override = screens_mat
 
 
 ## Яркость экранов при помехах (Vitals.screen_k): три экрана пульта пилота слева направо и экран сканера.
 func set_screens(helm: Vector3, scanner: float) -> void:
+	var key := Vector4(helm.x, helm.y, helm.z, scanner)
+	if key == _screens:   # без помех яркость ровная — не пишем (#847)
+		return
+	_screens = key
 	screens_mat.set_shader_parameter("k", helm)
 	scanner_text.modulate = Color(SCANNER_TEXT.r * scanner, SCANNER_TEXT.g * scanner, SCANNER_TEXT.b * scanner)
 
@@ -212,6 +282,8 @@ func set_screens(helm: Vector3, scanner: float) -> void:
 ## Стекло носовых окон по ART-057 (`steklo-okon.md`): один квад на три окна, маска мути/капель/царапин и нормали
 ## толстого стекла (`textures/bridge/steklo-*.png`, шейдер `window_glass.gdshader`); центр окна почти чистый.
 const GLASS_SHADER := preload("res://shaders/window_glass.gdshader")
+## Полный конденсат ART-077 (нормали капель, экранное преломление) — отдельный ресурс: копия экрана только на «Красиво».
+const GLASS_WET_SHADER := preload("res://shaders/window_glass_wet.gdshader")
 const GLASS_TINT := Color(0.6, 0.85, 0.9)
 var glass_mat: ShaderMaterial
 
@@ -237,7 +309,37 @@ static func glass_material() -> ShaderMaterial:
 	m.set_shader_parameter("normal_map", load(KIT_DIR + "steklo-normali.png"))
 	m.set_shader_parameter("split", glass_split())
 	m.set_shader_parameter("relief", true)
+	m.set_shader_parameter("condensation", load(WindowFog.MASK))   # конденсат и иней ART-077, сила — set_fog
+	m.set_shader_parameter("humidity", 0.0)
+	m.set_shader_parameter("ice_k", 0.0)
+	m.set_shader_parameter("ice_color", Vector3(WindowFog.ICE_COLOR.r, WindowFog.ICE_COLOR.g, WindowFog.ICE_COLOR.b))
 	return m
+
+
+## Конденсат и иней на окнах ART-077: влажность и доля инея (`WindowFog`, сглажены на CPU) — две uniform стекла.
+func set_fog(humidity: float, ice_k: float) -> void:
+	if not is_equal_approx(float(glass_mat.get_shader_parameter("humidity")), humidity):
+		glass_mat.set_shader_parameter("humidity", humidity)
+	if not is_equal_approx(float(glass_mat.get_shader_parameter("ice_k")), ice_k):
+		glass_mat.set_shader_parameter("ice_k", ice_k)
+
+
+## Полный вариант конденсата ART-077 («Красиво», `Main._apply_graphics`): true — шейдер с нормалями капель и
+## преломлением (`window_glass_wet`, читает копию экрана), false — без экранного буфера. Значения uniform те же.
+func set_wet(on: bool) -> void:
+	var want: Shader = GLASS_WET_SHADER if on else GLASS_SHADER
+	if glass_mat.shader == want:
+		return
+	var keep := {}
+	for u in glass_mat.shader.get_shader_uniform_list():
+		keep[u["name"]] = glass_mat.get_shader_parameter(u["name"])
+	glass_mat.shader = want
+	for k in keep:
+		glass_mat.set_shader_parameter(k, keep[k])
+
+
+func is_wet() -> bool:
+	return glass_mat.shader == GLASS_WET_SHADER
 
 
 ## Границы окон по u квада (стойки `BridgePlan.MULLIONS`): 0,328947 и 0,671053.
@@ -305,6 +407,7 @@ static func kit_material(paint: int, kits: Dictionary = KITS, dir: String = KIT_
 		m.set_shader_parameter(side + "_metal", k[3])
 		m.set_shader_parameter(side + "_z", Vector2(k[4], k[5]) if k.size() >= 6 else Vector2(-1e6, 1e6))
 	m.set_shader_parameter("relief", true)
+	m.set_shader_parameter("wear_mask", CabinWear.MASK)   # «корабль устал» ART-074, сила — set_wear
 	return m
 
 
@@ -318,7 +421,10 @@ func set_relief(on: bool) -> void:
 
 
 ## kits — комплекты карт по краскам (KITS мостика, RoomsView.KITS отсеков) из папки dir; пусто — заливка.
-static func build_mesh(parts: Array[BridgePlan.Part] = BridgePlan.parts(), kits: Dictionary = {}, dir: String = KIT_DIR) -> ArrayMesh:
+## mats — общие материалы по краскам (#846: меши отсеков RoomsView рисуются отдельно, материалы одни): краска уже
+## есть — её материал, нет — новый кладётся туда.
+static func build_mesh(parts: Array[BridgePlan.Part] = BridgePlan.parts(), kits: Dictionary = {}, dir: String = KIT_DIR,
+		mats: Dictionary = {}) -> ArrayMesh:
 	var by_paint := {}
 	for part in parts:
 		if not by_paint.has(part.paint):
@@ -331,8 +437,10 @@ static func build_mesh(parts: Array[BridgePlan.Part] = BridgePlan.parts(), kits:
 		var st: SurfaceTool = by_paint[paint]
 		st.generate_tangents()
 		st.commit(mesh)
-		var km := kit_material(paint, kits, dir) if not kits.is_empty() else null
-		mesh.surface_set_material(mesh.get_surface_count() - 1, km if km else material(paint))
+		if not mats.has(paint):
+			var km := kit_material(paint, kits, dir) if not kits.is_empty() else null
+			mats[paint] = km if km else material(paint)
+		mesh.surface_set_material(mesh.get_surface_count() - 1, mats[paint])
 	return mesh
 
 

@@ -22,6 +22,10 @@ var shown := 0  ## сколько хлопьев видно (для тестов
 var near_bow := 0  ## сколько из них в окне перед мостиком (для тестов)
 var _mat: StandardMaterial3D
 var _hull: Array = []  ## части корпуса (HullPlan): хлопья внутри корабля и у самых стен не рисуем
+var writes := 0        ## сколько раз буфер отправлен (тесты, #847)
+var _buf := PackedFloat32Array()   ## буфер MultiMesh: 12 чисел на карточку, отправляется одним вызовом
+var _scale: PackedFloat32Array     ## card_scale(j) заранее
+var _alpha := -1.0
 
 
 func _init() -> void:
@@ -48,6 +52,10 @@ func _init() -> void:
 	mm.instance_count = Silt.MAX_CLOUDS * PER_CLOUD
 	mm.visible_instance_count = 0
 	multimesh = mm
+	_buf.resize(mm.instance_count * 12)
+	_scale.resize(PER_CLOUD)
+	for j in PER_CLOUD:
+		_scale[j] = card_scale(j)
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	for part in HullPlan.parts():
 		if part.piece == HullPlan.Piece.BODY or part.piece == HullPlan.Piece.NOSE or part.piece == HullPlan.Piece.STERN:
@@ -79,9 +87,17 @@ static func card_scale(j: int) -> float:
 ## точки стоят в мире и переносятся на другую сторону окна, когда корабль уходит (как морской снег). Иначе 300 карточек
 ## на шар 16 м — у окон их почти нет (ART-048: 60–100 пятен в центральном окне внутри, 20–30 на входе).
 func apply(s: Silt, t: float, ship_pos: Vector3, yaw: float) -> void:
+	if s.clouds.is_empty():   # ила нет — ничего не пишем каждый кадр (#847)
+		if shown > 0 or visible:
+			multimesh.visible_instance_count = 0
+			shown = 0
+			near_bow = 0
+			visible = false
+		return
 	var n := 0
 	var near_n := 0
 	var anchor := ship_pos + Vector3(0.0, 0.0, -LOCAL_AHEAD).rotated(Vector3.UP, yaw)
+	var half := LOCAL_BOX * 0.5
 	for cl in s.clouds:
 		var sp := cl.spread()
 		var near_ship := cl.c.distance_to(ship_pos) < sp + 30.0
@@ -94,17 +110,35 @@ func apply(s: Silt, t: float, ship_pos: Vector3, yaw: float) -> void:
 				p = anchor + wrap_box(cl.c + o * LOCAL_BOX * 1.7 + sway - anchor)
 			else:
 				p = cl.c + o * sp + sway
-			if near_ship and in_hull((p - ship_pos).rotated(Vector3.UP, -yaw), card_scale(j)):
+			var sc := _scale[j]
+			if near_ship and in_hull((p - ship_pos).rotated(Vector3.UP, -yaw), sc):
 				continue
-			multimesh.set_instance_transform(n, Transform3D(Basis.from_scale(Vector3.ONE * card_scale(j)), p))
+			# одна карточка — 12 чисел (базис по строкам + сдвиг), весь буфер уходит одним вызовом (#847)
+			var i := n * 12
+			_buf[i] = sc; _buf[i + 1] = 0.0; _buf[i + 2] = 0.0; _buf[i + 3] = p.x
+			_buf[i + 4] = 0.0; _buf[i + 5] = sc; _buf[i + 6] = 0.0; _buf[i + 7] = p.y
+			_buf[i + 8] = 0.0; _buf[i + 9] = 0.0; _buf[i + 10] = sc; _buf[i + 11] = p.z
 			n += 1
-			if (p - anchor).abs().x < LOCAL_BOX.x * 0.5 and (p - anchor).abs().z < LOCAL_BOX.z * 0.5:
+			var d := (p - anchor).abs()
+			if d.x < half.x and d.z < half.z:
 				near_n += 1
+	multimesh.buffer = _buf
+	writes += 1
 	multimesh.visible_instance_count = n
 	shown = n
 	near_bow = near_n
 	visible = n > 0
-	_mat.albedo_color.a = OPACITY * minf(1.0, s.max_density() + 0.1)
+	var a := OPACITY * minf(1.0, s.max_density() + 0.1)
+	if not is_equal_approx(a, _alpha):
+		_alpha = a
+		_mat.albedo_color.a = a
+
+
+## Карточка i из последнего буфера (тесты; в headless движок положения из буфера не отдаёт).
+func flake(i: int) -> Transform3D:
+	var k := i * 12
+	return Transform3D(Basis(Vector3(_buf[k], _buf[k + 4], _buf[k + 8]), Vector3(_buf[k + 1], _buf[k + 5], _buf[k + 9]),
+			Vector3(_buf[k + 2], _buf[k + 6], _buf[k + 10])), Vector3(_buf[k + 3], _buf[k + 7], _buf[k + 11]))
 
 
 ## Сдвиг v, перенесённый в окно LOCAL_BOX с центром в нуле.

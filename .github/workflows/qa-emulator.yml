@@ -1,0 +1,103 @@
+name: QA на эмуляторе
+# Проба (#1393, решение владельца 07.11.2026): сценарий тестера tools/qa/scenario.json на эмуляторе Android x86_64
+# в Actions — снимки после каждого слияния. Тестер на компьютере владельца остаётся для телефона (кадры, Vulkan, касания).
+# Шаги — tools/qa/emulator.sh (как tools/qa/run-qa.ps1). Внешний action эмулятора разрешён владельцем на пробу.
+# Замеры кадров отсюда — не показатель телефона: Vulkan в эмуляторе программный (SwiftShader).
+# Первая проба (прогон 42395403631): игра стартует на SwiftShader, но за 50 мин ни одного снимка — после каждого
+# слияния не гоняем, пока менеджер с владельцем не решат по итогам (#1393). Только ручной запуск.
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'Номер PR: APK из артефакта deepdive-apk её прогона (пусто — main: релиз apk-latest)'
+        required: false
+        default: ''
+      scenario:
+        description: 'Сценарий'
+        required: false
+        default: tools/qa/scenario.json
+
+concurrency:
+  group: qa-emulator
+  cancel-in-progress: false
+
+jobs:
+  emulator:
+    name: Сценарий тестера на эмуляторе
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v5
+      - name: APK
+        id: apk
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          PR: ${{ inputs.pr }}
+        run: |
+          set -euo pipefail
+          mkdir -p apk
+          if [ "$EVENT" = "workflow_run" ]; then
+            rid="$RUN_ID"; head="${RUN_SHA::7}"
+          elif [ -n "$PR" ]; then
+            sha=$(gh api "repos/$REPO/pulls/$PR" --jq '.head.sha')
+            rid=$(gh api "repos/$REPO/actions/runs?head_sha=$sha&per_page=20" --jq '[.workflow_runs[] | select(.name=="Godot")][0].id')
+            head="PR#$PR ${sha::7}"
+          else
+            rid=""; head=""
+          fi
+          if [ -n "$rid" ]; then
+            if ! gh run download "$rid" -R "$REPO" -n deepdive-apk -D apk; then
+              echo "В прогоне $rid нет deepdive-apk (APK не собирался — в изменениях нет кода?)"
+              echo "have=false" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+          else
+            gh release download apk-latest -R "$REPO" -p DeepDive-emulator.apk -D apk
+            head=$(gh release view apk-latest -R "$REPO" --json body --jq .body | grep -o 'коммит [0-9a-f]\{7\}' | cut -d' ' -f2 || true)
+          fi
+          test -s apk/DeepDive-emulator.apk
+          ls -la apk
+          echo "have=true" >> "$GITHUB_OUTPUT"
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+      - name: KVM
+        if: steps.apk.outputs.have == 'true'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Эмулятор и сценарий
+        if: steps.apk.outputs.have == 'true'
+        uses: reactivecircus/android-emulator-runner@v2.33.0
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disk-size: 4096M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash tools/qa/emulator.sh apk/DeepDive-emulator.apk "${{ inputs.scenario || 'tools/qa/scenario.json' }}" qa-out 3000
+      - name: Итог
+        if: always() && steps.apk.outputs.have == 'true'
+        run: |
+          echo "Коммит: ${{ steps.apk.outputs.head }}"
+          cat qa-out/itog.txt || echo "итога нет"
+          echo '--- log.txt (хвост)'; tail -40 qa-out/log.txt 2>/dev/null || true
+          echo '--- ошибки'; cat qa-out/errors.txt 2>/dev/null || true
+      # Кадры — превью в лог (#1379): артефакт из облачной сессии не скачать, лог — можно.
+      # Забрать: python3 tools/ci_preview.py take --run <id прогона> <папка>
+      - name: Превью кадров
+        if: always() && steps.apk.outputs.have == 'true'
+        run: python3 tools/ci_preview.py put $(ls qa-out/*.png 2>/dev/null | grep -v screencap) qa-out/screencap-end.png
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.apk.outputs.have == 'true'
+        with:
+          name: qa-emulator
+          path: qa-out/
+          if-no-files-found: warn

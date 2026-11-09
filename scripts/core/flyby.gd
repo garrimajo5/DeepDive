@@ -39,6 +39,12 @@ func active() -> bool:
 	return kind != Kind.NONE
 
 
+## Корпус под защитой: пока идёт облёт в начале забега, удары живого мира не доходят до корпуса —
+## игрок ещё ничего не может сделать, облёт нужен для другого (решение владельца, issue #506).
+func shields() -> bool:
+	return kind == Kind.START
+
+
 ## Длина облёта, с.
 func length() -> float:
 	return START_S if kind == Kind.START else SURFACE_S
