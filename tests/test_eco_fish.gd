@@ -60,6 +60,29 @@ func test_six_shoals_of_22_at_corals() -> void:
 
 
 
+
+## Проба расстановки #1400: дом стаи рифа переносится до сброса мира (`EcoFish.home_at`), остальные — на месте; по
+## умолчанию переносов нет. Расчёт тихих мест на пути 00 → 01 — tools/quiet_map.gd.
+func test_home_moves_only_for_probe() -> void:
+	var to := Vector3(EcoCoral.BASES[2].x, -30.0, EcoCoral.BASES[2].y)
+	var w := EcoWorld.new(EcoRandom.WORLD_SEED)
+	w.ground = Seabed.height
+	w.ship.pos = Vector3(500, 0, 500)
+	var fish := EcoFish.new()
+	ok(fish.home_at.is_empty(), "в игре переносов нет")
+	fish.home_at[4] = to
+	w.add(fish)
+	eq(fish.shoals[4].home, to, "стая 4 — у другого рифа")
+	eq(fish.shoals[3].home, EcoFish.HOMES[3], "остальные — дома")
+	for f in fish.shoals[4].members:
+		ok(_flat(f.agent.p, to) < 4.5, "рыбки стаи — у нового дома")
+	var plain := _fish(_world())
+	eq(plain.shoals[4].home, EcoFish.HOMES[4], "без пробы дом на месте")
+	var tool: GDScript = load("res://tools/quiet_map.gd")
+	var pts: Array[Vector2] = tool.route_points()
+	eq(pts[0], Vector2(4.0, 80.0), "путь начинается у 00")
+	eq(pts[-1], Vector2(33.0, -22.0), "и кончается у 01")
+
 ## Б3 «плавность»: центр стаи после сброса — среднее рыбок, как в шаге; раньше стоял в доме, а рыбки — выше и
 ## вразброс, и на первом шаге центр (цель сканера и сонара, испуг, охота) прыгал до 1,9 м.
 func test_center_is_mean_after_reset() -> void:
