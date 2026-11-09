@@ -680,6 +680,13 @@ ORM = AO/шероховатость/металл, в существующие `P
 анатомия `ledokryl-anatomiya.png`, сцена `ledokryl-pod-ledom.jpg`; решения — `ledokryl.md`: размах 14 м, тело 9 + хвост 9 м,
 14 слабых точек по кромкам, рот-щель со скребком и резонатор снизу, присоски отдельно (`EcoRemora`), взмах по формуле `RayView`.
 Модель — следующий заказ MOD потока Б.
+## ART-070 Внешние огни корпуса — принято
+- Исходник: ART-001/ART-024 (`HullPlan`), окна ART-057, свет внутри ART-064, разряд ART-068.
+
+**Принято 09.11.2026** (PR #494, ветка `art/ART-070-ogni-korpusa`, v4): схема `ogni-korpusa-plan.png`, таблица
+`ogni-korpusa.json`, ореол `ogni-korpusa-oreol.png` (RGBA 128², 8 КБ), пары `ogni-korpusa-sprava.jpg`/`-sleva.jpg`;
+решения — `ogni-korpusa.md`: шесть огней ореолами одним MultiMesh (+1 вызов, без Light3D), левый борт — вытянутый
+#B8D9E8, правый — круглый #67DDEB, проблеск рубки 2,4 с. Встройка — поток А (#1510).
 ## ART-071 Пар вентиля сброса в машинном — принято
 - Исходник: ART-019/ART-055 (`mashinnoe.md`, `otseki-materialy.md`), ART-064 (`svet-vnutri.md`), ART-058, ART-063.
 
