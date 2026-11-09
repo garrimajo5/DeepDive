@@ -849,6 +849,9 @@ func test_voice_reaches_comms() -> void:   # голос мира (эхолове
 	eq(e["type"], EcoLink.VOICE, "тип события")
 	eq([e["role"], e["text"], e["fake"], e["ask"], e["silent"]], [0, "Дайте импульс", true, "ping", false], "поля")
 	eq(EcoLink.voice(9, "x")["role"], 3, "роль в пределах 0…3")
+	eq(e["id"], "", "без ID реплики — только текст")
+	eq(EcoLink.voice(1, "x", true, "ping", false, "RADIO_FAKE_PULSE01")["id"], "RADIO_FAKE_PULSE01",
+		"ID реплики TXT-002 для голоса SND-009 (#1477)")
 	main.on_eco_event(e)
 	main.step(0.1)
 	ok(main.comms.cur != null, "сообщение на плашке")
@@ -866,10 +869,11 @@ func test_echo_fake_reaches_comms() -> void:   # подделка эхоловц
 	await frames(1)
 	var e := main.eco.echo
 	ok(e != null and e.preds == main.eco.preds, "эхоловец знает серпохвостов сцены")
-	e.fake(main.eco.world, EcoEcho.ASK_PING)
+	var v := e.fake(main.eco.world, EcoEcho.ASK_PING)
 	main.step(0.1)
 	ok(main.comms.cur != null, "ложный вызов на плашке")
-	eq(main.comms.title(), "Сонарщик", "заявленная роль")
+	eq(main.comms.title(), Crew.ROLE_NAMES[v["role"]], "заявленная роль реплики TXT-002")
+	eq(main.comms.cur.text, v["text"], "текст реплики")
 	eq(main.comms.code_line(), "Код: …", "без кодового слова")
 	eq(main.comms.cur.ask, EcoEcho.ASK_PING, "просит импульс")
 	eq(main.comms.cur.reply, "", "первый спуск — молчит на «Спросить код»")
