@@ -14,7 +14,8 @@ extends SceneTree
 ## arrive — встреча у 01 (#1400): 30 с без света на стоянке, затем свет и без остановки к 01, там 40 с стоянки
 ## со светом; печатает, кто из трёх хищников подошёл ближе всех и когда (`modes=` — какие проходы считать).
 ## Ответ экипажа (#1498) — `answer=signal|charge|alert` (`answer_now`): свет гаснет, корабль встаёт без хода (не
-## шумит) через `delay=` с после повода, через ANSWER_HOLD с свет снова горит и путь идёт дальше; `alert=<с>` — проба фазы «замер» `EcoPred.alert`.
+## шумит) через `delay=` с после повода, через ANSWER_HOLD с свет снова горит и путь идёт дальше; `alert=<с>` — проба фазы «замер» `EcoPred.alert`;
+## `leave=<с>` — отход хищника прочь после «потерял корабль» `EcoPred.alert_leave`.
 ## По каждому проходу ещё — когда хищник впервые в луче (ближе дальности света и в конусе `Searchlight.HALF_ANGLE`)
 ## и сколько секунд от сигнала до броска и от броска до укуса.
 
@@ -41,6 +42,8 @@ static var answer := ""
 ## Через сколько секунд после повода экипаж гасит свет (реакция людей, `delay=`).
 static var delay := 0.0
 static var alert := 0.0
+## Отход хищника после «потерял корабль», с (`leave=`, `EcoPred.alert_leave`).
+static var leave := 0.0
 
 
 func _init() -> void:
@@ -52,6 +55,7 @@ func _init() -> void:
 	answer = kv.get("answer", "")
 	delay = float(kv.get("delay", "0"))
 	alert = float(kv.get("alert", "0"))
+	leave = float(kv.get("leave", "0"))
 	if kv.has("stop"):
 		var xz: PackedStringArray = kv["stop"].split(",")
 		path[1] = Vector2(float(xz[0]), float(xz[1]))
@@ -65,7 +69,7 @@ func _init() -> void:
 		probes = [kv["probe"] == "1"]
 	var lines: Array[String] = []
 	if not move.is_empty() or kv.has("stop") or answer != "" or alert > 0.0:
-		lines.append("== переносы %s, стоянка %s, ответ «%s» через %.1f с, замер %.1f с" % [str(move), str(path[1]), answer, delay, alert])
+		lines.append("== переносы %s, стоянка %s, ответ «%s» через %.1f с, замер %.1f с, отход %.0f с" % [str(move), str(path[1]), answer, delay, alert, leave])
 		print(lines[0])
 	for probe in probes:
 		for mode in modes:
@@ -79,6 +83,7 @@ func _init() -> void:
 			var answers := 0
 			var gaps_wc: Array[float] = []
 			var gaps_cb: Array[float] = []
+			var to01: Array[float] = []
 			for s in seeds:
 				var r := run(probe, mode, 20261018 + s * 7919)
 				bites += 1 if r["bite"] else 0
@@ -96,13 +101,15 @@ func _init() -> void:
 					gaps_wc.append(r["wc"])
 				if r["cb"] >= 0.0:
 					gaps_cb.append(r["cb"])
+				if r["reached"]:
+					to01.append(r["to01"])
 				var line := "%s %-7s зерно %d: %s" % ["проба" if probe else "сейчас", mode, s, r["text"]]
 				print(line)
 				lines.append(line)
 			var sum := "== %s %s: бросок %d/%d (№0 %d, №1 %d, №2 %d), укус %d/%d, сигнал до броска %d/%d" % [
 				"проба" if probe else "сейчас", mode, charges, seeds, by[0], by[1], by[2], bites, seeds, warned, seeds]
-			sum += "; в луче до броска %d/%d; сигнал→бросок %s; бросок→укус %s; дошёл до 01 %d/%d, ответов %d" % [
-				beam_first, seeds, span(gaps_wc), span(gaps_cb), reached, seeds, answers]
+			sum += "; в луче до броска %d/%d; сигнал→бросок %s; бросок→укус %s; дошёл до 01 %d/%d (%s), ответов %d" % [
+				beam_first, seeds, span(gaps_wc), span(gaps_cb), reached, seeds, span(to01), answers]
 			if mode == "arrive":
 				sum += "; на стоянке у 01: хищник ближе %.0f м %d/%d, сигнал %d/%d, бросок %d/%d" % [
 					EcoPred.REACH, at01[0], seeds, at01[1], seeds, at01[2], seeds]
@@ -152,6 +159,7 @@ static func make(probe: bool, seed_value: int) -> EcoView:
 	ev.ground = Seabed.mesh_height
 	ev.preds.probe = probe
 	ev.preds.alert = alert
+	ev.preds.alert_leave = leave
 	for k in move:
 		ev.fish.home_at[k] = QuietMap.home_of(move[k])
 	ev.world.reset(seed_value)
@@ -332,7 +340,7 @@ static func run(probe: bool, mode: String, seed_value: int) -> Dictionary:
 	var cb := float(bite["t"]) - float(charge["t"]) if not bite.is_empty() and not charge.is_empty() else -1.0
 	var beam_before := not beam.is_empty() and (charge.is_empty() or float(beam["t"]) <= float(charge["t"]))
 	ev.free()
-	return {"wc": wc, "cb": cb, "beam_before": beam_before, "reached": reached, "answers": answers,"bite": not bite.is_empty(), "charge": not charge.is_empty(), "warn_before": before,
+	return {"wc": wc, "cb": cb, "to01": t_at01 if t_at01 >= 0.0 else t, "beam_before": beam_before, "reached": reached, "answers": answers,"bite": not bite.is_empty(), "charge": not charge.is_empty(), "warn_before": before,
 		"by": int(charge.get("n", 0)), "seen01": not seen01.is_empty(), "warn01": not warn01.is_empty(),
 		"charge01": not charge.is_empty() and t_at01 >= 0.0 and float(charge["t"]) >= t_at01,
 		"text": "; ".join(parts)}
