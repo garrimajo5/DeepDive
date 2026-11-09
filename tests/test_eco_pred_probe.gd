@@ -76,3 +76,13 @@ func test_patrol_tool_runs() -> void:
 	var r: Dictionary = tool.run(true, "base", 20261018)
 	ok(r.has("bite") and r.has("charge") and r.has("warn_before"), "итог прохода полный")
 	ok(String(r["text"]) != "", "строка прохода есть")
+
+
+## Проход arrive (встреча у 01, #1400): корабль доходит до 01, стоит там и печатает ближайшего из трёх хищников.
+func test_patrol_tool_arrive() -> void:
+	var tool: GDScript = load("res://tools/patrol.gd")
+	var r: Dictionary = tool.run(false, "arrive", 20261018)
+	var text := String(r["text"])
+	ok(text.contains("у 01 с "), "корабль дошёл до 01: %s" % text)
+	ok(text.contains("№0") and text.contains("№1") and text.contains("№2"), "все три хищника в итоге: %s" % text)
+	ok(int(r["by"]) >= 0 and int(r["by"]) < 3, "номер бросившегося")
