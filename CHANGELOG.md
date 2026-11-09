@@ -3,6 +3,9 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-09
+- `tools/probe_frames.gd` (#1379, #519): замер по кадрам заданной последовательности — `seq=surface` (маршрут разом →
+  «наверх»: вид с борта и продувка), `start`, `ping`, `idle`; на кадр — шаг, отрисовка, остаток вне шага и
+  отрисовки, у долгих — части `StepClock`; итог цикла, `warm=0` — без прогрева, `out=` — в файл. Тест `test_probe_frames`.
 - `tools/qa/issue-img.ps1` (#1379): картинка или звук в issue без Python — то же, что `tools/issue_img.py`
   (ветка `issue-img` коммитом во временном индексе, комментарий через `gh`; без `gh` печатает текст комментария),
   PNG больше 900 КБ — в JPEG. В `docs/QA.md`. Тест `test_qa_tools.test_issue_img_ps1_mirrors_python`.
