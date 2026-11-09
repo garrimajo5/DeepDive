@@ -95,8 +95,7 @@ func test_scene_zap_marks_floor() -> void:
 	main.helm.pos.y = 0.0
 	main.fire_zap()
 	eq(main.scorch.all.size(), 0, "высоко над дном — следа нет")
-	var floor_y := Seabed.height(main.helm.pos.x, main.helm.pos.z)
-	main.helm.pos.y = floor_y + Helm.Ship.CLEARANCE
+	main.helm.pos.y = main.helm.floor_at(main.helm.pos, main.helm.yaw)   # на нижнем пределе всем днищем (#1481)
 	main.step(Zap.COOLDOWN + 0.1)
 	main.fire_zap()
 	eq(main.scorch.all.size(), 1, "у дна — след")
