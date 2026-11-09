@@ -94,9 +94,13 @@ const QUIET_R := 55.0
 const ARC_PRED := 1
 const ARC: Array[Vector2] = [Vector2(90, -90), Vector2(65, -100), Vector2(15, -95)]
 const ARC_JITTER := 5.0
+## Проба #1498 — фаза «замер» перед броском (`alert` > 0): хищник почти стоит и разворачивается к кораблю; манящее
+## пропало (свет погас, корабль затих, ушёл в укрытие) — уходит в патруль с паузой ALERT_LOSE_CD.
+const ALERT_SPEED := 1.5
+const ALERT_LOSE_CD := 8.0
 
 ## Режим хищника (pr.state в браузере); общее EcoAgent.State — у его существа.
-enum Mode { PATROL, HUNT, EAT, INVESTIGATE, CHARGE, RETREAT, FLEE, CLEAN }
+enum Mode { PATROL, HUNT, EAT, INVESTIGATE, CHARGE, RETREAT, FLEE, CLEAN, ALERT }
 
 
 ## Серпохвост: существо мира, режим, голод, пауза перед нападением и добыча.
@@ -169,6 +173,8 @@ var plankton: EcoPlankton
 var _rnd: EcoRandom
 ## Проба расстановки #1400 (QUIET, ARC): ставить до reset мира.
 var probe := false
+## Проба #1498: длина фазы «замер» перед броском на манящий корабль, с; 0 — бросок сразу (как в игре).
+var alert := 0.0
 ## Ось рифа у цветка на этот шаг (reef_axis).
 var _reef := Vector3.INF
 
@@ -454,7 +460,7 @@ static func _set_mode(pr: Pred, m: Mode, t: float) -> void:
 	match m:
 		Mode.HUNT, Mode.CHARGE:
 			pr.agent.state = EcoAgent.State.HUNT
-		Mode.INVESTIGATE, Mode.CLEAN:
+		Mode.INVESTIGATE, Mode.CLEAN, Mode.ALERT:
 			pr.agent.state = EcoAgent.State.SEEK
 		Mode.RETREAT, Mode.FLEE:
 			pr.agent.state = EcoAgent.State.FLEE
@@ -522,6 +528,19 @@ static func _text(world: EcoWorld, fmt: String, c: Species.Case = Species.Case.N
 ## Заманить хищника на корабль (E.lure: эхоловец выпросил свет) — бросок, как на свет прожектора.
 func lure(world: EcoWorld, pr: Pred) -> void:
 	_start_charge(world, pr)
+
+
+## Хищника поманил корабль: бросок сразу или, в пробе #1498 (`alert` > 0), сначала «замер».
+func _react(world: EcoWorld, pr: Pred) -> void:
+	if alert <= 0.0:
+		_start_charge(world, pr)
+		return
+	if not world.threat_free(pr):
+		return
+	world.hold_threat(pr)
+	_set_mode(pr, Mode.ALERT, alert)
+	pr.prey = null
+	world.emit(ID, "alert", pr.agent.p, _text(world, "%s замер и смотрит на корабль"))
 
 
 func _start_charge(world: EcoWorld, pr: Pred) -> void:
@@ -620,7 +639,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 					_set_mode(pr, Mode.HUNT, 12.0)
 					pr.prey = f
 			if can_attack:
-				_start_charge(world, pr)
+				_react(world, pr)
 
 		Mode.HUNT:
 			speed = HUNT_SPEED
@@ -661,7 +680,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 						if kelp:
 							kelp.caught_at(world, caught)
 					elif can_attack and pr.hunger > HUNT_TO_SHIP_HUNGER:
-						_start_charge(world, pr)
+						_react(world, pr)
 
 		Mode.EAT:
 			speed = EAT_SPEED
@@ -673,6 +692,18 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 			if a.distance_to(a.goal) < 10.0 or a.expired():
 				_set_mode(pr, Mode.PATROL, 0.0)
 			if can_attack:
+				_react(world, pr)
+
+		Mode.ALERT:
+			speed = ALERT_SPEED
+			world.hold_threat(pr)
+			var to := ship - a.p
+			a.goal = a.p + (to.normalized() * 3.0 if to.length_squared() > 1e-4 else Vector3.ZERO)
+			if not can_attack:  # свет погас, корабль затих или в укрытии — потерял
+				_set_mode(pr, Mode.PATROL, 0.0)
+				pr.cooldown = maxf(pr.cooldown, ALERT_LOSE_CD)
+				world.emit(ID, "lost", a.p, _text(world, "%s потерял корабль и отворачивает"))
+			elif a.expired():
 				_start_charge(world, pr)
 
 		Mode.CHARGE:
@@ -731,7 +762,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 		Mode.CLEAN:
 			speed = _step_clean(world, pr, dt)
 			if pr.mode == Mode.CLEAN and can_attack and pr.hunger > HUNT_TO_SHIP_HUNGER:
-				_start_charge(world, pr)
+				_react(world, pr)
 
 	if pr.leech and pr.mode != Mode.CLEAN:
 		speed *= EcoLeech.SLOW  # пиявник замедляет хищника
