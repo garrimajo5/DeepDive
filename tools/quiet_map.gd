@@ -1,4 +1,5 @@
 extends SceneTree
+class_name QuietMap
 ## Где на существующем проходе 00 → 01 есть тихое место для спокойного наблюдения (#1400, ответ гейм-дизайнера
 ## 09.11): мир целиком (`EcoView`, дно `Seabed.mesh_height`), headless, корабль далеко — хищников он не зовёт. По
 ## точкам пути через 5 м — доля времени, когда хоть один серпохвост ближе SEE м (видит свет корабля, `EcoPred`), и
@@ -18,10 +19,15 @@ const EVERY := 5.0
 const HOME_LIFT := 3.5
 
 
+## Куда переносить дом стаи рифа (номер → существующий риф EcoCoral.BASES): стаю (56; 6) — к рифу (55; −69) к
+## юго-востоку от 01, стаю (−26; 24) — к рифу (−57; 23) к западу от середины.
+const REEF_FOR := {4: EcoCoral.BASES[2], 1: EcoCoral.BASES[0]}
+
+
 ## Варианты: имя → {номер стаи: куда (x; z)}.
 static func variants() -> Array[Dictionary]:
-	var reef_se := EcoCoral.BASES[2]   # риф (55; −69) к юго-востоку от 01
-	var reef_w := EcoCoral.BASES[0]    # риф (−57; 23) к западу от середины
+	var reef_se: Vector2 = REEF_FOR[4]
+	var reef_w: Vector2 = REEF_FOR[1]
 	return [
 		{"name": "как есть", "move": {}},
 		{"name": "стая (56;6) → риф (55;−69)", "move": {4: reef_se}},

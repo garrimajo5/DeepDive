@@ -2,7 +2,9 @@ extends SceneTree
 ## Сравнение расстановки серпохвостов на сцене 00 → 01 (#1400): как есть и проба `EcoPred.probe` (тихий круг у
 ## спокойной остановки + дуга хищника №1 за внешней стороной 01). Мир целиком (`EcoView`, дно `Seabed.mesh_height`),
 ## headless, без узлов сцены. Облачный расчёт, не телефонный.
-##   godot --headless --path . -s tools/patrol.gd [-- seeds=8 csv=<файл>]
+##   godot --headless --path . -s tools/patrol.gd [-- seeds=8 csv=<файл> move=4,1 stop=23,13 only=now]
+## move — дома стай рифа с этими номерами переносятся к рифам `tools/quiet_map.gd` (`EcoFish.home_at`), stop — другая
+## точка стоянки на пути вместо середины, only=now — без пробы `EcoPred.probe`.
 ## Печатает по каждому проходу: первый сигнал экипажу (строка мира о хищнике или реакции на него) → бросок → укус, с
 ## координатами; доли времени хищников в тихом круге и в окне угрозы перед рифом; входы в круг по режимам.
 ## Проходы: base — сразу после сброса мира (у всех 20 с паузы), late — после 30 с тихой стоянки у 00 (пауза кончилась),
@@ -15,6 +17,9 @@ const WAIT_LATE := 30.0
 ## Путь: выход из 00 → середина (стоянка) → подход к 01 (точки `scena=`, tools/shot_setup.gd).
 const PATH: Array[Vector2] = [Vector2(4.0, 80.0), Vector2(20.0, 22.5), Vector2(33.0, -22.0)]
 const FLOOR := 7.0
+## Путь этого прогона (PATH, стоянка — `stop=`) и переносы домов стай (`move=`).
+static var path: Array[Vector2] = PATH.duplicate()
+static var move := {}
 ## Окно угрозы перед рифом: z между серединой и кольцом рифа (#1400, расчёт 08.11).
 const WIN_Z := Vector2(-20.0, 10.0)
 ## Слова строки мира, что про хищника (вид «pred» или реакции на него).
@@ -27,8 +32,19 @@ func _init() -> void:
 		var p := a.split("=", true, 1)
 		kv[p[0]] = p[1] if p.size() > 1 else ""
 	var seeds := int(kv.get("seeds", "8"))
+	if kv.has("stop"):
+		var xz: PackedStringArray = kv["stop"].split(",")
+		path[1] = Vector2(float(xz[0]), float(xz[1]))
+	if kv.has("move"):
+		var reefs: Dictionary = QuietMap.REEF_FOR
+		for k in kv["move"].split(","):
+			move[int(k)] = reefs[int(k)]
+	var probes := [false] if kv.get("only", "") == "now" else [false, true]
 	var lines: Array[String] = []
-	for probe in [false, true]:
+	if not move.is_empty() or kv.has("stop"):
+		lines.append("== переносы %s, стоянка %s" % [str(move), str(path[1])])
+		print(lines[0])
+	for probe in probes:
 		for mode in ["base", "late", "ping", "retreat"]:
 			var bites := 0
 			var charges := 0
@@ -45,7 +61,7 @@ func _init() -> void:
 				"проба" if probe else "сейчас", mode, charges, seeds, bites, seeds, warned, seeds]
 			print(sum)
 			lines.append(sum)
-	for probe in [false, true]:
+	for probe in probes:
 		var res := residency(probe, seeds)
 		print(res)
 		lines.append(res)
@@ -63,6 +79,8 @@ static func make(probe: bool, seed_value: int) -> EcoView:
 	var ev := EcoView.new()
 	ev.ground = Seabed.mesh_height
 	ev.preds.probe = probe
+	for k in move:
+		ev.fish.home_at[k] = QuietMap.home_of(move[k])
 	ev.world.reset(seed_value)
 	return ev
 
@@ -83,7 +101,7 @@ static func run(probe: bool, mode: String, seed_value: int) -> Dictionary:
 	var ev := make(probe, seed_value)
 	var w := ev.world
 	var ship := EcoLink.ShipState.new()
-	ship.pos = ship_at(PATH[0])
+	ship.pos = ship_at(path[0])
 	var t := 0.0
 	if mode != "base":  # тихая стоянка у 00: без света и хода, пауза хищников кончается
 		ship.light_on = false
@@ -106,13 +124,13 @@ static func run(probe: bool, mode: String, seed_value: int) -> Dictionary:
 		ship.sonar_ping = false
 		var target: Vector2
 		if retreating:
-			target = PATH[0]
-		elif leg < PATH.size() - 1:
-			target = PATH[leg + 1]
+			target = path[0]
+		elif leg < path.size() - 1:
+			target = path[leg + 1]
 		else:
 			break
 		var at := Vector2(ship.pos.x, ship.pos.z)
-		var stopping := not retreating and leg == 1 and stop_left > 0.0 and at.distance_to(PATH[1]) < 0.5
+		var stopping := not retreating and leg == 1 and stop_left > 0.0 and at.distance_to(path[1]) < 0.5
 		if stopping:
 			ship.speed = 0.0
 			stop_left -= DT
