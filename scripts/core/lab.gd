@@ -4,8 +4,8 @@ extends RefCounted
 ## Как в браузерной версии (js/ship.js, S.showTubes): в колбах — три последних образца из груза трюма, колба i —
 ## i-й из последних трёх; поднял лебёдкой — образец сам появляется в колбе. Пост «Колба» — что в ней; пост «Журнал» —
 ## сводка экспедиции на экране стойки (изученные виды — от сканера биолога, `Scanner`). Нажатия «Журнал» листают
-## страницы: сводка, затем карточки видов (изученные или с наблюдениями, порядок журнала), снова сводка
-## (renderJournal в js/game.js: имя, наблюдения «n из m»).
+## страницы: сводка, бортовой архив — передача К-2 TXT-001 §3 (`ARCHIVE`, #825), затем карточки видов (изученные или
+## с наблюдениями, порядок журнала), снова сводка (renderJournal в js/game.js: имя, наблюдения «n из m»).
 ## Оси корабля; отсек x −4…4, z 8…14 (`ShipLayout.ROOMS`).
 
 ## Центры тумб колб на полу (x, z): две у левого борта у кормы, третья у правого у носа.
@@ -84,9 +84,62 @@ static func cards(sc: Scanner) -> Array[String]:
 	return out
 
 
-## Страниц журнала: сводка и карточки.
+## Бортовой архив: фрагмент передачи «Ковчега-2», полученной Землёй (TXT-001 §3, L1_K2_01…06) — копия на борту К-7,
+## не прямой эфир. Две страницы по 8 строк экрана стойки; дочитал до последней — знание `LayerLore.K2` (#825).
+const ARCHIVE_HEAD := "АРХИВ · ПЕРЕДАЧА К-2 · %d / %d"
+const ARCHIVE_SOURCE := "Передача К-2. Получено на Земле"
+const ARCHIVE: Array[String] = [
+	"Земля, это «Ковчег-2».",
+	"Обратный ход врат не работает.",
+	"Его можно восстановить.",
+	"У ретранслятора остался заряд на одну передачу.",
+	"Весь заряд уходит на это сообщение.",
+	"Для следующего придётся восстановить питание.",
+]
+const ARCHIVE_END := "Конец доступного фрагмента"
+const ARCHIVE_SPLIT := 3             ## строк передачи на первой странице
+const ARCHIVE_PAGES := 2
+const ARCHIVE_INFO := "Архив: передача «Ковчега-2», полученная Землёй"
+
+
+## Страница page — архив К-2 (1…ARCHIVE_PAGES).
+static func is_archive(page: int) -> bool:
+	return page >= 1 and page <= ARCHIVE_PAGES
+
+
+## Последняя страница архива: дочитано — `LayerLore.K2`.
+static func archive_done(page: int) -> bool:
+	return page == ARCHIVE_PAGES
+
+
+## Строки экрана архива на странице n (1 или 2): подпись источника, строки передачи, конец фрагмента.
+static func archive_lines(n: int) -> PackedStringArray:
+	var lines := PackedStringArray([ARCHIVE_HEAD % [n, ARCHIVE_PAGES]])
+	if n <= 1:
+		lines.append(ARCHIVE_SOURCE)
+		for t in ARCHIVE.slice(0, ARCHIVE_SPLIT):
+			lines.append(t)
+	else:
+		for t in ARCHIVE.slice(ARCHIVE_SPLIT):
+			lines.append(t)
+		lines.append(ARCHIVE_END)
+	return lines
+
+
+## Сообщение при открытии страницы архива.
+static func archive_info(page: int) -> String:
+	return ("%s. %s" % [ARCHIVE_INFO, ARCHIVE_END]) if archive_done(page) else ARCHIVE_INFO
+
+
+## Страниц журнала: сводка, архив и карточки.
 static func pages(sc: Scanner) -> int:
-	return 1 + cards(sc).size()
+	return 1 + ARCHIVE_PAGES + cards(sc).size()
+
+
+## Карточка вида на странице page (−1 — сводка или архив).
+static func card_index(page: int, sc: Scanner) -> int:
+	var i := page - 1 - ARCHIVE_PAGES
+	return i if i >= 0 and i < cards(sc).size() else -1
 
 
 ## Строки карточки вида: номер карточки, имя (до сканирования — «Неизвестный вид»), счёт и последние наблюдения.
@@ -111,12 +164,23 @@ static func card_info(sc: Scanner, id: String) -> String:
 	return "Неизвестный вид: изучите его сканером на мостике"
 
 
-## Экран журнала на странице page (0 — сводка); страница за краем — сводка.
+## Экран журнала на странице page (0 — сводка, 1…2 — архив К-2, дальше карточки); страница за краем — сводка.
 static func page_lines(s: Samples, sc: Scanner, page: int) -> PackedStringArray:
+	if is_archive(page):
+		return archive_lines(page)
 	var ids := cards(sc)
-	if page <= 0 or page > ids.size():
+	var i := card_index(page, sc)
+	if i < 0:
 		return journal_lines(s, sc.scanned.size())
-	return card_lines(sc, ids[page - 1], page, ids.size())
+	return card_lines(sc, ids[i], i + 1, ids.size())
+
+
+## Сообщение по кнопке «Журнал» на странице page.
+static func page_info(s: Samples, sc: Scanner, page: int) -> String:
+	if is_archive(page):
+		return archive_info(page)
+	var i := card_index(page, sc)
+	return journal_info(s) if i < 0 else card_info(sc, cards(sc)[i])
 
 
 

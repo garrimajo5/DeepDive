@@ -52,7 +52,7 @@ var ballot := Ballot.new()        ## голоса игроков у голост
 var result_fade := Briefing.Fade.new()  ## итог забега на голограмме (VoteHolo.result_wanted)
 var result_rows: Array = []      ## четыре строки итога на голограмме (Run.summary)
 var result_detail: Array = []    ## итог на панели (Run.detail) — гостям в кадре
-var journal_page := 0          ## страница журнала лаборатории: 0 — сводка, дальше карточки видов (Lab.page_lines)
+var journal_page := 0          ## страница журнала лаборатории: 0 — сводка, 1…2 — архив К-2, дальше карточки видов (Lab.page_lines)
 var lab_screen := Lab.Screen.new()   ## строки экрана журнала — только при изменении (#847)
 var engine := EngineRoom.new()   ## машинное: вентиль сброса пара и щиток «Аварийный сброс»
 var debug_vent := false          ## снимок: вентиль держат без пальца
@@ -1060,9 +1060,11 @@ func use_post(id: String) -> void:
 				say(gate.press_text(lore))
 			else:
 				scanner.press()
-		"journal":   # листать: сводка → карточки видов → сводка
+		"journal":   # листать: сводка → архив К-2 → карточки видов → сводка
 			journal_page = (journal_page + 1) % Lab.pages(scanner)
-			say(Lab.journal_info(samples) if journal_page == 0 else Lab.card_info(scanner, Lab.cards(scanner)[journal_page - 1]))
+			say(Lab.page_info(samples, scanner, journal_page))
+			if Lab.archive_done(journal_page):
+				lore.learn(LayerLore.K2)   # передача К-2 дочитана в бортовом архиве (#825)
 		_ when id.begins_with("flask"):
 			say(Lab.flask_info(samples.cargo, int(id.substr(5))))
 		_ when id.begins_with("door"):
