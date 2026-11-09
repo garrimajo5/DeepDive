@@ -133,3 +133,23 @@ func test_run_qa_emulator_outlives_script() -> void:
 	var ps := FileAccess.get_file_as_bytes(DIR.path_join("run-qa.ps1")).slice(3).get_string_from_utf8()
 	ok(ps.contains("Invoke-CimMethod Win32_Process -MethodName Create"), "эмулятор — отвязанным процессом")
 	ok(not ps.contains("Start-Process \"$sdk\\emulator"), "не потомком скрипта")
+
+
+## #1379: картинка в issue без Python — issue-img.ps1 делает то же, что tools/issue_img.py: ветка-сирота issue-img,
+## коммит во временном индексе (рабочая папка не трогается), ссылки raw.githubusercontent в той же папке номера.
+func test_issue_img_ps1_mirrors_python() -> void:
+	var path := DIR.path_join("issue-img.ps1")
+	ok(FileAccess.file_exists(path), "issue-img.ps1 есть")
+	var ps := FileAccess.get_file_as_bytes(path).slice(3).get_string_from_utf8()
+	var py := FileAccess.get_file_as_string("res://tools/issue_img.py")
+	ok(py.contains("BRANCH = \"issue-img\"") and ps.contains("$branch = 'issue-img'"), "та же ветка, что у issue_img.py")
+	ok(ps.contains("https://raw.githubusercontent.com/$repoSlug/$branch/$Issue/$name"), "ссылка как raw_url в Python")
+	ok(ps.contains("$repoSlug = 'garrimajo5/DeepDive'"), "тот же репозиторий")
+	for step in ["GIT_INDEX_FILE", "hash-object -w", "update-index --add --cacheinfo", "commit-tree", "push -q origin"]:
+		ok(ps.contains(step), "git без checkout: %s" % step)
+	ok(ps.contains("Remove-Item Env:\\GIT_INDEX_FILE"), "временный индекс снимается — следующий git работает с обычным")
+	ok(ps.contains("[^A-Za-z0-9._-]"), "имя в ветке — латиницей")
+	ok(ps.contains("UTF8Encoding $false"), "JSON комментария без BOM")
+	ok(ps.contains("Get-Command gh"), "без gh — печатает текст комментария")
+	var qa := FileAccess.get_file_as_string("res://docs/QA.md")
+	ok(qa.contains("tools\\qa\\issue-img.ps1"), "docs/QA.md называет PowerShell-вариант")
