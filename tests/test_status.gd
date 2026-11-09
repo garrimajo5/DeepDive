@@ -224,3 +224,57 @@ func test_message_take_world() -> void:
 	m.say("Вы за штурвалом")
 	eq(m.take_world(), "", "своё сообщение игрока — не строка мира")
 	eq(m.text, "Вы за штурвалом", "и остаётся на приборах")
+
+
+func test_urgent_world_line_holds() -> void:
+	# #1516: строку угрозы «Серпохвост замер…» стирала следующая строка мира через 1 с — единственный знак до броска
+	var m := Status.Message.new()
+	m.say("Рыбы пасутся на мху", Status.MESSAGE_SECONDS, true)
+	m.update(0.2)
+	m.say("Серпохвост замер и смотрит на корабль", Status.MESSAGE_SECONDS, true, true)
+	eq(m.text, "Серпохвост замер и смотрит на корабль", "срочная — сразу, без очереди")
+	m.update(1.5)
+	m.say("Кружевной веер повёрнут к жерлу", Status.MESSAGE_SECONDS, true)
+	for i in 26:
+		m.update(0.1)
+		eq(m.text, "Серпохвост замер и смотрит на корабль", "строка мира ждёт, пока видна срочная (%.1f с)" % (1.6 + i * 0.1))
+	m.update(0.2)
+	eq(m.text, "Кружевной веер повёрнут к жерлу", "срочная погасла сама — вышла ждущая")
+	m.update(Status.MESSAGE_SECONDS + 0.1)
+	ok(not m.visible(), "ждущая отстояла своё и погасла")
+	m.say("Серпохвост замер и смотрит на корабль", Status.MESSAGE_SECONDS, true, true)
+	m.say("Вы за штурвалом")
+	eq(m.text, "Вы за штурвалом", "своё сообщение игрока перебивает и срочную")
+	m.say("Рыбы пасутся на мху", Status.MESSAGE_SECONDS, true)
+	m.update(1.5)
+	m.say("Серпохвост замер", Status.MESSAGE_SECONDS, true, true)
+	m.say("Рыбы ушли", Status.MESSAGE_SECONDS, true)
+	m.update(Status.MESSAGE_SECONDS - 0.1)
+	eq(m.text, "Серпохвост замер", "срочная держит все 4,2 с, а не MIN_SHOW")
+	m.clear("Серпохвост замер")
+	eq(m.text, "Рыбы ушли", "погашенная срочная пускает ждущую")
+	m.update(1.2)
+	m.say("Течение сменилось", Status.MESSAGE_SECONDS, true)
+	eq(m.text, "Течение сменилось", "обычная строка после срочной снова сменяется через MIN_SHOW")
+
+
+## Сцена: срочная MESSAGE от мира, следом обычная — на приборах срочная до 4,2 с (#1516).
+func test_scene_urgent_eco_message() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	for i in 5:
+		main.step(1.0 / 30.0)
+	var hot := "Серпохвост замер и смотрит на корабль — тестовая строка"
+	main.on_eco_event(EcoLink.message(hot, true))
+	main.step(1.0 / 30.0)
+	main.on_eco_event(EcoLink.message("Стайка рыбок у мха — тестовая строка"))
+	main.on_eco_event({"type": EcoLink.OBSERVE, "species": "fish", "note": "graze", "text": "Рыбы пасутся — тестовая строка"})
+	for i in 110:   # ~3,7 с
+		main.step(1.0 / 30.0)
+		eq(main.message.text, hot, "срочная на приборах (кадр %d)" % i)
+	for i in 30:
+		main.step(1.0 / 30.0)
+	ok(main.message.text != hot, "после 4,2 с срочная сменилась: %s" % main.message.text)
+	main.queue_free()
+	await frames(1)

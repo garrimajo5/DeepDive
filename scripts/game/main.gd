@@ -142,6 +142,7 @@ var tutorial_panel: TutorialPanel
 var arrival := ArrivalBrief.new()   ## брифинг прибытия TXT-001 до подсказок (#827); прочитан — `LayerLore.BRIEF`
 var arrival_panel: ArrivalBriefPanel
 var world_wait := ""   ## строка мира, отложенная до конца брифинга прибытия (#1429, `_world_say`)
+var world_wait_hot := false   ## отложенная строка — строка угрозы (#1516)
 ## Карточка роли у поста ART-045 (выключают те же `hints`; тестер — шаг `cards`): прочитанное — Settings.cards.
 var role_card := RoleCard.new()
 var role_card_panel: RoleCardPanel
@@ -1238,7 +1239,7 @@ func on_eco_event(e: Dictionary) -> void:
 				return   # обучение (#827): присоски энергию не тянут
 			vitals.drain(str(e.get("by", "")), float(e.get("units", 0.0)))
 		EcoLink.MESSAGE:
-			_world_say(str(e.get("text", "")))
+			_world_say(str(e.get("text", "")), bool(e.get("urgent", false)))
 		EcoLink.VOICE:   # голос во внутренней связи ART-040; просьбу не исполняем — решает игрок
 			if bool(e.get("fake", false)) and events_held():
 				return   # обучение (#827): подделок в эфире нет, свои доклады идут
@@ -1265,21 +1266,24 @@ func on_eco_event(e: Dictionary) -> void:
 			var fresh := scanner.observe(sp, str(e.get("note", "")))
 			var text := str(e.get("text", ""))
 			if text != "":
-				_world_say(text)
+				_world_say(text, bool(e.get("urgent", false)))
 			elif fresh:
 				_world_say("Новое наблюдение: %s" % Species.called(sp, Species.Case.NOM, scanner.is_scanned(sp)))
 
 
 ## Строка живого мира на приборы. Пока идёт облёт в начале забега, она не перебивает `Flyby.START_MSG` — игрок ещё
 ## ничего не делает, а сцена у старта сразу в луче (#827); наблюдение в журнал при этом записано. Пока открыт брифинг
-## прибытия, последняя строка ждёт его конца (`world_wait`, #1429): мир не перебивает лор.
-func _world_say(text: String) -> void:
+## прибытия, последняя строка ждёт его конца (`world_wait`, #1429): мир не перебивает лор. Строка угрозы (`urgent`,
+## #1516) держится на приборах свои 4,2 с — строки мира её не стирают; в ожидании брифинга её не сменяет обычная.
+func _world_say(text: String, urgent := false) -> void:
 	if flyby.kind == Flyby.Kind.START:
 		return
 	if arrival.active():
-		world_wait = text   # одна, последняя — не очередь
+		if urgent or not world_wait_hot or world_wait == "":
+			world_wait = text   # одна, последняя — не очередь
+			world_wait_hot = urgent
 		return
-	message.say(text, Status.MESSAGE_SECONDS, true)   # не стирает строку, видную меньше 1 с (issue #979)
+	message.say(text, Status.MESSAGE_SECONDS, true, urgent)   # не стирает строку, видную меньше 1 с (issue #979)
 
 
 ## Брифинг прибытия кончился — отложенная строка мира на приборы (#1429; `OverlayFlow.brief_step`). Пока идёт —
@@ -1287,14 +1291,18 @@ func _world_say(text: String) -> void:
 ## сменилась уже под плашкой — ждала своей секунды до брифинга).
 func release_world_say() -> void:
 	if arrival.active():
+		var parked_hot := message.hot and message.next == ""   # отдаётся видимая строка угрозы (#1516)
 		var parked := message.take_world()
 		if parked != "" and world_wait == "":
 			world_wait = parked
+			world_wait_hot = parked_hot
 		return
 	if world_wait != "":
 		var text := world_wait
+		var hot := world_wait_hot
 		world_wait = ""
-		_world_say(text)
+		world_wait_hot = false
+		_world_say(text, hot)
 		if qa != null:   # п. 2 #1429 тестер проверяет по логу, а не догадкой по кадру (#1350)
 			qa.note(QaRunner.released_line(text))
 
