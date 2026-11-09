@@ -130,7 +130,8 @@ func test_main_step_parts() -> void:
 	eq(subs, ["карточка роли", "маршрут", "подсказки", "приборы", "рация", "связь", "цель маршрута"], "подчасти интерфейса")
 	var views: Array = main.clock.subs.get("виды", {}).keys()   # отчёт #1182: «виды 57» у колодца 05 — что внутри
 	views.sort()
-	eq(views, ["голограммы", "корабль и камера", "отсеки и экраны", "пульты", "свет", "экипаж"], "подчасти видов")
+	eq(views, ["голограммы", "корабль и камера", "отсеки и экраны", "пульты", "свет", "экипаж", "экипаж: сборка",
+		"экипаж: снаряжение"], "подчасти видов")
 	near(float(main.clock.parts["виды"]), _sum(main.clock.subs["виды"]), 0.001, "виды — ровно сумма подчастей")
 	var world: Dictionary = main.clock.subs.get("мир", {})   # #1020: модули и виды живого мира
 	ok(world.has("существа") and world.has("связь") and world.has("вид: рыбы, хищники") \
@@ -334,3 +335,26 @@ static func _sum(of: Dictionary) -> float:
 	for k in of:
 		t += float(of[k])
 	return t
+
+
+## Issue #1518: «экипаж 37 ×35» на итоге забега — пересборка фигуры, снаряжение или поза. Сборка — своей подчастью,
+## отметки вне шага игры (новый товарищ, прогрев) в законченный шаг не ложатся.
+func test_crew_sub_parts() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var mate := main.add_mate(0.9, -2.3, 90.0, Crew.Role.ENGINEER, 0)
+	main.step(1.0 / 30.0)
+	main.step(1.0 / 30.0)
+	var idle: float = main.clock.subs["виды"]["экипаж: сборка"]
+	mate.look = 1   # внешность сменилась — фигура пересобирается в этом шаге
+	main.step(1.0 / 30.0)
+	var views: Dictionary = main.clock.subs.get("виды", {})
+	ok(views.has("экипаж: сборка") and views.has("экипаж: снаряжение"), "подчасти экипажа: %s" % [views.keys()])
+	ok(float(views["экипаж: сборка"]) > idle * 10.0 and float(views["экипаж: сборка"]) > 0.5,
+		"пересборка фигуры — в своей подчасти: %.3f мс (без смены — %.3f): %s" % [views["экипаж: сборка"], idle, views])
+	var before := _sum(views)
+	main.crew_view.apply()   # вне шага — без отметок
+	eq(_sum(main.clock.subs["виды"]), before, "вне шага подчасти не растут")
+	main.queue_free()
+	await frames(1)

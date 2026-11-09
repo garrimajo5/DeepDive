@@ -216,10 +216,29 @@ static func mesh_kind(m: Crew.Member, own: bool, look_pitch: float) -> int:
 	return 2 if not m.seated and not m.welding() and not m.holding() and look_pitch < LEGS_PITCH else 1
 
 
-func apply() -> void:
+## Подчасти «виды/экипаж» в худшем кадре лога тестера (#1518: «экипаж 37 ×35» на итоге забега — разовая пересборка
+## фигуры, снаряжение, прозрачность или поза): сборка и снаряжение — по событию, «экипаж» — поза и прочее.
+const CLOCK_POSE := "виды/экипаж"
+const CLOCK_BUILD := "виды/экипаж: сборка"
+const CLOCK_DRESS := "виды/экипаж: снаряжение"
+const CLOCK_FADE := "виды/экипаж: прозрачность"
+var _clock := false
+
+
+func _mark(part: String) -> void:
+	if _clock:
+		StepClock.mark(part)
+
+
+## clock — вызов из шага игры (`Main._apply_crew_view`): отмечать подчасти; вне шага (новый товарищ, прогрев) отметка
+## легла бы в уже законченный шаг.
+func apply(clock: bool = false) -> void:
+	_clock = clock
+	_mark(CLOCK_POSE)   # до фигур (сообщение, ходок) — «экипаж», как и раньше
 	for i in members.size():
 		var m: Crew.Member = members[i]
 		_build(i, m.look)
+		_mark(CLOCK_BUILD)
 		var own: bool = m == local
 		figures[i].visible = not (own and hide_own)
 		var j := m.joints()
@@ -236,7 +255,9 @@ func apply() -> void:
 		meshes[i].mesh = _meshes[looks[i]][kind]
 		meshes[i].material_override = _own_mat[looks[i]] if like_own else null
 		patches[i].visible = not own  # своя нашивка у самой камеры
+		_mark(CLOCK_POSE)
 		_dress(i, m.role)
+		_mark(CLOCK_DRESS)
 		for gn in gear[i]:
 			var node: Node3D = gear[i][gn]
 			node.visible = not (own and gn in CrewRig.GEAR_OWN_HIDDEN)
@@ -260,8 +281,10 @@ func apply() -> void:
 		torches[i].visible = m.welding()
 		if torches[i].visible:
 			torches[i].transform = m.torch_xform()
+		_mark(CLOCK_POSE)
 		if i < alphas.size():
 			_fade(i, alphas[i])
+			_mark(CLOCK_FADE)
 
 
 ## Фигура i со снаряжением и резаком — полупрозрачная (`alphas`): копии её материалов с прозрачностью на поверхностях

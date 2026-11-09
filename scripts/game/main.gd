@@ -1726,7 +1726,7 @@ func _apply_crew_view(dt: float = -1.0) -> void:
 	if dt >= 0.0:
 		me.ease_lean(dt)
 	crew_view.hide_own = power_view()   # #576: рукава у пульта загромождали кадр — фигуру прячем, пока нет анимации рук
-	crew_view.apply()
+	crew_view.apply(dt >= 0.0)   # из шага — подчасти «виды/экипаж» (#1518)
 	power_eye = me.eye_offset()
 	me.x = keep[0]
 	me.z = keep[1]
