@@ -90,6 +90,11 @@ jobs:
           cat qa-out/itog.txt || echo "итога нет"
           echo '--- log.txt (хвост)'; tail -40 qa-out/log.txt 2>/dev/null || true
           echo '--- ошибки'; cat qa-out/errors.txt 2>/dev/null || true
+      # Кадры — превью в лог (#1379): артефакт из облачной сессии не скачать, лог — можно.
+      # Забрать: python3 tools/ci_preview.py take --run <id прогона> <папка>
+      - name: Превью кадров
+        if: always() && steps.apk.outputs.have == 'true'
+        run: python3 tools/ci_preview.py put $(ls qa-out/*.png 2>/dev/null | grep -v screencap) qa-out/screencap-end.png
       - uses: actions/upload-artifact@v4
         if: always() && steps.apk.outputs.have == 'true'
         with:
