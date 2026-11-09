@@ -1225,3 +1225,22 @@ func test_catches_fish_pressed_to_floor() -> void:
 	ok(not EcoPred.can_catch(a, b), "выше хищника на 2,5 м — бросок вниз не помогает")
 	b.p = a.p + Vector3(0, 1.2, 0)
 	ok(EcoPred.can_catch(a, b), "ближе CATCH_DIST — как прежде")
+
+
+## #1400: стая рифа (55; −69) живёт внутри кольца рифа у цветка — хищник её там не ловит (бросок не ведёт его в
+## кольцо REEF_KEEP); стаи вне кольца — добыча как раньше.
+func test_reef_ring_fish_hidden() -> void:
+	var w := EcoWorld.new()
+	w.ground = Seabed.height
+	w.ship.pos = FAR
+	var fish := w.add(EcoFish.new()) as EcoFish
+	var preds := w.add(EcoPred.new(fish)) as EcoPred
+	preds._reef = preds.reef_axis()
+	ok(preds._reef.is_finite(), "риф у цветка есть")
+	var skip: Callable = preds._hidden_fish()
+	ok(skip.is_valid())
+	for f in fish.shoals[4].members:
+		ok(EcoPred._flat_dist(f.agent.p, preds._reef) < EcoPred.REEF_KEEP, "стая 4 — в кольце рифа")
+		ok(skip.call(f), "рыбку в рифе хищник не видит")
+	for f in fish.shoals[3].members:
+		ok(not skip.call(f), "стая 3 вне рифа — добыча")
