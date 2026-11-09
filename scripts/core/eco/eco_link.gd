@@ -66,6 +66,8 @@ const PRED_PER_DIVE := 0.15
 ##     первыми. Одно существо — одно событие, даже если оно и для сонара, и для сканера; сонар берёт только
 ##     "sonar": true.
 ## {"type": MESSAGE, "text": "…"}                                         — строка на приборы как есть
+##     "urgent": true (только у строк из URGENT, #1498) — строка угрозы: на приборах не перебивается строками мира
+##     попроще, пока не покажется MESSAGE_SECONDS; у остальных ключа нет. То же поле бывает и у OBSERVE.
 ## {"type": OBSERVE, "species": "fish", "note": "flee", "text": "…"}      — наблюдение для журнала (handleEvents
 ##     в js/game.js): событие шины EcoBus с заметкой вида (Species.is_observation) не дальше EcoBus.HEARING от корабля.
 ##     text — строка на приборы ("" — без текста); корабль показывает её сам, как MESSAGE, а у нового наблюдения
@@ -129,12 +131,27 @@ static func near(species: String, name: String, pos: Vector3, ship_pos: Vector3,
 		"sonar": sonar, "scan": scan}
 
 
-static func message(text: String) -> Dictionary:
-	return {"type": MESSAGE, "text": text}
+static func message(text: String, is_urgent := false) -> Dictionary:
+	var e := {"type": MESSAGE, "text": text}
+	if is_urgent:
+		e["urgent"] = true
+	return e
 
 
-static func observe(species: String, note: String, text: String = "") -> Dictionary:
-	return {"type": OBSERVE, "species": species, "note": note, "text": text}
+static func observe(species: String, note: String, text: String = "", is_urgent := false) -> Dictionary:
+	var e := {"type": OBSERVE, "species": species, "note": note, "text": text}
+	if is_urgent:
+		e["urgent"] = true
+	return e
+
+
+## Строки угрозы (#1498): вид → заметки события, чья строка на приборах приоритетная («urgent» у MESSAGE/OBSERVE).
+## «Замер» хищника — единственный знак до броска, его не должна стереть строка про рыб.
+const URGENT := {"pred": ["alert"]}
+
+
+static func urgent(species: String, note: String) -> bool:
+	return note in (URGENT.get(species, []) as Array)
 
 
 static func voice(role: int, text: String, fake := false, ask := "", silent := false, id := "") -> Dictionary:

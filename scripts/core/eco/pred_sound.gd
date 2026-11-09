@@ -12,7 +12,7 @@ const JAW := "res://audio/world/pred-jaw.wav"
 const FLEE := "res://audio/world/pred-flee.wav"
 const FILES: Array[String] = [CLICK, ROAR, JAW, FLEE]
 
-## Щелчки — пока ищет (HUNT, INVESTIGATE): сразу при входе в режим, потом раз в CLICK_MIN…CLICK_MAX с.
+## Щелчки — пока ищет (HUNT, INVESTIGATE, ALERT): сразу при входе в режим, потом раз в CLICK_MIN…CLICK_MAX с.
 const CLICK_MIN := 3.0
 const CLICK_MAX := 6.0
 ## Дальность (м): щелчки — до 60 м по заказу, бросок, укус и уход — громче, слышны дальше.
@@ -82,9 +82,10 @@ class Call:
 		return cue
 
 
-## Ищет добычу или проверяет звук — щёлкает.
+## Ищет добычу, проверяет звук или замер перед броском (#1498, `EcoPred.alert`) — щёлкает, в «замере» — сразу
+## при входе: слышно раньше, чем видно, сбоку и сзади тоже.
 static func searching(m: int) -> bool:
-	return m == EcoPred.Mode.HUNT or m == EcoPred.Mode.INVESTIGATE
+	return m == EcoPred.Mode.HUNT or m == EcoPred.Mode.INVESTIGATE or m == EcoPred.Mode.ALERT
 
 
 ## Пауза до следующего щелчка n у зверя i: CLICK_MIN…CLICK_MAX, детерминированно (хост и тест — одинаково).
