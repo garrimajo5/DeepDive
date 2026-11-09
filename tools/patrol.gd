@@ -14,7 +14,7 @@ extends SceneTree
 ## arrive — встреча у 01 (#1400): 30 с без света на стоянке, затем свет и без остановки к 01, там 40 с стоянки
 ## со светом; печатает, кто из трёх хищников подошёл ближе всех и когда (`modes=` — какие проходы считать).
 ## Ответ экипажа (#1498) — `answer=signal|charge|alert` (`answer_now`): свет гаснет, корабль встаёт без хода (не
-## шумит) через `delay=` с после повода, через ANSWER_HOLD с свет снова горит и путь идёт дальше; `alert=<с>` — проба фазы «замер» `EcoPred.alert`;
+## шумит) через `delay=` с после повода, через `hold=` с (ANSWER_HOLD) свет снова горит и путь идёт дальше; `alert=<с>` — проба фазы «замер» `EcoPred.alert`;
 ## `leave=<с>` — отход хищника прочь после «потерял корабль» `EcoPred.alert_leave`.
 ## По каждому проходу ещё — когда хищник впервые в луче (ближе дальности света и в конусе `Searchlight.HALF_ANGLE`)
 ## и сколько секунд от сигнала до броска и от броска до укуса.
@@ -37,6 +37,8 @@ const WIN_Z := Vector2(-20.0, 10.0)
 const THREAT_NOTES := ["ship", "ping", "hear", "bite", "fade", "alarm", "pred", "flee", "reef", "alert"]
 ## Сколько стоит корабль без света и хода после ответа экипажа (answer=).
 const ANSWER_HOLD := 25.0
+## Сколько стоит без света после ответа на этот прогон (`hold=`, по умолчанию ANSWER_HOLD).
+static var hold := ANSWER_HOLD
 ## Ответ экипажа этого прогона ("" — нет) и фаза «замер» хищника, с (0 — как в игре).
 static var answer := ""
 ## Через сколько секунд после повода экипаж гасит свет (реакция людей, `delay=`).
@@ -56,6 +58,7 @@ func _init() -> void:
 	delay = float(kv.get("delay", "0"))
 	alert = float(kv.get("alert", "0"))
 	leave = float(kv.get("leave", "0"))
+	hold = float(kv.get("hold", str(ANSWER_HOLD)))
 	if kv.has("stop"):
 		var xz: PackedStringArray = kv["stop"].split(",")
 		path[1] = Vector2(float(xz[0]), float(xz[1]))
@@ -69,7 +72,7 @@ func _init() -> void:
 		probes = [kv["probe"] == "1"]
 	var lines: Array[String] = []
 	if not move.is_empty() or kv.has("stop") or answer != "" or alert > 0.0:
-		lines.append("== переносы %s, стоянка %s, ответ «%s» через %.1f с, замер %.1f с, отход %.0f с" % [str(move), str(path[1]), answer, delay, alert, leave])
+		lines.append("== переносы %s, стоянка %s, ответ «%s» через %.1f с, замер %.1f с, отход %.0f с, темно %.0f с" % [str(move), str(path[1]), answer, delay, alert, leave, hold])
 		print(lines[0])
 	for probe in probes:
 		for mode in modes:
@@ -216,7 +219,7 @@ static func run(probe: bool, mode: String, seed_value: int) -> Dictionary:
 	while t < limit:
 		ship.sonar_ping = false
 		if hushed >= 0.0:  # ответ экипажа: без света и хода; через ANSWER_HOLD — свет и путь дальше
-			if t - hushed > ANSWER_HOLD:
+			if t - hushed > hold:
 				hushed = -1.0
 				ship.light_on = true
 			else:
