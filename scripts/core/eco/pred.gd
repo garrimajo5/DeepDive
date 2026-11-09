@@ -98,6 +98,8 @@ const ARC_JITTER := 5.0
 ## пропало (свет погас, корабль затих, ушёл в укрытие) — уходит в патруль с паузой ALERT_LOSE_CD.
 const ALERT_SPEED := 1.5
 const ALERT_LOSE_CD := 8.0
+## Проба #1498 — отход после «потерял корабль» (`alert_leave` > 0): уходит прочь от корабля на ALERT_LEAVE_DIST м.
+const ALERT_LEAVE_DIST := 45.0
 
 ## Режим хищника (pr.state в браузере); общее EcoAgent.State — у его существа.
 enum Mode { PATROL, HUNT, EAT, INVESTIGATE, CHARGE, RETREAT, FLEE, CLEAN, ALERT }
@@ -175,6 +177,8 @@ var _rnd: EcoRandom
 var probe := false
 ## Проба #1498: длина фазы «замер» перед броском на манящий корабль, с; 0 — бросок сразу (как в игре).
 var alert := 0.0
+## Проба #1498: сколько секунд после «потерял корабль» хищник отходит прочь (RETREAT); 0 — сразу патруль рядом.
+var alert_leave := 0.0
 ## Ось рифа у цветка на этот шаг (reef_axis).
 var _reef := Vector3.INF
 
@@ -700,8 +704,19 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 			var to := ship - a.p
 			a.goal = a.p + (to.normalized() * 3.0 if to.length_squared() > 1e-4 else Vector3.ZERO)
 			if not can_attack:  # свет погас, корабль затих или в укрытии — потерял
-				_set_mode(pr, Mode.PATROL, 0.0)
-				pr.cooldown = maxf(pr.cooldown, ALERT_LOSE_CD)
+				if alert_leave > 0.0:
+					_set_mode(pr, Mode.RETREAT, alert_leave)
+					pr.cooldown = maxf(pr.cooldown, alert_leave + ALERT_LOSE_CD)
+					var away := a.p - ship
+					away.y = 0.0
+					if away.length_squared() < 0.01:
+						away = Vector3(1, 0, 0)
+					var g := a.p + away.normalized() * ALERT_LEAVE_DIST
+					g.y = minf(_floor(world, g.x, g.z, GOAL_CEILING - 8.0) + 8.0, GOAL_CEILING)
+					a.goal = g
+				else:
+					_set_mode(pr, Mode.PATROL, 0.0)
+					pr.cooldown = maxf(pr.cooldown, ALERT_LOSE_CD)
 				world.emit(ID, "lost", a.p, _text(world, "%s потерял корабль и отворачивает"))
 			elif a.expired():
 				_start_charge(world, pr)
