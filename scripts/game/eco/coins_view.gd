@@ -379,12 +379,12 @@ static func glazun_tint(i: int) -> Color:
 
 
 ## Масштаб тела глазуна (в осях тела: x — ширина, y — высота, z — длина) в момент t при доле луча lit: вдох — выше и
-## шире, длина та же; в луче затаился (GLAZUN_HELD), в броске (`lunge`) не дышит.
+## шире, длина та же; в луче затаился (GLAZUN_HELD), в броске (`EcoCoins.lunge_k`) не дышит.
 static func glazun_breath(gz: EcoCoins.Glazun, t: float, lit: float) -> Vector3:
 	var i := gz.index + GLAZUN_SALT
 	var rate := EcoVary.spread(i, EcoVary.RATE, GLAZUN_BREATH_SPREAD)
 	var ph := EcoVary.unit(i, EcoVary.TURN) * TAU
-	var amp := lerpf(1.0, GLAZUN_HELD, smoothstep(0.0, 1.0, clampf(lit, 0.0, 1.0))) * (1.0 - clampf(gz.lunge, 0.0, 1.0))
+	var amp := lerpf(1.0, GLAZUN_HELD, smoothstep(0.0, 1.0, clampf(lit, 0.0, 1.0))) * (1.0 - EcoCoins.lunge_k(gz))
 	var k := amp * sin(t * TAU / GLAZUN_BREATH_T * rate + ph)
 	return Vector3(1.0 + GLAZUN_BREATH_W * k, 1.0 + GLAZUN_BREATH_H * k, 1.0)
 
