@@ -64,6 +64,10 @@ class Parse(unittest.TestCase):
 
 
 class Table(unittest.TestCase):
+    def test_average_over_measures(self):
+        got = ct.average([{"test_a.gd": 2.0, "test_b.gd": 1.0}, {"test_a.gd": 4.0}, {}])
+        self.assertEqual(got, {"test_a.gd": 3.0, "test_b.gd": 1.0})
+
     def test_roundtrip_like_shards_gd(self):
         text = ct.write_table({"test_b.gd": 1.234, "test_a.gd": 0.0})
         self.assertTrue(text.startswith(ct.HEAD))
@@ -96,6 +100,19 @@ class Main(unittest.TestCase):
             self.assertEqual(ct.main([lp, "--out", out]), 0)
             got = ct.read_table(open(out, encoding="utf-8").read())
             self.assertEqual(got, {"test_a.gd": 2.0, "test_b.gd": 0.25, "test_c.gd": 6.25, "test_old.gd": 4.0})
+
+    def test_two_logs_averaged(self):
+        with tempfile.TemporaryDirectory() as d:
+            open(os.path.join(d, "test_a.gd"), "w").close()
+            out = os.path.join(d, "vremya.txt")
+            paths = []
+            for k, end in enumerate((3, 5)):
+                lp = os.path.join(d, "job%d.txt" % k)
+                with open(lp, "w", encoding="utf-8") as f:
+                    f.write(log([(1, "Часть 1 из 1: файлов 1"), (end, "  ок     test_a.test_one")]))
+                paths.append(lp)
+            self.assertEqual(ct.main(paths + ["--out", out]), 0)
+            self.assertEqual(ct.read_table(open(out, encoding="utf-8").read()), {"test_a.gd": 3.0})
 
     def test_empty_log_keeps_table(self):
         with tempfile.TemporaryDirectory() as d:

@@ -4,9 +4,10 @@
 В облаке полный прогон с `--times` идёт ~15 мин и под нагрузкой врёт, а лог job CI можно взять через gh. Время
 файла — от последней строки предыдущего файла (или строки «Часть i из n») до последней строки этого файла
 («ок» или «ПАДЕНИЕ»), по меткам времени Actions в начале строк. Файлы, которых в логе нет, берут время из старой
-таблицы; файлов, которых уже нет в tests/, в новой таблице нет.
+таблицы; файлов, которых уже нет в tests/, в новой таблице нет. Время файла на раннерах CI от прогона к прогону
+гуляет на 20–30 % — несколько прогонов (`--run` повторить) или логов усредняются по файлу.
 
-  python3 tools/ci_times.py --run <id прогона Godot> [--repo владелец/репо] [--out tests/vremya.txt]
+  python3 tools/ci_times.py --run <id прогона Godot> [--run <id>…] [--repo владелец/репо] [--out tests/vremya.txt]
   python3 tools/ci_times.py <лог.txt|->… [--out tests/vremya.txt]      # из сохранённых логов job
 
 Формат — как `TestShards.write_times` (tests/shards.gd): шапка, затем «файл<TAB>секунды» по имени.
@@ -87,6 +88,15 @@ def write_table(times):
     return HEAD + "".join("%s\t%.2f\n" % (f, times[f]) for f in sorted(times))
 
 
+def average(measures):
+    """Несколько замеров {файл: с} → среднее по тем замерам, где файл есть."""
+    acc = {}
+    for m in measures:
+        for f, v in m.items():
+            acc.setdefault(f, []).append(v)
+    return {f: sum(v) / len(v) for f, v in acc.items()}
+
+
 def merge(old, new, present=None):
     """Новые времена поверх старых; present — файлы, что есть в tests/ (None — не фильтровать)."""
     out = dict(old)
@@ -108,7 +118,7 @@ def run_logs(run_id, repo):
 def main(argv):
     out_path = "tests/vremya.txt"
     repo = "garrimajo5/DeepDive"
-    run_id = None
+    runs = []
     logs = []
     i = 0
     while i < len(argv):
@@ -119,7 +129,7 @@ def main(argv):
             elif a == "--repo":
                 repo = argv[i + 1]
             else:
-                run_id = argv[i + 1]
+                runs.append(argv[i + 1])
             i += 2
             continue
         if a in ("-h", "--help"):
@@ -127,13 +137,12 @@ def main(argv):
             return 0
         logs.append(a)
         i += 1
-    if run_id is None and not logs:
+    if not runs and not logs:
         print(__doc__)
         return 2
-    text = run_logs(run_id, repo) if run_id else ""
-    for p in logs:
-        text += "\n" + (sys.stdin.read() if p == "-" else open(p, encoding="utf-8").read())
-    new = parse(text)
+    measures = [parse(run_logs(r, repo)) for r in runs]
+    measures += [parse(sys.stdin.read() if p == "-" else open(p, encoding="utf-8").read()) for p in logs]
+    new = average([m for m in measures if m])
     if not new:
         print("В логе нет строк тестов — таблица не тронута")
         return 1
