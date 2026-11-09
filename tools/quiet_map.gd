@@ -47,6 +47,28 @@ static func route_points() -> Array[Vector2]:
 	return out
 
 
+## Попадает ли дом стаи в кольца правил вида: кольцо рифа у цветка `EcoPred.REEF_KEEP` от `EcoFlower.CENTER`
+## (хищник туда не заходит и там не ловит, #834) и тихий круг пробы `EcoPred.QUIET_R` от `EcoPred.QUIET`.
+static func rings(xz: Vector2) -> String:
+	var reef := xz.distance_to(EcoFlower.CENTER)
+	var quiet := xz.distance_to(EcoPred.QUIET)
+	return "(%d; %d): риф у цветка %.1f м — %s кольца %d м, тихий круг %.1f м — %s круга %d м" % [
+		roundi(xz.x), roundi(xz.y), reef, "внутри" if reef < EcoPred.REEF_KEEP else "вне", int(EcoPred.REEF_KEEP),
+		quiet, "внутри" if quiet < EcoPred.QUIET_R else "вне", int(EcoPred.QUIET_R)]
+
+
+## Строки «дом в кольцах» для варианта: перенесённые дома, а в «как есть» — все дома стай рифа.
+static func ring_lines(move: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	for k in EcoFish.HOMES.size():
+		var h := EcoFish.HOMES[k]
+		if move.has(k):
+			out.append("  дом стаи %d → %s" % [k, rings(move[k])])
+		elif move.is_empty():
+			out.append("  дом стаи %d %s" % [k, rings(Vector2(h.x, h.z))])
+	return out
+
+
 static func home_of(xz: Vector2) -> Vector3:
 	return Vector3(xz.x, Seabed.height(xz.x, xz.y) + HOME_LIFT, xz.y)
 
@@ -116,7 +138,9 @@ func _init() -> void:
 			if float(r["any"]) < float(best["any"]):
 				best = r
 		lines.append("  самая тихая точка: " + fmt(best))
-		print("\n".join(lines.slice(lines.size() - rows.size() - 2)))
+		var rl := ring_lines(v["move"])
+		lines.append_array(rl)
+		print("\n".join(lines.slice(lines.size() - rows.size() - 2 - rl.size())))
 	if kv.has("csv"):
 		var f := FileAccess.open(kv["csv"], FileAccess.WRITE)
 		f.store_string("\n".join(lines) + "\n")
