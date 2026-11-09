@@ -120,13 +120,20 @@ func test_ship_goes_down_to_10() -> void:
 	var s := _ship_at(Vector3(LayerMap.xz("06").x, -100.0, S.GAP_Z), -PI / 2.0)
 	s.in_thrust = 1.0
 	s.in_vert = -1.0
+	# Глубина — у 10 (560, 200), а не в конце: там нос упирается в восточную стену и корпус над ней (#1481).
 	var worst := 0.0
 	for i in 2400:
 		s.update(0.05)
 		worst = maxf(worst, s.bump)
 	ok(s.pos.x > S.X_BOTTOM - 40.0, "дошёл до низа склона: x = %.0f" % s.pos.x)
 	ok(s.pos.x <= Helm.Ship.EAST_END, "не дальше восточной стены")
-	ok(s.depth() > 290.0, "глубина у 10: %.0f м" % s.depth())
+	ok(s.depth() > 270.0, "глубина у стены: %.0f м" % s.depth())
+	var p10 := LayerMap.xz("10")
+	var t := _ship_at(Vector3(p10.x, -250.0, p10.y), -PI / 2.0)
+	t.in_vert = -1.0
+	for i in 600:
+		t.update(0.05)
+	ok(t.depth() >= 290.0, "у 10 носом на восток всем корпусом над грунтом — 290 м: %.1f м" % t.depth())
 	ok(worst < 1.0, "без ударов о скалы: %.2f м" % worst)
 
 

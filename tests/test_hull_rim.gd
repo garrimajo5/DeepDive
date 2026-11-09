@@ -94,6 +94,7 @@ func test_scene_rim_follows_depth_silt_wreck() -> void:
 	var sm: ShaderMaterial = main.hull.body_material(HullPlan.Paint.METAL)
 	ok(sm.get_shader_parameter("rim_tex") is Texture2D, "LUT ART-076 в материале обшивки")
 	eq(main.hull.body.mesh.get_surface_count(), HullMesh.paints().size(), "без новых поверхностей и вызовов")
+	main.helm.ground = func(_x: float, _z: float) -> float: return -100.0   # у 00 дно мельче 45 м под кормой (#1481)
 	main.helm.pos.y = -45.0
 	main.step(1.0 / 30.0)
 	near(sm.get_shader_parameter("rim_row"), HullMesh.rim_row(main.helm.depth()), 1e-3, "строка по глубине корабля")

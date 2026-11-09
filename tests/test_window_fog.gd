@@ -85,6 +85,7 @@ func test_scene_fog_follows_depth() -> void:
 	main.window_fog.snap(2.0, 100.0, 0.0, 0.0)
 	main.step(1.0 / 30.0)
 	ok(float(m.get_shader_parameter("humidity")) < 0.02, "у поверхности окна чистые")
+	main.helm.ground = func(_x: float, _z: float) -> float: return -100.0   # у 00 дно мельче 45 м под кормой (#1481)
 	main.helm.pos.y = -45.0
 	for i in 300:
 		main.step(1.0 / 10.0)
