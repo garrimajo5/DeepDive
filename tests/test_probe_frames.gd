@@ -33,13 +33,13 @@ func test_rest_and_row() -> void:
 	ok(Probe.row(1, 3, "", 1.0, 1.0, 2.0).ends_with("2.0"), "без частей — без хвоста")
 
 
-func test_summary_skips_first_frame() -> void:
-	var fr := [{"step": 1.0, "draw": 1.0, "total": 500.0},   # время до начала цикла — не в итоге
+func test_summary_counts_event_frame() -> void:
+	var fr := [{"step": 1.0, "draw": 400.0, "total": 500.0},   # кадр события: сборка шейдеров без прогрева
 		{"step": 10.0, "draw": 20.0, "total": 40.0}, {"step": 30.0, "draw": 5.0, "total": 90.0}]
 	var s := Probe.summary(1, fr)
-	ok(s.contains("2 кадров") and s.contains("кадр 2 90.0"), "худший — второй замеренный: " + s)
-	ok(s.contains("шаг 30.0") and s.contains("отрисовка 20.0") and s.contains("остаток 55.0"), "максимумы частей: " + s)
-	ok(Probe.summary(1, [fr[0]]).contains("нет кадров"), "один кадр — нечего сравнивать")
+	ok(s.contains("3 кадров") and s.contains("кадр 0 500.0"), "худший — кадр события: " + s)
+	ok(s.contains("шаг 30.0") and s.contains("отрисовка 400.0") and s.contains("остаток 99.0"), "максимумы частей: " + s)
+	ok(Probe.summary(1, []).contains("нет кадров"), "пусто — нечего сравнивать")
 
 
 func test_shown_rows() -> void:

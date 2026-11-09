@@ -60,15 +60,15 @@ static func row(cycle: int, frame: int, ev: String, step: float, draw: float, to
 	return s + ("  " + note if note != "" else "")
 
 
-## Итог цикла по кадрам `{step, draw, total}`: худший кадр и максимум каждой части — по кадрам со второго
-## (первый кадр меряет время до начала цикла).
+## Итог цикла по кадрам `{step, draw, total}`: худший кадр и максимум каждой части. Кадр 0 — кадр события (его
+## вызов — в остатке, как в игре, где событие идёт внутри шага): сборки шейдеров без прогрева — здесь.
 static func summary(cycle: int, frames: Array) -> String:
 	var worst := -1
 	var m_step := 0.0
 	var m_draw := 0.0
 	var m_rest := 0.0
 	var sum := 0.0
-	for i in range(1, frames.size()):
+	for i in frames.size():
 		var f: Dictionary = frames[i]
 		m_step = maxf(m_step, f["step"])
 		m_draw = maxf(m_draw, f["draw"])
@@ -79,7 +79,7 @@ static func summary(cycle: int, frames: Array) -> String:
 	if worst < 0:
 		return "цикл %d: нет кадров" % cycle
 	return "цикл %d: %d кадров, среднее %.1f мс, худший — кадр %d %.1f мс; максимум: шаг %.1f, отрисовка %.1f, остаток %.1f" % [
-		cycle, frames.size() - 1, sum / (frames.size() - 1), worst, frames[worst]["total"], m_step, m_draw, m_rest]
+		cycle, frames.size(), sum / frames.size(), worst, frames[worst]["total"], m_step, m_draw, m_rest]
 
 
 ## Порог долгого кадра, мс: slow= из ключей или SLOW_K × среднее прошлых кадров цикла (без первого; нет их — ∞).
