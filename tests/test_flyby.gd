@@ -172,3 +172,23 @@ func test_scene_surface_skipped_by_action() -> void:
 	ok(main.run.ended and main.at_vote, "первое нажатие не начинает новый забег")
 	main.step(0.3)
 	ok(main.sonar_view.vote.board.visible, "итог на голограмме над столом")
+
+
+## #1481: камера стоит в точке облёта (сценарий тестера, вид снаружи) и сама не кончается; stop и новый облёт — снова идут.
+func test_hold_at_stays() -> void:
+	var f := Flyby.new()
+	f.hold_at(1.0)
+	ok(f.active() and f.still, "камера стоит")
+	for i in 400:
+		f.update(0.1)
+	ok(f.active(), "не кончилась сама за 40 с")
+	ok(f.pose().origin.is_equal_approx(Flyby.START_PATH[2]), "над кормой")
+	f.hold_at(0.0)
+	ok(f.pose().origin.is_equal_approx(Flyby.START_PATH[0]), "у носа")
+	f.stop()
+	ok(not f.active() and not f.still, "убрана")
+	f.hold_at(0.5)
+	f.start(Flyby.Kind.START)
+	ok(not f.still, "новый облёт идёт")
+	f.update(Flyby.START_S + 0.1)
+	ok(not f.active(), "и кончается сам")

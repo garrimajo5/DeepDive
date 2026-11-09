@@ -1053,3 +1053,38 @@ func test_slope_shots_edge_and_rocks() -> void:   # отчёт #1182: склон
 	var ahead := p + Vector2(-sin(yaw), -cos(yaw)) * 30.0
 	ok(absf(Seabed.height(ahead.x, ahead.y) - floor_y) < 15.0,
 			"носом вдоль склона: дно впереди не уходит из-под луча (%.1f м на 30 м)" % (Seabed.height(ahead.x, ahead.y) - floor_y))
+
+
+## #1481: шаги «floor» и «outside» — корабль на нижнем пределе хода над рельефом, камера с борта стоит над кормой,
+## пока сценарий её не уберёт; снимок ждёт кадра. Свой ровный грунт — тест не опирается на рельеф у старта.
+func test_floor_and_outside_steps() -> void:
+	var q := QaScript.parse('[{"do": "floor"}, {"do": "outside", "at": 0.5}, {"do": "shot", "name": "k"}, ' \
+		+ '{"do": "outside", "on": false}, {"do": "outside", "at": 3}]')
+	eq(q.errors.size(), 0, "шаги floor и outside известны")
+	var out := q.advance(0.1)
+	eq(out, [["floor"], ["outside", true, 0.5]], "снимок — после кадра с камерой снаружи")
+	var out2 := q.advance(0.1)
+	eq(out2[0], ["shot", "k"], "затем снимок")
+	eq(out2[1], ["outside", false, 1.0], "камера назад на мостик")
+	eq(out2[2], ["outside", true, 1.0], "точка облёта не дальше кормы")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.helm.ground = func(_x: float, _z: float) -> float: return -100.0
+	main.start_qa('[{"do": "ship", "x": 50, "y": -40, "z": 20, "yaw": 0}, {"do": "floor"}, ' \
+		+ '{"do": "outside", "at": 1.0}, {"do": "wait", "s": 1.0}]')
+	for i in 20:
+		main.step(1.0 / 30.0)
+	var low := main.helm.floor_at(main.helm.pos, main.helm.yaw)
+	ok(low > -100.0, "предел хода выше грунта")
+	near(main.helm.pos.y, low, 0.05, "корабль на нижнем пределе хода")
+	ok(main.flyby.active() and main.flyby.still, "камера с борта стоит")
+	ok(main.flyby_cam.current, "кадр — с борта")
+	ok(main.flyby_cam.transform.origin.is_equal_approx(Flyby.START_PATH[2]), "над кормой: %s" % main.flyby_cam.transform.origin)
+	main.start_qa('[{"do": "outside", "on": false}, {"do": "wait", "s": 0.2}]')
+	for i in 3:
+		main.step(1.0 / 30.0)
+	ok(not main.flyby.active(), "камера убрана")
+	ok(main.camera.current, "глаза на мостике")
+	main.queue_free()
+	await frames(1)
