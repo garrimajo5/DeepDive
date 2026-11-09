@@ -327,6 +327,16 @@ func _prefetch_step() -> void:
 	_ahead_done = key
 
 
+## Под главным меню шаг стоит, а корабль уже у начала спуска (`MenuFlow.to_menu`): клетки россыпей у at — заранее,
+## по `SeabedStones.CELLS_STEP` за кадр меню, а не всем радиусом в первом кадре «Погрузиться» (#1529). true — готово.
+func ahead(at: Vector3) -> bool:
+	if prefetch(at):
+		return true
+	_prefetch_step()
+	_ahead_on = false
+	return prefetch(at)
+
+
 ## Где корабль: внутри корпуса шахты не светят и взвеси нет (вид с мостика и из отсеков).
 func set_ship(pos: Vector3, yaw: float) -> void:
 	var cells := scatter_cells()
