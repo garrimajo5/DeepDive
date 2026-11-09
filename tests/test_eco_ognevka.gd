@@ -18,6 +18,7 @@ func _world(tops: Array[Vector3], fan_spots: Array[Vector2] = []) -> EcoWorld:
 	w.ship.pos = FAR
 	var fish := w.add(EcoFish.new()) as EcoFish
 	var ps := w.add(EcoPred.new(fish)) as EcoPred
+	ps.alert = 0.0  # бросок сразу: здесь чутьё и бросок; «замер» #1498 — test_eco_pred_zamer
 	var lc := w.add(EcoLeech.new(ps, null, tops)) as EcoLeech
 	var fans: EcoFan = null
 	if not fan_spots.is_empty():
@@ -423,6 +424,7 @@ func test_no_ognevka_no_shelter() -> void:
 	var w := EcoWorld.new()
 	w.ground = _flat
 	var ps := w.add(EcoPred.new()) as EcoPred
+	ps.alert = 0.0  # бросок сразу: здесь чутьё и бросок; «замер» #1498 — test_eco_pred_zamer
 	w.add(EcoLeech.new(ps, null, [Vector3(0, -36, 0)] as Array[Vector3]))
 	w.ship.pos = Vector3(5, -36, 0)
 	ok(not ps.ship_sheltered(w), "без огнёвок укрытия нет")

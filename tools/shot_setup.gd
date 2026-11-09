@@ -363,8 +363,8 @@ static func zamer_trace(g: Node, was: Dictionary, t: float) -> Array[String]:
 
 
 ## Кадры знака #1498 (zamer=): длина фазы и отход — как в рекомендации гейм-дизайнера (09.11), в игре пока выключено.
-const ZAMER_ALERT := 4.0
-const ZAMER_LEAVE := 20.0
+const ZAMER_ALERT := EcoPred.ALERT_ON
+const ZAMER_LEAVE := EcoPred.ALERT_LEAVE_ON
 ## На каком расстоянии от корабля ставим хищника, м (ближе EcoPred.REACH — свет его зовёт).
 const ZAMER_DIST := 26.0
 ## Хищник не ниже этого над видимым дном, м.

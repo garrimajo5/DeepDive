@@ -17,7 +17,7 @@ func _world() -> EcoWorld:
 	w.ground = _flat
 	w.ship.pos = FAR
 	w.add(EcoEel.new(null, null, [SPOT] as Array[Vector3]))
-	w.add(EcoPred.new())
+	(w.add(EcoPred.new()) as EcoPred).alert = 0.0  # бросок сразу: здесь чутьё и бросок; «замер» #1498 — test_eco_pred_zamer
 	return w
 
 

@@ -94,12 +94,15 @@ const QUIET_R := 55.0
 const ARC_PRED := 1
 const ARC: Array[Vector2] = [Vector2(90, -90), Vector2(65, -100), Vector2(15, -95)]
 const ARC_JITTER := 5.0
-## Проба #1498 — фаза «замер» перед броском (`alert` > 0): хищник почти стоит и разворачивается к кораблю; манящее
+## Фаза «замер» перед броском #1498 (`alert` > 0): хищник почти стоит и разворачивается к кораблю; манящее
 ## пропало (свет погас, корабль затих, ушёл в укрытие) — уходит в патруль с паузой ALERT_LOSE_CD.
 const ALERT_SPEED := 1.5
 const ALERT_LOSE_CD := 8.0
-## Проба #1498 — отход после «потерял корабль» (`alert_leave` > 0): уходит прочь от корабля на ALERT_LEAVE_DIST м.
+## Отход после «потерял корабль» #1498 (`alert_leave` > 0): уходит прочь от корабля на ALERT_LEAVE_DIST м.
 const ALERT_LEAVE_DIST := 45.0
+## Числа варианта 1 гейм-дизайнера (#1498, 09.11): замер 4 с, отход 20 с — значения `alert`/`alert_leave` в игре.
+const ALERT_ON := 4.0
+const ALERT_LEAVE_ON := 20.0
 
 ## Режим хищника (pr.state в браузере); общее EcoAgent.State — у его существа.
 enum Mode { PATROL, HUNT, EAT, INVESTIGATE, CHARGE, RETREAT, FLEE, CLEAN, ALERT }
@@ -178,10 +181,10 @@ var plankton: EcoPlankton
 var _rnd: EcoRandom
 ## Проба расстановки #1400 (QUIET, ARC): ставить до reset мира.
 var probe := false
-## Проба #1498: длина фазы «замер» перед броском на манящий корабль, с; 0 — бросок сразу (как в игре).
-var alert := 0.0
-## Проба #1498: сколько секунд после «потерял корабль» хищник отходит прочь (RETREAT); 0 — сразу патруль рядом.
-var alert_leave := 0.0
+## Длина фазы «замер» перед броском на манящий корабль, с (#1498: 4 с по гейм-дизайнеру); 0 — бросок сразу (до #1498).
+var alert := ALERT_ON
+## Сколько секунд после «потерял корабль» хищник отходит прочь (RETREAT, #1498: 20 с); 0 — сразу патруль рядом.
+var alert_leave := ALERT_LEAVE_ON
 ## Ось рифа у цветка на этот шаг (reef_axis).
 var _reef := Vector3.INF
 
@@ -538,7 +541,7 @@ func lure(world: EcoWorld, pr: Pred) -> void:
 	_start_charge(world, pr)
 
 
-## Хищника поманил корабль: бросок сразу или, в пробе #1498 (`alert` > 0), сначала «замер».
+## Хищника поманил корабль: сначала «замер» (#1498, `alert` > 0), с `alert` = 0 — бросок сразу.
 func _react(world: EcoWorld, pr: Pred) -> void:
 	if alert <= 0.0:
 		_start_charge(world, pr)

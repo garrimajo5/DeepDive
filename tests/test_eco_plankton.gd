@@ -32,6 +32,8 @@ func _world(with_pred := false) -> EcoWorld:
 	w.ground = _flat
 	w.ship.pos = FAR
 	var p: EcoPred = w.add(EcoPred.new()) as EcoPred if with_pred else null
+	if p:
+		p.alert = 0.0  # бросок сразу: здесь чутьё и бросок; «замер» #1498 — test_eco_pred_zamer
 	var pl := w.add(EcoPlankton.new(p, null, [Vector2(0, 0)] as Array[Vector2])) as EcoPlankton
 	if p:
 		p.plankton = pl
