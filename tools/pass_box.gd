@@ -39,12 +39,7 @@ func _init() -> void:
 	ev.ground = Seabed.mesh_height
 	ev.world.reset(int(kv.get("seed", "20261018")))
 	var total := Plan.path_length()
-	var st: Array[Dictionary] = []
-	var s := 0.0
-	while s <= total + 0.01:
-		st.append(station(s))
-		s += STEP
-	smooth(st)
+	var st := stations()
 	print("Проход 00 → 01 (%.0f м) по оси %s. Контур 20×30: ±%.0f м, низ H+%.0f, верх H+%.0f, ход H+%.0f; H — максимум грунта под следом %.1f×%.0f м." % [
 			total, Plan.PATH, HALF, LOW, LOW + HEIGHT, RIDE, Route.HULL_BACK - Route.HULL_FRONT, HALF * 2.0])
 	print("\nСтанции (через %.0f м; каждая пятая и вершины):" % STEP)
@@ -79,6 +74,27 @@ func _init() -> void:
 		var f := FileAccess.open(kv["json"], FileAccess.WRITE)
 		f.store_string(JSON.stringify({"stations": st, "flora": fl, "path": Plan.PATH}))
 	quit()
+
+
+## Станции через STEP м от 00 до 01 с плавным ходом ("smooth").
+static func stations() -> Array[Dictionary]:
+	var total := Plan.path_length()
+	var st: Array[Dictionary] = []
+	var s := 0.0
+	while s <= total + 0.01:
+		st.append(station(s))
+		s += STEP
+	smooth(st)
+	return st
+
+
+## Плавный ход в точке на s м от 00 (та же огибающая, что `smooth`, по станциям через STEP м и самой точке) —
+## высота хода для кадров `shot.gd scena=` (#1400).
+static func smooth_at(s: float) -> float:
+	var y := station(s)["ride"] as float
+	for u in stations():
+		y = maxf(y, u["ride"] - SLOPE * absf(u["s"] - s))
+	return y
 
 
 ## Станция на s м от 00: грунт оси, H под следом (корпус по курсу, ±HALF поперёк), ход, верх объёма.

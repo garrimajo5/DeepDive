@@ -4,6 +4,10 @@ extends RefCounted
 ## Раньше жило в Main.debug_setup; вынесено, чтобы отладка не раздувала main.gd и не шла в APK (tools/ не
 ## экспортируется).
 
+## Плавный ход сцены 00 → 01 (scena=, #1400) — из расчёта прохода.
+const PassBox := preload("res://tools/pass_box.gd")
+const PassPlan := preload("res://tools/pass_plan.gd")
+
 
 static func apply(g: Main, kv: Dictionary) -> void:
 	g.flyby.stop()   # снимки — с мостика; flyby=start|surface — вид с борта (age=<с> от начала)
@@ -180,8 +184,9 @@ static func apply(g: Main, kv: Dictionary) -> void:
 	if kv.has("scena"):  # scena=1|2|3 — контрольный ракурс сцены 00 → 01 (#1400): штатная камера пилота, нос к 01
 		var sp := scena_pose(int(kv["scena"]))
 		if not sp.is_empty():
-			if kv.has("scena_y"):   # scena_y=<y> — высота хода вместо SCENA_FLOOR над дном (контур 20×30, tools/pass_box.gd)
-				sp["ship"].y = float(kv["scena_y"])
+			var ride := scena_ride(int(kv["scena"]), String(kv.get("scena_y", "")))   # scena_y=<y>|dno — высота хода
+			sp["ship"].y = ride["y"]
+			g.set_meta("scena_src", ride["src"])
 			g.helm.yaw = sp["yaw"] + deg_to_rad(float(kv.get("scena_yaw", "0")))   # scena_yaw=<°> — левее, минус — правее
 			g.helm.turn = 0.0
 			g.park_at(sp["ship"])
@@ -390,6 +395,30 @@ static func scena_pose(n: int) -> Dictionary:
 	var to := LayerMap.xz(SCENA_GOAL) - at
 	var ship := Vector3(at.x, Seabed.mesh_height(at.x, at.y) + SCENA_FLOOR, at.y)
 	return {"ship": ship, "yaw": atan2(-to.x, -to.y)}   # нос (−sin, −cos) — к 01
+
+
+## Высота хода в ракурсе scena=n и откуда она: how — "" (плавный ход `tools/pass_box.gd`, контур 20×30: H+7 с
+## уклоном ≤ SLOPE), "dno" — SCENA_FLOOR над видимым дном в точке (кадры «до» #1400), число — y руками. {y, src}.
+static func scena_ride(n: int, how := "") -> Dictionary:
+	var at := SCENA[clampi(n, 1, SCENA.size()) - 1]
+	if how == "dno":
+		return {"y": Seabed.mesh_height(at.x, at.y) + SCENA_FLOOR, "src": "%.0f м над дном в точке (scena_y=dno)" % SCENA_FLOOR}
+	if how != "":
+		return {"y": float(how), "src": "руками (scena_y=%s)" % how}
+	var y: float = PassBox.smooth_at(PassPlan.arc_at(clampi(n, 1, SCENA.size()) - 1))
+	return {"y": y, "src": "плавный ход tools/pass_box.gd (H+%.0f, уклон ≤ %s)" % [PassBox.RIDE, _num(PassBox.SLOPE)]}
+
+
+## Подпись контрольного кадра scena= для лога (#1400): точка, фактический y корабля, до дна, курс, источник высоты.
+static func scena_line(g: Node) -> String:
+	var p: Vector3 = g.helm.pos
+	var yaw := wrapf(rad_to_deg(g.helm.yaw), -180.0, 180.0)
+	return "кадр сцены (#1400): точка (%s; %s), y корабля %s, до дна %s м, курс %+.0f° от −Z (плюс — левее); высота — %s" % [
+		_num(p.x), _num(p.z), _num(p.y), _num(p.y - Seabed.mesh_height(p.x, p.z)), yaw, g.get_meta("scena_src", "—")]
+
+
+static func _num(v: float) -> String:
+	return ("%.1f" % v).replace(".", ",").replace("-", "−")
 
 
 ## С какого расстояния впереди виден грунт в окне пилота (#1400, дизайнер уровней — границу видимости снять заново
