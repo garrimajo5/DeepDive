@@ -180,6 +180,8 @@ static func apply(g: Main, kv: Dictionary) -> void:
 	if kv.has("scena"):  # scena=1|2|3 — контрольный ракурс сцены 00 → 01 (#1400): штатная камера пилота, нос к 01
 		var sp := scena_pose(int(kv["scena"]))
 		if not sp.is_empty():
+			if kv.has("scena_y"):   # scena_y=<y> — высота хода вместо SCENA_FLOOR над дном (контур 20×30, tools/pass_box.gd)
+				sp["ship"].y = float(kv["scena_y"])
 			g.helm.yaw = sp["yaw"] + deg_to_rad(float(kv.get("scena_yaw", "0")))   # scena_yaw=<°> — левее, минус — правее
 			g.helm.turn = 0.0
 			g.park_at(sp["ship"])
