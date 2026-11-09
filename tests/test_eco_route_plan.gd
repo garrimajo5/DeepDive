@@ -49,3 +49,28 @@ func test_flora_at_place_is_marked() -> void:
 	ok(by_z[5]["end"], "у самого места б")
 	ok(not by_z[50]["end"], "середина отрезка — не у места")
 	ok(by_z[50]["hull"], "3 м от оси — в полосе корпуса")
+
+
+func test_full_route_uses_existing_links() -> void:
+	# Полный обход из схемы `docs/urovni/sloj-1.md` — только по существующим отрезкам `LayerMap`, кончается у 10.
+	var segs := LayerMap.segments()
+	var r: Array[String] = Plan.FULL_ROUTE
+	for i in r.size() - 1:
+		ok(segs.has([r[i], r[i + 1]]) or segs.has([r[i + 1], r[i]]), "отрезок %s → %s есть в LayerMap" % [r[i], r[i + 1]])
+	eq(r[0], "00", "начало — старт")
+	eq(r[-1], "10", "конец — спуск")
+	for id in LayerMap.POINTS:
+		ok(r.has(id), "обход заходит в %s" % id)
+
+
+func test_straight_07_08_hits_arch_and_exit_does_not() -> void:
+	var flora: Array[Dictionary] = []
+	var arch := 0
+	for st in Plan.leg_report("07", LayerMap.xz("07"), "08", LayerMap.xz("08"), flora)["stations"]:
+		arch += 1 if st["arch"] else 0
+	ok(arch > 0, "прямая 07 → 08 идёт сквозь западную опору арки")
+	var out := Plan.arch_exit()
+	for leg in [Plan.leg_report("07", LayerMap.xz("07"), "выход", out, flora),
+			Plan.leg_report("выход", out, "08", LayerMap.xz("08"), flora)]:
+		for st in leg["stations"]:
+			ok(not st["arch"], "через выход из прохода опоры не задеты (%s → %s, %.0f м)" % [leg["from"], leg["to"], st["s"]])

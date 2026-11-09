@@ -3,7 +3,9 @@ extends SceneTree
 ## `LayerMap.MAIN_ROUTE` (точка 10 — (560, 200), 290 м), полный габарит корпуса по `HullPlan`. Headless, без узлов:
 ## дно `Seabed.mesh_height`, мир (`EcoView`) после сброса — высокая флора, как в tools/pass_plan.gd. Облачный расчёт,
 ## не телефонный. Ничего не переставляет — только отчёт для дизайнера уровней.
-##   godot --headless --path . -s tools/route_plan.gd [-- seed=<n> json=<файл>]
+##   godot --headless --path . -s tools/route_plan.gd [-- seed=<n> json=<файл> route=full]
+## route=full — полный исследовательский обход из схемы `docs/urovni/sloj-1.md` (`FULL_ROUTE`): транзиты 01 → 00 и
+## 08 → 07 считаются отдельными отрезками (корпус несимметричен — нос и корма над разным грунтом).
 ## По каждому отрезку через STEP м: корпус на нижнем пределе хода (`Helm.Ship.CLEARANCE` над дном под центром) —
 ## насколько грунт под всем корпусом выше днища (корпус в грунте); поместится ли корпус над этим грунтом под льдом
 ## (`Helm.Ship.CEILING`); выход за край отмели вне прохода склона (`Helm.Ship.east_ok`) — корабль там не пройдёт;
@@ -24,6 +26,9 @@ const GRID := 10.0
 const FLOOR := Plan.FLOOR
 ## Флора ближе этого к концу отрезка — у самого места (сам ориентир, остановка), считается отдельно.
 const END_R := 30.0
+## Полный исследовательский обход по существующим связям (`docs/urovni/sloj-1.md`, «Бюджет»): повторные 00 и 07 —
+## транзит.
+const FULL_ROUTE: Array[String] = ["00", "01", "00", "09", "02", "05", "04", "07", "08", "07", "03", "06", "10"]
 
 
 func _init() -> void:
@@ -35,20 +40,25 @@ func _init() -> void:
 	ev.ground = Seabed.mesh_height
 	ev.world.reset(int(kv.get("seed", "20261018")))
 	var flora := Plan.collect(ev)
-	var route := LayerMap.MAIN_ROUTE
-	print("Основной маршрут %s прямыми между местами LayerMap. Корпус %.1f × %.1f м, днище %.1f м от точки хода, верх +%.1f м." % [
-			" → ".join(route), HULL_BACK - HULL_FRONT, HULL_HALF_W * 2.0, HULL_LOW, HULL_TOP])
+	var full: bool = kv.get("route", "") == "full"
+	var route: Array[String] = FULL_ROUTE if full else LayerMap.MAIN_ROUTE
+	print("%s %s прямыми между местами LayerMap. Корпус %.1f × %.1f м, днище %.1f м от точки хода, верх +%.1f м." % [
+			"Полный обход" if full else "Основной маршрут", " → ".join(route), HULL_BACK - HULL_FRONT, HULL_HALF_W * 2.0, HULL_LOW, HULL_TOP])
 	print("Нижний предел хода — %.0f м над дном под центром, верхний — y = %.0f (лёд). Объём %.0f×%.0f м от грунта оси + %.0f м." % [
 			Helm.Ship.CLEARANCE, Helm.Ship.CEILING, Plan.WIDTH, Plan.HEIGHT, Plan.LOW])
-	var out := {"route": [], "legs": [], "hull": [HULL_FRONT, HULL_BACK, HULL_HALF_W, HULL_LOW, HULL_TOP],
+	var out := {"full": full, "route": [], "legs": [], "hull": [HULL_FRONT, HULL_BACK, HULL_HALF_W, HULL_LOW, HULL_TOP],
 			"ceiling": Helm.Ship.CEILING, "grid": grid(), "grid_step": GRID}
 	for id in route:
 		var p := LayerMap.xz(id)
 		out["route"].append([id, p.x, p.y, LayerMap.POINTS[id]["depth"], Seabed.mesh_height(p.x, p.y)])
+	var total := 0.0
 	for i in route.size() - 1:
 		var leg := leg_report(route[i], LayerMap.xz(route[i]), route[i + 1], LayerMap.xz(route[i + 1]), flora)
+		leg["transit"] = route.slice(0, i + 1).has(route[i + 1])   # место уже пройдено — обратный ход
 		out["legs"].append(leg)
 		print_leg(leg)
+		total += leg["length"]
+	print("\nСумма прямых: %.0f м (с 06 → 10 по прямой, которой нет)." % total)
 	# Прямая 06 → 10 упирается в стену за краем отмели: для сравнения — через начало прохода склона (ось z = GAP_Z).
 	var gap := Vector2(Seabed.Slope.X_IN, Seabed.Slope.GAP_Z)
 	print("\nДля сравнения — 06 → 10 через начало прохода склона (%d; %d), не путь игры:" % [gap.x, gap.y])
@@ -56,10 +66,25 @@ func _init() -> void:
 		leg["detour"] = true
 		out["legs"].append(leg)
 		print_leg(leg)
+	if full:
+		# Прямая 07 → 08 идёт вдоль западной опоры арки 07: для сравнения — сначала из прохода на сторону подхода (+Z).
+		var out_gate := arch_exit()
+		print("\nДля сравнения — 07 → 08 через выход из прохода арки на сторону подхода (%d; %d), не путь игры:" % [out_gate.x, out_gate.y])
+		for leg in [leg_report("07", LayerMap.xz("07"), "выход арки", out_gate, flora),
+				leg_report("выход арки", out_gate, "08", LayerMap.xz("08"), flora)]:
+			leg["detour"] = true
+			out["legs"].append(leg)
+			print_leg(leg)
 	if kv.has("json"):
 		var f := FileAccess.open(kv["json"], FileAccess.WRITE)
 		f.store_string(JSON.stringify(out))
 	quit()
+
+
+## Точка перед проходом арки 07 со стороны подхода (+Z): корпус, повёрнутый поперёк, уже не задевает опоры —
+## полглубины арки, запас корпуса и полдлины корпуса.
+static func arch_exit() -> Vector2:
+	return EcoGate.CENTER + Vector2(0.0, GateArch.HALF_DEPTH + GateArch.SHIP_R + GateArch.SHIP_HALF_LEN)
 
 
 ## Отрезок a → b: станции и сводка помех.
@@ -157,7 +182,8 @@ static func print_leg(leg: Dictionary) -> void:
 	for x in st:
 		gmin = minf(gmin, x["gc"])
 		gmax = maxf(gmax, x["gc"])
-	print("\n%s → %s: %.0f м, дно по оси %.0f…%.0f м." % [leg["from"], leg["to"], leg["length"], -gmax, -gmin])
+	print("\n%s → %s%s: %.0f м, дно по оси %.0f…%.0f м." % [leg["from"], leg["to"], " (транзит)" if leg.get("transit") else "",
+			leg["length"], -gmax, -gmin])
 	var fmt := func(sp: Array, unit: String) -> String:
 		var parts: Array[String] = []
 		for p in sp:
