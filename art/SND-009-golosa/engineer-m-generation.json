@@ -1,0 +1,37 @@
+{
+  "request": {
+    "context": "SND-009 stage 1: three engineer-m voice candidates using approved Russian lines.",
+    "language": "ru",
+    "model_id": "eleven_ttv_v3",
+    "text": "Я у пульта. Слушаю экипаж. Проверяю питание корабля. Слежу за работой реактора. О неисправностях доложу отдельно. Пилот, по связи всё слышу.",
+    "voice_description": "Adult male Russian speaker with native, accent-free Russian speech. A calm professional on a long expedition beneath the ice. Not an announcer or a film actor. Lower timbre than the other crew, slightly raspy, a little tired but intelligible. Clean dry voice, no radio effect, echo, static or music."
+  },
+  "result": {
+    "previews": [
+      {
+        "generated_voice_id": "3u3a9Ki3iyziWf6AxW6i",
+        "duration_secs": 10.607541666666666,
+        "language": "ru",
+        "preview_index": 0
+      },
+      {
+        "generated_voice_id": "30RHL2K6DadEA9fglZzw",
+        "duration_secs": 10.529166666666667,
+        "language": "ru",
+        "preview_index": 1
+      },
+      {
+        "generated_voice_id": "QCojhXSLJab3swu1ysBM",
+        "duration_secs": 10.032833333333333,
+        "language": "ru",
+        "preview_index": 2
+      }
+    ],
+    "text": "Я у пульта. Слушаю экипаж. Проверяю питание корабля. Слежу за работой реактора. О неисправностях доложу отдельно. Пилот, по связи всё слышу.",
+    "voice_description": "Adult male Russian speaker with native, accent-free Russian speech. A calm professional on a long expedition beneath the ice. Not an announcer or a film actor. Lower timbre than the other crew, slightly raspy, a little tired but intelligible. Clean dry voice, no radio effect, echo, static or music.",
+    "model_id": "eleven_ttv_v3",
+    "language": "ru",
+    "view_kind": "voice_design",
+    "view_state_id": "viewstate_01m700ed2rfy99nt0swajbq06b"
+  }
+}
