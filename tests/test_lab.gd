@@ -47,22 +47,23 @@ func test_obstacles_and_posts() -> void:
 func test_species_cards() -> void:
 	var s := Samples.new(func(_x: float, _z: float) -> float: return -60.0)
 	var sc := Scanner.new()
-	eq(Lab.pages(sc), 1, "без видов — только сводка")
-	eq(Lab.page_lines(s, sc, 1)[0], "ЖУРНАЛ ЭКСПЕДИЦИИ", "страница за краем — сводка")
+	eq(Lab.pages(sc), 1 + Lab.ARCHIVE_PAGES, "без видов — сводка и архив К-2")
+	eq(Lab.page_lines(s, sc, 1 + Lab.ARCHIVE_PAGES)[0], "ЖУРНАЛ ЭКСПЕДИЦИИ", "страница за краем — сводка")
 	sc.observe("pred", "ping")
 	sc.scanned["fish"] = true
 	eq(Lab.cards(sc), ["fish", "pred"] as Array[String], "карточки по порядку журнала")
-	var fish := Lab.page_lines(s, sc, 1)
+	var c1 := 1 + Lab.ARCHIVE_PAGES   # первая карточка — после сводки и архива
+	var fish := Lab.page_lines(s, sc, c1)
 	eq(fish[0], "ЖУРНАЛ · ВИД 1 ИЗ 2", "номер карточки")
 	eq(fish[1], "Светляк-полосник", "изучен — имя")
 	eq(fish[2], "Наблюдений 0 из 3", "счёт заметок")
 	eq(fish[3], "Наблюдения пишутся, когда вид рядом с кораблём", "подсказка без наблюдений")
-	var pred := Lab.page_lines(s, sc, 2)
+	var pred := Lab.page_lines(s, sc, c1 + 1)
 	eq(pred[1], "Неизвестный вид: крупный хищник", "до сканирования — описательно")
 	eq(pred[3], "· Слышит сонар и плывёт проверить источник звука.", "заметка")
 	sc.observe("pred", "catch")
 	sc.observe("pred", "zap")
-	pred = Lab.page_lines(s, sc, 2)
+	pred = Lab.page_lines(s, sc, c1 + 1)
 	eq(pred.size(), 3 + Lab.CARD_NOTES, "только последняя заметка")
 	eq(pred[2], "Наблюдений 3 из 7", "счёт")
 	eq(pred[-1], "· Разряд по корпусу отпугивает его.", "последняя — внизу")
@@ -93,20 +94,23 @@ func test_scene_flasks_and_journal() -> void:
 	main.walker.z = Lab.JOURNAL_POST.y
 	main.step(1.0 / 30.0)
 	eq(main.overlay.action_label, "Журнал", "кнопка «Журнал»")
-	r.begin(5, r.layout.action.c)
-	main.step(1.0 / 30.0)
-	r.end(5)
-	main.step(1.0 / 30.0)
-	eq(main.message.text, "Журнал: образцов 1, видов образцов 1 из 4", "сводка журнала")
-	ok(main.rooms.journal_text.text.contains("Ветка огнецвета — 1"), "экран журнала: %s" % main.rooms.journal_text.text)
+	ok(main.rooms.journal_text.text.contains("Ветка огнецвета — 1"), "экран журнала — сводка: %s" % main.rooms.journal_text.text)
 	main.scanner.observe("pred", "ping")
-	for want in ["Неизвестный вид: изучите его сканером на мостике", "Журнал: образцов 1, видов образцов 1 из 4"]:
+	ok(not main.lore.knows(LayerLore.K2), "К-2 ещё не прочитана")
+	for want in [Lab.ARCHIVE_INFO, "%s. %s" % [Lab.ARCHIVE_INFO, Lab.ARCHIVE_END],
+			"Неизвестный вид: изучите его сканером на мостике", "Журнал: образцов 1, видов образцов 1 из 4"]:
 		r.begin(5, r.layout.action.c)
 		main.step(1.0 / 30.0)
 		r.end(5)
 		main.step(1.0 / 30.0)
 		eq(main.message.text, want, "листать журнал")
 		if main.journal_page == 1:
+			ok(main.rooms.journal_text.text.contains("Земля, это «Ковчег-2»."), "архив: %s" % main.rooms.journal_text.text)
+			ok(not main.lore.knows(LayerLore.K2), "первая страница архива — ещё не дочитано")
+		if main.journal_page == Lab.ARCHIVE_PAGES:
+			ok(main.rooms.journal_text.text.contains(Lab.ARCHIVE_END), "конец фрагмента: %s" % main.rooms.journal_text.text)
+			ok(main.lore.knows(LayerLore.K2), "дочитал архив — К-2 узнана (#825)")
+		if main.journal_page == 1 + Lab.ARCHIVE_PAGES:
 			ok(main.rooms.journal_text.text.contains("Наблюдений 1 из 7"), "карточка: %s" % main.rooms.journal_text.text)
 	eq(main.journal_page, 0, "снова сводка")
 	main.queue_free()
@@ -167,16 +171,17 @@ func test_screen_cache() -> void:   # #847: строки журнала не с�
 	sc.observe("pred", "ping")
 	scr.lines(s, sc, 0)
 	eq(scr.builds, 3, "наблюдение — пересчёт")
-	eq(scr.lines(s, sc, 1), Lab.page_lines(s, sc, 1), "страница карточки — как без кэша")
+	var c1 := 1 + Lab.ARCHIVE_PAGES
+	eq(scr.lines(s, sc, c1), Lab.page_lines(s, sc, c1), "страница карточки — как без кэша")
 	eq(scr.builds, 4, "смена страницы — пересчёт")
 	sc.observe("pred", "catch")   # число карточек то же, заметка новая
-	eq(scr.lines(s, sc, 1)[2], "Наблюдений 2 из 7", "новая заметка видна на той же странице")
+	eq(scr.lines(s, sc, c1)[2], "Наблюдений 2 из 7", "новая заметка видна на той же странице")
 	sc.complete("pred")
-	eq(scr.lines(s, sc, 1), Lab.page_lines(s, sc, 1), "изучен — карточка с именем")
+	eq(scr.lines(s, sc, c1), Lab.page_lines(s, sc, c1), "изучен — карточка с именем")
 	var before := scr.builds
 	s.restore([], [[Samples.Kind.MOSS, -1], [Samples.Kind.MOSS, -1]])
 	sc.restore([], {})
-	scr.lines(s, sc, 1)
+	scr.lines(s, sc, c1)
 	eq(scr.builds, before + 1, "из сохранения — пересчёт")
 	eq(scr.lines(s, sc, 0), Lab.page_lines(s, sc, 0), "сводка после сохранения — как без кэша")
 
@@ -195,8 +200,26 @@ func test_scene_journal_not_every_frame() -> void:   # #847: в шаге игр�
 	ok(main.lab_screen.builds - b <= changes, "за 30 кадров пересчётов %d, изменений %d" % [main.lab_screen.builds - b, changes])
 	ok(changes < 5, "изменений мало: %d" % changes)
 	main.scanner.observe("pred", "ping")
-	main.journal_page = 1
+	main.journal_page = 1 + Lab.ARCHIVE_PAGES
 	main.step(1.0 / 30.0)
 	ok(main.rooms.journal_text.text.contains("Наблюдений 1 из 7"), "экран обновился: %s" % main.rooms.journal_text.text)
 	main.queue_free()
 	await frames(1)
+
+
+func test_archive_k2() -> void:   # #825: бортовой архив — передача К-2 TXT-001 §3 на двух страницах стойки журнала
+	var p1 := Lab.archive_lines(1)
+	var p2 := Lab.archive_lines(2)
+	eq(p1[0], "АРХИВ · ПЕРЕДАЧА К-2 · 1 / 2", "заголовок первой")
+	eq(p1[1], "Передача К-2. Получено на Земле", "подпись источника")
+	eq(p2[-1], "Конец доступного фрагмента", "конец фрагмента — внизу второй")
+	var all := Array(p1) + Array(p2)
+	for t in Lab.ARCHIVE:
+		eq(all.count(t), 1, "строка передачи на экране один раз: %s" % t)
+	ok(all.find(Lab.ARCHIVE[0]) < all.find(Lab.ARCHIVE[-1]), "порядок строк")
+	for p in [p1, p2]:
+		ok(p.size() <= 8, "страница — не больше 8 строк экрана: %d" % p.size())
+		for t: String in p:
+			ok(t.length() <= 48, "строка не длиннее 48 знаков: %s" % t)
+	ok(not Lab.archive_done(1) and Lab.archive_done(2), "дочитано — на второй")
+	ok(not Lab.is_archive(0) and Lab.is_archive(1) and Lab.is_archive(2) and not Lab.is_archive(3), "архив — страницы 1…2")
