@@ -2,6 +2,11 @@
 
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
+## 2026-11-09
+- `tools/qa/issue-img.ps1` (#1379): картинка или звук в issue без Python — то же, что `tools/issue_img.py`
+  (ветка `issue-img` коммитом во временном индексе, комментарий через `gh`; без `gh` печатает текст комментария),
+  PNG больше 900 КБ — в JPEG. В `docs/QA.md`. Тест `test_qa_tools.test_issue_img_ps1_mirrors_python`.
+
 ## 2026-11-08
 - `.gitattributes` (#1379): `CHANGELOG.md merge=union` — при влитии свежего `main` в ветку строки двух PR под одной
   датой встают обе, без конфликта (локальный merge/rebase; кнопка GitHub его не читает). Тест `test_git_attrs`.
