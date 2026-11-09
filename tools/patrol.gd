@@ -8,7 +8,9 @@ extends SceneTree
 ## Печатает по каждому проходу: первый сигнал экипажу (строка мира о хищнике или реакции на него) → бросок → укус, с
 ## координатами; доли времени хищников в тихом круге и в окне угрозы перед рифом; входы в круг по режимам.
 ## Проходы: base — сразу после сброса мира (у всех 20 с паузы), late — после 30 с тихой стоянки у 00 (пауза кончилась),
-## ping — late + импульс сонара на стоянке, retreat — late, но по первому сигналу свет гаснет и корабль уходит к 00.
+## ping — late + импульс сонара на стоянке, retreat — late, но по первому сигналу свет гаснет и корабль уходит к 00,
+## stop — спокойное наблюдение без выхода из 00: 30 с без света на самой стоянке, затем свет, стоянка и путь к 01
+## (`modes=` — какие проходы считать).
 
 const SHIP_SPEED := 5.0
 const STOP := 25.0
@@ -39,13 +41,14 @@ func _init() -> void:
 		var reefs: Dictionary = QuietMap.REEF_FOR
 		for k in kv["move"].split(","):
 			move[int(k)] = reefs[int(k)]
+	var modes: PackedStringArray = kv.get("modes", "base,late,ping,retreat,stop").split(",")
 	var probes := [false] if kv.get("only", "") == "now" else [false, true]
 	var lines: Array[String] = []
 	if not move.is_empty() or kv.has("stop"):
 		lines.append("== переносы %s, стоянка %s" % [str(move), str(path[1])])
 		print(lines[0])
 	for probe in probes:
-		for mode in ["base", "late", "ping", "retreat"]:
+		for mode in modes:
 			var bites := 0
 			var charges := 0
 			var warned := 0
@@ -101,7 +104,7 @@ static func run(probe: bool, mode: String, seed_value: int) -> Dictionary:
 	var ev := make(probe, seed_value)
 	var w := ev.world
 	var ship := EcoLink.ShipState.new()
-	ship.pos = ship_at(path[0])
+	ship.pos = ship_at(path[1] if mode == "stop" else path[0])
 	var t := 0.0
 	if mode != "base":  # тихая стоянка у 00: без света и хода, пауза хищников кончается
 		ship.light_on = false
