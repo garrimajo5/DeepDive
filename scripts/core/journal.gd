@@ -46,9 +46,7 @@ const BROKEN_LINE := "Сохранение было повреждено — ж�
 const NO_HISTORY := "История посещений ещё не записана"
 const ROUTE_HINT := "Маршрут выбирайте у голостола"
 const NO_VALUE := "—"
-## Сетка видов (от R): заголовок «Виды · 1–6 из N», ячейки 280×160 шагом 300×180, «Ранее» / «Далее», номер страницы.
-const GRID_TITLE_TOP := 505.0
-const GRID_TITLE_PX := 30.0
+## Сетка видов (от R): вкладка «Виды · 1–6 из N» (`TAB`), ячейки 280×160 шагом 300×180, «Ранее» / «Далее», номер страницы.
 const GRID_AT := Vector2(0, 550)
 const CELL := Vector2(280, 160)
 const CELL_STEP := Vector2(300, 180)
@@ -63,6 +61,33 @@ const NEW_TEXT := "новое"
 const PREV := Rect2(0, 922, 240, 112)      ## от R
 const NEXT := Rect2(660, 922, 240, 112)
 const PAGE_CENTER := Vector2(450, 978)     ## от R: номер страницы «1 / 5»
+## Вкладки над сеткой (#825 ч. 2, UX #1335 п. 8): «Виды · 1–6 из N» и «Узнано · n / 8» — на месте заголовка сетки, от R.
+## «Узнано» — факты `LayerLore` без служебных (`LORE_LINES`), по 3 строки на страницу, новое сверху: значок места и
+## строка ≤ 36 знаков; неузнанное — только счётом во вкладке. Касание строки — её место на карте (`picked`).
+const TABS := ["species", "lore"]
+const TAB := [Rect2(0, 458, 440, 84), Rect2(460, 458, 440, 84)]   ## от R
+const TAB_PX := 30.0
+const LORE_PER_PAGE := 3
+const LORE_AT := Vector2(0, 550)           ## от R: первая строка «Узнано»
+const LORE_ROW := Vector2(900, 104)
+const LORE_STEP := 120.0
+const LORE_ICON := 70.0
+const LORE_PX := 32.0
+const LORE_EMPTY := "Пока ничего не узнано"
+const LORE_MAX := 36                       ## знаков в строке
+## Факт → [место (ключ `Run.PLACES` или "" — на борту), строка]. Порядок — как в `LayerLore.KEYS`; служебные отметки
+## (`INTRO`, `BRIEF`, `DOWN`, `BACK`) — не знания. Диагностика 07 — по TXT-001 §2, К-2 — по §3.
+const LORE_LINES := {
+	LayerLore.D07_RETURN: ["gate", "Обратный ход врат неисправен"],
+	LayerLore.D07_RELAY: ["gate", "Ретранслятор врат без питания"],
+	LayerLore.D07_AUTH: ["gate", "Настройки врат — по авторизации"],
+	LayerLore.K2: ["", "К-2: заряд потрачен, нужно питание"],
+	LayerLore.SHELL03: ["shell", "Раковина — часть чужого комплекса"],
+	LayerLore.FIELD08: ["field", "Граница поля зависит от размера"],
+	LayerLore.AUTH07: ["gate", "Терминал врат авторизован"],
+	LayerLore.PETAL07: ["gate", "Купольник открыл створку гнезда"],
+}
+
 ## Карточка вида 1320×715 по центру экрана: картинка слева, текст `Lab.card_lines` справа, «Закрыть».
 const CARD := Vector2(1320, 715)
 const CARD_PIC := Rect2(48, 190, 500, 230)       ## от угла карточки
@@ -86,6 +111,8 @@ var page := 0           ## страница сетки видов, с 0
 var card := ""          ## открытая карточка вида ("" — нет)
 var asked := ""         ## неизученный вид, которого коснулись: в ячейке «Изучите вид сканером»
 var blank := false      ## журнал пуст (`empty`): карты и сетки на экране нет — касания мимо них
+var tab := "species"    ## вкладка над сеткой: "species" | "lore"
+var lore: LayerLore     ## знания слоя для «Узнано» (ставит `MenuFlow.journal_show`); null — ничего не узнано
 
 
 ## Масштаб макета на экран size (по высоте).
@@ -234,6 +261,44 @@ static func page_center(size: Vector2) -> Vector2:
 	return to_screen(Rect2(PAGE_CENTER, Vector2.ZERO), size, true).position
 
 
+static func tab_rect(i: int, size: Vector2) -> Rect2:
+	return to_screen(TAB[i], size, true)
+
+
+## Узнанное в порядке «новое сверху»: ключи `LORE_LINES`.
+static func lore_facts(known: LayerLore) -> Array[String]:
+	var out: Array[String] = []
+	if known == null:
+		return out
+	for k in known.facts:
+		if LORE_LINES.has(k):
+			out.push_front(k)
+	return out
+
+
+## Подпись вкладки «Узнано · n / 8».
+static func lore_title(known: LayerLore) -> String:
+	return "Узнано · %d / %d" % [lore_facts(known).size(), LORE_LINES.size()]
+
+
+static func lore_pages(known: LayerLore) -> int:
+	return maxi(1, ceili(lore_facts(known).size() / float(LORE_PER_PAGE)))
+
+
+## Факты на странице n «Узнано».
+static func lore_page(known: LayerLore, n: int) -> Array[String]:
+	return lore_facts(known).slice(n * LORE_PER_PAGE, (n + 1) * LORE_PER_PAGE)
+
+
+static func lore_rect(i: int, size: Vector2) -> Rect2:
+	return to_screen(Rect2(LORE_AT + Vector2(0.0, LORE_STEP * i), LORE_ROW), size, true)
+
+
+## Страниц у открытой вкладки.
+func tab_pages() -> int:
+	return lore_pages(lore) if tab == "lore" else pages()
+
+
 ## Карточка по центру экрана.
 static func card_rect(size: Vector2) -> Rect2:
 	var s := scale(size)
@@ -308,9 +373,11 @@ func show() -> void:
 	page = 0
 	card = ""
 	asked = ""
+	tab = "species"
 
 
-## Что под касанием: "back", "place:<ключ>", "species:<вид>", "prev", "next", "close" или "". Открыта карточка —
+## Что под касанием: "back", "place:<ключ>", "species:<вид>", "tab:<вкладка>", "lore:<факт>", "prev", "next",
+## "close" или "". Открыта карточка —
 ## ловит только «Закрыть»; пустой журнал — только «Назад».
 func hit(p: Vector2, size: Vector2) -> String:
 	if not open:
@@ -324,10 +391,19 @@ func hit(p: Vector2, size: Vector2) -> String:
 	var k := Splash.hit_ids(p, size, Run.PLACES.keys(), place_rect)
 	if k != "":
 		return "place:" + k
-	var ids := page_ids(page)
-	for i in ids.size():
-		if cell_rect(i, size).has_point(p):
-			return "species:" + ids[i]
+	for i in TABS.size():
+		if tab_rect(i, size).has_point(p):
+			return "tab:" + TABS[i]
+	if tab == "lore":
+		var facts := lore_page(lore, page)
+		for i in facts.size():
+			if lore_rect(i, size).has_point(p):
+				return "lore:" + facts[i]
+	else:
+		var ids := page_ids(page)
+		for i in ids.size():
+			if cell_rect(i, size).has_point(p):
+				return "species:" + ids[i]
 	if prev_rect(size).has_point(p):
 		return "prev"
 	if next_rect(size).has_point(p):
@@ -349,6 +425,20 @@ func press(id: String, scanned: Dictionary = {}, e: Expedition = null) -> String
 	if id.begins_with("place:"):
 		picked = id.substr(6)
 		return "place"
+	if id.begins_with("tab:"):
+		var t := id.substr(4)
+		if t == tab or not TABS.has(t):
+			return ""
+		tab = t
+		page = 0
+		asked = ""
+		return "tab"
+	if id.begins_with("lore:"):   # строка «Узнано» — её место на карте; узнанное на борту (К-2) — без места
+		var line: Array = LORE_LINES.get(id.substr(5), ["", ""])
+		if line[0] == "":
+			return ""
+		picked = line[0]
+		return "place"
 	if id.begins_with("species:"):
 		var k := id.substr(8)
 		if scanned.has(k):
@@ -363,7 +453,7 @@ func press(id: String, scanned: Dictionary = {}, e: Expedition = null) -> String
 		page -= 1
 		asked = ""
 		return "page"
-	if id == "next" and page < pages() - 1:
+	if id == "next" and page < tab_pages() - 1:
 		page += 1
 		asked = ""
 		return "page"
@@ -379,4 +469,5 @@ func back() -> String:
 	card = ""
 	asked = ""
 	picked = ""
+	tab = "species"
 	return "back"

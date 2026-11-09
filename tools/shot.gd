@@ -123,9 +123,10 @@ extends SceneTree
 ## ekonomno=1 — предложение «Экономно» ART-044 после низких кадр/с
 ## zhurnal=1 — «Журнал экспедиции» ART-047: 1|empty|old|broken
 ## pick=05 — касание места на карте журнала
-## jpage=1 — страница сетки видов
+## jpage=1 — страница сетки видов (с jtab=lore — «Узнано»)
 ## jask=fish — касание неизученного вида («Изучите вид сканером»)
 ## jcard=fish — карточка изученного вида
+## jtab=lore — вкладка «Узнано» журнала (#825; знания — lore=…)
 ## pole=1 — поле 08 замечено, «граница» у 08 (#829)
 
 
@@ -357,6 +358,8 @@ func _go() -> void:
 		main.open_journal()
 		if kv.has("pick"):
 			main.logbook.press("place:" + str(kv["pick"]))
+		if kv.has("jtab"):   # вкладка до страниц: jpage листает её
+			main.logbook.press("tab:" + str(kv["jtab"]))
 		for i in int(kv.get("jpage", "0")):
 			main.logbook.press("next")
 		if kv.has("jask"):

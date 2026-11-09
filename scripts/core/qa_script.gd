@@ -10,7 +10,8 @@ extends RefCounted
 ##                                                     graphics — страница «Графика» ART-044, на ней g0…g2 — уровень,
 ##                                                     fps — «Показывать кадры/с»; crew — «Экипаж»,
 ##                                                     journal — «Журнал экспедиции» ART-047 (закрывает back; в нём
-##                                                     jcell0…jcell5 — ячейка вида, jprev / jnext, jclose),
+##                                                     jcell0…jcell5 — ячейка вида, jprev / jnext, jclose,
+##                                                     jtab0 / jtab1 — вкладка «Виды» / «Узнано», jlore0…2 — её строка),
 ##                                                     на экране «Войти по адресу» ART-039: join, last, клавиши
 ##                                                     key0…key9, key., keydel; brief — плашка брифинга прибытия)
 ##   {"do": "back"}                                  — системная «Назад» Android: пауза ART-037 (в паузе — закрыть)
@@ -80,7 +81,7 @@ extends RefCounted
 
 const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "ping", "pred", "ship", "floor", "outside", "fly", "route", "gone", "save", "wreck", "back", "tutorial", "brief", "cards", "voice", "slow", "hud", "play", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "map", "map_back", "hint_map", "new", "exit", "yes", "no", "crew", "journal", "settings", "graphics", "g0", "g1", "g2", "fps", "golos", "zvuk", "s0", "v_hold", "v_voice", "v_hear", "v_mic", "lite_yes", "lite_no", "ask", "brief", "join", "last", "lobby_new", "lobby_addr", "lobby_refresh",
-	"jcell0", "jcell1", "jcell2", "jcell3", "jcell4", "jcell5", "jprev", "jnext", "jclose",
+	"jcell0", "jcell1", "jcell2", "jcell3", "jcell4", "jcell5", "jprev", "jnext", "jclose", "jtab0", "jtab1", "jlore0", "jlore1", "jlore2",
 	"key0", "key1", "key2", "key3", "key4", "key5", "key6", "key7", "key8", "key9", "key.", "keydel"]
 ## Шаг «pred»: полпути серпохвоста мимо куста (м) — с запасом за PRED_R огнецвета и HIDE_R каменщиков.
 const PRED_SPAN := 30.0

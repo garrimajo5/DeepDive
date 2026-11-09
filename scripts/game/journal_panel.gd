@@ -16,7 +16,7 @@ var scanner: Scanner
 var species_total := 0
 var cargo_n := 0
 var broken := false
-var lore: LayerLore   ## знания слоя: подпись «граница» у 08 (#829)
+var lore: LayerLore   ## знания слоя: подпись «граница» у 08 (#829), вкладка «Узнано» (#825)
 var draw: Control
 var _icons := {}
 
@@ -112,8 +112,53 @@ func _fit(font: Font, text: String, rect: Rect2, top: float, px: float, color: C
 
 
 func _draw_grid(font: Font, size: Vector2, s: float, r: float) -> void:
-	UiStyle.text(draw, font, Journal.grid_title(journal.page), Vector2(r, Journal.GRID_TITLE_TOP * s),
-		Journal.GRID_TITLE_PX * s, Journal.SOFT)
+	var titles := [Journal.grid_title(journal.page if journal.tab == "species" else 0), Journal.lore_title(lore)]
+	for i in Journal.TABS.size():   # вкладки «Виды» / «Узнано» (#825 ч. 2): открытая — контур #67DDEB
+		var on: bool = journal.tab == Journal.TABS[i]
+		var t := Journal.tab_rect(i, size)
+		_box(t, s, Journal.MAIN if on else Journal.EDGE, 3.0 if on else 2.0,
+			Color(Journal.PANEL, 0.92 if on else 0.6))
+		var tpx := Journal.TAB_PX * s
+		_fit(font, titles[i], t, t.get_center().y - Splash.CAP_H * tpx * 0.5, tpx, Journal.INK if on else Journal.SOFT)
+	if journal.tab == "lore":
+		_draw_lore(font, size, s)
+	else:
+		_draw_cells(font, size, s)
+	var pages := journal.tab_pages()
+	_button(font, Journal.prev_rect(size), s, "Ранее", journal.page <= 0)
+	_button(font, Journal.next_rect(size), s, "Далее", journal.page >= pages - 1)
+	var pc := Journal.page_center(size)
+	var px := Journal.LABEL_PX * s
+	UiStyle.text(draw, font, "%d / %d" % [journal.page + 1, pages], Vector2(pc.x - 120.0 * s,
+		pc.y - Splash.CAP_H * px * 0.5), px, Journal.INK, 240.0 * s, HORIZONTAL_ALIGNMENT_CENTER)
+
+
+## «Узнано»: строка — значок места и текст; место строки выбрано на карте — контур #67DDEB.
+func _draw_lore(font: Font, size: Vector2, s: float) -> void:
+	var facts := Journal.lore_page(lore, journal.page)
+	var px := Journal.LORE_PX * s
+	if facts.is_empty():
+		var e := Journal.lore_rect(0, size)
+		UiStyle.text(draw, font, Journal.LORE_EMPTY, Vector2(e.position.x + 24.0 * s,
+			e.get_center().y - Splash.CAP_H * px * 0.5), px, Journal.SOFT)
+		return
+	for i in facts.size():
+		var line: Array = Journal.LORE_LINES[facts[i]]
+		var row := Journal.lore_rect(i, size)
+		var here: bool = line[0] != "" and journal.picked == line[0]
+		_box(row, s, Journal.MAIN if here else Journal.EDGE, 3.0 if here else 2.0)
+		var side := Journal.LORE_ICON * s
+		var icon := Rect2(row.position.x + 17.0 * s, row.get_center().y - side * 0.5, side, side)
+		var tex := _icon(Briefing.icon_path(line[0])) if line[0] != "" else null
+		if tex:
+			draw.draw_texture_rect(tex, icon, false)
+		else:   # узнанное на борту (архив К-2) — значок корабля: кольцо
+			draw.draw_arc(icon.get_center(), side * 0.3, 0.0, TAU, 32, Journal.SOFT, maxf(1.5, 3.0 * s), true)
+		UiStyle.text(draw, font, line[1], Vector2(icon.end.x + 24.0 * s, row.get_center().y - Splash.CAP_H * px * 0.5),
+			px, Journal.INK)
+
+
+func _draw_cells(font: Font, size: Vector2, s: float) -> void:
 	var scanned: Dictionary = scanner.scanned if scanner else {}
 	var ids := Journal.page_ids(journal.page)
 	for i in ids.size():
@@ -140,12 +185,6 @@ func _draw_grid(font: Font, size: Vector2, s: float, r: float) -> void:
 			UiStyle.text(draw, font, "?", Vector2(c.position.x, c.position.y + 30.0 * s), Journal.CELL_ASK_PX * s,
 				Journal.OFF, c.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 			_fit(font, Journal.CELL_OFF, c, c.end.y - 48.0 * s, Journal.CELL_NAME_PX * s, Journal.OFF)
-	_button(font, Journal.prev_rect(size), s, "Ранее", journal.page <= 0)
-	_button(font, Journal.next_rect(size), s, "Далее", journal.page >= Journal.pages() - 1)
-	var pc := Journal.page_center(size)
-	var px := Journal.LABEL_PX * s
-	UiStyle.text(draw, font, "%d / %d" % [journal.page + 1, Journal.pages()], Vector2(pc.x - 120.0 * s,
-		pc.y - Splash.CAP_H * px * 0.5), px, Journal.INK, 240.0 * s, HORIZONTAL_ALIGNMENT_CENTER)
 
 
 ## Текст с переносом по словам; at — верх глифов первой строки. Возвращает верх следующего абзаца.
