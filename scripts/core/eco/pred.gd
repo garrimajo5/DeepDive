@@ -856,6 +856,8 @@ static func _clean_text(world: EcoWorld) -> Callable:
 
 ## Каких светляков хищник не ловит: у станции чистки, в густом ленточнике (EcoKelp), в рифе гротовика (EcoGrot)
 ## и в чернилах подушечника (nearestFish пропускает nearStation, kelpShelter, grotShelter, inkAt).
+## Внутри кольца REEF_KEEP рифа у цветка — тоже: хищник туда не заходит, и бросок за рыбкой не ведёт его внутрь
+## (стая рифа (55; −69) живёт в кольце, #1400).
 func _hidden_fish() -> Callable:
 	var ink := cushions != null and cushions.any_ink()
 	var truce := ognevka != null and leeches != null and not leeches.stations.is_empty()
@@ -866,10 +868,12 @@ func _hidden_fish() -> Callable:
 		for sh in fish.shoals:
 			if sh.crown and sh.alarm > 0.0:
 				crown = true
-	if not ink and not truce and not grove and not reef and not crown:
+	var ring := _reef if _reef.is_finite() else Vector3.INF
+	if not ink and not truce and not grove and not reef and not crown and not ring.is_finite():
 		return Callable()
 	return func(f: EcoFish.Fish) -> bool:
-		return (crown and f.shoal.crown and f.shoal.alarm > 0.0) or (truce and leeches.near_station(f.agent.p) != null) or (grove and kelp.shelter(f) != null) \
+		return (ring.is_finite() and _flat_dist(f.agent.p, ring) < REEF_KEEP) \
+			or (crown and f.shoal.crown and f.shoal.alarm > 0.0) or (truce and leeches.near_station(f.agent.p) != null) or (grove and kelp.shelter(f) != null) \
 			or (reef and grot.shelter(f) != null) or (ink and _in_ink(f))
 
 

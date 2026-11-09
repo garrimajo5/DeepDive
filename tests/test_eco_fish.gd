@@ -61,6 +61,21 @@ func test_six_shoals_of_22_at_corals() -> void:
 
 
 
+## #1400: стая с прохода 00 → 01 (коралл (56; 6)) живёт у рифа (55; −69) — на 3,5 м над дном, как остальные дома.
+## Дальше 40 м от пути 00 → стоянка → 01: стая тянет хищников на путь (tools/quiet_map.gd).
+func test_shoal_home_moved_off_route() -> void:
+	var reef: Vector2 = EcoCoral.BASES[2]
+	var h := EcoFish.HOMES[4]
+	ok(Vector2(h.x, h.z).distance_to(reef) < 0.5, "стая 4 — у рифа (55; −69)")
+	near(h.y, Seabed.height(h.x, h.z) + 3.5, 0.05, "дом на 3,5 м над дном")
+	var tool: GDScript = load("res://tools/quiet_map.gd")
+	var pts: Array[Vector2] = tool.route_points()
+	var far := INF
+	for p in pts:
+		far = minf(far, Vector2(h.x, h.z).distance_to(p))
+	ok(far > 40.0, "дом стаи 4 не у пути 00 → 01: %.1f м" % far)
+
+
 ## Проба расстановки #1400: дом стаи рифа переносится до сброса мира (`EcoFish.home_at`), остальные — на месте; по
 ## умолчанию переносов нет. Расчёт тихих мест на пути 00 → 01 — tools/quiet_map.gd.
 func test_home_moves_only_for_probe() -> void:
