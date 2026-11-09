@@ -1062,11 +1062,11 @@ func test_floor_and_outside_steps() -> void:
 		+ '{"do": "outside", "on": false}, {"do": "outside", "at": 3}]')
 	eq(q.errors.size(), 0, "шаги floor и outside известны")
 	var out := q.advance(0.1)
-	eq(out, [["floor"], ["outside", true, 0.5]], "снимок — после кадра с камерой снаружи")
+	eq(out, [["floor"], ["outside", true, 0.5, false]], "снимок — после кадра с камерой снаружи")
 	var out2 := q.advance(0.1)
 	eq(out2[0], ["shot", "k"], "затем снимок")
-	eq(out2[1], ["outside", false, 1.0], "камера назад на мостик")
-	eq(out2[2], ["outside", true, 1.0], "точка облёта не дальше кормы")
+	eq(out2[1], ["outside", false, 1.0, false], "камера назад на мостик")
+	eq(out2[2], ["outside", true, 1.0, false], "точка облёта не дальше кормы")
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(2)
@@ -1081,10 +1081,38 @@ func test_floor_and_outside_steps() -> void:
 	ok(main.flyby.active() and main.flyby.still, "камера с борта стоит")
 	ok(main.flyby_cam.current, "кадр — с борта")
 	ok(main.flyby_cam.transform.origin.is_equal_approx(Flyby.START_PATH[2]), "над кормой: %s" % main.flyby_cam.transform.origin)
+	ok(main.flyby_cam.get_node_or_null(QaRunner.LAMP_NAME) == null, "без lamp — без света тестера")
 	main.start_qa('[{"do": "outside", "on": false}, {"do": "wait", "s": 0.2}]')
 	for i in 3:
 		main.step(1.0 / 30.0)
 	ok(not main.flyby.active(), "камера убрана")
 	ok(main.camera.current, "глаза на мостике")
+	main.queue_free()
+	await frames(1)
+
+
+## #1481: у 10 на 300 м корпус снаружи чёрный — шаг «outside» с "lamp" ставит у камеры с борта свет тестера, который
+## светит только отмель и корпус (слой мира, не мостик), и убирает его вместе с камерой.
+func test_outside_lamp() -> void:
+	var q := QaScript.parse('[{"do": "outside", "at": 1.0, "lamp": true}]')
+	eq(q.advance(0.1)[0], ["outside", true, 1.0, true], "lamp разобран")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.helm.ground = func(_x: float, _z: float) -> float: return -400.0
+	main.start_qa('[{"do": "ship", "x": 50, "y": -300, "z": 20, "yaw": 0}, {"do": "outside", "at": 1.0, "lamp": true}, ' \
+		+ '{"do": "wait", "s": 1.0}]')
+	for i in 10:
+		main.step(1.0 / 30.0)
+	var lamp := main.flyby_cam.get_node_or_null(QaRunner.LAMP_NAME) as OmniLight3D
+	ok(lamp != null, "у камеры с борта — свет тестера")
+	if lamp:
+		eq(lamp.light_cull_mask, OceanView.LAYER_WORLD, "светит корпус и дно, не мостик")
+		ok(lamp.omni_range >= 60.0, "дотягивается от камеры над кормой до носа и грунта: %.0f м" % lamp.omni_range)
+	main.start_qa('[{"do": "outside", "on": false}, {"do": "wait", "s": 0.2}]')
+	for i in 3:
+		main.step(1.0 / 30.0)
+	await frames(1)
+	ok(main.flyby_cam.get_node_or_null(QaRunner.LAMP_NAME) == null, "камера убрана — света нет")
 	main.queue_free()
 	await frames(1)
