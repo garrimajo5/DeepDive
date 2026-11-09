@@ -43,6 +43,7 @@ func open_menu() -> void:
 
 ## Шаг под меню: касания кнопок. «Погрузиться» — забег с начала (облёт, часы забега), палец с кнопки не идёт в игру.
 func menu_step(dt: float = 0.0) -> void:
+	dive_ahead()
 	var r := main.overlay.router
 	if main.settings.open:
 		settings_step(r)
@@ -83,6 +84,19 @@ func menu_step(dt: float = 0.0) -> void:
 			open_settings()
 			break
 	r.end_frame()
+
+
+## Под меню — заранее то, что первый кадр «Погрузиться» иначе считал бы разом (#1529, «виды/корабль и камера»
+## 52 мс у 30-kartochka-sonar): клетки камней, ракушек и кочек у начала спуска — по кадрам меню, затем списки
+## россыпей там же (один кадр меню, не кадр облёта), и LUT цветокоррекции на глубине камеры первого кадра — первая
+## точка облёта (`Flyby.START_PATH`) или глаза на мостике. Фон меню непрозрачный — подмены не видно; корабль стоит —
+## дальше шаг даром.
+func dive_ahead() -> void:
+	if main.ocean.ahead(main.helm.pos):
+		main.ocean.set_ship(main.helm.pos, main.helm.yaw)
+	var fly := Main.intro and main.settings.intro   # как в `Main._begin_run`
+	var y: float = Flyby.START_PATH[0].y if fly else main.pilot.eye(main.walker).y
+	main.grade.apply(-(main.helm.pos.y + y), main.silt.k)
 
 
 func close_menu() -> void:
