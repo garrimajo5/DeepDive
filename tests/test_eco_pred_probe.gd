@@ -86,3 +86,80 @@ func test_patrol_tool_arrive() -> void:
 	ok(text.contains("у 01 с "), "корабль дошёл до 01: %s" % text)
 	ok(text.contains("№0") and text.contains("№1") and text.contains("№2"), "все три хищника в итоге: %s" % text)
 	ok(int(r["by"]) >= 0 and int(r["by"]) < 3, "номер бросившегося")
+
+
+# ---------- Проба #1498: фаза «замер» перед броском ----------
+
+## Голодный хищник №0 готов напасть, корабль со светом — в 25 м по +X; фаза «замер» — alert с.
+func _alerted(alert: float) -> Array:
+	var r := _world(false)
+	var w: EcoWorld = r[0]
+	var ps: EcoPred = r[1]
+	ps.alert = alert
+	var pr := ps.all[0]
+	pr.hunger = 0.5
+	pr.cooldown = 0.0
+	w.ship.pos = pr.agent.p + Vector3(25, 0, 0)
+	w.ship.light_on = true
+	return [w, pr]
+
+
+func _has_note(w: EcoWorld, note: String) -> bool:
+	for ev in w.bus.pending:
+		if ev.species == EcoPred.ID and ev.note == note:
+			return true
+	return false
+
+
+func test_alert_off_charges_at_once() -> void:
+	var r := _alerted(0.0)
+	(r[0] as EcoWorld).step(EcoWorld.MAX_STEP)
+	eq((r[1] as EcoPred.Pred).mode, EcoPred.Mode.CHARGE, "без пробы — бросок сразу, как в игре")
+
+
+func test_alert_then_charge_if_light_stays() -> void:
+	var r := _alerted(2.0)
+	var w: EcoWorld = r[0]
+	var pr: EcoPred.Pred = r[1]
+	w.step(EcoWorld.MAX_STEP)
+	eq(pr.mode, EcoPred.Mode.ALERT, "сначала замер")
+	ok(_has_note(w, "alert"), "строка экипажу «замер и смотрит»")
+	var d0 := pr.agent.distance_to(w.ship.pos)
+	for i in 30:   # ~1 с
+		w.step(EcoWorld.MAX_STEP)
+	eq(pr.mode, EcoPred.Mode.ALERT, "замер держится до конца фазы")
+	ok(d0 - pr.agent.distance_to(w.ship.pos) < 2.5, "в замере почти не подходит")
+	for i in 45:
+		w.step(EcoWorld.MAX_STEP)
+	eq(pr.mode, EcoPred.Mode.CHARGE, "свет так и горит — бросок")
+
+
+func test_alert_cancels_when_light_goes_out() -> void:
+	var r := _alerted(2.0)
+	var w: EcoWorld = r[0]
+	var pr: EcoPred.Pred = r[1]
+	w.step(EcoWorld.MAX_STEP)
+	eq(pr.mode, EcoPred.Mode.ALERT)
+	w.ship.light_on = false   # экипаж погасил свет, корабль стоит — не шумит
+	w.step(EcoWorld.MAX_STEP)
+	eq(pr.mode, EcoPred.Mode.PATROL, "манящее пропало — отворачивает")
+	ok(pr.cooldown >= EcoPred.ALERT_LOSE_CD - 0.1, "пауза перед новым замером")
+	ok(_has_note(w, "lost"), "строка «потерял корабль»")
+	for i in 150:   # 5 с: свет снова горит, но пауза ещё идёт
+		if i == 30:
+			w.ship.light_on = true
+		w.step(EcoWorld.MAX_STEP)
+		ok(pr.mode != EcoPred.Mode.CHARGE, "в паузе не бросается")
+
+
+## tools/patrol.gd с ответом экипажа и замером (#1498): по сигналу свет гаснет, итог с промежутками и лучом.
+func test_patrol_tool_answer() -> void:
+	var tool: GDScript = load("res://tools/patrol.gd")
+	tool.set("answer", "signal")
+	tool.set("alert", 2.5)
+	var r: Dictionary = tool.run(false, "late", 20261018)
+	tool.set("answer", "")
+	tool.set("alert", 0.0)
+	ok(r.has("wc") and r.has("cb") and r.has("beam_before"), "итог с промежутками и лучом")
+	var text := String(r["text"])
+	ok(text.contains("ответ ") or text == "тихо", "по сигналу — ответ экипажа: %s" % text)
