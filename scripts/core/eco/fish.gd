@@ -39,7 +39,8 @@ const FLOOR_BRAKE := 10.0
 const FLOOR_LIFT := 20.0
 const FLOOR_LOOK := 0.6
 const FLOOR_NEAR := 0.25
-## Нос рыбки `Fish.look` догоняет скорость долей угла LOOK_K в секунду, не быстрее LOOK_MAX рад/с (`turn`, Б3):
+## Нос рыбки `Fish.look` догоняет скорость долей угла LOOK_K в секунду, не быстрее LOOK_MAX рад/с (`turn`, Б3;
+## тангаж — не круче `PITCH_MAX`):
 ## в рывке от хищника и у дома тело разворачивается за доли секунды, а не щёлкает за кадр.
 const LOOK_K := 10.0
 const LOOK_MAX := 8.0
@@ -353,20 +354,43 @@ static func cage_goal(sh: Shoal, rnd: EcoRandom, ground: Callable) -> Vector3:
 	return g
 
 
-## Нос from доворачивает к курсу move долей угла LOOK_K/с, не быстрее LOOK_MAX рад/с; навстречу — через верх.
+## Нос from доворачивает к курсу move долей угла LOOK_K/с, не быстрее LOOK_MAX рад/с — по курсу (вокруг вертикали) и по
+## тангажу порознь; тангаж носа — не круче PITCH_MAX, навстречу — разворот по горизонтали. Раньше нос шёл к скорости
+## по дуге большого круга: рыбка, что всплывала или ныряла почти отвесно, или разворот «через верх» проводили нос через
+## вертикаль, и бок тела (вверх × нос, `EcoFishLook.basis`) переворачивался на 180° за кадр (tools/jerk.gd place=01:
+## 36 переворотов за 20 с ближе 50 м, до 3 рад за кадр).
 static func turn(from: Vector3, move: Vector3, dt: float) -> Vector3:
 	if move.length_squared() < 1e-10:
 		return from
 	var want := move.normalized()
+	var flat := Vector2(want.x, want.z)
+	var pw := clampf(asin(clampf(want.y, -1.0, 1.0)), -PITCH_MAX, PITCH_MAX)
 	if from.length_squared() < 1e-8:
-		return want
-	var ang := from.angle_to(want)
+		var yw := atan2(flat.x, flat.y) if flat.length_squared() > 1e-8 else 0.0
+		return _nose(yw, pw)
+	var f := from.normalized()
+	var yf := atan2(f.x, f.z)
+	var pf := clampf(asin(clampf(f.y, -1.0, 1.0)), -PITCH_MAX, PITCH_MAX)
+	var yw := atan2(flat.x, flat.y) if flat.length_squared() > FLAT_MIN * FLAT_MIN else yf   # отвесно — курс держит
+	var dy := wrapf(yw - yf, -PI, PI)
+	var dp := pw - pf
+	var ang := sqrt(dy * dy + dp * dp)   # поворот тела: курс — вокруг вертикали на dy при любом тангаже
 	if ang < 1e-4:
-		return want
-	var axis := from.cross(want)
-	if axis.length_squared() < 1e-10:
-		axis = Vector3.UP if absf(from.y) < 0.9 else Vector3.RIGHT
-	return from.rotated(axis.normalized(), minf(ang * minf(1.0, LOOK_K * dt), LOOK_MAX * dt)).normalized()
+		return _nose(yf + dy, pw)
+	var k := minf(ang * minf(1.0, LOOK_K * dt), LOOK_MAX * dt) / ang
+	return _nose(yf + dy * k, pf + dp * k)
+
+
+## Тангаж носа рыбки — не круче этого, рад: всплывая и ныряя отвесно, тело идёт под углом, а не встаёт столбом.
+const PITCH_MAX := deg_to_rad(50.0)
+## Доля хода по горизонтали, меньше которой курс носа не меняется (скорость почти отвесная — курс по ней не понять).
+const FLAT_MIN := 0.05
+
+
+## Единичный нос по курсу yaw (0 — к +z) и тангажу pitch.
+static func _nose(yaw: float, pitch: float) -> Vector3:
+	var cp := cos(pitch)
+	return Vector3(sin(yaw) * cp, sin(pitch), cos(yaw) * cp)
 
 
 ## Съесть рыбку: пропадает на 25–40 с, потом появляется у дома стаи.

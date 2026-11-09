@@ -632,6 +632,30 @@ func test_young_hide_between_ribs() -> void:
 	pred.alive = false
 
 
+## Б3, tools/jerk.gd place=01: рыбка всплывает почти отвесно, ход по горизонтали мал и меняет знак — нос не проходит
+## через вертикаль, бок тела не переворачивается за кадр (раньше — до 3 рад за кадр), тангаж не круче PITCH_MAX.
+func test_steep_swim_keeps_side() -> void:
+	var dt := 1.0 / 30.0
+	var look := Vector3.ZERO
+	var side := Vector3.ZERO
+	var worst := 0.0
+	var steep := 0.0
+	for i in 300:
+		var sway := 0.12 * (1.0 if (i / 7) % 2 == 0 else -1.0)   # ход вбок дёргается туда-сюда
+		var v := Vector3(sway, 0.5 if i < 150 else -0.5, 0.03 * sin(i * 0.3))
+		look = EcoFish.turn(look, v, dt)
+		near(look.length(), 1.0, 1e-5, "нос единичный")
+		steep = maxf(steep, absf(asin(clampf(look.y, -1.0, 1.0))))
+		var s := Vector3(look.z, 0.0, -look.x).normalized()
+		if side != Vector3.ZERO:
+			worst = maxf(worst, side.angle_to(s))
+		side = s
+	ok(steep <= EcoFish.PITCH_MAX + 1e-4, "тангаж носа не круче PITCH_MAX: %.2f" % steep)
+	ok(worst <= EcoFish.LOOK_MAX * dt + 1e-3, "бок за кадр — не больше LOOK_MAX · dt: %.3f рад" % worst)
+	look = EcoFish.turn(Vector3(0, 0, 1), Vector3(0, 2, 0), dt)
+	ok(Vector2(look.x, look.z).length() > 0.5 and look.z > 0.0, "отвесно вверх — курс прежний, нос поднимается")
+
+
 ## Б3: нос `Fish.look` догоняет скорость — рывок от хищника разворачивает тело за доли секунды, а не за кадр.
 func test_nose_turns_smoothly() -> void:
 	var dt := 1.0 / 30.0
