@@ -101,7 +101,7 @@ func _alerted(alert: float) -> Array:
 	pr.cooldown = 0.0
 	w.ship.pos = pr.agent.p + Vector3(25, 0, 0)
 	w.ship.light_on = true
-	return [w, pr]
+	return [w, pr, ps]
 
 
 func _has_note(w: EcoWorld, note: String) -> bool:
@@ -150,6 +150,28 @@ func test_alert_cancels_when_light_goes_out() -> void:
 			w.ship.light_on = true
 		w.step(EcoWorld.MAX_STEP)
 		ok(pr.mode != EcoPred.Mode.CHARGE, "в паузе не бросается")
+
+
+## Отход после «потерял корабль» (#1498, `alert_leave`): уходит прочь, а не кружит рядом, и не бросается в отходе.
+func test_alert_lost_then_leaves() -> void:
+	var r := _alerted(2.0)
+	var w: EcoWorld = r[0]
+	var pr: EcoPred.Pred = r[1]
+	(r[2] as EcoPred).alert_leave = 20.0
+	w.step(EcoWorld.MAX_STEP)
+	eq(pr.mode, EcoPred.Mode.ALERT)
+	w.ship.light_on = false
+	w.step(EcoWorld.MAX_STEP)
+	eq(pr.mode, EcoPred.Mode.RETREAT, "потерял — отходит")
+	ok(_has_note(w, "lost"), "строка «потерял корабль»")
+	ok(pr.cooldown >= 20.0 + EcoPred.ALERT_LOSE_CD - 0.1, "пауза на весь отход и после")
+	var d0 := pr.agent.distance_to(w.ship.pos)
+	for i in 300:   # 10 с: свет снова горит с 1 с, но хищник уходит
+		if i == 30:
+			w.ship.light_on = true
+		w.step(EcoWorld.MAX_STEP)
+		ok(pr.mode != EcoPred.Mode.CHARGE and pr.mode != EcoPred.Mode.ALERT, "в отходе не замирает и не бросается")
+	ok(pr.agent.distance_to(w.ship.pos) > d0 + 15.0, "ушёл прочь: %.0f → %.0f м" % [d0, pr.agent.distance_to(w.ship.pos)])
 
 
 ## tools/patrol.gd с ответом экипажа и замером (#1498): по сигналу свет гаснет, итог с промежутками и лучом.
