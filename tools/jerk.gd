@@ -7,18 +7,23 @@ extends SceneTree
 ##   xvfb-run -a godot --path . --rendering-method gl_compatibility --rendering-driver opengl3 --resolution 320x240 \
 ##     -s tools/jerk.gd -- …
 ## Облачный headless-расчёт, не телефонный. Код игры не меняет.
-##   ключи: seed=<n> warm=<с> run=<с> top=<n> scena=1,2,3
+##   ключи: seed=<n> warm=<с> run=<с> top=<n> scena=1,2,3 | place=07,03,06,10
+##   place=NN,… — вместо ракурсов сцены: корабль у мест слоя 1 по позе `ShotSetup.place_pose` (как `shot.gd place=`).
 ## Порядок экземпляров в буфере у некоторых видов меняется (ближние к кораблю, LOD): скачок «через полкарты» —
 ## перестановка, а не рывок; такие (сдвиг за кадр больше JUMP) печатаются отдельно числом.
 
+const ShotSetup := preload("res://tools/shot_setup.gd")
 const DT := 1.0 / 30.0
 const STRIDE := 3                ## отсчёты через 0,1 с — дрожь сетки в кадр не считаем
 const FLOOR := 7.0
 const JUMP := 5.0                ## сдвиг за кадр больше — перестановка в буфере, не движение
-const NEAR := 120.0              ## дальше от корабля не смотрим — в кадре пилота не различить
+const NEAR := 120.0              ## дальше от корабля не смотрим — в кадре пилота не различить (ключ near=<м>)
+## Дальше EcoFish.MID (50 м) виды переписываются раз в 2–3 кадра (LOD, #133): сдвиг за кадр там — шаг LOD,
+## а не рывок; такие строки помечены «LOD». Только ближние — near=50.
 
 
 var _done := false
+var _near := NEAR
 
 
 func _process(_delta: float) -> bool:
@@ -37,17 +42,27 @@ func _run() -> void:
 	var warm := float(kv.get("warm", "10"))
 	var run := float(kv.get("run", "20"))
 	var top := int(kv.get("top", "12"))
+	_near = float(kv.get("near", str(NEAR)))
 	var pts: Array[Vector2] = [Vector2(4.0, 80.0), Vector2(20.0, 22.5), Vector2(33.0, -22.0)]
-	var which: Array = []
-	for s in String(kv.get("scena", "1,2,3")).split(","):
-		which.append(int(s))
+	var poses: Array = []   # [подпись, корабль (x, z), цель (x, z)]
+	if kv.has("place"):
+		for id in String(kv["place"]).split(","):
+			var pose := ShotSetup.place_pose(id)
+			if pose.is_empty():
+				push_error("нет места %s" % id)
+				continue
+			var sp: Vector3 = pose["ship"]
+			poses.append(["place=" + id, Vector2(sp.x, sp.z), LayerMap.xz(id if LayerMap.POINTS.has(id) else LayerMap.id_of(id))])
+	else:
+		for s in String(kv.get("scena", "1,2,3")).split(","):
+			poses.append(["scena=" + s, pts[int(s) - 1], LayerMap.xz("01")])
 	var ev := EcoView.new()
 	ev.ground = Seabed.mesh_height
 	root.add_child(ev)
 	ev.world.reset(int(kv.get("seed", "20261018")))
-	var goal := LayerMap.xz("01")
-	for n in which:
-		var at: Vector2 = pts[n - 1]
+	for pz: Array in poses:
+		var at: Vector2 = pz[1]
+		var goal: Vector2 = pz[2]
 		var ship := EcoLink.ShipState.new()
 		ship.pos = Vector3(at.x, Seabed.mesh_height(at.x, at.y) + FLOOR, at.y)
 		var to := goal - at
@@ -63,8 +78,8 @@ func _run() -> void:
 		for f in frames:
 			ev.step(DT, ship)
 			_sample(ev, ship.pos, f, hist, worst, swaps)
-		print("\nscena=%d: корабль (%.0f, %.0f, %.0f), мир %.0f с после %.0f с, отсчёты через %d кадров" % [
-				n, ship.pos.x, ship.pos.y, ship.pos.z, run, warm, STRIDE])
+		print("\n%s: корабль (%.0f, %.0f, %.0f), мир %.0f с после %.0f с, отсчёты через %d кадров" % [
+				pz[0], ship.pos.x, ship.pos.y, ship.pos.z, run, warm, STRIDE])
 		_report(worst, swaps, top)
 	ev.free()
 
@@ -104,7 +119,8 @@ func _sample(ev: Node, ship: Vector3, f: int, hist: Dictionary, worst: Array, sw
 			var t0: Transform3D = a0[i]
 			var t1: Transform3D = a1[i]
 			var t2: Transform3D = a2[i]
-			if t2.origin.distance_to(ship) > NEAR or t2.basis.get_scale().length() < 1e-3 or t0.basis.get_scale().length() < 1e-3:
+			if t2.origin.distance_to(ship) > _near or t2.basis.get_scale().length() < 1e-3 or t0.basis.get_scale().length() < 1e-3 \
+					or t1.basis.get_scale().length() < 1e-3:
 				continue
 			var hop := t2.origin.distance_to((prev[i] as Transform3D).origin)
 			if hop > JUMP:
@@ -115,7 +131,7 @@ func _sample(ev: Node, ship: Vector3, f: int, hist: Dictionary, worst: Array, sw
 			var w1 := _omega(t0.basis, t1.basis) / k
 			var w2 := _omega(t1.basis, t2.basis) / k
 			var alpha := (w2 - w1).length() / k
-			worst.append([key, i, f, acc, alpha, t2.origin, hop])
+			worst.append([key, i, f, acc, alpha, t2.origin, hop, t2.origin.distance_to(ship)])
 
 
 ## Поворот от a к b — вектор оси × угол, рад.
@@ -142,6 +158,7 @@ func _report(worst: Array, swaps: Dictionary, top: int) -> void:
 		print("  худшие по %s:" % {3: "ускорению точки, м/с²", 4: "угловому ускорению, рад/с²", 6: "сдвигу за кадр, м"}[col])
 		for r in rows.slice(0, top):
 			var p: Vector3 = r[5]
-			print("    %8.2f  %s #%d, кадр %d, у (%.0f, %.0f, %.0f)" % [r[col], r[0], r[1], r[2], p.x, p.y, p.z])
+			print("    %8.2f  %s #%d, кадр %d, у (%.0f, %.0f, %.0f), %.0f м от корабля%s" % [r[col], r[0], r[1], r[2],
+					p.x, p.y, p.z, r[7], " — LOD" if r[7] > EcoFish.MID else ""])
 	if not swaps.is_empty():
 		print("  перестановки в буфере (сдвиг > %.0f м за кадр): %s" % [JUMP, str(swaps)])
