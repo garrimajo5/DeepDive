@@ -74,17 +74,39 @@ func test_two_apks_phone_and_emulator() -> void:
 ## и записал прогон под новым коммитом. Теперь старый файл удаляется до скачивания, ошибка — выход до установки.
 func test_run_qa_stops_when_download_fails() -> void:
 	var ps := FileAccess.get_file_as_bytes(DIR.path_join("run-qa.ps1")).slice(3).get_string_from_utf8()
-	var dl := ps.find("Invoke-WebRequest $asset")
+	var dl := ps.find("Get-Asset $asset.browser_download_url $apk")
 	ok(dl > 0, "скачивание APK из релиза есть")
 	var rm := ps.rfind("Remove-Item $apk", dl)
 	ok(rm > 0 and rm < dl, "старый APK удаляется до скачивания")
-	var line_end := ps.find("\n", dl)
-	ok(ps.substr(dl, line_end - dl).contains("-ErrorAction Stop"), "ошибка скачивания ловится")
+	ok(ps.contains("Invoke-WebRequest $url -OutFile $path -Headers @{ 'User-Agent' = 'run-qa' } -ErrorAction Stop"),
+		"ошибка скачивания ловится")
 	var fail := ps.find("DOWNLOAD_FAILED", dl)
 	var inst := ps.find("adb install")
 	ok(fail > 0 and fail < inst, "при ошибке — выход до установки")
 	ok(ps.find("exit 1", fail) < inst, "выход с кодом 1")
 	ok(ps.find("last-commit.txt\" $head") > inst, "коммит записывается только после установки")
+
+
+## #1504: APK эмулятора приходил обрезанным (110 МиБ из 114), а скрипт сверял только «не меньше 1 МБ» —
+## установка падала INSTALL_PARSE_FAILED_NOT_APK. Теперь длина сверяется с размером в релизе, обрыв — докачка
+## и до трёх попыток; так же качается APK телефона (-Phone).
+func test_run_qa_checks_apk_size() -> void:
+	var ps := FileAccess.get_file_as_bytes(DIR.path_join("run-qa.ps1")).slice(3).get_string_from_utf8()
+	ok(not ps.contains("-lt 1MB"), "проверки «не меньше 1 МБ» больше нет")
+	var fn := ps.find("function Get-Asset")
+	ok(fn > 0, "скачивание со сверкой — одна функция")
+	var body := ps.substr(fn, ps.find("\n}\n", fn) - fn)
+	ok(body.contains("for ($try = 1; $try -le 3; $try++)"), "до трёх попыток")
+	ok(body.contains("if ($got -eq $size) { return '' }"), "успех — только при длине, равной размеру в релизе")
+	ok(body.contains("-C -"), "обрыв — докачка с места обрыва")
+	ok(not body.contains("Write-Output"), "попытки не смешиваются с ответом функции")
+	var emu := ps.find("Get-Asset $asset.browser_download_url $apk $asset.size")
+	ok(emu > fn, "APK эмулятора качается со сверкой длины")
+	var phone := ps.find("Get-Asset $asset.browser_download_url $file $asset.size")
+	ok(phone > fn and ps.rfind("name -eq 'DeepDive.apk'", phone) > fn, "APK телефона — тоже")
+	ok(ps.contains("[switch]$Phone"), "ключ -Phone")
+	var fail := ps.find("DOWNLOAD_FAILED", emu)
+	ok(fail > emu and fail < ps.find("adb install"), "расхождение — выход до установки")
 
 
 ## #1393: проба сценария тестера на эмуляторе в Actions — те же шаги, что run-qa.ps1: x86_64-сборка, пакет игры,
