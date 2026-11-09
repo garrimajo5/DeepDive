@@ -14,6 +14,10 @@ var zap_cards: MeshInstance3D   ## дуги у окна и у дна ART-068 (Za
 var _cards_lite := false
 var _cards_contact := Vector3.INF
 var _rim_lite := false   ## «Экономно» ART-044: ободок ART-076 слабее, без примыканий
+var lights: MultiMeshInstance3D   ## огни корпуса ART-070 (HullLights): шесть карточек одним вызовом, изнутри скрыты
+var _lights_lite := false
+var light_cards: Array[Transform3D] = []   ## последние карточки огней (оси корабля) — то же, что в MultiMesh
+var light_alpha := PackedFloat32Array()
 
 
 func _ready() -> void:
@@ -27,6 +31,7 @@ func _ready() -> void:
 	_setup(body)
 	add_child(body)
 	_make_zap_cards()
+	_make_lights()
 	for part in HullPlan.parts():
 		if not HullMesh.drawn(part) or not HullMesh.moving(part):
 			continue
@@ -67,6 +72,60 @@ func _make_zap_cards() -> void:
 	zap_cards.extra_cull_margin = 4.0   # дуга у окна сдвигается в шейдере
 	zap_cards.visible = false
 	add_child(zap_cards)
+
+
+## Огни ART-070: квадраты 1 × 1 м, цвет экземпляра — альбедо, альфа — ореол × яркость; материал без света, лицом
+## к камере с сохранением масштаба (как в пробе художника, `capture-v4.gd` в PR #494).
+func _make_lights() -> void:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	var quad := QuadMesh.new()
+	quad.size = Vector2.ONE
+	mm.mesh = quad
+	mm.instance_count = HullLights.count()
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	m.billboard_keep_scale = true
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.vertex_color_use_as_albedo = true
+	m.albedo_texture = load(HullLights.HALO_TEX)
+	for i in HullLights.count():
+		mm.set_instance_transform(i, HullLights.card(i, Vector3(0.0, 1.6, 55.0), false))
+		mm.set_instance_color(i, HullLights.COLORS[i])
+	lights = MultiMeshInstance3D.new()
+	lights.name = "Огни корпуса"
+	lights.multimesh = mm
+	lights.material_override = m
+	lights.layers = OceanView.LAYER_WORLD
+	lights.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	lights.extra_cull_margin = 2.0   # карточки растут с дистанцией
+	add_child(lights)
+
+
+## Огни ART-070 по активной камере cam (оси корабля): место и размер, яркость — HullLights.alpha. Камера внутри
+## корпуса или всё погасло — узел скрыт (0 вызовов).
+func set_lights(cam: Vector3, t: float, energy: float, lamp_k: float, wreck_t: float) -> void:
+	if lights == null:
+		return
+	var on := HullLights.shown(cam)
+	var mm := lights.multimesh
+	var lit := false
+	if on:
+		light_cards.resize(HullLights.count())
+		light_alpha.resize(HullLights.count())
+		for i in HullLights.count():
+			var a := HullLights.alpha(i, t, energy, lamp_k, wreck_t, _lights_lite)
+			lit = lit or a > 0.0
+			var c := HullLights.COLORS[i]
+			c.a = a
+			light_cards[i] = HullLights.card(i, cam, _lights_lite)
+			light_alpha[i] = a
+			mm.set_instance_transform(i, light_cards[i])
+			mm.set_instance_color(i, c)
+	lights.visible = on and lit
 
 
 func _cards_mesh(contact: Vector3) -> void:
@@ -162,6 +221,7 @@ func set_relief(on: bool) -> void:
 		m.set_shader_parameter("ao_contacts", on)    # и щели ART-076 только по шву
 	_rim_lite = not on   # и ободок ART-076 слабее
 	_cards_lite = not on   # и без карточек у окна и дна
+	_lights_lite = not on   # и огни ART-070: ореолы меньше, маяк ровный
 
 
 ## Разряд ART-068 по обшивке: t — время с начала разряда (Zap.arc_time), −1 — нет.
