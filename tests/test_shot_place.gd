@@ -79,6 +79,21 @@ func test_scena_ride_sources() -> void:   # высота хода scena=: пла
 	ok(String(hand["src"]).contains("scena_y=-30.5"), "источник — руками")
 
 
+func test_scena_back_same_path() -> void:   # scena_back=<м> — раньше по тому же пути, высота — плавный ход (#1400)
+	const Box := preload("res://tools/pass_box.gd")
+	const Plan := preload("res://tools/pass_plan.gd")
+	var at := ShotSetup.scena_at(3, 15.0)
+	var s := Plan.arc_at(2) - 15.0
+	ok(at.is_equal_approx(Plan.along(s)["at"]), "точка на пути, на 15 м раньше 03")
+	near(at.distance_to(ShotSetup.SCENA[2]), 15.0, 1e-3, "15 м по прямому отрезку")
+	ok(ShotSetup.scena_at(3).is_equal_approx(ShotSetup.SCENA[2]), "без scena_back — прежняя точка")
+	ok(ShotSetup.scena_at(1, 50.0).is_equal_approx(ShotSetup.SCENA[0]), "не раньше начала у 00")
+	near(ShotSetup.scena_ride(3, "", 15.0)["y"], Box.smooth_at(s), 1e-4, "высота — плавный ход в новой точке")
+	var p: Dictionary = ShotSetup.scena_pose(3, 15.0)
+	var to := LayerMap.xz("01") - at
+	near(Vector2(-sin(p["yaw"]), -cos(p["yaw"])).dot(to.normalized()), 1.0, 1e-4, "нос к 01")
+
+
 func test_scene_scena_at_helm() -> void:
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
@@ -109,6 +124,22 @@ func test_scene_scena_motion_holds_ship() -> void:   # scena_t=<с> — мир �
 	ok(ShotSetup.scena_line(main).contains("scena_y=dno"), "в подписи — источник dno")
 	near(main.helm.yaw, p["yaw"] - deg_to_rad(20.0), 1e-3, "курс правее на 20°")
 	ok(main.pilot.seated, "за штурвалом")
+	main.queue_free()
+	await frames(1)
+
+
+func test_scene_zamer_trace_logs_changes() -> void:   # смены режима хищника и строк приборов — в лог (#1400)
+	var main: Node = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	ShotSetup.apply(main, {"scena": "2", "zamer": "nos"})
+	var was := {"mode": -1, "parts": []}
+	var first := ShotSetup.zamer_trace(main, was, 0.5)
+	ok(first.any(func(l: String) -> bool: return l.contains("хищник №0")), "первый шаг — режим хищника: %s" % [first])
+	ok(ShotSetup.zamer_trace(main, was, 0.6).is_empty(), "без смены — пусто")
+	was["parts"] = ["старая строка приборов"]
+	var gone := ShotSetup.zamer_trace(main, was, 0.7)
+	ok(gone.has("zamer: 0,7 с — ушла «старая строка приборов»"), "ушедшая строка — в лог: %s" % [gone])
 	main.queue_free()
 	await frames(1)
 
