@@ -9,6 +9,9 @@ extends SceneTree
 ## Облачный headless-расчёт, не телефонный. Код игры не меняет.
 ##   ключи: seed=<n> warm=<с> run=<с> top=<n> scena=1,2,3 | place=07,03,06,10
 ##   place=NN,… — вместо ракурсов сцены: корабль у мест слоя 1 по позе `ShotSetup.place_pose` (как `shot.gd place=`).
+##   move=<м/с> — корабль не стоит, а идёт носом к цели с этой скоростью (полный ход — `Helm.Ship.FORWARD` = 3) на
+##   FLOOR над видимым дном, с шумом хода как в игре (скорость / 6,7); за MOVE_STOP м до цели встаёт. Так видны
+##   реакции живого мира на подход корабля (испуг стай, уход с курса), которых у стоящего нет.
 ## Порядок экземпляров в буфере у некоторых видов меняется (ближние к кораблю, LOD): скачок «через полкарты» —
 ## перестановка, а не рывок; такие (сдвиг за кадр больше JUMP) печатаются отдельно числом.
 
@@ -17,6 +20,7 @@ const DT := 1.0 / 30.0
 const STRIDE := 3                ## отсчёты через 0,1 с — дрожь сетки в кадр не считаем
 const FLOOR := 7.0
 const JUMP := 5.0                ## сдвиг за кадр больше — перестановка в буфере, не движение
+const MOVE_STOP := 15.0         ## move=: ближе к цели корабль встаёт
 const NEAR := 120.0              ## дальше от корабля не смотрим — в кадре пилота не различить (ключ near=<м>)
 ## Дальше EcoFish.MID (50 м) виды переписываются раз в 2–3 кадра (LOD, #133): сдвиг за кадр там — шаг LOD,
 ## а не рывок; такие строки помечены «LOD». Только ближние — near=50.
@@ -43,6 +47,7 @@ func _run() -> void:
 	var run := float(kv.get("run", "20"))
 	var top := int(kv.get("top", "12"))
 	_near = float(kv.get("near", str(NEAR)))
+	var move := float(kv.get("move", "0"))
 	var pts: Array[Vector2] = [Vector2(4.0, 80.0), Vector2(20.0, 22.5), Vector2(33.0, -22.0)]
 	var poses: Array = []   # [подпись, корабль (x, z), цель (x, z)]
 	if kv.has("place"):
@@ -70,18 +75,39 @@ func _run() -> void:
 		ship.light_on = true
 		ship.light_range = 60.0
 		for i in int(warm / DT):
+			_drive(ship, goal, move)
 			ev.step(DT, ship)
 		var hist := {}    # путь узла → [кадры: PackedVector3Array позиций, Array[Basis]]
 		var worst := []
 		var swaps := {}
 		var frames := int(run / DT)
 		for f in frames:
+			_drive(ship, goal, move)
 			ev.step(DT, ship)
 			_sample(ev, ship.pos, f, hist, worst, swaps)
-		print("\n%s: корабль (%.0f, %.0f, %.0f), мир %.0f с после %.0f с, отсчёты через %d кадров" % [
-				pz[0], ship.pos.x, ship.pos.y, ship.pos.z, run, warm, STRIDE])
+		print("\n%s: корабль (%.0f, %.0f, %.0f)%s, мир %.0f с после %.0f с, отсчёты через %d кадров" % [
+				pz[0], ship.pos.x, ship.pos.y, ship.pos.z, (" к концу, ход %.1f м/с от (%.0f, %.0f)" % [move, at.x, at.y])
+				if move > 0.0 else "", run, warm, STRIDE])
 		_report(worst, swaps, top)
 	ev.free()
+
+
+## move=: шаг корабля носом к цели на FLOOR над видимым дном; ближе MOVE_STOP — стоит.
+static func _drive(ship: EcoLink.ShipState, goal: Vector2, move: float) -> void:
+	if move <= 0.0:
+		return
+	var to := goal - Vector2(ship.pos.x, ship.pos.z)
+	if to.length() < MOVE_STOP:
+		ship.speed = 0.0
+		ship.hull_noise = 0.0
+		return
+	ship.speed = move
+	ship.hull_noise = clampf(move / 6.7, 0.0, 1.0)
+	var d := to.normalized() * move * DT
+	var x := ship.pos.x + d.x
+	var z := ship.pos.z + d.y
+	ship.pos = Vector3(x, Seabed.mesh_height(x, z) + FLOOR, z)
+	ship.yaw = atan2(-to.x, -to.y)
 
 
 ## Позиции и базисы экземпляров кадра f; узел — путь от EcoView.
