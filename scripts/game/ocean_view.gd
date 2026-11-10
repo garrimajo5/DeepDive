@@ -38,6 +38,7 @@ var _ship_at := Transform3D(Basis(), Vector3(INF, INF, INF))   ## корабль
 var _ahead_done := []                          ## заготовка россыпей (`prefetch`) готова: [место, lite каждой россыпи]
 var _ahead_at := Vector3.ZERO                  ## куда просили заготовку
 var _ahead_on := false                         ## просили в этот шаг
+var _turn := 0                                 ## с какой россыпи начинать шаг (`_follow`, #1564)
 
 
 func _ready() -> void:
@@ -337,12 +338,27 @@ func ahead(at: Vector3) -> bool:
 	return prefetch(at)
 
 
+## Россыпи за кораблём (камни досчитываются и стоя: клетки радиуса — по нескольку за шаг). Работу шага — клетки или
+## пересборку списка (`SeabedStones.needs`) — делает одна россыпь за кадр, по очереди: на ходу все три пересобирались
+## в одном кадре, «корабль и камера» 62 мс у `05-turn-and-dive` (#1564). Отложенная догонит через кадр-два (полметра
+## хода, у края радиуса камни и так мельчают до нуля); перескок дальше `JUMP` — сразу у всех.
+func _follow(pos: Vector3) -> void:
+	var views: Array[StonesView] = [stones, shells, tufts]
+	var busy := false
+	for i in views.size():
+		var v := views[(_turn + i) % views.size()]
+		var work := v.stones.needs(pos)
+		if work and busy and not v.stones.jumps(pos):
+			continue
+		busy = busy or work
+		v.follow(pos)
+	_turn = (_turn + 1) % views.size()
+
+
 ## Где корабль: внутри корпуса шахты не светят и взвеси нет (вид с мостика и из отсеков).
 func set_ship(pos: Vector3, yaw: float) -> void:
 	var cells := scatter_cells()
-	stones.follow(pos)   # камни досчитываются и стоя: клетки радиуса — по нескольку за шаг
-	shells.follow(pos)
-	tufts.follow(pos)
+	_follow(pos)
 	if _ahead_on and scatter_cells() == cells:
 		_prefetch_step()   # заготовка под прыжок — в шаг, когда своя россыпь стоит (#1095)
 	_ahead_on = false
