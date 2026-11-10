@@ -343,6 +343,39 @@ func test_grazer_starts_and_stops_smoothly() -> void:
 	ok(prev_v < 0.35, "к пятну подходит тише (%.2f м/с)" % prev_v)
 
 
+## Поворот с инерцией (Б3): доевший скребун трогается к новому пятну не на полные TURN_MAX за кадр — скорость
+## поворота меняется не быстрее TURN_ACCEL, к курсу подходит без перелёта (tools/jerk.gd: было 12 рад/с²).
+func test_turn_eases_without_jerk() -> void:
+	var g := EcoGrazer.Grazer.new()
+	g.dir = 0.0
+	var goal := 1.5
+	var dt := 1.0 / 30.0
+	var prev := 0.0
+	var top := 0.0
+	var over := 0.0
+	for i in 150:
+		var was := g.dir
+		EcoGrazer.turn_step(g, angle_difference(g.dir, goal), dt)
+		var rate := (g.dir - was) / dt
+		if not ok(absf(rate - prev) <= EcoGrazer.TURN_ACCEL * dt + 1e-4, "скорость поворота без рывка: %.3f → %.3f" % [prev, rate]):
+			return
+		top = maxf(top, absf(rate))
+		over = maxf(over, g.dir - goal)
+		prev = rate
+	ok(top <= EcoGrazer.TURN_MAX + 1e-4, "не быстрее TURN_MAX: %.3f" % top)
+	ok(over <= 1e-4, "к курсу без перелёта: %.4f" % over)
+	near(g.dir, goal, 0.01, "за 5 с довернул")
+	# стал пастись посреди поворота — доворот гаснет, а не обрывается за кадр
+	g.dir = 0.0
+	g.spin = EcoGrazer.TURN_MAX
+	var was2 := g.dir
+	EcoGrazer.turn_step(g, 0.0, dt, true)
+	ok((g.dir - was2) / dt > EcoGrazer.TURN_MAX - EcoGrazer.TURN_ACCEL * dt - 1e-4, "пасётся — поворот гаснет плавно")
+	for i in 60:
+		EcoGrazer.turn_step(g, 0.0, dt, true)
+	eq(g.spin, 0.0, "и встаёт")
+
+
 func test_walks_up_steep_bump_at_its_pace() -> void:
 	# бугор рифа 4 м на 3 м, уклон до 2:1 (как у (−40, 6) на отмели): вдоль дна — не быстрее шага 0,9 м/с (уклон — с
 	# прошлого шага, запас 10 %), раньше по склону — до 2 м/с (Б3: взбегал и скатывался); на ровном — полный шаг
