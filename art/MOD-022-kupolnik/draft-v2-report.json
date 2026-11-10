@@ -1,0 +1,15 @@
+{
+  "triangles": 7304,
+  "dimensions_gltf": [
+    1.8,
+    1.2,
+    3
+  ],
+  "scale": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "emission_mask_pixels": 10541,
+  "status": "DRAFT: topology loops and siphon valves unverified"
+}
