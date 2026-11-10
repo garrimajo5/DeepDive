@@ -5,7 +5,7 @@ extends SceneTree
 ##
 ## Ключи:
 ## seq=surface — последовательность (`SEQS`): idle — ничего, surface — маршрут разом → «наверх» (вид с борта и продувка
-##   `Wake.vent`, #519), start — облёт в начале забега, ping — импульс сонара
+##   `Wake.vent`, #519), start — облёт в начале забега, ping — импульс сонара, qa — кусок сценария тестера (ниже)
 ## warm=0 — без прогрева шейдеров (`Warmup.enabled`); сравнить с прогревом — два запуска, warm=0 и warm=1:
 ##   сборки шейдеров живут в процессе, второй цикл одного запуска их уже не собирает
 ## pre=10 — столько кадров с мостика до первого цикла, без замера: с warm=0 сцена с мостика уже собрана, и кадр 0
@@ -17,6 +17,17 @@ extends SceneTree
 ## out=probe.txt — таблицу ещё и в файл
 ## all=1 — печатать все кадры (по умолчанию — первые `HEAD`, долгие и итог цикла)
 ##
+##
+## seq=qa — кусок сценария тестера (#1350, для #803, #1317, #1511): шаги `scenario.json` идут как в прогоне тестера
+##   (`QaRunner.tick`, без снимков и лога в user://qa/out), замер — от снимка from= до снимка to=; итог — максимум и
+##   среднее за кадр частей шага и подчастей `мир/…` (`StepClock`) и худший шаг с подписью. Без отрисовки — запускать
+##   `godot --headless --path . -s tools/probe_frames.gd -- seq=qa from=36 to=36a`
+## from=36 — снимок (имя шага «shot» или номер шага с 0), с которого замер; to=36a — снимок, на котором замер кончается
+##   (без to= — до конца сценария)
+## start=35 — снимок или номер шага, с которого идут шаги до замера (постановка); по умолчанию — последний шаг «ship»
+##   не позже from= (корабль в точке мира), без него — с начала сценария
+## file=tools/qa/scenario.json — сценарий (путь от корня проекта или абсолютный); cycles= — сколько раз пройти кусок
+##
 ## В облаке отрисовка — llvmpipe (программная), абсолютные мс с телефоном не сравнивать: смотреть разницу циклов
 ## и прогрева и где остаток. Vulkan-варианты шейдеров отсюда не видны.
 
@@ -26,7 +37,12 @@ const SEQS := {
 	"surface": "маршрут разом → «наверх»: вид с борта и продувка",
 	"start": "облёт в начале забега",
 	"ping": "импульс сонара",
+	"qa": "кусок сценария тестера",
 }
+const QA_FILE := "res://tools/qa/scenario.json"
+const QA_SKIP := ["shot", "play", "quit"]   ## шаги сценария, которых в замере нет: снимки и выход
+const QA_MAX := 30 * 900                    ## кадров на кусок не больше (15 мин игры)
+const QA_SHOW := 12                         ## подчастей мира в итоге
 const TAIL := 15       ## кадров после конца вида с борта
 const MIN_FRAMES := 30
 const MAX_FRAMES := 600
@@ -119,7 +135,7 @@ func _go() -> void:
 		push_error(kv["error"])
 		quit(1)
 		return
-	Warmup.enabled = kv["warm"] != "0"
+	Warmup.enabled = kv["warm"] != "0" and kv["seq"] != "qa"
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	await process_frame
@@ -128,6 +144,9 @@ func _go() -> void:
 	main.set_process(false)   # шаг ведёт замер: ровный DT, своё время
 	RenderingServer.frame_pre_draw.connect(func() -> void: _draw_from = Time.get_ticks_usec())
 	RenderingServer.frame_post_draw.connect(func() -> void: _draw_us += Time.get_ticks_usec() - _draw_from)
+	if kv["seq"] == "qa":
+		await _go_qa(main, kv)
+		return
 	for p in int(kv.get("pre", "0")):
 		main.step(DT)
 		await process_frame
@@ -194,3 +213,159 @@ static func reset(main: Node) -> void:
 	main.flyby.stop()
 	if main.at_vote:
 		main.close_vote()   # после «наверх» — новый забег у начала спуска
+
+
+## Номер шага сценария steps по снимку (имя шага «shot») или по номеру с 0; -1 — нет такого.
+static func qa_find(steps: Array, key: String) -> int:
+	if key.is_valid_int():
+		var i := int(key)
+		return i if i >= 0 and i < steps.size() else -1
+	for i in steps.size():
+		if steps[i] is Dictionary and steps[i].get("do", "") == "shot" and str(steps[i].get("name", "")) == key:
+			return i
+	return -1
+
+
+## Кусок сценария для замера: шаги от постановки до снимка to= без `QA_SKIP` и окно замера в этом куске —
+## {steps, w0, w1}: кадр замеряется, пока номер идущего шага в [w0, w1). Ошибка — {error}.
+static func qa_plan(steps: Array, kv: Dictionary) -> Dictionary:
+	if not kv.has("from"):
+		return {"error": "seq=qa: нужен from=<снимок>"}
+	var i_from := qa_find(steps, kv["from"])
+	if i_from < 0:
+		return {"error": "seq=qa: нет снимка from=%s" % kv["from"]}
+	var i_to := steps.size()
+	if kv.has("to"):
+		i_to = qa_find(steps, kv["to"])
+		if i_to < 0:
+			return {"error": "seq=qa: нет снимка to=%s" % kv["to"]}
+		if i_to <= i_from:
+			return {"error": "seq=qa: to=%s раньше from=%s" % [kv["to"], kv["from"]]}
+	var i_start := 0
+	if kv.has("start"):
+		i_start = qa_find(steps, kv["start"])
+		if i_start < 0 or i_start > i_from:
+			return {"error": "seq=qa: start=%s — нет такого шага или он позже from=" % kv["start"]}
+	else:
+		for i in range(i_from, -1, -1):
+			if steps[i] is Dictionary and steps[i].get("do", "") == "ship":
+				i_start = i
+				break
+	var out: Array = []
+	var w0 := 0
+	var w1 := 0
+	for i in range(i_start, i_to):
+		if i == i_from:
+			w0 = out.size()
+		var st = steps[i]
+		if st is Dictionary and not QA_SKIP.has(st.get("do", "")):
+			out.append(st)
+	w1 = out.size()
+	return {"steps": out, "w0": w0, "w1": w1, "start": i_start, "from": i_from, "to": i_to}
+
+
+## Кадр замера в сводку acc: части шага parts и подчасти мира subs (мс), шаг step_ms, подпись note.
+static func qa_add(acc: Dictionary, step_ms: float, parts: Dictionary, subs: Dictionary, note: String) -> void:
+	var n: int = acc.get("n", 0)
+	if n == 0 or step_ms > float(acc["worst"]):
+		acc["worst"] = step_ms
+		acc["worst_at"] = n
+		acc["note"] = note
+	acc["sum"] = float(acc.get("sum", 0.0)) + step_ms
+	for pair in [["parts", parts], ["subs", subs]]:
+		var into: Dictionary = acc.get(pair[0], {})
+		for k in pair[1].keys():
+			var row: Array = into.get(k, [0.0, 0.0, 0])   # максимум, сумма, кадр максимума
+			var ms := float(pair[1][k])
+			if ms > row[0]:
+				row[0] = ms
+				row[2] = n
+			row[1] += ms
+			into[k] = row
+		acc[pair[0]] = into
+	acc["n"] = n + 1
+
+
+## Строки итога куска: шаг, части шага и подчасти мира по убыванию максимума (среднее — по всем кадрам замера,
+## кадр без подчасти — 0 мс).
+static func qa_lines(cycle: int, acc: Dictionary, show := QA_SHOW) -> Array[String]:
+	var n: int = acc.get("n", 0)
+	if n == 0:
+		return ["цикл %d: нет кадров в окне замера" % cycle] as Array[String]
+	var out: Array[String] = ["цикл %d: %d кадров, шаг в среднем %.2f мс, худший — кадр %d %.1f мс: %s" % [
+		cycle, n, float(acc["sum"]) / n, acc["worst_at"], acc["worst"], acc["note"]]]
+	out.append("  часть / подчасть                    макс   средн  кадр")
+	for pair in [["parts", ""], ["subs", "мир/"]]:
+		var of: Dictionary = acc.get(pair[0], {})
+		var keys: Array = of.keys()
+		keys.sort_custom(func(a, b): return of[a][0] > of[b][0] or (of[a][0] == of[b][0] and str(a) < str(b)))
+		if pair[0] == "subs":
+			keys = keys.slice(0, show)
+		for k in keys:
+			var row: Array = of[k]
+			out.append("  %-34s %6.2f %6.2f %5d" % [(pair[1] + str(k)).left(34), row[0], row[1] / n, row[2]])
+	return out
+
+
+## Прогон сценария без снимков и без лога в user://qa/out — только шаги (`QaRunner.tick`).
+class QuietRunner extends QaRunner:
+	func _log(line: String) -> void:
+		log_lines.append(line)
+
+	func _finish() -> void:
+		pass
+
+	func _shot(_name: String) -> void:
+		pass
+
+
+## Кусок сценария: постановка без замера, затем кадры окна [w0, w1) — части шага и подчасти мира.
+func _go_qa(main: Node, kv: Dictionary) -> void:
+	var path: String = kv.get("file", QA_FILE)
+	if not path.begins_with("res://") and not path.begins_with("/"):
+		path = "res://" + path
+	var steps = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if typeof(steps) != TYPE_ARRAY:
+		push_error("seq=qa: %s — не JSON-массив шагов" % path)
+		quit(1)
+		return
+	var plan := qa_plan(steps, kv)
+	if plan.has("error"):
+		push_error(plan["error"])
+		quit(1)
+		return
+	var text := JSON.stringify(plan["steps"])
+	var lines: Array[String] = ["seq=qa: %s, постановка с шага %d, замер от шага %d (from=%s) до %s; шагов в куске %d" % [
+		path, plan["start"], plan["from"], kv["from"],
+		("шага %d (to=%s)" % [plan["to"], kv["to"]]) if kv.has("to") else "конца", plan["steps"].size()]]
+	print(lines[0])
+	for c in int(kv["cycles"]):
+		var q := QuietRunner.new()
+		q.name = "Замер сценария"
+		q.main = main
+		q.script_q = QaScript.parse(text)
+		for e in q.script_q.errors:
+			push_error("seq=qa: " + e)
+		main.add_child(q)
+		main.qa = q
+		var acc := {}
+		var k := 0
+		while not q.script_q.finished and q.script_q.index < plan["w1"] and k < QA_MAX:
+			var inside: bool = q.script_q.index >= plan["w0"]
+			var t0 := Time.get_ticks_usec()
+			main.step(DT)
+			var step := (Time.get_ticks_usec() - t0) / 1000.0
+			if inside:
+				var clock: StepClock = main.clock
+				qa_add(acc, step, clock.parts, clock.subs.get("мир", {}), clock.note())
+				k += 1
+			await process_frame
+		main.qa = null
+		q.queue_free()
+		for l in qa_lines(c + 1, acc):
+			lines.append(l)
+			print(l)
+	if kv.has("out"):
+		var file := FileAccess.open(kv["out"], FileAccess.WRITE)
+		file.store_string("\n".join(lines) + "\n")
+	quit()
