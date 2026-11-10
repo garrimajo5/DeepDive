@@ -217,3 +217,37 @@ func test_publish_qa_sha_and_extensions() -> void:
 	var re := RegEx.create_from_string(m.get_string(1))
 	for n in ["36b-ognecvet-posle.jpg", "36b-ognecvet-posle.png", "36b-ognecvet-posle.jpeg", "36b-ognecvet-posle"]:
 		eq(re.sub(n, ""), "36b-ognecvet-posle", "имя снимка: %s" % n)
+
+
+## #1350: шумный прогон отличать фактом — загрузка ЦП хоста и число процессов эмулятора до установки сценария и
+## после прогона; итог одной строкой RUN (сборка, done, снимки, нагрузка) — в выводе и в конце log.txt.
+func test_run_qa_logs_host_load() -> void:
+	var ps := _ps("run-qa.ps1")
+	ok(ps.contains("function Get-Load") and ps.contains("LoadPercentage") and ps.contains("qemu-system-*"),
+		"нагрузка: ЦП и процессы эмулятора")
+	var before := ps.find("$loadBefore = Get-Load")
+	var after := ps.find("$loadAfter = Get-Load")
+	ok(before > 0 and before < ps.find("monkey -p $app"), "«до» — перед запуском игры")
+	ok(after > ps.find("function Get-Out"), "«после» — когда забрали снимки")
+	var res := ps.find("$result = \"RUN $head done=$done")
+	ok(res > after, "итоговая строка RUN называет сборку")
+	ok(ps.find("Add-Content \"$run\\log.txt\" \"run-qa: $result\"", res) > res, "итог — и в конец log.txt")
+	ok(ps.rfind("NOT_DONE") > res, "NOT_DONE остаётся последней строкой")
+
+
+## #1350: в облачной сессии pwsh нет — синтаксис скриптов тестера проверяет CI (ubuntu-раннер несёт pwsh),
+## и «Тесты» зелёные, только если проверка прошла.
+func test_ci_parses_ps1() -> void:
+	var ci := FileAccess.get_file_as_string("res://.github/workflows/godot.yml")
+	ok(ci.contains("[System.Management.Automation.Language.Parser]::ParseFile"), "CI разбирает .ps1 парсером PowerShell")
+	ok(ci.contains("tools/qa/*.ps1"), "все скрипты тестера")
+	ok(ci.contains("needs: [changes, test-parts, ps1]"), "итог «Тесты» ждёт проверку скриптов")
+	ok(ci.contains("needs.ps1.result }}\" = \"success\""), "и валится, если она красная")
+
+
+## #1350: пуш в main сравнивается с коммитом последнего зелёного прогона «Godot» на main, а не с прошлым пушем:
+## иначе код из отменённого прогона уходил непроверенным, если следом сливали коммит без кода.
+func test_ci_main_diff_from_last_green() -> void:
+	var ci := FileAccess.get_file_as_string("res://.github/workflows/godot.yml")
+	ok(ci.contains("actions/workflows/godot.yml/runs?branch=main&status=success"), "база — последний зелёный прогон main")
+	ok(ci.contains("actions: read"), "у job есть право читать прогоны")

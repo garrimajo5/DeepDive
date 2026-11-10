@@ -94,8 +94,8 @@ func start(m: Main, text: String = "") -> void:
 	DirAccess.make_dir_recursive_absolute(OUT)
 	for f in DirAccess.get_files_at(OUT):
 		DirAccess.remove_absolute(OUT + "/" + f)
-	_log("Сценарий: %d шагов, версия %s, %s" % [script_q.steps.size(), ProjectSettings.get_setting("application/config/version", "?"),
-		OS.get_model_name()])
+	# версия — как на плашке (`Main.version_text`: номер сборки и коммит из version.txt), чтобы лог сам называл сборку
+	_log("Сценарий: %d шагов, версия %s, %s" % [script_q.steps.size(), Main.version_text(), OS.get_model_name()])
 	for e in script_q.errors:
 		_log("ОШИБКА СЦЕНАРИЯ: " + e)
 

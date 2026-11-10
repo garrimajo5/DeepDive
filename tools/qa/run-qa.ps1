@@ -42,6 +42,13 @@ function Get-Asset([string]$url, [string]$path, [long]$size) {
   }
   return $why
 }
+# Шум хоста (#1350): загрузка ЦП и сколько процессов эмулятора (qemu) запущено — до и после прогона, в итоговой
+# строке и в log.txt, чтобы шумный прогон отличался от регрессии фактом
+function Get-Load {
+  $cpu = (Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object LoadPercentage -Average).Average
+  $emu = @(Get-Process -Name 'qemu-system-*' -ErrorAction SilentlyContinue).Count
+  return "ЦП $([int]$cpu)%, эмуляторов $emu"
+}
 $repo  = 'D:\AI\DeepDive'
 $out   = 'D:\AI\qa-build'
 $run   = "$out\run"
@@ -134,6 +141,7 @@ $inst = ''
 for ($i = 0; $i -lt 3; $i++) { $inst = (& $adb install -r $apk 2>&1 | Out-String); if ($inst -match 'Success') { break }; Start-Sleep 10 }
 if ($inst -notmatch 'Success') { Write-Output "INSTALL_FAILED $head"; $inst; exit 1 }
 
+$loadBefore = Get-Load
 # Сценарий — в user:// игры (files/qa/). APK отладочный, поэтому run-as работает.
 & $adb shell am force-stop $app
 & $adb push $tmp /data/local/tmp/qa-scenario.json | Out-Null
@@ -164,6 +172,7 @@ for ($try = 0; $try -lt 5; $try++) {
   $miss = @($want | Where-Object { $_ -notin $have })
   if ($done -and -not $miss) { break }
 }
+$loadAfter = Get-Load
 & $adb logcat -d | Set-Content "$run\logcat.txt" -Encoding utf8
 $errs = Select-String -Path "$run\logcat.txt" -Pattern ' E godot|SCRIPT ERROR|AndroidRuntime|FATAL' |
   ForEach-Object { ($_.Line -split ': ', 2)[1] } | Where-Object { $_ -and $_ -notmatch '^\s*$' } |
@@ -179,6 +188,10 @@ else {
 Write-Output 'log:'; if (Test-Path "$run\log.txt") { Get-Content "$run\log.txt" -Encoding utf8 }
 Write-Output 'errors:'; $errs | Select -First 30
 Write-Output "files: $run"
+# Итог одной строкой — и в конец log.txt: лог из отчёта сам называет сборку, снимки и шум хоста (#1350)
+$result = "RUN $head done=$done снимков $($have.Count) из $($want.Count) | до: $loadBefore | после: $loadAfter"
+Write-Output $result
+Add-Content "$run\log.txt" "run-qa: $result" -Encoding utf8
 # Заметная строка в самом конце: прогон не дошёл до конца или не все снимки забраны (#1533)
 if (-not $done -or $miss) {
   $why = @()
