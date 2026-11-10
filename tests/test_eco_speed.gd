@@ -74,7 +74,8 @@ func test_look_ahead_ground_cache() -> void:
 	eq(calls[0], n * 3, "другое дно — читает заново")
 
 
-## Issue #1247: ползущий ёж ленточника читает дно, только когда отполз дальше URCHIN_GROUND_STEP (раньше — каждый шаг).
+## Issue #1247: ползущий ёж ленточника читает дно, только когда отполз дальше URCHIN_GROUND_STEP (раньше — каждый шаг);
+## в точке — высота и уклон, между точками — по уклону (#1400).
 func test_urchin_ground_cache() -> void:
 	var calls := [0]
 	var kelp := EcoKelp.new()
@@ -84,13 +85,15 @@ func test_urchin_ground_cache() -> void:
 	var u := EcoKelp.Urchin.new()
 	u.pos = Vector3(1, 0, 0)
 	near(kelp.urchin_floor(u), 0.2, 1e-6, "первый раз — по дну")
+	eq(calls[0], 3, "высота и уклон по x и z")
 	for i in 10:
-		u.pos.x += 0.005   # ход ежа за кадр
-		kelp.urchin_floor(u)
-	eq(calls[0], 1, "отполз на 5 см — дно не читали заново")
-	u.pos.x += EcoKelp.URCHIN_GROUND_STEP
+		u.pos.x -= 0.005   # ход ежа за кадр
+		u.pos.z += 0.003
+		near(kelp.urchin_floor(u), u.pos.x * 0.2, 1e-6, "между точками — по уклону, а не ступенькой")
+	eq(calls[0], 3, "отполз на 6 см — дно не читали заново")
+	u.pos.x += EcoKelp.URCHIN_GROUND_STEP * 1.5
 	near(kelp.urchin_floor(u), u.pos.x * 0.2, 1e-6, "дальше шага — читает заново")
-	eq(calls[0], 2)
+	eq(calls[0], 6)
 
 
 func test_far_shoals_step_every_third_frame() -> void:

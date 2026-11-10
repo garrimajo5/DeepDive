@@ -157,6 +157,11 @@ class Urchin:
 	var gx := INF
 	var gz := INF
 	var gh := 0.0
+	## Уклон дна в этой точке (м на м по x и z): между точками ёж идёт по нему (`urchin_floor`, #1400).
+	var sx := 0.0
+	var sz := 0.0
+	## Чем прежний уклон разошёлся с дном в новой точке (м): гаснет за следующий шаг пути, а не скачком.
+	var go := 0.0
 	## Набранное время вдали (EcoLod): шагает реже, догоняя пропущенное.
 	var lag := 0.0
 
@@ -520,17 +525,37 @@ static func urchin_basis(u: Urchin, t: float) -> Basis:
 
 
 ## Дно под ежом u: пересчитывается, только когда ёж отполз дальше URCHIN_GROUND_STEP от прошлой точки (issue #1247:
-## ползущие ежи звали fbm каждый шаг — 14 вызовов за кадр при 0,005 м хода за кадр). Отличие — не больше уклона дна
-## на 0,1 м: на глаз незаметно, ёж и так стоит на UP над дном.
-const URCHIN_GROUND_STEP := 0.1
+## ползущие ежи звали fbm каждый шаг — 14 вызовов за кадр при 0,005 м хода за кадр). В точке запоминается и уклон
+## (ещё два чтения дна в URCHIN_SLOPE_D по x и z в сторону хода), между точками ёж идёт по нему (#1400: по запомненной
+## высоте ёж на крутом склоне съезжал ступенькой 0,14 м за кадр раз в 11 кадров, `tools/jerk.gd scena=2 move=3`).
+## Дно — сетка треугольников: перешёл на треугольник с другим уклоном — в новой точке высота разойдётся с уклоном
+## прежней; расхождение `go` гаснет за следующий шаг пути, а не скачком. Шаг вдвое длиннее прежнего 0,1 м — чтений
+## дна на метр пути в полтора раза больше, а не втрое.
+const URCHIN_GROUND_STEP := 0.2
+const URCHIN_SLOPE_D := 0.02
+## Расхождение больше — не догоняет плавно, а встаёт на дно (появился заново, перенесли): ниже UP — ушёл бы в грунт.
+const URCHIN_GO_MAX := UP
 func urchin_floor(u: Urchin) -> float:
 	var dx := u.pos.x - u.gx
 	var dz := u.pos.z - u.gz
-	if dx * dx + dz * dz > URCHIN_GROUND_STEP * URCHIN_GROUND_STEP:
+	var d2 := dx * dx + dz * dz
+	if d2 > URCHIN_GROUND_STEP * URCHIN_GROUND_STEP:
+		var was := u.gh + u.sx * dx + u.sz * dz + u.go * _go_k(d2)
+		var ax := -URCHIN_SLOPE_D if dx < 0.0 else URCHIN_SLOPE_D
+		var az := -URCHIN_SLOPE_D if dz < 0.0 else URCHIN_SLOPE_D
 		u.gx = u.pos.x
 		u.gz = u.pos.z
 		u.gh = _floor(u.pos.x, u.pos.z, u.pos.y - UP)
-	return u.gh
+		u.sx = (_floor(u.pos.x + ax, u.pos.z, u.gh) - u.gh) / ax
+		u.sz = (_floor(u.pos.x, u.pos.z + az, u.gh) - u.gh) / az
+		u.go = was - u.gh if is_finite(was) and absf(was - u.gh) < URCHIN_GO_MAX else 0.0
+		return u.gh + u.go
+	return u.gh + u.sx * dx + u.sz * dz + u.go * _go_k(d2)
+
+
+## Доля расхождения `go`, что осталась, когда ёж отполз от точки на √d2.
+static func _go_k(d2: float) -> float:
+	return maxf(0.0, 1.0 - sqrt(d2) / URCHIN_GROUND_STEP)
 
 
 func _floor(x: float, z: float, fallback: float) -> float:
