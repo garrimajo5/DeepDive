@@ -21,6 +21,21 @@ class Sources(unittest.TestCase):
         self.assertEqual(lm["main"][0], "00")
         self.assertIn(["07", "08"], lm["links"])
 
+    def test_bends_from_scheme(self):
+        bs = codex.bends(codex.read(codex.SLOJ1))
+        self.assertEqual(bs[("06", "10")], (250.0, 200.0))
+        self.assertEqual(bs[("07", "08")], (-100.0, -210.0))
+        self.assertEqual(codex.bend_of(bs, "08", "07"), (-100.0, -210.0), "обратно тем же изгибом")
+        self.assertIsNone(codex.bend_of(bs, "00", "01"))
+
+    def test_map_draws_bend_not_straight(self):
+        lm = codex.layer_map(codex.read(codex.LAYER_MAP))
+        svg = codex.map_svg(lm, codex.bends(codex.read(codex.SLOJ1)))
+        p06, p10 = lm["points"]["06"], lm["points"]["10"]
+        self.assertIn(f'points="{p06["x"]:g},{p06["z"]:g} 250,200 {p10["x"]:g},{p10["z"]:g}"', svg)
+        self.assertNotIn(f'x1="{p06["x"]}" y1="{p06["z"]}" x2="{p10["x"]}"', svg, "06→10 прямой сквозь стену")
+        self.assertEqual(svg.count('class="bend"'), 2)
+
     def test_species_registry(self):
         reg = codex.species(codex.read(codex.SPECIES))
         ids = [s["id"] for s in reg]
@@ -65,6 +80,13 @@ class Build(unittest.TestCase):
     def setUpClass(cls):
         cls.dir = tempfile.mkdtemp()
         cls.page = codex.build(cls.dir)
+
+    def test_map_says_scheme_not_path(self):
+        i = self.page.index('class="map"')
+        note = self.page[i:self.page.index('<div class="cards">', i)]
+        self.assertIn("Схема связей мест, не путь хода", note, "оговорка у карты, до длинного текста схемы")
+        self.assertIn("06 → (250; 200) → 10", note)
+        self.assertIn("07 → (−100; −210) → 08", note)
 
     def test_nothing_missing(self):
         self.assertEqual(codex.missing(self.page), [])

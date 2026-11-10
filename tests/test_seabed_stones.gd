@@ -176,3 +176,44 @@ func test_prefetch_before_jump() -> void:   # #1090: перескок под ш�
 	s.update(to)
 	eq(s.cells_done, done, "прыжок — ни одной новой клетки")
 	_check_still(s, to)
+
+
+## Работа россыпей одной за кадр (#1564): на ходу три россыпи пересобирались в одном кадре — «корабль и камера»
+## 62 мс у `05-turn-and-dive`. Шаг клеток или списка — у одной россыпи, отложенная догоняет; перескок — у всех сразу.
+func test_ocean_one_scatter_works_per_step() -> void:
+	var ocean := OceanView.new()
+	tree.root.add_child(ocean)
+	await frames(1)
+	var all := ocean.scatters()
+	var steps := 0
+	while steps < 300 and not all.all(func(v: SeabedStones) -> bool: return not v.needs(AT)):
+		ocean.set_ship(AT, 0.0)
+		steps += 1
+	ok(all.all(func(v: SeabedStones) -> bool: return not v.needs(AT)), "стоя досчитаны все три за %d шагов" % steps)
+	var worst := 0
+	var at := AT
+	for i in 240:   # 8 с полного хода, 8 м/с по диагонали
+		at += Vector3(0.19, 0.0, -0.19)
+		var before: Array = all.map(func(v: SeabedStones) -> Array: return [v.rev, v.cells_done])
+		ocean.set_ship(at, 0.0)
+		var busy := 0
+		for k in all.size():
+			if all[k].rev != before[k][0] or all[k].cells_done != before[k][1]:
+				busy += 1
+		worst = maxi(worst, busy)
+	eq(worst, 1, "за шаг работает одна россыпь")
+	for v in all:
+		ok(Vector2(v._center.x - at.x, v._center.z - at.z).length() < SeabedStones.MOVE + 1.0,
+				"на ходу россыпь не отстаёт от корабля")
+	var tail := 0
+	while tail < 60 and not all.all(func(v: SeabedStones) -> bool: return not v.needs(at)):
+		ocean.set_ship(at, 0.0)
+		tail += 1
+	ok(tail <= 12, "встали — все три догнали за %d шагов (≤ 12, меньше полсекунды)" % tail)
+	var revs: Array = all.map(func(v: SeabedStones) -> int: return v.rev)
+	at += Vector3(-80.0, 0.0, 0.0)
+	ocean.set_ship(at, 0.0)
+	for k in all.size():
+		ok(all[k].rev != revs[k], "перескок — россыпь %d пересобрана сразу" % k)
+	ocean.queue_free()
+	await frames(1)

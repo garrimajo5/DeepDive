@@ -106,9 +106,15 @@ var fringe_view: FringeView
 ## Край отмели (место 6, ART-032): скальные клинья вдоль бровки, шрам оползня с осыпью, трещины на площадке.
 var drop: EcoDrop
 var drop_view: DropView
+## Скребуны края отмели 06 (#840): своя группа на мху края (`EcoDrop.moss`), рисует свой MultiMesh «Скребуны края».
+var drop_grazers: EcoGrazer
+var drop_grazer_view: GrazerView
 ## Граница у Спуска 10 (#832): кварцевая корка на дне котловины склона, к востоку гуще, кончики светятся.
 var brink: EcoBrink
 var brink_view: BrinkView
+## Скребуны у Спуска 10 (#840): своя группа на мху площадки (`EcoBrink.moss`), рисует свой MultiMesh «Скребуны спуска».
+var brink_grazers: EcoGrazer
+var brink_grazer_view: GrazerView
 ## Купольник у террасы врат 07 (#837): рабочий Хранителя открывает створку гнезда; вид — по модели MOD-022.
 var dome: EcoDome
 ## Эхоловец (ART-007): засадчик с ушами-воронками лежит у Костей левиафана, уши поворачивает на корабль,
@@ -229,6 +235,15 @@ func _init() -> void:
 	echo = world.add(EcoEcho.new(bones, preds)) as EcoEcho
 	echo_view = EchoView.new(echo, lite)
 	add_child(echo_view)
+	# последними: прежние существа мира не сдвигаются по номерам и случаю
+	drop_grazers = world.add(EcoGrazer.new(drop.moss, EcoDrop.GRAZERS)) as EcoGrazer
+	drop_grazer_view = GrazerView.new(drop_grazers, lite)
+	drop_grazer_view.name = "Скребуны края"
+	add_child(drop_grazer_view)
+	brink_grazers = world.add(EcoGrazer.new(brink.moss, EcoBrink.GRAZERS)) as EcoGrazer
+	brink_grazer_view = GrazerView.new(brink_grazers, lite)
+	brink_grazer_view.name = "Скребуны спуска"
+	add_child(brink_grazer_view)
 	far_view = FarLifeView.new()
 	add_child(far_view)
 	_rebuild_moss()
@@ -304,6 +319,8 @@ func set_lite(on: bool) -> void:
 	ray_view.set_lite(on)
 	remora_view.set_lite(on)
 	grazer_view.set_lite(on)
+	drop_grazer_view.set_lite(on)
+	brink_grazer_view.set_lite(on)
 	moss_view.set_lite(on)
 	if well_view.moss_view:
 		well_view.moss_view.set_lite(on)
@@ -556,6 +573,8 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	EcoCaustic.set_time(world.time)
 	fish_view.sync(world.time, ship, current.vel(), world.ground)
 	grazer_view.sync(world.time, ship, current.vel())
+	drop_grazer_view.sync(world.time, ship, current.vel())
+	brink_grazer_view.sync(world.time, ship, current.vel())
 	pred_view.sync(world.time, ship.pos, ship, current.vel(), world.ground)
 	leech_view.sync(world.time, ship, current.vel())
 	StepClock.mark("мир/вид: рыбы, хищники")
@@ -567,6 +586,12 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	if well_view.moss_view:
 		well_view.moss_view.sync()
 		well_view.moss_view.set_time(world.time)
+	if drop_view and drop_view.moss_view:
+		drop_view.moss_view.sync()
+		drop_view.moss_view.set_time(world.time)
+	if brink_view and brink_view.moss_view:
+		brink_view.moss_view.sync()
+		brink_view.moss_view.set_time(world.time)
 	coral_view.sync()
 	kamen_view.sync()
 	flower_view.sync()

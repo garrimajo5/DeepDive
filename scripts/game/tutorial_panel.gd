@@ -6,7 +6,7 @@ extends Control
 const TEXT := UiStyle.TEXT
 const DIM := UiStyle.DIM
 const ACCENT := UiStyle.ACCENT
-const BACK := Color(0.043, 0.11, 0.141, 244.0 / 255.0)   ## #0B1C24, альфа 244
+const BACK := Color(UiStyle.DARK, UiStyle.PLATE_A)   ## #0B1C24, непрозрачная (#1556)
 
 var tut: Tutorial
 var layout: Touch.Layout

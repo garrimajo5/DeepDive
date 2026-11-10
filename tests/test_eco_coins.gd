@@ -534,6 +534,28 @@ func test_coin_turns_smoothly() -> void:
 	ok(cn.look.dot(Vector3.RIGHT) > 0.99, "за 2 с догнал путь")
 
 
+## Поворот с инерцией (Б3): новая цель за спиной — скорость поворота носа набирается не быстрее TURN_ACCEL, а не
+## срывается на TURN_MAX за кадр, и к курсу подходит без перелёта (tools/jerk.gd: было до 66 рад/с²).
+func test_coin_turn_rate_eases() -> void:
+	var cn := EcoCoins.Coin.new()   # нос в +Z
+	cn.vel = Vector3(-0.2, 0, -1)    # почти за спиной
+	var want := cn.vel.normalized()
+	var dt := 1.0 / 30.0
+	var prev := 0.0
+	var worst := 0.0
+	for i in 90:
+		var from := cn.look
+		EcoCoins.turn(cn, dt)
+		var rate := from.angle_to(cn.look) / dt
+		worst = maxf(worst, absf(rate - prev) / dt)
+		ok(rate <= EcoCoins.TURN_MAX + 1e-3, "не быстрее TURN_MAX")
+		prev = rate
+	ok(worst <= EcoCoins.TURN_ACCEL + 1e-2, "разгон и торможение поворота — не быстрее TURN_ACCEL: %.2f рад/с²" % worst)
+	ok(cn.look.angle_to(want) < 0.01, "за 3 с довернул: %.3f" % cn.look.angle_to(want))
+	_swim(cn, cn.vel, 30, dt)
+	ok(cn.look.angle_to(want) < 0.01, "и держит курс, не качается")
+
+
 func test_coin_banks_into_turn() -> void:
 	var cn := EcoCoins.Coin.new()  # нос в +Z, phase 0: в t = 0 покачивания нет
 	_swim(cn, Vector3(1, 0, 0), 4)  # +X при носе в +Z — поворот влево

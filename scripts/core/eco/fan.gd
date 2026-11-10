@@ -70,7 +70,8 @@ func _init(sea: EcoCurrent, spots: Array[Vector2] = []) -> void:
 
 
 ## Места из браузера: у каждого огнецвета и у старта (последний); между ними — два по бокам площадки 08 (EcoField),
-## два у сходов с террасы врат 07 (EcoGate) и три у Чёрного курильщика 02 (EcoVent).
+## два у сходов с террасы врат 07 (EcoGate), три у Чёрного курильщика 02 (EcoVent) и три пары на спуске 06 → 10
+## (EcoDrop.SLOPE_FANS, #840).
 static func default_spots() -> Array[Vector2]:
 	var out: Array[Vector2] = []
 	for i in EcoCoral.BASES.size():
@@ -79,6 +80,7 @@ static func default_spots() -> Array[Vector2]:
 	out.append_array(EcoField.FANS)
 	out.append_array(EcoGate.FANS)
 	out.append_array(EcoVent.FANS)
+	out.append_array(EcoDrop.SLOPE_FANS)
 	out.append(START)
 	return out
 

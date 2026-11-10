@@ -36,10 +36,12 @@ extends SceneTree
 ## scena_yaw=10 — курс левее на столько градусов (минус — правее)
 ## scena_t=4 — мир идёт столько секунд, корабль висит в точке (кадры движения)
 ## scena_y=-34.9 — высота хода руками, м; scena_y=dno — 7 м над дном в точке; без ключа — плавный ход tools/pass_box.gd (контур 20×30); в лог — фактический y и источник
-## zamer=bok — с scena=: фаза «замер» #1498 включена в снимке (4 с, отход 20 с); серпохвост №0 за 26 м: bok — справа, korma — за кормой, nos — перед носом; остальные уведены
-## zamer_off=2 — с zamer=: погасить прожектор через столько секунд мира (ответ экипажа, дальше отход)
+## zamer=bok — с scena=: фаза «замер» #1498 включена в снимке (4 с, отход 20 с); серпохвост №0 за 26 м: bok — справа, korma — за кормой, nos — перед носом; остальные уведены; журнал смен режима хищника и строк приборов — только с scena_t=
+## zamer_off=2 — с zamer=: погасить прожектор через столько секунд мира (ответ экипажа, дальше отход); только с scena_t= — без него мир снимка не идёт
+## budget=1 — после снимка в лог: вызовы и примитивы по частям сцены — без какой части сколько меньше (#1400, бюджет ART-044; и тень прожектора; 2 — ещё и дети «Отмели», «Живого мира» и «Корабля»)
 ## strah=40 — с scena=: голодный хищник №0 за стаей рифа у 01 на столько метров (причина — с дальней стороны); в лог раз в секунду — хищник и стая (#1400)
 ## light=0 — погасить прожектор
+## luch_ten=0 — прожектор без тени (после grafika=; сравнить цену тени, #1400)
 ## power=1 — встать к пульту энергии
 ## hot=80 — перегрев реактора, градусы
 ## energy=20 — заряд корабля, ед.
@@ -471,4 +473,50 @@ func _go() -> void:
 	print("SHOT ", out, " ", img.get_size(), " вызовов отрисовки: ",
 		Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
 		", примитивов: ", Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
+	if kv.has("budget"):
+		await _budget(main, int(kv["budget"]))
 	quit(0)
+
+
+## Вызовы и примитивы кадра после трёх кадров отрисовки.
+func _draw_count() -> Vector2i:
+	for i in 3:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	return Vector2i(int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+		int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)))
+
+
+## Бюджет по частям (#1400): часть прячется на кадр, разница с полным кадром — её цена.
+## Мир на это время стоит: иначе существа и взвесь уходят из кадра и разница плывёт.
+func _budget(main: Node, depth: int) -> void:
+	main.process_mode = Node.PROCESS_MODE_DISABLED
+	var full: Vector2i = await _draw_count()
+	print("БЮДЖЕТ всего: вызовов %d, примитивов %d" % [full.x, full.y])
+	var parts: Array[Node] = []
+	for n in main.get_children():
+		if n is Node3D or n is CanvasLayer:
+			parts.append(n)
+	if depth >= 2:
+		for name in ["Отмель", "Живой мир", "Корабль"]:
+			var g := main.get_node_or_null(name)
+			if g:
+				for c in g.get_children():
+					if c is Node3D:
+						parts.append(c)
+	for n in parts:
+		if not n.visible:
+			continue
+		n.visible = false
+		var c: Vector2i = await _draw_count()
+		n.visible = true
+		var d := full - c
+		if d.x != 0 or d.y != 0:
+			print("БЮДЖЕТ %s: вызовов %d, примитивов %d" % [str(main.get_path_to(n)), d.x, d.y])
+	var spot: SpotLight3D = main.searchlight.spot   # тень прожектора — отдельной строкой (#1400): цена на «Обычно»
+	if spot.visible and spot.shadow_enabled:
+		spot.shadow_enabled = false
+		var c: Vector2i = await _draw_count()
+		spot.shadow_enabled = true
+		var d := full - c
+		print("БЮДЖЕТ тень прожектора: вызовов %d, примитивов %d" % [d.x, d.y])

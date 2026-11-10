@@ -258,6 +258,74 @@ func test_urgent_world_line_holds() -> void:
 	eq(m.text, "Течение сменилось", "обычная строка после срочной снова сменяется через MIN_SHOW")
 
 
+func test_keep_world_line_holds() -> void:
+	# #1555: «Хищник потерял корабль и отворачивает» сменялась строкой мира через 1 с — не дочитать, когда включать свет
+	var m := Status.Message.new()
+	var lost := "Крупный хищник потерял корабль и отворачивает"
+	m.say(lost, Status.MESSAGE_SECONDS, true, false, true)
+	ok(m.hot and m.keep, "«держится» — держится, но не срочная")
+	m.update(0.5)
+	m.say("Рыбы пасутся на мху", Status.MESSAGE_SECONDS, true)
+	for i in 36:
+		m.update(0.1)
+		eq(m.text, lost, "строка мира ждёт, пока видна «держится» (%.1f с)" % (0.6 + i * 0.1))
+	m.update(0.2)
+	eq(m.text, "Рыбы пасутся на мху", "«держится» погасла сама через 4,2 с — вышла ждущая")
+	ok(not m.hot and not m.keep, "обычная строка снова обычная")
+	# срочная перебивает «держится» сразу
+	m.say(lost, Status.MESSAGE_SECONDS, true, false, true)
+	m.update(0.3)
+	m.say("Серпохвост замер", Status.MESSAGE_SECONDS, true, true)
+	eq(m.text, "Серпохвост замер", "срочная — сразу, поверх «держится»")
+	ok(m.hot and not m.keep, "и держится как срочная")
+	# «держится» перебивает обычную строку мира не раньше MIN_SHOW, как сейчас
+	m.say("Вы за штурвалом")
+	m.say("Течение сменилось", Status.MESSAGE_SECONDS, true)
+	m.update(0.4)
+	m.say(lost, Status.MESSAGE_SECONDS, true, false, true)
+	eq(m.text, "Течение сменилось", "«держится» ждёт MIN_SHOW обычной строки")
+	m.say("Рыбы ушли", Status.MESSAGE_SECONDS, true)
+	eq(m.next, lost, "ждущую «держится» обычная строка не сменяет")
+	m.update(0.7)
+	eq(m.text, lost, "через MIN_SHOW вышла «держится»")
+	ok(m.keep, "и держится")
+	m.update(Status.MESSAGE_SECONDS - 0.2)
+	eq(m.text, lost, "все 4,2 с")
+	# срочная видна — «держится» ждёт её конца
+	m.say("Серпохвост замер", Status.MESSAGE_SECONDS, true, true)
+	m.update(1.5)
+	m.say(lost, Status.MESSAGE_SECONDS, true, false, true)
+	eq(m.text, "Серпохвост замер", "срочную «держится» не перебивает")
+	m.update(Status.MESSAGE_SECONDS)
+	eq(m.text, lost, "срочная погасла — вышла «держится»")
+	ok(m.keep, "ждущая вышла и держится")
+
+
+## Сцена: строка «держится» от мира (pred/lost), следом строки мира — на приборах она все 4,2 с (#1555).
+func test_scene_keep_eco_message() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	for i in 5:
+		main.step(1.0 / 30.0)
+	var lost := "Крупный хищник потерял корабль и отворачивает — тестовая строка"
+	main.on_eco_event(EcoLink.observe("pred", "lost", lost, false, true))
+	main.step(1.0 / 30.0)
+	eq(main.message.text, lost, "строка отхода на приборах")
+	for i in 30:
+		main.step(1.0 / 30.0)
+	main.on_eco_event(EcoLink.message("Стайка рыбок у мха — тестовая строка"))
+	main.on_eco_event({"type": EcoLink.OBSERVE, "species": "fish", "note": "graze", "text": "Рыбы пасутся — тестовая строка"})
+	for i in 90:   # до ~4,1 с
+		main.step(1.0 / 30.0)
+		eq(main.message.text, lost, "строка отхода держится (кадр %d)" % i)
+	for i in 10:
+		main.step(1.0 / 30.0)
+	ok(main.message.text != lost, "после 4,2 с сменилась: %s" % main.message.text)
+	main.queue_free()
+	await frames(1)
+
+
 ## Сцена: срочная MESSAGE от мира, следом обычная — на приборах срочная до 4,2 с (#1516).
 func test_scene_urgent_eco_message() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()

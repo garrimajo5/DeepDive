@@ -52,10 +52,12 @@ func _draw() -> void:
 	var s := Comms.scale(size)
 	var a := comms.a
 	var font := get_theme_default_font()
-	var plate := Comms.plate_rect(size)
+	var rows := comms.rows(size, font)   # команда в одну или две строки: при двух шапка и верх плашки выше (#1557)
+	var n := rows.size()
+	var plate := Comms.plate_rect(size, n)
 	_box(plate, s, a, DARK, ACCENT)
 	# кружок роли с буквой: цвет роли сам ничего не значит, буква и название обязательны
-	var c := Comms.at(Comms.CIRCLE, size)
+	var c := Comms.at(Comms.CIRCLE, size, n)
 	var ring: Color = Comms.ROLE_RING[comms.cur.role]
 	draw_arc(c, Comms.CIRCLE_D * 0.5 * s, 0.0, TAU, 64, Color(ring, a), maxf(1.5, 2.5 * s), true)
 	var lpx := int(Comms.LETTER_PX * s)
@@ -63,17 +65,18 @@ func _draw() -> void:
 	var lw := font.get_string_size(letter, HORIZONTAL_ALIGNMENT_LEFT, -1, lpx).x
 	draw_string(font, c + Vector2(-lw * 0.5, lpx * 0.36), letter, HORIZONTAL_ALIGNMENT_LEFT, -1, lpx, Color(TEXT, a))
 	var title_px := int(Comms.ROLE_PX * s)
-	_text(font, Comms.at(Comms.ROLE_AT, size), comms.title(), title_px, Color(TEXT, a))
+	_text(font, Comms.at(Comms.ROLE_AT, size, n), comms.title(), title_px, Color(TEXT, a))
 	if comms.sub_wanted(size):
 		var tw := font.get_string_size(comms.title(), HORIZONTAL_ALIGNMENT_LEFT, -1, title_px).x
-		var sub := Comms.at(Comms.SUB_AT, size)
-		sub.x = maxf(sub.x, Comms.at(Comms.ROLE_AT, size).x + tw + 24.0 * s)
+		var sub := Comms.at(Comms.SUB_AT, size, n)
+		sub.x = maxf(sub.x, Comms.at(Comms.ROLE_AT, size, n).x + tw + 24.0 * s)
 		_text(font, sub, Comms.SUB, int(Comms.SUB_PX * s), Color(DIM, a))
-	# команда: не шире места до индикатора и кнопки (длинную реплику сокращает редактор, кегль не меньше)
-	var tx := Comms.at(Comms.TEXT_AT, size)
-	_text(font, tx, comms.line(), int(Comms.TEXT_PX * s), Color(TEXT, a), plate.end.x - tx.x - 30.0 * s)
+	# команда: перенос по словам в две строки, последняя — на месте прежней единственной (кегль не меньше 40)
+	for i in n:
+		_text(font, Comms.at(Comms.TEXT_AT, size, n - i), rows[i], int(Comms.TEXT_PX * s), Color(TEXT, a),
+			Comms.text_width(size))
 	# индикатор речи: 11 штрихов по центру строки
-	var bars := Comms.bars_rect(size)
+	var bars := Comms.bars_rect(size, n)
 	var hs := comms.bars(time)
 	var step := bars.size.x / float(hs.size())
 	var bw := maxf(1.5, 3.0 * s)

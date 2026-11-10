@@ -130,7 +130,7 @@ func test_main_step_parts() -> void:
 	eq(subs, ["карточка роли", "маршрут", "подсказки", "приборы", "рация", "связь", "цель маршрута"], "подчасти интерфейса")
 	var views: Array = main.clock.subs.get("виды", {}).keys()   # отчёт #1182: «виды 57» у колодца 05 — что внутри
 	views.sort()
-	eq(views, ["голограммы", "корабль и камера", "отсеки и экраны", "пульты", "свет", "экипаж", "экипаж: сборка",
+	eq(views, ["голограммы", "корабль и камера", "отсеки и экраны", "ползунки и люк", "свет", "экипаж", "экипаж: сборка",
 		"экипаж: снаряжение"], "подчасти видов")
 	near(float(main.clock.parts["виды"]), _sum(main.clock.subs["виды"]), 0.001, "виды — ровно сумма подчастей")
 	var world: Dictionary = main.clock.subs.get("мир", {})   # #1020: модули и виды живого мира
@@ -229,6 +229,37 @@ func test_usual_not_before_warm() -> void:
 	eq(StepClock.slower(5.0, 0.05), "", "обычное ~0 — подчасть по событию, без ×")
 	eq(StepClock.slower(3.0, 2.0), "", "меньше SLOW раз — без ×")
 	eq(StepClock.slower(9.0, 2.0), " ×5", "×N округляется")
+
+
+## #1350 (поток Б, 10.11): «EcoKamen 42» в логе тестера без «×» — у подчасти каждого шага обычное ~0,05 мс, меньше
+## USUAL_MIN, и отношение не писалось: заминка читалась как событие. Подчасть каждого шага — «×>N» по USUAL_MIN (не
+## больше «×>100»), подчасть по событию (редкий шаг) — по-прежнему без «×».
+func test_tiny_usual_floor() -> void:
+	var c := StepClock.new()
+	var t := 0
+	for i in StepClock.USUAL_FROM + 10:   # EcoKamen 0,05 мс каждый шаг, «импульс» 1 мс раз в 10 шагов
+		c.start(t, 1.0 / 30.0)
+		t += 3000
+		c.lap("мир/EcoFish", t)
+		t += 50
+		c.lap("мир/EcoKamen", t)
+		if i % 10 == 3:
+			t += 1000
+			c.lap("мир/" + StepClock.PING_MARK, t)
+	c.start(t, 1.0 / 30.0)   # провал: EcoKamen 42, событие 20
+	t += 3000
+	c.lap("мир/EcoFish", t)
+	t += 42000
+	c.lap("мир/EcoKamen", t)
+	t += 20000
+	c.lap("мир/" + StepClock.PING_MARK, t)
+	c.start(t, 1.0 / 30.0)
+	var n := c.last_note()
+	ok(n.contains("EcoKamen 42 ×>100"), "подчасть каждого шага с обычным ~0 — «×>100»: " + n)
+	ok(n.contains(StepClock.PING_MARK + " 20,") or n.ends_with(StepClock.PING_MARK + " 20]"),
+		"подчасть по событию — без «×»: " + n)
+	eq(StepClock.slower(1.5, 0.05, 1.0), " ×>15", "нижняя граница по USUAL_MIN")
+	eq(StepClock.slower(42.0, 0.05, 0.2), "", "редкая подчасть — без «×»")
 
 
 ## Обычный шаг мира: EcoFish 3, EcoKelp 2, EcoVent 1, a 1, b 1 — и всё (#1174).

@@ -222,6 +222,10 @@ class Fish:
 	var look := Vector3.ZERO
 	## Доля размаха виляния тела (`EcoFishLook.wag_step`, Б3): по ходу, догоняет плавно; −1 — ещё не плыла.
 	var wag := -1.0
+	## Крен в повороте, рад (`EcoFishLook.bank_step`, Б3): + — спина к боку формы x; догоняет нужный плавно.
+	var bank := 0.0
+	## Скорость крена, рад/с (пружина `EcoFishLook.bank_step`).
+	var bank_v := 0.0
 	## Время мира, когда вернулась после съедения (−INF — не съедали): с него рыбка вырастает (`FishView.grow_k`).
 	var born := -INF
 	## Б3: нормаль обшивки при последнем касании (мир) и сколько ещё её помнить, с (`EcoFish.hull_steer`).
@@ -736,6 +740,8 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 			a.v = Vector3(0, 0.2, 0)
 			f.look = Vector3.ZERO
 			f.wag = -1.0
+			f.bank = 0.0
+			f.bank_v = 0.0
 			f.born = t
 		var p := a.p
 		var v := a.v
@@ -790,7 +796,9 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 			v = climb_cap(v, maxf(max_s, was_s))
 			v = floor_hold(v, gap, a.floor_rate(v.x, v.z), v.length())
 		p += v * dt
-		f.look = turn(f.look, v, dt)
+		var was := f.look
+		f.look = turn(was, v, dt)
+		EcoFishLook.bank_step(f, was, f.look, dt)
 		f.wag = EcoFishLook.wag_step(f.wag, v.length(), dt)
 		if p.distance_squared_to(ship_pos) < hull_r2:  # сквозь корпус не проплывают
 			a.p = p

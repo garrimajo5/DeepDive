@@ -567,6 +567,7 @@ func test_view_one_multimesh_follows_world() -> void:
 	ok(tr.origin.distance_to(f.agent.p) < 1e-3, "место рыбки — из мира")
 	_close(EcoFishLook.forward(f, view.world.time) * EcoFishLook.scale(f), tr.basis * Vector3(0, 0, 1), "нос по курсу")
 	_close(EcoFishLook.basis(f, view.world.time).x, tr.basis.x, "расстановка — как EcoFishLook.basis")
+	_close(EcoFishLook.basis(f, view.world.time).y, tr.basis.y, "спина с креном — как EcoFishLook.basis")
 	near(FishView.shade_at(fv.buffer, f.index), EcoFishLook.shade(f), 1e-5, "оттенок тела особи")
 	near(FishView.tail_phase_at(fv.buffer, f.index), EcoFishLook.tail_phase(f), 1e-5, "фаза хвоста — в альфе цвета")
 	var mat := fv.multimesh.mesh.surface_get_material(0) as ShaderMaterial
@@ -716,6 +717,134 @@ func test_near_vertical_swim_does_not_wobble_heading() -> void:
 	near(EcoFish.flat_k(EcoFish.FLAT_MIN), 0.0, 1e-6, "у FLAT_MIN — курс стоит, как отвесно")
 	var flat := EcoFish.turn(Vector3(1, 0, 0), Vector3(0, 0, 3), dt)
 	near(Vector3(1, 0, 0).angle_to(flat), EcoFish.LOOK_MAX * dt, 1e-4, "по горизонтали поворот прежний")
+
+
+## Б3, вторичное движение (#1400): в повороте рыбка ложится на бок спиной к центру поворота, крен копится и
+## уходит плавно — разворот стаи кроны читается вспышкой боков, а не поворотом плоских фигурок.
+func test_tail_arcs_into_turn() -> void:
+	# оттенок и ступень изгиба в одном числе INSTANCE_CUSTOM.a: туда и обратно, и в half float Compatibility
+	for shade in [1.0 - EcoFishLook.SHADE_SPREAD, 1.0, 1.0 + EcoFishLook.SHADE_SPREAD]:
+		for bank in [-1.0, -EcoFishLook.BANK_MAX, -0.11, 0.0, 0.03, 0.26, EcoFishLook.BANK_MAX]:
+			var a := EcoFishLook.pack_shade(shade, bank)
+			var lv := EcoFishLook.arc_level(bank)
+			if not near(EcoFishLook.unpack_shade(a), shade, 1e-5, "оттенок цел: %.2f / %.2f" % [shade, bank]):
+				return
+			if not near(EcoFishLook.unpack_arc(a), float(lv) / EcoFishLook.ARC_LEVELS, 1e-6, "ступень цела"):
+				return
+			var h := _half(a)
+			if not near(EcoFishLook.unpack_shade(h), shade, 0.02, "оттенок в half float: %.2f / %.2f" % [shade, bank]):
+				return
+			if not near(EcoFishLook.unpack_arc(h), float(lv) / EcoFishLook.ARC_LEVELS, 1e-6, "ступень в half float"):
+				return
+	near(EcoFishLook.unpack_arc(EcoFishLook.pack_shade(1.0, 99.0)), 1.0, 1e-6, "не больше полного изгиба")
+	near(EcoFishLook.unpack_shade(1.0), 1.0, 1e-6, "пестрянки (1.0) — свой оттенок")
+	eq(EcoFishLook.unpack_arc(1.0), 0.0, "у пестрянок хвост не гнётся по дуге")
+	# хвост, а не голова: нос не сдвигается, кончик — на ARC_AMP при полном изгибе
+	eq(EcoFishLook.tail_arc(EcoFishLook.NOSE, 1.0), 0.0, "голова жёсткая")
+	near(EcoFishLook.tail_arc(EcoFishLook.TAIL_TIP, 1.0), EcoFishLook.ARC_AMP, 1e-6, "кончик — ARC_AMP")
+	eq(EcoFishLook.tail_arc(EcoFishLook.TAIL_TIP, 1.0, 0.0), 0.0, "«Экономно» — без изгиба")
+	# долгий поворот к боку +x — хвост к центру поворота (+x), плавно; прямо — выпрямляется
+	var dt := 1.0 / 30.0
+	var w := _world()
+	var fish := _fish(w)
+	var f := fish.all[2]
+	f.look = Vector3(0, 0, 1)
+	f.bank = 0.0
+	f.bank_v = 0.0
+	var prev := 0.0
+	var worst := 0.0
+	for i in 60:
+		var was := f.look
+		var yaw := atan2(was.x, was.z) + 2.0 * dt
+		f.look = Vector3(sin(yaw), 0, cos(yaw))
+		EcoFishLook.bank_step(f, was, f.look, dt)
+		var tip := EcoFishLook.tail_arc(EcoFishLook.TAIL_TIP, EcoFishLook.unpack_arc(
+			EcoFishLook.pack_shade(1.0, f.bank)))
+		worst = maxf(worst, absf(tip - prev))
+		prev = tip
+	ok(prev > 0.5 * EcoFishLook.ARC_AMP, "в повороте хвост к центру (+x): %.3f м" % prev)
+	ok(worst < 0.01, "изгиб копится плавно: за кадр кончик не дальше %.4f м" % worst)
+	f.agent.v = f.look * 2.0
+	var buf := FishView.pack(fish, 1.0)
+	near(FishView.arc_at(buf, f.index), float(EcoFishLook.arc_level(f.bank)) / EcoFishLook.ARC_LEVELS, 1e-6,
+		"изгиб — в буфере экземпляра")
+	near(FishView.shade_at(buf, f.index), EcoFishLook.shade(f), 1e-5, "оттенок в буфере — прежний")
+	for i in 60:
+		EcoFishLook.bank_step(f, f.look, f.look, dt)
+	eq(FishView.arc_at(FishView.pack(fish, 2.0), f.index), 0.0, "прямо — хвост прямой")
+	var code := FishView.shader_code()
+	ok(code.contains("half_a *") and code.contains("floor(INSTANCE_CUSTOM.a * 0.5)"), "шейдер гнёт хвост по дуге")
+
+
+## Округлить до half float (11 бит мантиссы) — так Compatibility хранит INSTANCE_CUSTOM.
+static func _half(x: float) -> float:
+	if x == 0.0:
+		return 0.0
+	var e := floorf(log(absf(x)) / log(2.0))
+	var step := pow(2.0, e - 10.0)
+	return roundf(x / step) * step
+
+
+func test_bank_leans_into_turn_smoothly() -> void:
+	var dt := 1.0 / 30.0
+	var w := _world()
+	var f := _fish(w).all[2]
+	f.look = Vector3(0, 0, 1)
+	var rate := 2.0   # курс растёт 2 рад/с — поворот к боку формы +x
+	var prev := 0.0
+	var worst := 0.0
+	for i in 60:
+		var was := f.look
+		var yaw := atan2(was.x, was.z) + rate * dt
+		f.look = Vector3(sin(yaw), 0, cos(yaw))
+		EcoFishLook.bank_step(f, was, f.look, dt)
+		worst = maxf(worst, absf(f.bank - prev))
+		prev = f.bank
+	near(f.bank, EcoFishLook.bank_want(rate), 0.01, "в долгом повороте — нужный крен")
+	ok(f.bank > 0.25 and f.bank <= EcoFishLook.BANK_MAX + 1e-6, "крен заметный, не больше BANK_MAX: %.2f" % f.bank)
+	ok(worst < 0.05, "крен копится плавно: за кадр не больше %.3f рад" % worst)
+	f.agent.v = f.look * 2.0
+	var b := EcoFishLook.basis(f, _straight(f))
+	var k := EcoFishLook.scale(f)
+	var center := Vector3(f.look.z, 0, -f.look.x)   # центр поворота — к боку +x формы
+	ok(b.y.normalized().dot(center) > 0.3, "спина наклонена к центру поворота")
+	near(b.determinant(), k * k * k, 1e-3, "крен без зеркала — грани не выворачиваются")
+	near(b.x.normalized().dot(b.z.normalized()), 0.0, 1e-4, "бок поперёк носа")
+	near(EcoFishLook.bank_want(-100.0), -EcoFishLook.BANK_MAX, 1e-6, "в обратную сторону — не больше BANK_MAX")
+	for i in 60:   # пошла прямо — выпрямляется
+		EcoFishLook.bank_step(f, f.look, f.look, dt)
+	ok(absf(f.bank) < 0.01, "прямо — без крена: %.3f" % f.bank)
+	f.bank = 0.4
+	EcoFishLook.bank_step(f, Vector3.ZERO, Vector3(0, 0, 1), dt)
+	eq(f.bank, 0.0, "не плыла — крена нет")
+	# в тревоге курс мечется влево-вправо каждые 0,1 с на полном LOOK_MAX — крен не перекидывается за кадр
+	f.bank = 0.0
+	f.bank_v = 0.0
+	var banks: Array[float] = []
+	for i in 90:
+		var was2 := f.look
+		var yaw2 := atan2(was2.x, was2.z) + EcoFish.LOOK_MAX * dt * (1.0 if (i / 3) % 2 == 0 else -1.0)
+		f.look = Vector3(sin(yaw2), 0, cos(yaw2))
+		EcoFishLook.bank_step(f, was2, f.look, dt)
+		banks.append(f.bank)
+	var acc := 0.0   # угловое ускорение крена по отсчётам через 3 кадра, как tools/jerk.gd
+	var k3 := 3.0 * dt
+	for i in range(6, banks.size()):
+		acc = maxf(acc, absf((banks[i] - banks[i - 3]) / k3 - (banks[i - 3] - banks[i - 6]) / k3) / k3)
+	ok(acc < 20.0, "мечется — крен без рывков: %.1f рад/с²" % acc)
+	f.bank = 0.0
+	f.bank_v = 0.0
+	EcoFishLook.bank_step(f, Vector3(0, 0, 1), Vector3(sin(0.5), 0, cos(0.5)), 2.0)
+	ok(f.bank > 0.0 and f.bank <= EcoFishLook.BANK_MAX + 1e-6, "длинный шаг дальней стаи — без перелёта: %.3f" % f.bank)
+	for i in 120:
+		w.step(dt)
+	var any := false
+	for g: EcoFish.Fish in _fish(w).all:
+		any = any or absf(g.bank) > 0.02
+		if absf(g.bank) > EcoFishLook.BANK_MAX + 1e-6:
+			ok(false, "крен в мире не больше BANK_MAX")
+			return
+	ok(any, "мир ведёт крен рыбок")
 
 
 ## Б3: нос `Fish.look` догоняет скорость — рывок от хищника разворачивает тело за доли секунды, а не за кадр.

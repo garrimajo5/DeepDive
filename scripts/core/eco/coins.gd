@@ -60,6 +60,10 @@ const PITCH_MAX := 0.6
 const BANK_K := 0.25
 const BANK_MAX := 0.4
 const BANK_FOLLOW := 5.0
+## Поворот с инерцией (Б3, как `EcoPred.TURN_ACCEL`): скорость поворота `Coin.spin` меняется не быстрее TURN_ACCEL
+## рад/с², к курсу — не быстрее √(2 · TURN_ACCEL · угол), тормозит заранее. Раньше новая цель за спиной или бегство
+## от сонара срывали нос с места на полные 5 рад/с за кадр (tools/jerk.gd near=50: до 66 рад/с² у 00 → 01).
+const TURN_ACCEL := 20.0
 
 
 ## Монетник.
@@ -79,6 +83,8 @@ class Coin:
 	## Куда смотрит нос (+Z меша, единичный) и крен (рад, + — на левый бок, в поворот влево): ведёт turn().
 	var look := Vector3(0, 0, 1)
 	var bank := 0.0
+	## Скорость поворота носа (вектор вдоль оси, рад/с): набирается и гаснет не быстрее TURN_ACCEL (`turn`).
+	var spin := Vector3.ZERO
 	var gx := INF
 	var gz := INF
 	var gh := 0.0
@@ -227,6 +233,7 @@ func _spawn(cn: Coin) -> void:
 	cn.vel = Vector3.ZERO
 	cn.look = Vector3(sin(cn.phase), 0.0, cos(cn.phase))
 	cn.bank = 0.0
+	cn.spin = Vector3.ZERO
 	cn.goal_t = 0.0
 	cn.goal = cn.pos
 
@@ -326,19 +333,33 @@ static func yaw_of(d: Vector3) -> float:
 	return atan2(-d.x, -d.z)
 
 
-## Шаг поворота тела за dt: нос догоняет aim(), крен — по скорости поворота (как у серпохвоста, EcoPred.turn).
+## Шаг поворота тела за dt: нос догоняет aim() со скоростью поворота spin (инерция), крен — по скорости поворота
+## (как у серпохвоста, EcoPred.turn).
 static func turn(cn: Coin, dt: float) -> void:
 	if dt <= 0.0:
 		return
 	var from := cn.look
 	var want := aim(cn)
 	var ang := from.angle_to(want)
+	var goal := Vector3.ZERO
 	if ang > 1e-5:
 		var axis := from.cross(want)
-		if axis.length_squared() < 1e-10:  # ровно назад — разворот по горизонтали
-			axis = Vector3.UP
-		var step := minf(ang * (1.0 - exp(-TURN_FOLLOW * dt)), TURN_MAX * dt)
-		cn.look = from.rotated(axis.normalized(), step).normalized()
+		if axis.length_squared() < 1e-10:  # ровно назад — разворот по горизонтали, в сторону уже начатого
+			axis = Vector3.UP * (-1.0 if cn.spin.y < 0.0 else 1.0)
+		var rate := minf(minf(ang * minf(TURN_FOLLOW, 1.0 / dt), TURN_MAX), sqrt(2.0 * TURN_ACCEL * ang))
+		goal = axis.normalized() * rate
+	cn.spin += (goal - cn.spin).limit_length(TURN_ACCEL * dt)
+	# нос идёт ровно со скоростью spin, без обрезки шага по углу до цели: цель сама едет к носу (ход догоняет новую
+	# точку), и обрезка роняла поворот за кадр (tools/jerk.gd: 42 рад/с²) — перелёт гасит тот же spin
+	var sp := cn.spin.length()
+	if sp > 1e-6:
+		cn.look = from.rotated(cn.spin / sp, sp * dt).normalized()
+		var lim := sin(PITCH_MAX)
+		if absf(cn.look.y) > lim:   # тангаж — не круче PITCH_MAX и при перелёте
+			var f := Vector2(cn.look.x, cn.look.z).normalized()
+			var y := signf(cn.look.y) * lim
+			var c := sqrt(1.0 - y * y)
+			cn.look = Vector3(f.x * c, y, f.y * c)
 	var rate := wrapf(yaw_of(cn.look) - yaw_of(from), -PI, PI) / dt
 	cn.bank = lerpf(cn.bank, clampf(rate * BANK_K, -BANK_MAX, BANK_MAX), 1.0 - exp(-BANK_FOLLOW * dt))
 
