@@ -12,6 +12,12 @@ uniform float layer_floor_y = -20.0;                              // y дна п
 uniform vec3 layer_ice_color = vec3(0.0423, 0.2195, 0.2789);     // WaterLayers.ICE #3A8190
 uniform vec3 layer_thermo_color = vec3(0.0168, 0.0782, 0.1413);  // WaterLayers.THERMO #234F69
 uniform vec3 layer_dust_color = vec3(0.0242, 0.0865, 0.0999);    // WaterLayers.DUST #2B5359
+uniform float layer_tilt = 0.0;                                   // перелив по вертикали (#1400, LightProbe.tilt)
+
+// Перелив по вертикали: светлее ко льду, темнее вниз, линейно по синусу наклона луча (WaterLayers.tilt_k).
+float wl_tilt(vec3 cam, vec3 p, float dist) {
+	return 1.0 + layer_tilt * clamp((p.y - cam.y) / max(dist, 0.001), -1.0, 1.0);
+}
 
 float wl_soft(float y, float a, float b) {
 	if (y <= a) return 0.0;
@@ -39,7 +45,7 @@ float wl_edge(float e, float dist) {
 vec4 water_layers_fog(vec3 cam, vec3 p, float p_above, float t) {
 	float dist = length(p - cam);
 	float a0 = 1.0 - exp(-dist * layer_density);
-	if (layer_gain <= 0.0) return vec4(layer_base, a0);
+	if (layer_gain <= 0.0) return vec4(layer_base * wl_tilt(cam, p, dist), a0);
 	float h = p_above < 0.0 ? max(p.y - layer_floor_y, 0.0) : p_above;
 	float w = 0.12 * sin(p.x * 0.09 + t * 0.25) * sin(p.z * 0.07 - t * 0.15);
 	float li = wl_band_len(cam.y, p.y, dist, -6.0, 0.0, wl_edge(1.5, dist));
@@ -53,5 +59,5 @@ vec4 water_layers_fog(vec3 cam, vec3 p, float p_above, float t) {
 	float la = clamp(total * layer_gain, 0.0, 0.16);
 	float a = a0 + la * (1.0 - a0);
 	vec3 c = (layer_base * a0 * (1.0 - la) + lc * la) / max(a, 0.00001);
-	return vec4(c, a);
+	return vec4(c * wl_tilt(cam, p, dist), a);
 }

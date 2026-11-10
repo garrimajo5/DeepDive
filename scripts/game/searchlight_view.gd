@@ -17,7 +17,7 @@ func _ready() -> void:
 	spot = SpotLight3D.new()
 	spot.name = "Свет прожектора"
 	spot.light_color = Searchlight.COLOR
-	spot.light_energy = Searchlight.ENERGY
+	spot.light_energy = LightProbe.spot_energy()   # проба света #1400: прожектор 5 — вариант сравнения
 	spot.spot_angle = Searchlight.spot_angle_deg()
 	# затухание по расстоянию слабое, как у луча в браузере: в Godot 1,0 — почти обратный квадрат,
 	# и на 20 м до дна прожектор становился невидим (у тестера в pogrujenie — «луча на дне не видно»)
@@ -96,7 +96,12 @@ func set_flicker(k: float) -> void:
 	_energy()
 
 
+## Проба света #1400 сменилась (`LightProbe.set_kind`) — энергию заново.
+func refresh() -> void:
+	_energy()
+
+
 func _energy() -> void:
-	var e := Searchlight.ENERGY * flicker if lit else Searchlight.DARK
+	var e := LightProbe.spot_energy() * flicker if lit else Searchlight.DARK
 	if not is_equal_approx(e, spot.light_energy):
 		spot.light_energy = e

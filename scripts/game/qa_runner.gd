@@ -134,6 +134,10 @@ func tick(dt: float) -> void:
 				_shot(c[1])
 			"hud":   # кадры для магазина: без крестовины, кнопок и строк приборов
 				main.set_hud(c[1])
+			"svet":   # проба света #1400: вариант на том же месте и позе, вода и прожектор — сразу
+				LightProbe.set_kind(c[1])
+				main.searchlight.refresh()
+				_log(LightProbe.line())
 			"play":   # кадр Google Play ART-046: снимок и кадр 1920×1080 с подписью
 				_play(c[1])
 			"goto":

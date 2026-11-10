@@ -33,6 +33,7 @@ const WATER_EPS_DEPTH := 0.005   ## м
 const WATER_EPS_SILT := 0.0005
 var water_writes := 0                          ## сколько раз вода записана (тесты)
 var _water_at := Vector2(INF, INF)             ## глубина и ил последней записи
+var _probe_rev := -1                           ## LightProbe.rev последней записи (#1400)
 var _layers_cam := Vector3(INF, INF, INF)      ## камера последней записи придонной пыли
 var _ship_at := Transform3D(Basis(), Vector3(INF, INF, INF))   ## корабль последней записи лучей и взвеси
 var _ahead_done := []                          ## заготовка россыпей (`prefetch`) готова: [место, lite каждой россыпи]
@@ -172,7 +173,7 @@ func layer_mats() -> Array[ShaderMaterial]:
 ## туманом остаётся только база ART-059 — вдали она темнее воды со слоями вокруг, и предмет проступает силуэтом.
 var extra_layer_mats: Array[ShaderMaterial] = []
 const LAYER_PARAMS: Array[String] = ["layer_base", "layer_density", "layer_gain", "layer_cam_above", "layer_floor_y",
-	"layer_ice_color", "layer_thermo_color", "layer_dust_color"]
+	"layer_ice_color", "layer_thermo_color", "layer_dust_color", "layer_tilt"]
 
 
 ## Подключить материал к слоям воды: числа сразу как у дна (вода по глубине пишется только при её смене, #847).
@@ -429,11 +430,15 @@ func set_shafts_lite(lite: bool) -> void:
 ## silt — корабль в облаке ила 0…1 (Silt.k): вода бурая и мутная.
 func apply_water(env: Environment, depth: float, around: Vector3, silt: float = 0.0) -> void:
 	snow.position = around
-	if absf(depth - _water_at.x) < WATER_EPS_DEPTH and absf(silt - _water_at.y) < WATER_EPS_SILT:
+	if absf(depth - _water_at.x) < WATER_EPS_DEPTH and absf(silt - _water_at.y) < WATER_EPS_SILT \
+			and _probe_rev == LightProbe.rev:
 		return   # глубина и ил те же — всё ниже уже записано (#847)
 	_water_at = Vector2(depth, silt)
+	_probe_rev = LightProbe.rev
 	water_writes += 1
 	var fog := Seabed.Water.fog_color(depth).lerp(Silt.FAR_COLOR, 0.75 * silt)   # серо-зелёная муть (ART-048)
+	var wk := LightProbe.water_k()   # проба света #1400: вода темнее
+	fog = Color(fog.r * wk, fog.g * wk, fog.b * wk)
 	env.background_color = fog
 	far_mat.set_shader_parameter("water", fog)   # дальняя вода — того же цвета, туман её доведёт до фона (#456)
 	env.fog_enabled = true
@@ -445,12 +450,13 @@ func apply_water(env: Environment, depth: float, around: Vector3, silt: float = 
 	shafts_mat.set_shader_parameter("fog_density", env.fog_density)
 	for m in layer_mats():   # FOG в шейдере заменяет штатный туман — база ART-059 туда же (ART-069)
 		m.set_shader_parameter("layer_base", _lin(fog))
+		m.set_shader_parameter("layer_tilt", LightProbe.tilt())   # перелив по вертикали (#1400)
 		m.set_shader_parameter("layer_density", env.fog_density)
 	layers_silt = silt
 	_apply_layers_gain()
 	env.fog_sky_affect = 0.0
 	env.ambient_light_color = Color(0.55, 0.75, 0.8)
-	env.ambient_light_energy = Seabed.Water.ambient(depth)
+	env.ambient_light_energy = Seabed.Water.ambient(depth) * LightProbe.ambient_k()
 	env.tonemap_exposure = Seabed.Water.exposure(depth)
 	sun.light_energy = Seabed.Water.sun(depth)
 	# Каустики на дне гаснут по глубине (меньше света сквозь лёд) и в облаке ила (свет рассеивается).

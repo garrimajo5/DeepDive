@@ -181,6 +181,10 @@ static func apply(g: Main, kv: Dictionary) -> void:
 			cam.global_position = pose["cam"]
 			cam.look_at(pose["look"])
 			cam.make_current()
+	if kv.has("svet"):   # svet=0|1|2 — проба света #1400
+		LightProbe.set_kind(int(kv["svet"]))
+		g.searchlight.refresh()
+		print(LightProbe.line())
 	if kv.has("scena"):  # scena=1|2|3 — контрольный ракурс сцены 00 → 01 (#1400): штатная камера пилота, нос к 01
 		var back := float(kv.get("scena_back", "0"))   # scena_back=<м> — раньше по тому же пути
 		var sp := scena_pose(int(kv["scena"]), back)

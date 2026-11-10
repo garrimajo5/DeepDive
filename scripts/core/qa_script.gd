@@ -74,14 +74,16 @@ extends RefCounted
 ##   {"do": "slow"}                                  — предложение «Экономно» ART-044, как после низких кадр/с
 ##                                                     (в прогоне само не открывается; ответ — lite_yes / lite_no)
 ##   {"do": "hud", "on": false}                     — спрятать крестовину и кнопки (кадры для магазина); true — вернуть
+##   {"do": "svet", "n": 1}                          — проба света #1400 (`LightProbe`): 0 — исходное, 1 — вода ×0,72 и
+##                                                     рассеянный ×0,8 с переливом, 2 — то же + прожектор 5
 ##   {"do": "play", "n": 1}                          — кадр Google Play ART-046: снимок → kadr-1-snimok.png и кадр 1920×1080
 ##                                                     с подписью n-го шаблона (1…4, `PlayFrame.CAPTIONS`) → kadr-1.png
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z[, yaw°]], ["floor"], ["outside", on, at, lamp], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["ping"], ["pred", n, bush, away], ["route"], ["act"], ["mate_hold", on], ["gone"], ["save", on], ["wreck"], ["back"], ["tutorial", on, шаг 1…7], ["brief", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z[, yaw°]], ["floor"], ["outside", on, at, lamp], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["ping"], ["pred", n, bush, away], ["route"], ["act"], ["mate_hold", on], ["gone"], ["save", on], ["wreck"], ["back"], ["tutorial", on, шаг 1…7], ["brief", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["svet", n], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
-const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "ping", "pred", "ship", "floor", "outside", "fly", "route", "gone", "save", "wreck", "back", "tutorial", "brief", "cards", "voice", "slow", "hud", "play", "log", "quit"]
+const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "ping", "pred", "ship", "floor", "outside", "fly", "route", "gone", "save", "wreck", "back", "tutorial", "brief", "cards", "voice", "slow", "hud", "svet", "play", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "map", "map_back", "hint_map", "new", "exit", "yes", "no", "crew", "journal", "settings", "graphics", "g0", "g1", "g2", "fps", "golos", "zvuk", "s0", "v_hold", "v_voice", "v_hear", "v_mic", "lite_yes", "lite_no", "ask", "brief", "join", "last", "lobby_new", "lobby_addr", "lobby_refresh",
 	"jcell0", "jcell1", "jcell2", "jcell3", "jcell4", "jcell5", "jprev", "jnext", "jclose", "jtab0", "jtab1", "jlore0", "jlore1", "jlore2",
 	"key0", "key1", "key2", "key3", "key4", "key5", "key6", "key7", "key8", "key9", "key.", "keydel"]
@@ -91,7 +93,7 @@ const PRESS_TIME := 0.15   ## сколько держать кнопку при 
 const FINGER := 900        ## номер пальца для касаний сценария (не пересекается с настоящими)
 ## После этих команд скриншот ждёт следующего шага: снимок берёт уже нарисованный кадр, и без кадра между ними
 ## на картинке было бы старое место (issue #216: 09g-tablo сразу после goto повторял 09e-eel-alarm).
-const NEEDS_FRAME := ["goto", "ship", "floor", "outside", "fly", "sample", "breach", "mate", "act", "gone", "route", "silt", "hot", "hud"]
+const NEEDS_FRAME := ["goto", "ship", "floor", "outside", "fly", "sample", "breach", "mate", "act", "gone", "route", "silt", "hot", "hud", "svet"]
 
 var steps: Array = []
 var errors: Array[String] = []
@@ -259,6 +261,8 @@ func _begin(st: Dictionary, out: Array) -> void:
 			out.append(["slow"])
 		"hud":
 			out.append(["hud", bool(st.get("on", true))])
+		"svet":
+			out.append(["svet", clampi(int(st.get("n", 0)), 0, LightProbe.NAMES.size() - 1)])
 		"play":
 			out.append(["play", clampi(int(st.get("n", 1)), 1, PlayFrame.CAPTIONS.size())])
 		"voice":

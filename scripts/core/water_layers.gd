@@ -104,8 +104,26 @@ static func add(cam: Vector3, p: Vector3, cam_above: float, p_above: float, t: f
 
 ## Итоговый туман (линейный цвет, альфа) — как FOG в шейдере: база ART-059 и добавка поверх.
 ## base_color — цвет тумана в линейном виде, density — env.fog_density, g — gain().
+## tilt — вертикальный перелив воды (#1400, проба `LightProbe`): цвет × `tilt_k` по наклону луча.
 static func fog(cam: Vector3, p: Vector3, cam_above: float, p_above: float, base_color: Color, density: float,
-		g: float, t: float = 0.0) -> Array:
+		g: float, t: float = 0.0, tilt: float = 0.0) -> Array:
+	var r0 := _fog(cam, p, cam_above, p_above, base_color, density, g, t)
+	var k := tilt_k(cam, p, tilt)
+	var c: Color = r0[1]
+	return [r0[0], Color(c.r * k, c.g * k, c.b * k)]
+
+
+## Перелив по вертикали (#1400): светлее ко льду, темнее вниз — линейно по синусу наклона луча камера → точка,
+## без порога: у горизонта нет ни полосы, ни стены. Двойник `layer_tilt` в shaders/water_layers.gdshaderinc.
+static func tilt_k(cam: Vector3, p: Vector3, tilt: float) -> float:
+	var d := cam.distance_to(p)
+	if d < 0.001 or tilt == 0.0:
+		return 1.0
+	return 1.0 + tilt * clampf((p.y - cam.y) / d, -1.0, 1.0)
+
+
+static func _fog(cam: Vector3, p: Vector3, cam_above: float, p_above: float, base_color: Color, density: float,
+		g: float, t: float) -> Array:
 	var a0 := 1.0 - exp(-cam.distance_to(p) * density)
 	if g <= 0.0:
 		return [a0, base_color]
