@@ -4,6 +4,8 @@ extends Control
 ## янтарная стрелка `HintPointer.ARROW_CELL` у края и одно слово под ней («Пробоина»), в кадре — плашка
 ## «Пробоина · машинное» над кольцом мирового указателя (`HintPointerView.symbol`). Касания не перехватывает.
 
+const FILL := UiStyle.PLATE_A   ## заливка плашки подписи: глухая (#1556)
+
 var atlas: Texture2D   ## белый атлас указателя (`HintPointerView.amber`)
 var arrow: Array = []  ## [ячейка на экране, зеркалить] или []
 var symbol := Rect2()  ## мировой символ на экране или пусто
@@ -55,5 +57,5 @@ func _draw() -> void:
 			r = Rect2(r.position.x + r.size.x, r.position.y, -r.size.x, r.size.y)
 		draw_texture_rect_region(atlas, r, HintPointer.ARROW_CELL, AlarmBoard.WORD_ON)
 	var b := box()
-	draw_style_box(UiStyle.box(Color(AlarmBoard.BACK, 0.92), 10.0 * s, AlarmBoard.WORD_ON, 2.0 * s), b)
+	draw_style_box(UiStyle.box(Color(AlarmBoard.BACK, FILL), 10.0 * s, AlarmBoard.WORD_ON, 2.0 * s), b)
 	UiStyle.label(self, get_theme_default_font(), text, b, AlarmWay.LABEL_PX * s, AlarmBoard.WORD_ON)
