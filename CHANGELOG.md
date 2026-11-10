@@ -3,6 +3,9 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-10
+- `tools/shot.gd luch_ten=0` — прожектор без тени (после `grafika=`), и `budget=` пишет строку «тень прожектора»:
+  цена тени на «Обычно» для #1400. Облачно (Compatibility) `scena=1…3 grafika=1`: тень — 31–40 вызовов, кадр
+  125→169, 127→173, 122→156. Тест `test_shot_place.test_luch_ten_off_after_graphics`.
 - Шапка `tools/shot.gd`: у `zamer=` и `zamer_off=` — что журнал смен режима хищника и строк приборов и гашение
   света идут только с `scena_t=` (без него мир снимка не шагает; #1350).
 - Порог `test_eco_speed.test_view_step_fits_frame` — 3,8 мс на ПК вместо 3,4: за 09–10.11 в 28 прогонах CI шаг
