@@ -68,6 +68,8 @@ const PRED_PER_DIVE := 0.15
 ## {"type": MESSAGE, "text": "…"}                                         — строка на приборы как есть
 ##     "urgent": true (только у строк из URGENT, #1498) — строка угрозы: на приборах не перебивается строками мира
 ##     попроще, пока не покажется MESSAGE_SECONDS; у остальных ключа нет. То же поле бывает и у OBSERVE.
+##     "keep": true (только у строк из KEEP, #1555) — строка «держится»: на приборы встаёт в очередь, как обычная, а
+##     вышла — строки мира её не перебивают MESSAGE_SECONDS; срочная перебивает. То же поле бывает и у OBSERVE.
 ## {"type": OBSERVE, "species": "fish", "note": "flee", "text": "…"}      — наблюдение для журнала (handleEvents
 ##     в js/game.js): событие шины EcoBus с заметкой вида (Species.is_observation) не дальше EcoBus.HEARING от корабля.
 ##     text — строка на приборы ("" — без текста); корабль показывает её сам, как MESSAGE, а у нового наблюдения
@@ -131,17 +133,21 @@ static func near(species: String, name: String, pos: Vector3, ship_pos: Vector3,
 		"sonar": sonar, "scan": scan}
 
 
-static func message(text: String, is_urgent := false) -> Dictionary:
+static func message(text: String, is_urgent := false, is_keep := false) -> Dictionary:
 	var e := {"type": MESSAGE, "text": text}
 	if is_urgent:
 		e["urgent"] = true
+	if is_keep:
+		e["keep"] = true
 	return e
 
 
-static func observe(species: String, note: String, text: String = "", is_urgent := false) -> Dictionary:
+static func observe(species: String, note: String, text: String = "", is_urgent := false, is_keep := false) -> Dictionary:
 	var e := {"type": OBSERVE, "species": species, "note": note, "text": text}
 	if is_urgent:
 		e["urgent"] = true
+	if is_keep:
+		e["keep"] = true
 	return e
 
 
@@ -152,6 +158,15 @@ const URGENT := {"pred": ["alert"]}
 
 static func urgent(species: String, note: String) -> bool:
 	return note in (URGENT.get(species, []) as Array)
+
+
+## Строки «держится» (#1555): вид → заметки, чья строка на приборах живёт все 4,2 с («keep» у MESSAGE/OBSERVE).
+## «Хищник потерял корабль» — единственный знак «угроза ушла» для того, кто не слышит щелчков: по ней включают свет.
+const KEEP := {"pred": ["lost"]}
+
+
+static func keep(species: String, note: String) -> bool:
+	return note in (KEEP.get(species, []) as Array)
 
 
 static func voice(role: int, text: String, fake := false, ask := "", silent := false, id := "") -> Dictionary:

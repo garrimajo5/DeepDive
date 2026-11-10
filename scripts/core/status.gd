@@ -168,6 +168,8 @@ class Lines:
 ## игрока (`wait` = false) показываются сразу — отклик на кнопку не ждёт.
 ## Строка угрозы мира (`urgent`, `EcoLink.URGENT`, #1516) выходит сразу и держится все свои секунды: обычная строка
 ## мира в это время ждёт очереди (`next`), своё сообщение игрока перебивает её, как любую.
+## Строка мира «держится» (`keep`, `EcoLink.KEEP`, #1555: «хищник потерял корабль») встаёт в очередь, как обычная, а
+## вышла — держится все свои секунды, как срочная; срочная её перебивает сразу. Ждущую «держится» обычная не сменяет.
 class Message:
 	const MIN_SHOW := 1.0
 	var text := ""
@@ -180,35 +182,42 @@ class Message:
 	var world := false
 	## Текущее — строка угрозы мира (#1516): строки мира её не перебивают, пока она не погасла сама.
 	var hot := false
+	## Текущее держится не как срочная, а как «держится» (#1555): срочная его перебивает.
+	var keep := false
+	## Ждущее — «держится» (#1555): обычная строка мира его не сменяет.
+	var next_keep := false
 
 	func visible() -> bool:
 		return not text.is_empty()
 
-	func say(msg: String, seconds: float = MESSAGE_SECONDS, wait := false, urgent := false) -> void:
+	func say(msg: String, seconds: float = MESSAGE_SECONDS, wait := false, urgent := false, held := false) -> void:
 		if urgent and wait and not msg.is_empty():
 			if msg == next:
-				next = ""
-				next_left = 0.0
+				_drop_next()
 			_show(msg, seconds)
 			world = true
 			hot = true
 			return
 		if wait and world and not msg.is_empty() and not text.is_empty() and msg != text and (hot or shown < MIN_SHOW):
+			if next_keep and not held and not next.is_empty():
+				return   # ждущую «держится» обычная строка мира не сменяет (#1555)
 			next = msg
 			next_left = seconds
+			next_keep = held
 			return
 		if wait or msg == next:
-			next = ""
-			next_left = 0.0
+			_drop_next()
 		_show(msg, seconds)
 		world = wait
+		if wait and held and not msg.is_empty():
+			hot = true
+			keep = true
 
 	## Забрать строки мира с приборов (брифинг прибытия, #1429): видимая строка мира и ждущая гаснут, отдаётся последняя
 	## («» — их нет). Свои сообщения игрока не трогает.
 	func take_world() -> String:
 		var out := next
-		next = ""
-		next_left = 0.0
+		_drop_next()
 		if world and not text.is_empty():
 			if out.is_empty():
 				out = text
@@ -216,12 +225,12 @@ class Message:
 			left = 0.0
 			world = false
 			hot = false
+			keep = false
 		return out
 
 	func clear(msg: String) -> void:
 		if next == msg:
-			next = ""
-			next_left = 0.0
+			_drop_next()
 		if text == msg:
 			text = ""
 			left = 0.0
@@ -239,6 +248,7 @@ class Message:
 			text = ""
 			left = 0.0
 			hot = false
+			keep = false
 			_take_next()
 
 	func _show(msg: String, seconds: float) -> void:
@@ -246,13 +256,21 @@ class Message:
 		left = seconds if not msg.is_empty() else 0.0
 		shown = 0.0
 		hot = false
+		keep = false
+
+	func _drop_next() -> void:
+		next = ""
+		next_left = 0.0
+		next_keep = false
 
 	func _take_next() -> void:
 		if next.is_empty():
 			return
 		var m := next
 		var s := next_left
-		next = ""
-		next_left = 0.0
+		var k := next_keep
+		_drop_next()
 		_show(m, s)
 		world = true
+		hot = k
+		keep = k

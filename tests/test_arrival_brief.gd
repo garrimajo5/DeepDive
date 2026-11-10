@@ -235,3 +235,32 @@ func test_scene_urgent_line_waits_for_brief() -> void:
 	eq(main.message.text, "Серпохвост замер и смотрит на корабль", "срочная на приборах")
 	ok(main.message.hot, "и держится как срочная")
 	ok(not main.world_wait_hot, "ожидание сброшено")
+
+
+## Строка «держится» под брифингом (#1555): обычная её не сменяет, срочная сменяет; вышла — держится, не срочная.
+func test_scene_keep_line_waits_for_brief() -> void:
+	Main.hints = true
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	for i in 30:
+		main.step(1.0 / 30.0)
+	ok(main.arrival.active(), "брифинг на экране")
+	main.world_wait = ""
+	main.world_wait_hot = false
+	main.world_wait_keep = false
+	var lost := "Хищник потерял корабль и отворачивает"
+	main.on_eco_event(EcoLink.message(lost, false, true))
+	main.on_eco_event(EcoLink.message("Рыбы пасутся на мху"))
+	eq(main.world_wait, lost, "обычная не сменяет ждущую «держится»")
+	main.on_eco_event(EcoLink.message("Серпохвост замер", true))
+	eq(main.world_wait, "Серпохвост замер", "срочная главнее")
+	ok(main.world_wait_hot and not main.world_wait_keep, "ждёт срочная")
+	main.world_wait = ""
+	main.world_wait_hot = false
+	main.on_eco_event(EcoLink.message(lost, false, true))
+	main.arrival.on = false   # брифинг кончился
+	main.release_world_say()
+	eq(main.message.text, lost, "«держится» на приборах")
+	ok(main.message.hot and main.message.keep, "и держится, не как срочная")
+	ok(not main.world_wait_keep, "ожидание сброшено")
