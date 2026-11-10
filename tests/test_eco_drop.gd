@@ -302,6 +302,26 @@ func test_feeding_moss_on_platform() -> void:
 		ok(far > 50.0, "до мха рифа %.0f м" % far)
 
 
+## Мох 06 по курсу подхода (#840, решение уровней 10.11): с начала подхода 03 → 06 ближнее пятно в поле зрения по курсу
+## (половина `Deck.FOV`) и не дальше луча прожектора, а направление на начало склона — тоже в кадре. Пятна не сливаются.
+func test_feeding_moss_ahead_on_approach() -> void:
+	var a := LayerMap.xz("03")
+	var dir := (LayerMap.xz("06") - a).normalized()
+	var half := Deck.FOV * 0.5
+	var slope := Vector2(Seabed.Slope.X_IN, Seabed.Slope.GAP_Z)
+	var seen := 0
+	for s in [0.0, 10.0, 20.0]:
+		var at: Vector2 = a + dir * s
+		var best := INF
+		for m in EcoDrop.MOSS:
+			if at.distance_to(m) <= Searchlight.BASE_RANGE:
+				best = minf(best, rad_to_deg(absf(dir.angle_to(m - at))))
+		if best <= half and rad_to_deg(absf(dir.angle_to(slope - at))) <= half:
+			seen += 1
+	ok(seen >= 2, "станций подхода с мхом и склоном по курсу: %d из 3" % seen)
+	ok(EcoDrop.MOSS[0].distance_to(EcoDrop.MOSS[1]) > EcoMoss.RADIUS * 2.0, "пятна не сливаются")
+
+
 ## Скребуны края пасутся на своём мху: за 10 минут не уходят от группы, и пятно тускнеет под ними, а потом отрастает.
 func test_feeding_group_stays_and_dims() -> void:
 	var w := EcoWorld.new()
