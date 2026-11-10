@@ -29,6 +29,8 @@ const LITE_CRYSTALS := 3
 const LITE_SIDES := 4
 
 var brink: EcoBrink
+## Мох кормовой площадки у 10 (EcoBrink.moss, #840) — свой меш пятен, один вызов отрисовки.
+var moss_view: MossView
 ## Вершины по треугольникам (мир), нормали, число треугольников, сколько вершин светится.
 var verts := PackedVector3Array()
 var normals := PackedVector3Array()
@@ -47,6 +49,9 @@ func _init(system: EcoBrink, lite_on := false) -> void:
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	lite = lite_on
 	_build()
+	moss_view = MossView.new(brink.moss, brink.ground, lite)
+	moss_view.name = "Мох спуска"
+	add_child(moss_view)
 
 
 ## «Экономно»: меньше кристаллов и граней; назад — полная корка.
@@ -54,6 +59,7 @@ func set_lite(on: bool) -> void:
 	if lite == on:
 		return
 	lite = on
+	moss_view.set_lite(on)
 	_build()
 
 
