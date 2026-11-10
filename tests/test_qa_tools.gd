@@ -263,7 +263,7 @@ func test_run_qa_noise_stale_coldboot() -> void:
 	ok(FileAccess.get_file_as_string("res://.github/workflows/godot.yml").contains("echo \"#${{ github.run_number }} ${GITHUB_SHA::7}\" > version.txt"),
 		"version.txt CI — «#сборка коммит»")
 	ok(ps.contains("STALE_APK $head $built"), "STALE_APK <ожидался> <получен>")
-	ok(ps.contains("if (-not $Pr -and -not $stale) { Set-Content \"$out\\last-commit.txt\" $head }"),
+	ok(ps.contains("if (-not $Pr -and -not $stale) { Set-Content \"$build\\last-commit.txt\" $head }"),
 		"чужой APK не помечается проверенным")
 	# -Pr: сценарий из ветки PR
 	var pr := ps.find("contents/${inBranch}?ref=$prSha")
@@ -281,3 +281,30 @@ func test_runner_logs_pause() -> void:
 	r._notification(Node.NOTIFICATION_APPLICATION_PAUSED)
 	eq(r.log_lines.size(), 0, "без сценария — без строк")
 	r.free()
+
+
+## #1606: прогон PR рядом с плановым — сборка PR ниже стоящей ставится (-d), результат в своей папке (плановый run\
+## не затирается, publish-qa.ps1 -From берёт снимки оттуда), NO_ARTIFACT — только при пустом списке артефактов.
+func test_run_qa_pr_beside_planned() -> void:
+	var ps := _ps("run-qa.ps1")
+	ok(ps.contains("install -r -d $apk"), "установка с понижением версии (-d)")
+	ok(not ps.contains("install -r $apk"), "без -d установок нет")
+	ok(ps.contains("[string]$Out)"), "ключ -Out")
+	ok(not RegEx.create_from_string("\\$out\\b").search(ps.replace("$Out", "")), "$out не путается с -Out (PowerShell не различает регистр)")
+	ok(ps.contains("\"run-pr$Pr\""), "-Pr — своя папка run-pr<номер>")
+	var made := ps.find("$run   = \"$build\\$Out\"")
+	ok(made > 0 and made < ps.find("Remove-Item -Recurse -Force $run"), "папка выбрана до очистки")
+	var arts := ps.find("/artifacts\" --jq '.artifacts[].name'")
+	var none := ps.find("Write-Output \"NO_ARTIFACT")
+	ok(arts > 0 and arts < none, "NO_ARTIFACT — по списку артефактов прогона")
+	ok(ps.find("gh run download $rid -R garrimajo5/DeepDive") > none, "скачивание — с явным репозиторием, после проверки")
+	ok(ps.contains("Push-Location $repo"), "gh — из клона")
+	ok(ps.contains("Write-Output \"DOWNLOAD_FAILED PR#"), "артефакт есть, но не скачался — не NO_ARTIFACT")
+	ok(ps.contains("actions/workflows/godot.yml/runs?head_sha="), "прогон — именно «Godot»")
+	var pub := _ps("publish-qa.ps1")
+	ok(pub.contains("[string]$From = 'run'"), "publish-qa.ps1 -From, по умолчанию run")
+	ok(pub.contains("Get-ChildItem \"$src\\*.png\""), "снимки — из папки -From")
+	ok(not pub.contains("qa-build\\run\\*.png"), "без жёсткого run\\")
+	var qa := FileAccess.get_file_as_string("res://docs/QA.md")
+	for k in ["-Out", "-From", "run-pr", "-r -d"]:
+		ok(qa.contains(k), "docs/QA.md: %s" % k)
