@@ -285,6 +285,9 @@ Compatibility-снимке).
     (`EcoPred.ARRIVE_K`), не кружит; вверх по склону не успевает — тормозит и по горизонтали; взгляд на дно — и по
     дуге к курсу цели. Мир ведёт и у гостя, на CPU — шейдеров и вызовов не прибавилось. Тест —
     `test_eco_pred.test_never_swims_tail_first`, `test_swim_turns_round_instead_of_backing`, `test_swim_arrives_without_circling`
+  - [x] Рыбки стай: почти отвесно курс носа идёт по доле хода по горизонтали (`EcoFish.flat_k`), а не за сносом вбок
+    со скоростью `LOOK_MAX` — стая кроны в тревоге у 01 не мотает носами (jerk.gd scena=3: 168 → 121 рад/с²). Тест —
+    `test_eco_fish.test_near_vertical_swim_does_not_wobble_heading`
   - [x] Серпохвост: скелет и клипы ANIM-001 приняты — `models/serpohvost-anim.glb` (10 костей, Swim/SwimFast в цикле,
     Bite, вертикальный TailStrike; `serpohvost.md`, раздел ANIM-001). Тест — `test_eco_serp_anim`
   - [x] Серпохвост в сцене на скелете: `PredView` — `serpohvost-anim.glb` целиком (3 сетки со skin, вызовов и

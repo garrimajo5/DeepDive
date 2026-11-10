@@ -695,6 +695,29 @@ func test_steep_swim_keeps_side() -> void:
 	ok(Vector2(look.x, look.z).length() > 0.5 and look.z > 0.0, "отвесно вверх — курс прежний, нос поднимается")
 
 
+## #1400: стая кроны в тревоге всплывает почти отвесно, снос вбок 0,03–0,15 м/с меняет знак — курс носа не мотает за
+## ним (было: ±0,3 рад за 0,1 с, угловое ускорение до 170 рад/с² в tools/jerk.gd scena=3). По горизонтали — как было.
+func test_near_vertical_swim_does_not_wobble_heading() -> void:
+	var dt := 1.0 / 30.0
+	var look := Vector3(0, 0, 1)
+	var yaws: Array[float] = []
+	for i in 240:
+		var sway := 0.1 * (1.0 if (i / 6) % 2 == 0 else -1.0)
+		look = EcoFish.turn(look, Vector3(sway, 0.55, 0.02), dt)
+		yaws.append(atan2(look.x, look.z))
+	var worst := 0.0   # угловое ускорение курса по отсчётам через 3 кадра, как tools/jerk.gd
+	var k := 3.0 * dt
+	for i in range(6, yaws.size()):
+		var w1 := wrapf(yaws[i - 3] - yaws[i - 6], -PI, PI) / k
+		var w2 := wrapf(yaws[i] - yaws[i - 3], -PI, PI) / k
+		worst = maxf(worst, absf(w2 - w1) / k)
+	ok(worst < 30.0, "курс почти отвесной рыбки не мотает: %.1f рад/с²" % worst)
+	near(EcoFish.flat_k(1.0), 1.0, 1e-6, "по горизонтали — курс в полную силу")
+	near(EcoFish.flat_k(EcoFish.FLAT_MIN), 0.0, 1e-6, "у FLAT_MIN — курс стоит, как отвесно")
+	var flat := EcoFish.turn(Vector3(1, 0, 0), Vector3(0, 0, 3), dt)
+	near(Vector3(1, 0, 0).angle_to(flat), EcoFish.LOOK_MAX * dt, 1e-4, "по горизонтали поворот прежний")
+
+
 ## Б3: нос `Fish.look` догоняет скорость — рывок от хищника разворачивает тело за доли секунды, а не за кадр.
 func test_nose_turns_smoothly() -> void:
 	var dt := 1.0 / 30.0
