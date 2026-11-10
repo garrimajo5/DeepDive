@@ -3,6 +3,8 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-10
+- MOD-022 (#920): модель купольника принята — `models/kupolnik.glb` (7419 треуг., без скелета), лист
+  `docs/concept-art/kupolnik-model.png`, привязки для ANIM — `kupolnik.md`; тест `test_eco_dome_model`.
 - `StepClock` (#1350): подчасть каждого шага с обычным короче `USUAL_MIN` (0,1 мс) — «×>N» нижней границей, не
   больше «×>100» («EcoKamen 42 ×>100» вместо «EcoKamen 42»); подчасть по событию (реже половины шагов) — без «×».
 - `tools/probe_frames.gd seq=qa from=<снимок> to=<снимок>` (#1350): кусок `scenario.json` шагами тестера без снимков
