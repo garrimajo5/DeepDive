@@ -175,3 +175,79 @@ func test_issue_img_ps1_mirrors_python() -> void:
 	ok(ps.contains("Get-Command gh"), "без gh — печатает текст комментария")
 	var qa := FileAccess.get_file_as_string("res://docs/QA.md")
 	ok(qa.contains("tools\\qa\\issue-img.ps1"), "docs/QA.md называет PowerShell-вариант")
+
+
+func _ps(name: String) -> String:
+	return FileAccess.get_file_as_bytes(DIR.path_join(name)).slice(3).get_string_from_utf8()
+
+
+## #1533: прогон 800+ шагов не укладывался в 195 × 2 с, скрипт не забирал последние снимки и done.txt —
+## тестер добирал их руками. Теперь ждём ≥ 600 с, добираем, пока снимков меньше строк «скриншот» в логе,
+## и в конце печатаем NOT_DONE со списком пропавших.
+func test_run_qa_waits_and_reports_not_done() -> void:
+	var ps := _ps("run-qa.ps1")
+	var m := RegEx.create_from_string("for \\(\\$i = 0; \\$i -lt (\\d+); \\$i\\+\\+\\) \\{\\s*\\n\\s*Start-Sleep (\\d+)").search(ps)
+	ok(m != null and int(m.get_string(1)) * int(m.get_string(2)) >= 600, "ожидание done.txt не меньше 600 с")
+	ok(ps.contains("Write-Output \"NOT_DONE $head"), "в конце — строка NOT_DONE")
+	ok(ps.rfind("NOT_DONE") > ps.rfind("Write-Output \"files: $run\""), "NOT_DONE — после всего вывода")
+	# шаблон строки снимка в скрипте ловит то, что пишет qa_runner.gd, и не ловит «нет картинки»
+	var pat := RegEx.create_from_string("-match '(\\^скриншот [^']+)'").search(ps)
+	ok(pat != null, "шаблон строки снимка найден")
+	if pat == null:
+		return
+	var runner := FileAccess.get_file_as_string("res://scripts/game/qa_runner.gd")
+	ok(runner.contains("_log(\"скриншот %s | %s\""), "qa_runner пишет «скриншот <имя> | …»")
+	var re := RegEx.create_from_string(pat.get_string(1))
+	var hit := re.search("скриншот 36b-ognecvet-posle | корабль (0, -30, 0)")
+	ok(hit != null and hit.get_string(1) == "36b-ognecvet-posle", "имя снимка из строки лога")
+	ok(re.search("скриншот 01-start: нет картинки (headless)") == null, "строка без картинки не в счёт")
+
+
+## #1533: SHA ветки отчёта — до возврата клона на main; -Shots принимает имена с .jpg/.png.
+func test_publish_qa_sha_and_extensions() -> void:
+	var ps := _ps("publish-qa.ps1")
+	var sha := ps.find("$sha = (git -C $repo rev-parse HEAD)")
+	ok(sha > 0 and sha < ps.find("git -C $repo checkout -q main"), "SHA берётся до возврата на main")
+	ok(ps.contains("Write-Output \"PUSHED $branch $sha\""), "PUSHED печатает SHA")
+	ok(ps.contains("raw.githubusercontent.com/garrimajo5/DeepDive/$sha/qa/$Folder/"), "готовый raw-префикс")
+	var m := RegEx.create_from_string("-replace '([^']+)', ''").search(ps)
+	ok(m != null, "расширение отрезается")
+	if m == null:
+		return
+	var re := RegEx.create_from_string(m.get_string(1))
+	for n in ["36b-ognecvet-posle.jpg", "36b-ognecvet-posle.png", "36b-ognecvet-posle.jpeg", "36b-ognecvet-posle"]:
+		eq(re.sub(n, ""), "36b-ognecvet-posle", "имя снимка: %s" % n)
+
+
+## #1350: шумный прогон отличать фактом — загрузка ЦП хоста и число процессов эмулятора до установки сценария и
+## после прогона; итог одной строкой RUN (сборка, done, снимки, нагрузка) — в выводе и в конце log.txt.
+func test_run_qa_logs_host_load() -> void:
+	var ps := _ps("run-qa.ps1")
+	ok(ps.contains("function Get-Load") and ps.contains("LoadPercentage") and ps.contains("qemu-system-*"),
+		"нагрузка: ЦП и процессы эмулятора")
+	var before := ps.find("$loadBefore = Get-Load")
+	var after := ps.find("$loadAfter = Get-Load")
+	ok(before > 0 and before < ps.find("monkey -p $app"), "«до» — перед запуском игры")
+	ok(after > ps.find("function Get-Out"), "«после» — когда забрали снимки")
+	var res := ps.find("$result = \"RUN $head done=$done")
+	ok(res > after, "итоговая строка RUN называет сборку")
+	ok(ps.find("Add-Content \"$run\\log.txt\" \"run-qa: $result\"", res) > res, "итог — и в конец log.txt")
+	ok(ps.rfind("NOT_DONE") > res, "NOT_DONE остаётся последней строкой")
+
+
+## #1350: в облачной сессии pwsh нет — синтаксис скриптов тестера проверяет CI (ubuntu-раннер несёт pwsh),
+## и «Тесты» зелёные, только если проверка прошла.
+func test_ci_parses_ps1() -> void:
+	var ci := FileAccess.get_file_as_string("res://.github/workflows/godot.yml")
+	ok(ci.contains("[System.Management.Automation.Language.Parser]::ParseFile"), "CI разбирает .ps1 парсером PowerShell")
+	ok(ci.contains("tools/qa/*.ps1"), "все скрипты тестера")
+	ok(ci.contains("needs: [changes, test-parts, ps1]"), "итог «Тесты» ждёт проверку скриптов")
+	ok(ci.contains("needs.ps1.result }}\" = \"success\""), "и валится, если она красная")
+
+
+## #1350: пуш в main сравнивается с коммитом последнего зелёного прогона «Godot» на main, а не с прошлым пушем:
+## иначе код из отменённого прогона уходил непроверенным, если следом сливали коммит без кода.
+func test_ci_main_diff_from_last_green() -> void:
+	var ci := FileAccess.get_file_as_string("res://.github/workflows/godot.yml")
+	ok(ci.contains("actions/workflows/godot.yml/runs?branch=main&status=success"), "база — последний зелёный прогон main")
+	ok(ci.contains("actions: read"), "у job есть право читать прогоны")

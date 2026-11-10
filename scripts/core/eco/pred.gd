@@ -73,6 +73,9 @@ const GOAL_CEILING := -6.0
 ## Запас до корпуса корабля, м (S.pushOut(pr.p, 0.7)), и до какого зазора дотягивается укусом (hullDist < 1,2).
 const HULL_GAP := 0.7
 const BITE_REACH := 1.2
+## Б3: у обшивки ход внутрь гаснет заранее (`hull_soften`): ближе HULL_SOFT_R, м, — с постоянной HULL_SOFT_K, 1/с.
+const HULL_SOFT_R := 3.0
+const HULL_SOFT_K := 6.0
 ## Риф у Каменного цветка (ось — подножие цветка, EcoFish.Shoal.axis стай кроны): внутрь кольца REEF_KEEP (м по
 ## горизонтали; крона Ø 26 м и кусты коралла вокруг) хищник не заходит, импульс ближе REEF_PING к оси зовёт его на
 ## REEF_EDGE от оси со своей стороны. Отталкивание от кольца — REEF_PUSH (м/с на долю заступа). Сообщение «не идёт
@@ -837,7 +840,23 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 		want = reef_steer(_reef, a.p, want)
 	a.agility = 1.6 if sharp else 1.1
 	a.swim(want, dt, SWIM_TURN, SWIM_TURN_SHARP if sharp else SWIM_TURN_MAX, SWIM_SLOW, world.ground)
+	if pr.mode != Mode.CHARGE:   # не в броске — у обшивки тормозит заранее, а не встаёт о неё за кадр
+		hull_soften(a, world.ship, dt)
 	world.push_out(a, HULL_GAP) # корпус не пускает внутрь
+
+
+## Б3: ближе HULL_SOFT_R к обшивке ход внутрь корпуса гаснет с постоянной HULL_SOFT_K в секунду, а не за кадр в
+## `push_out`. Раньше после укуса корпуса на ходу корабля тело по инерции входило в обшивку и вставало: 8 → 5 м/с
+## за кадр, 183 м/с² (`tools/jerk.gd scena=1 move=3 seed=3`). Бросок (CHARGE) бьёт в корпус как прежде.
+static func hull_soften(a: EcoAgent, ship: EcoLink.ShipState, dt: float) -> void:
+	var res := EcoHull.push_out(a.p, ship.pos, ship.yaw, HULL_SOFT_R)
+	if res.is_empty():
+		return
+	var n: Vector3 = res[1]
+	var sv := Vector3(-sin(ship.yaw), 0.0, -cos(ship.yaw)) * ship.speed
+	var vn := (a.v - sv).dot(n)
+	if vn < 0.0:
+		a.v -= n * vn * minf(1.0, HULL_SOFT_K * dt)
 
 
 ## Вспышка радужников видна издалека: патрульный или проверяющий звук хищник дальше своего чутья, но ближе 110 м

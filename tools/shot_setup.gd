@@ -195,11 +195,16 @@ static func apply(g: Main, kv: Dictionary) -> void:
 				g.sit_at_helm()
 			if kv.has("zamer"):   # zamer=bok|korma|nos — проба фазы «замер» #1498, серпохвост №0 рядом с кораблём
 				zamer_setup(g, sp["ship"], g.helm.yaw, String(kv["zamer"]))
+			if kv.has("strah"):   # strah=<м> — хищник №0 за стаей рифа у 01 на столько метров от неё (реакция стаи)
+				strah_setup(g, sp["ship"], float(kv["strah"]))
+				strah_log(g, 0.0)
 			if kv.has("scena_t"):   # scena_t=<с> — мир идёт столько секунд, корабль висит в точке ракурса (кадры движения)
 				scena_run(g, sp["ship"], float(kv["scena_t"]), float(kv.get("zamer_off", "-1")),   # zamer_off=<с> — свет гаснет
-						kv.has("zamer"))
+						kv.has("zamer"), kv.has("strah"))
 				if kv.has("zamer"):
 					zamer_log(g)
+				if kv.has("strah"):
+					strah_log(g, float(kv["scena_t"]))
 	if kv.has("lore"):  # lore=d07_return,shell03 — знания слоя 1 (#825; ключи LayerLore.KEYS)
 		for k in kv["lore"].split(",", false):
 			g.lore.learn(k)
@@ -321,7 +326,9 @@ const SCENA_DT := 1.0 / 30.0
 
 ## light_off ≥ 0 — через столько секунд прожектор гаснет (ответ экипажа на «замер», zamer_off=).
 ## trace — с zamer=: в лог каждая смена режима хищника №0 и строк приборов с секундой мира (момент потери цели, #1400).
-static func scena_run(g: Node, ship: Vector3, seconds: float, light_off := -1.0, trace := false) -> void:
+## shoal — с strah=: в лог раз в секунду мира — хищник №0 и стая STRAH_SHOAL (#1400).
+static func scena_run(g: Node, ship: Vector3, seconds: float, light_off := -1.0, trace := false,
+		shoal := false) -> void:
 	var n := int(round(seconds / SCENA_DT))
 	var off_at := int(round(light_off / SCENA_DT)) if light_off >= 0.0 else -1
 	var was := {"mode": -1, "parts": []}
@@ -335,6 +342,8 @@ static func scena_run(g: Node, ship: Vector3, seconds: float, light_off := -1.0,
 		if trace:
 			for line in zamer_trace(g, was, (i + 1) * SCENA_DT):
 				print(line)
+		if shoal and (i + 1) % int(round(1.0 / SCENA_DT)) == 0:
+			strah_log(g, (i + 1) * SCENA_DT)
 
 
 ## Что сменилось за шаг (scena_run с trace): режим хищника №0 и строки приборов со словами (числа без слов —
@@ -418,6 +427,64 @@ static func zamer_log(g: Node) -> void:
 	var pr: EcoPred.Pred = g.eco.preds.all[0]
 	print("zamer: хищник №0 — %s, до корабля %.1f м, свет %s" % [EcoPred.Mode.keys()[pr.mode],
 		pr.agent.distance_to(g.helm.pos), "горит" if g.light_on else "погашен"])
+
+
+## Реакция стаи у 01 (strah=, #1400): стая рифа (55; −69) — пятая в EcoFish.HOMES, видна между ветвями цветка.
+const STRAH_SHOAL := 4
+
+
+## Ставит голодного хищника №0 за стаей STRAH_SHOAL — на dist метров от её центра, на продолжении линии
+## корабль → стая (причина — с дальней стороны), на высоте стаи; остальных уводит за 400 м. Фаза «замер» — как в игре.
+## Хищник идёт к краю рифа против стаи (strah_goal); ближе EcoFish.PRED_ALARM — стая в тревоге и прячется у дома.
+static func strah_setup(g: Node, ship: Vector3, dist: float) -> void:
+	var ps: EcoPred = g.eco.preds
+	var fs: EcoFish = g.eco.fish
+	if ps == null or ps.all.is_empty() or fs == null or fs.shoals.size() <= STRAH_SHOAL:
+		push_warning("strah=: нет хищников или стаи")
+		return
+	var c: Vector3 = fs.shoals[STRAH_SHOAL].center
+	var at := strah_spot(ship, c, dist)
+	for pr in ps.all:
+		pr.cooldown = 999.0 if pr.index != 0 else 0.0
+		pr.agent.v = Vector3.ZERO
+		pr.agent.p = at if pr.index == 0 else ship + Vector3(400.0 + 30.0 * pr.index, 0.0, 0.0)
+		pr.agent.goal = strah_goal(ps, c) if pr.index == 0 else pr.agent.p
+		pr.prey = null
+		EcoPred._set_mode(pr, EcoPred.Mode.PATROL, 30.0)
+	ps.all[0].hunger = 0.5
+
+
+## Где ставить хищника strah=: на dist метров за стаей c по линии от корабля, на высоте стаи, не ниже ZAMER_FLOOR
+## над видимым дном.
+static func strah_spot(ship: Vector3, c: Vector3, dist: float) -> Vector3:
+	var dir := Vector3(c.x - ship.x, 0.0, c.z - ship.z).normalized()
+	var at := c + dir * dist
+	at.y = maxf(c.y, Seabed.mesh_height(at.x, at.z) + ZAMER_FLOOR)
+	return at
+
+
+## Цель патруля хищника strah=: стая у 01 — внутри кольца рифа (EcoPred.REEF_KEEP от оси цветка), туда хищник не
+## заходит; идёт к краю кольца против стаи — как обычный патруль к дому стаи (EcoPred.outside_reef).
+static func strah_goal(ps: EcoPred, c: Vector3) -> Vector3:
+	return EcoPred.outside_reef(ps.reef_axis(), c, EcoPred.REEF_KEEP)
+
+
+## Строка лога strah=: секунда мира, хищник №0 (режим, до стаи и до корабля), стая (в тревоге, спрятались, живых,
+## центр до дома).
+static func strah_line(g: Node, t: float) -> String:
+	var pr: EcoPred.Pred = g.eco.preds.all[0]
+	var sh: EcoFish.Shoal = g.eco.fish.shoals[STRAH_SHOAL]
+	var hid := 0
+	for f in sh.members:
+		if f.agent.alive and f.agent.state == EcoAgent.State.HIDE:
+			hid += 1
+	return "strah: %s с — хищник №0 %s, до стаи %.1f м, до корабля %.1f м; стая: тревога %s, спрятались %d из %d, центр от дома %.1f м" % [
+		_num(t), EcoPred.Mode.keys()[pr.mode], pr.agent.p.distance_to(sh.center), pr.agent.distance_to(g.helm.pos),
+		"да" if sh.alarm > 0.0 else "нет", hid, sh.alive, sh.center.distance_to(sh.home)]
+
+
+static func strah_log(g: Node, t: float) -> void:
+	print(strah_line(g, t))
 
 
 ## Поза ракурса scena=n (1…3): корабль в точке SCENA[n − 1] на SCENA_FLOOR над видимым дном, носом к 01.
@@ -573,3 +640,31 @@ static func ground_line(g: Node) -> String:
 		dist.append("%s %s" % [names[i], "нет" if r.is_empty() else "с %d м" % roundi(r["dist"])])
 		edge.append("—" if r.is_empty() else str(roundi((h - r["row"]) / h * 100.0)))
 	return "грунт в окне (#1400): %s · кромка на %s %% кадра снизу" % [", ".join(dist), "/".join(edge)]
+
+
+## Реплика плашки связи для svyaz=: своя — svyaz_text=, иначе образец для своего или подделки.
+static func svyaz_line(kv: Dictionary) -> String:
+	var own: String = kv.get("svyaz_text", "").strip_edges()
+	if own != "":
+		return own
+	return "Дайте импульс сонара" if svyaz_fake(kv) else "Сбросьте ход, перегрев"
+
+
+static func svyaz_fake(kv: Dictionary) -> bool:
+	return kv.get("svyaz", "1") in ["fake", "wrong", "exposed", "silent"]
+
+
+## svyaz=1|fake|wait|match|wrong|exposed|silent — плашка внутренней связи ART-040 в этом состоянии (svyaz_text= — своя строка).
+static func svyaz(g: Main, kv: Dictionary) -> void:
+	var v: String = kv.get("svyaz", "1")
+	g.comms.reset_run(0)
+	var fake := svyaz_fake(kv)
+	g.on_eco_event(EcoLink.voice(Crew.Role.PILOT if fake else Crew.Role.ENGINEER,
+		svyaz_line(kv), fake, "ping" if fake else "", v == "silent"))
+	for i in 6:
+		g.step(0.05)
+	var states := {"wait": Comms.Ask.WAIT, "match": Comms.Ask.MATCH, "wrong": Comms.Ask.WRONG,
+		"exposed": Comms.Ask.EXPOSED, "silent": Comms.Ask.SILENT}
+	if states.has(v):
+		g.comms.state = states[v]
+	g.comms_panel.show_comms(g.comms, g.time, g.comms_area())
