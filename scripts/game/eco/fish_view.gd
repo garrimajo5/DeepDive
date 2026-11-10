@@ -278,6 +278,13 @@ static func fill(out: PackedFloat32Array, system: EcoFish, t: float, moved_only:
 			var side := Vector3(fw.z, 0, -fw.x)
 			side = side.normalized() if side.length() > 1e-4 else Vector3(1, 0, 0)
 			var up := fw.cross(side)
+			var bk := f.bank   # крен в повороте — двойник EcoFishLook.frame
+			if absf(bk) > 1e-3:
+				var bc := cos(bk)
+				var bs := sin(bk)
+				var up2 := up * bc + side * bs
+				side = side * bc - up * bs
+				up = up2
 			var sz := f.size * vary[f.index * VARY]  # своя у особи, молодь мельче
 			var age := t - f.born   # вернувшаяся после съедения растёт (grow_k); не съедали — born = −INF
 			if age < FISH_RISE and age >= 0.0:
