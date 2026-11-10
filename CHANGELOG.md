@@ -3,6 +3,9 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-10
+- `tools/jerk.gd place=` (#1400, фокус потока Б): ближе `near` никого — строка «ближе N м никого; ближайшие за
+  прогон: …» (узел и расстояние) вместо пустого списка худших, в шапке места — расстояние до точки места. Облачный
+  инструмент, код игры не менялся. Тест `test_eco_jerk_tool`.
 - «QA на эмуляторе» (#1393, вторая проба по умолчанию 09.11): эмулятор в Actions идёт в Compatibility (OpenGL ES,
   `-gpu swiftshader_indirect`) — `tools/apk_args.py` дописывает `--rendering-method gl_compatibility` в
   `assets/_cl_` копии `DeepDive-emulator.apk`, CI выравнивает и переподписывает её отладочным ключом (вход
