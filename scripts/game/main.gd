@@ -903,7 +903,7 @@ func _step_zap(dt: float) -> void:
 		ocean.set_scorch(scorch.uniforms(time))
 
 
-## Шаг: виды корабля — пульты, голограммы, отсеки, своя фигура, корабль и камера (подчасти «виды/…» — в худшем кадре
+## Шаг: виды корабля — свет и экраны пультов, ползунки и люк, голограммы, отсеки, своя фигура, корабль и камера (подчасти «виды/…» — в худшем кадре
 ## лога тестера: «виды 57» у колодца 05 в отчёте #1182 не говорил, что внутри).
 func _step_view(dt: float) -> void:
 	_flicker(dt)
@@ -911,7 +911,7 @@ func _step_view(dt: float) -> void:
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	bridge.set_hatch(layout.doors[0].offset())
-	clock.lap("виды/пульты", Time.get_ticks_usec())
+	clock.lap("виды/ползунки и люк", Time.get_ticks_usec())
 	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0, silt.noise(time))
 	sonar_view.show_waypoint(run.waypoint())
 	alarm_board.show_alarms(alarms_on(), time, breach.active)
