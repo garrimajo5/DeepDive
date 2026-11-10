@@ -76,3 +76,68 @@ func test_scene_each_sequence_fires() -> void:
 		Probe.reset(main)
 		ok(not main.flyby.active(), "%s: после цикла вид с борта погашен" % seq)
 		ok(not main.run.ended, "%s: новый забег" % seq)
+
+
+## seq=qa (#1350): кусок сценария тестера — постановка с последнего «ship», окно замера от снимка from= до to=,
+## снимков и выхода в куске нет.
+func test_qa_plan_window() -> void:
+	var steps := [{"do": "shot", "name": "a"}, {"do": "ship", "x": 0, "y": -30, "z": 0}, {"do": "wait", "s": 1},
+		{"do": "shot", "name": "b"}, {"do": "wait", "s": 2}, {"do": "log", "note": "x"}, {"do": "shot", "name": "c"},
+		{"do": "quit"}]
+	eq(Probe.qa_find(steps, "b"), 3, "снимок по имени")
+	eq(Probe.qa_find(steps, "4"), 4, "шаг по номеру")
+	eq(Probe.qa_find(steps, "нет"), -1, "нет снимка")
+	var plan := Probe.qa_plan(steps, {"from": "b", "to": "c"})
+	eq(plan["start"], 1, "постановка — с последнего ship до from")
+	eq(plan["steps"].size(), 4, "ship, wait, wait, log — без снимков")
+	eq(plan["w0"], 2, "замер — с шага после снимка from")
+	eq(plan["w1"], 4, "до снимка to")
+	eq(Probe.qa_plan(steps, {"from": "b"})["w1"], 4, "без to — до конца, quit выброшен")
+	eq(Probe.qa_plan(steps, {"from": "b", "start": "a"})["start"], 0, "start= — своя постановка")
+	ok(Probe.qa_plan(steps, {}).has("error"), "без from — ошибка")
+	ok(Probe.qa_plan(steps, {"from": "c", "to": "b"}).has("error"), "to раньше from — ошибка")
+	ok(Probe.qa_plan(steps, {"from": "b", "start": "c"}).has("error"), "start позже from — ошибка")
+	ok(not Probe.parse(PackedStringArray(["seq=qa", "from=b"])).has("error"), "qa — известная последовательность")
+
+
+func test_qa_stats_max_and_mean() -> void:
+	var acc := {}
+	Probe.qa_add(acc, 10.0, {"мир": 6.0}, {"EcoFish": 4.0}, "мир 6")
+	Probe.qa_add(acc, 30.0, {"мир": 20.0, "виды": 2.0}, {"EcoFish": 2.0, "EcoKamen": 12.0}, "мир 20")
+	Probe.qa_add(acc, 5.0, {"мир": 3.0}, {}, "")
+	eq(acc["n"], 3, "три кадра")
+	eq(acc["worst_at"], 1, "худший — второй кадр")
+	eq(acc["subs"]["EcoFish"][0], 4.0, "максимум подчасти")
+	near(acc["subs"]["EcoFish"][1] / 3.0, 2.0, 1e-6, "среднее по всем кадрам, без подчасти — 0")
+	eq(acc["subs"]["EcoKamen"][2], 1, "кадр максимума")
+	var lines := Probe.qa_lines(1, acc)
+	ok(lines[0].contains("3 кадров") and lines[0].contains("30.0") and lines[0].ends_with("мир 20"), "итог: " + lines[0])
+	var kamen := lines.find(lines.filter(func(l): return l.contains("мир/EcoKamen"))[0])
+	var fish := lines.find(lines.filter(func(l): return l.contains("мир/EcoFish"))[0])
+	ok(kamen >= 0 and kamen < fish, "подчасти — по убыванию максимума")
+	ok(lines.any(func(l): return l.contains("виды") and not l.contains("мир/")), "части шага — тоже")
+	ok(Probe.qa_lines(1, {})[0].contains("нет кадров"), "пустое окно")
+
+
+func test_qa_quiet_runner_steps_scene() -> void:
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var plan := Probe.qa_plan([{"do": "ship", "x": 10, "y": -30, "z": 10}, {"do": "shot", "name": "a"},
+		{"do": "wait", "s": 0.5}, {"do": "shot", "name": "b"}], {"from": "a", "to": "b"})
+	var q := Probe.QuietRunner.new()
+	q.main = main
+	q.script_q = QaScript.parse(JSON.stringify(plan["steps"]))
+	main.add_child(q)
+	main.qa = q
+	var n := 0
+	for i in 40:
+		if q.script_q.index >= plan["w1"]:
+			break
+		if q.script_q.index >= plan["w0"]:
+			n += 1
+		main.step(Probe.DT)
+	ok(Vector2(main.helm.pos.x - 10, main.helm.pos.z - 10).length() < 2.0, "шаг ship выполнен: %s" % main.helm.pos)
+	ok(n >= 14 and n <= 17, "окно — полсекунды кадров: %d" % n)
+	main.qa = null
+	q.queue_free()
