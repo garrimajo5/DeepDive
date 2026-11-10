@@ -26,6 +26,7 @@ var _glint_k := -1.0
 var _glint_tint := Color(-1.0, -1.0, -1.0)
 var _wear_loss := -1.0
 var _screens := Vector4(-1.0, -1.0, -1.0, -1.0)
+var _readout := [Vector3(-1, -1, -1), Vector3(-1, -1, -1)]   ## показ экранов пульта (set_readout)
 var _surfaces: Array[ShaderMaterial] = []
 const SCANNER_TEXT := Color("67DDEB")
 ## Ширина строк экрана сканера, px подписи: видимое стекло в рамке модели уже `SCANNER_SCREEN_SIZE` — строка шире
@@ -257,13 +258,16 @@ static func light_texture(n: Node3D) -> void:
 		m.material_override = sm
 
 
-## Экраны пульта светятся ровным голубым (пока на них ничего не рисуем); три экрана — своя яркость у каждого
-## (`shaders/console_screens.gdshader`, помехи — `set_screens`); сетка — `BridgeProps.screen_mesh` вместо плоскости
-## из GLB (#1388).
+## Экраны пульта по ART-061: ход, глубина и курс, свет и сонар из атласа `textures/ekrany/atlas.png`; три экрана —
+## своя яркость у каждого (`shaders/console_screens.gdshader`, помехи — `set_screens`, показ — `set_readout`);
+## сетка — `BridgeProps.screen_mesh` вместо плоскости из GLB (#1388).
+const SCREENS_ATLAS := preload("res://textures/ekrany/atlas.png")
+
+
 func _light_screens(n: Node3D) -> void:
 	screens_mat = ShaderMaterial.new()
 	screens_mat.shader = load("res://shaders/console_screens.gdshader")
-	screens_mat.set_shader_parameter("glow", BridgeProps.SCREEN_GLOW)
+	screens_mat.set_shader_parameter("atlas", SCREENS_ATLAS)
 	for mi in n.find_children("*", "MeshInstance3D", true, false):
 		(mi as MeshInstance3D).mesh = BridgeProps.screen_mesh()   # стёкла по рамкам корпуса (#1388)
 		(mi as MeshInstance3D).material_override = screens_mat
@@ -277,6 +281,16 @@ func set_screens(helm: Vector3, scanner: float) -> void:
 	_screens = key
 	screens_mat.set_shader_parameter("k", helm)
 	scanner_text.modulate = Color(SCANNER_TEXT.r * scanner, SCANNER_TEXT.g * scanner, SCANNER_TEXT.b * scanner)
+
+
+## Показ экранов пульта (ART-061, #1568): `ConsoleScreen.values` — курс, глубина, ход; `ConsoleScreen.status` — свет,
+## сонар, тревога. Пишет uniform только при смене показа.
+func set_readout(values: Vector3, status: Vector3) -> void:
+	if values == _readout[0] and status == _readout[1]:
+		return
+	_readout = [values, status]
+	screens_mat.set_shader_parameter("values", values)
+	screens_mat.set_shader_parameter("status", status)
 
 
 ## Стекло носовых окон по ART-057 (`steklo-okon.md`): один квад на три окна, маска мути/капель/царапин и нормали

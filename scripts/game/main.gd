@@ -551,6 +551,8 @@ func _flicker(dt: float) -> void:
 	searchlight.set_flicker(k)
 	bridge.set_screens(Vector3(vitals.screen_k(time, Vitals.Screen.HELM_L), vitals.screen_k(time, Vitals.Screen.HELM_C),
 		vitals.screen_k(time, Vitals.Screen.HELM_R)), vitals.screen_k(time, Vitals.Screen.SCANNER))
+	bridge.set_readout(ConsoleScreen.values(helm.yaw, helm.depth(), helm.speed), ConsoleScreen.status(   # ART-061
+		Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP)), sonar.can_ping(time), alarms_on().has(true)))
 	rooms.set_journal_k(vitals.screen_k(time, Vitals.Screen.JOURNAL))   # помехи экранов при стеклоусте (ART-025)
 	if vitals.hiss(dt):
 		drain_sound.play()
