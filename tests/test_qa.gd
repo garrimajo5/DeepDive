@@ -128,6 +128,7 @@ func test_scene_runs_scenario() -> void:
 	var field_known := false   # 32e2: импульс с площадки 08 поймал ритм поля (#833)
 	var bones_seen := false   # 32g: сканер у Костей 04 — строка о минерализации (#840)
 	var shell_known := false   # 32h: сонар и сканер у Раковины 03 — знание «осмотр 03» (#835)
+	var reverse := 0.0   # 05c (#1568): задний ход — минус на левом экране пульта ART-061
 	var ogon: Array[String] = []   # 36/36a/36b (#1401): спрятано венчиков у куста огнецвета 0 и его свечение по кадрам
 	ok(not main.lore.knows(LayerLore.FIELD08), "до прогона поле 08 не замечено")
 	for i in scene_frames(qa.script_q):   # предел — от длины сценария (#1379)
@@ -184,6 +185,8 @@ func test_scene_runs_scenario() -> void:
 				legs_seen = legs_vis
 			if qa.log_lines[k].begins_with("скриншот 16-breach-weld"):
 				weld_y = weld_at
+			if qa.log_lines[k].begins_with("скриншот 05c-zadniy-hod"):
+				reverse = (main.bridge.screens_mat.get_shader_parameter("values") as Vector3).z
 			if qa.log_lines[k].begins_with("скриншот 10-zap"):
 				zap_seen = zap_vis
 			if qa.log_lines[k].begins_with("скриншот 10a-zap-okno"):
@@ -213,6 +216,7 @@ func test_scene_runs_scenario() -> void:
 	eq(windows_hidden, [] as Array[String], "на 33/33a окна не заслоняют товарищи (отчёт 2026-10-26-1233)")
 	ok(mate_weld_seen, "на 26b-mate-weld товарищ варит шов в кадре (#602)")
 	ok(sat, "по сценарию садились за штурвал")
+	ok(reverse < -1.0, "на 05c-zadniy-hod задний ход — на экране пульта ход с минусом: %.1f (#1568)" % reverse)
 	ok(field_known, "32e2: импульс у 08 — ритм поля, знание «поле 08»")
 	ok(bones_seen, "32g: сканер у Костей 04 — строка о минерализации")
 	ok(shell_known, "32h: сонар и сканер у Раковины 03 — знание «осмотр 03»")
