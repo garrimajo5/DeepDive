@@ -731,6 +731,11 @@ func test_view_slow_frame_one_substep() -> void:
 	await frames(1)
 
 
+## Дальше 110 м за краем мира: отмели ±EDGE или котловины склона у 10, куда ходят скребуны спуска (#840).
+static func _out(p: Vector3) -> bool:
+	return Vector2(p.x, p.z).distance_to(EcoAgent.bound_xz(p.x, p.z)) > 110.0
+
+
 ## Весь мир на длинном подшаге SLOW_STEP не разлетается: существа на месте, числа конечные.
 func test_world_steady_on_slow_step() -> void:
 	var view := EcoView.new()
@@ -744,8 +749,7 @@ func test_world_steady_on_slow_step() -> void:
 	var bad := 0
 	for a in view.world.agents:
 		var p := a.p
-		if not (is_finite(p.x) and is_finite(p.y) and is_finite(p.z)) or absf(p.x) > 400.0 or absf(p.z) > 400.0 \
-				or p.y > 5.0 or p.y < Seabed.height(p.x, p.z) - 3.0:
+		if not (is_finite(p.x) and is_finite(p.y) and is_finite(p.z)) or _out(p) or p.y > 5.0 or p.y < Seabed.height(p.x, p.z) - 3.0:
 			bad += 1
 			if bad <= 3:
 				ok(false, "%s в %s" % [a.species, p])

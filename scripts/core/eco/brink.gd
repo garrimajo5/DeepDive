@@ -4,7 +4,7 @@ extends EcoSystem
 ## `Seabed.Slope` к востоку меняет материал и свет — тёмная порода обрастает **кварцевой коркой**: друзы бледных
 ## кристаллов, к востоку гуще и крупнее, кончики слабо светятся холодным светом. Это готовит Кристальный лес
 ## («кристаллы обросли излучатели поля», `docs/world.md`) без его существ: минерал, не вид бестиария, — ни шага, ни
-## целей сонара и сканера. Граница — волнистая линия поперёк котловины у `BORDER_X`; западнее (проход 60 м и склон)
+## целей сонара и сканера (шагает только мох кормовой площадки `MOSS`, #840). Граница — волнистая линия поперёк котловины у `BORDER_X`; западнее (проход 60 м и склон)
 ## корки нет. Друзы ниже корабля: верх — не выше `MAX_H` над дном, у оси подхода к 10 — ниже `AXIS_H`.
 ## Расклад свой, от зерна мира не зависит; встаёт на дно при сбросе мира. Вид — `BrinkView` (один меш).
 
@@ -40,16 +40,51 @@ const AXIS_H := 2.2
 ## Свечение кончиков: у границы и при полной корке (доля альфы обрастания общего шейдера камня).
 const GLOW := Vector2(0.2, 1.0)
 
+## Заселённость 10 (#840, решение гейм-дизайнера 10.11 — «небольшая группа скребунов на мху, если видна со штатной
+## траектории»): кормовая площадка — два пятна светящегося мха на голой породе у самой границы корки, у оси подхода
+## (сбоку на 13–21 м) — корабль входит в круг спуска (`Run.PLACES["descent"]`, 55 м) над ней; на них пасутся GRAZERS
+## своих скребунов (`EcoView.brink_grazers`). Последняя жизнь перед кварцем: друз на пятнах нет (`MOSS_FREE`).
+## Скребуны ходят по котловине склона — `EcoAgent.bound_xz`. Высота пятна — видимое дно.
+const MOSS: Array[Vector2] = [Vector2(512.0, 213.0), Vector2(519.0, 221.0)]
+const GRAZERS := 3
+## Друзы не ближе этого к середине пятна мха, м (радиус пятна с запасом).
+const MOSS_FREE := 5.0
+
 ## Высота дна (мир передаёт при сбросе; без дна — ровно −300 м).
 var ground: Callable
+## Мох кормовой площадки (MOSS): один объект на всю жизнь мира — скребуны спуска держат на него ссылку.
+var moss: EcoMoss
 ## Друзы: (x, y дна, z, размер) и доля корки там (0…1) — по порядку раскладки.
 var druses: Array[Vector4] = []
 var shares := PackedFloat32Array()
 
 
+func _init() -> void:
+	var spots: Array[Vector3] = []
+	for xz in MOSS:
+		spots.append(Vector3(xz.x, -300.0, xz.y))
+	moss = EcoMoss.new(spots)
+
+
 func reset(world: EcoWorld) -> void:
 	ground = world.ground
+	moss.reset(world)
+	for p in moss.patches:
+		p.pos.y = floor_y(p.pos.x, p.pos.z)
 	_lay()
+
+
+## Корка — минерал без шага; шагает только мох площадки (тускнеет под скребунами и отрастает).
+func step(world: EcoWorld, dt: float) -> void:
+	moss.step(world, dt)
+
+
+## (x, z) на пятне мха площадки с запасом MOSS_FREE.
+static func on_moss(x: float, z: float) -> bool:
+	for m in MOSS:
+		if Vector2(x - m.x, z - m.y).length() < MOSS_FREE:
+			return true
+	return false
 
 
 ## Дно под (x, z): мир передаёт Seabed.height; без него — −300 м.
@@ -101,7 +136,8 @@ func _lay() -> void:
 			var roll := rnd.next()
 			var k := rnd.next()
 			var s := share(x, z)
-			if s <= 0.0 or roll >= s * patch(x, z) * DENSITY or Seabed.Slope.mask(x, z) < MASK:
+			if s <= 0.0 or roll >= s * patch(x, z) * DENSITY or Seabed.Slope.mask(x, z) < MASK \
+					or on_moss(x, z):
 				continue
 			var r := lerpf(SIZE.x, SIZE.y, s * (0.45 + 0.55 * k))
 			r = minf(r, MAX_H / TALL)
