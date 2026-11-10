@@ -39,6 +39,29 @@ class Body(unittest.TestCase):
         self.assertEqual(issue_img.comment_body(7, [("s.png", "")]), f"![s.png]({issue_img.raw_url(7, 's.png')})")
 
 
+class Text(unittest.TestCase):
+    def test_text_taken_out(self):
+        self.assertEqual(issue_img.take_text(["5", "a.png", "--text", "Какой?"]), ("Какой?", ["5", "a.png"]))
+
+    def test_no_key_no_text(self):
+        self.assertEqual(issue_img.take_text(["5", "a.png", "A"]), ("", ["5", "a.png", "A"]))
+
+    def test_empty_text_is_error(self):        # #1350: пустой --text не уходит молча одной картинкой
+        for argv in (["5", "a.png", "--text", ""], ["5", "a.png", "--text", "  "], ["5", "a.png", "--text"]):
+            with self.assertRaises(ValueError):
+                issue_img.take_text(argv)
+
+    def test_main_stops_before_upload(self):
+        called = []
+        old = issue_img.upload_all
+        issue_img.upload_all = lambda *a: called.append(a) or []
+        try:
+            self.assertEqual(issue_img.main(["5", __file__, "--text", ""]), 2)
+        finally:
+            issue_img.upload_all = old
+        self.assertEqual(called, [])
+
+
 class Shrink(unittest.TestCase):
     def test_small_file_kept(self):
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
