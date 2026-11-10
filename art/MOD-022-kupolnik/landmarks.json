@@ -1,0 +1,67 @@
+{
+  "coordinates": "glTF metres, Y up, front -Z",
+  "roots_are": "anatomical attachment centers inside mantle; no bones",
+  "grasper_0": {
+    "root": [
+      -0.469353,
+      0.599252,
+      -0.269878
+    ],
+    "pad_base": [
+      -0.60451,
+      0.278273,
+      -0.959943
+    ],
+    "centerline_length_m": 0.7884,
+    "pad_length_projection_m": 0.45,
+    "transverse_internal_rings": 6
+  },
+  "grasper_1": {
+    "root": [
+      0.000647,
+      0.599252,
+      -0.409878
+    ],
+    "pad_base": [
+      0.00378,
+      0.281464,
+      -1.040122
+    ],
+    "centerline_length_m": 0.7155,
+    "pad_length_projection_m": 0.45,
+    "transverse_internal_rings": 6
+  },
+  "grasper_2": {
+    "root": [
+      0.470647,
+      0.599252,
+      -0.269878
+    ],
+    "pad_base": [
+      0.615408,
+      0.28419,
+      -0.966137
+    ],
+    "centerline_length_m": 0.793,
+    "pad_length_projection_m": 0.45,
+    "transverse_internal_rings": 6
+  },
+  "siphon_-1": {
+    "mouth_center": [
+      -0.169353,
+      0.749252,
+      1.490122
+    ],
+    "diameter_m": 0.25,
+    "folds": 3
+  },
+  "siphon_1": {
+    "mouth_center": [
+      0.170647,
+      0.749252,
+      1.490122
+    ],
+    "diameter_m": 0.25,
+    "folds": 3
+  }
+}
