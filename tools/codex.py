@@ -50,6 +50,21 @@ def layer_map(text):
     }
 
 
+def bends(text):
+    """Изгибы переходов из схемы слоя (`sloj-1.md`, «Поправка маршрутов»): строка `- **06 → (250; 200) → 10**`
+    → {("06", "10"): (250.0, 200.0)}. Прямая между такими местами идёт сквозь рельеф (#1417)."""
+    out = {}
+    for a, x, z, b in re.findall(r"^- \*\*(\d\d) → \(([−\-\d.,]+); ([−\-\d.,]+)\) → (\d\d)\*\*", text, re.M):
+        num = lambda v: float(v.replace("−", "-").replace(",", "."))
+        out[(a, b)] = (num(x), num(z))
+    return out
+
+
+def bend_of(bs, a, b):
+    """Точка изгиба перехода a↔b (в любую сторону) или None."""
+    return bs.get((a, b)) or bs.get((b, a))
+
+
 def species(text):
     """Реестр видов `Species.ALL`: id, имя, описание, заметки журнала — по порядку журнала."""
     out = []
@@ -279,7 +294,8 @@ def section_world(world, notes, img):
     return "\n".join(out)
 
 
-def map_svg(lm):
+def map_svg(lm, bs=None):
+    bs = bs or {}
     pts = lm["points"]
     xs = [p["x"] for p in pts.values()] + [-350.0, 350.0]
     zs = [p["z"] for p in pts.values()] + [-350.0, 350.0]
@@ -289,7 +305,12 @@ def map_svg(lm):
     for path, cls in [(lm["main"], "main")] + [(p, "link") for p in lm["links"]]:
         for a, b in zip(path, path[1:]):
             pa, pb = pts[a], pts[b]
-            seg.append(f'<line class="{cls}" x1="{pa["x"]}" y1="{pa["z"]}" x2="{pb["x"]}" y2="{pb["z"]}"/>')
+            k = bend_of(bs, a, b)
+            if k:   # обязательный изгиб из схемы: ломаная через точку хода, не прямая сквозь рельеф
+                seg.append(f'<polyline class="{cls}" points="{pa["x"]:g},{pa["z"]:g} {k[0]:g},{k[1]:g} '
+                           f'{pb["x"]:g},{pb["z"]:g}"/><circle class="bend" cx="{k[0]:g}" cy="{k[1]:g}" r="5"/>')
+            else:
+                seg.append(f'<line class="{cls}" x1="{pa["x"]}" y1="{pa["z"]}" x2="{pb["x"]}" y2="{pb["z"]}"/>')
     dots = []
     for pid, p in pts.items():
         cls = "pt" if p["accepted"] else "pt prop"
@@ -302,10 +323,22 @@ def map_svg(lm):
             f'<text class="n" x="{x0 + 8}" y="{z0 + 24}">север −Z ↑</text></svg>')
 
 
+def bends_note(bs):
+    """Оговорка у карты: схема связей, а не путь хода, и изгибы из схемы слоя."""
+    if not bs:
+        return ""
+    fmt = lambda v: f"{v:g}".replace("-", "−")
+    turns = "; ".join(f"{a} → ({fmt(x)}; {fmt(z)}) → {b}" for (a, b), (x, z) in bs.items())
+    return (f'<p class="leg"><b>Схема связей мест, не путь хода.</b> Линии — порядок посещения; прямые идут сквозь '
+            f'рельеф. Обязательные изгибы (<span class="b"></span>) из <code>{SLOJ1}</code>: {turns}.</p>')
+
+
 def section_layer(lm, rows, sloj1, notes, img):
     pts = lm["points"]
+    bs = bends(sloj1)
     out = ['<section id="sloj1"><h2>Слой 1 «Подлёдный сад»</h2>',
-           f'<p class="src">Источник: <code>{LAYER_MAP}</code>, <code>{SLOJ1}</code>.</p>', map_svg(lm),
+           f'<p class="src">Источник: <code>{LAYER_MAP}</code>, <code>{SLOJ1}</code>.</p>', map_svg(lm, bs),
+           bends_note(bs),
            '<p class="leg"><span class="k main"></span> основной маршрут '
            + " → ".join(lm["main"]) + ' &nbsp; <span class="k link"></span> петли и ответвления: '
            + "; ".join(" → ".join(p) for p in lm["links"])
@@ -416,10 +449,11 @@ border:1px solid var(--line);border-radius:8px;padding:12px}.card h3{margin:0 0 
 .st{font-size:.7em;padding:1px 7px;border-radius:9px;vertical-align:middle;white-space:nowrap}
 .s-game{background:#1f6b4a}.s-concept{background:#6b5a1f}.s-plan{background:#3b4a55}
 .map{width:100%;max-height:80vh;background:#06121a;border:1px solid var(--line);border-radius:8px}
-.map .shelf{fill:#0e2a36;stroke:#24414f}.map line{stroke-width:4}.map .main{stroke:var(--acc)}
+.map .shelf{fill:#0e2a36;stroke:#24414f}.map line,.map polyline{stroke-width:4;fill:none}.map .bend{fill:#e8f4f6}.map .main{stroke:var(--acc)}
 .map .link{stroke:#8aa6ae;stroke-dasharray:10 8}.map .pt{fill:var(--acc)}.map .prop{fill:var(--warn)}
 .map text{fill:var(--fg);font-size:17px}.map .n{fill:var(--mut)}
 .k{display:inline-block;width:22px;height:4px;vertical-align:middle}.k.main{background:var(--acc)}
+.b{display:inline-block;width:9px;height:9px;border-radius:50%;background:#e8f4f6;vertical-align:middle}
 .k.link{background:repeating-linear-gradient(90deg,#8aa6ae 0 6px,transparent 6px 10px)}
 .d{display:inline-block;width:10px;height:10px;border-radius:5px;background:var(--warn)}
 a,code{overflow-wrap:anywhere}svg a,svg text{overflow-wrap:normal}details{margin-top:16px}summary{cursor:pointer;color:var(--acc)}
