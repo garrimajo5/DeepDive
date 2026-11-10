@@ -1131,6 +1131,23 @@ func test_luch_ten_step() -> void:
 	eq(q.advance(0.1).slice(0, 2), [["luch_ten", false], ["luch_ten", true]], "команды сцене")
 	var probe := QaScript.parse(FileAccess.get_file_as_string("res://tools/qa/luch-ten.json"))
 	eq(probe.errors.size(), 0, "сценарий пробы tools/qa/luch-ten.json без ошибок: %s" % ", ".join(probe.errors))
+	# #1606: перед каждым снимком корабль ставится в одну и ту же точку — течение за 5 с сносит его на ~1 м
+	var steps: Array = JSON.parse_string(FileAccess.get_file_as_string("res://tools/qa/luch-ten.json"))
+	var pose = null
+	var placed := false
+	var shots := 0
+	for st in steps:
+		if st["do"] == "ship":
+			var p := [st["x"], st["y"], st["z"], st["yaw"]]
+			if pose == null:
+				pose = p
+			eq(p, pose, "одна поза у всех трёх кадров")
+			placed = true
+		elif st["do"] == "shot":
+			ok(placed, "перед %s корабль поставлен заново" % st["name"])
+			placed = false
+			shots += 1
+	eq(shots, 3, "три кадра")
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(2)

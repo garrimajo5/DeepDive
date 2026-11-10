@@ -9,12 +9,14 @@
 #                         последнего прогона CI этой PR (нужен gh), ставит на эмулятор и гоняет сценарий
 #   -Force              — прогнать APK, даже если коммит тот же; -Scenario <файл> — свой сценарий
 #                         (с -Pr — путь в ветке PR, напр. tools/qa/scenario.json; без -Scenario с -Pr — сценарий ветки PR)
+#   -Out <имя>          — папка результата в qa-build (по умолчанию run, с -Pr — run-pr<номер>, с -Scenario —
+#                         run-<имя сценария>): прогон PR не затирает плановый run\
 #   -ColdBoot           — перед прогоном закрыть эмулятор (adb emu kill) и запустить заново без снимка состояния:
 #                         после чужих окон поверх игры, «помех» или растущих заминок от прогона к прогону
 #   -Phone              — только скачать DeepDive.apk (arm64, телефон) из apk-latest со сверкой длины
 #                         в D:\AI\qa-build\DeepDive.apk и выйти; на телефон ставить вручную
 #   Эмулятор после прогона не закрывается (запущен отдельно от скрипта): ручная проверка — adb, закрыть — adb emu kill
-param([switch]$Pc, [switch]$Force, [string]$Scenario, [int]$Pr, [switch]$Phone, [switch]$ColdBoot)
+param([switch]$Pc, [switch]$Force, [string]$Scenario, [int]$Pr, [switch]$Phone, [switch]$ColdBoot, [string]$Out)
 $ErrorActionPreference = 'Continue'
 $ProgressPreference = 'SilentlyContinue'   # полоса прогресса в PS 5.1 тормозит скачивание в разы
 
@@ -53,11 +55,17 @@ function Get-Load {
   return "ЦП $([int]$cpu)%, эмуляторов $emu"
 }
 $repo  = 'D:\AI\DeepDive'
-$out   = 'D:\AI\qa-build'
-$run   = "$out\run"
+$build = 'D:\AI\qa-build'
+# Папка результата (#1606): плановый прогон — run\, с -Pr — run-pr<номер>\, со своим -Scenario — run-<имя файла>\;
+# -Out <имя> — своя папка в qa-build. Прогон PR или пробы не затирает снимки планового, которые ещё не сданы
+# (сдать — publish-qa.ps1 -From <имя>).
+if (-not $Out) {
+  $Out = if ($Pr) { "run-pr$Pr" } elseif ($Scenario) { 'run-' + [IO.Path]::GetFileNameWithoutExtension($Scenario) } else { 'run' }
+}
+$run   = "$build\$Out"
 $app   = 'com.garrimajo5.deepdive'
-$apk   = "$out\DeepDive-emulator.apk"   # эмулятору — x86_64-сборка (#844); телефону — DeepDive.apk
-New-Item -ItemType Directory -Force $out | Out-Null
+$apk   = "$build\DeepDive-emulator.apk"   # эмулятору — x86_64-сборка (#844); телефону — DeepDive.apk
+New-Item -ItemType Directory -Force $build | Out-Null
 Remove-Item -Recurse -Force $run -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $run | Out-Null
 $prSha = ''
@@ -69,7 +77,7 @@ if ($Pr) {
 # существующий локальный файл берётся как есть. Скачивание — через cmd: редирект PowerShell 5.1 портит UTF-8.
 if ($Pr -and -not ($Scenario -and (Test-Path $Scenario))) {
   $inBranch = if ($Scenario) { $Scenario -replace '\\', '/' } else { 'tools/qa/scenario.json' }
-  $prScen = "$out\scenario-pr$Pr.json"
+  $prScen = "$build\scenario-pr$Pr.json"
   Remove-Item $prScen -Force -ErrorAction SilentlyContinue
   cmd /c "gh api `"repos/garrimajo5/DeepDive/contents/${inBranch}?ref=$prSha`" -H `"Accept: application/vnd.github.raw`" > `"$prScen`""
   if (-not (Test-Path $prScen) -or (Get-Item $prScen).Length -eq 0) {
@@ -83,7 +91,7 @@ if (-not $Scenario) { $Scenario = "$repo\tools\qa\scenario.json" }
 # Сценарий + шаг «закрыть игру» в конце
 $steps = Get-Content $Scenario -Raw -Encoding utf8 | ConvertFrom-Json
 $steps = @($steps) + [pscustomobject]@{ do = 'quit' }
-$tmp = "$out\scenario.json"
+$tmp = "$build\scenario.json"
 [IO.File]::WriteAllText($tmp, ($steps | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding $false))
 
 if ($Pc) {
@@ -110,7 +118,7 @@ if ($Phone) {
   $rel = Invoke-RestMethod 'https://api.github.com/repos/garrimajo5/DeepDive/releases/tags/apk-latest' -Headers @{ 'User-Agent' = 'run-qa' }
   $asset = $rel.assets | Where-Object name -eq 'DeepDive.apk' | Select -First 1
   if (-not $asset) { Write-Output 'NO_ASSET: в релизе apk-latest нет DeepDive.apk — повторите позже'; exit 1 }
-  $file = "$out\DeepDive.apk"
+  $file = "$build\DeepDive.apk"
   Remove-Item $file -Force -ErrorAction SilentlyContinue
   $why = Get-Asset $asset.browser_download_url $file $asset.size
   if ($why) { Write-Output "DOWNLOAD_FAILED DeepDive.apk: $why — повторите позже"; exit 1 }
@@ -123,21 +131,30 @@ $sdk = "$env:LOCALAPPDATA\Android\Sdk"
 $adb = "$sdk\platform-tools\adb.exe"
 if ($Pr) {
   # APK из артефакта deepdive-apk последнего прогона CI этой PR (REST, чтобы не зависеть от GraphQL)
+  # Прогон «Godot» именно этой сборки (не «Где мы» и не другой workflow того же коммита)
   $sha = $prSha
-  $rid = (gh api "repos/garrimajo5/DeepDive/actions/runs?head_sha=$sha&per_page=1" --jq '.workflow_runs[0].id').Trim()
+  $rid = "$(gh api "repos/garrimajo5/DeepDive/actions/workflows/godot.yml/runs?head_sha=$sha&per_page=1" --jq '.workflow_runs[0].id')".Trim()
   if (-not $rid) { Write-Output "NO_RUN: для PR #$Pr ($($sha.Substring(0,7))) прогона CI ещё нет"; exit 1 }
-  $dir = "$out\pr$Pr"
+  $dir = "$build\pr$Pr"
   Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
-  gh run download $rid -n deepdive-apk -D $dir
+  # NO_ARTIFACT — только если в прогоне правда нет deepdive-apk (#1606: из чужой папки `gh run download` не находил
+  # репозиторий, и сообщение «в PR нет кода?» сбивало); репозиторий — явно и из клона
+  $arts = @(gh api "repos/garrimajo5/DeepDive/actions/runs/$rid/artifacts" --jq '.artifacts[].name')
+  if ($arts -notcontains 'deepdive-apk') {
+    Write-Output "NO_ARTIFACT: в прогоне PR #$Pr нет deepdive-apk (сборка APK не шла — в PR нет кода? или прогон ещё идёт)"; exit 1
+  }
+  Push-Location $repo
+  gh run download $rid -R garrimajo5/DeepDive -n deepdive-apk -D $dir
+  Pop-Location
   # эмулятору — x86_64-сборка; в артефактах до #844 был один общий DeepDive.apk
   $apk = @("$dir\DeepDive-emulator.apk", "$dir\DeepDive.apk") | Where-Object { Test-Path $_ } | Select -First 1
-  if (-not $apk) { Write-Output "NO_ARTIFACT: в прогоне PR #$Pr нет deepdive-apk (сборка APK не шла — в PR нет кода?)"; exit 1 }
+  if (-not $apk) { Write-Output "DOWNLOAD_FAILED PR#${Pr}: артефакт deepdive-apk есть, но не скачался (gh run download) — повторите"; exit 1 }
   $head = "PR#$Pr $($sha.Substring(0,7))"
 } else {
   # APK из релиза apk-latest (то, что собрал CI из main)
   $rel = Invoke-RestMethod 'https://api.github.com/repos/garrimajo5/DeepDive/releases/tags/apk-latest' -Headers @{ 'User-Agent' = 'run-qa' }
   $head = if ($rel.body -match 'коммит ([0-9a-f]{7})') { $Matches[1] } else { $rel.published_at }
-  $last = if (Test-Path "$out\last-commit.txt") { (Get-Content "$out\last-commit.txt").Trim() } else { '' }
+  $last = if (Test-Path "$build\last-commit.txt") { (Get-Content "$build\last-commit.txt").Trim() } else { '' }
   if ($head -eq $last -and -not $Force) { Write-Output "NO_CHANGES $head"; exit 0 }
   # эмулятору — x86_64-сборка (#844); в релизах до неё — один общий DeepDive.apk
   $asset = $rel.assets | Where-Object name -eq 'DeepDive-emulator.apk' | Select -First 1
@@ -164,8 +181,9 @@ if (-not ((& $adb devices) -match 'emulator-\d+\s+device')) {
   & $adb wait-for-device
   for ($i = 0; $i -lt 60; $i++) { if ((& $adb shell getprop sys.boot_completed).Trim() -eq '1') { break }; Start-Sleep 5 }
 }
+# -d (#1606): сборка PR ниже стоящей (или релиз ниже стоящей сборки PR) — без него INSTALL_FAILED_VERSION_DOWNGRADE
 $inst = ''
-for ($i = 0; $i -lt 3; $i++) { $inst = (& $adb install -r $apk 2>&1 | Out-String); if ($inst -match 'Success') { break }; Start-Sleep 10 }
+for ($i = 0; $i -lt 3; $i++) { $inst = (& $adb install -r -d $apk 2>&1 | Out-String); if ($inst -match 'Success') { break }; Start-Sleep 10 }
 if ($inst -notmatch 'Success') { Write-Output "INSTALL_FAILED $head"; $inst; exit 1 }
 
 $loadBefore = Get-Load
@@ -219,7 +237,7 @@ $paused = if (Test-Path "$run\log.txt") { @(Select-String -Path "$run\log.txt" -
 $foreign = @(Select-String -Path "$run\logcat.txt" -Pattern 'START u0 \{' -Encoding utf8 |
   Where-Object { $_.Line -notmatch [regex]::Escape($app) }).Count
 $noise = $paused + $foreign
-if (-not $Pr -and -not $stale) { Set-Content "$out\last-commit.txt" $head }
+if (-not $Pr -and -not $stale) { Set-Content "$build\last-commit.txt" $head }
 Write-Output "OK $head done=$done"
 if ($Pr) { Write-Output "PR: #$Pr (артефакт прогона CI, не релиз)" }
 else {
