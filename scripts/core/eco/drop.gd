@@ -142,19 +142,35 @@ func crack_points(k: int) -> PackedVector3Array:
 	return out
 
 
-## Точка (в мире) внутри скальных клиньев — для существ и столкновения корабля (подключает поток А).
-func solid(p: Vector3) -> bool:
+## Верх скального клина в (x, z) мира (поверхность полки по профилю), или −INF, если клина тут нет.
+## Поток А поднимает сюда «пол» корпуса — корабль не проходит сквозь скалу и чиркает по ней (Vitals.scrape).
+func top(x: float, z: float) -> float:
 	for w in WEDGES.size():
 		var r := wedge_z(w)
-		if p.z < r.x or p.z > r.y:
+		if z < r.x or z > r.y:
 			continue
-		var pr := profile(w, p.z)
-		if p.x < pr[0].x or p.x > pr[3].x:
-			return false
+		var pr := profile(w, z)
+		if x < pr[0].x or x > pr[3].x:
+			return -INF
 		for i in 3:
 			var a := pr[i]
 			var b := pr[i + 1]
-			if p.x >= a.x and p.x <= b.x:
-				var y := lerpf(a.y, b.y, (p.x - a.x) / maxf(b.x - a.x, 1e-6))
-				return p.y < y
-	return false
+			if x >= a.x and x <= b.x:
+				return lerpf(a.y, b.y, (x - a.x) / maxf(b.x - a.x, 1e-6))
+	return -INF
+
+
+## Точка (в мире) внутри скальных клиньев — для существ и столкновения корабля (подключает поток А).
+func solid(p: Vector3) -> bool:
+	var y := top(p.x, p.z)
+	return y != -INF and p.y < y
+
+
+## Точка облака оползня для `silt.gd`: ниже скола по склону (+X на SLIDE_OFF), на SLIDE_UP м над дном, не глубже −55.
+## Так ил идёт из самого свежего шрама, а не с открытого склона в 60 м восточнее (issue #258).
+const SLIDE_OFF := 8.0
+const SLIDE_UP := 10.0
+func slide_cloud_point() -> Vector3:
+	var sp := scar_point()
+	var x := sp.x + SLIDE_OFF
+	return Vector3(x, maxf(floor_y(x, sp.z) + SLIDE_UP, -55.0), sp.z)

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://wq0cxodegth8"
-path="res://.godot/imported/lebedka-zahvat_lebedka-zahvat-emission.png-25ea1aa100a38f897c5933601a16fe9d.ctex"
+path.s3tc="res://.godot/imported/lebedka-zahvat_lebedka-zahvat-emission.png-25ea1aa100a38f897c5933601a16fe9d.s3tc.ctex"
+path.etc2="res://.godot/imported/lebedka-zahvat_lebedka-zahvat-emission.png-25ea1aa100a38f897c5933601a16fe9d.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "77c66dde6ffd3997587f97b801008962"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/lebedka-zahvat_lebedka-zahvat-emission.png"
-dest_files=["res://.godot/imported/lebedka-zahvat_lebedka-zahvat-emission.png-25ea1aa100a38f897c5933601a16fe9d.ctex"]
+dest_files=["res://.godot/imported/lebedka-zahvat_lebedka-zahvat-emission.png-25ea1aa100a38f897c5933601a16fe9d.s3tc.ctex", "res://.godot/imported/lebedka-zahvat_lebedka-zahvat-emission.png-25ea1aa100a38f897c5933601a16fe9d.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

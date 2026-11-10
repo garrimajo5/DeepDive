@@ -1,73 +1,166 @@
 class_name EcoPredLook
 extends RefCounted
-## Как двигается серпохвост в сцене (модель MOD-011, `docs/concept-art/serpohvost.md`): тело по скорости, хвост-серп
-## качается волной вокруг корня (чем быстрее — тем чаще и шире), после укуса — быстрый взмах серпом вбок, пасть
-## раскрывается в броске на корабль и в охоте у самой добычи, во время еды жуёт. Только числа, без узлов: рисует
-## PredView. Модель смотрит головой в −Z.
+## Как двигается серпохвост в сцене: модель MOD-011 на скелете ANIM-001 (`models/serpohvost-anim.glb`,
+## `docs/concept-art/serpohvost.md`). Тело — по курсу мира (`EcoPred.turn`), клипы на месте: плавание `Swim` и бросок
+## `SwimFast` смешиваются по скорости, `Bite` — пасть у корабля в броске, у добычи в охоте и пока ест (жуёт),
+## `TailStrike` — вертикальный удар серпом сразу после укуса корпуса. Только числа и выбор клипов, без узлов:
+## рисует PredView. Модель смотрит головой в −Z.
 
-## Модели художника: тело (голова, верхняя челюсть, плавники), хвост со серпом, нижняя челюсть.
-const BODY_GLB := "res://models/serpohvost-telo.glb"
-const TAIL_GLB := "res://models/serpohvost-hvost.glb"
-const JAW_GLB := "res://models/serpohvost-chelyust.glb"
-## Где в осях тела корень хвоста и шарнир челюсти (MOD-011, notes.md).
-const TAIL_ROOT := Vector3(0, -0.19, 1.80)
-const JAW_HINGE := Vector3(0, -0.12, -0.95)
-## Пределы поворота: хвост вокруг Y, челюсть вокруг X (рад, 35°) — больше модель не рассчитана.
-const TAIL_MAX := deg_to_rad(35.0)
-const JAW_MAX := deg_to_rad(35.0)
+## Модель художника на скелете (10 костей, 4 клипа).
+const RIG_GLB := "res://models/serpohvost-anim.glb"
+const SWIM := "Swim"
+const SWIM_FAST := "SwimFast"
+const BITE := "Bite"
+const STRIKE := "TailStrike"
+## Длина циклов плавания (с) — у ANIM-001 бросок ровно вдвое чаще.
+const SWIM_LEN := 2.4
+const SWIM_FAST_LEN := 1.2
+## Кости, которые двигает укус поверх плавания: только челюсть — хвост в укусе продолжает волну.
+const BITE_BONES: Array[String] = ["Jaw"]
 ## Наклон тела вверх-вниз не больше (рад).
-const PITCH_MAX := deg_to_rad(30.0)
-## Волна хвоста: частота в покое (рад/с) и прибавка за 1 м/с; размах в покое (рад) и прибавка за 1 м/с.
-const WAVE_RATE := 3.0
-const WAVE_RATE_PER_SPEED := 0.6
-const WAVE_AMP := deg_to_rad(12.0)
-const WAVE_AMP_PER_SPEED := deg_to_rad(1.6)
-## Удар серпом после укуса: длительность (с).
+const PITCH_MAX := deg_to_rad(30.0)  # тот же предел — EcoPred.PITCH_MAX (курс тела)
+## Смесь плавания: до этой скорости — только Swim, с этой — только SwimFast (м/с: патруль и бегство EcoPred).
+const MIX_FROM := EcoPred.PATROL_SPEED
+const MIX_TO := EcoPred.FLEE_SPEED
+## Медленнее патруля волна реже: в покое — эта доля частоты Swim.
+const REST_RATE_K := 0.5
+## Вход и выход разовых клипов смешиванием (с) — ANIM-001: позы укуса и удара кончаются нейтральной.
+const FADE_IN := 0.12
+const FADE_OUT := 0.2
+## Укус в броске начинается раньше касания: при 9,5 м/с за пик пасти (~0,4 с) — от 8,5 м (EcoPred.BITE_DIST) до 12 м.
+const BITE_SHIP_DIST := 12.0
+## У добычи в охоте пасть раскрывается ближе (м).
+const BITE_PREY_DIST := 6.0
+## Пока ест — жуёт: новый укус не чаще (с).
+const CHEW_EVERY := 1.5
+## Удар после укуса виден, если укус не старше (с) — длина TailStrike; старый укус (новый зверь в кадре) не играет.
 const STRIKE_TIME := 0.6
-## Пасть раскрыта, если до корабля в броске или до добычи в охоте ближе (м).
-const JAW_SHIP_DIST := 20.0
-const JAW_PREY_DIST := 6.0
-## Жуёт: частота (рад/с) и доля раскрытия.
-const CHEW_RATE := 6.0
-const CHEW_OPEN := 0.5
+## Дальше от корабля (м) — без смены клипов: только плавание (LOD).
+const CUE_FAR := 80.0
+## Дальше ANIM_FAR (м) скелет считается реже: раз в ANIM_FAR_STEP (с) набранным временем — зверь в тумане
+## (как дальние стаи, EcoFish.FAR), пять поз в секунду там не видно (issue #850).
+const ANIM_FAR := 100.0
+const ANIM_FAR_STEP := 0.2
+## Дальше HIDE_FAR (м) зверь спрятан, как гротовик и эхоловец (GrotView.FAR): не рисуется, скелет стоит.
+const HIDE_FAR := 160.0
+## Набранное время отдаётся скелету разом не длиннее (с): фаза плавания вдали не важна, а длинный шаг дерева дорог.
+const LAG_MAX := 1.0
+## «Экономно» (Б6, `PredView.set_lite`): скелет реже уже ближе — дальше ANIM_MID_LITE (м) раз в ANIM_MID_STEP (с),
+## дальше ANIM_FAR_LITE — раз в ANIM_FAR_STEP. Укус и удар серпом (до CUE_FAR) не ждут позы: `Clock.flush`.
+const ANIM_MID_LITE := 25.0
+const ANIM_MID_STEP := 0.1
+const ANIM_FAR_LITE := 60.0
+## «Дыхание» (Б3, `breath`): зверь качает воду жабрами — тело шире на ± BREATH_W и выше на ± BREATH_H за BREATH_T с
+## (ритм ± BREATH_SPREAD и фаза — у каждого свои, `EcoVary`); длина та же — пасть и серп на месте. В броске (доля
+## SwimFast, `swim_mix`) вода идёт сквозь жабры сама — размах гаснет вместе с ростом смеси, без скачка. По времени
+## мира (у гостя то же); масштаб корня модели — даром, и на «Экономно».
+const BREATH_T := 4.0
+const BREATH_W := 0.035
+const BREATH_H := 0.02
+const BREATH_SPREAD := 0.2
 
 
-## Куда смотрит голова: по скорости; почти стоит — на +Z (как lookAt в браузере). Наклон — не больше PITCH_MAX.
+## Куда смотрит голова сейчас (плавный курс EcoPred.turn).
 static func forward(pr: EcoPred.Pred) -> Vector3:
-	var v := pr.agent.v
-	if v.length_squared() <= 0.01:
-		return Vector3(0, 0, 1)
-	var flat := Vector2(v.x, v.z).length()
-	var pitch := clampf(atan2(v.y, flat), -PITCH_MAX, PITCH_MAX)
-	var h := Vector2(v.x, v.z).normalized() if flat > 1e-4 else Vector2(0, 1)
-	return Vector3(h.x * cos(pitch), sin(pitch), h.y * cos(pitch))
+	return pr.look
 
 
-## Поворот тела: −Z модели смотрит в forward, спина вверх.
+## Поворот тела: −Z модели смотрит в forward, спина вверх, в повороте — крен на EcoPred.Pred.bank вокруг оси тела
+## (> 0 — левым боком вниз).
 static func basis(pr: EcoPred.Pred) -> Basis:
-	return Basis.looking_at(forward(pr), Vector3.UP)
+	return Basis.looking_at(forward(pr), Vector3.UP) * Basis(Vector3.BACK, pr.bank)
 
 
-## Поворот хвоста вокруг Y (рад, ±TAIL_MAX) в момент t: волна, после укуса — взмах серпом.
-static func tail_angle(pr: EcoPred.Pred, t: float) -> float:
-	var since := t - pr.bit_at
-	if since >= 0.0 and since < STRIKE_TIME:
-		return TAIL_MAX * sin(PI * since / STRIKE_TIME)
-	var s := pr.agent.v.length()
-	var amp := minf(WAVE_AMP + WAVE_AMP_PER_SPEED * s, TAIL_MAX)
-	var rate := WAVE_RATE + WAVE_RATE_PER_SPEED * s
-	return amp * sin(t * rate + pr.index * 2.1)
+## Доля дыхания зверя в момент t: −1…1 · размах; в броске (swim_mix → 1) — 0.
+static func breath(pr: EcoPred.Pred, t: float) -> float:
+	var rate := EcoVary.spread(pr.index, EcoVary.RATE, BREATH_SPREAD)
+	var phase := EcoVary.unit(pr.index, EcoVary.SHADE) * TAU
+	return sin(t * TAU / BREATH_T * rate + phase) * (1.0 - swim_mix(pr))
 
 
-## Раскрытие пасти 0…JAW_MAX (рад; модель поворачивает челюсть на −угол вокруг X) в момент t у корабля в ship.
-static func jaw_angle(pr: EcoPred.Pred, ship: Vector3, t: float) -> float:
+## Множитель размера тела по доле дыхания: шире и выше, длина (ось −Z модели) та же.
+static func breath_scale(k: float) -> Vector3:
+	return Vector3(1.0 + BREATH_W * k, 1.0 + BREATH_H * k, 1.0)
+
+
+## Доля броска в смеси плавания 0…1: 0 — Swim, 1 — SwimFast.
+static func swim_mix(pr: EcoPred.Pred) -> float:
+	return clampf((pr.agent.v.length() - MIX_FROM) / (MIX_TO - MIX_FROM), 0.0, 1.0)
+
+
+## Сколько циклов плавания в секунду: от 1/2,4 (Swim) к 1/1,2 (SwimFast) по смеси, медленнее патруля — реже.
+static func swim_rate(pr: EcoPred.Pred) -> float:
+	var rate := lerpf(1.0 / SWIM_LEN, 1.0 / SWIM_FAST_LEN, swim_mix(pr))
+	var slow := clampf(pr.agent.v.length() / MIX_FROM, 0.0, 1.0)
+	return rate * lerpf(REST_RATE_K, 1.0, slow)
+
+
+## Пасть пора раскрыть сейчас: в броске у корабля ship или в охоте у самой добычи.
+static func jaw_close(pr: EcoPred.Pred, ship: Vector3) -> bool:
 	match pr.mode:
 		EcoPred.Mode.CHARGE:
-			if pr.agent.distance_to(ship) < JAW_SHIP_DIST:
-				return JAW_MAX
+			return pr.agent.distance_to(ship) < BITE_SHIP_DIST
 		EcoPred.Mode.HUNT:
-			if pr.prey and pr.agent.distance_to(pr.prey.agent.p) < JAW_PREY_DIST:
-				return JAW_MAX
-		EcoPred.Mode.EAT:
-			return JAW_MAX * CHEW_OPEN * 0.5 * (1.0 + sin(t * CHEW_RATE))
-	return 0.0
+			return pr.prey != null and pr.agent.distance_to(pr.prey.agent.p) < BITE_PREY_DIST
+	return false
+
+
+## Когда какой разовый клип запустить — по одному на зверя. update говорит, что играть в этот кадр.
+class Cues:
+	extends RefCounted
+	## Когда был последний укус-клип и какой укус корпуса (EcoPred.Pred.bit_at) уже отыгран ударом.
+	var bite_at := -99.0
+	var strike_seen := -99.0
+	## Пасть закрылась — следующее сближение снова укусит.
+	var armed := true
+
+	## Что запустить в момент t: {"bite": bool, "strike": bool}. far — зверь дальше CUE_FAR: клипы не меняются,
+	## но события запоминаются (подплыв ближе, старый укус не отыграет).
+	func update(pr: EcoPred.Pred, ship: Vector3, t: float, far := false) -> Dictionary:
+		var out := {"bite": false, "strike": false}
+		if pr.bit_at > strike_seen:
+			strike_seen = pr.bit_at
+			out["strike"] = not far and t - pr.bit_at < STRIKE_TIME and t >= pr.bit_at
+		var close := EcoPredLook.jaw_close(pr, ship)
+		if close and armed:
+			armed = false
+			out["bite"] = true
+		elif not close:
+			armed = true
+		if pr.mode == EcoPred.Mode.EAT and t - bite_at >= CHEW_EVERY:
+			out["bite"] = true
+		if far:
+			out["bite"] = false
+		elif out["bite"]:
+			bite_at = t
+		return out
+
+
+## Часы скелета одного зверя (LOD анимации, issue #850): вблизи — каждый кадр, вдали — реже набранным временем,
+## спрятанный — стоит, а пропущенное (не больше LAG_MAX) отдаёт, когда снова покажется.
+class Clock:
+	extends RefCounted
+	## Пропущенное время, ещё не отданное дереву анимации (с).
+	var lag := 0.0
+
+	## Сколько времени отдать дереву анимации в этот кадр: dt — шаг кадра, dist — до корабля (м); 0 — дерево не трогать.
+	## lite — «Экономно»: шаг позы реже уже с ANIM_MID_LITE.
+	func tick(dt: float, dist: float, lite := false) -> float:
+		lag = minf(lag + dt, LAG_MAX)
+		if dist > HIDE_FAR or lag < step_at(dist, lite) - 1e-6 or lag <= 0.0:
+			return 0.0
+		return flush()
+
+	## Отдать всё набранное сразу (разовый клип не ждёт следующей позы).
+	func flush() -> float:
+		var out := lag
+		lag = 0.0
+		return out
+
+	## Не чаще какого шага (с) меняется поза на расстоянии dist; 0 — каждый кадр.
+	static func step_at(dist: float, lite := false) -> float:
+		if dist > (ANIM_FAR_LITE if lite else ANIM_FAR):
+			return ANIM_FAR_STEP
+		if lite and dist > ANIM_MID_LITE:
+			return ANIM_MID_STEP
+		return 0.0

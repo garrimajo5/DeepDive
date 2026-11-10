@@ -69,9 +69,30 @@ static func ring_arc(segs: int, r: float = RING_R, w: float = RING_W) -> PackedV
 	return v
 
 
-## Центр поля choice ("deep" | "up") в осях голограммы, на высоте h.
-static func field_pos(choice: String, h: float = DISC_Y) -> Vector3:
+## Центр поля choice ("deep" | "up") в осях голограммы, на высоте h. У 10 (descent, #1362) поле одно — по центру.
+static func field_pos(choice: String, h: float = DISC_Y, descent: bool = false) -> Vector3:
+	if descent:
+		return Vector3(0.0, h, 0.0)
 	return Vector3(0.0, h, SPREAD if choice == "deep" else -SPREAD)
+
+
+## Спуск у 10 (#1362): «спуститься сейчас или позже» — над столом одно поле «ВНИЗ», без «НАВЕРХ».
+const DESCENT_WORD := "ВНИЗ"
+
+
+## Поля над столом: у 10 — только "deep".
+static func choices(descent: bool) -> Array[String]:
+	return ["deep"] as Array[String] if descent else CHOICES
+
+
+## Подпись поля: у 10 «глубже» — «ВНИЗ».
+static func word(choice: String, descent: bool) -> String:
+	return DESCENT_WORD if descent and choice == "deep" else WORDS[choice]
+
+
+## Центр кольца таймера: между полями; у 10 поле одно по центру — кольцо сбоку, на месте «наверх».
+static func ring_pos(descent: bool) -> Vector3:
+	return Vector3(0.0, RING_Y, -SPREAD if descent else 0.0)
 
 
 ## Голоса ролей по мнениям Run.opinions ([кто, наверх?, почему]): {"deep": [роль…], "up": [роль…]},
@@ -92,8 +113,8 @@ static func letter(role: int) -> String:
 
 ## Место i-й из n меток под полем choice: в ряд поперёк взгляда, по центру поля, первая — слева от поста
 ## «Маршрут» (+Z).
-static func mark_pos(choice: String, i: int, n: int) -> Vector3:
-	var p := field_pos(choice, MARK_Y)
+static func mark_pos(choice: String, i: int, n: int, descent: bool = false) -> Vector3:
+	var p := field_pos(choice, MARK_Y, descent)
 	p.z -= (float(i) - (n - 1) * 0.5) * MARK_STEP
 	return p
 

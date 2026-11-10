@@ -60,13 +60,33 @@ func test_seated_hands_on_wheel() -> void:
 		m.follow(0.0, Deck.SEAT_Z, 0.0, true, turn, 0.1)
 		var j := m.joints()
 		var g := Crew.wheel_grips(turn)
-		near(j["hand_l"].distance_to(g[0]), 0.0, 0.06, "левая рука на ободе (поворот %s)" % turn)
-		near(j["hand_r"].distance_to(g[1]), 0.0, 0.06, "правая рука на ободе (поворот %s)" % turn)
+		for side in 2:
+			var k := "l" if side == 0 else "r"
+			ok(j["palm_" + k].distance_to(g[side]) < 0.1, "ладонь %s у обода (поворот %s)" % [k, turn])
+			ok((j["hand_" + k] - j["wrist_" + k]).dot(Vector3(0, BridgeProps.WHEEL_Y, BridgeProps.WHEEL_Z) - g[side]) > 0.0,
+				"пальцы к центру колеса, на обод (поворот %s)" % turn)
 		near(absf(j["elbow_l"].distance_to(j["shoulder_l"])), Crew.UPPER_ARM, 1e-3, "длина плеча")
 	var g0 := Crew.wheel_grips(0.0)
 	var g1 := Crew.wheel_grips(1.0)
 	ok(g1[0].y > g0[0].y and g1[1].y < g0[1].y, "штурвал вправо: левая рука вверх, правая вниз")
 	near(g0[0].distance_to(Vector3(0, BridgeProps.WHEEL_Y, BridgeProps.WHEEL_Z)), Crew.RIM, 1e-5, "хват на ободе")
+
+
+## #1402: кисти не поднимаются выше 55° от верха обода (покой пробы ART-061 v4) ни при каком повороте — иначе
+## закрывают глубину и курс на центральном экране; в покое — 70°.
+func test_grips_stay_below_screen_windows() -> void:
+	var c := Vector3(0, BridgeProps.WHEEL_Y, BridgeProps.WHEEL_Z)
+	var tilt := Basis.from_euler(Vector3(deg_to_rad(BridgeProps.WHEEL_TILT), 0.0, 0.0))
+	for i in 21:
+		var turn := -1.0 + 0.1 * i
+		var g := Crew.wheel_grips(turn)
+		for side in 2:
+			var v: Vector3 = tilt.inverse() * (g[side] - c)  # в плоскости колеса
+			var from_top := rad_to_deg(acos(clampf(v.y / Crew.RIM, -1.0, 1.0)))
+			ok(from_top >= 55.0 - 0.01 and from_top <= 85.0 + 0.01,
+				"кисть %d при повороте %.1f — %.1f° от верха" % [side, turn, from_top])
+			if is_zero_approx(turn):
+				near(from_top, 70.0, 0.01, "в покое хват на 70°")
 
 
 func test_seated_in_chair() -> void:
@@ -114,6 +134,22 @@ func test_snapshot_round_trip() -> void:
 	for k in pa:
 		ok(pa[k].is_equal_approx(pb[k]), "поза %s совпадает" % k)
 	eq(Crew.part_color("torso", Crew.Role.ENGINEER), Crew.ROLE_COLORS[Crew.Role.ENGINEER], "цвет роли на груди")
+
+
+## Палитра: «красный — знак хищника», поэтому ни один цвет роли не красно-доминантный (владелец по #129 выбрал
+## инженеру светлый нейтральный). И цвета ролей различимы между собой — на груди и на метках голосования.
+func test_role_colors_not_red_and_distinct() -> void:
+	# Красный (не оранжевый): яркий красный канал при низком зелёном — зелёный и отделяет красный от янтаря пилота.
+	for role in range(Crew.ROLE_COLORS.size()):
+		var c: Color = Crew.ROLE_COLORS[role]
+		ok(not (c.r > 0.6 and c.g < 0.5 and c.r - c.b > 0.3),
+			"%s — не красный цвет (красный — знак хищника)" % Crew.ROLE_NAMES[role])
+	for i in range(Crew.ROLE_COLORS.size()):
+		for j in range(i + 1, Crew.ROLE_COLORS.size()):
+			var a: Color = Crew.ROLE_COLORS[i]
+			var b: Color = Crew.ROLE_COLORS[j]
+			var d := absf(a.r - b.r) + absf(a.g - b.g) + absf(a.b - b.b)
+			ok(d > 0.25, "цвета %s и %s различимы" % [Crew.ROLE_NAMES[i], Crew.ROLE_NAMES[j]])
 
 
 func test_pad_drives_only_own_walker() -> void:   # у каждого свой ходок и ввод: основа для сети

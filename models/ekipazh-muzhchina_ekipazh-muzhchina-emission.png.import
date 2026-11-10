@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://caiou76js8m3p"
-path="res://.godot/imported/ekipazh-muzhchina_ekipazh-muzhchina-emission.png-0dadfd6473bbf2fae7dbcf5df2e1d6f3.ctex"
+path.s3tc="res://.godot/imported/ekipazh-muzhchina_ekipazh-muzhchina-emission.png-0dadfd6473bbf2fae7dbcf5df2e1d6f3.s3tc.ctex"
+path.etc2="res://.godot/imported/ekipazh-muzhchina_ekipazh-muzhchina-emission.png-0dadfd6473bbf2fae7dbcf5df2e1d6f3.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "8a449e25c0c0d033e8adc81982ba34c5"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/ekipazh-muzhchina_ekipazh-muzhchina-emission.png"
-dest_files=["res://.godot/imported/ekipazh-muzhchina_ekipazh-muzhchina-emission.png-0dadfd6473bbf2fae7dbcf5df2e1d6f3.ctex"]
+dest_files=["res://.godot/imported/ekipazh-muzhchina_ekipazh-muzhchina-emission.png-0dadfd6473bbf2fae7dbcf5df2e1d6f3.s3tc.ctex", "res://.godot/imported/ekipazh-muzhchina_ekipazh-muzhchina-emission.png-0dadfd6473bbf2fae7dbcf5df2e1d6f3.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

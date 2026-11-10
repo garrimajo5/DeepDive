@@ -3,7 +3,11 @@ extends TestCase
 ## Одинаковый код — один ресурс, похожие материалы мест и видов — общий код EcoShaders с числами в uniform.
 
 ## Сколько разных шейдеров у живого мира — потолок. Вырос — проверить, нельзя ли взять общий из EcoShaders.
-const ECO_BUDGET := 22
+## 23 — бахрома колодца 05 (#836, `FringeView`): нить из полос с отводом в базисе экземпляра и следом касания по
+## INSTANCE_CUSTOM — ни один общий шейдер этого не умеет.
+## 24 — ореол силуэта серпохвоста (Б4, `EcoSilhouette`): второй проход без света сложением у тел GLB — у общих
+## шейдеров нет ни скина StandardMaterial3D, ни сложения без тумана.
+const ECO_BUDGET := 24
 
 
 func test_same_code_same_shader() -> void:
@@ -37,7 +41,7 @@ func test_plant_modes() -> void:
 	eq(a.shader, b.shader, "лента и орган — один шейдер")
 	eq(int(b.get_shader_parameter("mode")), EcoShaders.Plant.ORGAN, "что рисовать — в uniform")
 	near(float(b.get_shader_parameter("shade")), 0.45, 1e-6, "числа вида — в uniform")
-	# режимы шейдера совпадают с enum: качается только лента, у листа и веера — свои ветки, остальное — цвет вершины
+	# режимы шейдера совпадают с enum: у листа и веера — свои ветки, остальное — цвет вершины; колыхание — по bend (test_eco_sway)
 	eq(EcoShaders.Plant.KELP, 0, "лента — режим 0 (качание)")
 	ok(EcoShaders.PLANT.contains("mode == %d" % EcoShaders.Plant.LEAF), "ветка листа")
 	ok(EcoShaders.PLANT.contains("mode == %d" % EcoShaders.Plant.FAN), "ветка веера")

@@ -45,3 +45,33 @@ func step(_world: EcoWorld, dt: float) -> void:
 ## Скорость потока (м/с).
 func vel() -> Vector3:
 	return Vector3(sin(angle), 0.0, cos(angle)) * SPEED
+
+
+## Колыхание флоры в течении (план реализма Б3) — двойник ветки `sway` общего шейдера растений EcoShaders.PLANT.
+## Растение ложится по потоку (`lean`, порывы раз в ~14 с), по нему бежит волна вверх (`flutter`) и чуть
+## поперёк (`across`); всё — доли высоты растения и растёт к верху как h². Фаза — от места куста, поэтому соседи
+## колышутся вразнобой. Без течения остаётся лёгкое колыхание (IDLE доли), крен — только по потоку.
+const IDLE := 0.4
+## Фаза от места подножия: x · 0,23 + z · 0,19 (как G.sway у ленточника).
+const PHASE_X := 0.23
+const PHASE_Z := 0.19
+
+
+## Смещение точки растения в мире: o — подножие куста, h — доля высоты (0 — у дна, 1 — кончик), height — высота
+## растения (м), t — время, flow — скорость потока (м/с), bend — (крен, волна, поперёк) в долях высоты на полном
+## течении SPEED. Конец опускается, чтобы стебель не вытягивался.
+static func sway(o: Vector3, h: float, height: float, t: float, flow: Vector3, bend: Vector3) -> Vector3:
+	var v := flow.length()
+	var s := v / SPEED
+	var d := flow / v if v > 1e-5 else Vector3.BACK
+	var c := Vector3(-d.z, 0.0, d.x)
+	var ph := o.x * PHASE_X + o.z * PHASE_Z
+	var gust := 0.65 + 0.35 * sin(t * 0.45 + ph)
+	var fl := sin(t * 1.6 + ph * 1.3 - h * 2.2)
+	var cr := sin(t * 1.1 + ph * 0.7 - h * 1.5)
+	var w := IDLE + (1.0 - IDLE) * s
+	var k := clampf(h, 0.0, 1.0)
+	k = k * k * height
+	var off := d * (bend.x * s * gust + bend.y * w * fl) * k + c * (bend.z * w * cr) * k
+	off.y -= off.dot(off) / (2.0 * maxf(height, 0.1))
+	return off

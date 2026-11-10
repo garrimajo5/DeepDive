@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b0s4o3dee5j0y"
-path="res://.godot/imported/zhurnal-stoyka_zhurnal-stoyka-color.png-59cc87f09a7c4dba5ed79f1145f233fd.ctex"
+path.s3tc="res://.godot/imported/zhurnal-stoyka_zhurnal-stoyka-color.png-59cc87f09a7c4dba5ed79f1145f233fd.s3tc.ctex"
+path.etc2="res://.godot/imported/zhurnal-stoyka_zhurnal-stoyka-color.png-59cc87f09a7c4dba5ed79f1145f233fd.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "2d47fe3dde4a880e31695a7fcd851b62"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/zhurnal-stoyka_zhurnal-stoyka-color.png"
-dest_files=["res://.godot/imported/zhurnal-stoyka_zhurnal-stoyka-color.png-59cc87f09a7c4dba5ed79f1145f233fd.ctex"]
+dest_files=["res://.godot/imported/zhurnal-stoyka_zhurnal-stoyka-color.png-59cc87f09a7c4dba5ed79f1145f233fd.s3tc.ctex", "res://.godot/imported/zhurnal-stoyka_zhurnal-stoyka-color.png-59cc87f09a7c4dba5ed79f1145f233fd.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

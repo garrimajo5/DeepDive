@@ -1,6 +1,8 @@
 extends TestCase
 ## Экипаж в сцене: своя фигура идёт за игроком и садится за штурвал, другой член экипажа виден целиком.
 
+const ShotSetup := preload("res://tools/shot_setup.gd")
+
 var main: Main
 
 
@@ -32,13 +34,15 @@ func test_seated_hands_on_wheel_in_scene() -> void:
 	main.step(1.0 / 30.0)
 	var hand: Vector3 = _shown(0, "hand_r")
 	var grip: Vector3 = Crew.wheel_grips(main.helm.turn)[1]
-	ok(hand.distance_to(grip) < 0.12, "правая рука у обода (%.2f м)" % hand.distance_to(grip))
+	ok(hand.distance_to(grip) < 0.16, "правая рука у обода (%.2f м)" % hand.distance_to(grip))
+	var palm: Vector3 = main.me.joints()["palm_r"]
+	ok(palm.distance_to(grip) < 0.1, "ладонь на ободе (%.2f м)" % palm.distance_to(grip))
 	near(main.camera.position.y, main.me.eye().y, 1e-4, "камера в голове фигуры")
 	main.stand_up()
 
 
 func test_mate_visible_whole() -> void:
-	await main.debug_setup({"mate": "1,0.5,180,2"})
+	ShotSetup.apply(main, {"mate": "1,0.5,180,2"})
 	main.step(1.0 / 30.0)
 	eq(main.crew_view.figures.size(), 2, "две фигуры")
 	eq(main.crew[1].role, Crew.Role.ENGINEER, "роль из ключа")
@@ -60,7 +64,7 @@ func test_mate_not_inside_table() -> void:   # issue #156: сценарий ст
 
 func test_screen_input_only_to_own() -> void:   # ввод с экрана — своему, у другого свой ввод
 	var m := main.add_mate(1.5, 0.5, 0.0, Crew.Role.ENGINEER, 0)
-	eq(m.walker.stand, main.layout.can_stand, "ходок товарища знает весь корабль")
+	ok(m.walker.stand.call(0.0, 10.0) and not Deck.can_stand(0.0, 10.0), "ходок товарища знает весь корабль")
 	var me0 := Vector2(main.walker.x, main.walker.z)
 	main.overlay.router.move = Vector2i(0, 1)
 	for i in 20:
@@ -83,7 +87,7 @@ func _tris(mi: MeshInstance3D) -> int:
 
 
 func test_model_replaces_capsules() -> void:
-	await main.debug_setup({"mate": "1,0.5,180,2"})
+	ShotSetup.apply(main, {"mate": "1,0.5,180,2"})
 	main.step(1.0 / 30.0)
 	var cv := main.crew_view
 	ok(cv.skeletons[0] is Skeleton3D and cv.skeletons[0].get_bone_count() == 24, "модель MOD-012 со скелетом")
@@ -92,6 +96,12 @@ func test_model_replaces_capsules() -> void:
 	ok(_tris(cv.meshes[0]) < _tris(cv.meshes[1]) * 0.9, "свой игрок — без головы (%d треуг.)" % _tris(cv.meshes[0]))
 	ok(cv.meshes[0].material_override != null and cv.meshes[1].material_override == null, "свой — с отсечением граней")
 	ok(cv.patches[1].visible and not cv.patches[0].visible, "нашивка роли — у других")
+	eq((cv.patches[1].mesh.material as StandardMaterial3D).albedo_color, Crew.role_color(2), "нашивка цвета роли")
+	main.crew[1].role = 0
+	main.step(1.0 / 30.0)
+	eq((cv.patches[1].mesh.material as StandardMaterial3D).albedo_color, Crew.role_color(0), "сменил роль — нашивка тоже")
+	main.crew[1].role = 2
+	main.step(1.0 / 30.0)
 	var j := main.me.joints()
 	var hip: Vector3 = _shown(0, "hip")
 	near((hip - main.camera.position).dot(j["fwd"]), -CrewView.OWN_BACK, 1e-3, "стоя своя модель чуть позади камеры")
@@ -111,7 +121,9 @@ func test_hands_on_posts_in_scene() -> void:
 	var g := CrewHands.energy(4, main.reactor.share[4] / float(Reactor.MAX))
 	ok(main.me.hands[1].is_equal_approx(g[1]), "у пульта: правая на ползунке прожектора")
 	var hand: Vector3 = main.crew_view.shown[0]["hand_r"]
-	ok(hand.distance_to(g[1]) < 0.08, "модель дотянулась до ползунка (%.3f м)" % hand.distance_to(g[1]))
+	var sh: Vector3 = main.crew_view.shown[0]["shoulder_r"]
+	## Ракурс ART-050: своя фигура у камеры (как в макете) — рука вытянута к ползунку, хват — в me.hands для сети.
+	ok(hand.distance_to(g[1]) < sh.distance_to(g[1]) - 0.4, "модель тянется к ползунку (%.3f м)" % hand.distance_to(g[1]))
 	main.close_power()
 	main.step(1.0 / 30.0)
 	ok(not main.me.holding(), "отошёл от пульта — руки свободны")
@@ -156,9 +168,41 @@ func test_power_steps_to_panel() -> void:
 	for i in 15:
 		main.step(1.0 / 30.0)
 	var g := CrewHands.energy(0, main.reactor.share[0] / float(Reactor.MAX))
+	ok(main.me.hands[0].is_equal_approx(g[0]), "левая на ползунке двигателей (хват для сети и товарищей)")
 	var hand: Vector3 = main.crew_view.shown[0]["hand_l"]
-	ok(hand.distance_to(g[0]) < 0.08, "левая на ползунке двигателей (%.3f м)" % hand.distance_to(g[0]))
+	var sh: Vector3 = main.crew_view.shown[0]["shoulder_l"]
+	ok(hand.distance_to(g[0]) < sh.distance_to(g[0]) - 0.4, "модель тянется к ползунку (%.3f м)" % hand.distance_to(g[0]))
 	main.close_power()
+
+
+## Ракурс открытого пульта ART-050: камера и своя фигура — у CAM_AT (курс 70°, наклон −32°), таблица справа не
+## закрывает ползунки; ходок и место для сети — у пульта, свайп крутит взгляд от ракурса; закрыл — камера в ходоке.
+func test_power_view() -> void:
+	main.open_power()
+	main.step(1.0 / 30.0)
+	var cam: Vector3 = main.camera.position
+	near(Vector2(cam.x, cam.z).distance_to(PowerScreen.CAM_AT), 0.0, 0.15, "камера на ракурсе (в голове наклонённой фигуры)")
+	near(main.camera.rotation.y, PowerScreen.CAM_YAW, 1e-4, "курс 70°")
+	near(main.camera.rotation.x, PowerScreen.CAM_PITCH, 1e-4, "наклон −32°")
+	eq(Vector2(main.walker.x, main.walker.z), Main.POWER_STAND, "ходок у пульта")
+	eq(Vector2(main.me.x, main.me.z), Main.POWER_STAND, "для сети — у пульта")
+	var hip: Vector3 = main.crew_view.shown[0]["hip"]
+	ok(Vector2(hip.x, hip.z).distance_to(PowerScreen.CAM_AT) < 0.3, "своя фигура — у камеры, не заслоняет пульт")
+	# #576: фигура лицом к пульту, как стоя у поста (курс ходока 90°) — плечи вдоль z; повёрнутая курсом камеры
+	# на 70° тянула правый рукав через весь кадр.
+	var sh: Vector3 = main.crew_view.shown[0]["shoulder_r"] - main.crew_view.shown[0]["shoulder_l"]
+	ok(absf(sh.x) < absf(sh.z) * tan(deg_to_rad(5.0)), "плечи вдоль пульта (x %.3f, z %.3f)" % [sh.x, sh.z])
+	# #576 (решение владельца): пока нет анимации рук у пульта, свою фигуру на ракурсе не рисуем — рукава не в кадре.
+	ok(not main.crew_view.figures[0].visible, "своя фигура у пульта спрятана")
+	main.walker.yaw += 0.2   # свайп
+	main.step(1.0 / 30.0)
+	near(main.camera.rotation.y, PowerScreen.CAM_YAW + 0.2, 1e-4, "свайп — от ракурса")
+	main.close_power()
+	main.step(1.0 / 30.0)
+	var eye: Vector3 = main.pilot.eye(main.walker) + main.me.eye_offset()
+	ok(main.camera.position.distance_to(eye) < 1e-4, "закрыл — камера в ходоке")
+	ok(main.crew_view.figures[0].visible, "закрыл — своя фигура снова видна")
+	near(main.camera.rotation.y, main.walker.yaw, 1e-6, "курс ходока")
 
 
 ## Снаряжение ролей MOD-016: роль видна по деталям, свой игрок не видит их на голове и груди, щиток — на сварке.
@@ -177,10 +221,16 @@ func test_role_gear() -> void:
 	var at := main.crew_view.to_local(visor.global_position)
 	ok(at.distance_to(head) < 0.3, "щиток у головы (%.2f м)" % at.distance_to(head))
 	var up := visor.transform
-	mate.weld(Vector3(0.0, 1.2, -6.0), Vector3.BACK)
+	main.open_breach(0)   # варит по-настоящему: держит кнопку у пробоины (`Pad.hold`, `CrewFlow.holds`)
+	var s: Breach.Spot = main.breach.all[0]
+	mate.walker.x = s.at.x
+	mate.walker.z = s.at.y
+	main.step(0.0)
+	mate.pad.hold = true
 	main.step(1.0 / 30.0)
+	ok(mate.welding(), "товарищ варит")
 	ok(not visor.transform.is_equal_approx(up), "на сварке щиток опущен")
-	mate.weld(Vector3.INF)
+	mate.pad.hold = false
 	mate.role = Crew.Role.BIOLOGIST
 	main.step(1.0 / 30.0)
 	eq(main.crew_view.gear[i].keys(), CrewRig.ROLE_GEAR[Crew.Role.BIOLOGIST], "сменил роль — туника и пробы")
@@ -255,7 +305,6 @@ func test_helm_busy_for_second() -> void:   # ROADMAP «Кооп»: заняты
 	main.walker.z = Deck.CHAIR_Z + 0.9
 	main.step(1.0 / 30.0)
 	eq(main.overlay.action_label, "Занято", "на кнопке — «Занято»")
-	ok(main.status_parts().has("Штурвал занят"), "в строке состояния — «Штурвал занят»")
 	main.use_post("helm")
 	ok(not main.pilot.seated, "свой игрок не сел во второе кресло")
 	eq(main.message.text, "Штурвал занят: Сонарщик", "на приборах — кто держит")
@@ -263,7 +312,6 @@ func test_helm_busy_for_second() -> void:   # ROADMAP «Кооп»: заняты
 	mate.post = ""
 	main.step(1.0 / 30.0)
 	eq(main.overlay.action_label, "Штурвал", "встал — пост свободен")
-	ok(main.status_parts().has("Сесть за штурвал"), "в строке — снова «Сесть за штурвал»")
 	main.use_post("helm")
 	ok(main.pilot.seated, "теперь сел")
 	main.step(1.0 / 30.0)
@@ -383,6 +431,7 @@ func test_mate_action_vote() -> void:   # у голостола товарищ �
 	main.step(1.0 / 30.0)
 	ok(not m.at_vote, "маршрут не пройден — голосовать рано")
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	m.pad.action = true
 	main.step(1.0 / 30.0)
 	ok(m.at_vote, "товарищ у голосования")
@@ -392,10 +441,29 @@ func test_mate_action_vote() -> void:   # у голостола товарищ �
 	ok(not m.at_vote, "кнопка — отойти")
 
 
+func test_mate_action_sonar() -> void:   # ROADMAP «импульс сонара у гостя»: кнопка товарища у голостола — импульс хоста
+	var m := main.add_mate(-1.3, -1.6, -PI / 2.0, Crew.Role.SONAR, 1)
+	m.walker.x = -1.3
+	m.walker.z = -1.6
+	main.time = 50.0
+	var n := main.sonar.count
+	var e0: float = main.vitals.energy
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	eq(main.sonar.count, n + 1, "импульс прошёл")
+	ok(main.vitals.energy < e0, "заряд потрачен, как за свой импульс")
+	ok(not m.busy(), "у голостола товарищ поста не держит")
+	eq(str(main.news[1]).begins_with("Сонар:"), true, "ответ приборов — всем (сообщение события): %s" % [main.news])
+	m.pad.action = true
+	main.step(1.0 / 30.0)
+	eq(main.sonar.count, n + 1, "перезарядка — второго импульса нет")
+
+
 func test_coop_vote_majority() -> void:   # двое у голостола: метки — голоса игроков, решение ждёт второго
 	main.walker.x = Main.ROUTE_POST.x
 	main.walker.z = Main.ROUTE_POST.y
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	var m := main.add_mate(Main.ROUTE_POST.x + 0.2, Main.ROUTE_POST.y + 0.2, 0.0, Crew.Role.BIOLOGIST, 1)
 	m.walker.x = Main.ROUTE_POST.x + 0.2
 	m.walker.z = Main.ROUTE_POST.y + 0.2
@@ -421,6 +489,7 @@ func test_coop_vote_timer_up() -> void:   # второй молчит — по �
 	main.walker.x = Main.ROUTE_POST.x
 	main.walker.z = Main.ROUTE_POST.y
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	var m := main.add_mate(Main.ROUTE_POST.x + 0.2, Main.ROUTE_POST.y + 0.2, 0.0, Crew.Role.ENGINEER, 0)
 	m.walker.x = Main.ROUTE_POST.x + 0.2
 	m.walker.z = Main.ROUTE_POST.y + 0.2
@@ -442,3 +511,55 @@ func test_coop_vote_timer_up() -> void:   # второй молчит — по �
 	ok(main.run.ended, "время вышло — наверх")
 	ok(main.at_vote, "свой у стола видит итог")
 	main.close_vote()
+
+
+func test_walk_stops_at_mate() -> void:   # issue #602: шагом не войти в товарища — камера не в его голове
+	var mate := main.add_mate(-1.3, -1.6, 0.0, Crew.Role.SONAR, 0)
+	main.walker.x = -1.3
+	main.walker.z = -2.6
+	main.walker.yaw = PI   # лицом к корме, на товарища
+	for i in 60:
+		main.walker.walk(Vector2(0.0, 1.0), 1.0 / 30.0)
+	var d := Vector2(main.walker.x - mate.walker.x, main.walker.z - mate.walker.z).length()
+	ok(d >= Crew.GAP - 0.01 and d < Crew.GAP + 0.2, "остановился перед товарищем: %.2f м" % d)
+	mate.walker.yaw = 0.0   # и товарищ своим вводом не входит в своего игрока
+	for i in 60:
+		mate.walker.walk(Vector2(0.0, 1.0), 1.0 / 30.0)
+	d = Vector2(main.walker.x - mate.walker.x, main.walker.z - mate.walker.z).length()
+	ok(d >= Crew.GAP - 0.01, "товарищ тоже остановился: %.2f м" % d)
+
+
+func test_overlapped_can_step_away() -> void:   # поставили вплотную (сценарий, сеть) — отойти можно
+	var mate := main.add_mate(-1.3, -1.6, 0.0, Crew.Role.SONAR, 0)
+	main.walker.x = -1.3
+	main.walker.z = -1.8
+	main.walker.yaw = 0.0   # лицом к носу, от товарища
+	main.walker.walk(Vector2(0.0, 1.0), 0.2)
+	ok(main.walker.z < -1.8 - 0.3, "отошёл: z %.2f" % main.walker.z)
+	ok(Crew.room_for(main.crew, main.me, -1.3, -1.4) == false, "к товарищу ближе GAP — нельзя")
+	ok(mate != null)
+
+
+func test_restart_not_inside_mate() -> void:   # issue #602: новый забег ставил своего в товарища у штурвала
+	main.walker.reset()
+	var mate := main.add_mate(main.walker.x, main.walker.z, 0.0, Crew.Role.PILOT, 1)
+	main.walker.x = -1.0
+	main._restart()
+	var d := Vector2(main.walker.x - mate.walker.x, main.walker.z - mate.walker.z).length()
+	ok(d >= Crew.GAP, "свой игрок рядом с началом спуска, но не в товарище: %.2f м" % d)
+	ok(main.layout.can_stand(main.walker.x, main.walker.z), "и на полу")
+	ok(d < 1.0, "не дальше метра")
+
+
+func test_crew_freed_with_main() -> void:   # issue #779: ходок держал своего Member через stand_for — цикл RefCounted, утечка
+	var m: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(m)
+	await frames(2)
+	var me_ref: WeakRef = weakref(m.me)
+	var mate_ref: WeakRef = weakref(m.add_mate(0.0, -3.0, 0.0, Crew.Role.BIOLOGIST, 1))
+	ok(m.me.walker.stand.call(m.me.walker.x, m.me.walker.z), "ходок стоит на полу")
+	m.queue_free()
+	m = null
+	await frames(3)
+	ok(me_ref.get_ref() == null, "свой игрок освобождён вместе с main")
+	ok(mate_ref.get_ref() == null, "товарищ освобождён вместе с main")

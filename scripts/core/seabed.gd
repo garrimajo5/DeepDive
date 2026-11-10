@@ -6,10 +6,19 @@ const SIZE := 700.0      ## сторона карты, м
 const SEGMENTS := 140    ## клеток на сторону (141×141 вершин, ~39 тыс. треугольников)
 const TOP := -7.0        ## выше дно не поднимается
 const ICE_Y := 0.0
+## Участок сетки дна за восточным краем карты (#822, часть 2): x 350…700, z 60…340 — проход и котловина `Slope` с
+## запасом на её стены. Шаг и узлы — как у основной сетки (стык без щели), в той же поверхности (`map_arrays`).
+const EAST := Rect2(350.0, 60.0, 350.0, 280.0)
 
 
-## Высота дна под точкой (x, z).
+## Высота дна под точкой (x, z): прежняя отмель `base` + гребень и проходы слоя 1 (`Layer`) + склон за восточным
+## краем (`Slope`, #822).
 static func height(x: float, z: float) -> float:
+	return minf(Slope.cut(x, z, Layer.lanes(x, z, Layer.ridge(x, z, base(x, z)))), TOP)
+
+
+## Рельеф отмели как W.height в js/world.js (до карты слоя 1), без предела `TOP`.
+static func base(x: float, z: float) -> float:
 	var n := HashNoise.fbm(x * 0.006, z * 0.006, 4)
 	var h := -64.0 + (n - 0.5) * 34.0
 	var r := sqrt((x + 10.0) * (x + 10.0) + (z + 10.0) * (z + 10.0))
@@ -22,7 +31,182 @@ static func height(x: float, z: float) -> float:
 	var e := maxf(absf(x), absf(z))
 	h += HashNoise.smooth(285.0, 345.0, e) * 80.0
 	h += (HashNoise.value(x * 0.13, z * 0.13) - 0.5) * 1.4
-	return minf(h, TOP)
+	return h
+
+
+## Рельеф под карту слоя 1 (#821, часть 2; карта и места — `LayerMap`, схема #818): поверх прежнего рельефа отмели
+## поднят северо-западный гребень с террасой врат 07 и наблюдением поля 08, а вдоль маршрутов слоя и в карманах
+## разворота у 01, 07 и 09 макушки гряд срезаны до «свободно 30 м подо льдом». Где дно и так ниже — не трогаем: шесть
+## ориентиров ART-005, старт и склон на востоке стоят как были.
+class Layer:
+	## Гребень: дно около 47 м (ориентир 07/08 — 35 м), вдоль отрезка 08→07, продлённого на `RIDGE_PAD` на запад за 08.
+	const RIDGE_FLOOR := -47.0
+	const RIDGE_FULL := 70.0     ## м от оси гребня — дно гребня целиком
+	const RIDGE_FADE := 110.0    ## м — дальше прежний рельеф (Кости левиафана 04 — дальше)
+	const RIDGE_PAD := 40.0
+	## Проход: полоса ±`LANE_HALF` м вокруг отрезка маршрута, где дно не выше `LANE_CAP` (от льда ≥ 30 м воды и
+	## полметра запаса — габарит карты 60 × 30 м); дальше `LANE_FADE` м — плавно к прежнему рельефу. Прежняя отмель
+	## в проходах почти везде и так глубже: срезаются только макушки гряд, мох и стаи на них не трогаются.
+	const LANE_CAP := -30.5
+	const LANE_HALF := 32.0
+	const LANE_FADE := 24.0
+	const LANE_RIPPLE := 0.5     ## м — срез не плоский: рябь вниз от `LANE_CAP`
+	## Карманы разворота: круг радиуса `POCKET_R` (≈ 90 м поперёк) у мест, срез — как у прохода.
+	const POCKETS: Array[String] = ["01", "07", "09"]
+	const POCKET_R := 46.0
+	## Отрезки, которые режем: все маршруты слоя, кроме спуска 06→10 к лесу (склон глубже — отдельная задача).
+	static var _lanes: Array = []
+	static var _pockets: Array[Vector2] = []
+
+	## Дно гребня в (x, z) поверх прежнего h: только поднимает и не выше `RIDGE_FLOOR` + пологие бугры ±3 м.
+	static func ridge(x: float, z: float, h: float) -> float:
+		if x > 20.0 or z > -80.0:  # дальше `RIDGE_FADE` от оси гребня
+			return h
+		var a := LayerMap.xz("08")
+		var b := LayerMap.xz("07")
+		var dir := (b - a).normalized()
+		var d := _seg_dist(Vector2(x, z), a - dir * RIDGE_PAD, b)
+		var w := 1.0 - HashNoise.smooth(RIDGE_FULL, RIDGE_FADE, d)
+		if w <= 0.0:
+			return h
+		var top := RIDGE_FLOOR + (HashNoise.value(x * 0.02 + 5.3, z * 0.02 - 2.1) - 0.5) * 6.0
+		return lerpf(h, maxf(h, top), w)
+
+	## Срез гряд в проходах и карманах: дно не выше `LANE_CAP` (с лёгкой рябью вниз), плавно по краям.
+	static func lanes(x: float, z: float, h: float) -> float:
+		if h <= LANE_CAP - LANE_RIPPLE:
+			return h
+		var q := Vector2(x, z)
+		var d := INF
+		for s: Array in segments():
+			d = minf(d, _seg_dist(q, s[0], s[1]))
+		var w := 1.0 - HashNoise.smooth(LANE_HALF, LANE_HALF + LANE_FADE, d)
+		for c: Vector2 in pockets():
+			var dp := q.distance_to(c)
+			w = maxf(w, 1.0 - HashNoise.smooth(POCKET_R, POCKET_R + LANE_FADE, dp))
+		if w <= 0.0:
+			return h
+		var cap := LANE_CAP - HashNoise.value(x * 0.05 - 1.3, z * 0.05 + 4.7) * LANE_RIPPLE
+		return lerpf(h, minf(h, cap), w)
+
+	## Середины карманов `POCKETS` — один раз (#1300: дно зовут ~50 раз за кадр, словарь `LayerMap` — не на каждый).
+	static func pockets() -> Array[Vector2]:
+		if _pockets.is_empty():
+			for id: String in POCKETS:
+				_pockets.append(LayerMap.xz(id))
+		return _pockets
+
+	## Отрезки проходов [Vector2, Vector2] из `LayerMap.segments()` без спуска к лесу (место 10).
+	static func segments() -> Array:
+		if _lanes.is_empty():
+			for s: Array in LayerMap.segments():
+				if not s.has("10"):
+					_lanes.append([LayerMap.xz(s[0]), LayerMap.xz(s[1])])
+		return _lanes
+
+	static func _seg_dist(q: Vector2, a: Vector2, b: Vector2) -> float:
+		var ab := b - a
+		var t := clampf((q - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+		return q.distance_to(a + ab * t)
+
+
+## Склон до 300 м за восточным краем (#822, решение владельца 27.10 — расширение карты, не обрыв внутри квадрата):
+## в скальной стене за Краем отмели 06 — проход шириной `GAP_HALF`·2 м у z = `GAP_Z`, за ним дно уходит от
+## нынешних ~112 м к `BOTTOM` м у `X_BOTTOM` и раскрывается в котловину шириной `BASIN_HALF`·2 м; по бокам и в конце
+## котловины — прежняя стена. На склоне — крупные скальные массы (`ROCK` м), вдоль оси прохода они ниже (`AXIS_FREE`),
+## чтобы корабль шёл вниз без касаний. Сетка дна за краем — `EAST`/`map_arrays`, ход корабля туда — `open`
+## (`Helm.Ship`, #822, часть 2).
+class Slope:
+	const GAP_Z := 200.0         ## ось прохода, м
+	const GAP_HALF := 40.0       ## полуширина прохода в стене (≥ 30 — проход не уже 60 м)
+	const BASIN_HALF := 90.0     ## полуширина котловины за стеной
+	const FADE := 40.0           ## м — края прохода и котловины плавно к стене
+	const X_IN := 250.0          ## отсюда (дно ~112 м) начинается склон
+	const X_OPEN := 285.0        ## к этому x проход открыт целиком (здесь начинается стена)
+	const X_WIDE := Vector2(330.0, 430.0)  ## на этом участке проход раскрывается в котловину
+	const X_BOTTOM := 590.0      ## здесь склон доходит до `BOTTOM`
+	const X_END := 680.0         ## восточная стена котловины
+	const FLOOR_IN := -112.0     ## дно в начале склона, м
+	const BOTTOM := -310.0       ## дно внизу склона, м
+	const ROCK := 38.0           ## м — высота скальных масс
+	const AXIS_FREE := Vector2(22.0, 60.0)  ## м от оси: ближе — массы ниже в разы, дальше `y` — в полную силу
+
+	## Дно поверх h: в проходе и котловине — склон со скалами, дальше — h (стена). Только опускает.
+	static func cut(x: float, z: float, h: float) -> float:
+		if x <= X_IN:
+			return h
+		var m := mask(x, z)
+		if m <= 0.0:
+			return h
+		return lerpf(h, minf(h, floor_at(x, z)), m)
+
+	## Сюда за край отмели (x > `Helm.Ship.EDGE`) корабль заходит: проход и котловина хотя бы наполовину.
+	static func open(x: float, z: float) -> bool:
+		return mask(x, z) >= 0.5
+
+	## Доля склона в (x, z): 0 — стена, 1 — проход или котловина целиком.
+	static func mask(x: float, z: float) -> float:
+		var half := lerpf(GAP_HALF, BASIN_HALF, HashNoise.smooth(X_WIDE.x, X_WIDE.y, x))
+		var dz := absf(z - GAP_Z)
+		var side := 1.0 - HashNoise.smooth(half, half + FADE, dz)
+		var start := HashNoise.smooth(X_IN, X_OPEN, x)
+		var end := 1.0 - HashNoise.smooth(X_END - FADE, X_END, x)
+		return side * start * end
+
+	## Дно склона: профиль по x и скальные массы, вдоль оси прохода пониже.
+	static func floor_at(x: float, z: float) -> float:
+		var p := lerpf(FLOOR_IN, BOTTOM, HashNoise.smooth(X_IN, X_BOTTOM, x))
+		var rn := HashNoise.fbm(x * 0.011 + 11.3, z * 0.011 - 6.2, 3)
+		var rock := HashNoise.smooth(0.45, 0.8, rn) * ROCK
+		var free := lerpf(0.15, 1.0, HashNoise.smooth(AXIS_FREE.x, AXIS_FREE.y, absf(z - GAP_Z)))
+		var grain := (HashNoise.value(x * 0.09, z * 0.09) - 0.5) * 3.0
+		return p + rock * free + grain
+
+
+## Высота сетки дна (`map_arrays`, клетка SIZE / SEGMENTS) под (x, z): та, что видно, — между вершинами линейно по
+## треугольникам клетки (диагональ от (x0 + шаг, z0) к (x0, z0 + шаг)). Вне карты — по ближней клетке; за восточным
+## краем в полосе `EAST` — по клеткам участка склона.
+static func mesh_height(x: float, z: float) -> float:
+	var step := SIZE / SEGMENTS
+	var half := SIZE / 2.0
+	var last_i := SEGMENTS - 1.0
+	if x > half and z >= EAST.position.y and z < EAST.end.y:
+		last_i = (EAST.end.x + half) / step - 1.0
+	var i := clampf(floor((x + half) / step), 0.0, last_i)
+	var j := clampf(floor((z + half) / step), 0.0, SEGMENTS - 1.0)
+	var x0 := -half + i * step
+	var z0 := -half + j * step
+	var a := (x - x0) / step
+	var b := (z - z0) / step
+	var vi := int(i)
+	var vj := int(j)
+	var h10 := _vertex(vi + 1, vj)
+	var h01 := _vertex(vi, vj + 1)
+	if a + b <= 1.0:
+		var h00 := _vertex(vi, vj)
+		return h00 + (h10 - h00) * a + (h01 - h00) * b
+	var h11 := _vertex(vi + 1, vj + 1)
+	return h11 + (h01 - h11) * (1.0 - a) + (h10 - h11) * (1.0 - b)
+
+
+## Высоты вершин сетки дна по запросу (рельеф неизменен): вершина (i, j) — `height` в (−SIZE/2 + i·шаг, −SIZE/2 + j·шаг),
+## i до края полосы `EAST`. Живой мир ставит на дно по `mesh_height` (#1386) — каждое чтение не считает шум трижды.
+const _VERT_I := int((EAST.end.x + SIZE / 2.0) / (SIZE / SEGMENTS)) + 1
+const _VERT_J := SEGMENTS + 1
+static var _verts := PackedFloat32Array()
+
+
+static func _vertex(i: int, j: int) -> float:
+	if _verts.is_empty():
+		_verts.resize(_VERT_I * _VERT_J)
+		_verts.fill(NAN)
+	var k := j * _VERT_I + i
+	var h := _verts[k]
+	if is_nan(h):
+		var step := SIZE / SEGMENTS
+		h = height(-SIZE / 2.0 + i * step, -SIZE / 2.0 + j * step)
+		_verts[k] = h
+	return h
 
 
 ## Цвет дна (js/world.js): песок, на крутых склонах скала, пятнами мох, в глубине темнеет. ny — y нормали.
@@ -33,47 +217,92 @@ static func color_at(x: float, y: float, z: float, ny: float) -> Color:
 	c = c.lerp(Color(0.20, 0.48, 0.44), m)
 	var d := HashNoise.smooth(-55.0, -110.0, y)
 	c = c.lerp(Color(0.08, 0.13, 0.22), d)
+	c = crust_tint(c, x, z)
 	var v := 0.82 + HashNoise.value(x * 0.4, z * 0.4) * 0.3
 	return Color(c.r * v, c.g * v, c.b * v)
 
 
+## Корка у Спуска 10 (#832): за волнистой границей `EcoBrink.share` (x ≈ 525 ± 10, полная — за 70 м к востоку) тёмный
+## песок котловины сменяется серо-лиловой породой, на пятнах корки (`EcoBrink.patch`) — бледной кварцевой. Цвет
+## вершин сетки дна — без новых вызовов и шейдеров; западнее границы цвет как был.
+const CRUST_ROCK := Color(0.17, 0.19, 0.26)
+const CRUST_QUARTZ := Color(0.40, 0.47, 0.55)
+const CRUST_ROCK_K := 0.85
+const CRUST_QUARTZ_K := 0.6
+
+static func crust_tint(c: Color, x: float, z: float) -> Color:
+	if x < EcoBrink.BORDER_X - EcoBrink.WAVE:
+		return c
+	var s := EcoBrink.share(x, z)
+	if s <= 0.0:
+		return c
+	c = c.lerp(CRUST_ROCK, s * CRUST_ROCK_K)
+	return c.lerp(CRUST_QUARTZ, s * EcoBrink.patch(x, z) * CRUST_QUARTZ_K)
+
+
 ## Сетка дна: массивы для ArrayMesh (вершины, нормали, цвета, индексы), лицевая сторона вверх.
 static func build_arrays(segments: int = SEGMENTS, size: float = SIZE) -> Array:
-	var n := segments + 1
-	var step := size / segments
-	var half := size / 2.0
+	return grid_arrays(Vector2(-size / 2.0, -size / 2.0), segments, segments, size / segments)
+
+
+## Вся видимая сетка дна одной поверхностью (один вызов отрисовки): квадрат карты и участок склона `EAST`.
+static func map_arrays() -> Array:
+	var step := SIZE / SEGMENTS
+	var main := build_arrays()
+	var east := grid_arrays(EAST.position, int(EAST.size.x / step), int(EAST.size.y / step), step)
+	var base_n: int = (main[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	var idx: PackedInt32Array = east[Mesh.ARRAY_INDEX]
+	for t in idx.size():
+		idx[t] += base_n
+	var all: PackedInt32Array = main[Mesh.ARRAY_INDEX]
+	all.append_array(idx)
+	main[Mesh.ARRAY_INDEX] = all
+	var vs: PackedVector3Array = main[Mesh.ARRAY_VERTEX]
+	vs.append_array(east[Mesh.ARRAY_VERTEX])
+	main[Mesh.ARRAY_VERTEX] = vs
+	var ns: PackedVector3Array = main[Mesh.ARRAY_NORMAL]
+	ns.append_array(east[Mesh.ARRAY_NORMAL])
+	main[Mesh.ARRAY_NORMAL] = ns
+	var cs: PackedColorArray = main[Mesh.ARRAY_COLOR]
+	cs.append_array(east[Mesh.ARRAY_COLOR])
+	main[Mesh.ARRAY_COLOR] = cs
+	return main
+
+
+## Сетка nx × nz клеток шага step от угла at. Нормали — по разностям высоты через узел (на краю — за краем по
+## `height`), поэтому у двух сеток на общем ребре нормали совпадают и стык не виден.
+static func grid_arrays(at: Vector2, nx: int, nz: int, step: float) -> Array:
+	var w := nx + 3   # узлы с кольцом в одну клетку вокруг — для нормалей
 	var hs := PackedFloat32Array()
-	hs.resize(n * n)
-	for j in n:
-		for i in n:
-			hs[j * n + i] = height(-half + i * step, -half + j * step)
+	hs.resize(w * (nz + 3))
+	for j in nz + 3:
+		for i in w:
+			hs[j * w + i] = height(at.x + (i - 1) * step, at.y + (j - 1) * step)
+	var n := nx + 1
 	var pos := PackedVector3Array()
 	var nor := PackedVector3Array()
 	var col := PackedColorArray()
-	pos.resize(n * n)
-	nor.resize(n * n)
-	col.resize(n * n)
-	for j in n:
+	pos.resize(n * (nz + 1))
+	nor.resize(n * (nz + 1))
+	col.resize(n * (nz + 1))
+	for j in nz + 1:
 		for i in n:
 			var v := j * n + i
-			var x := -half + i * step
-			var z := -half + j * step
-			var y := hs[v]
-			var il := maxi(i - 1, 0)
-			var ir := mini(i + 1, n - 1)
-			var jd := maxi(j - 1, 0)
-			var ju := mini(j + 1, n - 1)
-			var dx := (hs[j * n + ir] - hs[j * n + il]) / ((ir - il) * step)
-			var dz := (hs[ju * n + i] - hs[jd * n + i]) / ((ju - jd) * step)
+			var x := at.x + i * step
+			var z := at.y + j * step
+			var c := (j + 1) * w + i + 1
+			var y := hs[c]
+			var dx := (hs[c + 1] - hs[c - 1]) / (2.0 * step)
+			var dz := (hs[c + w] - hs[c - w]) / (2.0 * step)
 			var nn := Vector3(-dx, 1.0, -dz).normalized()
 			pos[v] = Vector3(x, y, z)
 			nor[v] = nn
 			col[v] = color_at(x, y, z, nn.y)
 	var idx := PackedInt32Array()
-	idx.resize(segments * segments * 6)
+	idx.resize(nx * nz * 6)
 	var t := 0
-	for j in segments:
-		for i in segments:
+	for j in nz:
+		for i in nx:
 			var v := j * n + i
 			# Godot: лицевая сторона — обход по часовой стрелке, если смотреть на неё (сверху)
 			idx[t] = v; idx[t + 1] = v + 1; idx[t + 2] = v + n
@@ -88,23 +317,285 @@ static func build_arrays(segments: int = SEGMENTS, size: float = SIZE) -> Array:
 	return arr
 
 
-## Вода по глубине (updateEnv в js/game.js): у льда бирюзовая, к 95 м тёмная, туман гуще.
+## Вода по глубине по ART-059 (`docs/concept-art/voda-glubina.md`, ключи `voda-glubina.json`): конечные значения
+## тумана, рассеянного света, солнца сквозь лёд и экспозиции ACES — `OceanView.apply_water` ставит их как есть.
+## Между ключами — линейно (цвет — в линейном свете), ниже 120 м — как на 120 м.
 class Water:
-	const SHALLOW := Color8(0x1a, 0x66, 0x76)
-	const DEEP := Color8(0x04, 0x1a, 0x22)
+	## [глубина, цвет тумана, плотность, рассеянный, солнце, экспозиция]
+	const KEYS := [
+		[0.0, Color8(0x3A, 0x81, 0x90), 0.008, 0.70, 0.65, 0.84],
+		[5.0, Color8(0x2E, 0x76, 0x87), 0.009, 0.64, 0.60, 0.85],
+		[8.0, Color8(0x28, 0x6B, 0x80), 0.010, 0.58, 0.52, 0.86],
+		[15.0, Color8(0x20, 0x53, 0x6F), 0.0115, 0.43, 0.39, 0.885],
+		[20.0, Color8(0x1A, 0x46, 0x67), 0.013, 0.36, 0.31, 0.90],
+		[30.0, Color8(0x14, 0x37, 0x53), 0.0155, 0.25, 0.18, 0.92],
+		[45.0, Color8(0x0D, 0x29, 0x43), 0.018, 0.16, 0.085, 0.94],
+		[60.0, Color8(0x09, 0x1E, 0x34), 0.0195, 0.10, 0.04, 0.955],
+		[90.0, Color8(0x05, 0x13, 0x1F), 0.022, 0.045, 0.012, 0.98],
+		[120.0, Color8(0x04, 0x0D, 0x17), 0.0235, 0.025, 0.005, 0.98],
+		# ниже 120 м — склон до 300 м за восточным краем (#822): тот же оттенок темнеет к почти чёрному, солнца нет,
+		# плотность растёт медленно (прожектор ещё достаёт склон); ниже 300 м — как на 300.
+		[180.0, Color8(0x03, 0x0A, 0x12), 0.0245, 0.016, 0.0015, 0.985],
+		[240.0, Color8(0x02, 0x08, 0x0E), 0.025, 0.011, 0.0004, 0.99],
+		[300.0, Color8(0x02, 0x06, 0x0B), 0.0255, 0.008, 0.0, 0.99],
+	]
+	## Ключи ART-059 (`voda-glubina.json`) — первые ART059 строк, дальше — свои (#822).
+	const ART059 := 10
 
-	## 0 у льда (до 8 м), 1 на глубине 95 м и ниже.
+	## 0 у льда (до 8 м), 1 на глубине 95 м и ниже (каустики дна, прежняя кривая).
 	static func k(depth: float) -> float:
 		return HashNoise.smooth(8.0, 95.0, depth)
 
+	## Ключ и доля до следующего: [i, t].
+	static func _at(depth: float) -> Array:
+		return HashNoise.key_at(KEYS, depth)
+
+	static func _num(depth: float, col: int) -> float:
+		return HashNoise.keyed(KEYS, depth, col)
+
 	static func fog_density(depth: float) -> float:
-		return 0.015 + 0.01 * k(depth)
+		return _num(depth, 2)
 
 	static func ambient(depth: float) -> float:
-		return 0.95 - 0.55 * k(depth)
+		return _num(depth, 3)
 
 	static func sun(depth: float) -> float:
-		return 0.55 - 0.4 * k(depth)
+		return _num(depth, 4)
+
+	static func exposure(depth: float) -> float:
+		return _num(depth, 5)
 
 	static func fog_color(depth: float) -> Color:
-		return SHALLOW.lerp(DEEP, k(depth))
+		var a := _at(depth)
+		var c0: Color = KEYS[a[0]][1]
+		var c1: Color = KEYS[a[0] + 1][1]
+		return c0.srgb_to_linear().lerp(c1.srgb_to_linear(), a[1]).linear_to_srgb()
+
+	## Свет каустик на дне — прежняя кривая (ART-059: лучи и каустики не усиливать и не ослаблять заново).
+	static func caustic(depth: float) -> float:
+		return 0.55 - 0.4 * k(depth)
+
+
+## Грунты дна по ART-060 (`docs/concept-art/dno-grunty.md`): песок, ил и галька — карты 2 × 2 м поверх `color_at`
+## в материале дна (`shaders/seabed.gdshader`, один вызов). Веса грунтов, затухания и базис нормалей — здесь;
+## шейдер считает то же тем же хешем, что `HashNoise` (до точности float).
+class Ground:
+	const TEX := "res://textures/dno/%s-%s.png"   ## грунт (pesok, il, galka), карта (tsvet, normali, orm)
+	const KINDS := ["pesok", "il", "galka"]
+	const MAPS := ["tsvet", "normali", "orm"]
+	const TILE := 2.0                              ## плитка, м: uv = world.xz / TILE
+	const OFFSET := [Vector2(0.0, 0.0), Vector2(0.37, 0.71), Vector2(0.63, 0.19)]   ## свой сдвиг UV у грунта
+	const NORMAL_K := [0.42, 0.25, 0.55]           ## сила нормалей: песок, ил, галька
+	const NORMAL_FADE := Vector2(8.0, 35.0)        ## нормали гаснут, м от камеры
+	const COLOR_FADE := Vector2(12.0, 55.0)        ## цвет деталей гаснет, м
+	const BUMP := 0.12                             ## прежний процедурный микрорельеф — слабее
+	const SILT_SCALE := 0.075                      ## ил — карманы по шуму, 1/м
+	const SILT_EDGE := Vector2(0.48, 0.62)
+	const PEBBLE_SCALE := 0.11                     ## галька — пятна шума, 1/м
+	const PEBBLE_EDGE := Vector2(0.45, 0.62)
+	const STEEP := Vector2(0.42, 0.65)             ## уклон (1 − ny), на котором детали уходят в скалу
+
+	## Веса [песок, ил, галька] ≥ 0, сумма 1. ny — y нормали, depth — глубина дна под льдом, м.
+	static func weights(x: float, z: float, ny: float, depth: float) -> Array:
+		var s := 1.0 - ny
+		var n_silt := HashNoise.fbm(x * SILT_SCALE + 7.0, z * SILT_SCALE + 7.0, 2)
+		var band := HashNoise.smooth(10.0, 18.0, depth) * (1.0 - HashNoise.smooth(55.0, 75.0, depth))
+		var silt := HashNoise.smooth(SILT_EDGE.x, SILT_EDGE.y, n_silt) * (0.35 + 0.65 * band) \
+				* HashNoise.smooth(0.80, 0.98, ny)
+		var spot := HashNoise.value(x * PEBBLE_SCALE + 31.0, z * PEBBLE_SCALE - 5.0)
+		var slope_band := HashNoise.smooth(0.08, 0.16, s) * (1.0 - HashNoise.smooth(0.36, 0.46, s))
+		var pebble := maxf(slope_band * HashNoise.smooth(0.25, 0.45, spot),
+				0.7 * HashNoise.smooth(PEBBLE_EDGE.x, PEBBLE_EDGE.y, spot))
+		silt *= 1.0 - pebble
+		return [1.0 - silt - pebble, silt, pebble]
+
+	## Сила деталей на склоне: на крутом остаётся скальный цвет.
+	static func detail_k(ny: float) -> float:
+		return 1.0 - HashNoise.smooth(STEEP.x, STEEP.y, 1.0 - ny)
+
+	static func normal_fade(dist: float) -> float:
+		return 1.0 - HashNoise.smooth(NORMAL_FADE.x, NORMAL_FADE.y, dist)
+
+	static func color_fade(dist: float) -> float:
+		return 1.0 - HashNoise.smooth(COLOR_FADE.x, COLOR_FADE.y, dist)
+
+	## Цвет: vertex_color · mix(1, 2·tsvet, k) — карта даёт отклонение от 50 % серого.
+	static func tint(base: Color, tsvet: Color, k: float) -> Color:
+		return Color(base.r * lerpf(1.0, 2.0 * tsvet.r, k), base.g * lerpf(1.0, 2.0 * tsvet.g, k),
+				base.b * lerpf(1.0, 2.0 * tsvet.b, k))
+
+	## Мировой базис нормалей: T — +X на поверхность, B = N × T (на ровном дне к −Z), +Y карты — к −Z мира.
+	static func basis(n: Vector3) -> Basis:
+		var t := (Vector3.RIGHT - n * n.dot(Vector3.RIGHT)).normalized()
+		return Basis(t, n.cross(t), n)
+
+	## UV грунта kind в точке мира.
+	static func uv(x: float, z: float, kind: int) -> Vector2:
+		return Vector2(x, z) / TILE + OFFSET[kind]
+
+	static func path(kind: int, map: int) -> String:
+		return TEX % [KINDS[kind], MAPS[map]]
+
+
+## Декали дна по ART-066 (`docs/concept-art/dekali-dna.md`): атлас 4×4 (следы, вмятины, ил, ракушечник, мох; разряды —
+## ячейки 13–15, в фон не идут) проекцией world.xz в материал дна (`shaders/seabed.gdshader`, без новых вызовов).
+## Два слоя клеток 4 × 4 м (второй сдвинут на полклетки): в клетке слоя — не больше одного штампа. Шейдер считает то же
+## целочисленным хешем `HashNoise.hash2` — места штампов здесь и там совпадают.
+class Marks:
+	const ATLAS := "res://textures/dno/dekali.png"
+	const CELL := 4.0                     ## клетка, м
+	const LAYERS := 2                     ## слоёв клеток (ART-066 — один; плотность поднята при встройке)
+	const ACCEPT := 0.72                  ## доля клеток со штампом
+	const SIZE := Vector2(1.55, 2.4)      ## сторона квадрата штампа, м
+	const JITTER := 0.2                   ## сдвиг центра, ± м
+	const STRENGTH := 0.85                ## сила множителя
+	const FADE := Vector2(10.0, 45.0)     ## гаснут, м от камеры
+	const SLOPE := Vector2(0.30, 0.48)    ## уклон (1 − ny), на котором гаснут
+	const TRACK_NY := Vector2(0.82, 0.96) ## следы — только на ровном
+	const MOSS_EDGE := Vector2(0.48, 0.68)
+	const EDGE := 0.07                    ## края квадрата гаснут в пустом поле ячейки (20 px из 256 ≈ 0,078)
+	## «Экономно» (ART-044): один слой, реже и ближе.
+	const LITE_ACCEPT := 0.36
+	const LITE_FADE := Vector2(6.0, 25.0)
+	## Категории фона: верхняя граница доли, первая ячейка, сколько ячеек.
+	const CATS := [[0.27, 0, 4], [0.40, 4, 2], [0.67, 6, 3], [0.85, 9, 2], [1.0, 11, 2]]
+	enum Cat { TRACK, DENT, SILT, SHELL, MOSS }
+	const SCORCH := [13, 14, 15]          ## разряды — только по событию, не в фоне
+
+	## Хеш клетки (как dhash в шейдере): k — номер числа, у слоя свои 8.
+	static func h(ix: int, iz: int, k: int) -> float:
+		return HashNoise.hash2(ix + 9973 * k, iz - 7919 * k)
+
+	## Сдвиг сетки слоя, м.
+	static func offset(layer: int) -> float:
+		return CELL * 0.5 if layer == 1 else 0.0
+
+	## Кандидат клетки слоя, в которую попала точка: {cell, accept, centre, rot, size, cat, index}.
+	static func candidate(x: float, z: float, layer: int, accept: float = ACCEPT) -> Dictionary:
+		var o := offset(layer)
+		var ix := int(floorf((x - o) / CELL))
+		var iz := int(floorf((z - o) / CELL))
+		var b := layer * 8
+		var pick := h(ix, iz, b + 5)
+		var cat := 0
+		while pick >= CATS[cat][0] and cat < CATS.size() - 1:
+			cat += 1
+		var index: int = CATS[cat][1] + mini(int(floorf(h(ix, iz, b + 6) * CATS[cat][2])), CATS[cat][2] - 1)
+		return {
+			"cell": Vector2i(ix, iz),
+			"accept": h(ix, iz, b) < accept,
+			"centre": Vector2((ix + 0.5) * CELL + o + (h(ix, iz, b + 1) - 0.5) * 2.0 * JITTER,
+					(iz + 0.5) * CELL + o + (h(ix, iz, b + 2) - 0.5) * 2.0 * JITTER),
+			"rot": h(ix, iz, b + 3) * TAU,
+			"size": lerpf(SIZE.x, SIZE.y, h(ix, iz, b + 4)),
+			"cat": cat,
+			"index": index,
+		}
+
+	## Координаты точки в квадрате штампа 0…1 (вне квадрата — за пределами 0…1).
+	static func stamp_uv(x: float, z: float, c: Dictionary) -> Vector2:
+		var q: Vector2 = Vector2(x, z) - c.centre
+		var cs: float = cos(c.rot)
+		var sn: float = sin(c.rot)
+		return Vector2(cs * q.x + sn * q.y, -sn * q.x + cs * q.y) / c.size + Vector2(0.5, 0.5)
+
+	## UV в атласе: ячейка index (слева направо, сверху вниз), точка st в ней.
+	static func atlas_uv(index: int, st: Vector2) -> Vector2:
+		return (Vector2(index % 4, floorf(index / 4.0)) + st) / 4.0
+
+	## Где лежит категория: веса грунта [песок, ил, галька], y нормали, точка (мох — по маске мха).
+	static func habitat(cat: int, w: Array, ny: float, x: float, z: float) -> float:
+		match cat:
+			Cat.TRACK:
+				return (w[0] + w[1]) * HashNoise.smooth(TRACK_NY.x, TRACK_NY.y, ny)
+			Cat.DENT:
+				return w[0] + w[1]
+			Cat.SILT:
+				return minf(0.3 * w[0] + w[1], 1.0)
+			Cat.SHELL:
+				return minf(0.35 * w[0] + w[2], 1.0)
+		return HashNoise.smooth(MOSS_EDGE.x, MOSS_EDGE.y, HashNoise.value(x * 0.03 + 7.0, z * 0.03))
+
+	## Затухание: вдали и на уклоне.
+	static func fade(dist: float, ny: float, lite: bool = false) -> float:
+		var f: Vector2 = LITE_FADE if lite else FADE
+		return (1.0 - HashNoise.smooth(f.x, f.y, dist)) * (1.0 - HashNoise.smooth(SLOPE.x, SLOPE.y, 1.0 - ny))
+
+	## Штампы, которые накрывают точку: [{index, st, cat}] по слоям (обычно 0–1).
+	static func at(x: float, z: float, lite: bool = false) -> Array:
+		var out := []
+		for layer in (1 if lite else LAYERS):
+			var c := candidate(x, z, layer, LITE_ACCEPT if lite else ACCEPT)
+			if not c.accept:
+				continue
+			var st := stamp_uv(x, z, c)
+			if st.x > 0.0 and st.y > 0.0 and st.x < 1.0 and st.y < 1.0:
+				out.append({"index": c.index, "st": st, "cat": c.cat, "layer": layer})
+		return out
+
+
+## Следы разрядов ART-066 (ячейки атласа 13–15): штамп на дне под кораблём после настоящего разряда у дна.
+## Сила 0…1 на событие — по зазору под корпусом и доле «Разряд»; держатся последние MAX до нового забега, свежий
+## («разряд А» или «Б») за OLD с темнеет в «старое пятно». Шейдер дна читает uniform-массивы `uniforms(t)`.
+class Scorch:
+	const MAX := 4                        ## сколько последних держит материал дна
+	const REACH := Vector2(2.0, 10.0)     ## зазор под корпусом (над CLEARANCE), м: до x — полная сила, к y — нет следа
+	const MIN_K := 0.1                    ## слабее — следа нет
+	const SIZE := Vector2(2.4, 4.0)       ## сторона квадрата штампа, м (по силе)
+	const OLD := Vector2(40.0, 120.0)     ## свежий → «старое пятно», с после разряда
+	const OLD_K := 0.75                   ## старое пятно бледнее свежего
+	const FRESH := [13, 14]               ## разряды А и Б — по очереди
+	const STALE := 15                     ## старое пятно
+
+	## [{at: Vector2 xz, rot, size, k, index, t}] — от старых к новым.
+	var all: Array = []
+	var count := 0                        ## разрядов у дна за забег (выбирает А/Б и поворот)
+
+	## Сила следа: зазор от низа корпуса до дна gap (м, CLEARANCE уже вычтен), доля «Разряд» share 0…1.
+	static func strength(gap: float, share: float) -> float:
+		var k := (1.0 - HashNoise.smooth(REACH.x, REACH.y, gap)) * clampf(share, 0.0, 1.0)
+		return k if k >= MIN_K else 0.0
+
+	## Разряд в момент t: корабль в ship, дно под ним на floor_y, доля share. Возвращает, лёг ли след.
+	func add(ship: Vector3, floor_y: float, share: float, t: float) -> bool:
+		var k := strength(ship.y - floor_y - Helm.Ship.CLEARANCE, share)
+		if k <= 0.0:
+			return false
+		all.append({"at": Vector2(ship.x, ship.z), "rot": HashNoise.hash2(count, 61) * TAU,
+			"size": lerpf(SIZE.x, SIZE.y, k), "k": k, "index": FRESH[count % FRESH.size()], "t": t})
+		count += 1
+		if all.size() > MAX:
+			all.pop_front()
+		return true
+
+	func clear() -> void:
+		all.clear()
+		count = 0
+
+	## Доля «старого пятна» у следа s в момент t (0 — свежий, 1 — старый).
+	static func old(s: Dictionary, t: float) -> float:
+		return HashNoise.smooth(OLD.x, OLD.y, t - float(s.t))
+
+	## Для шейдера: [где (x, z, поворот, размер), сила (k, ячейка, доля старого, 0)] по MAX; пустые — сила 0.
+	func uniforms(t: float) -> Array:
+		var at := PackedVector4Array()
+		var kk := PackedVector4Array()
+		for i in MAX:
+			if i < all.size():
+				var s: Dictionary = all[i]
+				var o := old(s, t)
+				at.append(Vector4(s.at.x, s.at.y, s.rot, s.size))
+				kk.append(Vector4(s.k * lerpf(1.0, OLD_K, o), s.index, o, 0.0))
+			else:
+				at.append(Vector4(0.0, 0.0, 0.0, 1.0))
+				kk.append(Vector4.ZERO)
+		return [at, kk]
+
+	## Следы, которые накрывают точку: [{index, st, k, old}] (двойник шейдера для тестов).
+	func at_point(x: float, z: float, t: float) -> Array:
+		var out := []
+		for s: Dictionary in all:
+			var st := Marks.stamp_uv(x, z, {"centre": s.at, "rot": s.rot, "size": s.size})
+			if st.x > 0.0 and st.y > 0.0 and st.x < 1.0 and st.y < 1.0:
+				out.append({"index": s.index, "st": st, "k": s.k, "old": old(s, t)})
+		return out

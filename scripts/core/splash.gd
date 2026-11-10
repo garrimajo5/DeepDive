@@ -60,6 +60,15 @@ static func rect_to_screen(r: Rect2, size: Vector2) -> Rect2:
 	return Rect2(to_screen(r.position, size), r.size * scale(size))
 
 
+## Кнопка экрана под касанием p — первая из ids, чей прямоугольник rect_of(id, size) содержит p ("" — никакая).
+## ok(id) -> bool — работает ли кнопка (пусто — все работают). Общий поиск для экранов меню (#766).
+static func hit_ids(p: Vector2, size: Vector2, ids: Array, rect_of: Callable, ok := Callable()) -> String:
+	for id: String in ids:
+		if (not ok.is_valid() or ok.call(id)) and rect_of.call(id, size).has_point(p):
+			return id
+	return ""
+
+
 ## Строка состояния: при 100 % — «Готово к погружению».
 static func status(p: float) -> String:
 	return "Готово к погружению" if p >= 1.0 else "Подготовка погружения"

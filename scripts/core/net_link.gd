@@ -7,16 +7,26 @@ class_name NetLink
 ## Сообщения: клиент → хост `join` (версия, имя, роль, внешность; надёжно) и `pad` (ввод, счётчики нажатий `n`, «Свет» `nl`;
 ## по порядку, без повторов — счётчик не теряет нажатие при потере пакета); хост → клиент `hello` / `no`
 ## (надёжно) и `f` — кадр (по порядку, без повторов: старый не придёт после нового).
+## Сбор экипажа ART-028 до забега (`LobbyLink`): клиент → хост `lq` — запрос комнаты (`Lobby.press`: роль, готовность;
+## надёжно), хост → клиент `ans` — ответ на свой запрос (отказ «Занято») и `room` — снимок комнаты (`Lobby.pack`,
+## надёжно, по порядку после `hello`). Кадров `f` гость в комнате не получает: места на палубе ещё нет (`Guest.index`).
+## Голос рации ART-041 (`Voice`, #634) — свой канал `CH_VOICE`, по порядку без повторов (опоздавший пакет голоса не
+## нужен): клиент → хост `v` с пакетом `p` (`Voice.SIZE` байт); хост пересылает его остальным гостям на палубе с местом
+## говорящего `w` и забирает себе (`Host.take_voice`), свой голос шлёт всем (`Host.send_voice`). Себя гость не слышит.
 
 const PORT := 24680             ## порт хоста по умолчанию (UDP)
 const MAX_CLIENTS := 3          ## хост и три телефона — четыре роли
-const CHANNELS := 3
+const CHANNELS := 4
 const CH_CTRL := 0              ## join, hello, no — надёжно
 const CH_FRAME := 1             ## кадры хоста
 const CH_PAD := 2               ## ввод клиентов
+const CH_VOICE := 3             ## голос рации — пакеты `Voice`
+const VOICE_QUEUE := 64         ## принятых пакетов голоса не больше (≈ 0,3 с на четверых) — не забрали, старые мимо
 const TIMEOUT := 5.0            ## клиент ждёт ответа хоста столько секунд
 const LOST_AFTER := 1.5         ## без пакетов столько секунд — «Нет связи» на табличке (ART-033): у хоста — гость
                                 ## без ввода, у гостя — все, если кадры хоста не идут
+const WEAK_AFTER := 0.3         ## у гостя кадр хоста опоздал больше чем на столько секунд (6 кадров по SEND_DT) —
+                                ## плашка «Слабая связь» (ART-043, `WeakLink`)
 
 enum State { OFF, CONNECTING, JOINED, REFUSED, LOST }
 
@@ -42,6 +52,16 @@ static func _put(peer: ENetMultiplayerPeer, to: int, channel: int, reliable: boo
 	peer.put_packet(encode(msg))
 
 
+## Пакет голоса от места `who` в очередь (не больше VOICE_QUEUE: старые выбрасываются).
+static func _queue_voice(q: Array, who: int, p: Variant) -> bool:
+	if not (p is PackedByteArray) or (p as PackedByteArray).size() != Voice.SIZE or who < 0 or who > MAX_CLIENTS:
+		return false
+	q.append([who, p])
+	while q.size() > VOICE_QUEUE:
+		q.pop_front()
+	return true
+
+
 ## Телефон на борту у хоста: его ввод и место в экипаже.
 class Guest:
 	extends RefCounted
@@ -53,6 +73,7 @@ class Guest:
 	var index := -1        ## место в `main.crew` — уходит клиенту в кадре (`me`); −1 — ещё не на палубе
 	var acts := 0          ## последний принятый счётчик нажатий
 	var lights := 0        ## последний принятый счётчик нажатий «Свет»
+	var asks := 0          ## последний принятый счётчик нажатий кнопки связи («Спросить код»)
 	var quiet := 0.0       ## секунд без ввода гостя (`Host.poll(dt)`); больше LOST_AFTER — `lost`
 
 	func lost() -> bool:
@@ -67,6 +88,7 @@ class Host:
 	var sent := 0          ## кадров отправлено (каждому гостю — свой пакет)
 	var _acc := 0.0
 	var _left: Array[int] = []
+	var _voice: Array = []   ## принятый голос гостей [[место, пакет], …] (`take_voice`)
 
 	## Открыть хост на порту; ошибка — порт занят или сеть недоступна.
 	func start(port: int = NetLink.PORT) -> Error:
@@ -86,6 +108,7 @@ class Host:
 		peer = null
 		guests.clear()
 		_left.clear()
+		_voice.clear()
 
 	func active() -> bool:
 		return peer != null
@@ -116,7 +139,20 @@ class Host:
 						var nl := int(msg.get("nl", g.lights))
 						s["light"] = nl > g.lights
 						g.lights = maxi(g.lights, nl)
+						var na := int(msg.get("na", g.asks))
+						s["ask"] = int(msg.get("ci", 0)) if na > g.asks else 0   # номер сообщения связи (`Comms.press`)
+						g.asks = maxi(g.asks, na)
 						g.pad.apply(s)
+				"v":    # голос гостя на палубе: себе и остальным на палубе (`Voice`)
+					var vg: Guest = guests.get(from)
+					if vg and vg.index >= 0 and NetLink._queue_voice(_voice, vg.index, msg.get("p")):
+						vg.quiet = 0.0
+						_relay(vg.index, msg["p"], from)
+				"lq":   # запрос комнаты сбора экипажа — решает хост (`LobbyLink.serve`)
+					var lg: Guest = guests.get(from)
+					if lg:
+						lg.quiet = 0.0
+						out.append({"k": "room", "guest": lg, "q": str(msg.get("q", "")).left(16)})
 		for id in _left:
 			var g: Guest = guests.get(id)
 			if g:
@@ -145,6 +181,43 @@ class Host:
 		guests[from] = g
 		NetLink._put(peer, from, NetLink.CH_CTRL, true, {"k": "hello", "v": NetSnap.VERSION, "id": from})
 		out.append({"k": "join", "guest": g})
+
+	## Пакет голоса места who всем гостям на палубе, кроме peer skip.
+	func _relay(who: int, p: PackedByteArray, skip: int) -> void:
+		for g: Guest in guests.values():
+			if g.id != skip and g.index >= 0 and g.index != who:
+				NetLink._put(peer, g.id, NetLink.CH_VOICE, false, {"k": "v", "w": who, "p": p})
+
+	## Свой голос (место хоста в экипаже who, пакет `Voice.Encoder`) всем гостям на палубе.
+	func send_voice(who: int, p: PackedByteArray) -> void:
+		if peer != null and p.size() == Voice.SIZE:
+			_relay(who, p, 0)
+
+	## Голос гостей с прошлого вызова: [[место в экипаже, пакет], …].
+	func take_voice() -> Array:
+		var v := _voice
+		_voice = []
+		return v
+
+	## Снимок комнаты сбора экипажа всем гостям (надёжно): `Lobby.pack`.
+	func send_room(room: Dictionary) -> void:
+		if peer == null:
+			return
+		for g: Guest in guests.values():
+			NetLink._put(peer, g.id, NetLink.CH_CTRL, true, {"k": "room", "r": room})
+
+	## Трюм и изученные виды хоста (`NetSnap.hold`, #823) гостям на палубе — надёжно; to — одному гостю (peer id).
+	func send_hold(h: Dictionary, to: int = 0) -> void:
+		if peer == null:
+			return
+		for g: Guest in guests.values():
+			if g.index >= 0 and (to == 0 or g.id == to):
+				NetLink._put(peer, g.id, NetLink.CH_CTRL, true, {"k": "hold", "h": h})
+
+	## Ответ гостю id на его запрос комнаты q: why "" — принят, "taken" — роль занята (`Lobby.act`).
+	func answer(id: int, q: String, why: String) -> void:
+		if peer and guests.has(id):
+			NetLink._put(peer, id, NetLink.CH_CTRL, true, {"k": "ans", "q": q, "why": why})
 
 	## Пора ли слать кадр: раз в `NetSnap.SEND_DT` (номер кадра растёт).
 	func due(dt: float) -> bool:
@@ -194,6 +267,8 @@ class Client:
 	var version := NetSnap.VERSION   ## версия кадра; тест подменяет
 	var acts := 0          ## счётчик нажатий кнопки действия
 	var lights := 0        ## счётчик нажатий «Свет»
+	var asks := 0          ## счётчик нажатий кнопки связи; `ask_id` — номер последнего нажатого сообщения
+	var ask_id := 0
 	var got := 0           ## кадров принято
 	var quiet := 0.0       ## секунд без кадра хоста на борту (`poll(dt)`); больше LOST_AFTER — `lost`
 	var timeout := NetLink.TIMEOUT   ## ждать ответа хоста столько секунд (`rejoin` — окно NetDrop.WINDOW)
@@ -206,6 +281,10 @@ class Client:
 	var _ev_seq := -1
 	var _eco := PackedFloat32Array()   ## существа рядом, пришедшие отдельным пакетом, — к следующему кадру («eco»)
 	var _eco_seq := -1
+	var _room := {}        ## снимок комнаты сбора экипажа, ещё не отданный (`take_room`)
+	var _hold := {}        ## трюм и виды хоста, ещё не отданные (`take_hold`, #823)
+	var _answers: Array = []   ## ответы хоста на свои запросы комнаты [[q, why], …] (`take_answers`)
+	var _voice: Array = []     ## голос товарищей [[место в экипаже, пакет], …] (`take_voice`)
 
 	## Подключиться к хосту по адресу в локальной сети.
 	func join(to: String, at: int = NetLink.PORT, name: String = "", role: int = 0, look: int = 0) -> Error:
@@ -237,6 +316,10 @@ class Client:
 		_ev_seq = -1
 		_eco = PackedFloat32Array()
 		_eco_seq = -1
+		_room = {}
+		_hold = {}
+		_answers.clear()
+		_voice.clear()
 		peer.peer_connected.connect(func(pid: int) -> void:
 			if pid == 1:
 				NetLink._put(peer, 1, NetLink.CH_CTRL, true, _info))
@@ -285,6 +368,20 @@ class Client:
 					if state == NetLink.State.JOINED and cs > _eco_seq and msg.get("c") is PackedFloat32Array:
 						_eco_seq = cs
 						_eco = msg["c"]
+				"room":   # снимок комнаты — полное состояние, надёжно и по порядку: важен последний
+					if state == NetLink.State.JOINED and msg.get("r") is Dictionary:
+						_room = msg["r"]
+						quiet = 0.0
+				"hold":   # трюм и виды хоста (`NetSnap.hold`) — полное состояние, важен последний
+					if state == NetLink.State.JOINED and msg.get("h") is Dictionary:
+						_hold = msg["h"]
+				"ans":
+					if state == NetLink.State.JOINED:
+						_answers.append([str(msg.get("q", "")), str(msg.get("why", ""))])
+				"v":    # голос товарища (место w); своего голоса хост не присылает
+					var w := int(msg.get("w", -1))
+					if state == NetLink.State.JOINED and w != me:
+						NetLink._queue_voice(_voice, w, msg.get("p"))
 		if not newest.is_empty():
 			me = int(newest.get("me", me))
 			if not _ev.is_empty():
@@ -311,6 +408,40 @@ class Client:
 			peer = null
 		return newest
 
+	## Свой запрос комнаты сбора экипажа хосту (`Lobby.press`: "role:<i>", "ready", "unready").
+	func send_room(q: String) -> void:
+		if joined() and peer != null and q != "":
+			NetLink._put(peer, 1, NetLink.CH_CTRL, true, {"k": "lq", "q": q})
+
+	## Свой пакет голоса (`Voice.Encoder`) хосту — он перешлёт остальным. Пока не на борту — мимо.
+	func send_voice(p: PackedByteArray) -> void:
+		if joined() and peer != null and p.size() == Voice.SIZE:
+			NetLink._put(peer, 1, NetLink.CH_VOICE, false, {"k": "v", "p": p})
+
+	## Голос товарищей с прошлого вызова: [[место в экипаже, пакет], …].
+	func take_voice() -> Array:
+		var v := _voice
+		_voice = []
+		return v
+
+	## Свежий снимок комнаты от хоста ({} — нового нет); отдаётся один раз.
+	func take_room() -> Dictionary:
+		var r := _room
+		_room = {}
+		return r
+
+	## Свежие трюм и виды хоста ({} — нового нет); отдаются один раз.
+	func take_hold() -> Dictionary:
+		var h := _hold
+		_hold = {}
+		return h
+
+	## Ответы хоста на свои запросы с прошлого вызова: [[q, why], …].
+	func take_answers() -> Array:
+		var a := _answers.duplicate()
+		_answers.clear()
+		return a
+
 	## Кадры хоста не идут дольше LOST_AFTER: товарищи у гостя — «Нет связи».
 	func lost() -> bool:
 		return joined() and quiet > NetLink.LOST_AFTER
@@ -323,13 +454,19 @@ class Client:
 			acts += 1
 		if pad.light:
 			lights += 1
+		if pad.ask > 0:
+			asks += 1
+			ask_id = pad.ask
 		var s := pad.snapshot()
 		s.erase("act")
 		s.erase("light")
-		NetLink._put(peer, 1, NetLink.CH_PAD, false, {"k": "pad", "pad": s, "n": acts, "nl": lights})
+		s.erase("ask")
+		NetLink._put(peer, 1, NetLink.CH_PAD, false, {"k": "pad", "pad": s, "n": acts, "nl": lights, "na": asks,
+			"ci": ask_id})
 		pad.look = Vector2.ZERO
 		pad.action = false
 		pad.light = false
+		pad.ask = 0
 
 	## Строка для экрана подключения.
 	func label() -> String:

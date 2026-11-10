@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ce0fvilqmegnv"
-path="res://.godot/imported/lebedka-baraban_lebedka-baraban-emission.png-744d12873d6459ab5b5dcea6e5423a5c.ctex"
+path.s3tc="res://.godot/imported/lebedka-baraban_lebedka-baraban-emission.png-744d12873d6459ab5b5dcea6e5423a5c.s3tc.ctex"
+path.etc2="res://.godot/imported/lebedka-baraban_lebedka-baraban-emission.png-744d12873d6459ab5b5dcea6e5423a5c.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "d1dd210d6b1312cb342b56d02bd5e651"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/lebedka-baraban_lebedka-baraban-emission.png"
-dest_files=["res://.godot/imported/lebedka-baraban_lebedka-baraban-emission.png-744d12873d6459ab5b5dcea6e5423a5c.ctex"]
+dest_files=["res://.godot/imported/lebedka-baraban_lebedka-baraban-emission.png-744d12873d6459ab5b5dcea6e5423a5c.s3tc.ctex", "res://.godot/imported/lebedka-baraban_lebedka-baraban-emission.png-744d12873d6459ab5b5dcea6e5423a5c.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

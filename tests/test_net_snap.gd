@@ -116,6 +116,38 @@ func test_frame_fits_packet() -> void:
 	ok(n <= NetSnap.MAX_BYTES / 2, "события — %d байт" % n)
 
 
+func test_sonar_round_trip() -> void:   # импульс хоста и отметки — у гостя на голограмме, на своих часах
+	var h := Sonar.new()
+	h.ping(100.0, 1.0)
+	var ship := Vector3(10, -40, 95)
+	var ev := []
+	for i in Sonar.MAX_BLIPS:
+		ev.append(EcoLink.near("serpohvost" if i == 0 else "svetlyak", "?", ship + Vector3(i - 16.0, -3.25, 20.0), ship))
+	h.take_contacts(ev, ship)
+	var so := NetSnap.sonar(h, 100.5)
+	var busy := _busy_events()
+	busy["so"] = so
+	var n := NetSnap.bytes(busy)
+	ok(n <= NetSnap.MAX_BYTES, "секунда после импульса: события с 32 отметками — один пакет, %d байт" % n)
+	busy["so"] = NetSnap.sonar(h, 100.0 + NetSnap.NEWS_TIME)
+	ok(NetSnap.bytes(busy) <= NetSnap.MAX_BYTES / 2, "дальше отметки не едут — %d байт" % NetSnap.bytes(busy))
+	var g := Sonar.new()
+	ok(NetSnap.apply_sonar(bytes_to_var(var_to_bytes(so)), g, 7.0), "новый импульс")
+	eq(g.count, 1)
+	near(g.ping_time, 6.5, 1e-4, "импульс полсекунды назад — на часах гостя")
+	near(g.blip_alpha(7.0), h.blip_alpha(100.5), 1e-4, "отметки гаснут так же")
+	eq(g.blips.size(), Sonar.MAX_BLIPS)
+	near(g.blips[0]["pos"].distance_to(h.blips[0]["pos"]), 0.0, 0.06, "место отметки — до 5 см")
+	eq(g.blips[0]["color"], h.blips[0]["color"], "цвет вида")
+	ok(not NetSnap.apply_sonar(NetSnap.sonar(h, 102.0), g, 8.0), "тот же импульс — гость гасит своими часами")
+	eq(NetSnap.sonar(h, 120.0)[1].size(), 0, "отметки погасли — в кадре их нет")
+	var late := Sonar.new()
+	ok(NetSnap.apply_sonar(NetSnap.sonar(h, 100.8), late, 0.0) and late.blips.size() == Sonar.MAX_BLIPS, "гость вошёл через 0,8 с — отметки ещё едут")
+	h.ping(130.0, 1.0, true)
+	ok(NetSnap.apply_sonar(NetSnap.sonar(h, 130.0), g, 30.0) and g.jammed, "завязший импульс")
+	ok(not NetSnap.apply_sonar([PackedFloat32Array([1, 2]), PackedByteArray()], g, 0.0), "испорченный — мимо")
+
+
 func test_pad_round_trip() -> void:   # ввод клиента у хоста: крестовина, свайп копится, нажатие не теряется
 	var p := Crew.Pad.new()
 	p.move = Vector2(0.0, 1.0)
@@ -205,7 +237,11 @@ func test_run_round_trip() -> void:   # маршрут, голосование �
 	run.update(Run.place_xz("shell").x, Run.place_xz("shell").y)
 	ok(run.done, "маршрут пройден")
 	got = NetSnap.apply_run(NetSnap.run_state(run, {}, -1, -1.0, "", ops, [], []), my)
-	ok(my.done, "решают")
+	ok(my.done and not my.voting, "пройден, но голосования нет (#824)")
+	eq(got["ops"], [], "мнений без голосования нет")
+	run.open_vote()
+	got = NetSnap.apply_run(NetSnap.run_state(run, {}, -1, -1.0, "", ops, [], []), my)
+	ok(my.done and my.voting, "решают")
 	eq(got["ops"], ops, "мнения ролей")
 	eq(got["secs"], -1, "таймера нет")
 	run.finish(600.0, 3, 2, 1, 70.0)
@@ -232,3 +268,70 @@ func test_run_bad_data_ignored() -> void:   # испорченный маршр�
 	NetSnap.apply_run(st, my)
 	eq(my.route, -1, "чужой номер маршрута — без маршрута")
 	eq(my.visited, ["well"], "чужой номер места пропущен")
+
+
+func test_scorch_marks_reach_guest() -> void:   # следы разрядов у дна (ART-066) — у гостя те же, возраст по своим часам
+	var h := Seabed.Scorch.new()
+	var fy := -30.0
+	ok(h.add(Vector3(4.0, fy + Helm.Ship.CLEARANCE, -9.0), fy, 1.0, 100.0), "разряд у дна — след у хоста")
+	ok(h.add(Vector3(-6.0, fy + Helm.Ship.CLEARANCE + 3.0, 12.0), fy, 0.8, 150.0), "второй слабее")
+	var g := Seabed.Scorch.new()
+	ok(NetSnap.apply_scorch(NetSnap.scorch(h, 160.0), g, 20.0), "гость принял")
+	eq(g.all.size(), 2)
+	eq(g.count, 2)
+	for i in 2:
+		near(g.all[i].at.x, h.all[i].at.x, 1e-4, "место x")
+		near(g.all[i].at.y, h.all[i].at.y, 1e-4, "место z")
+		near(g.all[i].rot, h.all[i].rot, 1e-4, "поворот")
+		near(g.all[i].size, h.all[i].size, 1e-4, "размер")
+		near(g.all[i].k, h.all[i].k, 1e-4, "сила")
+		eq(g.all[i].index, h.all[i].index, "ячейка А/Б")
+	near(20.0 - float(g.all[0].t), 60.0, 1e-3, "возраст первого — 60 с, часы гостя свои")
+	near(Seabed.Scorch.old(g.all[0], 20.0), Seabed.Scorch.old(h.all[0], 160.0), 1e-4, "стареет так же")
+	ok(not NetSnap.apply_scorch(NetSnap.scorch(h, 161.0), g, 21.0), "тот же счёт — не переставляет")
+	near(20.0 - float(g.all[0].t), 60.0, 1e-3, "время следа осталось")
+	h.clear()
+	ok(NetSnap.apply_scorch(NetSnap.scorch(h, 200.0), g, 60.0), "новый забег у хоста")
+	ok(g.all.is_empty() and g.count == 0, "у гостя чистое дно")
+	ok(not NetSnap.apply_scorch(PackedFloat32Array([1.0, 2.0]), g, 0.0), "битый пакет не трогает")
+	ok(not NetSnap.apply_scorch(null, g, 0.0), "нет поля — не трогает")
+
+
+func _flat(_x: float, _z: float) -> float:
+	return -60.0
+
+
+## Трюм и изученные виды хоста (#823, часть 5): у гостя тот же груз, поднятые со дна, виды и наблюдения.
+func test_hold_round_trip() -> void:
+	var hs := Samples.new(_flat)
+	var hsc := Scanner.new()
+	hs.restore([1], [[hs.all[3].kind, 3], [0, -1]])
+	hsc.restore(["fish", "pred"], {"fish": ["flee"]})
+	var h := NetSnap.hold(hs, hsc)
+	ok(NetSnap.bytes(h) < 4000, "сообщение небольшое")
+	var gs := Samples.new(_flat)
+	var gsc := Scanner.new()
+	gs.restore([5], [])
+	gsc.restore(["moss"])
+	var key := NetSnap.hold_key(gs, gsc)
+	ok(NetSnap.apply_hold(bytes_to_var(var_to_bytes(h)), gs, gsc), "принято")
+	eq(gs.cargo, [[hs.all[3].kind, 3], [0, -1]], "груз хоста")
+	eq(gs.got.keys().size(), 2, "поднятые хоста: 1 и 3")
+	ok(gs.got.has(1) and gs.got.has(3) and not gs.got.has(5), "своего поднятого нет")
+	ok(gs.all[3].taken and not gs.all[5].taken, "на дне — как у хоста")
+	eq(gsc.list(), hsc.list(), "виды хоста")
+	eq(Array(gsc.seen_of("fish")), ["flee"], "наблюдения хоста")
+	ok(NetSnap.hold_key(gs, gsc) != key, "экраны трюма и лаборатории пересчитаются")
+
+
+func test_hold_empty_or_bad_ignored() -> void:   # нового нет ({}) или испорченный пакет — трюм гостя не тронут
+	var s := Samples.new(_flat)
+	var sc := Scanner.new()
+	s.restore([], [[0, -1]])
+	sc.restore(["fish"])
+	ok(not NetSnap.apply_hold({}, s, sc), "пусто — мимо")
+	ok(not NetSnap.apply_hold("мусор", s, sc), "не словарь — мимо")
+	eq(s.cargo.size(), 1, "груз на месте")
+	ok(NetSnap.apply_hold({"g": "x", "c": 7, "s": [42, "нет-такого"], "n": []}, s, sc), "кривые поля")
+	eq(s.cargo.size(), 0, "кривой груз — пустой трюм, без ошибки")
+	eq(sc.list().size(), 0, "чужие ключи видов пропущены")

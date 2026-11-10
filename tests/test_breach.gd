@@ -25,7 +25,7 @@ func test_hit_opens_by_rules() -> void:
 	ok(not b.on_hit(9, 80.0), "удар 9 % борт не пробивает")
 	ok(b.on_hit(12, 80.0), "укус 12 % — пробоина")
 	eq(b.active, b.all[0], "первая — на мостике")
-	eq(msgs[0], "Пробоина: мостик — держите «Сварка» у пробоины", "сообщение")
+	ok(msgs.is_empty(), "#1428: начало пробоины — без сообщения, его говорит строка тревоги: %s" % [msgs])
 	ok(not b.on_hit(30, 60.0), "вторая, пока открыта первая, — нет")
 	b.hold(10.0)
 	ok(b.active == null, "заварили")
@@ -89,22 +89,46 @@ func test_weld_and_pump() -> void:
 	eq(b.last, b.all[3], "заплатка осталась на борту")
 
 
+## #835, часть 2в: у Чёрного курильщика тревога не прячется — знак шлейфа (строка мира) приходит во время пробоины,
+## а первой в строке приборов остаётся пробоина; мир за бортом (гул курильщика) в сведении тише тревоги.
+func test_scene_vent_sign_keeps_alarm() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.open_breach(0)
+	main.step(0.1)
+	main.on_eco_event(EcoLink.message(EcoVent.WARN_TEXT))
+	main.step(0.1)
+	var parts := main.status_parts()
+	var alarm_row: Array = main.status_rows()[2]
+	ok(str(alarm_row[0]).begins_with("ПРОБОИНА · вода"), "в ряду сообщений первой — пробоина, не строка мира: %s" % [alarm_row])
+	ok(parts.has(EcoVent.WARN_TEXT), "знак шлейфа тоже на приборах")
+	ok(main.sound_mix.tension, "тревога — сведение напряжения")
+	ok(main.sound_mix.target()[SoundMix.WORLD] < main.sound_mix.target()[SoundMix.SHIP] * 0.5,
+		"мир за бортом тише корабля с сиреной")
+	main.queue_free()
+	await frames(1)
+
+
 func test_scene_bite_breach_weld() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
 	main.on_eco_event({"type": EcoLink.HIT, "damage": 0.12, "by": "Серпохвост"})
 	ok(main.breach.active == main.breach.all[0], "укус пробил мостик")
-	eq(main.message.text, "Пробоина: мостик — держите «Сварка» у пробоины", "на приборах")
+	ok(not main.message.text.begins_with("Пробоина"), "#1428: строка 2 не повторяет тревогу: %s" % main.message.text)
+	main.step(0.1)
+	var rows := main.status_rows()
+	ok(not str(rows).contains("Пробоина:"), "в строке приборов одна тревога: %s" % [rows])
+	ok(str(rows[2][0]).begins_with("ПРОБОИНА"), "строка 3 — тревога: %s" % [rows])
 	for i in 20:
 		main.step(0.1)
-	ok(main.breach_view.spot_node.visible and main.breach_view.spray.emitting, "струя бьёт")
+	ok(main.breach_view.spot_node.visible and main.breach_view.jet_mm.visible, "струя бьёт")
 	ok(main.breach_view.water.visible, "на полу вода")
-	ok(main.breach_view.alarm.visible, "тревога")
 	ok(main.breach_view.siren.playing and main.breach_view.jet_sound.playing, "воет сирена, шумит струя")
 	ok(main.breach_view.jet_sound.global_position.distance_to(main.breach_view.spot_node.global_position) < 0.2,
 		"шум — из пробоины")
-	ok(main.status_parts()[0].begins_with("ПРОБОИНА · МОСТИК"), "первая часть строки — пробоина: %s" % main.status_parts()[0])
+	ok(str(main.status_rows()[2][0]).begins_with("ПРОБОИНА · вода"), "ряд тревоги — пробоина: %s" % [main.status_rows()[2]])
 	var s: Breach.Spot = main.breach.all[0]
 	var t := main.breach_view.spot_node.global_transform
 	ok((t.basis.z).is_equal_approx(main.ship.global_transform.basis * s.n), "обшивка лицом внутрь")
@@ -116,23 +140,31 @@ func test_scene_bite_breach_weld() -> void:
 	r.begin(1, r.layout.action.c)
 	for i in 20:
 		main.step(0.1)
-	ok(main.breach_view.sparks.emitting, "искры")
+	ok(main.breach_view.spark_mm.visible and main.breach_view.parts.flash, "искры и вспышка электрода")
 	ok(main.me.welding() and main.crew_view.torches[0].visible, "резак в правой руке")
 	ok(main.visor.visible, "щиток опущен — экран затемнён")
-	ok(main.breach_view.splash.emitting, "брызги там, где струя бьёт в воду")
+	var vm := main.visor.material as ShaderMaterial
+	ok(vm != null and vm.shader.resource_path == "res://shaders/visor.gdshader",
+		"щиток — шейдер, яркое не тонирует (#530)")
+	ok(main.breach_view.splash_mm.visible, "брызги там, где струя бьёт в воду")
 	ok(main.breach_view.patch.scale.x > 0.4 and main.breach_view.patch.scale.x < 0.7, "заплатка наполовину: %.2f" % main.breach_view.patch.scale.x)
 	for i in 20:
 		main.step(0.1)
 	r.end(1)
 	main.step(0.1)
 	ok(main.breach.active == null, "заварено")
-	ok(not main.breach_view.spray.emitting and not main.breach_view.sparks.emitting, "струя и искры погасли")
-	ok(not main.breach_view.splash.emitting, "брызг нет")
+	var born := main.breach_view.parts.born
+	ok(not main.breach_view.parts.flash, "электрод погас")
 	ok(not main.breach_view.siren.playing and not main.breach_view.jet_sound.playing, "сирена и струя смолкли")
 	ok(not main.me.welding() and not main.crew_view.torches[0].visible and not main.visor.visible,
 		"заварил — резак убран, щиток поднят")
 	ok(main.breach_view._seam_mat.emission_energy_multiplier > 1.0, "шов горит")
 	ok(main.breach_view.water.visible, "вода ещё стоит")
+	for i in 8:
+		main.step(0.1)
+	eq(main.breach_view.parts.born, born, "заварено — новых частиц нет")
+	ok(not main.breach_view.jet_mm.visible and not main.breach_view.splash_mm.visible
+		and not main.breach_view.spark_mm.visible, "живые дожили: струи, брызг и искр нет")
 	main.queue_free()
 	await frames(1)
 
@@ -161,6 +193,8 @@ func test_destroyed_clears_breach() -> void:
 	await frames(1)
 	main.open_breach(2)
 	main.vitals.hit(100, "")
+	for i in 36:   # шторка «Корпус разрушен» 3,5 с, под ней подъём (ART-036)
+		main.step(0.1)
 	ok(main.breach.active == null and main.breach.water == 0.0, "корабль поднят — пробоины нет")
 	main.step(0.1)
 	ok(not main.breach_view.spot_node.visible, "обшивки не видно")
@@ -182,3 +216,20 @@ func test_jet_lands_inside_room() -> void:
 	near(b.p.y + d.y * t - Breach.JET_G * 0.5 * t * t, 0.0, 1e-4, "мостик: точка падения — на полу")
 	var sp := BreachView.splash_local(b, 0.2)
 	near(sp.y, 0.2 - b.p.y, 1e-6, "брызги на уровне воды")
+
+
+## По issue #530: щиток ровно смешивал кадр с тенью — янтарные искры становились бледными и белёсыми.
+func test_visor_keeps_sparks() -> void:
+	var spark := BreachSpray.COOL   # остывающая искра — янтарь
+	var seen := Breach.visor_pass(spark)
+	near(seen.r, spark.r, 0.01, "искра сквозь щиток — та же яркость")
+	ok(seen.r - seen.b > 0.6, "искра остаётся янтарной: %s" % seen)
+	var hot := Breach.visor_pass(BreachSpray.HOT)
+	ok(hot.is_equal_approx(BreachSpray.HOT), "вспышка у резака не тонируется")
+	var wall := Color(0.25, 0.28, 0.3)
+	var dim := Breach.visor_pass(wall)
+	ok(dim.r < wall.r * 0.6 and dim.b < wall.b, "тёмное затемнено к тени щитка: %s" % dim)
+	ok(dim.is_equal_approx(wall.lerp(Color(Breach.VISOR.r, Breach.VISOR.g, Breach.VISOR.b), Breach.VISOR.a)),
+		"тёмное — как прежний щиток")
+	var mid := Breach.visor_pass(Color(0.85, 0.5, 0.2))
+	ok(mid.r > 0.85 * (1.0 - Breach.VISOR.a) and mid.r < 0.85, "между — мягкий переход")

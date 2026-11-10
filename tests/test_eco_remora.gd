@@ -320,7 +320,8 @@ func test_view_one_multimesh() -> void:
 	view.sync(w.time)
 	for i in 6:
 		near(view.placed[i].origin.distance_to(_remoras(w).remoras[i].p), 0.0, 1e-5, "на месте рыбы")
-		near(view.placed[i].basis.z.length(), RemoraView.SCALE, 1e-4, "масштаб 1,6")
+		near(view.placed[i].basis.z.length(), RemoraView.SCALE * RemoraView.remora_scale(_remoras(w).remoras[i].index), 1e-4,
+			"масштаб 1,6 с разбросом особи")
 	view.queue_free()
 	await frames(1)
 
@@ -346,3 +347,257 @@ func test_eco_view_has_remoras() -> void:
 	ok(ev.eels.remoras == ev.remoras, "стеклоуст знает о прилипалах")
 	eq(ev.remoras.remoras.size(), 6)
 	ev.free()
+
+
+# ---------- Поворот носа ----------
+
+func test_turn_is_rate_limited() -> void:
+	var d := Vector3.BACK
+	var lim := EcoRemora.TURN_MAX * 0.05 + 1e-4
+	for i in 40:
+		var n := EcoRemora.turn(d, Vector3.FORWARD, 0.05)
+		near(n.length(), 1.0, 1e-4, "нос — единичный")
+		ok(d.angle_to(n) <= lim, "за шаг не больше %.2f рад (%.3f)" % [lim, d.angle_to(n)])
+		d = n
+	near(d.dot(Vector3.FORWARD), 1.0, 1e-3, "за 2 с развернулась кругом")
+	near(EcoRemora.turn(Vector3.BACK, Vector3.BACK * 3.0, 0.05).dot(Vector3.BACK), 1.0, 1e-6, "по курсу — как есть")
+
+
+## Нос за шаг — не больше TURN_MAX · dt плюс поворот носителя (скат за шаг поворачивает мало).
+func _check_turns(w: EcoWorld, seconds: float, prev: Array[Vector3]) -> int:
+	var rm := _remoras(w)
+	var ry := _rays(w).rays[0]
+	var lim := EcoRemora.TURN_MAX * 0.05 + 0.03
+	var bad := 0
+	for i in int(round(seconds / 0.05)):
+		w.ship.pos = Vector3(ry.p.x, -20.0, ry.p.z)
+		w.ship.yaw = 0.3
+		w.step(0.05)
+		for k in rm.remoras.size():
+			if rm.remoras[k].dir.angle_to(prev[k]) > lim:
+				bad += 1
+			prev[k] = rm.remoras[k].dir
+	return bad
+
+
+func test_nose_turns_smoothly_hop_and_zap() -> void:
+	var w := _world()
+	var rm := _remoras(w)
+	var prev: Array[Vector3] = []
+	for r in rm.remoras:
+		prev.append(r.dir)
+	eq(_check_turns(w, 12.0, prev), 0, "перебираясь на корпус, нос не щёлкает")
+	eq(rm.on_hull, 3)
+	w.ship.zap = true
+	eq(_check_turns(w, 0.05, prev), 0, "разряд не щёлкает носом")
+	w.ship.zap = false
+	eq(_check_turns(w, 30.0, prev), 0, "обратно на ската — тоже плавно")
+	eq(_count(w, EcoRemora.Mode.RAY), 6)
+	for r in rm.remoras:
+		near(r.dir.dot(r.ray.dir), 1.0, 1e-3, "на скате снова смотрит по его курсу")
+
+
+func test_hull_rider_turns_with_ship() -> void:
+	var w := _world()
+	_follow_ray(w, 12.0)
+	var rm := _remoras(w)
+	eq(rm.on_hull, 3)
+	# корабль разом повернул на 0,6 рад: сидящие на корпусе — вместе с ним, без отставания
+	w.ship.yaw = 0.9
+	w.step(0.05)
+	for r in rm.remoras:
+		if r.mode == EcoRemora.Mode.HULL:
+			near(r.dir.dot(w.ship.nose()), 1.0, 1e-4, "нос по носу корабля сразу")
+
+
+# ---------- «Экономно» (Б6) ----------
+
+func test_view_lite_coarser_same_material() -> void:
+	var w := _world()
+	var view := RemoraView.new(_remoras(w))
+	tree.root.add_child(view)
+	await frames(1)
+	var full := view.tris
+	var mat := view.multimesh.mesh.surface_get_material(0)
+	var box := view.multimesh.mesh.get_aabb()
+	var dust := view.dust_view
+	view.set_lite(true)
+	ok(view.lite, "присоски — на «Экономно»")
+	eq(full, 120, "полная рыба")
+	eq(view.tris, 72, "треугольников: %d → %d" % [full, view.tris])
+	ok(view.multimesh.mesh.surface_get_material(0) == mat, "материал тот же (свой свет)")
+	eq(view.multimesh.mesh.get_surface_count(), 1, "один вызов отрисовки")
+	eq(view.multimesh.instance_count, 6, "все рыбы на месте")
+	ok(view.dust_view == dust, "муть та же")
+	var lb := view.multimesh.mesh.get_aabb()
+	near(lb.size.z, box.size.z, 0.01, "длина с хвостом та же")
+	ok(lb.size.y > box.size.y * 0.9, "присоска на темени: %s → %s" % [box.size, lb.size])
+	var cols: PackedColorArray = view.multimesh.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	ok(cols.has(RemoraView.DISC) and cols.has(RemoraView.TAIL), "диск и хвост на месте")
+	# грубый меш тоже лицом наружу
+	var v: PackedVector3Array = view.multimesh.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	eq(view.mids.size(), v.size() / 3)
+	var bad := 0
+	for i in range(0, v.size(), 3):
+		var c := (v[i] + v[i + 1] + v[i + 2]) / 3.0
+		if (v[i + 1] - v[i]).cross(v[i + 2] - v[i]).dot(c - view.mids[i / 3]) > 0.0:
+			bad += 1
+	eq(bad, 0, "все грани наружу")
+	view.set_lite(false)
+	eq(view.tris, full, "назад — полный меш")
+	view.queue_free()
+	await frames(1)
+
+
+func test_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = Seabed.height
+	ev.set_lite(true)
+	ok(ev.remora_view.lite, "уровень дошёл до присосок")
+	var t := ev.remora_view.tris
+	ev.ground = Seabed.height
+	ok(ev.remora_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(ev.remora_view.tris, t, "и меш грубый")
+	ev.set_lite(false)
+	ev.free()
+
+
+## Сколько раз за seconds ход прилипалы (сдвиг за шаг 0,05 с) поменялся больше, чем на limit м/с; last — прошлые
+## места и скорости (по индексу прилипалы), корабль идёт под первым скатом.
+func _jerks(w: EcoWorld, seconds: float, last: Dictionary, limit: float) -> int:
+	var ry := _rays(w).rays[0]
+	var bad := 0
+	for i in int(round(seconds / 0.05)):
+		w.ship.pos = Vector3(ry.p.x, -20.0, ry.p.z)
+		w.ship.yaw = 0.3
+		w.step(0.05)
+		w.take_link()
+		for r in _remoras(w).remoras:
+			if last.has(r.index):
+				var v: Vector3 = (r.p - last[r.index][0]) / 0.05
+				if last[r.index][1] != null and (v - last[r.index][1]).length() > limit:
+					bad += 1
+				last[r.index] = [r.p, v]
+			else:
+				last[r.index] = [r.p, null]
+	return bad
+
+
+func test_swim_speeds_up_and_brakes_smoothly() -> void:
+	var w := _world()
+	var rm := _remoras(w)
+	# разгон ACCEL · 0,05 = 0,8 м/с за шаг, плюс поворот хода ската и шаг у места (до ARRIVE 0,05 м — 1 м/с);
+	# раньше — 8 м/с с места и стоп у места (скачок 4–6 м/с). Садится, только дойдя до места за шаг, а не за шаг
+	# + ARRIVE: прыжок к месту на ARRIVE поверх шага давал на скате с креном в поворот 2,4 м/с за шаг, теперь ≤ 1,6
+	var limit := EcoRemora.ACCEL * 0.05 + 1.0
+	var last := {}
+	eq(_jerks(w, 12.0, last, limit), 0, "снимается со ската и садится на корпус без рывка хода")
+	eq(rm.on_hull, EcoRemora.PER_RAY, "все три дошли")
+	w.ship.zap = true
+	eq(_jerks(w, 0.05, last, limit), 0, "разряд не дёргает ход")
+	w.ship.zap = false
+	eq(_jerks(w, 30.0, last, limit), 0, "обратно на ската — с разгоном и торможением")
+	eq(_count(w, EcoRemora.Mode.RAY), 6, "вернулись на скатов")
+
+
+
+func test_view_wags_round_head() -> void:
+	var rm := EcoRemora.Remora.new()
+	rm.index = 2
+	rm.p = Vector3(3, -20, 5)
+	rm.dir = Vector3(0, 0, -1)
+	rm.mode = EcoRemora.Mode.SWIM
+	var s := RemoraView.SCALE * RemoraView.remora_scale(2)
+	var still := RemoraView.place(rm, 0.0, 0.0)
+	var head_d := 0.0
+	var tail_d := 0.0
+	for i in 20:
+		var x := RemoraView.place(rm, i * 0.037)
+		head_d = maxf(head_d, (x * RemoraView.HEAD).distance_to(still * RemoraView.HEAD))
+		var tail := Vector3(0, 0, RemoraView.TAIL_Z - RemoraView.TAIL_L)
+		tail_d = maxf(tail_d, (x * tail).distance_to(still * tail))
+	ok(head_d < 1e-4, "голова стоит (%.5f м)" % head_d)
+	ok(tail_d > 0.1 * s, "машет хвост (%.3f м)" % tail_d)
+
+
+func test_view_wag_fades_when_landed() -> void:
+	var w := _world()
+	var rm := _remoras(w).remoras[0]
+	rm.mode = EcoRemora.Mode.SWIM
+	var view := RemoraView.new(_remoras(w))   # первая расстановка — в конструкторе, t = 0
+	var dt := 1.0 / 30.0
+	var t := 0.0
+	eq(view.wag_k[0], 1.0, "первая расстановка — сразу во весь размах")
+	rm.mode = EcoRemora.Mode.HULL
+	var prev := view.placed[0].basis.orthonormalized()
+	var worst := 0.0
+	for i in 30:
+		t += dt
+		view.sync(t)
+		var b := view.placed[0].basis.orthonormalized()
+		worst = maxf(worst, b.get_rotation_quaternion().angle_to(prev.get_rotation_quaternion()))
+		prev = b
+		if i == 5:
+			ok(view.wag_k[0] > 0.3 and view.wag_k[0] < 1.0, "легла — виляние гаснет, а не пропадает (%.2f)" % view.wag_k[0])
+	eq(view.wag_k[0], 0.0, "за WAG_RISE успокоилась")
+	# 14 рад/с × 0,3 рад — до ~0,14 рад за кадр от самого виляния; скачка 0,3 рад нет
+	ok(worst < 0.2, "поворот за кадр ≤ 0,2 рад (%.3f)" % worst)
+	rm.mode = EcoRemora.Mode.SWIM
+	t += dt
+	view.sync(t)
+	ok(view.wag_k[0] > 0.0 and view.wag_k[0] < 0.2, "снялась — виляние набирается (%.2f)" % view.wag_k[0])
+	view.free()
+
+
+func test_view_breathes_when_sitting() -> void:
+	var rm := EcoRemora.Remora.new()
+	rm.index = 3
+	rm.p = Vector3(3, -20, 5)
+	rm.dir = Vector3(0, 0, -1)
+	rm.mode = EcoRemora.Mode.HULL
+	var s := RemoraView.SCALE * RemoraView.remora_scale(3)
+	var wmin := INF
+	var wmax := 0.0
+	var hmin := INF
+	var hmax := 0.0
+	for i in 120:
+		var x := RemoraView.place(rm, i * 0.05)
+		near(x.basis.z.length(), s, 1e-5, "длина та же")
+		near(x.origin.distance_to(rm.p), 0.0, 1e-6, "место то же")
+		wmin = minf(wmin, x.basis.x.length() / s)
+		wmax = maxf(wmax, x.basis.x.length() / s)
+		hmin = minf(hmin, x.basis.y.length() / s)
+		hmax = maxf(hmax, x.basis.y.length() / s)
+	ok(wmax > 1.0 + RemoraView.BREATH_W * 0.9 and wmin < 1.0 - RemoraView.BREATH_W * 0.9,
+		"сидя шире и уже на ±%.0f %% (%.3f…%.3f)" % [RemoraView.BREATH_W * 100.0, wmin, wmax])
+	ok(hmax > 1.0 + RemoraView.BREATH_H * 0.9 and hmax < 1.0 + RemoraView.BREATH_H + 1e-4,
+		"и выше (%.3f…%.3f)" % [hmin, hmax])
+	# на плаву не дышит: размах гаснет с долей виляния
+	rm.mode = EcoRemora.Mode.SWIM
+	for i in 40:
+		var x := RemoraView.place(rm, i * 0.07)
+		near(x.basis.x.length(), s, 1e-5, "на плаву не дышит")
+	near(RemoraView.breath(3, 1.3, 0.5), RemoraView.breath(3, 1.3, 0.0) * 0.5, 1e-6, "полвиляния — полдыхания")
+	ok(not is_equal_approx(RemoraView.breath(3, 1.0, 0.0), RemoraView.breath(4, 1.0, 0.0)), "у рыб свои фазы")
+
+
+func test_view_breath_smooth_on_landing() -> void:
+	var w := _world()
+	var rm := _remoras(w).remoras[0]
+	rm.mode = EcoRemora.Mode.SWIM
+	var view := RemoraView.new(_remoras(w))
+	var dt := 1.0 / 30.0
+	var t := 0.0
+	rm.mode = EcoRemora.Mode.HULL
+	var prev := view.placed[0].basis.x.length()
+	var worst := 0.0
+	for i in 60:
+		t += dt
+		view.sync(t)
+		var wdt := view.placed[0].basis.x.length()
+		worst = maxf(worst, absf(wdt - prev))
+		prev = wdt
+	var s := RemoraView.SCALE * RemoraView.remora_scale(rm.index)
+	# дыхание 2,5 с: за кадр ширина меняется не больше 2π/2,5 · 1,2 · 5 % / 30 ≈ 0,5 % — скачка нет
+	ok(worst < 0.01 * s, "ширина за кадр без скачка (%.4f м)" % worst)
+	view.free()

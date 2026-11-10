@@ -21,6 +21,11 @@ const LEGS_PITCH := -0.6
 ## DOWN_PITCH; иначе пояс у самой камеры заслоняет ступни.
 const DOWN_BACK := 0.38
 const DOWN_PITCH := -1.3
+## Суставы фигуры для `shown`: имя сустава → кость модели (таблица одна, не собирается в цикле каждый кадр, #847).
+const SHOWN_BONES := [["hip", "Hips"], ["neck", "neck"], ["shoulder_l", "LeftArm"],
+		["shoulder_r", "RightArm"], ["elbow_l", "LeftForeArm"], ["elbow_r", "RightForeArm"],
+		["wrist_l", "LeftHand"], ["wrist_r", "RightHand"], ["knee_l", "LeftLeg"], ["knee_r", "RightLeg"],
+		["ankle_l", "LeftFoot"], ["ankle_r", "RightFoot"], ["toe_l", "LeftToeBase"], ["toe_r", "RightToeBase"]]
 
 
 ## Насколько своя фигура стоя позади глаза при наклоне взгляда pitch (рад): OWN_BACK, вниз — плавно до DOWN_BACK.
@@ -46,7 +51,12 @@ var shown: Array = []
 ## Фигуры, нарисованные материалом своего игрока (прогрев, #217): `_own_mat` с отсечением граней — отдельный шейдер,
 ## его видно только взглядом вниз у поста (руки на пульте энергии) — без прогрева он собирался при первом нажатии.
 var as_own: Array = []
+var alphas: Array[float] = []  ## непрозрачность фигуры i (нет — 1): < 1 — отключившиеся гости у хоста (MateGhost, ART-043)
 var pitch := 0.0  ## наклон взгляда своего игрока (рад, вниз < 0) — ставит Main перед apply()
+## Своя фигура спрятана (ставит Main перед apply()): у открытого пульта энергии рукава загромождали кадр (#576), а
+## нормальной анимации рук у пульта пока нет — решение владельца: прятать, пока её нет. Позу и `shown` считаем
+## как обычно (руки для сети и товарищей — `Crew.Member.hands`), не рисуем только меш и снаряжение.
+var hide_own := false
 var _rest := {}  ## внешность → CrewRig.Rest
 var _own_mat := {}  ## внешность → материал своего игрока: с отсечением задних граней (не видно изнанки у камеры)
 var _scenes := {}  ## внешность → PackedScene модели (держим загруженной: новая фигура не грузит её заново)
@@ -142,6 +152,7 @@ func _dress(i: int, role: int) -> void:
 		att.add_child(node)
 		gear[i][g] = node
 	gear_roles[i] = role
+	(patches[i].mesh.material as StandardMaterial3D).albedo_color = Crew.role_color(role)   # нашивка — с ролью
 
 
 ## Покой скелета для CrewRig.
@@ -205,11 +216,31 @@ static func mesh_kind(m: Crew.Member, own: bool, look_pitch: float) -> int:
 	return 2 if not m.seated and not m.welding() and not m.holding() and look_pitch < LEGS_PITCH else 1
 
 
-func apply() -> void:
+## Подчасти «виды/экипаж» в худшем кадре лога тестера (#1518: «экипаж 37 ×35» на итоге забега — разовая пересборка
+## фигуры, снаряжение, прозрачность или поза): сборка и снаряжение — по событию, «экипаж» — поза и прочее.
+const CLOCK_POSE := "виды/экипаж"
+const CLOCK_BUILD := "виды/экипаж: сборка"
+const CLOCK_DRESS := "виды/экипаж: снаряжение"
+const CLOCK_FADE := "виды/экипаж: прозрачность"
+var _clock := false
+
+
+func _mark(part: String) -> void:
+	if _clock:
+		StepClock.mark(part)
+
+
+## clock — вызов из шага игры (`Main._apply_crew_view`): отмечать подчасти; вне шага (новый товарищ, прогрев) отметка
+## легла бы в уже законченный шаг.
+func apply(clock: bool = false) -> void:
+	_clock = clock
+	_mark(CLOCK_POSE)   # до фигур (сообщение, ходок) — «экипаж», как и раньше
 	for i in members.size():
 		var m: Crew.Member = members[i]
 		_build(i, m.look)
+		_mark(CLOCK_BUILD)
 		var own: bool = m == local
+		figures[i].visible = not (own and hide_own)
 		var j := m.joints()
 		var g := CrewRig.pose(_rest[looks[i]], j, CrewRig.SEAT_BEND if m.seated else 0.0)
 		var sk := skeletons[i]
@@ -224,19 +255,17 @@ func apply() -> void:
 		meshes[i].mesh = _meshes[looks[i]][kind]
 		meshes[i].material_override = _own_mat[looks[i]] if like_own else null
 		patches[i].visible = not own  # своя нашивка у самой камеры
+		_mark(CLOCK_POSE)
 		_dress(i, m.role)
+		_mark(CLOCK_DRESS)
 		for gn in gear[i]:
 			var node: Node3D = gear[i][gn]
 			node.visible = not (own and gn in CrewRig.GEAR_OWN_HIDDEN)
 			if gn == "gear-shchitok":   # щиток поднят, на сварке опущен
 				node.transform = CrewRig.visor_xform(_rest[looks[i]], looks[i], not m.welding())
-		(patches[i].mesh.material as StandardMaterial3D).albedo_color = Crew.role_color(m.role)
 		var rest: CrewRig.Rest = _rest[looks[i]]
 		var at := {}
-		for pair in [["hip", "Hips"], ["neck", "neck"], ["shoulder_l", "LeftArm"],
-				["shoulder_r", "RightArm"], ["elbow_l", "LeftForeArm"], ["elbow_r", "RightForeArm"],
-				["wrist_l", "LeftHand"], ["wrist_r", "RightHand"], ["knee_l", "LeftLeg"], ["knee_r", "RightLeg"],
-				["ankle_l", "LeftFoot"], ["ankle_r", "RightFoot"], ["toe_l", "LeftToeBase"], ["toe_r", "RightToeBase"]]:
+		for pair in SHOWN_BONES:
 			var bn: String = pair[1]
 			if own and (bn in CrewRig.HIDE_HEAD or bn in CrewRig.HIDE_CHEST):
 				continue
@@ -252,3 +281,29 @@ func apply() -> void:
 		torches[i].visible = m.welding()
 		if torches[i].visible:
 			torches[i].transform = m.torch_xform()
+		_mark(CLOCK_POSE)
+		if i < alphas.size():
+			_fade(i, alphas[i])
+			_mark(CLOCK_FADE)
+
+
+## Фигура i со снаряжением и резаком — полупрозрачная (`alphas`): копии её материалов с прозрачностью на поверхностях
+## узлов (общие материалы моделей не трогаем), дальше меняется только альфа цвета.
+func _fade(i: int, alpha: float) -> void:
+	for root: Node in [figures[i], torches[i]]:
+		for n: Node in root.find_children("*", "MeshInstance3D", true, false):
+			var mi := n as MeshInstance3D
+			if mi.mesh == null:
+				continue
+			if not mi.has_meta("fade"):
+				var mats: Array[BaseMaterial3D] = []
+				for k in mi.mesh.get_surface_count():
+					var src := mi.get_active_material(k)
+					if src is BaseMaterial3D:
+						var d: BaseMaterial3D = src.duplicate()
+						d.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+						mi.set_surface_override_material(k, d)
+						mats.append(d)
+				mi.set_meta("fade", mats)
+			for d: BaseMaterial3D in mi.get_meta("fade"):
+				d.albedo_color.a = alpha

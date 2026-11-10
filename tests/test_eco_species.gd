@@ -22,7 +22,7 @@ func test_registry_like_browser() -> void:
 			keys[n[0]] = true
 			ok(String(n[1]) != "", "%s.%s: текст" % [id, n[0]])
 		notes += s.notes.size()
-	eq(notes, 77, "заметок для журнала столько же, сколько в браузере")
+	eq(notes, 78, "заметок для журнала: 77 из браузера и «kelp» серпохвоста — ленточник глушит двигатели (#1338)")
 
 
 func test_names_in_cases() -> void:

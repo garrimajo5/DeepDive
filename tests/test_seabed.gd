@@ -16,6 +16,69 @@ func test_fbm_as_browser() -> void:
 	near(HashNoise.fbm(-250.0 * 0.006, 300.0 * 0.006, 4), 0.539113016285, 1e-9, "fbm(-250,300)")
 
 
+## Прежний хеш (до #1300): Math.imul по 16 бит — образец, с которым быстрый `HashNoise.hash2`/`value` совпадает
+## бит в бит (дно, камни, ракушки и кочки стоят на тех же местах).
+static func _hash2_ref(ix: int, iz: int) -> float:
+	var h: int = (ix * 374761393 + iz * 668265263) & 0xFFFFFFFF
+	var a: int = (h ^ (h >> 13)) & 0xFFFFFFFF
+	var lo: int = a * (1274126177 & 0xFFFF)
+	var hi: int = ((a * (1274126177 >> 16)) & 0xFFFF) << 16
+	h = (lo + hi) & 0xFFFFFFFF
+	h ^= h >> 16
+	return float(h) / 4294967295.0
+
+
+static func _value_ref(x: float, z: float) -> float:
+	var fx0 := floorf(x)
+	var fz0 := floorf(z)
+	var ix := int(fx0)
+	var iz := int(fz0)
+	var fx := x - fx0
+	var fz := z - fz0
+	var ux := fx * fx * (3.0 - 2.0 * fx)
+	var uz := fz * fz * (3.0 - 2.0 * fz)
+	var a := _hash2_ref(ix, iz)
+	var b := _hash2_ref(ix + 1, iz)
+	var c := _hash2_ref(ix, iz + 1)
+	var d := _hash2_ref(ix + 1, iz + 1)
+	return a + (b - a) * ux + (c - a) * uz + (a - b - c + d) * ux * uz
+
+
+func test_fast_hash_same_bits() -> void:
+	var r := EcoRandom.new(1301)
+	var bad := 0
+	for i in 4000:
+		var ix := int(r.range_f(-3.0e6, 3.0e6))
+		var iz := int(r.range_f(-3.0e6, 3.0e6))
+		if HashNoise.hash2(ix, iz) != _hash2_ref(ix, iz):
+			bad += 1
+		var x := r.range_f(-2000.0, 2000.0)
+		var z := r.range_f(-2000.0, 2000.0)
+		if HashNoise.value(x, z) != _value_ref(x, z):
+			bad += 1
+	for e: Vector2i in [Vector2i(0, 0), Vector2i(-1, -1), Vector2i(2147483647, -2147483648), Vector2i(-2147483648, 2147483647)]:
+		if HashNoise.hash2(e.x, e.y) != _hash2_ref(e.x, e.y):
+			bad += 1
+	eq(bad, 0, "быстрый хеш и шум — те же числа, что прежние")
+
+
+func test_height_fast_enough() -> void:
+	# шаг живого мира зовёт дно ~50 раз за кадр (#1300): дно стоило ≈ 12 мкс, с быстрым хешем — заметно меньше,
+	# чем по прежнему хешу; сравниваем с образцом на той же машине — тест ловит возврат медленного хеша
+	var best_new := INF
+	var best_ref := INF
+	for k in 5:
+		var t0 := Time.get_ticks_usec()
+		for i in 2000:
+			HashNoise.value(i * 0.37 - 300.0, i * 0.21 - 200.0)
+		best_new = minf(best_new, Time.get_ticks_usec() - t0)
+		t0 = Time.get_ticks_usec()
+		for i in 2000:
+			_value_ref(i * 0.37 - 300.0, i * 0.21 - 200.0)
+		best_ref = minf(best_ref, Time.get_ticks_usec() - t0)
+	ok(best_new < best_ref * 0.8, "шум быстрее прежнего: %.0f против %.0f мкс" % [best_new, best_ref])
+
+
 func test_height_as_browser() -> void:
 	near(Seabed.height(0, 95), -42.382790764, 1e-6, "старт корабля")
 	near(Seabed.height(-10, -10), -44.238212313, 1e-6, "центр плато")
@@ -63,3 +126,120 @@ func test_seabed_uses_detail_shader() -> void:
 	if mat is ShaderMaterial and (mat as ShaderMaterial).shader:
 		ok((mat as ShaderMaterial).shader.code.contains("Дно отмели"), "назначен шейдер дна")
 	ov.queue_free()
+
+
+## ART-059: ключи таблицы совпадают с принятым `voda-glubina.json` и стоят как есть.
+func test_water_keys_from_art059() -> void:
+	var f := FileAccess.open("res://docs/concept-art/voda-glubina.json", FileAccess.READ)
+	ok(f != null, "voda-glubina.json читается")
+	var keys: Array = JSON.parse_string(f.get_as_text())
+	eq(keys.size(), Seabed.Water.ART059, "десять ключей ART-059 — первые в таблице")
+	for key in keys:
+		var d: float = key["depth"]
+		var c := Color(key["fog"])
+		ok(Seabed.Water.fog_color(d).is_equal_approx(c), "цвет на %d м" % d)
+		near(Seabed.Water.fog_density(d), key["density"], 1e-6, "плотность на %d м" % d)
+		near(Seabed.Water.ambient(d), key["ambient"], 1e-6, "рассеянный на %d м" % d)
+		near(Seabed.Water.sun(d), key["sun"], 1e-6, "солнце на %d м" % d)
+		near(Seabed.Water.exposure(d), key["exposure"], 1e-6, "экспозиция на %d м" % d)
+
+
+func test_water_smooth_and_clamped() -> void:
+	var prev_v := 2.0
+	var prev_amb := 2.0
+	var worst := 0.0
+	var d := 0.0
+	while d <= 320.0:
+		var c := Seabed.Water.fog_color(d)
+		ok(c.v <= prev_v + 1e-6, "цвет не светлеет вглубь (%.1f м)" % d)
+		ok(Seabed.Water.ambient(d) <= prev_amb + 1e-9, "рассеянный не растёт (%.1f м)" % d)
+		if prev_v < 2.0:
+			worst = maxf(worst, prev_v - c.v)
+		prev_v = c.v
+		prev_amb = Seabed.Water.ambient(d)
+		d += 0.5
+	ok(worst < 0.02, "без скачков: шаг яркости за 0,5 м %.4f" % worst)
+	near(Seabed.Water.sun(400.0), Seabed.Water.sun(300.0), 1e-9, "ниже 300 м — как на 300")
+	near(Seabed.Water.ambient(400.0), Seabed.Water.ambient(300.0), 1e-9, "рассеянный ниже 300 м — как на 300")
+	near(Seabed.Water.ambient(-3.0), Seabed.Water.ambient(0.0), 1e-9, "выше льда — как у льда")
+	# цвет между ключами смешан в линейном свете: середина темнее, чем среднее sRGB
+	var a := Seabed.Water.fog_color(90.0)
+	var b := Seabed.Water.fog_color(60.0)
+	var mid := Seabed.Water.fog_color(75.0)
+	near(mid.srgb_to_linear().b, (a.srgb_to_linear().b + b.srgb_to_linear().b) / 2.0, 1e-4, "середина — в линейном")
+
+
+## #822: склон до 300 м — вода темнеет и дальше 120 м (раньше там стоял clamp), плавно и без красного.
+func test_water_below_120() -> void:
+	ok(Seabed.Water.fog_color(300.0).v < Seabed.Water.fog_color(120.0).v - 0.02, "на 300 м туман темнее, чем на 120")
+	ok(Seabed.Water.ambient(300.0) < Seabed.Water.ambient(120.0) * 0.5, "рассеянный на 300 м слабее вдвое")
+	ok(Seabed.Water.ambient(200.0) < Seabed.Water.ambient(120.0), "на 200 м уже темнее, чем на 120")
+	ok(Seabed.Water.fog_density(300.0) > Seabed.Water.fog_density(120.0), "вода гуще")
+	ok(Seabed.Water.fog_density(300.0) < 0.03, "прожектор ещё достаёт склон: плотность < 0,03")
+	near(Seabed.Water.sun(300.0), 0.0, 1e-9, "солнца на 300 м нет")
+	var c := Seabed.Water.fog_color(300.0)
+	ok(c.b >= c.g and c.g >= c.r and c.v > 0.0, "оттенок тот же — синий, не серый и не чёрный ноль")
+	var keys: Array = Seabed.Water.KEYS
+	eq(keys[keys.size() - 1][0], 300.0, "последний ключ — 300 м")
+
+
+## OceanView.apply_water ставит конечные значения без прежних множителей 0,9 / 0,7 / 1,2.
+func test_apply_water_final_values() -> void:
+	var ov := OceanView.new()
+	tree.root.add_child(ov)
+	await frames(1)
+	var env := Environment.new()
+	for depth in [8.0, 20.0, 45.0, 90.0]:
+		ov.apply_water(env, depth, Vector3.ZERO)
+		near(env.fog_density, Seabed.Water.fog_density(depth), 1e-6, "туман на %d м" % depth)
+		near(env.ambient_light_energy, Seabed.Water.ambient(depth), 1e-6, "рассеянный на %d м" % depth)
+		near(env.tonemap_exposure, Seabed.Water.exposure(depth), 1e-6, "экспозиция на %d м" % depth)
+		near(ov.sun.light_energy, Seabed.Water.sun(depth), 1e-6, "солнце на %d м" % depth)
+	ov.apply_water(env, 20.0, Vector3.ZERO, 1.0)
+	near(env.fog_density, Seabed.Water.fog_density(20.0) + 0.03, 1e-6, "ил гуще на 0,03 (ART-048)")
+	ok(env.fog_light_color.is_equal_approx(Seabed.Water.fog_color(20.0).lerp(Silt.FAR_COLOR, 0.75)), "ил главнее цвета глубины")
+	ov.queue_free()
+	await frames(1)
+
+
+## #832: за границей корки у Спуска 10 дно меняет цвет — западнее как было, к востоку серая порода и бледные пятна.
+func test_crust_color_at_brink() -> void:
+	var base := Color(0.08, 0.13, 0.22)
+	eq(Seabed.crust_tint(base, 300.0, 200.0), base, "проход 60 м — цвет как был")
+	var z := 200.0
+	var b := EcoBrink.border_x(z)
+	eq(Seabed.crust_tint(base, b - 1.0, z), base, "западнее границы — без корки")
+	var far := Seabed.crust_tint(base, b + EcoBrink.FULL + 5.0, z)
+	ok(far.get_luminance() > base.get_luminance() + 0.02, "за границей дно светлее тёмной глубины")
+	ok(absf(far.b - far.r) < absf(base.b - base.r), "порода серее синей глубины")
+	# пятна корки бледнее голой породы
+	var lit := 0
+	var bare := 0
+	for i in 60:
+		var x := b + EcoBrink.FULL + 2.0 + i * 1.5
+		var p := EcoBrink.patch(x, z)
+		var c := Seabed.crust_tint(base, x, z)
+		if p > 0.9:
+			lit += 1
+			ok(c.get_luminance() > Seabed.CRUST_ROCK.get_luminance() * 0.9, "пятно корки бледнее")
+		elif p < 0.05:
+			bare += 1
+	ok(lit + bare > 0, "есть и пятна, и голая порода на участке")
+	# в цвете вершин сетки (color_at) корка тоже есть
+	var y := Seabed.height(b + EcoBrink.FULL + 10.0, z)
+	var with := Seabed.color_at(b + EcoBrink.FULL + 10.0, y, z, 1.0)
+	ok(with.b - with.r < 0.14 * 1.12, "color_at за границей — не синяя глубина")
+
+
+func test_mesh_height_vertex_cache() -> void:
+	# #1386: вершины сетки запоминаются — в вершине и между ними та же высота, что по шуму, и по треугольникам клетки.
+	var step := Seabed.SIZE / Seabed.SEGMENTS
+	for q in [Vector2(-40, 75), Vector2(50, 30), Vector2(360, 200), Vector2(-345, 345)]:
+		var x0 := floorf((q.x + Seabed.SIZE / 2.0) / step) * step - Seabed.SIZE / 2.0
+		var z0 := floorf((q.y + Seabed.SIZE / 2.0) / step) * step - Seabed.SIZE / 2.0
+		near(Seabed.mesh_height(x0, z0), Seabed.height(x0, z0), 1e-3, "вершина у %s" % q)
+		var h00 := Seabed.height(x0, z0)
+		var h10 := Seabed.height(x0 + step, z0)
+		var h01 := Seabed.height(x0, z0 + step)
+		near(Seabed.mesh_height(x0 + step * 0.25, z0 + step * 0.25),
+				h00 + (h10 - h00) * 0.25 + (h01 - h00) * 0.25, 1e-3, "внутри клетки у %s" % q)

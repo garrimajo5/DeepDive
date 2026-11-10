@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bwn4t68ylmqar"
-path="res://.godot/imported/ventil-koleso_ventil-koleso-color.png-d50546b6335ff3c9fa3eb7c2814f25f7.ctex"
+path.s3tc="res://.godot/imported/ventil-koleso_ventil-koleso-color.png-d50546b6335ff3c9fa3eb7c2814f25f7.s3tc.ctex"
+path.etc2="res://.godot/imported/ventil-koleso_ventil-koleso-color.png-d50546b6335ff3c9fa3eb7c2814f25f7.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "a937d3ad2a0afc0a718f84285aa36b3a"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/ventil-koleso_ventil-koleso-color.png"
-dest_files=["res://.godot/imported/ventil-koleso_ventil-koleso-color.png-d50546b6335ff3c9fa3eb7c2814f25f7.ctex"]
+dest_files=["res://.godot/imported/ventil-koleso_ventil-koleso-color.png-d50546b6335ff3c9fa3eb7c2814f25f7.s3tc.ctex", "res://.godot/imported/ventil-koleso_ventil-koleso-color.png-d50546b6335ff3c9fa3eb7c2814f25f7.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

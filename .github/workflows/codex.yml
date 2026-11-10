@@ -1,0 +1,61 @@
+name: Кодекс
+# «Кодекс игры» (#1417) — внутренний справочник из файлов репозитория (tools/codex.py). Тесты и сборка — на PR и main;
+# публикация на GitHub Pages — только с main: https://garrimajo5.github.io/DeepDive/
+# Pages включаются один раз в настройках (Settings → Pages → Source: GitHub Actions); пока они выключены, шаг
+# публикации не валит workflow, а собранный справочник лежит артефактом «kodeks».
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**", "scripts/core/**", "textures/places/**", "models/**", "tools/codex.py", "tools/test_codex.py",
+            ".github/workflows/codex.yml"]
+  pull_request:
+    paths: ["tools/codex.py", "tools/test_codex.py", ".github/workflows/codex.yml", "scripts/core/layer_map.gd",
+            "scripts/core/eco/species.gd", "docs/bestiary.md"]
+  workflow_dispatch:
+
+concurrency:
+  group: codex-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Собрать справочник
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Тесты справочника
+        run: python3 tools/test_codex.py
+      - name: Сборка
+        run: python3 tools/codex.py build/codex
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kodeks
+          path: build/codex
+      - if: github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/codex
+
+  pages:
+    name: Опубликовать на Pages
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true   # Pages не включены — справочник остаётся артефактом, main не краснеет
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - id: deploy
+        uses: actions/deploy-pages@v4

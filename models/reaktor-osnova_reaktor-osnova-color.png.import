@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://x648pxftkpm4"
-path="res://.godot/imported/reaktor-osnova_reaktor-osnova-color.png-45330c961a6a4bccb9e629ad84d650ad.ctex"
+path.s3tc="res://.godot/imported/reaktor-osnova_reaktor-osnova-color.png-45330c961a6a4bccb9e629ad84d650ad.s3tc.ctex"
+path.etc2="res://.godot/imported/reaktor-osnova_reaktor-osnova-color.png-45330c961a6a4bccb9e629ad84d650ad.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "41e1ba7a3b6e703372cd0853f2a8fb78"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/reaktor-osnova_reaktor-osnova-color.png"
-dest_files=["res://.godot/imported/reaktor-osnova_reaktor-osnova-color.png-45330c961a6a4bccb9e629ad84d650ad.ctex"]
+dest_files=["res://.godot/imported/reaktor-osnova_reaktor-osnova-color.png-45330c961a6a4bccb9e629ad84d650ad.s3tc.ctex", "res://.godot/imported/reaktor-osnova_reaktor-osnova-color.png-45330c961a6a4bccb9e629ad84d650ad.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

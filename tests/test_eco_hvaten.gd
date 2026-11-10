@@ -129,7 +129,9 @@ func test_hides_in_beam_and_reopens_in_dark() -> void:
 	ok(w.in_beam(hv.top), "хватень в луче")
 	w.run(0.2)
 	ok(hv.lit, "освещён")
-	near(hv.open, 1.0 - 0.2 * EcoHvaten.CLOSE_RATE, 1e-3, "щупальца прячутся быстро")
+	# прячет рефлексом: до CLOSE_RATE за CLOSE_RATE / CLOSE_ACCEL = 0,1 с, дальше на полном ходу
+	var ramp := EcoHvaten.CLOSE_RATE / EcoHvaten.CLOSE_ACCEL
+	near(hv.open, 1.0 - (0.2 - ramp * 0.5) * EcoHvaten.CLOSE_RATE, 0.07, "щупальца прячутся быстро")
 	eq(_notes(w, "hvaten", "hide").size(), 1, "«прячет щупальца»")
 	eq(_notes(w, "pestr", "immune").size(), 1, "пестрянка ныряет в щупальца")
 	ok(_notes(w, "hvaten", "hide")[0].text().contains("прожектор"), "текст про прожектор")
@@ -137,10 +139,78 @@ func test_hides_in_beam_and_reopens_in_dark() -> void:
 	near(hv.open, 0.0, 1e-6, "спрятал совсем")
 	w.ship.light_on = false
 	w.run(1.0)
-	near(hv.open, EcoHvaten.OPEN_RATE, 1e-3, "в темноте раскрывается медленно")
+	var ramp_in := EcoHvaten.OPEN_RATE / EcoHvaten.OPEN_ACCEL
+	near(hv.open, (1.0 - ramp_in * 0.5) * EcoHvaten.OPEN_RATE, 0.01, "в темноте раскрывается медленно")
 	_aim(w, hv.top)
 	w.run(0.1)
 	eq(_notes(w, "hvaten", "hide").size(), 1, "приоткрытый хватень — без нового «hide»")
+
+
+## Плавность (Б3): раскрытие меняет скорость не быстрее OPEN_ACCEL / CLOSE_ACCEL — кончики щупалец не срываются с
+## места на полном ходу за кадр, ни в луче, ни в темноте, ни на развороте; дошёл до нужного — встаёт без перелёта.
+func test_open_eases_without_jerk() -> void:
+	var w := EcoWorld.new()  # без светляков: только свет
+	w.ground = _flat
+	w.ship.pos = FAR
+	_hungry(w.add(EcoHvaten.new(null, [Vector3(0, FLAT, 0)] as Array[Vector3])) as EcoHvaten)
+	var hv := _system(w).anemones[0]
+	var dt := EcoWorld.MAX_STEP
+	var prev_v := 0.0
+	var worst := 0.0
+	var top := 0.0
+	var plan := [[true, 0.25], [false, 0.6], [true, 0.6], [false, 4.0]]  # прячет, не дорыв — раскрывает, снова прячет
+	for leg: Array in plan:
+		if leg[0]:
+			_aim(w, hv.top)
+		else:
+			w.ship.light_on = false
+		for i in int(float(leg[1]) / dt):
+			var o0 := hv.open
+			w.step(dt)
+			var v := (hv.open - o0) / dt
+			worst = maxf(worst, absf(v - prev_v) / dt)
+			top = maxf(top, absf(v))
+			ok(hv.open >= 0.0 and hv.open <= 1.0, "раскрытие в 0…1")
+			prev_v = v
+	# остановка на месте — в пределах шага разгона (раньше полный CLOSE_RATE за шаг — 50 1/с²)
+	ok(worst <= EcoHvaten.CLOSE_ACCEL * 1.3, "скорость раскрытия меняется не быстрее CLOSE_ACCEL (%.1f)" % worst)
+	ok(top <= EcoHvaten.CLOSE_RATE + 1e-3, "не быстрее CLOSE_RATE")
+	ok(hv.open > 0.9 and hv.open <= 1.0, "в темноте раскрылся снова (%.2f)" % hv.open)
+	# раскрытие из покоя: первый кадр — не на полном OPEN_RATE
+	w = EcoWorld.new()
+	w.ground = _flat
+	w.ship.pos = FAR
+	var h2 := w.add(EcoHvaten.new(null, [Vector3(0, FLAT, 0)] as Array[Vector3])) as EcoHvaten
+	var a2 := h2.anemones[0]
+	a2.digest = 0.0
+	a2.open = 0.0
+	w.step(dt)
+	ok(a2.open < EcoHvaten.OPEN_RATE * dt * 0.5, "трогается мягко, а не сразу на OPEN_RATE")
+	for i in int(1.0 / dt):
+		w.step(dt)
+	near(a2.open_v, EcoHvaten.OPEN_RATE, 1e-3, "за секунду набрал ход раскрытия")
+
+
+func test_open_step_arrives_without_overshoot() -> void:
+	# от 1 к половине (переваривает) — подход тормозит √(2·a·остаток), не перелетает DIGEST_OPEN
+	var hv := EcoHvaten.Anemone.new()
+	hv.open = 1.0
+	var low := 1.0
+	for i in 200:
+		EcoHvaten.open_step(hv, EcoHvaten.DIGEST_OPEN, 1.0 / 60.0)
+		low = minf(low, hv.open)
+	near(hv.open, EcoHvaten.DIGEST_OPEN, 1e-6, "встал на половине")
+	ok(low >= EcoHvaten.DIGEST_OPEN - 1e-6, "без перелёта ниже половины")
+	eq(hv.open_v, 0.0, "стоит")
+	# раскрывался и попал в луч — сперва тормозит, потом прячет; ход не дальше чем на OPEN_RATE² / (2·CLOSE_ACCEL)
+	hv.open = 0.5
+	hv.open_v = EcoHvaten.OPEN_RATE
+	var high := 0.5
+	for i in 120:
+		EcoHvaten.open_step(hv, 0.0, 1.0 / 60.0)
+		high = maxf(high, hv.open)
+	ok(high - 0.5 <= EcoHvaten.OPEN_RATE * EcoHvaten.OPEN_RATE / (2.0 * EcoHvaten.CLOSE_ACCEL) + 0.01, "тормозит рефлексом")
+	near(hv.open, 0.0, 1e-6, "спрятал")
 
 
 func test_hide_message_once_in_30_s() -> void:
@@ -312,7 +382,8 @@ func test_view_three_multimeshes() -> void:
 	eq(hv.pestr.multimesh.instance_count, 4 * EcoHvaten.PESTR_N, "пестрянки одним MultiMesh")
 	var a := view.hvaten.anemones[2]
 	var tr := HvatenView.transform_at(hv.tent_buffer, 2 * EcoHvaten.TENT + 3)
-	ok(tr.origin.distance_to(a.top) < 0.31, "щупальце растёт из диска")
+	near(tr.origin.distance_to(a.top), EcoHvaten.TENT_R * EcoHvaten.breath(a, view.world.time) * HvatenView.body_width(2), 1e-4,
+		"щупальце растёт из диска")
 	var tip := tr * Vector3(0, 1, 0)
 	ok(Vector2(tip.x - a.top.x, tip.z - a.top.z).length() > Vector2(tr.origin.x - a.top.x, tr.origin.z - a.top.z).length(),
 		"раскрытое щупальце клонится наружу")
@@ -321,8 +392,342 @@ func test_view_three_multimeshes() -> void:
 	hv.sync(view.world.time)
 	var closed := HvatenView.transform_at(hv.tent_buffer, 2 * EcoHvaten.TENT + 3)
 	ok((closed * Vector3(0, 1, 0)).distance_to(closed.origin) < 0.2, "спрятанное — короткое")
-	var pe := HvatenView.transform_at(hv.pestr_buffer, 2 * EcoHvaten.PESTR_N, HvatenView.STRIDE_C)
+	var pe := HvatenView.transform_at(hv.pestr_buffer, 2 * EcoHvaten.PESTR_N, HvatenView.STRIDE_P)
 	ok(pe.origin.is_equal_approx(a.pestr[0].p), "пестрянка на месте")
-	near(hv.pestr_buffer[2 * EcoHvaten.PESTR_N * HvatenView.STRIDE_C + 12], HvatenView.PESTR_COLORS[0].r, 1e-4, "оранжевая")
+	near(hv.pestr_buffer[2 * EcoHvaten.PESTR_N * HvatenView.STRIDE_P + 16],
+		HvatenView.pestr_glow(HvatenView.PESTR_COLORS[0] * EcoPestrLook.GLOW, 2 * EcoHvaten.PESTR_N).r,
+		1e-4, "оранжевая — свечение в INSTANCE_CUSTOM")
+	view.queue_free()
+	await frames(1)
+
+
+# ---------- Дыхание тела (план реализма Б3) ----------
+
+func test_body_breathes_slowly() -> void:
+	var w := _world()
+	var hv := _system(w).anemones[0]
+	var lo := 9.0
+	var hi := 0.0
+	for i in 110:
+		var b := EcoHvaten.breath(hv, i * 0.05)
+		lo = minf(lo, b)
+		hi = maxf(hi, b)
+	ok(hi - lo > EcoHvaten.BREATH_AMP * 1.5, "за период тело раздувается и опадает")
+	ok(lo >= 1.0 - EcoHvaten.BREATH_AMP - 1e-4 and hi <= 1.0 + EcoHvaten.BREATH_AMP + 1e-4, "не больше ±5 %")
+	near(EcoHvaten.breath(hv, 1.0), EcoHvaten.breath(hv, 1.0 + EcoHvaten.BREATH_T), 1e-4, "период 5,5 с")
+	ok(absf(EcoHvaten.breath(hv, 1.0) - EcoHvaten.breath(hv, 1.1)) < 0.01, "медленно — без дрожи")
+	hv.open = 0.0
+	ok(EcoHvaten.breath(hv, 1.0) < 1.0 - EcoHvaten.BREATH_AMP, "спрятавший щупальца сжимается")
+	near(EcoHvaten.breath(hv, 1.0, false), EcoHvaten.CLOSED_W, 1e-5, "без дыхания — только сжатие")
+
+
+func test_anemones_breathe_apart() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var a := view.hvaten.anemones
+	ok(a.size() >= 2, "хватней несколько")
+	var t := 3.0
+	for hv in a:
+		hv.open = 1.0
+	ok(absf(EcoHvaten.breath(a[0], t) - EcoHvaten.breath(a[1], t)) > 0.005, "соседи дышат вразнобой")
+	view.queue_free()
+	await frames(1)
+
+
+func test_body_and_tentacles_breathe_in_view() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var hv := view.hvaten_view
+	var a := view.hvaten.anemones[1]
+	a.open = 1.0
+	var widths: Array[float] = []
+	for i in 8:
+		var t := EcoHvaten.BREATH_T * i / 8.0
+		hv.sync(t)
+		var body := HvatenView.transform_at(hv.body_buffer, 1)
+		ok(body.origin.is_equal_approx(a.base), "тело стоит у подножия")
+		near(body.basis.y.length(), 1.0, 1e-5, "высота не меняется — диск на месте")
+		near(body.basis.x.length(), EcoHvaten.breath(a, t) * HvatenView.body_width(1), 1e-5, "ширина тела — дыхание × своя ширина")
+		widths.append(body.basis.x.length())
+		var tent := HvatenView.transform_at(hv.tent_buffer, EcoHvaten.TENT + 5)
+		var r := Vector2(tent.origin.x - a.top.x, tent.origin.z - a.top.z).length()
+		near(r, EcoHvaten.TENT_R * widths[-1], 1e-4, "щупальца сидят на дышащем диске")
+		ok(r < 0.4 * widths[-1], "не мимо края диска")
+	ok(widths.max() - widths.min() > EcoHvaten.BREATH_AMP, "в сцене тело дышит")
+	EcoShaders.set_sway_lite(true)
+	hv.sync(EcoHvaten.BREATH_T * 0.25)
+	var w1 := HvatenView.transform_at(hv.body_buffer, 1).basis.x.length()
+	hv.sync(EcoHvaten.BREATH_T * 0.75)
+	near(HvatenView.transform_at(hv.body_buffer, 1).basis.x.length(), w1, 1e-5, "на «Экономно» тело не дышит")
+	EcoShaders.set_sway_lite(false)
+	view.queue_free()
+	await frames(1)
+
+
+# ---------- Плавники пестрянок (план реализма Б3) ----------
+
+## Форма пестрянки: тело закрыто и смотрит наружу, хвост-веер позади кормы, грудные плавники по бокам гребут.
+func test_pestr_shape_has_fins() -> void:
+	var L := EcoPestrLook
+	eq(L.shape.size(), L.normals.size(), "нормаль у каждой вершины")
+	eq(L.shape.size(), L.colors.size(), "цвет у каждой вершины")
+	eq(L.tris.size() % 3, 0, "треугольники")
+	near(L.shape[L.nose_vertex].z, L.NOSE, 1e-6, "нос по +Z")
+	var body_tris := 2 * L.SEGMENTS * L.RINGS
+	var mid := (L.NOSE + L.BACK) * 0.5
+	for t in body_tris:
+		var a := L.shape[L.tris[t * 3]]
+		var b := L.shape[L.tris[t * 3 + 1]]
+		var c := L.shape[L.tris[t * 3 + 2]]
+		var m := (a + b + c) / 3.0
+		ok((b - a).cross(c - a).dot(Vector3(m.x, m.y, m.z - mid)) < 0.0, "грань тела %d — лицом наружу" % t)
+	eq(L.tail_tips.size(), 2, "две лопасти хвоста")
+	for i in L.tail_tips:
+		ok(L.shape[i].z < L.BACK - 0.1, "хвост за кормой")
+		eq(L.colors[i].b, 0.0, "хвост не гребёт — машет волной")
+	eq(L.pec_tips.size(), 2, "два грудных плавника")
+	ok(L.shape[L.pec_tips[0]].x > L.HALF_WIDTH and L.shape[L.pec_tips[1]].x < -L.HALF_WIDTH, "по бокам")
+	for i in L.pec_tips:
+		eq(L.colors[i].b, 1.0, "кончик грудного гребёт целиком")
+	for i in L.shape.size():
+		var tip := false
+		for j in L.pec_tips:
+			tip = tip or L.shape[i].is_equal_approx(L.shape[j])
+		if not tip:
+			eq(L.colors[i].b, 0.0, "остальное не гребёт (вершина %d)" % i)
+
+
+## Плавники живые: хвост ходит вбок, грудные — вверх-вниз вразнобой, нос стоит; «Экономно» — всё стоит.
+func test_pestr_fins_beat() -> void:
+	var L := EcoPestrLook
+	var a := 0.37
+	var tail := 0.0
+	var nose := 0.0
+	var pec := 0.0
+	var differ := 0.0
+	for k in 240:
+		var t := k * 0.011
+		tail = maxf(tail, absf(L.offset(L.tail_tips[0], t, a).x))
+		nose = maxf(nose, L.offset(L.nose_vertex, t, a).length())
+		var r := L.offset(L.pec_tips[0], t, a)
+		var l := L.offset(L.pec_tips[1], t, a)
+		pec = maxf(pec, absf(r.y))
+		differ = maxf(differ, absf(r.y - l.y))
+	eq(nose, 0.0, "нос стоит")
+	ok(tail > 0.6 * EcoFishLook.TAIL_AMP, "хвост машет: %.3f" % tail)
+	ok(pec > 0.9 * EcoFishLook.PEC_AMP and pec <= EcoFishLook.PEC_AMP + 1e-6, "грудной гребёт на ±PEC_AMP")
+	ok(differ > 0.5 * EcoFishLook.PEC_AMP, "правый и левый — вразнобой")
+	eq(L.offset(L.pec_tips[0], 0.4, a, 0.0), Vector3.ZERO, "«Экономно» — грудной стоит")
+	eq(L.offset(L.tail_tips[0], 0.4, a, 0.0), Vector3.ZERO, "«Экономно» — хвост стоит")
+	eq(EcoFishLook.fin_flap(0.1, 0.0, 0.4, a), 0.0, "у светляка (вес 0) грудных взмахов нет")
+
+
+## В сцене пестрянки — тот же шейдер, что светляки (шейдеров не прибавилось), фаза плавников у каждой своя.
+func test_pestr_view_shares_fish_shader() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var hv := view.hvaten_view
+	var mat := hv.pestr.multimesh.mesh.surface_get_material(0) as ShaderMaterial
+	var fish := view.fish_view.multimesh.mesh.surface_get_material(0) as ShaderMaterial
+	ok(mat != null and fish != null, "материалы на шейдере")
+	eq(mat.shader, fish.shader, "пестрянки и светляки — один шейдер")
+	ok(mat.shader.code.contains("COLOR.b") and mat.shader.code.contains("%.5f" % EcoFishLook.PEC_AMP),
+		"взмах грудных в шейдере — числа из EcoFishLook")
+	ok(hv.pestr.multimesh.use_custom_data, "свечение — в INSTANCE_CUSTOM")
+	var phases := {}
+	for i in hv.pestr.multimesh.instance_count:
+		var a := hv.pestr_buffer[i * HvatenView.STRIDE_P + 15]
+		ok(a >= 0.0 and a < 1.0, "фаза — доля оборота")
+		phases[snappedf(a, 0.01)] = true
+	ok(phases.size() > hv.pestr.multimesh.instance_count / 2, "пестрянки машут вразнобой")
+	var tr := HvatenView.transform_at(hv.pestr_buffer, 0, HvatenView.STRIDE_P)
+	near(tr.basis.z.length(), EcoPestrLook.SCALE * HvatenView.pestr_size(0), 1e-4, "форма уменьшена до пестрянки (свой размер)")
+	EcoShaders.set_sway_lite(true)
+	eq(mat.get_shader_parameter("sway_k"), 0.0, "«Экономно» гасит плавники")
+	EcoShaders.set_sway_lite(false)
+	eq(mat.get_shader_parameter("sway_k"), 1.0, "и возвращает")
+	view.queue_free()
+	await frames(1)
+
+
+# ---------- Дыхание пестрянок (Б3) ----------
+
+func test_view_pestr_breathe_in_round_dance() -> void:
+	# В хороводе (ход 0,3 м/с) — во весь размах: за период шире и уже на PESTR_BREATH_W.
+	var lo := 1.0
+	var hi := -1.0
+	for i in 60:
+		var b := HvatenView.pestr_breath(5, i * HvatenView.PESTR_BREATH_T / 60.0 * 1.3, 0.3)
+		lo = minf(lo, b)
+		hi = maxf(hi, b)
+	ok(hi > 0.95 and lo < -0.95, "в хороводе дышит во весь размах")
+	var s := HvatenView.pestr_breath_scale(1.0)
+	near(s.x, 1.0 + HvatenView.PESTR_BREATH_W, 1e-6, "шире")
+	near(s.y, 1.0 + HvatenView.PESTR_BREATH_H, 1e-6, "выше")
+	near(s.z, 1.0, 1e-6, "длина та же — нос и хвост на месте")
+	# На ходу к стае — не дышит; между порогами — плавно.
+	for i in 20:
+		near(HvatenView.pestr_breath(5, i * 0.37, HvatenView.PESTR_RUSH), 0.0, 1e-6, "на ходу размах погас")
+	var mid := absf(HvatenView.pestr_breath(5, 0.4, (HvatenView.PESTR_CALM + HvatenView.PESTR_RUSH) / 2.0))
+	ok(mid <= absf(HvatenView.pestr_breath(5, 0.4, 0.0)) + 1e-6, "между порогами — меньше")
+	# Не в такт: у рыбок свои фазы.
+	var at0 := {}
+	for n in 12:
+		at0[snappedf(HvatenView.pestr_breath(n, 0.0), 0.05)] = true
+	ok(at0.size() > 6, "пестрянки дышат вразнобой")
+	# В сцене: ширина в буфере дышит, длина нет.
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var hv := view.hvaten_view
+	var a := view.hvaten.anemones[0]
+	a.pestr[0].v = Vector3.ZERO
+	var widths := []
+	for i in 8:
+		var t := i * HvatenView.PESTR_BREATH_T / 8.0
+		hv.sync(t)
+		var tr := HvatenView.transform_at(hv.pestr_buffer, 0, HvatenView.STRIDE_P)
+		near(tr.basis.z.length(), EcoPestrLook.SCALE * HvatenView.pestr_size(0), 1e-4, "длина та же")
+		near(tr.basis.x.length(), EcoPestrLook.SCALE * HvatenView.pestr_size(0)
+			* (1.0 + HvatenView.PESTR_BREATH_W * HvatenView.pestr_breath(0, t, 0.0)), 1e-4, "ширина — по дыханию")
+		widths.append(tr.basis.x.length())
+	ok(widths.max() - widths.min() > EcoPestrLook.SCALE * 0.05, "в буфере ширина меняется")
+	view.queue_free()
+	await frames(1)
+
+
+# ---------- Плавность (Б3) ----------
+
+func test_pestr_turn_limited_and_holds_when_still() -> void:
+	var f := Vector3(0, 0, -1)
+	var back := EcoHvaten.turn(f, Vector3(0, 0, 1), 0.1)
+	near(f.angle_to(back), EcoHvaten.LOOK_MAX * 0.1, 1e-3, "ровно назад — не быстрее LOOK_MAX")
+	ok(absf(back.y) < 1e-4, "разворот по горизонтали")
+	var want := Vector3(sin(PI / 6.0), 0, -cos(PI / 6.0))
+	var side := EcoHvaten.turn(f, want, 0.05)
+	near(f.angle_to(side), PI / 6.0 * EcoHvaten.LOOK_K * 0.05, 1e-3, "доля угла за шаг")
+	ok(EcoHvaten.turn(f, Vector3.ZERO, 0.1).is_equal_approx(f), "стоит — держит курс")
+	ok(EcoHvaten.turn(Vector3.ZERO, Vector3(2, 0, 0), 0.1).is_equal_approx(Vector3.RIGHT), "курс не задан — сразу по ходу")
+
+
+func test_pestr_nose_does_not_snap_when_lure_starts() -> void:
+	var w := _world()
+	var hv := _system(w).anemones[0]
+	w.run(3.0)
+	var before: Array[Vector3] = []
+	for pe in hv.pestr:
+		before.append(EcoHvaten.pestr_pose(hv, hv.pestr.find(pe), w.time).basis.z)
+	hv.lure_cd = 0.0
+	w.step(EcoWorld.MAX_STEP)   # хватень подманил стаю — цель пестрянок прыгнула к ней
+	for k in hv.pestr.size():
+		var now := EcoHvaten.pestr_pose(hv, k, w.time).basis.z
+		ok(before[k].angle_to(now) <= EcoHvaten.LOOK_MAX * EcoWorld.MAX_STEP + 0.25,
+			"пестрянка %d: нос не щёлкнул (%.2f рад)" % [k, before[k].angle_to(now)])
+
+
+## Б3: хватень подманил стаю — пестрянки не срываются к ней за кадр (раньше lerp 2,5/с: до 30 м/с) и так же
+## плавно возвращаются; ход не больше SWIM_MAX, меняется не быстрее SWIM_ACCEL.
+func test_pestr_swim_speed_and_accel_limited() -> void:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	w.ship.pos = FAR
+	var f := w.add(EcoFish.new()) as EcoFish
+	var home := EcoFish.HOMES[0]
+	var h := w.add(EcoHvaten.new(f, [Vector3(home.x + 22.0, FLAT, home.z)] as Array[Vector3])) as EcoHvaten
+	_hungry(h)
+	var hv := h.anemones[0]
+	w.run(3.0)
+	hv.lure_cd = 0.0
+	var dt := EcoWorld.MAX_STEP
+	var prev_v: Array[Vector3] = []
+	for pe in hv.pestr:
+		prev_v.append((pe.p - pe.prev) / dt)
+	var top_speed := 0.0
+	var top_accel := 0.0
+	var lured := false
+	for i in int((EcoHvaten.LURE_T + 4.0) / dt):
+		w.step(dt)
+		lured = lured or hv.lure != null
+		for k in hv.pestr.size():
+			var pe := hv.pestr[k]
+			var v := (pe.p - pe.prev) / dt
+			top_speed = maxf(top_speed, v.length())
+			top_accel = maxf(top_accel, (v - prev_v[k]).length() / dt)
+			prev_v[k] = v
+	ok(lured, "стаю подманили")
+	ok(top_speed <= EcoHvaten.SWIM_MAX + 1e-3, "ход не больше SWIM_MAX (%.2f м/с)" % top_speed)
+	ok(top_accel <= EcoHvaten.SWIM_ACCEL + 1e-2, "разгон не больше SWIM_ACCEL (%.2f м/с²)" % top_accel)
+	ok(top_speed > 1.0, "к стае всё же плывут")
+
+
+## Бугор между хватнем и стаей: на пути к ней и у неё пестрянки идут над дном, а не сквозь бугор
+## (у старта 00 средина пестрянок была на 3 м под дном).
+static func _ridge(x: float, _z: float) -> float:
+	var x0 := EcoFish.HOMES[0].x + 11.0
+	return FLAT + 12.0 * exp(-pow((x - x0) / 5.0, 2.0))
+
+
+func test_pestr_swim_over_ridge_to_shoal() -> void:
+	var w := EcoWorld.new()
+	w.ground = _ridge
+	w.ship.pos = FAR
+	var f := w.add(EcoFish.new()) as EcoFish
+	var home := EcoFish.HOMES[0]
+	var h := w.add(EcoHvaten.new(f, [Vector3(home.x + 22.0, FLAT, home.z)] as Array[Vector3])) as EcoHvaten
+	_hungry(h)
+	var hv := h.anemones[0]
+	w.run(3.0)
+	hv.lure_cd = 0.0
+	var lowest := INF
+	var away := 0.0
+	for i in int(EcoHvaten.LURE_T / EcoWorld.MAX_STEP):
+		w.step(EcoWorld.MAX_STEP)
+		away = maxf(away, hv.pc.distance_to(hv.top))
+		for pe in hv.pestr:
+			lowest = minf(lowest, pe.p.y - _ridge(pe.p.x, pe.p.z))
+	ok(away > 4.0, "пестрянки ушли от хватня к стае (%.1f м)" % away)
+	ok(lowest > 0.0, "ни одна не под дном (%.2f м)" % lowest)
+
+
+func test_view_lite_draws_every_other_tentacle() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var hv := view.hvaten_view
+	var n := view.hvaten.anemones.size()
+	eq(hv.drawn(), n * EcoHvaten.TENT, "на «Обычно» — все щупальца")
+	view.set_lite(true)
+	ok(hv.lite, "хватни — на «Экономно»")
+	eq(hv.drawn(), n * EcoHvaten.TENT / 2, "каждое второе щупальце")
+	eq(hv.bodies.multimesh.visible_instance_count, -1, "тела — все")
+	eq(hv.pestr.multimesh.visible_instance_count, -1, "пестрянки — все")
+	var seen := {}
+	for i in n:
+		for k in EcoHvaten.TENT:
+			var s := HvatenView.tent_slot(i, k, n, true)
+			seen[s] = true
+			eq(s < hv.drawn(), HvatenView.lite_shown(k), "видно только показанное (%d, %d)" % [i, k])
+	eq(seen.size(), n * EcoHvaten.TENT, "места в буфере не повторяются")
+	var a := view.hvaten.anemones[2]
+	hv.sync(view.world.time)
+	var tr := HvatenView.transform_at(hv.tent_buffer, HvatenView.tent_slot(2, 4, n, true))
+	ok(tr.is_equal_approx(HvatenView.tentacle_pose(a, 4, view.world.time, not EcoShaders.sway_lite)),
+		"видимое щупальце — на своём месте буфера")
+	view.ground = Seabed.height   # сброс мира — виды пересобираются
+	ok(view.hvaten_view.lite and view.hvaten_view.drawn() < n * EcoHvaten.TENT, "сброс мира — снова «Экономно»")
+	view.set_lite(false)
+	hv = view.hvaten_view
+	eq(hv.drawn(), n * EcoHvaten.TENT, "назад — все")
+	a = view.hvaten.anemones[2]
+	var back := HvatenView.transform_at(hv.tent_buffer, 2 * EcoHvaten.TENT + 3)
+	ok(back.is_equal_approx(HvatenView.tentacle_pose(a, 3, hv._t, not EcoShaders.sway_lite)), "буфер снова по номеру")
 	view.queue_free()
 	await frames(1)

@@ -16,8 +16,11 @@ class Layout:
 	var down := Circle.new()
 	var light := Circle.new()
 	var noclip := Circle.new()  ## тестовая кнопка «noclip» в правом верхнем углу
+	## Безопасная область экрана (без вырезов), от которой разложены органы: по ней же — плашки поверх них (#603).
+	var area := Rect2()
 
 	func compute(safe: Rect2) -> void:
+		area = safe
 		var s := minf(safe.size.x, safe.size.y)
 		var m := s * MARGIN_SHARE
 		var pr := s * PAD_SHARE
@@ -39,6 +42,17 @@ class Layout:
 			up.c.y -= over
 			down.c.y -= over
 		light = Circle.new(Vector2(action.c.x, action.c.y - action.r - gap - br), br)
+
+	## Прямоугольники вокруг органов под пальцами с зазором gap (#1345): крестовина и кнопка действия, у пилота — ещё
+	## «Всплыть», «Вниз», «Свет». На них не ложатся плашки, которые ловят касания (карточка роли).
+	func rects(pilot: bool, gap: float = 0.0) -> Array:
+		var cs: Array = [pad, action]
+		if pilot:
+			cs.append_array([up, down, light])
+		var out: Array = []
+		for c: Circle in cs:
+			out.append(Rect2(c.c - Vector2(c.r, c.r), Vector2(c.r, c.r) * 2.0).grow(gap))
+		return out
 
 
 class Circle:
@@ -69,7 +83,7 @@ static func dpad(d: Vector2, radius: float) -> Vector2i:
 ## Разбор касаний: палец на крестовине ведёт игрока (можно вести по кругу и за край), на кнопке — держит её,
 ## остальные — обзор свайпом. Пальцы работают одновременно.
 class Router:
-	enum Role { PAD, ACTION, LOOK, UP, DOWN, LIGHT, NOCLIP }
+	enum Role { PAD, ACTION, LOOK, UP, DOWN, LIGHT, NOCLIP, UI }
 
 	var layout := Layout.new()
 	var pilot_buttons := false  ## за штурвалом работают «Всплыть», «Вниз», «Свет»
@@ -80,6 +94,9 @@ class Router:
 	var noclip_pressed := false  ## нажали тестовую кнопку noclip в этом кадре
 	var look := Vector2.ZERO     ## смещение пальцев обзора за кадр, px
 	var taps: Array[Vector2] = []   ## где пальцы коснулись экрана в этом кадре — кнопки диалогов (NetDrop)
+	## Прямоугольники экрана, где касание берёт интерфейс поверх игры (карточка роли ART-045): палец там не крутит
+	## взгляд — только `taps`. Кнопки управления важнее.
+	var blocks: Array[Rect2] = []
 	var _fingers := {}           ## id → [Role, последняя точка]
 
 	func vert() -> int:
@@ -105,7 +122,11 @@ class Router:
 			role = Role.DOWN
 		elif pilot_buttons and layout.light.has(p):
 			role = Role.LIGHT
-		_fingers[id] = [role, p]
+		else:
+			for b in blocks:
+				if b.has_point(p):
+					role = Role.UI
+		_fingers[id] = [role, p, p]
 		taps.append(p)
 		if role == Role.ACTION:
 			action_down = true
@@ -137,9 +158,29 @@ class Router:
 		light_pressed = false
 		noclip_pressed = false
 
+	## Где сейчас пальцы на экране (ползунки настроек ART-037).
+	func points() -> Array[Vector2]:
+		var out: Array[Vector2] = []
+		for f in _fingers.values():
+			out.append(f[1])
+		return out
+
+	## Держит ли палец кнопку интерфейса (рация ART-041): коснулся внутри `r` и ещё на экране — можно сползти.
+	func held_in(r: Rect2) -> bool:
+		for f in _fingers.values():
+			if f[0] == Role.UI and r.has_point(f[2]):
+				return true
+		return false
+
 	## Касается ли экрана хоть один палец.
 	func touching() -> bool:
 		return not _fingers.is_empty()
+
+	## Ввод кадра не идёт в игру, пальцы остаются на экране (ползунок настроек поверх идущего мира).
+	func mute() -> void:
+		move = Vector2i.ZERO
+		action_down = false
+		end_frame()
 
 	func clear() -> void:
 		_fingers.clear()

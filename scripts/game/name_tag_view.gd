@@ -5,7 +5,6 @@ extends Node3D
 ## буква и имя — Label3D; флаги как у экрана сканера (без света, двусторонние, без билборда) — новый шейдер не нужен.
 ## Узел в осях корабля рядом с CrewView, слой корабля. Сквозь стены не видна (проверка глубины).
 
-const FONT_PX := 64
 const DOWN_K := 0.8   ## табличку под плашкой строки опускаем не дальше этой доли LIFT — до макушки не доходит (#387)
 
 var tags: Array[Node3D] = []    ## корень таблички на каждого члена экипажа (по индексу в crew)
@@ -26,14 +25,15 @@ var keys: Array[String] = []     ## роль и имя, под которые с
 ## кнопку (`Member.active`) — контур ярче и три штриха, вход и выход за NameTag.FADE_T (dt — шаг; без dt — сразу);
 ## без связи (`Member.lost`) — всё приглушено и строка «Нет связи». hidden — члены экипажа без таблички над головой
 ## (их табличка уже на метке «Занято» у поста, BusyMarkView). plate — плашка строки состояния на экране: задетая
-## табличка опускается под неё не дальше DOWN_K·LIFT, иначе скрыта (#387).
+## табличка опускается под неё не дальше DOWN_K·LIFT, иначе скрыта (#387). voice — места в экипаже тех, кто говорит
+## по рации ART-041 (`Radio.voice`, только в поле зрения): та же «активность», не вторая табличка.
 func show_tags(crew: Array, me: Crew.Member, view: CrewView, cam: Camera3D, own_cam: Camera3D, blocks: Array = [],
-		dt: float = 1.0, hidden: Array = [], plate: Rect2 = Rect2()) -> void:
+		dt: float = 1.0, hidden: Array = [], plate: Rect2 = Rect2(), voice: Array = []) -> void:
 	while tags.size() < crew.size():
 		_add()
 	for i in mini(crew.size(), tags.size()):
 		var mm: Crew.Member = crew[i]
-		levels[i] = NameTag.glow_step(levels[i], mm.active() and not mm.lost, dt)
+		levels[i] = NameTag.glow_step(levels[i], (mm.active() or voice.has(i)) and not mm.lost, dt)
 	var shown: Array = []   # [индекс, расстояние, точка над макушкой, высота в мире]
 	for i in tags.size():
 		var t := tags[i]
@@ -109,31 +109,20 @@ func _add() -> void:
 	var t := Node3D.new()
 	t.name = "Табличка %d" % i
 	add_child(t)
-	var s := Sprite3D.new()
-	s.name = "Плашка"
-	_flags(s)
-	s.render_priority = 1
-	t.add_child(s)
-	var l := _label("Буква роли", NameTag.LETTER_EM)
-	t.add_child(l)
-	var n := _label("Имя", NameTag.NAME_EM)
-	t.add_child(n)
-	var g := Sprite3D.new()
-	g.name = "Нажимает"
-	_flags(g)
-	g.render_priority = 1
+	var parts := TagParts.add(t, "Плашка", 1)   # плашка, буква роли, имя (TagParts)
+	var g := TagParts.sprite("Нажимает", 1)
 	g.position.z = 0.005
 	g.visible = false
 	t.add_child(g)
-	var st := _label("Состояние", NameTag.STATUS_EM)
+	var st := TagParts.label("Состояние", NameTag.STATUS_EM, 2)
 	st.text = NameTag.LOST_TEXT
 	st.visible = false
 	t.add_child(st)
 	t.visible = false
 	tags.append(t)
-	plates.append(s)
-	letters.append(l)
-	names.append(n)
+	plates.append(parts[0])
+	letters.append(parts[1])
+	names.append(parts[2])
 	glows.append(g)
 	states.append(st)
 	levels.append(0.0)
@@ -141,48 +130,23 @@ func _add() -> void:
 	widths.append(NameTag.MIN_W)
 
 
-func _flags(g: GeometryInstance3D) -> void:
-	g.set("shaded", false)
-	g.set("double_sided", true)
-	g.set("alpha_cut", SpriteBase3D.ALPHA_CUT_DISABLED)
-	g.set("billboard", BaseMaterial3D.BILLBOARD_DISABLED)
-	g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	g.layers = OceanView.LAYER_SHIP
-
-
-func _label(nm: String, em: float) -> Label3D:
-	var l := Label3D.new()
-	l.name = nm
-	_flags(l)
-	l.font_size = FONT_PX
-	l.outline_size = 0
-	l.pixel_size = em / FONT_PX
-	l.render_priority = 2
-	return l
-
-
 ## Плашка под роль, имя и связь: текстура по ширине имени, буква в кружке, имя после него; без связи — приглушена,
 ## имя выше, под ним «Нет связи».
 func _build(i: int, m: Crew.Member) -> void:
-	var text := NameTag.label(m.name, m.role)
-	var key := "%d|%s|%s" % [m.role, text, m.lost]
+	var key := TagParts.key(m)
 	if keys[i] == key:
 		return
 	keys[i] = key
+	var text := NameTag.label(m.name, m.role)
 	var cols := NameTag.colors(m.role, m.lost)
-	var font := ThemeDB.fallback_font
-	var tw := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_PX).x * NameTag.NAME_EM / FONT_PX
+	var tw := TagParts.text_w(text, NameTag.NAME_EM)
 	var w := NameTag.width(tw)
 	widths[i] = w
 	var img := NameTag.plate_image(w, cols[1], cols[0])
-	plates[i].texture = ImageTexture.create_from_image(img)
-	plates[i].pixel_size = 1.0 / NameTag.TEX_H
+	TagParts.fill([plates[i], letters[i], names[i]], m, ImageTexture.create_from_image(img), w, tw, 0.0,
+			NameTag.LOST_NAME_Y if m.lost else 0.0)
 	glows[i].texture = ImageTexture.create_from_image(NameTag.glow_image(w))
 	glows[i].pixel_size = 1.0 / NameTag.TEX_H
-	letters[i].text = NameTag.letter(m.role)
-	letters[i].position = Vector3(NameTag.letter_x(w), 0.0, 0.01)
-	names[i].text = text
-	names[i].position = Vector3(NameTag.name_x(w, tw), NameTag.LOST_NAME_Y if m.lost else 0.0, 0.01)
-	var sw := font.get_string_size(NameTag.LOST_TEXT, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_PX).x * NameTag.STATUS_EM / FONT_PX
+	var sw := TagParts.text_w(NameTag.LOST_TEXT, NameTag.STATUS_EM)
 	states[i].position = Vector3(-w * 0.5 + NameTag.NAME_X + sw * 0.5, NameTag.LOST_STATUS_Y, 0.01)
 	states[i].visible = m.lost

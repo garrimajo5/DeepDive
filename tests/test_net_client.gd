@@ -15,9 +15,11 @@ var h_vitals := Vitals.new()
 var h_crew: Array = []
 var h_ev := {}   ## события в кадре хоста (NetSnap.events)
 var h_eco := PackedFloat32Array()   ## существа рядом в кадре хоста (EcoLink.pack_near)
+var h_lit := false   ## прожектор хоста
 
 
 func before() -> void:
+	h_lit = false
 	host = NetLink.Host.new()
 	eq(host.start(PORT), OK, "хост открыт")
 	main = load("res://scenes/main.tscn").instantiate()
@@ -55,7 +57,7 @@ func _host_tick(send := true) -> void:
 			h_crew.append(m)
 			guest.index = 1
 	if send and host.due(DT):
-		var f := NetSnap.frame(host.seq, 0.0, h_helm, h_reactor, h_vitals, false, h_crew, h_ev)
+		var f := NetSnap.frame(host.seq, 0.0, h_helm, h_reactor, h_vitals, h_lit, h_crew, h_ev)
 		if not h_eco.is_empty():
 			f["eco"] = h_eco
 		host.send_frame(f)
@@ -246,7 +248,7 @@ func test_events_from_host_frame() -> void:
 	ok(main.breach.active == main.breach.all[1], "та же — в коридоре")
 	near(main.breach.water, 0.2, 0.001, "вода в отсеке")
 	ok(main.breach_view.water.visible, "вода видна")
-	ok(main.breach_view.alarm.visible, "тревога горит")
+	ok(main.breach_view.siren.playing, "сирена воет")
 	ok(main.alarms_on()[0], "табло: пробоина")
 	ok(main.silt.inside != null, "корабль в облаке ила")
 	near(main.silt.k, 1.0, 0.001)
@@ -263,7 +265,39 @@ func test_events_from_host_frame() -> void:
 	h_ev = NetSnap.events(b, sl, 0.0, false)
 	ok(_pump(func() -> bool: return main.breach.active == null), "шов заварен у хоста — и у клиента")
 	ok(main.silt.clouds.is_empty() and main.silt.inside == null, "ила нет")
-	ok(not main.breach_view.alarm.visible, "тревога погасла")
+	ok(not main.breach_view.siren.playing, "сирена смолкла")
+
+
+func test_scorch_from_host_frame() -> void:   # разряд хоста у дна — тот же след на дне у гостя (ART-066)
+	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
+	eq(main.scorch.all.size(), 0, "дно чистое")
+	var sc := Seabed.Scorch.new()
+	var fy := Seabed.height(h_helm.pos.x, h_helm.pos.z)
+	ok(sc.add(Vector3(h_helm.pos.x, fy + Helm.Ship.CLEARANCE, h_helm.pos.z), fy, 1.0, 0.0), "след у хоста")
+	h_ev = {"z": NetSnap.scorch(sc, 0.0)}
+	ok(_pump(func() -> bool: return main.scorch.all.size() == 1), "след пришёл кадром")
+	var at: PackedVector4Array = main.ocean.seabed_mat.get_shader_parameter("scorch_at")
+	near(at[0].x, h_helm.pos.x, 0.01, "в материале дна под кораблём хоста")
+	var k: PackedVector4Array = main.ocean.seabed_mat.get_shader_parameter("scorch_k")
+	ok(k[0].x > 0.9 and k[0].z < 0.01, "свежий")
+	sc.clear()
+	h_ev = {"z": NetSnap.scorch(sc, 0.0)}
+	ok(_pump(func() -> bool: return main.scorch.all.is_empty()), "новый забег у хоста — чистое дно")
+	k = main.ocean.seabed_mat.get_shader_parameter("scorch_k")
+	eq(k[0].x, 0.0, "и в материале")
+
+
+func test_scorch_ages_on_guest() -> void:   # между кадрами след темнеет часами гостя
+	var sc := Seabed.Scorch.new()
+	var fy := Seabed.height(h_helm.pos.x, h_helm.pos.z)
+	sc.add(Vector3(h_helm.pos.x, fy + Helm.Ship.CLEARANCE, h_helm.pos.z), fy, 1.0, 0.0)
+	h_ev = {"z": NetSnap.scorch(sc, Seabed.Scorch.OLD.x)}   # хост: след уже 40 с
+	ok(_pump(func() -> bool: return main.scorch.all.size() == 1), "след пришёл")
+	for i in 20:
+		_host_tick()
+		main.step(5.0)   # 100 с у гостя: хост тот же кадр, но счёт не менялся
+	var k: PackedVector4Array = main.ocean.seabed_mat.get_shader_parameter("scorch_k")
+	near(k[0].z, 1.0, 1e-3, "стал старым пятном")
 
 
 func test_route_vote_and_result_from_host() -> void:   # маршрут, голосование и итог хоста — у гостя на голостоле
@@ -277,6 +311,7 @@ func test_route_vote_and_result_from_host() -> void:   # маршрут, гол�
 	eq(main.run.waypoint(), Run.place_xz("well"), "точка на голостоле — колодец")
 	for k in Run.ROUTES[2]["places"]:
 		run.update(Run.place_xz(k).x, Run.place_xz(k).y)
+	run.open_vote()   # в слое — переход у 10 (#828)
 	var ops := Run.opinions(30.0, 80.0, false, false, 0)
 	(h_crew[1] as Crew.Member).at_vote = true   # гость у голостола
 	h_ev["r"] = NetSnap.run_state(run, {"deep": [Crew.Role.PILOT], "up": [Crew.Role.BIOLOGIST]}, 9, 0.6,
@@ -318,3 +353,140 @@ func test_creatures_near_from_host() -> void:   # живой мир у гост�
 	eq(a.state, EcoAgent.State.FLEE, "состояние как у хоста")
 	ok(main.eco.world.time > t0, "мир гостя идёт сам")
 	h_eco = PackedFloat32Array()
+
+
+func test_weak_link_plate() -> void:   # ART-043: кадры хоста опаздывают — «Слабая связь», игра идёт; 2 с ровно — снята
+	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
+	ok(not main.weak.visible(), "связь ровная — плашки нет")
+	for i in int((NetLink.WEAK_AFTER + 0.2) / DT):
+		_host_tick(false)   # хост молчит: кадры опаздывают
+		main.step(DT)
+	ok(main.weak.on, "слабая связь")
+	ok(main.drop_panel.visible, "плашка видна")
+	ok(not main.drop.active(), "диалога нет — игра идёт")
+	main.overlay.router.move = Vector2i(0, 1)   # крестовина под плашкой работает
+	main.step(DT)
+	eq(main.net_pad.move, Vector2(0.0, 1.0), "управление не остановлено")
+	main.overlay.router.move = Vector2i.ZERO
+	ok(_pump(func() -> bool: return main.net_client.quiet == 0.0), "кадры снова идут")
+	for i in int(1.5 / DT):
+		_host_tick()
+		main.step(DT)
+	ok(main.weak.visible(), "до 2 с устойчивой связи плашка стоит")
+	for i in int(1.0 / DT):
+		_host_tick()
+		main.step(DT)
+	ok(not main.weak.visible(), "2 с ровной связи — снята")
+	ok(not main.drop_panel.visible, "панель скрыта")
+
+
+## Касание кнопки меню забега (ART-037) за один шаг.
+func _tap_pause(id: String) -> void:
+	main.overlay.router.begin(8, main.pause.rect(id, _size()).get_center())
+	main.step(DT)
+	main.overlay.router.end(8)
+
+
+func test_guest_run_menu_world_goes_on() -> void:   # ART-037 кооп: «Меню забега» у гостя, кадры идут, ввода нет
+	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
+	main.back_pressed()
+	ok(main.pause.open, "«Назад» — меню забега")
+	eq(main.pause.mode, "guest")
+	eq(main.pause.title(), "Меню забега")
+	eq(main.pause.subtitle(), "Вы — гость · забег продолжается")
+	ok(main.pause_panel.visible and not main.overlay.visible, "меню на экране, крестовина скрыта")
+	var pad := main.overlay.router.layout.pad
+	var at := pad.c + Vector2(0, -pad.r * 0.7)
+	if main.pause.hit(at, _size()) != "":   # на квадратном окне кнопки меню ложатся на крестовину — палец мимо них
+		at = pad.c + Vector2(-pad.r * 0.7, 0)
+	main.overlay.router.begin(5, at)
+	h_helm.pos += Vector3(0.0, 0.0, -6.0)
+	var seq := main.net_seq
+	ok(_pump(func() -> bool: return main.net_seq > seq), "кадры хоста идут под меню")
+	ok(main.helm.pos.distance_to(h_helm.pos) < 0.5, "корабль идёт по кадрам хоста")
+	eq(main.net_pad.move, Vector2.ZERO, "крестовина под меню хосту не идёт")
+	main.overlay.router.end(5)
+	_tap_pause("leave")
+	eq(main.pause.ask, "leave", "«Покинуть экипаж» — через подтверждение")
+	eq(main.pause.ask_lines()[1], "Вы выйдете из текущего забега.")
+	_tap_pause("no")
+	ok(main.pause.open and main.net_client != null, "«Нет» — снова меню, гость на борту")
+	_tap_pause("leave")
+	_tap_pause("yes")
+	ok(main.net_client == null, "гость покинул экипаж")
+	eq(main.crew.size(), 1, "остался свой игрок")
+	ok(not main.pause.open and not main.pause_panel.visible, "меню забега закрыто")
+	ok(main.main_menu.open and main.menu_panel.visible, "главное меню")
+	ok(_pump(func() -> bool: return host.guests.is_empty()), "хост увидел уход гостя")
+
+
+func test_drop_dialog_to_menu() -> void:   # ART-043: «В меню» в диалоге обрыва связи — главное меню ART-037
+	ok(_pump(func() -> bool: return main.crew.size() == 2), "на борту")
+	host.stop()
+	ok(_pump(func() -> bool: return main.drop.blocks(), false), "диалог открыт")
+	main.back_pressed()
+	ok(not main.pause.open, "под диалогом обрыва меню забега не открывается")
+	ok(main.drop.menu_ready, "«В меню» доступна")
+	_tap("menu")
+	eq(main.drop.phase, NetDrop.Phase.CONFIRM_MENU, "подтверждение")
+	_tap("yes")
+	ok(main.net_client == null, "сетевой забег покинут")
+	ok(not main.drop.active() and not main.drop_panel.visible, "диалог закрыт")
+	ok(main.main_menu.open and main.menu_panel.visible, "главное меню")
+
+
+func test_guest_tutorial_steps() -> void:   # ART-038 у гостя: плашка видна, свет — по своему нажатию и кадру хоста
+	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
+	var t := main.tutorial
+	t.on = true
+	t.step = 2   # «За штурвалом нажмите «Свет»»
+	var me := h_crew[1] as Crew.Member
+	me.sit()
+	me.sync_post()
+	ok(_pump(func() -> bool: return main.pilot.seated), "гость за штурвалом по кадру")
+	ok(_pump(func() -> bool: return main.tutorial_panel.visible), "у гостя плашка подсказки видна")
+	eq(main.tutorial_panel.ring, "light", "обведён «Свет»")
+	main.overlay.router.light_pressed = true
+	ok(_pump(func() -> bool: return guest.pad.light), "«Свет» ушёл хосту")
+	for i in 5:
+		_host_tick()
+		main.step(DT)
+	ok(t.done_t < 0.0 and t.step == 2, "пока свет в кадре не сменился — не засчитан")
+	h_lit = true   # хост переключил прожектор по нажатию гостя
+	ok(_pump(func() -> bool: return t.done_t >= 0.0 or t.step > 2), "свет в кадре хоста — шаг засчитан")
+	ok(_pump(func() -> bool: return t.step == 3), "шаг энергии")
+	eq(t.step_line(), "Первый забег · 4 / 6", "у гостя все шесть: сонар — импульсом хоста")
+
+
+func test_comms_from_host_and_ask_back() -> void:   # ART-040 у гостя: плашка и код хоста, «Спросить код» — хосту
+	var hc := Comms.new()
+	hc.reset_run(5)
+	h_ev = {"c": hc.pack()}
+	ok(_pump(func() -> bool: return main.net_seq > 0 and main.comms.code == hc.code), "код забега хоста")
+	ok(main.comms.follow and not main.comms.active(), "гость следует за хостом, сообщения нет")
+	hc.push(Crew.Role.PILOT, "Свет на полную", true, "light")
+	hc.update(DT, false)
+	h_ev = {"c": hc.pack()}
+	ok(_pump(func() -> bool: return main.comms_panel.visible and main.comms.a >= 1.0), "плашка у гостя")
+	eq(main.comms.line(), "Свет на полную")
+	eq(main.comms.code_line(), "Код: …", "подделка — «Код: …»")
+	var size := main.get_viewport().get_visible_rect().size
+	main.overlay.router.taps.append(Comms.button_rect(size).get_center())
+	ok(_pump(func() -> bool: return guest.pad.ask == hc.cur.id), "нажатие дошло хосту номером сообщения")
+	eq(main.comms.state, Comms.Ask.NONE, "проверку ведёт хост")
+	ok(hc.press(guest.pad.ask), "хост начал проверку")
+	h_ev = {"c": hc.pack()}
+	ok(_pump(func() -> bool: return main.comms.state == Comms.Ask.WAIT), "«Ждём ответ…» у гостя")
+
+
+func test_lore_from_host_frame() -> void:   # #825: знания слоя общие — гость получает их кадром хоста
+	var host_lore := LayerLore.new()
+	host_lore.learn(LayerLore.D07_RELAY)
+	host_lore.learn(LayerLore.K2)
+	h_ev = {"k": host_lore.pack()}
+	ok(_pump(func() -> bool: return main.lore.knows(LayerLore.K2)), "знания хоста у гостя")
+	eq(main.lore.pack(), host_lore.pack(), "те же факты")
+	h_ev = {}
+	ok(_pump(func() -> bool: return main.net_seq > 3), "кадры без «k» идут")
+	ok(main.lore.knows(LayerLore.D07_RELAY), "без «k» знания не теряются")
+

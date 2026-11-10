@@ -16,6 +16,10 @@ const DARK := 0.001
 const SPOT_EDGE := 0.7                     ## SpotLight3D.spot_angle_attenuation: край конуса гаснет мягко
 const ATTENUATION := 0.15                  ## SpotLight3D.spot_attenuation: свет почти не слабеет до конца дальности
 const BASE_RANGE := 120.0
+## Сдвиг тени по нормали (SpotLight3D.shadow_normal_bias, по умолчанию 1,0). Дно и бросает, и ловит тень прожектора;
+## на склоне под скользящим лучом 1,0 даёт «акне» — частые светлые и тёмные полосы поперёк пятна (issue #489).
+## 2,0 в кадре 05-turn-and-dive уже чисто, берём с запасом.
+const SHADOW_NORMAL_BIAS := 2.5
 const HALF_ANGLE := 0.45                   ## рад
 ## Наклон вниз 14°, а не 18° браузера (прицел (0, −10, −40)): из кресла пилота кромка пульта — ≈ 15° ниже
 ## горизонта, и при 18° середина пятна пряталась под ними (#47).
@@ -26,6 +30,13 @@ const BEAM_END := 13.0
 const BEAM_COLOR := Color(0.81, 0.965, 1.0, 0.06)   ## складывается с водой
 const BUTTON_ON := Color(1.0, 0.74, 0.32, 0.9)      ## янтарь
 const BUTTON_OFF := Color(0.75, 0.95, 1.0, 0.3)
+## Рисунок прожектора по ART-062 (`docs/concept-art/prozhektor.md`): маска пятна в `SpotLight3D.light_projector`
+## (проектор работает только с тенями — тени у прожектора, кастеры — мир) и поле взвеси в конусе луча.
+const MASK := "res://textures/prozhektor/maska.png"   ## RGBA 512², каждый канал = L, A = 1
+const FIELD := "res://textures/prozhektor/luch.png"   ## L8 256×512: U — поперёк, V — вдоль луча
+const DENSITY_BASE := 0.28                            ## плотность луча 0,28 + 0,72·поле
+const DRIFT := Vector2(0.006, -0.014)                 ## дрейф поля, 1/с: V −0,014 ≈ 0,77 м/с к лампе
+const SILT_DIM := 0.25                                ## в иле плотность × (1 − 0,25·k)
 
 
 ## Наклон луча вниз от горизонта, градусы.
@@ -57,6 +68,24 @@ static func beam_shade(t: float) -> float:
 	t = clampf(t, 0.0, 1.0)
 	var k := 1.0 - t
 	return (k * k * 0.9 + 0.1 * k) * HashNoise.smooth(0.0, 0.12, t)
+
+
+## Плотность луча по полю взвеси (0…1) и илу k (0…1).
+static func density(field: float, silt_k: float) -> float:
+	return (DENSITY_BASE + (1.0 - DENSITY_BASE) * field) * (1.0 - SILT_DIM * silt_k)
+
+
+## UV поля в конусе (локальные оси луча, конус вдоль −Z): U — угол вокруг оси, V — доля длины; дрейф по времени.
+static func beam_uv(p: Vector3, t: float = 0.0) -> Vector2:
+	var u := atan2(p.y, p.x) / TAU + 0.5
+	var v := clampf(-p.z / BEAM_LENGTH, 0.0, 1.0)
+	return Vector2(u, v) + DRIFT * t
+
+
+## Сколько ила вокруг (Silt.k) по укорочению луча reach = Silt.beam_k(): ил укорачивает луч один раз (в длине конуса),
+## а здесь — только для плотности.
+static func silt_k(reach: float) -> float:
+	return clampf((1.0 - reach) / (1.0 - Silt.BEAM_K), 0.0, 1.0)
 
 
 static func button_label(on: bool) -> String:

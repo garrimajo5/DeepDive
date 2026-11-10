@@ -6,8 +6,15 @@ extends EcoSystem
 ## (поворот и наклон), поворачивается на корабль (EAR_TURN рад/с, в пределах EAR_YAW/EAR_PITCH), дальше — уши
 ## медленно обводят воду. Затаившегося нет ни на сонаре, ни в прицеле сканера. Импульс сонара ближе REVEAL_R
 ## выдаёт его на REVEAL_T с (Ec.onPing): он виден сонару и сканеру, наблюдение «reveal» — только когда раскрылся.
-## Подделка голосов экипажа по связи («fake», «strike», «lure») — следующая задача потока Б вместе со связью
-## корабля (ART-040, поток А).
+## Подделка голосов (Ec.fake/real/onPing/onLight): корабль ближе LISTEN_R, эхоловец затаился — через FAKE_FIRST с
+## и потом раз в FAKE_CD с он шлёт по внутренней связи (EcoLink.VOICE, плашка ART-040 у корабля) ложный вызов
+## с просьбой, выгодной ему: «включите прожектор» (если свет выключен — в половине случаев) или «дайте импульс сонара»
+## — реплика TXT-002 от любой роли. Кодового слова забега у подделки нет: на первом спуске она молчит на «Спросить код»
+## (silent), на следующих — отвечает чужим словом (старое, с прошлого спуска). Просьба действует BAIT_T с: импульс
+## ближе STRIKE_R — удар по корпусу STRIKE («strike»), свет включили — ближайший серпохвост ближе LURE_R бросается
+## на корабль (EcoPred.lure, «lure»); не послушались — наблюдение «fake» без текста. Импульс, о котором он не просил,
+## раскрывает его (выше) — пока раскрыт, подделок нет. Настоящие доклады экипажа с кодом забега (Ec.real) — ближе
+## TALK_R раз в REAL_CD с, чтобы было с чем сравнить. Просьбу корабль сам не исполняет — решает игрок.
 
 const ID := "echo"
 ## Слушает корабль ближе LISTEN_R (м), импульс сонара ближе REVEAL_R раскрывает его на REVEAL_T с (js/echo.js).
@@ -26,11 +33,16 @@ const BED: Array[Vector3] = [Vector3.ZERO, Vector3(0, 0, 1.4), Vector3(0, 0, -1.
 	Vector3(-0.6, 0, 0)]
 ## Уши: основание стебля в теле (x вбок, y вверх, z вперёд — голова к +Z), предел поворота от носа и наклона (рад),
 ## скорость сустава (рад/с). Покой: уши обводят воду ± IDLE_SWEEP за IDLE_PERIOD с, левое и правое — вразнобой.
+## Сустав с инерцией (`ear_joint`): разгон и торможение не быстрее EAR_ACCEL рад/с², у цели — ход EAR_GAIN × отставание
+## (тянется за медленной целью без рывков, к неподвижной подходит без перелёта). Поворот — в пределах ±EAR_YAW, без
+## перехода через затылок (раньше разность бралась по кругу, и ухо уходило за предел сустава).
 const EAR_BASE: Array[Vector3] = [Vector3(0.42, 0.45, 0.75), Vector3(-0.42, 0.45, 0.75)]
 const EAR_YAW := 2.3
 const EAR_PITCH_MIN := -0.35
 const EAR_PITCH_MAX := 1.1
 const EAR_TURN := 1.2
+const EAR_ACCEL := 2.5
+const EAR_GAIN := 4.0
 const IDLE_SWEEP := 0.9
 const IDLE_PERIOD := 23.0
 const IDLE_PITCH := 0.35
@@ -38,6 +50,61 @@ const IDLE_PITCH := 0.35
 const TARGET_R := 2.0
 ## Без дна (тесты без ground) лежит на этой высоте.
 const FALLBACK_FLOOR := -46.0
+## Подделки голосов (js/echo.js): первая через FAKE_FIRST с после того, как корабль подошёл, потом раз в FAKE_CD с;
+## просьба ждёт исполнения BAIT_T с; удар на выпрошенный импульс ближе STRIKE_R м — доля прочности STRIKE (−12 %);
+## на свет идёт серпохвост не дальше LURE_R м.
+const FAKE_FIRST := 12.0
+const FAKE_CD := 45.0
+const BAIT_T := 10.0
+const STRIKE_R := 50.0
+const STRIKE := 0.12
+const LURE_R := 160.0
+## Настоящие доклады экипажа: корабль ближе TALK_R м, первый через REAL_FIRST с, потом раз в REAL_CD с.
+const TALK_R := 150.0
+const REAL_FIRST := 30.0
+const REAL_CD := 75.0
+## Просьбы подделки (EcoLink.VOICE "ask").
+const ASK_PING := "ping"
+const ASK_LIGHT := "light"
+## Ложные вызовы TXT-002 (`docs/teksty/TXT-002-golosa.md`, #1477): просьба → варианты [роль (Crew.Role), ID реплики,
+## текст]; вариант — по случаю. ID уходит в EcoLink.VOICE "id" — по нему корабль выбирает файл голоса (SND-009).
+const FAKES := {
+	"light": [
+		[0, "RADIO_FAKE_LIGHT01", "Включите прожектор. Надо видеть, куда идём."],
+		[1, "RADIO_FAKE_LIGHT02", "Нужен свет. Включите прожектор, пожалуйста."],
+		[2, "RADIO_FAKE_LIGHT03", "Включите прожектор. Сейчас, пока можно."],
+		[3, "RADIO_FAKE_LIGHT04", "Дайте свет. Включите прожектор, я посмотрю."],
+		[0, "RADIO_FAKE_LIGHT05", "Включите прожектор. Да, включите."],
+	],
+	"ping": [
+		[1, "RADIO_FAKE_PULSE01", "Дайте импульс сонара. Надо проверить проход."],
+		[0, "RADIO_FAKE_PULSE02", "Нужен импульс сонара. Сейчас бы, сейчас."],
+		[2, "RADIO_FAKE_PULSE03", "Дайте импульс сонара, пока есть время."],
+		[3, "RADIO_FAKE_PULSE04", "Дайте импульс сонара. Хочу сверить отметку."],
+		[1, "RADIO_FAKE_PULSE05", "Один импульс сонара, пожалуйста. Дайте импульс."],
+	],
+}
+## Настоящие доклады TXT-002: [роль, ID, текст] — без чисел корабля (мир их не знает). «Я у штурвала/сонара/пульта/
+## сканера» (P01, S01, E01, B01) пропущены: по «Применению» TXT-002 их нельзя от того, кто не у поста, а мир не знает,
+## кто где стоит (нет поля в ShipState).
+const REALS: Array = [
+	[0, "RADIO_TRUE_P02", "Маршрут передо мной. Можно сверить ориентиры."],
+	[0, "RADIO_TRUE_P03", "О повороте предупрежу заранее."],
+	[0, "RADIO_TRUE_P04", "Сонарщик, я на связи."],
+	[0, "RADIO_TRUE_P05", "Если понадобится остановиться, скажите."],
+	[1, "RADIO_TRUE_S02", "Сверяю отметки с картой."],
+	[1, "RADIO_TRUE_S03", "О новых отметках сообщу."],
+	[1, "RADIO_TRUE_S04", "Пилот, слышу тебя."],
+	[1, "RADIO_TRUE_S05", "Готов сверить маршрут с тобой."],
+	[2, "RADIO_TRUE_E02", "Проверяю питание корабля."],
+	[2, "RADIO_TRUE_E03", "Слежу за работой реактора."],
+	[2, "RADIO_TRUE_E04", "О неисправностях доложу отдельно."],
+	[2, "RADIO_TRUE_E05", "Пилот, по связи всё слышу."],
+	[3, "RADIO_TRUE_B02", "Сверяю наблюдения с архивом."],
+	[3, "RADIO_TRUE_B03", "Записываю наблюдения по ходу."],
+	[3, "RADIO_TRUE_B04", "Пока не спешу с выводами."],
+	[3, "RADIO_TRUE_B05", "Сонарщик, готов сверить записи."],
+]
 
 
 ## Сам эхоловец.
@@ -48,10 +115,22 @@ class Lurker:
 	var yaw := 0.0
 	## Уши: (поворот от носа, наклон вверх) каждого, рад.
 	var ears: Array[Vector2] = [Vector2(0.6, IDLE_PITCH), Vector2(-0.6, IDLE_PITCH)]
+	## Скорость суставов ушей (поворот, наклон), рад/с.
+	var ear_vel: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
 	## Корабль ближе LISTEN_R — слушает его (Ec.near).
 	var near := false
 	## Сколько ещё раскрыт (с); ≤ 0 — затаился.
 	var revealed := 0.0
+	## До следующей подделки и настоящего доклада, с (Ec.fakeT, Ec.realT).
+	var fake_t := FAKE_FIRST
+	var real_t := REAL_FIRST
+	## Просьба последней подделки ("" — нет) и сколько ещё ждёт исполнения, с (Ec.bait).
+	var bait := ""
+	var bait_t := 0.0
+	## Ложных вызовов за забег.
+	var fakes := 0
+	## Ударов по корпусу за забег (выпрошенный импульс; муть — EcoEchoDust).
+	var strikes := 0
 
 	func is_revealed() -> bool:
 		return revealed > 0.0
@@ -67,18 +146,31 @@ class Lurker:
 
 var echo: Lurker
 
+## Серпохвосты: на свет по подделке идёт ближайший (null — хищников нет).
+var preds: EcoPred
+
 var _bones: EcoBones
 var _ground: Callable
 var _t := 0.0
+var _rnd: EcoRandom
+var _light_was := false
 
 
-func _init(bones: EcoBones = null) -> void:
+func _init(bones: EcoBones = null, pred: EcoPred = null) -> void:
 	_bones = bones
+	preds = pred
+
+
+## Своё зерно (js: свой генератор, не сбивает случайность экосистемы).
+static func seed_for(world_seed: int) -> int:
+	return (world_seed * 37 + 9) & 0xFFFFFFFF
 
 
 func reset(world: EcoWorld) -> void:
 	_ground = world.ground
 	_t = 0.0
+	_rnd = EcoWorld.seeded_for(seed_for(world.seed_value))
+	_light_was = world.ship.light_on
 	echo = Lurker.new()
 	var at := lair()
 	echo.yaw = heading()
@@ -115,16 +207,33 @@ func step(world: EcoWorld, dt: float) -> void:
 	if ec == null:
 		return
 	var s := world.ship.pos
-	ec.near = ec.p.distance_to(s) < LISTEN_R
+	var d := ec.p.distance_to(s)
+	ec.near = d < LISTEN_R
 	if ec.revealed > 0.0:
 		ec.revealed = maxf(0.0, ec.revealed - dt)
+	_step_voices(world, d, dt)
 	for i in 2:
 		var want := aim(i, s) if ec.near else idle(i, _t)
 		var e := ec.ears[i]
-		var turn := EAR_TURN * dt
-		e.x += clampf(wrapf(want.x - e.x, -PI, PI), -turn, turn)
-		e.y += clampf(want.y - e.y, -turn, turn)
-		ec.ears[i] = e
+		var v := ec.ear_vel[i]
+		var yaw := ear_joint(e.x, v.x, want.x, dt)
+		var pitch := ear_joint(e.y, v.y, want.y, dt)
+		ec.ears[i] = Vector2(clampf(yaw.x, -EAR_YAW, EAR_YAW), clampf(pitch.x, EAR_PITCH_MIN, EAR_PITCH_MAX))
+		ec.ear_vel[i] = Vector2(yaw.y, pitch.y)
+
+
+## Шаг сустава уха: угол a со скоростью v догоняет want за dt → (новый угол, новая скорость). Скорость к цели — не
+## больше EAR_TURN, EAR_GAIN × отставание и того, с какой можно остановиться вполсилы торможения (√(EAR_ACCEL ·
+## отставание) — запас на шаг мира; на стыке с EAR_GAIN торможение ровно EAR_ACCEL); меняется не быстрее EAR_ACCEL.
+## Шаг, что перелетел бы цель, кончается в ней.
+static func ear_joint(a: float, v: float, want: float, dt: float) -> Vector2:
+	var err := want - a
+	var reach := minf(EAR_TURN, minf(absf(err) * EAR_GAIN, sqrt(EAR_ACCEL * absf(err))))
+	v = move_toward(v, signf(err) * reach, EAR_ACCEL * dt)
+	var step := v * dt
+	if err != 0.0 and signf(step) == signf(err) and absf(step) > absf(err):
+		return Vector2(want, err / dt)
+	return Vector2(a + step, v)
 
 
 ## Куда смотрит ухо i, чтобы слушать точку target: поворот от носа и наклон, в пределах суставов.
@@ -149,13 +258,96 @@ func ear_dir(i: int) -> Vector3:
 	return Basis(Vector3.UP, echo.yaw) * local
 
 
-## Импульс сонара (Ec.onPing): ближе REVEAL_R — раскрыт на REVEAL_T с; наблюдение — только когда раскрылся.
+## Голоса по связи: свет включили по просьбе, просьба истекла, настоящий доклад, новая подделка.
+func _step_voices(world: EcoWorld, d: float, dt: float) -> void:
+	var ec := echo
+	var light := world.ship.light_on
+	if light and not _light_was:
+		on_light(world)
+	_light_was = light
+	if ec.bait != "":
+		ec.bait_t -= dt
+		if ec.bait_t <= 0.0:   # не послушались — подделка ничего не дала
+			ec.bait = ""
+			world.emit(ID, "fake", ec.p)
+	if d < TALK_R:
+		ec.real_t -= dt
+		if ec.real_t <= 0.0:
+			ec.real_t = REAL_CD
+			if ec.bait == "":
+				real(world)
+	if ec.near and not ec.is_revealed():
+		ec.fake_t -= dt
+		if ec.fake_t <= 0.0:
+			ec.fake_t = FAKE_CD
+			fake(world)
+	elif not ec.near:
+		ec.fake_t = maxf(ec.fake_t, FAKE_FIRST)
+
+
+## Ложный вызов (Ec.fake): ask — "light" или "ping"; "" — сам выбирает (свет выключен — в половине случаев свет).
+## Кода забега у подделки нет: на первом спуске молчит на «Спросить код», дальше — отвечает старым словом.
+func fake(world: EcoWorld, ask := "") -> Dictionary:
+	var ec := echo
+	if ask == "":
+		ask = ASK_LIGHT if not world.ship.light_on and _rnd.chance(0.5) else ASK_PING
+	var lines: Array = FAKES[ask]
+	var line: Array = lines[_rnd.index(lines.size())]
+	ec.bait = ask
+	ec.bait_t = BAIT_T
+	ec.fakes += 1
+	var e := EcoLink.voice(line[0], line[2], true, ask, world.ship.dive == 0, line[1])
+	world.send(e)
+	return e
+
+
+## Настоящий доклад экипажа с кодом забега (Ec.real): роль и текст — по очереди случая.
+func real(world: EcoWorld) -> Dictionary:
+	var line: Array = REALS[_rnd.index(REALS.size())]
+	var e := EcoLink.voice(line[0], line[2], false, "", false, line[1])
+	world.send(e)
+	return e
+
+
+## Свет включили (Ec.onLight): по просьбе подделки — ближайший серпохвост ближе LURE_R (не в броске) идёт на корабль.
+func on_light(world: EcoWorld) -> EcoPred.Pred:
+	var ec := echo
+	if ec == null or ec.bait != ASK_LIGHT:
+		return null
+	ec.bait = ""
+	var best: EcoPred.Pred = null
+	if preds:
+		var bd := LURE_R
+		for pr in preds.all:
+			var dd := pr.agent.distance_to(world.ship.pos)
+			if pr.agent.alive and pr.mode != EcoPred.Mode.CHARGE and dd < bd:
+				bd = dd
+				best = pr
+	if best:
+		preds.lure(world, best)
+	world.emit(ID, "lure", ec.p, _lure_text(world))
+	return best
+
+
+## Импульс сонара (Ec.onPing): выпрошенный подделкой ближе STRIKE_R — удар по корпусу; не выпрошенный ближе
+## REVEAL_R — раскрыт на REVEAL_T с; наблюдение — только когда раскрылся.
 func on_ping(world: EcoWorld, pos: Vector3) -> void:
 	var ec := echo
-	if ec == null or ec.p.distance_to(pos) >= REVEAL_R:
+	if ec == null:
+		return
+	var d := ec.p.distance_to(pos)
+	if ec.bait == ASK_PING:
+		if d < STRIKE_R:
+			ec.bait = ""
+			ec.strikes += 1
+			if world.hit_ship(Species.cap(world.nm(ID)), STRIKE, ec.p):
+				world.emit(ID, "strike", ec.p, _strike_text(world))
+		return
+	if d >= REVEAL_R:
 		return
 	var was := ec.is_revealed()
 	ec.revealed = REVEAL_T
+	ec.bait = ""
 	if not was:
 		world.emit(ID, "reveal", ec.p, _reveal_text(world))
 
@@ -188,3 +380,20 @@ static func _reveal_text(world: EcoWorld) -> Callable:
 		var w: EcoWorld = wr.get_ref()
 		var who := w.nm(ID, Species.Case.ACC) if w else Species.called(ID, Species.Case.ACC)
 		return "Импульс сонара выдал %s: он раскрыт" % who
+
+
+## «Эхоловец ударил по корпусу на звук импульса…» и «на свет идёт серпохвост» — названия в момент показа.
+static func _strike_text(world: EcoWorld) -> Callable:
+	var wr: WeakRef = weakref(world)
+	return func() -> String:
+		var w: EcoWorld = wr.get_ref()
+		var who := w.nm(ID) if w else Species.called(ID)
+		return "%s ударил по корпусу на звук импульса, который сам выпросил" % Species.cap(who)
+
+
+static func _lure_text(world: EcoWorld) -> Callable:
+	var wr: WeakRef = weakref(world)
+	return func() -> String:
+		var w: EcoWorld = wr.get_ref()
+		var p := w.nm(EcoPred.ID) if w else Species.called(EcoPred.ID)
+		return "Свет включили по ложному вызову — на него идёт %s" % p

@@ -81,6 +81,7 @@ func test_scene_vote_on_table() -> void:
 	main.walker.z = Main.ROUTE_POST.y
 	main.use_post("route")
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	main.reactor.heat = 120.0   # горячо — инженер за «наверх»
 	main.reactor.hot = true
 	main.use_post("route")      # маршрут пройден — голосование
@@ -115,6 +116,7 @@ func test_scene_result_on_table() -> void:
 	main.walker.z = Main.ROUTE_POST.y
 	main.use_post("route")
 	main.complete_route()       # «Рифовый сад»: три места
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	main.breach.count += 1      # пробоина за забег
 	main.use_post("route")
 	main.step(0.3)
@@ -191,6 +193,7 @@ func test_scene_vote_in_frame() -> void:
 	main.walker.pitch = deg_to_rad(-38.0)
 	main.step(0.1)
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	main.use_post("route")
 	ok(main.at_vote, "маршрут пройден — голосование")
 	main.step(0.5)
@@ -247,6 +250,7 @@ func test_scene_timer_ring() -> void:
 	main.walker.pitch = deg_to_rad(-38.0)
 	main.step(0.1)
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	main.use_post("route")
 	ok(main.at_vote)
 	main.step(0.5)

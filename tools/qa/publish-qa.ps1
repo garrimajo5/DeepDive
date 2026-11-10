@@ -16,7 +16,16 @@ $codec = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Obj
 $ep = New-Object System.Drawing.Imaging.EncoderParameters 1
 $ep.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality), 80L
 $pngs = Get-ChildItem 'D:\AI\qa-build\run\*.png'
-if ($Shots) { $pngs = $pngs | Where-Object { $Shots -contains $_.BaseName } }
+# -Shots a,b,c через `powershell -File` приходит одной строкой «a,b,c» (#1350): разбиваем по запятой сами.
+# Имена можно с расширением: «36b-ognecvet-posle.jpg» — то же, что «36b-ognecvet-posle» (#1533).
+$Shots = @($Shots | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() -replace '\.(jpe?g|png)$', '' } |
+  Where-Object { $_ })
+if ($Shots) {
+  $pngs = $pngs | Where-Object { $Shots -contains $_.BaseName }
+  $miss = $Shots | Where-Object { $_ -notin @($pngs | ForEach-Object BaseName) }
+  if (-not $pngs) { throw "Ни одного снимка из -Shots ($($Shots -join ', ')) нет в D:\AI\qa-build\run" }
+  if ($miss) { Write-Warning "Нет снимков: $($miss -join ', ')" }
+}
 foreach ($f in $pngs) {
   $img = [System.Drawing.Image]::FromFile($f.FullName)
   $w = [Math]::Min(1600, $img.Width); $h = [int]($img.Height * $w / $img.Width)
@@ -28,10 +37,13 @@ foreach ($f in $pngs) {
 git -C $repo add -A "qa/$Folder"
 git -C $repo -c user.name=garrimajo5 -c user.email=garrimajo5@users.noreply.github.com commit -q -m $Message -m 'Co-Authored-By: Claude <noreply@anthropic.com>'
 git -C $repo push -q -u origin $branch
+# SHA коммита отчёта — до возврата на main (потом `git rev-parse HEAD` даёт коммит main, #1533)
+$sha = (git -C $repo rev-parse HEAD).Trim()
 if (Get-Command gh -ErrorAction SilentlyContinue) {
   gh pr create -R garrimajo5/DeepDive --base main --head $branch --title "Отчёт тестера: $Folder" --body "Отчёт: qa/$Folder/report.md"
 } else {
   Write-Output "gh не установлен: PR откроет Claude (ветка $branch)"
 }
 git -C $repo checkout -q main
-Write-Output "PUSHED $branch"
+Write-Output "PUSHED $branch $sha"
+Write-Output "RAW https://raw.githubusercontent.com/garrimajo5/DeepDive/$sha/qa/$Folder/"

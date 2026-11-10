@@ -8,19 +8,59 @@ func test_scale_and_places() -> void:
 	eq(Briefing.table_xz(Vector2(0, -100)).y < 0.0, true, "нос (−Z) — вверх, к носу стола")
 	for k in Run.PLACES:
 		ok(Briefing.NUMBERS.has(k) and Briefing.ORDER.has(k), "у места %s есть номер" % k)
-		var t := Briefing.table_xz(Run.place_xz(k))
-		ok(absf(t.x) < Briefing.SIDE / 2 and absf(t.y) < Briefing.SIDE / 2, "место %s на карте стола" % k)
+		var t := Briefing.on_table(Run.place_xz(k))
+		var on_map := absf(t.x) < Briefing.SIDE / 2 and absf(t.y) < Briefing.SIDE / 2
+		ok(on_map or Briefing.east_rect().has_point(t), "место %s на карте стола" % k)
+		ok(t.is_equal_approx(Briefing.table_xz(Run.place_xz(k))), "место %s — на своём месте, не прижато к краю (#829)" % k)
 	eq(Briefing.NUMBERS["bones"], 4, "номера — по таблице ART-016")
-	eq(Briefing.ORDER.size(), 6)
+	eq(Briefing.ORDER.size(), 11, "все 11 мест слоя 1 (#829)")
+	eq(Briefing.ORDER, Array(Run.PLACES.keys()), "порядок шейдера — как Run.PLACES")
+	for k: String in Briefing.ORDER:
+		eq(Briefing.NUMBERS[k], int(LayerMap.id_of(k)), "номер места %s — по карте слоя" % k)
+	var src := FileAccess.get_file_as_string("res://shaders/sonar_holo.gdshader")
+	ok(src.contains("places[%d]" % Briefing.ORDER.size()) and src.contains("place_state[%d]" % Briefing.ORDER.size())
+		and src.contains("i < %d;" % Briefing.ORDER.size()), "шейдер держит все места")
+
+
+## #829: склон за восточным краем — полоса у ближнего края стола в сжатом масштабе; отмель — как была.
+func test_east_slope_band() -> void:
+	var e := Briefing.east_rect()
+	near(e.position.x, Briefing.SIDE * 0.5, 1e-6, "полоса — сразу за краем квадрата (+X, к посту «Маршрут»)")
+	ok(Briefing.table_xz(Vector2(349.0, 200.0)).is_equal_approx(Vector2(349.0, 200.0) * Briefing.SCALE), "отмель — прежний масштаб")
+	near(Briefing.table_xz(Vector2(700.0, 200.0)).x, e.end.x, 1e-6, "700 м — дальний край полосы")
+	ok(Briefing.table_xz(Vector2(560.0, 200.0)).x > Briefing.table_xz(Vector2(400.0, 200.0)).x, "восточнее — дальше по полосе")
+	for x in [-200.0, 100.0, 360.0, 560.0, 690.0]:
+		var w := Vector2(x, 150.0)
+		ok(Briefing.world_xz(Briefing.table_xz(w)).is_equal_approx(w), "мир → стол → мир (x %.0f) — двойник шейдера" % x)
+	ok(Vector2(e.end.x, e.end.y).length() < 0.95, "угол полосы на диске голограммы (r 1,02)")
+	ok(e.position.y <= Seabed.EAST.position.y * Briefing.SCALE + 1e-6 and e.end.y >= Seabed.EAST.end.y * Briefing.SCALE - 1e-6,
+		"полоса покрывает Seabed.EAST по z")
+	var ship := Briefing.on_table(Vector2(900.0, 200.0))
+	near(ship.x, e.end.x - Briefing.EDGE_IN, 1e-6, "корабль восточнее склона — у края полосы")
+	var north := Briefing.on_table(Vector2(500.0, -200.0))
+	near(north.x, Briefing.SIDE * 0.5 - Briefing.EDGE_IN, 1e-6, "севернее полосы — у края квадрата, как было")
+	var src := FileAccess.get_file_as_string("res://shaders/sonar_holo.gdshader")
+	ok(src.contains("east_rect") and src.contains("east_scale"), "шейдер рисует полосу склона")
+
+
+## #829: места слоя 1 на столе не налезают иконками друг на друга (по горизонтали стола, с запасом на номер).
+func test_places_apart_on_table() -> void:
+	for a: String in Briefing.ORDER:
+		for b: String in Briefing.ORDER:
+			if a < b:
+				var d := Briefing.on_table(Run.place_xz(a)).distance_to(Briefing.on_table(Run.place_xz(b)))
+				ok(d >= Briefing.ICON_SIZE, "%s и %s дальше иконки на столе (%.3f м)" % [a, b, d])
 
 
 func test_segments_follow_routes() -> void:
 	var segs := Briefing.segments()
-	eq(segs.size(), 4, "1→4→5, 2→3, 5→6")
+	eq(segs.size(), 13, "1→4→5, 2→3, 5→6, 1→7→3→6→10, 9→2→5→4→7, 7→8")
+	for i in Run.ROUTES.size():
+		ok(Briefing.dash(i) in [Briefing.Dash.SOLID, Briefing.Dash.LONG, Briefing.Dash.DOTS], "тип линии у %d" % i)
 	ok(segs.size() <= Briefing.MAX_SEGS, "шейдер держит все отрезки")
 	eq(segs[0]["route"], 0)
-	eq(segs[0]["a"], Briefing.table_xz(Run.place_xz("flower")))
-	eq(segs[1]["b"], Briefing.table_xz(Run.place_xz("well")))
+	eq(segs[0]["a"], Briefing.on_table(Run.place_xz("flower")))
+	eq(segs[1]["b"], Briefing.on_table(Run.place_xz("well")))
 	near(segs[1]["start"], (segs[0]["a"] as Vector2).distance_to(segs[0]["b"]), 1e-6, "путь от начала маршрута")
 	eq(segs[2]["start"], 0.0, "новый маршрут — с нуля")
 	eq(segs[3]["route"], 2)
@@ -44,11 +84,13 @@ func test_wanted_and_fade() -> void:
 
 func test_place_states() -> void:
 	var run := Run.new()
-	eq(Array(SonarView.place_states(run)), [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "без маршрута — все тусклые")
+	eq(Array(SonarView.place_states(run)), [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+		"без маршрута — все тусклые")
 	run.choose(0)
 	run.update(40.0, -50.0)   # Каменный цветок пройден
-	# порядок ORDER: flower, geyser, shell, bones, well, drop
-	eq(Array(SonarView.place_states(run)), [2.0, 0.0, 0.0, 3.0, 1.0, 0.0], "пройдено, следующая, на маршруте")
+	# порядок ORDER: flower, geyser, shell, bones, well, drop, start, gate, field, cove, descent
+	eq(Array(SonarView.place_states(run)), [2.0, 0.0, 0.0, 3.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+		"пройдено, следующая, на маршруте; места слоя 1 вне маршрутов — тусклые")
 
 
 func test_scene_briefing_at_route_post() -> void:
@@ -73,6 +115,7 @@ func test_scene_briefing_at_route_post() -> void:
 	eq(mat.get_shader_parameter("sel_route"), 0, "выбранный маршрут ярче")
 	near(mat.get_shader_parameter("route_len"), Briefing.route_length(0), 1e-4)
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	main.use_post("route")   # маршрут пройден — голосование
 	ok(main.at_vote)
 	main.step(0.3)
@@ -96,7 +139,8 @@ func test_scene_icons() -> void:
 	tree.root.add_child(main)
 	await frames(2)
 	var sv := main.sonar_view
-	eq(sv.icons.size(), 6, "шесть иконок мест")
+	eq(sv.icons.size(), 11, "иконки всех 11 мест слоя 1 (#829)")
+	eq(sv.numbers[Briefing.ORDER.find("descent")].text, "10", "спуск к лесу — «10»")
 	ok(not sv.icons[0].visible, "вне брифинга иконки скрыты")
 	main.walker.x = Main.ROUTE_POST.x
 	main.walker.z = Main.ROUTE_POST.y
@@ -114,13 +158,26 @@ func test_scene_icons() -> void:
 
 
 func test_card_lines() -> void:
-	eq(Briefing.card_lines(-1).size(), 0, "маршрут не выбран — карточки нет")
+	eq(Briefing.card_lines(-1), Briefing.goal_lines(), "маршрут не выбран — цели слоя (#824)")
 	var l := Briefing.card_lines(0)
 	eq(l[0], "Рифовый сад", "название")
 	eq(l.slice(1, 4), ["1  Каменный цветок", "4  Кости левиафана", "5  Световой колодец"], "места по порядку с номерами карты")
 	eq(l[4], "Риск: много серпохвостов", "одна строка риска — последняя")
 	eq(Briefing.card_lines(1).size(), 4, "«Тёплые трубы»: два места")
 	eq(Briefing.RISK_COLOR, Color("F1A23D"), "риск янтарным, как в ART-016")
+
+
+## #824, часть 3: кампания — у стола сначала цели слоя: путь 00→01→07→03→06→10, куда он ведёт, маршруты — варианты.
+func test_goal_lines() -> void:
+	var l := Briefing.goal_lines()
+	eq(l[0], "Цели слоя", "заголовок")
+	eq(l[1], "Путь: 0 – 1 – 7 – 3 – 6 – 10", "рекомендуемый путь номерами карты — как LayerMap.MAIN_ROUTE")
+	eq(l[2], "Спуск к лесу — у места 10", "куда ведёт путь")
+	eq(l[3], "Маршруты у стола — варианты", "старые маршруты — варианты исследования")
+	eq(l[-1], "Риск: " + Run.ROUTES[Run.MAIN]["risk"], "риск последней строкой — янтарным")
+	eq(Run.ROUTES[Run.MAIN]["id"], "main", "Run.MAIN — «Путь к спуску»")
+	var path: Array = Run.ROUTES[Run.MAIN]["places"]
+	eq(LayerMap.id_of(path[-1]), LayerMap.MAIN_ROUTE[-1], "маршрут «Путь к спуску» ведёт туда же, куда цели слоя")
 
 
 func test_card_rect() -> void:
@@ -136,6 +193,57 @@ func test_card_rect() -> void:
 	eq(r.end.y, scr.y - Briefing.CARD_MARGIN, "не уходит под нижний край")
 	r = Briefing.card_rect(Vector2(-400, 300), sz, scr)
 	eq(r.position.x, Briefing.CARD_MARGIN, "не уходит за левый край")
+
+
+## #913: карточка встаёт мимо карты на экране — справа от неё, но не дальше кнопки действия.
+func test_card_rect_beside_map() -> void:
+	var scr := Vector2(1600, 720)
+	var sz := Vector2(330, 300)
+	var map := Rect2(575, 150, 400, 180)
+	var r := Briefing.card_rect(Vector2(800, 240), sz, scr, map)
+	eq(r.position.x, map.end.x + Briefing.CARD_GAP, "точка над картой — карточка правее карты")
+	ok(not r.intersects(map), "карту не закрывает")
+	map = Rect2(575, 150, 600, 180)
+	r = Briefing.card_rect(Vector2(800, 240), sz, scr, map)
+	eq(r.end.x, scr.x - Briefing.CARD_RIGHT_FREE, "справа места мало — у правого предела, не на кнопке действия")
+	eq(Briefing.map_points().size(), 8, "углы карты на столе и на высоте номеров")
+
+
+## #913: с точки сценария 09c-route карточка «Рифового сада» закрывала места 4, 7, 8 на голостоле.
+func test_scene_card_clear_of_places() -> void:
+	var was := tree.root.size
+	tree.root.size = Vector2i(1600, 720)
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.walker.x = 1.6
+	main.walker.z = -1.2
+	main.walker.yaw = PI / 2.0
+	main.walker.pitch = deg_to_rad(-38.0)
+	for r in range(-1, Run.ROUTES.size()):   # у маршрутов слоя 1 (#829) по пять мест — карточка выше; −1 — цели слоя
+		if r < 0:
+			main.run.route = -1
+		else:
+			main.run.choose(r)
+		main.step(0.5)
+		await frames(1)
+		ok(main.route_card.visible, "карточка видна")
+		var cam := main.get_viewport().get_camera_3d()
+		var sv := main.sonar_view
+		for i in Briefing.ORDER.size():
+			var k := Briefing.ORDER[i]
+			var ico := _screen_rect(cam, sv.icons[i].global_position, Vector2.ONE * Briefing.ICON_SIZE * 0.35)
+			var l := sv.numbers[i]
+			var c := l.global_position + (cam.global_basis.x * l.offset.x + cam.global_basis.y * l.offset.y) * l.pixel_size
+			var num := _screen_rect(cam, c, Vector2(0.4, 0.5) * l.font_size * l.pixel_size * 0.6)
+			ok(not main.route_card.rect.intersects(ico), "маршрут %d: иконка места %d не под карточкой: %s / %s" % [r,
+				Briefing.NUMBERS[k], ico, main.route_card.rect])
+			ok(not main.route_card.rect.intersects(num), "маршрут %d: номер места %d не под карточкой" % [r,
+				Briefing.NUMBERS[k]])
+	ok(Rect2(Vector2.ZERO, Vector2(1600, 720)).encloses(main.route_card.rect), "карточка на экране")
+	main.queue_free()
+	tree.root.size = was
+	await frames(1)
 
 
 func test_scene_route_card() -> void:
@@ -161,6 +269,7 @@ func test_scene_route_card() -> void:
 	ok(not main.route_card.visible, "точка за спиной — карточки нет")
 	main.walker.yaw = PI / 2
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	main.use_post("route")   # голосование — брифинг гаснет
 	main.step(0.3)
 	ok(not main.route_card.visible, "в голосовании карточки нет")
@@ -206,3 +315,99 @@ func test_scene_numbers_clear_of_icons() -> void:
 	main.queue_free()
 	tree.root.size = was
 	await frames(1)
+
+
+## #829: с точки сценария 09c-route дальний ряд мест (5, 8, 2, 9) читался плохо — номера мельче ближних втрое, «5» пряталась
+## за иконками ближних мест. Дальние номера крупнее (Briefing.number_scale): каждый не ниже NUMBER_MIN_PX на экране,
+## номера не налезают друг на друга и не уходят
+## под иконки мест ближе к посту.
+func test_scene_far_numbers_readable() -> void:
+	var was := tree.root.size
+	tree.root.size = Vector2i(1600, 720)
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.walker.x = 1.6
+	main.walker.z = -1.2
+	main.walker.yaw = PI / 2.0
+	main.walker.pitch = deg_to_rad(-38.0)
+	main.run.choose(0)
+	main.step(0.5)
+	await frames(1)
+	var cam := main.get_viewport().get_camera_3d()
+	var sv := main.sonar_view
+	var num := {}
+	var ico := {}
+	for i in Briefing.ORDER.size():
+		var k := Briefing.ORDER[i]
+		var l := sv.numbers[i]
+		var c := l.global_position + (cam.global_basis.x * l.offset.x + cam.global_basis.y * l.offset.y) * l.pixel_size
+		num[k] = _screen_rect(cam, c, Vector2(0.4 * l.text.length(), 0.5) * l.font_size * l.pixel_size * 0.6)
+		ico[k] = _screen_rect(cam, sv.icons[i].global_position, Vector2.ONE * Briefing.ICON_SIZE * 0.35)
+	for k in Briefing.ORDER:
+		var h: float = num[k].size.y
+		ok(h >= Briefing.NUMBER_MIN_PX, "номер %d не мельче %d px: %.1f" % [Briefing.NUMBERS[k], Briefing.NUMBER_MIN_PX, h])
+		for o in Briefing.ORDER:
+			if o == k:
+				continue
+			if Run.place_xz(o).x > Run.place_xz(k).x:   # ближняя к посту иконка закрыла бы номер (дальнюю номер перекрывает сам)
+				ok(not num[k].intersects(ico[o]), "номер %d не под иконкой %d" % [Briefing.NUMBERS[k], Briefing.NUMBERS[o]])
+			if Briefing.ORDER.find(o) > Briefing.ORDER.find(k):
+				ok(not num[k].intersects(num[o]), "номера %d и %d не налезают" % [Briefing.NUMBERS[k], Briefing.NUMBERS[o]])
+	main.queue_free()
+	tree.root.size = was
+	await frames(1)
+
+
+func test_number_scale() -> void:
+	near(Briefing.number_scale(Vector2(Briefing.SIDE * 0.5, 0.0)), 1.0, 1e-6, "ближний край стола — как было")
+	near(Briefing.number_scale(Vector2(-Briefing.SIDE * 0.5, 0.0)), 1.0 + Briefing.NUMBER_GROW, 1e-6, "дальний — крупнее")
+	ok(Briefing.number_scale(Vector2(-0.2, 0.0)) > Briefing.number_scale(Vector2(0.2, 0.0)), "чем дальше от поста, тем крупнее")
+
+
+## ART-040: страница «Связь» карточки брифинга — кодовое слово забега.
+func test_code_lines() -> void:
+	eq(Briefing.code_lines("").size(), 0, "слова нет — страницы нет")
+	eq(Briefing.code_lines("  ").size(), 0)
+	var l := Briefing.code_lines("Иней")
+	eq(l, [Briefing.CODE_TITLE, "Иней", Briefing.CODE_HINT[0], Briefing.CODE_HINT[1], Briefing.CODE_NOTE],
+		"заголовок, слово, подсказка в две строки, примечание")
+	eq(l.size(), RouteCard.CODE_PX.size(), "кегль на каждую строку")
+	eq(RouteCard.CODE_ROW.size(), RouteCard.CODE_PX.size())
+	for px in RouteCard.CODE_PX:
+		ok(px >= 18, "экранный кегль не меньше 18 px (ART-016)")
+
+
+func test_scene_code_on_briefing() -> void:
+	var was := tree.root.size
+	tree.root.size = Vector2i(1600, 720)
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.walker.x = Main.ROUTE_POST.x
+	main.walker.z = Main.ROUTE_POST.y
+	main.walker.yaw = PI / 2
+	main.walker.pitch = -0.5
+	main.step(0.3)
+	main.step(0.05)
+	ok(main.run.route < 0, "маршрут ещё не выбран")
+	ok(main.route_card.visible, "у голостола — карточка со словом, даже без маршрута")
+	eq(main.route_card.lines[0], "Цели слоя", "без маршрута — цели слоя (#824)")
+	eq(main.route_card.code[1], main.comms.code, "кодовое слово забега — то же, что проверяет связь")
+	main.run.choose(0)
+	main.step(0.05)
+	eq(main.route_card.lines[0], "Рифовый сад", "маршрут выбран — сверху маршрут")
+	eq(main.route_card.code[1], main.comms.code, "под ним — страница «Связь»")
+	var scr := main.get_viewport().get_visible_rect().size
+	ok(Rect2(Vector2.ZERO, scr).encloses(main.route_card.rect), "вся карточка на экране 1600 × 720")
+	ok(main.route_card.rect.end.x <= scr.x - Briefing.CARD_RIGHT_FREE, "не заходит на кнопку действия")
+	main.comms.reset_run(7)
+	main.step(0.05)
+	eq(main.route_card.code[1], main.comms.code, "новый забег — новое слово на карточке")
+	main.walker.x = 0.0
+	main.walker.z = 1.5
+	main.step(0.5)
+	ok(not main.route_card.visible, "отошёл от поста — карточки нет")
+	main.queue_free()
+	await frames(1)
+	tree.root.size = was

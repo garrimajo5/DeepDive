@@ -180,3 +180,250 @@ func test_eco_view_has_vent() -> void:
 	ok(view.vent_view.rock != null, "порода собрана по дну")
 	view.queue_free()
 	await frames(1)
+
+
+## Строки MESSAGE мира для корабля.
+static func _messages(w: EcoWorld) -> Array[String]:
+	var out: Array[String] = []
+	for e in w.take_link():
+		if e.get("type", "") == EcoLink.MESSAGE:
+			out.append(str(e["text"]))
+	return out
+
+
+## #835, часть 2а: знак шлейфа приходит раньше перегрева реактора — корабль идёт к жерлу с востока на 5 м/с.
+func test_plume_sign_before_heat() -> void:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	w.add(EcoVent.new())
+	var at := -1.0
+	var heat := -1.0
+	for i in 300:
+		var d := 150.0 - i * 0.5
+		w.ship.pos = Vector3(EcoVent.CENTER.x + d, FLAT + 12.0, EcoVent.CENTER.y)
+		w.step(0.1)
+		if at < 0.0 and _messages(w).has(EcoVent.WARN_TEXT):
+			at = d
+		if heat < 0.0 and Reactor.near_vent(w.ship.pos.x, w.ship.pos.z):
+			heat = d
+	ok(at > 0.0, "знак шлейфа пришёл")
+	ok(heat > 0.0, "корабль дошёл до тёплой воды")
+	ok(at - heat >= 25.0, "знак на %.0f м раньше перегрева (≥ 25 м, на 5 м/с — 5 с)" % (at - heat))
+	ok(EcoVent.WARN_R > Reactor.VENT_R, "круг знака шире круга перегрева")
+
+
+## Знак — один раз за заход: стоять в круге — тишина; выйти и сразу вернуться — тишина до WARN_CD; потом снова.
+func test_plume_sign_once_per_visit() -> void:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	var v := w.add(EcoVent.new()) as EcoVent
+	var inside := Vector3(EcoVent.CENTER.x + 60.0, FLAT + 12.0, EcoVent.CENTER.y)
+	var outside := Vector3(EcoVent.CENTER.x + 100.0, FLAT + 12.0, EcoVent.CENTER.y)
+	var got: Array[String] = []
+	w.ship.pos = inside
+	for i in 50:
+		w.step(0.1)
+		got.append_array(_messages(w))
+	eq(got.size(), 1, "в круге — одна строка")
+	w.ship.pos = outside
+	w.step(0.1)
+	w.ship.pos = inside
+	for i in 10:
+		w.step(0.1)
+		got.append_array(_messages(w))
+	eq(got.size(), 1, "вернулся раньше WARN_CD — без повтора")
+	w.ship.pos = outside
+	for i in int(EcoVent.WARN_CD * 10.0):
+		w.step(0.1)
+		got.append_array(_messages(w))
+	w.ship.pos = inside
+	w.step(0.1)
+	got.append_array(_messages(w))
+	eq(got.size(), 2, "после WARN_CD новый заход — снова знак")
+	w.reset()
+	ok(v.warn_cd == 0.0, "новый забег — знак заново")
+
+
+# ---------- Веерники у курильщика (#835, часть 2б) ----------
+
+func _fan_world() -> EcoWorld:
+	var w := EcoWorld.new()
+	w.ground = Seabed.height
+	w.ship.pos = Vector3(500, 0, 500)
+	var cur := w.add(EcoCurrent.new()) as EcoCurrent
+	w.add(EcoCoral.new())
+	w.add(EcoFan.new(cur))
+	w.reset()
+	return w
+
+
+func _fans(w: EcoWorld) -> EcoFan:
+	for s in w.systems:
+		if s is EcoFan:
+			return s
+	return null
+
+
+## Плоскость веера смотрит на жерло (без знака: плоскость двусторонняя).
+func _faces_vent(f: EcoFan.Fan) -> float:
+	var to := EcoVent.CENTER - Vector2(f.pos.x, f.pos.z)
+	var n := EcoFan.facing(f)
+	return absf(Vector2(n.x, n.z).dot(to.normalized()))
+
+
+func test_vent_fans_point_flow_to_vent() -> void:
+	for p in EcoVent.FANS:
+		ok(EcoFan.default_spots().has(p), "веерник курильщика — в местах EcoFan")
+		var d := p.distance_to(EcoVent.CENTER)
+		ok(d > 12.0 and d < EcoVent.PULL_IN, "в %.1f м от трубы — не в цоколе и в полной тяге" % d)
+		near(EcoFan.vent_pull(p), 1.0, 1e-6, "тяга к жерлу полная")
+	near(EcoFan.vent_pull(EcoFan.START), 0.0, 1e-6, "у старта тяги нет")
+	var w := _fan_world()
+	var fans := _fans(w)
+	var cur: EcoCurrent
+	for s in w.systems:
+		if s is EcoCurrent:
+			cur = s
+	var vent_fans: Array[EcoFan.Fan] = []
+	for f in fans.fans:
+		if f.pull > 0.0:
+			vent_fans.append(f)
+	eq(vent_fans.size(), EcoVent.FANS.size(), "тянет только веера курильщика")
+	for f in vent_fans:
+		ok(_faces_vent(f) > 0.999, "с начала плоскостью к жерлу: %f" % _faces_vent(f))
+	w.run(310.0)   # течение сменилось (180 с) и веера доворачиваются
+	ok(cur.turns >= 1, "течение сменилось")
+	for f in vent_fans:
+		ok(_faces_vent(f) > 0.999, "у курильщика течение мира веер не разворачивает: %f" % _faces_vent(f))
+	var far := fans.fans[0]
+	ok(EcoFan.facing(far).distance_to(cur.vel().normalized()) < 0.05, "веерник у огнецвета — поперёк течения, как раньше")
+
+
+## Тексты сообщений мира за шаги.
+func _texts(w: EcoWorld) -> Array[String]:
+	var out: Array[String] = []
+	for e in w.take_link():
+		if e["type"] == EcoLink.MESSAGE and e["text"] != "":
+			out.append(e["text"])
+	return out
+
+
+func _vent_fan(fans: EcoFan) -> EcoFan.Fan:
+	for f in fans.fans:
+		if f.pull > 0.5:
+			return f
+	return null
+
+
+func _to_vent(t: String) -> bool:
+	return t.contains("повёрнут к жерлу")
+
+
+## Простоять у веера secs с шагом 0,05 — все строки мира.
+func _stay(w: EcoWorld, secs: float) -> Array[String]:
+	var texts: Array[String] = []
+	for i in roundi(secs / 0.05):
+		w.step(0.05)
+		texts.append_array(_texts(w))
+	return texts
+
+
+func test_vent_fan_message() -> void:
+	var w := _fan_world()
+	var fans := _fans(w)
+	w.ship.pos = _vent_fan(fans).top + Vector3(0, 8, 6)
+	var early := _stay(w, 1.0)
+	ok(not early.any(_to_vent), "сразу у вееров строки нет — её перебил бы «Перегрев реактора»: %s" % str(early))
+	var texts := _stay(w, EcoFan.VENT_DWELL)
+	eq(texts.filter(_to_vent).size(), 1, "постояв у вееров — одна строка про поток к жерлу: %s" % str(texts))
+	ok(not texts.any(func(t: String) -> bool: return t.contains("поперёк течения")), "не «поперёк течения»")
+	ok(not _stay(w, 30.0).any(_to_vent), "дальше — не чаще раза в VENT_CD")
+
+
+## Отчёт QA 2026-10-29-1515 (#954): строка «поперёк» у старта ставила общий отсчёт на 150 с — у курильщика строки
+## не было; и перегрев реактора на входе в 45 м сразу перебивал её (строка держится Status.MESSAGE_SECONDS).
+func test_vent_fan_line_after_start_fan() -> void:
+	var w := _fan_world()
+	var fans := _fans(w)
+	w.ship.pos = fans.fans[-1].top + Vector3(0, 5, 4)   # веер у старта
+	_stay(w, 0.1)
+	ok(fans.read_cd > 100.0, "у старта — «поперёк» (наблюдение), отсчёт READ_CD пошёл")
+	w.ship.pos = _vent_fan(fans).top + Vector3(0, 8, 6)
+	ok(_stay(w, EcoFan.VENT_DWELL + 0.5).any(_to_vent), "у курильщика строка своя, несмотря на строку у старта")
+	ok(EcoFan.VENT_DWELL > Status.MESSAGE_SECONDS, "строка веера приходит, когда «Перегрев реактора» уже погас")
+
+
+## Отошёл от вееров раньше VENT_DWELL — отсчёт заново.
+func test_vent_fan_dwell_resets() -> void:
+	var w := _fan_world()
+	var fans := _fans(w)
+	var at := _vent_fan(fans).top + Vector3(0, 8, 6)
+	w.ship.pos = at
+	_stay(w, EcoFan.VENT_DWELL - 1.0)
+	w.ship.pos = Vector3(500, 0, 500)
+	_stay(w, 0.5)
+	w.ship.pos = at
+	ok(not _stay(w, EcoFan.VENT_DWELL - 1.0).any(_to_vent), "после ухода — снова ждать VENT_DWELL")
+	ok(_stay(w, 1.5).any(_to_vent), "простояв — строка есть")
+
+
+# ---------- «Экономно» (Б6) ----------
+
+func test_view_lite_coarser_rock_same_material() -> void:
+	var v := _vent(_slope)
+	var view := VentView.new(v)
+	tree.root.add_child(view)
+	await frames(1)
+	var full := view.tris
+	var mat := view.rock.mesh.surface_get_material(0)
+	var box := view.rock.mesh.get_aabb()
+	var bubbles := view.bubbles.multimesh
+	var haze := view.haze.mesh
+	view.set_lite(true)
+	ok(view.lite, "курильщик — на «Экономно»")
+	ok(view.tris * 100 <= full * 60, "треугольников не больше 60 %% (%d → %d)" % [full, view.tris])
+	eq(view.rock.mesh.get_surface_count(), 1, "порода — один вызов")
+	ok(view.rock.mesh.surface_get_material(0) == mat, "материал тот же (жар, мерцание)")
+	ok(view.bubbles.multimesh == bubbles and view.haze.mesh == haze, "пузыри и марево те же")
+	var meshes := 0
+	for c in view.get_children():
+		if c is GeometryInstance3D:
+			meshes += 1
+	eq(meshes, 3, "вызовов столько же")
+	var lb := view.rock.mesh.get_aabb()
+	ok(lb.size.y > box.size.y * 0.98 and lb.size.x > box.size.x * 0.93, "силуэт тот же: %s → %s" % [box.size, lb.size])
+	var bad := 0
+	for t in view.tris:
+		var a := view.verts[t * 3]
+		var cr := (view.verts[t * 3 + 1] - a).cross(view.verts[t * 3 + 2] - a)
+		if cr.dot(view.normals[t * 3]) >= 0.0:
+			bad += 1
+	eq(bad, 0, "и на «Экономно» грани обходом по часовой стрелке")
+	# кромки жерл светятся и на «Экономно»; жерло главной трубы — на месте
+	var cols: PackedColorArray = view.rock.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	var lit := 0
+	for c in cols:
+		if c.a > 0.99:
+			lit += 1
+	ok(lit > 0, "кромки светятся: %d" % lit)
+	var top := -INF
+	for p in view.verts:
+		top = maxf(top, p.y)
+	near(top, v.tubes[0].mouth.y, 1e-3, "кромка главного жерла на той же высоте")
+	view.set_lite(false)
+	eq(view.tris, full, "назад — полная порода")
+	view.queue_free()
+	await frames(1)
+
+
+func test_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = Seabed.height
+	ev.set_lite(true)
+	ok(ev.vent_view.lite, "уровень дошёл до курильщика")
+	var t := ev.vent_view.tris
+	ev.ground = Seabed.height
+	ok(ev.vent_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(ev.vent_view.tris, t, "и порода грубая")
+	ev.set_lite(false)
+	ev.free()

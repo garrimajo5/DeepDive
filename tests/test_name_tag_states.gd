@@ -96,7 +96,7 @@ func test_mate_press_lights_tag() -> void:
 
 func test_own_press_marks_me() -> void:
 	main.overlay.router.action_pressed = true
-	main._mark_presses(main.overlay.router, 1.0 / 30.0)
+	main.crew_flow.mark_presses(main.overlay.router, 1.0 / 30.0)
 	main.overlay.router.action_pressed = false
 	ok(main.me.active(), "свой нажал — гости увидят «нажимает» в кадре")
 
@@ -162,9 +162,10 @@ func test_tags_off_status_plate() -> void:
 	main.step(1.0 / 30.0)
 	main.open_silt()   # тревога и сообщение — плашка в четыре строки
 	main.vitals.energy = 5.0
+	bio.pad.action = true   # у голостола — импульс хоста (мало энергии — ответ всем), сообщение ниже — после него
+	main.step(1.0 / 30.0)
 	main.say("Биолог у сканера: рядом медузы-колокола, стая светляков и монетники на мху у Края отмели")
-	bio.pad.action = true
-	for k in 4:
+	for k in 3:
 		main.step(1.0 / 30.0)
 	var plate := main.status_rect()
 	ok(plate.has_area(), "плашка строк на экране (%s)" % plate)
@@ -187,6 +188,8 @@ func test_under_plate() -> void:
 	near(NameTag.under_plate(Rect2(400, 110, 200, 40), plate, 30.0), 129.0 + NameTag.GAP * 40.0 - 110.0, 1e-4,
 			"задела низ — под плашку с зазором")
 	eq(NameTag.under_plate(Rect2(400, 60, 200, 40), plate, 30.0), NameTag.HIDDEN, "опускать далеко — скрыта")
+	near(NameTag.under_plate(Rect2(400, 130, 200, 40), plate, 30.0), 129.0 + NameTag.GAP * 40.0 - 130.0, 1e-4,
+			"вплотную под плашкой (ближе зазора) — тоже на зазор: углы таблички в кадре чуть выше центра (#1345)")
 
 
 func _tag_rect(cam: Camera3D, i: int) -> Rect2:
@@ -196,3 +199,25 @@ func _tag_rect(cam: Camera3D, i: int) -> Rect2:
 	for c: Vector3 in [Vector3(w * 0.5, 0.5, 0), Vector3(-w * 0.5, -0.5, 0), Vector3(w * 0.5, -0.5, 0)]:
 		r = r.expand(cam.unproject_position(t * c))
 	return r
+
+
+func test_voice_lights_tag_not_through_walls() -> void:
+	var mate := _mate()
+	var i := main.crew.find(mate)
+	var v := main.name_tags
+	for k in 6:
+		main.radio.heard(i, mate.name, mate.role, 0.8)   # пакеты голоса товарища (рация ART-041)
+		main.step(1.0 / 30.0)
+	ok(v.tags[i].visible, "табличка видна")
+	near(v.levels[i], 1.0, 1e-6, "говорит — та же табличка в «активности»")
+	ok(v.glows[i].visible, "контур ярче и три штриха")
+	for k in 20:
+		main.step(1.0 / 30.0)
+	near(v.levels[i], 0.0, 1e-6, "замолчал — погасло (0,4 с + 0,15 с)")
+	mate.walker.z = 10.0   # ушёл в лабораторию, люки закрыты
+	mate.walker.x = 0.0
+	for k in 6:
+		main.radio.heard(i, mate.name, mate.role, 0.8)
+		main.step(1.0 / 30.0)
+	ok(not main.radio.talkers[0].seen, "за стеной — «Вне поля зрения»")
+	near(v.levels[i], 0.0, 1e-6, "сквозь стены «активности» нет")

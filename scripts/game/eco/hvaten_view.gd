@@ -1,63 +1,203 @@
 class_name HvatenView
 extends Node3D
 ## Хватни и пестрянки в сцене (initAnemones в js/creatures.js): три MultiMesh — тела (столб 0,45 → 0,32 м высотой
-## 0,8 м и розовый диск щупалец, своё слабое свечение #2a0a24), щупальца (тонкие конусы 1 м с цветом по длине:
-## лиловые у диска, светлее к кончикам, светятся сами) и пестрянки (вытянутые капли 7 × 10 × 24 см, оранжевые
-## и белая). Стоят на слое отмели (OceanView.LAYER_WORLD).
+## 0,8 м и розовый диск щупалец, своё слабое свечение #2a0a24; дышат и сжимаются по ширине — EcoHvaten.body), щупальца (тонкие конусы 1 м с цветом по длине:
+## лиловые у диска, светлее к кончикам; тело ловит свет, к кончикам светится само и колышется в течении мира —
+## общий шейдер растений EcoShaders.PLANT, режим TENTACLE, двойник на CPU — `tentacle_offset`) и пестрянки
+## (форма EcoPestrLook: тело 7 × 10 × 19 см, хвост-веер, спинной и грудные плавники; оранжевые и белая — цвет
+## в INSTANCE_CUSTOM.rgb, фаза плавников — в альфе цвета экземпляра; рисует шейдер светляков FishView: хвост машет,
+## грудные гребут, «Экономно» — sway_k через EcoShaders.follow). Стоят на слое отмели (OceanView.LAYER_WORLD).
+## «Экономно» (Б6, `set_lite`): у каждого хватня рисуется каждое второе щупальце (22 → 11, LITE_SKIP): видимые — в
+## начале буфера (`tent_slot`), `visible_instance_count` отрезает остальных. Мир (ловля, укрытие, приманка) не
+## меняется; тела и пестрянки — все. Вызовов столько же, вершинной работы щупалец вдвое меньше.
+## Не клоны (Б4, `EcoVary`): у хватня своя ширина тела ±12 % (`body_width`, основания щупалец на диске — с ним), у
+## пестрянки — размер ±15 % (`pestr_size`) и яркость свечения ±20 % (`pestr_glow`) по номеру рыбки. Хешем от номера —
+## мир и его случай не меняются, у гостя сети тот же вид. Вызовов и шейдеров столько же, и на «Экономно».
+## «Дыхание» пестрянок (Б3, `pestr_breath`): рыбка качает воду жабрами — тело шире на ± PESTR_BREATH_W и выше на
+## ± PESTR_BREATH_H за PESTR_BREATH_T с (ритм ± PESTR_BREATH_SPREAD и фаза — у каждой свои, `EcoVary`); длина та же —
+## нос и хвост-веер на месте. Дышит, пока висит в хороводе у хватня: на ходу к стае размах гаснет между
+## PESTR_CALM и PESTR_RUSH м/с (ход `Pestr.v` сам меняется плавно — без скачка). По времени мира (у гостя то же),
+## масштаб экземпляра MultiMesh — даром, и на «Экономно».
 
 ## Цвета пестрянок по порядку (pc в браузере).
 const PESTR_COLORS: Array[Color] = [Color("ff7a2a"), Color("fff1d0"), Color("ff9a4a")]
 const BODY_GLOW := Color("2a0a24")
-const PESTR_SIZE := Vector3(0.035, 0.05, 0.12)
-## Чисел на экземпляр: transform 3 × 4, у пестрянок ещё цвет (4).
+## Чисел на экземпляр: transform 3 × 4, у пестрянок ещё цвет (4: белый, в альфе — фаза плавников) и INSTANCE_CUSTOM
+## (4: свечение, оттенок тела 1).
 const STRIDE := 12
-const STRIDE_C := 16
+const STRIDE_P := 20
+## Колыхание щупальца (доли длины на полном течении: крен, волна, поперёк) — мягче ленты ленточника, но заметно на
+## метровом щупальце; сдвиг фазы по углу щупальца вокруг вертикали — щупальца одного диска извиваются вразнобой.
+const BEND := Vector3(0.1, 0.16, 0.12)
+const PHASE_AXIS := 10.0
+## Свечение щупальца: у диска — доля цвета, у кончика — почти полный (раньше светилось целиком, MeshBasicMaterial).
+const TIP_GLOW := Vector2(0.15, 0.9)
+## Разброс (Б4): ширина тела хватня, размер и яркость пестрянки.
+const BODY_SPREAD := 0.12
+const PESTR_SIZE_SPREAD := 0.15
+const PESTR_GLOW_SPREAD := 0.2
+## Дыхание пестрянки: период, размах по ширине и высоте, разброс ритма; ход, с которого размах гаснет, и до нуля.
+const PESTR_BREATH_T := 2.2
+const PESTR_BREATH_W := 0.05
+const PESTR_BREATH_H := 0.035
+const PESTR_BREATH_SPREAD := 0.2
+const PESTR_CALM := 0.6
+const PESTR_RUSH := 1.8
 
 var hvaten: EcoHvaten
 var bodies: MultiMeshInstance3D
 var tents: MultiMeshInstance3D
 var pestr: MultiMeshInstance3D
-## Последние буферы щупалец и пестрянок (для тестов — сервер отрисовки без экрана экземпляры не хранит).
+## Последние буферы тел, щупалец и пестрянок (для тестов — сервер отрисовки без экрана экземпляры не хранит).
+var body_buffer := PackedFloat32Array()
 var tent_buffer := PackedFloat32Array()
 var pestr_buffer := PackedFloat32Array()
+## Муть у дна (EcoHvatenDust: рывком прячет щупальца — клуб ила вокруг основания) — дочерний MultiMesh «Муть» на
+## общем шейдере EcoShaders.MIST, +1 вызов; буфер — для тестов.
+var dust := EcoHvatenDust.new()
+var dust_view: MultiMeshInstance3D
+## Буфер мути (EcoDustBuffer, issue #732).
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
 
 
-func _init(system: EcoHvaten) -> void:
+## «Экономно»: у хватня не рисуется щупальце с номером k % LITE_SKIP != 0.
+const LITE_SKIP := 2
+var lite := false
+
+
+func _init(system: EcoHvaten, on_lite := false) -> void:
 	hvaten = system
 	name = "Хватни"
 	var n := hvaten.anemones.size()
-	bodies = _instance("Тела", build_body(), n, false)
-	tents = _instance("Щупальца", build_tentacle(), n * EcoHvaten.TENT, false)
-	pestr = _instance("Пестрянки", build_pestr(), n * EcoHvaten.PESTR_N, true)
-	var buf := PackedFloat32Array()
-	buf.resize(n * STRIDE)
-	for hv in hvaten.anemones:
-		_put(buf, hv.index * STRIDE, Transform3D(Basis(Vector3.UP, hv.yaw), hv.base))
-	bodies.multimesh.buffer = buf
+	bodies = EcoMM.instance(self, "Тела", build_body(), n, false)
+	tents = EcoMM.instance(self, "Щупальца", build_tentacle(), n * EcoHvaten.TENT, false)
+	pestr = EcoMM.instance(self, "Пестрянки", build_pestr(), n * EcoHvaten.PESTR_N, true, true)
+	body_buffer.resize(n * STRIDE)
+	_width.resize(n)
+	for i in n:
+		_width[i] = body_width(i)
 	tent_buffer.resize(n * EcoHvaten.TENT * STRIDE)
-	pestr_buffer.resize(n * EcoHvaten.PESTR_N * STRIDE_C)
+	pestr_buffer.resize(n * EcoHvaten.PESTR_N * STRIDE_P)
+	dust_view = GrazerView.build_dust(EcoHvatenDust.POOL)
+	add_child(dust_view)
 	for hv in hvaten.anemones:
 		for k in EcoHvaten.PESTR_N:
-			var c := PESTR_COLORS[k % PESTR_COLORS.size()]
-			var i := (hv.index * EcoHvaten.PESTR_N + k) * STRIDE_C
-			pestr_buffer[i + 12] = c.r; pestr_buffer[i + 13] = c.g; pestr_buffer[i + 14] = c.b; pestr_buffer[i + 15] = 1.0
+			var m := hv.index * EcoHvaten.PESTR_N + k
+			var c := pestr_glow(PESTR_COLORS[k % PESTR_COLORS.size()] * EcoPestrLook.GLOW, m)
+			var i := m * STRIDE_P
+			pestr_buffer[i + 12] = 1.0; pestr_buffer[i + 13] = 1.0; pestr_buffer[i + 14] = 1.0
+			pestr_buffer[i + 15] = EcoPestrLook.phase(hv, k)
+			pestr_buffer[i + 16] = c.r; pestr_buffer[i + 17] = c.g; pestr_buffer[i + 18] = c.b; pestr_buffer[i + 19] = 1.0
+	var pts := PackedVector3Array()
+	for hv in hvaten.anemones:
+		pts.append(hv.base)
+	EcoMM.fit([bodies, tents, pestr], pts, FRAME_GROW)
+	if on_lite:
+		set_lite(true)
 	sync(0.0)
 
 
-func _instance(n: String, mesh: Mesh, count: int, colors: bool) -> MultiMeshInstance3D:
-	var mi := MultiMeshInstance3D.new()
-	mi.name = n
-	mi.layers = OceanView.LAYER_WORLD
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = colors
-	mm.mesh = mesh
-	mm.instance_count = count
-	mi.multimesh = mm
-	mi.custom_aabb = AABB(Vector3(-400, -200, -400), Vector3(800, 400, 800))
-	add_child(mi)
-	return mi
+## «Экономно» — рисуется каждое второе щупальце; буфер щупалец переписывается целиком сразу.
+func set_lite(on: bool) -> void:
+	if lite == on:
+		return
+	lite = on
+	var n := hvaten.anemones.size()
+	tents.multimesh.visible_instance_count = lite_count(n) if on else -1
+	_sync_tents(_t)
+	EcoMM.send(tents, tent_buffer)
+
+
+## Рисуется ли на «Экономно» щупальце номер k.
+static func lite_shown(k: int) -> bool:
+	return k % LITE_SKIP == 0
+
+
+## Сколько щупалец рисуется на «Экономно» у n хватней.
+static func lite_count(n: int) -> int:
+	return n * ((EcoHvaten.TENT + LITE_SKIP - 1) / LITE_SKIP)
+
+
+## Место щупальца k хватня номер i в буфере (n хватней): на «Экономно» видимые — в начале, по хватням.
+static func tent_slot(i: int, k: int, n: int, on_lite: bool) -> int:
+	if not on_lite:
+		return i * EcoHvaten.TENT + k
+	var per := (EcoHvaten.TENT + LITE_SKIP - 1) / LITE_SKIP
+	if lite_shown(k):
+		return i * per + k / LITE_SKIP
+	var rest := EcoHvaten.TENT - per
+	return n * per + i * rest + (k - k / LITE_SKIP - 1)
+
+
+## Ширина тела хватня номер i (доля): одна и та же при каждом вызове.
+static func body_width(i: int) -> float:
+	return EcoVary.spread(i, EcoVary.WIDTH, BODY_SPREAD)
+
+
+## Размер пестрянки номер n (доля от EcoPestrLook.SCALE).
+static func pestr_size(n: int) -> float:
+	return EcoVary.spread(n, EcoVary.SIZE, PESTR_SIZE_SPREAD)
+
+
+## Свечение пестрянки номер n: цвет c ярче или тусклее ±20 %, тон тот же.
+static func pestr_glow(c: Color, n: int) -> Color:
+	var k := EcoVary.spread(n, EcoVary.SHADE, PESTR_GLOW_SPREAD)
+	return Color(c.r * k, c.g * k, c.b * k, c.a)
+
+
+## Тело хватня в момент t — расстановка мира, шире или уже на `body_width` поперёк оси.
+static func body_pose(hv: EcoHvaten.Anemone, t: float, live := true) -> Transform3D:
+	var tr := EcoHvaten.body(hv, t, live)
+	var w := body_width(hv.index)
+	tr.basis = tr.basis * Basis.from_scale(Vector3(w, 1.0, w))
+	return tr
+
+
+## Щупальце k хватня в момент t: основание на диске своей ширины (`body_width`) — дальше или ближе к оси.
+## w — ширина тела, если уже известна (шаг вида берёт её из запаса `_width`, не считает хеш на каждое щупальце).
+static func tentacle_pose(hv: EcoHvaten.Anemone, k: int, t: float, live := true, w := -1.0) -> Transform3D:
+	var tr := EcoHvaten.tentacle(hv, k, t, live)
+	if w < 0.0:
+		w = body_width(hv.index)
+	tr.origin.x = hv.top.x + (tr.origin.x - hv.top.x) * w
+	tr.origin.z = hv.top.z + (tr.origin.z - hv.top.z) * w
+	return tr
+
+
+## Пестрянка k хватня в момент t: поза мира, размер EcoPestrLook.SCALE × `pestr_size`, дышит (`pestr_breath`).
+static func pestr_pose(hv: EcoHvaten.Anemone, k: int, t: float) -> Transform3D:
+	var tr := EcoHvaten.pestr_pose(hv, k, t)
+	var n := hv.index * EcoHvaten.PESTR_N + k
+	var b := pestr_breath(n, t, hv.pestr[k].v.length())
+	tr.basis = tr.basis * Basis.from_scale(pestr_breath_scale(b) * EcoPestrLook.SCALE * pestr_size(n))
+	return tr
+
+
+## Доля дыхания пестрянки n в момент t: −1…1 · размах (PESTR_BREATH_T, ритм и фаза — EcoVary); speed — ход, м/с
+## (в хороводе дышит во весь размах, на ходу к стае — нет).
+static func pestr_breath(n: int, t: float, speed := 0.0) -> float:
+	var rate := EcoVary.spread(n, EcoVary.RATE, PESTR_BREATH_SPREAD)
+	var phase := EcoVary.unit(n, EcoVary.HUE) * TAU
+	var calm := 1.0 - smoothstep(PESTR_CALM, PESTR_RUSH, speed)
+	return sin(t * TAU / PESTR_BREATH_T * rate + phase) * calm
+
+
+## Множитель размера пестрянки по доле дыхания: шире и выше, длина та же.
+static func pestr_breath_scale(k: float) -> Vector3:
+	return Vector3(1.0 + PESTR_BREATH_W * k, 1.0 + PESTR_BREATH_H * k, 1.0)
+
+
+## Сколько щупалец рисуется сейчас.
+func drawn() -> int:
+	var v := tents.multimesh.visible_instance_count
+	return tents.multimesh.instance_count if v < 0 else v
+
+
+## Запас рамки вокруг хватней (#849): щупальца тянутся на 1,9 м, пестрянки кружат рядом, течение гнёт.
+const FRAME_GROW := 5.0
 
 
 ## Тело: столб (0,32 сверху, 0,45 снизу, 0,8 м) цвета (0,48, 0,22, 0,42) и диск (0,4 → 0,32, 0,08 м) на 0,82 м —
@@ -78,7 +218,7 @@ static func build_body() -> ArrayMesh:
 
 
 ## Щупальце: конус 0,05 → 0,015 м длиной 1 м от основания вверх, четыре грани, цвет по высоте k:
-## (0,55 + 0,45k, 0,25 + 0,6k, 0,6 + 0,35k); светится само (MeshBasicMaterial).
+## (0,55 + 0,45k, 0,25 + 0,6k, 0,6 + 0,35k), в альфе — k (свечение к кончику); тело со светом (PLANT, TENTACLE).
 static func build_tentacle() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -89,28 +229,38 @@ static func build_tentacle() -> ArrayMesh:
 	var col := PackedColorArray()
 	for p in v:
 		var k := clampf(p.y, 0.0, 1.0)
-		col.append(Color(0.55 + k * 0.45, 0.25 + k * 0.6, 0.6 + k * 0.35))
+		col.append(Color(0.55 + k * 0.45, 0.25 + k * 0.6, 0.6 + k * 0.35, k))
 	arr[Mesh.ARRAY_COLOR] = col
 	var out := ArrayMesh.new()
 	out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.vertex_color_use_as_albedo = true
-	out.surface_set_material(0, mat)
+	out.surface_set_material(0, EcoShaders.plant(EcoShaders.Plant.TENTACLE, {"rough": 0.6, "spec": 0.4,
+		"bend": BEND, "reach": 1.0, "phase_axis": PHASE_AXIS, "tip_glow": TIP_GLOW}))
 	return out
 
 
-## Пестрянка: сплюснутая сфера 6 × 4, вытянута вдоль +Z (нос по ходу); цвет — у экземпляра, светится сама.
-static func build_pestr() -> SphereMesh:
-	var m := SphereMesh.new()
-	m.radius = 1.0
-	m.height = 2.0
-	m.radial_segments = 6
-	m.rings = 4
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.vertex_color_use_as_albedo = true
-	m.material = mat
+## Смещение точки v щупальца (в осях меша: y — доля длины) в мире по формуле шейдера PLANT (двойник для тестов):
+## tr — расстановка щупальца из буфера, flow — течение мира.
+static func tentacle_offset(tr: Transform3D, v: Vector3, t: float, flow: Vector3) -> Vector3:
+	var ay := tr.basis.y
+	var po := tr.origin + Vector3(atan2(ay.z, ay.x) * PHASE_AXIS, 0.0, 0.0)
+	return EcoCurrent.sway(po, clampf(v.y, 0.0, 1.0), ay.length(), t, flow, BEND)
+
+
+## Пестрянка: форма EcoPestrLook (нос по +Z) на шейдере светляков FishView — тот же ресурс Shader, свой материал
+## с тёмной основой плавников; светится цветом экземпляра, плавники машут в шейдере.
+static func build_pestr() -> ArrayMesh:
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = EcoPestrLook.shape
+	arrays[Mesh.ARRAY_NORMAL] = EcoPestrLook.normals
+	arrays[Mesh.ARRAY_COLOR] = EcoPestrLook.colors
+	arrays[Mesh.ARRAY_INDEX] = EcoPestrLook.tris
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var mat := ShaderMaterial.new()
+	mat.shader = EcoShaders.shader(FishView.shader_code())
+	mat.set_shader_parameter("body_color", EcoPestrLook.BODY_COLOR)
+	m.surface_set_material(0, EcoShaders.follow(mat))
 	return m
 
 
@@ -143,33 +293,62 @@ const FAR_EVERY := 3
 var _frame := 0
 
 
-## Расставить щупальца и пестрянок в момент t (время мира); all — переписать всех хватней сразу.
-func sync(t: float, ship_pos := Vector3.ZERO, all := true) -> void:
+## Расставить тела (дыхание — EcoHvaten.breath), щупальца и пестрянок в момент t (время мира); all — переписать всех
+## хватней сразу. На «Экономно» (EcoShaders.sway_lite) тело не дышит, только сжимается со щупальцами.
+## info — корабль целиком (муть светлее в луче прожектора), flow — течение мира (уносит муть).
+func sync(t: float, ship_pos := Vector3.ZERO, all := true, info: EcoLink.ShipState = null,
+		flow := Vector3.ZERO) -> void:
 	_frame += 1
+	_t = t
+	_sync_dust(t, ship_pos, info, flow)
+	var live := not EcoShaders.sway_lite
 	for hv in hvaten.anemones:
 		if not all and not due(hv, ship_pos, _frame):
 			continue
-		for k in EcoHvaten.TENT:
-			_put(tent_buffer, (hv.index * EcoHvaten.TENT + k) * STRIDE, EcoHvaten.tentacle(hv, k, t))
+		EcoMM.put(body_buffer, hv.index * STRIDE, body_pose(hv, t, live))
+		_put_tents(hv, t, live)
 		for k in EcoHvaten.PESTR_N:
-			var tr := EcoHvaten.pestr_pose(hv, k, t)
-			tr.basis = tr.basis * Basis.from_scale(PESTR_SIZE)
-			_put(pestr_buffer, (hv.index * EcoHvaten.PESTR_N + k) * STRIDE_C, tr)
-	tents.multimesh.buffer = tent_buffer
-	pestr.multimesh.buffer = pestr_buffer
+			EcoMM.put(pestr_buffer, (hv.index * EcoHvaten.PESTR_N + k) * STRIDE_P, pestr_pose(hv, k, t))
+	EcoMM.send(bodies, body_buffer)
+	EcoMM.send(tents, tent_buffer)
+	EcoMM.send(pestr, pestr_buffer)
+
+
+## Ширина тела хватня по номеру (`body_width`), посчитана один раз.
+var _width := PackedFloat32Array()
+
+## Время последнего sync — смена уровня переписывает щупальца в той же позе.
+var _t := 0.0
+
+
+func _sync_tents(t: float) -> void:
+	var live := not EcoShaders.sway_lite
+	for hv in hvaten.anemones:
+		_put_tents(hv, t, live)
+
+
+func _put_tents(hv: EcoHvaten.Anemone, t: float, live: bool) -> void:
+	var w := _width[hv.index]
+	if not lite:
+		var at := hv.index * EcoHvaten.TENT
+		for k in EcoHvaten.TENT:
+			EcoMM.put(tent_buffer, (at + k) * STRIDE, tentacle_pose(hv, k, t, live, w))
+		return
+	var n := hvaten.anemones.size()
+	for k in range(0, EcoHvaten.TENT, LITE_SKIP):   # скрытые — за visible_instance_count, не пишем
+		EcoMM.put(tent_buffer, tent_slot(hv.index, k, n, true) * STRIDE, tentacle_pose(hv, k, t, live, w))
+
+
+func _sync_dust(t: float, ship: Vector3, info: EcoLink.ShipState, flow: Vector3) -> void:
+	dust.update(hvaten, t, ship)
+	_dust.pack(dust.dust, t, flow, info, EcoHvatenDust.COLOR, EcoHvatenDust.LIT,
+			Seabed.mesh_height)
+	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)
 
 
 ## Переписать ли хватня в этом кадре: близкий или в луче — всегда, дальний — в свой кадр из трёх.
 static func due(hv: EcoHvaten.Anemone, ship_pos: Vector3, frame: int) -> bool:
 	return hv.lit or hv.base.distance_squared_to(ship_pos) < FAR * FAR or (frame + hv.index) % FAR_EVERY == 0
-
-
-static func _put(buf: PackedFloat32Array, i: int, tr: Transform3D) -> void:
-	var b := tr.basis
-	var o := tr.origin
-	buf[i] = b.x.x; buf[i + 1] = b.y.x; buf[i + 2] = b.z.x; buf[i + 3] = o.x
-	buf[i + 4] = b.x.y; buf[i + 5] = b.y.y; buf[i + 6] = b.z.y; buf[i + 7] = o.y
-	buf[i + 8] = b.x.z; buf[i + 9] = b.y.z; buf[i + 10] = b.z.z; buf[i + 11] = o.z
 
 
 ## Расстановка экземпляра n из буфера с шагом stride.

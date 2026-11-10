@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://12d1rrs00myp"
-path="res://.godot/imported/gear-proby_gear-proby-color.png-934e6767aaa45fc1ed0361567739d8af.ctex"
+path.s3tc="res://.godot/imported/gear-proby_gear-proby-color.png-934e6767aaa45fc1ed0361567739d8af.s3tc.ctex"
+path.etc2="res://.godot/imported/gear-proby_gear-proby-color.png-934e6767aaa45fc1ed0361567739d8af.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "fc7ef37bddbb5b285296688f777ef4c7"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/gear-proby_gear-proby-color.png"
-dest_files=["res://.godot/imported/gear-proby_gear-proby-color.png-934e6767aaa45fc1ed0361567739d8af.ctex"]
+dest_files=["res://.godot/imported/gear-proby_gear-proby-color.png-934e6767aaa45fc1ed0361567739d8af.s3tc.ctex", "res://.godot/imported/gear-proby_gear-proby-color.png-934e6767aaa45fc1ed0361567739d8af.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

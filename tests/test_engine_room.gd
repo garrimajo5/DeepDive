@@ -93,12 +93,18 @@ func test_scene_vent_and_scram() -> void:
 	for i in 30:
 		main.step(1.0 / 30.0)
 	ok(main.reactor.heat < 70.0 - 2.0, "держим — остывает (%.1f°)" % main.reactor.heat)
-	ok(main.rooms.steam.emitting, "пар виден")
+	ok(main.rooms.steam.visible and main.rooms.steam.shown > 20, "пар виден (%d карточек)" % main.rooms.steam.shown)
 	ok(absf(main.rooms.valve_wheel.rotation_degrees.x) > 1.0, "маховик повёрнут")
 	ok(main.eco_ship.hull_noise >= EngineRoom.VENT_NOISE, "существа слышат пар")
 	r.end(5)
 	main.step(1.0 / 30.0)
-	ok(not main.rooms.steam.emitting, "отпустили — пара нет")
+	var born := main.valve_steam.born
+	main.step(1.0 / 30.0)
+	eq(main.valve_steam.born, born, "отпустили — новых клубов нет")
+	ok(main.rooms.steam.visible, "живые клубы доживают")
+	for i in 45:
+		main.step(1.0 / 30.0)
+	ok(not main.rooms.steam.visible, "через жизнь клуба пара нет")
 	main.walker.x = EngineRoom.PANEL_POST.x
 	main.walker.z = EngineRoom.PANEL_POST.y
 	main.step(1.0 / 30.0)

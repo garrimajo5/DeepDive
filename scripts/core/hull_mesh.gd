@@ -41,6 +41,102 @@ const NORMAL_DEPTH := 1.0
 const DAMAGE_DEPTH := 0.85
 
 
+## Ободок и затенение щелей ART-076 (`docs/concept-art/obodok-korpusa.md`): LUT 256×8 (линейные данные, X — e = 1 − N·V,
+## строки — глубина RIM_ROWS_M и ил) даёт мягкую синюю кромку в EMISSION; AO процедурный — шов по маске ART-024 и поля
+## примыканий в метрах корабля (max, не сумма). Числа — те же, что в `hull_plating.gdshader` (передаёт HullView).
+const RIM_TEX := "res://textures/hull/obodok-gradient.png"
+const RIM_ROWS := 8
+const RIM_ROWS_M: Array[float] = [0.0, 8.0, 14.0, 20.0, 32.5, 45.0, 90.0]   ## строка 7 — ил (A = 0), не берём
+const RIM_LITE := 0.65          ## «Экономно»: кромка слабее, примыкания не считаются
+const RIM_CONTACT := 0.55       ## у примыканий кромка гаснет на эту долю
+const RIM_ZAP := 0.55           ## пока идёт разряд ART-068, кромка уступает дугам
+const AO_SEAM := 0.18
+const AO_CONTACT := 0.34
+const AO_MIN := 0.55
+const AO_ALBEDO := 0.55
+const AO_LIGHT := 0.15
+const AO_PROTECT := 0.8         ## на следах ART-049 щели не темнеют дважды
+## Примыкания (оси корабля, x — по модулю): крепления двигателя (box SDF), ниша ротора, корни рулей и стабилизаторов.
+const AO_MOUNT := Vector3(3.45, 1.0, 26.3)
+const AO_MOUNT_HALF := Vector3(0.75, 0.225, 0.7)
+const AO_MOUNT_FEATHER := 0.18
+const AO_RECESS := Vector3(5.4, 1.0, 26.5)
+const AO_RECESS_R := Vector2(1.0, 1.29)
+const AO_RECESS_Z := 0.72
+const AO_RUDDER := Vector3(3.95, 2.6, 24.6)
+const AO_RUDDER_R := Vector3(0.28, 0.30, 1.0)
+const AO_STAB_UP := Vector3(0.0, 3.42, 25.0)
+const AO_STAB_UP_R := Vector3(0.28, 0.25, 1.3)
+const AO_STAB_DOWN := Vector3(0.0, -0.2, 25.0)
+const AO_STAB_DOWN_R := Vector3(0.25, 0.24, 1.1)
+
+
+## Строка LUT ободка по глубине (0…6, дробная — шейдер смешивает соседние строки): 0→1 на 0…8 м, 1→3 на 8…20,
+## 3→5 на 20…45, 5→6 на 45…90.
+static func rim_row(depth: float) -> float:
+	var d := maxf(depth, 0.0)
+	if d < 8.0:
+		return d / 8.0
+	if d < 20.0:
+		return 1.0 + 2.0 * (d - 8.0) / 12.0
+	if d < 45.0:
+		return 3.0 + 2.0 * (d - 20.0) / 25.0
+	return minf(5.0 + (d - 45.0) / 45.0, 6.0)
+
+
+## V строки LUT (центр текселя).
+static func rim_v(row: float) -> float:
+	return (row + 0.5) / RIM_ROWS
+
+
+## «Корпус разрушен» ART-036: кромка гаснет к Wreck.DARK_AT, нет до RESTART_AT, возвращается к Wreck.END.
+static func rim_alive(wreck_t: float) -> float:
+	if wreck_t < 0.0:
+		return 1.0
+	if wreck_t < Wreck.RESTART_AT:
+		return 1.0 - smoothstep(0.0, Wreck.DARK_AT, wreck_t)
+	return smoothstep(Wreck.RESTART_AT, Wreck.END, wreck_t)
+
+
+## Общий множитель кромки с CPU (uniform `rim_k`): жив ли корпус, ил гасит, «Экономно» — RIM_LITE.
+static func rim_k(alive: float, silt_k: float, lite: bool) -> float:
+	return clampf(alive, 0.0, 1.0) * (1.0 - clampf(silt_k, 0.0, 1.0)) * (RIM_LITE if lite else 1.0)
+
+
+## Кромка уступает дугам разряда: 1 − RIM_ZAP · sin²(π t / dur), вне разряда — 1 (как в шейдере).
+static func rim_zap(zap_t: float, zap_dur: float) -> float:
+	if zap_t < 0.0 or zap_t >= zap_dur:
+		return 1.0
+	var s := sin(PI * zap_t / zap_dur)
+	return 1.0 - RIM_ZAP * s * s
+
+
+static func _patch(p: Vector3, c: Vector3, r: Vector3) -> float:
+	var q := (p - c) / r
+	return exp(-q.length_squared())
+
+
+## Примыкание 0…1 в точке p (оси корабля) — как `contact()` в шейдере.
+static func contact(p: Vector3) -> float:
+	var a := Vector3(absf(p.x), p.y, p.z)
+	var q := (a - AO_MOUNT).abs() - AO_MOUNT_HALF
+	var box := Vector3(maxf(q.x, 0.0), maxf(q.y, 0.0), maxf(q.z, 0.0)).length() + minf(maxf(q.x, maxf(q.y, q.z)), 0.0)
+	var c := exp(-maxf(box, 0.0) / AO_MOUNT_FEATHER)
+	var rho := Vector2(a.x - AO_RECESS.x, a.y - AO_RECESS.y).length()
+	var dz := (a.z - AO_RECESS.z) / AO_RECESS_Z
+	c = maxf(c, (1.0 - smoothstep(AO_RECESS_R.x, AO_RECESS_R.y, rho)) * exp(-dz * dz))
+	c = maxf(c, _patch(a, AO_RUDDER, AO_RUDDER_R))
+	c = maxf(c, _patch(p, AO_STAB_UP, AO_STAB_UP_R))
+	c = maxf(c, _patch(p, AO_STAB_DOWN, AO_STAB_DOWN_R))
+	return c
+
+
+## Затенение 0,55…1: шов (smoothstep маски), примыкание, cover — альфа следов ART-049 (там щели не темнеют).
+static func occlusion(seam: float, contact_k: float, cover: float) -> float:
+	var protect := 1.0 - AO_PROTECT * clampf(cover, 0.0, 1.0)
+	return clampf(1.0 - (AO_SEAM * seam + AO_CONTACT * contact_k) * protect, AO_MIN, 1.0)
+
+
 ## Краска под обшивкой: металл корпуса. Швы-кольца, окна, линза, шлюз — своим цветом.
 static func plated(paint: int) -> bool:
 	return paint == HullPlan.Paint.METAL

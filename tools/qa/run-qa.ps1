@@ -8,13 +8,52 @@
 #   -Pr <номер>         — проверить фикс из открытой PR ДО слияния: берёт APK из артефакта deepdive-apk
 #                         последнего прогона CI этой PR (нужен gh), ставит на эмулятор и гоняет сценарий
 #   -Force              — прогнать APK, даже если коммит тот же; -Scenario <файл> — свой сценарий
-param([switch]$Pc, [switch]$Force, [string]$Scenario, [int]$Pr)
+#   -Phone              — только скачать DeepDive.apk (arm64, телефон) из apk-latest со сверкой длины
+#                         в D:\AI\qa-build\DeepDive.apk и выйти; на телефон ставить вручную
+#   Эмулятор после прогона не закрывается (запущен отдельно от скрипта): ручная проверка — adb, закрыть — adb emu kill
+param([switch]$Pc, [switch]$Force, [string]$Scenario, [int]$Pr, [switch]$Phone)
 $ErrorActionPreference = 'Continue'
+$ProgressPreference = 'SilentlyContinue'   # полоса прогресса в PS 5.1 тормозит скачивание в разы
+
+# Скачать файл релиза и сверить длину с размером в релизе ($size). Invoke-WebRequest может молча оборвать
+# поток: APK эмулятора приходил ровно 110 МиБ из 114 и не ставился (INSTALL_PARSE_FAILED_NOT_APK, #1504).
+# Обрыв — докачка с места обрыва (curl.exe -C -, есть в Windows 10+), иначе заново; до 3 попыток.
+# Возвращает '' при успехе или текст ошибки (попытки — в Write-Host, чтобы не смешаться с ответом).
+function Get-Asset([string]$url, [string]$path, [long]$size) {
+  $why = ''; $err = ''
+  $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+  for ($try = 1; $try -le 3; $try++) {
+    $have = if (Test-Path $path) { (Get-Item $path).Length } else { 0 }
+    if ($have -gt $size) { Remove-Item $path -Force; $have = 0 }
+    try {
+      if ($curl -and $have -gt 0) {
+        & $curl.Source -sSL -C - -A 'run-qa' -o $path $url
+      } else {
+        Invoke-WebRequest $url -OutFile $path -Headers @{ 'User-Agent' = 'run-qa' } -ErrorAction Stop
+      }
+    } catch { $err = $_.Exception.Message }
+    $got = if (Test-Path $path) { (Get-Item $path).Length } else { 0 }
+    if ($got -eq $size) { return '' }
+    $why = "скачано $got байт из $size"
+    if ($err) { $why += " ($err)"; $err = '' }
+    Write-Host "  попытка ${try}: $why"
+    if (-not $curl) { Remove-Item $path -Force -ErrorAction SilentlyContinue }
+    Start-Sleep 5
+  }
+  return $why
+}
+# Шум хоста (#1350): загрузка ЦП и сколько процессов эмулятора (qemu) запущено — до и после прогона, в итоговой
+# строке и в log.txt, чтобы шумный прогон отличался от регрессии фактом
+function Get-Load {
+  $cpu = (Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object LoadPercentage -Average).Average
+  $emu = @(Get-Process -Name 'qemu-system-*' -ErrorAction SilentlyContinue).Count
+  return "ЦП $([int]$cpu)%, эмуляторов $emu"
+}
 $repo  = 'D:\AI\DeepDive'
 $out   = 'D:\AI\qa-build'
 $run   = "$out\run"
 $app   = 'com.garrimajo5.deepdive'
-$apk   = "$out\DeepDive.apk"
+$apk   = "$out\DeepDive-emulator.apk"   # эмулятору — x86_64-сборка (#844); телефону — DeepDive.apk
 if (-not $Scenario) { $Scenario = "$repo\tools\qa\scenario.json" }
 New-Item -ItemType Directory -Force $out | Out-Null
 Remove-Item -Recurse -Force $run -ErrorAction SilentlyContinue
@@ -36,12 +75,25 @@ if ($Pc) {
   $head = (git -C $repo rev-parse --short HEAD).Trim()
   & $godot.FullName --path $repo --import --headless | Out-Null
   $p = Start-Process $godot.FullName -ArgumentList '--path', $repo, '--resolution', '2400x1080' -PassThru
-  if (-not $p.WaitForExit(180000)) { $p.Kill(); Write-Output 'TIMEOUT: сценарий не закончился за 3 минуты' }
+  if (-not $p.WaitForExit(300000)) { $p.Kill(); Write-Output 'TIMEOUT: сценарий не закончился за 5 минут' }
   Copy-Item "$user\out\*" $run -Force
   $done = Test-Path "$run\done.txt"
   Write-Output "PC $head $($godot.Name) done=$done"
   Write-Output 'log:'; Get-Content "$run\log.txt" -Encoding utf8
   Write-Output "files: $run"
+  exit 0
+}
+
+if ($Phone) {
+  # ---- только APK телефона (arm64), со сверкой длины ----
+  $rel = Invoke-RestMethod 'https://api.github.com/repos/garrimajo5/DeepDive/releases/tags/apk-latest' -Headers @{ 'User-Agent' = 'run-qa' }
+  $asset = $rel.assets | Where-Object name -eq 'DeepDive.apk' | Select -First 1
+  if (-not $asset) { Write-Output 'NO_ASSET: в релизе apk-latest нет DeepDive.apk — повторите позже'; exit 1 }
+  $file = "$out\DeepDive.apk"
+  Remove-Item $file -Force -ErrorAction SilentlyContinue
+  $why = Get-Asset $asset.browser_download_url $file $asset.size
+  if ($why) { Write-Output "DOWNLOAD_FAILED DeepDive.apk: $why — повторите позже"; exit 1 }
+  Write-Output "OK $file ($($asset.size) байт) — $($rel.body)"
   exit 0
 }
 
@@ -57,8 +109,9 @@ if ($Pr) {
   $dir = "$out\pr$Pr"
   Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
   gh run download $rid -n deepdive-apk -D $dir
-  if (-not (Test-Path "$dir\DeepDive.apk")) { Write-Output "NO_ARTIFACT: в прогоне PR #$Pr нет deepdive-apk (сборка APK не шла — в PR нет кода?)"; exit 1 }
-  $apk = "$dir\DeepDive.apk"
+  # эмулятору — x86_64-сборка; в артефактах до #844 был один общий DeepDive.apk
+  $apk = @("$dir\DeepDive-emulator.apk", "$dir\DeepDive.apk") | Where-Object { Test-Path $_ } | Select -First 1
+  if (-not $apk) { Write-Output "NO_ARTIFACT: в прогоне PR #$Pr нет deepdive-apk (сборка APK не шла — в PR нет кода?)"; exit 1 }
   $head = "PR#$Pr $($sha.Substring(0,7))"
 } else {
   # APK из релиза apk-latest (то, что собрал CI из main)
@@ -66,12 +119,21 @@ if ($Pr) {
   $head = if ($rel.body -match 'коммит ([0-9a-f]{7})') { $Matches[1] } else { $rel.published_at }
   $last = if (Test-Path "$out\last-commit.txt") { (Get-Content "$out\last-commit.txt").Trim() } else { '' }
   if ($head -eq $last -and -not $Force) { Write-Output "NO_CHANGES $head"; exit 0 }
-  $asset = $rel.assets | Where-Object name -eq 'DeepDive.apk' | Select -First 1
-  Invoke-WebRequest $asset.browser_download_url -OutFile $apk -Headers @{ 'User-Agent' = 'run-qa' }
+  # эмулятору — x86_64-сборка (#844); в релизах до неё — один общий DeepDive.apk
+  $asset = $rel.assets | Where-Object name -eq 'DeepDive-emulator.apk' | Select -First 1
+  if (-not $asset) { $asset = $rel.assets | Where-Object name -eq 'DeepDive.apk' | Select -First 1 }
+  if (-not $asset) { Write-Output "NO_ASSET ${head}: в релизе apk-latest нет APK (перезаливается?) — повторите позже"; exit 1 }
+  # Старый APK не ставим: релиз мог перезаливаться, и скачивание упадёт (BlobNotFound, #1125)
+  Remove-Item $apk -Force -ErrorAction SilentlyContinue
+  $why = Get-Asset $asset.browser_download_url $apk $asset.size
+  if ($why) { Write-Output "DOWNLOAD_FAILED ${head}: $why — повторите позже"; exit 1 }
 }
 
 if (-not ((& $adb devices) -match 'emulator-\d+\s+device')) {
-  Start-Process "$sdk\emulator\emulator.exe" -ArgumentList '-avd', 'Pixel_8' -WindowStyle Minimized
+  # Эмулятор — отвязанным процессом (WMI, не потомок скрипта): живёт после прогона, даже если фоновый
+  # run-qa.ps1 закрыли вместе с деревом процессов, — можно досматривать руками через adb (#1350)
+  Invoke-CimMethod Win32_Process -MethodName Create -Arguments @{
+    CommandLine = "`"$sdk\emulator\emulator.exe`" -avd Pixel_8" } | Out-Null
   & $adb wait-for-device
   for ($i = 0; $i -lt 60; $i++) { if ((& $adb shell getprop sys.boot_completed).Trim() -eq '1') { break }; Start-Sleep 5 }
 }
@@ -79,6 +141,7 @@ $inst = ''
 for ($i = 0; $i -lt 3; $i++) { $inst = (& $adb install -r $apk 2>&1 | Out-String); if ($inst -match 'Success') { break }; Start-Sleep 10 }
 if ($inst -notmatch 'Success') { Write-Output "INSTALL_FAILED $head"; $inst; exit 1 }
 
+$loadBefore = Get-Load
 # Сценарий — в user:// игры (files/qa/). APK отладочный, поэтому run-as работает.
 & $adb shell am force-stop $app
 & $adb push $tmp /data/local/tmp/qa-scenario.json | Out-Null
@@ -86,13 +149,30 @@ if ($inst -notmatch 'Success') { Write-Output "INSTALL_FAILED $head"; $inst; exi
 & $adb logcat -c
 & $adb shell monkey -p $app -c android.intent.category.LAUNCHER 1 | Out-Null
 $done = $false
-for ($i = 0; $i -lt 90; $i++) {
+# 300 × 2 с: прогон 800+ шагов с прогревом и установкой не укладывался в 195 × 2 с (#1533)
+for ($i = 0; $i -lt 300; $i++) {
   Start-Sleep 2
   if ((& $adb shell "run-as $app ls files/qa/out/done.txt" 2>&1) -match 'done.txt$') { $done = $true; break }
 }
-Start-Sleep 2
-$names = (& $adb shell "run-as $app ls files/qa/out") -split "`r?`n" | Where-Object { $_ -match '\.(png|txt)$' }
-foreach ($n in $names) { cmd /c "`"$adb`" exec-out run-as $app cat files/qa/out/$n > `"$run\$n`"" }
+# Забрать files/qa/out. Снимок пишется после строки «скриншот» в логе: пока снимков меньше строк или нет
+# done.txt — ещё до 4 попыток через 15 с (#1533: последние 2 снимка и done.txt добирались руками).
+function Get-Out {
+  $names = (& $adb shell "run-as $app ls files/qa/out") -split "`r?`n" | Where-Object { $_ -match '\.(png|txt)$' }
+  foreach ($n in $names) { cmd /c "`"$adb`" exec-out run-as $app cat files/qa/out/$n > `"$run\$n`"" }
+}
+$miss = @()
+for ($try = 0; $try -lt 5; $try++) {
+  Start-Sleep $(if ($try -eq 0) { 2 } else { 15 })
+  Get-Out
+  $done = Test-Path "$run\done.txt"
+  $want = if (Test-Path "$run\log.txt") {
+    @(Get-Content "$run\log.txt" -Encoding utf8 | ForEach-Object { if ($_ -match '^скриншот (\S+) \|') { $Matches[1] } })
+  } else { @() }
+  $have = @(Get-ChildItem "$run\*.png" | ForEach-Object BaseName)
+  $miss = @($want | Where-Object { $_ -notin $have })
+  if ($done -and -not $miss) { break }
+}
+$loadAfter = Get-Load
 & $adb logcat -d | Set-Content "$run\logcat.txt" -Encoding utf8
 $errs = Select-String -Path "$run\logcat.txt" -Pattern ' E godot|SCRIPT ERROR|AndroidRuntime|FATAL' |
   ForEach-Object { ($_.Line -split ': ', 2)[1] } | Where-Object { $_ -and $_ -notmatch '^\s*$' } |
@@ -108,3 +188,14 @@ else {
 Write-Output 'log:'; if (Test-Path "$run\log.txt") { Get-Content "$run\log.txt" -Encoding utf8 }
 Write-Output 'errors:'; $errs | Select -First 30
 Write-Output "files: $run"
+# Итог одной строкой — и в конец log.txt: лог из отчёта сам называет сборку, снимки и шум хоста (#1350)
+$result = "RUN $head done=$done снимков $($have.Count) из $($want.Count) | до: $loadBefore | после: $loadAfter"
+Write-Output $result
+Add-Content "$run\log.txt" "run-qa: $result" -Encoding utf8
+# Заметная строка в самом конце: прогон не дошёл до конца или не все снимки забраны (#1533)
+if (-not $done -or $miss) {
+  $why = @()
+  if (-not $done) { $why += 'нет done.txt' }
+  if ($miss) { $why += "нет снимков ($($miss.Count)): $($miss -join ', ')" }
+  Write-Output "NOT_DONE $head — $($why -join '; ')"
+}
