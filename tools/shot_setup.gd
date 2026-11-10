@@ -74,6 +74,8 @@ static func apply(g: Main, kv: Dictionary) -> void:
 		g._apply_graphics(Graphics.ECONOMY)
 	if kv.has("grafika"):  # grafika=0|1|2 — уровень графики ART-044 (0 — «Экономно», 2 — «Красиво»)
 		g._apply_graphics(int(kv["grafika"]))
+	if kv.get("luch_ten", "1") == "0":  # luch_ten=0 — прожектор без тени (#1400: цена тени на «Обычно»), после grafika=
+		g.searchlight.spot.shadow_enabled = false
 	if kv.get("glints", "1") == "0":  # glints=0 — без бликов воды в мостике ART-067 (сравнить)
 		g.glints.lite = true
 	if kv.has("layers"):  # layers=<сила> — слои воды ART-069 (0 — выкл, 0,6 — «Обычно», 0,9 — «Красиво»)

@@ -188,3 +188,15 @@ func test_scene_scena_ground_in_window() -> void:   # scena=n печатает, 
 	ok(ShotSetup.ground_line(main).begins_with("грунт в окне (#1400): слева "), "строка для лога")
 	main.queue_free()
 	await frames(1)
+
+
+func test_luch_ten_off_after_graphics() -> void:   # luch_ten=0 — прожектор без тени, и после grafika= (#1400)
+	var main: Node = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	ShotSetup.apply(main, {"grafika": "1"})
+	ok(main.searchlight.spot.shadow_enabled, "«Обычно» — тень прожектора есть")
+	ShotSetup.apply(main, {"grafika": "1", "luch_ten": "0"})
+	ok(not main.searchlight.spot.shadow_enabled, "luch_ten=0 — без тени, grafika= не включает её обратно")
+	main.queue_free()
+	await frames(1)
