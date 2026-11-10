@@ -222,6 +222,7 @@ func test_scene_runs_scenario() -> void:
 	ok(ahead > 20.0, "корабль прошёл вперёд: %.1f м" % ahead)
 	ok(FileAccess.file_exists(QaRunner.OUT + "/done.txt"), "done.txt записан")
 	var log := FileAccess.get_file_as_string(QaRunner.OUT + "/log.txt")
+	ok(log.get_slice("\n", 0).contains("версия " + Main.version_text()), "#1350: первая строка лога — версия как на плашке")
 	ok(log.contains("сел за штурвал") and log.contains("за штурвалом"), "в логе есть состояние за штурвалом")
 	ok(log.contains("прожектор погашен | ") and log.contains("свет выкл"), "по сценарию гасили прожектор")
 	ok(main.light_on, "и зажгли снова")

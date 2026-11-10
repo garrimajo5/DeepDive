@@ -609,7 +609,7 @@ func set_hud(on: bool) -> void:
 
 
 ## Версия сборки для отладочной плашки: config/version + номер сборки из version.txt (пишет CI), иначе «dev».
-func version_text() -> String:
+static func version_text() -> String:
 	var v := str(ProjectSettings.get_setting("application/config/version", "?"))
 	var build := "dev"
 	if FileAccess.file_exists("res://version.txt"):
