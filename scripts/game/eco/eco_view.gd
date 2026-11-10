@@ -115,8 +115,9 @@ var brink_view: BrinkView
 ## Скребуны у Спуска 10 (#840): своя группа на мху площадки (`EcoBrink.moss`), рисует свой MultiMesh «Скребуны спуска».
 var brink_grazers: EcoGrazer
 var brink_grazer_view: GrazerView
-## Купольник у террасы врат 07 (#837): рабочий Хранителя открывает створку гнезда; вид — по модели MOD-022.
+## Купольник у террасы врат 07 (#837): рабочий Хранителя открывает створку гнезда; вид — модель MOD-022 (DomeView).
 var dome: EcoDome
+var dome_view: DomeView
 ## Эхоловец (ART-007): засадчик с ушами-воронками лежит у Костей левиафана, уши поворачивает на корабль,
 ## затаившегося выдаёт только импульс сонара.
 var echo: EcoEcho
@@ -231,6 +232,8 @@ func _init() -> void:
 	add_child(fringe_view)
 	drop = world.add(EcoDrop.new()) as EcoDrop
 	dome = world.add(EcoDome.new()) as EcoDome
+	dome_view = DomeView.new(dome)
+	add_child(dome_view)
 	brink = world.add(EcoBrink.new()) as EcoBrink
 	echo = world.add(EcoEcho.new(bones, preds)) as EcoEcho
 	echo_view = EchoView.new(echo, lite)
@@ -626,6 +629,7 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	moth_view.sync(ship, world.time)
 	fringe_view.sync(ship, world.time)
 	echo_view.sync(world.time, ship.pos, ship, current.vel())
+	dome_view.sync()
 	far_view.sync(world.time, ship.pos, world.ground)
 	dust_layer.sync()
 	StepClock.mark("мир/вид: планктон, эхо, дальние")

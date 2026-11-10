@@ -94,6 +94,13 @@ static func apply(g: Main, kv: Dictionary) -> void:
 				r.worms[i].quiet = 999.0
 			r.calm = false
 		g.eco.kamen.changed = true
+	if kv.get("kupol", "0") == "1":  # kupol=1 — купольник у гнезда 07 поднимает створку (#837, модель MOD-022)
+		var d: EcoDome = g.eco.dome
+		d.pos = d.stand()
+		d.yaw = 0.0
+		d.state = EcoDome.State.OPEN
+		d.t = 0.0
+		g.eco.dome_view.sync()
 	if kv.get("steam", "0") == "1":  # пар из вентиля и открытая крышка щитка (для снимка машинного)
 		g.debug_vent = true
 		g.engine.pressed = 30.0
