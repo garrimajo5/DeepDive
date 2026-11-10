@@ -509,6 +509,53 @@ func test_urchin_speed_eases() -> void:
 	ok(ate, "ёж дошёл до ленты и ест")
 
 
+## #1400 (`tools/jerk.gd scena=2 move=3`): на крутом склоне ёж шёл по запомненной высоте дна и раз в 0,1 м пути
+## съезжал ступенькой 0,14 м за кадр. Теперь высота меняется за шаг не больше, чем по уклону, и ёж стоит на UP над дном —
+## и на гладком склоне, и на изломе (дно игры — сетка треугольников, уклон меняется на ребре).
+func test_urchin_crawls_slope_without_steps() -> void:
+	var smooth := func(x: float, z: float) -> float:
+		return FLAT + x * 1.4 + sin(z * 0.7) * 0.5
+	var kink := func(x: float, z: float) -> float:
+		return FLAT + maxf(x * 1.4, x * 0.3) + absf(z) * 0.4
+	for g: Callable in [smooth, kink]:
+		var r := _urchins_on(g)
+		var name := "гладкий склон" if g == smooth else "излом"
+		ok(r[0] > 1.0, "%s: ежи ползут, %.1f м" % [name, r[0]])
+		ok(r[1] < 0.005, "%s: высота за шаг — по уклону, без ступенек: лишнее %.3f м" % [name, r[1]])
+		# на изломе в шаге через ребро ёж идёт по прежнему уклону и догоняет дно за следующий — не уходит в грунт
+		ok(r[2] < (0.03 if g == smooth else EcoKelp.UP * 0.7), "%s: ёж на UP над дном, отличие до %.3f м" % [name, r[2]])
+
+
+## Ежи у SPOT на дне ground 30 с: [путь, худшее «лишнее» Δy за шаг сверх уклона 1,6, худшее отличие от дна + UP].
+func _urchins_on(ground: Callable) -> Array[float]:
+	var w := EcoWorld.new()
+	w.ground = ground
+	w.add(EcoKelp.new(null, [SPOT] as Array[Vector3]))
+	w.ship.pos = SPOT + Vector3(0, 10, 0)   # рядом: ежи шагают каждый кадр (EcoLod)
+	var k := _kelp(w)
+	w.reset()
+	var dt := 1.0 / 30.0
+	var last: Array[Vector3] = []
+	for u in k.urchins:
+		last.append(u.pos)
+	var worst := 0.0
+	var off := 0.0
+	var moved := 0.0
+	for i in 900:
+		w.step(dt)
+		for u in k.urchins:
+			var j := u.index
+			var flat := Vector2(u.pos.x - last[j].x, u.pos.z - last[j].z).length()
+			var dy := absf(u.pos.y - last[j].y)
+			last[j] = u.pos
+			if not u.alive or flat > 0.5:   # съеден или появился заново
+				continue
+			moved += flat
+			worst = maxf(worst, dy - flat * 1.6)   # уклон — до 1,4 по x и 0,4 по z
+			off = maxf(off, absf(u.pos.y - (float(ground.call(u.pos.x, u.pos.z)) + EcoKelp.UP)))
+	return [moved, worst, off]
+
+
 func test_urchin_want_speed_slows_to_creep() -> void:
 	near(EcoKelp.want_speed(EcoKelp.SPEED, 5.0), EcoKelp.SPEED, 1e-6, "вдали — полный ход")
 	near(EcoKelp.want_speed(EcoKelp.SPEED, EcoKelp.ARRIVE * 0.5), EcoKelp.SPEED * 0.5, 1e-6, "у места — вполовину")
