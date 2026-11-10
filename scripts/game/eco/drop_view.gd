@@ -45,6 +45,8 @@ const TUFT_H := 0.5
 const CRACK_W := 0.5
 
 var drop: EcoDrop
+## Мох группы кормления 06 (EcoDrop.moss) — свой меш пятен, один вызов отрисовки.
+var moss_view: MossView
 ## Вершины по треугольникам (мир, для тестов), нормали, число треугольников; сколько у клиньев и светится.
 var verts := PackedVector3Array()
 var normals := PackedVector3Array()
@@ -66,6 +68,9 @@ func _init(system: EcoDrop, on_lite := false) -> void:
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_mat = EcoShaders.stone(GROWTH, FILL, ROUGH, SPEC)
 	_build()
+	moss_view = MossView.new(drop.moss, drop.ground, lite)
+	moss_view.name = "Мох края"
+	add_child(moss_view)
 
 
 ## «Экономно» — меш пересобран грубее (тот же материал); назад — полный.
@@ -73,6 +78,7 @@ func set_lite(on: bool) -> void:
 	if lite == on:
 		return
 	lite = on
+	moss_view.set_lite(on)
 	_build()
 
 
