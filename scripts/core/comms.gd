@@ -70,6 +70,7 @@ class Msg:
 	var text := ""
 	var fake := false
 	var ask := ""        ## просьба голоса: "ping" — импульс, "light" — свет, "" — нет (наказывает за неё мир)
+	var voice_id := ""   ## ID реплики TXT-002 (`EcoLink.VOICE` "id") — по нему файл голоса SND-009 (`VoiceFiles`); "" — без озвучки
 	var reply := ""      ## что источник ответит на «Спросить код»: своё — кодовое слово; "" — молчит
 	var t := 0.0         ## сколько уже показано (только видимое время)
 	var speech := 0.0    ## длина речи, с (индикатор движется только пока она идёт)
@@ -112,7 +113,8 @@ func reset_run(n: int) -> void:
 
 
 ## Сообщение в эфир. Своё отвечает кодом забега; подделка — чужим словом или молчит (`silent`).
-func push(role: int, text: String, fake := false, ask := "", silent := false) -> Msg:
+## voice_id — ID реплики TXT-002 для файла голоса (`VoiceFiles.path`).
+func push(role: int, text: String, fake := false, ask := "", silent := false, voice_id := "") -> Msg:
 	var m := Msg.new()
 	next_id += 1
 	m.id = next_id
@@ -120,6 +122,7 @@ func push(role: int, text: String, fake := false, ask := "", silent := false) ->
 	m.text = text
 	m.fake = fake
 	m.ask = ask
+	m.voice_id = voice_id
 	m.speech = clampf(text.length() * 0.065, 1.5, 12.0)
 	if silent:
 		m.reply = ""
@@ -251,7 +254,7 @@ func pack() -> Dictionary:
 	if cur != null:
 		var reply := cur.reply if state in [Ask.WRONG, Ask.EXPOSED] else ""
 		d["m"] = [cur.id, cur.role, cur.text.left(TEXT_MAX), cur.fake, reply, cur.t, cur.speech, int(state), st,
-			closing, exposed]
+			closing, exposed, cur.voice_id]
 	return d
 
 
@@ -261,7 +264,7 @@ func apply(d: Variant) -> void:
 		return
 	code = str(d.get("k", code))
 	var m: Variant = d.get("m")
-	if not (m is Array and m.size() == 11):
+	if not (m is Array and m.size() == 12):
 		if cur != null:
 			closing = true
 		return
@@ -280,6 +283,7 @@ func apply(d: Variant) -> void:
 	st = float(m[8])
 	closing = bool(m[9])
 	exposed = int(m[10])
+	cur.voice_id = str(m[11])
 
 
 ## Гость между кадрами хоста: только прозрачность и индикатор речи.

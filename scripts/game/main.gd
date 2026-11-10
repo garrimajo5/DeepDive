@@ -1244,7 +1244,7 @@ func on_eco_event(e: Dictionary) -> void:
 			if bool(e.get("fake", false)) and events_held():
 				return   # обучение (#827): подделок в эфире нет, свои доклады идут
 			comms.push(int(e.get("role", Crew.Role.ENGINEER)), str(e.get("text", "")), bool(e.get("fake", false)),
-				str(e.get("ask", "")), bool(e.get("silent", false)))
+				str(e.get("ask", "")), bool(e.get("silent", false)), str(e.get("id", "")))
 		EcoLink.DRAG:   # присоски на корпусе тормозят корабль (js/ship.js: drag = 0.45 + 0.025 * hullRemoras)
 			helm.extra_drag = 0.0 if events_held() else float(e.get("k", 0.0))   # обучение (#827) — не тормозят
 		EcoLink.STEAL:   # образец сорван с захвата (M.steal в js/manip.js)
