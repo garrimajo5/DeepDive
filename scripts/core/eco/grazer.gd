@@ -258,8 +258,9 @@ func _step_grazer(world: EcoWorld, g: Grazer, dt: float) -> void:
 			a.set_state(EcoAgent.State.SEEK)
 	if not moved:
 		return   # стоит, ест или идёт (`walk` уже поставил на дно): шум fbm не пересчитываем (issue #133)
-	a.p.x = clampf(a.p.x, -EcoAgent.EDGE, EcoAgent.EDGE)
-	a.p.z = clampf(a.p.z, -EcoAgent.EDGE, EcoAgent.EDGE)
+	var b := EcoAgent.bound_xz(a.p.x, a.p.z)   # отмель или котловина склона у 10 (#840)
+	a.p.x = b.x
+	a.p.z = b.y
 	a.p.y = _ground_y(world, a.p.x, a.p.z, g.patch.pos.y if g.patch else a.p.y - LIFT)
 
 
@@ -281,6 +282,5 @@ static func walk(world: EcoWorld, from: Vector3, move: Vector3, fallback: float,
 
 
 static func _on_ground(world: EcoWorld, from: Vector3, move: Vector3, fallback: float) -> Vector3:
-	var x := clampf(from.x + move.x, -EcoAgent.EDGE, EcoAgent.EDGE)
-	var z := clampf(from.z + move.z, -EcoAgent.EDGE, EcoAgent.EDGE)
-	return Vector3(x, _ground_y(world, x, z, fallback), z)
+	var b := EcoAgent.bound_xz(from.x + move.x, from.z + move.z)
+	return Vector3(b.x, _ground_y(world, b.x, b.y, fallback), b.y)

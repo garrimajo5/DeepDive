@@ -15,6 +15,10 @@ enum State {
 
 ## Край отмели по X и Z (clampArea).
 const EDGE := 290.0
+## Котловина склона за восточным краем (`Seabed.Slope`: x от края до восточной стены `X_END`, z — ось прохода
+## `GAP_Z` ± `BASIN_HALF`), куда пускает `bound_xz` (#840: скребуны у 10). `confine` её не знает: хищники и стаи,
+## как прежде, остаются на отмели и за кораблём вниз по склону не идут.
+const EAST := Rect2(EDGE, 110.0, 390.0, 180.0)
 
 var species: String
 var p := Vector3.ZERO      ## место
@@ -284,6 +288,17 @@ func confine(ground: Callable = Callable()) -> void:
 	p.z = clampf(p.z, -EDGE, EDGE)
 	if big and p.x < EcoField.BELT_IN:
 		EcoField.turn_back(self)
+
+
+## Ближайшая к (x, z) точка отмели ±EDGE или котловины склона EAST (донные, что живут у 10, — `EcoGrazer`). На
+## отмели — та же точка, что clampf по ±EDGE: прежние существа не сдвигаются.
+static func bound_xz(x: float, z: float) -> Vector2:
+	var a := Vector2(clampf(x, -EDGE, EDGE), clampf(z, -EDGE, EDGE))
+	if x <= EDGE:
+		return a
+	var b := Vector2(clampf(x, EAST.position.x, EAST.end.x), clampf(z, EAST.position.y, EAST.end.y))
+	var at := Vector2(x, z)
+	return a if at.distance_squared_to(a) <= at.distance_squared_to(b) else b
 
 
 ## Курс по дну from доворачивает к want за dt вокруг вертикали: доля угла k/с, не быстрее max_rate рад/с
