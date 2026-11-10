@@ -26,6 +26,8 @@ var _glint_k := -1.0
 var _glint_tint := Color(-1.0, -1.0, -1.0)
 var _wear_loss := -1.0
 var _screens := Vector4(-1.0, -1.0, -1.0, -1.0)
+var _slider_share := PackedFloat64Array()   ## доли ползунков, уже стоящие на пульте (set_slider, #1590)
+var _hatch_at := -1.0                        ## сдвиг створки люка, уже стоящий (set_hatch, #1590)
 var _readout := [Vector3(-1, -1, -1), Vector3(-1, -1, -1)]   ## показ экранов пульта (set_readout)
 var _surfaces: Array[ShaderMaterial] = []
 const SCANNER_TEXT := Color("67DDEB")
@@ -162,12 +164,21 @@ static func cabin_light(l: CabinLight.Lamp) -> OmniLight3D:
 
 ## Ползунок i пульта энергии на долю share 0…1 (паз наклонён: ползунок идёт по лицу пульта).
 func set_slider(i: int, share: float) -> void:
+	if _slider_share.size() != sliders.size():
+		_slider_share.resize(sliders.size())
+		_slider_share.fill(-1.0)
+	if _slider_share[i] == share:   # доля та же — узел не двигаем: перенос по дереву каждый кадр (#1590)
+		return
+	_slider_share[i] = share
 	var y := BridgeProps.slider_y(share)
 	sliders[i].position = Vector3(BridgeProps.SLIDER_X[i], y, BridgeProps.slider_z(y))
 
 
 ## Створка люка в коридор отъезжает вбок на offset м; колесо крутится, пока створка не тронулась.
 func set_hatch(offset: float) -> void:
+	if offset == _hatch_at:   # створка стоит — не пишем (#1590)
+		return
+	_hatch_at = offset
 	hatch_door.position.x = BridgeProps.HATCH_DOOR_OFFSET.x + offset
 	hatch_wheel.rotation_degrees.z = -offset / ShipLayout.Door.SLIDE * 540.0
 

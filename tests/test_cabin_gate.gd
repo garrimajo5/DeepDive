@@ -97,3 +97,27 @@ func test_rooms_cabin_wear_journal() -> void:
 	near(float(m.get_shader_parameter("wear_loss")), 0.0, 1e-5, "корпус цел — переписана")
 	r.queue_free()
 	await frames(1)
+
+
+## #1590: ползунки пульта энергии и створка люка не двигаются каждый кадр, если доля и сдвиг те же («пульты 24» в
+## худшем кадре `01-start` — восемь переносов по дереву за кадр у стоящего пульта).
+func test_bridge_sliders_and_hatch() -> void:
+	var v := BridgeView.new()
+	tree.root.add_child(v)
+	await frames(1)
+	v.set_slider(2, 0.7)
+	var y := v.sliders[2].position.y
+	v.sliders[2].position.y = 9.0
+	v.set_slider(2, 0.7)
+	eq(v.sliders[2].position.y, 9.0, "та же доля — ползунок не переписан")
+	v.set_slider(2, 0.2)
+	ok(v.sliders[2].position.y < y, "доля меньше — ползунок ниже: %.3f < %.3f" % [v.sliders[2].position.y, y])
+	v.set_hatch(0.3)
+	var x := v.hatch_door.position.x
+	v.hatch_door.position.x = 9.0
+	v.set_hatch(0.3)
+	eq(v.hatch_door.position.x, 9.0, "створка стоит — не переписана")
+	v.set_hatch(0.0)
+	near(v.hatch_door.position.x, x - 0.3, 1e-5, "створка закрылась")
+	v.queue_free()
+	await frames(1)
