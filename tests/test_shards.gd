@@ -93,6 +93,6 @@ func test_ci_runs_every_part() -> void:
 	var wf := FileAccess.get_file_as_string("res://.github/workflows/godot.yml")
 	ok(wf.contains("part: [1, 2, 3]"), "матрица из трёх частей")
 	ok(wf.contains("--shard ${{ matrix.part }}/3"), "часть берётся из матрицы, всего 3")
-	ok(wf.contains("needs: [changes, test-parts]") and wf.contains("needs.test-parts.result }}\" = \"success\""),
+	ok(wf.contains("needs: [changes, test-parts, ps1]") and wf.contains("needs.test-parts.result }}\" = \"success\""),
 		"итог «Тесты» проверяет результат всех частей")
 	ok(wf.contains("if: always() && needs.changes.outputs.code == 'true'"), "итог не пропускается при упавшей части")
