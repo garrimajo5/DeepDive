@@ -1121,3 +1121,29 @@ func test_outside_lamp() -> void:
 	ok(main.flyby_cam.get_node_or_null(QaRunner.LAMP_NAME) == null, "камера убрана — света нет")
 	main.queue_free()
 	await frames(1)
+
+
+## #1400 (отчёт qa/2026-11-11-0010-svezhaya-b946a31): цену тени прожектора на «Обычно» тестер меряет на устройстве —
+## шаг «luch_ten» гасит тень, true возвращает её по уровню графики («Экономно» — без тени и после true).
+func test_luch_ten_step() -> void:
+	var q := QaScript.parse('[{"do": "luch_ten", "on": false}, {"do": "luch_ten"}]')
+	eq(q.errors.size(), 0, "шаг luch_ten известен")
+	eq(q.advance(0.1).slice(0, 2), [["luch_ten", false], ["luch_ten", true]], "команды сцене")
+	var probe := QaScript.parse(FileAccess.get_file_as_string("res://tools/qa/luch-ten.json"))
+	eq(probe.errors.size(), 0, "сценарий пробы tools/qa/luch-ten.json без ошибок: %s" % ", ".join(probe.errors))
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main._apply_graphics(Graphics.NORMAL)
+	ok(main.searchlight.spot.shadow_enabled, "на «Обычно» прожектор с тенью")
+	main.start_qa('[{"do": "luch_ten", "on": false}, {"do": "wait", "s": 0.2}]')
+	for i in 3:
+		main.step(1.0 / 30.0)
+	ok(not main.searchlight.spot.shadow_enabled, "после шага — без тени")
+	QaRunner.luch_ten(main, true)
+	ok(main.searchlight.spot.shadow_enabled, "true — тень по уровню графики")
+	main._apply_graphics(Graphics.ECONOMY)
+	QaRunner.luch_ten(main, true)
+	ok(not main.searchlight.spot.shadow_enabled, "на «Экономно» тени нет и после true")
+	main.queue_free()
+	await frames(1)

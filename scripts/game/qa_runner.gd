@@ -149,6 +149,8 @@ func tick(dt: float) -> void:
 				_shot(c[1])
 			"hud":   # кадры для магазина: без крестовины, кнопок и строк приборов
 				main.set_hud(c[1])
+			"luch_ten":   # тень прожектора (#1400): false — без тени, true — по уровню графики
+				luch_ten(main, c[1])
 			"play":   # кадр Google Play ART-046: снимок и кадр 1920×1080 с подписью
 				_play(c[1])
 			"goto":
@@ -282,6 +284,15 @@ func _log_graphics() -> void:
 	if line != graphics_seen:
 		graphics_seen = line
 		_log(line)
+
+
+## Тень прожектора для шага `luch_ten` (#1400): цену тени на «Обычно» тестер меряет на устройстве — кадры
+## до и после шага; true возвращает тень такой, как её ставит уровень графики (`Main._apply_graphics`).
+static func luch_ten(m: Main, on: bool) -> void:
+	if m.searchlight == null:
+		return
+	m.searchlight.spot.shadow_enabled = on and int(Graphics.level(m.graphics_level)["shadows"]) > 0
+	m.say("тень прожектора: " + ("по графике" if on else "выкл"))
 
 
 ## Графика сейчас одной строкой: уровень `Main.graphics_level` и фактические MSAA, масштаб сцены и тени солнца.

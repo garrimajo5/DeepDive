@@ -3,6 +3,8 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-10
+- Шаг сценария тестера `{"do": "luch_ten", "on": false}` (#1400, отчёт PR #1600): прожектор без тени, `true` — тень
+  по уровню графики; проба цены тени на «Обычно» — `tools/qa/run-qa.ps1 -Force -Scenario tools/qa/luch-ten.json`.
 - MOD-022 (#920): модель купольника принята — `models/kupolnik.glb` (7419 треуг., без скелета), лист
   `docs/concept-art/kupolnik-model.png`, привязки для ANIM — `kupolnik.md`; тест `test_eco_dome_model`.
 - `StepClock` (#1350): подчасть каждого шага с обычным короче `USUAL_MIN` (0,1 мс) — «×>N» нижней границей, не
