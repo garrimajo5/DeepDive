@@ -721,6 +721,70 @@ func test_near_vertical_swim_does_not_wobble_heading() -> void:
 
 ## Б3, вторичное движение (#1400): в повороте рыбка ложится на бок спиной к центру поворота, крен копится и
 ## уходит плавно — разворот стаи кроны читается вспышкой боков, а не поворотом плоских фигурок.
+func test_tail_arcs_into_turn() -> void:
+	# оттенок и ступень изгиба в одном числе INSTANCE_CUSTOM.a: туда и обратно, и в half float Compatibility
+	for shade in [1.0 - EcoFishLook.SHADE_SPREAD, 1.0, 1.0 + EcoFishLook.SHADE_SPREAD]:
+		for bank in [-1.0, -EcoFishLook.BANK_MAX, -0.11, 0.0, 0.03, 0.26, EcoFishLook.BANK_MAX]:
+			var a := EcoFishLook.pack_shade(shade, bank)
+			var lv := EcoFishLook.arc_level(bank)
+			if not near(EcoFishLook.unpack_shade(a), shade, 1e-5, "оттенок цел: %.2f / %.2f" % [shade, bank]):
+				return
+			if not near(EcoFishLook.unpack_arc(a), float(lv) / EcoFishLook.ARC_LEVELS, 1e-6, "ступень цела"):
+				return
+			var h := _half(a)
+			if not near(EcoFishLook.unpack_shade(h), shade, 0.02, "оттенок в half float: %.2f / %.2f" % [shade, bank]):
+				return
+			if not near(EcoFishLook.unpack_arc(h), float(lv) / EcoFishLook.ARC_LEVELS, 1e-6, "ступень в half float"):
+				return
+	near(EcoFishLook.unpack_arc(EcoFishLook.pack_shade(1.0, 99.0)), 1.0, 1e-6, "не больше полного изгиба")
+	near(EcoFishLook.unpack_shade(1.0), 1.0, 1e-6, "пестрянки (1.0) — свой оттенок")
+	eq(EcoFishLook.unpack_arc(1.0), 0.0, "у пестрянок хвост не гнётся по дуге")
+	# хвост, а не голова: нос не сдвигается, кончик — на ARC_AMP при полном изгибе
+	eq(EcoFishLook.tail_arc(EcoFishLook.NOSE, 1.0), 0.0, "голова жёсткая")
+	near(EcoFishLook.tail_arc(EcoFishLook.TAIL_TIP, 1.0), EcoFishLook.ARC_AMP, 1e-6, "кончик — ARC_AMP")
+	eq(EcoFishLook.tail_arc(EcoFishLook.TAIL_TIP, 1.0, 0.0), 0.0, "«Экономно» — без изгиба")
+	# долгий поворот к боку +x — хвост к центру поворота (+x), плавно; прямо — выпрямляется
+	var dt := 1.0 / 30.0
+	var w := _world()
+	var fish := _fish(w)
+	var f := fish.all[2]
+	f.look = Vector3(0, 0, 1)
+	f.bank = 0.0
+	f.bank_v = 0.0
+	var prev := 0.0
+	var worst := 0.0
+	for i in 60:
+		var was := f.look
+		var yaw := atan2(was.x, was.z) + 2.0 * dt
+		f.look = Vector3(sin(yaw), 0, cos(yaw))
+		EcoFishLook.bank_step(f, was, f.look, dt)
+		var tip := EcoFishLook.tail_arc(EcoFishLook.TAIL_TIP, EcoFishLook.unpack_arc(
+			EcoFishLook.pack_shade(1.0, f.bank)))
+		worst = maxf(worst, absf(tip - prev))
+		prev = tip
+	ok(prev > 0.5 * EcoFishLook.ARC_AMP, "в повороте хвост к центру (+x): %.3f м" % prev)
+	ok(worst < 0.01, "изгиб копится плавно: за кадр кончик не дальше %.4f м" % worst)
+	f.agent.v = f.look * 2.0
+	var buf := FishView.pack(fish, 1.0)
+	near(FishView.arc_at(buf, f.index), float(EcoFishLook.arc_level(f.bank)) / EcoFishLook.ARC_LEVELS, 1e-6,
+		"изгиб — в буфере экземпляра")
+	near(FishView.shade_at(buf, f.index), EcoFishLook.shade(f), 1e-5, "оттенок в буфере — прежний")
+	for i in 60:
+		EcoFishLook.bank_step(f, f.look, f.look, dt)
+	eq(FishView.arc_at(FishView.pack(fish, 2.0), f.index), 0.0, "прямо — хвост прямой")
+	var code := FishView.shader_code()
+	ok(code.contains("half_a *") and code.contains("floor(INSTANCE_CUSTOM.a * 0.5)"), "шейдер гнёт хвост по дуге")
+
+
+## Округлить до half float (11 бит мантиссы) — так Compatibility хранит INSTANCE_CUSTOM.
+static func _half(x: float) -> float:
+	if x == 0.0:
+		return 0.0
+	var e := floorf(log(absf(x)) / log(2.0))
+	var step := pow(2.0, e - 10.0)
+	return roundf(x / step) * step
+
+
 func test_bank_leans_into_turn_smoothly() -> void:
 	var dt := 1.0 / 30.0
 	var w := _world()
