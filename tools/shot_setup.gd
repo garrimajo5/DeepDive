@@ -640,3 +640,31 @@ static func ground_line(g: Node) -> String:
 		dist.append("%s %s" % [names[i], "нет" if r.is_empty() else "с %d м" % roundi(r["dist"])])
 		edge.append("—" if r.is_empty() else str(roundi((h - r["row"]) / h * 100.0)))
 	return "грунт в окне (#1400): %s · кромка на %s %% кадра снизу" % [", ".join(dist), "/".join(edge)]
+
+
+## Реплика плашки связи для svyaz=: своя — svyaz_text=, иначе образец для своего или подделки.
+static func svyaz_line(kv: Dictionary) -> String:
+	var own: String = kv.get("svyaz_text", "").strip_edges()
+	if own != "":
+		return own
+	return "Дайте импульс сонара" if svyaz_fake(kv) else "Сбросьте ход, перегрев"
+
+
+static func svyaz_fake(kv: Dictionary) -> bool:
+	return kv.get("svyaz", "1") in ["fake", "wrong", "exposed", "silent"]
+
+
+## svyaz=1|fake|wait|match|wrong|exposed|silent — плашка внутренней связи ART-040 в этом состоянии (svyaz_text= — своя строка).
+static func svyaz(g: Main, kv: Dictionary) -> void:
+	var v: String = kv.get("svyaz", "1")
+	g.comms.reset_run(0)
+	var fake := svyaz_fake(kv)
+	g.on_eco_event(EcoLink.voice(Crew.Role.PILOT if fake else Crew.Role.ENGINEER,
+		svyaz_line(kv), fake, "ping" if fake else "", v == "silent"))
+	for i in 6:
+		g.step(0.05)
+	var states := {"wait": Comms.Ask.WAIT, "match": Comms.Ask.MATCH, "wrong": Comms.Ask.WRONG,
+		"exposed": Comms.Ask.EXPOSED, "silent": Comms.Ask.SILENT}
+	if states.has(v):
+		g.comms.state = states[v]
+	g.comms_panel.show_comms(g.comms, g.time, g.comms_area())

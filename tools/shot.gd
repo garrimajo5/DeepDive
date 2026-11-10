@@ -83,6 +83,7 @@ extends SceneTree
 ## t=3.2 — с drop=: секунд в окне ожидания
 ## weak=1 — плашка «Слабая связь» у гостя ART-043
 ## svyaz=1 — плашка внутренней связи ART-040: 1|fake|wait|match|wrong|exposed|silent
+## svyaz_text=… — с svyaz=: своя реплика на плашке, в кавычках целиком («svyaz_text=Сбросьте ход»): длина новых строк без правки снимка
 ## raciya=talk — рация ART-041: idle|talk|nomic|mute|two|wall|voice (с mate=… первый товарищ — Игорь)
 ##
 ## --- Забег, слой 1, мир
@@ -252,18 +253,7 @@ func _go() -> void:
 		main.overlay.router.layout.compute(Rect2(vis.position.x + cut, vis.position.y, vis.size.x - cut, vis.size.y))
 		main.overlay.queue_redraw()
 	if kv.has("svyaz"):   # svyaz=1|fake|wait|match|wrong|exposed|silent — плашка внутренней связи ART-040 в этом состоянии
-		var v: String = kv["svyaz"]
-		main.comms.reset_run(0)
-		var fake := v in ["fake", "wrong", "exposed", "silent"]
-		main.on_eco_event(EcoLink.voice(Crew.Role.PILOT if fake else Crew.Role.ENGINEER,
-			"Дайте импульс сонара" if fake else "Сбросьте ход, перегрев", fake, "ping" if fake else "", v == "silent"))
-		for i in 6:
-			main.step(0.05)
-		var states := {"wait": Comms.Ask.WAIT, "match": Comms.Ask.MATCH, "wrong": Comms.Ask.WRONG,
-			"exposed": Comms.Ask.EXPOSED, "silent": Comms.Ask.SILENT}
-		if states.has(v):
-			main.comms.state = states[v]
-		main.comms_panel.show_comms(main.comms, main.time, main.comms_area())
+		ShotSetup.svyaz(main, kv)
 	if kv.has("raciya"):   # raciya=idle|talk|nomic|mute|two|wall|voice — рация ART-041 в этом состоянии
 		var v: String = kv["raciya"]
 		var r: Radio = main.radio
