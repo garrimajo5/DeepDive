@@ -335,6 +335,10 @@ func test_slope_fans_along_descent() -> void:
 		ok(Seabed.Slope.mask(xz.x, xz.y) > 0.9, "веер %s в проходе склона" % xz)
 		var dz := absf(xz.y - Seabed.Slope.GAP_Z)
 		ok(dz < 40.0, "веер %s у пути по оси прохода" % xz)
+		# След корпуса по оси (полуширина 6,8 м) + полуширина веера 1,3 + колыхание 0,3 — с запасом (#840).
+		ok(dz >= EcoDrop.SLOPE_FAN_OFF, "веер %s вне следа корпуса: %.1f м от оси" % [xz, dz])
+		ok(EcoDrop.SLOPE_FAN_OFF - HullPlan.NOSE_W * 0.5 - EcoFan.WIDTH * 0.5 - EcoFan.HEIGHT * 0.1 > 1.0,
+				"запас от следа корпуса больше метра")
 		ok(xz.x < 285.0 or xz.x > 430.0 or dz > 30.0, "веер %s не в проходе 60 м (#832)" % xz)
 		ok(Seabed.mesh_height(xz.x, xz.y) < -100.0, "веер %s ниже края отмели" % xz)
 	var w := EcoWorld.new()
