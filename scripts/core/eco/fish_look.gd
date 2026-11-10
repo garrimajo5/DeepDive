@@ -20,6 +20,16 @@ const WIGGLE_RATE := 12.0
 ## машет во всю ширь, а не одинаково всегда. Ритм тот же (фаза не прыгает).
 const WIGGLE_SLOW := 0.4
 const WAG_FOLLOW := 1.5
+## Крен в повороте (Б3, плавность поведения — вторичное движение, #1400): рыбка ложится на бок к центру поворота —
+## BANK_K рад крена на 1 рад/с поворота курса носа, не больше BANK_MAX. `Fish.bank` идёт к нужному пружиной без
+## перелёта (`Fish.bank_v`, собственная частота BANK_W рад/с, шаг мира — `bank_step`): тело кренится и выпрямляется
+## с запаздыванием, а когда в тревоге курс мечется влево-вправо, крен не перекидывается с борта на борт за кадр
+## (угловое ускорение от крена — не больше BANK_W² × 2 × BANK_MAX). Разворот стаи кроны у 01 читается вспышкой
+## боков: рыбки поворачивают полосы к свету по очереди. Отвесно курс почти не идёт (`EcoFish.flat_k`) — и крена нет.
+## На CPU (basis), шейдер и вызовы те же.
+const BANK_K := 0.22
+const BANK_MAX := 0.5
+const BANK_W := 4.0
 ## Тело: полуширина, полувысота, нос и корма по z (м).
 const HALF_WIDTH := 0.07
 const HALF_HEIGHT := 0.1
@@ -202,6 +212,41 @@ static func wag_step(wag: float, speed: float, dt: float) -> float:
 	return want if wag < 0.0 else move_toward(wag, want, WAG_FOLLOW * dt)
 
 
+## Нужный крен (рад) при скорости поворота курса yaw_rate (рад/с, + — курс растёт, к боку basis().x).
+static func bank_want(yaw_rate: float) -> float:
+	return clampf(yaw_rate * BANK_K, -BANK_MAX, BANK_MAX)
+
+
+## Крен рыбки f шагом мира dt: нос повернул от from к to (Fish.look до и после EcoFish.turn). Пружина `bank`/`bank_v`
+## к bank_want — неявным шагом (устойчива и на длинном шаге дальней стаи). Не плыла (from или to нулевые) — крена нет.
+static func bank_step(f: EcoFish.Fish, from: Vector3, to: Vector3, dt: float) -> void:
+	if dt <= 0.0:
+		return
+	if from.length_squared() < 1e-8 or to.length_squared() < 1e-8:
+		f.bank = 0.0
+		f.bank_v = 0.0
+		return
+	var rate := atan2(from.z * to.x - from.x * to.z, from.x * to.x + from.z * to.z) / dt   # курс носа за шаг
+	var w := BANK_W
+	f.bank_v = (f.bank_v + dt * w * w * (bank_want(rate) - f.bank)) / (1.0 + 2.0 * w * dt + w * w * dt * dt)
+	f.bank += f.bank_v * dt
+
+
+## Бок и спина формы (без размера) при носе fw и крене bank: бок = вверх × нос, оба повёрнуты вокруг носа — спина
+## к центру поворота. Двойник FishView.fill.
+static func frame(fw: Vector3, bank: float) -> Array[Vector3]:
+	var side := Vector3(fw.z, 0, -fw.x)
+	side = side.normalized() if side.length() > 1e-4 else Vector3(1, 0, 0)
+	var up := fw.cross(side)
+	if absf(bank) > 1e-3:
+		var c := cos(bank)
+		var s := sin(bank)
+		var up2 := up * c + side * s
+		side = side * c - up * s
+		up = up2
+	return [side, up]
+
+
 ## Доля размаха рыбки сейчас: `Fish.wag`, а до первого шага — по её ходу.
 static func wag_of(f: EcoFish.Fish) -> float:
 	return f.wag if f.wag >= 0.0 else wag_want(f.agent.v.length())
@@ -236,12 +281,10 @@ static func basis(f: EcoFish.Fish, t: float) -> Basis:
 	if not f.agent.alive:
 		return Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO)
 	var fw := forward(f, t)
-	# бок = вверх × вперёд; рыбка, идущая отвесно, берёт ось x
-	var side := Vector3(fw.z, 0, -fw.x)
-	side = side.normalized() if side.length() > 1e-4 else Vector3(1, 0, 0)
-	var up := fw.cross(side)
+	# бок = вверх × вперёд (рыбка, идущая отвесно, берёт ось x), в повороте — с креном f.bank
+	var fr := frame(fw, f.bank)
 	var k := scale(f)
-	return Basis(side * k, up * k, fw * k)
+	return Basis(fr[0] * k, fr[1] * k, fw * k)
 
 
 ## Место вершины i формы для рыбки в момент t (то, что нарисует MultiMesh).
