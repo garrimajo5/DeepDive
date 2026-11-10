@@ -5,6 +5,10 @@ name: QA на эмуляторе
 # Замеры кадров отсюда — не показатель телефона: Vulkan в эмуляторе программный (SwiftShader).
 # Первая проба (прогон 42395403631): игра стартует на SwiftShader, но за 50 мин ни одного снимка — после каждого
 # слияния не гоняем, пока менеджер с владельцем не решат по итогам (#1393). Только ручной запуск.
+# Вторая проба (принято по умолчанию 09.11): Compatibility — tools/apk_args.py дописывает
+# `--rendering-method gl_compatibility` в assets/_cl_ копии APK, CI переподписывает её отладочным ключом.
+# Пресет «Android эмулятор» не меняется: эмулятор тестера на компьютере владельца остаётся на Vulkan.
+# Нет снимка игры за 30 мин — emulator.sh останавливается сам (FIRST_SHOT): проба закрывается, workflow удаляется.
 on:
   workflow_dispatch:
     inputs:
@@ -16,6 +20,10 @@ on:
         description: 'Сценарий'
         required: false
         default: tools/qa/scenario.json
+      renderer:
+        description: 'Рендерер в эмуляторе: gl_compatibility (OpenGL ES, проба #1393 после Vulkan) или mobile (Vulkan, как в APK)'
+        required: false
+        default: gl_compatibility
 
 concurrency:
   group: qa-emulator
@@ -65,6 +73,20 @@ jobs:
           ls -la apk
           echo "have=true" >> "$GITHUB_OUTPUT"
           echo "head=$head" >> "$GITHUB_OUTPUT"
+      - name: Рендерер
+        if: steps.apk.outputs.have == 'true' && (inputs.renderer || 'gl_compatibility') != 'mobile'
+        env:
+          RENDERER: ${{ inputs.renderer || 'gl_compatibility' }}
+        run: |
+          set -euo pipefail
+          bt=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          echo "build-tools: $bt"
+          python3 tools/apk_args.py apk/DeepDive-emulator.apk apk/raw.apk --rendering-method "$RENDERER"
+          "$bt/zipalign" -p -f 4 apk/raw.apk apk/aligned.apk
+          "$bt/apksigner" sign --ks android/debug.keystore --ks-key-alias androiddebugkey \
+            --ks-pass pass:android --key-pass pass:android --out apk/DeepDive-emulator.apk apk/aligned.apk
+          "$bt/apksigner" verify apk/DeepDive-emulator.apk
+          rm -f apk/raw.apk apk/aligned.apk
       - name: KVM
         if: steps.apk.outputs.have == 'true'
         run: |
@@ -82,7 +104,7 @@ jobs:
           disk-size: 4096M
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: bash tools/qa/emulator.sh apk/DeepDive-emulator.apk "${{ inputs.scenario || 'tools/qa/scenario.json' }}" qa-out 3000
+          script: FIRST_SHOT=1800 bash tools/qa/emulator.sh apk/DeepDive-emulator.apk "${{ inputs.scenario || 'tools/qa/scenario.json' }}" qa-out 3000
       - name: Итог
         if: always() && steps.apk.outputs.have == 'true'
         run: |

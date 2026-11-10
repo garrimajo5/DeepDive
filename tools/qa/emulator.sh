@@ -9,6 +9,8 @@
 # видно, рисует ли игра, даже если до своих снимков не дошла), itog.txt (одна строка для issue).
 set -u
 APK="$1"; SCENARIO="$2"; OUT="$3"; LIMIT="${4:-3000}"
+# FIRST_SHOT=<с>: нет ни одного снимка игры к этому сроку — остановиться (предел пробы #1393 — 30 мин)
+FIRST_SHOT="${FIRST_SHOT:-0}"
 APP=com.garrimajo5.deepdive
 mkdir -p "$OUT"
 log() { echo "$*" | tee -a "$OUT/itog.txt"; }
@@ -50,6 +52,9 @@ while :; do
     shot=$((shot + 1)); next_shot=$((now + 300))
     n=$(adb shell "run-as $APP ls files/qa/out" 2>/dev/null | grep -c '\.png' || true)
     echo "$((now - start)) с: снимков игры $n"
+    if [ "$FIRST_SHOT" -gt 0 ] && [ "$n" -eq 0 ] && [ $((now - start)) -ge "$FIRST_SHOT" ]; then
+      log "NO_FIRST_SHOT: нет снимка игры за $FIRST_SHOT с"; break
+    fi
   fi
   if ! adb shell pidof "$APP" > /dev/null 2>&1; then echo "процесс игры пропал"; break; fi
   if [ $((now - start)) -ge "$LIMIT" ]; then echo "предел ожидания $LIMIT с"; break; fi
@@ -61,7 +66,7 @@ for n in $(adb shell "run-as $APP ls files/qa/out" 2>/dev/null | tr -d '\r' | gr
   adb exec-out run-as "$APP" cat "files/qa/out/$n" > "$OUT/$n"
 done
 adb logcat -d > "$OUT/logcat.txt"
-grep -E ' E godot|SCRIPT ERROR|AndroidRuntime|FATAL|Vulkan|vulkan' "$OUT/logcat.txt" | head -60 > "$OUT/errors.txt"
+grep -E ' E godot|SCRIPT ERROR|AndroidRuntime|FATAL|Vulkan|vulkan|OpenGL|Project command line' "$OUT/logcat.txt" | head -60 > "$OUT/errors.txt"
 pngs=$(ls "$OUT"/*.png 2>/dev/null | grep -vc screencap || true)
 log "done=$done время=${took} с снимков игры=$pngs"
 exit 0
