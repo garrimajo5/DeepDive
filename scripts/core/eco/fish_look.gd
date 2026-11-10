@@ -30,6 +30,14 @@ const WAG_FOLLOW := 1.5
 const BANK_K := 0.22
 const BANK_MAX := 0.5
 const BANK_W := 4.0
+## Хвост по дуге поворота (Б3, инерция хвоста — вторичное движение, #1400): корма и хвост идут по следу носа и в
+## повороте выгибаются к его центру — сдвиг вбок ARC_AMP м у кончика при крене BANK_MAX (форма tail_bend, как волна
+## хвоста), то есть тот же сглаженный пружиной `Fish.bank`: изгиб набирается и сходит с запаздыванием, а не за кадр.
+## Ступень изгиба (ARC_LEVELS на сторону) едет в шейдер в INSTANCE_CUSTOM.a вместе с оттенком тела: целая часть
+## половины — ступень, остаток — оттенок (`pack_shade`; у Compatibility поле — half float, поэтому ступеней мало).
+## Двойник вершинного шейдера FishView — `tail_arc`; «Экономно» — как волна, sway_k = 0. Шейдер и вызовы те же.
+const ARC_AMP := 0.07
+const ARC_LEVELS := 16
 ## Тело: полуширина, полувысота, нос и корма по z (м).
 const HALF_WIDTH := 0.07
 const HALF_HEIGHT := 0.1
@@ -230,6 +238,32 @@ static func bank_step(f: EcoFish.Fish, from: Vector3, to: Vector3, dt: float) ->
 	var w := BANK_W
 	f.bank_v = (f.bank_v + dt * w * w * (bank_want(rate) - f.bank)) / (1.0 + 2.0 * w * dt + w * w * dt * dt)
 	f.bank += f.bank_v * dt
+
+
+## Ступень изгиба хвоста по дуге при крене bank: −ARC_LEVELS … ARC_LEVELS (+ — к боку формы x, к центру поворота).
+static func arc_level(bank: float) -> int:
+	return roundi(clampf(bank / BANK_MAX, -1.0, 1.0) * ARC_LEVELS)
+
+
+## INSTANCE_CUSTOM.a рыбки: оттенок тела shade (0 < shade < 2) и ступень изгиба при крене bank в одном числе.
+static func pack_shade(shade: float, bank: float) -> float:
+	return shade + 2.0 * arc_level(bank)
+
+
+## Оттенок тела из INSTANCE_CUSTOM.a (двойник шейдера FishView).
+static func unpack_shade(a: float) -> float:
+	return a - 2.0 * floorf(a * 0.5)
+
+
+## Доля изгиба хвоста −1 … 1 из INSTANCE_CUSTOM.a (двойник шейдера FishView).
+static func unpack_arc(a: float) -> float:
+	return floorf(a * 0.5) / ARC_LEVELS
+
+
+## Сдвиг вбок (м, по оси x формы) точки формы с z при доле изгиба arc (unpack_arc); sway_k — 0 на «Экономно».
+## Двойник вершинного шейдера FishView.
+static func tail_arc(z: float, arc: float, sway_k := 1.0) -> float:
+	return arc * ARC_AMP * tail_bend(z) * sway_k
 
 
 ## Бок и спина формы (без размера) при носе fw и крене bank: бок = вверх × нос, оба повёрнуты вокруг носа — спина
