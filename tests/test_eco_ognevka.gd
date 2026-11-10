@@ -252,9 +252,78 @@ func test_nose_turns_smoothly() -> void:
 		if mv.length() > 1e-3:
 			ok(s.dir.angle_to(mv) < 0.35, "через 1,5 с нос по ходу: %.2f рад" % s.dir.angle_to(mv))
 	var d := Vector3(0, 0, -1)
-	eq(EcoOgnevka.turn(d, Vector3.ZERO, 0.1), d, "хода нет — курс тот же")
-	near(EcoOgnevka.turn(d, Vector3(0, 0, 1), 0.1).angle_to(d), EcoOgnevka.LOOK_MAX * 0.1, 1e-4,
-		"навстречу — разворот не быстрее LOOK_MAX")
+	var st := EcoOgnevka.Shrimp.new()
+	st.dir = d
+	EcoOgnevka.steer(st, Vector3.ZERO, 0.1)
+	eq(st.dir, d, "хода нет и не поворачивал — курс тот же")
+	EcoOgnevka.steer(st, Vector3(0, 0, 1), 0.1)
+	near(st.dir.angle_to(d), EcoOgnevka.TURN_ACCEL * 0.1 * 0.1, 1e-4,
+		"навстречу с места — поворот набирается, а не сразу LOOK_MAX")
+	for i in 40:
+		EcoOgnevka.steer(st, Vector3(0, 0, 1), 0.1)
+		ok(st.spin.length() <= EcoOgnevka.LOOK_MAX + 1e-4, "не быстрее LOOK_MAX: %.2f" % st.spin.length())
+	ok(st.dir.angle_to(Vector3(0, 0, 1)) < 0.05, "развернулся по ходу: %.2f рад" % st.dir.angle_to(Vector3(0, 0, 1)))
+
+
+## Б3 (#1400): скорость поворота носа набирается и гаснет не быстрее TURN_ACCEL — смена цели (хищник встал на
+## чистку) не срывает нос с места на LOOK_MAX за шаг (tools/jerk.gd near=50: было 58–68 рад/с²).
+func test_nose_turn_has_inertia() -> void:
+	var top := Vector3(0, -36, 0)
+	var tops: Array[Vector3] = [top]
+	var w := _world(tops)
+	var ps := _sys(w, EcoPred) as EcoPred
+	var og := _sys(w, EcoOgnevka) as EcoOgnevka
+	_calm(ps)
+	_run(w, 3.0)
+	var pr := ps.all[0]
+	pr.leech = true
+	pr.hunger = 0.2
+	pr.agent.p = top + Vector3(6, 0, 0)
+	var spins: Array[Vector3] = []
+	var dirs: Array[Vector3] = []
+	for s in og.shrimp:
+		spins.append(s.spin)
+		dirs.append(s.dir)
+	var sdt := EcoWorld.MAX_STEP * 2.0
+	var worst := 0.0
+	var turned := 0.0
+	for n in 90:
+		w.step(EcoWorld.MAX_STEP)
+		w.step(EcoWorld.MAX_STEP)
+		for k in og.shrimp.size():
+			var s := og.shrimp[k]
+			worst = maxf(worst, (s.spin - spins[k]).length() / sdt)
+			var sp := s.spin.length()
+			var ahead: Vector3 = dirs[k] if sp < 1e-6 else dirs[k].rotated(s.spin / sp, sp * sdt)
+			ok(s.dir.distance_to(ahead) < 1e-3, "нос идёт ровно со скоростью spin: %.4f" % s.dir.distance_to(ahead))
+			turned = maxf(turned, s.spin.length())
+			spins[k] = s.spin
+			dirs[k] = s.dir
+	ok(worst <= EcoOgnevka.TURN_ACCEL + 1e-3, "угловое ускорение %.1f рад/с² (не больше %.0f)" % [worst, EcoOgnevka.TURN_ACCEL])
+	ok(turned > 2.0, "рачки поворачивают: до %.1f рад/с" % turned)
+	for sh in og.shrimp:
+		ok(absf(sh.dir.y) < 0.85, "не кувыркается носом отвесно: dir.y %.2f" % sh.dir.y)
+
+
+## Разворот назад — вокруг вертикали (рачок не кувыркается носом через низ); почти стоит — нос не крутит.
+func test_reverse_turns_level() -> void:
+	var st := EcoOgnevka.Shrimp.new()
+	st.dir = Vector3(0, -0.3, -1).normalized()
+	var low := 0.0
+	for i in 30:
+		EcoOgnevka.steer(st, Vector3(0, -0.03, 1) * 0.2, 0.1)
+		low = minf(low, st.dir.y)
+	ok(low > -0.6, "в развороте нос не ниже: %.2f" % low)
+	ok(st.dir.angle_to(Vector3(0, -0.03, 1).normalized()) < 0.1, "развернулся: %.2f" % st.dir.angle_to(Vector3(0, -0.03, 1).normalized()))
+	var still := EcoOgnevka.Shrimp.new()
+	still.dir = Vector3(1, 0, 0)
+	var going := EcoOgnevka.Shrimp.new()
+	going.dir = Vector3(1, 0, 0)
+	for i in 3:
+		EcoOgnevka.steer(still, Vector3(-1, 0, 0) * 0.001, 0.1)
+		EcoOgnevka.steer(going, Vector3(-1, 0, 0) * 0.1, 0.1)
+	ok(still.spin.length() < going.spin.length() * 0.2,
+		"ход 1 см/с — нос почти не трогается: %.2f рад/с (на ходу %.2f)" % [still.spin.length(), going.spin.length()])
 
 
 func test_shrimp_swarm_pred_on_cleaning() -> void:
