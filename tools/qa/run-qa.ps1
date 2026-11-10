@@ -8,10 +8,13 @@
 #   -Pr <номер>         — проверить фикс из открытой PR ДО слияния: берёт APK из артефакта deepdive-apk
 #                         последнего прогона CI этой PR (нужен gh), ставит на эмулятор и гоняет сценарий
 #   -Force              — прогнать APK, даже если коммит тот же; -Scenario <файл> — свой сценарий
+#                         (с -Pr — путь в ветке PR, напр. tools/qa/scenario.json; без -Scenario с -Pr — сценарий ветки PR)
+#   -ColdBoot           — перед прогоном закрыть эмулятор (adb emu kill) и запустить заново без снимка состояния:
+#                         после чужих окон поверх игры, «помех» или растущих заминок от прогона к прогону
 #   -Phone              — только скачать DeepDive.apk (arm64, телефон) из apk-latest со сверкой длины
 #                         в D:\AI\qa-build\DeepDive.apk и выйти; на телефон ставить вручную
 #   Эмулятор после прогона не закрывается (запущен отдельно от скрипта): ручная проверка — adb, закрыть — adb emu kill
-param([switch]$Pc, [switch]$Force, [string]$Scenario, [int]$Pr, [switch]$Phone)
+param([switch]$Pc, [switch]$Force, [string]$Scenario, [int]$Pr, [switch]$Phone, [switch]$ColdBoot)
 $ErrorActionPreference = 'Continue'
 $ProgressPreference = 'SilentlyContinue'   # полоса прогресса в PS 5.1 тормозит скачивание в разы
 
@@ -54,10 +57,28 @@ $out   = 'D:\AI\qa-build'
 $run   = "$out\run"
 $app   = 'com.garrimajo5.deepdive'
 $apk   = "$out\DeepDive-emulator.apk"   # эмулятору — x86_64-сборка (#844); телефону — DeepDive.apk
-if (-not $Scenario) { $Scenario = "$repo\tools\qa\scenario.json" }
 New-Item -ItemType Directory -Force $out | Out-Null
 Remove-Item -Recurse -Force $run -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $run | Out-Null
+$prSha = ''
+if ($Pr) {
+  $prSha = (gh api "repos/garrimajo5/DeepDive/pulls/$Pr" --jq '.head.sha').Trim()
+  if (-not $prSha) { Write-Output "NO_PR #$Pr"; exit 1 }
+}
+# -Pr: сценарий — из ветки PR, без git show руками (#1592). -Scenario — путь в ветке (по умолчанию сценарий тестера);
+# существующий локальный файл берётся как есть. Скачивание — через cmd: редирект PowerShell 5.1 портит UTF-8.
+if ($Pr -and -not ($Scenario -and (Test-Path $Scenario))) {
+  $inBranch = if ($Scenario) { $Scenario -replace '\\', '/' } else { 'tools/qa/scenario.json' }
+  $prScen = "$out\scenario-pr$Pr.json"
+  Remove-Item $prScen -Force -ErrorAction SilentlyContinue
+  cmd /c "gh api `"repos/garrimajo5/DeepDive/contents/${inBranch}?ref=$prSha`" -H `"Accept: application/vnd.github.raw`" > `"$prScen`""
+  if (-not (Test-Path $prScen) -or (Get-Item $prScen).Length -eq 0) {
+    Write-Output "NO_SCENARIO: в ветке PR #$Pr ($($prSha.Substring(0,7))) нет $inBranch"; exit 1
+  }
+  Write-Output "сценарий: $inBranch из ветки PR #$Pr ($($prSha.Substring(0,7)))"
+  $Scenario = $prScen
+}
+if (-not $Scenario) { $Scenario = "$repo\tools\qa\scenario.json" }
 
 # Сценарий + шаг «закрыть игру» в конце
 $steps = Get-Content $Scenario -Raw -Encoding utf8 | ConvertFrom-Json
@@ -102,8 +123,7 @@ $sdk = "$env:LOCALAPPDATA\Android\Sdk"
 $adb = "$sdk\platform-tools\adb.exe"
 if ($Pr) {
   # APK из артефакта deepdive-apk последнего прогона CI этой PR (REST, чтобы не зависеть от GraphQL)
-  $sha = (gh api "repos/garrimajo5/DeepDive/pulls/$Pr" --jq '.head.sha').Trim()
-  if (-not $sha) { Write-Output "NO_PR #$Pr"; exit 1 }
+  $sha = $prSha
   $rid = (gh api "repos/garrimajo5/DeepDive/actions/runs?head_sha=$sha&per_page=1" --jq '.workflow_runs[0].id').Trim()
   if (-not $rid) { Write-Output "NO_RUN: для PR #$Pr ($($sha.Substring(0,7))) прогона CI ещё нет"; exit 1 }
   $dir = "$out\pr$Pr"
@@ -129,11 +149,18 @@ if ($Pr) {
   if ($why) { Write-Output "DOWNLOAD_FAILED ${head}: $why — повторите позже"; exit 1 }
 }
 
+# -ColdBoot (#1592): эмулятор, на котором долго жили чужие окна и прогоны, шумит — закрыть и поднять заново
+# без снимка состояния (-no-snapshot-load), прежде чем считать заминки регрессией
+if ($ColdBoot -and ((& $adb devices) -match 'emulator-\d+')) {
+  & $adb emu kill | Out-Null
+  for ($i = 0; $i -lt 30; $i++) { Start-Sleep 2; if (-not ((& $adb devices) -match 'emulator-\d+')) { break } }
+}
+$cold = if ($ColdBoot) { ' -no-snapshot-load' } else { '' }
 if (-not ((& $adb devices) -match 'emulator-\d+\s+device')) {
   # Эмулятор — отвязанным процессом (WMI, не потомок скрипта): живёт после прогона, даже если фоновый
   # run-qa.ps1 закрыли вместе с деревом процессов, — можно досматривать руками через adb (#1350)
   Invoke-CimMethod Win32_Process -MethodName Create -Arguments @{
-    CommandLine = "`"$sdk\emulator\emulator.exe`" -avd Pixel_8" } | Out-Null
+    CommandLine = "`"$sdk\emulator\emulator.exe`" -avd Pixel_8$cold" } | Out-Null
   & $adb wait-for-device
   for ($i = 0; $i -lt 60; $i++) { if ((& $adb shell getprop sys.boot_completed).Trim() -eq '1') { break }; Start-Sleep 5 }
 }
@@ -178,7 +205,21 @@ $errs = Select-String -Path "$run\logcat.txt" -Pattern ' E godot|SCRIPT ERROR|An
   ForEach-Object { ($_.Line -split ': ', 2)[1] } | Where-Object { $_ -and $_ -notmatch '^\s*$' } |
   Group-Object | Sort Count -Descending | ForEach-Object { "$($_.Count)x $($_.Name)" }
 
-if (-not $Pr) { Set-Content "$out\last-commit.txt" $head }
+# STALE_APK (#1592): первая строка лога — версия как на плашке (`v… · #сборка коммит`); скачался не тот APK
+# (релиз перезаливался) — коммит не совпадёт с заметкой релиза. PR-сборка несёт коммит слияния — её не сверяем.
+$built = ''
+if (Test-Path "$run\log.txt") {
+  $first = Get-Content "$run\log.txt" -Encoding utf8 -TotalCount 1
+  if ($first -match ' · #\d+ ([0-9a-f]{7})') { $built = $Matches[1] }
+}
+$stale = (-not $Pr) -and $built -and ($head -match '^[0-9a-f]{7}$') -and ($built -ne $head)
+# Помехи (#1592): игра свёрнута посреди прогона (строка QaRunner.PAUSED_LINE) и чужие окна поверх неё
+# (запуск активности другого приложения в logcat: браузер, am start другого инструмента)
+$paused = if (Test-Path "$run\log.txt") { @(Select-String -Path "$run\log.txt" -Pattern '^игра свёрнута' -Encoding utf8).Count } else { 0 }
+$foreign = @(Select-String -Path "$run\logcat.txt" -Pattern 'START u0 \{' -Encoding utf8 |
+  Where-Object { $_.Line -notmatch [regex]::Escape($app) }).Count
+$noise = $paused + $foreign
+if (-not $Pr -and -not $stale) { Set-Content "$out\last-commit.txt" $head }
 Write-Output "OK $head done=$done"
 if ($Pr) { Write-Output "PR: #$Pr (артефакт прогона CI, не релиз)" }
 else {
@@ -189,7 +230,9 @@ Write-Output 'log:'; if (Test-Path "$run\log.txt") { Get-Content "$run\log.txt" 
 Write-Output 'errors:'; $errs | Select -First 30
 Write-Output "files: $run"
 # Итог одной строкой — и в конец log.txt: лог из отчёта сам называет сборку, снимки и шум хоста (#1350)
-$result = "RUN $head done=$done снимков $($have.Count) из $($want.Count) | до: $loadBefore | после: $loadAfter"
+$result = "RUN $head done=$done снимков $($have.Count) из $($want.Count) | помехи: $noise (свёрнута $paused, чужих окон $foreign) | до: $loadBefore | после: $loadAfter"
+if ($stale) { $result += " | STALE_APK $head $built" }
+if ($stale) { Write-Output "STALE_APK $head $built — скачался другой APK (релиз перезаливался?): повторите с -Force" }
 Write-Output $result
 Add-Content "$run\log.txt" "run-qa: $result" -Encoding utf8
 # Заметная строка в самом конце: прогон не дошёл до конца или не все снимки забраны (#1533)

@@ -231,3 +231,53 @@ func test_ci_main_diff_from_last_green() -> void:
 	var ci := FileAccess.get_file_as_string("res://.github/workflows/godot.yml")
 	ok(ci.contains("actions/workflows/godot.yml/runs?branch=main&status=success"), "база — последний зелёный прогон main")
 	ok(ci.contains("actions: read"), "у job есть право читать прогоны")
+
+
+## #1592: шумный прогон эмулятора отличать от регрессии по итогу RUN — помехи (игру свернули, чужое окно поверх),
+## STALE_APK (скачался прошлый APK), -ColdBoot (эмулятор заново без снимка), сценарий из ветки PR.
+func test_run_qa_noise_stale_coldboot() -> void:
+	var ps := _ps("run-qa.ps1")
+	ok(ps.contains("[switch]$ColdBoot"), "ключ -ColdBoot")
+	var kill := ps.find("& $adb emu kill")
+	ok(kill > 0 and kill < ps.find("emulator.exe"), "-ColdBoot закрывает эмулятор до запуска")
+	ok(ps.contains("-avd Pixel_8$cold") and ps.contains("' -no-snapshot-load'"), "холодный старт без снимка состояния")
+	ok(ps.contains("помехи: $noise"), "помехи — в итоге RUN")
+	ok(ps.find("$result = \"RUN $head done=$done") < ps.find("помехи: $noise") , "помехи — в самой строке RUN")
+	# шаблон паузы ловит строку, которую пишет QaRunner
+	var pat := RegEx.create_from_string("-Pattern '(\\^игра свёрнута)'").search(ps)
+	ok(pat != null, "шаблон паузы найден")
+	if pat != null:
+		ok(RegEx.create_from_string(pat.get_string(1)).search(QaRunner.PAUSED_LINE) != null, "ловит QaRunner.PAUSED_LINE")
+		ok(RegEx.create_from_string(pat.get_string(1)).search(QaRunner.RESUMED_LINE) == null, "возврат не в счёт")
+	ok(ps.contains("-notmatch [regex]::Escape($app)"), "своя активность — не помеха")
+	# STALE_APK: шаблон версии ловит первую строку лога (Main.version_text из version.txt CI)
+	var vm := RegEx.create_from_string("\\$first -match '([^']+)'").search(ps)
+	ok(vm != null, "шаблон версии найден")
+	if vm != null:
+		var re := RegEx.create_from_string(vm.get_string(1))
+		var hit := re.search("Сценарий: 812 шагов, версия v0.3 · #1043 a5dcbe0, sdk_gphone64_x86_64")
+		ok(hit != null and hit.get_string(1) == "a5dcbe0", "коммит из первой строки лога")
+		ok(re.search("Сценарий: 812 шагов, версия v0.3 · dev, PC") == null, "сборка без version.txt — не сверяется")
+	var runner := FileAccess.get_file_as_string("res://scripts/game/qa_runner.gd")
+	ok(runner.contains("_log(\"Сценарий: %d шагов, версия %s, %s\""), "первая строка лога — версия")
+	ok(FileAccess.get_file_as_string("res://.github/workflows/godot.yml").contains("echo \"#${{ github.run_number }} ${GITHUB_SHA::7}\" > version.txt"),
+		"version.txt CI — «#сборка коммит»")
+	ok(ps.contains("STALE_APK $head $built"), "STALE_APK <ожидался> <получен>")
+	ok(ps.contains("if (-not $Pr -and -not $stale) { Set-Content \"$out\\last-commit.txt\" $head }"),
+		"чужой APK не помечается проверенным")
+	# -Pr: сценарий из ветки PR
+	var pr := ps.find("contents/${inBranch}?ref=$prSha")
+	ok(pr > 0 and pr < ps.find("ConvertFrom-Json"), "сценарий ветки PR скачан до разбора")
+	ok(ps.contains("'tools/qa/scenario.json'"), "без -Scenario — сценарий тестера из ветки")
+	ok(ps.contains("Write-Output \"NO_SCENARIO"), "нет файла в ветке — NO_SCENARIO")
+	var qa := FileAccess.get_file_as_string("res://docs/QA.md")
+	for k in ["-ColdBoot", "STALE_APK", "помехи: N", "NO_SCENARIO"]:
+		ok(qa.contains(k), "docs/QA.md: %s" % k)
+
+
+## #1592: игру свернули посреди прогона — строка в логе (её считает run-qa.ps1); без сценария — молчит.
+func test_runner_logs_pause() -> void:
+	var r := QaRunner.new()
+	r._notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+	eq(r.log_lines.size(), 0, "без сценария — без строк")
+	r.free()

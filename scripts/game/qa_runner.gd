@@ -73,6 +73,21 @@ const LAMP_NAME := "Свет тестера"
 var drain_left := 0.0   ## шаг «drain»: столько секунд ещё слать в игру EcoLink.DRAIN от стеклоуста
 
 
+## Игру свернули посреди прогона (#1592): чужое окно поверх (браузер, `am start` другого инструмента) — кадры и
+## частота после этого шумные, не регрессия. Строку считает `run-qa.ps1` в «помехи: N» итога RUN.
+const PAUSED_LINE := "игра свёрнута (OnPause)"
+const RESUMED_LINE := "игра снова на экране"
+
+
+func _notification(what: int) -> void:
+	if script_q == null:
+		return
+	if what == NOTIFICATION_APPLICATION_PAUSED:
+		_log(PAUSED_LINE)
+	elif what == NOTIFICATION_APPLICATION_RESUMED:
+		_log(RESUMED_LINE)
+
+
 ## Есть ли сценарий для этого запуска.
 static func pending() -> bool:
 	return FileAccess.file_exists(SCENARIO)
