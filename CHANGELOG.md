@@ -3,6 +3,11 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-10
+- «QA на эмуляторе» (#1393, вторая проба по умолчанию 09.11): эмулятор в Actions идёт в Compatibility (OpenGL ES,
+  `-gpu swiftshader_indirect`) — `tools/apk_args.py` дописывает `--rendering-method gl_compatibility` в
+  `assets/_cl_` копии `DeepDive-emulator.apk`, CI выравнивает и переподписывает её отладочным ключом (вход
+  `renderer`, `mobile` — без правки). Пресет экспорта не тронут: эмулятор тестера остаётся на Vulkan. Нет снимка игры
+  за 30 мин — `emulator.sh` останавливается сам (`FIRST_SHOT`, `NO_FIRST_SHOT` в итоге). Тест `tools/test_apk_args.py`.
 - Ключ снимка `svyaz_text=` (#1350, мелочь из фокуса): своя реплика на плашке связи ART-040 вместе с `svyaz=`
   (`"svyaz_text=…"` в кавычках) — длину новых строк смотреть без правки `tools/shot.gd`; подготовка плашки — в
   `ShotSetup.svyaz`. Тест `test_shot_svyaz`.
