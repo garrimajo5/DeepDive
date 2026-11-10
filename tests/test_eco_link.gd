@@ -90,6 +90,27 @@ func test_urgent_alert_line() -> void:
 	eq(hot, 1, "одна строка «замер»")
 
 
+## Строка отхода хищника (#1555) идёт с "keep", прочие — без ключа.
+func test_keep_lost_line() -> void:
+	eq(EcoLink.message("x", false, true), {"type": EcoLink.MESSAGE, "text": "x", "keep": true}, "«держится» — с ключом")
+	ok(EcoLink.keep("pred", "lost"), "отход хищника — держится")
+	ok(not EcoLink.keep("pred", "alert") and not EcoLink.keep("fish", "lost"), "прочие — нет")
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float: return -40.0
+	w.emit("pred", "lost", w.ship.pos + Vector3(10, 0, 0), func(): return "Хищник потерял корабль и отворачивает")
+	w.emit("pred", "alert", w.ship.pos + Vector3(10, 0, 0), func(): return "Хищник замер")
+	w.emit("fish", "flee", w.ship.pos + Vector3(10, 0, 0), func(): return "Стая уходит")
+	var held := 0
+	for e in w.take_link():
+		if e.get("type") == EcoLink.MESSAGE or e.get("type") == EcoLink.OBSERVE:
+			if str(e.get("text", "")).contains("потерял"):
+				ok(e.get("keep", false) and not e.has("urgent"), "строка отхода — «держится», не срочная")
+				held += 1
+			else:
+				ok(not e.has("keep"), "прочие — без ключа: %s" % e.get("text", ""))
+	eq(held, 1, "одна строка отхода")
+
+
 func test_live_world_observation_reaches_journal() -> void:
 	# По issue #92: событие шины с заметкой вида рядом с кораблём приходит как OBSERVE и пишется в журнал.
 	var main: Main = load("res://scenes/main.tscn").instantiate()
