@@ -197,12 +197,20 @@ for ($i = 0; $i -lt 3; $i++) { $inst = (& $adb install -r -d $apk 2>&1 | Out-Str
 if ($inst -notmatch 'Success') { Write-Output "INSTALL_FAILED $head"; $inst; exit 1 }
 
 # Остывание после -ColdBoot (#1350, 11.11): эмулятор только что загрузился и APK поставлен — хост ещё занят
-# (первый прогон сессии шумный). Ждать, пока ЦП не упадёт ниже 50 %, до 120 с; сколько ждали — в итоге RUN
+# (первый прогон сессии шумный). Хост остыл — три замера подряд через 5 с ниже 50 % (один низкий замер среди
+# 64 % и 56 % — не остыл, #1350 11.11 13:30), ждём до 120 с; сколько ждали и замер выхода — в итоге RUN
 $cool = ''
 if ($ColdBoot) {
   $waited = 0
-  while ($waited -lt 120 -and (Get-Cpu) -ge 50) { Start-Sleep 5; $waited += 5 }
-  $cool = " | остывание $waited с (ЦП $(Get-Cpu)%)"
+  $calm = 0
+  $cpu = 0
+  while ($true) {
+    $cpu = Get-Cpu
+    if ($cpu -lt 50) { $calm++ } else { $calm = 0 }
+    if ($calm -ge 3 -or $waited -ge 120) { break }
+    Start-Sleep 5; $waited += 5
+  }
+  $cool = " | остывание $waited с (ЦП $cpu%)"
 }
 $loadBefore = Get-Load
 # Сценарий — в user:// игры (files/qa/). APK отладочный, поэтому run-as работает.
