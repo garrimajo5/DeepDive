@@ -2,9 +2,9 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cpnupiggdrm88"
-path.s3tc="res://.godot/imported/kupolnik_PhotophoreMask.png-fcc170d0c47fef63bcad9178afae0c7a.s3tc.ctex"
-path.etc2="res://.godot/imported/kupolnik_PhotophoreMask.png-fcc170d0c47fef63bcad9178afae0c7a.etc2.ctex"
+uid="uid://br18m5qnf7rq2"
+path.s3tc="res://.godot/imported/kupolnik-anim_PhotophoreMask.png-3bb0a2f8d7757a0285f9fea907c53272.s3tc.ctex"
+path.etc2="res://.godot/imported/kupolnik-anim_PhotophoreMask.png-3bb0a2f8d7757a0285f9fea907c53272.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
@@ -15,8 +15,8 @@ generator_parameters={
 
 [deps]
 
-source_file="res://models/kupolnik_PhotophoreMask.png"
-dest_files=["res://.godot/imported/kupolnik_PhotophoreMask.png-fcc170d0c47fef63bcad9178afae0c7a.s3tc.ctex", "res://.godot/imported/kupolnik_PhotophoreMask.png-fcc170d0c47fef63bcad9178afae0c7a.etc2.ctex"]
+source_file="res://models/kupolnik-anim_PhotophoreMask.png"
+dest_files=["res://.godot/imported/kupolnik-anim_PhotophoreMask.png-3bb0a2f8d7757a0285f9fea907c53272.s3tc.ctex", "res://.godot/imported/kupolnik-anim_PhotophoreMask.png-3bb0a2f8d7757a0285f9fea907c53272.etc2.ctex"]
 
 [params]
 

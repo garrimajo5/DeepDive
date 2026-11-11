@@ -2,21 +2,21 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b75ker1p6iidn"
-path.s3tc="res://.godot/imported/kupolnik_texture_0_metallic_roughness.png-0fd359297628d23b9485f1c91f2d28b0.s3tc.ctex"
-path.etc2="res://.godot/imported/kupolnik_texture_0_metallic_roughness.png-0fd359297628d23b9485f1c91f2d28b0.etc2.ctex"
+uid="uid://dljirw6j51beb"
+path.s3tc="res://.godot/imported/kupolnik-anim_normal.png-5f0208d3b57025a14aef24342644d769.s3tc.ctex"
+path.etc2="res://.godot/imported/kupolnik-anim_normal.png-5f0208d3b57025a14aef24342644d769.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "69d09d8b9332193d10389e5890497665"
+"md5": "c1ea76991e1ad33fea6f82ba8a780949"
 }
 
 [deps]
 
-source_file="res://models/kupolnik_texture_0_metallic_roughness.png"
-dest_files=["res://.godot/imported/kupolnik_texture_0_metallic_roughness.png-0fd359297628d23b9485f1c91f2d28b0.s3tc.ctex", "res://.godot/imported/kupolnik_texture_0_metallic_roughness.png-0fd359297628d23b9485f1c91f2d28b0.etc2.ctex"]
+source_file="res://models/kupolnik-anim_normal.png"
+dest_files=["res://.godot/imported/kupolnik-anim_normal.png-5f0208d3b57025a14aef24342644d769.s3tc.ctex", "res://.godot/imported/kupolnik-anim_normal.png-5f0208d3b57025a14aef24342644d769.etc2.ctex"]
 
 [params]
 
