@@ -128,6 +128,7 @@ func _alerted(alert: float) -> Array:
 	var w: EcoWorld = r[0]
 	var ps: EcoPred = r[1]
 	ps.alert = alert
+	ps.alert_leave = 0.0   # отход — отдельно (alert_leave = 20 ниже)
 	var pr := ps.all[0]
 	pr.hunger = 0.5
 	pr.cooldown = 0.0

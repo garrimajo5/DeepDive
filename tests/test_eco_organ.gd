@@ -38,6 +38,7 @@ func _pred_world(with_organ := true) -> EcoWorld:
 	w.ground = _flat
 	w.ship.pos = FAR
 	var p := w.add(EcoPred.new()) as EcoPred
+	p.alert = 0.0  # бросок сразу: здесь чутьё и бросок; «замер» #1498 — test_eco_pred_zamer
 	if with_organ:
 		p.organs = w.add(EcoOrgan.new([Vector2(-40, 20)] as Array[Vector2])) as EcoOrgan
 	return w

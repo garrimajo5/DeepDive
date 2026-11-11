@@ -15,7 +15,7 @@ func _alone() -> EcoWorld:
 	var w := EcoWorld.new()
 	w.ground = _flat
 	w.ship.pos = FAR
-	w.add(EcoPred.new())
+	(w.add(EcoPred.new()) as EcoPred).alert = 0.0  # бросок сразу: здесь чутьё и бросок; «замер» #1498 — test_eco_pred_zamer
 	return w
 
 
@@ -53,6 +53,7 @@ func test_three_preds_at_browser_spots() -> void:
 	var w := EcoWorld.new()
 	w.ground = Seabed.height
 	var preds := w.add(EcoPred.new()) as EcoPred
+	preds.alert = 0.0  # бросок сразу: здесь чутьё и бросок; «замер» #1498 — test_eco_pred_zamer
 	eq(preds.all.size(), 3)
 	eq(w.count("pred"), 3)
 	var js := [Vector2(-60, 20), Vector2(70, -20), Vector2(10, -110)]
@@ -314,6 +315,7 @@ func _with_fish() -> EcoWorld:
 	w.ship.pos = FAR
 	var fish := w.add(EcoFish.new()) as EcoFish
 	var preds := w.add(EcoPred.new(fish)) as EcoPred
+	preds.alert = 0.0  # бросок сразу: здесь чутьё и бросок; «замер» #1498 — test_eco_pred_zamer
 	for i in range(1, preds.all.size()):
 		preds.all[i].hunger = -10.0
 	var pr := preds.all[0]
@@ -421,7 +423,7 @@ static func _make() -> EcoWorld:
 	w.ground = Seabed.height
 	w.ship.pos = FAR
 	var f := w.add(EcoFish.new()) as EcoFish
-	w.add(EcoPred.new(f))
+	(w.add(EcoPred.new(f)) as EcoPred).alert = 0.0  # бросок сразу: здесь чутьё и бросок; «замер» #1498 — test_eco_pred_zamer
 	return w
 
 
@@ -947,6 +949,7 @@ func _reef_world() -> Array:
 	w.ship.pos = FAR
 	var fish := w.add(EcoFish.new()) as EcoFish
 	var preds := w.add(EcoPred.new(fish)) as EcoPred
+	preds.alert = 0.0  # бросок сразу: здесь чутьё и бросок; «замер» #1498 — test_eco_pred_zamer
 	for i in range(1, preds.all.size()):
 		preds.all[i].agent.p = Vector3(-300 + 20 * i, -30, 300)
 	return [w, preds, fish]
@@ -1274,6 +1277,7 @@ func test_reef_ring_fish_hidden() -> void:
 	w.ship.pos = FAR
 	var fish := w.add(EcoFish.new()) as EcoFish
 	var preds := w.add(EcoPred.new(fish)) as EcoPred
+	preds.alert = 0.0  # бросок сразу: здесь чутьё и бросок; «замер» #1498 — test_eco_pred_zamer
 	preds._reef = preds.reef_axis()
 	ok(preds._reef.is_finite(), "риф у цветка есть")
 	var skip: Callable = preds._hidden_fish()

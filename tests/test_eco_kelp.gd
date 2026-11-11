@@ -43,6 +43,7 @@ func _pred_world(with_kelp := true) -> EcoWorld:
 	w.ship.pos = FAR
 	var f := w.add(EcoFish.new()) as EcoFish
 	var p := w.add(EcoPred.new(f)) as EcoPred
+	p.alert = 0.0  # бросок сразу: здесь чутьё и бросок; «замер» #1498 — test_eco_pred_zamer
 	if with_kelp:
 		p.kelp = w.add(EcoKelp.new(f)) as EcoKelp
 	return w
@@ -721,6 +722,7 @@ func _muffle_world(with_kelp := true) -> Array:
 	w.ground = _flat
 	w.ship.pos = FAR
 	var p := w.add(EcoPred.new()) as EcoPred
+	p.alert = 0.0  # бросок сразу: здесь чутьё и бросок; «замер» #1498 — test_eco_pred_zamer
 	var pr: EcoPred.Pred = p.all[0]
 	var spot := Vector3(pr.agent.p.x + 20.0, FLAT, pr.agent.p.z)
 	var k: EcoKelp = null

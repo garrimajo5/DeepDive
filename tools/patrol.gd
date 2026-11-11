@@ -14,8 +14,8 @@ extends SceneTree
 ## arrive — встреча у 01 (#1400): 30 с без света на стоянке, затем свет и без остановки к 01, там 40 с стоянки
 ## со светом; печатает, кто из трёх хищников подошёл ближе всех и когда (`modes=` — какие проходы считать).
 ## Ответ экипажа (#1498) — `answer=signal|charge|alert` (`answer_now`): свет гаснет, корабль встаёт без хода (не
-## шумит) через `delay=` с после повода, через `hold=` с (ANSWER_HOLD) свет снова горит и путь идёт дальше; `alert=<с>` — проба фазы «замер» `EcoPred.alert`;
-## `leave=<с>` — отход хищника прочь после «потерял корабль» `EcoPred.alert_leave`.
+## шумит) через `delay=` с после повода, через `hold=` с (ANSWER_HOLD) свет снова горит и путь идёт дальше; `alert=<с>` — фаза «замер» `EcoPred.alert` (по умолчанию как в игре, 4 с; `alert=0` — бросок сразу, до #1498);
+## `leave=<с>` — отход хищника прочь после «потерял корабль» `EcoPred.alert_leave` (по умолчанию 20 с, как в игре).
 ## `lim=<с>` — предел прохода после тихой стоянки (LIMIT): короткий прогон для проверки инструмента, не для решений.
 ## `late=<с>` — тихая стоянка перед проходом (WAIT_LATE, 30 с), тоже для проверки инструмента.
 ## По каждому проходу ещё — когда хищник впервые в луче (ближе дальности света и в конусе `Searchlight.HALF_ANGLE`)
@@ -44,13 +44,13 @@ const THREAT_NOTES := ["ship", "ping", "hear", "bite", "fade", "alarm", "pred", 
 const ANSWER_HOLD := 25.0
 ## Сколько стоит без света после ответа на этот прогон (`hold=`, по умолчанию ANSWER_HOLD).
 static var hold := ANSWER_HOLD
-## Ответ экипажа этого прогона ("" — нет) и фаза «замер» хищника, с (0 — как в игре).
+## Ответ экипажа этого прогона ("" — нет) и фаза «замер» хищника, с (по умолчанию как в игре; 0 — бросок сразу).
 static var answer := ""
 ## Через сколько секунд после повода экипаж гасит свет (реакция людей, `delay=`).
 static var delay := 0.0
-static var alert := 0.0
+static var alert := EcoPred.ALERT_ON
 ## Отход хищника после «потерял корабль», с (`leave=`, `EcoPred.alert_leave`).
-static var leave := 0.0
+static var leave := EcoPred.ALERT_LEAVE_ON
 ## Предел прохода, с (после тихой стоянки у 00): дальше проход кончается, где бы ни был корабль.
 const LIMIT := 200.0
 ## Предел этого прогона (`lim=`, по умолчанию LIMIT).
@@ -65,8 +65,8 @@ func _init() -> void:
 	var seeds := int(kv.get("seeds", "8"))
 	answer = kv.get("answer", "")
 	delay = float(kv.get("delay", "0"))
-	alert = float(kv.get("alert", "0"))
-	leave = float(kv.get("leave", "0"))
+	alert = float(kv.get("alert", str(EcoPred.ALERT_ON)))
+	leave = float(kv.get("leave", str(EcoPred.ALERT_LEAVE_ON)))
 	hold = float(kv.get("hold", str(ANSWER_HOLD)))
 	limit = float(kv.get("lim", str(LIMIT)))
 	wait_late = float(kv.get("late", str(WAIT_LATE)))
