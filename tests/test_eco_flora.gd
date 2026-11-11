@@ -59,7 +59,7 @@ func test_current_matches_ship_current() -> void:
 func test_coral_bushes_on_station_spots() -> void:
 	var w := _world()
 	var co: EcoCoral = _sys(w, EcoCoral)
-	eq(co.bushes.size(), 3, "три куста — места станций огнёвок")
+	eq(co.bushes.size(), 4, "три куста — места станций огнёвок, четвёртый — в Тихой заводи (#831)")
 	for b in co.bushes:
 		near(b.base.y, Seabed.height(b.base.x, b.base.z), 1e-4, "куст на дне")
 		near(b.glow, 1.0, 1e-6, "горит")
@@ -112,18 +112,62 @@ func test_coral_dims_from_ping_and_zap() -> void:
 	ok(_texts(w.take_link()).has("Огнецвет гаснет от разряда"))
 
 
+## Б3: импульс и разряд гасят кончики на виду за DIM_TIME с, а не за кадр (свет мира и строка — сразу);
+## разгораются вместе со светом, шумный ход (0,8/с) — на виду так же, как в мире.
+func test_coral_dims_smoothly() -> void:
+	var w := _coral_world()
+	var co: EcoCoral = _sys(w, EcoCoral)
+	var b := co.bushes[2]
+	w.ship.pos = b.top + Vector3(0, 0, 15)
+	w.ship.zap = true
+	w.ship.zap_radius = 20.0
+	w.step(1.0 / 60.0)
+	w.ship.zap = false
+	near(b.glow, EcoCoral.MIN_GLOW, 0.01, "свет мира погас сразу")
+	ok(b.seen > 0.9, "на виду — ещё нет: %.3f" % b.seen)
+	var was := b.seen
+	var worst := 0.0
+	for i in int(EcoCoral.DIM_TIME * 60.0) + 2:
+		w.step(1.0 / 60.0)
+		worst = maxf(worst, absf(b.seen - was))
+		was = b.seen
+	ok(worst < 0.05, "за кадр — не больше 0,05: %.3f" % worst)
+	near(b.seen, b.glow, 1e-6, "через DIM_TIME — погас")
+	w.ship.pos = Vector3(500, 0, 500)
+	w.step(1.0)
+	near(b.seen, b.glow, 1e-6, "разгорается вместе со светом")
+	ok(b.glow > EcoCoral.MIN_GLOW, "разгорается")
+	b.glow = 1.0   # разгорелся (25 с) — импульс гасит половину
+	b.seen = 1.0
+	w.ship.pos = b.top + Vector3(0, 0, 25)
+	w.ship.sonar_ping = true
+	w.step(1.0 / 60.0)
+	w.ship.sonar_ping = false
+	ok(b.seen - b.glow > 0.4, "импульс: на виду гаснет не за кадр")
+	w.step(EcoCoral.DIM_TIME)
+	near(b.seen, b.glow, 1e-6, "и догоняет")
+	w.ship.pos = b.top + Vector3(0, 0, 5)
+	w.ship.speed = 5.0
+	for i in 30:
+		w.step(1.0 / 60.0)
+		near(b.seen, b.glow, 1e-6, "шумный ход гасит медленнее — на виду как в мире")
+	w.ship.speed = 0.0
+
+
 # ---------- Веерники ----------
 
 func test_fans_by_coral_and_at_start() -> void:
 	var w := _world()
 	var f: EcoFan = _sys(w, EcoFan)
 	var co: EcoCoral = _sys(w, EcoCoral)
-	eq(f.fans.size(), 4, "у трёх огнецветов и один у старта")
-	for i in 3:
+	eq(f.fans.size(), EcoCoral.BASES.size() + EcoField.FANS.size() + EcoGate.FANS.size() + EcoVent.FANS.size()
+		+ EcoDrop.SLOPE_FANS.size() + 1, "у каждого огнецвета (с заводью 09), два у площадки 08, два у врат 07, три у "
+		+ "курильщика 02, три пары на спуске 06 → 10 и один у старта")
+	for i in EcoCoral.BASES.size():
 		near(Vector2(f.fans[i].pos.x - co.bushes[i].base.x, f.fans[i].pos.z - co.bushes[i].base.z).length(), 7.0, 1e-3,
 			"в 7 м от огнецвета")
-	near(f.fans[3].pos.x, EcoFan.START.x, 1e-6)
-	near(f.fans[3].pos.z, EcoFan.START.y, 1e-6)
+	near(f.fans[-1].pos.x, EcoFan.START.x, 1e-6)
+	near(f.fans[-1].pos.z, EcoFan.START.y, 1e-6)
 	for fan in f.fans:
 		near(fan.pos.y, Seabed.height(fan.pos.x, fan.pos.z) - 0.05, 1e-4, "на дне")
 	var t := w.scan_targets()
@@ -132,7 +176,7 @@ func test_fans_by_coral_and_at_start() -> void:
 		if x["species"] == "fan":
 			n += 1
 			ok(x["sonar"], "сонар видит веерник")
-	eq(n, 4, "все веерники — цели сонара и сканера")
+	eq(n, f.fans.size(), "все веерники — цели сонара и сканера")
 
 
 func test_fan_stands_across_current_and_turns_after_it() -> void:
@@ -240,7 +284,7 @@ func test_view_one_coral_mesh_and_one_fan_multimesh() -> void:
 	eq(cv.layers, OceanView.LAYER_WORLD, "слой отмели")
 	eq(fv.layers, OceanView.LAYER_WORLD)
 	eq(cv.mesh.get_surface_count(), 1, "все кусты — один меш")
-	eq(fv.multimesh.instance_count, 4, "один MultiMesh на все веера")
+	eq(fv.multimesh.instance_count, view.fans.fans.size(), "один MultiMesh на все веера")
 	var b0 := view.coral.bushes[0]
 	near(cv.verts[0].y, EcoCoralLook.transform(b0).origin.y + EcoCoralLook.verts[0].y * b0.scale, 1e-3, "куст — по дну сцены")
 	near(b0.base.y, Seabed.height(b0.base.x, b0.base.z), 1e-3)
@@ -255,6 +299,7 @@ func test_view_one_coral_mesh_and_one_fan_multimesh() -> void:
 
 	var up := cv.uploads
 	b0.glow = EcoCoral.MIN_GLOW
+	b0.seen = EcoCoral.MIN_GLOW   # на виду — уже погас (гаснет за DIM_TIME — test_coral_dims_smoothly)
 	view.step(0.05, ship)
 	ok(cv.uploads > up, "свет отдан шейдеру")
 	near(cv.glows[0], b0.glow, 0.01, "погасший куст")
@@ -263,3 +308,254 @@ func test_view_one_coral_mesh_and_one_fan_multimesh() -> void:
 	eq(cv.uploads, up, "медленное разгорание не гоняет шейдер каждый кадр")
 	view.queue_free()
 	await frames(1)
+
+
+# ---------- «Экономно» (Б6) ----------
+
+static func _in_tri(p: Vector2, a: Vector2, b: Vector2, c: Vector2) -> bool:
+	var d1 := (b - a).cross(p - a)
+	var d2 := (c - b).cross(p - b)
+	var d3 := (a - c).cross(p - c)
+	return not ((d1 < -1e-6 or d2 < -1e-6 or d3 < -1e-6) and (d1 > 1e-6 or d2 > 1e-6 or d3 > 1e-6))
+
+
+## Веерник — многоугольник по контуру кружева: всё, что рисует маска шейдера, внутри меша; углов прямоугольника нет.
+func test_fan_mesh_hugs_lace() -> void:
+	var tri := FanView.outline_tris()
+	ok(tri.size() % 3 == 0 and tri.size() / 3 <= 16, "треугольников немного: %d" % (tri.size() / 3))
+	var w := EcoFan.WIDTH * 0.5
+	var area := 0.0
+	for i in range(0, tri.size(), 3):
+		var a := tri[i]
+		var b := tri[i + 1]
+		var c := tri[i + 2]
+		var z := (b - a).cross(c - a)
+		ok(z < 0.0, "лицом к +Z: (b − a) × (c − a) смотрит в −Z, треугольник %d" % (i / 3))
+		area += -z * 0.5
+		for p in [a, b, c]:
+			ok(absf(p.x) <= w + 1e-4 and p.y >= -1e-4 and p.y <= EcoFan.HEIGHT + 1e-4, "в прямоугольнике веера")
+	ok(area < EcoFan.WIDTH * EcoFan.HEIGHT * 0.7, "площадь %.2f м² — заметно меньше прямоугольника" % area)
+	var lace := 0
+	var missed := 0
+	var step := 0.02
+	var y := step * 0.5
+	while y < EcoFan.HEIGHT:
+		var x := -w + step * 0.5
+		while x < w:
+			var p := Vector2(x, y)
+			if FanView.lace(p):
+				lace += 1
+				var inside := false
+				for i in range(0, tri.size(), 3):
+					if _in_tri(p, tri[i], tri[i + 1], tri[i + 2]):
+						inside = true
+						break
+				if not inside:
+					missed += 1
+			x += step
+		y += step
+	ok(lace > 1500, "маска рисует кружево: %d точек" % lace)
+	eq(missed, 0, "ни одна точка кружева не за краем меша")
+	ok(FanView.lace(Vector2(0, 0.1)), "ствол")
+	ok(not FanView.lace(Vector2(-w + 0.05, EcoFan.HEIGHT - 0.05)), "верхний угол прямоугольника пуст")
+
+
+func test_fan_mesh_uv_matches_quad() -> void:
+	var mesh := FanView.build_mesh()
+	var arr := mesh.surface_get_arrays(0)
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	eq(v.size(), FanView.outline_tris().size())
+	for i in v.size():
+		near(uv[i].x, v[i].x / EcoFan.WIDTH + 0.5, 1e-5, "UV.x поперёк, как у прямоугольника")
+		near(uv[i].y, 1.0 - v[i].y / EcoFan.HEIGHT, 1e-5, "UV.y от верха")
+		eq(v[i].z, 0.0)
+	var mat := mesh.surface_get_material(0) as ShaderMaterial
+	eq(mat.get_shader_parameter("mode"), int(EcoShaders.Plant.FAN), "тот же шейдер растений")
+	ok(EcoShaders.PLANT.contains("vec2(0.0, 0.35)") and EcoShaders.PLANT.contains("vec2(d.x / 0.55, d.y / 0.95)")
+		and EcoShaders.PLANT.contains("abs(a) < 1.3") and EcoShaders.PLANT.contains("step(el, 2.6)"),
+		"числа маски — как FanView.HUB/AXES/SPREAD/EDGE_EL")
+
+
+func test_coral_lite_form_coarser_same_layout() -> void:
+	var f := EcoCoralLook.full
+	var l := EcoCoralLook.lite
+	ok(EcoCoralLook.form(false) == f and EcoCoralLook.form(true) == l)
+	eq(EcoCoralLook.verts.size(), f.verts.size(), "поля класса — полная форма")
+	eq(l.branch_count, f.branch_count, "ветвей столько же")
+	eq(l.tip_count, f.tip_count, "кончиков столько же")
+	ok(l.tris.size() * 100 <= f.tris.size() * 62, "треугольников не больше 62 %% (%d → %d)" % [f.tris.size() / 3,
+		l.tris.size() / 3])
+	eq(l.normals.size(), l.verts.size())
+	eq(l.colors.size(), l.verts.size())
+	eq(l.parts.size(), l.verts.size())
+	# силуэт тот же: высота и разлёт куста
+	var fb := AABB(f.verts[0], Vector3.ZERO)
+	for p in f.verts:
+		fb = fb.expand(p)
+	var lb := AABB(l.verts[0], Vector3.ZERO)
+	for p in l.verts:
+		lb = lb.expand(p)
+	near(lb.end.y, fb.end.y, 0.02, "верх куста тот же")
+	ok(lb.size.x > fb.size.x * 0.93 and lb.size.z > fb.size.z * 0.93, "разлёт тот же: %s → %s" % [fb.size, lb.size])
+	# центры кончиков те же: случайные числа не зависят от граней
+	ok(absf(_tip_center(l).distance_to(_tip_center(f))) < 0.02, "кончики на тех же местах")
+	ok(l.colors.has(EcoCoralLook.TIP), "оранжевые кончики")
+	# лицевая сторона по правилу Godot и на «Экономно»: кончики и камни замкнуты, объём со знаком минус
+	for part in [EcoCoralLook.Part.TIP, EcoCoralLook.Part.STONE]:
+		var vol := 0.0
+		for i in range(0, l.tris.size(), 3):
+			if l.parts[l.tris[i]] == part:
+				var a := l.verts[l.tris[i]]
+				vol += a.dot(l.verts[l.tris[i + 1]].cross(l.verts[l.tris[i + 2]])) / 6.0
+		ok(vol < 0.0, "часть %d: объём со знаком минус (%f)" % [part, vol])
+
+
+static func _tip_center(f: EcoCoralLook.Form) -> Vector3:
+	var s := Vector3.ZERO
+	var n := 0
+	for i in f.verts.size():
+		if f.parts[i] == EcoCoralLook.Part.TIP:
+			s += f.verts[i]
+			n += 1
+	return s / maxf(1.0, n)
+
+
+func test_coral_view_lite_same_material_and_glow() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var cv := view.coral_view
+	var full := cv.tris
+	var mat := cv.mesh.surface_get_material(0)
+	var dust := cv._dust
+	eq(full, EcoCoralLook.full.tris.size() / 3 * view.coral.bushes.size(), "полный меш — все кусты")
+	view.set_lite(true)
+	ok(cv.lite, "огнецвет — на «Экономно»")
+	eq(cv.tris, EcoCoralLook.lite.tris.size() / 3 * view.coral.bushes.size(), "грубая форма у всех кустов")
+	ok(cv.tris < full, "треугольников меньше: %d → %d" % [full, cv.tris])
+	eq(cv.mesh.get_surface_count(), 1, "вызов тот же")
+	ok(cv.mesh.surface_get_material(0) == mat, "материал тот же")
+	ok(cv._dust == dust, "муть та же (в общем слое EcoDustLayer)")
+	eq(cv.verts.size(), cv.heights.size(), "доля высоты у каждой вершины")
+	eq(cv.feet.size(), view.coral.bushes.size(), "подножие у каждого куста")
+	# колыхание: двойник шейдера считает по грубой форме (номер куста — по её числу вершин)
+	var last := cv.verts.size() - 1
+	var b := view.coral.bushes[-1]
+	near(cv.verts[last].distance_to(b.base), EcoCoralLook.lite.verts[-1].length() * b.scale, 1e-3,
+		"последняя вершина — у последнего куста")
+	var o := cv.offset(last, 3.0, Vector3(0.4, 0, 0))
+	ok(o.is_finite(), "смещение в течении считается")
+	# свет кончиков отдаётся как прежде
+	var up := cv.uploads
+	view.coral.bushes[0].glow = EcoCoral.MIN_GLOW
+	view.coral.bushes[0].seen = EcoCoral.MIN_GLOW   # шейдер берёт свет на виду (Б3)
+	cv.sync()
+	ok(cv.uploads > up, "свет отдан шейдеру")
+	view.set_lite(false)
+	eq(cv.tris, full, "назад — полный меш")
+	view.queue_free()
+	await frames(1)
+
+
+func test_coral_lite_kept_after_world_reset() -> void:
+	var ev := EcoView.new()
+	ev.ground = Seabed.height
+	ev.set_lite(true)
+	ok(ev.coral_view.lite, "уровень дошёл до огнецвета")
+	var t := ev.coral_view.tris
+	ev.ground = Seabed.height
+	ok(ev.coral_view.lite, "после сброса мира — по-прежнему «Экономно»")
+	eq(ev.coral_view.tris, t, "и меш грубый")
+	ev.set_lite(false)
+	ev.free()
+
+
+# ---------- Огнецвет: проход хищника (#1339) ----------
+
+## Огнецвет с одним серпохвостом, которого двигает тест (в мир не добавлен — сам не плывёт).
+func _pred_coral() -> Array:
+	var w := EcoWorld.new()
+	w.ground = Seabed.height
+	w.ship.pos = Vector3(500, 0, 500)
+	var ps := EcoPred.new()
+	var pr := EcoPred.Pred.new()
+	pr.agent = EcoAgent.new(EcoPred.ID, Vector3(500, -20, -500))
+	ps.all.append(pr)
+	var co := w.add(EcoCoral.new([], ps)) as EcoCoral
+	return [w, co, pr, ps]
+
+
+## Тихий неподвижный корабль: хищник проходит у куста — ближний гаснет и снова разгорается, дальний горит;
+## строка не называет хищника и не путает с кораблём.
+func test_coral_dims_from_passing_pred() -> void:
+	var a := _pred_coral()
+	var w: EcoWorld = a[0]
+	var co: EcoCoral = a[1]
+	var pr: EcoPred.Pred = a[2]
+	var b := co.bushes[1]
+	w.ship.pos = b.top + Vector3(30, 5, 0)
+	w.ship.speed = 0.0
+	w.run(1.0)
+	near(b.glow, 1.0, 1e-6, "до прохода — горит")
+	# хищник проплывает мимо вершины за ~6 с со скоростью патруля
+	var spooked := false
+	for i in 120:
+		pr.agent.p = b.top + Vector3(-9.0 + i * 0.15, 2.0, 6.0)
+		w.step(0.05)
+		spooked = spooked or b.spooked
+	ok(b.glow < EcoCoral.DARK, "ближний куст погас: %.2f" % b.glow)
+	ok(spooked, "гас от хищника, не от корабля")
+	for i in [0, 2, 3]:
+		near(co.bushes[i].glow, 1.0, 1e-6, "дальний куст %d горит" % i)
+	var msgs := _texts(w.take_link())
+	eq(msgs, ["Огнецвет гасит огни — рядом прошёл кто-то крупный"] as Array[String], "строка без «хищник»")
+	pr.agent.p = Vector3(500, -20, -500)
+	w.run(26.0)
+	near(b.glow, 1.0, 1e-6, "ушёл — разгорается")
+	ok(not b.spooked)
+
+
+## Хищник на чистке у станции не гасит куст (перемирие); мёртвый — тоже; далеко от корабля — без строки.
+func test_coral_ignores_cleaning_pred_and_far_ship() -> void:
+	var a := _pred_coral()
+	var w: EcoWorld = a[0]
+	var co: EcoCoral = a[1]
+	var pr: EcoPred.Pred = a[2]
+	var b := co.bushes[0]
+	pr.agent.p = b.top + Vector3(0, 1, 0)
+	pr.mode = EcoPred.Mode.CLEAN
+	w.run(3.0)
+	near(b.glow, 1.0, 1e-6, "на чистке — горит")
+	pr.mode = EcoPred.Mode.PATROL
+	pr.agent.alive = false
+	w.run(3.0)
+	near(b.glow, 1.0, 1e-6, "мёртвый не гасит")
+	pr.agent.alive = true
+	w.run(3.0)
+	ok(b.glow < EcoCoral.DARK, "живой в патруле гасит")
+	eq(_texts(w.take_link()).size(), 0, "корабль далеко — кустов не видно, строки нет")
+
+
+## Шум корабля — своя строка, хищник рядом её не перебивает.
+func test_coral_ship_noise_wins_message() -> void:
+	var a := _pred_coral()
+	var w: EcoWorld = a[0]
+	var co: EcoCoral = a[1]
+	var pr: EcoPred.Pred = a[2]
+	var b := co.bushes[2]
+	w.ship.pos = b.top + Vector3(10, 0, 0)
+	w.ship.speed = 5.0
+	pr.agent.p = b.top + Vector3(-5, 0, 0)
+	w.run(2.0)
+	ok(not b.spooked, "гаснет от корабля")
+	var msgs := _texts(w.take_link())
+	eq(msgs.size(), 1)
+	ok(msgs[0].ends_with("корабль шумит рядом"), msgs[0])
+
+
+## В сцене огнецвет видит серпохвостов мира.
+func test_coral_wired_to_preds_in_view() -> void:
+	var src := FileAccess.get_file_as_string("res://scripts/game/eco/eco_view.gd")
+	ok(src.contains("EcoCoral.new([], preds)"))

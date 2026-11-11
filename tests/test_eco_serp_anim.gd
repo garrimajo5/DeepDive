@@ -94,3 +94,13 @@ func test_swim_wave_is_sideways_and_seamless() -> void:
 	ok(_tip_at(n, "Swim", 2.4).distance_to(a) < 0.02, "цикл без шва")
 	n.queue_free()
 	await frames(1)
+
+
+## По issue #746: прежние модели MOD-011 без скелета не лежат в проекте (иначе ~11 МБ мёртвого груза в APK),
+## в сцене серпохвост — только `serpohvost-anim.glb`.
+func test_no_old_mod011_models() -> void:
+	var models := DirAccess.get_files_at("res://models")
+	for f in models:
+		if f.begins_with("serpohvost") and not f.begins_with("serpohvost-anim"):
+			ok(false, "лишний файл серпохвоста models/%s" % f)
+	eq(EcoPredLook.RIG_GLB, PATH, "сцена грузит модель на скелете")

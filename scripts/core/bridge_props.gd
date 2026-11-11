@@ -16,6 +16,14 @@ const WHEEL_Z := -5.25
 const WHEEL_TILT := -20.0
 ## Колесо поворачивается вслед за штурвалом: градусов на единицу поворота (Helm.Ship.turn −1…1).
 const WHEEL_TURN_DEG := 80.0
+## Колесо стоит повёрнутым на 180° (UX #1402): спицы на 6, 10 и 2 часа — верхняя спица ушла с центрального экрана,
+## верхние легли под кисти. Поворот при рулении — от этого нуля.
+const WHEEL_ZERO_DEG := 180.0
+
+
+## Угол колеса вокруг оси (rotation_degrees.z модели) при повороте штурвала turn −1…1.
+static func wheel_deg(turn: float) -> float:
+	return WHEEL_ZERO_DEG - turn * WHEEL_TURN_DEG
 ## Вал стойки в модели: высота оси и передний торец (м, до масштаба); полутолщина колеса.
 const SHAFT_Y := 0.7125
 const SHAFT_FRONT := 0.137
@@ -33,10 +41,50 @@ const CONSOLE_D := 0.65
 const CONSOLE_SY := 0.74
 const CONSOLE_SZ := 0.75
 const CONSOLE_Z := Deck.NOSE_INNER + CONSOLE_D * CONSOLE_SZ / 2.0
-const CONSOLE_FRONT := Deck.NOSE_INNER + CONSOLE_D * CONSOLE_SZ
-const CONSOLE_TOP := CONSOLE_H * CONSOLE_SY
-## Экраны пульта светятся ровным голубым, пока на них ничего не рисуем.
-const SCREEN_GLOW := Color(0.06, 0.26, 0.32)
+## Стёкла трёх экранов в осях модели пульта (до масштаба), углы слева направо: низ-лево, низ-право, верх-право,
+## верх-лево (#1388). Рамки на корпусе MOD-004 не прямоугольные: боковые экраны развёрнуты к пилоту и скошены —
+## у внешнего края ниже; плоскость сетки `pult-ekrany` была прямоугольной и вылезала за рамку. Углы сняты лучами
+## по тёмному полю экрана в текстуре корпуса, на 1,2 см внутрь от края поля и на 8 мм над поверхностью
+## (`test_bridge_screens`). Плоский список: по четыре угла на экран.
+const SCREEN_CORNERS: Array[Vector3] = [
+	Vector3(-1.021, 1.009, 0.044), Vector3(-0.601, 1.045, 0.069), Vector3(-0.601, 1.278, -0.019), Vector3(-1.021, 1.221, -0.031),
+	Vector3(-0.345, 1.052, 0.086), Vector3(0.345, 1.052, 0.086), Vector3(0.345, 1.303, 0.015), Vector3(-0.345, 1.303, 0.015),
+	Vector3(0.601, 1.054, 0.067), Vector3(1.021, 1.014, 0.049), Vector3(1.021, 1.222, -0.032), Vector3(0.601, 1.272, -0.016),
+]
+const SCREEN_COUNT := 3
+
+
+## Четыре угла экрана i (0 — левый).
+static func screen_quad(i: int) -> PackedVector3Array:
+	return PackedVector3Array(SCREEN_CORNERS.slice(i * 4, i * 4 + 4))
+
+
+## Сетка стёкол экранов по `SCREEN_CORNERS`: два треугольника на экран, лицом к пилоту (+Z), UV — 0…1 по экрану.
+static func screen_mesh() -> ArrayMesh:
+	var v := PackedVector3Array()
+	var n := PackedVector3Array()
+	var uv := PackedVector2Array()
+	var idx := PackedInt32Array()
+	var uvs := [Vector2(0, 1), Vector2(1, 1), Vector2(1, 0), Vector2(0, 0)]
+	for k in SCREEN_COUNT:
+		var q := screen_quad(k)
+		var base := v.size()
+		var face := (q[1] - q[0]).cross(q[3] - q[0]).normalized()   # наружу, к пилоту
+		for i in 4:
+			v.append(q[i])
+			n.append(face)
+			uv.append(uvs[i])
+		# лицевая сторона — обход по часовой, если смотреть на неё (CLAUDE.md)
+		idx.append_array([base, base + 3, base + 2, base, base + 2, base + 1])
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = v
+	arr[Mesh.ARRAY_NORMAL] = n
+	arr[Mesh.ARRAY_TEX_UV] = uv
+	arr[Mesh.ARRAY_INDEX] = idx
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	return m
 
 
 ## Модель на мостике: имя файла в models/, подпись, место и масштаб.

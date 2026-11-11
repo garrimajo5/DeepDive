@@ -7,27 +7,44 @@ extends Node3D
 ## Глаза и фотофоры светятся сами (карта свечения в GLB). Муть у дна от броска (EcoPredDust) — дочерний MultiMesh
 ## «Муть» в мировых координатах на общем шейдере EcoShaders.MIST (INK), +1 вызов. Стоит на слое отмели
 ## (OceanView.LAYER_WORLD).
+## Дышит жабрами — тело шире и выше в такт (`EcoPredLook.breath`, Б3), в броске — нет.
+## Голос SND-008 (`EcoPredSound`): у каждого два плеера `AudioStreamPlayer3D` на шине «Мир» — щелчки поиска и
+## разовые (рык броска, укус, уход после разряда), чтобы щелчок не обрывал рык.
 
-## Узлы дерева анимации (parameters/<узел>/…).
-const P_SWIM := "parameters/ts_swim/scale"
-const P_FAST := "parameters/ts_fast/scale"
-const P_MIX := "parameters/mix/blend_amount"
-const P_STRIKE := "parameters/strike/request"
-const P_BITE := "parameters/bite/request"
-const P_STRIKE_ON := "parameters/strike/active"
-const P_BITE_ON := "parameters/bite/active"
+## Узлы дерева анимации (parameters/<узел>/…) — StringName: строка не разбирается в путь каждый кадр (#850).
+const P_SWIM := &"parameters/ts_swim/scale"
+const P_FAST := &"parameters/ts_fast/scale"
+const P_MIX := &"parameters/mix/blend_amount"
+const P_STRIKE := &"parameters/strike/request"
+const P_BITE := &"parameters/bite/request"
+const P_STRIKE_ON := &"parameters/strike/active"
+const P_BITE_ON := &"parameters/bite/active"
 
 var preds: EcoPred
 ## Узел каждого хищника (в порядке preds.all), его дерево анимации и выбор разовых клипов.
 var bodies: Array[Node3D] = []
 var trees: Array[AnimationTree] = []
 var cues: Array[EcoPredLook.Cues] = []
+## Часы скелета каждого (LOD анимации: вдали реже, дальше EcoPredLook.HIDE_FAR — спрятан и стоит, #850).
+var clocks: Array[EcoPredLook.Clock] = []
+## Голос каждого (EcoPredSound.Call) и его плееры: щелчки и разовые звуки; last_cue — что прозвучало (для тестов).
+var voices: Array[EcoPredSound.Call] = []
+var clicks: Array[AudioStreamPlayer3D] = []
+var calls: Array[AudioStreamPlayer3D] = []
+var last_cue: Array[int] = []
+var _streams := {}
+## «Экономно» (Б6, `set_lite`): скелет реже уже с EcoPredLook.ANIM_MID_LITE — поза раз в ANIM_MID_STEP, дальше
+## ANIM_FAR_LITE — раз в ANIM_FAR_STEP. Модель, место, курс, укусы и удары те же.
+var lite := false
 
 ## Муть от броска у дна и её MultiMesh; буфер мути — для тестов.
 var dust := EcoPredDust.new()
 var dust_view: MultiMeshInstance3D
-var dust_buffer := PackedFloat32Array()
-var _dust_empty := false
+## Буфер мути (EcoDustBuffer, issue #732).
+var dust_buffer: PackedFloat32Array:
+	get:
+		return _dust.data
+var _dust := EcoDustBuffer.new()
 
 var _last_t := 0.0
 var _started := false
@@ -55,9 +72,46 @@ func _init(system: EcoPred) -> void:
 		bodies.append(root)
 		trees.append(at)
 		cues.append(EcoPredLook.Cues.new())
+		clocks.append(EcoPredLook.Clock.new())
+		voices.append(EcoPredSound.Call.new(pr.index))
+		clicks.append(_player(root, "Щелчки", EcoPredSound.CLICK_FAR))
+		calls.append(_player(root, "Голос", EcoPredSound.LOUD_FAR))
+		last_cue.append(EcoPredSound.Cue.NONE)
 	dust_view = GrazerView.build_dust(EcoPredDust.POOL)
 	add_child(dust_view)
 	sync(0.0, Vector3(1e6, 0, 1e6))
+
+
+func _player(root: Node3D, title: String, far: float) -> AudioStreamPlayer3D:
+	var p := AudioStreamPlayer3D.new()
+	p.name = title
+	p.bus = SoundMix.WORLD
+	p.unit_size = EcoPredSound.UNIT
+	p.max_distance = far
+	p.attenuation_filter_cutoff_hz = EcoPredSound.MUFFLE_HZ
+	p.attenuation_filter_db = EcoPredSound.MUFFLE_DB
+	root.add_child(p)
+	return p
+
+
+## Сыграть звук cue зверя i (не в дереве сцены — только запомнить).
+func _voice(i: int, cue: EcoPredSound.Cue) -> void:
+	last_cue[i] = cue
+	if cue == EcoPredSound.Cue.NONE:
+		return
+	var p := clicks[i] if cue == EcoPredSound.Cue.CLICK else calls[i]
+	var path := EcoPredSound.path_of(cue)
+	if not _streams.has(path):
+		_streams[path] = load(path)
+	p.stream = _streams[path]
+	p.volume_db = EcoPredSound.CLICK_DB if cue == EcoPredSound.Cue.CLICK else EcoPredSound.LOUD_DB
+	if p.stream and p.is_inside_tree():
+		p.play()
+
+
+## «Экономно» — скелет реже (EcoPredLook.Clock.step_at).
+func set_lite(on: bool) -> void:
+	lite = on
 
 
 ## Общее дерево: Swim и SwimFast (каждый со своей скоростью, фаза одна) → Blend2 → удар серпом → укус (челюсть).
@@ -116,32 +170,36 @@ func sync(t: float, ship: Vector3, state: EcoLink.ShipState = null, flow := Vect
 	for i in preds.all.size():
 		var pr := preds.all[i]
 		var root := bodies[i]
-		root.visible = pr.agent.alive
-		root.transform = Transform3D(EcoPredLook.basis(pr), pr.agent.p)
+		var dist := pr.agent.distance_to(ship)
+		root.visible = pr.agent.alive and dist <= EcoPredLook.HIDE_FAR
+		var breath := EcoPredLook.breath_scale(EcoPredLook.breath(pr, t))
+		root.transform = Transform3D(EcoPredLook.basis(pr).scaled_local(breath), pr.agent.p)
 		var at := trees[i]
+		var cue := cues[i].update(pr, ship, t, dist > EcoPredLook.CUE_FAR)
+		_voice(i, voices[i].update(pr, t, dist) if pr.agent.alive else EcoPredSound.Cue.NONE)
+		var step := clocks[i].tick(dt, dist, lite)
+		if not _started:  # у каждого своя фаза плавания — не машут хвостами в лад
+			step = pr.index * 0.83
+		elif not root.visible:
+			step = 0.0
+		elif step <= 0.0 and (cue["strike"] or cue["bite"]):
+			step = clocks[i].flush()   # на «Экономно» между позами: разовый клип не теряется
+		if step <= 0.0:
+			continue  # спрятан или вдали между позами — дерево не трогаем: укусов и ударов там нет (CUE_FAR < ANIM_FAR)
 		var rate := EcoPredLook.swim_rate(pr)
 		at.set(P_SWIM, rate * EcoPredLook.SWIM_LEN)
 		at.set(P_FAST, rate * EcoPredLook.SWIM_FAST_LEN)
 		at.set(P_MIX, EcoPredLook.swim_mix(pr))
-		var far := pr.agent.distance_to(ship) > EcoPredLook.CUE_FAR
-		var cue := cues[i].update(pr, ship, t, far)
 		if cue["strike"]:
 			at.set(P_STRIKE, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 		if cue["bite"]:
 			at.set(P_BITE, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
-		if not _started:  # у каждого своя фаза плавания — не машут хвостами в лад
-			at.advance(pr.index * 0.83)
-		elif root.visible:
-			at.advance(dt)
+		at.advance(step)
 	_started = true
 
 
 func _sync_dust(t: float, ship: Vector3, state: EcoLink.ShipState, flow: Vector3, ground: Callable) -> void:
 	dust.update(preds, t, ship, ground)
-	var shown := dust.dust.shown(t)
-	if shown == 0 and _dust_empty and dust_buffer.size() == EcoPredDust.POOL * GrazerView.DUST_STRIDE:
-		return   # мути нет и в буфере пусто — буфер не грузим заново (issue #133)
-	dust_buffer = GrazerView.pack_dust(dust.dust, t, flow, state, EcoPredDust.COLOR, EcoPredDust.LIT,
+	_dust.pack(dust.dust, t, flow, state, EcoPredDust.COLOR, EcoPredDust.LIT,
 			Seabed.mesh_height)
-	dust_view.multimesh.buffer = dust_buffer
-	_dust_empty = shown == 0
+	_dust.upload(dust_view)   # буфер — только когда изменился (#133), пустой слой спрятан (#849)

@@ -42,6 +42,26 @@ func test_shot_after_goto_waits_frame() -> void:   # issue #216: 09g-tablo сн�
 	eq(held.map(func(c): return c[0]), ["begin", "end", "shot", "done"], "после удержания снимок сразу — пар ещё в кадре")
 
 
+func test_level_switch_has_own_shot() -> void:   # 29-golos: худший кадр — смена уровня графики «Красиво» → «Обычно»
+	var q := QaScript.parse(FileAccess.get_file_as_string("res://tools/qa/scenario.json"))
+	var seen := 0
+	for i in q.steps.size():
+		var st: Dictionary = q.steps[i]
+		if st.get("do") != "press" or not str(st.get("what")) in ["g0", "g1", "g2"]:
+			continue
+		seen += 1
+		var own := true   # до снимка — только ожидание, запись и «Назад»; конец сценария — тоже можно
+		for j in range(i + 1, q.steps.size()):
+			var nx: Dictionary = q.steps[j]
+			if nx.get("do") == "shot":
+				break
+			if not nx.get("do") in ["wait", "log", "back"]:
+				own = false
+				break
+		ok(own, "после смены уровня %s — свой снимок: её кадр не уходит в строку следующего экрана" % st.get("what"))
+	ok(seen >= 3, "сценарий проходит три уровня графики")
+
+
 func test_swipe_moves_full_distance() -> void:
 	var q := QaScript.parse('[{"do":"swipe","dx":300,"dy":-40,"s":0.5}]')
 	var sum := Vector2.ZERO
@@ -49,6 +69,35 @@ func test_swipe_moves_full_distance() -> void:
 		if c[0] == "move":
 			sum += c[2]
 	ok(sum.distance_to(Vector2(300, -40)) < 0.01, "свайп прошёл всё расстояние: %s" % str(sum))
+
+
+## Предел шагов сценового прогона при 30 кадрах/с: длина сценария с запасом 10 % и 20 с на снимки (каждый ждёт кадр)
+## и прогрев. Раньше стояло число 7500 (250 с) — новые шаги тестера доводили сценарий до 240 с и роняли тест (#1379).
+static func scene_frames(q: QaScript) -> int:
+	return ceili((q.total_time() * 1.1 + 20.0) * 30.0)
+
+
+## Кадр 36… (#1401): ряд каменщиков ближе всех к кусту огнецвета 0 — сколько венчиков спрятано, и горит ли куст;
+## «присоска» — стеклоуст висит на стекле (корабль стоял в 15 м от его логова, тянул заряд и гасил прожектор к концу
+## прогона, а бросок мимо ряда прятал венчики — main 1ca7c20).
+static func _ognecvet(main: Main, shot: String) -> String:
+	var eco: EcoView = main.eco
+	var bush: EcoCoral.Bush = eco.coral.bushes[0]
+	var row: EcoKamen.Row = null
+	for r in eco.kamen.rows:
+		if row == null or r.center.distance_to(bush.top) < row.center.distance_to(bush.top):
+			row = r
+	var hidden := eco.kamen.hidden_in(row)
+	return "%s: %s %s%s" % [shot, "0" if hidden == 0 else "спрятаны", "погас" if bush.glow < EcoCoral.DARK else "свет",
+			" присоска" if main.vitals.drain_left > 0.0 else ""]
+
+
+func test_total_time() -> void:
+	var q := QaScript.parse('[{"do": "wait", "s": 2}, {"do": "hold", "what": "pad", "dir": [0, 1], "s": 0.5},'
+			+ ' {"do": "shot", "name": "a"}, {"do": "press", "what": "action"}, {"do": "swipe", "dx": 10, "dy": 0}]')
+	near(q.total_time(), 2.0 + 0.5 + QaScript.PRESS_TIME + 0.5, 1e-6, "длина — сумма шагов: ожидание, удержание, нажатие, свайп")
+	var full := QaScript.parse(FileAccess.get_file_as_string("res://tools/qa/scenario.json"))
+	ok(scene_frames(full) / 30.0 > full.total_time() + 20.0, "предел прогона длиннее сценария с запасом (#1379)")
 
 
 func test_scene_runs_scenario() -> void:
@@ -76,7 +125,19 @@ func test_scene_runs_scenario() -> void:
 	var windows_hidden: Array[String] = []   # конденсат 33/33a: окна не заслонены товарищами
 	var crowded: Array[String] = []   # issue #602: на снимке товарищ вплотную к камере — кадр закрыт его головой
 	var mate_weld_seen := false   # 26b: шов в кадре, его варит товарищ
-	for i in 4800:  # 160 с игры (сценарий идёт ~148 с)
+	var field_known := false   # 32e2: импульс с площадки 08 поймал ритм поля (#833)
+	var bones_seen := false   # 32g: сканер у Костей 04 — строка о минерализации (#840)
+	var shell_known := false   # 32h: сонар и сканер у Раковины 03 — знание «осмотр 03» (#835)
+	var reverse := 0.0   # 05c (#1568): задний ход — минус на левом экране пульта ART-061
+	var dome: Array[String] = []   # 37/37a (#1350): купольник в кадре — клип ANIM-004 и створка по кадрам
+	var dome_t := -1.0   # 37 (#837): время клипа OpenPetal на кадре — верхняя точка подъёма
+	var dome_say := ""   # 37a (#837, отчёт 11.11 15:18): строка створки на приборах
+	var task_say := ""   # 35-zadacha-07 (#1635, отчёт 11.11 12:19): строка 3 — задача места, не «Вы за штурвалом»
+	var zamer: Array[String] = []   # 38/38a (#1498): режим хищника 0 и строка приборов на кадрах «замер» и «потерял»
+	var zamer_hull: Array[float] = []   # 38 → 38a: удара нет
+	var ogon: Array[String] = []   # 36/36a/36b (#1401): спрятано венчиков у куста огнецвета 0 и его свечение по кадрам
+	ok(not main.lore.knows(LayerLore.FIELD08), "до прогона поле 08 не замечено")
+	for i in scene_frames(qa.script_q):   # предел — от длины сценария (#1379)
 		# снимок берёт уже нарисованный кадр — камеру до шага, в котором он снят
 		var cam := main.camera
 		var table_vis := cam.is_position_in_frustum(table.global_position + table.global_basis.y * 0.9)
@@ -113,9 +174,18 @@ func test_scene_runs_scenario() -> void:
 		var mate_welds := false
 		for m: Crew.Member in main.crew:
 			mate_welds = mate_welds or (m != main.me and m.welding() and weld_at > 0.0)
+		var dome_vis := cam.is_position_in_frustum(main.eco.dome.pos + Vector3(0, 0.6, 0)) and main.eco.dome_view.visible
+		var dome_line := "%s %s %.1f" % ["в кадре" if dome_vis else "не в кадре", main.eco.dome_view.playing,
+				main.eco.dome.petal]
+		var dome_at := main.eco.dome.t
+		var say_now := main.message.text
+		var pred_mode: String = EcoPred.Mode.keys()[main.eco.preds.all[0].mode]
 		main.step(1.0 / 30.0)
 		no_answer = no_answer or (main.address.open and main.address.hint() == AddressScreen.NO_ANSWER)
 		sat = sat or main.pilot.seated
+		field_known = field_known or main.lore.knows(LayerLore.FIELD08)
+		bones_seen = bones_seen or main.eco.bones.inspected
+		shell_known = shell_known or main.lore.knows(LayerLore.SHELL03)
 		ahead = maxf(ahead, z0 - main.helm.pos.z)
 		for k in range(shots, qa.log_lines.size()):   # #48: на 09-sonar в кадре голостол, на 10-zap — рычаг
 			if qa.log_lines[k].begins_with("скриншот 09-sonar"):
@@ -127,10 +197,26 @@ func test_scene_runs_scenario() -> void:
 				legs_seen = legs_vis
 			if qa.log_lines[k].begins_with("скриншот 16-breach-weld"):
 				weld_y = weld_at
+			if qa.log_lines[k].begins_with("скриншот 05c-zadniy-hod"):
+				reverse = (main.bridge.screens_mat.get_shader_parameter("values") as Vector3).z
 			if qa.log_lines[k].begins_with("скриншот 10-zap"):
 				zap_seen = zap_vis
 			if qa.log_lines[k].begins_with("скриншот 10a-zap-okno"):
 				arc_seen = arc_vis
+			if qa.log_lines[k].begins_with("скриншот 37-kupolnik") or qa.log_lines[k].begins_with("скриншот 37a-kupolnik"):
+				dome.append(dome_line)
+				if qa.log_lines[k].begins_with("скриншот 37-kupolnik"):
+					dome_t = dome_at
+				else:
+					dome_say = say_now
+			if qa.log_lines[k].begins_with("скриншот 38-zamer") or qa.log_lines[k].begins_with("скриншот 38a-zamer"):
+				zamer.append("%s: %s" % [qa.log_lines[k].split(" ")[1].trim_suffix(":"), pred_mode])
+				zamer.append(say_now)
+				zamer_hull.append(main.vitals.hull)
+			if qa.log_lines[k].begins_with("скриншот 35-zadacha-07"):
+				task_say = say_now
+			if qa.log_lines[k].begins_with("скриншот 36"):
+				ogon.append(_ognecvet(main, qa.log_lines[k].split(" ")[1].trim_suffix(":")))
 			if qa.log_lines[k].begins_with("скриншот 30-kartochka-sonar"):
 				card_seen = card_vis
 			if qa.log_lines[k].begins_with("скриншот 33") and screens > 0:
@@ -154,10 +240,35 @@ func test_scene_runs_scenario() -> void:
 	eq(windows_hidden, [] as Array[String], "на 33/33a окна не заслоняют товарищи (отчёт 2026-10-26-1233)")
 	ok(mate_weld_seen, "на 26b-mate-weld товарищ варит шов в кадре (#602)")
 	ok(sat, "по сценарию садились за штурвал")
+	ok(reverse < -1.0, "на 05c-zadniy-hod задний ход — на экране пульта ход с минусом: %.1f (#1568)" % reverse)
+	ok(field_known, "32e2: импульс у 08 — ритм поля, знание «поле 08»")
+	ok(bones_seen, "32g: сканер у Костей 04 — строка о минерализации")
+	ok(shell_known, "32h: сонар и сканер у Раковины 03 — знание «осмотр 03»")
+	eq(dome.size(), 2, "37/37a: оба кадра купольника сняты")
+	if dome.size() == 2:
+		eq(dome[0], "в кадре OpenPetal 1.0", "37: купольник в кадре, клип OpenPetal, створка поднята")
+		ok(absf(dome_t - EcoDome.LIFT.y) < 0.15,
+				"37 (#837): кадр в верхней точке подъёма захвата (LIFT.y %.1f с): %.2f с" % [EcoDome.LIFT.y, dome_t])
+		eq(dome[1], "в кадре Swim 1.0", "37a: створка поднята, купольник в кадре уходит клипом Swim")
+	eq(task_say, PlaceTask.line("gate"),
+			"35-zadacha-07 (#1635): на приборах строка задачи 07, не «%s»" % Main.SAT_MSG)
+	eq(dome_say, EcoDome.PETAL_TEXT, "37a (#837): на приборах строка створки — знание забыто шагом dome")
+	eq(ogon, ["36-ognecvet-do: 0 свет", "36a-ognecvet-prohod: спрятаны погас", "36b-ognecvet-posle: 0 свет"],
+			"#1401: до прохода ряд раскрыт и куст горит, на проходе — спрятан и погас, после — снова раскрыт")
+	eq(zamer.size(), 4, "38/38a (#1498): оба кадра «замера» сняты")
+	if zamer.size() == 4:
+		eq(zamer[0], "38-zamer: ALERT", "38 (#1498): хищник 0 в фазе «замер»")
+		ok(zamer[1].contains("замер и смотрит на корабль — его манит свет"), "38: на приборах строка замера: «%s»" % zamer[1])
+		eq(zamer[2], "38a-zamer-poteryal: RETREAT", "38a (#1498): свет погас — хищник отходит")
+		ok(zamer[3].contains("потерял корабль и отворачивает"), "38a: на приборах строка отхода: «%s»" % zamer[3])
+		ok(zamer_hull[1] >= zamer_hull[0], "38 → 38a: удара нет: корпус %.2f → %.2f" % [zamer_hull[0], zamer_hull[1]])
 	ok(not main.pilot.seated, "и встали")
 	ok(ahead > 20.0, "корабль прошёл вперёд: %.1f м" % ahead)
 	ok(FileAccess.file_exists(QaRunner.OUT + "/done.txt"), "done.txt записан")
 	var log := FileAccess.get_file_as_string(QaRunner.OUT + "/log.txt")
+	ok(log.contains("замер: хищник 0 nos, 26 м от корабля, замер 4.0 с, отход 20 с"), "38 (#1498): в логе у шага zamer — числа игры")
+	ok(log.contains("купольник: OpenPetal 3.5 с · створка 07 "), "37 (#837): в логе у шага dome — было ли знание")
+	ok(log.get_slice("\n", 0).contains("версия " + Main.version_text()), "#1350: первая строка лога — версия как на плашке")
 	ok(log.contains("сел за штурвал") and log.contains("за штурвалом"), "в логе есть состояние за штурвалом")
 	ok(log.contains("прожектор погашен | ") and log.contains("свет выкл"), "по сценарию гасили прожектор")
 	ok(main.light_on, "и зажгли снова")
@@ -224,6 +335,24 @@ func test_act_step() -> void:   # товарищ жмёт свою кнопку 
 	eq(q.advance(0.1)[0], ["act"], "команда сцене")
 
 
+func test_mate_same_role_replaces() -> void:   # #1162: второй «биолог» сценария встаёт вместо первого
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.start_qa('[{"do": "mate", "x": 0.9, "z": -2.3, "yaw": 90, "role": 3, "look": 0},'
+		+ ' {"do": "mate", "x": 0.2, "z": -2.6, "yaw": 60, "role": 2, "look": 1},'
+		+ ' {"do": "mate", "x": 1.85, "z": -0.75, "yaw": 90, "role": 3, "look": 0}, {"do": "wait", "s": 0.3}]')
+	for i in 20:
+		main.step(1.0 / 30.0)
+	eq(main.crew.size(), 3, "свой игрок, инженер и один биолог")
+	var bios := main.crew.filter(func(m: Crew.Member) -> bool: return m.role == Crew.Role.BIOLOGIST)
+	eq(bios.size(), 1, "биолог один")
+	eq((main.crew[-1] as Crew.Member).role, Crew.Role.BIOLOGIST, "новый — последним, его ведут act/gone")
+	near((main.crew[-1] as Crew.Member).walker.z, -0.75, 0.3, "стоит на новом месте")
+	main.queue_free()
+	await frames(1)
+
+
 func test_gone_step() -> void:   # товарищ отключился, как гость сети: у хоста плашка ART-043
 	var q := QaScript.parse('[{"do": "gone"}]')
 	eq(q.errors.size(), 0, "шаг gone известен")
@@ -239,6 +368,124 @@ func test_gone_step() -> void:   # товарищ отключился, как �
 	ok(Crew.holder(main.crew, main.me, "energy") == null, "пульт свободен")
 	ok(main.notice.active(), "плашка у хоста")
 	eq(main.notice.sub, "Роль свободна · пост освобождён", "держал пульт")
+	main.queue_free()
+	await frames(1)
+
+
+## Отчёт qa/2026-10-26-1620-novaya-c3f0473: шаг «wreck» ставит корпус 0 сам — в хронометраже это не «удар».
+func test_wreck_step_not_a_hit() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.start_qa('[{"do": "wait", "s": 0.2}, {"do": "wreck"}, {"do": "wait", "s": 0.3}]')
+	for i in 20:
+		main.step(1.0 / 30.0)
+	var text := ""
+	for e: Array in main.timeline.events:
+		text += "%s\n" % e[1]
+	ok(text.contains("корпус задан: 0%"), "крушение из сценария помечено: %s" % text)
+	ok(not text.contains("удар: корпус 0%"), "и не считается ударом: %s" % text)
+	main.queue_free()
+	await frames(1)
+
+
+## Кампания (#824, часть 4б): шаг «save» кладёт место в память сохранения (файл прогона не пишется), «wreck» после
+## него — загрузка этого места без облёта, а не подъём к началу спуска.
+func test_save_then_wreck_loads_place() -> void:
+	var q := QaScript.parse('[{"do": "save"}, {"do": "wreck"}, {"do": "save", "on": false}]')
+	eq(q.errors.size(), 0, "шаг save известен")
+	eq(q.advance(0.1).slice(0, 3), [["save", true], ["wreck"], ["save", false]], "команды сцене")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	eq(main.save.path, "", "прогон не пишет файл сохранения")
+	main.start_qa('[{"do": "ship", "x": 40, "y": -30, "z": -30, "yaw": 0}, {"do": "save"}, {"do": "wait", "s": 0.2},'
+		+ ' {"do": "ship", "x": 0, "y": -20, "z": 60}, {"do": "wreck"}, {"do": "wait", "s": 0.2}]')
+	for i in 20:
+		main.step(1.0 / 30.0)
+	ok(main.has_saved_ship(), "место в памяти сохранения")
+	eq(main.wreck_view.sub.text, Wreck.SUB_LOAD, "шторка обещает последнее сохранение")
+	for i in int(Wreck.END * 30.0) + 10:
+		main.step(1.0 / 30.0)
+	ok(not main.wreck.active(), "шторка прошла")
+	near(main.helm.pos.x, 40.0, 0.5, "корабль у сохранённого места (x)")
+	near(main.helm.pos.z, -30.0, 0.5, "корабль у сохранённого места (z)")
+	ok(not main.flyby.active(), "без облёта")
+	main.start_qa('[{"do": "save", "on": false}, {"do": "wait", "s": 0.1}]')
+	main.step(1.0 / 30.0)
+	ok(not main.has_saved_ship(), "место забыто — меню без «Продолжить»")
+	main.queue_free()
+	await frames(1)
+
+
+## Есть сохранённое место — в меню сверху «Продолжить», кнопки ниже: «crew»/«journal»/«dive» сценария жмут по
+## текущему меню, а не по меню без «Продолжить» (иначе «Экипаж» попадал мимо, 29f не дожидался «Нет ответа»).
+func test_menu_press_with_continue() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var qa := main.start_qa('[{"do": "wait", "s": 0.1}]')
+	main.main_menu.open = true
+	main.main_menu.can_continue = true
+	var size := main.get_viewport().get_visible_rect().size
+	for id in ["dive", "crew", "journal"]:
+		eq(main.main_menu.hit(qa._point(id, Vector2.ZERO), size), id, "касание «%s» — по своей кнопке" % id)
+	main.queue_free()
+	await frames(1)
+
+
+## Предложение тестера (#1350, 08.11): брифинг прибытия #827 — шагом сценария, а не руками через adb.
+func test_brief_step_pages_to_end() -> void:
+	var q := QaScript.parse('[{"do": "brief"}, {"do": "press", "what": "brief"}, {"do": "brief", "on": false}]')
+	eq(q.errors.size(), 0, "шаг brief и кнопка brief известны")
+	eq(q.advance(0.01)[0], ["brief", true], "команда сцене")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.lore.learn(LayerLore.BRIEF)   # прочитан в прошлом забеге — шаг всё равно показывает с начала
+	var steps := '{"do": "brief"}, {"do": "wait", "s": 0.8}'
+	for i in ArrivalBrief.count():
+		steps += ', {"do": "press", "what": "brief"}, {"do": "wait", "s": 0.8}'
+	var qa := main.start_qa("[" + steps + "]")
+	main.step(1.0 / 30.0)
+	ok(main.arrival.active(), "брифинг идёт")
+	ok(not main.lore.knows(LayerLore.BRIEF), "знание «прочитан» забыто")
+	eq(main.arrival.screen, 0, "с первого экрана")
+	var size := main.get_viewport().get_visible_rect().size
+	ok(ArrivalBrief.box(size).has_point(qa._point("brief", Vector2.ZERO)), "касание — в плашке")
+	for i in int((0.8 + ArrivalBrief.count() * (QaScript.PRESS_TIME + 0.8) + 0.5) * 30.0):
+		main.step(1.0 / 30.0)
+	ok(not main.arrival.active(), "пролистан до конца")
+	ok(main.lore.knows(LayerLore.BRIEF), "прочитан — как от касаний игрока")
+	main.queue_free()
+	await frames(1)
+
+
+func test_row3_line() -> void:   # #1429: строка 3 приборов в лог у шагов брифинга
+	eq(QaRunner.row3_line([], "", ""), "строка 3: пусто", "пусто")
+	eq(QaRunner.row3_line(["Из песка что-то схватило"], "Стайка рыбок", ""),
+		"строка 3: «Из песка что-то схватило» · в очереди: «Стайка рыбок»", "видна и ждёт очереди")
+	eq(QaRunner.row3_line([], "", "Стайка рыбок"), "строка 3: пусто · ждёт конца брифинга: «Стайка рыбок»",
+		"отложена до конца брифинга")
+
+
+func test_brief_logs_world_line() -> void:   # #1429: в логе видно, пришла строка мира до плашки или под ней
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main._world_say("Из песка что-то схватило круглую рыбку")
+	var qa := main.start_qa('[{"do": "brief"}, {"do": "wait", "s": 0.5}, {"do": "log", "note": "02r"}, {"do": "wait", "s": 5}]')
+	for i in 30:
+		main.step(1.0 / 30.0)
+	var on := Array(qa.log_lines).filter(func(l): return l.begins_with("брифинг вкл"))
+	eq(on.size(), 1, "шаг brief пишет строку")
+	if on.size() == 1:
+		ok("строка 3: «Из песка что-то схватило круглую рыбку»" in on[0], "строка мира до плашки: " + on[0])
+	var note := Array(qa.log_lines).filter(func(l): return l.begins_with("02r |"))
+	eq(note.size(), 1, "заметка под брифингом")
+	if note.size() == 1:
+		ok("строка 3: пусто · ждёт конца брифинга: «Из песка что-то схватило круглую рыбку»" in note[0],
+			"под плашкой строка мира отложена: " + note[0])
 	main.queue_free()
 	await frames(1)
 
@@ -290,6 +537,41 @@ func test_caustics_shot_starts_clean() -> void:
 			break
 	ok(closed, "перед 32-kaustiki пробоина закрыта")
 	ok(whole, "и корпус целый")
+
+
+func test_sonar_card_shot_calm_and_clear() -> void:   # issue #882: укус хищника прятал карточку, камера — в товарище
+	var steps: Array = JSON.parse_string(FileAccess.get_file_as_string("res://tools/qa/scenario.json"))
+	var mates: Array[Vector2] = []
+	var closed := false
+	var look := {}
+	var after: Array = []   # шаги между подходом к посту и снимком (#1018)
+	var shot := false
+	for st in steps:
+		if st["do"] == "mate" and st.has("x"):
+			mates.append(Vector2(float(st["x"]), float(st["z"])))
+		if st["do"] == "press" and st.get("what", "") == "dive":
+			closed = false   # новый забег: тревоги того забега не в счёт
+			look = {}
+		if st["do"] == "breach":
+			closed = not bool(st.get("on", true))
+		if st["do"] == "goto":
+			look = st
+			after = []
+		elif not look.is_empty() and st["do"] != "shot":
+			after.append(st["do"])
+		if st["do"] == "shot" and st["name"] == "30-kartochka-sonar":
+			shot = true
+			break
+	ok(shot and not look.is_empty(), "снимок карточки после «Погрузиться» и подхода к посту")
+	ok(after.has("breach") and after.has("cards") and after.has("drain") and after.has("silt"),
+		"после подхода к посту — тревоги сняты и карточки с нуля: тревога по дороге не сворачивает карточку (#1018): %s" % [after])
+	ok(closed, "пробоина закрыта перед снимком — под тревогой карточка прячется")
+	var at := Vector2(float(look["x"]), float(look["z"]))
+	ok(Deck.can_stand(at.x, at.y), "на месте можно стоять")
+	var post := Deck.nearest(Deck.posts(), at.x, at.y)
+	ok(post != null and post.id == "sonar", "ближайший пост — сонар")
+	for p in mates:
+		ok(p.distance_to(at) > 1.0, "товарищ %s не вплотную к камере (%.2f м)" % [p, p.distance_to(at)])
 
 
 func test_drain_step() -> void:   # issue #131: тревога о стеклоусте видна в прогоне тестера
@@ -380,6 +662,55 @@ func test_fps_settles_after_shot() -> void:
 	r.free()
 
 
+## Issue #1013: кадры сразу после шага «ship» (выгрузка мест в видеокарту после переноса через отмель) не попадают
+## в худший кадр — пишутся отдельно «после прыжка», а следующий провал виден как обычно.
+func test_worst_frame_skips_ship_jump() -> void:
+	var r := QaRunner.new()
+	var t := 1000000
+	r._measure(t)
+	r._jump = QaRunner.JUMP_FRAMES   # так ставит шаг «ship»
+	t += 180000                      # первая выгрузка места
+	r._measure(t)
+	for i in QaRunner.JUMP_FRAMES - 1:
+		t += 20000
+		r._measure(t)
+	eq(roundi(r.worst_ms), 0, "кадр после прыжка не худший кадр")
+	eq(roundi(r.jump_ms), 180, "он записан отдельно")
+	t += 90000                       # провал уже после прыжка
+	r._measure(t)
+	eq(roundi(r.worst_ms), 90, "провал после окна виден")
+	ok(r.worst_text().contains("худший кадр 90 мс") and r.worst_text().ends_with(" · после прыжка 180 мс"),
+		"оба в строке скриншота: " + r.worst_text())
+	r.after_shot()
+	eq(roundi(r.jump_ms), 0, "после снимка сброс")
+	r.free()
+
+
+## Issue #1204: корабль возвращается к 10 посреди тёмного экрана кат-сцены «глубже» — кадр выгрузки мест у 10
+## под закрытой шторкой не худший кадр, а «после прыжка»; провал, когда шторка уже открывается, виден как обычно.
+func test_worst_frame_skips_dark_trip() -> void:
+	var r := QaRunner.new()
+	r.trip = DescentTrip.new()
+	r.trip.start()
+	var t := 1000000
+	r._measure(t)
+	t += 70000                       # затемнение ещё идёт — кадр виден
+	r._measure(t)
+	eq(roundi(r.worst_ms), 70, "кадр в затемнении — худший")
+	r.trip.update(DescentTrip.SINK + DescentTrip.HOLD * 0.5)   # возвращение корабля: шторка закрыта
+	ok(QaRunner.dark_trip(r.trip), "шторка закрыта")
+	t += 186000                      # мир и места у 10 разом
+	r._measure(t)
+	eq(roundi(r.worst_ms), 70, "кадр под шторкой не худший")
+	eq(roundi(r.jump_ms), 186, "он записан «после прыжка»")
+	r.trip.update(DescentTrip.HOLD * 0.5 + 0.1)   # шторка открывается
+	ok(not QaRunner.dark_trip(r.trip), "шторка открывается")
+	t += 90000
+	r._measure(t)
+	eq(roundi(r.worst_ms), 90, "провал при открытой шторке виден")
+	r.free()
+
+
 func test_worst_frame_names_step() -> void:   # issue #217: в логе видно, на каком шаге худший кадр
 	var r := QaRunner.new()
 	r.script_q = QaScript.parse('[{"do": "wait", "s": 1}, {"do": "press", "what": "action"}, {"do": "wait", "s": 1}]')
@@ -403,11 +734,63 @@ func test_worst_frame_names_step() -> void:   # issue #217: в логе видн
 	r.free()
 
 
+func test_worst_note_pipelines() -> void:   # issue #983: провал отрисовки — сборка шейдеров или нет
+	eq(QaRunner.pipes_note(PackedInt32Array([0, 0, 0, 0, 0])), "", "сборок нет — молчим")
+	eq(QaRunner.pipes_note(PackedInt32Array([0, 0, 2, 1, 0])), "сборок шейдеров 3: поверхности 2, при отрисовке 1")
+	eq(QaRunner.worst_note("шаг 595 wait", 338.0, 12.0, 2.0, 352.0, "", PackedInt32Array([1, 0, 0, 4, 0])),
+		"шаг 595 wait, код 12 мс, отрисовка 338 мс (сборок шейдеров 5: 2D 1, при отрисовке 4), видеокарта 2 мс")
+	eq(QaRunner.worst_note("шаг 54 press", 7.2, 5.4, 0.0), "шаг 54 press, код 5 мс, отрисовка 7 мс", "без счётчиков — как раньше")
+	var r := QaRunner.new()
+	r._on_post_draw()
+	r._on_post_draw()
+	eq(r.pipes, PackedInt32Array([0, 0, 0, 0, 0]), "между двумя пустыми кадрами сборок нет — счёт за кадр, не накопленный")
+	r.free()
+
+
 func test_worst_note_code_and_gpu() -> void:   # issue #217, #281: отрисовка мала — код это или видеокарта
 	eq(QaRunner.worst_note("шаг 54 press", 7.2, 5.4, 0.0), "шаг 54 press, код 5 мс, отрисовка 7 мс", "без замера видеокарты")
 	eq(QaRunner.worst_note("шаг 54 press", 7.2, 5.4, 731.0), "шаг 54 press, код 5 мс, отрисовка 7 мс, видеокарта 731 мс",
 		"видеокарта — когда драйвер замеряет")
 	eq(QaRunner.worst_note("", 3.0), "отрисовка 3 мс", "без шага и кода — как раньше")
+
+
+## #519 (тестер в #1350, 10.11): `21a-vent` 107 мс при коде 18 и отрисовке 19 — остаток кадра делим на части движка.
+func test_worst_rest_parts() -> void:
+	# кадр 1 000 000…1 107 000 мкс: код 18 мс, отрисовка 1 020 000…1 039 000, физика с 1 100 000, узлы с 1 104 000
+	var parts := QaRunner.rest_parts(1000000, 1107000, 18.0, 1020000, 1039000, 1100000, 1104000)
+	near(parts["между кадрами"], 61.0, 0.01, "от конца отрисовки до первого такта физики")
+	near(parts["физика"], 4.0, 0.01, "такты физики до обработки узлов")
+	near(parts["узлы"], 5.0, 0.01, "узлы до кода (2) и после начала обработки (3)")
+	eq(QaRunner.worst_note("шаг 341 hold", 19.0, 18.0, 4.0, 107.0, "", PackedInt32Array(), parts),
+		"шаг 341 hold, код 18 мс, отрисовка 19 мс, видеокарта 4 мс, вне шага 70 мс (между кадрами 61, узлы 5, физика 4)")
+	var calm := QaRunner.rest_parts(1000000, 1107000, 18.0, 1020000, 1039000, 1030000, 1104000)
+	eq(calm["физика"], 0.0, "такт физики раньше отрисовки — тактов в кадре не было")
+	near(calm["между кадрами"], 65.0, 0.01, "тогда между кадрами — до обработки узлов")
+	eq(QaRunner.rest_parts(1000000, 1107000, 18.0, 0, 0, 0, 0), {}, "без отрисовки (headless) — меток нет")
+	eq(QaRunner.rest_parts(1000000, 1107000, 18.0, 990000, 995000, 0, 1104000), {}, "отрисовка прошлого кадра — не делим")
+	eq(QaRunner.rest_note(99.0, 18.0, 19.0, parts), "", "кадр короче 100 мс — без остатка")
+	eq(QaRunner.rest_note(107.0, 40.0, 19.0, parts), "", "код и отрисовка — больше половины кадра: виновник уже в строке")
+	eq(QaRunner.rest_note(120.0, 10.0, 10.0, {"между кадрами": 90.0, "физика": 0.2, "узлы": 0.0}),
+		"вне шага 100 мс (между кадрами 90, прочее 10)", "доли меньше 1 мс молчат, не разложенное — «прочее»")
+
+
+## Метки ставят сигналы дерева: первый такт физики после отрисовки, начало обработки узлов.
+func test_worst_rest_marks() -> void:
+	var r := QaRunner.new()
+	r._on_pre_draw()
+	r._on_post_draw()
+	r._on_physics_frame()
+	var first := r._phys_us
+	OS.delay_usec(1000)
+	r._on_physics_frame()
+	eq(r._phys_us, first, "второй такт в том же кадре метку не двигает")
+	r._on_process_frame()
+	ok(r._post_us <= r._phys_us and r._phys_us <= r._proc_us, "метки по порядку кадра")
+	r._on_post_draw()
+	OS.delay_usec(1000)
+	r._on_physics_frame()
+	ok(r._phys_us > r._post_us, "после новой отрисовки — новый первый такт")
+	r.free()
 
 
 ## Issue #609: «отрисовка 1466 мс» при худшем кадре 178 мс — замер движка запаздывал и приходился на чужой кадр.
@@ -492,6 +875,55 @@ func test_caustics_shot_under_cracks() -> void:
 	ok(eye_y < float(ship["y"]) - 4.0, "глаз под днищем — корпус не закрывает дно")
 
 
+## Шаг ship с курсом: курс — пятым числом (как у goto), без него — прежний (#729: вид на губку органа не зависит
+## от того, куда повернул забег).
+func test_ship_step_yaw() -> void:
+	var q := QaScript.parse('[{"do": "ship", "x": 52, "y": -25, "z": 40, "yaw": 0}, {"do": "ship", "x": 1, "z": 2}]')
+	eq(q.errors.size(), 0, "без ошибок")
+	var out := q.advance(0.1)
+	eq(out[0], ["ship", 52.0, -25.0, 40.0, 0.0], "курс задан")
+	eq(out[1], ["ship", 1.0, -20.0, 2.0], "курс не задан — четыре числа")
+
+
+## Снимки 32b/32c (выдох трубного органа, PR #729): корабль «в гуле» губки, курс задан, губка впереди и ниже
+## глаза, глаз над дном и под днищем.
+func test_organ_shot_at_organ() -> void:
+	var raw := FileAccess.get_file_as_string("res://tools/qa/scenario.json")
+	var steps: Array = JSON.parse_string(raw)
+	var ship := {}
+	var fly := {}
+	var look := {}
+	var shot := false
+	for st in steps:
+		if st["do"] == "ship":
+			ship = st
+			look = {}
+		if st["do"] == "goto":
+			look = st
+		if st["do"] == "fly" and st.get("on", true):
+			fly = st
+		if st["do"] == "shot" and st["name"] == "32b-organ":
+			shot = true
+			break
+	ok(shot and not ship.is_empty() and not fly.is_empty(), "в сценарии есть снимок органа после стоянки и полёта")
+	ok(ship.has("yaw"), "курс корабля задан")
+	ok(not look.is_empty() and is_zero_approx(float(look["yaw"])), "после стоянки взгляд по носу (goto yaw 0) — "
+		+ "не остаётся от прошлого снимка")
+	var at := Vector2(float(ship["x"]), float(ship["z"]))
+	var spot := EcoOrgan.SPOTS[0]
+	for s in EcoOrgan.SPOTS:
+		if s.distance_to(at) < spot.distance_to(at):
+			spot = s
+	ok(spot.distance_to(at) < EcoOrgan.MASK_R, "корабль ближе %.0f м к губке — трубы дышат каждый такт" % EcoOrgan.MASK_R)
+	var nose := Vector2(0, -1).rotated(-deg_to_rad(float(ship["yaw"])))
+	ok(nose.dot((spot - at).normalized()) > 0.9, "губка впереди по носу")
+	var eye_y := float(ship["y"]) + float(fly["y"])
+	var floor_y := Seabed.height(at.x, at.y)
+	ok(eye_y > floor_y + 2.0, "глаз над дном (%.1f > %.1f)" % [eye_y, floor_y])
+	ok(eye_y > Seabed.height(spot.x, spot.y) + EcoOrgan.TOP_UP, "глаз выше устьев труб")
+	ok(eye_y < float(ship["y"]) - 3.0, "глаз под днищем")
+
+
 func test_park_at_and_toggle_noclip() -> void:
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
@@ -505,5 +937,311 @@ func test_park_at_and_toggle_noclip() -> void:
 	main.toggle_noclip()
 	ok(not main.walker.noclip, "полёт выключен")
 	eq(main.walker.y, Deck.Walker.EYE, "глаз снова на высоте шага")
+	main.queue_free()
+	await frames(1)
+
+
+## Отчёт #742: видеокарта 30–40 мс весь первый забег, 1–3 мс после страницы «Графика» — уровень графики и что он
+## поставил на деле пишутся в лог при старте и при каждой смене.
+func test_graphics_line() -> void:
+	eq(QaRunner.graphics_line(Graphics.NORMAL, 2, 1.0, 2, "Adreno 740"),
+		"графика «Обычно»: MSAA 2×, масштаб 1,00, тени 2 · видеокарта Adreno 740", "обычно")
+	eq(QaRunner.graphics_line(Graphics.ECONOMY, 0, 0.75, 0, ""),
+		"графика «Экономно»: MSAA выкл, масштаб 0,75, тени выкл · видеокарта —", "экономно, видеокарта неизвестна")
+
+
+func test_graphics_logged_on_change() -> void:
+	tree.root.msaa_3d = Viewport.MSAA_4X   # MSAA, оставленный прошлым «Красиво», — при старте его ставит уровень
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var qa := main.start_qa('[{"do":"wait","s":5}]')
+	main.step(1.0 / 30.0)
+	var first := Array(qa.log_lines).filter(func(l): return l.begins_with("графика «"))
+	eq(first.size(), 1, "при старте — одна строка графики")
+	ok(first[0].begins_with("графика «Обычно»: MSAA 2×, масштаб 1,00, тени 2"), "уровень по умолчанию: " + first[0])
+	main.step(1.0 / 30.0)
+	eq(Array(qa.log_lines).filter(func(l): return l.begins_with("графика «")).size(), 1, "без смены — не повторяется")
+	main._apply_graphics(Graphics.BEAUTY)
+	main.step(1.0 / 30.0)
+	var all := Array(qa.log_lines).filter(func(l): return l.begins_with("графика «"))
+	eq(all.size(), 2, "смена уровня — новая строка")
+	ok(all[-1].begins_with("графика «Красиво»: MSAA 4×, масштаб 1,00, тени 4"), "красиво: " + all[-1])
+	main._apply_graphics(Graphics.NORMAL)
+	main.queue_free()
+	await frames(1)
+
+
+func test_layer_shots_look_out_window() -> void:   # issue #967: 32i–32m снимали стену сканера, строку костей перебивал «Новый вид»
+	var raw := FileAccess.get_file_as_string("res://tools/qa/scenario.json")
+	var steps: Array = JSON.parse_string(raw)
+	var look := {}
+	var fly := false
+	var held := false
+	var waited := 0.0
+	var since_ship := 0.0
+	var hot := false
+	var cooled := false
+	var seen := []
+	for st in steps:
+		match st["do"]:
+			"goto":
+				look = st
+				held = false
+				waited = 0.0
+			"fly":
+				fly = st.get("on", true)
+			"hold":
+				held = true
+			"wait":
+				waited += float(st["s"])
+				since_ship += float(st["s"])
+			"ship":
+				since_ship = 0.0
+			"hot":
+				cooled = hot and float(st["heat"]) <= 0.0
+			"shot":
+				var name: String = st["name"]
+				if name == "32g-kosti-skan":
+					ok(is_equal_approx(float(look["x"]), 3.5) and is_equal_approx(float(look["z"]), -2.0), "32g — у сканера")
+					ok(not held, "32g — кнопку не держат: «Новый вид» не перебивает строку костей")
+					ok(waited > EcoBones.INSPECT_TIME and waited < EcoBones.INSPECT_TIME + Status.MESSAGE_SECONDS,
+						"32g — стоим дольше осмотра (%.1f с), строка ещё на приборах" % waited)
+				if name in ["32i-kurilshchik-znak", "32j-kurilshchik-veerniki", "32k-stekloust-glaz",
+						"32l-cvetok-gasnet", "32m-cvetok-rif"]:
+					seen.append(name)
+					ok(not fly, "%s — с мостика" % name)
+					ok(float(look["z"]) < -2.5 and absf(float(look["x"])) < 1.5 and is_zero_approx(float(look["yaw"])),
+						"%s — у носового окна, взгляд по носу" % name)
+				if name == "32j-kurilshchik-veerniki":
+					hot = true
+					# issue #982: строка мира перед строкой веера держит её в очереди до MIN_SHOW — снимок после
+					ok(since_ship > EcoFan.VENT_DWELL + Status.Message.MIN_SHOW + 0.25
+							and since_ship < EcoFan.VENT_DWELL + Status.MESSAGE_SECONDS,
+						"32j — строка веера на приборах и после очереди (%.1f с)" % since_ship)
+				if name == "33-kondensat-obychno":
+					ok(cooled, "33 — реактор остужен после курильщика (нагрев сушит конденсат)")
+	eq(seen.size(), 5, "все снимки 32i–32m на месте")
+
+
+func test_shell_shot_through_window() -> void:   # отчёт 2026-10-31-0330: каустики на камне (#1047) — Раковина в окне, а не стена сканера
+	var raw := FileAccess.get_file_as_string("res://tools/qa/scenario.json")
+	var steps: Array = JSON.parse_string(raw)
+	var ship := {}
+	var look := {}
+	var fly := {}
+	var shot := false
+	for st in steps:
+		match st["do"]:
+			"ship":
+				ship = st
+				look = {}
+			"goto":
+				look = st
+			"fly":
+				fly = st if st.get("on", true) else {}
+			"shot":
+				if st["name"] == "32h2-rakovina-okno":
+					shot = true
+					break
+	ok(shot, "в сценарии есть снимок Раковины в окно")
+	# отчёт 2026-10-31-0430 (#1052): с роста игрока низ Раковины закрыт пультом пилота — глаз поднят над пультом
+	ok(not fly.is_empty() and float(fly["y"]) >= 2.0 and float(fly["pitch"]) < -10.0,
+			"глаз над пультом пилота, взгляд вниз в окно")
+	ok(not look.is_empty() and float(look["z"]) < -2.5 and absf(float(look["x"])) < 1.5
+			and is_zero_approx(float(look["yaw"])), "у носового окна, взгляд по носу")
+	var at := Vector2(float(ship["x"]), float(ship["z"]))
+	var p: Dictionary = LayerMap.POINTS["03"]
+	var shell := Vector2(float(p["x"]), float(p["z"]))
+	ok(at.distance_to(shell) < 30.0, "Раковина близко (%.0f м)" % at.distance_to(shell))
+	var nose := Vector2(0, -1).rotated(-deg_to_rad(float(ship["yaw"])))
+	ok(nose.dot((shell - at).normalized()) > 0.95, "Раковина впереди по носу")
+
+
+func test_crust_shot_beam_on_floor() -> void:   # отчёт 2026-10-31-0330: у 10 в окно дна в луче не видно (#1045) — снимок из-под днища
+	var raw := FileAccess.get_file_as_string("res://tools/qa/scenario.json")
+	var steps: Array = JSON.parse_string(raw)
+	var ship := {}
+	var fly := {}
+	var shot := false
+	for st in steps:
+		match st["do"]:
+			"ship":
+				ship = st
+			"fly":
+				fly = st if st.get("on", true) else {}
+			"shot":
+				if st["name"] == "34d2-korka-luch":
+					shot = true
+					break
+	ok(shot and not fly.is_empty(), "в сценарии есть снимок дна у 10 полётом")
+	var at := Vector2(float(ship["x"]), float(ship["z"]))
+	var p: Dictionary = LayerMap.POINTS["10"]
+	ok(at.distance_to(Vector2(float(p["x"]), float(p["z"]))) < 60.0, "у Спуска 10")
+	var floor_y := Seabed.height(at.x, at.y)
+	var eye_y := maxf(float(ship["y"]), floor_y + Helm.Ship.CLEARANCE) + float(fly["y"])   # корабль не ниже дна + зазор
+	ok(eye_y > floor_y + 2.5, "глаз над дном (%.1f > %.1f + 2,5) — пятно луча впереди, а не под носом" % [eye_y, floor_y])
+	# отчёт 2026-10-31-0430 (#1052): с 12 м пятна на дне в кадре не видно — глаз ближе ко дну
+	ok(eye_y < floor_y + 6.0, "глаз у дна (%.1f < %.1f + 6) — пятно луча яркое и крупное" % [eye_y, floor_y])
+	ok(float(fly["pitch"]) < -10.0, "взгляд вниз — на пятно луча")
+	# отчёты 2026-11-01 (#1052): носом на восток склон уходит вниз круче луча — пятно лишь краем конуса, тусклое.
+	# Носом вдоль склона: дно в 30 м впереди по ходу почти на той же высоте
+	var yaw := deg_to_rad(float(ship.get("yaw", 0.0)))
+	var ahead := at + Vector2(-sin(yaw), -cos(yaw)) * 30.0   # yaw = 0 — нос к −Z, растёт — влево
+	ok(absf(Seabed.height(ahead.x, ahead.y) - floor_y) < 4.0,
+			"дно впереди не уходит из-под луча (%.1f м на 30 м)" % (Seabed.height(ahead.x, ahead.y) - floor_y))
+	ok(EcoBrink.share(at.x, at.y) > 0.3, "за границей корки — цвет дна #1045 виден")
+
+
+func test_count_note() -> void:   # issue #1156: узлы и объекты в строке скриншота — видно, копится ли что-то за забег
+	eq(QaRunner.count_note(4210, 18344), " · узлы 4210, объекты 18344")
+	eq(QaRunner.count_note(4210, 18344, 3), " · узлы 4210, объекты 18344 (сирот 3)", "сироты — только если есть")
+
+
+func test_draw_note() -> void:   # #822: вызовы и треугольники кадра снимка — сверить бюджет у 10 и на отмели
+	eq(QaRunner.draw_note(168, 290787), " · вызовов 168, треуг. 291 тыс.")
+	eq(QaRunner.draw_note(0, 0), "", "нет замера (headless) — ничего")
+
+
+## Корабль и полёт перед снимком name в сценарии: [ship, fly] (fly — {} без полёта); нет снимка — [].
+static func _before_shot(name: String) -> Array:
+	var steps: Array = JSON.parse_string(FileAccess.get_file_as_string("res://tools/qa/scenario.json"))
+	var ship := {}
+	var fly := {}
+	for st in steps:
+		match st["do"]:
+			"ship":
+				ship = st
+			"fly":
+				fly = st if st.get("on", true) else {}
+			"shot":
+				if st["name"] == name:
+					return [ship, fly]
+	return []
+
+
+func test_slope_shots_edge_and_rocks() -> void:   # отчёт #1182: склон 06→10 (#832) сценарий не проходил — нечего проверить
+	var edge := _before_shot("34e-kraj-06")
+	ok(not edge.is_empty() and not edge[1].is_empty(), "снимок Края отмели 06 из-под днища")
+	var at := Vector2(float(edge[0]["x"]), float(edge[0]["z"]))
+	ok(at.x < EcoDrop.BROW_X and at.x > EcoDrop.BROW_X - 40.0, "на плато перед бровкой (x %.0f)" % at.x)
+	ok(at.y > EcoDrop.Z_FROM and at.y < EcoDrop.Z_TO, "напротив клиньев (z %.0f)" % at.y)
+	near(float(edge[0]["yaw"]), -90.0, 1e-6, "носом на восток — на бровку")
+	var slope := _before_shot("34f-sklon")
+	ok(not slope.is_empty() and not slope[1].is_empty(), "снимок склона из-под днища")
+	var p := Vector2(float(slope[0]["x"]), float(slope[0]["z"]))
+	ok(Seabed.Slope.open(p.x, p.y), "корабль в проходе склона, а не в стене")
+	var floor_y := Seabed.height(p.x, p.y)
+	ok(floor_y < -130.0 and floor_y > -250.0, "середина склона (дно %.0f м)" % floor_y)
+	var eye_y := maxf(float(slope[0]["y"]), floor_y + Helm.Ship.CLEARANCE) + float(slope[1]["y"])
+	ok(eye_y > floor_y + 2.5 and eye_y < floor_y + 10.0, "глаз у дна (%.1f над дном) — пятно луча на скале" % (eye_y - floor_y))
+	var yaw := deg_to_rad(float(slope[0].get("yaw", 0.0)))
+	var ahead := p + Vector2(-sin(yaw), -cos(yaw)) * 30.0
+	ok(absf(Seabed.height(ahead.x, ahead.y) - floor_y) < 15.0,
+			"носом вдоль склона: дно впереди не уходит из-под луча (%.1f м на 30 м)" % (Seabed.height(ahead.x, ahead.y) - floor_y))
+
+
+## #1481: шаги «floor» и «outside» — корабль на нижнем пределе хода над рельефом, камера с борта стоит над кормой,
+## пока сценарий её не уберёт; снимок ждёт кадра. Свой ровный грунт — тест не опирается на рельеф у старта.
+func test_floor_and_outside_steps() -> void:
+	var q := QaScript.parse('[{"do": "floor"}, {"do": "outside", "at": 0.5}, {"do": "shot", "name": "k"}, ' \
+		+ '{"do": "outside", "on": false}, {"do": "outside", "at": 3}]')
+	eq(q.errors.size(), 0, "шаги floor и outside известны")
+	var out := q.advance(0.1)
+	eq(out, [["floor"], ["outside", true, 0.5, false]], "снимок — после кадра с камерой снаружи")
+	var out2 := q.advance(0.1)
+	eq(out2[0], ["shot", "k"], "затем снимок")
+	eq(out2[1], ["outside", false, 1.0, false], "камера назад на мостик")
+	eq(out2[2], ["outside", true, 1.0, false], "точка облёта не дальше кормы")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.helm.ground = func(_x: float, _z: float) -> float: return -100.0
+	main.start_qa('[{"do": "ship", "x": 50, "y": -40, "z": 20, "yaw": 0}, {"do": "floor"}, ' \
+		+ '{"do": "outside", "at": 1.0}, {"do": "wait", "s": 1.0}]')
+	for i in 20:
+		main.step(1.0 / 30.0)
+	var low := main.helm.floor_at(main.helm.pos, main.helm.yaw)
+	ok(low > -100.0, "предел хода выше грунта")
+	near(main.helm.pos.y, low, 0.05, "корабль на нижнем пределе хода")
+	ok(main.flyby.active() and main.flyby.still, "камера с борта стоит")
+	ok(main.flyby_cam.current, "кадр — с борта")
+	ok(main.flyby_cam.transform.origin.is_equal_approx(Flyby.START_PATH[2]), "над кормой: %s" % main.flyby_cam.transform.origin)
+	ok(main.flyby_cam.get_node_or_null(QaRunner.LAMP_NAME) == null, "без lamp — без света тестера")
+	main.start_qa('[{"do": "outside", "on": false}, {"do": "wait", "s": 0.2}]')
+	for i in 3:
+		main.step(1.0 / 30.0)
+	ok(not main.flyby.active(), "камера убрана")
+	ok(main.camera.current, "глаза на мостике")
+	main.queue_free()
+	await frames(1)
+
+
+## #1481: у 10 на 300 м корпус снаружи чёрный — шаг «outside» с "lamp" ставит у камеры с борта свет тестера, который
+## светит только отмель и корпус (слой мира, не мостик), и убирает его вместе с камерой.
+func test_outside_lamp() -> void:
+	var q := QaScript.parse('[{"do": "outside", "at": 1.0, "lamp": true}]')
+	eq(q.advance(0.1)[0], ["outside", true, 1.0, true], "lamp разобран")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.helm.ground = func(_x: float, _z: float) -> float: return -400.0
+	main.start_qa('[{"do": "ship", "x": 50, "y": -300, "z": 20, "yaw": 0}, {"do": "outside", "at": 1.0, "lamp": true}, ' \
+		+ '{"do": "wait", "s": 1.0}]')
+	for i in 10:
+		main.step(1.0 / 30.0)
+	var lamp := main.flyby_cam.get_node_or_null(QaRunner.LAMP_NAME) as OmniLight3D
+	ok(lamp != null, "у камеры с борта — свет тестера")
+	if lamp:
+		eq(lamp.light_cull_mask, OceanView.LAYER_WORLD, "светит корпус и дно, не мостик")
+		ok(lamp.omni_range >= 60.0, "дотягивается от камеры над кормой до носа и грунта: %.0f м" % lamp.omni_range)
+	main.start_qa('[{"do": "outside", "on": false}, {"do": "wait", "s": 0.2}]')
+	for i in 3:
+		main.step(1.0 / 30.0)
+	await frames(1)
+	ok(main.flyby_cam.get_node_or_null(QaRunner.LAMP_NAME) == null, "камера убрана — света нет")
+	main.queue_free()
+	await frames(1)
+
+
+## #1400 (отчёт qa/2026-11-11-0010-svezhaya-b946a31): цену тени прожектора на «Обычно» тестер меряет на устройстве —
+## шаг «luch_ten» гасит тень, true возвращает её по уровню графики («Экономно» — без тени и после true).
+func test_luch_ten_step() -> void:
+	var q := QaScript.parse('[{"do": "luch_ten", "on": false}, {"do": "luch_ten"}]')
+	eq(q.errors.size(), 0, "шаг luch_ten известен")
+	eq(q.advance(0.1).slice(0, 2), [["luch_ten", false], ["luch_ten", true]], "команды сцене")
+	var probe := QaScript.parse(FileAccess.get_file_as_string("res://tools/qa/luch-ten.json"))
+	eq(probe.errors.size(), 0, "сценарий пробы tools/qa/luch-ten.json без ошибок: %s" % ", ".join(probe.errors))
+	# #1606: перед каждым снимком корабль ставится в одну и ту же точку — течение за 5 с сносит его на ~1 м
+	var steps: Array = JSON.parse_string(FileAccess.get_file_as_string("res://tools/qa/luch-ten.json"))
+	var pose = null
+	var placed := false
+	var shots := 0
+	for st in steps:
+		if st["do"] == "ship":
+			var p := [st["x"], st["y"], st["z"], st["yaw"]]
+			if pose == null:
+				pose = p
+			eq(p, pose, "одна поза у всех трёх кадров")
+			placed = true
+		elif st["do"] == "shot":
+			ok(placed, "перед %s корабль поставлен заново" % st["name"])
+			placed = false
+			shots += 1
+	eq(shots, 3, "три кадра")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main._apply_graphics(Graphics.NORMAL)
+	ok(main.searchlight.spot.shadow_enabled, "на «Обычно» прожектор с тенью")
+	main.start_qa('[{"do": "luch_ten", "on": false}, {"do": "wait", "s": 0.2}]')
+	for i in 3:
+		main.step(1.0 / 30.0)
+	ok(not main.searchlight.spot.shadow_enabled, "после шага — без тени")
+	QaRunner.luch_ten(main, true)
+	ok(main.searchlight.spot.shadow_enabled, "true — тень по уровню графики")
+	main._apply_graphics(Graphics.ECONOMY)
+	QaRunner.luch_ten(main, true)
+	ok(not main.searchlight.spot.shadow_enabled, "на «Экономно» тени нет и после true")
 	main.queue_free()
 	await frames(1)

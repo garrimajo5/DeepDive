@@ -9,6 +9,8 @@ func test_places_match_map() -> void:
 	for l in data["locations"]:
 		by_name[l["name"]] = Vector2(float(l["x"]), float(l["z"]))
 	for k in Run.PLACES:
+		if LayerMap.id_of(k) == "00" or not LayerMap.POINTS[LayerMap.id_of(k)]["accepted"]:
+			continue   # старт и места слоя 1 (#829) — не ART-005, их сверяет test_layer_map
 		ok(by_name.has(Run.place_name(k)), "место %s есть на карте" % k)
 		eq(Run.place_xz(k), by_name[Run.place_name(k)], "место %s — по карте ART-005" % k)
 	eq(Run.place_xz("geyser"), Reactor.VENT_POS, "курильщик там же, где перегрев")
@@ -18,6 +20,20 @@ func test_places_match_map() -> void:
 			ok(Run.PLACES.has(k), "у маршрута %s места из списка" % r["id"])
 
 
+## #938: «Путь к спуску» строкой приборов в две строки закрывал номера мест на голостоле — в строке только
+## число мест и риск (места — в карточке у стола).
+func test_choose_message_fits_one_line() -> void:
+	var run := Run.new()
+	for i in Run.ROUTES.size():
+		var msg := run.choose(i)
+		ok(msg.length() <= Run.LINE_MAX, "%s: %d знаков" % [msg, msg.length()])
+		ok(msg.ends_with(Run.ROUTES[i]["risk"]), "строка риска остаётся")
+	eq(run.choose(3), "Маршрут «Путь к спуску»: 5 мест; за краем — склон до 290 м")
+	eq(run.choose(0), "Маршрут «Рифовый сад»: 3 места; много серпохвостов")
+	eq([Run.places_word(1), Run.places_word(2), Run.places_word(5), Run.places_word(11), Run.places_word(22)],
+		["место", "места", "мест", "мест", "места"])
+
+
 func test_cycle_and_progress() -> void:
 	var run := Run.new()
 	eq(run.status(0, 0), "", "без маршрута строки нет")
@@ -25,7 +41,7 @@ func test_cycle_and_progress() -> void:
 	eq(run.label(), "Маршрут: выбрать")
 	var msg := run.cycle()
 	eq(run.route, 0, "первое нажатие — первый маршрут")
-	ok(msg.begins_with("Маршрут «Рифовый сад»: Каменный цветок, Кости левиафана, Световой колодец"), msg)
+	ok(msg.begins_with("Маршрут «Рифовый сад»: 3 места"), msg)
 	ok(msg.ends_with("много серпохвостов"), "строка риска")
 	eq(run.label(), "Маршрут: сменить")
 	eq(run.waypoint(), Run.place_xz("flower"), "первая точка на голостоле")
@@ -36,17 +52,53 @@ func test_cycle_and_progress() -> void:
 	eq(run.waypoint(), Run.place_xz("bones"))
 	# по пути зашли в третью точку раньше второй — тоже засчитана, следующей остаётся вторая
 	eq(run.update(-170.0, -70.0), "Точка маршрута пройдена: Световой колодец. Дальше — Кости левиафана")
-	eq(run.update(-30.0, -148.0), "Маршрут «Рифовый сад» пройден: глубже или наверх?")
+	eq(run.update(-30.0, -148.0), "Маршрут «Рифовый сад» пройден. Следующий — у голостола")
 	ok(run.done, "маршрут закрыт")
+	ok(not run.voting, "в слое пройденный маршрут голосования не открывает (#824)")
+	eq(run.label(), "Маршрут: выбрать")
 	eq(run.waypoint(), Vector2.INF, "отметки больше нет")
 	eq(run.status(0, 0), "маршрут «Рифовый сад» пройден")
 	eq(run.update(40.0, -50.0), "", "закрытый маршрут молчит")
 	run.cycle()
 	eq(run.route, 1, "следующее нажатие — следующий маршрут")
 	ok(not run.done and run.visited.is_empty(), "прогресс с нуля")
-	run.cycle()
-	run.cycle()
+	for i in Run.ROUTES.size() - 1:
+		run.cycle()
 	eq(run.route, 0, "по кругу")
+
+
+## #829: у каждого места слоя, кроме старта, есть маршрут, где оно — точка цели на сонаре (без исправления 07–10
+## ни на одном маршруте не было и отметка к ним не вела).
+func test_every_place_is_a_target() -> void:
+	for k: String in Run.PLACES:
+		if k == "start":
+			continue
+		var found := false
+		for i in Run.ROUTES.size():
+			var run := Run.new()
+			run.choose(i)
+			for step in Run.ROUTES[i]["places"].size():
+				if run.waypoint() == Run.place_xz(k):
+					found = true
+				var n := run.next_key()
+				run.update(Run.place_xz(n).x, Run.place_xz(n).y)
+		ok(found, "место %s — точка цели на сонаре" % k)
+
+
+func test_layer_routes_follow_map() -> void:
+	var by_id := {}
+	for r: Dictionary in Run.ROUTES:
+		by_id[r["id"]] = r["places"]
+	var keys := func(ids: Array) -> Array:
+		return ids.map(func(id: String) -> String: return LayerMap.POINTS[id]["key"])
+	eq(by_id["main"], keys.call(LayerMap.MAIN_ROUTE.slice(1)), "основной путь — по карте слоя, со старта")
+	eq(by_id["loop"], keys.call(LayerMap.LINKS[0].slice(1)), "петля — по карте слоя, со старта")
+	eq(by_id["field"], keys.call(LayerMap.LINKS[1]), "ветка 07 ↔ 08")
+	var run := Run.new()
+	run.choose(5)
+	eq(run.waypoint(), Run.place_xz("gate"))
+	run.update(-100.0, -240.0)
+	eq(run.waypoint(), Run.place_xz("field"), "после террасы — поле")
 
 
 func test_scene_route_post() -> void:
@@ -95,11 +147,13 @@ func test_vote_and_finish() -> void:
 	eq(run.vote_nav(Vector2i(0, -1)), "", "один голос за нажатие")
 	run.choose(1)
 	run.update(-126.0, 45.0)
-	eq(run.update(162.0, -36.0), "Маршрут «Тёплые трубы» пройден: глубже или наверх?")
+	eq(run.update(162.0, -36.0), "Маршрут «Тёплые трубы» пройден. Следующий — у голостола")
 	eq(run.routes, 1)
+	run.open_vote()
+	ok(run.voting)
 	eq(run.label(), "Глубже или наверх?")
 	eq(run.go_deeper(), "Глубже: 2-й спуск, хищники чутче на 15 %. Маршрут — у голостола")
-	ok(run.route == -1 and not run.done, "маршрут выбирать заново")
+	ok(run.route == -1 and not run.done and not run.voting, "маршрут выбирать заново")
 	var rows := run.finish(100.0 + 7.0 * 60.0, 4, 5, 2, 64.0)
 	ok(run.ended, "забег окончен")
 	eq(rows[0], ["Время под водой", "7 мин"])
@@ -147,7 +201,7 @@ func test_scene_vote() -> void:
 	ok(main.run.done, "маршрут пройден")
 	main.step(1.0 / 30.0)
 	eq(main.overlay.action_label, "Маршрут")
-	main.use_post("route")
+	main.open_vote()   # в слое — переход у 10 (#828)
 	ok(main.at_vote and main.vote_panel.visible, "у голостола — решение")
 	eq(main.vote_panel.rows.size(), 4, "мнения четырёх ролей")
 	var r := main.overlay.router
@@ -162,7 +216,7 @@ func test_scene_vote() -> void:
 	eq(main.run.route, -1, "маршрут заново")
 	main.complete_route()
 	main.vitals.hull = 70.0
-	main.use_post("route")
+	main.open_vote()
 	main.step(1.0 / 30.0)
 	r.begin(1, pad.c - Vector2(0, pad.r * 0.7))   # вверх — наверх
 	main.step(1.0 / 30.0)
@@ -194,7 +248,7 @@ func test_qa_logs_run() -> void:
 	tree.root.add_child(main)
 	await frames(2)
 	var qa := main.start_qa('[{"do": "goto", "x": 1.6, "z": -1.2, "yaw": 90}, {"do": "press", "what": "action"}, ' +
-		'{"do": "route"}, {"do": "press", "what": "action"}, {"do": "log", "note": "решение"}, ' +
+		'{"do": "route"}, {"do": "log", "note": "решение"}, {"do": "wait", "s": 0.1}, ' +
 		'{"do": "hold", "what": "pad", "dir": [0, -1], "s": 0.3}, {"do": "log", "note": "глубже"}]')
 	for i in 60:
 		main.step(1.0 / 30.0)
@@ -202,5 +256,77 @@ func test_qa_logs_run() -> void:
 	ok(log.contains("решение | ") and log.contains("маршрут «Рифовый сад» пройден · решение у голостола"), "в логе — решение")
 	ok(log.contains("глубже | ") and log.contains("спуск 2"), "в логе — второй спуск")
 	eq(main.run.depth, 1)
+	main.queue_free()
+	await frames(1)
+
+
+## Кампания слоя (#824): пройденный маршрут не открывает «глубже или наверх» — кнопка у стола даёт следующий маршрут,
+## голосование и итог не появляются (и у товарища у стола).
+func test_scene_route_done_no_vote() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.walker.x = Main.ROUTE_POST.x
+	main.walker.z = Main.ROUTE_POST.y
+	main.use_post("route")
+	main.complete_route()
+	ok(main.run.done and not main.run.voting, "маршрут пройден, голосования нет")
+	main.step(1.0 / 30.0)
+	main.use_post("route")
+	main.step(1.0 / 30.0)
+	ok(not main.at_vote and not main.vote_panel.visible, "у стола — не решение")
+	eq(main.run.route, 1, "кнопка — следующий маршрут")
+	ok(not main.run.done, "прогресс нового маршрута с нуля")
+	main.complete_route()
+	var mate: Crew.Member = main.add_mate(Main.ROUTE_POST.x + 0.4, Main.ROUTE_POST.y, PI / 2.0, 3, 0)
+	main.crew_flow.mate_action(mate)
+	ok(not mate.at_vote, "товарищ у стола тоже не голосует")
+	eq(main.run.route, 2, "товарищ листает маршруты")
+	main.step(1.0 / 30.0)
+	ok(not main.run.ended and main.result_rows.is_empty(), "итога забега нет")
+	main.queue_free()
+	await frames(1)
+
+
+func test_descent_opens_vote_once() -> void:   # переход у 10 (#828, часть 1)
+	var r := Run.new()
+	r.begin(0.0, 0, 0, 0)
+	var at := Run.place_xz(Run.DESCENT)
+	var rad := float(Run.PLACES[Run.DESCENT][2])
+	eq(r.descent(at.x - rad * 2.0, at.y), "", "далеко — тихо")
+	ok(not r.voting)
+	eq(r.descent(at.x, at.y), Run.DESCENT_MSG, "вошли в круг 10 — предупреждение")
+	ok(r.voting and r.seen.has(Run.DESCENT), "голосование открыто, место пройдено")
+	eq(r.label(), DescentVote.TITLE, "у 10 — спуск, не «глубже или наверх» (#1362)")
+	ok(Run.DESCENT_MSG.length() <= Run.LINE_MAX and Run.DESCENT_OFF_MSG.length() <= Run.LINE_MAX, "в строку")
+	eq(r.descent(at.x + 1.0, at.y), "", "в круге — второй раз не предупреждает")
+	r.go_deeper()
+	eq(r.descent(at.x, at.y), "", "после «глубже» в том же круге — без повтора")
+	eq(r.descent(at.x + rad * 1.2, at.y), "", "чуть за краем — ещё у спуска")
+	eq(r.descent(at.x + rad * 2.0, at.y), "", "ушли, голосования уже нет — тихо")
+	eq(r.descent(at.x, at.y), Run.DESCENT_MSG, "вернулись — снова")
+	eq(r.descent(at.x + rad * 2.0, at.y), Run.DESCENT_OFF_MSG, "ушли, не решив — закрыто")
+	ok(not r.voting, "отмена: корабль просто ушёл от спуска")
+	r.descent(at.x, at.y)
+	r.finish(1.0, 0, 0, 0, 100.0)
+	eq(r.descent(at.x + rad * 2.0, at.y), "", "забег окончен — молчит")
+
+
+func test_scene_descent_vote() -> void:   # корабль у 10 → голосование у стола, ушёл → закрыто
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var at := Run.place_xz(Run.DESCENT)
+	main.helm.pos = Vector3(at.x, Seabed.height(at.x, at.y) + 20.0, at.y)
+	main.step(1.0 / 30.0)
+	ok(main.run.voting, "у спуска — голосование открыто")
+	main.walker.x = Main.ROUTE_POST.x
+	main.walker.z = Main.ROUTE_POST.y
+	main.use_post("route")
+	ok(main.at_vote and main.vote_panel.visible, "у голостола — решение")
+	var far := at + Vector2(-float(Run.PLACES[Run.DESCENT][2]) * 3.0, 0.0)
+	main.helm.pos = Vector3(far.x, Seabed.height(far.x, far.y) + 20.0, far.y)
+	main.step(1.0 / 30.0)
+	ok(not main.run.voting and not main.at_vote and not main.vote_panel.visible, "ушли от спуска — закрыто")
 	main.queue_free()
 	await frames(1)

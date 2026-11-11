@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bksma1t3ixf6a"
-path="res://.godot/imported/reaktor-kozhuh_reaktor-kozhuh-emission.png-1afe2642196cf90dbf7d96309a59c65c.ctex"
+path.s3tc="res://.godot/imported/reaktor-kozhuh_reaktor-kozhuh-emission.png-1afe2642196cf90dbf7d96309a59c65c.s3tc.ctex"
+path.etc2="res://.godot/imported/reaktor-kozhuh_reaktor-kozhuh-emission.png-1afe2642196cf90dbf7d96309a59c65c.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "b8110192f312e0ccd77566855ef02344"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/reaktor-kozhuh_reaktor-kozhuh-emission.png"
-dest_files=["res://.godot/imported/reaktor-kozhuh_reaktor-kozhuh-emission.png-1afe2642196cf90dbf7d96309a59c65c.ctex"]
+dest_files=["res://.godot/imported/reaktor-kozhuh_reaktor-kozhuh-emission.png-1afe2642196cf90dbf7d96309a59c65c.s3tc.ctex", "res://.godot/imported/reaktor-kozhuh_reaktor-kozhuh-emission.png-1afe2642196cf90dbf7d96309a59c65c.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

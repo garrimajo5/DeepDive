@@ -71,7 +71,7 @@ func test_scene_sets_wear_on_bridge_and_rooms() -> void:
 	for m in mats:
 		near(float(m.get_shader_parameter("wear_loss")), want, 1e-4, "мостик получил потерю")
 		ok(m.get_shader_parameter("wear_mask") is Texture2D, "и маску")
-	var room := main.rooms.mesh_instance.mesh
+	var room := main.rooms.mesh
 	var seen := 0
 	for i in room.get_surface_count():
 		var m := room.surface_get_material(i) as ShaderMaterial

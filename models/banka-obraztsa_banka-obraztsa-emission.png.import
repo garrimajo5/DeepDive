@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ipf1tpgwo54p"
-path="res://.godot/imported/banka-obraztsa_banka-obraztsa-emission.png-56b3de372b8d25735740f784df10c528.ctex"
+path.s3tc="res://.godot/imported/banka-obraztsa_banka-obraztsa-emission.png-56b3de372b8d25735740f784df10c528.s3tc.ctex"
+path.etc2="res://.godot/imported/banka-obraztsa_banka-obraztsa-emission.png-56b3de372b8d25735740f784df10c528.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "e4fba31ad5fa8509694065ad1fac9b13"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/banka-obraztsa_banka-obraztsa-emission.png"
-dest_files=["res://.godot/imported/banka-obraztsa_banka-obraztsa-emission.png-56b3de372b8d25735740f784df10c528.ctex"]
+dest_files=["res://.godot/imported/banka-obraztsa_banka-obraztsa-emission.png-56b3de372b8d25735740f784df10c528.s3tc.ctex", "res://.godot/imported/banka-obraztsa_banka-obraztsa-emission.png-56b3de372b8d25735740f784df10c528.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

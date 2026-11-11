@@ -3,7 +3,7 @@ extends CanvasLayer
 ## Экран «Войти по адресу» ART-039 на фоне заставки (`main.address_panel`): заголовок, поле, подпись, последний
 ## удачный адрес, «Войти» / «Отмена», клавиатура, «Назад». Состояние и места — `AddressScreen`, клавиши —
 ## `AddressPad.key_rect`, масштаб и обрезка фона — `Splash`. Слой над главным меню (его 90), ниже заставки прогрева
-## (100); касания — `Touch.Router.taps` (`Main._address_step`).
+## (100); касания — `Touch.Router.taps` (`LobbyFlow.address_step`).
 
 var screen: AddressScreen
 var draw: Control
@@ -13,30 +13,8 @@ var blink := 0.0   ## время для мигания курсора
 func _init() -> void:
 	name = "Вход по адресу"
 	layer = 91
-	var dark := ColorRect.new()
-	dark.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dark.color = MainMenu.DARK
-	add_child(dark)
-	var bg := TextureRect.new()
-	bg.name = "Фон"
-	bg.texture = load(Splash.BG)
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
-	var dim := ColorRect.new()   # экран ввода темнее меню: цифры читаются на любом месте фона
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dim.color = Color(MainMenu.DARK, AddressScreen.DIM)
-	add_child(dim)
-	draw = Control.new()
-	draw.name = "Клавиши"
-	draw.set_anchors_preset(Control.PRESET_FULL_RECT)
-	draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	draw.draw.connect(_draw_screen)
-	add_child(draw)
+	# экран ввода темнее меню: цифры читаются на любом месте фона
+	draw = UiStyle.screen(self, "Клавиши", _draw_screen, MainMenu.DARK, Color(MainMenu.DARK, AddressScreen.DIM))
 
 
 func show_screen(s: AddressScreen) -> void:
@@ -60,9 +38,11 @@ func _draw_screen() -> void:
 	var font := draw.get_theme_default_font()
 	var f := screen.field
 	var busy := f.connecting
-	_text(font, AddressScreen.TITLE, Splash.to_screen(AddressScreen.TITLE_AT, size), AddressScreen.TITLE_PX * s, MainMenu.INK)
+	UiStyle.text(draw, font, AddressScreen.TITLE, Splash.to_screen(AddressScreen.TITLE_AT, size),
+		AddressScreen.TITLE_PX * s, MainMenu.INK)
 	_button(font, AddressScreen.screen_rect("back", size), "Назад", AddressScreen.BACK_PX * s, s, "plain")
-	_text(font, AddressScreen.LABEL, Splash.to_screen(AddressScreen.LABEL_AT, size), AddressScreen.SMALL_PX * s, MainMenu.SOFT)
+	UiStyle.text(draw, font, AddressScreen.LABEL, Splash.to_screen(AddressScreen.LABEL_AT, size),
+		AddressScreen.SMALL_PX * s, MainMenu.SOFT)
 	# поле: рамка главного цвета, текст или заглушка, курсор
 	var fr := AddressScreen.screen_rect("field", size)
 	var sb := _box(s, Color(MainMenu.PANEL, 0.92), MainMenu.MAIN)
@@ -78,14 +58,16 @@ func _draw_screen() -> void:
 		var cx := x + font.get_string_size(f.text, HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(px)).x + 4.0 * s
 		draw.draw_line(Vector2(cx, base - px * 0.85), Vector2(cx, base + px * 0.12), MainMenu.MAIN, maxf(1.0, 3.0 * s))
 	var h := screen.hint()
-	_text(font, h, Splash.to_screen(AddressScreen.HINT_AT, size), AddressScreen.HINT_PX * s,
+	UiStyle.text(draw, font, h, Splash.to_screen(AddressScreen.HINT_AT, size), AddressScreen.HINT_PX * s,
 		MainMenu.INK if h == AddressScreen.EMPTY_TEXT else MainMenu.SOFT)
 	if screen.has_last():
-		_text(font, AddressScreen.LAST_LABEL, Splash.to_screen(AddressScreen.LAST_LABEL_AT, size), AddressScreen.SMALL_PX * s, MainMenu.SOFT)
+		UiStyle.text(draw, font, AddressScreen.LAST_LABEL, Splash.to_screen(AddressScreen.LAST_LABEL_AT, size),
+			AddressScreen.SMALL_PX * s, MainMenu.SOFT)
 		_button(font, AddressScreen.screen_rect("last", size), f.last, AddressScreen.LAST_PX * s, s, "off" if busy else "plain")
 	var join_on := busy or f.can_join()
 	_button(font, AddressScreen.screen_rect("join", size), f.join_text(), AddressScreen.JOIN_PX * s, s, "main" if join_on else "off")
-	_text(font, AddressScreen.ASK, Splash.to_screen(AddressScreen.ASK_AT, size), AddressScreen.SMALL_PX * s, MainMenu.SOFT)
+	UiStyle.text(draw, font, AddressScreen.ASK, Splash.to_screen(AddressScreen.ASK_AT, size),
+		AddressScreen.SMALL_PX * s, MainMenu.SOFT)
 	for r in AddressPad.KEYS.size():
 		for c in AddressPad.KEYS[r].size():
 			var k: String = AddressPad.KEYS[r][c]
@@ -107,21 +89,8 @@ func _button(font: Font, r: Rect2, label: String, px: float, s: float, kind: Str
 		_:
 			sb = _box(s, Color(MainMenu.PANEL, 0.88), MainMenu.EDGE)
 	draw.draw_style_box(sb, r)
-	var base := r.position.y + r.size.y * 0.5 + Splash.CAP_H * px * 0.5
-	draw.draw_string(font, Vector2(r.position.x, base), label, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, roundi(px), col)
+	UiStyle.label(draw, font, label, r, px, col)
 
 
 func _box(s: float, fill: Color, edge: Color) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.set_corner_radius_all(roundi(AddressScreen.RADIUS * s))
-	sb.anti_aliasing = true
-	sb.bg_color = fill
-	if edge.a > 0.0:
-		sb.set_border_width_all(maxi(1, roundi(2.0 * s)))
-		sb.border_color = edge
-	return sb
-
-
-## Строка: at — левый край и верх видимых глифов на экране.
-func _text(font: Font, text: String, at: Vector2, px: float, color: Color) -> void:
-	draw.draw_string(font, at + Vector2(0.0, Splash.CAP_H * px), text, HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(px), color)
+	return UiStyle.box(fill, AddressScreen.RADIUS * s, edge, 2.0 * s if edge.a > 0.0 else 0.0)

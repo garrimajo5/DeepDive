@@ -140,6 +140,57 @@ func test_ear_turn_speed_limited() -> void:
 	ok(absf(d.y) <= EcoEcho.EAR_TURN * 0.1 + 1e-4, "наклон не быстрее EAR_TURN")
 
 
+func test_ear_starts_and_stops_smoothly() -> void:
+	# Плавность (Б3): корабль подошёл — уши трогаются разгоном, а не сразу на EAR_TURN; скорость меняется не быстрее
+	# EAR_ACCEL; к неподвижному кораблю подходят без перелёта и встают.
+	var w := _world()
+	var e: EcoEcho = _sys(w, EcoEcho)
+	var ec := e.echo
+	w.run(3.0)
+	var ship := ec.xform() * Vector3(-14.0, 3.0, 6.0)
+	w.ship.pos = ship
+	var dt := 0.05
+	var want := e.aim(0, ship)
+	var prev := ec.ears[0]
+	var vel := ec.ear_vel[0]
+	var side := signf(want.x - prev.x)
+	var top := 0.0
+	for k in 120:
+		w.step(dt)
+		var now := ec.ears[0]
+		var v := (now - prev) / dt
+		ok(absf(v.x) <= EcoEcho.EAR_TURN + 1e-4, "шаг %d: поворот не быстрее EAR_TURN (%.3f)" % [k, v.x])
+		ok(absf(v.x - vel.x) <= EcoEcho.EAR_ACCEL * dt + 1e-4,
+			"шаг %d: разгон не быстрее EAR_ACCEL (%.3f → %.3f)" % [k, vel.x, v.x])
+		ok(signf(want.x - now.x) != -side, "шаг %d: без перелёта цели" % k)
+		top = maxf(top, absf(v.x))
+		prev = now
+		vel = v
+	ok(top > EcoEcho.EAR_TURN * 0.5, "разогналось: %.2f" % top)
+	near(ec.ears[0].x, want.x, 1e-3, "дошло до цели")
+	near(ec.ear_vel[0].x, 0.0, 1e-2, "и встало")
+
+
+func test_ear_does_not_swing_through_the_back() -> void:
+	# Ухо справа сзади, корабль слева сзади: поворот идёт через нос, а не через затылок за предел сустава.
+	var w := _world()
+	var e: EcoEcho = _sys(w, EcoEcho)
+	var ec := e.echo
+	ec.ears[0] = Vector2(2.1, EcoEcho.IDLE_PITCH)
+	var ship := ec.ear_base(0) + Basis(Vector3.UP, ec.yaw) * Vector3(sin(-2.1), 0.0, cos(-2.1)) * 20.0
+	w.ship.pos = ship
+	var want := e.aim(0, ship)
+	ok(want.x < -2.0, "цель — слева сзади: %.2f" % want.x)
+	var prev := ec.ears[0].x
+	for k in 160:
+		w.step(0.05)
+		var x := ec.ears[0].x
+		ok(x <= prev + 1e-5, "шаг %d: поворот только к носу и дальше влево" % k)
+		ok(absf(x) <= EcoEcho.EAR_YAW + 1e-5, "шаг %d: в пределах сустава" % k)
+		prev = x
+	near(ec.ears[0].x, want.x, 1e-3, "дошло через нос")
+
+
 func test_ear_joint_limits() -> void:
 	var w := _world()
 	var e: EcoEcho = _sys(w, EcoEcho)
@@ -276,7 +327,7 @@ func test_fake_call_when_ship_near() -> void:
 			f = x
 	ok(not f.is_empty(), "VOICE с fake")
 	ok(f["ask"] == EcoEcho.ASK_PING or f["ask"] == EcoEcho.ASK_LIGHT, "с просьбой: %s" % f["ask"])
-	eq([f["role"], f["text"]], EcoEcho.FAKES[f["ask"]], "роль и текст по просьбе")
+	ok((EcoEcho.FAKES[f["ask"]] as Array).has([f["role"], f["id"], f["text"]]), "роль, ID и текст TXT-002 по просьбе")
 	ok(f["silent"], "первый спуск: старого кода нет — молчит на «Спросить код»")
 	eq(ec.bait, f["ask"], "просьба ждёт исполнения")
 	w.run(EcoEcho.FAKE_CD - 2.0)
@@ -419,7 +470,7 @@ func test_real_reports_near_bones() -> void:
 	var v := _voices(w.take_link())
 	eq(v.size(), 1, "настоящий доклад")
 	ok(not v[0]["fake"] and v[0]["ask"] == "" and not v[0]["silent"], "свой: с кодом, без просьбы")
-	ok(EcoEcho.REALS.has([v[0]["role"], v[0]["text"]]), "из списка докладов")
+	ok(EcoEcho.REALS.has([v[0]["role"], v[0]["id"], v[0]["text"]]), "из списка докладов, с ID")
 	w.run(EcoEcho.REAL_CD)
 	eq(_voices(w.take_link()).size(), 1, "раз в REAL_CD")
 
@@ -432,16 +483,65 @@ func test_voices_repeat_with_seed_and_reset() -> void:
 	var la: Array = []
 	var lb: Array = []
 	for i in 12:
-		la.append(ea.fake(a)["ask"])
-		lb.append(eb.fake(b)["ask"])
-	eq(la, lb, "одно зерно — те же просьбы")
+		la.append(ea.fake(a)["id"])
+		lb.append(eb.fake(b)["id"])
+	eq(la, lb, "одно зерно — те же реплики")
 	a.reset()
 	eq(ea.echo.fakes, 0, "сброс — счёт с нуля")
 	eq(ea.echo.bait, "", "без просьбы")
 	var lc: Array = []
 	for i in 12:
-		lc.append(ea.fake(a)["ask"])
+		lc.append(ea.fake(a)["id"])
 	eq(lc, la, "после сброса — те же")
+
+
+## Реплики TXT-002 (#1477): роль, ID и текст — как в принятой таблице `docs/teksty/TXT-002-golosa.md`.
+func _txt002() -> Dictionary:
+	var roles := {"Пилот": 0, "Сонарщик": 1, "Инженер": 2, "Биолог": 3}
+	var out := {}
+	var f := FileAccess.open("res://docs/teksty/TXT-002-golosa.md", FileAccess.READ)
+	ok(f != null, "таблица TXT-002 на месте")
+	if f == null:
+		return out
+	for line in f.get_as_text().split("\n"):
+		if not line.begins_with("| RADIO_"):
+			continue
+		var c := line.split("|")
+		out[c[1].strip_edges()] = [roles[c[2].strip_edges()], c[1].strip_edges(), c[3].strip_edges()]
+	return out
+
+
+func test_lines_from_txt002() -> void:
+	var doc := _txt002()
+	eq(doc.size(), 30, "в таблице 30 реплик")
+	var ids := {}
+	for ask: String in [EcoEcho.ASK_LIGHT, EcoEcho.ASK_PING]:
+		var lines: Array = EcoEcho.FAKES[ask]
+		eq(lines.size(), 5, "пять подделок на «%s»" % ask)
+		var who := {}
+		for l: Array in lines:
+			eq(l, doc.get(l[1], []), "подделка %s — как в TXT-002" % l[1])
+			ok(str(l[1]).begins_with("RADIO_FAKE_" + ("LIGHT" if ask == EcoEcho.ASK_LIGHT else "PULSE")), "просьба по ID")
+			who[l[0]] = true
+			ids[l[1]] = true
+		eq(who.size(), 4, "все четыре роли просят «%s»" % ask)
+	for l: Array in EcoEcho.REALS:
+		eq(l, doc.get(l[1], []), "доклад %s — как в TXT-002" % l[1])
+		ok(str(l[1]).begins_with("RADIO_TRUE_"), "настоящий — RADIO_TRUE")
+		ok(not str(l[2]).begins_with("Я у "), "«Я у…» мир не шлёт: не знает, кто у поста")
+		ids[l[1]] = true
+	eq(EcoEcho.REALS.size(), 16, "20 настоящих без четырёх «Я у…»")
+	eq(ids.size(), 26, "ID не повторяются")
+
+
+func test_fake_lines_vary() -> void:   # подделка — разные реплики TXT-002, а не одна строка на просьбу
+	var w := _world()
+	var e := _sys(w, EcoEcho) as EcoEcho
+	var seen := {}
+	for i in 40:
+		var v := e.fake(w, EcoEcho.ASK_PING)
+		seen[v["id"]] = true
+	ok(seen.size() >= 4, "за 40 вызовов — не меньше четырёх разных: %d" % seen.size())
 
 
 # ---------- Сцена ----------
@@ -492,3 +592,171 @@ func test_view_six_draw_calls() -> void:
 	ok(not ev.visible, "далеко — спрятан")
 	view.queue_free()
 	await frames(1)
+
+
+func _echo_tris(ev: EchoView) -> Dictionary:
+	var out := {}
+	for mi in ev.find_children("*", "MeshInstance3D", true, false):
+		var m := (mi as MeshInstance3D).mesh
+		var n := 0
+		for s in m.get_surface_count():
+			n += m.surface_get_array_len(s) / 3
+		out[String(mi.get_path())] = n
+	return out
+
+
+func test_view_lite_coarser_body_sac_and_ears() -> void:
+	var w := _world()
+	var e: EcoEcho = _sys(w, EcoEcho)
+	var ev := EchoView.new(e)
+	tree.root.add_child(ev)
+	await frames(1)
+	var full := _echo_tris(ev)
+	ev.set_lite(true)
+	ok(ev.lite, "эхоловец — на «Экономно»")
+	var lite := _echo_tris(ev)
+	var sum_full := 0
+	var sum_lite := 0
+	for k in full:
+		ok(lite[k] < full[k], "%s грубее (%d → %d)" % [k, full[k], lite[k]])
+		sum_full += full[k]
+		sum_lite += lite[k]
+	ok(sum_lite * 10 <= sum_full * 6, "треугольников не больше 60 %% (%d → %d)" % [sum_full, sum_lite])
+	var calls := 0
+	for mi in ev.find_children("*", "MeshInstance3D", true, false):
+		var m := (mi as MeshInstance3D).mesh
+		calls += m.get_surface_count()
+		for s in m.get_surface_count():
+			ok(m.surface_get_material(s) != null, "материал на месте: %s/%d" % [mi.name, s])
+	eq(calls, 6, "вызовов столько же")
+	var ear := ev.ears[0].get_child(0) as MeshInstance3D
+	ok(ear.mesh.surface_get_material(1) == ev.fold_mat, "складки — тот же материал (свечение по сонару)")
+	var a_full := EchoView.build_body(false).get_aabb()
+	var a_lite := EchoView.build_body(true).get_aabb()
+	near(a_lite.size.z, a_full.size.z, 0.05, "длина тела та же")
+	near(a_lite.size.y, a_full.size.y, 0.05, "высота та же")
+	ev.set_lite(false)
+	eq(_echo_tris(ev), full, "назад — прежняя сетка")
+	ev.queue_free()
+	await frames(1)
+	var view := EcoView.new()
+	tree.root.add_child(view)
+	view.ground = Seabed.height
+	view.set_lite(true)
+	ok(view.echo_view.lite, "EcoView.set_lite — до эхоловца")
+	view.ground = Seabed.height   # сброс мира — вид тот же
+	ok(view.echo_view.lite, "сброс мира — снова «Экономно»")
+	view.set_lite(false)   # общие выключатели мира (EcoShaders, EcoRim…) — назад для следующих тестов
+	view.queue_free()
+	await frames(1)
+
+
+func test_body_breathes_against_sac() -> void:
+	var w := _world()
+	var e: EcoEcho = _sys(w, EcoEcho)
+	var ev := EchoView.new(e)
+	tree.root.add_child(ev)
+	await frames(1)
+	var ec := e.echo
+	var ship := ec.p + Vector3(30, 10, 30)
+	var foot := ev.body_foot
+	ok(foot < -0.3, "низ тела — подошвы: %.2f" % foot)
+	var lo_h := 9.0
+	var hi_h := 0.0
+	var against := 0
+	var n := 0
+	for i in 240:
+		var t := i * 0.05
+		ev.sync(t, ship)
+		var sac := ev.sac.scale.y
+		var h := ev.body.scale.y
+		lo_h = minf(lo_h, h)
+		hi_h = maxf(hi_h, h)
+		# низ тела стоит на месте при любом вдохе
+		near(foot * ev.body.scale.y + ev.body.position.y, foot, 1e-5, "подошвы на дне (t %.2f)" % t)
+		if absf(sac - 1.0) > 0.03:
+			n += 1
+			if signf(sac - 1.0) != signf(h - 1.0):
+				against += 1
+	ok(hi_h - lo_h > EchoView.BODY_H * 1.6, "тело дышит: высота %.3f…%.3f" % [lo_h, hi_h])
+	ok(hi_h - lo_h < EchoView.BODY_H * 2.0 + 1e-4, "не больше ± BODY_H")
+	ok(n > 0 and against == n, "мешок надут — тело опало (%d из %d)" % [against, n])
+	# покой: фаза — по времени мира, как прежний мешок (у гостя то же)
+	near(ev.breath_phase, fposmod(239 * 0.05 / EchoView.SAC_PERIOD, 1.0), 1e-3, "покой — фаза по t")
+	ev.queue_free()
+	await frames(1)
+
+
+func test_revealed_breathes_faster_without_jump() -> void:
+	var w := _world()
+	var e: EcoEcho = _sys(w, EcoEcho)
+	var ev := EchoView.new(e)
+	tree.root.add_child(ev)
+	await frames(1)
+	var ec := e.echo
+	var ship := ec.p + Vector3(30, 10, 30)
+	for i in 20:
+		ev.sync(i * 0.05, ship)
+	near(ev.breath_rate, 1.0, 1e-6, "затаился — обычный ритм")
+	ec.revealed = EcoEcho.REVEAL_T
+	var prev := ev.sac.scale.y
+	var t := 1.0
+	var max_jump := 0.0
+	for i in 200:
+		t += 0.05
+		ev.sync(t, ship)
+		max_jump = maxf(max_jump, absf(ev.sac.scale.y - prev))
+		prev = ev.sac.scale.y
+	ok(ev.breath_rate > EchoView.ALARM_RATE * 0.95, "раскрыт — ритм ×%.1f" % ev.breath_rate)
+	# шаг 0,05 с при ритме ×2: мешок меняется не больше 2π·0,1·2·0,05/6 ≈ 0,011 за шаг — скачка фазы нет
+	ok(max_jump < 0.012, "без скачка: %.4f" % max_jump)
+	ec.revealed = 0.0
+	for i in 200:
+		t += 0.05
+		ev.sync(t, ship)
+	ok(ev.breath_rate < 1.05, "успокоился: ×%.2f" % ev.breath_rate)
+	ev.queue_free()
+	await frames(1)
+
+
+## Б3: раскрытый импульсом — складки ушей разгораются за LOUD_RISE, а не за кадр (было 0,12 → до 0,9);
+## раскрытие кончилось — гаснут за LOUD_FADE; скачок времени — сразу к цели.
+func test_folds_glow_eases_in_and_out() -> void:
+	var w := _world()
+	var e: EcoEcho = _sys(w, EcoEcho)
+	var ev := EchoView.new(e)
+	var ec := e.echo
+	var ship := ec.p + Vector3(30, 10, 30)
+	var dt := 1.0 / 30.0
+	# пик пульса sin(3t) = 1 — у t = π/6: худший миг для скачка
+	var t := PI / 6.0 - 0.5
+	for i in 15:
+		t += dt
+		ev.sync(t, ship)
+	near(ev.fold_mat.emission.b, (EchoView.FOLD * EchoView.HUSH).b, 1e-5, "затаился — тихо")
+	ec.revealed = EcoEcho.REVEAL_T
+	var last := ev.fold_mat.emission.b
+	var worst := 0.0
+	for i in int(EchoView.LOUD_RISE / dt) + 4:
+		t += dt
+		ev.sync(t, ship)
+		var g := ev.fold_mat.emission.b
+		worst = maxf(worst, absf(g - last))
+		last = g
+	near(ev.loud_k, 1.0, 1e-6, "раскрыт — пульс во всю силу")
+	var full := EchoView.FOLD.b * (EchoView.LOUD - EchoView.HUSH)
+	ok(worst < full * 0.2, "свечение за кадр %.3f < %.3f (было %.3f)" % [worst, full * 0.2, full])
+	ec.revealed = 0.0
+	t += dt
+	ev.sync(t, ship)
+	ok(ev.loud_k > 0.9, "раскрытие кончилось — гаснет не за кадр: %.3f" % ev.loud_k)
+	for i in int(EchoView.LOUD_FADE / dt) + 2:
+		t += dt
+		ev.sync(t, ship)
+	near(ev.fold_mat.emission.b, (EchoView.FOLD * EchoView.HUSH).b, 1e-5, "погас за LOUD_FADE")
+	ec.revealed = EcoEcho.REVEAL_T
+	ev.sync(t + 5.0, ship)
+	near(ev.loud_k, 1.0, 1e-6, "скачок времени — сразу к цели")
+	near(EchoView.loud_step(0.3, true, -1.0, true), 1.0, 1e-6, "snap — к цели")
+	near(EchoView.fold_k(1.0, 0.0), EchoView.HUSH, 1e-6, "без пульса — HUSH")
+	ev.free()

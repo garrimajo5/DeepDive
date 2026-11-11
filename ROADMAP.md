@@ -380,8 +380,18 @@
         `user://nastrojki.cfg`, в рацию — `Radio.mode`/`hear`/`mic_on`/`volume` (громкость — для проигрывателя голоса,
         его пока нет) (`VoicePage`, `Settings.page = "golos"`; снимок `nastrojki=golos golos=voice|mute|nomic`,
         шаги `29-golos…`; читаемость на 6" — тестер)
-    - [ ] Голос: захват (`AudioEffectCapture`), передача по `NetLink`, разрешение `RECORD_AUDIO` Android, пакеты →
-      `Radio.heard`, `Radio.link`; включить `Radio.enabled` — ждёт владельца (захват и передача — его решение)
+    - Голос (решение владельца 27.10: встроенными средствами Godot, без библиотек; эпик #634) — разделено:
+      - [x] Кодек без узлов `Voice`: моно 8 кГц μ-law, пакеты 20 мс с номером, `Gate` «По голосу», `Decoder` —
+        буфер 60 мс, порядок, опоздавшие и пропавшие, уровень (`test_voice`)
+      - [x] Канал голоса `NetLink.CH_VOICE`: гость → хост, хост пересылает остальным на палубе с местом говорящего
+        `w`, свой голос — всем (`send_voice`/`take_voice`); голоса у слушателя — `Voice.Room` (`test_net_link`, `test_voice`)
+      - [x] Захват (`AudioEffectCapture` на шине «Микрофон», −80 дБ) и проигрыватели (`AudioStreamGenerator` на шине
+        «Голоса», громкость `Radio.volume`), пакеты из `Voice.Room` → `Radio.heard` с уровнем, `Radio.link`; «По голосу» —
+        тишина не уходит (`Voice.Station`, `VoiceIO`, `OverlayFlow.voice_step`; микрофон — только при
+        `audio/driver/enable_input`, его включает следующая часть)
+      - [x] Разрешение `RECORD_AUDIO` Android (`MicPermit`, `Radio.mic`, «В настройки»), `audio/driver/enable_input`,
+        `Radio.enabled` — PR #876 (`test_radio`, `test_mic_permit`)
+      - [ ] Проверка вдвоём на двух телефонах — тестер (эпик #634)
   - Экран сбора экипажа по ART-028 (принят, `sbor-ekipazha.md`): 2D поверх мостика, роли П/С/И/Б, «Готов»,
     старт у хоста; табличка над фигурой — заказ ART-033 (#235) — разделено:
     - [x] Комната и её экран без сети: четыре строки ролей (галочка «Готов», кольцо «Ждём», прочерк «Свободно» и

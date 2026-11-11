@@ -15,6 +15,10 @@ enum State {
 
 ## Край отмели по X и Z (clampArea).
 const EDGE := 290.0
+## Котловина склона за восточным краем (`Seabed.Slope`: x от края до восточной стены `X_END`, z — ось прохода
+## `GAP_Z` ± `BASIN_HALF`), куда пускает `bound_xz` (#840: скребуны у 10). `confine` её не знает: хищники и стаи,
+## как прежде, остаются на отмели и за кораблём вниз по склону не идут.
+const EAST := Rect2(EDGE, 110.0, 390.0, 180.0)
 
 var species: String
 var p := Vector3.ZERO      ## место
@@ -25,12 +29,17 @@ var state: State = State.GRAZE
 ## Секунды до конца текущего состояния (уменьшается в tick, не ниже нуля).
 var timer := 0.0
 var alive := true
+## Крупный вид (`EcoField.BIG`): у пограничного поля на западе разворачивается (#833).
+var big := false
 ## Как быстро скорость догоняет желаемую (1/с): 1,1 обычно, 1,6 в броске.
 var agility := 1.1
 ## Высота над дном, ниже которой не опускается.
 var clearance := 1.8
 ## Потолок по Y (подо льдом).
 var ceiling := -4.0
+## На сколько секунд хода вперёд смотрит на дно (0 — не смотрит): подъём дна впереди — набирает высоту заранее
+## (`climb_for`), а не взлетает по склону вплотную ко дну. Серпохвост — `EcoPred.LOOK`.
+var look := 0.0
 ## Кого преследует или от кого бежит. Слабая ссылка: хищник и добыча смотрят друг на друга, а держит существ мир.
 var target: EcoAgent:
 	get:
@@ -48,6 +57,10 @@ var _gx := INF
 var _gz := INF
 var _gh := 0.0
 var _gcall: Callable
+## Наклон дна (dh/dx, dh/dz) по переходам между выборками: каждый поправляет его вдоль своего смещения (Бройден),
+## поперёк — прежний; для `ground_est`/`floor_rate` без новых вызовов ground; переход длиннее SLOPE_GAP (прыжок, возврат домой) или смена ground — наклон 0.
+const SLOPE_GAP := 1.0
+var _slope := Vector2.ZERO
 
 
 ## Неизвестный вид (нет в Species) — предупреждение, существо сразу неживое: мир его не двигает.
@@ -59,6 +72,7 @@ func _init(species_id: String, pos: Vector3) -> void:
 	p = pos
 	home = pos
 	goal = pos
+	big = EcoField.is_big(species_id)
 
 
 ## Сменить состояние на t секунд.
@@ -108,9 +122,125 @@ func hold(dt: float, ground: Callable = Callable()) -> void:
 
 ## Скорость тянется к want, затем шаг и ограничения.
 func drive(want: Vector3, dt: float, ground: Callable = Callable()) -> void:
+	var need := climb_for(ground) if look > 0.0 and ground.is_valid() else -INF
 	v = v.lerp(want, minf(1.0, dt * agility))
+	if need > v.y:  # дно впереди выше: вверх — не быстрее LOOK_ACCEL, но не медленнее lerp
+		v.y = minf(need, v.y + LOOK_ACCEL * dt)
 	p += v * dt
 	confine(ground)
+
+
+## Как drive, но ход по горизонтали поворачивает, а не проходит через ноль (Б3, «плавность»): курс скорости
+## догоняет курс want долей угла turn_k/с, не быстрее turn_max рад/с, величина тянется (lerp agility) к |want|,
+## в крутом повороте — к |want| · cos угла, не меньше slow_min доли. Раньше lerp векторов на развороте (цель патруля
+## за спиной) гасил ход до нуля и разгонял обратно: серпохвост ~1 с плыл хвостом вперёд, пока нос доворачивал.
+## Вертикаль — как в drive (lerp и подъём перед дном). Почти стоит — курс сразу по want.
+func swim(want: Vector3, dt: float, turn_k: float, turn_max: float, slow_min: float,
+		ground: Callable = Callable()) -> void:
+	var k := minf(1.0, dt * agility)
+	var vf := Vector2(v.x, v.z)
+	var wf := Vector2(want.x, want.z)
+	var s_now := vf.length()
+	var s_want := wf.length()
+	var flat := Vector2.ZERO
+	if s_want < 1e-4:
+		flat = vf.lerp(Vector2.ZERO, k)
+	elif s_now < SWIM_STILL:
+		flat = vf.lerp(wf, k)
+	else:
+		var da := vf.angle_to(wf)
+		var step := signf(da) * minf(absf(da) * minf(1.0, turn_k * dt), turn_max * dt)
+		var dir := vf.rotated(step) / s_now
+		var s_goal := s_want * maxf(cos(da), slow_min)
+		flat = dir * lerpf(s_now, s_goal, k)
+	# в повороте путь идёт дугой к курсу want: дно впереди смотрим и по нему, с нынешним ходом
+	var turn := Vector3.ZERO
+	if s_want >= 1e-4 and flat.length_squared() > 1e-6 and absf(flat.angle_to(wf)) > 0.05:
+		turn = Vector3(wf.x, 0.0, wf.y) * (flat.length() / s_want)
+	v = Vector3(flat.x, v.y, flat.y)
+	var need := climb_for(ground, turn) if look > 0.0 and ground.is_valid() else -INF
+	# вниз хочет не круче, чем пускает дно впереди: иначе lerp к want.y съедал торможение LOOK_ACCEL, и в нырке за
+	# добычей у дна (цель ниже clearance) хищник ложился на дно и отскакивал (Б3)
+	v.y = lerpf(v.y, maxf(want.y, minf(need, 0.0)), k)
+	if need > v.y:
+		if need > v.y + LOOK_ACCEL * dt:  # вверх не успевает: и по горизонтали тормозит, как в drive lerp
+			var fs := flat.length()
+			if fs > SWIM_STILL:
+				var slow := maxf(fs - LOOK_ACCEL * dt, SWIM_STILL) / fs
+				v.x *= slow
+				v.z *= slow
+		v.y = minf(need, v.y + LOOK_ACCEL * dt)
+	p += v * dt
+	confine(ground)
+
+
+## Медленнее этого (м/с) ход ещё не держит курс: swim тянет его к want, как drive.
+const SWIM_STILL := 0.3
+
+
+## Доли look, на которых смотрит дно впереди, и запас над clearance там.
+const LOOK_AT := [0.1, 0.2, 0.3, 0.45, 0.6, 0.8, 1.0]
+const LOOK_GAP := 0.6
+## Разгон вверх перед подъёмом дна, м/с².
+const LOOK_ACCEL := 8.0
+
+## Вертикальная скорость, с которой к каждой точке пути впереди (горизонтальный ход за долю LOOK_AT от look) существо
+## уже будет на clearance + LOOK_GAP над дном. Отрицательная — вниз не быстрее её: в нырке к дну тормозит заранее.
+## Высоко над дном (дальше, чем подъём 1:1 на всём пути и запас) — не смотрит: −INF без лишних вызовов дна.
+## turn — ход, к которому поворачивает (`swim`): путь дугой смотрит и по нему.
+func climb_for(ground: Callable, turn := Vector3.ZERO) -> float:
+	var flat := Vector3(v.x, 0.0, v.z)
+	var need := -INF
+	if p.y - ground_y(ground) - clearance > flat.length() * look + 2.0 - minf(v.y, 0.0) * look:
+		return need
+	var n := LOOK_AT.size()
+	for i in n:
+		var t: float = look * LOOK_AT[i]
+		var q := p + flat * t
+		var top := _look_ground(ground, i, q.x, q.z) + clearance + LOOK_GAP
+		need = maxf(need, (top - p.y) / t)
+	if turn != Vector3.ZERO:
+		for i in n:
+			var t: float = look * LOOK_AT[i]
+			var q := p + turn * t
+			var top := _look_ground(ground, n + i, q.x, q.z) + clearance + LOOK_GAP
+			need = maxf(need, (top - p.y) / t)
+	return need
+
+
+## Точки взгляда вперёд (`climb_for`) помнят дно, как `ground_y`: точка slot пересчитывает его, только когда ушла
+## дальше GROUND_STEP от прошлой или сменился ground (issue #1247: семь вызовов fbm на шаг серпохвоста — треть шага
+## хищников; медленный и стоящий у станции чистки смотрит в те же точки). Взгляд — запас, сетка дна в сцене 5 м.
+var _look_q := PackedVector2Array()
+var _look_h := PackedFloat32Array()
+var _look_call: Callable
+
+
+func _look_ground(ground: Callable, slot: int, x: float, z: float) -> float:
+	if ground != _look_call:
+		_look_call = ground
+		_look_q = PackedVector2Array()
+	if _look_q.size() <= slot:
+		var was := _look_q.size()
+		_look_q.resize(LOOK_AT.size() * 2)
+		_look_h.resize(LOOK_AT.size() * 2)
+		for k in range(was, _look_q.size()):
+			_look_q[k] = Vector2(INF, INF)
+	var q := _look_q[slot]
+	var dx := x - q.x
+	var dz := z - q.y
+	if dx * dx + dz * dz <= GROUND_STEP * GROUND_STEP:
+		return _look_h[slot]
+	var h := float(ground.call(x, z))
+	_look_q[slot] = Vector2(x, z)
+	_look_h[slot] = h
+	return h
+
+
+## Высота дна в точке (x, z) впереди по ходу — точка взгляда slot, из запомненной, пока точка не сдвинулась дальше
+## GROUND_STEP (светляки у дна, `EcoFish.floor_brake`; общий кэш с `climb_for`).
+func ground_ahead(ground: Callable, slot: int, x: float, z: float) -> float:
+	return _look_ground(ground, slot, x, z)
 
 
 ## Высота дна под существом (ground — (x, z) -> float, должен быть задан): из запомненной, пока не отплыло
@@ -118,15 +248,33 @@ func drive(want: Vector3, dt: float, ground: Callable = Callable()) -> void:
 func ground_y(ground: Callable) -> float:
 	var dx := p.x - _gx
 	var dz := p.z - _gz
-	if dx * dx + dz * dz > GROUND_STEP * GROUND_STEP or ground != _gcall:
+	var d2 := dx * dx + dz * dz
+	if d2 > GROUND_STEP * GROUND_STEP or ground != _gcall:
+		var h: float = ground.call(p.x, p.z)
+		if ground == _gcall and d2 <= SLOPE_GAP * SLOPE_GAP:
+			_slope += Vector2(dx, dz) * ((h - _gh - _slope.x * dx - _slope.y * dz) / d2)
+		else:
+			_slope = Vector2.ZERO
 		_gx = p.x
 		_gz = p.z
-		_gh = ground.call(p.x, p.z)
+		_gh = h
 		_gcall = ground
 	return _gh
 
 
-## Не под дном, не выше потолка, не за краем отмели (как после шага серпохвоста).
+## Дно под существом без ступенек кэша: запомненная высота плюс наклон с прошлой выборки на отплытое от неё
+## (на склоне 1:1 ступенька `ground_y` — до GROUND_STEP; здесь остаётся только кривизна дна).
+func ground_est(ground: Callable) -> float:
+	var h := ground_y(ground)
+	return h + _slope.x * (p.x - _gx) + _slope.y * (p.z - _gz)
+
+
+## С какой скоростью дно под существом поднимается (м/с, вниз — минус), если плыть по горизонтали со (vx, vz).
+func floor_rate(vx: float, vz: float) -> float:
+	return _slope.x * vx + _slope.y * vz
+
+
+## Не под дном, не выше потолка, не за краем отмели (как после шага серпохвоста); крупные — не в поясе поля (#833).
 func confine(ground: Callable = Callable()) -> void:
 	if ground.is_valid():
 		var floor_y: float = ground.call(p.x, p.z) + clearance
@@ -138,3 +286,35 @@ func confine(ground: Callable = Callable()) -> void:
 		p.y = ceiling
 	p.x = clampf(p.x, -EDGE, EDGE)
 	p.z = clampf(p.z, -EDGE, EDGE)
+	if big and p.x < EcoField.BELT_IN:
+		EcoField.turn_back(self)
+
+
+## Ближайшая к (x, z) точка отмели ±EDGE или котловины склона EAST (донные, что живут у 10, — `EcoGrazer`). На
+## отмели — та же точка, что clampf по ±EDGE: прежние существа не сдвигаются.
+static func bound_xz(x: float, z: float) -> Vector2:
+	var a := Vector2(clampf(x, -EDGE, EDGE), clampf(z, -EDGE, EDGE))
+	if x <= EDGE:
+		return a
+	var b := Vector2(clampf(x, EAST.position.x, EAST.end.x), clampf(z, EAST.position.y, EAST.end.y))
+	var at := Vector2(x, z)
+	return a if at.distance_squared_to(a) <= at.distance_squared_to(b) else b
+
+
+## Курс по дну from доворачивает к want за dt вокруг вертикали: доля угла k/с, не быстрее max_rate рад/с
+## (донные — кольчужник, скальник). Ровно назад — разворот в одну сторону, а не через ноль: lerp векторов
+## навстречу проходил через нулевой курс, и тело щёлкало носом. Без вертикали; нулевой want — курс тот же.
+static func turn_flat(from: Vector3, want: Vector3, dt: float, k: float, max_rate: float) -> Vector3:
+	var w := Vector3(want.x, 0.0, want.z)
+	if w.length_squared() < 1e-8:
+		return from
+	w = w.normalized()
+	var f := Vector3(from.x, 0.0, from.z)
+	if f.length_squared() < 1e-8:
+		return w
+	f = f.normalized()
+	var ang := atan2(f.cross(w).y, f.dot(w))   # со знаком: + — влево (вокруг +Y)
+	if absf(ang) < 1e-4:
+		return w
+	var step := signf(ang) * minf(absf(ang) * minf(1.0, k * dt), max_rate * dt)
+	return f.rotated(Vector3.UP, step).normalized()

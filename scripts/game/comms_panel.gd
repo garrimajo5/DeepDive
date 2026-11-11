@@ -1,14 +1,14 @@
 class_name CommsPanel
 extends Control
 ## Плашка внутренней связи ART-040 внизу по центру (состояние, строки и места — `Comms`). Касания идут через
-## `Touch.Router.taps`/`blocks` (`Main._comms_step`), сам узел их не ловит. Палитра ART-028/040: заливка #0B1C24,
+## `Touch.Router.taps`/`blocks` (`OverlayFlow.comms_step`), сам узел их не ловит. Палитра ART-028/040: заливка #0B1C24,
 ## контур #67DDEB, текст #D5E4E8/#9AD9E8, неактивное #6E909A, кнопка #102B37 с контуром #32616D. Красного и янтаря нет.
 
-const TEXT := Color("D5E4E8")
-const DIM := Color("9AD9E8")
-const OFF := Color("6E909A")
-const ACCENT := Color("67DDEB")
-const DARK := Color("0B1C24")
+const TEXT := UiStyle.TEXT
+const DIM := UiStyle.DIM
+const OFF := UiStyle.OFF
+const ACCENT := UiStyle.ACCENT
+const DARK := UiStyle.DARK
 const BUTTON := Color("102B37")
 const BUTTON_EDGE := Color("32616D")
 const GLYPH_TOP := 0.76   ## от верха видимых глифов до базовой линии, доля кегля (DejaVu Sans)
@@ -16,6 +16,7 @@ const GLYPH_TOP := 0.76   ## от верха видимых глифов до б
 var comms: Comms
 var time := 0.0
 var area := Rect2()  ## безопасная область экрана (`Main.comms_area`): места `Comms` считаются от неё (#603)
+var warming := false   ## прогрев (`warm`): кегли панели под шторкой вместо неё
 
 
 func _ready() -> void:
@@ -36,12 +37,7 @@ func show_comms(c: Comms, t: float, at: Rect2 = Rect2()) -> void:
 
 
 func _box(r: Rect2, s: float, a: float, fill: Color, border: Color, radius := 12.0) -> void:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(fill, fill.a * a)
-	sb.border_color = Color(border, border.a * a)
-	sb.set_border_width_all(maxi(1, roundi(2.0 * s)))
-	sb.set_corner_radius_all(roundi(radius * s))
-	draw_style_box(sb, r)
+	draw_style_box(UiStyle.box(Color(fill, fill.a * a), radius * s, Color(border, border.a * a), 2.0 * s), r)
 
 
 ## Строка от верха видимых глифов.
@@ -49,7 +45,25 @@ func _text(font: Font, top: Vector2, text: String, px: int, color: Color, width 
 	draw_string(font, top + Vector2(0, px * GLYPH_TOP), text, HORIZONTAL_ALIGNMENT_LEFT, width, px, color)
 
 
+## Прогрев (WarmRunner, #1350): под шторкой плашка связи рисует буквы `UiStyle.GLYPHS` своими кеглями
+## (`warm_sizes`) вместо себя — первый показ не растрирует глифы вне шага (#519, «узлы»). on = false — скрыта до
+## своего показа.
+func warm(on: bool) -> void:
+	warming = on
+	visible = on
+	queue_redraw()
+
+
+## Кегли панели, px — из её `_draw`.
+func warm_sizes() -> Array[int]:
+	return UiStyle.warm_px([Comms.LETTER_PX, Comms.ROLE_PX, Comms.SUB_PX, Comms.TEXT_PX, Comms.CODE_PX, Comms.BUTTON_PX],
+		Comms.scale(area.size if area.has_area() else get_viewport_rect().size))
+
+
 func _draw() -> void:
+	if warming:
+		UiStyle.warm_glyphs(self, [get_theme_default_font()], warm_sizes())
+		return
 	if comms == null or comms.cur == null:
 		return
 	var size := area.size if area.has_area() else get_viewport_rect().size
@@ -57,10 +71,12 @@ func _draw() -> void:
 	var s := Comms.scale(size)
 	var a := comms.a
 	var font := get_theme_default_font()
-	var plate := Comms.plate_rect(size)
+	var rows := comms.rows(size, font)   # команда в одну или две строки: при двух шапка и верх плашки выше (#1557)
+	var n := rows.size()
+	var plate := Comms.plate_rect(size, n)
 	_box(plate, s, a, DARK, ACCENT)
 	# кружок роли с буквой: цвет роли сам ничего не значит, буква и название обязательны
-	var c := Comms.at(Comms.CIRCLE, size)
+	var c := Comms.at(Comms.CIRCLE, size, n)
 	var ring: Color = Comms.ROLE_RING[comms.cur.role]
 	draw_arc(c, Comms.CIRCLE_D * 0.5 * s, 0.0, TAU, 64, Color(ring, a), maxf(1.5, 2.5 * s), true)
 	var lpx := int(Comms.LETTER_PX * s)
@@ -68,17 +84,18 @@ func _draw() -> void:
 	var lw := font.get_string_size(letter, HORIZONTAL_ALIGNMENT_LEFT, -1, lpx).x
 	draw_string(font, c + Vector2(-lw * 0.5, lpx * 0.36), letter, HORIZONTAL_ALIGNMENT_LEFT, -1, lpx, Color(TEXT, a))
 	var title_px := int(Comms.ROLE_PX * s)
-	_text(font, Comms.at(Comms.ROLE_AT, size), comms.title(), title_px, Color(TEXT, a))
+	_text(font, Comms.at(Comms.ROLE_AT, size, n), comms.title(), title_px, Color(TEXT, a))
 	if comms.sub_wanted(size):
 		var tw := font.get_string_size(comms.title(), HORIZONTAL_ALIGNMENT_LEFT, -1, title_px).x
-		var sub := Comms.at(Comms.SUB_AT, size)
-		sub.x = maxf(sub.x, Comms.at(Comms.ROLE_AT, size).x + tw + 24.0 * s)
+		var sub := Comms.at(Comms.SUB_AT, size, n)
+		sub.x = maxf(sub.x, Comms.at(Comms.ROLE_AT, size, n).x + tw + 24.0 * s)
 		_text(font, sub, Comms.SUB, int(Comms.SUB_PX * s), Color(DIM, a))
-	# команда: не шире места до индикатора и кнопки (длинную реплику сокращает редактор, кегль не меньше)
-	var tx := Comms.at(Comms.TEXT_AT, size)
-	_text(font, tx, comms.line(), int(Comms.TEXT_PX * s), Color(TEXT, a), plate.end.x - tx.x - 30.0 * s)
+	# команда: перенос по словам в две строки, последняя — на месте прежней единственной (кегль не меньше 40)
+	for i in n:
+		_text(font, Comms.at(Comms.TEXT_AT, size, n - i), rows[i], int(Comms.TEXT_PX * s), Color(TEXT, a),
+			Comms.text_width(size))
 	# индикатор речи: 11 штрихов по центру строки
-	var bars := Comms.bars_rect(size)
+	var bars := Comms.bars_rect(size, n)
 	var hs := comms.bars(time)
 	var step := bars.size.x / float(hs.size())
 	var bw := maxf(1.5, 3.0 * s)

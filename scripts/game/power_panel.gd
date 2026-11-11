@@ -9,6 +9,7 @@ var panel: Reactor.Console
 ## Раскладка кнопок (Touch.Layout): панель встаёт ниже кнопки noclip и выше кнопки действия (#349). null — без неё.
 var layout: Touch.Layout
 var bold: FontVariation
+var warming := false   ## прогрев (`warm`): кегли пульта обоими шрифтами под шторкой вместо него
 
 
 func _ready() -> void:
@@ -34,24 +35,37 @@ func box() -> Rect2:
 	return PowerScreen.box(get_viewport_rect().size, layout)
 
 
+## Прогрев (WarmRunner, #1350): под шторкой пульт рисует буквы `UiStyle.GLYPHS` своими кеглями (`warm_sizes`)
+## обычным и полужирным шрифтом вместо себя — строки перегрева и сброса не растрируют глифы при первом показе.
+## on = false — скрыт до поста энергии.
+func warm(on: bool) -> void:
+	warming = on
+	visible = on
+	queue_redraw()
+
+
+## Кегли пульта, px — из `_draw`, `_row` и строк `PowerScreen.foot`.
+func warm_sizes() -> Array[int]:
+	return UiStyle.warm_px([20.0, 21.0, 23.0, 24.0, 25.0, 27.0, 28.0, 30.0, 34.0], PowerScreen.k(box()))
+
+
 func _draw() -> void:
-	if reactor == null:
-		return
 	var font := get_theme_default_font()
 	if bold == null:
 		bold = FontVariation.new()
 		bold.base_font = font
 		bold.variation_embolden = 0.7
+	if warming:
+		UiStyle.warm_glyphs(self, [font, bold], warm_sizes())
+		return
+	if reactor == null:
+		return
 	var b := box()
 	var s := PowerScreen.k(b)
 	var o := b.position
 	var acc := PowerScreen.accent(reactor)
-	var frame := StyleBoxFlat.new()
-	frame.bg_color = PowerScreen.BG
-	frame.border_color = acc if reactor.hot else PowerScreen.FRAME
-	frame.set_border_width_all(maxi(1, roundi(2.0 * s)))
-	frame.set_corner_radius_all(roundi(PowerScreen.RADIUS * s))
-	draw_style_box(frame, b)
+	draw_style_box(UiStyle.box(PowerScreen.BG, PowerScreen.RADIUS * s, acc if reactor.hot else PowerScreen.FRAME,
+		2.0 * s), b)
 	# шапка: значок инженера (белый круг «И» — профессия, не тревога), название, роль или перегрев
 	var mark := o + Vector2(36.0, 30.0) * s
 	draw_arc(mark, 15.0 * s, 0.0, TAU, 32, PowerScreen.INK, maxf(1.0, 2.0 * s), true)
@@ -77,12 +91,7 @@ func _row(i: int, o: Vector2, s: float, acc: Color) -> void:
 	var top := o.y + PowerScreen.row_top(i) * s
 	var c := PowerScreen.row_colors(reactor, on)
 	if on:
-		var sel := StyleBoxFlat.new()
-		sel.bg_color = PowerScreen.SEL_FILL
-		sel.border_color = acc
-		sel.set_border_width_all(maxi(1, roundi(2.0 * s)))
-		sel.set_corner_radius_all(roundi(4.0 * s))
-		draw_style_box(sel, Rect2(o.x + 9.0 * s, top, (PowerScreen.W - 18.0) * s, PowerScreen.ROW_H * s))
+		draw_style_box(UiStyle.box(PowerScreen.SEL_FILL, 4.0 * s, acc, 2.0 * s), Rect2(o.x + 9.0 * s, top, (PowerScreen.W - 18.0) * s, PowerScreen.ROW_H * s))
 		draw_rect(Rect2(o.x + 9.0 * s, top, 6.0 * s, PowerScreen.ROW_H * s), acc)
 	var v := reactor.share[i]
 	_text(bold if on else font, Reactor.NAMES[i], Vector2(o.x + 31.0 * s, top + 2.0 * s), 30.0 * s, c[0])

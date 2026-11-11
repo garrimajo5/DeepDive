@@ -104,7 +104,25 @@ class Render(unittest.TestCase):
         self.assertIn("2/4", page)                       # 1 галочка + 1 подзадача из 2+2
         self.assertIn("#11 Вопрос", page)                # ждёт владельца — issue
         self.assertIn("два — эпик #10", page)            # ждёт владельца — задача чек-листа
-        self.assertIn("нет исполнителя-агента", page)    # звук и сюжет без агента
+        self.assertIn("Сценарист: сюжет и тексты (Codex)", page)       # роли паспорта 07.11
+        self.assertIn("Проект-менеджер (Claude)", page)
+        self.assertNotIn("нет исполнителя-агента", page)
+
+    def test_stage_zero_first_and_earlier_stages_wait(self):
+        # «Этап 0» заведён позже (milestone 8), а стоит первым; этапы без эпиков до работы — ждут приёмки
+        ms = [{"number": 8, "title": "Этап 0. Лор, сюжет, цели", "state": "open"},
+              {"number": 1, "title": "Этап 1. Старт работ", "state": "open"},
+              {"number": 4, "title": "Этап 4. Первый слой", "state": "open"}]
+        ep0 = {"number": 9, "title": "Эпик: сюжет", "state": "open", "milestone": {"number": 8},
+               "labels": [{"name": "эпик"}], "body": "- [ ] сюжет — сюжет\n", "sub_issues_summary": {}}
+        ep4 = {"number": 10, "title": "Эпик: слой", "state": "open", "milestone": {"number": 4},
+               "labels": [{"name": "эпик"}], "body": "- [x] раз — поток А\n- [ ] два — поток А\n",
+               "sub_issues_summary": {}}
+        page = status.render(ms, [ep0, ep4], [ep0, ep4], [], {})
+        rows = [l for l in page.splitlines() if l.startswith("| Этап ") and l[7:8].isdigit()]
+        self.assertTrue(rows[0].startswith("| Этап 0."))
+        self.assertIn("ждёт приёмки", rows[1])           # этап 1 без эпиков, дальше работа есть
+        self.assertIn("**Сейчас:** Этап 4. Первый слой", page)
 
     def test_on_hold_not_waiting_owner_and_verify_is_qa(self):
         ms = [{"number": 4, "title": "Этап 4. Забег", "state": "open"}]
@@ -119,8 +137,70 @@ class Render(unittest.TestCase):
         qa_row = [l for l in page.splitlines() if l.startswith("| Тестер")][0]
         self.assertIn("#12 (проверить)", qa_row)         # «проверить» — работа тестера
 
+    def test_owner_acceptance_listed(self):
+        # дела самого владельца без блокера (приёмка этапа, бета) тоже ждут его — отдельным списком
+        ms = [{"number": 4, "title": "Этап 4. Забег", "state": "open"}]
+        epic = {"number": 10, "title": "Эпик: приёмка", "state": "open", "milestone": None,
+                "labels": [{"name": "эпик"}], "sub_issues_summary": {"completed": 0, "total": 0},
+                "body": "- [ ] Этап 1: корабль удобно вести — владелец\n- [x] Выбор музыки — владелец\n"
+                        "- [ ] Сварка — поток А\n"}
+        page = status.render(ms, [epic], [epic], [], {})
+        owner = page.split("## ⛔ Ждёт владельца")[1].split("\n## ")[0]
+        self.assertIn("(1)", page.split("## ⛔ Ждёт владельца")[1].splitlines()[0])
+        self.assertIn("Приёмка и твои дела", owner)
+        self.assertIn("Этап 1: корабль удобно вести — эпик #10", owner)
+        self.assertNotIn("Выбор музыки", owner)          # сделано
+        self.assertNotIn("Сварка", owner)                # не роль владельца
+        self.assertNotIn("Решения", owner)               # решений не ждут — заголовка нет
+
+    def test_codex_link(self):
+        page = status.render([], [], [], [], {})
+        self.assertIn(f"[Кодекс игры]({status.CODEX_URL})", page.split("## ")[0])
+
     def test_short_drops_code_marks(self):
         self.assertEqual(status.short("Кадры по `tools/qa/play-kadry.json` для Google Play", 20), "Кадры по tools/qa/pl…")
+
+
+class GhRetry(unittest.TestCase):
+    """Сбой GitHub 5xx повторяется, 4xx — нет (#1350: «Где мы» краснел от разового HTTP 502)."""
+
+    def run_with(self, answers):
+        calls, pauses = [], []
+
+        class R:
+            def __init__(self, code, err, out=""):
+                self.returncode, self.stderr, self.stdout = code, err, out
+
+        def fake_run(cmd, **kw):
+            calls.append(cmd)
+            return R(*answers[min(len(calls), len(answers)) - 1])
+
+        old_run, old_sleep = status.subprocess.run, status.time.sleep
+        status.subprocess.run, status.time.sleep = fake_run, pauses.append
+        try:
+            try:
+                return status.gh("repos/x/y/issues?state=open"), calls, pauses
+            except RuntimeError as e:
+                return e, calls, pauses
+        finally:
+            status.subprocess.run, status.time.sleep = old_run, old_sleep
+
+    def test_502_then_ok(self):
+        res, calls, pauses = self.run_with([(1, "gh: Server Error (HTTP 502)"), (0, "", "[1]")])
+        self.assertEqual(res, [1])
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(pauses, [status.RETRY_PAUSE])
+
+    def test_502_gives_up(self):
+        res, calls, pauses = self.run_with([(1, "gh: Server Error (HTTP 502)")])
+        self.assertIsInstance(res, RuntimeError)
+        self.assertEqual(len(calls), status.RETRIES + 1)
+
+    def test_404_no_retry(self):
+        res, calls, pauses = self.run_with([(1, "gh: Not Found (HTTP 404)")])
+        self.assertIsInstance(res, RuntimeError)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(pauses, [])
 
 
 if __name__ == "__main__":

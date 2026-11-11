@@ -1,17 +1,18 @@
 class_name RoleCardPanel
 extends Control
 ## Карточка роли у поста ART-045, «?» и плашка чужой роли (состояние и места — `RoleCard`). Касания идут через
-## `Touch.Router.blocks`/`taps` (`Main._card_step`), сам узел их не ловит. Палитра ART-028/038, красного нет.
+## `Touch.Router.blocks`/`taps` (`OverlayFlow.card_step`), сам узел их не ловит. Палитра ART-028/038, красного нет.
 
-const TEXT := Color("D5E4E8")
-const DIM := Color("9AD9E8")
-const ACCENT := Color("67DDEB")
-const DARK := Color("0B1C24")
-const BACK := Color(0.043, 0.11, 0.141, 244.0 / 255.0)   ## #0B1C24, альфа 244
+const TEXT := UiStyle.TEXT
+const DIM := UiStyle.DIM
+const ACCENT := UiStyle.ACCENT
+const DARK := UiStyle.DARK
+const BACK := Color(UiStyle.DARK, UiStyle.PLATE_A)   ## #0B1C24, непрозрачная (#1556)
 
 var card: RoleCard
 var rect := Rect2()   ## место карточки этого кадра (`RoleCard.card_rect`); пусто — карточки нет
 var atlas: Texture2D
+var warming := false   ## прогрев (`warm`): кегли панели под шторкой вместо неё
 
 
 func _ready() -> void:
@@ -32,15 +33,29 @@ func show_card(c: RoleCard, r: Rect2) -> void:
 
 
 func _box(r: Rect2, s: float, a: float, fill: Color = BACK, border: Color = ACCENT, radius := 12.0) -> void:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(fill, fill.a * a)
-	sb.border_color = Color(border, border.a * a)
-	sb.set_border_width_all(maxi(1, roundi(2.0 * s)))
-	sb.set_corner_radius_all(roundi(radius * s))
-	draw_style_box(sb, r)
+	draw_style_box(UiStyle.box(Color(fill, fill.a * a), radius * s, Color(border, border.a * a), 2.0 * s), r)
+
+
+## Прогрев (WarmRunner, #1350): под шторкой карточка роли рисует буквы `UiStyle.GLYPHS` своими кеглями
+## (`warm_sizes`) вместо себя — первый показ не растрирует глифы вне шага (#519, «узлы»). on = false — скрыта до
+## своего показа.
+func warm(on: bool) -> void:
+	warming = on
+	visible = on
+	queue_redraw()
+
+
+## Кегли панели, px — из её `_draw`.
+func warm_sizes() -> Array[int]:
+	return UiStyle.warm_px([RoleCard.TITLE_PX, RoleCard.LETTER_PX, RoleCard.LINE_PX, RoleCard.BUTTON_PX, RoleCard.ASK_PX,
+		RoleCard.FOREIGN_PX.x, RoleCard.FOREIGN_PX.y],
+		get_viewport_rect().size.y / RoleCard.REF_H)
 
 
 func _draw() -> void:
+	if warming:
+		UiStyle.warm_glyphs(self, [get_theme_default_font()], warm_sizes())
+		return
 	if card == null:
 		return
 	var size := get_viewport_rect().size

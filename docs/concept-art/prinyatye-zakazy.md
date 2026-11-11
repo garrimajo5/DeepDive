@@ -680,6 +680,13 @@ ORM = AO/шероховатость/металл, в существующие `P
 анатомия `ledokryl-anatomiya.png`, сцена `ledokryl-pod-ledom.jpg`; решения — `ledokryl.md`: размах 14 м, тело 9 + хвост 9 м,
 14 слабых точек по кромкам, рот-щель со скребком и резонатор снизу, присоски отдельно (`EcoRemora`), взмах по формуле `RayView`.
 Модель — следующий заказ MOD потока Б.
+## ART-070 Внешние огни корпуса — принято
+- Исходник: ART-001/ART-024 (`HullPlan`), окна ART-057, свет внутри ART-064, разряд ART-068.
+
+**Принято 09.11.2026** (PR #494, ветка `art/ART-070-ogni-korpusa`, v4): схема `ogni-korpusa-plan.png`, таблица
+`ogni-korpusa.json`, ореол `ogni-korpusa-oreol.png` (RGBA 128², 8 КБ), пары `ogni-korpusa-sprava.jpg`/`-sleva.jpg`;
+решения — `ogni-korpusa.md`: шесть огней ореолами одним MultiMesh (+1 вызов, без Light3D), левый борт — вытянутый
+#B8D9E8, правый — круглый #67DDEB, проблеск рубки 2,4 с. Встройка — поток А (#1510).
 ## ART-071 Пар вентиля сброса в машинном — принято
 - Исходник: ART-019/ART-055 (`mashinnoe.md`, `otseki-materialy.md`), ART-064 (`svet-vnutri.md`), ART-058, ART-063.
 
@@ -735,3 +742,56 @@ ORM = AO/шероховатость/металл, в существующие `P
 `kondensat-proverka.png`, параметры `kondensat-parametry.json`; решения — `kondensat-okon.md`: слой в `window_glass.gdshader`
 по глубине (с 8 м, полный к 45 м), корпусу и нагреву реактора, сначала вариант «Экономно» (1 выборка, без экранного буфера),
 0 вызовов. Встройка — задача ROADMAP потока А.
+## ART-079 Терраса врат — принято
+- Исходник: `uzel-terrasa-vrat.jpg`, `docs/world.md`, #818 (места 07/08), лист корабля `kovcheg-7-rakursy.png`.
+
+**Принято 27.10.2026** (PR #857, ветка `art/ART-079-terrasa-vrat`): листы `terrasa-vrat-ansambl.png`, `terrasa-vrat-kontakt.png`,
+схема `terrasa-vrat-gabarity.png`, иконки `ikonka-terrasa-vrat.png`, `ikonka-nablyudenie-polya.png`; решения — `terrasa-vrat.md`:
+арка 120 × 58 × 23 м, проход 60 × 36 м, карман Ø 100 м, бюджет модели 59 тыс. треуг. с LOD, 3 материала. Глубина пола 65 м —
+предложение, проверить при сборке места 07. Модель — следующий заказ MOD.
+## ART-080 Инеевая бахрома и ледяная моль — принято
+- Исходник: `docs/bestiary.md`, `svetovoy-kolodets.md`, `ledokryl.md`, `led-snizu.md`, #818 (место 05).
+
+**Принято 27.10.2026** (PR #864, ветка `art/ART-080-bahroma-mol`): листы `inevaya-bahroma-list.png`, `ledyanaya-mol-list.png`,
+атлас `ledyanaya-mol-atlas.png` (RGBA 256², 2×2); решения — `inevaya-bahroma-i-mol.md`: бахрома 48 нитей одним MultiMesh
+(24 на «Экономно»), след касания #67DDEB до 60 с без bloom, моль ≤ 300 карточек одним MultiMesh (96 на «Экономно»), часть
+на наружном стекле, тревогу не закрывает. Встройка — поток Б (#836).
+## ART-081 Купольник — рабочий Хранителя — принято
+- Исходник: `docs/world.md` (раздел 5), `warden.jpg` (материал), ART-079 (`terrasa-vrat.md`), #818 (место 07).
+
+**Принято 27.10.2026** (PR #871, ветка `art/ART-081-kupolnik`): листы `kupolnik-rakursy.png`, `kupolnik-stvorka.png`;
+решения — `kupolnik.md`: габарит 3 × 1,8 × 1,2 м, три захвата веером под передней кромкой (вид сбоку неточен), два
+сифона, фотофоры #67DDEB с общим импульсом команды; модель ≤ 8000 треуг., один материал, ≈ 20 костей, клипы `Swim`,
+`OpenPetal`, `Idle`. Дальше — заказы MOD и ANIM, встройка — поток Б (#837).
+## ART-082 Иконки мест 00, 09, 10 — принято
+- Исходник: иконки ART-005 и ART-079, `karta-sloj1.md`, #818 (места 00, 09, 10).
+
+**Принято 28.10.2026** (PR #910, ветка `art/ART-082-ikonki-mest`): иконки `ikonka-start.png`, `ikonka-tihaya-zavod.png`,
+`ikonka-spusk-k-lesu.png` (256² RGBA), лист `ikonki-mest-sloj1-list.png`; решения — `ikonki-mest-sloj1.md`. В игре
+заменили временные значки: `textures/places/start.png`, `cove.png`, `descent.png`.
+## ART-083 Прядь инеевой бахромы — принято
+- Исходник: ART-080 (`inevaya-bahroma-list.png`, `inevaya-bahroma-i-mol.md`), #836 (место 05).
+
+**Принято 07.11.2026** (PR #1353, ветка `art/ART-083-bahroma-pryad`): карты пряди `models/inevaya-bahroma-pryad-cvet.png`,
+`-maska.png`, `-normal.png` (256 × 1024), лист `inevaya-bahroma-pryad.png`; решения — `inevaya-bahroma-pryad.md`. В игре
+заменили процедурный рисунок нитей `FringeView` (полоса в 2 раза шире нити, силуэт — альфа карты).
+## ART-061 Экраны пультов у штурвала — принято
+- Исходник: мостик ART-002 (`mostik.md`), пульт энергии ART-050, табло ART-025 (`tablo.md`), компоновка UX #1402.
+
+**Принято 10.11.2026** (PR #433, ветка `art/ART-061-ekrany-pultov`, v7): атлас `ekrany-pultov-atlas.png` (RGBA 1024×512,
+19 КБ: фоны трёх экранов и глифы `0–9 . м ° / − с`), кадры `ekrany-pultov-kadr.jpg`, `ekrany-pultov-2400.jpg`, лист
+поворотов руля `ekrany-pultov-povoroty.jpg`; решения — `ekrany-pultov.md`: «120 м» и «245°» крупно на центральном экране
+без подписей, лента компаса под курсом, ход — на левом, свет/сонар — на правом; кисти цифр не закрывают, спица — можно;
+106 → 106 вызовов, один атлас в материал экранов. Встройка — поток А (#1568).
+## MOD-022 Купольник — модель — принято
+- Исходник: ART-081 (`kupolnik-rakursy.png`, `kupolnik.md`), заказ #920.
+
+**Принято 11.11.2026** (PR #1574, ветка `art/MOD-022-kupolnik`): `models/kupolnik.glb` (7419 треуг., одна сетка и
+материал, без скелета, 1,80 × 1,20 × 2,98 м, перед −Z), лист `kupolnik-model.png`, устья — `kupolnik-model-klapany.png`;
+решения и привязки для ANIM — `kupolnik.md`, раздел «Модель MOD-022». Дальше — заказ ANIM, встройка — поток Б (#837).
+
+## ANIM-004 Купольник — скелет и три клипа — принято
+**Принято 11.11.2026** (PR #1619, заказ #1601): `models/kupolnik-anim.glb` — сетка MOD-022 на скелете из 20 костей,
+клипы `Idle` 4 с, `Swim` 3 с (циклы), `OpenPetal` 5 с (разовый, от `Idle` к `Idle`); прежний `models/kupolnik.glb`
+удалён, сцена грузит новую модель в позе покоя. Подробности — `kupolnik.md`, раздел ANIM-004; тест —
+`tests/test_eco_dome_anim.gd`. Встройка клипов в `EcoDome` и замер — #837.

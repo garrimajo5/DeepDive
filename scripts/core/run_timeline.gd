@@ -13,6 +13,8 @@ static var default_path := PATH
 const KEEP := 20          ## сколько забегов держать в файле
 const HIT_MIN := 1.5      ## падение корпуса за шаг от стольких % — «удар» (вода пробоины точит понемногу)
 const SHORT := 10.0       ## забег короче, с — не пишем (вышли в меню сразу после «Погрузиться»)
+const UNFINISHED := "не закончен"   ## итог в шапке недописанного забега
+const BLINK := 0.5        ## событие короче, с — мигание состояния (сценарий тестера на кадр снимка), в ленту не идёт (#692)
 
 var path := default_path
 var running := false
@@ -22,7 +24,11 @@ var events: Array = []    ## [t от начала, текст] — по врем
 var spans: Array = []     ## [имя, начало, конец (−1 — ещё идёт)]
 var deepest := 0.0
 var hull := 100.0
+var cause := ""          ## кто или что ударил последним (`blame`): в строку «удар» следующего шага (#1481)
+var legs: Array = []      ## участки слоя (#824): [откуда id, куда id, с] — от прихода к месту до прихода к следующему
 var _on := {}             ## имя события → индекс в spans, пока идёт
+var _place := ""          ## id `LayerMap` места, где корабль был последним
+var _place_at := 0.0      ## когда пришёл туда, с от начала забега
 var _old: Array[String] = []   ## записанные забеги (блоки текста), новый — первым
 var _n := 0               ## номер забега за всё время файла
 
@@ -40,10 +46,19 @@ func begin(t: float) -> void:
 	t_last = t
 	events.clear()
 	spans.clear()
+	legs.clear()
 	_on.clear()
+	_place = ""
+	_place_at = 0.0
 	deepest = 0.0
 	hull = 100.0
 	_add(0.0, "начало")
+
+
+## Кто ударил (`Vitals.hit` kind): "scrape" — «о дно», пусто — «?», иначе имя существа. Строка «удар» ближайшего шага
+## его назовёт — в хронометраже видно, откуда лишний удар в начале забега (#1481).
+func blame(kind: String) -> void:
+	cause = "о дно" if kind == "scrape" else (kind if kind != "" else "?")
 
 
 ## Шаг забега: on — какие события идут сейчас (имя → bool), корпус в %, глубина в м.
@@ -59,14 +74,51 @@ func watch(t: float, on: Dictionary, hull_now: float, depth: float) -> void:
 			spans.append([name, at, -1.0])
 			_add(at, name + " — началось")
 		elif not going and _on.has(name):
-			var s: Array = spans[_on[name]]
-			s[2] = at
+			var i: int = _on[name]
+			var s: Array = spans[i]
 			_on.erase(name)
+			if at - s[1] < BLINK:
+				_drop(i)
+				continue
+			s[2] = at
 			_add(at, "%s — кончилось (%s)" % [name, clock(at - s[1])])
 	if hull - hull_now >= HIT_MIN:
-		_add(at, "удар: корпус %d%%" % roundi(hull_now))
+		_add(at, "удар: корпус %d%%" % roundi(hull_now) + (" · " + cause if cause != "" else ""))
+		cause = ""
 	hull = hull_now
 	deepest = maxf(deepest, depth)
+
+
+## Корабль в (x, z) (шаг забега): пришёл к другому месту слоя — участок от прошлого места (кампания #824: хронометраж
+## по участкам слоя, а не только по забегу). Вышел из круга и вернулся к тому же месту — участка нет.
+func place(t: float, x: float, z: float) -> void:
+	if not running:
+		return
+	var id := place_at(x, z)
+	if id.is_empty() or id == _place:
+		return
+	var at := t - t0
+	if not _place.is_empty():
+		legs.append([_place, id, at - _place_at])
+	_place = id
+	_place_at = at
+
+
+## id `LayerMap` места, в круге которого точка (x, z) (радиусы `Run.PLACES`), или "".
+static func place_at(x: float, z: float) -> String:
+	for k: String in Run.PLACES:
+		if Vector2(x, z).distance_to(Run.place_xz(k)) < float(Run.PLACES[k][2]):
+			return LayerMap.id_of(k)
+	return ""
+
+
+## Корпус задан не ударом (сценарий тестера ставит износ) — строка «корпус задан», в «удары» не идёт (#692).
+func set_hull(t: float, pct: float) -> void:
+	if not running:
+		return
+	if absf(pct - hull) >= HIT_MIN:
+		_add(t - t0, "корпус задан: %d%%" % roundi(pct))
+	hull = pct
 
 
 ## Разовое событие забега (сообщение на приборах, «разряд»).
@@ -102,8 +154,8 @@ func save(stamp := "") -> void:
 	if running and t_last - t0 >= SHORT:
 		var keep := spans.duplicate(true)
 		_close(t_last - t0)
-		var lines := text_lines("идёт", stamp)
-		lines[0] = "Забег %d, не закончен · %s" % [_n + 1, lines[0]]
+		var lines := text_lines(UNFINISHED, stamp)
+		lines[0] = "Забег %d · %s" % [_n + 1, lines[0]]   # шапка как у законченных (#692)
 		blocks.push_front("\n".join(lines))
 		spans = keep
 	var f := FileAccess.open(path, FileAccess.WRITE)
@@ -151,6 +203,11 @@ func summary(dur: float) -> PackedStringArray:
 			hits += 1
 	parts.append("ударов %d" % hits)
 	out.append("События: %s · глубже всего %d м · корпус %d%%" % [", ".join(parts), roundi(deepest), roundi(hull)])
+	if not legs.is_empty():
+		var ls := PackedStringArray()
+		for l: Array in legs:
+			ls.append("%s–%s %s" % [l[0], l[1], clock(l[2])])
+		out.append("Участки: " + " · ".join(ls))
 	return out
 
 
@@ -177,6 +234,19 @@ static func clock(s: float) -> String:
 
 func _add(at: float, text: String) -> void:
 	events.append([at, text])
+
+
+## Убрать мигнувшее событие: его отрезок и строку «началось».
+func _drop(i: int) -> void:
+	var s: Array = spans[i]
+	spans.remove_at(i)
+	for k: String in _on:
+		if _on[k] > i:
+			_on[k] -= 1
+	for j in range(events.size() - 1, -1, -1):
+		if events[j][0] == s[1] and events[j][1] == s[0] + " — началось":
+			events.remove_at(j)
+			break
 
 
 func _close(at: float) -> void:
@@ -220,5 +290,5 @@ func _load() -> void:
 	for b in text.split("\n\n", false):
 		if b.begins_with("Забег "):   # и «не закончен» — игру закрыли посреди забега
 			_old.append(b)
-			_n = maxi(_n, b.substr(6).get_slice(" ", 0).get_slice(",", 0).to_int())
+			_n = maxi(_n, b.substr(6).get_slice(" ", 0).get_slice(",", 0).to_int())   # «, не закончен» — старый файл
 	_old.resize(mini(_old.size(), KEEP))

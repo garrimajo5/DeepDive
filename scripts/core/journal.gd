@@ -3,7 +3,7 @@ extends RefCounted
 ## Экран «Журнал экспедиции» ART-047 (`docs/concept-art/zhurnal-ekspedicii.md`) из главного меню: карта отмели с
 ## отметками мест, сводка, строки под картой, «Назад». Данные — `Expedition` (история в сохранении), изученные виды и
 ## груз. Здесь — состояние, раскладка и строки без узлов; рисует `scripts/game/journal_panel.gd` (`main.journal_panel`),
-## шаг — `Main._journal_step`. Сетка видов 3×2 по каталогу (`Species.ids`): изученный — имя и «новое», пока карточка
+## шаг — `MenuFlow.journal_step`. Сетка видов 3×2 по каталогу (`Species.ids`): изученный — имя и «новое», пока карточка
 ## не открыта (`Expedition.mark_read`); неизученный — «?» без имени, касание — «Изучите вид сканером». Карточка вида —
 ## текст `Lab.card_lines`, «Закрыть»; системная «Назад» сначала закрывает её.
 ## Раскладка — макет высотой 1080 (масштаб H/1080, кегли и кнопки не сжимаются), контент 1680 по центру:
@@ -20,10 +20,20 @@ const MAP_NAME := "Подлёдный сад"
 const MAP_NAME_TOP := 215.0
 const NORTH := "север вверх"
 const LABEL_PX := 34.0
-const PLACE_BUTTON := 112.0                ## кнопка места на карте
-const PLACE_ICON := 80.0
-const PX_PER_M := 1.25                     ## 1 px макета = 0,8 м
-const MAP_CENTER := Vector2(365, 560)      ## от (L, 0): точка (0, 0) отмели
+## Карта — все 11 мест слоя 1 (#829, `LayerMap`, вместе с террасой врат и спуском к лесу у 10): масштаб мельче макета
+## (0,95 px/м), кнопки 96 px; близкие (старт 00 и заводь 09) раздвинуты `place_spot` — точки не налезают.
+## Склон за восточным краем (место 10, #822) — полоса справа от отмели в сжатом масштабе `EAST_PX`, как на голостоле
+## (`Briefing.EAST_X0`): x мира 350…700 м — в 88 px (`east_rect`), отмель сдвинута влево, подпись `SLOPE`.
+const PLACE_BUTTON := 96.0                 ## кнопка места на карте (не меньше 96 px — палец)
+const PLACE_ICON := 70.0
+const PLACE_GAP := 6.0                     ## между кнопками мест, px
+const PX_PER_M := 0.95                     ## 1 px макета ≈ 1,05 м (отмель)
+const MAP_CENTER := Vector2(290, 555)      ## от (L, 0): точка (0, 0) отмели
+const EAST_X0 := Briefing.EAST_X0          ## восточный край отмели, м мира
+const EAST_PX := 0.25                      ## склон: px макета на м мира (вчетверо мельче отмели)
+const EAST_END := 700.0                    ## дальний край склона, м мира
+const SLOPE := "склон"
+const SLOPE_PX := 24.0
 const SUMMARY_AT := Vector2(64, 219)       ## от (R, 0): верх глифов первой строки
 const SUMMARY_STEP := 67.0
 const SUMMARY_PX := 36.0
@@ -36,9 +46,7 @@ const BROKEN_LINE := "Сохранение было повреждено — ж�
 const NO_HISTORY := "История посещений ещё не записана"
 const ROUTE_HINT := "Маршрут выбирайте у голостола"
 const NO_VALUE := "—"
-## Сетка видов (от R): заголовок «Виды · 1–6 из N», ячейки 280×160 шагом 300×180, «Ранее» / «Далее», номер страницы.
-const GRID_TITLE_TOP := 505.0
-const GRID_TITLE_PX := 30.0
+## Сетка видов (от R): вкладка «Виды · 1–6 из N» (`TAB`), ячейки 280×160 шагом 300×180, «Ранее» / «Далее», номер страницы.
 const GRID_AT := Vector2(0, 550)
 const CELL := Vector2(280, 160)
 const CELL_STEP := Vector2(300, 180)
@@ -53,6 +61,33 @@ const NEW_TEXT := "новое"
 const PREV := Rect2(0, 922, 240, 112)      ## от R
 const NEXT := Rect2(660, 922, 240, 112)
 const PAGE_CENTER := Vector2(450, 978)     ## от R: номер страницы «1 / 5»
+## Вкладки над сеткой (#825 ч. 2, UX #1335 п. 8): «Виды · 1–6 из N» и «Узнано · n / 8» — на месте заголовка сетки, от R.
+## «Узнано» — факты `LayerLore` без служебных (`LORE_LINES`), по 3 строки на страницу, новое сверху: значок места и
+## строка ≤ 36 знаков; неузнанное — только счётом во вкладке. Касание строки — её место на карте (`picked`).
+const TABS := ["species", "lore"]
+const TAB := [Rect2(0, 458, 440, 84), Rect2(460, 458, 440, 84)]   ## от R
+const TAB_PX := 30.0
+const LORE_PER_PAGE := 3
+const LORE_AT := Vector2(0, 550)           ## от R: первая строка «Узнано»
+const LORE_ROW := Vector2(900, 104)
+const LORE_STEP := 120.0
+const LORE_ICON := 70.0
+const LORE_PX := 32.0
+const LORE_EMPTY := "Пока ничего не узнано"
+const LORE_MAX := 36                       ## знаков в строке
+## Факт → [место (ключ `Run.PLACES` или "" — на борту), строка]. Порядок — как в `LayerLore.KEYS`; служебные отметки
+## (`INTRO`, `BRIEF`, `DOWN`, `BACK`) — не знания. Диагностика 07 — по TXT-001 §2, К-2 — по §3.
+const LORE_LINES := {
+	LayerLore.D07_RETURN: ["gate", "Обратный ход врат неисправен"],
+	LayerLore.D07_RELAY: ["gate", "Ретранслятор врат без питания"],
+	LayerLore.D07_AUTH: ["gate", "Настройки врат — по авторизации"],
+	LayerLore.K2: ["", "К-2: заряд потрачен, нужно питание"],
+	LayerLore.SHELL03: ["shell", "Раковина — часть чужого комплекса"],
+	LayerLore.FIELD08: ["field", "Граница поля зависит от размера"],
+	LayerLore.AUTH07: ["gate", "Терминал врат авторизован"],
+	LayerLore.PETAL07: ["gate", "Купольник открыл створку гнезда"],
+}
+
 ## Карточка вида 1320×715 по центру экрана: картинка слева, текст `Lab.card_lines` справа, «Закрыть».
 const CARD := Vector2(1320, 715)
 const CARD_PIC := Rect2(48, 190, 500, 230)       ## от угла карточки
@@ -76,6 +111,8 @@ var page := 0           ## страница сетки видов, с 0
 var card := ""          ## открытая карточка вида ("" — нет)
 var asked := ""         ## неизученный вид, которого коснулись: в ячейке «Изучите вид сканером»
 var blank := false      ## журнал пуст (`empty`): карты и сетки на экране нет — касания мимо них
+var tab := "species"    ## вкладка над сеткой: "species" | "lore"
+var lore: LayerLore     ## знания слоя для «Узнано» (ставит `MenuFlow.journal_show`); null — ничего не узнано
 
 
 ## Масштаб макета на экран size (по высоте).
@@ -103,11 +140,86 @@ static func map_rect(size: Vector2) -> Rect2:
 	return to_screen(MAP, size)
 
 
-## Центр места key на экране: u = L + 365 + 1,25·x, v = 560 + 1,25·z (север −Z вверх).
+## Центр места key на экране: точка макета `place_spot` от (L, 0) (север −Z вверх).
 static func place_center(key: String, size: Vector2) -> Vector2:
-	var p := Run.place_xz(key)
-	var at := MAP_CENTER + p * PX_PER_M
-	return (at + Vector2(left(size), 0.0)) * scale(size)
+	return (place_spot(key) + Vector2(left(size), 0.0)) * scale(size)
+
+
+static var _spots := {}
+
+
+## Точка мира (x, z) → точка карты, px макета от (L, 0): отмель — PX_PER_M, восточнее EAST_X0 — сжатый склон.
+static func map_point(xz: Vector2) -> Vector2:
+	var p := MAP_CENTER + xz * PX_PER_M
+	if xz.x > EAST_X0:
+		p.x = MAP_CENTER.x + EAST_X0 * PX_PER_M + (xz.x - EAST_X0) * EAST_PX
+	return p
+
+
+## Полоса склона на экране: от восточного края отмели до EAST_END по x, во всю высоту карты.
+static func east_rect(size: Vector2) -> Rect2:
+	var x0 := MAP_CENTER.x + EAST_X0 * PX_PER_M
+	var x1 := MAP_CENTER.x + EAST_X0 * PX_PER_M + (EAST_END - EAST_X0) * EAST_PX
+	return to_screen(Rect2(x0, MAP.position.y, x1 - x0, MAP.size.y), size)
+
+
+## Центр кнопки места key на карте, px макета от (L, 0): `map_point` (u = 290 + 0,95·x, v = 555 + 0,95·z), затем кнопки, что
+## налезают, раздвинуты по оси меньшего перекрытия (поровну) и оставлены внутри карты. Детерминированно, один раз.
+static func place_spot(key: String) -> Vector2:
+	if _spots.is_empty():
+		_spots = _layout()
+	return _spots[key]
+
+
+static func _layout() -> Dictionary:
+	var keys: Array = Run.PLACES.keys()
+	var at: Array[Vector2] = []
+	for k: String in keys:
+		at.append(map_point(Run.place_xz(k)))
+	var need := PLACE_BUTTON + PLACE_GAP
+	var half := PLACE_BUTTON * 0.5 + PLACE_GAP
+	for _pass in 40:
+		var moved := false
+		for i in at.size():
+			for j in range(i + 1, at.size()):
+				var d := at[j] - at[i]
+				var ox := need - absf(d.x)
+				var oy := need - absf(d.y)
+				if ox <= 0.0 or oy <= 0.0:
+					continue
+				moved = true
+				var push := Vector2(signf(d.x) if d.x != 0.0 else 1.0, 0.0) * ox if ox < oy \
+					else Vector2(0.0, signf(d.y) if d.y != 0.0 else 1.0) * oy
+				at[i] -= push * 0.5
+				at[j] += push * 0.5
+		for i in at.size():
+			at[i] = at[i].clamp(MAP.position + Vector2(half, half), MAP.end - Vector2(half, half))
+		if not moved:
+			break
+	var out := {}
+	for i in keys.size():
+		out[keys[i]] = at[i]
+	return out
+
+
+## Подпись «граница» у площадки 08 (#829): тонкая строка под её кнопкой, только когда поле замечено
+## (`LayerLore.FIELD08`) — пояс поля на карте не рисуется стеной.
+const BORDER := "граница"
+const BORDER_PX := 24.0
+const BORDER_H := 30.0
+const BORDER_W := 140.0
+
+
+static func border_shown(lore: LayerLore) -> bool:
+	return lore != null and lore.knows(LayerLore.FIELD08)
+
+
+static func border_rect(size: Vector2) -> Rect2:
+	var b := place_rect(LayerMap.POINTS["08"]["key"], size)
+	var s := scale(size)
+	var map := map_rect(size)   # 08 у западного края карты — подпись не вылезает за карту
+	var x := clampf(b.get_center().x - BORDER_W * 0.5 * s, map.position.x, map.end.x - BORDER_W * s)
+	return Rect2(Vector2(x, b.end.y + 2.0 * s), Vector2(BORDER_W, BORDER_H) * s)
 
 
 static func place_rect(key: String, size: Vector2) -> Rect2:
@@ -147,6 +259,44 @@ static func next_rect(size: Vector2) -> Rect2:
 
 static func page_center(size: Vector2) -> Vector2:
 	return to_screen(Rect2(PAGE_CENTER, Vector2.ZERO), size, true).position
+
+
+static func tab_rect(i: int, size: Vector2) -> Rect2:
+	return to_screen(TAB[i], size, true)
+
+
+## Узнанное в порядке «новое сверху»: ключи `LORE_LINES`.
+static func lore_facts(known: LayerLore) -> Array[String]:
+	var out: Array[String] = []
+	if known == null:
+		return out
+	for k in known.facts:
+		if LORE_LINES.has(k):
+			out.push_front(k)
+	return out
+
+
+## Подпись вкладки «Узнано · n / 8».
+static func lore_title(known: LayerLore) -> String:
+	return "Узнано · %d / %d" % [lore_facts(known).size(), LORE_LINES.size()]
+
+
+static func lore_pages(known: LayerLore) -> int:
+	return maxi(1, ceili(lore_facts(known).size() / float(LORE_PER_PAGE)))
+
+
+## Факты на странице n «Узнано».
+static func lore_page(known: LayerLore, n: int) -> Array[String]:
+	return lore_facts(known).slice(n * LORE_PER_PAGE, (n + 1) * LORE_PER_PAGE)
+
+
+static func lore_rect(i: int, size: Vector2) -> Rect2:
+	return to_screen(Rect2(LORE_AT + Vector2(0.0, LORE_STEP * i), LORE_ROW), size, true)
+
+
+## Страниц у открытой вкладки.
+func tab_pages() -> int:
+	return lore_pages(lore) if tab == "lore" else pages()
 
 
 ## Карточка по центру экрана.
@@ -223,9 +373,11 @@ func show() -> void:
 	page = 0
 	card = ""
 	asked = ""
+	tab = "species"
 
 
-## Что под касанием: "back", "place:<ключ>", "species:<вид>", "prev", "next", "close" или "". Открыта карточка —
+## Что под касанием: "back", "place:<ключ>", "species:<вид>", "tab:<вкладка>", "lore:<факт>", "prev", "next",
+## "close" или "". Открыта карточка —
 ## ловит только «Закрыть»; пустой журнал — только «Назад».
 func hit(p: Vector2, size: Vector2) -> String:
 	if not open:
@@ -236,13 +388,22 @@ func hit(p: Vector2, size: Vector2) -> String:
 		return "back"
 	if blank:
 		return ""
-	for k: String in Run.PLACES:
-		if place_rect(k, size).has_point(p):
-			return "place:" + k
-	var ids := page_ids(page)
-	for i in ids.size():
-		if cell_rect(i, size).has_point(p):
-			return "species:" + ids[i]
+	var k := Splash.hit_ids(p, size, Run.PLACES.keys(), place_rect)
+	if k != "":
+		return "place:" + k
+	for i in TABS.size():
+		if tab_rect(i, size).has_point(p):
+			return "tab:" + TABS[i]
+	if tab == "lore":
+		var facts := lore_page(lore, page)
+		for i in facts.size():
+			if lore_rect(i, size).has_point(p):
+				return "lore:" + facts[i]
+	else:
+		var ids := page_ids(page)
+		for i in ids.size():
+			if cell_rect(i, size).has_point(p):
+				return "species:" + ids[i]
 	if prev_rect(size).has_point(p):
 		return "prev"
 	if next_rect(size).has_point(p):
@@ -264,6 +425,20 @@ func press(id: String, scanned: Dictionary = {}, e: Expedition = null) -> String
 	if id.begins_with("place:"):
 		picked = id.substr(6)
 		return "place"
+	if id.begins_with("tab:"):
+		var t := id.substr(4)
+		if t == tab or not TABS.has(t):
+			return ""
+		tab = t
+		page = 0
+		asked = ""
+		return "tab"
+	if id.begins_with("lore:"):   # строка «Узнано» — её место на карте; узнанное на борту (К-2) — без места
+		var line: Array = LORE_LINES.get(id.substr(5), ["", ""])
+		if line[0] == "":
+			return ""
+		picked = line[0]
+		return "place"
 	if id.begins_with("species:"):
 		var k := id.substr(8)
 		if scanned.has(k):
@@ -278,7 +453,7 @@ func press(id: String, scanned: Dictionary = {}, e: Expedition = null) -> String
 		page -= 1
 		asked = ""
 		return "page"
-	if id == "next" and page < pages() - 1:
+	if id == "next" and page < tab_pages() - 1:
 		page += 1
 		asked = ""
 		return "page"
@@ -294,4 +469,5 @@ func back() -> String:
 	card = ""
 	asked = ""
 	picked = ""
+	tab = "species"
 	return "back"

@@ -10,7 +10,7 @@ func test_views_cover_circle() -> void:
 			yaws[int(v[0]) % 360] = true
 	for y in range(0, 360, 60):
 		ok(yaws.has(y), "взгляд на курс %d°" % y)
-	ok(Warmup.frames() <= 16, "кадров прогрева немного: %d (issue #159; +1 — вид при всплытии, #519)" % Warmup.frames())
+	ok(Warmup.frames() <= 19, "кадров прогрева немного: %d (issue #159; +1 — вид при всплытии, #519; +3 — первый взгляд по слоям, #424)" % Warmup.frames())
 	ok(Deck.FOV > 60.0, "шаг 60° не оставляет щелей при поле зрения %.0f°" % Deck.FOV)
 	near(Warmup.zap_radius(), 80.0, 1e-6, "разряд на пределе доли: 60 / 15 × 20 м")
 
@@ -38,7 +38,7 @@ func test_post_views() -> void:
 	while w.outside() < 0 and w.active():
 		eyes.append(w.eye())
 		w.advance()
-	eq(eyes.size(), Warmup.VIEWS.size() + Warmup.POSTS.size(), "взгляды с мостика: из центра и у постов")
+	eq(eyes.size(), Warmup.STAGES + Warmup.VIEWS.size() + Warmup.POSTS.size(), "взгляды с мостика: по слоям, из центра и у постов")
 	eq(eyes[0], Warmup.EYE, "сначала из центра")
 	eq(eyes[-1], Vector3(Warmup.POSTS[-1][0], Warmup.POSTS[-1][1], Warmup.POSTS[-1][2]), "потом у постов")
 
@@ -110,6 +110,47 @@ func test_outside_surface() -> void:
 	ok((-start.basis.z).dot((Flyby.LOOK_AT - start.origin).normalized()) > 0.9999, "смотрит на корпус")
 
 
+## Каждая панель `scripts/game/*_panel.gd` с `draw_string` прогревает свои кегли: есть `warm`/`warm_sizes`, и
+## WarmRunner вызывает её `warm` (#1350, #519: «узлы» первого показа). Исключения — с причиной.
+const WARM_EXEMPT := {
+	"lobby_panel.gd": "экран сбора — меню до забега, узел строится по требованию",
+	"address_panel.gd": "экран адреса — меню до забега, узел строится по требованию",
+}
+
+
+func test_panels_warm_glyphs() -> void:
+	var runner := FileAccess.get_file_as_string("res://scripts/game/warm_runner.gd")
+	var main_src := FileAccess.get_file_as_string("res://scripts/game/main.gd")
+	var dir := "res://scripts/game/"
+	var seen := 0
+	for f in DirAccess.get_files_at(dir):
+		if not f.ends_with("_panel.gd"):
+			continue
+		var src := FileAccess.get_file_as_string(dir + f)
+		if not "draw_string" in src or WARM_EXEMPT.has(f):
+			continue
+		seen += 1
+		ok("func warm(" in src and "func warm_sizes(" in src, "%s: рисует строки — нужны warm и warm_sizes" % f)
+		var cls := RegEx.create_from_string("class_name (\\w+)").search(src)
+		ok(cls != null, "%s: class_name" % f)
+		if cls == null:
+			continue
+		var field := RegEx.create_from_string("(\\w+) = %s\\.new\\(\\)" % cls.get_string(1)).search(main_src)
+		ok(field != null, "%s: поле в main.gd" % f)
+		if field == null:
+			continue
+		var at := "main.%s" % field.get_string(1)
+		ok(("%s," % at) in runner or ("%s]" % at) in runner or ("%s.warm(true)" % at) in runner,
+				"%s: WarmRunner прогревает %s (panels() или своя строка в begin)" % [f, at])
+	ok(seen >= 8, "панелей со строками найдено: %d" % seen)
+
+
+func test_warm_px() -> void:
+	eq(UiStyle.warm_px([40.0, 28.0], 0.5), [14, 20] as Array[int], "кегли × множитель, по возрастанию")
+	eq(UiStyle.warm_px([27.0], 0.65), [17, 18] as Array[int], "и вниз, и до ближайшего: 17,55 → 17 и 18")
+	eq(UiStyle.warm_px([10.0, 4.0], 0.5), [8] as Array[int], "не мельче 8, без повторов")
+
+
 func test_scene_warmup() -> void:
 	Warmup.enabled = true
 	var main: Main = load("res://scenes/main.tscn").instantiate()
@@ -117,7 +158,7 @@ func test_scene_warmup() -> void:
 	Warmup.enabled = false
 	ok(main.warming(), "при старте идёт прогрев")
 	ok(main.curtain != null and main.curtain.visible, "экран под шторкой")
-	eq(main.crew.size(), 1 + 2 * CrewRig.MODELS.size(), "каждая внешность экипажа в кадре — и материалом своего игрока")
+	eq(main.crew.size(), 1 + Warmup.mate_count() + CrewRig.MODELS.size(), "каждая роль и внешность экипажа в кадре — и материалом своего игрока")
 	var qa := main.start_qa('[{"do": "wait", "s": 1}, {"do": "log", "note": "прогрев"}]')
 	var torch: Node3D = main.crew_view.torches[0]
 	var yaws := {}
@@ -134,7 +175,24 @@ func test_scene_warmup() -> void:
 		ok(main.curtain.progress > prev, "полоса заставки растёт по кадрам прогрева (ART-034)")
 		prev = main.curtain.progress
 		ok(main.vote_panel.visible, "панель решения экипажа под шторкой")
+		ok(main.vote_panel.warming, "панель решения рисует все свои кегли под шторкой (#519, 09d-vote, 21a-vent)")
+		var vv := main.sonar_view.vote
+		ok((vv.board_rows[0][0] as Label3D).text == UiStyle.GLYPHS and (vv.board_rows[0][1] as Label3D).text == UiStyle.GLYPHS,
+				"строки итога на голограмме растрируют свои кегли под шторкой (#519, 21a-vent)")
+		ok(main.trip_view.shown() and main.trip_view.title.text == DescentTrip.TITLE,
+				"шторка «Кристальный лес» рисуется под заставкой — кегли в кэше шрифта (#1095)")
 		ok(main.power_panel.visible and main.power_panel.reactor != null, "пульт энергии рисуется под шторкой (#217)")
+		for pn: Control in main.warm_run.panels():
+			ok(pn.visible and pn.warming, "%s рисует свои кегли под шторкой (#1350)" % pn.name)
+		ok(main.route_card.visible and main.route_card.lines == Briefing.goal_lines() and not main.route_card.code.is_empty(),
+				"карточка у стола рисует цели слоя и «Связь» под шторкой — кегли в кэше шрифта (09c0-route-celi)")
+		var sm := main.ship_map_panel
+		ok(sm != null and sm.visible and sm.map != null and sm.alarm != null and false in sm.doors
+				and sm.marks.size() == Crew.Role.size(),
+				"схема корабля рисуется под шторкой с тревогой, закрытым люком и всеми ролями (29-shema)")
+		var sp := main.settings_panel
+		ok(sp != null and sp.visible and sp.warming and sp.settings == main.settings,
+				"настройки рисуют все страницы под шторкой — кегли в кэше шрифта (#1637, 29-nastrojki)")
 		if main.warm.outside() >= 0:
 			outside += 1
 			ok(main.flyby_cam.current, "кадр снаружи — камера с борта")
@@ -159,7 +217,21 @@ func test_scene_warmup() -> void:
 	eq(main.breach_view.parts.count(), 0, "частиц пробоины прогрев не родил")
 	eq(main.valve_steam.puffs.size(), 0, "клубов пара прогрев не родил")
 	ok(not main.vote_panel.visible, "панель решения снова скрыта")
+	ok(not main.trip_view.shown() and not main.trip.active, "шторка «Кристальный лес» снова скрыта, ухода нет")
 	ok(not main.power_panel.visible, "пульт энергии снова скрыт")
+	for pn: Control in main.warm_run.panels():
+		ok(not pn.warming, "%s снова рисует себя (#1350)" % pn.name)
+	ok(main.route_card.lines.is_empty() and main.route_card.code.is_empty() and not main.route_card.visible,
+			"карточка у стола снова пуста и скрыта")
+	ok(main.ship_map_panel != null and not main.ship_map_panel.visible and main.ship_map_panel.map == null,
+			"схема снова скрыта и пуста, узел остался — первое открытие его не строит")
+	ok(main.settings_panel != null and not main.settings_panel.visible and not main.settings_panel.warming,
+			"настройки снова скрыты, узел остался — первое открытие его не строит (#1637)")
+	ok(not main.vote_panel.visible and not main.vote_panel.warming, "панель решения снова скрыта (#519)")
+	var board: Array = main.sonar_view.vote.board_rows
+	ok((board[0][0] as Label3D).text == "" and (board[3][1] as Label3D).text == "", "строки итога снова пусты (#519)")
+	eq((main.sonar_view.vote.fields["up"]["count"] as Label3D).text, "0", "счёт поля снова «0»")
+	ok(not main.ship_map.open, "настоящая схема не открыта")
 	ok(main.camera.current, "глаза на мостике")
 	ok(yaws.size() >= 6, "камера обошла круг: %s" % str(yaws.keys()))
 	ok(main.curtain == null, "шторка снята")
@@ -218,7 +290,9 @@ func test_scene_warmup_draws_every_mesh() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	Warmup.enabled = false
-	ok(main.warming(), "идёт прогрев")
+	for i in Warmup.STAGES:   # первый взгляд по слоям (#424) — до кадра, где виден весь мир
+		main.step(1.0 / 60.0)
+	ok(main.warming() and main.warm.stage() == -1, "идёт прогрев, первый взгляд целиком")
 	for root: Node in [main.ship, main.ocean, main.silt_view, main.samples_view]:
 		for n in root.find_children("*", "GeometryInstance3D", true, false):
 			var g := n as GeometryInstance3D
@@ -228,6 +302,80 @@ func test_scene_warmup_draws_every_mesh() -> void:
 			elif g is MultiMeshInstance3D:
 				var mm := (g as MultiMeshInstance3D).multimesh
 				ok(mm != null and mm.mesh != null and mm.instance_count > 0, "есть что рисовать у %s" % g.name)
+	main.queue_free()
+	await frames(1)
+
+
+## Issue #424: на холодном кэше кадр 1 прогрева собирал почти все шейдеры (8,3 с из 10,9 на эмуляторе), полоса заставки
+## стояла. Первые Warmup.STAGES кадров — тот же первый взгляд, мир показывается слоями Main.warm_layers(): на кадре s
+## видны слои 0…s, остальное скрыто только на этот кадр; дальше всё видно, как раньше.
+func test_stage_order() -> void:
+	Warmup.enabled = true
+	var w := Warmup.new()
+	Warmup.enabled = false
+	for s in Warmup.STAGES:
+		eq(w.stage(), s, "кадр %d — слой %d" % [s, s])
+		eq(w.eye(), Warmup.EYE, "слой %d — из центра мостика" % s)
+		near(w.yaw(), deg_to_rad(Warmup.VIEWS[0][0]), 1e-9, "слой %d — первым взглядом" % s)
+		near(w.pitch(), deg_to_rad(Warmup.VIEWS[0][1]), 1e-9, "наклон первого взгляда")
+		w.advance()
+	eq(w.stage(), -1, "после слоёв — обычные кадры")
+	near(w.pitch(), deg_to_rad(Warmup.VIEWS[0][1]), 1e-9, "первый взгляд целиком")
+	w.advance()
+	near(w.yaw(), deg_to_rad(Warmup.VIEWS[1][0]), 1e-9, "дальше — круг взглядов")
+
+
+func test_scene_warm_layers() -> void:
+	Warmup.enabled = true
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	Warmup.enabled = false
+	var layers := main.warm_layers()
+	eq(layers.size(), Warmup.STAGES + 1, "слоёв на один больше кадров по слоям: последний виден с первого полного кадра")
+	eq(layers[0], [], "слой 0 — интерьер и всё, чего нет в других слоях")
+	var seen := {}
+	for s in Warmup.STAGES:
+		eq(main.warm.stage(), s, "кадр по слоям %d" % s)
+		for k in layers.size():
+			for n: Node3D in layers[k]:
+				if k > s:
+					ok(not n.visible, "%s на кадре слоя %d скрыт" % [n.name, s])
+				elif n.visible:
+					seen[n] = true
+		ok(main.bridge.visible and main.rooms.visible, "интерьер виден на каждом кадре")
+		ok(main.camera.current, "камера мостика")
+		main.step(1.0 / 60.0)
+	eq(main.warm.stage(), -1, "слои кончились")
+	for k in layers.size():
+		for n: Node3D in layers[k]:   # ил (SiltView) скрыт до события — его слои не трогают
+			ok(n.visible or not seen.has(n), "%s снова виден" % n.name)
+	for n in [main.crew_view, main.hull, main.ocean]:   # живой мир — с первого полного кадра
+		ok(seen.has(n), "%s показан на своём кадре" % n.name)
+	ok(main.eco in layers[-1] and main.ocean in layers[-2], "вода и живой мир — последними (самые тяжёлые)")
+	while main.warming():
+		main.step(1.0 / 60.0)
+	ok(main.ocean.visible and main.eco.visible and main.hull.visible and main.crew_view.visible, "после прогрева мир виден")
+	main.queue_free()
+	await frames(1)
+
+
+## #752: прогрев на сцене вынесен из Main в WarmRunner (`main.warm_run`): состояние — у него, после прогрева пусто.
+func test_scene_warm_runner() -> void:
+	Warmup.enabled = true
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	Warmup.enabled = false
+	ok(main.warm_run is WarmRunner and main.warm_run.main == main, "прогрев сцены — поле main.warm_run")
+	ok(not ("_warm_shown" in main) and not ("_warm_mates" in main), "состояние прогрева больше не в Main")
+	ok(main.warm_run._mates.size() == Warmup.mate_count() + CrewRig.MODELS.size(), "члены экипажа каждой внешности — у WarmRunner")
+	ok(main.warm_run._shown.size() > 0, "скрытое показано на кадр")
+	eq(main.warm_layers(), main.warm_run.layers(), "Main.warm_layers — пересылка")
+	while main.warming():
+		main.step(1.0 / 60.0)
+	main.step(1.0 / 60.0)
+	ok(main.warm_run._mates.is_empty() and main.warm_run._shown.is_empty() and main.warm_run._hidden.is_empty()
+		and main.warm_run._emit.is_empty(), "после прогрева у WarmRunner пусто")
+	eq(main.crew, [main.me], "временные члены экипажа ушли")
 	main.queue_free()
 	await frames(1)
 
@@ -248,5 +396,32 @@ func test_scene_flyby_waits() -> void:
 	main.step(0.5)
 	ok(not main.warming() and main.flyby.active(), "прогрев кончился — облёт")
 	ok(main.flyby_cam.current, "камера с борта")
+	main.queue_free()
+	await frames(1)
+
+
+## #883: товарищи прогрева — каждой роли, поэтому всё снаряжение MOD-016 (фартук, щиток, туника, пробы, планшет)
+## нарисовано непрозрачным под шторкой, а не при первом появлении инженера (провал на `06c-crew-model`).
+func test_scene_warmup_all_gear() -> void:
+	Warmup.enabled = true
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	Warmup.enabled = false
+	ok(Warmup.MATE_AT.size() >= Warmup.mate_count(), "у каждого товарища прогрева своё место")
+	main.step(1.0 / 60.0)
+	var cv := main.crew_view
+	var worn := {}
+	var looks := {}
+	for i in cv.members.size():
+		if cv.members[i] in main.warm_run._mates and not (cv.members[i] in cv.as_own):
+			looks[cv.looks[i]] = true
+			for g in cv.gear[i]:
+				if (cv.gear[i][g] as Node3D).is_visible_in_tree():
+					worn[g] = true
+	for g in CrewRig.GEAR:
+		ok(worn.has(g), "%s на товарище прогрева" % g)
+	eq(looks.size(), CrewRig.MODELS.size(), "каждая внешность")
+	while main.warming():
+		main.step(1.0 / 60.0)
 	main.queue_free()
 	await frames(1)

@@ -90,8 +90,8 @@ func test_scene_bridge_glints() -> void:
 		ok(m.get_shader_parameter("glint_mask") != null, "маска в материале")
 		near(m.get_shader_parameter("glint_k"), WaterGlints.strength(12.0), 1e-5, "12 м — сила по глубине")
 		near(m.get_shader_parameter("glint_time"), main.time, 1e-5, "часы течения — время игры")
-	for i in main.rooms.mesh_instance.mesh.get_surface_count():
-		var rm := main.rooms.mesh_instance.mesh.surface_get_material(i) as ShaderMaterial
+	for i in main.rooms.mesh.get_surface_count():
+		var rm := main.rooms.mesh.surface_get_material(i) as ShaderMaterial
 		if rm:
 			eq(rm.get_shader_parameter("glint_k"), null, "отсеки бликов не получают")
 	main.glints.lite = true

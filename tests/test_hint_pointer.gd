@@ -97,6 +97,7 @@ func test_scene_world_and_edge() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
+	main.arrival.on = false   # брифинг прибытия до подсказок — test_arrival_brief
 	var spr := main.hint_pointer.sprite
 	main.walker.x = 0.0
 	main.walker.z = 1.0
@@ -139,3 +140,35 @@ func test_scene_world_and_edge() -> void:
 	_tick(10)
 	ok(not main.tutorial_panel.visible, "тревога — плашка и стрелка скрыты")
 	ok(not spr.visible, "мировой скрыт под тревогой")
+
+
+## Порог острия подсказок (#1367): низ плашки + 16 px + PX_MAX при H = 1080; без плашки — запасной.
+func test_top_under() -> void:
+	var size := Vector2(1600, 720)
+	var s := size.y / HintPointer.REF_H
+	var b := Rect2(346, 200, 908, 116)
+	near(HintPointer.top_under(b, size, 99.0), 316.0 / s + 16.0 + HintPointer.PX_MAX, 0.01, "под плашкой")
+	eq(HintPointer.top_under(Rect2(), size, 99.0), 99.0, "плашки нет — порог тревоги")
+
+
+## Штурвал над головой у кресла (#1367): кольцо с точкой опускается под плашку подсказки — не за ней и не пропадает.
+func test_scene_lowered_under_box() -> void:
+	Main.hints = true
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.arrival.on = false
+	var spr := main.hint_pointer.sprite
+	main.walker.x = 0.0
+	main.walker.yaw = 0.0
+	main.walker.pitch = 0.0
+	for z: float in [-3.9, -4.3]:
+		main.walker.z = z
+		_tick(10)
+		ok(spr.visible, "z %.1f: указатель над постом виден" % z)
+		eq(main.tutorial_panel.arrow, [], "z %.1f: стрелки вбок нет" % z)
+		eq(spr.region_rect, HintPointer.NEAR, "z %.1f: в радиусе штурвала — кольцо с точкой" % z)
+		var sym: Rect2 = main.hint_pointer.symbol
+		var box: Rect2 = main.tutorial_panel.box()
+		ok(sym.has_area(), "z %.1f: символ на экране" % z)
+		ok(sym.position.y >= box.end.y - 1.0, "z %.1f: символ под плашкой (%.0f ≥ %.0f)" % [z, sym.position.y, box.end.y])

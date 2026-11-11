@@ -105,8 +105,10 @@ func test_ship_touch_squeezes_ink_9s_recharge_40s() -> void:
 	var ev := _notes(w, EcoCushion.ID, "touch")
 	eq(ev.size(), 1, "наблюдение «touch»")
 	eq(ev[0].text(), "Мягкая подушка сжимается и выпускает облако чернил — корабль его задел", "не изучен — по виду")
+	near(EcoCushion.squash(cu).x, 1.0, 1e-6, "в шаг касания ещё не сжалась — набирает за SQUEEZE_IN")
+	w.run(EcoCushion.SQUEEZE_IN)
 	near(EcoCushion.squash(cu).x, 1.0 - cu.squeeze * 0.45, 1e-6, "ниже и уже")
-	w.run(8.8)
+	w.run(8.8 - EcoCushion.SQUEEZE_IN)
 	ok(cu.inked(), "облако ещё держится")
 	w.run(0.3)
 	ok(not cu.inked(), "через 9 с облако растаяло")
@@ -115,6 +117,30 @@ func test_ship_touch_squeezes_ink_9s_recharge_40s() -> void:
 	near(cu.squeeze, 0.0, 1e-6, "расправилась")
 	w.run(1.0)
 	eq(_notes(w, EcoCushion.ID, "touch").size(), 2, "через 40 с — снова")
+
+
+## Б3: от касания подушка сжимается за SQUEEZE_IN с мягким входом — ширина за шаг меняется не больше чем на 0,1 (раньше
+## 1 → 0,55 за кадр, у подушки 2 м — на 0,9 м), в середине — на полпути, потом спадает по RELAX.
+func test_squeeze_eases_in() -> void:
+	var w := _world()
+	var cu := _cushions(w).cushions[0]
+	w.ship.pos = Vector3(6.0, FLAT + 2.0, 0.0)
+	var was := EcoCushion.squash(cu).x
+	var worst := 0.0
+	var mid := 0.0
+	for i in 20:
+		w.step(1.0 / 60.0)
+		var x := EcoCushion.squash(cu).x
+		worst = maxf(worst, absf(x - was))
+		was = x
+		if i == 9:
+			mid = x
+	ok(worst <= 0.1, "за шаг 1/60 с ширина меняется не больше чем на 0,1: %.3f" % worst)
+	ok(mid < 0.85 and mid > 0.65, "через 0,15 с — на полпути: %.3f" % mid)
+	near(was, 1.0 - cu.squeeze * 0.45, 1e-6, "через SQUEEZE_IN — сжата полностью")
+	near(EcoCushion.squeeze_k(cu), cu.squeeze, 1e-6, "дальше видимое сжатие — squeeze")
+	cu.cd = 0.0
+	near(EcoCushion.squeeze_k(cu), cu.squeeze, 1e-6, "без недавнего касания — squeeze как есть")
 
 
 func test_ship_far_or_high_does_not_touch() -> void:
@@ -296,16 +322,101 @@ func test_view_two_multimeshes() -> void:
 	var cu := view.cushions.cushions[1]
 	var tr := CushionView.transform_at(cv.pad_buffer, 1, CushionView.STRIDE)
 	ok(tr.origin.is_equal_approx(cu.base), "подушка на месте")
-	near(tr.basis.get_scale().y, 1.0, 1e-4, "не сжата")
+	near(tr.basis.get_scale().y, CushionView.pad_scale(1), 1e-4, "не сжата — своего размера")
 	near(CushionView.transform_at(cv.ink_buffer, EcoCushion.INK_N).basis.get_scale().x, 0.0, 1e-6, "чернил нет — пятна скрыты")
 	view.cushions.squeeze(view.world, cu, true)
 	view.world.run(1.0)
 	cv.sync(view.world.time)
 	tr = CushionView.transform_at(cv.pad_buffer, 1, CushionView.STRIDE)
-	ok(tr.basis.get_scale().y < 0.7, "сжатая — ниже")
+	ok(tr.basis.get_scale().y < 0.7 * CushionView.pad_scale(1), "сжатая — ниже")
 	var ink0 := CushionView.transform_at(cv.ink_buffer, EcoCushion.INK_N)
 	near(ink0.basis.get_scale().x, 1.0, 1e-4, "облако видно")
 	ok(ink0.origin.distance_to(cu.ink_c) < EcoCushion.INK_R + 0.5, "пятно в облаке")
 	near(cv.ink_buffer[EcoCushion.INK_N * CushionView.STRIDE_C + 15], CushionView.INK_ALPHA, 1e-4, "непрозрачность 0,85")
 	view.queue_free()
 	await frames(1)
+
+
+## «Экономно» (Б6): рисуется половина пятен каждого облака чернил — места вперемешку по подушкам, видимые в начале
+## буфера; назад — буфер снова по подушке; сброс мира уровень не теряет.
+func test_view_lite_draws_half_of_each_ink_cloud() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var cv := view.cushion_view
+	var n := view.cushions.cushions.size()
+	eq(cv.ink_drawn(), n * EcoCushion.INK_N, "на «Обычно» — все пятна")
+	view.set_lite(true)
+	ok(cv.lite, "подушечник — на «Экономно»")
+	var per := EcoMM.cloud_per(EcoCushion.INK_N)
+	eq(cv.ink_drawn(), per * n, "половина каждого облака")
+	ok(cv.ink_drawn() <= n * EcoCushion.INK_N / 2, "пятен вдвое меньше: %d" % cv.ink_drawn())
+	var seen := {}
+	for cu in view.cushions.cushions:
+		var shown := 0
+		for j in EcoCushion.INK_N:
+			var s := cv.ink_slot(cu.index, j)
+			seen[s] = true
+			if s < cv.ink_drawn():
+				shown += 1
+		eq(shown, per, "у подушки %d видно %d" % [cu.index, per])
+	eq(seen.size(), n * EcoCushion.INK_N, "места в буфере не повторяются")
+	var cu := view.cushions.cushions[1]
+	view.cushions.squeeze(view.world, cu, true)
+	view.world.run(1.0)
+	cv.sync(view.world.time)
+	var slot := cv.ink_slot(cu.index, 5)
+	ok(slot < cv.ink_drawn(), "пятно первой половины рисуется")
+	var ink5 := CushionView.transform_at(cv.ink_buffer, slot)
+	near(ink5.basis.get_scale().x, 1.0, 1e-4, "облако видно на своём месте")
+	near(ink5.origin.distance_to(EcoCushion.ink_point(cu, 5, view.world.time)), 0.0, 1e-4, "там, где его считает мир")
+	view.ground = Seabed.height   # сброс мира — виды пересобираются
+	ok(view.cushion_view.lite and view.cushion_view.ink_drawn() == per * n, "сброс мира — снова «Экономно»")
+	view.set_lite(false)
+	cv = view.cushion_view
+	eq(cv.ink_drawn(), n * EcoCushion.INK_N, "назад — все")
+	eq(cv.ink_slot(1, 5), EcoCushion.INK_N + 5, "буфер снова по подушке")
+	view.queue_free()
+	await frames(1)
+
+
+## «Дыхание» полипов (Б3): у корабля подушка медленно раздувается и опадает, у каждой свой ритм; дальше BREATH_FAR,
+## сжатая и на «Экономно» — ровно 1 (буфер неподвижен, #850).
+func test_breath_near_ship_only() -> void:
+	var lo := INF
+	var hi := -INF
+	for i in 200:
+		var s := CushionView.breath(0, 0.0, i * 0.1, 5.0)
+		lo = minf(lo, s.y)
+		hi = maxf(hi, s.y)
+		near(s.x, s.z, 1e-6, "ширина по x и z одна")
+		ok(absf(s.x - 1.0) <= CushionView.BREATH_W + 1e-6, "ширина в пределах")
+	ok(hi > 1.0 + CushionView.BREATH_H * 0.9 and lo < 1.0 - CushionView.BREATH_H * 0.9, "дышит в полный размах: %.3f…%.3f" % [lo, hi])
+	ok(CushionView.breath(0, 0.0, 3.0, 5.0) != CushionView.breath(1, 0.0, 3.0, 5.0), "у соседней — свой ритм")
+	eq(CushionView.breath(0, 0.0, 3.0, CushionView.BREATH_FAR), Vector3.ONE, "дальше BREATH_FAR — ровно 1")
+	eq(CushionView.breath(0, 1.0, 3.0, 5.0), Vector3.ONE, "сжатая не дышит")
+	eq(CushionView.breath(0, 0.0, 3.0, 5.0, false), Vector3.ONE, "«Экономно» — не дышит")
+	# к краю размах гаснет плавно — без скачка на границе
+	var edge := CushionView.breath(0, 0.0, 2.2, CushionView.BREATH_FAR - 0.5)
+	ok(absf(edge.y - 1.0) < 0.002, "у края почти 1: %.4f" % edge.y)
+
+
+## В сцене: подушка у корабля дышит в буфере, кадр за кадром разная; далеко — та же.
+func test_scene_breath_in_buffer() -> void:
+	var w := _world()
+	w.reset()
+	var c := _cushions(w)
+	var cv := CushionView.new(c)
+	var ys := []
+	for i in 3:
+		cv.sync(1.0 + i * 1.5, c.cushions[0].base + Vector3(10, 0, 0))
+		ys.append(CushionView.transform_at(cv.pad_buffer, 0, CushionView.STRIDE).basis.get_scale().y)
+	ok(absf(ys[0] - ys[1]) > 1e-3 or absf(ys[1] - ys[2]) > 1e-3, "у корабля высота меняется: %s" % [ys])
+	cv.sync(1.0, Vector3(500, 0, 500))
+	var a := cv.pad_buffer.duplicate()
+	cv.sync(4.0, Vector3(500, 0, 500))
+	eq(cv.pad_buffer, a, "корабль далеко — буфер тот же")
+	near(CushionView.transform_at(cv.pad_buffer, 0, CushionView.STRIDE).basis.get_scale().y, CushionView.pad_scale(0), 1e-4,
+		"далеко — не дышит")
+	cv.free()

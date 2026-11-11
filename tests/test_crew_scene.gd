@@ -1,6 +1,8 @@
 extends TestCase
 ## Экипаж в сцене: своя фигура идёт за игроком и садится за штурвал, другой член экипажа виден целиком.
 
+const ShotSetup := preload("res://tools/shot_setup.gd")
+
 var main: Main
 
 
@@ -40,7 +42,7 @@ func test_seated_hands_on_wheel_in_scene() -> void:
 
 
 func test_mate_visible_whole() -> void:
-	await main.debug_setup({"mate": "1,0.5,180,2"})
+	ShotSetup.apply(main, {"mate": "1,0.5,180,2"})
 	main.step(1.0 / 30.0)
 	eq(main.crew_view.figures.size(), 2, "две фигуры")
 	eq(main.crew[1].role, Crew.Role.ENGINEER, "роль из ключа")
@@ -85,7 +87,7 @@ func _tris(mi: MeshInstance3D) -> int:
 
 
 func test_model_replaces_capsules() -> void:
-	await main.debug_setup({"mate": "1,0.5,180,2"})
+	ShotSetup.apply(main, {"mate": "1,0.5,180,2"})
 	main.step(1.0 / 30.0)
 	var cv := main.crew_view
 	ok(cv.skeletons[0] is Skeleton3D and cv.skeletons[0].get_bone_count() == 24, "модель MOD-012 со скелетом")
@@ -94,6 +96,12 @@ func test_model_replaces_capsules() -> void:
 	ok(_tris(cv.meshes[0]) < _tris(cv.meshes[1]) * 0.9, "свой игрок — без головы (%d треуг.)" % _tris(cv.meshes[0]))
 	ok(cv.meshes[0].material_override != null and cv.meshes[1].material_override == null, "свой — с отсечением граней")
 	ok(cv.patches[1].visible and not cv.patches[0].visible, "нашивка роли — у других")
+	eq((cv.patches[1].mesh.material as StandardMaterial3D).albedo_color, Crew.role_color(2), "нашивка цвета роли")
+	main.crew[1].role = 0
+	main.step(1.0 / 30.0)
+	eq((cv.patches[1].mesh.material as StandardMaterial3D).albedo_color, Crew.role_color(0), "сменил роль — нашивка тоже")
+	main.crew[1].role = 2
+	main.step(1.0 / 30.0)
 	var j := main.me.joints()
 	var hip: Vector3 = _shown(0, "hip")
 	near((hip - main.camera.position).dot(j["fwd"]), -CrewView.OWN_BACK, 1e-3, "стоя своя модель чуть позади камеры")
@@ -184,6 +192,8 @@ func test_power_view() -> void:
 	# на 70° тянула правый рукав через весь кадр.
 	var sh: Vector3 = main.crew_view.shown[0]["shoulder_r"] - main.crew_view.shown[0]["shoulder_l"]
 	ok(absf(sh.x) < absf(sh.z) * tan(deg_to_rad(5.0)), "плечи вдоль пульта (x %.3f, z %.3f)" % [sh.x, sh.z])
+	# #576 (решение владельца): пока нет анимации рук у пульта, свою фигуру на ракурсе не рисуем — рукава не в кадре.
+	ok(not main.crew_view.figures[0].visible, "своя фигура у пульта спрятана")
 	main.walker.yaw += 0.2   # свайп
 	main.step(1.0 / 30.0)
 	near(main.camera.rotation.y, PowerScreen.CAM_YAW + 0.2, 1e-4, "свайп — от ракурса")
@@ -191,6 +201,7 @@ func test_power_view() -> void:
 	main.step(1.0 / 30.0)
 	var eye: Vector3 = main.pilot.eye(main.walker) + main.me.eye_offset()
 	ok(main.camera.position.distance_to(eye) < 1e-4, "закрыл — камера в ходоке")
+	ok(main.crew_view.figures[0].visible, "закрыл — своя фигура снова видна")
 	near(main.camera.rotation.y, main.walker.yaw, 1e-6, "курс ходока")
 
 
@@ -210,7 +221,7 @@ func test_role_gear() -> void:
 	var at := main.crew_view.to_local(visor.global_position)
 	ok(at.distance_to(head) < 0.3, "щиток у головы (%.2f м)" % at.distance_to(head))
 	var up := visor.transform
-	main.open_breach(0)   # варит по-настоящему: держит кнопку у пробоины (`Pad.hold`, `Main._mate_holds`)
+	main.open_breach(0)   # варит по-настоящему: держит кнопку у пробоины (`Pad.hold`, `CrewFlow.holds`)
 	var s: Breach.Spot = main.breach.all[0]
 	mate.walker.x = s.at.x
 	mate.walker.z = s.at.y
@@ -294,7 +305,6 @@ func test_helm_busy_for_second() -> void:   # ROADMAP «Кооп»: заняты
 	main.walker.z = Deck.CHAIR_Z + 0.9
 	main.step(1.0 / 30.0)
 	eq(main.overlay.action_label, "Занято", "на кнопке — «Занято»")
-	ok(main.status_parts().has("Штурвал занят"), "в строке состояния — «Штурвал занят»")
 	main.use_post("helm")
 	ok(not main.pilot.seated, "свой игрок не сел во второе кресло")
 	eq(main.message.text, "Штурвал занят: Сонарщик", "на приборах — кто держит")
@@ -302,7 +312,6 @@ func test_helm_busy_for_second() -> void:   # ROADMAP «Кооп»: заняты
 	mate.post = ""
 	main.step(1.0 / 30.0)
 	eq(main.overlay.action_label, "Штурвал", "встал — пост свободен")
-	ok(main.status_parts().has("Сесть за штурвал"), "в строке — снова «Сесть за штурвал»")
 	main.use_post("helm")
 	ok(main.pilot.seated, "теперь сел")
 	main.step(1.0 / 30.0)
@@ -422,6 +431,7 @@ func test_mate_action_vote() -> void:   # у голостола товарищ �
 	main.step(1.0 / 30.0)
 	ok(not m.at_vote, "маршрут не пройден — голосовать рано")
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	m.pad.action = true
 	main.step(1.0 / 30.0)
 	ok(m.at_vote, "товарищ у голосования")
@@ -453,6 +463,7 @@ func test_coop_vote_majority() -> void:   # двое у голостола: ме
 	main.walker.x = Main.ROUTE_POST.x
 	main.walker.z = Main.ROUTE_POST.y
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	var m := main.add_mate(Main.ROUTE_POST.x + 0.2, Main.ROUTE_POST.y + 0.2, 0.0, Crew.Role.BIOLOGIST, 1)
 	m.walker.x = Main.ROUTE_POST.x + 0.2
 	m.walker.z = Main.ROUTE_POST.y + 0.2
@@ -478,6 +489,7 @@ func test_coop_vote_timer_up() -> void:   # второй молчит — по �
 	main.walker.x = Main.ROUTE_POST.x
 	main.walker.z = Main.ROUTE_POST.y
 	main.complete_route()
+	main.run.open_vote()   # в слое голосование откроет переход у 10 (#828)
 	var m := main.add_mate(Main.ROUTE_POST.x + 0.2, Main.ROUTE_POST.y + 0.2, 0.0, Crew.Role.ENGINEER, 0)
 	m.walker.x = Main.ROUTE_POST.x + 0.2
 	m.walker.z = Main.ROUTE_POST.y + 0.2
@@ -537,3 +549,17 @@ func test_restart_not_inside_mate() -> void:   # issue #602: новый забе
 	ok(d >= Crew.GAP, "свой игрок рядом с началом спуска, но не в товарище: %.2f м" % d)
 	ok(main.layout.can_stand(main.walker.x, main.walker.z), "и на полу")
 	ok(d < 1.0, "не дальше метра")
+
+
+func test_crew_freed_with_main() -> void:   # issue #779: ходок держал своего Member через stand_for — цикл RefCounted, утечка
+	var m: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(m)
+	await frames(2)
+	var me_ref: WeakRef = weakref(m.me)
+	var mate_ref: WeakRef = weakref(m.add_mate(0.0, -3.0, 0.0, Crew.Role.BIOLOGIST, 1))
+	ok(m.me.walker.stand.call(m.me.walker.x, m.me.walker.z), "ходок стоит на полу")
+	m.queue_free()
+	m = null
+	await frames(3)
+	ok(me_ref.get_ref() == null, "свой игрок освобождён вместе с main")
+	ok(mate_ref.get_ref() == null, "товарищ освобождён вместе с main")

@@ -24,6 +24,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      actions: read
     outputs:
       code: ${{ steps.files.outputs.code }}
     steps:
@@ -38,10 +39,17 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          # PR: файлы PR — это уже разница с merge-base с main, влитый main кода не добавляет (#1350; JSON в docs/
+          # — код: его читают тесты). main: от коммита последнего зелёного прогона «Godot» на main, а не от прошлого
+          # пуша — иначе код отменённого прогона уходит непроверенным, если следом слит коммит без кода.
           if [ "$EVENT" = "pull_request" ]; then
             files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename')
           elif [ "$EVENT" = "push" ] && [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
-            files=$(gh api "repos/$REPO/compare/$BEFORE...$SHA" --jq '.files[].filename')
+            base=$(gh api "repos/$REPO/actions/workflows/godot.yml/runs?branch=main&status=success&per_page=1" \
+              --jq '.workflow_runs[0].head_sha // empty' || true)
+            [ -z "$base" ] && base="$BEFORE"
+            echo "База сравнения: ${base::7} (последний зелёный прогон main; прошлый пуш — ${BEFORE::7})"
+            files=$(gh api "repos/$REPO/compare/$base...$SHA" --jq '.files[].filename')
           else
             echo "code=true" >> "$GITHUB_OUTPUT"; echo "Ручной запуск — проверяем всё"; exit 0
           fi
@@ -58,12 +66,17 @@ jobs:
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "Изменения кода: $code"
 
-  tests:
-    name: Тесты
+  # Тесты — тремя частями параллельно (#845): файлы делятся по сумме времени из tests/vremya.txt (TestShards).
+  test-parts:
+    name: Тесты (часть ${{ matrix.part }} из 3)
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3]
     steps:
       - uses: actions/checkout@v5
       - name: Godot из кэша
@@ -86,8 +99,53 @@ jobs:
           restore-keys: godot-import-${{ env.GODOT_VERSION }}-
       - name: Импорт проекта
         run: ~/godot/godot --headless --path . --import
+      # --slow 15: в конце части — 15 самых долгих тестов, кандидаты на ускорение прямо из лога CI (#1350)
       - name: Тесты
-        run: ~/godot/godot --headless --path . -s tests/run.gd
+        run: ~/godot/godot --headless --path . -s tests/run.gd -- --shard ${{ matrix.part }}/3 --slow 15
+
+  # Итог «Тесты» — зелёный, только когда зелёные все части. always(): иначе при упавшей части итог «skipped»,
+  # а пропуск GitHub считает успехом. Без изменений кода части пропущены — итог тоже пропущен (зелёный).
+  # Синтаксис скриптов тестера tools/qa/*.ps1 (#1350): в облачной сессии pwsh нет, ошибка всплывала только у тестера.
+  # Парсер PowerShell 7 на ubuntu-раннере; кодировку (BOM для 5.1) проверяет test_qa_tools.
+  ps1:
+    name: Скрипты тестера
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Разбор .ps1
+        shell: pwsh
+        run: |
+          $bad = 0
+          foreach ($f in Get-ChildItem tools/qa/*.ps1) {
+            $tokens = $null; $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            foreach ($e in $errors) {
+              Write-Output "::error file=tools/qa/$($f.Name),line=$($e.Extent.StartLineNumber)::$($e.Message)"
+              $bad++
+            }
+            Write-Output "$($f.Name): ошибок $(@($errors).Count)"
+          }
+          if ($bad) { exit 1 }
+      # Сводка ПРОВЕРИТЬ run-qa.ps1 (#1350): разбор отчётов и счёт тихих прогонов — на выдуманных папках
+      - name: Проверка kadry.ps1
+        shell: pwsh
+        run: ./tools/qa/kadry.ps1 -SelfTest
+
+  tests:
+    name: Тесты
+    needs: [changes, test-parts, ps1]
+    if: always() && needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Все части зелёные
+        run: |
+          echo "Части тестов: ${{ needs.test-parts.result }}, скрипты тестера: ${{ needs.ps1.result }}"
+          test "${{ needs.test-parts.result }}" = "success"
+          test "${{ needs.ps1.result }}" = "success"
 
   apk:
     name: Сборка APK
@@ -163,15 +221,19 @@ jobs:
           GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
         run: |
           mkdir -p build
+          # Два APK (#844): телефон — только arm64-v8a, эмулятор тестера (Pixel_8 на Windows) — только x86_64.
+          # Раньше обе библиотеки шли в одном APK, и телефон тащил лишние ~27 МБ.
           ~/godot/godot --headless --path . --export-debug "Android" build/DeepDive.apk 2>&1 | tee build/export.log
-          test -s build/DeepDive.apk
-          ls -la build/DeepDive.apk
+          ~/godot/godot --headless --path . --export-debug "Android эмулятор" build/DeepDive-emulator.apk 2>&1 | tee -a build/export.log
+          test -s build/DeepDive.apk && test -s build/DeepDive-emulator.apk
+          ls -la build/*.apk
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: deepdive-apk
           path: |
             build/DeepDive.apk
+            build/DeepDive-emulator.apk
             build/export.log
           if-no-files-found: warn
 
@@ -197,8 +259,8 @@ jobs:
         run: |
           notes="APK из main, коммит ${GITHUB_SHA::7}: $(git log -1 --format=%s)"
           if gh release view apk-latest >/dev/null 2>&1; then
-            gh release upload apk-latest build/DeepDive.apk --clobber
+            gh release upload apk-latest build/DeepDive.apk build/DeepDive-emulator.apk --clobber
             gh release edit apk-latest --notes "$notes"
           else
-            gh release create apk-latest build/DeepDive.apk --title "Свежий APK" --notes "$notes" --prerelease --target "$GITHUB_SHA"
+            gh release create apk-latest build/DeepDive.apk build/DeepDive-emulator.apk --title "Свежий APK" --notes "$notes" --prerelease --target "$GITHUB_SHA"
           fi

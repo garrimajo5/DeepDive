@@ -3,7 +3,7 @@ extends RefCounted
 ## Как выглядит светящийся мох (пятна мха в js/world.js, Unity `Core/EcoMossLook.cs`): каждое пятно — сетка 7 × 7 м
 ## из 8 × 8 клеток, лежит по дну на 0,14 м выше него. Своя яркость вершины base: круг радиусом 3,4 м с мягким краем
 ## (полная до 1 м) и пятнистость по шуму, как в браузере. Яркость пятна целиком — EcoMoss.Patch.glow(): объеденное
-## тускнеет до 0,15, отрастая — разгорается. Сцена складывает все 22 пятна в один меш (MossView).
+## тускнеет до 0,15, отрастая — разгорается. Сцена складывает все 24 пятна в один меш (MossView).
 ## Грани смотрят вверх по правилу Godot: (b − a) × (c − a) — вниз, внутрь дна.
 
 ## Клеток по стороне пятна; вершин по стороне — на одну больше.
@@ -11,6 +11,8 @@ const CELLS := 8
 const SIDE := CELLS + 1
 const VERTS_PER_PATCH := SIDE * SIDE
 const TRIS_PER_PATCH := CELLS * CELLS * 2
+## «Экономно» (Б6): пятно — 4 × 4 клетки (32 треугольника вместо 128), размер и мягкий край те же.
+const LITE_CELLS := 4
 ## Над дном (м).
 const ABOVE := 0.14
 ## Цвет мха: цвет вершин (0,45; 1; 0,75) × цвет материала 0x9dffd0, как в браузере.
@@ -32,36 +34,39 @@ static func base_at(lx: float, lz: float, px: float, _pz: float) -> float:
 	return HashNoise.smooth(EcoMoss.RADIUS, 1.0, r) * (0.55 + HashNoise.value(lx * 1.3 + px, lz * 1.3) * 0.6)
 
 
-## Собрать меш всех пятен мха по дну ground (пустой Callable — пятна плоские на высоте пятна).
-static func build(patches: Array[EcoMoss.Patch], ground: Callable = Callable()) -> MossMesh:
+## Собрать меш всех пятен мха по дну ground (пустой Callable — пятна плоские на высоте пятна); cells — клеток по
+## стороне пятна (`CELLS`, на «Экономно» — `LITE_CELLS`).
+static func build(patches: Array[EcoMoss.Patch], ground: Callable = Callable(), cells := CELLS) -> MossMesh:
 	var m := MossMesh.new()
 	var n := patches.size()
-	m.verts.resize(n * VERTS_PER_PATCH)
-	m.base.resize(n * VERTS_PER_PATCH)
-	m.patch.resize(n * VERTS_PER_PATCH)
-	m.tris.resize(n * TRIS_PER_PATCH * 3)
+	var side := cells + 1
+	var per := side * side
+	m.verts.resize(n * per)
+	m.base.resize(n * per)
+	m.patch.resize(n * per)
+	m.tris.resize(n * cells * cells * 6)
 	var half := EcoMoss.SIZE / 2.0
-	var st := EcoMoss.SIZE / CELLS
+	var st := EcoMoss.SIZE / cells
 	var t := 0
 	for p in n:
 		var c := patches[p].pos
-		var v0 := p * VERTS_PER_PATCH
-		for iz in SIDE:
-			for ix in SIDE:
+		var v0 := p * per
+		for iz in side:
+			for ix in side:
 				var lx := -half + ix * st
 				var lz := -half + iz * st
 				var x := c.x + lx
 				var z := c.z + lz
 				var y: float = (ground.call(x, z) if ground.is_valid() else c.y) + ABOVE
-				var v := v0 + iz * SIDE + ix
+				var v := v0 + iz * side + ix
 				m.verts[v] = Vector3(x, y, z)
 				m.base[v] = base_at(lx, lz, c.x, c.z)
 				m.patch[v] = p
-		for iz in CELLS:
-			for ix in CELLS:
-				var a := v0 + iz * SIDE + ix
+		for iz in cells:
+			for ix in cells:
+				var a := v0 + iz * side + ix
 				var b := a + 1
-				var d := a + SIDE
+				var d := a + side
 				var e := d + 1
 				# лицом вверх в Godot: (b − a) × (d − a) = x × z смотрит вниз
 				m.tris[t] = a

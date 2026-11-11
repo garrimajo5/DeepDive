@@ -6,15 +6,15 @@ extends RefCounted
 ## пакета голоса, вход и выход — `FADE`.
 ## Режимы: «Нажать и держать» — передача, пока палец на кнопке (отпускание, меню, пауза, выход из забега — сразу
 ## стоп); «По голосу» — кнопка включает и выключает микрофон, подпись «Микрофон».
-## «Вас слышно» — только когда голос реально уходит (`link`). Захват и передача голоса — решение владельца
-## (встроенные средства Godot, разрешение микрофона Android), поэтому `link` пока всегда false и рация в игре скрыта
-## (`Radio.enabled`); раскладка, состояния и список — здесь, рисует `scripts/game/radio_panel.gd` (`main.radio_panel`),
-## удержание — `Touch.Router.held_in` по `blocks` (`Main._radio_step`), снимок `shot.gd raciya=…`.
+## «Вас слышно» — только когда голос реально уходит (`link` ставит `VoiceIO` по `Voice.Station.link`; голоса
+## товарищей — `heard` оттуда же). Разрешение микрофона Android — `MicPermit` (`mic`; нажали без доступа — `begged`,
+## системный запрос делает `OverlayFlow.radio_step`); раскладка, состояния и список — здесь, рисует `scripts/game/radio_panel.gd` (`main.radio_panel`),
+## удержание — `Touch.Router.held_in` по `blocks` (`OverlayFlow.radio_step`), снимок `shot.gd raciya=…`.
 
 enum Mode { HOLD, VOICE }
 
-## Рация на экране в коопе. Пока голоса нет (решение владельца), в игре выключено — видна только в снимке и тестах.
-static var enabled := false
+## Рация на экране в коопе (#634: захват, сеть и разрешение микрофона готовы). Выключить — только снимки и тесты.
+static var enabled := true
 
 const REF_H := 1080.0
 const HOLD := 0.4           ## имя держится после последнего пакета, с
@@ -61,13 +61,14 @@ var mic := true          ## разрешение микрофона Android ес
 var mic_on := true       ## переключатель «Микрофон» в настройках
 var hear := true         ## переключатель «Звук товарищей»
 var volume := 0.7        ## громкость товарищей 0…1 (страница «Голос» — `Settings.mates`; для проигрывателя голоса)
-var link := false        ## голос реально уходит в сеть (захват и передача — решение владельца)
+var link := false        ## голос реально уходит в сеть (`VoiceIO`: захват даёт пакеты и есть куда слать)
 var held := false        ## «Нажать и держать»: палец на кнопке
 var toggled := false     ## «По голосу»: микрофон включён кнопкой
 var hidden := false      ## меню, пауза, шторки, вне забега — передачи нет
 var ask := 0.0           ## сколько ещё держать «Разрешите микрофон»
-var settings_wanted := false   ## нажали «В настройки» (забирает `Main`)
-var pinned := false      ## снимок `shot.gd raciya=…`: состояние держится как задано, `Main._radio_step` только рисует
+var settings_wanted := false   ## нажали «В настройки» (забирает `OverlayFlow.radio_step` — снова спросить разрешение)
+var begged := false      ## в этом шаге нажали кнопку без доступа — первый раз спросить разрешение (`MicPermit`)
+var pinned := false      ## снимок `shot.gd raciya=…`: состояние держится как задано, `OverlayFlow.radio_step` только рисует
 var talkers: Array[Talker] = []
 var _was_down := false
 
@@ -80,7 +81,8 @@ func update(dt: float, down: bool, is_hidden: bool) -> void:
 		toggled = false
 	var pressed := down and not _was_down
 	_was_down = down
-	if pressed and not mic:
+	begged = pressed and not mic
+	if begged:
 		ask = ASK_TIME   # доступа нет — просим разрешение, передачу сами не включаем
 	match mode:
 		Mode.HOLD:

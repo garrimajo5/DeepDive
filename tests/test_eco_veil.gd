@@ -83,6 +83,26 @@ func test_drifts_near_home_above_floor() -> void:
 	ok(moved > 3.0, "дрейфует: %.1f м" % moved)
 
 
+## Б3 «плавность»: купол сразу после сброса стоит на высоте шага (с покачиванием) — раньше на первом шаге вторая
+## вуаль прыгала на 1 м за кадр (сброс ставил купол без покачивания). Дальше по высоте — не быстрее 1,5 м/с (покачивание и склон дна).
+func test_no_jump_after_reset() -> void:
+	var w := EcoWorld.new()
+	w.ground = Seabed.height
+	w.ship.pos = FAR
+	var v := w.add(EcoVeil.new()) as EcoVeil
+	var dt := 1.0 / 30.0
+	var prev: Array[Vector3] = []
+	for vl in v.veils:
+		prev.append(vl.p)
+	var worst := 0.0
+	for i in 30 * 60:
+		w.step(dt)
+		for k in v.veils.size():
+			worst = maxf(worst, absf(v.veils[k].p.y - prev[k].y) / dt)
+			prev[k] = v.veils[k].p
+	ok(worst < 1.5, "купол по высоте без рывков: %.2f м/с" % worst)
+
+
 func test_high_floor_lifts_veil() -> void:
 	var w := EcoWorld.new()
 	w.ground = func(_x: float, _z: float) -> float: return -28.0
@@ -268,44 +288,96 @@ func test_texts_name_species() -> void:
 
 # ---------- Сцена ----------
 
-func test_view_three_draw_calls_per_veil() -> void:
+## #849: все вуали — три вызова отрисовки на всех (купола, кромки, щупальца), не по три на каждую; дальние не рисуются.
+func test_view_three_draw_calls_for_all_veils() -> void:
 	var view := EcoView.new()
 	view.ground = Seabed.height
 	tree.root.add_child(view)
 	await frames(1)
 	var vv := view.veil_view
 	ok(vv != null and vv.get_parent() == view, "вуали — в живом мире")
-	eq(vv.groups.size(), 2, "две вуали")
+	eq(view.veils.veils.size(), 2, "две вуали")
 	ok(view.fish.veils == view.veils and view.preds.veils == view.veils, "светляки и серпохвосты знают о вуалях")
+	var calls := 0
+	var tris := 0
+	for c in vv.get_children():
+		if c == vv.dust_view:
+			continue
+		var gi := c as GeometryInstance3D
+		ok(gi is MultiMeshInstance3D, "MultiMesh: %s" % c.name)
+		eq(gi.layers, OceanView.LAYER_WORLD, "слой отмели: %s" % c.name)
+		calls += 1
+	eq(calls, 3, "три вызова отрисовки на все вуали")
+	eq(vv.bells.multimesh.instance_count, 2 * VeilView.BELLS, "по куполу, ядру и 9 колокольчиков на вуаль")
+	eq(vv.rims.multimesh.instance_count, 2, "кромка — экземпляр на вуаль")
+	eq(vv.tentacles.multimesh.instance_count, 2, "щупальца — экземпляр на вуаль")
+	var mm := vv.bells.multimesh
+	tris = mm.mesh.get_faces().size() / 3 * mm.instance_count
+	ok(tris < 24000, "треугольников куполов: %d" % tris)
+	var p0 := view.veils.veils[0]
+	var p1 := view.veils.veils[1]
 	var ship := EcoLink.ShipState.new()
-	ship.pos = view.veils.veils[0].p + Vector3(0, -5, 30)
+	ship.pos = p0.p + Vector3(0, -5, 30)
 	view.step(0.05, ship)
-	var g := vv.groups[0]
-	ok(g.visible, "ближняя вуаль видна")
-	near(g.position.distance_to(view.veils.veils[0].p), 0.0, 1e-4, "узел на куполе")
-	eq(vv.groups[1].visible, view.veils.veils[1].p.distance_to(ship.pos) < VeilView.FAR, "дальше FAR — спрятана")
+	ok(vv.shown[0] and vv.bells.visible, "ближняя вуаль видна")
+	var far1 := p1.p.distance_to(ship.pos) >= VeilView.FAR
+	eq(vv.shown[1], not far1, "дальше FAR — не рисуется")
+	eq(vv.bells.multimesh.visible_instance_count, vv.shown_count * VeilView.BELLS, "рисуются только видимые")
+	eq(vv.tentacles.multimesh.visible_instance_count, vv.shown_count)
+	var buf := vv.bell_buffer
+	near(buf[0], EcoVeil.R * EcoVeil.pulse(p0, view.world.time).x, 1e-4, "купол 6 м с пульсом")
+	near(Vector3(buf[3], buf[7], buf[11]).distance_to(p0.p), 0.0, 1e-4, "купол на месте вуали")
+	near(buf[15], VeilView.BELL.a * VeilView.veil_glow(p0.index), 1e-4, "прозрачный купол")
+	near(vv.rim_buffer[15], EcoVeil.rim_glow(p0, view.world.time), 1e-4, "мерцание кромки — в альфе экземпляра")
+	ok(vv.bells.custom_aabb.has_point(p0.p) and vv.tentacles.custom_aabb.has_point(p0.p - Vector3(0, 10, 0)),
+		"рамка видимости — у видимой вуали")
+	if far1:
+		ok(not vv.bells.custom_aabb.has_point(p1.p), "дальняя вуаль рамку не раздувает")
 	var far_ship := EcoLink.ShipState.new()
 	far_ship.pos = Vector3(-250, -20, -250)
 	view.step(0.05, far_ship)
-	ok(not vv.groups[0].visible and not vv.groups[1].visible, "далеко от корабля обе спрятаны")
+	ok(not vv.shown[0] and not vv.shown[1], "далеко от корабля обе не видны")
+	ok(not vv.bells.visible and not vv.rims.visible and not vv.tentacles.visible, "узлы спрятаны")
+	ship.pos = (p0.p + p1.p) * 0.5
 	view.step(0.05, ship)
-	var calls := 0
-	var tris := 0
-	for c in g.get_children():
-		var gi := c as GeometryInstance3D
-		eq(gi.layers, OceanView.LAYER_WORLD, "слой отмели: %s" % c.name)
-		calls += 1
-		if c is MultiMeshInstance3D:
-			var mm := (c as MultiMeshInstance3D).multimesh
-			eq(mm.instance_count, VeilView.BELLS, "купол, ядро и 9 колокольчиков")
-			tris += mm.mesh.get_faces().size() / 3 * mm.instance_count
-	eq(calls, 3, "три вызова отрисовки на вуаль")
-	ok(tris < 12000, "треугольников куполов: %d" % tris)
-	var buf := vv.bell_buffers[0]
-	near(buf[0], EcoVeil.R * EcoVeil.pulse(view.veils.veils[0], view.world.time).x, 1e-4, "купол 6 м с пульсом")
-	near(buf[15], VeilView.BELL.a, 1e-4, "прозрачный купол")
+	eq(vv.shown_count, 2, "посередине видны обе")
+	ok(vv.bells.custom_aabb.has_point(p0.p) and vv.bells.custom_aabb.has_point(p1.p), "рамка — по обеим")
+	near(Vector3(vv.bell_buffer[VeilView.BELLS * VeilView.STRIDE + 3], vv.bell_buffer[VeilView.BELLS * VeilView.STRIDE + 7],
+		vv.bell_buffer[VeilView.BELLS * VeilView.STRIDE + 11]).distance_to(p1.p), 0.0, 1e-4, "второй купол — у второй")
 	view.queue_free()
 	await frames(1)
+
+
+## #849: общий меш нитей всех вуалей — экземпляр вуали рисует только свои нити ровно как EcoVeil.tentacle_point,
+## чужие сжимает в точку.
+func test_tentacles_all_veils_one_mesh() -> void:
+	var w := _world([SPOT, SPOT + Vector2(40, 10)])
+	var list := _veils(w).veils
+	var m := VeilView.build_tentacles_all(list)
+	var arr := m.surface_get_arrays(0)
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	var uv2: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV2]
+	var per := EcoVeil.TENTACLES * EcoVeil.SEGMENTS * 2
+	eq(v.size(), per * list.size(), "нити всех вуалей")
+	var params := VeilView.tentacle_params()
+	eq((params["wave"] as Vector4).z, 0.0, "у общего материала фаза 0 — она в экземпляре")
+	var flow := Vector3(0.2, 0, -0.22)
+	var t := 41.3
+	for vl in list:
+		var custom := Color(EcoVeil.pulse(vl, t).x, vl.ph, vl.index, vl.w / EcoVeil.PULSE_W)
+		for i in [0, 1, 19, 238, 799]:
+			var own: int = vl.index * per + i
+			eq(int(uv2[own].x), vl.index, "номер вуали в UV2")
+			var got := VeilView.instance_point(v[own], uv[own], uv2[own].x, custom, vl.p, t, params, flow, 1.0, vl.drag)
+			var want := vl.p + EcoVeil.tentacle_point(vl, int(uv[own].x), int(uv[own].y), t, flow, true)
+			near(got.distance_to(want), 0.0, 1e-4, "вуаль %d, вершина %d" % [vl.index, i])
+			var other: int = (1 - vl.index) * per + i
+			near(VeilView.instance_point(v[other], uv[other], uv2[other].x, custom, vl.p, t, params, flow, 1.0)
+				.distance_to(vl.p), 0.0, 1e-6, "чужая нить — в точку")
+	var code := EcoShaders.MIST
+	for u in ["INSTANCE_CUSTOM.g", "UV2.x - INSTANCE_CUSTOM.b", "INSTANCE_CUSTOM.a"]:
+		ok(code.contains(u), "в шейдере: %s" % u)
 
 
 func test_tentacle_mesh_matches_shader_formula() -> void:
@@ -324,3 +396,438 @@ func test_tentacle_mesh_matches_shader_formula() -> void:
 		var j := int(uv[i].y)
 		var got := VeilView.shader_point(v[i], k, j, t, s)
 		near(got.distance_to(EcoVeil.tentacle_point(vl, k, j, t)), 0.0, 1e-4, "точка %d щупальца %d" % [j, k])
+
+
+## Б3: сокращение купола бежит волной вниз по щупальцам — кончик раздувается позже основания и шире.
+func test_pulse_wave_runs_down_tentacles() -> void:
+	var vl := _veils(_world()).veils[0]
+	vl.drag = Vector3.ZERO
+	var k := 3
+	var rest := Vector2(cos(vl.tent_a[k]), sin(vl.tent_a[k])) * vl.tent_r[k]
+	var best := {}
+	for j in [1, EcoVeil.SEGMENTS]:
+		var top := -1.0
+		var lo := 1e9
+		var hi := -1e9
+		var at := 0.0
+		var jf := float(j)
+		for i in 600:
+			var t := 100.0 + i * 0.01
+			var p := EcoVeil.tentacle_point(vl, k, j, t, Vector3.ZERO, true)
+			# радиальная доля без колыхания браузера
+			var wob := Vector2(sin(t * 0.9 + (jf - 1) * 0.45 + k), cos(t * 0.7 + (jf - 1) * 0.4 + k * 1.3)) * jf * 0.12
+			var r: float = (Vector2(p.x, p.z) - wob).length() / rest.length()
+			lo = minf(lo, r)
+			hi = maxf(hi, r)
+			if r > top:
+				top = r
+				at = t
+		best[j] = [at, hi - lo]
+	var lag: float = fposmod(best[EcoVeil.SEGMENTS][0] - best[1][0], TAU / vl.w)
+	near(lag, (EcoVeil.SEGMENTS - 1) * EcoVeil.WAVE_LAG / vl.w, 0.05, "кончик раздувается позже")
+	ok(best[EcoVeil.SEGMENTS][1] > best[1][1] * 1.6, "к кончику размах больше: %s" % [best])
+	var plain := EcoVeil.tentacle_point(vl, k, 6, 50.0)
+	var lite := VeilView.shader_point(Vector3(rest.x, -6 * vl.tent_len[k] / EcoVeil.SEGMENTS, rest.y), k, 6, 50.0,
+		EcoVeil.pulse(vl, 50.0).x, VeilView.tentacle_params(vl), Vector3(0.3, 0, 0), 0.0)
+	near(lite.distance_to(plain), 0.0, 1e-4, "«Экономно» — колыхание браузера, без волны и сноса")
+
+
+## Б3: течение сносит щупальца — кончик уходит по потоку, основание стоит, нить не вытягивается.
+func test_current_trails_tentacles() -> void:
+	var vl := _veils(_world()).veils[0]
+	vl.drag = Vector3.ZERO
+	var flow := Vector3(0, 0, -EcoCurrent.SPEED)
+	var t := 31.0
+	for k in [0, 17]:
+		var still := EcoVeil.tentacle_point(vl, k, EcoVeil.SEGMENTS, t, Vector3.ZERO, true)
+		var tip := EcoVeil.tentacle_point(vl, k, EcoVeil.SEGMENTS, t, flow, true)
+		var d := tip - still
+		ok(d.z < -0.7 * EcoVeil.TRAIL * vl.tent_len[k], "кончик %d по потоку: %.2f м" % [k, d.z])
+		ok(d.z > -EcoVeil.TRAIL * vl.tent_len[k] - 1e-4, "не дальше TRAIL длины")
+		near(d.x, 0.0, 1e-4, "поперёк потока не сносит")
+		ok(d.y > 0.0, "кончик приподнят — нить не вытягивается")
+		near(EcoVeil.tentacle_point(vl, k, 0, t, flow, true).distance_to(
+			EcoVeil.tentacle_point(vl, k, 0, t, Vector3.ZERO, true)), 0.0, 1e-6, "основание на куполе")
+		var mid := EcoVeil.tentacle_point(vl, k, 5, t, flow, true) - EcoVeil.tentacle_point(vl, k, 5, t, Vector3.ZERO, true)
+		ok(absf(mid.z) < absf(d.z) * 0.3, "середина сносится меньше (доля длины²)")
+
+
+## Шейдер щупалец считает волну и снос так же, как EcoVeil.tentacle_point; материал получает поток мира и
+## выключатель «Экономно».
+func test_tentacle_shader_live_matches_cpu() -> void:
+	var w := _world()
+	var vl := _veils(w).veils[0]
+	var m := VeilView.build_tentacles(vl)
+	var arr := m.surface_get_arrays(0)
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	var params := VeilView.tentacle_params(vl)
+	var flow := Vector3(0.2, 0, -0.22)
+	for t in [3.3, 77.1]:
+		var s := EcoVeil.pulse(vl, t).x
+		for i in [0, 1, 19, 238, 799]:
+			var k := int(uv[i].x)
+			var j := int(uv[i].y)
+			var got := VeilView.shader_point(v[i], k, j, t, s, params, flow, 1.0, vl.drag)
+			near(got.distance_to(EcoVeil.tentacle_point(vl, k, j, t, flow, true)), 0.0, 1e-4,
+				"точка %d щупальца %d в %.1f с" % [j, k, t])
+	var code := EcoShaders.MIST
+	for u in ["uniform vec4 wave", "uniform float trail", "uniform vec3 flow", "uniform float sway_k"]:
+		ok(code.contains(u), "в шейдере: %s" % u)
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var mat := view.veil_view.tentacles.material_override as ShaderMaterial
+	var p0 := view.veils.veils[0]
+	eq(mat.get_shader_parameter("wave"), Vector4(EcoVeil.PULSE, EcoVeil.PULSE_W, 0.0, EcoVeil.WAVE_LAG), "волна вуалей")
+	near(float(mat.get_shader_parameter("trail")), EcoVeil.TRAIL, 1e-6, "снос")
+	var ship := EcoLink.ShipState.new()
+	ship.pos = p0.p + Vector3(0, -5, 30)
+	view.step(0.05, ship)
+	near((mat.get_shader_parameter("flow") as Vector3).distance_to(view.current.vel()), 0.0, 1e-4, "поток мира")
+	EcoShaders.set_sway_lite(true)
+	near(float(mat.get_shader_parameter("sway_k")), 0.0, 1e-6, "«Экономно» — без волны и сноса")
+	EcoShaders.set_sway_lite(false)
+	near(float(mat.get_shader_parameter("sway_k")), 1.0, 1e-6, "обратно")
+	view.queue_free()
+	await frames(1)
+
+
+## Б6: на «Экономно» у каждой вуали — каждое второе щупальце и огонёк кромки; оставшиеся нити — те же, что на
+## «Обычно» (чётные), и стоят по формуле шейдера; вызовов столько же; сброс мира уровень не теряет.
+func test_view_lite_draws_every_other_thread() -> void:
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var vv := view.veil_view
+	eq(vv.threads(), EcoVeil.TENTACLES, "на «Обычно» — все щупальца")
+	eq(vv.rim_lights(), VeilView.RIM_N, "и все огоньки кромки")
+	view.set_lite(true)
+	ok(vv.lite, "вуали — на «Экономно»")
+	eq(vv.threads(), EcoVeil.TENTACLES / VeilView.LITE_STEP, "каждое второе щупальце")
+	eq(vv.rim_lights(), VeilView.RIM_N / VeilView.LITE_STEP, "каждый второй огонёк")
+	var arr := (vv.tentacles.multimesh.mesh as ArrayMesh).surface_get_arrays(0)
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	var uv2: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV2]
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var full := VeilView.build_tentacles_all(view.veils.veils).surface_get_arrays(0)
+	var fv: PackedVector3Array = full[Mesh.ARRAY_VERTEX]
+	var per := EcoVeil.TENTACLES * EcoVeil.SEGMENTS * 2
+	var seg := EcoVeil.SEGMENTS * 2
+	for i in v.size():
+		var k := int(uv[i].x)
+		eq(k % VeilView.LITE_STEP, 0, "только чётные нити (%d)" % i)
+		var j := i % seg
+		var src := int(uv2[i].x) * per + k * seg + j
+		ok(v[i].is_equal_approx(fv[src]), "нить — на своём месте (%d)" % i)
+		if i > 400:
+			break
+	ok(vv.tentacles.multimesh.mesh.custom_aabb == VeilView.TENT_BOX, "рамка нитей та же")
+	var calls := 0
+	for c in vv.get_children():
+		if c != vv.dust_view:
+			calls += 1
+	eq(calls, 3, "вызовов столько же")
+	var ship := EcoLink.ShipState.new()
+	ship.pos = view.veils.veils[0].p + Vector3(0, -5, 30)
+	view.step(0.05, ship)
+	eq(vv.tentacles.multimesh.visible_instance_count, vv.shown_count, "мир и показ вуалей не меняются")
+	view.ground = Seabed.height   # сброс мира
+	ok(view.veil_view.lite and view.veil_view.threads() == EcoVeil.TENTACLES / VeilView.LITE_STEP,
+		"сброс мира — снова «Экономно»")
+	view.set_lite(false)
+	eq(vv.threads(), EcoVeil.TENTACLES, "назад — все щупальца")
+	eq(vv.rim_lights(), VeilView.RIM_N, "и все огоньки")
+	view.queue_free()
+	await frames(1)
+
+
+## Б3 «плавность»: купол поднимается над склоном и опускается ходом — разгон не больше CLIMB_ACCEL (с покачиванием —
+## чуть больше), а не лифтом по дну под серединой с остановкой за кадр (было 6,5 м/с² у второй вуали над склоном у
+## (90, 19)); щупальца над дном под всем куполом не ближе HARD_PAD.
+func test_climbs_over_slope_smoothly() -> void:
+	var w := EcoWorld.new()
+	w.ground = Seabed.height
+	w.ship.pos = FAR
+	var v := w.add(EcoVeil.new()) as EcoVeil
+	var dt := 1.0 / 30.0
+	var n := v.veils.size()
+	var y0: Array[float] = []
+	var y1: Array[float] = []
+	for vl in v.veils:
+		y0.append(vl.p.y)
+		y1.append(vl.p.y)
+	var worst := 0.0
+	var climbed := 0.0
+	var gap := INF
+	for i in 30 * 90:
+		w.step(dt)
+		for k in n:
+			var vl := v.veils[k]
+			if i > 0:
+				worst = maxf(worst, absf(vl.p.y - 2.0 * y1[k] + y0[k]) / (dt * dt))
+			y0[k] = y1[k]
+			y1[k] = vl.p.y
+			climbed = maxf(climbed, absf(vl.vy))
+			gap = minf(gap, vl.base_y - (EcoVeil.floor_low(w, vl) - EcoVeil.FLOOR_PAD))
+	ok(climbed > 0.1, "купол и правда ходит по высоте над склоном: %.2f м/с" % climbed)
+	ok(worst < EcoVeil.CLIMB_ACCEL + 0.15, "по высоте без рывков: %.2f м/с²" % worst)
+	ok(gap >= EcoVeil.HARD_PAD - 1e-3, "щупальца над дном под куполом: %.2f м" % gap)
+
+
+func test_climb_eases_to_raised_floor() -> void:
+	var w := EcoWorld.new()
+	var floor_y := [-40.0]
+	w.ground = func(_x: float, _z: float) -> float: return floor_y[0]
+	w.ship.pos = FAR
+	var v := w.add(EcoVeil.new([SPOT] as Array[Vector2])) as EcoVeil
+	var vl := v.veils[0]
+	var start := vl.base_y
+	floor_y[0] = -36.0  # дно поднялось на 4 м: купол должен подняться, но не за кадр
+	w.step(1.0 / 30.0)
+	ok(vl.base_y - start < 0.05, "не прыгает за кадр: %.3f м" % (vl.base_y - start))
+	w.run(40.0)
+	near(vl.base_y, EcoVeil.target(w, vl), 0.05, "дошёл до нужной высоты")
+	ok(vl.base_y - start > 0.9, "поднялся над поднявшимся дном: %.2f м" % (vl.base_y - start))
+
+
+## Б4 «не клоны»: у каждой вуали свой ритм пульса — купол, волна по щупальцам и такт выдоха идут по нему; в шейдер
+## щупалец ритм приходит долей в INSTANCE_CUSTOM.a, и вершина совпадает с EcoVeil.tentacle_point.
+func test_each_veil_pulses_own_rate() -> void:
+	var w := _world([SPOT, SPOT + Vector2(40, 10)])
+	var list := _veils(w).veils
+	var a := list[0]
+	var b := list[1]
+	near(a.w, EcoVeil.pulse_rate(0), 1e-6, "ритм — по номеру")
+	ok(absf(a.w - b.w) > EcoVeil.PULSE_W * 0.03, "ритмы разные: %.3f и %.3f" % [a.w, b.w])
+	for vl in list:
+		ok(absf(vl.w / EcoVeil.PULSE_W - 1.0) <= EcoVeil.RATE_SPREAD + 1e-6, "в пределах ± RATE_SPREAD")
+		# период купола — 2π / w: через период пульс тот же, через полпериода — обратный
+		var t := 30.0
+		near(EcoVeil.pulse(vl, t + TAU / vl.w).x, EcoVeil.pulse(vl, t).x, 1e-4, "период купола — по ритму вуали")
+		near(EcoVeil.pulse(vl, t + PI / vl.w).x - 1.0, -(EcoVeil.pulse(vl, t).x - 1.0), 1e-4, "полпериода — обратный")
+		var c0 := EcoVeilDust.cycle(vl, 100.0)
+		near(EcoVeilDust.cycle_start(vl, c0 + 1) - EcoVeilDust.cycle_start(vl, c0), TAU / vl.w, 1e-4, "такт выдоха — по ритму")
+	var m := VeilView.build_tentacles_all(list)
+	var arr := m.surface_get_arrays(0)
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	var uv2: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV2]
+	var per := EcoVeil.TENTACLES * EcoVeil.SEGMENTS * 2
+	var params := VeilView.tentacle_params()
+	var t2 := 77.7
+	var vl := b
+	var i: int = vl.index * per + 199
+	var with_rate := VeilView.instance_point(v[i], uv[i], uv2[i].x, Color(EcoVeil.pulse(vl, t2).x, vl.ph, vl.index,
+		vl.w / EcoVeil.PULSE_W), vl.p, t2, params, Vector3.ZERO, 1.0, vl.drag)
+	var want := vl.p + EcoVeil.tentacle_point(vl, int(uv[i].x), int(uv[i].y), t2, Vector3.ZERO, true)
+	near(with_rate.distance_to(want), 0.0, 1e-4, "нить в шейдере — по ритму своей вуали")
+	var plain := VeilView.instance_point(v[i], uv[i], uv2[i].x, Color(EcoVeil.pulse(vl, t2).x, vl.ph, vl.index, 1.0),
+		vl.p, t2, params, Vector3.ZERO, 1.0, vl.drag)
+	ok(plain.distance_to(want) > 1e-3, "без доли ритма нить шла бы не в такт")
+
+
+## Б3, вторичное движение: дрейфующий купол тянет щупальца за собой — их сносит вода относительно купола, а не
+## поток мира. В стоячей воде кончик отстаёт против хода купола; ход для нитей догоняет ход купола плавно.
+func test_drifting_bell_drags_tentacles() -> void:
+	var w := _world()
+	var vl := _veils(w).veils[0]
+	near(vl.drag.distance_to(EcoVeil.drift_velocity(vl, w.time)), 0.0, 1e-6, "после сброса — ход купола, без рывка")
+	var dt := 0.05
+	var worst := 0.0
+	for i in 2400:
+		var before := vl.drag
+		w.step(dt)
+		worst = maxf(worst, (vl.drag - before).length() / dt)
+	ok(worst < 0.1, "ход для нитей меняется плавно: %.3f м/с²" % worst)
+	var v := EcoVeil.drift_velocity(vl, w.time)
+	ok(v.length() > 0.2, "купол дрейфует: %.2f м/с" % v.length())
+	near(vl.drag.distance_to(v), 0.0, 0.08, "ход нитей догнал ход купола")
+	var t := w.time
+	var k := 5
+	vl.drag = Vector3(0.5, 0, 0)
+	var tip := EcoVeil.tentacle_point(vl, k, EcoVeil.SEGMENTS, t, Vector3.ZERO, true)
+	vl.drag = Vector3.ZERO
+	var still := EcoVeil.tentacle_point(vl, k, EcoVeil.SEGMENTS, t, Vector3.ZERO, true)
+	var d := tip - still
+	ok(d.x < -0.5 * EcoVeil.TRAIL * vl.tent_len[k], "кончик отстаёт против хода купола: %.2f м" % d.x)
+	near(d.z, 0.0, 1e-4, "вбок не сносит")
+	ok(d.y > 0.0, "кончик приподнят — нить не вытягивается")
+	# купол идёт вместе с потоком — нити висят, как в стоячей воде
+	vl.drag = Vector3(0.2, 0, -0.1)
+	near(EcoVeil.tentacle_point(vl, k, EcoVeil.SEGMENTS, t, Vector3(0.2, 0, -0.1), true).distance_to(still), 0.0, 1e-4,
+		"плывёт с потоком — не сносит")
+	# быстрая вода — не дальше REL_MAX
+	vl.drag = Vector3(-5.0, 0, 0)
+	var far := EcoVeil.tentacle_point(vl, k, EcoVeil.SEGMENTS, t, Vector3.ZERO, true) - still
+	ok(far.x <= EcoVeil.REL_MAX / EcoCurrent.SPEED * EcoVeil.TRAIL * vl.tent_len[k] + 1e-4, "снос не больше REL_MAX: %.2f" % far.x)
+
+
+## Шейдер берёт ход купола своей вуали из uniform `drag` по номеру и сносит нити так же, как процессор.
+func test_shader_drag_per_veil() -> void:
+	var w := _world([SPOT, SPOT + Vector2(40, 10)])
+	var list := _veils(w).veils
+	list[0].drag = Vector3(0.4, 0, 0.1)
+	list[1].drag = Vector3(-0.3, 0, 0.2)
+	var d := VeilView.drags(list)
+	eq(d.size(), EcoVeil.DRAG_SLOTS, "мест в uniform")
+	near(d[1].distance_to(list[1].drag), 0.0, 1e-6, "по номеру вуали")
+	var m := VeilView.build_tentacles_all(list)
+	var arr := m.surface_get_arrays(0)
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	var uv2: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV2]
+	var per := EcoVeil.TENTACLES * EcoVeil.SEGMENTS * 2
+	var params := VeilView.tentacle_params()
+	var flow := Vector3(0.1, 0, -0.2)
+	var t := 52.0
+	for vl in list:
+		var custom := Color(EcoVeil.pulse(vl, t).x, vl.ph, vl.index, vl.w / EcoVeil.PULSE_W)
+		var i: int = vl.index * per + 19
+		var got := VeilView.instance_point(v[i], uv[i], uv2[i].x, custom, vl.p, t, params, flow, 1.0, d[vl.index])
+		var want := vl.p + EcoVeil.tentacle_point(vl, int(uv[i].x), int(uv[i].y), t, flow, true)
+		near(got.distance_to(want), 0.0, 1e-4, "вуаль %d — как процессор" % vl.index)
+	var code := EcoShaders.MIST
+	for u in ["uniform vec3 drag[4]", "drag[clamp(int(INSTANCE_CUSTOM.b + 0.5), 0, 3)]", "0.6 / rl"]:
+		ok(code.contains(u), "в шейдере: %s" % u)
+	eq(EcoVeil.DRAG_SLOTS, 4, "мест — как в шейдере")
+	near(EcoVeil.REL_MAX, 0.6, 1e-6, "предел — как в шейдере")
+	var view := EcoView.new()
+	view.ground = Seabed.height
+	tree.root.add_child(view)
+	await frames(1)
+	var ship := EcoLink.ShipState.new()
+	ship.pos = view.veils.veils[0].p + Vector3(0, -5, 30)
+	view.step(0.05, ship)
+	var mat := view.veil_view.tentacles.material_override as ShaderMaterial
+	var got_d: PackedVector3Array = mat.get_shader_parameter("drag")
+	near(got_d[0].distance_to(view.veils.veils[0].drag), 0.0, 1e-5, "материал получает ход купола")
+	view.queue_free()
+	await frames(1)
+
+
+## Б3: корабль на ходу 6 м/с идёт сквозь завесу нитей — точки щупалец не уходят внутрь корпуса (раньше нити
+## проходили сквозь обшивку и мостик), а ложатся вбок к борту своего корня и соскальзывают за кормой без рывков;
+## вдали от корабля нити как были.
+func test_hull_parts_tentacles() -> void:
+	var w := _world()
+	var vl := _veils(w).veils[0]
+	var m := VeilView.build_tentacles_all([vl])
+	var arr := m.surface_get_arrays(0)
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	var uv2: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV2]
+	var params := VeilView.tentacle_params()
+	var flow := Vector3(0.2, 0, -0.22)
+	var dt := 1.0 / 30.0
+	var yaw := 0.35
+	var fwd := Vector3(-sin(yaw), 0.0, -cos(yaw))
+	var inside := 0
+	var moved := 0
+	var jump := 0
+	var prev := PackedVector3Array()
+	prev.resize(v.size())
+	var view := VeilView.new(_veils(w))
+	tree.root.add_child(view)
+	# Где корпус может встретить нить (оси корабля): коробка деталей EcoHull и сечение раздвигания hull_half, шире на
+	# коробку щупалец VeilView.TENT_BOX (±8 м от купола) с запасом. Купол дальше — каждую вершину не считаем (так
+	# быстрее, #1350), а проверяем выборку: нить как была и не в корпусе.
+	var hb := EcoHull.box(0.0)
+	var reach := absf(VeilView.TENT_BOX.position.x) + 2.0
+	var zone := Rect2(Vector2(minf(hb.position.x, -EcoVeil.HULL_A), minf(hb.position.z, EcoVeil.HULL_Z0 - EcoVeil.HULL_NOSE)),
+		Vector2.ZERO).expand(Vector2(maxf(hb.end.x, EcoVeil.HULL_A), maxf(hb.end.z, EcoVeil.HULL_Z1 + EcoVeil.HULL_STERN))) \
+		.grow(reach)
+	var fresh := true   # prev ещё не задан (первый шаг или шаг после дальних)
+	var far_steps := 0
+	var n := int(100.0 / 6.0 / dt)
+	for s in n:
+		var t := 30.0 + s * dt
+		var ship := vl.p + Vector3(1.2, -10.0, 0.0) - fwd * 50.0 + fwd * (s * 6.0 * dt)
+		var custom := Color(EcoVeil.pulse(vl, t).x, vl.ph, vl.index, vl.w / EcoVeil.PULSE_W)
+		view.sync(t, ship, yaw, flow)
+		var lp := EcoHull.to_ship(vl.p, ship, yaw)
+		var far := not zone.has_point(Vector2(lp.x, lp.z))
+		if far:
+			far_steps += 1
+			fresh = true
+		for i in range(0, v.size(), 37 if far else 1):
+			var plain := VeilView.instance_point(v[i], uv[i], uv2[i].x, custom, vl.p, t, params, flow, 1.0, vl.drag)
+			var got := VeilView.instance_point(v[i], uv[i], uv2[i].x, custom, vl.p, t, params, flow, 1.0, vl.drag,
+				true, ship, yaw, view.sides[int(uv[i].x)])
+			var plain_in := EcoHull.touches(plain, ship, yaw, 0.0)
+			if far:
+				if not ok(got == plain and not plain_in, "купол далеко от корпуса — нить как была: шаг %d, вершина %d" % [s, i]):
+					view.queue_free()
+					return
+				continue
+			if plain_in:
+				inside += 1
+			if (plain_in if got == plain else EcoHull.touches(got, ship, yaw, 0.0)):
+				ok(false, "нить в корпусе: шаг %d, вершина %d" % [s, i])
+				view.queue_free()
+				return
+			if got != plain:
+				moved += 1
+				near(got.y, plain.y, 1e-4, "сдвиг — по горизонтали")
+			if not fresh and got.distance_to(prev[i]) > 1.5:
+				jump += 1
+			prev[i] = got
+		if not far:
+			fresh = false
+	ok(far_steps > 0 and far_steps < n / 2, "дальних шагов — часть прохода: %d из %d" % [far_steps, n])
+	ok(inside > 500, "без раздвигания нити шли сквозь корпус: %d" % inside)
+	ok(moved > inside, "раздвинуто: %d" % moved)
+	# рывок больше 1,5 м за кадр — только у нити, что пересекает ось корабля по высоте (корпус встречает её края по
+	# разные борта): за проход — одна вершина; с колпаками-эллипсоидами (носовая волна без конуса) — десятки
+	ok(jump <= 2, "нити за шаг не прыгают: %d вершин" % jump)
+	ok(view.hull_on, "корабль у вуали — раздвигание в материале")
+	view.queue_free()
+	var custom0 := Color(EcoVeil.pulse(vl, 37.0).x, vl.ph, vl.index, vl.w / EcoVeil.PULSE_W)
+	var far := VeilView.instance_point(v[50], uv[50], uv2[50].x, custom0, vl.p, 37.0, params, flow, 1.0, vl.drag,
+		true, vl.p + Vector3(60, 0, 0), 0.0)
+	near(far.distance_to(VeilView.instance_point(v[50], uv[50], uv2[50].x, custom0, vl.p, 37.0, params, flow, 1.0,
+		vl.drag)), 0.0, 1e-6, "корабль далеко — нить как была")
+	var code := EcoShaders.MIST
+	for u in ["uniform vec3 hull_pos", "uniform float hull_yaw", "uniform float hull_on", "hull_ab", "hull_z"]:
+		ok(code.contains(u), "в шейдере: %s" % u)
+	near(EcoVeil.hull_part(Vector3(0, HullPlan.CENTER_Y, 40), 1.0, Vector3.ZERO, 0.0).z, 40.0, 1e-6, "за кормой — как есть")
+	var side := EcoVeil.hull_part(Vector3(0.5, HullPlan.CENTER_Y, 5), -1.0, Vector3.ZERO, 0.0)
+	near(side.x, -EcoVeil.HULL_A, 1e-4, "к своему борту")
+	eq(EcoVeil.side_of(Vector3(-2, 0, 5), Vector3.ZERO, 0.0), -1.0, "борт по корню")
+	var probe := Vector3(-0.4, HullPlan.CENTER_Y, 5.0)
+	eq(EcoVeil.keep_side(1.0, probe, Vector3.ZERO, 0.0), 1.0, "нить на обшивке — борт держится")
+	eq(EcoVeil.keep_side(1.0, probe + Vector3(0, 30, 0), Vector3.ZERO, 0.0), -1.0, "не у корпуса — по нити")
+	eq(EcoVeil.keep_side(0.0, probe, Vector3.ZERO, 0.0), -1.0, "не задан — по нити")
+	ok(code.contains("* %d +" % EcoVeil.TENTACLES), "в шейдере нитей на вуаль — EcoVeil.TENTACLES")
+	await frames(1)
+
+
+## Корпус целиком внутри эллипса раздвигания: точка обшивки EcoHull сдвигается всегда (иначе нить прошла бы сквозь).
+func test_hull_part_covers_hull() -> void:
+	var miss := 0
+	for zi in range(-80, 300, 6):
+		for xi in range(0, 75, 3):
+			for yi in range(-18, 50, 3):
+				var l := Vector3(xi * 0.1, yi * 0.1, zi * 0.1)
+				if EcoHull.touches_local(l, 0.05) and EcoVeil.hull_part(l, 1.0, Vector3.ZERO, 0.0) == l:
+					miss += 1
+	eq(miss, 0, "все точки корпуса — внутри эллипса")
+
+
+## Корабль у вуали включает раздвигание в материале нитей, вдали — выключает.
+func test_view_hull_on_near_ship() -> void:
+	var w := _world()
+	var view := VeilView.new(_veils(w))
+	tree.root.add_child(view)
+	var vl := _veils(w).veils[0]
+	view.sync(10.0, vl.p + Vector3(0, -9, 0), 0.4)
+	ok(view.hull_on, "корабль под куполом — раздвигает")
+	var mat := view.tentacles.material_override as ShaderMaterial
+	near(float(mat.get_shader_parameter("hull_on")), 1.0, 1e-6, "uniform hull_on")
+	near(float(mat.get_shader_parameter("hull_yaw")), 0.4, 1e-6, "курс корабля")
+	view.sync(10.0, vl.p + Vector3(VeilView.HULL_NEAR + 5.0, 0, 0))
+	ok(not view.hull_on, "корабль далеко — выключено")
+	view.queue_free()
+	await frames(1)
