@@ -16,6 +16,7 @@ extends SceneTree
 ## Ответ экипажа (#1498) — `answer=signal|charge|alert` (`answer_now`): свет гаснет, корабль встаёт без хода (не
 ## шумит) через `delay=` с после повода, через `hold=` с (ANSWER_HOLD) свет снова горит и путь идёт дальше; `alert=<с>` — проба фазы «замер» `EcoPred.alert`;
 ## `leave=<с>` — отход хищника прочь после «потерял корабль» `EcoPred.alert_leave`.
+## `lim=<с>` — предел прохода после тихой стоянки (LIMIT): короткий прогон для проверки инструмента, не для решений.
 ## По каждому проходу ещё — когда хищник впервые в луче (ближе дальности света и в конусе `Searchlight.HALF_ANGLE`)
 ## и сколько секунд от сигнала до броска и от броска до укуса.
 
@@ -46,6 +47,10 @@ static var delay := 0.0
 static var alert := 0.0
 ## Отход хищника после «потерял корабль», с (`leave=`, `EcoPred.alert_leave`).
 static var leave := 0.0
+## Предел прохода, с (после тихой стоянки у 00): дальше проход кончается, где бы ни был корабль.
+const LIMIT := 200.0
+## Предел этого прогона (`lim=`, по умолчанию LIMIT).
+static var limit := LIMIT
 
 
 func _init() -> void:
@@ -59,6 +64,7 @@ func _init() -> void:
 	alert = float(kv.get("alert", "0"))
 	leave = float(kv.get("leave", "0"))
 	hold = float(kv.get("hold", str(ANSWER_HOLD)))
+	limit = float(kv.get("lim", str(LIMIT)))
 	if kv.has("stop"):
 		var xz: PackedStringArray = kv["stop"].split(",")
 		path[1] = Vector2(float(xz[0]), float(xz[1]))
@@ -211,7 +217,6 @@ static func run(probe: bool, mode: String, seed_value: int) -> Dictionary:
 	var bite := {}
 	var seen_pred := {}
 	var dmg := 0.0
-	var limit := 200.0
 	var beam := {}
 	var hushed := -1.0
 	var answers := 0
