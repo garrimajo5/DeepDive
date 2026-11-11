@@ -1,0 +1,5 @@
+rig.blend*
+local-godot/
+renders/
+render.log
+qa/.godot/
