@@ -133,6 +133,8 @@ func test_scene_runs_scenario() -> void:
 	var dome_t := -1.0   # 37 (#837): время клипа OpenPetal на кадре — верхняя точка подъёма
 	var dome_say := ""   # 37a (#837, отчёт 11.11 15:18): строка створки на приборах
 	var task_say := ""   # 35-zadacha-07 (#1635, отчёт 11.11 12:19): строка 3 — задача места, не «Вы за штурвалом»
+	var zamer: Array[String] = []   # 38/38a (#1498): режим хищника 0 и строка приборов на кадрах «замер» и «потерял»
+	var zamer_hull: Array[float] = []   # 38 → 38a: удара нет
 	var ogon: Array[String] = []   # 36/36a/36b (#1401): спрятано венчиков у куста огнецвета 0 и его свечение по кадрам
 	ok(not main.lore.knows(LayerLore.FIELD08), "до прогона поле 08 не замечено")
 	for i in scene_frames(qa.script_q):   # предел — от длины сценария (#1379)
@@ -177,6 +179,7 @@ func test_scene_runs_scenario() -> void:
 				main.eco.dome.petal]
 		var dome_at := main.eco.dome.t
 		var say_now := main.message.text
+		var pred_mode: String = EcoPred.Mode.keys()[main.eco.preds.all[0].mode]
 		main.step(1.0 / 30.0)
 		no_answer = no_answer or (main.address.open and main.address.hint() == AddressScreen.NO_ANSWER)
 		sat = sat or main.pilot.seated
@@ -206,6 +209,10 @@ func test_scene_runs_scenario() -> void:
 					dome_t = dome_at
 				else:
 					dome_say = say_now
+			if qa.log_lines[k].begins_with("скриншот 38-zamer") or qa.log_lines[k].begins_with("скриншот 38a-zamer"):
+				zamer.append("%s: %s" % [qa.log_lines[k].split(" ")[1].trim_suffix(":"), pred_mode])
+				zamer.append(say_now)
+				zamer_hull.append(main.vitals.hull)
 			if qa.log_lines[k].begins_with("скриншот 35-zadacha-07"):
 				task_say = say_now
 			if qa.log_lines[k].begins_with("скриншот 36"):
@@ -248,10 +255,18 @@ func test_scene_runs_scenario() -> void:
 	eq(dome_say, EcoDome.PETAL_TEXT, "37a (#837): на приборах строка створки — знание забыто шагом dome")
 	eq(ogon, ["36-ognecvet-do: 0 свет", "36a-ognecvet-prohod: спрятаны погас", "36b-ognecvet-posle: 0 свет"],
 			"#1401: до прохода ряд раскрыт и куст горит, на проходе — спрятан и погас, после — снова раскрыт")
+	eq(zamer.size(), 4, "38/38a (#1498): оба кадра «замера» сняты")
+	if zamer.size() == 4:
+		eq(zamer[0], "38-zamer: ALERT", "38 (#1498): хищник 0 в фазе «замер»")
+		ok(zamer[1].contains("замер и смотрит на корабль — его манит свет"), "38: на приборах строка замера: «%s»" % zamer[1])
+		eq(zamer[2], "38a-zamer-poteryal: RETREAT", "38a (#1498): свет погас — хищник отходит")
+		ok(zamer[3].contains("потерял корабль и отворачивает"), "38a: на приборах строка отхода: «%s»" % zamer[3])
+		ok(zamer_hull[1] >= zamer_hull[0], "38 → 38a: удара нет: корпус %.2f → %.2f" % [zamer_hull[0], zamer_hull[1]])
 	ok(not main.pilot.seated, "и встали")
 	ok(ahead > 20.0, "корабль прошёл вперёд: %.1f м" % ahead)
 	ok(FileAccess.file_exists(QaRunner.OUT + "/done.txt"), "done.txt записан")
 	var log := FileAccess.get_file_as_string(QaRunner.OUT + "/log.txt")
+	ok(log.contains("замер: хищник 0 nos, 26 м от корабля, замер 4.0 с, отход 20 с"), "38 (#1498): в логе у шага zamer — числа игры")
 	ok(log.contains("купольник: OpenPetal 3.5 с · створка 07 "), "37 (#837): в логе у шага dome — было ли знание")
 	ok(log.get_slice("\n", 0).contains("версия " + Main.version_text()), "#1350: первая строка лога — версия как на плашке")
 	ok(log.contains("сел за штурвал") and log.contains("за штурвалом"), "в логе есть состояние за штурвалом")

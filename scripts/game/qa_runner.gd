@@ -227,6 +227,8 @@ func tick(dt: float) -> void:
 				main.ping_sonar()
 			"pred":   # серпохвост мимо куста огнецвета поперёк взгляда с корабля (#1401)
 				pred_pass(main, c[1], c[2], c[3])
+			"zamer":   # фаза «замер» #1498: хищник у корабля, свет горит (#1498: строки знака в логе тестера не было)
+				_log(zamer(main, c[1], c[2]))
 			"dome":   # купольник у гнезда 07 на t с клипа OpenPetal (#1350: клипов ANIM-004 в отчёте не было)
 				if main.eco != null and main.eco.dome != null:
 					var knew := main.lore.knows(LayerLore.PETAL07)
@@ -792,6 +794,21 @@ static func pred_away(ps: EcoPred, n: int, top: Vector3, ship: Vector3) -> Array
 		if ps.pass_by(pr.index, from, to) and pr.index == n:
 			out = [from, to]
 	return out
+
+
+## Шаг «zamer» (#1498): голодный серпохвост n встаёт в `EcoPred.stage_spot` у корабля, остальных — далеко,
+## прожектор включается; «замер» и отход мир ведёт сам — по числам игры. Возвращает строку для лога.
+static func zamer(main: Main, n: int, side: String) -> String:
+	var eco: EcoView = main.eco
+	if eco == null or eco.preds == null:
+		return "замер: нет хищников"
+	var at := EcoPred.stage_spot(main.helm.pos, main.helm.yaw, side)
+	if at == Vector3.INF or not eco.preds.stage_near(n, at, main.helm.pos):
+		return "замер: нет стороны «%s» или хищника %d" % [side, n]
+	if not main.light_on:
+		main.toggle_light()
+	return "замер: хищник %d %s, %.0f м от корабля, замер %.1f с, отход %.0f с" % [n, side,
+		at.distance_to(main.helm.pos), eco.preds.alert, eco.preds.alert_leave]
 
 
 ## Свет тестера у камеры с борта: включить (узел «Свет тестера» под камерой, светит только отмель и корпус снаружи —
