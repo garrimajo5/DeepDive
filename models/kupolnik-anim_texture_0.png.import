@@ -2,21 +2,21 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://chfsgdolei4jf"
-path.s3tc="res://.godot/imported/kupolnik_normal.png-3baa9ffa07d0c50d79629f5ac2114a23.s3tc.ctex"
-path.etc2="res://.godot/imported/kupolnik_normal.png-3baa9ffa07d0c50d79629f5ac2114a23.etc2.ctex"
+uid="uid://du4ijkrnkce77"
+path.s3tc="res://.godot/imported/kupolnik-anim_texture_0.png-f550cf37ff9058d58c8b58cae9fd2b73.s3tc.ctex"
+path.etc2="res://.godot/imported/kupolnik-anim_texture_0.png-f550cf37ff9058d58c8b58cae9fd2b73.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "c1ea76991e1ad33fea6f82ba8a780949"
+"md5": "775260944b44ce5f13d52050f525c6e1"
 }
 
 [deps]
 
-source_file="res://models/kupolnik_normal.png"
-dest_files=["res://.godot/imported/kupolnik_normal.png-3baa9ffa07d0c50d79629f5ac2114a23.s3tc.ctex", "res://.godot/imported/kupolnik_normal.png-3baa9ffa07d0c50d79629f5ac2114a23.etc2.ctex"]
+source_file="res://models/kupolnik-anim_texture_0.png"
+dest_files=["res://.godot/imported/kupolnik-anim_texture_0.png-f550cf37ff9058d58c8b58cae9fd2b73.s3tc.ctex", "res://.godot/imported/kupolnik-anim_texture_0.png-f550cf37ff9058d58c8b58cae9fd2b73.etc2.ctex"]
 
 [params]
 

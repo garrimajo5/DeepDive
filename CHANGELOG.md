@@ -3,6 +3,9 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-11
+- ANIM-004 принят (#1601, PR #1619): купольник на скелете — `models/kupolnik-anim.glb` (20 костей, клипы `Idle`,
+  `Swim`, `OpenPetal`) вместо `kupolnik.glb`; `DomeView` грузит его в позе покоя, клипы — по #837;
+  тест `test_eco_dome_anim`, фазы и GIF — `docs/concept-art/kupolnik-anim*`.
 - `run-qa.ps1`: папка результата чистится только перед самим прогоном (`Reset-Run`) — `NO_RUN` у `-Pr` больше не
   оставляет пустую `run-pr<номер>\`, а `NO_CHANGES` не стирает несданные снимки `run\` (#1614, #1606).
 - `tests/vremya.txt` по логам четырёх прогонов `main` (`tools/ci_times.py`): части CI были 245 / 267 / 316 с по

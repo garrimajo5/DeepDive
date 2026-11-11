@@ -1,10 +1,10 @@
 extends TestCase
-## Модель купольника MOD-022 (`models/kupolnik.glb`, приёмка PR #1574, заказ #920; концепт ART-081 —
-## `docs/concept-art/kupolnik.md`): одна сетка и один материал без скелета (скелет — следующий заказ ANIM),
+## Модель купольника MOD-022 (приёмка PR #1574, заказ #920; концепт ART-081 — `docs/concept-art/kupolnik.md`), с ANIM-004
+## — на скелете (`models/kupolnik-anim.glb`, скелет и клипы — `test_eco_dome_anim`): одна сетка и один материал,
 ## габарит 3 × 1,8 × 1,2 м ±10 %, перед в −Z, pivot — центр низа, ≤ 8 000 треугольников, матовая (metallic 0),
 ## фотофоры — маской emissive.
 
-const PATH := "res://models/kupolnik.glb"
+const PATH := "res://models/kupolnik-anim.glb"
 
 
 func _model() -> Node3D:
@@ -16,11 +16,9 @@ func _mesh(n: Node) -> MeshInstance3D:
 	return n.find_children("*", "MeshInstance3D", true, false)[0]
 
 
-func test_one_mesh_no_rig() -> void:
+func test_one_mesh() -> void:
 	var n := _model()
 	eq(n.find_children("*", "MeshInstance3D", true, false).size(), 1, "одна сетка")
-	eq(n.find_children("*", "Skeleton3D", true, false).size(), 0, "без скелета")
-	eq(n.find_children("*", "AnimationPlayer", true, false).size(), 0, "без клипов")
 	var mi := _mesh(n)
 	eq(mi.mesh.get_surface_count(), 1, "один материал")
 	var tris: int = mi.mesh.surface_get_arrays(0)[Mesh.ARRAY_INDEX].size() / 3
@@ -66,3 +64,12 @@ func test_matte_with_glow_mask() -> void:
 	ok(mat.emission_enabled, "свечение включено")
 	ok(mat.emission_texture != null, "фотофоры — маской emissive")
 	n.free()
+
+
+## По ANIM-004 (#1601): прежняя модель без скелета не лежит в проекте (лишние 3,5 МБ в APK), сцена грузит модель
+## на скелете.
+func test_no_static_model() -> void:
+	for f in DirAccess.get_files_at("res://models"):
+		if f.begins_with("kupolnik") and not f.begins_with("kupolnik-anim"):
+			ok(false, "лишний файл купольника models/%s" % f)
+	eq(DomeView.GLB, PATH, "сцена грузит модель на скелете")
