@@ -839,7 +839,7 @@ func _step_ship(dt: float, h: Holds) -> void:
 	if not silt_msg.is_empty():
 		announce(silt_msg)
 	silt_view.apply(silt, time, helm.pos, helm.yaw)
-	var run_msg := run.update(helm.pos.x, helm.pos.z)
+	var run_msg := run.update(helm.pos.x, helm.pos.z, lore)   # у места с действием — задача (#1635)
 	if not run_msg.is_empty():
 		announce(run_msg)
 		timeline.mark(time, run_msg)
@@ -1897,7 +1897,7 @@ func status_rows() -> Array:
 		row2.append("курс %d°" % Status.course_deg(helm.yaw))
 		row2.append("прожектор %s" % ("вкл" if light_on else "выкл"))
 	else:
-		row2.append(run.status(helm.pos.x, helm.pos.z))
+		row2.append(run.status(helm.pos.x, helm.pos.z, lore))
 	if reactor.alert().is_empty():
 		row2.append("реактор %d/%d" % [reactor.used(), reactor.limit()])
 	if pilot.seated and current.vel().length() >= Status.CURRENT_SHOWN:

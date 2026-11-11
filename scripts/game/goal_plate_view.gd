@@ -8,12 +8,14 @@ var plate: GoalPlate
 var rect := Rect2()   ## место этого кадра; пусто — плашки нет
 var _rev := -1
 var k := 1.0          ## доля кегля текста и значка (`GoalPlate.fit`)
+var atlas: Texture2D  ## значки постов ART-042 — у задачи места (`GoalPlate.Kind.TASK`, #1635)
 
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	visible = false
+	atlas = load(ShipMap.ATLAS)
 
 
 ## Ширина текста плашки p в кегле экрана высотой h.
@@ -46,8 +48,9 @@ func warm(on: bool) -> void:
 		show_plate(plate, Rect2(), false)
 		return
 	var p := GoalPlate.new()
-	p.kind = GoalPlate.Kind.BEHIND
-	p.text = "0123456789°   " + GoalPlate.NONE_TEXT + " · " + GoalPlate.VOTE_TEXT
+	p.kind = GoalPlate.Kind.TASK   # значок поста из атласа — тоже в прогрев (#1635)
+	p.task = "gate"
+	p.text = "0123456789°   " + GoalPlate.NONE_TEXT + " · " + GoalPlate.VOTE_TEXT + " — узнано ближе ниже"
 	p.rev = -2
 	show_plate(p, Rect2(Vector2(40, 40), Vector2(600, 60)), true)
 
@@ -59,7 +62,14 @@ func _draw() -> void:
 	draw_style_box(UiStyle.box(Color(UiStyle.DARK, GoalPlate.FILL_A), GoalPlate.RADIUS * s, plate.edge(), 2.0 * s), rect)
 	var x := rect.position.x + GoalPlate.PAD * s
 	var cy := rect.get_center().y
-	if plate.has_icon():
+	var post := plate.task_icon()
+	if post != "":
+		var d := GoalPlate.ARROW_PX * s * k
+		var big := d * GoalPlate.POST_K   # у ячейки атласа свои поля — значок крупнее места стрелки, по тому же центру
+		draw_texture_rect_region(atlas, Rect2(Vector2(x + (d - big) * 0.5, cy - big * 0.5), Vector2(big, big)),
+			ShipMap.cell(post), UiStyle.ACCENT)
+		x += (GoalPlate.ARROW_PX + GoalPlate.ICON_GAP) * s * k
+	elif plate.has_icon():
 		_icon(Vector2(x + GoalPlate.ARROW_PX * s * k * 0.5, cy), GoalPlate.ARROW_PX * s * k, plate.kind)
 		x += (GoalPlate.ARROW_PX + GoalPlate.ICON_GAP) * s * k
 	var px := float(roundi(GoalPlate.TEXT_PX * s * k))
