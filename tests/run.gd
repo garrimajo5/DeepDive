@@ -1,6 +1,7 @@
 extends SceneTree
 ## Маленький раннер тестов без сторонних дополнений.
 ## Запуск: godot --headless --path . -s tests/run.gd [-- имя_файла_или_теста ...]
+## Фильтр — часть имени «файл.тест»; путь и .gd срезаются, ни одного теста — ошибка с объяснением (#1350).
 ## Часть прогона для CI (#845): `-- --shard 2/3` — файлы части 2 из 3 по сумме времени (`TestShards`).
 ## Замер времени файлов: `-- --times tests/vremya.txt` — после прогона пишет таблицу для раскладки частей.
 ## Самые долгие тесты: `-- --slow 20` — после прогона печатает 20 самых долгих тестов (не файлов), `TestShards.slowest`.
@@ -73,7 +74,7 @@ func _run() -> void:
 			slow_n = args[a + 1].to_int()
 			a += 2
 		else:
-			filters.append(arg)
+			filters.append(TestShards.filter_arg(arg))
 			a += 1
 	var files: Array[String] = []
 	for f in DirAccess.get_files_at(DIR):
@@ -134,6 +135,8 @@ func _run() -> void:
 	print("\nТестов: %d, прошло: %d, упало: %d (%.1f с)" % [passed + failed.size(), passed, failed.size(), ms / 1000.0])
 	for f in failed:
 		print("  упал: ", f)
+	if passed + failed.size() == 0 and not filters.is_empty():
+		print(TestShards.no_match(filters))
 	if slow_n > 0:
 		print("\n", TestShards.slow_text(test_s, slow_n))
 	if not times_out.is_empty():
