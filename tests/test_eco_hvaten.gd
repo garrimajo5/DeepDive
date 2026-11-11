@@ -112,7 +112,8 @@ func test_fed_at_start_no_catch_or_lure() -> void:
 		if ev.species == "hvaten" or ev.species == "pestr":
 			notes += 1
 	eq(notes, 0, "первые 30 с хватни сыты и молчат")
-	w.run(30.0)
+	# Сыты START_FED (35 с); первая поимка на этом зерне — на 36-й с: смотрим до 45 с, а не до 60 (#1350).
+	w.run(EcoHvaten.START_FED - 30.0 + 10.0)
 	var caught := 0
 	for ev in w.bus.pending:
 		if ev.species == "hvaten" and ev.note == "catch":

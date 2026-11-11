@@ -79,6 +79,8 @@ const LATE := 21.0
 ## Предел прохода arrive: путь от середины до 01 (≈46 м на 5 м/с) — 9,3 с, стоянке у 01 хватает 2,7 с —
 ## итог «у 01» и ближайшие хищники уже в строке (было 20 с, #1350 11.11).
 const LIM_ARRIVE := 12.0
+## Предел прохода с ответом экипажа: сигнал «замер» на этом зерне — на 8-й с прохода, запас 4 с (было 20 с, #1350).
+const LIM_ANSWER := 12.0
 
 
 ## Короткая стоянка тестов всё ещё дольше паузы хищников после сброса мира: проходы late/arrive — после паузы.
@@ -273,7 +275,7 @@ func test_patrol_tool_answer() -> void:
 	var tool: GDScript = load("res://tools/patrol.gd")
 	tool.set("answer", "signal")
 	tool.set("alert", 2.5)
-	tool.set("limit", LIM)
+	tool.set("limit", LIM_ANSWER)
 	tool.set("wait_late", LATE)
 	var r: Dictionary = tool.run(false, "late", 20261018)
 	tool.set("answer", "")
