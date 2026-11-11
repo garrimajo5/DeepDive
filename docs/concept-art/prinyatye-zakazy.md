@@ -240,6 +240,14 @@ y — высота, лёд на y = 0, метры. Упоминания Unity о
 `TailStrike` 0,6 с; кости, тайминги и подключение — `serpohvost.md`, раздел ANIM-001; превью — `serpohvost-anim.jpg`,
 `serpohvost-udar.gif`. Ставит в сцену задача потока Б в `docs/grafika-plan-eco.md` (Б3, плавность поведения).
 
+## ANIM-002 Экипаж — четыре клипа на MOD-012 — принято
+- Исходник: MOD-012 (`models/ekipazh-*.glb`), решение заказчика 11.11 — правка весов пяток (вариант А).
+
+**Принято 11.11.2026** (PR #697, issue #678, v2): те же `models/ekipazh-muzhchina.glb` и `ekipazh-zhenshchina.glb` с
+клипами `Idle`, `Walk` (0,8 с, 1,3 м), `SitIdle`, `PostIdle` (по 4 с, все циклы — в `.import`); веса подошвы Leg → Foot
+у 289/166 вершин. Решения — `ekipazh.md`, раздел ANIM-002; превью — `ekipazh-anim*.jpg`/`.gif`. Встраивание в
+`CrewView` и замер на телефоне — эпик #643.
+
 ## MOD-014 Щиток и рычаг разряда — принято
 - Исходник: ART-015, `razryad-shchitok.png`, решения — `razryad.md`.
 
