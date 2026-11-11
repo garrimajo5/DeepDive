@@ -293,6 +293,59 @@ func pass_by(n: int, from: Vector3, to: Vector3) -> bool:
 	return true
 
 
+## Постановка «замера» (#1498) для сценария тестера (шаг `zamer`) и снимка (`shot.gd zamer=`): хищник встаёт на
+## STAGE_DIST м от корабля с нужной стороны — ближе REACH, свет его зовёт; не ниже STAGE_FLOOR над видимым дном.
+const STAGE_DIST := 26.0
+const STAGE_FLOOR := 3.0
+const STAGE_SIDES := ["bok", "korma", "nos"]
+## Голод поставленного хищника: выше ATTACK_HUNGER — свет зовёт его сразу.
+const STAGE_HUNGER := 0.5
+## Остальные — за столько метров от корабля и с такой паузой, с: в кадре один эпизод угрозы.
+const STAGE_FAR := 400.0
+const STAGE_CALM := 999.0
+
+
+## Где ставить хищника: bok — с правого борта (+X корабля), korma — за кормой (+Z), nos — перед носом (−Z);
+## на высоте корабля, не ниже STAGE_FLOOR над видимым дном. Другая сторона — Vector3.INF.
+static func stage_spot(ship: Vector3, yaw: float, side: String) -> Vector3:
+	var fwd := Vector3(-sin(yaw), 0.0, -cos(yaw))
+	var right := Vector3(cos(yaw), 0.0, -sin(yaw))
+	var dir: Vector3
+	match side:
+		"bok":
+			dir = right
+		"korma":
+			dir = -fwd
+		"nos":
+			dir = fwd
+		_:
+			return Vector3.INF
+	var p := ship + dir * STAGE_DIST
+	p.y = maxf(ship.y, Seabed.mesh_height(p.x, p.z) + STAGE_FLOOR)
+	return p
+
+
+## Ставит голодного хищника n в at без паузы, в патруле — «замер» мир начнёт сам, если корабль манит (свет, сонар,
+## ход); остальных живых уводит за STAGE_FAR м от корабля ship с паузой STAGE_CALM. false — нет такого хищника.
+func stage_near(n: int, at: Vector3, ship: Vector3) -> bool:
+	if n < 0 or n >= all.size() or not all[n].agent.alive:
+		return false
+	for pr in all:
+		if pr.station >= 0 and leeches and pr.station < leeches.stations.size() \
+				and leeches.stations[pr.station].busy == pr.index:
+			leeches.stations[pr.station].busy = -1
+		pr.station = -1
+		pr.cooldown = 0.0 if pr.index == n else STAGE_CALM
+		pr.wary = 0.0
+		pr.agent.v = Vector3.ZERO
+		pr.agent.p = at if pr.index == n else ship + Vector3(STAGE_FAR + 30.0 * pr.index, 0.0, 0.0)
+		pr.agent.goal = pr.agent.p
+		pr.prey = null
+		_set_mode(pr, Mode.PATROL, 30.0)
+	all[n].hunger = STAGE_HUNGER
+	return true
+
+
 ## Каждый серпохвост виден сонару и сканеру.
 func targets(_world: EcoWorld, out: Array[Dictionary]) -> void:
 	for pr in all:

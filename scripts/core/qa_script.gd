@@ -38,6 +38,10 @@ extends RefCounted
 ##   {"do": "dome", "t": 2.5}                        — купольник у гнезда 07 (EcoDome.stage): клип OpenPetal идёт t с
 ##                                                     (створка поднимается с 1,2 до 3,8 с, на 5 с — уходит в нишу; знание `PETAL07` забыто —
 ##                                                     строка створки выходит всегда, #837)
+##   {"do": "zamer", "n": 0, "side": "nos"}         — фаза «замер» #1498: голодный серпохвост n в 26 м от корабля
+##                                                     (`EcoPred.stage_spot`: nos — перед носом, bok — правый борт,
+##                                                     korma — за кормой), прожектор включён, остальные хищники — за 400 м;
+##                                                     длина замера и отход — как в игре (`alert`/`alert_leave` не меняет)
 ##   {"do": "ping"}                                  — импульс сонара (`Main.ping_sonar`, как с поста): у 08 — ритм поля
 ##   {"do": "ship", "x": 38, "y": -20, "z": -25}     — поставить корабль в точку мира (y — высота, глубина со знаком
 ##                                                     минус), корабль стоит: вид на дно под трещинами льда (#445)
@@ -84,9 +88,9 @@ extends RefCounted
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z[, yaw°]], ["floor"], ["outside", on, at, lamp], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["ping"], ["pred", n, bush, away], ["dome", t], ["route"], ["act"], ["mate_hold", on], ["gone"], ["save", on], ["wreck"], ["back"], ["tutorial", on, шаг 1…7], ["brief", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["luch_ten", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z[, yaw°]], ["floor"], ["outside", on, at, lamp], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["ping"], ["pred", n, bush, away], ["zamer", n, side], ["dome", t], ["route"], ["act"], ["mate_hold", on], ["gone"], ["save", on], ["wreck"], ["back"], ["tutorial", on, шаг 1…7], ["brief", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["luch_ten", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
-const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "ping", "pred", "dome", "ship", "floor", "outside", "fly", "route", "gone", "save", "wreck", "back", "tutorial", "brief", "cards", "voice", "slow", "hud", "luch_ten", "play", "log", "quit"]
+const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "ping", "pred", "zamer", "dome", "ship", "floor", "outside", "fly", "route", "gone", "save", "wreck", "back", "tutorial", "brief", "cards", "voice", "slow", "hud", "luch_ten", "play", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "map", "map_back", "hint_map", "new", "exit", "yes", "no", "crew", "journal", "settings", "graphics", "g0", "g1", "g2", "fps", "golos", "zvuk", "s0", "v_hold", "v_voice", "v_hear", "v_mic", "lite_yes", "lite_no", "ask", "brief", "join", "last", "lobby_new", "lobby_addr", "lobby_refresh",
 	"jcell0", "jcell1", "jcell2", "jcell3", "jcell4", "jcell5", "jprev", "jnext", "jclose", "jtab0", "jtab1", "jlore0", "jlore1", "jlore2",
 	"key0", "key1", "key2", "key3", "key4", "key5", "key6", "key7", "key8", "key9", "key.", "keydel"]
@@ -225,6 +229,8 @@ func _begin(st: Dictionary, out: Array) -> void:
 			out.append(["ping"])
 		"pred":
 			out.append(["pred", int(st.get("n", 0)), int(st.get("bush", 0)), bool(st.get("away", false))])
+		"zamer":
+			out.append(["zamer", int(st.get("n", 0)), String(st.get("side", "nos"))])
 		"dome":
 			out.append(["dome", clampf(float(st.get("t", 0.0)), 0.0, EcoDome.OPEN_TIME)])
 		"charge":

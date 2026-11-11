@@ -388,34 +388,17 @@ static func zamer_trace(g: Node, was: Dictionary, t: float) -> Array[String]:
 	return out
 
 
-## Кадры знака #1498 (zamer=): длина фазы и отход — как в рекомендации гейм-дизайнера (09.11), в игре пока выключено.
+## Кадры знака #1498 (zamer=): длина фазы и отход — как в игре (вариант 1 гейм-дизайнера, включён PR #1663).
 const ZAMER_ALERT := EcoPred.ALERT_ON
 const ZAMER_LEAVE := EcoPred.ALERT_LEAVE_ON
-## На каком расстоянии от корабля ставим хищника, м (ближе EcoPred.REACH — свет его зовёт).
-const ZAMER_DIST := 26.0
-## Хищник не ниже этого над видимым дном, м.
-const ZAMER_FLOOR := 3.0
-const ZAMER_SIDES := ["bok", "korma", "nos"]
+## Где и как ставим хищника — постановка мира `EcoPred.stage_*` (общая с шагом `zamer` сценария тестера).
+const ZAMER_DIST := EcoPred.STAGE_DIST
+const ZAMER_FLOOR := EcoPred.STAGE_FLOOR
+const ZAMER_SIDES := EcoPred.STAGE_SIDES
 
 
-## Где ставить хищника: bok — с правого борта (+X корабля), korma — за кормой (+Z), nos — перед носом (−Z);
-## на высоте корабля, не ниже ZAMER_FLOOR над видимым дном. Другая сторона — Vector3.INF.
 static func zamer_spot(ship: Vector3, yaw: float, side: String) -> Vector3:
-	var fwd := Vector3(-sin(yaw), 0.0, -cos(yaw))
-	var right := Vector3(cos(yaw), 0.0, -sin(yaw))
-	var dir: Vector3
-	match side:
-		"bok":
-			dir = right
-		"korma":
-			dir = -fwd
-		"nos":
-			dir = fwd
-		_:
-			return Vector3.INF
-	var p := ship + dir * ZAMER_DIST
-	p.y = maxf(ship.y, Seabed.mesh_height(p.x, p.z) + ZAMER_FLOOR)
-	return p
+	return EcoPred.stage_spot(ship, yaw, side)
 
 
 ## Включает фазу «замер» в мире снимка и ставит голодного хищника №0 в zamer_spot; остальных уводит за 400 м.
@@ -427,14 +410,7 @@ static func zamer_setup(g: Node, ship: Vector3, yaw: float, side: String) -> voi
 		return
 	ps.alert = ZAMER_ALERT
 	ps.alert_leave = ZAMER_LEAVE
-	for pr in ps.all:
-		pr.cooldown = 999.0 if pr.index != 0 else 0.0
-		pr.agent.v = Vector3.ZERO
-		pr.agent.p = at if pr.index == 0 else ship + Vector3(400.0 + 30.0 * pr.index, 0.0, 0.0)
-		pr.agent.goal = pr.agent.p
-		pr.prey = null
-		EcoPred._set_mode(pr, EcoPred.Mode.PATROL, 30.0)
-	ps.all[0].hunger = 0.5
+	ps.stage_near(0, at, ship)
 	if not g.light_on:
 		g.toggle_light()
 

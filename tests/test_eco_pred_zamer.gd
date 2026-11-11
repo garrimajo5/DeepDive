@@ -131,3 +131,32 @@ func test_ping_alerts_with_reason() -> void:
 		if ev.species == EcoPred.ID and ev.note == "alert":
 			text = ev.text()
 	ok(text.contains("сонар"), "строка с причиной: %s" % text)
+
+
+## Постановка шага `zamer` сценария тестера и `shot.gd zamer=` (#1498): хищник n в stage_spot — голодный, без паузы,
+## остальные далеко с паузой; со светом мир сам начинает замер с игровыми числами, свет погас — отход.
+func test_stage_near_alerts_with_game_numbers() -> void:
+	var r := _world()
+	var w: EcoWorld = r[0]
+	var ps: EcoPred = r[1]
+	var ship := Vector3(20, FLAT + 7.0, 22.5)
+	w.ship.pos = ship
+	w.ship.light_on = true
+	var yaw := deg_to_rad(-15.0)
+	var at := EcoPred.stage_spot(ship, yaw, "nos")
+	ok(not ps.stage_near(ps.all.size(), at, ship), "нет такого хищника — false")
+	ok(ps.stage_near(1, at, ship), "хищник 1 поставлен")
+	var pr := ps.all[1]
+	eq(pr.agent.p, at, "в точке постановки")
+	near(Vector2(at.x - ship.x, at.z - ship.z).length(), EcoPred.STAGE_DIST, 1e-3, "26 м от корабля")
+	ok(EcoPred.STAGE_DIST < EcoPred.REACH, "ближе дальности чутья")
+	for o in ps.all:
+		if o != pr:
+			ok(o.agent.distance_to(ship) >= EcoPred.STAGE_FAR, "хищник %d уведён" % o.index)
+			eq(o.cooldown, EcoPred.STAGE_CALM, "и не нападает")
+	w.step(EcoWorld.MAX_STEP)
+	eq(pr.mode, EcoPred.Mode.ALERT, "со светом — замер, не бросок")
+	near(pr.agent.timer, EcoPred.ALERT_ON, 0.1, "замер по числам игры")
+	w.ship.light_on = false
+	_secs(w, 0.2)
+	eq(pr.mode, EcoPred.Mode.RETREAT, "свет погас — отход")
