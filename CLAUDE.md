@@ -125,7 +125,7 @@
   распаковать, `ln -s …/Godot_v4.7.2-stable_linux.x86_64 /usr/local/bin/godot` (504 от прокси — повторять `curl` в цикле
   с паузой 20 с; `gh release download` не годится — упирается в GraphQL). Android SDK в сессии нет (`dl.google.com` закрыт),
   APK собирает только CI.
-- CI «Godot» (`.github/workflows/godot.yml`): «Тесты» (три части матрицей по времени файлов — `tests/run.gd -- --shard i/3`, `TestShards`, таблица `tests/vremya.txt`; обновить — по логу CI средним 3–5 последних прогонов `main`: `python3 tools/ci_times.py --run <id> --run <id> …` (один прогон даёт перекос до ±60 с на часть) или локально `-- --times tests/vremya.txt`) и «Сборка APK» (артефакт `deepdive-apk`) идут **параллельно**;
+- CI «Godot» (`.github/workflows/godot.yml`): «Тесты» (три части матрицей по времени файлов — `tests/run.gd -- --shard i/3`, `TestShards`, таблица `tests/vremya.txt`; обновить — по логу CI средним 3–5 последних прогонов `main`: `python3 tools/ci_times.py --run <id> --run <id> …` (один прогон даёт перекос до ±60 с на часть) или локально `-- --times tests/vremya.txt`; самые долгие тесты, не файлы, — `-- --slow 20`, `TestShards.slowest`) и «Сборка APK» (артефакт `deepdive-apk`) идут **параллельно**;
   релиз `apk-latest` — отдельный job «Релиз» после обоих зелёных, только на `main`. PR сливается, когда тесты и APK зелёные.
   Импорт проекта кэшируется (`.godot`), поэтому прогон быстрый. Если в PR нет кода (только `art/`, `qa/`, `*.md`, картинки
   и html в `docs/`), job «Что изменилось» пропускает тесты, APK и релиз — «skipped» тоже считается зелёным.
