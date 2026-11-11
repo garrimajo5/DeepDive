@@ -71,9 +71,15 @@ func test_probe_patrol_goals() -> void:
 
 
 ## Отчёт сравнения tools/patrol.gd собирается и считает проход (по нему решают, включать ли пробу).
+## Проходы в тестах короткие (`lim=`, `limit`): проверяют сам инструмент, полный путь — у расчётов для решений.
+const LIM := 20.0
+
+
 func test_patrol_tool_runs() -> void:
 	var tool: GDScript = load("res://tools/patrol.gd")
+	tool.set("limit", LIM)
 	var r: Dictionary = tool.run(true, "base", 20261018)
+	tool.set("limit", tool.LIMIT)
 	ok(r.has("bite") and r.has("charge") and r.has("warn_before"), "итог прохода полный")
 	ok(String(r["text"]) != "", "строка прохода есть")
 
@@ -81,7 +87,9 @@ func test_patrol_tool_runs() -> void:
 ## Проход arrive (встреча у 01, #1400): корабль доходит до 01, стоит там и печатает ближайшего из трёх хищников.
 func test_patrol_tool_arrive() -> void:
 	var tool: GDScript = load("res://tools/patrol.gd")
+	tool.set("limit", LIM)
 	var r: Dictionary = tool.run(false, "arrive", 20261018)
+	tool.set("limit", tool.LIMIT)
 	var text := String(r["text"])
 	ok(text.contains("у 01 с "), "корабль дошёл до 01: %s" % text)
 	ok(text.contains("№0") and text.contains("№1") and text.contains("№2"), "все три хищника в итоге: %s" % text)
@@ -240,12 +248,15 @@ func test_patrol_tool_answer() -> void:
 	var tool: GDScript = load("res://tools/patrol.gd")
 	tool.set("answer", "signal")
 	tool.set("alert", 2.5)
+	tool.set("limit", LIM)
 	var r: Dictionary = tool.run(false, "late", 20261018)
 	tool.set("answer", "")
 	tool.set("alert", 0.0)
+	tool.set("limit", tool.LIMIT)
 	ok(r.has("wc") and r.has("cb") and r.has("beam_before"), "итог с промежутками и лучом")
 	var text := String(r["text"])
 	ok(text.contains("ответов ") or text == "тихо", "по сигналу — ответ экипажа: %s" % text)
+	eq(int(r["answers"]), 1, "сигнал за короткий проход есть — ответ один: %s" % text)
 
 
 ## Бросок во время ответа экипажа (корабль стоит без света) — в итоге с тем, что манило (`_watch`, `lure_of`).
