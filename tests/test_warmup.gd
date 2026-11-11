@@ -143,6 +143,9 @@ func test_scene_warmup() -> void:
 		ok(sm != null and sm.visible and sm.map != null and sm.alarm != null and false in sm.doors
 				and sm.marks.size() == Crew.Role.size(),
 				"схема корабля рисуется под шторкой с тревогой, закрытым люком и всеми ролями (29-shema)")
+		var sp := main.settings_panel
+		ok(sp != null and sp.visible and sp.warming and sp.settings == main.settings,
+				"настройки рисуют все страницы под шторкой — кегли в кэше шрифта (#1637, 29-nastrojki)")
 		if main.warm.outside() >= 0:
 			outside += 1
 			ok(main.flyby_cam.current, "кадр снаружи — камера с борта")
@@ -173,6 +176,8 @@ func test_scene_warmup() -> void:
 			"карточка у стола снова пуста и скрыта")
 	ok(main.ship_map_panel != null and not main.ship_map_panel.visible and main.ship_map_panel.map == null,
 			"схема снова скрыта и пуста, узел остался — первое открытие его не строит")
+	ok(main.settings_panel != null and not main.settings_panel.visible and not main.settings_panel.warming,
+			"настройки снова скрыты, узел остался — первое открытие его не строит (#1637)")
 	ok(not main.ship_map.open, "настоящая схема не открыта")
 	ok(main.camera.current, "глаза на мостике")
 	ok(yaws.size() >= 6, "камера обошла круг: %s" % str(yaws.keys()))

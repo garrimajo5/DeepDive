@@ -147,10 +147,21 @@ func open_settings() -> void:
 	main.overlay.router.clear()   # палец с кнопки «Настройки» не берёт ползунок
 
 
-func settings_show() -> void:
+func _settings_panel() -> SettingsPanel:
 	if main.settings_panel == null:
 		main.settings_panel = SettingsPanel.new()
 		main.add_child(main.settings_panel)
+	return main.settings_panel
+
+
+## Прогрев (WarmRunner, #1637): панель настроек создаётся под шторкой и рисует все страницы — узел и кегли
+## готовы до первого «Настройки». on = false — снова по состоянию настроек (закрыты — скрыта).
+func warm_settings(on: bool) -> void:
+	_settings_panel().warm(on, main.settings)
+
+
+func settings_show() -> void:
+	_settings_panel()
 	main.settings.mic_ok = main.radio.mic   # статус микрофона на странице «Голос» ART-041
 	main.settings_panel.show_settings(main.settings)
 	if main.menu_panel:   # над главным меню — его фон без кнопок
