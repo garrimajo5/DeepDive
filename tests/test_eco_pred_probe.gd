@@ -89,6 +89,7 @@ func test_late_outlasts_pred_pause() -> void:
 	ok(pause > 0.0, "на старте у хищников пауза")
 	ok(LATE > pause, "стоянка тестов %.0f с дольше паузы %.0f с" % [LATE, pause])
 	ok(LATE < tool.WAIT_LATE, "и короче стоянки расчётов")
+	eq(tool.get("wait_late"), tool.WAIT_LATE, "стоянка прогона настраивается (`late=`), по умолчанию — WAIT_LATE")
 
 
 func test_patrol_tool_runs() -> void:
