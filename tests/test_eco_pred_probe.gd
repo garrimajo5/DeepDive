@@ -76,6 +76,9 @@ const LIM := 20.0
 ## Тихая стоянка перед проходом в тестах (`late=`, `wait_late`): пауза хищников на старте — 20 с, хватает 21 с
 ## вместо 30 (WAIT_LATE расчётов).
 const LATE := 21.0
+## Предел прохода arrive: путь от середины до 01 (≈46 м на 5 м/с) — 9,3 с, стоянке у 01 хватает 2,7 с —
+## итог «у 01» и ближайшие хищники уже в строке (было 20 с, #1350 11.11).
+const LIM_ARRIVE := 12.0
 
 
 ## Короткая стоянка тестов всё ещё дольше паузы хищников после сброса мира: проходы late/arrive — после паузы.
@@ -104,13 +107,15 @@ func test_patrol_tool_runs() -> void:
 ## Проход arrive (встреча у 01, #1400): корабль доходит до 01, стоит там и печатает ближайшего из трёх хищников.
 func test_patrol_tool_arrive() -> void:
 	var tool: GDScript = load("res://tools/patrol.gd")
-	tool.set("limit", LIM)
+	ok(tool.get("limit") != null and tool.get("wait_late") != null, "предел и стоянка прохода настраиваются")
+	tool.set("limit", LIM_ARRIVE)
 	tool.set("wait_late", LATE)
 	var r: Dictionary = tool.run(false, "arrive", 20261018)
 	tool.set("limit", tool.LIMIT)
 	tool.set("wait_late", tool.WAIT_LATE)
 	var text := String(r["text"])
-	ok(text.contains("у 01 с "), "корабль дошёл до 01: %s" % text)
+	ok(bool(r["reached"]) and float(r["to01"]) < LIM_ARRIVE - 1.0, "корабль дошёл до 01 и постоял: %s" % text)
+	ok(text.contains("у 01 с ") and not text.contains("у 01 с -1"), "время у 01 в итоге: %s" % text)
 	ok(text.contains("№0") and text.contains("№1") and text.contains("№2"), "все три хищника в итоге: %s" % text)
 	ok(int(r["by"]) >= 0 and int(r["by"]) < 3, "номер бросившегося")
 
