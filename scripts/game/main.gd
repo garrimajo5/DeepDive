@@ -192,6 +192,7 @@ var logbook_panel: JournalPanel
 var flyby := Flyby.new()   ## камера с борта: облёт в начале забега, вид при всплытии
 var flyby_cam: Camera3D
 var overlay: TouchOverlay
+var hud := true          ## интерфейс поверх игры показан; `set_hud(false)` — кадры для магазина и пробы света
 var hint: Label            ## строка состояния на приборах (Status), по строкам экрана
 var status_lines := Status.Lines.new()   ## раскладка строки состояния — пересчёт только при смене (#847)
 var message := Status.Message.new()
@@ -602,8 +603,10 @@ func _build_world() -> void:
 
 
 ## Кадры для магазина (ART-046, шаг тестера `hud`, `shot.gd hud=0`): спрятать или вернуть крестовину и кнопки,
-## строки приборов и плашку версии. Следующее событие интерфейса (пауза, меню, шторка) ставит их по-своему.
+## строки приборов, плашку версии и плашку цели за штурвалом (`OverlayFlow.goal_step`). Следующее событие интерфейса
+## (пауза, меню, шторка) ставит кнопки и строки по-своему.
 func set_hud(on: bool) -> void:
+	hud = on
 	overlay.visible = on
 	hint.visible = on
 	var ver := overlay.get_parent().get_node_or_null("Версия") as CanvasItem
