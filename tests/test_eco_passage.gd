@@ -9,13 +9,13 @@ const X := Vector2(285.0, 430.0)   ## участок прохода по x
 const HALF := 30.0                 ## ±30 м у оси — проход 60 м
 const ABOVE := 25.0                ## у дна: не выше этого над дном
 
-var main: Main
+var view: EcoView
 
 
 func after() -> void:
-	if main:
-		main.queue_free()
-		main = null
+	if view:
+		view.queue_free()
+		view = null
 	await frames(1)
 
 
@@ -45,19 +45,23 @@ func test_in_passage_bounds() -> void:
 	ok(not in_passage(Vector3(250.0, floor_y + 2.0, S.GAP_Z)), "ещё на Краю отмели")
 
 
+## Живой мир целиком, как в игре (EcoView на видимой сетке дна, как у Main), без сцены корабля: проходу важны
+## только существа и цели, а сборка Main — две трети времени теста. Корабль стоит над осью — ShipState.
 func test_scene_passage_is_clear() -> void:
-	main = load("res://scenes/main.tscn").instantiate()
-	tree.root.add_child(main)
-	await frames(2)
-	var w := main.eco.world
+	view = EcoView.new()
+	view.ground = Seabed.mesh_height
+	tree.root.add_child(view)
+	await frames(1)
+	var w := view.world
 	ok(w.agents.size() > 10 and w.scan_targets().size() > 10, "живой мир есть")
+	var ship := EcoLink.ShipState.new()
 	for x: float in [300.0, 360.0, 420.0]:
-		main.park_at(Vector3(x, Seabed.height(x, S.GAP_Z) + 12.0, S.GAP_Z))
+		ship.pos = Vector3(x, Seabed.height(x, S.GAP_Z) + 12.0, S.GAP_Z)
 		for i in 30:
-			main.step(DT)
+			view.step(DT, ship)
 		var a := standing(w)
 		for i in 60:
-			main.step(DT)
+			view.step(DT, ship)
 		var b := standing(w)
 		var still := a.keys().filter(func(k: String) -> bool:
 			return b.has(k) and (b[k] as Vector3).distance_to(a[k]) < 0.5)
