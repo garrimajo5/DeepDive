@@ -629,7 +629,7 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	moth_view.sync(ship, world.time)
 	fringe_view.sync(ship, world.time)
 	echo_view.sync(world.time, ship.pos, ship, current.vel())
-	dome_view.sync()
+	dome_view.sync(world.time, ship.pos)
 	far_view.sync(world.time, ship.pos, world.ground)
 	dust_layer.sync()
 	StepClock.mark("мир/вид: планктон, эхо, дальние")

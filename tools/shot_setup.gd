@@ -189,8 +189,8 @@ static func apply(g: Main, kv: Dictionary) -> void:
 		d.pos = d.stand()
 		d.yaw = 0.0
 		d.state = EcoDome.State.OPEN
-		d.t = 0.0
-		g.eco.dome_view.sync()
+		d.t = float(kv.get("kupol_t", "0"))
+		g.eco.dome_view.sync(g.eco.world.time, d.pos)
 		var kc := Camera3D.new()
 		kc.fov = Deck.FOV
 		kc.far = 400.0
