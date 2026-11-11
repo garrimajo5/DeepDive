@@ -229,7 +229,10 @@ func tick(dt: float) -> void:
 				pred_pass(main, c[1], c[2], c[3])
 			"dome":   # купольник у гнезда 07 на t с клипа OpenPetal (#1350: клипов ANIM-004 в отчёте не было)
 				if main.eco != null and main.eco.dome != null:
+					var knew := main.lore.knows(LayerLore.PETAL07)
+					main.lore.facts.erase(LayerLore.PETAL07)   # строка створки на 37a — как в первый раз (#837, отчёт 11.11 15:18)
 					main.eco.dome.stage(c[1])
+					_log("купольник: OpenPetal %.1f с · створка 07 %s" % [c[1], "была открыта раньше — забыта" if knew else "ещё не открыта"])
 			"save":   # место для гибели (#824): как автосохранение, но только в памяти — файл прогона не пишется
 				main.save.ship = SaveGame.ship_read(SaveGame.ship_snapshot(main.helm, main.vitals)) if c[1] else {}
 			"wreck":   # корпус разрушен — как от удара (шторка ART-036)
