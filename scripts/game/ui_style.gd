@@ -16,15 +16,16 @@ const PLATE_A := 1.0
 const GLYPHS := "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ абвгдеёжзийклмнопрстуфхцчшщъыьэюя 0123456789 .,:;!?«»—–-+·%/()°×№"
 
 
-## Кегли прогрева панели: каждый кегль макета base × множитель s — и вниз (int), и до ближайшего (roundi): панели
-## округляют по-разному, а кэш глифов — на целый кегль. Не мельче 8, по возрастанию, без повторов.
-static func warm_px(base: Array, s: float) -> Array[int]:
+## Кегли прогрева панели: каждый кегль макета base × множитель s так, как его округляет сама панель: `int` (вниз —
+## `draw_string(…, px * s)` и `int(px * s)`) или nearest — `roundi` (пульт энергии). Кэш глифов — на целый кегль, лишний
+## кегль — лишняя растеризация под шторкой (обе округлки сразу — +1,5 с холодного прогрева, отчёты тестера #1674,
+## #1677). Не мельче 8, по возрастанию, без повторов.
+static func warm_px(base: Array, s: float, nearest := false) -> Array[int]:
 	var out: Array[int] = []
 	for px in base:
-		for n in [int(px * s), roundi(px * s)]:
-			var k := maxi(8, n)
-			if not k in out:
-				out.append(k)
+		var k := maxi(8, roundi(px * s) if nearest else int(px * s))
+		if not k in out:
+			out.append(k)
 	out.sort()
 	return out
 
