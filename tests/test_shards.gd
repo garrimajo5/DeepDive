@@ -96,3 +96,23 @@ func test_ci_runs_every_part() -> void:
 	ok(wf.contains("needs: [changes, test-parts, ps1]") and wf.contains("needs.test-parts.result }}\" = \"success\""),
 		"итог «Тесты» проверяет результат всех частей")
 	ok(wf.contains("if: always() && needs.changes.outputs.code == 'true'"), "итог не пропускается при упавшей части")
+
+
+func test_slowest_tests() -> void:
+	var t := {"test_a.test_x": 3.0, "test_a.test_y": 12.5, "test_b.test_z": 3.0, "test_c.test_w": 0.2}
+	eq(TestShards.slowest(t, 2), [["test_a.test_y", 12.5], ["test_a.test_x", 3.0]], "долгие первыми, равные — по имени")
+	eq(TestShards.slowest(t, 10).size(), 4, "N больше числа тестов — все")
+	eq(TestShards.slowest(t, 0), [])
+	eq(TestShards.slowest({}, 5), [])
+	var text := TestShards.slow_text(t, 2)
+	ok(text.begins_with("Самые долгие тесты (2):"), text)
+	ok(text.find("test_a.test_y") < text.find("test_a.test_x"), "по убыванию: " + text)
+	ok(text.contains("  12.5 с  test_a.test_y"), text)
+	eq(TestShards.slow_text({}, 3), "")
+
+
+func test_runner_has_slow_key() -> void:
+	# ключ разбирает сам раннер: без него --slow ушёл бы в фильтры и прогон стал бы пустым
+	var src := FileAccess.get_file_as_string("res://tests/run.gd")
+	ok(src.contains("\"--slow\""), "run.gd разбирает --slow")
+	ok(src.contains("TestShards.slow_text(test_s, slow_n)"), "run.gd печатает самые долгие тесты")
