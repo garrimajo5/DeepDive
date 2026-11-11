@@ -112,3 +112,18 @@ static func slow_text(test_s: Dictionary, n: int) -> String:
 	for p in top:
 		s += "  %6.1f с  %s\n" % [p[1], p[0]]
 	return s
+
+
+# Строки раннера про файл теста, который не загрузился (#1350): причина из ошибок движка, пойманных при load
+# (без «Failed to load» — это лишь следствие), и команда, которая покажет все ошибки разбора.
+static func load_fail(file: String, errors: Array) -> Array[String]:
+	var out: Array[String] = ["ПАДЕНИЕ  %s: скрипт не загрузился" % file]
+	var why: Array[String] = []
+	for e in errors:
+		var t := String(e)
+		if not t.begins_with("Failed to load script") and not why.has(t):
+			why.append(t)
+	for t in why.slice(0, 5):
+		out.append("         - причина: " + t)
+	out.append("         - подробно: godot --headless --path . --check-only -s tests/" + file)
+	return out
