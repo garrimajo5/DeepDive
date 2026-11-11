@@ -49,8 +49,11 @@ function Get-Asset([string]$url, [string]$path, [long]$size) {
 }
 # Шум хоста (#1350): загрузка ЦП и сколько процессов эмулятора (qemu) запущено — до и после прогона, в итоговой
 # строке и в log.txt, чтобы шумный прогон отличался от регрессии фактом
+function Get-Cpu {
+  return [int](Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object LoadPercentage -Average).Average
+}
 function Get-Load {
-  $cpu = (Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object LoadPercentage -Average).Average
+  $cpu = Get-Cpu
   $emu = @(Get-Process -Name 'qemu-system-*' -ErrorAction SilentlyContinue).Count
   return "ЦП $([int]$cpu)%, эмуляторов $emu"
 }
@@ -193,6 +196,14 @@ $inst = ''
 for ($i = 0; $i -lt 3; $i++) { $inst = (& $adb install -r -d $apk 2>&1 | Out-String); if ($inst -match 'Success') { break }; Start-Sleep 10 }
 if ($inst -notmatch 'Success') { Write-Output "INSTALL_FAILED $head"; $inst; exit 1 }
 
+# Остывание после -ColdBoot (#1350, 11.11): эмулятор только что загрузился и APK поставлен — хост ещё занят
+# (первый прогон сессии шумный). Ждать, пока ЦП не упадёт ниже 50 %, до 120 с; сколько ждали — в итоге RUN
+$cool = ''
+if ($ColdBoot) {
+  $waited = 0
+  while ($waited -lt 120 -and (Get-Cpu) -ge 50) { Start-Sleep 5; $waited += 5 }
+  $cool = " | остывание $waited с (ЦП $(Get-Cpu)%)"
+}
 $loadBefore = Get-Load
 # Сценарий — в user:// игры (files/qa/). APK отладочный, поэтому run-as работает.
 & $adb shell am force-stop $app
@@ -255,7 +266,7 @@ Write-Output 'log:'; if (Test-Path "$run\log.txt") { Get-Content "$run\log.txt" 
 Write-Output 'errors:'; $errs | Select -First 30
 Write-Output "files: $run"
 # Итог одной строкой — и в конец log.txt: лог из отчёта сам называет сборку, снимки и шум хоста (#1350)
-$result = "RUN $head done=$done снимков $($have.Count) из $($want.Count) | помехи: $noise (свёрнута $paused, чужих окон $foreign) | до: $loadBefore | после: $loadAfter"
+$result = "RUN $head done=$done снимков $($have.Count) из $($want.Count) | помехи: $noise (свёрнута $paused, чужих окон $foreign) | до: $loadBefore | после: $loadAfter$cool"
 if ($stale) { $result += " | STALE_APK $head $built" }
 if ($stale) { Write-Output "STALE_APK $head $built — скачался другой APK (релиз перезаливался?): повторите с -Force" }
 Write-Output $result

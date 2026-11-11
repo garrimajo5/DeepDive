@@ -275,6 +275,22 @@ func test_run_qa_noise_stale_coldboot() -> void:
 		ok(qa.contains(k), "docs/QA.md: %s" % k)
 
 
+## #1350 (11.11): после -ColdBoot хост ещё занят загрузкой эмулятора — скрипт ждёт ЦП < 50 % (до 120 с) перед
+## запуском игры, сколько ждали — в итоге RUN; без -ColdBoot не ждёт.
+func test_run_qa_cools_after_coldboot() -> void:
+	var ps := _ps("run-qa.ps1")
+	ok(ps.contains("function Get-Cpu"), "ЦП отдельной функцией")
+	var wait := ps.find("while ($waited -lt 120 -and (Get-Cpu) -ge 50)")
+	ok(wait > 0, "ждём ЦП < 50 % не дольше 120 с")
+	var guard := ps.rfind("if ($ColdBoot) {", wait)
+	ok(guard > 0 and wait - guard < 80, "ждём только после -ColdBoot")
+	ok(wait > ps.find("adb install -r -d $apk"), "после установки APK")
+	ok(wait < ps.find("$loadBefore = Get-Load") and wait < ps.find("monkey -p $app"), "до запуска игры")
+	ok(ps.contains("$cool = \" | остывание $waited с"), "строка «остывание N с»")
+	ok(ps.contains("после: $loadAfter$cool\""), "в итоге RUN")
+	ok(FileAccess.get_file_as_string("res://docs/QA.md").contains("остывание N с"), "docs/QA.md: остывание")
+
+
 ## #1592: игру свернули посреди прогона — строка в логе (её считает run-qa.ps1); без сценария — молчит.
 func test_runner_logs_pause() -> void:
 	var r := QaRunner.new()
