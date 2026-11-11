@@ -73,6 +73,22 @@ func test_probe_patrol_goals() -> void:
 ## Отчёт сравнения tools/patrol.gd собирается и считает проход (по нему решают, включать ли пробу).
 ## Проходы в тестах короткие (`lim=`, `limit`): проверяют сам инструмент, полный путь — у расчётов для решений.
 const LIM := 20.0
+## Тихая стоянка перед проходом в тестах (`late=`, `wait_late`): пауза хищников на старте — 20 с, хватает 21 с
+## вместо 30 (WAIT_LATE расчётов).
+const LATE := 21.0
+
+
+## Короткая стоянка тестов всё ещё дольше паузы хищников после сброса мира: проходы late/arrive — после паузы.
+func test_late_outlasts_pred_pause() -> void:
+	var tool: GDScript = load("res://tools/patrol.gd")
+	var ev: EcoView = tool.make(false, 20261018)
+	var pause := 0.0
+	for pr in ev.preds.all:
+		pause = maxf(pause, pr.cooldown)
+	ev.free()
+	ok(pause > 0.0, "на старте у хищников пауза")
+	ok(LATE > pause, "стоянка тестов %.0f с дольше паузы %.0f с" % [LATE, pause])
+	ok(LATE < tool.WAIT_LATE, "и короче стоянки расчётов")
 
 
 func test_patrol_tool_runs() -> void:
@@ -88,8 +104,10 @@ func test_patrol_tool_runs() -> void:
 func test_patrol_tool_arrive() -> void:
 	var tool: GDScript = load("res://tools/patrol.gd")
 	tool.set("limit", LIM)
+	tool.set("wait_late", LATE)
 	var r: Dictionary = tool.run(false, "arrive", 20261018)
 	tool.set("limit", tool.LIMIT)
+	tool.set("wait_late", tool.WAIT_LATE)
 	var text := String(r["text"])
 	ok(text.contains("у 01 с "), "корабль дошёл до 01: %s" % text)
 	ok(text.contains("№0") and text.contains("№1") and text.contains("№2"), "все три хищника в итоге: %s" % text)
@@ -249,10 +267,12 @@ func test_patrol_tool_answer() -> void:
 	tool.set("answer", "signal")
 	tool.set("alert", 2.5)
 	tool.set("limit", LIM)
+	tool.set("wait_late", LATE)
 	var r: Dictionary = tool.run(false, "late", 20261018)
 	tool.set("answer", "")
 	tool.set("alert", 0.0)
 	tool.set("limit", tool.LIMIT)
+	tool.set("wait_late", tool.WAIT_LATE)
 	ok(r.has("wc") and r.has("cb") and r.has("beam_before"), "итог с промежутками и лучом")
 	var text := String(r["text"])
 	ok(text.contains("ответов ") or text == "тихо", "по сигналу — ответ экипажа: %s" % text)
