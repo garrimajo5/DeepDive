@@ -8,6 +8,7 @@ const FILL := 1.0   ## заливка глухая: табло тревог ART-
 const GLYPH_TOP := 0.76   ## от верха видимых глифов до базовой линии, доля кегля (DejaVu Sans)
 
 var brief: ArrivalBrief
+var warming := false   ## прогрев (`warm`): кегли панели под шторкой вместо неё
 
 
 func _ready() -> void:
@@ -37,7 +38,25 @@ func _text(font: Font, top: Vector2, t: String, px: int, color: Color) -> void:
 	draw_string(font, top + Vector2(0, px * GLYPH_TOP), t, HORIZONTAL_ALIGNMENT_LEFT, -1, px, color)
 
 
+## Прогрев (WarmRunner, #1350): под шторкой брифинг прибытия рисует буквы `UiStyle.GLYPHS` своими кеглями
+## (`warm_sizes`) вместо себя — первый показ не растрирует глифы вне шага (#519, «узлы»). on = false — скрыта до
+## своего показа.
+func warm(on: bool) -> void:
+	warming = on
+	visible = on
+	queue_redraw()
+
+
+## Кегли панели, px — из её `_draw`.
+func warm_sizes() -> Array[int]:
+	return UiStyle.warm_px([ArrivalBrief.SOURCE_PX, ArrivalBrief.LINE_PX, ArrivalBrief.FOOT_PX],
+		ArrivalBrief.scale(get_viewport_rect().size))
+
+
 func _draw() -> void:
+	if warming:
+		UiStyle.warm_glyphs(self, [get_theme_default_font()], warm_sizes())
+		return
 	if brief == null or not brief.active():
 		return
 	var size := get_viewport_rect().size

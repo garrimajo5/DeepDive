@@ -16,6 +16,7 @@ const GLYPH_TOP := 0.76   ## от верха видимых глифов до б
 var comms: Comms
 var time := 0.0
 var area := Rect2()  ## безопасная область экрана (`Main.comms_area`): места `Comms` считаются от неё (#603)
+var warming := false   ## прогрев (`warm`): кегли панели под шторкой вместо неё
 
 
 func _ready() -> void:
@@ -44,7 +45,25 @@ func _text(font: Font, top: Vector2, text: String, px: int, color: Color, width 
 	draw_string(font, top + Vector2(0, px * GLYPH_TOP), text, HORIZONTAL_ALIGNMENT_LEFT, width, px, color)
 
 
+## Прогрев (WarmRunner, #1350): под шторкой плашка связи рисует буквы `UiStyle.GLYPHS` своими кеглями
+## (`warm_sizes`) вместо себя — первый показ не растрирует глифы вне шага (#519, «узлы»). on = false — скрыта до
+## своего показа.
+func warm(on: bool) -> void:
+	warming = on
+	visible = on
+	queue_redraw()
+
+
+## Кегли панели, px — из её `_draw`.
+func warm_sizes() -> Array[int]:
+	return UiStyle.warm_px([Comms.LETTER_PX, Comms.ROLE_PX, Comms.SUB_PX, Comms.TEXT_PX, Comms.CODE_PX, Comms.BUTTON_PX],
+		Comms.scale(area.size if area.has_area() else get_viewport_rect().size))
+
+
 func _draw() -> void:
+	if warming:
+		UiStyle.warm_glyphs(self, [get_theme_default_font()], warm_sizes())
+		return
 	if comms == null or comms.cur == null:
 		return
 	var size := area.size if area.has_area() else get_viewport_rect().size
