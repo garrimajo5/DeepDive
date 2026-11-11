@@ -147,7 +147,8 @@ func test_panels_warm_glyphs() -> void:
 
 func test_warm_px() -> void:
 	eq(UiStyle.warm_px([40.0, 28.0], 0.5), [14, 20] as Array[int], "кегли × множитель, по возрастанию")
-	eq(UiStyle.warm_px([27.0], 0.65), [17, 18] as Array[int], "и вниз, и до ближайшего: 17,55 → 17 и 18")
+	eq(UiStyle.warm_px([27.0], 0.65), [17] as Array[int], "как int у панели: 17,55 → 17, без лишнего 18 (#1674)")
+	eq(UiStyle.warm_px([27.0], 0.65, true), [18] as Array[int], "как roundi у пульта энергии: 17,55 → 18")
 	eq(UiStyle.warm_px([10.0, 4.0], 0.5), [8] as Array[int], "не мельче 8, без повторов")
 
 
