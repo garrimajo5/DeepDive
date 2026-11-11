@@ -109,5 +109,14 @@ func test_petal_lift() -> void:
 		hold = maxf(hold, (_pose(n, "OpenPetal", t)["GraspRPadA"] as Vector3).distance_to(a["GraspRPadA"]))
 	ok(hold < 0.01, "правый держит обод на месте (сдвиг %.3f м)" % hold)
 	ok((a["GraspMPadA"] as Vector3).z < (_pose(n, "Idle", 0.0)["Body"] as Vector3).z, "захваты — вперёд (−Z)")
+	# Верхняя точка подъёма — в LIFT.y: на неё ставит кадр 37 сценария тестера (#837, шаг «dome»).
+	var top := -INF
+	var top_t := 0.0
+	for i in 51:
+		var y: float = (_pose(n, "OpenPetal", i * 0.1)["GraspMPadA"] as Vector3).y
+		if y > top:
+			top = y
+			top_t = i * 0.1
+	near(top_t, EcoDome.LIFT.y, 0.15, "средний захват выше всего в LIFT.y")
 	n.queue_free()
 	await frames(1)
