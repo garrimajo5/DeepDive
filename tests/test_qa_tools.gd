@@ -308,3 +308,21 @@ func test_run_qa_pr_beside_planned() -> void:
 	var qa := FileAccess.get_file_as_string("res://docs/QA.md")
 	for k in ["-Out", "-From", "run-pr", "-r -d"]:
 		ok(qa.contains(k), "docs/QA.md: %s" % k)
+
+
+## #1614: папка результата чистилась в начале скрипта — NO_RUN у `-Pr` оставлял пустую run-pr<номер>\, а NO_CHANGES
+## планового стирал несданные снимки run\. Теперь — только перед самим прогоном, после всех ранних выходов.
+func test_run_qa_resets_folder_before_run() -> void:
+	var ps := _ps("run-qa.ps1")
+	var fn := ps.find("function Reset-Run")
+	ok(fn > 0, "чистка папки — функцией")
+	ok(ps.find("Remove-Item -Recurse -Force $run") > fn, "Remove-Item $run — только внутри Reset-Run")
+	ok(ps.count("Remove-Item -Recurse -Force $run") == 1, "и нигде больше")
+	var reset := ps.rfind("Reset-Run")
+	for early in ["NO_RUN:", "NO_ARTIFACT:", "NO_CHANGES", "DOWNLOAD_FAILED PR#", "NO_ASSET ${head}", "NO_PR #"]:
+		var at := ps.find(early)
+		ok(at > 0 and at < reset, "%s — до чистки папки" % early)
+	ok(reset < ps.find("$loadBefore = Get-Load"), "эмулятор: папка готова до прогона")
+	var pc := ps.find("NO_GODOT")
+	var pc_reset := ps.find("Reset-Run", pc)
+	ok(pc_reset > pc and pc_reset < ps.find("Copy-Item \"$user\\out\\*\" $run"), "-Pc: папка готова до копирования")
