@@ -545,10 +545,13 @@ func _wear(dt: float, light: float) -> void:
 func _flicker(dt: float) -> void:
 	var k := vitals.lamp_k(time, zap.flicker > 0.0)
 	_cabin(k * Wreck.lamps(wreck.t))   # шторка «Корпус разрушен»: плафоны гаснут
+	clock.lap("виды/свет внутри", Time.get_ticks_usec())
 	rooms.steam.apply(valve_steam, ValveSteam.tint(reactor, k * Wreck.lamps(wreck.t)))   # пар ART-071
 	rooms.lock_water.apply(lock_water, airlock.t, helm.depth(), helm.speed, vitals.hull, time, k * Wreck.lamps(wreck.t))   # ART-073
+	clock.lap("виды/пар и вода шлюза", Time.get_ticks_usec())
 	_glints(dt, k * Wreck.lamps(wreck.t))
 	_wear(dt, k * Wreck.lamps(wreck.t))
+	clock.lap("виды/блики и износ", Time.get_ticks_usec())
 	searchlight.set_flicker(k)
 	bridge.set_screens(Vector3(vitals.screen_k(time, Vitals.Screen.HELM_L), vitals.screen_k(time, Vitals.Screen.HELM_C),
 		vitals.screen_k(time, Vitals.Screen.HELM_R)), vitals.screen_k(time, Vitals.Screen.SCANNER))
@@ -906,11 +909,12 @@ func _step_zap(dt: float) -> void:
 		ocean.set_scorch(scorch.uniforms(time))
 
 
-## Шаг: виды корабля — свет и экраны пультов, ползунки и люк, голограммы, отсеки, своя фигура, корабль и камера (подчасти «виды/…» — в худшем кадре
-## лога тестера: «виды 57» у колодца 05 в отчёте #1182 не говорил, что внутри).
+## Шаг: виды корабля — свет внутри, пар и вода шлюза, блики и износ, прожектор и экраны пультов, ползунки и люк,
+## голограммы и табло, отсеки и экран сканера, своя фигура, корабль и камера (подчасти «виды/…» — в худшем кадре
+## лога тестера: «виды 57» у колодца 05 в отчёте #1182 не говорил, что внутри; имя — по тому, что вызывается, #1590).
 func _step_view(dt: float) -> void:
 	_flicker(dt)
-	clock.lap("виды/свет", Time.get_ticks_usec())
+	clock.lap("виды/прожектор и экраны пультов", Time.get_ticks_usec())
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	bridge.set_hatch(layout.doors[0].offset())
@@ -924,14 +928,14 @@ func _step_view(dt: float) -> void:
 		ballot.seconds() if coop else -1, ballot.fraction() if coop else -1.0, run.at_descent())
 	sonar_view.show_result(result_fade.update(dt, VoteHolo.result_wanted(at_vote, run.ended)), result_rows,
 		camera.global_position)
-	clock.lap("виды/голограммы", Time.get_ticks_usec())
+	clock.lap("виды/голограммы и табло", Time.get_ticks_usec())
 	rooms.apply(layout, reactor, airlock, engine)
 	var carry_c: Color = Samples.COLORS[samples.target.kind] if samples.target else Color.WHITE
 	rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(), carry_c)
 	rooms.set_lab(Lab.contents(samples.cargo), lab_screen.lines(samples, scanner, journal_page), time)
 	rooms.set_shelves(HoldShelves.contents(samples.cargo))
 	bridge.set_scanner_screen(gate.screen_lines(lore) if gate.active() else scanner.screen_lines())
-	clock.lap("виды/отсеки и экраны", Time.get_ticks_usec())
+	clock.lap("виды/отсеки и экран сканера", Time.get_ticks_usec())
 	message.update(dt)
 	me.back = CrewView.own_back(walker.pitch, me.holding())   # взгляд вниз — фигура дальше позади глаза, видны ступни (#108)
 	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt)
