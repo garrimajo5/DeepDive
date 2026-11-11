@@ -1,5 +1,6 @@
 ﻿# Прогон сценария тестера (tools/qa/scenario.json): игра сама проходит шаги, снимает скриншоты и пишет лог.
-# Результат — в D:\AI\qa-build\run\ (скриншоты *.png, log.txt, logcat.txt), итог печатается в конце.
+# Результат — в D:\AI\qa-build\run\ (скриншоты *.png, log.txt, logcat.txt, kadry.txt), итог печатается в конце:
+# строка RUN и под ней ПРОВЕРИТЬ — худший кадр шагов из открытых «проверить» с прошлыми прогонами (tools/qa/kadry.ps1).
 # Отчёт по результату пишет Claude по docs/QA.md. Перед запуском обнови клон: git -C D:\AI\DeepDive pull.
 #
 #   run-qa.ps1          — APK из релиза apk-latest на эмуляторе Pixel_8 (ровно то, что собрал CI из main)
@@ -279,6 +280,14 @@ if ($stale) { $result += " | STALE_APK $head $built" }
 if ($stale) { Write-Output "STALE_APK $head $built — скачался другой APK (релиз перезаливался?): повторите с -Force" }
 Write-Output $result
 Add-Content "$run\log.txt" "run-qa: $result" -Encoding utf8
+# Сводка ПРОВЕРИТЬ (#1350, 11.11): худший кадр шагов открытых «проверить»/«ждёт телефона» и провалов ≥ 100 мс сейчас —
+# с прошлыми значениями из qa/ клона и счётом тихих прогонов подряд < 100 мс (правило трёх). kadry.txt — в папку
+# прогона, publish-qa.ps1 сдаёт его рядом с report.md: следующей сводке не нужно разбирать отчёты.
+. (Join-Path $PSScriptRoot 'kadry.ps1')
+$worstNow = Read-Worst @(if (Test-Path "$run\log.txt") { Get-Content "$run\log.txt" -Encoding utf8 })
+Write-Kadry "$run\kadry.txt" $result $worstNow
+$watch = Get-WatchLines $worstNow (Test-Quiet $result) (Read-Past "$repo\qa") (Get-IssueSteps @($worstNow.Keys))
+foreach ($w in $watch) { Write-Output $w; Add-Content "$run\log.txt" "run-qa: $w" -Encoding utf8 }
 # Заметная строка в самом конце: прогон не дошёл до конца или не все снимки забраны (#1533)
 if (-not $done -or $miss) {
   $why = @()

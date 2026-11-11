@@ -348,3 +348,46 @@ func test_run_qa_resets_folder_before_run() -> void:
 	var pc := ps.find("NO_GODOT")
 	var pc_reset := ps.find("Reset-Run", pc)
 	ok(pc_reset > pc and pc_reset < ps.find("Copy-Item \"$user\\out\\*\" $run"), "-Pc: папка готова до копирования")
+
+
+## #1350 (11.11): сводка ПРОВЕРИТЬ под строкой RUN — худший кадр шагов открытых «проверить» с прошлыми прогонами
+## из qa/ и счётом тихих подряд < 100 мс. Логику на выдуманных папках гоняет CI (`kadry.ps1 -SelfTest`, pwsh);
+## здесь — что шаблоны ловят настоящие строки: лог QaRunner и раздел «Частота кадров» отчёта тестера.
+func test_run_qa_watch_summary() -> void:
+	var k := _ps("kadry.ps1")
+	var log_re := RegEx.create_from_string("\\$l -match '([^']+)'").search(k)
+	ok(log_re != null, "шаблон строки скриншота найден")
+	if log_re != null:
+		var r := QaRunner.new()
+		r.worst_ms = 111.4
+		r.worst_at = "шаг 342 wait, код 29 мс"
+		r.jump_ms = 163.0
+		var line := "скриншот 21a-vent | корабль (1, 2, 3)" + r.worst_text()
+		r.free()
+		var m := RegEx.create_from_string(log_re.get_string(1)).search(line)
+		ok(m != null and m.get_string(1) == "21a-vent" and m.get_string(2) == "111", "худший кадр из строки QaRunner: %s" % line)
+	var rep_re := RegEx.create_from_string("\\[regex\\]::Matches\\(\\$part, '([^']+)'\\)").search(k)
+	ok(rep_re != null, "шаблон отчёта найден")
+	if rep_re != null:
+		var text := FileAccess.get_file_as_string("res://qa/2026-11-11-2018-svezhaya-b031182/report.md")
+		var part := text.substr(text.find("\n## Частота кадров"))
+		part = part.substr(0, part.find("\n## ", 5))
+		var got := {}
+		for m in RegEx.create_from_string(rep_re.get_string(1)).search_all(part):
+			if not got.has(m.get_string(1)):
+				got[m.get_string(1)] = int(m.get_string(2))
+		eq([got.get("32o-mol-steklo"), got.get("21a-vent"), got.get("20-scanner"), got.get("09d-vote"), got.get("35-zadacha-07")],
+			[144, 111, 105, 71, 42], "числа отчёта b031182 по шагам")
+		ok(not got.has("32o"), "сокращённые имена — не шаги")
+	var run := _ps("run-qa.ps1")
+	var res := run.find("Add-Content \"$run\\log.txt\" \"run-qa: $result\"")
+	var dot := run.find(". (Join-Path $PSScriptRoot 'kadry.ps1')")
+	ok(dot > res, "сводка — после строки RUN")
+	ok(run.find("Write-Kadry \"$run\\kadry.txt\" $result") > dot, "kadry.txt — в папку прогона")
+	ok(run.find("Read-Past \"$repo\\qa\"") > dot, "прошлое — из qa/ клона")
+	ok(run.rfind("NOT_DONE") > run.find("foreach ($w in $watch)"), "NOT_DONE остаётся последней")
+	ok(k.contains("labels=$q") and k.contains("EscapeDataString"), "метка в адресе URL-кодом (кириллица в PS 5.1)")
+	ok(_ps("publish-qa.ps1").contains("Copy-Item \"$src\\kadry.txt\""), "publish-qa.ps1 сдаёт kadry.txt")
+	var ci := FileAccess.get_file_as_string("res://.github/workflows/godot.yml")
+	ok(ci.contains("./tools/qa/kadry.ps1 -SelfTest"), "CI гоняет проверку kadry.ps1")
+	ok(FileAccess.get_file_as_string("res://docs/QA.md").contains("ПРОВЕРИТЬ"), "docs/QA.md: сводка ПРОВЕРИТЬ")

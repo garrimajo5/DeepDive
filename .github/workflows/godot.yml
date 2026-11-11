@@ -129,6 +129,10 @@ jobs:
             Write-Output "$($f.Name): ошибок $(@($errors).Count)"
           }
           if ($bad) { exit 1 }
+      # Сводка ПРОВЕРИТЬ run-qa.ps1 (#1350): разбор отчётов и счёт тихих прогонов — на выдуманных папках
+      - name: Проверка kadry.ps1
+        shell: pwsh
+        run: ./tools/qa/kadry.ps1 -SelfTest
 
   tests:
     name: Тесты
