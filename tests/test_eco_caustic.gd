@@ -68,12 +68,9 @@ func test_only_top_faces() -> void:
 
 func test_scene_stones_tracked() -> void:
 	EcoCaustic.set_lite(false)
-	var main: Main = load("res://scenes/main.tscn").instantiate()
-	tree.root.add_child(main)
-	await frames(1)
-	main.step(0.1)
+	var ev: EcoView = await _world()
 	var stones := 0
-	for gi in main.eco.find_children("*", "GeometryInstance3D", true, false):
+	for gi in ev.find_children("*", "GeometryInstance3D", true, false):
 		for m in EcoRim.materials(gi as GeometryInstance3D):
 			if m is ShaderMaterial and (m as ShaderMaterial).shader == EcoShaders.shader(EcoShaders.STONE):
 				stones += 1
@@ -81,10 +78,10 @@ func test_scene_stones_tracked() -> void:
 					"камень %s под каустиками" % gi.name)
 	ok(stones >= 3, "места-ориентиры на камне есть (%d)" % stones)
 	ok(EcoCaustic.applied() > 0.0, "на отмели сила не ноль")
-	main.eco.set_lite(true)
+	ev.set_lite(true)
 	near(EcoCaustic.applied(), 0.0, 1e-6, "уровень «Экономно» мира гасит каустики")
-	main.eco.set_lite(false)
-	main.queue_free()
+	ev.set_lite(false)
+	ev.queue_free()
 	await frames(1)
 
 
@@ -121,3 +118,15 @@ func test_vent_heat_does_not_shimmer() -> void:
 	var heat := EcoShaders.material(EcoShaders.STONE, {"growth": VentView.HEAT, "flicker": 1.0})
 	ok(heat.shader.code.contains("uniform float shimmer = 0.0"), "по умолчанию камень не мерцает волнами")
 	eq(heat.get_shader_parameter("shimmer"), null, "жару курильщика размах не поставлен")
+
+
+## Живой мир без корабля (#1350): вид мира на видимой сетке дна (как в игре, #1386), шаг у старта 00.
+func _world() -> EcoView:
+	var ev := EcoView.new()
+	ev.ground = Seabed.mesh_height
+	tree.root.add_child(ev)
+	await frames(1)
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Helm.Ship.START
+	ev.step(0.1, ship)
+	return ev

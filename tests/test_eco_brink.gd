@@ -114,12 +114,14 @@ func test_view_one_mesh_glowing_tips() -> void:
 
 
 func test_scene_has_brink() -> void:
-	var main: Main = load("res://scenes/main.tscn").instantiate()
-	tree.root.add_child(main)
+	# живой мир без корабля (#1350): корку строит и ставит в дерево сам EcoView
+	var ev := EcoView.new()
+	ev.ground = Seabed.mesh_height
+	tree.root.add_child(ev)
 	await frames(2)
-	ok(main.eco.brink != null and main.eco.brink.druses.size() > 60, "корка в мире сцены")
-	ok(main.eco.brink_view != null and main.eco.brink_view.is_inside_tree(), "вид корки в сцене")
-	main.queue_free()
+	ok(ev.brink != null and ev.brink.druses.size() > 60, "корка в мире сцены")
+	ok(ev.brink_view != null and ev.brink_view.is_inside_tree(), "вид корки в сцене")
+	ev.queue_free()
 	await frames(1)
 
 

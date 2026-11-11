@@ -47,11 +47,7 @@ func test_shader_code_routes_emission() -> void:
 
 func test_scene_glow_is_one_knob() -> void:
 	EcoGlow.set_gain(EcoGlow.GAIN)
-	var main: Main = load("res://scenes/main.tscn").instantiate()
-	tree.root.add_child(main)
-	await frames(1)
-	main.step(0.1)
-	var ev: EcoView = main.eco
+	var ev: EcoView = await _world()
 	var shaders := 0
 	for gi in ev.find_children("*", "GeometryInstance3D", true, false):
 		for m in EcoRim.materials(gi as GeometryInstance3D):
@@ -78,5 +74,17 @@ func test_scene_glow_is_one_knob() -> void:
 	ok(spots >= 2, "светлые точки в мире найдены (%d)" % spots)
 	EcoGlow.set_gain(EcoGlow.GAIN)
 	near(float(ray.get_shader_parameter("bio")), 1.0, 1e-6, "и обратно")
-	main.queue_free()
+	ev.queue_free()
 	await frames(1)
+
+
+## Живой мир без корабля (#1350): вид мира на видимой сетке дна (как в игре, #1386), шаг у старта 00.
+func _world() -> EcoView:
+	var ev := EcoView.new()
+	ev.ground = Seabed.mesh_height
+	tree.root.add_child(ev)
+	await frames(1)
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Helm.Ship.START
+	ev.step(0.1, ship)
+	return ev
