@@ -19,11 +19,14 @@ extends SceneTree
 ##
 ##
 ## seq=qa — кусок сценария тестера (#1350, для #803, #1317, #1511): шаги `scenario.json` идут как в прогоне тестера
-##   (`QaRunner.tick`, без снимков и лога в user://qa/out), замер — от снимка from= до снимка to=; итог — максимум и
-##   среднее за кадр частей шага и подчастей `мир/…` (`StepClock`) и худший шаг с подписью. Без отрисовки — запускать
-##   `godot --headless --path . -s tools/probe_frames.gd -- seq=qa from=36 to=36a`
-## from=36 — снимок (имя шага «shot» или номер шага с 0), с которого замер; to=36a — снимок, на котором замер кончается
-##   (без to= — до конца сценария)
+##   (`QaRunner.tick`, без снимков и лога в user://qa/out), замер — от снимка from= до снимка to=; по кадрам — та же
+##   таблица «шаг / отрис / остат» (событие — текущий шаг сценария; all=1 — все кадры, slow= — порог), итог — худший
+##   кадр по частям кадра, максимум и среднее частей шага и подчастей `мир/…` (`StepClock`), худший шаг с подписью.
+##   Только шаг — `godot --headless --path . -s tools/probe_frames.gd -- seq=qa from=36-ognecvet-do to=36a`
+##   (отрисовка и остаток — под xvfb, как у других последовательностей)
+## from=36-ognecvet-do — снимок, с которого замер: полное имя шага «shot» или префикс до «-» (`from=32i` —
+##   32i-kurilshchik-znak; префикс двух снимков, как `32`, — ошибка со списком), номер шага с 0 — `#120` (или просто
+##   число, если такого префикса нет); to=36a — снимок, на котором замер кончается (без to= — до конца сценария)
 ## start=35 — снимок или номер шага, с которого идут шаги до замера (постановка); по умолчанию — последний шаг «ship»
 ##   не позже from= (корабль в точке мира), без него — с начала сценария
 ## file=tools/qa/scenario.json — сценарий (путь от корня проекта или абсолютный); cycles= — сколько раз пройти кусок
@@ -215,15 +218,35 @@ static func reset(main: Node) -> void:
 		main.close_vote()   # после «наверх» — новый забег у начала спуска
 
 
-## Номер шага сценария steps по снимку (имя шага «shot») или по номеру с 0; -1 — нет такого.
+## Номер шага сценария steps по снимку или номеру; -1 — нет такого или неоднозначно (причина — `qa_match`).
 static func qa_find(steps: Array, key: String) -> int:
-	if key.is_valid_int():
-		var i := int(key)
-		return i if i >= 0 and i < steps.size() else -1
+	return int(qa_match(steps, key).get("i", -1))
+
+
+## Шаг по ключу: полное имя снимка «shot», префикс имени до «-» (один снимок), «#N» или число N — номер шага с 0.
+## {i} или {error}.
+static func qa_match(steps: Array, key: String) -> Dictionary:
+	var names: Array[String] = []
+	var at: Array[int] = []
 	for i in steps.size():
-		if steps[i] is Dictionary and steps[i].get("do", "") == "shot" and str(steps[i].get("name", "")) == key:
-			return i
-	return -1
+		if steps[i] is Dictionary and steps[i].get("do", "") == "shot":
+			var nm := str(steps[i].get("name", ""))
+			if nm == key:
+				return {"i": i}
+			if key != "" and nm.begins_with(key + "-"):
+				names.append(nm)
+				at.append(i)
+	if key.begins_with("#") or (names.is_empty() and key.is_valid_int()):
+		var num := key.trim_prefix("#")
+		var n := int(num)
+		if num.is_valid_int() and n >= 0 and n < steps.size():
+			return {"i": n}
+		return {"error": "нет шага %s (шагов %d)" % [key, steps.size()]}
+	if names.size() == 1:
+		return {"i": at[0]}
+	if names.size() > 1:
+		return {"error": "%s — несколько снимков: %s (номер шага — #%s)" % [key, ", ".join(names), key]}
+	return {"error": "нет снимка %s" % key}
 
 
 ## Кусок сценария для замера: шаги от постановки до снимка to= без `QA_SKIP` и окно замера в этом куске —
@@ -231,14 +254,16 @@ static func qa_find(steps: Array, key: String) -> int:
 static func qa_plan(steps: Array, kv: Dictionary) -> Dictionary:
 	if not kv.has("from"):
 		return {"error": "seq=qa: нужен from=<снимок>"}
-	var i_from := qa_find(steps, kv["from"])
-	if i_from < 0:
-		return {"error": "seq=qa: нет снимка from=%s" % kv["from"]}
+	var m_from := qa_match(steps, kv["from"])
+	if m_from.has("error"):
+		return {"error": "seq=qa: from=: " + m_from["error"]}
+	var i_from: int = m_from["i"]
 	var i_to := steps.size()
 	if kv.has("to"):
-		i_to = qa_find(steps, kv["to"])
-		if i_to < 0:
-			return {"error": "seq=qa: нет снимка to=%s" % kv["to"]}
+		var m_to := qa_match(steps, kv["to"])
+		if m_to.has("error"):
+			return {"error": "seq=qa: to=: " + m_to["error"]}
+		i_to = m_to["i"]
 		if i_to <= i_from:
 			return {"error": "seq=qa: to=%s раньше from=%s" % [kv["to"], kv["from"]]}
 	var i_start := 0
@@ -307,6 +332,14 @@ static func qa_lines(cycle: int, acc: Dictionary, show := QA_SHOW) -> Array[Stri
 	return out
 
 
+## Подпись кадра в таблице seq=qa: текущий шаг сценария (его «do»; «ship», «wait», «ping»…).
+static func qa_event(script_q: QaScript) -> String:
+	if script_q.finished or script_q.index >= script_q.steps.size():
+		return "конец"
+	var st = script_q.steps[script_q.index]
+	return str(st.get("do", "?")) if st is Dictionary else "?"
+
+
 ## Прогон сценария без снимков и без лога в user://qa/out — только шаги (`QaRunner.tick`).
 class QuietRunner extends QaRunner:
 	func _log(line: String) -> void:
@@ -349,19 +382,39 @@ func _go_qa(main: Node, kv: Dictionary) -> void:
 		main.add_child(q)
 		main.qa = q
 		var acc := {}
+		var frames: Array = []
 		var k := 0
+		var t_prev := Time.get_ticks_usec()
 		while not q.script_q.finished and q.script_q.index < plan["w1"] and k < QA_MAX:
 			var inside: bool = q.script_q.index >= plan["w0"]
+			var ev := qa_event(q.script_q)
+			_draw_us = 0
 			var t0 := Time.get_ticks_usec()
 			main.step(DT)
 			var step := (Time.get_ticks_usec() - t0) / 1000.0
+			var clock: StepClock = main.clock
+			var note := clock.note()
 			if inside:
-				var clock: StepClock = main.clock
-				qa_add(acc, step, clock.parts, clock.subs.get("мир", {}), clock.note())
+				qa_add(acc, step, clock.parts, clock.subs.get("мир", {}), note)
+			await process_frame   # отрисовка этого кадра — как у других последовательностей
+			var t1 := Time.get_ticks_usec()
+			var f := {"step": step, "draw": _draw_us / 1000.0, "total": (t1 - t_prev) / 1000.0}
+			t_prev = t1
+			if inside:
+				var slow := slow_ms(kv, frames)
+				frames.append(f)
+				if shown(k, f["total"], slow, kv["all"] != "0"):
+					if k == 0:
+						lines.append(HEADER)
+						print(HEADER)
+					lines.append(row(c + 1, k, ev, step, f["draw"], f["total"],
+						note if f["total"] >= slow or k < HEAD else ""))
+					print(lines[-1])
 				k += 1
-			await process_frame
 		main.qa = null
 		q.queue_free()
+		lines.append(summary(c + 1, frames))
+		print(lines[-1])
 		for l in qa_lines(c + 1, acc):
 			lines.append(l)
 			print(l)
