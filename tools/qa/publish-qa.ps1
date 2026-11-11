@@ -37,6 +37,9 @@ foreach ($f in $pngs) {
   $bmp.Dispose(); $img.Dispose()
 }
 
+# kadry.txt (худший кадр по шагам, run-qa.ps1) — рядом с отчётом: сводка ПРОВЕРИТЬ следующих прогонов берёт числа из него
+if (Test-Path "$src\kadry.txt") { Copy-Item "$src\kadry.txt" (Join-Path $dir 'kadry.txt') -Force }
+
 git -C $repo add -A "qa/$Folder"
 git -C $repo -c user.name=garrimajo5 -c user.email=garrimajo5@users.noreply.github.com commit -q -m $Message -m 'Co-Authored-By: Claude <noreply@anthropic.com>'
 git -C $repo push -q -u origin $branch
