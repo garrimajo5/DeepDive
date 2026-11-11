@@ -1059,22 +1059,33 @@ func test_patrol_goes_around_reef() -> void:
 
 ## Самый резкий вертикальный разгон (м/с², по окну 3 шага) и шагов вплотную ко дну у серпохвостов за seconds с мира
 ## у места id.
-static func _vertical_jerk(id: String, seconds: float) -> Array:
+## Минута полного мира у места (EcoView, шаг 1/30 с) — одна на тесты разворота и вертикали серпохвостов: раньше
+## каждый гонял свою (60 и 50 с), 17 с на две одинаковые прогулки. Мир детерминирован — итог общий (#1350).
+## tail — худший угол носа к ходу на ходу ≥ 1 м/с; jerk — худший вертикальный разгон, м/с²; touch — шагов вплотную
+## ко дну.
+static var _walks := {}
+
+
+static func _walk(id: String) -> Dictionary:
+	if _walks.has(id):
+		return _walks[id]
 	var dt := 1.0 / 30.0
 	var ev := EcoView.new()
 	ev.world.ship.pos = LayerMap.at(id)
 	ev.ground = Seabed.height
-	var preds: EcoPred
-	for s in ev.world.systems:
-		if s is EcoPred:
-			preds = s
+	var preds: EcoPred = ev.preds
 	var hist := {}
+	var tail := 0.0
 	var worst := 0.0
 	var touch := 0
-	for i in int(seconds / dt):
+	for i in int(60.0 / dt):
 		ev.world.step(dt)
 		for k in preds.all.size():
-			var a := preds.all[k].agent
+			var pr: EcoPred.Pred = preds.all[k]
+			var a := pr.agent
+			var f := Vector2(a.v.x, a.v.z)
+			if f.length() >= 1.0:
+				tail = maxf(tail, absf(Vector2(pr.look.x, pr.look.z).angle_to(f)))
 			var h: Array = hist.get(k, [])
 			h.append(a.p.y)
 			if h.size() > 7:
@@ -1087,7 +1098,8 @@ static func _vertical_jerk(id: String, seconds: float) -> Array:
 				var v2: float = (h[6] - h[3]) / (3.0 * dt)
 				worst = maxf(worst, absf(v2 - v1) / (3.0 * dt))
 	ev.free()
-	return [worst, touch]
+	_walks[id] = {"tail": tail, "jerk": worst, "touch": touch}
+	return _walks[id]
 
 
 func test_looks_ahead_at_rising_floor() -> void:
@@ -1116,9 +1128,9 @@ func test_looks_ahead_at_rising_floor() -> void:
 func test_no_vertical_jerk_over_reef_and_ridges() -> void:
 	# у 01 и 02 серпохвосты охотятся у склонов: раньше взлетали по дну до 12 м/с вверх и вставали за кадр (107 м/с²)
 	for id in ["01", "02"]:
-		var r := _vertical_jerk(id, 50.0)
-		ok(r[0] < 15.0, "у %s вертикальный разгон серпохвоста плавный: %.1f м/с²" % [id, r[0]])
-		eq(r[1], 0, "у %s не ползёт вплотную по дну" % id)
+		var r := _walk(id)
+		ok(r["jerk"] < 15.0, "у %s вертикальный разгон серпохвоста плавный: %.1f м/с²" % [id, r["jerk"]])
+		eq(r["touch"], 0, "у %s не ползёт вплотную по дну" % id)
 
 
 func test_swim_turns_round_instead_of_backing() -> void:
@@ -1168,23 +1180,8 @@ func test_swim_arrives_without_circling() -> void:
 func test_never_swims_tail_first() -> void:
 	# у 01 и 02 за минуту: на ходу быстрее 1 м/с нос (`Pred.look`) не дальше 90° от хода. Раньше на развороте
 	# патруля ход шёл через ноль и обратно — до 176°, десятки шагов хвостом вперёд
-	var dt := 1.0 / 30.0
 	for id in ["01", "02"]:
-		var ev := EcoView.new()
-		ev.world.ship.pos = LayerMap.at(id)
-		ev.ground = Seabed.height
-		var preds: EcoPred
-		for s in ev.world.systems:
-			if s is EcoPred:
-				preds = s
-		var worst := 0.0
-		for i in int(60.0 / dt):
-			ev.world.step(dt)
-			for pr in preds.all:
-				var f := Vector2(pr.agent.v.x, pr.agent.v.z)
-				if f.length() >= 1.0:
-					worst = maxf(worst, absf(Vector2(pr.look.x, pr.look.z).angle_to(f)))
-		ev.free()
+		var worst: float = _walk(id)["tail"]
 		ok(worst < deg_to_rad(90.0), "у %s нос не дальше 90° от хода: %.0f°" % [id, rad_to_deg(worst)])
 
 
