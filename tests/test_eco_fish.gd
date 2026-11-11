@@ -29,7 +29,7 @@ func _mean_to(sh: EcoFish.Shoal, p: Vector3) -> float:
 	return s / n
 
 
-func _flat(a: Vector3, b: Vector3) -> float:
+static func _flat(a: Vector3, b: Vector3) -> float:
 	return Vector2(a.x - b.x, a.z - b.z).length()
 
 
@@ -137,23 +137,78 @@ func test_no_jump_out_of_hull_after_reset() -> void:
 	ok(worst < 0.5, "на первом шаге никто не прыгает: %.2f м" % worst)
 
 
-func test_shoal_roams_near_home_and_keeps_together() -> void:
-	var w := _world()
-	var fish := _fish(w)
-	for s in 6:
-		w.run(30.0)
-		for sh in fish.shoals:
-			eq(sh.alive, sh.members.size(), "все живы")
-			eq(sh.alarm, 0.0, "без угроз тревоги нет")
+## Три минуты спокойного мира рифа и кроны — одни на тесты стай рифа и стай кроны: раньше каждый гонял свои 180 с
+## (по 3,7 с на тест). Мир детерминирован, цветок стаи рифа не трогает — итог общий (#1350).
+## reef — все стаи у дома (как раньше, стаи кроны тоже), crown — у кроны; первая непройденная проверка ("" — все прошли), turned — сколько обошла крону каждая стая, рад;
+## samples / inside — мест рыбок кроны всего и внутри ветвей; quiet — событий в шине к концу.
+static var _calm_run := {}
+
+
+static func _calm() -> Dictionary:
+	if not _calm_run.is_empty():
+		return _calm_run
+	var w := EcoWorld.new(EcoRandom.WORLD_SEED)
+	w.ground = Seabed.height
+	w.ship.pos = Vector3(500, 0, 500)  # корабль далеко и не мешает
+	var fish := w.add(EcoFish.new()) as EcoFish
+	var flower := w.add(EcoFlower.new()) as EcoFlower
+	var foot := Vector3(EcoFlower.CENTER.x, Seabed.height(EcoFlower.CENTER.x, EcoFlower.CENTER.y), EcoFlower.CENTER.y)
+	var crown: Array[EcoFish.Shoal] = []
+	for sh in fish.shoals:
+		if sh.crown:
+			crown.append(sh)
+	var reef := ""
+	var bad := ""
+	var turned: Array[float] = [0.0, 0.0]
+	var last: Array[float] = []
+	for sh in crown:
+		last.append(atan2(sh.center.z - foot.z, sh.center.x - foot.x))
+	var samples := 0
+	var inside := 0
+	for s in 360:
+		w.run(0.5)
+		if reef == "" and (s + 1) % 60 == 0:  # каждые 30 с — все стаи, как раньше
+			for sh in fish.shoals:
+				if sh.alive != sh.members.size() or sh.alarm != 0.0:
+					reef = "стая %d, %d с: все живы и без тревоги (живых %d, тревога %.2f)" \
+						% [sh.index, (s + 1) / 2, sh.alive, sh.alarm]
+					break
+				for f: EcoFish.Fish in sh.members:
+					var p := f.agent.p
+					var good := _flat(p, sh.home) < 30.0 and p.distance_to(sh.center) < 6.0 \
+						and p.y - Seabed.height(p.x, p.z) > -0.5 and p.y < -3.0 \
+						and f.agent.v.length() <= EcoFish.CALM_SPEED + 1e-3 and f.agent.state == EcoAgent.State.GRAZE
+					if not good:
+						reef = "стая %d, %d с: у дома, вместе, над дном, подо льдом, спокойно (p=%s, центр=%s)" \
+							% [sh.index, (s + 1) / 2, p, sh.center] + " v=%s" % f.agent.v
+						break
+				if reef != "":
+					break
+		for i in crown.size():
+			if bad != "":
+				break
+			var sh := crown[i]
+			var r := _flat(sh.center, foot)
+			var h := sh.center.y - foot.y
+			if sh.alarm != 0.0 or not (r > 12.0 and r < 23.0 and h > 11.0 and h < 32.0):
+				bad = "стая %d у кроны снаружи и спокойна: r=%.1f, h=%.1f, тревога %.2f" % [sh.index, r, h, sh.alarm]
+				break
+			var a := atan2(sh.center.z - foot.z, sh.center.x - foot.x)
+			turned[i] += wrapf(a - last[i], -PI, PI)
+			last[i] = a
 			for f: EcoFish.Fish in sh.members:
-				var p := f.agent.p
-				var good := _flat(p, sh.home) < 30.0 and p.distance_to(sh.center) < 6.0 \
-					and p.y - Seabed.height(p.x, p.z) > -0.5 and p.y < -3.0 \
-					and f.agent.v.length() <= EcoFish.CALM_SPEED + 1e-3 and f.agent.state == EcoAgent.State.GRAZE
-				if not ok(good, "стая %d, %d с: у дома, вместе, над дном, подо льдом, спокойно (p=%s, центр=%s)"
-						% [sh.index, (s + 1) * 30, p, sh.center] + " v=%s" % f.agent.v):
-					return
-	eq(w.bus.pending.size(), 0, "спокойная стая молчит")
+				samples += 1
+				if flower.solid(f.agent.p):
+					inside += 1
+	_calm_run = {"reef": reef, "crown": bad, "turned": turned, "samples": samples, "inside": inside,
+		"quiet": w.bus.pending.size()}
+	return _calm_run
+
+
+func test_shoal_roams_near_home_and_keeps_together() -> void:
+	var c := _calm()
+	eq(c.reef, "", "три минуты все стаи у дома, вместе, над дном, подо льдом, спокойно")
+	eq(c.quiet, 0, "спокойная стая молчит")
 
 
 func test_predator_sends_shoal_home_to_hide() -> void:
@@ -209,32 +264,13 @@ func test_crown_shoals_circle_flower() -> void:
 		near(sh.home.distance_to(foot + Vector3(0, EcoFish.CROWN_HIDE, 0)), 0.0, 1e-3, "дом — в чаше на оси")
 		ok(not flower.solid(sh.home), "в доме ветвей нет")
 		ok(_flat(sh.center, foot) > EcoFlower.SPREAD, "начинают снаружи кроны")
-	var turned: Array[float] = [0.0, 0.0]
-	var last: Array[float] = []
-	for sh in crown:
-		last.append(atan2(sh.center.z - foot.z, sh.center.x - foot.x))
-	var samples := 0
-	var inside := 0
-	for s in 360:
-		w.run(0.5)
-		for i in crown.size():
-			var sh := crown[i]
-			eq(sh.alarm, 0.0, "без угроз спокойны")
-			var r := _flat(sh.center, foot)
-			var h := sh.center.y - foot.y
-			if not ok(r > 12.0 and r < 23.0 and h > 11.0 and h < 32.0,
-					"стая %d у кроны снаружи: r=%.1f, h=%.1f" % [sh.index, r, h]):
-				return
-			var a := atan2(sh.center.z - foot.z, sh.center.x - foot.x)
-			turned[i] += wrapf(a - last[i], -PI, PI)
-			last[i] = a
-			for f: EcoFish.Fish in sh.members:
-				samples += 1
-				if flower.solid(f.agent.p):
-					inside += 1
+	var c := _calm()  # три минуты того же мира
+	eq(c.crown, "", "три минуты у кроны снаружи и спокойны")
+	var turned: Array[float] = c.turned
 	for i in crown.size():
 		ok(turned[i] * crown[i].turn > TAU, "стая %d обошла крону в свою сторону: %.1f рад" % [i, turned[i]])
-	ok(inside < samples * 0.01, "сквозь ветви почти не плывут: %d из %d" % [inside, samples])
+	ok(c.inside < c.samples * 0.01, "сквозь ветви почти не плывут: %d из %d" % [c.inside, c.samples])
+	ok(c.samples > 0, "места рыбок кроны посчитаны")
 
 
 func test_crown_shoal_hides_in_chalice() -> void:
