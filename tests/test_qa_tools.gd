@@ -275,13 +275,19 @@ func test_run_qa_noise_stale_coldboot() -> void:
 		ok(qa.contains(k), "docs/QA.md: %s" % k)
 
 
-## #1350 (11.11): после -ColdBoot хост ещё занят загрузкой эмулятора — скрипт ждёт ЦП < 50 % (до 120 с) перед
-## запуском игры, сколько ждали — в итоге RUN; без -ColdBoot не ждёт.
+## #1350 (11.11): после -ColdBoot хост ещё занят загрузкой эмулятора — скрипт ждёт три замера ЦП подряд < 50 %
+## (до 120 с) перед запуском игры, сколько ждали и замер выхода — в итоге RUN; без -ColdBoot не ждёт.
 func test_run_qa_cools_after_coldboot() -> void:
 	var ps := _ps("run-qa.ps1")
 	ok(ps.contains("function Get-Cpu"), "ЦП отдельной функцией")
-	var wait := ps.find("while ($waited -lt 120 -and (Get-Cpu) -ge 50)")
-	ok(wait > 0, "ждём ЦП < 50 % не дольше 120 с")
+	var wait := ps.find("while ($true) {")
+	ok(wait > 0, "цикл остывания")
+	var loop := ps.substr(wait, ps.find("$cool = \" | остывание", wait) - wait)
+	ok(loop.contains("$cpu = Get-Cpu") and loop.contains("if ($cpu -lt 50) { $calm++ } else { $calm = 0 }"),
+			"замеры подряд ниже 50 %: высокий сбрасывает счёт (один низкий среди 64 % и 56 % — не остыл)")
+	ok(loop.contains("if ($calm -ge 3 -or $waited -ge 120) { break }"), "три замера подряд, не дольше 120 с")
+	ok(loop.contains("Start-Sleep 5; $waited += 5"), "замер раз в 5 с")
+	ok(ps.contains("остывание $waited с (ЦП $cpu%)"), "в итоге — замер, по которому вышли, а не новый")
 	var guard := ps.rfind("if ($ColdBoot) {", wait)
 	ok(guard > 0 and wait - guard < 80, "ждём только после -ColdBoot")
 	ok(wait > ps.find("adb install -r -d $apk"), "после установки APK")
