@@ -357,38 +357,60 @@ func test_fed_does_not_hunt() -> void:
 	eq(_notes(w, "catch").size(), 0)
 
 
-func test_shallows_live_with_preds_and_shoals() -> void:
-	var w := EcoWorld.new()
-	w.ground = Seabed.height
-	w.ship.pos = FAR
-	var fish := w.add(EcoFish.new()) as EcoFish
-	var preds := w.add(EcoPred.new(fish)) as EcoPred
-	var catches := 0
-	var flees := 0
+## Пять минут отмели с серпохвостами и стаями (корабль далеко) — одни на тесты жизни отмели и повторяемости мира:
+## раньше повторяемость гоняла свои три прогона по 40 с того же мира (#1350). В 40 с — места существ (`at40`),
+## после пяти минут — сброс и снова 40 с (`again40`): сброс после долгой жизни отмели — та же история.
+static var _shallow := {}
+
+
+static func _shallows() -> Dictionary:
+	if not _shallow.is_empty():
+		return _shallow
+	var w := _make()
+	var preds := w.systems.filter(func(s): return s is EcoPred)[0] as EcoPred
+	var r := {"catches": 0, "flees": 0, "closest": 1e9, "bad": "", "at40": []}
 	var reef := preds.reef_axis()
-	var closest := 1e9
 	for s in 300:
 		w.run(1.0)
+		if s == 39:
+			r["at40"] = w.agents.map(func(a): return a.p)
 		for ev in w.bus.take():
 			if ev.species == "pred" and ev.note == "catch":
-				catches += 1
+				r["catches"] += 1
 			if ev.species == "fish" and ev.note == "flee":
-				flees += 1
+				r["flees"] += 1
 		for pr in preds.all:
 			var p := pr.agent.p
-			if not ok(p.y >= Seabed.height(p.x, p.z) + 1.8 - 1e-3, "не под дном"):
-				return
-			ok(p.y <= -4.0 + 1e-4, "не выше потолка")
-			ok(absf(p.x) <= EcoAgent.EDGE and absf(p.z) <= EcoAgent.EDGE, "в пределах отмели")
-			ok(pr.hunger >= 0.0 and pr.hunger <= 1.0)
-			closest = minf(closest, Vector2(p.x - reef.x, p.z - reef.z).length())
-	ok(closest > EcoPred.REEF_KEEP - 4.0, "в риф у Каменного цветка не заходят (ближе всего %.1f м)" % closest)
-	ok(catches > 0, "за 5 минут серпохвосты кого-то поймали")
-	ok(flees > 0, "стаи уходили в кораллы от хищников")
-	eq(w.hits, 0, "корабль далеко — ударов нет")
+			var why := ""
+			if p.y < Seabed.height(p.x, p.z) + 1.8 - 1e-3:
+				why = "под дном"
+			elif p.y > -4.0 + 1e-4:
+				why = "выше потолка"
+			elif absf(p.x) > EcoAgent.EDGE or absf(p.z) > EcoAgent.EDGE:
+				why = "за пределами отмели"
+			elif pr.hunger < 0.0 or pr.hunger > 1.0:
+				why = "голод %.2f" % pr.hunger
+			if why != "" and r["bad"] == "":
+				r["bad"] = "%s на %d с: %s" % [why, s + 1, p]
+			r["closest"] = minf(r["closest"], Vector2(p.x - reef.x, p.z - reef.z).length())
+	r["hits"] = w.hits
+	w.reset()
+	w.run(40.0)
+	r["again40"] = w.agents.map(func(a): return a.p)
+	_shallow = r
+	return r
 
 
-func _make() -> EcoWorld:
+func test_shallows_live_with_preds_and_shoals() -> void:
+	var r := _shallows()
+	eq(r["bad"], "", "серпохвосты над дном, подо льдом, в пределах отмели, голод в 0…1")
+	ok(r["closest"] > EcoPred.REEF_KEEP - 4.0, "в риф у Каменного цветка не заходят (ближе всего %.1f м)" % r["closest"])
+	ok(r["catches"] > 0, "за 5 минут серпохвосты кого-то поймали")
+	ok(r["flees"] > 0, "стаи уходили в кораллы от хищников")
+	eq(r["hits"], 0, "корабль далеко — ударов нет")
+
+
+static func _make() -> EcoWorld:
 	var w := EcoWorld.new()
 	w.ground = Seabed.height
 	w.ship.pos = FAR
@@ -398,17 +420,18 @@ func _make() -> EcoWorld:
 
 
 func test_same_seed_same_world() -> void:
-	var a := _make()
+	var r := _shallows()
+	var at40: Array = r["at40"]
 	var b := _make()
-	a.run(40.0)
 	b.run(40.0)
-	for i in a.agents.size():
-		if not eq(a.agents[i].p, b.agents[i].p):
+	eq(b.agents.size(), at40.size(), "столько же существ")
+	for i in b.agents.size():
+		if not eq(b.agents[i].p, at40[i], "новый мир с тем же зерном — то же"):
 			return
-	a.reset()
-	a.run(40.0)
-	for i in a.agents.size():
-		if not eq(b.agents[i].p, a.agents[i].p, "после сброса — то же"):
+	var again: Array = r["again40"]
+	eq(again.size(), at40.size(), "после сброса столько же существ")
+	for i in again.size():
+		if not eq(again[i], at40[i], "после сброса и пяти минут — то же"):
 			return
 
 
