@@ -16,6 +16,29 @@ const PLATE_A := 1.0
 const GLYPHS := "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ абвгдеёжзийклмнопрстуфхцчшщъыьэюя 0123456789 .,:;!?«»—–-+·%/()°×№"
 
 
+## Кегли прогрева панели: каждый кегль макета base × множитель s — и вниз (int), и до ближайшего (roundi): панели
+## округляют по-разному, а кэш глифов — на целый кегль. Не мельче 8, по возрастанию, без повторов.
+static func warm_px(base: Array, s: float) -> Array[int]:
+	var out: Array[int] = []
+	for px in base:
+		for n in [int(px * s), roundi(px * s)]:
+			var k := maxi(8, n)
+			if not k in out:
+				out.append(k)
+	out.sort()
+	return out
+
+
+## Прогрев кеглей (WarmRunner, #519): строка `GLYPHS` каждым шрифтом fonts и кеглем sizes — глифы в кэше шрифта
+## до первого настоящего показа панели. Панель с `draw_string` рисует это вместо себя, пока `warming` (#1350).
+static func warm_glyphs(canvas: CanvasItem, fonts: Array, sizes: Array[int]) -> void:
+	var y := 0.0
+	for f: Font in fonts:
+		for px in sizes:
+			y += px * 1.2
+			canvas.draw_string(f, Vector2(20.0, y), GLYPHS, HORIZONTAL_ALIGNMENT_LEFT, -1, px, ACCENT)
+
+
 ## Плашка: заливка fill, скругление radius (px), рамка edge толщиной width (px, не тоньше 1; 0 — без рамки).
 ## Размеры уже в пикселях экрана — множитель раскладки умножает вызывающий.
 static func box(fill: Color, radius: float, edge := Color(0, 0, 0, 0), width := 0.0) -> StyleBoxFlat:

@@ -18,6 +18,7 @@ var arrow: Array = [] ## стрелка у края к посту вне кад�
 var atlas: Texture2D  ## атлас указателя ART-038
 var map_btn := false  ## кнопка «Схема» на плашке (`Tutorial.map_wanted`)
 var goal := Rect2()   ## плашка цели за штурвалом (#1344): подсказка под ней, на шаге 7 — обводка
+var warming := false   ## прогрев (`warm`): кегли панели под шторкой вместо неё
 
 
 func _ready() -> void:
@@ -57,7 +58,25 @@ func box() -> Rect2:
 	return Tutorial.box(get_viewport_rect().size, status, avoid, goal)
 
 
+## Прогрев (WarmRunner, #1350): под шторкой подсказка первого забега рисует буквы `UiStyle.GLYPHS` своими кеглями
+## (`warm_sizes`) вместо себя — первый показ не растрирует глифы вне шага (#519, «узлы»). on = false — скрыта до
+## своего показа.
+func warm(on: bool) -> void:
+	warming = on
+	visible = on
+	queue_redraw()
+
+
+## Кегли панели, px — из её `_draw`.
+func warm_sizes() -> Array[int]:
+	return UiStyle.warm_px([Tutorial.STEP_PX, Tutorial.TEXT_PX, Tutorial.MAP_PX],
+		get_viewport_rect().size.y / Tutorial.REF_H)
+
+
 func _draw() -> void:
+	if warming:
+		UiStyle.warm_glyphs(self, [get_theme_default_font()], warm_sizes())
+		return
 	if tut == null:
 		return
 	var size := get_viewport_rect().size

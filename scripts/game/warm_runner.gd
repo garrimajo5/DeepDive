@@ -40,8 +40,10 @@ func begin() -> void:
 		main.ghosts.append(MateGhost.new(g))
 	main.net_game.ghosts_step(0.0, true)
 	_particles(true)
-	main.power_panel.reactor = main.reactor   # пульт энергии рисует строки под шторкой: шрифты всех размеров (#217)
+	main.power_panel.reactor = main.reactor   # пульт энергии (#217): состояние — для первого показа
 	main.power_panel.panel = main.power
+	for p: Control in panels():   # кегли панелей с draw_string под шторкой (#519, #1350)
+		p.warm(true)
 	main.route_card.warm(true)   # карточка у стола рисует свои кегли под шторкой (09c0-route-celi)
 	main.goal_plate_view.warm(true)   # плашка цели за штурвалом (#1344) — её кегль
 	main.pause_flow.warm_map(true)   # схема корабля — узел, значки и кегли под шторкой (29-shema)
@@ -49,6 +51,13 @@ func begin() -> void:
 	main.vote_panel.warm(true)   # голосование, итог и спуск — кегли панели под шторкой (#519, 09d-vote, 21a-vent)
 	main.sonar_view.vote.warm(true)   # и строки итога на голограмме (Label3D)
 	frame()
+
+
+## Панели интерфейса с `draw_string`, которые прогреваются `warm(on)` (кроме голосования и карточки у стола — у них
+## своя строка в begin). Новая панель с `draw_string` — сюда, иначе `test_warmup` красный (#1350).
+func panels() -> Array[Control]:
+	return [main.power_panel, main.arrival_panel, main.tutorial_panel, main.role_card_panel, main.comms_panel,
+		main.radio_panel, main.drop_panel]
 
 
 ## CPUParticles3D корабля (если появятся) на время прогрева выпущены сразу (preprocess) — их шейдер собирается под
@@ -146,6 +155,8 @@ func restore() -> void:
 		main.pause_flow.warm_map(false)
 		main.menu_flow.warm_settings(false)
 		main.vote_panel.warm(false)
+		for p: Control in panels():
+			p.warm(false)
 		main.sonar_view.vote.warm(false)
 		main.curtain.queue_free()   # вместе с текстурой фона
 		main.curtain = null

@@ -17,6 +17,7 @@ const GLYPH_TOP := 0.76   ## от верха видимых глифов до б
 
 var radio: Radio
 var time := 0.0
+var warming := false   ## прогрев (`warm`): кегли панели под шторкой вместо неё
 
 
 func _ready() -> void:
@@ -60,7 +61,25 @@ func _mic(c: Vector2, s: float, color: Color, crossed: bool) -> void:
 		draw_line(c + Vector2(-18, -26) * s, c + Vector2(18, 24) * s, color, w, true)
 
 
+## Прогрев (WarmRunner, #1350): под шторкой рация рисует буквы `UiStyle.GLYPHS` своими кеглями
+## (`warm_sizes`) вместо себя — первый показ не растрирует глифы вне шага (#519, «узлы»). on = false — скрыта до
+## своего показа.
+func warm(on: bool) -> void:
+	warming = on
+	visible = on
+	queue_redraw()
+
+
+## Кегли панели, px — из её `_draw`.
+func warm_sizes() -> Array[int]:
+	return UiStyle.warm_px([Radio.BUTTON_PX, Radio.STATE_PX, Radio.NAME_PX, Radio.LETTER_PX, Radio.HEAD_PX, Radio.SUB_PX],
+		Radio.scale(get_viewport_rect().size))
+
+
 func _draw() -> void:
+	if warming:
+		UiStyle.warm_glyphs(self, [get_theme_default_font()], warm_sizes())
+		return
 	if radio == null or radio.hidden:
 		return
 	var size := get_viewport_rect().size
