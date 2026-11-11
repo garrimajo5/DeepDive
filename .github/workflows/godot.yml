@@ -133,6 +133,10 @@ jobs:
       - name: Проверка kadry.ps1
         shell: pwsh
         run: ./tools/qa/kadry.ps1 -SelfTest
+      # Замок run-qa/publish-qa (#1350, 12.11): живой чужой — BUSY, умерший или чужой PID — ничей
+      - name: Проверка zamok.ps1
+        shell: pwsh
+        run: ./tools/qa/zamok.ps1 -SelfTest
 
   tests:
     name: Тесты

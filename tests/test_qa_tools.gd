@@ -186,9 +186,10 @@ func test_run_qa_waits_and_reports_not_done() -> void:
 ## #1533: SHA ветки отчёта — до возврата клона на main; -Shots принимает имена с .jpg/.png.
 func test_publish_qa_sha_and_extensions() -> void:
 	var ps := _ps("publish-qa.ps1")
-	var sha := ps.find("$sha = (git -C $repo rev-parse HEAD)")
-	ok(sha > 0 and sha < ps.find("git -C $repo checkout -q main"), "SHA берётся до возврата на main")
-	ok(ps.contains("Write-Output \"PUSHED $branch $sha\""), "PUSHED печатает SHA")
+	var sha := ps.find("$sha = (git -C $wt rev-parse HEAD)")
+	ok(sha > 0 and sha < ps.find("git -C $wt push"), "SHA коммита отчёта — в worktree, до пуша")
+	ok(not ps.contains("checkout -q"), "ветка клона не переключается (#1350, 12.11)")
+	ok(ps.contains("Write-Output \"PUSHED $branch $sha"), "PUSHED печатает SHA")
 	ok(ps.contains("raw.githubusercontent.com/garrimajo5/DeepDive/$sha/qa/$Folder/"), "готовый raw-префикс")
 	var m := RegEx.create_from_string("-replace '([^']+)', ''").search(ps)
 	ok(m != null, "расширение отрезается")
@@ -391,3 +392,28 @@ func test_run_qa_watch_summary() -> void:
 	var ci := FileAccess.get_file_as_string("res://.github/workflows/godot.yml")
 	ok(ci.contains("./tools/qa/kadry.ps1 -SelfTest"), "CI гоняет проверку kadry.ps1")
 	ok(FileAccess.get_file_as_string("res://docs/QA.md").contains("ПРОВЕРИТЬ"), "docs/QA.md: сводка ПРОВЕРИТЬ")
+
+
+## #1350, 12.11: две сессии тестера одного часа — второй run-qa.ps1 на том же эмуляторе, два publish-qa.ps1 в одном
+## клоне, обе ветки отчётов пустые. Оба скрипта берут замок zamok.ps1 (живой чужой — BUSY и выход), сдача — в своём
+## worktree со сверкой ветки на сервере; логику замка гоняет CI (`zamok.ps1 -SelfTest`, pwsh).
+func test_qa_lock_and_worktree() -> void:
+	var z := _ps("zamok.ps1")
+	ok(z.contains("[IO.FileMode]::CreateNew"), "замок берётся атомарно")
+	ok(z.contains("function Lock-Qa") and z.contains("function Unlock-Qa") and z.contains("\"BUSY $($held.since)"),
+		"BUSY <с какого времени>")
+	ok(z.contains("StartTime"), "PID сверяется со временем запуска процесса")
+	var run := _ps("run-qa.ps1")
+	var lock := run.find("$busy = Lock-Qa $lockFile")
+	ok(lock > 0 and lock < run.find("function Reset-Run"), "run-qa берёт замок до первого прогона")
+	ok(run.find("exit 2", lock) > lock, "занято — выход с кодом 2")
+	ok(run.strip_edges().ends_with("Unlock-Qa $lockFile"), "замок снимается в конце")
+	ok(run.find("[Console]::OutputEncoding") < run.find("function Get-Asset"), "вывод в UTF-8 с самого начала")
+	var pub := _ps("publish-qa.ps1")
+	var plock := pub.find("$busy = Lock-Qa $lockFile")
+	ok(plock > 0 and plock < pub.find("worktree add"), "publish-qa берёт замок до worktree")
+	ok(pub.contains("git -C $wt commit") or pub.contains("git -C $wt -c user.name"), "коммит — в worktree")
+	ok(pub.contains("ls-remote origin") and pub.find("ls-remote") < pub.find("Write-Output \"PUSHED"),
+		"PUSHED — после сверки ветки на сервере")
+	var ci := FileAccess.get_file_as_string("res://.github/workflows/godot.yml")
+	ok(ci.contains("./tools/qa/zamok.ps1 -SelfTest"), "CI гоняет проверку zamok.ps1")

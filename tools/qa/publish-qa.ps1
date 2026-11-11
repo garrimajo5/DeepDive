@@ -8,8 +8,22 @@ $repo = 'D:\AI\DeepDive'
 $dir = Join-Path $repo "qa\$Folder"
 if (-not (Test-Path "$dir\report.md")) { throw "Нет report.md в $dir" }
 $branch = "qa/$Folder"
+# Замок (#1350, 12.11): два publish-qa.ps1 в одном клоне переключали друг другу ветку — обе ветки ушли пустыми.
+# Второй — строка BUSY и выход; коммит — в своём git worktree, рабочая копия клона и её ветка не трогаются.
+. (Join-Path $PSScriptRoot 'zamok.ps1')
+$lockFile = 'D:\AI\qa-build\publish-qa.lock'
+$busy = Lock-Qa $lockFile "publish-qa.ps1 $Folder"
+if ($busy) { Write-Output $busy; exit 2 }
+$wt = "D:\AI\qa-build\publish-wt"
 git -C $repo fetch -q origin main
-git -C $repo checkout -q -B $branch origin/main
+# Хвост прошлой сдачи, оборванной на полпути (замок уже снят — процесс умер)
+if (Test-Path $wt) {
+  try { git -C $repo worktree remove --force $wt 2>$null } catch { }
+  Remove-Item -Recurse -Force $wt -ErrorAction SilentlyContinue
+}
+git -C $repo worktree prune
+git -C $repo worktree add -q --force -B $branch $wt origin/main
+if ($LASTEXITCODE) { throw "git worktree add $wt не удался" }
 
 # Скриншоты: PNG эмулятора 2400x1080 -> JPEG 1600 px по ширине, качество 80 (обычно 150–300 КБ)
 Add-Type -AssemblyName System.Drawing
@@ -40,16 +54,29 @@ foreach ($f in $pngs) {
 # kadry.txt (худший кадр по шагам, run-qa.ps1) — рядом с отчётом: сводка ПРОВЕРИТЬ следующих прогонов берёт числа из него
 if (Test-Path "$src\kadry.txt") { Copy-Item "$src\kadry.txt" (Join-Path $dir 'kadry.txt') -Force }
 
-git -C $repo add -A "qa/$Folder"
-git -C $repo -c user.name=garrimajo5 -c user.email=garrimajo5@users.noreply.github.com commit -q -m $Message -m 'Co-Authored-By: Claude <noreply@anthropic.com>'
-git -C $repo push -q -u origin $branch
-# SHA коммита отчёта — до возврата на main (потом `git rev-parse HEAD` даёт коммит main, #1533)
-$sha = (git -C $repo rev-parse HEAD).Trim()
+# Папка отчёта — в worktree ветки отчёта; коммит, пуш и SHA — там же
+$dst = Join-Path $wt "qa\$Folder"
+New-Item -ItemType Directory -Force $dst | Out-Null
+Copy-Item "$dir\*" $dst -Recurse -Force
+git -C $wt add -A "qa/$Folder"
+git -C $wt -c user.name=garrimajo5 -c user.email=garrimajo5@users.noreply.github.com commit -q -m $Message -m 'Co-Authored-By: Claude <noreply@anthropic.com>'
+if ($LASTEXITCODE) { throw "коммит в $wt не удался (нечего коммитить?)" }
+$sha = (git -C $wt rev-parse HEAD).Trim()
+git -C $wt push -q -u origin $branch
+if ($LASTEXITCODE) { throw "push $branch не удался" }
+# Сверка: на сервере ветка указывает на наш коммит, и в нём есть report.md
+$remote = "$(git -C $repo ls-remote origin "refs/heads/$branch")".Split()[0]
+if ($remote -ne $sha) { throw "на сервере $branch = $remote, а не $sha" }
+$files = @(git -C $wt show --name-only --format= $sha | Where-Object { $_ -like "qa/$Folder/*" })
+if ($files -notcontains "qa/$Folder/report.md") { throw "в коммите $sha нет qa/$Folder/report.md" }
 if (Get-Command gh -ErrorAction SilentlyContinue) {
   gh pr create -R garrimajo5/DeepDive --base main --head $branch --title "Отчёт тестера: $Folder" --body "Отчёт: qa/$Folder/report.md"
 } else {
   Write-Output "gh не установлен: PR откроет Claude (ветка $branch)"
 }
-git -C $repo checkout -q main
-Write-Output "PUSHED $branch $sha"
+git -C $repo worktree remove --force $wt
+# Отчёт живёт в ветке: копия в клоне не нужна и после слияния помешала бы git pull (раньше её убирал checkout main)
+Remove-Item -Recurse -Force $dir
+Unlock-Qa $lockFile
+Write-Output "PUSHED $branch $sha (файлов $($files.Count))"
 Write-Output "RAW https://raw.githubusercontent.com/garrimajo5/DeepDive/$sha/qa/$Folder/"

@@ -18,6 +18,8 @@
 #                         в D:\AI\qa-build\DeepDive.apk и выйти; на телефон ставить вручную
 #   Эмулятор после прогона не закрывается (запущен отдельно от скрипта): ручная проверка — adb, закрыть — adb emu kill
 param([switch]$Pc, [switch]$Force, [string]$Scenario, [int]$Pr, [switch]$Phone, [switch]$ColdBoot, [string]$Out)
+# Вывод в UTF-8 (#1350): итог RUN/ПРОВЕРИТЬ, прочитанный из Bash или другой программы, иначе приходит кракозябрами
+try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding $false } catch { }
 $ErrorActionPreference = 'Continue'
 $ProgressPreference = 'SilentlyContinue'   # полоса прогресса в PS 5.1 тормозит скачивание в разы
 
@@ -70,6 +72,14 @@ $run   = "$build\$Out"
 $app   = 'com.garrimajo5.deepdive'
 $apk   = "$build\DeepDive-emulator.apk"   # эмулятору — x86_64-сборка (#844); телефону — DeepDive.apk
 New-Item -ItemType Directory -Force $build | Out-Null
+# Замок (#1350, 12.11): второй run-qa.ps1 той же машины (другая сессия тестера) — не на тот же эмулятор и не в те же
+# папки: строка BUSY <с какого времени> и выход. Замок снимается в конце или сам, когда процесс умер (zamok.ps1).
+. (Join-Path $PSScriptRoot 'zamok.ps1')
+$lockFile = "$build\run-qa.lock"
+if (-not $Phone) {
+  $busy = Lock-Qa $lockFile "run-qa.ps1 $($MyInvocation.Line)"
+  if ($busy) { Write-Output $busy; exit 2 }
+}
 # Папку результата чистим только перед самим прогоном (#1614): NO_PR, NO_RUN, NO_ARTIFACT, NO_CHANGES и сбой
 # скачивания не оставляют пустую run-pr<номер>\ и не стирают несданные снимки прошлого прогона.
 function Reset-Run {
@@ -295,3 +305,4 @@ if (-not $done -or $miss) {
   if ($miss) { $why += "нет снимков ($($miss.Count)): $($miss -join ', ')" }
   Write-Output "NOT_DONE $head — $($why -join '; ')"
 }
+Unlock-Qa $lockFile
