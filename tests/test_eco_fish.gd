@@ -19,6 +19,17 @@ func _fish(w: EcoWorld) -> EcoFish:
 	return w.systems[0] as EcoFish
 
 
+## Оставить в мире одну стаю: остальные стаи с их рыбками убираем — проверке одной стаи они только тратят время
+## (#1350, `--slow`). Своя стая шагает как прежде: очередь дальних — по номеру стаи и счётчику шагов, не по их числу.
+func _only(w: EcoWorld, fish: EcoFish, keep: EcoFish.Shoal) -> void:
+	for sh in fish.shoals:
+		if sh != keep:
+			for f: EcoFish.Fish in sh.members:
+				w.agents.erase(f.agent)
+	fish.shoals.assign([keep])
+	fish.all.assign(keep.members)
+
+
 func _mean_to(sh: EcoFish.Shoal, p: Vector3) -> float:
 	var s := 0.0
 	var n := 0
@@ -676,6 +687,7 @@ func test_young_hide_between_ribs() -> void:
 	var sh: EcoFish.Shoal = fish.shoals[8]
 	ok(sh.cage and not sh.crown, "девятая стая — молодь в костях, номера прежних не сдвинулись")
 	eq(sh.members.size(), EcoFish.JUV_PER, "14 мальков")
+	_only(w, fish, sh)  # у молоди свой генератор (cage_rnd) — без других стай она идёт так же
 	for f: EcoFish.Fish in sh.members:
 		near(f.size, EcoFish.JUV_SIZE, 1e-6, "мельче взрослых")
 		near(EcoFishLook.basis(f, 0.0).x.length(), EcoFish.JUV_SIZE * EcoFishLook.scale(f) / f.size, 1e-4, "и в форме")
@@ -1057,6 +1069,7 @@ func test_no_bounce_on_floor_clamp() -> void:
 		var w := _world()
 		var fish := _fish(w)
 		var sh := fish.shoals[k]
+		_only(w, fish, sh)
 		w.ship.pos = sh.home + Vector3(0, 0, 40)  # ближе MID: стая шагает каждый шаг мира
 		w.run(4.0)
 		var pred := w.spawn("pred", sh.center + Vector3(6, 3, 0))
