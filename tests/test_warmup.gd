@@ -134,6 +134,10 @@ func test_scene_warmup() -> void:
 		ok(main.curtain.progress > prev, "полоса заставки растёт по кадрам прогрева (ART-034)")
 		prev = main.curtain.progress
 		ok(main.vote_panel.visible, "панель решения экипажа под шторкой")
+		ok(main.vote_panel.warming, "панель решения рисует все свои кегли под шторкой (#519, 09d-vote, 21a-vent)")
+		var vv := main.sonar_view.vote
+		ok((vv.board_rows[0][0] as Label3D).text == UiStyle.GLYPHS and (vv.board_rows[0][1] as Label3D).text == UiStyle.GLYPHS,
+				"строки итога на голограмме растрируют свои кегли под шторкой (#519, 21a-vent)")
 		ok(main.trip_view.shown() and main.trip_view.title.text == DescentTrip.TITLE,
 				"шторка «Кристальный лес» рисуется под заставкой — кегли в кэше шрифта (#1095)")
 		ok(main.power_panel.visible and main.power_panel.reactor != null, "пульт энергии рисуется под шторкой (#217)")
@@ -178,6 +182,10 @@ func test_scene_warmup() -> void:
 			"схема снова скрыта и пуста, узел остался — первое открытие его не строит")
 	ok(main.settings_panel != null and not main.settings_panel.visible and not main.settings_panel.warming,
 			"настройки снова скрыты, узел остался — первое открытие его не строит (#1637)")
+	ok(not main.vote_panel.visible and not main.vote_panel.warming, "панель решения снова скрыта (#519)")
+	var board: Array = main.sonar_view.vote.board_rows
+	ok((board[0][0] as Label3D).text == "" and (board[3][1] as Label3D).text == "", "строки итога снова пусты (#519)")
+	eq((main.sonar_view.vote.fields["up"]["count"] as Label3D).text, "0", "счёт поля снова «0»")
 	ok(not main.ship_map.open, "настоящая схема не открыта")
 	ok(main.camera.current, "глаза на мостике")
 	ok(yaws.size() >= 6, "камера обошла круг: %s" % str(yaws.keys()))
