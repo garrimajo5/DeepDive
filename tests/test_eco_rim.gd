@@ -40,11 +40,7 @@ func test_lite_keeps_shader() -> void:
 
 func test_scene_heroes_have_rim() -> void:
 	EcoRim.set_lite(false)
-	var main: Main = load("res://scenes/main.tscn").instantiate()
-	tree.root.add_child(main)
-	await frames(1)
-	main.step(0.1)
-	var ev: EcoView = main.eco
+	var ev: EcoView = await _world()
 	for who in EcoRim.CREATURES:
 		var hero := ev.find_child(who, false, false)
 		ok(hero != null, "%s в мире" % who)
@@ -84,5 +80,17 @@ func test_scene_heroes_have_rim() -> void:
 	near(m.rim, 0.0, 1e-6, "EcoView.set_lite гасит ободок")
 	ok(EcoShaders.sway_lite, "и колыхание флоры")
 	ev.set_lite(false)
-	main.queue_free()
+	ev.queue_free()
 	await frames(1)
+
+
+## Живой мир без корабля (#1350): вид мира на видимой сетке дна (как в игре, #1386), шаг у старта 00.
+func _world() -> EcoView:
+	var ev := EcoView.new()
+	ev.ground = Seabed.mesh_height
+	tree.root.add_child(ev)
+	await frames(1)
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Helm.Ship.START
+	ev.step(0.1, ship)
+	return ev

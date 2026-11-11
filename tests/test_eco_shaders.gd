@@ -70,11 +70,7 @@ func _find(root: Node, who: String) -> String:
 
 
 func test_scene_world_shares_shaders() -> void:
-	var main: Main = load("res://scenes/main.tscn").instantiate()
-	tree.root.add_child(main)
-	await frames(1)
-	main.step(0.1)
-	var ev: EcoView = main.eco
+	var ev: EcoView = await _world()
 	ok(ev.moss_view.moss.patches.size() <= EcoShaders.MOSS_MAX, "пятен мха ≤ MOSS_MAX")
 	var keys := ShaderKey.collect(ev)
 	var moss := _find(ev, "Мох")
@@ -108,5 +104,17 @@ func test_scene_world_shares_shaders() -> void:
 	eq(float(rock.get_shader_parameter("flicker")), 1.0, "жерла курильщика мерцают")
 	ok(keys.size() <= ECO_BUDGET, "шейдеров мира %d ≤ %d" % [keys.size(), ECO_BUDGET])
 	print("  шейдеров живого мира: %d" % keys.size())
-	main.queue_free()
+	ev.queue_free()
 	await frames(1)
+
+
+## Живой мир без корабля (#1350): вид мира на видимой сетке дна (как в игре, #1386), шаг у старта 00.
+func _world() -> EcoView:
+	var ev := EcoView.new()
+	ev.ground = Seabed.mesh_height
+	tree.root.add_child(ev)
+	await frames(1)
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Helm.Ship.START
+	ev.step(0.1, ship)
+	return ev
