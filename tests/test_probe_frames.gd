@@ -100,6 +100,38 @@ func test_qa_plan_window() -> void:
 	ok(not Probe.parse(PackedStringArray(["seq=qa", "from=b"])).has("error"), "qa — известная последовательность")
 
 
+## Снимок по префиксу имени до «-» (#1350, 11.11): from=32i — 32i-…; префикс двух снимков — ошибка со списком,
+## номер шага — «#N» или число без такого префикса.
+func test_qa_find_prefix() -> void:
+	var steps := [{"do": "ship", "x": 0, "y": -30, "z": 0}, {"do": "shot", "name": "32i-kurilshchik-znak"},
+		{"do": "wait", "s": 1}, {"do": "shot", "name": "32j-kurilshchik-veerniki"}, {"do": "shot", "name": "1-odin"},
+		{"do": "shot", "name": "32ia-drugoj"},
+		{"do": "shot", "name": "32-kamni"}, {"do": "shot", "name": "32-kochki"}]
+	eq(Probe.qa_find(steps, "32i"), 1, "префикс до «-»: не 32ia-…")
+	eq(Probe.qa_find(steps, "32j-kurilshchik-veerniki"), 3, "полное имя")
+	eq(Probe.qa_find(steps, "32ia"), 5, "свой префикс")
+	var amb := Probe.qa_match(steps, "32")
+	ok(amb.has("error") and amb["error"].contains("32-kamni") and amb["error"].contains("32-kochki"),
+		"префикс двух снимков — ошибка со списком: %s" % amb)
+	eq(Probe.qa_find(steps, "1"), 4, "число с таким префиксом — снимок")
+	eq(Probe.qa_find(steps, "#1"), 1, "#N — номер шага")
+	eq(Probe.qa_find(steps, "2"), 2, "число без префикса — номер шага")
+	eq(Probe.qa_find(steps, "#9"), -1, "нет шага")
+	eq(Probe.qa_find(steps, "#7"), 7, "#N и у неоднозначного префикса")
+	var plan := Probe.qa_plan(steps, {"from": "32i", "to": "32j"})
+	eq([plan["from"], plan["to"]], [1, 3], "окно по префиксам: %s" % plan)
+	ok(Probe.qa_plan(steps, {"from": "32"})["error"].contains("несколько"), "неоднозначный from — ошибка")
+
+
+func test_qa_event_label() -> void:
+	var q := QaScript.parse('[{"do": "wait", "s": 1}, {"do": "ping"}]')
+	eq(Probe.qa_event(q), "wait", "текущий шаг")
+	q.index = 1
+	eq(Probe.qa_event(q), "ping", "следующий")
+	q.index = 2
+	eq(Probe.qa_event(q), "конец", "за концом")
+
+
 func test_qa_stats_max_and_mean() -> void:
 	var acc := {}
 	Probe.qa_add(acc, 10.0, {"мир": 6.0}, {"EcoFish": 4.0}, "мир 6")
