@@ -117,3 +117,22 @@ func test_runner_has_slow_key() -> void:
 	var src := FileAccess.get_file_as_string("res://tests/run.gd")
 	ok(src.contains("\"--slow\""), "run.gd разбирает --slow")
 	ok(src.contains("TestShards.slow_text(test_s, slow_n)"), "run.gd печатает самые долгие тесты")
+
+
+func test_load_fail_reason() -> void:
+	# файл не загрузился — раннер пишет причину из ошибок движка и команду --check-only (#1350)
+	var errs := ["Parse Error: Identifier \"nope\" not declared (test_a.gd:4 GDScript::reload)",
+		"Failed to load script \"res://tests/test_a.gd\" with error \"Parse error\". (gdscript_resource_format.cpp:46 load)",
+		"Parse Error: Identifier \"nope\" not declared (test_a.gd:4 GDScript::reload)"]
+	var lines := TestShards.load_fail("test_a.gd", errs)
+	eq(lines[0], "ПАДЕНИЕ  test_a.gd: скрипт не загрузился")
+	eq(lines.size(), 3, "повтор и «Failed to load» — не причины: %s" % [lines])
+	ok(lines[1].contains("причина: Parse Error: Identifier \"nope\""), lines[1])
+	eq(lines[2], "         - подробно: godot --headless --path . --check-only -s tests/test_a.gd")
+	eq(TestShards.load_fail("test_b.gd", []).size(), 2, "движок причину не дал — только подсказка")
+	var many: Array = []
+	for i in 9:
+		many.append("ошибка %d" % i)
+	eq(TestShards.load_fail("test_c.gd", many).size(), 7, "не больше пяти причин")
+	var src := FileAccess.get_file_as_string("res://tests/run.gd")
+	ok(src.contains("TestShards.load_fail(f, trap.take())"), "run.gd печатает причину незагрузившегося файла")

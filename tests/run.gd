@@ -90,10 +90,12 @@ func _run() -> void:
 	var t0 := Time.get_ticks_msec()
 	for f in files:
 		var f0 := Time.get_ticks_msec()
+		trap.take()
 		var script: GDScript = load(DIR + "/" + f)
 		if script == null or not script.can_instantiate():
 			failed.append("%s: скрипт не загрузился" % f)
-			print("ПАДЕНИЕ  %s: скрипт не загрузился" % f)
+			for line in TestShards.load_fail(f, trap.take()):
+				print(line)
 			continue
 		var names: Array[String] = []
 		for m in script.get_script_method_list():
