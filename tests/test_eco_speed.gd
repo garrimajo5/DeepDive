@@ -153,12 +153,19 @@ static func _most(hist: Array[int]) -> int:
 
 ## Issue #803: дальние стаи шли по набранному времени, и неровный кадр сводил их в один — раз в несколько кадров
 ## шагали все девять стай сразу (мир 51 мс вместо 15). Теперь очередь по счётчику шагов: не больше трети за кадр.
+## Очередь дальних ровная с первого кадра (каждый кадр — ровно треть), поэтому хватает 1000 кадров (~27 с мира)
+## вместо 3000 — зато проверяем и снизу: ни одного кадра меньше трети (фазы не слиплись в пустые кадры).
 func test_far_shoals_stay_apart_on_uneven_frames() -> void:
 	var w := _world(Vector3(500, 0, 500))  # все стаи дальше FAR
 	var n := (w.systems[0] as EcoFish).shoals.size()
-	var hist := _far_moves_per_frame(w, 3000)
+	var hist := _far_moves_per_frame(w, 1000)
 	var cap := ceili(n / float(EcoFish.FAR_EVERY))
 	ok(_most(hist) <= cap, "дальних стай за кадр не больше %d из %d: было %d (%s)" % [cap, n, _most(hist), str(hist)])
+	var low := floori(n / float(EcoFish.FAR_EVERY))
+	var under := 0
+	for k in low:
+		under += hist[k]
+	eq(under, 0, "кадров, где шагнуло меньше %d дальних стай: %d (%s)" % [low, under, str(hist)])
 
 
 ## Стаи у корабля (часть ближе MID, часть дальше) на неровных кадрах тоже не сходятся в один кадр.
