@@ -21,6 +21,10 @@ const ACCEL := 0.9
 const ARRIVE := 2.5
 const ARRIVE_MIN := 0.2
 const TURN_SLOW := 0.25
+## Поворот с инерцией (Б3): скорость поворота `Grazer.spin` меняется не быстрее TURN_ACCEL рад/с², к курсу — не
+## быстрее √(2 · TURN_ACCEL · угол) — тормозит заранее, без перелёта. Раньше доевший скребун трогался к новому пятну
+## на полные 1,2 рад/с за кадр (tools/jerk.gd near=50 move=3: 12 рад/с² у 00 → 01, ровно TURN_MAX за отсчёт).
+const TURN_ACCEL := 2.0
 ## Ближе этого к середине пятна — пасётся (м).
 const REACH := 1.6
 ## Сколько мха съедает за секунду.
@@ -45,6 +49,8 @@ class Grazer:
 	var index := 0
 	## Курс: вперёд — (sin dir, cos dir) по (x, z).
 	var dir := 0.0
+	## Скорость поворота курса, рад/с (+ — к росту dir): набирается и гаснет не быстрее TURN_ACCEL (`turn_step`).
+	var spin := 0.0
 	var patch: EcoMoss.Patch
 	## Секунды до следующего сообщения «объедает мох».
 	var graze_cd := 0.0
@@ -109,6 +115,20 @@ static func want_speed(d: float, da: float) -> float:
 	var arrive := clampf((d - REACH) / ARRIVE, ARRIVE_MIN, 1.0)
 	var aim := maxf(TURN_SLOW, cos(clampf(absf(da), 0.0, PI / 2.0)))
 	return WALK_SPEED * arrive * aim
+
+
+## Шаг курса g.dir на угол da (рад, к цели) за dt: нужная скорость поворота — доля угла TURN_RATE/с, не быстрее
+## TURN_MAX и √(2 · TURN_ACCEL · |da|); `spin` догоняет её не быстрее TURN_ACCEL · dt. Курс за шаг не перелетает
+## цель. still — цели нет: поворот только гаснет.
+static func turn_step(g: Grazer, da: float, dt: float, still := false) -> void:
+	var want := 0.0
+	if not still:
+		want = signf(da) * minf(minf(absf(da) * TURN_RATE, TURN_MAX), sqrt(2.0 * TURN_ACCEL * absf(da)))
+	g.spin = move_toward(g.spin, want, TURN_ACCEL * dt)
+	var step := g.spin * dt
+	if not still and signf(step) == signf(da) and absf(step) > absf(da):
+		step = da
+	g.dir += step
 
 
 ## Высота скребуна: дно мира + 0,1 м; без дна мира — fallback + 0,1 м.
@@ -198,6 +218,7 @@ func _step_grazer(world: EcoWorld, g: Grazer, dt: float) -> void:
 		a.p = Vector3(pt.pos.x + _rnd.range_f(-3, 3), pt.pos.y, pt.pos.z + _rnd.range_f(-3, 3))
 		a.alive = true
 		g.slope = 0.0
+		g.spin = 0.0
 		moved = true
 		g.patch = _pick_patch(g)
 		a.set_state(EcoAgent.State.SEEK)
@@ -221,7 +242,7 @@ func _step_grazer(world: EcoWorld, g: Grazer, dt: float) -> void:
 		else:
 			var da := atan2(dx, dz) - g.dir
 			da = atan2(sin(da), cos(da))
-			g.dir += clampf(da * minf(1.0, dt * TURN_RATE), -TURN_MAX * dt, TURN_MAX * dt)
+			turn_step(g, da, dt)
 			var sp := move_toward(a.v.length(), want_speed(d, da), ACCEL * dt)
 			a.v = Vector3(sin(g.dir) * sp, 0, cos(g.dir) * sp)
 			var was := a.p
@@ -230,14 +251,16 @@ func _step_grazer(world: EcoWorld, g: Grazer, dt: float) -> void:
 			if fl > 1e-5:
 				g.slope = (a.p.y - was.y) / fl
 	else:
+		turn_step(g, 0.0, dt, true)   # пасётся — доворот по инерции гаснет, а не обрывается
 		EcoMoss.eat(g.patch, dt * EAT_RATE)
 		if a.expired() or g.patch.food < LEAVE:
 			g.patch = _pick_patch(g)
 			a.set_state(EcoAgent.State.SEEK)
 	if not moved:
 		return   # стоит, ест или идёт (`walk` уже поставил на дно): шум fbm не пересчитываем (issue #133)
-	a.p.x = clampf(a.p.x, -EcoAgent.EDGE, EcoAgent.EDGE)
-	a.p.z = clampf(a.p.z, -EcoAgent.EDGE, EcoAgent.EDGE)
+	var b := EcoAgent.bound_xz(a.p.x, a.p.z)   # отмель или котловина склона у 10 (#840)
+	a.p.x = b.x
+	a.p.z = b.y
 	a.p.y = _ground_y(world, a.p.x, a.p.z, g.patch.pos.y if g.patch else a.p.y - LIFT)
 
 
@@ -259,6 +282,5 @@ static func walk(world: EcoWorld, from: Vector3, move: Vector3, fallback: float,
 
 
 static func _on_ground(world: EcoWorld, from: Vector3, move: Vector3, fallback: float) -> Vector3:
-	var x := clampf(from.x + move.x, -EcoAgent.EDGE, EcoAgent.EDGE)
-	var z := clampf(from.z + move.z, -EcoAgent.EDGE, EcoAgent.EDGE)
-	return Vector3(x, _ground_y(world, x, z, fallback), z)
+	var b := EcoAgent.bound_xz(from.x + move.x, from.z + move.z)
+	return Vector3(b.x, _ground_y(world, b.x, b.y, fallback), b.y)

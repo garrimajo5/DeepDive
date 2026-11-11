@@ -30,6 +30,12 @@ var _skip_frame := true
 ## Сюда входит и ожидание видеокарты и показа кадра (вплоть до кадровой развёртки).
 var draw_ms := 0.0
 var _draw_from_us := 0
+## Остаток долгого кадра вне кода и отрисовки (#519, тестер в #1350 10.11): метки времени конца отрисовки, первого
+## физического такта после неё (`SceneTree.physics_frame`) и начала обработки узлов (`process_frame`) — делят остаток
+## на «между кадрами», «физика» и «узлы» (`rest_parts`).
+var _post_us := 0
+var _phys_us := 0
+var _proc_us := 0
 ## Сборки шейдеров (конвейеров видеокарты) в последнем кадре по видам `PIPES` (issue #983): провал «отрисовка 338 мс»
 ## на устройстве — сборка это или выгрузка. Счётчики движка накопительные; Compatibility их не ведёт (нули).
 var pipes := PackedInt32Array([0, 0, 0, 0, 0])
@@ -73,6 +79,21 @@ const LAMP_NAME := "Свет тестера"
 var drain_left := 0.0   ## шаг «drain»: столько секунд ещё слать в игру EcoLink.DRAIN от стеклоуста
 
 
+## Игру свернули посреди прогона (#1592): чужое окно поверх (браузер, `am start` другого инструмента) — кадры и
+## частота после этого шумные, не регрессия. Строку считает `run-qa.ps1` в «помехи: N» итога RUN.
+const PAUSED_LINE := "игра свёрнута (OnPause)"
+const RESUMED_LINE := "игра снова на экране"
+
+
+func _notification(what: int) -> void:
+	if script_q == null:
+		return
+	if what == NOTIFICATION_APPLICATION_PAUSED:
+		_log(PAUSED_LINE)
+	elif what == NOTIFICATION_APPLICATION_RESUMED:
+		_log(RESUMED_LINE)
+
+
 ## Есть ли сценарий для этого запуска.
 static func pending() -> bool:
 	return FileAccess.file_exists(SCENARIO)
@@ -88,6 +109,8 @@ func start(m: Main, text: String = "") -> void:
 	RenderingServer.viewport_set_measure_render_time(main.get_viewport().get_viewport_rid(), true)   # видеокарта — для worst_at
 	RenderingServer.frame_pre_draw.connect(_on_pre_draw)
 	RenderingServer.frame_post_draw.connect(_on_post_draw)
+	main.get_tree().physics_frame.connect(_on_physics_frame)
+	main.get_tree().process_frame.connect(_on_process_frame)
 	for i in PIPES.size():   # счёт сборок — с начала прогона, не с запуска (issue #983)
 		_pipes_total[i] = RenderingServer.get_rendering_info(PIPES[i][0])
 	_warm_from_us = Time.get_ticks_usec()
@@ -134,6 +157,8 @@ func tick(dt: float) -> void:
 				_shot(c[1])
 			"hud":   # кадры для магазина: без крестовины, кнопок и строк приборов
 				main.set_hud(c[1])
+			"luch_ten":   # тень прожектора (#1400): false — без тени, true — по уровню графики
+				luch_ten(main, c[1])
 			"play":   # кадр Google Play ART-046: снимок и кадр 1920×1080 с подписью
 				_play(c[1])
 			"goto":
@@ -202,6 +227,12 @@ func tick(dt: float) -> void:
 				main.ping_sonar()
 			"pred":   # серпохвост мимо куста огнецвета поперёк взгляда с корабля (#1401)
 				pred_pass(main, c[1], c[2], c[3])
+			"dome":   # купольник у гнезда 07 на t с клипа OpenPetal (#1350: клипов ANIM-004 в отчёте не было)
+				if main.eco != null and main.eco.dome != null:
+					var knew := main.lore.knows(LayerLore.PETAL07)
+					main.lore.facts.erase(LayerLore.PETAL07)   # строка створки на 37a — как в первый раз (#837, отчёт 11.11 15:18)
+					main.eco.dome.stage(c[1])
+					_log("купольник: OpenPetal %.1f с · створка 07 %s" % [c[1], "была открыта раньше — забыта" if knew else "ещё не открыта"])
 			"save":   # место для гибели (#824): как автосохранение, но только в памяти — файл прогона не пишется
 				main.save.ship = SaveGame.ship_read(SaveGame.ship_snapshot(main.helm, main.vitals)) if c[1] else {}
 			"wreck":   # корпус разрушен — как от удара (шторка ART-036)
@@ -269,6 +300,15 @@ func _log_graphics() -> void:
 		_log(line)
 
 
+## Тень прожектора для шага `luch_ten` (#1400): цену тени на «Обычно» тестер меряет на устройстве — кадры
+## до и после шага; true возвращает тень такой, как её ставит уровень графики (`Main._apply_graphics`).
+static func luch_ten(m: Main, on: bool) -> void:
+	if m.searchlight == null:
+		return
+	m.searchlight.spot.shadow_enabled = on and int(Graphics.level(m.graphics_level)["shadows"]) > 0
+	m.say("тень прожектора: " + ("по графике" if on else "выкл"))
+
+
 ## Графика сейчас одной строкой: уровень `Main.graphics_level` и фактические MSAA, масштаб сцены и тени солнца.
 func graphics_now() -> String:
 	var vp := main.get_viewport()
@@ -308,7 +348,9 @@ func _measure(now_us: int) -> void:
 			return
 		if ms > worst_ms:
 			worst_ms = ms
-			worst_at = worst_note(_step_label, render_ms(), code_ms(), gpu_ms(), ms, main.clock.last_note() if main else "", pipes)   # _measure — уже в новом шаге (issue #662)
+			var code := code_ms()
+			worst_at = worst_note(_step_label, render_ms(), code, gpu_ms(), ms, main.clock.last_note() if main else "", pipes,
+				rest_parts(_last_us, now_us, code, _draw_from_us, _post_us, _phys_us, _proc_us))   # _measure — уже в новом шаге (issue #662)
 		if _settle > 0:
 			_settle -= 1
 		else:
@@ -463,7 +505,7 @@ const PARTS_FROM := 20.0   ## код дольше, мс, — пишем его �
 ## отрисовки (физика, ввод, система). Замер видеокарты движок отдаёт с запаздыванием на несколько кадров: больше самого
 ## кадра frame (мс) — он от другого кадра, не пишем (issue #609).
 static func worst_note(step: String, draw: float, code: float = -1.0, gpu: float = 0.0, frame := INF, parts := "",
-		built := PackedInt32Array()) -> String:
+		built := PackedInt32Array(), rest := {}) -> String:
 	var d := "отрисовка %d мс" % roundi(draw)
 	var b := pipes_note(built)
 	if not b.is_empty():
@@ -472,7 +514,48 @@ static func worst_note(step: String, draw: float, code: float = -1.0, gpu: float
 		d = "код %d мс%s, %s" % [roundi(code), " (%s)" % parts if not parts.is_empty() and code >= PARTS_FROM else "", d]
 	if gpu > 0.0 and gpu <= frame + 1.0:
 		d += ", видеокарта %d мс" % roundi(gpu)
+	var r := rest_note(frame, maxf(code, 0.0), draw, rest)
+	if not r.is_empty():
+		d += ", " + r
 	return step + ", " + d if not step.is_empty() else d
+
+
+const REST_FROM := 100.0   ## кадр от, мс, — с остатком вне кода и отрисовки, если код + отрисовка меньше половины кадра
+
+
+## Остаток кадра вне кода и отрисовки по частям (#519): «вне шага 70 мс (между кадрами 60, физика 8, узлы 2)».
+## Части от 1 мс, самые долгие первыми; не разложенное по меткам — «прочее». Кадр короче `REST_FROM`, код с
+## отрисовкой — половина кадра и больше, меток нет — "".
+static func rest_note(frame: float, code: float, draw: float, parts: Dictionary) -> String:
+	if parts.is_empty() or frame == INF or frame < REST_FROM or code + draw >= frame / 2.0:
+		return ""
+	var rest := frame - code - draw
+	var keys := parts.keys()
+	keys.sort_custom(func(a, b): return parts[a] > parts[b])
+	var out: Array[String] = []
+	var sum := 0.0
+	for k in keys:
+		sum += parts[k]
+		if roundi(parts[k]) >= 1:
+			out.append("%s %d" % [k, roundi(parts[k])])
+	if roundi(rest - sum) >= 1:
+		out.append("прочее %d" % roundi(rest - sum))
+	return "вне шага %d мс (%s)" % [roundi(rest), ", ".join(out)]
+
+
+## Части остатка кадра, мс, по меткам времени, мкс (#519). Кадр — от начала шага `from_us` до начала следующего `now_us`;
+## в нём код шага `code` (мс), отрисовка `pre_us`…`post_us`, затем такты физики с `phys_us` (раньше конца отрисовки —
+## тактов не было) и обработка узлов с `proc_us`. «Между кадрами» — от конца отрисовки до следующего кадра: ожидание
+## показа кадра и темпа (кадровая развёртка, предел кадров), события системы и ввод; «физика» — такты физики
+## (`_physics_process` и физический сервер); «узлы» — `_process` и отложенные вызовы вне `Main.step`. Навигации в игре
+## нет. Метки не по порядку (не тот кадр, headless без отрисовки) — {}.
+static func rest_parts(from_us: int, now_us: int, code: float, pre_us: int, post_us: int, phys_us: int, proc_us: int) -> Dictionary:
+	if from_us <= 0 or not (from_us <= pre_us and pre_us <= post_us and post_us <= proc_us and proc_us <= now_us):
+		return {}
+	var ticked := phys_us > post_us and phys_us <= proc_us
+	var start := phys_us if ticked else proc_us
+	return {"между кадрами": (start - post_us) / 1000.0, "физика": (proc_us - phys_us) / 1000.0 if ticked else 0.0,
+		"узлы": maxf((pre_us - from_us) / 1000.0 - code, 0.0) + (now_us - proc_us) / 1000.0}
 
 
 ## Сборки шейдеров кадра по видам `PIPES` для лога: «сборок шейдеров 3: поверхности 2, при отрисовке 1»; нет — "".
@@ -496,7 +579,17 @@ func _on_pre_draw() -> void:
 	_draw_from_us = Time.get_ticks_usec()
 
 
+func _on_physics_frame() -> void:
+	if _phys_us <= _post_us:   # первый такт физики после отрисовки
+		_phys_us = Time.get_ticks_usec()
+
+
+func _on_process_frame() -> void:
+	_proc_us = Time.get_ticks_usec()
+
+
 func _on_post_draw() -> void:
+	_post_us = Time.get_ticks_usec()
 	if _draw_from_us > 0:
 		draw_ms = (Time.get_ticks_usec() - _draw_from_us) / 1000.0
 	for i in PIPES.size():   # сборки шейдеров этого кадра (issue #983)

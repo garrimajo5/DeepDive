@@ -90,3 +90,40 @@ static func pick(files: Array[String], times: Dictionary, i: int, n: int) -> Arr
 	var part: Array[String] = []
 	part.assign(split(files, times, n)[i - 1])
 	return part
+
+
+## Самые долгие тесты (не файлы) для `run.gd -- --slow N`: N пар [имя, секунды], долгие первыми,
+## равные — по имени. N < 1 — пусто.
+static func slowest(test_s: Dictionary, n: int) -> Array:
+	var names := test_s.keys()
+	names.sort_custom(func(a, b): return test_s[a] > test_s[b] or (test_s[a] == test_s[b] and a < b))
+	var out: Array = []
+	for k in mini(maxi(n, 0), names.size()):
+		out.append([names[k], test_s[names[k]]])
+	return out
+
+
+## Текст для вывода: «  12.3 с  test_x.test_y» по строке, с заголовком.
+static func slow_text(test_s: Dictionary, n: int) -> String:
+	var top := slowest(test_s, n)
+	if top.is_empty():
+		return ""
+	var s := "Самые долгие тесты (%d):\n" % top.size()
+	for p in top:
+		s += "  %6.1f с  %s\n" % [p[1], p[0]]
+	return s
+
+
+# Строки раннера про файл теста, который не загрузился (#1350): причина из ошибок движка, пойманных при load
+# (без «Failed to load» — это лишь следствие), и команда, которая покажет все ошибки разбора.
+static func load_fail(file: String, errors: Array) -> Array[String]:
+	var out: Array[String] = ["ПАДЕНИЕ  %s: скрипт не загрузился" % file]
+	var why: Array[String] = []
+	for e in errors:
+		var t := String(e)
+		if not t.begins_with("Failed to load script") and not why.has(t):
+			why.append(t)
+	for t in why.slice(0, 5):
+		out.append("         - причина: " + t)
+	out.append("         - подробно: godot --headless --path . --check-only -s tests/" + file)
+	return out

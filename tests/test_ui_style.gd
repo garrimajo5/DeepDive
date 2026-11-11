@@ -100,3 +100,19 @@ func test_button_label() -> void:
 		ok(src.contains("UiStyle.label("), "%s: подпись кнопки — UiStyle.label" % f)
 		ok(not src.contains("var base := r.position.y + r.size.y * 0.5"), "%s: без своей базовой линии кнопки" % f)
 		ok(not src.contains("r.get_center().y + Splash.CAP_H * px * 0.5"), "%s: и без get_center-копии" % f)
+
+
+## Плашки с текстом поверх мира глухие: сквозь полупрозрачную читались надписи табло тревог (#1556, кадр 02t-podskazka).
+func test_world_plates_opaque() -> void:
+	eq(UiStyle.PLATE_A, 1.0, "общая непрозрачность плашки поверх мира")
+	eq(TutorialPanel.BACK.a, 1.0, "подсказка первого забега и кнопка «Схема»")
+	eq(RoleCardPanel.BACK.a, 1.0, "карточка роли")
+	eq(GoalPlate.FILL_A, 1.0, "плашка цели за штурвалом")
+	eq(RadioPanel.FILL, 1.0, "состояние рации, кнопка и просьба микрофона")
+	eq(AlarmPointerPanel.FILL, 1.0, "подпись указателя тревоги")
+	eq(ArrivalBriefPanel.FILL, 1.0, "брифинг прибытия")
+	# заливка в _draw берёт константу, а не своё число
+	var radio := FileAccess.get_file_as_string("res://scripts/game/radio_panel.gd")
+	ok(not radio.contains("Color(DARK, 0."), "у рации нет своей полупрозрачной заливки")
+	var way := FileAccess.get_file_as_string("res://scripts/game/alarm_pointer_panel.gd")
+	ok(not way.contains("Color(AlarmBoard.BACK, 0."), "у указателя тревоги нет своей полупрозрачной заливки")

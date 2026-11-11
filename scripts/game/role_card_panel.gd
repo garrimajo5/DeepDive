@@ -7,7 +7,7 @@ const TEXT := UiStyle.TEXT
 const DIM := UiStyle.DIM
 const ACCENT := UiStyle.ACCENT
 const DARK := UiStyle.DARK
-const BACK := Color(0.043, 0.11, 0.141, 244.0 / 255.0)   ## #0B1C24, альфа 244
+const BACK := Color(UiStyle.DARK, UiStyle.PLATE_A)   ## #0B1C24, непрозрачная (#1556)
 
 var card: RoleCard
 var rect := Rect2()   ## место карточки этого кадра (`RoleCard.card_rect`); пусто — карточки нет

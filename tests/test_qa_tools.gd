@@ -109,33 +109,13 @@ func test_run_qa_checks_apk_size() -> void:
 	ok(fail > emu and fail < ps.find("adb install"), "расхождение — выход до установки")
 
 
-## #1393: проба сценария тестера на эмуляторе в Actions — те же шаги, что run-qa.ps1: x86_64-сборка, пакет игры,
-## сценарий в files/qa, ожидание done.txt не короче сценария; action эмулятора закреплён тегом версии.
-func test_emulator_ci_matches_run_qa() -> void:
-	var sh := FileAccess.get_file_as_string(DIR.path_join("emulator.sh"))
-	var cfg := ConfigFile.new()
-	eq(cfg.load("res://export_presets.cfg"), OK, "пресеты читаются")
-	var pkg: String = cfg.get_value("preset.1.options", "package/unique_name")
-	ok(sh.contains("APP=" + pkg), "пакет игры как в пресете эмулятора: " + pkg)
-	ok(sh.contains("files/qa/scenario.json") and sh.contains("files/qa/out/done.txt"), "сценарий и done.txt — как run-qa.ps1")
-	ok(sh.contains("\"do\": \"quit\""), "в конце сценария — quit")
-	var wf := FileAccess.get_file_as_string("res://.github/workflows/qa-emulator.yml")
-	ok(wf.contains("DeepDive-emulator.apk"), "ставится x86_64-сборка")
-	ok(RegEx.create_from_string("reactivecircus/android-emulator-runner@v\\d+\\.\\d+\\.\\d+").search(wf) != null,
-		"action эмулятора закреплён тегом версии")
-	ok(wf.contains("workflow_dispatch:") and not wf.contains("workflow_run:"), "пока только вручную (проба не дала снимков)")
-	var limit := RegEx.create_from_string("emulator\\.sh .* qa-out (\\d+)").search(wf)
-	ok(limit != null, "предел ожидания задан")
-	if limit == null:
-		return
-	var steps: Array = JSON.parse_string(FileAccess.get_file_as_string(DIR.path_join("scenario.json")))
-	var timed := 0.0
-	for st in steps:
-		if st.get("do", "") in ["wait", "hold", "drain", "swipe"]:
-			timed += float(st.get("s", 0.0))
-	ok(timed * 1.25 + 30.0 <= int(limit.get_string(1)), "ожидание покрывает сценарий")
-	var tm := RegEx.create_from_string("timeout-minutes: (\\d+)").search(wf)
-	ok(tm != null and int(tm.get_string(1)) * 60 > int(limit.get_string(1)) + 600, "job дольше ожидания: есть время на загрузку эмулятора")
+## #1393: проба «QA на эмуляторе» в Actions закрыта (вторая попытка в Compatibility — игра не стартовала, снимка
+## нет): workflow удалён, внешний action эмулятора был разрешён только на пробу — в workflow его больше нет.
+func test_emulator_probe_closed() -> void:
+	ok(not FileAccess.file_exists("res://.github/workflows/qa-emulator.yml"), "workflow пробы удалён")
+	for f in DirAccess.get_files_at("res://.github/workflows"):
+		var wf := FileAccess.get_file_as_string("res://.github/workflows".path_join(f))
+		ok(not wf.contains("android-emulator-runner"), "нет action эмулятора: " + f)
 
 
 ## #1350: `publish-qa.ps1 -Shots a,b,c` через `powershell -File` приходит одной строкой — фильтр не находил ни
@@ -251,3 +231,120 @@ func test_ci_main_diff_from_last_green() -> void:
 	var ci := FileAccess.get_file_as_string("res://.github/workflows/godot.yml")
 	ok(ci.contains("actions/workflows/godot.yml/runs?branch=main&status=success"), "база — последний зелёный прогон main")
 	ok(ci.contains("actions: read"), "у job есть право читать прогоны")
+
+
+## #1592: шумный прогон эмулятора отличать от регрессии по итогу RUN — помехи (игру свернули, чужое окно поверх),
+## STALE_APK (скачался прошлый APK), -ColdBoot (эмулятор заново без снимка), сценарий из ветки PR.
+func test_run_qa_noise_stale_coldboot() -> void:
+	var ps := _ps("run-qa.ps1")
+	ok(ps.contains("[switch]$ColdBoot"), "ключ -ColdBoot")
+	var kill := ps.find("& $adb emu kill")
+	ok(kill > 0 and kill < ps.find("emulator.exe"), "-ColdBoot закрывает эмулятор до запуска")
+	ok(ps.contains("-avd Pixel_8$cold") and ps.contains("' -no-snapshot-load'"), "холодный старт без снимка состояния")
+	ok(ps.contains("помехи: $noise"), "помехи — в итоге RUN")
+	ok(ps.find("$result = \"RUN $head done=$done") < ps.find("помехи: $noise") , "помехи — в самой строке RUN")
+	# шаблон паузы ловит строку, которую пишет QaRunner
+	var pat := RegEx.create_from_string("-Pattern '(\\^игра свёрнута)'").search(ps)
+	ok(pat != null, "шаблон паузы найден")
+	if pat != null:
+		ok(RegEx.create_from_string(pat.get_string(1)).search(QaRunner.PAUSED_LINE) != null, "ловит QaRunner.PAUSED_LINE")
+		ok(RegEx.create_from_string(pat.get_string(1)).search(QaRunner.RESUMED_LINE) == null, "возврат не в счёт")
+	ok(ps.contains("-notmatch [regex]::Escape($app)"), "своя активность — не помеха")
+	# STALE_APK: шаблон версии ловит первую строку лога (Main.version_text из version.txt CI)
+	var vm := RegEx.create_from_string("\\$first -match '([^']+)'").search(ps)
+	ok(vm != null, "шаблон версии найден")
+	if vm != null:
+		var re := RegEx.create_from_string(vm.get_string(1))
+		var hit := re.search("Сценарий: 812 шагов, версия v0.3 · #1043 a5dcbe0, sdk_gphone64_x86_64")
+		ok(hit != null and hit.get_string(1) == "a5dcbe0", "коммит из первой строки лога")
+		ok(re.search("Сценарий: 812 шагов, версия v0.3 · dev, PC") == null, "сборка без version.txt — не сверяется")
+	var runner := FileAccess.get_file_as_string("res://scripts/game/qa_runner.gd")
+	ok(runner.contains("_log(\"Сценарий: %d шагов, версия %s, %s\""), "первая строка лога — версия")
+	ok(FileAccess.get_file_as_string("res://.github/workflows/godot.yml").contains("echo \"#${{ github.run_number }} ${GITHUB_SHA::7}\" > version.txt"),
+		"version.txt CI — «#сборка коммит»")
+	ok(ps.contains("STALE_APK $head $built"), "STALE_APK <ожидался> <получен>")
+	ok(ps.contains("if (-not $Pr -and -not $stale) { Set-Content \"$build\\last-commit.txt\" $head }"),
+		"чужой APK не помечается проверенным")
+	# -Pr: сценарий из ветки PR
+	var pr := ps.find("contents/${inBranch}?ref=$prSha")
+	ok(pr > 0 and pr < ps.find("ConvertFrom-Json"), "сценарий ветки PR скачан до разбора")
+	ok(ps.contains("'tools/qa/scenario.json'"), "без -Scenario — сценарий тестера из ветки")
+	ok(ps.contains("Write-Output \"NO_SCENARIO"), "нет файла в ветке — NO_SCENARIO")
+	var qa := FileAccess.get_file_as_string("res://docs/QA.md")
+	for k in ["-ColdBoot", "STALE_APK", "помехи: N", "NO_SCENARIO"]:
+		ok(qa.contains(k), "docs/QA.md: %s" % k)
+
+
+## #1350 (11.11): после -ColdBoot хост ещё занят загрузкой эмулятора — скрипт ждёт три замера ЦП подряд < 50 %
+## (до 120 с) перед запуском игры, сколько ждали и замер выхода — в итоге RUN; без -ColdBoot не ждёт.
+func test_run_qa_cools_after_coldboot() -> void:
+	var ps := _ps("run-qa.ps1")
+	ok(ps.contains("function Get-Cpu"), "ЦП отдельной функцией")
+	var wait := ps.find("while ($true) {")
+	ok(wait > 0, "цикл остывания")
+	var loop := ps.substr(wait, ps.find("$cool = \" | остывание", wait) - wait)
+	ok(loop.contains("$cpu = Get-Cpu") and loop.contains("if ($cpu -lt 50) { $calm++ } else { $calm = 0 }"),
+			"замеры подряд ниже 50 %: высокий сбрасывает счёт (один низкий среди 64 % и 56 % — не остыл)")
+	ok(loop.contains("if ($calm -ge 3 -or $waited -ge 120) { break }"), "три замера подряд, не дольше 120 с")
+	ok(loop.contains("Start-Sleep 5; $waited += 5"), "замер раз в 5 с")
+	ok(ps.contains("остывание $waited с (ЦП $cpu%)"), "в итоге — замер, по которому вышли, а не новый")
+	var guard := ps.rfind("if ($ColdBoot) {", wait)
+	ok(guard > 0 and wait - guard < 80, "ждём только после -ColdBoot")
+	ok(wait > ps.find("adb install -r -d $apk"), "после установки APK")
+	ok(wait < ps.find("$loadBefore = Get-Load") and wait < ps.find("monkey -p $app"), "до запуска игры")
+	ok(ps.contains("$cool = \" | остывание $waited с"), "строка «остывание N с»")
+	ok(ps.contains("после: $loadAfter$cool\""), "в итоге RUN")
+	ok(FileAccess.get_file_as_string("res://docs/QA.md").contains("остывание N с"), "docs/QA.md: остывание")
+
+
+## #1592: игру свернули посреди прогона — строка в логе (её считает run-qa.ps1); без сценария — молчит.
+func test_runner_logs_pause() -> void:
+	var r := QaRunner.new()
+	r._notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+	eq(r.log_lines.size(), 0, "без сценария — без строк")
+	r.free()
+
+
+## #1606: прогон PR рядом с плановым — сборка PR ниже стоящей ставится (-d), результат в своей папке (плановый run\
+## не затирается, publish-qa.ps1 -From берёт снимки оттуда), NO_ARTIFACT — только при пустом списке артефактов.
+func test_run_qa_pr_beside_planned() -> void:
+	var ps := _ps("run-qa.ps1")
+	ok(ps.contains("install -r -d $apk"), "установка с понижением версии (-d)")
+	ok(not ps.contains("install -r $apk"), "без -d установок нет")
+	ok(ps.contains("[string]$Out)"), "ключ -Out")
+	ok(not RegEx.create_from_string("\\$out\\b").search(ps.replace("$Out", "")), "$out не путается с -Out (PowerShell не различает регистр)")
+	ok(ps.contains("\"run-pr$Pr\""), "-Pr — своя папка run-pr<номер>")
+	var made := ps.find("$run   = \"$build\\$Out\"")
+	ok(made > 0 and made < ps.find("Remove-Item -Recurse -Force $run"), "папка выбрана до очистки")
+	var arts := ps.find("/artifacts\" --jq '.artifacts[].name'")
+	var none := ps.find("Write-Output \"NO_ARTIFACT")
+	ok(arts > 0 and arts < none, "NO_ARTIFACT — по списку артефактов прогона")
+	ok(ps.find("gh run download $rid -R garrimajo5/DeepDive") > none, "скачивание — с явным репозиторием, после проверки")
+	ok(ps.contains("Push-Location $repo"), "gh — из клона")
+	ok(ps.contains("Write-Output \"DOWNLOAD_FAILED PR#"), "артефакт есть, но не скачался — не NO_ARTIFACT")
+	ok(ps.contains("actions/workflows/godot.yml/runs?head_sha="), "прогон — именно «Godot»")
+	var pub := _ps("publish-qa.ps1")
+	ok(pub.contains("[string]$From = 'run'"), "publish-qa.ps1 -From, по умолчанию run")
+	ok(pub.contains("Get-ChildItem \"$src\\*.png\""), "снимки — из папки -From")
+	ok(not pub.contains("qa-build\\run\\*.png"), "без жёсткого run\\")
+	var qa := FileAccess.get_file_as_string("res://docs/QA.md")
+	for k in ["-Out", "-From", "run-pr", "-r -d"]:
+		ok(qa.contains(k), "docs/QA.md: %s" % k)
+
+
+## #1614: папка результата чистилась в начале скрипта — NO_RUN у `-Pr` оставлял пустую run-pr<номер>\, а NO_CHANGES
+## планового стирал несданные снимки run\. Теперь — только перед самим прогоном, после всех ранних выходов.
+func test_run_qa_resets_folder_before_run() -> void:
+	var ps := _ps("run-qa.ps1")
+	var fn := ps.find("function Reset-Run")
+	ok(fn > 0, "чистка папки — функцией")
+	ok(ps.find("Remove-Item -Recurse -Force $run") > fn, "Remove-Item $run — только внутри Reset-Run")
+	ok(ps.count("Remove-Item -Recurse -Force $run") == 1, "и нигде больше")
+	var reset := ps.rfind("Reset-Run")
+	for early in ["NO_RUN:", "NO_ARTIFACT:", "NO_CHANGES", "DOWNLOAD_FAILED PR#", "NO_ASSET ${head}", "NO_PR #"]:
+		var at := ps.find(early)
+		ok(at > 0 and at < reset, "%s — до чистки папки" % early)
+	ok(reset < ps.find("$loadBefore = Get-Load"), "эмулятор: папка готова до прогона")
+	var pc := ps.find("NO_GODOT")
+	var pc_reset := ps.find("Reset-Run", pc)
+	ok(pc_reset > pc and pc_reset < ps.find("Copy-Item \"$user\\out\\*\" $run"), "-Pc: папка готова до копирования")

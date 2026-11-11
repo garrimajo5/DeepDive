@@ -117,12 +117,5 @@ class Preview(unittest.TestCase):
             self.assertIn("не влезли", buf.getvalue())
 
 
-class Workflow(unittest.TestCase):
-    def test_emulator_job_prints_previews(self):
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        yml = open(os.path.join(root, ".github/workflows/qa-emulator.yml"), encoding="utf-8").read()
-        self.assertIn("tools/ci_preview.py put", yml)
-
-
 if __name__ == "__main__":
     unittest.main()

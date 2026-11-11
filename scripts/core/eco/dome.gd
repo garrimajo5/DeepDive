@@ -198,6 +198,22 @@ func _clear_hull(world: EcoWorld) -> void:
 	speed = 0.0
 
 
+## Сценарий тестера (шаг «dome», #1350): купольник уже у гнезда, клип OpenPetal идёт t с (0…OPEN_TIME) — створка
+## поднята по LIFT на это время; дальше шаг сам доводит подъём, событие PETAL и уход в нишу. Раньше в прогоне он
+## выходил на шаге у террасы 32f и открывал створку, пока корабль был у других мест, — клипов в отчёте не было.
+func stage(t_open: float) -> void:
+	state = State.OPEN
+	t = clampf(t_open, 0.0, OPEN_TIME)
+	opened = t >= LIFT.y
+	just_opened = false
+	petal = HashNoise.smooth(LIFT.x, LIFT.y, t)
+	speed = 0.0
+	turn_v = 0.0
+	pos = stand()
+	var n := GateDiag.nest_pos(NEST)
+	yaw = _yaw_to(Vector2(n.x - pos.x, n.z - pos.z))
+
+
 ## Створка открыта раньше (сохранение кампании): ушёл, створка поднята.
 func _done() -> void:
 	state = State.GONE

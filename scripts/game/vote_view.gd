@@ -191,6 +191,19 @@ func _build_board() -> void:
 	board.visible = false
 
 
+## Прогрев (WarmRunner, #519): строки итога и счёт полей получают буквы `UiStyle.GLYPHS` — Label3D растрирует глифы
+## своих кеглей (40 и 52 с обводкой) под шторкой, а не при первом «наверх». on = false — снова пусто.
+func warm(on: bool) -> void:
+	for r: Array in board_rows:
+		(r[0] as Label3D).text = UiStyle.GLYPHS if on else ""
+		(r[1] as Label3D).text = UiStyle.GLYPHS if on else ""
+	for f: Dictionary in fields.values():
+		(f["count"] as Label3D).text = "0123456789" if on else "0"
+		for m: Array in f["marks"]:   # буквы ролей на метках — 44 без обводки
+			(m[1] as Label3D).text = UiStyle.GLYPHS if on else ""
+	timer_label.text = UiStyle.GLYPHS if on else VoteHolo.timer_text(0)
+
+
 ## Итог: k — доля перехода 0…1, rows — Run.summary (четыре строки), eye — глаз смотрящего в осях голограммы.
 func show_result(k: float, rows: Array, eye: Vector3) -> void:
 	board.visible = k > 0.0

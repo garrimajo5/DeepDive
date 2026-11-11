@@ -7,7 +7,7 @@ extends SceneTree
 ##   xvfb-run -a godot --path . --rendering-method gl_compatibility --rendering-driver opengl3 --resolution 320x240 \
 ##     -s tools/jerk.gd -- …
 ## Облачный headless-расчёт, не телефонный. Код игры не меняет.
-##   ключи: seed=<n> warm=<с> run=<с> top=<n> scena=1,2,3 | place=07,03,06,10
+##   ключи: seed=<n> warm=<с> run=<с> top=<n> stride=<кадров> scena=1,2,3 | place=07,03,06,10
 ##   place=NN,… — вместо ракурсов сцены: корабль у мест слоя 1 по позе `ShotSetup.place_pose` (как `shot.gd place=`).
 ##   move=<м/с> — корабль не стоит, а идёт носом к цели с этой скоростью (полный ход — `Helm.Ship.FORWARD` = 3) на
 ##   FLOOR над видимым дном, с шумом хода как в игре (скорость / 6,7); за MOVE_STOP м до цели встаёт. Так видны
@@ -17,7 +17,10 @@ extends SceneTree
 
 const ShotSetup := preload("res://tools/shot_setup.gd")
 const DT := 1.0 / 30.0
-const STRIDE := 3                ## отсчёты через 0,1 с — дрожь сетки в кадр не считаем
+const STRIDE := 3                ## отсчёты через 0,1 с — дрожь сетки в кадр не считаем (ключ stride=<кадров>)
+## Виды, что шагают через кадр (огнёвки — половинами, EcoOgnevka.moved_half), при нечётном шаге отсчётов ложно
+## «дёргаются»: в отрезок попадает то один, то два их шага (у огнёвок ≈ 45 рад/с² и 8 м/с² при любом повороте) —
+## для них stride=6.
 const FLOOR := 7.0
 const JUMP := 5.0                ## сдвиг за кадр больше — перестановка в буфере, не движение
 const MOVE_STOP := 15.0         ## move=: ближе к цели корабль встаёт
@@ -28,6 +31,7 @@ const NEAR := 120.0              ## дальше от корабля не смо
 
 var _done := false
 var _near := NEAR
+var _stride := STRIDE
 
 
 func _process(_delta: float) -> bool:
@@ -47,6 +51,7 @@ func _run() -> void:
 	var run := float(kv.get("run", "20"))
 	var top := int(kv.get("top", "12"))
 	_near = float(kv.get("near", str(NEAR)))
+	_stride = maxi(1, int(kv.get("stride", str(STRIDE))))
 	var move := float(kv.get("move", "0"))
 	var pts: Array[Vector2] = [Vector2(4.0, 80.0), Vector2(20.0, 22.5), Vector2(33.0, -22.0)]
 	var poses: Array = []   # [подпись, корабль (x, z), цель (x, z)]
@@ -80,15 +85,20 @@ func _run() -> void:
 		var hist := {}    # путь узла → [кадры: PackedVector3Array позиций, Array[Basis]]
 		var worst := []
 		var swaps := {}
+		var nearest := {}   # узел → ближайший к кораблю экземпляр за прогон, м
 		var frames := int(run / DT)
 		for f in frames:
 			_drive(ship, goal, move)
 			ev.step(DT, ship)
-			_sample(ev, ship.pos, f, hist, worst, swaps)
+			_sample(ev, ship.pos, f, hist, worst, swaps, nearest)
 		print("\n%s: корабль (%.0f, %.0f, %.0f)%s, мир %.0f с после %.0f с, отсчёты через %d кадров" % [
 				pz[0], ship.pos.x, ship.pos.y, ship.pos.z, (" к концу, ход %.1f м/с от (%.0f, %.0f)" % [move, at.x, at.y])
-				if move > 0.0 else "", run, warm, STRIDE])
-		_report(worst, swaps, top)
+				if move > 0.0 else "", run, warm, _stride])
+		print("  до точки места %.0f м" % Vector2(ship.pos.x, ship.pos.z).distance_to(goal))
+		if worst.is_empty():
+			print(quiet_line(_near, nearest, top))
+		else:
+			_report(worst, swaps, top)
 	ev.free()
 
 
@@ -111,7 +121,7 @@ static func _drive(ship: EcoLink.ShipState, goal: Vector2, move: float) -> void:
 
 
 ## Позиции и базисы экземпляров кадра f; узел — путь от EcoView.
-func _sample(ev: Node, ship: Vector3, f: int, hist: Dictionary, worst: Array, swaps: Dictionary) -> void:
+func _sample(ev: Node, ship: Vector3, f: int, hist: Dictionary, worst: Array, swaps: Dictionary, nearest: Dictionary) -> void:
 	for node in ev.find_children("*", "", true, false):
 		var gi := node as GeometryInstance3D
 		if gi == null or not gi.is_visible_in_tree():
@@ -129,17 +139,23 @@ func _sample(ev: Node, ship: Vector3, f: int, hist: Dictionary, worst: Array, sw
 		else:
 			continue
 		var key := String(ev.get_path_to(gi))
+		for t: Transform3D in items:
+			if t.basis.get_scale().length() < 1e-3:
+				continue
+			var d := t.origin.distance_to(ship)
+			if d < float(nearest.get(key, INF)):
+				nearest[key] = d
 		var h: Array = hist.get(key, [])
 		h.append(items)
-		if h.size() > 2 * STRIDE + 1:
+		if h.size() > 2 * _stride + 1:
 			h.pop_front()
 		hist[key] = h
-		if h.size() < 2 * STRIDE + 1:
+		if h.size() < 2 * _stride + 1:
 			continue
 		var a0: Array = h[0]
-		var a1: Array = h[STRIDE]
-		var a2: Array = h[2 * STRIDE]
-		var prev: Array = h[2 * STRIDE - 1]
+		var a1: Array = h[_stride]
+		var a2: Array = h[2 * _stride]
+		var prev: Array = h[2 * _stride - 1]
 		var cnt2 := mini(mini(a0.size(), a1.size()), mini(a2.size(), prev.size()))
 		for i in cnt2:
 			var t0: Transform3D = a0[i]
@@ -152,12 +168,23 @@ func _sample(ev: Node, ship: Vector3, f: int, hist: Dictionary, worst: Array, sw
 			if hop > JUMP:
 				swaps[key] = int(swaps.get(key, 0)) + 1
 				continue
-			var k := STRIDE * DT
+			var k := _stride * DT
 			var acc := (t0.origin - 2.0 * t1.origin + t2.origin).length() / (k * k)
 			var w1 := _omega(t0.basis, t1.basis) / k
 			var w2 := _omega(t1.basis, t2.basis) / k
 			var alpha := (w2 - w1).length() / k
 			worst.append([key, i, f, acc, alpha, t2.origin, hop, t2.origin.distance_to(ship)])
+
+
+## Строка вместо пустого списка худших: ближе near никого не было — кто ближайший за прогон (узел → м), чтобы
+## отличить «мир у точки не заселён» от «точка съёмки далеко от жизни» (#1400).
+static func quiet_line(near: float, nearest: Dictionary, top: int) -> String:
+	var keys := nearest.keys()
+	keys.sort_custom(func(a: String, b: String) -> bool: return nearest[a] < nearest[b])
+	var parts: PackedStringArray = []
+	for k: String in keys.slice(0, top):
+		parts.append("%s %.0f м" % [k, nearest[k]])
+	return "  ближе %.0f м никого; ближайшие за прогон: %s" % [near, ", ".join(parts) if parts.size() > 0 else "нет ни одного"]
 
 
 ## Поворот от a к b — вектор оси × угол, рад.

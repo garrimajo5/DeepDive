@@ -222,6 +222,10 @@ class Fish:
 	var look := Vector3.ZERO
 	## Доля размаха виляния тела (`EcoFishLook.wag_step`, Б3): по ходу, догоняет плавно; −1 — ещё не плыла.
 	var wag := -1.0
+	## Крен в повороте, рад (`EcoFishLook.bank_step`, Б3): + — спина к боку формы x; догоняет нужный плавно.
+	var bank := 0.0
+	## Скорость крена, рад/с (пружина `EcoFishLook.bank_step`).
+	var bank_v := 0.0
 	## Время мира, когда вернулась после съедения (−INF — не съедали): с него рыбка вырастает (`FishView.grow_k`).
 	var born := -INF
 	## Б3: нормаль обшивки при последнем касании (мир) и сколько ещё её помнить, с (`EcoFish.hull_steer`).
@@ -385,13 +389,23 @@ static func turn(from: Vector3, move: Vector3, dt: float) -> Vector3:
 	if ang < 1e-4:
 		return _nose(yf + dy, pw)
 	var k := minf(ang * minf(1.0, LOOK_K * dt), LOOK_MAX * dt) / ang
-	return _nose(yf + dy * k, pf + dp * k)
+	return _nose(yf + dy * k * flat_k(flat.length()), pf + dp * k)
+
+
+## Доля хода курса носа при доле хода по горизонтали flat (0…1): почти отвесно — курс едва идёт, от FLAT_FULL — в
+## полную силу. Раньше рыбка, что всплывала или ныряла почти отвесно (стая кроны в тревоге, #1400), гнала курс за
+## ходом вбок в 0,03–0,1 м/с со скоростью LOOK_MAX: снос вбок менял знак — нос мотало по курсу на ±0,3 рад за 0,1 с
+## (tools/jerk.gd scena=3: угловое ускорение светляков до 170 рад/с²).
+static func flat_k(flat: float) -> float:
+	return smoothstep(FLAT_MIN, FLAT_FULL, flat)
 
 
 ## Тангаж носа рыбки — не круче этого, рад: всплывая и ныряя отвесно, тело идёт под углом, а не встаёт столбом.
 const PITCH_MAX := deg_to_rad(50.0)
 ## Доля хода по горизонтали, меньше которой курс носа не меняется (скорость почти отвесная — курс по ней не понять).
 const FLAT_MIN := 0.05
+## Доля хода по горизонтали, с которой курс носа идёт в полную силу (≈ cos PITCH_MAX — ход не круче тангажа носа).
+const FLAT_FULL := 0.6
 
 
 ## Единичный нос по курсу yaw (0 — к +z) и тангажу pitch.
@@ -726,6 +740,8 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 			a.v = Vector3(0, 0.2, 0)
 			f.look = Vector3.ZERO
 			f.wag = -1.0
+			f.bank = 0.0
+			f.bank_v = 0.0
 			f.born = t
 		var p := a.p
 		var v := a.v
@@ -780,7 +796,9 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 			v = climb_cap(v, maxf(max_s, was_s))
 			v = floor_hold(v, gap, a.floor_rate(v.x, v.z), v.length())
 		p += v * dt
-		f.look = turn(f.look, v, dt)
+		var was := f.look
+		f.look = turn(was, v, dt)
+		EcoFishLook.bank_step(f, was, f.look, dt)
 		f.wag = EcoFishLook.wag_step(f.wag, v.length(), dt)
 		if p.distance_squared_to(ship_pos) < hull_r2:  # сквозь корпус не проплывают
 			a.p = p

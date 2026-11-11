@@ -14,15 +14,16 @@ const GAP := 16.0         ## зазор до строки приборов и к
 const TEXT_PX := 40
 const ARROW_PX := 44      ## значок-стрелка
 const ICON_GAP := 24.0    ## от значка до текста
+const POST_K := 1.5       ## значок поста задачи (ячейка атласа ART-042 с полями) — во столько крупнее стрелки
 const RADIUS := 12.0
-const FILL_A := 0.85      ## непрозрачность подложки `UiStyle.DARK`
+const FILL_A := UiStyle.PLATE_A   ## непрозрачность подложки `UiStyle.DARK` (#1556)
 const AHEAD := 10.0       ## |Δ| ≤ — «прямо», без угла
 const BEHIND := 120.0     ## |Δ| > — «развернитесь»
 const ARRIVED_TIME := 2.0 ## «… — на месте», затем следующая цель
 const MIN_K := 0.8        ## мельче кегль текста не делаем — тогда плашка уходит под строку приборов
 const AMBER := Color("FFB259")   ## янтарь табло ART-025 — точка пройдена, решение у стола
 
-enum Kind { AHEAD, LEFT, RIGHT, BEHIND, ARRIVED, NONE, VOTE }
+enum Kind { AHEAD, LEFT, RIGHT, BEHIND, ARRIVED, NONE, VOTE, TASK }
 
 const NONE_TEXT := "Маршрут не выбран — голостол, «Маршрут»"
 const VOTE_TEXT := "Решение — у голостола"
@@ -35,6 +36,8 @@ var _route := -1
 var _key := ""
 var _arrived := ""        ## название пройденной точки, пока показываем «на месте»
 var _arrived_t := 0.0
+var task := ""            ## место задачи (`PlaceTask`), пока вид TASK: значок поста — `PlaceTask.TASKS[task].icon`
+var _task_was := ""       ## задача прошлого шага: сделана в круге — 2 с «… — узнано»
 
 
 ## Угол от курса корабля yaw (рад; 0 — нос в −Z, растёт — поворот влево) до пеленга из from на to (x, z), градусы
@@ -58,8 +61,10 @@ static func kind_of(dlt: float) -> Kind:
 	return Kind.LEFT if dlt > 0.0 else Kind.RIGHT
 
 
-## Шаг: маршрут run, корабль в pos (x, z) с курсом yaw. true — вид плашки сменился.
-func update(dt: float, run: Run, yaw: float, pos: Vector2) -> bool:
+## Шаг: маршрут run, корабль в pos (x, z) с курсом yaw на высоте y; lore — знания слоя: в круге места с несделанным
+## действием (`PlaceTask`, #1635) — задача (TASK) вместо следующей цели, сделали — 2 с «… — узнано». true — вид
+## плашки сменился.
+func update(dt: float, run: Run, yaw: float, pos: Vector2, lore: LayerLore = null, y := 0.0) -> bool:
 	var key := run.next_key() if run.route >= 0 and not run.done else ""
 	if run.route == _route and _key != "" and key != _key and run.visited.has(_key):
 		_arrived = Run.place_name(_key)   # точка пройдена — 2 с «на месте», затем следующая цель
@@ -68,6 +73,14 @@ func update(dt: float, run: Run, yaw: float, pos: Vector2) -> bool:
 		_arrived_t = 0.0
 	_route = run.route
 	_key = key
+	var at := PlaceTask.at(pos, lore) if lore != null else ""
+	if at == "" and _task_was != "" and PlaceTask.done(_task_was, lore) \
+			and pos.distance_to(Run.place_xz(_task_was)) < float(Run.PLACES[_task_was][2]):
+		_arrived = Run.place_name(_task_was) + " — узнано"   # сделали в круге
+		_arrived_t = ARRIVED_TIME
+	elif _arrived_t > 0.0 and _arrived.ends_with(" — узнано") and at != "":
+		_arrived_t = 0.0
+	_task_was = at
 	_arrived_t = maxf(0.0, _arrived_t - dt)
 	var k := Kind.NONE
 	var a := 0
@@ -77,7 +90,10 @@ func update(dt: float, run: Run, yaw: float, pos: Vector2) -> bool:
 		t = VOTE_TEXT
 	elif _arrived_t > 0.0:
 		k = Kind.ARRIVED
-		t = "%s — на месте" % _arrived
+		t = _arrived if _arrived.ends_with(" — узнано") else "%s — на месте" % _arrived
+	elif at != "":
+		k = Kind.TASK
+		t = PlaceTask.plate(at, Vector3(pos.x, y, pos.y), lore)
 	elif key != "":
 		var to := Run.place_xz(key)
 		var dlt := delta(yaw, pos, to)
@@ -91,6 +107,7 @@ func update(dt: float, run: Run, yaw: float, pos: Vector2) -> bool:
 			_:
 				a = roundi(absf(dlt))
 				t = "%d°   %s" % [a, where]
+	task = at if k == Kind.TASK else ""
 	if k == kind and a == angle and t == text:
 		return false
 	kind = k
@@ -100,9 +117,14 @@ func update(dt: float, run: Run, yaw: float, pos: Vector2) -> bool:
 	return true
 
 
-## Есть ли значок слева от текста (стрелка или разворот).
+## Есть ли значок слева от текста (стрелка, разворот или пост задачи).
 func has_icon() -> bool:
-	return kind in [Kind.AHEAD, Kind.LEFT, Kind.RIGHT, Kind.BEHIND]
+	return kind in [Kind.AHEAD, Kind.LEFT, Kind.RIGHT, Kind.BEHIND, Kind.TASK]
+
+
+## Значок поста задачи — ячейка `ShipMap.CELLS` ("" — не задача).
+func task_icon() -> String:
+	return PlaceTask.TASKS[task]["icon"] if kind == Kind.TASK and PlaceTask.has(task) else ""
 
 
 ## Цвет рамки: голубой акцент, янтарь — точка пройдена и решение у стола, погашенный — маршрута нет.

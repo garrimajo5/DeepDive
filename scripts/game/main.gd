@@ -143,6 +143,7 @@ var arrival := ArrivalBrief.new()   ## брифинг прибытия TXT-001 �
 var arrival_panel: ArrivalBriefPanel
 var world_wait := ""   ## строка мира, отложенная до конца брифинга прибытия (#1429, `_world_say`)
 var world_wait_hot := false   ## отложенная строка — строка угрозы (#1516)
+var world_wait_keep := false   ## отложенная строка — «держится» (#1555)
 ## Карточка роли у поста ART-045 (выключают те же `hints`; тестер — шаг `cards`): прочитанное — Settings.cards.
 var role_card := RoleCard.new()
 var role_card_panel: RoleCardPanel
@@ -191,6 +192,7 @@ var logbook_panel: JournalPanel
 var flyby := Flyby.new()   ## камера с борта: облёт в начале забега, вид при всплытии
 var flyby_cam: Camera3D
 var overlay: TouchOverlay
+var hud := true          ## интерфейс поверх игры показан; `set_hud(false)` — кадры для магазина и пробы света
 var hint: Label            ## строка состояния на приборах (Status), по строкам экрана
 var status_lines := Status.Lines.new()   ## раскладка строки состояния — пересчёт только при смене (#847)
 var message := Status.Message.new()
@@ -543,13 +545,18 @@ func _wear(dt: float, light: float) -> void:
 func _flicker(dt: float) -> void:
 	var k := vitals.lamp_k(time, zap.flicker > 0.0)
 	_cabin(k * Wreck.lamps(wreck.t))   # шторка «Корпус разрушен»: плафоны гаснут
+	clock.lap("виды/свет внутри", Time.get_ticks_usec())
 	rooms.steam.apply(valve_steam, ValveSteam.tint(reactor, k * Wreck.lamps(wreck.t)))   # пар ART-071
 	rooms.lock_water.apply(lock_water, airlock.t, helm.depth(), helm.speed, vitals.hull, time, k * Wreck.lamps(wreck.t))   # ART-073
+	clock.lap("виды/пар и вода шлюза", Time.get_ticks_usec())
 	_glints(dt, k * Wreck.lamps(wreck.t))
 	_wear(dt, k * Wreck.lamps(wreck.t))
+	clock.lap("виды/блики и износ", Time.get_ticks_usec())
 	searchlight.set_flicker(k)
 	bridge.set_screens(Vector3(vitals.screen_k(time, Vitals.Screen.HELM_L), vitals.screen_k(time, Vitals.Screen.HELM_C),
 		vitals.screen_k(time, Vitals.Screen.HELM_R)), vitals.screen_k(time, Vitals.Screen.SCANNER))
+	bridge.set_readout(ConsoleScreen.values(helm.yaw, helm.depth(), helm.speed), ConsoleScreen.status(   # ART-061
+		Searchlight.lit(light_on, reactor.k(Reactor.Sys.LAMP)), sonar.can_ping(time), alarms_on().has(true)))
 	rooms.set_journal_k(vitals.screen_k(time, Vitals.Screen.JOURNAL))   # помехи экранов при стеклоусте (ART-025)
 	if vitals.hiss(dt):
 		drain_sound.play()
@@ -599,8 +606,10 @@ func _build_world() -> void:
 
 
 ## Кадры для магазина (ART-046, шаг тестера `hud`, `shot.gd hud=0`): спрятать или вернуть крестовину и кнопки,
-## строки приборов и плашку версии. Следующее событие интерфейса (пауза, меню, шторка) ставит их по-своему.
+## строки приборов, плашку версии и плашку цели за штурвалом (`OverlayFlow.goal_step`). Следующее событие интерфейса
+## (пауза, меню, шторка) ставит кнопки и строки по-своему.
 func set_hud(on: bool) -> void:
+	hud = on
 	overlay.visible = on
 	hint.visible = on
 	var ver := overlay.get_parent().get_node_or_null("Версия") as CanvasItem
@@ -830,7 +839,7 @@ func _step_ship(dt: float, h: Holds) -> void:
 	if not silt_msg.is_empty():
 		announce(silt_msg)
 	silt_view.apply(silt, time, helm.pos, helm.yaw)
-	var run_msg := run.update(helm.pos.x, helm.pos.z)
+	var run_msg := run.update(helm.pos.x, helm.pos.z, lore)   # у места с действием — задача (#1635)
 	if not run_msg.is_empty():
 		announce(run_msg)
 		timeline.mark(time, run_msg)
@@ -900,15 +909,16 @@ func _step_zap(dt: float) -> void:
 		ocean.set_scorch(scorch.uniforms(time))
 
 
-## Шаг: виды корабля — пульты, голограммы, отсеки, своя фигура, корабль и камера (подчасти «виды/…» — в худшем кадре
-## лога тестера: «виды 57» у колодца 05 в отчёте #1182 не говорил, что внутри).
+## Шаг: виды корабля — свет внутри, пар и вода шлюза, блики и износ, прожектор и экраны пультов, ползунки и люк,
+## голограммы и табло, отсеки и экран сканера, своя фигура, корабль и камера (подчасти «виды/…» — в худшем кадре
+## лога тестера: «виды 57» у колодца 05 в отчёте #1182 не говорил, что внутри; имя — по тому, что вызывается, #1590).
 func _step_view(dt: float) -> void:
 	_flicker(dt)
-	clock.lap("виды/свет", Time.get_ticks_usec())
+	clock.lap("виды/прожектор и экраны пультов", Time.get_ticks_usec())
 	for i in Reactor.Sys.size():
 		bridge.set_slider(i, reactor.share[i] / float(Reactor.MAX))
 	bridge.set_hatch(layout.doors[0].offset())
-	clock.lap("виды/пульты", Time.get_ticks_usec())
+	clock.lap("виды/ползунки и люк", Time.get_ticks_usec())
 	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0, silt.noise(time))
 	sonar_view.show_waypoint(run.waypoint())
 	alarm_board.show_alarms(alarms_on(), time, breach.active)
@@ -918,14 +928,14 @@ func _step_view(dt: float) -> void:
 		ballot.seconds() if coop else -1, ballot.fraction() if coop else -1.0, run.at_descent())
 	sonar_view.show_result(result_fade.update(dt, VoteHolo.result_wanted(at_vote, run.ended)), result_rows,
 		camera.global_position)
-	clock.lap("виды/голограммы", Time.get_ticks_usec())
+	clock.lap("виды/голограммы и табло", Time.get_ticks_usec())
 	rooms.apply(layout, reactor, airlock, engine)
 	var carry_c: Color = Samples.COLORS[samples.target.kind] if samples.target else Color.WHITE
 	rooms.set_winch(samples.hook_local(Samples.ship_xform(helm.pos, helm.yaw)), samples.carrying(), carry_c)
 	rooms.set_lab(Lab.contents(samples.cargo), lab_screen.lines(samples, scanner, journal_page), time)
 	rooms.set_shelves(HoldShelves.contents(samples.cargo))
 	bridge.set_scanner_screen(gate.screen_lines(lore) if gate.active() else scanner.screen_lines())
-	clock.lap("виды/отсеки и экраны", Time.get_ticks_usec())
+	clock.lap("виды/отсеки и экран сканера", Time.get_ticks_usec())
 	message.update(dt)
 	me.back = CrewView.own_back(walker.pitch, me.holding())   # взгляд вниз — фигура дальше позади глаза, видны ступни (#108)
 	me.follow(walker.x, walker.z, walker.yaw, pilot.seated, helm.turn, dt)
@@ -1239,12 +1249,12 @@ func on_eco_event(e: Dictionary) -> void:
 				return   # обучение (#827): присоски энергию не тянут
 			vitals.drain(str(e.get("by", "")), float(e.get("units", 0.0)))
 		EcoLink.MESSAGE:
-			_world_say(str(e.get("text", "")), bool(e.get("urgent", false)))
+			_world_say(str(e.get("text", "")), bool(e.get("urgent", false)), bool(e.get("keep", false)))
 		EcoLink.VOICE:   # голос во внутренней связи ART-040; просьбу не исполняем — решает игрок
 			if bool(e.get("fake", false)) and events_held():
 				return   # обучение (#827): подделок в эфире нет, свои доклады идут
 			comms.push(int(e.get("role", Crew.Role.ENGINEER)), str(e.get("text", "")), bool(e.get("fake", false)),
-				str(e.get("ask", "")), bool(e.get("silent", false)))
+				str(e.get("ask", "")), bool(e.get("silent", false)), str(e.get("id", "")))
 		EcoLink.DRAG:   # присоски на корпусе тормозят корабль (js/ship.js: drag = 0.45 + 0.025 * hullRemoras)
 			helm.extra_drag = 0.0 if events_held() else float(e.get("k", 0.0))   # обучение (#827) — не тормозят
 		EcoLink.STEAL:   # образец сорван с захвата (M.steal в js/manip.js)
@@ -1266,7 +1276,7 @@ func on_eco_event(e: Dictionary) -> void:
 			var fresh := scanner.observe(sp, str(e.get("note", "")))
 			var text := str(e.get("text", ""))
 			if text != "":
-				_world_say(text, bool(e.get("urgent", false)))
+				_world_say(text, bool(e.get("urgent", false)), bool(e.get("keep", false)))
 			elif fresh:
 				_world_say("Новое наблюдение: %s" % Species.called(sp, Species.Case.NOM, scanner.is_scanned(sp)))
 
@@ -1275,15 +1285,19 @@ func on_eco_event(e: Dictionary) -> void:
 ## ничего не делает, а сцена у старта сразу в луче (#827); наблюдение в журнал при этом записано. Пока открыт брифинг
 ## прибытия, последняя строка ждёт его конца (`world_wait`, #1429): мир не перебивает лор. Строка угрозы (`urgent`,
 ## #1516) держится на приборах свои 4,2 с — строки мира её не стирают; в ожидании брифинга её не сменяет обычная.
-func _world_say(text: String, urgent := false) -> void:
+## Строка «держится» (`keep`, #1555) ждёт очереди, как обычная, а вышла — держится, как срочная; срочная главнее.
+func _world_say(text: String, urgent := false, held := false) -> void:
 	if flyby.kind == Flyby.Kind.START:
 		return
 	if arrival.active():
-		if urgent or not world_wait_hot or world_wait == "":
+		var level := 2 if urgent else (1 if held else 0)
+		var waiting := 2 if world_wait_hot else (1 if world_wait_keep else 0)
+		if world_wait == "" or level >= waiting:
 			world_wait = text   # одна, последняя — не очередь
 			world_wait_hot = urgent
+			world_wait_keep = held and not urgent
 		return
-	message.say(text, Status.MESSAGE_SECONDS, true, urgent)   # не стирает строку, видную меньше 1 с (issue #979)
+	message.say(text, Status.MESSAGE_SECONDS, true, urgent, held)   # не стирает строку, видную меньше 1 с (issue #979)
 
 
 ## Брифинг прибытия кончился — отложенная строка мира на приборы (#1429; `OverlayFlow.brief_step`). Пока идёт —
@@ -1291,18 +1305,22 @@ func _world_say(text: String, urgent := false) -> void:
 ## сменилась уже под плашкой — ждала своей секунды до брифинга).
 func release_world_say() -> void:
 	if arrival.active():
-		var parked_hot := message.hot and message.next == ""   # отдаётся видимая строка угрозы (#1516)
+		var parked_hot := message.hot and not message.keep and message.next == ""   # отдаётся видимая строка угрозы (#1516)
+		var parked_keep := message.next_keep if message.next != "" else (message.hot and message.keep)   # «держится» (#1555)
 		var parked := message.take_world()
 		if parked != "" and world_wait == "":
 			world_wait = parked
 			world_wait_hot = parked_hot
+			world_wait_keep = parked_keep
 		return
 	if world_wait != "":
 		var text := world_wait
 		var hot := world_wait_hot
+		var held := world_wait_keep
 		world_wait = ""
 		world_wait_hot = false
-		_world_say(text, hot)
+		world_wait_keep = false
+		_world_say(text, hot, held)
 		if qa != null:   # п. 2 #1429 тестер проверяет по логу, а не догадкой по кадру (#1350)
 			qa.note(QaRunner.released_line(text))
 
@@ -1879,7 +1897,7 @@ func status_rows() -> Array:
 		row2.append("курс %d°" % Status.course_deg(helm.yaw))
 		row2.append("прожектор %s" % ("вкл" if light_on else "выкл"))
 	else:
-		row2.append(run.status(helm.pos.x, helm.pos.z))
+		row2.append(run.status(helm.pos.x, helm.pos.z, lore))
 	if reactor.alert().is_empty():
 		row2.append("реактор %d/%d" % [reactor.used(), reactor.limit()])
 	if pilot.seated and current.vel().length() >= Status.CURRENT_SHOWN:

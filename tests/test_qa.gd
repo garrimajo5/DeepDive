@@ -128,6 +128,11 @@ func test_scene_runs_scenario() -> void:
 	var field_known := false   # 32e2: импульс с площадки 08 поймал ритм поля (#833)
 	var bones_seen := false   # 32g: сканер у Костей 04 — строка о минерализации (#840)
 	var shell_known := false   # 32h: сонар и сканер у Раковины 03 — знание «осмотр 03» (#835)
+	var reverse := 0.0   # 05c (#1568): задний ход — минус на левом экране пульта ART-061
+	var dome: Array[String] = []   # 37/37a (#1350): купольник в кадре — клип ANIM-004 и створка по кадрам
+	var dome_t := -1.0   # 37 (#837): время клипа OpenPetal на кадре — верхняя точка подъёма
+	var dome_say := ""   # 37a (#837, отчёт 11.11 15:18): строка створки на приборах
+	var task_say := ""   # 35-zadacha-07 (#1635, отчёт 11.11 12:19): строка 3 — задача места, не «Вы за штурвалом»
 	var ogon: Array[String] = []   # 36/36a/36b (#1401): спрятано венчиков у куста огнецвета 0 и его свечение по кадрам
 	ok(not main.lore.knows(LayerLore.FIELD08), "до прогона поле 08 не замечено")
 	for i in scene_frames(qa.script_q):   # предел — от длины сценария (#1379)
@@ -167,6 +172,11 @@ func test_scene_runs_scenario() -> void:
 		var mate_welds := false
 		for m: Crew.Member in main.crew:
 			mate_welds = mate_welds or (m != main.me and m.welding() and weld_at > 0.0)
+		var dome_vis := cam.is_position_in_frustum(main.eco.dome.pos + Vector3(0, 0.6, 0)) and main.eco.dome_view.visible
+		var dome_line := "%s %s %.1f" % ["в кадре" if dome_vis else "не в кадре", main.eco.dome_view.playing,
+				main.eco.dome.petal]
+		var dome_at := main.eco.dome.t
+		var say_now := main.message.text
 		main.step(1.0 / 30.0)
 		no_answer = no_answer or (main.address.open and main.address.hint() == AddressScreen.NO_ANSWER)
 		sat = sat or main.pilot.seated
@@ -184,10 +194,20 @@ func test_scene_runs_scenario() -> void:
 				legs_seen = legs_vis
 			if qa.log_lines[k].begins_with("скриншот 16-breach-weld"):
 				weld_y = weld_at
+			if qa.log_lines[k].begins_with("скриншот 05c-zadniy-hod"):
+				reverse = (main.bridge.screens_mat.get_shader_parameter("values") as Vector3).z
 			if qa.log_lines[k].begins_with("скриншот 10-zap"):
 				zap_seen = zap_vis
 			if qa.log_lines[k].begins_with("скриншот 10a-zap-okno"):
 				arc_seen = arc_vis
+			if qa.log_lines[k].begins_with("скриншот 37-kupolnik") or qa.log_lines[k].begins_with("скриншот 37a-kupolnik"):
+				dome.append(dome_line)
+				if qa.log_lines[k].begins_with("скриншот 37-kupolnik"):
+					dome_t = dome_at
+				else:
+					dome_say = say_now
+			if qa.log_lines[k].begins_with("скриншот 35-zadacha-07"):
+				task_say = say_now
 			if qa.log_lines[k].begins_with("скриншот 36"):
 				ogon.append(_ognecvet(main, qa.log_lines[k].split(" ")[1].trim_suffix(":")))
 			if qa.log_lines[k].begins_with("скриншот 30-kartochka-sonar"):
@@ -213,15 +233,26 @@ func test_scene_runs_scenario() -> void:
 	eq(windows_hidden, [] as Array[String], "на 33/33a окна не заслоняют товарищи (отчёт 2026-10-26-1233)")
 	ok(mate_weld_seen, "на 26b-mate-weld товарищ варит шов в кадре (#602)")
 	ok(sat, "по сценарию садились за штурвал")
+	ok(reverse < -1.0, "на 05c-zadniy-hod задний ход — на экране пульта ход с минусом: %.1f (#1568)" % reverse)
 	ok(field_known, "32e2: импульс у 08 — ритм поля, знание «поле 08»")
 	ok(bones_seen, "32g: сканер у Костей 04 — строка о минерализации")
 	ok(shell_known, "32h: сонар и сканер у Раковины 03 — знание «осмотр 03»")
+	eq(dome.size(), 2, "37/37a: оба кадра купольника сняты")
+	if dome.size() == 2:
+		eq(dome[0], "в кадре OpenPetal 1.0", "37: купольник в кадре, клип OpenPetal, створка поднята")
+		ok(absf(dome_t - EcoDome.LIFT.y) < 0.15,
+				"37 (#837): кадр в верхней точке подъёма захвата (LIFT.y %.1f с): %.2f с" % [EcoDome.LIFT.y, dome_t])
+		eq(dome[1], "в кадре Swim 1.0", "37a: створка поднята, купольник в кадре уходит клипом Swim")
+	eq(task_say, PlaceTask.line("gate"),
+			"35-zadacha-07 (#1635): на приборах строка задачи 07, не «%s»" % Main.SAT_MSG)
+	eq(dome_say, EcoDome.PETAL_TEXT, "37a (#837): на приборах строка створки — знание забыто шагом dome")
 	eq(ogon, ["36-ognecvet-do: 0 свет", "36a-ognecvet-prohod: спрятаны погас", "36b-ognecvet-posle: 0 свет"],
 			"#1401: до прохода ряд раскрыт и куст горит, на проходе — спрятан и погас, после — снова раскрыт")
 	ok(not main.pilot.seated, "и встали")
 	ok(ahead > 20.0, "корабль прошёл вперёд: %.1f м" % ahead)
 	ok(FileAccess.file_exists(QaRunner.OUT + "/done.txt"), "done.txt записан")
 	var log := FileAccess.get_file_as_string(QaRunner.OUT + "/log.txt")
+	ok(log.contains("купольник: OpenPetal 3.5 с · створка 07 "), "37 (#837): в логе у шага dome — было ли знание")
 	ok(log.get_slice("\n", 0).contains("версия " + Main.version_text()), "#1350: первая строка лога — версия как на плашке")
 	ok(log.contains("сел за штурвал") and log.contains("за штурвалом"), "в логе есть состояние за штурвалом")
 	ok(log.contains("прожектор погашен | ") and log.contains("свет выкл"), "по сценарию гасили прожектор")
@@ -708,6 +739,45 @@ func test_worst_note_code_and_gpu() -> void:   # issue #217, #281: отрисо�
 	eq(QaRunner.worst_note("", 3.0), "отрисовка 3 мс", "без шага и кода — как раньше")
 
 
+## #519 (тестер в #1350, 10.11): `21a-vent` 107 мс при коде 18 и отрисовке 19 — остаток кадра делим на части движка.
+func test_worst_rest_parts() -> void:
+	# кадр 1 000 000…1 107 000 мкс: код 18 мс, отрисовка 1 020 000…1 039 000, физика с 1 100 000, узлы с 1 104 000
+	var parts := QaRunner.rest_parts(1000000, 1107000, 18.0, 1020000, 1039000, 1100000, 1104000)
+	near(parts["между кадрами"], 61.0, 0.01, "от конца отрисовки до первого такта физики")
+	near(parts["физика"], 4.0, 0.01, "такты физики до обработки узлов")
+	near(parts["узлы"], 5.0, 0.01, "узлы до кода (2) и после начала обработки (3)")
+	eq(QaRunner.worst_note("шаг 341 hold", 19.0, 18.0, 4.0, 107.0, "", PackedInt32Array(), parts),
+		"шаг 341 hold, код 18 мс, отрисовка 19 мс, видеокарта 4 мс, вне шага 70 мс (между кадрами 61, узлы 5, физика 4)")
+	var calm := QaRunner.rest_parts(1000000, 1107000, 18.0, 1020000, 1039000, 1030000, 1104000)
+	eq(calm["физика"], 0.0, "такт физики раньше отрисовки — тактов в кадре не было")
+	near(calm["между кадрами"], 65.0, 0.01, "тогда между кадрами — до обработки узлов")
+	eq(QaRunner.rest_parts(1000000, 1107000, 18.0, 0, 0, 0, 0), {}, "без отрисовки (headless) — меток нет")
+	eq(QaRunner.rest_parts(1000000, 1107000, 18.0, 990000, 995000, 0, 1104000), {}, "отрисовка прошлого кадра — не делим")
+	eq(QaRunner.rest_note(99.0, 18.0, 19.0, parts), "", "кадр короче 100 мс — без остатка")
+	eq(QaRunner.rest_note(107.0, 40.0, 19.0, parts), "", "код и отрисовка — больше половины кадра: виновник уже в строке")
+	eq(QaRunner.rest_note(120.0, 10.0, 10.0, {"между кадрами": 90.0, "физика": 0.2, "узлы": 0.0}),
+		"вне шага 100 мс (между кадрами 90, прочее 10)", "доли меньше 1 мс молчат, не разложенное — «прочее»")
+
+
+## Метки ставят сигналы дерева: первый такт физики после отрисовки, начало обработки узлов.
+func test_worst_rest_marks() -> void:
+	var r := QaRunner.new()
+	r._on_pre_draw()
+	r._on_post_draw()
+	r._on_physics_frame()
+	var first := r._phys_us
+	OS.delay_usec(1000)
+	r._on_physics_frame()
+	eq(r._phys_us, first, "второй такт в том же кадре метку не двигает")
+	r._on_process_frame()
+	ok(r._post_us <= r._phys_us and r._phys_us <= r._proc_us, "метки по порядку кадра")
+	r._on_post_draw()
+	OS.delay_usec(1000)
+	r._on_physics_frame()
+	ok(r._phys_us > r._post_us, "после новой отрисовки — новый первый такт")
+	r.free()
+
+
 ## Issue #609: «отрисовка 1466 мс» при худшем кадре 178 мс — замер движка запаздывал и приходился на чужой кадр.
 ## Теперь отрисовка — от frame_pre_draw до frame_post_draw того кадра, чьё время меряется; видеокарта больше кадра — не пишем.
 func test_worst_frame_own_draw() -> void:
@@ -1115,5 +1185,48 @@ func test_outside_lamp() -> void:
 		main.step(1.0 / 30.0)
 	await frames(1)
 	ok(main.flyby_cam.get_node_or_null(QaRunner.LAMP_NAME) == null, "камера убрана — света нет")
+	main.queue_free()
+	await frames(1)
+
+
+## #1400 (отчёт qa/2026-11-11-0010-svezhaya-b946a31): цену тени прожектора на «Обычно» тестер меряет на устройстве —
+## шаг «luch_ten» гасит тень, true возвращает её по уровню графики («Экономно» — без тени и после true).
+func test_luch_ten_step() -> void:
+	var q := QaScript.parse('[{"do": "luch_ten", "on": false}, {"do": "luch_ten"}]')
+	eq(q.errors.size(), 0, "шаг luch_ten известен")
+	eq(q.advance(0.1).slice(0, 2), [["luch_ten", false], ["luch_ten", true]], "команды сцене")
+	var probe := QaScript.parse(FileAccess.get_file_as_string("res://tools/qa/luch-ten.json"))
+	eq(probe.errors.size(), 0, "сценарий пробы tools/qa/luch-ten.json без ошибок: %s" % ", ".join(probe.errors))
+	# #1606: перед каждым снимком корабль ставится в одну и ту же точку — течение за 5 с сносит его на ~1 м
+	var steps: Array = JSON.parse_string(FileAccess.get_file_as_string("res://tools/qa/luch-ten.json"))
+	var pose = null
+	var placed := false
+	var shots := 0
+	for st in steps:
+		if st["do"] == "ship":
+			var p := [st["x"], st["y"], st["z"], st["yaw"]]
+			if pose == null:
+				pose = p
+			eq(p, pose, "одна поза у всех трёх кадров")
+			placed = true
+		elif st["do"] == "shot":
+			ok(placed, "перед %s корабль поставлен заново" % st["name"])
+			placed = false
+			shots += 1
+	eq(shots, 3, "три кадра")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main._apply_graphics(Graphics.NORMAL)
+	ok(main.searchlight.spot.shadow_enabled, "на «Обычно» прожектор с тенью")
+	main.start_qa('[{"do": "luch_ten", "on": false}, {"do": "wait", "s": 0.2}]')
+	for i in 3:
+		main.step(1.0 / 30.0)
+	ok(not main.searchlight.spot.shadow_enabled, "после шага — без тени")
+	QaRunner.luch_ten(main, true)
+	ok(main.searchlight.spot.shadow_enabled, "true — тень по уровню графики")
+	main._apply_graphics(Graphics.ECONOMY)
+	QaRunner.luch_ten(main, true)
+	ok(not main.searchlight.spot.shadow_enabled, "на «Экономно» тени нет и после true")
 	main.queue_free()
 	await frames(1)

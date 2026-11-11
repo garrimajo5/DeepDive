@@ -34,11 +34,20 @@ const DART := 4.0
 ## за ~0,3 с, а не срывается с 0,7 до 4 м/с за шаг (рывок 58 м/с², нашёл обход мира по ускорениям); к цели тормозит
 ## заранее — нужный ход FOLLOW · остаток.
 const ACCEL := 12.0
-## Нос рачка `Shrimp.dir` догоняет ход долей угла LOOK_K в секунду, не быстрее LOOK_MAX рад/с (`turn`, Б3):
+## Нос рачка `Shrimp.dir` догоняет ход долей угла LOOK_K в секунду, не быстрее LOOK_MAX рад/с (`steer`, Б3):
 ## смена цели (станция → хищник на чистке → веерник) разворачивает рачка за ~0,4 с, а не за шаг; почти стоит —
 ## держит курс (раньше нос щёлкал на касательную круга).
 const LOOK_K := 10.0
 const LOOK_MAX := 8.0
+## Поворот с инерцией (Б3, как `EcoCoins.TURN_ACCEL`): скорость поворота носа `Shrimp.spin` набирается и гаснет не
+## быстрее TURN_ACCEL рад/с², к курсу — не быстрее √(2 · TURN_ACCEL · угол), тормозит заранее (`steer`). Раньше смена
+## цели срывала нос с места сразу на LOOK_MAX за шаг рачка (tools/jerk.gd near=50 у 00 → 01: 58–68 рад/с²).
+const TURN_ACCEL := 20.0
+## Медленнее SLOW м/с нос поворачивает долей хода (ход у нуля — курс куда попало: рачок на развороте кувыркался носом
+## через низ); нос тянется к курсу с тангажом не круче PITCH_MAX рад (`level`): у отвесного носа бок капсулы `dir × UP`
+## крутился бы рывком. Перелёт за предел гасит тот же spin, без обрезки — обрезка дала бы рывок.
+const SLOW := 0.3
+const PITCH_MAX := 0.6
 ## Запас до обшивки, м: корпус не пускает рачка внутрь (`EcoHull.push_out`, как светляков `EcoFish.HULL_GAP`).
 ## Корабль на высоте дна + 3 м проходит над огнецветом (вершина — 4,2 м), раньше стая кружила внутри корпуса —
 ## светящиеся рачки в отсеках и на мостике; теперь сидят на обшивке и возвращаются к вершине, когда корабль ушёл.
@@ -57,6 +66,8 @@ class Shrimp:
 	var dir := Vector3(1, 0, 0)
 	## Ход, м/с (`swim`).
 	var v := Vector3.ZERO
+	## Скорость поворота носа (вектор вдоль оси, рад/с), меняется не быстрее TURN_ACCEL (`steer`).
+	var spin := Vector3.ZERO
 
 
 var shrimp: Array[Shrimp] = []
@@ -149,7 +160,7 @@ func step(world: EcoWorld, dt: float) -> void:
 		s.p = outside(world, s.p + s.v * sdt)
 		# обшивка сдвинула — ход тот, что вышел на деле (не давит в корпус), не быстрее DART
 		s.v = ((s.p - was) / sdt).limit_length(DART)
-		s.dir = turn(s.dir, s.p - was, sdt)
+		steer(s, s.p - was, sdt)
 	fan_cd -= dt
 	if fans and fan_cd <= 0.0:
 		for st in leeches.stations:
@@ -186,20 +197,41 @@ static func swim(from: Vector3, v: Vector3, goal: Vector3, dt: float) -> Vector3
 	return v + (want - v).limit_length(ACCEL * dt)
 
 
-## Нос from → по ходу move: доля угла LOOK_K·dt, не больше LOOK_MAX·dt; хода нет — держит курс.
-static func turn(from: Vector3, move: Vector3, dt: float) -> Vector3:
-	if move.length_squared() < 1e-10:
-		return from
-	var want := move.normalized()
-	if from.length_squared() < 1e-8:
-		return want
-	var ang := from.angle_to(want)
-	if ang < 1e-4:
-		return want
-	var axis := from.cross(want)
-	if axis.length_squared() < 1e-10:
-		axis = Vector3.UP if absf(from.y) < 0.9 else Vector3.RIGHT
-	return from.rotated(axis.normalized(), minf(ang * minf(1.0, LOOK_K * dt), LOOK_MAX * dt)).normalized()
+## Шаг носа рачка s за dt по ходу move: нужная скорость поворота — доля угла LOOK_K в секунду, не быстрее LOOK_MAX
+## и √(2 · TURN_ACCEL · угол); `Shrimp.spin` догоняет её не быстрее TURN_ACCEL · dt, нос идёт ровно со скоростью
+## spin (перелёт гасит тот же spin). Разворот больше 90° — вокруг вертикали; медленнее SLOW — долей хода, хода нет —
+## нужная скорость ноль: нос доворачивает по инерции и встаёт.
+static func steer(s: Shrimp, move: Vector3, dt: float) -> void:
+	if dt <= 0.0:
+		return
+	var goal := Vector3.ZERO
+	if move.length_squared() >= 1e-10:
+		var want := level(move.normalized())
+		var ang := s.dir.angle_to(want)
+		if ang > 1e-5:
+			var axis := s.dir.cross(want)
+			if ang > PI * 0.5:  # разворот — по горизонтали, в сторону уже начатого (не кувырком через низ)
+				var side := axis.y if absf(axis.y) > 1e-4 else s.spin.y
+				axis = Vector3.UP * (-1.0 if side < 0.0 else 1.0)
+			var rate := minf(minf(ang * minf(LOOK_K, 1.0 / dt), LOOK_MAX), sqrt(2.0 * TURN_ACCEL * ang))
+			goal = axis.normalized() * rate * minf(1.0, move.length() / dt / SLOW)
+	s.spin += (goal - s.spin).limit_length(TURN_ACCEL * dt)
+	var sp := s.spin.length()
+	if sp > 1e-6:
+		s.dir = s.dir.rotated(s.spin / sp, sp * dt).normalized()
+
+
+## Направление d с тангажом не круче PITCH_MAX (курс по горизонтали тот же; отвесное — без курса, как есть).
+static func level(d: Vector3) -> Vector3:
+	var lim := sin(PITCH_MAX)
+	if absf(d.y) <= lim:
+		return d
+	var f := Vector2(d.x, d.z)
+	if f.length_squared() < 1e-10:
+		return d
+	f = f.normalized()
+	var c := sqrt(1.0 - lim * lim)
+	return Vector3(f.x * c, signf(d.y) * lim, f.y * c)
 
 
 ## Касательная круга над вершиной при фазе a (первый курс рачка).

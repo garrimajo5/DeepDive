@@ -105,13 +105,14 @@ func alarm_step(dt: float) -> void:
 
 
 ## Плашка цели маршрута за штурвалом (#1344): видна, пока свой игрок сидит за штурвалом; скрыта тем же, что карточка
-## роли (тревога, голосование у стола, итог, пауза, меню, облёт, шторки). Сонарная тьма не гасит — курс по счислению.
+## роли (тревога, голосование у стола, итог, пауза, меню, облёт, шторки) и `Main.set_hud(false)`. Сонарная тьма не
+## гасит — курс по счислению.
 func goal_step(dt: float) -> void:
 	var m := main
-	var hidden := not m.pilot.seated or m.alarms_on().has(true) or m.at_vote or m.run.ended or m.pause.open \
+	var hidden := not m.hud or not m.pilot.seated or m.alarms_on().has(true) or m.at_vote or m.run.ended or m.pause.open \
 		or m.main_menu.open or m.settings.open or m.flyby.active() or m.warm.active() or m.wreck.active() \
 		or m.walker.noclip or m.trip.active or (m.net_client != null and m.drop.active())
-	m.goal_plate.update(dt, m.run, m.helm.yaw, Vector2(m.helm.pos.x, m.helm.pos.z))
+	m.goal_plate.update(dt, m.run, m.helm.yaw, Vector2(m.helm.pos.x, m.helm.pos.z), m.lore, m.helm.pos.y)
 	if hidden:
 		m.goal_plate_view.show_plate(m.goal_plate, Rect2(), false)
 		return

@@ -99,8 +99,9 @@ jobs:
           restore-keys: godot-import-${{ env.GODOT_VERSION }}-
       - name: Импорт проекта
         run: ~/godot/godot --headless --path . --import
+      # --slow 15: в конце части — 15 самых долгих тестов, кандидаты на ускорение прямо из лога CI (#1350)
       - name: Тесты
-        run: ~/godot/godot --headless --path . -s tests/run.gd -- --shard ${{ matrix.part }}/3
+        run: ~/godot/godot --headless --path . -s tests/run.gd -- --shard ${{ matrix.part }}/3 --slow 15
 
   # Итог «Тесты» — зелёный, только когда зелёные все части. always(): иначе при упавшей части итог «skipped»,
   # а пропуск GitHub считает успехом. Без изменений кода части пропущены — итог тоже пропущен (зелёный).

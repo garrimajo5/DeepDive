@@ -138,7 +138,7 @@ func update(at: Vector3) -> bool:
 	var moved := gap >= MOVE
 	var budget := CELLS_STEP if gap < JUMP else 1 << 20
 	var c := cell_of(at.x, at.z)
-	if c == _full_at and not moved and not _dirty:
+	if not needs(at):
 		return false   # стоим в той же клетке, всё посчитано — шаг почти даром
 	var n := int(ceilf(r / CELL)) + 1
 	var todo := _fill(at, budget)
@@ -149,6 +149,19 @@ func update(at: Vector3) -> bool:
 	_dirty = false
 	_rebuild(c, n, r)
 	return true
+
+
+## Шагу `update` у at нужна работа: досчитать клетки или пересобрать список (не «та же клетка, всё посчитано»).
+## У корабля на ходу это каждые 3–4 м: обход клеток радиуса и пересборка списка — в облаке 1–4 мс на россыпь,
+## на эмуляторе в разы дольше; `OceanView.set_ship` даёт такой шаг одной россыпи за кадр (#1564).
+func needs(at: Vector3) -> bool:
+	var moved := Vector2(at.x - _center.x, at.z - _center.z).length() >= MOVE
+	return cell_of(at.x, at.z) != _full_at or moved or _dirty
+
+
+## Центр перескочил дальше JUMP (старт, загрузка, возвращение к 10): радиус — сразу, без очереди.
+func jumps(at: Vector3) -> bool:
+	return Vector2(at.x - _center.x, at.z - _center.z).length() >= JUMP
 
 
 ## Заранее досчитать клетки у будущего центра at, не больше budget за шаг (ближние первыми), список не трогать.

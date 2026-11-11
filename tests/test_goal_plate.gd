@@ -151,6 +151,13 @@ func test_scene_seated_plate() -> void:
 	ok(not Status.join(main.status_parts()).contains("Рифовый сад"), "строка маршрута ушла из приборов")
 	var r := main.goal_plate_view.rect
 	ok(r.has_area() and not r.intersects(main.status_rect()), "плашка мимо строки приборов")
+	main.set_hud(false)   # кадры для магазина и пробы света: плашки цели в кадре нет (#1350)
+	main.step(1.0 / 30.0)
+	ok(not main.goal_plate_view.visible, "hud=0 — плашки нет")
+	ok(not main.hint.visible, "hud=0 — строки приборов нет")
+	main.set_hud(true)
+	main.step(1.0 / 30.0)
+	ok(main.goal_plate_view.visible, "интерфейс вернулся — плашка снова")
 	main.stand_up()
 	main.step(1.0 / 30.0)
 	ok(not main.goal_plate_view.visible, "встал — плашки нет")
