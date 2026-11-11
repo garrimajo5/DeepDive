@@ -16,6 +16,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from urllib.parse import quote
 
 REPO = os.environ.get("STATUS_REPO", "garrimajo5/DeepDive")
@@ -147,6 +148,13 @@ def stage_status(closed, n_epics, done, total, has_later_work):
 
 # ---------- GitHub ----------
 
+# Сбой GitHub «HTTP 502/503/504» — повтор с паузой, а не красный прогон: 2 из 3 падений «Где мы» за 9–11.11
+# были такими (#1350). Ответ 4xx не повторяем — это ошибка запроса.
+SERVER_ERROR = re.compile(r"HTTP 5\d\d")
+RETRIES = 3
+RETRY_PAUSE = 5  # с; растёт с попыткой: 5, 10, 15
+
+
 def gh(path, method="GET", payload=None, paginate=False):
     """`gh api`; paginate — все страницы списка. Листаем сами (&page=N): ссылки «next» у GitHub ведут
     на repositories/<id>/…, а прокси облачной сессии такие пути не пускает."""
@@ -161,8 +169,12 @@ def gh(path, method="GET", payload=None, paginate=False):
     cmd = ["gh", "api", "-X", method, quote(path, safe="/?&=:-_.~,")]
     if payload is not None:
         cmd += ["--input", "-"]
-    r = subprocess.run(cmd, input=json.dumps(payload) if payload is not None else None,
-                       capture_output=True, text=True)
+    for attempt in range(RETRIES + 1):
+        r = subprocess.run(cmd, input=json.dumps(payload) if payload is not None else None,
+                           capture_output=True, text=True)
+        if r.returncode == 0 or not SERVER_ERROR.search(r.stderr) or attempt == RETRIES:
+            break
+        time.sleep(RETRY_PAUSE * (attempt + 1))
     if r.returncode != 0:
         raise RuntimeError(f"gh api {path}: {r.stderr.strip()[:300]}")
     out = r.stdout.strip()

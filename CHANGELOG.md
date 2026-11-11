@@ -3,6 +3,8 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-11
+- «Где мы» (`tools/status.py`): ответ GitHub HTTP 5xx повторяется до трёх раз с паузой 5/10/15 с — 2 из 3
+  красных прогонов страницы за 9–11.11 были разовым 502; 4xx не повторяется (тест `GhRetry`, #1350).
 - ANIM-004 принят (#1601, PR #1619): купольник на скелете — `models/kupolnik-anim.glb` (20 костей, клипы `Idle`,
   `Swim`, `OpenPetal`) вместо `kupolnik.glb`; `DomeView` грузит его в позе покоя, клипы — по #837;
   тест `test_eco_dome_anim`, фазы и GIF — `docs/concept-art/kupolnik-anim*`.

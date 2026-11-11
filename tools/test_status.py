@@ -161,5 +161,47 @@ class Render(unittest.TestCase):
         self.assertEqual(status.short("Кадры по `tools/qa/play-kadry.json` для Google Play", 20), "Кадры по tools/qa/pl…")
 
 
+class GhRetry(unittest.TestCase):
+    """Сбой GitHub 5xx повторяется, 4xx — нет (#1350: «Где мы» краснел от разового HTTP 502)."""
+
+    def run_with(self, answers):
+        calls, pauses = [], []
+
+        class R:
+            def __init__(self, code, err, out=""):
+                self.returncode, self.stderr, self.stdout = code, err, out
+
+        def fake_run(cmd, **kw):
+            calls.append(cmd)
+            return R(*answers[min(len(calls), len(answers)) - 1])
+
+        old_run, old_sleep = status.subprocess.run, status.time.sleep
+        status.subprocess.run, status.time.sleep = fake_run, pauses.append
+        try:
+            try:
+                return status.gh("repos/x/y/issues?state=open"), calls, pauses
+            except RuntimeError as e:
+                return e, calls, pauses
+        finally:
+            status.subprocess.run, status.time.sleep = old_run, old_sleep
+
+    def test_502_then_ok(self):
+        res, calls, pauses = self.run_with([(1, "gh: Server Error (HTTP 502)"), (0, "", "[1]")])
+        self.assertEqual(res, [1])
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(pauses, [status.RETRY_PAUSE])
+
+    def test_502_gives_up(self):
+        res, calls, pauses = self.run_with([(1, "gh: Server Error (HTTP 502)")])
+        self.assertIsInstance(res, RuntimeError)
+        self.assertEqual(len(calls), status.RETRIES + 1)
+
+    def test_404_no_retry(self):
+        res, calls, pauses = self.run_with([(1, "gh: Not Found (HTTP 404)")])
+        self.assertIsInstance(res, RuntimeError)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(pauses, [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
