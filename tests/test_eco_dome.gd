@@ -350,3 +350,29 @@ func test_hull_pushes_dome_aside() -> void:
 		d.step(w, DT)
 		guard += 1
 	ok(d.opened, "корабль ушёл — дошёл до гнезда и открыл створку")
+
+
+func test_stage_for_qa_step() -> void:   # #1350: шаг «dome» сценария тестера — у гнезда посреди клипа, дальше сам
+	var w := _world(_near())
+	var d := EcoDome.new()
+	d.reset(w)
+	_run(w, d, 400.0)
+	eq(d.state, EcoDome.State.GONE, "до шага створку уже открыл и ушёл (как в прогоне после 32f)")
+	d.stage(2.5)
+	eq(d.state, EcoDome.State.OPEN, "снова у гнезда")
+	eq(d.clip(), "OpenPetal", "клип открывания")
+	ok(d.shown(), "виден")
+	near(d.pos.distance_to(d.stand()), 0.0, 1e-4, "стоит на месте у гнезда")
+	ok(d.petal > 0.2 and d.petal < 0.9, "створка на полпути: %.2f" % d.petal)
+	ok(not d.opened, "ещё не открыта")
+	var n := GateDiag.nest_pos(EcoDome.NEST)
+	var face := Vector2(-sin(d.yaw), -cos(d.yaw)).dot(Vector2(n.x - d.pos.x, n.z - d.pos.z).normalized())
+	ok(face > 0.99, "носом к гнезду: %.3f" % face)
+	w.ship.pos = Vector3(n.x, -41.0, n.z + 25.0)   # корабль кадра шага — в 25 м южнее
+	var opens := _run(w, d, 2.0)
+	eq(opens, 1, "через 1,3 с створка поднята — одно событие")
+	ok(d.petal > 0.99, "створка поднята")
+	_run(w, d, 2.0)
+	eq(d.state, EcoDome.State.BACK, "после клипа уходит в нишу")
+	d.stage(99.0)
+	near(d.t, EcoDome.OPEN_TIME, 1e-5, "время клипа — не дальше его длины")
