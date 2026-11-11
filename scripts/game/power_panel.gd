@@ -46,7 +46,7 @@ func warm(on: bool) -> void:
 
 ## Кегли пульта, px — из `_draw`, `_row` и строк `PowerScreen.foot`.
 func warm_sizes() -> Array[int]:
-	return UiStyle.warm_px([20.0, 21.0, 23.0, 24.0, 25.0, 27.0, 28.0, 30.0, 34.0], PowerScreen.k(box()))
+	return UiStyle.warm_px([20.0, 21.0, 23.0, 24.0, 25.0, 27.0, 28.0, 30.0, 34.0], PowerScreen.k(box()), true)   # `_text` — roundi
 
 
 func _draw() -> void:
