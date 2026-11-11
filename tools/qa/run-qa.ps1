@@ -66,8 +66,12 @@ $run   = "$build\$Out"
 $app   = 'com.garrimajo5.deepdive'
 $apk   = "$build\DeepDive-emulator.apk"   # эмулятору — x86_64-сборка (#844); телефону — DeepDive.apk
 New-Item -ItemType Directory -Force $build | Out-Null
-Remove-Item -Recurse -Force $run -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force $run | Out-Null
+# Папку результата чистим только перед самим прогоном (#1614): NO_PR, NO_RUN, NO_ARTIFACT, NO_CHANGES и сбой
+# скачивания не оставляют пустую run-pr<номер>\ и не стирают несданные снимки прошлого прогона.
+function Reset-Run {
+  Remove-Item -Recurse -Force $run -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force $run | Out-Null
+}
 $prSha = ''
 if ($Pr) {
   $prSha = (gh api "repos/garrimajo5/DeepDive/pulls/$Pr" --jq '.head.sha').Trim()
@@ -98,6 +102,7 @@ if ($Pc) {
   # ---- Godot на этом компьютере ----
   $godot = Get-ChildItem 'D:\Godot' -Recurse -Filter 'Godot*.exe' | Where-Object Name -notmatch 'console' | Select -First 1
   if (-not $godot) { Write-Output 'NO_GODOT: не нашёл Godot*.exe в D:\Godot'; exit 1 }
+  Reset-Run
   $user = "$env:APPDATA\Godot\app_userdata\Погружение\qa"
   New-Item -ItemType Directory -Force $user | Out-Null
   Copy-Item $tmp "$user\scenario.json" -Force
@@ -165,6 +170,8 @@ if ($Pr) {
   $why = Get-Asset $asset.browser_download_url $apk $asset.size
   if ($why) { Write-Output "DOWNLOAD_FAILED ${head}: $why — повторите позже"; exit 1 }
 }
+
+Reset-Run
 
 # -ColdBoot (#1592): эмулятор, на котором долго жили чужие окна и прогоны, шумит — закрыть и поднять заново
 # без снимка состояния (-no-snapshot-load), прежде чем считать заминки регрессией
