@@ -3,6 +3,9 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-11
+- Тесты живого мира короче без потери проверки (#1350): `test_eco_hvaten.test_fed_at_start_no_catch_or_lure` —
+  поимка ждётся до 45 с мира, а не до 60 (первая — на 36-й с, сыты `START_FED`); `test_eco_pred_probe.test_patrol_tool_answer`
+  — проход 12 с вместо 20 (`LIM_ANSWER`: сигнал «замер» на 8-й с).
 - Прогрев кеглей — у всех панелей со строками (#1350, 11.11 12:13): пульт энергии, брифинг прибытия, подсказка,
   карточка роли, связь, рация и диалог потери хоста под шторкой рисуют буквы `UiStyle.GLYPHS` своими кеглями
   (`warm`/`warm_sizes`, `UiStyle.warm_px`/`warm_glyphs`, список `WarmRunner.panels`). `test_warmup.test_panels_warm_glyphs`
