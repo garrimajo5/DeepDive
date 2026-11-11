@@ -132,6 +132,7 @@ func test_scene_runs_scenario() -> void:
 	var dome: Array[String] = []   # 37/37a (#1350): купольник в кадре — клип ANIM-004 и створка по кадрам
 	var dome_t := -1.0   # 37 (#837): время клипа OpenPetal на кадре — верхняя точка подъёма
 	var dome_say := ""   # 37a (#837, отчёт 11.11 15:18): строка створки на приборах
+	var task_say := ""   # 35-zadacha-07 (#1635, отчёт 11.11 12:19): строка 3 — задача места, не «Вы за штурвалом»
 	var ogon: Array[String] = []   # 36/36a/36b (#1401): спрятано венчиков у куста огнецвета 0 и его свечение по кадрам
 	ok(not main.lore.knows(LayerLore.FIELD08), "до прогона поле 08 не замечено")
 	for i in scene_frames(qa.script_q):   # предел — от длины сценария (#1379)
@@ -205,6 +206,8 @@ func test_scene_runs_scenario() -> void:
 					dome_t = dome_at
 				else:
 					dome_say = say_now
+			if qa.log_lines[k].begins_with("скриншот 35-zadacha-07"):
+				task_say = say_now
 			if qa.log_lines[k].begins_with("скриншот 36"):
 				ogon.append(_ognecvet(main, qa.log_lines[k].split(" ")[1].trim_suffix(":")))
 			if qa.log_lines[k].begins_with("скриншот 30-kartochka-sonar"):
@@ -240,6 +243,8 @@ func test_scene_runs_scenario() -> void:
 		ok(absf(dome_t - EcoDome.LIFT.y) < 0.15,
 				"37 (#837): кадр в верхней точке подъёма захвата (LIFT.y %.1f с): %.2f с" % [EcoDome.LIFT.y, dome_t])
 		eq(dome[1], "в кадре Swim 1.0", "37a: створка поднята, купольник в кадре уходит клипом Swim")
+	eq(task_say, PlaceTask.line("gate"),
+			"35-zadacha-07 (#1635): на приборах строка задачи 07, не «%s»" % Main.SAT_MSG)
 	eq(dome_say, EcoDome.PETAL_TEXT, "37a (#837): на приборах строка створки — знание забыто шагом dome")
 	eq(ogon, ["36-ognecvet-do: 0 свет", "36a-ognecvet-prohod: спрятаны погас", "36b-ognecvet-posle: 0 свет"],
 			"#1401: до прохода ряд раскрыт и куст горит, на проходе — спрятан и погас, после — снова раскрыт")
