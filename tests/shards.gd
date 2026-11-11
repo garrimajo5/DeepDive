@@ -127,3 +127,18 @@ static func load_fail(file: String, errors: Array) -> Array[String]:
 		out.append("         - причина: " + t)
 	out.append("         - подробно: godot --headless --path . --check-only -s tests/" + file)
 	return out
+
+
+# Фильтр раннера из аргумента (#1350): «tests/test_helm.gd» и «test_helm.gd» значат файл test_helm — путь
+# и расширение срезаем, иначе фильтр не совпадёт ни с одним «файл.тест» и прогон выйдет «0 из 0».
+static func filter_arg(arg: String) -> String:
+	var s := arg.get_file() if arg.contains("/") else arg
+	return s.trim_suffix(".gd")
+
+
+# Строка раннера, когда фильтры не выбрали ни одного теста: прогон красный и говорит почему (#1350).
+static func no_match(filters: Array) -> String:
+	var names: Array[String] = []
+	for f in filters:
+		names.append("«%s»" % f)
+	return "Фильтр %s не нашёл ни одного теста — проверьте имя (файл без .gd или часть имени теста)" % ", ".join(names)

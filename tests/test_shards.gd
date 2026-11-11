@@ -136,3 +136,24 @@ func test_load_fail_reason() -> void:
 	eq(TestShards.load_fail("test_c.gd", many).size(), 7, "не больше пяти причин")
 	var src := FileAccess.get_file_as_string("res://tests/run.gd")
 	ok(src.contains("TestShards.load_fail(f, trap.take())"), "run.gd печатает причину незагрузившегося файла")
+
+
+func test_filter_arg() -> void:
+	# «test_helm.gd» и «tests/test_helm.gd» — тот же фильтр, что «test_helm» (#1350: было «0 из 0»)
+	eq(TestShards.filter_arg("test_helm.gd"), "test_helm")
+	eq(TestShards.filter_arg("tests/test_helm.gd"), "test_helm")
+	eq(TestShards.filter_arg("res://tests/test_helm.gd"), "test_helm")
+	eq(TestShards.filter_arg("test_helm"), "test_helm")
+	eq(TestShards.filter_arg("test_helm.test_turn"), "test_helm.test_turn", "имя теста не трогаем")
+	ok("test_shards.test_filter_arg".contains(TestShards.filter_arg("tests/test_shards.gd")), "совпадает с «файл.тест»")
+
+
+func test_no_match_message() -> void:
+	# фильтр не выбрал ни одного теста — раннер пишет почему, а выход и так 1 (passed == 0)
+	var line := TestShards.no_match(["test_nope", "zzz"])
+	ok(line.contains("«test_nope», «zzz»"), line)
+	ok(line.contains("не нашёл ни одного теста"), line)
+	var src := FileAccess.get_file_as_string("res://tests/run.gd")
+	ok(src.contains("filters.append(TestShards.filter_arg(arg))"), "run.gd срезает путь и .gd у фильтра")
+	ok(src.contains("print(TestShards.no_match(filters))"), "run.gd печатает, что фильтр пуст")
+	ok(src.contains("passed > 0 else 1"), "пустой прогон — выход 1")
