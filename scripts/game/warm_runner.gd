@@ -46,6 +46,8 @@ func begin() -> void:
 	main.goal_plate_view.warm(true)   # плашка цели за штурвалом (#1344) — её кегль
 	main.pause_flow.warm_map(true)   # схема корабля — узел, значки и кегли под шторкой (29-shema)
 	main.menu_flow.warm_settings(true)   # настройки — все страницы и кегли под шторкой (#1637, 29-nastrojki)
+	main.vote_panel.warm(true)   # голосование, итог и спуск — кегли панели под шторкой (#519, 09d-vote, 21a-vent)
+	main.sonar_view.vote.warm(true)   # и строки итога на голограмме (Label3D)
 	frame()
 
 
@@ -143,6 +145,8 @@ func restore() -> void:
 		main.goal_plate_view.warm(false)
 		main.pause_flow.warm_map(false)
 		main.menu_flow.warm_settings(false)
+		main.vote_panel.warm(false)
+		main.sonar_view.vote.warm(false)
 		main.curtain.queue_free()   # вместе с текстурой фона
 		main.curtain = null
 		main._place_camera()

@@ -19,6 +19,7 @@ var foot := ""
 var tally := ""         ## кооп: «голосов 1 из 2 · 12 с» (Ballot.tally) — после строки спуска
 var descent := false    ## у 10 — панель «Спуск к Кристальному лесу» (#1362, `DescentVote`): rows — [текст, важное?]
 var notes: Array = []   ## у 10: мнения ролей [кто, против?, почему] (`DescentVote.opinions`)
+var warming := false    ## прогрев (`warm`): все кегли голосования, итога и спуска одним рисунком под шторкой
 
 
 func _ready() -> void:
@@ -68,6 +69,26 @@ func show_results(lines: Array, score: int) -> void:
 	queue_redraw()
 
 
+## Прогрев (WarmRunner, #519: `21a-vent` и `09d-vote` — «узлы» 60–124 мс вне шага при первом показе): под шторкой
+## панель рисует буквы `UiStyle.GLYPHS` каждым своим кеглем (`warm_sizes`) — глифы в кэше шрифта до первого
+## голосования и итога. on = false — снова скрыта, первый настоящий показ перерисует.
+func warm(on: bool) -> void:
+	warming = on
+	visible = on
+	queue_redraw()
+
+
+## Кегли панели, px: голосование, итог и спуск у 10 (от высоты экрана, как в `_draw_descent`).
+func warm_sizes() -> Array[int]:
+	var out: Array[int] = [27, 24, 21, 20, 19, 17, 15]
+	var k := get_viewport_rect().size.y / 720.0
+	for px in [23, 17, 16, 15, 14]:
+		var n := roundi(px * k)
+		if not n in out:
+			out.append(n)
+	return out
+
+
 ## Прямоугольник панели: справа, над кнопкой действия, чтобы не закрывать голограмму над столом (поля голосования
 ## или итог).
 func box() -> Rect2:
@@ -82,6 +103,12 @@ func box() -> Rect2:
 
 func _draw() -> void:
 	var font := get_theme_default_font()
+	if warming:
+		var y := 40.0
+		for px in warm_sizes():
+			y += px * 1.2
+			_text(font, Vector2(20.0, y), UiStyle.GLYPHS, px, TEAL)
+		return
 	if descent:
 		_draw_descent(font)
 		return
