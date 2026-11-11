@@ -17,6 +17,7 @@ extends SceneTree
 ## шумит) через `delay=` с после повода, через `hold=` с (ANSWER_HOLD) свет снова горит и путь идёт дальше; `alert=<с>` — проба фазы «замер» `EcoPred.alert`;
 ## `leave=<с>` — отход хищника прочь после «потерял корабль» `EcoPred.alert_leave`.
 ## `lim=<с>` — предел прохода после тихой стоянки (LIMIT): короткий прогон для проверки инструмента, не для решений.
+## `late=<с>` — тихая стоянка перед проходом (WAIT_LATE, 30 с), тоже для проверки инструмента.
 ## По каждому проходу ещё — когда хищник впервые в луче (ближе дальности света и в конусе `Searchlight.HALF_ANGLE`)
 ## и сколько секунд от сигнала до броска и от броска до укуса.
 
@@ -24,6 +25,9 @@ const SHIP_SPEED := 5.0
 const STOP := 25.0
 const DT := 1.0 / 30.0
 const WAIT_LATE := 30.0
+## Тихая стоянка этого прогона, с (`late=`, по умолчанию WAIT_LATE): пауза хищников после сброса мира — 20 с
+## (`EcoPred`, cooldown), короче 20 с проходы late/stop/arrive теряют смысл.
+static var wait_late := WAIT_LATE
 ## Стоянка у 01 в проходе arrive.
 const HOLD_01 := 40.0
 ## Путь: выход из 00 → середина (стоянка) → подход к 01 (точки `scena=`, tools/shot_setup.gd).
@@ -65,6 +69,7 @@ func _init() -> void:
 	leave = float(kv.get("leave", "0"))
 	hold = float(kv.get("hold", str(ANSWER_HOLD)))
 	limit = float(kv.get("lim", str(LIMIT)))
+	wait_late = float(kv.get("late", str(WAIT_LATE)))
 	if kv.has("stop"):
 		var xz: PackedStringArray = kv["stop"].split(",")
 		path[1] = Vector2(float(xz[0]), float(xz[1]))
@@ -195,7 +200,7 @@ static func run(probe: bool, mode: String, seed_value: int) -> Dictionary:
 	var t := 0.0
 	if mode != "base":  # тихая стоянка у 00: без света и хода, пауза хищников кончается
 		ship.light_on = false
-		for i in int(WAIT_LATE / DT):
+		for i in int(wait_late / DT):
 			tick(ev, ship, DT)
 		t = 0.0
 	ship.light_on = true
