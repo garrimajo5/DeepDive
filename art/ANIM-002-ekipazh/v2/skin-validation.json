@@ -1,0 +1,64 @@
+[
+  {
+    "model": "muzhchina",
+    "approved_payload_equal": true,
+    "triangles": 7899,
+    "clips": {
+      "Idle": {
+        "mesh_min_y": -1.0193196298701068e-07,
+        "loop_max_vertex_error_m": 0.0,
+        "Left_sole_motion_m": 3.4179105829738143e-07,
+        "Right_sole_motion_m": 4.0399283475998095e-07
+      },
+      "Walk": {
+        "mesh_min_y": 1.5084361778065715e-08,
+        "loop_max_vertex_error_m": 0.0,
+        "Left_sole_world_slip_m": 4.891644693094049e-07,
+        "Right_sole_world_slip_m": 3.9531586905787953e-07
+      },
+      "SitIdle": {
+        "mesh_min_y": 3.5875553101698286e-07,
+        "loop_max_vertex_error_m": 0.0,
+        "Left_sole_motion_m": 5.223844521215289e-07,
+        "Right_sole_motion_m": 4.950981636760824e-07
+      },
+      "PostIdle": {
+        "mesh_min_y": -1.9383835085402488e-07,
+        "loop_max_vertex_error_m": 0.0,
+        "Left_sole_motion_m": 4.670695689548925e-07,
+        "Right_sole_motion_m": 4.997714853937721e-07
+      }
+    }
+  },
+  {
+    "model": "zhenshchina",
+    "approved_payload_equal": true,
+    "triangles": 7981,
+    "clips": {
+      "Idle": {
+        "mesh_min_y": -2.931197480358104e-07,
+        "loop_max_vertex_error_m": 0.0,
+        "Left_sole_motion_m": 3.3129115558612764e-07,
+        "Right_sole_motion_m": 3.9753226295333636e-07
+      },
+      "Walk": {
+        "mesh_min_y": -5.262869844092399e-07,
+        "loop_max_vertex_error_m": 0.0,
+        "Left_sole_world_slip_m": 6.386955123949082e-07,
+        "Right_sole_world_slip_m": 7.753255081801432e-07
+      },
+      "SitIdle": {
+        "mesh_min_y": -1.0553702901219798e-06,
+        "loop_max_vertex_error_m": 0.0,
+        "Left_sole_motion_m": 4.1273226514550345e-07,
+        "Right_sole_motion_m": 3.9720125888896695e-07
+      },
+      "PostIdle": {
+        "mesh_min_y": -1.997540284009758e-07,
+        "loop_max_vertex_error_m": 0.0,
+        "Left_sole_motion_m": 3.2711082859106045e-07,
+        "Right_sole_motion_m": 4.999302702050424e-07
+      }
+    }
+  }
+]
