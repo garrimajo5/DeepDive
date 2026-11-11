@@ -45,6 +45,7 @@ func begin() -> void:
 	main.route_card.warm(true)   # карточка у стола рисует свои кегли под шторкой (09c0-route-celi)
 	main.goal_plate_view.warm(true)   # плашка цели за штурвалом (#1344) — её кегль
 	main.pause_flow.warm_map(true)   # схема корабля — узел, значки и кегли под шторкой (29-shema)
+	main.menu_flow.warm_settings(true)   # настройки — все страницы и кегли под шторкой (#1637, 29-nastrojki)
 	frame()
 
 
@@ -141,6 +142,7 @@ func restore() -> void:
 		main.route_card.warm(false)
 		main.goal_plate_view.warm(false)
 		main.pause_flow.warm_map(false)
+		main.menu_flow.warm_settings(false)
 		main.curtain.queue_free()   # вместе с текстурой фона
 		main.curtain = null
 		main._place_camera()
