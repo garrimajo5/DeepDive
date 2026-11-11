@@ -357,7 +357,9 @@ func test_fed_does_not_hunt() -> void:
 	eq(_notes(w, "catch").size(), 0)
 
 
-## Пять минут отмели с серпохвостами и стаями (корабль далеко) — одни на тесты жизни отмели и повторяемости мира:
+## Пять минут отмели с серпохвостами и стаями (корабль далеко) — одни на тесты жизни отмели, повторяемости мира
+## и хода серпохвостов (`motion`, как `_walk`; вместо второй минуты полного мира «у 02», где серпохвосты в 100–190 м
+## от корабля — тот же мир без корабля, #1350):
 ## раньше повторяемость гоняла свои три прогона по 40 с того же мира (#1350). В 40 с — места существ (`at40`),
 ## после пяти минут — сброс и снова 40 с (`again40`): сброс после долгой жизни отмели — та же история.
 static var _shallow := {}
@@ -370,8 +372,11 @@ static func _shallows() -> Dictionary:
 	var preds := w.systems.filter(func(s): return s is EcoPred)[0] as EcoPred
 	var r := {"catches": 0, "flees": 0, "closest": 1e9, "bad": "", "at40": []}
 	var reef := preds.reef_axis()
+	var m := _motion()
 	for s in 300:
-		w.run(1.0)
+		for k in int(round(1.0 / EcoWorld.MAX_STEP)):   # то же, что w.run(1.0), с замером хода каждый шаг
+			w.step(EcoWorld.MAX_STEP)
+			_track(m, preds, EcoWorld.MAX_STEP)
 		if s == 39:
 			r["at40"] = w.agents.map(func(a): return a.p)
 		for ev in w.bus.take():
@@ -394,6 +399,7 @@ static func _shallows() -> Dictionary:
 				r["bad"] = "%s на %d с: %s" % [why, s + 1, p]
 			r["closest"] = minf(r["closest"], Vector2(p.x - reef.x, p.z - reef.z).length())
 	r["hits"] = w.hits
+	r["motion"] = m
 	w.reset()
 	w.run(40.0)
 	r["again40"] = w.agents.map(func(a): return a.p)
@@ -1084,6 +1090,7 @@ func test_patrol_goes_around_reef() -> void:
 ## у места id.
 ## Минута полного мира у места (EcoView, шаг 1/30 с) — одна на тесты разворота и вертикали серпохвостов: раньше
 ## каждый гонял свою (60 и 50 с), 17 с на две одинаковые прогулки. Мир детерминирован — итог общий (#1350).
+## Только 01: у 02 серпохвосты в 100–190 м от корабля — это отмель без корабля, её дают пять минут `_shallows`.
 ## tail — худший угол носа к ходу на ходу ≥ 1 м/с; jerk — худший вертикальный разгон, м/с²; touch — шагов вплотную
 ## ко дну.
 static var _walks := {}
@@ -1096,33 +1103,42 @@ static func _walk(id: String) -> Dictionary:
 	var ev := EcoView.new()
 	ev.world.ship.pos = LayerMap.at(id)
 	ev.ground = Seabed.height
-	var preds: EcoPred = ev.preds
-	var hist := {}
-	var tail := 0.0
-	var worst := 0.0
-	var touch := 0
+	var m := _motion()
 	for i in int(60.0 / dt):
 		ev.world.step(dt)
-		for k in preds.all.size():
-			var pr: EcoPred.Pred = preds.all[k]
-			var a := pr.agent
-			var f := Vector2(a.v.x, a.v.z)
-			if f.length() >= 1.0:
-				tail = maxf(tail, absf(Vector2(pr.look.x, pr.look.z).angle_to(f)))
-			var h: Array = hist.get(k, [])
-			h.append(a.p.y)
-			if h.size() > 7:
-				h.pop_front()
-			hist[k] = h
-			if a.p.y - (Seabed.height(a.p.x, a.p.z) + a.clearance) < 0.01:
-				touch += 1
-			if h.size() == 7 and i > 60:
-				var v1: float = (h[3] - h[0]) / (3.0 * dt)
-				var v2: float = (h[6] - h[3]) / (3.0 * dt)
-				worst = maxf(worst, absf(v2 - v1) / (3.0 * dt))
+		_track(m, ev.preds, dt)
 	ev.free()
-	_walks[id] = {"tail": tail, "jerk": worst, "touch": touch}
-	return _walks[id]
+	_walks[id] = m
+	return m
+
+
+## Замер хода серпохвостов по шагам мира: tail, jerk, touch (см. `_walk`); история высот — по окну 7 шагов,
+## разгон — после первых 2 с (раньше — разгон с места).
+static func _motion() -> Dictionary:
+	return {"tail": 0.0, "jerk": 0.0, "touch": 0, "hist": {}, "i": 0, "t": 0.0}
+
+
+static func _track(m: Dictionary, preds: EcoPred, dt: float) -> void:
+	m["i"] += 1
+	m["t"] += dt
+	var hist: Dictionary = m["hist"]
+	for k in preds.all.size():
+		var pr: EcoPred.Pred = preds.all[k]
+		var a := pr.agent
+		var f := Vector2(a.v.x, a.v.z)
+		if f.length() >= 1.0:
+			m["tail"] = maxf(m["tail"], absf(Vector2(pr.look.x, pr.look.z).angle_to(f)))
+		var h: Array = hist.get(k, [])
+		h.append(a.p.y)
+		if h.size() > 7:
+			h.pop_front()
+		hist[k] = h
+		if a.p.y - (Seabed.height(a.p.x, a.p.z) + a.clearance) < 0.01:
+			m["touch"] += 1
+		if h.size() == 7 and m["t"] > 2.0 + 1.5 * dt:
+			var v1: float = (h[3] - h[0]) / (3.0 * dt)
+			var v2: float = (h[6] - h[3]) / (3.0 * dt)
+			m["jerk"] = maxf(m["jerk"], absf(v2 - v1) / (3.0 * dt))
 
 
 func test_looks_ahead_at_rising_floor() -> void:
@@ -1149,11 +1165,13 @@ func test_looks_ahead_at_rising_floor() -> void:
 
 
 func test_no_vertical_jerk_over_reef_and_ridges() -> void:
-	# у 01 и 02 серпохвосты охотятся у склонов: раньше взлетали по дну до 12 м/с вверх и вставали за кадр (107 м/с²)
-	for id in ["01", "02"]:
-		var r := _walk(id)
-		ok(r["jerk"] < 15.0, "у %s вертикальный разгон серпохвоста плавный: %.1f м/с²" % [id, r["jerk"]])
-		eq(r["touch"], 0, "у %s не ползёт вплотную по дну" % id)
+	# у 01 и по всей отмели серпохвосты охотятся у склонов: раньше взлетали по дну до 12 м/с вверх и вставали
+	# за кадр (107 м/с²). Отмель — пять минут без корабля (`_shallows`, шаг 0,05 с) вместо минуты у 02 (#1350)
+	var runs := {"у 01": _walk("01"), "на отмели": _shallows()["motion"]}
+	for at in runs:
+		var r: Dictionary = runs[at]
+		ok(r["jerk"] < 15.0, "%s вертикальный разгон серпохвоста плавный: %.1f м/с²" % [at, r["jerk"]])
+		eq(r["touch"], 0, "%s не ползёт вплотную по дну" % at)
 
 
 func test_swim_turns_round_instead_of_backing() -> void:
@@ -1201,11 +1219,12 @@ func test_swim_arrives_without_circling() -> void:
 
 
 func test_never_swims_tail_first() -> void:
-	# у 01 и 02 за минуту: на ходу быстрее 1 м/с нос (`Pred.look`) не дальше 90° от хода. Раньше на развороте
+	# у 01 за минуту и на отмели за пять: на ходу быстрее 1 м/с нос (`Pred.look`) не дальше 90° от хода. Раньше на развороте
 	# патруля ход шёл через ноль и обратно — до 176°, десятки шагов хвостом вперёд
-	for id in ["01", "02"]:
-		var worst: float = _walk(id)["tail"]
-		ok(worst < deg_to_rad(90.0), "у %s нос не дальше 90° от хода: %.0f°" % [id, rad_to_deg(worst)])
+	var runs := {"у 01": _walk("01"), "на отмели": _shallows()["motion"]}
+	for at in runs:
+		var worst: float = runs[at]["tail"]
+		ok(worst < deg_to_rad(90.0), "%s нос не дальше 90° от хода: %.0f°" % [at, rad_to_deg(worst)])
 
 
 func test_dive_to_prey_at_floor_brakes_above_floor() -> void:
