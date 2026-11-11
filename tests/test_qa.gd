@@ -129,6 +129,7 @@ func test_scene_runs_scenario() -> void:
 	var bones_seen := false   # 32g: сканер у Костей 04 — строка о минерализации (#840)
 	var shell_known := false   # 32h: сонар и сканер у Раковины 03 — знание «осмотр 03» (#835)
 	var reverse := 0.0   # 05c (#1568): задний ход — минус на левом экране пульта ART-061
+	var dome: Array[String] = []   # 37/37a (#1350): купольник в кадре — клип ANIM-004 и створка по кадрам
 	var ogon: Array[String] = []   # 36/36a/36b (#1401): спрятано венчиков у куста огнецвета 0 и его свечение по кадрам
 	ok(not main.lore.knows(LayerLore.FIELD08), "до прогона поле 08 не замечено")
 	for i in scene_frames(qa.script_q):   # предел — от длины сценария (#1379)
@@ -168,6 +169,9 @@ func test_scene_runs_scenario() -> void:
 		var mate_welds := false
 		for m: Crew.Member in main.crew:
 			mate_welds = mate_welds or (m != main.me and m.welding() and weld_at > 0.0)
+		var dome_vis := cam.is_position_in_frustum(main.eco.dome.pos + Vector3(0, 0.6, 0)) and main.eco.dome_view.visible
+		var dome_line := "%s %s %.1f" % ["в кадре" if dome_vis else "не в кадре", main.eco.dome_view.playing,
+				main.eco.dome.petal]
 		main.step(1.0 / 30.0)
 		no_answer = no_answer or (main.address.open and main.address.hint() == AddressScreen.NO_ANSWER)
 		sat = sat or main.pilot.seated
@@ -191,6 +195,8 @@ func test_scene_runs_scenario() -> void:
 				zap_seen = zap_vis
 			if qa.log_lines[k].begins_with("скриншот 10a-zap-okno"):
 				arc_seen = arc_vis
+			if qa.log_lines[k].begins_with("скриншот 37-kupolnik") or qa.log_lines[k].begins_with("скриншот 37a-kupolnik"):
+				dome.append(dome_line)
 			if qa.log_lines[k].begins_with("скриншот 36"):
 				ogon.append(_ognecvet(main, qa.log_lines[k].split(" ")[1].trim_suffix(":")))
 			if qa.log_lines[k].begins_with("скриншот 30-kartochka-sonar"):
@@ -220,6 +226,11 @@ func test_scene_runs_scenario() -> void:
 	ok(field_known, "32e2: импульс у 08 — ритм поля, знание «поле 08»")
 	ok(bones_seen, "32g: сканер у Костей 04 — строка о минерализации")
 	ok(shell_known, "32h: сонар и сканер у Раковины 03 — знание «осмотр 03»")
+	eq(dome.size(), 2, "37/37a: оба кадра купольника сняты")
+	if dome.size() == 2:
+		ok(dome[0].begins_with("в кадре OpenPetal") and dome[0] != "в кадре OpenPetal 0.0" \
+				and dome[0] != "в кадре OpenPetal 1.0", "37: купольник в кадре, клип OpenPetal, створка на подъёме: %s" % dome[0])
+		eq(dome[1], "в кадре Swim 1.0", "37a: створка поднята, купольник в кадре уходит клипом Swim")
 	eq(ogon, ["36-ognecvet-do: 0 свет", "36a-ognecvet-prohod: спрятаны погас", "36b-ognecvet-posle: 0 свет"],
 			"#1401: до прохода ряд раскрыт и куст горит, на проходе — спрятан и погас, после — снова раскрыт")
 	ok(not main.pilot.seated, "и встали")
