@@ -757,8 +757,15 @@ func test_dense_kelp_muffles_engines() -> void:
 	var ev := _notes(w, EcoPred.ID, "kelp")
 	eq(ev.size(), 1, "наблюдение серпохвоста «kelp» для журнала")
 	ok(ev[0].text().begins_with("Ленточник глушит двигатели — ") and ev[0].text().ends_with(" не слышит корабль"), ev[0].text())
-	w.run(30.0)
+	# «Раз в 40 с у рощи» — по часам рощи, без 30 с мира (#1350): после наблюдения часы взведены на MUFFLE_CD и идут;
+	# пока не дошли до нуля — второго нет, дошли — хищник в роще снова даёт «kelp».
+	var gr := k.groves[0]
+	near(gr.muffle_cd, EcoKelp.MUFFLE_CD - 3.0, 0.2, "часы рощи взведены на 40 с при первом наблюдении")
+	w.run(1.0)
 	eq(_notes(w, EcoPred.ID, "kelp").size(), 1, "раз в 40 с у рощи")
+	gr.muffle_cd = 0.05
+	w.run(0.2)
+	eq(_notes(w, EcoPred.ID, "kelp").size(), 2, "часы дошли — снова наблюдение")
 
 
 func test_grazed_kelp_does_not_muffle() -> void:
