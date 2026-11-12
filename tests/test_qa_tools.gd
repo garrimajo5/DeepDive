@@ -245,12 +245,12 @@ func test_run_qa_noise_stale_coldboot() -> void:
 	ok(ps.contains("помехи: $noise"), "помехи — в итоге RUN")
 	ok(ps.find("$result = \"RUN $head done=$done") < ps.find("помехи: $noise") , "помехи — в самой строке RUN")
 	# шаблон паузы ловит строку, которую пишет QaRunner
-	var pat := RegEx.create_from_string("-Pattern '(\\^игра свёрнута)'").search(ps)
+	var pat := RegEx.create_from_string("\\$l -match '(\\^игра свёрнута)'").search(_ps("kadry.ps1"))   # Count-Paused, #1350 12.11
 	ok(pat != null, "шаблон паузы найден")
 	if pat != null:
 		ok(RegEx.create_from_string(pat.get_string(1)).search(QaRunner.PAUSED_LINE) != null, "ловит QaRunner.PAUSED_LINE")
 		ok(RegEx.create_from_string(pat.get_string(1)).search(QaRunner.RESUMED_LINE) == null, "возврат не в счёт")
-	ok(ps.contains("-notmatch [regex]::Escape($app)"), "своя активность — не помеха")
+	ok(_ps("kadry.ps1").contains("-or $l.Contains($app)) { continue }"), "своя активность — не помеха")
 	# STALE_APK: шаблон версии ловит первую строку лога (Main.version_text из version.txt CI)
 	var vm := RegEx.create_from_string("\\$first -match '([^']+)'").search(ps)
 	ok(vm != null, "шаблон версии найден")
@@ -382,8 +382,9 @@ func test_run_qa_watch_summary() -> void:
 		ok(not got.has("32o"), "сокращённые имена — не шаги")
 	var run := _ps("run-qa.ps1")
 	var res := run.find("Add-Content \"$run\\log.txt\" \"run-qa: $result\"")
-	var dot := run.find(". (Join-Path $PSScriptRoot 'kadry.ps1')")
+	var dot := run.find("$worstNow = Read-Worst")
 	ok(dot > res, "сводка — после строки RUN")
+	ok(run.find(". (Join-Path $PSScriptRoot 'kadry.ps1')") < res, "kadry.ps1 подключён до строки RUN (помехи)")
 	ok(run.find("Write-Kadry \"$run\\kadry.txt\" $result") > dot, "kadry.txt — в папку прогона")
 	ok(run.find("Read-Past @(\"$repo\\qa\", $prQa)") > dot, "прошлое — из qa/ клона и отчётов открытых PR")
 	# #1350, 11.11: сводка не видела отчёт, ещё не слитый в main, и второй прогон того же отчёта
@@ -425,3 +426,26 @@ func test_qa_lock_and_worktree() -> void:
 		"PUSHED — после сверки ветки на сервере")
 	var ci := FileAccess.get_file_as_string("res://.github/workflows/godot.yml")
 	ok(ci.contains("./tools/qa/zamok.ps1 -SelfTest"), "CI гоняет проверку zamok.ps1")
+
+
+## #1350, 12.11: Chrome от com.android.shell через 0,5–2 мин после сценария метил прогон шумом — два холодных подряд
+## выпали из правила трёх. Окна и «свёрнута» — только до «Готово» сценария, после — «после сценария: N»; без -ColdBoot —
+## «остывание 0 с (ЦП X%)». Логику на выдуманном logcat гоняет CI (`kadry.ps1 -SelfTest`); здесь — связь с игрой и скриптом.
+func test_run_qa_noise_only_in_scenario() -> void:
+	var k := _ps("kadry.ps1")
+	var run := _ps("run-qa.ps1")
+	ok(k.contains("function Split-Foreign") and k.contains("function Count-Paused"), "функции в kadry.ps1")
+	ok(k.contains("' godot\\s*: QA Готово'"), "конец сценария — строка «Готово» в logcat")
+	var qr := FileAccess.get_file_as_string("res://scripts/game/qa_runner.gd")
+	ok(qr.contains("print(\"QA \", line)") and qr.contains("_log(\"Готово | \""), "QaRunner печатает «QA Готово» в logcat")
+	ok(qr.contains("const PAUSED_LINE := \"игра свёрнута"), "строка «свёрнута» — как в Count-Paused")
+	ok(not run.contains("-Pattern '^игра свёрнута'"), "старый счёт «свёрнута» по всему логу убран")
+	ok(run.contains("$split = Split-Foreign @(Get-Content \"$run\\logcat.txt\"") and run.contains("$foreign = $split.During"),
+		"в помехи — окна сценария")
+	ok(run.contains("| после сценария: $($split.After) |"), "окна после сценария — отдельным полем RUN")
+	ok(run.contains("if (-not $ColdBoot) { $cool = \" | остывание 0 с (ЦП $(Get-Cpu)%)\" }"), "остывание и без -ColdBoot")
+	var cool := run.find("if (-not $ColdBoot) { $cool")
+	ok(cool > run.find("& $adb logcat -c") and cool < run.find("& $adb shell monkey"), "замер ЦП — к самому началу сценария")
+	ok(k.contains("Split-Foreign $cat $app"), "проверка kadry.ps1 гоняет Split-Foreign")
+	var qa := FileAccess.get_file_as_string("res://docs/QA.md")
+	ok(qa.contains("«после сценария: N»") and qa.contains("остывание 0 с"), "docs/QA.md описывает поля")

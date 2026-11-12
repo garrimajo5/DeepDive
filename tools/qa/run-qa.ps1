@@ -229,6 +229,8 @@ $loadBefore = Get-Load
 & $adb push $tmp /data/local/tmp/qa-scenario.json | Out-Null
 & $adb shell "run-as $app sh -c 'mkdir -p files/qa && rm -rf files/qa/out && cp /data/local/tmp/qa-scenario.json files/qa/scenario.json'"
 & $adb logcat -c
+# Без -ColdBoot — тоже «остывание 0 с (ЦП X%)» (#1350, 12.11): замер ЦП к самому началу сценария, по нему Test-Quiet
+if (-not $ColdBoot) { $cool = " | остывание 0 с (ЦП $(Get-Cpu)%)" }
 & $adb shell monkey -p $app -c android.intent.category.LAUNCHER 1 | Out-Null
 $done = $false
 # 300 × 2 с: прогон 800+ шагов с прогревом и установкой не укладывался в 195 × 2 с (#1533)
@@ -269,10 +271,12 @@ if (Test-Path "$run\log.txt") {
 }
 $stale = (-not $Pr) -and $built -and ($head -match '^[0-9a-f]{7}$') -and ($built -ne $head)
 # Помехи (#1592): игра свёрнута посреди прогона (строка QaRunner.PAUSED_LINE) и чужие окна поверх неё
-# (запуск активности другого приложения в logcat: браузер, am start другого инструмента)
-$paused = if (Test-Path "$run\log.txt") { @(Select-String -Path "$run\log.txt" -Pattern '^игра свёрнута' -Encoding utf8).Count } else { 0 }
-$foreign = @(Select-String -Path "$run\logcat.txt" -Pattern 'START u0 \{' -Encoding utf8 |
-  Where-Object { $_.Line -notmatch [regex]::Escape($app) }).Count
+# (запуск активности другого приложения в logcat: браузер, am start другого инструмента) — только до конца
+# сценария (строка «Готово»); окна после него — «после сценария: N», справочно, прогон шумом не метят (#1350, 12.11, Split-Foreign)
+. (Join-Path $PSScriptRoot 'kadry.ps1')
+$paused = if (Test-Path "$run\log.txt") { Count-Paused @(Get-Content "$run\log.txt" -Encoding utf8) } else { 0 }
+$split = Split-Foreign @(Get-Content "$run\logcat.txt" -Encoding utf8) $app
+$foreign = $split.During
 $noise = $paused + $foreign
 if (-not $Pr -and -not $stale) { Set-Content "$build\last-commit.txt" $head }
 Write-Output "OK $head done=$done"
@@ -285,15 +289,14 @@ Write-Output 'log:'; if (Test-Path "$run\log.txt") { Get-Content "$run\log.txt" 
 Write-Output 'errors:'; $errs | Select -First 30
 Write-Output "files: $run"
 # Итог одной строкой — и в конец log.txt: лог из отчёта сам называет сборку, снимки и шум хоста (#1350)
-$result = "RUN $head done=$done снимков $($have.Count) из $($want.Count) | помехи: $noise (свёрнута $paused, чужих окон $foreign) | до: $loadBefore | после: $loadAfter$cool"
+$result = "RUN $head done=$done снимков $($have.Count) из $($want.Count) | помехи: $noise (свёрнута $paused, чужих окон $foreign) | после сценария: $($split.After) | до: $loadBefore | после: $loadAfter$cool"
 if ($stale) { $result += " | STALE_APK $head $built" }
 if ($stale) { Write-Output "STALE_APK $head $built — скачался другой APK (релиз перезаливался?): повторите с -Force" }
 Write-Output $result
 Add-Content "$run\log.txt" "run-qa: $result" -Encoding utf8
 # Сводка ПРОВЕРИТЬ (#1350, 11.11): худший кадр шагов открытых «проверить»/«ждёт телефона» и провалов ≥ 100 мс сейчас —
 # с прошлыми значениями из qa/ клона и счётом тихих прогонов подряд < 100 мс (правило трёх). kadry.txt — в папку
-# прогона, publish-qa.ps1 сдаёт его рядом с report.md: следующей сводке не нужно разбирать отчёты.
-. (Join-Path $PSScriptRoot 'kadry.ps1')
+# прогона, publish-qa.ps1 сдаёт его рядом с report.md: следующей сводке не нужно разбирать отчёты (kadry.ps1 подключён выше, у помех).
 $worstNow = Read-Worst @(if (Test-Path "$run\log.txt") { Get-Content "$run\log.txt" -Encoding utf8 })
 Write-Kadry "$run\kadry.txt" $result $worstNow
 # Отчёты открытых PR qa/* (ещё не в main) — тоже в счёт (#1350, 11.11)

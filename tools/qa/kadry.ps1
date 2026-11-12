@@ -28,6 +28,36 @@ function Test-Quiet([string]$runLine) {
   return ($noise -eq 0 -and $cpu -lt 50)
 }
 
+# Чужие окна поверх игры (#1350, 12.11): запуски чужой активности в logcat («START u0 {» не нашего пакета) — до конца
+# сценария и после него. Конец — строка «Готово» QaRunner (он печатает строки лога в logcat: «I godot : QA …»; порядок
+# строк logcat — время); её нет (игра упала, не дошла) — последняя строка «QA …», нет и их — все окна в счёт сценария.
+# В помехи идут только окна сценария: Chrome от com.android.shell через 0,5–2 мин после него прогон шумом не делает.
+function Split-Foreign([string[]]$logcat, [string]$app) {
+  $last = -1
+  for ($i = 0; $i -lt $logcat.Count; $i++) {
+    if ($logcat[$i] -match ' godot\s*: QA Готово') { $last = $i; break }
+    if ($logcat[$i] -match ' godot\s*: QA ') { $last = $i }
+  }
+  $during = 0; $after = 0
+  for ($i = 0; $i -lt $logcat.Count; $i++) {
+    $l = $logcat[$i]
+    if ($l -notmatch 'START u0 \{' -or $l.Contains($app)) { continue }
+    if ($last -ge 0 -and $i -gt $last) { $after++ } else { $during++ }
+  }
+  return [pscustomobject]@{ During = $during; After = $after }
+}
+
+# Сколько раз игру свернули посреди сценария (строка QaRunner.PAUSED_LINE в log.txt) — до строки «Готово»: свернули
+# после неё (чужое окно после сценария) — не помеха (#1350, 12.11)
+function Count-Paused([string[]]$log) {
+  $n = 0
+  foreach ($l in $log) {
+    if ($l -match '^Готово') { break }
+    if ($l -match '^игра свёрнута') { $n++ }
+  }
+  return $n
+}
+
 function Write-Kadry([string]$path, [string]$runLine, $worst) {
   $lines = @($runLine) + @($worst.Keys | ForEach-Object { "$_ $($worst[$_])" })
   [IO.File]::WriteAllLines($path, [string[]]$lines, (New-Object Text.UTF8Encoding $false))
@@ -187,6 +217,25 @@ if ($SelfTest) {
   Check (Test-Quiet 'RUN x | помехи: 0 (…) | до: ЦП 9%, эмуляторов 1') 'тихий: помех 0, ЦП 9 %'
   Check (-not (Test-Quiet 'RUN x | помехи: 2 (…) | до: ЦП 9%')) 'помехи — шумный'
   Check (-not (Test-Quiet 'RUN x | помехи: 0 | до: ЦП 9% | после: ЦП 3% | остывание 120 с (ЦП 64%)')) 'остывание важнее «до»'
+  $app = 'com.garrimajo5.deepdive'
+  $cat = @('11-12 02:28:00.100 500 500 I ActivityManager: START u0 {act=android.intent.action.MAIN cmp=com.garrimajo5.deepdive/.Main}',
+    '11-12 02:28:05.000 600 600 I godot   : QA скриншот 01-start | x',
+    '11-12 02:29:00.000 500 500 I ActivityManager: START u0 {act=android.intent.action.VIEW dat=http://127.0.0.1:4200/... cmp=com.android.chrome/...} from uid 2000',
+    '11-12 02:31:00.000 600 600 I godot   : QA скриншот 99-konec | x',
+    '11-12 02:31:01.000 600 600 I godot   : QA Готово | x',
+    '11-12 02:32:10.000 500 500 I ActivityManager: START u0 {act=android.intent.action.VIEW dat=http://127.0.0.1:4211/#play cmp=com.android.chrome/...} from uid 2000',
+    '11-12 02:33:00.000 500 500 I ActivityManager: START u0 {cmp=com.android.chrome/...}')
+  $sf = Split-Foreign $cat $app
+  Check ($sf.During -eq 1 -and $sf.After -eq 2) "Split-Foreign: окно в сценарии 1, после последней строки 2 ($($sf.During)/$($sf.After))"
+  $sf1 = Split-Foreign ($cat + @('11-12 02:32:11.000 600 600 I godot   : QA игра свёрнута (OnPause)')) $app
+  Check ($sf1.During -eq 1 -and $sf1.After -eq 2) 'Split-Foreign: «свёрнута» после «Готово» конец не сдвигает'
+  $sf2 = Split-Foreign @($cat[0], $cat[1], $cat[2], $cat[3], $cat[5]) $app
+  Check ($sf2.During -eq 1 -and $sf2.After -eq 1) 'Split-Foreign: нет «Готово» — конец по последней строке QA'
+  Check ((Count-Paused @('a', 'игра свёрнута (OnPause)', 'игра снова на экране', 'Готово | x', 'игра свёрнута (OnPause)')) -eq 1) 'Count-Paused: после «Готово» не в счёт'
+  $sf0 = Split-Foreign @($cat[0], $cat[2]) $app
+  Check ($sf0.During -eq 1 -and $sf0.After -eq 0) 'Split-Foreign: строк сценария нет — все окна в сценарии'
+  Check (Test-Quiet 'RUN x | помехи: 0 (свёрнута 0, чужих окон 0) | после сценария: 2 | до: ЦП 9% | остывание 0 с (ЦП 12%)') 'окна после сценария — тихий'
+  Check (-not (Test-Quiet 'RUN x | помехи: 0 | до: ЦП 9% | остывание 0 с (ЦП 71%)')) 'без -ColdBoot: ЦП к началу сценария ≥ 50 % — шумный'
   $past = Read-Past $qa
   Check ($past.Count -eq 3 -and $past[0].Commit -eq 'b031182' -and $past[2].Commit -eq 'a27bd91') 'Read-Past: новые первыми, без чужих папок'
   Check ($past[2].Worst['21a-vent'] -eq 71 -and $past[2].Worst['32o-mol-steklo'] -eq 102) 'report.md: числа из «Частоты кадров»'
