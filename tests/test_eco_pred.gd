@@ -1282,43 +1282,58 @@ func test_reef_ring_fish_hidden() -> void:
 
 
 ## Б3: укус корпуса на ходу корабля — после укуса тело по инерции не входит в обшивку и не встаёт о неё за шаг
-## (`EcoPred.hull_soften`; раньше 8 → 5 м/с за кадр, 183 м/с², tools/jerk.gd scena=1 move=3). Корабль идёт 3 м/с
-## курсом yaw, хищник в dist м по −X от него и side м по Z, свет горит. Худшее ускорение со следующего шага после
-## укуса и 2 с — сам удар броска о корпус в шаге укуса — контакт, его не меряем; без `hull_soften` сбоку было
-## 110–118 м/с², с ним 11–38. [время укуса, худшее, м/с²]
-func _bite_on_the_move(dist: float, side: float, yaw: float) -> Array:
+## (`EcoPred.hull_soften`; раньше 8 → 5 м/с за кадр, 183 м/с², tools/jerk.gd scena=1 move=3). Корабль идёт speed м/с
+## курсом yaw, хищник в dist м по −X от него и side м по Z, свет горит. Худшее ускорение за 1 с до укуса и 2 с после,
+## шаг укуса тоже (#1753: бросок тормозит у обшивки заранее, `EcoPred.strike_brake`; раньше в шаг укуса — удар
+## 55–184 м/с², у стоящего корабля центр тела 42 м/с² после укуса). [время укуса, худшее, м/с²]
+func _bite_on_the_move(dist: float, side: float, yaw: float, speed := 3.0) -> Array:
 	var w := _alone()
 	var pr := _ready_pred(w, dist)
 	w.ship.pos += Vector3(0, 0, side)
 	w.ship.yaw = yaw
 	w.ship.light_on = true
 	w.ship.light_range = 60.0
-	w.ship.speed = 3.0
+	w.ship.speed = speed
 	w.ship.hull_noise = 0.45
 	var dt := EcoWorld.MAX_STEP
 	var fwd := Vector3(-sin(yaw), 0, -cos(yaw))
 	var t := 0.0
-	var worst := 0.0
+	var acc: Array[Vector2] = []   # (время, ускорение)
 	var was := pr.agent.v
 	var bit := -1.0
 	while t < 14.0:
 		w.ship.pos += fwd * w.ship.speed * dt
 		_step(w)
 		t += dt
-		if bit >= 0.0:
-			worst = maxf(worst, (pr.agent.v - was).length() / dt)
-			if t - bit >= 2.0:
-				break
-		elif w.hits > 0:
-			bit = t
+		acc.append(Vector2(t, (pr.agent.v - was).length() / dt))
 		was = pr.agent.v
+		if bit < 0.0 and w.hits > 0:
+			bit = t
+		if bit >= 0.0 and t - bit >= 2.0:
+			break
+	var worst := 0.0
+	for e in acc:
+		if bit >= 0.0 and e.x > bit - 1.0:
+			worst = maxf(worst, e.y)
 	return [bit, worst]
 
 
 func test_bite_on_the_move_no_hull_stop() -> void:
 	# сбоку и наискось к носу; лоб в лоб нос корабля сам толкает зверя (3 м/с навстречу) — это удар, не скольжение
-	for c: Vector3 in [Vector3(30, -4, PI / 2.0), Vector3(30, 12, 0.0), Vector3(30, -12, PI), Vector3(25, 8, 0.0),
-			Vector3(25, -8, PI)]:
+	for c: Vector3 in [Vector3(30, 12, 0.0), Vector3(30, -12, PI), Vector3(25, 8, 0.0), Vector3(25, -8, PI)]:
 		var r := _bite_on_the_move(c.x, c.y, c.z)
 		ok(r[0] >= 0.0, "бросок дотянулся до корабля на ходу (%s)" % c)
-		ok(r[1] < 60.0, "после укуса не встаёт о обшивку за шаг: %.0f м/с² (%s)" % [r[1], c])
+		ok(r[1] < 25.0, "укус без стопа о обшивку: %.0f м/с² (%s)" % [r[1], c])
+	# нос идёт на зверя наискось: касание неизбежно, но не удар 184 м/с², как раньше
+	var r := _bite_on_the_move(30, -4, PI / 2.0)
+	ok(r[0] >= 0.0, "бросок навстречу носу дотянулся")
+	ok(r[1] < 90.0, "навстречу носу — касание мягче прежнего удара: %.0f м/с²" % r[1])
+
+
+## #1753: у стоящего корабля бросок сбоку подходит к обшивке, сбавляя ход, и отходит без стопа: раньше 42 м/с²
+## после укуса (7 → 3 м/с за 0,2 с, tools/pred_jerk.gd), удар в шаг укуса — до 56 м/с².
+func test_bite_still_ship_no_hull_stop() -> void:
+	for c: Vector3 in [Vector3(30, 0, PI / 2.0), Vector3(26, 6, 0.0), Vector3(26, -6, 0.0)]:
+		var r := _bite_on_the_move(c.x, c.y, c.z, 0.0)
+		ok(r[0] >= 0.0, "бросок дотянулся до стоящего корабля (%s)" % c)
+		ok(r[1] < 20.0, "у стоящего корабля укус без стопа: %.0f м/с² (%s)" % [r[1], c])
