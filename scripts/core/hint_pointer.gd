@@ -56,6 +56,17 @@ static func cell_height(d: float, depth: float, fov_deg: float) -> float:
 	return sym / SYMBOL_H
 
 
+## Зазор от верха символа до потолка, м (`under_roof`).
+const ROOF_GAP := 0.05
+
+
+## Высота острия (оси корабля), чтобы символ высотой ячейки h (м) с покачиванием (m_ref — м на px при H = 1080) не
+## уходил в потолок roof: в коридоре над люком мостика 0,5 м до потолка — символ прятался в нём (#1722). Ниже потолка —
+## tip_y как есть.
+static func under_roof(tip_y: float, h: float, m_ref: float, roof: float) -> float:
+	return minf(tip_y, roof - ROOF_GAP - SYMBOL_H * h - BOB * m_ref)
+
+
 ## Покачивание, px при H = 1080 (вверх — плюс), t — секунды.
 static func bob(t: float) -> float:
 	return BOB * sin(TAU * t / BOB_PERIOD)

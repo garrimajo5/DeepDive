@@ -100,7 +100,7 @@ func alarm_step(dt: float) -> void:
 		m.alarm_pointer_panel.show_way(null, [], Rect2(), null)
 		return
 	var edge := m.hint_pointer.show_at(p.anchor, false, 1.0, dt, m.get_viewport().get_camera_3d(), m.camera,
-		AlarmBoard.WORD_ON, AlarmWay.TIP_MIN_Y)
+		AlarmBoard.WORD_ON, AlarmWay.TIP_MIN_Y, p.roof)
 	m.alarm_pointer_panel.show_way(p, edge, m.hint_pointer.symbol, m.hint_pointer.amber)
 
 

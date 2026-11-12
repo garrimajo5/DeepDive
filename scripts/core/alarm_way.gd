@@ -127,6 +127,7 @@ class Pointer:
 	var room := 0     ## отсек цели
 	var door := -1    ## ближний люк по пути, индекс в ShipLayout.DOOR_Z
 	var anchor := Vector3.ZERO   ## остриё шеврона, оси корабля
+	var roof := INF   ## потолок отсека игрока (y, оси корабля): символ под ним опускает остриё (#1722)
 
 	## Подпись под стрелкой / над кольцом: «Пробоина · машинное».
 	func label() -> String:
@@ -157,6 +158,7 @@ static func pointer(b: Breach, r: Reactor, player_room: int, solo: bool, tutoria
 	var wall := wall_span(p.door)   # со стороны игрока, перед гранью стены
 	var z := wall.x - POINTER_IN if p.room > player_room else wall.y + POINTER_IN
 	p.anchor = Vector3(0.0, ShipLayout.DOOR_H + POINTER_UP, z)
+	p.roof = BridgePlan.CEILING if player_room == ShipLayout.Room.BRIDGE else float(ShipLayout.ROOMS[player_room][3])
 	return p
 
 

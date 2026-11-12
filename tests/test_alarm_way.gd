@@ -343,3 +343,89 @@ func test_pointer_outside_wall() -> void:
 	v.drain("Стеклоуст", 3.0)
 	var p := AlarmWay.pointer(Breach.new(), r, ShipLayout.Room.CORRIDOR, true, false, v)
 	near(p.anchor.z, BridgePlan.STERN + AlarmWay.WALL + AlarmWay.POINTER_IN, 0.001, "из коридора — перед стеной мостика")
+
+
+## #1722: остриё под потолком отсека — символ не уходит в потолок; низкий потолок опускает остриё.
+func test_under_roof() -> void:
+	eq(HintPointer.under_roof(2.35, 0.8, 0.003, 3.4), 2.35, "высокий потолок — как есть")
+	var y := HintPointer.under_roof(2.35, 0.8, 0.003, 2.6)
+	near(y + HintPointer.SYMBOL_H * 0.8 + HintPointer.BOB * 0.003, 2.6 - HintPointer.ROOF_GAP, 1e-5, "верх под потолком")
+	var r := Reactor.new()
+	var v := Vitals.new()
+	v.drain("Стеклоуст", 3.0)
+	eq(AlarmWay.pointer(Breach.new(), r, ShipLayout.Room.CORRIDOR, true, false, v).roof, 2.6, "потолок коридора")
+	eq(AlarmWay.pointer(Breach.new(), r, ShipLayout.Room.LAB, true, false, v).roof, 3.4, "потолок лаборатории")
+
+
+## #1722: нос корпуса (купол) не заходит за кормовую стену мостика — из коридора он закрывал люк мостика.
+func test_nose_not_in_corridor() -> void:
+	for part in HullPlan.parts():
+		if part.piece != HullPlan.Piece.NOSE:
+			continue
+		var xf := part.xform()
+		var far := -INF
+		for q in HullMesh.unit(part.form).pos:
+			far = maxf(far, (xf * q).z)
+		ok(far <= BridgePlan.STERN + 1e-3, "нос до z %.2f (стена мостика %.1f)" % [far, BridgePlan.STERN])
+
+
+func _meshes(n: Node, out: Array) -> void:
+	if n is MeshInstance3D and n.is_visible_in_tree() and n.mesh is ArrayMesh:
+		out.append(n)
+	for c in n.get_children():
+		_meshes(c, out)
+
+
+## Первая видимая деталь корабля на отрезке a → b (мир) или "" (#1722: `HullView`, отсеки, мостик).
+func _blocker(ship: Node, a: Vector3, b: Vector3) -> String:
+	var all: Array = []
+	_meshes(ship, all)
+	for g: MeshInstance3D in all:
+		if not (g.global_transform * g.get_aabb()).intersects_segment(a, b):
+			continue
+		var inv := g.global_transform.affine_inverse()
+		var la := inv * a
+		var lb := inv * b
+		for si in g.mesh.get_surface_count():
+			var arr: Array = g.mesh.surface_get_arrays(si)
+			if arr[Mesh.ARRAY_INDEX] == null:
+				continue
+			var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+			var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+			for t in range(0, idx.size(), 3):
+				var h: Variant = Geometry3D.segment_intersects_triangle(la, lb, v[idx[t]], v[idx[t + 1]], v[idx[t + 2]])
+				if h != null:
+					return "%s %s" % [g.name, h]
+	return ""
+
+
+## #1722: из коридора лицом к мостику указатель тревоги над люком виден — от камеры до острия и до верха символа
+## ничто не закрывает (раньше — купол носа корпуса на z 3,9…4,8 и потолок коридора 2,6 над символом).
+func test_scene_pointer_from_corridor() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.vitals.drain("Стеклоуст", 0.01)
+	main.vitals.drain_left = 60.0
+	var ship: Node = main.get_node("Корабль")
+	for z in [3.5, 6.0, 7.8]:
+		main.walker.x = 0.0
+		main.walker.z = z
+		main.walker.yaw = 0.0
+		main.walker.pitch = 0.0
+		main.step(0.1)
+		await frames(1)
+		var spr: Sprite3D = main.hint_pointer.sprite
+		ok(spr.visible, "z %.1f: указатель в мире" % z)
+		var cam := main.get_viewport().get_camera_3d()
+		var h: float = spr.global_basis.y.length()
+		var tip_local: Vector3 = ship.global_transform.affine_inverse() * (spr.global_position - spr.global_basis.y.normalized() * h * HintPointer.TIP)
+		var top: Vector3 = spr.global_position + spr.global_basis.y.normalized() * h * (HintPointer.SYMBOL_H - HintPointer.TIP)
+		var top_local: Vector3 = ship.global_transform.affine_inverse() * top
+		ok(top_local.y < 2.6, "z %.1f: верх символа %.2f под потолком коридора" % [z, top_local.y])
+		ok(tip_local.y > 1.5, "z %.1f: остриё %.2f над люком, не в полу" % [z, tip_local.y])
+		var tip: Vector3 = ship.global_transform * tip_local
+		eq(_blocker(ship, cam.global_position, tip.lerp(cam.global_position, 0.01)), "", "z %.1f: остриё открыто" % z)
+		eq(_blocker(ship, cam.global_position, top.lerp(cam.global_position, 0.01)), "", "z %.1f: верх символа открыт" % z)
+	main.queue_free()
+	await frames(1)
