@@ -158,7 +158,8 @@ func test_scene_one_multimesh() -> void:
 	ok(mat.shader == EcoShaders.mist(EcoShaders.Mist.INK).shader, "общий шейдер MIST — шейдеров не прибавилось")
 	var ship := EcoLink.ShipState.new()
 	ship.pos = view.grazers.all[0].agent.p
-	for i in 200:
+	# первое облачко — к 10-му шагу (0,5 с мира), к 40-му их три; 200 шагов (10 с) проверку не усиливали (#1350)
+	for i in 40:
 		view.step(0.05, ship)
 	var gv := view.grazer_view
 	var seen := 0
