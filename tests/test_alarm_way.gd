@@ -225,3 +225,121 @@ func test_lower_tip() -> void:
 	near(HintPointer.lower_tip(Vector2(800, 10), 0.1, size, AlarmWay.TIP_MIN_Y).y, AlarmWay.TIP_MIN_Y * s, 0.01,
 		"вплотную над головой — тоже опущено (#1367)")
 	eq(HintPointer.lower_tip(Vector2(800, 10), -0.1, size, AlarmWay.TIP_MIN_Y), Vector2(800, 10), "за спиной — как есть")
+
+
+## #1709: ил — выход по кратчайшему пути из шара облака на мостике, путь к штурвалу из других отсеков.
+func test_silt_line() -> void:
+	var s := Silt.new()
+	eq(AlarmWay.silt_line(s, Vector3.ZERO, ShipLayout.Room.BRIDGE), "", "не в иле — пусто")
+	var cl := Silt.Cloud.new()
+	cl.c = Vector3(100.0, -40.0, 50.0)
+	cl.r = 16.0
+	s.inside = cl
+	eq(AlarmWay.silt_line(s, cl.c + Vector3(4.0, 0.0, 0.0), ShipLayout.Room.BRIDGE),
+		"ИЛ — СОНАР СЛЕП · выход: курс 90°, 12 м", "к востоку")
+	eq(AlarmWay.silt_line(s, cl.c + Vector3(0.0, 4.0, 0.0), ShipLayout.Room.BRIDGE),
+		"ИЛ — СОНАР СЛЕП · выход: вверх 12 м", "к верху")
+	eq(AlarmWay.silt_exit(cl, cl.c + Vector3(0.0, 0.0, -6.0)), "курс 0°, 10 м", "север — −Z")
+	eq(AlarmWay.silt_exit(cl, cl.c + Vector3(-3.0, 0.0, 3.0)), "курс 225°, 12 м", "юго-запад")
+	eq(AlarmWay.silt_exit(cl, cl.c + Vector3(1.0, 0.0, -10.0)), "курс 5°, 6 м", "до 5°: 5,7° → 5°")
+	eq(AlarmWay.silt_exit(cl, cl.c + Vector3(3.0, -6.0, 0.0)), "курс 90°, 9 м", "вниз — не «вниз», а по горизонтали")
+	eq(AlarmWay.silt_exit(cl, cl.c), "вверх 16 м", "в самом центре — вверх")
+	for room in [1, 2, 3, 4]:
+		var want := "ИЛ — СОНАР СЛЕП · штурвал: в нос, %s" % AlarmWay.doors_text(room)
+		eq(AlarmWay.silt_line(s, cl.c, room), want, AlarmWay.ROOMS[room])
+		ok(want.length() <= Run.LINE_MAX, "≤ 48: " + want)
+	ok(AlarmWay.silt_line(s, cl.c + Vector3(0.1, 0.0, 0.1), 0).length() <= Run.LINE_MAX, "на мостике ≤ 48")
+
+
+## #1709: присоска — у рычага «жмите «Разряд»», на мостике «рычаг у левого борта», иначе путь на мостик.
+func test_drain_line() -> void:
+	var v := Vitals.new()
+	eq(AlarmWay.drain_line(v, 0, false), "", "без присоски — пусто")
+	v.drain("Стеклоуст", 3.0)
+	eq(AlarmWay.drain_line(v, 0, true), "СТЕКЛОУСТ ПЬЁТ ЗАРЯД · жмите «Разряд»", "у рычага")
+	eq(AlarmWay.drain_line(v, 0, false), "СТЕКЛОУСТ ПЬЁТ ЗАРЯД · рычаг у левого борта", "на мостике")
+	eq(AlarmWay.drain_line(v, 1, false), "СТЕКЛОУСТ ПЬЁТ ЗАРЯД · мостик, в нос, 1 люк", "из коридора")
+	eq(AlarmWay.drain_line(v, 2, false), "СТЕКЛОУСТ ПЬЁТ ЗАРЯД · мостик, в нос, 2 люка", "из лаборатории")
+	v.drain("Двенадцатьбу", 3.0)   # 12 знаков — своё имя, худшая длина
+	for room in 5:
+		ok(AlarmWay.drain_line(v, room, false).length() <= Run.LINE_MAX, AlarmWay.drain_line(v, room, false))
+	eq(AlarmWay.drain_line(v, 4, false), "ДВЕНАДЦАТЬБУ ПЬЁТ ЗАРЯД · мостик, в нос, 4 люка")
+	v.drain("Очень длинное имя", 3.0)
+	eq(AlarmWay.drain_line(v, 0, false), "СУЩЕСТВО ПЬЁТ ЗАРЯД · рычаг у левого борта", "длинное — «существо»")
+
+
+## #1709: указатель присоски — к люку на мостик; на мостике нет; пробоина главнее, присоска главнее перегрева.
+func test_pointer_drain() -> void:
+	var b := Breach.new()
+	var r := Reactor.new()
+	var v := Vitals.new()
+	var R := ShipLayout.Room
+	v.drain("Стеклоуст", 3.0)
+	var p := AlarmWay.pointer(b, r, R.CORRIDOR, true, false, v)
+	ok(p != null, "из коридора — есть")
+	eq(p.label(), "Стеклоуст · мостик")
+	eq(p.door, 0, "люк z 2")
+	ok(p.anchor.z > ShipLayout.DOOR_Z[0], "со стороны игрока")
+	eq(AlarmWay.pointer(b, r, R.CARGO, true, false, v).door, 3, "из трюма — ближний люк z 19,5")
+	eq(AlarmWay.pointer(b, r, R.BRIDGE, true, false, v), null, "на мостике — рамка у щитка")
+	r.hot = true
+	eq(AlarmWay.pointer(b, r, R.CORRIDOR, true, false, v).word, "Стеклоуст", "присоска главнее перегрева")
+	b.active = b.all[3]
+	eq(AlarmWay.pointer(b, r, R.CORRIDOR, true, false, v).word, "Пробоина", "пробоина главнее присоски")
+	eq(AlarmWay.pointer(Breach.new(), Reactor.new(), R.CORRIDOR, true, false, null), null, "без заряда — без присоски")
+
+
+## Сцена: строка ила и присоски по месту игрока; у рычага — «жмите «Разряд»» (кнопка действия «Разряд»).
+func test_scene_silt_drain_rows() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	main.open_silt()
+	main.step(0.1)
+	main.walker.x = 0.0
+	main.walker.z = -1.0
+	main.step(0.1)
+	ok(str(main.status_rows()[2][0]).begins_with("ИЛ — СОНАР СЛЕП · выход: "), "на мостике: %s" % [main.status_rows()[2]])
+	main.walker.z = 6.0
+	main.step(0.1)
+	eq(str(main.status_rows()[2][0]), "ИЛ — СОНАР СЛЕП · штурвал: в нос, 1 люк", "из коридора")
+	main.silt.reset()
+	main.vitals.drain("Стеклоуст", 0.5)
+	main.step(0.05)
+	main.vitals.drain("Стеклоуст", 0.5)
+	eq(str(main.status_rows()[2][0]), "СТЕКЛОУСТ ПЬЁТ ЗАРЯД · мостик, в нос, 1 люк", "из коридора")
+	var zap: Deck.Post = null
+	for post in main.posts:
+		if post.id == "zap":
+			zap = post
+	main.walker.x = zap.at.x
+	main.walker.z = zap.at.y
+	ok(main._at_lever(), "у рычага")
+	eq(str(main.status_rows()[2][0]), "СТЕКЛОУСТ ПЬЁТ ЗАРЯД · жмите «Разряд»", "у рычага")
+	main.queue_free()
+	await frames(1)
+
+
+## #1709: остриё указателя — перед гранью стены над люком со стороны игрока, а не в её толще: у люка мостика стена
+## 2,0…2,2 (кормовая стена мостика), из коридора остриё было на 2,15 — внутри, указатель не видно.
+func test_pointer_outside_wall() -> void:
+	var r := Reactor.new()
+	var v := Vitals.new()
+	for door in ShipLayout.DOOR_Z.size():
+		var span := AlarmWay.wall_span(door)
+		ok(span.x <= ShipLayout.DOOR_Z[door] and span.y >= ShipLayout.DOOR_Z[door], "люк %d в стене" % door)
+		for target in [door, door + 1]:   # цель в нос (игрок в door + 1) и в корму (игрок в door)
+			var player: int = door + 1 if target == door else door
+			var b := Breach.new()
+			for s in b.all:
+				if s.room == target:
+					b.active = s
+			if b.active == null:
+				continue
+			var p := AlarmWay.pointer(b, r, player, true, false, v)
+			eq(p.door, door, "люк %d" % door)
+			ok(p.anchor.z < span.x or p.anchor.z > span.y, "люк %d, игрок в %d: остриё z %.2f вне стены %s" % [
+				door, player, p.anchor.z, span])
+	v.drain("Стеклоуст", 3.0)
+	var p := AlarmWay.pointer(Breach.new(), r, ShipLayout.Room.CORRIDOR, true, false, v)
+	near(p.anchor.z, BridgePlan.STERN + AlarmWay.WALL + AlarmWay.POINTER_IN, 0.001, "из коридора — перед стеной мостика")
