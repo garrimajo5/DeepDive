@@ -1,0 +1,1640 @@
+[
+  {
+    "sex": "muzhchina",
+    "lean": 0.9,
+    "distance": 0.2,
+    "pole": 0,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 735733,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.25,
+        "area": 778220,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.5,
+        "area": 816920,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.75,
+        "area": 871268,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 1,
+        "area": 995674,
+        "table": 1807,
+        "min_vertex_distance": 0.010341895350191487
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.9,
+    "distance": 0.2,
+    "pole": 0,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 377134,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.25,
+        "area": 457477,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.5,
+        "area": 562590,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.75,
+        "area": 705191,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 1,
+        "area": 927261,
+        "table": 1807,
+        "min_vertex_distance": 0.010341895350191487
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.9,
+    "distance": 0.2,
+    "pole": 1,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 804137,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.25,
+        "area": 879378,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.5,
+        "area": 976072,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.75,
+        "area": 1068281,
+        "table": 3588,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 1,
+        "area": 1177063,
+        "table": 28912,
+        "min_vertex_distance": 0.010341895350191487
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.9,
+    "distance": 0.2,
+    "pole": 1,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 429265,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.25,
+        "area": 522640,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.5,
+        "area": 642723,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.75,
+        "area": 802973,
+        "table": 3588,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 1,
+        "area": 1007778,
+        "table": 28912,
+        "min_vertex_distance": 0.010341895350191487
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.9,
+    "distance": 0.2,
+    "pole": 2,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 600881,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.25,
+        "area": 636666,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.5,
+        "area": 698698,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.75,
+        "area": 809636,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 1,
+        "area": 992217,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.9,
+    "distance": 0.2,
+    "pole": 2,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 368414,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.25,
+        "area": 453150,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.5,
+        "area": 564694,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.75,
+        "area": 724180,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      },
+      {
+        "share": 1,
+        "area": 975179,
+        "table": 0,
+        "min_vertex_distance": 0.010341895350191487
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 1.05,
+    "distance": 0.2,
+    "pole": 0,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 741312,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 0.25,
+        "area": 732424,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 0.5,
+        "area": 712387,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 0.75,
+        "area": 709752,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 1,
+        "area": 750742,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 1.05,
+    "distance": 0.2,
+    "pole": 0,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 315564,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 0.25,
+        "area": 374661,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 0.5,
+        "area": 446199,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 0.75,
+        "area": 540900,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 1,
+        "area": 675559,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 1.05,
+    "distance": 0.2,
+    "pole": 1,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 859805,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 0.25,
+        "area": 872670,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 0.5,
+        "area": 872337,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 0.75,
+        "area": 885166,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 1,
+        "area": 905945,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 1.05,
+    "distance": 0.2,
+    "pole": 1,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 357590,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 0.25,
+        "area": 422431,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 0.5,
+        "area": 498398,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 0.75,
+        "area": 599690,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 1,
+        "area": 736105,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 1.05,
+    "distance": 0.2,
+    "pole": 2,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 562747,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 0.25,
+        "area": 574554,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 0.5,
+        "area": 606864,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 0.75,
+        "area": 668829,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 1,
+        "area": 771970,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 1.05,
+    "distance": 0.2,
+    "pole": 2,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 311659,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 0.25,
+        "area": 377894,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 0.5,
+        "area": 461659,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 0.75,
+        "area": 572425,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      },
+      {
+        "share": 1,
+        "area": 727420,
+        "table": 0,
+        "min_vertex_distance": 0.01830105695441127
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 1.2,
+    "distance": 0.2,
+    "pole": 0,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 743911,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.25,
+        "area": 707199,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.5,
+        "area": 664636,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.75,
+        "area": 644087,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 1,
+        "area": 660847,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 1.2,
+    "distance": 0.2,
+    "pole": 0,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 277827,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.25,
+        "area": 325736,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.5,
+        "area": 386253,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.75,
+        "area": 467270,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 1,
+        "area": 577087,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 1.2,
+    "distance": 0.2,
+    "pole": 1,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 900448,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.25,
+        "area": 865630,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.5,
+        "area": 830133,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.75,
+        "area": 802954,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 1,
+        "area": 783564,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 1.2,
+    "distance": 0.2,
+    "pole": 1,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 316473,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.25,
+        "area": 364999,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.5,
+        "area": 423243,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.75,
+        "area": 500333,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 1,
+        "area": 604403,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 1.2,
+    "distance": 0.2,
+    "pole": 2,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 544327,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.25,
+        "area": 542826,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.5,
+        "area": 560634,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.75,
+        "area": 605679,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 1,
+        "area": 686299,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 1.2,
+    "distance": 0.2,
+    "pole": 2,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 276571,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.25,
+        "area": 331771,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.5,
+        "area": 403194,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.75,
+        "area": 496741,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 1,
+        "area": 626211,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 1.2,
+    "distance": 0.3,
+    "pole": 0,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 384400,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.25,
+        "area": 433576,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.5,
+        "area": 505612,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.75,
+        "area": 594815,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 1,
+        "area": 776126,
+        "table": 2067,
+        "min_vertex_distance": 0.08169733388267325
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 1.2,
+    "distance": 0.3,
+    "pole": 0,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 227982,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.25,
+        "area": 282029,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.5,
+        "area": 357841,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.75,
+        "area": 473502,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 1,
+        "area": 709756,
+        "table": 2067,
+        "min_vertex_distance": 0.08169733388267325
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 1.2,
+    "distance": 0.3,
+    "pole": 1,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 427305,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.25,
+        "area": 469193,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.5,
+        "area": 535463,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.75,
+        "area": 643329,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 1,
+        "area": 839952,
+        "table": 10640,
+        "min_vertex_distance": 0.08169733388267325
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 1.2,
+    "distance": 0.3,
+    "pole": 1,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 265215,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.25,
+        "area": 317708,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.5,
+        "area": 391766,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.75,
+        "area": 505776,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 1,
+        "area": 740276,
+        "table": 10640,
+        "min_vertex_distance": 0.08169733388267325
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 1.2,
+    "distance": 0.3,
+    "pole": 2,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 337244,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.25,
+        "area": 383711,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.5,
+        "area": 447175,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.75,
+        "area": 548882,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 1,
+        "area": 794109,
+        "table": 1066,
+        "min_vertex_distance": 0.08169733388267325
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 1.2,
+    "distance": 0.3,
+    "pole": 2,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 211596,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.25,
+        "area": 261613,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.5,
+        "area": 340495,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 0.75,
+        "area": 472933,
+        "table": 0,
+        "min_vertex_distance": 0.08169733388267325
+      },
+      {
+        "share": 1,
+        "area": 749082,
+        "table": 1066,
+        "min_vertex_distance": 0.08169733388267325
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.9,
+    "distance": 0.2,
+    "pole": 0,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 442076,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.25,
+        "area": 496712,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.5,
+        "area": 567706,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.75,
+        "area": 641566,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 1,
+        "area": 732254,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.9,
+    "distance": 0.2,
+    "pole": 0,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 266648,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.25,
+        "area": 326279,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.5,
+        "area": 402244,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.75,
+        "area": 505464,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 1,
+        "area": 664666,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.9,
+    "distance": 0.2,
+    "pole": 1,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 490494,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.25,
+        "area": 547955,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.5,
+        "area": 628942,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.75,
+        "area": 732449,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 1,
+        "area": 847393,
+        "table": 1940,
+        "min_vertex_distance": 0.03902028198568896
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.9,
+    "distance": 0.2,
+    "pole": 1,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 305196,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.25,
+        "area": 370926,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.5,
+        "area": 454005,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.75,
+        "area": 562434,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 1,
+        "area": 722218,
+        "table": 1940,
+        "min_vertex_distance": 0.03902028198568896
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.9,
+    "distance": 0.2,
+    "pole": 2,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 393541,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.25,
+        "area": 454561,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.5,
+        "area": 522375,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.75,
+        "area": 608762,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 1,
+        "area": 760688,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.9,
+    "distance": 0.2,
+    "pole": 2,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 257840,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.25,
+        "area": 323314,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.5,
+        "area": 410340,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.75,
+        "area": 537847,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      },
+      {
+        "share": 1,
+        "area": 733997,
+        "table": 0,
+        "min_vertex_distance": 0.03902028198568896
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 1.05,
+    "distance": 0.2,
+    "pole": 0,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 479202,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 0.25,
+        "area": 505117,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 0.5,
+        "area": 534297,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 0.75,
+        "area": 545752,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 1,
+        "area": 580643,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 1.05,
+    "distance": 0.2,
+    "pole": 0,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 236418,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 0.25,
+        "area": 283193,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 0.5,
+        "area": 338835,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 0.75,
+        "area": 408232,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 1,
+        "area": 501422,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 1.05,
+    "distance": 0.2,
+    "pole": 1,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 533618,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 0.25,
+        "area": 573957,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 0.5,
+        "area": 609296,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 0.75,
+        "area": 642011,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 1,
+        "area": 676374,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 1.05,
+    "distance": 0.2,
+    "pole": 1,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 268285,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 0.25,
+        "area": 317658,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 0.5,
+        "area": 376137,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 0.75,
+        "area": 446612,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 1,
+        "area": 542832,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 1.05,
+    "distance": 0.2,
+    "pole": 2,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 410045,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 0.25,
+        "area": 436673,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 0.5,
+        "area": 467523,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 0.75,
+        "area": 518444,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 1,
+        "area": 606516,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 1.05,
+    "distance": 0.2,
+    "pole": 2,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 233346,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 0.25,
+        "area": 283326,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 0.5,
+        "area": 346835,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 0.75,
+        "area": 433015,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      },
+      {
+        "share": 1,
+        "area": 564445,
+        "table": 0,
+        "min_vertex_distance": 0.03387764257840878
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 1.2,
+    "distance": 0.2,
+    "pole": 0,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 495733,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 0.25,
+        "area": 508078,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 0.5,
+        "area": 505311,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 0.75,
+        "area": 499961,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 1,
+        "area": 521361,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 1.2,
+    "distance": 0.2,
+    "pole": 0,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 215992,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 0.25,
+        "area": 255813,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 0.5,
+        "area": 302701,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 0.75,
+        "area": 362082,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 1,
+        "area": 440755,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 1.2,
+    "distance": 0.2,
+    "pole": 1,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 608533,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 0.25,
+        "area": 598383,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 0.5,
+        "area": 594274,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 0.75,
+        "area": 608382,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 1,
+        "area": 605154,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 1.2,
+    "distance": 0.2,
+    "pole": 1,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 246318,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 0.25,
+        "area": 286146,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 0.5,
+        "area": 331246,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 0.75,
+        "area": 391448,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 1,
+        "area": 471528,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 1.2,
+    "distance": 0.2,
+    "pole": 2,
+    "handmode": 0,
+    "samples": [
+      {
+        "share": 0,
+        "area": 408550,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 0.25,
+        "area": 420774,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 0.5,
+        "area": 441494,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 0.75,
+        "area": 480034,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 1,
+        "area": 547702,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 1.2,
+    "distance": 0.2,
+    "pole": 2,
+    "handmode": 1,
+    "samples": [
+      {
+        "share": 0,
+        "area": 222036,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 0.25,
+        "area": 266607,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 0.5,
+        "area": 318679,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 0.75,
+        "area": 389775,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      },
+      {
+        "share": 1,
+        "area": 493799,
+        "table": 0,
+        "min_vertex_distance": 0.08651316165178187
+      }
+    ]
+  }
+]

@@ -1,0 +1,134 @@
+[
+  {
+    "sex": "muzhchina",
+    "lean_rad": 1.35,
+    "wrist_distance_m": 0.25,
+    "neck_rad": -0.4,
+    "wrist_yaw_deg": -30,
+    "wrist_tilt_deg": 90,
+    "samples": [
+      {
+        "share": 0,
+        "right_area": 299779,
+        "left_area": 0,
+        "table_pixels": 0,
+        "surface_clearance_m": 0.20458127558231354,
+        "adjacent_centres_covered": [
+          false,
+          false
+        ]
+      },
+      {
+        "share": 0.25,
+        "right_area": 339746,
+        "left_area": 0,
+        "table_pixels": 0,
+        "surface_clearance_m": 0.1958646923303604,
+        "adjacent_centres_covered": [
+          false,
+          false
+        ]
+      },
+      {
+        "share": 0.5,
+        "right_area": 396532,
+        "left_area": 0,
+        "table_pixels": 0,
+        "surface_clearance_m": 0.18561863899230957,
+        "adjacent_centres_covered": [
+          false,
+          false
+        ]
+      },
+      {
+        "share": 0.75,
+        "right_area": 474717,
+        "left_area": 0,
+        "table_pixels": 0,
+        "surface_clearance_m": 0.1743823140859604,
+        "adjacent_centres_covered": [
+          false,
+          false
+        ]
+      },
+      {
+        "share": 1,
+        "right_area": 552099,
+        "left_area": 0,
+        "table_pixels": 0,
+        "surface_clearance_m": 0.15868118405342102,
+        "adjacent_centres_covered": [
+          true,
+          false
+        ]
+      }
+    ],
+    "verdict": "REJECTED: visually excessive torso bending; male also occludes adjacent slider centre at share 1. Not final animation."
+  },
+  {
+    "sex": "zhenshchina",
+    "lean_rad": 1.2,
+    "wrist_distance_m": 0.25,
+    "neck_rad": -0.4,
+    "wrist_yaw_deg": -90,
+    "wrist_tilt_deg": 0,
+    "samples": [
+      {
+        "share": 0,
+        "right_area": 174100,
+        "left_area": 0,
+        "table_pixels": 0,
+        "surface_clearance_m": 0.13663259148597717,
+        "adjacent_centres_covered": [
+          false,
+          false
+        ]
+      },
+      {
+        "share": 0.25,
+        "right_area": 209888,
+        "left_area": 0,
+        "table_pixels": 0,
+        "surface_clearance_m": 0.13663259148597717,
+        "adjacent_centres_covered": [
+          false,
+          false
+        ]
+      },
+      {
+        "share": 0.5,
+        "right_area": 255560,
+        "left_area": 0,
+        "table_pixels": 0,
+        "surface_clearance_m": 0.13663259148597717,
+        "adjacent_centres_covered": [
+          false,
+          false
+        ]
+      },
+      {
+        "share": 0.75,
+        "right_area": 320197,
+        "left_area": 0,
+        "table_pixels": 0,
+        "surface_clearance_m": 0.13663259148597717,
+        "adjacent_centres_covered": [
+          false,
+          false
+        ]
+      },
+      {
+        "share": 1,
+        "right_area": 418478,
+        "left_area": 0,
+        "table_pixels": 0,
+        "surface_clearance_m": 0.13663259148597717,
+        "adjacent_centres_covered": [
+          false,
+          false
+        ]
+      }
+    ],
+    "verdict": "REJECTED: visually excessive torso bending; male also occludes adjacent slider centre at share 1. Not final animation."
+  }
+]
