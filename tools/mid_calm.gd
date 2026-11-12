@@ -3,7 +3,9 @@ extends SceneTree
 ## моллюски». Гейм-дизайнер (08.11): в середине не накладывать зов хищника гребневиками. Мир целиком (`EcoView`, дно
 ## `Seabed.mesh_height`), headless, без узлов сцены; облачный расчёт, не телефонный.
 ##   godot --headless --path . -s tools/mid_calm.gd [-- seeds=16 raduzh=1:80,5 lim=<с> dark=<с> probe=1 answer=1 delay=<с> hold=<с>
-##   start0=<x>,<z>]
+##   start0=<x>,<z> band0=<x0>,<x1>,<z0>,<z1>]
+## band0= — проба целей патруля №0 (#1400, уровни и гейм-дизайнер 12.11, вариант 1): цели «у дома» стай светляков 0 и 1
+## — в прямоугольнике x0…x1, z0…z1 (`EcoPred.home_band`); печатает цели №0 и отрезки между ними против пути середины.
 ## start0= — старт серпохвоста №0 на пробу в другом месте (как `EcoPred.STARTS[0]`: та же высота над дном, #1400, 12.11).
 ## raduzh=<номер>:<x>,<z> — дом стаи радужников с этим номером на пробу в другом месте (`EcoRaduzh._homes` до сброса
 ## мира; несколько — через «;»). Проход как `late` в tools/patrol.gd: 30 с без света у 00 (пауза хищников после сброса
@@ -47,6 +49,9 @@ static var delay := DELAY
 static var hold := HOLD
 ## Старт серпохвоста №0 этого прогона (`start0=`), не задан — INF: как в игре.
 static var start0 := Vector2.INF
+## Полоса целей патруля №0 у домов стай BAND_HOMES (`band0=`), пустая — как в игре.
+const BAND_HOMES := [0, 1]
+static var band0 := Rect2()
 ## Порядок событий середины (гейм-дизайнер, #1400, 12.11): свет → раскрытие волнолиста → видимая реакция моллюсков
 ## (раскрыт на `EcoFern.FEED_OPEN` — моллюски под листьями видны; «рыбы приплыли» — `EcoFern` "mollusk" у куртины
 ## прохода) → первый «замер» серпохвоста. Путь №0 — старт, затем точки раз в TRACK_EVERY с первые TRACK_FOR с после света.
@@ -69,6 +74,8 @@ func _init() -> void:
 	if kv.has("start0"):
 		var xz: PackedStringArray = kv["start0"].split(",")
 		start0 = Vector2(float(xz[0]), float(xz[1]))
+	if kv.has("band0"):
+		band0 = parse_band(kv["band0"])
 	if kv.has("raduzh"):
 		moves = parse_moves(kv["raduzh"])
 	for line in report(seeds):
@@ -86,6 +93,20 @@ static func parse_moves(s: String) -> Dictionary:
 	return out
 
 
+## "-75,-45,20,76" → Rect2 x −75…−45, z 20…76.
+static func parse_band(s: String) -> Rect2:
+	var v := s.split(",")
+	var x0 := float(v[0])
+	var z0 := float(v[2])
+	return Rect2(x0, z0, float(v[1]) - x0, float(v[3]) - z0)
+
+
+## Ближе всего отрезок a–b (x, z) к пути середины PATH[0] → PATH[1], м.
+static func to_mid_path(a: Vector2, b: Vector2) -> float:
+	var c := Geometry2D.get_closest_points_between_segments(a, b, PATH[0], PATH[1])
+	return c[0].distance_to(c[1])
+
+
 static func ship_at(xz: Vector2) -> Vector3:
 	return Vector3(xz.x, Seabed.mesh_height(xz.x, xz.y) + FLOOR, xz.y)
 
@@ -99,6 +120,8 @@ static func make(seed_value: int) -> EcoView:
 			homes[k] = moves[k]
 		ev.raduzh._homes = homes
 	ev.preds.probe = probe
+	if band0.has_area():
+		ev.preds.home_band = {0: {"homes": BAND_HOMES, "rect": band0}}
 	ev.world.reset(seed_value)
 	if start0.is_finite():
 		move_pred(ev.preds.all[0], start0)
@@ -130,14 +153,32 @@ static func run(seed_value: int) -> Dictionary:
 	ship.speed = 0.0
 	var born: Vector3 = ev.preds.all[0].agent.p
 	var t := 0.0
+	var goals: Array = []   # цели патруля №0 (x, z) по порядку, с первой после сброса мира
+	var path0 := {"near": INF, "hunt": 0.0}  # №0 ближе всего к пути середины (x, z) и секунд охоты на рыб, пока корабль в середине
+	var was := {"mode": ev.preds.all[0].mode, "goal": ev.preds.all[0].agent.goal}
+	# Цель выбрана патрулем — сменилась, когда №0 и до шага, и после шага в PATROL (цель охоты или «замера»,
+	# оставшаяся при возврате в патруль, — не выбор цели).
+	var track := func() -> void:
+		var pr: EcoPred.Pred = ev.preds.all[0]
+		if pr.mode == EcoPred.Mode.PATROL and was["mode"] == EcoPred.Mode.PATROL \
+				and (was["goal"] as Vector3).distance_to(pr.agent.goal) > 0.01:
+			goals.append(Vector2(pr.agent.goal.x, pr.agent.goal.z))
+		was["mode"] = pr.mode
+		was["goal"] = pr.agent.goal
 	while t < dark:
 		w.ship = ship
 		w.step(DT)
 		w.take_link()
 		t += DT
+		track.call()
+		if ev.preds.all[0].mode == EcoPred.Mode.HUNT:
+			path0["hunt"] += DT
+		var q := Vector2(ev.preds.all[0].agent.p.x, ev.preds.all[0].agent.p.z)
+		path0["near"] = minf(path0["near"], to_mid_path(q, q))
 	ship.light_on = true
 	ship.light_range = Searchlight.BASE_RANGE
-	var r := {"fern_t": -1.0, "flare": {}, "betray_mid": 0, "betray_01": 0, "threat_mid": {}, "threat_01": {},
+	var mode_lit: String = EcoPred.Mode.keys()[ev.preds.all[0].mode]
+	var r := {"mode0_lit": mode_lit, "fern_t": -1.0, "flare": {}, "betray_mid": 0, "betray_01": 0, "threat_mid": {}, "threat_01": {},
 		"pred_mid": INF, "answers": 0, "mollusk_t": -1.0, "alert_t": -1.0, "alert_who": -1, "alert_d": 0.0,
 		"track0": [], "near0": INF, "near0_t": 0.0, "lit_t": -1.0, "born0": Vector2(born.x, born.z),
 		"fish_t": -1.0}
@@ -190,8 +231,14 @@ static func run(seed_value: int) -> Dictionary:
 				r["betray_mid" if mid else "betray_01"] += 1
 			elif e["type"] == EcoLink.HIT or e["type"] == EcoLink.DRAIN:
 				heard.append(["%s:%s" % [e["by"], e["type"]], 0.0])
+		track.call()
 		var p0: EcoPred.Pred = ev.preds.all[0]
 		var d0 := p0.agent.p.distance_to(ship.pos)
+		if mid:
+			if p0.mode == EcoPred.Mode.HUNT:
+				path0["hunt"] += DT
+			var q0 := Vector2(p0.agent.p.x, p0.agent.p.z)
+			path0["near"] = minf(path0["near"], to_mid_path(q0, q0))
 		if d0 < r["near0"]:
 			r["near0"] = d0
 			r["near0_t"] = t - dark
@@ -227,6 +274,9 @@ static func run(seed_value: int) -> Dictionary:
 				if sw.glow > EcoRaduzh.FLARE_ON and not lit.has(sw.index):
 					lit[sw.index] = {"t": t - dark, "d": sw.c.distance_to(ship.pos)}
 	r["flare"] = lit
+	r["goals0"] = goals
+	r["path0"] = path0["near"]
+	r["hunt0"] = path0["hunt"]
 	w.bus.emitted.disconnect(listen)
 	ev.free()
 	return r
@@ -237,8 +287,9 @@ static func report(seeds: int) -> Array[String]:
 	var homes: Array[Vector2] = EcoRaduzh.HOMES.duplicate()
 	for k in moves:
 		homes[k] = moves[k]
-	lines.append("== дома радужников %s, старт серпохвоста №0 %s, тихий круг серпохвоста %s, ответ экипажа %s, %d зёрен, путь %s, стоянка %.0f с у середины" % [str(homes), str(start0 if start0.is_finite() else EcoPred.STARTS[0]), "вкл" if probe else "выкл", ("через %.1f с, %.0f с без света" % [delay, hold]) if answer else "нет", seeds, str(PATH), STOP])
-	var order := {"done": 0, "mollusk": [], "alert": [], "near0": []}
+	var band := ("цели №0 у стай %s — x %.0f…%.0f, z %.0f…%.0f" % [str(BAND_HOMES), band0.position.x, band0.end.x, band0.position.y, band0.end.y]) if band0.has_area() else "цели №0 как в игре"
+	lines.append("== дома радужников %s, старт серпохвоста №0 %s, %s, тихий круг серпохвоста %s, ответ экипажа %s, %d зёрен, путь %s, стоянка %.0f с у середины" % [str(homes), str(start0 if start0.is_finite() else EcoPred.STARTS[0]), band, "вкл" if probe else "выкл", ("через %.1f с, %.0f с без света" % [delay, hold]) if answer else "нет", seeds, str(PATH), STOP])
+	var order := {"done": 0, "mollusk": [], "alert": [], "near0": [], "goal": [], "seg": [], "path0": []}
 	var fern := 0
 	var flared := {}
 	var betray_mid := 0
@@ -273,6 +324,11 @@ static func report(seeds: int) -> Array[String]:
 		if r["answers"] > 0:
 			parts.append("ответов %d" % r["answers"])
 		parts.append(chain_line(r))
+		var gs := goal_stats(r)
+		parts.append(goal_line(gs))
+		order["goal"].append(gs["goal"])
+		order["seg"].append(gs["seg"])
+		order["path0"].append(r["path0"])
 		if chain_done(r):
 			order["done"] += 1
 		if r["mollusk_t"] >= 0.0:
@@ -291,7 +347,40 @@ static func report(seeds: int) -> Array[String]:
 	lines.append("угрозы на подходе к 01 (зёрен из %d): %s" % [seeds, _keys(threats_01) if not threats_01.is_empty() else "нет"])
 	lines.append("порядок: моллюски до первого «замера» %d/%d; реакция моллюсков %s; первый «замер» %s; №0 ближе всего (медиана) %.0f м" \
 		% [order["done"], seeds, _spread(order["mollusk"], seeds), _spread(order["alert"], seeds), _median(order["near0"])])
+	lines.append("путь середины %s → %s: ближе всего цель №0 %s; отрезок между целями %s; сам №0, пока корабль в середине, %s" \
+		% [str(PATH[0]), str(PATH[1]), _metres(order["goal"]), _metres(order["seg"]), _metres(order["path0"])])
 	return lines
+
+
+## «мин 12 м, медиана 40 м» по зёрнам.
+static func _metres(v: Array) -> String:
+	var s := v.duplicate()
+	s.sort()
+	return "мин %.0f м, медиана %.0f м" % [s[0], _median(s)] if not s.is_empty() else "нет"
+
+
+## Цели патруля №0 прохода r против пути середины: {n, band (в полосе band0), goal, seg — ближе всего цель и отрезок
+## между соседними целями к пути PATH[0] → PATH[1], м; seg_at — номер цели, с которой начинается ближний отрезок}.
+static func goal_stats(r: Dictionary) -> Dictionary:
+	var gl: Array = r["goals0"]
+	var out := {"n": gl.size(), "band": 0, "goal": INF, "seg": INF, "seg_at": -1}
+	for k in gl.size():
+		var g: Vector2 = gl[k]
+		if band0.has_area() and band0.grow(0.01).has_point(g):
+			out["band"] += 1
+		out["goal"] = minf(out["goal"], to_mid_path(g, g))
+		if k > 0:
+			var d := to_mid_path(gl[k - 1], g)
+			if d < out["seg"]:
+				out["seg"] = d
+				out["seg_at"] = k - 1
+	return out
+
+
+## «цели №0: 9 (в полосе 4), ближе к пути середины: цель 51 м, отрезок 3 м (цели 2→3), сам №0 18 м».
+static func goal_line(gs: Dictionary) -> String:
+	var seg := ("отрезок %.0f м (цели %d→%d)" % [gs["seg"], gs["seg_at"], gs["seg_at"] + 1]) if gs["seg_at"] >= 0 else "отрезков нет"
+	return "цели №0: %d (в полосе %d), ближе к пути середины: цель %.0f м, %s" % [gs["n"], gs["band"], gs["goal"], seg]
 
 
 ## Наблюдение цепочки закончено до вынужденного ответа: моллюски показались, а «замера» не было или он позже.
@@ -309,7 +398,8 @@ static func chain_line(r: Dictionary) -> String:
 	for k in (r["track0"] as Array).size():
 		var pt: Array = r["track0"][k]
 		tr.append("%d с (%.0f; %.0f) %.0f м" % [roundi(k * TRACK_EVERY), pt[0].x, pt[0].y, pt[1]])
-	return t + "; путь №0: " + ", ".join(tr) + "; №0 ближе всего %.0f м на %.1f с" % [r["near0"], r["near0_t"]]
+	return t + "; путь №0 (при свете — %s): " % r.get("mode0_lit", "?") + ", ".join(tr) \
+		+ "; №0 ближе всего %.0f м на %.1f с, к пути середины %.0f м, охота на рыб %.0f с" % [r["near0"], r["near0_t"], r.get("path0", INF), r.get("hunt0", 0.0)]
 
 
 static func _t(v: float) -> String:

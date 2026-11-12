@@ -242,3 +242,52 @@ func test_route_fern_opens_in_beam_before_stop() -> void:
 		last_lit = maxf(last_lit, seed_first)
 	eq(ferns, 16 * EcoFern.PER_CLUSTER, "все кусты всех зёрен")
 	ok(first_lit >= 6.0 and last_lit <= 8.0, "первый куст в луче на 6–8 с после света: %.2f…%.2f" % [first_lit, last_lit])
+
+
+## Проба целей патруля №0 (#1400, уровни и гейм-дизайнер 12.11, вариант 1): `band0=` — прямоугольник x0…x1, z0…z1;
+## цель «у дома» — та же доля сдвига от дома по каждой оси внутри прямоугольника, углы — в углах.
+func test_tool_band_and_goal() -> void:
+	var tool := _tool()
+	var r: Rect2 = tool.parse_band("-75,-45,20,76")
+	eq(r, Rect2(-75, 20, 30, 56), "полоса уровней")
+	eq(EcoPred.band_goal(r, -25.0, -25.0), Vector2(-75, 20), "угол x0, z0")
+	eq(EcoPred.band_goal(r, 25.0, 25.0), Vector2(-45, 76), "угол x1, z1")
+	eq(EcoPred.band_goal(r, 0.0, 0.0), Vector2(-60, 48), "середина")
+	near(tool.to_mid_path(Vector2(-45, 80), Vector2(-45, 20)), 49.0, 1e-3, "полоса западнее пути середины на 49 м")
+	near(tool.to_mid_path(Vector2(-45, 50), Vector2(60, 50)), 0.0, 1e-3, "отрезок через путь")
+
+
+## Цели патруля серпохвоста в маленьком квадрате в углу карты (туда случайная цель почти не попадает): за 400 с
+## мира — у кого из хищников сколько.
+func _band_goals(band: Dictionary) -> Array:
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float: return -40.0
+	w.ship.pos = Vector3(400, -30, 400)
+	var fish := w.add(EcoFish.new()) as EcoFish
+	var preds := w.add(EcoPred.new(fish)) as EcoPred
+	preds.alert = EcoPred.ALERT_ON  # «замер» как в игре; корабль далеко — здесь только выбор цели
+	preds.home_band = band
+	w.reset(11)
+	var corner := Rect2(-160, -160, 1, 1)
+	var got := [0, 0, 0]
+	var was: Array[Vector3] = []
+	for pr in preds.all:
+		was.append(pr.agent.goal)
+	for i in 400 * 10:
+		w.step(0.1)
+		for pr in preds.all:
+			var g := pr.agent.goal
+			if g.distance_to(was[pr.index]) > 0.01 and corner.grow(0.01).has_point(Vector2(g.x, g.z)):
+				got[pr.index] += 1
+			was[pr.index] = g
+	return got
+
+
+## `EcoPred.home_band` берёт цели «у дома» только у своего хищника и только у своих стай; пусто — как в игре.
+func test_home_band_only_own_pred() -> void:
+	var off := _band_goals({})
+	eq(off, [0, 0, 0], "как в игре — в угол не ходит никто")
+	var on := _band_goals({0: {"homes": [0, 1, 2, 3, 4, 5], "rect": Rect2(-160, -160, 1, 1)}})
+	ok(on[0] >= 3, "№0 берёт цели у домов в полосе: %s" % str(on))
+	eq(on[1], 0, "№1 — как в игре")
+	eq(on[2], 0, "№2 — как в игре")

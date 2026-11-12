@@ -6,7 +6,7 @@ extends TestCase
 
 func _tool() -> GDScript:
 	var tool: GDScript = load("res://tools/mid_calm.gd")
-	for v in ["moves", "limit", "dark", "probe", "answer", "delay", "hold", "start0"]:
+	for v in ["moves", "limit", "dark", "probe", "answer", "delay", "hold", "start0", "band0"]:
 		ok(tool.get(v) != null, "в инструменте есть %s" % v)
 	return tool
 
@@ -20,6 +20,7 @@ func _restore(tool: GDScript) -> void:
 	tool.set("delay", tool.DELAY)
 	tool.set("hold", tool.HOLD)
 	tool.set("start0", Vector2.INF)
+	tool.set("band0", Rect2())
 
 
 func test_parse_moves() -> void:
@@ -47,14 +48,18 @@ func test_short_pass_opens_route_fern_and_reports() -> void:
 	tool.set("limit", 12.0)
 	var lines: Array[String] = tool.report(1)
 	_restore(tool)
-	eq(lines.size(), 6, "шапка, зерно, итог, угрозы середины и подхода к 01, порядок")
+	eq(lines.size(), 7, "шапка, зерно, итог, угрозы середины и подхода к 01, порядок, цели №0 против пути середины")
 	ok(lines[0].begins_with("== дома радужников"), lines[0])
 	ok(lines[1].contains("волнолист раскрыт на"), lines[1])
 	ok(lines[2].begins_with("итог: волнолист 1/1") and lines[2].contains("стая 1 —"), lines[2])
 	ok(lines[3].begins_with("угрозы в середине (зёрен из 1)") and lines[3].contains("серпохвост ближе всего"), lines[3])
 	ok(lines[4].begins_with("угрозы на подходе к 01 (зёрен из 1)"), lines[4])
 	ok(lines[5].begins_with("порядок: моллюски до первого «замера»"), lines[5])
-	ok(lines[1].contains("свет 0 → луч на волнолисте") and lines[1].contains("путь №0: старт (-60; 20)"), lines[1])
+	ok(lines[1].contains("свет 0 → луч на волнолисте") and lines[1].contains("путь №0 (при свете — ") \
+		and lines[1].contains("): старт (-60; 20)"), lines[1])
+	ok(lines[1].contains("цели №0: ") and lines[1].contains("охота на рыб"), lines[1])
+	ok(lines[0].contains("цели №0 как в игре"), lines[0])
+	ok(lines[6].begins_with("путь середины") and lines[6].contains("отрезок между целями"), lines[6])
 
 
 ## Угрозы — события шины из THREATS ближе слышимости экипажа: засада глазуна, «замер» и укус серпохвоста.
