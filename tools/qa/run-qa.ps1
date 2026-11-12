@@ -296,7 +296,9 @@ Add-Content "$run\log.txt" "run-qa: $result" -Encoding utf8
 . (Join-Path $PSScriptRoot 'kadry.ps1')
 $worstNow = Read-Worst @(if (Test-Path "$run\log.txt") { Get-Content "$run\log.txt" -Encoding utf8 })
 Write-Kadry "$run\kadry.txt" $result $worstNow
-$watch = Get-WatchLines $worstNow (Test-Quiet $result) (Read-Past "$repo\qa") (Get-IssueSteps @($worstNow.Keys))
+# Отчёты открытых PR qa/* (ещё не в main) — тоже в счёт (#1350, 11.11)
+$prQa = try { Export-QaBranches $repo 'D:\AI\qa-build\qa-pr' } catch { Write-Warning "qa/* открытых PR не прочитаны: $_"; $null }
+$watch = Get-WatchLines $worstNow (Test-Quiet $result) (Read-Past @("$repo\qa", $prQa)) (Get-IssueSteps @($worstNow.Keys))
 foreach ($w in $watch) { Write-Output $w; Add-Content "$run\log.txt" "run-qa: $w" -Encoding utf8 }
 # Заметная строка в самом конце: прогон не дошёл до конца или не все снимки забраны (#1533)
 if (-not $done -or $miss) {
