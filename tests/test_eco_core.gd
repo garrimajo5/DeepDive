@@ -307,11 +307,11 @@ func test_view_steps_world() -> void:
 	var ship := EcoLink.ShipState.new()
 	ship.pos = Vector3(0, -15, 0)
 	ship.sonar_ping = true
-	for i in 300:
+	for i in 60:   # 2 с мира всех видов (было 10 с, #1350): время и подшаги проверяются так же
 		view.step(1.0 / 30.0, ship)
 		ship.sonar_ping = false
-	near(view.world.time, 10.0, 1e-3, "мир идёт со сценой")
-	eq(view.world.steps, 300, "кадр 1/30 с — один подшаг")
+	near(view.world.time, 2.0, 1e-4, "мир идёт со сценой")
+	eq(view.world.steps, 60, "кадр 1/30 с — один подшаг")
 	near(view.world.last_ping, 0.0, 1e-9, "импульс сонара отмечен")
 	ok(view.world.ship == ship, "мир видит корабль")
 	view.free()
