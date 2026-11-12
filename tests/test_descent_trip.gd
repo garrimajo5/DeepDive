@@ -74,11 +74,22 @@ func test_scene_prefetch_while_voting_at_ten() -> void:
 	var back := DescentTrip.return_spot()
 	var worst := 0
 	var stay := main.helm.pos
+	var ready_cells := 0
+	var after := -1   # готово ≈ на 75-м шаге из 300: ещё 10 шагов «даром» — и хватит (здоровье тестов, #1350)
 	for i in 300:
 		main.helm.pos = stay   # корабль стоит: своя россыпь не считает, всё — заготовка
 		var done := main.ocean.scatter_cells()
 		main.step(1.0 / 30.0)
 		worst = maxi(worst, main.ocean.scatter_cells() - done)
+		if after < 0 and main.ocean.prefetch(back):
+			after = 10
+			ready_cells = main.ocean.scatter_cells()
+		elif after > 0:
+			after -= 1
+		elif after == 0:
+			break
+	ok(after == 0, "заготовка досчиталась за 300 шагов")
+	eq(main.ocean.scatter_cells(), ready_cells, "готово — дальше шаг даром")
 	ok(worst <= SeabedStones.CELLS_STEP, "за шаг клеток не больше CELLS_STEP: %d" % worst)
 	for v in main.ocean.scatters():
 		ok(v.complete(back), "к решению клетки у места возвращения в кэше: %s" % v.get_script().get_global_name())
