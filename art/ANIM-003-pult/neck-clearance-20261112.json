@@ -1,0 +1,72 @@
+[
+  {
+    "sex": "muzhchina",
+    "neck_rad": -0.6,
+    "surface_clearance": 0.13492004573345184
+  },
+  {
+    "sex": "muzhchina",
+    "neck_rad": -0.4,
+    "surface_clearance": 0.13492004573345184
+  },
+  {
+    "sex": "muzhchina",
+    "neck_rad": -0.2,
+    "surface_clearance": 0.11756908893585205
+  },
+  {
+    "sex": "muzhchina",
+    "neck_rad": 0,
+    "surface_clearance": 0.08169732242822647
+  },
+  {
+    "sex": "muzhchina",
+    "neck_rad": 0.2,
+    "surface_clearance": 0.052542850375175476
+  },
+  {
+    "sex": "muzhchina",
+    "neck_rad": 0.4,
+    "surface_clearance": 0.026605436578392982
+  },
+  {
+    "sex": "muzhchina",
+    "neck_rad": 0.6,
+    "surface_clearance": 0.02457944117486477
+  },
+  {
+    "sex": "zhenshchina",
+    "neck_rad": -0.6,
+    "surface_clearance": 0.14868418872356415
+  },
+  {
+    "sex": "zhenshchina",
+    "neck_rad": -0.4,
+    "surface_clearance": 0.13663259148597717
+  },
+  {
+    "sex": "zhenshchina",
+    "neck_rad": -0.2,
+    "surface_clearance": 0.11116596311330795
+  },
+  {
+    "sex": "zhenshchina",
+    "neck_rad": 0,
+    "surface_clearance": 0.08632108569145203
+  },
+  {
+    "sex": "zhenshchina",
+    "neck_rad": 0.2,
+    "surface_clearance": 0.059335339814424515
+  },
+  {
+    "sex": "zhenshchina",
+    "neck_rad": 0.4,
+    "surface_clearance": 0.06090793013572693
+  },
+  {
+    "sex": "zhenshchina",
+    "neck_rad": 0.6,
+    "surface_clearance": 0.06111558899283409
+  }
+]
