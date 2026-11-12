@@ -1888,7 +1888,7 @@ func alarms_on() -> Array[bool]:
 ## Ряды строки приборов, не больше трёх строк (#1345): 1 — где я · глубина · ход · корпус · энергия; 2 — данные поста
 ## (за штурвалом: до дна · курс · прожектор · реактор, течение — только сильное; на палубе: маршрут · реактор · шлюз);
 ## 3 — тревога и сообщение. Подписи постов здесь нет — они на кнопке действия; цель за штурвалом — в плашке (#1344).
-## Пробоина и перегрев говорят «куда» и «что делать» по месту игрока (`AlarmWay`, #1361); сообщение во время
+## Пробоина, перегрев, присоска и ил говорят «куда» и «что делать» по месту игрока (`AlarmWay`, #1361, #1709); сообщение во время
 ## тревоги не клеится к ней — на свои секунды встаёт рядом 2 вместо данных поста.
 func status_rows() -> Array:
 	var room := ShipLayout.room_at(walker.z)
@@ -1909,8 +1909,8 @@ func status_rows() -> Array:
 	if not airlock.closed():
 		row2.append("шлюз открыт" if airlock.fully_open() else "шлюз в движении")
 	var row3: Array = []
-	var alarm := Status.alarm([AlarmWay.breach_line(breach, room), vitals.drain_alarm(),
-		AlarmWay.heat_line(reactor, room), silt.alarm(), vitals.warning()])
+	var alarm := Status.alarm([AlarmWay.breach_line(breach, room), AlarmWay.drain_line(vitals, room, _at_lever()),
+		AlarmWay.heat_line(reactor, room), AlarmWay.silt_line(silt, helm.pos, room), vitals.warning()])
 	if not alarm.is_empty():
 		row3.append(alarm)
 		if message.visible():
@@ -1918,6 +1918,14 @@ func status_rows() -> Array:
 	elif message.visible():
 		row3.append(message.text)
 	return [row1, row2, row3]
+
+
+## Свой игрок у рычага разряда: кнопка действия сейчас «Разряд» (строка присоски, #1709).
+func _at_lever() -> bool:
+	if pilot.seated or at_power or at_vote:
+		return false
+	var post := Deck.nearest(posts, walker.x, walker.z)
+	return post != null and post.id == "zap"
 
 
 ## Все части строки приборов подряд (лог, тесты): ряды `status_rows` один за другим.

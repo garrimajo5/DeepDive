@@ -94,7 +94,7 @@ func alarm_step(dt: float) -> void:
 	var p: AlarmWay.Pointer = null
 	if not hidden:
 		p = AlarmWay.pointer(m.breach, m.reactor, ShipLayout.room_at(m.walker.z), m.crew.size() == 1,
-			m.tutorial.active())
+			m.tutorial.active(), m.vitals)
 	m.alarm_pointer = p
 	if p == null:
 		m.alarm_pointer_panel.show_way(null, [], Rect2(), null)

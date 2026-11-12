@@ -191,7 +191,7 @@ func test_scene_pilot_status_three_lines() -> void:
 	var rows := main.status_rows()
 	eq(rows.size(), 3, "три ряда")
 	eq(str(rows[0][0]), "За штурвалом", "якорь «где я» — первым")
-	eq(rows[2][0], Silt.ALARM, "тревога — в третьем ряду")
+	ok(str(rows[2][0]).begins_with(AlarmWay.SILT_HEAD + " · выход: "), "тревога — в третьем ряду: %s" % [rows[2]])
 	ok(main.hint.text.split("\n").size() <= 3, "на экране ≤ 3 строк:\n%s" % main.hint.text)
 	main.queue_free()
 	await frames(1)

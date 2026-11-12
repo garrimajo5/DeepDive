@@ -134,7 +134,7 @@ func test_scene_eco_hits_and_drain() -> void:
 		main.step(1.0)
 	ok(main.vitals.energy < e0 - 1.0, "стеклоуст тянет заряд")
 	var line := Status.join(main.status_parts())
-	ok(str(main.status_rows()[2][0]).begins_with("Стеклоуст на корпусе пьёт энергию"), "тревога первой в ряду сообщений: " + line)
+	ok(str(main.status_rows()[2][0]).begins_with("СТЕКЛОУСТ ПЬЁТ ЗАРЯД · "), "тревога первой в ряду сообщений: " + line)
 	ok(main.drain_sound.playing, "шипит тревога присоски")
 	eq(main.drain_hisses, 2, "шаги по 1 с: шипит сразу и на втором шаге")
 	var seen := {}
