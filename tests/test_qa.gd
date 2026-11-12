@@ -135,6 +135,7 @@ func test_scene_runs_scenario() -> void:
 	var task_say := ""   # 35-zadacha-07 (#1635, отчёт 11.11 12:19): строка 3 — задача места, не «Вы за штурвалом»
 	var zamer: Array[String] = []   # 38/38a (#1498): режим хищника 0 и строка приборов на кадрах «замер» и «потерял»
 	var zamer_hull: Array[float] = []   # 38 → 38a: удара нет
+	var helm_silt := ""   # 39-shturval-il (#1708): за штурвалом в иле — ил, сидим, рамки у колеса нет
 	var ogon: Array[String] = []   # 36/36a/36b (#1401): спрятано венчиков у куста огнецвета 0 и его свечение по кадрам
 	ok(not main.lore.knows(LayerLore.FIELD08), "до прогона поле 08 не замечено")
 	for i in scene_frames(qa.script_q):   # предел — от длины сценария (#1379)
@@ -180,6 +181,8 @@ func test_scene_runs_scenario() -> void:
 		var dome_at := main.eco.dome.t
 		var say_now := main.message.text
 		var pred_mode: String = EcoPred.Mode.keys()[main.eco.preds.all[0].mode]
+		var silt_line := "ил %s, сидит %s, рамка %s" % [main.silt.inside != null, main.pilot.seated,
+				main.alarm_board.hint.visible]
 		main.step(1.0 / 30.0)
 		no_answer = no_answer or (main.address.open and main.address.hint() == AddressScreen.NO_ANSWER)
 		sat = sat or main.pilot.seated
@@ -213,6 +216,8 @@ func test_scene_runs_scenario() -> void:
 				zamer.append("%s: %s" % [qa.log_lines[k].split(" ")[1].trim_suffix(":"), pred_mode])
 				zamer.append(say_now)
 				zamer_hull.append(main.vitals.hull)
+			if qa.log_lines[k].begins_with("скриншот 39-shturval-il"):
+				helm_silt = silt_line
 			if qa.log_lines[k].begins_with("скриншот 35-zadacha-07"):
 				task_say = say_now
 			if qa.log_lines[k].begins_with("скриншот 36"):
@@ -262,6 +267,8 @@ func test_scene_runs_scenario() -> void:
 		eq(zamer[2], "38a-zamer-poteryal: RETREAT", "38a (#1498): свет погас — хищник отходит")
 		ok(zamer[3].contains("потерял корабль и отворачивает"), "38a: на приборах строка отхода: «%s»" % zamer[3])
 		ok(zamer_hull[1] >= zamer_hull[0], "38 → 38a: удара нет: корпус %.2f → %.2f" % [zamer_hull[0], zamer_hull[1]])
+	eq(helm_silt, "ил true, сидит true, рамка false",
+			"39-shturval-il (#1708): корабль в иле, свой игрок за штурвалом, рамка-подсказка у колеса скрыта")
 	ok(not main.pilot.seated, "и встали")
 	ok(ahead > 20.0, "корабль прошёл вперёд: %.1f м" % ahead)
 	ok(FileAccess.file_exists(QaRunner.OUT + "/done.txt"), "done.txt записан")

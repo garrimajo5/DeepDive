@@ -154,15 +154,12 @@ func _initialize() -> void:
 
 
 func _go() -> void:
-	var args := OS.get_cmdline_user_args()
-	var out := "shot.png"
-	var kv := {}
-	for a in args:
-		if a.contains("="):
-			var p := a.split("=", true, 1)
-			kv[p[0]] = p[1]
-		else:
-			out = a
+	var parsed := ShotSetup.parse_args(OS.get_cmdline_user_args())
+	var out: String = parsed["out"]
+	var kv: Dictionary = parsed["kv"]
+	for a: String in parsed["stray"]:   # флаг Godot после «--» — не ключ снимка, кадр снят без него
+		print("ВНИМАНИЕ: «%s» после «--» — флаг Godot, не ключ снимка: ставь его до «--» (кадр — %s)" % [a,
+				str(root.get_visible_rect().size)])
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	await process_frame

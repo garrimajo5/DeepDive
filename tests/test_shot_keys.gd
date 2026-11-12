@@ -57,3 +57,19 @@ func test_parsers() -> void:
 	var c := code_keys("if kv.has(\"a\"): kv.get(\"b\", \"0\") + kv[\"c\"]\nx = \"menu=1\" in args")
 	eq(c.keys().size(), 4)
 	ok(c.has("a") and c.has("b") and c.has("c") and c.has("menu"), "все виды чтения")
+
+
+func test_parse_args_flags_after_dashes() -> void:   # #1350, 12.11: «--resolution» после «--» снимал 1600×720 молча
+	var setup = load("res://tools/shot_setup.gd")
+	var p: Dictionary = setup.parse_args(PackedStringArray(["out.png", "silt=1", "pilot=1"]))
+	eq(p["out"], "out.png")
+	eq(p["kv"], {"silt": "1", "pilot": "1"})
+	eq(p["stray"], [] as Array[String], "без флагов — предупреждать нечего")
+	p = setup.parse_args(PackedStringArray(["out.png", "--resolution", "1280x720", "z=-3"]))
+	eq(p["out"], "out.png", "значение флага не становится именем файла")
+	eq(p["kv"], {"z": "-3"})
+	eq(p["stray"], ["--resolution 1280x720"] as Array[String], "флаг со значением — в предупреждение")
+	p = setup.parse_args(PackedStringArray(["--rendering-method=gl_compatibility", "a.png"]))
+	eq(p["out"], "a.png")
+	eq(p["stray"], ["--rendering-method=gl_compatibility"] as Array[String])
+	eq(p["kv"], {}, "флаг с «=» — не ключ снимка")
