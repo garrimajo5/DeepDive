@@ -137,6 +137,59 @@ func test_glazun_grabs_coin_overhead() -> void:
 	near(EcoCoins.glazun_transform(gz).origin.y, gz.pos.y + 0.35 * EcoCoins.lunge_k(gz), 1e-5, "тело приподнято по позе")
 
 
+## Строка засады на приборах — раз за эпизод наблюдения (гейм-дизайнер, #1400, 12.11): повтор раньше
+## EcoWorld.ONCE_GAP с идёт OBSERVE без текста (журнал тот же), позже — снова со строкой. Глаза в луче — не трогаем.
+func _ambush_texts(w: EcoWorld) -> Array[String]:
+	var out: Array[String] = []
+	for e in w.take_link():
+		if e["type"] == EcoLink.OBSERVE and e["species"] == EcoCoins.GLAZUN:
+			out.append("%s:%s" % [e["note"], e["text"]])
+	return out
+
+
+func _grab(w: EcoWorld) -> void:
+	var sc := _coins(w).schools[0]
+	var gz := sc.glazun
+	gz.cd = 0.0
+	for cn in sc.members:
+		if cn.alive:
+			cn.pos = gz.pos + Vector3(0.3, 1.0, 0)
+			cn.goal = cn.pos
+			cn.goal_t = 10.0
+			break
+	w.step(0.02)
+
+
+func test_ambush_line_once_per_episode() -> void:
+	var w := _world()
+	w.ship.pos = SPOTS[0] + Vector3(0, 7, 20)
+	_grab(w)
+	eq(_ambush_texts(w), ["ambush:Из песка что-то схватило круглую рыбку"] as Array[String], "первая — со строкой")
+	w.time += 20.0
+	_grab(w)
+	eq(_ambush_texts(w), ["ambush:"] as Array[String], "повтор через 20 с — без строки, но в журнал")
+	w.time += EcoWorld.ONCE_GAP - 1.0
+	_grab(w)
+	eq(_ambush_texts(w), ["ambush:"] as Array[String], "повторы продлевают эпизод")
+	w.time += EcoWorld.ONCE_GAP + 1.0
+	_grab(w)
+	eq(_ambush_texts(w), ["ambush:Из песка что-то схватило круглую рыбку"] as Array[String], "новый эпизод — снова")
+	# Глаза в луче и чужие строки повтор не гасит.
+	var eyes := func() -> String: return "два глаза"
+	for i in 2:
+		w.bus.emit(EcoCoins.GLAZUN, "eyes", w.ship.pos, eyes)
+	eq(_ambush_texts(w), ["eyes:два глаза", "eyes:два глаза"] as Array[String], "глаза — каждый раз")
+	# Неуслышанная засада (дальше EcoBus.HEARING) эпизод не начинает.
+	w.reset(1)
+	w.ship.pos = SPOTS[0] + Vector3(0, 7, EcoBus.HEARING + 20.0)
+	_grab(w)
+	eq(_ambush_texts(w).size(), 0, "далеко — не слышно")
+	w.ship.pos = SPOTS[0] + Vector3(0, 7, 20)
+	w.time += 5.0
+	_grab(w)
+	eq(_ambush_texts(w), ["ambush:Из песка что-то схватило круглую рыбку"] as Array[String], "подплыли — строка")
+
+
 ## Бросок из песка — за EcoCoins.RISE, а не за кадр: высота тела за кадр меняется не больше наклона smoothstep, тело
 ## доходит до 0,35 м и опадает вместе с lunge (раньше 0 → 0,35 м и 0,4 рад за один шаг, tools/jerk.gd).
 func test_glazun_lunge_rises_without_snap() -> void:
