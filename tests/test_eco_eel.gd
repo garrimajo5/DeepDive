@@ -523,12 +523,17 @@ func test_same_seed_same_story() -> void:
 		var eels := w.add(EcoEel.new(g, f)) as EcoEel
 		w.ship.yaw = PI
 		w.ship.pos = eels.eels[0].lair + Vector3(0, 5, -12) - EcoEel.FRONT.rotated(Vector3.UP, PI)
-		w.run(40.0, 0.1)
+		# Стеклоуст выходит из логова к ~18 с и к ~19 с присасывается (TO_SHIP → LATCHED): 22 с хватает всей истории,
+		# прежние 40 с — ещё 21 с на присоске без нового (#1350, CI 3,1 с).
+		w.run(22.0, 0.1)
+		eq(eels.eels[0].mode, EcoEel.Mode.LATCHED, "история случилась: стеклоуст вышел и присосался")
 		var s := []
 		for e in eels.eels:
 			s.append([e.mode, e.agent.p])
+		for a in w.agents:
+			s.append(a.p)
 		runs.append(s)
-	eq(runs[0], runs[1], "мир повторяется")
+	eq(runs[0], runs[1], "мир повторяется — стеклоуст, рыбы и скребуны")
 
 
 # ---------- Сцена ----------
