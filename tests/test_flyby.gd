@@ -92,17 +92,17 @@ func test_scene_intro_ends_and_surface_view() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(2)
-	for i in int(Flyby.START_S * 30.0) + 2:
-		main.step(1.0 / 30.0)
+	for i in int(Flyby.START_S * 10.0) + 2:   # шаг 0,1 с: облёт идёт по времени, не по кадрам (втрое меньше шагов, #1350)
+		main.step(0.1)
 	ok(not main.flyby.active() and main.camera.current, "облёт кончился сам — глаза на мостике")
 	main.decide("up")
 	main.step(1.0 / 30.0)
 	ok(main.flyby.kind == Flyby.Kind.SURFACE and main.flyby_cam.current, "наверх — вид с борта при всплытии")
-	for i in 30:
-		main.step(1.0 / 30.0)
+	for i in 10:
+		main.step(0.1)
 	ok(main.flyby.active(), "сначала — вид с борта")
-	for i in int((Flyby.SURFACE_S + Flyby.SURFACE_HOLD) * 30.0):
-		main.step(1.0 / 30.0)
+	for i in int((Flyby.SURFACE_S + Flyby.SURFACE_HOLD) * 10.0):
+		main.step(0.1)
 	ok(not main.flyby.active() and main.camera.current, "вид с борта кончился сам — глаза на мостике (issue #209)")
 	ok(main.run.ended, "забег ещё на итоге")
 	main.close_vote()
@@ -131,8 +131,8 @@ func test_scene_no_breach_during_intro() -> void:   # issue #506
 	main.on_eco_event({"type": EcoLink.HIT, "damage": 0.12, "by": "Серпохвост"})
 	eq(main.vitals.hull, hull, "удар во время облёта не снял корпус")
 	ok(main.breach.active == null, "пробоины нет")
-	for i in int(Flyby.START_S * 30.0) + 2:
-		main.step(1.0 / 30.0)
+	for i in int(Flyby.START_S * 10.0) + 2:   # шаг 0,1 с: облёт идёт по времени, не по кадрам (втрое меньше шагов, #1350)
+		main.step(0.1)
 	ok(not main.flyby.active(), "облёт кончился")
 	main.on_eco_event({"type": EcoLink.HIT, "damage": 0.12, "by": "Серпохвост"})
 	ok(main.vitals.hull < hull, "после облёта удар доходит")
