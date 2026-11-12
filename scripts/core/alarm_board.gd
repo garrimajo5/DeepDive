@@ -160,7 +160,9 @@ const HINT_BREACH_SIZE := Vector2(1.0, 1.0)
 
 
 ## Рамка для главного поля main (−1 — нет тревог) или null. breach_spot — открытая пробоина (`Breach.active`).
-static func hint(main: int, breach_spot: Breach.Spot) -> Hint:
+## seated — свой игрок за штурвалом: рамка у поста — для тех, кто к нему идёт, у пилота она в ближней плоскости
+## камеры и ложится полосой поперёк окна (#1708), поэтому для него рамки ила нет. У товарищей — своя рамка.
+static func hint(main: int, breach_spot: Breach.Spot, seated := false) -> Hint:
 	match main:
 		Field.BREACH:
 			if breach_spot == null:
@@ -172,6 +174,8 @@ static func hint(main: int, breach_spot: Breach.Spot) -> Hint:
 			var h := BridgeProps.HATCH_POS
 			return Hint.new(Vector3(h.x, HINT_HATCH_SIZE.y * 0.5, h.z - HINT_HATCH_GAP), HINT_HATCH_SIZE, Vector3.FORWARD)
 		Field.SILT:
+			if seated:
+				return null
 			return Hint.new(Vector3(0.0, BridgeProps.WHEEL_Y, BridgeProps.WHEEL_Z + 0.2), HINT_WHEEL_SIZE, Vector3.BACK)
 		Field.CHARGE:
 			var e := BridgeProps.ENERGY_POS

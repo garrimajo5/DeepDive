@@ -143,6 +143,39 @@ func test_scene_hint() -> void:
 	await frames(1)
 
 
+## issue #1708: в иле рамка у штурвала — для тех, кто к нему идёт; у своего пилота её нет (была полосой поперёк окна).
+func test_silt_hint_hidden_for_own_pilot() -> void:
+	eq(AlarmBoard.hint(AlarmBoard.Field.SILT, null, true), null, "пилоту — рамки ила нет")
+	ok(AlarmBoard.hint(AlarmBoard.Field.SILT, null, false) != null, "стоящему — есть")
+	ok(AlarmBoard.hint(AlarmBoard.Field.CHARGE, null, true) != null, "пульт энергии у пилота — как был")
+	ok(AlarmBoard.hint(AlarmBoard.Field.BREACH, Breach.spots()[0], true) != null, "пробоина у пилота — как была")
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.step(0.1)
+	main.open_silt()
+	main.step(0.1)
+	var hint := main.alarm_board.hint
+	eq(AlarmBoard.main_field(main.alarms_on()), AlarmBoard.Field.SILT, "главная тревога — ил")
+	ok(hint.visible, "стоит на мостике — рамка у штурвала видна")
+	main.walker.x = 0.6
+	main.walker.z = Deck.CHAIR_Z + 0.9
+	main.step(1.0 / 30.0)
+	main.use_post("helm")
+	ok(main.pilot.seated, "сел за штурвал")
+	main.step(0.1)
+	ok(not hint.visible, "за штурвалом — рамки нет")
+	main.stand_up()
+	ok(not main.pilot.seated, "встал")
+	main.step(0.1)
+	ok(hint.visible, "встал — рамка снова видна")
+	main.add_mate(0.0, Deck.SEAT_Z, 0.0, Crew.Role.SONAR, 0, true)
+	main.step(0.1)
+	ok(hint.visible, "за штурвалом товарищ — у своего игрока рамка видна")
+	main.queue_free()
+	await frames(1)
+
+
 ## issue #349: нажал сонар, сразу перешёл к окну — фигура не тянется руками к столу через мостик, глаз не опущен
 ## поклоном, и табло к 0,3 с снова под плашкой приборов (как в шаге 09b2-silt-okno сценария тестера).
 func test_board_after_leaving_sonar() -> void:

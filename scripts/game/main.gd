@@ -924,7 +924,7 @@ func _step_view(dt: float) -> void:
 	clock.lap("виды/ползунки и люк", Time.get_ticks_usec())
 	sonar_view.show_state(sonar, helm.pos, helm.yaw, time, reactor.k(Reactor.Sys.SONAR) > 0.0, silt.noise(time))
 	sonar_view.show_waypoint(run.waypoint())
-	alarm_board.show_alarms(alarms_on(), time, breach.active)
+	alarm_board.show_alarms(alarms_on(), time, breach.active, pilot.seated)
 	sonar_view.show_briefing(brief.update(dt, Briefing.wanted(near_post, at_vote, run.ended)), run, helm.pos)
 	var coop := vote_ids().size() > 1   # таймер — только у голосов игроков (Ballot), в одиночной игре его нет
 	sonar_view.show_vote(vote_fade.update(dt, VoteHolo.wanted(at_vote, run.ended)), vote_marks(),

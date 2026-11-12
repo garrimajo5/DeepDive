@@ -253,7 +253,7 @@ func client_step(dt: float) -> void:
 	main.sonar_view.show_state(main.sonar, main.helm.pos, main.helm.yaw, main.time, main.reactor.k(Reactor.Sys.SONAR) > 0.0, main.silt.noise(main.time))
 	client_eco(dt, near)
 	main.visor.visible = main.me.welding()
-	main.alarm_board.show_alarms(main.alarms_on(), main.time, main.breach.active)
+	main.alarm_board.show_alarms(main.alarms_on(), main.time, main.breach.active, main.pilot.seated)
 	client_run_view(dt)
 	var live := not (main.wreck.active() or main.drop.blocks())   # ввод, который ушёл хосту
 	for ev in main.tutorial_guest.update(dt, main.pilot.seated, main.at_power, main.near_post, Vector2(r.move) if live else Vector2.ZERO,

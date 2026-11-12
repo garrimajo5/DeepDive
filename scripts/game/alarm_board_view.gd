@@ -68,8 +68,9 @@ func _ready() -> void:
 
 
 ## Состояние полей: on — активные тревоги по порядку AlarmBoard.Field, t — время игры (мигание главной).
-## breach_spot — открытая пробоина (к ней ведёт рамка, если главная тревога — пробоина).
-func show_alarms(on: Array[bool], t: float, breach_spot: Breach.Spot = null) -> void:
+## breach_spot — открытая пробоина (к ней ведёт рамка, если главная тревога — пробоина); seated — свой игрок
+## за штурвалом (рамки у штурвала ему не видно, #1708).
+func show_alarms(on: Array[bool], t: float, breach_spot: Breach.Spot = null, seated := false) -> void:
 	levels = AlarmBoard.levels(on, t)
 	if mat:
 		var arr := PackedVector2Array()
@@ -77,7 +78,7 @@ func show_alarms(on: Array[bool], t: float, breach_spot: Breach.Spot = null) -> 
 			arr.append(v)
 		mat.set_shader_parameter("lv", arr)
 	if hint:
-		_show_hint(AlarmBoard.hint(AlarmBoard.main_field(on), breach_spot), AlarmBoard.hint_glow(on, t))
+		_show_hint(AlarmBoard.hint(AlarmBoard.main_field(on), breach_spot, seated), AlarmBoard.hint_glow(on, t))
 
 
 func _show_hint(h: AlarmBoard.Hint, glow: float) -> void:
