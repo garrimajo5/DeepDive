@@ -184,6 +184,10 @@ var plankton: EcoPlankton
 var _rnd: EcoRandom
 ## Проба расстановки #1400 (QUIET, ARC): ставить до reset мира.
 var probe := false
+## Проба целей патруля #1400 (уровни и гейм-дизайнер, 12.11, вариант 1): номер серпохвоста → {"homes": [номера стай
+## светляков], "rect": Rect2 по x, z}. Цель «у дома» этих стай он берёт не в ±25 м от дома, а в прямоугольнике rect
+## (те же два числа случайности — остальной мир не сдвигается). Пусто — как в игре; ставит tools/mid_calm.gd `band0=`.
+var home_band := {}
 ## Длина фазы «замер» перед броском на манящий корабль, с (#1498: 4 с по гейм-дизайнеру); 0 — бросок сразу (до #1498).
 var alert := ALERT_ON
 ## Сколько секунд после «потерял корабль» хищник отходит прочь (RETREAT, #1498: 20 с); 0 — сразу патруль рядом.
@@ -380,6 +384,11 @@ static func reef_edge(axis: Vector3, from: Vector3, r: float) -> Vector3:
 
 
 ## Цель за кольцом рифа: внутри кольца keep — вынесена на кольцо по горизонтали.
+## Цель в прямоугольнике rect (x, z) по сдвигу от дома dx, dz ∈ [−25; 25] — та же доля по каждой оси (`home_band`).
+static func band_goal(rect: Rect2, dx: float, dz: float) -> Vector2:
+	return rect.position + rect.size * Vector2(clampf((dx + 25.0) / 50.0, 0.0, 1.0), clampf((dz + 25.0) / 50.0, 0.0, 1.0))
+
+
 static func outside_reef(axis: Vector3, g: Vector3, keep: float) -> Vector3:
 	if not axis.is_finite() or _flat_dist(g, axis) >= keep:
 		return g
@@ -713,9 +722,15 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 					gx = g2.x + _rnd.range_f(-ARC_JITTER, ARC_JITTER)
 					gz = g2.y + _rnd.range_f(-ARC_JITTER, ARC_JITTER)
 				elif fish and fish.shoals.size() > 0 and _rnd.chance(0.6):
-					var h: Vector3 = (_rnd.pick(fish.shoals) as EcoFish.Shoal).home
+					var sh: EcoFish.Shoal = _rnd.pick(fish.shoals)
+					var h: Vector3 = sh.home
 					gx = h.x + _rnd.range_f(-25, 25)
 					gz = h.z + _rnd.range_f(-25, 25)
+					var band: Dictionary = home_band.get(pr.index, {})
+					if not band.is_empty() and sh.index in (band["homes"] as Array):
+						var gb := band_goal(band["rect"], gx - h.x, gz - h.z)
+						gx = gb.x
+						gz = gb.y
 				else:
 					gx = _rnd.range_f(-170, 150)
 					gz = _rnd.range_f(-170, 150)
