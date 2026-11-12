@@ -136,6 +136,7 @@ func test_scene_runs_scenario() -> void:
 	var zamer: Array[String] = []   # 38/38a (#1498): режим хищника 0 и строка приборов на кадрах «замер» и «потерял»
 	var zamer_hull: Array[float] = []   # 38 → 38a: удара нет
 	var helm_silt := ""   # 39-shturval-il (#1708): за штурвалом в иле — ил, сидим, рамки у колеса нет
+	var corridor: Array[String] = []   # 40/40a (#1722): из коридора при тревоге на мостике люк и указатель в кадре
 	var ogon: Array[String] = []   # 36/36a/36b (#1401): спрятано венчиков у куста огнецвета 0 и его свечение по кадрам
 	ok(not main.lore.knows(LayerLore.FIELD08), "до прогона поле 08 не замечено")
 	for i in scene_frames(qa.script_q):   # предел — от длины сценария (#1379)
@@ -183,6 +184,13 @@ func test_scene_runs_scenario() -> void:
 		var pred_mode: String = EcoPred.Mode.keys()[main.eco.preds.all[0].mode]
 		var silt_line := "ил %s, сидит %s, рамка %s" % [main.silt.inside != null, main.pilot.seated,
 				main.alarm_board.hint.visible]
+		var way := main.alarm_pointer
+		var way_line := "нет указателя"
+		if way != null:
+			var hatch := Vector3(0.0, ShipLayout.DOOR_H * 0.5, AlarmWay.wall_span(way.door).y)
+			way_line = "%s, отсек %s, люк %s, указатель %s" % [way.label(), AlarmWay.ROOMS[ShipLayout.room_at(main.walker.z)],
+					"в кадре" if cam.is_position_in_frustum(main.ship.to_global(hatch)) else "не в кадре",
+					"в кадре" if cam.is_position_in_frustum(main.ship.to_global(way.anchor)) else "не в кадре"]
 		main.step(1.0 / 30.0)
 		no_answer = no_answer or (main.address.open and main.address.hint() == AddressScreen.NO_ANSWER)
 		sat = sat or main.pilot.seated
@@ -218,6 +226,8 @@ func test_scene_runs_scenario() -> void:
 				zamer_hull.append(main.vitals.hull)
 			if qa.log_lines[k].begins_with("скриншот 39-shturval-il"):
 				helm_silt = silt_line
+			if qa.log_lines[k].begins_with("скриншот 40-koridor") or qa.log_lines[k].begins_with("скриншот 40a-koridor"):
+				corridor.append(way_line)
 			if qa.log_lines[k].begins_with("скриншот 35-zadacha-07"):
 				task_say = say_now
 			if qa.log_lines[k].begins_with("скриншот 36"):
@@ -269,6 +279,9 @@ func test_scene_runs_scenario() -> void:
 		ok(zamer_hull[1] >= zamer_hull[0], "38 → 38a: удара нет: корпус %.2f → %.2f" % [zamer_hull[0], zamer_hull[1]])
 	eq(helm_silt, "ил true, сидит true, рамка false",
 			"39-shturval-il (#1708): корабль в иле, свой игрок за штурвалом, рамка-подсказка у колеса скрыта")
+	eq(corridor, ["Стеклоуст · мостик, отсек коридор, люк в кадре, указатель в кадре",
+			"Пробоина · мостик, отсек коридор, люк в кадре, указатель в кадре"],
+			"40/40a (#1722): из коридора лицом к носу при тревоге на мостике люк и указатель над ним в кадре")
 	ok(not main.pilot.seated, "и встали")
 	ok(ahead > 20.0, "корабль прошёл вперёд: %.1f м" % ahead)
 	ok(FileAccess.file_exists(QaRunner.OUT + "/done.txt"), "done.txt записан")
