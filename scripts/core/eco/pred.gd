@@ -904,7 +904,9 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 		want = reef_steer(_reef, a.p, want)
 	a.agility = 1.6 if sharp else 1.1
 	a.swim(want, dt, SWIM_TURN, SWIM_TURN_SHARP if sharp else SWIM_TURN_MAX, SWIM_SLOW, world.ground)
-	if pr.mode != Mode.CHARGE:   # не в броске — у обшивки тормозит заранее, а не встаёт о неё за кадр
+	if pr.mode == Mode.CHARGE or world.time - pr.bit_at < STRIKE_AFTER:
+		strike_brake(a, world.ship, dt, pr.mode == Mode.CHARGE or world.ship.speed < STRIKE_SHIP)   # бросок и отход после укуса тормозят ровно, а не встают о обшивку (#1753)
+	else:   # у обшивки тормозит заранее, а не встаёт о неё за кадр
 		hull_soften(a, world.ship, dt)
 	world.push_out(a, HULL_GAP) # корпус не пускает внутрь
 
@@ -931,6 +933,50 @@ static func hull_soften(a: EcoAgent, ship: EcoLink.ShipState, dt: float) -> void
 	var vn := (a.v - sv).dot(n)
 	if vn < 0.0:
 		a.v -= n * vn * minf(1.0, HULL_SOFT_K * dt)
+
+
+## #1753: бросок (CHARGE) шёл к обшивке на 7–9,5 м/с, а после укуса `hull_soften` гасил ход внутрь с 6/с — центр
+## тела 42 м/с² (7 → 3 м/с за 0,2 с, `tools/pred_jerk.gd`), в шаг укуса — удар о обшивку до 56 м/с² (нос навстречу —
+## 184): удар «встаёт» о корпус. Теперь в броске и STRIKE_AFTER с после укуса ход относительно корабля не выше
+## sqrt(2·STRIKE_DECEL·L), где L — путь по этому ходу до обшивки (луч, STRIKE_R вперёд): тело тормозит не круче
+## STRIKE_DECEL м/с² и доходит до укуса (BITE_REACH) уже медленно, по той же кривой, что и после него, — укус
+## «с подходом», без стопа о корпус. Луч мимо обшивки — ход не трогает (проходит вдоль борта). Сошёл с кривой
+## (нос корабля сам идёт на зверя) — после укуса за шаг гасит не больше, чем `hull_soften`.
+const STRIKE_R := 8.0
+const STRIKE_DECEL := 11.0
+## Сколько секунд после укуса ход у обшивки гасит strike_brake, а не hull_soften.
+const STRIKE_AFTER := 1.5
+## Корабль быстрее (м/с) — после укуса кривую держит мягко: нос сам идёт на зверя, жёсткая кривая встала бы ударом.
+const STRIKE_SHIP := 1.0
+## Точность пути до обшивки по лучу, м.
+const STRIKE_TOL := 0.05
+
+static func strike_brake(a: EcoAgent, ship: EcoLink.ShipState, dt: float, hard: bool) -> void:
+	if not EcoHull.touches(a.p, ship.pos, ship.yaw, STRIKE_R + HULL_GAP):
+		return
+	var sv := Vector3(-sin(ship.yaw), 0.0, -cos(ship.yaw)) * ship.speed
+	var rel := a.v - sv
+	var s := rel.length()
+	if s < 1e-3:
+		return
+	var dir := rel / s
+	var lo := 0.0
+	var hi := minf(STRIKE_R, s * s / (2.0 * STRIKE_DECEL) + 0.5)  # дальше этого кривая ход не режет
+	if not EcoHull.touches(a.p + dir * hi, ship.pos, ship.yaw, HULL_GAP):
+		return   # по ходу обшивки нет (ближе, чем успел бы затормозить)
+	while hi - lo > STRIKE_TOL:
+		var m := (lo + hi) * 0.5
+		if EcoHull.touches(a.p + dir * m, ship.pos, ship.yaw, HULL_GAP):
+			hi = m
+		else:
+			lo = m
+	var cap := sqrt(2.0 * STRIKE_DECEL * lo)
+	var over := s - cap
+	if over <= 0.0:
+		return
+	if not hard:   # за шаг — не круче STRIKE_DECEL, если кривая не нарушена сильнее, и не круче hull_soften
+		over = minf(over, maxf(STRIKE_DECEL * dt, over * minf(1.0, HULL_SOFT_K * dt)))
+	a.v -= dir * over
 
 
 ## Вспышка радужников видна издалека: патрульный или проверяющий звук хищник дальше своего чутья, но ближе 110 м
