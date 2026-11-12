@@ -1,0 +1,96 @@
+{
+  "checked_main": "ecac99847f79b19113f8ad933c6bb6741d04a68c",
+  "owner_choice": "https://github.com/garrimajo5/DeepDive/issues/1719#issuecomment-6836487560",
+  "tool": "creative_save_designed_voice",
+  "results": [
+    {
+      "key": "pilot-m",
+      "candidate": 3,
+      "saved_voice_id": "ruRZj2VupLa0mYlo5SXJ"
+    },
+    {
+      "key": "pilot-f",
+      "candidate": 2,
+      "result": {
+        "view_kind": "voice_design",
+        "view_state_id": "viewstate_01m700cd3yf2qrr58v7860agqz",
+        "saved_voice_id": "aBEDcTmclOFVR8g3BS2I",
+        "saved_generated_voice_id": "aBEDcTmclOFVR8g3BS2I",
+        "saved_voice_name": "DeepDive SND009 pilot-f",
+        "saved_voice_url": "https://elevenlabs.io/app/voice-lab?voiceId=aBEDcTmclOFVR8g3BS2I"
+      }
+    },
+    {
+      "key": "sonar-m",
+      "candidate": 1,
+      "result": {
+        "view_kind": "voice_design",
+        "view_state_id": "viewstate_01m700cxvsextrt0ybbmz4pxqw",
+        "saved_voice_id": "6gj1WRBTx34niXU6kVCd",
+        "saved_generated_voice_id": "6gj1WRBTx34niXU6kVCd",
+        "saved_voice_name": "DeepDive SND009 sonar-m",
+        "saved_voice_url": "https://elevenlabs.io/app/voice-lab?voiceId=6gj1WRBTx34niXU6kVCd"
+      }
+    },
+    {
+      "key": "sonar-f",
+      "candidate": 1,
+      "result": {
+        "view_kind": "voice_design",
+        "view_state_id": "viewstate_01m700dcbvekssqh8ghvysa7xe",
+        "saved_voice_id": "Ko0sT4Srx9LnyxaI5twm",
+        "saved_generated_voice_id": "Ko0sT4Srx9LnyxaI5twm",
+        "saved_voice_name": "DeepDive SND009 sonar-f",
+        "saved_voice_url": "https://elevenlabs.io/app/voice-lab?voiceId=Ko0sT4Srx9LnyxaI5twm"
+      }
+    },
+    {
+      "key": "engineer-m",
+      "candidate": 2,
+      "result": {
+        "view_kind": "voice_design",
+        "view_state_id": "viewstate_01m700ed2rfy99nt0swajbq06b",
+        "saved_voice_id": "30RHL2K6DadEA9fglZzw",
+        "saved_generated_voice_id": "30RHL2K6DadEA9fglZzw",
+        "saved_voice_name": "DeepDive SND009 engineer-m",
+        "saved_voice_url": "https://elevenlabs.io/app/voice-lab?voiceId=30RHL2K6DadEA9fglZzw"
+      }
+    },
+    {
+      "key": "engineer-f",
+      "candidate": 3,
+      "result": {
+        "view_kind": "voice_design",
+        "view_state_id": "viewstate_01m700eve7eqz86y8cgztb07zy",
+        "saved_voice_id": "ggYSA3jFuePklOLLsw5D",
+        "saved_generated_voice_id": "ggYSA3jFuePklOLLsw5D",
+        "saved_voice_name": "DeepDive SND009 engineer-f",
+        "saved_voice_url": "https://elevenlabs.io/app/voice-lab?voiceId=ggYSA3jFuePklOLLsw5D"
+      }
+    },
+    {
+      "key": "biolog-m",
+      "candidate": 3,
+      "result": {
+        "view_kind": "voice_design",
+        "view_state_id": "viewstate_01m700fc84enrt79ws7sqdbnq9",
+        "saved_voice_id": "TRGuYuwLGF5S4HYfHIMd",
+        "saved_generated_voice_id": "TRGuYuwLGF5S4HYfHIMd",
+        "saved_voice_name": "DeepDive SND009 biolog-m",
+        "saved_voice_url": "https://elevenlabs.io/app/voice-lab?voiceId=TRGuYuwLGF5S4HYfHIMd"
+      }
+    },
+    {
+      "key": "biolog-f",
+      "candidate": 3,
+      "result": {
+        "error": "This picker already started a generation. Resuming it again would charge a second one.",
+        "error_code": "INVALID_ARGUMENT"
+      }
+    }
+  ],
+  "library_verified_count": 7,
+  "new_audio_generations": 0,
+  "balance": "unavailable",
+  "subscription": "Creator per owner; no service read tool"
+}

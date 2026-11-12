@@ -1,3 +1,16 @@
+Принимать: `audio/voice/pilot-m/kandidat-3.wav`, `audio/voice/pilot-f/kandidat-2.wav`, `audio/voice/sonar-m/kandidat-1.wav`, `audio/voice/sonar-f/kandidat-1.wav`, `audio/voice/engineer-m/kandidat-2.wav`, `audio/voice/engineer-f/kandidat-3.wav`, `audio/voice/biolog-m/kandidat-3.wav`, `audio/voice/biolog-f/kandidat-3.wav` — выбор владельца, основной пакет ещё не сдан.
+
+## 13.11.2026 — явный выбор и начало сохранения голосов
+
+Владелец выбрал набор в [#1719](https://github.com/garrimajo5/DeepDive/issues/1719#issuecomment-6836487560). Он заменяет редакционный набор по умолчанию. Проверенная база main: `ecac99847f79b19113f8ad933c6bb6741d04a68c`; ветка и старые файлы сохранены.
+
+`creative_save_designed_voice` успешно сохранил семь голосов; `creative_list_voices(search="DeepDive SND009")` подтвердил семь записей. ID, view_state_id и ответы — в `voice-save-20261113.json`. Повторно эти голоса не сохранять.
+
+Восьмой вызов, biolog-f кандидат 3 (`Sj1FsO8GTi4V4JRQz9Ik`, `viewstate_01m700fw6we39aefmsse91r68y`), вернул `INVALID_ARGUMENT`: `This picker already started a generation. Resuming it again would charge a second one.` Сохранённый voice_id не возвращён, biolog-f в списке библиотеки с названием проекта отсутствует. Это фактическая ошибка инструмента; причина не установлена. Повторный вызов и повторная генерация не выполнялись. Продолжение требует устранения ошибки сохранения или подтверждённого library voice_id именно выбранной пробы.
+
+Новых аудиогенераций: 0, новая длительность: 0 с. Баланс недоступен; запрос дополнительного инструмента чтения тарифа и кредитов вернул отсутствие такой возможности. Creator известен по решению владельца, через сервис не подтверждён. Сохранение голосов не меняет происхождение старых аудиофайлов. Основные 60 файлов, дополнительные дубли и TTS-пробы ещё не созданы. Новых технических замеров аудио и прослушивания не было.
+
+---
 # SND-009 — этап 1: кандидаты голосов
 
 Заказ: https://github.com/garrimajo5/DeepDive/issues/1476
@@ -132,3 +145,4 @@ Adult male Russian speaker with native, accent-free Russian speech. A calm profe
 | sonar-m / 3 | 40ISidUW2pCQALyfH53V | 9.169 | -20.01 | -4.27 | 880302 |
 
 Всего длительность WAV: 250.985 с. Все 24 — 48000 Гц, 1 канал, PCM16; каждый меньше 6 МБ.
+
