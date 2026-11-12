@@ -150,7 +150,7 @@ static func touches(p: Vector3, ship_pos: Vector3, yaw: float, r: float = 0.0) -
 	var l := to_ship(p, ship_pos, yaw)
 	if l.distance_to(CENTER) > REACH + r:
 		return false
-	return _shape_at(l, shapes(r)) != null
+	return touches_local(l, r)
 
 
 ## Обход корпуса (S.detour в js/ship.js): путь от p к goal (мир) проходит сквозь корпус, раздутый на r, — вернуть
