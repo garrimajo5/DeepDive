@@ -739,6 +739,12 @@ func test_hull_parts_tentacles() -> void:
 	var zone := Rect2(Vector2(minf(hb.position.x, -EcoVeil.HULL_A), minf(hb.position.z, EcoVeil.HULL_Z0 - EcoVeil.HULL_NOSE)),
 		Vector2.ZERO).expand(Vector2(maxf(hb.end.x, EcoVeil.HULL_A), maxf(hb.end.z, EcoVeil.HULL_Z1 + EcoVeil.HULL_STERN))) \
 		.grow(reach)
+	# Вершина дальше коробки деталей и сечения hull_half (оси корабля) — по построению нить как была и не в корпусе:
+	# hull_part сдвигает только точки внутри сечения. Её тоже проверяем выборкой — на остальных так быстрее (#1350).
+	var tight := hb.merge(AABB(Vector3(-EcoVeil.HULL_A, HullPlan.CENTER_Y - EcoVeil.HULL_B,
+		EcoVeil.HULL_Z0 - EcoVeil.HULL_NOSE), Vector3(2.0 * EcoVeil.HULL_A, 2.0 * EcoVeil.HULL_B,
+		EcoVeil.HULL_Z1 + EcoVeil.HULL_STERN - EcoVeil.HULL_Z0 + EcoVeil.HULL_NOSE))).grow(0.5)
+	var skipped := 0
 	var fresh := true   # prev ещё не задан (первый шаг или шаг после дальних)
 	var far_steps := 0
 	var n := int(100.0 / 6.0 / dt)
@@ -754,14 +760,22 @@ func test_hull_parts_tentacles() -> void:
 			fresh = true
 		for i in range(0, v.size(), 37 if far else 1):
 			var plain := VeilView.instance_point(v[i], uv[i], uv2[i].x, custom, vl.p, t, params, flow, 1.0, vl.drag)
+			var out := far or not tight.has_point(EcoHull.to_ship(plain, ship, yaw))
+			if out and not far and i % 37 != 0:
+				skipped += 1
+				if not fresh and plain.distance_to(prev[i]) > 1.5:
+					jump += 1
+				prev[i] = plain
+				continue
 			var got := VeilView.instance_point(v[i], uv[i], uv2[i].x, custom, vl.p, t, params, flow, 1.0, vl.drag,
 				true, ship, yaw, view.sides[int(uv[i].x)])
 			var plain_in := EcoHull.touches(plain, ship, yaw, 0.0)
-			if far:
-				if not ok(got == plain and not plain_in, "купол далеко от корпуса — нить как была: шаг %d, вершина %d" % [s, i]):
+			if out:
+				if not ok(got == plain and not plain_in, "далеко от корпуса — нить как была: шаг %d, вершина %d" % [s, i]):
 					view.queue_free()
 					return
-				continue
+				if far:
+					continue
 			if plain_in:
 				inside += 1
 			if (plain_in if got == plain else EcoHull.touches(got, ship, yaw, 0.0)):
@@ -782,6 +796,7 @@ func test_hull_parts_tentacles() -> void:
 	# рывок больше 1,5 м за кадр — только у нити, что пересекает ось корабля по высоте (корпус встречает её края по
 	# разные борта): за проход — одна вершина; с колпаками-эллипсоидами (носовая волна без конуса) — десятки
 	ok(jump <= 2, "нити за шаг не прыгают: %d вершин" % jump)
+	ok(skipped > inside, "вдали от корпуса — выборкой: %d вершин" % skipped)
 	ok(view.hull_on, "корабль у вуали — раздвигание в материале")
 	view.queue_free()
 	var custom0 := Color(EcoVeil.pulse(vl, 37.0).x, vl.ph, vl.index, vl.w / EcoVeil.PULSE_W)
