@@ -1,0 +1,42 @@
+[
+  {
+    "name": "gear-fartuk-m",
+    "body_contacts": 0,
+    "gap_max_m": 0.03509087115526199,
+    "A_outside": 138,
+    "self_before": 2384,
+    "self_after": 2297,
+    "self_A": 41,
+    "worse_poses": []
+  },
+  {
+    "name": "gear-fartuk-zh",
+    "body_contacts": 0,
+    "gap_max_m": 0.03335731476545334,
+    "A_outside": 175,
+    "self_before": 2907,
+    "self_after": 2705,
+    "self_A": 48,
+    "worse_poses": []
+  },
+  {
+    "name": "gear-tunika-m",
+    "body_contacts": 1055,
+    "gap_max_m": 0.0467413067817688,
+    "A_outside": 380,
+    "self_before": 7861,
+    "self_after": 7861,
+    "self_A": 178,
+    "worse_poses": []
+  },
+  {
+    "name": "gear-tunika-zh",
+    "body_contacts": 740,
+    "gap_max_m": 0.04386574774980545,
+    "A_outside": 514,
+    "self_before": 13724,
+    "self_after": 13596,
+    "self_A": 253,
+    "worse_poses": []
+  }
+]
