@@ -246,6 +246,43 @@ func test_pred_loses_fish_in_ink() -> void:
 	eq(_notes(w, EcoCushion.ID, "hide").size(), 1, "раз в 30 с")
 
 
+## #1753: охоту, сорванную укрытием, хищник не меняет тут же на соседнего светляка: весь патруль (4–8 с) не ищет
+## добычу, хоть голоден и светляк рядом на виду. Раньше брал нового через 0,25 с — ход и волна хвоста перескакивали
+## «охота ↔ патруль» каждые 1–5 с.
+func test_lost_hunt_rests_before_next() -> void:
+	var w := _pred_world()
+	var c := _cushions(w)
+	var cu := c.cushions[0]
+	var pr := _preds(w).all[0]
+	var fish := w.systems[0] as EcoFish
+	var prey: EcoFish.Fish = fish.all[0]
+	var other: EcoFish.Fish = fish.all[1]
+	pr.hunger = 0.9
+	pr.mode = EcoPred.Mode.HUNT
+	pr.agent.timer = 12.0
+	pr.prey = prey
+	c.squeeze(w, cu, false)
+	prey.agent.p = cu.ink_c
+	w.step(EcoWorld.MAX_STEP)
+	eq(pr.mode, EcoPred.Mode.PATROL, "светляк в чернилах — охота сорвана")
+	var rest := pr.agent.timer
+	ok(rest >= 4.0 - 0.1 and rest <= 8.0, "патруль 4–8 с")
+	var t := 0.0
+	var first := -1.0
+	while t < 12.0:
+		other.agent.p = pr.agent.p + Vector3(6, 0, 0)  # соседний светляк всё время на виду, вне чернил
+		other.agent.v = Vector3.ZERO
+		pr.hunger = 0.9
+		w.step(EcoWorld.MAX_STEP)
+		t += EcoWorld.MAX_STEP
+		if pr.mode == EcoPred.Mode.HUNT:
+			first = t
+			break
+	ok(first > 0.0, "после отдыха охотится снова")
+	ok(first >= rest - 0.1, "новая охота не раньше конца патруля: через %.2f с, патруль %.2f с" % [first, rest])
+	ok(first <= rest + EcoPred.SEEK_EVERY + 0.1, "и сразу после него: через %.2f с" % first)
+
+
 func test_hungry_pred_does_not_pick_fish_in_ink() -> void:
 	var w := _pred_world()
 	var c := _cushions(w)
