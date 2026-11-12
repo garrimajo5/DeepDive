@@ -137,6 +137,10 @@ jobs:
       - name: Проверка zamok.ps1
         shell: pwsh
         run: ./tools/qa/zamok.ps1 -SelfTest
+      # Снимки отчёта по -Shots, «папка/имя» — из второго прогона (#1350, 12.11)
+      - name: Проверка publish-qa.ps1
+        shell: pwsh
+        run: ./tools/qa/publish-qa.ps1 -SelfTest
 
   tests:
     name: Тесты

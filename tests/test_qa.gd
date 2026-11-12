@@ -137,6 +137,7 @@ func test_scene_runs_scenario() -> void:
 	var zamer_hull: Array[float] = []   # 38 → 38a: удара нет
 	var helm_silt := ""   # 39-shturval-il (#1708): за штурвалом в иле — ил, сидим, рамки у колеса нет
 	var corridor: Array[String] = []   # 40/40a (#1722): из коридора при тревоге на мостике люк и указатель в кадре
+	var lever := ""   # 40b (#1709): у рычага при стеклоусте — строка «жмите «Разряд»», указателя нет
 	var ogon: Array[String] = []   # 36/36a/36b (#1401): спрятано венчиков у куста огнецвета 0 и его свечение по кадрам
 	ok(not main.lore.knows(LayerLore.FIELD08), "до прогона поле 08 не замечено")
 	for i in scene_frames(qa.script_q):   # предел — от длины сценария (#1379)
@@ -228,6 +229,9 @@ func test_scene_runs_scenario() -> void:
 				helm_silt = silt_line
 			if qa.log_lines[k].begins_with("скриншот 40-koridor") or qa.log_lines[k].begins_with("скриншот 40a-koridor"):
 				corridor.append(way_line)
+			if qa.log_lines[k].begins_with("скриншот 40b-rychag"):
+				lever = "у рычага %s, %s, %s" % [main._at_lever(), AlarmWay.drain_line(main.vitals,
+						ShipLayout.room_at(main.walker.z), main._at_lever()), way_line]
 			if qa.log_lines[k].begins_with("скриншот 35-zadacha-07"):
 				task_say = say_now
 			if qa.log_lines[k].begins_with("скриншот 36"):
@@ -282,6 +286,8 @@ func test_scene_runs_scenario() -> void:
 	eq(corridor, ["Стеклоуст · мостик, отсек коридор, люк в кадре, указатель в кадре",
 			"Пробоина · мостик, отсек коридор, люк в кадре, указатель в кадре"],
 			"40/40a (#1722): из коридора лицом к носу при тревоге на мостике люк и указатель над ним в кадре")
+	eq(lever, "у рычага true, СТЕКЛОУСТ ПЬЁТ ЗАРЯД · жмите «Разряд», нет указателя",
+			"40b (#1709): игрок у рычага при стеклоусте — строка ведёт к кнопке, указателя над люком нет")
 	ok(not main.pilot.seated, "и встали")
 	ok(ahead > 20.0, "корабль прошёл вперёд: %.1f м" % ahead)
 	ok(FileAccess.file_exists(QaRunner.OUT + "/done.txt"), "done.txt записан")
