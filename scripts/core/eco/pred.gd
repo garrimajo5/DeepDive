@@ -757,8 +757,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 				_set_mode(pr, Mode.PATROL, 0.0)
 				pr.prey = null
 			elif ognevka and (at_station or leeches.near_station(pr.prey.agent.p)):  # у станции чистки перемирие
-				_set_mode(pr, Mode.PATROL, _rnd.range_f(4, 8))
-				pr.prey = null
+				_give_up(pr, _rnd.range_f(4, 8))
 				if pr.truce_cd <= 0.0:
 					pr.truce_cd = EcoOgnevka.TRUCE_CD
 					ognevka.truce(world, a.p)
@@ -767,16 +766,13 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 				var cu := cushions.ink_at(pr.prey.agent.p) if cushions and gr == null else null
 				var gt := grot.shelter(pr.prey) if grot and gr == null and cu == null else null
 				if gr:  # стая нырнула в густой ленточник
-					_set_mode(pr, Mode.PATROL, _rnd.range_f(4, 8))
-					pr.prey = null
+					_give_up(pr, _rnd.range_f(4, 8))
 					kelp.hid_fish(world, gr)
 				elif cu:  # светляк скрылся в чернилах подушечника
-					_set_mode(pr, Mode.PATROL, _rnd.range_f(4, 8))
-					pr.prey = null
+					_give_up(pr, _rnd.range_f(4, 8))
 					cushions.hid_fish(world, cu)
 				elif gt:  # стая нырнула в риф на спине гротовика
-					_set_mode(pr, Mode.PATROL, _rnd.range_f(4, 8))
-					pr.prey = null
+					_give_up(pr, _rnd.range_f(4, 8))
 					grot.hid_fish(world)
 				else:
 					a.goal = pr.prey.agent.p + pr.prey.agent.v * 0.4
@@ -911,6 +907,16 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 	if pr.mode != Mode.CHARGE:   # не в броске — у обшивки тормозит заранее, а не встаёт о неё за кадр
 		hull_soften(a, world.ship, dt)
 	world.push_out(a, HULL_GAP) # корпус не пускает внутрь
+
+
+## Добыча ушла в укрытие (ленточник, чернила, риф гротовика) или к станции чистки — хищник бросает охоту и t с
+## патрулирует, не ища новую (#1753). Раньше `seek_t` — 0,25 с, и он тут же брал соседа той же стаи: за 5 минут
+## мира 28 охот из 56 начинались меньше чем через 8 с после брошенной, часто через 0,27 с, — ход 3 ↔ 7,6 м/с
+## и волна хвоста 0,42 ↔ 0,72 Гц перескакивали каждые 1–5 с («рывками по скорости», `tools/pred_jerk.gd`).
+static func _give_up(pr: Pred, t: float) -> void:
+	_set_mode(pr, Mode.PATROL, t)
+	pr.prey = null
+	pr.seek_t = t
 
 
 ## Б3: ближе HULL_SOFT_R к обшивке ход внутрь корпуса гаснет с постоянной HULL_SOFT_K в секунду, а не за кадр в
