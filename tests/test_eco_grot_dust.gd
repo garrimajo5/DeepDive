@@ -179,7 +179,8 @@ func test_same_world_same_dust() -> void:
 		var d := EcoGrotDust.new()
 		w.ship.pos = _watch(w)
 		d.update(_g(w), w.time, w.ship.pos)
-		_run(w, d, 20.0)
+		_run(w, d, 14.0)   # пул из 16 полон к 12-й секунде (облачко в 0,7 с); было 20 с (#1350)
+		ok(d.dust.added > EcoGrotDust.POOL, "пул пошёл по кругу (%d облачков)" % d.dust.added)
 		eq(d.dust.puffs.size(), EcoGrotDust.POOL, "пул не растёт")
 		var row := []
 		for p in d.dust.puffs:

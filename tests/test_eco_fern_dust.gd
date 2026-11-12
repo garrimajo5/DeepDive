@@ -188,8 +188,11 @@ func test_same_world_same_dust() -> void:
 			_aim(w, fe.top)
 			_run(w, d, 2.0)
 			w.ship.light_on = false
-			_run(w, d, 12.0)
-		ok(d._made >= EcoFernDust.UNFURL_N, "развернулся — муть (%d)" % d._made)
+			# свернуться ниже UNFURL: LIT_HOLD 5 с и 0,25 в секунду от 1 до 0,5 — 7 с; 8 с — с запасом (было 12, #1350)
+			_run(w, d, 8.0)
+		var all := 2 * EcoFernDust.UNFURL_N * _fern(w).ferns.size()
+		ok(d._made >= all, "оба раза развернулись все кусты — муть (%d из %d)" % [d._made, all])
+		ok(d.dust.added > EcoFernDust.POOL, "пул пошёл по кругу (%d облачков)" % d.dust.added)
 		eq(d.dust.puffs.size(), EcoFernDust.POOL, "пул не растёт")
 		var row := []
 		for p in d.dust.puffs:
