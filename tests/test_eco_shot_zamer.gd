@@ -96,3 +96,76 @@ func test_strah_shoal_hides() -> void:
 	ok(alarmed, "стая в тревоге — рядом хищник")
 	ok(hid > 0, "рыбки прячутся у дома (%d)" % hid)
 	ok(ps.all[0].agent.distance_to(ship) > EcoPred.REACH, "хищник не подошёл к кораблю на свет")
+
+
+## Подход к 01 (#1400, `docs/urovni/sloj-1.md`: «стая → бегство → обнаружение причины»): корабль идёт с середины
+## (20; 22,5) к (33; −22) по ходу `tools/mid_calm.gd` со светом, голодный хищник №0 — за стаей рифа, как в strah=40.
+## Первое предупреждение — строка «стая уходит» у Каменного цветка — приходит на подходе, до стоянки, и бежит стая
+## 01 от хищника, не от корабля; причина в этот миг не в луче и дальше длины луча от корабля. 16 зёрен.
+func test_reef_flees_before_pred_in_beam() -> void:
+	var tool: GDScript = load("res://tools/mid_calm.gd")
+	var a: Vector2 = tool.PATH[1]
+	var b: Vector2 = tool.PATH[2]
+	var dt := EcoWorld.MAX_STEP
+	var reach := EcoWorld.BEAM_R + Searchlight.LAMP.length()
+	var first := INF
+	var last := 0.0
+	for s in 16:
+		var w := EcoWorld.new()
+		w.ground = Seabed.mesh_height
+		var fs := EcoFish.new()
+		w.add(fs)
+		var ps := EcoPred.new(fs)
+		w.add(ps)
+		w.reset(20261018 + s * 7919)
+		var ship := w.ship
+		ship.pos = tool.ship_at(a)
+		ship.light_on = true
+		ship.light_range = Searchlight.BASE_RANGE
+		var at := ShotSetup.strah_spot(tool.ship_at(b), fs.shoals[ShotSetup.STRAH_SHOAL].center, 40.0)
+		for pr in ps.all:
+			pr.cooldown = 999.0 if pr.index != 0 else 0.0
+			pr.agent.v = Vector3.ZERO
+			pr.agent.p = at if pr.index == 0 else ship.pos + Vector3(400.0 + 30.0 * pr.index, 0, 0)
+			pr.agent.goal = ShotSetup.strah_goal(ps, fs.shoals[ShotSetup.STRAH_SHOAL].center) if pr.index == 0 else pr.agent.p
+			pr.prey = null
+			EcoPred._set_mode(pr, EcoPred.Mode.PATROL, 30.0)
+		var p0 := ps.all[0]
+		p0.hunger = 0.5
+		var tag := "зерно %d" % s
+		var t := 0.0
+		var flee := -1.0
+		var lit := false
+		var arrive := -1.0
+		while t < 15.0 and flee < 0.0:
+			var d := Vector2(b.x - ship.pos.x, b.y - ship.pos.z)
+			if d.length() < 0.5:
+				ship.speed = 0.0
+				if arrive < 0.0:
+					arrive = t
+			else:
+				ship.yaw = atan2(-d.x, -d.y)
+				ship.speed = tool.SPEED
+				var mv := d.normalized() * minf(tool.SPEED * dt, d.length())
+				ship.pos = tool.ship_at(Vector2(ship.pos.x + mv.x, ship.pos.z + mv.y))
+			w.step(dt)
+			t += dt
+			lit = lit or w.in_beam(p0.agent.p)
+			for e in w.take_link():
+				if e["type"] == EcoLink.OBSERVE and e.get("note", "") == "flee":
+					flee = t
+		if not ok(flee > 0.0, "%s: строка о бегстве стаи пришла" % tag):
+			continue
+		first = minf(first, flee)
+		last = maxf(last, flee)
+		ok(arrive < 0.0, "%s: на подходе, до стоянки (%.2f с)" % [tag, flee])
+		ok(not lit, "%s: хищник не был в луче до строки" % tag)
+		var dist := p0.agent.distance_to(ship.pos)
+		ok(dist > reach, "%s: хищник дальше луча — %.1f м" % [tag, dist])
+		var at01 := false
+		for sh in fs.shoals:
+			if sh.alarm > 0.0 and sh.has_threat and not sh.threat_is_ship \
+					and Vector2(sh.center.x, sh.center.z).distance_to(EcoFlower.CENTER) < EcoPred.REEF_KEEP + 30.0:
+				at01 = true
+		ok(at01, "%s: бежит стая у 01 — от хищника, не от корабля" % tag)
+	ok(last < first + 3.0, "строка на подходе в узком окне: %.2f…%.2f с" % [first, last])
