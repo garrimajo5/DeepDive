@@ -9,6 +9,30 @@ const PassBox := preload("res://tools/pass_box.gd")
 const PassPlan := preload("res://tools/pass_plan.gd")
 
 
+## Аргументы после «--»: имя файла, ключи «ключ=значение» и флаги Godot, попавшие сюда по ошибке («--resolution
+## 1280x720» после «--» молча снимал 1600×720 в файл «1280x720», #1350 12.11). Флаг «--…» и его значение без «=» —
+## в "stray", не в имя файла.
+static func parse_args(args: PackedStringArray) -> Dictionary:
+	var out := "shot.png"
+	var kv := {}
+	var stray: Array[String] = []
+	var flag := false   # прошлый аргумент — флаг «--…» без «=»: следующий без «=» — его значение
+	for a in args:
+		if a.begins_with("--"):
+			stray.append(a)
+			flag = not a.contains("=")
+		elif flag and not a.contains("="):
+			stray[-1] += " " + a
+			flag = false
+		elif a.contains("="):
+			var p := a.split("=", true, 1)
+			kv[p[0]] = p[1]
+			flag = false
+		else:
+			out = a
+	return {"out": out, "kv": kv, "stray": stray}
+
+
 static func apply(g: Main, kv: Dictionary) -> void:
 	g.flyby.stop()   # снимки — с мостика; flyby=start|surface — вид с борта (age=<с> от начала)
 	g.message.clear(Flyby.START_MSG)
