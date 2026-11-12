@@ -44,6 +44,13 @@ const SPIKE_K := 10.0      ## во сколько раз дольше обычн
 const SPIKE_MS := 3.0      ## и не короче, мс
 const SPIKE_MIN := 2       ## «разом ×N» не меньше
 const PING_MARK := "импульс, разряд"   ## подчасть мира в кадре импульса или разряда (`EcoWorld.step`)
+## Одна отметка (#1350, 12.11, отчёт `2026-11-12-0330`: «мир 72 [EcoFlower 42 ×>100, EcoFish 12, …]»): у подчасти
+## обычное ~0 (`EcoFlower.step` — шесть сложений, за 1680 кадров замера макс 1 мс), она одна «×>N», а у всех подчастей
+## с известным обычным — меньше SLOW раз. Работы в ней на 42 мс нет — время отняла машина (хост снял процесс с ЦП),
+## пока шёл этот вызов. Пишем после скобок «— одна отметка, вероятно хост», чтобы разбор не искал в ней виновника.
+## Подчасть с обычным ≥ USUAL_MIN, одна «×30» среди «×1», — по-прежнему виновник (у неё есть работа, которая может
+## подорожать). В кадре импульса или разряда (`PING_MARK`) — не пишем.
+const LONE := " — одна отметка, вероятно хост"
 
 var parts := {}            ## часть → мс этого шага (части с одним именем складываются)
 var subs := {}             ## часть → {подчасть → мс}: отметки «часть/подчасть» (issue #745)
@@ -174,6 +181,8 @@ static func _top(of: Dictionary, n: int, min_ms: float, sub_of: Dictionary = {},
 				var x := stall(sub_of[k], us.get("/", {}).get(k, {}))
 				if x > 0:
 					t += STALL % x
+				elif lone(sub_of[k], us.get("/", {}).get(k, {}), us.get("seen", {}).get(k, {})):
+					t += LONE
 		out.append(t)
 	return ", ".join(out)
 
@@ -196,6 +205,26 @@ static func stall(sub: Dictionary, us: Dictionary) -> int:
 		return roundi(med)
 	var r := rest_stall(sub, us)
 	return r if r > 0 else spike_stall(sub, us)
+
+
+## Одна отметка (`LONE`): ровно одна подчасть sub не короче MIN_MS с обычным короче USUAL_MIN, которая каждого шага
+## (seen ≥ SEEN_MIN) и пишется «×>N», а все подчасти с известным обычным (хотя бы одна) — меньше SLOW раз; кадр без
+## импульса и разряда. us — обычное время подчастей, мс; seen — доля шагов с подчастью.
+static func lone(sub: Dictionary, us: Dictionary, seen: Dictionary) -> bool:
+	if sub.has(PING_MARK):
+		return false
+	var floors := 0
+	var known := 0
+	for key in sub.keys():
+		var m := float(sub[key])
+		var u := float(us.get(key, 0.0))
+		if u >= USUAL_MIN:
+			if m >= u * SLOW:
+				return false
+			known += 1
+		elif m >= MIN_MS and not slower(m, u, float(seen.get(key, 0.0))).is_empty():
+			floors += 1
+	return floors == 1 and known > 0
 
 
 ## Заминка по трём «виновникам» сразу (#1317): не меньше STALL_N подчастей с известным обычным — каждая не короче
