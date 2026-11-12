@@ -834,34 +834,33 @@ func test_clock_lod() -> void:
 	ok(EcoPredLook.CUE_FAR < EcoPredLook.ANIM_FAR, "укусы и удары — только там, где скелет идёт каждый кадр")
 
 
-## «Экономно» (Б6): поза реже уже с ANIM_MID_LITE, дальше ANIM_FAR_LITE — как вдали; вблизи — каждый кадр; время не
-## теряется; на «Обычно» прежний порядок.
+## «Экономно» (Б6): скелет не прореживается — как на «Обычно»: раньше в 25–60 м поза шла раз в 0,1 с, дальше —
+## раз в 0,2 с, и хвост в луче дёргался (#1753); время не теряется.
 func test_clock_lite() -> void:
 	var c := EcoPredLook.Clock.new()
 	near(c.tick(0.05, 10.0, true), 0.05, 1e-6, "вблизи и на «Экономно» — каждый кадр")
-	eq(EcoPredLook.Clock.step_at(40.0), 0.0, "на «Обычно» в 40 м — каждый кадр")
-	eq(EcoPredLook.Clock.step_at(40.0, true), EcoPredLook.ANIM_MID_STEP, "на «Экономно» в 40 м — реже")
-	eq(EcoPredLook.Clock.step_at(70.0, true), EcoPredLook.ANIM_FAR_STEP, "дальше %.0f м — как вдали" % EcoPredLook.ANIM_FAR_LITE)
+	for d in [30.0, 40.0, 70.0, 95.0]:
+		eq(EcoPredLook.Clock.step_at(d, true), EcoPredLook.Clock.step_at(d), "на «Экономно» в %.0f м — как на «Обычно»" % d)
+		eq(EcoPredLook.Clock.step_at(d, true), 0.0, "в %.0f м — каждый кадр" % d)
 	var got := 0.0
 	var calls := 0
 	for i in 20:
-		var s := c.tick(0.05, 40.0, true)
+		var s := c.tick(1.0 / 30.0, 40.0, true)
 		if s > 0.0:
 			calls += 1
 			got += s
-	eq(calls, 10, "в 40 м — раз в %.1f с" % EcoPredLook.ANIM_MID_STEP)
-	near(got + c.lag, 1.0, 1e-5, "время не теряется")
-	ok(EcoPredLook.ANIM_MID_LITE < EcoPredLook.ANIM_FAR_LITE and EcoPredLook.ANIM_FAR_LITE < EcoPredLook.ANIM_FAR,
-		"пороги «Экономно» ближе обычных")
+	eq(calls, 20, "в 40 м — поза каждый кадр")
+	near(got + c.lag, 20.0 / 30.0, 1e-5, "время не теряется")
+	ok(load("res://tools/pred_jerk.gd") != null, "расчёт рывков по костям (#1753) загружается")
 	c.lag = 0.0
-	c.tick(0.05, 40.0, true)
+	eq(c.tick(0.05, EcoPredLook.ANIM_FAR + 10.0, true), 0.0, "вдали — копит")
 	near(c.flush(), 0.05, 1e-6, "flush отдаёт набранное")
 	eq(c.lag, 0.0, "и обнуляет")
 
 
-## «Экономно» у сцены: EcoView.set_lite доходит до серпохвостов; в 40 м поза меняется реже кадра, а укус между
-## позами всё равно запускается.
-func test_view_lite_skeleton_slower() -> void:
+## «Экономно» у сцены: EcoView.set_lite доходит до серпохвостов; в 40 м (в луче) поза меняется каждый кадр — хвост не
+## дёргается шагом 0,1 с (#1753; без исправления — 10 смен из 20).
+func test_view_lite_skeleton_every_frame() -> void:
 	var view := EcoView.new()
 	view.ground = Seabed.height
 	tree.root.add_child(view)
@@ -886,15 +885,7 @@ func test_view_lite_skeleton_slower() -> void:
 		if not q.is_equal_approx(last):
 			changes += 1
 		last = q
-	ok(changes >= 8 and changes <= 11, "поза в 40 м сменилась %d раз за 20 кадров" % changes)
-	# укус в такой кадр, где поза не меняется: клип всё равно идёт
-	t0 += 1.1
-	pv.sync(t0, mid)   # шаг 0,1 с — поза сменилась, набранного нет
-	eq(pv.clocks[1].lag, 0.0, "набранное отдано")
-	pr.mode = EcoPred.Mode.EAT
-	pv.cues[1].bite_at = -99.0
-	pv.sync(t0 + 0.05, mid)   # 0,05 с — между позами
-	ok(pv.trees[1].get(PredView.P_BITE_ON), "укус между позами не потерян")
+	eq(changes, 20, "поза в 40 м на «Экономно» — каждый кадр")
 	view.set_lite(false)
 	ok(not pv.lite, "назад — «Обычно»")
 	view.queue_free()

@@ -33,8 +33,7 @@ var clicks: Array[AudioStreamPlayer3D] = []
 var calls: Array[AudioStreamPlayer3D] = []
 var last_cue: Array[int] = []
 var _streams := {}
-## «Экономно» (Б6, `set_lite`): скелет реже уже с EcoPredLook.ANIM_MID_LITE — поза раз в ANIM_MID_STEP, дальше
-## ANIM_FAR_LITE — раз в ANIM_FAR_STEP. Модель, место, курс, укусы и удары те же.
+## «Экономно» (Б6, `set_lite`): скелет — как на «Обычно» (прореживание в луче дёргало хвост, #1753).
 var lite := false
 
 ## Муть от броска у дна и её MultiMesh; буфер мути — для тестов.

@@ -45,11 +45,9 @@ const ANIM_FAR_STEP := 0.2
 const HIDE_FAR := 160.0
 ## Набранное время отдаётся скелету разом не длиннее (с): фаза плавания вдали не важна, а длинный шаг дерева дорог.
 const LAG_MAX := 1.0
-## «Экономно» (Б6, `PredView.set_lite`): скелет реже уже ближе — дальше ANIM_MID_LITE (м) раз в ANIM_MID_STEP (с),
-## дальше ANIM_FAR_LITE — раз в ANIM_FAR_STEP. Укус и удар серпом (до CUE_FAR) не ждут позы: `Clock.flush`.
-const ANIM_MID_LITE := 25.0
-const ANIM_MID_STEP := 0.1
-const ANIM_FAR_LITE := 60.0
+## «Экономно» (Б6, `PredView.set_lite`) скелет не прореживает: раньше уже с 25 м поза шла раз в 0,1 с, дальше 60 м —
+## раз в 0,2 с, и хвост в луче (до Searchlight.BASE_RANGE) дёргался (#1753: кончик хвоста 99 % ≈ 200 м/с² против 13,
+## `tools/pred_jerk.gd lite`), а три скелета по 10 костей — копейки. Пороги те же, что на «Обычно».
 ## «Дыхание» (Б3, `breath`): зверь качает воду жабрами — тело шире на ± BREATH_W и выше на ± BREATH_H за BREATH_T с
 ## (ритм ± BREATH_SPREAD и фаза — у каждого свои, `EcoVary`); длина та же — пасть и серп на месте. В броске (доля
 ## SwimFast, `swim_mix`) вода идёт сквозь жабры сама — размах гаснет вместе с ростом смеси, без скачка. По времени
@@ -144,7 +142,7 @@ class Clock:
 	var lag := 0.0
 
 	## Сколько времени отдать дереву анимации в этот кадр: dt — шаг кадра, dist — до корабля (м); 0 — дерево не трогать.
-	## lite — «Экономно»: шаг позы реже уже с ANIM_MID_LITE.
+	## lite — «Экономно»: с #1753 шаг тот же (параметр оставлен для вызовов).
 	func tick(dt: float, dist: float, lite := false) -> float:
 		lag = minf(lag + dt, LAG_MAX)
 		if dist > HIDE_FAR or lag < step_at(dist, lite) - 1e-6 or lag <= 0.0:
@@ -158,9 +156,7 @@ class Clock:
 		return out
 
 	## Не чаще какого шага (с) меняется поза на расстоянии dist; 0 — каждый кадр.
-	static func step_at(dist: float, lite := false) -> float:
-		if dist > (ANIM_FAR_LITE if lite else ANIM_FAR):
+	static func step_at(dist: float, _lite := false) -> float:
+		if dist > ANIM_FAR:
 			return ANIM_FAR_STEP
-		if lite and dist > ANIM_MID_LITE:
-			return ANIM_MID_STEP
 		return 0.0
