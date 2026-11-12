@@ -93,3 +93,38 @@ func test_echo_does_not_listen() -> void:
 		nearest = minf(nearest, Vector2(s.pos.x, s.pos.z).distance_to(Vector2(at.x, at.z)))
 	ok(nearest > EcoEcho.LISTEN_R, "эхоловец не слушает корабль середины: %.1f м" % nearest)
 	ok(nearest > EcoEcho.STRIKE_R, "и не бьёт на импульс")
+
+
+
+## Места появления из starts, которые ближе sense к пробам середины.
+func _near_starts(starts: Array[Vector2], sense: float) -> Array[String]:
+	var out: Array[String] = []
+	for st in starts:
+		for s in _ships():
+			var d := Vector2(s.pos.x, s.pos.z).distance_to(st)
+			if d <= sense:
+				out.append("%s у %s: %.1f м" % [st, s.pos, d])
+				break
+	return out
+
+
+## «Не создавать новую точку спавна непосредственно перед кораблём» (`docs/urovni/sloj-1.md`, 08.11): серпохвосты
+## появляются (STARTS, и пробная дуга ARC[0]) дальше, чем видят свет и слышат сонар (REACH) и двигатели
+## (HEAR_RADIUS), от всего пути середины и стоянки. Тихий круг пробы — вокруг той же стоянки, что у инструмента.
+func test_pred_starts_beyond_senses() -> void:
+	var tool := _tool()
+	eq(EcoPred.QUIET, tool.PATH[1], "тихий круг пробы — вокруг стоянки середины")
+	var starts: Array[Vector2] = EcoPred.STARTS.duplicate()
+	starts.append(EcoPred.ARC[0])
+	var sense := maxf(EcoPred.REACH, EcoPred.HEAR_RADIUS)
+	var near := _near_starts(starts, sense)
+	eq(near.size(), 0, "хищник не появляется у пути середины: %s" % ", ".join(near))
+	var nearest := INF
+	for st in starts:
+		for s in _ships():
+			nearest = minf(nearest, Vector2(s.pos.x, s.pos.z).distance_to(st))
+	ok(nearest > sense, "ближайшее место появления — %.1f м, чутьё %.0f м" % [nearest, sense])
+	# Проверка не пустая: место появления у середины пути (сбоку на полчутья) она ловит.
+	var mid: Vector2 = (tool.PATH[0] + tool.PATH[1]) * 0.5 + Vector2(sense * 0.5, 0.0)
+	var bad: Array[Vector2] = [mid]
+	eq(_near_starts(bad, sense).size(), 1, "место у пути — поймано")
