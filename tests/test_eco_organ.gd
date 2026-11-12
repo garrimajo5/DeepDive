@@ -372,18 +372,26 @@ func test_view_sync_passes_world_time() -> void:
 	await frames(1)
 
 
-func test_main_organs_stand_on_visible_floor() -> void:
+func test_organs_stand_on_visible_floor() -> void:
 	# #1386: мир ставил трубы на шум Seabed.height, а сетка дна между вершинами (клетка 5 м) ниже на 2–3 м —
-	# губки у (−38, 78) и (52, 30) висели над грунтом. Живой мир в игре стоит на видимой сетке (Seabed.mesh_height).
-	var main: Main = load("res://scenes/main.tscn").instantiate()
-	tree.root.add_child(main)
+	# губки у (−38, 78) и (52, 30) висели над грунтом. Живой мир в игре стоит на видимой сетке (Seabed.mesh_height;
+	# что Main даёт миру именно её — test_eco_drop.test_wired_into_ship). Мир без корабля (#1350).
+	var ev := EcoView.new()
+	ev.ground = Seabed.mesh_height
+	tree.root.add_child(ev)
 	await frames(1)
-	for og in main.eco.organs.organs:
+	var bases := 0
+	for og in ev.organs.organs:
 		for k in og.tube_base.size():
 			var b := og.tube_base[k]
 			var floor_y := Seabed.mesh_height(b.x, b.z)
 			near(b.y, floor_y - EcoOrgan.SINK, 0.05, "губка %d, труба %d — основание в грунте видимого дна" % [og.index, k])
-	var p := Vector2(52, 30)
-	near(float(main.eco.world.ground.call(p.x, p.y)), Seabed.mesh_height(p.x, p.y), 1e-4, "дно мира — сетка")
-	main.queue_free()
+			bases += 1
+	ok(ev.organs.organs.size() >= 2 and bases >= 7 * ev.organs.organs.size(), "губки на месте, по семь труб: %d" % bases)
+	var off := 0.0   # проверка не пустая: на шуме Seabed.height губки висели бы
+	for og in ev.organs.organs:
+		for b in og.tube_base:
+			off = maxf(off, absf(Seabed.height(b.x, b.z) - Seabed.mesh_height(b.x, b.z)))
+	ok(off > 0.1, "у оснований шум и сетка расходятся: %.2f м" % off)
+	ev.queue_free()
 	await frames(1)

@@ -180,7 +180,8 @@ func test_slide_cloud_at_scar() -> void:
 	ok(absf(c.x - Silt.DROP.x) > 40.0, "новая точка далеко от старой DROP над открытым склоном")
 
 
-## Подключение в корабль (issue #258): main поднимает «пол» корпуса на верх скалы и берёт точку облака из шрама.
+## Подключение в корабль (issue #258): main поднимает «пол» корпуса на верх скалы и берёт точку облака из шрама;
+## живой мир в игре стоит на видимой сетке дна (#1386; губки органа на ней — test_eco_organ).
 func test_wired_into_ship() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
@@ -193,6 +194,8 @@ func test_wired_into_ship() -> void:
 	var g_here: float = main.helm.ground.call(rim.x, zc)
 	ok(g_here >= rim.y - 1e-3, "пол корпуса не ниже верха скалы: %.2f ≥ %.2f" % [g_here, rim.y])
 	ok(g_here > Seabed.height(rim.x, zc) + 0.5, "над скалой пол корпуса выше дна — корабль чиркает")
+	for p in [Vector2(52, 30), Vector2(-38, 78), Vector2(2.5, -7.5)]:   # между вершинами сетки шум и сетка расходятся
+		near(float(main.eco.world.ground.call(p.x, p.y)), Seabed.mesh_height(p.x, p.y), 1e-4, "дно мира — сетка у %s" % p)
 	main.queue_free()
 	await frames(1)
 
