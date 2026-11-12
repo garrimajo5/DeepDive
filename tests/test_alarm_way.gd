@@ -388,10 +388,12 @@ func _blocker(ship: Node, a: Vector3, b: Vector3) -> String:
 		var lb := inv * b
 		for si in g.mesh.get_surface_count():
 			var arr: Array = g.mesh.surface_get_arrays(si)
-			if arr[Mesh.ARRAY_INDEX] == null:
-				continue
 			var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
-			var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+			var idx := PackedInt32Array()
+			if arr[Mesh.ARRAY_INDEX] != null:
+				idx = arr[Mesh.ARRAY_INDEX]
+			else:
+				idx = PackedInt32Array(range(v.size()))
 			for t in range(0, idx.size(), 3):
 				var h: Variant = Geometry3D.segment_intersects_triangle(la, lb, v[idx[t]], v[idx[t + 1]], v[idx[t + 2]])
 				if h != null:
