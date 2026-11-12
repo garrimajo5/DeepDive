@@ -318,3 +318,28 @@ func test_scene_silt_drain_rows() -> void:
 	eq(str(main.status_rows()[2][0]), "СТЕКЛОУСТ ПЬЁТ ЗАРЯД · жмите «Разряд»", "у рычага")
 	main.queue_free()
 	await frames(1)
+
+
+## #1709: остриё указателя — перед гранью стены над люком со стороны игрока, а не в её толще: у люка мостика стена
+## 2,0…2,2 (кормовая стена мостика), из коридора остриё было на 2,15 — внутри, указатель не видно.
+func test_pointer_outside_wall() -> void:
+	var r := Reactor.new()
+	var v := Vitals.new()
+	for door in ShipLayout.DOOR_Z.size():
+		var span := AlarmWay.wall_span(door)
+		ok(span.x <= ShipLayout.DOOR_Z[door] and span.y >= ShipLayout.DOOR_Z[door], "люк %d в стене" % door)
+		for target in [door, door + 1]:   # цель в нос (игрок в door + 1) и в корму (игрок в door)
+			var player: int = door + 1 if target == door else door
+			var b := Breach.new()
+			for s in b.all:
+				if s.room == target:
+					b.active = s
+			if b.active == null:
+				continue
+			var p := AlarmWay.pointer(b, r, player, true, false, v)
+			eq(p.door, door, "люк %d" % door)
+			ok(p.anchor.z < span.x or p.anchor.z > span.y, "люк %d, игрок в %d: остриё z %.2f вне стены %s" % [
+				door, player, p.anchor.z, span])
+	v.drain("Стеклоуст", 3.0)
+	var p := AlarmWay.pointer(Breach.new(), r, ShipLayout.Room.CORRIDOR, true, false, v)
+	near(p.anchor.z, BridgePlan.STERN + AlarmWay.WALL + AlarmWay.POINTER_IN, 0.001, "из коридора — перед стеной мостика")

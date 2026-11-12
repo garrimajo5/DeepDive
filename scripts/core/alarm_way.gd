@@ -115,7 +115,7 @@ static func drain_line(v: Vitals, player_room: int, at_lever: bool) -> String:
 ## пути к цели. Только один игрок в экипаже, подсказки первого забега кончились, горит пробоина (раньше), присоска
 ## (к рычагу на мостике, #1709) или перегрев — порядок `Status.alarm`; игрок не в отсеке цели: там дальше ведёт рамка `AlarmBoard.hint`. Кооп — голос товарища (этап 5).
 const POINTER_UP := 0.25   ## остриё шеврона над проёмом люка, м над DOOR_H
-const POINTER_IN := 0.15   ## от переборки к игроку, м: стрелка не прячется в стене люка
+const POINTER_IN := 0.15   ## от грани стены к игроку, м: стрелка не прячется в стене люка (`wall_span`)
 const LABEL_PX := 30.0     ## подпись указателя при H = 1080
 ## Остриё не выше, px при H = 1080: над ним символ (до PX_MAX) и подпись, всё — под строкой приборов в три ряда
 ## (низ ≈ 172 px). Люк вплотную над головой — кольцо опускается сюда (`HintPointer.lower_tip`).
@@ -154,9 +154,23 @@ static func pointer(b: Breach, r: Reactor, player_room: int, solo: bool, tutoria
 	p.door = next_door(player_room, p.room)
 	if p.door < 0:
 		return null
-	var dz := -POINTER_IN if p.room > player_room else POINTER_IN   # со стороны игрока
-	p.anchor = Vector3(0.0, ShipLayout.DOOR_H + POINTER_UP, ShipLayout.DOOR_Z[p.door] + dz)
+	var wall := wall_span(p.door)   # со стороны игрока, перед гранью стены
+	var z := wall.x - POINTER_IN if p.room > player_room else wall.y + POINTER_IN
+	p.anchor = Vector3(0.0, ShipLayout.DOOR_H + POINTER_UP, z)
 	return p
+
+
+## Стена над люком door по z: (носовая грань, кормовая грань). Люк мостика — кормовая стена мостика
+## `BridgePlan.STERN` … +0,2 (#1709: указатель из коридора стоял внутри неё и не был виден), остальные — переборки
+## `ShipLayout._bulkhead` толщиной 0,2 по центру DOOR_Z.
+const WALL := 0.2
+
+
+static func wall_span(door: int) -> Vector2:
+	if door == 0:
+		return Vector2(BridgePlan.STERN, BridgePlan.STERN + WALL)
+	var z := ShipLayout.DOOR_Z[door]
+	return Vector2(z - WALL * 0.5, z + WALL * 0.5)
 
 
 ## Плашка подписи указателя на экране size: text_w — ширина текста, px; symbol — символ мирового указателя на экране
