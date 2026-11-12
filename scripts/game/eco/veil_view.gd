@@ -257,11 +257,17 @@ static func tentacle_params(vl: EcoVeil.Veil = null) -> Dictionary:
 ## щупалец (его волна и снос), flow — поток, sway_k — 0 на «Экономно», drag — ход купола (uniform `drag` вуали).
 static func shader_point(rest: Vector3, k: int, j: int, t: float, pulse: float, m: Dictionary = {},
 		flow := Vector3.ZERO, sway_k := 0.0, drag := Vector3.ZERO) -> Vector3:
+	return _point(rest, k, j, t, pulse, m, m.get("wave", Vector4.ZERO), flow, sway_k, drag)
+
+
+## shader_point с волной wave вместо m["wave"]: экземпляр меняет фазу и ритм, не копируя словарь материала —
+## instance_point зовут сотни тысяч раз (test_hull_parts_tentacles), копия словаря была его главной ценой.
+static func _point(rest: Vector3, k: int, j: int, t: float, pulse: float, m: Dictionary, wave: Vector4,
+		flow: Vector3, sway_k: float, drag: Vector3) -> Vector3:
 	var p := Vector3(rest.x * pulse, rest.y, rest.z * pulse)
 	flow = EcoVeil.rel_water(flow, drag)
 	if j > 0:
 		var h := j / float(m.get("seg", 10.0))
-		var wave: Vector4 = m.get("wave", Vector4.ZERO)
 		var sj := lerpf(pulse, 1.0 + sin(t * wave.y + wave.z - j * wave.w) * wave.x
 			* (1.0 + float(m.get("grow", 0.0)) * h), sway_k)
 		p.x = rest.x * sj + sin(t * 0.9 + (j - 1) * 0.45 + k) * j * 0.12
@@ -284,12 +290,10 @@ static func instance_point(rest: Vector3, kj: Vector2, vi: float, custom: Color,
 		ship_pos := Vector3.ZERO, yaw := 0.0, side := 0.0) -> Vector3:
 	if absf(vi - custom.b) > 0.5:
 		return at
-	var mm := m.duplicate()
-	var w: Vector4 = mm.get("wave", Vector4.ZERO)
+	var w: Vector4 = m.get("wave", Vector4.ZERO)
 	w.z += custom.g
 	w.y *= custom.a if custom.a > 0.0 else 1.0
-	mm["wave"] = w
-	var p := at + shader_point(rest, int(kj.x), int(kj.y), t, custom.r, mm, flow, sway_k, drag)
+	var p := at + _point(rest, int(kj.x), int(kj.y), t, custom.r, m, w, flow, sway_k, drag)
 	if hull and int(kj.y) > 0:
 		if side == 0.0:
 			side = EcoVeil.side_of(at + Vector3(rest.x * custom.r, 0.0, rest.z * custom.r), ship_pos, yaw)

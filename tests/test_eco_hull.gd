@@ -182,3 +182,31 @@ func test_shape_matches_part() -> void:
 					ok(false, "запас %.1f: %s" % [r, p])
 					return
 	ok(true)
+
+
+## touches отсекает точку коробкой box(r) до обхода деталей: ответ тот же, что у обхода всех деталей, а точка вне
+## коробки, но ближе REACH, деталей не проверяет (раньше — до 13 проверок на точку; test_hull_parts_tentacles
+## зовёт touches сотни тысяч раз).
+func test_touches_box_cut_same_answer() -> void:
+	for r in [0.0, 0.7, 2.0]:
+		var inside := 0
+		var cut := 0
+		for l in _grid():
+			for d in [Vector3.ZERO, Vector3(0.37, 0.21, 0.53)]:
+				var q: Vector3 = l + d
+				var want := false
+				for part: HullPlan.Part in EcoHull.parts(r):
+					want = want or part.contains(q)
+				var before := EcoHull.checks
+				if EcoHull.touches(_world_point(q), SHIP, YAW, r) != want:
+					ok(false, "запас %.1f: %s" % [r, q])
+					return
+				if want:
+					inside += 1
+				elif q.distance_to(EcoHull.CENTER) <= EcoHull.REACH + r and not EcoHull.box(r).has_point(q):
+					cut += 1
+					if EcoHull.checks != before:
+						ok(false, "вне коробки — без проверки деталей: %s" % q)
+						return
+		ok(inside > 200, "запас %.1f: внутри %d точек" % [r, inside])
+		ok(cut > 100, "запас %.1f: отсечено коробкой %d точек" % [r, cut])
