@@ -56,11 +56,12 @@ func test_walk_from_bridge_to_cargo() -> void:
 	var r := main.overlay.router
 	main.walker.yaw = PI   # лицом к корме
 	main.walker.z = 0.5
+	const DT := 0.1   # шаг 0,1 с: ходок — 0,24 м за шаг, у люка останавливаемся за 0,9 м; втрое меньше кадров (фокус А п. 3)
 	for i in 4:
 		# дойти до люка, открыть его кнопкой, пройти
 		r.begin(1, r.layout.pad.c + Vector2(0, -r.layout.pad.r * 0.7))
-		for k in 240:
-			main.step(1.0 / 30.0)
+		for k in 80:
+			main.step(DT)
 			if main.walker.z > ShipLayout.DOOR_Z[i] - 0.9:
 				break
 		r.end(1)
@@ -71,12 +72,12 @@ func test_walk_from_bridge_to_cargo() -> void:
 		eq(main.overlay.action_label, "Люк", "у люка %d — кнопка «Люк»" % (i + 1))
 		r.begin(2, r.layout.action.c)
 		r.end(2)
-		for k in 30:
-			main.step(1.0 / 30.0)
+		for k in 10:   # 1 с: створка открыта за 1 / Door.SPEED ≈ 0,56 с
+			main.step(DT)
 		ok(main.layout.doors[i].passable(), "люк %d открыт" % (i + 1))
 		r.begin(3, r.layout.pad.c + Vector2(0, -r.layout.pad.r * 0.7))
-		for k in 45:
-			main.step(1.0 / 30.0)
+		for k in 15:
+			main.step(DT)
 		r.end(3)
 		ok(main.walker.z > ShipLayout.DOOR_Z[i] + 0.5, "прошли люк %d: z %.1f" % [i + 1, main.walker.z])
 		if i == 2:
