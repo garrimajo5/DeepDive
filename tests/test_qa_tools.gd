@@ -447,6 +447,27 @@ func test_qa_lock_and_worktree() -> void:
 	ok(ci.contains("./tools/qa/zamok.ps1 -SelfTest"), "CI гоняет проверку zamok.ps1")
 
 
+## #1746: зависший `adb shell getprop sys.boot_completed` держал замок тестера 3 ч — три плановых запуска BUSY.
+## Каждый вызов в ожидании загрузки — Invoke-Timed с пределом, всё ожидание — Wait-Boot 300 с → EMULATOR_TIMEOUT
+## со снятием замка; в BUSY — возраст замка и «похоже, завис». Логику гоняет CI (`zamok.ps1 -SelfTest`).
+func test_run_qa_boot_wait_has_limit() -> void:
+	var z := _ps("zamok.ps1")
+	var run := _ps("run-qa.ps1")
+	ok(z.contains("function Invoke-Timed") and z.contains("$p.WaitForExit($ms)") and z.contains("$p.Kill()"),
+		"вызов с пределом и kill")
+	ok(z.contains("function Wait-Boot") and z.contains("function Get-LockAge"), "ожидание загрузки и возраст замка")
+	ok(z.contains("; держит $age мин") and z.contains("похоже, завис"), "BUSY — возраст и «завис»")
+	ok(z.contains("Invoke-Timed $sh @('-NoProfile', '-Command', 'Start-Sleep 60') 3000"), "SelfTest — зависший вызов")
+	ok(z.contains("Wait-Boot { $null } 3 1"), "SelfTest — общий предел")
+	ok(not run.contains("(& $adb shell getprop sys.boot_completed)"), "голого getprop без предела нет")
+	ok(not run.contains("& $adb wait-for-device"), "wait-for-device без предела убран")
+	var boot := run.find("Wait-Boot { Invoke-Timed $adb @('shell', 'getprop', 'sys.boot_completed') 10000 } 300 5")
+	ok(boot > 0 and boot < run.find("& $adb install"), "загрузка — до установки")
+	var tout := run.find("EMULATOR_TIMEOUT", boot)
+	ok(tout > boot and run.find("Unlock-Qa $lockFile; exit 1", tout) > tout, "EMULATOR_TIMEOUT снимает замок")
+	ok(FileAccess.get_file_as_string("res://docs/QA.md").contains("EMULATOR_TIMEOUT"), "docs/QA.md: EMULATOR_TIMEOUT")
+
+
 ## #1350, 12.11: Chrome от com.android.shell через 0,5–2 мин после сценария метил прогон шумом — два холодных подряд
 ## выпали из правила трёх. Окна и «свёрнута» — только до «Готово» сценария, после — «после сценария: N»; без -ColdBoot —
 ## «остывание 0 с (ЦП X%)». Логику на выдуманном logcat гоняет CI (`kadry.ps1 -SelfTest`); здесь — связь с игрой и скриптом.

@@ -199,8 +199,12 @@ if (-not ((& $adb devices) -match 'emulator-\d+\s+device')) {
   # run-qa.ps1 закрыли вместе с деревом процессов, — можно досматривать руками через adb (#1350)
   Invoke-CimMethod Win32_Process -MethodName Create -Arguments @{
     CommandLine = "`"$sdk\emulator\emulator.exe`" -avd Pixel_8$cold" } | Out-Null
-  & $adb wait-for-device
-  for ($i = 0; $i -lt 60; $i++) { if ((& $adb shell getprop sys.boot_completed).Trim() -eq '1') { break }; Start-Sleep 5 }
+}
+# Загрузка (#1746): каждый вызов adb — с пределом 10 с (зависший `adb shell getprop` держал замок 3 ч), всё ожидание —
+# не дольше 300 с; «нет устройства» до загрузки — та же проба. Не загрузился — EMULATOR_TIMEOUT, замок снят.
+if (-not (Wait-Boot { Invoke-Timed $adb @('shell', 'getprop', 'sys.boot_completed') 10000 } 300 5)) {
+  Write-Output "EMULATOR_TIMEOUT ${head}: эмулятор не ответил sys.boot_completed=1 за 300 с — adb devices, при зависании adb kill-server, повторить с -ColdBoot"
+  Unlock-Qa $lockFile; exit 1
 }
 # -d (#1606): сборка PR ниже стоящей (или релиз ниже стоящей сборки PR) — без него INSTALL_FAILED_VERSION_DOWNGRADE
 $inst = ''
