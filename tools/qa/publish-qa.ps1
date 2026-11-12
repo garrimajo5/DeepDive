@@ -4,9 +4,66 @@
 # -From <имя> — из другой папки прогона: run-pr<номер> после `run-qa.ps1 -Pr`, run-<сценарий> после -Scenario (#1606).
 # -Also <имя> — kadry.txt второго прогона того же отчёта (напр. `-From run-cold -Also run`) кладётся рядом как kadry-2.txt:
 # сводка ПРОВЕРИТЬ (kadry.ps1) считает его отдельным прогоном (#1350, 11.11).
-param([Parameter(Mandatory)][string]$Folder, [Parameter(Mandatory)][string]$Message, [string[]]$Shots, [string]$From = 'run',
-  [string]$Also)
+# В -Shots имя с папкой (`run-koridor/k1-drain-z6`) — снимок из D:\AI\qa-build\run-koridor\, без папки — из -From:
+# кадры второго прогона того же отчёта без ручного копирования (#1350, 12.11).
+#   publish-qa.ps1 -SelfTest — проверка выбора снимков на временных папках (её гоняет CI, job «Скрипты тестера»)
+param([string]$Folder, [string]$Message, [string[]]$Shots, [string]$From = 'run', [string]$Also, [switch]$SelfTest)
 $ErrorActionPreference = 'Stop'
+
+# Снимки для отчёта: $shots пусто — все *.png папки $root\$from; иначе по именам. «a,b» одной строкой (`powershell -File`,
+# #1350) разбивается по запятой, расширение отбрасывается (#1533), «папка/имя» или «папка\имя» — из $root\папка.
+# Одно имя из двух папок — ошибка (JPEG в отчёте называется по имени снимка); ни одного найденного — ошибка.
+function Resolve-QaShots([string]$root, [string]$from, [string[]]$shots) {
+  $names = @($shots | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() -replace '\.(jpe?g|png)$', '' } |
+    Where-Object { $_ })
+  if (-not $names) { return @(Get-ChildItem (Join-Path (Join-Path $root $from) '*.png')) }
+  $found = @(); $miss = @()
+  foreach ($n in $names) {
+    $parts = @($n -split '[\\/]' | Where-Object { $_ })
+    $dir = if ($parts.Count -gt 1) { $parts[0..($parts.Count - 2)] -join [IO.Path]::DirectorySeparatorChar } else { $from }
+    $png = Join-Path (Join-Path $root $dir) ($parts[-1] + '.png')
+    if (Test-Path $png) { $found += Get-Item $png } else { $miss += $n }
+  }
+  if (-not $found) { throw "Ни одного снимка из -Shots ($($names -join ', ')) нет в $root" }
+  $dups = @($found | Group-Object BaseName | Where-Object Count -gt 1 | ForEach-Object Name)
+  if ($dups) { throw "Снимок с одним именем из двух папок: $($dups -join ', ')" }
+  if ($miss) { Write-Warning "Нет снимков: $($miss -join ', ')" }
+  return $found
+}
+
+if ($SelfTest) {
+  $bad = 0
+  function Check([bool]$cond, [string]$what) { if (-not $cond) { Write-Output "FAIL $what"; $script:bad++ } else { Write-Output "ok $what" } }
+  $root = Join-Path ([IO.Path]::GetTempPath()) ("publish-" + [guid]::NewGuid().ToString('N'))
+  # Вход: run\a.png, run\b.png, run-k\k1.png, run-k\a.png (содержимое не читается — только имена)
+  foreach ($f in @('run/a', 'run/b', 'run-k/k1', 'run-k/a')) {
+    $p = Join-Path $root ($f + '.png'); New-Item -ItemType Directory -Force (Split-Path $p -Parent) | Out-Null
+    [IO.File]::WriteAllText($p, 'x')
+  }
+  function Pick($shots) { @(Resolve-QaShots $root 'run' $shots | ForEach-Object { "$(Split-Path $_.DirectoryName -Leaf)/$($_.BaseName)" }) -join ' ' }
+  # без -Shots — вся папка -From: «run/a run/b»
+  Check ((Pick @()) -eq 'run/a run/b') "без -Shots — вся папка: $(Pick @())"
+  # «a,run-k/k1» одной строкой: a — из -From, k1 — из run-k → «run/a run-k/k1»
+  Check ((Pick @('a,run-k/k1')) -eq 'run/a run-k/k1') "имя с папкой — из своей папки: $(Pick @('a,run-k/k1'))"
+  # обратная косая и расширение: «run-k\k1.jpg» → «run-k/k1»
+  Check ((Pick @('run-k\k1.jpg')) -eq 'run-k/k1') "папка через \ и расширение: $(Pick @('run-k\k1.jpg'))"
+  # «b, run-k/a» — разные имена из двух папок, порядок -Shots → «run/b run-k/a»
+  Check ((Pick @('b', 'run-k/a')) -eq 'run/b run-k/a') "две папки в одном отчёте: $(Pick @('b', 'run-k/a'))"
+  # «a, run-k/a» — одно имя a.jpg из двух папок → ошибка
+  $err = ''; try { Pick @('a', 'run-k/a') | Out-Null } catch { $err = "$_" }
+  Check ($err -like '*одним именем*') "одно имя из двух папок — ошибка: $err"
+  # «zz, run-k/zz» — ничего нет → ошибка
+  $err = ''; try { Pick @('zz', 'run-k/zz') | Out-Null } catch { $err = "$_" }
+  Check ($err -like 'Ни одного снимка*') "ни одного снимка — ошибка: $err"
+  # «a, run-x/q» — найден один, второго нет → предупреждение, отдаётся «run/a»
+  Check ((Pick @('a', 'run-x/q') 3>$null) -eq 'run/a') 'часть не нашлась — остальные идут'
+  Remove-Item -Recurse -Force $root
+  if ($bad) { Write-Output "publish-qa.ps1 -SelfTest: провалов $bad"; exit 1 }
+  Write-Output 'publish-qa.ps1 -SelfTest: ok'
+  exit 0
+}
+
+if (-not $Folder -or -not $Message) { throw 'Нужны -Folder и -Message' }
 $repo = 'D:\AI\DeepDive'
 $dir = Join-Path $repo "qa\$Folder"
 if (-not (Test-Path "$dir\report.md")) { throw "Нет report.md в $dir" }
@@ -35,17 +92,7 @@ $ep = New-Object System.Drawing.Imaging.EncoderParameters 1
 $ep.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality), 80L
 $src = "D:\AI\qa-build\$From"
 if (-not (Test-Path $src)) { throw "Нет папки прогона $src (-From)" }
-$pngs = Get-ChildItem "$src\*.png"
-# -Shots a,b,c через `powershell -File` приходит одной строкой «a,b,c» (#1350): разбиваем по запятой сами.
-# Имена можно с расширением: «36b-ognecvet-posle.jpg» — то же, что «36b-ognecvet-posle» (#1533).
-$Shots = @($Shots | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() -replace '\.(jpe?g|png)$', '' } |
-  Where-Object { $_ })
-if ($Shots) {
-  $pngs = $pngs | Where-Object { $Shots -contains $_.BaseName }
-  $miss = $Shots | Where-Object { $_ -notin @($pngs | ForEach-Object BaseName) }
-  if (-not $pngs) { throw "Ни одного снимка из -Shots ($($Shots -join ', ')) нет в $src" }
-  if ($miss) { Write-Warning "Нет снимков: $($miss -join ', ')" }
-}
+$pngs = Resolve-QaShots 'D:\AI\qa-build' $From $Shots
 foreach ($f in $pngs) {
   $img = [System.Drawing.Image]::FromFile($f.FullName)
   $w = [Math]::Min(1600, $img.Width); $h = [int]($img.Height * $w / $img.Width)

@@ -121,12 +121,25 @@ func test_emulator_probe_closed() -> void:
 ## #1350: `publish-qa.ps1 -Shots a,b,c` через `powershell -File` приходит одной строкой — фильтр не находил ни
 ## одного снимка, и отчёт уходил без скриншотов молча. Теперь строка разбивается по запятой, без снимков — ошибка.
 func test_publish_qa_splits_shots() -> void:
-	var ps := FileAccess.get_file_as_bytes(DIR.path_join("publish-qa.ps1")).slice(3).get_string_from_utf8()
-	var split := ps.find("-split ','")
-	var filt := ps.find("$Shots -contains")
-	ok(split > 0 and split < filt, "-Shots разбивается по запятой до фильтра")
-	var fail := ps.find("throw", filt)
-	ok(fail > 0 and fail < ps.find("foreach ($f in $pngs)"), "без снимков — ошибка до сжатия и коммита")
+	var ps := _ps("publish-qa.ps1")
+	var fn := ps.find("function Resolve-QaShots")
+	var split := ps.find("-split ','", fn)
+	var fail := ps.find("throw \"Ни одного снимка", fn)
+	ok(fn > 0 and split > fn and fail > split, "-Shots разбивается по запятой, без снимков — ошибка (Resolve-QaShots)")
+	var call := ps.find("$pngs = Resolve-QaShots")
+	ok(call > ps.find("if ($SelfTest)") and call < ps.find("foreach ($f in $pngs)"), "снимки выбраны до сжатия и коммита")
+
+
+## #1350, 12.11: кадры второго прогона того же отчёта тестер копировал в run\ руками — в -Shots теперь имя с папкой
+## (`run-koridor/k1-drain-z6`). Выбор снимков на временных папках гоняет CI (`publish-qa.ps1 -SelfTest`, pwsh).
+func test_publish_qa_shots_from_folder() -> void:
+	var ps := _ps("publish-qa.ps1")
+	ok(ps.contains("[switch]$SelfTest") and ps.contains("Resolve-QaShots $root 'run'"), "publish-qa.ps1 -SelfTest на Resolve-QaShots")
+	ok(ps.contains("-split '[\\\\/]'"), "имя с папкой через / или \\")
+	ok(ps.contains("одним именем"), "одно имя из двух папок — ошибка")
+	ok(ps.find("if ($SelfTest)") < ps.find(". (Join-Path $PSScriptRoot 'zamok.ps1')"), "проверка — до замка и git")
+	var ci := FileAccess.get_file_as_string("res://.github/workflows/godot.yml")
+	ok(ci.contains("./tools/qa/publish-qa.ps1 -SelfTest"), "CI гоняет проверку publish-qa.ps1")
 
 
 ## #1350: эмулятор закрывался вместе с фоновым run-qa.ps1 посреди ручной проверки. Запуск — через WMI
@@ -326,7 +339,8 @@ func test_run_qa_pr_beside_planned() -> void:
 	ok(ps.contains("actions/workflows/godot.yml/runs?head_sha="), "прогон — именно «Godot»")
 	var pub := _ps("publish-qa.ps1")
 	ok(pub.contains("[string]$From = 'run'"), "publish-qa.ps1 -From, по умолчанию run")
-	ok(pub.contains("Get-ChildItem \"$src\\*.png\""), "снимки — из папки -From")
+	ok(pub.contains("Resolve-QaShots 'D:\\AI\\qa-build' $From $Shots") and pub.contains("Join-Path $root $from"),
+			"снимки — из папки -From")
 	ok(not pub.contains("qa-build\\run\\*.png"), "без жёсткого run\\")
 	var qa := FileAccess.get_file_as_string("res://docs/QA.md")
 	for k in ["-Out", "-From", "run-pr", "-r -d"]:
