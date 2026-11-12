@@ -123,6 +123,11 @@ var tuft_n := PackedVector3Array()
 var cap_a := PackedVector3Array()
 var cap_b := PackedVector3Array()
 var cap_r := PackedFloat32Array()
+## Капсулы по полосам вдоль оси (локальная z, шаг CAP_CELL от _cap_z0): `solid` проверяет только капсулы своей
+## полосы — тот же ответ, в разы быстрее (162 капсулы, #1350).
+const CAP_CELL := 2.0
+var _cap_cells: Array[PackedInt32Array] = []
+var _cap_z0 := 0.0
 ## Мох у ног рёбер (свои пятна, MossView рисует их у BonesView).
 var moss: EcoMoss
 
@@ -385,6 +390,7 @@ func _build() -> void:
 		jaw.append(p)
 	for q in JAW_N - 1:
 		_capsule(jaw[q], jaw[q + 1], JAW_R)
+	_index_capsules()
 	# обрастание: на рёбрах (у ноги и выше), на позвонках, на черепе у окон и у дна
 	tuft_c.clear()
 	tuft_n.clear()
@@ -423,6 +429,27 @@ func _capsule(a: Vector3, b: Vector3, r: float) -> void:
 	cap_r.append(r)
 
 
+## Раскладка капсул по полосам z: капсула — в каждой полосе, которую задевает её отрезок с радиусом.
+func _index_capsules() -> void:
+	_cap_cells.clear()
+	if cap_a.is_empty():
+		return
+	var lo := INF
+	var hi := -INF
+	for c in cap_a.size():
+		lo = minf(lo, minf(cap_a[c].z, cap_b[c].z) - cap_r[c])
+		hi = maxf(hi, maxf(cap_a[c].z, cap_b[c].z) + cap_r[c])
+	_cap_z0 = lo
+	_cap_cells.resize(floori((hi - lo) / CAP_CELL))
+	for i in _cap_cells.size():
+		_cap_cells[i] = PackedInt32Array()
+	for c in cap_a.size():
+		var a := floori((minf(cap_a[c].z, cap_b[c].z) - cap_r[c] - lo) / CAP_CELL)
+		var b := floori((maxf(cap_a[c].z, cap_b[c].z) + cap_r[c] - lo) / CAP_CELL)
+		for i in range(maxi(a, 0), mini(b, _cap_cells.size() - 1) + 1):
+			_cap_cells[i].append(c)
+
+
 func _tuft(c: Vector3, n: Vector3) -> void:
 	tuft_c.append(c)
 	tuft_n.append(n)
@@ -452,10 +479,14 @@ func solid(p: Vector3) -> bool:
 		return false
 	if in_skull(q):
 		return true
-	for c in cap_a.size():
+	var cell := floori((q.z - _cap_z0) / CAP_CELL)
+	if cell < 0 or cell >= _cap_cells.size():
+		return false
+	for c in _cap_cells[cell]:
 		if seg_dist(q, cap_a[c], cap_b[c]) < cap_r[c]:
 			return true
 	return false
+
 
 
 ## Верхняя точка (мир).
