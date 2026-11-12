@@ -155,3 +155,90 @@ func test_tool_chain_done() -> void:
 	ok(tool.chain_done({"mollusk_t": 8.5, "alert_t": 12.0}), "замер позже")
 	ok(not tool.chain_done({"mollusk_t": 8.8, "alert_t": 7.9}), "замер раньше")
 	ok(not tool.chain_done({"mollusk_t": -1.0, "alert_t": -1.0}), "моллюски не показались")
+
+
+## Секунд стоянки середины, которые куртина прохода видна раскрытой курсом подхода (дальше — выходит из луча и
+## через LIT_HOLD + сворачивание закрывается: 3,4–5,7 с на 16 зёрнах; экипаж поворачивает луч сам).
+const SEEN := 3.0
+
+
+## Ход середины, как в `tools/mid_calm.gd` (без тёмной стоянки): свет у выхода из 00, PATH[0] → PATH[1] 5 м/с на
+## FLOOR над дном и SEEN с стоянки. Мир — один волнолист. По кусту куртины прохода: {lit, open (раскрыт на
+## FEED_OPEN — моллюски под листьями видны), d — до корабля в этот миг, shut — снова свёрнут ниже FEED_OPEN,
+## near — ближе всего корабль}; "arrive" — пришёл к стоянке.
+func _route_fern_pass(seed_value: int) -> Dictionary:
+	var tool := _tool()
+	var w := EcoWorld.new()
+	w.ground = Seabed.mesh_height
+	var fr := w.add(EcoFern.new()) as EcoFern
+	w.reset(seed_value)
+	var ship := w.ship
+	ship.pos = tool.ship_at(tool.PATH[0])
+	ship.light_on = true
+	ship.light_range = Searchlight.BASE_RANGE
+	var dt: float = tool.DT
+	var out := {"arrive": -1.0, "ferns": {}}
+	for fe in fr.ferns:
+		if Vector2(fe.pos.x, fe.pos.z).distance_to(EcoFern.ROUTE_CLUSTER) < EcoFern.SPREAD * 2.0:
+			out["ferns"][fe.index] = {"lit": -1.0, "open": -1.0, "d": 0.0, "shut": -1.0, "near": INF}
+	var t := 0.0
+	var tg: Vector2 = tool.PATH[1]
+	while out["arrive"] < 0.0 or t < out["arrive"] + SEEN:
+		var d := Vector2(tg.x - ship.pos.x, tg.y - ship.pos.z)
+		if d.length() < 0.5:
+			ship.speed = 0.0
+			if out["arrive"] < 0.0:
+				out["arrive"] = t
+		else:
+			ship.yaw = atan2(-d.x, -d.y)
+			ship.speed = tool.SPEED
+			var mv := d.normalized() * minf(tool.SPEED * dt, d.length())
+			ship.pos = tool.ship_at(Vector2(ship.pos.x + mv.x, ship.pos.z + mv.y))
+		w.step(dt)
+		t += dt
+		for k in out["ferns"]:
+			var fe: EcoFern.Fern = fr.ferns[k]
+			var r: Dictionary = out["ferns"][k]
+			if fe.lit and r["lit"] < 0.0:
+				r["lit"] = t
+			if fe.open > EcoFern.FEED_OPEN and r["open"] < 0.0:
+				r["open"] = t
+				r["d"] = ship.pos.distance_to(fe.pos)
+			if r["open"] >= 0.0 and r["shut"] < 0.0 and fe.open <= EcoFern.FEED_OPEN:
+				r["shut"] = t
+			r["near"] = minf(r["near"], ship.pos.distance_to(fe.pos))
+	return out
+
+
+## Цепочка «прожектор → волнолист → моллюски» на ходу середины (решение гейм-дизайнера 08.11, #1400): куртина у
+## прохода попадает в луч на подходе (по `tools/mid_calm.gd` — 6,6–7,5 с после света), раскрывается на FEED_OPEN не
+## раньше, чем через FEED_OPEN / OPEN_RATE с в луче, — до стоянки и ещё SEEN с стоянки держится раскрытой;
+## моллюски видны после раскрытия, а у стоянки корабль ближе SHELL_BREATH_FAR — моллюски дышат на глазах экипажа.
+## 16 зёрен.
+func test_route_fern_opens_in_beam_before_stop() -> void:
+	var dt: float = _tool().DT
+	var need := EcoFern.FEED_OPEN / EcoFern.OPEN_RATE
+	var first_lit := INF
+	var last_lit := 0.0
+	var ferns := 0
+	for s in 16:
+		var r := _route_fern_pass(20261018 + s * 7919)
+		var arrive: float = r["arrive"]
+		ok(arrive > 0.0, "зерно %d: корабль пришёл к стоянке" % s)
+		eq((r["ferns"] as Dictionary).size(), EcoFern.PER_CLUSTER, "зерно %d: куртина прохода" % s)
+		var seed_first := INF
+		for k in r["ferns"]:
+			var fe: Dictionary = r["ferns"][k]
+			ferns += 1
+			var tag := "зерно %d, куст %d" % [s, k]
+			ok(fe["lit"] > 0.0 and fe["lit"] < arrive, "%s: в луче на подходе (%.2f с, стоянка с %.2f с)" % [tag, fe["lit"], arrive])
+			ok(fe["open"] >= fe["lit"] + need - dt * 1.5, "%s: раскрыт не раньше %.2f с в луче: луч %.2f, раскрыт %.2f" % [tag, need, fe["lit"], fe["open"]])
+			ok(fe["open"] > 0.0 and fe["open"] < arrive, "%s: раскрыт до стоянки: %.2f с" % [tag, fe["open"]])
+			ok(fe["d"] <= EcoWorld.BEAM_R + Searchlight.LAMP.length(), "%s: раскрыт в луче, %.1f м" % [tag, fe["d"]])
+			ok(fe["shut"] < 0.0 or fe["shut"] >= arrive + SEEN - dt * 0.5, "%s: раскрыт ещё %.0f с стоянки: свёрнут на %.2f с, стоянка с %.2f с" % [tag, SEEN, fe["shut"], arrive])
+			ok(fe["near"] < FernView.SHELL_BREATH_FAR, "%s: моллюски дышат — корабль в %.1f м" % [tag, fe["near"]])
+			seed_first = minf(seed_first, fe["lit"])
+		first_lit = minf(first_lit, seed_first)
+		last_lit = maxf(last_lit, seed_first)
+	eq(ferns, 16 * EcoFern.PER_CLUSTER, "все кусты всех зёрен")
+	ok(first_lit >= 6.0 and last_lit <= 8.0, "первый куст в луче на 6–8 с после света: %.2f…%.2f" % [first_lit, last_lit])
