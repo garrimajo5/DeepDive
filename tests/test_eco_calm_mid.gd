@@ -128,3 +128,30 @@ func test_pred_starts_beyond_senses() -> void:
 	var mid: Vector2 = (tool.PATH[0] + tool.PATH[1]) * 0.5 + Vector2(sense * 0.5, 0.0)
 	var bad: Array[Vector2] = [mid]
 	eq(_near_starts(bad, sense).size(), 1, "место у пути — поймано")
+
+
+## `tools/mid_calm.gd start0=` (#1400, 12.11): серпохвост №0 со своего старта стоит там же, где его ставит
+## `EcoPred.reset`; с пробного — в той же высоте над дном.
+func test_tool_moves_pred_like_reset() -> void:
+	var tool := _tool()
+	var w := EcoWorld.new()
+	w.ground = Seabed.mesh_height
+	var preds := w.add(EcoPred.new(null)) as EcoPred
+	w.reset(7)
+	var pr: EcoPred.Pred = preds.all[0]
+	var was := pr.agent.p
+	tool.move_pred(pr, EcoPred.STARTS[0])
+	near(pr.agent.p.distance_to(was), 0.0, 1e-4, "свой старт — то же место")
+	tool.move_pred(pr, Vector2(-60, -20))
+	near(Vector2(pr.agent.p.x, pr.agent.p.z).distance_to(Vector2(-60, -20)), 0.0, 1e-4, "пробный старт")
+	eq(pr.start, pr.agent.p, "старт патруля — там же")
+	ok(pr.agent.p.y <= EcoPred.GOAL_CEILING + 1e-4, "не выше потолка")
+
+
+## Наблюдение закончено: моллюски видны раньше первого «замера» или «замера» нет.
+func test_tool_chain_done() -> void:
+	var tool := _tool()
+	ok(tool.chain_done({"mollusk_t": 8.5, "alert_t": -1.0}), "без замера")
+	ok(tool.chain_done({"mollusk_t": 8.5, "alert_t": 12.0}), "замер позже")
+	ok(not tool.chain_done({"mollusk_t": 8.8, "alert_t": 7.9}), "замер раньше")
+	ok(not tool.chain_done({"mollusk_t": -1.0, "alert_t": -1.0}), "моллюски не показались")

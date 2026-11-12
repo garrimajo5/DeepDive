@@ -2,7 +2,9 @@ extends SceneTree
 ## Спокойная середина 00 → 01 (#1400): что ещё зажигает луч, пока экипаж смотрит цепочку «прожектор → волнолист →
 ## моллюски». Гейм-дизайнер (08.11): в середине не накладывать зов хищника гребневиками. Мир целиком (`EcoView`, дно
 ## `Seabed.mesh_height`), headless, без узлов сцены; облачный расчёт, не телефонный.
-##   godot --headless --path . -s tools/mid_calm.gd [-- seeds=16 raduzh=1:80,5 lim=<с> dark=<с> probe=1 answer=1 delay=<с> hold=<с>]
+##   godot --headless --path . -s tools/mid_calm.gd [-- seeds=16 raduzh=1:80,5 lim=<с> dark=<с> probe=1 answer=1 delay=<с> hold=<с>
+##   start0=<x>,<z>]
+## start0= — старт серпохвоста №0 на пробу в другом месте (как `EcoPred.STARTS[0]`: та же высота над дном, #1400, 12.11).
 ## raduzh=<номер>:<x>,<z> — дом стаи радужников с этим номером на пробу в другом месте (`EcoRaduzh._homes` до сброса
 ## мира; несколько — через «;»). Проход как `late` в tools/patrol.gd: 30 с без света у 00 (пауза хищников после сброса
 ## кончилась), затем свет и ход 5 м/с по оси PATH на 7 м над дном, стоянка STOP с у середины, дальше к 01.
@@ -43,6 +45,13 @@ const HOLD := 25.0
 static var answer := false
 static var delay := DELAY
 static var hold := HOLD
+## Старт серпохвоста №0 этого прогона (`start0=`), не задан — INF: как в игре.
+static var start0 := Vector2.INF
+## Порядок событий середины (гейм-дизайнер, #1400, 12.11): свет → раскрытие волнолиста → видимая реакция моллюсков
+## (раскрыт на `EcoFern.FEED_OPEN` — моллюски под листьями видны; «рыбы приплыли» — `EcoFern` "mollusk" у куртины
+## прохода) → первый «замер» серпохвоста. Путь №0 — старт, затем точки раз в TRACK_EVERY с первые TRACK_FOR с после света.
+const TRACK_EVERY := 5.0
+const TRACK_FOR := 60.0
 
 
 func _init() -> void:
@@ -57,6 +66,9 @@ func _init() -> void:
 	answer = kv.get("answer", "0") == "1"
 	delay = float(kv.get("delay", str(DELAY)))
 	hold = float(kv.get("hold", str(HOLD)))
+	if kv.has("start0"):
+		var xz: PackedStringArray = kv["start0"].split(",")
+		start0 = Vector2(float(xz[0]), float(xz[1]))
 	if kv.has("raduzh"):
 		moves = parse_moves(kv["raduzh"])
 	for line in report(seeds):
@@ -88,7 +100,16 @@ static func make(seed_value: int) -> EcoView:
 		ev.raduzh._homes = homes
 	ev.preds.probe = probe
 	ev.world.reset(seed_value)
+	if start0.is_finite():
+		move_pred(ev.preds.all[0], start0)
 	return ev
+
+
+## Серпохвост pr — со старта xz, как если бы он стоял там в `EcoPred.STARTS` (высота — как в `EcoPred.reset`).
+static func move_pred(pr: EcoPred.Pred, xz: Vector2) -> void:
+	var p := Vector3(xz.x, minf(Seabed.mesh_height(xz.x, xz.y) + 8.0, EcoPred.GOAL_CEILING), xz.y)
+	pr.agent.p = p
+	pr.start = p
 
 
 ## Событие шины — угроза в слышимости экипажа: «вид:заметка», иначе "".
@@ -107,6 +128,7 @@ static func run(seed_value: int) -> Dictionary:
 	ship.pos = ship_at(PATH[0])
 	ship.light_on = false
 	ship.speed = 0.0
+	var born: Vector3 = ev.preds.all[0].agent.p
 	var t := 0.0
 	while t < dark:
 		w.ship = ship
@@ -116,9 +138,14 @@ static func run(seed_value: int) -> Dictionary:
 	ship.light_on = true
 	ship.light_range = Searchlight.BASE_RANGE
 	var r := {"fern_t": -1.0, "flare": {}, "betray_mid": 0, "betray_01": 0, "threat_mid": {}, "threat_01": {},
-		"pred_mid": INF, "answers": 0}
+		"pred_mid": INF, "answers": 0, "mollusk_t": -1.0, "alert_t": -1.0, "alert_who": -1, "alert_d": 0.0,
+		"track0": [], "near0": INF, "near0_t": 0.0, "lit_t": -1.0, "born0": Vector2(born.x, born.z),
+		"fish_t": -1.0}
 	var heard: Array = []   # [«вид:заметка», расстояние до корабля] за шаг
 	var listen := func(e: EcoBus.Event) -> void:
+		if e.species == EcoFern.ID and e.note == "mollusk" and r["fish_t"] < 0.0 \
+				and Vector2(e.pos.x, e.pos.z).distance_to(EcoFern.ROUTE_CLUSTER) < 6.0:
+			r["fish_t"] = w.time - dark
 		var k := threat_key(e, w.ship.pos)
 		if k != "":
 			heard.append([k, e.pos.distance_to(w.ship.pos)])
@@ -163,8 +190,19 @@ static func run(seed_value: int) -> Dictionary:
 				r["betray_mid" if mid else "betray_01"] += 1
 			elif e["type"] == EcoLink.HIT or e["type"] == EcoLink.DRAIN:
 				heard.append(["%s:%s" % [e["by"], e["type"]], 0.0])
+		var p0: EcoPred.Pred = ev.preds.all[0]
+		var d0 := p0.agent.p.distance_to(ship.pos)
+		if d0 < r["near0"]:
+			r["near0"] = d0
+			r["near0_t"] = t - dark
+		if t - dark <= TRACK_FOR + DT * 0.5 and (r["track0"] as Array).size() < int((t - dark) / TRACK_EVERY + 1e-4) + 1:
+			(r["track0"] as Array).append([Vector2(p0.agent.p.x, p0.agent.p.z), d0])
 		for pr in ev.preds.all:
 			var dp := pr.agent.p.distance_to(ship.pos)
+			if pr.mode == EcoPred.Mode.ALERT and r["alert_t"] < 0.0:
+				r["alert_t"] = t - dark
+				r["alert_who"] = pr.index
+				r["alert_d"] = dp
 			if pr.mode == EcoPred.Mode.ALERT or pr.mode == EcoPred.Mode.CHARGE:
 				heard.append(["pred%d:%s" % [pr.index, EcoPred.Mode.keys()[pr.mode].to_lower()], dp])
 			if mid:
@@ -177,8 +215,13 @@ static func run(seed_value: int) -> Dictionary:
 			got[h[0]]["n"] += 1
 		if r["fern_t"] < 0.0:
 			for fe in ev.ferns.ferns:
-				if fe.open > EcoFern.FEED_OPEN and Vector2(fe.pos.x, fe.pos.z).distance_to(EcoFern.ROUTE_CLUSTER) < 6.0:
+				if Vector2(fe.pos.x, fe.pos.z).distance_to(EcoFern.ROUTE_CLUSTER) >= 6.0:
+					continue
+				if fe.lit and r["lit_t"] < 0.0:
+					r["lit_t"] = t - dark
+				if fe.open > EcoFern.FEED_OPEN:
 					r["fern_t"] = t - dark
+					r["mollusk_t"] = t - dark   # раскрыт на FEED_OPEN — моллюски под листьями видны
 		if mid:
 			for sw in ev.raduzh.swarms:
 				if sw.glow > EcoRaduzh.FLARE_ON and not lit.has(sw.index):
@@ -194,7 +237,8 @@ static func report(seeds: int) -> Array[String]:
 	var homes: Array[Vector2] = EcoRaduzh.HOMES.duplicate()
 	for k in moves:
 		homes[k] = moves[k]
-	lines.append("== дома радужников %s, тихий круг серпохвоста %s, ответ экипажа %s, %d зёрен, путь %s, стоянка %.0f с у середины" % [str(homes), "вкл" if probe else "выкл", ("через %.1f с, %.0f с без света" % [delay, hold]) if answer else "нет", seeds, str(PATH), STOP])
+	lines.append("== дома радужников %s, старт серпохвоста №0 %s, тихий круг серпохвоста %s, ответ экипажа %s, %d зёрен, путь %s, стоянка %.0f с у середины" % [str(homes), str(start0 if start0.is_finite() else EcoPred.STARTS[0]), "вкл" if probe else "выкл", ("через %.1f с, %.0f с без света" % [delay, hold]) if answer else "нет", seeds, str(PATH), STOP])
+	var order := {"done": 0, "mollusk": [], "alert": [], "near0": []}
 	var fern := 0
 	var flared := {}
 	var betray_mid := 0
@@ -228,6 +272,14 @@ static func report(seeds: int) -> Array[String]:
 		pred_near = minf(pred_near, r["pred_mid"])
 		if r["answers"] > 0:
 			parts.append("ответов %d" % r["answers"])
+		parts.append(chain_line(r))
+		if chain_done(r):
+			order["done"] += 1
+		if r["mollusk_t"] >= 0.0:
+			order["mollusk"].append(r["mollusk_t"])
+		if r["alert_t"] >= 0.0:
+			order["alert"].append(r["alert_t"])
+		order["near0"].append(r["near0"])
 		lines.append("  зерно %d: %s" % [s, ", ".join(parts)])
 	var fl: Array[String] = []
 	for k in homes.size():
@@ -237,7 +289,49 @@ static func report(seeds: int) -> Array[String]:
 	lines.append("угрозы в середине (зёрен из %d): %s; серпохвост ближе всего %.0f м" \
 		% [seeds, _keys(threats_mid) if not threats_mid.is_empty() else "нет", pred_near])
 	lines.append("угрозы на подходе к 01 (зёрен из %d): %s" % [seeds, _keys(threats_01) if not threats_01.is_empty() else "нет"])
+	lines.append("порядок: моллюски до первого «замера» %d/%d; реакция моллюсков %s; первый «замер» %s; №0 ближе всего (медиана) %.0f м" \
+		% [order["done"], seeds, _spread(order["mollusk"], seeds), _spread(order["alert"], seeds), _median(order["near0"])])
 	return lines
+
+
+## Наблюдение цепочки закончено до вынужденного ответа: моллюски показались, а «замера» не было или он позже.
+static func chain_done(r: Dictionary) -> bool:
+	return r["mollusk_t"] >= 0.0 and (r["alert_t"] < 0.0 or r["mollusk_t"] < r["alert_t"])
+
+
+## «свет 0 → луч на волнолисте 2,0 с → моллюски видны 3,1 с (рыбы нет) → замер №0 12,0 с в 30 м; путь №0: старт
+## (−60; 20), 0 с (−18; 13) 70 м, …; №0 ближе всего 4 м на 20,1 с».
+static func chain_line(r: Dictionary) -> String:
+	var t := "свет 0 → луч на волнолисте %s → моллюски видны %s (рыбы %s) → замер %s" % [_t(r["lit_t"]),
+		_t(r["mollusk_t"]), _t(r["fish_t"]),
+		("№%d %.1f с в %.0f м" % [r["alert_who"], r["alert_t"], r["alert_d"]]) if r["alert_t"] >= 0.0 else "нет"]
+	var tr: Array[String] = ["старт (%.0f; %.0f)" % [r["born0"].x, r["born0"].y]]
+	for k in (r["track0"] as Array).size():
+		var pt: Array = r["track0"][k]
+		tr.append("%d с (%.0f; %.0f) %.0f м" % [roundi(k * TRACK_EVERY), pt[0].x, pt[0].y, pt[1]])
+	return t + "; путь №0: " + ", ".join(tr) + "; №0 ближе всего %.0f м на %.1f с" % [r["near0"], r["near0_t"]]
+
+
+static func _t(v: float) -> String:
+	return "%.1f с" % v if v >= 0.0 else "нет"
+
+
+## «в 12/16, 3,1–9,8 с, медиана 5,2 с».
+static func _spread(v: Array, seeds: int) -> String:
+	if v.is_empty():
+		return "в 0/%d" % seeds
+	var s := v.duplicate()
+	s.sort()
+	return "в %d/%d, %.1f–%.1f с, медиана %.1f с" % [s.size(), seeds, s[0], s[-1], _median(s)]
+
+
+static func _median(v: Array) -> float:
+	if v.is_empty():
+		return INF
+	var s := v.duplicate()
+	s.sort()
+	var m := s.size() / 2
+	return float(s[m]) if s.size() % 2 == 1 else (float(s[m - 1]) + float(s[m])) * 0.5
 
 
 ## {ключ → раз} или {ключ → {n, t, d}} строкой: «ключ ×n» или «ключ ×n с t с в d м» (для режима — кадров).
