@@ -16,7 +16,7 @@ func test_model_textures_vram_compressed() -> void:
 	var files := DirAccess.get_files_at("res://models")
 	var n := 0
 	for f in files:
-		if not f.ends_with(".png.import"):
+		if not (f.ends_with(".png.import") or f.ends_with(".jpg.import")):
 			continue
 		n += 1
 		eq(_mode("res://models/" + f), 2, "%s: VRAM Compressed (compress/mode=2)" % f)
