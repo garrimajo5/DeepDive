@@ -6,7 +6,7 @@ extends TestCase
 
 func _tool() -> GDScript:
 	var tool: GDScript = load("res://tools/mid_calm.gd")
-	for v in ["moves", "limit", "dark", "probe", "answer", "delay", "hold", "start0", "band0"]:
+	for v in ["moves", "limit", "dark", "probe", "answer", "delay", "hold", "start0", "band0", "fish_moves"]:
 		ok(tool.get(v) != null, "в инструменте есть %s" % v)
 	return tool
 
@@ -21,6 +21,7 @@ func _restore(tool: GDScript) -> void:
 	tool.set("hold", tool.HOLD)
 	tool.set("start0", Vector2.INF)
 	tool.set("band0", Rect2())
+	tool.set("fish_moves", {})
 
 
 func test_parse_moves() -> void:
@@ -48,18 +49,45 @@ func test_short_pass_opens_route_fern_and_reports() -> void:
 	tool.set("limit", 12.0)
 	var lines: Array[String] = tool.report(1)
 	_restore(tool)
-	eq(lines.size(), 7, "шапка, зерно, итог, угрозы середины и подхода к 01, порядок, цели №0 против пути середины")
+	eq(lines.size(), 10, "шапка, дом стаи 0, зерно, итог, угрозы середины и подхода к 01, порядок, цели №0, стая 0, погони")
 	ok(lines[0].begins_with("== дома радужников"), lines[0])
-	ok(lines[1].contains("волнолист раскрыт на"), lines[1])
-	ok(lines[2].begins_with("итог: волнолист 1/1") and lines[2].contains("стая 1 —"), lines[2])
-	ok(lines[3].begins_with("угрозы в середине (зёрен из 1)") and lines[3].contains("серпохвост ближе всего"), lines[3])
-	ok(lines[4].begins_with("угрозы на подходе к 01 (зёрен из 1)"), lines[4])
-	ok(lines[5].begins_with("порядок: моллюски до первого «замера»"), lines[5])
-	ok(lines[1].contains("свет 0 → луч на волнолисте") and lines[1].contains("путь №0 (при свете — ") \
-		and lines[1].contains("): старт (-60; 20)"), lines[1])
-	ok(lines[1].contains("цели №0: ") and lines[1].contains("охота на рыб"), lines[1])
+	ok(lines[1].begins_with("== дом стаи светляков 0 (15; 76), тёмная стоянка 0 с"), lines[1])
+	ok(lines[2].contains("волнолист раскрыт на"), lines[2])
+	ok(lines[3].begins_with("итог: волнолист 1/1") and lines[3].contains("стая 1 —"), lines[3])
+	ok(lines[4].begins_with("угрозы в середине (зёрен из 1)") and lines[4].contains("серпохвост ближе всего"), lines[4])
+	ok(lines[5].begins_with("угрозы на подходе к 01 (зёрен из 1)"), lines[5])
+	ok(lines[6].begins_with("порядок: моллюски до первого «замера»"), lines[6])
+	ok(lines[2].contains("свет 0 → луч на волнолисте") and lines[2].contains("путь №0 (при свете — ") \
+		and lines[2].contains("): старт (-60; 20)"), lines[2])
+	ok(lines[2].contains("цели №0: ") and lines[2].contains("охота на рыб"), lines[2])
+	ok(lines[2].contains("стая 0: до ") and lines[2].contains("кадров погони"), lines[2])
 	ok(lines[0].contains("цели №0 как в игре"), lines[0])
-	ok(lines[6].begins_with("путь середины") and lines[6].contains("отрезок между целями"), lines[6])
+	ok(lines[7].begins_with("путь середины") and lines[7].contains("отрезок между целями"), lines[7])
+	ok(lines[8].begins_with("стая 0: дальше всего от дома макс "), lines[8])
+	ok(lines[9].begins_with("погони (HUNT, все серпохвосты): "), lines[9])
+
+
+## fish= (#1400, 12.11): дом стаи рифа 0 — в новом месте на HOME_LIFT над дном, остальные стаи на месте.
+func test_fish_move_puts_shoal_home_there() -> void:
+	var tool := _tool()
+	tool.set("fish_moves", tool.parse_moves("0:100,90"))
+	var ev: EcoView = tool.make(7)
+	_restore(tool)
+	var h := ev.fish.shoals[0].home
+	near(h.x, 100.0, 1e-4, "стая 0 — в новом доме по x")
+	near(h.z, 90.0, 1e-4, "по z")
+	near(h.y, Seabed.height(100.0, 90.0) + tool.HOME_LIFT, 1e-4, "на HOME_LIFT над дном")
+	near(ev.fish.shoals[1].home.x, EcoFish.HOMES[1].x, 1e-4, "стая 1 — на месте")
+	ev.free()
+
+
+## Среда у дома: у прежнего дома стаи 0 — флора рядом (папоротники волнолиста), у пустой точки — «ничего».
+func test_site_line_counts_life_near() -> void:
+	var tool := _tool()
+	var old: String = tool.site_line("прежний", Vector2(EcoFish.HOMES[0].x, EcoFish.HOMES[0].z))
+	ok(old.begins_with("== прежний (15; 76): дно ") and old.contains("EcoFern.ferns ×"), old)
+	var empty: String = tool.site_line("пусто", Vector2(100.0, 90.0))
+	ok(empty.contains("грунт песок ") and empty.ends_with("ближе 25 м: ничего"), empty)
 
 
 ## Угрозы — события шины из THREATS ближе слышимости экипажа: засада глазуна, «замер» и укус серпохвоста.
