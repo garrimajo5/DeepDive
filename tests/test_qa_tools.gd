@@ -397,6 +397,11 @@ func test_run_qa_watch_summary() -> void:
 	ok(k.contains("Export-QaBranches $clone"), "проверка kadry.ps1 гоняет ветку qa/* на своём origin")
 	ok(run.rfind("NOT_DONE") > run.find("foreach ($w in $watch)"), "NOT_DONE остаётся последней")
 	ok(k.contains("labels=$q") and k.contains("EscapeDataString"), "метка в адресе URL-кодом (кириллица в PS 5.1)")
+	# #1350, 12.11 (отчёт ea2758d): при открытых «ждёт телефона» строк ПРОВЕРИТЬ не было — строка ISSUES говорит почему
+	var note := run.find("Write-Output $script:IssueNote")
+	ok(note > run.find("foreach ($w in $watch)") and note < run.rfind("NOT_DONE"), "строка ISSUES — под сводкой, NOT_DONE после")
+	ok(k.contains("function gh {") and k.contains("Get-IssueSteps @('32o-mol-steklo'"), "Get-IssueSteps проверен на подставном gh")
+	ok(not k.contains("@tsv' 2>$null"), "ошибка gh не глушится")
 	ok(_ps("publish-qa.ps1").contains("Copy-Item \"$src\\kadry.txt\""), "publish-qa.ps1 сдаёт kadry.txt")
 	var ci := FileAccess.get_file_as_string("res://.github/workflows/godot.yml")
 	ok(ci.contains("./tools/qa/kadry.ps1 -SelfTest"), "CI гоняет проверку kadry.ps1")

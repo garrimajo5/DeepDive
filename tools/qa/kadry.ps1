@@ -145,12 +145,30 @@ function Export-QaBranches([string]$repo, [string]$dest) {
 
 # Шаг → «#519, #1665»: открытые issues «проверить» и «ждёт телефона», где шаг назван в заголовке или тексте.
 # Метка — в адресе URL-кодом, jq без кавычек: Windows PowerShell 5.1 портит кириллицу и кавычки в аргументах gh.
+# Что прочитано — строкой $script:IssueNote («ISSUES «проверить» 12, «ждёт телефона» 4 | шаги: 32o-mol-steklo #1665»),
+# run-qa.ps1 печатает её под сводкой: сводка без строк ПРОВЕРИТЬ при открытых issues (#1350, 12.11, отчёт ea2758d)
+# сама говорит, gh не нашёлся, упал или шаги не совпали.
+$script:IssueNote = ''
 function Get-IssueSteps([string[]]$steps) {
   $map = @{}
-  if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { return $map }
+  if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+    $script:IssueNote = 'ISSUES gh не найден — шаги открытых «проверить»/«ждёт телефона» не сопоставлены'
+    return $map
+  }
+  $notes = @()
   foreach ($label in @('проверить', 'ждёт телефона')) {
     $q = [uri]::EscapeDataString($label)
-    $rows = @(gh api "repos/garrimajo5/DeepDive/issues?state=open&per_page=100&labels=$q" --jq '.[] | select(.pull_request == null) | [.number, .title, .body] | @tsv' 2>$null)
+    $global:LASTEXITCODE = 0
+    $all = @(gh api "repos/garrimajo5/DeepDive/issues?state=open&per_page=100&labels=$q" --jq '.[] | select(.pull_request == null) | [.number, .title, .body] | @tsv' 2>&1)
+    $code = $LASTEXITCODE
+    $errs = @($all | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] })
+    $rows = @($all | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] -and "$_" -match '^\d+\t' })
+    if ($code -or ($errs -and -not $rows)) {
+      $why = if ($errs) { ("$($errs[0])" -split "`n")[0].Trim() } else { '' }
+      $notes += "«$label» ошибка gh (код $code) $why".TrimEnd()
+      continue
+    }
+    $notes += "«$label» $($rows.Count)"
     foreach ($r in $rows) {
       $n, $t = "$r" -split "`t", 2
       foreach ($s in $steps) {
@@ -160,6 +178,8 @@ function Get-IssueSteps([string[]]$steps) {
       }
     }
   }
+  $hit = @($map.Keys | Sort-Object | ForEach-Object { "$_ $(@($map[$_]) -join ',')" })
+  $script:IssueNote = "ISSUES $($notes -join ', ') | шаги: $(if ($hit) { $hit -join '; ' } else { 'ни один шаг прогона не назван' })"
   return $map
 }
 
@@ -248,6 +268,31 @@ if ($SelfTest) {
   Check ($w2[0] -like 'ПРОВЕРИТЬ 21a-vent 70 мс шум (#519) |*подряд: 2 из 3') "шумный сейчас — не в счёт: $($w2[0])"
   Check ((Get-WatchLines ([ordered]@{ 'x-1' = 50 }) $true @() @{}).Count -eq 0) 'ниже предела и без issue — без строки'
   Check ((Get-WatchLines ([ordered]@{ '9-novyj' = 130 }) $true @() @{})[0] -like '*раньше: нет данных*') 'новый шаг — «нет данных»'
+  # Get-IssueSteps на подставном gh (функция перекрывает gh.exe): шаг из заголовка и тела, строка ISSUES (#1350, 12.11)
+  # Метка в адресе URL-кодом: «проверить» начинается с %D0%BF, «ждёт телефона» — с %D0%B6.
+  # Ошибку gh подставной отдаёт объектом ErrorRecord в вывод, не Write-Error: pwsh в Actions — $ErrorActionPreference stop.
+  function gh {
+    $global:LASTEXITCODE = 0
+    if ("$($args[1])" -match 'labels=%D0%BF') {
+      "1665`tПровал кадра у колодца (32o-mol-steklo)`tтело"
+      "519`tПровал`tшаги 21a-vent и 32o-mol-steklo"
+    } else { "803`tПровал на 31b-kod-net`t" }
+  }
+  $im = Get-IssueSteps @('32o-mol-steklo', '21a-vent', '31b-kod-net', '01-start', '32o')
+  # ждём: 32o-mol-steklo → #1665 и #519, 21a-vent → #519, 31b-kod-net → #803; 01-start и «32o» (часть имени) — нет
+  Check ((@($im['32o-mol-steklo']) -join ',') -eq '#1665,#519' -and (@($im['21a-vent']) -join ',') -eq '#519' -and (@($im['31b-kod-net']) -join ',') -eq '#803') "Get-IssueSteps: шаги из заголовка и тела ($(@($im.Keys | ForEach-Object { "$_=$(@($im[$_]) -join ',')" }) -join ' '))"
+  Check (-not $im.ContainsKey('01-start') -and -not $im.ContainsKey('32o')) 'Get-IssueSteps: шаг без issue и часть имени — нет'
+  Check ($script:IssueNote -eq 'ISSUES «проверить» 2, «ждёт телефона» 1 | шаги: 21a-vent #519; 31b-kod-net #803; 32o-mol-steklo #1665,#519') "строка ISSUES: $($script:IssueNote)"
+  $wi = Get-WatchLines ([ordered]@{ '32o-mol-steklo' = 32; '01-start' = 40 }) $true @() $im
+  Check ($wi.Count -eq 1 -and $wi[0] -like 'ПРОВЕРИТЬ 32o-mol-steklo 32 мс (#1665, #519) |*') "шаг из issue ниже 100 мс — строка есть: $($wi -join ' / ')"
+  function gh {
+    $global:LASTEXITCODE = 1
+    [System.Management.Automation.ErrorRecord]::new([Exception]::new('HTTP 401: Bad credentials'), 'gh', 'NotSpecified', $null)
+  }
+  $im2 = Get-IssueSteps @('32o-mol-steklo')
+  Check ($im2.Count -eq 0 -and $script:IssueNote -like 'ISSUES «проверить» ошибка gh (код 1) HTTP 401: Bad credentials, «ждёт телефона» ошибка gh (код 1)*| шаги: ни один*') "gh упал — причина в строке ISSUES: $($script:IssueNote)"
+  Remove-Item function:gh
+
   # kadry-2.txt — второй прогон того же отчёта, сразу за kadry.txt
   $q2 = Join-Path $root 'qa2'
   New-Item -ItemType Directory -Force (Join-Path $q2 '2026-11-12-0226-svezhaya-a7246c2') | Out-Null

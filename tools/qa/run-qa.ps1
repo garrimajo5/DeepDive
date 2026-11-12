@@ -303,6 +303,8 @@ Write-Kadry "$run\kadry.txt" $result $worstNow
 $prQa = try { Export-QaBranches $repo 'D:\AI\qa-build\qa-pr' } catch { Write-Warning "qa/* открытых PR не прочитаны: $_"; $null }
 $watch = Get-WatchLines $worstNow (Test-Quiet $result) (Read-Past @("$repo\qa", $prQa)) (Get-IssueSteps @($worstNow.Keys))
 foreach ($w in $watch) { Write-Output $w; Add-Content "$run\log.txt" "run-qa: $w" -Encoding utf8 }
+# Что сводка прочитала из issues (#1350, 12.11): нет строк ПРОВЕРИТЬ — эта строка говорит почему
+if ($script:IssueNote) { Write-Output $script:IssueNote; Add-Content "$run\log.txt" "run-qa: $($script:IssueNote)" -Encoding utf8 }
 # Заметная строка в самом конце: прогон не дошёл до конца или не все снимки забраны (#1533)
 if (-not $done -or $miss) {
   $why = @()
