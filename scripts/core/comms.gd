@@ -144,6 +144,13 @@ func push(role: int, text: String, fake := false, ask := "", silent := false, vo
 
 
 ## Чужое слово подделки: не код забега, по тексту — одно и то же для одной реплики.
+## Реплика с файлом голоса (`VoiceFiles.stream`): речь — длина файла, показ — не меньше речи + `AFTER_SPEECH`.
+## seconds ≤ 0 — файла нет, речь остаётся по длине текста.
+func set_voice(m: Msg, seconds: float) -> void:
+	if m != null and seconds > 0.0:
+		m.speech = seconds
+
+
 func wrong_word(text: String) -> String:
 	var i := posmod(text.hash(), WORDS.size())
 	if WORDS[i] == code:
