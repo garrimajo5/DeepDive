@@ -385,7 +385,15 @@ func test_run_qa_watch_summary() -> void:
 	var dot := run.find(". (Join-Path $PSScriptRoot 'kadry.ps1')")
 	ok(dot > res, "сводка — после строки RUN")
 	ok(run.find("Write-Kadry \"$run\\kadry.txt\" $result") > dot, "kadry.txt — в папку прогона")
-	ok(run.find("Read-Past \"$repo\\qa\"") > dot, "прошлое — из qa/ клона")
+	ok(run.find("Read-Past @(\"$repo\\qa\", $prQa)") > dot, "прошлое — из qa/ клона и отчётов открытых PR")
+	# #1350, 11.11: сводка не видела отчёт, ещё не слитый в main, и второй прогон того же отчёта
+	ok(run.find("$prQa = try { Export-QaBranches $repo") > dot, "отчёты открытых PR qa/* — до сводки, сбой не валит её")
+	ok(k.contains("'+refs/heads/qa/*:refs/remotes/origin/qa/*'") and k.contains("archive --format=zip -o"),
+		"ветки qa/* — fetch и git archive (не вывод git show: кириллица в PS 5.1)")
+	ok(k.contains("'kadry-2.txt'"), "kadry-2.txt — отдельным прогоном")
+	var pub := _ps("publish-qa.ps1")
+	ok(pub.contains("[string]$Also") and pub.contains("'kadry-2.txt'"), "publish-qa.ps1 -Also кладёт kadry-2.txt")
+	ok(k.contains("Export-QaBranches $clone"), "проверка kadry.ps1 гоняет ветку qa/* на своём origin")
 	ok(run.rfind("NOT_DONE") > run.find("foreach ($w in $watch)"), "NOT_DONE остаётся последней")
 	ok(k.contains("labels=$q") and k.contains("EscapeDataString"), "метка в адресе URL-кодом (кириллица в PS 5.1)")
 	ok(_ps("publish-qa.ps1").contains("Copy-Item \"$src\\kadry.txt\""), "publish-qa.ps1 сдаёт kadry.txt")

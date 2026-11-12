@@ -2,7 +2,10 @@
 # Использование: publish-qa.ps1 -Folder <ГГГГ-ММ-ДД-ЧЧММ-что> -Message "<сообщение коммита>" [-Shots 01-start,04-forward]
 # report.md должен уже лежать в D:\AI\DeepDive\qa\<Folder>\report.md. Скриншоты берутся из D:\AI\qa-build\run\;
 # -From <имя> — из другой папки прогона: run-pr<номер> после `run-qa.ps1 -Pr`, run-<сценарий> после -Scenario (#1606).
-param([Parameter(Mandatory)][string]$Folder, [Parameter(Mandatory)][string]$Message, [string[]]$Shots, [string]$From = 'run')
+# -Also <имя> — kadry.txt второго прогона того же отчёта (напр. `-From run-cold -Also run`) кладётся рядом как kadry-2.txt:
+# сводка ПРОВЕРИТЬ (kadry.ps1) считает его отдельным прогоном (#1350, 11.11).
+param([Parameter(Mandatory)][string]$Folder, [Parameter(Mandatory)][string]$Message, [string[]]$Shots, [string]$From = 'run',
+  [string]$Also)
 $ErrorActionPreference = 'Stop'
 $repo = 'D:\AI\DeepDive'
 $dir = Join-Path $repo "qa\$Folder"
@@ -53,6 +56,11 @@ foreach ($f in $pngs) {
 
 # kadry.txt (худший кадр по шагам, run-qa.ps1) — рядом с отчётом: сводка ПРОВЕРИТЬ следующих прогонов берёт числа из него
 if (Test-Path "$src\kadry.txt") { Copy-Item "$src\kadry.txt" (Join-Path $dir 'kadry.txt') -Force }
+if ($Also) {
+  $also = "D:\AI\qa-build\$Also\kadry.txt"
+  if (-not (Test-Path $also)) { throw "Нет $also (-Also)" }
+  Copy-Item $also (Join-Path $dir 'kadry-2.txt') -Force
+}
 
 # Папка отчёта — в worktree ветки отчёта; коммит, пуш и SHA — там же
 $dst = Join-Path $wt "qa\$Folder"

@@ -2,7 +2,8 @@
 # (строка RUN и «шаг мс» по каждому снимку), publish-qa.ps1 кладёт его в qa/<папка>/ рядом с report.md, а сводка
 # ПРОВЕРИТЬ в конце run-qa.ps1 по каждому шагу открытого «проверить»/«ждёт телефона» (и каждому провалу ≥ 100 мс сейчас)
 # называет прошлые значения из папок qa/ клона и сколько тихих прогонов подряд он < 100 мс — без чтения трёх отчётов.
-# Папка без kadry.txt (отчёты до него) — числа из раздела «## Частота кадров» report.md.
+# Папка без kadry.txt (отчёты до него) — числа из раздела «## Частота кадров» report.md. kadry-2.txt — второй прогон
+# того же отчёта (publish-qa.ps1 -Also). Отчёты ещё не слитых PR (ветки qa/*) — тоже в счёт: Export-QaBranches.
 # Тихий прогон — помех 0 и ЦП < 50 % (по «остыванию», без -ColdBoot — по «до: ЦП»), как в docs/QA.md.
 #   kadry.ps1 -SelfTest — проверка на выдуманных папках (её гоняет CI, job «Скрипты тестера»)
 param([switch]$SelfTest)
@@ -32,21 +33,41 @@ function Write-Kadry([string]$path, [string]$runLine, $worst) {
   [IO.File]::WriteAllLines($path, [string[]]$lines, (New-Object Text.UTF8Encoding $false))
 }
 
-# Отчёты в qa/ клона, новые первыми: коммит, тихий ли, шаг → мс
-function Read-Past([string]$qaDir, [int]$count = 8) {
+# kadry.txt → строка RUN и шаг → мс
+function Read-KadryFile([string]$path) {
+  $lines = @(Get-Content $path -Encoding utf8)
+  $worst = [ordered]@{}
+  foreach ($l in $lines) { if ($l -match '^(\S+) (\d+)$') { $worst[$Matches[1]] = [int]$Matches[2] } }
+  return [pscustomobject]@{ Run = "$($lines | Where-Object { $_ -match '^RUN ' } | Select-Object -First 1)"; Worst = $worst }
+}
+
+# Отчёты в папках qa/ (клон и отчёты открытых PR — Export-QaBranches), новые первыми: коммит, тихий ли, шаг → мс.
+# Папка с тем же именем в нескольких местах берётся один раз — из первого. kadry-2.txt (второй прогон того же
+# отчёта, publish-qa.ps1 -Also) — отдельным прогоном сразу за kadry.txt.
+function Read-Past([string[]]$qaDirs, [int]$count = 8) {
   $runs = @()
-  if (-not (Test-Path $qaDir)) { return ,$runs }
-  $dirs = Get-ChildItem $qaDir -Directory | Where-Object Name -match '^\d{4}-\d\d-\d\d-\d{4}' | Sort-Object Name -Descending
+  $seen = @{}
+  $dirs = @()
+  foreach ($q in $qaDirs) {
+    if (-not $q -or -not (Test-Path $q)) { continue }
+    foreach ($d in @(Get-ChildItem $q -Directory | Where-Object Name -match '^\d{4}-\d\d-\d\d-\d{4}')) {
+      if ($seen.ContainsKey($d.Name)) { continue }
+      $seen[$d.Name] = $true
+      $dirs += $d
+    }
+  }
+  $dirs = @($dirs | Sort-Object Name -Descending)
   foreach ($d in $dirs) {
     $kadry = Join-Path $d.FullName 'kadry.txt'
+    $kadry2 = Join-Path $d.FullName 'kadry-2.txt'
     $report = Join-Path $d.FullName 'report.md'
-    $worst = [ordered]@{}
-    $run = ''
+    $found = @()
     if (Test-Path $kadry) {
-      $lines = @(Get-Content $kadry -Encoding utf8)
-      $run = "$($lines | Where-Object { $_ -match '^RUN ' } | Select-Object -First 1)"
-      foreach ($l in $lines) { if ($l -match '^(\S+) (\d+)$') { $worst[$Matches[1]] = [int]$Matches[2] } }
+      $found += Read-KadryFile $kadry
+      if (Test-Path $kadry2) { $found += Read-KadryFile $kadry2 }
     } elseif (Test-Path $report) {
+      $worst = [ordered]@{}
+      $run = ''
       $text = (Get-Content $report -Raw -Encoding utf8) -replace "`r", ''
       if ($text -match '`(RUN [^`]+)`') { $run = $Matches[1] -replace '\s+', ' ' }
       $part = if ($text -match '(?s)\n## Частота кадров[^\n]*\n(.*?)(?=\n## |$)') { $Matches[1] } else { '' }
@@ -55,13 +76,41 @@ function Read-Past([string]$qaDir, [int]$count = 8) {
         $s = $m.Groups[1].Value
         if (-not $worst.Contains($s)) { $worst[$s] = [int]$m.Groups[2].Value }
       }
+      $found += [pscustomobject]@{ Run = $run; Worst = $worst }
     } else { continue }
-    $commit = if ($run -match '^RUN (?:PR#\d+ )?([0-9a-f]{7})') { $Matches[1] }
-      elseif ($d.Name -match '([0-9a-f]{7})$') { $Matches[1] } else { $d.Name }
-    $runs += [pscustomobject]@{ Name = $d.Name; Commit = $commit; Quiet = (Test-Quiet $run); Worst = $worst }
-    if ($runs.Count -ge $count) { break }
+    foreach ($f in $found) {
+      $commit = if ($f.Run -match '^RUN (?:PR#\d+ )?([0-9a-f]{7})') { $Matches[1] }
+        elseif ($d.Name -match '([0-9a-f]{7})$') { $Matches[1] } else { $d.Name }
+      $runs += [pscustomobject]@{ Name = $d.Name; Commit = $commit; Quiet = (Test-Quiet $f.Run); Worst = $f.Worst }
+      if ($runs.Count -ge $count) { return ,$runs }
+    }
   }
   return ,$runs
+}
+
+# Отчёты, ещё не слитые в main (ветки qa/* открытых PR), — в $dest/<папка>/: только report.md и kadry*.txt.
+# Без этого сводка сразу после сдачи прошлого отчёта не видела его чисел (#1350, 11.11). Возвращает $dest.
+# Файлы — через `git archive -o` (zip пишет сам git): вывод git show в Windows PowerShell 5.1 портит кириллицу.
+function Export-QaBranches([string]$repo, [string]$dest) {
+  if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
+  New-Item -ItemType Directory -Force $dest | Out-Null
+  git -C $repo fetch -q origin '+refs/heads/qa/*:refs/remotes/origin/qa/*' 2>$null
+  $refs = @(git -C $repo for-each-ref --format='%(refname:short)' refs/remotes/origin/qa/ 2>$null)
+  foreach ($r in $refs) {
+    $name = "$r" -replace '^origin/qa/', ''
+    if ($name -notmatch '^\d{4}-\d\d-\d\d-\d{4}[^/]*$') { continue }
+    $paths = @(git -C $repo ls-tree -r --name-only $r "qa/$name/" 2>$null |
+      Where-Object { $_ -match '/(report\.md|kadry(-\d)?\.txt)$' })
+    if (-not $paths) { continue }
+    $zip = Join-Path $dest "$name.zip"
+    git -C $repo archive --format=zip -o $zip $r @paths 2>$null
+    if ($LASTEXITCODE -or -not (Test-Path $zip)) { continue }
+    $tmp = Join-Path $dest "$name.tmp"
+    Expand-Archive -Path $zip -DestinationPath $tmp -Force
+    Move-Item (Join-Path $tmp "qa/$name") (Join-Path $dest $name)
+    Remove-Item -Recurse -Force $tmp, $zip
+  }
+  return $dest
 }
 
 # Шаг → «#519, #1665»: открытые issues «проверить» и «ждёт телефона», где шаг назван в заголовке или тексте.
@@ -150,6 +199,44 @@ if ($SelfTest) {
   Check ($w2[0] -like 'ПРОВЕРИТЬ 21a-vent 70 мс шум (#519) |*подряд: 2 из 3') "шумный сейчас — не в счёт: $($w2[0])"
   Check ((Get-WatchLines ([ordered]@{ 'x-1' = 50 }) $true @() @{}).Count -eq 0) 'ниже предела и без issue — без строки'
   Check ((Get-WatchLines ([ordered]@{ '9-novyj' = 130 }) $true @() @{})[0] -like '*раньше: нет данных*') 'новый шаг — «нет данных»'
+  # kadry-2.txt — второй прогон того же отчёта, сразу за kadry.txt
+  $q2 = Join-Path $root 'qa2'
+  New-Item -ItemType Directory -Force (Join-Path $q2 '2026-11-12-0226-svezhaya-a7246c2') | Out-Null
+  New-Item -ItemType Directory -Force (Join-Path $q2 '2026-11-11-2018-svezhaya-b031182') | Out-Null
+  Write-Kadry (Join-Path $q2 '2026-11-12-0226-svezhaya-a7246c2/kadry.txt') 'RUN a7246c2 done=True | помехи: 0 | до: ЦП 12%' ([ordered]@{ '21a-vent' = 90 })
+  Write-Kadry (Join-Path $q2 '2026-11-12-0226-svezhaya-a7246c2/kadry-2.txt') 'RUN a7246c2 done=True | помехи: 0 | до: ЦП 21%' ([ordered]@{ '21a-vent' = 95 })
+  Write-Kadry (Join-Path $q2 '2026-11-11-2018-svezhaya-b031182/kadry.txt') 'RUN b031182 дубль | помехи: 5' ([ordered]@{ '21a-vent' = 999 })
+  $past2 = Read-Past @($qa, $q2, (Join-Path $root 'net'))
+  Check ($past2.Count -eq 5 -and $past2[0].Commit -eq 'a7246c2' -and $past2[0].Worst['21a-vent'] -eq 90 -and $past2[1].Worst['21a-vent'] -eq 95) "kadry-2.txt — отдельный прогон за kadry.txt ($(@($past2 | ForEach-Object { "$($_.Commit) $($_.Worst['21a-vent'])" }) -join ', '))"
+  Check ($past2[2].Commit -eq 'b031182' -and $past2[2].Worst['21a-vent'] -eq 81) 'та же папка в двух местах — из первого'
+  Check ((Read-Past @($qa, $q2) 2).Count -eq 2) 'предел прогонов считает и kadry-2.txt'
+
+  # отчёт открытой PR: ветка qa/<папка> в origin — Export-QaBranches кладёт report.md и kadry*.txt, без снимков
+  if (Get-Command git -ErrorAction SilentlyContinue) {
+    $bare = Join-Path $root 'origin.git'; $clone = Join-Path $root 'clone'
+    git init -q --bare $bare
+    git clone -q $bare $clone 2>$null
+    $g = @('-C', $clone, '-c', 'user.name=t', '-c', 'user.email=t@t')
+    git -C $clone symbolic-ref HEAD refs/heads/main
+    [IO.File]::WriteAllText((Join-Path $clone 'README.md'), 'x', $utf8)
+    git @g add -A; git @g commit -q -m init; git @g push -q origin main 2>$null
+    $f = '2026-11-12-0300-svezhaya-abc1234'
+    git @g checkout -q -b "qa/$f"
+    New-Item -ItemType Directory -Force (Join-Path $clone "qa/$f") | Out-Null
+    Write-Kadry (Join-Path $clone "qa/$f/kadry.txt") 'RUN abc1234 done=True | помехи: 0 | до: ЦП 9%' ([ordered]@{ '32o-mol-steklo' = 88 })
+    [IO.File]::WriteAllText((Join-Path $clone "qa/$f/report.md"), '# отчёт — кириллица', $utf8)
+    [IO.File]::WriteAllText((Join-Path $clone "qa/$f/01-start.jpg"), 'jpg', $utf8)
+    git @g add -A; git @g commit -q -m qa; git @g push -q origin "qa/$f" 2>$null
+    git @g checkout -q main
+    git @g branch -q -D "qa/$f"
+    git -C $clone update-ref -d "refs/remotes/origin/qa/$f" 2>$null
+    $pr = Export-QaBranches $clone (Join-Path $root 'pr')
+    Check (Test-Path (Join-Path $pr "$f/kadry.txt")) 'Export-QaBranches: kadry.txt из ветки qa/*'
+    Check (-not (Test-Path (Join-Path $pr "$f/01-start.jpg"))) 'Export-QaBranches: снимки не берёт'
+    Check ((Get-Content (Join-Path $pr "$f/report.md") -Raw -Encoding utf8) -eq '# отчёт — кириллица') 'Export-QaBranches: кириллица цела'
+    $past3 = Read-Past @((Join-Path $clone 'qa'), $pr)
+    Check ($past3.Count -eq 1 -and $past3[0].Commit -eq 'abc1234' -and $past3[0].Worst['32o-mol-steklo'] -eq 88) 'Read-Past: отчёт открытой PR в сводке'
+  } else { Write-Output 'git нет — Export-QaBranches не проверен' }
   Remove-Item -Recurse -Force $root
   if ($bad) { Write-Output "kadry.ps1: провалов $bad"; exit 1 }
   Write-Output 'kadry.ps1: всё верно'
