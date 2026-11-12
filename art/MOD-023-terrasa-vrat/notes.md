@@ -1,3 +1,41 @@
+# MOD-023 - revision v21, 2026-11-12
+
+Current submission: **terrasa-vrat-v21.glb**, **preview-v21.png** (1024 x 1024), **overlay-v21.png**, **lods-v21.png**. Versioned filenames preserve all earlier submissions, including the original terrasa-vrat.glb / preview.png. Issue #999, existing PR #1444, branch art/MOD-023-terrasa-vrat. Rules read from origin/main **6478bda891ebde3be78578d5f91ff199228bfea9**. This section supersedes the old 60 x 36 m clearance descriptions below.
+
+## Changes and source
+
+Implemented the 12 November review: passage X -24..24, Y 0..22 m, curved upper opening around 43 m, inward shoulders around 24-30 m, 58 m spike. Existing Meshy v16 geometry, remesh UVs, textures, cup cluster and convex porous lids reused. **No Meshy API operation or download, actual cost this session 0 credits; cumulative order remains 200.** Existing image-to-3D/remesh task IDs, exact prompts, settings and accepted source images are retained in the v16 section below.
+
+The v18 defect was a stale assembly correction that pushed vertices at height 36-38.5 m out to X +/-32.5 for the obsolete 60 x 36 m clearance. Removed it; changed the radial cage and gently offset the upper contour to the right by up to 5 m, matching the painting's asymmetry. The shift fades at the floor and outer root tips. The lower shoulder cage retains clearance with this offset. No new topology or new source art; contact pivots and geometry retained. v19/v20 were local intermediate checks, not submissions.
+
+**overlay-v21.png**: exact projected LOD0 triangles in orange (40% fill plus outline), original accepted ensemble front crop 1054 x 576 underneath; green = 48 x 22 m clearance. One scale on both axes: 968 / 120 = 8.066667 px/m, origin pixel (544,495), width reference endpoints x=60..1028. No independent height scaling or perspective fitting. The original review reference is https://raw.githubusercontent.com/garrimajo5/DeepDive/issue-img/1444/v17-zamer.jpg . The model height is 58 m; the painted spike measures about 56 m at this same scale.
+
+## Technical result
+
+Dimensions x/y/z: **119.964 / 58.115 / 23.521 m** (within 5%). Metres, Y up, approach +Z. Root pivot (0,0,0), node scale 1, no skeleton or animation. LOD totals including shared moving parts **41192 / 11675 / 4798**; moving **1458**. Three static meshes per LOD (one per material), common Stvorka0/1/2 and Diagnostika outside LOD roots. Only one LOD should be shown at once.
+
+Socket centres glTF: (48,1.8,11.8), (52,1.8,11.8), (50,5.264102,11.8), equilateral triangle side 4 m. Lids 1.7 x 1.5 x 0.12 m; pivots (48,2.5,11.19), (52,2.5,11.19), (50,5.964102,11.19). Rotate local X from 0 to -90 degrees: centroid rises 1.4183 m. Diagnostika pivot (54.5,3,11.585), footprint 2.855 x 1.843 m, relief 0.07 m. Cables diameter 0.08 m, lengths 5.967 / 6.065 m. No terrace floor was added.
+
+Three PBR materials: Mineral metallic 0, no emission, 2048-square color/normal/roughness maps; HumanCable constant #9C633D, roughness 0.8; Polyps 512-square mask, dark stalks and emissive tips #67DDEB / #9AD9E8, strength 1. Embedded images now named **terrasa-vrat-color**, **terrasa-vrat-normal**, **terrasa-vrat-orm**, **terrasa-vrat-polyps-emission**. Original remesh-specific UV quadrants preserved; JPEG quality 65. Colour values in compressed emission texture are approximate.
+
+## Evidence and limitations
+
+- validation-v21.json: every exported triangle clipped against the full passage volume (1 mm numerical tolerance), zero intersections for every mesh/LOD; zero degenerate triangles; file/triangle budgets, node scales, maps, pivots, animation/skin absence checked.
+- lid-clearance-v21.json: each lid versus every mineral LOD at 0..90 degrees, step 5 degrees; zero intersecting triangle pairs. This is sampled, not a continuous collision proof.
+- godot-v21.json: Godot 4.7.2 GLTFDocument import, 13 MeshInstance3D, correct material flags, 3 x 3 passage rays per mesh, no errors. No game code/scenes changed and no device performance measurement claimed.
+- shape-v21.json: exported LOD0 cross-sections. Right-body projected widths at heights 10/20/25/30/35/36 m: 15.31 / 13.69 / 18.19 / 13.65 / 13.84 / 14.04 m. The broad shoulder at 25 m is locally thicker; upper projected vertical spans at x=0/10/15/20 are 10.67 / 10.66 / 8.84 / 9.23 m. These are axis-aligned sections, not a uniform wall thickness.
+- Visually inspected preview, all three LODs and overlay. Gone: rectangular shoulder protrusions and side strip of v18. Retained: broad roots, upper cloud-shaped opening, side spike, contact cluster with one open lid in preview.
+
+Remaining differences from concept: exterior of the upper ring is fuller to retain body; lower roots/opening and fine asymmetry are an approximation, clearly shown by overlay. Porosity and vein pattern come from Meshy and differ from the painting; LOD2 has visibly coarser holes; close-up contact textures remain coarser. No baked scene lights, ship, labels or seabed in GLB. Artistic acceptance and in-game route/ice/floor testing remain with the reviewer/integration roles; this is the model submission, not their sign-off.
+
+Self-decided within the order: remove obsolete clearance correction; revise cage and asymmetric offset; keep existing Meshy sources and contact system; rename embedded maps. Reproduce in Blender 4.5.9 with src/atlas_arch_v21.py then assemble_details_v21.py and the validation/render scripts; raw-source task IDs below. Godot audit: src/godot_check/audit_v21.gd with GLB/report paths after --.
+
+---
+
+GLB size: **4012216 bytes**.
+
+---
+
 # MOD-023 - revision v16, 2026-11-09 (second review round)
 
 Current review files: **terrasa-vrat-v16.glb**, **preview-v16.png** (1024 square, four views with metre rulers). `view-v16-0..3.png` are individual views; `lods-v16.png` compares all LODs. Previous submissions remain unchanged.
