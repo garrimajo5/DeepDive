@@ -229,7 +229,7 @@ if ($SelfTest) {
   Check ($sf.During -eq 1 -and $sf.After -eq 2) "Split-Foreign: окно в сценарии 1, после последней строки 2 ($($sf.During)/$($sf.After))"
   $sf1 = Split-Foreign ($cat + @('11-12 02:32:11.000 600 600 I godot   : QA игра свёрнута (OnPause)')) $app
   Check ($sf1.During -eq 1 -and $sf1.After -eq 2) 'Split-Foreign: «свёрнута» после «Готово» конец не сдвигает'
-  $sf2 = Split-Foreign @($cat[0], $cat[1], $cat[2], $cat[3]) $app
+  $sf2 = Split-Foreign @($cat[0], $cat[1], $cat[2], $cat[3], $cat[5]) $app
   Check ($sf2.During -eq 1 -and $sf2.After -eq 1) 'Split-Foreign: нет «Готово» — конец по последней строке QA'
   Check ((Count-Paused @('a', 'игра свёрнута (OnPause)', 'игра снова на экране', 'Готово | x', 'игра свёрнута (OnPause)')) -eq 1) 'Count-Paused: после «Готово» не в счёт'
   $sf0 = Split-Foreign @($cat[0], $cat[2]) $app
