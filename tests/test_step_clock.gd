@@ -362,6 +362,40 @@ func test_stall_three_spikes() -> void:
 	eq(StepClock.stall(two, us), 0, "два виновника — не заминка")
 
 
+## #1350 (поток Б, 12.11; отчёт `2026-11-12-0330`, `36b`): «мир 72 [EcoFlower 42 ×>100, EcoFish 12, …]» в шумном прогоне
+## прочли как виновника, а у `EcoFlower.step` шесть сложений — процесс сняли с ЦП посреди вызова. Одна «×>N» среди
+## подчастей «как обычно» — «одна отметка, вероятно хост»; две такие, раздутая подчасть с известным обычным или кадр
+## импульса — без пометки.
+func test_lone_tiny_mark_is_host() -> void:
+	var c := StepClock.new()
+	var t := 0
+	for i in StepClock.USUAL_FROM + 10:   # EcoFish 10 мс, EcoFlower 0,01 мс, a 1 мс — каждый шаг
+		c.start(t, 1.0 / 30.0)
+		for p in [["EcoFish", 10000], ["EcoFlower", 10], ["a", 1000]]:
+			t += int(p[1])
+			c.lap("мир/" + p[0], t)
+	c.start(t, 1.0 / 30.0)   # провал: EcoFlower 42, прочие как обычно
+	for p in [["EcoFish", 12000], ["EcoFlower", 42000], ["a", 1000]]:
+		t += int(p[1])
+		c.lap("мир/" + p[0], t)
+	c.start(t, 1.0 / 30.0)
+	eq(c.last_note(), "мир 55 (обычно 11) [EcoFlower 42 ×>100, EcoFish 12, a 1]" + StepClock.LONE,
+		"одна «×>100» среди «как обычно» — хост, не виновник")
+	var us := {"EcoFish": 10.0, "EcoFlower": 0.01, "b": 0.02, "a": 1.0}
+	var all := {"EcoFish": 1.0, "EcoFlower": 1.0, "b": 1.0, "a": 1.0}
+	ok(StepClock.lone({"EcoFish": 12.0, "EcoFlower": 42.0, "a": 1.0}, us, all), "одна отметка")
+	ok(not StepClock.lone({"EcoFish": 12.0, "EcoFlower": 42.0, "b": 5.0, "a": 1.0}, us, all),
+		"две подчасти «×>N» — не одна отметка")
+	ok(not StepClock.lone({"EcoFish": 40.0, "EcoFlower": 42.0, "a": 1.0}, us, all),
+		"раздута и подчасть с работой — не одна отметка")
+	ok(not StepClock.lone({"EcoFish": 12.0, "EcoFlower": 42.0, "a": 1.0}, us, {"EcoFlower": 0.2}),
+		"подчасть по событию (редкая) — без «×>», не одна отметка")
+	ok(not StepClock.lone({"EcoFlower": 42.0}, us, all), "сравнить не с чем — не пишем")
+	ok(not StepClock.lone({"EcoFish": 12.0, "EcoFlower": 42.0, StepClock.PING_MARK: 2.0}, us, all),
+		"кадр импульса — не пишем")
+	ok(not StepClock.lone({"EcoFish": 60.0, "a": 1.0}, us, all), "виновник с работой ×6 — как прежде, не хост")
+
+
 static func _sum(of: Dictionary) -> float:
 	var t := 0.0
 	for k in of:
