@@ -1,0 +1,82 @@
+[
+  {
+    "sex": "muzhchina",
+    "samples": [
+      {
+        "share": 0,
+        "right_pixels": 603611,
+        "left_pixels": 253337,
+        "table_pixels": 21477,
+        "above285_pixels": 0
+      },
+      {
+        "share": 0.25,
+        "right_pixels": 609381,
+        "left_pixels": 253337,
+        "table_pixels": 21319,
+        "above285_pixels": 0
+      },
+      {
+        "share": 0.5,
+        "right_pixels": 619647,
+        "left_pixels": 253337,
+        "table_pixels": 21333,
+        "above285_pixels": 42
+      },
+      {
+        "share": 0.75,
+        "right_pixels": 634991,
+        "left_pixels": 253337,
+        "table_pixels": 21466,
+        "above285_pixels": 16968
+      },
+      {
+        "share": 1,
+        "right_pixels": 654365,
+        "left_pixels": 253337,
+        "table_pixels": 21778,
+        "above285_pixels": 46428
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "samples": [
+      {
+        "share": 0,
+        "right_pixels": 448181,
+        "left_pixels": 181682,
+        "table_pixels": 3731,
+        "above285_pixels": 0
+      },
+      {
+        "share": 0.25,
+        "right_pixels": 457378,
+        "left_pixels": 181682,
+        "table_pixels": 3720,
+        "above285_pixels": 0
+      },
+      {
+        "share": 0.5,
+        "right_pixels": 468970,
+        "left_pixels": 181682,
+        "table_pixels": 3610,
+        "above285_pixels": 0
+      },
+      {
+        "share": 0.75,
+        "right_pixels": 484738,
+        "left_pixels": 181682,
+        "table_pixels": 3497,
+        "above285_pixels": 7901
+      },
+      {
+        "share": 1,
+        "right_pixels": 505658,
+        "left_pixels": 181682,
+        "table_pixels": 4088,
+        "above285_pixels": 25076
+      }
+    ]
+  }
+]
