@@ -66,6 +66,7 @@ var ship_sounds: ShipSounds   ## разовые звуки корабля SND-00
 var machine_sounds: MachineSounds   ## машины корабля SND-005: роторы, реактор, перегрев, пар (`MachineSound`)
 var hand_sounds: HandSounds   ## руки экипажа SND-006: сварка, сканер, «вид изучен» (`HandSound`)
 var ui_sounds: UiSounds   ## интерфейс и связь SND-007: касания, кнопка поста, сообщение связи, тангента (`UiSound`)
+var radio_voices: RadioVoices   ## голоса связи SND-009 по ID реплики (`VoiceFiles`), шина «Эфир»
 var hit_local: Variant = null   ## точка удара существа в осях корабля, пока идёт vitals.hit (звук по стороне, #656)
 var sound_mix := SoundMix.Mix.new()  ## сведение шин звука (docs/zvuk.md): меню, пауза, вид с борта, тревога — Main._sound
 ## Прогрев шейдеров при старте (Warmup, issue #50): шторка, камера оглядывает корабль, скрытое показано на кадр.
@@ -243,6 +244,8 @@ func _build_audio() -> void:
 	add_child(ship_sounds)
 	ui_sounds = UiSounds.new()   # SND-007
 	add_child(ui_sounds)
+	radio_voices = RadioVoices.new()   # SND-009
+	add_child(radio_voices)
 
 
 ## Сборка: за бортом — отмель, ил, след, живой мир, образцы; пол корпуса для хода.
@@ -1873,6 +1876,7 @@ func _sound(dt: float) -> void:
 	machine_sounds.update(dt, hull_motion.spin, reactor.hot, reactor.heat, reactor.scram, engine.venting)   # SND-005
 	hand_sounds.update(dt, HandSound.weld_point(crew), scanner.busy or gate.busy, scanner.done + gate.done)   # SND-006
 	ui_sounds.update(comms.cur, comms.shown, radio.wants())   # SND-007: связь и тангента
+	radio_voices.update(comms, crew)   # SND-009: голос реплики, если файл есть
 
 
 ## Активные поля табло тревог (AlarmBoard.Field) — из тех же строк, что тревога в строке состояния.
