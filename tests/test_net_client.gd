@@ -5,6 +5,7 @@ extends TestCase
 
 const PORT := 24720
 const DT := 1.0 / 30.0
+const SLOW := 0.1   ## ожидание таймеров (окно, «Связь восстановлена», слабая связь) — шагом 0,1 с, а не 1/30 (#1350)
 var main: Main
 var host: NetLink.Host
 var guest: NetLink.Guest
@@ -142,8 +143,8 @@ func test_lost_host_opens_dialog_not_solo() -> void:   # ART-043: не уход�
 	main.step(DT)
 	eq(main.net_pad.move, Vector2.ZERO, "управление остановлено")
 	main.overlay.router.end(5)
-	for i in int(NetDrop.WINDOW / DT) + 2:
-		main.step(DT)
+	for i in int(NetDrop.WINDOW / SLOW) + 2:
+		main.step(SLOW)
 	eq(main.drop.phase, NetDrop.Phase.NO_ANSWER, "окно истекло — «Нет ответа»")
 	eq(main.drop.wait_line(), "Нет ответа")
 	ok(main.net_client != null, "автоматического соло нет")
@@ -173,9 +174,9 @@ func test_host_back_restores() -> void:   # хост вернулся в окн�
 	eq(main.drop.phase, NetDrop.Phase.BACK)
 	eq(main.drop.lines()[0], "Связь восстановлена")
 	ok(main.net_client.joined())
-	for i in int(NetDrop.BACK_TIME / DT) + 2:
+	for i in int(NetDrop.BACK_TIME / SLOW) + 2:
 		_host_tick()
-		main.step(DT)
+		main.step(SLOW)
 	ok(not main.drop.active(), "плашка ушла через 2 с")
 
 
@@ -358,9 +359,9 @@ func test_creatures_near_from_host() -> void:   # живой мир у гост�
 func test_weak_link_plate() -> void:   # ART-043: кадры хоста опаздывают — «Слабая связь», игра идёт; 2 с ровно — снята
 	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
 	ok(not main.weak.visible(), "связь ровная — плашки нет")
-	for i in int((NetLink.WEAK_AFTER + 0.2) / DT):
+	for i in int((NetLink.WEAK_AFTER + 0.2) / SLOW):
 		_host_tick(false)   # хост молчит: кадры опаздывают
-		main.step(DT)
+		main.step(SLOW)
 	ok(main.weak.on, "слабая связь")
 	ok(main.drop_panel.visible, "плашка видна")
 	ok(not main.drop.active(), "диалога нет — игра идёт")
@@ -369,13 +370,13 @@ func test_weak_link_plate() -> void:   # ART-043: кадры хоста опаз
 	eq(main.net_pad.move, Vector2(0.0, 1.0), "управление не остановлено")
 	main.overlay.router.move = Vector2i.ZERO
 	ok(_pump(func() -> bool: return main.net_client.quiet == 0.0), "кадры снова идут")
-	for i in int(1.5 / DT):
+	for i in 15:   # 1,5 с
 		_host_tick()
-		main.step(DT)
+		main.step(SLOW)
 	ok(main.weak.visible(), "до 2 с устойчивой связи плашка стоит")
-	for i in int(1.0 / DT):
+	for i in 10:   # ещё 1 с
 		_host_tick()
-		main.step(DT)
+		main.step(SLOW)
 	ok(not main.weak.visible(), "2 с ровной связи — снята")
 	ok(not main.drop_panel.visible, "панель скрыта")
 
