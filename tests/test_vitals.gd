@@ -190,8 +190,8 @@ func test_diving_onto_flat_bottom_is_not_a_hit() -> void:
 	var r := main.overlay.router
 	r.begin(1, r.layout.pad.c + Vector2(0, -r.layout.pad.r * 0.7))
 	r.begin(2, r.layout.down.c)
-	for i in 300:   # 10 с: быстрее SCRAPE_SPEED уже через ~1 с, дальше — 60 м полного хода у дна (было 600 шагов, #1350)
-		main.step(1.0 / 30.0)
+	for i in 100:   # 10 с шагом 0,1: быстрее SCRAPE_SPEED уже через ~1 с, дальше — 60 м полного хода у дна (было 600 шагов по 1/30, #1350)
+		main.step(0.1)
 	ok(absf(main.helm.speed) > Vitals.SCRAPE_SPEED * 2.0, "шли полным ходом, а не стояли")
 	near(main.vitals.hull, 100.0, 1e-6, "полный ход и «Вниз» до ровного дна — корпус цел")
 
