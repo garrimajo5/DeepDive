@@ -7,6 +7,7 @@ extends RefCounted
 ## дно — удар снизу со скрежетом хвостом, лёд — прямой удар без урона.
 
 const PING := "res://audio/ship/sonar-ping.wav"
+const JAM := "res://audio/ship/sonar-jam.wav"   ## импульс завяз в иле — тот же пинг, глухой, без эха (SND-006)
 ## Прямой, косой и снизу (SND-002: hull-hit-1-2, 2-1, 3-1).
 const HITS: Array[String] = ["res://audio/ship/hull-hit-1.wav", "res://audio/ship/hull-hit-2.wav",
 		"res://audio/ship/hull-hit-3.wav"]
@@ -19,7 +20,7 @@ const ZAP := "res://audio/ship/zap.wav"
 const ZAP_DB := -3.0
 
 const PING_DB := -6.0       ## импульс — заметно, но под гулом и тревогой
-const JAM_DB := -14.0       ## импульс завяз в иле — глухо (пока нет своего sonar-jam)
+const JAM_DB := -8.0        ## импульс завяз в иле: глухость — в самом файле JAM, громкость почти как у пинга
 const HIT_DB := 0.0         ## сильный удар — в полную
 const HIT_SOFT_DB := -12.0  ## слабый удар (1 %) — тише на 12 дБ
 const HIT_FULL := 15        ## с этой доли корпуса удар — в полную

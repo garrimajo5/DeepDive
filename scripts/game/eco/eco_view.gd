@@ -9,7 +9,7 @@ var world := EcoWorld.new()
 ## Светляки-полосники: шесть стай у кораллов и их MultiMesh.
 var fish: EcoFish
 var fish_view: FishView
-## Светящийся мох (22 пятна) и скребуны (10), что его объедают.
+## Светящийся мох (24 пятна) и скребуны (10), что его объедают.
 var moss: EcoMoss
 var moss_view: MossView
 var grazers: EcoGrazer
@@ -21,6 +21,9 @@ var pred_view: PredView
 var current: EcoCurrent
 var coral: EcoCoral
 var coral_view: CoralView
+## Каменщики (#1337): ряды трубок у кустов огнецвета, венчики прячутся от вибрации крупного.
+var kamen: EcoKamen
+var kamen_view: KamenView
 var fans: EcoFan
 var fan_view: FanView
 ## Пиявники на жабрах серпохвостов и станции чистки на вершинах огнецвета.
@@ -103,11 +106,18 @@ var fringe_view: FringeView
 ## Край отмели (место 6, ART-032): скальные клинья вдоль бровки, шрам оползня с осыпью, трещины на площадке.
 var drop: EcoDrop
 var drop_view: DropView
+## Скребуны края отмели 06 (#840): своя группа на мху края (`EcoDrop.moss`), рисует свой MultiMesh «Скребуны края».
+var drop_grazers: EcoGrazer
+var drop_grazer_view: GrazerView
 ## Граница у Спуска 10 (#832): кварцевая корка на дне котловины склона, к востоку гуще, кончики светятся.
 var brink: EcoBrink
 var brink_view: BrinkView
-## Купольник у террасы врат 07 (#837): рабочий Хранителя открывает створку гнезда; вид — по модели MOD-022.
+## Скребуны у Спуска 10 (#840): своя группа на мху площадки (`EcoBrink.moss`), рисует свой MultiMesh «Скребуны спуска».
+var brink_grazers: EcoGrazer
+var brink_grazer_view: GrazerView
+## Купольник у террасы врат 07 (#837): рабочий Хранителя открывает створку гнезда; вид — модель MOD-022 (DomeView).
 var dome: EcoDome
+var dome_view: DomeView
 ## Эхоловец (ART-007): засадчик с ушами-воронками лежит у Костей левиафана, уши поворачивает на корабль,
 ## затаившегося выдаёт только импульс сонара.
 var echo: EcoEcho
@@ -127,6 +137,7 @@ var ground: Callable:
 		lag = 0.0
 		_rebuild_moss()
 		_rebuild_coral()
+		_rebuild_kamen()
 		_rebuild_ferns()
 		_rebuild_bladders()
 		_rebuild_organs()
@@ -164,8 +175,9 @@ func _init() -> void:
 	pred_view = PredView.new(preds)
 	add_child(pred_view)
 	current = world.add(EcoCurrent.new()) as EcoCurrent
-	coral = world.add(EcoCoral.new()) as EcoCoral
+	coral = world.add(EcoCoral.new([], preds)) as EcoCoral
 	leeches = world.add(EcoLeech.new(preds, coral)) as EcoLeech
+	kamen = world.add(EcoKamen.new()) as EcoKamen
 	leech_view = LeechView.new(leeches, lite)
 	add_child(leech_view)
 	fans = world.add(EcoFan.new(current)) as EcoFan
@@ -220,14 +232,26 @@ func _init() -> void:
 	add_child(fringe_view)
 	drop = world.add(EcoDrop.new()) as EcoDrop
 	dome = world.add(EcoDome.new()) as EcoDome
+	dome_view = DomeView.new(dome)
+	add_child(dome_view)
 	brink = world.add(EcoBrink.new()) as EcoBrink
 	echo = world.add(EcoEcho.new(bones, preds)) as EcoEcho
 	echo_view = EchoView.new(echo, lite)
 	add_child(echo_view)
+	# последними: прежние существа мира не сдвигаются по номерам и случаю
+	drop_grazers = world.add(EcoGrazer.new(drop.moss, EcoDrop.GRAZERS)) as EcoGrazer
+	drop_grazer_view = GrazerView.new(drop_grazers, lite)
+	drop_grazer_view.name = "Скребуны края"
+	add_child(drop_grazer_view)
+	brink_grazers = world.add(EcoGrazer.new(brink.moss, EcoBrink.GRAZERS)) as EcoGrazer
+	brink_grazer_view = GrazerView.new(brink_grazers, lite)
+	brink_grazer_view.name = "Скребуны спуска"
+	add_child(brink_grazer_view)
 	far_view = FarLifeView.new()
 	add_child(far_view)
 	_rebuild_moss()
 	_rebuild_coral()
+	_rebuild_kamen()
 	_rebuild_ferns()
 	_rebuild_bladders()
 	_rebuild_organs()
@@ -289,6 +313,7 @@ func set_lite(on: bool) -> void:
 	flower_view.set_lite(on)
 	bones_view.set_lite(on)
 	coral_view.set_lite(on)
+	kamen_view.set_lite(on)
 	vent_view.set_lite(on)
 	organ_view.set_lite(on)
 	if fern_view:
@@ -297,6 +322,8 @@ func set_lite(on: bool) -> void:
 	ray_view.set_lite(on)
 	remora_view.set_lite(on)
 	grazer_view.set_lite(on)
+	drop_grazer_view.set_lite(on)
+	brink_grazer_view.set_lite(on)
 	moss_view.set_lite(on)
 	if well_view.moss_view:
 		well_view.moss_view.set_lite(on)
@@ -316,6 +343,14 @@ func _rebuild_moss() -> void:
 
 
 ## Меш огнецвета по дну мира (кусты встают на дно при сбросе мира).
+func _rebuild_kamen() -> void:
+	if kamen_view:
+		remove_child(kamen_view)
+		kamen_view.free()
+	kamen_view = KamenView.new(kamen, lite)
+	add_child(kamen_view)
+
+
 func _rebuild_coral() -> void:
 	if coral_view:
 		remove_child(coral_view)
@@ -541,6 +576,8 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	EcoCaustic.set_time(world.time)
 	fish_view.sync(world.time, ship, current.vel(), world.ground)
 	grazer_view.sync(world.time, ship, current.vel())
+	drop_grazer_view.sync(world.time, ship, current.vel())
+	brink_grazer_view.sync(world.time, ship, current.vel())
 	pred_view.sync(world.time, ship.pos, ship, current.vel(), world.ground)
 	leech_view.sync(world.time, ship, current.vel())
 	StepClock.mark("мир/вид: рыбы, хищники")
@@ -552,7 +589,14 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	if well_view.moss_view:
 		well_view.moss_view.sync()
 		well_view.moss_view.set_time(world.time)
+	if drop_view and drop_view.moss_view:
+		drop_view.moss_view.sync()
+		drop_view.moss_view.set_time(world.time)
+	if brink_view and brink_view.moss_view:
+		brink_view.moss_view.sync()
+		brink_view.moss_view.set_time(world.time)
 	coral_view.sync()
+	kamen_view.sync()
 	flower_view.sync()
 	coral_view.sync_dust(world.time, ship, current.vel())
 	StepClock.mark("мир/вид: мох, кораллы")
@@ -585,6 +629,7 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	moth_view.sync(ship, world.time)
 	fringe_view.sync(ship, world.time)
 	echo_view.sync(world.time, ship.pos, ship, current.vel())
+	dome_view.sync(world.time, ship.pos)
 	far_view.sync(world.time, ship.pos, world.ground)
 	dust_layer.sync()
 	StepClock.mark("мир/вид: планктон, эхо, дальние")

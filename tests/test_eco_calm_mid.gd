@@ -1,0 +1,293 @@
+extends TestCase
+## Спокойная середина 00 → 01 (#1400, решение гейм-дизайнера 08.11 в `docs/urovni/sloj-1.md`): цепочку «прожектор →
+## волнолист → моллюски» не совмещать с песчаной засадой, засадчиками и логовом. Путь и стоянка — как в
+## `tools/mid_calm.gd` (PATH, FLOOR, STOP): корабль идёт от выхода из 00 к середине (20; 22,5) и стоит там. Засады
+## мира стоят на местах из констант, поэтому проверка — геометрией луча, без шагов мира.
+
+const STEP := 0.5   # м между пробами пути
+const LOOK := 16    # курсов на стоянке: экипаж оглядывается
+
+
+func _tool() -> GDScript:
+	return load("res://tools/mid_calm.gd")
+
+
+## Пробы корабля середины: путь PATH[0] → PATH[1] курсом по ходу и стоянка у PATH[1] со всеми курсами.
+func _ships() -> Array[EcoLink.ShipState]:
+	var tool := _tool()
+	var a: Vector2 = tool.PATH[0]
+	var b: Vector2 = tool.PATH[1]
+	var out: Array[EcoLink.ShipState] = []
+	var n := int(a.distance_to(b) / STEP)
+	var d := b - a
+	for i in n + 1:
+		out.append(_ship(tool, a.lerp(b, float(i) / n), atan2(-d.x, -d.y)))
+	for k in LOOK:
+		out.append(_ship(tool, b, TAU * k / LOOK))
+	return out
+
+
+func _ship(tool: GDScript, xz: Vector2, yaw: float) -> EcoLink.ShipState:
+	var s := EcoLink.ShipState.new()
+	s.pos = tool.ship_at(xz)
+	s.yaw = yaw
+	s.light_on = true
+	s.light_range = Searchlight.BASE_RANGE
+	return s
+
+
+## Где могут быть глаза глазуна у пятна стайки p: на круге GZ_OFFSET (угол — от зерна), над видимым дном.
+func _glazun_eyes(p: Vector3) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for k in 12:
+		var a := TAU * k / 12.0
+		var x := p.x + cos(a) * EcoCoins.GZ_OFFSET
+		var z := p.z + sin(a) * EcoCoins.GZ_OFFSET
+		out.append(Vector3(x, Seabed.mesh_height(x, z) + EcoCoins.EYE.y, z))
+	return out
+
+
+func test_glazun_eyes_never_in_beam() -> void:
+	var ships := _ships()
+	var eyes: Array[Vector3] = []
+	for p in EcoCoins.default_spots():
+		eyes.append_array(_glazun_eyes(p))
+	eq(eyes.size(), EcoCoins.SCHOOLS * 12, "все глазуны")
+	var nearest := INF
+	var lit: Array[String] = []
+	for s in ships:
+		for e in eyes:
+			if EcoWorld.beam_hits(s, e):
+				lit.append("%s из %s" % [e, s.pos])
+			nearest = minf(nearest, Vector2(e.x - s.pos.x, e.z - s.pos.z).length())
+	eq(lit.size(), 0, "глаза глазуна не в луче середины: %s" % ", ".join(lit.slice(0, 3)))
+	ok(nearest > EcoWorld.BEAM_R * 0.5, "глазун не у пути середины: %.1f м" % nearest)
+	# Проверка не пустая: глаз прямо по курсу середины луч видит.
+	var hits := 0
+	for s in ships:
+		var fwd := Basis(Vector3.UP, s.yaw) * Vector3(0, 0, -20)
+		var p := s.pos + fwd
+		p.y = Seabed.mesh_height(p.x, p.z) + EcoCoins.EYE.y
+		if EcoWorld.beam_hits(s, p):
+			hits += 1
+	ok(hits > ships.size() / 2, "глаз в 20 м по курсу — в луче: %d из %d" % [hits, ships.size()])
+
+
+func test_eel_lair_beyond_warning() -> void:
+	var nearest := INF
+	for s in _ships():
+		for l in EcoEel.LAIRS:
+			nearest = minf(nearest, Vector2(s.pos.x, s.pos.z).distance_to(l))
+	ok(nearest > EcoEel.WARN_R, "логово стеклоуста дальше знака WARN_R: %.1f м" % nearest)
+
+
+func test_echo_does_not_listen() -> void:
+	var w := EcoWorld.new()
+	w.ground = Seabed.mesh_height
+	var bones := w.add(EcoBones.new()) as EcoBones
+	var echo := w.add(EcoEcho.new(bones, null)) as EcoEcho
+	w.reset(1)
+	var at := echo.echo.p
+	var nearest := INF
+	for s in _ships():
+		nearest = minf(nearest, Vector2(s.pos.x, s.pos.z).distance_to(Vector2(at.x, at.z)))
+	ok(nearest > EcoEcho.LISTEN_R, "эхоловец не слушает корабль середины: %.1f м" % nearest)
+	ok(nearest > EcoEcho.STRIKE_R, "и не бьёт на импульс")
+
+
+
+## Места появления из starts, которые ближе sense к пробам середины.
+func _near_starts(starts: Array[Vector2], sense: float) -> Array[String]:
+	var out: Array[String] = []
+	for st in starts:
+		for s in _ships():
+			var d := Vector2(s.pos.x, s.pos.z).distance_to(st)
+			if d <= sense:
+				out.append("%s у %s: %.1f м" % [st, s.pos, d])
+				break
+	return out
+
+
+## «Не создавать новую точку спавна непосредственно перед кораблём» (`docs/urovni/sloj-1.md`, 08.11): серпохвосты
+## появляются (STARTS, и пробная дуга ARC[0]) дальше, чем видят свет и слышат сонар (REACH) и двигатели
+## (HEAR_RADIUS), от всего пути середины и стоянки. Тихий круг пробы — вокруг той же стоянки, что у инструмента.
+func test_pred_starts_beyond_senses() -> void:
+	var tool := _tool()
+	eq(EcoPred.QUIET, tool.PATH[1], "тихий круг пробы — вокруг стоянки середины")
+	var starts: Array[Vector2] = EcoPred.STARTS.duplicate()
+	starts.append(EcoPred.ARC[0])
+	var sense := maxf(EcoPred.REACH, EcoPred.HEAR_RADIUS)
+	var near := _near_starts(starts, sense)
+	eq(near.size(), 0, "хищник не появляется у пути середины: %s" % ", ".join(near))
+	var nearest := INF
+	for st in starts:
+		for s in _ships():
+			nearest = minf(nearest, Vector2(s.pos.x, s.pos.z).distance_to(st))
+	ok(nearest > sense, "ближайшее место появления — %.1f м, чутьё %.0f м" % [nearest, sense])
+	# Проверка не пустая: место появления у середины пути (сбоку на полчутья) она ловит.
+	var mid: Vector2 = (tool.PATH[0] + tool.PATH[1]) * 0.5 + Vector2(sense * 0.5, 0.0)
+	var bad: Array[Vector2] = [mid]
+	eq(_near_starts(bad, sense).size(), 1, "место у пути — поймано")
+
+
+## `tools/mid_calm.gd start0=` (#1400, 12.11): серпохвост №0 со своего старта стоит там же, где его ставит
+## `EcoPred.reset`; с пробного — в той же высоте над дном.
+func test_tool_moves_pred_like_reset() -> void:
+	var tool := _tool()
+	var w := EcoWorld.new()
+	w.ground = Seabed.mesh_height
+	var preds := w.add(EcoPred.new(null)) as EcoPred
+	w.reset(7)
+	var pr: EcoPred.Pred = preds.all[0]
+	var was := pr.agent.p
+	tool.move_pred(pr, EcoPred.STARTS[0])
+	near(pr.agent.p.distance_to(was), 0.0, 1e-4, "свой старт — то же место")
+	tool.move_pred(pr, Vector2(-60, -20))
+	near(Vector2(pr.agent.p.x, pr.agent.p.z).distance_to(Vector2(-60, -20)), 0.0, 1e-4, "пробный старт")
+	eq(pr.start, pr.agent.p, "старт патруля — там же")
+	ok(pr.agent.p.y <= EcoPred.GOAL_CEILING + 1e-4, "не выше потолка")
+
+
+## Наблюдение закончено: моллюски видны раньше первого «замера» или «замера» нет.
+func test_tool_chain_done() -> void:
+	var tool := _tool()
+	ok(tool.chain_done({"mollusk_t": 8.5, "alert_t": -1.0}), "без замера")
+	ok(tool.chain_done({"mollusk_t": 8.5, "alert_t": 12.0}), "замер позже")
+	ok(not tool.chain_done({"mollusk_t": 8.8, "alert_t": 7.9}), "замер раньше")
+	ok(not tool.chain_done({"mollusk_t": -1.0, "alert_t": -1.0}), "моллюски не показались")
+
+
+## Секунд стоянки середины, которые куртина прохода видна раскрытой курсом подхода (дальше — выходит из луча и
+## через LIT_HOLD + сворачивание закрывается: 3,4–5,7 с на 16 зёрнах; экипаж поворачивает луч сам).
+const SEEN := 3.0
+
+
+## Ход середины, как в `tools/mid_calm.gd` (без тёмной стоянки): свет у выхода из 00, PATH[0] → PATH[1] 5 м/с на
+## FLOOR над дном и SEEN с стоянки. Мир — один волнолист. По кусту куртины прохода: {lit, open (раскрыт на
+## FEED_OPEN — моллюски под листьями видны), d — до корабля в этот миг, shut — снова свёрнут ниже FEED_OPEN,
+## near — ближе всего корабль}; "arrive" — пришёл к стоянке.
+func _route_fern_pass(seed_value: int) -> Dictionary:
+	var tool := _tool()
+	var w := EcoWorld.new()
+	w.ground = Seabed.mesh_height
+	var fr := w.add(EcoFern.new()) as EcoFern
+	w.reset(seed_value)
+	var ship := w.ship
+	ship.pos = tool.ship_at(tool.PATH[0])
+	ship.light_on = true
+	ship.light_range = Searchlight.BASE_RANGE
+	var dt: float = tool.DT
+	var out := {"arrive": -1.0, "ferns": {}}
+	for fe in fr.ferns:
+		if Vector2(fe.pos.x, fe.pos.z).distance_to(EcoFern.ROUTE_CLUSTER) < EcoFern.SPREAD * 2.0:
+			out["ferns"][fe.index] = {"lit": -1.0, "open": -1.0, "d": 0.0, "shut": -1.0, "near": INF}
+	var t := 0.0
+	var tg: Vector2 = tool.PATH[1]
+	while out["arrive"] < 0.0 or t < out["arrive"] + SEEN:
+		var d := Vector2(tg.x - ship.pos.x, tg.y - ship.pos.z)
+		if d.length() < 0.5:
+			ship.speed = 0.0
+			if out["arrive"] < 0.0:
+				out["arrive"] = t
+		else:
+			ship.yaw = atan2(-d.x, -d.y)
+			ship.speed = tool.SPEED
+			var mv := d.normalized() * minf(tool.SPEED * dt, d.length())
+			ship.pos = tool.ship_at(Vector2(ship.pos.x + mv.x, ship.pos.z + mv.y))
+		w.step(dt)
+		t += dt
+		for k in out["ferns"]:
+			var fe: EcoFern.Fern = fr.ferns[k]
+			var r: Dictionary = out["ferns"][k]
+			if fe.lit and r["lit"] < 0.0:
+				r["lit"] = t
+			if fe.open > EcoFern.FEED_OPEN and r["open"] < 0.0:
+				r["open"] = t
+				r["d"] = ship.pos.distance_to(fe.pos)
+			if r["open"] >= 0.0 and r["shut"] < 0.0 and fe.open <= EcoFern.FEED_OPEN:
+				r["shut"] = t
+			r["near"] = minf(r["near"], ship.pos.distance_to(fe.pos))
+	return out
+
+
+## Цепочка «прожектор → волнолист → моллюски» на ходу середины (решение гейм-дизайнера 08.11, #1400): куртина у
+## прохода попадает в луч на подходе (по `tools/mid_calm.gd` — 6,6–7,5 с после света), раскрывается на FEED_OPEN не
+## раньше, чем через FEED_OPEN / OPEN_RATE с в луче, — до стоянки и ещё SEEN с стоянки держится раскрытой;
+## моллюски видны после раскрытия, а у стоянки корабль ближе SHELL_BREATH_FAR — моллюски дышат на глазах экипажа.
+## 16 зёрен.
+func test_route_fern_opens_in_beam_before_stop() -> void:
+	var dt: float = _tool().DT
+	var need := EcoFern.FEED_OPEN / EcoFern.OPEN_RATE
+	var first_lit := INF
+	var last_lit := 0.0
+	var ferns := 0
+	for s in 16:
+		var r := _route_fern_pass(20261018 + s * 7919)
+		var arrive: float = r["arrive"]
+		ok(arrive > 0.0, "зерно %d: корабль пришёл к стоянке" % s)
+		eq((r["ferns"] as Dictionary).size(), EcoFern.PER_CLUSTER, "зерно %d: куртина прохода" % s)
+		var seed_first := INF
+		for k in r["ferns"]:
+			var fe: Dictionary = r["ferns"][k]
+			ferns += 1
+			var tag := "зерно %d, куст %d" % [s, k]
+			ok(fe["lit"] > 0.0 and fe["lit"] < arrive, "%s: в луче на подходе (%.2f с, стоянка с %.2f с)" % [tag, fe["lit"], arrive])
+			ok(fe["open"] >= fe["lit"] + need - dt * 1.5, "%s: раскрыт не раньше %.2f с в луче: луч %.2f, раскрыт %.2f" % [tag, need, fe["lit"], fe["open"]])
+			ok(fe["open"] > 0.0 and fe["open"] < arrive, "%s: раскрыт до стоянки: %.2f с" % [tag, fe["open"]])
+			ok(fe["d"] <= EcoWorld.BEAM_R + Searchlight.LAMP.length(), "%s: раскрыт в луче, %.1f м" % [tag, fe["d"]])
+			ok(fe["shut"] < 0.0 or fe["shut"] >= arrive + SEEN - dt * 0.5, "%s: раскрыт ещё %.0f с стоянки: свёрнут на %.2f с, стоянка с %.2f с" % [tag, SEEN, fe["shut"], arrive])
+			ok(fe["near"] < FernView.SHELL_BREATH_FAR, "%s: моллюски дышат — корабль в %.1f м" % [tag, fe["near"]])
+			seed_first = minf(seed_first, fe["lit"])
+		first_lit = minf(first_lit, seed_first)
+		last_lit = maxf(last_lit, seed_first)
+	eq(ferns, 16 * EcoFern.PER_CLUSTER, "все кусты всех зёрен")
+	ok(first_lit >= 6.0 and last_lit <= 8.0, "первый куст в луче на 6–8 с после света: %.2f…%.2f" % [first_lit, last_lit])
+
+
+## Проба целей патруля №0 (#1400, уровни и гейм-дизайнер 12.11, вариант 1): `band0=` — прямоугольник x0…x1, z0…z1;
+## цель «у дома» — та же доля сдвига от дома по каждой оси внутри прямоугольника, углы — в углах.
+func test_tool_band_and_goal() -> void:
+	var tool := _tool()
+	var r: Rect2 = tool.parse_band("-75,-45,20,76")
+	eq(r, Rect2(-75, 20, 30, 56), "полоса уровней")
+	eq(EcoPred.band_goal(r, -25.0, -25.0), Vector2(-75, 20), "угол x0, z0")
+	eq(EcoPred.band_goal(r, 25.0, 25.0), Vector2(-45, 76), "угол x1, z1")
+	eq(EcoPred.band_goal(r, 0.0, 0.0), Vector2(-60, 48), "середина")
+	near(tool.to_mid_path(Vector2(-45, 80), Vector2(-45, 20)), 49.0, 1e-3, "полоса западнее пути середины на 49 м")
+	near(tool.to_mid_path(Vector2(-45, 50), Vector2(60, 50)), 0.0, 1e-3, "отрезок через путь")
+
+
+## Цели патруля серпохвоста в маленьком квадрате в углу карты (туда случайная цель почти не попадает): за 400 с
+## мира — у кого из хищников сколько.
+func _band_goals(band: Dictionary) -> Array:
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float: return -40.0
+	w.ship.pos = Vector3(400, -30, 400)
+	var fish := w.add(EcoFish.new()) as EcoFish
+	var preds := w.add(EcoPred.new(fish)) as EcoPred
+	preds.alert = EcoPred.ALERT_ON  # «замер» как в игре; корабль далеко — здесь только выбор цели
+	preds.home_band = band
+	w.reset(11)
+	var corner := Rect2(-160, -160, 1, 1)
+	var got := [0, 0, 0]
+	var was: Array[Vector3] = []
+	for pr in preds.all:
+		was.append(pr.agent.goal)
+	for i in 400 * 10:
+		w.step(0.1)
+		for pr in preds.all:
+			var g := pr.agent.goal
+			if g.distance_to(was[pr.index]) > 0.01 and corner.grow(0.01).has_point(Vector2(g.x, g.z)):
+				got[pr.index] += 1
+			was[pr.index] = g
+	return got
+
+
+## `EcoPred.home_band` берёт цели «у дома» только у своего хищника и только у своих стай; пусто — как в игре.
+func test_home_band_only_own_pred() -> void:
+	var off := _band_goals({})
+	eq(off, [0, 0, 0], "как в игре — в угол не ходит никто")
+	var on := _band_goals({0: {"homes": [0, 1, 2, 3, 4, 5], "rect": Rect2(-160, -160, 1, 1)}})
+	ok(on[0] >= 3, "№0 берёт цели у домов в полосе: %s" % str(on))
+	eq(on[1], 0, "№1 — как в игре")
+	eq(on[2], 0, "№2 — как в игре")

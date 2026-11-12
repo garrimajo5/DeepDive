@@ -65,18 +65,14 @@ func test_lite_keeps_shader() -> void:
 
 func test_scene_lite_switch() -> void:
 	EcoIris.set_lite(false)
-	var main: Main = load("res://scenes/main.tscn").instantiate()
-	tree.root.add_child(main)
-	await frames(1)
-	main.step(0.1)
-	var ev: EcoView = main.eco
+	var ev: EcoView = await _world()
 	var fish := ev.fish_view.multimesh.mesh.surface_get_material(0) as ShaderMaterial
 	near(float(fish.get_shader_parameter("iris")), EcoIris.FISH, 1e-6, "светляки в мире переливаются")
 	ev.set_lite(true)
 	near(float(fish.get_shader_parameter("iris")), 0.0, 1e-6, "«Экономно» мира гасит переливы")
 	ev.set_lite(false)
 	near(float(fish.get_shader_parameter("iris")), EcoIris.FISH, 1e-6, "и возвращает")
-	main.queue_free()
+	ev.queue_free()
 	await frames(2)
 
 
@@ -88,3 +84,15 @@ func _diff(a: Color, b: Color) -> float:
 func _iris(m: ShaderMaterial) -> float:
 	var v: Variant = m.get_shader_parameter("iris")
 	return 0.0 if v == null else float(v)
+
+
+## Живой мир без корабля (#1350): вид мира на видимой сетке дна (как в игре, #1386), шаг у старта 00.
+func _world() -> EcoView:
+	var ev := EcoView.new()
+	ev.ground = Seabed.mesh_height
+	tree.root.add_child(ev)
+	await frames(1)
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Helm.Ship.START
+	ev.step(0.1, ship)
+	return ev

@@ -54,6 +54,7 @@ var score := 0
 var start := {}           ## счётчики в начале забега: t, груз, виды, пробоины
 var _vote_held := true    ## голосование ждёт, пока отпустят крестовину
 var _at_descent := false  ## корабль в круге спуска 10 (`descent`): предупреждение — один раз на вход
+var _task_at := ""        ## место с несделанным действием (`PlaceTask`), в круге которого корабль: строка — на вход
 
 ## Переход к Кристальному лесу у места 10 (#828, часть 1): корабль вошёл в круг места — предупреждение и голосование
 ## «глубже или наверх» у голостола (`voting`); ушёл дальше DESCENT_LEAVE — голосование закрыто, если не решили.
@@ -79,6 +80,7 @@ func begin(t: float, cargo_n: int, species_n: int, breaches_n: int) -> void:
 	done = false
 	voting = false
 	_at_descent = false
+	_task_at = ""
 	depth = 0
 	routes = 0
 	ended = false
@@ -89,7 +91,7 @@ func begin(t: float, cargo_n: int, species_n: int, breaches_n: int) -> void:
 ## Подпись поста у голостола.
 func label() -> String:
 	if voting:
-		return "Глубже или наверх?"
+		return DescentVote.TITLE if _at_descent else "Глубже или наверх?"
 	return "Маршрут: выбрать" if route < 0 or done else "Маршрут: сменить"
 
 
@@ -135,10 +137,18 @@ func waypoint() -> Vector2:
 	return place_xz(k) if k != "" else Vector2.INF
 
 
-## Шаг: корабль в (x, z). Возвращает сообщение, если точка пройдена, иначе "".
-func update(x: float, z: float) -> String:
+## Шаг: корабль в (x, z). Возвращает сообщение, если точка пройдена, иначе "". lore — знания слоя: вход в круг места
+## с несделанным действием (`PlaceTask`, #1635) — строка задачи вместо «Точка маршрута пройдена…», при любом маршруте
+## и без него, один раз на вход.
+func update(x: float, z: float, lore: LayerLore = null) -> String:
+	var task := PlaceTask.at(Vector2(x, z), lore)
+	var task_msg := ""
+	if task != _task_at:
+		_task_at = task
+		if task != "":
+			task_msg = PlaceTask.line(task)
 	if route < 0 or done:
-		return ""
+		return task_msg
 	var r: Dictionary = ROUTES[route]
 	for k in r["places"]:
 		if visited.has(k) or Vector2(x, z).distance_to(place_xz(k)) >= float(PLACES[k][2]):
@@ -146,13 +156,18 @@ func update(x: float, z: float) -> String:
 		visited.append(k)
 		if not seen.has(k):
 			seen.append(k)
+		if task_msg != "":   # маршрут засчитан, но на приборах — что делать здесь
+			if next_key() == "":
+				done = true
+				routes += 1
+			return task_msg
 		var n := next_key()
 		if n != "":
 			return "Точка маршрута пройдена: %s. Дальше — %s" % [place_name(k), place_name(n)]
 		done = true
 		routes += 1
 		return "Маршрут «%s» пройден. Следующий — у голостола" % r["name"]
-	return ""
+	return task_msg
 
 
 ## Шаг перехода у 10: корабль в (x, z). Вход в круг места 10 — голосование открыто, `DESCENT_MSG`; уход дальше
@@ -184,8 +199,24 @@ func at_descent() -> bool:
 	return _at_descent
 
 
-## Часть строки состояния: «Рифовый сад 1/3 · Кости левиафана 120 м», пусто без маршрута.
-func status(x: float, z: float) -> String:
+## Гость сети: круг 10 — по кадру хоста (`NetSnap.apply_run`).
+func set_at_descent(v: bool) -> void:
+	_at_descent = v
+
+
+## Годится ли голос choice: у 10 (#1362) «наверх» нет — спуститься сейчас или позже, «вверх» ничего не делает.
+func vote_ok(choice: String) -> bool:
+	return choice != "" and not (choice == "up" and _at_descent)
+
+
+## Часть строки состояния: «Рифовый сад 1/3 · Кости левиафана 120 м», пусто без маршрута. В круге места с
+## несделанным действием (lore, `PlaceTask`, #1635) — задача: «Терраса врат: сканер 1 / 3».
+func status(x: float, z: float, lore: LayerLore = null) -> String:
+	if _at_descent and not ended:   # у 10 — имя места, не строка маршрута (#1362)
+		return place_name(DESCENT)
+	var task := PlaceTask.at(Vector2(x, z), lore)
+	if task != "":
+		return PlaceTask.status(task, lore)
 	if route < 0:
 		return ""
 	var r: Dictionary = ROUTES[route]

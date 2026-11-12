@@ -12,10 +12,12 @@ const OFF := UiStyle.OFF
 const ACCENT := UiStyle.ACCENT
 const DARK := UiStyle.DARK
 const EDGE := Color("32616D")
+const FILL := UiStyle.PLATE_A   ## заливка плашек рации: глухая (#1556)
 const GLYPH_TOP := 0.76   ## от верха видимых глифов до базовой линии, доля кегля (DejaVu Sans)
 
 var radio: Radio
 var time := 0.0
+var warming := false   ## прогрев (`warm`): кегли панели под шторкой вместо неё
 
 
 func _ready() -> void:
@@ -59,7 +61,25 @@ func _mic(c: Vector2, s: float, color: Color, crossed: bool) -> void:
 		draw_line(c + Vector2(-18, -26) * s, c + Vector2(18, 24) * s, color, w, true)
 
 
+## Прогрев (WarmRunner, #1350): под шторкой рация рисует буквы `UiStyle.GLYPHS` своими кеглями
+## (`warm_sizes`) вместо себя — первый показ не растрирует глифы вне шага (#519, «узлы»). on = false — скрыта до
+## своего показа.
+func warm(on: bool) -> void:
+	warming = on
+	visible = on
+	queue_redraw()
+
+
+## Кегли панели, px — из её `_draw`.
+func warm_sizes() -> Array[int]:
+	return UiStyle.warm_px([Radio.BUTTON_PX, Radio.STATE_PX, Radio.NAME_PX, Radio.LETTER_PX, Radio.HEAD_PX, Radio.SUB_PX],
+		Radio.scale(get_viewport_rect().size))
+
+
 func _draw() -> void:
+	if warming:
+		UiStyle.warm_glyphs(self, [get_theme_default_font()], warm_sizes())
+		return
 	if radio == null or radio.hidden:
 		return
 	var size := get_viewport_rect().size
@@ -67,14 +87,14 @@ func _draw() -> void:
 	var font := get_theme_default_font()
 	# строка состояния
 	var st := Radio.state_rect(size)
-	_box(st, s, Color(DARK, 0.86), EDGE, 8.0)
+	_box(st, s, Color(DARK, FILL), EDGE, 8.0)
 	var spx := int(Radio.STATE_PX * s)
 	_text(font, st.position + Vector2(14.0 * s, (st.size.y - spx) * 0.5), radio.state_text(), spx,
 		TEXT if radio.mic else OFF)
 	# кнопка: светлая — только когда голос реально уходит
 	var b := Radio.button_rect(size)
 	var lit := radio.sending()
-	_box(b, s, ACCENT if lit else Color(DARK, 0.9), ACCENT if radio.mic else EDGE, 12.0)
+	_box(b, s, ACCENT if lit else Color(DARK, FILL), ACCENT if radio.mic else EDGE, 12.0)
 	var ink := DARK if lit else (TEXT if radio.mic else OFF)
 	_mic(b.position + Vector2(58.0 * s, b.size.y * 0.5 + 2.0 * s), s, ink, not radio.mic)
 	var bpx := int(Radio.BUTTON_PX * s)
@@ -83,10 +103,10 @@ func _draw() -> void:
 	# просьба разрешения
 	if radio.ask > 0.0:
 		var ar := Radio.ask_rect(size)
-		_box(ar, s, Color(DARK, 0.86), EDGE, 12.0)
+		_box(ar, s, Color(DARK, FILL), EDGE, 12.0)
 		_text(font, ar.position + Vector2(20.0 * s, 8.0 * s), Radio.ASK_TEXT, int(Radio.STATE_PX * s), TEXT)
 		var ab := Radio.ask_button_rect(size)
-		_box(ab, s, Color(DARK, 0.92), ACCENT, 10.0)
+		_box(ab, s, Color(DARK, FILL), ACCENT, 10.0)
 		var apx := int(Radio.STATE_PX * s)
 		draw_string(font, Vector2(ab.position.x, ab.get_center().y + apx * 0.36), Radio.ASK_BUTTON,
 			HORIZONTAL_ALIGNMENT_CENTER, ab.size.x, apx, TEXT)
@@ -99,7 +119,7 @@ func _draw() -> void:
 	for i in rows.size():
 		var t: Radio.Talker = rows[i]
 		var r := Radio.row_rect(i, size)
-		draw_style_box(UiStyle.box(Color(DARK, 0.88 * t.a), 12.0 * s, Color(ACCENT, t.a), 2.0 * s), r)
+		draw_style_box(UiStyle.box(Color(DARK, FILL * t.a), 12.0 * s, Color(ACCENT, t.a), 2.0 * s), r)
 		var c := r.position + Vector2(40.0 * s, r.size.y * 0.5)
 		draw_arc(c, 24.0 * s, 0.0, TAU, 48, Color(TEXT, t.a), maxf(1.5, 2.0 * s), true)
 		var lpx := int(Radio.LETTER_PX * s)

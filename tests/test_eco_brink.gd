@@ -114,12 +114,14 @@ func test_view_one_mesh_glowing_tips() -> void:
 
 
 func test_scene_has_brink() -> void:
-	var main: Main = load("res://scenes/main.tscn").instantiate()
-	tree.root.add_child(main)
+	# живой мир без корабля (#1350): корку строит и ставит в дерево сам EcoView
+	var ev := EcoView.new()
+	ev.ground = Seabed.mesh_height
+	tree.root.add_child(ev)
 	await frames(2)
-	ok(main.eco.brink != null and main.eco.brink.druses.size() > 60, "корка в мире сцены")
-	ok(main.eco.brink_view != null and main.eco.brink_view.is_inside_tree(), "вид корки в сцене")
-	main.queue_free()
+	ok(ev.brink != null and ev.brink.druses.size() > 60, "корка в мире сцены")
+	ok(ev.brink_view != null and ev.brink_view.is_inside_tree(), "вид корки в сцене")
+	ev.queue_free()
 	await frames(1)
 
 
@@ -160,3 +162,83 @@ func test_view_lite_keeps_layout() -> void:
 	ok(tip_full.distance_to(tip_lite) < 1e-4, "кончик первого кристалла на месте")
 	a.free()
 	l.free()
+
+
+## Заселённость 10 (#840): два пятна мха на видимом дне котловины, на голой породе у границы корки, в круге спуска
+## сбоку от оси подхода; друз на пятнах нет.
+func test_feeding_moss_at_10() -> void:
+	var w := EcoWorld.new()
+	w.ground = Seabed.mesh_height
+	var b := w.add(EcoBrink.new()) as EcoBrink
+	eq(b.moss.patches.size(), EcoBrink.MOSS.size(), "пятна площадки")
+	var circle: float = Run.PLACES[Run.DESCENT][2]
+	for p in b.moss.patches:
+		near(p.pos.y, Seabed.mesh_height(p.pos.x, p.pos.z), 1e-4, "пятно %d на видимом дне" % p.index)
+		ok(Seabed.Slope.mask(p.pos.x, p.pos.z) > 0.9, "пятно %d в котловине склона" % p.index)
+		ok(EcoBrink.share(p.pos.x, p.pos.z) < 0.1, "пятно %d на голой породе у границы корки" % p.index)
+		var c := Vector2(p.pos.x, p.pos.z)
+		ok(c.distance_to(EcoBrink.CENTER) < circle, "пятно %d в круге спуска" % p.index)
+		var off := absf(p.pos.z - Seabed.Slope.GAP_Z)
+		ok(off > 10.0 and off < EcoBrink.AXIS_HALF, "пятно %d сбоку от оси подхода: %.0f м" % [p.index, off])
+		for d in b.druses:
+			ok(Vector2(d.x, d.z).distance_to(c) >= EcoBrink.MOSS_FREE, "на пятне %d нет друз" % p.index)
+
+
+## Скребуны спуска пасутся на своём мху у 10 (x ≈ 515, за прежним краем мира 290 м): не сползают к краю отмели, за
+## 10 минут не уходят от группы, объеденное пятно тускнеет.
+func test_grazers_at_10_stay_and_dim() -> void:
+	var w := EcoWorld.new()
+	w.ground = Seabed.mesh_height
+	var b := w.add(EcoBrink.new()) as EcoBrink
+	var g := w.add(EcoGrazer.new(b.moss, EcoBrink.GRAZERS)) as EcoGrazer
+	w.ship.pos = Vector3(505, -275, 200)
+	eq(g.all.size(), EcoBrink.GRAZERS, "скребунов спуска")
+	var mid := Vector3.ZERO
+	for p in b.moss.patches:
+		mid += p.pos / b.moss.patches.size()
+	var low := 1.0
+	var far := 0.0
+	var dy := 0.0
+	for i in 6000:
+		w.step(0.1)
+		for p in b.moss.patches:
+			low = minf(low, p.food)
+		for s in g.all:
+			far = maxf(far, Vector2(s.agent.p.x - mid.x, s.agent.p.z - mid.z).length())
+			dy = maxf(dy, absf(s.agent.p.y - Seabed.mesh_height(s.agent.p.x, s.agent.p.z) - EcoGrazer.LIFT))
+	ok(far < 15.0, "скребуны у группы: дальше всех %.1f м" % far)
+	ok(low < 0.5, "объеденное пятно тускнеет: еда до %.2f" % low)
+	near(dy, 0.0, 0.05, "идут по дну котловины")
+
+
+## Граница мира для донных (`EcoAgent.bound_xz`): на отмели — тот же clampf по ±EDGE, в котловине склона — без
+## сдвига, за её стенами — к ближней точке; котловина — та же, что у рельефа `Seabed.Slope`.
+func test_bound_includes_slope_basin() -> void:
+	var e := EcoAgent.EDGE
+	for q in [Vector2(10, -20), Vector2(-500, 300), Vector2(200, -310), Vector2(280, 500)]:
+		eq(EcoAgent.bound_xz(q.x, q.y), Vector2(clampf(q.x, -e, e), clampf(q.y, -e, e)), "отмель: %s" % q)
+	eq(EcoAgent.bound_xz(400.0, 0.0), Vector2(290.0, 0.0), "севернее котловины — на край отмели")
+	eq(EcoAgent.bound_xz(512.0, 213.0), Vector2(512.0, 213.0), "в котловине — без сдвига")
+	eq(EcoAgent.bound_xz(800.0, 200.0), Vector2(EcoAgent.EAST.end.x, 200.0), "за восточной стеной — к стене")
+	eq(EcoAgent.bound_xz(500.0, 330.0), Vector2(500.0, EcoAgent.EAST.end.y), "за южной стеной котловины — к стене")
+	near(EcoAgent.EAST.position.y, Seabed.Slope.GAP_Z - Seabed.Slope.BASIN_HALF, 1e-4, "котловина с севера")
+	near(EcoAgent.EAST.end.y, Seabed.Slope.GAP_Z + Seabed.Slope.BASIN_HALF, 1e-4, "котловина с юга")
+	near(EcoAgent.EAST.end.x, Seabed.Slope.X_END, 1e-4, "до восточной стены")
+	near(EcoAgent.EAST.position.x, e, 1e-4, "от края отмели")
+
+
+## В живом мире: скребунов спуска рисует «Скребуны спуска», мох площадки — «Мох спуска» у вида корки; мох едет гостю
+## один раз (EcoLink.mosses); прежние группы те же.
+func test_brink_grazers_in_eco_view() -> void:
+	var ev := EcoView.new()
+	ev.ground = Seabed.mesh_height
+	ok(ev.brink_grazers != null and ev.brink_grazers.moss == ev.brink.moss, "скребуны спуска на мху площадки")
+	eq(ev.grazers.all.size(), EcoGrazer.COUNT, "скребунов рифа столько же")
+	eq(ev.drop_grazers.all.size(), EcoDrop.GRAZERS, "скребунов края столько же")
+	ok(ev.get_node_or_null("Скребуны спуска") == ev.brink_grazer_view, "вид скребунов спуска")
+	ok(ev.brink_view.moss_view != null and ev.brink_view.moss_view.name == "Мох спуска", "мох у вида корки")
+	var all := EcoLink.mosses(ev.world.systems)
+	eq(all.count(ev.brink.moss), 1, "мох спуска в сети один раз")
+	for g in ev.brink_grazers.all:
+		ok(g.agent.p.x > EcoAgent.EDGE + 200.0, "скребун у 10, а не у края отмели: x %.0f" % g.agent.p.x)
+	ev.free()

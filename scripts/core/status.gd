@@ -8,6 +8,10 @@ const MESSAGE_SECONDS := 4.2
 const RUMBS: Array[String] = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"]
 ## Сколько строк самое большее у одной длинной части (описание вида из журнала); дальше — «…».
 const PART_LINES := 4
+## Строка приборов — не больше стольких строк на любом посту (#1345): место и общие приборы, данные поста, сообщение.
+const MAX_ROWS := 3
+## Течение пишем строкой поста за штурвалом только с такой скорости (м/с); слабее — лишь сообщением при смене.
+const CURRENT_SHOWN := 0.5
 
 
 ## Разложить части по строкам ширины width; measure — ширина текста (в сцене — шрифт, в тестах — число букв).
@@ -48,7 +52,7 @@ static func lines(parts: Array, measure: Callable, width: float) -> PackedString
 
 ## Текст по словам в строки ширины width, не больше PART_LINES; не влезло — последняя строка кончается «…».
 ## Слово шире строки стоит одно.
-static func wrap_words(text: String, measure: Callable, width: float) -> PackedStringArray:
+static func wrap_words(text: String, measure: Callable, width: float, limit: int = PART_LINES) -> PackedStringArray:
 	var out := PackedStringArray()
 	var cur := ""
 	for word in text.split(" ", false):
@@ -60,12 +64,45 @@ static func wrap_words(text: String, measure: Callable, width: float) -> PackedS
 			cur = word
 	if not cur.is_empty():
 		out.append(cur)
-	if out.size() > PART_LINES:
-		var last := out[PART_LINES - 1]
+	limit = maxi(1, limit)
+	if out.size() > limit:
+		var last := out[limit - 1]
 		while last.contains(" ") and float(measure.call(last + "…")) > width:
 			last = last.substr(0, last.rfind(" "))
-		out.resize(PART_LINES)
-		out[PART_LINES - 1] = last.rstrip(" ,.;:—") + "…"
+		out.resize(limit)
+		out[limit - 1] = last.rstrip(" ,.;:—") + "…"
+	return out
+
+
+## Строки по рядам приборов (#1345): каждый ряд, кроме последнего, — своими строками (`lines`, обычно одна), но так,
+## чтобы следующим непустым рядам осталось по строке (иначе — по словам с «…»);
+## последний (тревога и сообщение) — одним текстом по словам на оставшиеся до max_rows строки (хотя бы одну), хвост — «…».
+## Повтор части в другом ряду не пишется.
+static func rows(by_row: Array, measure: Callable, width: float, max_rows: int = MAX_ROWS) -> PackedStringArray:
+	var out := PackedStringArray()
+	var seen := {}
+	for i in by_row.size():
+		var parts: Array = []
+		for raw in by_row[i]:
+			var p := str(raw).strip_edges()
+			if p.is_empty() or seen.has(p.to_lower()):
+				continue
+			seen[p.to_lower()] = true
+			parts.append(p)
+		if parts.is_empty():
+			continue
+		if i < by_row.size() - 1:
+			var later := 0   # каждому следующему непустому ряду — хотя бы строка (#1361: сообщение во 2-м ряду)
+			for j in range(i + 1, by_row.size()):
+				later += 1 if not (by_row[j] as Array).is_empty() else 0
+			var budget := maxi(1, max_rows - out.size() - later)
+			var ls := lines(parts, measure, width)
+			if ls.size() > budget:
+				ls = wrap_words(SEPARATOR.join(PackedStringArray(parts)), measure, width, budget)
+			out.append_array(ls)
+		else:
+			out.append_array(wrap_words(SEPARATOR.join(PackedStringArray(parts)), measure, width,
+				maxi(1, max_rows - out.size())))
 	return out
 
 
@@ -110,6 +147,18 @@ class Lines:
 		text = "\n".join(Status.lines(parts, measure, width))
 		return true
 
+	## То же по рядам приборов (`Status.rows`, #1345).
+	func update_rows(by_row: Array, measure: Callable, width: float, size: int = 0) -> bool:
+		var flat := PackedStringArray()
+		for r: Array in by_row:
+			flat.append("\u001f".join(PackedStringArray(r.map(func(p): return str(p)))))
+		var k := "%s|%d|%s" % [width, size, "\u001e".join(flat)]
+		if k == key:
+			return false
+		key = k
+		text = "\n".join(Status.rows(by_row, measure, width))
+		return true
+
 
 ## Сообщение в конце строки состояния («Вы за штурвалом», «Прожектор погашен»…): держится 4,2 с и гаснет.
 ## Сообщение-состояние гасят сразу, когда состояние кончилось (clear), — только если на приборах всё ещё оно.
@@ -117,6 +166,10 @@ class Lines:
 ## Сообщение мира (`wait`) не перебивает другое сообщение мира, пока то видно меньше MIN_SHOW с: ждёт своей очереди (одно, последнее), —
 ## иначе строку мира («веер повёрнут к жерлу») стирал укус хищника в ту же секунду (issue #979). Свои действия
 ## игрока (`wait` = false) показываются сразу — отклик на кнопку не ждёт.
+## Строка угрозы мира (`urgent`, `EcoLink.URGENT`, #1516) выходит сразу и держится все свои секунды: обычная строка
+## мира в это время ждёт очереди (`next`), своё сообщение игрока перебивает её, как любую.
+## Строка мира «держится» (`keep`, `EcoLink.KEEP`, #1555: «хищник потерял корабль») встаёт в очередь, как обычная, а
+## вышла — держится все свои секунды, как срочная; срочная её перебивает сразу. Ждущую «держится» обычная не сменяет.
 class Message:
 	const MIN_SHOW := 1.0
 	var text := ""
@@ -127,25 +180,57 @@ class Message:
 	var next_left := 0.0
 	## Текущее — строка мира (её и бережём от следующей строки мира).
 	var world := false
+	## Текущее — строка угрозы мира (#1516): строки мира её не перебивают, пока она не погасла сама.
+	var hot := false
+	## Текущее держится не как срочная, а как «держится» (#1555): срочная его перебивает.
+	var keep := false
+	## Ждущее — «держится» (#1555): обычная строка мира его не сменяет.
+	var next_keep := false
 
 	func visible() -> bool:
 		return not text.is_empty()
 
-	func say(msg: String, seconds: float = MESSAGE_SECONDS, wait := false) -> void:
-		if wait and world and not msg.is_empty() and not text.is_empty() and msg != text and shown < MIN_SHOW:
+	func say(msg: String, seconds: float = MESSAGE_SECONDS, wait := false, urgent := false, held := false) -> void:
+		if urgent and wait and not msg.is_empty():
+			if msg == next:
+				_drop_next()
+			_show(msg, seconds)
+			world = true
+			hot = true
+			return
+		if wait and world and not msg.is_empty() and not text.is_empty() and msg != text and (hot or shown < MIN_SHOW):
+			if next_keep and not held and not next.is_empty():
+				return   # ждущую «держится» обычная строка мира не сменяет (#1555)
 			next = msg
 			next_left = seconds
+			next_keep = held
 			return
 		if wait or msg == next:
-			next = ""
-			next_left = 0.0
+			_drop_next()
 		_show(msg, seconds)
 		world = wait
+		if wait and held and not msg.is_empty():
+			hot = true
+			keep = true
+
+	## Забрать строки мира с приборов (брифинг прибытия, #1429): видимая строка мира и ждущая гаснут, отдаётся последняя
+	## («» — их нет). Свои сообщения игрока не трогает.
+	func take_world() -> String:
+		var out := next
+		_drop_next()
+		if world and not text.is_empty():
+			if out.is_empty():
+				out = text
+			text = ""
+			left = 0.0
+			world = false
+			hot = false
+			keep = false
+		return out
 
 	func clear(msg: String) -> void:
 		if next == msg:
-			next = ""
-			next_left = 0.0
+			_drop_next()
 		if text == msg:
 			text = ""
 			left = 0.0
@@ -157,24 +242,35 @@ class Message:
 			return
 		left -= dt
 		shown += dt
-		if not next.is_empty() and shown >= MIN_SHOW:
+		if not next.is_empty() and shown >= MIN_SHOW and not (hot and left > 0.0):
 			_take_next()
 		elif left <= 0.0:
 			text = ""
 			left = 0.0
+			hot = false
+			keep = false
 			_take_next()
 
 	func _show(msg: String, seconds: float) -> void:
 		text = msg
 		left = seconds if not msg.is_empty() else 0.0
 		shown = 0.0
+		hot = false
+		keep = false
+
+	func _drop_next() -> void:
+		next = ""
+		next_left = 0.0
+		next_keep = false
 
 	func _take_next() -> void:
 		if next.is_empty():
 			return
 		var m := next
 		var s := next_left
-		next = ""
-		next_left = 0.0
+		var k := next_keep
+		_drop_next()
 		_show(m, s)
 		world = true
+		hot = k
+		keep = k

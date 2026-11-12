@@ -60,11 +60,11 @@ func test_scene_ghost_stays_then_goes() -> void:
 	eq(mat.transparency, BaseMaterial3D.TRANSPARENCY_ALPHA)
 	ok(main.crew_view.meshes[0].get_active_material(0) != mat, "у своих фигур материал прежний")
 	near(main.ghost_view.shown[0]["hip"].x, -3.5, 0.6, "там, где стоял")
-	for i in int(9.5 / DT):
-		main.step(DT)
+	for i in 95:   # 9,5 с шагом 0,1: таяние — таймер, кадр за кадром не нужен (#1350)
+		main.step(0.1)
 	ok(fig.visible, "через 9,5 с ещё стоит")
-	for i in int(1.0 / DT):
-		main.step(DT)
+	for i in 10:
+		main.step(0.1)
 	eq(main.ghosts.size(), 0, "через 10,3 с растаяла")
 	ok(not fig.visible, "фигуры нет")
 	main.queue_free()

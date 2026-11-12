@@ -38,6 +38,7 @@ func _pred_world(with_organ := true) -> EcoWorld:
 	w.ground = _flat
 	w.ship.pos = FAR
 	var p := w.add(EcoPred.new()) as EcoPred
+	p.alert = 0.0  # бросок сразу: здесь чутьё и бросок; «замер» #1498 — test_eco_pred_zamer
 	if with_organ:
 		p.organs = w.add(EcoOrgan.new([Vector2(-40, 20)] as Array[Vector2])) as EcoOrgan
 	return w
@@ -368,4 +369,29 @@ func test_view_sync_passes_world_time() -> void:
 	near(float(mat.get_shader_parameter("t")), 123.5, 1e-6, "время мира — в шейдер (у гостя — то же)")
 	ok(ov.extra_cull_margin >= OrganView.BREATH, "раздутые устья не обрезает рамка")
 	ov.queue_free()
+	await frames(1)
+
+
+func test_organs_stand_on_visible_floor() -> void:
+	# #1386: мир ставил трубы на шум Seabed.height, а сетка дна между вершинами (клетка 5 м) ниже на 2–3 м —
+	# губки у (−38, 78) и (52, 30) висели над грунтом. Живой мир в игре стоит на видимой сетке (Seabed.mesh_height;
+	# что Main даёт миру именно её — test_eco_drop.test_wired_into_ship). Мир без корабля (#1350).
+	var ev := EcoView.new()
+	ev.ground = Seabed.mesh_height
+	tree.root.add_child(ev)
+	await frames(1)
+	var bases := 0
+	for og in ev.organs.organs:
+		for k in og.tube_base.size():
+			var b := og.tube_base[k]
+			var floor_y := Seabed.mesh_height(b.x, b.z)
+			near(b.y, floor_y - EcoOrgan.SINK, 0.05, "губка %d, труба %d — основание в грунте видимого дна" % [og.index, k])
+			bases += 1
+	ok(ev.organs.organs.size() >= 2 and bases >= 7 * ev.organs.organs.size(), "губки на месте, по семь труб: %d" % bases)
+	var off := 0.0   # проверка не пустая: на шуме Seabed.height губки висели бы
+	for og in ev.organs.organs:
+		for b in og.tube_base:
+			off = maxf(off, absf(Seabed.height(b.x, b.z) - Seabed.mesh_height(b.x, b.z)))
+	ok(off > 0.1, "у оснований шум и сетка расходятся: %.2f м" % off)
+	ev.queue_free()
 	await frames(1)

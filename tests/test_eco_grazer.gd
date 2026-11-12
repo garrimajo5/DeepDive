@@ -53,11 +53,11 @@ func _flat(a: Vector3, b: Vector3) -> float:
 
 # ---------- Мох и скребуны (EcoMoss, EcoGrazer) ----------
 
-func test_22_patches_and_10_grazers() -> void:
+func test_24_patches_and_10_grazers() -> void:
 	var w := _world()
 	var moss := _moss(w)
 	var gr := _grazers(w)
-	eq(moss.patches.size(), 22, "22 пятна")
+	eq(moss.patches.size(), 24, "24 пятна: 22 из браузера и два у Каменного цветка (#1400)")
 	near(moss.patches[0].pos.x, 30.831, 0.01, "первое пятно — как в браузере")
 	near(moss.patches[0].pos.z, 94.437, 0.01)
 	for p in moss.patches:
@@ -343,6 +343,39 @@ func test_grazer_starts_and_stops_smoothly() -> void:
 	ok(prev_v < 0.35, "к пятну подходит тише (%.2f м/с)" % prev_v)
 
 
+## Поворот с инерцией (Б3): доевший скребун трогается к новому пятну не на полные TURN_MAX за кадр — скорость
+## поворота меняется не быстрее TURN_ACCEL, к курсу подходит без перелёта (tools/jerk.gd: было 12 рад/с²).
+func test_turn_eases_without_jerk() -> void:
+	var g := EcoGrazer.Grazer.new()
+	g.dir = 0.0
+	var goal := 1.5
+	var dt := 1.0 / 30.0
+	var prev := 0.0
+	var top := 0.0
+	var over := 0.0
+	for i in 150:
+		var was := g.dir
+		EcoGrazer.turn_step(g, angle_difference(g.dir, goal), dt)
+		var rate := (g.dir - was) / dt
+		if not ok(absf(rate - prev) <= EcoGrazer.TURN_ACCEL * dt + 1e-4, "скорость поворота без рывка: %.3f → %.3f" % [prev, rate]):
+			return
+		top = maxf(top, absf(rate))
+		over = maxf(over, g.dir - goal)
+		prev = rate
+	ok(top <= EcoGrazer.TURN_MAX + 1e-4, "не быстрее TURN_MAX: %.3f" % top)
+	ok(over <= 1e-4, "к курсу без перелёта: %.4f" % over)
+	near(g.dir, goal, 0.01, "за 5 с довернул")
+	# стал пастись посреди поворота — доворот гаснет, а не обрывается за кадр
+	g.dir = 0.0
+	g.spin = EcoGrazer.TURN_MAX
+	var was2 := g.dir
+	EcoGrazer.turn_step(g, 0.0, dt, true)
+	ok((g.dir - was2) / dt > EcoGrazer.TURN_MAX - EcoGrazer.TURN_ACCEL * dt - 1e-4, "пасётся — поворот гаснет плавно")
+	for i in 60:
+		EcoGrazer.turn_step(g, 0.0, dt, true)
+	eq(g.spin, 0.0, "и встаёт")
+
+
 func test_walks_up_steep_bump_at_its_pace() -> void:
 	# бугор рифа 4 м на 3 м, уклон до 2:1 (как у (−40, 6) на отмели): вдоль дна — не быстрее шага 0,9 м/с (уклон — с
 	# прошлого шага, запас 10 %), раньше по склону — до 2 м/с (Б3: взбегал и скатывался); на ровном — полный шаг
@@ -507,11 +540,31 @@ func test_eaten_grazer_invisible() -> void:
 			return
 
 
+## #1400, подход к 01: два последних пятна — у цоколя Каменного цветка со стороны прохода 00 → 01. Край пятна касается
+## цоколя (основание рифа связано с грунтом), в крону и под цоколь пятно не заходит; оба — по бокам цоколя, как его
+## видно с подхода от 00 (ближняя сторона в кадре пилота закрыта пультом), одно слева, другое справа.
+func test_flower_patches_touch_plinth_on_approach_side() -> void:
+	var c := EcoFlower.CENTER
+	var from00 := Vector2(LayerMap.POINTS["00"]["x"], LayerMap.POINTS["00"]["z"])
+	var n := EcoMoss.SPOTS.size()
+	var sides: Array[float] = []
+	for i in range(n - EcoMoss.FLOWER_SPOTS, n):
+		var s := EcoMoss.SPOTS[i]
+		var d := Vector2(s.x, s.z).distance_to(c)
+		var edge := d - EcoMoss.RADIUS
+		ok(edge > 0.0 and edge <= EcoFlower.PLINTH_R + 0.5, "пятно %d касается цоколя: край в %.1f м от оси" % [i, edge])
+		ok(d < EcoFlower.SPREAD, "под кроной, а не в стороне")
+		var ang := rad_to_deg((Vector2(s.x, s.z) - c).angle_to(from00 - c))
+		ok(absf(ang) >= 60.0 and absf(ang) <= 120.0, "пятно %d сбоку цоколя: %.0f° от направления на 00" % [i, ang])
+		sides.append(signf(ang))
+	ok(sides[0] != sides[1], "одно слева, другое справа")
+
+
 func test_moss_patches_lie_on_ground() -> void:
 	var moss := _moss(_world())
 	var m := EcoMossLook.build(moss.patches, Seabed.height)
-	eq(m.verts.size(), 22 * 81)
-	eq(m.tris.size(), 22 * 128 * 3)
+	eq(m.verts.size(), 24 * 81)
+	eq(m.tris.size(), 24 * 128 * 3)
 	for i in range(0, m.verts.size(), 7):
 		var p := m.verts[i]
 		if not near(p.y, Seabed.height(p.x, p.z) + EcoMossLook.ABOVE, 1e-3, "по дну"):

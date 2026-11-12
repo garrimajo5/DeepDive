@@ -26,6 +26,9 @@ var _glint_k := -1.0
 var _glint_tint := Color(-1.0, -1.0, -1.0)
 var _wear_loss := -1.0
 var _screens := Vector4(-1.0, -1.0, -1.0, -1.0)
+var _slider_share := PackedFloat64Array()   ## доли ползунков, уже стоящие на пульте (set_slider, #1590)
+var _hatch_at := -1.0                        ## сдвиг створки люка, уже стоящий (set_hatch, #1590)
+var _readout := [Vector3(-1, -1, -1), Vector3(-1, -1, -1)]   ## показ экранов пульта (set_readout)
 var _surfaces: Array[ShaderMaterial] = []
 const SCANNER_TEXT := Color("67DDEB")
 ## Ширина строк экрана сканера, px подписи: видимое стекло в рамке модели уже `SCANNER_SCREEN_SIZE` — строка шире
@@ -56,6 +59,7 @@ func _ready() -> void:
 	wp.pos = Vector3.ZERO
 	wheel = _add_model(wp, wheel_mount)
 	props[BridgeProps.WHEEL] = wheel
+	set_wheel_turn(0.0)
 	_light_screens(props[BridgeProps.SCREENS])
 	for p in BridgeProps.side_props():
 		props[p.model] = _add_model(p, self)
@@ -160,12 +164,21 @@ static func cabin_light(l: CabinLight.Lamp) -> OmniLight3D:
 
 ## Ползунок i пульта энергии на долю share 0…1 (паз наклонён: ползунок идёт по лицу пульта).
 func set_slider(i: int, share: float) -> void:
+	if _slider_share.size() != sliders.size():
+		_slider_share.resize(sliders.size())
+		_slider_share.fill(-1.0)
+	if _slider_share[i] == share:   # доля та же — узел не двигаем: перенос по дереву каждый кадр (#1590)
+		return
+	_slider_share[i] = share
 	var y := BridgeProps.slider_y(share)
 	sliders[i].position = Vector3(BridgeProps.SLIDER_X[i], y, BridgeProps.slider_z(y))
 
 
 ## Створка люка в коридор отъезжает вбок на offset м; колесо крутится, пока створка не тронулась.
 func set_hatch(offset: float) -> void:
+	if offset == _hatch_at:   # створка стоит — не пишем (#1590)
+		return
+	_hatch_at = offset
 	hatch_door.position.x = BridgeProps.HATCH_DOOR_OFFSET.x + offset
 	hatch_wheel.rotation_degrees.z = -offset / ShipLayout.Door.SLIDE * 540.0
 
@@ -194,7 +207,7 @@ func set_zap_lever(deg: float, ready: bool) -> void:
 ## Поворот колеса вслед за штурвалом: turn −1…1 (вправо — по часовой, если смотреть из кресла).
 func set_wheel_turn(turn: float) -> void:
 	if wheel:
-		wheel.rotation_degrees.z = -turn * BridgeProps.WHEEL_TURN_DEG
+		wheel.rotation_degrees.z = BridgeProps.wheel_deg(turn)
 
 
 ## Текст на экране сканера: лицом в −X (к мостику), текст вправо — к +Z.
@@ -256,13 +269,18 @@ static func light_texture(n: Node3D) -> void:
 		m.material_override = sm
 
 
-## Экраны пульта светятся ровным голубым (пока на них ничего не рисуем); три экрана — своя яркость у каждого
-## (`shaders/console_screens.gdshader`, помехи — `set_screens`).
+## Экраны пульта по ART-061: ход, глубина и курс, свет и сонар из атласа `textures/ekrany/atlas.png`; три экрана —
+## своя яркость у каждого (`shaders/console_screens.gdshader`, помехи — `set_screens`, показ — `set_readout`);
+## сетка — `BridgeProps.screen_mesh` вместо плоскости из GLB (#1388).
+const SCREENS_ATLAS := preload("res://textures/ekrany/atlas.png")
+
+
 func _light_screens(n: Node3D) -> void:
 	screens_mat = ShaderMaterial.new()
 	screens_mat.shader = load("res://shaders/console_screens.gdshader")
-	screens_mat.set_shader_parameter("glow", BridgeProps.SCREEN_GLOW)
+	screens_mat.set_shader_parameter("atlas", SCREENS_ATLAS)
 	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).mesh = BridgeProps.screen_mesh()   # стёкла по рамкам корпуса (#1388)
 		(mi as MeshInstance3D).material_override = screens_mat
 
 
@@ -274,6 +292,16 @@ func set_screens(helm: Vector3, scanner: float) -> void:
 	_screens = key
 	screens_mat.set_shader_parameter("k", helm)
 	scanner_text.modulate = Color(SCANNER_TEXT.r * scanner, SCANNER_TEXT.g * scanner, SCANNER_TEXT.b * scanner)
+
+
+## Показ экранов пульта (ART-061, #1568): `ConsoleScreen.values` — курс, глубина, ход; `ConsoleScreen.status` — свет,
+## сонар, тревога. Пишет uniform только при смене показа.
+func set_readout(values: Vector3, status: Vector3) -> void:
+	if values == _readout[0] and status == _readout[1]:
+		return
+	_readout = [values, status]
+	screens_mat.set_shader_parameter("values", values)
+	screens_mat.set_shader_parameter("status", status)
 
 
 ## Стекло носовых окон по ART-057 (`steklo-okon.md`): один квад на три окна, маска мути/капель/царапин и нормали

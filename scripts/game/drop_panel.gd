@@ -16,6 +16,7 @@ var drop: NetDrop
 var notice: HostNotice
 var weak: WeakLink
 var quiet := false   ## шторка «Корпус разрушен» на экране: плашки хоста и «Слабая связь» не рисуются (#473)
+var warming := false   ## прогрев (`warm`): кегли панели под шторкой вместо неё
 
 
 func _ready() -> void:
@@ -59,7 +60,27 @@ func _refresh() -> void:
 		queue_redraw()
 
 
+## Прогрев (WarmRunner, #1350): под шторкой диалог потери хоста и плашки рисуют буквы `UiStyle.GLYPHS` своими кеглями
+## (`warm_sizes`) вместо себя — первый показ не растрирует глифы вне шага (#519, «узлы»). on = false — скрыта до
+## своего показа.
+func warm(on: bool) -> void:
+	warming = on
+	visible = on
+	queue_redraw()
+
+
+## Кегли панели, px — из её `_draw`: только плашки, которые появляются посреди игры («Слабая связь» 34, «Игорь
+## отключился» 44/32, «Связь восстановлена» 40/28). Кегли самого диалога потери хоста (56, 42, 36) не греются: он
+## встаёт на последнем кадре хоста, игра уже стоит, а кегль 56 — самый дорогой в прогреве (#1674, #1677).
+func warm_sizes() -> Array[int]:
+	return UiStyle.warm_px([28.0, 32.0, 34.0, 40.0, 44.0],
+		get_viewport_rect().size.y / NetDrop.REF_H)
+
+
 func _draw() -> void:
+	if warming:
+		UiStyle.warm_glyphs(self, [get_theme_default_font()], warm_sizes())
+		return
 	var size := get_viewport_rect().size
 	var s := size.y / NetDrop.REF_H
 	var font := get_theme_default_font()

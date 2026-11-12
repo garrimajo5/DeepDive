@@ -126,6 +126,17 @@ func test_snd003_files() -> void:
 	ok(z != null and z.loop_mode != AudioStreamWAV.LOOP_FORWARD, "разряд — один раз")
 
 
+## SND-003, правки тревоги (#657, PR #709): сирена — выбор владельца, петля 2,25 с (прежняя — 2,95 с), громкость как
+## у прежней (−18 LUFS, пик −10 дБ) — SIREN_DB в BreachView не менялся.
+func test_snd003_siren_owner_choice() -> void:
+	var s := load(HullSound.SIREN) as AudioStreamWAV
+	ok(s != null, "тревога загружается")
+	if s == null:
+		return
+	near(s.get_length(), 2.25, 0.01, "петля тревоги — выбор владельца, 2,25 с")
+	eq(s.loop_mode, AudioStreamWAV.LOOP_FORWARD, "петля вперёд")
+
+
 func test_snd003_scene() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
@@ -196,7 +207,8 @@ func test_scene_rub_loop() -> void:
 	ok(s.rub.volume_db < HullSound.RUB_DB, "тише")
 	s.set_rub(0.0, HullSound.RUB_FADE)
 	ok(not s.rub.playing, "спала — петля стоит")
-	main.helm.pos.y = Seabed.height(main.helm.pos.x, main.helm.pos.z) + Helm.Ship.CLEARANCE - 1.0
+	main.helm.ground = func(_x: float, _z: float) -> float: return -60.0   # ровное: днище всем корпусом на дне и на ходу (#1481)
+	main.helm.pos.y = -60.0 + Helm.Ship.CLEARANCE - 1.0
 	main.helm.speed = 2.5
 	main.step(1.0 / 30.0)
 	ok(main.helm.rub > HullSound.RUB_SPEED, "в игре: на дне на ходу — трёмся (%.2f)" % main.helm.rub)

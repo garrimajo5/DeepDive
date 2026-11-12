@@ -30,6 +30,12 @@ var _skip_frame := true
 ## Сюда входит и ожидание видеокарты и показа кадра (вплоть до кадровой развёртки).
 var draw_ms := 0.0
 var _draw_from_us := 0
+## Остаток долгого кадра вне кода и отрисовки (#519, тестер в #1350 10.11): метки времени конца отрисовки, первого
+## физического такта после неё (`SceneTree.physics_frame`) и начала обработки узлов (`process_frame`) — делят остаток
+## на «между кадрами», «физика» и «узлы» (`rest_parts`).
+var _post_us := 0
+var _phys_us := 0
+var _proc_us := 0
 ## Сборки шейдеров (конвейеров видеокарты) в последнем кадре по видам `PIPES` (issue #983): провал «отрисовка 338 мс»
 ## на устройстве — сборка это или выгрузка. Счётчики движка накопительные; Compatibility их не ведёт (нули).
 var pipes := PackedInt32Array([0, 0, 0, 0, 0])
@@ -65,7 +71,27 @@ var _warm_last_us := 0
 var _warm_ms: Array[int] = []   ## длительность каждого кадра прогрева, мс (issue #159: какой взгляд дорогой)
 var composing := 0     ## кадры Google Play (шаг «play»), которые ещё собираются — «quit» их ждёт
 var graphics_seen := ""   ## последняя записанная строка графики (`graphics_now`): новая — в лог (по отчёту #742)
+## Свет тестера у камеры с борта (шаг «outside» с "lamp"): на 300 м корпус и грунт снаружи чёрные — без него у 10
+## виден только огонёк окна, зазор кормы над дном не оценить (#1481). Только в прогоне сценария, в игре его нет.
+const LAMP_ENERGY := 3.0
+const LAMP_RANGE := 90.0
+const LAMP_NAME := "Свет тестера"
 var drain_left := 0.0   ## шаг «drain»: столько секунд ещё слать в игру EcoLink.DRAIN от стеклоуста
+
+
+## Игру свернули посреди прогона (#1592): чужое окно поверх (браузер, `am start` другого инструмента) — кадры и
+## частота после этого шумные, не регрессия. Строку считает `run-qa.ps1` в «помехи: N» итога RUN.
+const PAUSED_LINE := "игра свёрнута (OnPause)"
+const RESUMED_LINE := "игра снова на экране"
+
+
+func _notification(what: int) -> void:
+	if script_q == null:
+		return
+	if what == NOTIFICATION_APPLICATION_PAUSED:
+		_log(PAUSED_LINE)
+	elif what == NOTIFICATION_APPLICATION_RESUMED:
+		_log(RESUMED_LINE)
 
 
 ## Есть ли сценарий для этого запуска.
@@ -83,14 +109,16 @@ func start(m: Main, text: String = "") -> void:
 	RenderingServer.viewport_set_measure_render_time(main.get_viewport().get_viewport_rid(), true)   # видеокарта — для worst_at
 	RenderingServer.frame_pre_draw.connect(_on_pre_draw)
 	RenderingServer.frame_post_draw.connect(_on_post_draw)
+	main.get_tree().physics_frame.connect(_on_physics_frame)
+	main.get_tree().process_frame.connect(_on_process_frame)
 	for i in PIPES.size():   # счёт сборок — с начала прогона, не с запуска (issue #983)
 		_pipes_total[i] = RenderingServer.get_rendering_info(PIPES[i][0])
 	_warm_from_us = Time.get_ticks_usec()
 	DirAccess.make_dir_recursive_absolute(OUT)
 	for f in DirAccess.get_files_at(OUT):
 		DirAccess.remove_absolute(OUT + "/" + f)
-	_log("Сценарий: %d шагов, версия %s, %s" % [script_q.steps.size(), ProjectSettings.get_setting("application/config/version", "?"),
-		OS.get_model_name()])
+	# версия — как на плашке (`Main.version_text`: номер сборки и коммит из version.txt), чтобы лог сам называл сборку
+	_log("Сценарий: %d шагов, версия %s, %s" % [script_q.steps.size(), Main.version_text(), OS.get_model_name()])
 	for e in script_q.errors:
 		_log("ОШИБКА СЦЕНАРИЯ: " + e)
 
@@ -129,6 +157,8 @@ func tick(dt: float) -> void:
 				_shot(c[1])
 			"hud":   # кадры для магазина: без крестовины, кнопок и строк приборов
 				main.set_hud(c[1])
+			"luch_ten":   # тень прожектора (#1400): false — без тени, true — по уровню графики
+				luch_ten(main, c[1])
 			"play":   # кадр Google Play ART-046: снимок и кадр 1920×1080 с подписью
 				_play(c[1])
 			"goto":
@@ -158,6 +188,15 @@ func tick(dt: float) -> void:
 					main.helm.turn = 0.0
 				main.park_at(Vector3(c[1], c[2], c[3]))
 				_jump = JUMP_FRAMES
+			"floor":   # на нижний предел хода над рельефом по курсу — корма и нос у грунта (#1481)
+				main.park_at(Vector3(main.helm.pos.x, main.helm.floor_at(main.helm.pos, main.helm.yaw), main.helm.pos.z))
+				_jump = JUMP_FRAMES
+			"outside":   # камера с борта стоит в точке облёта: корпус и грунт под ним снаружи (#1481)
+				if c[1]:
+					main.flyby.hold_at(c[2])
+				else:
+					main.flyby.stop()
+				_set_lamp(c[1] and c[3])
 			"fly":   # тестовый полёт noclip: глаз на высоте c[2] в осях корабля, наклон c[3]
 				if main.walker.noclip != c[1]:
 					main.toggle_noclip()
@@ -186,6 +225,16 @@ func tick(dt: float) -> void:
 				main.vitals.energy = c[1]
 			"ping":   # импульс сонара, как с поста (у площадки 08 — ритм пограничного поля, #833)
 				main.ping_sonar()
+			"pred":   # серпохвост мимо куста огнецвета поперёк взгляда с корабля (#1401)
+				pred_pass(main, c[1], c[2], c[3])
+			"zamer":   # фаза «замер» #1498: хищник у корабля, свет горит (#1498: строки знака в логе тестера не было)
+				_log(zamer(main, c[1], c[2]))
+			"dome":   # купольник у гнезда 07 на t с клипа OpenPetal (#1350: клипов ANIM-004 в отчёте не было)
+				if main.eco != null and main.eco.dome != null:
+					var knew := main.lore.knows(LayerLore.PETAL07)
+					main.lore.facts.erase(LayerLore.PETAL07)   # строка створки на 37a — как в первый раз (#837, отчёт 11.11 15:18)
+					main.eco.dome.stage(c[1])
+					_log("купольник: OpenPetal %.1f с · створка 07 %s" % [c[1], "была открыта раньше — забыта" if knew else "ещё не открыта"])
 			"save":   # место для гибели (#824): как автосохранение, но только в памяти — файл прогона не пишется
 				main.save.ship = SaveGame.ship_read(SaveGame.ship_snapshot(main.helm, main.vitals)) if c[1] else {}
 			"wreck":   # корпус разрушен — как от удара (шторка ART-036)
@@ -194,9 +243,17 @@ func tick(dt: float) -> void:
 				main.vitals.destroyed.emit()
 			"back":   # системная «Назад»: пауза ART-037
 				main.back_pressed()
-			"tutorial":   # подсказки первого забега ART-038: с первого шага или убрать
+			"tutorial":   # подсказки первого забега ART-038: с шага c[2] (обычно с первого) или убрать
 				main.tutorial.reset()
 				main.tutorial.on = c[1]
+				main.tutorial.step = c[2] - 1
+			"brief":   # брифинг прибытия TXT-001 (#827) с первого экрана: знание «прочитан» забыто, как в первом забеге
+				main.arrival.on = c[1]
+				main.arrival.screen = 0
+				main.arrival.t = 0.0
+				if c[1]:
+					main.lore.facts.erase(LayerLore.BRIEF)
+				_log("брифинг %s · %s" % ["вкл" if c[1] else "выкл", row3_now()])   # строка мира до плашки (#1429)
 			"voice":   # голос во внутренней связи ART-040 — как событие мира EcoLink.VOICE
 				main.on_eco_event(EcoLink.voice(c[1], c[2], c[3], c[4], c[5]))
 			"slow":   # предложение «Экономно» ART-044 — как после нескольких секунд низких кадр/с
@@ -245,6 +302,15 @@ func _log_graphics() -> void:
 		_log(line)
 
 
+## Тень прожектора для шага `luch_ten` (#1400): цену тени на «Обычно» тестер меряет на устройстве — кадры
+## до и после шага; true возвращает тень такой, как её ставит уровень графики (`Main._apply_graphics`).
+static func luch_ten(m: Main, on: bool) -> void:
+	if m.searchlight == null:
+		return
+	m.searchlight.spot.shadow_enabled = on and int(Graphics.level(m.graphics_level)["shadows"]) > 0
+	m.say("тень прожектора: " + ("по графике" if on else "выкл"))
+
+
 ## Графика сейчас одной строкой: уровень `Main.graphics_level` и фактические MSAA, масштаб сцены и тени солнца.
 func graphics_now() -> String:
 	var vp := main.get_viewport()
@@ -284,7 +350,9 @@ func _measure(now_us: int) -> void:
 			return
 		if ms > worst_ms:
 			worst_ms = ms
-			worst_at = worst_note(_step_label, render_ms(), code_ms(), gpu_ms(), ms, main.clock.last_note() if main else "", pipes)   # _measure — уже в новом шаге (issue #662)
+			var code := code_ms()
+			worst_at = worst_note(_step_label, render_ms(), code, gpu_ms(), ms, main.clock.last_note() if main else "", pipes,
+				rest_parts(_last_us, now_us, code, _draw_from_us, _post_us, _phys_us, _proc_us))   # _measure — уже в новом шаге (issue #662)
 		if _settle > 0:
 			_settle -= 1
 		else:
@@ -310,6 +378,8 @@ func _point(what: String, dir: Vector2) -> Vector2:
 			return l.light.c
 		"dive":   # «Погрузиться» в главном меню ART-037
 			return main.main_menu.rect("dive", main.get_viewport().get_visible_rect().size).get_center()
+		"brief":   # касание плашки брифинга прибытия (#827) — листает экран
+			return ArrivalBrief.box(main.get_viewport().get_visible_rect().size).get_center()
 		"hint_map":   # кнопка «Схема» на плашке подсказки ART-038
 			return main.tutorial_panel.map_rect().get_center()
 		"map_back":   # «Назад» схемы корабля ART-042
@@ -350,6 +420,10 @@ func _point(what: String, dir: Vector2) -> Vector2:
 			return Journal.close_rect(main.get_viewport().get_visible_rect().size).get_center()
 		"join", "last":
 			return AddressScreen.screen_rect(what, main.get_viewport().get_visible_rect().size).get_center()
+	if what.begins_with("jtab"):   # вкладка журнала «Виды» / «Узнано» (#825)
+		return Journal.tab_rect(int(what.substr(4)), main.get_viewport().get_visible_rect().size).get_center()
+	if what.begins_with("jlore"):   # строка вкладки «Узнано»
+		return Journal.lore_rect(int(what.substr(5)), main.get_viewport().get_visible_rect().size).get_center()
 	if what.begins_with("jcell"):   # ячейка сетки видов журнала ART-047
 		return Journal.cell_rect(int(what.substr(5)), main.get_viewport().get_visible_rect().size).get_center()
 	if what.begins_with("key"):   # клавиша экрана адреса: key0…key9, key., keydel
@@ -382,7 +456,26 @@ func state() -> String:
 	return "t %.1f с · %s · свет %s · глубина %.1f м · ход %.2f м/с · курс %d° · корабль (%.1f, %.1f, %.1f) · игрок (%.2f, %.2f) · реактор %s · %s кадр/с" % [
 		time, "за штурвалом" if main.pilot.seated else ("у пульта энергии" if main.at_power else "на ногах"), "вкл" if main.light_on else "выкл", h.depth(), h.speed, Status.course_deg(h.yaw),
 		h.pos.x, h.pos.y, h.pos.z, main.walker.x, main.walker.z, "%s %d°%s" % [str(main.reactor.share), roundi(main.reactor.heat), " сброс" if main.reactor.scram > 0.0 else ""], fps_text()] + worst_text() + ("" if main.breach.status().is_empty() else " · " + main.breach.status()) \
-		+ _run_state()
+		+ _run_state() + (" · " + row3_now() if main.arrival.active() else "")
+
+
+## Строка 3 приборов сейчас и строки мира, которые ждут: в лог у шагов брифинга прибытия (#1429, тестер в #1350 —
+## по кадрам `02r`/`02s` не понять, пришла строка мира до плашки или под ней).
+func row3_now() -> String:
+	return row3_line(main.status_rows()[2], main.message.next if main.message.world else "", main.world_wait)
+
+
+## «строка 3: «…»» или «строка 3: пусто», дальше — строка мира в очереди приборов и отложенная до конца брифинга.
+static func row3_line(row3: Array, queued: String, parked: String) -> String:
+	var parts := PackedStringArray()
+	for p in row3:
+		parts.append(str(p))
+	var out := "строка 3: " + ("пусто" if parts.is_empty() else "«%s»" % " · ".join(parts))
+	if queued != "":
+		out += " · в очереди: «%s»" % queued
+	if parked != "":
+		out += " · ждёт конца брифинга: «%s»" % parked
+	return out
 
 
 ## Худший кадр с прошлого скриншота для строки состояния: « · худший кадр 726 мс (шаг 53 press, логика 9 мс)».
@@ -414,7 +507,7 @@ const PARTS_FROM := 20.0   ## код дольше, мс, — пишем его �
 ## отрисовки (физика, ввод, система). Замер видеокарты движок отдаёт с запаздыванием на несколько кадров: больше самого
 ## кадра frame (мс) — он от другого кадра, не пишем (issue #609).
 static func worst_note(step: String, draw: float, code: float = -1.0, gpu: float = 0.0, frame := INF, parts := "",
-		built := PackedInt32Array()) -> String:
+		built := PackedInt32Array(), rest := {}) -> String:
 	var d := "отрисовка %d мс" % roundi(draw)
 	var b := pipes_note(built)
 	if not b.is_empty():
@@ -423,7 +516,48 @@ static func worst_note(step: String, draw: float, code: float = -1.0, gpu: float
 		d = "код %d мс%s, %s" % [roundi(code), " (%s)" % parts if not parts.is_empty() and code >= PARTS_FROM else "", d]
 	if gpu > 0.0 and gpu <= frame + 1.0:
 		d += ", видеокарта %d мс" % roundi(gpu)
+	var r := rest_note(frame, maxf(code, 0.0), draw, rest)
+	if not r.is_empty():
+		d += ", " + r
 	return step + ", " + d if not step.is_empty() else d
+
+
+const REST_FROM := 100.0   ## кадр от, мс, — с остатком вне кода и отрисовки, если код + отрисовка меньше половины кадра
+
+
+## Остаток кадра вне кода и отрисовки по частям (#519): «вне шага 70 мс (между кадрами 60, физика 8, узлы 2)».
+## Части от 1 мс, самые долгие первыми; не разложенное по меткам — «прочее». Кадр короче `REST_FROM`, код с
+## отрисовкой — половина кадра и больше, меток нет — "".
+static func rest_note(frame: float, code: float, draw: float, parts: Dictionary) -> String:
+	if parts.is_empty() or frame == INF or frame < REST_FROM or code + draw >= frame / 2.0:
+		return ""
+	var rest := frame - code - draw
+	var keys := parts.keys()
+	keys.sort_custom(func(a, b): return parts[a] > parts[b])
+	var out: Array[String] = []
+	var sum := 0.0
+	for k in keys:
+		sum += parts[k]
+		if roundi(parts[k]) >= 1:
+			out.append("%s %d" % [k, roundi(parts[k])])
+	if roundi(rest - sum) >= 1:
+		out.append("прочее %d" % roundi(rest - sum))
+	return "вне шага %d мс (%s)" % [roundi(rest), ", ".join(out)]
+
+
+## Части остатка кадра, мс, по меткам времени, мкс (#519). Кадр — от начала шага `from_us` до начала следующего `now_us`;
+## в нём код шага `code` (мс), отрисовка `pre_us`…`post_us`, затем такты физики с `phys_us` (раньше конца отрисовки —
+## тактов не было) и обработка узлов с `proc_us`. «Между кадрами» — от конца отрисовки до следующего кадра: ожидание
+## показа кадра и темпа (кадровая развёртка, предел кадров), события системы и ввод; «физика» — такты физики
+## (`_physics_process` и физический сервер); «узлы» — `_process` и отложенные вызовы вне `Main.step`. Навигации в игре
+## нет. Метки не по порядку (не тот кадр, headless без отрисовки) — {}.
+static func rest_parts(from_us: int, now_us: int, code: float, pre_us: int, post_us: int, phys_us: int, proc_us: int) -> Dictionary:
+	if from_us <= 0 or not (from_us <= pre_us and pre_us <= post_us and post_us <= proc_us and proc_us <= now_us):
+		return {}
+	var ticked := phys_us > post_us and phys_us <= proc_us
+	var start := phys_us if ticked else proc_us
+	return {"между кадрами": (start - post_us) / 1000.0, "физика": (proc_us - phys_us) / 1000.0 if ticked else 0.0,
+		"узлы": maxf((pre_us - from_us) / 1000.0 - code, 0.0) + (now_us - proc_us) / 1000.0}
 
 
 ## Сборки шейдеров кадра по видам `PIPES` для лога: «сборок шейдеров 3: поверхности 2, при отрисовке 1»; нет — "".
@@ -447,7 +581,17 @@ func _on_pre_draw() -> void:
 	_draw_from_us = Time.get_ticks_usec()
 
 
+func _on_physics_frame() -> void:
+	if _phys_us <= _post_us:   # первый такт физики после отрисовки
+		_phys_us = Time.get_ticks_usec()
+
+
+func _on_process_frame() -> void:
+	_proc_us = Time.get_ticks_usec()
+
+
 func _on_post_draw() -> void:
+	_post_us = Time.get_ticks_usec()
 	if _draw_from_us > 0:
 		draw_ms = (Time.get_ticks_usec() - _draw_from_us) / 1000.0
 	for i in PIPES.size():   # сборки шейдеров этого кадра (issue #983)
@@ -580,6 +724,16 @@ static func warm_line(ms: Array[int]) -> String:
 	return "%s; кадры: %s; худший — кадр %d из %d" % [head, ", ".join(parts), worst, ms.size() - 1]
 
 
+## Строка в лог сценария от игры (не от шага): что случилось само, между шагами.
+func note(line: String) -> void:
+	_log(line)
+
+
+## Отложенная до конца брифинга прибытия строка мира вышла на приборы (#1429, `Main.release_world_say`).
+static func released_line(text: String) -> String:
+	return "отложенное сообщение выведено: «%s»" % text
+
+
 func _log(line: String) -> void:
 	log_lines.append(line)
 	print("QA ", line)
@@ -594,3 +748,81 @@ func _finish() -> void:
 	var f := FileAccess.open(OUT + "/done.txt", FileAccess.WRITE)
 	if f:
 		f.store_string("ok\n")
+
+
+## Шаг «pred» (#1401): серпохвост n проходит мимо вершины куста огнецвета bush поперёк линии «корабль — куст»,
+## в 2 м над вершиной, от −PRED_SPAN до +PRED_SPAN; away — уводит его дальше по той же линии, от 2 до 8 PRED_SPAN
+## (до прохода хищник мог стоять у куста на чистке — ряд каменщиков был бы спрятан в кадре «до»). Уводит далеко:
+## 180 м на скорости проверки — дольше 25 с проверки, иначе он доплывал за 5 с и возвращался к станции чистки у куста
+## раньше кадра «после» (CI, PR #1419).
+## Возвращает [откуда, куда] или пусто, если куста/хищника нет.
+static func pred_pass(main: Main, n: int, bush: int, away := false) -> Array:
+	var eco: EcoView = main.eco
+	if eco == null or eco.coral == null or eco.preds == null or bush < 0 or bush >= eco.coral.bushes.size():
+		return []
+	var top := eco.coral.bushes[bush].top + Vector3(0, 2, 0)
+	if away:
+		return pred_away(eco.preds, n, top, main.helm.pos)
+	var off := pred_off(top, main.helm.pos)
+	if not eco.preds.pass_by(n, top - off, top + off):
+		return []
+	return [top - off, top + off]
+
+
+## Поперёк взгляда с корабля ship на точку top, длиной PRED_SPAN.
+static func pred_off(top: Vector3, ship: Vector3) -> Vector3:
+	var look := Vector2(top.x - ship.x, top.z - ship.z)
+	var across := Vector2(1, 0) if look.length() < 1.0 else look.normalized().orthogonal()
+	return Vector3(across.x, 0, across.y) * QaScript.PRED_SPAN
+
+
+## Кадр «до» и «после» (#1401): уводит от куста всех живых серпохвостов, а не только n — иначе другой, бродящий
+## или охотящийся рядом, гасит куст и прячет каменщиков на кадре, и тест сценария краснеет от случая (main 1ca7c20).
+## n уходит за 2·PRED_SPAN, остальные — каждый следующий ещё на PRED_SPAN дальше, все прочь от куста.
+## Возвращает путь n ([] — нет такого).
+static func pred_away(ps: EcoPred, n: int, top: Vector3, ship: Vector3) -> Array:
+	var off := pred_off(top, ship)
+	var out: Array = []
+	var k := 0
+	for pr in ps.all:
+		if not pr.agent.alive:
+			continue
+		var from := top + off * (2.0 + (0.0 if pr.index == n else 1.0 + k))
+		var to := from + off * 6.0
+		if pr.index != n:
+			k += 1
+		if ps.pass_by(pr.index, from, to) and pr.index == n:
+			out = [from, to]
+	return out
+
+
+## Шаг «zamer» (#1498): голодный серпохвост n встаёт в `EcoPred.stage_spot` у корабля, остальных — далеко,
+## прожектор включается; «замер» и отход мир ведёт сам — по числам игры. Возвращает строку для лога.
+static func zamer(main: Main, n: int, side: String) -> String:
+	var eco: EcoView = main.eco
+	if eco == null or eco.preds == null:
+		return "замер: нет хищников"
+	var at := EcoPred.stage_spot(main.helm.pos, main.helm.yaw, side)
+	if at == Vector3.INF or not eco.preds.stage_near(n, at, main.helm.pos):
+		return "замер: нет стороны «%s» или хищника %d" % [side, n]
+	if not main.light_on:
+		main.toggle_light()
+	return "замер: хищник %d %s, %.0f м от корабля, замер %.1f с, отход %.0f с" % [n, side,
+		at.distance_to(main.helm.pos), eco.preds.alert, eco.preds.alert_leave]
+
+
+## Свет тестера у камеры с борта: включить (узел «Свет тестера» под камерой, светит только отмель и корпус снаружи —
+## слой `OceanView.LAYER_WORLD`) или убрать.
+func _set_lamp(on: bool) -> void:
+	var lamp := main.flyby_cam.get_node_or_null(LAMP_NAME) as OmniLight3D   # по имени: новый прогон сценария тоже уберёт
+	if on and lamp == null:
+		lamp = OmniLight3D.new()
+		lamp.name = LAMP_NAME
+		lamp.light_energy = LAMP_ENERGY
+		lamp.omni_range = LAMP_RANGE
+		lamp.omni_attenuation = 0.5
+		lamp.light_cull_mask = OceanView.LAYER_WORLD
+		lamp.shadow_enabled = false
+		main.flyby_cam.add_child(lamp)
+	elif not on and lamp != null:
+		lamp.free()

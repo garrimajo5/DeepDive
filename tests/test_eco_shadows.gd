@@ -51,12 +51,21 @@ func _materials(gi: GeometryInstance3D) -> Array[Material]:
 	return out
 
 
-func test_scene_heroes_cast_shadows() -> void:
-	var main: Main = load("res://scenes/main.tscn").instantiate()
-	tree.root.add_child(main)
+## Живой мир без корабля (#1350): тени ставят сами виды, Main для проверки не нужен. Тени света сквозь лёд в
+## сцене (`ocean.sun.shadow_enabled`) проверяет test_graphics.
+func _world() -> EcoView:
+	var ev := EcoView.new()
+	ev.ground = Seabed.mesh_height   # как в игре (#1386)
+	tree.root.add_child(ev)
 	await frames(1)
-	main.step(0.1)
-	var ev: EcoView = main.eco
+	var ship := EcoLink.ShipState.new()
+	ship.pos = Vector3(0, -30, 0)
+	ev.step(0.1, ship)
+	return ev
+
+
+func test_scene_heroes_cast_shadows() -> void:
+	var ev: EcoView = await _world()
 	var list := EcoShadows.casters(ev)
 	var seen := {}
 	for gi in list:
@@ -72,20 +81,15 @@ func test_scene_heroes_cast_shadows() -> void:
 	ok(not ev.grot_view.glow in list, "огоньки гротовика без тени")
 	ok(not ev.krab_view.spines in list, "иглы кольчужника без тени")
 	ok(not ev.skalnik_view.carry in list, "добыча скальника без тени")
-	ok(main.ocean.sun.shadow_enabled, "свет сквозь лёд даёт тени")
 	print("  узлов мира с тенью: %d" % list.size())
-	main.queue_free()
+	ev.queue_free()
 	await frames(1)
 
 
 ## Места-ориентиры из камня (Б1): порода курильщика 02 и Каменный цветок 01 отбрасывают тень, пузыри и марево
 ## курильщика — нет (прозрачные).
 func test_scene_landmarks_cast_shadows() -> void:
-	var main: Main = load("res://scenes/main.tscn").instantiate()
-	tree.root.add_child(main)
-	await frames(1)
-	main.step(0.1)
-	var ev: EcoView = main.eco
+	var ev: EcoView = await _world()
 	var vent: VentView = ev.find_child("Чёрный курильщик", false, false)
 	var flower: FlowerView = ev.find_child("Каменный цветок", false, false)
 	ok(vent != null and flower != null, "курильщик и Каменный цветок в сцене")
@@ -95,5 +99,5 @@ func test_scene_landmarks_cast_shadows() -> void:
 		ok(not vent.bubbles in list, "пузыри курильщика без тени")
 		ok(not vent.haze in list, "марево курильщика без тени")
 		ok(flower in list, "Каменный цветок отбрасывает тень")
-	main.queue_free()
+	ev.queue_free()
 	await frames(1)

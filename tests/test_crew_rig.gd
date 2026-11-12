@@ -148,6 +148,22 @@ func test_hands_rest_on_rim_not_inside() -> void:   # #427: ладони не п
 				ok(gap < 0.015, "кисть лежит на ободе: зазор %.3f м (%s)" % [gap, what])
 
 
+func test_pilot_elbows_bent() -> void:   # #1387: руки не вытянуты в струну, предплечье идёт к ободу снизу
+	for turn in [0.0, 0.8, -0.8]:
+		var m := Crew.Member.new()
+		m.follow(0.0, Deck.SEAT_Z, 0.0, true, turn, 0.1)
+		var j := m.joints()
+		for k in ["l", "r"]:
+			var sh: Vector3 = j["shoulder_" + k]
+			var el: Vector3 = j["elbow_" + k]
+			var wr: Vector3 = j["wrist_" + k]
+			var bend := rad_to_deg((sh - el).angle_to(wr - el))
+			var what := "поворот %.1f, рука %s" % [turn, k]
+			ok(bend < 150.0, "локоть согнут: %.0f° (%s)" % [bend, what])
+			ok(el.y < sh.y - 0.04, "локоть ниже плеча (%s)" % what)
+			ok(wr.y > el.y + 0.03, "предплечье к ободу снизу (%s)" % what)
+
+
 func test_knees_forward_elbows_back() -> void:
 	var m := Crew.Member.new()
 	m.follow(0.0, Deck.SEAT_Z, 0.0, true, 0.0, 0.1)

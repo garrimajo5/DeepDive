@@ -85,9 +85,10 @@ func test_scene_fog_follows_depth() -> void:
 	main.window_fog.snap(2.0, 100.0, 0.0, 0.0)
 	main.step(1.0 / 30.0)
 	ok(float(m.get_shader_parameter("humidity")) < 0.02, "у поверхности окна чистые")
+	main.helm.ground = func(_x: float, _z: float) -> float: return -100.0   # у 00 дно мельче 45 м под кормой (#1481)
 	main.helm.pos.y = -45.0
-	for i in 300:
-		main.step(1.0 / 10.0)
+	for i in 60:   # 30 с хода: огибающие WindowFog — десятки секунд, шаг 0,5 с (здоровье тестов, #1350)
+		main.step(0.5)
 	ok(float(m.get_shader_parameter("humidity")) > 0.3, "на 45 м запотели: %.2f" % float(m.get_shader_parameter("humidity")))
 	ok(float(m.get_shader_parameter("ice_k")) > 0.5, "и иней в углах")
 	near(m.get_shader_parameter("humidity"), main.window_fog.humidity, 1e-4, "в стекле — сглаженная влажность")

@@ -92,17 +92,17 @@ func test_scene_intro_ends_and_surface_view() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(2)
-	for i in int(Flyby.START_S * 30.0) + 2:
-		main.step(1.0 / 30.0)
+	for i in int(Flyby.START_S * 10.0) + 2:   # шаг 0,1 с: облёт идёт по времени, не по кадрам (втрое меньше шагов, #1350)
+		main.step(0.1)
 	ok(not main.flyby.active() and main.camera.current, "облёт кончился сам — глаза на мостике")
 	main.decide("up")
 	main.step(1.0 / 30.0)
 	ok(main.flyby.kind == Flyby.Kind.SURFACE and main.flyby_cam.current, "наверх — вид с борта при всплытии")
-	for i in 30:
-		main.step(1.0 / 30.0)
+	for i in 10:
+		main.step(0.1)
 	ok(main.flyby.active(), "сначала — вид с борта")
-	for i in int((Flyby.SURFACE_S + Flyby.SURFACE_HOLD) * 30.0):
-		main.step(1.0 / 30.0)
+	for i in int((Flyby.SURFACE_S + Flyby.SURFACE_HOLD) * 10.0):
+		main.step(0.1)
 	ok(not main.flyby.active() and main.camera.current, "вид с борта кончился сам — глаза на мостике (issue #209)")
 	ok(main.run.ended, "забег ещё на итоге")
 	main.close_vote()
@@ -131,8 +131,8 @@ func test_scene_no_breach_during_intro() -> void:   # issue #506
 	main.on_eco_event({"type": EcoLink.HIT, "damage": 0.12, "by": "Серпохвост"})
 	eq(main.vitals.hull, hull, "удар во время облёта не снял корпус")
 	ok(main.breach.active == null, "пробоины нет")
-	for i in int(Flyby.START_S * 30.0) + 2:
-		main.step(1.0 / 30.0)
+	for i in int(Flyby.START_S * 10.0) + 2:   # шаг 0,1 с: облёт идёт по времени, не по кадрам (втрое меньше шагов, #1350)
+		main.step(0.1)
 	ok(not main.flyby.active(), "облёт кончился")
 	main.on_eco_event({"type": EcoLink.HIT, "damage": 0.12, "by": "Серпохвост"})
 	ok(main.vitals.hull < hull, "после облёта удар доходит")
@@ -172,3 +172,23 @@ func test_scene_surface_skipped_by_action() -> void:
 	ok(main.run.ended and main.at_vote, "первое нажатие не начинает новый забег")
 	main.step(0.3)
 	ok(main.sonar_view.vote.board.visible, "итог на голограмме над столом")
+
+
+## #1481: камера стоит в точке облёта (сценарий тестера, вид снаружи) и сама не кончается; stop и новый облёт — снова идут.
+func test_hold_at_stays() -> void:
+	var f := Flyby.new()
+	f.hold_at(1.0)
+	ok(f.active() and f.still, "камера стоит")
+	for i in 400:
+		f.update(0.1)
+	ok(f.active(), "не кончилась сама за 40 с")
+	ok(f.pose().origin.is_equal_approx(Flyby.START_PATH[2]), "над кормой")
+	f.hold_at(0.0)
+	ok(f.pose().origin.is_equal_approx(Flyby.START_PATH[0]), "у носа")
+	f.stop()
+	ok(not f.active() and not f.still, "убрана")
+	f.hold_at(0.5)
+	f.start(Flyby.Kind.START)
+	ok(not f.still, "новый облёт идёт")
+	f.update(Flyby.START_S + 0.1)
+	ok(not f.active(), "и кончается сам")

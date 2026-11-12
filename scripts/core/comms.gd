@@ -61,6 +61,10 @@ const BUTTON := Rect2(0, 886, 380, 112)
 const BUTTON_PX := 34.0
 const BARS_FROM := 165.0      ## индикатор речи x = R − 165, ширина 114
 const BARS := Rect2(0, 748, 114, 36)
+const LINE_STEP := 52.0        ## шаг строк команды; при двух строках верх плашки и шапка выше на него (#1557)
+const MAX_ROWS := 2            ## команда — не больше двух строк, дальше «…»
+const TEXT_PAD := 30.0         ## от конца строки команды до края плашки
+const CUT := "…"
 
 
 class Msg:
@@ -70,6 +74,7 @@ class Msg:
 	var text := ""
 	var fake := false
 	var ask := ""        ## просьба голоса: "ping" — импульс, "light" — свет, "" — нет (наказывает за неё мир)
+	var voice_id := ""   ## ID реплики TXT-002 (`EcoLink.VOICE` "id") — по нему файл голоса SND-009 (`VoiceFiles`); "" — без озвучки
 	var reply := ""      ## что источник ответит на «Спросить код»: своё — кодовое слово; "" — молчит
 	var t := 0.0         ## сколько уже показано (только видимое время)
 	var speech := 0.0    ## длина речи, с (индикатор движется только пока она идёт)
@@ -91,6 +96,9 @@ var solo := true              ## одиночный забег: подпись �
 var follow := false           ## гость сети: сообщение и проверка — из кадра хоста (`apply`), свои часы не идут
 var asked := 0                ## гость: нажал кнопку сообщения с этим номером — уходит хосту (`Crew.Pad.ask`)
 var next_id := 0
+var _rows_key := ""                       ## для чего посчитаны строки (текст, ширина, кегль) — перенос не каждый кадр
+var _rows := PackedStringArray()
+var cut_logged := 0                       ## сколько реплик не влезло в две строки (в лог — с ID, #1557)
 
 
 ## Кодовое слово забега по числу (новый забег — новое слово).
@@ -112,7 +120,8 @@ func reset_run(n: int) -> void:
 
 
 ## Сообщение в эфир. Своё отвечает кодом забега; подделка — чужим словом или молчит (`silent`).
-func push(role: int, text: String, fake := false, ask := "", silent := false) -> Msg:
+## voice_id — ID реплики TXT-002 для файла голоса (`VoiceFiles.path`).
+func push(role: int, text: String, fake := false, ask := "", silent := false, voice_id := "") -> Msg:
 	var m := Msg.new()
 	next_id += 1
 	m.id = next_id
@@ -120,6 +129,7 @@ func push(role: int, text: String, fake := false, ask := "", silent := false) ->
 	m.text = text
 	m.fake = fake
 	m.ask = ask
+	m.voice_id = voice_id
 	m.speech = clampf(text.length() * 0.065, 1.5, 12.0)
 	if silent:
 		m.reply = ""
@@ -134,6 +144,13 @@ func push(role: int, text: String, fake := false, ask := "", silent := false) ->
 
 
 ## Чужое слово подделки: не код забега, по тексту — одно и то же для одной реплики.
+## Реплика с файлом голоса (`VoiceFiles.stream`): речь — длина файла, показ — не меньше речи + `AFTER_SPEECH`.
+## seconds ≤ 0 — файла нет, речь остаётся по длине текста.
+func set_voice(m: Msg, seconds: float) -> void:
+	if m != null and seconds > 0.0:
+		m.speech = seconds
+
+
 func wrong_word(text: String) -> String:
 	var i := posmod(text.hash(), WORDS.size())
 	if WORDS[i] == code:
@@ -251,7 +268,7 @@ func pack() -> Dictionary:
 	if cur != null:
 		var reply := cur.reply if state in [Ask.WRONG, Ask.EXPOSED] else ""
 		d["m"] = [cur.id, cur.role, cur.text.left(TEXT_MAX), cur.fake, reply, cur.t, cur.speech, int(state), st,
-			closing, exposed]
+			closing, exposed, cur.voice_id]
 	return d
 
 
@@ -261,7 +278,7 @@ func apply(d: Variant) -> void:
 		return
 	code = str(d.get("k", code))
 	var m: Variant = d.get("m")
-	if not (m is Array and m.size() == 11):
+	if not (m is Array and m.size() == 12):
 		if cur != null:
 			closing = true
 		return
@@ -280,6 +297,7 @@ func apply(d: Variant) -> void:
 	st = float(m[8])
 	closing = bool(m[9])
 	exposed = int(m[10])
+	cur.voice_id = str(m[11])
 
 
 ## Гость между кадрами хоста: только прозрачность и индикатор речи.
@@ -317,6 +335,68 @@ func line() -> String:
 	if cur == null:
 		return ""
 	return EXPOSED_TEXT if state == Ask.EXPOSED else cur.text
+
+
+## Строки команды на этом экране (1 или 2): перенос по словам под ширину плашки, кегль `TEXT_PX` (#1557).
+## Не влезло и в две — конец второй «…» и строка в лог с ID реплики. Считается заново только при смене текста или экрана.
+func rows(size: Vector2, font: Font) -> PackedStringArray:
+	var t := line()
+	var px := int(TEXT_PX * scale(size))
+	var w := text_width(size)
+	var key := "%s|%d|%d" % [t, int(w), px]
+	if key != _rows_key:
+		_rows_key = key
+		_rows = wrap_rows(t, w, func(x: String) -> float: return font.get_string_size(x, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x)
+		if _rows.size() > 0 and _rows[-1].ends_with(CUT) and not t.ends_with(CUT):
+			cut_logged += 1
+			print("Связь: реплика не влезла в две строки (%s): %s" % [cur.voice_id if cur != null and cur.voice_id != "" else "без ID", t])
+	return _rows
+
+
+## Перенос по словам в `MAX_ROWS` строки шириной `width` (`measure` — ширина строки в тех же единицах). Не влезло —
+## конец последней строки «…» (по границе слова, если можно).
+static func wrap_rows(text: String, width: float, measure: Callable) -> PackedStringArray:
+	var t := text.strip_edges()
+	if t == "" or width <= 0.0 or measure.call(t) <= width:   # нет места (окно уже плашки) — переносить некуда
+		return PackedStringArray([t])
+	var out := PackedStringArray()
+	var rest := t
+	while out.size() < MAX_ROWS - 1 and measure.call(rest) > width:
+		var words := rest.split(" ", false)
+		var head := ""
+		var i := 0
+		while i < words.size():
+			var probe: String = words[i] if head == "" else head + " " + words[i]
+			if measure.call(probe) > width:
+				break
+			head = probe
+			i += 1
+		if head == "":   # первое слово шире строки — режем по буквам
+			var n := rest.length()
+			while n > 1 and measure.call(rest.left(n)) > width:
+				n -= 1
+			head = rest.left(n)
+			rest = rest.substr(n).strip_edges()
+		else:
+			rest = " ".join(words.slice(i))
+		out.append(head)
+	if measure.call(rest) > width:
+		rest = _cut(rest, width, measure)
+	out.append(rest)
+	return out
+
+
+## Начало строки с «…», не шире `width`: по границе слова, если от строки что-то остаётся.
+static func _cut(t: String, width: float, measure: Callable) -> String:
+	var n := t.length()
+	while n > 0 and measure.call(t.left(n).strip_edges() + CUT) > width:
+		n -= 1
+	var head := t.left(n)
+	if n < t.length() and t[n] != " ":
+		var sp := head.rfind(" ")
+		if sp > 0:
+			head = head.left(sp)
+	return head.strip_edges().trim_suffix(",").trim_suffix(".") + CUT
 
 
 ## Нижняя строка: код или ход проверки.
@@ -375,11 +455,21 @@ static func right(size: Vector2) -> float:
 	return logical_w(size) - RIGHT_FROM
 
 
-static func plate_rect(size: Vector2) -> Rect2:
+## Подъём шапки (кружок, роль, индикатор, первая строка команды) в единицах макета: узкий экран и вторая строка.
+static func lift(size: Vector2, n_rows := 1) -> float:
+	return (NARROW_UP if narrow(size) else 0.0) + LINE_STEP * clampi(n_rows - 1, 0, MAX_ROWS - 1)
+
+
+## Ширина строки команды, пиксели экрана: от начала команды до края плашки без отступа.
+static func text_width(size: Vector2) -> float:
+	return (right(size) - TEXT_AT.x - TEXT_PAD) * scale(size)
+
+
+## Плашка при `n_rows` строках команды: вторая строка поднимает верх, низ на месте (#1557).
+static func plate_rect(size: Vector2, n_rows := 1) -> Rect2:
 	var s := scale(size)
-	var top := TOP - NARROW_UP if narrow(size) else TOP
-	var h := HEIGHT + NARROW_UP if narrow(size) else HEIGHT
-	return Rect2(LEFT * s, top * s, (right(size) - LEFT) * s, h * s)
+	var up := lift(size, n_rows)
+	return Rect2(LEFT * s, (TOP - up) * s, (right(size) - LEFT) * s, (HEIGHT + up) * s)
 
 
 static func button_rect(size: Vector2) -> Rect2:
@@ -387,16 +477,16 @@ static func button_rect(size: Vector2) -> Rect2:
 	return Rect2((right(size) - BUTTON_FROM) * s, BUTTON.position.y * s, BUTTON.size.x * s, BUTTON.size.y * s)
 
 
-static func bars_rect(size: Vector2) -> Rect2:
+static func bars_rect(size: Vector2, n_rows := 1) -> Rect2:
 	var s := scale(size)
-	var y := BARS.position.y - (NARROW_UP if narrow(size) else 0.0)
+	var y := BARS.position.y - lift(size, n_rows)
 	return Rect2((right(size) - BARS_FROM) * s, y * s, BARS.size.x * s, BARS.size.y * s)
 
 
-## Точка макета с подъёмом на узком экране (кружок, роль, подпись, команда).
-static func at(p: Vector2, size: Vector2) -> Vector2:
-	var up := NARROW_UP if narrow(size) else 0.0
-	return Vector2(p.x, p.y - up) * scale(size)
+## Точка макета с подъёмом на узком экране и при `n_rows` строках команды (кружок, роль, подпись, первая строка).
+## Строка команды i из n — `at(TEXT_AT, size, n - i)`: последняя на месте прежней единственной.
+static func at(p: Vector2, size: Vector2, n_rows := 1) -> Vector2:
+	return Vector2(p.x, p.y - lift(size, n_rows)) * scale(size)
 
 
 static func code_at(size: Vector2) -> Vector2:

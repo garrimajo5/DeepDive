@@ -134,7 +134,7 @@ func test_scene_eco_hits_and_drain() -> void:
 		main.step(1.0)
 	ok(main.vitals.energy < e0 - 1.0, "стеклоуст тянет заряд")
 	var line := Status.join(main.status_parts())
-	ok(line.begins_with("Стеклоуст на корпусе пьёт энергию"), "тревога первой: " + line)
+	ok(str(main.status_rows()[2][0]).begins_with("СТЕКЛОУСТ ПЬЁТ ЗАРЯД · "), "тревога первой в ряду сообщений: " + line)
 	ok(main.drain_sound.playing, "шипит тревога присоски")
 	eq(main.drain_hisses, 2, "шаги по 1 с: шипит сразу и на втором шаге")
 	var seen := {}
@@ -190,9 +190,22 @@ func test_diving_onto_flat_bottom_is_not_a_hit() -> void:
 	var r := main.overlay.router
 	r.begin(1, r.layout.pad.c + Vector2(0, -r.layout.pad.r * 0.7))
 	r.begin(2, r.layout.down.c)
-	for i in 600:
-		main.step(1.0 / 30.0)
+	for i in 100:   # 10 с шагом 0,1: быстрее SCRAPE_SPEED уже через ~1 с, дальше — 60 м полного хода у дна (было 600 шагов по 1/30, #1350)
+		main.step(0.1)
+	ok(absf(main.helm.speed) > Vitals.SCRAPE_SPEED * 2.0, "шли полным ходом, а не стояли")
 	near(main.vitals.hull, 100.0, 1e-6, "полный ход и «Вниз» до ровного дна — корпус цел")
+	# Пара к test_scene_scrape_into_slope (#1350, 12.11 18:13): дно впереди поднимается полого (0,1 м на метр) —
+	# поднимает корабль медленнее SCRAPE_LIFT, удара нет. Без этой части порог SCRAPE_LIFT := 0 тест не ловил.
+	var z0 := main.helm.pos.z - 15.0   # подъём начинается впереди корпуса, а не скачком под ним
+	main.helm.ground = func(_x: float, z: float) -> float: return -30.0 + maxf(0.0, z0 - z) * 0.1
+	var lifted := 0.0
+	for i in 70:   # 7 с полного хода: 15 м по ровному, дальше подъём, «Вниз» держим — корабль лежит на дне
+		main.step(0.1)
+		lifted = maxf(lifted, main.helm.bump / 0.1)
+	r.end(1)
+	r.end(2)
+	ok(lifted > 0.1 and lifted < Vitals.SCRAPE_LIFT, "пологий подъём поднимает корабль: %.2f м/с" % lifted)
+	near(main.vitals.hull, 100.0, 1e-6, "полный ход в пологий подъём — без удара")
 
 
 func test_hiss_every_period() -> void:   # шипение присоски раз в 1,6 с, пока тревога горит (#163)

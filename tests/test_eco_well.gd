@@ -88,7 +88,7 @@ func test_moss_spot() -> void:
 	near(span_w, 8.0, 0.01, "мох на 16 м поперёк")
 	var ev := EcoView.new()
 	ev.ground = Seabed.height
-	eq(ev.moss.patches.size(), 22, "пятна рифа — прежние 22, скребуны их не делят с колодцем")
+	eq(ev.moss.patches.size(), EcoMoss.SPOTS.size(), "пятна рифа — только EcoMoss.SPOTS, скребуны их не делят с колодцем")
 	ok(ev.well != null and ev.well_view != null, "колодец в живом мире")
 	var mv := ev.well_view.moss_view
 	ok(mv != null and mv.get_parent() == ev.well_view, "мох колодца — в сцене")

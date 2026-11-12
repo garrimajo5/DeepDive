@@ -123,7 +123,8 @@ static func spread(rects: Array) -> Array:
 ## GAP высоты — но не больше max_down px (столько, чтобы не легла на макушку, см. LIFT); нужно больше — HIDDEN
 ## (плашка — интерфейс, на него табличка не ложится, как в #319). Возвращает сдвиг вниз, px (≥ 0), или HIDDEN.
 static func under_plate(r: Rect2, plate: Rect2, max_down: float) -> float:
-	if not plate.has_area() or not plate.intersects(r):
+	# ближе GAP под плашкой — тоже опустить: оценка по центру таблички не ловит наклон её углов в кадре (#1345)
+	if not plate.has_area() or not plate.grow_side(SIDE_BOTTOM, GAP * r.size.y).intersects(r):
 		return 0.0
 	var down := plate.end.y + GAP * r.size.y - r.position.y
 	return down if down <= max_down else HIDDEN

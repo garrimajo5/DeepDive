@@ -34,13 +34,14 @@ const EDGE := 60.0       ## отступ стрелки от края
 const EDGE_Y := Vector2(260.0, 560.0)   ## центр стрелки по y — не в нижних углах и не на строке приборов
 
 ## Остриё шеврона над постом, оси корабля (y — над палубой). Штурвал — над креслом пилота (как в макете), пульт
-## энергии — перед его лицом (не в стене, как метка «Занято»), сонар — над голостолом, «Маршрут» — над своим постом
-## справа от стола.
+## энергии — перед его лицом (не в стене, как метка «Занято»), сонар — над голостолом, «Маршрут» — на кромке стола
+## (край корпуса r 1,1 м на высоте 0,9 м, `CrewHands.TABLE_*`) со стороны поста справа: стрелка показывает на стол,
+## а не на стену (#1346).
 const ANCHORS := {
 	"helm": Vector3(0.0, 1.75, Deck.CHAIR_Z),
 	"energy": Vector3(BridgeProps.ENERGY_POS.x + 0.4, 1.9, BridgeProps.ENERGY_POS.z),
 	"sonar": Vector3(0.0, 1.65, BridgeProps.TABLE_Z),
-	"route": Vector3(1.5, 1.5, BridgeProps.TABLE_Z),
+	"route": Vector3(1.1, 1.0, BridgeProps.TABLE_Z),
 }
 
 
@@ -53,6 +54,17 @@ static func px(d: float) -> float:
 static func cell_height(d: float, depth: float, fov_deg: float) -> float:
 	var sym := 2.0 * depth * tan(deg_to_rad(fov_deg) * 0.5) * px(d) / REF_H
 	return sym / SYMBOL_H
+
+
+## Зазор от верха символа до потолка, м (`under_roof`).
+const ROOF_GAP := 0.05
+
+
+## Высота острия (оси корабля), чтобы символ высотой ячейки h (м) с покачиванием (m_ref — м на px при H = 1080) не
+## уходил в потолок roof: в коридоре над люком мостика 0,5 м до потолка — символ прятался в нём (#1722). Ниже потолка —
+## tip_y как есть.
+static func under_roof(tip_y: float, h: float, m_ref: float, roof: float) -> float:
+	return minf(tip_y, roof - ROOF_GAP - SYMBOL_H * h - BOB * m_ref)
 
 
 ## Покачивание, px при H = 1080 (вверх — плюс), t — секунды.
@@ -101,3 +113,39 @@ static func mode(local: Vector3, p: Vector2, size: Vector2) -> String:
 	if depth > 0.0 and depth < MIN_DEPTH and Rect2(Vector2.ZERO, size).has_point(p):
 		return ""
 	return "edge"
+
+
+## Атлас белым по его альфе (#1361): цвет символа задаёт модуляция — янтарь тревоги вместо голубого подсказок.
+## Голубой атлас ярок во всех каналах, поэтому без насыщенности и с яркостью ×4 он упирается в белый, альфа — как была.
+static func white_image(src: Image) -> Image:
+	var img := src.duplicate() as Image
+	if img.is_compressed():
+		img.decompress()
+	img.convert(Image.FORMAT_RGBA8)
+	img.adjust_bcs(4.0, 1.0, 0.0)
+	return img
+
+
+## Остриё p перед камерой (depth) по ширине в кадре, но выше min_y (px при H = 1080) — опустить его до min_y: кольцо
+## встаёт у верхнего края, а не уходит стрелкой вбок (#1361: люк вплотную над головой). Иначе — p как есть. Пост
+## над самой головой (ближе MIN_DEPTH, но впереди) тоже опускается — ставить кольцо на MIN_DEPTH (#1367: у кресла
+## штурвал над головой, без этого — ни кольца, ни стрелки); за спиной (depth ≤ 0) — стрелка.
+static func lower_tip(p: Vector2, depth: float, size: Vector2, min_y: float) -> Vector2:
+	if depth <= 0.0:
+		return p
+	var s := size.y / REF_H
+	var mx := PX_MIN * 0.5 * s
+	if p.x < mx or p.x > size.x - mx or p.y >= min_y * s:
+		return p
+	return Vector2(p.x, min_y * s)
+
+
+const GAP_TIP := 16.0   ## от низа плашки подсказки до символа указателя, px при H = 1080 (#1367)
+
+
+## Порог острия для подсказок первого забега (#1367), px при H = 1080: под плашкой подсказки b (экран size) — её низ
+## + GAP_TIP + PX_MAX (символ над остриём целиком под плашкой). Плашки нет — fallback (порог тревоги).
+static func top_under(b: Rect2, size: Vector2, fallback: float) -> float:
+	if not b.has_area() or size.y <= 0.0:
+		return fallback
+	return b.end.y * REF_H / size.y + GAP_TIP + PX_MAX

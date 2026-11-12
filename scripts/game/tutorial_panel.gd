@@ -6,7 +6,7 @@ extends Control
 const TEXT := UiStyle.TEXT
 const DIM := UiStyle.DIM
 const ACCENT := UiStyle.ACCENT
-const BACK := Color(0.043, 0.11, 0.141, 244.0 / 255.0)   ## #0B1C24, альфа 244
+const BACK := Color(UiStyle.DARK, UiStyle.PLATE_A)   ## #0B1C24, непрозрачная (#1556)
 
 var tut: Tutorial
 var layout: Touch.Layout
@@ -17,6 +17,8 @@ var avoid := Rect2()  ## открытая панель (пульт энерги�
 var arrow: Array = [] ## стрелка у края к посту вне кадра: [ячейка на экране, зеркалить] (`HintPointer.edge`)
 var atlas: Texture2D  ## атлас указателя ART-038
 var map_btn := false  ## кнопка «Схема» на плашке (`Tutorial.map_wanted`)
+var goal := Rect2()   ## плашка цели за штурвалом (#1344): подсказка под ней, на шаге 7 — обводка
+var warming := false   ## прогрев (`warm`): кегли панели под шторкой вместо неё
 
 
 func _ready() -> void:
@@ -27,7 +29,7 @@ func _ready() -> void:
 
 
 func show_tutorial(t: Tutorial, text: String, highlight: String, status_rect: Rect2, panel := Rect2(),
-		edge: Array = [], map := false) -> void:
+		edge: Array = [], map := false, goal_rect := Rect2()) -> void:
 	tut = t
 	var vis := t != null and t.shown()
 	if vis != visible:
@@ -40,6 +42,7 @@ func show_tutorial(t: Tutorial, text: String, highlight: String, status_rect: Re
 	avoid = panel
 	arrow = edge
 	map_btn = map
+	goal = goal_rect
 	queue_redraw()
 
 
@@ -52,10 +55,28 @@ func map_rect() -> Rect2:
 
 ## Плашка на экране (для табличек и меток: на неё не ложатся).
 func box() -> Rect2:
-	return Tutorial.box(get_viewport_rect().size, status, avoid)
+	return Tutorial.box(get_viewport_rect().size, status, avoid, goal)
+
+
+## Прогрев (WarmRunner, #1350): под шторкой подсказка первого забега рисует буквы `UiStyle.GLYPHS` своими кеглями
+## (`warm_sizes`) вместо себя — первый показ не растрирует глифы вне шага (#519, «узлы»). on = false — скрыта до
+## своего показа.
+func warm(on: bool) -> void:
+	warming = on
+	visible = on
+	queue_redraw()
+
+
+## Кегли панели, px — из её `_draw`.
+func warm_sizes() -> Array[int]:
+	return UiStyle.warm_px([Tutorial.STEP_PX, Tutorial.TEXT_PX, Tutorial.MAP_PX],
+		get_viewport_rect().size.y / Tutorial.REF_H)
 
 
 func _draw() -> void:
+	if warming:
+		UiStyle.warm_glyphs(self, [get_theme_default_font()], warm_sizes())
+		return
 	if tut == null:
 		return
 	var size := get_viewport_rect().size
@@ -84,7 +105,10 @@ func _draw() -> void:
 			HORIZONTAL_ALIGNMENT_CENTER, m.size.x, mpx, Color(ACCENT, a))
 	draw_string(font, base, line, HORIZONTAL_ALIGNMENT_LEFT, text_end - base.x, px,
 		Color(ACCENT if line == Tutorial.DONE else TEXT, a))
-	if layout != null and ring != "":
+	if ring == "goal" and goal.has_area():   # шаг 7 — плашка цели: обводка рамкой с отступом
+		var w := maxf(2.0, Tutorial.RING * s)
+		draw_style_box(UiStyle.box(Color(0, 0, 0, 0), 12.0 * s + w, Color(ACCENT, a), w), goal.grow(w * 1.5))
+	elif layout != null and ring != "":
 		var c := Tutorial.ring_of(ring, layout)
 		if c != null:
 			var w := maxf(2.0, Tutorial.RING * s)

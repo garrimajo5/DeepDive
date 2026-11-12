@@ -66,6 +66,10 @@ const PRED_PER_DIVE := 0.15
 ##     первыми. Одно существо — одно событие, даже если оно и для сонара, и для сканера; сонар берёт только
 ##     "sonar": true.
 ## {"type": MESSAGE, "text": "…"}                                         — строка на приборы как есть
+##     "urgent": true (только у строк из URGENT, #1498) — строка угрозы: на приборах не перебивается строками мира
+##     попроще, пока не покажется MESSAGE_SECONDS; у остальных ключа нет. То же поле бывает и у OBSERVE.
+##     "keep": true (только у строк из KEEP, #1555) — строка «держится»: на приборы встаёт в очередь, как обычная, а
+##     вышла — строки мира её не перебивают MESSAGE_SECONDS; срочная перебивает. То же поле бывает и у OBSERVE.
 ## {"type": OBSERVE, "species": "fish", "note": "flee", "text": "…"}      — наблюдение для журнала (handleEvents
 ##     в js/game.js): событие шины EcoBus с заметкой вида (Species.is_observation) не дальше EcoBus.HEARING от корабля.
 ##     text — строка на приборы ("" — без текста); корабль показывает её сам, как MESSAGE, а у нового наблюдения
@@ -76,13 +80,16 @@ const PRED_PER_DIVE := 0.15
 ## {"type": DROP, "sample": n, "at": Vector3}                              — унесённый образец n брошен (M.drop):
 ##     снова лежит на дне в точке at (x, z; высоту над дном ставит корабль), его можно поднять заново. Не унесённый
 ##     образец корабль не трогает. Текст на приборы («бросил образец») мир шлёт своим MESSAGE/OBSERVE.
-## {"type": VOICE, "role": 2, "text": "Сбросьте ход, перегрев", "fake": true, "ask": "ping", "silent": false}
+## {"type": VOICE, "role": 2, "text": "Сбросьте ход, перегрев", "fake": true, "ask": "ping", "silent": false,
+##  "id": "RADIO_FAKE_PULSE03"}
 ##     — голос во внутренней связи ART-040: корабль показывает его на плашке связи (`Comms`, `Main.on_eco_event`).
 ##     role — заявленная роль (Crew.Role: 0 пилот, 1 сонарщик, 2 инженер, 3 биолог), text — команда одной-двумя
 ##     короткими строками. fake — подделка (эхоловец): на плашке «Код: …» вместо кодового слова забега, на «Спросить
 ##     код» отвечает чужим словом («Код не совпал» → «Это был не наш»), а с "silent": true — молчит («Нет ответа»,
 ##     не разоблачение). ask — о чём просит голос: "ping" — импульс сонара, "light" — свет, "" — ни о чём. Корабль
 ##     просьбу не исполняет сам; за исполненную просьбу подделки наказывает мир (по ShipState.sonar_ping / light_on).
+##     id — ID реплики TXT-002 (`EcoEcho.FAKES`/`REALS`, #1477): по нему корабль берёт файл голоса SND-009; "" — реплика
+##     без озвучки (только текст).
 ## {"type": FIELD, "period": 2.4, "text": "…"}                            — импульс сонара с площадки 08 поймал ритм
 ##     пограничного поля (`EcoField.rhythm`, #833): period — с между ударами, text — строка на приборы. Корабль
 ##     ставит знание «поле 08 замечено» (`LayerLore.FIELD08`) и показывает строку. Приходит только в шаг импульса
@@ -126,16 +133,45 @@ static func near(species: String, name: String, pos: Vector3, ship_pos: Vector3,
 		"sonar": sonar, "scan": scan}
 
 
-static func message(text: String) -> Dictionary:
-	return {"type": MESSAGE, "text": text}
+static func message(text: String, is_urgent := false, is_keep := false) -> Dictionary:
+	var e := {"type": MESSAGE, "text": text}
+	if is_urgent:
+		e["urgent"] = true
+	if is_keep:
+		e["keep"] = true
+	return e
 
 
-static func observe(species: String, note: String, text: String = "") -> Dictionary:
-	return {"type": OBSERVE, "species": species, "note": note, "text": text}
+static func observe(species: String, note: String, text: String = "", is_urgent := false, is_keep := false) -> Dictionary:
+	var e := {"type": OBSERVE, "species": species, "note": note, "text": text}
+	if is_urgent:
+		e["urgent"] = true
+	if is_keep:
+		e["keep"] = true
+	return e
 
 
-static func voice(role: int, text: String, fake := false, ask := "", silent := false) -> Dictionary:
-	return {"type": VOICE, "role": clampi(role, 0, 3), "text": text, "fake": fake, "ask": ask, "silent": silent}
+## Строки угрозы (#1498): вид → заметки события, чья строка на приборах приоритетная («urgent» у MESSAGE/OBSERVE).
+## «Замер» хищника — единственный знак до броска, его не должна стереть строка про рыб.
+const URGENT := {"pred": ["alert"]}
+
+
+static func urgent(species: String, note: String) -> bool:
+	return note in (URGENT.get(species, []) as Array)
+
+
+## Строки «держится» (#1555): вид → заметки, чья строка на приборах живёт все 4,2 с («keep» у MESSAGE/OBSERVE).
+## «Хищник потерял корабль» — единственный знак «угроза ушла» для того, кто не слышит щелчков: по ней включают свет.
+const KEEP := {"pred": ["lost"]}
+
+
+static func keep(species: String, note: String) -> bool:
+	return note in (KEEP.get(species, []) as Array)
+
+
+static func voice(role: int, text: String, fake := false, ask := "", silent := false, id := "") -> Dictionary:
+	return {"type": VOICE, "role": clampi(role, 0, 3), "text": text, "fake": fake, "ask": ask, "silent": silent,
+		"id": id}
 
 
 static func shell(text: String) -> Dictionary:

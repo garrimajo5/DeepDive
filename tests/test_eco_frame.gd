@@ -12,6 +12,8 @@ const FIXED := {
 	"Стеклоусты": ["Камни логов"],
 	"Монетники": ["Глазуны"],
 }
+## Слои, которые видны только после события (куст лопнул, подушку сжали): тест вызывает событие сам.
+const BURST: Array[String] = ["Споры", "Чернила"]
 
 
 func test_frame_around_points() -> void:
@@ -30,8 +32,17 @@ func test_fixed_species_get_own_frame() -> void:
 	var ship := EcoLink.ShipState.new()
 	var shelf := EcoMM.SHOAL_AABB.get_volume()
 	var checked := 0
-	for i in 300:
-		ship.pos = Vector3(sin(i * 0.02) * 60.0, -30.0, -i * 0.5)
+	# Корабль проходит тот же путь, что и раньше за 300 шагов, — прыжками по 2,5 м (рамки от его места не зависят).
+	for i in 60:
+		ship.pos = Vector3(sin(i * 0.1) * 60.0, -30.0, -i * 2.5)
+		view.step(0.1, ship)
+	# Подвижные слои — тоже в рамке: споры лопнувших кустов, чернила сжатых подушек (раньше споры ждали проход
+	# корабля у куста, чернила не появлялись вовсе).
+	for bl in view.bladders.bushes:
+		view.bladders.pop(view.world, bl, false)
+	for cu in view.cushions.cushions:
+		view.cushions.squeeze(view.world, cu, false)
+	for i in 10:   # мир за кадр — один подшаг (EcoView.world_dt): облака успевают разойтись
 		view.step(0.1, ship)
 	for sp: String in FIXED:
 		var holder := view.find_child(sp, true, false)
@@ -51,14 +62,18 @@ func test_fixed_species_get_own_frame() -> void:
 			var buf := mm.buffer
 			ok(buf.size() == mm.instance_count * stride, "%s/%s: буфер записан" % [sp, layer])
 			var outside := 0
+			var shown := 0
 			for k in buf.size() / stride:
 				var i := k * stride
 				var sc := Vector3(buf[i], buf[i + 4], buf[i + 8]).length()
 				if sc < 1e-4:
 					continue  # спрятанный экземпляр (масштаб 0)
+				shown += 1
 				if not box.has_point(Vector3(buf[i + 3], buf[i + 7], buf[i + 11])):
 					outside += 1
 			eq(outside, 0, "%s/%s: все видимые экземпляры в рамке" % [sp, layer])
+			if layer in BURST:
+				ok(shown > 0, "%s/%s: облако видно — проверка не пустая" % [sp, layer])
 			checked += 1
 	ok(checked >= 10, "проверено слоёв (%d)" % checked)
 	view.queue_free()

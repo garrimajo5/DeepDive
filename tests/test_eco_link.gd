@@ -63,6 +63,54 @@ func test_observe_to_journal() -> void:
 	await frames(1)
 
 
+## Строка угрозы «замер» (#1498) идёт с "urgent", прочие — без ключа (корабль принимает поле — поток А).
+func test_urgent_alert_line() -> void:
+	eq(EcoLink.message("x"), {"type": EcoLink.MESSAGE, "text": "x"}, "обычная строка — без ключа")
+	ok(EcoLink.urgent("pred", "alert"), "замер хищника — срочно")
+	ok(not EcoLink.urgent("pred", "lost") and not EcoLink.urgent("fish", "alert"), "прочие — нет")
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float: return -40.0
+	var ps := EcoPred.new()
+	ps.alert = 2.0
+	w.add(ps)
+	var pr := ps.all[0]
+	pr.hunger = 0.5
+	pr.cooldown = 0.0
+	w.ship.pos = pr.agent.p + Vector3(25, 0, 0)
+	w.ship.light_on = true
+	w.step(EcoWorld.MAX_STEP)
+	var hot := 0
+	for e in w.take_link():
+		if e.get("type") == EcoLink.MESSAGE or e.get("type") == EcoLink.OBSERVE:
+			if str(e.get("text", "")).contains("замер"):
+				ok(e.get("urgent", false), "строка «замер» — срочная")
+				hot += 1
+			else:
+				ok(not e.has("urgent"), "прочие — без ключа: %s" % e.get("text", ""))
+	eq(hot, 1, "одна строка «замер»")
+
+
+## Строка отхода хищника (#1555) идёт с "keep", прочие — без ключа.
+func test_keep_lost_line() -> void:
+	eq(EcoLink.message("x", false, true), {"type": EcoLink.MESSAGE, "text": "x", "keep": true}, "«держится» — с ключом")
+	ok(EcoLink.keep("pred", "lost"), "отход хищника — держится")
+	ok(not EcoLink.keep("pred", "alert") and not EcoLink.keep("fish", "lost"), "прочие — нет")
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float: return -40.0
+	w.emit("pred", "lost", w.ship.pos + Vector3(10, 0, 0), func(): return "Хищник потерял корабль и отворачивает")
+	w.emit("pred", "alert", w.ship.pos + Vector3(10, 0, 0), func(): return "Хищник замер")
+	w.emit("fish", "flee", w.ship.pos + Vector3(10, 0, 0), func(): return "Стая уходит")
+	var held := 0
+	for e in w.take_link():
+		if e.get("type") == EcoLink.MESSAGE or e.get("type") == EcoLink.OBSERVE:
+			if str(e.get("text", "")).contains("потерял"):
+				ok(e.get("keep", false) and not e.has("urgent"), "строка отхода — «держится», не срочная")
+				held += 1
+			else:
+				ok(not e.has("keep"), "прочие — без ключа: %s" % e.get("text", ""))
+	eq(held, 1, "одна строка отхода")
+
+
 func test_live_world_observation_reaches_journal() -> void:
 	# По issue #92: событие шины с заметкой вида рядом с кораблём приходит как OBSERVE и пишется в журнал.
 	var main: Main = load("res://scenes/main.tscn").instantiate()
@@ -849,6 +897,9 @@ func test_voice_reaches_comms() -> void:   # голос мира (эхолове
 	eq(e["type"], EcoLink.VOICE, "тип события")
 	eq([e["role"], e["text"], e["fake"], e["ask"], e["silent"]], [0, "Дайте импульс", true, "ping", false], "поля")
 	eq(EcoLink.voice(9, "x")["role"], 3, "роль в пределах 0…3")
+	eq(e["id"], "", "без ID реплики — только текст")
+	eq(EcoLink.voice(1, "x", true, "ping", false, "RADIO_FAKE_PULSE01")["id"], "RADIO_FAKE_PULSE01",
+		"ID реплики TXT-002 для голоса SND-009 (#1477)")
 	main.on_eco_event(e)
 	main.step(0.1)
 	ok(main.comms.cur != null, "сообщение на плашке")
@@ -866,10 +917,11 @@ func test_echo_fake_reaches_comms() -> void:   # подделка эхоловц
 	await frames(1)
 	var e := main.eco.echo
 	ok(e != null and e.preds == main.eco.preds, "эхоловец знает серпохвостов сцены")
-	e.fake(main.eco.world, EcoEcho.ASK_PING)
+	var v := e.fake(main.eco.world, EcoEcho.ASK_PING)
 	main.step(0.1)
 	ok(main.comms.cur != null, "ложный вызов на плашке")
-	eq(main.comms.title(), "Сонарщик", "заявленная роль")
+	eq(main.comms.title(), Crew.ROLE_NAMES[v["role"]], "заявленная роль реплики TXT-002")
+	eq(main.comms.cur.text, v["text"], "текст реплики")
 	eq(main.comms.code_line(), "Код: …", "без кодового слова")
 	eq(main.comms.cur.ask, EcoEcho.ASK_PING, "просит импульс")
 	eq(main.comms.cur.reply, "", "первый спуск — молчит на «Спросить код»")

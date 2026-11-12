@@ -1,8 +1,10 @@
 extends SceneTree
 ## Маленький раннер тестов без сторонних дополнений.
 ## Запуск: godot --headless --path . -s tests/run.gd [-- имя_файла_или_теста ...]
+## Фильтр — часть имени «файл.тест»; путь и .gd срезаются, ни одного теста — ошибка с объяснением (#1350).
 ## Часть прогона для CI (#845): `-- --shard 2/3` — файлы части 2 из 3 по сумме времени (`TestShards`).
 ## Замер времени файлов: `-- --times tests/vremya.txt` — после прогона пишет таблицу для раскладки частей.
+## Самые долгие тесты: `-- --slow 20` — после прогона печатает 20 самых долгих тестов (не файлов), `TestShards.slowest`.
 ## Берёт все tests/test_*.gd, в каждом — методы test_*. Ошибка движка во время теста (null, неверный тип и т. п.)
 ## тоже валит тест: её ловит свой Logger. Код выхода 0 — всё зелёное, 1 — есть падения.
 
@@ -49,6 +51,7 @@ func _run() -> void:
 	var filters: Array = []
 	var shard: Array[int] = []
 	var times_out := ""
+	var slow_n := 0
 	var args := Array(OS.get_cmdline_user_args())
 	var a := 0
 	while a < args.size():
@@ -63,8 +66,15 @@ func _run() -> void:
 		elif arg == "--times" and a + 1 < args.size():
 			times_out = args[a + 1]
 			a += 2
+		elif arg == "--slow" and a + 1 < args.size():
+			if not args[a + 1].is_valid_int() or args[a + 1].to_int() < 1:
+				print("Неверное число «%s»: нужно --slow N, N ≥ 1" % args[a + 1])
+				quit(1)
+				return
+			slow_n = args[a + 1].to_int()
+			a += 2
 		else:
-			filters.append(arg)
+			filters.append(TestShards.filter_arg(arg))
 			a += 1
 	var files: Array[String] = []
 	for f in DirAccess.get_files_at(DIR):
@@ -75,15 +85,18 @@ func _run() -> void:
 		files = TestShards.pick(files, TestShards.load_times(), shard[0], shard[1])
 		print("Часть %d из %d: файлов %d" % [shard[0], shard[1], files.size()])
 	var file_ms := {}
+	var test_s := {}
 	var passed := 0
 	var failed: Array[String] = []
 	var t0 := Time.get_ticks_msec()
 	for f in files:
 		var f0 := Time.get_ticks_msec()
+		trap.take()
 		var script: GDScript = load(DIR + "/" + f)
 		if script == null or not script.can_instantiate():
 			failed.append("%s: скрипт не загрузился" % f)
-			print("ПАДЕНИЕ  %s: скрипт не загрузился" % f)
+			for line in TestShards.load_fail(f, trap.take()):
+				print(line)
 			continue
 		var names: Array[String] = []
 		for m in script.get_script_method_list():
@@ -95,11 +108,13 @@ func _run() -> void:
 			if not filters.is_empty() and not filters.any(func(s): return full.contains(s)):
 				continue
 			trap.take()
+			var n0 := Time.get_ticks_msec()
 			var t: TestCase = script.new()
 			t.tree = self
 			await t.before()
 			await t.call(n)
 			await t.after()
+			test_s[full] = (Time.get_ticks_msec() - n0) / 1000.0
 			var errs := trap.take()
 			for e in errs:
 				t.failures.append("ошибка движка: " + e)
@@ -120,6 +135,10 @@ func _run() -> void:
 	print("\nТестов: %d, прошло: %d, упало: %d (%.1f с)" % [passed + failed.size(), passed, failed.size(), ms / 1000.0])
 	for f in failed:
 		print("  упал: ", f)
+	if passed + failed.size() == 0 and not filters.is_empty():
+		print(TestShards.no_match(filters))
+	if slow_n > 0:
+		print("\n", TestShards.slow_text(test_s, slow_n))
 	if not times_out.is_empty():
 		var fa := FileAccess.open(times_out, FileAccess.WRITE)
 		if fa:

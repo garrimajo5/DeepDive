@@ -9,6 +9,7 @@ const LAYER := 91
 
 var settings: Settings
 var draw: Control
+var warming := false   ## прогрев (`warm`): все страницы и подтверждение одним рисунком под шторкой
 
 
 func _init() -> void:
@@ -25,6 +26,16 @@ func show_settings(s: Settings) -> void:
 		draw.queue_redraw()
 
 
+## Прогрев (WarmRunner, отчёт тестера #1637: `29-nastrojki` 103 мс, код 2 мс, «узлы 91» — рисунок панели вне шага):
+## под шторкой панель рисует основную страницу с подтверждением сброса, «Графику», «Голос» и «Звук» разом — глифы
+## всех кеглей в кэше шрифта до первого «Настройки». on = false — снова по s (закрыты — скрыта).
+func warm(on: bool, s: Settings) -> void:
+	warming = on
+	settings = s
+	visible = on or (s != null and s.open)
+	draw.queue_redraw()
+
+
 func _draw_settings() -> void:
 	if settings == null:
 		return
@@ -32,6 +43,12 @@ func _draw_settings() -> void:
 	var s := Splash.scale(size)
 	var font := draw.get_theme_default_font()
 	draw.draw_rect(Rect2(Vector2.ZERO, size), Color(MainMenu.DARK, Pause.DIM))
+	if warming:
+		_draw_main(font, s, size, true)
+		_draw_graphics(font, s, size)
+		_draw_voice(font, s, size)
+		_draw_sound(font, s, size)
+		return
 	if settings.page == "grafika":
 		_draw_graphics(font, s, size)
 		return
@@ -41,7 +58,12 @@ func _draw_settings() -> void:
 	if settings.page == "zvuk":
 		_draw_sound(font, s, size)
 		return
-	var k := 0.35 if settings.ask else 1.0
+	_draw_main(font, s, size, settings.ask)
+
+
+## Основная страница: ползунки, «Камера с борта», кнопки страниц и сброса; ask — поверх подтверждение сброса.
+func _draw_main(font: Font, s: float, size: Vector2, ask: bool) -> void:
+	var k := 0.35 if ask else 1.0
 	_text(font, Settings.TITLE, Settings.TITLE_AT, Settings.TITLE_PX * s, Color(MainMenu.INK, k), size)
 	_button(font, Settings.screen_rect("back", size), "Назад", false, k, s)
 	for sl: Array in Settings.SLIDERS:
@@ -55,7 +77,7 @@ func _draw_settings() -> void:
 	_button(font, Settings.screen_rect("zvuk", size), Settings.ZVUK_LABEL, false, k, s)
 	_button(font, Settings.screen_rect("golos", size), Settings.GOLOS_LABEL, false, k, s)
 	_button(font, Settings.screen_rect("reset", size), Settings.RESET_LABEL, false, k, s)
-	if not settings.ask:
+	if not ask:
 		return
 	draw.draw_rect(Rect2(Vector2.ZERO, size), Color(MainMenu.DARK, 0.45))
 	draw.draw_style_box(UiStyle.dialog(s), Splash.rect_to_screen(Pause.BOX, size))

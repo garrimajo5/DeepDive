@@ -305,7 +305,6 @@ func test_helm_busy_for_second() -> void:   # ROADMAP «Кооп»: заняты
 	main.walker.z = Deck.CHAIR_Z + 0.9
 	main.step(1.0 / 30.0)
 	eq(main.overlay.action_label, "Занято", "на кнопке — «Занято»")
-	ok(main.status_parts().has("Штурвал занят"), "в строке состояния — «Штурвал занят»")
 	main.use_post("helm")
 	ok(not main.pilot.seated, "свой игрок не сел во второе кресло")
 	eq(main.message.text, "Штурвал занят: Сонарщик", "на приборах — кто держит")
@@ -313,7 +312,6 @@ func test_helm_busy_for_second() -> void:   # ROADMAP «Кооп»: заняты
 	mate.post = ""
 	main.step(1.0 / 30.0)
 	eq(main.overlay.action_label, "Штурвал", "встал — пост свободен")
-	ok(main.status_parts().has("Сесть за штурвал"), "в строке — снова «Сесть за штурвал»")
 	main.use_post("helm")
 	ok(main.pilot.seated, "теперь сел")
 	main.step(1.0 / 30.0)

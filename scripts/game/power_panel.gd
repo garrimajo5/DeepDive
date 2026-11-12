@@ -9,6 +9,7 @@ var panel: Reactor.Console
 ## Раскладка кнопок (Touch.Layout): панель встаёт ниже кнопки noclip и выше кнопки действия (#349). null — без неё.
 var layout: Touch.Layout
 var bold: FontVariation
+var warming := false   ## прогрев (`warm`): кегли пульта обоими шрифтами под шторкой вместо него
 
 
 func _ready() -> void:
@@ -34,14 +35,31 @@ func box() -> Rect2:
 	return PowerScreen.box(get_viewport_rect().size, layout)
 
 
+## Прогрев (WarmRunner, #1350): под шторкой пульт рисует буквы `UiStyle.GLYPHS` своими кеглями (`warm_sizes`)
+## обычным и полужирным шрифтом вместо себя — строки перегрева и сброса не растрируют глифы при первом показе.
+## on = false — скрыт до поста энергии.
+func warm(on: bool) -> void:
+	warming = on
+	visible = on
+	queue_redraw()
+
+
+## Кегли пульта, px — из `_draw`, `_row` и строк `PowerScreen.foot`.
+func warm_sizes() -> Array[int]:
+	return UiStyle.warm_px([20.0, 21.0, 23.0, 24.0, 25.0, 27.0, 28.0, 30.0, 34.0], PowerScreen.k(box()), true)   # `_text` — roundi
+
+
 func _draw() -> void:
-	if reactor == null:
-		return
 	var font := get_theme_default_font()
 	if bold == null:
 		bold = FontVariation.new()
 		bold.base_font = font
 		bold.variation_embolden = 0.7
+	if warming:
+		UiStyle.warm_glyphs(self, [font, bold], warm_sizes())
+		return
+	if reactor == null:
+		return
 	var b := box()
 	var s := PowerScreen.k(b)
 	var o := b.position

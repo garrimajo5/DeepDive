@@ -23,16 +23,27 @@ const START_MSG := "Ковчег-7 у начала спуска · коснит�
 
 var kind := Kind.NONE
 var t := 0.0  ## секунды с начала облёта
+var still := false  ## камера стоит в точке облёта (`hold_at`) — сценарий тестера, вид корпуса у грунта (#1481)
 
 
 func start(k: Kind) -> void:
 	kind = k
 	t = 0.0
+	still = false
 
 
 func stop() -> void:
 	kind = Kind.NONE
 	t = 0.0
+	still = false
+
+
+## Камера с борта стоит в точке облёта u (0 — у носа, 1 — над кормой) и не кончается сама: снимок снаружи в любом
+## месте забега (шаг `outside` сценария тестера, #1481). Касание или `stop()` — глаза на мостике, как у облёта.
+func hold_at(u: float) -> void:
+	kind = Kind.START
+	t = clampf(u, 0.0, 1.0) * START_S
+	still = true
 
 
 func active() -> bool:
@@ -57,7 +68,7 @@ func duration() -> float:
 
 ## Шаг: облёт кончается сам — в начале забега после пути, при всплытии после стоянки в последней точке.
 func update(dt: float) -> void:
-	if not active():
+	if not active() or still:
 		return
 	t += dt
 	if t >= duration():

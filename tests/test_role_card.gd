@@ -108,6 +108,34 @@ func test_place() -> void:
 	ok(s.end.x < 1920.0 * 0.5, "16:9 — карточка в левой половине")
 
 
+## #1345: карточка не ложится на крестовину и кнопки (`Touch.Layout.rects` в avoid); со строкой приборов в 3 строки
+## штурвальная карточка помещается над крестовиной; места нет — пусто (тогда сразу «?»).
+func test_avoids_pad_and_buttons() -> void:
+	for size: Vector2 in [Vector2(1600, 720), Vector2(2400, 1080), Vector2(1920, 1080)]:
+		var l := Touch.Layout.new()
+		l.compute(Rect2(Vector2.ZERO, size))
+		var k := size.y / 720.0
+		var status := Rect2(14, 7, 900 * k, 106 * k)   # три строки приборов кеглем 24 при 720
+		var gap := RoleCard.PAD_GAP * size.y / RoleCard.REF_H
+		for pilot: bool in [true, false]:
+			var avoid := l.rects(pilot, gap)
+			for id: String in RoleCard.CARDS:
+				var r := RoleCard.card_rect(id, size, avoid, status)
+				for c: Touch.Circle in [l.pad, l.action] + ([l.up, l.down, l.light] if pilot else []):
+					var box := Rect2(c.c - Vector2(c.r, c.r), Vector2(c.r, c.r) * 2.0)
+					ok(not r.intersects(box), "%s %s: карточка %s мимо кнопки %s" % [size, id, r, box])
+		var helm := RoleCard.card_rect("helm", size, l.rects(true, gap), status)
+		ok(helm.has_area(), "%s: штурвальная карточка помещается со строкой в 3 строки" % size)
+		ok(helm.end.y + gap <= l.pad.c.y - l.pad.r + 0.01, "%s: над крестовиной с зазором" % size)
+	var l := Touch.Layout.new()
+	l.compute(Rect2(0, 0, 1600, 720))
+	var tall := Rect2(14, 7, 900, 260)
+	near(RoleCard.card_rect("helm", Vector2(1600, 720), l.rects(true, 10.0), tall).position.x, 1600.0 - RoleCard.RIGHT_FROM * 720.0 / RoleCard.REF_H, 0.01,
+		"строка высокая — слева карточка легла бы на крестовину, она справа")
+	eq(RoleCard.card_rect("helm", Vector2(1600, 720), l.rects(true, 10.0) + [Rect2(600, 0, 1000, 720)], tall), Rect2(),
+		"ни слева, ни справа места нет — пусто")
+
+
 func test_router_blocks_look() -> void:
 	var r := Touch.Router.new()
 	r.layout.compute(Rect2(Vector2.ZERO, SIZE))

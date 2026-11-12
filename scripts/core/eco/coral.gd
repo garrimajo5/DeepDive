@@ -4,7 +4,8 @@ extends EcoSystem
 ## на местах станций чистки огнёвок из js/creatures.js (initStations: места кораллов у (−45, 35), (38, 72), (22, −42);
 ## у их подножия лежат образцы «Ветка огнецвета», Samples). Кончики светятся сами; от шума корабля рядом (быстрый
 ## ход ближе 18 м), импульса сонара и разряда гаснут, в тишине медленно разгораются снова. Огнёвки и их станции
-## придут партией «Риф».
+## придут партией «Риф». Так же гаснут от близкого прохода серпохвоста (#1339, бестиарий: «видно, где прошёл
+## хищник») — по погасшим кустам видно его путь, когда корабль стоит тихо.
 
 ## Подножия кустов (x, z): места станций из браузера (образец лежит в 1,6 м к востоку и 0,4 м к югу) и четвёртый куст —
 ## станция чистки в Тихой заводи 09 (EcoCove, #831).
@@ -29,6 +30,12 @@ const DARK := 0.5
 ## Видно кончики гаснут от импульса и разряда за DIM_TIME с (Б3, `Bush.seen`), а не за кадр: полипы втягивают
 ## огни волной, а не щелчком выключателя (как у Каменного цветка, EcoFlower.DIM_TIME).
 const DIM_TIME := 0.4
+## Проход хищника (#1339): серпохвост ближе PRED_R к вершине куста гасит его, как шумный ход корабля (DIM_RATE).
+## Кроме чистки на станции (EcoPred.Mode.CLEAN): там он стоит смирно, перемирие. Строка «прошёл кто-то крупный» —
+## только если куст погас не от корабля и корабль ближе SEE_R (кусты видно): причину не называет — хищник это или
+## другое крупное, игрок проверяет сонаром и сканером.
+const PRED_R := 14.0
+const SEE_R := 70.0
 
 
 ## Куст огнецвета.
@@ -46,6 +53,8 @@ class Bush:
 	var glow := 1.0
 	## Свет кончиков на виду (шейдеру — `CoralView.sync`): догоняет glow вниз за DIM_TIME, вверх — сразу с ним.
 	var seen := 1.0
+	## Последний шаг гас от прохода хищника (не от корабля).
+	var spooked := false
 
 
 var bushes: Array[Bush] = []
@@ -53,11 +62,18 @@ var bushes: Array[Bush] = []
 var msg_cd := 0.0
 
 var _bases: Array[Vector2]
+## Хищники — слабой ссылкой (EcoPred держит пиявников, те — огнецвет: сильная замкнула бы круг); null — без хищников.
+var _preds: WeakRef
 
 
-## bases — свои места (для тестов); пусто — места из браузера.
-func _init(bases: Array[Vector2] = []) -> void:
+## bases — свои места (для тестов); пусто — места из браузера. pred_system — серпохвосты, чей проход гасит кусты.
+func _init(bases: Array[Vector2] = [], pred_system: EcoPred = null) -> void:
 	_bases = bases if not bases.is_empty() else BASES
+	_preds = weakref(pred_system) if pred_system else null
+
+
+func preds() -> EcoPred:
+	return _preds.get_ref() as EcoPred if _preds else null
 
 
 static func seed_for(world_seed: int) -> int:
@@ -85,17 +101,34 @@ func step(world: EcoWorld, dt: float) -> void:
 	var s := world.ship
 	var loud := absf(s.speed) > NOISE_SPEED
 	var dimmed := false
+	var passed := false
+	var ps := preds()
 	for b in bushes:
 		var was := b.glow
-		if loud and s.pos.distance_to(b.top) < NOISE_R:
+		var by_ship := loud and s.pos.distance_to(b.top) < NOISE_R
+		b.spooked = not by_ship and ps != null and pred_near(ps, b.top)
+		if by_ship or b.spooked:
 			b.glow = maxf(MIN_GLOW, b.glow - dt * DIM_RATE)
 		else:
 			b.glow = minf(1.0, b.glow + dt * RELIGHT)
 		if was >= DARK and b.glow < DARK:
-			dimmed = true
+			if by_ship:
+				dimmed = true
+			elif s.pos.distance_to(b.top) < SEE_R:
+				passed = true
 		b.seen = ease_seen(b.seen, b.glow, dt)
 	if dimmed:
 		_say(world, "Огнецвет гасит огни — корабль шумит рядом")
+	elif passed:
+		_say(world, "Огнецвет гасит огни — рядом прошёл кто-то крупный")
+
+
+## Серпохвост проходит у вершины top (ближе PRED_R, живой, не на чистке).
+static func pred_near(ps: EcoPred, top: Vector3) -> bool:
+	for pr in ps.all:
+		if pr.agent.alive and pr.mode != EcoPred.Mode.CLEAN and pr.agent.p.distance_to(top) < PRED_R:
+			return true
+	return false
 
 
 func on_ping(world: EcoWorld, pos: Vector3) -> void:

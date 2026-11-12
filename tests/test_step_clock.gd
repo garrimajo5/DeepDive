@@ -130,7 +130,9 @@ func test_main_step_parts() -> void:
 	eq(subs, ["карточка роли", "маршрут", "подсказки", "приборы", "рация", "связь", "цель маршрута"], "подчасти интерфейса")
 	var views: Array = main.clock.subs.get("виды", {}).keys()   # отчёт #1182: «виды 57» у колодца 05 — что внутри
 	views.sort()
-	eq(views, ["голограммы", "корабль и камера", "отсеки и экраны", "пульты", "свет", "экипаж"], "подчасти видов")
+	eq(views, ["блики и износ", "голограммы и табло", "корабль и камера", "отсеки и экран сканера", "пар и вода шлюза",
+		"ползунки и люк", "прожектор и экраны пультов", "свет внутри", "экипаж", "экипаж: сборка", "экипаж: снаряжение"],
+		"подчасти видов: имя — по тому, что вызывается (#1590)")
 	near(float(main.clock.parts["виды"]), _sum(main.clock.subs["виды"]), 0.001, "виды — ровно сумма подчастей")
 	var world: Dictionary = main.clock.subs.get("мир", {})   # #1020: модули и виды живого мира
 	ok(world.has("существа") and world.has("связь") and world.has("вид: рыбы, хищники") \
@@ -230,6 +232,37 @@ func test_usual_not_before_warm() -> void:
 	eq(StepClock.slower(9.0, 2.0), " ×5", "×N округляется")
 
 
+## #1350 (поток Б, 10.11): «EcoKamen 42» в логе тестера без «×» — у подчасти каждого шага обычное ~0,05 мс, меньше
+## USUAL_MIN, и отношение не писалось: заминка читалась как событие. Подчасть каждого шага — «×>N» по USUAL_MIN (не
+## больше «×>100»), подчасть по событию (редкий шаг) — по-прежнему без «×».
+func test_tiny_usual_floor() -> void:
+	var c := StepClock.new()
+	var t := 0
+	for i in StepClock.USUAL_FROM + 10:   # EcoKamen 0,05 мс каждый шаг, «импульс» 1 мс раз в 10 шагов
+		c.start(t, 1.0 / 30.0)
+		t += 3000
+		c.lap("мир/EcoFish", t)
+		t += 50
+		c.lap("мир/EcoKamen", t)
+		if i % 10 == 3:
+			t += 1000
+			c.lap("мир/" + StepClock.PING_MARK, t)
+	c.start(t, 1.0 / 30.0)   # провал: EcoKamen 42, событие 20
+	t += 3000
+	c.lap("мир/EcoFish", t)
+	t += 42000
+	c.lap("мир/EcoKamen", t)
+	t += 20000
+	c.lap("мир/" + StepClock.PING_MARK, t)
+	c.start(t, 1.0 / 30.0)
+	var n := c.last_note()
+	ok(n.contains("EcoKamen 42 ×>100"), "подчасть каждого шага с обычным ~0 — «×>100»: " + n)
+	ok(n.contains(StepClock.PING_MARK + " 20,") or n.ends_with(StepClock.PING_MARK + " 20]"),
+		"подчасть по событию — без «×»: " + n)
+	eq(StepClock.slower(1.5, 0.05, 1.0), " ×>15", "нижняя граница по USUAL_MIN")
+	eq(StepClock.slower(42.0, 0.05, 0.2), "", "редкая подчасть — без «×»")
+
+
 ## Обычный шаг мира: EcoFish 3, EcoKelp 2, EcoVent 1, a 1, b 1 — и всё (#1174).
 func _warm_world(c: StepClock, t: int) -> int:
 	for i in StepClock.USUAL_FROM + 2:
@@ -307,8 +340,112 @@ func test_stall_by_rest_sum() -> void:
 		"без двух долгих осталась одна подчасть — мало для вывода")
 
 
+## Отчёт тестера `2026-11-08-1715` (#1317, `32h-rakovina-osmotr`): «мир 51 (обычно 10) [EcoKelp 9 ×24, EcoCoins 9
+## ×44, EcoGrazer 9 ×80, ещё 44: 24 ×3]» — три несвязанных модуля по 9 мс разом, остальные ×3, и заминка не
+## отмечалась: тестер снова искал виновника в мире. Три подчасти ×10 и дольше в кадре без импульса — заминка, весь
+## замер ×6; в кадре импульса или с двумя такими — нет.
+func test_stall_three_spikes() -> void:
+	var sub := {"EcoKelp": 9.0, "EcoCoins": 9.0, "EcoGrazer": 9.0}
+	var us := {"EcoKelp": 0.375, "EcoCoins": 0.2, "EcoGrazer": 0.11}
+	for i in 44:
+		sub["m%d" % i] = 24.0 / 44.0
+		us["m%d" % i] = 8.0 / 44.0
+	eq(StepClock.rest_stall(sub, us), 0, "по сумме остальных — ×4, раньше заминки не было")
+	eq(StepClock.stall(sub, us), 6, "три модуля ×24…×80 разом — заминка, весь мир ×6")
+	var ping := sub.duplicate()
+	ping[StepClock.PING_MARK] = 0.5
+	var ping_us := us.duplicate()
+	ping_us[StepClock.PING_MARK] = 0.2
+	eq(StepClock.stall(ping, ping_us), 0, "в кадре импульса модули вправе дорожать разом — не заминка")
+	var two := sub.duplicate()
+	two["EcoGrazer"] = 0.2
+	eq(StepClock.stall(two, us), 0, "два виновника — не заминка")
+
+
+## #1350 (поток Б, 12.11; отчёт `2026-11-12-0330`, `36b`): «мир 72 [EcoFlower 42 ×>100, EcoFish 12, …]» в шумном прогоне
+## прочли как виновника, а у `EcoFlower.step` шесть сложений — процесс сняли с ЦП посреди вызова. Одна «×>N» среди
+## подчастей «как обычно» — «одна отметка, вероятно хост»; две такие, раздутая подчасть с известным обычным или кадр
+## импульса — без пометки.
+func test_lone_tiny_mark_is_host() -> void:
+	var c := StepClock.new()
+	var t := 0
+	for i in StepClock.USUAL_FROM + 10:   # EcoFish 10 мс, EcoFlower 0,01 мс, a 1 мс — каждый шаг
+		c.start(t, 1.0 / 30.0)
+		for p in [["EcoFish", 10000], ["EcoFlower", 10], ["a", 1000]]:
+			t += int(p[1])
+			c.lap("мир/" + p[0], t)
+	c.start(t, 1.0 / 30.0)   # провал: EcoFlower 42, прочие как обычно
+	for p in [["EcoFish", 12000], ["EcoFlower", 42000], ["a", 1000]]:
+		t += int(p[1])
+		c.lap("мир/" + p[0], t)
+	c.start(t, 1.0 / 30.0)
+	eq(c.last_note(), "мир 55 (обычно 11) [EcoFlower 42 ×>100, EcoFish 12, a 1]" + StepClock.LONE,
+		"одна «×>100» среди «как обычно» — хост, не виновник")
+	var us := {"EcoFish": 10.0, "EcoFlower": 0.01, "b": 0.02, "a": 1.0}
+	var all := {"EcoFish": 1.0, "EcoFlower": 1.0, "b": 1.0, "a": 1.0}
+	ok(StepClock.lone({"EcoFish": 12.0, "EcoFlower": 42.0, "a": 1.0}, us, all), "одна отметка")
+	ok(not StepClock.lone({"EcoFish": 12.0, "EcoFlower": 42.0, "b": 5.0, "a": 1.0}, us, all),
+		"две подчасти «×>N» — не одна отметка")
+	ok(not StepClock.lone({"EcoFish": 40.0, "EcoFlower": 42.0, "a": 1.0}, us, all),
+		"раздута и подчасть с работой — не одна отметка")
+	ok(not StepClock.lone({"EcoFish": 12.0, "EcoFlower": 42.0, "a": 1.0}, us, {"EcoFlower": 0.2}),
+		"подчасть по событию (редкая) — без «×>», не одна отметка")
+	ok(not StepClock.lone({"EcoFlower": 42.0}, us, all), "сравнить не с чем — не пишем")
+	ok(not StepClock.lone({"EcoFish": 12.0, "EcoFlower": 42.0, StepClock.PING_MARK: 2.0}, us, all),
+		"кадр импульса — не пишем")
+	ok(not StepClock.lone({"EcoFish": 60.0, "a": 1.0}, us, all), "виновник с работой ×6 — как прежде, не хост")
+
+
+## #1731 (#803, отчёт `a668be5`, `31b-kod-net`): «мир 52 [EcoCurrent 35 ×>100, …, монетники 4 ×2, …]» — пометки «одна
+## отметка» не было: соседняя подчасть ровно на пороге ×2. Прибавка +2 мс — не работа, а та же машина; подчасть,
+## прибавившая SPIKE_MS и больше, по-прежнему отменяет пометку.
+func test_lone_ignores_small_double() -> void:
+	var c := StepClock.new()
+	var t := 0
+	for i in StepClock.USUAL_FROM + 10:   # EcoFish 8, монетники 2, хищники 3, EcoCurrent 0,01 мс — каждый шаг
+		c.start(t, 1.0 / 30.0)
+		for p in [["EcoFish", 8000], ["монетники", 2000], ["хищники", 3000], ["EcoCurrent", 10]]:
+			t += int(p[1])
+			c.lap("мир/" + p[0], t)
+	c.start(t, 1.0 / 30.0)   # провал: EcoCurrent 35, монетники ×2
+	for p in [["EcoFish", 8000], ["монетники", 4000], ["хищники", 3000], ["EcoCurrent", 35000]]:
+		t += int(p[1])
+		c.lap("мир/" + p[0], t)
+	c.start(t, 1.0 / 30.0)
+	eq(c.last_note(), "мир 50 (обычно 13) [EcoCurrent 35 ×>100, EcoFish 8, монетники 4 ×2, ещё 1: 3]" + StepClock.LONE,
+		"«×2» на +2 мс рядом с одной «×>100» — хост")
+	var us := {"EcoFish": 8.0, "монетники": 2.0, "EcoCurrent": 0.01}
+	var all := {"EcoFish": 1.0, "монетники": 1.0, "EcoCurrent": 1.0}
+	ok(StepClock.lone({"EcoFish": 8.0, "монетники": 4.0, "EcoCurrent": 35.0}, us, all), "+2 мс — хост")
+	ok(not StepClock.lone({"EcoFish": 8.0, "монетники": 5.0, "EcoCurrent": 35.0}, us, all),
+		"+3 мс (SPIKE_MS) при ×2,5 — не одна отметка")
+
+
 static func _sum(of: Dictionary) -> float:
 	var t := 0.0
 	for k in of:
 		t += float(of[k])
 	return t
+
+
+## Issue #1518: «экипаж 37 ×35» на итоге забега — пересборка фигуры, снаряжение или поза. Сборка — своей подчастью,
+## отметки вне шага игры (новый товарищ, прогрев) в законченный шаг не ложатся.
+func test_crew_sub_parts() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var mate := main.add_mate(0.9, -2.3, 90.0, Crew.Role.ENGINEER, 0)
+	main.step(1.0 / 30.0)
+	main.step(1.0 / 30.0)
+	var idle: float = main.clock.subs["виды"]["экипаж: сборка"]
+	mate.look = 1   # внешность сменилась — фигура пересобирается в этом шаге
+	main.step(1.0 / 30.0)
+	var views: Dictionary = main.clock.subs.get("виды", {})
+	ok(views.has("экипаж: сборка") and views.has("экипаж: снаряжение"), "подчасти экипажа: %s" % [views.keys()])
+	ok(float(views["экипаж: сборка"]) > idle * 10.0 and float(views["экипаж: сборка"]) > 0.5,
+		"пересборка фигуры — в своей подчасти: %.3f мс (без смены — %.3f): %s" % [views["экипаж: сборка"], idle, views])
+	var before := _sum(views)
+	main.crew_view.apply()   # вне шага — без отметок
+	eq(_sum(main.clock.subs["виды"]), before, "вне шага подчасти не растут")
+	main.queue_free()
+	await frames(1)

@@ -141,6 +141,44 @@ func test_skull_aside() -> void:
 	ok(b.solid(b.to_world(b.jaw[4])), "челюсть твёрдая")
 
 
+## Перебор всех капсул без полос — эталон для `EcoBones.solid`.
+func _solid_all(b: EcoBones, p: Vector3) -> bool:
+	var q := b.to_local(p)
+	if Vector2(q.x, q.z).length() > EcoBones.OBSTACLE_R:
+		return false
+	if b.in_skull(q):
+		return true
+	for c in b.cap_a.size():
+		if EcoBones.seg_dist(q, b.cap_a[c], b.cap_b[c]) < b.cap_r[c]:
+			return true
+	return false
+
+
+func test_solid_cells_same_as_all_capsules() -> void:
+	var b := _bones(Seabed.height)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1350
+	var hits := 0
+	var diff := 0
+	# у самих капсул (концы со сдвигом в пределах радиуса и чуть за ним) и по всей коробке скелета
+	for c in b.cap_a.size():
+		for q in 6:
+			var at := b.cap_a[c].lerp(b.cap_b[c], rng.randf())
+			var off := Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)) * b.cap_r[c] * 1.3
+			var p := b.to_world(at + off)
+			var want := _solid_all(b, p)
+			hits += int(want)
+			diff += int(b.solid(p) != want)
+	for q in 3000:
+		var p := b.to_world(Vector3(rng.randf_range(-27, 27), b.pass_floor(0.0) + rng.randf_range(-3, 16),
+			rng.randf_range(-27, 27)))
+		var want := _solid_all(b, p)
+		hits += int(want)
+		diff += int(b.solid(p) != want)
+	ok(hits > 300, "выборка задевает кости: %d" % hits)
+	eq(diff, 0, "полосы капсул отвечают как перебор всех")
+
+
 func test_solid_bones_and_water() -> void:
 	var b := _bones(Seabed.height)
 	ok(b.solid(b.to_world(b.rib_point(3, 4))), "ребро твёрдое")
@@ -238,7 +276,7 @@ func test_moss_at_rib_feet() -> void:
 	eq(sides, [3, 3], "по три пятна с каждой стороны")
 	var ev := EcoView.new()
 	ev.ground = Seabed.height
-	eq(ev.moss.patches.size(), 22, "пятна рифа — прежние 22, скребуны их не делят с костями")
+	eq(ev.moss.patches.size(), EcoMoss.SPOTS.size(), "пятна рифа — только EcoMoss.SPOTS, скребуны их не делят с костями")
 	var mv := ev.bones_view.moss_view
 	ok(mv != null and mv.get_parent() == ev.bones_view, "мох на костях — в сцене")
 	eq(mv.look.verts.size(), EcoBones.MOSS_PAIRS.size() * EcoMossLook.VERTS_PER_PATCH, "один меш на все пятна")

@@ -114,12 +114,24 @@ def upload_all(issue, pairs):
     return []
 
 
+def take_text(argv):
+    """Достаёт `--text`: (текст, остальные аргументы). Ключ без текста или с пустым текстом — ошибка ValueError:
+    иначе в issue молча уходит одна картинка без вопроса (#1350)."""
+    if "--text" not in argv:
+        return "", argv
+    k = argv.index("--text")
+    text = argv[k + 1] if k + 1 < len(argv) else ""
+    if not text.strip():
+        raise ValueError("--text пустой: напишите вопрос или уберите ключ")
+    return text, argv[:k] + argv[k + 2:]
+
+
 def main(argv):
-    text = ""
-    if "--text" in argv:
-        k = argv.index("--text")
-        text = argv[k + 1]
-        argv = argv[:k] + argv[k + 2:]
+    try:
+        text, argv = take_text(argv)
+    except ValueError as e:
+        print(f"issue_img: {e}", file=sys.stderr)
+        return 2
     if len(argv) < 2 or not argv[0].isdigit():
         print(__doc__)
         return 2

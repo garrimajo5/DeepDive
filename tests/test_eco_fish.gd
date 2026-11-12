@@ -19,6 +19,17 @@ func _fish(w: EcoWorld) -> EcoFish:
 	return w.systems[0] as EcoFish
 
 
+## Оставить в мире одну стаю: остальные стаи с их рыбками убираем — проверке одной стаи они только тратят время
+## (#1350, `--slow`). Своя стая шагает как прежде: очередь дальних — по номеру стаи и счётчику шагов, не по их числу.
+func _only(w: EcoWorld, fish: EcoFish, keep: EcoFish.Shoal) -> void:
+	for sh in fish.shoals:
+		if sh != keep:
+			for f: EcoFish.Fish in sh.members:
+				w.agents.erase(f.agent)
+	fish.shoals.assign([keep])
+	fish.all.assign(keep.members)
+
+
 func _mean_to(sh: EcoFish.Shoal, p: Vector3) -> float:
 	var s := 0.0
 	var n := 0
@@ -29,7 +40,7 @@ func _mean_to(sh: EcoFish.Shoal, p: Vector3) -> float:
 	return s / n
 
 
-func _flat(a: Vector3, b: Vector3) -> float:
+static func _flat(a: Vector3, b: Vector3) -> float:
 	return Vector2(a.x - b.x, a.z - b.z).length()
 
 
@@ -59,6 +70,45 @@ func test_six_shoals_of_22_at_corals() -> void:
 			near(sh.home.y - Seabed.height(sh.home.x, sh.home.z), 3.5, 0.25, "дом стаи на 3,5 м над дном")
 
 
+
+
+## #1400: стая с прохода 00 → 01 (коралл (56; 6)) живёт у рифа (55; −69) — на 3,5 м над дном, как остальные дома.
+## Дальше 40 м от пути 00 → стоянка → 01: стая тянет хищников на путь (tools/quiet_map.gd).
+func test_shoal_home_moved_off_route() -> void:
+	var reef: Vector2 = EcoCoral.BASES[2]
+	var h := EcoFish.HOMES[4]
+	ok(Vector2(h.x, h.z).distance_to(reef) < 0.5, "стая 4 — у рифа (55; −69)")
+	near(h.y, Seabed.height(h.x, h.z) + 3.5, 0.05, "дом на 3,5 м над дном")
+	var tool: GDScript = load("res://tools/quiet_map.gd")
+	var pts: Array[Vector2] = tool.route_points()
+	var far := INF
+	for p in pts:
+		far = minf(far, Vector2(h.x, h.z).distance_to(p))
+	ok(far > 40.0, "дом стаи 4 не у пути 00 → 01: %.1f м" % far)
+
+
+## Проба расстановки #1400: дом стаи рифа переносится до сброса мира (`EcoFish.home_at`), остальные — на месте; по
+## умолчанию переносов нет. Расчёт тихих мест на пути 00 → 01 — tools/quiet_map.gd.
+func test_home_moves_only_for_probe() -> void:
+	var to := Vector3(EcoCoral.BASES[2].x, -30.0, EcoCoral.BASES[2].y)
+	var w := EcoWorld.new(EcoRandom.WORLD_SEED)
+	w.ground = Seabed.height
+	w.ship.pos = Vector3(500, 0, 500)
+	var fish := EcoFish.new()
+	ok(fish.home_at.is_empty(), "в игре переносов нет")
+	fish.home_at[4] = to
+	w.add(fish)
+	eq(fish.shoals[4].home, to, "стая 4 — у другого рифа")
+	eq(fish.shoals[3].home, EcoFish.HOMES[3], "остальные — дома")
+	for f in fish.shoals[4].members:
+		ok(_flat(f.agent.p, to) < 4.5, "рыбки стаи — у нового дома")
+	var plain := _fish(_world())
+	eq(plain.shoals[4].home, EcoFish.HOMES[4], "без пробы дом на месте")
+	var tool: GDScript = load("res://tools/quiet_map.gd")
+	var pts: Array[Vector2] = tool.route_points()
+	eq(pts[0], Vector2(4.0, 80.0), "путь начинается у 00")
+	eq(pts[-1], Vector2(33.0, -22.0), "и кончается у 01")
+	eq(tool.REEF_FOR[4], EcoCoral.BASES[2], "дом (56; 6) — к существующему рифу (55; −69)")
 
 ## Б3 «плавность»: центр стаи после сброса — среднее рыбок, как в шаге; раньше стоял в доме, а рыбки — выше и
 ## вразброс, и на первом шаге центр (цель сканера и сонара, испуг, охота) прыгал до 1,9 м.
@@ -98,23 +148,78 @@ func test_no_jump_out_of_hull_after_reset() -> void:
 	ok(worst < 0.5, "на первом шаге никто не прыгает: %.2f м" % worst)
 
 
-func test_shoal_roams_near_home_and_keeps_together() -> void:
-	var w := _world()
-	var fish := _fish(w)
-	for s in 6:
-		w.run(30.0)
-		for sh in fish.shoals:
-			eq(sh.alive, sh.members.size(), "все живы")
-			eq(sh.alarm, 0.0, "без угроз тревоги нет")
+## Три минуты спокойного мира рифа и кроны — одни на тесты стай рифа и стай кроны: раньше каждый гонял свои 180 с
+## (по 3,7 с на тест). Мир детерминирован, цветок стаи рифа не трогает — итог общий (#1350).
+## reef — все стаи у дома (как раньше, стаи кроны тоже), crown — у кроны; первая непройденная проверка ("" — все прошли), turned — сколько обошла крону каждая стая, рад;
+## samples / inside — мест рыбок кроны всего и внутри ветвей; quiet — событий в шине к концу.
+static var _calm_run := {}
+
+
+static func _calm() -> Dictionary:
+	if not _calm_run.is_empty():
+		return _calm_run
+	var w := EcoWorld.new(EcoRandom.WORLD_SEED)
+	w.ground = Seabed.height
+	w.ship.pos = Vector3(500, 0, 500)  # корабль далеко и не мешает
+	var fish := w.add(EcoFish.new()) as EcoFish
+	var flower := w.add(EcoFlower.new()) as EcoFlower
+	var foot := Vector3(EcoFlower.CENTER.x, Seabed.height(EcoFlower.CENTER.x, EcoFlower.CENTER.y), EcoFlower.CENTER.y)
+	var crown: Array[EcoFish.Shoal] = []
+	for sh in fish.shoals:
+		if sh.crown:
+			crown.append(sh)
+	var reef := ""
+	var bad := ""
+	var turned: Array[float] = [0.0, 0.0]
+	var last: Array[float] = []
+	for sh in crown:
+		last.append(atan2(sh.center.z - foot.z, sh.center.x - foot.x))
+	var samples := 0
+	var inside := 0
+	for s in 360:
+		w.run(0.5)
+		if reef == "" and (s + 1) % 60 == 0:  # каждые 30 с — все стаи, как раньше
+			for sh in fish.shoals:
+				if sh.alive != sh.members.size() or sh.alarm != 0.0:
+					reef = "стая %d, %d с: все живы и без тревоги (живых %d, тревога %.2f)" \
+						% [sh.index, (s + 1) / 2, sh.alive, sh.alarm]
+					break
+				for f: EcoFish.Fish in sh.members:
+					var p := f.agent.p
+					var good := _flat(p, sh.home) < 30.0 and p.distance_to(sh.center) < 6.0 \
+						and p.y - Seabed.height(p.x, p.z) > -0.5 and p.y < -3.0 \
+						and f.agent.v.length() <= EcoFish.CALM_SPEED + 1e-3 and f.agent.state == EcoAgent.State.GRAZE
+					if not good:
+						reef = "стая %d, %d с: у дома, вместе, над дном, подо льдом, спокойно (p=%s, центр=%s)" \
+							% [sh.index, (s + 1) / 2, p, sh.center] + " v=%s" % f.agent.v
+						break
+				if reef != "":
+					break
+		for i in crown.size():
+			if bad != "":
+				break
+			var sh := crown[i]
+			var r := _flat(sh.center, foot)
+			var h := sh.center.y - foot.y
+			if sh.alarm != 0.0 or not (r > 12.0 and r < 23.0 and h > 11.0 and h < 32.0):
+				bad = "стая %d у кроны снаружи и спокойна: r=%.1f, h=%.1f, тревога %.2f" % [sh.index, r, h, sh.alarm]
+				break
+			var a := atan2(sh.center.z - foot.z, sh.center.x - foot.x)
+			turned[i] += wrapf(a - last[i], -PI, PI)
+			last[i] = a
 			for f: EcoFish.Fish in sh.members:
-				var p := f.agent.p
-				var good := _flat(p, sh.home) < 30.0 and p.distance_to(sh.center) < 6.0 \
-					and p.y - Seabed.height(p.x, p.z) > -0.5 and p.y < -3.0 \
-					and f.agent.v.length() <= EcoFish.CALM_SPEED + 1e-3 and f.agent.state == EcoAgent.State.GRAZE
-				if not ok(good, "стая %d, %d с: у дома, вместе, над дном, подо льдом, спокойно (p=%s, центр=%s)"
-						% [sh.index, (s + 1) * 30, p, sh.center] + " v=%s" % f.agent.v):
-					return
-	eq(w.bus.pending.size(), 0, "спокойная стая молчит")
+				samples += 1
+				if flower.solid(f.agent.p):
+					inside += 1
+	_calm_run = {"reef": reef, "crown": bad, "turned": turned, "samples": samples, "inside": inside,
+		"quiet": w.bus.pending.size()}
+	return _calm_run
+
+
+func test_shoal_roams_near_home_and_keeps_together() -> void:
+	var c := _calm()
+	eq(c.reef, "", "три минуты все стаи у дома, вместе, над дном, подо льдом, спокойно")
+	eq(c.quiet, 0, "спокойная стая молчит")
 
 
 func test_predator_sends_shoal_home_to_hide() -> void:
@@ -170,32 +275,13 @@ func test_crown_shoals_circle_flower() -> void:
 		near(sh.home.distance_to(foot + Vector3(0, EcoFish.CROWN_HIDE, 0)), 0.0, 1e-3, "дом — в чаше на оси")
 		ok(not flower.solid(sh.home), "в доме ветвей нет")
 		ok(_flat(sh.center, foot) > EcoFlower.SPREAD, "начинают снаружи кроны")
-	var turned: Array[float] = [0.0, 0.0]
-	var last: Array[float] = []
-	for sh in crown:
-		last.append(atan2(sh.center.z - foot.z, sh.center.x - foot.x))
-	var samples := 0
-	var inside := 0
-	for s in 360:
-		w.run(0.5)
-		for i in crown.size():
-			var sh := crown[i]
-			eq(sh.alarm, 0.0, "без угроз спокойны")
-			var r := _flat(sh.center, foot)
-			var h := sh.center.y - foot.y
-			if not ok(r > 12.0 and r < 23.0 and h > 11.0 and h < 32.0,
-					"стая %d у кроны снаружи: r=%.1f, h=%.1f" % [sh.index, r, h]):
-				return
-			var a := atan2(sh.center.z - foot.z, sh.center.x - foot.x)
-			turned[i] += wrapf(a - last[i], -PI, PI)
-			last[i] = a
-			for f: EcoFish.Fish in sh.members:
-				samples += 1
-				if flower.solid(f.agent.p):
-					inside += 1
+	var c := _calm()  # три минуты того же мира
+	eq(c.crown, "", "три минуты у кроны снаружи и спокойны")
+	var turned: Array[float] = c.turned
 	for i in crown.size():
 		ok(turned[i] * crown[i].turn > TAU, "стая %d обошла крону в свою сторону: %.1f рад" % [i, turned[i]])
-	ok(inside < samples * 0.01, "сквозь ветви почти не плывут: %d из %d" % [inside, samples])
+	ok(c.inside < c.samples * 0.01, "сквозь ветви почти не плывут: %d из %d" % [c.inside, c.samples])
+	ok(c.samples > 0, "места рыбок кроны посчитаны")
 
 
 func test_crown_shoal_hides_in_chalice() -> void:
@@ -528,6 +614,7 @@ func test_view_one_multimesh_follows_world() -> void:
 	ok(tr.origin.distance_to(f.agent.p) < 1e-3, "место рыбки — из мира")
 	_close(EcoFishLook.forward(f, view.world.time) * EcoFishLook.scale(f), tr.basis * Vector3(0, 0, 1), "нос по курсу")
 	_close(EcoFishLook.basis(f, view.world.time).x, tr.basis.x, "расстановка — как EcoFishLook.basis")
+	_close(EcoFishLook.basis(f, view.world.time).y, tr.basis.y, "спина с креном — как EcoFishLook.basis")
 	near(FishView.shade_at(fv.buffer, f.index), EcoFishLook.shade(f), 1e-5, "оттенок тела особи")
 	near(FishView.tail_phase_at(fv.buffer, f.index), EcoFishLook.tail_phase(f), 1e-5, "фаза хвоста — в альфе цвета")
 	var mat := fv.multimesh.mesh.surface_get_material(0) as ShaderMaterial
@@ -600,6 +687,7 @@ func test_young_hide_between_ribs() -> void:
 	var sh: EcoFish.Shoal = fish.shoals[8]
 	ok(sh.cage and not sh.crown, "девятая стая — молодь в костях, номера прежних не сдвинулись")
 	eq(sh.members.size(), EcoFish.JUV_PER, "14 мальков")
+	_only(w, fish, sh)  # у молоди свой генератор (cage_rnd) — без других стай она идёт так же
 	for f: EcoFish.Fish in sh.members:
 		near(f.size, EcoFish.JUV_SIZE, 1e-6, "мельче взрослых")
 		near(EcoFishLook.basis(f, 0.0).x.length(), EcoFish.JUV_SIZE * EcoFishLook.scale(f) / f.size, 1e-4, "и в форме")
@@ -630,6 +718,181 @@ func test_young_hide_between_ribs() -> void:
 	ok(sh.alarm > 0.0, "хищник рядом — тревога")
 	ok(_mean_to(sh, sh.home) < 4.0, "прячется в середине клетки")
 	pred.alive = false
+
+
+## Б3, tools/jerk.gd place=01: рыбка всплывает почти отвесно, ход по горизонтали мал и меняет знак — нос не проходит
+## через вертикаль, бок тела не переворачивается за кадр (раньше — до 3 рад за кадр), тангаж не круче PITCH_MAX.
+func test_steep_swim_keeps_side() -> void:
+	var dt := 1.0 / 30.0
+	var look := Vector3.ZERO
+	var side := Vector3.ZERO
+	var worst := 0.0
+	var steep := 0.0
+	for i in 300:
+		var sway := 0.12 * (1.0 if (i / 7) % 2 == 0 else -1.0)   # ход вбок дёргается туда-сюда
+		var v := Vector3(sway, 0.5 if i < 150 else -0.5, 0.03 * sin(i * 0.3))
+		look = EcoFish.turn(look, v, dt)
+		near(look.length(), 1.0, 1e-5, "нос единичный")
+		steep = maxf(steep, absf(asin(clampf(look.y, -1.0, 1.0))))
+		var s := Vector3(look.z, 0.0, -look.x).normalized()
+		if side != Vector3.ZERO:
+			worst = maxf(worst, side.angle_to(s))
+		side = s
+	ok(steep <= EcoFish.PITCH_MAX + 1e-4, "тангаж носа не круче PITCH_MAX: %.2f" % steep)
+	ok(worst <= EcoFish.LOOK_MAX * dt + 1e-3, "бок за кадр — не больше LOOK_MAX · dt: %.3f рад" % worst)
+	look = EcoFish.turn(Vector3(0, 0, 1), Vector3(0, 2, 0), dt)
+	ok(Vector2(look.x, look.z).length() > 0.5 and look.z > 0.0, "отвесно вверх — курс прежний, нос поднимается")
+
+
+## #1400: стая кроны в тревоге всплывает почти отвесно, снос вбок 0,03–0,15 м/с меняет знак — курс носа не мотает за
+## ним (было: ±0,3 рад за 0,1 с, угловое ускорение до 170 рад/с² в tools/jerk.gd scena=3). По горизонтали — как было.
+func test_near_vertical_swim_does_not_wobble_heading() -> void:
+	var dt := 1.0 / 30.0
+	var look := Vector3(0, 0, 1)
+	var yaws: Array[float] = []
+	for i in 240:
+		var sway := 0.1 * (1.0 if (i / 6) % 2 == 0 else -1.0)
+		look = EcoFish.turn(look, Vector3(sway, 0.55, 0.02), dt)
+		yaws.append(atan2(look.x, look.z))
+	var worst := 0.0   # угловое ускорение курса по отсчётам через 3 кадра, как tools/jerk.gd
+	var k := 3.0 * dt
+	for i in range(6, yaws.size()):
+		var w1 := wrapf(yaws[i - 3] - yaws[i - 6], -PI, PI) / k
+		var w2 := wrapf(yaws[i] - yaws[i - 3], -PI, PI) / k
+		worst = maxf(worst, absf(w2 - w1) / k)
+	ok(worst < 30.0, "курс почти отвесной рыбки не мотает: %.1f рад/с²" % worst)
+	near(EcoFish.flat_k(1.0), 1.0, 1e-6, "по горизонтали — курс в полную силу")
+	near(EcoFish.flat_k(EcoFish.FLAT_MIN), 0.0, 1e-6, "у FLAT_MIN — курс стоит, как отвесно")
+	var flat := EcoFish.turn(Vector3(1, 0, 0), Vector3(0, 0, 3), dt)
+	near(Vector3(1, 0, 0).angle_to(flat), EcoFish.LOOK_MAX * dt, 1e-4, "по горизонтали поворот прежний")
+
+
+## Б3, вторичное движение (#1400): в повороте рыбка ложится на бок спиной к центру поворота, крен копится и
+## уходит плавно — разворот стаи кроны читается вспышкой боков, а не поворотом плоских фигурок.
+func test_tail_arcs_into_turn() -> void:
+	# оттенок и ступень изгиба в одном числе INSTANCE_CUSTOM.a: туда и обратно, и в half float Compatibility
+	for shade in [1.0 - EcoFishLook.SHADE_SPREAD, 1.0, 1.0 + EcoFishLook.SHADE_SPREAD]:
+		for bank in [-1.0, -EcoFishLook.BANK_MAX, -0.11, 0.0, 0.03, 0.26, EcoFishLook.BANK_MAX]:
+			var a := EcoFishLook.pack_shade(shade, bank)
+			var lv := EcoFishLook.arc_level(bank)
+			if not near(EcoFishLook.unpack_shade(a), shade, 1e-5, "оттенок цел: %.2f / %.2f" % [shade, bank]):
+				return
+			if not near(EcoFishLook.unpack_arc(a), float(lv) / EcoFishLook.ARC_LEVELS, 1e-6, "ступень цела"):
+				return
+			var h := _half(a)
+			if not near(EcoFishLook.unpack_shade(h), shade, 0.02, "оттенок в half float: %.2f / %.2f" % [shade, bank]):
+				return
+			if not near(EcoFishLook.unpack_arc(h), float(lv) / EcoFishLook.ARC_LEVELS, 1e-6, "ступень в half float"):
+				return
+	near(EcoFishLook.unpack_arc(EcoFishLook.pack_shade(1.0, 99.0)), 1.0, 1e-6, "не больше полного изгиба")
+	near(EcoFishLook.unpack_shade(1.0), 1.0, 1e-6, "пестрянки (1.0) — свой оттенок")
+	eq(EcoFishLook.unpack_arc(1.0), 0.0, "у пестрянок хвост не гнётся по дуге")
+	# хвост, а не голова: нос не сдвигается, кончик — на ARC_AMP при полном изгибе
+	eq(EcoFishLook.tail_arc(EcoFishLook.NOSE, 1.0), 0.0, "голова жёсткая")
+	near(EcoFishLook.tail_arc(EcoFishLook.TAIL_TIP, 1.0), EcoFishLook.ARC_AMP, 1e-6, "кончик — ARC_AMP")
+	eq(EcoFishLook.tail_arc(EcoFishLook.TAIL_TIP, 1.0, 0.0), 0.0, "«Экономно» — без изгиба")
+	# долгий поворот к боку +x — хвост к центру поворота (+x), плавно; прямо — выпрямляется
+	var dt := 1.0 / 30.0
+	var w := _world()
+	var fish := _fish(w)
+	var f := fish.all[2]
+	f.look = Vector3(0, 0, 1)
+	f.bank = 0.0
+	f.bank_v = 0.0
+	var prev := 0.0
+	var worst := 0.0
+	for i in 60:
+		var was := f.look
+		var yaw := atan2(was.x, was.z) + 2.0 * dt
+		f.look = Vector3(sin(yaw), 0, cos(yaw))
+		EcoFishLook.bank_step(f, was, f.look, dt)
+		var tip := EcoFishLook.tail_arc(EcoFishLook.TAIL_TIP, EcoFishLook.unpack_arc(
+			EcoFishLook.pack_shade(1.0, f.bank)))
+		worst = maxf(worst, absf(tip - prev))
+		prev = tip
+	ok(prev > 0.5 * EcoFishLook.ARC_AMP, "в повороте хвост к центру (+x): %.3f м" % prev)
+	ok(worst < 0.01, "изгиб копится плавно: за кадр кончик не дальше %.4f м" % worst)
+	f.agent.v = f.look * 2.0
+	var buf := FishView.pack(fish, 1.0)
+	near(FishView.arc_at(buf, f.index), float(EcoFishLook.arc_level(f.bank)) / EcoFishLook.ARC_LEVELS, 1e-6,
+		"изгиб — в буфере экземпляра")
+	near(FishView.shade_at(buf, f.index), EcoFishLook.shade(f), 1e-5, "оттенок в буфере — прежний")
+	for i in 60:
+		EcoFishLook.bank_step(f, f.look, f.look, dt)
+	eq(FishView.arc_at(FishView.pack(fish, 2.0), f.index), 0.0, "прямо — хвост прямой")
+	var code := FishView.shader_code()
+	ok(code.contains("half_a *") and code.contains("floor(INSTANCE_CUSTOM.a * 0.5)"), "шейдер гнёт хвост по дуге")
+
+
+## Округлить до half float (11 бит мантиссы) — так Compatibility хранит INSTANCE_CUSTOM.
+static func _half(x: float) -> float:
+	if x == 0.0:
+		return 0.0
+	var e := floorf(log(absf(x)) / log(2.0))
+	var step := pow(2.0, e - 10.0)
+	return roundf(x / step) * step
+
+
+func test_bank_leans_into_turn_smoothly() -> void:
+	var dt := 1.0 / 30.0
+	var w := _world()
+	var f := _fish(w).all[2]
+	f.look = Vector3(0, 0, 1)
+	var rate := 2.0   # курс растёт 2 рад/с — поворот к боку формы +x
+	var prev := 0.0
+	var worst := 0.0
+	for i in 60:
+		var was := f.look
+		var yaw := atan2(was.x, was.z) + rate * dt
+		f.look = Vector3(sin(yaw), 0, cos(yaw))
+		EcoFishLook.bank_step(f, was, f.look, dt)
+		worst = maxf(worst, absf(f.bank - prev))
+		prev = f.bank
+	near(f.bank, EcoFishLook.bank_want(rate), 0.01, "в долгом повороте — нужный крен")
+	ok(f.bank > 0.25 and f.bank <= EcoFishLook.BANK_MAX + 1e-6, "крен заметный, не больше BANK_MAX: %.2f" % f.bank)
+	ok(worst < 0.05, "крен копится плавно: за кадр не больше %.3f рад" % worst)
+	f.agent.v = f.look * 2.0
+	var b := EcoFishLook.basis(f, _straight(f))
+	var k := EcoFishLook.scale(f)
+	var center := Vector3(f.look.z, 0, -f.look.x)   # центр поворота — к боку +x формы
+	ok(b.y.normalized().dot(center) > 0.3, "спина наклонена к центру поворота")
+	near(b.determinant(), k * k * k, 1e-3, "крен без зеркала — грани не выворачиваются")
+	near(b.x.normalized().dot(b.z.normalized()), 0.0, 1e-4, "бок поперёк носа")
+	near(EcoFishLook.bank_want(-100.0), -EcoFishLook.BANK_MAX, 1e-6, "в обратную сторону — не больше BANK_MAX")
+	for i in 60:   # пошла прямо — выпрямляется
+		EcoFishLook.bank_step(f, f.look, f.look, dt)
+	ok(absf(f.bank) < 0.01, "прямо — без крена: %.3f" % f.bank)
+	f.bank = 0.4
+	EcoFishLook.bank_step(f, Vector3.ZERO, Vector3(0, 0, 1), dt)
+	eq(f.bank, 0.0, "не плыла — крена нет")
+	# в тревоге курс мечется влево-вправо каждые 0,1 с на полном LOOK_MAX — крен не перекидывается за кадр
+	f.bank = 0.0
+	f.bank_v = 0.0
+	var banks: Array[float] = []
+	for i in 90:
+		var was2 := f.look
+		var yaw2 := atan2(was2.x, was2.z) + EcoFish.LOOK_MAX * dt * (1.0 if (i / 3) % 2 == 0 else -1.0)
+		f.look = Vector3(sin(yaw2), 0, cos(yaw2))
+		EcoFishLook.bank_step(f, was2, f.look, dt)
+		banks.append(f.bank)
+	var acc := 0.0   # угловое ускорение крена по отсчётам через 3 кадра, как tools/jerk.gd
+	var k3 := 3.0 * dt
+	for i in range(6, banks.size()):
+		acc = maxf(acc, absf((banks[i] - banks[i - 3]) / k3 - (banks[i - 3] - banks[i - 6]) / k3) / k3)
+	ok(acc < 20.0, "мечется — крен без рывков: %.1f рад/с²" % acc)
+	f.bank = 0.0
+	f.bank_v = 0.0
+	EcoFishLook.bank_step(f, Vector3(0, 0, 1), Vector3(sin(0.5), 0, cos(0.5)), 2.0)
+	ok(f.bank > 0.0 and f.bank <= EcoFishLook.BANK_MAX + 1e-6, "длинный шаг дальней стаи — без перелёта: %.3f" % f.bank)
+	for i in 120:
+		w.step(dt)
+	var any := false
+	for g: EcoFish.Fish in _fish(w).all:
+		any = any or absf(g.bank) > 0.02
+		if absf(g.bank) > EcoFishLook.BANK_MAX + 1e-6:
+			ok(false, "крен в мире не больше BANK_MAX")
+			return
+	ok(any, "мир ведёт крен рыбок")
 
 
 ## Б3: нос `Fish.look` догоняет скорость — рывок от хищника разворачивает тело за доли секунды, а не за кадр.
@@ -806,6 +1069,7 @@ func test_no_bounce_on_floor_clamp() -> void:
 		var w := _world()
 		var fish := _fish(w)
 		var sh := fish.shoals[k]
+		_only(w, fish, sh)
 		w.ship.pos = sh.home + Vector3(0, 0, 40)  # ближе MID: стая шагает каждый шаг мира
 		w.run(4.0)
 		var pred := w.spawn("pred", sh.center + Vector3(6, 3, 0))

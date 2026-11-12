@@ -327,7 +327,7 @@ func test_fake_call_when_ship_near() -> void:
 			f = x
 	ok(not f.is_empty(), "VOICE с fake")
 	ok(f["ask"] == EcoEcho.ASK_PING or f["ask"] == EcoEcho.ASK_LIGHT, "с просьбой: %s" % f["ask"])
-	eq([f["role"], f["text"]], EcoEcho.FAKES[f["ask"]], "роль и текст по просьбе")
+	ok((EcoEcho.FAKES[f["ask"]] as Array).has([f["role"], f["id"], f["text"]]), "роль, ID и текст TXT-002 по просьбе")
 	ok(f["silent"], "первый спуск: старого кода нет — молчит на «Спросить код»")
 	eq(ec.bait, f["ask"], "просьба ждёт исполнения")
 	w.run(EcoEcho.FAKE_CD - 2.0)
@@ -470,7 +470,7 @@ func test_real_reports_near_bones() -> void:
 	var v := _voices(w.take_link())
 	eq(v.size(), 1, "настоящий доклад")
 	ok(not v[0]["fake"] and v[0]["ask"] == "" and not v[0]["silent"], "свой: с кодом, без просьбы")
-	ok(EcoEcho.REALS.has([v[0]["role"], v[0]["text"]]), "из списка докладов")
+	ok(EcoEcho.REALS.has([v[0]["role"], v[0]["id"], v[0]["text"]]), "из списка докладов, с ID")
 	w.run(EcoEcho.REAL_CD)
 	eq(_voices(w.take_link()).size(), 1, "раз в REAL_CD")
 
@@ -483,16 +483,65 @@ func test_voices_repeat_with_seed_and_reset() -> void:
 	var la: Array = []
 	var lb: Array = []
 	for i in 12:
-		la.append(ea.fake(a)["ask"])
-		lb.append(eb.fake(b)["ask"])
-	eq(la, lb, "одно зерно — те же просьбы")
+		la.append(ea.fake(a)["id"])
+		lb.append(eb.fake(b)["id"])
+	eq(la, lb, "одно зерно — те же реплики")
 	a.reset()
 	eq(ea.echo.fakes, 0, "сброс — счёт с нуля")
 	eq(ea.echo.bait, "", "без просьбы")
 	var lc: Array = []
 	for i in 12:
-		lc.append(ea.fake(a)["ask"])
+		lc.append(ea.fake(a)["id"])
 	eq(lc, la, "после сброса — те же")
+
+
+## Реплики TXT-002 (#1477): роль, ID и текст — как в принятой таблице `docs/teksty/TXT-002-golosa.md`.
+func _txt002() -> Dictionary:
+	var roles := {"Пилот": 0, "Сонарщик": 1, "Инженер": 2, "Биолог": 3}
+	var out := {}
+	var f := FileAccess.open("res://docs/teksty/TXT-002-golosa.md", FileAccess.READ)
+	ok(f != null, "таблица TXT-002 на месте")
+	if f == null:
+		return out
+	for line in f.get_as_text().split("\n"):
+		if not line.begins_with("| RADIO_"):
+			continue
+		var c := line.split("|")
+		out[c[1].strip_edges()] = [roles[c[2].strip_edges()], c[1].strip_edges(), c[3].strip_edges()]
+	return out
+
+
+func test_lines_from_txt002() -> void:
+	var doc := _txt002()
+	eq(doc.size(), 30, "в таблице 30 реплик")
+	var ids := {}
+	for ask: String in [EcoEcho.ASK_LIGHT, EcoEcho.ASK_PING]:
+		var lines: Array = EcoEcho.FAKES[ask]
+		eq(lines.size(), 5, "пять подделок на «%s»" % ask)
+		var who := {}
+		for l: Array in lines:
+			eq(l, doc.get(l[1], []), "подделка %s — как в TXT-002" % l[1])
+			ok(str(l[1]).begins_with("RADIO_FAKE_" + ("LIGHT" if ask == EcoEcho.ASK_LIGHT else "PULSE")), "просьба по ID")
+			who[l[0]] = true
+			ids[l[1]] = true
+		eq(who.size(), 4, "все четыре роли просят «%s»" % ask)
+	for l: Array in EcoEcho.REALS:
+		eq(l, doc.get(l[1], []), "доклад %s — как в TXT-002" % l[1])
+		ok(str(l[1]).begins_with("RADIO_TRUE_"), "настоящий — RADIO_TRUE")
+		ok(not str(l[2]).begins_with("Я у "), "«Я у…» мир не шлёт: не знает, кто у поста")
+		ids[l[1]] = true
+	eq(EcoEcho.REALS.size(), 16, "20 настоящих без четырёх «Я у…»")
+	eq(ids.size(), 26, "ID не повторяются")
+
+
+func test_fake_lines_vary() -> void:   # подделка — разные реплики TXT-002, а не одна строка на просьбу
+	var w := _world()
+	var e := _sys(w, EcoEcho) as EcoEcho
+	var seen := {}
+	for i in 40:
+		var v := e.fake(w, EcoEcho.ASK_PING)
+		seen[v["id"]] = true
+	ok(seen.size() >= 4, "за 40 вызовов — не меньше четырёх разных: %d" % seen.size())
 
 
 # ---------- Сцена ----------

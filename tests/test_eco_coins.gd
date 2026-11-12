@@ -134,7 +134,93 @@ func test_glazun_grabs_coin_overhead() -> void:
 	eq(ev[0].text(), "Из песка что-то схватило круглую рыбку")
 	w.scanned = func(sp: String) -> bool: return true
 	eq(ev[0].text(), "Песчаный глазун схватил монетника")
-	near(EcoCoins.glazun_transform(gz).origin.y, gz.pos.y + 0.35 * gz.lunge, 1e-5, "тело приподнято")
+	near(EcoCoins.glazun_transform(gz).origin.y, gz.pos.y + 0.35 * EcoCoins.lunge_k(gz), 1e-5, "тело приподнято по позе")
+
+
+## Строка засады на приборах — раз за эпизод наблюдения (гейм-дизайнер, #1400, 12.11): повтор раньше
+## EcoWorld.ONCE_GAP с идёт OBSERVE без текста (журнал тот же), позже — снова со строкой. Глаза в луче — не трогаем.
+func _ambush_texts(w: EcoWorld) -> Array[String]:
+	var out: Array[String] = []
+	for e in w.take_link():
+		if e["type"] == EcoLink.OBSERVE and e["species"] == EcoCoins.GLAZUN:
+			out.append("%s:%s" % [e["note"], e["text"]])
+	return out
+
+
+func _grab(w: EcoWorld) -> void:
+	var sc := _coins(w).schools[0]
+	var gz := sc.glazun
+	gz.cd = 0.0
+	for cn in sc.members:
+		if cn.alive:
+			cn.pos = gz.pos + Vector3(0.3, 1.0, 0)
+			cn.goal = cn.pos
+			cn.goal_t = 10.0
+			break
+	w.step(0.02)
+
+
+func test_ambush_line_once_per_episode() -> void:
+	var w := _world()
+	w.ship.pos = SPOTS[0] + Vector3(0, 7, 20)
+	_grab(w)
+	eq(_ambush_texts(w), ["ambush:Из песка что-то схватило круглую рыбку"] as Array[String], "первая — со строкой")
+	w.time += 20.0
+	_grab(w)
+	eq(_ambush_texts(w), ["ambush:"] as Array[String], "повтор через 20 с — без строки, но в журнал")
+	w.time += EcoWorld.ONCE_GAP - 1.0
+	_grab(w)
+	eq(_ambush_texts(w), ["ambush:"] as Array[String], "повторы продлевают эпизод")
+	w.time += EcoWorld.ONCE_GAP + 1.0
+	_grab(w)
+	eq(_ambush_texts(w), ["ambush:Из песка что-то схватило круглую рыбку"] as Array[String], "новый эпизод — снова")
+	# Глаза в луче и чужие строки повтор не гасит.
+	var eyes := func() -> String: return "два глаза"
+	for i in 2:
+		w.bus.emit(EcoCoins.GLAZUN, "eyes", w.ship.pos, eyes)
+	eq(_ambush_texts(w), ["eyes:два глаза", "eyes:два глаза"] as Array[String], "глаза — каждый раз")
+	# Неуслышанная засада (дальше EcoBus.HEARING) эпизод не начинает.
+	w.reset(1)
+	w.ship.pos = SPOTS[0] + Vector3(0, 7, EcoBus.HEARING + 20.0)
+	_grab(w)
+	eq(_ambush_texts(w).size(), 0, "далеко — не слышно")
+	w.ship.pos = SPOTS[0] + Vector3(0, 7, 20)
+	w.time += 5.0
+	_grab(w)
+	eq(_ambush_texts(w), ["ambush:Из песка что-то схватило круглую рыбку"] as Array[String], "подплыли — строка")
+
+
+## Бросок из песка — за EcoCoins.RISE, а не за кадр: высота тела за кадр меняется не больше наклона smoothstep, тело
+## доходит до 0,35 м и опадает вместе с lunge (раньше 0 → 0,35 м и 0,4 рад за один шаг, tools/jerk.gd).
+func test_glazun_lunge_rises_without_snap() -> void:
+	var w := _world()
+	var c := _coins(w)
+	var sc := c.schools[0]
+	var gz := sc.glazun
+	gz.cd = 0.0
+	var cn := sc.members[0]
+	cn.pos = gz.pos + Vector3(0.3, 1.0, 0)
+	cn.goal = cn.pos
+	cn.goal_t = 10.0
+	var dt := 1.0 / 30.0
+	var prev := EcoCoins.glazun_transform(gz).origin.y - gz.pos.y
+	var worst := 0.0
+	var top := 0.0
+	var top_t := -1.0
+	for i in 45:
+		w.step(dt)
+		var h := EcoCoins.glazun_transform(gz).origin.y - gz.pos.y
+		worst = maxf(worst, absf(h - prev))
+		if h > top + 1e-4:
+			top = h
+			top_t = (i + 1) * dt
+		prev = h
+	ok(not cn.alive, "схвачен")
+	ok(worst <= 0.35 * 1.5 * dt / EcoCoins.RISE + 1e-3, "за кадр не больше %.3f м: %.3f" % [0.35 * 1.5 * dt / EcoCoins.RISE, worst])
+	ok(worst < 0.35 * 0.5, "не прыжком: %.3f" % worst)
+	ok(top > 0.3, "вышел из песка: %.2f м" % top)
+	ok(top_t <= EcoCoins.RISE + 2 * dt, "быстро — за %.2f с" % top_t)
+	ok(prev < 0.05, "к 1,5 с снова в песке: %.2f" % prev)
 
 
 func test_glazun_waits_and_ignores_high_coins() -> void:
@@ -501,6 +587,28 @@ func test_coin_turns_smoothly() -> void:
 	ok(cn.look.dot(Vector3.RIGHT) > 0.99, "за 2 с догнал путь")
 
 
+## Поворот с инерцией (Б3): новая цель за спиной — скорость поворота носа набирается не быстрее TURN_ACCEL, а не
+## срывается на TURN_MAX за кадр, и к курсу подходит без перелёта (tools/jerk.gd: было до 66 рад/с²).
+func test_coin_turn_rate_eases() -> void:
+	var cn := EcoCoins.Coin.new()   # нос в +Z
+	cn.vel = Vector3(-0.2, 0, -1)    # почти за спиной
+	var want := cn.vel.normalized()
+	var dt := 1.0 / 30.0
+	var prev := 0.0
+	var worst := 0.0
+	for i in 90:
+		var from := cn.look
+		EcoCoins.turn(cn, dt)
+		var rate := from.angle_to(cn.look) / dt
+		worst = maxf(worst, absf(rate - prev) / dt)
+		ok(rate <= EcoCoins.TURN_MAX + 1e-3, "не быстрее TURN_MAX")
+		prev = rate
+	ok(worst <= EcoCoins.TURN_ACCEL + 1e-2, "разгон и торможение поворота — не быстрее TURN_ACCEL: %.2f рад/с²" % worst)
+	ok(cn.look.angle_to(want) < 0.01, "за 3 с довернул: %.3f" % cn.look.angle_to(want))
+	_swim(cn, cn.vel, 30, dt)
+	ok(cn.look.angle_to(want) < 0.01, "и держит курс, не качается")
+
+
 func test_coin_banks_into_turn() -> void:
 	var cn := EcoCoins.Coin.new()  # нос в +Z, phase 0: в t = 0 покачивания нет
 	_swim(cn, Vector3(1, 0, 0), 4)  # +X при носе в +Z — поворот влево
@@ -800,8 +908,10 @@ func test_view_glazun_breathes_held_in_beam() -> void:
 	var free := CoinsView.glazun_breath(gz, t0, 0.0).y - 1.0
 	near(CoinsView.glazun_breath(gz, t0, 1.0).y - 1.0, free * CoinsView.GLAZUN_HELD, 1e-6, "в луче — доля размаха")
 	gz.lunge = 1.0
+	gz.rise = 1.0
 	eq(CoinsView.glazun_breath(gz, t0, 0.0), Vector3.ONE, "в броске не дышит")
 	gz.lunge = 0.0
+	gz.rise = 0.0
 	ok(absf(CoinsView.glazun_breath(c.glazuns[0], t0, 0.0).y - CoinsView.glazun_breath(c.glazuns[1], t0, 0.0).y) > 1e-3
 			if c.glazuns.size() > 1 else true, "у каждого своя фаза")
 	# свет приходит плавно: размах не прыгает за кадр

@@ -12,9 +12,15 @@ const ID := "ezh"
 ## Рощи — у этих стай светляков (E.shoals[gi + 1]); стай должно быть хотя бы три.
 const SHOALS: Array[int] = [1, 2]
 const MIN_SHOALS := 3
+## Три рощи на переходе 00 → 01 (#1400, постановка в docs/urovni/sloj-1.md): густая сторона прохода — восточная, от
+## огнецвета у старта (EcoCoral.BASES[1]) мимо трубного органа (EcoOrgan.SPOTS[1]) к стае 5 у 01; западная остаётся
+## открытым обходом. Третья — впереди середины перехода (t ≈ 0,72), чтобы из середины у оси взгляда пилота справа
+## стояла заросль, а не пустой песок. Края рощ — в ROUTE_GAP от прямой 00 → 01, свободный габарит прохода не трогают.
+const ROUTE: Array[Vector2] = [Vector2(36.0, 38.0), Vector2(45.0, 14.0), Vector2(47.0, -4.0)]
+const ROUTE_GAP := 11.0
 ## Рощи без своей стаи (x, z): Тихая заводь 09 (EcoCove, #831) — ежи там пасутся, а прятаться в ней некому;
-## две у террасы врат 07 — рама позади арки (EcoGate, #831).
-const EXTRA: Array[Vector2] = [EcoCove.KELP, EcoGate.KELP[0], EcoGate.KELP[1]]
+## две у террасы врат 07 — рама позади арки (EcoGate, #831); три — на переходе 00 → 01 (ROUTE).
+const EXTRA: Array[Vector2] = [EcoCove.KELP, EcoGate.KELP[0], EcoGate.KELP[1], ROUTE[0], ROUTE[1], ROUTE[2]]
 ## Лент в роще и радиус рощи (KELP_N, KELP_R); ежей у рощи (URCH_N).
 const KELP_N := 34
 const KELP_R := 7.0
@@ -78,6 +84,13 @@ const SHELTER_UP := 5.0
 const GROVE_PAD := 1.5
 ## Изменение ленты, после которого её надо перерисовать (s.drawn).
 const REDRAW := 0.01
+## Ленточник глушит шум (бестиарий, #1338): корабль в густой роще — ближе KELP_R + MUFFLE_PAD к середине по
+## горизонтали и не выше MUFFLE_UP над её дном (лента до 5,5 м, корабль держится в 3 м над дном) — хищник не слышит
+## двигатели. Свет, сонар и светящийся след ленты не прячут. Объеденная роща (cover < COVER_MIN) не глушит.
+const MUFFLE_PAD := 1.5
+const MUFFLE_UP := 7.5
+## Наблюдение «kelp» у серпохвоста — раз в MUFFLE_CD у рощи.
+const MUFFLE_CD := 40.0
 
 
 ## Лента ленточника.
@@ -113,6 +126,8 @@ class Grove:
 	var cover := 1.0
 	var msg_cd := 0.0
 	var graze_cd := 0.0
+	## Пауза наблюдения «ленточник заглушил двигатели» (muffled).
+	var muffle_cd := 0.0
 	var stalks: Array[Stalk] = []
 	## Ленты рощи пора переписать в буфер вида (KelpView.sync переписывает только такие рощи).
 	var redraw := true
@@ -142,6 +157,11 @@ class Urchin:
 	var gx := INF
 	var gz := INF
 	var gh := 0.0
+	## Уклон дна в этой точке (м на м по x и z): между точками ёж идёт по нему (`urchin_floor`, #1400).
+	var sx := 0.0
+	var sz := 0.0
+	## Чем прежний уклон разошёлся с дном в новой точке (м): гаснет за следующий шаг пути, а не скачком.
+	var go := 0.0
 	## Набранное время вдали (EcoLod): шагает реже, догоняя пропущенное.
 	var lag := 0.0
 
@@ -234,6 +254,7 @@ func step(world: EcoWorld, dt: float) -> void:
 	for gr in groves:
 		gr.msg_cd -= dt
 		gr.graze_cd -= dt
+		gr.muffle_cd -= dt
 		var sum := 0.0
 		for s in gr.stalks:
 			if s.eater < 0:
@@ -422,6 +443,26 @@ func grove_at(p: Vector3) -> Grove:
 	return null
 
 
+## Густая роща, в которой корабль (#1338): шум его двигателей хищникам не слышен. null — корабль не в роще
+## или роща объедена шипоежами.
+func muffling(world: EcoWorld) -> Grove:
+	var p := world.ship.pos
+	for gr in groves:
+		if gr.cover < COVER_MIN or p.y - gr.center.y > MUFFLE_UP:
+			continue
+		if Vector2(p.x - gr.center.x, p.z - gr.center.z).length() < KELP_R + MUFFLE_PAD:
+			return gr
+	return null
+
+
+## Ленточник спрятал двигатели от серпохвоста: watching — тот патрулирует или проверяет звук. Наблюдение
+## серпохвоста «kelp» — раз в MUFFLE_CD у рощи (биолог объясняет укрытие по журналу).
+func muffled(world: EcoWorld, gr: Grove, watching: bool) -> void:
+	if watching and gr.muffle_cd <= 0.0:
+		gr.muffle_cd = MUFFLE_CD
+		world.emit(EcoPred.ID, "kelp", gr.center, _muffle_text(world))
+
+
 ## Серпохвост потерял стаю в ленточнике: наблюдение светляка «kelp», раз в MSG_CD у рощи.
 func hid_fish(world: EcoWorld, gr: Grove) -> void:
 	if gr.msg_cd <= 0.0:
@@ -484,17 +525,37 @@ static func urchin_basis(u: Urchin, t: float) -> Basis:
 
 
 ## Дно под ежом u: пересчитывается, только когда ёж отполз дальше URCHIN_GROUND_STEP от прошлой точки (issue #1247:
-## ползущие ежи звали fbm каждый шаг — 14 вызовов за кадр при 0,005 м хода за кадр). Отличие — не больше уклона дна
-## на 0,1 м: на глаз незаметно, ёж и так стоит на UP над дном.
-const URCHIN_GROUND_STEP := 0.1
+## ползущие ежи звали fbm каждый шаг — 14 вызовов за кадр при 0,005 м хода за кадр). В точке запоминается и уклон
+## (ещё два чтения дна в URCHIN_SLOPE_D по x и z в сторону хода), между точками ёж идёт по нему (#1400: по запомненной
+## высоте ёж на крутом склоне съезжал ступенькой 0,14 м за кадр раз в 11 кадров, `tools/jerk.gd scena=2 move=3`).
+## Дно — сетка треугольников: перешёл на треугольник с другим уклоном — в новой точке высота разойдётся с уклоном
+## прежней; расхождение `go` гаснет за следующий шаг пути, а не скачком. Шаг вдвое длиннее прежнего 0,1 м — чтений
+## дна на метр пути в полтора раза больше, а не втрое.
+const URCHIN_GROUND_STEP := 0.2
+const URCHIN_SLOPE_D := 0.02
+## Расхождение больше — не догоняет плавно, а встаёт на дно (появился заново, перенесли): ниже UP — ушёл бы в грунт.
+const URCHIN_GO_MAX := UP
 func urchin_floor(u: Urchin) -> float:
 	var dx := u.pos.x - u.gx
 	var dz := u.pos.z - u.gz
-	if dx * dx + dz * dz > URCHIN_GROUND_STEP * URCHIN_GROUND_STEP:
+	var d2 := dx * dx + dz * dz
+	if d2 > URCHIN_GROUND_STEP * URCHIN_GROUND_STEP:
+		var was := u.gh + u.sx * dx + u.sz * dz + u.go * _go_k(d2)
+		var ax := -URCHIN_SLOPE_D if dx < 0.0 else URCHIN_SLOPE_D
+		var az := -URCHIN_SLOPE_D if dz < 0.0 else URCHIN_SLOPE_D
 		u.gx = u.pos.x
 		u.gz = u.pos.z
 		u.gh = _floor(u.pos.x, u.pos.z, u.pos.y - UP)
-	return u.gh
+		u.sx = (_floor(u.pos.x + ax, u.pos.z, u.gh) - u.gh) / ax
+		u.sz = (_floor(u.pos.x, u.pos.z + az, u.gh) - u.gh) / az
+		u.go = was - u.gh if is_finite(was) and absf(was - u.gh) < URCHIN_GO_MAX else 0.0
+		return u.gh + u.go
+	return u.gh + u.sx * dx + u.sz * dz + u.go * _go_k(d2)
+
+
+## Доля расхождения `go`, что осталась, когда ёж отполз от точки на √d2.
+static func _go_k(d2: float) -> float:
+	return maxf(0.0, 1.0 - sqrt(d2) / URCHIN_GROUND_STEP)
 
 
 func _floor(x: float, z: float, fallback: float) -> float:
@@ -517,6 +578,14 @@ static func _kelp_text(world: EcoWorld) -> Callable:
 		var fish_n := w.nm(EcoFish.ID) if w else Species.called(EcoFish.ID)
 		var pred := w.nm(EcoPred.ID) if w else Species.called(EcoPred.ID)
 		return "%s: стая спряталась в ленточнике, %s её потерял" % [Species.cap(fish_n), pred]
+
+
+static func _muffle_text(world: EcoWorld) -> Callable:
+	var wr: WeakRef = weakref(world)
+	return func() -> String:
+		var w: EcoWorld = wr.get_ref()
+		var pred := w.nm(EcoPred.ID) if w else Species.called(EcoPred.ID)
+		return "Ленточник глушит двигатели — %s не слышит корабль" % pred
 
 
 static func _bare_text(world: EcoWorld) -> Callable:

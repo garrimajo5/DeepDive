@@ -53,6 +53,33 @@ static func ensure() -> void:
 		AudioServer.set_bus_send(i, "Master")
 
 
+## Шина «Эфир» для голосов связи SND-009 — под «Голосами» (громкость и ползунок — их), с обработкой рации:
+## срез низа и верха, лёгкий перегруз (`VoiceFiles.RADIO_*`). Не в BUSES: своего ползунка нет. Индекс шины.
+const RADIO := "Эфир"
+
+
+static func radio_bus() -> int:
+	ensure()
+	var i := AudioServer.get_bus_index(RADIO)
+	if i >= 0:
+		return i
+	AudioServer.add_bus()
+	i = AudioServer.bus_count - 1
+	AudioServer.set_bus_name(i, RADIO)
+	AudioServer.set_bus_send(i, VOICE)
+	var lo := AudioEffectHighPassFilter.new()
+	lo.cutoff_hz = VoiceFiles.RADIO_LOW_CUT
+	AudioServer.add_bus_effect(i, lo)
+	var hi := AudioEffectLowPassFilter.new()
+	hi.cutoff_hz = VoiceFiles.RADIO_HIGH_CUT
+	AudioServer.add_bus_effect(i, hi)
+	var d := AudioEffectDistortion.new()
+	d.mode = AudioEffectDistortion.MODE_OVERDRIVE
+	d.drive = VoiceFiles.RADIO_DRIVE
+	AudioServer.add_bus_effect(i, d)
+	return i
+
+
 ## Доля → дБ шины: 0 — тишина.
 static func to_db(k: float) -> float:
 	return MUTE_DB if k <= 0.001 else maxf(MUTE_DB, linear_to_db(k))

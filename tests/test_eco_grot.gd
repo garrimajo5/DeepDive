@@ -30,6 +30,16 @@ func _world() -> EcoWorld:
 	return w
 
 
+## Гротовик один, без стай и хищников: его ход от них не зависит (стая на спине только берёт дом), а шаг мира
+## со стаями в долгих тестах хода — главная цена файла (12 тыс. шагов — ~12 с).
+func _lone(ground: Callable = _flat) -> EcoWorld:
+	var w := EcoWorld.new()
+	w.ground = ground
+	w.ship.pos = FAR
+	w.add(EcoGrot.new())
+	return w
+
+
 func _sys(w: EcoWorld, cls: Variant) -> Variant:
 	for s in w.systems:
 		if is_instance_of(s, cls):
@@ -53,7 +63,7 @@ func test_starts_on_route_on_floor() -> void:
 
 
 func test_walks_route_in_order_slowly() -> void:
-	var w := _world()
+	var w := _lone()
 	var gr := (_sys(w, EcoGrot) as EcoGrot).grot
 	var seen: Array[int] = []
 	var last := Vector2(gr.p.x, gr.p.z)
@@ -145,8 +155,10 @@ func test_riders_travel_with_grot() -> void:
 	var g: EcoGrot = _sys(w, EcoGrot)
 	var sh := g.shoal
 	var start := g.grot.back
-	w.run(100.0)
-	# стая бродит у дома на спине (до ~10 м в отдельные мгновения) — среднее за последние 20 с, а не один снимок
+	# 60 с хода + 20 с среднего: гротовик уже ~34 м от старта (0,45 м/с), стая за 60–80 с — в среднем 4,9 м от рифа
+	# (за 100–120 с было 6,6 м) — запас тот же, а мира со стаями на треть меньше (#1350)
+	w.run(60.0)
+	# стая бродит у дома на спине (до ~10 м в отдельные мгновения) — среднее за 20 с, а не один снимок
 	var d := 0.0
 	for i in 40:
 		w.run(0.5)
@@ -257,7 +269,7 @@ func test_ship_bump_makes_shy() -> void:
 
 
 func test_shy_cooldown_and_ship_above() -> void:
-	var w := _world()
+	var w := _lone()
 	var g: EcoGrot = _sys(w, EcoGrot)
 	var gr := g.grot
 	w.ship.pos = Vector3(gr.p.x, gr.top + 1.0, gr.p.z)
@@ -271,7 +283,7 @@ func test_shy_cooldown_and_ship_above() -> void:
 
 
 func test_drift_note_near_ship() -> void:
-	var w := _world()
+	var w := _lone()
 	var g: EcoGrot = _sys(w, EcoGrot)
 	w.run(2.0)
 	eq(_notes(w, "grot", "drift").size(), 0, "далеко — без наблюдения")
@@ -305,18 +317,9 @@ static func _slope_x(x: float, _z: float) -> float:
 	return FLAT + x * SLOPE_K
 
 
-func _slope_world(ground: Callable) -> EcoWorld:
-	var w := EcoWorld.new()
-	w.ground = ground
-	w.ship.pos = FAR
-	var f := w.add(EcoFish.new()) as EcoFish
-	w.add(EcoGrot.new(f))
-	return w
-
-
 ## Раньше панцирь стоял ровно: на склоне верхний край уходил в дно, нижний висел. Теперь нос и борта ложатся по дну.
 func test_shell_lies_along_slope() -> void:
-	var w := _slope_world(_slope_x)
+	var w := _lone(_slope_x)
 	var gr := (_sys(w, EcoGrot) as EcoGrot).grot
 	var want := atan(SLOPE_K)
 	for i in 120:  # 60 с — курс меняется, наклон догоняет
@@ -352,7 +355,7 @@ func test_tilt_feels_ground_rarely() -> void:
 	var counted := func(x: float, z: float) -> float:
 		calls[0] += 1
 		return FLAT + x * SLOPE_K
-	var w := _slope_world(counted)
+	var w := _lone(counted)
 	for i in 120:
 		w.run(0.5)  # разогнался, курс выровнялся
 	calls[0] = 0
@@ -639,7 +642,7 @@ func test_ship_cannot_pass_through_grot() -> void:
 
 
 func test_grot_does_not_walk_into_ship() -> void:
-	var w := _world()
+	var w := _lone()
 	var g: EcoGrot = _sys(w, EcoGrot)
 	var gr := g.grot
 	# корабль стоит на пути ко второй точке круга, в 20 м впереди

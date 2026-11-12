@@ -301,3 +301,47 @@ func test_view_in_eco_view() -> void:
 	eq(ev.fringe_view.strands.multimesh.mesh, ev.fringe_view.mesh_full, "обратно — две")
 	ev.queue_free()
 	await frames(1)
+
+
+## Карты пряди ART-083 (#922): материал берёт цвет, маску следа и нормали; силуэт — в альфе (узлы шире стебля),
+## маска ярче на узлах, чем на стебле между ними; конец тает; карты сжаты для видеокарты (нормали — режимом нормалей).
+func test_view_uses_art083_maps() -> void:
+	var f := EcoFringe.new()
+	f.reset(null)
+	var v := FringeView.new(f)
+	var mat := v.material
+	for key in ["map_color", "map_glow", "map_normal"]:
+		ok(mat.get_shader_parameter(key) is Texture2D, "карта %s в материале" % key)
+	var code := mat.shader.code
+	ok(code.contains("NORMAL_MAP ="), "рельеф узлов и щели — картой нормалей")
+	ok(code.contains("ALPHA = tex.a"), "силуэт пряди — альфа карты")
+	ok(not code.contains("node_at"), "процедурных узлов больше нет")
+	var col := Image.load_from_file(ProjectSettings.globalize_path(FringeView.MAP_COLOR))
+	var glow := Image.load_from_file(ProjectSettings.globalize_path(FringeView.MAP_GLOW))
+	eq(col.get_size(), Vector2i(256, 1024), "цвет 256×1024")
+	eq(glow.get_size(), Vector2i(256, 1024), "маска того же размера")
+	var wide := func(y: int) -> int:
+		var n := 0
+		for x in 256:
+			if col.get_pixel(x, y).a > 0.1:
+				n += 1
+		return n
+	var stem := 1024
+	for k in FringeView.NODES.size() - 1:
+		var mid := int((FringeView.NODES[k] + FringeView.NODES[k + 1]) * 512.0)
+		stem = mini(stem, wide.call(mid))
+	for vv in FringeView.NODES.slice(0, 6):
+		var y := int(vv * 1024.0)
+		ok(wide.call(y) > stem * 1.5, "узел на %.2f шире стебля (%d > %d)" % [vv, wide.call(y), stem])
+		ok(glow.get_pixel(128 + 40, y).r > glow.get_pixel(128 + 40, int((vv + 0.04) * 1024.0)).r or
+				glow.get_pixel(128, y).r >= 0.9, "маска ярче на узле %.2f" % vv)
+	ok(stem * FringeView.SPAN / 256.0 * FringeView.WIDTH > 0.02, "стебель в мире не тоньше 2 см")
+	eq(col.get_pixel(128, 1023).a < 0.5, true, "конец пряди тает")
+	for m in [FringeView.MAP_COLOR, FringeView.MAP_GLOW, FringeView.MAP_NORMAL]:
+		var cfg := ConfigFile.new()
+		cfg.load(m + ".import")
+		eq(int(cfg.get_value("params", "compress/mode")), 2, "%s сжата для видеокарты" % m)
+	var cfg_n := ConfigFile.new()
+	cfg_n.load(FringeView.MAP_NORMAL + ".import")
+	eq(int(cfg_n.get_value("params", "compress/normal_map")), 1, "нормали — режимом нормалей")
+	v.free()

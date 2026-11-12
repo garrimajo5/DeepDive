@@ -2,7 +2,7 @@ class_name FishView
 extends MultiMeshInstance3D
 ## Светляки-полосники в сцене: все рыбки (стаи рифа, кроны и молодь в костях) — один MultiMesh (один вызов отрисовки). Форма — EcoFishLook, место
 ## и курс каждой рыбки — EcoFishLook.basis, цвет полос — EcoFishLook.stripe в INSTANCE_CUSTOM.rgb, оттенок тела особи
-## (EcoFishLook.shade, Б4) — в INSTANCE_CUSTOM.a; размер и ритм виляния у каждой свои. Краска вершины лежит
+## (EcoFishLook.shade, Б4) и ступень изгиба хвоста по дуге поворота (EcoFishLook.pack_shade) — в INSTANCE_CUSTOM.a; размер и ритм виляния у каждой свои. Краска вершины лежит
 ## в цвете вершины (r: 0 — тело, 1 — полоса, FIN_GLOW — конец хвоста): тело тёмное и освещается, полосы светятся сами.
 ## Хвост и корма гнутся бегущей волной (EcoFishLook.tail_wave, Б3): фаза особи — альфа цвета экземпляра (Godot множит
 ## цвет экземпляра на цвет вершины, у вершин альфа 1); «Экономно» — sway_k = 0 через EcoShaders.follow / set_sway_lite.
@@ -30,7 +30,9 @@ varying float paint;
 varying float shade;
 void vertex() {
 	glow = INSTANCE_CUSTOM.rgb;
-	shade = INSTANCE_CUSTOM.a;
+	// оттенок и ступень изгиба по дуге в одном числе — двойник EcoFishLook.unpack_shade / unpack_arc
+	float half_a = floor(INSTANCE_CUSTOM.a * 0.5);
+	shade = INSTANCE_CUSTOM.a - 2.0 * half_a;
 	paint = COLOR.r;
 	// волна хвоста — двойник EcoFishLook.tail_wave
 	float a = COLOR.a;
@@ -38,6 +40,8 @@ void vertex() {
 	float s = clamp((%s - VERTEX.z) / %s, 0.0, 1.0);
 	float rate = %s * (%s + %s * fract(a * 7.13));
 	VERTEX.x += sin(TIME * rate + a * 6.2831853 + VERTEX.z * %s) * %s * s * s * sway_k;
+	// хвост по дуге поворота — двойник EcoFishLook.tail_arc
+	VERTEX.x += half_a * %s * s * s * sway_k;
 	// взмах грудных плавников (вес — канал b, у светляка 0) — двойник EcoFishLook.fin_flap
 	VERTEX.y += sin(TIME * %s + a * 6.2831853 + sign(VERTEX.x) * %s) * %s * COLOR.b * sway_k;
 }
@@ -172,7 +176,8 @@ static func build_mesh() -> ArrayMesh:
 static func shader_code() -> String:
 	var L := EcoFishLook
 	return SHADER % [_f(L.TAIL_FROM), _f(L.TAIL_FROM - L.TAIL_TIP), _f(L.TAIL_RATE), _f(1.0 - L.TAIL_RATE_SPREAD),
-		_f(2.0 * L.TAIL_RATE_SPREAD), _f(L.TAIL_K), _f(L.TAIL_AMP), _f(L.PEC_RATE), _f(L.PEC_SKEW), _f(L.PEC_AMP),
+		_f(2.0 * L.TAIL_RATE_SPREAD), _f(L.TAIL_K), _f(L.TAIL_AMP),
+		_f(L.ARC_AMP / L.ARC_LEVELS), _f(L.PEC_RATE), _f(L.PEC_SKEW), _f(L.PEC_AMP),
 		EcoIris.glsl(), _f(EcoIris.SHIFT)]
 
 
@@ -209,6 +214,8 @@ const STRIDE := 20
 ## хвоста — считается раз (хеш на каждую рыбку в каждом кадре дорог).
 static var _vary := PackedFloat32Array()
 const VARY := 4
+## Ступеней изгиба хвоста на 1 рад крена (EcoFishLook.arc_level).
+const ARC_PER_RAD := EcoFishLook.ARC_LEVELS / EcoFishLook.BANK_MAX
 
 
 static func _vary_of(system: EcoFish) -> PackedFloat32Array:
@@ -263,7 +270,9 @@ static func fill(out: PackedFloat32Array, system: EcoFish, t: float, moved_only:
 			out[i + 16] = col.r * k
 			out[i + 17] = col.g * k
 			out[i + 18] = col.b * k
-			out[i + 19] = vary[f.index * VARY + 2]
+			# оттенок + ступень изгиба хвоста по дуге — EcoFishLook.pack_shade без вызова на рыбку
+			var lv := clampf(roundf(f.bank * ARC_PER_RAD), -EcoFishLook.ARC_LEVELS, EcoFishLook.ARC_LEVELS) if a.alive else 0.0
+			out[i + 19] = vary[f.index * VARY + 2] + 2.0 * lv
 			if not a.alive:
 				for c in [0, 1, 2, 4, 5, 6, 8, 9, 10]:
 					out[i + c] = 0.0  # съеденная — нулевой basis
@@ -278,6 +287,13 @@ static func fill(out: PackedFloat32Array, system: EcoFish, t: float, moved_only:
 			var side := Vector3(fw.z, 0, -fw.x)
 			side = side.normalized() if side.length() > 1e-4 else Vector3(1, 0, 0)
 			var up := fw.cross(side)
+			var bk := f.bank   # крен в повороте — двойник EcoFishLook.frame
+			if absf(bk) > 1e-3:
+				var bc := cos(bk)
+				var bs := sin(bk)
+				var up2 := up * bc + side * bs
+				side = side * bc - up * bs
+				up = up2
 			var sz := f.size * vary[f.index * VARY]  # своя у особи, молодь мельче
 			var age := t - f.born   # вернувшаяся после съедения растёт (grow_k); не съедали — born = −INF
 			if age < FISH_RISE and age >= 0.0:
@@ -330,4 +346,9 @@ static func tail_phase_at(buf: PackedFloat32Array, n: int) -> float:
 
 ## Оттенок тела рыбки n из буфера (EcoFishLook.shade).
 static func shade_at(buf: PackedFloat32Array, n: int) -> float:
-	return buf[n * STRIDE + 19]
+	return EcoFishLook.unpack_shade(buf[n * STRIDE + 19])
+
+
+## Доля изгиба хвоста по дуге поворота рыбки n из буфера (EcoFishLook.unpack_arc).
+static func arc_at(buf: PackedFloat32Array, n: int) -> float:
+	return EcoFishLook.unpack_arc(buf[n * STRIDE + 19])

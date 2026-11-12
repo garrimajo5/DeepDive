@@ -25,7 +25,7 @@ func test_hit_opens_by_rules() -> void:
 	ok(not b.on_hit(9, 80.0), "удар 9 % борт не пробивает")
 	ok(b.on_hit(12, 80.0), "укус 12 % — пробоина")
 	eq(b.active, b.all[0], "первая — на мостике")
-	eq(msgs[0], "Пробоина: мостик — держите «Сварка» у пробоины", "сообщение")
+	ok(msgs.is_empty(), "#1428: начало пробоины — без сообщения, его говорит строка тревоги: %s" % [msgs])
 	ok(not b.on_hit(30, 60.0), "вторая, пока открыта первая, — нет")
 	b.hold(10.0)
 	ok(b.active == null, "заварили")
@@ -100,7 +100,8 @@ func test_scene_vent_sign_keeps_alarm() -> void:
 	main.on_eco_event(EcoLink.message(EcoVent.WARN_TEXT))
 	main.step(0.1)
 	var parts := main.status_parts()
-	ok(str(parts[0]).begins_with("ПРОБОИНА · МОСТИК"), "первой — пробоина, не строка мира: %s" % parts[0])
+	var alarm_row: Array = main.status_rows()[2]
+	ok(str(alarm_row[0]).begins_with("ПРОБОИНА · вода"), "в ряду сообщений первой — пробоина, не строка мира: %s" % [alarm_row])
 	ok(parts.has(EcoVent.WARN_TEXT), "знак шлейфа тоже на приборах")
 	ok(main.sound_mix.tension, "тревога — сведение напряжения")
 	ok(main.sound_mix.target()[SoundMix.WORLD] < main.sound_mix.target()[SoundMix.SHIP] * 0.5,
@@ -115,7 +116,11 @@ func test_scene_bite_breach_weld() -> void:
 	await frames(1)
 	main.on_eco_event({"type": EcoLink.HIT, "damage": 0.12, "by": "Серпохвост"})
 	ok(main.breach.active == main.breach.all[0], "укус пробил мостик")
-	eq(main.message.text, "Пробоина: мостик — держите «Сварка» у пробоины", "на приборах")
+	ok(not main.message.text.begins_with("Пробоина"), "#1428: строка 2 не повторяет тревогу: %s" % main.message.text)
+	main.step(0.1)
+	var rows := main.status_rows()
+	ok(not str(rows).contains("Пробоина:"), "в строке приборов одна тревога: %s" % [rows])
+	ok(str(rows[2][0]).begins_with("ПРОБОИНА"), "строка 3 — тревога: %s" % [rows])
 	for i in 20:
 		main.step(0.1)
 	ok(main.breach_view.spot_node.visible and main.breach_view.jet_mm.visible, "струя бьёт")
@@ -123,7 +128,7 @@ func test_scene_bite_breach_weld() -> void:
 	ok(main.breach_view.siren.playing and main.breach_view.jet_sound.playing, "воет сирена, шумит струя")
 	ok(main.breach_view.jet_sound.global_position.distance_to(main.breach_view.spot_node.global_position) < 0.2,
 		"шум — из пробоины")
-	ok(main.status_parts()[0].begins_with("ПРОБОИНА · МОСТИК"), "первая часть строки — пробоина: %s" % main.status_parts()[0])
+	ok(str(main.status_rows()[2][0]).begins_with("ПРОБОИНА · вода"), "ряд тревоги — пробоина: %s" % [main.status_rows()[2]])
 	var s: Breach.Spot = main.breach.all[0]
 	var t := main.breach_view.spot_node.global_transform
 	ok((t.basis.z).is_equal_approx(main.ship.global_transform.basis * s.n), "обшивка лицом внутрь")

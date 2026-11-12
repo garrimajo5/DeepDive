@@ -17,6 +17,7 @@ func _world(tops: Array[Vector3] = []) -> EcoWorld:
 	w.ground = _flat
 	w.ship.pos = FAR
 	var ps := w.add(EcoPred.new()) as EcoPred
+	ps.alert = 0.0  # бросок сразу: здесь чутьё и бросок; «замер» #1498 — test_eco_pred_zamer
 	w.add(EcoLeech.new(ps, null, tops))
 	return w
 
@@ -258,6 +259,7 @@ func test_stations_on_coral_tops() -> void:
 	var w := EcoWorld.new()
 	w.ground = _flat
 	var ps := w.add(EcoPred.new()) as EcoPred
+	ps.alert = 0.0  # бросок сразу: здесь чутьё и бросок; «замер» #1498 — test_eco_pred_zamer
 	var coral := w.add(EcoCoral.new()) as EcoCoral
 	var lc := w.add(EcoLeech.new(ps, coral)) as EcoLeech
 	eq(lc.stations.size(), coral.bushes.size(), "станция на каждом кусте огнецвета")

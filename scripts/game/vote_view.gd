@@ -10,6 +10,10 @@ var timer: Node3D        ## кольцо таймера между полями 
 var timer_arc: MeshInstance3D
 var timer_label: Label3D
 var _arc_segs := -1
+var descent := false     ## у 10 — одно поле «ВНИЗ» по центру (#1362, `VoteHolo.choices`)
+## Высота над голограммой у частей поля — чтобы переставить поля при смене раскладки (`_lay_out`).
+const PART_Y := {"disc": VoteHolo.DISC_Y, "beam": VoteHolo.DISC_Y * 0.5, "arrow": VoteHolo.ARROW_Y,
+	"word": VoteHolo.WORD_Y, "count": VoteHolo.COUNT_Y}
 var board: Node3D        ## итог забега над столом (VoteHolo.BOARD_*)
 var board_rows: Array = []   ## [[Label3D название, Label3D значение, Sprite3D иконка ART-026]…]
 var _mats: Array[StandardMaterial3D] = []
@@ -187,6 +191,19 @@ func _build_board() -> void:
 	board.visible = false
 
 
+## Прогрев (WarmRunner, #519): строки итога и счёт полей получают буквы `UiStyle.GLYPHS` — Label3D растрирует глифы
+## своих кеглей (40 и 52 с обводкой) под шторкой, а не при первом «наверх». on = false — снова пусто.
+func warm(on: bool) -> void:
+	for r: Array in board_rows:
+		(r[0] as Label3D).text = UiStyle.GLYPHS if on else ""
+		(r[1] as Label3D).text = UiStyle.GLYPHS if on else ""
+	for f: Dictionary in fields.values():
+		(f["count"] as Label3D).text = "0123456789" if on else "0"
+		for m: Array in f["marks"]:   # буквы ролей на метках — 44 без обводки
+			(m[1] as Label3D).text = UiStyle.GLYPHS if on else ""
+	timer_label.text = UiStyle.GLYPHS if on else VoteHolo.timer_text(0)
+
+
 ## Итог: k — доля перехода 0…1, rows — Run.summary (четыре строки), eye — глаз смотрящего в осях голограммы.
 func show_result(k: float, rows: Array, eye: Vector3) -> void:
 	board.visible = k > 0.0
@@ -219,14 +236,22 @@ func show_result(k: float, rows: Array, eye: Vector3) -> void:
 
 ## k — доля перехода (Briefing.Fade), votes — VoteHolo.votes(Run.opinions(...)); seconds и frac — таймер Ballot
 ## (seconds() и fraction(); -1 — таймера нет, кольцо скрыто).
-func show_vote(k: float, votes: Dictionary, seconds: int = -1, frac: float = -1.0) -> void:
+func show_vote(k: float, votes: Dictionary, seconds: int = -1, frac: float = -1.0, at_descent: bool = false) -> void:
 	visible = k > 0.0 or board.visible
 	if k <= 0.0:
 		timer.visible = false
 		return
-	for f: Dictionary in fields.values():
-		for key in ["disc", "beam", "arrow", "word", "count"]:
-			(f[key] as Node3D).visible = true
+	if at_descent != descent:
+		descent = at_descent
+		_lay_out()
+	var shown := VoteHolo.choices(descent)
+	for choice: String in fields:
+		var f: Dictionary = fields[choice]
+		for key in PART_Y:
+			(f[key] as Node3D).visible = choice in shown
+		if not choice in shown:
+			for m: Array in f["marks"]:
+				(m[0] as Node3D).visible = false
 	timer.visible = VoteHolo.timer_wanted(seconds)
 	if timer.visible:
 		timer_label.text = VoteHolo.timer_text(seconds)
@@ -239,7 +264,7 @@ func show_vote(k: float, votes: Dictionary, seconds: int = -1, frac: float = -1.
 	for l in _labels:
 		l.modulate.a = k
 		l.outline_modulate.a = k
-	for choice in VoteHolo.CHOICES:
+	for choice in shown:
 		var f: Dictionary = fields[choice]
 		var roles: Array = votes.get(choice, [])
 		(f["count"] as Label3D).text = str(roles.size())
@@ -251,10 +276,52 @@ func show_vote(k: float, votes: Dictionary, seconds: int = -1, frac: float = -1.
 			if not s.visible:
 				continue
 			var c := Crew.role_color(roles[i])
-			s.position = VoteHolo.mark_pos(choice, i, roles.size())
+			s.position = VoteHolo.mark_pos(choice, i, roles.size(), descent)
 			s.modulate = Color(c.r, c.g, c.b, k)
 			l.text = VoteHolo.letter(roles[i])
 			l.modulate = Color(c.r, c.g, c.b, k)
+
+
+## Подписи и счёт видимых полей на экране (#1376): табличка товарища на них не ложится (`Main.tag_blocks`).
+## Подпись повёрнута к камере только по вертикали — берём коробку её размера по ширине в обе стороны (x и z),
+## так прямоугольник не меньше подписи при любом повороте. Пусто, если голосования нет или подпись за камерой.
+func word_rects(cam: Camera3D) -> Array:
+	var out: Array = []
+	if cam == null or not is_visible_in_tree():
+		return out
+	var view := cam.get_viewport().get_visible_rect()
+	for f: Dictionary in fields.values():
+		for key in ["word", "count"]:
+			var l: Label3D = f[key]
+			if not l.visible or l.modulate.a <= 0.0 or l.text.is_empty():
+				continue
+			var box := l.get_aabb()
+			var s := l.global_basis.get_scale()
+			var hw := maxf(box.size.x * s.x, box.size.z * s.z) * 0.5
+			var hh := box.size.y * s.y * 0.5
+			var c := l.global_transform * box.get_center()
+			var pts := PackedVector2Array()
+			var behind := false
+			for dx in [-hw, hw]:
+				for dz in [-hw, hw]:
+					for dy in [-hh, hh]:
+						var g := c + Vector3(dx, dy, dz)
+						behind = behind or cam.is_position_behind(g)
+						pts.append(cam.unproject_position(g))
+			var r := AlarmBoard.screen_rect(pts, behind, view)
+			if r.has_area():
+				out.append(r)
+	return out
+
+
+## Поля и кольцо таймера — по раскладке: два поля или одно «ВНИЗ» у 10 (`descent`).
+func _lay_out() -> void:
+	for choice: String in fields:
+		var f: Dictionary = fields[choice]
+		for key in PART_Y:
+			(f[key] as Node3D).position = VoteHolo.field_pos(choice, PART_Y[key], descent)
+		(f["word"] as Label3D).text = VoteHolo.word(choice, descent)
+	timer.position = VoteHolo.ring_pos(descent)
 
 
 func _add(n: Node3D, nm: String) -> Node3D:

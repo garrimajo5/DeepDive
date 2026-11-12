@@ -156,3 +156,33 @@ func test_scene_menu_flow() -> void:
 	main.close_menu()
 	ok(not main.main_menu.open and not main.logbook.open, "close_menu закрыл меню и журнал")
 	ok(main.overlay.visible, "крестовина снова на экране")
+
+
+## #1529: «В меню» из далёкого места — корабль у начала спуска, а россыпи и LUT цветокоррекции догоняют его под
+## меню, по кадрам; первый кадр «Погрузиться» их не пересобирает («виды/корабль и камера» 52 мс у 30-kartochka-sonar).
+func test_dive_after_menu_no_scatter_rebuild() -> void:
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var start: Vector3 = main.helm.pos
+	main.helm.pos = start + Vector3(220.0, 0.0, -380.0)   # далеко: россыпи уходят с начала спуска
+	for i in 5:
+		main.step(1.0 / 30.0)
+	main.menu_flow.to_menu()
+	ok(main.main_menu.open, "в меню")
+	ok(main.helm.pos.distance_to(start) < 30.0, "корабль у начала спуска")
+	for i in 40:
+		main.step(1.0 / 30.0)   # под меню шаг стоит, россыпи досчитываются
+	ok(main.ocean.prefetch(main.helm.pos), "клетки у начала спуска — в кэше")
+	var views: Array[StonesView] = [main.ocean.stones, main.ocean.shells, main.ocean.tufts]
+	var writes: Array[int] = []
+	for v in views:
+		writes.append(v.writes)
+	var lut: int = main.grade.rebuilds
+	main.menu_flow.close_menu()
+	main.save.live = true
+	main._begin_run()
+	main.step(1.0 / 30.0)
+	for i in views.size():
+		eq(views[i].writes, writes[i], "%s: первый кадр забега не пересобирает список" % views[i].name)
+	eq(main.grade.rebuilds, lut, "LUT цветокоррекции готова под меню")

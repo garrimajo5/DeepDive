@@ -297,7 +297,7 @@ func test_descent_opens_vote_once() -> void:   # переход у 10 (#828, ч�
 	ok(not r.voting)
 	eq(r.descent(at.x, at.y), Run.DESCENT_MSG, "вошли в круг 10 — предупреждение")
 	ok(r.voting and r.seen.has(Run.DESCENT), "голосование открыто, место пройдено")
-	eq(r.label(), "Глубже или наверх?")
+	eq(r.label(), DescentVote.TITLE, "у 10 — спуск, не «глубже или наверх» (#1362)")
 	ok(Run.DESCENT_MSG.length() <= Run.LINE_MAX and Run.DESCENT_OFF_MSG.length() <= Run.LINE_MAX, "в строку")
 	eq(r.descent(at.x + 1.0, at.y), "", "в круге — второй раз не предупреждает")
 	r.go_deeper()

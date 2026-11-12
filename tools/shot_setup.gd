@@ -4,6 +4,34 @@ extends RefCounted
 ## Раньше жило в Main.debug_setup; вынесено, чтобы отладка не раздувала main.gd и не шла в APK (tools/ не
 ## экспортируется).
 
+## Плавный ход сцены 00 → 01 (scena=, #1400) — из расчёта прохода.
+const PassBox := preload("res://tools/pass_box.gd")
+const PassPlan := preload("res://tools/pass_plan.gd")
+
+
+## Аргументы после «--»: имя файла, ключи «ключ=значение» и флаги Godot, попавшие сюда по ошибке («--resolution
+## 1280x720» после «--» молча снимал 1600×720 в файл «1280x720», #1350 12.11). Флаг «--…» и его значение без «=» —
+## в "stray", не в имя файла.
+static func parse_args(args: PackedStringArray) -> Dictionary:
+	var out := "shot.png"
+	var kv := {}
+	var stray: Array[String] = []
+	var flag := false   # прошлый аргумент — флаг «--…» без «=»: следующий без «=» — его значение
+	for a in args:
+		if a.begins_with("--"):
+			stray.append(a)
+			flag = not a.contains("=")
+		elif flag and not a.contains("="):
+			stray[-1] += " " + a
+			flag = false
+		elif a.contains("="):
+			var p := a.split("=", true, 1)
+			kv[p[0]] = p[1]
+			flag = false
+		else:
+			out = a
+	return {"out": out, "kv": kv, "stray": stray}
+
 
 static func apply(g: Main, kv: Dictionary) -> void:
 	g.flyby.stop()   # снимки — с мостика; flyby=start|surface — вид с борта (age=<с> от начала)
@@ -70,6 +98,8 @@ static func apply(g: Main, kv: Dictionary) -> void:
 		g._apply_graphics(Graphics.ECONOMY)
 	if kv.has("grafika"):  # grafika=0|1|2 — уровень графики ART-044 (0 — «Экономно», 2 — «Красиво»)
 		g._apply_graphics(int(kv["grafika"]))
+	if kv.get("luch_ten", "1") == "0":  # luch_ten=0 — прожектор без тени (#1400: цена тени на «Обычно»), после grafika=
+		g.searchlight.spot.shadow_enabled = false
 	if kv.get("glints", "1") == "0":  # glints=0 — без бликов воды в мостике ART-067 (сравнить)
 		g.glints.lite = true
 	if kv.has("layers"):  # layers=<сила> — слои воды ART-069 (0 — выкл, 0,6 — «Обычно», 0,9 — «Красиво»)
@@ -81,6 +111,13 @@ static func apply(g: Main, kv: Dictionary) -> void:
 	if kv.get("drain", "0") == "1":  # drain=1 — стеклоуст на корпусе (табло и рамка у щитка разряда)
 		g.vitals.drain("Стеклоуст", 0.01)
 		g.vitals.drain_left = 60.0
+	if kv.has("kamen"):  # kamen=<n> — у каждого ряда каменщиков первые n гнёзд спрятали венчики (#1337)
+		for r in g.eco.kamen.rows:
+			for i in mini(int(kv["kamen"]), r.worms.size()):
+				r.worms[i].open = 0.0
+				r.worms[i].quiet = 999.0
+			r.calm = false
+		g.eco.kamen.changed = true
 	if kv.get("steam", "0") == "1":  # пар из вентиля и открытая крышка щитка (для снимка машинного)
 		g.debug_vent = true
 		g.engine.pressed = 30.0
@@ -155,6 +192,77 @@ static func apply(g: Main, kv: Dictionary) -> void:
 			g.helm.yaw = deg_to_rad(p[3])
 			g.helm.turn = 0.0
 		g.park_at(Vector3(p[0], p[1], p[2]))
+	if kv.has("place"):  # place=NN|ключ — корабль у места слоя 1 носом к ориентиру, камера снаружи корпуса (#1358);
+		# place_cam=front|back — перед носом / позади и выше корабля, place_dist=<м> — от ориентира, place_side=<°> — откуда
+		var pose := place_pose(kv["place"], kv.get("place_cam", "front"), float(kv.get("place_dist", str(PLACE_DIST))),
+			float(kv["place_side"]) if kv.has("place_side") else NAN)
+		if not pose.is_empty():
+			g.helm.yaw = pose["yaw"]
+			g.helm.turn = 0.0
+			g.park_at(pose["ship"])
+			var cam := Camera3D.new()
+			cam.fov = Deck.FOV
+			cam.far = 400.0
+			g.add_child(cam)
+			cam.global_position = pose["cam"]
+			cam.look_at(pose["look"])
+			cam.make_current()
+	if kv.get("kupol", "0") == "1":  # kupol=1 — купольник у гнезда 07 поднимает створку (#837, модель MOD-022),
+		# камера в 6 м сбоку-сзади от него
+		var d: EcoDome = g.eco.dome
+		d.pos = d.stand()
+		d.yaw = 0.0
+		d.state = EcoDome.State.OPEN
+		d.t = float(kv.get("kupol_t", "0"))
+		g.eco.dome_view.sync(g.eco.world.time, d.pos)
+		var kc := Camera3D.new()
+		kc.fov = Deck.FOV
+		kc.far = 400.0
+		g.add_child(kc)
+		kc.global_position = d.pos + Vector3(3.5, 2.0, 5.0)
+		kc.look_at(d.pos + Vector3(0.0, 0.5, 0.0))
+		kc.make_current()
+	if kv.has("scena"):  # scena=1|2|3 — контрольный ракурс сцены 00 → 01 (#1400): штатная камера пилота, нос к 01
+		var back := float(kv.get("scena_back", "0"))   # scena_back=<м> — раньше по тому же пути
+		var sp := scena_pose(int(kv["scena"]), back)
+		if not sp.is_empty():
+			var ride := scena_ride(int(kv["scena"]), String(kv.get("scena_y", "")), back)   # scena_y=<y>|dno — высота хода
+			sp["ship"].y = ride["y"]
+			g.set_meta("scena_src", ride["src"])
+			g.helm.yaw = sp["yaw"] + deg_to_rad(float(kv.get("scena_yaw", "0")))   # scena_yaw=<°> — левее, минус — правее
+			g.helm.turn = 0.0
+			g.park_at(sp["ship"])
+			if not g.pilot.seated:
+				g.sit_at_helm()
+			if kv.has("zamer"):   # zamer=bok|korma|nos — проба фазы «замер» #1498, серпохвост №0 рядом с кораблём
+				zamer_setup(g, sp["ship"], g.helm.yaw, String(kv["zamer"]))
+			if kv.has("strah"):   # strah=<м> — хищник №0 за стаей рифа у 01 на столько метров от неё (реакция стаи)
+				strah_setup(g, sp["ship"], float(kv["strah"]))
+				strah_log(g, 0.0)
+			if kv.has("scena_t"):   # scena_t=<с> — мир идёт столько секунд, корабль висит в точке ракурса (кадры движения)
+				scena_run(g, sp["ship"], float(kv["scena_t"]), float(kv.get("zamer_off", "-1")),   # zamer_off=<с> — свет гаснет
+						kv.has("zamer"), kv.has("strah"))
+				if kv.has("zamer"):
+					zamer_log(g)
+				if kv.has("strah"):
+					strah_log(g, float(kv["scena_t"]))
+	if kv.has("lore"):  # lore=d07_return,shell03 — знания слоя 1 (#825; ключи LayerLore.KEYS)
+		for k in kv["lore"].split(",", false):
+			g.lore.learn(k)
+	if kv.get("spusk_vote", "") in ["1", "later", "coop"]:   # корабль в круге 10 — панель спуска у стола (#1362); later — «позже»
+		if not kv.has("ship"):
+			var p10 := Run.place_xz(Run.DESCENT)
+			g.park_at(Vector3(p10.x, Seabed.height(p10.x, p10.y) + 15.0, p10.y))
+		g.say(g.run.descent(g.helm.pos.x, g.helm.pos.z))
+		g.walker.x = Main.ROUTE_POST.x   # у поста «Маршрут» справа от голостола
+		g.walker.z = Main.ROUTE_POST.y
+		g.walker.yaw = PI / 2.0
+		if kv["spusk_vote"] != "later":
+			g.open_vote()
+		if kv["spusk_vote"] == "coop":   # с mate=…: все у стола, свой голос «вниз», ждём товарищей
+			for m: Crew.Member in g.crew:
+				m.at_vote = true
+			g.ballot.cast(g.me.get_instance_id(), g.me.role, "deep")
 	if kv.has("scorch"):  # scorch=n — n следов разряда на дне перед носом через 4 м (первый — старое пятно)
 		var n := int(kv["scorch"])
 		for i in n:
@@ -209,3 +317,371 @@ static func apply(g: Main, kv: Dictionary) -> void:
 		mate.pad.hold = true
 		for i in int(float(kv.get("hold_s", "1.5")) * 10.0):
 			g.step(0.1)
+
+
+## Ракурс place=NN (#1358): от ориентира до середины корпуса, м.
+const PLACE_DIST := 38.0
+## Камера в осях корабля: перед носом (front) и позади-выше (back) — вне корпуса HullPlan.
+const PLACE_CAM := {"front": Vector3(0.0, 3.0, -17.0), "back": Vector3(0.0, 16.0, 62.0)}
+## Над дном: корабль и камера не ниже стольких метров.
+const PLACE_FLOOR := 7.0
+
+
+## Поза снимка места слоя 1: id из LayerMap.POINTS ("03") или ключ Run.PLACES ("shell"). Корабль на глубине ориентира
+## (не ниже PLACE_FLOOR над дном) в dist м от него, со стороны середины карты (side — пеленг от ориентира, °,
+## 0 — с юга, +z), носом к ориентиру. {ship, yaw, cam, look}; пусто — нет такого места.
+static func place_pose(name: String, kind: String = "front", dist: float = PLACE_DIST, side: float = NAN) -> Dictionary:
+	var id := name if LayerMap.POINTS.has(name) else LayerMap.id_of(name)
+	if id == "":
+		return {}
+	var at := LayerMap.at(id)
+	var away := Vector2(-at.x, -at.z).normalized()   # к середине карты
+	if not is_nan(side):
+		away = Vector2(sin(deg_to_rad(side)), cos(deg_to_rad(side)))
+	elif away == Vector2.ZERO:
+		away = Vector2(0.0, 1.0)
+	var sx := at.x + away.x * dist
+	var sz := at.z + away.y * dist
+	var ship := Vector3(sx, maxf(at.y, Seabed.height(sx, sz) + PLACE_FLOOR), sz)
+	var yaw := atan2(away.x, away.y)   # нос (−sin, −cos) — от корабля к ориентиру
+	var local: Vector3 = PLACE_CAM.get(kind, PLACE_CAM["front"])
+	var cam := ship + local.rotated(Vector3.UP, yaw)
+	cam.y = maxf(cam.y, Seabed.height(cam.x, cam.z) + PLACE_FLOOR)
+	var look := Vector3(at.x, maxf(at.y - 4.0, Seabed.height(at.x, at.z) + 2.0), at.z)
+	return {"ship": ship, "yaw": yaw, "cam": cam, "look": look}
+
+
+## Контрольные ракурсы сцены 00 → 01 (#1400, docs/urovni/sloj-1.md «Пакет сравнения»): выход из 00, середина
+## перехода, подход к 01 — точки (x, z), на них сняты кадры «до» в #1400 (main 9b26569).
+const SCENA: Array[Vector2] = [Vector2(4.0, 80.0), Vector2(20.0, 22.5), Vector2(33.0, -22.0)]
+## Цель взгляда сцены — место 01 (Каменный цветок).
+const SCENA_GOAL := "01"
+## Корабль над видимым дном в ракурсе сцены, м (как кадры «до»: 6–8 м).
+const SCENA_FLOOR := 7.0
+
+
+## Кадры движения сцены (#1400): игра шагает seconds секунд ровным шагом SCENA_DT, корабль после каждого шага
+## возвращается в точку ракурса (течение не уносит взгляд), курс и свет — как поставлены; мир — стаи, луч на флоре — идёт сам.
+const SCENA_DT := 1.0 / 30.0
+
+
+## light_off ≥ 0 — через столько секунд прожектор гаснет (ответ экипажа на «замер», zamer_off=).
+## trace — с zamer=: в лог каждая смена режима хищника №0 и строк приборов с секундой мира (момент потери цели, #1400).
+## shoal — с strah=: в лог раз в секунду мира — хищник №0 и стая STRAH_SHOAL (#1400).
+static func scena_run(g: Node, ship: Vector3, seconds: float, light_off := -1.0, trace := false,
+		shoal := false) -> void:
+	var n := int(round(seconds / SCENA_DT))
+	var off_at := int(round(light_off / SCENA_DT)) if light_off >= 0.0 else -1
+	var was := {"mode": -1, "parts": []}
+	for i in n:
+		if i == off_at and g.light_on:
+			g.toggle_light()
+			if trace:
+				print("zamer: %s с — прожектор погашен" % _num((i + 1) * SCENA_DT))
+		g.step(SCENA_DT)
+		g.park_at(ship)
+		if trace:
+			for line in zamer_trace(g, was, (i + 1) * SCENA_DT):
+				print(line)
+		if shoal and (i + 1) % int(round(1.0 / SCENA_DT)) == 0:
+			strah_log(g, (i + 1) * SCENA_DT)
+
+
+## Что сменилось за шаг (scena_run с trace): режим хищника №0 и строки приборов со словами (числа без слов —
+## глубина, курс — не печатаем). was — прошлое состояние {mode, parts}, обновляется. Строки для лога.
+static func zamer_trace(g: Node, was: Dictionary, t: float) -> Array[String]:
+	var out: Array[String] = []
+	var ps: EcoPred = g.eco.preds
+	if ps != null and not ps.all.is_empty():
+		var pr: EcoPred.Pred = ps.all[0]
+		if pr.mode != was["mode"]:
+			out.append("zamer: %s с — хищник №0: %s, до корабля %s м" % [_num(t), EcoPred.Mode.keys()[pr.mode],
+				_num(pr.agent.distance_to(g.helm.pos))])
+			was["mode"] = pr.mode
+	var parts: Array = []
+	for p in g.status_parts():
+		if String(p).length() > 12:
+			parts.append(String(p))
+	for p in parts:
+		if not was["parts"].has(p):
+			out.append("zamer: %s с — строка «%s»" % [_num(t), p])
+	for p in was["parts"]:
+		if not parts.has(p):
+			out.append("zamer: %s с — ушла «%s»" % [_num(t), p])
+	was["parts"] = parts
+	return out
+
+
+## Кадры знака #1498 (zamer=): длина фазы и отход — как в игре (вариант 1 гейм-дизайнера, включён PR #1663).
+const ZAMER_ALERT := EcoPred.ALERT_ON
+const ZAMER_LEAVE := EcoPred.ALERT_LEAVE_ON
+## Где и как ставим хищника — постановка мира `EcoPred.stage_*` (общая с шагом `zamer` сценария тестера).
+const ZAMER_DIST := EcoPred.STAGE_DIST
+const ZAMER_FLOOR := EcoPred.STAGE_FLOOR
+const ZAMER_SIDES := EcoPred.STAGE_SIDES
+
+
+static func zamer_spot(ship: Vector3, yaw: float, side: String) -> Vector3:
+	return EcoPred.stage_spot(ship, yaw, side)
+
+
+## Включает фазу «замер» в мире снимка и ставит голодного хищника №0 в zamer_spot; остальных уводит за 400 м.
+static func zamer_setup(g: Node, ship: Vector3, yaw: float, side: String) -> void:
+	var at := zamer_spot(ship, yaw, side)
+	var ps: EcoPred = g.eco.preds
+	if at == Vector3.INF or ps == null or ps.all.is_empty():
+		push_warning("zamer=%s: нет стороны или хищников" % side)
+		return
+	ps.alert = ZAMER_ALERT
+	ps.alert_leave = ZAMER_LEAVE
+	ps.stage_near(0, at, ship)
+	if not g.light_on:
+		g.toggle_light()
+
+
+## В лог снимка — режим хищника №0 и расстояние до корабля (что поймал кадр).
+static func zamer_log(g: Node) -> void:
+	var pr: EcoPred.Pred = g.eco.preds.all[0]
+	print("zamer: хищник №0 — %s, до корабля %.1f м, свет %s" % [EcoPred.Mode.keys()[pr.mode],
+		pr.agent.distance_to(g.helm.pos), "горит" if g.light_on else "погашен"])
+
+
+## Реакция стаи у 01 (strah=, #1400): стая рифа (55; −69) — пятая в EcoFish.HOMES, видна между ветвями цветка.
+const STRAH_SHOAL := 4
+
+
+## Ставит голодного хищника №0 за стаей STRAH_SHOAL — на dist метров от её центра, на продолжении линии
+## корабль → стая (причина — с дальней стороны), на высоте стаи; остальных уводит за 400 м. Фаза «замер» — как в игре.
+## Хищник идёт к краю рифа против стаи (strah_goal); ближе EcoFish.PRED_ALARM — стая в тревоге и прячется у дома.
+static func strah_setup(g: Node, ship: Vector3, dist: float) -> void:
+	var ps: EcoPred = g.eco.preds
+	var fs: EcoFish = g.eco.fish
+	if ps == null or ps.all.is_empty() or fs == null or fs.shoals.size() <= STRAH_SHOAL:
+		push_warning("strah=: нет хищников или стаи")
+		return
+	var c: Vector3 = fs.shoals[STRAH_SHOAL].center
+	var at := strah_spot(ship, c, dist)
+	for pr in ps.all:
+		pr.cooldown = 999.0 if pr.index != 0 else 0.0
+		pr.agent.v = Vector3.ZERO
+		pr.agent.p = at if pr.index == 0 else ship + Vector3(400.0 + 30.0 * pr.index, 0.0, 0.0)
+		pr.agent.goal = strah_goal(ps, c) if pr.index == 0 else pr.agent.p
+		pr.prey = null
+		EcoPred._set_mode(pr, EcoPred.Mode.PATROL, 30.0)
+	ps.all[0].hunger = 0.5
+
+
+## Где ставить хищника strah=: на dist метров за стаей c по линии от корабля, на высоте стаи, не ниже ZAMER_FLOOR
+## над видимым дном.
+static func strah_spot(ship: Vector3, c: Vector3, dist: float) -> Vector3:
+	var dir := Vector3(c.x - ship.x, 0.0, c.z - ship.z).normalized()
+	var at := c + dir * dist
+	at.y = maxf(c.y, Seabed.mesh_height(at.x, at.z) + ZAMER_FLOOR)
+	return at
+
+
+## Цель патруля хищника strah=: стая у 01 — внутри кольца рифа (EcoPred.REEF_KEEP от оси цветка), туда хищник не
+## заходит; идёт к краю кольца против стаи — как обычный патруль к дому стаи (EcoPred.outside_reef).
+static func strah_goal(ps: EcoPred, c: Vector3) -> Vector3:
+	return EcoPred.outside_reef(ps.reef_axis(), c, EcoPred.REEF_KEEP)
+
+
+## Строка лога strah=: секунда мира, хищник №0 (режим, до стаи и до корабля), стая (в тревоге, спрятались, живых,
+## центр до дома).
+static func strah_line(g: Node, t: float) -> String:
+	var pr: EcoPred.Pred = g.eco.preds.all[0]
+	var sh: EcoFish.Shoal = g.eco.fish.shoals[STRAH_SHOAL]
+	var hid := 0
+	for f in sh.members:
+		if f.agent.alive and f.agent.state == EcoAgent.State.HIDE:
+			hid += 1
+	return "strah: %s с — хищник №0 %s, до стаи %.1f м, до корабля %.1f м; стая: тревога %s, спрятались %d из %d, центр от дома %.1f м" % [
+		_num(t), EcoPred.Mode.keys()[pr.mode], pr.agent.p.distance_to(sh.center), pr.agent.distance_to(g.helm.pos),
+		"да" if sh.alarm > 0.0 else "нет", hid, sh.alive, sh.center.distance_to(sh.home)]
+
+
+static func strah_log(g: Node, t: float) -> void:
+	print(strah_line(g, t))
+
+
+## Поза ракурса scena=n (1…3): корабль в точке SCENA[n − 1] на SCENA_FLOOR над видимым дном, носом к 01.
+## {ship, yaw}; пусто — нет такого ракурса.
+## back > 0 — на столько метров раньше по тому же пути `tools/pass_plan.gd` (scena_back=, #1400).
+static func scena_pose(n: int, back := 0.0) -> Dictionary:
+	if n < 1 or n > SCENA.size():
+		return {}
+	var at := scena_at(n, back)
+	var to := LayerMap.xz(SCENA_GOAL) - at
+	var ship := Vector3(at.x, Seabed.mesh_height(at.x, at.y) + SCENA_FLOOR, at.y)
+	return {"ship": ship, "yaw": atan2(-to.x, -to.y)}   # нос (−sin, −cos) — к 01
+
+
+## Высота хода в ракурсе scena=n и откуда она: how — "" (плавный ход `tools/pass_box.gd`, контур 20×30: H+7 с
+## уклоном ≤ SLOPE), "dno" — SCENA_FLOOR над видимым дном в точке (кадры «до» #1400), число — y руками. {y, src}.
+static func scena_ride(n: int, how := "", back := 0.0) -> Dictionary:
+	var at := scena_at(clampi(n, 1, SCENA.size()), back)
+	if how == "dno":
+		return {"y": Seabed.mesh_height(at.x, at.y) + SCENA_FLOOR, "src": "%.0f м над дном в точке (scena_y=dno)" % SCENA_FLOOR}
+	if how != "":
+		return {"y": float(how), "src": "руками (scena_y=%s)" % how}
+	var y: float = PassBox.smooth_at(maxf(PassPlan.arc_at(clampi(n, 1, SCENA.size()) - 1) - maxf(back, 0.0), 0.0))
+	return {"y": y, "src": "плавный ход tools/pass_box.gd (H+%.0f, уклон ≤ %s)" % [PassBox.RIDE, _num(PassBox.SLOPE)]}
+
+
+## Точка ракурса scena=n: SCENA[n − 1] или на back м раньше по пути (не дальше начала у 00).
+static func scena_at(n: int, back := 0.0) -> Vector2:
+	if back <= 0.0:
+		return SCENA[n - 1]
+	return PassPlan.along(maxf(PassPlan.arc_at(n - 1) - back, 0.0))["at"]
+
+
+## Подпись контрольного кадра scena= для лога (#1400): точка, фактический y корабля, до дна, курс, источник высоты.
+static func scena_line(g: Node) -> String:
+	var p: Vector3 = g.helm.pos
+	var yaw := wrapf(rad_to_deg(g.helm.yaw), -180.0, 180.0)
+	return "кадр сцены (#1400): точка (%s; %s), y корабля %s, до дна %s м, курс %+.0f° от −Z (плюс — левее); высота — %s" % [
+		_num(p.x), _num(p.z), _num(p.y), _num(p.y - Seabed.mesh_height(p.x, p.z)), yaw, g.get_meta("scena_src", "—")]
+
+
+static func _num(v: float) -> String:
+	return ("%.1f" % v).replace(".", ",").replace("-", "−")
+
+
+## С какого расстояния впереди виден грунт в окне пилота (#1400, дизайнер уровней — границу видимости снять заново
+## после #1402): по столбцам кадра GROUND_COLS снизу вверх с шагом GROUND_STEP пикселей ищем первый луч, который
+## доходит до видимого дна (`Seabed.mesh_height`), не задев мостик и корпус (пульт, штурвал, рама, нос).
+## Печатает shot.gd с scena=, чтобы ближний план ставить без проб.
+const GROUND_COLS: Array[float] = [0.25, 0.5, 0.75]
+const GROUND_STEP := 8
+## Шаг луча до дна, м, и дальше этого дна в кадре нет (дальняя вода).
+const GROUND_MARCH := 0.5
+const GROUND_FAR := 300.0
+
+
+## Заслоны взгляда: видимые несглаженные сетки под узлами roots в мировых координатах — [{aabb, faces}].
+## Стекло окна прозрачно — не заслон; экипаж (сетки со скином) не берём: поза рук меняется.
+static func occluders(roots: Array) -> Array:
+	var out := []
+	for r in roots:
+		if r == null:
+			continue
+		for n in (r as Node).find_children("*", "MeshInstance3D", true, false):
+			var mi := n as MeshInstance3D
+			if mi.mesh == null or not mi.is_visible_in_tree() or mi.skin != null or _is_glass(mi):
+				continue
+			var faces: PackedVector3Array = mi.global_transform * mi.mesh.get_faces()
+			if faces.is_empty():
+				continue
+			out.append({"aabb": mi.global_transform * mi.get_aabb(), "faces": faces})
+	return out
+
+
+static func _is_glass(mi: MeshInstance3D) -> bool:
+	var m := mi.material_override as ShaderMaterial
+	return m != null and m.shader in [BridgeView.GLASS_SHADER, BridgeView.GLASS_WET_SHADER]
+
+
+## Луч заслонён ближе reach: попал в лицевую сторону треугольника (обход по часовой, (b − a) × (c − a) — внутрь,
+## то есть по лучу); изнанку движок не рисует — она не заслон.
+static func blocked(from: Vector3, dir: Vector3, reach: float, occ: Array) -> bool:
+	var to := from + dir * reach
+	for o in occ:
+		if not (o["aabb"] as AABB).grow(0.01).intersects_segment(from, to):
+			continue
+		var f: PackedVector3Array = o["faces"]
+		for i in range(0, f.size() - 2, 3):
+			var a := f[i]
+			var b := f[i + 1]
+			var c := f[i + 2]
+			if (b - a).cross(c - a).dot(dir) <= 0.0:
+				continue
+			var hit: Variant = Geometry3D.ray_intersects_triangle(from, dir, a, b, c)
+			if hit != null and from.distance_to(hit) < reach:
+				return true
+	return false
+
+
+## Расстояние вдоль луча до дна floor(x, z) → y, м; INF — дна нет ближе GROUND_FAR (луч вверх или в дальнюю воду).
+static func ground_hit(from: Vector3, dir: Vector3, floor_y: Callable) -> float:
+	if dir.y >= 0.0:
+		return INF
+	var t := 0.0
+	while t < GROUND_FAR:
+		var t2 := t + GROUND_MARCH
+		var p := from + dir * t2
+		if p.y <= float(floor_y.call(p.x, p.z)):
+			var a := t
+			var b := t2
+			for k in 12:
+				var m := (a + b) / 2.0
+				var q := from + dir * m
+				if q.y <= float(floor_y.call(q.x, q.z)):
+					b = m
+				else:
+					a = m
+			return b
+		t = t2
+	return INF
+
+
+## Ближний видимый грунт в столбце u (0…1 по ширине кадра) камеры cam: {row — строка кадра сверху, dist — по
+## горизонтали от глаза, м}; пусто — в столбце дна не видно.
+static func ground_ahead(cam: Camera3D, u: float, occ: Array, floor_y: Callable) -> Dictionary:
+	var size := cam.get_viewport().get_visible_rect().size
+	var y := int(size.y) - 1
+	while y > 0:
+		var px := Vector2(size.x * u, y)
+		var o := cam.project_ray_origin(px)
+		var d := cam.project_ray_normal(px)
+		var t := ground_hit(o, d, floor_y)
+		if t == INF:
+			return {}
+		if not blocked(o, d, t, occ):
+			var p := o + d * t
+			return {"row": y, "dist": Vector2(p.x - o.x, p.z - o.z).length()}
+		y -= GROUND_STEP
+	return {}
+
+
+## Строка для лога снимка: «грунт в окне (#1400): слева с 14 м, по центру с 18 м, справа с 15 м · кромка на 35/30/35 %
+## кадра снизу».
+static func ground_line(g: Node) -> String:
+	var cam := g.get_viewport().get_camera_3d()
+	var occ := occluders([g.bridge, g.hull])
+	var h := cam.get_viewport().get_visible_rect().size.y
+	var names := ["слева", "по центру", "справа"]
+	var dist: Array[String] = []
+	var edge: Array[String] = []
+	for i in GROUND_COLS.size():
+		var r := ground_ahead(cam, GROUND_COLS[i], occ, Seabed.mesh_height)
+		dist.append("%s %s" % [names[i], "нет" if r.is_empty() else "с %d м" % roundi(r["dist"])])
+		edge.append("—" if r.is_empty() else str(roundi((h - r["row"]) / h * 100.0)))
+	return "грунт в окне (#1400): %s · кромка на %s %% кадра снизу" % [", ".join(dist), "/".join(edge)]
+
+
+## Реплика плашки связи для svyaz=: своя — svyaz_text=, иначе образец для своего или подделки.
+static func svyaz_line(kv: Dictionary) -> String:
+	var own: String = kv.get("svyaz_text", "").strip_edges()
+	if own != "":
+		return own
+	return "Дайте импульс сонара" if svyaz_fake(kv) else "Сбросьте ход, перегрев"
+
+
+static func svyaz_fake(kv: Dictionary) -> bool:
+	return kv.get("svyaz", "1") in ["fake", "wrong", "exposed", "silent"]
+
+
+## svyaz=1|fake|wait|match|wrong|exposed|silent — плашка внутренней связи ART-040 в этом состоянии (svyaz_text= — своя строка).
+static func svyaz(g: Main, kv: Dictionary) -> void:
+	var v: String = kv.get("svyaz", "1")
+	g.comms.reset_run(0)
+	var fake := svyaz_fake(kv)
+	g.on_eco_event(EcoLink.voice(Crew.Role.PILOT if fake else Crew.Role.ENGINEER,
+		svyaz_line(kv), fake, "ping" if fake else "", v == "silent"))
+	for i in 6:
+		g.step(0.05)
+	var states := {"wait": Comms.Ask.WAIT, "match": Comms.Ask.MATCH, "wrong": Comms.Ask.WRONG,
+		"exposed": Comms.Ask.EXPOSED, "silent": Comms.Ask.SILENT}
+	if states.has(v):
+		g.comms.state = states[v]
+	g.comms_panel.show_comms(g.comms, g.time, g.comms_area())

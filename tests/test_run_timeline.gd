@@ -275,3 +275,31 @@ func test_scene_leg_from_start() -> void:
 	eq(main.timeline.legs[0][1], "01")
 	main.queue_free()
 	await frames(1)
+
+
+## #1481: в строке удара — кто ударил (о дно, существо), чтобы лишний удар в начале забега было видно по логу.
+func test_hit_names_cause() -> void:
+	var r := _tl()
+	r.begin(0.0)
+	r.blame("scrape")
+	r.watch(1.0, {}, 90.0, 0.0)
+	r.blame("Серпохвост")
+	r.watch(2.0, {}, 80.0, 0.0)
+	r.watch(3.0, {}, 70.0, 0.0)   # причина не названа — без хвоста, прошлая не тянется
+	r.blame("")
+	r.watch(4.0, {}, 60.0, 0.0)
+	var hits := r.events.filter(func(e: Array) -> bool: return String(e[1]).begins_with("удар")).map(
+		func(e: Array) -> String: return e[1])
+	eq(hits, ["удар: корпус 90% · о дно", "удар: корпус 80% · Серпохвост", "удар: корпус 70%", "удар: корпус 60% · ?"])
+	ok("\n".join(r.text_lines("—")).contains("ударов 4"), "счёт ударов прежний")
+
+
+## Удар о дно в игре: `Main._on_hit` называет причину хронометражу.
+func test_main_blames_scrape() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.vitals.hit(10, "scrape")
+	eq(main.timeline.cause, "о дно", "причина удара для строки хронометража")
+	main.queue_free()
+	await frames(1)

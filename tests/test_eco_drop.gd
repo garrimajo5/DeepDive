@@ -180,7 +180,8 @@ func test_slide_cloud_at_scar() -> void:
 	ok(absf(c.x - Silt.DROP.x) > 40.0, "новая точка далеко от старой DROP над открытым склоном")
 
 
-## Подключение в корабль (issue #258): main поднимает «пол» корпуса на верх скалы и берёт точку облака из шрама.
+## Подключение в корабль (issue #258): main поднимает «пол» корпуса на верх скалы и берёт точку облака из шрама;
+## живой мир в игре стоит на видимой сетке дна (#1386; губки органа на ней — test_eco_organ).
 func test_wired_into_ship() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
@@ -193,6 +194,8 @@ func test_wired_into_ship() -> void:
 	var g_here: float = main.helm.ground.call(rim.x, zc)
 	ok(g_here >= rim.y - 1e-3, "пол корпуса не ниже верха скалы: %.2f ≥ %.2f" % [g_here, rim.y])
 	ok(g_here > Seabed.height(rim.x, zc) + 0.5, "над скалой пол корпуса выше дна — корабль чиркает")
+	for p in [Vector2(52, 30), Vector2(-38, 78), Vector2(2.5, -7.5)]:   # между вершинами сетки шум и сетка расходятся
+		near(float(main.eco.world.ground.call(p.x, p.y)), Seabed.mesh_height(p.x, p.y), 1e-4, "дно мира — сетка у %s" % p)
 	main.queue_free()
 	await frames(1)
 
@@ -277,3 +280,110 @@ func test_lite_kept_after_world_reset() -> void:
 	ev.set_lite(false)
 	ev.free()
 	EcoShaders.set_sway_lite(false)
+
+
+## Заселённость 06 (#840): два пятна мха на площадке у бровки — на видимом дне, мимо клиньев и трещин, в стороне от
+## шрама; ближнее пятно рифа далеко — скребуны рифа сюда не ходят.
+func test_feeding_moss_on_platform() -> void:
+	var w := EcoWorld.new()
+	w.ground = Seabed.mesh_height
+	var d := w.add(EcoDrop.new()) as EcoDrop
+	eq(d.moss.patches.size(), EcoDrop.MOSS.size(), "пятна группы кормления")
+	for p in d.moss.patches:
+		near(p.pos.y, Seabed.mesh_height(p.pos.x, p.pos.z), 1e-4, "пятно %d на видимом дне" % p.index)
+		ok(p.pos.x + EcoMoss.RADIUS < EcoDrop.brow_x(p.pos.z) - EcoDrop.BACK, "пятно %d не под клином" % p.index)
+		ok(absf(p.pos.z - EcoDrop.SCAR_Z) > EcoDrop.SCAR_W * 0.5 + EcoMoss.RADIUS, "пятно %d мимо шрама" % p.index)
+		for c in EcoDrop.CRACKS.size():
+			var a := Vector2(EcoDrop.CRACKS[c].x, EcoDrop.CRACKS[c].y)
+			var dir := Vector2(EcoDrop.CRACKS[c].z, EcoDrop.CRACKS[c].w).normalized()
+			var q := Vector2(p.pos.x, p.pos.z) - a
+			var t := clampf(q.dot(dir), 0.0, EcoDrop.CRACK_LEN[c])
+			ok((q - dir * t).length() > EcoMoss.RADIUS, "пятно %d мимо трещины %d" % [p.index, c])
+		var far := INF
+		for s in EcoMoss.SPOTS:
+			far = minf(far, Vector2(s.x - p.pos.x, s.z - p.pos.z).length())
+		ok(far > 50.0, "до мха рифа %.0f м" % far)
+
+
+## Мох 06 по курсу подхода (#840, решение уровней 10.11): с начала подхода 03 → 06 ближнее пятно в поле зрения по курсу
+## (половина `Deck.FOV`) и не дальше луча прожектора, а направление на начало склона — тоже в кадре. Пятна не сливаются.
+func test_feeding_moss_ahead_on_approach() -> void:
+	var a := LayerMap.xz("03")
+	var dir := (LayerMap.xz("06") - a).normalized()
+	var half := Deck.FOV * 0.5
+	var slope := Vector2(Seabed.Slope.X_IN, Seabed.Slope.GAP_Z)
+	var seen := 0
+	for s in [0.0, 10.0, 20.0]:
+		var at: Vector2 = a + dir * s
+		var best := INF
+		for m in EcoDrop.MOSS:
+			if at.distance_to(m) <= Searchlight.BASE_RANGE:
+				best = minf(best, rad_to_deg(absf(dir.angle_to(m - at))))
+		if best <= half and rad_to_deg(absf(dir.angle_to(slope - at))) <= half:
+			seen += 1
+	ok(seen >= 2, "станций подхода с мхом и склоном по курсу: %d из 3" % seen)
+	ok(EcoDrop.MOSS[0].distance_to(EcoDrop.MOSS[1]) > EcoMoss.RADIUS * 2.0, "пятна не сливаются")
+
+
+## Скребуны края пасутся на своём мху: за 10 минут не уходят от группы, и пятно тускнеет под ними, а потом отрастает.
+func test_feeding_group_stays_and_dims() -> void:
+	var w := EcoWorld.new()
+	w.ground = Seabed.mesh_height
+	var d := w.add(EcoDrop.new()) as EcoDrop
+	var g := w.add(EcoGrazer.new(d.moss, EcoDrop.GRAZERS)) as EcoGrazer
+	w.ship.pos = Vector3(160, -50, 76)
+	eq(g.all.size(), EcoDrop.GRAZERS, "скребунов края")
+	var mid := Vector3.ZERO
+	for p in d.moss.patches:
+		mid += p.pos / d.moss.patches.size()
+	var low := 1.0
+	var far := 0.0
+	for i in 6000:
+		w.step(0.1)
+		for p in d.moss.patches:
+			low = minf(low, p.food)
+		for s in g.all:
+			far = maxf(far, Vector2(s.agent.p.x - mid.x, s.agent.p.z - mid.z).length())
+	ok(far < 15.0, "скребуны у группы: дальше всех %.1f м" % far)
+	ok(low < 0.5, "объеденное пятно тускнеет: еда до %.2f" % low)
+
+
+## Веерники спуска 06 → 10 (#840): три пары у оси прохода склона, но не в самом проходе 60 м, на видимом дне склона, поперёк течения как все.
+func test_slope_fans_along_descent() -> void:
+	var spots := EcoFan.default_spots()
+	eq(spots[spots.size() - 1], EcoFan.START, "веер у старта — последний")
+	eq(EcoDrop.SLOPE_FANS.size(), 6, "три пары")
+	for xz in EcoDrop.SLOPE_FANS:
+		ok(spots.has(xz), "веер %s среди вееров мира" % xz)
+		ok(Seabed.Slope.mask(xz.x, xz.y) > 0.9, "веер %s в проходе склона" % xz)
+		var dz := absf(xz.y - Seabed.Slope.GAP_Z)
+		ok(dz < 40.0, "веер %s у пути по оси прохода" % xz)
+		# След корпуса по оси (полуширина 6,8 м) + полуширина веера 1,3 + колыхание 0,3 — с запасом (#840).
+		ok(dz >= EcoDrop.SLOPE_FAN_OFF, "веер %s вне следа корпуса: %.1f м от оси" % [xz, dz])
+		ok(EcoDrop.SLOPE_FAN_OFF - HullPlan.NOSE_W * 0.5 - EcoFan.WIDTH * 0.5 - EcoFan.HEIGHT * 0.1 > 1.0,
+				"запас от следа корпуса больше метра")
+		ok(xz.x < 285.0 or xz.x > 430.0 or dz > 30.0, "веер %s не в проходе 60 м (#832)" % xz)
+		ok(Seabed.mesh_height(xz.x, xz.y) < -100.0, "веер %s ниже края отмели" % xz)
+	var w := EcoWorld.new()
+	w.ground = Seabed.mesh_height
+	var c := w.add(EcoCurrent.new()) as EcoCurrent
+	var fans := w.add(EcoFan.new(c)) as EcoFan
+	for f in fans.fans:
+		if EcoDrop.SLOPE_FANS.has(Vector2(f.pos.x, f.pos.z)):
+			near(f.pos.y, Seabed.mesh_height(f.pos.x, f.pos.z) - 0.05, 1e-4, "веер %d стоит на дне склона" % f.index)
+			near(f.yaw, EcoFan.aim(f, c.angle), 1e-4, "веер %d поперёк течения" % f.index)
+
+
+## В живом мире: свои скребуны края рисует «Скребуны края», мох края — «Мох края» у вида места; мох края едет гостю
+## один раз вместе с остальным (EcoLink.mosses).
+func test_feeding_group_in_eco_view() -> void:
+	var ev := EcoView.new()
+	ev.ground = Seabed.mesh_height
+	ok(ev.drop_grazers != null and ev.drop_grazers.moss == ev.drop.moss, "скребуны края на мху края")
+	eq(ev.grazers.all.size(), EcoGrazer.COUNT, "скребунов рифа столько же")
+	ok(ev.get_node_or_null("Скребуны края") == ev.drop_grazer_view, "вид скребунов края")
+	ok(ev.drop_view.moss_view != null and ev.drop_view.moss_view.name == "Мох края", "мох края у вида места")
+	var all := EcoLink.mosses(ev.world.systems)
+	eq(all.count(ev.drop.moss), 1, "мох края в сети один раз")
+	ok(all.has(ev.moss), "мох рифа на месте")
+	ev.free()

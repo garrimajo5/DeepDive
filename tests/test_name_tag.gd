@@ -186,3 +186,56 @@ func test_tag_not_over_panel() -> void:
 				ok(not b.intersects(r.grow(-1.0)), "x %.1f: табличка %s не на %s" % [x, r, b])
 	main.vote_panel.visible = false
 	ok(hidden_by_panel > 0, "хотя бы раз табличка попала на панель и скрыта")
+
+
+## #1376: табличка товарища за столом не ложится на подпись «ВНИЗ» и счёт поля голосования (`34a-spusk-panel`):
+## корабль у 10, свой — у поста «Маршрут», товарищ напротив за столом, голосование о спуске открыто.
+func test_tag_not_over_vote_words() -> void:
+	main.walker.x = Main.ROUTE_POST.x
+	main.walker.z = Main.ROUTE_POST.y
+	main.walker.yaw = PI / 2.0
+	var mate := main.add_mate(-1.4, BridgeProps.TABLE_Z, -PI / 2.0, Crew.Role.SONAR, 1)
+	mate.name = "Сонарщик"
+	var i := main.crew.find(mate)
+	var p10 := Run.place_xz(Run.DESCENT)   # у 10 — одно поле «ВНИЗ» по центру, как на снимке тестера
+	main.park_at(Vector3(p10.x, Seabed.height(p10.x, p10.y) + 15.0, p10.y))
+	main.run.descent(main.helm.pos.x, main.helm.pos.z)
+	main.open_vote()
+	for k in 30:
+		main.step(1.0 / 30.0)
+	var cam := main.get_viewport().get_camera_3d()
+	ok(not main.sonar_view.vote.word_rects(cam).is_empty(), "подписи полей видны и есть на экране")
+	var hidden := 0
+	var seen := 0
+	for k in 15:
+		var z := BridgeProps.TABLE_Z - 1.4 + 0.2 * k
+		mate.place(-1.4, z, -PI / 2.0)
+		main.step(1.0 / 30.0)
+		var t := main.name_tags.tags[i]
+		if not t.visible:
+			hidden += 1
+			continue
+		seen += 1
+		var r := _screen_rect(i)
+		for w: Rect2 in main.sonar_view.vote.word_rects(cam):
+			ok(not w.intersects(r.grow(-1.0)), "z %.1f: табличка %s не на подписи %s" % [z, r, w])
+	ok(hidden > 0, "за столом напротив табличка попадала на подпись и скрыта")
+	ok(seen > 0, "в стороне от подписи табличка видна")
+
+
+## #1376: горящее табло тревог над окнами — тоже интерфейс для табличек; погашенное — нет.
+func test_lit_alarm_board_blocks_tags() -> void:
+	main.walker.x = 0.0
+	main.walker.z = 1.0
+	main.walker.yaw = 0.0
+	main.walker.pitch = 0.2
+	main.step(1.0 / 30.0)
+	var board := main.board_screen_rect()
+	ok(board.has_area(), "табло в кадре")
+	ok(not main.tag_blocks().has(board), "тревог нет — табло не мешает табличкам")
+	main.vitals.energy = Vitals.LOW_ENERGY * 0.5
+	main.step(1.0 / 30.0)
+	ok(main.alarms_on().has(true), "мало энергии — табло горит")
+	board = main.board_screen_rect()
+	ok(board.has_area(), "табло в кадре и при тревоге %s" % board)
+	ok(main.tag_blocks().has(board), "горящее табло — табличка на него не ложится")

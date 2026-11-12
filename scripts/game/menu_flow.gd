@@ -20,6 +20,12 @@ func _size() -> Vector2:
 	return main.get_viewport().get_visible_rect().size
 
 
+## Палец попал в кнопку меню, паузы, настроек или журнала — щелчок SND-007 (`UiSounds.tap`).
+func tap_sound(id: String) -> void:
+	if id != "" and main.ui_sounds:
+		main.ui_sounds.tap()
+
+
 ## Главное меню ART-037 поверх сцены (после заставки прогрева — сразу под ней). Игра под меню стоит.
 func open_menu() -> void:
 	main.main_menu.open = true
@@ -37,6 +43,7 @@ func open_menu() -> void:
 
 ## Шаг под меню: касания кнопок. «Погрузиться» — забег с начала (облёт, часы забега), палец с кнопки не идёт в игру.
 func menu_step(dt: float = 0.0) -> void:
+	dive_ahead()
 	var r := main.overlay.router
 	if main.settings.open:
 		settings_step(r)
@@ -55,7 +62,9 @@ func menu_step(dt: float = 0.0) -> void:
 		r.end_frame()
 		return
 	for p in r.taps:
-		var what := main.main_menu.press(main.main_menu.hit(p, _size()))
+		var id := main.main_menu.hit(p, _size())
+		tap_sound(id)
+		var what := main.main_menu.press(id)
 		if what == "dive":
 			close_menu()
 			main.save.live = true
@@ -75,6 +84,19 @@ func menu_step(dt: float = 0.0) -> void:
 			open_settings()
 			break
 	r.end_frame()
+
+
+## Под меню — заранее то, что первый кадр «Погрузиться» иначе считал бы разом (#1529, «виды/корабль и камера»
+## 52 мс у 30-kartochka-sonar): клетки камней, ракушек и кочек у начала спуска — по кадрам меню, затем списки
+## россыпей там же (один кадр меню, не кадр облёта), и LUT цветокоррекции на глубине камеры первого кадра — первая
+## точка облёта (`Flyby.START_PATH`) или глаза на мостике. Фон меню непрозрачный — подмены не видно; корабль стоит —
+## дальше шаг даром.
+func dive_ahead() -> void:
+	if main.ocean.ahead(main.helm.pos):
+		main.ocean.set_ship(main.helm.pos, main.helm.yaw)
+	var fly := Main.intro and main.settings.intro   # как в `Main._begin_run`
+	var y: float = Flyby.START_PATH[0].y if fly else main.pilot.eye(main.walker).y
+	main.grade.apply(-(main.helm.pos.y + y), main.silt.k)
 
 
 func close_menu() -> void:
@@ -125,10 +147,21 @@ func open_settings() -> void:
 	main.overlay.router.clear()   # палец с кнопки «Настройки» не берёт ползунок
 
 
-func settings_show() -> void:
+func _settings_panel() -> SettingsPanel:
 	if main.settings_panel == null:
 		main.settings_panel = SettingsPanel.new()
 		main.add_child(main.settings_panel)
+	return main.settings_panel
+
+
+## Прогрев (WarmRunner, #1637): панель настроек создаётся под шторкой и рисует все страницы — узел и кегли
+## готовы до первого «Настройки». on = false — снова по состоянию настроек (закрыты — скрыта).
+func warm_settings(on: bool) -> void:
+	_settings_panel().warm(on, main.settings)
+
+
+func settings_show() -> void:
+	_settings_panel()
 	main.settings.mic_ok = main.radio.mic   # статус микрофона на странице «Голос» ART-041
 	main.settings_panel.show_settings(main.settings)
 	if main.menu_panel:   # над главным меню — его фон без кнопок
@@ -145,6 +178,7 @@ func settings_step(r: Touch.Router) -> void:
 	var settings := main.settings
 	for p in r.taps:
 		var id := settings.hit(p, size)
+		tap_sound(id)
 		var what := settings.press(id, p, size)
 		if id == "swipe" or Settings.is_volume(id):
 			apply_settings()
@@ -247,6 +281,7 @@ func journal_show() -> void:
 	if m.logbook_panel == null:
 		m.logbook_panel = JournalPanel.new()
 		m.add_child(m.logbook_panel)
+	m.logbook.lore = m.lore
 	m.logbook.blank = Journal.empty(m.expedition, m.scanner.scanned.size(), m.samples.cargo.size())
 	m.logbook_panel.show_journal(m.logbook, m.expedition, m.scanner, Species.count(), m.samples.cargo.size(),
 		m.save.state == SaveGame.Load.BROKEN, m.lore)
@@ -258,7 +293,9 @@ func journal_show() -> void:
 func journal_step(r: Touch.Router) -> void:
 	var m := main
 	for p in r.taps:
-		var did := m.logbook.press(m.logbook.hit(p, _size()), m.scanner.scanned, m.expedition)
+		var id := m.logbook.hit(p, _size())
+		tap_sound(id)
+		var did := m.logbook.press(id, m.scanner.scanned, m.expedition)
 		if did in ["card", "back"]:   # карточка открыта/закрыта, журнал закрыт: палец не нажмёт то, что под ним
 			m.overlay.router.clear()
 			break

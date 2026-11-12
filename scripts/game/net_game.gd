@@ -183,6 +183,7 @@ func enter_client(c: NetLink.Client) -> void:
 	main.drop.menu_ready = true   # главное меню ART-037 есть: «В меню» в диалоге обрыва связи
 	main.flyby.stop()   # клиент входит в идущий забег — облёта нет
 	main.tutorial_guest = Tutorial.Guest.new()
+	main.tutorial.set_guest(true)   # маршрута у гостя нет — без шага 7 (#1346)
 	main.sonar.count = -1   # первый кадр хоста ставит его сонар, даже если счёт импульсов совпал со своим
 	main.comms.reset_run(0)
 	main.comms.code = ""   # кодовое слово — хоста, до первого кадра страницы «Связь» нет
@@ -252,7 +253,7 @@ func client_step(dt: float) -> void:
 	main.sonar_view.show_state(main.sonar, main.helm.pos, main.helm.yaw, main.time, main.reactor.k(Reactor.Sys.SONAR) > 0.0, main.silt.noise(main.time))
 	client_eco(dt, near)
 	main.visor.visible = main.me.welding()
-	main.alarm_board.show_alarms(main.alarms_on(), main.time, main.breach.active)
+	main.alarm_board.show_alarms(main.alarms_on(), main.time, main.breach.active, main.pilot.seated)
 	client_run_view(dt)
 	var live := not (main.wreck.active() or main.drop.blocks())   # ввод, который ушёл хосту
 	for ev in main.tutorial_guest.update(dt, main.pilot.seated, main.at_power, main.near_post, Vector2(r.move) if live else Vector2.ZERO,
@@ -295,13 +296,16 @@ func client_run_view(dt: float) -> void:
 	main.sonar_view.show_waypoint(main.run.waypoint())
 	main.sonar_view.show_briefing(main.brief.update(dt, Briefing.wanted(main.near_post, main.at_vote, main.run.ended)), main.run, main.helm.pos)
 	main.sonar_view.show_vote(main.vote_fade.update(dt, VoteHolo.wanted(main.at_vote, main.run.ended)), main.votes, int(main.net_vote["secs"]),
-		float(main.net_vote["frac"]))
+		float(main.net_vote["frac"]), main.run.at_descent())
 	main.sonar_view.show_result(main.result_fade.update(dt, VoteHolo.result_wanted(main.at_vote, main.run.ended)), main.result_rows,
 		main.camera.global_position)
 	if not main.at_vote:
 		main.vote_panel.visible = false
 	elif main.run.ended:
 		main.vote_panel.show_results(main.result_detail, main.run.score)
+	elif main.run.at_descent():   # у 10 — панель спуска по знаниям слоя (кадр «k») и мнениям хоста (#1362)
+		main.vote_panel.show_descent(DescentVote.unknown(main.lore), DescentVote.opinions(main.net_vote["ops"]))
+		main.vote_panel.set_tally(main.net_vote["tally"])
 	else:
 		main.vote_panel.show_vote(main.run.depth, main.net_vote["ops"])
 		main.vote_panel.set_tally(main.net_vote["tally"])
@@ -399,6 +403,7 @@ func leave_net() -> void:
 	main.net_client.stop()
 	main.net_client = null
 	main.tutorial_guest = null
+	main.tutorial.set_guest(false)
 	main.save.guest = false   # снова своя кампания: свои знания вместо пришедших от хоста (#823)
 	main.lore.apply(own_lore)
 	NetSnap.apply_hold(own_hold, main.samples, main.scanner)   # и свои трюм и виды вместо хозяйских

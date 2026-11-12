@@ -93,7 +93,7 @@ func test_scene_power_panel_drives_engines() -> void:
 	main.sit_at_helm()
 	main.helm.in_thrust = 1.0
 	r.begin(3, r.layout.pad.c + Vector2(0, -r.layout.pad.r * 0.7))
-	for i in 600:
-		main.step(1.0 / 30.0)
+	for i in 150:   # 15 с шагом 0,1: до полного хода остаётся e^(−0,45·15) ≈ 0,1 % (шаг 1/30 × 600 — втрое дольше, #1350)
+		main.step(0.1)
 	r.end(3)
 	near(main.helm.speed, Helm.Ship.FORWARD * 1.5 / Helm.Ship.DRAG, 0.05, "тяга ×1,5 — полный ход 10 м/с")

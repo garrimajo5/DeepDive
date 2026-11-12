@@ -92,7 +92,9 @@ func pause_step() -> void:
 		r.end_frame()
 		return
 	for p in r.taps:
-		var what := main.pause.press(main.pause.hit(p, main.get_viewport().get_visible_rect().size))
+		var id := main.pause.hit(p, main.get_viewport().get_visible_rect().size)
+		main.menu_flow.tap_sound(id)
+		var what := main.pause.press(id)
 		if what != "":
 			pause_show()
 			match what:

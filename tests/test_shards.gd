@@ -93,6 +93,67 @@ func test_ci_runs_every_part() -> void:
 	var wf := FileAccess.get_file_as_string("res://.github/workflows/godot.yml")
 	ok(wf.contains("part: [1, 2, 3]"), "матрица из трёх частей")
 	ok(wf.contains("--shard ${{ matrix.part }}/3"), "часть берётся из матрицы, всего 3")
-	ok(wf.contains("needs: [changes, test-parts]") and wf.contains("needs.test-parts.result }}\" = \"success\""),
+	ok(wf.contains("--shard ${{ matrix.part }}/3 --slow 15"), "каждая часть печатает 15 самых долгих тестов")
+	ok(wf.contains("needs: [changes, test-parts, ps1]") and wf.contains("needs.test-parts.result }}\" = \"success\""),
 		"итог «Тесты» проверяет результат всех частей")
 	ok(wf.contains("if: always() && needs.changes.outputs.code == 'true'"), "итог не пропускается при упавшей части")
+
+
+func test_slowest_tests() -> void:
+	var t := {"test_a.test_x": 3.0, "test_a.test_y": 12.5, "test_b.test_z": 3.0, "test_c.test_w": 0.2}
+	eq(TestShards.slowest(t, 2), [["test_a.test_y", 12.5], ["test_a.test_x", 3.0]], "долгие первыми, равные — по имени")
+	eq(TestShards.slowest(t, 10).size(), 4, "N больше числа тестов — все")
+	eq(TestShards.slowest(t, 0), [])
+	eq(TestShards.slowest({}, 5), [])
+	var text := TestShards.slow_text(t, 2)
+	ok(text.begins_with("Самые долгие тесты (2):"), text)
+	ok(text.find("test_a.test_y") < text.find("test_a.test_x"), "по убыванию: " + text)
+	ok(text.contains("  12.5 с  test_a.test_y"), text)
+	eq(TestShards.slow_text({}, 3), "")
+
+
+func test_runner_has_slow_key() -> void:
+	# ключ разбирает сам раннер: без него --slow ушёл бы в фильтры и прогон стал бы пустым
+	var src := FileAccess.get_file_as_string("res://tests/run.gd")
+	ok(src.contains("\"--slow\""), "run.gd разбирает --slow")
+	ok(src.contains("TestShards.slow_text(test_s, slow_n)"), "run.gd печатает самые долгие тесты")
+
+
+func test_load_fail_reason() -> void:
+	# файл не загрузился — раннер пишет причину из ошибок движка и команду --check-only (#1350)
+	var errs := ["Parse Error: Identifier \"nope\" not declared (test_a.gd:4 GDScript::reload)",
+		"Failed to load script \"res://tests/test_a.gd\" with error \"Parse error\". (gdscript_resource_format.cpp:46 load)",
+		"Parse Error: Identifier \"nope\" not declared (test_a.gd:4 GDScript::reload)"]
+	var lines := TestShards.load_fail("test_a.gd", errs)
+	eq(lines[0], "ПАДЕНИЕ  test_a.gd: скрипт не загрузился")
+	eq(lines.size(), 3, "повтор и «Failed to load» — не причины: %s" % [lines])
+	ok(lines[1].contains("причина: Parse Error: Identifier \"nope\""), lines[1])
+	eq(lines[2], "         - подробно: godot --headless --path . --check-only -s tests/test_a.gd")
+	eq(TestShards.load_fail("test_b.gd", []).size(), 2, "движок причину не дал — только подсказка")
+	var many: Array = []
+	for i in 9:
+		many.append("ошибка %d" % i)
+	eq(TestShards.load_fail("test_c.gd", many).size(), 7, "не больше пяти причин")
+	var src := FileAccess.get_file_as_string("res://tests/run.gd")
+	ok(src.contains("TestShards.load_fail(f, trap.take())"), "run.gd печатает причину незагрузившегося файла")
+
+
+func test_filter_arg() -> void:
+	# «test_helm.gd» и «tests/test_helm.gd» — тот же фильтр, что «test_helm» (#1350: было «0 из 0»)
+	eq(TestShards.filter_arg("test_helm.gd"), "test_helm")
+	eq(TestShards.filter_arg("tests/test_helm.gd"), "test_helm")
+	eq(TestShards.filter_arg("res://tests/test_helm.gd"), "test_helm")
+	eq(TestShards.filter_arg("test_helm"), "test_helm")
+	eq(TestShards.filter_arg("test_helm.test_turn"), "test_helm.test_turn", "имя теста не трогаем")
+	ok("test_shards.test_filter_arg".contains(TestShards.filter_arg("tests/test_shards.gd")), "совпадает с «файл.тест»")
+
+
+func test_no_match_message() -> void:
+	# фильтр не выбрал ни одного теста — раннер пишет почему, а выход и так 1 (passed == 0)
+	var line := TestShards.no_match(["test_nope", "zzz"])
+	ok(line.contains("«test_nope», «zzz»"), line)
+	ok(line.contains("не нашёл ни одного теста"), line)
+	var src := FileAccess.get_file_as_string("res://tests/run.gd")
+	ok(src.contains("filters.append(TestShards.filter_arg(arg))"), "run.gd срезает путь и .gd у фильтра")
+	ok(src.contains("print(TestShards.no_match(filters))"), "run.gd печатает, что фильтр пуст")
+	ok(src.contains("passed > 0 else 1"), "пустой прогон — выход 1")

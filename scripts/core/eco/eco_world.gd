@@ -97,6 +97,7 @@ func reset(world_seed: int = -1) -> void:
 	_link.clear()
 	_drain.clear()
 	_drag.clear()
+	_heard.clear()
 	agents.clear()
 	time = 0.0
 	steps = 0
@@ -327,6 +328,26 @@ func send(event: Dictionary) -> void:
 	_link.append(event)
 
 
+## Фоновые строки, которые экипаж видит раз за эпизод наблюдения (гейм-дизайнер, #1400, 12.11): вид → заметки.
+## Засада глазуна на монетников — 5–6 раз за стоянку у середины 00 → 01, одна и та же строка мешала цепочке
+## «волнолист → моллюски». Повтор, услышанный раньше ONCE_GAP с после прежнего такого же, идёт без текста
+## (наблюдение в журнал остаётся, частота охоты та же); ушли из слышимости и вернулись позже — строка снова.
+const ONCE := {"glazun": ["ambush"]}
+const ONCE_GAP := 60.0
+## «вид:заметка» → время мира, когда экипаж последний раз слышал такое событие.
+var _heard := {}
+
+
+## Повтор фоновой строки ONCE в этом эпизоде (и отметка, что событие услышано).
+func repeat(species: String, note: String) -> bool:
+	if not note in (ONCE.get(species, []) as Array):
+		return false
+	var key := species + ":" + note
+	var was: float = _heard.get(key, -INF)
+	_heard[key] = time
+	return time - was < ONCE_GAP
+
+
 ## Забрать события для корабля: прямые (удар, энергия, рядом) и события шины, которые экипаж слышит
 ## (не дальше EcoBus.HEARING от корабля): с заметкой вида — EcoLink.OBSERVE вместе с текстом (handleEvents
 ## в js/game.js: текст и наблюдение одним событием), остальные с текстом — EcoLink.MESSAGE. Очереди очищаются.
@@ -334,9 +355,11 @@ func take_link() -> Array[Dictionary]:
 	var out := _link.duplicate()
 	_link.clear()
 	for ev in bus.take_near(ship.pos):
-		var t := ev.text()
+		var t := "" if repeat(ev.species, ev.note) else ev.text()
+		var hot := EcoLink.urgent(ev.species, ev.note)
+		var held := EcoLink.keep(ev.species, ev.note)
 		if ev.is_observation():
-			out.append(EcoLink.observe(ev.species, ev.note, t))
+			out.append(EcoLink.observe(ev.species, ev.note, t, hot, held))
 		elif t != "":
-			out.append(EcoLink.message(t))
+			out.append(EcoLink.message(t, hot, held))
 	return out

@@ -19,6 +19,11 @@ const USUAL_K := 0.05      ## доля нового шага в среднем
 const USUAL_FROM := 10     ## столько шагов до первого «обычно»
 const USUAL_MIN := 0.1     ## обычное короче, мс — отношение не пишем (подчасть по событию)
 const SLOW := 2.0          ## во сколько раз дольше обычного — пишем «×N»
+## Подчасть каждого шага с обычным короче USUAL_MIN (#1350, `EcoKamen` ~0,05 мс): «EcoKamen 42» без «×» читалась как
+## событие, а не заминка. Точного отношения нет — пишем нижнюю границу «×>N» по USUAL_MIN, не больше «×>100». Подчасть
+## по событию (бывает не в каждом шаге — доля шагов `usual_seen` ниже SEEN_MIN) по-прежнему без «×».
+const SEEN_MIN := 0.5      ## доля шагов с подчастью — она «каждого шага»
+const FLOOR_CAP := 100     ## «×>N» не больше
 ## Заминка машины (issue #1174, #1156: в провалах эмулятора «мир 230 [EcoVent 34 ×…, EcoCoins 33 ×129]» — раздуты все
 ## подчасти, даже EcoVent, у которого в шаге три строки, а тестер и разбор гадали, какой вид виноват). Медиана «×»
 ## подчастей с известным обычным — не меньше STALL_K, и таких подчастей не меньше STALL_N — после скобок пишем
@@ -30,6 +35,22 @@ const STALL_K := 5.0
 const STALL_N := 3
 const REST_SKIP := 2     ## заминка по сумме — без стольких самых долгих подчастей (#1253)
 const STALL := " — разом ×%d, заминка"
+## Три виновника разом (#1317, `32h-rakovina-osmotr`: «мир 51 (обычно 10) [EcoKelp 9 ×24, EcoCoins 9 ×44, EcoGrazer 9
+## ×80, ещё 44: 24 ×3]» без пометки): машина отняла по куску времени у нескольких несвязанных модулей, остальные —
+## ×3. За кадр мир идёт одним подшагом, и без импульса или разряда (`PING_MARK`) у трёх несвязанных модулей нет общей
+## причины стать в SPIKE_K раз дольше разом (в облаке у Раковины 03 со сканером и импульсом ни один модуль за 840
+## кадров не дольше 1,6 мс). Тогда «разом ×N» — во сколько раз дольше обычного весь замер, не меньше SPIKE_MIN.
+const SPIKE_K := 10.0      ## во сколько раз дольше обычного — подчасть-«виновник»
+const SPIKE_MS := 3.0      ## и не короче, мс
+const SPIKE_MIN := 2       ## «разом ×N» не меньше
+const PING_MARK := "импульс, разряд"   ## подчасть мира в кадре импульса или разряда (`EcoWorld.step`)
+## Одна отметка (#1350, 12.11, отчёт `2026-11-12-0330`: «мир 72 [EcoFlower 42 ×>100, EcoFish 12, …]»): у подчасти
+## обычное ~0 (`EcoFlower.step` — шесть сложений, за 1680 кадров замера макс 1 мс), она одна «×>N», а у всех подчастей
+## с известным обычным — меньше SLOW раз (или прибавили меньше SPIKE_MS, #1731). Работы в ней на 42 мс нет — время отняла машина (хост снял процесс с ЦП),
+## пока шёл этот вызов. Пишем после скобок «— одна отметка, вероятно хост», чтобы разбор не искал в ней виновника.
+## Подчасть с обычным ≥ USUAL_MIN, одна «×30» среди «×1», — по-прежнему виновник (у неё есть работа, которая может
+## подорожать). В кадре импульса или разряда (`PING_MARK`) — не пишем.
+const LONE := " — одна отметка, вероятно хост"
 
 var parts := {}            ## часть → мс этого шага (части с одним именем складываются)
 var subs := {}             ## часть → {подчасть → мс}: отметки «часть/подчасть» (issue #745)
@@ -40,6 +61,7 @@ var last_dt := 0.0         ## шаг времени прошлого шага, �
 var _from := 0
 var usual := {}            ## часть → обычное время, мс (среднее шагов до `last`)
 var usual_subs := {}       ## часть → {подчасть → обычное время, мс}
+var usual_seen := {}       ## часть → {подчасть → доля шагов, где она была} (SEEN_MIN)
 var usual_n := 0           ## сколько шагов в среднем
 var _starts := 0           ## сколько было `start`: `last` — законченный шаг со второго
 
@@ -75,6 +97,12 @@ func _fold(of: Dictionary, sub_of: Dictionary) -> void:
 			usual_subs[p] = {}
 	for p in usual_subs.keys():
 		_mix(usual_subs[p], sub_of.get(p, {}), k)
+		var here := {}
+		for key in sub_of.get(p, {}).keys():
+			here[key] = 1.0
+		if not usual_seen.has(p):
+			usual_seen[p] = {}
+		_mix(usual_seen[p], here, k)
 
 
 static func _mix(into: Dictionary, of: Dictionary, k: float) -> void:
@@ -120,12 +148,18 @@ func top(n: int = SHOW, min_ms: float = MIN_MS) -> String:
 
 ## Обычное время для подписи: {} — пока шагов мало.
 func _usual_now() -> Dictionary:
-	return {"": usual, "/": usual_subs} if usual_ready() else {}
+	return {"": usual, "/": usual_subs, "seen": usual_seen} if usual_ready() else {}
 
 
 ## «×N» к обычному времени ms (usual — обычное, мс): пусто, если не дольше SLOW раз или обычное неизвестно.
-static func slower(ms: float, usual_ms: float) -> String:
-	if usual_ms < USUAL_MIN or ms < usual_ms * SLOW:
+## seen — доля шагов с этой подчастью: подчасть каждого шага (≥ SEEN_MIN) с обычным короче USUAL_MIN — «×>N» (#1350).
+static func slower(ms: float, usual_ms: float, seen: float = 0.0) -> String:
+	if usual_ms < USUAL_MIN:
+		var low := floori(ms / USUAL_MIN)
+		if seen < SEEN_MIN or low < roundi(SLOW):
+			return ""
+		return " ×>%d" % mini(low, FLOOR_CAP)
+	if ms < usual_ms * SLOW:
 		return ""
 	return " ×%d" % roundi(ms / usual_ms)
 
@@ -140,12 +174,15 @@ static func _top(of: Dictionary, n: int, min_ms: float, sub_of: Dictionary = {},
 		if float(of[k]) >= SUB_MS and mine.has(k) and float(of[k]) >= float(mine[k]) * SLOW:
 			t += " (обычно %d)" % roundi(float(mine[k]))
 		if float(of[k]) >= SUB_MS and sub_of.has(k):
-			var inner := _inner(float(of[k]), sub_of[k], min_ms, us.get("/", {}).get(k, {}))
+			var inner := _inner(float(of[k]), sub_of[k], min_ms, us.get("/", {}).get(k, {}),
+					us.get("seen", {}).get(k, {}))
 			if not inner.is_empty():
 				t += " [%s]" % inner
 				var x := stall(sub_of[k], us.get("/", {}).get(k, {}))
 				if x > 0:
 					t += STALL % x
+				elif lone(sub_of[k], us.get("/", {}).get(k, {}), us.get("seen", {}).get(k, {})):
+					t += LONE
 		out.append(t)
 	return ", ".join(out)
 
@@ -166,7 +203,52 @@ static func stall(sub: Dictionary, us: Dictionary) -> int:
 	var med := ratios[mid] if ratios.size() % 2 == 1 else (ratios[mid - 1] + ratios[mid]) * 0.5
 	if med >= STALL_K:
 		return roundi(med)
-	return rest_stall(sub, us)
+	var r := rest_stall(sub, us)
+	return r if r > 0 else spike_stall(sub, us)
+
+
+## Одна отметка (`LONE`): ровно одна подчасть sub не короче MIN_MS с обычным короче USUAL_MIN, которая каждого шага
+## (seen ≥ SEEN_MIN) и пишется «×>N», а все подчасти с известным обычным (хотя бы одна) — меньше SLOW раз
+## или прибавили меньше SPIKE_MS (#1731: «монетники 4 ×2» рядом с «EcoCurrent 35 ×>100» — +2 мс машина даёт сама);
+## кадр без импульса и разряда. us — обычное время подчастей, мс; seen — доля шагов с подчастью.
+static func lone(sub: Dictionary, us: Dictionary, seen: Dictionary) -> bool:
+	if sub.has(PING_MARK):
+		return false
+	var floors := 0
+	var known := 0
+	for key in sub.keys():
+		var m := float(sub[key])
+		var u := float(us.get(key, 0.0))
+		if u >= USUAL_MIN:
+			if m >= u * SLOW and m - u >= SPIKE_MS:
+				return false
+			known += 1
+		elif m >= MIN_MS and not slower(m, u, float(seen.get(key, 0.0))).is_empty():
+			floors += 1
+	return floors == 1 and known > 0
+
+
+## Заминка по трём «виновникам» сразу (#1317): не меньше STALL_N подчастей с известным обычным — каждая не короче
+## SPIKE_MS и в SPIKE_K раз дольше обычного, в кадре без импульса и разряда. Итог — весь замер к обычному, не меньше
+## SPIKE_MIN; иначе 0. Два таких — ещё виновники (`test_stall_by_rest_sum`).
+static func spike_stall(sub: Dictionary, us: Dictionary) -> int:
+	if sub.has(PING_MARK):
+		return 0
+	var spikes := 0
+	var ms := 0.0
+	var usual_ms := 0.0
+	for key in sub.keys():
+		var u := float(us.get(key, 0.0))
+		if u < USUAL_MIN:
+			continue
+		var m := float(sub[key])
+		ms += m
+		usual_ms += u
+		if m >= SPIKE_MS and m >= SPIKE_K * u:
+			spikes += 1
+	if spikes < STALL_N:
+		return 0
+	return maxi(SPIKE_MIN, roundi(ms / usual_ms))
 
 
 ## Заминка по сумме (#1253, `32o-mol-steklo`: «мир 230 (обычно 16) [EcoFish 79 ×40, рыбы 21 ×11, EcoDome 19 ×41,
@@ -190,7 +272,7 @@ static func rest_stall(sub: Dictionary, us: Dictionary) -> int:
 
 ## Подчасти долгой части total: SUB_SHOW самых долгих, затем остаток — прочие подчасти одной суммой (`REST`) и время
 ## вне подчастей (`BARE`), если они не короче min_ms (issue #1020).
-static func _inner(total: float, sub: Dictionary, min_ms: float, us: Dictionary = {}) -> String:
+static func _inner(total: float, sub: Dictionary, min_ms: float, us: Dictionary = {}, seen: Dictionary = {}) -> String:
 	var t := _top(sub, SUB_SHOW, min_ms)
 	if t.is_empty():
 		return t
@@ -201,7 +283,8 @@ static func _inner(total: float, sub: Dictionary, min_ms: float, us: Dictionary 
 	if mark:   # подчасти заново — с «×N» к обычному
 		var named := PackedStringArray()
 		for k in shown:
-			named.append("%s %d%s" % [k, roundi(float(sub[k])), slower(float(sub[k]), float(us.get(k, 0.0)))])
+			named.append("%s %d%s" % [k, roundi(float(sub[k])),
+					slower(float(sub[k]), float(us.get(k, 0.0)), float(seen.get(k, 0.0)))])
 		t = ", ".join(named)
 	var rest := 0.0
 	var rest_usual := 0.0

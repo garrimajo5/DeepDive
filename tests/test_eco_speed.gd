@@ -74,7 +74,8 @@ func test_look_ahead_ground_cache() -> void:
 	eq(calls[0], n * 3, "другое дно — читает заново")
 
 
-## Issue #1247: ползущий ёж ленточника читает дно, только когда отполз дальше URCHIN_GROUND_STEP (раньше — каждый шаг).
+## Issue #1247: ползущий ёж ленточника читает дно, только когда отполз дальше URCHIN_GROUND_STEP (раньше — каждый шаг);
+## в точке — высота и уклон, между точками — по уклону (#1400).
 func test_urchin_ground_cache() -> void:
 	var calls := [0]
 	var kelp := EcoKelp.new()
@@ -84,13 +85,15 @@ func test_urchin_ground_cache() -> void:
 	var u := EcoKelp.Urchin.new()
 	u.pos = Vector3(1, 0, 0)
 	near(kelp.urchin_floor(u), 0.2, 1e-6, "первый раз — по дну")
+	eq(calls[0], 3, "высота и уклон по x и z")
 	for i in 10:
-		u.pos.x += 0.005   # ход ежа за кадр
-		kelp.urchin_floor(u)
-	eq(calls[0], 1, "отполз на 5 см — дно не читали заново")
-	u.pos.x += EcoKelp.URCHIN_GROUND_STEP
+		u.pos.x -= 0.005   # ход ежа за кадр
+		u.pos.z += 0.003
+		near(kelp.urchin_floor(u), u.pos.x * 0.2, 1e-6, "между точками — по уклону, а не ступенькой")
+	eq(calls[0], 3, "отполз на 6 см — дно не читали заново")
+	u.pos.x += EcoKelp.URCHIN_GROUND_STEP * 1.5
 	near(kelp.urchin_floor(u), u.pos.x * 0.2, 1e-6, "дальше шага — читает заново")
-	eq(calls[0], 2)
+	eq(calls[0], 6)
 
 
 func test_far_shoals_step_every_third_frame() -> void:
@@ -150,12 +153,19 @@ static func _most(hist: Array[int]) -> int:
 
 ## Issue #803: дальние стаи шли по набранному времени, и неровный кадр сводил их в один — раз в несколько кадров
 ## шагали все девять стай сразу (мир 51 мс вместо 15). Теперь очередь по счётчику шагов: не больше трети за кадр.
+## Очередь дальних ровная с первого кадра (каждый кадр — ровно треть), поэтому хватает 1000 кадров (~27 с мира)
+## вместо 3000 — зато проверяем и снизу: ни одного кадра меньше трети (фазы не слиплись в пустые кадры).
 func test_far_shoals_stay_apart_on_uneven_frames() -> void:
 	var w := _world(Vector3(500, 0, 500))  # все стаи дальше FAR
 	var n := (w.systems[0] as EcoFish).shoals.size()
-	var hist := _far_moves_per_frame(w, 3000)
+	var hist := _far_moves_per_frame(w, 1000)
 	var cap := ceili(n / float(EcoFish.FAR_EVERY))
 	ok(_most(hist) <= cap, "дальних стай за кадр не больше %d из %d: было %d (%s)" % [cap, n, _most(hist), str(hist)])
+	var low := floori(n / float(EcoFish.FAR_EVERY))
+	var under := 0
+	for k in low:
+		under += hist[k]
+	eq(under, 0, "кадров, где шагнуло меньше %d дальних стай: %d (%s)" % [low, under, str(hist)])
 
 
 ## Стаи у корабля (часть ближе MID, часть дальше) на неровных кадрах тоже не сходятся в один кадр.
@@ -273,8 +283,29 @@ func test_hull_bound_covers_hull() -> void:
 ## Мерка скорости машины: 40 раз толчки соседей в стае из 22 рыбок (чистый GDScript, как шаг мира); на ПК ≈ 0,6 мс.
 const REF_PC_MS := 0.6
 ## Порог шага живого мира на машине не медленнее ПК (мс), см. test_view_step_fits_frame. Issue #1172: плавность
-## Б3 (#1137–#1170) подняла шаг к прежнему порогу 2,5 (0,95–1,05 от него в CI) — 3,0.
-const LIMIT_PC_MS := 3.0
+## Б3 (#1137–#1170) подняла шаг к прежнему порогу 2,5 (0,95–1,05 от него в CI) — 3,0. Issue #1357, второй раз: на
+## часах процессора шаг в пересчёте на ПК (шаг / медленность) — 2,52–2,74 у обычных раннеров CI, но 3,01 у быстрого
+## раннера (мерка 0,575 — быстрее ПК) и 3,08 в облачной сессии: мерки не повторяют долю движка в шаге (половина шага —
+## `_sync` видов, запись буферов MultiMesh). Разброс машин ≈ 20 %, порог 3,0 лежал внутри него — 3,4 (таблица
+## `RUNNERS`, запас не меньше 10 % у каждой), рост шага на обычном раннере ловится от ~25 %. Третий раз, 10.11:
+## 28 прогонов CI за 09–10.11 — шаг на ПК 2,76–3,45 (медиана 3,05); один коммит ce6781d дал 3,45 и 2,91 на двух
+## раннерах (разброс одной машины-раннера ≈ 18 %), 3,45 — красный при 3,4 дважды за день без изменений мира. Порог
+## 3,8 = 3,45 + 10 %, рост на ~25 % над медианой по-прежнему ловится.
+const LIMIT_PC_MS := 3.8
+## Замеры шага на часах процессора (#1359): [шаг, мерка ref, мерка obj] мс — раннеры CI 07.11.2026 и облачная сессия.
+## Порог обязан покрывать каждую с запасом MARGIN (test_limit_covers_runners): новая машина вне таблицы — дописать.
+## Замеры последних прогонов CI разом и строки для таблицы — `python3 tools/ci_speed.py --runs 20`.
+const RUNNERS := [
+	[3.22, 0.575, 0.235],  # быстрый раннер CI, main 2a528a6 — красный при пороге 3,0
+	[4.70, 1.075, 0.395],  # раннер CI, PR #1359
+	[3.70, 0.810, 0.290],  # раннер CI, PR #1359, перезапуск
+	[4.20, 0.719, 0.300],  # облачная сессия
+	[6.35, 1.060, 0.405],  # раннер CI, PR #1581 ce6781d — красный при пороге 3,4 (перезапуск — 2,91 на ПК)
+	[5.00, 0.800, 0.330],  # раннер CI, main 7620c07 (3,33 на ПК)
+	[3.47, 0.590, 0.230],  # быстрый раннер CI, main ba7fd1a (3,32 на ПК)
+]
+## Запас порога над шагом известных машин (доля).
+const MARGIN := 0.10
 ## Больше всего замеров шага живого мира на шумной машине (test_view_step_fits_frame, issue #732).
 const ROUNDS := 12
 
@@ -286,10 +317,11 @@ static func _ref_ms() -> float:
 	for i in 22:
 		pos.append(Vector3(r.range_f(-1.5, 1.5), r.range_f(-1, 1), r.range_f(-1.5, 1.5)))
 		live.append(1)
-	var t0 := Time.get_ticks_usec()
-	for i in 40:
-		EcoFish._separation(pos, live)
-	return (Time.get_ticks_usec() - t0) / 1000.0
+	var t0 := now_ms()
+	for n in REPS:
+		for i in 40:
+			EcoFish._separation(pos, live)
+	return (now_ms() - t0) / REPS
 
 
 ## Во сколько раз машина медленнее ПК по мерке ref (мс), не меньше 1.
@@ -312,8 +344,8 @@ static func _obj_ms() -> float:
 	for i in 22:
 		agents.append(EcoAgent.new("fish", Vector3(r.range_f(-3, 3), r.range_f(-31, -29), r.range_f(-3, 3))))
 	var home := Vector3(0, -30, 0)
-	var t0 := Time.get_ticks_usec()
-	for k in 40:
+	var t0 := now_ms()
+	for k in 40 * REPS:
 		for a in agents:
 			var p := a.p
 			var v := a.v
@@ -323,8 +355,50 @@ static func _obj_ms() -> float:
 			a.v = v.limit_length(2.4)
 			a.p = p + a.v * 0.016
 			a.state = EcoAgent.State.GRAZE
-	return (Time.get_ticks_usec() - t0) / 1000.0
+	return (now_ms() - t0) / REPS
 
+
+## Повторов мерок за замер (issue #1357): часы процессора `now_ms` идут шагами такта ядра (до 4 мс), мерка в 0,7 мс
+## их не видит — 200 повторов ≈ 140 мс, ошибка такта ≈ 3 %. Мерка — среднее одного повтора, как прежде.
+const REPS := 200
+
+
+## Время процессора потока (мс) из строки /proc/<…>/schedstat: первое число — наносекунды на процессоре.
+static func schedstat_ms(line: String) -> float:
+	var head := line.strip_edges().get_slice(" ", 0)
+	return float(head.to_int()) / 1e6 if head.is_valid_int() else -1.0
+
+
+## Время процессора главного потока (мс), −1 — нет /proc (не Linux).
+static func _cpu_clock() -> float:
+	for path in ["/proc/thread-self/schedstat", "/proc/self/schedstat"]:
+		var f := FileAccess.open(path, FileAccess.READ)
+		if f == null:
+			continue
+		var ms := schedstat_ms(f.get_line())
+		if ms >= 0.0:
+			return ms
+	return -1.0
+
+
+## Часы замеров шага живого мира (issue #1357): время процессора потока — вытеснение процесса на шумной машине
+## (параллельные тесты, снимки, соседи по раннеру CI) его не растит, а рост самого шага растит; шаг мира идёт
+## в главном потоке. Нет /proc — стенные часы, как до #1357.
+static func now_ms() -> float:
+	var cpu := _cpu_clock()
+	return cpu if cpu >= 0.0 else Time.get_ticks_usec() / 1000.0
+
+
+func test_cpu_clock() -> void:
+	near(schedstat_ms("96892547 266689 10"), 96.892547, 1e-9, "наносекунды → мс")
+	near(schedstat_ms("0 0 1\n"), 0.0, 1e-9, "ноль")
+	eq(schedstat_ms(""), -1.0, "пустая строка — нет часов")
+	eq(schedstat_ms("abc 1 2"), -1.0, "не число — нет часов")
+	var a := now_ms()
+	var x := 0.0
+	for i in 20000:
+		x += sin(i)
+	ok(now_ms() >= a, "часы не идут назад (%.1f)" % x)
 
 ## Медленность машины по обеим меркам: бо́льшая из двух, не меньше 1.
 static func slowness2(ref: float, obj: float) -> float:
@@ -338,6 +412,14 @@ func test_slowness() -> void:
 	near(slowness2(REF_PC_MS, OBJ_PC_MS * 1.3), 1.3, 1e-6, "объекты медленнее счёта — порог по объектам")
 	near(slowness2(REF_PC_MS * 1.5, OBJ_PC_MS), 1.5, 1e-6, "счёт медленнее объектов — порог по счёту")
 	near(slowness2(REF_PC_MS * 0.5, OBJ_PC_MS * 0.5), 1.0, 1e-6, "быстрее ПК по обеим — порог не ниже ПК")
+
+
+## Issue #1357: порог шага с запасом MARGIN над каждой известной машиной из RUNNERS (шаг в пересчёте на ПК).
+func test_limit_covers_runners() -> void:
+	for r: Array in RUNNERS:
+		var pc: float = r[0] / slowness2(r[1], r[2])
+		ok(pc * (1.0 + MARGIN) <= LIMIT_PC_MS, "шаг на ПК %.2f мс (%.2f / %.2f): порог %.2f без запаса %d %%" % [
+			pc, r[0], slowness2(r[1], r[2]), LIMIT_PC_MS, roundi(MARGIN * 100.0)])
 
 
 func test_view_step_fits_frame() -> void:
@@ -369,6 +451,9 @@ func test_view_step_fits_frame() -> void:
 	# Issue #1086: на раннере CI с меркой 0,78 мс и в облачной сессии шаг упирался в порог (3,60 при 3,25), хотя
 	# на обычном раннере держит запас ~10 %: мерка ref — чистый счёт, шаг — обход объектов. Вторая мерка `_obj_ms`
 	# (объекты EcoAgent) — порог по бо́льшей из двух медленностей.
+	# Issue #1357: в CI краснел без изменений мира (5,30 при пороге 5,07), локально — под нагрузкой. Мерки по 0,7 мс
+	# проскакивают между вытеснениями процесса, а 60 кадров шага по 4 мс — нет: шаг рос, порог — нет. Мерки и шаг
+	# теперь меряются временем процессора этого потока (`now_ms`), вытеснение в него не входит.
 	var best := INF
 	var ref := INF
 	var obj := INF
@@ -377,15 +462,16 @@ func test_view_step_fits_frame() -> void:
 	for k in ROUNDS:
 		ref = minf(ref, _ref_ms())
 		obj = minf(obj, _obj_ms())
-		var t0 := Time.get_ticks_usec()
+		var t0 := now_ms()
 		for i in 60:
 			view.step(1.0 / 60.0, ship)
-		best = minf(best, (Time.get_ticks_usec() - t0) / 60.0 / 1000.0)
+		best = minf(best, (now_ms() - t0) / 60.0)
 		slow = slowness2(ref, obj)
 		limit = LIMIT_PC_MS * slow
 		if k >= 4 and best < limit:
 			break
-	print("    шаг живого мира %.2f мс, порог %.2f (мерка %.3f мс, объекты %.3f мс)" % [best, limit, ref, obj])
+	print("    шаг живого мира %.2f мс, порог %.2f (на ПК %.2f из %.2f; мерка %.3f мс, объекты %.3f мс; часы: %s)" % [
+		best, limit, best / slow, LIMIT_PC_MS, ref, obj, "процессора" if _cpu_clock() >= 0.0 else "стенные"])
 	ok(best < limit, "шаг живого мира %.2f мс (< %.2f мс; машина медленнее ПК в %.2f раза)" % [best, limit, slow])
 	view.queue_free()
 	await frames(1)
@@ -659,6 +745,11 @@ func test_view_slow_frame_one_substep() -> void:
 	await frames(1)
 
 
+## Дальше 110 м за краем мира: отмели ±EDGE или котловины склона у 10, куда ходят скребуны спуска (#840).
+static func _out(p: Vector3) -> bool:
+	return Vector2(p.x, p.z).distance_to(EcoAgent.bound_xz(p.x, p.z)) > 110.0
+
+
 ## Весь мир на длинном подшаге SLOW_STEP не разлетается: существа на месте, числа конечные.
 func test_world_steady_on_slow_step() -> void:
 	var view := EcoView.new()
@@ -672,8 +763,7 @@ func test_world_steady_on_slow_step() -> void:
 	var bad := 0
 	for a in view.world.agents:
 		var p := a.p
-		if not (is_finite(p.x) and is_finite(p.y) and is_finite(p.z)) or absf(p.x) > 400.0 or absf(p.z) > 400.0 \
-				or p.y > 5.0 or p.y < Seabed.height(p.x, p.z) - 3.0:
+		if not (is_finite(p.x) and is_finite(p.y) and is_finite(p.z)) or _out(p) or p.y > 5.0 or p.y < Seabed.height(p.x, p.z) - 3.0:
 			bad += 1
 			if bad <= 3:
 				ok(false, "%s в %s" % [a.species, p])

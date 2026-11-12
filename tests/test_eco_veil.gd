@@ -731,33 +731,72 @@ func test_hull_parts_tentacles() -> void:
 	prev.resize(v.size())
 	var view := VeilView.new(_veils(w))
 	tree.root.add_child(view)
+	# Где корпус может встретить нить (оси корабля): коробка деталей EcoHull и сечение раздвигания hull_half, шире на
+	# коробку щупалец VeilView.TENT_BOX (±8 м от купола) с запасом. Купол дальше — каждую вершину не считаем (так
+	# быстрее, #1350), а проверяем выборку: нить как была и не в корпусе.
+	var hb := EcoHull.box(0.0)
+	var reach := absf(VeilView.TENT_BOX.position.x) + 2.0
+	var zone := Rect2(Vector2(minf(hb.position.x, -EcoVeil.HULL_A), minf(hb.position.z, EcoVeil.HULL_Z0 - EcoVeil.HULL_NOSE)),
+		Vector2.ZERO).expand(Vector2(maxf(hb.end.x, EcoVeil.HULL_A), maxf(hb.end.z, EcoVeil.HULL_Z1 + EcoVeil.HULL_STERN))) \
+		.grow(reach)
+	# Вершина дальше коробки деталей и сечения hull_half (оси корабля) — по построению нить как была и не в корпусе:
+	# hull_part сдвигает только точки внутри сечения. Её тоже проверяем выборкой — на остальных так быстрее (#1350).
+	var tight := hb.merge(AABB(Vector3(-EcoVeil.HULL_A, HullPlan.CENTER_Y - EcoVeil.HULL_B,
+		EcoVeil.HULL_Z0 - EcoVeil.HULL_NOSE), Vector3(2.0 * EcoVeil.HULL_A, 2.0 * EcoVeil.HULL_B,
+		EcoVeil.HULL_Z1 + EcoVeil.HULL_STERN - EcoVeil.HULL_Z0 + EcoVeil.HULL_NOSE))).grow(0.5)
+	var skipped := 0
+	var fresh := true   # prev ещё не задан (первый шаг или шаг после дальних)
+	var far_steps := 0
 	var n := int(100.0 / 6.0 / dt)
 	for s in n:
 		var t := 30.0 + s * dt
 		var ship := vl.p + Vector3(1.2, -10.0, 0.0) - fwd * 50.0 + fwd * (s * 6.0 * dt)
 		var custom := Color(EcoVeil.pulse(vl, t).x, vl.ph, vl.index, vl.w / EcoVeil.PULSE_W)
 		view.sync(t, ship, yaw, flow)
-		for i in v.size():
+		var lp := EcoHull.to_ship(vl.p, ship, yaw)
+		var far := not zone.has_point(Vector2(lp.x, lp.z))
+		if far:
+			far_steps += 1
+			fresh = true
+		for i in range(0, v.size(), 37 if far else 1):
 			var plain := VeilView.instance_point(v[i], uv[i], uv2[i].x, custom, vl.p, t, params, flow, 1.0, vl.drag)
+			var out := far or not tight.has_point(EcoHull.to_ship(plain, ship, yaw))
+			if out and not far and i % 37 != 0:
+				skipped += 1
+				if not fresh and plain.distance_to(prev[i]) > 1.5:
+					jump += 1
+				prev[i] = plain
+				continue
 			var got := VeilView.instance_point(v[i], uv[i], uv2[i].x, custom, vl.p, t, params, flow, 1.0, vl.drag,
 				true, ship, yaw, view.sides[int(uv[i].x)])
-			if EcoHull.touches(plain, ship, yaw, 0.0):
+			var plain_in := EcoHull.touches(plain, ship, yaw, 0.0)
+			if out:
+				if not ok(got == plain and not plain_in, "далеко от корпуса — нить как была: шаг %d, вершина %d" % [s, i]):
+					view.queue_free()
+					return
+				if far:
+					continue
+			if plain_in:
 				inside += 1
-			if EcoHull.touches(got, ship, yaw, 0.0):
+			if (plain_in if got == plain else EcoHull.touches(got, ship, yaw, 0.0)):
 				ok(false, "нить в корпусе: шаг %d, вершина %d" % [s, i])
 				view.queue_free()
 				return
 			if got != plain:
 				moved += 1
 				near(got.y, plain.y, 1e-4, "сдвиг — по горизонтали")
-			if s > 0 and got.distance_to(prev[i]) > 1.5:
+			if not fresh and got.distance_to(prev[i]) > 1.5:
 				jump += 1
 			prev[i] = got
+		if not far:
+			fresh = false
+	ok(far_steps > 0 and far_steps < n / 2, "дальних шагов — часть прохода: %d из %d" % [far_steps, n])
 	ok(inside > 500, "без раздвигания нити шли сквозь корпус: %d" % inside)
 	ok(moved > inside, "раздвинуто: %d" % moved)
 	# рывок больше 1,5 м за кадр — только у нити, что пересекает ось корабля по высоте (корпус встречает её края по
 	# разные борта): за проход — одна вершина; с колпаками-эллипсоидами (носовая волна без конуса) — десятки
 	ok(jump <= 2, "нити за шаг не прыгают: %d вершин" % jump)
+	ok(skipped > inside, "вдали от корпуса — выборкой: %d вершин" % skipped)
 	ok(view.hull_on, "корабль у вуали — раздвигание в материале")
 	view.queue_free()
 	var custom0 := Color(EcoVeil.pulse(vl, 37.0).x, vl.ph, vl.index, vl.w / EcoVeil.PULSE_W)
