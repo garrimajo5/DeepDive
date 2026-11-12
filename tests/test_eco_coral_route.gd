@@ -106,3 +106,76 @@ func test_exit00_ping_reaches_bush() -> void:
 	near(b.glow, 1.0 - EcoCoral.PING_DIM, 0.01, "импульс с выхода гасит половину")
 	_run(w, c, 2.0, said)
 	ok(not _has(said, "кто-то крупный"), "без строки о крупном: %s" % str(said))
+
+
+## Мир с рядом каменщиков у кустов огнецвета (EcoKamen у каждого EcoCoral.BASES), серпохвосты далеко.
+func _world_kamen() -> Array:
+	var w := EcoWorld.new()
+	w.ground = Seabed.mesh_height
+	var ps := w.add(EcoPred.new()) as EcoPred
+	var c := w.add(EcoCoral.new([], ps)) as EcoCoral
+	var k := w.add(EcoKamen.new()) as EcoKamen
+	w.reset()
+	for pr in ps.all:
+		pr.agent.p = FAR
+		pr.agent.goal = FAR
+	return [w, c, k]
+
+
+## Ход 5 м/с (`tools/mid_calm.gd` SPEED) со светом от a к b на FLOOR над видимым дном, шаг 0,1 с. Строки на приборы и
+## заметки каменщиков — в said; ближе всего к вершине куста и к гнёздам его ряда — в near ([куст, ряд]).
+func _cruise(w: EcoWorld, c: EcoCoral, k: EcoKamen, a: Vector2, b: Vector2, said: Array[String],
+		near_m: Array[float]) -> void:
+	var dt := 0.1
+	var speed := 5.0
+	var n := ceili(a.distance_to(b) / (speed * dt))
+	w.ship.light_on = true
+	for i in n + 1:
+		var p := a.lerp(b, float(i) / n)
+		w.ship.pos = Vector3(p.x, Seabed.mesh_height(p.x, p.y) + FLOOR, p.y)
+		w.ship.speed = speed
+		w.step(dt)
+		near_m[0] = minf(near_m[0], w.ship.pos.distance_to(c.bushes[BUSH].top))
+		for wm in k.rows[BUSH].worms:
+			near_m[1] = minf(near_m[1], w.ship.pos.distance_to(wm.base))
+		for ev in w.bus.pending:
+			if ev.species == EcoKamen.ID:
+				said.append("kamen:" + str(ev.note))
+		for ev in w.take_link():
+			said.append(str(ev.get("text", "")))
+
+
+## Спокойная середина (решение гейм-дизайнера 08.11, #1400): шумный ход 5 м/с от выхода 00 к стоянке (20; 22,5) идёт
+## дальше слуха куста у прохода и ряда каменщиков у него — огнецвет горит, венчики раскрыты, строк «корабль шумит» и
+## «прячет венчики» нет; цепочку «прожектор → волнолист → моллюски» шум хода не перебивает. Контроль: тот же ход в
+## 8 м от куста гасит его и прячет ряд — проверка не пустая.
+func test_mid_cruise_keeps_bush_and_kamen_calm() -> void:
+	var a := _world_kamen()
+	var w: EcoWorld = a[0]
+	var c: EcoCoral = a[1]
+	var k: EcoKamen = a[2]
+	var said: Array[String] = []
+	var near_m: Array[float] = [INF, INF]
+	ok(5.0 > EcoCoral.NOISE_SPEED and 5.0 > EcoKamen.NOISE_SPEED, "ход середины шумный")
+	_cruise(w, c, k, Vector2(4.0, 80.0), Vector2(20.0, 22.5), said, near_m)
+	ok(near_m[0] > EcoCoral.NOISE_R + 2.0, "путь дальше слуха куста: %.1f м" % near_m[0])
+	ok(near_m[1] > EcoKamen.NOISE_R + 2.0, "и ряда каменщиков: %.1f м" % near_m[1])
+	for b in c.bushes:
+		near(b.glow, 1.0, 1e-6, "куст у (%.0f; %.0f) горит" % [b.base.x, b.base.z])
+	for r in k.rows:
+		eq(k.hidden_in(r), 0, "ряд %d раскрыт" % r.index)
+	ok(not _has(said, "корабль шумит"), "без строки о шуме: %s" % str(said))
+	ok(not _has(said, "kamen:"), "без заметок каменщиков: %s" % str(said))
+	# контроль: тот же ход мимо куста в 8 м — гаснет и прячется
+	var b2 := _world_kamen()
+	var w2: EcoWorld = b2[0]
+	var c2: EcoCoral = b2[1]
+	var k2: EcoKamen = b2[2]
+	var said2: Array[String] = []
+	var near2: Array[float] = [INF, INF]
+	var base := Vector2(c2.bushes[BUSH].base.x, c2.bushes[BUSH].base.z)
+	_cruise(w2, c2, k2, base + Vector2(-8.0, 30.0), base + Vector2(-8.0, -30.0), said2, near2)
+	ok(c2.bushes[BUSH].glow < EcoCoral.DARK, "вплотную куст гаснет: %.2f" % c2.bushes[BUSH].glow)
+	ok(k2.hidden_in(k2.rows[BUSH]) > 0, "и ряд прячется")
+	ok(_has(said2, "корабль шумит"), "строка о шуме: %s" % str(said2))
+	ok(_has(said2, "kamen:hide"), "и заметка каменщиков: %s" % str(said2))
