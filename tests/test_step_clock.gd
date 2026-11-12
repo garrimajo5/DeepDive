@@ -396,6 +396,31 @@ func test_lone_tiny_mark_is_host() -> void:
 	ok(not StepClock.lone({"EcoFish": 60.0, "a": 1.0}, us, all), "виновник с работой ×6 — как прежде, не хост")
 
 
+## #1731 (#803, отчёт `a668be5`, `31b-kod-net`): «мир 52 [EcoCurrent 35 ×>100, …, монетники 4 ×2, …]» — пометки «одна
+## отметка» не было: соседняя подчасть ровно на пороге ×2. Прибавка +2 мс — не работа, а та же машина; подчасть,
+## прибавившая SPIKE_MS и больше, по-прежнему отменяет пометку.
+func test_lone_ignores_small_double() -> void:
+	var c := StepClock.new()
+	var t := 0
+	for i in StepClock.USUAL_FROM + 10:   # EcoFish 8, монетники 2, хищники 3, EcoCurrent 0,01 мс — каждый шаг
+		c.start(t, 1.0 / 30.0)
+		for p in [["EcoFish", 8000], ["монетники", 2000], ["хищники", 3000], ["EcoCurrent", 10]]:
+			t += int(p[1])
+			c.lap("мир/" + p[0], t)
+	c.start(t, 1.0 / 30.0)   # провал: EcoCurrent 35, монетники ×2
+	for p in [["EcoFish", 8000], ["монетники", 4000], ["хищники", 3000], ["EcoCurrent", 35000]]:
+		t += int(p[1])
+		c.lap("мир/" + p[0], t)
+	c.start(t, 1.0 / 30.0)
+	eq(c.last_note(), "мир 50 (обычно 13) [EcoCurrent 35 ×>100, EcoFish 8, монетники 4 ×2, ещё 1: 3]" + StepClock.LONE,
+		"«×2» на +2 мс рядом с одной «×>100» — хост")
+	var us := {"EcoFish": 8.0, "монетники": 2.0, "EcoCurrent": 0.01}
+	var all := {"EcoFish": 1.0, "монетники": 1.0, "EcoCurrent": 1.0}
+	ok(StepClock.lone({"EcoFish": 8.0, "монетники": 4.0, "EcoCurrent": 35.0}, us, all), "+2 мс — хост")
+	ok(not StepClock.lone({"EcoFish": 8.0, "монетники": 5.0, "EcoCurrent": 35.0}, us, all),
+		"+3 мс (SPIKE_MS) при ×2,5 — не одна отметка")
+
+
 static func _sum(of: Dictionary) -> float:
 	var t := 0.0
 	for k in of:
