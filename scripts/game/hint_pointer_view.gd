@@ -47,9 +47,10 @@ func show_pointer(target: String, near: bool, a: float, dt: float, cam: Camera3D
 ## То же для любого места в осях корабля (`anchor` — остриё шеврона); tint — цвет символа: белый — атлас как есть
 ## (подсказки), иначе — белый атлас `amber` × tint (указатель тревоги, #1361). a ≤ 0 — скрыть. top — цель перед
 ## камерой, но остриё выше top px (при H = 1080; люк вплотную): кольцо опускается до top (`HintPointer.lower_tip`), а
-## не уходит стрелкой вбок; top < 0 — как подсказки.
+## не уходит стрелкой вбок; top < 0 — как подсказки. roof — потолок отсека (y в осях корабля): символ под ним,
+## остриё опускается (`HintPointer.under_roof`, #1722); INF — как подсказки.
 func show_at(anchor: Vector3, near: bool, a: float, dt: float, cam: Camera3D, own_cam: Camera3D,
-		tint := Color.WHITE, top := -1.0) -> Array:
+		tint := Color.WHITE, top := -1.0, roof := INF) -> Array:
 	time = fmod(time + dt, HintPointer.BOB_PERIOD)
 	sprite.visible = false
 	symbol = Rect2()
@@ -59,6 +60,15 @@ func show_at(anchor: Vector3, near: bool, a: float, dt: float, cam: Camera3D, ow
 	var local := cam.global_transform.affine_inverse() * tip
 	var size := cam.get_viewport().get_visible_rect().size
 	var p := cam.unproject_position(tip) if -local.z > 0.0 else Vector2(-1.0, -1.0)
+	if roof < INF and -local.z > HintPointer.MIN_DEPTH:
+		var depth0 := -local.z
+		var h0 := HintPointer.cell_height(cam.global_position.distance_to(tip), depth0, cam.fov)
+		var y := HintPointer.under_roof(anchor.y, h0, 2.0 * depth0 * tan(deg_to_rad(cam.fov) * 0.5) / HintPointer.REF_H,
+			roof)
+		if y < anchor.y:
+			tip = to_global(Vector3(anchor.x, y, anchor.z))
+			local = cam.global_transform.affine_inverse() * tip
+			p = cam.unproject_position(tip) if -local.z > 0.0 else Vector2(-1.0, -1.0)
 	if top >= 0.0:
 		var low := HintPointer.lower_tip(p, -local.z, size, top)
 		if low != p:   # вплотную над головой (ближе MIN_DEPTH) — кольцо на MIN_DEPTH перед камерой (#1367)

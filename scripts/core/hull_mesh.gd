@@ -300,6 +300,13 @@ class Builder:
 		return idx.size() / 3
 
 
+## Широта, с которой начинается купол (Form.DOME — только носовая оболочка): кормовая макушка носа (до z 4,8)
+## уходила за кормовую стену мостика BridgePlan.STERN и из коридора закрывала люк мостика и указатель над ним
+## (#1722). Снаружи эта часть не видна: до z ≈ −0,2 нос внутри корпуса (капсулы), открытая макушка — тоже.
+static func dome_top() -> float:
+	return acos(clampf((BridgePlan.STERN - HullPlan.NOSE_Z) / HullPlan.NOSE_L, -1.0, 1.0))
+
+
 ## Единичная форма HullPlan.Form (размеры — в шапке hull_plan.gd).
 static func unit(form: int) -> Builder:
 	var b := Builder.new()
@@ -316,9 +323,9 @@ static func unit(form: int) -> Builder:
 			_side(b, 0.5, -0.5, 0.5, 0.5, true)
 			_sphere(b, 0.0, PI / 2.0, Vector3(0, 0.5, 0))
 			_sphere(b, PI / 2.0, PI, Vector3(0, -0.5, 0))
-		HullPlan.Form.DOME:   # шар Ø1, срезанный плоскостью y = −0,25 (широта 120°), срез закрыт кругом
-			var cut := PI * 2.0 / 3.0
-			_sphere(b, 0.0, cut, Vector3.ZERO)
+		HullPlan.Form.DOME:   # шар Ø1, срезанный плоскостью y = −0,25 (широта 120°), срез закрыт кругом;
+			var cut := PI * 2.0 / 3.0   # макушка открыта до dome_top() — она внутри корпуса (#1722)
+			_sphere(b, dome_top(), cut, Vector3.ZERO)
 			_disc(b, -0.25, 0.5 * sin(cut), Vector3.DOWN)
 		HullPlan.Form.FRUSTUM:
 			_side(b, 0.5, -1.0, 0.25, 1.0, true)
