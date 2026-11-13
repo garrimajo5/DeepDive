@@ -359,6 +359,45 @@ func test_fed_does_not_hunt() -> void:
 	eq(_notes(w, "catch").size(), 0)
 
 
+## #1753: погоня вышла за 12 с или добычу съел другой — хищник 4–8 с патрулирует и не берёт тут же соседа из стаи
+## (как после укрытия, `test_eco_cushion.test_lost_hunt_rests_before_next`). Раньше новая охота — через 0,25 с:
+## ход 3 ↔ 7,6 м/с и волна хвоста перескакивали, за 5 минут отмели — 6–9 таких охот на зерно.
+func test_ended_hunt_rests_before_next() -> void:
+	for why in ["timer", "eaten"]:
+		var w := _with_fish()
+		var fish := w.systems[0] as EcoFish
+		var pr := _preds(w).all[0]
+		var prey: EcoFish.Fish = fish.all[0]
+		var other: EcoFish.Fish = fish.all[1]
+		pr.hunger = 0.9
+		pr.mode = EcoPred.Mode.HUNT
+		pr.prey = prey
+		pr.agent.timer = 12.0
+		prey.agent.p = pr.agent.p + Vector3(30, 0, 0)
+		if why == "timer":
+			pr.agent.timer = EcoWorld.MAX_STEP * 0.5
+		else:
+			fish.kill(prey)
+		_step(w)
+		eq(pr.mode, EcoPred.Mode.PATROL, "%s: охота кончилась" % why)
+		ok(pr.prey == null, "%s: добычи нет" % why)
+		var rest := pr.agent.timer
+		ok(rest >= 4.0 - 0.1 and rest <= 8.0, "%s: патруль 4–8 с: %.2f" % [why, rest])
+		var t := 0.0
+		var first := -1.0
+		while t < 12.0:
+			other.agent.p = pr.agent.p + Vector3(6, 0, 0)  # сосед из стаи всё время рядом
+			other.agent.v = Vector3.ZERO
+			pr.hunger = 0.9
+			_step(w)
+			t += EcoWorld.MAX_STEP
+			if pr.mode == EcoPred.Mode.HUNT:
+				first = t
+				break
+		ok(first > 0.0, "%s: после отдыха охотится снова" % why)
+		ok(first >= rest - 0.1, "%s: новая охота не раньше конца патруля: через %.2f с, патруль %.2f с" % [why, first, rest])
+
+
 ## Пять минут отмели с серпохвостами и стаями (корабль далеко) — одни на тесты жизни отмели, повторяемости мира
 ## и хода серпохвостов (`motion`, как `_walk`; вместо второй минуты полного мира «у 02», где серпохвосты в 100–190 м
 ## от корабля — тот же мир без корабля, #1350):

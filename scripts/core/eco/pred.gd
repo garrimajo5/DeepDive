@@ -753,9 +753,8 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 
 		Mode.HUNT:
 			speed = HUNT_SPEED
-			if pr.prey == null or not pr.prey.agent.alive or a.expired():
-				_set_mode(pr, Mode.PATROL, 0.0)
-				pr.prey = null
+			if pr.prey == null or not pr.prey.agent.alive or a.expired():  # упустил за 12 с или добычу съел другой
+				_give_up(pr, _rnd.range_f(4, 8))
 			elif ognevka and (at_station or leeches.near_station(pr.prey.agent.p)):  # у станции чистки перемирие
 				_give_up(pr, _rnd.range_f(4, 8))
 				if pr.truce_cd <= 0.0:
@@ -911,8 +910,8 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 	world.push_out(a, HULL_GAP) # корпус не пускает внутрь
 
 
-## Добыча ушла в укрытие (ленточник, чернила, риф гротовика) или к станции чистки — хищник бросает охоту и t с
-## патрулирует, не ища новую (#1753). Раньше `seek_t` — 0,25 с, и он тут же брал соседа той же стаи: за 5 минут
+## Добыча ушла в укрытие (ленточник, чернила, риф гротовика) или к станции чистки, погоня вышла за 12 с, добычу
+## съел другой — хищник бросает охоту и t с патрулирует, не ища новую (#1753). Раньше `seek_t` — 0,25 с, и он тут же брал соседа той же стаи: за 5 минут
 ## мира 28 охот из 56 начинались меньше чем через 8 с после брошенной, часто через 0,27 с, — ход 3 ↔ 7,6 м/с
 ## и волна хвоста 0,42 ↔ 0,72 Гц перескакивали каждые 1–5 с («рывками по скорости», `tools/pred_jerk.gd`).
 static func _give_up(pr: Pred, t: float) -> void:
