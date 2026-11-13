@@ -120,6 +120,12 @@ func _tick(n: int = 1) -> void:
 		main.step(1.0 / 30.0)
 
 
+## шаг по времени крупнее кадра: подсказки ждут секунды (DONE_TIME, COURSE_TIME), не кадры
+func _secs(s: float) -> void:
+	for i in ceili(s / 0.1 - 0.001):
+		main.step(0.1)
+
+
 func _course_step() -> Tutorial:
 	var t := Tutorial.new()
 	t.step = Tutorial.STEPS.size() - 1
@@ -220,7 +226,7 @@ func test_scene_route_hint_beside_card() -> void:   # #1346: у поста «М�
 	main.walker.z = Main.ROUTE_POST.y
 	main.walker.yaw = PI * 0.5
 	main.walker.pitch = deg_to_rad(-30.0)
-	_tick(60)
+	_secs(2.0)
 	eq(main.tutorial_panel.line, "Нажмите «Маршрут» — выберите путь", "у поста — текст поста")
 	ok(main.route_card.visible, "карточка целей слоя у стола")
 	ok(not main.tutorial_panel.box().intersects(main.route_card.rect), "подсказка не на карточке")
@@ -234,7 +240,7 @@ func test_scene_six_steps() -> void:
 	main.arrival.on = false   # брифинг прибытия до подсказок — test_arrival_brief
 	var t := main.tutorial
 	ok(t.on, "в первом забеге включено")
-	_tick(10)
+	_secs(0.4)
 	ok(main.tutorial_panel.visible, "плашка на экране")
 	main.walker.x = 0.0
 	main.walker.z = Deck.CHAIR_Z
@@ -242,36 +248,36 @@ func test_scene_six_steps() -> void:
 	eq(main.tutorial_panel.ring, "action", "у штурвала обведена кнопка «Штурвал»")
 	main.use_post("helm")
 	eq(t.done_t >= 0.0, true, "сел — шаг 1 выполнен")
-	_tick(20)
+	_secs(0.7)
 	eq(t.step, 1, "шаг 2")
 	var r := main.overlay.router
 	r.move = Vector2i(0, 1)
 	_tick()
 	r.move = Vector2i.ZERO
-	_tick(20)
+	_secs(0.7)
 	eq(t.step, 2, "ход дан — шаг 3")
 	r.light_pressed = true
 	_tick()
-	_tick(20)
+	_secs(0.7)
 	eq(t.step, 3, "прожектор переключён — шаг 4")
 	eq(main.tutorial_panel.line, Tutorial.STAND_UP, "сидит — «Нажмите «Встать»…»")
 	main.stand_up()
 	main.open_power()
 	r.move = Vector2i(-1, 0)   # убавить долю: свободной энергии на старте нет
-	_tick(10)
+	_secs(0.4)
 	r.move = Vector2i.ZERO
 	main.close_power()
-	_tick(20)
+	_secs(0.7)
 	eq(t.step, 4, "доля изменена — шаг 5")
 	main.vitals.energy = 100.0
 	main.use_post("sonar")
-	_tick(20)
+	_secs(0.7)
 	eq(t.step, 5, "импульс прошёл — шаг 6")
 	main.near_post = "sonar"
 	_tick()
 	eq(main.tutorial_panel.line, Tutorial.FIND_ROUTE, "у голостола — «Вправо от голостола…»")
 	main.use_post("route")
-	_tick(20)
+	_secs(0.7)
 	eq(t.step, 6, "маршрут выбран — шаг 7")
 	ok(not t.finished() and main.events_held(), "события ещё ждут")
 	main.use_post("helm")
@@ -283,9 +289,9 @@ func test_scene_six_steps() -> void:
 	eq(main.tutorial_panel.ring, "goal", "обведена плашка цели")
 	ok(not main.tutorial_panel.box().intersects(main.goal_plate_view.rect), "подсказка не на плашке цели")
 	r.move = Vector2i(0, 1)
-	_tick(75)
+	_secs(2.5)
 	r.move = Vector2i.ZERO
-	_tick(20)
+	_secs(0.7)
 	ok(t.finished(), "2,5 с ходом к цели — обучение пройдено")
 	ok(main.settings.hints_done, "запомнено в настройках")
 	ok(not main.tutorial_panel.visible, "плашки больше нет")
@@ -494,7 +500,7 @@ func test_scene_finish_learns_intro() -> void:   # #827: пройденное о
 	main.arrival.on = false   # брифинг прибытия до подсказок — test_arrival_brief
 	main.tutorial.step = Tutorial.STEPS.size() - 1
 	ok(main.tutorial.note(Tutorial.Ev.COURSE), "последний шаг засчитан")
-	_tick(30)
+	_secs(1.0)
 	ok(main.tutorial.finished(), "пройдено")
 	ok(main.lore.knows(LayerLore.INTRO), "знание «обучение просмотрено»")
 
