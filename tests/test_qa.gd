@@ -591,6 +591,37 @@ func test_shot_logs_rows() -> void:
 	await frames(1)
 
 
+func test_petal_note() -> void:   # #1757: створка гнезда 07 в строке снимка числом
+	eq(QaRunner.petal_note(0, 0.0), " · створка гнезда 1: закрыта", "закрыта")
+	eq(QaRunner.petal_note(0, 1.0), " · створка гнезда 1: открыта (90°)", "открыта")
+	eq(QaRunner.petal_note(2, 0.5), " · створка гнезда 3: поднята на 45° из 90°", "в пути — угол")
+	eq(QaRunner.petal_note(0, 0.999), " · створка гнезда 1: открыта (90°)", "почти — открыта")
+	eq(QaRunner.petal_note(0, 0.004), " · створка гнезда 1: закрыта", "меньше полградуса — закрыта")
+
+
+## #1757 (тестер 13.11 22:22): поднятую створку на `37`/`37a` с 26 м не различить — строка снимка у арки 07 несёт её
+## угол с узла модели; вдали от арки строки нет, строки приборов остаются в конце.
+func test_shot_logs_petal_at_gate() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var qa := main.start_qa('[{"do": "wait", "s": 60}]')
+	main.step(1.0 / 30.0)
+	ok(not "створка" in qa.state(true), "вдали от арки — без створки: " + qa.state(true))
+	main.helm.pos = Vector3(EcoGate.CENTER.x + 12.0, -58.0, EcoGate.CENTER.y + 30.0)
+	main.gate_view.set_petal(EcoDome.NEST, 0.0)
+	ok("створка гнезда 1: закрыта" in qa.state(true), "у арки — закрыта: " + qa.state(true))
+	ok(not "створка" in qa.state(), "заметка без снимка — без створки")
+	main.gate_view.set_petal(EcoDome.NEST, 0.4)
+	ok("створка гнезда 1: поднята на 36° из 90°" in qa.state(true), "подъём — углом узла модели: " + qa.state(true))
+	main.lore.learn(LayerLore.PETAL07)
+	main.gate_petal()
+	ok("створка гнезда 1: открыта (90°)" in qa.state(true), "открыта в кампании: " + qa.state(true))
+	ok(qa.state(true).ends_with(qa.rows_now()), "строки приборов — по-прежнему в конце")
+	main.queue_free()
+	await frames(1)
+
+
 func test_brief_logs_world_line() -> void:   # #1429: в логе видно, пришла строка мира до плашки или под ней
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
@@ -1319,7 +1350,7 @@ func test_outside_lamp() -> void:
 	var lamp := main.flyby_cam.get_node_or_null(QaRunner.LAMP_NAME) as OmniLight3D
 	ok(lamp != null, "у камеры с борта — свет тестера")
 	if lamp:
-		eq(lamp.light_cull_mask, OceanView.LAYER_WORLD, "светит корпус и дно, не мостик")
+		eq(lamp.light_cull_mask, OceanView.LIT_WORLD, "светит корпус и дно, не мостик")
 		ok(lamp.omni_range >= 60.0, "дотягивается от камеры над кормой до носа и грунта: %.0f м" % lamp.omni_range)
 	main.start_qa('[{"do": "outside", "on": false}, {"do": "wait", "s": 0.2}]')
 	for i in 3:

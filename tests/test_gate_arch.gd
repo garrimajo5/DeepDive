@@ -143,7 +143,15 @@ func test_scene_has_arch_and_helm_solid() -> void:
 	ok(gv.get_node_or_null("Чаши гнёзд") == null, "временных чаш нет — гнёзда на модели")
 	for i in 3:
 		for mi: MeshInstance3D in gv.lod_meshes(i):
-			eq(mi.layers, OceanView.LAYER_WORLD, "%s на слое отмели" % mi.name)
+			# #1757, кадр `37`: двусторонняя сетка в луче затеняла сама себя чёрными треугольниками — тело арки светом
+			# отмели освещено, но в карту теней прожектора не идёт; тень от света сквозь лёд остаётся.
+			eq(mi.layers, OceanView.LAYER_NOBEAM, "%s на слое отмели без тени прожектора" % mi.name)
+			var spot: SpotLight3D = main.searchlight.spot
+			ok(spot.light_cull_mask & mi.layers != 0, "%s: прожектор освещает" % mi.name)
+			ok(spot.shadow_enabled and spot.shadow_caster_mask & mi.layers == 0, "%s: в тень прожектора не идёт" % mi.name)
+			ok(main.ocean.sun.light_cull_mask & mi.layers != 0 and main.ocean.sun.shadow_caster_mask & mi.layers != 0,
+				"%s: свет сквозь лёд освещает и кладёт её тень" % mi.name)
+			ok(main.zap_light.light_cull_mask & mi.layers != 0, "%s: вспышка разряда освещает" % mi.name)
 			var r := GateArch.ranges(i, main.gate_view.lite)
 			near(mi.visibility_range_begin, maxf(r.x, 0.0), 0.001, "%s: начало LOD" % mi.name)
 			near(mi.visibility_range_end, maxf(r.y, 0.0), 0.001, "%s: конец LOD" % mi.name)
@@ -153,6 +161,7 @@ func test_scene_has_arch_and_helm_solid() -> void:
 	for mi: MeshInstance3D in gv.petals + [gv.plate]:
 		ok(mi.is_visible_in_tree(), "%s показана" % mi.name)
 		eq(mi.layers, OceanView.LAYER_WORLD, "%s на слое отмели" % mi.name)
+		ok(main.searchlight.spot.shadow_caster_mask & mi.layers != 0, "%s: односторонняя — тень прожектора бросает" % mi.name)
 		near(mi.visibility_range_end, GateArch.DETAIL_END, 0.001, "%s: вдали не рисуется" % mi.name)
 		eq(mi.visibility_range_end_margin, 0.0, "%s: без гистерезиса" % mi.name)
 	# Створку гнезда купольника поворачивает его подъём, открытую в кампании — знание (#1757).

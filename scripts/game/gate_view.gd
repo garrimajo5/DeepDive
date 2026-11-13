@@ -4,7 +4,7 @@ extends Node3D
 ## гнёзда под створками `Stvorka0…2` (их читает диагностика, `GateDiag.NESTS`) и табличка `Diagnostika` — перед
 ## ними карман в склоне жёлоба (`Seabed.Layer.nest_pocket`). Модель стоит pivot-ом на полу жёлоба
 ## в середине террасы (`EcoGate.CENTER`, `GateArch.floor_y`), подход с +Z — как в файле.
-## Слой отмели (`OceanView.LAYER_WORLD`): её освещает свет сквозь лёд и прожектор.
+## Слой отмели: её освещает свет сквозь лёд и прожектор; тело арки — `OceanView.LAYER_NOBEAM` (без тени прожектора).
 ## Материалы модели заменены своим шейдером с её же картами (`shaders/gate_arch.gdshader`): туман — слоями воды
 ## ART-069 (`OceanView.add_layer_mat`), со штатным туманом арка вдали темнее воды вокруг и видна со старта силуэтом.
 ## LOD — по расстоянию (`visibility_range_*`, отрезки `GateArch.ranges`), «Экономно» — `set_lite` (без LOD0).
@@ -34,6 +34,12 @@ func _init() -> void:
 	for mi: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
 		mi.layers = OceanView.LAYER_WORLD
 		mi.set_surface_override_material(0, _model_mat(mi.mesh.surface_get_material(0) as StandardMaterial3D))
+	# Тело арки — двусторонняя сетка (glTF doubleSided): в карту теней прожектора не идёт — в луче она затеняла сама
+	# себя рваными чёрными треугольниками (#1757, кадр `37`). Тень от света сквозь лёд остаётся; створки и табличка
+	# (односторонние, малые) тень прожектора бросают, как раньше.
+	for i in LODS.size():
+		for mi: MeshInstance3D in lod_meshes(i):
+			mi.layers = OceanView.LAYER_NOBEAM
 	for n in PETALS:
 		petals.append(model.get_node(n) as MeshInstance3D)
 	plate = model.get_node(PLATE) as MeshInstance3D

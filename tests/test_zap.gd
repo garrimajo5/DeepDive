@@ -74,7 +74,7 @@ func test_scene_light_off_without_warmup() -> void:
 	tree.root.add_child(main)
 	ok(not main.warming(), "в тестах прогрева нет")
 	ok(main.zap_light.light_energy < 0.01, "вспышка погашена")
-	ok(main.zap_light.light_cull_mask == OceanView.LAYER_WORLD, "светит только за бортом")
+	ok(main.zap_light.light_cull_mask == OceanView.LIT_WORLD, "светит только за бортом")
 	main.queue_free()
 	await frames(1)
 
