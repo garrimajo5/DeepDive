@@ -568,6 +568,88 @@ func test_reef_shoal_at_01_calms_after_pred_leaves() -> void:
 	eq(w.bus.pending.size(), 2, "после паузы — строка снова")
 
 
+## Сцена 00→01 (решение ГД 08.11, `docs/urovni/sloj-1.md`): корабль на стоянке у 01 (33; −22), серпохвост у рифа
+## между кораблём и краем тревоги кроны — стая кроны прячется в чашу со строкой. Разряд по корпусу (ShipState.zap)
+## уводит его дальше CROWN_ALARM — тревога кроны спадает, стая снова кружит на кольце, новой строки о бегстве нет
+## (только «Разряд отпугнул»): ответ экипажа читается последствием у цветка, а не шумом строк.
+func test_zap_at_01_sends_pred_off_and_crown_returns() -> void:
+	var w := _world()
+	var fish := _fish(w)
+	w.add(EcoFlower.new())
+	var preds := w.add(EcoPred.new()) as EcoPred
+	preds.alert = EcoPred.ALERT_ON  # явно: здесь не чутьё и бросок, хищник сыт
+	var sh := fish.shoals[6]
+	_only(w, fish, sh)
+	var pr := preds.all[0]
+	for other in preds.all.slice(1):  # остальные серпохвосты — далеко и не доплывут за проверку
+		other.agent.p = Vector3(-400, -30, 400)
+		other.agent.goal = other.agent.p
+	var stand := Vector2(33.0, -22.0)
+	w.ship.pos = Vector3(stand.x, Seabed.height(stand.x, stand.y) + 7.0, stand.y)
+	w.ship.speed = 0.0
+	w.ship.light_on = true
+	w.ship.light_range = 40.0
+	pr.agent.p = Vector3(-300, -30, -300)  # пока — далеко
+	pr.agent.goal = pr.agent.p
+	w.run(5.0)
+	ok(sh.alarm == 0.0 and w.bus.pending.is_empty(), "без хищника спокойна")
+
+	var out := Vector3(stand.x - sh.axis.x, 0, stand.y - sh.axis.z).normalized()  # от оси к стоянке и дальше
+	pr.hunger = 0.0
+	pr.cooldown = 30.0
+	pr.agent.p = w.ship.pos + out * 12.0
+	pr.agent.goal = pr.agent.p
+	pr.agent.timer = 60.0
+	var r0 := _flat(pr.agent.p, sh.axis)
+	ok(r0 > EcoPred.REEF_KEEP and r0 < EcoFish.CROWN_ALARM, "хищник снаружи рифа, в тревоге кроны: %.1f м от оси" % r0)
+	ok(pr.agent.distance_to(w.ship.pos) < EcoWorld.ZAP_RADIUS, "в радиусе разряда")
+	w.step(0.05)
+	ok(sh.alarm > 0.0, "тревога кроны")
+	eq(w.bus.pending.size(), 1, "одна строка")
+	eq(w.bus.pending[0].note, "flee")
+	w.run(6.0)
+	ok(sh.alarm > 0.0, "хищник у рифа — стая в тревоге")
+
+	w.ship.zap = true
+	w.step(0.05)
+	w.ship.zap = false
+	eq(pr.mode, EcoPred.Mode.FLEE, "разряд отпугнул")
+	var calm_at := -1.0
+	var nearest := INF  # ближе всего к оси после того, как тревога спала
+	var back := 0  # шагов с тревогой после того, как она спала
+	var t := 0.0
+	while t < 30.0:
+		w.step(0.05)
+		t += 0.05
+		if calm_at < 0.0 and sh.alarm <= 0.0:
+			calm_at = t
+		if calm_at >= 0.0:
+			nearest = minf(nearest, _flat(pr.agent.p, sh.axis))
+			if sh.alarm > 0.0:
+				back += 1
+	var ring := 0
+	for f: EcoFish.Fish in sh.members:
+		if _flat(f.agent.p, sh.axis) > EcoFlower.SPREAD:
+			ring += 1
+	var r := _flat(sh.center, sh.axis)
+	print("    разряд: тревога кроны спала через %.2f с, хищник потом не ближе %.1f м к оси, на кольце %d из %d, центр %.1f м" % [
+		calm_at, nearest, ring, sh.members.size(), r])
+	ok(calm_at > 0.0 and calm_at < 12.0, "тревога спала: %.2f с" % calm_at)
+	ok(nearest > EcoFish.CROWN_ALARM, "хищник не вернулся в тревогу кроны: %.1f м" % nearest)
+	eq(back, 0, "стая не металась обратно в чашу")
+	ok(ring >= sh.members.size() - 2, "снова снаружи кроны: %d из %d" % [ring, sh.members.size()])
+	ok(r > EcoFish.CROWN_RING.x - 3.0 and r < EcoFish.CROWN_RING.y + 3.0, "центр стаи — на кольце: %.1f м" % r)
+	var flee := 0
+	var zap := 0
+	for ev in w.bus.pending:
+		if ev.note == "flee":
+			flee += 1
+		elif ev.note == "zap":
+			zap += 1
+	eq(flee, 1, "возврат без новой строки о бегстве")
+	eq(zap, 1, "строка разряда — одна")
+
+
 func test_ship_under_way_scares_without_message() -> void:
 	var w := _world()
 	var fish := _fish(w)
