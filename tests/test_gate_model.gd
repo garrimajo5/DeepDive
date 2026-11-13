@@ -112,6 +112,19 @@ func test_contact_outside_passage() -> void:
 	n.free()
 
 
+## Гнёзда диагностики стоят на гнёздах модели: середина закрытой створки i — гнездо i (#1757).
+func test_nests_behind_petals() -> void:
+	var n := _model()
+	for i in GateDiag.NESTS.size():
+		var mi := n.get_node("Stvorka%d" % i) as MeshInstance3D
+		var c: Vector3 = (mi.transform * mi.mesh.get_aabb()).get_center()
+		var a: Vector3 = GateDiag.NESTS[i]["at"]
+		near(a.x, c.x, 0.05, "гнездо %d: x створки" % i)
+		near(a.y, c.y, 0.05, "гнездо %d: высота середины створки" % i)
+		near(a.z, c.z, 0.15, "гнездо %d: на лице опоры, под створкой" % i)
+	n.free()
+
+
 func test_only_polyps_glow() -> void:
 	var n := _model()
 	for mi in _meshes(n):

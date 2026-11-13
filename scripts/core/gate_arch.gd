@@ -8,7 +8,8 @@ extends RefCounted
 ## Коллизия — блоки по силуэту модели (`boxes`, замер LOD0 сеткой 4 × 2 м; `test_gate_arch.test_boxes_follow_model`).
 ## Корабль сквозь опоры и плечи не проходит: `hits` (три точки по длине корпуса, запас по высоте — по `HullPlan`)
 ## → `Helm.Ship.solid`. Модель рисует `scripts/game/gate_view.gd` (`main.gate_view`, слой отмели).
-## Чаши гнёзд `nests_mesh` — временные, пока гнёзда `GateDiag.NESTS` не встали на места гнёзд модели (#1757).
+## Гнёзда диагностики `GateDiag.NESTS` — на местах гнёзд модели; створки `Stvorka0…2` открываются поворотом
+## вокруг своей оси X (`PETAL_TURN`), табличка `Diagnostika` — рядом на лице правой опоры.
 
 const MODEL := "res://models/terrasa-vrat.glb"
 const HEIGHT := 58.1            ## рост модели от пола, м
@@ -29,9 +30,8 @@ const LOD_LITE: Array[float] = [0.0, 160.0]
 ## Гистерезиса (`visibility_range_*_margin`) нет намеренно: в его полосе движок держит прежнее состояние, а после
 ## прыжка камеры (загрузка сохранения у 07, снимок) прежнего нет — оба LOD скрыты, арки нет в кадре.
 
-const NEST_COLOR := Color("#82999D")
-const NEST_R := 0.8             ## чаша гнезда Ø 1,6 м
-const NEST_H := 0.35
+const PETAL_TURN := -PI / 2.0    ## открытая створка: поворот узла `Stvorka<i>` по своей X (подъём по дуге ≈ 1,4 м)
+const DETAIL_END := 320.0       ## створки и табличку (≈ 1,7 м) дальше этого не рисуем, м — как LOD1
 
 ## Блоки по силуэту модели в осях места: x0, x1, y0, y1 (от пола), полуглубина по Z. Левая опора (−X) у прохода
 ## отвесная, правая выше 4 м отступает до x 36; плечи с 22 м идут внутрь до −12 и +20, выше 28 м — до −9 и +15;
@@ -110,17 +110,6 @@ static func hits(pos: Vector3, yaw: float) -> bool:
 	return false
 
 
-## Меш чаш гнёзд в мировых координатах (временные, до гнёзд модели). Лицевая сторона — по часовой.
-static func nests_mesh() -> ArrayMesh:
-	var m := ArrayMesh.new()
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for i in GateDiag.NESTS.size():
-		_bowl(st, GateDiag.nest_pos(i))
-	st.commit(m)
-	return m
-
-
 ## Отрезок расстояний LOD i (0…2): Vector2(начало, конец), конец 0 — без предела; начало = конец = −1 — LOD скрыт.
 static func ranges(i: int, lite: bool) -> Vector2:
 	var ends := LOD_LITE if lite else LOD_FULL
@@ -129,29 +118,3 @@ static func ranges(i: int, lite: bool) -> Vector2:
 	if i < 2 and to <= from:
 		return Vector2(-1.0, -1.0)
 	return Vector2(from, to)
-
-
-static func _quad(st: SurfaceTool, n: Vector3, a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
-	# a b c d — по часовой, если смотреть снаружи
-	for v in [a, b, c, a, c, d]:
-		st.set_normal(n)
-		st.add_vertex(v)
-
-
-## Чаша гнезда: низкий восьмигранник на дне.
-static func _bowl(st: SurfaceTool, at: Vector3) -> void:
-	var n := 8
-	var y0 := at.y - 1.0   # юбка в дно: на склоне жёлоба (#1757) нижний край чаши не висит над грунтом
-	var y1 := at.y + NEST_H
-	for i in n:
-		var a0 := TAU * i / n
-		var a1 := TAU * (i + 1) / n
-		var p0 := Vector3(at.x + cos(a0) * NEST_R, 0.0, at.z + sin(a0) * NEST_R)
-		var p1 := Vector3(at.x + cos(a1) * NEST_R, 0.0, at.z + sin(a1) * NEST_R)
-		var side := Vector3(cos((a0 + a1) * 0.5), 0.0, sin((a0 + a1) * 0.5))
-		_quad(st, side, Vector3(p1.x, y0, p1.z), Vector3(p1.x, y1, p1.z), Vector3(p0.x, y1, p0.z),
-			Vector3(p0.x, y0, p0.z))
-		var mid := Vector3(at.x, y1 - 0.15, at.z)   # чаша — чуть вогнутый верх
-		for v in [Vector3(p1.x, y1, p1.z), mid, Vector3(p0.x, y1, p0.z)]:
-			st.set_normal(Vector3.UP)
-			st.add_vertex(v)

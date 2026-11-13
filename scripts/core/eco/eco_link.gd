@@ -283,6 +283,15 @@ static func solid(systems: Array, pos: Vector3, yaw: float) -> bool:
 	return false
 
 
+## Подъём створки гнезда 07, которую открывает купольник: 0 — закрыта, 1 — поднята (`EcoDome.petal`, #1757).
+## Корабль поворачивает по нему створку модели арки (`GateView.set_petal`, гнездо `EcoDome.NEST`). Нет купольника — 0.
+static func petal_lift(systems: Array) -> float:
+	for s in systems:
+		if s is EcoDome:
+			return (s as EcoDome).petal
+	return 0.0
+
+
 ## Система светляков из списка систем мира или null.
 static func fish_of(systems: Array) -> EcoFish:
 	for s in systems:
