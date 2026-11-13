@@ -143,7 +143,9 @@ function Export-QaBranches([string]$repo, [string]$dest) {
   return $dest
 }
 
-# Шаг → «#519, #1665»: открытые issues «проверить» и «ждёт телефона», где шаг назван в заголовке или тексте.
+# Шаг → «#519, #1665»: открытые issues «проверить» и «ждёт телефона», где шаг назван в заголовке, тексте или
+# комментариях (у #1709 шаги были только в комментарии — сводка их не увидела, #1350, 13.11); комментарии читаются
+# отдельным запросом и только у issues, где они есть; не прочитались — шаги берутся из заголовка и текста.
 # Метка — в адресе URL-кодом, jq без кавычек: Windows PowerShell 5.1 портит кириллицу и кавычки в аргументах gh.
 # Что прочитано — строкой $script:IssueNote («ISSUES «проверить» 12, «ждёт телефона» 4 | шаги: 32o-mol-steklo #1665»),
 # run-qa.ps1 печатает её под сводкой: сводка без строк ПРОВЕРИТЬ при открытых issues (#1350, 12.11, отчёт ea2758d)
@@ -159,10 +161,10 @@ function Get-IssueSteps([string[]]$steps) {
   foreach ($label in @('проверить', 'ждёт телефона')) {
     $q = [uri]::EscapeDataString($label)
     $global:LASTEXITCODE = 0
-    $all = @(gh api "repos/garrimajo5/DeepDive/issues?state=open&per_page=100&labels=$q" --jq '.[] | select(.pull_request == null) | [.number, .title, .body] | @tsv' 2>&1)
+    $all = @(gh api "repos/garrimajo5/DeepDive/issues?state=open&per_page=100&labels=$q" --jq '.[] | select(.pull_request == null) | [.number, .comments, .title, .body] | @tsv' 2>&1)
     $code = $LASTEXITCODE
     $errs = @($all | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] })
-    $rows = @($all | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] -and "$_" -match '^\d+\t' })
+    $rows = @($all | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] -and "$_" -match '^\d+\t\d+\t' })
     if ($code -or ($errs -and -not $rows)) {
       $why = if ($errs) { ("$($errs[0])" -split "`n")[0].Trim() } else { '' }
       $notes += "«$label» ошибка gh (код $code) $why".TrimEnd()
@@ -170,7 +172,12 @@ function Get-IssueSteps([string[]]$steps) {
     }
     $notes += "«$label» $($rows.Count)"
     foreach ($r in $rows) {
-      $n, $t = "$r" -split "`t", 2
+      $n, $c, $t = "$r" -split "`t", 3
+      if ([int]$c -gt 0) {
+        $cm = @(gh api "repos/garrimajo5/DeepDive/issues/$n/comments?per_page=100" --jq '.[].body' 2>&1 |
+          Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] })
+        $t = "$t`t$($cm -join ' ')"
+      }
       foreach ($s in $steps) {
         if ($t -match "(?<![0-9a-z-])$([regex]::Escape($s))(?![0-9a-z-])") {
           $map[$s] = @(@($map[$s]) + "#$n" | Where-Object { $_ } | Select-Object -Unique)
@@ -269,20 +276,32 @@ if ($SelfTest) {
   Check ((Get-WatchLines ([ordered]@{ 'x-1' = 50 }) $true @() @{}).Count -eq 0) 'ниже предела и без issue — без строки'
   Check ((Get-WatchLines ([ordered]@{ '9-novyj' = 130 }) $true @() @{})[0] -like '*раньше: нет данных*') 'новый шаг — «нет данных»'
   # Get-IssueSteps на подставном gh (функция перекрывает gh.exe): шаг из заголовка и тела, строка ISSUES (#1350, 12.11)
+  # Строки подставного: номер, число комментариев, заголовок, тело. У #1709 шаг 33-tablo-il назван только в комментарии
+  # (их два, #1350, 13.11); у #519 комментариев нет — запроса комментариев к нему быть не должно.
   # Метка в адресе URL-кодом: «проверить» начинается с %D0%BF, «ждёт телефона» — с %D0%B6.
   # Ошибку gh подставной отдаёт объектом ErrorRecord в вывод, не Write-Error: pwsh в Actions — $ErrorActionPreference stop.
   function gh {
     $global:LASTEXITCODE = 0
+    if ("$($args[1])" -match '/issues/(\d+)/comments') {
+      $script:asked += $Matches[1]
+      if ($Matches[1] -eq '1709') { 'приёмка UX'; 'смотреть шаг 33-tablo-il на устройстве' }
+      return
+    }
     if ("$($args[1])" -match 'labels=%D0%BF') {
-      "1665`tПровал кадра у колодца (32o-mol-steklo)`tтело"
-      "519`tПровал`tшаги 21a-vent и 32o-mol-steklo"
-    } else { "803`tПровал на 31b-kod-net`t" }
+      "1665`t0`tПровал кадра у колодца (32o-mol-steklo)`tтело"
+      "519`t0`tПровал`tшаги 21a-vent и 32o-mol-steklo"
+      "1709`t2`tТревоги ила`tбез шагов"
+    } else { "803`t0`tПровал на 31b-kod-net`t" }
   }
-  $im = Get-IssueSteps @('32o-mol-steklo', '21a-vent', '31b-kod-net', '01-start', '32o')
-  # ждём: 32o-mol-steklo → #1665 и #519, 21a-vent → #519, 31b-kod-net → #803; 01-start и «32o» (часть имени) — нет
+  $script:asked = @()
+  $im = Get-IssueSteps @('32o-mol-steklo', '21a-vent', '31b-kod-net', '01-start', '32o', '33-tablo-il')
+  # ждём: 32o-mol-steklo → #1665 и #519, 21a-vent → #519, 31b-kod-net → #803, 33-tablo-il → #1709 (из комментария);
+  # 01-start и «32o» (часть имени) — нет; комментарии спрошены только у #1709
   Check ((@($im['32o-mol-steklo']) -join ',') -eq '#1665,#519' -and (@($im['21a-vent']) -join ',') -eq '#519' -and (@($im['31b-kod-net']) -join ',') -eq '#803') "Get-IssueSteps: шаги из заголовка и тела ($(@($im.Keys | ForEach-Object { "$_=$(@($im[$_]) -join ',')" }) -join ' '))"
+  Check ((@($im['33-tablo-il']) -join ',') -eq '#1709') "Get-IssueSteps: шаг из комментария ($(@($im['33-tablo-il']) -join ','))"
+  Check (($script:asked -join ',') -eq '1709') "комментарии — только у issues, где они есть: $($script:asked -join ',')"
   Check (-not $im.ContainsKey('01-start') -and -not $im.ContainsKey('32o')) 'Get-IssueSteps: шаг без issue и часть имени — нет'
-  Check ($script:IssueNote -eq 'ISSUES «проверить» 2, «ждёт телефона» 1 | шаги: 21a-vent #519; 31b-kod-net #803; 32o-mol-steklo #1665,#519') "строка ISSUES: $($script:IssueNote)"
+  Check ($script:IssueNote -eq 'ISSUES «проверить» 3, «ждёт телефона» 1 | шаги: 21a-vent #519; 31b-kod-net #803; 32o-mol-steklo #1665,#519; 33-tablo-il #1709') "строка ISSUES: $($script:IssueNote)"
   $wi = Get-WatchLines ([ordered]@{ '32o-mol-steklo' = 32; '01-start' = 40 }) $true @() $im
   Check ($wi.Count -eq 1 -and $wi[0] -like 'ПРОВЕРИТЬ 32o-mol-steklo 32 мс (#1665, #519) |*') "шаг из issue ниже 100 мс — строка есть: $($wi -join ' / ')"
   function gh {

@@ -489,3 +489,23 @@ func test_run_qa_noise_only_in_scenario() -> void:
 	ok(k.contains("Split-Foreign $cat $app"), "проверка kadry.ps1 гоняет Split-Foreign")
 	var qa := FileAccess.get_file_as_string("res://docs/QA.md")
 	ok(qa.contains("«после сценария: N»") and qa.contains("остывание 0 с"), "docs/QA.md описывает поля")
+
+
+## Мелочи тестера (#1350, 13.11): «не остыл» при выходе по времени говорит про три замера подряд; сводка ПРОВЕРИТЬ
+## читает и комментарии issues; хвост PUSHED — латиницей. Сами строки проверяет -SelfTest в job «Скрипты тестера».
+func test_tester_trifles_1311() -> void:
+	var z := _ps("zamok.ps1")
+	ok(z.contains("три замера подряд < $lim не набралось, последний $l"), "Format-Calm: выход по времени — не «не остыл (load ниже порога)»")
+	ok(not z.contains("(load $l, порог $lim)"), "прежней строки, спорившей с собой, нет")
+	ok(z.contains("load = 1.4; calm = $false; how = 'предел'"), "самопроверка: последний замер ниже порога")
+	var k := _ps("kadry.ps1")
+	ok(k.contains("[.number, .comments, .title, .body] | @tsv"), "в строке issue — число комментариев")
+	ok(k.contains("issues/$n/comments?per_page=100") and k.contains("if ([int]$c -gt 0) {"),
+			"комментарии читаются только там, где они есть")
+	ok(k.contains("Get-IssueSteps: шаг из комментария") and k.contains("комментарии — только у issues, где они есть"),
+			"самопроверка: шаг из комментария и число запросов")
+	var p := _ps("publish-qa.ps1")
+	ok(p.contains("PUSHED $branch $sha (files $($files.Count))"), "хвост PUSHED латиницей")
+	var tail := p.substr(p.find("Write-Output \"PUSHED"))
+	tail = tail.substr(0, tail.find("\n"))
+	ok(RegEx.create_from_string("[А-Яа-яЁё]").search(tail) == null, "в строке PUSHED нет кириллицы: " + tail)

@@ -133,5 +133,6 @@ git -C $repo worktree remove --force $wt
 # Отчёт живёт в ветке: копия в клоне не нужна и после слияния помешала бы git pull (раньше её убирал checkout main)
 Remove-Item -Recurse -Force $dir
 Unlock-Qa $lockFile
-Write-Output "PUSHED $branch $sha (файлов $($files.Count))"
+# Хвост латиницей: строку читают и разбирают в консоли Windows, где кириллица после SHA ломается (#1350, 13.11)
+Write-Output "PUSHED $branch $sha (files $($files.Count))"
 Write-Output "RAW https://raw.githubusercontent.com/garrimajo5/DeepDive/$sha/qa/$Folder/"
