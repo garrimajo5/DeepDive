@@ -308,6 +308,54 @@ func test_crown_shoal_hides_in_chalice() -> void:
 	ok(inside <= 1, "в чаше, а не в ветвях: %d" % inside)
 
 
+## Сцена 00→01 (решение ГД 08.11, `docs/urovni/sloj-1.md`): стая кроны — знак раньше хищника. Серпохвост ещё в 40 м
+## от оси, за кроной (дальше тревоги стай рифа), — строка о бегстве, стая уходит в чашу; хищник ушёл дальше
+## CROWN_ALARM — тревога спадает, стая снова кружит снаружи кроны. Последствие без укуса: хищник не ближе 30 м.
+func test_crown_shoal_hides_early_and_returns_to_ring() -> void:
+	var w := _world()
+	var fish := _fish(w)
+	var flower := w.add(EcoFlower.new()) as EcoFlower
+	var sh := fish.shoals[6]
+	_only(w, fish, sh)
+	w.run(5.0)
+	ok(sh.alarm == 0.0 and w.bus.pending.is_empty(), "без хищника спокойна")
+	var out := Vector3(sh.center.x - sh.axis.x, 0, sh.center.z - sh.axis.z).normalized()
+	var far := 40.0
+	ok(far > EcoFlower.SPREAD + EcoFish.PRED_ALARM and far < EcoFish.CROWN_ALARM, "40 м: за кроной, но в тревоге кроны")
+	var pred := w.spawn("pred", sh.axis - out * far + Vector3(0, 18, 0))  # с другой стороны кроны
+	w.step(0.05)
+	ok(sh.alarm > 0.0, "тревога сразу")
+	eq(w.bus.pending.size(), 1, "одна строка")
+	eq(w.bus.pending[0].note, "flee")
+	eq(w.bus.pending[0].text(), "Мелкая рыба: стая у Каменного цветка прячется в крону — где-то рядом хищник")
+	var closest := INF
+	for s in 20:
+		w.run(0.5)
+		for f: EcoFish.Fish in sh.members:
+			closest = minf(closest, f.agent.p.distance_to(pred.p))
+	ok(_mean_to(sh, sh.home) < 5.0, "стая в чаше: %.1f м" % _mean_to(sh, sh.home))
+	var inside := 0
+	for f: EcoFish.Fish in sh.members:
+		if flower.solid(f.agent.p):
+			inside += 1
+	ok(inside <= 1, "в чаше, а не в ветвях: %d" % inside)
+	ok(closest > 30.0, "хищник до стаи не дошёл: %.1f м" % closest)
+	eq(w.bus.pending.size(), 1, "строка раз за тревогу")
+
+	pred.p = sh.axis - out * (EcoFish.CROWN_ALARM + 10.0) + Vector3(0, 18, 0)  # ушёл дальше тревоги кроны
+	w.run(4.0)
+	eq(sh.alarm, 0.0, "тревога прошла")
+	w.run(16.0)
+	var ring := 0
+	for f: EcoFish.Fish in sh.members:
+		if _flat(f.agent.p, sh.axis) > EcoFlower.SPREAD:
+			ring += 1
+	ok(ring >= sh.members.size() - 2, "снова снаружи кроны: %d из %d" % [ring, sh.members.size()])
+	var r := _flat(sh.center, sh.axis)
+	ok(r > EcoFish.CROWN_RING.x - 3.0 and r < EcoFish.CROWN_RING.y + 3.0, "центр стаи — на кольце: %.1f м" % r)
+	eq(w.bus.pending.size(), 1, "возврат без строки")
+
+
 func test_ship_under_way_scares_without_message() -> void:
 	var w := _world()
 	var fish := _fish(w)
