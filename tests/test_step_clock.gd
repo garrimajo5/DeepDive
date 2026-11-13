@@ -63,7 +63,7 @@ func test_scene_menu_graphics_parts() -> void:
 	main.clock.start(Time.get_ticks_usec())
 	main._apply_graphics(Graphics.ECONOMY)
 	var subs: Dictionary = main.clock.subs.get("графика", {})
-	for k in ["океан", "корпус и отсеки", "прожектор и частицы", "свечение и мир", "сглаживание и масштаб"]:
+	for k in ["океан", "корпус и отсеки", "прожектор и частицы", "свечение", "мир", "сглаживание и масштаб"]:
 		ok(subs.has(k), "подчасть графики «%s»: %s" % [k, subs.keys()])
 	near(float(main.clock.parts.get("графика", -1.0)), _sum(subs), 0.001, "графика — ровно сумма подчастей")
 	ok(main.clock.parts.has("меню"), "время до смены — части меню")

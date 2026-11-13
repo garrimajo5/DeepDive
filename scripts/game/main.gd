@@ -1461,9 +1461,10 @@ func _apply_graphics(level: int) -> void:
 	if env:
 		env.glow_enabled = not lite   # bloom — лишние проходы размытия на слабых телефонах (#842)
 	glints.lite = lite                # блики воды в мостике ART-067 выключены
+	StepClock.mark("графика/свечение")
 	if eco:
 		eco.set_lite(lite)            # живой мир: флора не колышется, ободка тел нет (EcoView.set_lite, #598)
-	StepClock.mark("графика/свечение и мир")
+	StepClock.mark("графика/мир")   # EcoView.set_lite: на ПК 56–106 мс при смене «Экономно» (#1792)
 	var vp := get_viewport()
 	if vp:
 		vp.msaa_3d = {0: Viewport.MSAA_DISABLED, 2: Viewport.MSAA_2X, 4: Viewport.MSAA_4X}.get(int(g["msaa"]),
