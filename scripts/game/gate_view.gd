@@ -65,8 +65,8 @@ func set_lite(on: bool) -> void:
 			mi.visible = r.x >= 0.0
 			mi.visibility_range_begin = maxf(r.x, 0.0)
 			mi.visibility_range_end = maxf(r.y, 0.0)
-			mi.visibility_range_begin_margin = GateArch.LOD_MARGIN if r.x > 0.0 else 0.0
-			mi.visibility_range_end_margin = GateArch.LOD_MARGIN if r.y > 0.0 else 0.0
+			mi.visibility_range_begin_margin = 0.0
+			mi.visibility_range_end_margin = 0.0
 
 
 ## Сетки LOD i (0…2).

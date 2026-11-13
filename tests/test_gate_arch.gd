@@ -147,6 +147,8 @@ func test_scene_has_arch_and_helm_solid() -> void:
 			var r := GateArch.ranges(i, main.gate_view.lite)
 			near(mi.visibility_range_begin, maxf(r.x, 0.0), 0.001, "%s: начало LOD" % mi.name)
 			near(mi.visibility_range_end, maxf(r.y, 0.0), 0.001, "%s: конец LOD" % mi.name)
+			eq(mi.visibility_range_begin_margin + mi.visibility_range_end_margin, 0.0,
+				"%s: без гистерезиса — после прыжка камеры в его полосе скрыты оба LOD" % mi.name)
 	for n in GateView.HIDDEN:
 		ok(not (gv.model.get_node(n) as Node3D).visible, "%s скрыта до гнёзд" % n)
 	main._apply_graphics(Graphics.ECONOMY)
