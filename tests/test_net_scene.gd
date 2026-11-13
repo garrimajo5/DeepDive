@@ -93,8 +93,8 @@ func test_guest_leaves() -> void:
 	eq(main.notice.title, "Ира отключилась", "женская внешность — «отключилась»")
 	eq(main.notice.sub, "Роль свободна", "поста не держала")
 	ok(main.drop_panel.visible, "плашка на экране")
-	for i in int(HostNotice.LEFT_TIME / DT) + 2:
-		main.step(DT)
+	for i in int(HostNotice.LEFT_TIME / 0.1) + 2:   # шагом 0,1: плашка живёт по времени (было по DT — 1 с цикла, #1350)
+		main.step(0.1)
 	ok(not main.notice.active(), "через 4 с плашки нет")
 	ok(not main.drop_panel.visible)
 
