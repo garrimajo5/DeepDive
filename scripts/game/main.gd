@@ -182,6 +182,10 @@ var settings_panel: SettingsPanel
 ## Применённый уровень графики ART-044 (`_apply_graphics`); −1 — ещё не применён: при старте `_apply_settings` ставит
 ## уровень всегда, даже «Обычно» — иначе MSAA и прочее остаются, какими были до него (issue #744).
 var graphics_level := -1
+## Смена уровня графики по кадрам (#1792, `set_graphics`): частей в смене и сколько ещё не поставлено (0 — сцена
+## на уровне `graphics_level`).
+const GRAPHICS_PARTS := 5
+var graphics_left := 0
 var fps_view: FpsView   ## счётчик кадров ART-044 у правого края («Показывать кадры/с»)
 ## Предложение «Экономно» ART-044 после нескольких секунд низких кадр/с (тесты и снимки выключают: tests/run.gd,
 ## tools/shot.gd; прогон тестера — только шаг `slow`). Отказ — `Settings.lite_no`.
@@ -658,6 +662,7 @@ func _process(dt: float) -> void:
 func step(dt: float) -> void:
 	clock.start(Time.get_ticks_usec(), dt)
 	warm_run.restore()
+	_graphics_step()   # смена уровня графики — по части за кадр (#1792)
 	_sound(dt)
 	time += dt
 	if qa:
@@ -1418,59 +1423,96 @@ func _apply_settings() -> void:
 ## сквозь лёд и прожектора, сглаживание и разрешение 3D-сцены (интерфейс — в полном), сила слоёв воды.
 ## Части шага для лога тестера (#1792: смена уровня в меню — «код 240–321 мс» без частей): «графика 230 [мир 180, …]»;
 ## время до вызова — части того, кто позвал («меню», «пауза»), отметка `StepClock.mark` закрывает её.
+## Ставит уровень целиком за один вызов (старт, снимки, тесты); смена из настроек — по кадрам, `set_graphics`.
 func _apply_graphics(level: int) -> void:
 	StepClock.mark("меню/касания")
 	graphics_level = Graphics.valid(level)
+	graphics_left = 0
+	for i in GRAPHICS_PARTS:
+		_graphics_part(i)
+
+
+## Смена уровня графики из настроек и предложения «Экономно» — по части за кадр (#1792: вся смена одним кадром —
+## 166–177 мс на эмуляторе: код 60–80 мс и сборка вариантов шейдеров 90–100 мс). Уровень в `graphics_level` — сразу
+## (страница настроек, `LiteOffer`), сцена догоняет за `GRAPHICS_PARTS` шагов — `_graphics_step`. Новая смена, пока
+## идёт прежняя, начинает части заново: каждая часть ставит своё целиком, порядок не важен.
+## Уровень ещё не ставили (старт) — целиком сразу, как `_apply_graphics`.
+func set_graphics(level: int) -> void:
+	if graphics_level < 0:
+		_apply_graphics(level)
+		return
+	graphics_level = Graphics.valid(level)
+	graphics_left = GRAPHICS_PARTS
+
+
+## Следующая часть смены уровня графики, одна за шаг игры (`step`, и под меню, и под паузой); true — часть была.
+func _graphics_step() -> bool:
+	if graphics_left <= 0:
+		return false
+	_graphics_part(GRAPHICS_PARTS - graphics_left)
+	graphics_left -= 1
+	return true
+
+
+## Часть i уровня `graphics_level` (0…`GRAPHICS_PARTS` − 1): океан; корпус и отсеки; прожектор, частицы и свечение;
+## живой мир; сглаживание и масштаб. Части независимы — каждая ставит своё по уровню целиком.
+func _graphics_part(i: int) -> void:
 	var g := Graphics.level(graphics_level)
 	var lite: bool = g["lite"]
-	for cam: Camera3D in [camera, flyby_cam]:
-		if cam:
-			cam.far = g["far"]
-	if ocean:
-		ocean.set_far(g["wall"])
-		ocean.set_relief(not lite)    # лёд ART-056
-		ocean.set_shafts_lite(lite)   # лучи ART-052 без чтения глубины кадра (#852)
-		ocean.set_snow_lite(lite)     # взвесь ART-058 реже, без вращения
-		ocean.set_decals_lite(lite)   # декали дна ART-066 реже и ближе
-		ocean.set_stones_lite(lite)   # камни и ракушки на дне ближе
-		ocean.set_layers_level(g["layers"])   # слои воды ART-069: 0 / 0,6 / 0,9
-		ocean.set_shadows(g["shadows"])
-	StepClock.mark("графика/океан")
-	if hull:
-		hull.set_relief(not lite)     # обшивка ART-053
-	if bridge:
-		bridge.set_relief(not lite)   # мостик ART-054
-		bridge.set_wet(g.get("wet", false))   # капли ART-077 с преломлением — только «Красиво»
-	if rooms:
-		rooms.set_relief(not lite)    # отсеки ART-055
-		rooms.drops.lite = lite       # капли износа ART-074: 12 карточек
-	StepClock.mark("графика/корпус и отсеки")
-	if searchlight:
-		searchlight.set_lite(lite)    # луч прожектора ART-062 без дрейфа
-		searchlight.spot.shadow_enabled = int(g["shadows"]) > 0
-	wake.lite = lite                  # след винтов ART-063: 96 карточек, кадры 0–11
-	if wake_view:
-		wake_view.set_lite(lite)
-	valve_steam.lite = lite           # пар вентиля ART-071: 24 карточки
-	lock_water.lite = lite            # рябь в шахте шлюза ART-073 × 0,625
-	if breach_view:
-		breach_view.parts.lite = lite  # частицы пробоины ART-072: 24/16/15+1
-	if grade:
-		grade.set_lite(lite)          # виньетка ART-065: без LUT и без копии экрана, овал 0,10 (#842)
-	StepClock.mark("графика/прожектор и частицы")
-	if env:
-		env.glow_enabled = not lite   # bloom — лишние проходы размытия на слабых телефонах (#842)
-	glints.lite = lite                # блики воды в мостике ART-067 выключены
-	StepClock.mark("графика/свечение")
-	if eco:
-		eco.set_lite(lite)            # живой мир: флора не колышется, ободка тел нет (EcoView.set_lite, #598)
-	StepClock.mark("графика/мир")   # EcoView.set_lite: на ПК 56–106 мс при смене «Экономно» (#1792)
-	var vp := get_viewport()
-	if vp:
-		vp.msaa_3d = {0: Viewport.MSAA_DISABLED, 2: Viewport.MSAA_2X, 4: Viewport.MSAA_4X}.get(int(g["msaa"]),
-			Viewport.MSAA_2X)
-		vp.scaling_3d_scale = g["scale"]
-	StepClock.mark("графика/сглаживание и масштаб")
+	match i:
+		0:
+			for cam: Camera3D in [camera, flyby_cam]:
+				if cam:
+					cam.far = g["far"]
+			if ocean:
+				ocean.set_far(g["wall"])
+				ocean.set_relief(not lite)    # лёд ART-056
+				ocean.set_shafts_lite(lite)   # лучи ART-052 без чтения глубины кадра (#852)
+				ocean.set_snow_lite(lite)     # взвесь ART-058 реже, без вращения
+				ocean.set_decals_lite(lite)   # декали дна ART-066 реже и ближе
+				ocean.set_stones_lite(lite)   # камни и ракушки на дне ближе
+				ocean.set_layers_level(g["layers"])   # слои воды ART-069: 0 / 0,6 / 0,9
+				ocean.set_shadows(g["shadows"])
+			StepClock.mark("графика/океан")
+		1:
+			if hull:
+				hull.set_relief(not lite)     # обшивка ART-053
+			if bridge:
+				bridge.set_relief(not lite)   # мостик ART-054
+				bridge.set_wet(g.get("wet", false))   # капли ART-077 с преломлением — только «Красиво»
+			if rooms:
+				rooms.set_relief(not lite)    # отсеки ART-055
+				rooms.drops.lite = lite       # капли износа ART-074: 12 карточек
+			StepClock.mark("графика/корпус и отсеки")
+		2:
+			if searchlight:
+				searchlight.set_lite(lite)    # луч прожектора ART-062 без дрейфа
+				searchlight.spot.shadow_enabled = int(g["shadows"]) > 0
+			wake.lite = lite                  # след винтов ART-063: 96 карточек, кадры 0–11
+			if wake_view:
+				wake_view.set_lite(lite)
+			valve_steam.lite = lite           # пар вентиля ART-071: 24 карточки
+			lock_water.lite = lite            # рябь в шахте шлюза ART-073 × 0,625
+			if breach_view:
+				breach_view.parts.lite = lite  # частицы пробоины ART-072: 24/16/15+1
+			if grade:
+				grade.set_lite(lite)          # виньетка ART-065: без LUT и без копии экрана, овал 0,10 (#842)
+			StepClock.mark("графика/прожектор и частицы")
+			if env:
+				env.glow_enabled = not lite   # bloom — лишние проходы размытия на слабых телефонах (#842)
+			glints.lite = lite                # блики воды в мостике ART-067 выключены
+			StepClock.mark("графика/свечение")
+		3:
+			if eco:
+				eco.set_lite(lite)            # живой мир: флора не колышется, ободка тел нет (EcoView.set_lite, #598)
+			StepClock.mark("графика/мир")   # EcoView.set_lite: заранее собранные меши, ≈ 3 мс на ПК (#1798)
+		4:
+			var vp := get_viewport()
+			if vp:
+				vp.msaa_3d = {0: Viewport.MSAA_DISABLED, 2: Viewport.MSAA_2X, 4: Viewport.MSAA_4X}.get(
+					int(g["msaa"]), Viewport.MSAA_2X)
+				vp.scaling_3d_scale = g["scale"]
+			StepClock.mark("графика/сглаживание и масштаб")
 
 
 ## «Журнал экспедиции» ART-047 — `MenuFlow.open_journal` (#753).

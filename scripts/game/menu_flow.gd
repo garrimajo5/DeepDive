@@ -4,7 +4,7 @@ extends RefCounted
 ## «Голос» ART-041), предложение «Экономно» ART-044, «Журнал экспедиции» ART-047. У каждого экрана один рисунок:
 ## открыть → `*_show` (панель) → шаг (касания `Touch.Router.taps` → `hit` → `press` → `*_do`). Состояние экранов —
 ## поля `main.main_menu`, `main.settings`, `main.lite_offer`, `main.logbook`, панели — `main.menu_panel`,
-## `main.settings_panel`, `main.lite_offer_panel`, `main.logbook_panel`. Уровень графики ставит `Main._apply_graphics`.
+## `main.settings_panel`, `main.lite_offer_panel`, `main.logbook_panel`. Уровень графики ставит `Main.set_graphics`.
 ## Живёт полем `main.menu_flow`; входы для тестов и `tools/` — тонкие пересылки у `Main`.
 
 const CONTINUE_MSG := "Ковчег на месте сохранения"
@@ -203,7 +203,7 @@ func settings_do(what: String) -> void:
 			apply_settings()
 			main.settings.write()
 		"graphics":
-			apply_settings()
+			apply_settings(true)
 			main.settings.write()
 		"wipe":
 			main.save.reset(main.samples, main.scanner)
@@ -215,13 +215,18 @@ func settings_do(what: String) -> void:
 
 
 ## Громкость шины Master, чувствительность свайпа, уровень графики ART-044; облёт читает `_begin_run`.
-func apply_settings() -> void:
+## by_frames — смена уровня с касания игрока (страница «Графика», «Да» у предложения «Экономно»): сцена меняется по
+## части за кадр, `Main.set_graphics` (#1792); иначе (старт, тесты, снимки) — целиком сразу.
+func apply_settings(by_frames := false) -> void:
 	var settings := main.settings
 	AudioServer.set_bus_volume_db(0, Settings.volume_db(settings.volume))
 	if main.overlay:
 		main.overlay.swipe = settings.swipe
 	if main.graphics_level != settings.graphics:
-		main._apply_graphics(settings.graphics)
+		if by_frames:
+			main.set_graphics(settings.graphics)
+		else:
+			main._apply_graphics(settings.graphics)
 	if main.fps_view:
 		main.fps_view.visible = settings.fps
 	var radio := main.radio
@@ -257,7 +262,7 @@ func offer_do(what: String) -> void:
 	match what:
 		"yes":
 			main.settings.graphics = Graphics.ECONOMY
-			apply_settings()
+			apply_settings(true)
 			main.say("Графика: «Экономно»")
 		"no":
 			main.settings.lite_no = true

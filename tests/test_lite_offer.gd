@@ -124,6 +124,9 @@ func test_scene_yes_switches_to_economy() -> void:
 	ok(not main.lite_offer.open and not main.lite_offer_panel.visible, "«Да» закрыло диалог")
 	eq(main.settings.graphics, Graphics.ECONOMY, "в настройках — «Экономно»")
 	eq(main.graphics_level, Graphics.ECONOMY, "и в сцене")
+	for i in Main.GRAPHICS_PARTS:   # сцена — по части за кадр, мир при этом идёт (#1792)
+		main.step(1.0 / 30.0)
+	ok(main.wake.lite and not main.env.glow_enabled and main.graphics_left == 0, "сцена на «Экономно» за пять шагов")
 
 
 func test_scene_back_declines_and_alarm_blocks() -> void:

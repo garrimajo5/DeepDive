@@ -153,6 +153,70 @@ func test_scene_applies_level() -> void:
 	main._apply_settings()
 
 
+## #1792: смена уровня с касания — по части за кадр (вся смена одним кадром — 166–177 мс на эмуляторе). Уровень в
+## `graphics_level` — сразу, сцена догоняет за `Main.GRAPHICS_PARTS` шагов, в каждом шаге — одна подчасть «графика».
+func test_scene_tap_changes_by_frames() -> void:
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var vp := main.get_viewport()
+	main.settings.graphics = Graphics.ECONOMY
+	main.menu_flow.settings_do("graphics")
+	eq(main.graphics_level, Graphics.ECONOMY, "уровень — сразу (страница настроек, предложение)")
+	eq(main.graphics_left, Main.GRAPHICS_PARTS, "сцена — ещё нет: все части впереди")
+	near(main.camera.far, 400.0, 1e-3, "в кадре касания дальность прежняя")
+	eq(vp.msaa_3d, Viewport.MSAA_2X, "и сглаживание прежнее")
+	var seen := {}
+	for i in Main.GRAPHICS_PARTS:
+		main.step(1.0 / 30.0)
+		var subs: Dictionary = main.clock.subs.get("графика", {})
+		ok(subs.size() >= 1 and subs.size() <= 2, "шаг %d — одна часть смены: %s" % [i, subs.keys()])
+		for k in subs:
+			ok(not seen.has(k), "часть «%s» — один раз" % k)
+			seen[k] = true
+		if i == 0:
+			near(main.camera.far, 260.0, 1e-3, "первый шаг — океан и дальность")
+			eq(vp.msaa_3d, Viewport.MSAA_2X, "сглаживание — последним шагом")
+	eq(seen.size(), 6, "все подчасти графики за смену: %s" % [seen.keys()])
+	eq(main.graphics_left, 0, "смена кончилась")
+	ok(not main.ocean.sun.shadow_enabled and not main.searchlight.spot.shadow_enabled, "тени выключены")
+	ok(not main.env.glow_enabled and main.wake.lite and main.glints.lite, "свечение, частицы, блики — «Экономно»")
+	ok(EcoShaders.sway_lite and EcoRim.lite, "живой мир — «Экономно»")
+	eq(vp.msaa_3d, Viewport.MSAA_DISABLED, "без сглаживания")
+	near(vp.scaling_3d_scale, 0.75, 1e-5, "разрешение сцены снижено")
+	main.step(1.0 / 30.0)
+	ok(not main.clock.subs.has("графика"), "дальше шаг без графики")
+	main._apply_graphics(Graphics.NORMAL)   # следующим тестам — уровень по умолчанию
+
+
+## Вторая смена, пока идёт первая, начинает части заново; смена целиком (`_apply_graphics`: снимки, тесты) гасит
+## очередь — сцена не остаётся наполовину на старом уровне.
+func test_scene_change_mid_way() -> void:
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var vp := main.get_viewport()
+	main.set_graphics(Graphics.ECONOMY)
+	main.step(1.0 / 30.0)
+	main.step(1.0 / 30.0)
+	near(main.camera.far, 260.0, 1e-3, "океан уже «Экономно»")
+	main.set_graphics(Graphics.BEAUTY)
+	eq(main.graphics_left, Main.GRAPHICS_PARTS, "новая смена — части заново")
+	for i in Main.GRAPHICS_PARTS:
+		main.step(1.0 / 30.0)
+	near(main.camera.far, float(Graphics.level(Graphics.BEAUTY)["far"]), 1e-3, "дальность — «Красиво»")
+	eq(vp.msaa_3d, Viewport.MSAA_4X, "4× MSAA")
+	ok(main.env.glow_enabled and not main.wake.lite and not EcoRim.lite, "ничего не осталось на «Экономно»")
+	main.set_graphics(Graphics.ECONOMY)
+	main.step(1.0 / 30.0)
+	main._apply_graphics(Graphics.NORMAL)
+	eq(main.graphics_left, 0, "смена целиком гасит очередь")
+	main.step(1.0 / 30.0)
+	near(main.camera.far, 400.0, 1e-3, "уровень целиком — «Обычно»")
+	eq(vp.msaa_3d, Viewport.MSAA_2X, "2× MSAA")
+	ok(main.env.glow_enabled and not EcoRim.lite, "хвост прежней смены не доехал")
+
+
 ## Issue #842: дешёвые правки видеокарты — дно без тени на всех уровнях; на «Экономно» нет bloom и виньетка
 ## не копирует экран (умножение кадра на овал, `grade_lite.gdshader`); на «Обычно» всё возвращается.
 func test_scene_lite_gpu_savings() -> void:
