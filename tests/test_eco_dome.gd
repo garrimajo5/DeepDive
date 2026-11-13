@@ -58,7 +58,7 @@ func test_goes_opens_once_and_leaves() -> void:
 		d.step(w, DT)
 		peak = maxf(peak, d.glow)
 	ok(peak > 0.6, "импульс фотофоров — команда")
-	var opens := _run(w, d, 200.0)
+	var opens := _run(w, d, 300.0)
 	eq(opens, 1, "створка открылась один раз")
 	ok(d.opened, "створка открыта")
 	near(d.petal, 1.0, 1e-4, "поднята целиком и остаётся")
@@ -376,3 +376,70 @@ func test_stage_for_qa_step() -> void:   # #1350: шаг «dome» сценари
 	eq(d.state, EcoDome.State.BACK, "после клипа уходит в нишу")
 	d.stage(99.0)
 	near(d.t, EcoDome.OPEN_TIME, 1e-5, "время клипа — не дальше его длины")
+
+
+## #1757: гнёзда на полу кармана перед правой опорой MOD-023 — путь ниша → гнездо → ниша обходит опору (блоки
+## `GateArch.SHAPE` с запасом) и проходит точки `WAY`; по склону кармана (0,95 м/м) не упирается в дно (без
+## опережения `LOOK` вертикаль 0,6 хода отставала — тело уходило в склон).
+func test_path_around_pillar_through_way() -> void:
+	var w := _world(_near())
+	var d := EcoDome.new()
+	d.reset(w)
+	var boxes := GateArch.boxes()
+	var inside := 0
+	var near_way: Array[float] = []
+	for i in EcoDome.WAY.size():
+		near_way.append(INF)
+	var low := INF
+	var guard := 0
+	while d.state != EcoDome.State.GONE and guard < 6000:
+		w.time += DT
+		d.step(w, DT)
+		var l := GateArch.local(d.pos)
+		for b: AABB in boxes:
+			if b.grow(1.0).has_point(l):
+				inside += 1
+		for i in EcoDome.WAY.size():
+			near_way[i] = minf(near_way[i], Vector2(d.pos.x, d.pos.z).distance_to(EcoDome.way(i)))
+		low = minf(low, d.pos.y - Seabed.height(d.pos.x, d.pos.z))
+		guard += 1
+	eq(d.state, EcoDome.State.GONE, "дошёл, открыл и вернулся")
+	eq(inside, 0, "ни на шаге не в опоре и не ближе 1 м к ней")
+	for i in EcoDome.WAY.size():
+		ok(near_way[i] < EcoDome.WAY_R, "прошёл точку пути %d (%.1f м)" % [i, near_way[i]])
+	print("  ниже всего над дном: %.2f м" % low)
+	ok(low > EcoDome.AT_NEST * 0.5 + 0.05, "по склону кармана не опирается на дно (%.2f м)" % low)
+	# мутация: прямо из ниши к гнезду — сквозь опору
+	var s := d.stand()
+	var h := EcoDome.home()
+	var hits := 0
+	for k in 101:
+		var q := Vector2(h.x, h.y).lerp(Vector2(s.x, s.z), k / 100.0)
+		var l2 := GateArch.local(Vector3(q.x, Seabed.height(q.x, q.y) + EcoDome.CRUISE, q.y))
+		for b: AABB in boxes:
+			if b.has_point(l2):
+				hits += 1
+	ok(hits > 0, "проверка честная: прямая ниша → гнездо идёт сквозь опору (%d точек из 101)" % hits)
+
+
+## #1757, кадр 37a: от гнезда назад — сразу к последней точке WAY (без подхода с +Z за спиной) и разворот на месте
+## клипом Swim, а не Idle: через 1,8 с после OPEN купольник в кадре уходит.
+func test_leaves_nest_turning_with_swim() -> void:
+	var w := _world(_near())
+	var d := EcoDome.new()
+	d.reset(w)
+	d.stage(EcoDome.OPEN_TIME - 0.05)
+	_run(w, d, 0.1)
+	eq(d.state, EcoDome.State.BACK, "створка открыта — назад")
+	eq(d.leg, EcoDome.WAY.size() - 1, "назад — к последней точке пути, не к подходу")
+	var swim := 0
+	var idle := 0
+	for i in 18:
+		w.time += DT
+		d.step(w, DT)
+		if d.clip() == "Swim":
+			swim += 1
+		else:
+			idle += 1
+	print("  первые 1,8 с назад: Swim %d, Idle %d" % [swim, idle])
+	ok(idle <= 2, "разворачивается и уходит клипом Swim (Idle %d шагов из 18)" % idle)
