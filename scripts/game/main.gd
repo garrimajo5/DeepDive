@@ -261,6 +261,7 @@ func _build_outside() -> void:
 	eco.name = "Живой мир"
 	eco.ground = Seabed.mesh_height   # живой мир стоит на видимой сетке дна (#1386)
 	eco.world.scanned = scanner.is_scanned
+	run.scanned = scanner.is_scanned   # имя вида в риске маршрута — после скана (#1787)
 	add_child(eco)
 	samples_view = SamplesView.new(samples)
 	samples_view.name = "Образцы"
@@ -399,6 +400,7 @@ func _build_ui() -> void:
 	vote_panel.name = "Решение экипажа"
 	ui.add_child(vote_panel)
 	route_card = RouteCard.new()
+	route_card.scanned = scanner.is_scanned
 	route_card.name = "Карточка маршрута"
 	ui.add_child(route_card)
 	hit_flash = ColorRect.new()

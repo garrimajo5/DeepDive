@@ -373,7 +373,7 @@ func tick(dt: float) -> void:
 	_step_label = step_label(script_q)   # этот кадр рисуется на этом шаге — к нему и отнесём его время
 	if drain_left > 0.0:   # как присосавшийся стеклоуст: 3,2 ед./с (js/creatures.js), пока не истечёт шаг
 		drain_left -= dt
-		main.on_eco_event(EcoLink.drain("Стеклоуст", 3.2))
+		main.on_eco_event(EcoLink.drain(main.eco.world.nm("eel"), 3.2))   # имя — как у мира: до скана описательное (#1787)
 
 
 ## Уровень графики и то, что он поставил на деле, — в лог при старте и при каждой смене (отчёт #742: видеокарта
