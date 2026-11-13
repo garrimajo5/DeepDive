@@ -22,9 +22,11 @@ const PLACES := {
 	"cove": [LayerMap.POINTS["09"]["name"], Vector2(LayerMap.POINTS["09"]["x"], LayerMap.POINTS["09"]["z"]), 40.0],
 	"descent": [LayerMap.POINTS["10"]["name"], Vector2(LayerMap.POINTS["10"]["x"], LayerMap.POINTS["10"]["z"]), 55.0],
 }
-## Маршруты: название, места по порядку, одна строка риска (ART-016, #86; слой 1 — #829).
+## Маршруты: название, места по порядку, одна строка риска (ART-016, #86; слой 1 — #829). Риск с видом — "who":
+## до скана вида строка "risk_unknown" (имя — только после распознавания, #1787), её даёт `risk`.
 const ROUTES: Array = [
-	{"id": "reef", "name": "Рифовый сад", "places": ["flower", "bones", "well"], "risk": "много серпохвостов"},
+	{"id": "reef", "name": "Рифовый сад", "places": ["flower", "bones", "well"], "risk": "много серпохвостов",
+		"who": "pred", "risk_unknown": "много крупных хищников"},
 	{"id": "vents", "name": "Тёплые трубы", "places": ["geyser", "shell"], "risk": "реактор будет греться"},
 	{"id": "edge", "name": "Край отмели", "places": ["well", "drop"], "risk": "оползни: сонарная тьма"},
 	# слой 1 (#829, docs/sloj1-sad.md «Маршруты и связность»): основной путь, петля и ветка к полю — так у мест
@@ -43,6 +45,7 @@ const MAIN := 3
 const LINE_MAX := 64
 
 var route := -1           ## индекс в ROUTES, −1 — маршрут не выбран
+var scanned := Callable() ## изучен ли вид (`Scanner.is_scanned`): имя вида в строке риска (#1787); пусто — не изучен
 var visited: Array[String] = []
 var seen: Array[String] = []   ## места, пройденные за забег (без повторов) — строка «Места» итога
 var done := false
@@ -108,8 +111,16 @@ func choose(i: int) -> String:
 	var n: int = r["places"].size()
 	# места и риск — в карточке у стола; полный список в строке приборов шёл на две строки и ложился
 	# на номера мест голостола (#938) — здесь только число мест и риск
-	var msg := "Маршрут «%s»: %d %s; %s" % [r["name"], n, places_word(n), r["risk"]]
+	var msg := "Маршрут «%s»: %d %s; %s" % [r["name"], n, places_word(n), risk(route, scanned)]
 	return msg if msg.length() <= LINE_MAX else "Маршрут «%s»: %d %s" % [r["name"], n, places_word(n)]
+
+
+## Строка риска маршрута i (#1787): вид из "who" не изучен (scanned пусто или false) — "risk_unknown" без имени.
+static func risk(i: int, scanned := Callable()) -> String:
+	var r: Dictionary = ROUTES[i]
+	if r.has("who") and not (scanned.is_valid() and bool(scanned.call(r["who"]))):
+		return r["risk_unknown"]
+	return r["risk"]
 
 
 ## «место», «места», «мест» по числу.

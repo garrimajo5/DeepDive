@@ -93,7 +93,7 @@ static func icon_alpha(state: float) -> float:
 
 ## Строки карточки маршрута i: название, места по порядку с номерами карты, риск. Маршрут не выбран — цели слоя
 ## (`goal_lines`, кампания #824): у стола сначала путь слоя, маршруты — варианты исследования.
-static func card_lines(i: int) -> Array[String]:
+static func card_lines(i: int, scanned := Callable()) -> Array[String]:
 	if i < 0:
 		return goal_lines()
 	var out: Array[String] = []
@@ -103,7 +103,7 @@ static func card_lines(i: int) -> Array[String]:
 	out.append(r["name"])
 	for k in r["places"]:
 		out.append("%d  %s" % [NUMBERS[k], Run.place_name(k)])
-	out.append("Риск: " + r["risk"])
+	out.append("Риск: " + Run.risk(i, scanned))   # имя вида — после скана (#1787)
 	return out
 
 
@@ -119,7 +119,7 @@ static func goal_lines() -> Array[String]:
 		"Путь: " + " – ".join(ids),
 		"%s — у места %d" % [LayerMap.POINTS[last]["name"], int(last)],
 		"Маршруты у стола — варианты",
-		"Риск: " + Run.ROUTES[Run.MAIN]["risk"],
+		"Риск: " + Run.risk(Run.MAIN),
 	]
 
 

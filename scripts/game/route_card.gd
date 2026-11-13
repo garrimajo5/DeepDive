@@ -20,6 +20,7 @@ const CODE_ROW: Array[float] = [28.0, 46.0, 26.0, 28.0, 26.0]
 const CODE_GAP := 14.0       ## от маршрута до черты и от черты до страницы «Связь», px
 
 var lines: Array[String] = []   ## маршрут (Briefing.card_lines)
+var scanned := Callable()       ## изучен ли вид (`Scanner.is_scanned`): имя вида в риске — после скана (#1787)
 var code: Array[String] = []    ## страница «Связь» (Briefing.code_lines)
 var alpha := 0.0
 var rect := Rect2()
@@ -36,7 +37,7 @@ func _ready() -> void:
 ## страницы «Связь»).
 func show_card(k: float, route: int, cam: Camera3D, holo: Transform3D, word := "") -> void:
 	var anchor := holo * Briefing.CARD_ANCHOR
-	var l := Briefing.card_lines(route)
+	var l := Briefing.card_lines(route, scanned)
 	var c := Briefing.code_lines(word)
 	var on := k > 0.0 and not (l.is_empty() and c.is_empty()) and cam != null and not cam.is_position_behind(anchor)
 	if not on:

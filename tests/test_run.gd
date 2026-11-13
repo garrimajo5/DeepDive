@@ -27,9 +27,9 @@ func test_choose_message_fits_one_line() -> void:
 	for i in Run.ROUTES.size():
 		var msg := run.choose(i)
 		ok(msg.length() <= Run.LINE_MAX, "%s: %d знаков" % [msg, msg.length()])
-		ok(msg.ends_with(Run.ROUTES[i]["risk"]), "строка риска остаётся")
+		ok(msg.ends_with(Run.risk(i)), "строка риска остаётся")
 	eq(run.choose(3), "Маршрут «Путь к спуску»: 5 мест; за краем — склон до 290 м")
-	eq(run.choose(0), "Маршрут «Рифовый сад»: 3 места; много серпохвостов")
+	eq(run.choose(0), "Маршрут «Рифовый сад»: 3 места; много крупных хищников", "серпохвост не изучен — без имени (#1787)")
 	eq([Run.places_word(1), Run.places_word(2), Run.places_word(5), Run.places_word(11), Run.places_word(22)],
 		["место", "места", "мест", "мест", "места"])
 
@@ -42,7 +42,7 @@ func test_cycle_and_progress() -> void:
 	var msg := run.cycle()
 	eq(run.route, 0, "первое нажатие — первый маршрут")
 	ok(msg.begins_with("Маршрут «Рифовый сад»: 3 места"), msg)
-	ok(msg.ends_with("много серпохвостов"), "строка риска")
+	ok(msg.ends_with("много крупных хищников"), "строка риска — без имени неизученного вида (#1787)")
 	eq(run.label(), "Маршрут: сменить")
 	eq(run.waypoint(), Run.place_xz("flower"), "первая точка на голостоле")
 	eq(run.status(40.0, 50.0), "Рифовый сад 0/3: Каменный цветок 100 м", "строка на приборах")
@@ -330,3 +330,23 @@ func test_scene_descent_vote() -> void:   # корабль у 10 → голос�
 	ok(not main.run.voting and not main.at_vote and not main.vote_panel.visible, "ушли от спуска — закрыто")
 	main.queue_free()
 	await frames(1)
+
+
+## #1787: риск «Рифового сада» называет серпохвоста только после скана; маршрут без вида — как есть.
+func test_risk_names_species_after_scan() -> void:
+	var sc := Scanner.new()
+	eq(Run.risk(0), "много крупных хищников", "без сканера — без имени")
+	eq(Run.risk(0, sc.is_scanned), "много крупных хищников", "серпохвост не изучен")
+	sc.scanned["pred"] = true
+	eq(Run.risk(0, sc.is_scanned), "много серпохвостов", "изучен — имя вида")
+	eq(Run.risk(1), Run.ROUTES[1]["risk"], "«Тёплые трубы» — без вида в риске")
+	var run := Run.new()
+	run.scanned = sc.is_scanned
+	ok(run.choose(0).ends_with("много серпохвостов"), "строка приборов — по сканеру забега")
+	eq(Briefing.card_lines(0)[-1], "Риск: много крупных хищников", "карточка у стола до скана")
+	eq(Briefing.card_lines(0, sc.is_scanned)[-1], "Риск: много серпохвостов", "карточка у стола после скана")
+	for r in Run.ROUTES:
+		if r.has("who"):
+			ok(Species.info(r["who"]) != null, "%s: вид риска есть в реестре" % r["id"])
+			ok(not str(r["risk_unknown"]).to_lower().contains(Species.called(r["who"], Species.Case.NOM, true).to_lower().left(6)),
+				"%s: строка до скана без имени вида" % r["id"])

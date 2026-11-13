@@ -289,8 +289,9 @@ static func letter(role: int) -> String:
 
 
 ## Цель тревоги по главному полю табло (`AlarmBoard.main_field`), null — нечего показывать.
-## Пробоина — из настоящего события (`Breach.active`), перегрев — вентиль, стеклоуст — рычаг разряда.
-static func alarm(field: int, spot: Breach.Spot) -> Alarm:
+## Пробоина — из настоящего события (`Breach.active`), перегрев — вентиль, присоска — рычаг разряда; who — кто на
+## присоске (`AlarmWay.drain_name`): до скана вида — «Существо», имя — только после (#1787).
+static func alarm(field: int, spot: Breach.Spot, who := "Существо") -> Alarm:
 	var a := Alarm.new()
 	match field:
 		AlarmBoard.Field.BREACH:
@@ -309,7 +310,7 @@ static func alarm(field: int, spot: Breach.Spot) -> Alarm:
 			a.room = ShipLayout.Room.BRIDGE
 			a.at = Zap.POST_AT
 			a.icon = "zap"
-			a.lines = ["Стеклоуст", "Мостик · разряд"]
+			a.lines = [who, "Мостик · разряд"]
 		_:
 			return null
 	return a
