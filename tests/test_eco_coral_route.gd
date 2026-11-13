@@ -179,3 +179,42 @@ func test_mid_cruise_keeps_bush_and_kamen_calm() -> void:
 	ok(k2.hidden_in(k2.rows[BUSH]) > 0, "и ряд прячется")
 	ok(_has(said2, "корабль шумит"), "строка о шуме: %s" % str(said2))
 	ok(_has(said2, "kamen:hide"), "и заметка каменщиков: %s" % str(said2))
+
+
+## Стоянка у самого куста (кандидат (ц), `docs/roles/dev-b.md`): два импульса сонара гасят куст у основания (33,3; 56,8)
+## до тления; корабль стоит рядом в 8 м со светом — ближе слуха NOISE_R, но тихо — и куст разгорается сам за
+## (1 − MIN_GLOW) / RELIGHT ≈ 23 с, как в тишине; ползком 2 м/с (тише NOISE_SPEED) — так же. Свет и близость сами куст
+## погашенным не держат — держит только шум хода: контроль 4 м/с в том же месте оставляет его тлеть.
+func test_bush_relights_beside_quiet_lit_ship() -> void:
+	var full := (1.0 - EcoCoral.MIN_GLOW) / EcoCoral.RELIGHT
+	for crawl in [0.0, 2.0, 4.0]:
+		var a := _world()
+		var w: EcoWorld = a[0]
+		var c: EcoCoral = a[2]
+		var b := c.bushes[BUSH]
+		var said: Array[String] = []
+		_put(w, Vector2(b.base.x - 8.0, b.base.z))
+		var d := w.ship.pos.distance_to(b.top)
+		ok(d < EcoCoral.NOISE_R, "корабль ближе слуха куста: %.1f м" % d)
+		_ping(w, said)
+		_run(w, c, 0.5, said)
+		_ping(w, said)
+		near(b.glow, EcoCoral.MIN_GLOW, 0.01, "два импульса — куст тлеет")
+		ok(_has(said, "от импульса сонара"), "строка называет импульс: %s" % str(said))
+		w.ship.speed = crawl
+		var lit_at := -1.0
+		var t := 0.0
+		while t < full + 5.0:
+			_run(w, c, 0.1, said)
+			t += 0.1
+			if lit_at < 0.0 and b.glow >= 1.0 - 1e-6:
+				lit_at = t
+		print("    ход %.0f м/с в %.1f м от вершины: горит снова через %.1f с (свет %.2f, в тишине %.1f с)"
+			% [crawl, d, lit_at, b.glow, full])
+		if crawl < EcoCoral.NOISE_SPEED:
+			ok(lit_at > 0.0 and lit_at <= full + 0.2, "ход %.0f м/с со светом рядом — куст разгорается сам: %.1f с"
+				% [crawl, lit_at])
+			ok(not _has(said, "корабль шумит"), "стоянка рядом без строки о шуме: %s" % str(said))
+		else:
+			near(b.glow, EcoCoral.MIN_GLOW, 1e-6, "контроль: шумный ход %.0f м/с держит куст погасшим" % crawl)
+			ok(not _has(said, "корабль шумит"), "строки нет: куст погас раньше, от импульса")
