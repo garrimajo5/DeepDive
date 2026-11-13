@@ -4,6 +4,7 @@ extends SceneTree
 ## Фильтр — часть имени «файл.тест»; путь и .gd срезаются, ни одного теста — ошибка с объяснением (#1350).
 ## Часть прогона для CI (#845): `-- --shard 2/3` — файлы части 2 из 3 по сумме времени (`TestShards`).
 ## Замер времени файлов: `-- --times tests/vremya.txt` — после прогона пишет таблицу для раскладки частей.
+## Сообщения пройденных проверок: `-- --say` — под «ок» строки `ok`/`eq`/`near` со своим сообщением (замер виден в логе).
 ## Самые долгие тесты: `-- --slow 20` — после прогона печатает 20 самых долгих тестов (не файлов), `TestShards.slowest`.
 ## Берёт все tests/test_*.gd, в каждом — методы test_*. Ошибка движка во время теста (null, неверный тип и т. п.)
 ## тоже валит тест: её ловит свой Logger. Код выхода 0 — всё зелёное, 1 — есть падения.
@@ -56,7 +57,10 @@ func _run() -> void:
 	var a := 0
 	while a < args.size():
 		var arg: String = args[a]
-		if arg == "--shard" and a + 1 < args.size():
+		if arg == "--say":
+			TestCase.say = true
+			a += 1
+		elif arg == "--shard" and a + 1 < args.size():
 			shard = TestShards.parse(args[a + 1])
 			if shard.is_empty():
 				print("Неверная часть «%s»: нужно i/n, например 2/3" % args[a + 1])
@@ -121,6 +125,8 @@ func _run() -> void:
 			if t.failures.is_empty():
 				passed += 1
 				print("  ок     ", full)
+				for msg in t.spoken:
+					print("         · ", msg)
 			else:
 				failed.append(full)
 				print("ПАДЕНИЕ  ", full)
