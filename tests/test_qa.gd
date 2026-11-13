@@ -559,6 +559,38 @@ func test_row3_line() -> void:   # #1429: строка 3 приборов в л�
 		"отложена до конца брифинга")
 
 
+func test_row2_line() -> void:   # фокус 2а: строка 2 приборов в лог у снимка
+	eq(QaRunner.row2_line([]), "строка 2: пусто", "пусто")
+	eq(QaRunner.row2_line(["до дна 12 м", "курс 90°"]), "строка 2: «до дна 12 м · курс 90°»", "части через точку")
+
+
+## Фокус 2а (тестер, #1350, 13.11 09:23): строка снимка несёт тексты строк 2–3 приборов — знак, которого в кадре
+## не разглядеть, проверяется по логу. Заметка `log` их не несёт (как раньше), снимок под скрытыми приборами — с пометкой.
+func test_shot_logs_rows() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.say("Знак у логова")
+	var qa := main.start_qa('[{"do": "wait", "s": 0.2}, {"do": "shot", "name": "a"}, {"do": "log", "note": "zametka"},'
+		+ ' {"do": "hud", "on": false}, {"do": "wait", "s": 0.2}, {"do": "shot", "name": "b"}, {"do": "wait", "s": 5}]')
+	for i in 30:
+		main.step(1.0 / 30.0)
+	var a := Array(qa.log_lines).filter(func(l): return l.begins_with("скриншот a"))
+	eq(a.size(), 1, "строка снимка a")
+	if a.size() == 1:
+		ok("строка 2: «%s»" % " · ".join(PackedStringArray(main.status_rows()[1])) in a[0], "строка 2 как на приборах: " + a[0])
+		ok("строка 3: «Знак у логова»" in a[0], "строка 3 — сообщение: " + a[0])
+		ok(not "приборы скрыты" in a[0], "приборы на экране — без пометки")
+	ok("строка 3" in qa.rows_now() and qa.state(true).ends_with(qa.rows_now()), "со снимком — строки в конце состояния")
+	ok(not "строка 2" in qa.state(), "без снимка состояние прежнее")
+	var note := Array(qa.log_lines).filter(func(l): return l.begins_with("zametka |"))
+	ok(note.size() == 1 and not "строка 2" in note[0], "заметка — без строк приборов")
+	var b := Array(qa.log_lines).filter(func(l): return l.begins_with("скриншот b"))
+	ok(b.size() == 1 and b[0].ends_with("приборы скрыты"), "снимок без приборов помечен: %s" % [b])
+	main.queue_free()
+	await frames(1)
+
+
 func test_brief_logs_world_line() -> void:   # #1429: в логе видно, пришла строка мира до плашки или под ней
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
