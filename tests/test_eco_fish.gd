@@ -650,6 +650,89 @@ func test_zap_at_01_sends_pred_off_and_crown_returns() -> void:
 	eq(zap, 1, "строка разряда — одна")
 
 
+## Сцена 00→01 (решение ГД 08.11, `docs/urovni/sloj-1.md`): у цветка угроза читается последствием, а не потерей —
+## голодный серпохвост ходит у края рифа рядом со стоянкой (33; −22), но рыбок кроны не берёт: на кольце они внутри
+## REEF_KEEP (кольцо 15–19 м от оси, риф — 32 м), в тревоге — в чаше. Он уходит за край тревоги кроны и
+## возвращается — стаи то в чаше, то на кольце, но целы (22 из 22), добычей он их не выбирает и в риф за ними не
+## заходит. Других, кто ест рыбок кроны, у 01 нет (вуали — у (85; 25) и (−28; 42), угорь — у (−62; −8)).
+func test_hungry_pred_at_01_takes_no_crown_fish() -> void:
+	var w := _world()
+	var fish := _fish(w)
+	w.add(EcoFlower.new())
+	var preds := w.add(EcoPred.new(fish)) as EcoPred
+	preds.alert = EcoPred.ALERT_ON  # явно: корабль в рифе, бросков нет — здесь только охота на рыбок
+	var crown: Array[EcoFish.Shoal] = []
+	for sh in fish.shoals:
+		if sh.crown:
+			crown.append(sh)
+		else:
+			for f: EcoFish.Fish in sh.members:
+				w.agents.erase(f.agent)
+	eq(crown.size(), EcoFish.CROWN_SHOALS)
+	fish.shoals.assign(crown)
+	var keep: Array[EcoFish.Fish] = []
+	for sh in crown:
+		keep.append_array(sh.members)
+	fish.all.assign(keep)
+	var pr := preds.all[0]
+	for other in preds.all.slice(1):  # остальные серпохвосты — далеко и не доплывут за проверку
+		other.agent.p = Vector3(-400, -30, 400)
+		other.agent.goal = other.agent.p
+	var stand := Vector2(33.0, -22.0)
+	w.ship.pos = Vector3(stand.x, Seabed.height(stand.x, stand.y) + 7.0, stand.y)
+	w.ship.speed = 0.0
+	w.ship.light_on = true
+	w.ship.light_range = 40.0
+	var axis := crown[0].axis
+	ok(_flat(w.ship.pos, axis) < EcoPred.REEF_KEEP, "стоянка — в рифе: корабль хищнику не цель")
+	var out := Vector3(stand.x - axis.x, 0, stand.y - axis.z).normalized()
+	pr.agent.p = Vector3(axis.x, -30.0, axis.z) + out * EcoPred.REEF_EDGE  # у края рифа со стороны стоянки
+	pr.agent.goal = pr.agent.p
+	pr.hunger = 1.0
+	pr.cooldown = 30.0
+	var nearest := INF  # ближе всего хищник к оси
+	var lost := 0  # рыбок кроны съедено
+	var crown_prey := 0  # шагов охоты за рыбкой кроны
+	var hunts := 0  # шагов охоты вообще
+	var on_ring := 0.0  # секунд, когда хищник за краем тревоги кроны, а стаи на кольце в его досягаемости
+	var t := 0.0
+	var hold := Vector3.INF
+	while t < 60.0:
+		pr.hunger = 1.0  # голоден всё время
+		if t >= 20.0 and t < 35.0:  # 15 с держится за краем тревоги кроны со стороны стаи: та выходит на кольцо
+			if not hold.is_finite():
+				var side := Vector3(crown[0].center.x - axis.x, 0, crown[0].center.z - axis.z)
+				side = side.normalized() if side.length() > 1.0 else out
+				hold = Vector3(axis.x, -30.0, axis.z) + side * (EcoFish.CROWN_ALARM + 6.0)
+			pr.agent.p = hold
+			pr.agent.goal = hold
+		w.step(0.05)
+		t += 0.05
+		nearest = minf(nearest, _flat(pr.agent.p, axis))
+		if pr.mode == EcoPred.Mode.HUNT:
+			hunts += 1
+			if pr.prey != null and pr.prey.shoal.crown:
+				crown_prey += 1
+		if _flat(pr.agent.p, axis) > EcoFish.CROWN_ALARM and crown[0].alarm <= 0.0 \
+				and pr.agent.p.distance_to(crown[0].center) < EcoPred.HUNT_RADIUS:
+			on_ring += 0.05
+		for ev in w.bus.pending:
+			if ev.species == "pred" and ev.note == "catch":
+				lost += 1
+		w.bus.pending.clear()
+	var alive := 0
+	for f: EcoFish.Fish in fish.all:
+		if f.agent.alive:
+			alive += 1
+	print("    голодный у 01: 60 с, ближе всего %.1f м к оси, охоты %.1f с (за кроной %.1f с), стаи на кольце в досягаемости %.1f с, живых %d из %d" % [
+		nearest, hunts * 0.05, crown_prey * 0.05, on_ring, alive, fish.all.size()])
+	ok(on_ring > 5.0, "стаи на кольце бывали в досягаемости хищника: %.1f с" % on_ring)
+	eq(crown_prey, 0, "рыбку кроны добычей не выбирает")
+	eq(lost, 0, "улова нет")
+	eq(alive, fish.all.size(), "стаи кроны целы")
+	ok(nearest > EcoPred.REEF_KEEP - 1.0, "в риф не заходит: %.1f м" % nearest)
+
+
 func test_ship_under_way_scares_without_message() -> void:
 	var w := _world()
 	var fish := _fish(w)
