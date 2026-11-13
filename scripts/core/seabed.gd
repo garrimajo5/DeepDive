@@ -11,10 +11,10 @@ const ICE_Y := 0.0
 const EAST := Rect2(350.0, 60.0, 350.0, 280.0)
 
 
-## Высота дна под точкой (x, z): прежняя отмель `base` + гребень и проходы слоя 1 (`Layer`) + склон за восточным
-## краем (`Slope`, #822).
+## Высота дна под точкой (x, z): прежняя отмель `base` + гребень, проходы и жёлоб врат слоя 1 (`Layer`) + склон за
+## восточным краем (`Slope`, #822).
 static func height(x: float, z: float) -> float:
-	return minf(Slope.cut(x, z, Layer.lanes(x, z, Layer.ridge(x, z, base(x, z)))), TOP)
+	return minf(Slope.cut(x, z, Layer.trough(x, z, Layer.lanes(x, z, Layer.ridge(x, z, base(x, z))))), TOP)
 
 
 ## Рельеф отмели как W.height в js/world.js (до карты слоя 1), без предела `TOP`.
@@ -88,6 +88,36 @@ class Layer:
 			return h
 		var cap := LANE_CAP - HashNoise.value(x * 0.05 - 1.3, z * 0.05 + 4.7) * LANE_RIPPLE
 		return lerpf(h, minf(h, cap), w)
+
+	## Жёлоб прохода под аркой врат 07 (#1757, вариант уровней 13.11 под модель MOD-023): пол `TROUGH_FLOOR` в
+	## |dx| ≤ `TROUGH_HALF`, |dz| ≤ `TROUGH_LEN` от середины террасы, боковые склоны `TROUGH_SIDE` м, выход на гребень
+	## к югу (откуда подходит корабль) — `TROUGH_EXIT` м (уровни: не короче 30). Только опускает. Те же числа у
+	## рамки живого мира — `EcoGate.TROUGH_HALF`/`TROUGH_SLOPE`/`STRIP_DZ` (сверяет `test_layer_relief`).
+	## Склоны прямые: дно гребня (не выше `TROUGH_RIM`) сходит к полу за `TROUGH_SIDE`/`TROUGH_EXIT` м, положе 1 м
+	## на метр; за ними гребень не тронут. К северу жёлоб упирается в стену края карты (она начинается у z ≈ −290,
+	## ещё над полом): там склон круче, `TROUGH_WALL` м на метр, — выемка в стене закрывается, не дойдя до края карты.
+	const TROUGH_FLOOR := -66.0
+	const TROUGH_RIM := -44.0    ## самое мелкое дно гребня: `RIDGE_FLOOR` + 3 м бугров
+	const TROUGH_HALF := 28.0
+	const TROUGH_LEN := 60.0
+	const TROUGH_SIDE := 30.0
+	const TROUGH_EXIT := 36.0
+	const TROUGH_WALL := 0.95
+	const TROUGH_RIPPLE := 0.4   ## м — пол не плоский: рябь вниз от `TROUGH_FLOOR`
+
+	static func trough(x: float, z: float, h: float) -> float:
+		var c := EcoGate.CENTER
+		var drop := TROUGH_RIM - TROUGH_FLOOR
+		var dz := z - c.y
+		var lift := maxf(absf(x - c.x) - TROUGH_HALF, 0.0) * drop / TROUGH_SIDE
+		if dz > TROUGH_LEN:
+			lift = maxf(lift, (dz - TROUGH_LEN) * drop / TROUGH_EXIT)
+		elif dz < -TROUGH_LEN:
+			lift = maxf(lift, (-dz - TROUGH_LEN) * TROUGH_WALL)
+		if TROUGH_FLOOR - TROUGH_RIPPLE + lift >= h:
+			return h
+		var cap := TROUGH_FLOOR - HashNoise.value(x * 0.05 + 7.9, z * 0.05 - 3.4) * TROUGH_RIPPLE
+		return minf(h, cap + lift)
 
 	## Середины карманов `POCKETS` — один раз (#1300: дно зовут ~50 раз за кадр, словарь `LayerMap` — не на каждый).
 	static func pockets() -> Array[Vector2]:
