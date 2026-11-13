@@ -185,3 +185,74 @@ func test_catches_info_name_and_raw_by() -> void:
 	eq(_by_calls("pred.gd", "\t\t\t\tif world.hit_ship(\"Серпохвост\", BITE_DAMAGE, a.p):").size(), 1, "удар с готовым именем")
 	eq(_by_calls("pred.gd", "\t\t\t\tif world.hit_ship(Species.cap(world.nm(ID)), BITE_DAMAGE, a.p):").size(), 0,
 		"удар через nm — можно")
+
+
+## Путь события, а не литералы (п. 2 (с) фокуса, #1784): стоянка у 01 (33; −22), биолог у сканера — мир подключён к
+## сканеру корабля, как в Main (`eco.world.scanned = scanner.is_scanned`). До скана имя вида в NEAR (и у прицела, и у
+## отметки сонара) — описательное, прицел — «Неизвестный вид»; сканер удержали 1,5 с — «Новый вид: <имя>», и в
+## следующий шаг NEAR несёт настоящее имя только у изученного вида, у остальных — по-прежнему описательное.
+func test_scanner_at_01_names_near_after_scan() -> void:
+	var w := EcoWorld.new(EcoRandom.WORLD_SEED)
+	w.ground = Seabed.height
+	var cur := w.add(EcoCurrent.new()) as EcoCurrent
+	w.add(EcoFish.new())
+	var moss := w.add(EcoMoss.new()) as EcoMoss
+	w.add(EcoGrazer.new(moss))
+	w.add(EcoKamen.new())
+	w.add(EcoFan.new(cur))
+	w.add(EcoFlower.new())
+	var sc := Scanner.new()
+	w.scanned = sc.is_scanned
+	var said: Array[String] = []
+	sc.message.connect(func(t: String): said.append(t))
+	var stand := Vector2(33.0, -22.0)
+	w.ship.pos = Vector3(stand.x, Seabed.height(stand.x, stand.y) + 7.0, stand.y)
+	var to := EcoFlower.CENTER - stand
+	w.ship.yaw = atan2(-to.x, -to.y)
+	w.ship.light_on = true
+	w.ship.light_range = 40.0
+	w.ship.scan_range = Scanner.RANGE
+	w.ship.sonar_range = 120.0
+	w.ship.sonar_ping = true
+	w.step(0.05)
+	var ev := w.take_link()
+	w.ship.sonar_ping = false
+	sc.take(ev)
+	ok(not sc.target.is_empty(), "у 01 есть цель сканера")
+	var kinds := {}
+	var sonar_n := 0
+	for e in ev:
+		if e.get("type", "") != EcoLink.NEAR:
+			continue
+		var sk := str(e["species"])
+		kinds[sk] = true
+		sonar_n += int(bool(e["sonar"]))
+		eq(str(e["name"]), Species.called(sk), "%s до скана — описательно" % sk)
+		ok(str(e["name"]) != Species.info(sk).name, "%s: «%s» — не настоящее имя" % [sk, e["name"]])
+	var sp := str(sc.target.get("species", ""))
+	print("    у 01 до скана: виды %s, отметок сонара %d, цель %s «%s»" % [kinds.keys(), sonar_n, sp, sc.target.get("name", "")])
+	ok(kinds.size() >= 2, "проверка не пустая: видов у 01 %d" % kinds.size())
+	ok(sonar_n >= 1, "проверка не пустая: отметок сонара %d" % sonar_n)
+	eq(sc.target_name(), "Неизвестный вид", "прицел до скана")
+	for i in 40:   # 2 с удержания
+		sc.hold(0.05)
+		sc.update(0.05)
+	ok(sc.is_scanned(sp), "вид %s изучен" % sp)
+	ok(said.has("Новый вид: %s" % Species.info(sp).name), "строка «Новый вид»: %s" % [said])
+	w.step(0.05)
+	ev = w.take_link()
+	var real := 0
+	for e in ev:
+		if e.get("type", "") != EcoLink.NEAR:
+			continue
+		var sk := str(e["species"])
+		if sk == sp:
+			real += 1
+			eq(str(e["name"]), Species.called(sk, Species.Case.NOM, true), "%s после скана — настоящее имя" % sk)
+			ok(str(e["name"]).to_lower() == Species.info(sk).name.to_lower(), "%s: «%s» — имя вида" % [sk, e["name"]])
+		else:
+			eq(str(e["name"]), Species.called(sk), "%s не изучен — описательно" % sk)
+	ok(real >= 1, "изученный вид снова у прицела: %d" % real)
+	sc.take(ev)
+	if str(sc.target.get("species", "")) == sp:
+		eq(sc.target_name(), Species.info(sp).name, "прицел после скана")
