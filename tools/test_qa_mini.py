@@ -72,6 +72,65 @@ class Mini(unittest.TestCase):
         with self.assertRaises(SystemExit):
             mini.cut(STEPS, "11", "10")
 
+    def test_open_screens(self):
+        # пауза → настройки → «Графика» → уровень → три back: по шагам стек растёт и пустеет
+        menu = [
+            {"do": "press", "what": "dive"},          # 0
+            {"do": "back"},                           # 1 пауза
+            {"do": "press", "what": "settings"},      # 2
+            {"do": "press", "what": "graphics"},      # 3
+            {"do": "press", "what": "g2"},            # 4 не экран
+            {"do": "back"},                           # 5 закрыта «Графика»
+            {"do": "back"},                           # 6 закрыты настройки
+            {"do": "back"},                           # 7 закрыта пауза
+            {"do": "back"},                           # 8 снова пауза
+            {"do": "press", "what": "map"},           # 9
+            {"do": "press", "what": "map_back"},      # 10
+            {"do": "press", "what": "exit"},          # 11
+            {"do": "press", "what": "yes"},           # 12 главное меню
+            {"do": "press", "what": "journal"},       # 13
+            {"do": "back"},                           # 14
+            {"do": "press", "what": "dive"},          # 15 в игре
+            {"do": "shot", "name": "50-igra"},        # 16
+        ]
+        self.assertEqual(mini.opened(menu, 1), [])
+        self.assertEqual(mini.opened(menu, 2), [mini.PAUSE])
+        self.assertEqual(mini.opened(menu, 5), [mini.PAUSE, "settings", "graphics"], "g2 — не экран")
+        self.assertEqual(mini.opened(menu, 7), [mini.PAUSE])
+        self.assertEqual(mini.opened(menu, 8), [], "парные back закрыли всё")
+        self.assertEqual(mini.opened(menu, 10), [mini.PAUSE, "map"])
+        self.assertEqual(mini.opened(menu, 11), [mini.PAUSE], "map_back закрывает схему")
+        self.assertEqual(mini.opened(menu, 13), [mini.MENU], "«Выйти» → «Да» — главное меню")
+        self.assertEqual(mini.opened(menu, 14), [mini.MENU, "journal"])
+        self.assertEqual(mini.opened(menu, 15), [mini.MENU], "back в меню закрыл журнал, меню осталось")
+        self.assertEqual(mini.opened(menu, 16), [], "press dive — в игре")
+
+    def test_open_screens_in_real_scenario(self):
+        with open(mini.SCENARIO, encoding="utf-8") as f:
+            steps = json.load(f)
+        self.assertEqual(mini.opened(steps, len(steps)), [], "к концу сценария все экраны закрыты")
+        at = {s["name"]: i for i, s in enumerate(steps) if s.get("do") == "shot"}
+        self.assertEqual(mini.opened(steps, at["29-nastrojki"]), [mini.PAUSE, "settings"])
+        self.assertEqual(mini.opened(steps, at["29c-menu-again"]), [mini.MENU])
+        self.assertEqual(mini.opened(steps, at["33a-kondensat-krasivo"]), [], "уровень сменили и вышли из паузы")
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(root, "scripts", "core", "qa_script.gd"), encoding="utf-8") as f:
+            text = f.read()
+        for name in mini.OPENERS | mini.CLOSERS:
+            self.assertIn('"%s"' % name, text, "кнопку %s знает QaScript" % name)
+
+    def test_warns_about_open_screens(self):
+        import contextlib
+        import io
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            mini.main(["29-grafika"])
+        self.assertIn("пауза → settings", err.getvalue())
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            mini.main(["01-"])
+        self.assertNotIn("открыты", err.getvalue())
+
     def test_real_scenario_parses_and_writes(self):
         with open(mini.SCENARIO, encoding="utf-8") as f:
             steps = json.load(f)

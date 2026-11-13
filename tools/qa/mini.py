@@ -14,7 +14,9 @@
 
 С --put помнить (CLAUDE.md): пока файл лежит, тесты не запускать — сценовые тесты его забирают.
 Шаги, ставящие состояние раньше начала (hull, hot, breach, silt…), в мини-сценарий не попадают — для них --ship
-или более раннее начало; что выпало после ближайшего ship перед началом, печатается в stderr.
+или более раннее начало; что выпало после ближайшего ship перед началом, печатается в stderr. Там же — экраны,
+открытые до начала и не закрытые (пауза, настройки, «Графика»…): без них первый back мини-сценария откроет паузу,
+а не закроет экран (#1350, 13.11).
 """
 import argparse
 import json
@@ -36,6 +38,36 @@ START = [
 # Шаги, что меняют состояние игры надолго: выпали до начала — предупреждаем.
 STATEFUL = {"ship", "hull", "hot", "breach", "silt", "drain", "charge", "mate", "sample", "fly", "outside",
             "floor", "save", "slow", "hud", "luch_ten", "dome", "gone"}
+# Экраны (#1350, 13.11): нажатие открывает экран поверх прежнего, back или своя кнопка закрывает верхний.
+# «Назад» без открытых экранов — пауза; «Выйти» → «Да» — главное меню, из него уводит press dive.
+OPENERS = {"settings", "graphics", "golos", "zvuk", "map", "hint_map", "new", "exit", "journal", "jcell0", "crew",
+           "lobby_addr", "lobby_new"}
+CLOSERS = {"map_back", "no", "jclose", "resume"}
+PAUSE = "пауза"
+MENU = "главное меню"
+
+
+def opened(steps, upto):
+    """Экраны, открытые шагами до индекса upto и не закрытые к нему, снизу вверх: ["пауза", "settings", "graphics"]."""
+    stack = []
+    for st in steps[:upto]:
+        do, what = st.get("do"), st.get("what")
+        if do == "back":
+            if not stack:
+                stack.append(PAUSE)
+            elif stack[-1] != MENU:
+                stack.pop()
+        elif do != "press":
+            continue
+        elif what == "dive":
+            stack = []
+        elif what == "yes" and stack and stack[-1] == "exit":
+            stack = [MENU]
+        elif what in OPENERS:
+            stack.append(what)
+        elif what in CLOSERS and stack and stack[-1] != MENU:
+            stack.pop()
+    return stack
 
 
 def find(steps, key, after=0):
@@ -115,6 +147,10 @@ def main(argv=None):
     if lost:
         print("до начала выпали шаги состояния: %s — нужен ли --ship или раннее начало?" % ", ".join(lost),
               file=sys.stderr)
+    screens = opened(steps, first)
+    if screens:
+        print("до начала открыты и не закрыты экраны: %s — первый back закроет не то; начни раньше, с шага, "
+              "который их открывает" % " → ".join(screens), file=sys.stderr)
     return 0
 
 

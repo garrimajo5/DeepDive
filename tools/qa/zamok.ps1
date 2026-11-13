@@ -129,15 +129,16 @@ function Wait-Calm([scriptblock]$probe, [double]$below, [int]$limitSec = 120, [i
   }
 }
 
-# Строка итога RUN про ожидание Android: «Android тихо за 25 с (load 1.20 < 2.0)» / «… не остыл за 120 с …» /
-# «… нет /proc/loadavg, пауза 30 с»
+# Строка итога RUN про ожидание Android: «Android тихо за 25 с (load 1.20 < 2.0)» / «Android не остыл за 120 с: три
+# замера подряд < 2.0 не набралось, последний 1.40» (выход по времени — последний замер бывает и ниже порога:
+# не набралось трёх подряд, #1350, 13.11) / «… нет /proc/loadavg, пауза 30 с»
 function Format-Calm($res, [double]$below) {
   $inv = [Globalization.CultureInfo]::InvariantCulture
   $lim = $below.ToString('0.0', $inv)
   if ($res.how -eq 'пауза') { return "Android: нет /proc/loadavg, пауза $($res.waited) с" }
   $l = if ($null -eq $res.load) { '?' } else { ([double]$res.load).ToString('0.00', $inv) }
   if ($res.calm) { return "Android тихо за $($res.waited) с (load $l < $lim)" }
-  return "Android не остыл за $($res.waited) с (load $l, порог $lim)"
+  return "Android не остыл за $($res.waited) с: три замера подряд < $lim не набралось, последний $l"
 }
 
 # Содержимое замка: pid, start, since, what — или $null, если файла нет или он ещё пишется
@@ -218,7 +219,9 @@ if ($SelfTest) {
   $sw = [Diagnostics.Stopwatch]::StartNew()
   $res = Wait-Calm { $v = $script:seq[$script:at]; $script:at++; $v } 2.0 10 5 3 0
   Check (-not $res.calm -and $res.how -eq 'предел' -and $res.waited -eq 10 -and $res.load -eq 6.0) "не остыл — предел: ждали $($res.waited) с, load $($res.load)"
-  Check ((Format-Calm $res 2.0) -eq 'Android не остыл за 10 с (load 6.00, порог 2.0)') "строка RUN — не остыл: $(Format-Calm $res 2.0)"
+  Check ((Format-Calm $res 2.0) -eq 'Android не остыл за 10 с: три замера подряд < 2.0 не набралось, последний 6.00') "строка RUN — не остыл: $(Format-Calm $res 2.0)"
+  # выход по времени с последним замером ниже порога (1,4 < 2,0): строка не спорит сама с собой
+  Check ((Format-Calm @{ waited = 120; load = 1.4; calm = $false; how = 'предел' } 2.0) -eq 'Android не остыл за 120 с: три замера подряд < 2.0 не набралось, последний 1.40') 'строка RUN — предел при низком последнем замере'
   Check ($sw.Elapsed.TotalSeconds -lt 15) "предел держится ($([int]$sw.Elapsed.TotalSeconds) с)"
   # /proc/loadavg не читается (три $null подряд) — пауза и выход, без ожидания предела
   $script:at = 0
