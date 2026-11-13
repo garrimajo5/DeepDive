@@ -112,7 +112,7 @@ var current := Helm.SeaCurrent.new()
 
 var ocean: OceanView
 var eco: EcoView            ## живой мир отмели (поток Б), связь — EcoLink
-var gate_view: GateView     ## временная арка врат 07 и чаши гнёзд (#826, `GateArch`) до MOD-023
+var gate_view: GateView     ## арка врат 07 — модель MOD-023 (#1757) и временные чаши гнёзд; коллизия — `GateArch`
 var step_ms := 0.0          ## сколько занял прошлый шаг игры (код), мс — для лога тестера (issue #217)
 var clock := StepClock.new()   ## части прошлого шага (корабль, мир, виды) — для лога тестера (issue #627)
 var eco_ship := EcoLink.ShipState.new()
@@ -1473,6 +1473,8 @@ func _graphics_part(i: int) -> void:
 				ocean.set_stones_lite(lite)   # камни и ракушки на дне ближе
 				ocean.set_layers_level(g["layers"])   # слои воды ART-069: 0 / 0,6 / 0,9
 				ocean.set_shadows(g["shadows"])
+			if gate_view:
+				gate_view.set_lite(lite)      # арка врат 07 MOD-023: без LOD0
 			StepClock.mark("графика/океан")
 		1:
 			if hull:
