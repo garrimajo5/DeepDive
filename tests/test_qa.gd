@@ -509,8 +509,8 @@ func test_brief_step_pages_to_end() -> void:
 	eq(main.arrival.screen, 0, "с первого экрана")
 	var size := main.get_viewport().get_visible_rect().size
 	ok(ArrivalBrief.box(size).has_point(qa._point("brief", Vector2.ZERO)), "касание — в плашке")
-	for i in int((0.8 + ArrivalBrief.count() * (QaScript.PRESS_TIME + 0.8) + 0.5) * 30.0):
-		main.step(1.0 / 30.0)
+	for i in int((0.8 + ArrivalBrief.count() * (QaScript.PRESS_TIME + 0.8) + 0.5) * 10.0):   # шаг 0,1 с — втрое меньше кадров (#1350)
+		main.step(0.1)
 	ok(not main.arrival.active(), "пролистан до конца")
 	ok(main.lore.knows(LayerLore.BRIEF), "прочитан — как от касаний игрока")
 	main.queue_free()

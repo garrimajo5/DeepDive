@@ -28,8 +28,8 @@ func test_plate_shrinks_after_long_message() -> void:
 	var long_h := main.hint.size.y
 	ok(long_h > short_h + 20.0, "длинное сообщение — плашка выше (%.0f > %.0f)" % [long_h, short_h])
 	ok(main.hint.text.split("\n").size() <= Status.MAX_ROWS, "длинное сообщение — не больше трёх строк (#1345)")
-	for i in 150:   # 5 с — сообщение (4,2 с) сошло
-		main.step(1.0 / 30.0)
+	for i in 50:   # 5 с шагом 0,1 — сообщение (4,2 с) сошло (#1350)
+		main.step(0.1)
 	main.message.clear(main.message.text)   # строка мира, пришедшая за эти 5 с, — тоже
 	main.step(1.0 / 30.0)
 	await frames(1)
