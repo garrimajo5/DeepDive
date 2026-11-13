@@ -48,7 +48,7 @@ func test_scene_deeper_at_ten_returns_with_lore() -> void:
 	ok(not main.run.voting, "голосование закрыто")
 	ok(not main.lore.knows(LayerLore.DOWN), "знание — только после ухода")
 	var worst := 0   # #1090, #1095: камни, ракушки и кочки у 10 — заранее, по CELLS_STEP за шаг на все россыпи, не весь радиус разом
-	for i in int((DescentTrip.SINK + DescentTrip.HOLD + DescentTrip.RISE) * 30.0) + 5:
+	for i in int((DescentTrip.SINK + DescentTrip.HOLD + DescentTrip.RISE) * 30.0) + 5:   # шаг 1/30 нарочно: при 0,1 с заготовка к возвращению не успевает (≈75 шагов), всплеск 415 клеток (#1350, 13.11)
 		var done := main.ocean.scatter_cells()
 		main.step(1.0 / 30.0)
 		worst = maxi(worst, main.ocean.scatter_cells() - done)
@@ -96,8 +96,8 @@ func test_scene_prefetch_while_voting_at_ten() -> void:
 	ok(main.ocean.prefetch(back), "заготовка готова")
 	main.decide("deep")
 	var done := main.ocean.scatter_cells()
-	for i in int((DescentTrip.SINK + DescentTrip.HOLD) * 30.0):
-		main.step(1.0 / 30.0)
+	for i in int((DescentTrip.SINK + DescentTrip.HOLD) * 10.0):   # шаг 0,1 с — то же время кат-сцены втрое быстрее (#1350)
+		main.step(0.1)
 	eq(main.ocean.scatter_cells(), done,
 		"кат-сцена и возвращение — ни одной новой клетки")
 	main.queue_free()

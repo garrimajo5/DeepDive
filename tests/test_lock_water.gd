@@ -90,8 +90,8 @@ func test_plane_and_winch_in_game() -> void:
 	var kinds: Array = []
 	var seen := 0
 	main.debug_winch = true
-	for i in 60 * 12:
-		main.step(1.0 / 60.0)
+	for i in 10 * 12:   # шаг 0,1 с: вход и выход троса ловятся по смене стороны, не по кадру (здоровье тестов, #1350)
+		main.step(0.1)
 		if main.lock_water.events > seen:
 			seen = main.lock_water.events
 			kinds.append(main.lock_water.event_kind)

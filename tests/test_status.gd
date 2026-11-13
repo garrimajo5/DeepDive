@@ -312,15 +312,15 @@ func test_scene_keep_eco_message() -> void:
 	main.on_eco_event(EcoLink.observe("pred", "lost", lost, false, true))
 	main.step(1.0 / 30.0)
 	eq(main.message.text, lost, "строка отхода на приборах")
-	for i in 30:
-		main.step(1.0 / 30.0)
+	for i in 10:   # шаг 0,1 с: таймер строки — по времени, не по кадрам (здоровье тестов, #1350)
+		main.step(0.1)
 	main.on_eco_event(EcoLink.message("Стайка рыбок у мха — тестовая строка"))
 	main.on_eco_event({"type": EcoLink.OBSERVE, "species": "fish", "note": "graze", "text": "Рыбы пасутся — тестовая строка"})
-	for i in 90:   # до ~4,1 с
-		main.step(1.0 / 30.0)
+	for i in 30:   # до ~4,03 с
+		main.step(0.1)
 		eq(main.message.text, lost, "строка отхода держится (кадр %d)" % i)
 	for i in 10:
-		main.step(1.0 / 30.0)
+		main.step(0.1)
 	ok(main.message.text != lost, "после 4,2 с сменилась: %s" % main.message.text)
 	main.queue_free()
 	await frames(1)
@@ -338,11 +338,11 @@ func test_scene_urgent_eco_message() -> void:
 	main.step(1.0 / 30.0)
 	main.on_eco_event(EcoLink.message("Стайка рыбок у мха — тестовая строка"))
 	main.on_eco_event({"type": EcoLink.OBSERVE, "species": "fish", "note": "graze", "text": "Рыбы пасутся — тестовая строка"})
-	for i in 110:   # ~3,7 с
-		main.step(1.0 / 30.0)
+	for i in 36:   # ~3,63 с шагом 0,1 (здоровье тестов, #1350)
+		main.step(0.1)
 		eq(main.message.text, hot, "срочная на приборах (кадр %d)" % i)
-	for i in 30:
-		main.step(1.0 / 30.0)
+	for i in 10:
+		main.step(0.1)
 	ok(main.message.text != hot, "после 4,2 с срочная сменилась: %s" % main.message.text)
 	main.queue_free()
 	await frames(1)
