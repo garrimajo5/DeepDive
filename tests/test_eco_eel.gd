@@ -147,7 +147,7 @@ func test_eye_sign_before_threat() -> void:
 		w.ship.pos = e.lair + Vector3(0, 6, -d)
 		w.step(0.1)
 		var nose := EcoEel.front(w.ship).distance_to(e.lair)
-		if sign_at < 0.0 and _texts(w).has(EcoEel.WARN_TEXT):
+		if sign_at < 0.0 and _texts(w).has(EcoEel.WARN_UNKNOWN):
 			sign_at = nose
 		if go_at < 0.0 and e.mode == EcoEel.Mode.TO_SHIP:
 			go_at = nose
@@ -170,22 +170,64 @@ func test_eye_sign_once_per_visit() -> void:
 	w.ship.pos = inside
 	for i in 50:
 		w.step(0.1)
-		got += _texts(w).count(EcoEel.WARN_TEXT)
+		got += _texts(w).count(EcoEel.WARN_UNKNOWN)
 	eq(got, 1, "в круге — одна строка")
 	w.ship.pos = outside
 	w.step(0.1)
 	w.ship.pos = inside
 	for i in 50:
 		w.step(0.1)
-		got += _texts(w).count(EcoEel.WARN_TEXT)
+		got += _texts(w).count(EcoEel.WARN_UNKNOWN)
 	eq(got, 1, "вернулся сразу — тишина до WARN_CD")
 	w.ship.pos = outside
 	for i in int(EcoEel.WARN_CD * 10.0):
 		w.step(0.1)
 	w.ship.pos = inside
 	w.step(0.1)
-	got += _texts(w).count(EcoEel.WARN_TEXT)
+	got += _texts(w).count(EcoEel.WARN_UNKNOWN)
 	eq(got, 2, "через WARN_CD — снова")
+
+
+## Имя вида — только после скана (#1784, поправка владельца 13.11): до скана знак у логова без «стеклоуста»,
+## после — с именем; присоска на стекле тоже тянет заряд под описательным именем, пока вид не изучен.
+func test_names_only_after_scan() -> void:
+	var known := [false]
+	var w := _world()
+	w.scanned = func(id: String) -> bool: return known[0] and id == EcoEel.ID
+	var e := _eels(w).eels[0]
+	e.cd = 999.0   # сидит, к стеклу не плывёт
+	w.ship.pos = e.lair + Vector3(0, 8, EcoEel.WARN_R - 10.0)
+	var before: Array[String] = []
+	for i in 5:
+		w.step(0.1)
+		before.append_array(_texts(w))
+	eq(before, [EcoEel.WARN_UNKNOWN] as Array[String], "до скана — знак без имени")
+	ok(not EcoEel.WARN_UNKNOWN.to_lower().contains("стеклоуст"), "в строке без имени нет «стеклоуста»")
+	ok(EcoEel.WARN_TEXT.contains("стеклоуста"), "строка изученного вида — с именем")
+	known[0] = true
+	eq(EcoEel.warn_text(w), EcoEel.WARN_TEXT, "после скана — с именем")
+	w.ship.pos = e.lair + Vector3(0, 8, EcoEel.WARN_R + 20.0)
+	for i in int(EcoEel.WARN_CD * 10.0) + 1:
+		w.step(0.1)
+	w.take_link()
+	w.ship.pos = e.lair + Vector3(0, 8, EcoEel.WARN_R - 10.0)
+	w.step(0.1)
+	eq(_texts(w), [EcoEel.WARN_TEXT] as Array[String], "новый заход после скана — строка с именем")
+	known[0] = false
+	var w2 := _world()
+	w2.scanned = func(id: String) -> bool: return known[0] and id == EcoEel.ID
+	var e2 := _eels(w2).eels[0]
+	e2.cd = 0.0
+	_ship_near(w2, e2)
+	ok(_run_until_latched(w2), "присосался")
+	w2.take_link()
+	w2.step(0.04)
+	var d := _drains(w2.take_link())
+	ok(d.size() == 1 and d[0]["by"] == "Прозрачный угорь", "до скана тянет «Прозрачный угорь»")
+	known[0] = true
+	w2.step(0.04)
+	d = _drains(w2.take_link())
+	ok(d.size() == 1 and d[0]["by"] == "Стеклоуст", "после скана — «Стеклоуст»")
 
 
 ## Обход есть: корабль идёт от 02 к 01 стороной, на 45 м от пути в сторону от логова, на 28 м глубины — дно ниже, нос
@@ -389,7 +431,7 @@ func test_latches_on_glass_and_drains() -> void:
 	var d := _drains(w.take_link())
 	eq(d.size(), 1, "одно DRAIN за шаг, сколько бы ни было подшагов")
 	if d.size() == 1:
-		eq(d[0]["by"], "Стеклоуст", "кто тянет")
+		eq(d[0]["by"], "Прозрачный угорь", "кто тянет — без имени, вид не изучен (#1784)")
 		near(d[0]["units"], EcoEel.DRAIN, 1e-6, "3,2 ед./с")
 	w.run(10.0)
 	eq(eels.latched, e, "висит, пока нет разряда")
