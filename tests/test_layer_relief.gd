@@ -31,12 +31,77 @@ func _highest(a: Vector2, b: Vector2, half: float) -> Array:
 
 
 func test_ridge_lifts_terrace_and_field() -> void:
-	# Карта: ориентир 35 м на мелком гребне, дно около 45–50 м (было −62 и −67).
-	for id: String in ["07", "08"]:
-		var p := LayerMap.xz(id)
+	# Карта: ориентир 35 м на мелком гребне, дно около 45–50 м (было −62 и −67). У 07 под аркой — жёлоб (#1757):
+	# гребень смотрим у его края, за боковым склоном.
+	var gate := LayerMap.xz("07") + Vector2(Seabed.Layer.TROUGH_HALF + Seabed.Layer.TROUGH_SIDE + 2.0, 0.0)
+	for p: Vector2 in [gate, LayerMap.xz("08")]:
 		var h := Seabed.height(p.x, p.y)
-		ok(h <= -44.0 and h >= -52.0, "дно под %s около 45–50 м: %.1f" % [id, h])
-		ok(Seabed.base(p.x, p.y) < -55.0, "%s было глубже — гребень поднят" % id)
+		ok(h <= -44.0 and h >= -52.0, "дно гребня у %s около 45–50 м: %.1f" % [p, h])
+		ok(Seabed.base(p.x, p.y) < -55.0, "у %s было глубже — гребень поднят" % p)
+
+
+func test_trough_floor_under_gate() -> void:
+	# Жёлоб под аркой MOD-023 (#1757, уровни 13.11): пол 66 м в |dx| ≤ 28, |dz| ≤ 60 от 07.
+	var c := LayerMap.xz("07")
+	var l := Seabed.Layer
+	for dx in range(-28, 29, 4):
+		for dz in range(-60, 61, 4):
+			var h := Seabed.height(c.x + dx, c.y + dz)
+			ok(h <= l.TROUGH_FLOOR and h >= l.TROUGH_FLOOR - l.TROUGH_RIPPLE, "пол жёлоба 66 м в (%d, %d): %.2f" % [dx, dz, h])
+	eq(l.TROUGH_HALF, EcoGate.TROUGH_HALF, "полуширина — как у рамки живого мира")
+	eq(l.TROUGH_SIDE, EcoGate.TROUGH_SLOPE, "боковой склон — как у рамки")
+	eq(l.TROUGH_LEN, EcoGate.STRIP_DZ, "длина — как у рамки")
+	ok(l.TROUGH_EXIT >= 30.0, "выход на гребень вдоль оси не короче 30 м")
+
+
+func test_trough_only_lowers_and_ends() -> void:
+	# Только опускает; за склонами гребень (дно не выше `TROUGH_RIM`) — как без жёлоба, рамка `EcoGate` стоит на
+	# нём, как стояла. Выше `TROUGH_RIM` (стена края карты к северу, бугор к Костям) склон продолжается, пока не
+	# встретит дно; выемка в стене закрыта до края карты.
+	var c := LayerMap.xz("07")
+	var l := Seabed.Layer
+	for dx in range(-100, 101, 5):
+		for dz in range(-110, 111, 5):
+			var x := c.x + dx
+			var z := c.y + dz
+			var was := l.lanes(x, z, l.ridge(x, z, Seabed.base(x, z)))
+			var now := l.trough(x, z, was)
+			ok(now <= was, "жёлоб только опускает (%d, %d)" % [dx, dz])
+			var out: bool = absf(dx) >= l.TROUGH_HALF + l.TROUGH_SIDE or absf(dz) >= l.TROUGH_LEN + l.TROUGH_EXIT
+			if out and was <= l.TROUGH_RIM:
+				eq(now, was, "за склонами не тронуто (%d, %d)" % [dx, dz])
+	for dx in range(-110, 111, 10):
+		var edge := -Seabed.SIZE / 2.0
+		ok(Seabed.height(c.x + dx, edge) > -20.0, "стена у края карты за аркой закрыта (%d): %.1f" % [dx, Seabed.height(c.x + dx, edge)])
+	for p: Vector2 in EcoGate.spots():
+		var was := l.lanes(p.x, p.y, l.ridge(p.x, p.y, Seabed.base(p.x, p.y)))
+		eq(Seabed.height(p.x, p.y), minf(was, Seabed.TOP), "под рамкой %s гребень как был" % p)
+
+
+func test_trough_ship_dives_under_arch_top() -> void:
+	# Подход по оси (уровни, #1757): с гребня корабль идёт не глубже ≈ 45,6 м, в жёлобе успевает спуститься к
+	# проектным 58 м до арки — верх корпуса ниже свода 44 м (пол 66 − проход 22) — и держит их под аркой.
+	var c := LayerMap.xz("07")
+	var ship := Helm.Ship.new()
+	ship.ground = Seabed.height
+	var ridge_z := c.y + Seabed.Layer.TROUGH_LEN + Seabed.Layer.TROUGH_EXIT + 30.0
+	ship.pos = Vector3(c.x, -40.0, ridge_z)
+	ship.yaw = 0.0
+	ok(ship.floor_at(ship.pos, -80.0) > -47.5, "на гребне глубже ≈ 46 м не уйти: %.1f" % ship.floor_at(ship.pos, -80.0))
+	ship.in_thrust = 1.0
+	ship.in_vert = -1.0
+	var at_arch := 0.0
+	for i in 1200:
+		ship.update(0.1)
+		if ship.pos.z < c.y - 30.0:
+			break
+		if absf(ship.pos.z - c.y) <= 21.0:   # нос (7,75 м от центра) у лица арки (±11,5 м) и дальше под ней
+			if at_arch == 0.0:
+				at_arch = ship.pos.y
+			ok(ship.pos.y <= -58.0, "под аркой держит 58 м: %.1f у dz %.0f" % [ship.pos.y, ship.pos.z - c.y])
+	ok(ship.pos.z < c.y - 30.0, "прошёл жёлоб насквозь: dz %.0f" % (ship.pos.z - c.y))
+	ok(at_arch != 0.0 and at_arch <= -58.0, "к арке полным ходом успел спуститься к 58 м: %.1f" % at_arch)
+	ok(at_arch + 4.8 < -44.0 - 3.0, "верх корпуса ниже свода 44 м с запасом 3 м: %.1f" % (at_arch + 4.8))
 
 
 func test_ship_fits_under_new_points() -> void:
@@ -98,6 +163,7 @@ func test_cuts_only_lower_and_ridge_only_raises() -> void:
 			ok(r >= b, "гребень только поднимает (%.0f, %.0f)" % [x, z])
 			ok(r <= maxf(b, Seabed.Layer.RIDGE_FLOOR + 3.0), "гребень не выше своего дна (%.0f, %.0f)" % [x, z])
 			ok(Seabed.Layer.lanes(x, z, r) <= r, "проход только срезает (%.0f, %.0f)" % [x, z])
+			ok(Seabed.Layer.trough(x, z, r) <= r, "жёлоб только опускает (%.0f, %.0f)" % [x, z])
 
 
 func test_relief_smooth() -> void:

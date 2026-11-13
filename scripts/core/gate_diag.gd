@@ -20,7 +20,8 @@ const NESTS: Array[Dictionary] = [
 	{"at": Vector2(40.0, 13.0), "fact": LayerLore.D07_RELAY},
 	{"at": Vector2(38.0, 9.5), "fact": LayerLore.D07_AUTH},
 ]
-const READ_R := 45.0       ## гнездо читается не дальше этого от корабля, м (по прямой)
+const READ_R := 50.0       ## гнездо читается не дальше этого от корабля, м (по прямой); 45 → 50 с жёлобом (#1757):
+                           ## гнёзда на его склоне на 10–12 м глубже, с 35 м над серединой до них 46–48 м
 const READ_TIME := 3.0     ## удержание до перевода одного гнезда, с
 const DECAY := 1.0         ## спад прогресса без удержания, доля в с
 
@@ -69,23 +70,29 @@ static func effect(a: int) -> Array[String]:
 
 
 ## Цель шага: ближнее непрочитанное гнездо в `READ_R` (все прочитаны — ближнее прочитанное, нажатие повторит
-## перевод). Если у сканера есть цель-существо ближе гнезда — гнездо не в прицеле. Идёт чтение — держит своё.
+## перевод). Ближнее — по горизонтали: гнёзда на склоне жёлоба стоят на разной высоте, и сверху по прямой ближе
+## оказалось бы не то, над которым корабль (#1757); предел `READ_R` и расстояние на экране — по прямой.
+## Если у сканера есть цель-существо ближе гнезда — гнездо не в прицеле. Идёт чтение — держит своё.
 func aim(ship: Vector3, lore: LayerLore, creature_dist := INF) -> void:
 	var best := -1
 	var best_d := INF
+	var best_flat := INF
 	var best_known := true
 	for i in NESTS.size():
-		var d := ship.distance_to(nest_pos(i))
+		var p := nest_pos(i)
+		var d := ship.distance_to(p)
 		if d > READ_R:
 			continue
+		var flat := Vector2(ship.x - p.x, ship.z - p.z).length()
 		var known := lore.knows(NESTS[i]["fact"])
 		if progress > 0.0 and i == nest:
 			best = i
 			best_d = d
 			break
-		if (best_known and not known) or (known == best_known and d < best_d):
+		if (best_known and not known) or (known == best_known and flat < best_flat):
 			best = i
 			best_d = d
+			best_flat = flat
 			best_known = known
 	if best >= 0 and best_d > creature_dist:
 		best = -1

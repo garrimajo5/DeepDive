@@ -33,6 +33,18 @@ func test_nests_on_terrace_bottom() -> void:
 	eq(facts, want, "у каждого факта диагностики своё гнездо")
 
 
+func test_nearest_nest_is_one_below_on_slope() -> void:
+	# Жёлоб (#1757): гнёзда на его склоне на разной высоте — над гнездом в прицеле оно, а не то, что выше по склону.
+	var hs: Array = range(GateDiag.NESTS.size()).map(func(i): return GateDiag.nest_pos(i).y)
+	ok(absf(hs.max() - hs.min()) > 1.0, "гнёзда на склоне, не на одной высоте: %s" % str(hs))
+	for i in GateDiag.NESTS.size():
+		var g := GateDiag.new()
+		var p := GateDiag.nest_pos(i)
+		g.aim(Vector3(p.x, -35.0, p.z), LayerLore.new())
+		eq(g.nest, i, "над гнездом %d в прицеле оно" % i)
+		near(g.dist, -35.0 - p.y, 0.01, "расстояние на экране — по прямой")
+
+
 func test_far_away_no_target() -> void:
 	var g := GateDiag.new()
 	var lore := LayerLore.new()

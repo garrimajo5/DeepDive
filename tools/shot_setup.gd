@@ -219,7 +219,9 @@ static func apply(g: Main, kv: Dictionary) -> void:
 		kc.fov = Deck.FOV
 		kc.far = 400.0
 		g.add_child(kc)
-		kc.global_position = d.pos + Vector3(3.5, 2.0, 5.0)
+		var kp := d.pos + Vector3(3.5, 2.0, 5.0)
+		kp.y = maxf(kp.y, Seabed.mesh_height(kp.x, kp.z) + 1.5)   # гнездо на склоне жёлоба (#1757): камера не под дном
+		kc.global_position = kp
 		kc.look_at(d.pos + Vector3(0.0, 0.5, 0.0))
 		kc.make_current()
 	if kv.has("scena"):  # scena=1|2|3 — контрольный ракурс сцены 00 → 01 (#1400): штатная камера пилота, нос к 01

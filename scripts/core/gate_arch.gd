@@ -136,7 +136,7 @@ static func _cube(st: SurfaceTool, b: AABB, o: Vector3) -> void:
 ## Чаша гнезда: низкий восьмигранник на дне.
 static func _bowl(st: SurfaceTool, at: Vector3) -> void:
 	var n := 8
-	var y0 := at.y - 0.2
+	var y0 := at.y - 1.0   # юбка в дно: на склоне жёлоба (#1757) нижний край чаши не висит над грунтом
 	var y1 := at.y + NEST_H
 	for i in n:
 		var a0 := TAU * i / n
