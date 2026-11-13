@@ -62,6 +62,28 @@ func test_level_switch_has_own_shot() -> void:   # 29-golos: худший кад
 	ok(seen >= 3, "сценарий проходит три уровня графики")
 
 
+## #1758: решение «глубже» у 10 (`34b-les-ekran`) — не в кадрах сразу после снимка `34a` (на эмуляторе они долгие,
+## #435, `QaRunner.SETTLE_FRAMES` идут в худший кадр): иначе провал «узлы» кадра решения не отделить от снимка.
+func test_descent_decision_not_right_after_shot() -> void:
+	var q := QaScript.parse(FileAccess.get_file_as_string("res://tools/qa/scenario.json"))
+	var at := -1
+	for i in q.steps.size():
+		if q.steps[i].get("do") == "shot" and str(q.steps[i].get("name")) == "34a-spusk-panel":
+			at = i
+	ok(at >= 0, "снимок 34a-spusk-panel в сценарии")
+	var gap := 0.0
+	var found := false
+	for j in range(at + 1, q.steps.size()):
+		var st: Dictionary = q.steps[j]
+		if st.get("do") == "hold":
+			found = str(st.get("what")) == "pad" and Vector2(st["dir"][0], st["dir"][1]) == Vector2(0, -1)
+			break
+		if st.get("do") == "wait":
+			gap += float(st["s"])
+	ok(found, "после 34a — «вниз» на голостоле")
+	ok(gap >= 0.2, "между снимком 34a и решением «глубже» — пауза ≥ 0,2 с (было 0)")
+
+
 func test_swipe_moves_full_distance() -> void:
 	var q := QaScript.parse('[{"do":"swipe","dx":300,"dy":-40,"s":0.5}]')
 	var sum := Vector2.ZERO
