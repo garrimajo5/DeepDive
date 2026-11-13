@@ -75,8 +75,8 @@ func test_sit_drive_and_stand() -> void:
 	near(main.camera.position.z, Deck.SEAT_Z, 1e-4, "глаза над креслом")
 	var z0 := main.helm.pos.z
 	r.begin(2, r.layout.pad.c + Vector2(r.layout.pad.r * 0.5, -r.layout.pad.r * 0.5))
-	for i in 120:  # 4 с игры с ровным шагом: в headless кадры идут без пауз
-		main.step(1.0 / 30.0)
+	for i in 40:  # 4 с игры шагом 0,1: в headless кадры идут без пауз (было 120 по 1/30 — 1,1 с цикла, #1350)
+		main.step(0.1)
 	r.end(2)
 	ok(main.helm.pos.z < z0 - 0.5, "корабль пошёл к носу")
 	ok(main.helm.yaw < 0.0, "и повернул вправо")
