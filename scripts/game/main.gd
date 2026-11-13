@@ -300,7 +300,7 @@ func _build_ship() -> void:
 	zap_light = OmniLight3D.new()
 	zap_light.name = "Вспышка разряда"
 	zap_light.light_color = Color("5ef2d6")
-	zap_light.light_cull_mask = OceanView.LAYER_WORLD
+	zap_light.light_cull_mask = OceanView.LIT_WORLD
 	zap_light.position = Vector3(0, 1.6, 8)
 	# вспышка всегда в сцене на наибольший радиус и почти без энергии: набор огней на предметах отмели не меняется
 	# при разряде — шейдеры не собираются заново (issue #159)

@@ -34,7 +34,7 @@ func test_light_button_toggles() -> void:
 	await frames(1)
 	var sl := main.searchlight
 	ok(sl.spot.visible and sl.beam.visible, "на старте прожектор горит")
-	eq(sl.spot.light_cull_mask, OceanView.LAYER_WORLD, "светит только на отмель")
+	eq(sl.spot.light_cull_mask, OceanView.LIT_WORLD, "светит только на отмель (оба её слоя)")
 	ok(sl.spot.spot_attenuation < 0.5, "свет не гаснет к дну как обратный квадрат")
 	var r := main.overlay.router
 	r.begin(1, r.layout.light.c)
