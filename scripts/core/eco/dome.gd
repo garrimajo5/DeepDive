@@ -15,6 +15,15 @@ extends EcoSystem
 const ID := "dome"
 ## Ниша (x, z) — смещение от середины террасы `EcoGate.CENTER`: за правой опорой, к северо-востоку, вне прохода.
 const HOME_OFF := Vector2(70.0, -40.0)
+## Путь ниша → гнездо (смещения от `EcoGate.CENTER`, #1757): гнёзда на полу кармана перед правой опорой
+## (`Seabed.Layer.nest_pocket`), прямая из ниши шла сквозь опору (`GateArch.SHAPE`) и восточную рощу `EcoGate.KELP`.
+## Обход: с запада от рощи, вдоль восточного края основания опоры (x 60) — вниз по северному склону кармана, к гнезду
+## по полу с подхода (+Z). Точку пути проходит, не останавливаясь, ближе WAY_R; назад — тем же путём в обратном
+## порядке. Последняя точка — перед лицом опоры: гнездо на любом месте лица (dz +11,5…13) достижимо по полу. После
+## неё — подход к месту у гнезда с +Z (`APPROACH` м перед ним): к гнезду не сбоку по склону, а прямо, на уровне.
+const WAY: Array[Vector2] = [Vector2(52.0, -28.0), Vector2(63.0, -4.0), Vector2(63.0, 20.0)]
+const WAY_R := 3.0
+const APPROACH := 10.0
 ## Гнездо, которое открывает (номер в `GateDiag.NESTS`), и где встаёт: перед ним с подхода (+Z) на FRONT м,
 ## на AT_NEST м над дном (купол 1,2 м — захват на уровне гнезда).
 const NEST := 0
@@ -72,6 +81,7 @@ var opened := false        ## створка открыта (раз за сло�
 var just_opened := false   ## открылась в этот шаг
 var glow := GLOW_REST
 var t := 0.0               ## время в состоянии, с
+var leg := 0               ## следующая точка пути `point` (к гнезду — вверх по номеру, назад — вниз)
 var _pulse := -INF         ## время мира начала импульса
 var ground: Callable
 
@@ -86,15 +96,39 @@ func reset(world: EcoWorld) -> void:
 	_pulse = -INF
 	speed = 0.0
 	turn_v = 0.0
+	leg = 0
 	var h := home()
 	pos = Vector3(h.x, floor_y(h.x, h.y) + AT_NEST, h.y)
-	var s := stand()
-	yaw = _yaw_to(Vector2(s.x - pos.x, s.z - pos.z))
+	var w := way(0)
+	yaw = _yaw_to(Vector2(w.x - pos.x, w.y - pos.z))
 
 
 ## Ниша на карте (x, z).
 static func home() -> Vector2:
 	return EcoGate.CENTER + HOME_OFF
+
+
+## Точка пути i на карте (x, z).
+static func way(i: int) -> Vector2:
+	return EcoGate.CENTER + WAY[i]
+
+
+## Точка пути i (x, z): 0…WAY.size() − 1 — `WAY`, WAY.size() — подход к гнезду.
+func point(i: int) -> Vector2:
+	if i < WAY.size():
+		return way(i)
+	var s := stand()
+	return Vector2(s.x, s.z + APPROACH)
+
+
+## Весь путь на карте: ниша, точки пути, место у гнезда (x, z).
+func route() -> Array[Vector2]:
+	var out: Array[Vector2] = [home()]
+	for i in WAY.size() + 1:
+		out.append(point(i))
+	var s := stand()
+	out.append(Vector2(s.x, s.z))
+	return out
 
 
 ## Где стоит у гнезда: перед ним с подхода, над дном.
@@ -135,7 +169,10 @@ func step(world: EcoWorld, dt: float) -> void:
 			if Vector2(sp.x, sp.z).distance_to(EcoGate.CENTER) < CALL_R:
 				_go(State.GO, world)
 		State.GO:
-			if _swim(stand(), SWIM, sp, dt):
+			if leg <= WAY.size():
+				if _pass(leg, SWIM, sp, dt):
+					leg += 1
+			elif _swim(stand(), SWIM, sp, dt):
 				_go(State.OPEN, world)
 		State.OPEN:
 			speed = 0.0
@@ -150,7 +187,10 @@ func step(world: EcoWorld, dt: float) -> void:
 				_go(State.BACK, world)
 		State.BACK:
 			var h := home()
-			if _swim(Vector3(h.x, floor_y(h.x, h.y) + AT_NEST, h.y), LEAVE, sp, dt):
+			if leg >= 0:
+				if _pass(leg, LEAVE, sp, dt):
+					leg -= 1
+			elif _swim(Vector3(h.x, floor_y(h.x, h.y) + AT_NEST, h.y), LEAVE, sp, dt):
 				_go(State.GONE, world)
 				speed = 0.0
 	if state != State.GONE:
@@ -228,12 +268,27 @@ func _done() -> void:
 func _go(s: State, world: EcoWorld) -> void:
 	state = s
 	t = 0.0
+	leg = WAY.size() if s == State.BACK else 0
 	if s == State.GO:
 		_pulse = world.time   # команда Хранителя — выход к гнезду
 
 
-## Шаг пути к цели: поворот носом к ней, ход только почти носом вперёд, высота — над дном (последние DESCEND м —
-## к высоте цели). Корабль
+## Шаг к точке пути i — на высоте хода над дном; true — прошёл (ближе WAY_R по горизонтали).
+func _pass(i: int, top: float, ship: Vector3, dt: float) -> bool:
+	var w := point(i)
+	if Vector2(pos.x, pos.z).distance_to(w) < WAY_R:
+		return true
+	_swim(Vector3(w.x, floor_y(w.x, w.y) + CRUISE, w.y), top, ship, dt)
+	return false
+
+
+## Дно впереди по ходу, м: высоту пути держит над самым высоким из них — подъём по склону кармана (0,95 м/м)
+## начинает заранее, вертикаль (0,6 хода) успевает без упора в дно (#1757).
+const LOOK: Array[float] = [3.0, 6.0, 9.0]
+
+
+## Шаг пути к цели: поворот носом к ней, ход только почти носом вперёд, высота — над дном впереди (`LOOK`; последние
+## DESCEND м — к высоте цели), не ниже AT_NEST/2 над дном. Корабль
 ## ближе KEEP — стоит. true — пришёл.
 func _swim(goal: Vector3, top: float, ship: Vector3, dt: float) -> bool:
 	var d := Vector2(goal.x - pos.x, goal.z - pos.z)
@@ -253,8 +308,15 @@ func _swim(goal: Vector3, top: float, ship: Vector3, dt: float) -> bool:
 	if dist > 1e-4:
 		pos.x += d.x / dist * go
 		pos.z += d.y / dist * go
-	var low := goal.y if dist < DESCEND else floor_y(pos.x, pos.z) + CRUISE
-	pos.y = move_toward(pos.y, maxf(low, floor_y(pos.x, pos.z) + AT_NEST * 0.5), top * 0.6 * dt if not blocked else 0.0)
+	var low := goal.y
+	if dist >= DESCEND:
+		var top_floor := floor_y(pos.x, pos.z)
+		for k in LOOK:
+			if k < dist:
+				top_floor = maxf(top_floor, floor_y(pos.x + d.x / dist * k, pos.z + d.y / dist * k))
+		low = top_floor + CRUISE
+	var bottom := floor_y(pos.x, pos.z) + AT_NEST * 0.5
+	pos.y = maxf(move_toward(pos.y, maxf(low, bottom), top * 0.6 * dt if not blocked else 0.0), bottom)
 	return false
 
 
