@@ -5,6 +5,7 @@ extends TestCase
 func test_fields() -> void:
 	eq(AlarmBoard.WORDS.size(), 5)
 	eq(AlarmBoard.WORDS[0], "ПРОБОИНА")
+	eq(AlarmBoard.WORDS[1], "ПРИСОСКА НА КОРПУСЕ", "#1787: табло горит и до скана — без имени вида")
 	eq(AlarmBoard.WORDS[4], "МАЛО ЗАРЯДА")
 	var sum := 0.0
 	for w in AlarmBoard.WIDTHS:

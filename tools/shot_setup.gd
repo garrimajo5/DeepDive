@@ -109,7 +109,7 @@ static func apply(g: Main, kv: Dictionary) -> void:
 	if kv.has("energy"):  # energy=<ед.> — заряд корабля (меньше 20 — «МАЛО ЗАРЯДА» на табло)
 		g.vitals.energy = float(kv["energy"])
 	if kv.get("drain", "0") == "1":  # drain=1 — стеклоуст на корпусе (табло и рамка у щитка разряда)
-		g.vitals.drain("Стеклоуст", 0.01)
+		g.vitals.drain(g.eco.world.nm("eel"), 0.01)   # имя — как у мира: до скана без имени (#1787)
 		g.vitals.drain_left = 60.0
 	if kv.has("kamen"):  # kamen=<n> — у каждого ряда каменщиков первые n гнёзд спрятали венчики (#1337)
 		for r in g.eco.kamen.rows:
