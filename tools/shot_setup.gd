@@ -219,9 +219,7 @@ static func apply(g: Main, kv: Dictionary) -> void:
 		kc.fov = Deck.FOV
 		kc.far = 400.0
 		g.add_child(kc)
-		var kp := d.pos + Vector3(3.5, 2.0, 5.0)
-		kp.y = maxf(kp.y, Seabed.mesh_height(kp.x, kp.z) + 1.5)   # гнездо на склоне жёлоба (#1757): камера не под дном
-		kc.global_position = kp
+		kc.global_position = cam_above(d.pos + Vector3(3.5, 2.0, 5.0))   # гнездо на склоне жёлоба (#1757): камера не под дном
 		kc.look_at(d.pos + Vector3(0.0, 0.5, 0.0))
 		kc.make_current()
 	if kv.has("scena"):  # scena=1|2|3 — контрольный ракурс сцены 00 → 01 (#1400): штатная камера пилота, нос к 01
@@ -308,7 +306,11 @@ static func apply(g: Main, kv: Dictionary) -> void:
 		out.fov = Deck.FOV
 		out.far = 400.0
 		g.add_child(out)
-		out.global_position = g.ship.to_global(Vector3(v[0], v[1], v[2]))
+		var want: Vector3 = g.ship.to_global(Vector3(v[0], v[1], v[2]))
+		out.global_position = cam_above(want)
+		if out.global_position.y > want.y:   # молча поднятая камера — другой кадр: строка в лог снимка
+			print("view=: камера была под дном — поднята на %s м (не ниже %s м над видимым дном)" % [
+				_num(out.global_position.y - want.y), _num(CAM_FLOOR)])
 		out.look_at(g.ship.to_global(Vector3(0.0, HullPlan.CENTER_Y, 10.0)))
 		out.make_current()
 	if kv.get("mate_hold", "0") == "1" and g.crew.size() > 1:   # последний товарищ держит кнопку (сварка, вентиль…)
@@ -319,6 +321,16 @@ static func apply(g: Main, kv: Dictionary) -> void:
 		mate.pad.hold = true
 		for i in int(float(kv.get("hold_s", "1.5")) * 10.0):
 			g.step(0.1)
+
+
+## Камера снимка со сдвигом от объекта или корабля (kupol=, view=, place=) — не ниже стольких метров над видимым
+## дном: на склоне она оказывалась под сеткой дна, и кадр резал «чёрный клин» (#1350, 13.11, PR #1818).
+const CAM_FLOOR := 1.5
+
+
+## Точка p, поднятая до CAM_FLOOR над видимой сеткой дна (`Seabed.mesh_height`); выше — как есть.
+static func cam_above(p: Vector3, ground: Callable = Seabed.mesh_height) -> Vector3:
+	return Vector3(p.x, maxf(p.y, float(ground.call(p.x, p.z)) + CAM_FLOOR), p.z)
 
 
 ## Ракурс place=NN (#1358): от ориентира до середины корпуса, м.
@@ -349,6 +361,7 @@ static func place_pose(name: String, kind: String = "front", dist: float = PLACE
 	var local: Vector3 = PLACE_CAM.get(kind, PLACE_CAM["front"])
 	var cam := ship + local.rotated(Vector3.UP, yaw)
 	cam.y = maxf(cam.y, Seabed.height(cam.x, cam.z) + PLACE_FLOOR)
+	cam = cam_above(cam)   # видимая сетка дна на изломе выше гладкого рельефа
 	var look := Vector3(at.x, maxf(at.y - 4.0, Seabed.height(at.x, at.z) + 2.0), at.z)
 	return {"ship": ship, "yaw": yaw, "cam": cam, "look": look}
 

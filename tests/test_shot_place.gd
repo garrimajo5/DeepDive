@@ -47,6 +47,36 @@ func test_scene_camera_at_pose() -> void:
 	await frames(1)
 
 
+func test_cam_above_ground() -> void:   # камера со сдвигом от объекта не под дном (#1350, 13.11)
+	var slope := func(x: float, _z: float) -> float: return -60.0 + x   # склон 1 м/м
+	var up := ShotSetup.cam_above(Vector3(10.0, -55.0, 3.0), slope)
+	ok(up.is_equal_approx(Vector3(10.0, -50.0 + ShotSetup.CAM_FLOOR, 3.0)), "под склоном — поднята до CAM_FLOOR над дном: %s" % up)
+	var free := Vector3(-10.0, -40.0, 3.0)
+	ok(ShotSetup.cam_above(free, slope).is_equal_approx(free), "над дном — как есть")
+	for id: String in LayerMap.POINTS:
+		for kind: String in ShotSetup.PLACE_CAM:
+			var c: Vector3 = ShotSetup.place_pose(id, kind)["cam"]
+			ok(c.y >= Seabed.mesh_height(c.x, c.z) + ShotSetup.CAM_FLOOR - 1e-3, "place= над видимым дном: %s %s" % [id, kind])
+
+
+func test_scene_view_camera_not_under_ground() -> void:   # view= у дна: камера ниже корабля не уходит под сетку дна
+	var main: Node = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var at := LayerMap.xz("07") + Vector2(40.0, 30.0)   # восточный склон жёлоба 07 (#1757)
+	var ship := Vector3(at.x, Seabed.mesh_height(at.x, at.y) + 4.0, at.y)
+	ShotSetup.apply(main, {"ship": "%f,%f,%f" % [ship.x, ship.y, ship.z], "view": "14,-8,-16"})
+	await frames(1)
+	var cam := main.get_viewport().get_camera_3d()
+	var c := cam.global_position
+	var want: Vector3 = main.ship.to_global(Vector3(14.0, -8.0, -16.0))
+	ok(want.y < Seabed.mesh_height(want.x, want.z), "постановка: точка view= под дном")
+	near(c.y, Seabed.mesh_height(c.x, c.z) + ShotSetup.CAM_FLOOR, 1e-3, "камера поднята до CAM_FLOOR над видимым дном")
+	ok(absf(c.x - want.x) < 1e-2 and absf(c.z - want.z) < 1e-2, "по горизонтали — где просили: %s / %s" % [c, want])
+	main.queue_free()
+	await frames(1)
+
+
 func test_scena_poses_nose_to_flower() -> void:   # scena=1|2|3 — ракурсы сцены 00 → 01 (#1400)
 	for n in range(1, ShotSetup.SCENA.size() + 1):
 		var p: Dictionary = ShotSetup.scena_pose(n)

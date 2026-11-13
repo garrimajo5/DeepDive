@@ -620,15 +620,18 @@ static func worst_note(step: String, draw: float, code: float = -1.0, gpu: float
 
 
 const REST_FROM := 100.0   ## кадр от, мс, — с остатком вне кода и отрисовки, если код + отрисовка меньше половины кадра
+const REST_OWN := 40.0     ## или сам остаток от, мс: `09f-deeper` 112 мс = код 21 + отрисовка 37 + 54 без виновника (#1350, 13.11)
 
 
 ## Остаток кадра вне кода и отрисовки по частям (#519): «вне шага 70 мс (между кадрами 60, физика 8, узлы 2)».
 ## Части от 1 мс, самые долгие первыми; не разложенное по меткам — «прочее». Кадр короче `REST_FROM`, код с
-## отрисовкой — половина кадра и больше, меток нет — "".
+## отрисовкой — половина кадра и больше при остатке меньше `REST_OWN`, меток нет — "".
 static func rest_note(frame: float, code: float, draw: float, parts: Dictionary) -> String:
-	if parts.is_empty() or frame == INF or frame < REST_FROM or code + draw >= frame / 2.0:
+	if parts.is_empty() or frame == INF or frame < REST_FROM:
 		return ""
 	var rest := frame - code - draw
+	if code + draw >= frame / 2.0 and rest < REST_OWN:
+		return ""
 	var keys := parts.keys()
 	keys.sort_custom(func(a, b): return parts[a] > parts[b])
 	var out: Array[String] = []

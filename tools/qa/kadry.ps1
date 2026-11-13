@@ -10,6 +10,14 @@ param([switch]$SelfTest)
 
 $KadryLimit = 100     # провал кадра, мс
 $KadryNeed = 3        # тихих прогонов подряд ниже предела, чтобы закрыть провал
+# Шаги со своим пределом (#1792): смена уровня графики — заминка меню (сборки шейдеров движком), провал — от 400 мс;
+# ниже него сводка ПРОВЕРИТЬ шаг не поднимает (#1350, 13.11)
+$KadryOwn = @{ '29-grafika-ekonomno' = 400; '29-grafika-krasivo' = 400 }
+
+function Get-KadryLimit([string]$step) {
+  if ($KadryOwn.ContainsKey($step)) { return [int]$KadryOwn[$step] }
+  return $KadryLimit
+}
 
 # Строки log.txt → шаг → худший кадр, мс (строка «скриншот <шаг> | … · худший кадр N мс (…)», QaRunner)
 function Read-Worst([string[]]$lines) {
@@ -195,20 +203,21 @@ function Get-WatchLines($now, [bool]$nowQuiet, $past, $issues) {
   $out = @()
   foreach ($s in @($now.Keys)) {
     $tag = if ($issues -and $issues.ContainsKey($s)) { " ($(@($issues[$s]) -join ', '))" } else { '' }
-    if ($now[$s] -lt $KadryLimit -and -not $tag) { continue }
+    $limit = Get-KadryLimit $s
+    if ($now[$s] -lt $limit -and -not $tag) { continue }
     $seq = @([pscustomobject]@{ Ms = $now[$s]; Quiet = $nowQuiet; Commit = '' })
     $seq += @($past | Where-Object { $_.Worst.Contains($s) } |
       ForEach-Object { [pscustomobject]@{ Ms = $_.Worst[$s]; Quiet = $_.Quiet; Commit = $_.Commit } })
     $streak = 0
     foreach ($e in $seq) {
       if (-not $e.Quiet) { continue }        # шумный прогон серию не продолжает и не рвёт
-      if ($e.Ms -ge $KadryLimit) { break }
+      if ($e.Ms -ge $limit) { break }
       $streak++
     }
     $before = @($seq | Select-Object -Skip 1 -First 4 | ForEach-Object { "$($_.Ms) $($_.Commit)$(if (-not $_.Quiet) { ' шум' })" })
     $was = if ($before) { $before -join ', ' } else { 'нет данных' }
     $now1 = if ($nowQuiet) { '' } else { ' шум' }
-    $out += "ПРОВЕРИТЬ $s $($now[$s]) мс$now1$tag | раньше: $was | тихих < $KadryLimit подряд: $streak из $KadryNeed"
+    $out += "ПРОВЕРИТЬ $s $($now[$s]) мс$now1$tag | раньше: $was | тихих < $limit подряд: $streak из $KadryNeed"
   }
   return ,$out
 }
@@ -275,6 +284,18 @@ if ($SelfTest) {
   Check ($w2[0] -like 'ПРОВЕРИТЬ 21a-vent 70 мс шум (#519) |*подряд: 2 из 3') "шумный сейчас — не в счёт: $($w2[0])"
   Check ((Get-WatchLines ([ordered]@{ 'x-1' = 50 }) $true @() @{}).Count -eq 0) 'ниже предела и без issue — без строки'
   Check ((Get-WatchLines ([ordered]@{ '9-novyj' = 130 }) $true @() @{})[0] -like '*раньше: нет данных*') 'новый шаг — «нет данных»'
+  # Свой предел шага (#1792): 29-grafika-ekonomno 246 мс < 400 — строки нет, 29-grafika-krasivo 410 мс ≥ 400 — строка
+  # есть, серию считает от 400: прошлые 380 (тихий) и 420 (тихий) → сейчас 410 рвёт серию сразу, «0 из 3»;
+  # 29-nastrojki — обычный предел 100: 120 мс — строка. Ждём две строки, в этом порядке.
+  $pg = @([pscustomobject]@{ Commit = 'aaa1111'; Quiet = $true; Worst = [ordered]@{ '29-grafika-krasivo' = 380; '29-grafika-ekonomno' = 188 } },
+          [pscustomobject]@{ Commit = 'bbb2222'; Quiet = $true; Worst = [ordered]@{ '29-grafika-krasivo' = 420 } })
+  $wg = Get-WatchLines ([ordered]@{ '29-grafika-ekonomno' = 246; '29-grafika-krasivo' = 410; '29-nastrojki' = 120 }) $true $pg @{}
+  Check ($wg.Count -eq 2) "свой предел: заминка меню ниже 400 мс не в сводке ($($wg -join ' / '))"
+  Check ($wg[0] -eq 'ПРОВЕРИТЬ 29-grafika-krasivo 410 мс | раньше: 380 aaa1111, 420 bbb2222 | тихих < 400 подряд: 0 из 3') "свой предел в строке: $($wg[0])"
+  Check ($wg[1] -like 'ПРОВЕРИТЬ 29-nastrojki 120 мс |*тихих < 100 подряд: 0 из 3') "обычный шаг — предел 100: $($wg[1])"
+  # ниже своего предела, но шаг назван в issue «проверить» — строка есть, серия от 400: 246 сейчас + 188 → «2 из 3»
+  $wg2 = Get-WatchLines ([ordered]@{ '29-grafika-ekonomno' = 246 }) $true $pg @{ '29-grafika-ekonomno' = @('#1792') }
+  Check ($wg2.Count -eq 1 -and $wg2[0] -eq 'ПРОВЕРИТЬ 29-grafika-ekonomno 246 мс (#1792) | раньше: 188 aaa1111 | тихих < 400 подряд: 2 из 3') "свой предел и issue: $($wg2 -join ' / ')"
   # Get-IssueSteps на подставном gh (функция перекрывает gh.exe): шаг из заголовка и тела, строка ISSUES (#1350, 12.11)
   # Строки подставного: номер, число комментариев, заголовок, тело. У #1709 шаг 33-tablo-il назван только в комментарии
   # (их два, #1350, 13.11); у #519 комментариев нет — запроса комментариев к нему быть не должно.
