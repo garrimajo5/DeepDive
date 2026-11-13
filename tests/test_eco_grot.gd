@@ -656,3 +656,23 @@ func test_grot_does_not_walk_into_ship() -> void:
 			ok(false, "гротовик вошёл в корабль на %.1f с" % (i * 0.05))
 			return
 	ok(Vector2(gr.p.x, gr.p.z).distance_to(EcoGrot.ROUTE[0]) > 2.0, "дошёл до корабля и встал")
+
+
+## Круг на пробу (`EcoGrot.route`, инструменты расчёта #1400): гротовик стартует с его первой точки и идёт по его
+## точкам; в игре `route` — прежний ROUTE.
+func test_probe_route_followed() -> void:
+	ok(EcoGrot.route == EcoGrot.ROUTE, "по умолчанию — круг игры")
+	EcoGrot.route = [Vector2(43, 75), Vector2(55, 65), Vector2(55, 49), Vector2(43, 39)] as Array[Vector2]
+	var w := _lone()
+	var gr := (_sys(w, EcoGrot) as EcoGrot).grot
+	var start := Vector2(gr.p.x, gr.p.z)
+	var seen: Array[int] = []
+	for i in 300:  # 150 с
+		w.run(0.5)
+		if seen.is_empty() or seen[-1] != gr.wp:
+			seen.append(gr.wp)
+	var at := Vector2(gr.p.x, gr.p.z)
+	EcoGrot.route = EcoGrot.ROUTE
+	near(start.distance_to(Vector2(43, 75)), 0.0, 1e-4, "старт — первая точка пробы")
+	ok(seen.size() >= 3, "прошёл точки пробы: %s" % [seen])
+	ok(at.x > 40.0 and at.x < 58.0 and at.y > 36.0 and at.y < 78.0, "ходит по кругу пробы: %s" % at)

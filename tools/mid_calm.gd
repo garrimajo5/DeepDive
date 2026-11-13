@@ -3,7 +3,11 @@ extends SceneTree
 ## моллюски». Гейм-дизайнер (08.11): в середине не накладывать зов хищника гребневиками. Мир целиком (`EcoView`, дно
 ## `Seabed.mesh_height`), headless, без узлов сцены; облачный расчёт, не телефонный.
 ##   godot --headless --path . -s tools/mid_calm.gd [-- seeds=16 raduzh=1:80,5 lim=<с> dark=<с> probe=1 answer=1 delay=<с> hold=<с>
-##   start0=<x>,<z> band0=<x0>,<x1>,<z0>,<z1> fish=<номер>:<x>,<z> watch=<номера через ,> sites=1]
+##   start0=<x>,<z> band0=<x0>,<x1>,<z0>,<z1> fish=<номер>:<x>,<z> watch=<номера через ,> sites=1
+##   grot=<x>,<z>;<x>,<z>;… path=1]
+## grot= — круг гротовика на пробу (`EcoGrot.route`; уровни и ГД 13.11, #1400: стая 5 едет на нём). С sites=1 — среда
+## каждой точки круга; path=1 — весь путь (`grot_path`): гротовик один, корабль далеко, круг целиком — время круга,
+## дно и наклон, остановки и поворот на точках, задевает ли панцирь или риф твёрдое других систем и кто ближе всего.
 ## watch=1,5 — чьи разброс и погони печатать (по умолчанию стая 0; уровни и ГД 13.11 — совместная проба домов стай 1
 ## и 5): по каждой стае разброс, а по зерну — погони на неё (кто, когда, откуда и куда, ближе всего к выходу 00 и к пути
 ## середины), итогом — сколько погонь и в скольких зёрнах они ближе EXIT_NEAR м к выходу или к пути середины.
@@ -100,9 +104,131 @@ func _init() -> void:
 	if kv.has("watch"):
 		watch = parse_watch(kv["watch"])
 	sites = kv.get("sites", "0") == "1"
+	if kv.has("grot"):
+		EcoGrot.route = parse_route(kv["grot"])
+	if kv.get("path", "0") == "1":
+		for line in grot_path():
+			print(line)
+		if seeds <= 0:
+			quit()
+			return
 	for line in report(seeds):
 		print(line)
 	quit()
+
+
+## "43,75;55,65" → [(43, 75), (55, 65)].
+static func parse_route(s: String) -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	for part in s.split(";", false):
+		var xz := part.split(",")
+		out.append(Vector2(float(xz[0]), float(xz[1])))
+	return out
+
+
+## Весь круг гротовика (`EcoGrot.route`) на мире зерна 20261018: гротовик идёт один (корабль за 2 км), шаг PATH_DT,
+## пока не пройдёт все точки и не вернётся к первой (не дольше PATH_MAX с). Печатает время круга, дно (мин…макс),
+## наклон панциря (наибольший и доля времени у предела `EcoGrot.TILT_MAX`), остановки на точках (сколько секунд шаг
+## ниже 0,2 и наибольший поворот, рад/с), касания панцирем и рифом (`body_points`) твёрдого других систем (`solid`) и
+## кто из живого ближе PATH_NEAR м к центру тела в пути (система.поле — наименьшее расстояние).
+const PATH_DT := 0.1
+const PATH_MAX := 1500.0
+const PATH_NEAR := 8.0
+static func grot_path() -> Array[String]:
+	var lines: Array[String] = []
+	var ev := EcoView.new()
+	ev.ground = Seabed.mesh_height
+	ev.world.reset(20261018)
+	ev.world.ship.pos = Vector3(0.0, 0.0, -2000.0)
+	var g: EcoGrot = ev.grot
+	var route := EcoGrot.route
+	var perim := 0.0
+	for i in route.size():
+		perim += route[i].distance_to(route[(i + 1) % route.size()])
+	var solids: Array[EcoSystem] = []
+	for sys in ev.world.systems:
+		if sys != g and sys.has_method("solid"):
+			solids.append(sys)
+	var objs: Array = []   # [ключ, (x, z)]
+	for sys in ev.world.systems:
+		if sys == g or sys is EcoFish:
+			continue
+		for prop in sys.get_property_list():
+			if prop["type"] != TYPE_ARRAY:
+				continue
+			var arr = sys.get(prop["name"])
+			if not (arr is Array):
+				continue
+			for it in arr:
+				if not (it is Object) or not ("pos" in it):
+					continue
+				var pv = it.get("pos")
+				if pv is Vector3:
+					objs.append(["%s.%s" % [sys.get_script().get_global_name(), prop["name"]], Vector2(pv.x, pv.z)])
+				elif pv is Vector2:
+					objs.append(["%s.%s" % [sys.get_script().get_global_name(), prop["name"]], pv])
+	for b in EcoCoral.BASES:
+		objs.append(["огнецвет (EcoCoral.BASES)", b])
+	var near := {}
+	var hits := {}
+	var lo := INF
+	var hi := -INF
+	var tilt_max := 0.0
+	var capped := 0.0
+	var slow := 0.0
+	var turn_max := 0.0
+	var visited := 0
+	var last_wp := g.grot.wp
+	var t := 0.0
+	var yaw0 := g.grot.yaw
+	while t < PATH_MAX:
+		g.step(ev.world, PATH_DT)
+		t += PATH_DT
+		var gr := g.grot
+		var rate := absf(wrapf(gr.yaw - yaw0, -PI, PI)) / PATH_DT
+		yaw0 = gr.yaw
+		if t > 5.0:
+			turn_max = maxf(turn_max, rate)
+		lo = minf(lo, gr.p.y)
+		hi = maxf(hi, gr.p.y)
+		var tl := maxf(absf(gr.tilt_want.x), absf(gr.tilt_want.y))
+		tilt_max = maxf(tilt_max, tl)
+		if tl >= EcoGrot.TILT_MAX - 1e-4:
+			capped += PATH_DT
+		if gr.stride < 0.2 and t > 5.0:
+			slow += PATH_DT
+		var xz := Vector2(gr.p.x, gr.p.z)
+		for o in objs:
+			var d: float = (o[1] as Vector2).distance_to(xz)
+			if d < PATH_NEAR and d < near.get(o[0], INF):
+				near[o[0]] = d
+		var base := Vector3(gr.p.x, gr.body_y, gr.p.z)
+		var bs := gr.basis()
+		for sys in solids:
+			for q in EcoGrot.body_points():
+				if sys.solid(base + bs * q):
+					var key: String = sys.get_script().get_global_name()
+					if not hits.has(key):
+						hits[key] = "в (%.0f; %.0f) на %.0f с" % [xz.x, xz.y, t]
+					break
+		if gr.wp != last_wp:
+			last_wp = gr.wp
+			visited += 1
+			if visited > route.size():
+				break
+	ev.free()
+	lines.append("== круг гротовика %s: длина %.0f м, круг за %.0f с (%.0f с хода на %.2f м/с без поворотов)%s" % [str(route), perim, t, perim / EcoGrot.SPEED, EcoGrot.SPEED, "" if visited > route.size() else " — круг НЕ замкнулся"])
+	lines.append("   дно %.1f…%.1f м; наклон панциря до %.2f рад (предел %.2f — %.0f с у предела); шаг ниже 0,2 — %.0f с за круг, поворот до %.2f рад/с" % [lo, hi, tilt_max, EcoGrot.TILT_MAX, capped, slow, turn_max])
+	var hl: Array[String] = []
+	for k in hits:
+		hl.append("%s %s" % [k, hits[k]])
+	lines.append("   панцирь и риф задевают твёрдое: %s" % (", ".join(hl) if not hl.is_empty() else "нет"))
+	var nl: Array[String] = []
+	for k in near:
+		nl.append("%s %.1f м" % [k, near[k]])
+	nl.sort()
+	lines.append("   ближе %.0f м к телу в пути: %s" % [PATH_NEAR, ", ".join(nl) if not nl.is_empty() else "никого"])
+	return lines
 
 
 ## "1:80,5;2:-70,-60" → {1: (80, 5), 2: (−70, −60)}.
@@ -379,13 +505,13 @@ static func report(seeds: int) -> Array[String]:
 	lines.append("== дома радужников %s, старт серпохвоста №0 %s, %s, тихий круг серпохвоста %s, ответ экипажа %s, %d зёрен, путь %s, стоянка %.0f с у середины" % [str(homes), str(start0 if start0.is_finite() else EcoPred.STARTS[0]), band, "вкл" if probe else "выкл", ("через %.1f с, %.0f с без света" % [delay, hold]) if answer else "нет", seeds, str(PATH), STOP])
 	for k in watch:
 		if k == EcoGrot.RIDERS:
-			lines.append("== стая светляков %d — на спине гротовика, дом идёт с ним по кругу %s (EcoGrot.ROUTE; fish=%d не действует), тёмная стоянка %.0f с" % [k, str(EcoGrot.ROUTE), k, dark])
+			lines.append("== стая светляков %d — на спине гротовика, дом идёт с ним по кругу %s (%s; fish=%d не действует), тёмная стоянка %.0f с" % [k, str(EcoGrot.route), "EcoGrot.ROUTE" if EcoGrot.route == EcoGrot.ROUTE else "проба grot=", k, dark])
 		else:
 			lines.append("== дом стаи светляков %d (%.0f; %.0f), тёмная стоянка %.0f с" % [k, fh[k].x, fh[k].z, dark])
 	if sites:
 		for k in watch:
 			if k == EcoGrot.RIDERS:
-				for q in EcoGrot.ROUTE:
+				for q in EcoGrot.route:
 					lines.append(site_line("точка круга гротовика (стая %d)" % k, q))
 			elif not fish_moves.has(k):
 				lines.append(site_line("дом стаи %d" % k, Vector2(fh[k].x, fh[k].z)))
