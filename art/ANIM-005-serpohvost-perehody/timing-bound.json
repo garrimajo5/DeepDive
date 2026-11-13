@@ -1,0 +1,8 @@
+{
+  "assumption": "vertical wind-up maximum at .35s; y=.3m; vy=0; y(.55)<=-.8; y(.9)=0; vy(.9)=0; continuous |ay|<=60",
+  "min_downward_speed_at_055": 7.101020514433642,
+  "max_return_displacement_by_09": 0.38471935853074823,
+  "required_return_displacement": 0.8,
+  "earliest_possible_rest_return": 0.9535641918382022,
+  "limitation": "Necessary bound only; assumes peak at .35. Does not rule out earlier peak or claim a sampled Godot measurement."
+}
