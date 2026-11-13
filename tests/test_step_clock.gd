@@ -50,6 +50,27 @@ func test_scene_step_parts() -> void:
 	await frames(1)
 
 
+## #1792: смена уровня графики в меню — «код 240–321 мс» без частей: шаг под меню и паузой отмечает свою часть,
+## `_apply_graphics` — часть «графика» с подчастями, иначе виновник провала не виден в логе тестера.
+func test_scene_menu_graphics_parts() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.main_menu.open = true
+	main.step(1.0 / 30.0)
+	ok(main.clock.parts.has("меню"), "шаг под меню — часть «меню»: %s" % [main.clock.parts.keys()])
+	main.main_menu.open = false
+	main.clock.start(Time.get_ticks_usec())
+	main._apply_graphics(Graphics.ECONOMY)
+	var subs: Dictionary = main.clock.subs.get("графика", {})
+	for k in ["океан", "корпус и отсеки", "прожектор и частицы", "свечение и мир", "сглаживание и масштаб"]:
+		ok(subs.has(k), "подчасть графики «%s»: %s" % [k, subs.keys()])
+	near(float(main.clock.parts.get("графика", -1.0)), _sum(subs), 0.001, "графика — ровно сумма подчастей")
+	ok(main.clock.parts.has("меню"), "время до смены — части меню")
+	main.queue_free()
+	await frames(1)
+
+
 ## Issue #662: замер кадра идёт внутри нового шага, после `start` — части и шаг времени нужны прошлого шага.
 func test_last_step_kept() -> void:
 	var c := StepClock.new()
