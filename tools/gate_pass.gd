@@ -118,9 +118,10 @@ static func drive(points: Array) -> Dictionary:
 			var ahead := ship.pos + ship.nose() * ship.speed * LOOK
 			var keep := maxf(probe.floor_at(ship.pos, ship.yaw), probe.floor_at(ahead, ship.yaw)) + KEEL
 			var want_y := maxf(lerpf(from.y, to.y, k), keep)
-			var near_xz := length < 0.5 or d.length() < ARRIVE   # отрезок-стоянка: только глубина, без руля
-			if near_xz and absf(ship.pos.y - to.y) < DEPTH_OK:
+			var hover := length < 0.5   # отрезок-стоянка: только глубина, без руля
+			if (hover and absf(ship.pos.y - to.y) < DEPTH_OK) or (not hover and d.length() < ARRIVE):
 				break
+			var near_xz := hover
 			ship.in_vert = clampf((want_y - ship.pos.y) * 0.8, -1.0, 1.0)
 			if near_xz:
 				ship.in_thrust = 0.0
