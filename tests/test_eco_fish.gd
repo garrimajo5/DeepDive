@@ -501,6 +501,73 @@ func test_ping_at_01_does_not_alarm() -> void:
 	ok(w.bus.pending.size() >= 1 and w.bus.pending[0].note == "flee", "строка о бегстве — от хищника")
 
 
+## Сцена 00→01 (решение ГД 08.11, `docs/urovni/sloj-1.md`): стая рифа у 01 (55; −69) при корабле на стоянке (33; −22)
+## бежит от хищника в кораллы со строкой, а когда он ушёл дальше PRED_ALARM — тревога спадает, стая выходит из
+## укрытия и снова бродит у дома без новой строки. Хищник вернулся раньше FLEE_COOLDOWN — тревога снова, строки нет;
+## после паузы — строка снова: «стая → бегство» остаётся знаком угрозы, а не шумом.
+func test_reef_shoal_at_01_calms_after_pred_leaves() -> void:
+	var w := _world()
+	var fish := _fish(w)
+	var sh := fish.shoals[4]
+	_only(w, fish, sh)
+	var stand := Vector2(33.0, -22.0)
+	w.ship.pos = Vector3(stand.x, Seabed.height(stand.x, stand.y) + 7.0, stand.y)
+	w.ship.speed = 0.0
+	w.ship.light_on = true
+	w.ship.light_range = 40.0
+	w.ship.hull_noise = 0.2
+	ok(_flat(sh.home, w.ship.pos) < 60.0, "стая рифа у 01: %.1f м от стоянки" % _flat(sh.home, w.ship.pos))
+	w.run(8.0)
+	ok(sh.alarm == 0.0 and w.bus.pending.is_empty(), "без хищника спокойна")
+	var side := Vector3(sh.home.x - stand.x, 0, sh.home.z - stand.y).normalized()  # хищник — по ту сторону стаи
+	var close := sh.center + side * 8.0  # рядом со стаей, где она бродит
+	var away := sh.home + side * 30.0 + Vector3(0, sh.center.y - sh.home.y, 0)
+	var pred := w.spawn("pred", close)
+	w.run(0.1)  # стая в ~50 м от стоянки — дальше MID, шагает через шаг мира
+	ok(sh.alarm > 0.0, "тревога от хищника")
+	eq(w.bus.pending.size(), 1, "одна строка")
+	eq(w.bus.pending[0].note, "flee")
+	w.run(8.0)
+	ok(_mean_to(sh, sh.home) < 5.0, "стая в кораллах: %.1f м" % _mean_to(sh, sh.home))
+
+	pred.p = away
+	var nearest := INF
+	var t := 0.0
+	var calm_at := -1.0
+	while t < 16.0:
+		w.step(0.05)
+		t += 0.05
+		nearest = minf(nearest, pred.p.distance_to(sh.center))
+		if calm_at < 0.0 and sh.alarm <= 0.0:
+			calm_at = t
+	print("    хищник ушёл: тревога спала через %.2f с, ближе всего %.1f м до центра стаи, стая в %.1f м от дома" % [
+		calm_at, nearest, _mean_to(sh, sh.home)])
+	ok(nearest > EcoFish.PRED_ALARM, "хищник дальше тревоги: %.1f м" % nearest)
+	ok(calm_at > 0.0 and calm_at <= 3.0 + 0.1, "тревога спала за удержание: %.2f с" % calm_at)
+	var hiding := 0
+	var grazing := 0
+	for f: EcoFish.Fish in sh.members:
+		if f.agent.state == EcoAgent.State.HIDE:
+			hiding += 1
+		elif f.agent.state == EcoAgent.State.GRAZE:
+			grazing += 1
+	eq(hiding, 0, "из укрытия вышли")
+	eq(grazing, sh.members.size(), "бродят спокойно: %d из %d" % [grazing, sh.members.size()])
+	ok(_flat(sh.center, sh.home) < sh.range_m + 2.0, "у дома: %.1f м" % _flat(sh.center, sh.home))
+	eq(w.bus.pending.size(), 1, "выход из укрытия — без строки")
+
+	pred.p = sh.center + side * 8.0  # вернулся через 24 с после строки — раньше FLEE_COOLDOWN
+	w.run(0.1)
+	ok(sh.alarm > 0.0, "снова тревога")
+	eq(w.bus.pending.size(), 1, "раньше паузы — без новой строки")
+	pred.p = away
+	w.run(8.0)
+	eq(sh.alarm, 0.0, "ушёл — спокойна")
+	pred.p = sh.center + side * 8.0  # 32 с после строки
+	w.run(0.1)
+	eq(w.bus.pending.size(), 2, "после паузы — строка снова")
+
+
 func test_ship_under_way_scares_without_message() -> void:
 	var w := _world()
 	var fish := _fish(w)
