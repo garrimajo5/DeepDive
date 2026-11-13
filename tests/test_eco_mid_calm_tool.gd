@@ -173,3 +173,24 @@ func test_sites_list_homes_grot_and_reefs() -> void:
 	var got := lines.filter(func(l: String) -> bool: return l.begins_with("== дом стаи 1 (") \
 		or l.begins_with("== точка круга гротовика (стая 5)") or l.begins_with("== риф ("))
 	eq(got.size(), 1 + EcoGrot.ROUTE.size() + EcoCoral.BASES.size(), "\n".join(lines))
+
+
+## grot= — круг гротовика на пробу (уровни и ГД 13.11, #1400): точки круга в среде (sites=1) — пробные, путь
+## (`grot_path`) — круг целиком, гротовик замыкает его и печатает, кто ближе всего. В игре круг — `EcoGrot.ROUTE`.
+func test_grot_probe_route_sites_and_path() -> void:
+	var tool := _tool()
+	eq(tool.parse_route("43,75;55,65;55,49;43,39"), [Vector2(43, 75), Vector2(55, 65), Vector2(55, 49), Vector2(43, 39)] as Array[Vector2])
+	ok(EcoGrot.route == EcoGrot.ROUTE, "в игре — прежний круг")
+	EcoGrot.route = tool.parse_route("43,75;55,65;55,49;43,39")
+	tool.set("watch", tool.parse_watch("5"))
+	tool.set("sites", true)
+	var lines: Array[String] = tool.report(0)
+	var path: Array[String] = tool.grot_path()
+	EcoGrot.route = EcoGrot.ROUTE
+	_restore(tool)
+	var got := lines.filter(func(l: String) -> bool: return l.begins_with("== точка круга гротовика (стая 5) (55; 65)"))
+	eq(got.size(), 1, "\n".join(lines))
+	ok(lines.any(func(l: String) -> bool: return "проба grot=" in l), "заголовок говорит о пробе")
+	ok(path[0].begins_with("== круг гротовика [(43.0, 75.0)"), path[0])
+	ok(not ("НЕ замкнулся" in path[0]), path[0])
+	eq(path.size(), 4, "\n".join(path))

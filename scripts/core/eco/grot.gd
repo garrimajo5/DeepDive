@@ -15,6 +15,9 @@ extends EcoSystem
 const ID := "grot"
 ## Круг по отмели (x, z) — как в браузере (js: [[-22, 62], [18, 44], [30, 4], [-14, 12]]).
 const ROUTE: Array[Vector2] = [Vector2(-22, 62), Vector2(18, 44), Vector2(30, 4), Vector2(-14, 12)]
+## Круг, по которому гротовик ходит сейчас: в игре — ROUTE; другой круг ставят только инструменты расчёта
+## (`tools/mid_calm.gd grot=…`, проба круга #1400, уровни и ГД 13.11) до сброса мира.
+static var route: Array[Vector2] = ROUTE
 ## Радиус панциря (м), скорость (м/с), поворот (доля разницы курса в секунду), точка пути пройдена ближе REACHED.
 const R := 3.2
 const SPEED := 0.45
@@ -125,7 +128,7 @@ func _init(fish: EcoFish = null) -> void:
 func reset(world: EcoWorld) -> void:
 	_ground = world.ground
 	grot = Walker.new()
-	var s := ROUTE[0]
+	var s := route[0]
 	grot.p = Vector3(s.x, _floor(s.x, s.y), s.y)
 	_feel(grot)
 	grot.tilt = grot.tilt_want
@@ -164,10 +167,10 @@ func step(world: EcoWorld, dt: float) -> void:
 	if not moving:
 		gr.stride = 0.0
 	if moving:
-		var tg := ROUTE[gr.wp]
+		var tg := route[gr.wp]
 		var to := Vector2(tg.x - gr.p.x, tg.y - gr.p.z)
 		if to.length() < REACHED:
-			gr.wp = (gr.wp + 1) % ROUTE.size()
+			gr.wp = (gr.wp + 1) % route.size()
 		else:
 			var diff := wrapf(atan2(to.x, to.y) - gr.yaw, -PI, PI)
 			var want := want_stride(diff, gr.lift)
