@@ -84,6 +84,40 @@ func test_descent_decision_not_right_after_shot() -> void:
 	ok(gap >= 0.2, "между снимком 34a и решением «глубже» — пауза ≥ 0,2 с (было 0)")
 
 
+## #1765 обобщённо (#1350, 13.11): ни одно нажатие сценария (`press`/`hold`) не идёт в первые
+## `QaRunner.SETTLE_FRAMES` после снимка — между снимком (`shot`/`play`) и первым действием за ним шаги длятся
+## ≥ 0,2 с. Иначе худший кадр действия (открыть панель, нажать пост) сливается с долгими кадрами после снимка.
+## Удержание, прерванное снимком (сварка, лебёдка, ход крестовиной), продолжается в том же кадре — нового нажатия
+## нет, это не действие. Сообщение перечисляет все такие пары «снимок → действие».
+func test_no_action_right_after_shot() -> void:
+	var q := QaScript.parse(FileAccess.get_file_as_string("res://tools/qa/scenario.json"))
+	var bad: Array[String] = []
+	var pairs := 0
+	for i in q.steps.size():
+		if not q.steps[i].get("do") in ["shot", "play"]:
+			continue
+		var held := ""   # удержание прямо перед снимком (без строк лога)
+		for b in range(i - 1, -1, -1):
+			if q.steps[b]["do"] != "log":
+				held = str(q.steps[b]["what"]) if q.steps[b]["do"] == "hold" else ""
+				break
+		var gap := 0.0
+		for j in range(i + 1, q.steps.size()):
+			var st: Dictionary = q.steps[j]
+			if st["do"] in ["shot", "play"]:
+				break
+			if st["do"] in ["press", "hold"]:
+				if st["do"] == "hold" and gap == 0.0 and str(st["what"]) == held:
+					break   # то же удержание продолжается
+				pairs += 1
+				if gap < 0.2 - 1e-6:
+					bad.append("%s → %s %s (%.2f с)" % [q.steps[i].get("name", q.steps[i].get("n")), st["do"], st["what"], gap])
+				break
+			gap += QaScript.duration(st)
+	ok(pairs > 50, "после снимков есть нажатия (%d)" % pairs)
+	ok(bad.is_empty(), "нажатие сразу после снимка: " + ", ".join(bad))
+
+
 func test_swipe_moves_full_distance() -> void:
 	var q := QaScript.parse('[{"do":"swipe","dx":300,"dy":-40,"s":0.5}]')
 	var sum := Vector2.ZERO
