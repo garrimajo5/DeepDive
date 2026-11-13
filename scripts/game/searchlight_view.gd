@@ -23,11 +23,11 @@ func _ready() -> void:
 	# и на 20 м до дна прожектор становился невидим (у тестера в pogrujenie — «луча на дне не видно»)
 	spot.spot_attenuation = Searchlight.ATTENUATION
 	spot.spot_angle_attenuation = Searchlight.SPOT_EDGE
-	spot.light_cull_mask = OceanView.LAYER_WORLD
+	spot.light_cull_mask = OceanView.LIT_WORLD
 	# ART-062: маска пятна отражателя — проектор; в 4.7.2 он работает только с тенями, кастеры — мир (не мостик)
 	spot.light_projector = load(Searchlight.MASK)
 	spot.shadow_enabled = true
-	spot.shadow_caster_mask = OceanView.LAYER_WORLD
+	spot.shadow_caster_mask = OceanView.LAYER_WORLD   # без `LAYER_NOBEAM`: арка 07 себя в луче не затеняет (#1757)
 	spot.shadow_normal_bias = Searchlight.SHADOW_NORMAL_BIAS   # без полос «акне» на склоне (#489)
 	add_child(spot)
 	beam = MeshInstance3D.new()
