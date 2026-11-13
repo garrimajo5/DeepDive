@@ -6,7 +6,7 @@ extends RefCounted
 ## (`test_gate_model.test_passage_empty`), выше него плечи опор выступают внутрь, свод проёма ≈ 41 м.
 ## Середина — `EcoGate.CENTER`, пол — дно жёлоба там (`floor_y`, ≈ 66 м), верх на ≈ 8 м.
 ## Коллизия — блоки по силуэту модели (`boxes`, замер LOD0 сеткой 4 × 2 м; `test_gate_arch.test_boxes_follow_model`).
-## Корабль сквозь опоры и плечи не проходит: `hits` (три точки по длине корпуса, запас по высоте — по `HullPlan`)
+## Корабль сквозь опоры и плечи не проходит: `hits` (точки `SHIP_PTS` по всей длине корпуса, запас по высоте — по `HullPlan`)
 ## → `Helm.Ship.solid`. Модель рисует `scripts/game/gate_view.gd` (`main.gate_view`, слой отмели).
 ## Гнёзда диагностики `GateDiag.NESTS` — на местах гнёзд модели; створки `Stvorka0…2` открываются поворотом
 ## вокруг своей оси X (`PETAL_TURN`), табличка `Diagnostika` — рядом на лице правой опоры.
@@ -18,8 +18,12 @@ const PASS_HALF := 24.0         ## полуширина прохода, м (бы
 const PASS_TOP := 22.0          ## высота прохода от пола, м (было 36)
 const TOP_DEPTH := 8.0          ## верх арки не выше этой глубины, м (лёд и потолок хода `Helm.Ship.CEILING`)
 const SINK := 8.0               ## блоки опор уходят в дно — склоны жёлоба под ними неровные
-const SHIP_HALF_LEN := 13.0     ## точки корпуса для `hits`: середина и ± это вдоль носа, м
+const SHIP_HALF_LEN := 13.0     ## отход от арки, с которого корпус поперёк её не задевает (`tools/route_plan.gd`), м
 const SHIP_R := 5.5             ## запас вокруг точки корпуса по горизонтали, м
+## Точки корпуса для `hits` — z в осях корабля (нос в −Z), от носа с губками манипулятора (−9,2) до кормы
+## (`HullPlan.STERN_END` 29) за вычетом `SHIP_R`, шаг 6,8 м. Раньше — центр и ±13 м: корма дальше 18,5 м от центра
+## (ещё 10,5 м корпуса) шла сквозь опоры и плечи на развороте у арки (#1757, `tools/gate_pass.gd`).
+const SHIP_PTS: Array[float] = [-3.7, 3.1, 9.9, 16.7, 23.5]
 const SHIP_UP := 4.8            ## корпус над центром корабля, м (`HullPlan`, рубка)
 const SHIP_DOWN := 1.6          ## корпус под центром, м
 
@@ -98,14 +102,14 @@ static func inside(p: Vector3, r := 0.0, up := 0.0, down := 0.0) -> bool:
 	return false
 
 
-## Корпус в `pos` с курсом `yaw` задевает арку: середина и нос/корма (`SHIP_HALF_LEN`) с запасом `SHIP_R`
-## в стороны, по высоте — корпус от −`SHIP_DOWN` до +`SHIP_UP` от центра.
+## Корпус в `pos` с курсом `yaw` задевает арку: точки `SHIP_PTS` вдоль корпуса с запасом `SHIP_R` в стороны,
+## по высоте — корпус от −`SHIP_DOWN` до +`SHIP_UP` от центра.
 static func hits(pos: Vector3, yaw: float) -> bool:
-	if absf(pos.x - EcoGate.CENTER.x) > 90.0 or absf(pos.z - EcoGate.CENTER.y) > 40.0:
-		return false   # далеко от арки — без счёта
-	var nose := Vector3(-sin(yaw), 0.0, -cos(yaw)) * SHIP_HALF_LEN
-	for p in [pos, pos + nose, pos - nose]:
-		if inside(p, SHIP_R, SHIP_UP, SHIP_DOWN):
+	if absf(pos.x - EcoGate.CENTER.x) > 95.0 or absf(pos.z - EcoGate.CENTER.y) > 50.0:
+		return false   # далеко от арки — без счёта (корма — до 29 м от центра)
+	var aft := Vector3(sin(yaw), 0.0, cos(yaw))   # к корме: +Z осей корабля
+	for z in SHIP_PTS:
+		if inside(pos + aft * z, SHIP_R, SHIP_UP, SHIP_DOWN):
 			return true
 	return false
 
