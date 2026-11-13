@@ -398,6 +398,63 @@ func test_parked_at_01_with_light_does_not_alarm() -> void:
 	ok(w.bus.pending.size() >= 1 and w.bus.pending[0].note == "flee", "строка о бегстве — от хищника")
 
 
+## Сцена 00→01 (решение ГД 08.11, `docs/urovni/sloj-1.md`): минута стоянки у 01 (33; −22) со светом, без хищника, в
+## течении отмели (EcoCurrent, как в EcoView): стаи кроны всё время кружат на кольце — центр в CROWN_RING ± 3 м от
+## оси, течение (0,3 м/с — за минуту 18 м) их с кольца не сносит, а корабль со светом к себе не тянет: ближе всего к
+## нему центр стаи подходит не ближе, чем кольцо проходит мимо стоянки. Крона у 01 — постоянная живая картинка.
+func test_parked_at_01_crown_keeps_ring_in_current() -> void:
+	var w := EcoWorld.new(EcoRandom.WORLD_SEED)
+	w.ground = Seabed.height
+	var cur := w.add(EcoCurrent.new()) as EcoCurrent
+	var fish := w.add(EcoFish.new()) as EcoFish
+	w.add(EcoFlower.new())
+	var stand := Vector2(33.0, -22.0)
+	w.ship.pos = Vector3(stand.x, Seabed.height(stand.x, stand.y) + 7.0, stand.y)
+	var to := EcoFlower.CENTER - stand
+	w.ship.yaw = atan2(-to.x, -to.y)  # нос — на крону
+	w.ship.speed = 0.0
+	w.ship.light_on = true
+	w.ship.light_range = 40.0
+	w.ship.hull_noise = 0.2
+	var crown: Array[EcoFish.Shoal] = []
+	for sh in fish.shoals:
+		if sh.crown:
+			crown.append(sh)
+	eq(crown.size(), EcoFish.CROWN_SHOALS, "стаи кроны")
+	near(cur.vel().length(), EcoCurrent.SPEED, 1e-4, "течение идёт")
+	var axis := crown[0].axis
+	var ship_axis := _flat(w.ship.pos, axis)
+	var r_min := INF
+	var r_max := 0.0
+	var ship_min := INF
+	var turned: Array[float] = []
+	var last: Array[float] = []
+	for sh in crown:
+		turned.append(0.0)
+		last.append(atan2(sh.center.z - axis.z, sh.center.x - axis.x))
+	for s in 60 * 20:
+		w.step(0.05)
+		if s % 10 != 9:
+			continue
+		for i in crown.size():
+			var sh := crown[i]
+			var r := _flat(sh.center, axis)
+			r_min = minf(r_min, r)
+			r_max = maxf(r_max, r)
+			ship_min = minf(ship_min, _flat(sh.center, w.ship.pos))
+			var a := atan2(sh.center.z - axis.z, sh.center.x - axis.x)
+			turned[i] += wrapf(a - last[i], -PI, PI)
+			last[i] = a
+	print("    стоянка у 01 в течении: центр стаи %.1f–%.1f м от оси, к кораблю не ближе %.1f м (ось в %.1f м), обход %.2f / %.2f рад" % [
+		r_min, r_max, ship_min, ship_axis, turned[0], turned[1]])
+	ok(r_min > EcoFish.CROWN_RING.x - 3.0, "с кольца внутрь не сносит: %.1f м" % r_min)
+	ok(r_max < EcoFish.CROWN_RING.y + 3.0, "с кольца наружу не сносит: %.1f м" % r_max)
+	ok(ship_min > ship_axis - EcoFish.CROWN_RING.y - 1.5, "к кораблю не тянет: %.1f м" % ship_min)
+	for i in crown.size():
+		ok(turned[i] * crown[i].turn > 0.5, "стая %d кружит в свою сторону: %.2f рад" % [i, turned[i]])
+	eq(w.bus.pending.size(), 0, "минута — без строки")
+
+
 ## Сцена 00→01 (решение ГД 08.11, `docs/urovni/sloj-1.md`): хищник ходит у границы CROWN_ALARM — то в 45 м от оси
 ## кроны, то в 55 м. Строка о бегстве — не чаще FLEE_COOLDOWN (без перерыва тревоги — одна), а стая не мечется между чашей и кольцом: короткий
 ## выход за границу (2 с) тревогу не снимает, длинный (8 с) снимает, но переключения не чаще удержания тревоги (3 с).
