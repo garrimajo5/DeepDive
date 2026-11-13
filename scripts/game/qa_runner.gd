@@ -71,8 +71,88 @@ var _warm_last_us := 0
 var _warm_ms: Array[int] = []   ## длительность каждого кадра прогрева, мс (issue #159: какой взгляд дорогой)
 var composing := 0     ## кадры Google Play (шаг «play»), которые ещё собираются — «quit» их ждёт
 var graphics_seen := ""   ## последняя записанная строка графики (`graphics_now`): новая — в лог (по отчёту #742)
+## Начало замера рывков: хищник n, s секунд; lite — скелет как на «Экономно» на время замера.
+func _jerk_begin(n: int, s: float, lite: bool) -> void:
+	var pv: PredView = main.eco.pred_view if main.eco != null else null
+	if pv == null or n < 0 or n >= pv.bodies.size():
+		_log("рывки: нет хищника %d" % n)
+		return
+	var sk := pv.bodies[n].find_child("Skeleton3D", true, false) as Skeleton3D
+	if sk == null or sk.find_bone("Tail03") < 0:
+		_log("рывки: у хищника %d нет кости Tail03" % n)
+		return
+	_jerk = {"n": n, "left": s, "s": s, "lite": lite or pv.lite, "was": pv.lite, "sk": sk, "bone": sk.find_bone("Tail03"),
+			"body": pv.bodies[n], "tail": [] as Array[Vector3], "core": [] as Array[Vector3], "dts": [] as Array[float],
+			"dt": 0.0, "dmin": INF, "dmax": 0.0}
+	pv.lite = lite or pv.lite   # без lite — как ставит уровень графики
+
+
+## Кадр замера: поза, которую мир поставил прошлым шагом (его dt — прошлый кадр), — в ряды; конец — строка в лог.
+func _jerk_tick(dt: float) -> void:
+	if _jerk.is_empty():
+		return
+	var sk: Skeleton3D = _jerk["sk"]
+	var body: Node3D = _jerk["body"]
+	if not is_instance_valid(sk) or not is_instance_valid(body):
+		_log("рывки: хищник %d пропал из сцены" % _jerk["n"])
+		_jerk = {}
+		return
+	if _jerk["dt"] > 0.0:
+		(_jerk["tail"] as Array[Vector3]).append(sk.get_bone_global_pose(_jerk["bone"]).origin)
+		(_jerk["core"] as Array[Vector3]).append(body.global_position)
+		(_jerk["dts"] as Array[float]).append(_jerk["dt"])
+		var d := body.global_position.distance_to(main.helm.pos)
+		_jerk["dmin"] = minf(_jerk["dmin"], d)
+		_jerk["dmax"] = maxf(_jerk["dmax"], d)
+	_jerk["dt"] = dt
+	_jerk["left"] -= dt
+	if _jerk["left"] > 0.0:
+		return
+	var pv: PredView = main.eco.pred_view
+	pv.lite = _jerk["was"]
+	_log(jerk_line(_jerk["n"], _jerk["s"], _jerk["lite"], (_jerk["tail"] as Array).size(), accel(_jerk["tail"], _jerk["dts"]),
+			accel(_jerk["core"], _jerk["dts"]), _jerk["dmin"], _jerk["dmax"]))
+	_jerk = {}
+
+
+## Ускорение точки по кадрам: вторая разность с неровным шагом, 2·(v₂ − v₁)/(dt₁ + dt₂), м/с², по возрастанию.
+## pts[i] — поза после шага dts[i]; кадр без шага (dt ≈ 0) пропускается.
+static func accel(pts: Array[Vector3], dts: Array[float]) -> Array[float]:
+	var out: Array[float] = []
+	for i in range(1, pts.size() - 1):
+		var d1 := dts[i]
+		var d2 := dts[i + 1]
+		if d1 < 1e-4 or d2 < 1e-4:
+			continue
+		var v1 := (pts[i] - pts[i - 1]) / d1
+		var v2 := (pts[i + 1] - pts[i]) / d2
+		out.append((v2 - v1).length() * 2.0 / (d1 + d2))
+	out.sort()
+	return out
+
+
+## 99-й процентиль отсортированного ряда (пустой — 0).
+static func p99(sorted: Array[float]) -> float:
+	return 0.0 if sorted.is_empty() else sorted[mini(int(sorted.size() * 0.99), sorted.size() - 1)]
+
+
+## «рывки: хищник 0 за 3,0 с, скелет полный, 88 кадров, 24–27 м: кончик хвоста 99 % 12 (макс 18) м/с², центр тела 99 % 4 (макс 6) · норма хвоста ≤ 30».
+static func jerk_line(n: int, s: float, lite: bool, frames: int, tail: Array[float], core: Array[float], dmin: float,
+		dmax: float) -> String:
+	var tail_max := 0.0 if tail.is_empty() else tail[tail.size() - 1]
+	var core_max := 0.0 if core.is_empty() else core[core.size() - 1]
+	var verdict := "в норме" if p99(tail) <= JERK_LIMIT else "РЫВОК"
+	return ("рывки: хищник %d за %.1f с, скелет %s, %d кадров, %.0f–%.0f м от корабля: кончик хвоста 99 %% %.0f (макс %.0f) м/с², "
+			+ "центр тела 99 %% %.0f (макс %.0f) м/с² · хвост %s (норма ≤ %.0f, #1753)") % [n, s,
+			"«Экономно»" if lite else "полный", frames, dmin if dmin < INF else 0.0, dmax, p99(tail), tail_max,
+			p99(core), core_max, verdict, JERK_LIMIT]
+
+
 ## Свет тестера у камеры с борта (шаг «outside» с "lamp"): на 300 м корпус и грунт снаружи чёрные — без него у 10
 ## виден только огонёк окна, зазор кормы над дном не оценить (#1481). Только в прогоне сценария, в игре его нет.
+## Шаг «jerk» (#1753): замер рывков серпохвоста — хищник, сколько осталось, точки по кадрам, прежний `PredView.lite`.
+var _jerk := {}
+const JERK_LIMIT := 30.0   ## м/с², 99 % ускорения кончика хвоста — норма для тестера (pred_jerk.gd: «Обычно» ≈ 13)
 const LAMP_ENERGY := 3.0
 const LAMP_RANGE := 90.0
 const LAMP_NAME := "Свет тестера"
@@ -141,6 +221,7 @@ func tick(dt: float) -> void:
 	time += dt
 	_measure(Time.get_ticks_usec())
 	_log_graphics()
+	_jerk_tick(dt)
 	var r := main.overlay.router
 	for c in script_q.advance(dt):
 		match c[0]:
@@ -229,6 +310,8 @@ func tick(dt: float) -> void:
 				pred_pass(main, c[1], c[2], c[3])
 			"zamer":   # фаза «замер» #1498: хищник у корабля, свет горит (#1498: строки знака в логе тестера не было)
 				_log(zamer(main, c[1], c[2]))
+			"jerk":   # рывки серпохвоста по кадрам (#1753): тестер сверяет число, а не картинку
+				_jerk_begin(c[1], c[2], c[3])
 			"dome":   # купольник у гнезда 07 на t с клипа OpenPetal (#1350: клипов ANIM-004 в отчёте не было)
 				if main.eco != null and main.eco.dome != null:
 					var knew := main.lore.knows(LayerLore.PETAL07)

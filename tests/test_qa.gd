@@ -303,6 +303,14 @@ func test_scene_runs_scenario() -> void:
 		eq(zamer[2], "38a-zamer-poteryal: RETREAT", "38a (#1498): свет погас — хищник отходит")
 		ok(zamer[3].contains("потерял корабль и отворачивает"), "38a: на приборах строка отхода: «%s»" % zamer[3])
 		ok(zamer_hull[1] >= zamer_hull[0], "38 → 38a: удара нет: корпус %.2f → %.2f" % [zamer_hull[0], zamer_hull[1]])
+	var jerks: Array[String] = []   # шаг jerk (#1753): рывки серпохвоста числом — за 38 → 38a и на отходе со скелетом «Экономно»
+	for l in qa.log_lines:
+		if l.begins_with("рывки: "):
+			jerks.append(l)
+	eq(jerks.size(), 2, "#1753: две строки рывков серпохвоста в логе")
+	if jerks.size() == 2:
+		ok(jerks[0].contains("скелет полный") and jerks[0].contains("хвост в норме"), "38 → 38a: %s" % jerks[0])
+		ok(jerks[1].contains("скелет «Экономно»") and jerks[1].contains("хвост в норме"), "отход: %s" % jerks[1])
 	eq(helm_silt, "ил true, сидит true, рамка false",
 			"39-shturval-il (#1708): корабль в иле, свой игрок за штурвалом, рамка-подсказка у колеса скрыта")
 	eq(corridor, ["Стеклоуст · мостик, отсек коридор, люк в кадре, указатель в кадре",
