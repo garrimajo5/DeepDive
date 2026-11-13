@@ -356,6 +356,48 @@ func test_crown_shoal_hides_early_and_returns_to_ring() -> void:
 	eq(w.bus.pending.size(), 1, "возврат без строки")
 
 
+## Сцена 00→01 (решение ГД 08.11, `docs/urovni/sloj-1.md`): стоянка у 01 (33; −22) со светом на крону сама стаи не
+## тревожит — ни стаи кроны (кружат в 10–20 м от корабля), ни стаю рифа (55; −69). Тревога и строка — только от
+## хищника: иначе «стая → бегство» у 01 перестаёт быть знаком угрозы.
+func test_parked_at_01_with_light_does_not_alarm() -> void:
+	var w := _world()
+	var fish := _fish(w)
+	w.add(EcoFlower.new())
+	var stand := Vector2(33.0, -22.0)
+	w.ship.pos = Vector3(stand.x, Seabed.height(stand.x, stand.y) + 7.0, stand.y)
+	var to := EcoFlower.CENTER - stand
+	w.ship.yaw = atan2(-to.x, -to.y)  # нос — на крону
+	w.ship.speed = 0.0
+	w.ship.light_on = true
+	w.ship.light_range = 40.0
+	w.ship.hull_noise = 0.2  # стоит с работающими машинами
+	var watch: Array[EcoFish.Shoal] = [fish.shoals[4]]
+	for sh in fish.shoals:
+		if sh.crown:
+			watch.append(sh)
+	eq(watch.size(), 1 + EcoFish.CROWN_SHOALS, "стая рифа и стаи кроны")
+	var closest := INF
+	var alarms := 0
+	for s in 60 * 20:
+		w.step(0.05)
+		for sh in watch:
+			closest = minf(closest, w.ship.pos.distance_to(sh.center))
+			if sh.alarm > 0.0 or sh.threat_is_ship:
+				alarms += 1
+	ok(closest < 20.0, "стаи кроны подходят к кораблю: %.1f м" % closest)
+	eq(alarms, 0, "минута стоянки со светом — без тревоги")
+	eq(w.bus.pending.size(), 0, "и без строки")
+
+	w.spawn("pred", Vector3(EcoFlower.CENTER.x, w.ship.pos.y, EcoFlower.CENTER.y) + Vector3(0, 0, -40.0))
+	w.step(0.05)
+	var crown_alarm := 0
+	for sh in watch:
+		if sh.crown and sh.alarm > 0.0:
+			crown_alarm += 1
+	eq(crown_alarm, EcoFish.CROWN_SHOALS, "хищник в 40 м за кроной — обе стаи кроны в тревоге")
+	ok(w.bus.pending.size() >= 1 and w.bus.pending[0].note == "flee", "строка о бегстве — от хищника")
+
+
 func test_ship_under_way_scares_without_message() -> void:
 	var w := _world()
 	var fish := _fish(w)
