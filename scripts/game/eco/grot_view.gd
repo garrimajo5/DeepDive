@@ -82,6 +82,8 @@ var _dust := EcoDustBuffer.new()
 
 ## На «Экономно» — грубее сетка (set_lite).
 var lite := false
+## Меши тела, рифа и свечения по уровню (#1798): смена «Экономно» их не пересобирает.
+var _variants := {}
 
 
 func _init(system: EcoGrot, on_lite := false) -> void:
@@ -119,12 +121,30 @@ func _mesh(n: String, m: ArrayMesh, mat: Material) -> MeshInstance3D:
 func set_lite(on: bool) -> void:
 	if lite == on:
 		return
+	_variants[lite] = [body.mesh, reef.mesh, glow.mesh]
 	lite = on
+	var ms: Array = _variants[on] if _variants.has(on) else _build_variant(on)
+	for i in 3:
+		[body, reef, glow][i].mesh = ms[i]
+
+
+## Собрать второй вариант заранее (EcoView.prefetch_lite); вид не меняется. true — собирали.
+func prefetch_lite() -> bool:
+	if _variants.has(not lite):
+		return false
+	_variants[not lite] = _build_variant(not lite)
+	return true
+
+
+## Меши тела, рифа и свечения на уровень on — с материалами нынешних (общие у вариантов).
+func _build_variant(on: bool) -> Array:
+	var out := []
 	for pair in [[body, build_body(on)], [reef, build_reef(on)], [glow, build_glow(on)]]:
 		var mi: MeshInstance3D = pair[0]
 		var m: ArrayMesh = pair[1]
 		m.surface_set_material(0, mi.mesh.surface_get_material(0))
-		mi.mesh = m
+		out.append(m)
+	return out
 
 
 static func _lit(emission: Color) -> StandardMaterial3D:

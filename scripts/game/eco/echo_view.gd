@@ -87,6 +87,8 @@ var dust_buffer: PackedFloat32Array:
 var _dust := EcoDustBuffer.new()
 ## На «Экономно» — грубее сетка (set_lite).
 var lite := false
+## Меши тела, мешка и уха по уровню (#1798): смена «Экономно» их не пересобирает.
+var _variants := {}
 ## Фаза дыхания (доля оборота SAC_PERIOD) и её скорость (1 — покой, ALARM_RATE — раскрыт); время прошлого sync.
 var breath_phase := 0.0
 var breath_rate := 1.0
@@ -137,19 +139,40 @@ static func _mesh(parent: Node3D, n: String, m: ArrayMesh, mat: Material) -> Mes
 func set_lite(on: bool) -> void:
 	if lite == on:
 		return
+	_variants[lite] = [body.mesh, sac.mesh, (ears[0].get_child(0) as MeshInstance3D).mesh if not ears.is_empty() else null]
 	lite = on
-	_swap(body, build_body(on))
+	var ms: Array = _variants[on] if _variants.has(on) else _build_variant(on)
+	body.mesh = ms[0]
 	body_foot = body.mesh.get_aabb().position.y
-	_swap(sac, build_sac(on))
-	var ear_mesh := build_ear(on)
+	sac.mesh = ms[1]
 	for joint in ears:
-		_swap(joint.get_child(0) as MeshInstance3D, ear_mesh)
+		(joint.get_child(0) as MeshInstance3D).mesh = ms[2]
 
 
-static func _swap(mi: MeshInstance3D, m: ArrayMesh) -> void:
+## Собрать второй вариант заранее (EcoView.prefetch_lite); вид не меняется. true — собирали.
+func prefetch_lite() -> bool:
+	if _variants.has(not lite):
+		return false
+	_variants[not lite] = _build_variant(not lite)
+	return true
+
+
+## Меши тела, мешка и уха на уровень on — с материалами нынешних (общие у вариантов).
+func _build_variant(on: bool) -> Array:
+	var ear_mesh: ArrayMesh = null
+	if not ears.is_empty():
+		ear_mesh = build_ear(on)
+		_dress(ears[0].get_child(0) as MeshInstance3D, ear_mesh)
+	var b := build_body(on)
+	_dress(body, b)
+	var s := build_sac(on)
+	_dress(sac, s)
+	return [b, s, ear_mesh]
+
+
+static func _dress(mi: MeshInstance3D, m: ArrayMesh) -> void:
 	for k in m.get_surface_count():
 		m.surface_set_material(k, mi.mesh.surface_get_material(k))
-	mi.mesh = m
 
 
 ## Поворот сустава уха: (поворот от носа, наклон вверх) → базис, где +Z — ось воронки.

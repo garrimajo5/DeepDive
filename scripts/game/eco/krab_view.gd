@@ -95,6 +95,8 @@ var lite := false
 ## Поза ног: углы ног в последнем меше тела и готовые массивы тела в покое (body_rest).
 var leg_angles := PackedFloat32Array()
 var _rest: Dictionary = {}
+## Тело в покое и щипцы по уровню (#1798): смена «Экономно» их не пересобирает.
+var _variants := {}
 ## Доля размаха дыхания 0…1 (HELD…1): 1 — спокоен, 0 — затаился; и время прошлого sync.
 var calm := 1.0
 var _last_t := 0.0
@@ -135,16 +137,34 @@ func _init(system: EcoKrab, on_lite := false) -> void:
 func set_lite(on: bool) -> void:
 	if lite == on:
 		return
+	_variants[lite] = [_rest, claws.mesh]
 	lite = on
-	_rest = body_rest(lite)
-	_swap(body, _rest["mesh"])
-	leg_angles = PackedFloat32Array()
-	_swap(claws, build_claws(lite))
+	var v: Array = _variants[on] if _variants.has(on) else _build_variant(on)
+	_rest = v[0]
+	body.mesh = _rest["mesh"]
+	leg_angles = PackedFloat32Array()   # тело встанет в позу заново
+	claws.mesh = v[1]
 
 
-static func _swap(mi: MeshInstance3D, m: ArrayMesh) -> void:
+## Собрать второй вариант заранее (EcoView.prefetch_lite); вид не меняется. true — собирали.
+func prefetch_lite() -> bool:
+	if _variants.has(not lite):
+		return false
+	_variants[not lite] = _build_variant(not lite)
+	return true
+
+
+## Тело в покое и щипцы на уровень on — с материалами нынешних (общие у вариантов).
+func _build_variant(on: bool) -> Array:
+	var rest := body_rest(on)
+	_dress(body, rest["mesh"])
+	var c := build_claws(on)
+	_dress(claws, c)
+	return [rest, c]
+
+
+static func _dress(mi: MeshInstance3D, m: ArrayMesh) -> void:
 	m.surface_set_material(0, mi.mesh.surface_get_material(0))
-	mi.mesh = m
 
 
 ## Треугольников в норе, теле и клешнях (без игл; для тестов).

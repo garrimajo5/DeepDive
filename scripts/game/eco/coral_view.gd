@@ -89,6 +89,8 @@ var lite := false
 var form: EcoCoralLook.Form
 ## Треугольников во всём меше.
 var tris := 0
+## Варианты меша для «Экономно» (#1798).
+var _lite := EcoLite.new(["mesh", "form", "verts", "heights", "feet", "talls", "tris"])
 
 
 func _init(system: EcoCoral, on_lite := false) -> void:
@@ -109,8 +111,12 @@ func _init(system: EcoCoral, on_lite := false) -> void:
 func set_lite(on: bool) -> void:
 	if lite == on:
 		return
-	lite = on
-	_build()
+	_lite.switch(self, on)
+
+
+## Собрать второй вариант заранее (EcoView.prefetch_lite); вид не меняется. true — собирали.
+func prefetch_lite() -> bool:
+	return _lite.prefetch(self)
 
 
 func _build() -> void:

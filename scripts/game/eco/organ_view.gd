@@ -61,6 +61,8 @@ var _uv2 := PackedVector2Array()
 ## На «Экономно» — грубее трубы и ободы (set_lite).
 var lite := false
 var _mat: ShaderMaterial
+## Варианты меша для «Экономно» (#1798).
+var _lite := EcoLite.new(["mesh", "verts", "_nor", "_col", "_idx", "_uv", "_uv2", "tris"])
 
 
 func _init(system: EcoOrgan, on_lite := false) -> void:
@@ -81,8 +83,12 @@ func _init(system: EcoOrgan, on_lite := false) -> void:
 func set_lite(on: bool) -> void:
 	if lite == on:
 		return
-	lite = on
-	_build()
+	_lite.switch(self, on)
+
+
+## Собрать второй вариант заранее (EcoView.prefetch_lite); вид не меняется. true — собирали.
+func prefetch_lite() -> bool:
+	return _lite.prefetch(self)
 
 
 ## Граней у трубы и обода по уровню.
