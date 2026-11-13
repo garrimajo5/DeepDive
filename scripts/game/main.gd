@@ -665,10 +665,12 @@ func step(dt: float) -> void:
 	if main_menu.open and not warm.active():   # главное меню: игра стоит, касания — кнопкам меню
 		overlay_flow.hide_all()
 		menu_flow.menu_step(dt)
+		clock.lap("меню", Time.get_ticks_usec())   # касания меню и настроек; смена графики — своей частью (#1792)
 		return
 	if pause.open:   # пауза: игра стоит, касания — кнопкам паузы; меню сетевого забега — мир идёт без своего ввода
 		var stop := pause.stops_world()
 		pause_flow.pause_step()
+		clock.lap("пауза", Time.get_ticks_usec())   # кнопки паузы и настроек; смена графики — своей частью (#1792)
 		if stop or main_menu.open:
 			overlay_flow.hide_all()
 			return
@@ -1414,7 +1416,10 @@ func _apply_settings() -> void:
 
 ## Уровень графики ART-044 (`Graphics.LEVELS`): дальность камер, «Экономно» у рельефа, частиц и пост, тени света
 ## сквозь лёд и прожектора, сглаживание и разрешение 3D-сцены (интерфейс — в полном), сила слоёв воды.
+## Части шага для лога тестера (#1792: смена уровня в меню — «код 240–321 мс» без частей): «графика 230 [мир 180, …]»;
+## время до вызова — части того, кто позвал («меню», «пауза»), отметка `StepClock.mark` закрывает её.
 func _apply_graphics(level: int) -> void:
+	StepClock.mark("меню/касания")
 	graphics_level = Graphics.valid(level)
 	var g := Graphics.level(graphics_level)
 	var lite: bool = g["lite"]
@@ -1430,6 +1435,7 @@ func _apply_graphics(level: int) -> void:
 		ocean.set_stones_lite(lite)   # камни и ракушки на дне ближе
 		ocean.set_layers_level(g["layers"])   # слои воды ART-069: 0 / 0,6 / 0,9
 		ocean.set_shadows(g["shadows"])
+	StepClock.mark("графика/океан")
 	if hull:
 		hull.set_relief(not lite)     # обшивка ART-053
 	if bridge:
@@ -1438,6 +1444,7 @@ func _apply_graphics(level: int) -> void:
 	if rooms:
 		rooms.set_relief(not lite)    # отсеки ART-055
 		rooms.drops.lite = lite       # капли износа ART-074: 12 карточек
+	StepClock.mark("графика/корпус и отсеки")
 	if searchlight:
 		searchlight.set_lite(lite)    # луч прожектора ART-062 без дрейфа
 		searchlight.spot.shadow_enabled = int(g["shadows"]) > 0
@@ -1450,16 +1457,20 @@ func _apply_graphics(level: int) -> void:
 		breach_view.parts.lite = lite  # частицы пробоины ART-072: 24/16/15+1
 	if grade:
 		grade.set_lite(lite)          # виньетка ART-065: без LUT и без копии экрана, овал 0,10 (#842)
+	StepClock.mark("графика/прожектор и частицы")
 	if env:
 		env.glow_enabled = not lite   # bloom — лишние проходы размытия на слабых телефонах (#842)
 	glints.lite = lite                # блики воды в мостике ART-067 выключены
+	StepClock.mark("графика/свечение")
 	if eco:
 		eco.set_lite(lite)            # живой мир: флора не колышется, ободка тел нет (EcoView.set_lite, #598)
+	StepClock.mark("графика/мир")   # EcoView.set_lite: на ПК 56–106 мс при смене «Экономно» (#1792)
 	var vp := get_viewport()
 	if vp:
 		vp.msaa_3d = {0: Viewport.MSAA_DISABLED, 2: Viewport.MSAA_2X, 4: Viewport.MSAA_4X}.get(int(g["msaa"]),
 			Viewport.MSAA_2X)
 		vp.scaling_3d_scale = g["scale"]
+	StepClock.mark("графика/сглаживание и масштаб")
 
 
 ## «Журнал экспедиции» ART-047 — `MenuFlow.open_journal` (#753).
