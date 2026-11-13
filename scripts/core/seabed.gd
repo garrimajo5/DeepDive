@@ -14,7 +14,7 @@ const EAST := Rect2(350.0, 60.0, 350.0, 280.0)
 ## Высота дна под точкой (x, z): прежняя отмель `base` + гребень, проходы и жёлоб врат слоя 1 (`Layer`) + склон за
 ## восточным краем (`Slope`, #822).
 static func height(x: float, z: float) -> float:
-	return minf(Slope.cut(x, z, Layer.trough(x, z, Layer.lanes(x, z, Layer.ridge(x, z, base(x, z))))), TOP)
+	return minf(Slope.cut(x, z, Layer.nest_pocket(x, z, Layer.trough(x, z, Layer.lanes(x, z, Layer.ridge(x, z, base(x, z)))))), TOP)
 
 
 ## Рельеф отмели как W.height в js/world.js (до карты слоя 1), без предела `TOP`.
@@ -114,6 +114,30 @@ class Layer:
 			lift = maxf(lift, (dz - TROUGH_LEN) * drop / TROUGH_EXIT)
 		elif dz < -TROUGH_LEN:
 			lift = maxf(lift, (-dz - TROUGH_LEN) * TROUGH_WALL)
+		if TROUGH_FLOOR - TROUGH_RIPPLE + lift >= h:
+			return h
+		var cap := TROUGH_FLOOR - HashNoise.value(x * 0.05 + 7.9, z * 0.05 - 3.4) * TROUGH_RIPPLE
+		return minf(h, cap + lift)
+
+	## Карман контактной группы MOD-023 перед правой опорой арки 07 (#1757, уровни 13.11, `docs/urovni/sloj-1.md`,
+	## «Уточнение 13.11»): пол жёлоба (`TROUGH_FLOOR`) продолжен к востоку — dx `TROUGH_HALF`…`NEST_EAST`,
+	## dz `NEST_NORTH`…`NEST_SOUTH`; склоны со всех трёх сторон `TROUGH_WALL` м на метр (уровни: не круче 0,95).
+	## Гнёзда, створки и табличка модели (dx 47…56, 0,2…6 м от пола, лицо опоры dz ≈ +11,5) выходят из грунта.
+	## Края пола — по вершинам видимой сетки дна (5 м), а не ровно по числам уровней (58 и +11): склон от dx 58
+	## поднял бы сетку у таблички (до dx 55,9) на 0,3 м, от dz +11 — закрыл бы низ гнёзд. Восточный край — край
+	## основания опоры (`GateArch.SHAPE`, x 60), северный склон начинается под ней (её основание — до dz 11,5) и
+	## уходит в её тело. Только опускает. Восточнее опоры северный склон выходит на гребень у dz ≈ −10: рамка
+	## живого мира стоит севернее (`test_layer_relief`). Карман — место купольника и взгляд на гнёзда, не стоянка.
+	const NEST_EAST := 60.0
+	const NEST_SOUTH := 27.0
+	const NEST_NORTH := 10.0
+
+	static func nest_pocket(x: float, z: float, h: float) -> float:
+		var dx := x - EcoGate.CENTER.x
+		if dx < TROUGH_HALF - 5.0 or dx > NEST_EAST + 30.0:
+			return h
+		var dz := z - EcoGate.CENTER.y
+		var lift := maxf(maxf(dx - NEST_EAST, 0.0), maxf(dz - NEST_SOUTH, NEST_NORTH - dz)) * TROUGH_WALL
 		if TROUGH_FLOOR - TROUGH_RIPPLE + lift >= h:
 			return h
 		var cap := TROUGH_FLOOR - HashNoise.value(x * 0.05 + 7.9, z * 0.05 - 3.4) * TROUGH_RIPPLE

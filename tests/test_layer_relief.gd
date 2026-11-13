@@ -32,8 +32,8 @@ func _highest(a: Vector2, b: Vector2, half: float) -> Array:
 
 func test_ridge_lifts_terrace_and_field() -> void:
 	# Карта: ориентир 35 м на мелком гребне, дно около 45–50 м (было −62 и −67). У 07 под аркой — жёлоб (#1757):
-	# гребень смотрим у его края, за боковым склоном.
-	var gate := LayerMap.xz("07") + Vector2(Seabed.Layer.TROUGH_HALF + Seabed.Layer.TROUGH_SIDE + 2.0, 0.0)
+	# гребень смотрим у его западного края, за боковым склоном (у восточного — карман гнёзд).
+	var gate := LayerMap.xz("07") - Vector2(Seabed.Layer.TROUGH_HALF + Seabed.Layer.TROUGH_SIDE + 2.0, 0.0)
 	for p: Vector2 in [gate, LayerMap.xz("08")]:
 		var h := Seabed.height(p.x, p.y)
 		ok(h <= -44.0 and h >= -52.0, "дно гребня у %s около 45–50 м: %.1f" % [p, h])
@@ -76,6 +76,52 @@ func test_trough_only_lowers_and_ends() -> void:
 	for p: Vector2 in EcoGate.spots():
 		var was := l.lanes(p.x, p.y, l.ridge(p.x, p.y, Seabed.base(p.x, p.y)))
 		eq(Seabed.height(p.x, p.y), minf(was, Seabed.TOP), "под рамкой %s гребень как был" % p)
+
+
+func test_nest_pocket_opens_contact_group() -> void:
+	# Карман перед правой опорой (#1757, уровни 13.11): пол 66 м в dx 28…58, dz +11…+27. Контактная группа модели
+	# (dx 47…56, от 0,2 м над полом, лицо опоры dz ≈ +11,5) — над видимой сеткой дна, а не под склоном жёлоба.
+	var c := LayerMap.xz("07")
+	var l := Seabed.Layer
+	for dx in range(28, 59, 2):
+		for dz in range(11, 28, 2):
+			var h := Seabed.height(c.x + dx, c.y + dz)
+			ok(h <= l.TROUGH_FLOOR and h >= l.TROUGH_FLOOR - l.TROUGH_RIPPLE, "пол кармана 66 м в (%d, %d): %.2f" % [dx, dz, h])
+	for dx in range(46, 58):
+		for dz: float in [11.0, 11.5, 12.0, 14.0]:
+			var m := Seabed.mesh_height(c.x + dx, c.y + dz)
+			ok(m <= l.TROUGH_FLOOR + 0.05, "видимое дно у гнёзд не выше пола (%d, %.1f): %.2f" % [dx, dz, m])
+	ok(l.NEST_EAST >= 58.0 and l.NEST_EAST <= GateArch.SHAPE[21], "восточный край пола — не дальше основания опоры")
+	ok(l.NEST_NORTH < GateArch.SHAPE[24], "северный склон начинается под основанием опоры")
+
+
+func test_nest_pocket_slopes_and_frame() -> void:
+	# Склоны кармана не круче 0,95 м/м; карман только опускает; за склонами гребень не тронут (рамку живого
+	# мира на гребне сверяет `test_eco_gate`).
+	var c := LayerMap.xz("07")
+	var l := Seabed.Layer
+	for dz in range(12, 27, 3):
+		for dx in range(60, 90):
+			var d := Seabed.height(c.x + dx + 1.0, c.y + dz) - Seabed.height(c.x + dx, c.y + dz)
+			ok(d <= 0.95 + 0.45, "восточный склон не круче 0,95 (+ рябь) в (%d, %d): %.2f" % [dx, dz, d])
+	for dx in range(30, 60, 3):
+		for dz in range(27, 60):
+			var d := Seabed.height(c.x + dx, c.y + dz + 1.0) - Seabed.height(c.x + dx, c.y + dz)
+			ok(d <= 0.95 + 0.45, "южный склон не круче 0,95 (+ рябь) в (%d, %d): %.2f" % [dx, dz, d])
+	near(l.TROUGH_WALL, 0.95, 1e-6, "уклон кармана — 0,95")
+	for dx in range(0, 121, 4):
+		for dz in range(-80, 81, 4):
+			var x := c.x + dx
+			var z := c.y + dz
+			var was := l.trough(x, z, l.lanes(x, z, l.ridge(x, z, Seabed.base(x, z))))
+			var now := l.nest_pocket(x, z, was)
+			ok(now <= was, "карман только опускает (%d, %d)" % [dx, dz])
+			if dx >= l.NEST_EAST + 24.0 or dz >= l.NEST_SOUTH + 24.0 or dz <= l.NEST_NORTH - 24.0:
+				eq(now, was, "за склонами кармана не тронуто (%d, %d)" % [dx, dz])
+	for dx in range(62, 90, 3):
+		for dz in range(-20, 10):
+			var d := Seabed.height(c.x + dx, c.y + dz) - Seabed.height(c.x + dx, c.y + dz + 1.0)
+			ok(d <= 0.95 + 0.45, "северный склон восточнее опоры не круче 0,95 (+ рябь) в (%d, %d): %.2f" % [dx, dz, d])
 
 
 func test_trough_ship_dives_under_arch_top() -> void:

@@ -34,9 +34,10 @@ func test_nests_on_terrace_bottom() -> void:
 
 
 func test_nearest_nest_is_one_below_on_slope() -> void:
-	# Жёлоб (#1757): гнёзда на его склоне на разной высоте — над гнездом в прицеле оно, а не то, что выше по склону.
+	# Карман перед правой опорой (#1757): гнёзда на его полу 66 м; над гнездом в прицеле оно (ближнее — по
+	# горизонтали: на неровном дне по прямой ближе оказалось бы не то, над которым корабль).
 	var hs: Array = range(GateDiag.NESTS.size()).map(func(i): return GateDiag.nest_pos(i).y)
-	ok(absf(hs.max() - hs.min()) > 1.0, "гнёзда на склоне, не на одной высоте: %s" % str(hs))
+	ok(hs.max() <= Seabed.Layer.TROUGH_FLOOR and hs.min() >= Seabed.Layer.TROUGH_FLOOR - 0.5, "гнёзда на полу кармана: %s" % str(hs))
 	for i in GateDiag.NESTS.size():
 		var g := GateDiag.new()
 		var p := GateDiag.nest_pos(i)
