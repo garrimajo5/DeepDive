@@ -120,3 +120,15 @@ func test_petal_lift() -> void:
 	near(top_t, EcoDome.LIFT.y, 0.15, "средний захват выше всего в LIFT.y")
 	n.queue_free()
 	await frames(1)
+
+
+## Подушки среднего захвата в Idle — там, где их ждёт стоянка у гнезда (`EcoDome.GRIP_Y`/`GRIP_AHEAD`, #1757).
+func test_grip_where_stand_expects() -> void:
+	var n := _rig()
+	tree.root.add_child(n)
+	await frames(1)
+	var pad: Vector3 = _pose(n, "Idle", 0.0)["GraspMPadA"]
+	near(pad.y, EcoDome.GRIP_Y, 0.02, "подушки над низом модели")
+	near(-pad.z, EcoDome.GRIP_AHEAD, 0.03, "подушки впереди тела")
+	n.queue_free()
+	await frames(1)

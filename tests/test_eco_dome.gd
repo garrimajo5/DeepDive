@@ -83,7 +83,8 @@ func test_stands_at_nest_while_opening() -> void:
 	eq(d.state, EcoDome.State.OPEN, "дошёл до гнезда")
 	var n := GateDiag.nest_pos(EcoDome.NEST)
 	ok(Vector2(d.pos.x, d.pos.z).distance_to(Vector2(n.x, n.z)) < 2.0, "у первого гнезда")
-	near(d.pos.y - Seabed.height(d.pos.x, d.pos.z), EcoDome.AT_NEST, 0.2, "у дна, на уровне гнезда")
+	near(d.pos.y, d.stand().y, 0.05, "на высоте стоянки у гнезда")
+	ok(d.pos.y - Seabed.height(d.pos.x, d.pos.z) > EcoDome.AT_NEST * 0.5, "над дном")
 	eq(d.clip(), "OpenPetal", "клип открытия")
 	_run(w, d, 1.0)
 	near(d.petal, 0.0, 1e-4, "сначала держит обод — створка ещё закрыта")
@@ -443,3 +444,23 @@ func test_leaves_nest_turning_with_swim() -> void:
 			idle += 1
 	print("  первые 1,8 с назад: Swim %d, Idle %d" % [swim, idle])
 	ok(idle <= 2, "разворачивается и уходит клипом Swim (Idle %d шагов из 18)" % idle)
+
+
+## Высота стоянки — по гнезду модели арки (#1757): подушки среднего захвата у нижней кромки створки 0, перед её
+## лицом (не в нём); раньше стоянка шла от дна (`AT_NEST`), и при сдвиге гнезда захват уходил от створки.
+func test_grip_at_petal_edge() -> void:
+	var g: Node3D = load("res://models/terrasa-vrat.glb").instantiate()
+	tree.root.add_child(g)
+	await frames(1)
+	var s: MeshInstance3D = g.find_child("Stvorka0", true, false)
+	var box: AABB = s.global_transform * s.get_aabb()
+	g.queue_free()
+	await frames(1)
+	var d := EcoDome.new()
+	var st := d.stand()
+	var base := GateArch.floor_y()
+	near(st.y + EcoDome.GRIP_Y - base, box.position.y, 0.03, "подушки — у нижней кромки створки")
+	var face := EcoGate.CENTER.y + box.end.z
+	var pad_z := st.z - EcoDome.GRIP_AHEAD
+	ok(pad_z > face and pad_z < face + 0.6, "подушки перед лицом створки (%.2f м)" % (pad_z - face))
+	ok(st.y - Seabed.height(st.x, st.z) >= EcoDome.AT_NEST * 0.5, "над дном кармана")

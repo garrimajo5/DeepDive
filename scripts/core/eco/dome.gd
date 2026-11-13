@@ -25,11 +25,17 @@ const HOME_OFF := Vector2(70.0, -40.0)
 const WAY: Array[Vector2] = [Vector2(52.0, -28.0), Vector2(63.0, -4.0), Vector2(63.0, 20.0)]
 const WAY_R := 3.0
 const APPROACH := 10.0
-## Гнездо, которое открывает (номер в `GateDiag.NESTS`), и где встаёт: перед ним с подхода (+Z) на FRONT м,
-## на AT_NEST м над дном (купол 1,2 м — захват на уровне гнезда).
+## Гнездо, которое открывает (номер в `GateDiag.NESTS`), и где встаёт: перед ним с подхода (+Z) на FRONT м
+## (передние концы захватов — у лица опоры, не в нём). Высота стоянки — по гнезду модели (#1757): подушки среднего
+## захвата (`GRIP_Y` над низом модели в позе `Idle`, `GRIP_AHEAD` м впереди, замер ANIM-004) — у нижней кромки
+## створки, `PETAL_LOW` м ниже середины гнезда (створка 1,5 м). В `OpenPetal` подушки поднимаются на 0,59 м и
+## толкают кромку вверх. Не ниже AT_NEST/2 над дном. AT_NEST — высота над дном в нише и у дна вообще.
 const NEST := 0
 const FRONT := 1.6
 const AT_NEST := 0.9
+const GRIP_Y := 0.28
+const GRIP_AHEAD := 1.04
+const PETAL_LOW := 0.75
 ## Корабль ближе этого к середине террасы (м по горизонтали) — купольник выходит.
 const CALL_R := 80.0
 ## Ход, м/с: к гнезду и обратно; поворот — рад/с (разница клапанов сифонов).
@@ -132,12 +138,12 @@ func route() -> Array[Vector2]:
 	return out
 
 
-## Где стоит у гнезда: перед ним с подхода, над дном.
+## Где стоит у гнезда: перед ним с подхода, подушки захвата — у нижней кромки створки (не ниже AT_NEST/2 над дном).
 func stand() -> Vector3:
 	var n := GateDiag.nest_pos(NEST)
 	var x := n.x
 	var z := n.z + FRONT
-	return Vector3(x, floor_y(x, z) + AT_NEST, z)
+	return Vector3(x, maxf(n.y - PETAL_LOW - GRIP_Y, floor_y(x, z) + AT_NEST * 0.5), z)
 
 
 func floor_y(x: float, z: float) -> float:
