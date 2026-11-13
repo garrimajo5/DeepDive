@@ -3,7 +3,11 @@ extends SceneTree
 ## моллюски». Гейм-дизайнер (08.11): в середине не накладывать зов хищника гребневиками. Мир целиком (`EcoView`, дно
 ## `Seabed.mesh_height`), headless, без узлов сцены; облачный расчёт, не телефонный.
 ##   godot --headless --path . -s tools/mid_calm.gd [-- seeds=16 raduzh=1:80,5 lim=<с> dark=<с> probe=1 answer=1 delay=<с> hold=<с>
-##   start0=<x>,<z> band0=<x0>,<x1>,<z0>,<z1> fish=<номер>:<x>,<z>]
+##   start0=<x>,<z> band0=<x0>,<x1>,<z0>,<z1> fish=<номер>:<x>,<z> watch=<номера через ,> sites=1]
+## watch=1,5 — чьи разброс и погони печатать (по умолчанию стая 0; уровни и ГД 13.11 — совместная проба домов стай 1
+## и 5): по каждой стае разброс, а по зерну — погони на неё (кто, когда, откуда и куда, ближе всего к выходу 00 и к пути
+## середины), итогом — сколько погонь и в скольких зёрнах они ближе EXIT_NEAR м к выходу или к пути середины.
+## sites=1 — среда (`site_line`) у домов стай watch и у существующих рифов `EcoCoral.BASES` — кандидатов расстановки.
 ## fish=<номер>:<x>,<z> — дом стаи рифа (светляки, `EcoFish.home_at`; дом на HOME_LIFT над `Seabed.height`) на пробу в
 ## другом месте (#1400, гейм-дизайнер и уровни 12.11: стая 0 (15; 76) → (100; 90)); несколько — через «;». Печатает
 ## разброс стаи WATCH_SHOAL (рыбы дальше всего от дома, ближе всего к выходу 00 и к пути середины) и погони всех
@@ -61,6 +65,10 @@ static var band0 := Rect2()
 ## прохода) → первый «замер» серпохвоста. Путь №0 — старт, затем точки раз в TRACK_EVERY с первые TRACK_FOR с после света.
 ## Стая, разброс которой печатает расчёт (`fish=`), и подъём дома над дном (как `tools/quiet_map.gd`).
 const WATCH_SHOAL := 0
+## Стаи, чьи разброс и погони печатает расчёт (`watch=`), по умолчанию [WATCH_SHOAL].
+static var watch: Array[int] = [WATCH_SHOAL]
+## Среда у домов watch и у рифов (`sites=1`).
+static var sites := false
 const HOME_LIFT := 3.5
 ## Переносы домов стай рифа этого прогона: номер → (x, z).
 static var fish_moves := {}
@@ -89,6 +97,9 @@ func _init() -> void:
 		moves = parse_moves(kv["raduzh"])
 	if kv.has("fish"):
 		fish_moves = parse_moves(kv["fish"])
+	if kv.has("watch"):
+		watch = parse_watch(kv["watch"])
+	sites = kv.get("sites", "0") == "1"
 	for line in report(seeds):
 		print(line)
 	quit()
@@ -101,6 +112,14 @@ static func parse_moves(s: String) -> Dictionary:
 		var kz := part.split(":")
 		var xz := kz[1].split(",")
 		out[int(kz[0])] = Vector2(float(xz[0]), float(xz[1]))
+	return out
+
+
+## "1,5" → [1, 5].
+static func parse_watch(s: String) -> Array[int]:
+	var out: Array[int] = []
+	for part in s.split(",", false):
+		out.append(int(part))
 	return out
 
 
@@ -179,23 +198,43 @@ static func run(seed_value: int) -> Dictionary:
 			goals.append(Vector2(pr.agent.goal.x, pr.agent.goal.z))
 		was["mode"] = pr.mode
 		was["goal"] = pr.agent.goal
-	# Стая WATCH_SHOAL и погони (`fish=`): весь проход, и в тёмные секунды у 00.
-	var spread := {"far": 0.0, "exit": INF, "path": INF, "hunt_exit": INF, "hunt_path": INF, "prey": {}}
-	var flock: Array[EcoFish.Fish] = []
+	# Стаи watch и погони (`fish=`, `watch=`): весь проход, и в тёмные секунды у 00.
+	var spread := {"shoals": {}, "hunt_exit": INF, "hunt_path": INF, "prey": {}, "chases": []}
+	var flocks := {}
+	for k in watch:
+		spread["shoals"][k] = {"far": 0.0, "exit": INF, "path": INF}
+		flocks[k] = []
 	for f in ev.fish.all:
-		if f.shoal.index == WATCH_SHOAL:
-			flock.append(f)
-	var home_w: Vector3 = ev.fish.shoals[WATCH_SHOAL].home
-	var watch := func() -> void:
-		for f in flock:
-			var q := Vector2(f.agent.p.x, f.agent.p.z)
-			spread["far"] = maxf(spread["far"], q.distance_to(Vector2(home_w.x, home_w.z)))
-			spread["exit"] = minf(spread["exit"], q.distance_to(PATH[0]))
-			spread["path"] = minf(spread["path"], to_mid_path(q, q))
+		if flocks.has(f.shoal.index):
+			flocks[f.shoal.index].append(f)
+	var open := {}   # серпохвост → идущая погоня на стаю из watch
+	var watch_step := func(now: float) -> void:
+		for k in flocks:
+			var hw: Vector3 = ev.fish.shoals[k].home
+			var sd: Dictionary = spread["shoals"][k]
+			for f in flocks[k]:
+				var q := Vector2(f.agent.p.x, f.agent.p.z)
+				sd["far"] = maxf(sd["far"], q.distance_to(Vector2(hw.x, hw.z)))
+				sd["exit"] = minf(sd["exit"], q.distance_to(PATH[0]))
+				sd["path"] = minf(sd["path"], to_mid_path(q, q))
 		for pr in ev.preds.all:
+			var q := Vector2(pr.agent.p.x, pr.agent.p.z)
+			var on := pr.mode == EcoPred.Mode.HUNT and pr.prey != null and flocks.has(pr.prey.shoal.index)
+			var c: Dictionary = open.get(pr.index, {})
+			if not c.is_empty() and (not on or c["shoal"] != pr.prey.shoal.index):
+				c["t1"] = now
+				c["to"] = q
+				spread["chases"].append(c)
+				open.erase(pr.index)
+				c = {}
+			if on:
+				if c.is_empty():
+					c = {"who": pr.index, "shoal": pr.prey.shoal.index, "t0": now, "from": q, "exit": INF, "path": INF}
+					open[pr.index] = c
+				c["exit"] = minf(c["exit"], q.distance_to(PATH[0]))
+				c["path"] = minf(c["path"], to_mid_path(q, q))
 			if pr.mode != EcoPred.Mode.HUNT:
 				continue
-			var q := Vector2(pr.agent.p.x, pr.agent.p.z)
 			spread["hunt_exit"] = minf(spread["hunt_exit"], q.distance_to(PATH[0]))
 			spread["hunt_path"] = minf(spread["hunt_path"], to_mid_path(q, q))
 			if pr.prey != null:
@@ -208,7 +247,7 @@ static func run(seed_value: int) -> Dictionary:
 		w.take_link()
 		t += DT
 		track.call()
-		watch.call()
+		watch_step.call(t)
 		if ev.preds.all[0].mode == EcoPred.Mode.HUNT:
 			path0["hunt"] += DT
 		var q := Vector2(ev.preds.all[0].agent.p.x, ev.preds.all[0].agent.p.z)
@@ -270,7 +309,7 @@ static func run(seed_value: int) -> Dictionary:
 			elif e["type"] == EcoLink.HIT or e["type"] == EcoLink.DRAIN:
 				heard.append(["%s:%s" % [e["by"], e["type"]], 0.0])
 		track.call()
-		watch.call()
+		watch_step.call(t)
 		var p0: EcoPred.Pred = ev.preds.all[0]
 		var d0 := p0.agent.p.distance_to(ship.pos)
 		if mid:
@@ -316,6 +355,12 @@ static func run(seed_value: int) -> Dictionary:
 	r["goals0"] = goals
 	r["path0"] = path0["near"]
 	r["hunt0"] = path0["hunt"]
+	for k in open:
+		var c: Dictionary = open[k]
+		var pe: Vector3 = ev.preds.all[k].agent.p
+		c["t1"] = t
+		c["to"] = Vector2(pe.x, pe.z)
+		spread["chases"].append(c)
 	r["spread"] = spread
 	w.bus.emitted.disconnect(listen)
 	ev.free()
@@ -332,12 +377,27 @@ static func report(seeds: int) -> Array[String]:
 	for k in fish_moves:
 		fh[k] = Vector3(fish_moves[k].x, 0.0, fish_moves[k].y)
 	lines.append("== дома радужников %s, старт серпохвоста №0 %s, %s, тихий круг серпохвоста %s, ответ экипажа %s, %d зёрен, путь %s, стоянка %.0f с у середины" % [str(homes), str(start0 if start0.is_finite() else EcoPred.STARTS[0]), band, "вкл" if probe else "выкл", ("через %.1f с, %.0f с без света" % [delay, hold]) if answer else "нет", seeds, str(PATH), STOP])
-	lines.append("== дом стаи светляков %d (%.0f; %.0f), тёмная стоянка %.0f с" % [WATCH_SHOAL, fh[WATCH_SHOAL].x, fh[WATCH_SHOAL].z, dark])
+	for k in watch:
+		if k == EcoGrot.RIDERS:
+			lines.append("== стая светляков %d — на спине гротовика, дом идёт с ним по кругу %s (EcoGrot.ROUTE; fish=%d не действует), тёмная стоянка %.0f с" % [k, str(EcoGrot.ROUTE), k, dark])
+		else:
+			lines.append("== дом стаи светляков %d (%.0f; %.0f), тёмная стоянка %.0f с" % [k, fh[k].x, fh[k].z, dark])
+	if sites:
+		for k in watch:
+			if k == EcoGrot.RIDERS:
+				for q in EcoGrot.ROUTE:
+					lines.append(site_line("точка круга гротовика (стая %d)" % k, q))
+			elif not fish_moves.has(k):
+				lines.append(site_line("дом стаи %d" % k, Vector2(fh[k].x, fh[k].z)))
+		for b in EcoCoral.BASES:
+			lines.append(site_line("риф", b))
 	for k in fish_moves:
 		lines.append(site_line("перенос стаи %d" % k, fish_moves[k]))
 		lines.append(site_line("прежний дом стаи %d" % k, Vector2(EcoFish.HOMES[k].x, EcoFish.HOMES[k].z)))
 	var order := {"done": 0, "mollusk": [], "alert": [], "near0": [], "goal": [], "seg": [], "path0": []}
-	var sp := {"far": [], "exit": [], "path": [], "hunt_exit": [], "hunt_path": [], "prey": {}, "exit20": 0}
+	var sp := {"shoals": {}, "hunt_exit": [], "hunt_path": [], "prey": {}, "exit20": 0}
+	for k in watch:
+		sp["shoals"][k] = {"far": [], "exit": [], "path": [], "n": 0, "seeds": 0, "exit20": 0, "path20": 0}
 	var fern := 0
 	var flared := {}
 	var betray_mid := 0
@@ -376,9 +436,25 @@ static func report(seeds: int) -> Array[String]:
 		parts.append(goal_line(gs))
 		var rs: Dictionary = r["spread"]
 		parts.append(spread_line(rs))
-		for k in ["far", "exit", "path", "hunt_exit", "hunt_path"]:
+		for k in ["hunt_exit", "hunt_path"]:
 			if is_finite(rs[k]):
 				sp[k].append(rs[k])
+		for k in watch:
+			var sd: Dictionary = rs["shoals"][k]
+			var acc: Dictionary = sp["shoals"][k]
+			for key in ["far", "exit", "path"]:
+				if is_finite(sd[key]):
+					acc[key].append(sd[key])
+			var mine := (rs["chases"] as Array).filter(func(c: Dictionary) -> bool: return c["shoal"] == k)
+			acc["n"] += mine.size()
+			if not mine.is_empty():
+				acc["seeds"] += 1
+			if mine.any(func(c: Dictionary) -> bool: return c["exit"] < EXIT_NEAR):
+				acc["exit20"] += 1
+			if mine.any(func(c: Dictionary) -> bool: return c["path"] < EXIT_NEAR):
+				acc["path20"] += 1
+		if not (rs["chases"] as Array).is_empty():
+			parts.append("погони на стаи %s: %s" % [str(watch), chases_line(rs["chases"])])
 		if rs["hunt_exit"] < EXIT_NEAR:
 			sp["exit20"] += 1
 		for k in rs["prey"]:
@@ -406,8 +482,11 @@ static func report(seeds: int) -> Array[String]:
 		% [order["done"], seeds, _spread(order["mollusk"], seeds), _spread(order["alert"], seeds), _median(order["near0"])])
 	lines.append("путь середины %s → %s: ближе всего цель №0 %s; отрезок между целями %s; сам №0, пока корабль в середине, %s" \
 		% [str(PATH[0]), str(PATH[1]), _metres(order["goal"]), _metres(order["seg"]), _metres(order["path0"])])
-	lines.append("стая %d: дальше всего от дома %s; ближе всего к выходу 00 %s, к пути середины %s" \
-		% [WATCH_SHOAL, _metres_max(sp["far"]), _metres(sp["exit"]), _metres(sp["path"])])
+	for k in watch:
+		var acc: Dictionary = sp["shoals"][k]
+		lines.append("стая %d: дальше всего от дома %s; ближе всего к выходу 00 %s, к пути середины %s; погонь на неё %d в %d/%d зёрнах, ближе %.0f м к выходу 00 — %d/%d зёрен, к пути середины — %d/%d" \
+			% [k, _metres_max(acc["far"]), _metres(acc["exit"]), _metres(acc["path"]), acc["n"], acc["seeds"], seeds,
+			EXIT_NEAR, acc["exit20"], seeds, acc["path20"], seeds])
 	lines.append("погони (HUNT, все серпохвосты): ближе всего к выходу 00 %s (ближе %.0f м — %d/%d зёрен), к пути середины %s; кто → стая (зёрен): %s" \
 		% [_metres(sp["hunt_exit"]), EXIT_NEAR, sp["exit20"], seeds, _metres(sp["hunt_path"]), _keys(sp["prey"]) if not sp["prey"].is_empty() else "погонь нет"])
 	return lines
@@ -461,9 +540,22 @@ const EXIT_NEAR := 20.0
 
 ## «стая 0: до 22 м от дома, к выходу 00 9 м, к пути середины 12 м; погони: к выходу 4 м, к пути 3 м (№0→0 ×120)».
 static func spread_line(rs: Dictionary) -> String:
-	return "стая %d: до %.0f м от дома, к выходу 00 %.0f м, к пути середины %.0f м; погони: к выходу %s, к пути %s (кадров погони: %s)" \
-		% [WATCH_SHOAL, rs["far"], rs["exit"], rs["path"], ("%.0f м" % rs["hunt_exit"]) if is_finite(rs["hunt_exit"]) else "нет",
+	var sh: Array[String] = []
+	for k in rs["shoals"]:
+		var sd: Dictionary = rs["shoals"][k]
+		sh.append("стая %d: до %.0f м от дома, к выходу 00 %.0f м, к пути середины %.0f м" % [k, sd["far"], sd["exit"], sd["path"]])
+	return "%s; погони: к выходу %s, к пути %s (кадров погони: %s)" \
+		% ["; ".join(sh), ("%.0f м" % rs["hunt_exit"]) if is_finite(rs["hunt_exit"]) else "нет",
 		("%.0f м" % rs["hunt_path"]) if is_finite(rs["hunt_path"]) else "нет", _keys(rs["prey"]) if not rs["prey"].is_empty() else "погонь нет"]
+
+
+## Погони на стаи watch: «№1→5 −12…4 с (60; 40)→(70; 52), к выходу 00 70 м, к пути середины 45 м» (время — от света).
+static func chases_line(chases: Array) -> String:
+	var out: Array[String] = []
+	for c in chases:
+		out.append("№%d→%d %.0f…%.0f с (%.0f; %.0f)→(%.0f; %.0f), к выходу 00 %.0f м, к пути середины %.0f м" % [c["who"],
+			c["shoal"], c["t0"] - dark, c["t1"] - dark, c["from"].x, c["from"].y, c["to"].x, c["to"].y, c["exit"], c["path"]])
+	return "; ".join(out)
 
 
 ## «макс 30 м, медиана 22 м» по зёрнам.

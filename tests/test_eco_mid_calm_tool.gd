@@ -6,7 +6,7 @@ extends TestCase
 
 func _tool() -> GDScript:
 	var tool: GDScript = load("res://tools/mid_calm.gd")
-	for v in ["moves", "limit", "dark", "probe", "answer", "delay", "hold", "start0", "band0", "fish_moves"]:
+	for v in ["moves", "limit", "dark", "probe", "answer", "delay", "hold", "start0", "band0", "fish_moves", "watch", "sites"]:
 		ok(tool.get(v) != null, "в инструменте есть %s" % v)
 	return tool
 
@@ -22,6 +22,8 @@ func _restore(tool: GDScript) -> void:
 	tool.set("start0", Vector2.INF)
 	tool.set("band0", Rect2())
 	tool.set("fish_moves", {})
+	tool.set("watch", [tool.WATCH_SHOAL] as Array[int])
+	tool.set("sites", false)
 
 
 func test_parse_moves() -> void:
@@ -128,3 +130,46 @@ func test_answer_in_header() -> void:
 	ok(lines[0].contains("ответ экипажа через 1.5 с, 25 с без света"), lines[0])
 	ok(lines[3].contains("нет"), lines[3])
 	ok(tool.report(0)[0].contains("ответ экипажа нет"), "без answer — нет")
+
+
+## watch=1,5 (#1400, уровни и ГД 13.11 — совместная проба домов стай 1 и 5): по строке разброса и погонь на каждую
+## стаю; стая 5 — на спине гротовика, её дом ходит по `EcoGrot.ROUTE`, перенос `fish=5` не действует — так и в шапке.
+func test_watch_two_shoals_reports_each() -> void:
+	var tool := _tool()
+	eq(tool.parse_watch("1,5"), [1, 5] as Array[int])
+	tool.set("watch", tool.parse_watch("1,5"))
+	tool.set("dark", 0.0)
+	tool.set("limit", 6.0)
+	var lines: Array[String] = tool.report(1)
+	_restore(tool)
+	eq(lines.size(), 12, "шапка, две стаи, зерно, итог, угрозы ×2, порядок, цели №0, стаи 1 и 5, погони")
+	ok(lines[1].begins_with("== дом стаи светляков 1 (-26; 24)"), lines[1])
+	ok(lines[2].begins_with("== стая светляков 5 — на спине гротовика") and lines[2].contains("fish=5 не действует"), lines[2])
+	ok(lines[3].contains("стая 1: до ") and lines[3].contains("; стая 5: до "), lines[3])
+	ok(lines[9].begins_with("стая 1: дальше всего от дома") and lines[9].contains("погонь на неё "), lines[9])
+	ok(lines[10].begins_with("стая 5: дальше всего от дома"), lines[10])
+	eq(EcoGrot.RIDERS, 5, "стая гротовика — 5")
+
+
+## Погоня на стаю из watch — строкой: кто, на кого, с какой по какую секунду от света, откуда куда, ближе всего к
+## выходу 00 и к пути середины.
+func test_chases_line() -> void:
+	var tool := _tool()
+	tool.set("dark", 30.0)
+	var s: String = tool.chases_line([{"who": 1, "shoal": 5, "t0": 18.0, "t1": 34.0, "from": Vector2(60, 40),
+		"to": Vector2(70, 52), "exit": 70.4, "path": 45.0}])
+	_restore(tool)
+	eq(s, "№1→5 -12…4 с (60; 40)→(70; 52), к выходу 00 70 м, к пути середины 45 м")
+
+
+## sites=1: среда у дома стаи 1, у четырёх точек круга гротовика (стая 5) и у существующих рифов — кандидаты
+## совместной расстановки (уровни 13.11: «site_line существующих участков со средой»).
+func test_sites_list_homes_grot_and_reefs() -> void:
+	var tool := _tool()
+	tool.set("watch", tool.parse_watch("1,5"))
+	tool.set("sites", true)
+	var lines: Array[String] = tool.report(0)
+	_restore(tool)
+	var got := lines.filter(func(l: String) -> bool: return l.begins_with("== дом стаи 1 (") \
+		or l.begins_with("== точка круга гротовика (стая 5)") or l.begins_with("== риф ("))
+	eq(got.size(), 1 + EcoGrot.ROUTE.size() + EcoCoral.BASES.size(), "\n".join(lines))
