@@ -92,6 +92,54 @@ function Wait-Boot([scriptblock]$probe, [int]$limitSec = 300, [int]$stepSec = 5)
   }
 }
 
+# Нагрузка Android (#1350, 12.11 21:30): после -ColdBoot хост остыл, а внутри эмулятора ещё идёт загрузка служб —
+# первые шаги сценария шумные. Read-LoadAvg — первое число /proc/loadavg (средняя за минуту) или $null, если вывод
+# не разобрать; Read-Cores — число ядер из `nproc` (не разобрать — 4).
+function Read-LoadAvg($text) {
+  if ($null -eq $text) { return $null }
+  $m = [regex]::Match("$text", '^\s*(\d+(?:\.\d+)?)\s+\d')
+  if (-not $m.Success) { return $null }
+  return [double]::Parse($m.Groups[1].Value, [Globalization.CultureInfo]::InvariantCulture)
+}
+function Read-Cores($text) {
+  $n = 0
+  if ($null -ne $text -and [int]::TryParse("$text".Trim(), [ref]$n) -and $n -gt 0) { return $n }
+  return 4
+}
+
+# Ждать, пока $probe (нагрузка числом или $null) $need раз подряд через $stepSec не окажется ниже $below, не дольше
+# $limitSec. Проба не разобралась ни разу за первые $need попыток — замера нет: пауза $pauseSec и выход.
+# Возвращает @{ waited = секунд; load = последняя нагрузка или $null; calm = дождались ли; how = 'замер'|'пауза'|'предел' }.
+function Wait-Calm([scriptblock]$probe, [double]$below, [int]$limitSec = 120, [int]$stepSec = 5, [int]$need = 3,
+    [int]$pauseSec = 30) {
+  $waited = 0; $calm = 0; $tries = 0; $seen = $false; $load = $null
+  while ($true) {
+    $r = & $probe
+    $tries++
+    if ($null -ne $r) { $seen = $true; $load = [double]$r }
+    if ($null -ne $r -and [double]$r -lt $below) { $calm++ } else { $calm = 0 }
+    if ($calm -ge $need) { return @{ waited = $waited; load = $load; calm = $true; how = 'замер' } }
+    if (-not $seen -and $tries -ge $need) {
+      if ($pauseSec -gt 0) { Start-Sleep -Seconds $pauseSec }
+      return @{ waited = $waited + $pauseSec; load = $null; calm = $false; how = 'пауза' }
+    }
+    if ($waited + $stepSec -gt $limitSec) { return @{ waited = $waited; load = $load; calm = $false; how = 'предел' } }
+    if ($stepSec -gt 0) { Start-Sleep -Seconds $stepSec }
+    $waited += $stepSec
+  }
+}
+
+# Строка итога RUN про ожидание Android: «Android тихо за 25 с (load 1.20 < 2.0)» / «… не остыл за 120 с …» /
+# «… нет /proc/loadavg, пауза 30 с»
+function Format-Calm($res, [double]$below) {
+  $inv = [Globalization.CultureInfo]::InvariantCulture
+  $lim = $below.ToString('0.0', $inv)
+  if ($res.how -eq 'пауза') { return "Android: нет /proc/loadavg, пауза $($res.waited) с" }
+  $l = if ($null -eq $res.load) { '?' } else { ([double]$res.load).ToString('0.00', $inv) }
+  if ($res.calm) { return "Android тихо за $($res.waited) с (load $l < $lim)" }
+  return "Android не остыл за $($res.waited) с (load $l, порог $lim)"
+}
+
 # Содержимое замка: pid, start, since, what — или $null, если файла нет или он ещё пишется
 function Read-QaLock([string]$path) {
   if (-not (Test-Path $path)) { return $null }
@@ -154,6 +202,29 @@ if ($SelfTest) {
   $sw = [Diagnostics.Stopwatch]::StartNew()
   Check (-not (Wait-Boot { $null } 3 1)) 'не загрузился — $false'
   Check ($sw.Elapsed.TotalSeconds -lt 6) "общий предел ожидания держится ($([int]$sw.Elapsed.TotalSeconds) с)"
+  # Нагрузка Android (#1350, 12.11 21:30): разбор /proc/loadavg и nproc, ожидание тишины
+  Check ((Read-LoadAvg "3.41 2.10 1.05 5/812 4321`n") -eq 3.41) 'loadavg — первое число'
+  Check ($null -eq (Read-LoadAvg 'error: no devices/emulators found')) 'loadavg без числа — $null'
+  Check ($null -eq (Read-LoadAvg $null)) 'loadavg без вывода (завис) — $null'
+  Check ((Read-Cores "8`r`n") -eq 8) 'ядра из nproc'
+  Check ((Read-Cores 'nproc: not found') -eq 4) 'ядра не разобрать — 4'
+  # пробы 5,0 4,0 1,5 3,0 1,2 1,0 0,9 при пороге 2: тишина — три подряд ниже (пробы 5…7), ждали 6 шагов
+  $script:seq = @(5.0, 4.0, 1.5, 3.0, 1.2, 1.0, 0.9); $script:at = 0
+  $res = Wait-Calm { $v = $script:seq[$script:at]; $script:at++; $v } 2.0 120 0 3 0
+  Check ($res.calm -and $res.how -eq 'замер' -and $script:at -eq 7) "тишина на седьмой пробе: проб $script:at, $($res.how)"
+  Check ((Format-Calm @{ waited = 30; load = 0.9; calm = $true; how = 'замер' } 2.0) -eq 'Android тихо за 30 с (load 0.90 < 2.0)') 'строка RUN — тихо'
+  # одна низкая проба среди высоких — не тишина; предел 10 с шагом 5 — три пробы (0, 5, 10 с) и выход
+  $script:seq = @(6.0, 1.0, 6.0, 1.0); $script:at = 0
+  $sw = [Diagnostics.Stopwatch]::StartNew()
+  $res = Wait-Calm { $v = $script:seq[$script:at]; $script:at++; $v } 2.0 10 5 3 0
+  Check (-not $res.calm -and $res.how -eq 'предел' -and $res.waited -eq 10 -and $res.load -eq 6.0) "не остыл — предел: ждали $($res.waited) с, load $($res.load)"
+  Check ((Format-Calm $res 2.0) -eq 'Android не остыл за 10 с (load 6.00, порог 2.0)') "строка RUN — не остыл: $(Format-Calm $res 2.0)"
+  Check ($sw.Elapsed.TotalSeconds -lt 15) "предел держится ($([int]$sw.Elapsed.TotalSeconds) с)"
+  # /proc/loadavg не читается (три $null подряд) — пауза и выход, без ожидания предела
+  $script:at = 0
+  $res = Wait-Calm { $script:at++; $null } 2.0 120 0 3 0
+  Check ($res.how -eq 'пауза' -and $script:at -eq 3) "нет замера — пауза после трёх проб: проб $script:at"
+  Check ((Format-Calm @{ waited = 30; load = $null; calm = $false; how = 'пауза' } 2.0) -eq 'Android: нет /proc/loadavg, пауза 30 с') 'строка RUN — пауза'
   # мёртвый хозяин: PID, которого нет
   Remove-Item $lock -Force
   [IO.File]::WriteAllText($lock, "pid=999999`nstart=12345`nsince=2026-11-12 01:00:00`nwhat=старый`n")
