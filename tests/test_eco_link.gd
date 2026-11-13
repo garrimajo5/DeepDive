@@ -1022,6 +1022,17 @@ func test_petal_opened_learns_07() -> void:   # #837: купольник отк�
 
 ## Отчёт QA 2026-11-05-2015: на итоге забега «Крупный хищник укусил корпус», а удара нет (#1249 гасил только удар).
 ## Корабль под защитой — `ShipState.shielded`: в мире нет ни удара, ни строки «укусил корпус».
+func test_petal_lift_follows_dome() -> void:   # #1757: створку модели арки корабль поворачивает по подъёму купольника
+	eq(EcoLink.petal_lift([]), 0.0, "нет купольника — створка закрыта")
+	var d := EcoDome.new()
+	near(EcoLink.petal_lift([EcoSystem.new(), d]), 0.0, 1e-6, "ждёт в нише — закрыта")
+	d.stage(EcoDome.LIFT.y)
+	near(EcoLink.petal_lift([EcoSystem.new(), d]), 1.0, 1e-6, "поднял — открыта")
+	d.stage((EcoDome.LIFT.x + EcoDome.LIFT.y) * 0.5)
+	var half := EcoLink.petal_lift([d])
+	ok(half > 0.2 and half < 0.8, "на полпути подъёма — приоткрыта: %.2f" % half)
+
+
 func test_shielded_ship_no_bite_text() -> void:
 	var w := EcoWorld.new()
 	w.ground = func(_x: float, _z: float) -> float: return -40.0
