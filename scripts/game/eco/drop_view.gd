@@ -58,6 +58,8 @@ var lite := false
 
 var _col := PackedColorArray()
 var _mat: Material
+## Варианты меша для «Экономно» (#1798).
+var _lite := EcoLite.new(["mesh", "verts", "normals", "_col", "tris", "wedge_tris", "glowing"])
 
 
 func _init(system: EcoDrop, on_lite := false) -> void:
@@ -77,9 +79,13 @@ func _init(system: EcoDrop, on_lite := false) -> void:
 func set_lite(on: bool) -> void:
 	if lite == on:
 		return
-	lite = on
 	moss_view.set_lite(on)
-	_build()
+	_lite.switch(self, on)
+
+
+## Собрать второй вариант заранее (EcoView.prefetch_lite); вид не меняется. true — собирали.
+func prefetch_lite() -> bool:
+	return _lite.prefetch(self)
 
 
 func _build() -> void:

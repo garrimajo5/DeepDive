@@ -34,6 +34,8 @@ var lite := false
 
 var _mat: ShaderMaterial
 var _ground: Callable
+## Варианты меша для «Экономно» (#1798).
+var _lite := EcoLite.new(["mesh", "look"])
 
 
 func _init(system: EcoMoss, ground: Callable = Callable(), on_lite := false) -> void:
@@ -53,8 +55,12 @@ func _init(system: EcoMoss, ground: Callable = Callable(), on_lite := false) -> 
 func set_lite(on: bool) -> void:
 	if lite == on:
 		return
-	lite = on
-	_build()
+	_lite.switch(self, on)
+
+
+## Собрать второй вариант заранее (EcoView.prefetch_lite); вид не меняется. true — собирали.
+func prefetch_lite() -> bool:
+	return _lite.prefetch(self)
 
 
 func _build() -> void:

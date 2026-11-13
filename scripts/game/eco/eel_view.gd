@@ -64,6 +64,8 @@ var ring_k := PackedFloat32Array()
 var _wag_t := NAN
 ## «Экономно» (set_lite).
 var lite := false
+## Шар оболочки по уровню (#1798): смена «Экономно» его не пересобирает.
+var _variants := {}
 var rocks: MultiMeshInstance3D
 var shell: MultiMeshInstance3D
 ## Внутренности и глаза одним MultiMesh (#849): сначала n · (SEGS − 1) звеньев, потом n · 2 глаза.
@@ -123,8 +125,23 @@ func _init(system: EcoEel, lite_on := false) -> void:
 func set_lite(on: bool) -> void:
 	if lite == on:
 		return
+	_variants[lite] = shell.multimesh.mesh
+	if not _variants.has(on):
+		prefetch_lite()
 	lite = on
-	shell.multimesh.mesh = build_shell(on)
+	shell.multimesh.mesh = _variants[on]
+
+
+## Собрать второй вариант оболочки заранее (EcoView.prefetch_lite); вид не меняется. Материал — нынешний
+## (ободок и свечение мира не теряются, #1798). true — собирали.
+func prefetch_lite() -> bool:
+	var other := not lite
+	if _variants.has(other):
+		return false
+	var m := build_shell(other)
+	m.material = (shell.multimesh.mesh as PrimitiveMesh).material
+	_variants[other] = m
+	return true
 
 
 ## Шар оболочки звена (на «Экономно» — SHELL_LITE).

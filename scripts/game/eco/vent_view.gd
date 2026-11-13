@@ -62,6 +62,8 @@ var _col := PackedColorArray()
 ## На «Экономно» — грубее порода (set_lite).
 var lite := false
 var _mat: Material
+## Варианты меша для «Экономно» (#1798).
+var _lite := EcoLite.new(["rock:mesh", "verts", "normals", "_col", "tris"], "_build_rock")
 
 
 func _init(system: EcoVent, on_lite := false) -> void:
@@ -87,9 +89,15 @@ func _init(system: EcoVent, on_lite := false) -> void:
 func set_lite(on: bool) -> void:
 	if lite == on:
 		return
-	lite = on
 	if rock:
-		_build_rock()
+		_lite.switch(self, on)
+	else:
+		lite = on
+
+
+## Собрать второй вариант заранее (EcoView.prefetch_lite); вид не меняется. true — собирали.
+func prefetch_lite() -> bool:
+	return rock != null and _lite.prefetch(self)
 
 
 func _build_rock() -> void:

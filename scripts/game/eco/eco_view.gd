@@ -76,6 +76,11 @@ var plankton: EcoPlankton
 var plankton_view: PlanktonView
 ## «Экономно» (set_lite): виды, что пересоздаются при сбросе мира, берут его заново.
 var lite := false
+## Второй вариант мешей для «Экономно» собирается заранее, по виду за шаг (#1798): смена уровня графики их не
+## пересобирает. false — не собирать (замеры, которым нужен шаг без сборки).
+static var prefetch := true
+## Все виды уже держат оба варианта (до пересборки мира).
+var prefetched := false
 ## Фонарные вуали: две колонии медуз дрейфуют над рифом, жалят светляков, под куполом серпохвост теряет корабль.
 var veils: EcoVeil
 var veil_view: VeilView
@@ -156,6 +161,7 @@ var ground: Callable:
 		_rebuild_drop()
 		_rebuild_brink()
 		_rebuild_plankton()
+		prefetched = false
 		EcoRim.apply(self)
 		EcoSilhouette.apply(self)
 		EcoSurface.apply(self)
@@ -552,6 +558,7 @@ func step(dt: float, ship: EcoLink.ShipState) -> Array[Dictionary]:
 	world.ship = ship
 	world.step(world_dt(dt))
 	_sync(ship)
+	_prefetch_step()
 	var out := world.take_link()
 	StepClock.mark("мир/связь")
 	return out
@@ -566,6 +573,37 @@ func step_client(dt: float, ship: EcoLink.ShipState, near: PackedFloat32Array = 
 	if not near.is_empty():
 		EcoLink.apply_world(world.agents, world.systems, near, world)
 	_sync(ship)
+	_prefetch_step()
+
+
+## Виды с двумя вариантами мешей (prefetch_lite): мир, места и тела, чья пересборка на смене уровня дорога (#1798).
+func lite_views() -> Array:
+	var out := []
+	for v in [brink_view, bones_view, flower_view, drop_view, shell_view, coral_view, moss_view, organ_view,
+			vent_view, grot_view, echo_view, krab_view, eel_view]:
+		if v:
+			out.append(v)
+	for v in [brink_view, bones_view, drop_view, well_view]:
+		if v and v.moss_view:
+			out.append(v.moss_view)
+	return out
+
+
+## Собрать второй вариант одного вида (первого, у которого его нет). true — собирали; все готовы — false.
+func prefetch_lite() -> bool:
+	if prefetched:
+		return false
+	for v in lite_views():
+		if v.prefetch_lite():
+			return true
+	prefetched = true
+	return false
+
+
+func _prefetch_step() -> void:
+	if prefetch and not prefetched:
+		prefetch_lite()
+		StepClock.mark("мир/второй вариант мешей")
 
 
 func _sync(ship: EcoLink.ShipState) -> void:

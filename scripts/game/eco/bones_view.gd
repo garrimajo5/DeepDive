@@ -47,6 +47,8 @@ var moss_view: MossView
 ## На «Экономно» — грубее сетка (set_lite).
 var lite := false
 var _mat: Material
+## Варианты меша для «Экономно» (#1798).
+var _lite := EcoLite.new(["mesh", "verts", "normals", "_col", "tris", "glowing", "rib_tris", "skull_tris"])
 
 
 func _init(system: EcoBones, on_lite := false) -> void:
@@ -69,11 +71,17 @@ func _init(system: EcoBones, on_lite := false) -> void:
 func set_lite(on: bool) -> void:
 	if lite == on:
 		return
-	lite = on
 	if moss_view:
 		moss_view.set_lite(on)
 	if _mat:
-		_build()
+		_lite.switch(self, on)
+	else:
+		lite = on
+
+
+## Собрать второй вариант заранее (EcoView.prefetch_lite); вид не меняется. true — собирали.
+func prefetch_lite() -> bool:
+	return _mat != null and _lite.prefetch(self)
 
 
 func _build() -> void:

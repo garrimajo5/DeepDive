@@ -97,6 +97,8 @@ var _foot := Vector3.ZERO
 var _foot_dir := Vector3.ZERO
 var _foot_len := 0.0
 var _mat: ShaderMaterial
+## Варианты меша для «Экономно» (#1798).
+var _lite := EcoLite.new(["mesh", "verts", "normals", "_col", "_uv", "sway", "tris"])
 
 
 func _init(system: EcoFlower, on_lite := false) -> void:
@@ -125,9 +127,15 @@ func _init(system: EcoFlower, on_lite := false) -> void:
 func set_lite(on: bool) -> void:
 	if lite == on:
 		return
-	lite = on
 	if _mat:
-		_build()
+		_lite.switch(self, on)
+	else:
+		lite = on
+
+
+## Собрать второй вариант заранее (EcoView.prefetch_lite); вид не меняется. true — собирали.
+func prefetch_lite() -> bool:
+	return _mat != null and _lite.prefetch(self)
 
 
 func _build() -> void:

@@ -45,6 +45,8 @@ var lite := false
 
 var _col := PackedColorArray()
 var _mat: Material
+## Варианты меша для «Экономно» (#1798).
+var _lite := EcoLite.new(["mesh", "verts", "normals", "_col", "tris", "glowing", "tube_tris", "tube_row", "tube_end"])
 
 
 func _init(system: EcoShell, on_lite := false) -> void:
@@ -63,9 +65,15 @@ func _init(system: EcoShell, on_lite := false) -> void:
 func set_lite(on: bool) -> void:
 	if lite == on:
 		return
-	lite = on
 	if not shell.ring.is_empty():
-		_build()
+		_lite.switch(self, on)
+	else:
+		lite = on
+
+
+## Собрать второй вариант заранее (EcoView.prefetch_lite); вид не меняется. true — собирали.
+func prefetch_lite() -> bool:
+	return not shell.ring.is_empty() and _lite.prefetch(self)
 
 
 func _build() -> void:
