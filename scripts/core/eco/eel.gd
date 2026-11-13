@@ -21,6 +21,8 @@ const LAIR_CLEAR := 80.0
 const WARN_R := 55.0
 const WARN_CD := 120.0
 const WARN_TEXT := "В расщелине у трещины — красный глаз стеклоуста. Обходите стороной: ближе 28 м он бросится к стеклу."
+## Вид не изучен (#1784, поправка владельца 13.11): имя местного вида экипаж узнаёт только сканом — строка без имени.
+const WARN_UNKNOWN := "В расщелине у трещины — красный глаз. Обходите стороной: ближе 28 м существо бросится к стеклу."
 ## Глаз вдали (#970): сам глаз — шар 0,07 м, с 45 м это меньше пикселя телефона, и знак WARN_TEXT в окне не
 ## читается. Поверх глаза — мягкое красное пятно лицом к камере постоянного углового размера GLINT_ANG (радиус на
 ## метр расстояния): с 45 м — 0,63 м (мягкий край — видимое ядро около трети), около 10 px в окне 1600 px. Ближе GLINT_NEAR пятна нет (глаз виден сам), к
@@ -216,7 +218,7 @@ func step(world: EcoWorld, dt: float) -> void:
 	_tick += 1
 	_sign(world, dt)
 	if latched:
-		world.drain(Species.info(ID).name, DRAIN)
+		world.drain(Species.cap(world.nm(ID)), DRAIN)   # имя — только изученного вида (#1784)
 
 
 func _update(world: EcoWorld, e: Eel, dt: float, t: float) -> void:
@@ -281,7 +283,17 @@ func _sign(world: EcoWorld, dt: float) -> void:
 	elif not _warned and warn_cd <= 0.0 and latched == null and near.mode == Mode.HIDE:
 		_warned = true
 		warn_cd = WARN_CD
-		world.send(EcoLink.message(WARN_TEXT))
+		world.send(EcoLink.message(warn_text(world)))
+
+
+## Знак у логова: с именем, если стеклоуст изучен (EcoWorld.scanned), иначе WARN_UNKNOWN (#1784).
+static func warn_text(world: EcoWorld) -> String:
+	return WARN_TEXT if known(world) else WARN_UNKNOWN
+
+
+## Изучен ли стеклоуст сканером (EcoWorld.scanned; не задан — нет).
+static func known(world: EcoWorld) -> bool:
+	return world != null and world.scanned.is_valid() and bool(world.scanned.call(ID))
 
 
 ## В логове: добыча рядом — бросок; иначе корабль рядом — к носу (eelUpdate, case 'hide').
