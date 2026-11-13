@@ -398,6 +398,51 @@ func test_parked_at_01_with_light_does_not_alarm() -> void:
 	ok(w.bus.pending.size() >= 1 and w.bus.pending[0].note == "flee", "строка о бегстве — от хищника")
 
 
+## Сцена 00→01 (решение ГД 08.11, `docs/urovni/sloj-1.md`): хищник ходит у границы CROWN_ALARM — то в 45 м от оси
+## кроны, то в 55 м. Строка о бегстве — не чаще FLEE_COOLDOWN (без перерыва тревоги — одна), а стая не мечется между чашей и кольцом: короткий
+## выход за границу (2 с) тревогу не снимает, длинный (8 с) снимает, но переключения не чаще удержания тревоги (3 с).
+func test_crown_alarm_edge_no_flicker() -> void:
+	for half: float in [2.0, 8.0]:
+		var w := _world()
+		var fish := _fish(w)
+		w.add(EcoFlower.new())
+		var sh := fish.shoals[6]
+		_only(w, fish, sh)
+		w.run(5.0)
+		var out := Vector3(sh.center.x - sh.axis.x, 0, sh.center.z - sh.axis.z).normalized()
+		var pred := w.spawn("pred", sh.axis - out * 45.0 + Vector3(0, 18, 0))
+		var lines: Array[float] = []
+		var flips: Array[float] = []
+		var was := false
+		var t := 0.0
+		while t < 64.0:
+			var inside := fmod(t, 2.0 * half) < half
+			var r := EcoFish.CROWN_ALARM + (-5.0 if inside else 5.0)
+			pred.p = sh.axis - out * r + Vector3(0, 18, 0)
+			var before := w.bus.pending.size()
+			w.step(0.05)
+			t += 0.05
+			for i in range(before, w.bus.pending.size()):
+				if w.bus.pending[i].note == "flee":
+					lines.append(t)
+			var now := sh.alarm > 0.0
+			if now != was:
+				flips.append(t)
+				was = now
+		if half < 3.0:
+			eq(lines.size(), 1, "тревога не прерывалась — одна строка за эпизод")
+		else:
+			ok(lines.size() >= 2 and lines.size() <= 3, "полупериод 8 с: строк %d" % lines.size())
+		for i in range(1, lines.size()):
+			ok(lines[i] - lines[i - 1] >= EcoFish.FLEE_COOLDOWN - 0.1, "строки через %.1f с" % (lines[i] - lines[i - 1]))
+		if half < 3.0:
+			eq(flips.size(), 1, "короткие выходы тревогу не снимают")
+		else:
+			ok(flips.size() >= 5, "длинные выходы снимают тревогу: %d" % flips.size())
+			for i in range(1, flips.size()):
+				ok(flips[i] - flips[i - 1] >= 3.0 - 0.1, "переключение через %.1f с" % (flips[i] - flips[i - 1]))
+
+
 func test_ship_under_way_scares_without_message() -> void:
 	var w := _world()
 	var fish := _fish(w)
