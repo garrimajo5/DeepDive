@@ -1,0 +1,76 @@
+{
+  "camera": {
+    "eye": [
+      0.0,
+      1.33,
+      -11.8
+    ],
+    "yaw": 0,
+    "pitch": -8,
+    "fov_y": 72,
+    "viewport": [
+      1280,
+      720
+    ]
+  },
+  "planes": [
+    -12.75,
+    -13.0
+  ],
+  "ports": [
+    [
+      -1.15,
+      0.4
+    ],
+    [
+      0,
+      0.55
+    ],
+    [
+      1.15,
+      0.4
+    ]
+  ],
+  "checks": {
+    "bottom25m": {
+      "xyz": [
+        0,
+        -8,
+        -36.8
+      ],
+      "visible": true
+    },
+    "landmark_top": {
+      "xyz": [
+        0,
+        -2,
+        -42
+      ],
+      "visible": true
+    },
+    "creature_center": {
+      "xyz": [
+        -5,
+        0,
+        -30
+      ],
+      "visible": true
+    },
+    "near_bottom10m": {
+      "xyz": [
+        0,
+        -8,
+        -21.8
+      ],
+      "visible": false
+    },
+    "side_creature": {
+      "xyz": [
+        12,
+        0,
+        -30
+      ],
+      "visible": false
+    }
+  }
+}
