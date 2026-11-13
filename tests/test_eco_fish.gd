@@ -733,6 +733,83 @@ func test_hungry_pred_at_01_takes_no_crown_fish() -> void:
 	ok(nearest > EcoPred.REEF_KEEP - 1.0, "в риф не заходит: %.1f м" % nearest)
 
 
+## Сцена 00→01 (решение ГД 08.11, `docs/urovni/sloj-1.md`; #834 «читаемая встреча»): корабль на стоянке у 01
+## (33; −22) носом к цветку, луч на полной силе (45 м), серпохвост далеко за рифом. Импульс сонара у цветка зовёт его к внешнему краю
+## рифа (EcoPred.REEF_EDGE, 42 м от оси) со своей стороны, а не к кораблю. С какой бы стороны он ни шёл, стая кроны
+## прячется в чашу со строкой раньше, чем он дошёл до края (на 1,2–1,8 с при CROWN_ALARM 50 м; при 42 м — после),
+## внутрь кольца EcoPred.REEF_KEEP он не заходит и в луч (EcoWorld.in_beam) за 30 с не входит: угрозу видно
+## последствием у цветка, а не встречей.
+func test_ping_at_01_calls_pred_to_edge_crown_hides_first() -> void:
+	for k in 8:
+		_ping_at_01_from(TAU * k / 8.0)
+
+
+func _ping_at_01_from(bearing: float) -> void:
+	var w := _world()
+	var fish := _fish(w)
+	w.add(EcoFlower.new())
+	var preds := w.add(EcoPred.new(fish)) as EcoPred  # как в игре (EcoView): риф у цветка знает стаи кроны
+	preds.alert = EcoPred.ALERT_ON  # явно: здесь не чутьё и бросок, хищник сыт
+	var sh := fish.shoals[6]
+	ok(sh.crown, "стая кроны")
+	_only(w, fish, sh)
+	var pr := preds.all[0]
+	for other in preds.all.slice(1):  # остальные серпохвосты — далеко и не доплывут за проверку
+		other.agent.p = Vector3(-400, -30, 400)
+		other.agent.goal = other.agent.p
+	var stand := Vector2(33.0, -22.0)
+	w.ship.pos = Vector3(stand.x, Seabed.height(stand.x, stand.y) + 7.0, stand.y)
+	w.ship.yaw = atan2(-(sh.axis.x - stand.x), -(sh.axis.z - stand.y))  # нос к цветку
+	w.ship.speed = 0.0
+	w.ship.light_on = true
+	w.ship.light_range = Searchlight.BASE_RANGE  # полная сила лампы: луч EcoWorld.BEAM_R = 45 м
+	ok(w.in_beam(Vector3(sh.axis.x, w.ship.pos.y - 4.0, sh.axis.z)), "луч смотрит на цветок")
+	ok(_flat(w.ship.pos, sh.axis) < EcoPred.REEF_KEEP, "стоянка — в рифе")
+	pr.hunger = -2.0  # сыт весь прогон — не бросается
+	pr.cooldown = 60.0
+	pr.agent.p = Vector3(sh.axis.x + cos(bearing) * 110.0, -30.0, sh.axis.z + sin(bearing) * 110.0)
+	pr.agent.goal = pr.agent.p
+	pr.agent.timer = 60.0
+	w.run(3.0)
+	ok(sh.alarm == 0.0 and w.bus.pending.is_empty(), "до импульса стая спокойна, строк нет")
+	ok(not w.in_beam(pr.agent.p), "хищник не в луче")
+
+	preds.on_ping(w, w.ship.pos)
+	eq(pr.mode, EcoPred.Mode.INVESTIGATE, "услышал импульс")
+	near(_flat(pr.agent.goal, sh.axis), EcoPred.REEF_EDGE, 1e-3, "плывёт к внешнему краю рифа")
+	ok(_flat(pr.agent.goal, w.ship.pos) > 10.0, "не к кораблю")
+	var hide_at := -1.0
+	var beam_at := -1.0
+	var edge_at := -1.0
+	var nearest := INF  # ближе всего к оси рифа за прогон
+	var t := 0.0
+	while t < 30.0:
+		w.step(0.05)
+		t += 0.05
+		if hide_at < 0.0 and sh.alarm > 0.0:
+			hide_at = t
+		if beam_at < 0.0 and w.in_beam(pr.agent.p):
+			beam_at = t
+		var r := _flat(pr.agent.p, sh.axis)
+		if edge_at < 0.0 and r < EcoPred.REEF_EDGE + 3.0:
+			edge_at = t
+		nearest = minf(nearest, r)
+	var flee: Array[String] = []
+	for ev in w.bus.pending:
+		if ev.note == "flee":
+			flee.append(ev.text())
+	print("    импульс у 01, хищник с %3d°: крона прячется через %.2f с, в луче через %.2f с, у края через %.2f с, к оси не ближе %.1f м" % [
+		int(round(rad_to_deg(bearing))), hide_at, beam_at, edge_at, nearest])
+	ok(edge_at > 0.0, "дошёл до края рифа")
+	ok(hide_at > 0.0, "стая кроны спряталась")
+	ok(hide_at < edge_at, "раньше, чем хищник дошёл до края рифа: %.2f < %.2f с" % [hide_at, edge_at])
+	ok(beam_at < 0.0, "в луч он так и не вошёл: %.2f с" % beam_at)
+	ok(nearest > EcoPred.REEF_KEEP, "в риф не зашёл: %.1f м от оси" % nearest)
+	eq(flee.size(), 1, "одна строка о бегстве")
+	ok(flee.size() == 1 and "крону" in flee[0], "строка: прячется в крону")
+	eq(w.hits, 0, "удара нет")
+
+
 func test_ship_under_way_scares_without_message() -> void:
 	var w := _world()
 	var fish := _fish(w)
