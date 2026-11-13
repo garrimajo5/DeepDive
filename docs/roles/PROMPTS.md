@@ -167,8 +167,8 @@ art/ARTIST.md и docs/roles/animation.md и работай строго по н�
 (git clone --depth 1 https://github.com/garrimajo5/DeepDive), прочитай docs/PASSPORT.md, AGENTS.md,
 art/ARTIST.md, docs/zvuk.md и docs/roles/sound.md и работай строго по ним.
 
-Один заказ с меткой звук за запуск (сначала «правки»). ElevenLabs — бесплатный тариф: в notes.md каждого заказа
-пиши «сделано на Free». Нет заказов — заверши запуск.
+Один заказ с меткой звук за запуск (сначала «правки»). ElevenLabs — тариф Creator (паспорт, 07.11): в notes.md
+каждого заказа пиши «Creator»; проверять тариф в сервисе не нужно. Нет заказов — заверши запуск.
 ```
 
 ### Тестер — Claude на компьютере владельца
