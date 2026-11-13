@@ -533,13 +533,27 @@ func fps_text() -> String:
 	return "—" if f < 0 else str(f)
 
 
-## Состояние игры одной строкой для лога.
-func state() -> String:
+## Состояние игры одной строкой для лога. `shot` — строка снимка: в конце тексты строк 2–3 приборов (`rows_now`).
+func state(shot: bool = false) -> String:
 	var h := main.helm
 	return "t %.1f с · %s · свет %s · глубина %.1f м · ход %.2f м/с · курс %d° · корабль (%.1f, %.1f, %.1f) · игрок (%.2f, %.2f) · реактор %s · %s кадр/с" % [
 		time, "за штурвалом" if main.pilot.seated else ("у пульта энергии" if main.at_power else "на ногах"), "вкл" if main.light_on else "выкл", h.depth(), h.speed, Status.course_deg(h.yaw),
 		h.pos.x, h.pos.y, h.pos.z, main.walker.x, main.walker.z, "%s %d°%s" % [str(main.reactor.share), roundi(main.reactor.heat), " сброс" if main.reactor.scram > 0.0 else ""], fps_text()] + worst_text() + ("" if main.breach.status().is_empty() else " · " + main.breach.status()) \
-		+ _run_state() + (" · " + row3_now() if main.arrival.active() else "")
+		+ _run_state() + (" · " + rows_now() if shot else (" · " + row3_now() if main.arrival.active() else ""))
+
+
+## Строки 2–3 приборов сейчас — у каждого снимка (тестер, #1350, 13.11 09:23: текст знака у логова в `32k` в кадре
+## не виден — мелкий или под панелью; проверяется по логу, а не по картинке). Скрытый интерфейс — пометкой.
+func rows_now() -> String:
+	return row2_line(main.status_rows()[1]) + " · " + row3_now() + ("" if main.hud else " · приборы скрыты")
+
+
+## «строка 2: «до дна 12 м · курс 90° · прожектор вкл»» или «строка 2: пусто».
+static func row2_line(row2: Array) -> String:
+	var parts := PackedStringArray()
+	for p in row2:
+		parts.append(str(p))
+	return "строка 2: " + ("пусто" if parts.is_empty() else "«%s»" % " · ".join(parts))
 
 
 ## Строка 3 приборов сейчас и строки мира, которые ждут: в лог у шагов брифинга прибытия (#1429, тестер в #1350 —
@@ -722,13 +736,13 @@ func _shot(name: String) -> void:
 	if DisplayServer.get_name() != "headless":
 		img = main.get_viewport().get_texture().get_image()
 	if img == null or img.is_empty():
-		_log("скриншот %s: нет картинки (headless)" % name)
+		_log("скриншот %s: нет картинки (headless) · %s" % [name, rows_now()])
 		return
 	var calls := RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME)
 	var prims := RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME)
 	img.save_png("%s/%s.png" % [OUT, name])
 	shots.append(name)
-	_log("скриншот %s | %s" % [name, state() + draw_note(calls, prims) + count_note(int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
+	_log("скриншот %s | %s" % [name, state(true) + draw_note(calls, prims) + count_note(int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
 		int(Performance.get_monitor(Performance.OBJECT_COUNT)), int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)))])
 	after_shot()
 
