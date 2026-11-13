@@ -21,6 +21,7 @@ const HOME_OFF := Vector2(70.0, -40.0)
 ## по полу с подхода (+Z). Точку пути проходит, не останавливаясь, ближе WAY_R; назад — тем же путём в обратном
 ## порядке. Последняя точка — перед лицом опоры: гнездо на любом месте лица (dz +11,5…13) достижимо по полу. После
 ## неё — подход к месту у гнезда с +Z (`APPROACH` м перед ним): к гнезду не сбоку по склону, а прямо, на уровне.
+## Назад от гнезда — сразу к последней точке WAY, без подхода (не разворачивается на месте кругом).
 const WAY: Array[Vector2] = [Vector2(52.0, -28.0), Vector2(63.0, -4.0), Vector2(63.0, 20.0)]
 const WAY_R := 3.0
 const APPROACH := 10.0
@@ -121,7 +122,7 @@ func point(i: int) -> Vector2:
 	return Vector2(s.x, s.z + APPROACH)
 
 
-## Весь путь на карте: ниша, точки пути, место у гнезда (x, z).
+## Весь путь к гнезду на карте: ниша, точки пути, место у гнезда (x, z); назад — без подхода `APPROACH`.
 func route() -> Array[Vector2]:
 	var out: Array[Vector2] = [home()]
 	for i in WAY.size() + 1:
@@ -143,13 +144,13 @@ func floor_y(x: float, z: float) -> float:
 	return float(ground.call(x, z)) if ground.is_valid() else Seabed.height(x, z)
 
 
-## Клип для вида: Idle, Swim или OpenPetal.
+## Клип для вида: Idle, Swim или OpenPetal. Разворот на месте — тоже сифонами (Swim).
 func clip() -> String:
 	match state:
 		State.OPEN:
 			return "OpenPetal"
 		State.GO, State.BACK:
-			return "Swim" if speed > 0.05 else "Idle"
+			return "Swim" if speed > 0.05 or absf(turn_v) > 0.1 else "Idle"
 	return "Idle"
 
 
@@ -268,7 +269,7 @@ func _done() -> void:
 func _go(s: State, world: EcoWorld) -> void:
 	state = s
 	t = 0.0
-	leg = WAY.size() if s == State.BACK else 0
+	leg = WAY.size() - 1 if s == State.BACK else 0
 	if s == State.GO:
 		_pulse = world.time   # команда Хранителя — выход к гнезду
 
@@ -285,6 +286,9 @@ func _pass(i: int, top: float, ship: Vector3, dt: float) -> bool:
 ## Дно впереди по ходу, м: высоту пути держит над самым высоким из них — подъём по склону кармана (0,95 м/м)
 ## начинает заранее, вертикаль (0,6 хода) успевает без упора в дно (#1757).
 const LOOK: Array[float] = [3.0, 6.0, 9.0]
+## Запас над дном в LOOK[0] м впереди, меньше которого ход тише (доля запаса, не меньше SLOW_MIN): от гнезда вверх
+## по склону сперва поднимается, потом идёт — за шаг не дальше хода (`test_no_jump_at_nest`).
+const CLIMB_GAP := 1.0
 
 
 ## Шаг пути к цели: поворот носом к ней, ход только почти носом вперёд, высота — над дном впереди (`LOOK`; последние
@@ -303,6 +307,9 @@ func _swim(goal: Vector3, top: float, ship: Vector3, dt: float) -> bool:
 	var face := cos(wrapf(want - yaw, -PI, PI))
 	var blocked := pos.distance_to(ship) < KEEP
 	var want_v := want_speed(top, face, dist, blocked)
+	if dist >= DESCEND and dist > LOOK[0]:   # дно впереди выше, чем успевает подняться, — сначала вверх, потом вперёд
+		var ahead := floor_y(pos.x + d.x / dist * LOOK[0], pos.z + d.y / dist * LOOK[0])
+		want_v *= clampf((pos.y - ahead - AT_NEST * 0.5) / CLIMB_GAP, SLOW_MIN, 1.0)
 	speed = move_toward(speed, want_v, (ACCEL if want_v > speed else BRAKE) * dt)
 	var go := minf(speed * dt, dist)
 	if dist > 1e-4:

@@ -420,3 +420,26 @@ func test_path_around_pillar_through_way() -> void:
 			if b.has_point(l2):
 				hits += 1
 	ok(hits > 0, "проверка честная: прямая ниша → гнездо идёт сквозь опору (%d точек из 101)" % hits)
+
+
+## #1757, кадр 37a: от гнезда назад — сразу к последней точке WAY (без подхода с +Z за спиной) и разворот на месте
+## клипом Swim, а не Idle: через 1,8 с после OPEN купольник в кадре уходит.
+func test_leaves_nest_turning_with_swim() -> void:
+	var w := _world(_near())
+	var d := EcoDome.new()
+	d.reset(w)
+	d.stage(EcoDome.OPEN_TIME - 0.05)
+	_run(w, d, 0.1)
+	eq(d.state, EcoDome.State.BACK, "створка открыта — назад")
+	eq(d.leg, EcoDome.WAY.size() - 1, "назад — к последней точке пути, не к подходу")
+	var swim := 0
+	var idle := 0
+	for i in 18:
+		w.time += DT
+		d.step(w, DT)
+		if d.clip() == "Swim":
+			swim += 1
+		else:
+			idle += 1
+	print("  первые 1,8 с назад: Swim %d, Idle %d" % [swim, idle])
+	ok(idle <= 2, "разворачивается и уходит клипом Swim (Idle %d шагов из 18)" % idle)
