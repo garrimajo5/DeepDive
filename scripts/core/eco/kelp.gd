@@ -19,7 +19,7 @@ const MIN_SHOALS := 3
 const ROUTE: Array[Vector2] = [Vector2(36.0, 38.0), Vector2(45.0, 14.0), Vector2(47.0, -4.0)]
 const ROUTE_GAP := 11.0
 ## Рощи без своей стаи (x, z): Тихая заводь 09 (EcoCove, #831) — ежи там пасутся, а прятаться в ней некому;
-## две у террасы врат 07 — рама позади арки (EcoGate, #831); три — на переходе 00 → 01 (ROUTE).
+## две у террасы врат 07 — рама по бокам жёлоба прохода (EcoGate, #831, #1757); три — на переходе 00 → 01 (ROUTE).
 const EXTRA: Array[Vector2] = [EcoCove.KELP, EcoGate.KELP[0], EcoGate.KELP[1], ROUTE[0], ROUTE[1], ROUTE[2]]
 ## Лент в роще и радиус рощи (KELP_N, KELP_R); ежей у рощи (URCH_N).
 const KELP_N := 34
