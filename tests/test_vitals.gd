@@ -30,7 +30,7 @@ func test_drain_alarm() -> void:   # issue #131: пока тянет заряд 
 	v.drain("Стеклоуст", 0.0)
 	eq(v.drain_alarm(), "", "нулевой расход — не тревога")
 	v.drain("Стеклоуст", 3.2)
-	eq(v.drain_alarm(), "Стеклоуст на корпусе пьёт энергию. Разряд — рычаг у левого борта", "тревога")
+	eq(v.drain_alarm(), "Утечка энергии с корпуса. Разряд — рычаг у левого борта", "тревога эффектом, без вида (#1709)")
 	v.update(0.3, 0.0, 0.0, false, 1.0)
 	ok(v.drain_alarm() != "", "держится между событиями")
 	v.drain("Стеклоуст", 3.2)
@@ -134,7 +134,7 @@ func test_scene_eco_hits_and_drain() -> void:
 		main.step(1.0)
 	ok(main.vitals.energy < e0 - 1.0, "стеклоуст тянет заряд")
 	var line := Status.join(main.status_parts())
-	ok(str(main.status_rows()[2][0]).begins_with("СТЕКЛОУСТ ПЬЁТ ЗАРЯД · "), "тревога первой в ряду сообщений: " + line)
+	ok(str(main.status_rows()[2][0]).begins_with("УТЕЧКА ЭНЕРГИИ · "), "тревога первой в ряду сообщений: " + line)
 	ok(main.drain_sound.playing, "шипит тревога присоски")
 	eq(main.drain_hisses, 2, "шаги по 1 с: шипит сразу и на втором шаге")
 	var seen := {}
@@ -149,7 +149,7 @@ func test_scene_eco_hits_and_drain() -> void:
 	eq(main.drain_hisses, 4, "ещё 3 с — два шипения через 1,6 с, а не каждый шаг")
 	main.step(0.3)
 	main.step(0.3)
-	ok(not Status.join(main.status_parts()).contains("Стеклоуст"), "отпустил — тревога погасла")
+	ok(not Status.join(main.status_parts()).to_lower().contains("утечка энергии"), "отпустил — тревога погасла")
 	ok(not main.drain_sound.playing, "шипение смолкло")
 	near(main.bridge.lamps[1].light_energy, CabinLight.of(true)[1].energy, 1e-6, "свет снова ровный")
 	fake.send = [EcoLink.hit("Серпохвост", 1.0, main.helm.pos)]

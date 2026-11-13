@@ -129,12 +129,7 @@ func test_alarm_targets() -> void:
 	var heat := ShipMap.alarm(AlarmBoard.Field.HEAT, null)
 	ok(heat.room == ShipLayout.Room.ENGINE and heat.at == EngineRoom.VALVE_POST, "перегрев — вентиль в машинном")
 	eq(ShipMap.alarm(AlarmBoard.Field.DRAIN, null).at, Zap.POST_AT, "присоска — рычаг разряда")
-	eq(ShipMap.alarm(AlarmBoard.Field.DRAIN, null).lines[0], "Существо", "#1787: без имени — вид не назван")
-	var v := Vitals.new()
-	v.drain("Прозрачный угорь", 1.0)   # до скана мир шлёт описательное имя (#1786)
-	eq(ShipMap.alarm(AlarmBoard.Field.DRAIN, null, AlarmWay.drain_name(v)).lines[0], "Существо", "#1787: до скана")
-	v.drain("Стеклоуст", 1.0)
-	eq(ShipMap.alarm(AlarmBoard.Field.DRAIN, null, AlarmWay.drain_name(v)).lines[0], "Стеклоуст", "#1787: после скана")
+	eq(ShipMap.alarm(AlarmBoard.Field.DRAIN, null).lines[0], "Утечка энергии", "#1709: эффектом, имя вида не пишется")
 
 
 func test_open_back_hit() -> void:

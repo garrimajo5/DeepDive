@@ -176,8 +176,7 @@ func map_show() -> void:
 	var doors: Array[bool] = []
 	for d in main.layout.doors:
 		doors.append(d.passable())
-	var a := ShipMap.alarm(AlarmBoard.main_field(main.alarms_on()), main.breach.active,
-		AlarmWay.drain_name(main.vitals))
+	var a := ShipMap.alarm(AlarmBoard.main_field(main.alarms_on()), main.breach.active)
 	main.ship_map_panel.show_map(main.ship_map, marks, main.crew.find(main.me), doors, a)
 
 
