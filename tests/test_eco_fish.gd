@@ -443,6 +443,64 @@ func test_crown_alarm_edge_no_flicker() -> void:
 				ok(flips[i] - flips[i - 1] >= 3.0 - 0.1, "переключение через %.1f с" % (flips[i] - flips[i - 1]))
 
 
+## Сцена 00→01 (решение ГД 08.11, `docs/urovni/sloj-1.md`): импульсы сонара на стоянке у 01 (33; −22) сами стаи кроны
+## и стаю рифа не будят — минута импульсов раз в 3 с без тревоги и строки, даже когда серпохвост в 90 м за кроной
+## (дальше CROWN_ALARM). Тревога — только когда хищник подошёл: сонар не расширяет круг тревоги стаи.
+func test_ping_at_01_does_not_alarm() -> void:
+	var w := _world()
+	var fish := _fish(w)
+	w.add(EcoFlower.new())
+	var stand := Vector2(33.0, -22.0)
+	w.ship.pos = Vector3(stand.x, Seabed.height(stand.x, stand.y) + 7.0, stand.y)
+	var to := EcoFlower.CENTER - stand
+	w.ship.yaw = atan2(-to.x, -to.y)  # нос — на крону
+	w.ship.speed = 0.0
+	w.ship.light_on = true
+	w.ship.light_range = 40.0
+	w.ship.hull_noise = 0.2
+	w.ship.sonar_range = 120.0
+	var watch: Array[EcoFish.Shoal] = [fish.shoals[4]]
+	for sh in fish.shoals:
+		if sh.crown:
+			watch.append(sh)
+	eq(watch.size(), 1 + EcoFish.CROWN_SHOALS, "стая рифа и стаи кроны")
+	var far := Vector3(EcoFlower.CENTER.x, w.ship.pos.y, EcoFlower.CENTER.y - 90.0)
+	var pred := w.spawn("pred", far)
+	var pings := 0
+	var blips := 0
+	var alarms := 0
+	var nearest := INF
+	for s in 60 * 20:
+		pred.p = far  # стоит за кроной: без модуля хищника его не уводит никто
+		w.ship.sonar_ping = s % 60 == 0
+		w.step(0.05)
+		if w.ship.sonar_ping:
+			pings += 1
+			near(w.last_ping, w.time - 0.05, 1e-3, "импульс дошёл до мира")
+		w.ship.sonar_ping = false
+		for ev in w.take_link():
+			if ev.get("type") == EcoLink.NEAR:
+				blips += 1
+		for sh in watch:
+			nearest = minf(nearest, pred.p.distance_to(sh.center))
+			if sh.alarm > 0.0 or sh.threat_is_ship:
+				alarms += 1
+	eq(pings, 20, "минута — 20 импульсов")
+	ok(blips > 0, "сонар видит существ: %d отметок" % blips)
+	ok(nearest > EcoFish.CROWN_ALARM, "хищник дальше круга тревоги кроны: %.1f м" % nearest)
+	eq(alarms, 0, "импульсы на стоянке — без тревоги")
+	eq(w.bus.pending.size(), 0, "и без строки")
+
+	pred.p = far + Vector3(0, 0, 50.0)  # в 40 м за кроной
+	w.step(0.05)
+	var crown_alarm := 0
+	for sh in watch:
+		if sh.crown and sh.alarm > 0.0:
+			crown_alarm += 1
+	eq(crown_alarm, EcoFish.CROWN_SHOALS, "хищник в 40 м за кроной — обе стаи кроны в тревоге")
+	ok(w.bus.pending.size() >= 1 and w.bus.pending[0].note == "flee", "строка о бегстве — от хищника")
+
+
 func test_ship_under_way_scares_without_message() -> void:
 	var w := _world()
 	var fish := _fish(w)
