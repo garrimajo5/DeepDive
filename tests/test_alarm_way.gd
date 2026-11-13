@@ -256,16 +256,35 @@ func test_drain_line() -> void:
 	var v := Vitals.new()
 	eq(AlarmWay.drain_line(v, 0, false), "", "без присоски — пусто")
 	v.drain("Стеклоуст", 3.0)
-	eq(AlarmWay.drain_line(v, 0, true), "СТЕКЛОУСТ ПЬЁТ ЗАРЯД · жмите «Разряд»", "у рычага")
-	eq(AlarmWay.drain_line(v, 0, false), "СТЕКЛОУСТ ПЬЁТ ЗАРЯД · рычаг у левого борта", "на мостике")
-	eq(AlarmWay.drain_line(v, 1, false), "СТЕКЛОУСТ ПЬЁТ ЗАРЯД · мостик, в нос, 1 люк", "из коридора")
-	eq(AlarmWay.drain_line(v, 2, false), "СТЕКЛОУСТ ПЬЁТ ЗАРЯД · мостик, в нос, 2 люка", "из лаборатории")
-	v.drain("Двенадцатьбу", 3.0)   # 12 знаков — своё имя, худшая длина
+	eq(AlarmWay.drain_line(v, 0, true), "УТЕЧКА ЭНЕРГИИ · жмите «Разряд»", "у рычага")
+	eq(AlarmWay.drain_line(v, 0, false), "УТЕЧКА ЭНЕРГИИ · рычаг у левого борта", "на мостике")
+	eq(AlarmWay.drain_line(v, 1, false), "УТЕЧКА ЭНЕРГИИ · мостик, в нос, 1 люк", "из коридора")
+	eq(AlarmWay.drain_line(v, 2, false), "УТЕЧКА ЭНЕРГИИ · мостик, в нос, 2 люка", "из лаборатории")
 	for room in 5:
 		ok(AlarmWay.drain_line(v, room, false).length() <= Run.LINE_MAX, AlarmWay.drain_line(v, room, false))
-	eq(AlarmWay.drain_line(v, 4, false), "ДВЕНАДЦАТЬБУ ПЬЁТ ЗАРЯД · мостик, в нос, 4 люка")
-	v.drain("Очень длинное имя", 3.0)
-	eq(AlarmWay.drain_line(v, 0, false), "СУЩЕСТВО ПЬЁТ ЗАРЯД · рычаг у левого борта", "длинное — «существо»")
+	eq(AlarmWay.drain_line(v, 4, false), "УТЕЧКА ЭНЕРГИИ · мостик, в нос, 4 люка")
+
+
+## #1709 (поправка владельца 13.11): корабль говорит эффектом — имени вида и слова «присоска» нет ни в строке 3
+## (у рычага, на мостике, из любого отсека), ни в указателе, ни на табло, ни на схеме, ни в тревоге `Vitals`.
+func test_drain_no_species_name() -> void:
+	for who in ["Стеклоуст", "Прозрачный угорь", ""]:
+		var v := Vitals.new()
+		v.drain(who, 3.0)
+		var texts: Array[String] = [v.drain_alarm(), AlarmBoard.WORDS[AlarmBoard.Field.DRAIN]]
+		texts.append(ShipMap.alarm(AlarmBoard.Field.DRAIN, null).lines[0])   # вторая — «Мостик · разряд»
+		for room in 5:
+			texts.append(AlarmWay.drain_line(v, room, false))
+			texts.append(AlarmWay.drain_line(v, room, true))
+			var p := AlarmWay.pointer(Breach.new(), Reactor.new(), room, true, false, v)
+			if p != null:
+				texts.append(p.label())
+		for t in texts:
+			ok(not t.is_empty(), "строка есть (%s)" % who)
+			var low := t.to_lower()
+			ok(not low.contains("стеклоуст") and not low.contains("присоск") and not low.contains("угорь")
+					and not low.contains("существо"), "без имени вида: «%s»" % t)
+			ok(low.contains("утечка энергии"), "эффектом: «%s»" % t)
 
 
 ## #1709: указатель присоски — к люку на мостик; на мостике нет; пробоина главнее, присоска главнее перегрева.
@@ -277,13 +296,13 @@ func test_pointer_drain() -> void:
 	v.drain("Стеклоуст", 3.0)
 	var p := AlarmWay.pointer(b, r, R.CORRIDOR, true, false, v)
 	ok(p != null, "из коридора — есть")
-	eq(p.label(), "Стеклоуст · мостик")
+	eq(p.label(), "Утечка энергии · мостик")
 	eq(p.door, 0, "люк z 2")
 	ok(p.anchor.z > ShipLayout.DOOR_Z[0], "со стороны игрока")
 	eq(AlarmWay.pointer(b, r, R.CARGO, true, false, v).door, 3, "из трюма — ближний люк z 19,5")
 	eq(AlarmWay.pointer(b, r, R.BRIDGE, true, false, v), null, "на мостике — рамка у щитка")
 	r.hot = true
-	eq(AlarmWay.pointer(b, r, R.CORRIDOR, true, false, v).word, "Стеклоуст", "присоска главнее перегрева")
+	eq(AlarmWay.pointer(b, r, R.CORRIDOR, true, false, v).word, "Утечка энергии", "присоска главнее перегрева")
 	b.active = b.all[3]
 	eq(AlarmWay.pointer(b, r, R.CORRIDOR, true, false, v).word, "Пробоина", "пробоина главнее присоски")
 	eq(AlarmWay.pointer(Breach.new(), Reactor.new(), R.CORRIDOR, true, false, null), null, "без заряда — без присоски")
@@ -307,7 +326,7 @@ func test_scene_silt_drain_rows() -> void:
 	main.vitals.drain("Стеклоуст", 0.5)
 	main.step(0.05)
 	main.vitals.drain("Стеклоуст", 0.5)
-	eq(str(main.status_rows()[2][0]), "СТЕКЛОУСТ ПЬЁТ ЗАРЯД · мостик, в нос, 1 люк", "из коридора")
+	eq(str(main.status_rows()[2][0]), "УТЕЧКА ЭНЕРГИИ · мостик, в нос, 1 люк", "из коридора")
 	var zap: Deck.Post = null
 	for post in main.posts:
 		if post.id == "zap":
@@ -315,7 +334,7 @@ func test_scene_silt_drain_rows() -> void:
 	main.walker.x = zap.at.x
 	main.walker.z = zap.at.y
 	ok(main._at_lever(), "у рычага")
-	eq(str(main.status_rows()[2][0]), "СТЕКЛОУСТ ПЬЁТ ЗАРЯД · жмите «Разряд»", "у рычага")
+	eq(str(main.status_rows()[2][0]), "УТЕЧКА ЭНЕРГИИ · жмите «Разряд»", "у рычага")
 	main.queue_free()
 	await frames(1)
 

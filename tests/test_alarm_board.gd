@@ -5,7 +5,7 @@ extends TestCase
 func test_fields() -> void:
 	eq(AlarmBoard.WORDS.size(), 5)
 	eq(AlarmBoard.WORDS[0], "ПРОБОИНА")
-	eq(AlarmBoard.WORDS[1], "ПРИСОСКА НА КОРПУСЕ", "#1787: табло горит и до скана — без имени вида")
+	eq(AlarmBoard.WORDS[1], "УТЕЧКА ЭНЕРГИИ", "#1709: эффектом, без имени вида")
 	eq(AlarmBoard.WORDS[4], "МАЛО ЗАРЯДА")
 	var sum := 0.0
 	for w in AlarmBoard.WIDTHS:
@@ -15,6 +15,50 @@ func test_fields() -> void:
 	near(AlarmBoard.field_span(4).y, 3.6, 1e-5)
 	near(AlarmBoard.u_of(-AlarmBoard.face_rect()[1].x * 0.5), 0.0, 1e-5)
 	near(AlarmBoard.u_of(AlarmBoard.face_rect()[1].x * 0.5), 1.0, 1e-5)
+
+
+
+## #1709: надписи атласа MOD-019 совпадают с `WORDS` — правка слова без перерисовки атласа (или наоборот) ловится.
+## В каждом поле буквы (класс 255) делятся на слова пробелами ≥ WORD_GAP px; число слов — как в WORDS, а число
+## столбцов-глифов слова — его буквы (соседние могут слипнуться: не меньше букв − 2).
+const WORD_GAP := 10
+
+
+func test_atlas_matches_words() -> void:
+	var img: Image = (load(AlarmBoardView.WORDS_TEX) as Texture2D).get_image()
+	ok(img != null, "атлас грузится")
+	if img == null:
+		return
+	if img.is_compressed():
+		img.decompress()
+	for i in AlarmBoard.WORDS.size():
+		var span := AlarmBoard.field_span(i)
+		var left := AlarmBoard.CENTER.x - AlarmBoard.SIZE.x * 0.5   # поля атласа — доли всей ширины 7,2 м (fields.json)
+		var x0 := roundi((span.x - left) / AlarmBoard.SIZE.x * img.get_width())
+		var x1 := roundi((span.y - left) / AlarmBoard.SIZE.x * img.get_width())
+		var runs: Array[int] = []   # глифов в каждом слове
+		var gap := WORD_GAP
+		var was := false
+		for x in range(x0 + 4, x1 - 4):
+			var ink := false
+			for y in img.get_height():
+				if img.get_pixel(x, y).r > 0.9:
+					ink = true
+					break
+			if ink and not was:
+				if gap >= WORD_GAP:
+					runs.append(0)
+				runs[-1] += 1
+				gap = 0
+			elif not ink:
+				gap += 1
+			was = ink
+		var words := AlarmBoard.WORDS[i].split(" ")
+		eq(runs.size(), words.size(), "поле %d «%s»: слов в атласе %s" % [i, AlarmBoard.WORDS[i], runs])
+		if runs.size() == words.size():
+			for w in words.size():
+				var n := words[w].length()
+				ok(runs[w] <= n and runs[w] >= n - 2, "«%s»: глифов %d на %d букв" % [words[w], runs[w], n])
 
 
 func test_place() -> void:

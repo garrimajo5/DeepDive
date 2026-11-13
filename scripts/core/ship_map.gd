@@ -3,7 +3,7 @@ extends RefCounted
 ## Схема корабля по ART-042 (`docs/concept-art/shema.md`, `shema-korablya.png`, `shema-sostoyaniya.png`): вид сверху
 ## поверх затемнённой сцены — пять отсеков из `ShipLayout.ROOMS` и `Deck.BRIDGE_MIN/MAX`, люки (`Door.passable`),
 ## значки постов `Deck.posts()` из атласа `textures/shema/znachki.png`, отметки экипажа (свой — «Вы здесь»),
-## тревога янтарём (пробоина — отсек и место сварки, перегрев — вентиль, стеклоуст — разряд), легенда и линейка 5 м.
+## тревога янтарём (пробоина — отсек и место сварки, перегрев — вентиль, утечка энергии — разряд), легенда и линейка 5 м.
 ## Вход — «Схема корабля» в паузе / меню забега ART-037 (`Pause`), «Назад» и системная «Назад» возвращают туда.
 ## Здесь — состояние и раскладка без узлов; рисует `scripts/game/ship_map_panel.gd` (`main.ship_map_panel`),
 ## шаг — `PauseFlow.map_step`. Раскладка — в пикселях макета высотой 1080 на всю ширину экрана: масштаб H/1080,
@@ -289,9 +289,9 @@ static func letter(role: int) -> String:
 
 
 ## Цель тревоги по главному полю табло (`AlarmBoard.main_field`), null — нечего показывать.
-## Пробоина — из настоящего события (`Breach.active`), перегрев — вентиль, присоска — рычаг разряда; who — кто на
-## присоске (`AlarmWay.drain_name`): до скана вида — «Существо», имя — только после (#1787).
-static func alarm(field: int, spot: Breach.Spot, who := "Существо") -> Alarm:
+## Пробоина — из настоящего события (`Breach.active`), перегрев — вентиль, присоска — рычаг разряда, подпись —
+## эффектом «Утечка энергии», имя вида на схеме не пишется (#1709).
+static func alarm(field: int, spot: Breach.Spot) -> Alarm:
 	var a := Alarm.new()
 	match field:
 		AlarmBoard.Field.BREACH:
@@ -310,7 +310,7 @@ static func alarm(field: int, spot: Breach.Spot, who := "Существо") -> A
 			a.room = ShipLayout.Room.BRIDGE
 			a.at = Zap.POST_AT
 			a.icon = "zap"
-			a.lines = [who, "Мостик · разряд"]
+			a.lines = [AlarmWay.DRAIN_WORD, "Мостик · разряд"]
 		_:
 			return null
 	return a

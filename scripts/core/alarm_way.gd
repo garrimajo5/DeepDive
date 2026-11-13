@@ -88,21 +88,17 @@ static func silt_exit(cl: Silt.Cloud, ship: Vector3) -> String:
 	return "курс %d°, %d м" % [(roundi(deg / 5.0) * 5) % 360, m]
 
 
-## Имя существа на присоске для строки и указателя: «Стеклоуст»; длиннее NAME_MAX — «Существо».
-const NAME_MAX := 12
+## Присоска на корпусе для строки, указателя и схемы — эффектом, не видом (#1709, поправка владельца 13.11): корабль
+## спроектирован до знакомства с местными видами, `Vitals.drain_by` в интерфейсе корабля не показывается.
+const DRAIN_WORD := "Утечка энергии"
 
 
-static func drain_name(v: Vitals) -> String:
-	var n := v.drain_by
-	return n if n != "" and n.length() <= NAME_MAX else "Существо"
-
-
-## Присоска (#1709): у рычага — «СТЕКЛОУСТ ПЬЁТ ЗАРЯД · жмите «Разряд»», на мостике — «… · рычаг у левого борта»,
+## Присоска (#1709): у рычага — «УТЕЧКА ЭНЕРГИИ · жмите «Разряд»», на мостике — «… · рычаг у левого борта»,
 ## в другом отсеке — «… · мостик, в нос, 2 люка». at_lever — кнопка действия сейчас «Разряд». Нет присоски — пусто.
 static func drain_line(v: Vitals, player_room: int, at_lever: bool) -> String:
 	if v.drain_alarm().is_empty():
 		return ""
-	var head := "%s ПЬЁТ ЗАРЯД" % drain_name(v).to_upper()
+	var head := DRAIN_WORD.to_upper()
 	if at_lever:
 		return head + " · жмите «Разряд»"
 	if player_room == ShipLayout.Room.BRIDGE:
@@ -123,7 +119,7 @@ const TIP_MIN_Y := 172.0 + LABEL_PX * 1.6 + 16.0 + HintPointer.PX_MAX
 
 
 class Pointer:
-	var word := ""    ## «Пробоина» / «Стеклоуст» / «Перегрев» — подпись у стрелки у края
+	var word := ""    ## «Пробоина» / «Утечка энергии» / «Перегрев» — подпись у стрелки у края
 	var room := 0     ## отсек цели
 	var door := -1    ## ближний люк по пути, индекс в ShipLayout.DOOR_Z
 	var anchor := Vector3.ZERO   ## остриё шеврона, оси корабля
@@ -145,7 +141,7 @@ static func pointer(b: Breach, r: Reactor, player_room: int, solo: bool, tutoria
 		p.word = "Пробоина"
 		p.room = b.active.room
 	elif v != null and not v.drain_alarm().is_empty():
-		p.word = drain_name(v)
+		p.word = DRAIN_WORD
 		p.room = ShipLayout.Room.BRIDGE
 	elif r.hot and r.scram <= 0.0:
 		p.word = "Перегрев"
