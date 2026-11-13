@@ -252,6 +252,7 @@ func client_step(dt: float) -> void:
 	main.silt_view.apply(main.silt, main.time, main.helm.pos, main.helm.yaw)
 	main.sonar_view.show_state(main.sonar, main.helm.pos, main.helm.yaw, main.time, main.reactor.k(Reactor.Sys.SONAR) > 0.0, main.silt.noise(main.time))
 	client_eco(dt, near)
+	main.gate_petal()
 	main.visor.visible = main.me.welding()
 	main.alarm_board.show_alarms(main.alarms_on(), main.time, main.breach.active, main.pilot.seated)
 	client_run_view(dt)

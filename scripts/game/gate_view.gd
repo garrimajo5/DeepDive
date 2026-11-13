@@ -1,21 +1,25 @@
 class_name GateView
 extends Node3D
-## Арка террасы врат 07 — модель MOD-023 (`GateArch.MODEL`, встройка #1757) и три временные чаши гнёзд
-## (`GateArch.nests_mesh`, до переноса гнёзд `GateDiag.NESTS` на места модели). Модель стоит pivot-ом на полу жёлоба
+## Арка террасы врат 07 — модель MOD-023 (`GateArch.MODEL`, встройка #1757) с контактной группой у правой опоры:
+## гнёзда под створками `Stvorka0…2` (их читает диагностика, `GateDiag.NESTS`) и табличка `Diagnostika` — перед
+## ними карман в склоне жёлоба (`Seabed.Layer.nest_pocket`). Модель стоит pivot-ом на полу жёлоба
 ## в середине террасы (`EcoGate.CENTER`, `GateArch.floor_y`), подход с +Z — как в файле.
 ## Слой отмели (`OceanView.LAYER_WORLD`): её освещает свет сквозь лёд и прожектор.
 ## Материалы модели заменены своим шейдером с её же картами (`shaders/gate_arch.gdshader`): туман — слоями воды
 ## ART-069 (`OceanView.add_layer_mat`), со штатным туманом арка вдали темнее воды вокруг и видна со старта силуэтом.
 ## LOD — по расстоянию (`visibility_range_*`, отрезки `GateArch.ranges`), «Экономно» — `set_lite` (без LOD0).
-## Створки `Stvorka0…2` и табличка `Diagnostika` скрыты: контактная группа модели у правой опоры (y 0,2…6 м от пола)
-## сейчас под восточным склоном жёлоба — вопрос уровням в #1757; покажутся вместе с гнёздами.
+## Створку гнезда поднимает купольник: `set_petal(i, k)` — поворот узла створки вокруг своей оси X
+## (`GateArch.PETAL_TURN`), долю ставит `Main` по `EcoLink.petal_lift` и знанию `LayerLore.PETAL07`.
+## Створки и табличка — вне LOD модели: дальше `GateArch.DETAIL_END` не рисуются.
 
 const SHADER := preload("res://shaders/gate_arch.gdshader")
 const LODS: Array[String] = ["LOD0", "LOD1", "LOD2"]
-const HIDDEN: Array[String] = ["Stvorka0", "Stvorka1", "Stvorka2", "Diagnostika"]
+const PETALS: Array[String] = ["Stvorka0", "Stvorka1", "Stvorka2"]
+const PLATE := "Diagnostika"
 
 var model: Node3D
-var nests: MeshInstance3D
+var petals: Array[MeshInstance3D] = []   ## створки гнёзд по номерам `GateDiag.NESTS`
+var plate: MeshInstance3D                ## табличка диагностики
 var mats: Array[ShaderMaterial] = []
 var lite := false
 var _by_name := {}   ## имя материала модели → наш материал (один на все LOD)
@@ -30,18 +34,11 @@ func _init() -> void:
 	for mi: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
 		mi.layers = OceanView.LAYER_WORLD
 		mi.set_surface_override_material(0, _model_mat(mi.mesh.surface_get_material(0) as StandardMaterial3D))
-	for n in HIDDEN:
-		var h := model.get_node_or_null(n) as Node3D
-		if h:
-			h.visible = false
-	nests = MeshInstance3D.new()
-	nests.name = "Чаши гнёзд"
-	nests.layers = OceanView.LAYER_WORLD
-	nests.mesh = GateArch.nests_mesh()
-	var nm := _mat(GateArch.NEST_COLOR, 0.7)
-	mats.append(nm)
-	nests.set_surface_override_material(0, nm)
-	add_child(nests)
+	for n in PETALS:
+		petals.append(model.get_node(n) as MeshInstance3D)
+	plate = model.get_node(PLATE) as MeshInstance3D
+	for mi: MeshInstance3D in petals + [plate]:
+		mi.visibility_range_end = GateArch.DETAIL_END
 	set_lite(false)
 
 
@@ -67,6 +64,17 @@ func set_lite(on: bool) -> void:
 			mi.visibility_range_end = maxf(r.y, 0.0)
 			mi.visibility_range_begin_margin = 0.0
 			mi.visibility_range_end_margin = 0.0
+
+
+## Створка гнезда i поднята на долю k (0 — закрыта, 1 — открыта).
+func set_petal(i: int, k: float) -> void:
+	var x := GateArch.PETAL_TURN * clampf(k, 0.0, 1.0)
+	if petals[i].rotation.x != x:
+		petals[i].rotation.x = x
+
+
+func petal(i: int) -> float:
+	return petals[i].rotation.x / GateArch.PETAL_TURN
 
 
 ## Сетки LOD i (0…2).
