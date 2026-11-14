@@ -188,6 +188,7 @@ func test_scene_runs_scenario() -> void:
 	var dome: Array[String] = []   # 37/37a (#1350): купольник в кадре — клип ANIM-004 и створка по кадрам
 	var dome_t := -1.0   # 37 (#837): время клипа OpenPetal на кадре — верхняя точка подъёма
 	var dome_say := ""   # 37a (#837, отчёт 11.11 15:18): строка створки на приборах
+	var okno: Array[String] = []   # 41…41c (#1757, ГД 14.11): створка из носового окна по порядку — клип, створка, строка снимка
 	var task_say := ""   # 35-zadacha-07 (#1635, отчёт 11.11 12:19): строка 3 — задача места, не «Вы за штурвалом»
 	var zamer: Array[String] = []   # 38/38a (#1498): режим хищника 0 и строка приборов на кадрах «замер» и «потерял»
 	var zamer_hull: Array[float] = []   # 38 → 38a: удара нет
@@ -277,6 +278,12 @@ func test_scene_runs_scenario() -> void:
 					dome_t = dome_at
 				else:
 					dome_say = say_now
+			if qa.log_lines[k].begins_with("скриншот 41"):
+				# строка снимка в headless без состояния — створку берём там же, где её берёт снимок: с узла модели
+				okno.append("%s %s | %s" % [qa.log_lines[k].split(" ")[1].trim_suffix(":"), dome_line,
+						QaRunner.petal_note(EcoDome.NEST, main.gate_view.petal(EcoDome.NEST)).get_slice(": ", 1).get_slice(" ", 0)])
+				if qa.log_lines[k].begins_with("скриншот 41b"):
+					okno.append(say_now)
 			if qa.log_lines[k].begins_with("скриншот 38-zamer") or qa.log_lines[k].begins_with("скриншот 38a-zamer"):
 				zamer.append("%s: %s" % [qa.log_lines[k].split(" ")[1].trim_suffix(":"), pred_mode])
 				zamer.append(say_now)
@@ -325,6 +332,16 @@ func test_scene_runs_scenario() -> void:
 		ok(absf(dome_t - EcoDome.LIFT.y) < 0.15,
 				"37 (#837): кадр в верхней точке подъёма захвата (LIFT.y %.1f с): %.2f с" % [EcoDome.LIFT.y, dome_t])
 		eq(dome[1], "в кадре Swim 1.0", "37a: створка поднята, купольник в кадре уходит клипом Swim")
+	eq(okno.size(), 5, "41…41c (#1757): четыре кадра створки из носового окна сняты: %s" % str(okno))
+	if okno.size() == 5:
+		eq(okno[0], "41-okno-zakryta в кадре OpenPetal 0.0 | закрыта", "41: купольник у гнезда, створка закрыта")
+		ok(okno[1].begins_with("41a-okno-podem в кадре OpenPetal 0.") and okno[1].ends_with("| поднята"),
+				"41a: купольник действует, створка в пути: " + okno[1])
+		var half := float(okno[1].get_slice(" ", 4))   # доля подъёма у мира; на узле модели — она же («поднята»)
+		ok(half > 0.3 and half < 0.7, "41a: створка поднята примерно наполовину — её видно между «закрыта» и «открыта»: %.2f" % half)
+		eq(okno[2], "41b-okno-otkryta в кадре OpenPetal 1.0 | открыта", "41b: створка открыта, купольник ещё у гнезда")
+		eq(okno[3], EcoDome.PETAL_TEXT, "41b: на приборах строка створки — знание забыто шагом dome")
+		eq(okno[4], "41c-okno-uhodit в кадре Swim 1.0 | открыта", "41c: купольник уходит в кадре, створка осталась открытой")
 	eq(task_say, PlaceTask.line("gate"),
 			"35-zadacha-07 (#1635): на приборах строка задачи 07, не «%s»" % Main.SAT_MSG)
 	eq(dome_say, EcoDome.PETAL_TEXT, "37a (#837): на приборах строка створки — знание забыто шагом dome")
@@ -1300,6 +1317,48 @@ func test_gate_window_shot_is_reachable() -> void:
 	ok(to.length() < 30.0, "гнездо ближе 30 м от центра корабля: %.1f" % to.length())
 	var was := _before_shot("37-kupolnik-stvorka")
 	ok(to.length() < Vector2(n.x - float(was[0]["x"]), n.z - float(was[0]["z"])).length() - 10.0, "ближе, чем корабль кадра 37")
+
+
+## #1757 (гейм-дизайнер 14.11 08:09): тестеру нужна последовательность «закрыта → купольник действует → открыта →
+## уходит» тем же взглядом и с обычными столкновениями. Все четыре кадра `41…` сняты со стоянки `37b` (она законна и
+## достижима ходом — тесты выше и `test_gate_pass`), без полёта, взглядом `37b`; корабль возвращён на стоянку перед
+## каждым кадром, а купольник поставлен один раз — дальше клип идёт сам.
+func test_gate_window_sequence_keeps_the_stand() -> void:
+	var base := _before_shot("37b-okno-gnezdo")
+	var q: Array = JSON.parse_string(FileAccess.get_file_as_string("res://tools/qa/scenario.json"))
+	var names := ["41-okno-zakryta", "41a-okno-podem", "41b-okno-otkryta", "41c-okno-uhodit"]
+	var from := -1
+	var prev := -1
+	var domes := 0
+	for i in q.size():
+		var st: Dictionary = q[i]
+		if st["do"] == "dome" and from >= 0:
+			domes += 1
+		if st["do"] == "dome" and from < 0 and i + 2 < q.size() and q[i + 2].get("name", "") == names[0]:
+			from = i
+			near(float(st.get("t", -1.0)), 0.0, 1e-6, "серия начинается с начала клипа — створка закрыта")
+		if st["do"] == "shot" and st["name"] in names:
+			ok(from >= 0, "%s: после шага dome серии" % st["name"])
+			var ships := 0
+			var looks := 0
+			for j in range(maxi(prev, from - 3) + 1, i):
+				if q[j]["do"] == "ship":
+					ships += 1
+				if q[j]["do"] == "goto":
+					looks += 1
+					eq([q[j]["x"], q[j]["z"], q[j]["yaw"], q[j]["pitch"]], [0.9, -2.9, 0.0, -9.0], "%s: взгляд кадра 37b" % st["name"])
+			eq(ships, 1, "%s: корабль возвращён на стоянку перед кадром" % st["name"])
+			eq(looks, 1, "%s: взгляд поставлен перед кадром" % st["name"])
+			prev = i
+	eq(domes, 0, "купольник поставлен один раз: между кадрами клип идёт сам, а не переставляется")
+	for n in names:
+		var b := _before_shot(n)
+		ok(not b.is_empty() and not b[0].is_empty(), "кадр %s есть в сценарии" % n)
+		if b.is_empty() or b[0].is_empty():
+			continue
+		ok(b[1].is_empty(), "%s: без тестового полёта" % n)
+		for key in ["x", "y", "z", "yaw"]:
+			near(float(b[0][key]), float(base[0][key]), 1e-6, "%s: стоянка 37b, %s" % [n, key])
 
 
 func test_slope_shots_edge_and_rocks() -> void:   # отчёт #1182: склон 06→10 (#832) сценарий не проходил — нечего проверить
