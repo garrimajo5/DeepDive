@@ -11,6 +11,11 @@ extends SceneTree
 ## держался; прятались ли в это время и стаи рифа у 01 (не крона, дом ближе REEF_HOME м от оси). Строка зерна —
 ## сразу, как посчитано. Ещё — тревога кроны за первые FIRST с стоянки (столько стоит экипаж в сцене) и чем занят
 ## залипший хищник: режимы (`EcoPred.Mode`, с) и сколько секунд его цель (`agent.goal`) внутри CROWN_ALARM.
+## Разбор тревоги кроны по причине (п. 2 (аж), #1400): «транзит» — ближайший серпохвост внутри CROWN_ALARM патрулирует
+## к цели вне CROWN_ALARM (огибает риф по пути, `reef_steer`), «цель у рифа» — патруль к цели внутри CROWN_ALARM,
+## «охота» — внутри CROWN_ALARM в другом режиме, «ушёл» — внутри CROWN_ALARM серпохвоста нет (тревога спадает).
+## В итоге — суммы по зёрнам, эпизоды «спряталась → вернулась», зёрна без подхода серпохвоста внутрь CROWN_ALARM,
+## доля транзита в тревоге и самый долгий отрезок транзита.
 
 const MidCalm := preload("res://tools/mid_calm.gd")
 const DT := 1.0 / 30.0
@@ -24,6 +29,9 @@ const REEF_HOME := 45.0
 const LONG := 20.0
 ## Первые секунды стоянки у 01 — столько стоит экипаж в сцене (как стоянка STOP в tools/mid_calm.gd, с).
 const FIRST := 25.0
+## Причины тревоги кроны (ключи `why` в итоге зерна) — в этом порядке и в строках.
+const WHY: Array[String] = ["transit", "goal_in", "hunt", "away"]
+const WHY_RU := {"transit": "транзит", "goal_in": "цель у рифа", "hunt": "охота", "away": "ушёл"}
 static var dark := DARK
 static var mid := MID
 static var stay := STAY
@@ -59,7 +67,9 @@ static func _flat(a: Vector3, b: Vector3) -> float:
 
 ## Один проход: {alarm (с), episodes, longest (с), lines, stuck (с, самый долгий отрезок), stuck_r ([мин, макс] м),
 ## reef_hid (с, стаи рифа прятались во время залипания), hunger (макс. голод ближайшего за стоянку), nearest (м),
-## first (с тревоги за первые FIRST с), modes (режим → с залипания), goal_in (с залипания с целью внутри CROWN_ALARM)}.
+## first (с тревоги за первые FIRST с), modes (режим → с залипания), goal_in (с залипания с целью внутри CROWN_ALARM),
+## why (причина → с тревоги кроны, сумма — alarm), transit (с, самый долгий отрезок транзита), transit_r ([мин, макс] м
+## от оси на транзите)}.
 static func run(seed_value: int) -> Dictionary:
 	var ev: EcoView = MidCalm.make(seed_value)
 	var w := ev.world
@@ -75,7 +85,10 @@ static func run(seed_value: int) -> Dictionary:
 		if not sh.crown and _flat(sh.home, axis) < REEF_HOME:
 			reef.append(sh)
 	var r := {"alarm": 0.0, "episodes": 0, "longest": 0.0, "lines": 0, "stuck": 0.0, "stuck_r": [INF, 0.0],
-		"reef_hid": 0.0, "hunger": 0.0, "nearest": INF, "reef": reef.size(), "first": 0.0, "modes": {}, "goal_in": 0.0}
+		"reef_hid": 0.0, "hunger": 0.0, "nearest": INF, "reef": reef.size(), "first": 0.0, "modes": {}, "goal_in": 0.0,
+		"why": {}, "transit": 0.0, "transit_r": [INF, 0.0]}
+	for k in WHY:
+		r["why"][k] = 0.0
 	var stood := [0.0]
 	var at_01 := [false]
 	var listen := func(e: EcoBus.Event) -> void:
@@ -88,6 +101,7 @@ static func run(seed_value: int) -> Dictionary:
 	var left: float = legs[0][1]
 	var run_alarm := 0.0
 	var run_stuck := 0.0
+	var run_transit := 0.0
 	var was := false
 	while leg < legs.size():
 		var tg: Vector2 = legs[leg][0]
@@ -137,6 +151,16 @@ static func run(seed_value: int) -> Dictionary:
 		else:
 			run_alarm = 0.0
 		was = hidden
+		var why := cause(pr, pd, axis) if hidden else ""
+		if why != "":
+			r["why"][why] += DT
+		if why == "transit":
+			run_transit += DT
+			r["transit"] = maxf(r["transit"], run_transit)
+			r["transit_r"][0] = minf(r["transit_r"][0], pd)
+			r["transit_r"][1] = maxf(r["transit_r"][1], pd)
+		else:
+			run_transit = 0.0
 		if hidden and pr and pd < EcoFish.CROWN_ALARM and pr.hunger > EcoPred.HUNT_HUNGER:
 			run_stuck += DT
 			r["stuck"] = maxf(r["stuck"], run_stuck)
@@ -157,15 +181,29 @@ static func run(seed_value: int) -> Dictionary:
 	return r
 
 
+## Причина тревоги кроны по ближайшему к оси серпохвосту `pr` (на `pd` м от оси `axis`): ключ из WHY.
+static func cause(pr: EcoPred.Pred, pd: float, axis: Vector3) -> String:
+	if pr == null or pd >= EcoFish.CROWN_ALARM:
+		return "away"
+	if pr.mode != EcoPred.Mode.PATROL:
+		return "hunt"
+	return "goal_in" if _flat(pr.agent.goal, axis) < EcoFish.CROWN_ALARM else "transit"
+
+
 static func seed_line(s: int, r: Dictionary) -> String:
 	var sr: Array = r["stuck_r"]
 	var modes := ""
 	for k in r["modes"]:
 		modes += "%s%s %.1f" % [", " if modes != "" else "", String(k).to_lower(), r["modes"][k]]
-	return "  зерно %2d: крона в тревоге %5.1f с (за первые %.0f с — %4.1f), эпизодов %d, самый долгий %5.1f с, строк кроны %d; залипание %5.1f с%s, цель внутри %.1f с, режимы [%s], стаи рифа (%d) прятались %4.1f с; голод у рифа до %.2f, ближе всего %.1f м" % [
+	var why := ""
+	for k in WHY:
+		why += "%s%s %.1f" % [", " if why != "" else "", WHY_RU[k], r["why"][k]]
+	var tr: Array = r["transit_r"]
+	return "  зерно %2d: крона в тревоге %5.1f с (за первые %.0f с — %4.1f), эпизодов %d, самый долгий %5.1f с, строк кроны %d; залипание %5.1f с%s, цель внутри %.1f с, режимы [%s], стаи рифа (%d) прятались %4.1f с; голод у рифа до %.2f, ближе всего %.1f м; причины [%s], транзит самый долгий %.1f с%s" % [
 		s, r["alarm"], FIRST, r["first"], r["episodes"], r["longest"], r["lines"], r["stuck"],
 		(" (%.1f–%.1f м от оси)" % [sr[0], sr[1]]) if r["stuck"] > 0.0 else "", r["goal_in"], modes, r["reef"],
-		r["reef_hid"], r["hunger"], r["nearest"]]
+		r["reef_hid"], r["hunger"], r["nearest"], why, r["transit"],
+		(" (%.1f–%.1f м от оси)" % [tr[0], tr[1]]) if r["transit"] > 0.0 else ""]
 
 
 static func report(seeds: int) -> Array[String]:
@@ -178,6 +216,14 @@ static func report(seeds: int) -> Array[String]:
 	var firsts: Array = []
 	var longest: Array = []
 	var stucks: Array = []
+	var why := {}
+	for k in WHY:
+		why[k] = 0.0
+	var total := 0.0
+	var episodes := 0
+	var transits: Array = []
+	var transit_seeds := 0
+	var no_visit := 0
 	for s in seeds:
 		var r := run(s)
 		put(lines, seed_line(s, r))
@@ -190,12 +236,31 @@ static func report(seeds: int) -> Array[String]:
 			stucks.append(r["stuck"])
 		if r["stuck"] > LONG:
 			long += 1
+		total += r["alarm"]
+		if r["nearest"] >= EcoFish.CROWN_ALARM:
+			no_visit += 1
+		episodes += r["episodes"]
+		for k in WHY:
+			why[k] += r["why"][k]
+		if r["transit"] > 0.0:
+			transit_seeds += 1
+			transits.append(r["transit"])
 	longest.sort()
 	stucks.sort()
 	firsts.sort()
+	transits.sort()
+	var parts := ""
+	for k in WHY:
+		parts += "%s%s %.0f с (%s)" % [", " if parts != "" else "", WHY_RU[k], why[k], _pct(why[k], total)]
+	put(lines, "== причины тревоги кроны, сумма %d зёрен: всего %.0f с, эпизодов %d, зёрен без подхода серпохвоста ближе %.0f м — %d; %s; транзит в %d/%d зёрнах, самый долгий отрезок — медиана %s, макс %s с" % [
+		seeds, total, episodes, EcoFish.CROWN_ALARM, no_visit, parts, transit_seeds, seeds, _med(transits), _max(transits)])
 	put(lines, "== итог: крона в тревоге в %d/%d зёрнах (самый долгий эпизод — медиана %s, макс %s с; за первые %.0f с — медиана %s с); залипание голодного в %d/%d (макс %s с), дольше %.0f с — %d/%d" % [
 		alarmed, seeds, _med(longest), _max(longest), FIRST, _med(firsts), stuck, seeds, _max(stucks), LONG, long, seeds])
 	return lines
+
+
+static func _pct(a: float, b: float) -> String:
+	return "—" if b <= 0.0 else "%.0f %%" % (100.0 * a / b)
 
 
 static func _med(v: Array) -> String:
