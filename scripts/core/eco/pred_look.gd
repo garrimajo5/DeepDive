@@ -3,15 +3,22 @@ extends RefCounted
 ## Как двигается серпохвост в сцене: модель MOD-011 на скелете ANIM-001 (`models/serpohvost-anim.glb`,
 ## `docs/concept-art/serpohvost.md`). Тело — по курсу мира (`EcoPred.turn`), клипы на месте: плавание `Swim` и бросок
 ## `SwimFast` смешиваются по скорости, `Bite` — пасть у корабля в броске, у добычи в охоте и пока ест (жуёт),
-## `TailStrike` — вертикальный удар серпом сразу после укуса корпуса. Только числа и выбор клипов, без узлов:
+## `TailStrike` — вертикальный удар серпом сразу после укуса корпуса. Переходы ANIM-005 (#1753, #1766): `Coil` —
+## взвод в начале броска, `Recoil` — отход, когда удар серпом гаснет, `Hover` — замер (`EcoPred.Mode.ALERT`) плавно
+## поверх плавания, `BendL`/`BendR` — хвост дугой в повороте по крену тела. Только числа и выбор клипов, без узлов:
 ## рисует PredView. Модель смотрит головой в −Z.
 
-## Модель художника на скелете (10 костей, 4 клипа).
+## Модель художника на скелете (10 костей, 9 клипов: ANIM-001 и ANIM-005).
 const RIG_GLB := "res://models/serpohvost-anim.glb"
 const SWIM := "Swim"
 const SWIM_FAST := "SwimFast"
 const BITE := "Bite"
 const STRIKE := "TailStrike"
+const RECOIL := "Recoil"
+const HOVER := "Hover"
+const COIL := "Coil"
+const BEND_L := "BendL"
+const BEND_R := "BendR"
 ## Длина циклов плавания (с) — у ANIM-001 бросок ровно вдвое чаще.
 const SWIM_LEN := 2.4
 const SWIM_FAST_LEN := 1.2
@@ -36,6 +43,27 @@ const CHEW_EVERY := 1.5
 ## Удар после укуса виден, если укус не старше (с) — длина TailStrike (ANIM-005, #1766: 0,9 с; было 0,6 — ANIM-001);
 ## старый укус (новый зверь в кадре) не играет.
 const STRIKE_TIME := 0.9
+## Отход Recoil (1,0 с) начинается, когда удар серпом начал гаснуть: удар уходит в отход смешиванием FADE_OUT.
+const RECOIL_AT := STRIKE_TIME - FADE_OUT
+const RECOIL_TIME := 1.0
+## Отход входит и выходит дольше удара: его концы — нейтраль (Swim на 0 с), а волна под ним в своей фазе, и за
+## FADE_OUT хвост перескакивал к ней (кончик хвоста 54–56 м/с² у конца отхода, `tools/pred_jerk.gd`).
+const RECOIL_FADE := 0.4
+## Отход двигает голову, тело и плавники; хвост продолжает волну плавания — две волны поверх друг друга
+## смешиванием давали кончику хвоста 99 % 34 м/с² против 27 (`tools/pred_jerk.gd`).
+const RECOIL_BONES: Array[String] = ["Body", "Jaw", "FinFrontL", "FinFrontR", "FinRearL", "FinRearR"]
+## Замер Hover набирает вес от 0 до 1 (и сбрасывает) за HOVER_IN с по smoothstep — без скачка позы и без излома
+## скорости на концах.
+const HOVER_IN := 0.6
+## Изгиб в повороте: вес позы BendL/BendR по крену тела (EcoPred.Pred.bank / BANK_MAX), не больше BEND_W — хвост
+## и в повороте машет. Крен уже сглажен (EcoPred.BANK_FOLLOW), вес за ним не прыгает. Только хвост и передние
+## плавники (BEND_BONES): тело и пасть — от плавания.
+const BEND_W := 0.6
+## Вес изгиба догоняет крен ещё одним сглаживанием с постоянной BEND_TAU (с): без него — и с ровным пределом
+## скорости веса (излом на концах) — хвост в развороте отхода дёргался (кончик хвоста 99 % 27 → 31 м/с²,
+## `tools/pred_jerk.gd`).
+const BEND_TAU := 0.4
+const BEND_BONES: Array[String] = ["Tail01", "Tail02", "Tail03", "FinFrontL", "FinFrontR"]
 ## Дальше от корабля (м) — без смены клипов: только плавание (LOD).
 const CUE_FAR := 80.0
 ## Дальше ANIM_FAR (м) скелет считается реже: раз в ANIM_FAR_STEP (с) набранным временем — зверь в тумане
@@ -94,6 +122,11 @@ static func swim_rate(pr: EcoPred.Pred) -> float:
 	return rate * lerpf(REST_RATE_K, 1.0, slow)
 
 
+## Вес изгиба в повороте −BEND_W…BEND_W: > 0 — поворот влево (крен левым боком вниз, BendL), < 0 — вправо (BendR).
+static func bend(pr: EcoPred.Pred) -> float:
+	return clampf(pr.bank / EcoPred.BANK_MAX, -1.0, 1.0) * BEND_W
+
+
 ## Пасть пора раскрыть сейчас: в броске у корабля ship или в охоте у самой добычи.
 static func jaw_close(pr: EcoPred.Pred, ship: Vector3) -> bool:
 	match pr.mode:
@@ -110,16 +143,39 @@ class Cues:
 	## Когда был последний укус-клип и какой укус корпуса (EcoPred.Pred.bit_at) уже отыгран ударом.
 	var bite_at := -99.0
 	var strike_seen := -99.0
+	## Какой укус корпуса уже отыгран отходом Recoil.
+	var recoil_seen := -99.0
 	## Пасть закрылась — следующее сближение снова укусит.
 	var armed := true
+	## Режим зверя в прошлый вызов: бросок только начался — взвод Coil.
+	var mode_was := -1
+	## Вес замера Hover 0…1 (плавно, HOVER_IN; ровная доля — _hover_lin) и время прошлого вызова.
+	var hover := 0.0
+	var _hover_lin := 0.0
+	## Вес изгиба −BEND_W…BEND_W (плавно, BEND_TAU): > 0 — BendL.
+	var bend := 0.0
+	var _t := -1.0
 
-	## Что запустить в момент t: {"bite": bool, "strike": bool}. far — зверь дальше CUE_FAR: клипы не меняются,
-	## но события запоминаются (подплыв ближе, старый укус не отыграет).
+	## Что запустить в момент t: {"bite", "strike", "coil", "recoil": bool}; вес замера — в hover. far — зверь
+	## дальше CUE_FAR: клипы не меняются, но события запоминаются (подплыв ближе, старый укус не отыграет).
 	func update(pr: EcoPred.Pred, ship: Vector3, t: float, far := false) -> Dictionary:
-		var out := {"bite": false, "strike": false}
+		var out := {"bite": false, "strike": false, "coil": false, "recoil": false}
+		var dt := clampf(t - _t, 0.0, 0.5) if _t >= 0.0 else 0.0
+		_t = t
+		var want := 1.0 if pr.mode == EcoPred.Mode.ALERT else 0.0
+		_hover_lin = want if far else move_toward(_hover_lin, want, dt / HOVER_IN)
+		hover = smoothstep(0.0, 1.0, _hover_lin)
+		var turn := EcoPredLook.bend(pr)
+		bend = turn if far else lerpf(bend, turn, 1.0 - exp(-dt / BEND_TAU))
+		if pr.mode == EcoPred.Mode.CHARGE and mode_was != EcoPred.Mode.CHARGE and mode_was >= 0:
+			out["coil"] = not far
+		mode_was = pr.mode
 		if pr.bit_at > strike_seen:
 			strike_seen = pr.bit_at
 			out["strike"] = not far and t - pr.bit_at < STRIKE_TIME and t >= pr.bit_at
+		if pr.bit_at > recoil_seen and t >= pr.bit_at + RECOIL_AT:
+			recoil_seen = pr.bit_at
+			out["recoil"] = not far and t - pr.bit_at - RECOIL_AT < RECOIL_TIME * 0.5
 		var close := EcoPredLook.jaw_close(pr, ship)
 		if close and armed:
 			armed = false

@@ -3,7 +3,8 @@ extends Node3D
 ## Серпохвосты в сцене: у каждого — модель MOD-011 на скелете ANIM-001 (`models/serpohvost-anim.glb`, три сетки со
 ## skin — 3 вызова отрисовки на зверя, 5 719 треугольников). Место и курс — из мира, клипы выбирает EcoPredLook:
 ## Swim и SwimFast смешиваются по скорости (Blend2 с общей фазой), Bite — поверх, только челюсть, TailStrike — после
-## укуса корпуса. Дерево анимации идёт вручную от времени мира (`sync`) — у гостя сети мир свой, клипы тоже.
+## укуса корпуса; переходы ANIM-005 (#1753): Hover — замер поверх плавания, BendL/BendR — хвост дугой в повороте,
+## Coil — взвод в начале броска, Recoil — отход после удара серпом. Дерево анимации идёт вручную от времени мира (`sync`) — у гостя сети мир свой, клипы тоже.
 ## Глаза и фотофоры светятся сами (карта свечения в GLB). Муть у дна от броска (EcoPredDust) — дочерний MultiMesh
 ## «Муть» в мировых координатах на общем шейдере EcoShaders.MIST (INK), +1 вызов. Стоит на слое отмели
 ## (OceanView.LAYER_WORLD).
@@ -19,6 +20,13 @@ const P_STRIKE := &"parameters/strike/request"
 const P_BITE := &"parameters/bite/request"
 const P_STRIKE_ON := &"parameters/strike/active"
 const P_BITE_ON := &"parameters/bite/active"
+const P_HOVER := &"parameters/hover/blend_amount"
+const P_BEND_L := &"parameters/bend_l/blend_amount"
+const P_BEND_R := &"parameters/bend_r/blend_amount"
+const P_COIL := &"parameters/coil/request"
+const P_RECOIL := &"parameters/recoil/request"
+const P_COIL_ON := &"parameters/coil/active"
+const P_RECOIL_ON := &"parameters/recoil/active"
 
 var preds: EcoPred
 ## Узел каждого хищника (в порядке preds.all), его дерево анимации и выбор разовых клипов.
@@ -113,49 +121,70 @@ func set_lite(on: bool) -> void:
 	lite = on
 
 
-## Общее дерево: Swim и SwimFast (каждый со своей скоростью, фаза одна) → Blend2 → удар серпом → укус (челюсть).
+## Общее дерево: Swim и SwimFast (каждый со своей скоростью, фаза одна) → Blend2 → замер Hover → изгиб BendL/BendR
+## (только хвост и передние плавники) → взвод Coil → отход Recoil → удар серпом → укус (челюсть).
 static func _blend_tree() -> AnimationNodeBlendTree:
 	var bt := AnimationNodeBlendTree.new()
-	var swim := AnimationNodeAnimation.new()
-	swim.animation = EcoPredLook.SWIM
-	var fast := AnimationNodeAnimation.new()
-	fast.animation = EcoPredLook.SWIM_FAST
-	var strike_clip := AnimationNodeAnimation.new()
-	strike_clip.animation = EcoPredLook.STRIKE
-	var bite_clip := AnimationNodeAnimation.new()
-	bite_clip.animation = EcoPredLook.BITE
 	var mix := AnimationNodeBlend2.new()
 	mix.sync = true  # бросок идёт и при нулевом весе — фазы не расходятся
-	var strike := _shot()
-	var bite := _shot()
-	bite.filter_enabled = true
-	for b in EcoPredLook.BITE_BONES:
-		bite.set_filter_path(NodePath("SerpohvostRig/Skeleton3D:" + b), true)
-	bt.add_node("swim", swim, Vector2(0, 0))
-	bt.add_node("fast", fast, Vector2(0, 200))
+	bt.add_node("swim", _clip(EcoPredLook.SWIM), Vector2(0, 0))
+	bt.add_node("fast", _clip(EcoPredLook.SWIM_FAST), Vector2(0, 200))
 	bt.add_node("ts_swim", AnimationNodeTimeScale.new(), Vector2(200, 0))
 	bt.add_node("ts_fast", AnimationNodeTimeScale.new(), Vector2(200, 200))
 	bt.add_node("mix", mix, Vector2(400, 100))
-	bt.add_node("strike_clip", strike_clip, Vector2(400, 300))
-	bt.add_node("strike", strike, Vector2(600, 100))
-	bt.add_node("bite_clip", bite_clip, Vector2(600, 300))
-	bt.add_node("bite", bite, Vector2(800, 100))
 	bt.connect_node("ts_swim", 0, "swim")
 	bt.connect_node("ts_fast", 0, "fast")
 	bt.connect_node("mix", 0, "ts_swim")
 	bt.connect_node("mix", 1, "ts_fast")
-	bt.connect_node("strike", 0, "mix")
-	bt.connect_node("strike", 1, "strike_clip")
-	bt.connect_node("bite", 0, "strike")
-	bt.connect_node("bite", 1, "bite_clip")
-	bt.connect_node("output", 0, "bite")
+	var hover := AnimationNodeBlend2.new()
+	var bend_l := AnimationNodeBlend2.new()
+	var bend_r := AnimationNodeBlend2.new()
+	for b in [bend_l, bend_r]:
+		b.filter_enabled = true
+		for bone in EcoPredLook.BEND_BONES:
+			b.set_filter_path(NodePath("SerpohvostRig/Skeleton3D:" + bone), true)
+	var recoil := _shot(EcoPredLook.RECOIL_FADE)
+	recoil.filter_enabled = true
+	for bone in EcoPredLook.RECOIL_BONES:
+		recoil.set_filter_path(NodePath("SerpohvostRig/Skeleton3D:" + bone), true)
+	var bite := _shot()
+	bite.filter_enabled = true
+	for b in EcoPredLook.BITE_BONES:
+		bite.set_filter_path(NodePath("SerpohvostRig/Skeleton3D:" + b), true)
+	# звено за звеном: вход 0 — всё, что ниже по цепочке, вход 1 — свой клип
+	var chain := [
+		["hover", hover, EcoPredLook.HOVER],
+		["bend_l", bend_l, EcoPredLook.BEND_L],
+		["bend_r", bend_r, EcoPredLook.BEND_R],
+		["coil", _shot(), EcoPredLook.COIL],
+		["recoil", recoil, EcoPredLook.RECOIL],
+		["strike", _shot(), EcoPredLook.STRIKE],
+		["bite", bite, EcoPredLook.BITE],
+	]
+	var below := "mix"
+	var x := 600
+	for link in chain:
+		var id: String = link[0]
+		bt.add_node(id, link[1], Vector2(x, 100))
+		bt.add_node(id + "_clip", _clip(link[2]), Vector2(x, 300))
+		bt.connect_node(id, 0, below)
+		bt.connect_node(id, 1, id + "_clip")
+		below = id
+		x += 200
+	bt.connect_node("output", 0, below)
 	return bt
 
 
-static func _shot() -> AnimationNodeOneShot:
+static func _clip(clip: String) -> AnimationNodeAnimation:
+	var a := AnimationNodeAnimation.new()
+	a.animation = clip
+	return a
+
+
+static func _shot(fade := 0.0) -> AnimationNodeOneShot:
 	var s := AnimationNodeOneShot.new()
-	s.fadein_time = EcoPredLook.FADE_IN
-	s.fadeout_time = EcoPredLook.FADE_OUT
+	s.fadein_time = fade if fade > 0.0 else EcoPredLook.FADE_IN
+	s.fadeout_time = fade if fade > 0.0 else EcoPredLook.FADE_OUT
 	return s
 
 
@@ -181,7 +210,7 @@ func sync(t: float, ship: Vector3, state: EcoLink.ShipState = null, flow := Vect
 			step = pr.index * 0.83
 		elif not root.visible:
 			step = 0.0
-		elif step <= 0.0 and (cue["strike"] or cue["bite"]):
+		elif step <= 0.0 and (cue["strike"] or cue["bite"] or cue["coil"] or cue["recoil"]):
 			step = clocks[i].flush()   # на «Экономно» между позами: разовый клип не теряется
 		if step <= 0.0:
 			continue  # спрятан или вдали между позами — дерево не трогаем: укусов и ударов там нет (CUE_FAR < ANIM_FAR)
@@ -189,6 +218,14 @@ func sync(t: float, ship: Vector3, state: EcoLink.ShipState = null, flow := Vect
 		at.set(P_SWIM, rate * EcoPredLook.SWIM_LEN)
 		at.set(P_FAST, rate * EcoPredLook.SWIM_FAST_LEN)
 		at.set(P_MIX, EcoPredLook.swim_mix(pr))
+		at.set(P_HOVER, cues[i].hover)
+		var bend := cues[i].bend
+		at.set(P_BEND_L, maxf(bend, 0.0))
+		at.set(P_BEND_R, maxf(-bend, 0.0))
+		if cue["coil"]:
+			at.set(P_COIL, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
+		if cue["recoil"]:
+			at.set(P_RECOIL, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 		if cue["strike"]:
 			at.set(P_STRIKE, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 		if cue["bite"]:
