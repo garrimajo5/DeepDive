@@ -6,7 +6,7 @@ extends TestCase
 
 func _tool() -> GDScript:
 	var tool: GDScript = load("res://tools/mid_calm.gd")
-	for v in ["moves", "limit", "dark", "probe", "answer", "delay", "hold", "start0", "band0", "fish_moves", "watch", "sites"]:
+	for v in ["moves", "limit", "dark", "probe", "answer", "delay", "hold", "start0", "band0", "fish_moves", "watch", "sites", "repeat"]:
 		ok(tool.get(v) != null, "в инструменте есть %s" % v)
 	return tool
 
@@ -24,6 +24,7 @@ func _restore(tool: GDScript) -> void:
 	tool.set("fish_moves", {})
 	tool.set("watch", [tool.WATCH_SHOAL] as Array[int])
 	tool.set("sites", false)
+	tool.set("repeat", false)
 
 
 func test_parse_moves() -> void:
@@ -194,3 +195,38 @@ func test_grot_probe_route_sites_and_path() -> void:
 	ok(path[0].begins_with("== круг гротовика [(43.0, 75.0)"), path[0])
 	ok(not ("НЕ замкнулся" in path[0]), path[0])
 	eq(path.size(), 4, "\n".join(path))
+
+
+## repeat=1 (уровни и ГД 14.11, #1400): настоящий повтор 00→01→00→01 — корабль проходит все пять участков по порядку,
+## на каждом своя строка (угрозы, «замер», серпохвост ближе всего), засады глазуна в слышимости — отдельными строками
+## с местом корабля и ближайшим серпохвостом; итог по каждому участку.
+func test_repeat_walks_there_back_and_again() -> void:
+	var tool := _tool()
+	tool.set("repeat", true)
+	tool.set("dark", 0.0)
+	tool.set("limit", tool.LIMIT_REPEAT)
+	var lines: Array[String] = tool.report(1)
+	_restore(tool)
+	ok(lines[0].contains("повтор 00→01→00→01"), lines[0])
+	var seg: Array = lines.filter(func(l: String) -> bool: return l.begins_with("    участки: "))
+	eq(seg.size(), 1, "\n".join(lines))
+	var at := -1
+	for sg in tool.SEGS:
+		var i: int = (seg[0] as String).find(sg + ": с ")
+		ok(i > at, "участок %s пройден после прежнего: %s" % [sg, seg[0]])
+		at = i
+	ok(not (seg[0] as String).contains("не дошёл"), seg[0])
+	for sg in tool.SEGS:
+		var tot := lines.filter(func(l: String) -> bool: return l.begins_with("участок %s (прошли 1/1)" % sg))
+		eq(tot.size(), 1, "итог участка %s" % sg)
+	var amb := lines.filter(func(l: String) -> bool: return l.begins_with("    засада "))
+	print("  засад глазуна в слышимости за повтор: %d" % amb.size())
+	ok(amb.size() > 0, "глазуны охотятся и за повтор их слышно")
+
+
+## Строка засады: участок, время, глазун и корабль, свет и ход, ближайший серпохвост, монетники.
+func test_ambush_line() -> void:
+	var tool := _tool()
+	var s: String = tool.ambush_line({"seg": "back", "t": 22.5, "gz": 0, "at": Vector2(32, 96), "ship": Vector2(4, 80),
+		"d": 33.2, "light": true, "speed": 0.0, "pred": {"who": 2, "mode": "eat", "d": 24.0}, "coins": 7})
+	eq(s, "back 22.5 с: глазун 0 (32; 96), корабль (4; 80) в 33 м, свет, стоит; серпохвост №2 eat в 24 м; монетников 7")
