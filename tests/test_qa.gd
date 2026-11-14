@@ -1277,6 +1277,31 @@ static func _before_shot(name: String) -> Array:
 	return []
 
 
+## #1757 (уровни и ГД, 13.11 23:35/23:42): кадр гнезда и купольника из достижимого места — без тестового полёта,
+## глазами у носового окна. Корабль шага `ship` стоит законно: выше нижнего предела хода всем днищем, корпус по всей
+## длине вне арки, нос — на гнездо купольника; корабль на 12 м ближе к гнезду, чем в `37` (там глаз вынесен за нос полётом).
+func test_gate_window_shot_is_reachable() -> void:
+	var b := _before_shot("37b-okno-gnezdo")
+	ok(not b.is_empty() and not b[0].is_empty(), "снимок гнезда из носового окна есть в сценарии")
+	if b.is_empty() or b[0].is_empty():
+		return
+	ok(b[1].is_empty(), "без тестового полёта: глаз игрока на палубе")
+	var pos := Vector3(float(b[0]["x"]), float(b[0]["y"]), float(b[0]["z"]))
+	var yaw := deg_to_rad(float(b[0]["yaw"]))
+	var h := Helm.Ship.new()
+	h.ground = func(x: float, z: float) -> float: return Seabed.height(x, z)
+	var low: float = h.floor_at(pos, yaw)
+	ok(pos.y >= low + 0.5, "корабль выше нижнего предела хода с запасом: %.1f при пределе %.1f" % [pos.y, low])
+	ok(not GateArch.hits(pos, yaw), "корпус по всей длине вне опор и плеч арки")
+	var n := GateDiag.nest_pos(EcoDome.NEST)
+	var to := Vector2(n.x - pos.x, n.z - pos.z)
+	var fwd := Vector2(-sin(yaw), -cos(yaw))
+	ok(fwd.dot(to.normalized()) > cos(deg_to_rad(3.0)), "нос — на гнездо купольника")
+	ok(to.length() < 30.0, "гнездо ближе 30 м от центра корабля: %.1f" % to.length())
+	var was := _before_shot("37-kupolnik-stvorka")
+	ok(to.length() < Vector2(n.x - float(was[0]["x"]), n.z - float(was[0]["z"])).length() - 10.0, "ближе, чем корабль кадра 37")
+
+
 func test_slope_shots_edge_and_rocks() -> void:   # отчёт #1182: склон 06→10 (#832) сценарий не проходил — нечего проверить
 	var edge := _before_shot("34e-kraj-06")
 	ok(not edge.is_empty() and not edge[1].is_empty(), "снимок Края отмели 06 из-под днища")
