@@ -148,16 +148,7 @@ func _ambush_texts(w: EcoWorld) -> Array[String]:
 
 
 func _grab(w: EcoWorld) -> void:
-	var sc := _coins(w).schools[0]
-	var gz := sc.glazun
-	gz.cd = 0.0
-	for cn in sc.members:
-		if cn.alive:
-			cn.pos = gz.pos + Vector3(0.3, 1.0, 0)
-			cn.goal = cn.pos
-			cn.goal_t = 10.0
-			break
-	w.step(0.02)
+	_grab_in(w, 0)
 
 
 func test_ambush_line_once_per_episode() -> void:
@@ -188,6 +179,57 @@ func test_ambush_line_once_per_episode() -> void:
 	w.time += 5.0
 	_grab(w)
 	eq(_ambush_texts(w), ["ambush:Из песка что-то схватило круглую рыбку"] as Array[String], "подплыли — строка")
+
+
+## Засада, которую экипаж не слышал (дальше EcoBus.HEARING), эпизод ONCE не продлевает (#1400, п. 2 (ч)): take_near
+## выбрасывает её до repeat. Повтор 00 → 01 → 00 → 01 → 00 на настоящих пятнах (EcoCoins.default_spots, Seabed.height):
+## глазун у 00 слышен со старта и не слышен со стоянки у 01; засада, пока корабль у 01, не гасит строку по возвращении.
+## Без Main. Мутация — repeat для всех событий шины до take_near: третья строка пропадает.
+const AT_00 := Helm.Ship.START
+const AT_01 := Vector3(33.0, -35.0, -22.0)
+
+
+func test_unheard_ambush_does_not_extend_episode() -> void:
+	var w := EcoWorld.new()
+	w.ground = Seabed.height
+	w.ship.pos = FAR
+	var m := w.add(EcoMoss.new()) as EcoMoss
+	var c := w.add(EcoCoins.new(m)) as EcoCoins
+	var k := 0
+	for i in c.schools.size():
+		if c.schools[i].glazun.pos.distance_to(AT_00) < c.schools[k].glazun.pos.distance_to(AT_00):
+			k = i
+	var gz := c.schools[k].glazun
+	var d00 := gz.pos.distance_to(AT_00)
+	var d01 := gz.pos.distance_to(AT_01)
+	print("    глазун %d в %s: от 00 %.1f м, от 01 %.1f м (слух %.0f)" % [k, gz.pos, d00, d01, EcoBus.HEARING])
+	ok(d00 < EcoBus.HEARING - 10.0, "у 00 слышно")
+	ok(d01 > EcoBus.HEARING + 10.0, "у 01 не слышно")
+	var line := "ambush:Из песка что-то схватило круглую рыбку"
+	var at := func(p: Vector3, dt: float) -> Array[String]:
+		w.ship.pos = p
+		w.time += dt
+		_grab_in(w, k)
+		return _ambush_texts(w)
+	eq(at.call(AT_00, 0.0), [line] as Array[String], "00: первая засада — со строкой")
+	eq(at.call(AT_01, 30.0), [] as Array[String], "01: засада у 00 не слышна")
+	eq(at.call(AT_00, 35.0), [line] as Array[String], "00 через 65 с после услышанной — снова строка")
+	eq(at.call(AT_01, 30.0), [] as Array[String], "01 снова: не слышно")
+	eq(at.call(AT_00, 20.0), ["ambush:"] as Array[String], "00 через 50 с после услышанной — эпизод тот же")
+	eq(at.call(AT_00, EcoWorld.ONCE_GAP + 1.0), [line] as Array[String], "после паузы — снова")
+
+
+func _grab_in(w: EcoWorld, k: int) -> void:
+	var sc := _coins(w).schools[k]
+	var gz := sc.glazun
+	gz.cd = 0.0
+	for cn in sc.members:
+		if cn.alive:
+			cn.pos = gz.pos + Vector3(0.3, 1.0, 0)
+			cn.goal = cn.pos
+			cn.goal_t = 10.0
+			break
+	w.step(0.02)
 
 
 ## Бросок из песка — за EcoCoins.RISE, а не за кадр: высота тела за кадр меняется не больше наклона smoothstep, тело
