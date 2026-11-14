@@ -142,6 +142,28 @@ func test_publish_qa_shots_from_folder() -> void:
 	ok(ci.contains("./tools/qa/publish-qa.ps1 -SelfTest"), "CI гоняет проверку publish-qa.ps1")
 
 
+## #1350, 14.11 (тестер): досдача снимков уже сданного прогона — без kadry.txt, иначе сводка ПРОВЕРИТЬ считает прогон
+## дважды. Ключ -NoKadry; сама логика — в самопроверке (pwsh, CI).
+func test_publish_qa_no_kadry() -> void:
+	var ps := _ps("publish-qa.ps1")
+	ok(ps.contains("[switch]$NoKadry"), "ключ -NoKadry")
+	var fn := ps.find("function Copy-QaKadry(")
+	var self_at := ps.find("if ($SelfTest)")
+	ok(fn > 0 and fn < self_at, "Copy-QaKadry объявлена до самопроверки")
+	var body := ps.substr(fn, self_at - fn)
+	var skip := body.find("if ($noKadry) {")
+	ok(skip > 0 and skip < body.find("Copy-Item $k"), "при -NoKadry выход раньше копирования")
+	ok(body.contains("'kadry*.txt') -ErrorAction SilentlyContinue | Remove-Item"), "лежащий в папке отчёта kadry*.txt убирается")
+	var test := ps.substr(self_at, ps.find("exit 0", self_at) - self_at)
+	ok(test.contains("(Kadry $run '' $true) -eq '' -and (Rep) -eq 'report.md'"), "самопроверка: -NoKadry — отчёт без kadry.txt")
+	ok(test.contains("-NoKadry с -Also — ошибка") and test.contains("-Also — kadry-2.txt второго прогона"),
+		"самопроверка: -Also и запрет вместе с -NoKadry")
+	var early := ps.find("if ($NoKadry -and $Also) { throw")
+	ok(early > self_at and early < ps.find(". (Join-Path $PSScriptRoot 'zamok.ps1')"), "-NoKadry с -Also — ошибка до замка")
+	ok(ps.contains("Copy-QaKadry $src $dir $alsoDir ([bool]$NoKadry) | Out-Null"), "сдача зовёт Copy-QaKadry с ключом")
+	ok(FileAccess.get_file_as_string("res://docs/QA.md").contains("-NoKadry"), "docs/QA.md: строка про -NoKadry")
+
+
 ## #1350: эмулятор закрывался вместе с фоновым run-qa.ps1 посреди ручной проверки. Запуск — через WMI
 ## (процесс не потомок скрипта), а не Start-Process.
 func test_run_qa_emulator_outlives_script() -> void:
@@ -416,7 +438,8 @@ func test_run_qa_watch_summary() -> void:
 	ok(note > run.find("foreach ($w in $watch)") and note < run.rfind("NOT_DONE"), "строка ISSUES — под сводкой, NOT_DONE после")
 	ok(k.contains("function gh {") and k.contains("Get-IssueSteps @('32o-mol-steklo'"), "Get-IssueSteps проверен на подставном gh")
 	ok(not k.contains("@tsv' 2>$null"), "ошибка gh не глушится")
-	ok(_ps("publish-qa.ps1").contains("Copy-Item \"$src\\kadry.txt\""), "publish-qa.ps1 сдаёт kadry.txt")
+	ok(pub.contains("Copy-Item $k (Join-Path $dir 'kadry.txt')") and pub.contains("Copy-QaKadry $src $dir $alsoDir"),
+		"publish-qa.ps1 сдаёт kadry.txt")
 	var ci := FileAccess.get_file_as_string("res://.github/workflows/godot.yml")
 	ok(ci.contains("./tools/qa/kadry.ps1 -SelfTest"), "CI гоняет проверку kadry.ps1")
 	ok(FileAccess.get_file_as_string("res://docs/QA.md").contains("ПРОВЕРИТЬ"), "docs/QA.md: сводка ПРОВЕРИТЬ")

@@ -6,8 +6,11 @@
 # сводка ПРОВЕРИТЬ (kadry.ps1) считает его отдельным прогоном (#1350, 11.11).
 # В -Shots имя с папкой (`run-koridor/k1-drain-z6`) — снимок из D:\AI\qa-build\run-koridor\, без папки — из -From:
 # кадры второго прогона того же отчёта без ручного копирования (#1350, 12.11).
-#   publish-qa.ps1 -SelfTest — проверка выбора снимков на временных папках (её гоняет CI, job «Скрипты тестера»)
-param([string]$Folder, [string]$Message, [string[]]$Shots, [string]$From = 'run', [string]$Also, [switch]$SelfTest)
+# -NoKadry — досдача снимков уже сданного прогона (#1350, 14.11): kadry.txt не кладётся — второй файл того же прогона
+# засчитал бы его в правило трёх дважды. Вместе с -Also — ошибка.
+#   publish-qa.ps1 -SelfTest — проверка выбора снимков и kadry.txt на временных папках (её гоняет CI, job «Скрипты тестера»)
+param([string]$Folder, [string]$Message, [string[]]$Shots, [string]$From = 'run', [string]$Also, [switch]$NoKadry,
+  [switch]$SelfTest)
 $ErrorActionPreference = 'Stop'
 
 # Снимки для отчёта: $shots пусто — все *.png папки $root\$from; иначе по именам. «a,b» одной строкой (`powershell -File`,
@@ -29,6 +32,27 @@ function Resolve-QaShots([string]$root, [string]$from, [string[]]$shots) {
   if ($dups) { throw "Снимок с одним именем из двух папок: $($dups -join ', ')" }
   if ($miss) { Write-Warning "Нет снимков: $($miss -join ', ')" }
   return $found
+}
+
+# kadry.txt (худший кадр по шагам, run-qa.ps1) из папки прогона $src — в папку отчёта $dir: сводка ПРОВЕРИТЬ следующих
+# прогонов берёт числа из него. $alsoDir — папка второго прогона того же отчёта, её файл ложится как kadry-2.txt.
+# $noKadry — досдача снимков: ничего не кладётся, а kadry*.txt, уже лежащие в папке отчёта, убираются.
+# Отдаёт имена положенных файлов.
+function Copy-QaKadry([string]$src, [string]$dir, [string]$alsoDir, [bool]$noKadry) {
+  if ($noKadry) {
+    if ($alsoDir) { throw '-NoKadry и -Also вместе: досдача снимков идёт без kadry.txt' }
+    Get-ChildItem (Join-Path $dir 'kadry*.txt') -ErrorAction SilentlyContinue | Remove-Item -Force
+    return @()
+  }
+  $put = @()
+  $k = Join-Path $src 'kadry.txt'
+  if (Test-Path $k) { Copy-Item $k (Join-Path $dir 'kadry.txt') -Force; $put += 'kadry.txt' }
+  if ($alsoDir) {
+    $also = Join-Path $alsoDir 'kadry.txt'
+    if (-not (Test-Path $also)) { throw "Нет $also (-Also)" }
+    Copy-Item $also (Join-Path $dir 'kadry-2.txt') -Force; $put += 'kadry-2.txt'
+  }
+  return $put
 }
 
 if ($SelfTest) {
@@ -57,6 +81,27 @@ if ($SelfTest) {
   Check ($err -like 'Ни одного снимка*') "ни одного снимка — ошибка: $err"
   # «a, run-x/q» — найден один, второго нет → предупреждение, отдаётся «run/a»
   Check ((Pick @('a', 'run-x/q') 3>$null) -eq 'run/a') 'часть не нашлась — остальные идут'
+  # kadry.txt. Вход: run\kadry.txt («1»), run-k\kadry.txt («2»), в run-x файла нет; папка отчёта rep\ с report.md
+  $run = Join-Path $root 'run'; $runK = Join-Path $root 'run-k'; $runX = Join-Path $root 'run-x'
+  $rep = Join-Path $root 'rep'; New-Item -ItemType Directory -Force $rep | Out-Null
+  [IO.File]::WriteAllText((Join-Path $run 'kadry.txt'), '1'); [IO.File]::WriteAllText((Join-Path $runK 'kadry.txt'), '2')
+  [IO.File]::WriteAllText((Join-Path $rep 'report.md'), 'r')
+  function Kadry($src, $also, $no) { @(Copy-QaKadry $src $rep $also $no) -join ' ' }
+  function Rep { @(Get-ChildItem $rep | Sort-Object Name | ForEach-Object Name) -join ' ' }
+  # в папке прогона файла нет — ничего не кладётся, не ошибка: в rep только «report.md»
+  Check ((Kadry $runX '' $false) -eq '' -and (Rep) -eq 'report.md') "нет kadry.txt в прогоне — без него: $(Rep)"
+  # обычная сдача: «kadry.txt» с содержимым «1»
+  Check ((Kadry $run '' $false) -eq 'kadry.txt' -and [IO.File]::ReadAllText((Join-Path $rep 'kadry.txt')) -eq '1') 'kadry.txt прогона — в отчёт'
+  # -Also run-k: «kadry.txt kadry-2.txt», второй — «2»
+  Check ((Kadry $run $runK $false) -eq 'kadry.txt kadry-2.txt' -and [IO.File]::ReadAllText((Join-Path $rep 'kadry-2.txt')) -eq '2') '-Also — kadry-2.txt второго прогона'
+  # -Also без файла (run-x) → ошибка «Нет …»
+  $err = ''; try { Kadry $run $runX $false | Out-Null } catch { $err = "$_" }
+  Check ($err -like 'Нет *') "-Also без kadry.txt — ошибка: $err"
+  # -NoKadry: ничего не кладётся, оба лежащих kadry*.txt убраны, report.md цел → «report.md»
+  Check ((Kadry $run '' $true) -eq '' -and (Rep) -eq 'report.md') "-NoKadry — отчёт без kadry.txt: $(Rep)"
+  # -NoKadry вместе с -Also → ошибка
+  $err = ''; try { Kadry $run $runK $true | Out-Null } catch { $err = "$_" }
+  Check ($err -like '*-NoKadry и -Also*') "-NoKadry с -Also — ошибка: $err"
   Remove-Item -Recurse -Force $root
   if ($bad) { Write-Output "publish-qa.ps1 -SelfTest: провалов $bad"; exit 1 }
   Write-Output 'publish-qa.ps1 -SelfTest: ok'
@@ -64,6 +109,7 @@ if ($SelfTest) {
 }
 
 if (-not $Folder -or -not $Message) { throw 'Нужны -Folder и -Message' }
+if ($NoKadry -and $Also) { throw '-NoKadry и -Also вместе: досдача снимков идёт без kadry.txt' }
 $repo = 'D:\AI\DeepDive'
 $dir = Join-Path $repo "qa\$Folder"
 if (-not (Test-Path "$dir\report.md")) { throw "Нет report.md в $dir" }
@@ -101,13 +147,9 @@ foreach ($f in $pngs) {
   $bmp.Dispose(); $img.Dispose()
 }
 
-# kadry.txt (худший кадр по шагам, run-qa.ps1) — рядом с отчётом: сводка ПРОВЕРИТЬ следующих прогонов берёт числа из него
-if (Test-Path "$src\kadry.txt") { Copy-Item "$src\kadry.txt" (Join-Path $dir 'kadry.txt') -Force }
-if ($Also) {
-  $also = "D:\AI\qa-build\$Also\kadry.txt"
-  if (-not (Test-Path $also)) { throw "Нет $also (-Also)" }
-  Copy-Item $also (Join-Path $dir 'kadry-2.txt') -Force
-}
+# kadry.txt — рядом с отчётом; -NoKadry (досдача снимков сданного прогона) — без него
+$alsoDir = if ($Also) { "D:\AI\qa-build\$Also" } else { '' }
+Copy-QaKadry $src $dir $alsoDir ([bool]$NoKadry) | Out-Null
 
 # Папка отчёта — в worktree ветки отчёта; коммит, пуш и SHA — там же
 $dst = Join-Path $wt "qa\$Folder"
