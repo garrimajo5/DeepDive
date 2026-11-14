@@ -169,3 +169,11 @@ func test_reef_flees_before_pred_in_beam() -> void:
 				at01 = true
 		ok(at01, "%s: бежит стая у 01 — от хищника, не от корабля" % tag)
 	ok(last < first + 3.0, "строка на подходе в узком окне: %.2f…%.2f с" % [first, last])
+
+
+## Ролик kino= (#1753): мир на кадр идёт ровно 1/fps секунды шагами SCENA_DT, не быстрее и не медленнее.
+func test_kino_steps_keep_world_time() -> void:
+	for fps in [15, 30, 10]:
+		near(ShotSetup.kino_steps(fps) * ShotSetup.SCENA_DT, 1.0 / fps, 1e-6, "кадр = 1/%d с мира" % fps)
+	eq(ShotSetup.kino_steps(60), 1, "чаще шага мира — один шаг на кадр")
+	eq(ShotSetup.kino_steps(0), 30, "ноль кадров — как один в секунду")

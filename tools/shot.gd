@@ -43,6 +43,8 @@ extends SceneTree
 ## grot_t=84 — гротовик один прошёл столько секунд круга с первой точки, корабль у него за штурвалом; в лог — наклон, место и угол на спину
 ## grot_cam=bok — с grot_t=: bok — справа от курса тела, nos — перед ним, korma — позади, mid — стоянка середины сцены
 ## grot_dist=24 — с grot_t=: от корабля до тела, м — наименьшее (спину не видно из окна пилота — корабль дальше)
+## kino=12 — ролик: мир идёт столько секунд ровным шагом, корабль висит в точке (как scena_t=), кадры <out>-kino/0000.png…; в лог — смены режима хищника №0 с номером кадра; ролик — ffmpeg -framerate 15 -i <out>-kino/%04d.png (#1753)
+## kino_fps=15 — с kino=: кадров на секунду мира (шаг мира — 1/30 с)
 ## strah=40 — с scena=: голодный хищник №0 за стаей рифа у 01 на столько метров (причина — с дальней стороны); в лог раз в секунду — хищник и стая (#1400)
 ## light=0 — погасить прожектор
 ## luch_ten=0 — прожектор без тени (после grafika=; сравнить цену тени, #1400)
@@ -464,6 +466,10 @@ func _go() -> void:
 		main.set_hud(false)
 	for i in int(kv.get("frames", "8")):
 		await process_frame
+	if kv.has("kino"):   # kino=<с> — ролик штатной камерой (#1753: до/после ANIM-005)
+		await _kino(main, out, float(kv["kino"]), int(kv.get("kino_fps", "15")))
+		quit(0)
+		return
 	await RenderingServer.frame_post_draw
 	var img := root.get_texture().get_image()
 	img.save_png(out)
@@ -523,3 +529,24 @@ func _budget(main: Node, depth: int) -> void:
 		spot.shadow_enabled = true
 		var d := full - c
 		print("БЮДЖЕТ тень прожектора: вызовов %d, примитивов %d" % [d.x, d.y])
+
+
+## Ролик (kino=): main сам не шагает, мир идёт `ShotSetup.kino_steps` шагов SCENA_DT на кадр, корабль после шага —
+## в той же точке (течение не уносит взгляд). Кадры — <out>-kino/NNNN.png; смены режима хищника №0 — в лог.
+func _kino(main: Node, out: String, seconds: float, fps: int) -> void:
+	main.set_process(false)
+	var dir := out.get_basename() + "-kino"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var ship: Vector3 = main.helm.pos
+	var per := ShotSetup.kino_steps(fps)
+	var was := {"mode": -1, "parts": []}
+	for f in int(round(seconds * fps)):
+		for i in per:
+			main.step(ShotSetup.SCENA_DT)
+			main.park_at(ship)
+		for line in ShotSetup.zamer_trace(main, was, (f + 1) / float(fps)):
+			print("kino %04d: %s" % [f, line])
+		await process_frame
+		await RenderingServer.frame_post_draw
+		root.get_texture().get_image().save_png("%s/%04d.png" % [dir, f])
+	print("KINO ", dir, " кадров ", int(round(seconds * fps)), ", ", fps, " в секунду")
