@@ -122,11 +122,11 @@ class Ship:
 	static func east_ok(x: float, z: float) -> bool:
 		return x <= EDGE or Seabed.Slope.open(x, z)
 
-	func _free(p: Vector3) -> bool:
-		return east_ok(p.x, p.z) and not _in_solid(p)
+	func _free(p: Vector3, y: float) -> bool:
+		return east_ok(p.x, p.z) and not _in_solid(p, y)
 
-	func _in_solid(p: Vector3) -> bool:
-		return solid.is_valid() and bool(solid.call(p, yaw))
+	func _in_solid(p: Vector3, y: float) -> bool:
+		return solid.is_valid() and bool(solid.call(p, y))
 
 	func nose() -> Vector3:
 		return Vector3(-sin(yaw), 0.0, -cos(yaw))
@@ -264,20 +264,30 @@ class Ship:
 		pos.y += vy * dt
 		pos.x = clampf(pos.x, -EDGE, EAST_END)
 		pos.z = clampf(pos.z, -EDGE, EDGE)
-		if not _free(pos) and not (east_ok(pos.x, pos.z) and _in_solid(was)):   # в стене за краем или в арке: скользим вдоль, иначе стоим
+		# В стене за краем или в твёрдом: скользим вдоль, иначе стоим. Поворот, после которого корпус в твёрдом, не идёт —
+		# курс остаётся прежним, как сдвиг у стены (#1847: разворот на месте проводил корму сквозь гротовика и опоры
+		# арки). Уже стоял в твёрдом при прежнем курсе (загрузка, существо подошло) — выходит свободно.
+		if not _free(pos, yaw) and not (east_ok(pos.x, pos.z) and _in_solid(was, was_yaw)):
 			var tries: Array[Vector3] = [Vector3(was.x, pos.y, pos.z), Vector3(pos.x, pos.y, was.z),
 				Vector3(pos.x, was.y, pos.z), Vector3(was.x, pos.y, was.z), was]
 			var moved := false
-			for q in tries:
-				if _free(q):
+			for yy: float in ([yaw, was_yaw] if yaw != was_yaw else [yaw]):
+				for q in tries:
+					if moved or not _free(q, yy):
+						continue
 					if q.y != pos.y:
 						vy = 0.0
 					pos = q
 					moved = true
-					break
+					if yy != yaw:
+						yaw = yy
+						turn = 0.0
 			if not moved:
 				pos.x = minf(was.x, EDGE) if not east_ok(was.x, was.z) else was.x
 				pos.z = was.z
+				if _in_solid(pos, yaw):
+					yaw = was_yaw
+					turn = 0.0
 		knock = 0.0
 		if pos.y > CEILING:
 			pos.y = CEILING
@@ -299,7 +309,7 @@ class Ship:
 				var found := false
 				for yy: float in [yaw, was_yaw]:
 					for q in opts:
-						if found or not _free(q):
+						if found or not _free(q, yy):
 							continue
 						if floor_at(q, yy) - pos.y <= maxf(allow, stuck + STEP * 0.5):
 							best = q
