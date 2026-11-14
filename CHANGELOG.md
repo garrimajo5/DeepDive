@@ -7,7 +7,9 @@
   цели патруля у домов стай внутри `EcoPred.REEF_KEEP` (крона и стая рифа у 01 — их рыбки ему недоступны),
   `EcoPred.patrol_homes`; сытый ходит и туда. `tools/crown_wait.gd` на 16 зёрнах: крона на кольце ≥ 12,5 с из первых
   25 с стоянки — 9/16 (было 5/16), тревога за первые 25 с — медиана 0 с (было 24); тест
-  `test_eco_pred.test_hungry_patrol_skips_reef_homes` (без правки — 3 цели на кольце).
+  `test_eco_pred.test_hungry_patrol_skips_reef_homes` (без правки — 3 цели на кольце). Попутно: цель брошенной у рифа
+  охоты внутри кольца патруль выносит на кольцо (`test_patrol_goal_inside_reef_moves_to_ring`; без правки хищник
+  в 5 минутах отмели доходил до 26 м от оси).
 - Поток А, #1757 (проба ГД и уровней 14.11): ключ снимка `shot.gd stvorka=<градусы>` — угол открытой створки гнезда 07
   для сравнения силуэта (60° против 90°); в игре угол прежний (`GateArch.PETAL_TURN`, `GateView.turn`); тест
   `test_gate_arch.test_petal_open_angle_is_view_number`.
