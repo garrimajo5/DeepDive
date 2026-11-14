@@ -35,6 +35,18 @@ class Body(unittest.TestCase):
         data, name = issue_img.shrink(path)
         self.assertEqual((name, len(data)), ("theme.mp3", issue_img.MAX_BYTES + 12))
 
+    def test_video_is_a_watch_link(self):        # #1753: ролик до/после — ссылкой, не картинкой
+        body = issue_img.comment_body(9, [("do-posle.mp4", "До и после")])
+        self.assertEqual(body, f"**До и после** — [▶ смотреть `do-posle.mp4`]({issue_img.raw_url(9, 'do-posle.mp4')})")
+
+    def test_big_gif_and_video_kept_as_is(self):  # JPEG убил бы анимацию GIF
+        for fname in ("udar.gif", "do-posle.mp4"):
+            path = os.path.join(tempfile.mkdtemp(), fname)
+            with open(path, "wb") as f:
+                f.write(b"GIF89a" + b"\0" * (issue_img.MAX_BYTES + 10))
+            data, name = issue_img.shrink(path)
+            self.assertEqual((name, len(data)), (fname, issue_img.MAX_BYTES + 16))
+
     def test_no_caption(self):
         self.assertEqual(issue_img.comment_body(7, [("s.png", "")]), f"![s.png]({issue_img.raw_url(7, 's.png')})")
 

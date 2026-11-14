@@ -33,6 +33,8 @@ def gh(path, method="GET", payload=None, ok_404=False):
 
 
 AUDIO = (".mp3", ".wav", ".ogg")
+# Ролик: GitHub не встраивает видео по ссылке — «▶ смотреть», ссылка играет в браузере (#1753).
+VIDEO = (".mp4", ".webm")
 
 
 def raw_url(issue, name):
@@ -43,6 +45,15 @@ def is_audio(name):
     return name.lower().endswith(AUDIO)
 
 
+def is_video(name):
+    return name.lower().endswith(VIDEO)
+
+
+def as_is(name):
+    """Звук, ролик и GIF не пережимаются: JPEG убил бы анимацию GIF."""
+    return is_audio(name) or is_video(name) or name.lower().endswith(".gif")
+
+
 def comment_body(issue, items, text=""):
     """Текст комментария: вступление, по картинке с подписью на каждую пару (имя, подпись); звук — ссылкой
     «▶ послушать» (GitHub не встраивает аудио, но ссылка играет прямо в браузере телефона)."""
@@ -51,16 +62,18 @@ def comment_body(issue, items, text=""):
         url = raw_url(issue, name)
         if is_audio(name):
             parts.append(f"**{caption or name}** — [▶ послушать `{name}`]({url})")
+        elif is_video(name):
+            parts.append(f"**{caption or name}** — [▶ смотреть `{name}`]({url})")
         else:
             parts.append(f"**{caption}**\n\n![{caption}]({url})" if caption else f"![{name}]({url})")
     return "\n\n".join(parts)
 
 
 def shrink(path):
-    """Байты файла и имя в ветке: крупный снимок → JPEG 85 % (если есть Pillow); звук — как есть."""
+    """Байты файла и имя в ветке: крупный снимок → JPEG 85 % (если есть Pillow); звук, ролик и GIF — как есть."""
     data = open(path, "rb").read()
     name = os.path.basename(path)
-    if len(data) <= MAX_BYTES or is_audio(name):
+    if len(data) <= MAX_BYTES or as_is(name):
         return data, name
     try:
         from PIL import Image
