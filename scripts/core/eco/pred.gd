@@ -727,6 +727,9 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 	var speed := PATROL_SPEED
 	match pr.mode:
 		Mode.PATROL:
+			if _reef.is_finite() and _flat_dist(a.goal, _reef) < REEF_KEEP:  # цель брошенной охоты — за кольцом рифа
+				var gk := outside_reef(_reef, a.goal, REEF_KEEP)
+				a.goal = Vector3(gk.x, a.goal.y, gk.z)
 			if a.expired() or a.distance_to(a.goal) < 4.0:
 				a.timer = _rnd.range_f(10, 20)
 				var gx: float

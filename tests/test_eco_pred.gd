@@ -1155,6 +1155,25 @@ func test_hungry_patrol_skips_reef_homes() -> void:
 	eq(hungry[1], 0, "голодный — ни одной цели на кольце рифа")
 
 
+## Охоту бросил у рифа (`_give_up` — PATROL со старой целью у добычи): цель внутри REEF_KEEP патруль сразу выносит на
+## кольцо, а не плывёт к ней сквозь `reef_steer` (5 минут отмели — 26 м от оси, `test_shallows_live_with_preds_and_shoals`).
+func test_patrol_goal_inside_reef_moves_to_ring() -> void:
+	var r := _reef_world()
+	var w: EcoWorld = r[0]
+	var preds: EcoPred = r[1]
+	var axis := preds.reef_axis()
+	var pr := preds.all[0]
+	pr.hunger = -2.0
+	pr.agent.p = Vector3(axis.x + 45.0, -30.0, axis.z)
+	EcoPred._give_up(pr, 8.0)
+	pr.agent.goal = Vector3(axis.x + 12.0, -30.0, axis.z + 4.0)
+	pr.agent.timer = 8.0
+	_step(w)
+	eq(pr.mode, EcoPred.Mode.PATROL)
+	near(Vector2(pr.agent.goal.x - axis.x, pr.agent.goal.z - axis.z).length(), EcoPred.REEF_KEEP, 1e-3, "цель — на кольце рифа")
+	near(pr.agent.goal.y, -30.0, 1e-3, "высота цели та же")
+
+
 ## Самый резкий вертикальный разгон (м/с², по окну 3 шага) и шагов вплотную ко дну у серпохвостов за seconds с мира
 ## у места id.
 ## Минута полного мира у места (EcoView, шаг 1/30 с) — одна на тесты разворота и вертикали серпохвостов: раньше
