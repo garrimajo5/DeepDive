@@ -59,6 +59,51 @@ func test_turn_to_field_and_back() -> void:
 	ok(GateArch.local(back["end"]).z < -40.0, "от 08 прошёл арку насквозь")
 
 
+## #1757 (уровни и ГД 13.11, фокус 14.11): стоянка кадра `37b-okno-gnezdo` — не только законное место, но и
+## достижимое ходом: с гребня в жёлоб, разворот на оси, носом к гнезду — корабль встаёт в точку шага `ship` сценария
+## без удара, упора, отката поворота и сдвига вдоль опоры, и задним ходом возвращается на гребень.
+func test_stand_37b_reached_by_helm() -> void:
+	var ship := {}
+	for st: Dictionary in JSON.parse_string(FileAccess.get_file_as_string("res://tools/qa/scenario.json")):
+		if st["do"] == "ship":
+			ship = st
+		elif st["do"] == "shot" and st["name"] == "37b-okno-gnezdo":
+			break
+	ok(not ship.is_empty(), "шаг ship перед кадром 37b есть")
+	var want := Pass.world(Pass.STAND[0], Pass.STAND[1], Pass.STAND[2])
+	near(want.x, float(ship["x"]), 0.01, "стоянка инструмента — место шага сценария, x")
+	near(want.y, float(ship["y"]), 0.01, "глубина")
+	near(want.z, float(ship["z"]), 0.01, "z")
+	near(Pass.STAND[3], float(ship["yaw"]), 0.01, "курс")
+	var r := Pass.drive(Pass.RUNS["к стоянке 37b"])
+	ok(r["done"], "все точки взяты: подход, стоянка, отход задним ходом")
+	eq(r["bumps"], 0, "без ударов о дно")
+	near(r["stuck"], 0.0, 0.05, "без упоров")
+	eq(r["held"], 0, "поворот нигде не откатился у твёрдого")
+	eq(r["slid"], 0, "корпус не скользил вдоль опоры")
+	ok(r["min_arch"] > 2.0, "контур корпуса с выступами не ближе 2 м к арке (%.1f)" % r["min_arch"])
+	ok(r["min_ground"] > 1.39, "грунт под днищем не ближе зазора (%.2f)" % r["min_ground"])
+	eq(r["stands"].size(), 1, "встал на стоянку")
+	if r["stands"].size() != 1:
+		return
+	var st: Dictionary = r["stands"][0]
+	var at: Vector3 = st["at"]
+	ok(Vector2(at.x - want.x, at.z - want.z).length() < Pass.PARK, "центр — в точке кадра")
+	near(-at.y, Pass.STAND[2], Pass.DEPTH_OK, "глубина кадра")
+	near(rad_to_deg(st["yaw"]), Pass.STAND[3], 1.5, "курс кадра")
+	ok(not GateArch.hits(at, st["yaw"]), "корпус вне арки")
+	var nest := GateDiag.nest_pos(EcoDome.NEST)
+	var to_nest := Vector2(nest.x - at.x, nest.z - at.z).length()
+	ok(to_nest > 26.0 and to_nest < 30.0, "гнездо в окне: 26–30 м от центра (%.1f)" % to_nest)
+	ok(GateArch.local(r["end"]).z > 95.0, "задним ходом вышел на гребень")
+	# разворот на месте со стоянки круг не замыкает: корма (29 м) упирается в правую опору, курс откатывается (#1847)
+	var left := Pass.swing(at, st["yaw"], 1.0)
+	var right := Pass.swing(at, st["yaw"], -1.0)
+	ok(left > 90.0 and left < 359.0, "влево — до опоры (%.0f°)" % left)
+	ok(right > 90.0 and right < 359.0, "вправо — до опоры (%.0f°)" % right)
+	near(Pass.swing(Pass.world(0.0, 140.0, 20.0), 0.0, 1.0), 360.0, 0.5, "над гребнем круг свободен")
+
+
 func test_outline_and_gaps() -> void:
 	var pts := Pass.outline(Vector3.ZERO, 0.0)
 	var lo := Vector2(INF, INF)

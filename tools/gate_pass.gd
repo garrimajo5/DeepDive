@@ -9,9 +9,13 @@ extends SceneTree
 ## Прогоны `RUNS` — ломаные в осях места (dx; dz от середины арки, подход с +Z) с глубиной в каждой точке; ведёт
 ## простой рулевой `drive`: нос на точку (задний ход — корма на точку), глубина — по доле пути отрезка, но не ближе
 ## `KEEL` м к нижнему пределу хода под корпусом сейчас и через `LOOK` с (как пилот, что смотрит на глубину под килем).
+## Точка с пятым числом — **стоянка**: курс стоянки в градусах (`rotation.y`, как `yaw` шага `ship` сценария). К ней
+## рулевой подходит, сбавляя ход (скорость ≈ `PARK_K` × остаток пути, тормозит задним ходом), встаёт не дальше `PARK`
+## м от точки, доворачивает на курс и берёт глубину. Так проверяется место кадра `37b-okno-gnezdo` — `STAND`.
 ## Печатает по каждому прогону станции через `EVERY` м пути: место, глубину, курс, нижний предел хода
 ## (`Helm.Ship.floor_at`), зазор грунта под всем днищем, зазор от контура корпуса с выступами до блоков арки на его
-## высоте; итог — дошёл ли, удары о дно (`bump`), упоры (корабль стоит под тягой), наименьшие зазоры.
+## высоте; итог — дошёл ли, удары о дно (`bump`), упоры (корабль стоит под тягой), откаты поворота у твёрдого
+## (#1847) и сдвиги вбок вдоль твёрдого, наименьшие зазоры; у стоянки — где встал и сколько до гнезда купольника.
 ## png= — план: дно оттенком по глубине, блоки арки на высоте прохода, контуры корпуса и след центра.
 
 const Route := preload("res://tools/route_plan.gd")
@@ -33,6 +37,16 @@ const PASS_DEPTH := 58.0     ## проектное сечение уровней
 const RIDGE_DEPTH := 38.0    ## ход над гребнем, м (дно гребня 44…50 м, предел по центру ≈ 39,4…45,6)
 const KEEL := 1.0            ## м — рулевой держит центр не ближе этого к нижнему пределу хода: сейчас и через LOOK с
 const LOOK := 2.5
+const PARK := 0.5            ## м — стоянка взята: центр не дальше этого от точки…
+const PARK_SPEED := 0.15     ## …ход не больше этого, м/с…
+const PARK_YAW := 0.02       ## …и курс не дальше этого от курса стоянки, рад (≈ 1°)
+const PARK_K := 0.4          ## 1/с — ход к стоянке: остаток пути × это, не больше хода рулевого
+const SLIDE := 0.03          ## м за шаг — центр ушёл от «нос × ход» дальше этого: корпус скользит вдоль твёрдого
+
+## Стоянка кадра `37b-okno-gnezdo` (#1757) в осях места: [dx, dz, глубина, курс °] — шаг `ship` сценария тестера
+## (−76,9; −62; −215,5), yaw −63 (тест сверяет со сценарием). Точка разворота перед ней — на оси жёлоба, на линии курса.
+const STAND := [23.1, 24.5, 62.0, -63.0]
+const STAND_TURN := [0.0, 36.3]
 
 ## Прогоны: имя → точки [dx, dz, глубина, задний ход (1/0)]; первая точка — старт (курс — на вторую).
 const RUNS := {
@@ -45,6 +59,10 @@ const RUNS := {
 		[-150.0, 30.0, 35.0, 0], [0.0, 25.0, RIDGE_DEPTH, 0], [0.0, 25.0, PASS_DEPTH, 0], [0.0, -45.0, PASS_DEPTH, 0]],
 	"верхом": [  # проём между плечами модели: строго по оси на глубине гребня, без спуска
 		[0.0, 140.0, 30.0, 0], [0.0, 100.0, 35.0, 0], [0.0, -45.0, 35.0, 0], [0.0, 60.0, 35.0, 1]],
+	"к стоянке 37b": [  # с гребня в жёлоб, разворот на оси, носом к гнезду купольника — встать; задним ходом обратно
+		[0.0, 140.0, 30.0, 0], [0.0, 100.0, RIDGE_DEPTH, 0], [STAND_TURN[0], STAND_TURN[1], PASS_DEPTH, 0],
+		[STAND[0], STAND[1], STAND[2], 0, STAND[3]],
+		[STAND_TURN[0], STAND_TURN[1], PASS_DEPTH, 1], [0.0, 100.0, RIDGE_DEPTH, 1]],
 }
 
 
@@ -84,7 +102,9 @@ static func world(dx: float, dz: float, depth: float) -> Vector3:
 
 ## Прогон по точкам: шаги корабля до последней точки. Итог: "samples" — каждый шаг (at, yaw, speed, floor — нижний
 ## предел, ground — зазор грунта под днищем, arch — зазор до арки, bump, stuck), "done" — точки взяты,
-## "legs" — время отрезков, с; сводка — "bumps", "stuck", "min_ground", "min_arch", "min_floor" (запас над пределом).
+## "legs" — время отрезков, с; сводка — "bumps", "stuck", "min_ground", "min_arch", "min_floor" (запас над пределом),
+## "held" — шаги, где поворот откатился у твёрдого, "slid" — шаги со сдвигом вдоль твёрдого; "stands" — стоянки:
+## at, yaw, t — время от начала отрезка до остановки, arch — зазор до арки на стоянке.
 static func drive(points: Array) -> Dictionary:
 	var ship := make_ship()
 	var probe := make_ship()
@@ -102,7 +122,7 @@ static func drive(points: Array) -> Dictionary:
 		first = -first
 	ship.yaw = atan2(-first.x, -first.y)
 	var out := {"samples": [], "done": true, "legs": [], "bumps": 0, "stuck": 0.0, "min_ground": INF, "min_arch": INF,
-			"min_floor": INF, "path": 0.0}
+			"min_floor": INF, "path": 0.0, "held": 0, "slid": 0, "stands": []}
 	for i in range(1, points.size()):
 		var a: Array = points[i - 1]
 		var b: Array = points[i]
@@ -110,6 +130,9 @@ static func drive(points: Array) -> Dictionary:
 		var to := world(b[0], b[1], b[2])
 		var length := Vector2(to.x - from.x, to.z - from.z).length()
 		var back := int(b[3]) == 1
+		var park := b.size() > 4
+		var park_yaw := deg_to_rad(float(b[4])) if park else 0.0
+		var parked := false
 		var limit := length / 1.0 + 90.0
 		var t := 0.0
 		while t < limit:
@@ -119,13 +142,28 @@ static func drive(points: Array) -> Dictionary:
 			var keep := maxf(probe.floor_at(ship.pos, ship.yaw), probe.floor_at(ahead, ship.yaw)) + KEEL
 			var want_y := maxf(lerpf(from.y, to.y, k), keep)
 			var hover := length < 0.5   # отрезок-стоянка: только глубина, без руля
-			if (hover and absf(ship.pos.y - to.y) < DEPTH_OK) or (not hover and d.length() < ARRIVE):
+			if park:
+				var yaw_err := wrapf(park_yaw - ship.yaw, -PI, PI)
+				if d.length() < PARK and absf(ship.speed) < PARK_SPEED and absf(yaw_err) < PARK_YAW \
+						and absf(ship.pos.y - to.y) < DEPTH_OK:
+					parked = true
+					break
+			elif (hover and absf(ship.pos.y - to.y) < DEPTH_OK) or (not hover and d.length() < ARRIVE):
 				break
 			var near_xz := hover
 			ship.in_vert = clampf((want_y - ship.pos.y) * 0.8, -1.0, 1.0)
 			if near_xz:
 				ship.in_thrust = 0.0
 				ship.in_turn = 0.0
+			elif park:
+				# далеко — нос на точку; у точки — курс стоянки, ход — по остатку пути вдоль носа (перелёт — задним)
+				var along := d.dot(Vector2(ship.nose().x, ship.nose().z))
+				var close := d.length() < PARK * 4.0
+				var aim := park_yaw if close else atan2(-d.x, -d.y)
+				var err := wrapf(aim - ship.yaw, -PI, PI)
+				ship.in_turn = clampf(-err * 3.0, -1.0, 1.0)
+				var want_v := 0.0 if (absf(err) > AIM and not close) else clampf(along * PARK_K, -1.5, THRUST * Helm.Ship.FORWARD / Helm.Ship.DRAG)
+				ship.in_thrust = clampf((want_v - ship.speed) * 1.5, -1.0, 1.0)
 			else:
 				var aim := atan2(d.x, d.y) if back else atan2(-d.x, -d.y)
 				var err := wrapf(aim - ship.yaw, -PI, PI)
@@ -135,6 +173,11 @@ static func drive(points: Array) -> Dictionary:
 			ship.update(DT)
 			t += DT
 			var moved := Vector2(ship.pos.x - was.x, ship.pos.z - was.z).length()
+			var straight := was + ship.nose() * ship.speed * DT
+			if ship.in_turn != 0.0 and ship.turn == 0.0:
+				out["held"] += 1   # поворот завёл бы корпус в твёрдое — курс откатился (#1847)
+			elif Vector2(ship.pos.x - straight.x, ship.pos.z - straight.z).length() > SLIDE:
+				out["slid"] += 1
 			var stuck := absf(ship.speed) > 0.5 and moved < absf(ship.speed) * DT * 0.3
 			out["path"] += moved
 			var fl := probe.floor_at(ship.pos, ship.yaw)
@@ -149,11 +192,33 @@ static func drive(points: Array) -> Dictionary:
 			out["min_arch"] = minf(out["min_arch"], s["arch"])
 			out["min_floor"] = minf(out["min_floor"], ship.pos.y - fl)
 		out["legs"].append(t)
+		if parked:
+			out["stands"].append({"at": ship.pos, "yaw": ship.yaw, "t": t, "arch": arch_gap(ship.pos, ship.yaw)})
 		if t >= limit:
 			out["done"] = false
 			break
 	out["end"] = ship.pos
 	return out
+
+
+## Разворот на месте из стоянки: руль до упора в сторону `dir` (+1 — влево, `rotation.y` растёт), без хода, до
+## полного круга или пока курс не встанет (откат у твёрдого #1847 или стена дна под корпусом). Итог — на сколько
+## градусов повернул (360 — круг свободен).
+static func swing(pos: Vector3, yaw: float, dir: float) -> float:
+	var ship := make_ship()
+	ship.pos = pos
+	ship.yaw = yaw
+	var turned := 0.0
+	var still := 0
+	while turned < TAU and still < 30:
+		var was := ship.yaw
+		ship.in_turn = -dir
+		ship.in_vert = clampf((pos.y - ship.pos.y) * 0.8, -1.0, 1.0)
+		ship.update(DT)
+		var step := absf(wrapf(ship.yaw - was, -PI, PI))
+		turned += step
+		still = still + 1 if step < 1e-5 else 0
+	return minf(rad_to_deg(turned), 360.0)
 
 
 ## Наименьший зазор грунта под днищем: низ корпуса в точках `Helm.Ship.foot()` минус дно под ними, м.
@@ -215,6 +280,16 @@ static func print_run(run_name: String, r: Dictionary) -> void:
 			r["samples"].size() * DT, r["bumps"], r["stuck"]])
 	print("  наименьшие: грунт под днищем %.1f м, до блоков арки %s, запас над нижним пределом хода %.1f м." % [
 			r["min_ground"], "—" if r["min_arch"] == INF else "%.1f м" % r["min_arch"], r["min_floor"]])
+	print("  откаты поворота у твёрдого: %d шаг., сдвиги вдоль твёрдого: %d шаг." % [r["held"], r["slid"]])
+	var nest := GateDiag.nest_pos(EcoDome.NEST)
+	for st: Dictionary in r["stands"]:
+		var sq := GateArch.local(st["at"])
+		var at: Vector3 = st["at"]
+		print("  стоянка: встал за %.0f с в (%+.1f; %+.1f), мир (%.1f; %.1f), глубина %.1f м, курс %+.1f°; до арки %.1f м, от центра до гнезда купольника %.1f м." % [
+				st["t"], sq.x, sq.z, at.x, at.z, -at.y, rad_to_deg(st["yaw"]), st["arch"],
+				Vector2(nest.x - at.x, nest.z - at.z).length()])
+		print("  разворот на месте со стоянки: влево %.0f°, вправо %.0f° (360 — полный круг)." % [
+				swing(at, st["yaw"], 1.0), swing(at, st["yaw"], -1.0)])
 	print("  путь, м | (dx; dz) | глубина, м | курс, ° | предел хода, м | грунт под днищем, м | до арки, м | ход, м/с")
 	var next := 0.0
 	var last: Dictionary = r["samples"][-1]
