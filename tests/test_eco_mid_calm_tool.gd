@@ -6,7 +6,7 @@ extends TestCase
 
 func _tool() -> GDScript:
 	var tool: GDScript = load("res://tools/mid_calm.gd")
-	for v in ["moves", "limit", "dark", "probe", "answer", "delay", "hold", "start0", "band0", "fish_moves", "watch", "sites", "repeat", "live"]:
+	for v in ["moves", "limit", "dark", "probe", "answer", "delay", "hold", "start0", "band0", "fish_moves", "watch", "sites", "repeat", "dark_mark", "live"]:
 		ok(tool.get(v) != null, "в инструменте есть %s" % v)
 	return tool
 
@@ -25,6 +25,7 @@ func _restore(tool: GDScript) -> void:
 	tool.set("watch", [tool.WATCH_SHOAL] as Array[int])
 	tool.set("sites", false)
 	tool.set("repeat", false)
+	tool.set("dark_mark", false)
 	tool.set("live", false)
 
 
@@ -282,3 +283,53 @@ func test_answer_extends_pass_limit() -> void:
 	for sg in tool.SEGS:
 		eq(lines.filter(func(l: String) -> bool: return l.begins_with("участок %s (прошли 1/1)" % sg)).size(), 1,
 			"с ответами дошли до участка %s:\n%s" % [sg, "\n".join(lines)])
+
+
+## dark_mark=1 (#1400, п. 2 (я)): мир зовёт `EcoWorld.repeat` и в тёмной стоянке у 00, поэтому засада, услышанная до
+## света, уже открывает эпизод. С отметкой с начала стоянки строка расчёта совпадает с самим миром (`world_line`) на
+## каждой засаде; без неё (как расчёт (ш)) первая засада после света ложно идёт «СТРОКОЙ».
+func _ambushes(tool: GDScript, mark: bool) -> Array:
+	tool.set("dark_mark", mark)
+	tool.set("dark", tool.DARK)
+	tool.set("limit", 20.0)
+	var r: Dictionary = tool.run(0)
+	_restore(tool)
+	return r["ambush"]
+
+
+func _mismatch(amb: Array) -> int:
+	var n := 0
+	var prev := -INF
+	for a in amb:
+		var at: float = a["t"] + (0.0 if a["seg"] == "dark" else 1000.0)
+		if absf(at - prev) > 1e-4 and a["line"] != a["world"]:   # две засады одним шагом мир отмечает разом
+			n += 1
+		prev = at
+	return n
+
+
+func test_dark_mark_matches_world_line() -> void:
+	var tool := _tool()
+	var amb := _ambushes(tool, true)
+	var dark := amb.filter(func(a: Dictionary) -> bool: return a["seg"] == "dark")
+	var lit := amb.filter(func(a: Dictionary) -> bool: return a["seg"] != "dark")
+	print("  зерно 0: засад в тёмной стоянке %d (со строкой %d), после света %d (со строкой %d)" % [dark.size(),
+		dark.filter(func(a: Dictionary) -> bool: return a["line"]).size(), lit.size(),
+		lit.filter(func(a: Dictionary) -> bool: return a["line"]).size()])
+	ok(dark.size() > 0, "глазуны слышны и в тёмной стоянке у 00")
+	ok(dark[0]["line"], "первая услышанная в тёмной стоянке — со строкой")
+	eq(_mismatch(amb), 0, "строка расчёта — как у мира на каждой засаде")
+	var old := _mismatch(_ambushes(tool, false))
+	print("  без dark_mark расхождений с миром: %d" % old)
+	ok(old > 0, "без отметки с тёмной стоянки расчёт расходится с миром (проверка не пустая)")
+
+
+func test_dark_mark_summary_line() -> void:
+	var tool := _tool()
+	tool.set("dark_mark", true)
+	tool.set("limit", 5.0)
+	var lines: Array[String] = tool.report(1)
+	_restore(tool)
+	var got := lines.filter(func(l: String) -> bool: return l.begins_with("строка засады в первом проходе с отметкой с тёмной стоянки (30 с): "))
+	eq(got.size(), 1, "\n".join(lines))
+	ok(lines.any(func(l: String) -> bool: return l.begins_with("    засада СТРОКА dark ")), "засады тёмной стоянки — строками участка dark")
