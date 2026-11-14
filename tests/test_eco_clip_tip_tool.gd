@@ -17,19 +17,19 @@ func test_all_clips_measured() -> void:
 	for n in ["Swim", "SwimFast", "Bite", "TailStrike"]:
 		ok(res.has(n), "есть клип %s" % n)
 	near(float(res["Swim"].len), 2.4, 0.01, "длина Swim")
-	near(float(res["TailStrike"].len), 0.6, 0.01, "длина TailStrike")
+	near(float(res["TailStrike"].len), 0.9, 0.01, "длина TailStrike (ANIM-005)")
 
 
-## Таблица заказа: плавание спокойное, бросок резче, удар серпом — самый резкий, пик в середине удара.
-func test_strike_is_the_sharp_one() -> void:
+## Плавание спокойное, бросок резче; удар серпом после ANIM-005 — плавный (≤ 60 м/с², было 177), но быстрый.
+func test_strike_is_smooth_but_fast() -> void:
 	var res := _measure()
 	var swim: Dictionary = res["Swim"]
 	var fast: Dictionary = res["SwimFast"]
 	var strike: Dictionary = res["TailStrike"]
 	ok(float(swim.amax) < 15.0, "плавание: макс. ускорение %.1f м/с²" % swim.amax)
 	ok(float(fast.amax) > float(swim.amax) and float(fast.amax) < 60.0, "бросок: %.1f м/с²" % fast.amax)
-	ok(float(strike.amax) > 120.0, "удар ANIM-001: %.1f м/с² — резкий, заказ ANIM-005 ≤ 60" % strike.amax)
-	near(float(strike.at), 0.33, 0.05, "пик удара — в середине клипа")
+	ok(float(strike.amax) <= 60.0, "удар ANIM-005: %.1f м/с² ≤ 60" % strike.amax)
+	near(float(strike.at), 0.47, 0.05, "пик удара — между замахом и низом")
 	ok(float(strike.vmax) > 7.0, "удар быстрый: %.1f м/с" % strike.vmax)
 
 

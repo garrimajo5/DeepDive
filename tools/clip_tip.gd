@@ -6,7 +6,9 @@ extends SceneTree
 ##   godot --headless --path . -s tools/clip_tip.gd -- [glb=res://models/serpohvost-anim.glb] [bone=Tail03]
 ##     [point=0,-0.19,4.2] [hz=30]
 ## point — точка в позе покоя модели (м); по умолчанию — конец серпа серпохвоста. 13.11, 30 кадров/с:
-## Swim 10,3, SwimFast 38,9, TailStrike 177 м/с² (0,33 с) — по этой таблице заказ ANIM-005.
+## Swim 10,3, SwimFast 38,9, TailStrike 177 м/с² (0,33 с) — по этой таблице заказ ANIM-005. После приёмки ANIM-005
+## (14.11, импорт 60 кадров/с без оптимизатора): TailStrike 58,1 / 59,1 м/с² при 30 / 60 кадрах/с, Recoil 15,9, Coil 18,1,
+## Hover 0,3.
 
 const GLB := "res://models/serpohvost-anim.glb"
 const BONE := "Tail03"
