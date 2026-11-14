@@ -37,7 +37,10 @@ func test_pose_sides_and_nose() -> void:
 					ok(o["down"] > deg_to_rad(ShotSetup.GROT_DOWN), "%s — на %.0f м спину видно, а выбран угол больше" % [kind, k])
 					k += ShotSetup.GROT_STEP
 			var want: Vector2 = {"bok": right, "nos": f, "korma": -f}[kind]
-			if kind == "bok":   # с той стороны, откуда спину видно ниже
+			if kind == "bok" and pose["side"] != "bok":   # сбоку не видно — спереди или сзади
+				near(absf(d.normalized().dot(f)), 1.0, 1e-3, "bok — иначе спереди или сзади")
+				ok(ShotSetup._grot_line(gr, "bok", 18.0)["down"] > deg_to_rad(ShotSetup.GROT_DOWN), "сбоку спину не видно")
+			elif kind == "bok":   # с той стороны, откуда спину видно ниже
 				near(absf(d.normalized().dot(want)), 1.0, 1e-3, "bok — сбоку")
 				var other := ShotSetup._grot_spot(gr, Vector2(gr.p.x, gr.p.z) - d)
 				ok(pose["down"] <= other["down"] + 1e-4, "bok — сторона с меньшим углом")

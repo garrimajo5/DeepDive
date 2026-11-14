@@ -233,7 +233,7 @@ static func apply(g: Main, kv: Dictionary) -> void:
 		g.park_at(gp["ship"])
 		if not g.pilot.seated:
 			g.sit_at_helm()
-		print(grot_line(g.eco.grot.grot, gp["ship"]) + ", спина ниже взгляда на %.0f°" % rad_to_deg(gp["down"]))
+		print(grot_line(g.eco.grot.grot, gp["ship"]) + ", спина ниже взгляда на %.0f° (%s)" % [rad_to_deg(gp["down"]), gp["side"]])
 	if kv.has("scena"):  # scena=1|2|3 — контрольный ракурс сцены 00 → 01 (#1400): штатная камера пилота, нос к 01
 		var back := float(kv.get("scena_back", "0"))   # scena_back=<м> — раньше по тому же пути
 		var sp := scena_pose(int(kv["scena"]), back)
@@ -428,11 +428,25 @@ static func grot_walk(g, seconds: float) -> void:
 		sh.goal = sh.home
 
 
-## Поза корабля для кадра гротовика: bok — сбоку от курса тела (с той стороны, откуда спину видно ниже), nos — перед
+## Поза корабля для кадра гротовика: bok — сбоку от курса тела (с той стороны, откуда спину видно ниже; сбоку не видно
+## ни с какой — спереди или сзади), nos — перед
 ## телом, korma — позади, mid — на стоянке середины сцены (SCENA[1]); нос к телу. Глаз пилота — на GROT_EYE выше и
 ## впереди середины корабля: спина ниже взгляда круче GROT_DOWN — под пультом, корабль отходит дальше (до GROT_FAR).
-## {ship, yaw, down — угол от глаза вниз на спину, рад}.
+## {ship, yaw, down — угол от глаза вниз на спину, рад, side — откуда}.
 static func grot_pose(gr: EcoGrot.Walker, kind: String, dist: float) -> Dictionary:
+	if kind == "bok":   # сбоку спину не видно (тело в ложбине) — спереди или сзади
+		var best_side := _grot_line(gr, kind, dist)
+		if best_side["down"] > deg_to_rad(GROT_DOWN):
+			for k in ["nos", "korma"]:
+				var other := _grot_line(gr, k, dist)
+				if other["down"] < best_side["down"] - 1e-4:
+					best_side = other
+		return best_side
+	return _grot_line(gr, kind, dist)
+
+
+## Одна сторона (bok — обе бортовые) от dist до GROT_FAR через GROT_STEP: первая, где спина в окне, иначе наименьший угол.
+static func _grot_line(gr: EcoGrot.Walker, kind: String, dist: float) -> Dictionary:
 	var at := Vector2(gr.p.x, gr.p.z)
 	var f := Vector2(sin(gr.yaw), cos(gr.yaw))
 	var left := Vector2(cos(gr.yaw), -sin(gr.yaw))
@@ -447,6 +461,7 @@ static func grot_pose(gr: EcoGrot.Walker, kind: String, dist: float) -> Dictiona
 			_: spots = [at - left * d, at + left * d]
 		for xz in spots:
 			var pose := _grot_spot(gr, xz)
+			pose["side"] = kind
 			if best.is_empty() or pose["down"] < best["down"] - 1e-4:
 				best = pose
 		d += GROT_STEP
