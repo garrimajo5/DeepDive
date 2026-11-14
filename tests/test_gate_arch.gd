@@ -226,7 +226,7 @@ func test_arch_fog_uses_water_layers() -> void:
 	var gv: GateView = main.gate_view
 	var o: OceanView = main.ocean
 	var all: Array = gv.model.find_children("*", "MeshInstance3D", true, false)
-	eq(gv.mats.size(), 3, "минерал, кабель и полипы — по материалу на все LOD и створки")
+	eq(gv.mats.size(), 4, "минерал, кабель, полипы и минерал створок — по материалу на все LOD")
 	for mi: MeshInstance3D in all:
 		var m := mi.get_surface_override_material(0) as ShaderMaterial
 		ok(m != null, "%s — свой шейдер, не StandardMaterial3D" % mi.name)
@@ -249,6 +249,33 @@ func test_arch_fog_uses_water_layers() -> void:
 		near(float(m0.get_shader_parameter("layer_density")), main.env.fog_density, 0.00001, "новая глубина — новый туман")
 		near(float(m0.get_shader_parameter("layer_gain")), float(o.seabed_mat.get_shader_parameter("layer_gain")), 0.00001,
 			"сила слоёв как у дна")
-	eq(o.layer_mats().size(), 6, "дно, лёд, дальняя вода и три материала арки — без повторов")
+	eq(o.layer_mats().size(), 7, "дно, лёд, дальняя вода и четыре материала арки — без повторов")
 	main.queue_free()
 	await frames(1)
+
+
+## Створки темнее опоры (#1757, проба контраста): свой материал на том же шейдере и картах, тон лица и кромок ниже 1,
+## без свечения; тело арки и табличка — прежним цветом карты.
+func test_petals_stand_out_from_pier() -> void:
+	var gv := GateView.new()
+	var body := gv.plate.get_surface_override_material(0) as ShaderMaterial
+	ok(gv.petal_mat != null and gv.petal_mat != body, "у створок свой материал, не минерал опоры")
+	if gv.petal_mat == null:
+		gv.free()
+		return
+	for mi in gv.petals:
+		ok(mi.get_surface_override_material(0) == gv.petal_mat, "%s — материал створок" % mi.name)
+	ok(gv.mats.has(gv.petal_mat), "материал створок — в списке: получит слои воды")
+	ok(gv.petal_mat.shader == body.shader, "тот же шейдер — новых сборок нет")
+	ok(gv.petal_mat.get_shader_parameter("albedo_tex") == body.get_shader_parameter("albedo_tex"), "та же карта минерала")
+	near(float(gv.petal_mat.get_shader_parameter("tone")), GateArch.PETAL_TONE, 0.0001, "тон лица")
+	near(float(gv.petal_mat.get_shader_parameter("tone_in")), GateArch.PETAL_TONE_IN, 0.0001, "тон кромок и изнанки")
+	ok(GateArch.PETAL_TONE < 0.7 and GateArch.PETAL_TONE > 0.3, "лицо заметно темнее опоры, но не чёрное — минерал")
+	ok(GateArch.PETAL_TONE_IN < GateArch.PETAL_TONE and GateArch.PETAL_TONE_IN > 0.15, "кромка и изнанка темнее лица: поднятая створка — тёмная полоса")
+	near(float(gv.petal_mat.get_shader_parameter("rough")), GateArch.PETAL_ROUGH, 0.0001, "шероховатость — из таблицы")
+	ok(body.get_shader_parameter("tone") == null or is_equal_approx(float(body.get_shader_parameter("tone")), 1.0), "опора — цветом карты")
+	var glow = gv.petal_mat.get_shader_parameter("glow")
+	ok(glow == null or Color(glow.r, glow.g, glow.b).is_equal_approx(Color.BLACK), "без свечения")
+	var sh := FileAccess.get_file_as_string("res://shaders/gate_arch.gdshader")
+	ok(sh.contains("mix(tone, tone_in, inner)"), "шейдер красит по стороне плиты")
+	gv.free()

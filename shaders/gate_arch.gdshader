@@ -14,17 +14,23 @@ uniform float normal_k = 0.0;
 uniform sampler2D orm_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
 uniform vec3 glow : source_color = vec3(0.0);
 uniform sampler2D glow_tex : source_color, hint_default_white, filter_linear_mipmap, repeat_enable;
+// Тон створок гнёзд (#1757, проба контраста, `GateArch.PETAL_TONE…`): лицо (нормаль +Z модели) и остальное — кромки и изнанка.
+// У тела арки оба — 1: цвет как в картах.
+uniform float tone = 1.0;
+uniform float tone_in = 1.0;
 
 #include "res://shaders/water_layers.gdshaderinc"
 
 varying vec3 w_pos;
+varying float inner;
 
 void vertex() {
 	w_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	inner = 1.0 - clamp(NORMAL.z, 0.0, 1.0);
 }
 
 void fragment() {
-	ALBEDO = albedo * texture(albedo_tex, UV).rgb;
+	ALBEDO = albedo * texture(albedo_tex, UV).rgb * mix(tone, tone_in, inner);
 	ROUGHNESS = rough * texture(orm_tex, UV).g;
 	NORMAL_MAP = texture(normal_tex, UV).rgb;
 	NORMAL_MAP_DEPTH = normal_k;

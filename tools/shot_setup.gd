@@ -215,13 +215,14 @@ static func apply(g: Main, kv: Dictionary) -> void:
 		d.state = EcoDome.State.OPEN
 		d.t = float(kv.get("kupol_t", "0"))
 		g.eco.dome_view.sync(g.eco.world.time, d.pos)
-		var kc := Camera3D.new()
-		kc.fov = Deck.FOV
-		kc.far = 400.0
-		g.add_child(kc)
-		kc.global_position = cam_above(d.pos + Vector3(3.5, 2.0, 5.0))   # гнездо на лице опоры над полом кармана (#1757): камера не под дном
-		kc.look_at(d.pos + Vector3(0.0, 0.5, 0.0))
-		kc.make_current()
+		if kv.get("kupol_cam", "1") != "0":  # kupol_cam=0 — камера остаётся у игрока (вид из окна, с ship= и x/z/pitch)
+			var kc := Camera3D.new()
+			kc.fov = Deck.FOV
+			kc.far = 400.0
+			g.add_child(kc)
+			kc.global_position = cam_above(d.pos + Vector3(3.5, 2.0, 5.0))   # гнездо на лице опоры над полом кармана (#1757): камера не под дном
+			kc.look_at(d.pos + Vector3(0.0, 0.5, 0.0))
+			kc.make_current()
 	if kv.has("grot") or kv.has("grot_t"):  # grot=x,z;… — круг гротовика на пробу; grot_t=<с> — он один прошёл столько
 		# секунд круга, корабль в grot_dist м от него (grot_cam=bok|nos|korma|mid), за штурвалом — штатная камера (#1400)
 		if kv.has("grot"):
