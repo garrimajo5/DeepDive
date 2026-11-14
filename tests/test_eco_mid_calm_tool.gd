@@ -6,7 +6,7 @@ extends TestCase
 
 func _tool() -> GDScript:
 	var tool: GDScript = load("res://tools/mid_calm.gd")
-	for v in ["moves", "limit", "dark", "probe", "answer", "delay", "hold", "start0", "band0", "fish_moves", "watch", "sites", "repeat"]:
+	for v in ["moves", "limit", "dark", "probe", "answer", "delay", "hold", "start0", "band0", "fish_moves", "watch", "sites", "repeat", "live"]:
 		ok(tool.get(v) != null, "в инструменте есть %s" % v)
 	return tool
 
@@ -25,6 +25,7 @@ func _restore(tool: GDScript) -> void:
 	tool.set("watch", [tool.WATCH_SHOAL] as Array[int])
 	tool.set("sites", false)
 	tool.set("repeat", false)
+	tool.set("live", false)
 
 
 func test_parse_moves() -> void:
@@ -230,3 +231,30 @@ func test_ambush_line() -> void:
 	var s: String = tool.ambush_line({"seg": "back", "t": 22.5, "gz": 0, "at": Vector2(32, 96), "ship": Vector2(4, 80),
 		"d": 33.2, "light": true, "speed": 0.0, "pred": {"who": 2, "mode": "eat", "d": 24.0}, "coins": 7})
 	eq(s, "back 22.5 с: глазун 0 (32; 96), корабль (4; 80) в 33 м, свет, стоит; серпохвост №2 eat в 24 м; монетников 7")
+
+
+## answer=1 и repeat=1 (#1350, 14.11 01:08): каждый ответ экипажа — hold с без света и хода, поэтому предел прохода
+## растёт на hold за ответ (`pass_limit`); с постоянным пределом повтор с ответами молча обрывался, не дойдя до 012.
+## Предел `lim` здесь — с запасом на один ход без ответов, но меньше хода с двумя ответами.
+func test_answer_extends_pass_limit() -> void:
+	var tool := _tool()
+	tool.set("hold", tool.HOLD)
+	eq(tool.pass_limit(0), tool.limit, "без ответов — предел lim")
+	near(tool.pass_limit(3) - tool.pass_limit(2), tool.HOLD, 1e-6, "ответ — ещё hold")
+	tool.set("repeat", true)
+	tool.set("answer", true)
+	tool.set("dark", 0.0)
+	tool.set("limit", 200.0)
+	var lines: Array[String] = tool.report(1)
+	_restore(tool)
+	ok(lines[0].contains("предел 200 с + 25 с на ответ"), lines[0])
+	var seed_line: Array = lines.filter(func(l: String) -> bool: return l.begins_with("  зерно 0: "))
+	var answers := -1
+	var m := RegEx.create_from_string("ответов (\\d+)").search(seed_line[0])
+	if m != null:
+		answers = int(m.get_string(1))
+	print("  ответов экипажа за повтор: %d (предел %.0f с + %d × %.0f с)" % [answers, 200.0, answers, tool.HOLD])
+	ok(answers >= 2, "ответов больше одного — без продления предел 200 с не хватает: %s" % seed_line[0])
+	for sg in tool.SEGS:
+		eq(lines.filter(func(l: String) -> bool: return l.begins_with("участок %s (прошли 1/1)" % sg)).size(), 1,
+			"с ответами дошли до участка %s:\n%s" % [sg, "\n".join(lines)])

@@ -10,6 +10,9 @@ extends SceneTree
 ## Участки: mid, 01 — первый проход; back — 01→00 и стоянка у 00; mid2, 012 — второй проход. По участку — угрозы,
 ## первый «замер» и моллюски от его начала; засады глазуна в слышимости — где, когда, где корабль, кто из серпохвостов
 ## ближе и в каком режиме, сколько монетников в стайке. Предел прохода по умолчанию — LIMIT_REPEAT.
+## Предел `lim=` — ход без ответов: каждый ответ экипажа (`answer=1`) продлевает его на `hold=` с стоянки без света
+## (`pass_limit`), иначе повтор с ответом молча обрывался до 012 (#1350, 14.11 01:08). Строки печатаются сразу —
+## и зерно, как только посчитано (`live`), а не всё в конце.
 ## grot= — круг гротовика на пробу (`EcoGrot.route`; уровни и ГД 13.11, #1400: стая 5 едет на нём). С sites=1 — среда
 ## каждой точки круга; path=1 — весь путь (`grot_path`): гротовик один, корабль далеко, круг целиком — время круга,
 ## дно и наклон, остановки и поворот на точках, задевает ли панцирь или риф твёрдое других систем и кто ближе всего.
@@ -47,7 +50,7 @@ const SPEED := 5.0
 const DT := 1.0 / 30.0
 const DARK := 30.0
 const STOP := 25.0
-## Предел прохода после тёмной стоянки, с.
+## Предел прохода после тёмной стоянки без ответов экипажа, с (каждый ответ добавляет hold — `pass_limit`).
 const LIMIT := 120.0
 static var limit := LIMIT
 const LIMIT_REPEAT := 420.0
@@ -85,6 +88,8 @@ static var sites := false
 const HOME_LIFT := 3.5
 ## Переносы домов стай рифа этого прогона: номер → (x, z).
 static var fish_moves := {}
+## Печатать строки отчёта сразу, как появились (`_init`; тесты собирают их молча).
+static var live := false
 const TRACK_EVERY := 5.0
 const TRACK_FOR := 60.0
 
@@ -122,9 +127,21 @@ func _init() -> void:
 		if seeds <= 0:
 			quit()
 			return
-	for line in report(seeds):
-		print(line)
+	live = true
+	report(seeds)
 	quit()
+
+
+## Предел прохода после тёмной стоянки, с: ход `limit` и стоянки без света по ответам экипажа (каждая `hold`).
+static func pass_limit(answers: int) -> float:
+	return limit + answers * hold
+
+
+## Строка в отчёт; при `live` — сразу в лог.
+static func put(lines: Array[String], line: String) -> void:
+	lines.append(line)
+	if live:
+		print(line)
 
 
 ## "43,75;55,65" → [(43, 75), (55, 65)].
@@ -425,7 +442,7 @@ static func run(seed_value: int) -> Dictionary:
 	var hushed := -1.0  # с какого времени стоит без света и хода
 	var mid := true
 	var lit := {}
-	while leg < legs.size() and t < dark + limit:
+	while leg < legs.size() and t < dark + pass_limit(r["answers"]):
 		var tg: Vector2 = legs[leg][0]
 		if legs[leg][2] != at["seg"]:
 			at["seg"] = legs[leg][2]
@@ -596,24 +613,24 @@ static func report(seeds: int) -> Array[String]:
 	var fh: Array[Vector3] = EcoFish.HOMES.duplicate()
 	for k in fish_moves:
 		fh[k] = Vector3(fish_moves[k].x, 0.0, fish_moves[k].y)
-	lines.append("== дома радужников %s, старт серпохвоста №0 %s, %s, тихий круг серпохвоста %s, ответ экипажа %s, %d зёрен, путь %s, стоянка %.0f с у середины%s" % [str(homes), str(start0 if start0.is_finite() else EcoPred.STARTS[0]), band, "вкл" if probe else "выкл", ("через %.1f с, %.0f с без света" % [delay, hold]) if answer else "нет", seeds, str(PATH), STOP, (", повтор 00→01→00→01, предел %.0f с" % limit) if repeat else ""])
+	put(lines, "== дома радужников %s, старт серпохвоста №0 %s, %s, тихий круг серпохвоста %s, ответ экипажа %s, %d зёрен, путь %s, стоянка %.0f с у середины%s" % [str(homes), str(start0 if start0.is_finite() else EcoPred.STARTS[0]), band, "вкл" if probe else "выкл", ("через %.1f с, %.0f с без света" % [delay, hold]) if answer else "нет", seeds, str(PATH), STOP, (", повтор 00→01→00→01, предел %.0f с + %.0f с на ответ" % [limit, hold if answer else 0.0]) if repeat else ""])
 	for k in watch:
 		if k == EcoGrot.RIDERS:
-			lines.append("== стая светляков %d — на спине гротовика, дом идёт с ним по кругу %s (%s; fish=%d не действует), тёмная стоянка %.0f с" % [k, str(EcoGrot.route), "EcoGrot.ROUTE" if EcoGrot.route == EcoGrot.ROUTE else "проба grot=", k, dark])
+			put(lines, "== стая светляков %d — на спине гротовика, дом идёт с ним по кругу %s (%s; fish=%d не действует), тёмная стоянка %.0f с" % [k, str(EcoGrot.route), "EcoGrot.ROUTE" if EcoGrot.route == EcoGrot.ROUTE else "проба grot=", k, dark])
 		else:
-			lines.append("== дом стаи светляков %d (%.0f; %.0f), тёмная стоянка %.0f с" % [k, fh[k].x, fh[k].z, dark])
+			put(lines, "== дом стаи светляков %d (%.0f; %.0f), тёмная стоянка %.0f с" % [k, fh[k].x, fh[k].z, dark])
 	if sites:
 		for k in watch:
 			if k == EcoGrot.RIDERS:
 				for q in EcoGrot.route:
-					lines.append(site_line("точка круга гротовика (стая %d)" % k, q))
+					put(lines, site_line("точка круга гротовика (стая %d)" % k, q))
 			elif not fish_moves.has(k):
-				lines.append(site_line("дом стаи %d" % k, Vector2(fh[k].x, fh[k].z)))
+				put(lines, site_line("дом стаи %d" % k, Vector2(fh[k].x, fh[k].z)))
 		for b in EcoCoral.BASES:
-			lines.append(site_line("риф", b))
+			put(lines, site_line("риф", b))
 	for k in fish_moves:
-		lines.append(site_line("перенос стаи %d" % k, fish_moves[k]))
-		lines.append(site_line("прежний дом стаи %d" % k, Vector2(EcoFish.HOMES[k].x, EcoFish.HOMES[k].z)))
+		put(lines, site_line("перенос стаи %d" % k, fish_moves[k]))
+		put(lines, site_line("прежний дом стаи %d" % k, Vector2(EcoFish.HOMES[k].x, EcoFish.HOMES[k].z)))
 	var order := {"done": 0, "mollusk": [], "alert": [], "near0": [], "goal": [], "seg": [], "path0": []}
 	var sp := {"shoals": {}, "hunt_exit": [], "hunt_path": [], "prey": {}, "exit20": 0}
 	for k in watch:
@@ -692,11 +709,11 @@ static func report(seeds: int) -> Array[String]:
 		if r["alert_t"] >= 0.0:
 			order["alert"].append(r["alert_t"])
 		order["near0"].append(r["near0"])
-		lines.append("  зерно %d: %s" % [s, ", ".join(parts)])
+		put(lines, "  зерно %d: %s" % [s, ", ".join(parts)])
 		if repeat:
-			lines.append("    участки: " + seg_line(r))
+			put(lines, "    участки: " + seg_line(r))
 			for a in r["ambush"]:
-				lines.append("    засада " + ambush_line(a))
+				put(lines, "    засада " + ambush_line(a))
 			for sg in SEGS:
 				var acc: Dictionary = segs[sg]
 				if not r["seg_t0"].has(sg):
@@ -714,27 +731,27 @@ static func report(seeds: int) -> Array[String]:
 	var fl: Array[String] = []
 	for k in homes.size():
 		fl.append("стая %d — %d/%d" % [k, flared.get(k, 0), seeds])
-	lines.append("итог: волнолист %d/%d; вспышки в середине: %s; зов хищника вспышкой в середине %d/%d, на подходе к 01 %d/%d" \
+	put(lines, "итог: волнолист %d/%d; вспышки в середине: %s; зов хищника вспышкой в середине %d/%d, на подходе к 01 %d/%d" \
 		% [fern, seeds, ", ".join(fl), betray_mid, seeds, betray_01, seeds])
-	lines.append("угрозы в середине (зёрен из %d): %s; серпохвост ближе всего %.0f м" \
+	put(lines, "угрозы в середине (зёрен из %d): %s; серпохвост ближе всего %.0f м" \
 		% [seeds, _keys(threats_mid) if not threats_mid.is_empty() else "нет", pred_near])
-	lines.append("угрозы на подходе к 01 (зёрен из %d): %s" % [seeds, _keys(threats_01) if not threats_01.is_empty() else "нет"])
-	lines.append("порядок: моллюски до первого «замера» %d/%d; реакция моллюсков %s; первый «замер» %s; №0 ближе всего (медиана) %.0f м" \
+	put(lines, "угрозы на подходе к 01 (зёрен из %d): %s" % [seeds, _keys(threats_01) if not threats_01.is_empty() else "нет"])
+	put(lines, "порядок: моллюски до первого «замера» %d/%d; реакция моллюсков %s; первый «замер» %s; №0 ближе всего (медиана) %.0f м" \
 		% [order["done"], seeds, _spread(order["mollusk"], seeds), _spread(order["alert"], seeds), _median(order["near0"])])
-	lines.append("путь середины %s → %s: ближе всего цель №0 %s; отрезок между целями %s; сам №0, пока корабль в середине, %s" \
+	put(lines, "путь середины %s → %s: ближе всего цель №0 %s; отрезок между целями %s; сам №0, пока корабль в середине, %s" \
 		% [str(PATH[0]), str(PATH[1]), _metres(order["goal"]), _metres(order["seg"]), _metres(order["path0"])])
 	for k in watch:
 		var acc: Dictionary = sp["shoals"][k]
-		lines.append("стая %d: дальше всего от дома %s; ближе всего к выходу 00 %s, к пути середины %s; погонь на неё %d в %d/%d зёрнах, ближе %.0f м к выходу 00 — %d/%d зёрен, к пути середины — %d/%d" \
+		put(lines, "стая %d: дальше всего от дома %s; ближе всего к выходу 00 %s, к пути середины %s; погонь на неё %d в %d/%d зёрнах, ближе %.0f м к выходу 00 — %d/%d зёрен, к пути середины — %d/%d" \
 			% [k, _metres_max(acc["far"]), _metres(acc["exit"]), _metres(acc["path"]), acc["n"], acc["seeds"], seeds,
 			EXIT_NEAR, acc["exit20"], seeds, acc["path20"], seeds])
 	if repeat:
 		for sg in SEGS:
 			var acc: Dictionary = segs[sg]
-			lines.append("участок %s (прошли %d/%d): моллюски раньше «замера» %d/%d; первый «замер» от начала участка %s; серпохвост ближе всего %s; засад глазуна в слышимости %d; угрозы (зёрен): %s" \
+			put(lines, "участок %s (прошли %d/%d): моллюски раньше «замера» %d/%d; первый «замер» от начала участка %s; серпохвост ближе всего %s; засад глазуна в слышимости %d; угрозы (зёрен): %s" \
 				% [sg, acc["n"], seeds, acc["moll_first"], acc["n"], _spread(acc["alert"], acc["n"]), _metres(acc["pred"]),
 				acc["ambush"], _keys(acc["threats"]) if not acc["threats"].is_empty() else "нет"])
-	lines.append("погони (HUNT, все серпохвосты): ближе всего к выходу 00 %s (ближе %.0f м — %d/%d зёрен), к пути середины %s; кто → стая (зёрен): %s" \
+	put(lines, "погони (HUNT, все серпохвосты): ближе всего к выходу 00 %s (ближе %.0f м — %d/%d зёрен), к пути середины %s; кто → стая (зёрен): %s" \
 		% [_metres(sp["hunt_exit"]), EXIT_NEAR, sp["exit20"], seeds, _metres(sp["hunt_path"]), _keys(sp["prey"]) if not sp["prey"].is_empty() else "погонь нет"])
 	return lines
 
