@@ -8,8 +8,8 @@
   (скольжение вдоль с прежним курсом). Раньше `Helm.Ship.update` считал новый курс до проверки и не откатывал его:
   разворот на месте проводил корму сквозь гротовика и опору. «Уже стоял в твёрдом — выходит свободно» теперь
   считается по прежнему курсу. Тесты `test_helm.test_turn_into_solid_is_held`, `test_turn_held_ship_still_moves`,
-  `test_turn_free_when_already_in_solid`, `test_turn_at_grot_keeps_hull_out`,
-  `test_gate_arch.test_turn_does_not_swing_stern_into_pillar` (без исправления падают).
+  `test_turn_at_grot_keeps_hull_out`, `test_gate_arch.test_turn_does_not_swing_stern_into_pillar` (без исправления
+  падают), `test_helm.test_turn_free_when_already_in_solid` (страховка прежнего поведения).
 - Поток Б (п. 3 фокуса, по примеру арки 07 #1835): гротовик твёрд для **всего** корабля — `EcoHull.touches_whole`
   (основной объём и выступы: двигатели в кожухах по бортам кормы до |x| 6,7 м при кормовом переходе 3,6 м, рули,
   стабилизаторы, манипулятор и прожектор под носом до z −9,2); раньше `EcoGrot.touches_ship` видел только основной
