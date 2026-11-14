@@ -248,7 +248,30 @@ func test_run_qa_logs_host_load() -> void:
 	var res := ps.find("$result = \"RUN $head done=$done")
 	ok(res > after, "итоговая строка RUN называет сборку")
 	ok(ps.find("Add-Content \"$run\\log.txt\" \"run-qa: $result\"", res) > res, "итог — и в конец log.txt")
-	ok(ps.rfind("NOT_DONE") > res, "NOT_DONE остаётся последней строкой")
+	ok(ps.rfind("NOT_DONE") > res, "NOT_DONE — в конце, после итога")
+
+
+## #1350, 14.11: тестер ждал конец прогона по строке RUN, а сводка ПРОВЕРИТЬ печатается позже (Export-QaBranches
+## ещё идёт). Последняя строка вывода — маркер END <коммит>: после сводки, ISSUES, NOT_DONE и снятия замка.
+func test_run_qa_ends_with_end_marker() -> void:
+	var ps := _ps("run-qa.ps1")
+	var code: Array[String] = []
+	for line in ps.split("\n"):
+		var t := line.strip_edges()
+		if t != "" and not t.begins_with("#"):
+			code.append(t)
+	eq(code[-1], "Write-Output (Get-EndLine $head)", "последняя строка кода печатает END")
+	eq(ps.count("Get-EndLine"), 1, "маркер печатается один раз")
+	var end := ps.find("Write-Output (Get-EndLine $head)")
+	for before in ["Export-QaBranches $repo", "foreach ($w in $watch)", "$script:IssueNote", "NOT_DONE $head", "Unlock-Qa $lockFile\n"]:
+		ok(ps.rfind(before) > 0 and ps.rfind(before) < end, "END — после «%s»" % before.strip_edges())
+	var kadry := _ps("kadry.ps1")
+	ok(kadry.contains("function Get-EndLine([string]$head) { return \"END $head\" }"), "строка — END и коммит")
+	ok(kadry.contains("Check (Test-EndLast @(Get-Content (Join-Path $PSScriptRoot 'run-qa.ps1')"),
+		"kadry.ps1 -SelfTest проверяет, что END — последним")
+	var doc := FileAccess.get_file_as_string("res://docs/QA.md")
+	ok(doc.contains("**Конец прогона — строка `END <коммит>`**") and doc.contains("ждать её, а не `RUN`"),
+		"docs/QA.md: ждать END, не RUN")
 
 
 ## #1350: в облачной сессии pwsh нет — синтаксис скриптов тестера проверяет CI (ubuntu-раннер несёт pwsh),
@@ -458,7 +481,9 @@ func test_qa_lock_and_worktree() -> void:
 	var lock := run.find("$busy = Lock-Qa $lockFile")
 	ok(lock > 0 and lock < run.find("function Reset-Run"), "run-qa берёт замок до первого прогона")
 	ok(run.find("exit 2", lock) > lock, "занято — выход с кодом 2")
-	ok(run.strip_edges().ends_with("Unlock-Qa $lockFile"), "замок снимается в конце")
+	var tail := run.substr(run.rfind("Unlock-Qa $lockFile"))
+	ok(tail.strip_edges().ends_with("Write-Output (Get-EndLine $head)") and not tail.contains("exit"),
+		"замок снимается в конце — после него только маркер END")
 	ok(run.find("[Console]::OutputEncoding") < run.find("function Get-Asset"), "вывод в UTF-8 с самого начала")
 	var pub := _ps("publish-qa.ps1")
 	var plock := pub.find("$busy = Lock-Qa $lockFile")
