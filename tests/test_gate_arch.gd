@@ -118,6 +118,27 @@ func test_ship_through_passage_not_through_pillar() -> void:
 	ok(s2.pos.z > EcoGate.CENTER.y + GateArch.HALF_DEPTH, "в опору не вошёл: z %.1f" % s2.pos.z)
 
 
+func test_turn_does_not_swing_stern_into_pillar() -> void:
+	# #1847: корабль за аркой, бортом к ней (нос к −X, корма у правой опоры); разворот заводил корму в опору.
+	var ship := Helm.Ship.new()
+	ship.solid = GateArch.hits   # без дна: проверяем только твёрдое арки
+	ship.pos = _c(30.0, GateArch.floor_y() + 12.0, -20.0)
+	ship.yaw = PI / 2.0
+	ok(not GateArch.hits(ship.pos, ship.yaw), "постановка: вдоль арки свободно")
+	ok(GateArch.hits(ship.pos, ship.yaw - 0.5), "постановка: довернуть на 0,5 рад — корма в опоре")
+	ship.in_turn = 1.0   # вправо: yaw убывает, корма идёт к арке (+Z)
+	for i in 300:
+		ship.update(1.0 / 30.0)
+		if GateArch.hits(ship.pos, ship.yaw):
+			ok(false, "корма вошла в опору на %.1f с, курс %.2f" % [i / 30.0, ship.yaw])
+			return
+	ok(ship.yaw > PI / 2.0 - 0.5 and ship.yaw < PI / 2.0 - 0.05, "довернул до опоры и встал: %.2f" % ship.yaw)
+	ship.in_turn = -1.0
+	for i in 90:
+		ship.update(1.0 / 30.0)
+	ok(ship.yaw > PI / 2.0, "от опоры поворот идёт: %.2f" % ship.yaw)
+
+
 func test_without_solid_no_change() -> void:
 	var ship := Helm.Ship.new()
 	ship.ground = Seabed.height
