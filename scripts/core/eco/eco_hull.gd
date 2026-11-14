@@ -88,6 +88,7 @@ static func _grown(part: HullPlan.Part, r: float) -> HullPlan.Part:
 const EXTRA_FORM := {HullPlan.Form.TUBE: HullPlan.Form.CYLINDER, HullPlan.Form.ROTOR: HullPlan.Form.CYLINDER,
 		HullPlan.Form.WEDGE: HullPlan.Form.CUBE}
 static var _extra := {}
+static var _extra_boxes := {}
 static func extra_shapes(r: float) -> Array:
 	var key := snappedf(r, 0.001)
 	if _extra.has(key):
@@ -109,7 +110,12 @@ static func touches_whole(p: Vector3, ship_pos: Vector3, yaw: float, r: float = 
 	var l := to_ship(p, ship_pos, yaw)
 	if l.distance_to(CENTER) > REACH + r:
 		return false
-	return touches_local(l, r) or _shape_at(l, extra_shapes(r)) != null
+	if touches_local(l, r):
+		return true
+	var key := snappedf(r, 0.001)
+	if not _extra_boxes.has(key):
+		_extra_boxes[key] = _box_of(extra_shapes(key))
+	return (_extra_boxes[key] as AABB).has_point(l) and _shape_at(l, extra_shapes(key)) != null
 
 
 ## Точка мира → оси корабля, стоящего в ship_pos с курсом yaw.
@@ -137,9 +143,15 @@ static func box(r: float) -> AABB:
 	var key := snappedf(r, 0.001)
 	if _boxes.has(key):
 		return _boxes[key]
+	_boxes[key] = _box_of(shapes(key))
+	return _boxes[key]
+
+
+## Коробка в осях корабля вокруг деталей list (Shape).
+static func _box_of(list: Array) -> AABB:
 	var out := AABB()
 	var first := true
-	for sh: Shape in shapes(key):
+	for sh: Shape in list:
 		var back := sh.to_unit.inverse()
 		for k in 8:
 			var u := Vector3(0.5 if k & 1 else -0.5, 1.0 if k & 2 else -1.0, 0.5 if k & 4 else -0.5)
@@ -149,7 +161,6 @@ static func box(r: float) -> AABB:
 				first = false
 			else:
 				out = out.expand(l)
-	_boxes[key] = out
 	return out
 
 

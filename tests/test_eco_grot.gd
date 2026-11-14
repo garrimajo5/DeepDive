@@ -653,7 +653,7 @@ func test_engine_does_not_pass_through_grot() -> void:
 	g.place()
 	var s := _helm(w)
 	var engine := Vector3(HullPlan.ENGINE_X, HullPlan.ENGINE_Y, HullPlan.ENGINE_Z)
-	var side := HullPlan.ENGINE_X + HullPlan.SHROUD_D / 2.0 + EcoGrot.SHELL.x - 1.0   # кожух на 1 м в панцире
+	var side := HullPlan.ENGINE_X + EcoGrot.SHELL.x   # край панциря — под осью двигателя, риф — в кожухе
 	s.pos = Vector3(gr.p.x - side, maxf(gr.body_y + 0.5 - HullPlan.ENGINE_Y, FLAT + Helm.Ship.CLEARANCE),
 			gr.p.z - engine.z - 40.0)
 	s.yaw = 0.0   # нос к −Z, задним ходом — к +Z, на гротовика
@@ -666,20 +666,29 @@ func test_engine_does_not_pass_through_grot() -> void:
 			main_hits += 1
 	eq(main_hits, 0, "корпус без выступов проходит мимо")
 	ok(g.blocks(beside, 0.0), "корабль целиком — задевает двигателем")
-	var pts: Array[Vector3] = [engine, engine + Vector3(HullPlan.SHROUD_D / 2.0 - 0.1, 0, 0),
-			engine + Vector3(HullPlan.SHROUD_D / 2.0 - 0.1, 0, 1.0), engine + Vector3(HullPlan.SHROUD_D / 2.0 - 0.1, 0, -1.0)]
 	var dt := 1.0 / 60.0
 	for i in int(25.0 / dt):
 		s.update(dt)
 		w.ship.pos = s.pos
 		w.ship.yaw = s.yaw
-		for p in pts:
-			if g.solid(s.pos + p.rotated(Vector3.UP, s.yaw)):
-				ok(false, "двигатель вошёл в панцирь на %.1f с, корабль z %.1f" % [i * dt, s.pos.z])
-				return
+		var hit := _in_engine(gr, s, engine)
+		if hit >= 0.0:
+			ok(false, "панцирь или риф в кожухе двигателя на %.1f с (%.2f м от оси), корабль z %.1f" % [i * dt, hit, s.pos.z])
+			return
 	print("  двигатель встал у панциря: корабль z %.1f, гротовик z %.1f, сдвиг вдоль борта %.1f м" % [s.pos.z, gr.p.z,
 			s.pos.z + engine.z - gr.p.z])
 	ok(s.pos.z + engine.z < gr.p.z, "двигатель не прошёл мимо центра гротовика")
+
+
+## Ближайшая к оси кожуха двигателя (оси корабля) точка панциря или рифа gr внутри кожуха — расстояние до оси; нет — −1.
+func _in_engine(gr: EcoGrot.Walker, s: Helm.Ship, engine: Vector3) -> float:
+	var best := -1.0
+	for q in EcoGrot.body_points():
+		var l := EcoHull.to_ship(Vector3(gr.p.x, gr.body_y, gr.p.z) + gr.basis() * q, s.pos, s.yaw)
+		var r := Vector2(l.x - engine.x, l.y - engine.y).length()
+		if r <= HullPlan.SHROUD_D / 2.0 and absf(l.z - engine.z) <= HullPlan.SHROUD_L / 2.0 and (best < 0.0 or r < best):
+			best = r
+	return best
 
 
 func test_grot_does_not_walk_into_ship() -> void:
