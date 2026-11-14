@@ -1376,3 +1376,35 @@ func test_bite_still_ship_no_hull_stop() -> void:
 		var r := _bite_on_the_move(c.x, c.y, c.z, 0.0)
 		ok(r[0] >= 0.0, "бросок дотянулся до стоящего корабля (%s)" % c)
 		ok(r[1] < 20.0, "у стоящего корабля укус без стопа: %.0f м/с² (%s)" % [r[1], c])
+
+
+## `tools/pred_jerk.gd hunts` (#1753): журнал охот — чем кончилась и пауза после прошлой; «перескок» — новая охота
+## быстрее QUICK с после конца прошлой (так считали 28 из 56 до паузы `_give_up`).
+func test_pred_jerk_hunt_log() -> void:
+	var tool: GDScript = load("res://tools/pred_jerk.gd")
+	ok(tool != null, "pred_jerk.gd загружается")
+	var q: float = tool.QUICK
+	var sm: Dictionary = tool.hunt_summary([[10.0, 14.0, "kelp"], [14.27, 16.0, "kelp"], [16.0 + q + 1.0, 30.0, "catch"],
+			[40.0, -1.0, "end"]])
+	eq(sm["n"], 4, "четыре охоты")
+	eq(sm["quick"], 1, "быстрее QUICK — только через 0,27 с; через QUICK + 1 и через 10 с — нет")
+	near(sm["min_pause"], 0.27, 1e-4, "кратчайшая пауза")
+	eq(sm["why"]["kelp"], 2, "счёт по причинам")
+	eq(int(tool.hunt_summary([])["n"]), 0, "пустой журнал")
+	ok(tool.hunt_summary([[1.0, -1.0, "end"]])["min_pause"] == INF, "одна охота — пауз нет")
+	for k in ["catch", "gone", "time", "kelp", "ink", "grot", "truce", "ship", "end", "other"]:
+		ok(tool.HUNT_WHY.has(k), "есть подпись «%s»" % k)
+	var pp := EcoPred.new()
+	var pr := EcoPred.Pred.new()
+	pr.mode = EcoPred.Mode.EAT
+	eq(tool._why(pp, pr, null, false), "catch", "сменил охоту на еду — поймал")
+	pr.mode = EcoPred.Mode.CHARGE
+	eq(tool._why(pp, pr, null, false), "ship", "бросок на корабль")
+	pr.mode = EcoPred.Mode.PATROL
+	eq(tool._why(pp, pr, null, false), "gone", "добычи нет")
+	var f := EcoFish.Fish.new()
+	f.agent = EcoAgent.new(EcoFish.ID, Vector3.ZERO)
+	eq(tool._why(pp, pr, f, true), "time", "добыча жива, таймер вышел")
+	eq(tool._why(pp, pr, f, false), "other", "ни укрытий, ни станций — другое")
+	f.agent.alive = false
+	eq(tool._why(pp, pr, f, true), "gone", "добычу съел другой — раньше таймера")
