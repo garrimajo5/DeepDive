@@ -233,8 +233,7 @@ static func apply(g: Main, kv: Dictionary) -> void:
 		g.park_at(gp["ship"])
 		if not g.pilot.seated:
 			g.sit_at_helm()
-		g.walker.pitch = gp["pitch"]
-		print(grot_line(g.eco.grot.grot, gp["ship"]))
+		print(grot_line(g.eco.grot.grot, gp["ship"]) + ", спина ниже взгляда на %.0f°" % rad_to_deg(gp["down"]))
 	if kv.has("scena"):  # scena=1|2|3 — контрольный ракурс сцены 00 → 01 (#1400): штатная камера пилота, нос к 01
 		var back := float(kv.get("scena_back", "0"))   # scena_back=<м> — раньше по тому же пути
 		var sp := scena_pose(int(kv["scena"]), back)
@@ -380,15 +379,13 @@ static func place_pose(name: String, kind: String = "front", dist: float = PLACE
 
 
 ## Кадры дрейфа гротовика (#1400): корабль от середины тела, м; над видимым дном не ниже GROT_FLOOR (чуть выше
-## `Helm.Ship.CLEARANCE`) и над телом не ниже GROT_UP — нос к телу, камера пилота (взгляд −8°: выше — тело под пультом).
+## `Helm.Ship.CLEARANCE`) и над телом не ниже GROT_UP — нос к телу, штатная камера пилота (взгляд −8°).
 const GROT_DIST := 24.0
 const GROT_UP := 1.5
 const GROT_FLOOR := 4.5
 ## Луч от спины к кораблю — по GROT_RAYS точкам, над видимым дном не ниже GROT_CLEAR, м (иначе корабль выше).
 const GROT_RAYS := 12
 const GROT_CLEAR := 1.0
-## Взгляд пилота — на спину (вниз, не выше GROT_PITCH_MAX°, как сел за штурвал): иначе тело под пультом.
-const GROT_PITCH_MAX := -8.0
 ## Шаг, которым гротовик один проходит grot_t (как `tools/mid_calm.gd grot_path`).
 const GROT_DT := 0.1
 
@@ -424,26 +421,39 @@ static func grot_walk(g, seconds: float) -> void:
 		sh.goal = sh.home
 
 
-## Поза корабля для кадра гротовика: bok — справа от курса тела, nos — перед ним, korma — позади, mid — на стоянке
-## середины сцены (SCENA[1]); нос к телу, взгляд на спину. {ship, yaw, pitch}.
+## Поза корабля для кадра гротовика: bok — сбоку от курса тела (с той стороны, откуда спину видно ниже: из окна
+## пилота взгляд вниз не круче ~12°, дальше — пульт), nos — перед телом, korma — позади, mid — на стоянке середины
+## сцены (SCENA[1]); нос к телу. {ship, yaw, down — угол от корабля вниз на спину, рад}.
 static func grot_pose(gr: EcoGrot.Walker, kind: String, dist: float) -> Dictionary:
 	var at := Vector2(gr.p.x, gr.p.z)
 	var f := Vector2(sin(gr.yaw), cos(gr.yaw))
-	var xz: Vector2
+	var left := Vector2(cos(gr.yaw), -sin(gr.yaw))
+	var spots: Array[Vector2] = []
 	match kind:
-		"nos": xz = at + f * dist
-		"korma": xz = at - f * dist
-		"mid": xz = SCENA[1]
-		_: xz = at - Vector2(cos(gr.yaw), -sin(gr.yaw)) * dist
+		"nos": spots = [at + f * dist]
+		"korma": spots = [at - f * dist]
+		"mid": spots = [SCENA[1]]
+		_: spots = [at - left * dist, at + left * dist]
+	var best := {}
+	for xz in spots:
+		var pose := _grot_spot(gr, xz)
+		if best.is_empty() or pose["down"] < best["down"] - 1e-4:
+			best = pose
+	return best
+
+
+## Корабль в xz носом к телу: над дном GROT_FLOOR, над телом GROT_UP, луч от спины к нему над дном на GROT_CLEAR.
+static func _grot_spot(gr: EcoGrot.Walker, xz: Vector2) -> Dictionary:
+	var at := Vector2(gr.p.x, gr.p.z)
 	var away := (xz - at).normalized() if xz != at else Vector2(0.0, 1.0)
 	var y := maxf(float(Seabed.mesh_height(xz.x, xz.y)) + GROT_FLOOR, gr.body_y + GROT_UP)
 	var back := gr.body_y + EcoGrot.BACK_UP
-	for i in range(1, GROT_RAYS):   # гребень между кораблём и телом не закрывает спину: луч от спины над дном на GROT_CLEAR
+	for i in range(1, GROT_RAYS):   # гребень между кораблём и телом не закрывает спину
 		var s := float(i) / GROT_RAYS
 		var q := at.lerp(xz, s)
 		y = maxf(y, back + (float(Seabed.mesh_height(q.x, q.y)) + GROT_CLEAR - back) / s)
-	var pitch := minf(deg_to_rad(GROT_PITCH_MAX), -atan2(y - back, dist if kind != "mid" else at.distance_to(xz)))
-	return {"ship": Vector3(xz.x, y, xz.y), "yaw": atan2(away.x, away.y), "pitch": pitch}
+	return {"ship": Vector3(xz.x, y, xz.y), "yaw": atan2(away.x, away.y),
+		"down": atan2(y - back, maxf(at.distance_to(xz), 0.1))}
 
 
 ## Строка в лог: где гротовик, курс, наклон (тангаж/крен, цель по дну), шаг, точка пути, расстояние до корабля.

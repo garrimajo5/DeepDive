@@ -30,12 +30,16 @@ func test_pose_sides_and_nose() -> void:
 			var d := Vector2(s.x - gr.p.x, s.z - gr.p.z)
 			near(d.length(), 18.0, 1e-3, "%s — в 18 м" % kind)
 			var want: Vector2 = {"bok": right, "nos": f, "korma": -f}[kind]
-			near(d.normalized().dot(want), 1.0, 1e-3, "%s — с той стороны курса" % kind)
+			if kind == "bok":   # с той стороны, откуда спину видно ниже
+				near(absf(d.normalized().dot(want)), 1.0, 1e-3, "bok — сбоку")
+				var other := ShotSetup._grot_spot(gr, Vector2(gr.p.x, gr.p.z) - d)
+				ok(pose["down"] <= other["down"] + 1e-4, "bok — сторона с меньшим углом")
+			else:
+				near(d.normalized().dot(want), 1.0, 1e-3, "%s — с той стороны курса" % kind)
 			var nose := Vector2(-sin(pose["yaw"]), -cos(pose["yaw"]))
 			near(nose.dot(-d.normalized()), 1.0, 1e-3, "%s — нос к телу" % kind)
 			ok(s.y >= Seabed.mesh_height(s.x, s.z) + ShotSetup.GROT_FLOOR - 1e-3, "не в грунте")
-			var down := -atan2(s.y - gr.body_y - EcoGrot.BACK_UP, 18.0)
-			near(pose["pitch"], minf(deg_to_rad(ShotSetup.GROT_PITCH_MAX), down), 1e-4, "%s — взгляд на спину" % kind)
+			near(pose["down"], atan2(s.y - gr.body_y - EcoGrot.BACK_UP, 18.0), 1e-4, "%s — угол на спину" % kind)
 			ok(s.y >= gr.body_y + ShotSetup.GROT_UP - 1e-3, "выше тела")
 			var back := gr.body_y + EcoGrot.BACK_UP
 			for i in range(1, ShotSetup.GROT_RAYS):
