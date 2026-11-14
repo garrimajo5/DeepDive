@@ -222,6 +222,18 @@ static func apply(g: Main, kv: Dictionary) -> void:
 		kc.global_position = cam_above(d.pos + Vector3(3.5, 2.0, 5.0))   # гнездо на лице опоры над полом кармана (#1757): камера не под дном
 		kc.look_at(d.pos + Vector3(0.0, 0.5, 0.0))
 		kc.make_current()
+	if kv.has("grot") or kv.has("grot_t"):  # grot=x,z;… — круг гротовика на пробу; grot_t=<с> — он один прошёл столько
+		# секунд круга, корабль в grot_dist м от него (grot_cam=bok|nos|korma|mid), за штурвалом — штатная камера (#1400)
+		if kv.has("grot"):
+			EcoGrot.route = grot_route(kv["grot"])
+		grot_walk(g, float(kv.get("grot_t", "0")))
+		var gp := grot_pose(g.eco.grot.grot, String(kv.get("grot_cam", "bok")), float(kv.get("grot_dist", str(GROT_DIST))))
+		g.helm.yaw = gp["yaw"]
+		g.helm.turn = 0.0
+		g.park_at(gp["ship"])
+		if not g.pilot.seated:
+			g.sit_at_helm()
+		print(grot_line(g.eco.grot.grot, gp["ship"]))
 	if kv.has("scena"):  # scena=1|2|3 — контрольный ракурс сцены 00 → 01 (#1400): штатная камера пилота, нос к 01
 		var back := float(kv.get("scena_back", "0"))   # scena_back=<м> — раньше по тому же пути
 		var sp := scena_pose(int(kv["scena"]), back)
@@ -364,6 +376,78 @@ static func place_pose(name: String, kind: String = "front", dist: float = PLACE
 	cam = cam_above(cam)   # видимая сетка дна на изломе выше гладкого рельефа
 	var look := Vector3(at.x, maxf(at.y - 4.0, Seabed.height(at.x, at.z) + 2.0), at.z)
 	return {"ship": ship, "yaw": yaw, "cam": cam, "look": look}
+
+
+## Кадры дрейфа гротовика (#1400): корабль от середины тела, м; над видимым дном не ниже GROT_FLOOR (чуть выше
+## `Helm.Ship.CLEARANCE`) и над телом не ниже GROT_UP — нос к телу, камера пилота (взгляд −8°: выше — тело под пультом).
+const GROT_DIST := 24.0
+const GROT_UP := 1.5
+const GROT_FLOOR := 4.5
+## Луч от спины к кораблю — по GROT_RAYS точкам, над видимым дном не ниже GROT_CLEAR, м (иначе корабль выше).
+const GROT_RAYS := 12
+const GROT_CLEAR := 1.0
+## Шаг, которым гротовик один проходит grot_t (как `tools/mid_calm.gd grot_path`).
+const GROT_DT := 0.1
+
+
+## Круг гротовика из «x,z;x,z;…».
+static func grot_route(s: String) -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	for part in s.split(";", false):
+		var xz := part.split_floats(",")
+		if xz.size() >= 2:
+			out.append(Vector2(xz[0], xz[1]))
+	return out if out.size() >= 2 else EcoGrot.ROUTE
+
+
+## Гротовик заново с первой точки круга `EcoGrot.route` и один (корабль далеко) идёт seconds секунд шагом GROT_DT;
+## стая рифа — снова на спине (как в `EcoGrot.reset`).
+static func grot_walk(g, seconds: float) -> void:
+	var w: EcoWorld = g.eco.world
+	var gs: EcoGrot = g.eco.grot
+	var ship := w.ship.pos
+	w.ship.pos = Vector3(0.0, 0.0, -2000.0)
+	gs.reset(w)
+	for i in int(round(seconds / GROT_DT)):
+		gs.step(w, GROT_DT)
+	w.ship.pos = ship
+	var sh := gs.shoal
+	if sh:
+		var from := sh.center
+		for f: EcoFish.Fish in sh.members:
+			f.agent.p += sh.home - from
+			f.agent.home = sh.home
+		sh.center = sh.home
+		sh.goal = sh.home
+
+
+## Поза корабля для кадра гротовика: bok — справа от курса тела, nos — перед ним, korma — позади, mid — на стоянке
+## середины сцены (SCENA[1]); нос к телу. {ship, yaw}.
+static func grot_pose(gr: EcoGrot.Walker, kind: String, dist: float) -> Dictionary:
+	var at := Vector2(gr.p.x, gr.p.z)
+	var f := Vector2(sin(gr.yaw), cos(gr.yaw))
+	var xz: Vector2
+	match kind:
+		"nos": xz = at + f * dist
+		"korma": xz = at - f * dist
+		"mid": xz = SCENA[1]
+		_: xz = at - Vector2(cos(gr.yaw), -sin(gr.yaw)) * dist
+	var away := (xz - at).normalized() if xz != at else Vector2(0.0, 1.0)
+	var y := maxf(float(Seabed.mesh_height(xz.x, xz.y)) + GROT_FLOOR, gr.body_y + GROT_UP)
+	var back := gr.body_y + EcoGrot.BACK_UP
+	for i in range(1, GROT_RAYS):   # гребень между кораблём и телом не закрывает спину: луч от спины над дном на GROT_CLEAR
+		var s := float(i) / GROT_RAYS
+		var q := at.lerp(xz, s)
+		y = maxf(y, back + (float(Seabed.mesh_height(q.x, q.y)) + GROT_CLEAR - back) / s)
+	return {"ship": Vector3(xz.x, y, xz.y), "yaw": atan2(away.x, away.y)}
+
+
+## Строка в лог: где гротовик, курс, наклон (тангаж/крен, цель по дну), шаг, точка пути, расстояние до корабля.
+static func grot_line(gr: EcoGrot.Walker, ship: Vector3) -> String:
+	return "гротовик: (%.1f; %.1f) дно %.1f, курс %.0f°, наклон %.2f/%.2f (по дну %.2f/%.2f, предел %.2f), шаг %.2f, к точке %d %s; корабль (%.1f; %.1f; %.1f) в %.1f м" % [
+		gr.p.x, gr.p.z, gr.p.y, rad_to_deg(gr.yaw), gr.tilt.x, gr.tilt.y, gr.tilt_want.x, gr.tilt_want.y,
+		EcoGrot.TILT_MAX, gr.stride, gr.wp, str(EcoGrot.route[gr.wp]), ship.x, ship.y, ship.z,
+		Vector2(ship.x - gr.p.x, ship.z - gr.p.z).length()]
 
 
 ## Контрольные ракурсы сцены 00 → 01 (#1400, docs/urovni/sloj-1.md «Пакет сравнения»): выход из 00, середина
