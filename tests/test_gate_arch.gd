@@ -279,3 +279,22 @@ func test_petals_stand_out_from_pier() -> void:
 	var sh := FileAccess.get_file_as_string("res://shaders/gate_arch.gdshader")
 	ok(sh.contains("mix(tone, tone_in, inner)"), "шейдер красит по стороне плиты")
 	gv.free()
+
+
+## Угол открытой створки — число вида (#1757, проба 60° против 90°): в игре — `GateArch.PETAL_TURN`, проба снимка
+## ставит свой; доля `petal` считается от него же, закрытая створка от угла не зависит.
+func test_petal_open_angle_is_view_number() -> void:
+	var gv := GateView.new()
+	near(gv.turn, GateArch.PETAL_TURN, 0.0001, "в игре — угол из таблицы")
+	gv.set_petal(0, 1.0)
+	near(gv.petals[0].rotation.x, GateArch.PETAL_TURN, 0.0001, "открыта — на полный угол")
+	gv.turn = -deg_to_rad(60.0)
+	gv.set_petal(0, 1.0)
+	near(rad_to_deg(gv.petals[0].rotation.x), -60.0, 0.001, "проба: открыта на 60°")
+	near(gv.petal(0), 1.0, 0.0001, "доля — от своего угла")
+	gv.set_petal(0, 0.5)
+	near(rad_to_deg(gv.petals[0].rotation.x), -30.0, 0.001, "половина подъёма — половина угла")
+	gv.set_petal(0, 0.0)
+	near(gv.petals[0].rotation.x, 0.0, 0.0001, "закрыта — на лице опоры")
+	near(gv.petals[1].rotation.x, 0.0, 0.0001, "соседние створки не тронуты")
+	gv.free()

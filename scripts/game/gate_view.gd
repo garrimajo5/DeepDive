@@ -23,6 +23,9 @@ var plate: MeshInstance3D                ## табличка диагности�
 var mats: Array[ShaderMaterial] = []
 var petal_mat: ShaderMaterial          ## минерал створок — темнее опоры (#1757)
 var lite := false
+## Угол открытой створки, рад (поворот по своей X). В игре — `GateArch.PETAL_TURN`; другой — только проба снимка
+## `shot.gd stvorka=<градусы>` (#1757: 60° против 90°), диагностика и коллизия от него не зависят.
+var turn := GateArch.PETAL_TURN
 var _by_name := {}   ## имя материала модели → наш материал (один на все LOD)
 
 
@@ -83,13 +86,13 @@ func set_lite(on: bool) -> void:
 
 ## Створка гнезда i поднята на долю k (0 — закрыта, 1 — открыта).
 func set_petal(i: int, k: float) -> void:
-	var x := GateArch.PETAL_TURN * clampf(k, 0.0, 1.0)
+	var x := turn * clampf(k, 0.0, 1.0)
 	if petals[i].rotation.x != x:
 		petals[i].rotation.x = x
 
 
 func petal(i: int) -> float:
-	return petals[i].rotation.x / GateArch.PETAL_TURN
+	return petals[i].rotation.x / turn
 
 
 ## Сетки LOD i (0…2).

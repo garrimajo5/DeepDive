@@ -207,6 +207,8 @@ static func apply(g: Main, kv: Dictionary) -> void:
 			cam.global_position = pose["cam"]
 			cam.look_at(pose["look"])
 			cam.make_current()
+	if kv.has("stvorka") and g.gate_view:  # stvorka=60 — угол открытой створки гнезда 07, градусы: проба силуэта (#1757)
+		g.gate_view.turn = -deg_to_rad(clampf(float(kv["stvorka"]), 1.0, 120.0))
 	if kv.get("kupol", "0") == "1":  # kupol=1 — купольник у гнезда 07 поднимает створку (#837, модель MOD-022),
 		# камера в 6 м сбоку-сзади от него
 		var d: EcoDome = g.eco.dome
