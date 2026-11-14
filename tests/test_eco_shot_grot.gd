@@ -28,7 +28,14 @@ func test_pose_sides_and_nose() -> void:
 			var pose := ShotSetup.grot_pose(gr, kind, 18.0)
 			var s: Vector3 = pose["ship"]
 			var d := Vector2(s.x - gr.p.x, s.z - gr.p.z)
-			near(d.length(), 18.0, 1e-3, "%s — в 18 м" % kind)
+			var far := d.length()
+			ok(far > 18.0 - 1e-3 and far < ShotSetup.GROT_FAR + 1e-3, "%s — от 18 м до GROT_FAR: %.1f" % [kind, far])
+			if pose["down"] > deg_to_rad(ShotSetup.GROT_DOWN) + 1e-4:   # спину не видно — дальше по той же линии тоже нет
+				var k := 18.0
+				while k <= ShotSetup.GROT_FAR + 1e-3:
+					var o := ShotSetup._grot_spot(gr, Vector2(gr.p.x, gr.p.z) + d.normalized() * k)
+					ok(o["down"] > deg_to_rad(ShotSetup.GROT_DOWN), "%s — на %.0f м спину видно, а выбран угол больше" % [kind, k])
+					k += ShotSetup.GROT_STEP
 			var want: Vector2 = {"bok": right, "nos": f, "korma": -f}[kind]
 			if kind == "bok":   # с той стороны, откуда спину видно ниже
 				near(absf(d.normalized().dot(want)), 1.0, 1e-3, "bok — сбоку")
@@ -39,11 +46,13 @@ func test_pose_sides_and_nose() -> void:
 			var nose := Vector2(-sin(pose["yaw"]), -cos(pose["yaw"]))
 			near(nose.dot(-d.normalized()), 1.0, 1e-3, "%s — нос к телу" % kind)
 			ok(s.y >= Seabed.mesh_height(s.x, s.z) + ShotSetup.GROT_FLOOR - 1e-3, "не в грунте")
-			near(pose["down"], atan2(s.y - gr.body_y - EcoGrot.BACK_UP, 18.0), 1e-4, "%s — угол на спину" % kind)
+			near(pose["down"], atan2(s.y + ShotSetup.GROT_EYE.y - gr.body_y - EcoGrot.BACK_UP, far - ShotSetup.GROT_EYE.x),
+				1e-3, "%s — угол на спину от глаза" % kind)
 			ok(s.y >= gr.body_y + ShotSetup.GROT_UP - 1e-3, "выше тела")
 			var back := gr.body_y + EcoGrot.BACK_UP
+			var eye := s + Vector3(-d.normalized().x, 0.0, -d.normalized().y) * ShotSetup.GROT_EYE.x + Vector3(0, ShotSetup.GROT_EYE.y, 0)
 			for i in range(1, ShotSetup.GROT_RAYS):
-				var q := Vector3(gr.p.x, back, gr.p.z).lerp(s, float(i) / ShotSetup.GROT_RAYS)
+				var q := Vector3(gr.p.x, back, gr.p.z).lerp(eye, float(i) / ShotSetup.GROT_RAYS)
 				ok(q.y >= Seabed.mesh_height(q.x, q.z) + ShotSetup.GROT_CLEAR - 1e-3, "%s — гребень не закрывает спину" % kind)
 	var mid := ShotSetup.grot_pose(gr, "mid", 18.0)
 	eq(Vector2(mid["ship"].x, mid["ship"].z), ShotSetup.SCENA[1], "mid — стоянка середины сцены")
