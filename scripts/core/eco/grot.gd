@@ -55,7 +55,7 @@ const TARGET_R := 3.0
 ## Панцирь для столкновения: полуэллипсоид SHELL (ширина, высота, длина) над телом, с запасом на голову спереди.
 const SHELL := Vector3(2.4, 1.1, 3.2)
 ## Корабль и гротовик: точки панциря и рифа (`body_points`, оси тела над низом панциря) ближе HULL_PAD к обшивке
-## (`EcoHull.touches`) — задел. Риф — два кольца веток REEF_R на высотах REEF_H и макушка REEF_TOP (ветки
+## (`EcoHull.touches_whole`: корпус с выступами — манипулятором под носом, креплениями двигателей) — задел. Риф — два кольца веток REEF_R на высотах REEF_H и макушка REEF_TOP (ветки
 ## `GrotView.branch` — до ~2,7 м над телом). Дальше HULL_FAR по горизонтали — без счёта.
 const HULL_PAD := 0.3
 const REEF_R := Vector2(1.5, 2.0)
@@ -299,7 +299,7 @@ static func touches_ship(gr: Walker, ship_pos: Vector3, ship_yaw: float) -> bool
 	var base := Vector3(gr.p.x, gr.body_y, gr.p.z)
 	var b := gr.basis()
 	for q in body_points():
-		if EcoHull.touches(base + b * q, ship_pos, ship_yaw, HULL_PAD):
+		if EcoHull.touches_whole(base + b * q, ship_pos, ship_yaw, HULL_PAD):
 			return true
 	return false
 

@@ -641,6 +641,56 @@ func test_ship_cannot_pass_through_grot() -> void:
 	ok(s.pos.z > gr.p.z, "не прошёл насквозь: z %.1f" % s.pos.z)
 
 
+## Корабль задним ходом идёт мимо гротовика так, что корпус проходит рядом, а двигатель правого борта (кожух
+## |x| до 6,7 м, кормовой переход там — 3,6 м) — сквозь панцирь. Твёрдое — корабль целиком (`EcoHull.touches_whole`),
+## а не только основной объём: двигатель в панцирь не входит (по примеру арки 07, #1835).
+func test_engine_does_not_pass_through_grot() -> void:
+	var w := _world()
+	var g: EcoGrot = _sys(w, EcoGrot)
+	var gr := g.grot
+	gr.shy = 1e9   # стоит на месте
+	gr.yaw = 0.0
+	g.place()
+	var s := _helm(w)
+	var engine := Vector3(HullPlan.ENGINE_X, HullPlan.ENGINE_Y, HullPlan.ENGINE_Z)
+	var side := HullPlan.ENGINE_X + EcoGrot.SHELL.x   # край панциря — под осью двигателя, риф — в кожухе
+	s.pos = Vector3(gr.p.x - side, maxf(gr.body_y + 0.5 - HullPlan.ENGINE_Y, FLAT + Helm.Ship.CLEARANCE),
+			gr.p.z - engine.z - 40.0)
+	s.yaw = 0.0   # нос к −Z, задним ходом — к +Z, на гротовика
+	s.in_thrust = -1.0
+	# на траверзе гротовика основной объём его не задевает — без выступов корабль прошёл бы
+	var beside := Vector3(gr.p.x - side, s.pos.y, gr.p.z - engine.z)   # двигатель — на траверзе гротовика
+	var main_hits := 0
+	for q in EcoGrot.body_points():
+		if EcoHull.touches(Vector3(gr.p.x, gr.body_y, gr.p.z) + gr.basis() * q, beside, 0.0, EcoGrot.HULL_PAD):
+			main_hits += 1
+	eq(main_hits, 0, "корпус без выступов проходит мимо")
+	ok(g.blocks(beside, 0.0), "корабль целиком — задевает двигателем")
+	var dt := 1.0 / 60.0
+	for i in int(25.0 / dt):
+		s.update(dt)
+		w.ship.pos = s.pos
+		w.ship.yaw = s.yaw
+		var hit := _in_engine(gr, s, engine)
+		if hit >= 0.0:
+			ok(false, "панцирь или риф в кожухе двигателя на %.1f с (%.2f м от оси), корабль z %.1f" % [i * dt, hit, s.pos.z])
+			return
+	print("  двигатель встал у панциря: корабль z %.1f, гротовик z %.1f, сдвиг вдоль борта %.1f м" % [s.pos.z, gr.p.z,
+			s.pos.z + engine.z - gr.p.z])
+	ok(s.pos.z + engine.z < gr.p.z, "двигатель не прошёл мимо центра гротовика")
+
+
+## Ближайшая к оси кожуха двигателя (оси корабля) точка панциря или рифа gr внутри кожуха — расстояние до оси; нет — −1.
+func _in_engine(gr: EcoGrot.Walker, s: Helm.Ship, engine: Vector3) -> float:
+	var best := -1.0
+	for q in EcoGrot.body_points():
+		var l := EcoHull.to_ship(Vector3(gr.p.x, gr.body_y, gr.p.z) + gr.basis() * q, s.pos, s.yaw)
+		var r := Vector2(l.x - engine.x, l.y - engine.y).length()
+		if r <= HullPlan.SHROUD_D / 2.0 and absf(l.z - engine.z) <= HullPlan.SHROUD_L / 2.0 and (best < 0.0 or r < best):
+			best = r
+	return best
+
+
 func test_grot_does_not_walk_into_ship() -> void:
 	var w := _lone()
 	var g: EcoGrot = _sys(w, EcoGrot)
