@@ -507,6 +507,11 @@ const SCENA_FLOOR := 7.0
 const SCENA_DT := 1.0 / 30.0
 
 
+## Шагов мира SCENA_DT на кадр ролика kino= при fps кадрах в секунду (не меньше одного).
+static func kino_steps(fps: int) -> int:
+	return maxi(1, int(round(1.0 / (maxf(1.0, fps) * SCENA_DT))))
+
+
 ## light_off ≥ 0 — через столько секунд прожектор гаснет (ответ экипажа на «замер», zamer_off=).
 ## trace — с zamer=: в лог каждая смена режима хищника №0 и строк приборов с секундой мира (момент потери цели, #1400).
 ## shoal — с strah=: в лог раз в секунду мира — хищник №0 и стая STRAH_SHOAL (#1400).
