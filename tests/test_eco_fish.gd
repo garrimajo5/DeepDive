@@ -666,6 +666,52 @@ func test_crown_alarm_edge_no_flicker() -> void:
 				ok(flips[i] - flips[i - 1] >= 3.0 - 0.1, "переключение через %.1f с" % (flips[i] - flips[i - 1]))
 
 
+## Обе стаи кроны (`CROWN_SHOALS`) меряют тревогу от одной оси цветка и в одном круге `CROWN_ALARM` — хищник входит
+## в него разом для обеих. Строка «прячется в крону» за такую тревогу — одна на цветок, не по строке от каждой стаи
+## (#1400, п. 2 (ав): по `tools/lines_01.gd` вторая такая же строка сменяла первую в очереди). Тревога спала и
+## хищник вернулся через `FLEE_COOLDOWN` — строка снова одна.
+func test_crown_alarm_one_line_for_both_crown_shoals() -> void:
+	var w := _world()
+	var fish := _fish(w)
+	w.add(EcoFlower.new())
+	var crown: Array[EcoFish.Shoal] = []
+	for sh in fish.shoals:
+		if sh.crown:
+			crown.append(sh)
+	eq(crown.size(), EcoFish.CROWN_SHOALS)
+	for sh in fish.shoals:
+		if not sh.crown:
+			for f: EcoFish.Fish in sh.members:
+				w.agents.erase(f.agent)
+	fish.shoals.assign(crown)
+	var keep: Array[EcoFish.Fish] = []
+	for sh in crown:
+		keep.append_array(sh.members)
+	fish.all.assign(keep)
+	var axis := crown[0].axis
+	eq(crown[1].axis, axis, "обе стаи кроны — у одной оси")
+	var pred := w.spawn("pred", axis + Vector3(200, 18, 0))
+	w.ship.pos = axis + Vector3(0, 10, 30)   # корабль у цветка: стаи кроны шагают каждый шаг
+	w.run(5.0)
+	var lines: Array[float] = []
+	var t := 0.0
+	# два захода: 20 с внутри, 40 с снаружи (тревога спала, FLEE_COOLDOWN прошёл), снова 20 с внутри
+	while t < 80.0:
+		var inside := t < 20.0 or t >= 60.0
+		pred.p = axis + Vector3(EcoFish.CROWN_ALARM + (-10.0 if inside else 60.0), 18, 0)
+		var before := w.bus.pending.size()
+		w.step(0.05)
+		t += 0.05
+		for i in range(before, w.bus.pending.size()):
+			var e: EcoBus.Event = w.bus.pending[i]
+			if e.note == "flee":
+				lines.append(t)
+	print("  строки кроны: ", lines)
+	eq(lines.size(), 2, "два захода хищника — две строки, а не по строке от каждой стаи")
+	if lines.size() == 2:
+		ok(lines[0] < 1.0 and lines[1] >= 60.0 and lines[1] < 61.0, "строка — при входе хищника в круг")
+
+
 ## Сцена 00→01 (решение ГД 08.11, `docs/urovni/sloj-1.md`): импульсы сонара на стоянке у 01 (33; −22) сами стаи кроны
 ## и стаю рифа не будят — минута импульсов раз в 3 с без тревоги и строки, даже когда серпохвост в 90 м за кроной
 ## (дальше CROWN_ALARM). Тревога — только когда хищник подошёл: сонар не расширяет круг тревоги стаи.

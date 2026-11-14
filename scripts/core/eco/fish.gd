@@ -568,6 +568,10 @@ func _step_shoal(world: EcoWorld, sh: Shoal, dt: float) -> void:
 	if sh.has_threat:
 		if sh.alarm <= 0.0 and sh.flee_cd <= 0.0:
 			sh.flee_cd = FLEE_COOLDOWN
+			if sh.crown:   # строка кроны — одна на цветок: обе стаи тревожатся от одной оси (#1400, п. 2 (ав))
+				for o in shoals:
+					if o.crown:
+						o.flee_cd = FLEE_COOLDOWN
 			world.emit(ID, "flee", sh.center, _crown_text(world) if sh.crown else _flee_text(world))
 		sh.alarm = 3.0
 	elif world.ship.pos.distance_to(sh.center) < SHIP_ALARM and absf(world.ship.speed) > SHIP_FAST:
