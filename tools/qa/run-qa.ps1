@@ -1,6 +1,7 @@
 ﻿# Прогон сценария тестера (tools/qa/scenario.json): игра сама проходит шаги, снимает скриншоты и пишет лог.
 # Результат — в D:\AI\qa-build\run\ (скриншоты *.png, log.txt, logcat.txt, kadry.txt), итог печатается в конце:
 # строка RUN и под ней ПРОВЕРИТЬ — худший кадр шагов из открытых «проверить» с прошлыми прогонами (tools/qa/kadry.ps1).
+# Самая последняя строка — END <коммит>: прогон кончился, сводка напечатана (ждать её, а не RUN).
 # Отчёт по результату пишет Claude по docs/QA.md. Перед запуском обнови клон: git -C D:\AI\DeepDive pull.
 #
 #   run-qa.ps1          — APK из релиза apk-latest на эмуляторе Pixel_8 (ровно то, что собрал CI из main)
@@ -318,7 +319,7 @@ $watch = Get-WatchLines $worstNow (Test-Quiet $result) (Read-Past @("$repo\qa", 
 foreach ($w in $watch) { Write-Output $w; Add-Content "$run\log.txt" "run-qa: $w" -Encoding utf8 }
 # Что сводка прочитала из issues (#1350, 12.11): нет строк ПРОВЕРИТЬ — эта строка говорит почему
 if ($script:IssueNote) { Write-Output $script:IssueNote; Add-Content "$run\log.txt" "run-qa: $($script:IssueNote)" -Encoding utf8 }
-# Заметная строка в самом конце: прогон не дошёл до конца или не все снимки забраны (#1533)
+# Заметная строка в конце, перед END: прогон не дошёл до конца или не все снимки забраны (#1533)
 if (-not $done -or $miss) {
   $why = @()
   if (-not $done) { $why += 'нет done.txt' }
@@ -326,3 +327,7 @@ if (-not $done -or $miss) {
   Write-Output "NOT_DONE $head — $($why -join '; ')"
 }
 Unlock-Qa $lockFile
+# Маркер конца (#1350, 14.11): последняя строка вывода — после RUN, сводки ПРОВЕРИТЬ, ISSUES и NOT_DONE, замок уже
+# снят. Конец прогона ждать по ней, не по RUN: под RUN ещё идёт Export-QaBranches (git fetch веток qa/*).
+# Строку ниже держит последней kadry.ps1 -SelfTest (Test-EndLast) — после неё кода нет.
+Write-Output (Get-EndLine $head)

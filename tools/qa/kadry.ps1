@@ -222,6 +222,17 @@ function Get-WatchLines($now, [bool]$nowQuiet, $past, $issues) {
   return ,$out
 }
 
+# Маркер конца прогона (#1350, 14.11): последняя строка вывода run-qa.ps1 — после RUN, сводки ПРОВЕРИТЬ, ISSUES
+# и NOT_DONE. Тестер ждёт конец по ней: RUN печатается до сводки, пока Export-QaBranches ещё идёт.
+function Get-EndLine([string]$head) { return "END $head" }
+# Маркер печатает последняя строка кода скрипта (не пустая, не комментарий), и больше его нигде нет
+function Test-EndLast([string[]]$lines) {
+  $code = @($lines | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith('#') })
+  if ($code.Count -eq 0) { return $false }
+  if ($code[$code.Count - 1].Trim() -ne 'Write-Output (Get-EndLine $head)') { return $false }
+  return @($code | Where-Object { $_ -match 'Get-EndLine' }).Count -eq 1
+}
+
 if ($SelfTest) {
   $bad = 0
   function Check([bool]$cond, [string]$what) { if (-not $cond) { Write-Output "FAIL $what"; $script:bad++ } else { Write-Output "ok $what" } }
@@ -371,6 +382,16 @@ if ($SelfTest) {
     $past3 = Read-Past @((Join-Path $clone 'qa'), $pr)
     Check ($past3.Count -eq 1 -and $past3[0].Commit -eq 'abc1234' -and $past3[0].Worst['32o-mol-steklo'] -eq 88) 'Read-Past: отчёт открытой PR в сводке'
   } else { Write-Output 'git нет — Export-QaBranches не проверен' }
+  # Маркер конца: вход — строки скрипта. [0] комментарий, [1] сводка, [2] пусто, [3] маркер — верно;
+  # маркер [1] перед сводкой [2] — нет; два маркера ([0] и [2]) — нет; пусто — нет
+  Check ((Get-EndLine 'abc1234') -eq 'END abc1234') 'Get-EndLine: END и коммит'
+  $endLine = 'Write-Output (Get-EndLine $head)'
+  Check (Test-EndLast @('# шапка', 'Write-Output $w', '', $endLine)) 'Test-EndLast: маркер последним'
+  Check (Test-EndLast @('Write-Output $w', $endLine, '# хвост-комментарий', '')) 'Test-EndLast: комментарий и пустая строка после — не код'
+  Check (-not (Test-EndLast @('# шапка', $endLine, 'Write-Output $w'))) 'Test-EndLast: сводка после маркера — нет'
+  Check (-not (Test-EndLast @($endLine, 'Write-Output $w', $endLine))) 'Test-EndLast: маркер дважды — нет'
+  Check (-not (Test-EndLast @('# только комментарий'))) 'Test-EndLast: кода нет — нет'
+  Check (Test-EndLast @(Get-Content (Join-Path $PSScriptRoot 'run-qa.ps1') -Encoding utf8)) 'run-qa.ps1: END — последняя строка вывода'
   Remove-Item -Recurse -Force $root
   if ($bad) { Write-Output "kadry.ps1: провалов $bad"; exit 1 }
   Write-Output 'kadry.ps1: всё верно'
