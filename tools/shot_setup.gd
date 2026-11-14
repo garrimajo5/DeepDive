@@ -233,6 +233,7 @@ static func apply(g: Main, kv: Dictionary) -> void:
 		g.park_at(gp["ship"])
 		if not g.pilot.seated:
 			g.sit_at_helm()
+		g.walker.pitch = gp["pitch"]
 		print(grot_line(g.eco.grot.grot, gp["ship"]))
 	if kv.has("scena"):  # scena=1|2|3 — контрольный ракурс сцены 00 → 01 (#1400): штатная камера пилота, нос к 01
 		var back := float(kv.get("scena_back", "0"))   # scena_back=<м> — раньше по тому же пути
@@ -386,6 +387,8 @@ const GROT_FLOOR := 4.5
 ## Луч от спины к кораблю — по GROT_RAYS точкам, над видимым дном не ниже GROT_CLEAR, м (иначе корабль выше).
 const GROT_RAYS := 12
 const GROT_CLEAR := 1.0
+## Взгляд пилота — на спину (вниз, не выше GROT_PITCH_MAX°, как сел за штурвал): иначе тело под пультом.
+const GROT_PITCH_MAX := -8.0
 ## Шаг, которым гротовик один проходит grot_t (как `tools/mid_calm.gd grot_path`).
 const GROT_DT := 0.1
 
@@ -422,7 +425,7 @@ static func grot_walk(g, seconds: float) -> void:
 
 
 ## Поза корабля для кадра гротовика: bok — справа от курса тела, nos — перед ним, korma — позади, mid — на стоянке
-## середины сцены (SCENA[1]); нос к телу. {ship, yaw}.
+## середины сцены (SCENA[1]); нос к телу, взгляд на спину. {ship, yaw, pitch}.
 static func grot_pose(gr: EcoGrot.Walker, kind: String, dist: float) -> Dictionary:
 	var at := Vector2(gr.p.x, gr.p.z)
 	var f := Vector2(sin(gr.yaw), cos(gr.yaw))
@@ -439,7 +442,8 @@ static func grot_pose(gr: EcoGrot.Walker, kind: String, dist: float) -> Dictiona
 		var s := float(i) / GROT_RAYS
 		var q := at.lerp(xz, s)
 		y = maxf(y, back + (float(Seabed.mesh_height(q.x, q.y)) + GROT_CLEAR - back) / s)
-	return {"ship": Vector3(xz.x, y, xz.y), "yaw": atan2(away.x, away.y)}
+	var pitch := minf(deg_to_rad(GROT_PITCH_MAX), -atan2(y - back, dist if kind != "mid" else at.distance_to(xz)))
+	return {"ship": Vector3(xz.x, y, xz.y), "yaw": atan2(away.x, away.y), "pitch": pitch}
 
 
 ## Строка в лог: где гротовик, курс, наклон (тангаж/крен, цель по дну), шаг, точка пути, расстояние до корабля.
