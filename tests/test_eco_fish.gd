@@ -546,6 +546,81 @@ func test_current_turn_at_01_turns_fans_crown_keeps_ring() -> void:
 		ok(turned[i] * crown[i].turn > 0.5, "стая %d кружит в свою сторону и после смены: %.2f рад" % [i, turned[i]])
 
 
+## Сцена 00→01 (п. 2 (щ)): течение сменилось, пока стаи кроны у 01 прячутся от хищника, — строка веерника «turn» и
+## строка бегства приходят почти разом (0,3 с). Обе доходят до приборов по очереди: шина отдаёт обе (`take_link`), а
+## `Status.Message` (как `Main._world_say`) не глотает ни одну — каждая видна не меньше `MIN_SHOW` (без одного шага:
+## строка встаёт и считает время в том же кадре). Порядок — оба. Мутация: очередь `Status` без `MIN_SHOW` — 0,3 с.
+func test_current_turn_during_crown_flee_both_lines_shown() -> void:
+	for turn_first: bool in [true, false]:
+		var w := EcoWorld.new(EcoRandom.WORLD_SEED)
+		w.ground = Seabed.height
+		var cur := w.add(EcoCurrent.new()) as EcoCurrent
+		w.add(EcoFan.new(cur))
+		var fish := w.add(EcoFish.new()) as EcoFish
+		w.add(EcoFlower.new())
+		var stand := Vector2(33.0, -22.0)
+		w.ship.pos = Vector3(stand.x, Seabed.height(stand.x, stand.y) + 7.0, stand.y)
+		var to := EcoFlower.CENTER - stand
+		w.ship.yaw = atan2(-to.x, -to.y)
+		w.ship.speed = 0.0
+		w.ship.light_on = true
+		w.ship.light_range = 40.0
+		w.ship.hull_noise = 0.2
+		cur.timer = 1000.0
+		var crown: EcoFish.Shoal = null
+		for sh in fish.shoals:
+			if sh.crown:
+				crown = sh
+				break
+		var msg := Status.Message.new()
+		var shown: Array = []   # [текст, когда встал, сколько виден]
+		var at := {"turn": -1.0, "flee": -1.0}
+		var t := 0.0
+		var pred: EcoAgent = null
+		while t < 14.0:
+			var turn_at := 2.0 if turn_first else 2.3
+			var pred_at := 2.3 if turn_first else 2.0
+			if cur.timer > 100.0 and t >= turn_at - 0.001:
+				cur.timer = 0.01
+			if pred == null and t >= pred_at - 0.001:
+				var out := Vector3(crown.center.x - crown.axis.x, 0, crown.center.z - crown.axis.z).normalized()
+				pred = w.spawn("pred", crown.axis - out * 30.0 + Vector3(0, 18, 0))
+			w.step(0.05)
+			t += 0.05
+			for e in w.take_link():
+				if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+					continue
+				var text := String(e.get("text", ""))
+				if text == "":
+					continue
+				if e.get("note") == "turn" and at["turn"] < 0.0:
+					at["turn"] = t
+				if e.get("note") == "flee" and at["flee"] < 0.0:
+					at["flee"] = t
+				msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)))
+			msg.update(0.05)
+			if msg.text != "" and (shown.is_empty() or shown[-1][0] != msg.text):
+				shown.append([msg.text, t, 0.0])
+			if msg.text != "":
+				shown[-1][2] = t - float(shown[-1][1]) + 0.05   # кадр t виден до следующего шага
+		var turn_seen := 0.0
+		var flee_seen := 0.0
+		for s: Array in shown:
+			if String(s[0]).contains("течением"):
+				turn_seen = maxf(turn_seen, float(s[2]))
+			elif String(s[0]).contains("в крону"):
+				flee_seen = maxf(flee_seen, float(s[2]))
+		var lines := PackedStringArray()
+		for s: Array in shown:
+			lines.append("%.2f с «%s» %.2f с" % [s[1], String(s[0]).left(40), s[2]])
+		print("    %s: «turn» на %.2f с, «flee» на %.2f с; на приборах: %s" % [
+			"сначала течение" if turn_first else "сначала хищник", at["turn"], at["flee"], " | ".join(lines)])
+		ok(at["turn"] > 0.0 and at["flee"] > 0.0, "обе строки пришли с шины")
+		ok(absf(float(at["turn"]) - float(at["flee"])) < Status.Message.MIN_SHOW,
+			"строки пришли ближе MIN_SHOW — проверка не пустая: %.2f с" % absf(float(at["turn"]) - float(at["flee"])))
+		ok(turn_seen >= Status.Message.MIN_SHOW - 0.051, "строка течения видна %.2f с" % turn_seen)
+		ok(flee_seen >= Status.Message.MIN_SHOW - 0.051, "строка бегства видна %.2f с" % flee_seen)
+
 ## Сцена 00→01 (решение ГД 08.11, `docs/urovni/sloj-1.md`): хищник ходит у границы CROWN_ALARM — то в 45 м от оси
 ## кроны, то в 55 м. Строка о бегстве — не чаще FLEE_COOLDOWN (без перерыва тревоги — одна), а стая не мечется между чашей и кольцом: короткий
 ## выход за границу (2 с) тревогу не снимает, длинный (8 с) снимает, но переключения не чаще удержания тревоги (3 с).
