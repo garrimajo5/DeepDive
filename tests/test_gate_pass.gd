@@ -127,3 +127,16 @@ func _clean(r: Dictionary, what: String) -> void:
 	near(r["stuck"], 0.0, 0.05, "«%s»: без упоров" % what)
 	ok(r["min_arch"] > 3.0, "«%s»: контур корпуса не ближе 3 м к арке (%.1f)" % [what, r["min_arch"]])
 	ok(r["min_ground"] > 1.39, "«%s»: грунт под днищем не ближе зазора (%.2f)" % [what, r["min_ground"]])
+
+
+## Промер шага прогона (`Sounding`) — те же числа, что отдельные проходы: предел хода `Helm.Ship.floor_at` и зазор
+## `ground_gap`; на склоне жёлоба, у опоры и на гребне, с разным курсом. Прогон берёт предел и зазор из него.
+func test_sounding_matches_floor_and_gap() -> void:
+	var probe := Pass.Sounding.new()
+	var ship := Pass.make_ship()
+	for p: Array in [[0.0, 140.0, 30.0, 0.0], [0.0, 60.0, 50.0, 0.4], [23.1, 24.5, 62.0, -1.1], [-150.0, 30.0, 35.0, 2.6]]:
+		var pos := Pass.world(p[0], p[1], p[2])
+		probe.at(pos, p[3])
+		eq(probe.floor_y, ship.floor_at(pos, p[3]), "предел хода в (%.0f; %.0f)" % [p[0], p[1]])
+		eq(probe.gap, Pass.ground_gap(pos, p[3]), "зазор грунта в (%.0f; %.0f)" % [p[0], p[1]])
+	ok(probe.gap < 100.0, "зазор посчитан")
