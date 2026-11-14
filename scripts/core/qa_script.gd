@@ -200,7 +200,7 @@ static func crop_image(img: Image, crop: Array) -> Image:
 static func crop_note(name: String, crop: Array, size: Vector2i) -> String:
 	var r := crop_rect(crop, size)
 	var big := crop_size(crop, size)
-	return "вырез %s%s.png: %d×%d пикс. от (%d, %d), ×%s → %d×%d" % [name, CROP_TAIL, r.size.x, r.size.y,
+	return "вырез %s%s.png: %d×%d пикс. от (%d, %d), ×%s, итог %d×%d" % [name, CROP_TAIL, r.size.x, r.size.y,
 		r.position.x, r.position.y, str(int(crop[4])) if is_equal_approx(crop[4], roundf(crop[4])) else ("%.2f" % crop[4]).replace(".", ","),
 		big.x, big.y]
 

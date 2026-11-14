@@ -79,7 +79,7 @@ func test_runner_writes_crop_beside_the_shot() -> void:
 	var got := Image.load_from_file(path)
 	eq(Vector2i(got.get_width(), got.get_height()), Vector2i(200, 100), "размер выреза")
 	ok(got.get_pixel(100, 50).is_equal_approx(Color.BLUE), "левая нижняя четверть")
-	eq(qa.log_lines[-1], "вырез x-krupno.png: 100×50 пикс. от (0, 50), ×2 → 200×100", "строка лога называет файл и место")
+	eq(qa.log_lines[-1], "вырез x-krupno.png: 100×50 пикс. от (0, 50), ×2, итог 200×100", "строка лога называет файл и место")
 	ok(not qa.log_lines[-1].begins_with("скриншот "), "не строка «скриншот»: run-qa.ps1 считает снимки по ним")
 	qa.free()
 	DirAccess.remove_absolute(path)
