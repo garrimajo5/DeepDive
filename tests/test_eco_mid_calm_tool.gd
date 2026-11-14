@@ -223,6 +223,9 @@ func test_repeat_walks_there_back_and_again() -> void:
 	var amb := lines.filter(func(l: String) -> bool: return l.begins_with("    засада "))
 	print("  засад глазуна в слышимости за повтор: %d" % amb.size())
 	ok(amb.size() > 0, "глазуны охотятся и за повтор их слышно")
+	ok(amb.any(func(l: String) -> bool: return l.begins_with("    засада СТРОКА ")), "первая услышанная засада — со строкой")
+	eq(lines.filter(func(l: String) -> bool: return l.begins_with("строка засады во втором проходе (mid2, 012): ")).size(), 1,
+		"итог строки засады во втором проходе")
 
 
 ## Строка засады: участок, время, глазун и корабль, свет и ход, ближайший серпохвост, монетники.
@@ -231,6 +234,27 @@ func test_ambush_line() -> void:
 	var s: String = tool.ambush_line({"seg": "back", "t": 22.5, "gz": 0, "at": Vector2(32, 96), "ship": Vector2(4, 80),
 		"d": 33.2, "light": true, "speed": 0.0, "pred": {"who": 2, "mode": "eat", "d": 24.0}, "coins": 7})
 	eq(s, "back 22.5 с: глазун 0 (32; 96), корабль (4; 80) в 33 м, свет, стоит; серпохвост №2 eat в 24 м; монетников 7")
+	var shown: String = tool.ambush_line({"seg": "mid2", "t": 1.0, "gz": 1, "at": Vector2(69, 79), "ship": Vector2(20, 23),
+		"d": 75.0, "light": true, "speed": 0.0, "pred": {"who": 0, "mode": "patrol", "d": 65.0}, "coins": 6, "line": true})
+	ok(shown.begins_with("СТРОКА mid2 1.0 с: "), shown)
+
+
+## Строка засады на приборах (#1400, п. 2 (ш)): как `EcoWorld.repeat` — отметку двигает каждая услышанная засада, не
+## только показанная, поэтому засады чаще ONCE_GAP держат эпизод без строки сколько угодно. Сверка с самим миром.
+func test_line_shown_like_world_once() -> void:
+	var tool := _tool()
+	var w := EcoWorld.new()
+	var r := {"gz_last": -INF}
+	var gap := EcoWorld.ONCE_GAP
+	var got: Array[bool] = []
+	for t in [0.0, 0.7 * gap, 1.4 * gap, 2.1 * gap, 3.3 * gap]:
+		w.time = t
+		var mine: bool = tool.line_shown(r, t)
+		eq(mine, not w.repeat(EcoCoins.GLAZUN, "ambush"), "засада в %.0f с" % t)
+		got.append(mine)
+	print("  строка засады при %s × ONCE_GAP: %s" % [str([0, 0.7, 1.4, 2.1, 3.3]), str(got)])
+	eq(got, [true, false, false, false, true] as Array[bool], "каждые 0,7 × ONCE_GAP — строка только первая")
+	near(r["gz_quiet"], 1.2 * gap, 0.001, "самая долгая тишина — между 2,1 и 3,3 × ONCE_GAP")
 
 
 ## answer=1 и repeat=1 (#1350, 14.11 01:08): каждый ответ экипажа — hold с без света и хода, поэтому предел прохода
