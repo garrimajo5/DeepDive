@@ -4,7 +4,12 @@ extends SceneTree
 ## `Seabed.mesh_height`), headless, без узлов сцены; облачный расчёт, не телефонный.
 ##   godot --headless --path . -s tools/mid_calm.gd [-- seeds=16 raduzh=1:80,5 lim=<с> dark=<с> probe=1 answer=1 delay=<с> hold=<с>
 ##   start0=<x>,<z> band0=<x0>,<x1>,<z0>,<z1> fish=<номер>:<x>,<z> watch=<номера через ,> sites=1
-##   grot=<x>,<z>;<x>,<z>;… path=1]
+##   grot=<x>,<z>;<x>,<z>;… path=1 repeat=1]
+## repeat=1 — настоящий повтор 00→01→00→01 (уровни и ГД 14.11, #1400): после 01 стоянка STOP с, обратный ход к 00 через
+## середину, стоянка STOP с у 00 и второй проход к 01 со стоянкой у середины, свет не гаснет (кроме ответа экипажа).
+## Участки: mid, 01 — первый проход; back — 01→00 и стоянка у 00; mid2, 012 — второй проход. По участку — угрозы,
+## первый «замер» и моллюски от его начала; засады глазуна в слышимости — где, когда, где корабль, кто из серпохвостов
+## ближе и в каком режиме, сколько монетников в стайке. Предел прохода по умолчанию — LIMIT_REPEAT.
 ## grot= — круг гротовика на пробу (`EcoGrot.route`; уровни и ГД 13.11, #1400: стая 5 едет на нём). С sites=1 — среда
 ## каждой точки круга; path=1 — весь путь (`grot_path`): гротовик один, корабль далеко, круг целиком — время круга,
 ## дно и наклон, остановки и поворот на точках, задевает ли панцирь или риф твёрдое других систем и кто ближе всего.
@@ -45,6 +50,10 @@ const STOP := 25.0
 ## Предел прохода после тёмной стоянки, с.
 const LIMIT := 120.0
 static var limit := LIMIT
+const LIMIT_REPEAT := 420.0
+## Повтор 00→01→00→01 (`repeat=1`).
+static var repeat := false
+const SEGS: Array[String] = ["mid", "01", "back", "mid2", "012"]
 ## Тёмная стоянка этого прогона, с (`dark=`, по умолчанию DARK; короче 20 с — пауза хищников не кончилась, только для
 ## проверки инструмента).
 static var dark := DARK
@@ -86,7 +95,8 @@ func _init() -> void:
 		var p := a.split("=", true, 1)
 		kv[p[0]] = p[1] if p.size() > 1 else ""
 	var seeds := int(kv.get("seeds", "16"))
-	limit = float(kv.get("lim", str(LIMIT)))
+	repeat = kv.get("repeat", "0") == "1"
+	limit = float(kv.get("lim", str(LIMIT_REPEAT if repeat else LIMIT)))
 	dark = float(kv.get("dark", str(DARK)))
 	probe = kv.get("probe", "0") == "1"
 	answer = kv.get("answer", "0") == "1"
@@ -384,24 +394,43 @@ static func run(seed_value: int) -> Dictionary:
 	var r := {"mode0_lit": mode_lit, "fern_t": -1.0, "flare": {}, "betray_mid": 0, "betray_01": 0, "threat_mid": {}, "threat_01": {},
 		"pred_mid": INF, "answers": 0, "mollusk_t": -1.0, "alert_t": -1.0, "alert_who": -1, "alert_d": 0.0,
 		"track0": [], "near0": INF, "near0_t": 0.0, "lit_t": -1.0, "born0": Vector2(born.x, born.z),
-		"fish_t": -1.0}
+		"fish_t": -1.0, "seg_t0": {}, "seg_alert": {}, "seg_open": {}, "seg_moll": {}, "seg_pred": {}, "ambush": []}
+	for sg in SEGS:
+		r["threat_" + sg] = r.get("threat_" + sg, {})
+		r["betray_" + sg] = r.get("betray_" + sg, 0)
+	var at := {"seg": "mid"}   # участок, на котором сейчас корабль
+	r["seg_t0"]["mid"] = 0.0
 	var heard: Array = []   # [«вид:заметка», расстояние до корабля] за шаг
 	var listen := func(e: EcoBus.Event) -> void:
 		if e.species == EcoFern.ID and e.note == "mollusk" and r["fish_t"] < 0.0 \
 				and Vector2(e.pos.x, e.pos.z).distance_to(EcoFern.ROUTE_CLUSTER) < 6.0:
 			r["fish_t"] = w.time - dark
+		if e.species == EcoFern.ID and e.note == "mollusk" and not r["seg_moll"].has(at["seg"]) \
+				and Vector2(e.pos.x, e.pos.z).distance_to(EcoFern.ROUTE_CLUSTER) < 6.0:
+			r["seg_moll"][at["seg"]] = w.time - dark - r["seg_t0"][at["seg"]]
 		var k := threat_key(e, w.ship.pos)
+		if k == "glazun:ambush":
+			r["ambush"].append(ambush_note(ev, e, at["seg"], w.time - dark - r["seg_t0"][at["seg"]]))
 		if k != "":
 			heard.append([k, e.pos.distance_to(w.ship.pos)])
 	w.bus.emitted.connect(listen)
-	var leg := 1
-	var stop := STOP
+	# Ноги прохода: куда, сколько стоять там, участок. Без repeat — как раньше: стоянка у середины, затем к 01.
+	var legs: Array = [[PATH[1], STOP, "mid"], [PATH[2], 0.0, "01"]]
+	if repeat:
+		legs = [[PATH[1], STOP, "mid"], [PATH[2], STOP, "01"], [PATH[1], 0.0, "back"], [PATH[0], STOP, "back"],
+			[PATH[1], STOP, "mid2"], [PATH[2], 0.0, "012"]]
+	var leg := 0
+	var stop: float = legs[0][1]
 	var cue := -1.0     # когда экипаж услышал «замер» (ответ через delay)
 	var hushed := -1.0  # с какого времени стоит без света и хода
 	var mid := true
 	var lit := {}
-	while leg < PATH.size() and t < dark + limit:
-		var tg := PATH[leg]
+	while leg < legs.size() and t < dark + limit:
+		var tg: Vector2 = legs[leg][0]
+		if legs[leg][2] != at["seg"]:
+			at["seg"] = legs[leg][2]
+			r["seg_t0"][at["seg"]] = t - dark
+		mid = at["seg"] == "mid"
 		var d := Vector2(tg.x - ship.pos.x, tg.y - ship.pos.z)
 		if cue >= 0.0 and t - cue >= delay - DT * 0.5:
 			cue = -1.0
@@ -412,12 +441,13 @@ static func run(seed_value: int) -> Dictionary:
 		ship.light_on = hushed < 0.0
 		if hushed >= 0.0:
 			ship.speed = 0.0
-		elif d.length() < 0.5 and leg == 1 and stop > 0.0:
+		elif d.length() < 0.5 and stop > 0.0:
 			stop -= DT
 			ship.speed = 0.0
 		elif d.length() < 0.5:
 			leg += 1
-			mid = false
+			if leg < legs.size():
+				stop = legs[leg][1]
 			continue
 		else:
 			ship.yaw = atan2(-d.x, -d.y)
@@ -428,10 +458,11 @@ static func run(seed_value: int) -> Dictionary:
 		heard.clear()
 		w.step(DT)
 		t += DT
-		var got: Dictionary = r["threat_mid" if mid else "threat_01"]
+		var sg: String = at["seg"]
+		var got: Dictionary = r["threat_" + sg]
 		for e in w.take_link():
 			if e["type"] == EcoLink.OBSERVE and e.get("species", "") == EcoRaduzh.ID and e.get("note", "") == "betray":
-				r["betray_mid" if mid else "betray_01"] += 1
+				r["betray_" + sg] += 1
 			elif e["type"] == EcoLink.HIT or e["type"] == EcoLink.DRAIN:
 				heard.append(["%s:%s" % [e["by"], e["type"]], 0.0])
 		track.call()
@@ -454,6 +485,9 @@ static func run(seed_value: int) -> Dictionary:
 				r["alert_t"] = t - dark
 				r["alert_who"] = pr.index
 				r["alert_d"] = dp
+			if pr.mode == EcoPred.Mode.ALERT and not r["seg_alert"].has(sg):
+				r["seg_alert"][sg] = t - dark - r["seg_t0"][sg]
+			r["seg_pred"][sg] = minf(r["seg_pred"].get(sg, INF), dp)
 			if pr.mode == EcoPred.Mode.ALERT or pr.mode == EcoPred.Mode.CHARGE:
 				heard.append(["pred%d:%s" % [pr.index, EcoPred.Mode.keys()[pr.mode].to_lower()], dp])
 			if mid:
@@ -464,6 +498,11 @@ static func run(seed_value: int) -> Dictionary:
 			if not got.has(h[0]):
 				got[h[0]] = {"n": 0, "t": t - dark, "d": h[1]}
 			got[h[0]]["n"] += 1
+		if not r["seg_open"].has(sg):
+			for fe in ev.ferns.ferns:
+				if fe.open > EcoFern.FEED_OPEN and Vector2(fe.pos.x, fe.pos.z).distance_to(EcoFern.ROUTE_CLUSTER) < 6.0:
+					r["seg_open"][sg] = t - dark - r["seg_t0"][sg]
+					break
 		if r["fern_t"] < 0.0:
 			for fe in ev.ferns.ferns:
 				if Vector2(fe.pos.x, fe.pos.z).distance_to(EcoFern.ROUTE_CLUSTER) >= 6.0:
@@ -493,6 +532,61 @@ static func run(seed_value: int) -> Dictionary:
 	return r
 
 
+## Засада глазуна в слышимости (`repeat=1`, уровни и ГД 14.11): участок и время от его начала, глазун и где он, где
+## корабль (x, z), расстояние, свет и ход, ближайший серпохвост к глазуну (номер, режим, м), живых монетников в стайке.
+static func ambush_note(ev: EcoView, e: EcoBus.Event, seg: String, t: float) -> Dictionary:
+	var gi := -1
+	var gd := INF
+	for gz in ev.coins.glazuns:
+		var dd := gz.pos.distance_to(e.pos)
+		if dd < gd:
+			gd = dd
+			gi = gz.index
+	var alive := -1
+	for sc in ev.coins.schools:
+		if sc.glazun != null and sc.glazun.index == gi:
+			alive = sc.alive_count()
+	var pn := {"who": -1, "mode": "", "d": INF}
+	for pr in ev.preds.all:
+		var dp := pr.agent.p.distance_to(e.pos)
+		if dp < pn["d"]:
+			pn = {"who": pr.index, "mode": EcoPred.Mode.keys()[pr.mode].to_lower(), "d": dp}
+	var sh: EcoLink.ShipState = ev.world.ship
+	return {"seg": seg, "t": t, "gz": gi, "at": Vector2(e.pos.x, e.pos.z), "ship": Vector2(sh.pos.x, sh.pos.z),
+		"d": e.pos.distance_to(sh.pos), "light": sh.light_on, "speed": sh.speed, "pred": pn, "coins": alive}
+
+
+static func ambush_line(a: Dictionary) -> String:
+	var pn: Dictionary = a["pred"]
+	return "%s %.1f с: глазун %d (%.0f; %.0f), корабль (%.0f; %.0f) в %.0f м, %s, %s; серпохвост №%d %s в %.0f м; монетников %d" \
+		% [a["seg"], a["t"], a["gz"], a["at"].x, a["at"].y, a["ship"].x, a["ship"].y, a["d"],
+		"свет" if a["light"] else "без света", "ход" if a["speed"] > 0.0 else "стоит", pn["who"], pn["mode"], pn["d"], a["coins"]]
+
+
+## Строка участков зерна (`repeat=1`): по участку — от его начала волнолист у прохода раскрыт на FEED_OPEN (моллюски
+## видны, как `mollusk_t`), рыбы приплыли к моллюскам (`EcoFern` "mollusk"), первый серпохвост в «замере» (0,0 — «замер»
+## шёл уже на прежнем участке), серпохвост ближе всего, угрозы.
+static func seg_line(r: Dictionary) -> String:
+	var parts: Array[String] = []
+	for sg in SEGS:
+		if not r["seg_t0"].has(sg):
+			parts.append("%s — не дошёл" % sg)
+			continue
+		var bits: Array[String] = ["с %.0f с" % r["seg_t0"][sg]]
+		if r["seg_open"].has(sg):
+			bits.append("волнолист %.1f" % r["seg_open"][sg])
+		if r["seg_moll"].has(sg):
+			bits.append("рыбы к моллюскам %.1f" % r["seg_moll"][sg])
+		if r["seg_alert"].has(sg):
+			bits.append("«замер» %.1f" % r["seg_alert"][sg])   # 0,0 — «замер» шёл уже на прежнем участке
+		bits.append("серпохвост ≥ %.0f м" % r["seg_pred"].get(sg, INF))
+		var got: Dictionary = r["threat_" + sg]
+		if not got.is_empty():
+			bits.append(_keys(got))
+		parts.append("%s: %s" % [sg, " ".join(bits)])
+	return "; ".join(parts)
+
+
 static func report(seeds: int) -> Array[String]:
 	var lines: Array[String] = []
 	var homes: Array[Vector2] = EcoRaduzh.HOMES.duplicate()
@@ -502,7 +596,7 @@ static func report(seeds: int) -> Array[String]:
 	var fh: Array[Vector3] = EcoFish.HOMES.duplicate()
 	for k in fish_moves:
 		fh[k] = Vector3(fish_moves[k].x, 0.0, fish_moves[k].y)
-	lines.append("== дома радужников %s, старт серпохвоста №0 %s, %s, тихий круг серпохвоста %s, ответ экипажа %s, %d зёрен, путь %s, стоянка %.0f с у середины" % [str(homes), str(start0 if start0.is_finite() else EcoPred.STARTS[0]), band, "вкл" if probe else "выкл", ("через %.1f с, %.0f с без света" % [delay, hold]) if answer else "нет", seeds, str(PATH), STOP])
+	lines.append("== дома радужников %s, старт серпохвоста №0 %s, %s, тихий круг серпохвоста %s, ответ экипажа %s, %d зёрен, путь %s, стоянка %.0f с у середины%s" % [str(homes), str(start0 if start0.is_finite() else EcoPred.STARTS[0]), band, "вкл" if probe else "выкл", ("через %.1f с, %.0f с без света" % [delay, hold]) if answer else "нет", seeds, str(PATH), STOP, (", повтор 00→01→00→01, предел %.0f с" % limit) if repeat else ""])
 	for k in watch:
 		if k == EcoGrot.RIDERS:
 			lines.append("== стая светляков %d — на спине гротовика, дом идёт с ним по кругу %s (%s; fish=%d не действует), тёмная стоянка %.0f с" % [k, str(EcoGrot.route), "EcoGrot.ROUTE" if EcoGrot.route == EcoGrot.ROUTE else "проба grot=", k, dark])
@@ -531,6 +625,9 @@ static func report(seeds: int) -> Array[String]:
 	var threats_mid := {}
 	var threats_01 := {}
 	var pred_near := INF
+	var segs := {}
+	for sg in SEGS:
+		segs[sg] = {"n": 0, "threats": {}, "alert": [], "moll_first": 0, "pred": [], "ambush": 0}
 	for s in seeds:
 		var r := run(20261018 + s * 7919)
 		var parts: Array[String] = []
@@ -596,6 +693,24 @@ static func report(seeds: int) -> Array[String]:
 			order["alert"].append(r["alert_t"])
 		order["near0"].append(r["near0"])
 		lines.append("  зерно %d: %s" % [s, ", ".join(parts)])
+		if repeat:
+			lines.append("    участки: " + seg_line(r))
+			for a in r["ambush"]:
+				lines.append("    засада " + ambush_line(a))
+			for sg in SEGS:
+				var acc: Dictionary = segs[sg]
+				if not r["seg_t0"].has(sg):
+					continue
+				acc["n"] += 1
+				var got: Dictionary = r["threat_" + sg]
+				for k in got:
+					acc["threats"][k] = acc["threats"].get(k, 0) + 1
+				if r["seg_alert"].has(sg):
+					acc["alert"].append(r["seg_alert"][sg])
+				if r["seg_open"].has(sg) and (not r["seg_alert"].has(sg) or r["seg_open"][sg] < r["seg_alert"][sg]):
+					acc["moll_first"] += 1
+				acc["pred"].append(r["seg_pred"].get(sg, INF))
+				acc["ambush"] += (r["ambush"] as Array).filter(func(a: Dictionary) -> bool: return a["seg"] == sg).size()
 	var fl: Array[String] = []
 	for k in homes.size():
 		fl.append("стая %d — %d/%d" % [k, flared.get(k, 0), seeds])
@@ -613,6 +728,12 @@ static func report(seeds: int) -> Array[String]:
 		lines.append("стая %d: дальше всего от дома %s; ближе всего к выходу 00 %s, к пути середины %s; погонь на неё %d в %d/%d зёрнах, ближе %.0f м к выходу 00 — %d/%d зёрен, к пути середины — %d/%d" \
 			% [k, _metres_max(acc["far"]), _metres(acc["exit"]), _metres(acc["path"]), acc["n"], acc["seeds"], seeds,
 			EXIT_NEAR, acc["exit20"], seeds, acc["path20"], seeds])
+	if repeat:
+		for sg in SEGS:
+			var acc: Dictionary = segs[sg]
+			lines.append("участок %s (прошли %d/%d): моллюски раньше «замера» %d/%d; первый «замер» от начала участка %s; серпохвост ближе всего %s; засад глазуна в слышимости %d; угрозы (зёрен): %s" \
+				% [sg, acc["n"], seeds, acc["moll_first"], acc["n"], _spread(acc["alert"], acc["n"]), _metres(acc["pred"]),
+				acc["ambush"], _keys(acc["threats"]) if not acc["threats"].is_empty() else "нет"])
 	lines.append("погони (HUNT, все серпохвосты): ближе всего к выходу 00 %s (ближе %.0f м — %d/%d зёрен), к пути середины %s; кто → стая (зёрен): %s" \
 		% [_metres(sp["hunt_exit"]), EXIT_NEAR, sp["exit20"], seeds, _metres(sp["hunt_path"]), _keys(sp["prey"]) if not sp["prey"].is_empty() else "погонь нет"])
 	return lines
