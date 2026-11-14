@@ -151,6 +151,44 @@ func test_turn_at_grot_keeps_hull_out() -> void:
 	ok(s.yaw > 0.02 and s.yaw < 1.0, "довернул до гротовика и встал: курс %.2f" % s.yaw)
 
 
+## Упёршись в твёрдое на месте, корабль перебирает сдвиги, равные прежней позе: каждую позу спрашиваем у `solid`
+## один раз за шаг — две проверки вместо восьми (проверка корпуса против гротовика — самая дорогая часть шага).
+func test_solid_asked_once_per_pose() -> void:
+	var s := Helm.Ship.new()
+	s.ground = func(_x: float, _z: float) -> float: return -40.0
+	s.pos = Vector3(0.0, -20.0, 0.0)
+	var asked: Array = []
+	s.solid = func(p: Vector3, yaw: float) -> bool:
+		asked.append([p, yaw])
+		return yaw > 0.1   # «стена» по курсу: довернуть дальше 0,1 нельзя
+	s.in_turn = -1.0
+	var worst := 0
+	var stuck := 0
+	for i in 300:
+		asked.clear()
+		var yaw0 := s.yaw
+		s.update(1.0 / 60.0)
+		for j in asked.size():
+			ok(asked.find(asked[j]) == j, "поза спрошена дважды за шаг %d" % i)
+		worst = maxi(worst, asked.size())
+		if s.yaw == yaw0 and i > 10:
+			stuck += 1
+	ok(stuck > 100, "упёрся и стоит: %d шагов" % stuck)
+	ok(s.yaw > 0.05 and s.yaw <= 0.1, "довернул до стены: курс %.3f" % s.yaw)
+	eq(worst, 2, "в упоре — новая поза и прежняя, не больше")
+	eq(s.solid_calls > 0, true, "счётчик идёт")
+	# Сдвиг вдоль стены работает как раньше: стена по x, идём наискось — скользим по z.
+	var t := Helm.Ship.new()
+	t.ground = s.ground
+	t.pos = Vector3(0.0, -20.0, 0.0)
+	t.yaw = -PI / 4.0   # нос в −Z и +X
+	t.solid = func(p: Vector3, _yaw: float) -> bool: return p.x > 1.0
+	t.in_thrust = 1.0
+	for i in 300:
+		t.update(1.0 / 60.0)
+	ok(t.pos.x <= 1.0 and t.pos.z < -5.0, "скользит вдоль стены: x %.2f, z %.1f" % [t.pos.x, t.pos.z])
+
+
 ## Насколько днище корабля ниже допустимого (грунт + зазор) в худшей точке `Helm.Ship.foot()`; ≤ 0 — не в грунте.
 func _dig(s: Helm.Ship) -> float:
 	var worst := -INF

@@ -100,6 +100,9 @@ class Ship:
 	## Твёрдое над дном (`func(pos: Vector3, yaw: float) -> bool`): арка 07 `GateArch.hits` (#826), гротовик с рифом
 	## (`EcoLink.solid`). Корабль скользит вдоль; уже застрял в твёрдом (загрузка, существо подошло) — выходит свободно.
 	var solid: Callable
+	## Сколько раз `solid` спрошен за всё время — для тестов и замеров цены упора.
+	var solid_calls := 0
+	var _asked := {}   # ответы `solid` по позе [pos, yaw] в пределах одного шага `update`
 
 	func _init() -> void:
 		reset()
@@ -126,7 +129,17 @@ class Ship:
 		return east_ok(p.x, p.z) and not _in_solid(p, y)
 
 	func _in_solid(p: Vector3, y: float) -> bool:
-		return solid.is_valid() and bool(solid.call(p, y))
+		if not solid.is_valid():
+			return false
+		# Одна и та же поза за шаг спрашивается один раз: упёршись на месте, корабль перебирает сдвиги, которые все
+		# равны прежней позе, — было 8 проверок корпуса против твёрдого за кадр, стало 2 (`solid_calls`).
+		var key := [p, y]
+		if _asked.has(key):
+			return _asked[key]
+		solid_calls += 1
+		var hit := bool(solid.call(p, y))
+		_asked[key] = hit
+		return hit
 
 	func nose() -> Vector3:
 		return Vector3(-sin(yaw), 0.0, -cos(yaw))
@@ -250,6 +263,7 @@ class Ship:
 		return -pos.y
 
 	func update(dt: float, k: float = 1.0, current: Vector3 = Vector3.ZERO) -> void:
+		_asked.clear()
 		var thrust := clampf(in_thrust, -1.0, 1.0)
 		var tr := clampf(in_turn, -1.0, 1.0)
 		var vert := clampf(in_vert, -1.0, 1.0)
