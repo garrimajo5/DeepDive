@@ -4,7 +4,10 @@ extends SceneTree
 ## `Seabed.mesh_height`), headless, без узлов сцены; облачный расчёт, не телефонный.
 ##   godot --headless --path . -s tools/mid_calm.gd [-- seeds=16 raduzh=1:80,5 lim=<с> dark=<с> probe=1 answer=1 delay=<с> hold=<с>
 ##   start0=<x>,<z> band0=<x0>,<x1>,<z0>,<z1> fish=<номер>:<x>,<z> watch=<номера через ,> sites=1
-##   grot=<x>,<z>;<x>,<z>;… path=1 repeat=1]
+##   grot=<x>,<z>;<x>,<z>;… path=1 repeat=1 dark_mark=1]
+## dark_mark=1 — засады глазуна, услышанные ещё в тёмной стоянке у 00, двигают отметку строки (`gz_last`), как в игре
+## (`EcoWorld.repeat` зовётся и до света): участок «dark», итогом — во скольких зёрнах строка пришла в тёмной стоянке,
+## в первой середине и нигде за первый проход (#1400, п. 2 (я)). Без ключа отметка с света — как в расчёте (ш).
 ## repeat=1 — настоящий повтор 00→01→00→01 (уровни и ГД 14.11, #1400): после 01 стоянка STOP с, обратный ход к 00 через
 ## середину, стоянка STOP с у 00 и второй проход к 01 со стоянкой у середины, свет не гаснет (кроме ответа экипажа).
 ## Участки: mid, 01 — первый проход; back — 01→00 и стоянка у 00; mid2, 012 — второй проход. По участку — угрозы,
@@ -58,6 +61,8 @@ static var limit := LIMIT
 const LIMIT_REPEAT := 420.0
 ## Повтор 00→01→00→01 (`repeat=1`).
 static var repeat := false
+## Отметка строки засады с начала тёмной стоянки (`dark_mark=1`).
+static var dark_mark := false
 const SEGS: Array[String] = ["mid", "01", "back", "mid2", "012"]
 ## Тёмная стоянка этого прогона, с (`dark=`, по умолчанию DARK; короче 20 с — пауза хищников не кончилась, только для
 ## проверки инструмента).
@@ -103,6 +108,7 @@ func _init() -> void:
 		kv[p[0]] = p[1] if p.size() > 1 else ""
 	var seeds := int(kv.get("seeds", "16"))
 	repeat = kv.get("repeat", "0") == "1"
+	dark_mark = kv.get("dark_mark", "0") == "1"
 	limit = float(kv.get("lim", str(LIMIT_REPEAT if repeat else LIMIT)))
 	dark = float(kv.get("dark", str(DARK)))
 	probe = kv.get("probe", "0") == "1"
@@ -396,6 +402,16 @@ static func run(seed_value: int) -> Dictionary:
 				var who: Dictionary = spread["prey"]
 				var key := "№%d→%d" % [pr.index, pr.prey.shoal.index]
 				who[key] = who.get(key, 0) + 1
+	# Засады в тёмной стоянке (`dark_mark=1`): отметка строки — как у мира, участок «dark», время от сброса.
+	var pre := {"gz_last": -INF, "gz_quiet": 0.0, "ambush": []}
+	var dark_listen := func(e: EcoBus.Event) -> void:
+		if threat_key(e, w.ship.pos) == "glazun:ambush":
+			var an := ambush_note(ev, e, "dark", w.time)
+			an["line"] = line_shown(pre, w.time)
+			an["world"] = world_line(w)
+			pre["ambush"].append(an)
+	if dark_mark:
+		w.bus.emitted.connect(dark_listen)
 	while t < dark:
 		w.ship = ship
 		w.step(DT)
@@ -407,13 +423,15 @@ static func run(seed_value: int) -> Dictionary:
 			path0["hunt"] += DT
 		var q := Vector2(ev.preds.all[0].agent.p.x, ev.preds.all[0].agent.p.z)
 		path0["near"] = minf(path0["near"], to_mid_path(q, q))
+	if dark_mark:
+		w.bus.emitted.disconnect(dark_listen)
 	ship.light_on = true
 	ship.light_range = Searchlight.BASE_RANGE
 	var mode_lit: String = EcoPred.Mode.keys()[ev.preds.all[0].mode]
 	var r := {"mode0_lit": mode_lit, "fern_t": -1.0, "flare": {}, "betray_mid": 0, "betray_01": 0, "threat_mid": {}, "threat_01": {},
 		"pred_mid": INF, "answers": 0, "mollusk_t": -1.0, "alert_t": -1.0, "alert_who": -1, "alert_d": 0.0,
 		"track0": [], "near0": INF, "near0_t": 0.0, "lit_t": -1.0, "born0": Vector2(born.x, born.z),
-		"fish_t": -1.0, "seg_t0": {}, "seg_alert": {}, "seg_open": {}, "seg_moll": {}, "seg_pred": {}, "ambush": [], "gz_last": -INF, "gz_quiet": 0.0}
+		"fish_t": -1.0, "seg_t0": {}, "seg_alert": {}, "seg_open": {}, "seg_moll": {}, "seg_pred": {}, "ambush": pre["ambush"].duplicate(), "gz_last": pre["gz_last"], "gz_quiet": pre["gz_quiet"]}
 	for sg in SEGS:
 		r["threat_" + sg] = r.get("threat_" + sg, {})
 		r["betray_" + sg] = r.get("betray_" + sg, 0)
@@ -431,6 +449,7 @@ static func run(seed_value: int) -> Dictionary:
 		if k == "glazun:ambush":
 			var an := ambush_note(ev, e, at["seg"], w.time - dark - r["seg_t0"][at["seg"]])
 			an["line"] = line_shown(r, w.time)
+			an["world"] = world_line(w)
 			r["ambush"].append(an)
 		if k != "":
 			heard.append([k, e.pos.distance_to(w.ship.pos)])
@@ -589,6 +608,12 @@ static func line_shown(r: Dictionary, time: float) -> bool:
 	return time - was >= EcoWorld.ONCE_GAP
 
 
+## Пойдёт ли засада, которую шина только что выпустила, на приборы текстом у самого мира: отметка `EcoWorld._heard`
+## до `take_link` этого шага (сверка `line_shown` с игрой, `dark_mark`).
+static func world_line(w: EcoWorld) -> bool:
+	return w.time - float(w._heard.get(EcoCoins.GLAZUN + ":ambush", -INF)) >= EcoWorld.ONCE_GAP
+
+
 static func ambush_line(a: Dictionary) -> String:
 	var pn: Dictionary = a["pred"]
 	return ("СТРОКА " if a.get("line", false) else "") + "%s %.1f с: глазун %d (%.0f; %.0f), корабль (%.0f; %.0f) в %.0f м, %s, %s; серпохвост №%d %s в %.0f м; монетников %d" \
@@ -661,6 +686,7 @@ static func report(seeds: int) -> Array[String]:
 	var segs := {}
 	var quiet: Array = []   # самая долгая тишина между засадами в слышимости, по зёрнам
 	var second := 0   # зёрен со строкой засады во втором проходе (mid2, 012)
+	var first := {"dark": 0, "mid": 0, "01": 0, "none": 0, "dark_amb": 0}   # dark_mark=1: зёрен со строкой на участке первого прохода
 	for sg in SEGS:
 		segs[sg] = {"n": 0, "threats": {}, "alert": [], "moll_first": 0, "pred": [], "ambush": 0, "lines": 0, "line_seeds": 0}
 	for s in seeds:
@@ -728,6 +754,16 @@ static func report(seeds: int) -> Array[String]:
 			order["alert"].append(r["alert_t"])
 		order["near0"].append(r["near0"])
 		put(lines, "  зерно %d: %s" % [s, ", ".join(parts)])
+		if dark_mark:
+			for sg in ["dark", "mid", "01"]:
+				if (r["ambush"] as Array).any(func(a: Dictionary) -> bool: return a["seg"] == sg and a.get("line", false)):
+					first[sg] += 1
+			if not (r["ambush"] as Array).any(func(a: Dictionary) -> bool: return a["seg"] in ["dark", "mid", "01"] and a.get("line", false)):
+				first["none"] += 1
+			first["dark_amb"] += (r["ambush"] as Array).filter(func(a: Dictionary) -> bool: return a["seg"] == "dark").size()
+			if not repeat:
+				for a in r["ambush"]:
+					put(lines, "    засада " + ambush_line(a))
 		if repeat:
 			put(lines, "    участки: " + seg_line(r))
 			for a in r["ambush"]:
@@ -780,6 +816,9 @@ static func report(seeds: int) -> Array[String]:
 			put(lines, "участок %s (прошли %d/%d): моллюски раньше «замера» %d/%d; первый «замер» от начала участка %s; серпохвост ближе всего %s; засад глазуна в слышимости %d, со строкой %d (в %d/%d зёрнах); угрозы (зёрен): %s" \
 				% [sg, acc["n"], seeds, acc["moll_first"], acc["n"], _spread(acc["alert"], acc["n"]), _metres(acc["pred"]),
 				acc["ambush"], acc["lines"], acc["line_seeds"], acc["n"], _keys(acc["threats"]) if not acc["threats"].is_empty() else "нет"])
+	if dark_mark:
+		put(lines, "строка засады в первом проходе с отметкой с тёмной стоянки (%.0f с): засад в слышимости в тёмной стоянке %d; строка в тёмной стоянке %d/%d зёрен, в середине (mid) %d/%d, у 01 %d/%d, нигде до света и в первом проходе %d/%d" \
+			% [dark, first["dark_amb"], first["dark"], seeds, first["mid"], seeds, first["01"], seeds, first["none"], seeds])
 	if repeat:
 		put(lines, "строка засады во втором проходе (mid2, 012): %d/%d зёрен; самая долгая тишина между засадами в слышимости %s (ONCE_GAP %.0f с)" \
 			% [second, seeds, _spread(quiet, seeds), EcoWorld.ONCE_GAP])
