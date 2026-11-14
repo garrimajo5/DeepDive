@@ -371,6 +371,20 @@ func reef_axis() -> Vector3:
 	return Vector3.INF
 
 
+## Цели патруля у домов стай: голодному (> HUNT_HUNGER) — без стай, чей дом внутри кольца REEF_KEEP рифа у цветка
+## (крона и стая рифа у 01): их рыбки ему недоступны (`_hidden_fish`), и цель у такого дома держала его на краю рифа,
+## а крону — в чаше (#1400, п. 2 (ю), вариант 2 — ГД 14.11; расчёт tools/crown_wait.gd). Сытый ходит и туда — набегами.
+## Все дома недоступны — весь список (выбор не пустой). Тот же один вызов `pick` — ход зёрен не сдвигается.
+static func patrol_homes(pr: Pred, shoals: Array, reef: Vector3) -> Array:
+	if pr.hunger <= HUNT_HUNGER or not reef.is_finite():
+		return shoals
+	var out: Array = []
+	for sh: EcoFish.Shoal in shoals:
+		if _flat_dist(sh.home, reef) >= REEF_KEEP:
+			out.append(sh)
+	return out if not out.is_empty() else shoals
+
+
 ## Расстояние по горизонтали.
 static func _flat_dist(a: Vector3, b: Vector3) -> float:
 	return Vector2(a.x - b.x, a.z - b.z).length()
@@ -722,7 +736,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 					gx = g2.x + _rnd.range_f(-ARC_JITTER, ARC_JITTER)
 					gz = g2.y + _rnd.range_f(-ARC_JITTER, ARC_JITTER)
 				elif fish and fish.shoals.size() > 0 and _rnd.chance(0.6):
-					var sh: EcoFish.Shoal = _rnd.pick(fish.shoals)
+					var sh: EcoFish.Shoal = _rnd.pick(patrol_homes(pr, fish.shoals, _reef))
 					var h: Vector3 = sh.home
 					gx = h.x + _rnd.range_f(-25, 25)
 					gz = h.z + _rnd.range_f(-25, 25)

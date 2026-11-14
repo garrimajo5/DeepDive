@@ -1119,6 +1119,42 @@ func test_patrol_goes_around_reef() -> void:
 	ok(reached, "и доплывает до цели на той стороне (%s)" % pr.agent.p)
 
 
+## #1400, п. 2 (ю), вариант 2 (ГД 14.11): голодный хищник не берёт цели патруля у домов стай внутри REEF_KEEP (крона
+## и стая рифа у 01) — их рыбки ему недоступны, а цель у такого дома `outside_reef` ставила на край рифа, и крона
+## сидела в чаше (`tools/crown_wait.gd`). Сытый туда ходит: проверка не пустая. Охоту гасим (`seek_t`), чтобы считать
+## только выбор цели; цель «на кольце» — ровно REEF_KEEP от оси (так её выносит `outside_reef`).
+func _ring_goals(hunger: float, seconds: float) -> Array:
+	var r := _reef_world()
+	var w: EcoWorld = r[0]
+	var preds: EcoPred = r[1]
+	var axis := preds.reef_axis()
+	var pr := preds.all[0]
+	pr.agent.p = Vector3(axis.x + 60.0, -30.0, axis.z)
+	var last := Vector3.INF
+	var picks := 0
+	var ring := 0
+	for i in int(seconds / EcoWorld.MAX_STEP):
+		pr.hunger = hunger
+		pr.seek_t = 100.0
+		_step(w)
+		var g := pr.agent.goal
+		if pr.mode == EcoPred.Mode.PATROL and g != last:
+			last = g
+			picks += 1
+			if Vector2(g.x - axis.x, g.z - axis.z).length() < EcoPred.REEF_KEEP + 0.5:
+				ring += 1
+	return [picks, ring]
+
+
+func test_hungry_patrol_skips_reef_homes() -> void:
+	var fed := _ring_goals(0.0, 250.0)
+	var hungry := _ring_goals(1.0, 250.0)
+	print("    целей патруля на кольце рифа: сытый %d из %d, голодный %d из %d" % [fed[1], fed[0], hungry[1], hungry[0]])
+	ok(fed[1] >= 3, "сытый берёт цели у домов кроны и стаи рифа — на кольце (%d)" % fed[1])
+	ok(hungry[0] >= 12, "голодный выбирал цель много раз (%d)" % hungry[0])
+	eq(hungry[1], 0, "голодный — ни одной цели на кольце рифа")
+
+
 ## Самый резкий вертикальный разгон (м/с², по окну 3 шага) и шагов вплотную ко дну у серпохвостов за seconds с мира
 ## у места id.
 ## Минута полного мира у места (EcoView, шаг 1/30 с) — одна на тесты разворота и вертикали серпохвостов: раньше
