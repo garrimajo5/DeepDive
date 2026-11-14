@@ -71,6 +71,23 @@ func test_three_swarms_above_ground() -> void:
 	near(r2.swarms[1].members[5].o.x, r.swarms[1].members[5].o.x, 1e-9, "то же зерно — та же стая")
 
 
+## #1400 (решение по умолчанию, срок 14.11): в спокойной середине 00 → 01 ни одна стая не висит в луче с оси прохода —
+## дом не ближе 45 м к оси `tools/mid_calm.gd` PATH (дальность луча мира) и не у подхода к 01, не над волнолистом у
+## прохода. Прежний дом стаи 1 (45, 0) — в 5 м от волнолиста, и вспышка звала серпохвоста в 7 из 16 проходов.
+func test_no_swarm_home_on_calm_middle() -> void:
+	var path: Array[Vector2] = (load("res://tools/mid_calm.gd") as GDScript).PATH
+	var p01 := LayerMap.at("01")
+	for i in EcoRaduzh.HOMES.size():
+		var h := EcoRaduzh.HOMES[i]
+		var best := INF
+		for k in path.size() - 1:
+			best = minf(best, h.distance_to(Geometry2D.get_closest_point_to_segment(h, path[k], path[k + 1])))
+		ok(best >= 45.0, "дом стаи %d в %.1f м от оси прохода 00 → 01, нужно не ближе 45" % [i, best])
+		ok(h.distance_to(Vector2(p01.x, p01.z)) >= 60.0, "дом стаи %d не у подхода к 01" % i)
+		ok(h.distance_to(EcoFern.ROUTE_CLUSTER) >= 30.0, "дом стаи %d не над волнолистом у прохода" % i)
+	eq(EcoRaduzh.HOMES[1], Vector2(80, 5), "стая 1 — в (80, 5) над илом восточнее прохода")
+
+
 func test_swarm_drifts_around_home() -> void:
 	var w := _world()
 	var r := _sys(w, EcoRaduzh) as EcoRaduzh
