@@ -348,7 +348,7 @@ class QuietRunner extends QaRunner:
 	func _finish() -> void:
 		pass
 
-	func _shot(_name: String) -> void:
+	func _shot(_name: String, _crop: Array = []) -> void:
 		pass
 
 

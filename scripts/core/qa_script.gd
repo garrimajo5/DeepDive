@@ -3,7 +3,10 @@ extends RefCounted
 ## Сценарий тестера: игра сама проходит шаги, снимает скриншоты и пишет лог — без тапов по координатам экрана.
 ## Сценарий — JSON-массив шагов (пример — tools/qa/scenario.json):
 ##   {"do": "wait", "s": 2}                          — подождать
-##   {"do": "shot", "name": "01-start"}              — скриншот
+##   {"do": "shot", "name": "01-start"}              — скриншот; "crop": [x, y, w, h, k] — рядом с ним вырез
+##                                                     01-start-krupno.png: часть кадра в долях (x, y — левый верхний
+##                                                     угол, w, h — размер; 0…1), увеличенная в k раз (без k — 2):
+##                                                     серии «видно ли из окна» сравнивают по вырезам (#1757)
 ##   {"do": "press", "what": "action"}               — нажать и отпустить (action, up, down, light;
 ##                                                     dive — «Погрузиться» в главном меню ART-037; в паузе ART-037:
 ##                                                     resume, map (схема ART-042, её «Назад» — map_back), new, exit, в подтверждении yes / no; в настройках
@@ -94,7 +97,7 @@ extends RefCounted
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z[, yaw°]], ["floor"], ["outside", on, at, lamp], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["ping"], ["pred", n, bush, away], ["zamer", n, side], ["jerk", n, s, lite], ["dome", t], ["route"], ["act"], ["mate_hold", on], ["gone"], ["save", on], ["wreck"], ["back"], ["tutorial", on, шаг 1…7], ["brief", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["luch_ten", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name[, вырез [x, y, w, h, k]]], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z[, yaw°]], ["floor"], ["outside", on, at, lamp], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["ping"], ["pred", n, bush, away], ["zamer", n, side], ["jerk", n, s, lite], ["dome", t], ["route"], ["act"], ["mate_hold", on], ["gone"], ["save", on], ["wreck"], ["back"], ["tutorial", on, шаг 1…7], ["brief", on], ["cards", on], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["luch_ten", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
 const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "ping", "pred", "zamer", "jerk", "dome", "ship", "floor", "outside", "fly", "route", "gone", "save", "wreck", "back", "tutorial", "brief", "cards", "voice", "slow", "hud", "luch_ten", "play", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "map", "map_back", "hint_map", "new", "exit", "yes", "no", "crew", "journal", "settings", "graphics", "g0", "g1", "g2", "fps", "golos", "zvuk", "s0", "v_hold", "v_voice", "v_hear", "v_mic", "lite_yes", "lite_no", "ask", "brief", "join", "last", "lobby_new", "lobby_addr", "lobby_refresh",
@@ -102,6 +105,11 @@ const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "map
 	"key0", "key1", "key2", "key3", "key4", "key5", "key6", "key7", "key8", "key9", "key.", "keydel"]
 ## Шаг «pred»: полпути серпохвоста мимо куста (м) — с запасом за PRED_R огнецвета и HIDE_R каменщиков.
 const PRED_SPAN := 30.0
+## Вырез шага «shot» (`crop`): увеличение без k, предел увеличения, хвост имени файла, меньшая доля стороны.
+const CROP_K := 2.0
+const CROP_K_MAX := 8.0
+const CROP_TAIL := "-krupno"
+const CROP_MIN := 0.02
 const PRESS_TIME := 0.15   ## сколько держать кнопку при «press», с
 const FINGER := 900        ## номер пальца для касаний сценария (не пересекается с настоящими)
 ## После этих команд скриншот ждёт следующего шага: снимок берёт уже нарисованный кадр, и без кадра между ними
@@ -134,8 +142,67 @@ static func parse(text: String) -> QaScript:
 		if st["do"] == "press" and st["what"] == "pad":
 			q.errors.append("шаг %d: крестовину не нажимают, а держат (hold)" % (i + 1))
 			continue
+		if st["do"] == "shot" and st.has("crop") and crop_of(st).is_empty():
+			# снимок остаётся, без выреза: прогон всё равно даёт картинку
+			q.errors.append("шаг %d: вырез «crop» — [x, y, w, h] или [x, y, w, h, k] в долях кадра 0…1, k от 1 до %d: %s"
+				% [i + 1, int(CROP_K_MAX), str(st["crop"])])
+			st = st.duplicate()
+			st.erase("crop")
 		q.steps.append(st)
 	return q
+
+
+## Вырез шага «shot»: [x, y, w, h, k] числами или [] — выреза нет либо он записан неверно (не массив из 4–5
+## чисел, вне кадра, сторона меньше CROP_MIN, k вне 1…CROP_K_MAX).
+static func crop_of(st: Dictionary) -> Array:
+	var c = st.get("crop")
+	if typeof(c) != TYPE_ARRAY or c.size() < 4 or c.size() > 5:
+		return []
+	var out: Array = []
+	for v in c:
+		if not typeof(v) in [TYPE_FLOAT, TYPE_INT]:
+			return []
+		out.append(float(v))
+	if out.size() == 4:
+		out.append(CROP_K)
+	if out[0] < 0.0 or out[1] < 0.0 or out[2] < CROP_MIN or out[3] < CROP_MIN:
+		return []
+	if out[0] + out[2] > 1.0001 or out[1] + out[3] > 1.0001 or out[4] < 1.0 or out[4] > CROP_K_MAX:
+		return []
+	return out
+
+
+## Прямоугольник выреза в пикселях кадра size: доли одни на телефоне 2400×1080 и в облаке 1600×720.
+static func crop_rect(crop: Array, size: Vector2i) -> Rect2i:
+	var at := Vector2i(roundi(crop[0] * size.x), roundi(crop[1] * size.y))
+	var to := Vector2i(roundi((crop[0] + crop[2]) * size.x), roundi((crop[1] + crop[3]) * size.y))
+	at = at.clamp(Vector2i.ZERO, size - Vector2i.ONE)
+	to = to.clamp(at + Vector2i.ONE, size)
+	return Rect2i(at, to - at)
+
+
+## Размер увеличенного выреза, пикс.
+static func crop_size(crop: Array, size: Vector2i) -> Vector2i:
+	var r := crop_rect(crop, size)
+	return Vector2i(maxi(roundi(r.size.x * crop[4]), 1), maxi(roundi(r.size.y * crop[4]), 1))
+
+
+## Вырез из снимка: часть кадра, увеличенная в k раз (сглаженно — как видит глаз вблизи, без ступенек точек).
+static func crop_image(img: Image, crop: Array) -> Image:
+	var size := Vector2i(img.get_width(), img.get_height())
+	var part := img.get_region(crop_rect(crop, size))
+	var big := crop_size(crop, size)
+	part.resize(big.x, big.y, Image.INTERPOLATE_CUBIC)
+	return part
+
+
+## Строка лога о вырезе (после строки «скриншот»; имя файла — первым словом после «вырез»).
+static func crop_note(name: String, crop: Array, size: Vector2i) -> String:
+	var r := crop_rect(crop, size)
+	var big := crop_size(crop, size)
+	return "вырез %s%s.png: %d×%d пикс. от (%d, %d), ×%s → %d×%d" % [name, CROP_TAIL, r.size.x, r.size.y,
+		r.position.x, r.position.y, str(int(crop[4])) if is_equal_approx(crop[4], roundf(crop[4])) else ("%.2f" % crop[4]).replace(".", ","),
+		big.x, big.y]
 
 
 ## Длительность шага, с.
@@ -213,7 +280,11 @@ func _begin(st: Dictionary, out: Array) -> void:
 		"swipe":
 			out.append(["begin", FINGER, "look", Vector2.ZERO])
 		"shot":
-			out.append(["shot", str(st.get("name", "shot-%02d" % (index + 1)))])
+			var shot := ["shot", str(st.get("name", "shot-%02d" % (index + 1)))]
+			var crop := crop_of(st)
+			if not crop.is_empty():
+				shot.append(crop)
+			out.append(shot)
 		"goto":
 			var g := ["goto", float(st.get("x", 0.0)), float(st.get("z", 0.0)), float(st.get("yaw", 0.0))]
 			if st.has("pitch"):

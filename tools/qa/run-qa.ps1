@@ -300,8 +300,9 @@ else {
 Write-Output 'log:'; if (Test-Path "$run\log.txt") { Get-Content "$run\log.txt" -Encoding utf8 }
 Write-Output 'errors:'; $errs | Select -First 30
 Write-Output "files: $run"
+# «снимков N из M» — только снимки шагов: вырезы *-krupno.png (crop) и kadr-N-snimok.png в счёт не идут.
 # Итог одной строкой — и в конец log.txt: лог из отчёта сам называет сборку, снимки и шум хоста (#1350)
-$result = "RUN $head done=$done снимков $($have.Count) из $($want.Count) | помехи: $noise (свёрнута $paused, чужих окон $foreign) | после сценария: $($split.After) | до: $loadBefore | после: $loadAfter$cool"
+$result = "RUN $head done=$done снимков $(@($want | Where-Object { $_ -in $have }).Count) из $($want.Count) | помехи: $noise (свёрнута $paused, чужих окон $foreign) | после сценария: $($split.After) | до: $loadBefore | после: $loadAfter$cool"
 if ($stale) { $result += " | STALE_APK $head $built" }
 if ($stale) { Write-Output "STALE_APK $head $built — скачался другой APK (релиз перезаливался?): повторите с -Force" }
 Write-Output $result

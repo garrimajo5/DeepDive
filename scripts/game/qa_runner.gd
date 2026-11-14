@@ -243,7 +243,7 @@ func tick(dt: float) -> void:
 			"end":
 				r.end(c[1])
 			"shot":
-				_shot(c[1])
+				_shot(c[1], c[2] if c.size() > 2 else [])
 			"hud":   # кадры для магазина: без крестовины, кнопок и строк приборов
 				main.set_hud(c[1])
 			"luch_ten":   # тень прожектора (#1400): false — без тени, true — по уровню графики
@@ -762,7 +762,7 @@ func _run_state() -> String:
 	return s
 
 
-func _shot(name: String) -> void:
+func _shot(name: String, crop: Array = []) -> void:
 	var img: Image = null
 	if DisplayServer.get_name() != "headless":
 		img = main.get_viewport().get_texture().get_image()
@@ -775,7 +775,16 @@ func _shot(name: String) -> void:
 	shots.append(name)
 	_log("скриншот %s | %s" % [name, state(true) + draw_note(calls, prims) + count_note(int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
 		int(Performance.get_monitor(Performance.OBJECT_COUNT)), int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)))])
+	if not crop.is_empty():
+		save_crop(img, name, crop, OUT)
 	after_shot()
+
+
+## Вырез рядом со снимком (`"crop"` шага shot, #1757): <имя>-krupno.png и строка в лог. В кадре снимка — он
+## в худший кадр не идёт (`after_shot`).
+func save_crop(img: Image, name: String, crop: Array, dir: String) -> void:
+	QaScript.crop_image(img, crop).save_png("%s/%s%s.png" % [dir, name, QaScript.CROP_TAIL])
+	_log(QaScript.crop_note(name, crop, Vector2i(img.get_width(), img.get_height())))
 
 
 ## Кадр Google Play n (ART-046): снимок как есть — kadr-n-snimok.png, собранный кадр с подписью — kadr-n.png

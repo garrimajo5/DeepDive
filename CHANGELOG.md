@@ -3,6 +3,11 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-14
+- Сценарий тестера, вырез-увеличение (#1757, предложение тестера): у шага `shot` ключ `"crop": [x, y, w, h, k]`
+  (доли кадра, без k — вдвое) — рядом со снимком пишется `<имя>-krupno.png` и строка «вырез …» в лог
+  (`QaScript.crop_of`/`crop_rect`/`crop_image`, `QaRunner.save_crop`); неверный вырез — ошибка сценария, снимок
+  остаётся. Вырез стоит у `37b-okno-gnezdo` и серии `41`…`41c`; `run-qa.ps1` считает «снимков N из M» по именам
+  из лога, а не по числу `*.png`. Тест `test_qa_crop`.
 - Поток Б, ролик до/после ANIM-005 (#1753): ключ `tools/shot.gd kino=<с>` (`kino_fps=`) — мир идёт ровным шагом,
   корабль висит в точке, кадры штатной камеры в `<out>-kino/NNNN.png`, смены режима хищника — в лог с номером кадра
   (`ShotSetup.kino_steps`, тест `test_eco_shot_zamer.test_kino_steps_keep_world_time`). `tools/issue_img.py`: GIF не
