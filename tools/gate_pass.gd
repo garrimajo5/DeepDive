@@ -107,7 +107,7 @@ static func world(dx: float, dz: float, depth: float) -> Vector3:
 ## at, yaw, t — время от начала отрезка до остановки, arch — зазор до арки на стоянке.
 static func drive(points: Array) -> Dictionary:
 	var ship := make_ship()
-	var probe := make_ship()
+	var probe := Sounding.new()
 	var p0: Array = points[0]
 	var p1: Array = points[1]
 	ship.pos = world(p0[0], p0[1], p0[2])
@@ -123,6 +123,7 @@ static func drive(points: Array) -> Dictionary:
 	ship.yaw = atan2(-first.x, -first.y)
 	var out := {"samples": [], "done": true, "legs": [], "bumps": 0, "stuck": 0.0, "min_ground": INF, "min_arch": INF,
 			"min_floor": INF, "path": 0.0, "held": 0, "slid": 0, "stands": []}
+	probe.at(ship.pos, ship.yaw)
 	for i in range(1, points.size()):
 		var a: Array = points[i - 1]
 		var b: Array = points[i]
@@ -138,8 +139,9 @@ static func drive(points: Array) -> Dictionary:
 		while t < limit:
 			var d := Vector2(to.x - ship.pos.x, to.z - ship.pos.z)
 			var k := 1.0 if length < 0.5 else clampf(1.0 - d.length() / length, 0.0, 1.0)
+			# предел под корпусом сейчас — промер прошлого шага (`probe`); на месте «через LOOK с» — он же
 			var ahead := ship.pos + ship.nose() * ship.speed * LOOK
-			var keep := maxf(probe.floor_at(ship.pos, ship.yaw), probe.floor_at(ahead, ship.yaw)) + KEEL
+			var keep := maxf(probe.floor_y, probe.floor_y if ahead == ship.pos else probe.ship.floor_at(ahead, ship.yaw)) + KEEL
 			var want_y := maxf(lerpf(from.y, to.y, k), keep)
 			var hover := length < 0.5   # отрезок-стоянка: только глубина, без руля
 			if park:
@@ -180,8 +182,9 @@ static func drive(points: Array) -> Dictionary:
 				out["slid"] += 1
 			var stuck := absf(ship.speed) > 0.5 and moved < absf(ship.speed) * DT * 0.3
 			out["path"] += moved
-			var fl := probe.floor_at(ship.pos, ship.yaw)
-			var s := {"at": ship.pos, "yaw": ship.yaw, "speed": ship.speed, "floor": fl, "ground": ground_gap(ship.pos, ship.yaw),
+			probe.at(ship.pos, ship.yaw)
+			var fl := probe.floor_y
+			var s := {"at": ship.pos, "yaw": ship.yaw, "speed": ship.speed, "floor": fl, "ground": probe.gap,
 					"arch": arch_gap(ship.pos, ship.yaw), "bump": ship.bump, "stuck": stuck, "leg": i, "s": out["path"]}
 			out["samples"].append(s)
 			if ship.bump > 0.0:
@@ -199,6 +202,39 @@ static func drive(points: Array) -> Dictionary:
 			break
 	out["end"] = ship.pos
 	return out
+
+
+## Промер под корпусом за один проход по точкам днища: нижний предел хода `floor_y` (`Helm.Ship.floor_at`) и зазор
+## грунта под днищем `gap` (как `ground_gap`) — по тем же высотам дна. Высоты записывает `ground` промерного корабля:
+## `floor_at` спрашивает дно раз на точку `foot()`, по порядку. Раньше шаг прогона считал дно под корпусом трижды
+## (предел до шага, предел после, зазор) — промер после шага служит и следующему шагу.
+class Sounding extends RefCounted:
+	var ship := Helm.Ship.new()
+	var floor_y := 0.0
+	var gap := INF
+	var _seen := PackedFloat64Array()
+
+	func _init() -> void:
+		ship.ground = _ground
+
+	func _ground(x: float, z: float) -> float:
+		var h := Seabed.height(x, z)
+		_seen.append(h)
+		return h
+
+	func at(pos: Vector3, yaw: float) -> void:
+		_seen.clear()
+		floor_y = ship.floor_at(pos, yaw)
+		var feet := Helm.Ship.foot()
+		gap = INF
+		if _seen.size() == feet.size():
+			for i in feet.size():
+				gap = minf(gap, pos.y + feet[i].y - _seen[i])
+			return
+		var c := cos(yaw)   # `floor_at` спросил дно иначе — зазор отдельным проходом, как `ground_gap`
+		var sn := sin(yaw)
+		for q in feet:
+			gap = minf(gap, pos.y + q.y - Seabed.height(pos.x + q.x * c + q.z * sn, pos.z - q.x * sn + q.z * c))
 
 
 ## Разворот на месте из стоянки: руль до упора в сторону `dir` (+1 — влево, `rotation.y` растёт), без хода, до
