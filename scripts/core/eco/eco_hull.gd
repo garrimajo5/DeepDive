@@ -67,13 +67,49 @@ static func parts(r: float) -> Array:
 	for part: HullPlan.Part in HullPlan.parts():
 		if part.piece != HullPlan.Piece.BODY and part.piece != HullPlan.Piece.NOSE and part.piece != HullPlan.Piece.STERN:
 			continue
-		var s := part.size
-		var grow := Vector3(2 * key, 2 * key, 2 * key)
-		if part.form == HullPlan.Form.CAPSULE or part.form == HullPlan.Form.FRUSTUM:
-			grow.y = key
-		out.append(HullPlan.Part.new(part.name, part.piece, part.form, part.paint, part.pos, s + grow, part.rot))
+		out.append(_grown(part, key))
 	_inflated[key] = out
 	return out
+
+
+## Деталь part, раздутая на r: капсула и конус — Ø1 высотой 2, по оси y +r, поперёк +2r.
+static func _grown(part: HullPlan.Part, r: float) -> HullPlan.Part:
+	var grow := Vector3(2 * r, 2 * r, 2 * r)
+	if part.form == HullPlan.Form.CAPSULE or part.form == HullPlan.Form.FRUSTUM or part.form == HullPlan.Form.CYLINDER:
+		grow.y = r
+	return HullPlan.Part.new(part.name, part.piece, part.form, part.paint, part.pos, part.size + grow, part.rot)
+
+
+## Выступы корпуса — детали HullPlan вне основного объёма parts(r): двигатели в кожухах по бортам кормы (|x| до 6,7 м,
+## а кормовой переход там — 3,6 м), рули глубины, стабилизаторы, крепления; манипулятор и прожектор под носом (до
+## z −8,9, основной объём — от −7,2), шлюз, крышки. Кожух (труба) — сплошным цилиндром, клин — бруском; окна-пластины
+## лежат на обшивке — без них. Мелким существам хватает основного объёма; твёрдое крупное (гротовик) проверяет
+## корабль целиком — touches_whole (#1835: у арки 07 корма с двигателями тоже шла мимо проверки).
+const EXTRA_FORM := {HullPlan.Form.TUBE: HullPlan.Form.CYLINDER, HullPlan.Form.ROTOR: HullPlan.Form.CYLINDER,
+		HullPlan.Form.WEDGE: HullPlan.Form.CUBE}
+static var _extra := {}
+static func extra_shapes(r: float) -> Array:
+	var key := snappedf(r, 0.001)
+	if _extra.has(key):
+		return _extra[key]
+	var out: Array = []
+	for part: HullPlan.Part in HullPlan.parts():
+		if part.piece == HullPlan.Piece.BODY or part.piece == HullPlan.Piece.NOSE or part.piece == HullPlan.Piece.STERN \
+				or part.form == HullPlan.Form.PLATE:
+			continue
+		var f: int = EXTRA_FORM.get(part.form, part.form)
+		var solid := HullPlan.Part.new(part.name, part.piece, f, part.paint, part.pos, part.size, part.rot)
+		out.append(Shape.new(_grown(solid, key)))
+	_extra[key] = out
+	return out
+
+
+## Касается ли точка p (мир) корабля целиком — основного объёма и выступов extra_shapes, раздутых на r.
+static func touches_whole(p: Vector3, ship_pos: Vector3, yaw: float, r: float = 0.0) -> bool:
+	var l := to_ship(p, ship_pos, yaw)
+	if l.distance_to(CENTER) > REACH + r:
+		return false
+	return touches_local(l, r) or _shape_at(l, extra_shapes(r)) != null
 
 
 ## Точка мира → оси корабля, стоящего в ship_pos с курсом yaw.

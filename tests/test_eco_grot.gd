@@ -641,6 +641,47 @@ func test_ship_cannot_pass_through_grot() -> void:
 	ok(s.pos.z > gr.p.z, "не прошёл насквозь: z %.1f" % s.pos.z)
 
 
+## Корабль задним ходом идёт мимо гротовика так, что корпус проходит рядом, а двигатель правого борта (кожух
+## |x| до 6,7 м, кормовой переход там — 3,6 м) — сквозь панцирь. Твёрдое — корабль целиком (`EcoHull.touches_whole`),
+## а не только основной объём: двигатель в панцирь не входит (по примеру арки 07, #1835).
+func test_engine_does_not_pass_through_grot() -> void:
+	var w := _world()
+	var g: EcoGrot = _sys(w, EcoGrot)
+	var gr := g.grot
+	gr.shy = 1e9   # стоит на месте
+	gr.yaw = 0.0
+	g.place()
+	var s := _helm(w)
+	var engine := Vector3(HullPlan.ENGINE_X, HullPlan.ENGINE_Y, HullPlan.ENGINE_Z)
+	var side := HullPlan.ENGINE_X + HullPlan.SHROUD_D / 2.0 + EcoGrot.SHELL.x - 1.0   # кожух на 1 м в панцире
+	s.pos = Vector3(gr.p.x - side, maxf(gr.body_y + 0.5 - HullPlan.ENGINE_Y, FLAT + Helm.Ship.CLEARANCE),
+			gr.p.z - engine.z - 40.0)
+	s.yaw = 0.0   # нос к −Z, задним ходом — к +Z, на гротовика
+	s.in_thrust = -1.0
+	# на траверзе гротовика основной объём его не задевает — без выступов корабль прошёл бы
+	var beside := Vector3(gr.p.x - side, s.pos.y, gr.p.z - engine.z)   # двигатель — на траверзе гротовика
+	var main_hits := 0
+	for q in EcoGrot.body_points():
+		if EcoHull.touches(Vector3(gr.p.x, gr.body_y, gr.p.z) + gr.basis() * q, beside, 0.0, EcoGrot.HULL_PAD):
+			main_hits += 1
+	eq(main_hits, 0, "корпус без выступов проходит мимо")
+	ok(g.blocks(beside, 0.0), "корабль целиком — задевает двигателем")
+	var pts: Array[Vector3] = [engine, engine + Vector3(HullPlan.SHROUD_D / 2.0 - 0.1, 0, 0),
+			engine + Vector3(HullPlan.SHROUD_D / 2.0 - 0.1, 0, 1.0), engine + Vector3(HullPlan.SHROUD_D / 2.0 - 0.1, 0, -1.0)]
+	var dt := 1.0 / 60.0
+	for i in int(25.0 / dt):
+		s.update(dt)
+		w.ship.pos = s.pos
+		w.ship.yaw = s.yaw
+		for p in pts:
+			if g.solid(s.pos + p.rotated(Vector3.UP, s.yaw)):
+				ok(false, "двигатель вошёл в панцирь на %.1f с, корабль z %.1f" % [i * dt, s.pos.z])
+				return
+	print("  двигатель встал у панциря: корабль z %.1f, гротовик z %.1f, сдвиг вдоль борта %.1f м" % [s.pos.z, gr.p.z,
+			s.pos.z + engine.z - gr.p.z])
+	ok(s.pos.z + engine.z < gr.p.z, "двигатель не прошёл мимо центра гротовика")
+
+
 func test_grot_does_not_walk_into_ship() -> void:
 	var w := _lone()
 	var g: EcoGrot = _sys(w, EcoGrot)
