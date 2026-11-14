@@ -136,16 +136,19 @@ static func p99(sorted: Array[float]) -> float:
 	return 0.0 if sorted.is_empty() else sorted[mini(int(sorted.size() * 0.99), sorted.size() - 1)]
 
 
-## «рывки: хищник 0 за 3,0 с, скелет полный, 88 кадров, 24–27 м: кончик хвоста 99 % 12 (макс 18) м/с², центр тела 99 % 4 (макс 6) · норма хвоста ≤ 30».
+## «рывки: хищник 0 за 3,0 с, скелет полный, 88 кадров, 24–27 м от корабля: кончик хвоста 99 % 12 (макс 18) м/с²,
+## центр тела 99 % 4 (макс 6) м/с² · хвост в норме (≤ 30), центр в норме (≤ 40), #1753».
+## Меньше 100 кадров — 99 % и есть худший кадр: за 3 с число держит один кадр, разброс прогонов ±10 м/с² — не рост.
 static func jerk_line(n: int, s: float, lite: bool, frames: int, tail: Array[float], core: Array[float], dmin: float,
 		dmax: float) -> String:
 	var tail_max := 0.0 if tail.is_empty() else tail[tail.size() - 1]
 	var core_max := 0.0 if core.is_empty() else core[core.size() - 1]
 	var verdict := "в норме" if p99(tail) <= JERK_LIMIT else "РЫВОК"
+	var core_verdict := "в норме" if p99(core) <= JERK_CORE_LIMIT else "РЫВОК"
 	return ("рывки: хищник %d за %.1f с, скелет %s, %d кадров, %.0f–%.0f м от корабля: кончик хвоста 99 %% %.0f (макс %.0f) м/с², "
-			+ "центр тела 99 %% %.0f (макс %.0f) м/с² · хвост %s (норма ≤ %.0f, #1753)") % [n, s,
+			+ "центр тела 99 %% %.0f (макс %.0f) м/с² · хвост %s (≤ %.0f), центр %s (≤ %.0f), #1753") % [n, s,
 			"«Экономно»" if lite else "полный", frames, dmin if dmin < INF else 0.0, dmax, p99(tail), tail_max,
-			p99(core), core_max, verdict, JERK_LIMIT]
+			p99(core), core_max, verdict, JERK_LIMIT, core_verdict, JERK_CORE_LIMIT]
 
 
 ## Свет тестера у камеры с борта (шаг «outside» с "lamp"): на 300 м корпус и грунт снаружи чёрные — без него у 10
@@ -153,6 +156,11 @@ static func jerk_line(n: int, s: float, lite: bool, frames: int, tail: Array[flo
 ## Шаг «jerk» (#1753): замер рывков серпохвоста — хищник, сколько осталось, точки по кадрам, прежний `PredView.lite`.
 var _jerk := {}
 const JERK_LIMIT := 30.0   ## м/с², 99 % ускорения кончика хвоста — норма для тестера (pred_jerk.gd: «Обычно» ≈ 13)
+## м/с², 99 % ускорения центра тела — норма для тестера (#1350, 13.11: центр 18 → 29 → 33 за три прогона). Центр
+## ведёт логика хода, не скелет: поворот на полном ходу `CHARGE_SPEED` 9,5 м/с × `SWIM_TURN_SHARP` 3 рад/с = 28,5 и
+## разгон lerp-ом — `pred_jerk.gd`, 3 зерна, с постановкой и без: 99 % за 45 с 9–17, худший кадр 30–32 (начало отхода
+## после укуса и поворот в отходе). Выше 40 логика хода не даёт — скачок позы (телепорт, сбой шага).
+const JERK_CORE_LIMIT := 40.0
 const LAMP_ENERGY := 3.0
 const LAMP_RANGE := 90.0
 const LAMP_NAME := "Свет тестера"
