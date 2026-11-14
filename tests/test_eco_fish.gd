@@ -873,6 +873,84 @@ func test_zap_at_01_sends_pred_off_and_crown_returns() -> void:
 	eq(zap, 1, "строка разряда — одна")
 
 
+## Сцена 00→01, разбор (р): тест выше строит `EcoPred.new()` без стай, как отдельную проверку разряда. В игре
+## (`EcoView`) хищник видит все стаи — `EcoPred.new(fish)`. Если оставить ему одну крону (`_only`), сытость кончается,
+## а вся добыча спрятана в чаше и внутри REEF_KEEP: голодный патруль водит его по краю рифа (36–40 м от оси, внутри
+## CROWN_ALARM), и крона прячется снова — это следствие пустого мира, не сцены. В полном мире после разряда он уходит
+## и охотится на стаи вне рифа: крона спокойна, на кольце, строки кроны нет — так и закреплено. Мутация: разряд
+## на хищника не действует (`on_zap` сразу `return`) — тревога кроны спадает только через 22,7 с.
+func test_zap_at_01_in_full_world_pred_hunts_away_crown_stays() -> void:
+	var w := _world()
+	var fish := _fish(w)
+	w.add(EcoFlower.new())
+	var preds := w.add(EcoPred.new(fish)) as EcoPred  # как в EcoView: хищник видит все стаи
+	preds.alert = EcoPred.ALERT_ON
+	var sh := fish.shoals[6]
+	ok(sh.crown, "стая 6 — у кроны")
+	var pr := preds.all[0]
+	for other in preds.all.slice(1):
+		other.agent.p = Vector3(-400, -30, 400)
+		other.agent.goal = other.agent.p
+	var stand := Vector2(33.0, -22.0)
+	w.ship.pos = Vector3(stand.x, Seabed.height(stand.x, stand.y) + 7.0, stand.y)
+	w.ship.speed = 0.0
+	w.ship.light_on = true
+	w.ship.light_range = 40.0
+	pr.agent.p = Vector3(-300, -30, -300)
+	pr.agent.goal = pr.agent.p
+	w.run(5.0)
+	var out := Vector3(stand.x - sh.axis.x, 0, stand.y - sh.axis.z).normalized()
+	pr.hunger = 0.0
+	pr.cooldown = 30.0
+	pr.agent.p = w.ship.pos + out * 12.0
+	pr.agent.goal = pr.agent.p
+	pr.agent.timer = 60.0
+	w.step(0.05)
+	w.run(6.0)
+	ok(sh.alarm > 0.0, "хищник у рифа — крона в тревоге")
+	var crown_lines := func() -> int:
+		var n := 0
+		for ev in w.bus.pending:
+			if ev.note == "flee" and _flat(ev.pos, sh.axis) < EcoFish.CROWN_RING.y + 6.0:
+				n += 1
+		return n
+	var lines0: int = crown_lines.call()
+	ok(lines0 >= 1, "строка кроны есть: %d" % lines0)
+
+	w.ship.zap = true
+	w.step(0.05)
+	w.ship.zap = false
+	var calm_at := -1.0
+	var nearest := INF
+	var back := 0
+	var hungry := 0.0  # самый сильный голод за минуту: голодный хищник выбирал, кого ловить
+	var t := 0.0
+	while t < 60.0:
+		w.step(0.05)
+		t += 0.05
+		hungry = maxf(hungry, pr.hunger)
+		if calm_at < 0.0 and sh.alarm <= 0.0:
+			calm_at = t
+		if calm_at >= 0.0:
+			nearest = minf(nearest, _flat(pr.agent.p, sh.axis))
+			if sh.alarm > 0.0:
+				back += 1
+	var ring := 0
+	for f: EcoFish.Fish in sh.members:
+		if _flat(f.agent.p, sh.axis) > EcoFlower.SPREAD:
+			ring += 1
+	var r := _flat(sh.center, sh.axis)
+	print("    полный мир: тревога кроны спала через %.2f с, хищник потом не ближе %.1f м к оси, голод до %.2f, на кольце %d из %d, центр %.1f м" % [
+		calm_at, nearest, hungry, ring, sh.members.size(), r])
+	ok(calm_at > 0.0 and calm_at < 12.0, "тревога спала: %.2f с" % calm_at)
+	ok(hungry > EcoPred.HUNT_HUNGER, "проверка не пустая: хищник был голоден (%.2f) и выбирал добычу" % hungry)
+	ok(nearest > EcoFish.CROWN_ALARM, "минуту не возвращается в тревогу кроны: %.1f м" % nearest)
+	eq(back, 0, "крона не прячется снова")
+	ok(ring >= sh.members.size() - 2, "снаружи кроны: %d из %d" % [ring, sh.members.size()])
+	ok(r > EcoFish.CROWN_RING.x - 3.0 and r < EcoFish.CROWN_RING.y + 3.0, "центр — на кольце: %.1f м" % r)
+	eq(crown_lines.call(), lines0, "новой строки кроны нет")
+
+
 ## Сцена 00→01 (решение ГД 08.11, `docs/urovni/sloj-1.md`): у цветка угроза читается последствием, а не потерей —
 ## голодный серпохвост ходит у края рифа рядом со стоянкой (33; −22), но рыбок кроны не берёт: на кольце они внутри
 ## REEF_KEEP (кольцо 15–19 м от оси, риф — 32 м), в тревоге — в чаше. Он уходит за край тревоги кроны и
