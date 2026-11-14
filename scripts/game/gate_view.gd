@@ -21,6 +21,7 @@ var model: Node3D
 var petals: Array[MeshInstance3D] = []   ## створки гнёзд по номерам `GateDiag.NESTS`
 var plate: MeshInstance3D                ## табличка диагностики
 var mats: Array[ShaderMaterial] = []
+var petal_mat: ShaderMaterial          ## минерал створок — темнее опоры (#1757)
 var lite := false
 var _by_name := {}   ## имя материала модели → наш материал (один на все LOD)
 
@@ -43,6 +44,14 @@ func _init() -> void:
 	for n in PETALS:
 		petals.append(model.get_node(n) as MeshInstance3D)
 	plate = model.get_node(PLATE) as MeshInstance3D
+	# Створки — свой материал: тот же минерал, тон темнее опоры (`GateArch.PETAL_TONE…`, #1757).
+	petal_mat = (petals[0].get_surface_override_material(0) as ShaderMaterial).duplicate()
+	petal_mat.set_shader_parameter("tone", GateArch.PETAL_TONE)
+	petal_mat.set_shader_parameter("tone_in", GateArch.PETAL_TONE_IN)
+	petal_mat.set_shader_parameter("rough", GateArch.PETAL_ROUGH)
+	mats.append(petal_mat)
+	for mi in petals:
+		mi.set_surface_override_material(0, petal_mat)
 	for mi: MeshInstance3D in petals + [plate]:
 		mi.visibility_range_end = GateArch.DETAIL_END
 	set_lite(false)
