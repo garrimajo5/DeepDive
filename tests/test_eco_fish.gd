@@ -455,6 +455,97 @@ func test_parked_at_01_crown_keeps_ring_in_current() -> void:
 	eq(w.bus.pending.size(), 0, "минута — без строки")
 
 
+## Сцена 00→01 (решение ГД 08.11, `docs/urovni/sloj-1.md`, кандидат (т)): течение отмели сменилось на стоянке у 01
+## (33; −22) со светом — EcoCurrent через PERIOD берёт следующее из DIRS и плавно (TURN_RATE) поворачивает. Веерник у
+## огнецвета (54,9; −68,7) — в 51 м, ближе TURN_R — разворачивается следом без рывка и шлёт одну строку «turn»;
+## колыхание (EcoCurrent.sway по vel) ложится по новому потоку. Стаи кроны течения не читают (у EcoFish его нет):
+## остаются на кольце CROWN_RING ± 3 м и не теряют сторону обхода — смена течения у 01 видна по флоре, а не по рыбам.
+func test_current_turn_at_01_turns_fans_crown_keeps_ring() -> void:
+	var w := EcoWorld.new(EcoRandom.WORLD_SEED)
+	w.ground = Seabed.height
+	var cur := w.add(EcoCurrent.new()) as EcoCurrent
+	var fans := w.add(EcoFan.new(cur)) as EcoFan
+	var fish := w.add(EcoFish.new()) as EcoFish
+	w.add(EcoFlower.new())
+	var stand := Vector2(33.0, -22.0)
+	w.ship.pos = Vector3(stand.x, Seabed.height(stand.x, stand.y) + 7.0, stand.y)
+	var to := EcoFlower.CENTER - stand
+	w.ship.yaw = atan2(-to.x, -to.y)  # нос — на крону
+	w.ship.speed = 0.0
+	w.ship.light_on = true
+	w.ship.light_range = 40.0
+	w.ship.hull_noise = 0.2
+	cur.timer = 2.0  # смена — через 2 с стоянки, а не через 180
+	var fan: EcoFan.Fan = null
+	for f in fans.fans:
+		if Vector2(f.pos.x, f.pos.z).distance_to(stand) < EcoFan.TURN_R and (fan == null
+				or Vector2(f.pos.x, f.pos.z).distance_to(stand) < Vector2(fan.pos.x, fan.pos.z).distance_to(stand)):
+			fan = f
+	ok(fan != null, "у стоянки 01 есть веерник ближе TURN_R")
+	if fan == null:
+		return
+	var fan_d := Vector2(fan.pos.x, fan.pos.z).distance_to(stand)
+	var crown: Array[EcoFish.Shoal] = []
+	for sh in fish.shoals:
+		if sh.crown:
+			crown.append(sh)
+	eq(crown.size(), EcoFish.CROWN_SHOALS, "стаи кроны")
+	var axis := crown[0].axis
+	var flow0 := cur.vel()
+	var yaw0 := fan.yaw
+	var r_min := INF
+	var r_max := 0.0
+	var turned: Array[float] = []
+	var last: Array[float] = []
+	for sh in crown:
+		turned.append(0.0)
+		last.append(atan2(sh.center.z - axis.z, sh.center.x - axis.x))
+	var fan_jump := 0.0
+	var flow_jump := 0.0
+	var prev := fan.yaw
+	var prev_flow := cur.angle
+	for s in 60 * 20:
+		w.step(0.05)
+		fan_jump = maxf(fan_jump, absf(wrapf(fan.yaw - prev, -PI, PI)))
+		flow_jump = maxf(flow_jump, absf(wrapf(cur.angle - prev_flow, -PI, PI)))
+		prev = fan.yaw
+		prev_flow = cur.angle
+		if s % 10 != 9:
+			continue
+		for i in crown.size():
+			var sh := crown[i]
+			var r := _flat(sh.center, axis)
+			r_min = minf(r_min, r)
+			r_max = maxf(r_max, r)
+			var a := atan2(sh.center.z - axis.z, sh.center.x - axis.x)
+			turned[i] += wrapf(a - last[i], -PI, PI)
+			last[i] = a
+	var flow1 := cur.vel()
+	var fan_turn := absf(wrapf(fan.yaw - yaw0, -PI, PI))
+	var fan_off := absf(wrapf(EcoFan.aim(fan, cur.angle) - fan.yaw, -PI, PI))
+	var turn_lines := 0
+	for e in w.bus.pending:
+		if e.species == EcoFan.ID and e.note == "turn":
+			turn_lines += 1
+	print("    смена течения у 01: поток повернул на %.2f рад, веерник в %.0f м — на %.2f рад (до цели %.3f, шаг не больше %.4f при шаге потока %.4f), центр кроны %.1f–%.1f м, обход %.2f / %.2f рад, строк «turn» %d" % [
+		flow0.angle_to(flow1), fan_d, fan_turn, fan_off, fan_jump, flow_jump, r_min, r_max, turned[0], turned[1], turn_lines])
+	eq(cur.turns, 1, "течение сменилось один раз")
+	ok(flow0.angle_to(flow1) > 1.0, "поток повернул заметно: %.2f рад" % flow0.angle_to(flow1))
+	ok(fan_turn > 1.0, "веерник развернулся следом: %.2f рад" % fan_turn)
+	ok(fan_off < 0.1, "веерник встал поперёк нового потока: до цели %.3f рад" % fan_off)
+	ok(fan_jump < 0.8 * flow_jump, "веерник медленно идёт следом, не рывком за потоком: шаг %.4f при %.4f рад" % [
+		fan_jump, flow_jump])
+	eq(turn_lines, 1, "одна строка «разворачивается следом за течением»")
+	var sway0 := EcoCurrent.sway(fan.pos, 1.0, EcoFan.HEIGHT, 0.0, flow0, Vector3(0.3, 0.0, 0.0))
+	var sway1 := EcoCurrent.sway(fan.pos, 1.0, EcoFan.HEIGHT, 0.0, flow1, Vector3(0.3, 0.0, 0.0))
+	ok(Vector2(sway1.x, sway1.z).normalized().dot(Vector2(flow1.x, flow1.z).normalized()) > 0.99
+			and Vector2(sway0.x, sway0.z).angle_to(Vector2(sway1.x, sway1.z)) != 0.0, "колыхание легло по новому потоку")
+	ok(r_min > EcoFish.CROWN_RING.x - 3.0, "крону с кольца внутрь не сносит: %.1f м" % r_min)
+	ok(r_max < EcoFish.CROWN_RING.y + 3.0, "крону с кольца наружу не сносит: %.1f м" % r_max)
+	for i in crown.size():
+		ok(turned[i] * crown[i].turn > 0.5, "стая %d кружит в свою сторону и после смены: %.2f рад" % [i, turned[i]])
+
+
 ## Сцена 00→01 (решение ГД 08.11, `docs/urovni/sloj-1.md`): хищник ходит у границы CROWN_ALARM — то в 45 м от оси
 ## кроны, то в 55 м. Строка о бегстве — не чаще FLEE_COOLDOWN (без перерыва тревоги — одна), а стая не мечется между чашей и кольцом: короткий
 ## выход за границу (2 с) тревогу не снимает, длинный (8 с) снимает, но переключения не чаще удержания тревоги (3 с).
