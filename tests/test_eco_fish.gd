@@ -951,6 +951,31 @@ func test_flee_message_reaches_ship_nearby() -> void:
 	eq(link[0]["text"], "Мелкая рыба: стая уходит в кораллы — рядом хищник")
 
 
+## Сцена 00→01, п. 2 (у) dev-b.md: строка бегства стаи рифа и стаи кроны у 01 собирается, когда корабль забирает
+## события (`take_link` → `EcoBus.Event.text()`), а не когда стая испугалась: вид изучен сканером между событием и
+## показом — на приборах уже настоящее имя. Без мира (`w` = null в замыкании) — описательное. Без Main.
+func test_flee_text_names_fish_scanned_after_event() -> void:
+	for k in [0, EcoFish.HOMES.size()]:  # стая рифа и первая стая кроны (после HOMES)
+		var w := _world()
+		var known := [false]
+		w.scanned = func(sp: String) -> bool: return known[0] and sp == "fish"
+		var sh := _fish(w).shoals[k]
+		eq(sh.crown, k > 0, "стая %d — %s" % [k, "крона" if k > 0 else "риф"])
+		w.ship.pos = sh.home + Vector3(0, 10, 40)
+		w.spawn("pred", sh.center + Vector3(4, 0, 0))
+		w.step(0.05)
+		var pending := w.bus.pending.filter(func(e: EcoBus.Event) -> bool: return e.note == "flee")
+		eq(pending.size(), 1, "стая %d испугалась — событие в очереди, корабль его ещё не забрал" % k)
+		known[0] = true  # биолог изучил вид, пока строка не показана
+		var link := w.take_link()
+		eq(link.size(), 1)
+		var text: String = link[0]["text"]
+		print("  стая %d: «%s»" % [k, text])
+		ok(text.begins_with(Species.cap(Species.called("fish", Species.Case.NOM, true)) + ":"),
+				"имя — изученное, на момент показа")
+		ok(not text.contains(Species.cap(Species.called("fish", Species.Case.NOM, false))), "описательного имени нет")
+
+
 # ---------- Вид рыбки (EcoFishLook) ----------
 
 func _find(x: float, y: float, z: float) -> int:
