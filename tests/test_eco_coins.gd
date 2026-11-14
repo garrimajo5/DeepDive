@@ -232,6 +232,93 @@ func _grab_in(w: EcoWorld, k: int) -> void:
 	w.step(0.02)
 
 
+## Строка засады глазуна в тёмной стоянке у 00 — на приборах в игре (#1400, п. 2 (ё), с Main): по расчёту (я)
+## (PR #1881) засада, услышанная у 00 до света (8–18 с), открывает эпизод ONCE — строка уже на приборах до света,
+## а первая засада после света (раньше ONCE_GAP) идёт без текста: на приборах её нет, наблюдение в журнале остаётся.
+## Засады — свои у живого мира в Main; нет за отведённое время — вызвана подсадкой монетника над глазуном.
+func test_dark_stay_ambush_line_then_silent_after_light() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	var w: EcoWorld = main.eco.world
+	var c: EcoCoins = null
+	for s in w.systems:
+		if s is EcoCoins:
+			c = s
+	ok(c != null, "монетники в мире игры")
+	if c == null:
+		main.queue_free()
+		return
+	main.light_on = false
+	var k := 0
+	for i in c.schools.size():
+		if c.schools[i].glazun.pos.distance_to(main.helm.pos) < c.schools[k].glazun.pos.distance_to(main.helm.pos):
+			k = i
+	ok(c.schools[k].glazun.pos.distance_to(main.helm.pos) < EcoBus.HEARING - 10.0, "у 00 глазун слышен")
+	var line := "Из песка что-то схватило круглую рыбку"
+	var key := EcoCoins.GLAZUN + ":ambush"
+	var shows := func() -> bool: return main.message.text == line or main.message.next == line
+	# тёмная стоянка 30 с: первая услышанная засада — со строкой
+	var dark := -1.0
+	var t := 0.0
+	while t < 30.0 and dark < 0.0:
+		main.step(0.1)
+		t += 0.1
+		if shows.call():
+			dark = t
+	if dark < 0.0:
+		_force_ambush(main, c, k)
+		dark = t
+		if not shows.call():
+			dark = -1.0
+	print("    строка засады в темноте на %.1f с" % dark)
+	ok(dark >= 0.0, "до света строка засады на приборах")
+	eq(main.scanner.seen_of(EcoCoins.GLAZUN), ["ambush"] as Array[String], "засада в журнале")
+	ok(not main.light_on, "всё это — до света")
+	# свет; ждём, пока строка сойдёт, и следующую услышанную засаду (не дольше ONCE_GAP от прошлой)
+	main.toggle_light()
+	ok(main.light_on, "свет включён")
+	var was: float = w._heard[key]
+	var again := false
+	var said := false
+	var lit := 0.0
+	while lit < 40.0 and not again:
+		main.step(0.1)
+		lit += 0.1
+		if lit > Status.MESSAGE_SECONDS + 1.5:
+			said = said or shows.call()
+		again = float(w._heard[key]) > was
+	if not again:
+		while shows.call():
+			main.step(0.1)
+		_force_ambush(main, c, k)
+		again = float(w._heard[key]) > was
+	var gap := float(w._heard[key]) - was
+	print("    засада после света: через %.1f с после прошлой" % gap)
+	ok(again, "засада после света услышана")
+	ok(gap < EcoWorld.ONCE_GAP, "в том же эпизоде")
+	for i in 20:
+		main.step(0.1)
+		said = said or shows.call()
+	ok(not said, "после света засада — без строки на приборах")
+	eq(main.scanner.seen_of(EcoCoins.GLAZUN), ["ambush"] as Array[String], "журнал наблюдений тот же")
+	main.queue_free()
+	await frames(1)
+
+
+## Засада глазуна k в мире игры: монетник над ним, глазун готов, один шаг Main.
+func _force_ambush(main: Main, c: EcoCoins, k: int) -> void:
+	var sc := c.schools[k]
+	sc.glazun.cd = 0.0
+	for cn in sc.members:
+		if cn.alive:
+			cn.pos = sc.glazun.pos + Vector3(0.3, 1.0, 0)
+			cn.goal = cn.pos
+			cn.goal_t = 10.0
+			break
+	main.step(0.05)
+
+
 ## Бросок из песка — за EcoCoins.RISE, а не за кадр: высота тела за кадр меняется не больше наклона smoothstep, тело
 ## доходит до 0,35 м и опадает вместе с lunge (раньше 0 → 0,35 м и 0,4 рад за один шаг, tools/jerk.gd).
 func test_glazun_lunge_rises_without_snap() -> void:
