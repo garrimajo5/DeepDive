@@ -5,6 +5,11 @@ extends Node3D
 
 const LAYER_WORLD := 1   ## слой отмели: её освещает свет сквозь лёд
 const LAYER_SHIP := 2    ## слой корабля изнутри: только свои лампы
+## Отмель без тени прожектора: свет тот же, что у слоя 1 (сквозь лёд — с тенью, прожектор, разряд), но в карту теней
+## прожектора не идёт. Для двусторонних сеток (арка 07 MOD-023): в луче они затеняли сами себя рваными чёрными
+## треугольниками — сдвиг тени по нормали у изнанки грани уводит точку под поверхность (#1757, кадр `37`).
+const LAYER_NOBEAM := 4
+const LIT_WORLD := LAYER_WORLD | LAYER_NOBEAM   ## маска света отмели: оба слоя
 
 var seabed: MeshInstance3D
 var seabed_mat: ShaderMaterial   # материал дна: каустики и свет по глубине задаём отсюда
@@ -109,14 +114,14 @@ func _ready() -> void:
 	sun.name = "Свет сквозь лёд"
 	sun.rotation_degrees = Vector3(-70, 20, 0)
 	sun.light_color = Color("9AD9E8")
-	sun.light_cull_mask = LAYER_WORLD
+	sun.light_cull_mask = LIT_WORLD
 	# Тени на отмели (Forward Mobile): существа и флора ложатся тенью на дно — глубина и вес.
 	sun.shadow_enabled = true
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS   # 2 каскада — дешевле для телефона
 	sun.directional_shadow_max_distance = 110.0   # за туманом тени не нужны
 	sun.light_angular_distance = 1.5              # мягкие края — рассеянный свет сквозь лёд
 	sun.shadow_blur = 1.3
-	sun.shadow_caster_mask = LAYER_WORLD   # мостик и отсеки изнутри (слой 2) тень на дно не кладут (отчёт #945)
+	sun.shadow_caster_mask = LIT_WORLD   # мостик и отсеки изнутри (слой 2) тень на дно не кладут (отчёт #945)
 	add_child(sun)
 
 	far_wall = _make_far_wall()

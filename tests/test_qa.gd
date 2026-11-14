@@ -591,6 +591,37 @@ func test_shot_logs_rows() -> void:
 	await frames(1)
 
 
+func test_petal_note() -> void:   # #1757: створка гнезда 07 в строке снимка числом
+	eq(QaRunner.petal_note(0, 0.0), " · створка гнезда 1: закрыта", "закрыта")
+	eq(QaRunner.petal_note(0, 1.0), " · створка гнезда 1: открыта (90°)", "открыта")
+	eq(QaRunner.petal_note(2, 0.5), " · створка гнезда 3: поднята на 45° из 90°", "в пути — угол")
+	eq(QaRunner.petal_note(0, 0.999), " · створка гнезда 1: открыта (90°)", "почти — открыта")
+	eq(QaRunner.petal_note(0, 0.004), " · створка гнезда 1: закрыта", "меньше полградуса — закрыта")
+
+
+## #1757 (тестер 13.11 22:22): поднятую створку на `37`/`37a` с 26 м не различить — строка снимка у арки 07 несёт её
+## угол с узла модели; вдали от арки строки нет, строки приборов остаются в конце.
+func test_shot_logs_petal_at_gate() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var qa := main.start_qa('[{"do": "wait", "s": 60}]')
+	main.step(1.0 / 30.0)
+	ok(not "створка" in qa.state(true), "вдали от арки — без створки: " + qa.state(true))
+	main.helm.pos = Vector3(EcoGate.CENTER.x + 12.0, -58.0, EcoGate.CENTER.y + 30.0)
+	main.gate_view.set_petal(EcoDome.NEST, 0.0)
+	ok("створка гнезда 1: закрыта" in qa.state(true), "у арки — закрыта: " + qa.state(true))
+	ok(not "створка" in qa.state(), "заметка без снимка — без створки")
+	main.gate_view.set_petal(EcoDome.NEST, 0.4)
+	ok("створка гнезда 1: поднята на 36° из 90°" in qa.state(true), "подъём — углом узла модели: " + qa.state(true))
+	main.lore.learn(LayerLore.PETAL07)
+	main.gate_petal()
+	ok("створка гнезда 1: открыта (90°)" in qa.state(true), "открыта в кампании: " + qa.state(true))
+	ok(qa.state(true).ends_with(qa.rows_now()), "строки приборов — по-прежнему в конце")
+	main.queue_free()
+	await frames(1)
+
+
 func test_brief_logs_world_line() -> void:   # #1429: в логе видно, пришла строка мира до плашки или под ней
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
@@ -1246,6 +1277,31 @@ static func _before_shot(name: String) -> Array:
 	return []
 
 
+## #1757 (уровни и ГД, 13.11 23:35/23:42): кадр гнезда и купольника из достижимого места — без тестового полёта,
+## глазами у носового окна. Корабль шага `ship` стоит законно: выше нижнего предела хода всем днищем, корпус по всей
+## длине вне арки, нос — на гнездо купольника; корабль на 12 м ближе к гнезду, чем в `37` (там глаз вынесен за нос полётом).
+func test_gate_window_shot_is_reachable() -> void:
+	var b := _before_shot("37b-okno-gnezdo")
+	ok(not b.is_empty() and not b[0].is_empty(), "снимок гнезда из носового окна есть в сценарии")
+	if b.is_empty() or b[0].is_empty():
+		return
+	ok(b[1].is_empty(), "без тестового полёта: глаз игрока на палубе")
+	var pos := Vector3(float(b[0]["x"]), float(b[0]["y"]), float(b[0]["z"]))
+	var yaw := deg_to_rad(float(b[0]["yaw"]))
+	var h := Helm.Ship.new()
+	h.ground = func(x: float, z: float) -> float: return Seabed.height(x, z)
+	var low: float = h.floor_at(pos, yaw)
+	ok(pos.y >= low + 0.5, "корабль выше нижнего предела хода с запасом: %.1f при пределе %.1f" % [pos.y, low])
+	ok(not GateArch.hits(pos, yaw), "корпус по всей длине вне опор и плеч арки")
+	var n := GateDiag.nest_pos(EcoDome.NEST)
+	var to := Vector2(n.x - pos.x, n.z - pos.z)
+	var fwd := Vector2(-sin(yaw), -cos(yaw))
+	ok(fwd.dot(to.normalized()) > cos(deg_to_rad(3.0)), "нос — на гнездо купольника")
+	ok(to.length() < 30.0, "гнездо ближе 30 м от центра корабля: %.1f" % to.length())
+	var was := _before_shot("37-kupolnik-stvorka")
+	ok(to.length() < Vector2(n.x - float(was[0]["x"]), n.z - float(was[0]["z"])).length() - 10.0, "ближе, чем корабль кадра 37")
+
+
 func test_slope_shots_edge_and_rocks() -> void:   # отчёт #1182: склон 06→10 (#832) сценарий не проходил — нечего проверить
 	var edge := _before_shot("34e-kraj-06")
 	ok(not edge.is_empty() and not edge[1].is_empty(), "снимок Края отмели 06 из-под днища")
@@ -1319,7 +1375,7 @@ func test_outside_lamp() -> void:
 	var lamp := main.flyby_cam.get_node_or_null(QaRunner.LAMP_NAME) as OmniLight3D
 	ok(lamp != null, "у камеры с борта — свет тестера")
 	if lamp:
-		eq(lamp.light_cull_mask, OceanView.LAYER_WORLD, "светит корпус и дно, не мостик")
+		eq(lamp.light_cull_mask, OceanView.LIT_WORLD, "светит корпус и дно, не мостик")
 		ok(lamp.omni_range >= 60.0, "дотягивается от камеры над кормой до носа и грунта: %.0f м" % lamp.omni_range)
 	main.start_qa('[{"do": "outside", "on": false}, {"do": "wait", "s": 0.2}]')
 	for i in 3:

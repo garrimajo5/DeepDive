@@ -15,11 +15,27 @@ extends EcoSystem
 const ID := "dome"
 ## Ниша (x, z) — смещение от середины террасы `EcoGate.CENTER`: за правой опорой, к северо-востоку, вне прохода.
 const HOME_OFF := Vector2(70.0, -40.0)
-## Гнездо, которое открывает (номер в `GateDiag.NESTS`), и где встаёт: перед ним с подхода (+Z) на FRONT м,
-## на AT_NEST м над дном (купол 1,2 м — захват на уровне гнезда).
+## Путь ниша → гнездо (смещения от `EcoGate.CENTER`, #1757): гнёзда на полу кармана перед правой опорой
+## (`Seabed.Layer.nest_pocket`), прямая из ниши шла сквозь опору (`GateArch.SHAPE`) и восточную рощу `EcoGate.KELP`.
+## Обход: с запада от рощи, вдоль восточного края основания опоры (x 60) — вниз по северному склону кармана, к гнезду
+## по полу с подхода (+Z). Точку пути проходит, не останавливаясь, ближе WAY_R; назад — тем же путём в обратном
+## порядке. Последняя точка — перед лицом опоры: гнездо на любом месте лица (dz +11,5…13) достижимо по полу. После
+## неё — подход к месту у гнезда с +Z (`APPROACH` м перед ним): к гнезду не сбоку по склону, а прямо, на уровне.
+## Назад от гнезда — сразу к последней точке WAY, без подхода (не разворачивается на месте кругом).
+const WAY: Array[Vector2] = [Vector2(52.0, -28.0), Vector2(63.0, -4.0), Vector2(63.0, 20.0)]
+const WAY_R := 3.0
+const APPROACH := 10.0
+## Гнездо, которое открывает (номер в `GateDiag.NESTS`), и где встаёт: перед ним с подхода (+Z) на FRONT м
+## (передние концы захватов — у лица опоры, не в нём). Высота стоянки — по гнезду модели (#1757): подушки среднего
+## захвата (`GRIP_Y` над низом модели в позе `Idle`, `GRIP_AHEAD` м впереди, замер ANIM-004) — у нижней кромки
+## створки, `PETAL_LOW` м ниже середины гнезда (створка 1,5 м). В `OpenPetal` подушки поднимаются на 0,59 м и
+## толкают кромку вверх. Не ниже AT_NEST/2 над дном. AT_NEST — высота над дном в нише и у дна вообще.
 const NEST := 0
 const FRONT := 1.6
 const AT_NEST := 0.9
+const GRIP_Y := 0.28
+const GRIP_AHEAD := 1.04
+const PETAL_LOW := 0.75
 ## Корабль ближе этого к середине террасы (м по горизонтали) — купольник выходит.
 const CALL_R := 80.0
 ## Ход, м/с: к гнезду и обратно; поворот — рад/с (разница клапанов сифонов).
@@ -72,6 +88,7 @@ var opened := false        ## створка открыта (раз за сло�
 var just_opened := false   ## открылась в этот шаг
 var glow := GLOW_REST
 var t := 0.0               ## время в состоянии, с
+var leg := 0               ## следующая точка пути `point` (к гнезду — вверх по номеру, назад — вниз)
 var _pulse := -INF         ## время мира начала импульса
 var ground: Callable
 
@@ -86,10 +103,11 @@ func reset(world: EcoWorld) -> void:
 	_pulse = -INF
 	speed = 0.0
 	turn_v = 0.0
+	leg = 0
 	var h := home()
 	pos = Vector3(h.x, floor_y(h.x, h.y) + AT_NEST, h.y)
-	var s := stand()
-	yaw = _yaw_to(Vector2(s.x - pos.x, s.z - pos.z))
+	var w := way(0)
+	yaw = _yaw_to(Vector2(w.x - pos.x, w.y - pos.z))
 
 
 ## Ниша на карте (x, z).
@@ -97,25 +115,48 @@ static func home() -> Vector2:
 	return EcoGate.CENTER + HOME_OFF
 
 
-## Где стоит у гнезда: перед ним с подхода, над дном.
+## Точка пути i на карте (x, z).
+static func way(i: int) -> Vector2:
+	return EcoGate.CENTER + WAY[i]
+
+
+## Точка пути i (x, z): 0…WAY.size() − 1 — `WAY`, WAY.size() — подход к гнезду.
+func point(i: int) -> Vector2:
+	if i < WAY.size():
+		return way(i)
+	var s := stand()
+	return Vector2(s.x, s.z + APPROACH)
+
+
+## Весь путь к гнезду на карте: ниша, точки пути, место у гнезда (x, z); назад — без подхода `APPROACH`.
+func route() -> Array[Vector2]:
+	var out: Array[Vector2] = [home()]
+	for i in WAY.size() + 1:
+		out.append(point(i))
+	var s := stand()
+	out.append(Vector2(s.x, s.z))
+	return out
+
+
+## Где стоит у гнезда: перед ним с подхода, подушки захвата — у нижней кромки створки (не ниже AT_NEST/2 над дном).
 func stand() -> Vector3:
 	var n := GateDiag.nest_pos(NEST)
 	var x := n.x
 	var z := n.z + FRONT
-	return Vector3(x, floor_y(x, z) + AT_NEST, z)
+	return Vector3(x, maxf(n.y - PETAL_LOW - GRIP_Y, floor_y(x, z) + AT_NEST * 0.5), z)
 
 
 func floor_y(x: float, z: float) -> float:
 	return float(ground.call(x, z)) if ground.is_valid() else Seabed.height(x, z)
 
 
-## Клип для вида: Idle, Swim или OpenPetal.
+## Клип для вида: Idle, Swim или OpenPetal. Разворот на месте — тоже сифонами (Swim).
 func clip() -> String:
 	match state:
 		State.OPEN:
 			return "OpenPetal"
 		State.GO, State.BACK:
-			return "Swim" if speed > 0.05 else "Idle"
+			return "Swim" if speed > 0.05 or absf(turn_v) > 0.1 else "Idle"
 	return "Idle"
 
 
@@ -135,7 +176,10 @@ func step(world: EcoWorld, dt: float) -> void:
 			if Vector2(sp.x, sp.z).distance_to(EcoGate.CENTER) < CALL_R:
 				_go(State.GO, world)
 		State.GO:
-			if _swim(stand(), SWIM, sp, dt):
+			if leg <= WAY.size():
+				if _pass(leg, SWIM, sp, dt):
+					leg += 1
+			elif _swim(stand(), SWIM, sp, dt):
 				_go(State.OPEN, world)
 		State.OPEN:
 			speed = 0.0
@@ -150,7 +194,10 @@ func step(world: EcoWorld, dt: float) -> void:
 				_go(State.BACK, world)
 		State.BACK:
 			var h := home()
-			if _swim(Vector3(h.x, floor_y(h.x, h.y) + AT_NEST, h.y), LEAVE, sp, dt):
+			if leg >= 0:
+				if _pass(leg, LEAVE, sp, dt):
+					leg -= 1
+			elif _swim(Vector3(h.x, floor_y(h.x, h.y) + AT_NEST, h.y), LEAVE, sp, dt):
 				_go(State.GONE, world)
 				speed = 0.0
 	if state != State.GONE:
@@ -228,12 +275,30 @@ func _done() -> void:
 func _go(s: State, world: EcoWorld) -> void:
 	state = s
 	t = 0.0
+	leg = WAY.size() - 1 if s == State.BACK else 0
 	if s == State.GO:
 		_pulse = world.time   # команда Хранителя — выход к гнезду
 
 
-## Шаг пути к цели: поворот носом к ней, ход только почти носом вперёд, высота — над дном (последние DESCEND м —
-## к высоте цели). Корабль
+## Шаг к точке пути i — на высоте хода над дном; true — прошёл (ближе WAY_R по горизонтали).
+func _pass(i: int, top: float, ship: Vector3, dt: float) -> bool:
+	var w := point(i)
+	if Vector2(pos.x, pos.z).distance_to(w) < WAY_R:
+		return true
+	_swim(Vector3(w.x, floor_y(w.x, w.y) + CRUISE, w.y), top, ship, dt)
+	return false
+
+
+## Дно впереди по ходу, м: высоту пути держит над самым высоким из них — подъём по склону кармана (0,95 м/м)
+## начинает заранее, вертикаль (0,6 хода) успевает без упора в дно (#1757).
+const LOOK: Array[float] = [3.0, 6.0, 9.0]
+## Запас над дном в LOOK[0] м впереди, меньше которого ход тише (доля запаса, не меньше SLOW_MIN): от гнезда вверх
+## по склону сперва поднимается, потом идёт — за шаг не дальше хода (`test_no_jump_at_nest`).
+const CLIMB_GAP := 1.0
+
+
+## Шаг пути к цели: поворот носом к ней, ход только почти носом вперёд, высота — над дном впереди (`LOOK`; последние
+## DESCEND м — к высоте цели), не ниже AT_NEST/2 над дном. Корабль
 ## ближе KEEP — стоит. true — пришёл.
 func _swim(goal: Vector3, top: float, ship: Vector3, dt: float) -> bool:
 	var d := Vector2(goal.x - pos.x, goal.z - pos.z)
@@ -248,13 +313,23 @@ func _swim(goal: Vector3, top: float, ship: Vector3, dt: float) -> bool:
 	var face := cos(wrapf(want - yaw, -PI, PI))
 	var blocked := pos.distance_to(ship) < KEEP
 	var want_v := want_speed(top, face, dist, blocked)
+	if dist >= DESCEND and dist > LOOK[0]:   # дно впереди выше, чем успевает подняться, — сначала вверх, потом вперёд
+		var ahead := floor_y(pos.x + d.x / dist * LOOK[0], pos.z + d.y / dist * LOOK[0])
+		want_v *= clampf((pos.y - ahead - AT_NEST * 0.5) / CLIMB_GAP, SLOW_MIN, 1.0)
 	speed = move_toward(speed, want_v, (ACCEL if want_v > speed else BRAKE) * dt)
 	var go := minf(speed * dt, dist)
 	if dist > 1e-4:
 		pos.x += d.x / dist * go
 		pos.z += d.y / dist * go
-	var low := goal.y if dist < DESCEND else floor_y(pos.x, pos.z) + CRUISE
-	pos.y = move_toward(pos.y, maxf(low, floor_y(pos.x, pos.z) + AT_NEST * 0.5), top * 0.6 * dt if not blocked else 0.0)
+	var low := goal.y
+	if dist >= DESCEND:
+		var top_floor := floor_y(pos.x, pos.z)
+		for k in LOOK:
+			if k < dist:
+				top_floor = maxf(top_floor, floor_y(pos.x + d.x / dist * k, pos.z + d.y / dist * k))
+		low = top_floor + CRUISE
+	var bottom := floor_y(pos.x, pos.z) + AT_NEST * 0.5
+	pos.y = maxf(move_toward(pos.y, maxf(low, bottom), top * 0.6 * dt if not blocked else 0.0), bottom)
 	return false
 
 

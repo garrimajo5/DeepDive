@@ -62,3 +62,45 @@ func test_smooth_wave_is_in_norm() -> void:
 	var line := QaRunner.jerk_line(0, 3.0, false, pts.size(), QaRunner.accel(pts, dts), [] as Array[float], 24.0, 27.0)
 	ok(line.contains("хвост в норме"), line)
 	ok(line.contains("скелет полный"), line)
+
+
+## Центр тела (#1350, 13.11: 18 → 29 → 33 за три прогона) — своя норма, тестер отличает рост от разброса.
+func test_core_turn_at_full_speed_is_in_norm() -> void:
+	# поворот на полном ходу броска — предел логики хода: 9,5 м/с × 3 рад/с = 28,5 м/с²
+	var pts: Array[Vector3] = []
+	var dts: Array[float] = []
+	var r := EcoPred.CHARGE_SPEED / EcoPred.SWIM_TURN_SHARP
+	for i in 90:
+		var a := (i * 0.04) * EcoPred.SWIM_TURN_SHARP   # кадры по 40 мс — 25 кадр/с телефона
+		pts.append(Vector3(r * cos(a), 0.0, r * sin(a)))
+		dts.append(0.04)
+	var line := QaRunner.jerk_line(0, 3.0, false, pts.size(), [] as Array[float], QaRunner.accel(pts, dts), 24.0, 27.0)
+	print("  поворот на полном ходу: %s" % line)
+	ok(line.contains("центр в норме (≤ 40)"), line)
+	ok(line.contains("центр тела 99 % 28 (макс 28)"), "по хорде кадра — чуть меньше 28,5: %s" % line)
+
+
+func test_core_pose_jump_is_a_jerk() -> void:
+	# ход 6 м/с, на одном кадре тело перескакивает на 0,5 м (сбой шага) — центр «РЫВОК», хвост не судит его
+	var pts: Array[Vector3] = []
+	var dts: Array[float] = []
+	var x := 0.0
+	for i in 90:
+		x += 6.0 / 30.0 + (0.5 if i == 45 else 0.0)
+		pts.append(Vector3(x, 0.0, 0.0))
+		dts.append(1.0 / 30.0)
+	var line := QaRunner.jerk_line(0, 3.0, false, pts.size(), [] as Array[float], QaRunner.accel(pts, dts), 24.0, 27.0)
+	print("  скачок 0,5 м: %s" % line)
+	ok(line.contains("центр РЫВОК"), line)
+	ok(line.contains("хвост в норме"), "хвост без рядов — в норме: %s" % line)
+
+
+func test_core_limit_above_swim_bound() -> void:
+	# норма центра выше того, что даёт логика хода серпохвоста: поворот, разгон lerp-ом (agility броска 1,6) и подъём
+	# перед дном — вместе; поменяли скорость или поворот — норму пересчитать (`pred_jerk.gd`)
+	var turn := EcoPred.CHARGE_SPEED * EcoPred.SWIM_TURN_SHARP
+	var gain := 1.6 * EcoPred.CHARGE_SPEED
+	var bound := sqrt(turn * turn + gain * gain + EcoAgent.LOOK_ACCEL * EcoAgent.LOOK_ACCEL)
+	print("  предел логики хода %.1f м/с², норма центра %.0f" % [bound, QaRunner.JERK_CORE_LIMIT])
+	ok(bound < QaRunner.JERK_CORE_LIMIT, "предел %.1f < нормы %.0f" % [bound, QaRunner.JERK_CORE_LIMIT])
+	ok(QaRunner.JERK_CORE_LIMIT - bound < 10.0, "норма не слишком свободна: запас %.1f" % (QaRunner.JERK_CORE_LIMIT - bound))

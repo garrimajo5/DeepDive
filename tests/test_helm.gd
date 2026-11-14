@@ -78,6 +78,79 @@ func test_trapped_in_solid_moves_out() -> void:
 	ok(z < 0.0)
 
 
+## Твёрдая стена x > 5 для кормы (+29 м от точки хода): курс 0 — свободно, поворот влево заводит корму в стену.
+func _stern_wall(p: Vector3, yaw: float) -> bool:
+	return p.x + sin(yaw) * 29.0 > 5.0
+
+
+func test_turn_into_solid_is_held() -> void:
+	# #1847: разворот на месте проводил корму сквозь твёрдое — курс считался до проверки и не откатывался.
+	var s := Helm.Ship.new()
+	s.pos = Vector3.ZERO
+	s.solid = _stern_wall
+	s.in_turn = -1.0   # влево: yaw растёт, корма идёт к +X
+	var dt := 1.0 / 60.0
+	for i in 600:
+		s.update(dt)
+		if _stern_wall(s.pos, s.yaw):
+			ok(false, "корма вошла в твёрдое на %.2f с, курс %.2f" % [i * dt, s.yaw])
+			return
+	var edge := asin(5.0 / 29.0)
+	ok(s.yaw > edge - 0.02 and s.yaw <= edge, "довернул до стены и встал: курс %.3f, стена %.3f" % [s.yaw, edge])
+	eq(Vector2(s.pos.x, s.pos.z), Vector2.ZERO, "на месте")
+	s.in_turn = 1.0   # от стены — свободно
+	_run(s, 3.0)
+	ok(s.yaw < -0.3, "в другую сторону поворот идёт: %.2f" % s.yaw)
+
+
+func test_turn_held_ship_still_moves() -> void:
+	var s := Helm.Ship.new()
+	s.pos = Vector3.ZERO
+	s.solid = _stern_wall
+	s.in_turn = -1.0
+	s.in_thrust = 1.0
+	var dt := 1.0 / 60.0
+	for i in 600:
+		s.update(dt)
+		if _stern_wall(s.pos, s.yaw):
+			ok(false, "корма вошла в твёрдое на %.2f с" % (i * dt))
+			return
+	ok(s.pos.length() > 20.0, "ход не встал вместе с поворотом: прошёл %.1f м" % s.pos.length())
+
+
+func test_turn_free_when_already_in_solid() -> void:
+	var s := Helm.Ship.new()
+	s.pos = Vector3.ZERO
+	s.yaw = 0.5   # корма уже в стене (загрузка, существо подошло)
+	s.solid = _stern_wall
+	ok(_stern_wall(s.pos, s.yaw), "постановка: стоит в твёрдом")
+	s.in_turn = -1.0
+	_run(s, 2.0)
+	ok(s.yaw > 0.7, "застрявший поворачивает свободно: %.2f" % s.yaw)
+
+
+func test_turn_at_grot_keeps_hull_out() -> void:
+	# Воспроизведение из #1847: гротовик стоит, корабль рядом разворачивается на месте.
+	var w := EcoWorld.new()
+	w.ground = func(_x: float, _z: float) -> float: return -40.0
+	var g := w.add(EcoGrot.new()) as EcoGrot
+	g.grot.shy = 1e9
+	var s := Helm.Ship.new()
+	s.ground = w.ground
+	s.solid = func(p: Vector3, yaw: float) -> bool: return EcoLink.solid(w.systems, p, yaw)
+	s.pos = Vector3(g.grot.p.x - 10.0, -37.0, g.grot.p.z - 20.0)
+	s.yaw = 0.0
+	ok(not g.blocks(s.pos, s.yaw), "постановка: у гротовика свободно")
+	s.in_turn = -1.0
+	var dt := 1.0 / 60.0
+	for i in 600:
+		s.update(dt)
+		if g.blocks(s.pos, s.yaw):
+			ok(false, "корпус вошёл в гротовика на %.2f с, курс %.2f" % [i * dt, s.yaw])
+			return
+	ok(s.yaw > 0.02 and s.yaw < 1.0, "довернул до гротовика и встал: курс %.2f" % s.yaw)
+
+
 ## Насколько днище корабля ниже допустимого (грунт + зазор) в худшей точке `Helm.Ship.foot()`; ≤ 0 — не в грунте.
 func _dig(s: Helm.Ship) -> float:
 	var worst := -INF

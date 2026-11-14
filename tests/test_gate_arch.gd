@@ -118,6 +118,27 @@ func test_ship_through_passage_not_through_pillar() -> void:
 	ok(s2.pos.z > EcoGate.CENTER.y + GateArch.HALF_DEPTH, "в опору не вошёл: z %.1f" % s2.pos.z)
 
 
+func test_turn_does_not_swing_stern_into_pillar() -> void:
+	# #1847: корабль за аркой, бортом к ней (нос к −X, корма у правой опоры); разворот заводил корму в опору.
+	var ship := Helm.Ship.new()
+	ship.solid = GateArch.hits   # без дна: проверяем только твёрдое арки
+	ship.pos = _c(30.0, GateArch.floor_y() + 12.0, -20.0)
+	ship.yaw = PI / 2.0
+	ok(not GateArch.hits(ship.pos, ship.yaw), "постановка: вдоль арки свободно")
+	ok(GateArch.hits(ship.pos, ship.yaw - 0.5), "постановка: довернуть на 0,5 рад — корма в опоре")
+	ship.in_turn = 1.0   # вправо: yaw убывает, корма идёт к арке (+Z)
+	for i in 300:
+		ship.update(1.0 / 30.0)
+		if GateArch.hits(ship.pos, ship.yaw):
+			ok(false, "корма вошла в опору на %.1f с, курс %.2f" % [i / 30.0, ship.yaw])
+			return
+	ok(ship.yaw > PI / 2.0 - 0.5 and ship.yaw < PI / 2.0 - 0.05, "довернул до опоры и встал: %.2f" % ship.yaw)
+	ship.in_turn = -1.0
+	for i in 90:
+		ship.update(1.0 / 30.0)
+	ok(ship.yaw > PI / 2.0, "от опоры поворот идёт: %.2f" % ship.yaw)
+
+
 func test_without_solid_no_change() -> void:
 	var ship := Helm.Ship.new()
 	ship.ground = Seabed.height
@@ -140,17 +161,50 @@ func test_scene_has_arch_and_helm_solid() -> void:
 	near(gv.model.position.x, EcoGate.CENTER.x, 0.001, "в середине террасы по X")
 	near(gv.model.position.z, EcoGate.CENTER.y, 0.001, "в середине террасы по Z")
 	near(gv.model.rotation.y, 0.0, 0.001, "подход с +Z — как в файле")
-	eq(gv.nests.mesh.get_surface_count(), 1, "чаши гнёзд — временные")
+	ok(gv.get_node_or_null("Чаши гнёзд") == null, "временных чаш нет — гнёзда на модели")
 	for i in 3:
 		for mi: MeshInstance3D in gv.lod_meshes(i):
-			eq(mi.layers, OceanView.LAYER_WORLD, "%s на слое отмели" % mi.name)
+			# #1757, кадр `37`: двусторонняя сетка в луче затеняла сама себя чёрными треугольниками — тело арки светом
+			# отмели освещено, но в карту теней прожектора не идёт; тень от света сквозь лёд остаётся.
+			eq(mi.layers, OceanView.LAYER_NOBEAM, "%s на слое отмели без тени прожектора" % mi.name)
+			var spot: SpotLight3D = main.searchlight.spot
+			ok(spot.light_cull_mask & mi.layers != 0, "%s: прожектор освещает" % mi.name)
+			ok(spot.shadow_enabled and spot.shadow_caster_mask & mi.layers == 0, "%s: в тень прожектора не идёт" % mi.name)
+			ok(main.ocean.sun.light_cull_mask & mi.layers != 0 and main.ocean.sun.shadow_caster_mask & mi.layers != 0,
+				"%s: свет сквозь лёд освещает и кладёт её тень" % mi.name)
+			ok(main.zap_light.light_cull_mask & mi.layers != 0, "%s: вспышка разряда освещает" % mi.name)
 			var r := GateArch.ranges(i, main.gate_view.lite)
 			near(mi.visibility_range_begin, maxf(r.x, 0.0), 0.001, "%s: начало LOD" % mi.name)
 			near(mi.visibility_range_end, maxf(r.y, 0.0), 0.001, "%s: конец LOD" % mi.name)
 			eq(mi.visibility_range_begin_margin + mi.visibility_range_end_margin, 0.0,
 				"%s: без гистерезиса — после прыжка камеры в его полосе скрыты оба LOD" % mi.name)
-	for n in GateView.HIDDEN:
-		ok(not (gv.model.get_node(n) as Node3D).visible, "%s скрыта до гнёзд" % n)
+	eq(gv.petals.size(), GateDiag.NESTS.size(), "створка на гнездо")
+	for mi: MeshInstance3D in gv.petals + [gv.plate]:
+		ok(mi.is_visible_in_tree(), "%s показана" % mi.name)
+		eq(mi.layers, OceanView.LAYER_WORLD, "%s на слое отмели" % mi.name)
+		ok(main.searchlight.spot.shadow_caster_mask & mi.layers != 0, "%s: односторонняя — тень прожектора бросает" % mi.name)
+		near(mi.visibility_range_end, GateArch.DETAIL_END, 0.001, "%s: вдали не рисуется" % mi.name)
+		eq(mi.visibility_range_end_margin, 0.0, "%s: без гистерезиса" % mi.name)
+	# Створку гнезда купольника поворачивает его подъём, открытую в кампании — знание (#1757).
+	main.lore.facts.erase(LayerLore.PETAL07)
+	main.eco.dome.petal = 0.0
+	main.gate_petal()
+	near(gv.petals[EcoDome.NEST].rotation.x, 0.0, 0.001, "створка закрыта")
+	main.eco.dome.petal = 0.5
+	main.gate_petal()
+	near(gv.petal(EcoDome.NEST), 0.5, 0.001, "купольник поднял наполовину — створка наполовину")
+	near(gv.petals[EcoDome.NEST].rotation.x, GateArch.PETAL_TURN * 0.5, 0.001, "поворот по своей X")
+	main.eco.dome.petal = 0.0
+	main.lore.learn(LayerLore.PETAL07)
+	main.gate_petal()
+	near(gv.petal(EcoDome.NEST), 1.0, 0.001, "открыта в кампании — поднята и без купольника")
+	for i in gv.petals.size():
+		if i != EcoDome.NEST:
+			near(gv.petals[i].rotation.x, 0.0, 0.001, "створка %d закрыта: её никто не открывал" % i)
+	var shut: AABB = gv.petals[0].mesh.get_aabb()
+	var up: Vector3 = Basis(Vector3.RIGHT, GateArch.PETAL_TURN) * shut.get_center()
+	near(up.y - shut.get_center().y, 1.4, 0.1, "открытая створка поднята на ≈ 1,4 м (ART-079)")
+	ok(up.z > 0.5, "и стоит перед лицом опоры, не в камне")
 	main._apply_graphics(Graphics.ECONOMY)
 	ok(gv.lite, "«Экономно» дошло до арки")
 	for mi: MeshInstance3D in gv.lod_meshes(0):
@@ -172,8 +226,7 @@ func test_arch_fog_uses_water_layers() -> void:
 	var gv: GateView = main.gate_view
 	var o: OceanView = main.ocean
 	var all: Array = gv.model.find_children("*", "MeshInstance3D", true, false)
-	all.append(gv.nests)
-	eq(gv.mats.size(), 4, "минерал, кабель, полипы и чаши — по материалу на все LOD")
+	eq(gv.mats.size(), 3, "минерал, кабель и полипы — по материалу на все LOD и створки")
 	for mi: MeshInstance3D in all:
 		var m := mi.get_surface_override_material(0) as ShaderMaterial
 		ok(m != null, "%s — свой шейдер, не StandardMaterial3D" % mi.name)
@@ -196,6 +249,6 @@ func test_arch_fog_uses_water_layers() -> void:
 		near(float(m0.get_shader_parameter("layer_density")), main.env.fog_density, 0.00001, "новая глубина — новый туман")
 		near(float(m0.get_shader_parameter("layer_gain")), float(o.seabed_mat.get_shader_parameter("layer_gain")), 0.00001,
 			"сила слоёв как у дна")
-	eq(o.layer_mats().size(), 7, "дно, лёд, дальняя вода и четыре материала арки — без повторов")
+	eq(o.layer_mats().size(), 6, "дно, лёд, дальняя вода и три материала арки — без повторов")
 	main.queue_free()
 	await frames(1)

@@ -46,12 +46,18 @@ func test_frame_off_lanes_and_pocket() -> void:
 		ok(EcoFan.default_spots().has(p), "веерник врат — в местах EcoFan")
 
 
-## Купольник (#837) ходит из ниши к гнезду: роща не на его пути и не в нише, веерник — не в нише.
+## Купольник (#837) ходит из ниши к гнезду путём `EcoDome.WAY` (#1757: в обход опоры и рощи): роща не на его пути
+## и не в нише, веерник — не в нише.
 func test_frame_clear_of_dome() -> void:
 	var home := EcoGate.CENTER + EcoDome.HOME_OFF
-	var nest: Vector2 = EcoGate.CENTER + GateDiag.NESTS[EcoDome.NEST]["at"] + Vector2(0.0, EcoDome.FRONT)
+	var d0 := EcoDome.new()
+	d0.ground = Seabed.height
+	var path := d0.route()
+	eq(path[0], home, "путь начинается в нише")
 	for p in EcoGate.KELP:
-		var d := Seabed.Layer._seg_dist(p, home, nest)
+		var d := INF
+		for i in path.size() - 1:
+			d = minf(d, Seabed.Layer._seg_dist(p, path[i], path[i + 1]))
 		print("  роща %s: до пути купольника %.1f м" % [p, d])
 		ok(d - EcoGate.KELP_REACH >= 5.0, "роща %s не на пути купольника" % p)
 	for p in EcoGate.FANS:

@@ -112,7 +112,7 @@ var current := Helm.SeaCurrent.new()
 
 var ocean: OceanView
 var eco: EcoView            ## живой мир отмели (поток Б), связь — EcoLink
-var gate_view: GateView     ## арка врат 07 — модель MOD-023 (#1757) и временные чаши гнёзд; коллизия — `GateArch`
+var gate_view: GateView     ## арка врат 07 — модель MOD-023 (#1757) с гнёздами и створками; коллизия — `GateArch`
 var step_ms := 0.0          ## сколько занял прошлый шаг игры (код), мс — для лога тестера (issue #217)
 var clock := StepClock.new()   ## части прошлого шага (корабль, мир, виды) — для лога тестера (issue #627)
 var eco_ship := EcoLink.ShipState.new()
@@ -300,7 +300,7 @@ func _build_ship() -> void:
 	zap_light = OmniLight3D.new()
 	zap_light.name = "Вспышка разряда"
 	zap_light.light_color = Color("5ef2d6")
-	zap_light.light_cull_mask = OceanView.LAYER_WORLD
+	zap_light.light_cull_mask = OceanView.LIT_WORLD
 	zap_light.position = Vector3(0, 1.6, 8)
 	# вспышка всегда в сцене на наибольший радиус и почти без энергии: набор огней на предметах отмели не меняется
 	# при разряде — шейдеры не собираются заново (issue #159)
@@ -699,10 +699,19 @@ func step(dt: float) -> void:
 	_step_zap(dt)
 	clock.lap("корабль", Time.get_ticks_usec())
 	_step_eco(dt)
+	gate_petal()
 	_step_view(dt)
 	_step_ui(dt)
 	_step_marks(dt, r)
 	clock.lap("метки и сеть", Time.get_ticks_usec())
+
+
+## Створка гнезда 07 на модели арки (#1757): пока купольник поднимает — по нему (`EcoLink.petal_lift`), открыта
+## в кампании (`LayerLore.PETAL07`; у гостя — знания хоста) — поднята.
+func gate_petal() -> void:
+	if gate_view:
+		gate_view.set_petal(EcoDome.NEST, 1.0 if lore.knows(LayerLore.PETAL07)
+			else (EcoLink.petal_lift(eco.world.systems) if eco else 0.0))
 
 
 ## Кнопки удержания в этом кадре: свой игрок у поста (`valve`…) и товарищи (`held` — `CrewFlow.holds`).

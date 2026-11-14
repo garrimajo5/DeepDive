@@ -14,15 +14,21 @@ func _read_all(g: GateDiag, lore: LayerLore, ship: Vector3) -> String:
 	return f
 
 
-func test_nests_on_terrace_bottom() -> void:
+func test_nests_on_pillar_face() -> void:
+	# Гнёзда модели MOD-023 (#1757): на лице правой опоры над полом кармана, не на дне.
 	for i in GateDiag.NESTS.size():
 		var p := GateDiag.nest_pos(i)
-		near(p.y, Seabed.height(p.x, p.z), 1e-3, "гнездо %d на дне" % i)
-		ok(Vector2(p.x, p.z).distance_to(EcoGate.CENTER) < EcoGate.POCKET, "гнездо %d в кармане арки, обвязка дальше" % i)
+		var a: Vector3 = GateDiag.NESTS[i]["at"]
+		near(p.y, GateArch.floor_y() + a.y, 1e-3, "гнездо %d — от пола террасы" % i)
+		ok(a.y > 1.0 and a.y < 6.0, "гнездо %d на лице опоры, 1…6 м от пола" % i)
+		ok(a.z > GateArch.HALF_DEPTH, "гнездо %d перед лицом опоры, с подхода" % i)
+		ok(Seabed.mesh_height(p.x, p.z + 1.0) < p.y - 0.7, "перед гнездом %d — пол кармана, грунт его не закрывает" % i)
+		ok(a.x > Seabed.Layer.TROUGH_HALF and a.x < Seabed.Layer.NEST_EAST and a.z + 1.0 > Seabed.Layer.NEST_NORTH
+			and a.z < Seabed.Layer.NEST_SOUTH, "гнездо %d над полом кармана: рамку живого мира от него держит поток Б" % i)
 		ok(OVER.distance_to(p) < GateDiag.READ_R, "с 35 м над серединой гнездо %d читается" % i)
 	for i in GateDiag.NESTS.size():
-		var a: Vector2 = GateDiag.NESTS[i]["at"]
-		ok(a.x > 30.0, "гнездо %d у правой опоры, вне прохода X −30…+30 (ART-079)" % i)
+		var a: Vector3 = GateDiag.NESTS[i]["at"]
+		ok(a.x > GateArch.PASS_HALF + 10.0, "гнездо %d у правой опоры, вне прохода" % i)
 		for j in GateDiag.NESTS.size():
 			if j > i:
 				near(a.distance_to(GateDiag.NESTS[j]["at"]), 4.0, 0.1, "тройка — треугольник со стороной 4 м")
@@ -33,10 +39,9 @@ func test_nests_on_terrace_bottom() -> void:
 	eq(facts, want, "у каждого факта диагностики своё гнездо")
 
 
-func test_nearest_nest_is_one_below_on_slope() -> void:
-	# Жёлоб (#1757): гнёзда на его склоне на разной высоте — над гнездом в прицеле оно, а не то, что выше по склону.
-	var hs: Array = range(GateDiag.NESTS.size()).map(func(i): return GateDiag.nest_pos(i).y)
-	ok(absf(hs.max() - hs.min()) > 1.0, "гнёзда на склоне, не на одной высоте: %s" % str(hs))
+func test_nearest_nest_is_one_below() -> void:
+	# Над гнездом в прицеле оно (ближнее — по горизонтали: гнёзда на разной высоте, по прямой ближе оказалось бы
+	# не то, над которым корабль).
 	for i in GateDiag.NESTS.size():
 		var g := GateDiag.new()
 		var p := GateDiag.nest_pos(i)

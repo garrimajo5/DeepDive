@@ -210,3 +210,22 @@ func test_touches_box_cut_same_answer() -> void:
 						return
 		ok(inside > 200, "запас %.1f: внутри %d точек" % [r, inside])
 		ok(cut > 100, "запас %.1f: отсечено коробкой %d точек" % [r, cut])
+
+
+## Корабль целиком (`touches_whole`) — основной объём и все выступы: центр каждой детали HullPlan, кроме окон-пластин,
+## касается; двигатель у кормы (|x| 5,4 м) — вне основного объёма (там кормовой переход 3,6 м), но в корабле целиком.
+func test_whole_covers_every_part() -> void:
+	var ship := Vector3(10, -20, 30)
+	var yaw := 0.7
+	for part: HullPlan.Part in HullPlan.parts():
+		if part.form == HullPlan.Form.PLATE:
+			continue
+		var p := ship + part.pos.rotated(Vector3.UP, yaw)
+		ok(EcoHull.touches_whole(p, ship, yaw), "%s — в корабле целиком" % part.name)
+	var engine := Vector3(HullPlan.ENGINE_X + HullPlan.SHROUD_D / 2.0 - 0.1, HullPlan.ENGINE_Y, HullPlan.ENGINE_Z)
+	var e := ship + engine.rotated(Vector3.UP, yaw)
+	ok(not EcoHull.touches(e, ship, yaw), "край кожуха — вне основного объёма")
+	ok(EcoHull.touches_whole(e, ship, yaw), "край кожуха — в корабле целиком")
+	var jaw := Vector3(0.17, -1.65, -9.0)
+	ok(EcoHull.touches_whole(ship + jaw.rotated(Vector3.UP, yaw), ship, yaw), "губка манипулятора под носом")
+	ok(not EcoHull.touches_whole(ship + Vector3(0, -1.65, -10.0).rotated(Vector3.UP, yaw), ship, yaw), "за губкой — вода")
