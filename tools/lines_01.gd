@@ -8,7 +8,8 @@ extends SceneTree
 ##   godot --headless --path . -s tools/lines_01.gd [-- seeds=16 stay=<с> turn=<с> dark=<с> mid=<с>]
 ## `turn` — смена течения (`EcoCurrent.timer`) через столько секунд стоянки у 01 (−1 — своим ходом, `PERIOD`).
 ## По зерну и участку: сколько строк пришло, сколько из них «потеряно» (видна меньше MIN_SHOW), и какие (вид/заметка);
-## «тройка» — три строки за MIN_SHOW.
+## «тройка» — три строки за MIN_SHOW. Бегство рыб — раздельно: `fish/flee-krona` (стая кроны Каменного цветка) и
+## `fish/flee-rif` (стая рифа); у потерянной — какая строка её сменила (следующий приход, «—» — никакая за окно).
 
 const MidCalm := preload("res://tools/mid_calm.gd")
 const DT := 1.0 / 30.0
@@ -50,16 +51,20 @@ static func put(lines: Array[String], line: String) -> void:
 		print(line)
 
 
-## Метка строки: вид/заметка события шины с тем же текстом, «?» — не нашли.
-static func _label(text: String, evs: Array) -> String:
+## Метка строки: вид/заметка события шины с тем же текстом, «?» — не нашли. Бегство рыб делится по тексту кроны
+## (`EcoFish._crown_text` того же мира): крона — `fish/flee-krona`, иначе — `fish/flee-rif`.
+static func _label(text: String, evs: Array, world: EcoWorld = null) -> String:
 	for ev: EcoBus.Event in evs:
 		if ev.text() == text:
-			return "%s/%s" % [ev.species, ev.note]
+			var lab := "%s/%s" % [ev.species, ev.note]
+			if ev.species == EcoFish.ID and ev.note == "flee" and world:
+				lab += "-krona" if text == String(EcoFish._crown_text(world).call()) else "-rif"
+			return lab
 	return "?"
 
 
-## Один проход: по участку {got, lost, lost_what (метка → число), triples}; ещё turn_at (с стоянки у 01, когда
-## течение повернуло; −1 — не повернуло) и shown — все показы у 01 ([с, метка, сколько видна]).
+## Один проход: по участку {got, lost, lost_what (метка → число), lost_by («потерянная <- сменившая» → число),
+## triples}; ещё turn_at (с стоянки у 01, когда течение повернуло; −1 — не повернуло) и shown — все показы у 01 ([с, метка, сколько видна]).
 static func run(seed_value: int) -> Dictionary:
 	var ev: EcoView = MidCalm.make(seed_value)
 	var w := ev.world
@@ -67,7 +72,7 @@ static func run(seed_value: int) -> Dictionary:
 	ship.pos = MidCalm.ship_at(MidCalm.PATH[0])
 	var r := {"turn_at": -1.0, "shown": []}
 	for k in LEGS:
-		r[k] = {"got": 0, "lost": 0, "lost_what": {}, "triples": 0}
+		r[k] = {"got": 0, "lost": 0, "lost_what": {}, "lost_by": {}, "triples": 0}
 	var legs: Array = [[MidCalm.PATH[0], dark, false], [MidCalm.PATH[1], mid, true], [MidCalm.PATH[2], stay, true]]
 	var leg := 0
 	var left: float = legs[0][1]
@@ -117,7 +122,7 @@ static func run(seed_value: int) -> Dictionary:
 			if text == "":
 				continue
 			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)))
-			got.append([text, _label(text, evs), leg_key, t, 0.0])
+			got.append([text, _label(text, evs, w), leg_key, t, 0.0])
 			arrived.append(t)
 			r[leg_key]["got"] += 1
 		msg.update(DT)
@@ -137,6 +142,11 @@ static func run(seed_value: int) -> Dictionary:
 		if float(g[4]) < Status.Message.MIN_SHOW - DT * 1.5:
 			r[lk]["lost"] += 1
 			r[lk]["lost_what"][g[1]] = int(r[lk]["lost_what"].get(g[1], 0)) + 1
+			var by := "—"
+			if i + 1 < got.size() and float(got[i + 1][3]) - float(g[3]) <= WINDOW:
+				by = String(got[i + 1][1])
+			var pair := "%s <- %s" % [g[1], by]
+			r[lk]["lost_by"][pair] = int(r[lk]["lost_by"].get(pair, 0)) + 1
 		if i >= 2 and float(g[3]) - float(got[i - 2][3]) < Status.Message.MIN_SHOW:
 			r[lk]["triples"] += 1
 	ev.free()
@@ -150,10 +160,21 @@ static func seed_line(s: int, r: Dictionary) -> String:
 		var what := PackedStringArray()
 		for lab in a["lost_what"]:
 			what.append("%s ×%d" % [lab, a["lost_what"][lab]])
-		parts.append("%s: строк %d, потеряно %d%s, троек %d" % [k, a["got"], a["lost"],
-			(" (%s)" % ", ".join(what)) if what.size() > 0 else "", a["triples"]])
+		parts.append("%s: строк %d, потеряно %d%s%s, троек %d" % [k, a["got"], a["lost"],
+			(" (%s)" % ", ".join(what)) if what.size() > 0 else "", _by_text(a["lost_by"]), a["triples"]])
 	return "  зерно %2d: %s; течение у 01 повернуло %s" % [s, "; ".join(parts),
 		("на %.1f с" % r["turn_at"]) if float(r["turn_at"]) >= 0.0 else "—"]
+
+
+## «, сменили: a <- b ×n, …» (чаще — раньше) — пусто, если потерь нет. «<- —» — после неё за окно ничего не
+## пришло: её не пустила ждущая «держится» (`Status.Message.next_keep`).
+static func _by_text(by: Dictionary) -> String:
+	var keys: Array = by.keys()
+	keys.sort_custom(func(a, b): return int(by[a]) > int(by[b]) or (int(by[a]) == int(by[b]) and String(a) < String(b)))
+	var out := PackedStringArray()
+	for pair in keys:
+		out.append("%s ×%d" % [pair, by[pair]])
+	return (", сменили: %s" % ", ".join(out)) if out.size() > 0 else ""
 
 
 static func report(seeds: int) -> Array[String]:
@@ -162,7 +183,7 @@ static func report(seeds: int) -> Array[String]:
 		dark, mid, stay, ("через %.0f с стоянки у 01" % turn) if turn >= 0.0 else "своим ходом", seeds])
 	var tot := {}
 	for k in LEGS:
-		tot[k] = {"got": 0, "lost": 0, "seeds_lost": 0, "triples": 0, "what": {}}
+		tot[k] = {"got": 0, "lost": 0, "seeds_lost": 0, "triples": 0, "what": {}, "by": {}}
 	for s in seeds:
 		var r := run(s)
 		put(lines, seed_line(s, r))
@@ -175,12 +196,15 @@ static func report(seeds: int) -> Array[String]:
 				tot[k]["seeds_lost"] += 1
 			for lab in a["lost_what"]:
 				tot[k]["what"][lab] = int(tot[k]["what"].get(lab, 0)) + int(a["lost_what"][lab])
+			for pair in a["lost_by"]:
+				tot[k]["by"][pair] = int(tot[k]["by"].get(pair, 0)) + int(a["lost_by"][pair])
 	var parts := PackedStringArray()
 	for k in LEGS:
 		var what := PackedStringArray()
 		for lab in tot[k]["what"]:
 			what.append("%s ×%d" % [lab, tot[k]["what"][lab]])
-		parts.append("%s — строк %d, потеряно %d в %d/%d зёрнах%s, троек %d" % [k, tot[k]["got"], tot[k]["lost"],
-			tot[k]["seeds_lost"], seeds, (" (%s)" % ", ".join(what)) if what.size() > 0 else "", tot[k]["triples"]])
+		parts.append("%s — строк %d, потеряно %d в %d/%d зёрнах%s%s, троек %d" % [k, tot[k]["got"], tot[k]["lost"],
+			tot[k]["seeds_lost"], seeds, (" (%s)" % ", ".join(what)) if what.size() > 0 else "", _by_text(tot[k]["by"]),
+			tot[k]["triples"]])
 	put(lines, "== итог: %s" % "; ".join(parts))
 	return lines
