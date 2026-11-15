@@ -1119,6 +1119,42 @@ func test_patrol_goes_around_reef() -> void:
 	ok(reached, "и доплывает до цели на той стороне (%s)" % pr.agent.p)
 
 
+
+## Чистка не ведёт хищника в риф у цветка (#1400, п. 2 (аз)): у 01 вершина огнецвета — станция пиявников — в 23,9 м
+## от оси, внутри REEF_KEEP. Заражённый сытый серпохвост плывёт к ней в режиме CLEAN, но reef_steer держит его снаружи
+## кольца, станция не работает, и через CLEAN_TIME он бросает чистку. Мутация «reef_steer не для CLEAN» (вариант 3
+## вопроса ГД) — заходит к вершине и чистится.
+func test_clean_station_inside_reef_keeps_pred_out() -> void:
+	var r := _reef_world()
+	var w: EcoWorld = r[0]
+	var preds: EcoPred = r[1]
+	var axis := preds.reef_axis()
+	var top := Vector3(axis.x + 23.9, FLAT + EcoLeech.TOP, axis.z)
+	var tops: Array[Vector3] = [top]
+	var lv := w.add(EcoLeech.new(preds, null, tops)) as EcoLeech
+	var pr := preds.all[0]
+	ok(pr.leech, "первый хищник заражён")
+	pr.hunger = 0.1  # сыт — плывёт на чистку, а не охотится
+	pr.cooldown = 1e9
+	pr.agent.p = Vector3(axis.x + 70.0, -30.0, axis.z + 2.0)  # снаружи, вершина — прямо по пути внутрь кольца
+	pr.agent.goal = pr.agent.p
+	var closest := 1e9
+	var clean_t := 0.0
+	var dt := EcoWorld.MAX_STEP
+	for i in int((EcoLeech.CLEAN_TIME + 10.0) / dt):
+		_step(w)
+		if pr.mode == EcoPred.Mode.CLEAN:
+			clean_t += dt
+			var p := pr.agent.p
+			closest = minf(closest, Vector2(p.x - axis.x, p.z - axis.z).length())
+	print("    чистка %.1f с, ближе всего к оси %.1f м (REEF_KEEP %.0f), станция %.1f м" % [
+		clean_t, closest, EcoPred.REEF_KEEP, Vector2(top.x - axis.x, top.z - axis.z).length()])
+	ok(clean_t > 30.0, "плыл на чистку дольше 30 с (%.1f с)" % clean_t)
+	ok(closest > EcoPred.REEF_KEEP - 4.0, "к станции в рифе не заходит (ближе всего %.1f м)" % closest)
+	ok(pr.leech, "пиявник не снят — станция внутри кольца недоступна")
+	eq(lv.stations[0].work, 0.0, "огнёвки не работали")
+	ok(pr.mode != EcoPred.Mode.CLEAN, "бросил чистку через CLEAN_TIME")
+
 ## Самый резкий вертикальный разгон (м/с², по окну 3 шага) и шагов вплотную ко дну у серпохвостов за seconds с мира
 ## у места id.
 ## Минута полного мира у места (EcoView, шаг 1/30 с) — одна на тесты разворота и вертикали серпохвостов: раньше
