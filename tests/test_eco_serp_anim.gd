@@ -78,7 +78,7 @@ func _blade_at(n: Node3D, clip: String, t: float) -> Vector3:
 	var sk := _skeleton(n)
 	var b := sk.find_bone("Tail03")
 	var tool: GDScript = load("res://tools/clip_tip.gd")
-	return sk.global_transform * (sk.get_bone_global_pose(b) * sk.get_bone_global_rest(b).affine_inverse()) * tool.POINT
+	return sk.global_transform * tool.point_at(sk, b, tool.POINT)
 
 
 func test_tail_strike_is_vertical() -> void:
