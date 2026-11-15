@@ -16,6 +16,10 @@ extends SceneTree
 ## «охота» — внутри CROWN_ALARM в другом режиме, «ушёл» — внутри CROWN_ALARM серпохвоста нет (тревога спадает).
 ## В итоге — суммы по зёрнам, эпизоды «спряталась → вернулась», зёрна без подхода серпохвоста внутрь CROWN_ALARM,
 ## доля транзита в тревоге и самый долгий отрезок транзита.
+## Разбор «охоты» (п. 2 (аз), #1400): за кем и чем занят ближайший серпохвост в эти секунды — ключ `prey_key`
+## (охота: крона / стая рифа / другая стая с номером; не охота — режим), сколько секунд добыча внутри
+## `EcoPred.REEF_KEEP` и сколько секунд это стая рифа или крона (кольцо кроны — внутри рифа); у `clean` — на каком
+## расстоянии от оси станция чистки (`EcoLeech.Station.top`), к которой он плывёт.
 
 const MidCalm := preload("res://tools/mid_calm.gd")
 const DT := 1.0 / 30.0
@@ -69,7 +73,8 @@ static func _flat(a: Vector3, b: Vector3) -> float:
 ## reef_hid (с, стаи рифа прятались во время залипания), hunger (макс. голод ближайшего за стоянку), nearest (м),
 ## first (с тревоги за первые FIRST с), modes (режим → с залипания), goal_in (с залипания с целью внутри CROWN_ALARM),
 ## why (причина → с тревоги кроны, сумма — alarm), transit (с, самый долгий отрезок транзита), transit_r ([мин, макс] м
-## от оси на транзите)}.
+## от оси на транзите), prey (ключ `prey_key` → с «охоты»), prey_in (с «охоты» с добычей внутри REEF_KEEP),
+## prey_home (с «охоты» за кроной или стаей рифа), clean_r ([мин, макс] м от оси до станции чистки в «охоте»)}.
 static func run(seed_value: int) -> Dictionary:
 	var ev: EcoView = MidCalm.make(seed_value)
 	var w := ev.world
@@ -86,7 +91,8 @@ static func run(seed_value: int) -> Dictionary:
 			reef.append(sh)
 	var r := {"alarm": 0.0, "episodes": 0, "longest": 0.0, "lines": 0, "stuck": 0.0, "stuck_r": [INF, 0.0],
 		"reef_hid": 0.0, "hunger": 0.0, "nearest": INF, "reef": reef.size(), "first": 0.0, "modes": {}, "goal_in": 0.0,
-		"why": {}, "transit": 0.0, "transit_r": [INF, 0.0]}
+		"why": {}, "transit": 0.0, "transit_r": [INF, 0.0], "prey": {}, "prey_in": 0.0, "prey_home": 0.0,
+		"clean_r": [INF, 0.0]}
 	for k in WHY:
 		r["why"][k] = 0.0
 	var stood := [0.0]
@@ -154,6 +160,18 @@ static func run(seed_value: int) -> Dictionary:
 		var why := cause(pr, pd, axis) if hidden else ""
 		if why != "":
 			r["why"][why] += DT
+		if why == "hunt":
+			var pk := prey_key(pr, axis)
+			r["prey"][pk] = float(r["prey"].get(pk, 0.0)) + DT
+			if pr.mode == EcoPred.Mode.HUNT and pr.prey:
+				if _flat(pr.prey.agent.p, axis) < EcoPred.REEF_KEEP:
+					r["prey_in"] += DT
+				if pk == "крона" or pk == "риф":
+					r["prey_home"] += DT
+			if pr.mode == EcoPred.Mode.CLEAN and ev.leeches and pr.station >= 0 and pr.station < ev.leeches.stations.size():
+				var sd := _flat(ev.leeches.stations[pr.station].top, axis)
+				r["clean_r"][0] = minf(r["clean_r"][0], sd)
+				r["clean_r"][1] = maxf(r["clean_r"][1], sd)
 		if why == "transit":
 			run_transit += DT
 			r["transit"] = maxf(r["transit"], run_transit)
@@ -190,6 +208,30 @@ static func cause(pr: EcoPred.Pred, pd: float, axis: Vector3) -> String:
 	return "goal_in" if _flat(pr.agent.goal, axis) < EcoFish.CROWN_ALARM else "transit"
 
 
+## За кем «охота» ближайшего серпохвоста `pr`: в режиме HUNT — «крона», «риф» (дом стаи ближе REEF_HOME к оси
+## `axis`), «стая N» или «без добычи»; в другом режиме — имя режима строчными (`eat`, `investigate`…).
+static func prey_key(pr: EcoPred.Pred, axis: Vector3) -> String:
+	if pr.mode != EcoPred.Mode.HUNT:
+		return String(EcoPred.Mode.keys()[pr.mode]).to_lower()
+	if pr.prey == null or pr.prey.shoal == null:
+		return "без добычи"
+	var sh: EcoFish.Shoal = pr.prey.shoal
+	if sh.crown:
+		return "крона"
+	if _flat(sh.home, axis) < REEF_HOME:
+		return "риф"
+	return "стая %d" % sh.index
+
+
+static func _prey_text(prey: Dictionary) -> String:
+	var keys := prey.keys()
+	keys.sort_custom(func(a, b) -> bool: return float(prey[a]) > float(prey[b]))
+	var t := ""
+	for k in keys:
+		t += "%s%s %.1f" % [", " if t != "" else "", k, prey[k]]
+	return t
+
+
 static func seed_line(s: int, r: Dictionary) -> String:
 	var sr: Array = r["stuck_r"]
 	var modes := ""
@@ -199,11 +241,13 @@ static func seed_line(s: int, r: Dictionary) -> String:
 	for k in WHY:
 		why += "%s%s %.1f" % [", " if why != "" else "", WHY_RU[k], r["why"][k]]
 	var tr: Array = r["transit_r"]
-	return "  зерно %2d: крона в тревоге %5.1f с (за первые %.0f с — %4.1f), эпизодов %d, самый долгий %5.1f с, строк кроны %d; залипание %5.1f с%s, цель внутри %.1f с, режимы [%s], стаи рифа (%d) прятались %4.1f с; голод у рифа до %.2f, ближе всего %.1f м; причины [%s], транзит самый долгий %.1f с%s" % [
+	var cr: Array = r["clean_r"]
+	return "  зерно %2d: крона в тревоге %5.1f с (за первые %.0f с — %4.1f), эпизодов %d, самый долгий %5.1f с, строк кроны %d; залипание %5.1f с%s, цель внутри %.1f с, режимы [%s], стаи рифа (%d) прятались %4.1f с; голод у рифа до %.2f, ближе всего %.1f м; причины [%s], транзит самый долгий %.1f с%s; охота [%s], добыча внутри рифа %.1f с%s" % [
 		s, r["alarm"], FIRST, r["first"], r["episodes"], r["longest"], r["lines"], r["stuck"],
 		(" (%.1f–%.1f м от оси)" % [sr[0], sr[1]]) if r["stuck"] > 0.0 else "", r["goal_in"], modes, r["reef"],
 		r["reef_hid"], r["hunger"], r["nearest"], why, r["transit"],
-		(" (%.1f–%.1f м от оси)" % [tr[0], tr[1]]) if r["transit"] > 0.0 else ""]
+		(" (%.1f–%.1f м от оси)" % [tr[0], tr[1]]) if r["transit"] > 0.0 else "", _prey_text(r["prey"]),
+		r["prey_in"], (", станция чистки %.1f–%.1f м от оси" % [cr[0], cr[1]]) if cr[0] < INF else ""]
 
 
 static func report(seeds: int) -> Array[String]:
@@ -224,6 +268,9 @@ static func report(seeds: int) -> Array[String]:
 	var transits: Array = []
 	var transit_seeds := 0
 	var no_visit := 0
+	var prey := {}
+	var prey_in := 0.0
+	var prey_home := 0.0
 	for s in seeds:
 		var r := run(s)
 		put(lines, seed_line(s, r))
@@ -242,6 +289,10 @@ static func report(seeds: int) -> Array[String]:
 		episodes += r["episodes"]
 		for k in WHY:
 			why[k] += r["why"][k]
+		for k in r["prey"]:
+			prey[k] = float(prey.get(k, 0.0)) + float(r["prey"][k])
+		prey_in += r["prey_in"]
+		prey_home += r["prey_home"]
 		if r["transit"] > 0.0:
 			transit_seeds += 1
 			transits.append(r["transit"])
@@ -254,6 +305,8 @@ static func report(seeds: int) -> Array[String]:
 		parts += "%s%s %.0f с (%s)" % [", " if parts != "" else "", WHY_RU[k], why[k], _pct(why[k], total)]
 	put(lines, "== причины тревоги кроны, сумма %d зёрен: всего %.0f с, эпизодов %d, зёрен без подхода серпохвоста ближе %.0f м — %d; %s; транзит в %d/%d зёрнах, самый долгий отрезок — медиана %s, макс %s с" % [
 		seeds, total, episodes, EcoFish.CROWN_ALARM, no_visit, parts, transit_seeds, seeds, _med(transits), _max(transits)])
+	put(lines, "== охота у рифа, сумма %d зёрен: всего %.0f с; [%s]; добыча внутри REEF_KEEP %.0f м — %.0f с, крона или стая рифа — %.0f с" % [
+		seeds, why["hunt"], _prey_text(prey), EcoPred.REEF_KEEP, prey_in, prey_home])
 	put(lines, "== итог: крона в тревоге в %d/%d зёрнах (самый долгий эпизод — медиана %s, макс %s с; за первые %.0f с — медиана %s с); залипание голодного в %d/%d (макс %s с), дольше %.0f с — %d/%d" % [
 		alarmed, seeds, _med(longest), _max(longest), FIRST, _med(firsts), stuck, seeds, _max(stucks), LONG, long, seeds])
 	return lines
