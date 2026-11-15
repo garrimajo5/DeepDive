@@ -26,7 +26,7 @@ func test_short_run_reports() -> void:
 	var r: Dictionary = tool.run(0)
 	var lines: Array[String] = tool.report(1)
 	_restore(tool)
-	for k in ["alarm", "episodes", "longest", "lines", "stuck", "stuck_r", "reef_hid", "hunger", "nearest", "reef", "first", "modes", "goal_in", "why", "transit", "transit_r"]:
+	for k in ["alarm", "episodes", "longest", "lines", "stuck", "stuck_r", "reef_hid", "hunger", "nearest", "reef", "first", "modes", "goal_in", "why", "transit", "transit_r", "prey", "prey_in", "prey_home", "clean_r"]:
 		ok(r.has(k), "в итоге зерна есть %s" % k)
 	ok(int(r["reef"]) >= 1, "стая рифа у 01 найдена: %d" % r["reef"])
 	ok(float(r["alarm"]) <= 10.0 + tool.DT + 1e-3, "тревога не дольше стоянки: %.2f" % r["alarm"])
@@ -39,12 +39,19 @@ func test_short_run_reports() -> void:
 		why += float(r["why"][k])
 	near(why, float(r["alarm"]), 1e-3, "причины делят всю тревогу кроны")
 	ok(float(r["transit"]) <= float(r["why"]["transit"]) + 1e-3, "отрезок транзита — не дольше транзита за стоянку")
-	eq(lines.size(), 4, "шапка, зерно, причины, итог")
+	var hunt := 0.0
+	for k in r["prey"]:
+		hunt += float(r["prey"][k])
+	near(hunt, float(r["why"]["hunt"]), 1e-3, "разбор охоты делит всю «охоту»")
+	ok(float(r["prey_in"]) <= hunt + 1e-3 and float(r["prey_home"]) <= hunt + 1e-3, "добыча в рифе — внутри охоты")
+	eq(lines.size(), 5, "шапка, зерно, причины, охота, итог")
 	ok(lines[0].begins_with("== голодный серпохвост у 01"), lines[0])
 	ok(lines[1].begins_with("  зерно  0: крона в тревоге"), lines[1])
 	ok(lines[1].contains("причины [транзит"), lines[1])
 	ok(lines[2].begins_with("== причины тревоги кроны, сумма 1 зёрен"), lines[2])
-	ok(lines[3].begins_with("== итог: крона в тревоге в"), lines[3])
+	ok(lines[1].contains("; охота ["), lines[1])
+	ok(lines[3].begins_with("== охота у рифа, сумма 1 зёрен"), lines[3])
+	ok(lines[4].begins_with("== итог: крона в тревоге в"), lines[4])
 
 
 ## Причина тревоги по ближайшему серпохвосту: вне CROWN_ALARM — «ушёл», не патруль — «охота», патруль — по цели:
@@ -63,3 +70,28 @@ func test_cause_by_mode_and_goal() -> void:
 	eq(tool.cause(pr, 38.0, axis), "hunt", "охота у рифа")
 	eq(tool.cause(pr, EcoFish.CROWN_ALARM + 1.0, axis), "away", "дальше тревоги кроны")
 	eq(tool.cause(null, 0.0, axis), "away", "серпохвостов нет")
+
+
+## За кем «охота» (п. 2 (аз)): не HUNT — имя режима; HUNT — крона, стая рифа (дом ближе REEF_HOME), другая стая
+## с номером или без добычи.
+func test_prey_key_by_shoal() -> void:
+	var tool := _tool()
+	var axis := Vector3(33.0, 0.0, -22.0)
+	var pr := EcoPred.Pred.new()
+	pr.agent = EcoAgent.new(EcoPred.ID, axis + Vector3(38.0, 0.0, 0.0))
+	pr.mode = EcoPred.Mode.EAT
+	eq(tool.prey_key(pr, axis), "eat", "ест — режим")
+	pr.mode = EcoPred.Mode.HUNT
+	eq(tool.prey_key(pr, axis), "без добычи", "охота без добычи")
+	var sh := EcoFish.Shoal.new()
+	sh.index = 5
+	sh.home = axis + Vector3(tool.REEF_HOME + 5.0, 0.0, 0.0)
+	var f := EcoFish.Fish.new()
+	f.agent = EcoAgent.new(EcoFish.ID, axis)
+	f.shoal = sh
+	pr.prey = f
+	eq(tool.prey_key(pr, axis), "стая 5", "чужая стая — с номером")
+	sh.home = axis + Vector3(tool.REEF_HOME - 5.0, 0.0, 0.0)
+	eq(tool.prey_key(pr, axis), "риф", "дом у оси — стая рифа")
+	sh.crown = true
+	eq(tool.prey_key(pr, axis), "крона", "стая кроны")
