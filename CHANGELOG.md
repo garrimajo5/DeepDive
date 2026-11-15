@@ -3,6 +3,8 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-15
+- UX (#1866): реакции экипажа у 07 — подписанное замечание строкой 3 приборов у стоящего на посту реплики, соло и
+  кооп одним правилом; спецификация и макеты в issue, строка в `docs/ux/put-novichka-sloj1.md`.
 - Поток А, фокус п. 4 (#1350): сценовым тестам корабля — тихий живой мир `TestCase.still_world(main)` (`StillEco`,
   события тест кладёт в `send`): шаг мира — ~60 % времени `main.step` в headless. `test_vitals` (ровное дно: цикл
   2,0 → 0,8 с; склон), `test_run_timeline.test_scene_breach_and_surface`, `test_rooms.test_walk_from_bridge_to_cargo`;
