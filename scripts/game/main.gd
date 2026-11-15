@@ -41,6 +41,7 @@ var expedition := Expedition.new()   ## история для журнала ART
 var lore := LayerLore.new()   ## знания слоя 1 (#825): диагностика 07, запись К-2, Раковина 03, поле 08…
 var scanner := Scanner.new()   ## сканер биолога: цели от живого мира, изученные виды
 var gate := GateDiag.new()     ## диагностика 07 сканером с борта (#826): гнёзда арки → факты `lore`
+var reaction := GateReaction.new()   ## реакции экипажа у 07 строкой приборов у поста реплики (#1866)
 var at_scanner := false        ## игрок у поста «Сканер»: мир шлёт цели (ShipState.scan_range)
 var near_post := ""            ## пост рядом с игроком на ногах (id), "" — нет или игрок занят постом
 var busy_said := {}           ## пост → «Пульт энергии занят: Инженер» на приборах; гаснет, когда пост освободился
@@ -510,6 +511,7 @@ func _load_state() -> void:
 	lore.changed.connect(save.mark)
 	scanner.message.connect(say)
 	gate.read.connect(func(f: String) -> void: announce(GateDiag.TEXT[f]))   # факт 07 видят все (#826)
+	gate.read.connect(reaction.arm)   # реплика роли — позже, у её поста (#1866)
 
 
 ## Идёт прогрев шейдеров: экран под шторкой, сценарий тестера ждёт.
@@ -987,6 +989,7 @@ func _step_ui(dt: float) -> void:
 	clock.lap("интерфейс/связь", Time.get_ticks_usec())
 	overlay_flow.radio_step(dt)
 	clock.lap("интерфейс/рация", Time.get_ticks_usec())
+	overlay_flow.reaction_step(dt)   # реакция экипажа у 07 (#1866) — после приборов кадра
 
 
 ## Шаг: метки «Занято», таблички, ушедшие, прогрев, сеть.

@@ -354,6 +354,14 @@ func tick(dt: float) -> void:
 				if c[1]:
 					main.lore.facts.erase(LayerLore.BRIEF)
 				_log("брифинг %s · %s" % ["вкл" if c[1] else "выкл", row3_now()])   # строка мира до плашки (#1429)
+			"nests":   # диагностика 07 с нуля (#1866): реакции экипажа взводит только чтение в этом сеансе
+				var n := 0
+				for f in LayerLore.DIAGNOSTICS:
+					if main.lore.knows(f):
+						main.lore.facts.erase(f)
+						n += 1
+				main.reaction.forget()
+				_log("гнёзда 07: забыто фактов %d, реакции экипажа с нуля" % n)
 			"voice":   # голос во внутренней связи ART-040 — как событие мира EcoLink.VOICE
 				main.on_eco_event(EcoLink.voice(c[1], c[2], c[3], c[4], c[5]))
 			"slow":   # предложение «Экономно» ART-044 — как после нескольких секунд низких кадр/с
