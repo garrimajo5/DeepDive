@@ -89,21 +89,21 @@ func test_scene_brief_before_hints() -> void:
 	tree.root.add_child(main)
 	await frames(1)
 	ok(main.arrival.active(), "первое прибытие — брифинг")
-	for i in 30:
-		main.step(1.0 / 30.0)
+	for i in 10:   # 1 с шагом 0,1: плашка проявилась (FADE 0,25 с), было 30 шагов по 1/30 (#1350, п. 4)
+		main.step(0.1)
 	ok(main.arrival_panel.visible, "плашка брифинга видна")
 	ok(not main.tutorial.shown(), "подсказки ждут конца брифинга")
 	ok(main.events_held(), "события слоя ждут")
 	var size := main.get_viewport().get_visible_rect().size
 	for i in ArrivalBrief.count():
 		main.overlay.router.taps.append(ArrivalBrief.box(size).get_center())
-		main.step(1.0 / 30.0)
-		for j in 15:
-			main.step(1.0 / 30.0)
+		main.step(0.1)
+		for j in 5:   # 0,5 с > MIN_SHOW: следующее касание листает
+			main.step(0.1)
 	ok(not main.arrival.active(), "восемь касаний — пройден")
 	ok(main.lore.knows(LayerLore.BRIEF), "знание «брифинг прочитан»")
-	for i in 15:
-		main.step(1.0 / 30.0)
+	for i in 5:
+		main.step(0.1)
 	ok(main.tutorial.shown(), "дальше — подсказки первого забега")
 	ok(not main.arrival_panel.visible, "плашки брифинга нет")
 
@@ -113,10 +113,10 @@ func test_scene_pad_does_not_turn() -> void:   # крестовина ведёт
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
-	for i in 30:
-		main.step(1.0 / 30.0)
+	for i in 10:
+		main.step(0.1)
 	main.overlay.router.taps.append(main.overlay.router.layout.pad.c)
-	main.step(1.0 / 30.0)
+	main.step(0.1)
 	eq(main.arrival.screen, 0, "касание крестовины экран не листает")
 
 
@@ -155,8 +155,8 @@ func test_scene_world_lines_wait_for_brief() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
-	for i in 30:
-		main.step(1.0 / 30.0)
+	for i in 10:
+		main.step(0.1)
 	ok(main.arrival.shown(), "брифинг на экране")
 	var before: String = main.message.text
 	main.on_eco_event({"type": EcoLink.MESSAGE, "text": "Из песка что-то схватило рыбу"})
@@ -166,13 +166,13 @@ func test_scene_world_lines_wait_for_brief() -> void:
 	var size := main.get_viewport().get_visible_rect().size
 	var pending := ""
 	for i in ArrivalBrief.count():
-		for j in 15:
-			main.step(1.0 / 30.0)
+		for j in 5:   # 0,5 с > MIN_SHOW: следующее касание листает
+			main.step(0.1)
 		ok(main.arrival.active(), "брифинг ещё идёт")
 		eq(main.message.text, before, "строка приборов под брифингом не меняется (экран %d)" % (i + 1))
 		pending = main.world_wait   # живой мир может сменить отложенную строку на свежую — ждёт последняя
 		main.overlay.router.taps.append(ArrivalBrief.box(size).get_center())
-		main.step(1.0 / 30.0)
+		main.step(0.1)
 	ok(not main.arrival.active(), "брифинг пройден")
 	ok(pending != "", "строка ждала")
 	ok(main.message.text != before and main.message.text != "", "после брифинга — отложенная строка на приборах")
@@ -185,14 +185,14 @@ func test_scene_queued_world_line_waits_for_brief() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
-	for i in 30:
-		main.step(1.0 / 30.0)
+	for i in 10:
+		main.step(0.1)
 	ok(main.arrival.shown(), "брифинг на экране")
 	main.world_wait = ""
 	main.message.say("Из песка что-то схватило круглую рыбку", Status.MESSAGE_SECONDS, true)
 	main.message.say("Стайка круглых рыбок пасётся на светящемся мху", Status.MESSAGE_SECONDS, true)   # в очереди
-	for i in 60:
-		main.step(1.0 / 30.0)
+	for i in 20:   # те же 2 с
+		main.step(0.1)
 		ok(not main.message.text.contains("рыб"), "строка мира не выходит под брифингом (кадр %d)" % i)
 	eq(main.world_wait, "Стайка круглых рыбок пасётся на светящемся мху", "ждёт последняя из очереди")
 
@@ -204,8 +204,8 @@ func test_scene_released_line_in_qa_log() -> void:
 	tree.root.add_child(main)
 	await frames(1)
 	var qa := main.start_qa('[{"do": "wait", "s": 60}]')
-	for i in 30:
-		main.step(1.0 / 30.0)
+	for i in 10:
+		main.step(0.1)
 	ok(main.arrival.active(), "брифинг на экране")
 	main.world_wait = "Из песка что-то схватило рыбу"
 	main.arrival.on = false   # брифинг кончился
@@ -222,8 +222,8 @@ func test_scene_urgent_line_waits_for_brief() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
-	for i in 30:
-		main.step(1.0 / 30.0)
+	for i in 10:
+		main.step(0.1)
 	ok(main.arrival.active(), "брифинг на экране")
 	main.world_wait = ""
 	main.world_wait_hot = false
@@ -243,8 +243,8 @@ func test_scene_keep_line_waits_for_brief() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
-	for i in 30:
-		main.step(1.0 / 30.0)
+	for i in 10:
+		main.step(0.1)
 	ok(main.arrival.active(), "брифинг на экране")
 	main.world_wait = ""
 	main.world_wait_hot = false
