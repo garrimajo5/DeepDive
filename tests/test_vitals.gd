@@ -104,24 +104,11 @@ func test_warning() -> void:
 	eq(v.warning(), "Корпус повреждён", "корпус важнее")
 
 
-class HitEco:
-	extends EcoView
-	var send: Array[Dictionary] = []
-
-	func step(_dt: float, _ship: EcoLink.ShipState) -> Array[Dictionary]:
-		var out := send.duplicate()
-		send.clear()
-		return out
-
-
 func test_scene_eco_hits_and_drain() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
-	var fake := HitEco.new()
-	main.eco.queue_free()
-	main.eco = fake
-	main.add_child(fake)
+	var fake := still_world(main)
 	main.breach.cd = Breach.COOLDOWN   # без пробоины: она — в test_breach
 	fake.send = [EcoLink.hit("Серпохвост", 0.12, main.helm.pos)]
 	main.step(0.1)
@@ -165,6 +152,7 @@ func test_scene_scrape_into_slope() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
+	still_world(main)
 	main.helm.ground = func(_x: float, z: float) -> float: return -42.0 + maxf(0.0, 90.0 - z) * 0.5   # стена-склон впереди
 	main.helm.pos = Vector3(0, -39, 95)
 	main.helm.speed = 6.5
@@ -185,6 +173,7 @@ func test_diving_onto_flat_bottom_is_not_a_hit() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
+	still_world(main)   # мир тесту не нужен: 170 шагов без него втрое быстрее (#1350, фокус А п. 4)
 	main.helm.ground = func(_x: float, _z: float) -> float: return -30.0
 	main.sit_at_helm()
 	var r := main.overlay.router

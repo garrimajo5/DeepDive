@@ -47,6 +47,28 @@ func near(got: float, want: float, eps: float = 1e-6, msg: String = "") -> bool:
 	return false
 
 
+## Тихий живой мир для сценовых тестов корабля (#1350, фокус А п. 4): шаг мира — ~60 % времени `main.step`
+## в headless, а тесту хода, отсеков или хронометража он не нужен — и случайный укус его не заденет.
+## События мира тест кладёт сам: `send`.
+class StillEco:
+	extends EcoView
+	var send: Array[Dictionary] = []
+
+	func step(_dt: float, _ship: EcoLink.ShipState) -> Array[Dictionary]:
+		var out := send.duplicate()
+		send.clear()
+		return out
+
+
+## Заменить живой мир сцены тихим (после `add_child(main)` и кадра). Цена — ~0,15 с, окупается с ~20 шагов.
+func still_world(main: Main) -> StillEco:
+	var still := StillEco.new()
+	main.eco.queue_free()
+	main.eco = still
+	main.add_child(still)
+	return still
+
+
 ## Ждать n кадров дерева.
 func frames(n: int = 1) -> void:
 	for i in n:

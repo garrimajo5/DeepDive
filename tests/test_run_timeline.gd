@@ -206,6 +206,7 @@ func test_scene_breach_and_surface() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
+	still_world(main)   # пробоину и итог тест ставит сам; 151 шаг без мира вдвое быстрее (#1350, фокус А п. 4)
 	ok(main.timeline.running, "забег идёт с начала игры")
 	for i in 20:
 		main.step(0.1)
