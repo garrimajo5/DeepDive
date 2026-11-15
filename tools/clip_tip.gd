@@ -44,6 +44,12 @@ static func line(clip: String, r: Dictionary) -> String:
 		clip, r.len, r.vmax, r.amed, r.amax, r.at]
 
 
+## Точка `point` позы покоя модели (м), жёстко сидящая на кости `b`, — в текущей позе скелета, в осях скелета.
+## Общая для замера и тестов приёмки ANIM (мировая точка — `sk.global_transform * point_at(...)`).
+static func point_at(sk: Skeleton3D, b: int, point: Vector3) -> Vector3:
+	return sk.get_bone_global_pose(b) * (sk.get_bone_global_rest(b).affine_inverse() * point)
+
+
 ## По клипам модели {имя: {len, vmax, amed, amax, at}}; модель ставится под parent на время замера и уходит.
 ## Нет файла, скелета, плеера или кости — пустой словарь.
 static func measure(parent: Node, glb: String, bone: String, point: Vector3, hz: float) -> Dictionary:
@@ -64,7 +70,6 @@ static func measure(parent: Node, glb: String, bone: String, point: Vector3, hz:
 	if b < 0:
 		sc.free()
 		return out
-	var local := sk.get_bone_global_rest(b).affine_inverse() * point
 	var h := 1.0 / hz
 	var names := Array(ap.get_animation_list())
 	names.sort()
@@ -75,7 +80,7 @@ static func measure(parent: Node, glb: String, bone: String, point: Vector3, hz:
 		var steps := int(floor(anim.length / h + 1e-4))
 		for i in steps + 1:
 			ap.seek(minf(i * h, anim.length), true)
-			pts.append(sk.get_bone_global_pose(b) * local)
+			pts.append(point_at(sk, b, point))
 		ap.stop()
 		var acc: Array[float] = []
 		var vmax := 0.0
