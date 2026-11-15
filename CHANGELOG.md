@@ -3,6 +3,10 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-15
+- Поток А, фокус п. 4 (#1350): сценовым тестам корабля — тихий живой мир `TestCase.still_world(main)` (`StillEco`,
+  события тест кладёт в `send`): шаг мира — ~60 % времени `main.step` в headless. `test_vitals` (ровное дно: цикл
+  2,0 → 0,8 с; склон), `test_run_timeline.test_scene_breach_and_surface`, `test_rooms.test_walk_from_bridge_to_cargo`;
+  `HitEco` в `test_vitals` заменён им же. Мутации `SCRAPE_LIFT := 0` и `:= 99` тесты валят, код игры не менялся.
 - Поток А, фокус п. 4 (#1350): сценовые тесты `test_arrival_brief` идут шагом 0,1 с вместо 1/30 (в свежей таблице CI
   `test_scene_brief_before_hints` — 3,0 с): 173 шага → 63, файл 17,5 → 15,4 с. Паузы между касаниями 0,5 с —
   по-прежнему дольше `MIN_SHOW`; мутация `MIN_SHOW := 0,65` тест валит.

@@ -53,6 +53,7 @@ func test_walk_from_bridge_to_cargo() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(1)
+	still_world(main)   # проход по отсекам — без живого мира (#1350, фокус А п. 4)
 	var r := main.overlay.router
 	main.walker.yaw = PI   # лицом к корме
 	main.walker.z = 0.5
