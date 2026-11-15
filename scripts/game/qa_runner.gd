@@ -136,19 +136,28 @@ static func p99(sorted: Array[float]) -> float:
 	return 0.0 if sorted.is_empty() else sorted[mini(int(sorted.size() * 0.99), sorted.size() - 1)]
 
 
-## «рывки: хищник 0 за 3,0 с, скелет полный, 88 кадров, 24–27 м от корабля: кончик хвоста 99 % 12 (макс 18) м/с²,
-## центр тела 99 % 4 (макс 6) м/с² · хвост в норме (≤ 30), центр в норме (≤ 40), #1753».
+## Медиана отсортированного ряда (пустой — 0; чётное число — среднее двух средних).
+static func median(sorted: Array[float]) -> float:
+	var n := sorted.size()
+	if n == 0:
+		return 0.0
+	return sorted[n >> 1] if n % 2 == 1 else (sorted[(n >> 1) - 1] + sorted[n >> 1]) * 0.5
+
+
+## «рывки: хищник 0 за 3,0 с, скелет полный, 88 кадров, 24–27 м от корабля: кончик хвоста 99 % 12 (медиана 3,
+## макс 18) м/с², центр тела 99 % 4 (медиана 1, макс 6) м/с² · хвост в норме (≤ 30), центр в норме (≤ 40), #1753».
 ## Меньше 100 кадров — 99 % и есть худший кадр: за 3 с число держит один кадр, разброс прогонов ±10 м/с² — не рост.
+## Медиана — половина кадров: один кадр её не сдвигает, растёт она — движение стало резче целиком, не разброс.
 static func jerk_line(n: int, s: float, lite: bool, frames: int, tail: Array[float], core: Array[float], dmin: float,
 		dmax: float) -> String:
 	var tail_max := 0.0 if tail.is_empty() else tail[tail.size() - 1]
 	var core_max := 0.0 if core.is_empty() else core[core.size() - 1]
 	var verdict := "в норме" if p99(tail) <= JERK_LIMIT else "РЫВОК"
 	var core_verdict := "в норме" if p99(core) <= JERK_CORE_LIMIT else "РЫВОК"
-	return ("рывки: хищник %d за %.1f с, скелет %s, %d кадров, %.0f–%.0f м от корабля: кончик хвоста 99 %% %.0f (макс %.0f) м/с², "
-			+ "центр тела 99 %% %.0f (макс %.0f) м/с² · хвост %s (≤ %.0f), центр %s (≤ %.0f), #1753") % [n, s,
-			"«Экономно»" if lite else "полный", frames, dmin if dmin < INF else 0.0, dmax, p99(tail), tail_max,
-			p99(core), core_max, verdict, JERK_LIMIT, core_verdict, JERK_CORE_LIMIT]
+	return ("рывки: хищник %d за %.1f с, скелет %s, %d кадров, %.0f–%.0f м от корабля: кончик хвоста 99 %% %.0f (медиана %.0f, макс %.0f) м/с², "
+			+ "центр тела 99 %% %.0f (медиана %.0f, макс %.0f) м/с² · хвост %s (≤ %.0f), центр %s (≤ %.0f), #1753") % [n, s,
+			"«Экономно»" if lite else "полный", frames, dmin if dmin < INF else 0.0, dmax, p99(tail), median(tail),
+			tail_max, p99(core), median(core), core_max, verdict, JERK_LIMIT, core_verdict, JERK_CORE_LIMIT]
 
 
 ## Свет тестера у камеры с борта (шаг «outside» с "lamp"): на 300 м корпус и грунт снаружи чёрные — без него у 10

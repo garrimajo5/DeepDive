@@ -77,7 +77,7 @@ func test_core_turn_at_full_speed_is_in_norm() -> void:
 	var line := QaRunner.jerk_line(0, 3.0, false, pts.size(), [] as Array[float], QaRunner.accel(pts, dts), 24.0, 27.0)
 	print("  поворот на полном ходу: %s" % line)
 	ok(line.contains("центр в норме (≤ 40)"), line)
-	ok(line.contains("центр тела 99 % 28 (макс 28)"), "по хорде кадра — чуть меньше 28,5: %s" % line)
+	ok(line.contains("центр тела 99 % 28 (медиана 28, макс 28)"), "по хорде кадра — чуть меньше 28,5: %s" % line)
 
 
 func test_core_pose_jump_is_a_jerk() -> void:
@@ -104,3 +104,41 @@ func test_core_limit_above_swim_bound() -> void:
 	print("  предел логики хода %.1f м/с², норма центра %.0f" % [bound, QaRunner.JERK_CORE_LIMIT])
 	ok(bound < QaRunner.JERK_CORE_LIMIT, "предел %.1f < нормы %.0f" % [bound, QaRunner.JERK_CORE_LIMIT])
 	ok(QaRunner.JERK_CORE_LIMIT - bound < 10.0, "норма не слишком свободна: запас %.1f" % (QaRunner.JERK_CORE_LIMIT - bound))
+
+
+## Медиана в строке (#1350, 14.11): за 3 с «99 %» — один кадр, по нему рост от разброса не отличить.
+func test_median_of_sorted_row() -> void:
+	near(QaRunner.median([] as Array[float]), 0.0, 1e-6, "пустой ряд — 0")
+	near(QaRunner.median([4.0] as Array[float]), 4.0, 1e-6, "один кадр")
+	near(QaRunner.median([1.0, 2.0, 9.0] as Array[float]), 2.0, 1e-6, "нечётное число — средний")
+	near(QaRunner.median([1.0, 2.0, 4.0, 9.0] as Array[float]), 3.0, 1e-6, "чётное — среднее двух средних")
+
+
+func test_one_bad_frame_moves_p99_not_median() -> void:
+	# ход 6 м/с с плавным разгоном 3 м/с²; во втором ряду на одном кадре тело перескакивает на 0,03 м
+	var lines: Array[String] = []
+	for jump: float in [0.0, 0.03]:
+		var pts: Array[Vector3] = []
+		var dts: Array[float] = []
+		for i in 90:
+			var t := i / 30.0
+			pts.append(Vector3(6.0 * t + 1.5 * t * t + (jump if i >= 45 else 0.0), 0.0, 0.0))
+			dts.append(1.0 / 30.0)
+		lines.append(QaRunner.jerk_line(0, 3.0, false, pts.size(), [] as Array[float], QaRunner.accel(pts, dts), 24.0, 27.0))
+		print("  скачок %.2f м: %s" % [jump, lines[-1]])
+	ok(lines[0].contains("центр тела 99 % 3 (медиана 3, макс 3)"), "ровный разгон: %s" % lines[0])
+	ok(lines[1].contains("центр тела 99 % 30 (медиана 3, макс 30)"), "один кадр: 99 %% вырос, медиана на месте — %s" % lines[1])
+
+
+func test_line_parts_parse_back() -> void:
+	# строку читает тестер: у хвоста и центра по три числа — 99 %, медиана, макс — в этом порядке
+	var tail: Array[float] = [1.0, 2.0, 3.0, 4.0, 18.0]
+	var core: Array[float] = [0.5, 5.0, 22.0]
+	var line := QaRunner.jerk_line(0, 3.0, false, 88, tail, core, 24.0, 27.0)
+	var re := RegEx.create_from_string("(кончик хвоста|центр тела) 99 % (\\d+) \\(медиана (\\d+), макс (\\d+)\\) м/с²")
+	var got := re.search_all(line)
+	eq(got.size(), 2, line)
+	if got.size() == 2:
+		eq([got[0].get_string(2), got[0].get_string(3), got[0].get_string(4)], ["18", "3", "18"], "хвост: %s" % line)
+		eq([got[1].get_string(2), got[1].get_string(3), got[1].get_string(4)], ["22", "5", "22"], "центр: %s" % line)
+	ok(line.ends_with("хвост в норме (≤ 30), центр в норме (≤ 40), #1753"), line)
