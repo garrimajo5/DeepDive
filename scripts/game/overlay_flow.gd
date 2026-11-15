@@ -25,6 +25,19 @@ func step(dt: float) -> void:
 	card_step(dt)
 	comms_step(dt)   # гость: нажатие — `net_pad.ask` со следующим вводом
 	radio_step(dt)
+	reaction_step(dt)
+
+
+## Реакции экипажа у 07 (#1866, `GateReaction`): реплика роли — строкой приборов у того, кто стоит у её поста, пока
+## корабль в круге 07. У каждого игрока своя: хост и гость показывают её сами, по сети она не идёт. Выходит строкой
+## мира с ожиданием на 6 с — срочную и «держится» не перебивает. Под облётом, брифингом, голосованием, итогом,
+## шторками и экранами — часы стоят.
+func reaction_step(dt: float) -> void:
+	var m := main
+	var hide := hidden() or m.arrival.active() or m.run.voting
+	var text := m.reaction.update(dt, Vector2(m.helm.pos.x, m.helm.pos.z), m.near_post, m.lore, hide)
+	if text != "":
+		m.message.say(text, GateReaction.SHOW, true)
 
 
 ## Подсказки первого забега ART-038: скрыты под тревогой, голосованием, итогом, облётом, шторкой, паузой и меню

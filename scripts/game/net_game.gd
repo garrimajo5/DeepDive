@@ -172,6 +172,7 @@ func enter_client(c: NetLink.Client) -> void:
 	main.save.flush(main.samples, main.scanner)   # своё несохранённое — в файл до кадров хоста
 	main.save.guest = true   # сохраняет хост (#823): кампания гостя не перетирается кадрами хоста
 	own_lore = main.lore.snapshot()
+	main.reaction.resync()   # знания хоста на входе — основа, не событие (#1866)
 	own_hold = NetSnap.hold(main.samples, main.scanner)
 	main.net_client = c
 	main.net_seq = -1
@@ -335,6 +336,8 @@ func client_frame(f: Dictionary) -> void:
 			NetSnap.apply_sonar(evd.get("so"), main.sonar, main.time)
 			main.comms.apply(evd.get("c"))
 			main.lore.apply_net(evd.get("k"))
+			if typeof(evd.get("k")) in [TYPE_INT, TYPE_FLOAT]:
+				main.reaction.follow(main.lore)   # новый факт 07 от хоста — реплика у своего поста (#1866)
 		var rs := NetSnap.apply_run(evd.get("r") if evd is Dictionary else null, main.run)
 		if not rs.is_empty():   # маршрут хоста уже в run; метки, таймер и итог — для показа
 			main.votes = rs["marks"]
