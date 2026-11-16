@@ -635,8 +635,36 @@ func test_shot_logs_petal_at_gate() -> void:
 	main.gate_petal()
 	ok("створка гнезда 1: открыта (60°)" in qa.state(true), "открыта в кампании: " + qa.state(true))
 	ok(qa.state(true).ends_with(qa.rows_now()), "строки приборов — по-прежнему в конце")
+	# сводка створки run-qa.ps1 (#1350, 16.11 20:22) разбирает именно эту строку: шаблоны — из kadry.ps1
+	var pats := _petal_patterns()
+	eq(pats.size(), 2, "шаблоны Get-PetalLines найдены в kadry.ps1")
+	if pats.size() == 2:
+		main.say("Терраса 07: рабочий открыл створку гнезда")
+		var line := "скриншот 41b-okno-otkryta | " + qa.state(true) + qa.draw_note(81, 376000)
+		var m: RegExMatch = pats[0].search(line)
+		ok(m != null, "шаблон сводки ловит строку снимка: " + line)
+		if m != null:
+			eq(m.get_string(1), "41b-okno-otkryta", "шаг")
+			eq(m.get_string(2), "%.1f" % qa.time, "момент")
+			eq(m.get_string(3), "1", "номер гнезда")
+			eq(m.get_string(4), "открыта (60°)", "створка — без строк приборов")
+		var r: RegExMatch = pats[1].search(line)
+		ok(r != null and r.get_string(1) == qa.row3_now(), "строка 3 — как пишет QaRunner: " + ("" if r == null else r.get_string(1)))
 	main.queue_free()
 	await frames(1)
+
+
+## Шаблоны `Get-PetalLines` из tools/qa/kadry.ps1 (строки `$l -match '…'` внутри функции): строка снимка и строка 3.
+func _petal_patterns() -> Array[RegEx]:
+	var out: Array[RegEx] = []
+	var ps := FileAccess.get_file_as_bytes("res://tools/qa/kadry.ps1").slice(3).get_string_from_utf8()
+	var from := ps.find("function Get-PetalLines(")
+	if from < 0:
+		return out
+	var body := ps.substr(from, ps.find("\nfunction ", from + 1) - from)
+	for m in RegEx.create_from_string("\\$l -match '([^']+)'").search_all(body):
+		out.append(RegEx.create_from_string(m.get_string(1)))
+	return out
 
 
 func test_brief_logs_world_line() -> void:   # #1429: в логе видно, пришла строка мира до плашки или под ней

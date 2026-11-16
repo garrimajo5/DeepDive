@@ -331,6 +331,9 @@ $watch = Get-WatchLines $worstNow (Test-Quiet $result) (Read-Past @("$repo\qa", 
 foreach ($w in $watch) { Write-Output $w; Add-Content "$run\log.txt" "run-qa: $w" -Encoding utf8 }
 # Что сводка прочитала из issues (#1350, 12.11): нет строк ПРОВЕРИТЬ — эта строка говорит почему
 if ($script:IssueNote) { Write-Output $script:IssueNote; Add-Content "$run\log.txt" "run-qa: $($script:IssueNote)" -Encoding utf8 }
+# Сводка створки гнезда 07 (#1350, 16.11 20:22): шаг, момент, створка и строка 3 приборов по снимкам у арки — одной таблицей
+$petal = @(Get-PetalLines @(if (Test-Path "$run\log.txt") { Get-Content "$run\log.txt" -Encoding utf8 }))
+foreach ($row in $petal) { Write-Output $row; Add-Content "$run\log.txt" "run-qa: $row" -Encoding utf8 }
 # Заметная строка в конце, перед END: прогон не дошёл до конца или не все снимки забраны (#1533)
 if (-not $done -or $miss) {
   $why = @()
