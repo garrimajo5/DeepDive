@@ -972,12 +972,15 @@ func test_worst_rest_splits_canvas_draw() -> void:
 	near(sum, 107.0 - 18.0 - 19.0, 0.01, "части в сумме — весь остаток кадра")
 
 
+## Проба порядка обработки: в свой `_process` запоминает, что метка показывала до неё. Сравниваем порядок, а не
+## время: два пустых `_process` на быстрой машине попадают в одну микросекунду (#1947).
 class TailProbe extends Node:
-	var us := 0
+	var tail: QaRunner.Tail = null
+	var before := 0   # метка на момент последнего `_process` пробы
 	var seen := 0
 
 	func _process(_dt: float) -> void:
-		us = Time.get_ticks_usec()
+		before = tail.us
 		seen += 1
 
 
@@ -989,10 +992,13 @@ func test_tail_mark_processes_last() -> void:
 	var tail: QaRunner.Tail = qa._tail
 	eq(qa.get_child_count(), 1, "метка одна, второй вызов её не плодит")
 	var probe := TailProbe.new()   # в дереве позже метки: без приоритета шёл бы после неё
+	probe.tail = tail
 	tree.root.add_child(probe)
 	await frames(4)
 	ok(probe.seen >= 2 and tail.us > 0, "оба узла обработаны")
-	ok(tail.us > probe.us, "метка обработана после узла, стоящего в дереве позже")
+	# Метка шла после пробы — с тех пор она сдвинулась; шла бы до — проба увидела бы уже её значение этого кадра.
+	ok(tail.us != probe.before, "метка обработана после узла, стоящего в дереве позже")
+	ok(tail.us >= probe.before, "метка времени не идёт назад")
 	probe.queue_free()
 	qa.queue_free()
 
