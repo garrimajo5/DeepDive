@@ -97,7 +97,7 @@ func reset(world_seed: int = -1) -> void:
 	_link.clear()
 	_drain.clear()
 	_drag.clear()
-	_heard.clear()
+	_once.clear()
 	agents.clear()
 	time = 0.0
 	steps = 0
@@ -330,22 +330,71 @@ func send(event: Dictionary) -> void:
 
 ## Фоновые строки, которые экипаж видит раз за эпизод наблюдения (гейм-дизайнер, #1400, 12.11): вид → заметки.
 ## Засада глазуна на монетников — 5–6 раз за стоянку у середины 00 → 01, одна и та же строка мешала цепочке
-## «волнолист → моллюски». Повтор, услышанный раньше ONCE_GAP с после прежнего такого же, идёт без текста
-## (наблюдение в журнал остаётся, частота охоты та же); ушли из слышимости и вернулись позже — строка снова.
+## «волнолист → моллюски». Эпизод — по месту (#1400, п. 2 (ш), вариант 3, ГД 14.11): первая услышанная засада
+## открывает его строкой, повторы идут без текста (наблюдение в журнал остаётся, частота охоты та же), сколько бы
+## корабль ни стоял. Эпизод кончается, когда корабль дальше EcoBus.HEARING + ONCE_LEAVE от всех источников
+## (`once_from`, у глазунов — их места) — тогда следующая услышанная засада снова со строкой; само возвращение строку
+## не даёт. Запас ONCE_LEAVE — мелкие колебания у границы слышимости эпизод не закрывают.
 const ONCE := {"glazun": ["ambush"]}
-const ONCE_GAP := 60.0
-## «вид:заметка» → время мира, когда экипаж последний раз слышал такое событие.
-var _heard := {}
+const ONCE_LEAVE := 10.0
 
 
-## Повтор фоновой строки ONCE в этом эпизоде (и отметка, что событие услышано).
-func repeat(species: String, note: String) -> bool:
+## Эпизод фоновой строки ONCE: открыт ли, где источники, когда последний раз услышан.
+class Episode:
+	extends RefCounted
+	var open := false
+	var sources: Array[Vector3] = []
+	## Время мира последнего услышанного события (−INF — не было).
+	var last := -INF
+
+	## Услышали событие из точки at в time: true — строка (эпизод открылся), false — повтор в открытом эпизоде.
+	## Незнакомая точка становится источником.
+	func hear(at: Vector3, time: float) -> bool:
+		last = time
+		if not sources.any(func(q: Vector3) -> bool: return q.distance_to(at) < 1.0):
+			sources.append(at)
+		if open:
+			return false
+		open = true
+		return true
+
+	## Корабль в ship: дальше EcoBus.HEARING + ONCE_LEAVE от всех источников — эпизод кончился.
+	func watch(ship_pos: Vector3) -> void:
+		if open and not near(ship_pos):
+			open = false
+
+	## Корабль в ship_pos не дальше EcoBus.HEARING + ONCE_LEAVE от какого-нибудь источника.
+	func near(ship_pos: Vector3) -> bool:
+		var reach := EcoBus.HEARING + ONCE_LEAVE
+		for q in sources:
+			if q.distance_to(ship_pos) <= reach:
+				return true
+		return false
+
+
+## «вид:заметка» → Episode.
+var _once := {}
+
+
+## Эпизод «вид:заметка» (создаётся при первом обращении).
+func episode(species: String, note: String) -> Episode:
+	var key := species + ":" + note
+	if not _once.has(key):
+		_once[key] = Episode.new()
+	return _once[key]
+
+
+## Источники фоновой строки ONCE (места засадчиков): модуль вида задаёт их при сбросе. Без них источник — где
+## событие услышали.
+func once_from(species: String, note: String, at: Array[Vector3]) -> void:
+	episode(species, note).sources = at.duplicate()
+
+
+## Повтор фоновой строки ONCE в этом эпизоде (и отметка, что событие из at услышано).
+func repeat(species: String, note: String, at: Vector3) -> bool:
 	if not note in (ONCE.get(species, []) as Array):
 		return false
-	var key := species + ":" + note
-	var was: float = _heard.get(key, -INF)
-	_heard[key] = time
-	return time - was < ONCE_GAP
+	return not episode(species, note).hear(at, time)
 
 
 ## Забрать события для корабля: прямые (удар, энергия, рядом) и события шины, которые экипаж слышит
@@ -354,8 +403,10 @@ func repeat(species: String, note: String) -> bool:
 func take_link() -> Array[Dictionary]:
 	var out := _link.duplicate()
 	_link.clear()
+	for ep in _once.values():
+		(ep as Episode).watch(ship.pos)
 	for ev in bus.take_near(ship.pos):
-		var t := "" if repeat(ev.species, ev.note) else ev.text()
+		var t := "" if repeat(ev.species, ev.note, ev.pos) else ev.text()
 		var hot := EcoLink.urgent(ev.species, ev.note)
 		var held := EcoLink.keep(ev.species, ev.note)
 		if ev.is_observation():

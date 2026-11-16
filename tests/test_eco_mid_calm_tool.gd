@@ -240,22 +240,36 @@ func test_ambush_line() -> void:
 	ok(shown.begins_with("СТРОКА mid2 1.0 с: "), shown)
 
 
-## Строка засады на приборах (#1400, п. 2 (ш)): как `EcoWorld.repeat` — отметку двигает каждая услышанная засада, не
-## только показанная, поэтому засады чаще ONCE_GAP держат эпизод без строки сколько угодно. Сверка с самим миром.
+## Строка засады на приборах (#1400, п. 2 (ш), вариант 3): как `EcoWorld.repeat` — эпизод по месту: стоянка у глазуна
+## сколько угодно без строки, ушли дальше HEARING + ONCE_LEAVE от всех глазунов и вернулись — следующая засада снова со
+## строкой. Сверка с самим миром (его take_link — watch, как line_watch у инструмента).
 func test_line_shown_like_world_once() -> void:
 	var tool := _tool()
 	var w := EcoWorld.new()
-	var r := {"gz_last": -INF}
-	var gap := EcoWorld.ONCE_GAP
+	var gz := Vector3(0, -30, 0)
+	w.once_from(EcoCoins.GLAZUN, "ambush", [gz] as Array[Vector3])
+	var r := {"gz_ep": tool.line_episode(w)}
+	var near_p := gz + Vector3(0, 7, 20)
+	var edge := gz + Vector3(0, 7, EcoBus.HEARING + EcoWorld.ONCE_LEAVE * 0.5)
+	var far := gz + Vector3(0, 7, EcoBus.HEARING + EcoWorld.ONCE_LEAVE + 10.0)
 	var got: Array[bool] = []
-	for t in [0.0, 0.7 * gap, 1.4 * gap, 2.1 * gap, 3.3 * gap]:
-		w.time = t
-		var mine: bool = tool.line_shown(r, t)
-		eq(mine, not w.repeat(EcoCoins.GLAZUN, "ambush"), "засада в %.0f с" % t)
+	# [где корабль перед засадой, через сколько с]: стоянка, у границы, далеко, снова у глазуна
+	for st in [[near_p, 0.0], [near_p, 200.0], [edge, 10.0], [near_p, 10.0], [far, 10.0], [near_p, 10.0], [near_p, 10.0]]:
+		var p: Vector3 = st[0]
+		w.time += float(st[1])
+		w.ship.pos = p
+		tool.line_watch(r, p)
+		w.take_link()
+		if p.distance_to(gz) > EcoBus.HEARING:
+			continue   # засаду не слышно — только отход
+		var world_says: bool = tool.world_line(w)
+		var mine: bool = tool.line_shown(r, gz, w.time)
+		eq(mine, not w.repeat(EcoCoins.GLAZUN, "ambush", gz), "засада в %.0f с" % w.time)
+		eq(world_says, mine, "world_line как мир в %.0f с" % w.time)
 		got.append(mine)
-	print("  строка засады при %s × ONCE_GAP: %s" % [str([0, 0.7, 1.4, 2.1, 3.3]), str(got)])
-	eq(got, [true, false, false, false, true] as Array[bool], "каждые 0,7 × ONCE_GAP — строка только первая")
-	near(r["gz_quiet"], 1.2 * gap, 0.001, "самая долгая тишина — между 2,1 и 3,3 × ONCE_GAP")
+	print("  строка засады: стоянка, вернулись от границы, вернулись издалека, стоянка: %s" % str(got))
+	eq(got, [true, false, false, true, false] as Array[bool], "строка — первая и после ухода из слышимости всех")
+	near(r["gz_quiet"], 200.0, 0.001, "самая долгая тишина — стоянка")
 
 
 ## answer=1 и repeat=1 (#1350, 14.11 01:08): каждый ответ экипажа — hold с без света и хода, поэтому предел прохода
