@@ -835,3 +835,18 @@ static func svyaz(g: Main, kv: Dictionary) -> void:
 	if states.has(v):
 		g.comms.state = states[v]
 	g.comms_panel.show_comms(g.comms, g.time, g.comms_area())
+
+
+## Сколько держится строка say=: дольше любого ожидания снимка.
+const SAY_SECONDS := 3600.0
+
+
+## say=<текст> — сообщение в строку приборов на время снимка (#1350, UX 15.11): новые строки проверяют настоящим
+## шрифтом до встройки. Своё сообщение игрока: показывается сразу, ждущую строку мира снимает; держится час —
+## кадры ожидания снимка (frames=) его не гасят. Пустой текст строку не трогает.
+static func say(g: Main, kv: Dictionary) -> void:
+	var text: String = kv.get("say", "").strip_edges()
+	if text == "":
+		return
+	g.message.take_world()
+	g.message.say(text, SAY_SECONDS)
