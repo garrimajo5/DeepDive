@@ -578,3 +578,22 @@ func test_tester_trifles_1311() -> void:
 	var tail := p.substr(p.find("Write-Output \"PUSHED"))
 	tail = tail.substr(0, tail.find("\n"))
 	ok(RegEx.create_from_string("[А-Яа-яЁё]").search(tail) == null, "в строке PUSHED нет кириллицы: " + tail)
+
+
+## Вердикт прогона и SIGABRT в RUN (#1350, 16.11 17:23 и 18:23): тестер не выводит «тихий / пограничный / шумный»
+## руками из числа load и не считает SIGABRT службы эмулятора. Сами строки проверяет -SelfTest в job «Скрипты тестера».
+func test_run_qa_verdict_and_sigabrt() -> void:
+	var k := _ps("kadry.ps1")
+	ok(k.contains("function Get-Verdict([string]$runLine)") and k.contains("function Count-Sigabrt("), "функции в kadry.ps1")
+	ok(k.contains("if ($load -le $edge) { return \"пограничный"), "граница включительно: ровно 2.20 — пограничный")
+	ok(k.contains("return (Get-Verdict $runLine) -notmatch '^шумный'"), "счёт тихих прогонов — по тому же вердикту")
+	ok(k.contains("Get-Verdict ($cold + '2.20") and k.contains("Get-Verdict ($cold + '2.21')") and k.contains("(Count-Sigabrt $abrt) -eq 2"),
+			"самопроверка: граница 2.20 / 2.21 и счёт SIGABRT")
+	var run := _ps("run-qa.ps1")
+	ok(run.contains("$abrt = Count-Sigabrt @(Get-Content \"$run\\logcat.txt\" -Encoding utf8)"), "SIGABRT считается по logcat прогона")
+	ok(run.contains("$result += \" | SIGABRT android.hardwar: $abrt\""), "число SIGABRT — в строке RUN")
+	var verdict := run.find("$result += \" | прогон: $(Get-Verdict $result)\"")
+	ok(verdict > run.find("$result = \"RUN $head") and verdict < run.find("Write-Output $result"), "вердикт дописан в RUN до печати")
+	ok(verdict < run.find("Write-Kadry \"$run\\kadry.txt\" $result"), "и до kadry.txt — следующая сводка читает его же")
+	var qa := FileAccess.get_file_as_string("res://docs/QA.md")
+	ok(qa.contains("«прогон: тихий»") and qa.contains("SIGABRT android.hardwar: N"), "docs/QA.md описывает поля")

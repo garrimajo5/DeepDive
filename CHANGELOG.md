@@ -3,6 +3,11 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-16
+- Поток А, `run-qa.ps1` (фокус п. 3; тестер, #1350 16.11 17:23 и 18:23): в конце строки `RUN` — «SIGABRT
+  android.hardwar: N» (`Count-Sigabrt` по logcat) и вердикт «прогон: тихий / пограничный (Android load X не выше
+  2.2) / шумный (…)» по правилу `docs/roles/qa.md` (`Get-Verdict`; ровно 2.20 — пограничный). `Test-Quiet` считает
+  по тому же вердикту: прогон с шумным Android (load выше 2.2) в серию тихих больше не идёт. Проверка —
+  `kadry.ps1 -SelfTest`, тест `test_qa_tools.test_run_qa_verdict_and_sigabrt`.
 - Поток А, тест `test_qa.test_tail_mark_processes_last` (#1947): порядок метки `QaRunner.Tail` проверяется порядком,
   а не временем — проба запоминает, что метка показывала до неё; два пустых `_process` в одну микросекунду тест
   больше не роняют. Без `process_priority` у метки тест по-прежнему красный.
