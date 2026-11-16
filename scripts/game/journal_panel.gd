@@ -5,7 +5,8 @@ extends CanvasLayer
 ## «Далее», карточка вида поверх; пустой журнал — одна строка. Рисунков видов пока нет — в карточке на месте картинки
 ## описание вида (`Species.Info.desc`). Состояние и
 ## места — `Journal`, история — `Expedition`. Слой над главным меню (его 90), ниже заставки прогрева (100); касания —
-## `Touch.Router.taps` (`MenuFlow.journal_step`).
+## `Touch.Router.taps` (`MenuFlow.journal_step`). Страница перерисовывается, только когда изменилось то, что на ней
+## видно (`state_key`), а не каждый кадр, пока журнал открыт (#1929).
 
 const DIM := 0.7   ## затемнение фона: текст читается на любом месте
 
@@ -19,6 +20,7 @@ var broken := false
 var lore: LayerLore   ## знания слоя: подпись «граница» у 08 (#829), вкладка «Узнано» (#825)
 var draw: Control
 var _icons := {}
+var _shown: Array = []   ## `state_key` нарисованной страницы; пусто — журнал скрыт
 
 
 func _init() -> void:
@@ -38,8 +40,27 @@ func show_journal(j: Journal, e: Expedition, sc: Scanner, total: int, cargo: int
 	cargo_n = cargo
 	broken = was_broken
 	visible = j != null and j.open
-	if visible:
+	if not visible:
+		_shown = []
+		return
+	var key := state_key()
+	if key != _shown:   # журнал шагает каждый кадр меню — рисунок страницы только по изменению (#1929, «узлы»)
+		_shown = key
 		draw.queue_redraw()
+
+
+## Всё, от чего зависит рисунок страницы: размер экрана, состояние журнала (страница, вкладка, карточка, выбранное
+## место, подсказка в ячейке), история экспедиции, изученное и наблюдения сканера, груз, знания слоя. Новое поле в
+## `_draw_*` — сюда же, иначе страница его не покажет до следующего касания.
+func state_key() -> Array:
+	var key: Array = [draw.get_viewport_rect().size if draw.is_inside_tree() else Vector2.ZERO, species_n,
+		species_total, cargo_n, broken, scanner.rev if scanner else -1, lore.rev if lore else -1]
+	if journal:
+		key.append_array([journal.page, journal.tab, journal.card, journal.picked, journal.asked, journal.blank])
+	if expedition:
+		key.append_array([expedition.places.hash(), expedition.runs, expedition.deepest, expedition.read.hash(),
+			expedition.full])
+	return key
 
 
 func _icon(path: String) -> Texture2D:
