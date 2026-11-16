@@ -79,6 +79,26 @@ function Invoke-Timed([string]$exe, [string[]]$argv, [int]$ms = 10000) {
   return ''
 }
 
+# Слушает ли кто-то порт $port на этой машине (сервер adb — 5037); ждёт соединения не дольше $ms.
+function Test-Port([int]$port, [int]$ms = 500) {
+  $c = New-Object Net.Sockets.TcpClient
+  try { return ($c.ConnectAsync('127.0.0.1', $port).Wait($ms) -and $c.Connected) } catch { return $false } finally { $c.Close() }
+}
+
+# Поднять фоновую службу отвязанно (#1350, 15.11): сервер adb, который первый же `adb devices` запускал сам, наследовал
+# stdout скрипта и держал трубу `run-qa.ps1 … | tail` открытой 20+ мин после строки END. $alive — блок «служба уже
+# отвечает» (Test-Port 5037), $start — блок запуска без наследования вывода (WMI Win32_Process.Create, как эмулятор).
+# Возвращает 'был' — запускать не пришлось, 'поднят' — ответила после запуска, 'нет' — не ответила за $tries проб.
+function Start-Detached([scriptblock]$alive, [scriptblock]$start, [int]$tries = 20, [int]$stepMs = 500) {
+  if (& $alive) { return 'был' }
+  try { & $start } catch { return 'нет' }
+  for ($i = 0; $i -lt $tries; $i++) {
+    if (& $alive) { return 'поднят' }
+    if ($stepMs -gt 0) { Start-Sleep -Milliseconds $stepMs }
+  }
+  return 'нет'
+}
+
 # Ждать, пока $probe вернёт «1» (sys.boot_completed), не дольше $limitSec всего; $true — дождались, $false — предел.
 # $probe — блок, обычно { Invoke-Timed $adb @('shell','getprop','sys.boot_completed') 10000 }: «нет устройства» и
 # зависший вызов ($null) — просто ещё не загрузился.
@@ -196,6 +216,19 @@ if ($SelfTest) {
   Check ($null -eq $r -and $sw.Elapsed.TotalSeconds -lt 15) "зависший вызов обрывается по пределу ($([int]$sw.Elapsed.TotalSeconds) с)"
   $r = Invoke-Timed $sh @('-NoProfile', '-Command', 'Write-Output 1') 60000
   Check ("$r".Trim() -eq '1') "быстрый вызов — его вывод: '$r'"
+  # Сервер adb отвязанно (#1350, 15.11): порт слушают — 'был' и запуска нет; не слушают — запуск один раз и ждём ответа
+  $l = New-Object Net.Sockets.TcpListener ([Net.IPAddress]::Loopback, 0)
+  $l.Start(); $port = $l.LocalEndpoint.Port
+  Check (Test-Port $port 2000) 'порт слушают — Test-Port да'
+  $l.Stop()
+  Check (-not (Test-Port $port 500)) 'порт закрыт — Test-Port нет'
+  $script:starts = 0; $script:asks = 0
+  Check ((Start-Detached { $true } { $script:starts++ } 5 0) -eq 'был' -and $script:starts -eq 0) 'служба жива — не запускаем'
+  # пробы: 1-я (до запуска) нет, 2-я нет, 3-я да — запуск один, ответ на третьей пробе
+  $r = Start-Detached { $script:asks++; $script:asks -ge 3 } { $script:starts++ } 5 0
+  Check ($r -eq 'поднят' -and $script:starts -eq 1 -and $script:asks -eq 3) "служба поднята: $r, запусков $script:starts, проб $script:asks"
+  Check ((Start-Detached { $false } { } 3 0) -eq 'нет') 'служба не ответила — нет'
+  Check ((Start-Detached { $false } { throw 'нет WMI' } 3 0) -eq 'нет') 'запуск упал — нет, без исключения'
   # Wait-Boot: «1» на третьей пробе — дождались; вечно $null (висит) — $false по общему пределу
   $script:probes = 0
   Check (Wait-Boot { $script:probes++; if ($script:probes -ge 3) { "1`r`n" } else { '0' } } 30 0) 'загрузка — на третьей пробе'

@@ -189,6 +189,13 @@ if ($Pr) {
 
 Reset-Run
 
+# Сервер adb — до первого вызова adb и отвязанным процессом (WMI, как эмулятор; #1350, 15.11): поднятый самим
+# `adb devices`, он наследовал stdout скрипта и держал трубу `run-qa.ps1 … | tail` 20+ мин после END.
+# Не ответил — идём дальше: первый вызов adb поднимет его по-старому (конец прогона тогда — по log.txt, docs/QA.md).
+$adbSrv = Start-Detached { Test-Port 5037 } {
+  Invoke-CimMethod Win32_Process -MethodName Create -Arguments @{ CommandLine = "`"$adb`" start-server" } | Out-Null }
+if ($adbSrv -eq 'нет') { Write-Warning 'сервер adb не поднялся отдельно за 10 с — поднимет первый вызов adb' }
+
 # -ColdBoot (#1592): эмулятор, на котором долго жили чужие окна и прогоны, шумит — закрыть и поднять заново
 # без снимка состояния (-no-snapshot-load), прежде чем считать заминки регрессией
 if ($ColdBoot -and ((& $adb devices) -match 'emulator-\d+')) {
