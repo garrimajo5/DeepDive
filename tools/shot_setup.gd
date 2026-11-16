@@ -835,3 +835,34 @@ static func svyaz(g: Main, kv: Dictionary) -> void:
 	if states.has(v):
 		g.comms.state = states[v]
 	g.comms_panel.show_comms(g.comms, g.time, g.comms_area())
+
+
+## Сколько держится строка say=: дольше любого ожидания снимка.
+const SAY_SECONDS := 3600.0
+
+
+## say=<текст> — сообщение в строку приборов на время снимка (#1350, UX 15.11): новые строки проверяют настоящим
+## шрифтом до встройки. Держится час и как строка угрозы мира: обычные строки мира (существо у окна, течение) её
+## не сменяют — ждут очереди. Срочная строка мира и своё действие игрока перебивают, поэтому `shot.gd` ставит её
+## заново каждый кадр ожидания, а после снимка сверяет (`say_line`). Пустой текст строку не трогает.
+static func say(g: Main, kv: Dictionary) -> void:
+	var text := say_text(kv)
+	if text == "":
+		return
+	if g.message.text != text:
+		g.message.take_world()
+		g.message.say(text, SAY_SECONDS)
+	g.message.world = true
+	g.message.hot = true
+
+
+static func say_text(kv: Dictionary) -> String:
+	return str(kv.get("say", "")).strip_edges()
+
+
+## Строка лога после снимка с say=: что на приборах на самом деле (строку могла перебить угроза мира в последнем кадре).
+static func say_line(g: Main, kv: Dictionary) -> String:
+	var text := say_text(kv)
+	if g.message.text == text and g.status_parts().has(text):
+		return "SAY на приборах: «%s», %d знаков" % [text, text.length()]
+	return "SAY ВНИМАНИЕ: на приборах «%s», а не строка say= — переснять" % g.message.text
