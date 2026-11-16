@@ -216,6 +216,11 @@ func reset(world: EcoWorld) -> void:
 			sc.members.append(cn)
 			coins.append(cn)
 	_h.resize(schools.size())
+	# Эпизод строки засады — по месту: кончается, когда корабль ушёл из слышимости всех глазунов (#1400, п. 2 (ш)).
+	var at: Array[Vector3] = []
+	for gz in glazuns:
+		at.append(gz.pos)
+	world.once_from(GLAZUN, "ambush", at)
 
 
 ## Монетник появляется над мхом, но не прямо над глазуном (coinSpawn).

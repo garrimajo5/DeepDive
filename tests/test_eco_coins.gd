@@ -137,8 +137,8 @@ func test_glazun_grabs_coin_overhead() -> void:
 	near(EcoCoins.glazun_transform(gz).origin.y, gz.pos.y + 0.35 * EcoCoins.lunge_k(gz), 1e-5, "тело приподнято по позе")
 
 
-## Строка засады на приборах — раз за эпизод наблюдения (гейм-дизайнер, #1400, 12.11): повтор раньше
-## EcoWorld.ONCE_GAP с идёт OBSERVE без текста (журнал тот же), позже — снова со строкой. Глаза в луче — не трогаем.
+## Строка засады на приборах — раз за эпизод наблюдения (гейм-дизайнер, #1400, 12.11), эпизод — по месту (п. 2 (ш),
+## вариант 3): повтор идёт OBSERVE без текста (журнал тот же), сколько бы ни стояли. Глаза в луче — не трогаем.
 func _ambush_texts(w: EcoWorld) -> Array[String]:
 	var out: Array[String] = []
 	for e in w.take_link():
@@ -153,18 +153,16 @@ func _grab(w: EcoWorld) -> void:
 
 func test_ambush_line_once_per_episode() -> void:
 	var w := _world()
+	var line := "ambush:Из песка что-то схватило круглую рыбку"
 	w.ship.pos = SPOTS[0] + Vector3(0, 7, 20)
 	_grab(w)
-	eq(_ambush_texts(w), ["ambush:Из песка что-то схватило круглую рыбку"] as Array[String], "первая — со строкой")
+	eq(_ambush_texts(w), [line] as Array[String], "первая — со строкой")
 	w.time += 20.0
 	_grab(w)
 	eq(_ambush_texts(w), ["ambush:"] as Array[String], "повтор через 20 с — без строки, но в журнал")
-	w.time += EcoWorld.ONCE_GAP - 1.0
+	w.time += 300.0
 	_grab(w)
-	eq(_ambush_texts(w), ["ambush:"] as Array[String], "повторы продлевают эпизод")
-	w.time += EcoWorld.ONCE_GAP + 1.0
-	_grab(w)
-	eq(_ambush_texts(w), ["ambush:Из песка что-то схватило круглую рыбку"] as Array[String], "новый эпизод — снова")
+	eq(_ambush_texts(w), ["ambush:"] as Array[String], "долгая стоянка в слышимости — эпизод тот же")
 	# Глаза в луче и чужие строки повтор не гасит.
 	var eyes := func() -> String: return "два глаза"
 	for i in 2:
@@ -178,12 +176,62 @@ func test_ambush_line_once_per_episode() -> void:
 	w.ship.pos = SPOTS[0] + Vector3(0, 7, 20)
 	w.time += 5.0
 	_grab(w)
-	eq(_ambush_texts(w), ["ambush:Из песка что-то схватило круглую рыбку"] as Array[String], "подплыли — строка")
+	eq(_ambush_texts(w), [line] as Array[String], "подплыли — строка")
+
+
+## Эпизод строки засады — по месту (#1400, п. 2 (ш), вариант 3, ГД 14.11): кончается, только когда корабль дальше
+## EcoBus.HEARING + EcoWorld.ONCE_LEAVE от всех глазунов; колебания у границы слышимости его не закрывают; само
+## возвращение строки не даёт — только следующая услышанная засада. Мутации: без watch в take_link — строки после
+## возвращения нет; без запаса ONCE_LEAVE — строка после колебания у границы.
+func _far_from_all(w: EcoWorld, z: float) -> float:
+	var near := INF
+	for gz in _coins(w).glazuns:
+		near = minf(near, gz.pos.distance_to(Vector3(0, FLAT + 7.0, z)))
+	return near
+
+
+func test_ambush_episode_by_place() -> void:
+	var w := _world()
+	var line := "ambush:Из песка что-то схватило круглую рыбку"
+	var ep := w.episode(EcoCoins.GLAZUN, "ambush")
+	eq(ep.sources.size(), _coins(w).glazuns.size(), "источники эпизода — места всех глазунов")
+	w.ship.pos = Vector3(0, FLAT + 7.0, 20)
+	_grab_in(w, 1)
+	eq(_ambush_texts(w), [line] as Array[String], "первая — со строкой")
+	# у границы: дальше слышимости ближайшего глазуна, но в запасе
+	var z := 20.0
+	while _far_from_all(w, z) < EcoBus.HEARING + EcoWorld.ONCE_LEAVE * 0.5:
+		z += 0.5
+	var edge := _far_from_all(w, z)
+	print("    у границы: до ближайшего глазуна %.1f м (слух %.0f, запас %.0f)" % [edge, EcoBus.HEARING, EcoWorld.ONCE_LEAVE])
+	ok(edge > EcoBus.HEARING and edge < EcoBus.HEARING + EcoWorld.ONCE_LEAVE, "вне слышимости, но в запасе")
+	for i in 3:
+		w.ship.pos = Vector3(0, FLAT + 7.0, z)
+		w.time += 5.0
+		eq(_ambush_texts(w).size(), 0, "у границы — тихо")
+		ok(ep.open, "колебание у границы эпизод не закрывает")
+		w.ship.pos = Vector3(0, FLAT + 7.0, 20)
+		_grab_in(w, 1)
+		eq(_ambush_texts(w), ["ambush:"] as Array[String], "вернулись от границы — без строки")
+	# ушли из слышимости всех глазунов с запасом
+	w.ship.pos = Vector3(0, FLAT + 7.0, 20.0 + EcoBus.HEARING + EcoWorld.ONCE_LEAVE + 20.0)
+	ok(_far_from_all(w, w.ship.pos.z) > EcoBus.HEARING + EcoWorld.ONCE_LEAVE, "далеко от всех глазунов")
+	w.time += 5.0
+	eq(_ambush_texts(w).size(), 0, "далеко — тихо")
+	ok(not ep.open, "ушли — эпизод кончился")
+	w.ship.pos = Vector3(0, FLAT + 7.0, 20)
+	w.time += 5.0
+	eq(_ambush_texts(w).size(), 0, "само возвращение строки не даёт")
+	_grab_in(w, 0)
+	eq(_ambush_texts(w), [line] as Array[String], "вернулись — следующая засада со строкой (другой глазун тоже)")
+	_grab_in(w, 2)
+	eq(_ambush_texts(w), ["ambush:"] as Array[String], "и снова эпизод один на все места")
 
 
 ## Засада, которую экипаж не слышал (дальше EcoBus.HEARING), эпизод ONCE не продлевает (#1400, п. 2 (ч)): take_near
 ## выбрасывает её до repeat. Повтор 00 → 01 → 00 → 01 → 00 на настоящих пятнах (EcoCoins.default_spots, Seabed.height):
-## глазун у 00 слышен со старта и не слышен со стоянки у 01; засада, пока корабль у 01, не гасит строку по возвращении.
+## глазуны слышны со старта 00, а стоянка у 01 — дальше слышимости всех с запасом ONCE_LEAVE: каждое возвращение
+## к 00 — снова строка, стоянка у 00 сколько угодно — без строки (эпизод по месту, п. 2 (ш), вариант 3).
 ## Без Main. Мутация — repeat для всех событий шины до take_near: третья строка пропадает.
 const AT_00 := Helm.Ship.START
 const AT_01 := Vector3(33.0, -35.0, -22.0)
@@ -201,10 +249,13 @@ func test_unheard_ambush_does_not_extend_episode() -> void:
 			k = i
 	var gz := c.schools[k].glazun
 	var d00 := gz.pos.distance_to(AT_00)
-	var d01 := gz.pos.distance_to(AT_01)
-	print("    глазун %d в %s: от 00 %.1f м, от 01 %.1f м (слух %.0f)" % [k, gz.pos, d00, d01, EcoBus.HEARING])
+	var d01 := INF
+	for g in c.glazuns:
+		d01 = minf(d01, g.pos.distance_to(AT_01))
+	print("    глазун %d в %s: от 00 %.1f м; от 01 до ближайшего глазуна %.1f м (слух %.0f, запас %.0f)" \
+		% [k, gz.pos, d00, d01, EcoBus.HEARING, EcoWorld.ONCE_LEAVE])
 	ok(d00 < EcoBus.HEARING - 10.0, "у 00 слышно")
-	ok(d01 > EcoBus.HEARING + 10.0, "у 01 не слышно")
+	ok(d01 > EcoBus.HEARING + EcoWorld.ONCE_LEAVE, "у 01 не слышно ни одного, с запасом")
 	var line := "ambush:Из песка что-то схватило круглую рыбку"
 	var at := func(p: Vector3, dt: float) -> Array[String]:
 		w.ship.pos = p
@@ -213,10 +264,10 @@ func test_unheard_ambush_does_not_extend_episode() -> void:
 		return _ambush_texts(w)
 	eq(at.call(AT_00, 0.0), [line] as Array[String], "00: первая засада — со строкой")
 	eq(at.call(AT_01, 30.0), [] as Array[String], "01: засада у 00 не слышна")
-	eq(at.call(AT_00, 35.0), [line] as Array[String], "00 через 65 с после услышанной — снова строка")
+	eq(at.call(AT_00, 35.0), [line] as Array[String], "00 снова — строка")
 	eq(at.call(AT_01, 30.0), [] as Array[String], "01 снова: не слышно")
-	eq(at.call(AT_00, 20.0), ["ambush:"] as Array[String], "00 через 50 с после услышанной — эпизод тот же")
-	eq(at.call(AT_00, EcoWorld.ONCE_GAP + 1.0), [line] as Array[String], "после паузы — снова")
+	eq(at.call(AT_00, 20.0), [line] as Array[String], "вернулись к 00 — снова строка, хоть и через 50 с")
+	eq(at.call(AT_00, 120.0), ["ambush:"] as Array[String], "стоянка у 00 — эпизод тот же")
 
 
 func _grab_in(w: EcoWorld, k: int) -> void:
@@ -234,7 +285,7 @@ func _grab_in(w: EcoWorld, k: int) -> void:
 
 ## Строка засады глазуна в тёмной стоянке у 00 — на приборах в игре (#1400, п. 2 (ё), с Main): по расчёту (я)
 ## (PR #1881) засада, услышанная у 00 до света (8–18 с), открывает эпизод ONCE — строка уже на приборах до света,
-## а первая засада после света (раньше ONCE_GAP) идёт без текста: на приборах её нет, наблюдение в журнале остаётся.
+## а первая засада после света (корабль у 00 — эпизод по месту тот же) идёт без текста: на приборах её нет, наблюдение в журнале остаётся.
 ## Засады — свои у живого мира в Main; нет за отведённое время — вызвана подсадкой монетника над глазуном.
 func test_dark_stay_ambush_line_then_silent_after_light() -> void:
 	var main: Main = load("res://scenes/main.tscn").instantiate()
@@ -256,7 +307,6 @@ func test_dark_stay_ambush_line_then_silent_after_light() -> void:
 			k = i
 	ok(c.schools[k].glazun.pos.distance_to(main.helm.pos) < EcoBus.HEARING - 10.0, "у 00 глазун слышен")
 	var line := "Из песка что-то схватило круглую рыбку"
-	var key := EcoCoins.GLAZUN + ":ambush"
 	var shows := func() -> bool: return main.message.text == line or main.message.next == line
 	# тёмная стоянка 30 с: первая услышанная засада — со строкой
 	var dark := -1.0
@@ -275,10 +325,11 @@ func test_dark_stay_ambush_line_then_silent_after_light() -> void:
 	ok(dark >= 0.0, "до света строка засады на приборах")
 	eq(main.scanner.seen_of(EcoCoins.GLAZUN), ["ambush"] as Array[String], "засада в журнале")
 	ok(not main.light_on, "всё это — до света")
-	# свет; ждём, пока строка сойдёт, и следующую услышанную засаду (не дольше ONCE_GAP от прошлой)
+	# свет; ждём, пока строка сойдёт, и следующую услышанную засаду (корабль стоит у 00 — эпизод тот же)
 	main.toggle_light()
 	ok(main.light_on, "свет включён")
-	var was: float = w._heard[key]
+	var ep := w.episode(EcoCoins.GLAZUN, "ambush")
+	var was: float = ep.last
 	var again := false
 	var said := false
 	var lit := 0.0
@@ -287,16 +338,15 @@ func test_dark_stay_ambush_line_then_silent_after_light() -> void:
 		lit += 0.1
 		if lit > Status.MESSAGE_SECONDS + 1.5:
 			said = said or shows.call()
-		again = float(w._heard[key]) > was
+		again = ep.last > was
 	if not again:
 		while shows.call():
 			main.step(0.1)
 		_force_ambush(main, c, k)
-		again = float(w._heard[key]) > was
-	var gap := float(w._heard[key]) - was
-	print("    засада после света: через %.1f с после прошлой" % gap)
+		again = ep.last > was
+	print("    засада после света: через %.1f с после прошлой" % (ep.last - was))
 	ok(again, "засада после света услышана")
-	ok(gap < EcoWorld.ONCE_GAP, "в том же эпизоде")
+	ok(ep.open, "в том же эпизоде")
 	for i in 20:
 		main.step(0.1)
 		said = said or shows.call()

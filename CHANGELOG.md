@@ -3,6 +3,13 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-16
+- Поток Б, сцена 00→01 (#1400, п. 2 (ш), вариант 3, ГД 14.11): строка засады глазуна — раз за эпизод **по месту**, а не
+  по времени: эпизод кончается, только когда корабль дальше `EcoBus.HEARING` + `EcoWorld.ONCE_LEAVE` (10 м) от всех
+  глазунов (`EcoWorld.Episode`, источники — `once_from` из `EcoCoins.reset`); стоянка в слышимости — без строки
+  сколько угодно, колебание у границы эпизод не закрывает, само возвращение строки не даёт — только следующая
+  услышанная засада. `ONCE_GAP` (60 с) убран; `tools/mid_calm.gd` считает строку так же (`line_episode`/`line_watch`).
+  Тесты `test_eco_coins.test_ambush_episode_by_place`, `test_unheard_ambush_does_not_extend_episode`,
+  `test_eco_mid_calm_tool.test_line_shown_like_world_once`.
 - Поток А (#1350, 15.11): `tools/qa/mini.py --from <шаг>` — начало мини-сценария назад до шага по `do`, `do=what`
   или `do:k` (k-й назад: `--from ship:2`, `--from nests`, `--from press=settings`): блок, где `ship` стоит и между
   действиями, ближайшим `--ship` не собирался. `@N <снимок>` (шаг лога и конечный снимок) — в справке и под тестом.
