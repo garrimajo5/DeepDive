@@ -1022,6 +1022,27 @@ func test_petal_opened_learns_07() -> void:   # #837: купольник отк�
 
 ## Отчёт QA 2026-11-05-2015: на итоге забега «Крупный хищник укусил корпус», а удара нет (#1249 гасил только удар).
 ## Корабль под защитой — `ShipState.shielded`: в мире нет ни удара, ни строки «укусил корпус».
+func test_petal_line_does_not_say_gone() -> void:   # #1757 (ГД 16.11): строка створки приходит, пока купольник у гнезда
+	var w := EcoWorld.new()
+	w.ground = Seabed.height
+	w.ship.pos = Vector3(EcoGate.CENTER.x, -35.0, EcoGate.CENTER.y + 60.0)
+	var d := EcoDome.new()
+	d.reset(w)
+	var text := ""
+	for i in 4000:
+		w.time += 0.1
+		d.step(w, 0.1)
+		for e in w.take_link():
+			if e["type"] == EcoLink.PETAL:
+				text = e["text"]
+		if text != "":
+			break
+	ok(text != "", "событие створки пришло")
+	eq(d.state, EcoDome.State.OPEN, "в миг события купольник ещё у гнезда — не ушёл")
+	ok(not text.contains("уш"), "строка не сообщает уход, пока рабочий у гнезда: «%s»" % text)
+	ok(text.begins_with("Терраса 07: рабочий открыл створку"), "строка говорит об открытии: «%s»" % text)
+
+
 func test_petal_lift_follows_dome() -> void:   # #1757: створку модели арки корабль поворачивает по подъёму купольника
 	eq(EcoLink.petal_lift([]), 0.0, "нет купольника — створка закрыта")
 	var d := EcoDome.new()
