@@ -114,6 +114,51 @@ func test_menu_item() -> void:
 	eq(ids.find("journal"), ids.find("crew") + 1, "после «Экипаж»")
 
 
+## #1929: открытый журнал шагает каждый кадр меню, но страницу рисует только по изменению — раньше рисунок всей
+## страницы (сотня строк и плашек) шёл в каждом кадре вне шага («узлы»).
+func test_scene_page_redraws_only_on_change() -> void:
+	Main.menu = true
+	main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	main.expedition.runs = 1   # не пустой журнал: карта и сетка на экране
+	main.scanner.restore(Species.ids().slice(0, 1))
+	main.open_journal()
+	var draws := [0]
+	main.logbook_panel.draw.draw.connect(func() -> void: draws[0] += 1)
+	var size := main.get_viewport().get_visible_rect().size
+	var r := main.overlay.router
+	for i in 6:
+		main.step(1.0 / 30.0)
+		await frames(1)
+	eq(draws[0], 1, "шесть кадров открытого журнала — страница нарисована один раз")
+	r.begin(1, Journal.next_rect(size).get_center())
+	main.step(1.0 / 30.0)
+	r.end(1)
+	await frames(1)
+	eq(main.logbook.page, 1, "«Далее» — вторая страница")
+	eq(draws[0], 2, "новая страница — один рисунок")
+	for i in 4:
+		main.step(1.0 / 30.0)
+		await frames(1)
+	eq(draws[0], 2, "дальше без касаний — без рисунка")
+	main.expedition.deepest = 120   # сводка «Глубже всего» изменилась под открытым журналом
+	main.step(1.0 / 30.0)
+	await frames(1)
+	eq(draws[0], 3, "изменилась история — страница перерисована")
+	main.scanner.restore(Species.ids().slice(0, 2))
+	main.step(1.0 / 30.0)
+	await frames(1)
+	eq(draws[0], 4, "изучен вид — страница перерисована")
+	main.back_pressed()
+	main.step(1.0 / 30.0)
+	await frames(1)
+	main.open_journal()
+	main.step(1.0 / 30.0)
+	await frames(1)
+	eq(draws[0], 5, "открыт снова — нарисован")
+
+
 func test_scene_open_from_menu_and_back() -> void:
 	Main.menu = true
 	main = load("res://scenes/main.tscn").instantiate()
