@@ -28,12 +28,40 @@ function Read-Worst([string[]]$lines) {
   return $out
 }
 
-function Test-Quiet([string]$runLine) {
-  $noise = if ($runLine -match 'помехи: (\d+)') { [int]$Matches[1] } else { 0 }
-  $cpu = 0
+# Вердикт прогона одной фразой (#1350, 16.11 17:23 и 18:23; правило — docs/roles/qa.md): помехи или ЦП хоста ≥ 50 % —
+# шумный; «Android не остыл» — по последнему замеру load: не выше порога × 1,1 (2,2 при пороге 2,0, граница
+# включительно) — пограничный, то есть тихий с пометкой, выше — шумный; иначе тихий. Печатает run-qa.ps1 в конце RUN.
+function Get-Verdict([string]$runLine) {
+  $inv = [Globalization.CultureInfo]::InvariantCulture
+  if ($runLine -match 'помехи: (\d+)' -and [int]$Matches[1] -gt 0) { return "шумный (помехи $($Matches[1]))" }
+  $cpu = -1
   if ($runLine -match 'остывание \d+ с \(ЦП (\d+)%\)') { $cpu = [int]$Matches[1] }
   elseif ($runLine -match 'до: ЦП (\d+)%') { $cpu = [int]$Matches[1] }
-  return ($noise -eq 0 -and $cpu -lt 50)
+  if ($cpu -ge 50) { return "шумный (ЦП хоста $cpu%)" }
+  if ($runLine -match 'Android не остыл за \d+ с: три замера подряд < (\d+(?:\.\d+)?) не набралось, последний (\d+(?:\.\d+)?)') {
+    $lim = [double]::Parse($Matches[1], $inv)
+    $load = [double]::Parse($Matches[2], $inv)
+    $edge = [math]::Round($lim * 1.1, 2)
+    $l = $load.ToString('0.00', $inv)
+    $e = $edge.ToString('0.0#', $inv)
+    if ($load -le $edge) { return "пограничный (Android load $l не выше $e)" }
+    return "шумный (Android load $l выше $e)"
+  }
+  return 'тихий'
+}
+# Тихий прогон — в счёт правила трёх: пограничный — тихий с пометкой, шумный Android — как шумный хост
+function Test-Quiet([string]$runLine) {
+  return (Get-Verdict $runLine) -notmatch '^шумный'
+}
+
+# SIGABRT системной службы эмулятора в logcat (#1350, 16.11 17:23): строки libc «Fatal signal 6 (SIGABRT) … pid N
+# (android.hardwar)» — шум эмулятора после холодного старта, не игра; число — в RUN, прогон шумным само не делает.
+function Count-Sigabrt([string[]]$logcat, [string]$proc = 'android.hardwar') {
+  $n = 0
+  foreach ($l in $logcat) {
+    if ($l -match 'Fatal signal \d+ \(SIGABRT\)' -and $l.Contains($proc)) { $n++ }
+  }
+  return $n
 }
 
 # Чужие окна поверх игры (#1350, 12.11): запуски чужой активности в logcat («START u0 {» не нашего пакета) — до конца
@@ -283,6 +311,28 @@ if ($SelfTest) {
   Check ($sf0.During -eq 1 -and $sf0.After -eq 0) 'Split-Foreign: строк сценария нет — все окна в сценарии'
   Check (Test-Quiet 'RUN x | помехи: 0 (свёрнута 0, чужих окон 0) | после сценария: 2 | до: ЦП 9% | остывание 0 с (ЦП 12%)') 'окна после сценария — тихий'
   Check (-not (Test-Quiet 'RUN x | помехи: 0 | до: ЦП 9% | остывание 0 с (ЦП 71%)')) 'без -ColdBoot: ЦП к началу сценария ≥ 50 % — шумный'
+  # Вердикт (#1350, 16.11): порог 2.0 — граница 2.2 включительно; 1.82 и 2.20 — пограничный, 2.21 и 2.93 — шумный;
+  # «Android тихо» — тихий; хост 64 % и помехи важнее Android
+  $cold = 'RUN x | помехи: 0 (…) | до: ЦП 10% | после: ЦП 5% | остывание 10 с (ЦП 4%) | Android не остыл за 120 с: три замера подряд < 2.0 не набралось, последний '
+  Check ((Get-Verdict ($cold + '1.82')) -eq 'пограничный (Android load 1.82 не выше 2.2)') "вердикт 1.82: $(Get-Verdict ($cold + '1.82'))"
+  Check ((Get-Verdict ($cold + '2.20 | SIGABRT android.hardwar: 3')) -eq 'пограничный (Android load 2.20 не выше 2.2)') "вердикт 2.20 — граница включительно: $(Get-Verdict ($cold + '2.20'))"
+  Check ((Get-Verdict ($cold + '2.21')) -eq 'шумный (Android load 2.21 выше 2.2)') "вердикт 2.21: $(Get-Verdict ($cold + '2.21'))"
+  Check ((Get-Verdict ($cold + '2.93')) -eq 'шумный (Android load 2.93 выше 2.2)') 'вердикт 2.93 — шумный'
+  Check ((Get-Verdict 'RUN x | помехи: 0 | до: ЦП 9% | остывание 5 с (ЦП 15%) | Android тихо за 25 с (load 1.20 < 2.0)') -eq 'тихий') 'вердикт: Android тихо — тихий'
+  Check ((Get-Verdict 'RUN x | помехи: 0 | до: ЦП 9%') -eq 'тихий') 'вердикт: старая строка без остывания — тихий'
+  Check ((Get-Verdict 'RUN x | помехи: 0 | до: ЦП 9% | остывание 120 с (ЦП 64%) | Android не остыл за 120 с: три замера подряд < 2.0 не набралось, последний 1.10') -eq 'шумный (ЦП хоста 64%)') 'вердикт: хост важнее Android'
+  Check ((Get-Verdict ('RUN x | помехи: 2 (свёрнута 1, чужих окон 1) | до: ЦП 9% | остывание 0 с (ЦП 12%)')) -eq 'шумный (помехи 2)') 'вердикт: помехи'
+  Check (Test-Quiet ($cold + '2.20')) 'пограничный — в счёт тихих'
+  Check (-not (Test-Quiet ($cold + '2.93'))) 'шумный Android — не в счёт тихих'
+  Check ((Get-Verdict ($cold + '1.82 | SIGABRT android.hardwar: 88 | прогон: пограничный (Android load 1.82 не выше 2.2)')) -eq 'пограничный (Android load 1.82 не выше 2.2)') 'вердикт не спотыкается о свой же хвост RUN'
+  # SIGABRT: две строки libc службы эмулятора; строка DEBUG без имени процесса и SIGABRT другого процесса — не в счёт
+  $abrt = @('11-17 00:21:01.100  512  512 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 512 (android.hardwar), pid 512 (android.hardwar)',
+    '11-17 00:21:01.200  530  530 F DEBUG   : signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------',
+    '11-17 00:21:03.100  601  615 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 615 (binder:601_2), pid 601 (android.hardwar)',
+    '11-17 00:21:04.100  700  700 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 700 (surfaceflinger), pid 700 (surfaceflinger)',
+    '11-17 00:21:05.100  800  800 I godot   : QA Готово')
+  Check ((Count-Sigabrt $abrt) -eq 2) "SIGABRT android.hardwar: $(Count-Sigabrt $abrt) из 2"
+  Check ((Count-Sigabrt @()) -eq 0) 'SIGABRT: пустой logcat — 0'
   $past = Read-Past $qa
   Check ($past.Count -eq 3 -and $past[0].Commit -eq 'b031182' -and $past[2].Commit -eq 'a27bd91') 'Read-Past: новые первыми, без чужих папок'
   Check ($past[2].Worst['21a-vent'] -eq 71 -and $past[2].Worst['32o-mol-steklo'] -eq 102) 'report.md: числа из «Частоты кадров»'
