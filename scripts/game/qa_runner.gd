@@ -758,7 +758,7 @@ func _petal_state() -> String:
 	return petal_note(EcoDome.NEST, g.petal(EcoDome.NEST))
 
 
-## « · створка гнезда 1: закрыта» / «поднята на 47° из 90°» / «открыта (90°)»; номер — как на табличке, с единицы.
+## « · створка гнезда 1: закрыта» / «поднята на 47° из 60°» / «открыта (60°)»; номер — как на табличке, с единицы.
 static func petal_note(nest: int, k: float) -> String:
 	var full := roundi(absf(rad_to_deg(GateArch.PETAL_TURN)))
 	var deg := roundi(clampf(k, 0.0, 1.0) * full)
