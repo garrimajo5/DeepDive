@@ -1120,6 +1120,84 @@ func test_patrol_goes_around_reef() -> void:
 
 
 
+## Затянувшийся транзит мимо рифа (#1400, п. 2 (аж), вариант 3 — ГД 15.11): голодный серпохвост в патруле идёт к
+## цели прямо за цветком, `reef_steer` ведёт его по краю внутри CROWN_ALARM. Подряд дольше TRANSIT_MAX он не
+## кружит: цель сменяется на точку своей стороны (TRANSIT_OUT от оси), и он уходит из CROWN_ALARM. Без правки —
+## ≈ 40 с по краю и доплывает до дальней цели.
+func test_long_transit_turns_back_to_own_side() -> void:
+	var r := _reef_world()
+	var w: EcoWorld = r[0]
+	var preds: EcoPred = r[1]
+	var axis := preds.reef_axis()
+	var pr := preds.all[0]
+	pr.hunger = EcoPred.HUNT_HUNGER + 0.1
+	pr.seek_t = 1e9  # не ищет добычу — чистый транзит в патруле
+	pr.agent.p = Vector3(axis.x - 60.0, -30.0, axis.z + 3.0)
+	var start := pr.agent.p
+	pr.agent.goal = Vector3(axis.x + 60.0, -30.0, axis.z - 3.0)  # путь прямо через цветок
+	pr.agent.timer = 120.0
+	var far := pr.agent.goal
+	var run := 0.0
+	var longest := 0.0
+	var closest := 1e9
+	var left_at := -1.0
+	var was_in := false
+	for i in 1600:  # 80 с
+		pr.hunger = EcoPred.HUNT_HUNGER + 0.1
+		_step(w)
+		var d := Vector2(pr.agent.p.x - axis.x, pr.agent.p.z - axis.z).length()
+		closest = minf(closest, d)
+		if pr.mode == EcoPred.Mode.PATROL and d < EcoFish.CROWN_ALARM:
+			run += EcoWorld.MAX_STEP
+			longest = maxf(longest, run)
+			was_in = true
+		else:
+			run = 0.0
+			if was_in and left_at < 0.0:
+				left_at = (i + 1) * EcoWorld.MAX_STEP
+	print("    транзит подряд %.1f с, ближе всего %.1f м, вышел из %.0f м на %.1f с" % [longest, closest, EcoFish.CROWN_ALARM, left_at])
+	eq(pr.mode, EcoPred.Mode.PATROL)
+	ok(longest <= EcoPred.TRANSIT_MAX + 6.0, "внутри CROWN_ALARM не дольше TRANSIT_MAX и пути наружу (%.1f с)" % longest)
+	ok(left_at > 0.0, "вышел из тревоги кроны")
+	ok(closest > EcoPred.REEF_KEEP - 4.0, "в риф не заходит (ближе всего %.1f м)" % closest)
+	var g := pr.agent.goal
+	ok(Vector2(g.x - far.x, g.z - far.z).length() > 30.0, "дальнюю цель бросил (%s)" % g)
+	ok(Vector2(g.x - start.x, g.z - start.z).length() < Vector2(g.x - far.x, g.z - far.z).length(),
+		"новая цель — со стороны, откуда пришёл (%s)" % g)
+
+
+## Счёт транзита не обрывает другие режимы и после них начинается заново (вариант 3 (аж): охоту, «замер», бросок,
+## отход и чистку таймером не обрываем): 30 с еды у края рифа — счёт 0, затем патруль — цель TRANSIT_MAX с держится.
+## Сытый счёт не ведёт — его обход до цели держит `test_patrol_goes_around_reef`.
+func test_transit_counts_only_in_patrol() -> void:
+	var r := _reef_world()
+	var w: EcoWorld = r[0]
+	var preds: EcoPred = r[1]
+	var axis := preds.reef_axis()
+	var pr := preds.all[0]
+	pr.hunger = EcoPred.HUNT_HUNGER + 0.1
+	pr.seek_t = 1e9  # не ищет добычу
+	pr.agent.p = Vector3(axis.x - 42.0, -30.0, axis.z)
+	EcoPred._set_mode(pr, EcoPred.Mode.EAT, 40.0)
+	pr.agent.goal = Vector3(axis.x + 70.0, -30.0, axis.z)
+	for i in 600:  # 30 с
+		pr.agent.timer = 40.0
+		pr.hunger = EcoPred.HUNT_HUNGER + 0.1
+		_step(w)
+	eq(pr.mode, EcoPred.Mode.EAT)
+	ok(Vector2(pr.agent.p.x - axis.x, pr.agent.p.z - axis.z).length() < EcoFish.CROWN_ALARM, "ест внутри тревоги кроны")
+	near(pr.transit, 0.0, 1e-6, "в другом режиме транзит не считается")
+	pr.transit = EcoPred.TRANSIT_MAX - 0.5
+	EcoPred._give_up(pr, 120.0)
+	near(pr.transit, 0.0, 1e-6, "смена режима сбрасывает счёт")
+	pr.agent.goal = Vector3(axis.x + 70.0, -30.0, axis.z)
+	var goal := pr.agent.goal
+	for i in int((EcoPred.TRANSIT_MAX - 1.0) / EcoWorld.MAX_STEP):
+		pr.hunger = EcoPred.HUNT_HUNGER + 0.1
+		_step(w)
+	eq(pr.agent.goal, goal, "до TRANSIT_MAX патруля цель та же")
+
+
 ## Чистка не ведёт хищника в риф у цветка (#1400, п. 2 (аз)): у 01 вершина огнецвета — станция пиявников — в 23,9 м
 ## от оси, внутри REEF_KEEP. Заражённый сытый серпохвост плывёт к ней в режиме CLEAN, но reef_steer держит его снаружи
 ## кольца, станция не работает, и через CLEAN_TIME он бросает чистку. Мутация «reef_steer не для CLEAN» (вариант 3

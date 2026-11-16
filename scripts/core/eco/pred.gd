@@ -87,6 +87,13 @@ const REEF_PUSH := 8.0
 ## С какого запаса до кольца хищник начинает огибать риф, м.
 const REEF_MARGIN := 8.0
 const REEF_CD := 30.0
+## Затянувшийся транзит мимо рифа (#1400, п. 2 (аж), вариант 3 — ГД 15.11): голодный (> HUNT_HUNGER) серпохвост в
+## патруле внутри EcoFish.CROWN_ALARM к цели вне его (огибает риф по пути, `reef_steer`) дольше TRANSIT_MAX с подряд —
+## цель сменяется на точку своей стороны рифа в TRANSIT_OUT м от оси (`transit_goal`). Сытый, как и в (ю), огибает
+## риф до цели. Охота, «замер», бросок, отход и чистка счёт сбрасывают (`_set_mode`) и им не обрываются; REEF_KEEP и
+## CROWN_ALARM те же.
+const TRANSIT_MAX := 22.0
+const TRANSIT_OUT := 75.0
 
 ## Проба расстановки сцены 00 → 01 (#1400, вариант 3 потока Б, гипотеза гейм-дизайнера, дуга — дизайнер уровней):
 ## цели патруля — вне тихого круга QUIET_R вокруг спокойной остановки QUIET (как вне кольца рифа), хищник ARC_PRED
@@ -154,6 +161,8 @@ class Pred:
 	## Секунды после «потерял корабль» (#1498, фаза «замер»): манящее снова в чутье — сразу новый «замер», пауза
 	## cooldown не спасает (скрытой неуязвимости нет); 0 — не терял. Бросок и разряд сбрасывают.
 	var wary := 0.0
+	## Секунды подряд транзита голодного у рифа (патруль внутри CROWN_ALARM к цели вне его, TRANSIT_MAX).
+	var transit := 0.0
 
 
 var all: Array[Pred] = []
@@ -444,6 +453,28 @@ static func arc_next(pr: Pred) -> Vector2:
 	return ARC[j]
 
 
+## Цель вместо затянувшегося транзита: точка в TRANSIT_OUT м от оси рифа в сторону хищника (по горизонтали),
+## высота — как у патруля посередине (дно + 9 м, не выше GOAL_CEILING). Без случайности — ход зёрен не сдвигается.
+static func transit_goal(world: EcoWorld, axis: Vector3, p: Vector3) -> Vector3:
+	var g := reef_edge(axis, p, TRANSIT_OUT)
+	g.y = minf(_floor(world, g.x, g.z, GOAL_CEILING - 14.0) + 9.0, GOAL_CEILING)
+	return g
+
+
+## Счёт транзита у рифа в патруле (TRANSIT_MAX): дольше — новая цель своей стороны (`transit_goal`).
+func _step_transit(world: EcoWorld, pr: Pred, dt: float) -> void:
+	var a := pr.agent
+	if not _reef.is_finite() or pr.hunger <= HUNT_HUNGER or _flat_dist(a.p, _reef) >= EcoFish.CROWN_ALARM \
+			or _flat_dist(a.goal, _reef) < EcoFish.CROWN_ALARM:
+		pr.transit = 0.0
+		return
+	pr.transit += dt
+	if pr.transit > TRANSIT_MAX:
+		pr.transit = 0.0
+		a.goal = transit_goal(world, _reef, a.p)
+		a.timer = maxf(a.timer, 15.0)
+
+
 ## Корабль в рифе у цветка: хищник его там не атакует (#834).
 func ship_in_reef(world: EcoWorld, reef: Vector3) -> bool:
 	return reef.is_finite() and _flat_dist(world.ship.pos, reef) < REEF_KEEP
@@ -547,6 +578,7 @@ static func turn(pr: Pred, dt: float) -> void:
 static func _set_mode(pr: Pred, m: Mode, t: float) -> void:
 	pr.mode = m
 	pr.agent.timer = t
+	pr.transit = 0.0
 	match m:
 		Mode.HUNT, Mode.CHARGE:
 			pr.agent.state = EcoAgent.State.HUNT
@@ -758,6 +790,7 @@ func _step_pred(world: EcoWorld, pr: Pred, dt: float) -> void:
 				gz = gp.z
 				var gy := minf(_floor(world, gx, gz, GOAL_CEILING - 14.0) + _rnd.range_f(4, 14), GOAL_CEILING)
 				a.goal = Vector3(gx, gy, gz)
+			_step_transit(world, pr, dt)
 			pr.seek_t = maxf(pr.seek_t - dt, 0.0)
 			if pr.hunger > HUNT_HUNGER and fish and not at_station and pr.seek_t <= 0.0:
 				pr.seek_t = SEEK_EVERY
