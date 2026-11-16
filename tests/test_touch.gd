@@ -66,3 +66,34 @@ func test_pilot_buttons_only_at_helm() -> void:
 	eq(r.vert(), -1, "вниз")
 	r.begin(3, r.layout.light.c)
 	ok(r.light_pressed, "свет")
+
+
+func test_pilot_labels_not_smaller_than_12sp() -> void:
+	# #1918: подписи «Свет», «Всплыть», «Вниз» — не мельче 0,03 короткой стороны и внутри круга с полями
+	var font := ThemeDB.fallback_font
+	for safe: Rect2 in [Rect2(0, 0, 1600, 720), Rect2(0, 0, 1280, 720), Rect2(0, 0, 2400, 1080),
+			Rect2(80, 0, 1520, 720), Rect2(0, 0, 1600, 1200)]:  # короткая сторона в игре не меньше 720 (растяжение expand)
+		var l := Touch.Layout.new()
+		l.compute(safe)
+		var s := minf(safe.size.x, safe.size.y)
+		near(l.side, s, 1e-6, "короткая сторона безопасной области")
+		for b in [[l.light, Searchlight.button_label(true), Touch.Layout.LIGHT_LABEL],
+				[l.up, "Всплыть", Touch.Layout.LIFT_LABEL], [l.down, "Вниз", Touch.Layout.LIFT_LABEL]]:
+			var c: Touch.Circle = b[0]
+			var px := l.label_px(c, b[2])
+			ok(px >= s * Touch.Layout.LABEL_MIN, "«%s» при %s: кегль %d не мельче предела" % [b[1], safe.size, px])
+			ok(px >= c.r * float(b[2]) - 1e-4, "«%s»: и не мельче доли радиуса" % b[1])
+			var w := font.get_string_size(b[1], HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
+			ok(w <= c.r * 2.0 - 12.0 * s / 720.0, "«%s» при %s: ширина %.1f внутри круга с полями" % [b[1], safe.size, w])
+			ok(w <= l.label_room(c) + 1e-4, "то же — через label_room")
+	var l720 := Touch.Layout.new()
+	l720.compute(SCREEN)
+	ok(l720.label_px(l720.light, Touch.Layout.LIGHT_LABEL) > int(l720.light.r * 0.3), "«Свет» крупнее прежнего")
+
+
+func test_light_label_is_one_word() -> void:
+	eq(Searchlight.button_label(true), "Свет", "горит — «Свет»")
+	eq(Searchlight.button_label(false), Searchlight.button_label(true), "погашен — та же подпись, состояние видно формой")
+	var src := FileAccess.get_file_as_string("res://scripts/game/touch_overlay.gd")
+	eq(src.count("l.label_px("), 2, "кегль подписей пилота рисовалка берёт из Touch.Layout.label_px")
+	ok(not src.contains("c.r * 0.36") and not src.contains("l.light.r * 0.3"), "прежних мелких кеглей нет")

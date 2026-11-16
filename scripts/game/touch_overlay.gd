@@ -115,13 +115,13 @@ func _draw() -> void:
 			var c: Touch.Circle = b[0]
 			draw_circle(c.c, c.r, Color(0.6, 0.85, 0.95, 0.3 if b[2] else 0.12))
 			draw_arc(c.c, c.r, 0, TAU, 32, line, 2.0)
-			_text(font, c.c, b[1], c.r * 0.36)
-		# «Свет»: горит — полный янтарный круг, погашен — тусклое кольцо
+			_text(font, c.c, b[1], l.label_px(c, Touch.Layout.LIFT_LABEL))
+		# «Свет»: горит — полный янтарный круг, погашен — тусклое кольцо; подпись одна (#1918)
 		if light_on:
 			draw_circle(l.light.c, l.light.r, Searchlight.BUTTON_ON)
 		else:
 			draw_arc(l.light.c, l.light.r, 0, TAU, 32, Searchlight.BUTTON_OFF, 3.0)
-		_text(font, l.light.c, Searchlight.button_label(light_on), l.light.r * 0.3,
+		_text(font, l.light.c, Searchlight.button_label(light_on), l.label_px(l.light, Touch.Layout.LIGHT_LABEL),
 			Color(0.1, 0.07, 0.02, 0.95) if light_on else Color(1, 1, 1, 0.75))
 
 

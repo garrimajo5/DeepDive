@@ -47,7 +47,7 @@ func test_light_button_toggles() -> void:
 	main.step(0.1)
 	ok(not sl.lit and not sl.beam.visible, "за штурвалом «Свет» гасит прожектор")
 	ok(sl.spot.visible and sl.spot.light_energy < 0.01, "свет погашен энергией, а не спрятан (issue #159)")
-	ok(not main.overlay.light_on, "кнопка показывает «Свет выкл»")
+	ok(not main.overlay.light_on, "кнопка погашена — пустое кольцо")
 	r.begin(3, r.layout.light.c)
 	r.end(3)
 	main.step(0.1)
