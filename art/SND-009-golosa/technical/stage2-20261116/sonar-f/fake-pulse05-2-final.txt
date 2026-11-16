@@ -1,0 +1,29 @@
+[aist#0:0/pcm_s16le @ 000002a357fae600] Guessed Channel Layout: mono
+Input #0, wav, from 'C:\Users\FEDYA\Documents\ChatGPT\Pogrujenie\work\sound-schedule-20261107\art\SND-009-golosa/audio/voice/sonar-f/fake-pulse05-2.wav':
+  Metadata:
+    encoder         : Lavf61.7.100
+  Duration: 00:00:03.02, bitrate: 768 kb/s
+  Stream #0:0: Audio: pcm_s16le ([1][0][0][0] / 0x0001), 48000 Hz, mono, s16, 768 kb/s
+Stream mapping:
+  Stream #0:0 -> #0:0 (pcm_s16le (native) -> pcm_s16le (native))
+Output #0, null, to 'pipe:':
+  Metadata:
+    encoder         : Lavf61.7.100
+  Stream #0:0: Audio: pcm_s16le, 192000 Hz, mono, s16, 3072 kb/s
+      Metadata:
+        encoder         : Lavc61.19.100 pcm_s16le
+[Parsed_loudnorm_0 @ 000002a3567c7080]
+{
+	"input_i" : "-20.01",
+	"input_tp" : "-5.72",
+	"input_lra" : "0.20",
+	"input_thresh" : "-30.47",
+	"output_i" : "-19.48",
+	"output_tp" : "-5.27",
+	"output_lra" : "0.00",
+	"output_thresh" : "-29.95",
+	"normalization_type" : "dynamic",
+	"target_offset" : "-0.52"
+}
+[out#0/null @ 000002a357fae7c0] video:0KiB audio:1134KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+size=N/A time=00:00:03.10 bitrate=N/A speed=62.4x

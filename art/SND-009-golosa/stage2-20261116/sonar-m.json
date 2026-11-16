@@ -1,0 +1,319 @@
+[
+  {
+    "key": "sonar-m",
+    "voice": "6gj1WRBTx34niXU6kVCd",
+    "id": "proba",
+    "text": "Я у сонара. Слушаю эфир.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "jATfmZ13z0mhnMGRrsgW",
+    "session_ids": [
+      "4d1VNEaIw1M50bUJMZXC"
+    ],
+    "generations": [
+      {
+        "id": "IEyoCs98NqOxj8YZmbzh",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Я у сонара. Слушаю эфир.",
+        "duration_secs": 1.811156462585034,
+        "created_at_unix_ms": 1794855898761,
+        "price": {
+          "credits": 23.9976,
+          "price_cents": 0.43632,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "sonar-m",
+    "voice": "6gj1WRBTx34niXU6kVCd",
+    "id": "true-s01",
+    "text": "Я у сонара. Слушаю эфир.",
+    "direction": "Тихо и сосредоточенно, без шёпота.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "F1mi8PTlJslXObkV4VqW",
+    "session_ids": [
+      "G6Wrj4rcHT51MPXIofVt"
+    ],
+    "generations": [
+      {
+        "id": "7LMwmFGiOTlEHRaiY4AB",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Я у сонара. Слушаю эфир.",
+        "duration_secs": 1.7647165532879818,
+        "created_at_unix_ms": 1794855903536,
+        "price": {
+          "credits": 23.9976,
+          "price_cents": 0.43632,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "sonar-m",
+    "voice": "6gj1WRBTx34niXU6kVCd",
+    "id": "true-s02",
+    "text": "Сверяю отметки с картой.",
+    "direction": "Рабочий темп, без тревоги.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "1RoGUHfGffbPf1ezsvCQ",
+    "session_ids": [
+      "ocl9KSEgdMauLnWM6ux5"
+    ],
+    "generations": [
+      {
+        "id": "8FCdYLozYkfhayoHLGpR",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Сверяю отметки с картой.",
+        "duration_secs": 1.6718367346938776,
+        "created_at_unix_ms": 1794855907894,
+        "price": {
+          "credits": 23.9976,
+          "price_cents": 0.43632,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "sonar-m",
+    "voice": "6gj1WRBTx34niXU6kVCd",
+    "id": "true-s03",
+    "text": "О новых отметках сообщу.",
+    "direction": "Ровно; обещание, а не сигнал опасности.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "6ZhudqJgVKArguKrWfWT",
+    "session_ids": [
+      "4RWgfYtXQpNvESNM0giz"
+    ],
+    "generations": [
+      {
+        "id": "OKdxSYzkpiV4gwekRwtl",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "О новых отметках сообщу.",
+        "duration_secs": 1.7647165532879818,
+        "created_at_unix_ms": 1794855911075,
+        "price": {
+          "credits": 23.9976,
+          "price_cents": 0.43632,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "sonar-m",
+    "voice": "6gj1WRBTx34niXU6kVCd",
+    "id": "true-s04",
+    "text": "Пилот, слышу тебя.",
+    "direction": "Естественный короткий ответ.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "iNR7dgRKIjZ3EnNYgs5I",
+    "session_ids": [
+      "pOpEZsrzMDiZQ7h2kKNT"
+    ],
+    "generations": [
+      {
+        "id": "NoVtSw64a1GrmtvNbtO1",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Пилот, слышу тебя.",
+        "duration_secs": 1.253877551020408,
+        "created_at_unix_ms": 1794855915111,
+        "price": {
+          "credits": 17.998199999999997,
+          "price_cents": 0.32724,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "sonar-m",
+    "voice": "6gj1WRBTx34niXU6kVCd",
+    "id": "true-s05",
+    "text": "Готов сверить маршрут с тобой.",
+    "direction": "Предложение помочь, мягкое окончание.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "GVquQhiMgAE4J6XNysxU",
+    "session_ids": [
+      "phPM1yMB3un5545mKOzR"
+    ],
+    "generations": [
+      {
+        "id": "AICRN3Kyd7FmBOubXK6D",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Готов сверить маршрут с тобой.",
+        "duration_secs": 1.8575963718820863,
+        "created_at_unix_ms": 1794855919426,
+        "price": {
+          "credits": 29.997,
+          "price_cents": 0.5454,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "sonar-m",
+    "voice": "6gj1WRBTx34niXU6kVCd",
+    "id": "fake-light02",
+    "text": "Нужен свет. Включите прожектор, пожалуйста.",
+    "direction": "После «свет» пауза чуть длиннее; конец заученно ровный.",
+    "count": 2,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "Rj1iPcBZOKdQ9L84OAQj",
+    "session_ids": [
+      "bPDMqFeFif73qDqw5a5t",
+      "ZQ2uEQwPQHVdx70lWjy3"
+    ],
+    "generations": [
+      {
+        "id": "HlwvOC3MMyY5g4DOXMPF",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Нужен свет. Включите прожектор, пожалуйста.",
+        "duration_secs": 2.36843537414966,
+        "created_at_unix_ms": 1794855923092,
+        "price": {
+          "credits": 42.99569999999999,
+          "price_cents": 0.7817399999999999,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      },
+      {
+        "id": "d6zECl8Ht8JkehbgNCzw",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Нужен свет. Включите прожектор, пожалуйста.",
+        "duration_secs": 2.5541950113378684,
+        "created_at_unix_ms": 1794855923138,
+        "price": {
+          "credits": 42.99569999999999,
+          "price_cents": 0.7817399999999999,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "sonar-m",
+    "voice": "6gj1WRBTx34niXU6kVCd",
+    "id": "fake-pulse01",
+    "text": "Дайте импульс сонара. Надо проверить проход.",
+    "direction": "Обычный рабочий голос, окончание немного обрублено.",
+    "count": 2,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "C8cJ1KrvYpreqEE4WHnw",
+    "session_ids": [
+      "EvR60Wno7IcR3o3S7cyf",
+      "w4cl9fquNOOeZcJlAWOc"
+    ],
+    "generations": [
+      {
+        "id": "Qb2W8kQMu9zu0dzejPZJ",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Дайте импульс сонара. Надо проверить проход.",
+        "duration_secs": 2.693514739229025,
+        "created_at_unix_ms": 1794855926746,
+        "price": {
+          "credits": 43.995599999999996,
+          "price_cents": 0.79992,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      },
+      {
+        "id": "aSZ8XvAOef6PUneLU4xB",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Дайте импульс сонара. Надо проверить проход.",
+        "duration_secs": 3.01859410430839,
+        "created_at_unix_ms": 1794855926789,
+        "price": {
+          "credits": 43.995599999999996,
+          "price_cents": 0.79992,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "sonar-m",
+    "voice": "6gj1WRBTx34niXU6kVCd",
+    "id": "fake-pulse05",
+    "text": "Один импульс сонара, пожалуйста. Дайте импульс.",
+    "direction": "Вежливое начало и более плоское повторение просьбы.",
+    "count": 2,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "FriN5kjdl6UnhLcf4Quj",
+    "session_ids": [
+      "ZVsQbE6W1Ol1U7O3dMLy",
+      "lg7POZBVigAMtfbA9Zy0"
+    ],
+    "generations": [
+      {
+        "id": "WxbPDJquhRiPlqFPRk1y",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Один импульс сонара, пожалуйста. Дайте импульс.",
+        "duration_secs": 2.647074829931973,
+        "created_at_unix_ms": 1794855932129,
+        "price": {
+          "credits": 46.9953,
+          "price_cents": 0.85446,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      },
+      {
+        "id": "8kjonXrf8Ffe0AaX6nBi",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Один импульс сонара, пожалуйста. Дайте импульс.",
+        "duration_secs": 2.9257142857142857,
+        "created_at_unix_ms": 1794855932187,
+        "price": {
+          "credits": 46.9953,
+          "price_cents": 0.85446,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  }
+]

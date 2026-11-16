@@ -1,0 +1,273 @@
+[
+  {
+    "key": "engineer-f",
+    "voice": "ggYSA3jFuePklOLLsw5D",
+    "id": "proba",
+    "text": "Я у пульта. Слушаю экипаж.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "oLUtFlsl8TSPpTz4Ialp",
+    "session_ids": [
+      "qcrQnxW2ZCux5IGNPrU5"
+    ],
+    "generations": [
+      {
+        "id": "o44NHD8GeM2HchvhXtBl",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Я у пульта. Слушаю экипаж.",
+        "duration_secs": 2.089795918367347,
+        "created_at_unix_ms": 1794856052245,
+        "price": {
+          "credits": 25.9974,
+          "price_cents": 0.47268,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "engineer-f",
+    "voice": "ggYSA3jFuePklOLLsw5D",
+    "id": "true-e01",
+    "text": "Я у пульта. Слушаю экипаж.",
+    "direction": "Спокойно, чуть устало, но разборчиво.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "tritumry0N0AsF7NS5wY",
+    "session_ids": [
+      "H5Fk9iqclVOdmeWUeXZH"
+    ],
+    "generations": [
+      {
+        "id": "dhITutE7m5LJ2q8Zcy2a",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Я у пульта. Слушаю экипаж.",
+        "duration_secs": 2.089795918367347,
+        "created_at_unix_ms": 1794856057278,
+        "price": {
+          "credits": 25.9974,
+          "price_cents": 0.47268,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "engineer-f",
+    "voice": "ggYSA3jFuePklOLLsw5D",
+    "id": "true-e02",
+    "text": "Проверяю питание корабля.",
+    "direction": "Сосредоточенно; без вывода об исправности.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "dPYzcDPQ2V2kzL62hljn",
+    "session_ids": [
+      "b8mYB4wnUAawQAAv75oe"
+    ],
+    "generations": [
+      {
+        "id": "xr1PZbBzrVoZpS316d79",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Проверяю питание корабля.",
+        "duration_secs": 1.5325170068027212,
+        "created_at_unix_ms": 1794856062256,
+        "price": {
+          "credits": 24.997500000000002,
+          "price_cents": 0.4545,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "engineer-f",
+    "voice": "ggYSA3jFuePklOLLsw5D",
+    "id": "true-e03",
+    "text": "Слежу за работой реактора.",
+    "direction": "Обычный доклад, без подчёркивания угрозы.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "CoJ7AUUeNtu4s4BO5nND",
+    "session_ids": [
+      "wcuWJ5dfy1uBz88x3YHq"
+    ],
+    "generations": [
+      {
+        "id": "hopulaB3gXMrgIa6a9bk",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Слежу за работой реактора.",
+        "duration_secs": 1.8575963718820863,
+        "created_at_unix_ms": 1794856066157,
+        "price": {
+          "credits": 25.9974,
+          "price_cents": 0.47268,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "engineer-f",
+    "voice": "ggYSA3jFuePklOLLsw5D",
+    "id": "true-e04",
+    "text": "О неисправностях доложу отдельно.",
+    "direction": "Деловито, без обещания полной безопасности.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "bQDmNeITWUvaFS8LNZxH",
+    "session_ids": [
+      "YUv8CYKMIbACRniLyHcD"
+    ],
+    "generations": [
+      {
+        "id": "0zIj4YriXYCam8DAyqSg",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "О неисправностях доложу отдельно.",
+        "duration_secs": 2.2755555555555556,
+        "created_at_unix_ms": 1794856069833,
+        "price": {
+          "credits": 32.996700000000004,
+          "price_cents": 0.59994,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "engineer-f",
+    "voice": "ggYSA3jFuePklOLLsw5D",
+    "id": "true-e05",
+    "text": "Пилот, по связи всё слышу.",
+    "direction": "Короткий ответ после обычной паузы.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "6Ddeu2QXsJYReVgtkycX",
+    "session_ids": [
+      "ttHnwM5eDSdx1QcF7GYL"
+    ],
+    "generations": [
+      {
+        "id": "6ZTEHIgeFFsBwH9l41aC",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Пилот, по связи всё слышу.",
+        "duration_secs": 1.811156462585034,
+        "created_at_unix_ms": 1794856073275,
+        "price": {
+          "credits": 25.9974,
+          "price_cents": 0.47268,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "engineer-f",
+    "voice": "ggYSA3jFuePklOLLsw5D",
+    "id": "fake-light03",
+    "text": "Включите прожектор. Сейчас, пока можно.",
+    "direction": "На «сейчас» короткий нажим, без объяснения спешки.",
+    "count": 2,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "j7eJvQfmJUa7A5g5dqa5",
+    "session_ids": [
+      "AjUYJGRsetYNhTOAZC1X",
+      "UJuNMF8l8ONJ3lArgZDj"
+    ],
+    "generations": [
+      {
+        "id": "63i6Kh67IJzjusiyy7mm",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Включите прожектор. Сейчас, пока можно.",
+        "duration_secs": 2.8328344671201813,
+        "created_at_unix_ms": 1794856076805,
+        "price": {
+          "credits": 38.9961,
+          "price_cents": 0.70902,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      },
+      {
+        "id": "qjCbO3ShY3jxUYNFAMkT",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Включите прожектор. Сейчас, пока можно.",
+        "duration_secs": 2.461315192743764,
+        "created_at_unix_ms": 1794856076868,
+        "price": {
+          "credits": 38.9961,
+          "price_cents": 0.70902,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "engineer-f",
+    "voice": "ggYSA3jFuePklOLLsw5D",
+    "id": "fake-pulse03",
+    "text": "Дайте импульс сонара, пока есть время.",
+    "direction": "Почти буднично; лёгкая поспешность на последних словах.",
+    "count": 2,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "Egbvnj3YE3rIqQFTutdH",
+    "session_ids": [
+      "pTqQXZYofbn6TC0UGZQL",
+      "OUTpoHe7m0w0ypI1TRVO"
+    ],
+    "generations": [
+      {
+        "id": "e1oG3JDCKYRM3MQzAAg2",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Дайте импульс сонара, пока есть время.",
+        "duration_secs": 2.5541950113378684,
+        "created_at_unix_ms": 1794856080384,
+        "price": {
+          "credits": 37.9962,
+          "price_cents": 0.69084,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      },
+      {
+        "id": "XLwwUnRhB3WXkTdu9H4G",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Дайте импульс сонара, пока есть время.",
+        "duration_secs": 2.507755102040816,
+        "created_at_unix_ms": 1794856080429,
+        "price": {
+          "credits": 37.9962,
+          "price_cents": 0.69084,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  }
+]
