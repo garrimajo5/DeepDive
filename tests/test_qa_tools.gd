@@ -495,6 +495,27 @@ func test_qa_lock_and_worktree() -> void:
 	ok(ci.contains("./tools/qa/zamok.ps1 -SelfTest"), "CI гоняет проверку zamok.ps1")
 
 
+## #1350 (тестер, 15.11): сервер adb, поднятый первым `adb devices`, наследовал stdout скрипта и держал трубу
+## `run-qa.ps1 … | tail` 20+ мин после END. Сервер поднимается до первого вызова adb отвязанным процессом (WMI, как
+## эмулятор); логику гоняет CI (`zamok.ps1 -SelfTest`), в docs/QA.md — конец прогона по log.txt.
+func test_run_qa_starts_adb_server_detached() -> void:
+	var z := _ps("zamok.ps1")
+	var run := _ps("run-qa.ps1")
+	ok(z.contains("function Start-Detached") and z.contains("function Test-Port"), "запуск службы и проба порта")
+	ok(z.contains("Start-Detached { $true } { $script:starts++ } 5 0"), "SelfTest — живую службу не запускаем")
+	ok(z.contains("$r -eq 'поднят' -and $script:starts -eq 1"), "SelfTest — запуск один раз")
+	var srv := run.find("Start-Detached { Test-Port 5037 }")
+	ok(srv > 0, "run-qa поднимает сервер adb сам")
+	var wmi := run.find("CommandLine = \"`\"$adb`\" start-server\"", srv)
+	ok(wmi > srv and wmi - srv < 200, "сервер — через WMI, без наследования вывода")
+	ok(run.rfind("Invoke-CimMethod Win32_Process", wmi) > srv, "тем же способом, что эмулятор")
+	var first := run.find("& $adb ")
+	ok(first > srv, "до первого вызова adb")
+	ok(not run.contains("& $adb start-server"), "голого start-server нет")
+	var doc := FileAccess.get_file_as_string("res://docs/QA.md")
+	ok(doc.contains("конец прогона по `log.txt`") and doc.contains("`run-qa: ISSUES …`"), "docs/QA.md: конец по log.txt")
+
+
 ## #1746: зависший `adb shell getprop sys.boot_completed` держал замок тестера 3 ч — три плановых запуска BUSY.
 ## Каждый вызов в ожидании загрузки — Invoke-Timed с пределом, всё ожидание — Wait-Boot 300 с → EMULATOR_TIMEOUT
 ## со снятием замка; в BUSY — возраст замка и «похоже, завис». Логику гоняет CI (`zamok.ps1 -SelfTest`).
