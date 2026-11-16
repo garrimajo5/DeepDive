@@ -8,7 +8,11 @@
   python3 tools/qa/mini.py 36b                  # от снимка 36b-ognecvet-posle (первый, чьё имя начинается с 36b) до него же
   python3 tools/qa/mini.py 36a 36b              # от снимка 36a… до снимка 36b… включительно
   python3 tools/qa/mini.py @797                 # «шаг 797» из лога тестера (номер с 1), до ближайшего снимка после него
+  python3 tools/qa/mini.py @797 36b             # от «шага 797» до снимка 36b…: блок, где начало — не снимок
   python3 tools/qa/mini.py 36b --ship           # назад — до ближайшего шага ship перед началом (корабль на месте)
+  python3 tools/qa/mini.py 35e --from nests     # назад — до ближайшего шага nests перед началом
+  python3 tools/qa/mini.py 35e --from ship:2    # до второго ship назад: блок, где ship стоит и между действиями
+  python3 tools/qa/mini.py 29 --from press=settings   # шаг с кнопкой: do=what (или name, у снимка)
   python3 tools/qa/mini.py 36b --put            # сразу в user://qa/scenario.json игры (Linux, облачная сессия)
   python3 tools/qa/mini.py 36b -o mini.json     # в файл; без -o и --put — в stdout
 
@@ -92,8 +96,27 @@ def next_shot(steps, i):
     return len(steps) - 1
 
 
-def cut(steps, start, end=None, ship=False):
-    """(шаги мини-сценария, индекс первого взятого, выпавшие шаги состояния до него)."""
+def back_to(steps, a, spec):
+    """Индекс шага назад от a (включая его) по «do», «do=what» или «do:k» — k-й такой шаг назад (#1350, 15.11):
+    блок с несколькими ship внутри ближайшим ship не собрать."""
+    spec, _, k = spec.partition(":")
+    if k and not (k.isdigit() and int(k) >= 1):
+        raise SystemExit("«:%s» — нужен номер с 1: ship:2 — второй ship назад" % k)
+    do, _, what = spec.partition("=")
+    left = int(k) if k else 1
+    for i in range(a, -1, -1):
+        st = steps[i]
+        if st.get("do") != do or (what and what not in (st.get("what"), st.get("name"))):
+            continue
+        left -= 1
+        if left == 0:
+            return i
+    raise SystemExit("шага «%s» перед шагом %d нет%s" % (spec, a + 1, " столько раз (%s)" % k if k else ""))
+
+
+def cut(steps, start, end=None, ship=False, since=None):
+    """(шаги мини-сценария, индекс первого взятого, выпавшие шаги состояния до него).
+    since — начало назад до шага: «ship:2», «nests», «press=scan» (см. back_to)."""
     a = find(steps, start)
     if steps[a].get("do") == "shot" and end is None:
         b = a
@@ -103,7 +126,9 @@ def cut(steps, start, end=None, ship=False):
         b = find(steps, end, a)
     if b < a:
         raise SystemExit("конец раньше начала")
-    if ship:
+    if since:
+        a = back_to(steps, a, since)
+    elif ship:
         while a > 0 and steps[a].get("do") != "ship":
             a -= 1
     # пред снимком обычно ждут: если начали ровно со снимка, берём и ожидание перед ним
@@ -126,7 +151,10 @@ def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("start", help="снимок (имя или начало) или @N — «шаг N» лога")
     p.add_argument("end", nargs="?", help="последний снимок (имя или начало); по умолчанию — первый снимок от начала")
-    p.add_argument("--ship", action="store_true", help="начать с ближайшего шага ship перед началом")
+    w = p.add_mutually_exclusive_group()
+    w.add_argument("--ship", action="store_true", help="начать с ближайшего шага ship перед началом")
+    w.add_argument("--from", dest="since", metavar="ШАГ",
+                   help="начать с шага назад от начала: do, do=what, do:k — k-й назад (ship:2, nests, press=scan)")
     p.add_argument("--scenario", default=SCENARIO)
     g = p.add_mutually_exclusive_group()
     g.add_argument("-o", "--out")
@@ -134,7 +162,7 @@ def main(argv=None):
     a = p.parse_args(argv)
     with open(a.scenario, encoding="utf-8") as f:
         steps = json.load(f)
-    mini, first, lost = cut(steps, a.start, a.end, a.ship)
+    mini, first, lost = cut(steps, a.start, a.end, a.ship, a.since)
     text = "[\n" + ",\n".join("  " + json.dumps(s, ensure_ascii=False) for s in mini) + "\n]\n"
     out = USER_PATH if a.put else a.out
     if out:
