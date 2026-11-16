@@ -87,11 +87,12 @@ const REEF_PUSH := 8.0
 ## С какого запаса до кольца хищник начинает огибать риф, м.
 const REEF_MARGIN := 8.0
 const REEF_CD := 30.0
-## Затянувшийся транзит мимо рифа (#1400, п. 2 (аж), вариант 3 — ГД 15.11): патруль внутри EcoFish.CROWN_ALARM к
-## цели вне его (огибает риф по пути, `reef_steer`) дольше TRANSIT_MAX с подряд — цель сменяется на точку своей
-## стороны рифа в TRANSIT_OUT м от оси (`transit_goal`). Охота, «замер», бросок, отход и чистка счёт сбрасывают
-## (`_set_mode`) и им не обрываются; REEF_KEEP и CROWN_ALARM те же.
-const TRANSIT_MAX := 25.0
+## Затянувшийся транзит мимо рифа (#1400, п. 2 (аж), вариант 3 — ГД 15.11): голодный (> HUNT_HUNGER) серпохвост в
+## патруле внутри EcoFish.CROWN_ALARM к цели вне его (огибает риф по пути, `reef_steer`) дольше TRANSIT_MAX с подряд —
+## цель сменяется на точку своей стороны рифа в TRANSIT_OUT м от оси (`transit_goal`). Сытый, как и в (ю), огибает
+## риф до цели. Охота, «замер», бросок, отход и чистка счёт сбрасывают (`_set_mode`) и им не обрываются; REEF_KEEP и
+## CROWN_ALARM те же.
+const TRANSIT_MAX := 22.0
 const TRANSIT_OUT := 75.0
 
 ## Проба расстановки сцены 00 → 01 (#1400, вариант 3 потока Б, гипотеза гейм-дизайнера, дуга — дизайнер уровней):
@@ -160,7 +161,7 @@ class Pred:
 	## Секунды после «потерял корабль» (#1498, фаза «замер»): манящее снова в чутье — сразу новый «замер», пауза
 	## cooldown не спасает (скрытой неуязвимости нет); 0 — не терял. Бросок и разряд сбрасывают.
 	var wary := 0.0
-	## Секунды подряд транзита у рифа (патруль внутри CROWN_ALARM к цели вне его, TRANSIT_MAX).
+	## Секунды подряд транзита голодного у рифа (патруль внутри CROWN_ALARM к цели вне его, TRANSIT_MAX).
 	var transit := 0.0
 
 
@@ -463,7 +464,7 @@ static func transit_goal(world: EcoWorld, axis: Vector3, p: Vector3) -> Vector3:
 ## Счёт транзита у рифа в патруле (TRANSIT_MAX): дольше — новая цель своей стороны (`transit_goal`).
 func _step_transit(world: EcoWorld, pr: Pred, dt: float) -> void:
 	var a := pr.agent
-	if not _reef.is_finite() or _flat_dist(a.p, _reef) >= EcoFish.CROWN_ALARM \
+	if not _reef.is_finite() or pr.hunger <= HUNT_HUNGER or _flat_dist(a.p, _reef) >= EcoFish.CROWN_ALARM \
 			or _flat_dist(a.goal, _reef) < EcoFish.CROWN_ALARM:
 		pr.transit = 0.0
 		return

@@ -1168,18 +1168,21 @@ func test_long_transit_turns_back_to_own_side() -> void:
 
 ## Счёт транзита не обрывает другие режимы и после них начинается заново (вариант 3 (аж): охоту, «замер», бросок,
 ## отход и чистку таймером не обрываем): 30 с еды у края рифа — счёт 0, затем патруль — цель TRANSIT_MAX с держится.
+## Сытый счёт не ведёт — его обход до цели держит `test_patrol_goes_around_reef`.
 func test_transit_counts_only_in_patrol() -> void:
 	var r := _reef_world()
 	var w: EcoWorld = r[0]
 	var preds: EcoPred = r[1]
 	var axis := preds.reef_axis()
 	var pr := preds.all[0]
-	pr.hunger = -2.0
+	pr.hunger = EcoPred.HUNT_HUNGER + 0.1
+	pr.seek_t = 1e9  # не ищет добычу
 	pr.agent.p = Vector3(axis.x - 42.0, -30.0, axis.z)
 	EcoPred._set_mode(pr, EcoPred.Mode.EAT, 40.0)
 	pr.agent.goal = Vector3(axis.x + 70.0, -30.0, axis.z)
 	for i in 600:  # 30 с
 		pr.agent.timer = 40.0
+		pr.hunger = EcoPred.HUNT_HUNGER + 0.1
 		_step(w)
 	eq(pr.mode, EcoPred.Mode.EAT)
 	ok(Vector2(pr.agent.p.x - axis.x, pr.agent.p.z - axis.z).length() < EcoFish.CROWN_ALARM, "ест внутри тревоги кроны")
@@ -1190,6 +1193,7 @@ func test_transit_counts_only_in_patrol() -> void:
 	pr.agent.goal = Vector3(axis.x + 70.0, -30.0, axis.z)
 	var goal := pr.agent.goal
 	for i in int((EcoPred.TRANSIT_MAX - 1.0) / EcoWorld.MAX_STEP):
+		pr.hunger = EcoPred.HUNT_HUNGER + 0.1
 		_step(w)
 	eq(pr.agent.goal, goal, "до TRANSIT_MAX патруля цель та же")
 
