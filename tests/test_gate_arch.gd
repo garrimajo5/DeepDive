@@ -203,7 +203,7 @@ func test_scene_has_arch_and_helm_solid() -> void:
 			near(gv.petals[i].rotation.x, 0.0, 0.001, "створка %d закрыта: её никто не открывал" % i)
 	var shut: AABB = gv.petals[0].mesh.get_aabb()
 	var up: Vector3 = Basis(Vector3.RIGHT, GateArch.PETAL_TURN) * shut.get_center()
-	near(up.y - shut.get_center().y, 1.4, 0.1, "открытая створка поднята на ≈ 1,4 м (ART-079)")
+	near(up.y - shut.get_center().y, 0.92, 0.1, "открытая створка поднята на ≈ 0,9 м (60°, #1757)")
 	ok(up.z > 0.5, "и стоит перед лицом опоры, не в камне")
 	main._apply_graphics(Graphics.ECONOMY)
 	ok(gv.lite, "«Экономно» дошло до арки")
@@ -278,6 +278,26 @@ func test_petals_stand_out_from_pier() -> void:
 	ok(glow == null or Color(glow.r, glow.g, glow.b).is_equal_approx(Color.BLACK), "без свечения")
 	var sh := FileAccess.get_file_as_string("res://shaders/gate_arch.gdshader")
 	ok(sh.contains("mix(tone, tone_in, inner)"), "шейдер красит по стороне плиты")
+	gv.free()
+
+
+## Открытая створка — 60° (#1757, ГД и уровни 15.11): при 90° из окна видно ребро плиты (0,12 м), при 60° — её
+## площадь, а устье под ней остаётся открытым. Меряем саму плиту: углы её AABB, повёрнутые вокруг оси узла.
+func test_open_petal_shows_its_face() -> void:
+	near(rad_to_deg(GateArch.PETAL_TURN), -60.0, 0.001, "угол открытой створки в игре")
+	var gv := GateView.new()
+	var shut: AABB = gv.petals[0].mesh.get_aabb()
+	var turn := Basis(Vector3.RIGHT, GateArch.PETAL_TURN)
+	var lo := INF
+	var hi := -INF
+	for i in 8:
+		var y: float = (turn * shut.get_endpoint(i)).y
+		lo = minf(lo, y)
+		hi = maxf(hi, y)
+	ok(hi - lo > 0.6, "плита видна площадью, не ребром: по высоте %.2f м" % (hi - lo))
+	ok(lo > shut.get_center().y + 0.4, "низ плиты выше середины гнезда — устье открыто: %.2f м" % (lo - shut.get_center().y))
+	var hidden := (shut.end.y - lo) / shut.size.y
+	ok(hidden < 0.2, "плита закрывает меньше пятой части устья: %.0f %%" % (hidden * 100.0))
 	gv.free()
 
 

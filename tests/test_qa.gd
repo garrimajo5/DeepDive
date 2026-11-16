@@ -610,9 +610,9 @@ func test_shot_logs_rows() -> void:
 
 func test_petal_note() -> void:   # #1757: створка гнезда 07 в строке снимка числом
 	eq(QaRunner.petal_note(0, 0.0), " · створка гнезда 1: закрыта", "закрыта")
-	eq(QaRunner.petal_note(0, 1.0), " · створка гнезда 1: открыта (90°)", "открыта")
-	eq(QaRunner.petal_note(2, 0.5), " · створка гнезда 3: поднята на 45° из 90°", "в пути — угол")
-	eq(QaRunner.petal_note(0, 0.999), " · створка гнезда 1: открыта (90°)", "почти — открыта")
+	eq(QaRunner.petal_note(0, 1.0), " · створка гнезда 1: открыта (60°)", "открыта")
+	eq(QaRunner.petal_note(2, 0.5), " · створка гнезда 3: поднята на 30° из 60°", "в пути — угол")
+	eq(QaRunner.petal_note(0, 0.999), " · створка гнезда 1: открыта (60°)", "почти — открыта")
 	eq(QaRunner.petal_note(0, 0.004), " · створка гнезда 1: закрыта", "меньше полградуса — закрыта")
 
 
@@ -630,10 +630,10 @@ func test_shot_logs_petal_at_gate() -> void:
 	ok("створка гнезда 1: закрыта" in qa.state(true), "у арки — закрыта: " + qa.state(true))
 	ok(not "створка" in qa.state(), "заметка без снимка — без створки")
 	main.gate_view.set_petal(EcoDome.NEST, 0.4)
-	ok("створка гнезда 1: поднята на 36° из 90°" in qa.state(true), "подъём — углом узла модели: " + qa.state(true))
+	ok("створка гнезда 1: поднята на 24° из 60°" in qa.state(true), "подъём — углом узла модели: " + qa.state(true))
 	main.lore.learn(LayerLore.PETAL07)
 	main.gate_petal()
-	ok("створка гнезда 1: открыта (90°)" in qa.state(true), "открыта в кампании: " + qa.state(true))
+	ok("створка гнезда 1: открыта (60°)" in qa.state(true), "открыта в кампании: " + qa.state(true))
 	ok(qa.state(true).ends_with(qa.rows_now()), "строки приборов — по-прежнему в конце")
 	main.queue_free()
 	await frames(1)
