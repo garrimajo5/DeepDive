@@ -1,6 +1,7 @@
 extends TestCase
 ## Ключ снимка say= (#1350, UX 15.11): своя строка в приборах на время снимка — длину новых сообщений проверяют
-## настоящим шрифтом до встройки. Строка держится все кадры ожидания снимка и не уступает строке мира.
+## настоящим шрифтом до встройки. Строка держится все кадры ожидания снимка и не уступает строке мира: первый же
+## облачный снимок показал вместо неё «Папоротник-спираль разворачивает листья…».
 
 const ShotSetup := preload("res://tools/shot_setup.gd")
 const LINE := "Гнездо прочитано: створка откроется, когда купольник поднимет её"
@@ -26,6 +27,14 @@ func test_scene_line_on_status_and_stays() -> void:
 	eq(main.message.text, LINE, "в приборах своя строка, без краевых пробелов")
 	eq(main.message.next, "", "ждущая строка мира снята — не сменит её до снимка")
 	ok(main.status_parts().has(LINE), "строка в частях строки состояния")
+	main.on_eco_event(EcoLink.message("Папоротник-спираль разворачивает листья"))
+	main.step(0.1)
+	eq(main.message.text, LINE, "строка мира её не сменяет")
+	eq(ShotSetup.say_line(main, {"say": LINE}), "SAY на приборах: «%s», %d знаков" % [LINE, LINE.length()], "строка лога")
+	main.message.say("Хищник рядом", Status.MESSAGE_SECONDS, true, true)
+	ok(ShotSetup.say_line(main, {"say": LINE}).begins_with("SAY ВНИМАНИЕ"), "перебила угроза — лог предупреждает")
+	ShotSetup.say(main, {"say": LINE})
+	eq(main.message.text, LINE, "повтор каждый кадр ожидания возвращает строку")
 	for i in 100:   # 10 с мира: обычное сообщение (4,2 с) давно бы погасло
 		main.step(0.1)
 	eq(main.message.text, LINE, "держится до снимка")

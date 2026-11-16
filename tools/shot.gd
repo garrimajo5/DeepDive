@@ -16,7 +16,7 @@ extends SceneTree
 ## frames=30 — сколько кадров ждать до снимка
 ## view=14,3,-16 — камера снаружи в осях корабля (корпус)
 ## hud=0 — без крестовины, кнопок и строк приборов
-## say=… — сообщение в строку приборов на время снимка, в кавычках целиком («say=Курс на Раковину»): длина новых строк настоящим шрифтом, смотреть в 1600×720 и 1280×720 (#1350)
+## say=… — сообщение в строку приборов на время снимка, в кавычках целиком («say=Курс на Раковину»): длина новых строк настоящим шрифтом, смотреть в 1600×720 и 1280×720; строки мира её не сменяют, в лог — «SAY на приборах: …» (#1350)
 ## kadr=1 — ещё и кадр Google Play ART-046 (1…4: 1920×1080, подпись n-го шаблона, снимок в рамке 16:9) в <out>-kadr.png
 ## vyrez=80 — вырез телефона слева, px (безопасная область, #603)
 ##
@@ -471,6 +471,8 @@ func _go() -> void:
 		main.set_hud(false)
 	for i in int(kv.get("frames", "8")):
 		await process_frame
+		if kv.has("say"):   # строку могла перебить срочная строка мира — вернуть до следующего кадра
+			ShotSetup.say(main, kv)
 	if kv.has("kino"):   # kino=<с> — ролик штатной камерой (#1753: до/после ANIM-005)
 		await _kino(main, out, float(kv["kino"]), int(kv.get("kino_fps", "15")))
 		quit(0)
@@ -487,6 +489,8 @@ func _go() -> void:
 	print("SHOT ", out, " ", img.get_size(), " вызовов отрисовки: ",
 		Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
 		", примитивов: ", Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
+	if kv.has("say"):
+		print(ShotSetup.say_line(main, kv))
 	if kv.has("budget"):
 		await _budget(main, int(kv["budget"]))
 	quit(0)
