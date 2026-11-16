@@ -3,6 +3,10 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-16
+- Поток А (#1350, 15.11): `tools/qa/mini.py --from <шаг>` — начало мини-сценария назад до шага по `do`, `do=what`
+  или `do:k` (k-й назад: `--from ship:2`, `--from nests`, `--from press=settings`): блок, где `ship` стоит и между
+  действиями, ближайшим `--ship` не собирался. `@N <снимок>` (шаг лога и конечный снимок) — в справке и под тестом.
+  Тесты `tools/test_qa_mini.py`: `test_from_step_goes_back`, `test_from_in_real_scenario`, `test_step_start_with_end_shot`.
 - Поток А (#1918, спецификация UX): подписи кнопок пилота не мельче 12 sp — кегль `max(r × k, 0,03 × s)` от короткой
   стороны безопасной области (`Touch.Layout.label_px`, `LABEL_MIN`; «Всплыть»/«Вниз» 19 → 22 px при H = 720), «Свет» —
   одним словом в обоих состояниях (`Searchlight.button_label`, кегль `r × 0,4`, 16 → 22 px): горит — залитый круг,

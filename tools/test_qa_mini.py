@@ -64,6 +64,56 @@ class Mini(unittest.TestCase):
         _, _, lost = mini.cut(STEPS, "10")
         self.assertEqual(lost, ["ship"], "без --ship — выпал ship; hull до него не в счёт")
 
+    def test_step_start_with_end_shot(self):
+        # #1350, 15.11: начало — шаг лога, конец — снимок дальше первого
+        out, first, _ = mini.cut(STEPS, "@4", "11")
+        self.assertEqual(first, 3)
+        self.assertEqual(out[len(mini.START):-1], STEPS[3:11], "от шага 4 до снимка 11 с заметками")
+
+    def test_from_step_goes_back(self):
+        # блок с несколькими ship: ближайший ship стоит между действиями, нужен тот, что раньше
+        steps = [
+            {"do": "ship", "x": 1},                       # 0
+            {"do": "hold", "what": "scan", "s": 2},       # 1
+            {"do": "ship", "x": 2},                       # 2
+            {"do": "nests"},                              # 3
+            {"do": "ship", "x": 3},                       # 4
+            {"do": "press", "what": "scan"},              # 5
+            {"do": "wait", "s": 1},                       # 6
+            {"do": "shot", "name": "35e-reakciya"},       # 7
+        ]
+        _, near, _ = mini.cut(steps, "35e", ship=True)
+        self.assertEqual(near, 4, "--ship — только ближайший")
+        out, first, lost = mini.cut(steps, "35e", since="ship:2")
+        self.assertEqual(first, 2, "второй ship назад")
+        self.assertEqual(out[len(mini.START):-1], steps[2:8])
+        self.assertEqual(lost, [], "начали с ship — корабль на месте")
+        self.assertEqual(mini.cut(steps, "35e", since="ship:3")[1], 0)
+        self.assertEqual(mini.cut(steps, "35e", since="ship")[1], 4, "без номера — ближайший")
+        self.assertEqual(mini.cut(steps, "35e", since="nests")[1], 3, "любой шаг по do")
+        self.assertEqual(mini.cut(steps, "35e", since="hold=scan")[1], 1, "do=what")
+        self.assertEqual(mini.cut(steps, "35e", since="press=scan")[1], 5)
+        self.assertEqual(mini.cut(steps, "35e", since="shot=35e-reakciya")[1], 6,
+                         "сам снимок по имени — с ожиданием перед ним")
+        self.assertEqual(mini.cut(steps, "@4", "35e", since="ship")[1], 2, "назад от шага лога, сам шаг — в счёт")
+        for bad in ("ship:4", "ship:0", "ship:x", "silt", "press=dive"):
+            with self.assertRaises(SystemExit, msg=bad):
+                mini.cut(steps, "35e", since=bad)
+
+    def test_from_in_real_scenario(self):
+        import contextlib
+        import io
+        with open(mini.SCENARIO, encoding="utf-8") as f:
+            steps = json.load(f)
+        at = {s["name"]: i for i, s in enumerate(steps) if s.get("do") == "shot"}
+        out, first, _ = mini.cut(steps, "35e-reakciya", since="nests")
+        self.assertEqual(steps[first], {"do": "nests"})
+        self.assertLess(first, at["35d-reakciya-bio-07"], "блок реакций у 07 целиком: nests стоит до первого кадра")
+        self.assertIn({"do": "shot", "name": "35d-reakciya-bio-07"}, out)
+        with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                mini.main(["35e", "--ship", "--from", "nests"])
+
     def test_missing(self):
         with self.assertRaises(SystemExit):
             mini.cut(STEPS, "99-net")
