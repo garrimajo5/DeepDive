@@ -36,6 +36,10 @@ var _draw_from_us := 0
 var _post_us := 0
 var _phys_us := 0
 var _proc_us := 0
+## Конец обработки узлов (#1350, 16.11 17:16; #1929): «узлы 60» не говорили, `_process` это или рисунок панелей.
+## Узел-метка `Tail` обрабатывается последним в дереве — от него до `frame_pre_draw` идут отложенные вызовы и `_draw`
+## холстов (`queue_redraw` рисует там же), в строке — «холсты».
+var _tail: Tail
 ## Сборки шейдеров (конвейеров видеокарты) в последнем кадре по видам `PIPES` (issue #983): провал «отрисовка 338 мс»
 ## на устройстве — сборка это или выгрузка. Счётчики движка накопительные; Compatibility их не ведёт (нули).
 var pipes := PackedInt32Array([0, 0, 0, 0, 0])
@@ -208,6 +212,7 @@ func start(m: Main, text: String = "") -> void:
 	RenderingServer.frame_post_draw.connect(_on_post_draw)
 	main.get_tree().physics_frame.connect(_on_physics_frame)
 	main.get_tree().process_frame.connect(_on_process_frame)
+	watch_tail()
 	for i in PIPES.size():   # счёт сборок — с начала прогона, не с запуска (issue #983)
 		_pipes_total[i] = RenderingServer.get_rendering_info(PIPES[i][0])
 	_warm_from_us = Time.get_ticks_usec()
@@ -460,7 +465,7 @@ func _measure(now_us: int) -> void:
 			worst_ms = ms
 			var code := code_ms()
 			worst_at = worst_note(_step_label, render_ms(), code, gpu_ms(), ms, main.clock.last_note() if main else "", pipes,
-				rest_parts(_last_us, now_us, code, _draw_from_us, _post_us, _phys_us, _proc_us))   # _measure — уже в новом шаге (issue #662)
+				rest_parts(_last_us, now_us, code, _draw_from_us, _post_us, _phys_us, _proc_us, _tail.us if _tail else 0))   # _measure — уже в новом шаге (issue #662)
 		if _settle > 0:
 			_settle -= 1
 		else:
@@ -674,15 +679,43 @@ static func rest_note(frame: float, code: float, draw: float, parts: Dictionary)
 ## в нём код шага `code` (мс), отрисовка `pre_us`…`post_us`, затем такты физики с `phys_us` (раньше конца отрисовки —
 ## тактов не было) и обработка узлов с `proc_us`. «Между кадрами» — от конца отрисовки до следующего кадра: ожидание
 ## показа кадра и темпа (кадровая развёртка, предел кадров), события системы и ввод; «физика» — такты физики
-## (`_physics_process` и физический сервер); «узлы» — `_process` и отложенные вызовы вне `Main.step`. Навигации в игре
-## нет. Метки не по порядку (не тот кадр, headless без отрисовки) — {}.
-static func rest_parts(from_us: int, now_us: int, code: float, pre_us: int, post_us: int, phys_us: int, proc_us: int) -> Dictionary:
+## (`_physics_process` и физический сервер); «узлы» — `_process` вне `Main.step`; «холсты» — от конца обработки узлов
+## `tail_us` (метка `Tail`) до начала отрисовки: отложенные вызовы и `_draw` панелей. Метки конца узлов нет или она
+## не из этого кадра — «холстов» нет, всё до отрисовки идёт в «узлы», как раньше. Навигации в игре нет. Метки не по
+## порядку (не тот кадр, headless без отрисовки) — {}.
+static func rest_parts(from_us: int, now_us: int, code: float, pre_us: int, post_us: int, phys_us: int, proc_us: int,
+		tail_us := 0) -> Dictionary:
 	if from_us <= 0 or not (from_us <= pre_us and pre_us <= post_us and post_us <= proc_us and proc_us <= now_us):
 		return {}
 	var ticked := phys_us > post_us and phys_us <= proc_us
 	var start := phys_us if ticked else proc_us
-	return {"между кадрами": (start - post_us) / 1000.0, "физика": (proc_us - phys_us) / 1000.0 if ticked else 0.0,
-		"узлы": maxf((pre_us - from_us) / 1000.0 - code, 0.0) + (now_us - proc_us) / 1000.0}
+	var split := tail_us >= from_us and tail_us <= pre_us
+	var nodes_to := tail_us if split else pre_us
+	var out := {"между кадрами": (start - post_us) / 1000.0, "физика": (proc_us - phys_us) / 1000.0 if ticked else 0.0,
+		"узлы": maxf((nodes_to - from_us) / 1000.0 - code, 0.0) + (now_us - proc_us) / 1000.0}
+	if split:
+		out["холсты"] = (pre_us - tail_us) / 1000.0
+	return out
+
+
+## Метка конца обработки узлов: `_process` этого узла идёт последним в дереве (`process_priority` — позже всех).
+class Tail extends Node:
+	const LAST := 1 << 30
+	var us := 0
+
+	func _init() -> void:
+		process_priority = LAST
+
+	func _process(_dt: float) -> void:
+		us = Time.get_ticks_usec()
+
+
+## Поставить метку конца обработки узлов (раз за прогон).
+func watch_tail() -> void:
+	if _tail == null:
+		_tail = Tail.new()
+		_tail.name = "Конец узлов"
+		add_child(_tail)
 
 
 ## Сборки шейдеров кадра по видам `PIPES` для лога: «сборок шейдеров 3: поверхности 2, при отрисовке 1»; нет — "".
