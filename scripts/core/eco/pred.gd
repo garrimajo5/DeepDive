@@ -1064,7 +1064,7 @@ func _step_leech(world: EcoWorld, pr: Pred, dt: float, can_attack: bool, d_ship:
 			pr.leech = true
 			world.emit(EcoLeech.ID, "infest", pr.agent.p, _infest_text(world))
 	elif pr.station < 0 and pr.hunger < EcoLeech.SEEK_HUNGER and (pr.mode == Mode.PATROL or pr.mode == Mode.EAT):
-		var st := leeches.nearest_station(pr.agent.p)
+		var st := leeches.nearest_station(pr.agent.p, _reef, REEF_KEEP)  # станция в рифе у цветка недоступна (#1400, (аз))
 		if st:
 			pr.station = st.index
 			_set_mode(pr, Mode.CLEAN, EcoLeech.CLEAN_TIME)
