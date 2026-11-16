@@ -36,6 +36,11 @@ func test_short_run_reports() -> void:
 		for lab in a["lost_what"]:
 			n += int(a["lost_what"][lab])
 		eq(n, int(a["lost"]), "%s: потерянные разложены по видам" % k)
+		var c := 0
+		for lab in a["got_what"]:
+			c += int(a["got_what"][lab])
+			ok(int(a["lost_what"].get(lab, 0)) <= int(a["got_what"][lab]), "%s: потеряно %s не больше пришедших" % [k, lab])
+		eq(c, int(a["got"]), "%s: пришедшие разложены по меткам" % k)
 		var m := 0
 		for pair: String in a["lost_by"]:
 			m += int(a["lost_by"][pair])
@@ -48,10 +53,11 @@ func test_short_run_reports() -> void:
 	for s: Array in r["shown"]:
 		ok(float(s[2]) <= tool.WINDOW + 1e-3, "строка видна не дольше окна: %.2f" % s[2])
 		ok(String(s[1]) != "?", "у строки найден вид: %s" % s[1])
-	eq(lines.size(), 3, "шапка, зерно, итог")
+	eq(lines.size(), 4, "шапка, зерно, итог, пришедшие по метке")
 	ok(lines[0].begins_with("== строки мира почти разом"), lines[0])
 	ok(lines[1].begins_with("  зерно  0: 00: строк"), lines[1])
 	ok(lines[2].begins_with("== итог: 00 — строк"), lines[2])
+	ok(lines[3].begins_with("== пришли по метке (пришло/потеряно): 00 — "), lines[3])
 
 
 ## Метка бегства рыб: крона и риф — по тексту кроны того же мира; прочие заметки — как были.
@@ -74,3 +80,6 @@ func test_flee_label_splits_crown_and_reef() -> void:
 	eq(String(tool._by_text({"a <- b": 2})), ", сменили: a <- b ×2", "сменившие строкой")
 	eq(String(tool._by_text({"c <- d": 1, "a <- b": 3, "e <- f": 1})), ", сменили: a <- b ×3, c <- d ×1, e <- f ×1",
 		"чаще — раньше")
+	eq(String(tool._came_text({}, {})), "—", "ничего не пришло")
+	eq(String(tool._came_text({"b/x": 2, "a/y": 5, "c/z": 2}, {"a/y": 1})), "a/y 5/1, b/x 2/0, c/z 2/0",
+		"пришедшие по метке, чаще — раньше")
