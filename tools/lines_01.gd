@@ -8,6 +8,7 @@ extends SceneTree
 ##   godot --headless --path . -s tools/lines_01.gd [-- seeds=16 stay=<с> turn=<с> dark=<с> mid=<с>]
 ## `turn` — смена течения (`EcoCurrent.timer`) через столько секунд стоянки у 01 (−1 — своим ходом, `PERIOD`).
 ## По зерну и участку: сколько строк пришло, сколько из них «потеряно» (видна меньше MIN_SHOW), и какие (вид/заметка);
+## последней строкой — пришедшие по метке «пришло/потеряно» (сравнить версии: сменился состав или очередь, #1400 ГД 16.11);
 ## «тройка» — три строки за MIN_SHOW. Бегство рыб — раздельно: `fish/flee-krona` (стая кроны Каменного цветка) и
 ## `fish/flee-rif` (стая рифа); у потерянной — какая строка её сменила (следующий приход, «—» — никакая за окно).
 
@@ -63,7 +64,7 @@ static func _label(text: String, evs: Array, world: EcoWorld = null) -> String:
 	return "?"
 
 
-## Один проход: по участку {got, lost, lost_what (метка → число), lost_by («потерянная <- сменившая» → число),
+## Один проход: по участку {got, lost, got_what (метка → пришло), lost_what (метка → число), lost_by («потерянная <- сменившая» → число),
 ## triples}; ещё turn_at (с стоянки у 01, когда течение повернуло; −1 — не повернуло) и shown — все показы у 01 ([с, метка, сколько видна]).
 static func run(seed_value: int) -> Dictionary:
 	var ev: EcoView = MidCalm.make(seed_value)
@@ -72,7 +73,7 @@ static func run(seed_value: int) -> Dictionary:
 	ship.pos = MidCalm.ship_at(MidCalm.PATH[0])
 	var r := {"turn_at": -1.0, "shown": []}
 	for k in LEGS:
-		r[k] = {"got": 0, "lost": 0, "lost_what": {}, "lost_by": {}, "triples": 0}
+		r[k] = {"got": 0, "lost": 0, "got_what": {}, "lost_what": {}, "lost_by": {}, "triples": 0}
 	var legs: Array = [[MidCalm.PATH[0], dark, false], [MidCalm.PATH[1], mid, true], [MidCalm.PATH[2], stay, true]]
 	var leg := 0
 	var left: float = legs[0][1]
@@ -137,6 +138,7 @@ static func run(seed_value: int) -> Dictionary:
 	for i in got.size():
 		var g: Array = got[i]
 		var lk: String = g[2]
+		r[lk]["got_what"][g[1]] = int(r[lk]["got_what"].get(g[1], 0)) + 1
 		if lk == "01":
 			r["shown"].append([float(g[3]), g[1], float(g[4])])
 		if float(g[4]) < Status.Message.MIN_SHOW - DT * 1.5:
@@ -183,7 +185,7 @@ static func report(seeds: int) -> Array[String]:
 		dark, mid, stay, ("через %.0f с стоянки у 01" % turn) if turn >= 0.0 else "своим ходом", seeds])
 	var tot := {}
 	for k in LEGS:
-		tot[k] = {"got": 0, "lost": 0, "seeds_lost": 0, "triples": 0, "what": {}, "by": {}}
+		tot[k] = {"got": 0, "lost": 0, "seeds_lost": 0, "triples": 0, "what": {}, "by": {}, "came": {}}
 	for s in seeds:
 		var r := run(s)
 		put(lines, seed_line(s, r))
@@ -194,6 +196,8 @@ static func report(seeds: int) -> Array[String]:
 			tot[k]["triples"] += a["triples"]
 			if a["lost"] > 0:
 				tot[k]["seeds_lost"] += 1
+			for lab in a["got_what"]:
+				tot[k]["came"][lab] = int(tot[k]["came"].get(lab, 0)) + int(a["got_what"][lab])
 			for lab in a["lost_what"]:
 				tot[k]["what"][lab] = int(tot[k]["what"].get(lab, 0)) + int(a["lost_what"][lab])
 			for pair in a["lost_by"]:
@@ -207,4 +211,18 @@ static func report(seeds: int) -> Array[String]:
 			tot[k]["seeds_lost"], seeds, (" (%s)" % ", ".join(what)) if what.size() > 0 else "", _by_text(tot[k]["by"]),
 			tot[k]["triples"]])
 	put(lines, "== итог: %s" % "; ".join(parts))
+	var came := PackedStringArray()
+	for k in LEGS:
+		came.append("%s — %s" % [k, _came_text(tot[k]["came"], tot[k]["what"])])
+	put(lines, "== пришли по метке (пришло/потеряно): %s" % "; ".join(came))
 	return lines
+
+
+## «a 12/3, b 5/0, …» — пришедшие по метке и сколько из них потеряно; чаще пришедшие — раньше.
+static func _came_text(came: Dictionary, lost: Dictionary) -> String:
+	var keys: Array = came.keys()
+	keys.sort_custom(func(a, b): return int(came[a]) > int(came[b]) or (int(came[a]) == int(came[b]) and String(a) < String(b)))
+	var out := PackedStringArray()
+	for lab in keys:
+		out.append("%s %d/%d" % [lab, came[lab], int(lost.get(lab, 0))])
+	return ", ".join(out) if out.size() > 0 else "—"
