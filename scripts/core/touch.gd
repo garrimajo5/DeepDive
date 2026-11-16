@@ -9,6 +9,11 @@ class Layout:
 	const ACTION_SHARE := 0.11
 	const MARGIN_SHARE := 0.06
 	const PILOT_SHARE := 0.075
+	## Подписи кнопок пилота (#1918): кегль — доля радиуса, но не мельче LABEL_MIN короткой стороны (≈ 12 sp на 6").
+	const LABEL_MIN := 0.03
+	const LIFT_LABEL := 0.36   ## «Всплыть», «Вниз»
+	const LIGHT_LABEL := 0.4   ## «Свет»
+	const LABEL_PAD := 12.0 / 720.0  ## поля подписи внутри круга, доля короткой стороны (оба края вместе)
 
 	var pad := Circle.new()
 	var action := Circle.new()
@@ -18,10 +23,12 @@ class Layout:
 	var noclip := Circle.new()  ## тестовая кнопка «noclip» в правом верхнем углу
 	## Безопасная область экрана (без вырезов), от которой разложены органы: по ней же — плашки поверх них (#603).
 	var area := Rect2()
+	var side := 0.0  ## короткая сторона безопасной области: от неё радиусы и нижний предел кегля
 
 	func compute(safe: Rect2) -> void:
 		area = safe
 		var s := minf(safe.size.x, safe.size.y)
+		side = s
 		var m := s * MARGIN_SHARE
 		var pr := s * PAD_SHARE
 		var ar := s * ACTION_SHARE
@@ -42,6 +49,14 @@ class Layout:
 			up.c.y -= over
 			down.c.y -= over
 		light = Circle.new(Vector2(action.c.x, action.c.y - action.r - gap - br), br)
+
+	## Кегль подписи кнопки пилота, px: доля k радиуса, не мельче LABEL_MIN короткой стороны (вверх до целого).
+	func label_px(c: Circle, k: float) -> int:
+		return int(ceilf(maxf(c.r * k, side * LABEL_MIN)))
+
+	## Сколько места у строки внутри круга, px: диаметр без полей.
+	func label_room(c: Circle) -> float:
+		return c.r * 2.0 - side * LABEL_PAD
 
 	## Прямоугольники вокруг органов под пальцами с зазором gap (#1345): крестовина и кнопка действия, у пилота — ещё
 	## «Всплыть», «Вниз», «Свет». На них не ложатся плашки, которые ловят касания (карточка роли).
