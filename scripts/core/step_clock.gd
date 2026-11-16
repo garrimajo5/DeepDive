@@ -178,7 +178,7 @@ static func _top(of: Dictionary, n: int, min_ms: float, sub_of: Dictionary = {},
 					us.get("seen", {}).get(k, {}))
 			if not inner.is_empty():
 				t += " [%s]" % inner
-				var x := stall(sub_of[k], us.get("/", {}).get(k, {}))
+				var x := stall(sub_of[k], us.get("/", {}).get(k, {}), us.get("seen", {}).get(k, {}))
 				if x > 0:
 					t += STALL % x
 				elif lone(sub_of[k], us.get("/", {}).get(k, {}), us.get("seen", {}).get(k, {})):
@@ -190,7 +190,8 @@ static func _top(of: Dictionary, n: int, min_ms: float, sub_of: Dictionary = {},
 ## Во сколько раз разом медленнее обычного все подчасти sub (us — их обычное время, мс): медиана «×» подчастей с
 ## известным обычным, если она не меньше STALL_K и таких подчастей не меньше STALL_N; иначе 0 — есть виновник или мало
 ## данных. Долгий шаг кадра порог не меняет: мир идёт одним подшагом (#1255), прочие части шаг не дробят (#1253).
-static func stall(sub: Dictionary, us: Dictionary) -> int:
+## seen — доля шагов с подчастью: по ней `spike_stall` узнаёт подчасть каждого шага с обычным ~0 (#1934).
+static func stall(sub: Dictionary, us: Dictionary, seen: Dictionary = {}) -> int:
 	var ratios: Array[float] = []
 	for key in sub.keys():
 		var u := float(us.get(key, 0.0))
@@ -204,7 +205,7 @@ static func stall(sub: Dictionary, us: Dictionary) -> int:
 	if med >= STALL_K:
 		return roundi(med)
 	var r := rest_stall(sub, us)
-	return r if r > 0 else spike_stall(sub, us)
+	return r if r > 0 else spike_stall(sub, us, seen)
 
 
 ## Одна отметка (`LONE`): ровно одна подчасть sub не короче MIN_MS с обычным короче USUAL_MIN, которая каждого шага
@@ -231,22 +232,31 @@ static func lone(sub: Dictionary, us: Dictionary, seen: Dictionary) -> bool:
 ## Заминка по трём «виновникам» сразу (#1317): не меньше STALL_N подчастей с известным обычным — каждая не короче
 ## SPIKE_MS и в SPIKE_K раз дольше обычного, в кадре без импульса и разряда. Итог — весь замер к обычному, не меньше
 ## SPIKE_MIN; иначе 0. Два таких — ещё виновники (`test_stall_by_rest_sum`).
-static func spike_stall(sub: Dictionary, us: Dictionary) -> int:
+## Подчасть каждого шага (seen ≥ SEEN_MIN) с обычным короче USUAL_MIN, раздутая до SPIKE_MS, — тоже «виновник» (#1934,
+## `41b-okno-otkryta`: «мир 33 (обычно 7) [монетники 11 ×12, EcoRay 8 ×>78, грот 3 ×19, …]» без пометки — у `EcoRay`
+## обычное ~0, в счёт она не шла, а к обычному она дольше не в 10, а в 30 раз и больше). Одних таких мало: хотя бы
+## один «виновник» — с известным обычным, иначе это не «разом» у несвязанных модулей с работой, а отметки (`lone`).
+static func spike_stall(sub: Dictionary, us: Dictionary, seen: Dictionary = {}) -> int:
 	if sub.has(PING_MARK):
 		return 0
 	var spikes := 0
+	var floors := 0
 	var ms := 0.0
 	var usual_ms := 0.0
 	for key in sub.keys():
 		var u := float(us.get(key, 0.0))
-		if u < USUAL_MIN:
-			continue
 		var m := float(sub[key])
+		if u < USUAL_MIN:
+			if m >= SPIKE_MS and float(seen.get(key, 0.0)) >= SEEN_MIN:
+				floors += 1
+				ms += m   # в «весь замер» — и она: её время тоже отняла машина
+				usual_ms += u
+			continue
 		ms += m
 		usual_ms += u
 		if m >= SPIKE_MS and m >= SPIKE_K * u:
 			spikes += 1
-	if spikes < STALL_N:
+	if spikes < 1 or spikes + floors < STALL_N:
 		return 0
 	return maxi(SPIKE_MIN, roundi(ms / usual_ms))
 

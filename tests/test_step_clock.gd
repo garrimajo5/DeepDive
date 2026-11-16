@@ -383,6 +383,53 @@ func test_stall_three_spikes() -> void:
 	eq(StepClock.stall(two, us), 0, "два виновника — не заминка")
 
 
+## #1934 (разбор #1932, `41b-okno-otkryta`): «мир 33 (обычно 7) [вид: хватень, краб, монетники 11 ×12, EcoRay 8 ×>78,
+## вид: скаты, вуаль, грот 3 ×19, ещё 44: 11]» без пометки: у `EcoRay` обычное ~0, в счёт «виновников» она не шла, и
+## их было два. Подчасть каждого шага с обычным ~0, раздутая до SPIKE_MS, — третий «виновник»: «разом, заминка».
+## По событию (редкая), без «виновника» с известным обычным или в кадре импульса — как прежде, без пометки.
+func test_stall_counts_tiny_usual_spike() -> void:
+	var coins := "вид: хватень, краб, монетники"
+	var grot := "вид: скаты, вуаль, грот"
+	var c := StepClock.new()
+	var t := 0
+	var usual := [[coins, 900], ["EcoRay", 10], [grot, 170]]
+	var worst := [[coins, 11000], ["EcoRay", 7850], [grot, 3200]]
+	for i in 44:
+		usual.append(["m%d" % i, 136])
+		worst.append(["m%d" % i, 250])
+	for i in StepClock.USUAL_FROM + 10:
+		c.start(t, 1.0 / 30.0)
+		for p in usual:
+			t += int(p[1])
+			c.lap("мир/" + p[0], t)
+	c.start(t, 1.0 / 30.0)   # провал: три несвязанные подчасти раздуло разом, прочие ×1,8
+	for p in worst:
+		t += int(p[1])
+		c.lap("мир/" + p[0], t)
+	c.start(t, 1.0 / 30.0)
+	eq(c.last_note(), "мир 33 (обычно 7) [%s 11 ×12, EcoRay 8 ×>78, %s 3 ×19, ещё 44: 11]" % [coins, grot]
+		+ StepClock.STALL % 5, "строка #1932: два виновника и «×>N» каждого шага — заминка, весь мир ×5")
+	var sub := {"a": 11.0, "b": 3.2, "ray": 7.85, "c": 2.0}
+	var us := {"a": 0.9, "b": 0.17, "ray": 0.01, "c": 1.5}
+	var all := {"a": 1.0, "b": 1.0, "ray": 1.0, "c": 1.0}
+	ok(StepClock.spike_stall(sub, us, all) >= StepClock.SPIKE_MIN, "два виновника и подчасть ~0 каждого шага — заминка")
+	eq(StepClock.spike_stall(sub, us), 0, "без доли шагов подчасть ~0 в счёт не идёт — как до #1934")
+	eq(StepClock.spike_stall(sub, us, {"ray": 0.2}), 0, "подчасть по событию (редкая) — не виновник")
+	var small := sub.duplicate()
+	small["ray"] = 2.5
+	eq(StepClock.spike_stall(small, us, all), 0, "подчасть ~0 короче SPIKE_MS — не виновник")
+	var one := sub.duplicate()
+	one["b"] = 0.2
+	eq(StepClock.spike_stall(one, us, all), 0, "один виновник и одна «×>N» — мало")
+	var tiny := {"ray": 8.0, "ray2": 8.0, "ray3": 8.0, "c": 2.0}
+	var tiny_us := {"ray": 0.01, "ray2": 0.01, "ray3": 0.01, "c": 1.5}
+	eq(StepClock.spike_stall(tiny, tiny_us, {"ray": 1.0, "ray2": 1.0, "ray3": 1.0, "c": 1.0}), 0,
+		"одни «×>N» без виновника с известным обычным — не «разом»")
+	var ping := sub.duplicate()
+	ping[StepClock.PING_MARK] = 0.5
+	eq(StepClock.spike_stall(ping, us, all), 0, "кадр импульса — не заминка")
+
+
 ## #1350 (поток Б, 12.11; отчёт `2026-11-12-0330`, `36b`): «мир 72 [EcoFlower 42 ×>100, EcoFish 12, …]» в шумном прогоне
 ## прочли как виновника, а у `EcoFlower.step` шесть сложений — процесс сняли с ЦП посреди вызова. Одна «×>N» среди
 ## подчастей «как обычно» — «одна отметка, вероятно хост»; две такие, раздутая подчасть с известным обычным или кадр
