@@ -118,11 +118,14 @@ func near_station(p: Vector3) -> Station:
 	return null
 
 
-## Ближайшая станция (null — станций нет).
-func nearest_station(p: Vector3) -> Station:
+## Ближайшая станция (null — станций нет). axis/keep — ось рифа у цветка и его кольцо (#1400, (аз) вариант 2): станция,
+## чья вершина ближе keep к оси по горизонтали, недоступна — хищник в риф не заходит (EcoPred.reef_steer), её пропускаем.
+func nearest_station(p: Vector3, axis := Vector3.INF, keep := 0.0) -> Station:
 	var best: Station = null
 	var bd := INF
 	for st in stations:
+		if axis.is_finite() and Vector2(st.top.x - axis.x, st.top.z - axis.z).length() < keep:
+			continue
 		var d := st.top.distance_to(p)
 		if d < bd:
 			bd = d

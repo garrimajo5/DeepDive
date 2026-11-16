@@ -1120,40 +1120,72 @@ func test_patrol_goes_around_reef() -> void:
 
 
 
-## Чистка не ведёт хищника в риф у цветка (#1400, п. 2 (аз)): у 01 вершина огнецвета — станция пиявников — в 23,9 м
-## от оси, внутри REEF_KEEP. Заражённый сытый серпохвост плывёт к ней в режиме CLEAN, но reef_steer держит его снаружи
-## кольца, станция не работает, и через CLEAN_TIME он бросает чистку. Мутация «reef_steer не для CLEAN» (вариант 3
-## вопроса ГД) — заходит к вершине и чистится.
-func test_clean_station_inside_reef_keeps_pred_out() -> void:
+## Чистка не ведёт хищника в риф у цветка (#1400, п. 2 (аз), вариант 2): у 01 вершина огнецвета — станция пиявников —
+## в 23,9 м от оси, внутри REEF_KEEP, а reef_steer туда не пускает. Раньше заражённый сытый серпохвост выбирал её
+## ближайшей и 40–65 с кружил у края рифа, пряча крону. Теперь станцию в кольце он пропускает и плывёт к следующей
+## снаружи — доплывает и чистится там. Без правки (`nearest_station` без оси) выбирает станцию 0 в рифе.
+func test_clean_skips_station_inside_reef() -> void:
 	var r := _reef_world()
 	var w: EcoWorld = r[0]
 	var preds: EcoPred = r[1]
 	var axis := preds.reef_axis()
-	var top := Vector3(axis.x + 23.9, FLAT + EcoLeech.TOP, axis.z)
-	var tops: Array[Vector3] = [top]
+	var inner := Vector3(axis.x + 23.9, FLAT + EcoLeech.TOP, axis.z)
+	var outer := Vector3(axis.x - 20.0, FLAT + EcoLeech.TOP, axis.z + 75.0)
+	var tops: Array[Vector3] = [inner, outer]
 	var lv := w.add(EcoLeech.new(preds, null, tops)) as EcoLeech
 	var pr := preds.all[0]
 	ok(pr.leech, "первый хищник заражён")
 	pr.hunger = 0.1  # сыт — плывёт на чистку, а не охотится
 	pr.cooldown = 1e9
-	pr.agent.p = Vector3(axis.x + 70.0, -30.0, axis.z + 2.0)  # снаружи, вершина — прямо по пути внутрь кольца
+	pr.agent.p = Vector3(axis.x + 70.0, -30.0, axis.z + 2.0)  # станция в рифе ближе (46 м), снаружи — 117 м
 	pr.agent.goal = pr.agent.p
+	ok(pr.agent.p.distance_to(inner) < pr.agent.p.distance_to(outer), "станция в рифе — ближайшая")
+	_step(w)
+	eq(pr.mode, EcoPred.Mode.CLEAN, "сытый заражённый плывёт на чистку")
+	eq(pr.station, 1, "к станции снаружи рифа, а не к ближайшей в кольце")
 	var closest := 1e9
-	var clean_t := 0.0
+	var reached := false
+	var t := 0.0
 	var dt := EcoWorld.MAX_STEP
-	for i in int((EcoLeech.CLEAN_TIME + 10.0) / dt):
+	while pr.leech and t < EcoLeech.CLEAN_TIME:
+		_step(w)
+		t += dt
+		var p := pr.agent.p
+		closest = minf(closest, Vector2(p.x - axis.x, p.z - axis.z).length())
+		reached = reached or p.distance_to(outer) < EcoLeech.CLEAN_R
+	print("    чистка %.1f с, ближе всего к оси %.1f м (REEF_KEEP %.0f)" % [t, closest, EcoPred.REEF_KEEP])
+	ok(reached, "доплыл до вершины станции снаружи")
+	ok(not pr.leech, "огнёвки сняли паразита за %.1f с" % t)
+	var cleaned := 0
+	for ev in w.bus.pending:
+		cleaned += int(ev.species == EcoLeech.ID and ev.note == "cleaned")
+	eq(cleaned, 1, "чистка закончилась")
+	ok(closest > EcoPred.REEF_KEEP - 4.0, "в риф не заходил (ближе всего %.1f м)" % closest)
+	eq(lv.stations[0].work, 0.0, "станция в рифе не работала")
+
+
+## Станция чистки одна, и та в рифе у цветка: сытый заражённый на неё не идёт — остаётся в патруле с паразитом, а не
+## кружит у края рифа CLEAN_TIME (#1400, (аз)).
+func test_clean_station_inside_reef_not_chosen() -> void:
+	var r := _reef_world()
+	var w: EcoWorld = r[0]
+	var preds: EcoPred = r[1]
+	var axis := preds.reef_axis()
+	var tops: Array[Vector3] = [Vector3(axis.x + 23.9, FLAT + EcoLeech.TOP, axis.z)]
+	w.add(EcoLeech.new(preds, null, tops))
+	var pr := preds.all[0]
+	pr.hunger = 0.1
+	pr.cooldown = 1e9
+	pr.agent.p = Vector3(axis.x + 70.0, -30.0, axis.z + 2.0)
+	pr.agent.goal = pr.agent.p
+	var clean_t := 0.0
+	for i in int(10.0 / EcoWorld.MAX_STEP):
 		_step(w)
 		if pr.mode == EcoPred.Mode.CLEAN:
-			clean_t += dt
-			var p := pr.agent.p
-			closest = minf(closest, Vector2(p.x - axis.x, p.z - axis.z).length())
-	print("    чистка %.1f с, ближе всего к оси %.1f м (REEF_KEEP %.0f), станция %.1f м" % [
-		clean_t, closest, EcoPred.REEF_KEEP, Vector2(top.x - axis.x, top.z - axis.z).length()])
-	ok(clean_t > 30.0, "плыл на чистку дольше 30 с (%.1f с)" % clean_t)
-	ok(closest > EcoPred.REEF_KEEP - 4.0, "к станции в рифе не заходит (ближе всего %.1f м)" % closest)
-	ok(pr.leech, "пиявник не снят — станция внутри кольца недоступна")
-	eq(lv.stations[0].work, 0.0, "огнёвки не работали")
-	ok(pr.mode != EcoPred.Mode.CLEAN, "бросил чистку через CLEAN_TIME")
+			clean_t += EcoWorld.MAX_STEP
+	near(clean_t, 0.0, 1e-6, "на станцию в рифе не плывёт")
+	eq(pr.station, -1)
+	ok(pr.leech, "паразит остаётся — чистить негде")
 
 ## Самый резкий вертикальный разгон (м/с², по окну 3 шага) и шагов вплотную ко дну у серпохвостов за seconds с мира
 ## у места id.
