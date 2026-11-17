@@ -621,6 +621,102 @@ func test_current_turn_during_crown_flee_both_lines_shown() -> void:
 		ok(turn_seen >= Status.Message.MIN_SHOW - 0.051, "строка течения видна %.2f с" % turn_seen)
 		ok(flee_seen >= Status.Message.MIN_SHOW - 0.051, "строка бегства видна %.2f с" % flee_seen)
 
+
+## Сцена 00→01 (п. 2 (аб)): бегство рыб у 01 — строка «держится» (`EcoLink.KEEP`, решение ГД по (э), вариант 2):
+## в очереди `Status.Message` одно место, и ждущую «держится» поток строк фона не сменяет — видна не меньше
+## `MIN_SHOW` (по факту — все MESSAGE_SECONDS). Без ранга бегство стаи рифа у 01 сменяла строка `grot/hide`
+## (замер (аа), `tools/lines_01.gd`); фон здесь — реальные заметки стоянки у 01 (`grazer/graze`, `grot/hide`),
+## флаги строк — из мира (`take_link`), на `Status.Message` — как `Main._world_say`. Мутация: «flee» без ранга
+## в `EcoLink.KEEP` — ждущее бегство сменяет первая же строка фона, бегства на приборах нет вовсе. Без Main.
+func test_flee_keep_line_shown_under_background_stream() -> void:
+	var w := EcoWorld.new(EcoRandom.WORLD_SEED)
+	w.ground = Seabed.height
+	var fish := w.add(EcoFish.new()) as EcoFish
+	w.add(EcoFlower.new())
+	var stand := Vector2(33.0, -22.0)
+	var to := EcoFlower.CENTER - stand
+	w.ship.pos = Vector3(stand.x, Seabed.height(stand.x, stand.y) + 7.0, stand.y)
+	w.ship.yaw = atan2(-to.x, -to.y)
+	w.ship.speed = 0.0
+	w.ship.light_on = true
+	w.ship.light_range = 40.0
+	w.ship.hull_noise = 0.2
+	var crown: EcoFish.Shoal = null
+	for sh in fish.shoals:
+		if sh.crown:
+			crown = sh
+			break
+	var bottom := func(x: float, z: float) -> Vector3: return Vector3(x, Seabed.height(x, z) + 2.0, z)
+	var line_a := "Гребневики пасутся на мху у подножия рифа"
+	var bg_texts := {   # строки фона, наступающие на ждущее бегство (+0,15 с и +0,30 с после его прихода)
+		"Гребневики перешли на соседнее пятно мха": true,
+		"Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял": true,
+	}
+	var msg := Status.Message.new()
+	var shown: Array = []   # [текст, когда встал, сколько виден]
+	var at := {"a": -1.0, "flee": -1.0}
+	var stream_at: Array[float] = []
+	var flee_text := ""
+	var fled_keep := false
+	var waiting_bg := 0
+	var bg_i := 0
+	var pred: EcoAgent = null
+	var t := 0.0
+	while t < 7.0:
+		if at["a"] < 0.0 and t >= 0.499 and t < 1.5:
+			w.emit(EcoGrazer.ID, "graze", bottom.call(48.0, -60.0), func(): return line_a)
+		if pred == null and t >= 0.799:
+			var out := Vector3(crown.center.x - crown.axis.x, 0, crown.center.z - crown.axis.z).normalized()
+			pred = w.spawn(EcoPred.ID, crown.axis - out * 30.0 + Vector3(0, 18, 0))
+		if not stream_at.is_empty() and t >= stream_at[0] - 0.001:
+			stream_at.remove_at(0)
+			if bg_i == 0:
+				w.emit(EcoGrazer.ID, "graze", bottom.call(60.0, -40.0),
+					func(): return "Гребневики перешли на соседнее пятно мха")
+			else:
+				w.emit(EcoGrot.ID, "hide", bottom.call(30.0, 4.0),
+					func(): return "Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял")
+			bg_i += 1
+		w.step(0.05)
+		t += 0.05
+		for e in w.take_link():
+			if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+				continue
+			var text := String(e.get("text", ""))
+			if text == "":
+				continue
+			if text == line_a and at["a"] < 0.0:
+				at["a"] = t
+			elif String(e.get("note", "")) == "flee" and at["flee"] < 0.0:
+				at["flee"] = t
+				flee_text = text
+				fled_keep = bool(e.get("keep", false))
+				stream_at.assign([t + 0.15, t + 0.30])
+			elif not flee_text.is_empty() and msg.next == flee_text and bg_texts.has(text):
+				waiting_bg += 1   # строка фона пришла, пока бегство ждало очереди
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
+		msg.update(0.05)
+		if msg.text != "" and (shown.is_empty() or shown[-1][0] != msg.text):
+			shown.append([msg.text, t, 0.0])
+		if msg.text != "":
+			shown[-1][2] = t - float(shown[-1][1]) + 0.05   # кадр t виден до следующего шага
+	var flee_seen := 0.0
+	for s: Array in shown:
+		if String(s[0]).contains("в крону") or String(s[0]).contains("уходит в кораллы"):
+			flee_seen = maxf(flee_seen, float(s[2]))
+	var lines := PackedStringArray()
+	for s: Array in shown:
+		lines.append("%.2f с «%s» %.2f с" % [s[1], String(s[0]).left(40), s[2]])
+	print("    бегство пришло на %.2f с (строка фона на %.2f с), фона при ждущем бегстве %d; на приборах: %s" % [
+		at["flee"], at["a"], waiting_bg, " | ".join(lines)])
+	ok(at["a"] > 0.0 and at["flee"] > 0.0, "строка фона и бегство пришли")
+	ok(at["flee"] - at["a"] < Status.Message.MIN_SHOW - 0.2,
+		"бегство ждало очереди (строка фона видна %.2f с) — проверка не пустая" % (at["flee"] - at["a"]))
+	ok(fled_keep, "бегство пришло с рангом «держится» (EcoLink.KEEP)")
+	eq(waiting_bg, bg_texts.size(), "пока бегство ждало, пришёл весь фон (%d)" % bg_texts.size())
+	ok(flee_seen >= Status.Message.MIN_SHOW - 0.051, "строка бегства видна %.2f с" % flee_seen)
+
 ## Сцена 00→01 (решение ГД 08.11, `docs/urovni/sloj-1.md`): хищник ходит у границы CROWN_ALARM — то в 45 м от оси
 ## кроны, то в 55 м. Строка о бегстве — не чаще FLEE_COOLDOWN (без перерыва тревоги — одна), а стая не мечется между чашей и кольцом: короткий
 ## выход за границу (2 с) тревогу не снимает, длинный (8 с) снимает, но переключения не чаще удержания тревоги (3 с).
