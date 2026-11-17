@@ -291,8 +291,10 @@ func test_take_link_hits_and_heard_messages() -> void:
 	eq(got.size(), 4, "удар, два наблюдения и сообщение; без заметки и текста — ничего")
 	eq(got[0]["type"], EcoLink.HIT, "удар")
 	near(got[0]["damage"], 0.12, 1e-6, "доля прочности")
-	eq(got[1], EcoLink.observe("pred", "catch", "Серпохвост поймал рыбу"), "заметка вида рядом — наблюдение с текстом")
-	eq(got[2], EcoLink.observe("fish", "flee"), "наблюдение без текста тоже доходит")
+	# кормёжка хищника и бегство рыб — «держится» (EcoLink.KEEP, #1400 (э))
+	eq(got[1], EcoLink.observe("pred", "catch", "Серпохвост поймал рыбу", false, true),
+		"заметка вида рядом — наблюдение с текстом")
+	eq(got[2], EcoLink.observe("fish", "flee", "", false, true), "наблюдение без текста тоже доходит")
 	eq(got[3], EcoLink.message("Серпохвост рядом"), "без заметки вида — просто сообщение")
 	eq(w.hits, 1, "ударов")
 	eq(w.take_link().size(), 0, "очереди пусты")

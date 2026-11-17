@@ -90,25 +90,40 @@ func test_urgent_alert_line() -> void:
 	eq(hot, 1, "одна строка «замер»")
 
 
-## Строка отхода хищника (#1555) идёт с "keep", прочие — без ключа.
+## Строка отхода хищника (#1555) идёт с "keep" и "lead" (#1400 (э)); бегство рыб и кормёжка хищника — с "keep" без
+## "lead"; прочие — без ключей.
 func test_keep_lost_line() -> void:
 	eq(EcoLink.message("x", false, true), {"type": EcoLink.MESSAGE, "text": "x", "keep": true}, "«держится» — с ключом")
-	ok(EcoLink.keep("pred", "lost"), "отход хищника — держится")
+	eq(EcoLink.message("x", false, true, true), {"type": EcoLink.MESSAGE, "text": "x", "keep": true, "lead": true},
+		"ведущая — с двумя ключами")
+	eq(EcoLink.message("x", false, false, true), {"type": EcoLink.MESSAGE, "text": "x"}, "«lead» без «keep» не бывает")
+	ok(EcoLink.keep("pred", "lost") and EcoLink.lead("pred", "lost"), "отход хищника — держится, ведущая")
+	ok(EcoLink.keep("fish", "flee") and not EcoLink.lead("fish", "flee"), "бегство рыб — держится")
+	ok(EcoLink.keep("pred", "catch") and not EcoLink.lead("pred", "catch"), "кормёжка хищника — держится")
 	ok(not EcoLink.keep("pred", "alert") and not EcoLink.keep("fish", "lost"), "прочие — нет")
 	var w := EcoWorld.new()
 	w.ground = func(_x: float, _z: float) -> float: return -40.0
-	w.emit("pred", "lost", w.ship.pos + Vector3(10, 0, 0), func(): return "Хищник потерял корабль и отворачивает")
-	w.emit("pred", "alert", w.ship.pos + Vector3(10, 0, 0), func(): return "Хищник замер")
-	w.emit("fish", "flee", w.ship.pos + Vector3(10, 0, 0), func(): return "Стая уходит")
-	var held := 0
+	var at := w.ship.pos + Vector3(10, 0, 0)
+	w.emit("pred", "lost", at, func(): return "Хищник потерял корабль и отворачивает")
+	w.emit("pred", "alert", at, func(): return "Хищник замер")
+	w.emit("fish", "flee", at, func(): return "Стая уходит")
+	w.emit("pred", "catch", at, func(): return "Хищник выхватил рыбку")
+	w.emit("grazer", "graze", at, func(): return "Пасутся")
+	var got := {}
 	for e in w.take_link():
 		if e.get("type") == EcoLink.MESSAGE or e.get("type") == EcoLink.OBSERVE:
-			if str(e.get("text", "")).contains("потерял"):
-				ok(e.get("keep", false) and not e.has("urgent"), "строка отхода — «держится», не срочная")
-				held += 1
+			var t := str(e.get("text", ""))
+			got[t] = e
+			if t.contains("потерял"):
+				ok(e.get("keep", false) and e.get("lead", false) and not e.has("urgent"),
+					"строка отхода — «держится», ведущая, не срочная")
+			elif t.contains("Стая") or t.contains("выхватил"):
+				ok(e.get("keep", false) and not e.has("lead") and not e.has("urgent"), "последствие — «держится»: %s" % t)
+			elif t.contains("замер"):
+				ok(e.get("urgent", false) and not e.has("keep"), "«замер» — срочная")
 			else:
-				ok(not e.has("keep"), "прочие — без ключа: %s" % e.get("text", ""))
-	eq(held, 1, "одна строка отхода")
+				ok(not e.has("keep") and not e.has("lead"), "прочие — без ключа: %s" % t)
+	eq(got.size(), 5, "все пять строк пришли: %s" % str(got.keys()))
 
 
 func test_live_world_observation_reaches_journal() -> void:
