@@ -146,6 +146,7 @@ var arrival_panel: ArrivalBriefPanel
 var world_wait := ""   ## строка мира, отложенная до конца брифинга прибытия (#1429, `_world_say`)
 var world_wait_hot := false   ## отложенная строка — строка угрозы (#1516)
 var world_wait_keep := false   ## отложенная строка — «держится» (#1555)
+var world_wait_lead := false   ## отложенная «держится» — ведущая: другая «держится» её не сменяет (#1966)
 ## Карточка роли у поста ART-045 (выключают те же `hints`; тестер — шаг `cards`): прочитанное — Settings.cards.
 var role_card := RoleCard.new()
 var role_card_panel: RoleCardPanel
@@ -1273,7 +1274,8 @@ func on_eco_event(e: Dictionary) -> void:
 				return   # обучение (#827): присоски энергию не тянут
 			vitals.drain(str(e.get("by", "")), float(e.get("units", 0.0)))
 		EcoLink.MESSAGE:
-			_world_say(str(e.get("text", "")), bool(e.get("urgent", false)), bool(e.get("keep", false)))
+			_world_say(str(e.get("text", "")), bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
 		EcoLink.VOICE:   # голос во внутренней связи ART-040; просьбу не исполняем — решает игрок
 			if bool(e.get("fake", false)) and events_held():
 				return   # обучение (#827): подделок в эфире нет, свои доклады идут
@@ -1300,7 +1302,7 @@ func on_eco_event(e: Dictionary) -> void:
 			var fresh := scanner.observe(sp, str(e.get("note", "")))
 			var text := str(e.get("text", ""))
 			if text != "":
-				_world_say(text, bool(e.get("urgent", false)), bool(e.get("keep", false)))
+				_world_say(text, bool(e.get("urgent", false)), bool(e.get("keep", false)), bool(e.get("lead", false)))
 			elif fresh:
 				_world_say("Новое наблюдение: %s" % Species.called(sp, Species.Case.NOM, scanner.is_scanned(sp)))
 
@@ -1310,18 +1312,20 @@ func on_eco_event(e: Dictionary) -> void:
 ## прибытия, последняя строка ждёт его конца (`world_wait`, #1429): мир не перебивает лор. Строка угрозы (`urgent`,
 ## #1516) держится на приборах свои 4,2 с — строки мира её не стирают; в ожидании брифинга её не сменяет обычная.
 ## Строка «держится» (`keep`, #1555) ждёт очереди, как обычная, а вышла — держится, как срочная; срочная главнее.
-func _world_say(text: String, urgent := false, held := false) -> void:
+## Ведущую «держится» (`lead`, #1966: «потерял корабль») в ожидании не сменяет другая «держится» — и под брифингом.
+func _world_say(text: String, urgent := false, held := false, lead := false) -> void:
 	if flyby.kind == Flyby.Kind.START:
 		return
 	if arrival.active():
-		var level := 2 if urgent else (1 if held else 0)
-		var waiting := 2 if world_wait_hot else (1 if world_wait_keep else 0)
+		var level := 3 if urgent else ((2 if lead else 1) if held else 0)
+		var waiting := 3 if world_wait_hot else ((2 if world_wait_lead else 1) if world_wait_keep else 0)
 		if world_wait == "" or level >= waiting:
 			world_wait = text   # одна, последняя — не очередь
 			world_wait_hot = urgent
 			world_wait_keep = held and not urgent
+			world_wait_lead = world_wait_keep and lead
 		return
-	message.say(text, Status.MESSAGE_SECONDS, true, urgent, held)   # не стирает строку, видную меньше 1 с (issue #979)
+	message.say(text, Status.MESSAGE_SECONDS, true, urgent, held, lead)   # не стирает строку, видную меньше 1 с (issue #979)
 
 
 ## Брифинг прибытия кончился — отложенная строка мира на приборы (#1429; `OverlayFlow.brief_step`). Пока идёт —
@@ -1331,20 +1335,24 @@ func release_world_say() -> void:
 	if arrival.active():
 		var parked_hot := message.hot and not message.keep and message.next == ""   # отдаётся видимая строка угрозы (#1516)
 		var parked_keep := message.next_keep if message.next != "" else (message.hot and message.keep)   # «держится» (#1555)
+		var parked_lead := parked_keep and (message.next_lead if message.next != "" else message.lead)   # ведущая (#1966)
 		var parked := message.take_world()
 		if parked != "" and world_wait == "":
 			world_wait = parked
 			world_wait_hot = parked_hot
 			world_wait_keep = parked_keep
+			world_wait_lead = parked_lead
 		return
 	if world_wait != "":
 		var text := world_wait
 		var hot := world_wait_hot
 		var held := world_wait_keep
+		var lead := world_wait_lead
 		world_wait = ""
 		world_wait_hot = false
 		world_wait_keep = false
-		_world_say(text, hot, held)
+		world_wait_lead = false
+		_world_say(text, hot, held, lead)
 		if qa != null:   # п. 2 #1429 тестер проверяет по логу, а не догадкой по кадру (#1350)
 			qa.note(QaRunner.released_line(text))
 
