@@ -26,7 +26,7 @@ func test_short_run_reports() -> void:
 	var r: Dictionary = tool.run(0)
 	var lines: Array[String] = tool.report(1)
 	_restore(tool)
-	for k in ["alarm", "episodes", "longest", "lines", "stuck", "stuck_r", "reef_hid", "hunger", "nearest", "reef", "first", "modes", "goal_in", "why", "transit", "transit_r", "prey", "prey_in", "prey_home", "clean_r"]:
+	for k in ["alarm", "episodes", "longest", "lines", "stuck", "stuck_r", "reef_hid", "hunger", "nearest", "reef", "first", "modes", "goal_in", "why", "transit", "transit_r", "prey", "prey_in", "prey_home", "clean_r", "cleaned", "cleaned_out", "clean_in"]:
 		ok(r.has(k), "в итоге зерна есть %s" % k)
 	ok(int(r["reef"]) >= 1, "стая рифа у 01 найдена: %d" % r["reef"])
 	ok(float(r["alarm"]) <= 10.0 + tool.DT + 1e-3, "тревога не дольше стоянки: %.2f" % r["alarm"])
@@ -44,14 +44,18 @@ func test_short_run_reports() -> void:
 		hunt += float(r["prey"][k])
 	near(hunt, float(r["why"]["hunt"]), 1e-3, "разбор охоты делит всю «охоту»")
 	ok(float(r["prey_in"]) <= hunt + 1e-3 and float(r["prey_home"]) <= hunt + 1e-3, "добыча в рифе — внутри охоты")
-	eq(lines.size(), 5, "шапка, зерно, причины, охота, итог")
+	ok(int(r["cleaned_out"]) <= int(r["cleaned"]), "чистки снаружи кольца — среди всех чисток")
+	ok(float(r["clean_in"]) >= 0.0)
+	ok(lines[1].contains("; чисток за проход "), lines[1])
+	eq(lines.size(), 6, "шапка, зерно, причины, охота, чистка, итог")
 	ok(lines[0].begins_with("== голодный серпохвост у 01"), lines[0])
 	ok(lines[1].begins_with("  зерно  0: крона в тревоге"), lines[1])
 	ok(lines[1].contains("причины [транзит"), lines[1])
 	ok(lines[2].begins_with("== причины тревоги кроны, сумма 1 зёрен"), lines[2])
 	ok(lines[1].contains("; охота ["), lines[1])
 	ok(lines[3].begins_with("== охота у рифа, сумма 1 зёрен"), lines[3])
-	ok(lines[4].begins_with("== итог: крона в тревоге в"), lines[4])
+	ok(lines[4].begins_with("== чистка за весь проход, сумма 1 зёрен"), lines[4])
+	ok(lines[5].begins_with("== итог: крона в тревоге в"), lines[5])
 
 
 ## Причина тревоги по ближайшему серпохвосту: вне CROWN_ALARM — «ушёл», не патруль — «охота», патруль — по цели:
