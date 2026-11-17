@@ -243,3 +243,17 @@ func test_mesh_height_vertex_cache() -> void:
 		var h01 := Seabed.height(x0, z0 + step)
 		near(Seabed.mesh_height(x0 + step * 0.25, z0 + step * 0.25),
 				h00 + (h10 - h00) * 0.25 + (h01 - h00) * 0.25, 1e-3, "внутри клетки у %s" % q)
+
+
+## #1964: первое чтение вершины отдавало float64, следующие — float32 из кэша: высота в точке зависела от того,
+## читали ли её раньше, и мир с тем же зерном шёл по-разному первым в процессе и после другого мира.
+func test_mesh_height_same_on_first_and_next_read() -> void:
+	Seabed._verts = PackedFloat32Array()   # пустой кэш: заполнится заново по запросу
+	var differ := 0
+	for i in 20:
+		var x := -40.0 + i * 3.7
+		var z := 12.0 - i * 2.3
+		var first := Seabed.mesh_height(x, z)
+		if Seabed.mesh_height(x, z) != first:
+			differ += 1
+	eq(differ, 0)

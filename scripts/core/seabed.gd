@@ -260,6 +260,7 @@ static func _vertex(i: int, j: int) -> float:
 		var step := SIZE / SEGMENTS
 		h = height(-SIZE / 2.0 + i * step, -SIZE / 2.0 + j * step)
 		_verts[k] = h
+		h = _verts[k]   # то же float32, что отдадут следующие чтения (#1964)
 	return h
 
 
