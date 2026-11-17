@@ -1,0 +1,29 @@
+[aist#0:0/pcm_s16le @ 000001997a254880] Guessed Channel Layout: mono
+Input #0, wav, from 'C:\Users\FEDYA\Documents\ChatGPT\Pogrujenie\work\sound-schedule-20261107\art\SND-009-golosa\audio\voice\biolog-m\kandidat-2.wav':
+  Metadata:
+    encoder         : Lavf61.7.100
+  Duration: 00:00:10.37, bitrate: 768 kb/s
+  Stream #0:0: Audio: pcm_s16le ([1][0][0][0] / 0x0001), 48000 Hz, mono, s16, 768 kb/s
+Stream mapping:
+  Stream #0:0 -> #0:0 (pcm_s16le (native) -> pcm_s16le (native))
+Output #0, null, to 'pipe:':
+  Metadata:
+    encoder         : Lavf61.7.100
+  Stream #0:0: Audio: pcm_s16le, 192000 Hz, mono, s16, 3072 kb/s
+      Metadata:
+        encoder         : Lavc61.19.100 pcm_s16le
+[Parsed_loudnorm_1 @ 000001997a231040] 
+{
+	"input_i" : "-20.00",
+	"input_tp" : "-2.93",
+	"input_lra" : "2.50",
+	"input_thresh" : "-30.40",
+	"output_i" : "-20.38",
+	"output_tp" : "-3.29",
+	"output_lra" : "2.10",
+	"output_thresh" : "-30.74",
+	"normalization_type" : "dynamic",
+	"target_offset" : "0.38"
+}
+[out#0/null @ 000001997a254a40] video:0KiB audio:3889KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+size=N/A time=00:00:10.40 bitrate=N/A speed=74.9x

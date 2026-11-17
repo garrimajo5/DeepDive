@@ -1,0 +1,110 @@
+[
+  {
+    "file": "biolog-m/fake-light04.wav",
+    "source": "biolog-m/fake-light04-1.wav",
+    "sha256": "9dfefeae2c17ca3d7b1a47e66a3bf67b8014fc312c82ad361b7b0e00d9c2577e",
+    "reason": "Первый дубль для предварительной комплектации; слуховой выбор не выполнен"
+  },
+  {
+    "file": "biolog-m/fake-pulse04.wav",
+    "source": "biolog-m/fake-pulse04-1.wav",
+    "sha256": "de27b493530a088f4e75bef99741e42f7c202f94cfd61d696b280f5672a7b70a",
+    "reason": "Первый дубль для предварительной комплектации; слуховой выбор не выполнен"
+  },
+  {
+    "file": "engineer-f/fake-light03.wav",
+    "source": "engineer-f/fake-light03-1.wav",
+    "sha256": "7ec1f1b3be4f3f1d05bda6775086031d1ea79ec310dc96c0011c426b359a6d4a",
+    "reason": "Первый дубль для предварительной комплектации; слуховой выбор не выполнен"
+  },
+  {
+    "file": "engineer-f/fake-pulse03.wav",
+    "source": "engineer-f/fake-pulse03-1.wav",
+    "sha256": "80d42bb48fe4fb4c98f1ed65ef55eddcf5175e5cce0660a413b9021609c61221",
+    "reason": "Первый дубль для предварительной комплектации; слуховой выбор не выполнен"
+  },
+  {
+    "file": "engineer-m/fake-light03.wav",
+    "source": "engineer-m/fake-light03-1.wav",
+    "sha256": "d7c2ea92cc44b8696be7aafb65e34a46d7a2380e06e27d75970bc182529e5a23",
+    "reason": "Первый дубль для предварительной комплектации; слуховой выбор не выполнен"
+  },
+  {
+    "file": "engineer-m/fake-pulse03.wav",
+    "source": "engineer-m/fake-pulse03-1.wav",
+    "sha256": "979d81f272b8580a22785b9b3fededfa8d4e843ff32ae706a0815e91ba613846",
+    "reason": "Первый дубль для предварительной комплектации; слуховой выбор не выполнен"
+  },
+  {
+    "file": "pilot-f/fake-light01.wav",
+    "source": "pilot-f/fake-light01-1.wav",
+    "sha256": "ac2d98a23ade5bb171fc5eb428d65be45484dad9f0bd1c7c6ae5d7204bda4616",
+    "reason": "Первый дубль для предварительной комплектации; слуховой выбор не выполнен"
+  },
+  {
+    "file": "pilot-f/fake-light05.wav",
+    "source": "pilot-f/fake-light05-1.wav",
+    "sha256": "1226a16b016656a74a1af95d60c458f185f5444916e4b6781e91c2cf00245454",
+    "reason": "Первый дубль для предварительной комплектации; слуховой выбор не выполнен"
+  },
+  {
+    "file": "pilot-f/fake-pulse02.wav",
+    "source": "pilot-f/fake-pulse02-1.wav",
+    "sha256": "77065d79ba6f011949af79372027250e8c2a781dcd0f4ee41d9b8e1bb498a25f",
+    "reason": "Первый дубль для предварительной комплектации; слуховой выбор не выполнен"
+  },
+  {
+    "file": "pilot-m/fake-light01.wav",
+    "source": "pilot-m/fake-light01-1.wav",
+    "sha256": "927124e40b706b4f1ed465aa9803a353483af069b4cc340b9626a9e393a7e924",
+    "reason": "Первый дубль для предварительной комплектации; слуховой выбор не выполнен"
+  },
+  {
+    "file": "pilot-m/fake-light05.wav",
+    "source": "pilot-m/fake-light05-1.wav",
+    "sha256": "72d9516df908392931471e72c7111145acd2915bb91755dfb041572c5c8bc021",
+    "reason": "Первый дубль для предварительной комплектации; слуховой выбор не выполнен"
+  },
+  {
+    "file": "pilot-m/fake-pulse02.wav",
+    "source": "pilot-m/fake-pulse02-1.wav",
+    "sha256": "462161598973ffa4d24917ae409ba3a73d4dab62197430ef911843d6eb776182",
+    "reason": "Первый дубль для предварительной комплектации; слуховой выбор не выполнен"
+  },
+  {
+    "file": "sonar-f/fake-light02.wav",
+    "source": "sonar-f/fake-light02-1.wav",
+    "sha256": "404aa4af05865cc203b9ec96421fb4a3aec783732ff0959291772584a43a9afa",
+    "reason": "Первый дубль для предварительной комплектации; слуховой выбор не выполнен"
+  },
+  {
+    "file": "sonar-f/fake-pulse01.wav",
+    "source": "sonar-f/fake-pulse01-1.wav",
+    "sha256": "ad824001f28eacb263a9cfda09c44f62cf97c7a9d0f98d29cde26f5a9b18cfa1",
+    "reason": "Первый дубль для предварительной комплектации; слуховой выбор не выполнен"
+  },
+  {
+    "file": "sonar-f/fake-pulse05.wav",
+    "source": "sonar-f/fake-pulse05-1.wav",
+    "sha256": "4c0fdb63f736d88236d432dbbf58131455a5cdade0be595567b375f3251bdcfc",
+    "reason": "Первый дубль для предварительной комплектации; слуховой выбор не выполнен"
+  },
+  {
+    "file": "sonar-m/fake-light02.wav",
+    "source": "sonar-m/fake-light02-1.wav",
+    "sha256": "793a91b5714b018cb00374007ca1335949d7557d42790f99832333abf96e5325",
+    "reason": "Первый дубль для предварительной комплектации; слуховой выбор не выполнен"
+  },
+  {
+    "file": "sonar-m/fake-pulse01.wav",
+    "source": "sonar-m/fake-pulse01-1.wav",
+    "sha256": "a8152e3d456167ba7b662e610fb1befc2214af84e90f60299224852290c73735",
+    "reason": "Первый дубль для предварительной комплектации; слуховой выбор не выполнен"
+  },
+  {
+    "file": "sonar-m/fake-pulse05.wav",
+    "source": "sonar-m/fake-pulse05-1.wav",
+    "sha256": "0f066eed6f4409476846c6cae48f1410aa257f272bad976bdb59e23a61fbc0a1",
+    "reason": "Первый дубль для предварительной комплектации; слуховой выбор не выполнен"
+  }
+]

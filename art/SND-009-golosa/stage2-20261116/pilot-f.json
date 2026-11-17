@@ -1,0 +1,319 @@
+[
+  {
+    "key": "pilot-f",
+    "voice": "aBEDcTmclOFVR8g3BS2I",
+    "id": "proba",
+    "text": "Я у штурвала. Слушаю вас.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "IKmJ6mBbQ5N9WG2mAdDm",
+    "session_ids": [
+      "wgbuNW3SMqzkzlGknTyy"
+    ],
+    "generations": [
+      {
+        "id": "LbSyGdadFt63N1PdalSR",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Я у штурвала. Слушаю вас.",
+        "duration_secs": 1.8575963718820863,
+        "created_at_unix_ms": 1794855809070,
+        "price": {
+          "credits": 24.997500000000002,
+          "price_cents": 0.4545,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "pilot-f",
+    "voice": "aBEDcTmclOFVR8g3BS2I",
+    "id": "true-p01",
+    "text": "Я у штурвала. Слушаю вас.",
+    "direction": "Спокойно, короткая пауза между фразами.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "ybb8IVznVf3JP8KK3ZMb",
+    "session_ids": [
+      "WC9wVY3cnBb2kaShg6U8"
+    ],
+    "generations": [
+      {
+        "id": "gwLN6eT0nNRn5isO92gf",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Я у штурвала. Слушаю вас.",
+        "duration_secs": 1.7647165532879818,
+        "created_at_unix_ms": 1794855813106,
+        "price": {
+          "credits": 24.997500000000002,
+          "price_cents": 0.4545,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "pilot-f",
+    "voice": "aBEDcTmclOFVR8g3BS2I",
+    "id": "true-p02",
+    "text": "Маршрут передо мной. Можно сверить ориентиры.",
+    "direction": "Будничное предложение свериться, без нажима.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "Seyg6FUAYorR7eOV6pxB",
+    "session_ids": [
+      "WsU78pCWMQsWYTjXgCjK"
+    ],
+    "generations": [
+      {
+        "id": "Bt9sd1RdGFP2cWvvwtGa",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Маршрут передо мной. Можно сверить ориентиры.",
+        "duration_secs": 2.8328344671201813,
+        "created_at_unix_ms": 1794855817246,
+        "price": {
+          "credits": 44.9955,
+          "price_cents": 0.8180999999999999,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "pilot-f",
+    "voice": "aBEDcTmclOFVR8g3BS2I",
+    "id": "true-p03",
+    "text": "О повороте предупрежу заранее.",
+    "direction": "Ровно, с лёгким акцентом на «заранее».",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "OzzRJXPinubA2Grj8sKa",
+    "session_ids": [
+      "e18owyGzHNWKE5fMSP9r"
+    ],
+    "generations": [
+      {
+        "id": "6SW2QP3BpHr4pZ8F63e5",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "О повороте предупрежу заранее.",
+        "duration_secs": 2.136235827664399,
+        "created_at_unix_ms": 1794855820919,
+        "price": {
+          "credits": 29.997,
+          "price_cents": 0.5454,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "pilot-f",
+    "voice": "aBEDcTmclOFVR8g3BS2I",
+    "id": "true-p04",
+    "text": "Сонарщик, я на связи.",
+    "direction": "Обычное обращение к соседнему посту.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "y8yWD4vNZyeBMyBUrj0V",
+    "session_ids": [
+      "c87t58GPl546GAaKhBIT"
+    ],
+    "generations": [
+      {
+        "id": "6pR7hNZVNeYEBVGb0pIR",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Сонарщик, я на связи.",
+        "duration_secs": 1.811156462585034,
+        "created_at_unix_ms": 1794855827502,
+        "price": {
+          "credits": 20.9979,
+          "price_cents": 0.38178,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "pilot-f",
+    "voice": "aBEDcTmclOFVR8g3BS2I",
+    "id": "true-p05",
+    "text": "Если понадобится остановиться, скажите.",
+    "direction": "Внимательно, оставляя место ответу.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "wWayTl5NccA2fOnNZwcX",
+    "session_ids": [
+      "WtBMe5IFHX35m3kXTDfh"
+    ],
+    "generations": [
+      {
+        "id": "qjRba98bXjoTM8d5Zrnb",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Если понадобится остановиться, скажите.",
+        "duration_secs": 2.647074829931973,
+        "created_at_unix_ms": 1794855832234,
+        "price": {
+          "credits": 38.9961,
+          "price_cents": 0.70902,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "pilot-f",
+    "voice": "aBEDcTmclOFVR8g3BS2I",
+    "id": "fake-light01",
+    "text": "Включите прожектор. Надо видеть, куда идём.",
+    "direction": "Чуть настойчивее обычного; «надо» произнести сухо.",
+    "count": 2,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "AGkgByWqq7c8hhSjMnE3",
+    "session_ids": [
+      "acKwhad6LAVZB7t7kZ2Q",
+      "hOxgm424QiJ66s5sYZ1b"
+    ],
+    "generations": [
+      {
+        "id": "E2AjJeV9SpdbDhv1AM8v",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Включите прожектор. Надо видеть, куда идём.",
+        "duration_secs": 2.7399546485260773,
+        "created_at_unix_ms": 1794855837553,
+        "price": {
+          "credits": 42.99569999999999,
+          "price_cents": 0.7817399999999999,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      },
+      {
+        "id": "Bq3JlOWIvsDOlT80KKor",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Включите прожектор. Надо видеть, куда идём.",
+        "duration_secs": 2.414875283446712,
+        "created_at_unix_ms": 1794855837603,
+        "price": {
+          "credits": 42.99569999999999,
+          "price_cents": 0.7817399999999999,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "pilot-f",
+    "voice": "aBEDcTmclOFVR8g3BS2I",
+    "id": "fake-light05",
+    "text": "Включите прожектор. Да, включите.",
+    "direction": "Повтор будто ответил на неуслышанное возражение; без крика.",
+    "count": 2,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "gFW65yu2sGVB28Btc7Td",
+    "session_ids": [
+      "utBnmGN90qSN3XkQTCEA",
+      "8ZnqzzqEMxaRAhP4ZKwd"
+    ],
+    "generations": [
+      {
+        "id": "5HVVw3JxeOA4VUWmmiWC",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Включите прожектор. Да, включите.",
+        "duration_secs": 2.2291156462585033,
+        "created_at_unix_ms": 1794855842981,
+        "price": {
+          "credits": 32.996700000000004,
+          "price_cents": 0.59994,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      },
+      {
+        "id": "mS5LNyDz5Tr3wSi6V61i",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Включите прожектор. Да, включите.",
+        "duration_secs": 2.414875283446712,
+        "created_at_unix_ms": 1794855843024,
+        "price": {
+          "credits": 32.996700000000004,
+          "price_cents": 0.59994,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "pilot-f",
+    "voice": "aBEDcTmclOFVR8g3BS2I",
+    "id": "fake-pulse02",
+    "text": "Нужен импульс сонара. Сейчас бы, сейчас.",
+    "direction": "Повтор с той же высотой тона, без нарастания паники.",
+    "count": 2,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "aWnptjm4tT6TWhEUoya7",
+    "session_ids": [
+      "Th3VPm3wBYywZ5FeA0PL",
+      "mdq5mRclnGpLcMfcwWoT"
+    ],
+    "generations": [
+      {
+        "id": "dUzoWKeKsoOexsvTnbKQ",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Нужен импульс сонара. Сейчас бы, сейчас.",
+        "duration_secs": 2.972154195011338,
+        "created_at_unix_ms": 1794855847898,
+        "price": {
+          "credits": 39.995999999999995,
+          "price_cents": 0.7272,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      },
+      {
+        "id": "zU3UiyyttRh91czqp1D9",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Нужен импульс сонара. Сейчас бы, сейчас.",
+        "duration_secs": 2.6006349206349206,
+        "created_at_unix_ms": 1794855847943,
+        "price": {
+          "credits": 39.995999999999995,
+          "price_cents": 0.7272,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  }
+]

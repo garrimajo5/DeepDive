@@ -1,0 +1,37 @@
+{
+  "request": {
+    "context": "SND-009 stage 1: three sonar-f voice candidates using approved Russian lines.",
+    "language": "ru",
+    "model_id": "eleven_ttv_v3",
+    "text": "Я у сонара. Слушаю эфир. Сверяю отметки с картой. О новых отметках сообщу. Пилот, слышу тебя. Готов сверить маршрут с тобой.",
+    "voice_description": "Adult female Russian speaker with native, accent-free Russian speech. A calm professional on a long expedition beneath the ice. Not an announcer or a film actor. Quiet, focused, slightly higher and softer timbre than a pilot. Not whispering. Clean dry voice, no radio effect, echo, static or music."
+  },
+  "result": {
+    "previews": [
+      {
+        "generated_voice_id": "Ko0sT4Srx9LnyxaI5twm",
+        "duration_secs": 9.954458333333333,
+        "language": "ru",
+        "preview_index": 0
+      },
+      {
+        "generated_voice_id": "rhIHH9QqgjYimn1MtpRU",
+        "duration_secs": 10.111208333333334,
+        "language": "ru",
+        "preview_index": 1
+      },
+      {
+        "generated_voice_id": "sOV3Xzch23pVQNeHejhU",
+        "duration_secs": 9.876083333333334,
+        "language": "ru",
+        "preview_index": 2
+      }
+    ],
+    "text": "Я у сонара. Слушаю эфир. Сверяю отметки с картой. О новых отметках сообщу. Пилот, слышу тебя. Готов сверить маршрут с тобой.",
+    "voice_description": "Adult female Russian speaker with native, accent-free Russian speech. A calm professional on a long expedition beneath the ice. Not an announcer or a film actor. Quiet, focused, slightly higher and softer timbre than a pilot. Not whispering. Clean dry voice, no radio effect, echo, static or music.",
+    "model_id": "eleven_ttv_v3",
+    "language": "ru",
+    "view_kind": "voice_design",
+    "view_state_id": "viewstate_01m700dcbvekssqh8ghvysa7xe"
+  }
+}

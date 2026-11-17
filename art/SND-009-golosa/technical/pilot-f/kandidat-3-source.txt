@@ -1,0 +1,29 @@
+[mp3 @ 00000140041b5a80] Estimating duration from bitrate, this may be inaccurate
+Input #0, mp3, from 'C:\Users\FEDYA\Documents\ChatGPT\Pogrujenie\work\sound-schedule-20261107\art\SND-009-golosa\sources\pilot-f\kandidat-3.mp3':
+  Metadata:
+    encoder         : Lavf63.1.102
+  Duration: 00:00:11.31, start: 0.000000, bitrate: 192 kb/s
+  Stream #0:0: Audio: mp3 (mp3float), 44100 Hz, mono, fltp, 192 kb/s
+Stream mapping:
+  Stream #0:0 -> #0:0 (mp3 (mp3float) -> pcm_s16le (native))
+Output #0, null, to 'pipe:':
+  Metadata:
+    encoder         : Lavf61.7.100
+  Stream #0:0: Audio: pcm_s16le, 192000 Hz, mono, s16, 3072 kb/s
+      Metadata:
+        encoder         : Lavc61.19.100 pcm_s16le
+[Parsed_loudnorm_1 @ 00000140041b7e40] 
+{
+	"input_i" : "-18.81",
+	"input_tp" : "-4.80",
+	"input_lra" : "1.40",
+	"input_thresh" : "-29.28",
+	"output_i" : "-20.33",
+	"output_tp" : "-6.71",
+	"output_lra" : "1.40",
+	"output_thresh" : "-30.84",
+	"normalization_type" : "dynamic",
+	"target_offset" : "0.33"
+}
+[out#0/null @ 00000140041b0a80] video:0KiB audio:4242KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+size=N/A time=00:00:11.40 bitrate=N/A speed=72.3x

@@ -1,0 +1,37 @@
+{
+  "request": {
+    "context": "SND-009 stage 1: three biolog-f voice candidates using approved Russian lines.",
+    "language": "ru",
+    "model_id": "eleven_ttv_v3",
+    "text": "Я у сканера. Слушаю вас. Сверяю наблюдения с архивом. Записываю наблюдения по ходу. Пока не спешу с выводами. Сонарщик, готов сверить записи.",
+    "voice_description": "Adult female Russian speaker with native, accent-free Russian speech. A calm professional on a long expedition beneath the ice. Not an announcer or a film actor. Lively, curious, slightly faster pace. Interested without excitement. Clean dry voice, no radio effect, echo, static or music."
+  },
+  "result": {
+    "previews": [
+      {
+        "generated_voice_id": "7m1ugmuPaZZftoH1o7mp",
+        "duration_secs": 11.07775,
+        "language": "ru",
+        "preview_index": 0
+      },
+      {
+        "generated_voice_id": "GJpL1KwE1aaIqFSVfPVU",
+        "duration_secs": 10.921,
+        "language": "ru",
+        "preview_index": 1
+      },
+      {
+        "generated_voice_id": "Sj1FsO8GTi4V4JRQz9Ik",
+        "duration_secs": 9.719375,
+        "language": "ru",
+        "preview_index": 2
+      }
+    ],
+    "text": "Я у сканера. Слушаю вас. Сверяю наблюдения с архивом. Записываю наблюдения по ходу. Пока не спешу с выводами. Сонарщик, готов сверить записи.",
+    "voice_description": "Adult female Russian speaker with native, accent-free Russian speech. A calm professional on a long expedition beneath the ice. Not an announcer or a film actor. Lively, curious, slightly faster pace. Interested without excitement. Clean dry voice, no radio effect, echo, static or music.",
+    "model_id": "eleven_ttv_v3",
+    "language": "ru",
+    "view_kind": "voice_design",
+    "view_state_id": "viewstate_01m700fw6we39aefmsse91r68y"
+  }
+}

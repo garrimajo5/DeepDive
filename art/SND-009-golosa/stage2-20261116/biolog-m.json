@@ -1,0 +1,273 @@
+[
+  {
+    "key": "biolog-m",
+    "voice": "TRGuYuwLGF5S4HYfHIMd",
+    "id": "proba",
+    "text": "Я у сканера. Слушаю вас.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "TDNKLH7d5BrBj57CKbeP",
+    "session_ids": [
+      "8DSTNZIjwPH5FrOVMLz3"
+    ],
+    "generations": [
+      {
+        "id": "NpWDz0fwCOcCWafX6CtU",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Я у сканера. Слушаю вас.",
+        "duration_secs": 1.7647165532879818,
+        "created_at_unix_ms": 1794856101063,
+        "price": {
+          "credits": 23.9976,
+          "price_cents": 0.43632,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "biolog-m",
+    "voice": "TRGuYuwLGF5S4HYfHIMd",
+    "id": "true-b01",
+    "text": "Я у сканера. Слушаю вас.",
+    "direction": "Спокойно и внимательно.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "4JLFiVlZghKxGHvBOOi0",
+    "session_ids": [
+      "3iSuJu9UJb3zMJI5k6rU"
+    ],
+    "generations": [
+      {
+        "id": "EE2jSch13fjbxOytPGof",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Я у сканера. Слушаю вас.",
+        "duration_secs": 1.9969160997732427,
+        "created_at_unix_ms": 1794856105030,
+        "price": {
+          "credits": 23.9976,
+          "price_cents": 0.43632,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "biolog-m",
+    "voice": "TRGuYuwLGF5S4HYfHIMd",
+    "id": "true-b02",
+    "text": "Сверяю наблюдения с архивом.",
+    "direction": "Заинтересованно, без восторженного открытия.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "11N8aIh6WWoYtY58apFv",
+    "session_ids": [
+      "OnAdZaEhtw9QQkTMPfON"
+    ],
+    "generations": [
+      {
+        "id": "g32melmsjPYEdaIF6QnC",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Сверяю наблюдения с архивом.",
+        "duration_secs": 1.8575963718820863,
+        "created_at_unix_ms": 1794856109821,
+        "price": {
+          "credits": 27.997200000000003,
+          "price_cents": 0.50904,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "biolog-m",
+    "voice": "TRGuYuwLGF5S4HYfHIMd",
+    "id": "true-b03",
+    "text": "Записываю наблюдения по ходу.",
+    "direction": "Буднично, с живой речевой интонацией.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "4xSJ01QL3otMBvaVtKPV",
+    "session_ids": [
+      "oPCg1CERT6GgnukQvLt7"
+    ],
+    "generations": [
+      {
+        "id": "4FDdnT3dghJSq2Igiyi6",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Записываю наблюдения по ходу.",
+        "duration_secs": 2.2291156462585033,
+        "created_at_unix_ms": 1794856115093,
+        "price": {
+          "credits": 28.9971,
+          "price_cents": 0.52722,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "biolog-m",
+    "voice": "TRGuYuwLGF5S4HYfHIMd",
+    "id": "true-b04",
+    "text": "Пока не спешу с выводами.",
+    "direction": "Небольшая задумчивая пауза после «пока».",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "Hkz3zwlPaI22eZL8t4ZT",
+    "session_ids": [
+      "Va5Gdhk8xyj5mFOjfJMN"
+    ],
+    "generations": [
+      {
+        "id": "Tx51kbAtkBbhW0GVdqGS",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Пока не спешу с выводами.",
+        "duration_secs": 2.043356009070295,
+        "created_at_unix_ms": 1794856120146,
+        "price": {
+          "credits": 24.997500000000002,
+          "price_cents": 0.4545,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "biolog-m",
+    "voice": "TRGuYuwLGF5S4HYfHIMd",
+    "id": "true-b05",
+    "text": "Сонарщик, готов сверить записи.",
+    "direction": "Обращение к коллеге, без срочности.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "j7ZZtaWwHXVmHdPoX5wp",
+    "session_ids": [
+      "XwkIBdKWnan2aFqZMJqL"
+    ],
+    "generations": [
+      {
+        "id": "QA0FkMKMTGimp7V8Krhv",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Сонарщик, готов сверить записи.",
+        "duration_secs": 2.2755555555555556,
+        "created_at_unix_ms": 1794856124381,
+        "price": {
+          "credits": 30.996899999999997,
+          "price_cents": 0.56358,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "biolog-m",
+    "voice": "TRGuYuwLGF5S4HYfHIMd",
+    "id": "fake-light04",
+    "text": "Дайте свет. Включите прожектор, я посмотрю.",
+    "direction": "Вторая просьба почти повторяет интонацию первой.",
+    "count": 2,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "h42lO8ISPBNpQUIcNBUy",
+    "session_ids": [
+      "Owmyrvf9aQshmDd9E6VM",
+      "cIEFIAPlNFI87B3ARzYO"
+    ],
+    "generations": [
+      {
+        "id": "G1cu1WmzbkJFDEw8JLA5",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Дайте свет. Включите прожектор, я посмотрю.",
+        "duration_secs": 2.972154195011338,
+        "created_at_unix_ms": 1794856128944,
+        "price": {
+          "credits": 42.99569999999999,
+          "price_cents": 0.7817399999999999,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      },
+      {
+        "id": "sHUoZ4cSx4TK3Usb04jg",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Дайте свет. Включите прожектор, я посмотрю.",
+        "duration_secs": 2.7399546485260773,
+        "created_at_unix_ms": 1794856128985,
+        "price": {
+          "credits": 42.99569999999999,
+          "price_cents": 0.7817399999999999,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  },
+  {
+    "key": "biolog-m",
+    "voice": "TRGuYuwLGF5S4HYfHIMd",
+    "id": "fake-pulse04",
+    "text": "Дайте импульс сонара. Хочу сверить отметку.",
+    "direction": "Пауза на стыке фраз слегка неестественна, голос обычный.",
+    "count": 2,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "node_id": "JXKoW4iMKYdmha13nxr7",
+    "session_ids": [
+      "qV3jvcEYNl5L6HYhGKH4",
+      "IW1l5yuzmYl7iFKuPMqD"
+    ],
+    "generations": [
+      {
+        "id": "hoI6ohCgCBHWEG6hsPSt",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Дайте импульс сонара. Хочу сверить отметку.",
+        "duration_secs": 2.9257142857142857,
+        "created_at_unix_ms": 1794856132619,
+        "price": {
+          "credits": 42.99569999999999,
+          "price_cents": 0.7817399999999999,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      },
+      {
+        "id": "yzpXKPfK13YP69VCwYvS",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Дайте импульс сонара. Хочу сверить отметку.",
+        "duration_secs": 2.786394557823129,
+        "created_at_unix_ms": 1794856132660,
+        "price": {
+          "credits": 42.99569999999999,
+          "price_cents": 0.7817399999999999,
+          "cost_fiat_currency": "usd"
+        },
+        "content_url": null
+      }
+    ]
+  }
+]
