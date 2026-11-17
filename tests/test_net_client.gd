@@ -76,7 +76,36 @@ func _pump(cond: Callable, send := true) -> bool:
 	return false
 
 
-func test_frame_sets_ship_and_own_player() -> void:
+## Проверки одной сцены идут подряд одним тестом: загрузка `main.tscn` (≈1,4 с) — раз на группу, а не на каждую
+## (#1350, фокус А п. 4). Порядок частей значим: следующая начинает с того, чем кончила прошлая.
+func test_frame_ship_input_and_yaw() -> void:   # кадр ставит корабль и экипаж, ввод уходит хосту, курс свой
+	_frame_sets_ship_and_own_player()
+	_client_does_not_step_ship()
+	_screen_input_reaches_host()
+	_own_yaw_stays_local_until_post()   # последней: сажает гостя за пост
+
+
+func test_world_events_from_host_frame() -> void:   # существа, знания, пробоина с илом и следы разрядов — кадром хоста
+	_creatures_near_from_host()
+	_lore_from_host_frame()
+	_events_from_host_frame()
+	_scorch_from_host_frame()
+	_scorch_ages_on_guest()   # последней: 100 с мира гостя
+
+
+func test_comms_route_and_vote_from_host() -> void:   # связь ART-040, затем маршрут, голосование и итог
+	_comms_from_host_and_ask_back()
+	_route_vote_and_result_from_host()   # последней: забег кончается
+
+
+func test_link_weak_back_and_lost() -> void:   # ART-043: слабая связь, хост вернулся, хост пропал — соло
+	still_world(main)   # таймеры связи — без живого мира (#1350, фокус А п. 4)
+	_weak_link_plate()
+	_host_back_restores()
+	_lost_host_opens_dialog_not_solo()   # последней: кончается одиночным забегом
+
+
+func _frame_sets_ship_and_own_player() -> void:
 	ok(_pump(func() -> bool: return main.net_seq > 0), "кадр принят")
 	ok(main.helm.pos.distance_to(h_helm.pos) < 0.01, "корабль как у хоста")
 	near(main.helm.yaw, 0.7, 0.001)
@@ -95,7 +124,7 @@ func test_frame_sets_ship_and_own_player() -> void:
 	ok(Vector2(eye.x, eye.z).distance_to(Vector2(-1.0, 4.0)) < 0.6, "камера у своего игрока (%s)" % eye)
 
 
-func test_client_does_not_step_ship() -> void:
+func _client_does_not_step_ship() -> void:
 	ok(_pump(func() -> bool: return main.net_seq > 0), "кадр принят")
 	var p := main.helm.pos
 	for i in 30:   # секунда без кадров: на хосте корабль прошёл бы 4 м, клиент сам его не двигает
@@ -107,7 +136,7 @@ func test_client_does_not_step_ship() -> void:
 	ok(main.helm.pos.distance_to(h_helm.pos) < 0.01, "корабль сдвинул кадр хоста")
 
 
-func test_screen_input_reaches_host() -> void:
+func _screen_input_reaches_host() -> void:
 	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
 	main.overlay.router.move = Vector2i(0, 1)
 	ok(_pump(func() -> bool: return guest.pad.move == Vector2(0.0, 1.0)), "крестовина у хоста")
@@ -116,9 +145,11 @@ func test_screen_input_reaches_host() -> void:
 	ok(_pump(func() -> bool: return guest.pad.action), "нажатие у хоста")
 	main.overlay.router.light_pressed = true
 	ok(_pump(func() -> bool: return guest.pad.light), "«Свет» у хоста")
+	main.overlay.router.action_pressed = false   # следующей проверке того же теста — чистый ввод
+	main.overlay.router.light_pressed = false
 
 
-func test_own_yaw_stays_local_until_post() -> void:
+func _own_yaw_stays_local_until_post() -> void:
 	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
 	main.walker.yaw = 1.2   # свайп повернул взгляд, хост ещё не знает
 	var seq := main.net_seq
@@ -130,8 +161,7 @@ func test_own_yaw_stays_local_until_post() -> void:
 	near(main.walker.yaw, 0.0, 0.001, "курс поста от хоста")
 
 
-func test_lost_host_opens_dialog_not_solo() -> void:   # ART-043: не уходит в соло молча
-	still_world(main)   # окно ожидания — без живого мира (#1350, фокус А п. 4)
+func _lost_host_opens_dialog_not_solo() -> void:   # ART-043: не уходит в соло молча
 	ok(_pump(func() -> bool: return main.crew.size() == 2), "на борту")
 	host.stop()
 	ok(_pump(func() -> bool: return main.drop.blocks(), false), "диалог открыт")
@@ -165,8 +195,7 @@ func test_lost_host_opens_dialog_not_solo() -> void:   # ART-043: не уход�
 	ok(main.helm.pos.distance_to(p) > 0.01, "корабль снова считает свой шаг")
 
 
-func test_host_back_restores() -> void:   # хост вернулся в окно ожидания — «Связь восстановлена», управление снова
-	still_world(main)   # таймеры связи — без живого мира
+func _host_back_restores() -> void:   # хост вернулся в окно ожидания — «Связь восстановлена», управление снова
 	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
 	host.stop()
 	ok(_pump(func() -> bool: return main.drop.blocks(), false), "диалог открыт")
@@ -239,7 +268,7 @@ func test_ship_moves_smoothly_between_frames() -> void:
 
 
 ## Пробоина и ил у хоста — у клиента по кадру: тревога, вода в отсеке, облако вокруг корабля, сообщение один раз.
-func test_events_from_host_frame() -> void:
+func _events_from_host_frame() -> void:
 	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
 	ok(main.breach.active == null and main.silt.clouds.is_empty(), "событий нет")
 	var b := Breach.new()
@@ -274,7 +303,7 @@ func test_events_from_host_frame() -> void:
 	ok(not main.breach_view.siren.playing, "сирена смолкла")
 
 
-func test_scorch_from_host_frame() -> void:   # разряд хоста у дна — тот же след на дне у гостя (ART-066)
+func _scorch_from_host_frame() -> void:   # разряд хоста у дна — тот же след на дне у гостя (ART-066)
 	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
 	eq(main.scorch.all.size(), 0, "дно чистое")
 	var sc := Seabed.Scorch.new()
@@ -293,7 +322,7 @@ func test_scorch_from_host_frame() -> void:   # разряд хоста у дн�
 	eq(k[0].x, 0.0, "и в материале")
 
 
-func test_scorch_ages_on_guest() -> void:   # между кадрами след темнеет часами гостя
+func _scorch_ages_on_guest() -> void:   # между кадрами след темнеет часами гостя
 	var sc := Seabed.Scorch.new()
 	var fy := Seabed.height(h_helm.pos.x, h_helm.pos.z)
 	sc.add(Vector3(h_helm.pos.x, fy + Helm.Ship.CLEARANCE, h_helm.pos.z), fy, 1.0, 0.0)
@@ -306,7 +335,7 @@ func test_scorch_ages_on_guest() -> void:   # между кадрами след
 	near(k[0].z, 1.0, 1e-3, "стал старым пятном")
 
 
-func test_route_vote_and_result_from_host() -> void:   # маршрут, голосование и итог хоста — у гостя на голостоле
+func _route_vote_and_result_from_host() -> void:   # маршрут, голосование и итог хоста — у гостя на голостоле
 	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
 	var run := Run.new()
 	run.begin(0.0, 0, 0, 0)
@@ -339,7 +368,7 @@ func test_route_vote_and_result_from_host() -> void:   # маршрут, гол�
 	ok(_pump(func() -> bool: return not main.vote_panel.visible), "отошёл от стола — панели нет")
 
 
-func test_creatures_near_from_host() -> void:   # живой мир у гостя: существа рядом встают по кадру хоста
+func _creatures_near_from_host() -> void:   # живой мир у гостя: существа рядом встают по кадру хоста
 	ok(_pump(func() -> bool: return main.net_seq > 0), "кадр принят")
 	var agents := main.eco.world.agents
 	ok(agents.size() > 3, "у гостя свой мир по зерну")
@@ -361,8 +390,7 @@ func test_creatures_near_from_host() -> void:   # живой мир у гост�
 	h_eco = PackedFloat32Array()
 
 
-func test_weak_link_plate() -> void:   # ART-043: кадры хоста опаздывают — «Слабая связь», игра идёт; 2 с ровно — снята
-	still_world(main)   # таймеры связи — без живого мира
+func _weak_link_plate() -> void:   # ART-043: кадры хоста опаздывают — «Слабая связь», игра идёт; 2 с ровно — снята
 	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
 	ok(not main.weak.visible(), "связь ровная — плашки нет")
 	for i in int((NetLink.WEAK_AFTER + 0.2) / SLOW):
@@ -465,7 +493,7 @@ func test_guest_tutorial_steps() -> void:   # ART-038 у гостя: плашк�
 	eq(t.step_line(), "Первый забег · 4 / 6", "у гостя все шесть: сонар — импульсом хоста")
 
 
-func test_comms_from_host_and_ask_back() -> void:   # ART-040 у гостя: плашка и код хоста, «Спросить код» — хосту
+func _comms_from_host_and_ask_back() -> void:   # ART-040 у гостя: плашка и код хоста, «Спросить код» — хосту
 	var hc := Comms.new()
 	hc.reset_run(5)
 	h_ev = {"c": hc.pack()}
@@ -486,7 +514,7 @@ func test_comms_from_host_and_ask_back() -> void:   # ART-040 у гостя: п�
 	ok(_pump(func() -> bool: return main.comms.state == Comms.Ask.WAIT), "«Ждём ответ…» у гостя")
 
 
-func test_lore_from_host_frame() -> void:   # #825: знания слоя общие — гость получает их кадром хоста
+func _lore_from_host_frame() -> void:   # #825: знания слоя общие — гость получает их кадром хоста
 	var host_lore := LayerLore.new()
 	host_lore.learn(LayerLore.D07_RELAY)
 	host_lore.learn(LayerLore.K2)
@@ -494,6 +522,7 @@ func test_lore_from_host_frame() -> void:   # #825: знания слоя общ
 	ok(_pump(func() -> bool: return main.lore.knows(LayerLore.K2)), "знания хоста у гостя")
 	eq(main.lore.pack(), host_lore.pack(), "те же факты")
 	h_ev = {}
-	ok(_pump(func() -> bool: return main.net_seq > 3), "кадры без «k» идут")
+	var seq := main.net_seq
+	ok(_pump(func() -> bool: return main.net_seq > seq + 3), "кадры без «k» идут")
 	ok(main.lore.knows(LayerLore.D07_RELAY), "без «k» знания не теряются")
 
