@@ -58,7 +58,8 @@ func test_panel_hints_fit() -> void:   # подсказки словами дл�
 		PowerScreen.W - 40.0])
 	var vp := VotePanel.new()
 	vp.show_vote(0, [])
-	var vw := minf(470.0, vis.x * 0.3)   # VotePanel.box
-	ok(f.get_string_size(vp.foot, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x < vw * 0.9,
-		"голосование: %d px из %d" % [f.get_string_size(vp.foot, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x, vw * 0.9])
+	var vw := DescentVote.width(vis) - 2.0 * VoteLayout.PAD   # VoteLayout: панель без полей
+	var px := VoteLayout.px(VoteLayout.SECOND, vis)
+	ok(f.get_string_size(vp.foot, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x < vw,
+		"голосование: %d px из %d" % [f.get_string_size(vp.foot, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x, vw])
 	vp.free()
