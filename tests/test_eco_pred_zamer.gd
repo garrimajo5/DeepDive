@@ -249,3 +249,119 @@ func test_alert_urgent_line_held_under_background_stream() -> void:
 	ok(bg_during >= 3, "пока виден «замер», пришёл поток фона (%d строки) — проверка не пустая" % bg_during)
 	ok(alert_seen >= Status.MESSAGE_SECONDS - 0.051, "срочная строка видна все %.1f с (по факту %.2f с)" % [
 		Status.MESSAGE_SECONDS, alert_seen])
+
+
+## Сцена 00→01 (п. 2 (аг)): отбой «потерял корабль» (`pred/lost`, ведущая «держится» `EcoLink.KEEP_LEAD`, #1966) —
+## единственный знак «угроза ушла» для того, кто не слышит щелчков: по ней включают свет. Постановка как в (ав):
+## свет погас во «замере» — отбой приходит, пока на приборах срочная «замер», и ждёт очереди. Ждущий отбой под
+## потоком строк фона (как в (аб)) не сменяет ни фон (`grazer/graze`, `grot/hide`), ни другая «держится» — бегство
+## рыб (`fish/flee`, `EcoLink.KEEP` без ведущего ранга); а выйдя на приборы, держится все `MESSAGE_SECONDS` — фон
+## ждёт очереди (`next`). Флаги строк — из мира (`take_link`), показ — `Status.Message`, как `Main._world_say`.
+## Шов «ранг мира × очередь под потоком фона» юнит-тестами не покрыт: в `test_status.test_message_lead_keeps_queue`
+## флаги выставлены руками, `test_eco_link.test_keep_lost_line` проверяет только таблицу рангов. Мутация: «lost»
+## без ранга в `EcoLink.KEEP_LEAD` — ждущий отбой сменяет бегство рыб, отбоя на приборах нет вовсе. Без Main.
+func test_lost_lead_line_held_under_background_stream() -> void:
+	var r := _near(0)
+	var w: EcoWorld = r[0]
+	var line_a := "Гребневики пасутся на мху у подножия рифа"
+	var flee_line := "Мелкая рыба: стая уходит в кораллы — рядом хищник"
+	var bg_texts := {   # поток фона: у ждущего отбоя (+0,15 с, +0,30 с) и у видимого (+0,15 с, +0,30 с, +1,5 с, +3,0 с) — строки стоянки у 01, как в (аб)
+		"Гребневики перешли на соседнее пятно мха": true,
+		"Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял": true,
+		"Гребневики пасутся на мху у подножия рифа": true,
+	}
+	var msg := Status.Message.new()
+	var shown: Array = []   # [текст, когда встал, сколько виден]
+	var at := {"a": -1.0, "alert": -1.0, "lost": -1.0}
+	var wait_stream: Array[float] = []   # фон и бегство рыб, наступающие на ждущий отбой
+	var show_stream: Array[float] = []   # фон, наступающий на видимый отбой
+	var wait_i := 0
+	var show_i := 0
+	var lost_text := ""
+	var lost_keep := false
+	var lost_lead := false
+	var waiting_bg := 0   # строки фона, пришедшие, пока отбой ждал очереди
+	var waiting_flee := 0   # другая «держится» у ждущего отбоя
+	var shown_bg := 0   # строки фона, пришедшие, пока отбой на приборах
+	var t := 0.0
+	while t < 10.5:
+		if at["a"] < 0.0 and t >= 0.499 and t < 1.5:
+			w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(12, -4, 8), func(): return line_a)
+		if not w.ship.light_on and at["lost"] < 0.0 and t >= 0.799 and t < 2.0:
+			w.ship.light_on = true   # голодный хищник в 25 м: «замер» на этом шаге
+		if w.ship.light_on and at["alert"] > 0.0 and t >= 2.299:
+			w.ship.light_on = false   # свет погас во «замере» — отбой на этом шаге
+		if not wait_stream.is_empty() and t >= wait_stream[0] - 0.001:
+			wait_stream.remove_at(0)
+			if wait_i == 2:
+				w.emit(EcoFish.ID, "flee", w.ship.pos + Vector3(15, -3, 10), func(): return flee_line)
+			elif wait_i == 0:
+				w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(-8, -4, 10),
+					func(): return "Гребневики перешли на соседнее пятно мха")
+			else:
+				w.emit(EcoGrot.ID, "hide", w.ship.pos + Vector3(10, -5, -7),
+					func(): return "Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял")
+			wait_i += 1
+		if not show_stream.is_empty() and t >= show_stream[0] - 0.001:
+			show_stream.remove_at(0)
+			if show_i % 2 == 0:
+				w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(6, -4, -12), func(): return line_a)
+			else:
+				w.emit(EcoGrot.ID, "hide", w.ship.pos + Vector3(-12, -3, -6),
+					func(): return "Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял")
+			show_i += 1
+		w.step(0.05)
+		t += 0.05
+		for e in w.take_link():
+			if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+				continue
+			var text := String(e.get("text", ""))
+			if text == "":
+				continue
+			if text == line_a and at["a"] < 0.0:
+				at["a"] = t
+			elif text.contains("замер") and at["alert"] < 0.0:
+				at["alert"] = t
+			elif text.contains("потерял корабль") and at["lost"] < 0.0:
+				at["lost"] = t
+				lost_text = text
+				lost_keep = bool(e.get("keep", false))
+				lost_lead = bool(e.get("lead", false))
+				wait_stream.assign([t + 0.15, t + 0.30, t + 0.45])
+			elif not lost_text.is_empty() and bg_texts.has(text):
+				if msg.next == lost_text:
+					waiting_bg += 1   # строка фона пришла, пока отбой ждал очереди
+				if msg.text == lost_text:
+					shown_bg += 1   # строка фона пришла, пока отбой на приборах
+			elif text == flee_line and not lost_text.is_empty() and msg.next == lost_text:
+				waiting_flee += 1   # другая «держится» наступила на ждущий отбой
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
+		msg.update(0.05)
+		if not lost_text.is_empty() and msg.text == lost_text and show_i == 0 and show_stream.is_empty():
+			show_stream.assign([t + 0.15, t + 0.30, t + 1.5, t + 3.0])   # отбой вышел — фон наступает на него
+		if msg.text != "" and (shown.is_empty() or shown[-1][0] != msg.text):
+			shown.append([msg.text, t, 0.0])
+		if msg.text != "":
+			shown[-1][2] = t - float(shown[-1][1]) + 0.05   # кадр t виден до следующего шага
+	var lost_seen := 0.0
+	var flee_seen := 0.0
+	for s: Array in shown:
+		if String(s[0]) == lost_text and not lost_text.is_empty():
+			lost_seen = maxf(lost_seen, float(s[2]))
+		elif String(s[0]) == flee_line:
+			flee_seen = maxf(flee_seen, float(s[2]))
+	var lines := PackedStringArray()
+	for s: Array in shown:
+		lines.append("%.2f с «%s» %.2f с" % [s[1], String(s[0]).left(40), s[2]])
+	print("    отбой пришёл на %.2f с («замер» на %.2f с), у ждущего фона %d и бегство %d, фона при видимом отбое %d; на приборах: %s" % [
+		at["lost"], at["alert"], waiting_bg, waiting_flee, shown_bg, " | ".join(lines)])
+	ok(at["a"] > 0.0 and at["alert"] > 0.0 and at["lost"] > 0.0, "строка фона, «замер» и отбой пришли")
+	ok(at["alert"] < at["lost"], "отбой пришёл во время показа «замера» — ждал очереди")
+	ok(lost_keep and lost_lead, "отбой пришёл ведущей «держится» (EcoLink.KEEP_LEAD)")
+	eq(waiting_bg, 2, "пока отбой ждал, наступал фон (%d) — проверка не пустая" % waiting_bg)
+	eq(waiting_flee, 1, "пока отбой ждал, наступала другая «держится» — бегство рыб")
+	ok(shown_bg >= 3, "пока отбой виден, пришёл поток фона (%d строки) — проверка не пустая" % shown_bg)
+	eq(flee_seen, 0.0, "бегство рыб ждущий отбой не сменило и на приборы не вышло")
+	ok(lost_seen >= Status.MESSAGE_SECONDS - 0.051, "отбой виден все %.1f с (по факту %.2f с)" % [
+		Status.MESSAGE_SECONDS, lost_seen])

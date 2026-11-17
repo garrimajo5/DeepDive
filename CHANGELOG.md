@@ -3,6 +3,9 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-17
+- Тесты, поток Б п. 2 (аг): ждущая ведущая «держится» `pred/lost` («потерял корабль», `EcoLink.KEEP_LEAD`) под потоком
+  строк фона не сменяется другой «держится» (`fish/flee`) и фоном, а выйдя на приборы — держится все `MESSAGE_SECONDS`
+  (`test_eco_pred_zamer.test_lost_lead_line_held_under_background_stream`; флаги из `take_link`, показ — `Status.Message`).
 - Поток А, #1788 (п. 0 фокуса 17.11): модель-макет батискафа ART-085 v3 (28 × 10 × 9 м, `tools/maket085.gd`,
   числа — листы `art/ART-085-korabl-koncept/`) и три проверки на нём, код игры и `world.md` не тронуты.
   Врата 07 всем корпусом с выступами (`tools/maket085_pass.gd`, наклон до 25°): низом до арки 11,3 м, верхом
