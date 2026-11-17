@@ -43,6 +43,7 @@ func test_short_run_reports() -> void:
 	for k in r["prey"]:
 		hunt += float(r["prey"][k])
 	near(hunt, float(r["why"]["hunt"]), 1e-3, "разбор охоты делит всю «охоту»")
+	ok(not r["prey"].has("clean"), "путь на чистку — не «охота» (п. 2 (ак))")
 	ok(float(r["prey_in"]) <= hunt + 1e-3 and float(r["prey_home"]) <= hunt + 1e-3, "добыча в рифе — внутри охоты")
 	ok(int(r["cleaned_out"]) <= int(r["cleaned"]), "чистки снаружи кольца — среди всех чисток")
 	ok(float(r["clean_in"]) >= 0.0)
@@ -51,6 +52,8 @@ func test_short_run_reports() -> void:
 	ok(lines[0].begins_with("== голодный серпохвост у 01"), lines[0])
 	ok(lines[1].begins_with("  зерно  0: крона в тревоге"), lines[1])
 	ok(lines[1].contains("причины [транзит"), lines[1])
+	ok(lines[1].contains(", чистка "), lines[1])
+	ok(lines[2].contains(", чистка "), lines[2])
 	ok(lines[2].begins_with("== причины тревоги кроны, сумма 1 зёрен"), lines[2])
 	ok(lines[1].contains("; охота ["), lines[1])
 	ok(lines[3].begins_with("== охота у рифа, сумма 1 зёрен"), lines[3])
@@ -58,8 +61,8 @@ func test_short_run_reports() -> void:
 	ok(lines[5].begins_with("== итог: крона в тревоге в"), lines[5])
 
 
-## Причина тревоги по ближайшему серпохвосту: вне CROWN_ALARM — «ушёл», не патруль — «охота», патруль — по цели:
-## внутри CROWN_ALARM — «цель у рифа», дальше — «транзит».
+## Причина тревоги по ближайшему серпохвосту: вне CROWN_ALARM — «ушёл», чистка — «чистка» (п. 2 (ак)), другой
+## режим, не патруль, — «охота», патруль — по цели: внутри CROWN_ALARM — «цель у рифа», дальше — «транзит».
 func test_cause_by_mode_and_goal() -> void:
 	var tool := _tool()
 	var axis := Vector3(33.0, 0.0, -22.0)
@@ -72,6 +75,10 @@ func test_cause_by_mode_and_goal() -> void:
 	eq(tool.cause(pr, 38.0, axis), "goal_in", "патруль к цели внутри тревоги кроны")
 	pr.mode = EcoPred.Mode.HUNT
 	eq(tool.cause(pr, 38.0, axis), "hunt", "охота у рифа")
+	pr.mode = EcoPred.Mode.CLEAN
+	eq(tool.cause(pr, 38.0, axis), "clean", "плывёт на чистку — не охота")
+	pr.mode = EcoPred.Mode.EAT
+	eq(tool.cause(pr, 38.0, axis), "hunt", "ест у рифа — «охота»")
 	eq(tool.cause(pr, EcoFish.CROWN_ALARM + 1.0, axis), "away", "дальше тревоги кроны")
 	eq(tool.cause(null, 0.0, axis), "away", "серпохвостов нет")
 
