@@ -170,6 +170,8 @@ class Lines:
 ## мира в это время ждёт очереди (`next`), своё сообщение игрока перебивает её, как любую.
 ## Строка мира «держится» (`keep`, `EcoLink.KEEP`, #1555: «хищник потерял корабль») встаёт в очередь, как обычная, а
 ## вышла — держится все свои секунды, как срочная; срочная её перебивает сразу. Ждущую «держится» обычная не сменяет.
+## Ведущую «держится» (`lead`, `EcoLink.KEEP_LEAD`, #1966: «потерял корабль») в очереди не сменяет и другая
+## «держится» (кормёжка, бегство рыб) — только такая же ведущая; срочная выходит сразу, как и раньше.
 class Message:
 	const MIN_SHOW := 1.0
 	var text := ""
@@ -186,11 +188,15 @@ class Message:
 	var keep := false
 	## Ждущее — «держится» (#1555): обычная строка мира его не сменяет.
 	var next_keep := false
+	## Текущее и ждущее — ведущая «держится» (#1966): ждущую другая «держится» без `lead` не сменяет.
+	var lead := false
+	var next_lead := false
 
 	func visible() -> bool:
 		return not text.is_empty()
 
-	func say(msg: String, seconds: float = MESSAGE_SECONDS, wait := false, urgent := false, held := false) -> void:
+	func say(msg: String, seconds: float = MESSAGE_SECONDS, wait := false, urgent := false, held := false,
+			leading := false) -> void:
 		if urgent and wait and not msg.is_empty():
 			if msg == next:
 				_drop_next()
@@ -199,11 +205,12 @@ class Message:
 			hot = true
 			return
 		if wait and world and not msg.is_empty() and not text.is_empty() and msg != text and (hot or shown < MIN_SHOW):
-			if next_keep and not held and not next.is_empty():
-				return   # ждущую «держится» обычная строка мира не сменяет (#1555)
+			if next_keep and not next.is_empty() and (not held or (next_lead and not leading)):
+				return   # ждущую «держится» обычная строка мира не сменяет (#1555), ведущую — и другая «держится» (#1966)
 			next = msg
 			next_left = seconds
 			next_keep = held
+			next_lead = held and leading
 			return
 		if wait or msg == next:
 			_drop_next()
@@ -212,6 +219,7 @@ class Message:
 		if wait and held and not msg.is_empty():
 			hot = true
 			keep = true
+			lead = leading
 
 	## Забрать строки мира с приборов (брифинг прибытия, #1429): видимая строка мира и ждущая гаснут, отдаётся последняя
 	## («» — их нет). Свои сообщения игрока не трогает.
@@ -226,6 +234,7 @@ class Message:
 			world = false
 			hot = false
 			keep = false
+			lead = false
 		return out
 
 	func clear(msg: String) -> void:
@@ -249,6 +258,7 @@ class Message:
 			left = 0.0
 			hot = false
 			keep = false
+			lead = false
 			_take_next()
 
 	func _show(msg: String, seconds: float) -> void:
@@ -257,11 +267,13 @@ class Message:
 		shown = 0.0
 		hot = false
 		keep = false
+		lead = false
 
 	func _drop_next() -> void:
 		next = ""
 		next_left = 0.0
 		next_keep = false
+		next_lead = false
 
 	func _take_next() -> void:
 		if next.is_empty():
@@ -269,8 +281,10 @@ class Message:
 		var m := next
 		var s := next_left
 		var k := next_keep
+		var l := next_lead
 		_drop_next()
 		_show(m, s)
 		world = true
 		hot = k
 		keep = k
+		lead = l

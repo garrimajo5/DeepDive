@@ -264,3 +264,31 @@ func test_scene_keep_line_waits_for_brief() -> void:
 	eq(main.message.text, lost, "«держится» на приборах")
 	ok(main.message.hot and main.message.keep, "и держится, не как срочная")
 	ok(not main.world_wait_keep, "ожидание сброшено")
+	# ведущая «держится» (#1966): под брифингом другая «держится» её не сменяет, срочная сменяет
+	main.arrival.on = true
+	main.message.take_world()
+	var lead := EcoLink.message(lost, false, true)
+	lead["lead"] = true
+	var feed := "Хищник схватил рыбу у цветка"
+	main.on_eco_event(EcoLink.message(feed, false, true))
+	main.on_eco_event(lead)
+	eq(main.world_wait, lost, "ведущая сменяет ждущую «держится»")
+	main.on_eco_event(EcoLink.message(feed, false, true))
+	eq(main.world_wait, lost, "другая «держится» ведущую не сменяет")
+	ok(main.world_wait_keep and main.world_wait_lead, "ждёт ведущая")
+	main.arrival.on = false
+	main.release_world_say()
+	eq(main.message.text, lost, "ведущая на приборах")
+	ok(main.message.keep and main.message.lead, "держится, ведущая")
+	ok(not main.world_wait_lead, "ожидание сброшено")
+	# брифинг открылся снова: видимая ведущая уходит в ожидание ведущей
+	main.arrival.on = true
+	main.release_world_say()
+	eq(main.world_wait, lost, "видимая строка отложена")
+	ok(main.world_wait_lead, "и осталась ведущей")
+	main.on_eco_event(EcoLink.message(feed, false, true))
+	eq(main.world_wait, lost, "под брифингом её не сменяет другая «держится»")
+	main.on_eco_event(EcoLink.message("Серпохвост замер", true))
+	eq(main.world_wait, "Серпохвост замер", "срочная главнее")
+	ok(not main.world_wait_lead, "ждёт уже не ведущая")
+	main.arrival.on = false
