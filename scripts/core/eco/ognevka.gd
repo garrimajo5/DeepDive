@@ -207,7 +207,7 @@ static func steer(s: Shrimp, move: Vector3, dt: float) -> void:
 	var goal := Vector3.ZERO
 	if move.length_squared() >= 1e-10:
 		var want := level(move.normalized())
-		var ang := s.dir.angle_to(want)
+		var ang := EcoAgent.angle(s.dir, want)
 		if ang > 1e-5:
 			var axis := s.dir.cross(want)
 			if ang > PI * 0.5:  # разворот — по горизонтали, в сторону уже начатого (не кувырком через низ)

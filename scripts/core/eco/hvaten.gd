@@ -262,7 +262,7 @@ static func turn(from: Vector3, move: Vector3, dt: float) -> Vector3:
 	if from.length_squared() < 1e-8:
 		return want
 	from = from.normalized()
-	var ang := from.angle_to(want)
+	var ang := EcoAgent.angle(from, want)
 	if ang < 1e-4:
 		return want
 	var axis := from.cross(want)
