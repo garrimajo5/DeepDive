@@ -13,12 +13,14 @@ extends SceneTree
 ## залипший хищник: режимы (`EcoPred.Mode`, с) и сколько секунд его цель (`agent.goal`) внутри CROWN_ALARM.
 ## Разбор тревоги кроны по причине (п. 2 (аж), #1400): «транзит» — ближайший серпохвост внутри CROWN_ALARM патрулирует
 ## к цели вне CROWN_ALARM (огибает риф по пути, `reef_steer`), «цель у рифа» — патруль к цели внутри CROWN_ALARM,
-## «охота» — внутри CROWN_ALARM в другом режиме, «ушёл» — внутри CROWN_ALARM серпохвоста нет (тревога спадает).
+## «чистка» — внутри CROWN_ALARM плывёт на чистку или чистится (`Mode.CLEAN`, п. 2 (ак): отдельно от «охоты», чтобы
+## путь к станции не путали с охотой в числах (э)/(аж)), «охота» — внутри CROWN_ALARM в другом режиме (не патруль и
+## не чистка), «ушёл» — внутри CROWN_ALARM серпохвоста нет (тревога спадает).
 ## В итоге — суммы по зёрнам, эпизоды «спряталась → вернулась», зёрна без подхода серпохвоста внутрь CROWN_ALARM,
 ## доля транзита в тревоге и самый долгий отрезок транзита.
 ## Разбор «охоты» (п. 2 (аз), #1400): за кем и чем занят ближайший серпохвост в эти секунды — ключ `prey_key`
 ## (охота: крона / стая рифа / другая стая с номером; не охота — режим), сколько секунд добыча внутри
-## `EcoPred.REEF_KEEP` и сколько секунд это стая рифа или крона (кольцо кроны — внутри рифа); у `clean` — на каком
+## `EcoPred.REEF_KEEP` и сколько секунд это стая рифа или крона (кольцо кроны — внутри рифа). У «чистки» — на каком
 ## расстоянии от оси станция чистки (`EcoLeech.Station.top`), к которой он плывёт.
 ## Чистка за весь проход (вариант 2 (аз): станцию в кольце `EcoPred.REEF_KEEP` хищник не выбирает): сколько чисток
 ## закончено (событие `cleaned`) и у скольких из них станция снаружи кольца, сколько секунд серпохвосты (все) плыли
@@ -37,8 +39,8 @@ const LONG := 20.0
 ## Первые секунды стоянки у 01 — столько стоит экипаж в сцене (как стоянка STOP в tools/mid_calm.gd, с).
 const FIRST := 25.0
 ## Причины тревоги кроны (ключи `why` в итоге зерна) — в этом порядке и в строках.
-const WHY: Array[String] = ["transit", "goal_in", "hunt", "away"]
-const WHY_RU := {"transit": "транзит", "goal_in": "цель у рифа", "hunt": "охота", "away": "ушёл"}
+const WHY: Array[String] = ["transit", "goal_in", "hunt", "clean", "away"]
+const WHY_RU := {"transit": "транзит", "goal_in": "цель у рифа", "hunt": "охота", "clean": "чистка", "away": "ушёл"}
 static var dark := DARK
 static var mid := MID
 static var stay := STAY
@@ -77,7 +79,7 @@ static func _flat(a: Vector3, b: Vector3) -> float:
 ## first (с тревоги за первые FIRST с), modes (режим → с залипания), goal_in (с залипания с целью внутри CROWN_ALARM),
 ## why (причина → с тревоги кроны, сумма — alarm), transit (с, самый долгий отрезок транзита), transit_r ([мин, макс] м
 ## от оси на транзите), prey (ключ `prey_key` → с «охоты»), prey_in (с «охоты» с добычей внутри REEF_KEEP),
-## prey_home (с «охоты» за кроной или стаей рифа), clean_r ([мин, макс] м от оси до станции чистки в «охоте»)}.
+## prey_home (с «охоты» за кроной или стаей рифа), clean_r ([мин, макс] м от оси до станции чистки в «чистке»)}.
 static func run(seed_value: int) -> Dictionary:
 	var ev: EcoView = MidCalm.make(seed_value)
 	var w := ev.world
@@ -179,7 +181,8 @@ static func run(seed_value: int) -> Dictionary:
 					r["prey_in"] += DT
 				if pk == "крона" or pk == "риф":
 					r["prey_home"] += DT
-			if pr.mode == EcoPred.Mode.CLEAN and ev.leeches and pr.station >= 0 and pr.station < ev.leeches.stations.size():
+		if why == "clean":
+			if ev.leeches and pr.station >= 0 and pr.station < ev.leeches.stations.size():
 				var sd := _flat(ev.leeches.stations[pr.station].top, axis)
 				r["clean_r"][0] = minf(r["clean_r"][0], sd)
 				r["clean_r"][1] = maxf(r["clean_r"][1], sd)
@@ -214,6 +217,8 @@ static func run(seed_value: int) -> Dictionary:
 static func cause(pr: EcoPred.Pred, pd: float, axis: Vector3) -> String:
 	if pr == null or pd >= EcoFish.CROWN_ALARM:
 		return "away"
+	if pr.mode == EcoPred.Mode.CLEAN:
+		return "clean"
 	if pr.mode != EcoPred.Mode.PATROL:
 		return "hunt"
 	return "goal_in" if _flat(pr.agent.goal, axis) < EcoFish.CROWN_ALARM else "transit"
