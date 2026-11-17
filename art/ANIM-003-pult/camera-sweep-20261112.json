@@ -1,0 +1,1020 @@
+[
+  {
+    "sex": "muzhchina",
+    "lean": 0.6,
+    "distance": 0.15,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": true,
+        "right_pixels": 1241712,
+        "left_pixels": 0,
+        "table_pixels": 18131,
+        "min_vertex_eye_distance": 0.04273457568523701
+      },
+      {
+        "share": 0.25,
+        "reachable": true,
+        "right_pixels": 1610792,
+        "left_pixels": 0,
+        "table_pixels": 196022,
+        "min_vertex_eye_distance": 0.031731794461506015
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.6,
+    "distance": 0.2,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": false
+      },
+      {
+        "share": 0.25,
+        "reachable": false
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.6,
+    "distance": 0.25,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": false
+      },
+      {
+        "share": 0.25,
+        "reachable": false
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.6,
+    "distance": 0.3,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": false
+      },
+      {
+        "share": 0.25,
+        "reachable": false
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.6,
+    "distance": 0.35,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": false
+      },
+      {
+        "share": 0.25,
+        "reachable": false
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.75,
+    "distance": 0.15,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": true,
+        "right_pixels": 1144094,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.06978189038571768
+      },
+      {
+        "share": 0.25,
+        "reachable": true,
+        "right_pixels": 1224918,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.0661939016916093
+      },
+      {
+        "share": 0.5,
+        "reachable": true,
+        "right_pixels": 1351789,
+        "left_pixels": 0,
+        "table_pixels": 7852,
+        "min_vertex_eye_distance": 0.06050527704473959
+      },
+      {
+        "share": 0.75,
+        "reachable": true,
+        "right_pixels": 1531106,
+        "left_pixels": 0,
+        "table_pixels": 50393,
+        "min_vertex_eye_distance": 0.05347305319140679
+      },
+      {
+        "share": 1,
+        "reachable": true,
+        "right_pixels": 1750707,
+        "left_pixels": 0,
+        "table_pixels": 172235,
+        "min_vertex_eye_distance": 0.04585894211949923
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.75,
+    "distance": 0.2,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": true,
+        "right_pixels": 806065,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.06978189038571768
+      },
+      {
+        "share": 0.25,
+        "reachable": true,
+        "right_pixels": 981632,
+        "left_pixels": 0,
+        "table_pixels": 6727,
+        "min_vertex_eye_distance": 0.06978189038571768
+      },
+      {
+        "share": 0.5,
+        "reachable": true,
+        "right_pixels": 1226739,
+        "left_pixels": 0,
+        "table_pixels": 91708,
+        "min_vertex_eye_distance": 0.06562383235044413
+      },
+      {
+        "share": 0.75,
+        "reachable": true,
+        "right_pixels": 1678026,
+        "left_pixels": 0,
+        "table_pixels": 326385,
+        "min_vertex_eye_distance": 0.04077118785141749
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.75,
+    "distance": 0.25,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": false
+      },
+      {
+        "share": 0.25,
+        "reachable": false
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.75,
+    "distance": 0.3,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": false
+      },
+      {
+        "share": 0.25,
+        "reachable": false
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.75,
+    "distance": 0.35,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": false
+      },
+      {
+        "share": 0.25,
+        "reachable": false
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.9,
+    "distance": 0.15,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": true,
+        "right_pixels": 1099412,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.25,
+        "reachable": true,
+        "right_pixels": 1107930,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.5,
+        "reachable": true,
+        "right_pixels": 1140170,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.75,
+        "reachable": true,
+        "right_pixels": 1182512,
+        "left_pixels": 0,
+        "table_pixels": 478,
+        "min_vertex_eye_distance": 0.010341895350191487
+      },
+      {
+        "share": 1,
+        "reachable": true,
+        "right_pixels": 1239208,
+        "left_pixels": 0,
+        "table_pixels": 9547,
+        "min_vertex_eye_distance": 0.010341895350191487
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.9,
+    "distance": 0.2,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": true,
+        "right_pixels": 804137,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.25,
+        "reachable": true,
+        "right_pixels": 879378,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.5,
+        "reachable": true,
+        "right_pixels": 976072,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.75,
+        "reachable": true,
+        "right_pixels": 1068281,
+        "left_pixels": 0,
+        "table_pixels": 3588,
+        "min_vertex_eye_distance": 0.010341895350191487
+      },
+      {
+        "share": 1,
+        "reachable": true,
+        "right_pixels": 1177063,
+        "left_pixels": 0,
+        "table_pixels": 28912,
+        "min_vertex_eye_distance": 0.010341895350191487
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.9,
+    "distance": 0.25,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": true,
+        "right_pixels": 577861,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.25,
+        "reachable": true,
+        "right_pixels": 690539,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.5,
+        "reachable": true,
+        "right_pixels": 863753,
+        "left_pixels": 0,
+        "table_pixels": 4952,
+        "min_vertex_eye_distance": 0.010341895350191487
+      },
+      {
+        "share": 0.75,
+        "reachable": true,
+        "right_pixels": 1151943,
+        "left_pixels": 0,
+        "table_pixels": 116904,
+        "min_vertex_eye_distance": 0.010341895350191487
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.9,
+    "distance": 0.3,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": false
+      },
+      {
+        "share": 0.25,
+        "reachable": false
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "muzhchina",
+    "lean": 0.9,
+    "distance": 0.35,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": false
+      },
+      {
+        "share": 0.25,
+        "reachable": false
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.6,
+    "distance": 0.15,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": true,
+        "right_pixels": 729041,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.051548270116016454
+      },
+      {
+        "share": 0.25,
+        "reachable": true,
+        "right_pixels": 934674,
+        "left_pixels": 0,
+        "table_pixels": 9643,
+        "min_vertex_eye_distance": 0.033333514102015224
+      },
+      {
+        "share": 0.5,
+        "reachable": true,
+        "right_pixels": 1352879,
+        "left_pixels": 0,
+        "table_pixels": 113646,
+        "min_vertex_eye_distance": 0.015543960365449416
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.6,
+    "distance": 0.2,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": false
+      },
+      {
+        "share": 0.25,
+        "reachable": false
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.6,
+    "distance": 0.25,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": false
+      },
+      {
+        "share": 0.25,
+        "reachable": false
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.6,
+    "distance": 0.3,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": false
+      },
+      {
+        "share": 0.25,
+        "reachable": false
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.6,
+    "distance": 0.35,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": false
+      },
+      {
+        "share": 0.25,
+        "reachable": false
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.75,
+    "distance": 0.15,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": true,
+        "right_pixels": 727056,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.08745295644383436
+      },
+      {
+        "share": 0.25,
+        "reachable": true,
+        "right_pixels": 799156,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.07867543154124208
+      },
+      {
+        "share": 0.5,
+        "reachable": true,
+        "right_pixels": 916037,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.0702152328237103
+      },
+      {
+        "share": 0.75,
+        "reachable": true,
+        "right_pixels": 1054856,
+        "left_pixels": 0,
+        "table_pixels": 2437,
+        "min_vertex_eye_distance": 0.06190809938581844
+      },
+      {
+        "share": 1,
+        "reachable": true,
+        "right_pixels": 1236413,
+        "left_pixels": 0,
+        "table_pixels": 22719,
+        "min_vertex_eye_distance": 0.049419326490742266
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.75,
+    "distance": 0.2,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": true,
+        "right_pixels": 496896,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.0892203758271915
+      },
+      {
+        "share": 0.25,
+        "reachable": true,
+        "right_pixels": 606076,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.08499738132446805
+      },
+      {
+        "share": 0.5,
+        "reachable": true,
+        "right_pixels": 805698,
+        "left_pixels": 0,
+        "table_pixels": 166,
+        "min_vertex_eye_distance": 0.07146703470628717
+      },
+      {
+        "share": 0.75,
+        "reachable": true,
+        "right_pixels": 1150653,
+        "left_pixels": 0,
+        "table_pixels": 101012,
+        "min_vertex_eye_distance": 0.05573295483206522
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.75,
+    "distance": 0.25,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": false
+      },
+      {
+        "share": 0.25,
+        "reachable": false
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.75,
+    "distance": 0.3,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": false
+      },
+      {
+        "share": 0.25,
+        "reachable": false
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.75,
+    "distance": 0.35,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": false
+      },
+      {
+        "share": 0.25,
+        "reachable": false
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.9,
+    "distance": 0.15,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": true,
+        "right_pixels": 830371,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.25,
+        "reachable": true,
+        "right_pixels": 832191,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.5,
+        "reachable": true,
+        "right_pixels": 851983,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.75,
+        "reachable": true,
+        "right_pixels": 885129,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.03902028198568896
+      },
+      {
+        "share": 1,
+        "reachable": true,
+        "right_pixels": 911352,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.03902028198568896
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.9,
+    "distance": 0.2,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": true,
+        "right_pixels": 490494,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.25,
+        "reachable": true,
+        "right_pixels": 547955,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.5,
+        "reachable": true,
+        "right_pixels": 628942,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.75,
+        "reachable": true,
+        "right_pixels": 732449,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.03902028198568896
+      },
+      {
+        "share": 1,
+        "reachable": true,
+        "right_pixels": 847393,
+        "left_pixels": 0,
+        "table_pixels": 1940,
+        "min_vertex_eye_distance": 0.03902028198568896
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.9,
+    "distance": 0.25,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": true,
+        "right_pixels": 378778,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.25,
+        "reachable": true,
+        "right_pixels": 449686,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.5,
+        "reachable": true,
+        "right_pixels": 564528,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.75,
+        "reachable": true,
+        "right_pixels": 830125,
+        "left_pixels": 0,
+        "table_pixels": 10655,
+        "min_vertex_eye_distance": 0.03902028198568896
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.9,
+    "distance": 0.3,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": true,
+        "right_pixels": 414641,
+        "left_pixels": 0,
+        "table_pixels": 0,
+        "min_vertex_eye_distance": 0.03902028198568896
+      },
+      {
+        "share": 0.25,
+        "reachable": false
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  },
+  {
+    "sex": "zhenshchina",
+    "lean": 0.9,
+    "distance": 0.35,
+    "samples": [
+      {
+        "share": 0,
+        "reachable": false
+      },
+      {
+        "share": 0.25,
+        "reachable": false
+      },
+      {
+        "share": 0.5,
+        "reachable": false
+      },
+      {
+        "share": 0.75,
+        "reachable": false
+      },
+      {
+        "share": 1,
+        "reachable": false
+      }
+    ]
+  }
+]

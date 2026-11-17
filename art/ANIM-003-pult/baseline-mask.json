@@ -1,0 +1,62 @@
+[
+  {
+    "sex": "muzhchina",
+    "eye": [
+      0,
+      1.65,
+      0
+    ],
+    "left_pixels": 260832,
+    "right_pixels": 485760
+  },
+  {
+    "sex": "muzhchina",
+    "eye": [
+      0,
+      1.65,
+      -0.1
+    ],
+    "left_pixels": 4406,
+    "right_pixels": 258056
+  },
+  {
+    "sex": "muzhchina",
+    "eye": [
+      0,
+      1.65,
+      -0.2
+    ],
+    "left_pixels": 0,
+    "right_pixels": 4994
+  },
+  {
+    "sex": "zhenshchina",
+    "eye": [
+      0,
+      1.65,
+      0
+    ],
+    "left_pixels": 189064,
+    "right_pixels": 334903
+  },
+  {
+    "sex": "zhenshchina",
+    "eye": [
+      0,
+      1.65,
+      -0.1
+    ],
+    "left_pixels": 0,
+    "right_pixels": 113907
+  },
+  {
+    "sex": "zhenshchina",
+    "eye": [
+      0,
+      1.65,
+      -0.2
+    ],
+    "left_pixels": 0,
+    "right_pixels": 2930
+  }
+]
