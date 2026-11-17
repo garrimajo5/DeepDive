@@ -1,6 +1,7 @@
 extends TestCase
 ## Хост в сцене (Main.host_game): телефон по loopback встаёт членом экипажа, его ввод ведёт фигуру,
 ## кадры уходят раз в SEND_DT, ушедший пропадает с палубы.
+## Проверки одной сцены идут подряд одним тестом (загрузка main.tscn ≈ 1,4 с на тест, фокус А п. 4): 9 загрузок → 3.
 
 const PORT := 24710
 const DT := 1.0 / 30.0
@@ -37,7 +38,37 @@ func _pump(cond: Callable) -> bool:
 	return false
 
 
-func test_guest_joins_as_mate() -> void:
+## Гость встал к посту — отходит своей кнопкой (крестовина в том же вводе пустая: не уводит фигуру).
+func _step_away(m: Crew.Member) -> void:
+	var pad := Crew.Pad.new()
+	pad.action = true
+	client.send_pad(pad)
+	ok(_pump(func() -> bool: return not m.busy()), "гость отошёл от поста своей кнопкой")
+
+
+## Жизнь гостя на палубе одной сценой: вошёл, идёт своей крестовиной, получает кадры, ушёл, вернулся.
+func test_guest_joins_walks_leaves_and_returns() -> void:
+	_joins_as_mate()
+	_pad_walks_mate()
+	_frames_reach_guest_with_place()
+	_leaves()
+	_comes_back()
+
+
+## Гость на постах одной сценой: за штурвалом правит кораблём, у пульта — долями энергии.
+func test_guest_at_posts_drives_ship() -> void:
+	var m := _at_helm_drives_ship()
+	_step_away(m)
+	_at_power_moves_shares()
+
+
+## Кнопка гостя у голостола и у поста «Маршрут» одной сценой: импульс, маршрут и голосование — у всех.
+func test_guest_button_at_table() -> void:
+	_pings_sonar_for_all()
+	_picks_route_and_gets_vote()
+
+
+func _joins_as_mate() -> void:
 	ok(_pump(func() -> bool: return main.crew.size() == 2), "гость на палубе")
 	var m: Crew.Member = main.crew[1]
 	eq(m.role, Crew.Role.BIOLOGIST, "роль гостя")
@@ -50,7 +81,7 @@ func test_guest_joins_as_mate() -> void:
 	eq(g.index, 1, "место гостя в экипаже")
 
 
-func test_frames_reach_guest_with_place() -> void:
+func _frames_reach_guest_with_place() -> void:
 	main.helm.pos = Vector3(3.0, -30.0, 12.0)
 	ok(_pump(func() -> bool: return client.got >= 3), "кадры идут")
 	eq(client.me, 1, "своё место — второй")
@@ -67,7 +98,7 @@ func test_frames_reach_guest_with_place() -> void:
 	eq(main.net_host.seq - before, 20, "кадр раз в SEND_DT")
 
 
-func test_guest_pad_walks_mate() -> void:
+func _pad_walks_mate() -> void:
 	ok(_pump(func() -> bool: return main.crew.size() == 2), "гость на палубе")
 	var m: Crew.Member = main.crew[1]
 	var z0 := m.walker.z
@@ -82,7 +113,7 @@ func test_guest_pad_walks_mate() -> void:
 	ok(m.walker.z < z0 - 0.5, "фигура гостя идёт его крестовиной (%.2f → %.2f)" % [z0, m.walker.z])
 
 
-func test_guest_leaves() -> void:
+func _leaves() -> void:
 	ok(_pump(func() -> bool: return main.crew.size() == 2), "гость на палубе")
 	client.stop()
 	ok(_pump(func() -> bool: return main.crew.size() == 1), "ушёл с палубы")
@@ -99,10 +130,7 @@ func test_guest_leaves() -> void:
 	ok(not main.drop_panel.visible)
 
 
-func test_guest_comes_back() -> void:   # ART-043: «Ира вернулась» — тот же гость по имени
-	ok(_pump(func() -> bool: return main.crew.size() == 2), "гость на палубе")
-	client.stop()
-	ok(_pump(func() -> bool: return main.crew.size() == 1), "ушла")
+func _comes_back() -> void:   # ART-043: «Ира вернулась» — тот же гость по имени (после _leaves: плашка ухода уже погасла)
 	client = NetLink.Client.new()
 	client.join("127.0.0.1", PORT, "Ира", Crew.Role.BIOLOGIST, 1)
 	ok(_pump(func() -> bool: return main.crew.size() == 2), "вошла снова")
@@ -125,7 +153,7 @@ func _seat_guest(x: float, z: float) -> Crew.Member:
 	return m
 
 
-func test_guest_at_helm_drives_ship() -> void:
+func _at_helm_drives_ship() -> Crew.Member:
 	var m := _seat_guest(0.0, Deck.CHAIR_Z)
 	ok(m.seated, "сел за штурвал")
 	var pad := Crew.Pad.new()
@@ -152,9 +180,10 @@ func test_guest_at_helm_drives_ship() -> void:
 		main.step(DT)
 		client.poll(DT)
 	ok(main.light_on != lit, "одно нажатие — одно переключение")
+	return m
 
 
-func test_guest_at_power_moves_shares() -> void:
+func _at_power_moves_shares() -> void:
 	var m := _seat_guest(Main.POWER_STAND.x, Main.POWER_STAND.y)
 	ok(m.at_power, "у пульта энергии")
 	var before := main.reactor.share.duplicate()
@@ -169,7 +198,7 @@ func test_guest_at_power_moves_shares() -> void:
 	ok(main.reactor.share != before, "доли реактора правит крестовина гостя (%s → %s)" % [before, main.reactor.share])
 
 
-func test_guest_picks_route_and_gets_vote() -> void:   # кнопка гостя у поста «Маршрут» листает маршрут, кадр везёт его
+func _picks_route_and_gets_vote() -> void:   # кнопка гостя у поста «Маршрут» листает маршрут, кадр везёт его
 	ok(_pump(func() -> bool: return main.crew.size() == 2), "гость на палубе")
 	var m: Crew.Member = main.crew[1]
 	m.place(Main.ROUTE_POST.x, Main.ROUTE_POST.y, 0.0)
@@ -199,7 +228,7 @@ func test_guest_picks_route_and_gets_vote() -> void:   # кнопка гостя
 	eq(got[0]["marks"], VoteHolo.votes(got[0]["ops"]), "голосует один — метки по мнениям ролей")
 
 
-func test_guest_pings_sonar_for_all() -> void:   # кнопка гостя у голостола — импульс хоста, кадр везёт его гостю
+func _pings_sonar_for_all() -> void:   # кнопка гостя у голостола — импульс хоста, кадр везёт его гостю
 	ok(_pump(func() -> bool: return main.crew.size() == 2), "гость на палубе")
 	var m: Crew.Member = main.crew[1]
 	m.place(-1.3, -1.6, 0.0)
