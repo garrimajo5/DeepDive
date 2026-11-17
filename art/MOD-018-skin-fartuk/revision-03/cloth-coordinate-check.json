@@ -1,0 +1,86 @@
+[
+  {
+    "gear": "gear-fartuk-m",
+    "pose": "post20",
+    "max_error_m": 7.199132232926786e-05,
+    "mean_error_m": 3.314703629114899e-05,
+    "samples": 204
+  },
+  {
+    "gear": "gear-fartuk-m",
+    "pose": "seat1",
+    "max_error_m": 0.00022304762387648225,
+    "mean_error_m": 0.00013487407238030487,
+    "samples": 204
+  },
+  {
+    "gear": "gear-fartuk-m",
+    "pose": "standing",
+    "max_error_m": 7.16258873580955e-05,
+    "mean_error_m": 3.3726746314123506e-05,
+    "samples": 204
+  },
+  {
+    "gear": "gear-tunika-m",
+    "pose": "post20",
+    "max_error_m": 7.160168752307072e-05,
+    "mean_error_m": 3.370606337915915e-05,
+    "samples": 335
+  },
+  {
+    "gear": "gear-tunika-m",
+    "pose": "seat1",
+    "max_error_m": 0.0002244718198198825,
+    "mean_error_m": 0.00012596229614938415,
+    "samples": 335
+  },
+  {
+    "gear": "gear-tunika-m",
+    "pose": "standing",
+    "max_error_m": 7.129454024834558e-05,
+    "mean_error_m": 3.392409960371825e-05,
+    "samples": 335
+  },
+  {
+    "gear": "gear-fartuk-zh",
+    "pose": "post20",
+    "max_error_m": 7.022744830464944e-05,
+    "mean_error_m": 2.6415571826864045e-05,
+    "samples": 230
+  },
+  {
+    "gear": "gear-fartuk-zh",
+    "pose": "seat1",
+    "max_error_m": 0.00022070079285185784,
+    "mean_error_m": 0.00010581219479323933,
+    "samples": 230
+  },
+  {
+    "gear": "gear-fartuk-zh",
+    "pose": "standing",
+    "max_error_m": 7.024519436527044e-05,
+    "mean_error_m": 2.674447060937639e-05,
+    "samples": 230
+  },
+  {
+    "gear": "gear-tunika-zh",
+    "pose": "post20",
+    "max_error_m": 7.036374881863594e-05,
+    "mean_error_m": 3.047273453153534e-05,
+    "samples": 345
+  },
+  {
+    "gear": "gear-tunika-zh",
+    "pose": "seat1",
+    "max_error_m": 0.00022299731790553778,
+    "mean_error_m": 0.00011664952115153568,
+    "samples": 345
+  },
+  {
+    "gear": "gear-tunika-zh",
+    "pose": "standing",
+    "max_error_m": 7.018432370387018e-05,
+    "mean_error_m": 3.0717316784323e-05,
+    "samples": 345
+  }
+]

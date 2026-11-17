@@ -1,0 +1,23 @@
+15:09:36 | INFO: Data are loaded, start creating Blender stuff
+15:09:36 | INFO: Blender create Mesh node output_unwrapped
+15:09:36 | INFO: glTF import finished in 0.05s
+15:09:36 | INFO: Data are loaded, start creating Blender stuff
+15:09:36 | INFO: Blender create Mesh node output_unwrapped
+15:09:36 | INFO: glTF import finished in 0.05s
+BASE gear-fartuk-m (0, 2297, 0.03509041294455528, 0.027155855670571327)
+TRY 1 (20679, 699, 0.06247958540916443, 0.033370569348335266)
+WIN gear-fartuk-m (20679, 699, 0.06247958540916443, 0.033370569348335266)
+BASE gear-fartuk-zh (0, 2705, 0.05624210089445114, 0.05624210089445114)
+TRY 1 (31471, 4189, 0.05991033464670181, 0.052576009184122086)
+WIN gear-fartuk-zh (31471, 4189, 0.05991033464670181, 0.052576009184122086)
+BASE gear-tunika-m (1055, 7861, 0.0467413067817688, 0.03707126900553703)
+TRY 1 (53735, 4211, 0.12077686190605164, 0.04920061305165291)
+WIN gear-tunika-m (53735, 4211, 0.12077686190605164, 0.04920061305165291)
+BASE gear-tunika-zh (740, 13596, 0.04386574774980545, 0.03632614389061928)
+TRY 1 (54087, 4027, 0.12827159464359283, 0.04500111937522888)
+WIN gear-tunika-zh (54087, 4027, 0.12827159464359283, 0.04500111937522888)
+Info: Saved as "uvraw13.blend"
+Blender 4.5.9 LTS (hash 8bf95cbd38d1 built 2026-04-21 01:33:45)
+Read blend: "C:\Users\FEDYA\Documents\ChatGPT\Pogrujenie\work\DeepDive\art\MOD-018-skin-fartuk\revision-12\source.blend"
+
+Blender quit

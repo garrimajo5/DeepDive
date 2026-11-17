@@ -1,0 +1,54 @@
+[
+  {
+    "bone_attachment_count": 0,
+    "bone_count": 24,
+    "name": "gear-fartuk-m",
+    "rest_error_m": 0.000000478290132832626,
+    "shared_body_skeleton": true,
+    "skin_binds": 24,
+    "skin_rest_error_m": 0.0000646247426629998,
+    "surfaces": 1,
+    "texture": "1024x1024",
+    "triangles": 308,
+    "vertices": 204
+  },
+  {
+    "bone_attachment_count": 0,
+    "bone_count": 24,
+    "name": "gear-tunika-m",
+    "rest_error_m": 0.000000478290132832626,
+    "shared_body_skeleton": true,
+    "skin_binds": 24,
+    "skin_rest_error_m": 0.0000685388658894226,
+    "surfaces": 1,
+    "texture": "1024x1024",
+    "triangles": 509,
+    "vertices": 335
+  },
+  {
+    "bone_attachment_count": 0,
+    "bone_count": 24,
+    "name": "gear-fartuk-zh",
+    "rest_error_m": 0.000000960084662438021,
+    "shared_body_skeleton": true,
+    "skin_binds": 24,
+    "skin_rest_error_m": 0.0000586767746426631,
+    "surfaces": 1,
+    "texture": "1024x1024",
+    "triangles": 368,
+    "vertices": 230
+  },
+  {
+    "bone_attachment_count": 0,
+    "bone_count": 24,
+    "name": "gear-tunika-zh",
+    "rest_error_m": 0.000000960084662438021,
+    "shared_body_skeleton": true,
+    "skin_binds": 24,
+    "skin_rest_error_m": 0.0000681146484566852,
+    "surfaces": 1,
+    "texture": "1024x1024",
+    "triangles": 520,
+    "vertices": 345
+  }
+]

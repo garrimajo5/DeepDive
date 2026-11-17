@@ -1,0 +1,13 @@
+{
+  "main": "18f99d852e1f81db3be0d5937f4c14b9dea4d1b5",
+  "previous_revision": "b8a13e2",
+  "sha256": {
+    "art/MOD-018-skin-fartuk/revision-05/source.blend": "7a4f1639d93c1878ab69a3ee8774eaf1a2631c85169ec6a33022391765385b41",
+    "art/MOD-018-skin-fartuk/revision-05/gear-fartuk-m.glb": "d31ba47203ef157aa6f50dcaa0c7f75d4d6b421551a3b4cbff3b4aa90310c7f1",
+    "art/MOD-018-skin-fartuk/revision-05/gear-fartuk-zh.glb": "7e8a9139a51cf7dfc6678d1a8b49b9d0a772ecf7e4399422a7fde8360d108057",
+    "art/MOD-018-skin-fartuk/revision-05/gear-tunika-m.glb": "b15b15c03da6c61ae0ed972ac37b586b8807b89eaabfdf928a37e9e62f165cef",
+    "art/MOD-018-skin-fartuk/revision-05/gear-tunika-zh.glb": "8dd7a5d32ffb5694a86cd9695a7b3b120c21eff8b13a1b0c0005a3ac6a638d42",
+    "models/ekipazh-muzhchina.glb": "c3a78f48b0546ac1e6ff71de5817068a50f6a90f0a2a6e6d236a7fb560ea4be1",
+    "models/ekipazh-zhenshchina.glb": "531ce14edb2712310ad32d51cecee5e690c848fc9dee368e7924830560b7b920"
+  }
+}

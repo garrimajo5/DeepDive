@@ -1,0 +1,162 @@
+[
+  {
+    "name": "gear-fartuk-m",
+    "poses": {
+      "rest": {
+        "min": -0.03301149606704712,
+        "max": 0.03559879958629608,
+        "inside": 1,
+        "far": 0,
+        "intersections": 100
+      },
+      "seat": {
+        "min": -0.004728331230580807,
+        "max": 0.04478500038385391,
+        "inside": 1,
+        "far": 1,
+        "intersections": 203
+      },
+      "walk": {
+        "min": -0.030311010777950287,
+        "max": 0.03375409543514252,
+        "inside": 1,
+        "far": 0,
+        "intersections": 108
+      },
+      "walk2": {
+        "min": 0.002989555010572076,
+        "max": 0.038457971066236496,
+        "inside": 0,
+        "far": 0,
+        "intersections": 100
+      },
+      "lean": {
+        "min": -0.03301149606704712,
+        "max": 0.03559879958629608,
+        "inside": 1,
+        "far": 0,
+        "intersections": 95
+      }
+    }
+  },
+  {
+    "name": "gear-fartuk-zh",
+    "poses": {
+      "rest": {
+        "min": 0.00383812771178782,
+        "max": 0.04462137073278427,
+        "inside": 0,
+        "far": 1,
+        "intersections": 81
+      },
+      "seat": {
+        "min": -0.01408862043172121,
+        "max": 0.04462137073278427,
+        "inside": 1,
+        "far": 1,
+        "intersections": 77
+      },
+      "walk": {
+        "min": 0.00383812771178782,
+        "max": 0.04462137073278427,
+        "inside": 0,
+        "far": 1,
+        "intersections": 79
+      },
+      "walk2": {
+        "min": -0.01756797730922699,
+        "max": 0.04462137073278427,
+        "inside": 1,
+        "far": 1,
+        "intersections": 95
+      },
+      "lean": {
+        "min": 0.0022474275901913643,
+        "max": 0.049476925283670425,
+        "inside": 0,
+        "far": 3,
+        "intersections": 79
+      }
+    }
+  },
+  {
+    "name": "gear-tunika-m",
+    "poses": {
+      "rest": {
+        "min": -0.004166257567703724,
+        "max": 0.03620576485991478,
+        "inside": 1,
+        "far": 0,
+        "intersections": 140
+      },
+      "seat": {
+        "min": -0.019260812550783157,
+        "max": 0.03620576485991478,
+        "inside": 3,
+        "far": 0,
+        "intersections": 211
+      },
+      "walk": {
+        "min": -0.005602674558758736,
+        "max": 0.03620576485991478,
+        "inside": 1,
+        "far": 0,
+        "intersections": 161
+      },
+      "walk2": {
+        "min": -0.002576723461970687,
+        "max": 0.03620576485991478,
+        "inside": 1,
+        "far": 0,
+        "intersections": 143
+      },
+      "lean": {
+        "min": -0.001979535911232233,
+        "max": 0.03947366029024124,
+        "inside": 0,
+        "far": 0,
+        "intersections": 161
+      }
+    }
+  },
+  {
+    "name": "gear-tunika-zh",
+    "poses": {
+      "rest": {
+        "min": 0.0028297812677919865,
+        "max": 0.04475226625800133,
+        "inside": 0,
+        "far": 1,
+        "intersections": 378
+      },
+      "seat": {
+        "min": 0.0012223107041791081,
+        "max": 0.04475226625800133,
+        "inside": 0,
+        "far": 1,
+        "intersections": 400
+      },
+      "walk": {
+        "min": 0.003335842164233327,
+        "max": 0.04475226625800133,
+        "inside": 0,
+        "far": 1,
+        "intersections": 361
+      },
+      "walk2": {
+        "min": 0.001210783259011805,
+        "max": 0.04475226625800133,
+        "inside": 0,
+        "far": 1,
+        "intersections": 388
+      },
+      "lean": {
+        "min": -0.017999831587076187,
+        "max": 0.05079392343759537,
+        "inside": 1,
+        "far": 8,
+        "intersections": 389
+      }
+    }
+  }
+]

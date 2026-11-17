@@ -1,0 +1,26 @@
+[
+  {
+    "name": "gear-fartuk-m",
+    "triangles": 388,
+    "flipped_faces": [],
+    "max_displacement": 0.024587155234588726
+  },
+  {
+    "name": "gear-fartuk-zh",
+    "triangles": 446,
+    "flipped_faces": [],
+    "max_displacement": 0.0
+  },
+  {
+    "name": "gear-tunika-m",
+    "triangles": 596,
+    "flipped_faces": [],
+    "max_displacement": 0.0019999743040848474
+  },
+  {
+    "name": "gear-tunika-zh",
+    "triangles": 599,
+    "flipped_faces": [],
+    "max_displacement": 0.009999990414939883
+  }
+]
