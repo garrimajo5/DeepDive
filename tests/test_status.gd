@@ -346,3 +346,53 @@ func test_scene_urgent_eco_message() -> void:
 	ok(main.message.text != hot, "после 4,2 с срочная сменилась: %s" % main.message.text)
 	main.queue_free()
 	await frames(1)
+
+
+## Ведущая «держится» (#1966, `EcoLink.KEEP_LEAD`): ждущую «потерял корабль» другая «держится» (кормёжка, бегство
+## рыб) не сменяет, а она ждущую другую сменяет; срочная выходит сразу в обоих случаях.
+func test_message_lead_keeps_queue() -> void:
+	var lost := "Хищник потерял корабль и отворачивает"
+	var feed := "Хищник схватил рыбу у цветка"
+	var m := Status.Message.new()
+	m.say("Течение сменилось", Status.MESSAGE_SECONDS, true)
+	m.update(0.3)
+	m.say(lost, Status.MESSAGE_SECONDS, true, false, true, true)
+	ok(m.next_keep and m.next_lead, "ждёт ведущая «держится»")
+	m.say(feed, Status.MESSAGE_SECONDS, true, false, true)
+	eq(m.next, lost, "другая «держится» ведущую не сменяет")
+	ok(m.next_lead, "и ведущей она осталась")
+	m.say("Рыбы ушли", Status.MESSAGE_SECONDS, true)
+	eq(m.next, lost, "обычная — тем более")
+	m.update(0.8)
+	eq(m.text, lost, "через MIN_SHOW вышла «потерял корабль»")
+	ok(m.keep and m.lead and not m.next_lead, "держится, ведущая; очередь пуста")
+	m.say(feed, Status.MESSAGE_SECONDS, true, false, true)
+	eq(m.text, lost, "видимую «держится» другая не перебивает")
+	eq(m.next, feed, "ждёт своей очереди")
+	m.update(Status.MESSAGE_SECONDS)
+	eq(m.text, feed, "вышла следом")
+	ok(m.keep and not m.lead, "держится, не ведущая")
+	# обратный порядок: ждёт кормёжка — «потерял корабль» её сменяет
+	m = Status.Message.new()
+	m.say("Течение сменилось", Status.MESSAGE_SECONDS, true)
+	m.update(0.3)
+	m.say(feed, Status.MESSAGE_SECONDS, true, false, true)
+	m.say("Рыбы бегут от рифа", Status.MESSAGE_SECONDS, true, false, true)
+	eq(m.next, "Рыбы бегут от рифа", "две не ведущие: ждёт последняя, как раньше")
+	m.say(lost, Status.MESSAGE_SECONDS, true, false, true, true)
+	eq(m.next, lost, "ведущая сменяет ждущую «держится»")
+	m.say("Хищник снова потерял корабль", Status.MESSAGE_SECONDS, true, false, true, true)
+	eq(m.next, "Хищник снова потерял корабль", "ведущую сменяет только ведущая")
+	# срочная выходит сразу, ждущая ведущая не теряется
+	m.say("Серпохвост замер", Status.MESSAGE_SECONDS, true, true)
+	eq(m.text, "Серпохвост замер", "«замер» — сразу")
+	eq(m.next, "Хищник снова потерял корабль", "ведущая ждёт")
+	m.say(feed, Status.MESSAGE_SECONDS, true, false, true)
+	eq(m.next, "Хищник снова потерял корабль", "и под срочной её не сменяет другая «держится»")
+	m.update(Status.MESSAGE_SECONDS)
+	ok(m.lead, "срочная погасла — вышла ведущая")
+	# «ведущая» без «держится» — обычная строка
+	m = Status.Message.new()
+	m.say("Течение сменилось", Status.MESSAGE_SECONDS, true)
+	m.say("Рыбы ушли", Status.MESSAGE_SECONDS, true, false, false, true)
+	ok(not m.next_keep and not m.next_lead, "lead без keep ничего не значит")

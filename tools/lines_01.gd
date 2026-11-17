@@ -122,7 +122,8 @@ static func run(seed_value: int) -> Dictionary:
 			var text := String(e.get("text", ""))
 			if text == "":
 				continue
-			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)))
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
 			got.append([text, _label(text, evs, w), leg_key, t, 0.0])
 			arrived.append(t)
 			r[leg_key]["got"] += 1
