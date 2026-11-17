@@ -1,0 +1,271 @@
+[
+  {
+    "id": "proba",
+    "text": "Я у сканера. Слушаю вас.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "key": "biolog-f",
+    "voice": "Sj1FsO8GTi4V4JRQz9Ik",
+    "context": "DeepDive SND009 biolog-f/proba. Exact approved Russian text; dry calm crew voice. Direction: Calm short pause between sentences. Same default voice settings for real/fake. Creator per passport.",
+    "node_id": "nvIJcjNMtttOHnqPJnQh",
+    "session_ids": [
+      "ZFRigUXuNiTnmxTxWALn"
+    ],
+    "generations": [
+      {
+        "id": "GY27JjV4HNp1p2A38Vd6",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Я у сканера. Слушаю вас.",
+        "duration_secs": 2.043356009070295,
+        "created_at_unix_ms": 1794948805007,
+        "price": {
+          "credits": 23.9976,
+          "price_cents": 0.43632,
+          "cost_fiat_currency": "usd"
+        }
+      }
+    ]
+  },
+  {
+    "id": "true-b01",
+    "text": "Я у сканера. Слушаю вас.",
+    "direction": "Спокойно и внимательно.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "key": "biolog-f",
+    "voice": "Sj1FsO8GTi4V4JRQz9Ik",
+    "context": "DeepDive SND009 biolog-f/true-b01. Exact approved Russian text; dry calm crew voice. Direction: Спокойно и внимательно.. Same default voice settings for real/fake. Creator per passport.",
+    "node_id": "KMmlL4yFKr17KgdKKoSn",
+    "session_ids": [
+      "SriR62QEvPxhg4OyAdYs"
+    ],
+    "generations": [
+      {
+        "id": "vgXEVrCME5yXPV2R4BMM",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Я у сканера. Слушаю вас.",
+        "duration_secs": 1.9504761904761905,
+        "created_at_unix_ms": 1794948808418,
+        "price": {
+          "credits": 23.9976,
+          "price_cents": 0.43632,
+          "cost_fiat_currency": "usd"
+        }
+      }
+    ]
+  },
+  {
+    "id": "true-b02",
+    "text": "Сверяю наблюдения с архивом.",
+    "direction": "Заинтересованно, без восторженного открытия.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "key": "biolog-f",
+    "voice": "Sj1FsO8GTi4V4JRQz9Ik",
+    "context": "DeepDive SND009 biolog-f/true-b02. Exact approved Russian text; dry calm crew voice. Direction: Заинтересованно, без восторженного открытия.. Same default voice settings for real/fake. Creator per passport.",
+    "node_id": "05eBIElg20YUdjTVZyNo",
+    "session_ids": [
+      "4QC6uxQrk7iInBRdL8KD"
+    ],
+    "generations": [
+      {
+        "id": "5HuTUIN0Pez5nDCpl0Qn",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Сверяю наблюдения с архивом.",
+        "duration_secs": 1.9040362811791383,
+        "created_at_unix_ms": 1794948812826,
+        "price": {
+          "credits": 27.997200000000003,
+          "price_cents": 0.50904,
+          "cost_fiat_currency": "usd"
+        }
+      }
+    ]
+  },
+  {
+    "id": "true-b03",
+    "text": "Записываю наблюдения по ходу.",
+    "direction": "Буднично, с живой речевой интонацией.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "key": "biolog-f",
+    "voice": "Sj1FsO8GTi4V4JRQz9Ik",
+    "context": "DeepDive SND009 biolog-f/true-b03. Exact approved Russian text; dry calm crew voice. Direction: Буднично, с живой речевой интонацией.. Same default voice settings for real/fake. Creator per passport.",
+    "node_id": "xHgouHuK0NsF8NEt5YfW",
+    "session_ids": [
+      "AnmWRhEi3qygynPCb7Bh"
+    ],
+    "generations": [
+      {
+        "id": "q5DaL2wgUIx7XxJKCIY1",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Записываю наблюдения по ходу.",
+        "duration_secs": 1.9969160997732427,
+        "created_at_unix_ms": 1794948817336,
+        "price": {
+          "credits": 28.9971,
+          "price_cents": 0.52722,
+          "cost_fiat_currency": "usd"
+        }
+      }
+    ]
+  },
+  {
+    "id": "true-b04",
+    "text": "Пока не спешу с выводами.",
+    "direction": "Небольшая задумчивая пауза после «пока».",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "key": "biolog-f",
+    "voice": "Sj1FsO8GTi4V4JRQz9Ik",
+    "context": "DeepDive SND009 biolog-f/true-b04. Exact approved Russian text; dry calm crew voice. Direction: Небольшая задумчивая пауза после «пока».. Same default voice settings for real/fake. Creator per passport.",
+    "node_id": "T1fLiaS2tZUNgFwUZtfh",
+    "session_ids": [
+      "Np5GWIHCHh9V8bGuThbq"
+    ],
+    "generations": [
+      {
+        "id": "qVGJMdCKkYKBFhSumZmO",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Пока не спешу с выводами.",
+        "duration_secs": 1.5789569160997732,
+        "created_at_unix_ms": 1794948826678,
+        "price": {
+          "credits": 24.997500000000002,
+          "price_cents": 0.4545,
+          "cost_fiat_currency": "usd"
+        }
+      }
+    ]
+  },
+  {
+    "id": "true-b05",
+    "text": "Сонарщик, готов сверить записи.",
+    "direction": "Обращение к коллеге, без срочности.",
+    "count": 1,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "key": "biolog-f",
+    "voice": "Sj1FsO8GTi4V4JRQz9Ik",
+    "context": "DeepDive SND009 biolog-f/true-b05. Exact approved Russian text; dry calm crew voice. Direction: Обращение к коллеге, без срочности.. Same default voice settings for real/fake. Creator per passport.",
+    "node_id": "QFcsjKUpDsE0BrFifwSv",
+    "session_ids": [
+      "avbWqt6Xk2rTORzYlmiP"
+    ],
+    "generations": [
+      {
+        "id": "bUGuPOM9SDbBA0HHe4ZA",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Сонарщик, готов сверить записи.",
+        "duration_secs": 2.136235827664399,
+        "created_at_unix_ms": 1794948832891,
+        "price": {
+          "credits": 30.996899999999997,
+          "price_cents": 0.56358,
+          "cost_fiat_currency": "usd"
+        }
+      }
+    ]
+  },
+  {
+    "id": "fake-light04",
+    "text": "Дайте свет. Включите прожектор, я посмотрю.",
+    "direction": "Вторая просьба почти повторяет интонацию первой.",
+    "count": 2,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "key": "biolog-f",
+    "voice": "Sj1FsO8GTi4V4JRQz9Ik",
+    "context": "DeepDive SND009 biolog-f/fake-light04. Exact approved Russian text; dry calm crew voice. Direction: Вторая просьба почти повторяет интонацию первой.. Same default voice settings for real/fake. Creator per passport.",
+    "node_id": "WTQLXK4QgLUmjEIwvsI1",
+    "session_ids": [
+      "hs9JkmYIwgYHI3YXjmDs",
+      "7LZVrdavmfc8KbWXLk5C"
+    ],
+    "generations": [
+      {
+        "id": "lOxYkSpUqYRvoh61LuTR",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Дайте свет. Включите прожектор, я посмотрю.",
+        "duration_secs": 2.972154195011338,
+        "created_at_unix_ms": 1794948837075,
+        "price": {
+          "credits": 42.99569999999999,
+          "price_cents": 0.7817399999999999,
+          "cost_fiat_currency": "usd"
+        }
+      },
+      {
+        "id": "Vi5wfORRyNmelDYKjGuM",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Дайте свет. Включите прожектор, я посмотрю.",
+        "duration_secs": 2.647074829931973,
+        "created_at_unix_ms": 1794948837117,
+        "price": {
+          "credits": 42.99569999999999,
+          "price_cents": 0.7817399999999999,
+          "cost_fiat_currency": "usd"
+        }
+      }
+    ]
+  },
+  {
+    "id": "fake-pulse04",
+    "text": "Дайте импульс сонара. Хочу сверить отметку.",
+    "direction": "Пауза на стыке фраз слегка неестественна, голос обычный.",
+    "count": 2,
+    "flow_id": "CkmgVTH6aqoiPXdmdulS",
+    "key": "biolog-f",
+    "voice": "Sj1FsO8GTi4V4JRQz9Ik",
+    "context": "DeepDive SND009 biolog-f/fake-pulse04. Exact approved Russian text; dry calm crew voice. Direction: Пауза на стыке фраз слегка неестественна, голос обычный.. Same default voice settings for real/fake. Creator per passport.",
+    "node_id": "9yOJkCISZtOeTUBtplcc",
+    "session_ids": [
+      "TronKCtmeJrZ5Xez9Obe",
+      "d4Ehs7xXCRFRaQ4Lxyhh"
+    ],
+    "generations": [
+      {
+        "id": "L2fpc5gGcMW539EzfyXh",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Дайте импульс сонара. Хочу сверить отметку.",
+        "duration_secs": 2.8792743764172335,
+        "created_at_unix_ms": 1794948846329,
+        "price": {
+          "credits": 42.99569999999999,
+          "price_cents": 0.7817399999999999,
+          "cost_fiat_currency": "usd"
+        }
+      },
+      {
+        "id": "atw8rZ3Fz4C6SbMQeozf",
+        "status": "completed",
+        "model_id": "eleven_multilingual_v2",
+        "modality": "audio",
+        "prompt": "Дайте импульс сонара. Хочу сверить отметку.",
+        "duration_secs": 2.9257142857142857,
+        "created_at_unix_ms": 1794948846369,
+        "price": {
+          "credits": 42.99569999999999,
+          "price_cents": 0.7817399999999999,
+          "cost_fiat_currency": "usd"
+        }
+      }
+    ]
+  }
+]

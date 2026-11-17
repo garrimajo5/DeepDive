@@ -1,0 +1,29 @@
+[aist#0:0/pcm_s16le @ 000001965ce3e600] Guessed Channel Layout: mono
+Input #0, wav, from 'C:\Users\FEDYA\AppData\Local\Temp\DeepDive-biolog-f-6aca193959db4edd972b40b1f489f985/technical/stage2-20261117/biolog-f/fake-light04-1-trim.wav':
+  Metadata:
+    encoder         : Lavf61.7.100
+  Duration: 00:00:03.03, bitrate: 768 kb/s
+  Stream #0:0: Audio: pcm_s16le ([1][0][0][0] / 0x0001), 48000 Hz, mono, s16, 768 kb/s
+Stream mapping:
+  Stream #0:0 -> #0:0 (pcm_s16le (native) -> pcm_s16le (native))
+Output #0, null, to 'pipe:':
+  Metadata:
+    encoder         : Lavf61.7.100
+  Stream #0:0: Audio: pcm_s16le, 192000 Hz, mono, s16, 3072 kb/s
+      Metadata:
+        encoder         : Lavc61.19.100 pcm_s16le
+[Parsed_loudnorm_0 @ 000001965b4b70c0]
+{
+	"input_i" : "-17.89",
+	"input_tp" : "-4.05",
+	"input_lra" : "0.10",
+	"input_thresh" : "-27.89",
+	"output_i" : "-20.01",
+	"output_tp" : "-6.25",
+	"output_lra" : "0.00",
+	"output_thresh" : "-30.01",
+	"normalization_type" : "dynamic",
+	"target_offset" : "0.01"
+}
+[out#0/null @ 000001965ce60680] video:0KiB audio:1135KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+size=N/A time=00:00:03.10 bitrate=N/A speed=57.4x
