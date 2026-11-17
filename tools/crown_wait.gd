@@ -4,7 +4,8 @@ extends SceneTree
 ## `EcoFish.CROWN_ALARM`) и снова прячет крону. Здесь — бывает ли это в сцене: мир целиком (`EcoView`, как в
 ## tools/mid_calm.gd `make`), тёмная стоянка у 00, свет и проход 00 → середина (стоянка) → 01, затем долгая стоянка у
 ## 01 (33; −22) со светом. Headless, без узлов сцены; облачный расчёт, не телефонный.
-##   godot --headless --path . -s tools/crown_wait.gd [-- seeds=16 stay=<с> dark=<с> mid=<с>]
+##   godot --headless --path . -s tools/crown_wait.gd [-- seeds=16 stay=<с> dark=<с> mid=<с> seed=<одно зерно> trace=1]
+## `trace=1` — отпечаток мира раз в 10 с (`tools/eco_print.gd`, (ан)): сравнить с теми же строками в логе CI.
 ## По зерну на стоянке у 01: сколько секунд стаи кроны в тревоге (`Shoal.alarm`), сколько эпизодов тревоги и самый
 ## долгий, строк кроны «flee» на шине; «залипание» — тревога кроны, пока ближайший к оси серпохвост голоден
 ## (> `EcoPred.HUNT_HUNGER`) и внутри `CROWN_ALARM`: самый долгий такой отрезок и на каком расстоянии от оси хищник
@@ -27,6 +28,7 @@ extends SceneTree
 ## на чистку к станции внутри кольца — чтобы нулевая «чистка» у 01 не скрыла потерю чистки вообще.
 
 const MidCalm := preload("res://tools/mid_calm.gd")
+const EcoPrint := preload("res://tools/eco_print.gd")
 const DT := 1.0 / 30.0
 const DARK := 30.0
 const MID := 25.0
@@ -46,10 +48,13 @@ static var mid := MID
 static var stay := STAY
 ## Печатать строки сразу (`_init`; тесты собирают молча).
 static var live := false
+## Отпечаток мира раз в `EcoPrint.EVERY` с (`tools/eco_print.gd`, (ан)): строки — в итоге зерна, ключ "print".
+static var trace := false
 
 
 func _init() -> void:
 	var seeds := 16
+	var one := -1
 	for a in OS.get_cmdline_user_args():
 		var kv := a.split("=")
 		if kv.size() != 2:
@@ -59,7 +64,13 @@ func _init() -> void:
 			"stay": stay = float(kv[1])
 			"dark": dark = float(kv[1])
 			"mid": mid = float(kv[1])
+			"trace": trace = kv[1] == "1"
+			"seed": one = int(kv[1])
 	live = true
+	if one >= 0:
+		print(seed_line(one, run(one)))
+		quit()
+		return
 	report(seeds)
 	quit()
 
@@ -110,6 +121,9 @@ static func run(seed_value: int) -> Dictionary:
 			if _flat(e.pos, axis) >= EcoPred.REEF_KEEP:
 				r["cleaned_out"] += 1
 	w.bus.emitted.connect(listen)
+	var prints: Array[String] = []
+	var next_print := 0.0
+	r["print"] = prints
 	# Ноги: куда, сколько стоять. Тёмная стоянка — без света у 00.
 	var legs: Array = [[MidCalm.PATH[0], dark, false], [MidCalm.PATH[1], mid, true], [MidCalm.PATH[2], stay, true]]
 	var leg := 0
@@ -137,6 +151,9 @@ static func run(seed_value: int) -> Dictionary:
 			ship.pos = MidCalm.ship_at(Vector2(ship.pos.x + mv.x, ship.pos.z + mv.y))
 		w.ship = ship
 		at_01[0] = leg == 2 and d.length() < 0.5
+		if trace and w.time >= next_print - 1e-6:
+			put(prints, EcoPrint.line(w.time, EcoPrint.of(w)))
+			next_print += EcoPrint.EVERY
 		w.step(DT)
 		w.take_link()
 		for p: EcoPred.Pred in ev.preds.all:

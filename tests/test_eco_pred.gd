@@ -1212,7 +1212,13 @@ func test_scene_01_transit_capped() -> void:
 	tool.set("dark", tool.DARK)
 	tool.set("mid", tool.MID)
 	tool.set("stay", tool.STAY)
+	ok(tool.get("trace") != null, "в инструменте есть trace")
+	tool.set("trace", true)   # отпечаток мира в лог CI — где полный мир расходится с облаком (#1400, (ан))
 	var r: Dictionary = tool.run(1)
+	tool.set("trace", false)
+	for s in r["print"]:
+		print("    " + s)
+	ok((r["print"] as Array).size() >= 15, "отпечатки раз в 10 с за весь проход (%d)" % (r["print"] as Array).size())
 	print("    зерно 1: транзит самый долгий %.1f с, транзит за стоянку %.1f с, тревога кроны %.1f с, голод у рифа до %.2f" % [
 		r["transit"], r["why"]["transit"], r["alarm"], r["hunger"]])
 	ok(float(r["hunger"]) > EcoPred.HUNT_HUNGER, "у рифа был голодный серпохвост (%.2f)" % r["hunger"])
