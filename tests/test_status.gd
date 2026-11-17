@@ -383,16 +383,78 @@ func test_message_lead_keeps_queue() -> void:
 	eq(m.next, lost, "ведущая сменяет ждущую «держится»")
 	m.say("Хищник снова потерял корабль", Status.MESSAGE_SECONDS, true, false, true, true)
 	eq(m.next, "Хищник снова потерял корабль", "ведущую сменяет только ведущая")
-	# срочная выходит сразу, ждущая ведущая не теряется
+	# срочная выходит сразу; ведущая, пришедшая под ней, ждёт, и другая «держится» её не сменяет
 	m.say("Серпохвост замер", Status.MESSAGE_SECONDS, true, true)
 	eq(m.text, "Серпохвост замер", "«замер» — сразу")
-	eq(m.next, "Хищник снова потерял корабль", "ведущая ждёт")
+	m.say(lost, Status.MESSAGE_SECONDS, true, false, true, true)
+	eq(m.next, lost, "потеря после «замера» ждёт")
 	m.say(feed, Status.MESSAGE_SECONDS, true, false, true)
-	eq(m.next, "Хищник снова потерял корабль", "и под срочной её не сменяет другая «держится»")
+	eq(m.next, lost, "и под срочной её не сменяет другая «держится»")
 	m.update(Status.MESSAGE_SECONDS)
-	ok(m.lead, "срочная погасла — вышла ведущая")
+	eq(m.text, lost, "срочная погасла — вышла ведущая")
+	ok(m.lead, "ведущей и осталась")
 	# «ведущая» без «держится» — обычная строка
 	m = Status.Message.new()
 	m.say("Течение сменилось", Status.MESSAGE_SECONDS, true)
 	m.say("Рыбы ушли", Status.MESSAGE_SECONDS, true, false, false, true)
 	ok(not m.next_keep and not m.next_lead, "lead без keep ничего не значит")
+
+
+## Ждущий отбой устарел, когда пришла новая угроза (ГД, PR #1968): «потерял корабль» не выходит следом за «замер»,
+## пока хищник не потерял корабль снова. Фон (кормёжка, бегство рыб) ждущий отбой по-прежнему не стирает.
+func test_message_alert_drops_waiting_lead() -> void:
+	var lost := "Хищник потерял корабль и отворачивает"
+	var alert := "Серпохвост замер"
+	var m := Status.Message.new()
+	m.say("Течение сменилось", Status.MESSAGE_SECONDS, true)
+	m.update(0.3)
+	m.say(lost, Status.MESSAGE_SECONDS, true, false, true, true)
+	eq(m.next, lost, "отбой ждёт")
+	m.say("Рыбы бегут от рифа", Status.MESSAGE_SECONDS, true, false, true)
+	eq(m.next, lost, "фон отбой не стирает")
+	m.say(alert, Status.MESSAGE_SECONDS, true, true)
+	eq(m.text, alert, "«замер» — сразу")
+	eq(m.next, "", "ждущий отбой снят новой угрозой")
+	ok(not m.next_keep and not m.next_lead, "и его признаки тоже")
+	m.update(Status.MESSAGE_SECONDS)
+	eq(m.text, "", "строка истекла, новой потери не было — отбоя нет")
+	m.update(1.0)
+	eq(m.text, "", "и позже не выходит")
+	m.say(lost, Status.MESSAGE_SECONDS, true, false, true, true)
+	eq(m.text, lost, "новая потеря — новый отбой")
+	ok(m.lead, "ведущая")
+	# ждущую не ведущую «держится» и обычную строку «замер» не трогает — как раньше
+	m = Status.Message.new()
+	m.say("Течение сменилось", Status.MESSAGE_SECONDS, true)
+	m.update(0.3)
+	m.say("Хищник схватил рыбу у цветка", Status.MESSAGE_SECONDS, true, false, true)
+	m.say(alert, Status.MESSAGE_SECONDS, true, true)
+	eq(m.next, "Хищник схватил рыбу у цветка", "не ведущая «держится» ждёт под «замер»")
+
+
+## То же через события мира (`Main.on_eco_event`): ждущий отбой → «замер» → строка истекла, новой потери не было.
+func test_scene_alert_drops_waiting_lost() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(1)
+	still_world(main)
+	for i in 5:
+		main.step(1.0 / 30.0)
+	var lost := "Серпохвост потерял корабль и отворачивает — тестовая строка"
+	var alert := "Серпохвост замер и смотрит на корабль — тестовая строка"
+	main.on_eco_event(EcoLink.message("Стайка рыбок у мха — тестовая строка"))
+	main.step(0.1)
+	main.on_eco_event(EcoLink.observe("pred", "lost", lost, false, true, true))
+	eq(main.message.next, lost, "отбой ждёт очереди")
+	main.on_eco_event(EcoLink.observe("fish", "flee", "Рыбы бегут от рифа — тестовая строка", false, true))
+	eq(main.message.next, lost, "фон его не стирает")
+	main.on_eco_event(EcoLink.observe("pred", "alert", alert, true))
+	eq(main.message.text, alert, "«замер» на приборах")
+	eq(main.message.next, "", "ждущий отбой снят")
+	for i in 60:   # 6 с: строка «замер» истекла (4,2 с), новой потери не было
+		main.step(0.1)
+		ok(main.message.text != lost, "старый отбой не выходит (кадр %d)" % i)
+	main.on_eco_event(EcoLink.observe("pred", "lost", lost, false, true, true))
+	eq(main.message.text, lost, "новая потеря — отбой на приборах")
+	main.queue_free()
+	await frames(1)

@@ -198,7 +198,8 @@ class Message:
 	func say(msg: String, seconds: float = MESSAGE_SECONDS, wait := false, urgent := false, held := false,
 			leading := false) -> void:
 		if urgent and wait and not msg.is_empty():
-			if msg == next:
+			# ждущий отбой («потерял корабль») после новой угрозы устарел — не выходит следом за «замер» (ГД, #1968)
+			if msg == next or next_lead:
 				_drop_next()
 			_show(msg, seconds)
 			world = true
