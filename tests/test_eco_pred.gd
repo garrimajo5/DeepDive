@@ -1610,3 +1610,28 @@ func test_pred_jerk_hunt_log() -> void:
 	eq(tool._why(pp, pr, f, false), "other", "ни укрытий, ни станций — другое")
 	f.agent.alive = false
 	eq(tool._why(pp, pr, f, true), "gone", "добычу съел другой — раньше таймера")
+
+
+## `tools/pred_jerk.gd shot=` (#1753, 17.11): долгий кадр снимка в окне шага `jerk` — мир проходит не время кадра, а
+## `EcoView.world_dt` (не дольше `SLOW_STEP`, остаток — следующим кадром). Ровный ход 1 м/с по времени кадра даёт
+## «рывок» центра больше нормы тестера (40), по времени мира — ноль: так у тестера «центр РЫВОК» 47 / 93.
+func test_pred_jerk_shot_frame_is_measure_error() -> void:
+	var tool: GDScript = load("res://tools/pred_jerk.gd")
+	ok(tool != null, "pred_jerk.gd загружается")
+	var ev := EcoView.new()
+	var pts: Array[Vector3] = []
+	var fd: Array[float] = []
+	var wd: Array[float] = []
+	var x := 0.0
+	for i in 141:
+		var dt := 0.2 if i == 70 else 0.021
+		var h := ev.world_dt(dt)
+		x += h   # 1 м/с
+		pts.append(Vector3(x, 0, 0))
+		fd.append(dt)
+		wd.append(h)
+	ev.free()
+	ok(wd[70] < fd[70] and wd[71] > fd[71], "кадр снимка мир не догоняет сразу: %.3f из %.3f, следом %.3f" % [wd[70], fd[70], wd[71]])
+	var r: Array = tool.shot_accel(pts, fd, wd)
+	ok(r[1] > QaRunner.JERK_CORE_LIMIT, "по времени кадра — «рывок»: макс %.0f м/с²" % r[1])
+	ok(r[3] < 0.5, "по времени мира хода без рывка: макс %.2f м/с²" % r[3])
