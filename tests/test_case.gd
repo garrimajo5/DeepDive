@@ -49,7 +49,7 @@ func near(got: float, want: float, eps: float = 1e-6, msg: String = "") -> bool:
 
 ## Тихий живой мир для сценовых тестов корабля (#1350, фокус А п. 4): шаг мира — ~60 % времени `main.step`
 ## в headless, а тесту хода, отсеков или хронометража он не нужен — и случайный укус его не заденет.
-## События мира тест кладёт сам: `send`.
+## События мира тест кладёт сам: `send`. У гостя сети (`step_client`) мир тоже стоит.
 class StillEco:
 	extends EcoView
 	var send: Array[Dictionary] = []
@@ -58,6 +58,10 @@ class StillEco:
 		var out := send.duplicate()
 		send.clear()
 		return out
+
+	## Гость сети (`NetGame.client_eco`): мир не идёт и по кадру хоста не встаёт.
+	func step_client(_dt: float, _ship: EcoLink.ShipState, _near: PackedFloat32Array = PackedFloat32Array()) -> void:
+		pass
 
 
 ## Заменить живой мир сцены тихим (после `add_child(main)` и кадра). Цена — ~0,15 с, окупается с ~20 шагов.
