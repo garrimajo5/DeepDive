@@ -409,8 +409,9 @@ func take_link() -> Array[Dictionary]:
 		var t := "" if repeat(ev.species, ev.note, ev.pos) else ev.text()
 		var hot := EcoLink.urgent(ev.species, ev.note)
 		var held := EcoLink.keep(ev.species, ev.note)
+		var lead := EcoLink.lead(ev.species, ev.note)
 		if ev.is_observation():
-			out.append(EcoLink.observe(ev.species, ev.note, t, hot, held))
+			out.append(EcoLink.observe(ev.species, ev.note, t, hot, held, lead))
 		elif t != "":
-			out.append(EcoLink.message(t, hot, held))
+			out.append(EcoLink.message(t, hot, held, lead))
 	return out

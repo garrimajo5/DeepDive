@@ -71,6 +71,8 @@ const PRED_PER_DIVE := 0.15
 ##     попроще, пока не покажется MESSAGE_SECONDS; у остальных ключа нет. То же поле бывает и у OBSERVE.
 ##     "keep": true (только у строк из KEEP, #1555) — строка «держится»: на приборы встаёт в очередь, как обычная, а
 ##     вышла — строки мира её не перебивают MESSAGE_SECONDS; срочная перебивает. То же поле бывает и у OBSERVE.
+##     "lead": true (только у строк из KEEP_LEAD, вместе с "keep", #1400 (э)) — ведущая «держится»: ждущую её не
+##     сменяет другая «держится» (бегство рыб, кормёжка хищника), а она сама ждущую другую сменяет.
 ## {"type": OBSERVE, "species": "fish", "note": "flee", "text": "…"}      — наблюдение для журнала (handleEvents
 ##     в js/game.js): событие шины EcoBus с заметкой вида (Species.is_observation) не дальше EcoBus.HEARING от корабля.
 ##     text — строка на приборы ("" — без текста); корабль показывает её сам, как MESSAGE, а у нового наблюдения
@@ -134,22 +136,26 @@ static func near(species: String, name: String, pos: Vector3, ship_pos: Vector3,
 		"sonar": sonar, "scan": scan}
 
 
-static func message(text: String, is_urgent := false, is_keep := false) -> Dictionary:
+static func message(text: String, is_urgent := false, is_keep := false, is_lead := false) -> Dictionary:
 	var e := {"type": MESSAGE, "text": text}
-	if is_urgent:
-		e["urgent"] = true
-	if is_keep:
-		e["keep"] = true
+	_flags(e, is_urgent, is_keep, is_lead)
 	return e
 
 
-static func observe(species: String, note: String, text: String = "", is_urgent := false, is_keep := false) -> Dictionary:
+static func observe(species: String, note: String, text: String = "", is_urgent := false, is_keep := false,
+		is_lead := false) -> Dictionary:
 	var e := {"type": OBSERVE, "species": species, "note": note, "text": text}
+	_flags(e, is_urgent, is_keep, is_lead)
+	return e
+
+
+static func _flags(e: Dictionary, is_urgent: bool, is_keep: bool, is_lead: bool) -> void:
 	if is_urgent:
 		e["urgent"] = true
 	if is_keep:
 		e["keep"] = true
-	return e
+		if is_lead:
+			e["lead"] = true
 
 
 ## Строки угрозы (#1498): вид → заметки события, чья строка на приборах приоритетная («urgent» у MESSAGE/OBSERVE).
@@ -163,11 +169,19 @@ static func urgent(species: String, note: String) -> bool:
 
 ## Строки «держится» (#1555): вид → заметки, чья строка на приборах живёт все 4,2 с («keep» у MESSAGE/OBSERVE).
 ## «Хищник потерял корабль» — единственный знак «угроза ушла» для того, кто не слышит щелчков: по ней включают свет.
-const KEEP := {"pred": ["lost"]}
+## Бегство рыб и кормёжка хищника — последствие угрозы у цветка (решение 08.11, ГД #1400 14.11 (э) вариант 2, (аг)):
+## фон их не сменяет.
+const KEEP := {"pred": ["lost", "catch"], "fish": ["flee"]}
+## Ведущие из KEEP (#1400 (э)): «потерял корабль» не теряется за другой «держится» («lead» у MESSAGE/OBSERVE).
+const KEEP_LEAD := {"pred": ["lost"]}
 
 
 static func keep(species: String, note: String) -> bool:
 	return note in (KEEP.get(species, []) as Array)
+
+
+static func lead(species: String, note: String) -> bool:
+	return note in (KEEP_LEAD.get(species, []) as Array)
 
 
 static func voice(role: int, text: String, fake := false, ask := "", silent := false, id := "") -> Dictionary:
