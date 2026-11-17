@@ -160,3 +160,92 @@ func test_stage_near_alerts_with_game_numbers() -> void:
 	w.ship.light_on = false
 	_secs(w, 0.2)
 	eq(pr.mode, EcoPred.Mode.RETREAT, "свет погас — отход")
+
+
+## Сцена 00→01 (п. 2 (ав)): срочная строка «замер» (`pred/alert`, ранг `EcoLink.URGENT`, #1498) перебивает свежую
+## строку фона сразу и держится все `MESSAGE_SECONDS`, пока идёт поток строк фона, — фон ждёт очереди (`next`),
+## срочную не сменяет и не срезает до `MIN_SHOW`. Флаги строк — из мира (`take_link`), показ — `Status.Message`,
+## как `Main._world_say`; фон — реальные заметки стоянки у 01 (`grazer/graze`, `grot/hide`), как в (аб).
+## Шов «ранг мира × очередь под потоком фона» юнит-тестом очереди (`test_status.test_urgent_world_line_holds`)
+## не покрыт: там флаги выставлены руками. Мутация: «alert» без ранга в `EcoLink.URGENT` — срочная ждёт очереди
+## за строкой фона и сменяется следующей строкой фона, на приборах её нет вовсе. Без Main.
+func test_alert_urgent_line_held_under_background_stream() -> void:
+	var r := _near(0)
+	var w: EcoWorld = r[0]
+	var line_a := "Гребневики пасутся на мху у подножия рифа"
+	var bg_texts := {   # поток фона после «замера» (+0,15 с, +0,30 с, +1,5 с, +3,0 с) — строки стоянки у 01, как в (аб)
+		"Гребневики перешли на соседнее пятно мха": true,
+		"Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял": true,
+		"Гребневики пасутся на мху у подножия рифа": true,
+	}
+	var msg := Status.Message.new()
+	var shown: Array = []   # [текст, когда встал, сколько виден]
+	var at := {"a": -1.0, "alert": -1.0}
+	var stream_at: Array[float] = []
+	var alert_text := ""
+	var alert_urgent := false
+	var bg_during := 0   # строки фона, пришедшие, пока на приборах «замер»
+	var bg_i := 0
+	var t := 0.0
+	while t < 7.0:
+		if at["a"] < 0.0 and t >= 0.499 and t < 1.5:
+			w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(12, -4, 8), func(): return line_a)
+		if not w.ship.light_on and t >= 0.799:
+			w.ship.light_on = true   # голодный хищник в 25 м: «замер» на этом шаге
+		if not stream_at.is_empty() and t >= stream_at[0] - 0.001:
+			stream_at.remove_at(0)
+			if bg_i == 0:
+				w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(-8, -4, 10),
+					func(): return "Гребневики перешли на соседнее пятно мха")
+			elif bg_i == 1:
+				w.emit(EcoGrot.ID, "hide", w.ship.pos + Vector3(10, -5, -7),
+					func(): return "Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял")
+			elif bg_i == 2:
+				w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(6, -4, -12), func(): return line_a)
+			else:
+				w.emit(EcoGrot.ID, "hide", w.ship.pos + Vector3(-12, -3, -6),
+					func(): return "Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял")
+			bg_i += 1
+		w.step(0.05)
+		t += 0.05
+		for e in w.take_link():
+			if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+				continue
+			var text := String(e.get("text", ""))
+			if text == "":
+				continue
+			if text == line_a and at["a"] < 0.0:
+				at["a"] = t
+			elif text.contains("замер") and at["alert"] < 0.0:
+				at["alert"] = t
+				alert_text = text
+				alert_urgent = bool(e.get("urgent", false))
+				stream_at.assign([t + 0.15, t + 0.30, t + 1.5, t + 3.0])
+			elif not alert_text.is_empty() and msg.text == alert_text and bg_texts.has(text):
+				bg_during += 1   # строка фона пришла, пока на приборах срочная
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
+		msg.update(0.05)
+		if msg.text != "" and (shown.is_empty() or shown[-1][0] != msg.text):
+			shown.append([msg.text, t, 0.0])
+		if msg.text != "":
+			shown[-1][2] = t - float(shown[-1][1]) + 0.05   # кадр t виден до следующего шага
+	var a_seen := 0.0
+	var alert_seen := 0.0
+	for s: Array in shown:
+		if String(s[0]).contains("замер"):
+			alert_seen = maxf(alert_seen, float(s[2]))
+		elif String(s[0]) == line_a:
+			a_seen = maxf(a_seen, float(s[2]))
+	var lines := PackedStringArray()
+	for s: Array in shown:
+		lines.append("%.2f с «%s» %.2f с" % [s[1], String(s[0]).left(40), s[2]])
+	print("    «замер» пришёл на %.2f с (фон на %.2f с), фона при срочной %d; на приборах: %s" % [
+		at["alert"], at["a"], bg_during, " | ".join(lines)])
+	ok(at["a"] > 0.0 and at["alert"] > 0.0, "строка фона и «замер» пришли")
+	ok(at["a"] < at["alert"], "фон был на приборах, когда пришла срочная — прерывание реальное")
+	ok(a_seen < Status.Message.MIN_SHOW, "срочная перебила свежую строку фона (та видна %.2f с < MIN_SHOW)" % a_seen)
+	ok(alert_urgent, "«замер» пришёл с рангом «срочная» (EcoLink.URGENT)")
+	ok(bg_during >= 3, "пока виден «замер», пришёл поток фона (%d строки) — проверка не пустая" % bg_during)
+	ok(alert_seen >= Status.MESSAGE_SECONDS - 0.051, "срочная строка видна все %.1f с (по факту %.2f с)" % [
+		Status.MESSAGE_SECONDS, alert_seen])
