@@ -239,15 +239,16 @@ func status(x: float, z: float, lore: LayerLore = null) -> String:
 
 
 ## Мнения ролей перед решением (js/run.js R.opinions): [кто, наверх?, почему]. Решает игрок, мнения — подсказка.
+## Строки короткие: с приставкой роли влезают в панель на 16:9 кеглем второго плана (#1970, `VoteLayout`).
 static func opinions(hull: float, energy: float, hot: bool, in_silt: bool, cargo_n: int) -> Array:
 	return [
-		["Пилот", hull < 50.0, "корпус %d%% — второй такой удар не выдержим" % roundi(hull) if hull < 50.0
-			else "корабль слушается, можно идти дальше"],
+		["Пилот", hull < 50.0, "корпус %d%% — удара не выдержим" % roundi(hull) if hull < 50.0
+			else "корабль слушается"],
 		["Инженер", energy < 40.0 or hot, "реактор перегрет" if hot
-			else "энергии %d — не хватит на обратный путь" % floori(energy) if energy < 40.0 else "реактор в норме"],
+			else "энергии %d — не хватит назад" % floori(energy) if energy < 40.0 else "реактор в норме"],
 		["Сонарщик", in_silt, "вокруг ил, мы слепые" if in_silt else "сонар чистый"],
-		["Биолог", cargo_n >= 4, "в трюме %d образцов — пора их довезти" % cargo_n if cargo_n >= 4
-			else "образцов мало, внизу их больше"],
+		["Биолог", cargo_n >= 4, "в трюме %d — пора наверх" % cargo_n if cargo_n >= 4
+			else "образцов мало, внизу больше"],
 	]
 
 
