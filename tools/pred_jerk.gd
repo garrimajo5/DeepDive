@@ -9,6 +9,10 @@ extends SceneTree
 ##   hunts — журнал охот на светляков хищника 0: начало, длина, чем кончилась (`HUNT_WHY`), пауза после прошлой;
 ##   итог — сколько охот началось быстрее `QUICK` с после конца прошлой (#1753: так видно перескоки
 ##   «бросил — тут же новая»; с `free` и `run=300` — пять минут мира).
+##   shot=<мс>@<с> — один долгий кадр (снимок тестера) на этой секунде: строка «снимок» сравнивает ускорение центра
+##   тела за 3 с вокруг него, как шаг тестера `jerk` (`QaRunner.accel` по времени кадра), и по времени мира
+##   (`EcoWorld.time` — мир идёт `EcoView.world_dt`, не дольше `SLOW_STEP` за кадр, остаток — следующим кадром).
+##   Разница — ошибка замера, не ход хищника (#1753, 17.11: «центр РЫВОК» 47 / 93 у `38 → 38a`, в окне снимок `38-zamer`).
 ## lite — «Экономно» (`PredView.set_lite`). 12.11: на «Экономно» кончик хвоста в 25–60 м — 99 % ≈ 200 м/с² против
 ## 13 на «Обычно» (поза раз в 0,1 с) — исправлено в той же PR.
 
@@ -68,12 +72,28 @@ func _run() -> void:
 	var hist := []   # кадр → {local: [Vector3], origin, basis, mode, v, rate, mix}
 	var n := int(run / dt)
 	var last_mode := -1
+	var shot_ms := 0.0
+	var shot_at := -1.0
+	if kv.has("shot"):
+		var sp: PackedStringArray = kv["shot"].split("@")
+		shot_ms = float(sp[0])
+		shot_at = float(sp[1]) if sp.size() > 1 else 1.5
+	var shot_f := int(shot_at / dt) if shot_at >= 0.0 else -1
+	var origins: Array[Vector3] = []
+	var frame_dts: Array[float] = []
+	var world_dts: Array[float] = []
 	var hunts := []   # [начало, конец (−1 — идёт), ключ HUNT_WHY]
 	for f in n:
 		var was_hunt := pr.mode == EcoPred.Mode.HUNT
 		var prey: EcoFish.Fish = pr.prey
 		var t_before := pr.agent.timer
-		ev.step(dt, ship)
+		var fdt := shot_ms / 1000.0 if f == shot_f else dt
+		var w0 := ev.world.time
+		ev.step(fdt, ship)
+		if shot_f >= 0 and absf(f - shot_f) * dt <= 1.5:
+			origins.append(body.global_transform.origin)
+			frame_dts.append(fdt)
+			world_dts.append(ev.world.time - w0)
 		if not was_hunt and pr.mode == EcoPred.Mode.HUNT:
 			hunts.append([(f + 1) * dt, -1.0, "end"])
 		elif was_hunt and pr.mode != EcoPred.Mode.HUNT and not hunts.is_empty():
@@ -89,6 +109,10 @@ func _run() -> void:
 		if pr.mode != last_mode:
 			print("%6.2f с  режим %s  v %.2f  до корабля %.1f" % [f * dt, EcoPred.Mode.keys()[pr.mode], rec["v"], rec["d"]])
 			last_mode = pr.mode
+	if shot_f >= 0:
+		var r := shot_accel(origins, frame_dts, world_dts)
+		print("снимок %.0f мс на %.2f с (режим %s, v %.2f): центр тела за 3 с — по времени кадра (шаг jerk) 99 %% %.0f, макс %.0f; по времени мира 99 %% %.0f, макс %.0f м/с²" % [
+				shot_ms, shot_at, EcoPred.Mode.keys()[hist[shot_f]["mode"]], hist[shot_f]["v"], r[0], r[1], r[2], r[3]])
 	# всплески: вторая разность локальной позы кости за кадр (м/с²), курс тела — угловое ускорение
 	print("\nкость: медиана / 99 % / максимум ускорения в осях тела (м/с²), где максимум")
 	for bi in bones.size():
@@ -161,6 +185,15 @@ func _run() -> void:
 				sm["quick"], "—" if sm["min_pause"] == INF else "%.2f с" % sm["min_pause"], ", ".join(why)])
 	ev.free()
 	quit()
+
+
+## Ускорение центра тела двумя способами: [99 %, макс] по времени кадра (как `QaRunner` шаг `jerk`) и [99 %, макс]
+## по времени мира. pts[i] — поза после кадра i, frame_dts[i] — его время, world_dts[i] — сколько прошёл мир.
+static func shot_accel(pts: Array[Vector3], frame_dts: Array[float], world_dts: Array[float]) -> Array[float]:
+	var a := QaRunner.accel(pts, frame_dts)
+	var b := QaRunner.accel(pts, world_dts)
+	var top := func(s: Array[float]) -> float: return 0.0 if s.is_empty() else s[s.size() - 1]
+	return [QaRunner.p99(a), top.call(a), QaRunner.p99(b), top.call(b)]
 
 
 ## Чем кончилась охота, если в шаге мира режим HUNT сменился: prey — добыча до шага, timed — таймер 12 с истекал.
