@@ -85,13 +85,21 @@ func _jerk_begin(n: int, s: float, lite: bool) -> void:
 	if sk == null or sk.find_bone("Tail03") < 0:
 		_log("рывки: у хищника %d нет кости Tail03" % n)
 		return
-	_jerk = {"n": n, "left": s, "s": s, "lite": lite or pv.lite, "was": pv.lite, "sk": sk, "bone": sk.find_bone("Tail03"),
-			"body": pv.bodies[n], "tail": [] as Array[Vector3], "core": [] as Array[Vector3], "dts": [] as Array[float],
-			"dt": 0.0, "dmin": INF, "dmax": 0.0}
+	_jerk_open(n, s, lite or pv.lite, pv.lite, sk, pv.bodies[n])
 	pv.lite = lite or pv.lite   # без lite — как ставит уровень графики
 
 
-## Кадр замера: поза, которую мир поставил прошлым шагом (его dt — прошлый кадр), — в ряды; конец — строка в лог.
+## Состояние замера: скелет с костью Tail03 и тело хищника n; was — прежний `PredView.lite` (вернётся в конце).
+func _jerk_open(n: int, s: float, lite: bool, was: bool, sk: Skeleton3D, body: Node3D) -> void:
+	_jerk = {"n": n, "left": s, "s": s, "lite": lite, "was": was, "sk": sk, "bone": sk.find_bone("Tail03"),
+			"body": body, "tail": [] as Array[Vector3], "core": [] as Array[Vector3], "dts": [] as Array[float],
+			"wt": NAN, "dmin": INF, "dmax": 0.0}
+
+
+## Кадр замера: поза, которую мир поставил прошлым шагом, — в ряды; конец — строка в лог. Шаг позы — сколько за
+## прошлый кадр прошёл мир (`EcoWorld.time`), а не время кадра: долгий кадр (снимок в окне замера) мир проходит
+## одним подшагом ≤ `SLOW_STEP`, остаток — следующими кадрами (`EcoView.world_dt`); по времени кадра ровный ход
+## давал «центр РЫВОК» 47 / 93 м/с² (#1958). Окно замера `left` — по времени кадра, как у сценария.
 func _jerk_tick(dt: float) -> void:
 	if _jerk.is_empty():
 		return
@@ -101,14 +109,15 @@ func _jerk_tick(dt: float) -> void:
 		_log("рывки: хищник %d пропал из сцены" % _jerk["n"])
 		_jerk = {}
 		return
-	if _jerk["dt"] > 0.0:
+	var wt: float = main.eco.world.time
+	if not is_nan(_jerk["wt"]):
 		(_jerk["tail"] as Array[Vector3]).append(sk.get_bone_global_pose(_jerk["bone"]).origin)
 		(_jerk["core"] as Array[Vector3]).append(body.global_position)
-		(_jerk["dts"] as Array[float]).append(_jerk["dt"])
+		(_jerk["dts"] as Array[float]).append(wt - _jerk["wt"])
 		var d := body.global_position.distance_to(main.helm.pos)
 		_jerk["dmin"] = minf(_jerk["dmin"], d)
 		_jerk["dmax"] = maxf(_jerk["dmax"], d)
-	_jerk["dt"] = dt
+	_jerk["wt"] = wt
 	_jerk["left"] -= dt
 	if _jerk["left"] > 0.0:
 		return

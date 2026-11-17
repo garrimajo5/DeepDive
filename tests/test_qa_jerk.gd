@@ -142,3 +142,39 @@ func test_line_parts_parse_back() -> void:
 		eq([got[0].get_string(2), got[0].get_string(3), got[0].get_string(4)], ["18", "3", "18"], "хвост: %s" % line)
 		eq([got[1].get_string(2), got[1].get_string(3), got[1].get_string(4)], ["22", "5", "22"], "центр: %s" % line)
 	ok(line.ends_with("хвост в норме (≤ 30), центр в норме (≤ 40), #1753"), line)
+
+
+## #1958: долгий кадр (снимок `38-zamer`) внутри окна замера. Мир за него проходит не время кадра, а
+## `EcoView.world_dt` (≤ `SLOW_STEP`, остаток — следующими кадрами); тело идёт ровно 1 м/с по времени мира. Шаг позы —
+## по времени мира: ускорения нет. По времени кадра (как было) — «центр РЫВОК» больше нормы 40.
+func test_long_frame_in_window_is_not_a_jerk() -> void:
+	var main: Main = load("res://scenes/main.tscn").instantiate()
+	tree.root.add_child(main)
+	await frames(2)
+	var qa := main.start_qa('[{"do": "wait", "s": 60}]')
+	main.step(0.021)
+	var body := Node3D.new()
+	main.add_child(body)
+	var sk := Skeleton3D.new()
+	sk.add_bone("Tail03")
+	body.add_child(sk)
+	var t0: float = main.eco.world.time
+	qa._jerk_open(0, 2.9, false, main.eco.pred_view.lite, sk, body)
+	var held := false   # кадр снимка мир не прошёл целиком
+	for i in 160:
+		var dt := 0.2 if i == 70 else 0.021
+		var was: float = main.eco.world.time
+		main.step(dt)   # сначала замер позы прошлого шага, потом шаг мира
+		held = held or (i == 70 and main.eco.world.time - was < dt - 0.05)
+		body.position = Vector3(main.eco.world.time - t0, 0.0, 0.0)   # ровный ход 1 м/с по времени мира
+	ok(held, "долгий кадр мир проходит одним подшагом, остаток — следом")
+	ok(qa._jerk.is_empty(), "замер кончился")
+	var line := ""
+	for l in qa.log_lines:
+		if l.begins_with("рывки:"):
+			line = l
+	ok(line.contains("центр тела 99 % 0 (медиана 0, макс 0)"), "ровный ход по времени мира — без ускорения: " + line)
+	ok(line.contains("центр в норме"), "долгий кадр в окне — не «РЫВОК»")
+	main.queue_free()
+	await frames(1)
+
