@@ -236,7 +236,7 @@ static func turn(from: Vector3, want: Vector3, dt: float) -> Vector3:
 	if from.length_squared() < 1e-8:
 		return want
 	from = from.normalized()
-	var ang := from.angle_to(want)
+	var ang := EcoAgent.angle(from, want)
 	if ang < 1e-4:
 		return want
 	var step := minf(ang * minf(1.0, TURN_K * dt), TURN_MAX * dt)

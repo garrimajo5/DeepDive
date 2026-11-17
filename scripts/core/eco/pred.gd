@@ -552,7 +552,7 @@ static func turn(pr: Pred, dt: float) -> void:
 		return
 	var from := pr.look
 	var want := aim(pr)
-	var ang := from.angle_to(want)
+	var ang := EcoAgent.angle(from, want)
 	var goal := Vector3.ZERO
 	if ang > 1e-5:
 		var axis := from.cross(want)

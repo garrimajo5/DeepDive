@@ -426,7 +426,7 @@ static func settle_frac(e: Eel, dt: float) -> float:
 ## Курс головы from доворачивает к want: доля угла FACE_FOLLOW в секунду, не быстрее FACE_MAX рад/с; ровно назад —
 ## разворот по горизонтали (вокруг вертикали). Оба — единичные.
 static func turn_face(from: Vector3, want: Vector3, dt: float) -> Vector3:
-	var ang := from.angle_to(want)
+	var ang := EcoAgent.angle(from, want)
 	if ang < 1e-5 or dt <= 0.0:
 		return want if ang < 1e-5 else from
 	var axis := from.cross(want)

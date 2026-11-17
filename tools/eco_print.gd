@@ -94,9 +94,10 @@ static func first_diff(a: Array, b: Array) -> Dictionary:
 
 ## Отпечаток математики машины: хэш результатов функций libm на N точках — двойная точность (sin, cos, atan2, exp,
 ## pow, log из GDScript) и float32 в векторах Godot (`Vector2.angle` — atan2f, `rotated` и `from_angle` — sinf/cosf,
-## `Vector3.angle_to`, `Vector3.rotated`). Одна строка: имя → хэш. Разные строки облака и CI — разная libm.
+## `Vector3.angle_to`, `Vector3.rotated`); `eco_angle`/`eco_angle2` — угол живого мира `EcoAgent.angle`/`angle2`
+## (двойная точность, должен совпасть везде, (ао)). Одна строка: имя → хэш. Разные строки облака и CI — разная libm.
 static func math_line(n: int = 20000) -> String:
-	var names: Array[String] = ["sin", "cos", "atan2", "exp", "pow", "log", "angle", "rotated2", "from_angle", "angle_to", "rotated3"]
+	var names: Array[String] = ["sin", "cos", "atan2", "exp", "pow", "log", "angle", "rotated2", "from_angle", "angle_to", "rotated3", "eco_angle", "eco_angle2"]
 	var ctx: Array[HashingContext] = []
 	for k in names:
 		var c := HashingContext.new()
@@ -109,7 +110,8 @@ static func math_line(n: int = 20000) -> String:
 		var z := rnd.range_f(-3.0, 3.0)
 		var v := [sin(x), cos(x), atan2(x, y), exp(z * 10.0), pow(absf(x) + 1e-3, z), log(absf(y) + 1e-3),
 			Vector2(x, y).angle(), Vector2(x, y).rotated(z), Vector2.from_angle(x), Vector3(x, y, z).angle_to(Vector3(y, z, x)),
-			Vector3(x, z, y).rotated(Vector3(0, 1, 0), z)]
+			Vector3(x, z, y).rotated(Vector3(0, 1, 0), z), EcoAgent.angle(Vector3(x, y, z), Vector3(y, z, x)),
+			EcoAgent.angle2(Vector2(x, y), Vector2(y, z))]
 		for j in names.size():
 			ctx[j].update(var_to_bytes(v[j]))
 	var parts: Array[String] = []

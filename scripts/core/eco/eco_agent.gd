@@ -148,14 +148,14 @@ func swim(want: Vector3, dt: float, turn_k: float, turn_max: float, slow_min: fl
 	elif s_now < SWIM_STILL:
 		flat = vf.lerp(wf, k)
 	else:
-		var da := vf.angle_to(wf)
+		var da := angle2(vf, wf)
 		var step := signf(da) * minf(absf(da) * minf(1.0, turn_k * dt), turn_max * dt)
 		var dir := vf.rotated(step) / s_now
 		var s_goal := s_want * maxf(cos(da), slow_min)
 		flat = dir * lerpf(s_now, s_goal, k)
 	# в повороте путь идёт дугой к курсу want: дно впереди смотрим и по нему, с нынешним ходом
 	var turn := Vector3.ZERO
-	if s_want >= 1e-4 and flat.length_squared() > 1e-6 and absf(flat.angle_to(wf)) > 0.05:
+	if s_want >= 1e-4 and flat.length_squared() > 1e-6 and absf(angle2(flat, wf)) > 0.05:
 		turn = Vector3(wf.x, 0.0, wf.y) * (flat.length() / s_want)
 	v = Vector3(flat.x, v.y, flat.y)
 	var need := climb_for(ground, turn) if look > 0.0 and ground.is_valid() else -INF
@@ -292,6 +292,18 @@ func confine(ground: Callable = Callable()) -> void:
 
 ## Ближайшая к (x, z) точка отмели ±EDGE или котловины склона EAST (донные, что живут у 10, — `EcoGrazer`). На
 ## отмели — та же точка, что clampf по ±EDGE: прежние существа не сдвигаются.
+## Угол между векторами (0…π) на двойной точности: `atan2` GDScript вместо `Vector3.angle_to` (atan2f), который
+## в glibc облака (24.04) и раннера CI (26.04) считается по-разному — мир расходился к 40 с (#1400 (ан), PR #1980).
+## В `scripts/core/eco/` угол — только им (`test_eco_angle`).
+static func angle(a: Vector3, b: Vector3) -> float:
+	return atan2(a.cross(b).length(), a.dot(b))
+
+
+## Угол со знаком от a к b на плоскости (−π…π), как `Vector2.angle_to`, но на двойной точности (см. `angle`).
+static func angle2(a: Vector2, b: Vector2) -> float:
+	return atan2(a.cross(b), a.dot(b))
+
+
 static func bound_xz(x: float, z: float) -> Vector2:
 	var a := Vector2(clampf(x, -EDGE, EDGE), clampf(z, -EDGE, EDGE))
 	if x <= EDGE:
