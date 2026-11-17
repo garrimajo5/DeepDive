@@ -31,3 +31,12 @@ func test_same_world_same_line_and_bit_diff_found() -> void:
 	ok(EcoPrint.parse("чужая строка").is_empty(), "чужая строка не разбирается")
 	a.free()
 	b.free()
+
+
+## Отпечаток libm машины в лог (#1400, (ан)): полный мир расходится у облака (Ubuntu 24.04, glibc 2.39) и CI
+## (ubuntu-26.04) с первых 10 с. Сравнить эту строку в логе CI с локальной — какая функция считает иначе.
+func test_math_print() -> void:
+	var s := EcoPrint.math_line()
+	print("    " + s)
+	eq(s, EcoPrint.math_line(), "на одной машине — одна строка")
+	ok(s.begins_with("математика sin="), "строка разобрана")

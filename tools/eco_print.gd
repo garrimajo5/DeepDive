@@ -92,6 +92,32 @@ static func first_diff(a: Array, b: Array) -> Dictionary:
 	return {}
 
 
+## Отпечаток математики машины: хэш результатов функций libm на N точках — двойная точность (sin, cos, atan2, exp,
+## pow, log из GDScript) и float32 в векторах Godot (`Vector2.angle` — atan2f, `rotated` и `from_angle` — sinf/cosf,
+## `Vector3.angle_to`, `Vector3.rotated`). Одна строка: имя → хэш. Разные строки облака и CI — разная libm.
+static func math_line(n: int = 20000) -> String:
+	var names: Array[String] = ["sin", "cos", "atan2", "exp", "pow", "log", "angle", "rotated2", "from_angle", "angle_to", "rotated3"]
+	var ctx: Array[HashingContext] = []
+	for k in names:
+		var c := HashingContext.new()
+		c.start(HashingContext.HASH_MD5)
+		ctx.append(c)
+	var rnd := EcoRandom.new(7)
+	for i in n:
+		var x := rnd.range_f(-400.0, 400.0)
+		var y := rnd.range_f(-400.0, 400.0)
+		var z := rnd.range_f(-3.0, 3.0)
+		var v := [sin(x), cos(x), atan2(x, y), exp(z * 10.0), pow(absf(x) + 1e-3, z), log(absf(y) + 1e-3),
+			Vector2(x, y).angle(), Vector2(x, y).rotated(z), Vector2.from_angle(x), Vector3(x, y, z).angle_to(Vector3(y, z, x)),
+			Vector3(x, z, y).rotated(Vector3(0, 1, 0), z)]
+		for j in names.size():
+			ctx[j].update(var_to_bytes(v[j]))
+	var parts: Array[String] = []
+	for j in names.size():
+		parts.append("%s=%s" % [names[j], ctx[j].finish().hex_encode().substr(0, 8)])
+	return "математика " + " ".join(parts)
+
+
 static func _feed(ctx: HashingContext, v: Variant, depth: int, seen: Dictionary) -> void:
 	match typeof(v):
 		TYPE_NIL, TYPE_CALLABLE, TYPE_SIGNAL, TYPE_RID:
