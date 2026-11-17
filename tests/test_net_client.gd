@@ -131,6 +131,7 @@ func test_own_yaw_stays_local_until_post() -> void:
 
 
 func test_lost_host_opens_dialog_not_solo() -> void:   # ART-043: не уходит в соло молча
+	still_world(main)   # окно ожидания — без живого мира (#1350, фокус А п. 4)
 	ok(_pump(func() -> bool: return main.crew.size() == 2), "на борту")
 	host.stop()
 	ok(_pump(func() -> bool: return main.drop.blocks(), false), "диалог открыт")
@@ -165,6 +166,7 @@ func test_lost_host_opens_dialog_not_solo() -> void:   # ART-043: не уход�
 
 
 func test_host_back_restores() -> void:   # хост вернулся в окно ожидания — «Связь восстановлена», управление снова
+	still_world(main)   # таймеры связи — без живого мира
 	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
 	host.stop()
 	ok(_pump(func() -> bool: return main.drop.blocks(), false), "диалог открыт")
@@ -209,6 +211,8 @@ func _tap(id: String) -> void:
 
 ## Хост ведёт корабль и шлёт кадры со своим временем: у клиента корабль идёт ровно, без шага в 20 раз в секунду.
 func test_ship_moves_smoothly_between_frames() -> void:
+	var still := still_world(main)   # ход корабля между кадрами — без живого мира: цикл втрое быстрее (#1350, фокус А п. 4)
+	var world_t: float = still.world.time
 	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
 	var t := 0.0
 	var last := Vector3.INF
@@ -231,6 +235,7 @@ func test_ship_moves_smoothly_between_frames() -> void:
 	ok(n > 80)
 	ok(worst < v * d * 1.8, "шаг корабля у клиента %.3f м за кадр (ход %.3f)" % [worst, v * d])
 	ok(main.helm.pos.distance_to(h_helm.pos) < v * 0.5, "отстаёт не больше полсекунды хода")
+	ok(main.eco == still and still.world.time == world_t, "тихий мир у гостя стоит (StillEco.step_client)")
 
 
 ## Пробоина и ил у хоста — у клиента по кадру: тревога, вода в отсеке, облако вокруг корабля, сообщение один раз.
@@ -357,6 +362,7 @@ func test_creatures_near_from_host() -> void:   # живой мир у гост�
 
 
 func test_weak_link_plate() -> void:   # ART-043: кадры хоста опаздывают — «Слабая связь», игра идёт; 2 с ровно — снята
+	still_world(main)   # таймеры связи — без живого мира
 	ok(_pump(func() -> bool: return main.net_seq > 0), "на борту")
 	ok(not main.weak.visible(), "связь ровная — плашки нет")
 	for i in int((NetLink.WEAK_AFTER + 0.2) / SLOW):
