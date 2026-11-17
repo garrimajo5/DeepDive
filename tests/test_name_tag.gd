@@ -168,6 +168,7 @@ func test_tag_not_over_panel() -> void:
 	var i := main.crew.find(mate)
 	var screen := main.get_viewport().get_visible_rect()
 	var hidden_by_panel := 0
+	main.vote_panel.show_vote(0, Run.opinions(100.0, 100.0, false, false, 0))   # высота панели — по строкам (#1970)
 	for k in 13:
 		var x := -2.4 + 0.4 * k
 		main.vote_panel.visible = false

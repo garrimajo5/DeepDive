@@ -83,6 +83,8 @@ func test_width_by_screen() -> void:
 	near(DescentVote.width(Vector2(1280, 720)), 420.0, 0.01, "16:9 — не уже 420")
 	near(DescentVote.width(Vector2(1600, 720)), 470.0, 0.01, "широкий — не шире 470")
 	near(DescentVote.width(Vector2(2400, 1080)), 705.0, 0.01, "ширина — по высоте экрана")
+	near(DescentVote.width(Vector2(960, 720)), 420.0, 0.01, "4:3 — те же 420: строки влезают")
+	near(DescentVote.width(Vector2(1600, 1600)), 720.0, 0.01, "уже 4:3 (окно тестов) — не шире 45 % экрана")
 	near(VoteLayout.room(Vector2(1600, 720), VoteLayout.TOP).position.y, 0.17 * 720.0, 0.01, "верх — 17 % высоты")
 
 
