@@ -18,6 +18,10 @@ extends SceneTree
 ## С ship= стоянка держится против течения все frames= кадров (как сценарий тестера — возврат на
 ## стоянку за 0,3 с до кадра, #1757): длинный frames= для поздней фазы не сдвигает ракурс.
 ## С kupol=1 в лог печатается клип купольника, t и «створка гнезда 1: …» (как строка снимка сценария).
+## kino=9 — непрерывный фрагмент (как kino= у shot.gd): мир идёт столько секунд ровным шагом SCENA_DT,
+##       стоянку ship= держит каждый шаг, кадры <out>-kino/0000.png…; kino_fps=10 — кадров на секунду
+##       мира (шаг мира — 1/30 с); в лог раз в секунду мира — клип купольника, t и строка створки
+##       (моменты фаз для комментария). Сборка — GIF (Pillow) или ffmpeg -framerate <fps> -i %04d.png.
 
 const Maket := preload("res://tools/maket085.gd")
 const ShotSetup := preload("res://tools/shot_setup.gd")
@@ -59,6 +63,10 @@ func _go() -> void:
 		var sp: PackedFloat64Array = (kv["ship"] as String).split_floats(",")
 		stoyat = Vector3(sp[0], sp[1], sp[2])
 		stoyat_yaw = main.helm.yaw
+	if kv.has("kino"):   # kino=<с> — непрерывный фрагмент: кадры <out>-kino/NNNN.png (#1788)
+		await _kino(main, out, float(kv["kino"]), int(kv.get("kino_fps", "15")), stoyat, stoyat_yaw)
+		quit(0)
+		return
 	for i in int(kv.get("frames", "8")):
 		if stoyat != Vector3.INF:
 			main.helm.yaw = stoyat_yaw
@@ -82,6 +90,34 @@ func _go() -> void:
 		Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
 		", примитивов: ", Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
 	quit(0)
+
+
+## Ролик (kino=): main сам не шагает, мир идёт `ShotSetup.kino_steps` шагов SCENA_DT на кадр, стоянку
+## держим против течения после каждого шага (как у одиночного кадра с ship=). Кадры — <out>-kino/NNNN.png;
+## раз в секунду мира в лог — клип купольника, t и строка створки (моменты фаз для комментария в issue).
+func _kino(main: Node, out: String, seconds: float, fps: int, stoyat: Vector3, stoyat_yaw: float) -> void:
+	main.set_process(false)
+	var dir := out.get_basename() + "-kino"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var per := ShotSetup.kino_steps(fps)
+	var was_sec := -1
+	for f in int(round(seconds * fps)):
+		for i in per:
+			main.step(ShotSetup.SCENA_DT)
+			if stoyat != Vector3.INF:
+				main.helm.yaw = stoyat_yaw
+				main.helm.turn = 0.0
+				main.park_at(stoyat)
+		await process_frame
+		await RenderingServer.frame_post_draw
+		root.get_texture().get_image().save_png("%s/%04d.png" % [dir, f])
+		var sec := int(f / float(fps))
+		if sec != was_sec:
+			was_sec = sec
+			var d: EcoDome = main.eco.dome
+			print("kino %d с: клип %s, t %.1f с%s" % [sec, d.clip(), d.t,
+				QaRun.petal_note(EcoDome.NEST, main.gate_view.petal(EcoDome.NEST))])
+	print("KINO ", dir, " кадров ", int(round(seconds * fps)), ", ", fps, " в секунду")
 
 
 ## Прячет вид корабля игры (мостик, отсеки, корпус, экипаж, метки), ставит кабину/кожух макета
