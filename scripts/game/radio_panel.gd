@@ -132,7 +132,7 @@ func _draw() -> void:
 		draw_string(font, Vector2(r.position.x + 80.0 * s, ny), t.name, HORIZONTAL_ALIGNMENT_LEFT,
 			r.size.x - 150.0 * s, npx, Color(TEXT, t.a))
 		if not t.seen:   # за стеной — табличку над фигурой не видно, в строке «Вне поля зрения»
-			_text(font, Vector2(r.position.x + 80.0 * s, c.y + 10.0 * s), Radio.OUT_OF_VIEW,
+			_text(font, Vector2(r.position.x + 80.0 * s, c.y + 8.0 * s), Radio.OUT_OF_VIEW,
 				int(Radio.SUB_PX * s), Color(DIM, t.a))
 		var hs := Radio.bars(t, time)
 		var bw := maxf(1.5, 3.0 * s)

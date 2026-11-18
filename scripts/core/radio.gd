@@ -33,8 +33,8 @@ const BUTTON_PX := 36.0
 const STATE_PX := 28.0
 const NAME_PX := 32.0
 const LETTER_PX := 30.0
-const HEAD_PX := 24.0
-const SUB_PX := 22.0
+const HEAD_PX := 27.0
+const SUB_PX := 27.0
 
 const HEAD := "Рация · игроки"
 const OUT_OF_VIEW := "Вне поля зрения"
