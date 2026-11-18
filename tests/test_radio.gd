@@ -159,6 +159,28 @@ func test_layout_above_light_and_corners_free() -> void:
 		ok(Radio.head_at(size).y > 0.0, "заголовок списка на экране")
 
 
+func test_kegl_second_plan() -> void:
+	# #1995: второй план рации ≥ 10 sp — 27 px при 1080, 18 px при 720 (очередь docs/ux/kegl.md)
+	ok(Radio.HEAD_PX >= 27.0, "«Рация · игроки» ≥ 27 px при 1080")
+	ok(Radio.SUB_PX >= 27.0, "«Вне поля зрения» ≥ 27 px при 1080")
+	var font := ThemeDB.fallback_font
+	for size: Vector2 in [SIZE, Vector2(1600, 720)]:
+		var s := Radio.scale(size)
+		var hpx := int(Radio.HEAD_PX * s)
+		var spx := int(Radio.SUB_PX * s)
+		ok(hpx >= 18, "кегль заголовка %d при H=%d ≥ 18" % [hpx, size.y])
+		ok(spx >= 18, "кегль подстроки %d при H=%d ≥ 18" % [spx, size.y])
+		if size.y == 1080:
+			ok(hpx >= 27 and spx >= 27, "при H=1080 оба ≥ 27")
+		var r := Radio.row_rect(0, size)
+		var w := font.get_string_size(Radio.OUT_OF_VIEW, HORIZONTAL_ALIGNMENT_LEFT, -1, spx).x
+		ok(w <= r.size.x - 110.0 * s, "подстрока в строке %s: %.0f ≤ %.0f (отступ 80 + штрихи 30)" %
+			[size, w, r.size.x - 110.0 * s])
+		var top := r.position.y + r.size.y * 0.5 + 8.0 * s   # как в radio_panel._draw (c.y + 8·s)
+		var bottom := top + spx   # высота строки = кегль (замер UX: «низ ≈ 34 от центра при полувысоте 36»)
+		ok(bottom <= r.end.y, "низ подстроки в рамке %s: %.1f ≤ %.1f" % [size, bottom, r.end.y])
+
+
 func _hits(r: Rect2, c: Touch.Circle) -> bool:
 	var q := Vector2(clampf(c.c.x, r.position.x, r.end.x), clampf(c.c.y, r.position.y, r.end.y))
 	return q.distance_to(c.c) < c.r
