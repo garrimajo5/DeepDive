@@ -89,6 +89,14 @@ const STAND_SONAR := Vector2(0.0, -4.0)
 ## Консоль пилота у передней стены (src/v3-control.py: top 0,85; x ±0,65; z −12,35…−12,65).
 const PILOT_CONSOLE := Vector4(0.0, -12.5, 0.65, 0.15)   ## (x, z, полуширина, полуглубина), не повёрнута
 const CONSOLE_TOP := 0.85
+
+## Подлокотники и рукоятки пилота — по листу 03 v3 («Пилот: два коротких органа на подлокотниках»,
+## «кнопки света и вертикали в зоне кисти»). Рукоятка — на переднем конце подлокотника кресла пилота.
+## (18.11: раньше макет ставил рукоятки на консоль — 0,85 м от плеча сидящего, вне зоны досягаемости.)
+const ARMREST_X := 0.45      ## ось подлокотника от оси кресла, м (просвет между подлокотниками 0,8 м)
+const ARMREST_TOP := 0.76    ## верх подлокотника, м
+const GRIP_Y := 0.83         ## ось рукоятки (вертикальный стержень h 0,14 на подлокотнике)
+const GRIP_Z := -11.55       ## рукоятка у переднего края подлокотника, z
 ## Боковые консоли: 0,65 м впереди поста по рабочему взгляду 45° (лист 03), 0,9 × 0,36 м, верх как у пилота.
 ## (x, z, полуширина, полуглубина, курс взгляда рад: +45° — инженер смотрит вправо от носа).
 const SIDE_CONSOLES: Array = [
@@ -353,6 +361,8 @@ static func routes() -> Dictionary:
 		"пилот → сонар": [STAND_PILOT, c, j, tr, sr, STAND_SONAR],
 		"пилот → инженер": [STAND_PILOT, c, el, eb, STAND_ENGINEER],
 		"инженер → пилот": [STAND_ENGINEER, eb, el, c, STAND_PILOT],
+		"пилот → биолог": [STAND_PILOT, c, br, bb, STAND_BIOLOG],
+		"биолог → пилот": [STAND_BIOLOG, bb, br, c, STAND_PILOT],
 		"инженер → биолог": [STAND_ENGINEER, eb, el, j, br, bb, STAND_BIOLOG],
 		"биолог → сонар": [STAND_BIOLOG, bb, br, tr, sr, STAND_SONAR],
 		"сонар → биолог": [STAND_SONAR, sr, tr, br, bb, STAND_BIOLOG],
@@ -423,6 +433,109 @@ static func walk_all(r: float = WALK_R) -> Dictionary:
 		out[name] = res
 	return out
 
+
+
+# ---------- Полный цикл смены поста в соло (ГД, #1788 18.11) ----------
+
+## Зоны досягаемости от плеча (UX Р-2, #1754 шаг 2): комфорт 0,55 м, предел 0,68 м.
+const REACH_OK := 0.55
+const REACH_MAX := 0.68
+## Посадка и вставание — допущение проверки (в игре — анимация кресла): по 0,8 с на действие.
+const SIT_T := 0.8
+
+## Плечо сидящего оператора поста: 0,18 м ниже и 0,1 м позади глаза; глаз сидя 1,33 м (лист 04 v3),
+## у боковых постов — на 0,1 м впереди оси кресла по рабочему взгляду (наклон к консоли).
+static func shoulder_at(post: Vector2, dir: float) -> Vector3:
+	var fwd := Vector2(sin(dir), -cos(dir))
+	return Vector3(post.x + fwd.x * 0.1, 1.33 - 0.18, post.y + fwd.y * 0.1)
+
+
+## Плечи пилота в кресле v3 (глаз EYE — на 0,4 м впереди оси кресла, лист 04 v3).
+static func pilot_shoulder(sx: float) -> Vector3:
+	return Vector3(sx * 0.2, EYE.y - 0.18, EYE.z + 0.1)
+
+
+## Худшая досягаемость рукояток пилота из кресла (обе руки), м.
+static func pilot_grip_reach() -> float:
+	var worst := 0.0
+	for sx in [-1.0, 1.0]:
+		worst = maxf(worst, pilot_shoulder(sx).distance_to(Vector3(sx * ARMREST_X, GRIP_Y, GRIP_Z)))
+	return worst
+
+
+## Досягаемость ближнего края рабочей поверхности консоли из позы сидящего оператора поста (3D), м.
+static func console_reach(post: Vector2, dir: float, c: Vector4) -> float:
+	var fwd := Vector2(sin(dir), -cos(dir))
+	var edge := Vector2(c.x, c.y) - fwd * c.w   # ближний к посту край консоли
+	var sh := shoulder_at(post, dir)
+	return Vector3(edge.x - sh.x, CONSOLE_TOP - sh.y, edge.y - sh.z).length()
+
+
+## Посадка с рабочей точки на кресло поста: расстояние и чистота прямого перевода
+## (капсула сжимается до r 0,2 — сесть можно, когда линия «стояние → кресло» не режет консоль).
+static func seat_check(post: Vector2, stand: Vector2) -> Dictionary:
+	var d := post.distance_to(stand)
+	var clear := true
+	var n := int(d / 0.05) + 1
+	for i in n + 1:
+		var p := stand.lerp(post, float(i) / n)
+		for con in consoles():
+			if _in_console(p.x, p.y, con[0], con[1], 0.2):
+				clear = false
+	return {"dist": d, "clear": clear}
+
+
+## Полный цикл «пилот сидит → встал → дошёл до поста → занял пост → встал → вернулся → сел».
+## Посты: имя → [кресло, рабочая точка, взгляд рад, сидя?]. Сонар — стоящий пост у стола.
+static func cycle_posts() -> Dictionary:
+	return {
+		"инженер": [POST_ENGINEER, STAND_ENGINEER, SIDE_DIR[0], true],
+		"биолог": [POST_BIOLOG, STAND_BIOLOG, SIDE_DIR[1], true],
+		"сонар": [POST_SONAR, STAND_SONAR, 0.0, false],
+	}
+
+
+## Досягаемость органа поста из рабочей позы: сидя — консоль (3D от плеча), стоя у стола —
+## горизонталь до ближней кромки стола (стоящий наклоняется; вертикаль не считаем).
+static func post_reach(pname: String) -> float:
+	var p: Array = cycle_posts()[pname]
+	if p[3]:
+		var idx := 0 if pname == "инженер" else 1
+		return console_reach(p[0], p[2], SIDE_CONSOLES[idx])
+	var stand: Vector2 = p[1]
+	return stand.distance_to(TABLE) - TABLE_R
+
+
+## Все циклы смены поста: имя → {ok, t_out, t_back, t_cycle, seat_dist, seat_clear, reach}.
+## Время цикла: путь туда + путь обратно + посадки/вставания (по SIT_T; у стоячего поста — без кресла).
+static func cycle_all() -> Dictionary:
+	var rts := routes()
+	var out := {}
+	for pname: String in cycle_posts():
+		var p: Array = cycle_posts()[pname]
+		var go := walk(rts["пилот → %s" % pname])
+		var back := walk(rts["%s → пилот" % pname])
+		var seat := seat_check(p[0], p[1])
+		var reach := post_reach(pname)
+		var sits := 4.0 if p[3] else 2.0   # встал у пилота + сел на посту + встал + сел у пилота
+		out[pname] = {"ok": go["ok"] and back["ok"] and seat["clear"] and reach <= REACH_MAX,
+				"t_out": go["time"], "t_back": back["time"],
+				"t_cycle": go["time"] + back["time"] + sits * SIT_T,
+				"seat_dist": seat["dist"], "seat_clear": seat["clear"], "reach": reach}
+	return out
+
+
+## Полный обход всех постов с возвращением к управлению: пилот → инженер → биолог → сонар → пилот.
+static func tour_all() -> Dictionary:
+	var rts := routes()
+	var t := 0.0
+	var ok_all := true
+	for nm in ["пилот → инженер", "инженер → биолог", "биолог → сонар", "сонар → пилот"]:
+		var r := walk(rts[nm])
+		t += r["time"]
+		ok_all = ok_all and r["ok"]
+	# посадки: встал у пилота, сел/встал у инженера и биолога, сел у пилота (сонар — стоя)
+	return {"ok": ok_all, "time": t + 6.0 * SIT_T}
 
 
 # ---------- 3D-кладка макета (для maket085_shot.gd; игру не трогает) ----------
@@ -560,7 +673,7 @@ static func build_cabin() -> Node3D:
 			rim.position = Vector3(port.x, PORT_Y, rz)
 			rim.material_override = _mat_rim()
 			cabin.add_child(rim)
-	# консоль пилота: тумба 1,3 × 0,3, верх 0,85; три экрана, две рукоятки
+	# консоль пилота: тумба 1,3 × 0,3, верх 0,85; три экрана
 	var pc := PILOT_CONSOLE
 	_box(cabin, Vector3(pc.z * 2.0, CONSOLE_TOP, pc.w * 2.0), Vector3(pc.x, CONSOLE_TOP / 2.0, pc.y), m, 0.0, "Консоль пилота")
 	var scr := _mat_screen()
@@ -568,8 +681,11 @@ static func build_cabin() -> Node3D:
 		var sx := (i - 1) * 0.42
 		var sc := _box(cabin, Vector3(0.34, 0.2, 0.02), Vector3(sx, CONSOLE_TOP + 0.1, pc.y + 0.17), scr, 0.0, "Экран")
 		sc.rotation.x = -0.35
-	for sx in [-0.2, 0.2]:
-		var grip := _cyl(cabin, 0.025, 0.025, 0.14, Vector3(sx, CONSOLE_TOP + 0.07, pc.y - 0.05), _mat_rim())
+	# подлокотники и рукоятки пилота — на кресле (лист 03 v3: «два коротких органа на подлокотниках»)
+	for sx in [-1.0, 1.0]:
+		_box(cabin, Vector3(0.1, ARMREST_TOP - 0.5, 0.5),
+				Vector3(sx * ARMREST_X, 0.5 + (ARMREST_TOP - 0.5) / 2.0, POST_PILOT.y + 0.05), m, 0.0, "Подлокотник")
+		var grip := _cyl(cabin, 0.025, 0.025, 0.14, Vector3(sx * ARMREST_X, GRIP_Y, GRIP_Z), _mat_rim())
 		grip.name = "Рукоятка"
 	# боковые консоли под 45° к постам, экраном к креслу
 	for i in 2:

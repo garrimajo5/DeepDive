@@ -57,15 +57,15 @@ func test_stands() -> void:
 ## в tools/maket085.md), аварийные переходы в технику — до 10 с.
 func test_walk() -> void:
 	var res := Maket.walk_all()
-	eq(res.size(), 10, "десять маршрутов")
+	eq(res.size(), 12, "двенадцать маршрутов")
 	for rname: String in res:
 		var r: Dictionary = res[rname]
 		ok(r["waypoints_ok"], "точки маршрута стоят: %s" % rname)
 		ok(r["ok"], "маршрут проходим: %s" % rname)
 		ok(r["time"] < 10.0, "время в разумных пределах: %s (%.1f с)" % [rname, r["time"]])
 		ok(r["time"] > 0.5, "время не нулевое: %s" % rname)
-	var near_routes := ["пилот → инженер", "инженер → пилот", "инженер → биолог", "биолог → сонар",
-			"сонар → биолог", "пилот → сонар", "сонар → пилот"]
+	var near_routes := ["пилот → инженер", "инженер → пилот", "пилот → биолог", "биолог → пилот",
+			"инженер → биолог", "биолог → сонар", "сонар → биолог", "пилот → сонар", "сонар → пилот"]
 	for rname in near_routes:
 		var r: Dictionary = res[rname]
 		ok(r["time"] >= 1.5 and r["time"] <= 4.0, "межпостовый переход 1,5…4 с: %s (%.1f с)" % [rname, r["time"]])
@@ -95,3 +95,25 @@ func test_arch() -> void:
 	var tilted := Maket.arch_gap(mid, 0.0, deg_to_rad(20.0))
 	ok(tilted > 3.0, "с наклоном 20° зазор в проходе остаётся")
 	ok(absf(tilted - flat) > 0.05, "наклон заметен в зазоре")
+
+
+## Полный цикл смены поста и возвращения к управлению в соло (ГД, #1788 18.11): пилот сидит →
+## встал → дошёл до поста → занял пост → встал → вернулся → сел. Маршруты проходимы, посадка —
+## один шаг с рабочей точки и чисто от консолей, органы в досягаемости из позы оператора;
+## по возвращении рукоятки пилота в зоне кисти (на подлокотниках, лист 03 v3).
+func test_post_cycle() -> void:
+	var res := Maket.cycle_all()
+	eq(res.size(), 3, "три цикла к постам")
+	for pname: String in res:
+		var c: Dictionary = res[pname]
+		ok(c["ok"], "цикл проходим: %s" % pname)
+		ok(c["seat_clear"], "линия посадки не режет консоль: %s" % pname)
+		ok(c["seat_dist"] <= 0.9, "посадка — один шаг: %s (%.2f м)" % [pname, c["seat_dist"]])
+		ok(c["reach"] <= Maket.REACH_MAX, "орган поста в досягаемости: %s (%.2f м)" % [pname, c["reach"]])
+		ok(c["t_cycle"] < 12.0, "цикл разумный: %s (%.1f с)" % [pname, c["t_cycle"]])
+	near(res["инженер"]["reach"], res["биолог"]["reach"], 0.001, "посты симметричны по досягаемости")
+	var grip := Maket.pilot_grip_reach()
+	ok(grip <= Maket.REACH_OK, "рукоятки пилота в зоне кисти (%.2f м)" % grip)
+	var tour := Maket.tour_all()
+	ok(tour["ok"], "полный обход постов проходим")
+	ok(tour["time"] < 20.0, "обход всех постов с возвратом < 20 с (%.1f)" % tour["time"])
