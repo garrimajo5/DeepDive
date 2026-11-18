@@ -97,6 +97,27 @@ func test_arch() -> void:
 	ok(absf(tilted - flat) > 0.05, "наклон заметен в зазоре")
 
 
+## Обзор гнезда купольника 07 из кресла пилота v3 (#1788, 18.11): угол взгляда вниз на гнездо
+## против предела нижней кромки центрального порта (24,6°). Старая поза 57,5 м (прогон
+## «к стоянке 37b (глубина макета)») — за кромкой (гнездо закрыто, замер пробы 18.11); соседняя
+## точка уровней (мир (−81,5; −57,3; −213,1), курс −63°) — с запасом (проба потока А 18.11).
+func test_gate_nest_view_angle() -> void:
+	var nest := GateDiag.nest_pos(EcoDome.NEST)
+	var limit := rad_to_deg(atan2(Maket.PORTS[1].y, Maket.EYE.z - Maket.PORT_Z1))
+	near(limit, 24.6, 0.1, "предел нижней кромки порта 24,6°")
+	var down := func(ship: Vector3, yaw_deg: float) -> float:
+		var yaw := deg_to_rad(yaw_deg)
+		var eye := Vector3(ship.x + Maket.EYE.z * sin(yaw), ship.y + Maket.EYE.y,
+				ship.z + Maket.EYE.z * cos(yaw))
+		var hor := Vector2(nest.x - eye.x, nest.z - eye.z).length()
+		return rad_to_deg(atan2(eye.y - nest.y, hor))
+	var old: float = down.call(Vector3(-77.2, -57.3, -215.3), -63.0)
+	ok(old > limit, "старая поза 57,5 м за нижней кромкой (%.1f° > %.1f°)" % [old, limit])
+	var cand: float = down.call(Vector3(-81.5, -57.3, -213.1), -63.0)
+	ok(cand < limit, "точка уровней в просвете порта (%.1f° < %.1f°)" % [cand, limit])
+	ok(limit - cand >= 2.0, "запас до кромки не меньше 2° (%.1f°)" % [limit - cand])
+
+
 ## Полный цикл смены поста и возвращения к управлению в соло (ГД, #1788 18.11): пилот сидит →
 ## встал → дошёл до поста → занял пост → встал → вернулся → сел. Маршруты проходимы, посадка —
 ## один шаг с рабочей точки и чисто от консолей, органы в досягаемости из позы оператора;
