@@ -33,6 +33,15 @@ func test_key_and_side() -> void:
 	near(p["yaw"], 0.0, 1e-6, "носом на север (−z)")
 
 
+func test_ship_and_place_warns() -> void:   # ship= и place= вместе — place молча побеждает, нужно предупреждение (#1350, 16.11)
+	var w := ShotSetup.ship_place_warn({"ship": "-76.9,-62,-215.5,-63", "place": "07"})
+	ok(w != "", "предупреждение есть")
+	ok(w.contains("07") and w.contains("-76.9"), "называет оба ключа: " + w)
+	eq(ShotSetup.ship_place_warn({"ship": "1,2,3"}), "", "только ship= — тихо")
+	eq(ShotSetup.ship_place_warn({"place": "07"}), "", "только place= — тихо")
+	eq(ShotSetup.ship_place_warn({}), "", "без ключей — тихо")
+
+
 func test_scene_camera_at_pose() -> void:
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)

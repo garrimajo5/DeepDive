@@ -186,6 +186,9 @@ static func apply(g: Main, kv: Dictionary) -> void:
 			g.breach.welding = g.debug_weld
 			g.breach_view.apply(1.0 / 60.0)
 		g.breach.time = 0.25
+	var place_warn := ship_place_warn(kv)   # ship= и place= вместе — place молча побеждает (#1350, 16.11)
+	if place_warn != "":
+		print(place_warn)
 	if kv.has("ship"):  # ship=x,y,z[,курс°] — поставить корабль (y — высота, глубина со знаком минус)
 		var p: PackedFloat64Array = kv["ship"].split_floats(",")
 		if p.size() > 3:   # ship=x,y,z,курс° — курс корабля, как шаг «ship» сценария тестера
@@ -379,6 +382,14 @@ static func place_pose(name: String, kind: String = "front", dist: float = PLACE
 	cam = cam_above(cam)   # видимая сетка дна на изломе выше гладкого рельефа
 	var look := Vector3(at.x, maxf(at.y - 4.0, Seabed.height(at.x, at.z) + 2.0), at.z)
 	return {"ship": ship, "yaw": yaw, "cam": cam, "look": look}
+
+
+## ship= и place= вместе: place разбирается после ship= и молча побеждает — переставляет корабль и ставит камеру
+## снаружи (#1350, 16.11). Строка для лога; пусто — предупреждать не о чем.
+static func ship_place_warn(kv: Dictionary) -> String:
+	if not (kv.has("ship") and kv.has("place")):
+		return ""
+	return "place=%s дан вместе с ship=%s: place переставляет корабль и ставит камеру снаружи, ship= проигрывает — оставь один ключ" % [kv["place"], kv["ship"]]
 
 
 ## Кадры дрейфа гротовика (#1400): корабль от середины тела, м; над видимым дном не ниже GROT_FLOOR (чуть выше
