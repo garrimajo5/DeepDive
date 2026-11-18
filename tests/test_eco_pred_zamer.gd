@@ -1419,3 +1419,108 @@ func test_second_alert_cuts_visible_first_alert() -> void:
 		Status.MESSAGE_SECONDS, alert2_seen])
 	ok(bg_during >= 2, "пока видна вторая «замер», пришёл поток фона (%d строки) — проверка не пустая" % bg_during)
 	ok(bg_texts.has(after2), "следом за второй срочной вышел ждущий фон («%s»)" % after2.left(40))
+
+
+## Сцена 00→01 (п. 2 (ау)): экипаж гасит свет во «замере» — отклик на кнопку («Прожектор погашен», `wait` = false,
+## `main.gd` `toggle_light` → `Main.say`) срезает ВИДИМУЮ срочную «замер» (`pred/alert`, ранг `EcoLink.URGENT`,
+## #1498) сразу, не дожидаясь её `MESSAGE_SECONDS`: своё показывается в тот же вызов `Status.Message.say` («отклик
+## на кнопку не ждёт»), «замер» назад не возвращается; ждущая строка мира (фон в `next`, стоянка у 01, как в (аб))
+## не теряется — выходит следом за своим после `MIN_SHOW`. Постановка как в (ав): свет → «замер» на приборах, фон
+## ждёт в `next`, своё сообщение — вместо гашения с шагом мира (иначе пришёл бы отбой «потерял корабль» и встал в
+## `next` вместо фона, (аг)). Флаги строк — из мира (`take_link`), показ — `Status.Message`, как `Main._world_say`.
+## Шов «своё сообщение × видимая срочная» юнит-тестами не покрыт: в `test_status` флаги выставлены руками и
+## срочной среди видимых нет, (ащ) — срочная × видимая срочная, (ач) — брифинг своё не трогает, а не наоборот.
+## Мутация: ветка своего (`wait` = false) не показывает при `hot` (своё кладётся в `next` поверх ждущего фона) —
+## своё ждёт, пока «замер» догорит, а ждущий фон перезаписан и теряется. Без Main.
+func test_own_message_cuts_visible_alert() -> void:
+	var r := _near(0)
+	var w: EcoWorld = r[0]
+	var ps: EcoPred = r[2]
+	ps.alert = 100.0   # «замер» не кончается броском в окне теста: строка броска сменила бы ждущий фон на приборах
+	var line_a := "Гребневики пасутся на мху у подножия рифа"
+	var line_c := "Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял"
+	var own := "Прожектор погашен"
+	var msg := Status.Message.new()
+	var shown: Array = []   # [текст, когда встал, сколько виден]
+	var at := {"a": -1.0, "alert": -1.0, "c": -1.0, "own": -1.0}
+	var alert_text := ""
+	var alert_urgent := false
+	var own_wait := -1.0   # сколько своё сообщение ждало показа (0,00 — в тот же вызов say)
+	var pre_text := ""   # что было на приборах в момент своего сообщения
+	var pre_next := ""   # и что ждало в `next`
+	var bg_during := 0   # строки фона, пришедшие, пока на приборах «замер»
+	var t := 0.0
+	while t < 8.0:
+		if at["a"] < 0.0 and t >= 0.499 and t < 1.5:
+			w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(12, -4, 8), func(): return line_a)
+		if not w.ship.light_on and t >= 0.799:
+			w.ship.light_on = true   # голодный хищник в 25 м: «замер» на этом шаге
+		if at["c"] < 0.0 and at["alert"] > 0.0 and t >= at["alert"] + 0.15:
+			w.emit(EcoGrot.ID, "hide", w.ship.pos + Vector3(-12, -3, -6), func(): return line_c)   # ждущий фон
+			at["c"] = t
+		w.step(0.05)
+		t += 0.05
+		for e in w.take_link():
+			if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+				continue
+			var text := String(e.get("text", ""))
+			if text == "":
+				continue
+			if text == line_a and at["a"] < 0.0:
+				at["a"] = t
+			elif text.contains("замер") and at["alert"] < 0.0:
+				at["alert"] = t
+				alert_text = text
+				alert_urgent = bool(e.get("urgent", false))
+			elif not alert_text.is_empty() and msg.text == alert_text and (text == line_a or text == line_c):
+				bg_during += 1   # строка фона пришла, пока на приборах срочная
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
+		if at["own"] < 0.0 and at["c"] > 0.0 and t >= at["alert"] + 1.0:
+			pre_text = msg.text
+			pre_next = msg.next
+			at["own"] = t
+			msg.say(own)   # отклик на кнопку (`main.gd` `toggle_light` → `Main.say`), `wait` = false
+		msg.update(0.05)
+		if at["own"] > 0.0 and own_wait < 0.0 and msg.text == own:
+			own_wait = t - at["own"]
+		if msg.text != "" and (shown.is_empty() or shown[-1][0] != msg.text):
+			shown.append([msg.text, t, 0.0])
+		if msg.text != "":
+			shown[-1][2] = t - float(shown[-1][1]) + 0.05   # кадр t виден до следующего шага
+	var a_seen := 0.0
+	var alert_seen := 0.0
+	var alert_count := 0   # интервалов показа «замера»: больше одного — срочная вернулась
+	var own_seen := 0.0
+	var after_own := ""   # что вышло следом за своим сообщением
+	for i in shown.size():
+		var s: Array = shown[i]
+		if String(s[0]) == alert_text:
+			alert_seen = maxf(alert_seen, float(s[2]))
+			alert_count += 1
+		elif String(s[0]) == line_a:
+			a_seen = maxf(a_seen, float(s[2]))
+		elif String(s[0]) == own:
+			own_seen = maxf(own_seen, float(s[2]))
+			if i + 1 < shown.size():
+				after_own = String(shown[i + 1][0])
+	var lines := PackedStringArray()
+	for s: Array in shown:
+		lines.append("%.2f с «%s» %.2f с" % [s[1], String(s[0]).left(40), s[2]])
+	print("    фон %.2f с, «замер» %.2f с, ждущий фон %.2f с, своё %.2f с (ждало %.2f с); на приборах: %s" % [
+		at["a"], at["alert"], at["c"], at["own"], maxf(own_wait, 0.0), " | ".join(lines)])
+	ok(at["a"] > 0.0 and at["alert"] > 0.0 and at["c"] > 0.0 and at["own"] > 0.0,
+		"фон, «замер», ждущий фон и своё сообщение пришли")
+	ok(at["a"] < at["alert"], "фон был на приборах, когда пришла срочная — прерывание реальное")
+	ok(alert_urgent, "«замер» пришла с рангом «срочная» (EcoLink.URGENT)")
+	ok(a_seen < Status.Message.MIN_SHOW, "срочная перебила свежую строку фона (та видна %.2f с < MIN_SHOW)" % a_seen)
+	ok(bg_during >= 1, "пока видна «замер», пришла строка фона (%d) — ждущая проверена реально" % bg_during)
+	eq(pre_text, alert_text, "в момент своего сообщения на приборах — видимая срочная «замер» (постановка реальная)")
+	eq(pre_next, line_c, "в момент своего сообщения фон ждёт в `next` (постановка реальная)")
+	ok(own_wait >= 0.0 and own_wait < 0.06, "своё сообщение на приборах в тот же вызов say (ждало %.2f с)" % [
+		maxf(own_wait, 0.0)])
+	ok(alert_seen < Status.MESSAGE_SECONDS - 0.5, "срочная срезана, не догорев (видна %.2f с < %.1f с)" % [
+		alert_seen, Status.MESSAGE_SECONDS])
+	eq(alert_count, 1, "«замер» назад не возвращается (интервалов показа: %d)" % alert_count)
+	ok(own_seen >= Status.Message.MIN_SHOW - 0.051, "своё держится минимальную секунду (по факту %.2f с)" % own_seen)
+	eq(after_own, line_c, "следом за своим вышел ждущий фон («%s»)" % after_own.left(40))
