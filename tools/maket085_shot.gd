@@ -15,9 +15,13 @@ extends SceneTree
 ## glaza=0,1.65,-2.5,0,-8 — глаз в осях корабля: x,y,z[,курс°,наклон°] — внутренние кадры пути соло
 ## vokrug=20,6,140 — камера снаружи: дистанция,высота,угол° (0 — за кормой, 180 — перед носом);
 ##       строится кожух макета (Maket085.build_hull) вместо кабины; имеет смысл со scena= или ship=
+## С ship= стоянка держится против течения все frames= кадров (как сценарий тестера — возврат на
+## стоянку за 0,3 с до кадра, #1757): длинный frames= для поздней фазы не сдвигает ракурс.
+## С kupol=1 в лог печатается клип купольника, t и «створка гнезда 1: …» (как строка снимка сценария).
 
 const Maket := preload("res://tools/maket085.gd")
 const ShotSetup := preload("res://tools/shot_setup.gd")
+const QaRun := preload("res://scripts/game/qa_runner.gd")   # petal_note — строка створки как у снимка сценария
 
 ## Куда переносится прожектор для макета: под нос, под порты (у нынешнего корпуса — (0; 0,8; −6,8),
 ## что для макета внутри кабины).
@@ -49,7 +53,17 @@ func _go() -> void:
 	var cam := _maket_view(main, kv)
 	if kv.get("hud", "1") == "0":
 		main.set_hud(false)
+	var stoyat := Vector3.INF
+	var stoyat_yaw := 0.0
+	if kv.has("ship"):  # стоянку держим против течения все кадры ожидания фазы (как сценарий, #1757)
+		var sp: PackedFloat64Array = (kv["ship"] as String).split_floats(",")
+		stoyat = Vector3(sp[0], sp[1], sp[2])
+		stoyat_yaw = main.helm.yaw
 	for i in int(kv.get("frames", "8")):
+		if stoyat != Vector3.INF:
+			main.helm.yaw = stoyat_yaw
+			main.helm.turn = 0.0
+			main.park_at(stoyat)
 		await process_frame
 	await RenderingServer.frame_post_draw
 	var img := root.get_texture().get_image()
@@ -60,6 +74,10 @@ func _go() -> void:
 			print(_ground_line(main, cam))
 		if kv.has("zamer"):
 			ShotSetup.zamer_log(main)
+	if kv.get("kupol", "0") == "1" and main.gate_view:
+		var d: EcoDome = main.eco.dome
+		print("купольник: клип %s, t %.1f с%s" % [d.clip(), d.t,
+			QaRun.petal_note(EcoDome.NEST, main.gate_view.petal(EcoDome.NEST))])
 	print("SHOT ", out, " ", img.get_size(), " вызовов отрисовки: ",
 		Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
 		", примитивов: ", Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
