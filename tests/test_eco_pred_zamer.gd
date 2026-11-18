@@ -1280,3 +1280,142 @@ func test_arrival_brief_drops_urgent_and_pending_lead() -> void:
 	eq(msg.text, "Прожектор погашен", "и остаётся на приборах")
 	msg.update(1.5)
 	eq(msg.text, "Прожектор погашен", "и не сменяется вернувшейся строкой мира")
+
+
+## Сцена 00→01 (п. 2 (ащ)): экипаж видит «замер» первого хищника (свет), бьёт разрядом (тот уходит) и тут же
+## даёт импульс сонара — второй голодный хищник рядом отвечает своей срочной «замер» (`pred/alert`, ранг
+## `EcoLink.URGENT`, #1498) с причиной «сонар». Вторая срочная срезает ВИДИМУЮ первую сразу, не дожидаясь её
+## `MESSAGE_SECONDS`, — ветка срочной в `Status.Message.say` показывает безусловно, у новой срочной тот же
+## приоритет над горячей строкой, что у неё над видимым отбоем ((ад)) — и держится все свои секунды; ждущая
+## в `next` строка фона (стоянка у 01, как в (аб)) не теряется — выходит следом за второй срочной. Постановка
+## `_near` с двумя хищниками у корабля: первый в 25 м (свет его зовёт), второй в 34 м — за чутьём на свет
+## (`REACH` 32 м), ближе зова сонара (`PING_CALL` 150 м); сдрейфует в патруле под 32 м до гашения света — не
+## страшно: замер ему закрывает угроза первого (`threat_free`). Разряд (`ps.on_zap` радиусом 30 м — только по
+## первому) уводит первого в `FLEE` без строки «потерял корабль»: та (`KEEP_LEAD`) встала бы в `next` вместо
+## фона; угроза свободна через `THREAT_HOLD` (1 с) после ухода первого. Свет погашен до импульса — иначе
+## строка второго была бы про свет (`_lure_kind` смотрит свет первым). Флаги строк — из мира (`take_link`),
+## показ — `Status.Message`, как `Main._world_say`. Шов «срочная × видимая срочная» до этого был не покрыт:
+## (ад) — срочная × видимый отбой, в `test_status` флаги выставлены руками. Мутация: ветка срочной не
+## перебивает горячую (`and not hot` в `say`) — вторая «замер» кладётся в `next` поверх ждущего фона (тот не
+## выходит вовсе) и сама выходит, только когда догорит первая. Без Main.
+func test_second_alert_cuts_visible_first_alert() -> void:
+	var w := EcoWorld.new()
+	w.ground = _flat
+	var ps := EcoPred.new()
+	ps.alert = 100.0   # «замеры» не кончаются броском в окне теста: строка броска встала бы в `next` вместо фона
+	w.add(ps)
+	w.ship.light_on = false
+	var p0 := ps.all[0]
+	p0.hunger = 0.5
+	p0.cooldown = 0.0
+	w.ship.pos = p0.agent.p + Vector3(25, 0, 0)
+	var p1 := ps.all[1]
+	p1.agent.p = w.ship.pos + Vector3(34, 0, 0)   # за чутьём на свет (32 м), ближе зова сонара (150 м)
+	p1.hunger = 0.5
+	p1.cooldown = 0.0
+	var p2 := ps.all[2]
+	p2.agent.p = Vector3(700, FLAT + 6.0, -600)
+	p2.cooldown = 999.0
+	var line_a := "Гребневики пасутся на мху у подножия рифа"
+	var line_c := "Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял"
+	var bg_texts := {   # ждущий фон и поток фона у второй «замеры» (+0,3 с, +1,5 с) — строки стоянки у 01, как в (аб)
+		line_a: true,
+		line_c: true,
+		"Гребневики перешли на соседнее пятно мха": true,
+	}
+	var msg := Status.Message.new()
+	var shown: Array = []   # [текст, когда встал, сколько виден]
+	var at := {"a": -1.0, "alert1": -1.0, "zap": -1.0, "alert2": -1.0}
+	var alert1_text := ""
+	var alert2_text := ""
+	var alert2_urgent := false
+	var alert2_wait := -1.0   # сколько вторая срочная ждала показа (0,00 — в тот же вызов say)
+	var pre2_text := ""   # что было на приборах в момент второй срочной
+	var pre2_next := ""   # и что ждало в `next`
+	var stream_at: Array[float] = []   # фон, наступающий на видимую вторую «замер»
+	var bg_during := 0   # строки фона, пришедшие, пока на приборах вторая «замер»
+	var zapped := false
+	var emitted_c := false
+	var t := 0.0
+	while t < 9.5:
+		if at["a"] < 0.0 and t >= 0.499 and t < 1.5:
+			w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(12, -4, 8), func(): return line_a)
+		if not w.ship.light_on and t >= 0.799 and t < 1.5:
+			w.ship.light_on = true   # голодный хищник в 25 м: первая «замер» на этом шаге
+		if not zapped and at["alert1"] > 0.0 and t >= at["alert1"] + 1.15:
+			ps.on_zap(w, 30.0)   # разряд только по первому (второй в ~34 м): FLEE без строки «потерял корабль»
+			w.ship.light_on = false   # до импульса — иначе вторая «замер» была бы с причиной «свет»
+			ps.on_ping(w, w.ship.pos)   # второй голодный в 38 м < PING_CALL — плывёт на звук
+			zapped = true
+		if zapped and not emitted_c and t >= 0.35 + 2.05:
+			w.emit(EcoGrot.ID, "hide", w.ship.pos + Vector3(-12, -3, -6), func(): return line_c)   # ждущий фон
+			emitted_c = true
+		if not stream_at.is_empty() and t >= stream_at[0] - 0.001:
+			stream_at.remove_at(0)
+			w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(6, -4, -12),
+				func(): return "Гребневики перешли на соседнее пятно мха")
+		w.step(0.05)
+		t += 0.05
+		for e in w.take_link():
+			if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+				continue
+			var text := String(e.get("text", ""))
+			if text == "":
+				continue
+			if text == line_a and at["a"] < 0.0:
+				at["a"] = t
+			elif text.contains("замер") and at["alert1"] < 0.0:
+				at["alert1"] = t
+				alert1_text = text
+			elif text.contains("замер") and not alert1_text.is_empty() and text != alert1_text \
+					and at["alert2"] < 0.0:
+				at["alert2"] = t
+				alert2_text = text
+				alert2_urgent = bool(e.get("urgent", false))
+				pre2_text = msg.text
+				pre2_next = msg.next
+				stream_at.assign([t + 0.3, t + 1.5])
+			elif text.begins_with("Разряд отпугнул") and at["zap"] < 0.0:
+				at["zap"] = t
+			elif not alert2_text.is_empty() and msg.text == alert2_text and bg_texts.has(text):
+				bg_during += 1   # строка фона пришла, пока на приборах вторая «замер»
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
+		msg.update(0.05)
+		if not alert2_text.is_empty() and alert2_wait < 0.0 and msg.text == alert2_text:
+			alert2_wait = t - at["alert2"]
+		if msg.text != "" and (shown.is_empty() or shown[-1][0] != msg.text):
+			shown.append([msg.text, t, 0.0])
+		if msg.text != "":
+			shown[-1][2] = t - float(shown[-1][1]) + 0.05   # кадр t виден до следующего шага
+	var alert1_seen := 0.0
+	var alert2_seen := 0.0
+	var after2 := ""   # что вышло следом за второй срочной
+	for i in shown.size():
+		var s: Array = shown[i]
+		if String(s[0]) == alert1_text:
+			alert1_seen = maxf(alert1_seen, float(s[2]))
+		elif String(s[0]) == alert2_text:
+			alert2_seen = maxf(alert2_seen, float(s[2]))
+			if i + 1 < shown.size():
+				after2 = String(shown[i + 1][0])
+	var lines := PackedStringArray()
+	for s: Array in shown:
+		lines.append("%.2f с «%s» %.2f с" % [s[1], String(s[0]).left(40), s[2]])
+	print("    «замер» 1 на %.2f с, разряд %.2f с, «замер» 2 на %.2f с (ждала %.2f с), фона при ней %d; на приборах: %s" % [
+		at["alert1"], at["zap"], at["alert2"], maxf(alert2_wait, 0.0), bg_during, " | ".join(lines)])
+	ok(at["a"] > 0.0 and at["alert1"] > 0.0, "строка фона и первая «замер» пришли")
+	ok(at["zap"] > 0.0, "разряд по первому хищнику прошёл")
+	ok(at["alert2"] > 0.0, "вторая «замер» пришла (импульс сонара у второго хищника)")
+	ok(alert1_text.contains("свет") and alert2_text.contains("сонар"), "причины различны: свет и сонар")
+	ok(alert2_urgent, "вторая «замер» пришла с рангом «срочная» (EcoLink.URGENT)")
+	eq(pre2_text, alert1_text, "в момент второй срочной на приборах — видимая первая (постановка реальная)")
+	eq(pre2_next, line_c, "в момент второй срочной фон ждёт в `next` (постановка реальная)")
+	ok(alert2_wait >= 0.0 and alert2_wait < 0.06, "вторая срочная на приборах сразу (ждала %.2f с)" % [
+		maxf(alert2_wait, 0.0)])
+	ok(alert1_seen < Status.MESSAGE_SECONDS - 0.5, "первая срочная срезана, не догорев (видна %.2f с < %.1f с)" % [
+		alert1_seen, Status.MESSAGE_SECONDS])
+	ok(alert2_seen >= Status.MESSAGE_SECONDS - 0.051, "вторая срочная видна все %.1f с (по факту %.2f с)" % [
+		Status.MESSAGE_SECONDS, alert2_seen])
+	ok(bg_during >= 2, "пока видна вторая «замер», пришёл поток фона (%d строки) — проверка не пустая" % bg_during)
+	ok(bg_texts.has(after2), "следом за второй срочной вышел ждущий фон («%s»)" % after2.left(40))
