@@ -77,6 +77,7 @@ New-Item -ItemType Directory -Force $build | Out-Null
 # Замок (#1350, 12.11): второй run-qa.ps1 той же машины (другая сессия тестера) — не на тот же эмулятор и не в те же
 # папки: строка BUSY <с какого времени> и выход. Замок снимается в конце или сам, когда процесс умер (zamok.ps1).
 . (Join-Path $PSScriptRoot 'zamok.ps1')
+. (Join-Path $PSScriptRoot 'gh-find.ps1')   # gh из PATH или стандартного места установки (#1350, тестер 18.11)
 $lockFile = "$build\run-qa.lock"
 if (-not $Phone) {
   $busy = Lock-Qa $lockFile "run-qa.ps1 $($MyInvocation.Line)"
@@ -90,7 +91,9 @@ function Reset-Run {
 }
 $prSha = ''
 if ($Pr) {
-  $prSha = (gh api "repos/garrimajo5/DeepDive/pulls/$Pr" --jq '.head.sha').Trim()
+  $ghExe = Find-Gh   # PATH или C:\Program Files\GitHub CLI\gh.exe (#1350, тестер 18.11)
+  if (-not $ghExe) { Write-Output 'NO_GH: gh не найден ни в PATH, ни в C:\Program Files\GitHub CLI — проверка PR недоступна'; exit 1 }
+  $prSha = (& $ghExe api "repos/garrimajo5/DeepDive/pulls/$Pr" --jq '.head.sha').Trim()
   if (-not $prSha) { Write-Output "NO_PR #$Pr"; exit 1 }
 }
 # -Pr: сценарий — из ветки PR, без git show руками (#1592). -Scenario — путь в ветке (по умолчанию сценарий тестера);
@@ -99,7 +102,7 @@ if ($Pr -and -not ($Scenario -and (Test-Path $Scenario))) {
   $inBranch = if ($Scenario) { $Scenario -replace '\\', '/' } else { 'tools/qa/scenario.json' }
   $prScen = "$build\scenario-pr$Pr.json"
   Remove-Item $prScen -Force -ErrorAction SilentlyContinue
-  cmd /c "gh api `"repos/garrimajo5/DeepDive/contents/${inBranch}?ref=$prSha`" -H `"Accept: application/vnd.github.raw`" > `"$prScen`""
+  cmd /c "`"$ghExe`" api `"repos/garrimajo5/DeepDive/contents/${inBranch}?ref=$prSha`" -H `"Accept: application/vnd.github.raw`" > `"$prScen`""
   if (-not (Test-Path $prScen) -or (Get-Item $prScen).Length -eq 0) {
     Write-Output "NO_SCENARIO: в ветке PR #$Pr ($($prSha.Substring(0,7))) нет $inBranch"; exit 1
   }
@@ -154,18 +157,18 @@ if ($Pr) {
   # APK из артефакта deepdive-apk последнего прогона CI этой PR (REST, чтобы не зависеть от GraphQL)
   # Прогон «Godot» именно этой сборки (не «Где мы» и не другой workflow того же коммита)
   $sha = $prSha
-  $rid = "$(gh api "repos/garrimajo5/DeepDive/actions/workflows/godot.yml/runs?head_sha=$sha&per_page=1" --jq '.workflow_runs[0].id')".Trim()
+  $rid = "$(& $ghExe api "repos/garrimajo5/DeepDive/actions/workflows/godot.yml/runs?head_sha=$sha&per_page=1" --jq '.workflow_runs[0].id')".Trim()
   if (-not $rid) { Write-Output "NO_RUN: для PR #$Pr ($($sha.Substring(0,7))) прогона CI ещё нет"; exit 1 }
   $dir = "$build\pr$Pr"
   Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
   # NO_ARTIFACT — только если в прогоне правда нет deepdive-apk (#1606: из чужой папки `gh run download` не находил
   # репозиторий, и сообщение «в PR нет кода?» сбивало); репозиторий — явно и из клона
-  $arts = @(gh api "repos/garrimajo5/DeepDive/actions/runs/$rid/artifacts" --jq '.artifacts[].name')
+  $arts = @(& $ghExe api "repos/garrimajo5/DeepDive/actions/runs/$rid/artifacts" --jq '.artifacts[].name')
   if ($arts -notcontains 'deepdive-apk') {
     Write-Output "NO_ARTIFACT: в прогоне PR #$Pr нет deepdive-apk (сборка APK не шла — в PR нет кода? или прогон ещё идёт)"; exit 1
   }
   Push-Location $repo
-  gh run download $rid -R garrimajo5/DeepDive -n deepdive-apk -D $dir
+  & $ghExe run download $rid -R garrimajo5/DeepDive -n deepdive-apk -D $dir
   Pop-Location
   # эмулятору — x86_64-сборка; в артефактах до #844 был один общий DeepDive.apk
   $apk = @("$dir\DeepDive-emulator.apk", "$dir\DeepDive.apk") | Where-Object { Test-Path $_ } | Select -First 1

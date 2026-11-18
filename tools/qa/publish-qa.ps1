@@ -12,6 +12,8 @@
 param([string]$Folder, [string]$Message, [string[]]$Shots, [string]$From = 'run', [string]$Also, [switch]$NoKadry,
   [switch]$SelfTest)
 $ErrorActionPreference = 'Stop'
+# gh из PATH сессии или стандартного места установки (Find-Gh, #1350, тестер 18.11)
+. (Join-Path $PSScriptRoot 'gh-find.ps1')
 
 # Снимки для отчёта: $shots пусто — все *.png папки $root\$from; иначе по именам. «a,b» одной строкой (`powershell -File`,
 # #1350) разбивается по запятой, расширение отбрасывается (#1533), «папка/имя» или «папка\имя» — из $root\папка.
@@ -166,8 +168,9 @@ $remote = "$(git -C $repo ls-remote origin "refs/heads/$branch")".Split()[0]
 if ($remote -ne $sha) { throw "на сервере $branch = $remote, а не $sha" }
 $files = @(git -C $wt show --name-only --format= $sha | Where-Object { $_ -like "qa/$Folder/*" })
 if ($files -notcontains "qa/$Folder/report.md") { throw "в коммите $sha нет qa/$Folder/report.md" }
-if (Get-Command gh -ErrorAction SilentlyContinue) {
-  gh pr create -R garrimajo5/DeepDive --base main --head $branch --title "Отчёт тестера: $Folder" --body "Отчёт: qa/$Folder/report.md"
+$ghExe = Find-Gh
+if ($ghExe) {
+  & $ghExe pr create -R garrimajo5/DeepDive --base main --head $branch --title "Отчёт тестера: $Folder" --body "Отчёт: qa/$Folder/report.md"
 } else {
   Write-Output "gh не установлен: PR откроет Claude (ветка $branch)"
 }

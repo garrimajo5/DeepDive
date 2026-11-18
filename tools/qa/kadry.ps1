@@ -8,6 +8,9 @@
 #   kadry.ps1 -SelfTest — проверка на выдуманных папках (её гоняет CI, job «Скрипты тестера»)
 param([switch]$SelfTest)
 
+# gh из PATH сессии или стандартного места установки (Find-Gh, #1350, тестер 18.11)
+. (Join-Path $PSScriptRoot 'gh-find.ps1')
+
 $KadryLimit = 100     # провал кадра, мс
 $KadryNeed = 3        # тихих прогонов подряд ниже предела, чтобы закрыть провал
 # Шаги со своим пределом (#1792): смена уровня графики — заминка меню (сборки шейдеров движком), провал — от 400 мс;
@@ -206,7 +209,8 @@ function Export-QaBranches([string]$repo, [string]$dest) {
 $script:IssueNote = ''
 function Get-IssueSteps([string[]]$steps) {
   $map = @{}
-  if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+  $ghExe = Find-Gh
+  if (-not $ghExe) {
     $script:IssueNote = 'ISSUES gh не найден — шаги открытых «проверить»/«ждёт телефона» не сопоставлены'
     return $map
   }
@@ -214,7 +218,7 @@ function Get-IssueSteps([string[]]$steps) {
   foreach ($label in @('проверить', 'ждёт телефона')) {
     $q = [uri]::EscapeDataString($label)
     $global:LASTEXITCODE = 0
-    $all = @(gh api "repos/garrimajo5/DeepDive/issues?state=open&per_page=100&labels=$q" --jq '.[] | select(.pull_request == null) | [.number, .comments, .title, .body] | @tsv' 2>&1)
+    $all = @(& $ghExe api "repos/garrimajo5/DeepDive/issues?state=open&per_page=100&labels=$q" --jq '.[] | select(.pull_request == null) | [.number, .comments, .title, .body] | @tsv' 2>&1)
     $code = $LASTEXITCODE
     $errs = @($all | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] })
     $rows = @($all | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] -and "$_" -match '^\d+\t\d+\t' })
@@ -227,7 +231,7 @@ function Get-IssueSteps([string[]]$steps) {
     foreach ($r in $rows) {
       $n, $c, $t = "$r" -split "`t", 3
       if ([int]$c -gt 0) {
-        $cm = @(gh api "repos/garrimajo5/DeepDive/issues/$n/comments?per_page=100" --jq '.[].body' 2>&1 |
+        $cm = @(& $ghExe api "repos/garrimajo5/DeepDive/issues/$n/comments?per_page=100" --jq '.[].body' 2>&1 |
           Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] })
         $t = "$t`t$($cm -join ' ')"
       }
@@ -410,6 +414,16 @@ if ($SelfTest) {
   $im2 = Get-IssueSteps @('32o-mol-steklo')
   Check ($im2.Count -eq 0 -and $script:IssueNote -like 'ISSUES «проверить» ошибка gh (код 1) HTTP 401: Bad credentials, «ждёт телефона» ошибка gh (код 1)*| шаги: ни один*') "gh упал — причина в строке ISSUES: $($script:IssueNote)"
   Remove-Item function:gh
+  # Find-Gh (#1350, тестер 18.11): gh вне PATH сессии — стандартный путь установки; нет и его — пусто.
+  # Get-Command подменяется функцией (cmdlet не вызывается), поэтому проверка не зависит от того, стоит ли gh
+  # на машине CI. «gh.exe» — пустышка во временной папке, путь ей передаётся параметром (стандартный путь
+  # машины на проверку не влияет). Ждём: с пустышкой — её путь; с несуществующим — ''.
+  function Get-Command { [CmdletBinding()] param($Name) return $null }
+  $fakeGh = Join-Path $root 'gh.exe'
+  [IO.File]::WriteAllText($fakeGh, 'подставной', $utf8)
+  Check ((Find-Gh $fakeGh) -eq $fakeGh) "Find-Gh: нет в PATH — стандартный путь ($(Find-Gh $fakeGh))"
+  Check ((Find-Gh (Join-Path $root 'gh-net.exe')) -eq '') 'Find-Gh: нет ни в PATH, ни по пути — пусто'
+  Remove-Item function:Get-Command
 
   # kadry-2.txt — второй прогон того же отчёта, сразу за kadry.txt
   $q2 = Join-Path $root 'qa2'
