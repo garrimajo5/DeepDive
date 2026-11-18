@@ -3,6 +3,13 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-18
+- Тесты, поток Б п. 2 (аш): `test_eco_pred_zamer.test_pending_catch_survives_new_alert` и
+  `test_new_alert_cuts_visible_catch_line` — ждущая кормёжка серпохвоста (`pred/catch`, «держится»
+  `EcoLink.KEEP` без ведущего ранга) при новой срочной «замер» (`pred/alert`, `EcoLink.URGENT`) не теряется
+  (выходит следом за срочной и держится свои `MESSAGE_SECONDS`), а видимая кормёжка срезается срочной сразу
+  и назад не возвращается — зеркала (ае)/(аф) для кормёжки (без Main, флаги из `take_link`, показ —
+  `Status.Message`). Мутации: ветка срочной дропает `next` безусловно — кормёжки на приборах нет вовсе;
+  «alert» без ранга в `URGENT` — срочная ждёт очереди за видимой кормёжкой.
 - Тесты, поток Б п. 2 (ач): `test_eco_pred_zamer.test_arrival_brief_drops_world_lines` — брифинг прибытия
   (`Status.Message.take_world`, #1429, вызов — `main.gd`) гасит и ВИДИМУЮ «держится» (бегство рыб `fish/flee`,
   `EcoLink.KEEP`), и ЖДУЩУЮ строку мира (фон в `next`), брифингу отдаётся последняя; своё сообщение игрока
