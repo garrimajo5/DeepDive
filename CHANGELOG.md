@@ -8,7 +8,7 @@
   (новый `tools/qa/gh-find.ps1`, `Find-Gh`; тестер, #1350 18.11): сводка ISSUES и открытие PR не зависят
   от PATH сессии, запущенной до установки GitHub CLI. Нет gh нигде — `run-qa.ps1 -Pr` отвечает `NO_GH`
   вместо прежнего `NO_PR`; `kadry.ps1` — прежняя строка «ISSUES gh не найден». Проверка fallback —
-  в `kadry.ps1 -SelfTest` (подмена `Get-Command`).
+  в `kadry.ps1 -SelfTest` (подмена `Get-Command`) и `test_qa_tools.test_gh_fallback_to_standard_path`.
 - Тесты, поток Б п. 2 (ае): ждущее бегство рыб у 01 (`fish/flee`, «держится» `EcoLink.KEEP` без ведущего
   ранга) при новой срочной «замер» (`pred/alert`, `EcoLink.URGENT`) не устаревает и не теряется — в отличие
   от ждущего отбоя (#1968, PR #1979): срочная выходит сразу и держится все свои секунды (по факту 4,20 с),
