@@ -485,3 +485,128 @@ func test_new_alert_cuts_visible_lost_line() -> void:
 	ok(bg2_during >= 3, "пока виден новый «замер», пришёл поток фона (%d строки) — проверка не пустая" % bg2_during)
 	ok(alert2_seen >= Status.MESSAGE_SECONDS - 0.051, "новый «замер» виден все %.1f с (по факту %.2f с)" % [
 		Status.MESSAGE_SECONDS, alert2_seen])
+
+
+## Сцена 00→01 (п. 2 (ае)): ждущее бегство рыб у 01 (`fish/flee`, «держится» `EcoLink.KEEP` без ведущего
+## ранга) при новой срочной «замер» (`pred/alert`, `EcoLink.URGENT`) НЕ устаревает и не теряется — в отличие
+## от ждущего отбоя (#1968, PR #1979): бегство — про угрозу, которая длится (хищник рядом, стая уходит),
+## а не про прошедшую. Постановка: бегство приходит, пока на приборах свежая строка фона, и ждёт очереди
+## (`next`); тут же голодный хищник даёт «замер» — срочная выходит сразу и держится все свои секунды,
+## бегство выходит следом за ней и держится свои `MESSAGE_SECONDS`; поток фона (строки стоянки у 01, как
+## в (аб)) ждёт очереди. Флаги строк — из мира (`take_link`), показ — `Status.Message`, как `Main._world_say`.
+## Шов «срочная × ждущая „держится" без ведущего ранга» юнит-тестами не покрыт:
+## `test_message_alert_drops_waiting_lead` (#1979) — про ждущий отбой (не ведущая там только поставлена
+## под «замер», выход её не проверен), `test_message_lead_keeps_queue` флаги выставляет руками. Мутация:
+## в `Status.Message.say` ветка срочной дропает ждущее (`next`) безусловно — бегства на приборах нет вовсе.
+## Без Main.
+func test_pending_flee_survives_new_alert() -> void:
+	var r := _near(0)
+	var w: EcoWorld = r[0]
+	var line_a := "Гребневики пасутся на мху у подножия рифа"
+	var flee_line := "Мелкая рыба: стая уходит в кораллы — рядом хищник"
+	var bg_texts := {   # поток фона у видимого бегства (+0,15 с, +0,30 с, +1,5 с, +3,0 с) — строки стоянки у 01, как в (аб)
+		"Гребневики перешли на соседнее пятно мха": true,
+		"Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял": true,
+		"Гребневики пасутся на мху у подножия рифа": true,
+	}
+	var msg := Status.Message.new()
+	var shown: Array = []   # [текст, когда встал, сколько виден]
+	var at := {"a": -1.0, "flee": -1.0, "alert": -1.0}
+	var flee_keep := false
+	var flee_lead := false
+	var alert_urgent := false
+	var flee_waiting_at_alert := false   # в момент прихода срочной бегство ждало очереди
+	var flee_stream: Array[float] = []   # фон, наступающий на видимое бегство
+	var flee_i := 0
+	var bg_during_flee := 0   # строки фона, пришедшие, пока на приборах бегство
+	var t := 0.0
+	while t < 10.5:
+		if at["a"] < 0.0 and t >= 0.499 and t < 0.6:
+			w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(12, -4, 8), func(): return line_a)
+		if at["a"] > 0.0 and at["flee"] < 0.0 and t >= 0.649 and t < 1.5:
+			w.emit(EcoFish.ID, "flee", w.ship.pos + Vector3(15, -3, 10), func(): return flee_line)
+		if not w.ship.light_on and at["flee"] > 0.0 and t >= 0.799:
+			w.ship.light_on = true   # голодный хищник в 25 м: «замер» на этом шаге
+		if not flee_stream.is_empty() and t >= flee_stream[0] - 0.001:
+			flee_stream.remove_at(0)
+			if flee_i % 3 == 0:
+				w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(-8, -4, 10),
+					func(): return "Гребневики перешли на соседнее пятно мха")
+			elif flee_i % 3 == 1:
+				w.emit(EcoGrot.ID, "hide", w.ship.pos + Vector3(10, -5, -7),
+					func(): return "Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял")
+			else:
+				w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(6, -4, -12), func(): return line_a)
+			flee_i += 1
+		w.step(0.05)
+		t += 0.05
+		for e in w.take_link():
+			if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+				continue
+			var text := String(e.get("text", ""))
+			if text == "":
+				continue
+			if text == line_a and at["a"] < 0.0:
+				at["a"] = t
+			elif text == flee_line and at["flee"] < 0.0:
+				at["flee"] = t
+				flee_keep = bool(e.get("keep", false))
+				flee_lead = bool(e.get("lead", false))
+			elif text.contains("замер") and at["alert"] < 0.0:
+				at["alert"] = t
+				alert_urgent = bool(e.get("urgent", false))
+				flee_waiting_at_alert = msg.next == flee_line   # бегство ждало очереди, когда пришла срочная
+			elif at["flee"] > 0.0 and msg.text == flee_line and bg_texts.has(text):
+				bg_during_flee += 1   # строка фона пришла, пока на приборах бегство
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
+		msg.update(0.05)
+		if at["flee"] > 0.0 and msg.text == flee_line and flee_i == 0 and flee_stream.is_empty():
+			flee_stream.assign([t + 0.15, t + 0.30, t + 1.5, t + 3.0])   # бегство вышло — фон наступает на него
+		if msg.text != "" and (shown.is_empty() or shown[-1][0] != msg.text):
+			shown.append([msg.text, t, 0.0])
+		if msg.text != "":
+			shown[-1][2] = t - float(shown[-1][1]) + 0.05   # кадр t виден до следующего шага
+	var a_seen := 0.0
+	var alert_seen := 0.0
+	var alert_shown_at := -1.0
+	var flee_seen := 0.0
+	var flee_shown_at := -1.0
+	var after_alert := ""
+	for i in shown.size():
+		var s: Array = shown[i]
+		var txt := String(s[0])
+		if txt == line_a:
+			a_seen = maxf(a_seen, float(s[2]))
+		elif txt.contains("замер"):
+			alert_seen = maxf(alert_seen, float(s[2]))
+			if alert_shown_at < 0.0:
+				alert_shown_at = float(s[1])
+			if i + 1 < shown.size():
+				after_alert = String(shown[i + 1][0])
+		elif txt == flee_line:
+			flee_seen = maxf(flee_seen, float(s[2]))
+			if flee_shown_at < 0.0:
+				flee_shown_at = float(s[1])
+	var lines := PackedStringArray()
+	for s: Array in shown:
+		lines.append("%.2f с «%s» %.2f с" % [s[1], String(s[0]).left(40), s[2]])
+	print("    фон %.2f с, бегство %.2f с (ждало при срочной: %s), «замер» %.2f с (на приборах %.2f с), бегство на приборах %.2f с, фона при нём %d; на приборах: %s" % [
+		at["a"], at["flee"], flee_waiting_at_alert, at["alert"], alert_shown_at, flee_shown_at, bg_during_flee,
+		" | ".join(lines)])
+	ok(at["a"] > 0.0 and at["flee"] > 0.0 and at["alert"] > 0.0, "фон, бегство и «замер» пришли")
+	ok(at["a"] < at["flee"] and at["flee"] < at["alert"], "порядок: фон → бегство → «замер»")
+	ok(flee_keep and not flee_lead, "бегство пришло «держится» без ведущего ранга (EcoLink.KEEP)")
+	ok(flee_waiting_at_alert, "в момент прихода срочной бегство ждало очереди (next) — постановка реальная")
+	ok(alert_urgent, "«замер» пришёл с рангом «срочная» (EcoLink.URGENT)")
+	ok(a_seen < Status.Message.MIN_SHOW, "срочная перебила свежую строку фона (та видна %.2f с < MIN_SHOW)" % a_seen)
+	ok(alert_shown_at - at["alert"] <= 0.051, "срочная вышла на приборы сразу (ждала %.2f с)" % [
+		alert_shown_at - at["alert"]])
+	ok(alert_seen >= Status.MESSAGE_SECONDS - 0.051, "срочная видна все %.1f с (по факту %.2f с)" % [
+		Status.MESSAGE_SECONDS, alert_seen])
+	ok(flee_shown_at >= alert_shown_at + Status.MESSAGE_SECONDS - 0.051,
+		"бегство вышло следом за срочной (на приборах %.2f с, срочная с %.2f с)" % [flee_shown_at, alert_shown_at])
+	eq(after_alert, flee_line, "сразу за срочной на приборах — бегство, не фон")
+	ok(bg_during_flee >= 3, "пока видно бегство, пришёл поток фона (%d строки) — проверка не пустая" % bg_during_flee)
+	ok(flee_seen >= Status.MESSAGE_SECONDS - 0.051, "бегство видно все свои %.1f с (по факту %.2f с)" % [
+		Status.MESSAGE_SECONDS, flee_seen])
