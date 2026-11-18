@@ -1188,3 +1188,95 @@ func test_arrival_brief_drops_world_lines() -> void:
 	eq(msg.text, "Прожектор погашен", "и остаётся на приборах")
 	msg.update(1.5)
 	eq(msg.text, "Прожектор погашен", "и не сменяется вернувшейся строкой мира")
+
+
+## Сцена 00→01 (п. 2 (ат)): брифинг прибытия (`Status.Message.take_world`, #1429, вызов — `main.gd`)
+## гасит и ВИДИМУЮ срочную «замер» (`pred/alert`, `EcoLink.URGENT`, #1498), и ЖДУЩИЙ ведущий отбой
+## (`pred/lost`, `EcoLink.KEEP_LEAD` в `next`, #1966): после брифинга ни «замер», ни отбой на приборы
+## не выходят, брифингу отдаётся последняя строка мира — ждущий отбой; своё сообщение игрока
+## (`wait` = false) брифинг не трогает. Постановка как в (аг) — брифинг вместо повторного света:
+## свет → «замер» на приборах (`hot`), свет погас во «замере» → отбой ждёт очереди за срочной.
+## Флаги строк — из мира (`take_link`), показ — `Status.Message`, как `Main._world_say`.
+## Шов «брифинг × срочная × ждущая ведущая» юнит-тестом не покрыт: в `test_status.test_message_take_world`
+## флаги выставлены руками и срочной среди них нет, (ач) — про «держится» без срочной. Мутация:
+## `take_world` не трогает горячую (`hot`) — «замер» остаётся на приборах после брифинга. Без Main.
+func test_arrival_brief_drops_urgent_and_pending_lead() -> void:
+	var r := _near(0)
+	var w: EcoWorld = r[0]
+	var msg := Status.Message.new()
+	var shown: Array = []   # [текст, когда встал, сколько виден] до брифинга
+	var at := {"alert": -1.0, "lost": -1.0}
+	var alert_text := ""
+	var alert_urgent := false
+	var lost_text := ""
+	var lost_keep := false
+	var lost_lead := false
+	var brief_at := -1.0
+	var brief := ""
+	var pre_text := ""
+	var pre_next := ""
+	var post_text := "~"
+	var post_next := "~"
+	var t := 0.0
+	while t < 4.0 and brief_at < 0.0:
+		if not w.ship.light_on and at["alert"] < 0.0 and t >= 0.799:
+			w.ship.light_on = true   # голодный хищник в 25 м: «замер» на этом шаге
+		if w.ship.light_on and at["alert"] > 0.0 and at["lost"] < 0.0 and t >= 2.299:
+			w.ship.light_on = false   # свет погас во «замере» — отбой на этом шаге
+		w.step(0.05)
+		t += 0.05
+		for e in w.take_link():
+			if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+				continue
+			var text := String(e.get("text", ""))
+			if text == "":
+				continue
+			if text.contains("замер") and at["alert"] < 0.0:
+				at["alert"] = t
+				alert_text = text
+				alert_urgent = bool(e.get("urgent", false))
+			elif text.contains("потерял корабль") and at["lost"] < 0.0:
+				at["lost"] = t
+				lost_text = text
+				lost_keep = bool(e.get("keep", false))
+				lost_lead = bool(e.get("lead", false))
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
+		msg.update(0.05)
+		if at["lost"] > 0.0 and brief_at < 0.0 and t >= at["lost"] + 0.299:
+			pre_text = msg.text
+			pre_next = msg.next
+			brief_at = t
+			brief = msg.take_world()   # брифинг прибытия забирает строки мира
+			post_text = msg.text
+			post_next = msg.next
+		if msg.text != "" and (shown.is_empty() or shown[-1][0] != msg.text):
+			shown.append([msg.text, t, 0.0])
+		if msg.text != "":
+			shown[-1][2] = t - float(shown[-1][1]) + 0.05   # кадр t виден до следующего шага
+	var after: Array = []
+	for i in 120:   # 6 с после брифинга
+		msg.update(0.05)
+		if msg.text != "" and (after.is_empty() or after[-1] != msg.text):
+			after.append(msg.text)
+	var lines := PackedStringArray()
+	for s: Array in shown:
+		lines.append("%.2f с «%s» %.2f с" % [s[1], String(s[0]).left(40), s[2]])
+	print("    «замер» %.2f с, отбой %.2f с, брифинг %.2f с; до брифинга: %s; после: %s" % [
+		at["alert"], at["lost"], brief_at, " | ".join(lines), " | ".join(after)])
+	ok(at["alert"] > 0.0 and at["lost"] > 0.0, "«замер» и отбой пришли")
+	ok(alert_urgent, "«замер» пришла с рангом «срочная» (EcoLink.URGENT)")
+	ok(lost_keep and lost_lead, "отбой пришёл ведущей «держится» (EcoLink.KEEP_LEAD)")
+	eq(pre_text, alert_text, "в момент брифинга на приборах — видимая срочная «замер»")
+	eq(pre_next, lost_text, "отбой ждал очереди за срочной — постановка реальная")
+	eq(brief, lost_text, "брифингу отдана последняя строка мира — ждущий отбой")
+	eq(post_text, "", "брифинг погасил видимую срочную")
+	eq(post_next, "", "и снял ждущий отбой")
+	ok(after.is_empty(), "после брифинга ни «замер», ни отбой на приборы не выходят (показано: %s)" % [" | ".join(after)])
+	# своё сообщение игрока (`wait` = false) брифинг не трогает
+	msg.say("Прожектор погашен")
+	eq(msg.text, "Прожектор погашен", "своё сообщение игрока — сразу на приборы")
+	eq(msg.take_world(), "", "своё сообщение — не строка мира, брифингу не отдаётся")
+	eq(msg.text, "Прожектор погашен", "и остаётся на приборах")
+	msg.update(1.5)
+	eq(msg.text, "Прожектор погашен", "и не сменяется вернувшейся строкой мира")
