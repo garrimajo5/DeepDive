@@ -847,3 +847,92 @@ func test_catch_keep_line_held_under_background_stream() -> void:
 	ok(shown_bg >= 3, "пока кормёжка видна, пришёл поток фона (%d строки) — проверка не пустая" % shown_bg)
 	ok(catch_seen >= Status.MESSAGE_SECONDS - 0.051, "кормёжка видна все %.1f с (по факту %.2f с)" % [
 		Status.MESSAGE_SECONDS, catch_seen])
+
+
+## Сцена 00→01 (п. 2 (ач)): брифинг прибытия (`Status.Message.take_world`, #1429, вызов — `main.gd`)
+## забирает строки мира с приборов: гасит и ВИДИМУЮ «держится» (бегство рыб `fish/flee`, `EcoLink.KEEP`),
+## и ЖДУЩУЮ строку мира (фон в `next`), брифингу отдаётся последняя; своё сообщение игрока
+## (`wait` = false) брифинг не трогает — после брифинга ни бегство, ни фон на приборы не выходят.
+## Постановка как в (аф): фон → после MIN_SHOW бегство (встаёт на приборы сразу) → фон ждёт очереди
+## за «держится»; флаги строк — из мира (`take_link`), показ — `Status.Message`, как `Main._world_say`.
+## Шов «брифинг × ранги мира × очередь» юнит-тестом не покрыт: в `test_status.test_message_take_world`
+## флаги выставлены руками и «держится» среди них нет. Мутация: `take_world` оставляет `next` —
+## ждущий фон выходит после брифинга. Без Main.
+func test_arrival_brief_drops_world_lines() -> void:
+	var w := EcoWorld.new(EcoRandom.WORLD_SEED)
+	w.ground = Seabed.height
+	var stand := Vector2(33.0, -22.0)
+	w.ship.pos = Vector3(stand.x, Seabed.height(stand.x, stand.y) + 7.0, stand.y)
+	w.ship.light_on = true
+	var line_a := "Гребневики пасутся на мху у подножия рифа"
+	var flee_line := "Мелкая рыба: стая уходит в кораллы — рядом хищник"
+	var line_bg := "Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял"
+	var msg := Status.Message.new()
+	var shown: Array = []   # тексты на приборах до брифинга
+	var at := {"a": -1.0, "flee": -1.0, "bg": -1.0}
+	var flee_keep := false
+	var flee_lead := false
+	var brief_at := -1.0
+	var brief := ""
+	var pre_text := ""
+	var pre_next := ""
+	var post_text := "~"
+	var post_next := "~"
+	var t := 0.0
+	while t < 4.0 and brief_at < 0.0:
+		if at["a"] < 0.0 and t >= 0.499:
+			w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(12, -4, 8), func(): return line_a)
+		if at["a"] > 0.0 and at["flee"] < 0.0 and t >= at["a"] + 1.199:   # фон виден дольше MIN_SHOW — бегство встанет сразу
+			w.emit(EcoFish.ID, "flee", w.ship.pos + Vector3(15, -3, 10), func(): return flee_line)
+		if at["flee"] > 0.0 and at["bg"] < 0.0 and t >= at["flee"] + 0.299:   # бегство «держится» на приборах — фон ждёт очереди
+			w.emit(EcoGrot.ID, "hide", w.ship.pos + Vector3(10, -5, -7), func(): return line_bg)
+		w.step(0.05)
+		t += 0.05
+		for e in w.take_link():
+			if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+				continue
+			var text := String(e.get("text", ""))
+			if text == "":
+				continue
+			if text == line_a and at["a"] < 0.0:
+				at["a"] = t
+			elif text == flee_line and at["flee"] < 0.0:
+				at["flee"] = t
+				flee_keep = bool(e.get("keep", false))
+				flee_lead = bool(e.get("lead", false))
+			elif text == line_bg and at["bg"] < 0.0:
+				at["bg"] = t
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
+		msg.update(0.05)
+		if at["bg"] > 0.0 and t >= at["bg"] + 0.299:
+			pre_text = msg.text
+			pre_next = msg.next
+			brief_at = t
+			brief = msg.take_world()   # брифинг прибытия забирает строки мира
+			post_text = msg.text
+			post_next = msg.next
+		if msg.text != "" and (shown.is_empty() or shown[-1] != msg.text):
+			shown.append(msg.text)
+	var after: Array = []
+	for i in 120:   # 6 с после брифинга
+		msg.update(0.05)
+		if msg.text != "" and (after.is_empty() or after[-1] != msg.text):
+			after.append(msg.text)
+	print("    фон %.2f с, бегство %.2f с, ждущий фон %.2f с, брифинг %.2f с; до брифинга: %s; после: %s" % [
+		at["a"], at["flee"], at["bg"], brief_at, " | ".join(shown), " | ".join(after)])
+	ok(at["a"] > 0.0 and at["flee"] > 0.0 and at["bg"] > 0.0, "фон, бегство и ждущий фон пришли")
+	ok(flee_keep and not flee_lead, "бегство пришло «держится» без ведущего ранга (EcoLink.KEEP)")
+	eq(pre_text, flee_line, "в момент брифинга на приборах — видимое бегство")
+	eq(pre_next, line_bg, "фон ждал очереди — постановка реальная")
+	eq(brief, line_bg, "брифингу отдана последняя строка мира — ждущий фон")
+	eq(post_text, "", "брифинг погасил видимое бегство")
+	eq(post_next, "", "и снял ждущий фон")
+	ok(after.is_empty(), "после брифинга ни бегство, ни фон на приборы не выходят (показано: %s)" % [" | ".join(after)])
+	# своё сообщение игрока (`wait` = false) брифинг не трогает
+	msg.say("Прожектор погашен")
+	eq(msg.text, "Прожектор погашен", "своё сообщение игрока — сразу на приборы")
+	eq(msg.take_world(), "", "своё сообщение — не строка мира, брифингу не отдаётся")
+	eq(msg.text, "Прожектор погашен", "и остаётся на приборах")
+	msg.update(1.5)
+	eq(msg.text, "Прожектор погашен", "и не сменяется вернувшейся строкой мира")
