@@ -3,6 +3,12 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-18
+- Тесты, поток Б п. 2 (ач): `test_eco_pred_zamer.test_arrival_brief_drops_world_lines` — брифинг прибытия
+  (`Status.Message.take_world`, #1429, вызов — `main.gd`) гасит и ВИДИМУЮ «держится» (бегство рыб `fish/flee`,
+  `EcoLink.KEEP`), и ЖДУЩУЮ строку мира (фон в `next`), брифингу отдаётся последняя; своё сообщение игрока
+  (`wait` = false) не трогается, после брифинга ни бегство, ни фон на приборы не выходят (без Main, флаги из
+  `take_link`, показ — `Status.Message`). Мутация (`take_world` оставляет `next`) — красный: ждущий фон
+  выходит после брифинга.
 - Снимки, поток А (фокус п. 3, #1350 16.11): `shot_setup.gd` предупреждает в лог, когда в команде снимка даны
   и `ship=`, и `place=` — `place` разбирается позже и молча переставляет корабль и камеру, `ship=` проигрывает
   (`ship_place_warn`; тест `test_shot_place.test_ship_and_place_warns`). Шапка `tools/shot.gd` про `kupol` без
