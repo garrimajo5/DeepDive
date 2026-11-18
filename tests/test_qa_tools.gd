@@ -378,7 +378,7 @@ func test_run_qa_pr_beside_planned() -> void:
 	var arts := ps.find("/artifacts\" --jq '.artifacts[].name'")
 	var none := ps.find("Write-Output \"NO_ARTIFACT")
 	ok(arts > 0 and arts < none, "NO_ARTIFACT — по списку артефактов прогона")
-	ok(ps.find("gh run download $rid -R garrimajo5/DeepDive") > none, "скачивание — с явным репозиторием, после проверки")
+	ok(ps.find("& $ghExe run download $rid -R garrimajo5/DeepDive") > none, "скачивание — с явным репозиторием, после проверки")
 	ok(ps.contains("Push-Location $repo"), "gh — из клона")
 	ok(ps.contains("Write-Output \"DOWNLOAD_FAILED PR#"), "артефакт есть, но не скачался — не NO_ARTIFACT")
 	ok(ps.contains("actions/workflows/godot.yml/runs?head_sha="), "прогон — именно «Godot»")
@@ -390,6 +390,21 @@ func test_run_qa_pr_beside_planned() -> void:
 	var qa := FileAccess.get_file_as_string("res://docs/QA.md")
 	for k in ["-Out", "-From", "run-pr", "-r -d"]:
 		ok(qa.contains(k), "docs/QA.md: %s" % k)
+
+
+## #1350 (тестер, 18.11): GitHub CLI ставится в Machine PATH, но сессия, запущенная до установки, его не видит —
+## сводка ISSUES и открытие PR не должны зависеть от PATH сессии: fallback в стандартный путь установки (Find-Gh).
+func test_gh_fallback_to_standard_path() -> void:
+	var gh := _ps("gh-find.ps1")
+	ok(gh.contains("C:\\Program Files\\GitHub CLI\\gh.exe"), "gh-find.ps1: стандартный путь установки")
+	ok(gh.contains("Get-Command gh"), "сначала — gh из PATH сессии")
+	for f in ["run-qa.ps1", "kadry.ps1", "publish-qa.ps1"]:
+		ok(_ps(f).contains("gh-find.ps1"), "%s подключает gh-find.ps1" % f)
+	var run := _ps("run-qa.ps1")
+	ok(run.contains("NO_GH"), "run-qa.ps1 -Pr без gh нигде — NO_GH")
+	var kad := _ps("kadry.ps1")
+	ok(kad.contains("$ghExe = Find-Gh"), "kadry.ps1: сводка ISSUES через Find-Gh")
+	ok(kad.contains("ISSUES gh не найден"), "нет gh нигде — прежняя строка «gh не найден»")
 
 
 ## #1614: папка результата чистилась в начале скрипта — NO_RUN у `-Pr` оставлял пустую run-pr<номер>\, а NO_CHANGES
