@@ -3,6 +3,10 @@
 История прежних версий (браузер, Unity) — в `garrimajo5/pogrujenie`.
 
 ## 2026-11-18
+- Снимки, поток А (фокус п. 3, #1350 16.11): `shot_setup.gd` предупреждает в лог, когда в команде снимка даны
+  и `ship=`, и `place=` — `place` разбирается позже и молча переставляет корабль и камеру, `ship=` проигрывает
+  (`ship_place_warn`; тест `test_shot_place.test_ship_and_place_warns`). Шапка `tools/shot.gd` про `kupol` без
+  `place=` — раньше, в PR #2006.
 - Тесты, поток Б п. 2 (ах): `test_eco_pred_zamer.test_catch_keep_line_held_under_background_stream` — кормёжка
   серпохвоста (`pred/catch`, «держится» `EcoLink.KEEP` без ведущего ранга) под потоком строк фона держится все
   `MESSAGE_SECONDS`: ждущую фон не сменяет, видимую — не сменяет и не срезает до `MIN_SHOW` (без Main, флаги из
