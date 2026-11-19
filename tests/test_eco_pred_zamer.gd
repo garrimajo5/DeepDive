@@ -2089,3 +2089,112 @@ func test_own_message_cuts_visible_lost_lead() -> void:
 	eq(after_own, line_c, "следом за своим вышел ждущий фон («%s»)" % after_own.left(40))
 	ok(c_shown_at - own_shown_at >= Status.Message.MIN_SHOW - 0.051,
 		"ждущий фон вышел после MIN_SHOW своего (через %.2f с)" % [c_shown_at - own_shown_at])
+
+
+## Сцена 00→01 (п. 2 (аы)): своё сообщение игрока (`wait` = false — отклик на кнопку, напр. «Прожектор
+## погашен», `main.gd` `toggle_light` → `Main.say`) при ЖДУЩЕЙ ведущей «держится» (отбой «потерял корабль»
+## `pred/lost`, `EcoLink.KEEP_LEAD` в `next`) НЕ дропает её: отбой выходит следом за своим после `MIN_SHOW`
+## и держится все свои `MESSAGE_SECONDS`. Зеркало (ая) для ведущего ранга: ждущий отбой дропает только
+## срочная (после новой угрозы он устарел, ГД #1968, тест (аь)); своё сообщение ждущее не трогает — ветка
+## `Status.Message.say` при `wait` = false дропает `next`, только если своё совпало с ним по тексту.
+## Постановка как в (аг) — своё сообщение вместо повторного света: свет → «замер» на приборах → свет погас
+## во «замере» → отбой ждёт в `next` → своё сообщение. Флаги строк — из мира (`take_link`), показ —
+## `Status.Message`, как `Main._world_say`. Шов «своё × ЖДУЩАЯ ведущая „держится"» юнит-тестами не покрыт:
+## `test_status` флаги выставляет руками, (аь) — срочная × ждущий отбой (дроп), (аг) — ждущий отбой под
+## потоком фона, (ат) — брифинг × ждущий отбой, (ая) — своё × ждущая НЕ ведущая. Мутация: ветка своего
+## дропает `next` безусловно — отбоя на приборах нет вовсе. Без Main.
+func test_own_message_keeps_pending_lost_lead() -> void:
+	var r := _near(0)
+	var w: EcoWorld = r[0]
+	var own := "Прожектор погашен"
+	var msg := Status.Message.new()
+	var shown: Array = []   # [текст, когда встал, сколько виден]
+	var at := {"alert": -1.0, "lost": -1.0, "own": -1.0}
+	var alert_text := ""
+	var lost_text := ""
+	var lost_keep := false
+	var lost_lead := false
+	var lost_queued := false   # отбой ждал в `next`, пока на приборах «замер»
+	var own_wait := -1.0   # сколько своё сообщение ждало показа (0,00 — в тот же вызов say)
+	var pre_text := ""   # что было на приборах в момент своего сообщения
+	var pre_next := ""   # и что ждало в `next`
+	var t := 0.0
+	while t < 9.5:
+		if not w.ship.light_on and at["alert"] < 0.0 and t >= 0.799 and t < 2.0:
+			w.ship.light_on = true   # голодный хищник в 25 м: «замер» на этом шаге
+		if w.ship.light_on and at["alert"] > 0.0 and at["lost"] < 0.0 and t >= 2.299:
+			w.ship.light_on = false   # свет погас во «замере» — отбой на этом шаге
+		w.step(0.05)
+		t += 0.05
+		for e in w.take_link():
+			if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+				continue
+			var text := String(e.get("text", ""))
+			if text == "":
+				continue
+			if text.contains("замер") and at["alert"] < 0.0:
+				at["alert"] = t
+				alert_text = text
+			elif text.contains("потерял корабль") and at["lost"] < 0.0:
+				at["lost"] = t
+				lost_text = text
+				lost_keep = bool(e.get("keep", false))
+				lost_lead = bool(e.get("lead", false))
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
+		if not lost_queued and not lost_text.is_empty():
+			lost_queued = msg.next == lost_text   # после шага с отбоем тот ждёт очереди за «замером»
+		msg.update(0.05)
+		if at["own"] < 0.0 and lost_queued and msg.next == lost_text and t >= at["lost"] + 0.15:
+			pre_text = msg.text
+			pre_next = msg.next
+			at["own"] = t
+			msg.say(own)   # отклик на кнопку (`main.gd` `toggle_light` → `Main.say`), `wait` = false
+		if at["own"] > 0.0 and own_wait < 0.0 and msg.text == own:
+			own_wait = t - at["own"]
+		if msg.text != "" and (shown.is_empty() or shown[-1][0] != msg.text):
+			shown.append([msg.text, t, 0.0])
+		if msg.text != "":
+			shown[-1][2] = t - float(shown[-1][1]) + 0.05   # кадр t виден до следующего шага
+	var alert_seen := 0.0
+	var lost_seen := 0.0
+	var lost_shown_at := -1.0
+	var own_seen := 0.0
+	var own_shown_at := -1.0
+	var after_own := ""   # что вышло сразу за своим сообщением
+	for i in shown.size():
+		var s: Array = shown[i]
+		var txt := String(s[0])
+		if not alert_text.is_empty() and txt == alert_text:
+			alert_seen = maxf(alert_seen, float(s[2]))
+		elif not lost_text.is_empty() and txt == lost_text:
+			lost_seen = maxf(lost_seen, float(s[2]))
+			if lost_shown_at < 0.0:
+				lost_shown_at = float(s[1])
+		elif txt == own:
+			own_seen = maxf(own_seen, float(s[2]))
+			if own_shown_at < 0.0:
+				own_shown_at = float(s[1])
+			if i + 1 < shown.size():
+				after_own = String(shown[i + 1][0])
+	var lines := PackedStringArray()
+	for s: Array in shown:
+		lines.append("%.2f с «%s» %.2f с" % [s[1], String(s[0]).left(40), s[2]])
+	print("    «замер» %.2f с, отбой %.2f с, своё %.2f с (ждало %.2f с), отбой на приборах %.2f с; на приборах: %s" % [
+		at["alert"], at["lost"], at["own"], maxf(own_wait, 0.0), lost_shown_at, " | ".join(lines)])
+	ok(at["alert"] > 0.0 and at["lost"] > 0.0 and at["own"] > 0.0, "«замер», отбой и своё сообщение пришли")
+	ok(at["alert"] < at["lost"] and at["lost"] < at["own"], "порядок: «замер» → отбой → своё сообщение")
+	ok(lost_keep and lost_lead, "отбой пришёл ведущей «держится» (EcoLink.KEEP_LEAD)")
+	ok(lost_queued, "отбой ждал в `next`, пока на приборах «замер» (постановка реальная)")
+	eq(pre_text, alert_text, "в момент своего сообщения на приборах — видимая «замер» (постановка реальная)")
+	eq(pre_next, lost_text, "в момент своего сообщения отбой ждёт в `next` (постановка реальная)")
+	ok(own_wait >= 0.0 and own_wait < 0.06, "своё сообщение на приборах в тот же вызов say (ждало %.2f с)" % [
+		maxf(own_wait, 0.0)])
+	ok(alert_seen > 0.0 and alert_seen < Status.MESSAGE_SECONDS,
+		"своё срезало видимую срочную «замер» (та видна %.2f с < %.1f с)" % [alert_seen, Status.MESSAGE_SECONDS])
+	ok(own_seen >= Status.Message.MIN_SHOW - 0.051, "своё держится минимальную секунду (по факту %.2f с)" % own_seen)
+	eq(after_own, lost_text, "сразу за своим на приборах — ждущий отбой, не потерян")
+	ok(lost_shown_at - own_shown_at >= Status.Message.MIN_SHOW - 0.051,
+		"отбой вышел после MIN_SHOW своего (через %.2f с)" % [lost_shown_at - own_shown_at])
+	ok(lost_seen >= Status.MESSAGE_SECONDS - 0.051, "отбой держится все свои %.1f с (по факту %.2f с)" % [
+		Status.MESSAGE_SECONDS, lost_seen])
