@@ -2512,3 +2512,94 @@ func test_arrival_brief_drops_pending_catch() -> void:
 	eq(post_next, "", "и снял ждущую кормёжку")
 	ok(after.is_empty(), "после брифинга ни кормёжка, ни фон на приборы не выходят (показано: %s)" % [
 		" | ".join(after)])
+
+
+## Сцена 00→01 (п. 2 (ас)): брифинг прибытия (`Status.Message.take_world`, #1429, вызов — `main.gd`)
+## гасит ВИДИМУЮ кормёжку серпохвоста у 01 (`pred/catch`, «держится» `EcoLink.KEEP` без ведущего ранга)
+## сразу, не дожидаясь её `MESSAGE_SECONDS`: после брифинга кормёжка на приборы не выходит и назад не
+## возвращается; брифингу отдаётся последняя строка мира — ждущий фон (зеркало (ач) для кормёжки, как
+## (аш) для (ае)/(аф); (ар) — ждущая кормёжка × брифинг). Постановка как в (ач) — кормёжка вместо
+## бегства (заметка `catch` у `pred`, текст из `_catch_text`): свежий фон на приборах, кормёжка ждёт
+## очереди, выходит и держится, фон ждёт в `next`, брифинг. Флаги строк — из мира (`take_link`), показ —
+## `Status.Message`, как `Main._world_say`. Шов «брифинг × ВИДИМАЯ кормёжка» юнит-тестами не покрыт:
+## (ач) — видимое бегство × брифинг, (аш) — срочная × видимая кормёжка, (ар) — ждущая кормёжка ×
+## брифинг, `test_status` флаги выставляет руками. Мутация: `take_world` не гасит видимую строку мира
+## (`world`) — кормёжка остаётся на приборах после брифинга. Без Main.
+func test_arrival_brief_drops_visible_catch_line() -> void:
+	var r := _near(0)
+	var w: EcoWorld = r[0]
+	var line_a := "Гребневики пасутся на мху у подножия рифа"
+	var line_bg := "Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял"
+	var msg := Status.Message.new()
+	var shown: Array = []   # тексты на приборах до брифинга
+	var at := {"a": -1.0, "catch": -1.0, "bg": -1.0}
+	var catch_text := ""
+	var catch_keep := false
+	var catch_lead := false
+	var brief_at := -1.0
+	var brief := ""
+	var pre_text := ""
+	var pre_next := ""
+	var post_text := "~"
+	var post_next := "~"
+	var t := 0.0
+	while t < 4.0 and brief_at < 0.0:
+		if at["a"] < 0.0 and t >= 0.499:
+			w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(12, -4, 8), func(): return line_a)
+		if at["a"] > 0.0 and at["catch"] < 0.0 and t >= at["a"] + 1.199:   # фон виден дольше MIN_SHOW — кормёжка встанет сразу
+			w.emit(EcoPred.ID, "catch", w.ship.pos + Vector3(15, -3, 10), EcoPred._catch_text(w))
+		if at["catch"] > 0.0 and at["bg"] < 0.0 and t >= at["catch"] + 0.299:   # кормёжка «держится» на приборах — фон ждёт очереди
+			w.emit(EcoGrot.ID, "hide", w.ship.pos + Vector3(10, -5, -7), func(): return line_bg)
+		w.step(0.05)
+		t += 0.05
+		for e in w.take_link():
+			if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+				continue
+			var text := String(e.get("text", ""))
+			if text == "":
+				continue
+			if text == line_a and at["a"] < 0.0:
+				at["a"] = t
+			elif String(e.get("note", "")) == "catch" and at["catch"] < 0.0:
+				at["catch"] = t
+				catch_text = text
+				catch_keep = bool(e.get("keep", false))
+				catch_lead = bool(e.get("lead", false))
+			elif text == line_bg and at["bg"] < 0.0:
+				at["bg"] = t
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
+		msg.update(0.05)
+		if at["bg"] > 0.0 and t >= at["bg"] + 0.299:
+			pre_text = msg.text
+			pre_next = msg.next
+			brief_at = t
+			brief = msg.take_world()   # брифинг прибытия забирает строки мира
+			post_text = msg.text
+			post_next = msg.next
+		if msg.text != "" and (shown.is_empty() or shown[-1] != msg.text):
+			shown.append(msg.text)
+	var after: Array = []
+	for i in 120:   # 6 с после брифинга
+		msg.update(0.05)
+		if msg.text != "" and (after.is_empty() or after[-1] != msg.text):
+			after.append(msg.text)
+	print("    фон %.2f с, кормёжка %.2f с, ждущий фон %.2f с, брифинг %.2f с; до брифинга: %s; после: %s" % [
+		at["a"], at["catch"], at["bg"], brief_at, " | ".join(shown), " | ".join(after)])
+	ok(at["a"] > 0.0 and at["catch"] > 0.0 and at["bg"] > 0.0, "фон, кормёжка и ждущий фон пришли")
+	ok(catch_text.contains("поймал"), "текст кормёжки из `_catch_text` мира: «%s»" % catch_text)
+	ok(catch_keep and not catch_lead, "кормёжка пришла «держится» без ведущего ранга (EcoLink.KEEP)")
+	eq(pre_text, catch_text, "в момент брифинга на приборах — видимая кормёжка")
+	eq(pre_next, line_bg, "фон ждал очереди — постановка реальная")
+	eq(brief, line_bg, "брифингу отдана последняя строка мира — ждущий фон")
+	eq(post_text, "", "брифинг погасил видимую кормёжку")
+	eq(post_next, "", "и снял ждущий фон")
+	ok(after.is_empty(), "после брифинга ни кормёжка, ни фон на приборы не выходят (показано: %s)" % [
+		" | ".join(after)])
+	# своё сообщение игрока (`wait` = false) брифинг не трогает
+	msg.say("Прожектор погашен")
+	eq(msg.text, "Прожектор погашен", "своё сообщение игрока — сразу на приборы")
+	eq(msg.take_world(), "", "своё сообщение — не строка мира, брифингу не отдаётся")
+	eq(msg.text, "Прожектор погашен", "и остаётся на приборах")
+	msg.update(1.5)
+	eq(msg.text, "Прожектор погашен", "и не сменяется вернувшейся строкой мира")
