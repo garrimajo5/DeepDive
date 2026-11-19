@@ -2603,3 +2603,115 @@ func test_arrival_brief_drops_visible_catch_line() -> void:
 	eq(msg.text, "Прожектор погашен", "и остаётся на приборах")
 	msg.update(1.5)
 	eq(msg.text, "Прожектор погашен", "и не сменяется вернувшейся строкой мира")
+
+
+## Сцена 00→01 (п. 2 (ат)): брифинг прибытия (`Status.Message.take_world`, #1429, вызов — `main.gd`)
+## гасит ВИДИМУЮ ведущую «потерял корабль» (`pred/lost`, «держится» `EcoLink.KEEP` с ведущим рангом
+## `lead`, #1966) сразу, не дожидаясь её `MESSAGE_SECONDS`: после брифинга ведущая на приборы не выходит
+## и назад не возвращается; пустой `next` — брифингу отдаётся сама ведущая, иначе — последняя ждущая
+## строка мира; своё сообщение игрока (`wait` = false) не тронуто (зеркало (ас) для ведущей, как (ач)
+## для бегства). Постановка как в (ас) — ведущая вместо кормёжки (заметка `lost` у `pred`, `lead` из
+## флагов `take_link`): свежий фон на приборах, ведущая ждёт очереди, выходит и держится, фон ждёт в
+## `next`, брифинг. Флаги строк — из мира (`take_link`), показ — `Status.Message`, как `Main._world_say`.
+## Шов «брифинг × ВИДИМАЯ ведущая» юнит-тестами не покрыт: (ач) — видимое бегство × брифинг, (ас) —
+## видимая кормёжка × брифинг, `test_arrival_brief_drops_urgent_and_pending_lead` — видимая срочная и
+## ЖДУЩАЯ ведущая, `test_status` флаги выставляет руками. Мутация: `take_world` не гасит видимую строку
+## мира (`world`) — ведущая остаётся на приборах после брифинга, зеркала (ач),(ас) красные по тому же
+## шву. Без Main.
+func test_arrival_brief_drops_visible_lost_lead() -> void:
+	var r := _near(0)
+	var w: EcoWorld = r[0]
+	var line_a := "Гребневики пасутся на мху у подножия рифа"
+	var line_bg := "Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял"
+	var msg := Status.Message.new()
+	var shown: Array = []   # тексты на приборах до брифинга
+	var at := {"a": -1.0, "lost": -1.0, "bg": -1.0}
+	var lost_text := ""
+	var lost_keep := false
+	var lost_lead := false
+	var lost_shown_at := -1.0
+	var pending_lead := false   # ведущая ждала очереди в `next` ведущей «держится» (постановка реальная)
+	var brief_at := -1.0
+	var brief := ""
+	var pre_text := ""
+	var pre_next := ""
+	var post_text := "~"
+	var post_next := "~"
+	var t := 0.0
+	while t < 5.0 and brief_at < 0.0:
+		if at["a"] < 0.0 and t >= 0.499:
+			w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(12, -4, 8), func(): return line_a)
+		if at["a"] > 0.0 and at["lost"] < 0.0 and t >= at["a"] + 0.149:   # фон свежий (виден < MIN_SHOW) — ведущая ждёт очереди
+			w.emit(EcoPred.ID, "lost", w.ship.pos + Vector3(15, -3, 10),
+				EcoPred._text(w, "%s потерял корабль и отворачивает"))
+		if lost_shown_at > 0.0 and at["bg"] < 0.0 and t >= lost_shown_at + 0.299:   # ведущая держится — фон ждёт очереди
+			w.emit(EcoGrot.ID, "hide", w.ship.pos + Vector3(10, -5, -7), func(): return line_bg)
+		w.step(0.05)
+		t += 0.05
+		for e in w.take_link():
+			if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+				continue
+			var text := String(e.get("text", ""))
+			if text == "":
+				continue
+			if text == line_a and at["a"] < 0.0:
+				at["a"] = t
+			elif text.contains("потерял корабль") and at["lost"] < 0.0:   # `lost` — MESSAGE без `note` (не наблюдение)
+				at["lost"] = t
+				lost_text = text
+				lost_keep = bool(e.get("keep", false))
+				lost_lead = bool(e.get("lead", false))
+			elif text == line_bg and at["bg"] < 0.0:
+				at["bg"] = t
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
+		if not lost_text.is_empty() and msg.next == lost_text and msg.next_keep and msg.next_lead:
+			pending_lead = true
+		msg.update(0.05)
+		if not lost_text.is_empty() and lost_shown_at < 0.0 and msg.text == lost_text:
+			lost_shown_at = t
+		if at["bg"] > 0.0 and t >= at["bg"] + 0.299:
+			pre_text = msg.text
+			pre_next = msg.next
+			brief_at = t
+			brief = msg.take_world()   # брифинг прибытия забирает строки мира
+			post_text = msg.text
+			post_next = msg.next
+		if msg.text != "" and (shown.is_empty() or shown[-1] != msg.text):
+			shown.append(msg.text)
+	var after: Array = []
+	for i in 120:   # 6 с после брифинга
+		msg.update(0.05)
+		if msg.text != "" and (after.is_empty() or after[-1] != msg.text):
+			after.append(msg.text)
+	print("    фон %.2f с, ведущая %.2f с (на приборах %.2f с), ждущий фон %.2f с, брифинг %.2f с; до брифинга: %s; после: %s" % [
+		at["a"], at["lost"], lost_shown_at, at["bg"], brief_at, " | ".join(shown), " | ".join(after)])
+	ok(at["a"] > 0.0 and at["lost"] > 0.0 and at["bg"] > 0.0, "фон, ведущая и ждущий фон пришли")
+	ok(lost_text.contains("потерял корабль"), "текст ведущей из мира (`_text` как в `pred.gd`): «%s»" % lost_text)
+	ok(lost_keep and lost_lead, "отбой пришёл ведущей «держится» (EcoLink.KEEP_LEAD)")
+	ok(pending_lead, "фон был свежим — ведущая ждала очереди в `next` ведущей «держится» (постановка реальная)")
+	ok(lost_shown_at > at["lost"], "фон догорел до MIN_SHOW — ведущая вышла на приборы и держится")
+	eq(pre_text, lost_text, "в момент брифинга на приборах — видимая ведущая")
+	eq(pre_next, line_bg, "фон ждал очереди — постановка реальная")
+	eq(brief, line_bg, "брифингу отдана последняя строка мира — ждущий фон")
+	eq(post_text, "", "брифинг погасил видимую ведущую, не дожидаясь её MESSAGE_SECONDS")
+	eq(post_next, "", "и снял ждущий фон")
+	ok(after.is_empty(), "после брифинга ни ведущая, ни фон на приборы не выходят (показано: %s)" % [
+		" | ".join(after)])
+	# своё сообщение игрока (`wait` = false) брифинг не трогает
+	msg.say("Прожектор погашен")
+	eq(msg.text, "Прожектор погашен", "своё сообщение игрока — сразу на приборы")
+	eq(msg.take_world(), "", "своё сообщение — не строка мира, брифингу не отдаётся")
+	eq(msg.text, "Прожектор погашен", "и остаётся на приборах")
+	msg.update(1.5)
+	eq(msg.text, "Прожектор погашен", "и не сменяется вернувшейся строкой мира")
+	# пустой `next` — брифингу отдаётся сама видимая ведущая (`take_world`: `out = text`)
+	var msg2 := Status.Message.new()
+	msg2.say(line_a, Status.MESSAGE_SECONDS, true)
+	msg2.update(1.2)   # фон виден дольше MIN_SHOW — ведущая встанет сразу
+	msg2.say(lost_text, Status.MESSAGE_SECONDS, true, false, lost_keep, lost_lead)
+	eq(msg2.text, lost_text, "свежий показ: ведущая на приборах")
+	eq(msg2.next, "", "очередь пуста")
+	var brief2 := msg2.take_world()
+	eq(brief2, lost_text, "пустой `next` — брифингу отдана сама видимая ведущая")
+	eq(msg2.text, "", "и она погашена сразу, не дожидаясь MESSAGE_SECONDS")
