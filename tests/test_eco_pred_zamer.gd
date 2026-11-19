@@ -2198,3 +2198,127 @@ func test_own_message_keeps_pending_lost_lead() -> void:
 		"отбой вышел после MIN_SHOW своего (через %.2f с)" % [lost_shown_at - own_shown_at])
 	ok(lost_seen >= Status.MESSAGE_SECONDS - 0.051, "отбой держится все свои %.1f с (по факту %.2f с)" % [
 		Status.MESSAGE_SECONDS, lost_seen])
+
+
+## Сцена 00→01 (п. 2 (ап), зеркало (ая) для кормёжки): своё сообщение игрока (`wait` = false — отклик на
+## кнопку, напр. «Прожектор погашен», `main.gd` `toggle_light` → `Main.say`) при ЖДУЩЕЙ кормёжке серпохвоста
+## (`pred/catch`, «держится» `EcoLink.KEEP` без ведущего ранга в `next`) НЕ дропает её: кормёжка выходит
+## следом за своим после `MIN_SHOW` и держится все свои `MESSAGE_SECONDS`. Ждущую дропает только срочная,
+## и ту — лишь при ведущем ранге ждущего (`next_lead`, ждущий отбой, #1968); ветка своего в
+## `Status.Message.say` дропает `next`, только если своё совпало с ним по тексту. Постановка как в (ах) —
+## своё сообщение вместо срочной «замер»: свежий фон на приборах (виден < `MIN_SHOW`), кормёжка ждёт в
+## `next` (заметка `catch` у `pred`, текст из `EcoPred._catch_text`), своё показывается в тот же вызов
+## `say` и срезает фон, кормёжка выходит следом за своим; поток фона (строки стоянки у 01, как в (аб))
+## наступает на видимую кормёжку и ждёт очереди. Флаги строк — из мира (`take_link`), показ —
+## `Status.Message`, как `Main._world_say`. Шов «своё × ЖДУЩАЯ кормёжка» юнит-тестами не покрыт:
+## `test_status` флаги выставляет руками, (ая) — своё × ждущее бегство, (аш) — ждущая кормёжка × срочная.
+## Мутация: ветка своего (`wait` = false) в `Status.Message.say` дропает `next` безусловно — кормёжки на
+## приборах нет вовсе. Без Main.
+func test_own_message_keeps_pending_catch() -> void:
+	var r := _near(0)
+	var w: EcoWorld = r[0]
+	var line_a := "Гребневики пасутся на мху у подножия рифа"
+	var own := "Прожектор погашен"
+	var bg_texts := {   # поток фона у видимой кормёжки (+0,15 с, +0,30 с, +1,5 с, +3,0 с) — строки стоянки у 01, как в (аб)
+		"Гребневики перешли на соседнее пятно мха": true,
+		"Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял": true,
+		"Гребневики пасутся на мху у подножия рифа": true,
+	}
+	var msg := Status.Message.new()
+	var shown: Array = []   # [текст, когда встал, сколько виден]
+	var at := {"a": -1.0, "catch": -1.0, "own": -1.0}
+	var catch_text := ""
+	var catch_keep := false
+	var catch_lead := false
+	var catch_waiting_at_own := false   # в момент своего сообщения кормёжка ждала очереди (`next`)
+	var own_wait := -1.0   # сколько своё сообщение ждало показа (0,00 — в тот же вызов say)
+	var catch_stream: Array[float] = []   # фон, наступающий на видимую кормёжку
+	var catch_i := 0
+	var bg_during_catch := 0   # строки фона, пришедшие, пока на приборах кормёжка
+	var t := 0.0
+	while t < 8.0:
+		if at["a"] < 0.0 and t >= 0.499 and t < 0.6:
+			w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(12, -4, 8), func(): return line_a)
+		if at["a"] > 0.0 and at["catch"] < 0.0 and t >= 0.649 and t < 1.5:
+			w.emit(EcoPred.ID, "catch", w.ship.pos + Vector3(15, -3, 10), EcoPred._catch_text(w))
+		if not catch_stream.is_empty() and t >= catch_stream[0] - 0.001:
+			catch_stream.remove_at(0)
+			if catch_i % 3 == 0:
+				w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(-8, -4, 10),
+					func(): return "Гребневики перешли на соседнее пятно мха")
+			elif catch_i % 3 == 1:
+				w.emit(EcoGrot.ID, "hide", w.ship.pos + Vector3(10, -5, -7),
+					func(): return "Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял")
+			else:
+				w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(6, -4, -12), func(): return line_a)
+			catch_i += 1
+		w.step(0.05)
+		t += 0.05
+		for e in w.take_link():
+			if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+				continue
+			var text := String(e.get("text", ""))
+			if text == "":
+				continue
+			if text == line_a and at["a"] < 0.0:
+				at["a"] = t
+			elif String(e.get("note", "")) == "catch" and at["catch"] < 0.0:
+				at["catch"] = t
+				catch_text = text
+				catch_keep = bool(e.get("keep", false))
+				catch_lead = bool(e.get("lead", false))
+			elif at["catch"] > 0.0 and not catch_text.is_empty() and msg.text == catch_text and bg_texts.has(text):
+				bg_during_catch += 1   # строка фона пришла, пока на приборах кормёжка
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
+		msg.update(0.05)
+		if at["own"] < 0.0 and at["catch"] > 0.0 and not catch_text.is_empty() and msg.next == catch_text \
+				and t >= at["catch"] + 0.15:
+			at["own"] = t
+			catch_waiting_at_own = true
+			msg.say(own)   # отклик на кнопку (`main.gd` `toggle_light` → `Main.say`), `wait` = false
+		if at["own"] > 0.0 and own_wait < 0.0 and msg.text == own:
+			own_wait = t - at["own"]
+		if not catch_text.is_empty() and msg.text == catch_text and catch_i == 0 and catch_stream.is_empty():
+			catch_stream.assign([t + 0.15, t + 0.30, t + 1.5, t + 3.0])   # кормёжка вышла — фон наступает на неё
+		if msg.text != "" and (shown.is_empty() or shown[-1][0] != msg.text):
+			shown.append([msg.text, t, 0.0])
+		if msg.text != "":
+			shown[-1][2] = t - float(shown[-1][1]) + 0.05   # кадр t виден до следующего шага
+	var a_seen := 0.0
+	var own_seen := 0.0
+	var catch_seen := 0.0
+	var catch_shown_at := -1.0
+	var after_own := ""   # что вышло сразу за своим сообщением
+	for i in shown.size():
+		var s: Array = shown[i]
+		var txt := String(s[0])
+		if txt == line_a:
+			a_seen = maxf(a_seen, float(s[2]))
+		elif txt == own:
+			own_seen = maxf(own_seen, float(s[2]))
+			if i + 1 < shown.size():
+				after_own = String(shown[i + 1][0])
+		elif not catch_text.is_empty() and txt == catch_text:
+			catch_seen = maxf(catch_seen, float(s[2]))
+			if catch_shown_at < 0.0:
+				catch_shown_at = float(s[1])
+	var lines := PackedStringArray()
+	for s: Array in shown:
+		lines.append("%.2f с «%s» %.2f с" % [s[1], String(s[0]).left(40), s[2]])
+	print("    фон %.2f с, кормёжка %.2f с (ждала очереди: %s), своё %.2f с (ждало %.2f с), кормёжка на приборах %.2f с, фона при ней %d; на приборах: %s" % [
+		at["a"], at["catch"], catch_waiting_at_own, at["own"], maxf(own_wait, 0.0), catch_shown_at, bg_during_catch,
+		" | ".join(lines)])
+	ok(at["a"] > 0.0 and at["catch"] > 0.0 and at["own"] > 0.0, "фон, кормёжка и своё сообщение пришли")
+	ok(at["a"] < at["catch"] and at["catch"] < at["own"], "порядок: фон → кормёжка → своё сообщение")
+	ok(catch_text.contains("поймал"), "текст кормёжки из `_catch_text` мира: «%s»" % catch_text)
+	ok(catch_keep and not catch_lead, "кормёжка пришла «держится» без ведущего ранга (EcoLink.KEEP)")
+	ok(catch_waiting_at_own, "в момент своего сообщения кормёжка ждала очереди (next) — постановка реальная")
+	ok(a_seen < Status.Message.MIN_SHOW, "своё срезало свежую строку фона (та видна %.2f с < MIN_SHOW)" % a_seen)
+	ok(own_wait >= 0.0 and own_wait < 0.06, "своё сообщение на приборах в тот же вызов say (ждало %.2f с)" % [
+		maxf(own_wait, 0.0)])
+	ok(own_seen >= Status.Message.MIN_SHOW - 0.051, "своё держится минимальную секунду (по факту %.2f с)" % own_seen)
+	eq(after_own, catch_text, "сразу за своим на приборах — ждущая кормёжка, не потеряна")
+	ok(bg_during_catch >= 3, "пока видна кормёжка, пришёл поток фона (%d строки) — проверка не пустая" % bg_during_catch)
+	ok(catch_seen >= Status.MESSAGE_SECONDS - 0.051, "кормёжка видна все свои %.1f с (по факту %.2f с)" % [
+		Status.MESSAGE_SECONDS, catch_seen])
