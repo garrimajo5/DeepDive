@@ -2430,3 +2430,85 @@ func test_own_message_cuts_visible_catch_line() -> void:
 	eq(after_catch, own, "сразу за срезанной кормёжкой на приборах — своё сообщение")
 	ok(own_seen >= Status.Message.MIN_SHOW - 0.051, "своё держится минимальную секунду (по факту %.2f с)" % own_seen)
 	eq(after_own, line_c, "следом за своим вышел ждущий фон («%s»)" % after_own.left(40))
+
+
+## Сцена 00→01 (п. 2 (ар)): брифинг прибытия (`Status.Message.take_world`, #1429, вызов — `main.gd`)
+## гасит ЖДУЩУЮ кормёжку серпохвоста у 01 (`pred/catch`, «держится» `EcoLink.KEEP` без ведущего ранга в
+## `next`): кормёжка отдаётся брифингу как последняя строка мира, после брифинга на приборы не выходит
+## (зеркало (аэ) для кормёжки, как (аш) для (ае)). Постановка как в (аэ) — кормёжка вместо бегства:
+## свежий фон на приборах (виден < `MIN_SHOW`), кормёжка ждёт в `next` (заметка `catch` у `pred`, текст
+## из `_catch_text`), брифинг. Флаги строк — из мира (`take_link`), показ — `Status.Message`, как
+## `Main._world_say`. Шов «брифинг × ждущая кормёжка» юнит-тестами не покрыт: (аэ) — ждущее бегство ×
+## брифинг, (аш) — ждущая кормёжка × срочная, `test_status` флаги выставляет руками. Мутация:
+## `take_world` оставляет ждущую «держится» (`next_keep`) — кормёжка выходит после брифинга. Без Main.
+func test_arrival_brief_drops_pending_catch() -> void:
+	var r := _near(0)
+	var w: EcoWorld = r[0]
+	var line_a := "Гребневики пасутся на мху у подножия рифа"
+	var msg := Status.Message.new()
+	var shown: Array = []   # тексты на приборах до брифинга
+	var at := {"a": -1.0, "catch": -1.0}
+	var catch_text := ""
+	var catch_keep := false
+	var catch_lead := false
+	var brief_at := -1.0
+	var brief := ""
+	var pre_text := ""
+	var pre_next := ""
+	var pre_next_keep := false
+	var pre_next_lead := true
+	var post_text := "~"
+	var post_next := "~"
+	var t := 0.0
+	while t < 3.0 and brief_at < 0.0:
+		if at["a"] < 0.0 and t >= 0.499:
+			w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(12, -4, 8), func(): return line_a)
+		if at["a"] > 0.0 and at["catch"] < 0.0 and t >= at["a"] + 0.149:   # фон свежий (виден < MIN_SHOW) — кормёжка ждёт очереди
+			w.emit(EcoPred.ID, "catch", w.ship.pos + Vector3(15, -3, 10), EcoPred._catch_text(w))
+		w.step(0.05)
+		t += 0.05
+		for e in w.take_link():
+			if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+				continue
+			var text := String(e.get("text", ""))
+			if text == "":
+				continue
+			if text == line_a and at["a"] < 0.0:
+				at["a"] = t
+			elif String(e.get("note", "")) == "catch" and at["catch"] < 0.0:
+				at["catch"] = t
+				catch_text = text
+				catch_keep = bool(e.get("keep", false))
+				catch_lead = bool(e.get("lead", false))
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
+		msg.update(0.05)
+		if at["catch"] > 0.0 and brief_at < 0.0 and t >= at["catch"] + 0.299:
+			pre_text = msg.text
+			pre_next = msg.next
+			pre_next_keep = msg.next_keep
+			pre_next_lead = msg.next_lead
+			brief_at = t
+			brief = msg.take_world()   # брифинг прибытия забирает строки мира
+			post_text = msg.text
+			post_next = msg.next
+		if msg.text != "" and (shown.is_empty() or shown[-1] != msg.text):
+			shown.append(msg.text)
+	var after: Array = []
+	for i in 120:   # 6 с после брифинга
+		msg.update(0.05)
+		if msg.text != "" and (after.is_empty() or after[-1] != msg.text):
+			after.append(msg.text)
+	print("    фон %.2f с, кормёжка %.2f с (ждала очереди), брифинг %.2f с; до брифинга: %s; после: %s" % [
+		at["a"], at["catch"], brief_at, " | ".join(shown), " | ".join(after)])
+	ok(at["a"] > 0.0 and at["catch"] > 0.0, "фон и кормёжка пришли")
+	ok(catch_text.contains("поймал"), "текст кормёжки из `_catch_text` мира: «%s»" % catch_text)
+	ok(catch_keep and not catch_lead, "кормёжка пришла «держится» без ведущего ранга (EcoLink.KEEP)")
+	eq(pre_text, line_a, "в момент брифинга на приборах — видимый фон")
+	eq(pre_next, catch_text, "кормёжка ждала очереди за свежим фоном — постановка реальная")
+	ok(pre_next_keep and not pre_next_lead, "ждущая кормёжка — «держится» без ведущего ранга (next_keep)")
+	eq(brief, catch_text, "брифингу отдана последняя строка мира — ждущая кормёжка")
+	eq(post_text, "", "брифинг погасил видимый фон")
+	eq(post_next, "", "и снял ждущую кормёжку")
+	ok(after.is_empty(), "после брифинга ни кормёжка, ни фон на приборы не выходят (показано: %s)" % [
+		" | ".join(after)])
