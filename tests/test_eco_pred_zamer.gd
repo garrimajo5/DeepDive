@@ -1744,3 +1744,110 @@ func test_arrival_brief_drops_pending_keep_flee() -> void:
 	eq(msg.text, "Прожектор погашен", "и остаётся на приборах")
 	msg.update(1.5)
 	eq(msg.text, "Прожектор погашен", "и не сменяется вернувшейся строкой мира")
+
+
+## Сцена 00→01 (п. 2 (аю)): своё сообщение игрока (`wait` = false — отклик на кнопку, «Прожектор погашен»,
+## `main.gd` `toggle_light` → `Main.say`) срезает ВИДИМУЮ «держится» — бегство рыб у 01 (`fish/flee`,
+## `EcoLink.KEEP` без ведущего ранга) — сразу, не дожидаясь её `MESSAGE_SECONDS`: «держится» не срочная,
+## своё перебивает её, как любую (`Status.Message`: «Свои действия игрока показываются сразу — отклик на
+## кнопку не ждёт»), бегство назад не возвращается; ждущая строка мира (фон в `next`) не теряется — выходит
+## следом за своим после `MIN_SHOW`. Постановка как в (аф) — своё сообщение вместо новой срочной: фон →
+## бегство вышло на приборы и держится (ждало очереди за свежим фоном) → ждущий фон → своё сообщение.
+## Флаги строк — из мира (`take_link`), показ — `Status.Message`, как `Main._world_say`. Шов «своё
+## сообщение × видимая „держится"» юнит-тестами не покрыт: в `test_status` флаги выставлены руками,
+## (ау) — своё × видимая срочная, (ае) — ждущее бегство × срочная, (аф) — видимое бегство × срочная.
+## Мутация: ветка своего не показывает при `hot` (`if wait and world …` перестаёт требовать `wait` — своё
+## кладётся в `next` поверх ждущего фона) — своё ждёт, пока бегство догорит, а ждущий фон перезаписан
+## и теряется. Без Main.
+func test_own_message_cuts_visible_flee_line() -> void:
+	var r := _near(0)
+	var w: EcoWorld = r[0]
+	var line_a := "Гребневики пасутся на мху у подножия рифа"
+	var line_c := "Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял"
+	var flee_line := "Мелкая рыба: стая уходит в кораллы — рядом хищник"
+	var own := "Прожектор погашен"
+	var msg := Status.Message.new()
+	var shown: Array = []   # [текст, когда встал, сколько виден]
+	var at := {"a": -1.0, "flee": -1.0, "c": -1.0, "own": -1.0}
+	var flee_keep := false
+	var flee_lead := false
+	var flee_shown_at := -1.0   # когда бегство вышло на приборы (после очереди за свежим фоном)
+	var own_wait := -1.0   # сколько своё сообщение ждало показа (0,00 — в тот же вызов say)
+	var pre_text := ""   # что было на приборах в момент своего сообщения
+	var pre_next := ""   # и что ждало в `next`
+	var t := 0.0
+	while t < 8.0:
+		if at["a"] < 0.0 and t >= 0.499 and t < 0.6:
+			w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(12, -4, 8), func(): return line_a)
+		if at["a"] > 0.0 and at["flee"] < 0.0 and t >= 0.649 and t < 1.5:
+			w.emit(EcoFish.ID, "flee", w.ship.pos + Vector3(15, -3, 10), func(): return flee_line)
+		if at["c"] < 0.0 and flee_shown_at > 0.0 and t >= flee_shown_at + 0.15:
+			w.emit(EcoGrot.ID, "hide", w.ship.pos + Vector3(-12, -3, -6), func(): return line_c)   # ждущий фон
+			at["c"] = t
+		w.step(0.05)
+		t += 0.05
+		for e in w.take_link():
+			if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+				continue
+			var text := String(e.get("text", ""))
+			if text == "":
+				continue
+			if text == line_a and at["a"] < 0.0:
+				at["a"] = t
+			elif text == flee_line and at["flee"] < 0.0:
+				at["flee"] = t
+				flee_keep = bool(e.get("keep", false))
+				flee_lead = bool(e.get("lead", false))
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
+		msg.update(0.05)
+		if flee_shown_at < 0.0 and msg.text == flee_line:
+			flee_shown_at = t
+		if at["own"] < 0.0 and at["c"] > 0.0 and flee_shown_at > 0.0 and t >= flee_shown_at + 0.55:
+			pre_text = msg.text
+			pre_next = msg.next
+			at["own"] = t
+			msg.say(own)   # отклик на кнопку (`main.gd` `toggle_light` → `Main.say`), `wait` = false
+		if at["own"] > 0.0 and own_wait < 0.0 and msg.text == own:
+			own_wait = t - at["own"]
+		if msg.text != "" and (shown.is_empty() or shown[-1][0] != msg.text):
+			shown.append([msg.text, t, 0.0])
+		if msg.text != "":
+			shown[-1][2] = t - float(shown[-1][1]) + 0.05   # кадр t виден до следующего шага
+	var flee_seen := 0.0
+	var flee_entries := 0   # интервалов показа бегства: больше одного — бегство вернулось
+	var after_flee := ""   # что вышло сразу за срезанным бегством
+	var own_seen := 0.0
+	var after_own := ""   # что вышло следом за своим сообщением
+	for i in shown.size():
+		var s: Array = shown[i]
+		if String(s[0]) == flee_line:
+			flee_seen = maxf(flee_seen, float(s[2]))
+			flee_entries += 1
+			if i + 1 < shown.size():
+				after_flee = String(shown[i + 1][0])
+		elif String(s[0]) == own:
+			own_seen = maxf(own_seen, float(s[2]))
+			if i + 1 < shown.size():
+				after_own = String(shown[i + 1][0])
+	var lines := PackedStringArray()
+	for s: Array in shown:
+		lines.append("%.2f с «%s» %.2f с" % [s[1], String(s[0]).left(40), s[2]])
+	print("    фон %.2f с, бегство %.2f с (на приборах %.2f с), ждущий фон %.2f с, своё %.2f с (ждало %.2f с); на приборах: %s" % [
+		at["a"], at["flee"], flee_shown_at, at["c"], at["own"], maxf(own_wait, 0.0), " | ".join(lines)])
+	ok(at["a"] > 0.0 and at["flee"] > 0.0 and at["c"] > 0.0 and at["own"] > 0.0,
+		"фон, бегство, ждущий фон и своё сообщение пришли")
+	ok(at["a"] < at["flee"] and at["flee"] < at["c"] and at["c"] < at["own"],
+		"порядок: фон → бегство → ждущий фон → своё сообщение")
+	ok(flee_keep and not flee_lead, "бегство пришло «держится» без ведущего ранга (EcoLink.KEEP)")
+	ok(flee_shown_at > at["flee"], "бегство ждало очереди за свежим фоном, вышло на приборы и держится")
+	eq(pre_text, flee_line, "в момент своего сообщения на приборах — видимое бегство (постановка реальная)")
+	eq(pre_next, line_c, "в момент своего сообщения фон ждёт в `next` (постановка реальная)")
+	ok(own_wait >= 0.0 and own_wait < 0.06, "своё сообщение на приборах в тот же вызов say (ждало %.2f с)" % [
+		maxf(own_wait, 0.0)])
+	ok(flee_seen > 0.0 and flee_seen < Status.MESSAGE_SECONDS,
+		"бегство срезано, не догорев (видно %.2f с < %.1f с)" % [flee_seen, Status.MESSAGE_SECONDS])
+	eq(flee_entries, 1, "бегство назад не возвращается (интервалов показа: %d)" % flee_entries)
+	eq(after_flee, own, "сразу за срезанным бегством на приборах — своё сообщение")
+	ok(own_seen >= Status.Message.MIN_SHOW - 0.051, "своё держится минимальную секунду (по факту %.2f с)" % own_seen)
+	eq(after_own, line_c, "следом за своим вышел ждущий фон («%s»)" % after_own.left(40))
