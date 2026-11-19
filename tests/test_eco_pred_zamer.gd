@@ -2715,3 +2715,107 @@ func test_arrival_brief_drops_visible_lost_lead() -> void:
 	var brief2 := msg2.take_world()
 	eq(brief2, lost_text, "пустой `next` — брифингу отдана сама видимая ведущая")
 	eq(msg2.text, "", "и она погашена сразу, не дожидаясь MESSAGE_SECONDS")
+
+
+## Сцена 00→01 (п. 2 (ац)): своё сообщение игрока (`wait` = false — отклик на кнопку, напр. «Прожектор
+## погашен», `main.gd` `toggle_light` → `Main.say`) перебивает ВИДИМУЮ обычную строку мира (фон у 01, без
+## «держится») сразу, не дожидаясь её `MIN_SHOW`: фон назад не возвращается; ждущая строка мира в `next`
+## не дропается — выходит следом за своим после `MIN_SHOW` и догорает сама. Зеркало (аю) — там видимая
+## «держится» (бегство рыб). Постановка: фон на приборах (виден < `MIN_SHOW`), в `next` вторая строка
+## мира, своё. Флаги строк — из мира (`take_link`), показ — `Status.Message`, как `Main._world_say`. Шов
+## «своё × видимая обычная строка мира» юнит-тестами не покрыт: в `test_status` флаги выставлены руками,
+## (аю) — своё × видимое бегство «держится», (ау) — своё × видимая срочная. Мутация: ветка своего
+## (`wait` = false) в `Status.Message.say` дропает `next` (`if wait or msg == next` → `if true`) —
+## ждущая строка потеряна. Без Main.
+func test_own_message_cuts_visible_plain_line() -> void:
+	var r := _near(0)
+	var w: EcoWorld = r[0]
+	var line_a := "Гребневики пасутся на мху у подножия рифа"
+	var line_b := "Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял"
+	var own := "Прожектор погашен"
+	var msg := Status.Message.new()
+	var shown: Array = []   # [текст, когда встал, сколько виден]
+	var at := {"a": -1.0, "b": -1.0, "own": -1.0}
+	var a_keep := false
+	var a_urgent := false
+	var b_shown_at := -1.0   # когда ждущая строка вышла на приборы (после MIN_SHOW своего)
+	var own_wait := -1.0   # сколько своё сообщение ждало показа (0,00 — в тот же вызов say)
+	var pre_text := ""   # что было на приборах в момент своего сообщения
+	var pre_next := ""   # и что ждало в `next`
+	var t := 0.0
+	while t < 8.0:
+		if at["a"] < 0.0 and t >= 0.499:
+			w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(12, -4, 8), func(): return line_a)
+		if at["a"] > 0.0 and at["b"] < 0.0 and t >= at["a"] + 0.149:   # фон свежий (виден < MIN_SHOW) — вторая ждёт очереди
+			w.emit(EcoGrot.ID, "hide", w.ship.pos + Vector3(10, -5, -7), func(): return line_b)
+		w.step(0.05)
+		t += 0.05
+		for e in w.take_link():
+			if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+				continue
+			var text := String(e.get("text", ""))
+			if text == "":
+				continue
+			if text == line_a and at["a"] < 0.0:
+				at["a"] = t
+				a_keep = bool(e.get("keep", false))
+				a_urgent = bool(e.get("urgent", false))
+			elif text == line_b and at["b"] < 0.0:
+				at["b"] = t
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
+		msg.update(0.05)
+		if at["own"] < 0.0 and at["b"] > 0.0 and t >= at["b"] + 0.149:   # фон всё ещё свежий (< MIN_SHOW), вторая ждёт
+			pre_text = msg.text
+			pre_next = msg.next
+			at["own"] = t
+			msg.say(own)   # отклик на кнопку (`main.gd` `toggle_light` → `Main.say`), `wait` = false
+		if at["own"] > 0.0 and own_wait < 0.0 and msg.text == own:
+			own_wait = t - at["own"]
+		if b_shown_at < 0.0 and at["own"] > 0.0 and msg.text == line_b:
+			b_shown_at = t
+		if msg.text != "" and (shown.is_empty() or shown[-1][0] != msg.text):
+			shown.append([msg.text, t, 0.0])
+		if msg.text != "":
+			shown[-1][2] = t - float(shown[-1][1]) + 0.05   # кадр t виден до следующего шага
+	var a_seen := 0.0
+	var a_entries := 0   # интервалов показа фона: больше одного — фон вернулся
+	var after_a := ""   # что вышло сразу за срезанным фоном
+	var own_seen := 0.0
+	var after_own := ""   # что вышло следом за своим сообщением
+	var b_seen := 0.0
+	for i in shown.size():
+		var s: Array = shown[i]
+		if String(s[0]) == line_a:
+			a_seen = maxf(a_seen, float(s[2]))
+			a_entries += 1
+			if i + 1 < shown.size():
+				after_a = String(shown[i + 1][0])
+		elif String(s[0]) == own:
+			own_seen = maxf(own_seen, float(s[2]))
+			if i + 1 < shown.size():
+				after_own = String(shown[i + 1][0])
+		elif String(s[0]) == line_b:
+			b_seen = maxf(b_seen, float(s[2]))
+	var lines := PackedStringArray()
+	for s: Array in shown:
+		lines.append("%.2f с «%s» %.2f с" % [s[1], String(s[0]).left(40), s[2]])
+	print("    фон %.2f с, ждущая %.2f с, своё %.2f с (ждало %.2f с), ждущая на приборах %.2f с; на приборах: %s" % [
+		at["a"], at["b"], at["own"], maxf(own_wait, 0.0), b_shown_at, " | ".join(lines)])
+	ok(at["a"] > 0.0 and at["b"] > 0.0 and at["own"] > 0.0, "фон, вторая строка мира и своё сообщение пришли")
+	ok(at["a"] < at["b"] and at["b"] < at["own"], "порядок: фон → вторая строка → своё сообщение")
+	ok(not a_keep and not a_urgent, "видимая строка — обычная строка мира (без «держится», не срочная)")
+	eq(pre_text, line_a, "в момент своего сообщения на приборах — видимый фон (постановка реальная)")
+	eq(pre_next, line_b, "в момент своего сообщения вторая строка ждёт в `next` (постановка реальная)")
+	ok(own_wait >= 0.0 and own_wait < 0.06, "своё сообщение на приборах в тот же вызов say (ждало %.2f с)" % [
+		maxf(own_wait, 0.0)])
+	ok(a_seen > 0.0 and a_seen < Status.Message.MIN_SHOW,
+		"фон срезан, не дождавшись MIN_SHOW (виден %.2f с < %.1f с)" % [a_seen, Status.Message.MIN_SHOW])
+	eq(a_entries, 1, "фон назад не возвращается (интервалов показа: %d)" % a_entries)
+	eq(after_a, own, "сразу за срезанным фоном на приборах — своё сообщение")
+	ok(own_seen >= Status.Message.MIN_SHOW - 0.051, "своё держится минимальную секунду (по факту %.2f с)" % own_seen)
+	eq(after_own, line_b, "следом за своим вышла ждущая строка — `next` не потерян («%s»)" % after_own.left(40))
+	ok(b_shown_at >= at["own"] + Status.Message.MIN_SHOW - 0.051,
+		"ждущая вышла после MIN_SHOW своего (%.2f с ≥ %.2f с)" % [b_shown_at, at["own"] + Status.Message.MIN_SHOW])
+	ok(b_seen >= Status.MESSAGE_SECONDS - 0.051, "ждущая видна все свои %.1f с (по факту %.2f с)" % [
+		Status.MESSAGE_SECONDS, b_seen])
