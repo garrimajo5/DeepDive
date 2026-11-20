@@ -2929,3 +2929,123 @@ func test_arrival_brief_drops_visible_keep_and_pending_lead() -> void:
 	eq(msg.text, "Прожектор погашен", "и остаётся на приборах")
 	msg.update(1.5)
 	eq(msg.text, "Прожектор погашен", "и не сменяется вернувшейся строкой мира")
+
+
+## Сцена 00→01 (п. 2 (бб)): срочная строка мира («замер» хищника, `pred/alert`, ранг `EcoLink.URGENT`, #1498)
+## срезает ВИДИМУЮ обычную строку мира (фон у 01, без «держится») сразу, не дожидаясь её `MIN_SHOW`: фон назад не
+## возвращается; ждущая в `next` обычная строка мира НЕ дропается (ветка срочной в `Status.Message.say` дропает
+## `next`, только когда `msg == next` или ждущая — ведущая, #1968) — выходит после догорания срочной и догорает
+## сама. Постановка как в (ац), срочная вместо своего сообщения: фон на приборах (виден < `MIN_SHOW`), в `next`
+## вторая обычная строка, свет при голодном хищнике в 25 м — «замер» на этом шаге (как в (ав)); после прихода
+## срочной замер продлён (`pr.agent.timer = 999`), чтобы строки броска и укуса не заместили ждущую — шов не про
+## них. Флаги строк — из мира (`take_link`), показ — `Status.Message`, как `Main._world_say`. Шов «срочная ×
+## видимая обычная + ждущая обычная» миром не покрыт: (ав) — срочная держится под потоком фона (срез видимого
+## фона там есть, возврат фона и судьба ждущей не проверяются), (аф) — срочная × видимое бегство «держится»,
+## (аь) — срочная дропает ждущую ведущую. Мутация: ветка срочной дропает `next` всегда (`if msg == next or
+## next_lead` → `if true`) — ждущая строка потеряна. Без Main.
+func test_alert_urgent_cuts_visible_plain_keeps_pending() -> void:
+	var r := _near(0)
+	var w: EcoWorld = r[0]
+	var pr: EcoPred.Pred = r[1]
+	var line_a := "Гребневики пасутся на мху у подножия рифа"
+	var line_b := "Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял"
+	var msg := Status.Message.new()
+	var shown: Array = []   # [текст, когда встал, сколько виден]
+	var at := {"a": -1.0, "b": -1.0, "alert": -1.0}
+	var a_keep := false
+	var a_urgent := false
+	var b_keep := false
+	var b_lead := false
+	var alert_text := ""
+	var alert_urgent := false
+	var alert_shown_at := -1.0
+	var b_shown_at := -1.0
+	var pre_text := ""   # что было на приборах в момент срочной
+	var pre_next := ""   # и что ждало в `next`
+	var t := 0.0
+	while t < 10.5:
+		if at["a"] < 0.0 and t >= 0.499:
+			w.emit(EcoGrazer.ID, "graze", w.ship.pos + Vector3(12, -4, 8), func(): return line_a)
+		if at["a"] > 0.0 and at["b"] < 0.0 and t >= at["a"] + 0.149:   # фон свежий (виден < MIN_SHOW) — вторая ждёт очереди
+			w.emit(EcoGrot.ID, "hide", w.ship.pos + Vector3(10, -5, -7), func(): return line_b)
+		if not w.ship.light_on and at["b"] > 0.0 and t >= at["b"] + 0.099:   # фон всё ещё свежий, вторая ждёт — срочная
+			w.ship.light_on = true   # голодный хищник в 25 м: «замер» на этом шаге
+		w.step(0.05)
+		t += 0.05
+		for e in w.take_link():
+			if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+				continue
+			var text := String(e.get("text", ""))
+			if text == "":
+				continue
+			if text == line_a and at["a"] < 0.0:
+				at["a"] = t
+				a_keep = bool(e.get("keep", false))
+				a_urgent = bool(e.get("urgent", false))
+			elif text == line_b and at["b"] < 0.0:
+				at["b"] = t
+				b_keep = bool(e.get("keep", false))
+				b_lead = bool(e.get("lead", false))
+			elif text.contains("замер") and at["alert"] < 0.0:
+				pre_text = msg.text
+				pre_next = msg.next
+				at["alert"] = t
+				alert_text = text
+				alert_urgent = bool(e.get("urgent", false))
+				pr.agent.timer = 999.0   # замер не кончается броском — строки броска/укуса не заместят ждущую
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
+		msg.update(0.05)
+		if at["alert"] > 0.0 and alert_shown_at < 0.0 and msg.text == alert_text:
+			alert_shown_at = t
+		if b_shown_at < 0.0 and at["alert"] > 0.0 and msg.text == line_b:
+			b_shown_at = t
+		if msg.text != "" and (shown.is_empty() or shown[-1][0] != msg.text):
+			shown.append([msg.text, t, 0.0])
+		if msg.text != "":
+			shown[-1][2] = t - float(shown[-1][1]) + 0.05   # кадр t виден до следующего шага
+	var a_seen := 0.0
+	var a_entries := 0   # интервалов показа фона: больше одного — фон вернулся
+	var after_a := ""   # что вышло сразу за срезанным фоном
+	var alert_seen := 0.0
+	var after_alert := ""   # что вышло следом за срочной
+	var b_seen := 0.0
+	for i in shown.size():
+		var s: Array = shown[i]
+		var txt := String(s[0])
+		if txt == line_a:
+			a_seen = maxf(a_seen, float(s[2]))
+			a_entries += 1
+			if i + 1 < shown.size():
+				after_a = String(shown[i + 1][0])
+		elif not alert_text.is_empty() and txt == alert_text:
+			alert_seen = maxf(alert_seen, float(s[2]))
+			if i + 1 < shown.size():
+				after_alert = String(shown[i + 1][0])
+		elif txt == line_b:
+			b_seen = maxf(b_seen, float(s[2]))
+	var lines := PackedStringArray()
+	for s: Array in shown:
+		lines.append("%.2f с «%s» %.2f с" % [s[1], String(s[0]).left(40), s[2]])
+	print("    фон %.2f с, ждущая %.2f с, «замер» %.2f с (на приборах %.2f с), ждущая на приборах %.2f с; на приборах: %s" % [
+		at["a"], at["b"], at["alert"], alert_shown_at, b_shown_at, " | ".join(lines)])
+	ok(at["a"] > 0.0 and at["b"] > 0.0 and at["alert"] > 0.0, "фон, вторая обычная строка и «замер» пришли")
+	ok(at["a"] < at["b"] and at["b"] < at["alert"], "порядок: фон → вторая строка → срочная")
+	ok(not a_keep and not a_urgent, "видимая строка — обычная строка мира (без «держится», не срочная)")
+	ok(not b_keep and not b_lead, "ждущая строка — обычная строка мира (без «держится», не ведущая)")
+	eq(pre_text, line_a, "в момент срочной на приборах — видимый фон (постановка реальная)")
+	eq(pre_next, line_b, "в момент срочной вторая строка ждёт в `next` (постановка реальная)")
+	ok(alert_urgent, "«замер» пришёл с рангом «срочная» (EcoLink.URGENT)")
+	ok(alert_shown_at - at["alert"] <= 0.051, "срочная срезала видимый фон сразу (ждала %.2f с)" % [
+		maxf(alert_shown_at - at["alert"], 0.0)])
+	ok(a_seen > 0.0 and a_seen < Status.Message.MIN_SHOW,
+		"фон срезан, не дождавшись MIN_SHOW (виден %.2f с < %.1f с)" % [a_seen, Status.Message.MIN_SHOW])
+	eq(a_entries, 1, "фон назад не возвращается (интервалов показа: %d)" % a_entries)
+	ok(after_a.contains("замер"), "сразу за срезанным фоном на приборах — срочная")
+	ok(alert_seen >= Status.MESSAGE_SECONDS - 0.051, "срочная видна все %.1f с (по факту %.2f с)" % [
+		Status.MESSAGE_SECONDS, alert_seen])
+	eq(after_alert, line_b, "следом за срочной вышла ждущая строка — `next` не потерян («%s»)" % after_alert.left(40))
+	ok(b_shown_at >= alert_shown_at + Status.MESSAGE_SECONDS - 0.051,
+		"ждущая вышла после догорания срочной (%.2f с ≥ %.2f с)" % [b_shown_at, alert_shown_at + Status.MESSAGE_SECONDS])
+	ok(b_seen >= Status.MESSAGE_SECONDS - 0.051, "ждущая видна все свои %.1f с — догорела сама (по факту %.2f с)" % [
+		Status.MESSAGE_SECONDS, b_seen])
