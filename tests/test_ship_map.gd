@@ -73,6 +73,36 @@ func test_doors_on_bulkheads() -> void:
 			ok(not ShipMap.room_rect(room, size).has_point(label), "«Люк закрыт» под отсеками, не на плане")
 
 
+## #2057 (обход читаемости `docs/ux/kegl.md`): кегль второго плана схемы ≥ 10 sp — «5 м» и «Люк закрыт»
+## по 27 px макета (18 px при 720); подписи соседних люков не сталкиваются, «5 м» не липнет к контуру
+## мостика, плашка люка z = 2 не достаёт до легенды. Низ строки — «верх + кегль», не get_string_size().y.
+func test_kegl_second_plan() -> void:
+	ok(ShipMap.RULER_PX >= 27.0, "RULER_PX ≥ 27 px при 1080 (10 sp)")
+	ok(ShipMap.DOOR_PX >= 27.0, "DOOR_PX ≥ 27 px при 1080 (10 sp)")
+	var font := ThemeDB.fallback_font
+	for size: Vector2 in [Vector2(2400, 1080), Vector2(1600, 720), Vector2(1280, 720)]:
+		var kk := ShipMap.k(size)
+		var need := 27 if size.y >= 1080.0 else 18
+		var door_px := int(ShipMap.DOOR_PX * kk)
+		var ruler_px := int(ShipMap.RULER_PX * kk)
+		ok(door_px >= need, "кегль «Люк закрыт» %d ≥ %d (%s)" % [door_px, need, size])
+		ok(ruler_px >= need, "кегль «5 м» %d ≥ %d (%s)" % [ruler_px, need, size])
+		# Плашки соседних люков: ширина строки + 16·kk ≤ расстояние между центрами − 12·kk.
+		var w := font.get_string_size(ShipMap.DOOR_TEXT, HORIZONTAL_ALIGNMENT_LEFT, -1, door_px).x + 16.0 * kk
+		for i in ShipLayout.DOOR_Z.size() - 1:
+			var dist := absf(ShipMap.door_label(i + 1, size).x - ShipMap.door_label(i, size).x)
+			ok(w <= dist - 12.0 * kk, "плашки люков %d/%d: %.1f ≤ %.1f (%s)" % [i, i + 1, w, dist - 12.0 * kk, size])
+		# Верх «5 м» не ближе 8·kk к контуру мостика (в панели строка рисуется выше линейки на RULER_PX + 10).
+		var bridge_bottom := (ShipMap.CENTER_Y + Deck.BRIDGE_MAX.x * ShipMap.plan_s(size)) * kk
+		var top5: float = ShipMap.ruler(size)[0].y - (ShipMap.RULER_PX + 10.0) * kk
+		ok(top5 >= bridge_bottom + 8.0 * kk, "верх «5 м»: %.1f ≥ %.1f (%s)" % [top5, bridge_bottom + 8.0 * kk, size])
+		# Низ плашки люка z = 2 (верх + кегль) не ниже верха легенды (центр значка − ICON/2).
+		var at := ShipMap.door_label(ShipLayout.DOOR_Z.find(2.0), size)
+		var legend_top := ShipMap.legend_at(0, size).y - ShipMap.ICON * 0.5 * kk
+		ok(at.y + ShipMap.DOOR_PX * kk <= legend_top, "плашка люка z=2: низ %.1f ≤ %.1f (%s)"
+			% [at.y + ShipMap.DOOR_PX * kk, legend_top, size])
+
+
 func test_marks_own_first_and_spread() -> void:
 	var size := Vector2(2400, 1080)
 	var pts := [Vector2(0.0, -3.0), Vector2(0.1, -3.1), Vector2(0.0, 10.0), Vector2(-0.1, -2.9)]
