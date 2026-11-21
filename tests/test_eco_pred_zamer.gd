@@ -3362,3 +3362,134 @@ func test_alert_urgent_cuts_visible_plain_drops_pending_lead() -> void:
 		Status.MESSAGE_SECONDS, alert2_seen])
 	eq(lost_seen, 0.0, "отбой на приборы не вышел вовсе (показан %.2f с)" % lost_seen)
 	ok(not after_alert2, "после догорания срочной ни фон, ни отбой на приборы не выходят")
+
+
+## Сцена 00→01 (п. 2 (бе)): срочная «замер» (`pred/alert`, `EcoLink.URGENT`, #1498) при ВИДИМОЙ «держится»
+## без ведущего ранга (кормёжка серпохвоста `pred/catch`, `EcoLink.KEEP`, текст из `_catch_text`) и ЖДУЩЕЙ
+## ведущей «потерял корабль» (`pred/lost`, `EcoLink.KEEP_LEAD` в `next`, #1966): срочная срезает видимую
+## кормёжку сразу, не дожидаясь её `MESSAGE_SECONDS` («держится» перебивает только срочная), и дропает ждущую
+## ведущую (устарела после новой угрозы, ГД #1968) — после догорания срочной ни кормёжка, ни отбой на приборы
+## не выходят и назад не возвращаются. Постановка как в (бд), кормёжка вместо фона: первый «замер» → кормёжка
+## на приборах (держится) → свет погас, отбой ждёт за ней очереди (`next_keep` + `next_lead`) → свет снова,
+## новый «замер» (wary, RETREAT). Флаги строк — из мира (`take_link`), показ — `Status.Message`, как
+## `Main._world_say`. Шов «срочная × видимая „держится" + ждущая ведущая» миром не покрыт: (бд) — видимая
+## обычная + ждущая ведущая, (аь) — видимая срочная + ждущая ведущая, (аш) — ждущая кормёжка × срочная,
+## (аж) — срочная × видимая кормёжка без ждущей. Мутация: ветка срочной не дропает `next` при `next_lead`
+## (`if msg == next:` без `or next_lead`) — отбой выходит после срочной. Без Main.
+func test_alert_urgent_cuts_visible_catch_drops_pending_lead() -> void:
+	var r := _near(0)
+	var w: EcoWorld = r[0]
+	var pr: EcoPred.Pred = r[1]
+	var ps: EcoPred = r[2]
+	ps.alert = 100.0   # «замер» не кончается броском в окне теста (как в (ау)/(аь))
+	var msg := Status.Message.new()
+	var shown: Array = []   # [текст, когда встал, сколько виден]
+	var at := {"alert": -1.0, "catch": -1.0, "lost": -1.0, "alert2": -1.0}
+	var catch_text := ""
+	var catch_keep := false
+	var catch_lead := false
+	var lost_text := ""
+	var lost_keep := false
+	var lost_lead := false
+	var alert2_text := ""
+	var alert2_urgent := false
+	var pre2_text := ""   # что было на приборах в момент второго «замера»
+	var pre2_next := ""   # и что ждало в `next`
+	var post2_next := "~"   # что осталось в `next` после ветки срочной
+	var post2_shown := -1.0   # msg.shown сразу после показа второго «замера»
+	var just_alert2 := false
+	var t := 0.0
+	while t < 12.5:
+		if not w.ship.light_on and at["alert"] < 0.0 and t >= 0.799:
+			w.ship.light_on = true   # голодный хищник в 25 м: первый «замер» на этом шаге
+		if at["alert"] > 0.0 and at["catch"] < 0.0 and t >= at["alert"] + Status.MESSAGE_SECONDS + 0.149:
+			# первый «замер» догорел, приборы пусты — кормёжка выходит сразу
+			w.emit(EcoPred.ID, "catch", w.ship.pos + Vector3(15, -3, 10), EcoPred._catch_text(w))
+		if w.ship.light_on and at["catch"] > 0.0 and at["lost"] < 0.0 and t >= at["catch"] + 0.299:
+			w.ship.light_on = false   # кормёжка держится — отбой ждёт за ней очереди
+		if not w.ship.light_on and at["lost"] > 0.0 and at["alert2"] < 0.0 and t >= at["lost"] + 0.149:
+			w.ship.pos = pr.agent.p + Vector3(20, 0, 0)   # догнали отходящего хищника
+			w.ship.light_on = true   # свет снова до выхода отбоя — сразу новый «замер» (wary, RETREAT)
+		w.step(0.05)
+		t += 0.05
+		for e in w.take_link():
+			if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+				continue
+			var text := String(e.get("text", ""))
+			if text == "":
+				continue
+			if text.contains("потерял корабль") and at["lost"] < 0.0:
+				at["lost"] = t
+				lost_text = text
+				lost_keep = bool(e.get("keep", false))
+				lost_lead = bool(e.get("lead", false))
+			elif String(e.get("note", "")) == "catch" and at["catch"] < 0.0:
+				at["catch"] = t
+				catch_text = text
+				catch_keep = bool(e.get("keep", false))
+				catch_lead = bool(e.get("lead", false))
+			elif text.contains("замер") and at["alert"] < 0.0:
+				at["alert"] = t
+			elif text.contains("замер") and at["alert"] > 0.0 and at["alert2"] < 0.0:
+				at["alert2"] = t
+				alert2_text = text
+				alert2_urgent = bool(e.get("urgent", false))
+				pre2_text = msg.text
+				pre2_next = msg.next
+				just_alert2 = true
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
+			if just_alert2:
+				post2_next = msg.next
+				post2_shown = msg.shown
+				just_alert2 = false
+		msg.update(0.05)
+		if msg.text != "" and (shown.is_empty() or shown[-1][0] != msg.text):
+			shown.append([msg.text, t, 0.0])
+		if msg.text != "":
+			shown[-1][2] = t - float(shown[-1][1]) + 0.05   # кадр t виден до следующего шага
+	var catch_seen := 0.0
+	var catch_entries := 0   # интервалов показа кормёжки: больше одного — кормёжка вернулась
+	var alert2_seen := 0.0
+	var lost_seen := 0.0
+	var after_alert2 := false   # после догорания второго «замера» что-то вышло на приборы
+	var alert2_end := -1.0
+	for i in shown.size():
+		var s: Array = shown[i]
+		var txt := String(s[0])
+		if not catch_text.is_empty() and txt == catch_text:
+			catch_seen = maxf(catch_seen, float(s[2]))
+			catch_entries += 1
+		elif not alert2_text.is_empty() and txt == alert2_text and float(s[1]) >= at["alert2"] - 0.001:
+			alert2_seen = maxf(alert2_seen, float(s[2]))
+			alert2_end = float(s[1]) + float(s[2])
+		elif not lost_text.is_empty() and txt == lost_text:
+			lost_seen = maxf(lost_seen, float(s[2]))
+	if alert2_end > 0.0:
+		for s: Array in shown:
+			if float(s[1]) >= alert2_end - 0.051 and String(s[0]) != alert2_text:
+				after_alert2 = true
+	var lines := PackedStringArray()
+	for s: Array in shown:
+		lines.append("%.2f с «%s» %.2f с" % [s[1], String(s[0]).left(40), s[2]])
+	print("    «замер» %.2f с, кормёжка %.2f с, отбой %.2f с, новый «замер» %.2f с (показан с shown=%.2f с); на приборах: %s" % [
+		at["alert"], at["catch"], at["lost"], at["alert2"], post2_shown, " | ".join(lines)])
+	ok(at["alert"] > 0.0 and at["catch"] > 0.0 and at["lost"] > 0.0 and at["alert2"] > 0.0,
+		"первый «замер», кормёжка, отбой и новый «замер» пришли")
+	ok(at["alert"] < at["catch"] and at["catch"] < at["lost"] and at["lost"] < at["alert2"],
+		"порядок: первый «замер» → кормёжка → отбой → новый «замер»")
+	ok(catch_text.contains("поймал"), "текст кормёжки из `_catch_text` мира: «%s»" % catch_text)
+	ok(catch_keep and not catch_lead, "кормёжка пришла «держится» без ведущего ранга (EcoLink.KEEP)")
+	ok(lost_keep and lost_lead, "отбой пришёл ведущей «держится» (EcoLink.KEEP_LEAD)")
+	ok(alert2_urgent, "новый «замер» пришёл с рангом «срочная» (EcoLink.URGENT)")
+	eq(pre2_text, catch_text, "в момент нового «замера» на приборах — видимая кормёжка (постановка реальная)")
+	eq(pre2_next, lost_text, "в момент нового «замера» отбой ждёт очереди в `next` (постановка реальная)")
+	eq(post2_next, "", "ветка срочной дропнула ждущую ведущую (next_lead) — отбоя в очереди нет")
+	ok(post2_shown >= 0.0 and post2_shown < 0.051, "новый «замер» показан в тот же вызов say (shown=%.2f с)" % post2_shown)
+	ok(catch_seen > 0.0 and catch_seen < Status.MESSAGE_SECONDS,
+		"кормёжка срезана, не дождавшись своих %.1f с (видна %.2f с)" % [Status.MESSAGE_SECONDS, catch_seen])
+	eq(catch_entries, 1, "кормёжка назад не возвращается (интервалов показа: %d)" % catch_entries)
+	ok(alert2_seen >= Status.MESSAGE_SECONDS - 0.051, "срочная видна все %.1f с (по факту %.2f с)" % [
+		Status.MESSAGE_SECONDS, alert2_seen])
+	eq(lost_seen, 0.0, "отбой на приборы не вышел вовсе (показан %.2f с)" % lost_seen)
+	ok(not after_alert2, "после догорания срочной ни кормёжка, ни отбой на приборы не выходят")
