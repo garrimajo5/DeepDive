@@ -3493,3 +3493,133 @@ func test_alert_urgent_cuts_visible_catch_drops_pending_lead() -> void:
 		Status.MESSAGE_SECONDS, alert2_seen])
 	eq(lost_seen, 0.0, "отбой на приборы не вышел вовсе (показан %.2f с)" % lost_seen)
 	ok(not after_alert2, "после догорания срочной ни кормёжка, ни отбой на приборы не выходят")
+
+
+## Сцена 00→01 (п. 2 (бж)): срочная «замер» (`pred/alert`, `EcoLink.URGENT`, #1498) при ВИДИМОЙ «держится» без
+## ведущего ранга (кормёжка серпохвоста `pred/catch`, `EcoLink.KEEP`, текст из `_catch_text`) и ЖДУЩЕЙ обычной
+## строке мира в `next` (вторая строка фона у 01, без рангов): срочная срезает видимую кормёжку сразу, не дожидаясь
+## её `MESSAGE_SECONDS` («держится» перебивает только срочная), а ждущий фон СОХРАНЯЕТСЯ и выходит на приборы после
+## догорания срочной (зеркало (бб) — там видимая обычная — для видимой «держится»). Постановка как в (бе), но
+## срочная — импульсом сонара (`ps.on_ping`, голодный хищник в ~38 м < `PING_CALL`, причина «сонар», как в (ащ)):
+## свет не горит вовсе — иначе отбой «потерял корабль» (keep+lead) сменил бы ждущий фон в `next`. Строка «плывёт на
+## звук» (`pred/ping` от импульса) приходит раньше фона и ждёт за кормёжкой, фон её сменяет в `next` — в момент
+## срочной ждёт именно фон. Флаги строк — из мира (`take_link`), показ — `Status.Message`, как `Main._world_say`.
+## Шов «срочная × видимая „держится" + ждущая обычная» миром не покрыт: (бе) — видимая „держится" + ждущая
+## ведущая (дроп), (бб) — видимая обычная + ждущая обычная (сохраняется), (ач) — срочная × видимая кормёжка без
+## ждущей. Мутация: ветка срочной дропает `next` безусловно (`_drop_next()` всегда) — ждущий фон теряется, после
+## догорания срочной пусто. Без Main.
+func test_alert_urgent_cuts_visible_catch_keeps_pending_plain() -> void:
+	var r := _world()
+	var w: EcoWorld = r[0]
+	var ps: EcoPred = r[1]
+	ps.alert = 100.0   # «замер» не кончается броском в окне теста (как в (ау)/(аь))
+	var pr := ps.all[0]
+	pr.hunger = 0.5
+	pr.cooldown = 0.0
+	w.ship.pos = pr.agent.p + Vector3(38, 0, 0)   # 38 м: свет бы не манил (>32), импульс сонара зовёт (< PING_CALL)
+	for j in range(1, ps.all.size()):
+		var o := ps.all[j]
+		o.agent.p = Vector3(600 + 100 * j, FLAT + 6.0, -600)
+		o.cooldown = 999.0
+	var line_b := "Мелкая рыба: стая спряталась в рифе на спине гротовика, серпохвост её потерял"
+	var msg := Status.Message.new()
+	var shown: Array = []   # [текст, когда встал, сколько виден]
+	var at := {"catch": -1.0, "ping": -1.0, "b": -1.0, "alert": -1.0}
+	var catch_text := ""
+	var catch_keep := false
+	var catch_lead := false
+	var alert_text := ""
+	var alert_urgent := false
+	var pre_text := ""   # что было на приборах в момент срочной
+	var pre_next := ""   # и что ждало в `next`
+	var post_next := "~"   # что осталось в `next` после ветки срочной
+	var post_shown := -1.0   # msg.shown сразу после показа срочной
+	var just_alert := false
+	var pinged := false
+	var emitted_b := false
+	var t := 0.0
+	while t < 12.5:
+		if at["catch"] < 0.0 and t >= 0.499:
+			w.emit(EcoPred.ID, "catch", w.ship.pos + Vector3(15, -3, 10), EcoPred._catch_text(w))
+		if at["catch"] > 0.0 and not pinged and t >= at["catch"] + 0.149:
+			ps.on_ping(w, w.ship.pos)   # кормёжка держится — «плывёт на звук» ждёт за ней очереди
+			pinged = true
+			at["ping"] = t
+		if at["ping"] > 0.0 and not emitted_b and t >= at["ping"] + 0.099:
+			w.emit(EcoGrot.ID, "hide", w.ship.pos + Vector3(10, -5, -7), func(): return line_b)   # ждущий фон
+			emitted_b = true
+		w.step(0.05)
+		t += 0.05
+		for e in w.take_link():
+			if e.get("type") != EcoLink.MESSAGE and e.get("type") != EcoLink.OBSERVE:
+				continue
+			var text := String(e.get("text", ""))
+			if text == "":
+				continue
+			if String(e.get("note", "")) == "catch" and at["catch"] < 0.0:
+				at["catch"] = t
+				catch_text = text
+				catch_keep = bool(e.get("keep", false))
+				catch_lead = bool(e.get("lead", false))
+			elif text == line_b and at["b"] < 0.0:
+				at["b"] = t
+			elif text.contains("замер") and at["alert"] < 0.0:
+				at["alert"] = t
+				alert_text = text
+				alert_urgent = bool(e.get("urgent", false))
+				pre_text = msg.text
+				pre_next = msg.next
+				just_alert = true
+			msg.say(text, Status.MESSAGE_SECONDS, true, bool(e.get("urgent", false)), bool(e.get("keep", false)),
+				bool(e.get("lead", false)))
+			if just_alert:
+				post_next = msg.next
+				post_shown = msg.shown
+				just_alert = false
+		msg.update(0.05)
+		if msg.text != "" and (shown.is_empty() or shown[-1][0] != msg.text):
+			shown.append([msg.text, t, 0.0])
+		if msg.text != "":
+			shown[-1][2] = t - float(shown[-1][1]) + 0.05   # кадр t виден до следующего шага
+	var catch_seen := 0.0
+	var catch_entries := 0   # интервалов показа кормёжки: больше одного — кормёжка вернулась
+	var alert_seen := 0.0
+	var after_alert := ""   # что вышло следом за срочной
+	var b_seen := 0.0
+	for i in shown.size():
+		var s: Array = shown[i]
+		var txt := String(s[0])
+		if not catch_text.is_empty() and txt == catch_text:
+			catch_seen = maxf(catch_seen, float(s[2]))
+			catch_entries += 1
+		elif not alert_text.is_empty() and txt == alert_text:
+			alert_seen = maxf(alert_seen, float(s[2]))
+			if i + 1 < shown.size():
+				after_alert = String(shown[i + 1][0])
+		elif txt == line_b:
+			b_seen = maxf(b_seen, float(s[2]))
+	var lines := PackedStringArray()
+	for s: Array in shown:
+		lines.append("%.2f с «%s» %.2f с" % [s[1], String(s[0]).left(40), s[2]])
+	print("    кормёжка %.2f с, импульс %.2f с, фон %.2f с, «замер» %.2f с (показан с shown=%.2f с); на приборах: %s" % [
+		at["catch"], at["ping"], at["b"], at["alert"], post_shown, " | ".join(lines)])
+	ok(at["catch"] > 0.0 and at["ping"] > 0.0 and at["b"] > 0.0 and at["alert"] > 0.0,
+		"кормёжка, импульс сонара, ждущий фон и «замер» пришли")
+	ok(at["catch"] < at["ping"] and at["ping"] < at["b"] and at["b"] < at["alert"],
+		"порядок: кормёжка → импульс → ждущий фон → срочная")
+	ok(catch_text.contains("поймал"), "текст кормёжки из `_catch_text` мира: «%s»" % catch_text)
+	ok(catch_keep and not catch_lead, "кормёжка пришла «держится» без ведущего ранга (EcoLink.KEEP)")
+	ok(alert_urgent, "«замер» пришёл с рангом «срочная» (EcoLink.URGENT)")
+	ok(alert_text.contains("сонар"), "причина «замера» — сонар, свет не горел: «%s»" % alert_text)
+	eq(pre_text, catch_text, "в момент срочной на приборах — видимая кормёжка (постановка реальная)")
+	eq(pre_next, line_b, "в момент срочной фон ждёт очереди в `next` (постановка реальная)")
+	eq(post_next, line_b, "ветка срочной ждущий фон НЕ дропнула — он выйдет после догорания срочной")
+	ok(post_shown >= 0.0 and post_shown < 0.051, "срочная показана в тот же вызов say (shown=%.2f с)" % post_shown)
+	ok(catch_seen > 0.0 and catch_seen < Status.MESSAGE_SECONDS,
+		"кормёжка срезана, не дождавшись своих %.1f с (видна %.2f с)" % [Status.MESSAGE_SECONDS, catch_seen])
+	eq(catch_entries, 1, "кормёжка назад не возвращается (интервалов показа: %d)" % catch_entries)
+	ok(alert_seen >= Status.MESSAGE_SECONDS - 0.051, "срочная видна все %.1f с (по факту %.2f с)" % [
+		Status.MESSAGE_SECONDS, alert_seen])
+	eq(after_alert, line_b, "следом за срочной вышел ждущий фон — `next` не потерян («%s»)" % after_alert.left(40))
+	ok(b_seen >= Status.MESSAGE_SECONDS - 0.051, "ждущий фон виден все свои %.1f с — догорел сам (по факту %.2f с)" % [
+		Status.MESSAGE_SECONDS, b_seen])
