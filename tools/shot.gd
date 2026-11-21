@@ -132,7 +132,7 @@ extends SceneTree
 ## adres_state=connecting — connecting|timeout|full|version
 ## pause=1 — пауза ART-037: 1|new|exit|leave|saved
 ## pause_mode=host — «Меню забега» коопа: host|guest
-## shema=1 — схема корабля ART-042 поверх паузы: 1|door (люк коридор → лаборатория открыт)
+## shema=1 — схема корабля ART-042 поверх паузы: 1|door (люк коридор → лаборатория открыт)|crew (свой + двое чужих на мостике, инженер у нижней кромки под линейкой, #2068)
 ## nastrojki=1 — настройки ART-037 поверх паузы: 1|reset|grafika|zvuk|golos
 ## grafika=1 — уровень графики ART-044 (0|1|2) — и в сцене
 ## zvuk=0.5 — на странице «Звук»: доля громкости музыки
@@ -328,12 +328,17 @@ func _go() -> void:
 		main.pause_panel.show_pause(main.pause)
 		if kv.has("pause_mode"):
 			main.set_process(false)   # без сети меню забега закрылось бы следующим шагом
-	if kv.has("shema"):   # shema=1|door — схема корабля ART-042 из паузы (door — люк в лабораторию открыт; тревога —
-		if not main.pause.open:   # breach=n / hot=… / drain=1, товарищи — mate=…)
-			main.back_pressed()
+	if kv.has("shema"):   # shema=1|door|crew — схема корабля ART-042 из паузы (door — люк в лабораторию открыт;
+		if not main.pause.open:   # crew — свой + двое чужих на мостике, инженер у нижней кромки под линейкой, #2068;
+			main.back_pressed()   # тревога — breach=n / hot=… / drain=1, товарищи — mate=…)
 		if kv["shema"] == "door":
 			main.layout.doors[1].open = true
 			main.layout.doors[1].t = 1.0
+		elif kv["shema"] == "crew":
+			main.walker.x = 1.0
+			main.walker.z = -1.0
+			main.add_mate(-4.5, -3.5, 0.0, Crew.Role.ENGINEER, 1)
+			main.add_mate(2.5, -4.5, 0.0, Crew.Role.BIOLOGIST, 0)
 		main.open_map("pause")
 	if kv.has("zhurnal"):   # zhurnal=1|empty|old|broken — «Журнал экспедиции» ART-047 (pick=<место> — касание карты)
 		Main.menu = true
