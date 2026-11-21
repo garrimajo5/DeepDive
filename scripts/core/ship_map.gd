@@ -212,6 +212,18 @@ static func ruler(size: Vector2) -> Array:
 	return [Vector2(x0, y) * kk, Vector2(x0 + RULER_M * plan_s(size), y) * kk]
 
 
+## Зона линейки с засечками и подписи «5 м» (верх подписи — на RULER_PX + 10 выше линии, как в панели):
+## чужие отметки экипажа сюда не встают — ни настоящей точкой, ни разносом (#2057, кадр тестера 21.11).
+static func ruler_zone(size: Vector2) -> Rect2:
+	var kk := k(size)
+	var ru := ruler(size)
+	var a: Vector2 = ru[0]
+	var b: Vector2 = ru[1]
+	var top: float = a.y - (RULER_PX + 10.0) * kk
+	var bottom: float = a.y + 8.0 * kk
+	return Rect2(Vector2(minf(a.x, b.x), top), Vector2(absf(b.x - a.x), bottom - top))
+
+
 ## Центр значка i-й строки легенды (текст — правее на 60 px макета).
 static func legend_at(i: int, size: Vector2) -> Vector2:
 	var step := PLAN_M * plan_s(size) * LEGEND_STEP
@@ -221,7 +233,8 @@ static func legend_at(i: int, size: Vector2) -> Vector2:
 
 ## Отметки экипажа: points — (x, z) каждого, letters — буквы ролей, own — индекс своего (−1 — нет).
 ## Наложенные кружки разнесены по двум кольцам (выноска к настоящей точке), свой — всегда на месте,
-## его выноску и подпись «Вы здесь» чужие отметки не закрывают (#575).
+## его выноску и подпись «Вы здесь» чужие отметки не закрывают (#575); линейку и подпись «5 м»
+## чужие не закрывают ни точкой, ни разносом (#2057, кадр тестера 21.11).
 static func marks(points: Array, letters: Array, own: int, size: Vector2) -> Array[Mark]:
 	var out: Array[Mark] = []
 	var order: Array[int] = []
@@ -233,6 +246,7 @@ static func marks(points: Array, letters: Array, own: int, size: Vector2) -> Arr
 	var kk := k(size)
 	var gap := MARK * kk
 	var here := Rect2()
+	var zone := ruler_zone(size)
 	for i in order:
 		var m := Mark.new()
 		var p: Vector2 = points[i]
@@ -242,10 +256,11 @@ static func marks(points: Array, letters: Array, own: int, size: Vector2) -> Arr
 		m.own = i == own
 		if m.own:
 			here = here_rect(m.pos, size)
-		elif _crowded(m.pos, out, gap) or _covers(m.pos, here, gap * 0.5):
+		elif _crowded(m.pos, out, gap) or _covers(m.pos, here, gap * 0.5) or _covers(m.pos, zone, gap * 0.5):
 			for c in _slots():
 				var cand := m.at + c * kk
-				if not _crowded(cand, out, gap) and not _covers(cand, here, gap * 0.5):
+				if not _crowded(cand, out, gap) and not _covers(cand, here, gap * 0.5) \
+						and not _covers(cand, zone, gap * 0.5):
 					m.pos = cand
 					break
 		out.append(m)

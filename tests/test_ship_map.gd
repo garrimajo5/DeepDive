@@ -121,6 +121,33 @@ func test_marks_own_first_and_spread() -> void:
 	eq(ShipMap.letter(Crew.Role.BIOLOGIST), "Б", "буква роли")
 
 
+## #2057 (кадр тестера 29-shema, 21.11): чужая отметка не накрывает линейку и подпись «5 м» — ни
+## настоящей точкой, ни разносом; своя остаётся на месте (#575). Без правки `marks()` инженер у энергии
+## на нижней кромке мостика вставал кружком ровно на «5 м».
+func test_marks_keep_ruler_clear() -> void:
+	for size: Vector2 in [Vector2(2400, 1080), Vector2(1600, 720)]:
+		var kk := ShipMap.k(size)
+		var zone := ShipMap.ruler_zone(size)
+		var ru := ShipMap.ruler(size)
+		near(zone.position.y, ru[0].y - (ShipMap.RULER_PX + 10.0) * kk, 0.01, "зона: верх — верх «5 м» (%s)" % size)
+		near(zone.end.y, ru[0].y + 8.0 * kk, 0.01, "зона: низ — засечки линейки (%s)" % size)
+		var r := ShipMap.MARK * 0.5 * kk
+		# Стенд: точка на нижней кромке мостика под центром линейки — на экране кружок достаёт до зоны.
+		var at := Vector2(Deck.BRIDGE_MIN.x, -3.5)
+		ok(ShipMap._covers(ShipMap.to_screen(at.x, at.y, size), zone, r), "стенд: точка накрывает линейку (%s)" % size)
+		var pts := [Vector2(0.0, 10.0), at, at]
+		var ms := ShipMap.marks(pts, ["П", "И", "С"], 0, size)
+		eq(ms.size(), 3, "все отметки (%s)" % size)
+		ok(ms[0].own and ms[0].pos == ms[0].at, "свой — на месте (%s)" % size)
+		for m in ms:
+			if not m.own:
+				ok(not ShipMap._covers(m.pos, zone, r), "отметка «%s» вне линейки (%s)" % [m.letter, size])
+		for a in ms:
+			for b in ms:
+				if a != b:
+					ok(a.pos.distance_to(b.pos) >= (ShipMap.MARK - 0.02) * kk, "кружки не налезают (%s)" % size)
+
+
 ## #575: шесть человек почти в одной точке (сценарий тестера) — кружки не налезают ни друг на друга,
 ## ни на выноску «Вы здесь»; раньше разнос 48 px был меньше кружка 50 px, и чужие ложились поверх своего.
 func test_marks_crowd_keeps_own_visible() -> void:
