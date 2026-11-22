@@ -98,7 +98,7 @@ func _init(system: EcoCoral, on_lite := false) -> void:
 	lite = on_lite
 	name = "Огнецвет"
 	layers = OceanView.LAYER_WORLD
-	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	EcoShadows.cast(self)   # риф отбрасывает тень (Б1, EcoShadows.HEROES); муть — без тени
 	_build()
 	dust_view = GrazerView.build_dust(EcoCoralDust.POOL)
 	add_child(dust_view)
