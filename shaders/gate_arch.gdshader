@@ -14,6 +14,13 @@ uniform float normal_k = 0.0;
 uniform sampler2D orm_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
 uniform vec3 glow : source_color = vec3(0.0);
 uniform sampler2D glow_tex : source_color, hint_default_white, filter_linear_mipmap, repeat_enable;
+// Ободковый (френель) свет по краям (план графики, этап 3): силуэт арки читается в полумраке. Кромка по
+// e = 1 − |N·V| геометрической нормали (сетка двусторонняя — abs; рельеф карт не берём: кромка — по форме),
+// в EMISSION, дальше гаснет тем же слоевым туманом, что и тело. Числа — `GateArch.RIM_*`, «Экономно» — слабее
+// (`GateView.set_lite`); створки — без ободка (ГД 14.11: «без свечения»). В bloom не уходит: пик ниже порога 0,9.
+uniform vec3 rim_color : source_color = vec3(0.0);
+uniform float rim_power = 3.0;
+uniform float rim_gain = 0.0;
 // Тон створок гнёзд (#1757, проба контраста, `GateArch.PETAL_TONE…`): лицо (нормаль +Z модели) и остальное — кромки и изнанка.
 // У тела арки оба — 1: цвет как в картах.
 uniform float tone = 1.0;
@@ -32,8 +39,10 @@ void vertex() {
 void fragment() {
 	ALBEDO = albedo * texture(albedo_tex, UV).rgb * mix(tone, tone_in, inner);
 	ROUGHNESS = rough * texture(orm_tex, UV).g;
+	// Ободок — до записи NORMAL_MAP: NORMAL здесь ещё геометрический, рельеф карт кромку не рябит.
+	float rim_e = pow(1.0 - abs(dot(normalize(NORMAL), normalize(VIEW))), rim_power);
 	NORMAL_MAP = texture(normal_tex, UV).rgb;
 	NORMAL_MAP_DEPTH = normal_k;
-	EMISSION = glow * texture(glow_tex, UV).rgb;
+	EMISSION = glow * texture(glow_tex, UV).rgb + rim_color * rim_e * rim_gain;
 	FOG = water_layers_fog(CAMERA_POSITION_WORLD, w_pos, -1.0, TIME);
 }
