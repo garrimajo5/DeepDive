@@ -101,3 +101,26 @@ func test_scene_landmarks_cast_shadows() -> void:
 		ok(flower in list, "Каменный цветок отбрасывает тень")
 	ev.queue_free()
 	await frames(1)
+
+
+## Флора (Б1): риф (огнецвет), ленты ленточника, листья и моллюски волнолиста отбрасывают тень — «сидят» на дне;
+## мелочь (ежи рощ) и муть — без тени. У колодца 05 отбрасывать нечему: трещина и столб света прозрачные, мох
+## светится (EcoShaders.MOSS — unshaded).
+func test_scene_flora_casts_shadows() -> void:
+	var ev: EcoView = await _world()
+	var list := EcoShadows.casters(ev)
+	var kelp: KelpView = ev.find_child("Ленточник", false, false)
+	var fern: FernView = ev.find_child("Волнолист", false, false)
+	var coral: CoralView = ev.find_child("Огнецвет", false, false)
+	ok(kelp != null and fern != null and coral != null, "ленточник, волнолист и огнецвет в сцене")
+	if kelp and fern and coral:
+		ok(kelp.stalks in list, "ленты ленточника отбрасывают тень")
+		ok(not kelp.bodies in list, "ежи рощ — без тени (мелочь)")
+		ok(not kelp.dust_view in list, "муть ленточника без тени")
+		ok(fern.leaves in list, "листья волнолиста отбрасывают тень")
+		ok(fern.shells in list, "моллюски волнолиста отбрасывают тень")
+		ok(not fern.dust_view in list, "муть волнолиста без тени")
+		ok(coral in list, "огнецвет рифа отбрасывает тень")
+		ok(not coral.dust_view in list, "муть огнецвета без тени")
+	ev.queue_free()
+	await frames(1)

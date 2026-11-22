@@ -80,6 +80,8 @@ func _init(system: EcoFern, ground: Callable = Callable(), on_lite := false) -> 
 		ferns.ferns.size() * EcoFern.LEAVES, true, false, false)
 	shells = EcoMM.instance(self, "Моллюски", build_shell(LITE_SHELL_SEG if lite else SHELL_SEG),
 		ferns.ferns.size() * EcoFern.SHELLS, false, false, false)
+	EcoShadows.cast(leaves)   # флора отбрасывает тень (Б1, EcoShadows.HEROES); муть — без тени
+	EcoShadows.cast(shells)
 	shell_buffer.resize(shells.multimesh.instance_count * STRIDE)
 	_shell_rest.resize(shells.multimesh.instance_count)
 	_shell_live.resize(ferns.ferns.size())
