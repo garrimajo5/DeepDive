@@ -79,6 +79,7 @@ func _init(system: EcoKelp, on_lite := false) -> void:
 	kelp = system
 	name = "Ленточник"
 	stalks = EcoMM.instance(self, "Ленты", build_stalk(), kelp.groves.size() * EcoKelp.KELP_N, true)
+	EcoShadows.cast(stalks)   # флора отбрасывает тень (Б1, EcoShadows.HEROES); ежи и муть — без тени
 	bodies = EcoMM.instance(self, "Шипоежи", build_urchin(), kelp.urchins.size(), false)
 	dust_view = GrazerView.build_dust(EcoUrchinDust.POOL)
 	add_child(dust_view)
