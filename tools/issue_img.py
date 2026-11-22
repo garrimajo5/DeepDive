@@ -13,6 +13,7 @@ GitHub не даёт прикладывать файлы к issue через API
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -21,10 +22,26 @@ REPO = os.environ.get("STATUS_REPO", "garrimajo5/DeepDive")
 BRANCH = "issue-img"
 MAX_BYTES = 900_000
 
+_GH_STD = r"C:\Program Files\GitHub CLI\gh.exe"
+
+
+def find_gh():
+    """gh без PATH сессии (#1350, 21–22.11): как tools/qa/gh-find.ps1 — сначала PATH, затем стандартное
+    место установки; нет и там — «gh», ошибка запуска будет честной."""
+    if shutil.which("gh"):
+        return "gh"
+    return _GH_STD if os.path.exists(_GH_STD) else "gh"
+
+
+GH = find_gh()
+
 
 def gh(path, method="GET", payload=None, ok_404=False):
-    cmd = ["gh", "api", "-X", method, path] + (["--input", "-"] if payload is not None else [])
-    r = subprocess.run(cmd, input=json.dumps(payload) if payload is not None else None, capture_output=True, text=True)
+    cmd = [GH, "api", "-X", method, path] + (["--input", "-"] if payload is not None else [])
+    # encoding/errors (#1350, поток А 21.11): gh отвечает UTF-8, text=True на Windows декодирует в cp1251
+    # и падает на кириллице ответа — комментарий при этом уже опубликован.
+    r = subprocess.run(cmd, input=json.dumps(payload) if payload is not None else None, capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
     if r.returncode != 0:
         if ok_404 and "404" in (r.stdout + r.stderr):
             return None
@@ -93,8 +110,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 def git(*args, env=None, data=None):
     r = subprocess.run(["git", *args], cwd=ROOT, env=env, input=data, capture_output=True)
     if r.returncode != 0:
-        raise RuntimeError(f"git {' '.join(args)}: {r.stderr.decode(errors='replace').strip()[:300]}")
-    return r.stdout.decode().strip()
+        raise RuntimeError(f"git {' '.join(args)}: {r.stderr.decode('utf-8', errors='replace').strip()[:300]}")
+    return r.stdout.decode("utf-8", errors="replace").strip()
 
 
 def upload_all(issue, pairs):
