@@ -318,3 +318,36 @@ func test_petal_open_angle_is_view_number() -> void:
 	near(gv.petals[0].rotation.x, 0.0, 0.0001, "закрыта — на лице опоры")
 	near(gv.petals[1].rotation.x, 0.0, 0.0001, "соседние створки не тронуты")
 	gv.free()
+
+
+## Ободковый (френель) свет арки (план графики, этап 3 — силуэт читается в полумраке): кромка по геометрической
+## нормали (двусторонняя сетка — |N·V|) в EMISSION, числа из `GateArch.RIM_*`; створки — без ободка (ГД 14.11:
+## «без свечения»); «Экономно» — слабее вдвое; пик эмиссии ниже порога bloom (0,9, `Main._build_world`) —
+## кромка светится, а не цветёт пятном.
+func test_rim_light_edges() -> void:
+	var sh := FileAccess.get_file_as_string("res://shaders/gate_arch.gdshader")
+	ok(sh.contains("1.0 - abs(dot(normalize(NORMAL), normalize(VIEW)))"), "кромка по геометрической нормали, обе стороны грани")
+	ok(sh.contains("rim_color * rim_e * rim_gain"), "ободок добавлен в эмиссию")
+	var gv := GateView.new()
+	var seen := 0
+	for m in gv.mats:
+		if m == gv.petal_mat:
+			near(float(m.get_shader_parameter("rim_gain")), 0.0, 0.0001, "створки без ободка (ГД 14.11)")
+			continue
+		seen += 1
+		var c: Color = m.get_shader_parameter("rim_color")
+		near(c.r, GateArch.RIM_COLOR.r, 0.0001, "цвет ободка из таблицы")
+		near(c.g, GateArch.RIM_COLOR.g, 0.0001, "цвет ободка из таблицы")
+		near(c.b, GateArch.RIM_COLOR.b, 0.0001, "цвет ободка из таблицы")
+		near(float(m.get_shader_parameter("rim_power")), GateArch.RIM_POWER, 0.0001, "теснота кромки из таблицы")
+		near(float(m.get_shader_parameter("rim_gain")), GateArch.RIM_GAIN, 0.0001, "сила ободка из таблицы")
+	eq(seen, 3, "минерал, кабель и полипы — с ободком (створки — без)")
+	var peak := GateArch.RIM_COLOR.get_luminance() * GateArch.RIM_GAIN
+	ok(peak < 0.9 and peak > 0.05, "пик ободка %.2f — заметен, но ниже порога bloom" % peak)
+	gv.set_lite(true)
+	near(float(gv.mats[0].get_shader_parameter("rim_gain")), GateArch.RIM_GAIN * GateArch.RIM_LITE, 0.0001,
+		"«Экономно» — ободок слабее")
+	near(float(gv.petal_mat.get_shader_parameter("rim_gain")), 0.0, 0.0001, "створки и в «Экономно» без ободка")
+	gv.set_lite(false)
+	near(float(gv.mats[0].get_shader_parameter("rim_gain")), GateArch.RIM_GAIN, 0.0001, "обратно — полный ободок")
+	gv.free()

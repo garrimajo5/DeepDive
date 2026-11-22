@@ -52,6 +52,7 @@ func _init() -> void:
 	petal_mat.set_shader_parameter("tone", GateArch.PETAL_TONE)
 	petal_mat.set_shader_parameter("tone_in", GateArch.PETAL_TONE_IN)
 	petal_mat.set_shader_parameter("rough", GateArch.PETAL_ROUGH)
+	petal_mat.set_shader_parameter("rim_gain", 0.0)   # створки без ободка (ГД 14.11: «без свечения»)
 	mats.append(petal_mat)
 	for mi in petals:
 		mi.set_surface_override_material(0, petal_mat)
@@ -68,7 +69,7 @@ func _enter_tree() -> void:
 			o.add_layer_mat(m)
 
 
-## Отрезки LOD по уровню графики: «Экономно» — без LOD0.
+## Отрезки LOD по уровню графики: «Экономно» — без LOD0 и ободок слабее (`GateArch.RIM_LITE`).
 func set_lite(on: bool) -> void:
 	lite = on
 	for i in LODS.size():
@@ -82,6 +83,10 @@ func set_lite(on: bool) -> void:
 			mi.visibility_range_end = maxf(r.y, 0.0)
 			mi.visibility_range_begin_margin = 0.0
 			mi.visibility_range_end_margin = 0.0
+	var rim := GateArch.RIM_GAIN * (GateArch.RIM_LITE if on else 1.0)
+	for m in mats:
+		if m != petal_mat:   # створки — без ободка вовсе (ГД 14.11)
+			m.set_shader_parameter("rim_gain", rim)
 
 
 ## Створка гнезда i поднята на долю k (0 — закрыта, 1 — открыта).
@@ -130,4 +135,7 @@ static func _mat(c: Color, rough: float) -> ShaderMaterial:
 	m.shader = SHADER
 	m.set_shader_parameter("albedo", c)
 	m.set_shader_parameter("rough", rough)
+	m.set_shader_parameter("rim_color", GateArch.RIM_COLOR)
+	m.set_shader_parameter("rim_power", GateArch.RIM_POWER)
+	m.set_shader_parameter("rim_gain", GateArch.RIM_GAIN)
 	return m
