@@ -200,13 +200,39 @@ $adbSrv = Start-Detached { Test-Port 5037 } {
 if ($adbSrv -eq 'нет') { Write-Warning 'сервер adb не поднялся отдельно за 10 с — поднимет первый вызов adb' }
 
 # -ColdBoot (#1592): эмулятор, на котором долго жили чужие окна и прогоны, шумит — закрыть и поднять заново
-# без снимка состояния (-no-snapshot-load), прежде чем считать заминки регрессией
-if ($ColdBoot -and ((& $adb devices) -match 'emulator-\d+')) {
-  & $adb emu kill | Out-Null
-  for ($i = 0; $i -lt 30; $i++) { Start-Sleep 2; if (-not ((& $adb devices) -match 'emulator-\d+')) { break } }
+# без снимка состояния (-no-snapshot-load), прежде чем считать заминки регрессией.
+# Предел ожидания (#1350, тестер 22.11): каждый вызов adb до холодного старта — Invoke-Timed 10 с, как у getprop
+# (#1746); зависший adb (две копии) не держит замок — понятная ошибка ADB_TIMEOUT, замок снят. Завис/не закрылся
+# после emu kill — тоже выход: вторую копию эмулятора вслепую не поднимаем.
+$devs = Invoke-Timed $adb @('devices') 10000
+if ($null -eq $devs) {
+  Write-Output "ADB_TIMEOUT ${head}: adb devices не ответил за 10 с до холодного старта — adb kill-server и повторить прогон"
+  Unlock-Qa $lockFile; exit 1
+}
+if ($ColdBoot -and ($devs -match 'emulator-\d+')) {
+  if ($null -eq (Invoke-Timed $adb @('emu', 'kill') 10000)) {
+    Write-Output "ADB_TIMEOUT ${head}: adb emu kill не ответил за 10 с — adb kill-server, закрыть эмулятор руками, повторить с -ColdBoot"
+    Unlock-Qa $lockFile; exit 1
+  }
+  # Закрытие — while, не for: тесты done.txt берут первый цикл «for + Start-Sleep» в файле (test_qa_tools)
+  $left = 60
+  while ($left -gt 0) {
+    Start-Sleep 2
+    $left -= 2
+    $devs = Invoke-Timed $adb @('devices') 10000
+    if ($null -eq $devs) {
+      Write-Output "ADB_TIMEOUT ${head}: adb devices завис после emu kill — adb kill-server, проверить эмулятор, повторить с -ColdBoot"
+      Unlock-Qa $lockFile; exit 1
+    }
+    if ($devs -notmatch 'emulator-\d+') { break }
+  }
+  if ($devs -match 'emulator-\d+') {
+    Write-Output "ADB_TIMEOUT ${head}: эмулятор не закрылся за 60 с после emu kill — закрыть руками (adb emu kill), повторить с -ColdBoot"
+    Unlock-Qa $lockFile; exit 1
+  }
 }
 $cold = if ($ColdBoot) { ' -no-snapshot-load' } else { '' }
-if (-not ((& $adb devices) -match 'emulator-\d+\s+device')) {
+if ($devs -notmatch 'emulator-\d+\s+device') {
   # Эмулятор — отвязанным процессом (WMI, не потомок скрипта): живёт после прогона, даже если фоновый
   # run-qa.ps1 закрыли вместе с деревом процессов, — можно досматривать руками через adb (#1350)
   Invoke-CimMethod Win32_Process -MethodName Create -Arguments @{
