@@ -28,14 +28,24 @@ func test_lite_keeps_shader() -> void:
 	var own := ShaderMaterial.new()
 	own.shader = EcoShaders.shader(RayView.SHADER)
 	ok(EcoRim.rim(own), "шейдер ледокрыла берёт ободок")
+	var fish := ShaderMaterial.new()
+	fish.shader = EcoShaders.shader(FishView.shader_code())
+	ok(EcoRim.rim(fish, EcoRim.SOFT), "шейдер светляков берёт ободок")
+	var graz := ShaderMaterial.new()
+	graz.shader = EcoShaders.shader(GrazerView.SHADER)
+	ok(EcoRim.rim(graz, EcoRim.SOFT), "шейдер скребунов берёт ободок")
 	EcoRim.set_lite(true)
 	near(lit.rim, 0.0, 1e-6, "«Экономно» — ободок погашен")
 	near(float(own.get_shader_parameter("rim")), 0.0, 1e-6, "и у своего шейдера")
+	near(float(fish.get_shader_parameter("rim")), 0.0, 1e-6, "и у светляков")
+	near(float(graz.get_shader_parameter("rim")), 0.0, 1e-6, "и у скребунов")
 	eq(ShaderKey.of(lit), key, "шейдер тот же — меняется только число")
 	ok(lit.rim_enabled, "флаг не снят (иначе пересборка)")
 	EcoRim.set_lite(false)
 	near(lit.rim, EcoRim.STRENGTH, 1e-6, "вернулся")
 	near(float(own.get_shader_parameter("rim")), EcoRim.STRENGTH, 1e-6, "и у ледокрыла")
+	near(float(fish.get_shader_parameter("rim")), EcoRim.SOFT, 1e-6, "и у светляков")
+	near(float(graz.get_shader_parameter("rim")), EcoRim.SOFT, 1e-6, "и у скребунов")
 
 
 func test_scene_heroes_have_rim() -> void:
@@ -76,6 +86,19 @@ func test_scene_heroes_have_rim() -> void:
 					and b.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED and not b.rim_enabled:
 				plain += 1
 	eq(plain, 0, "все освещаемые непрозрачные тела мира — с флагом ободка")
+	# тела со своим шейдером (светляки, пестрянки на нём же, скребуны) — слабый ободок числом
+	for who in ["Светляки", "Скребуны", "Хватни"]:
+		var node := ev.find_child(who, true, false)
+		ok(node != null, "%s в мире" % who)
+		var found := 0
+		for gi in node.find_children("*", "GeometryInstance3D", true, false) + [node]:
+			if gi is GeometryInstance3D:
+				for mat in EcoRim.materials(gi as GeometryInstance3D):
+					if mat is ShaderMaterial and EcoRim.has_uniform(mat as ShaderMaterial):
+						near(float((mat as ShaderMaterial).get_shader_parameter("rim")), EcoRim.SOFT, 1e-6,
+								"%s / %s — слабый ободок" % [who, gi.name])
+						found += 1
+		ok(found > 0, "%s: материал с ободком найден" % who)
 	ev.set_lite(true)
 	near(m.rim, 0.0, 1e-6, "EcoView.set_lite гасит ободок")
 	ok(EcoShaders.sway_lite, "и колыхание флоры")
