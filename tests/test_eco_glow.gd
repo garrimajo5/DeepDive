@@ -45,6 +45,21 @@ func test_shader_code_routes_emission() -> void:
 				ok(line.contains("eco_bio("), "%s: свечение через eco_bio — %s" % [who, line.strip_edges()])
 
 
+func test_coral_far_glow() -> void:
+	var code := CoralView.SHADER
+	ok(code.contains("uniform float far0") and code.contains("uniform float far_boost"),
+		"огнецвет: дальнее свечение — uniform в том же шейдере")
+	for line in code.split("\n"):
+		if line.strip_edges().begins_with("EMISSION ="):
+			ok(line.contains("far_k"), "свечение кончика усилено вдали — %s" % line.strip_edges())
+	near(CoralView.far_gain(10.0), 1.0, 1e-6, "ближний куст не тронут")
+	near(CoralView.far_gain(CoralView.FAR0), 1.0, 1e-6, "на пороге — 1")
+	near(CoralView.far_gain(CoralView.FAR1), 1.0 + CoralView.FAR_BOOST, 1e-6, "на полной дальности — 1 + boost")
+	ok(CoralView.far_gain(120.0) <= 1.0 + CoralView.FAR_BOOST + 1e-6, "дальше полной не растёт")
+	var mid := CoralView.far_gain((CoralView.FAR0 + CoralView.FAR1) / 2.0)
+	ok(mid > 1.0 and mid < 1.0 + CoralView.FAR_BOOST, "между — монотонно (%0.3f)" % mid)
+
+
 func test_scene_glow_is_one_knob() -> void:
 	EcoGlow.set_gain(EcoGlow.GAIN)
 	var ev: EcoView = await _world()
@@ -72,6 +87,9 @@ func test_scene_glow_is_one_knob() -> void:
 				near(float(sm.get_shader_parameter("bio")), 1.5, 1e-6, "%s: ручка у светлых точек" % gi.name)
 				spots += 1
 	ok(spots >= 2, "светлые точки в мире найдены (%d)" % spots)
+	var coral: ShaderMaterial = ev.find_child("Огнецвет", true, false).material()
+	near(float(coral.get_shader_parameter("far_boost")), CoralView.FAR_BOOST, 1e-6, "дальнее свечение — параметр в мире")
+	near(float(coral.get_shader_parameter("far1")), CoralView.FAR1, 1e-6, "и дальность полного усиления")
 	EcoGlow.set_gain(EcoGlow.GAIN)
 	near(float(ray.get_shader_parameter("bio")), 1.0, 1e-6, "и обратно")
 	ev.queue_free()
