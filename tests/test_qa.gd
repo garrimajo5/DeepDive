@@ -188,6 +188,7 @@ func test_scene_runs_scenario() -> void:
 	var dome: Array[String] = []   # 37/37a (#1350): купольник в кадре — клип ANIM-004 и створка по кадрам
 	var dome_t := -1.0   # 37 (#837): время клипа OpenPetal на кадре — верхняя точка подъёма
 	var dome_say := ""   # 37a (#837, отчёт 11.11 15:18): строка створки на приборах
+	var dome_gate: Array[float] = []   # 37/37a (#837): створка на узле модели MOD-023 (GateView), не только доля мира
 	var okno: Array[String] = []   # 41…41c (#1757, ГД 14.11): створка из носового окна по порядку — клип, створка, строка снимка
 	var task_say := ""   # 35-zadacha-07 (#1635, отчёт 11.11 12:19): строка 3 — задача места, не «Вы за штурвалом»
 	var zamer: Array[String] = []   # 38/38a (#1498): режим хищника 0 и строка приборов на кадрах «замер» и «потерял»
@@ -274,6 +275,7 @@ func test_scene_runs_scenario() -> void:
 				arc_seen = arc_vis
 			if qa.log_lines[k].begins_with("скриншот 37-kupolnik") or qa.log_lines[k].begins_with("скриншот 37a-kupolnik"):
 				dome.append(dome_line)
+				dome_gate.append(main.gate_view.petal(EcoDome.NEST))   # створка узла модели, как в строке снимка
 				if qa.log_lines[k].begins_with("скриншот 37-kupolnik"):
 					dome_t = dome_at
 				else:
@@ -332,6 +334,12 @@ func test_scene_runs_scenario() -> void:
 		ok(absf(dome_t - EcoDome.LIFT.y) < 0.15,
 				"37 (#837): кадр в верхней точке подъёма захвата (LIFT.y %.1f с): %.2f с" % [EcoDome.LIFT.y, dome_t])
 		eq(dome[1], "в кадре Swim 1.0", "37a: створка поднята, купольник в кадре уходит клипом Swim")
+	eq(dome_gate.size(), 2, "37/37a (#837): створка модели MOD-023 замерена на обоих кадрах")
+	if dome_gate.size() == 2:
+		ok(dome_gate[0] > 0.95,
+				"37 (#837): створка MOD-023 поднята по событию — узел модели, доля %.2f" % dome_gate[0])
+		ok(dome_gate[1] > 0.95,
+				"37a (#837): створка MOD-023 осталась открытой на уходе купольника — узел модели, доля %.2f" % dome_gate[1])
 	eq(okno.size(), 5, "41…41c (#1757): четыре кадра створки из носового окна сняты: %s" % str(okno))
 	if okno.size() == 5:
 		eq(okno[0], "41-okno-zakryta в кадре OpenPetal 0.0 | закрыта", "41: купольник у гнезда, створка закрыта")
