@@ -105,7 +105,10 @@ class Render(unittest.TestCase):
         self.assertIn("#11 Вопрос", page)                # ждёт владельца — issue
         self.assertIn("два — эпик #10", page)            # ждёт владельца — задача чек-листа
         self.assertIn("Сценарист: сюжет и тексты (Codex)", page)       # роли паспорта 07.11
-        self.assertIn("Проект-менеджер (Claude)", page)
+        for name in ("Проект-менеджер (Kimi)", "UX/UI-дизайнер (Kimi)", "Тестер (Kimi)",
+                     "Dev: корабль (Kimi, поток А)", "Dev: живой мир (Kimi, поток Б)"):
+            self.assertIn(name, page)                                   # роли на Kimi с 17.11 (#1986, #1987)
+        self.assertNotIn("(Claude)", page)
         self.assertNotIn("нет исполнителя-агента", page)
 
     def test_stage_zero_first_and_earlier_stages_wait(self):
