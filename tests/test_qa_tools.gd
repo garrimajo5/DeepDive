@@ -297,7 +297,7 @@ func test_ci_main_diff_from_last_green() -> void:
 func test_run_qa_noise_stale_coldboot() -> void:
 	var ps := _ps("run-qa.ps1")
 	ok(ps.contains("[switch]$ColdBoot"), "ключ -ColdBoot")
-	var kill := ps.find("& $adb emu kill")
+	var kill := ps.find("Invoke-Timed $adb @('emu', 'kill')")
 	ok(kill > 0 and kill < ps.find("emulator.exe"), "-ColdBoot закрывает эмулятор до запуска")
 	ok(ps.contains("-avd Pixel_8$cold") and ps.contains("' -no-snapshot-load'"), "холодный старт без снимка состояния")
 	ok(ps.contains("помехи: $noise"), "помехи — в итоге RUN")
@@ -550,6 +550,24 @@ func test_run_qa_boot_wait_has_limit() -> void:
 	var tout := run.find("EMULATOR_TIMEOUT", boot)
 	ok(tout > boot and run.find("Unlock-Qa $lockFile; exit 1", tout) > tout, "EMULATOR_TIMEOUT снимает замок")
 	ok(FileAccess.get_file_as_string("res://docs/QA.md").contains("EMULATOR_TIMEOUT"), "docs/QA.md: EMULATOR_TIMEOUT")
+
+
+## #1350 (тестер, 22.11): «adb emu kill» и первый «adb devices» до холодного старта шли без предела — зависший
+## adb (две копии) вешал прогон и держал замок тестера. Теперь каждый вызов — Invoke-Timed 10 с, как у getprop
+## (#1746); завис или эмулятор не закрылся за 60 с — ADB_TIMEOUT со снятием замка: вторую копию вслепую не поднимаем.
+func test_run_qa_adb_before_coldboot_has_limit() -> void:
+	var run := _ps("run-qa.ps1")
+	ok(not run.contains("(& $adb devices)"), "голого adb devices без предела нет")
+	ok(not run.contains("& $adb emu kill"), "голого adb emu kill без предела нет")
+	var first := run.find("Invoke-Timed $adb @('devices') 10000")
+	ok(first > 0, "первый devices — с пределом")
+	ok(first > run.find("Start-Detached { Test-Port 5037 }"), "после подъёма сервера adb")
+	ok(first < run.find("emulator.exe"), "и до запуска эмулятора")
+	ok(run.contains("Invoke-Timed $adb @('emu', 'kill') 10000"), "emu kill — с пределом")
+	var tout := run.find("ADB_TIMEOUT")
+	ok(tout > 0 and tout < run.find("Wait-Boot"), "ADB_TIMEOUT — до ожидания загрузки")
+	ok(run.find("Unlock-Qa $lockFile; exit 1", tout) > tout, "ADB_TIMEOUT снимает замок")
+	ok(FileAccess.get_file_as_string("res://docs/QA.md").contains("ADB_TIMEOUT"), "docs/QA.md: ADB_TIMEOUT")
 
 
 ## #1350, 12.11: Chrome от com.android.shell через 0,5–2 мин после сценария метил прогон шумом — два холодных подряд
