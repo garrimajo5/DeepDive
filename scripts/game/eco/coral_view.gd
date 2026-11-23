@@ -24,9 +24,13 @@ uniform float tall[%d];
 uniform vec3 bend = vec3(0.0);
 uniform float rough = 0.6;
 uniform float spec = 0.4;
+uniform float far0 = 25.0;
+uniform float far1 = 70.0;
+uniform float far_boost = 0.7;
 """ + EcoShaders.SWAY + """
 varying vec3 paint;
 varying float lit;
+varying float far_k;
 void vertex() {
 	int i = int(UV.x + 0.5);
 	if (sway_k > 0.0) {
@@ -37,12 +41,13 @@ void vertex() {
 	if (UV.y > 0.5) {
 		paint = mix(dark_color, tip_paint, lit);
 	}
+	far_k = 1.0 + far_boost * smoothstep(far0, far1, length((MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz));
 }
 void fragment() {
 	ALBEDO = paint;
 	ROUGHNESS = rough;
 	SPECULAR = spec;
-	EMISSION = eco_bio(tip_glow * lit);
+	EMISSION = eco_bio(tip_glow * lit * far_k);
 }
 """
 
@@ -50,6 +55,13 @@ void fragment() {
 ## а свечение — тот же оранжевый.
 const TIP_PAINT := Color(0.85, 0.33, 0.06)
 const TIP_GLOW := Color(0.95, 0.42, 0.1)
+
+## Дальний риф в полумраке тонет в воде (замер телефона, кадр 36-do отчёта #2084): свечение кончиков усиливается
+## с расстоянием до камеры — от FAR0 (1,0, ближний куст не тронут) до FAR1 (полные 1 + FAR_BOOST). Приём в том же
+## шейдере (uniform), «Экономно» тот же код — стоимость нулевая.
+const FAR0 := 25.0
+const FAR1 := 70.0
+const FAR_BOOST := 0.7
 
 ## Изгиб куста в течении (крен, волна, поперёк — доли высоты на полном течении): коралл твёрже веерника
 ## (FanView.BEND), вершина со станцией огнёвок уходит не дальше пары десятков сантиметров.
@@ -171,6 +183,9 @@ func _build() -> void:
 		_mat.set_shader_parameter("foot", feet)
 		_mat.set_shader_parameter("tall", talls)
 		_mat.set_shader_parameter("bend", BEND)
+		_mat.set_shader_parameter("far0", FAR0)
+		_mat.set_shader_parameter("far1", FAR1)
+		_mat.set_shader_parameter("far_boost", FAR_BOOST)
 		EcoShaders.follow(_mat)
 		m.surface_set_material(0, _mat)
 	mesh = m
@@ -201,6 +216,11 @@ func sync_dust(t: float, ship: EcoLink.ShipState, flow := Vector3.ZERO) -> void:
 func offset(i: int, t: float, flow: Vector3 = EcoShaders.flow) -> Vector3:
 	var b := i / maxi(1, form.verts.size())
 	return EcoCurrent.sway(feet[b], heights[i], talls[b], t, flow, BEND)
+
+
+## Множитель дальнего свечения кончика на расстоянии dist от камеры — двойник шейдера (для тестов).
+static func far_gain(dist: float) -> float:
+	return 1.0 + FAR_BOOST * smoothstep(FAR0, FAR1, dist)
 
 
 ## Краска c на кусте номер j: светлее-темнее и теплее-холоднее по номеру (у гостя сети та же).
