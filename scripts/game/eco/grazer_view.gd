@@ -21,6 +21,9 @@ uniform float swing;
 uniform float step_lift;
 uniform float rough = 0.7;
 uniform float spec = 0.5;
+// ободковый свет по краю панциря (EcoRim, Б2): сила и доля цвета тела; 0 — «Экономно»
+uniform float rim = 0.0;
+uniform float rim_tint = 0.0;
 varying vec3 paint;
 void vertex() {
 	paint = COLOR.rgb;
@@ -41,6 +44,8 @@ void fragment() {
 	ALBEDO = paint;
 	ROUGHNESS = rough;
 	SPECULAR = spec;
+	RIM = rim;
+	RIM_TINT = rim_tint;
 }
 """
 

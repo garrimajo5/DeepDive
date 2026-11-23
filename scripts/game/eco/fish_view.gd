@@ -24,6 +24,9 @@ uniform float sway_k = 1.0;
 uniform float rough = 0.6;
 uniform float spec = 0.5;
 uniform float iris = 0.0;
+// ободковый свет по краю тела (EcoRim, Б2): сила и доля цвета тела; 0 — «Экономно»
+uniform float rim = 0.0;
+uniform float rim_tint = 0.0;
 varying vec3 glow;
 varying float phase;
 varying float paint;
@@ -55,6 +58,8 @@ void fragment() {
 	ALBEDO = mix(body, glow * 0.3, clamp(p, 0.0, 1.0));
 	ROUGHNESS = rough;
 	SPECULAR = spec;
+	RIM = rim;
+	RIM_TINT = rim_tint;
 	EMISSION = eco_bio(glow * p * 1.8);
 }
 """
