@@ -22,6 +22,8 @@ extends SceneTree
 ##
 ## --- Корабль и пилот
 ## pilot=1 — сесть за штурвал (взгляд −8°, Deck.SEAT_PITCH)
+## port=1 — режим «у порта» (#2095): глаз на 0,5 м ближе к окну, строка 1 приборов «У порта» (с pilot=1 или без — сам садит)
+## port_t=0.5 — кадр перехода в режим «у порта» на этой доле (0 — штатно, 1 — прильнул); переход заморожен
 ## wheel=0.5 — колесо и руки в повороте без хода (доля −1…1)
 ## thrust=1 — ввод пилота: ход
 ## turn=0.5 — ввод пилота: поворот
@@ -187,6 +189,17 @@ func _go() -> void:
 		if kv.has("pitch"): w.pitch = deg_to_rad(float(kv["pitch"]))
 		if kv.has("noclip"): w.noclip = kv["noclip"] != "0"   # тестовый полёт: глаз в (x, y, z), сквозь корпус
 		if kv.has("y"): w.y = float(kv["y"])
+	if kv.has("port") or kv.has("port_t"):   # port=1 — «у порта» (#2095); port_t=<0…1> — кадр перехода, заморожен
+		if not main.pilot.seated:
+			main.sit_at_helm()
+		if kv.get("port", "0") == "1":
+			main.port_lean_on()
+		else:
+			main.pilot.port_on = true
+		main.pilot.port = clampf(float(kv.get("port_t", "1")), 0.0, 1.0)
+		main.step(0.0)   # камера и приборы — на этом месте перехода
+		if kv.has("port_t"):
+			main.set_process(false)
 	if kv.has("splash"):   # splash=<доля 0…1> — заставка прогрева ART-034 поверх сцены, hint=<с> — время подсказки
 		var sp := WarmSplash.new()
 		root.add_child(sp)
