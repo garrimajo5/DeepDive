@@ -14,6 +14,13 @@ const SEAT_Z := -4.85
 const SEAT_EYE := 1.33
 ## Взгляд при посадке за штурвал чуть вниз (UX #1402): окно на 2/3 кадра, верх центрального экрана — в кадре.
 const SEAT_PITCH := -8.0 * PI / 180.0
+## «Прильнуть к порту» (#2095, спецификация UX из #2067): глаз на 0,5 м ближе к окну — у 07 видно дно под носом.
+const SEAT_PORT_Z := SEAT_Z - 0.5
+## Переход в режим и обратно, с (ease in-out в `Pilot.eye`).
+const SEAT_PORT_T := 0.5
+## Верхняя граница зоны жеста «у порта»: взгляд в режиме — от нижнего упора (−Walker.MAX_PITCH) до неё;
+## выход плавный — свайп вверх до этого упора и дожим (Touch.LEAN_PUSH).
+const SEAT_PORT_PITCH_UP := -35.0 * PI / 180.0
 ## Кресло пилота (MOD-001, глубина 0,7 м): центр на полу, сдвинуто вперёд вместе с SEAT_Z.
 const CHAIR_Z := -4.45
 ## Встав из кресла, игрок оказывается за ним, лицом к носу, как на старте (замечание тестера в pogrujenie).
@@ -158,20 +165,32 @@ class Walker:
 ## Кто за штурвалом. Сесть — взгляд на нос, чуть вниз (SEAT_PITCH); встать — за креслом, лицом к носу.
 class Pilot:
 	var seated := false
+	## Режим «у порта» (#2095): включён дожимом за нижним упором взгляда; port — ход перехода 0…1 (SEAT_PORT_T).
+	var port_on := false
+	var port := 0.0
 
 	func sit(w: Walker) -> void:
 		seated = true
+		port_on = false
+		port = 0.0
 		w.yaw = 0.0
 		w.pitch = SEAT_PITCH
 
 	func stand(w: Walker) -> void:
 		seated = false
+		port_on = false
+		port = 0.0
 		w.reset()
 
-	## Глаз игрока в осях корабля.
+	## Ход перехода «у порта» к цели режима за SEAT_PORT_T с.
+	func port_step(dt: float) -> void:
+		port = move_toward(port, 1.0 if port_on else 0.0, dt / SEAT_PORT_T)
+
+	## Глаз игрока в осях корабля. В режиме «у порта» — на 0,5 м ближе к окну, переход плавный (ease in-out).
 	func eye(w: Walker) -> Vector3:
 		if w.noclip:
 			return Vector3(w.x, w.y, w.z)
 		if seated:
-			return Vector3(0.0, SEAT_EYE, SEAT_Z)
+			var k := port * port * (3.0 - 2.0 * port)
+			return Vector3(0.0, SEAT_EYE, lerpf(SEAT_Z, SEAT_PORT_Z, k))
 		return Vector3(w.x, Walker.EYE, w.z)

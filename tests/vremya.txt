@@ -220,6 +220,7 @@ test_pause.gd	10.41
 test_pause_flow.gd	3.13
 test_place_task.gd	0.07
 test_play_frame.gd	1.75
+test_port_lean.gd	9.84
 test_power_screen.gd	0.03
 test_probe_frames.gd	3.21
 test_qa.gd	87.26

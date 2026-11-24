@@ -95,6 +95,7 @@ var at_power: bool:               ## игрок у пульта энергии: 
 var press_post := ""               ## пост, у которого только что нажали кнопку (руки на нём CrewHands.PRESS с)
 var press_t := 0.0
 var press_at := Vector2.ZERO        ## где стоял игрок при нажатии: ушёл дальше CrewHands.LEAVE — руки отпускают пост
+var _port_push := 0.0               ## накопление дожима за упором взгляда для режима «у порта» (#2095), точек
 var power_panel: PowerPanel
 var at_vote: bool:                ## игрок решает у голостола «глубже или наверх» (или смотрит итог; `me.at_vote`)
 	get:
@@ -204,6 +205,8 @@ var hint: Label            ## строка состояния на прибор�
 var status_lines := Status.Lines.new()   ## раскладка строки состояния — пересчёт только при смене (#847)
 var message := Status.Message.new()
 const SAT_MSG := "Вы за штурвалом"
+## Режим «у порта» (#2095): сообщение при входе — 4,2 с, как SAT_MSG; гаснет при выходе (clear).
+const PORT_MSG := "Вы прильнули к порту"
 const LOADED_MSG := "Корпус разрушен. Ковчег у последнего сохранения"   ## гибель в кампании (#824)
 const DRAIN_DB := -12.0   ## шипение присоски: js/audio.js 0,12 против 0,05 у сирены (−16 дБ)
 var env: Environment
@@ -753,6 +756,8 @@ func _step_input(dt: float, r: Touch.Router, wrecked: bool) -> Holds:
 		walker.look(overlay.look_points())
 		walker.walk(Vector2(r.move), dt)
 	elif pilot.seated:
+		if pilot.port_on and r.move != Vector2i.ZERO:   # «у порта»: крестовина — мгновенный выход, тяга в этом же кадре (#2095)
+			port_lean_off(true)
 		helm.in_thrust = r.move.y
 		helm.in_turn = r.move.x
 		helm.in_vert = r.vert()
@@ -764,6 +769,8 @@ func _step_input(dt: float, r: Touch.Router, wrecked: bool) -> Holds:
 			if light_on != was_lit:
 				tutorial.note(Tutorial.Ev.LIGHT)
 		walker.look(overlay.look_points())
+		_port_lean(r)
+		pilot.port_step(dt)
 		if r.action_pressed:
 			stand_up()
 	elif at_power:
@@ -1768,7 +1775,52 @@ func comms_area() -> Rect2:
 func stand_up() -> void:
 	pilot.stand(walker)
 	overlay.set_pilot(false)
+	_port_push = 0.0
 	message.clear(SAT_MSG)
+	message.clear(PORT_MSG)
+
+
+## Режим «у порта» (#2095, спецификация UX из #2067): глаз на Deck.SEAT_PORT_Z, у 07 видно дно под носом.
+## Вход — дожим вниз ≥ Touch.LEAN_PUSH за нижним упором взгляда (−Walker.MAX_PITCH); выход плавный — дожим вверх
+## за верхним упором зоны (Deck.SEAT_PORT_PITCH_UP). Тяга в другую сторону или отпускание сбрасывают накопление.
+## Взгляд в режиме — внутри зоны жеста (выше SEAT_PORT_PITCH_UP не поднимается), yaw свободен.
+func _port_lean(r: Touch.Router) -> void:
+	if pilot.port_on:
+		walker.pitch = minf(walker.pitch, Deck.SEAT_PORT_PITCH_UP)
+	if not r.has_look():
+		_port_push = 0.0
+		return
+	var dy := overlay.look_points().y   # палец вниз — dy > 0, взгляд вниз (walker.look уже применён)
+	if pilot.port_on:
+		if dy < 0.0 and walker.pitch >= Deck.SEAT_PORT_PITCH_UP - 1e-3:
+			_port_push = maxf(0.0, _port_push) - dy
+			if _port_push >= Touch.LEAN_PUSH:
+				port_lean_off(false)
+		elif dy > 0.0:
+			_port_push = 0.0
+	else:
+		if dy > 0.0 and walker.pitch <= -Deck.Walker.MAX_PITCH + 1e-3:
+			_port_push = maxf(0.0, _port_push) + dy
+			if _port_push >= Touch.LEAN_PUSH:
+				port_lean_on()
+		elif dy < 0.0:
+			_port_push = 0.0
+
+
+## Вход в режим «у порта»: переход глаза плавный (Deck.SEAT_PORT_T), сообщение и маркер приборов — сразу.
+func port_lean_on() -> void:
+	pilot.port_on = true
+	_port_push = 0.0
+	say(PORT_MSG)
+
+
+## Выход из режима «у порта»: instant — глаз сразу штатный (крестовина, «Встать», «Назад»), иначе — плавный отъезд.
+func port_lean_off(instant: bool) -> void:
+	pilot.port_on = false
+	_port_push = 0.0
+	if instant:
+		pilot.port = 0.0
+	message.clear(PORT_MSG)
 
 
 ## Тестовая кнопка noclip: вкл — игрок летит сквозь корпус смотреть живой мир; выкл — назад на пол, где включил.
@@ -1969,7 +2021,7 @@ func alarms_on() -> Array[bool]:
 ## тревоги не клеится к ней — на свои секунды встаёт рядом 2 вместо данных поста.
 func status_rows() -> Array:
 	var room := ShipLayout.room_at(walker.z)
-	var where := "За штурвалом" if pilot.seated else ShipLayout.ROOM_SHORT[room]
+	var where := "У порта" if pilot.port_on else ("За штурвалом" if pilot.seated else ShipLayout.ROOM_SHORT[room])   # маркер режима «у порта» (#2095)
 	var row1: Array = [where, "глубина %d м" % roundi(helm.depth()), "ход %s м/с" % _num(helm.speed),
 		"корпус %d%%" % roundi(vitals.hull), "энергия %d" % floori(vitals.energy)]
 	var row2: Array = []

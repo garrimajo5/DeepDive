@@ -19,6 +19,9 @@ func _init(m: Main) -> void:
 func back_pressed() -> void:
 	if main.warm.active():
 		return
+	if main.pilot.port_on:   # режим «у порта» (#2095): «Назад» снимает его без паузы, повторное «Назад» — пауза
+		main.port_lean_off(true)
+		return
 	if main.ship_map.open:   # схема корабля — назад туда, откуда открыли (пауза)
 		map_back()
 		return
