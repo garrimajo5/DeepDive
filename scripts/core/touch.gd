@@ -83,6 +83,8 @@ class Circle:
 
 
 const DEAD_ZONE := 0.2  ## доля радиуса крестовины: в центре — стоп
+## Дожим за упором взгляда для режима «у порта» (#2095): столько «точек» (≈0,3″) в ту же сторону после упора.
+const LEAN_PUSH := 48.0
 
 
 ## Крестовина на 8 направлений (js/controls.js). d — смещение пальца от центра, y вниз.
@@ -208,6 +210,10 @@ class Router:
 			if f[0] == role:
 				return true
 		return false
+
+	## Палец обзора на экране: накопление дожима «у порта» (#2095) сбрасывается, когда его отпустили.
+	func has_look() -> bool:
+		return _has(Role.LOOK)
 
 	func _apply(id: int, p: Vector2) -> void:
 		var f: Array = _fingers[id]
