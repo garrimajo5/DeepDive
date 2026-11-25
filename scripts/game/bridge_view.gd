@@ -20,6 +20,8 @@ var plafond_mat: StandardMaterial3D   ## рассеиватели плафоно
 const PLAFOND_TEX := preload("res://textures/svet/plafon.png")
 const GLINT_MASK := preload("res://textures/bridge/bliki-maska.png")   ## ART-067, L8 512², бесшовная
 var screens_mat: ShaderMaterial    ## экраны пульта пилота (помехи — set_screens)
+var power_mat: ShaderMaterial      ## свечение пульта энергии: полосы в пазах — до высоты доли (set_slider, #2102)
+var _levels := PackedFloat32Array([0.5, 0.5, 0.5, 0.5, 0.5])   ## доли в uniform levels (до первого кадра — половина)
 ## Последние значения в материалы и огни (#847): то же самое каждый кадр не пишем.
 var _cabin_key := Vector3(-2.0, 0.0, -1.0)
 var _glint_k := -1.0
@@ -78,6 +80,7 @@ func _ready() -> void:
 	for name in props:
 		if TextureGlow.MODELS.has(name):
 			light_texture(props[name])
+	_light_power_levels(props[BridgeProps.ENERGY])
 	for l in CabinLight.of(true):   # B1, B2 по ART-064
 		var o := cabin_light(l)
 		add_child(o)
@@ -163,6 +166,7 @@ static func cabin_light(l: CabinLight.Lamp) -> OmniLight3D:
 
 
 ## Ползунок i пульта энергии на долю share 0…1 (паз наклонён: ползунок идёт по лицу пульта).
+## Заодно — высота светящейся части полосы i в шейдер пульта (#2102).
 func set_slider(i: int, share: float) -> void:
 	if _slider_share.size() != sliders.size():
 		_slider_share.resize(sliders.size())
@@ -172,6 +176,21 @@ func set_slider(i: int, share: float) -> void:
 	_slider_share[i] = share
 	var y := BridgeProps.slider_y(share)
 	sliders[i].position = Vector3(BridgeProps.SLIDER_X[i], y, BridgeProps.slider_z(y))
+	if power_mat:
+		_levels[i] = share
+		power_mat.set_shader_parameter("levels", _levels)
+
+
+## Полосы в пазах пульта энергии светятся до высоты доли системы (#2102): тот же шейдер tex_glow с level_k=1,
+## доли — uniform levels (пишет set_slider; до первого кадра — половина, как ползунки).
+func _light_power_levels(panel: Node3D) -> void:
+	for mi in panel.find_children("*", "MeshInstance3D", true, false):
+		var sm := (mi as MeshInstance3D).material_override as ShaderMaterial
+		if sm and sm.shader == GLOW_SHADER:
+			power_mat = sm
+			sm.set_shader_parameter("level_k", 1.0)
+	if power_mat:
+		power_mat.set_shader_parameter("levels", _levels)
 
 
 ## Створка люка в коридор отъезжает вбок на offset м; колесо крутится, пока створка не тронулась.

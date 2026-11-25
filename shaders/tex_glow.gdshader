@@ -1,5 +1,7 @@
 // Модель художника, у которой светятся голубые места текстуры (#67DDEB): огни голостола, кнопки пультов, рамка сканера.
 // Маска — по оттенку исходного цвета текстуры (как в texture_glow.gd, там же числа): голубой, насыщенный и яркий.
+// Пульт энергии MOD-005 (#2102): светящаяся часть полосы в пазе равна доле системы — level_k=1 и levels[5]
+// (окно полос STRIP_Y, колонки по x — как BridgeProps.SLIDER_X / STRIP_Y / STRIP_HALF; у других моделей level_k=0).
 shader_type spatial;
 render_mode cull_disabled;
 
@@ -12,6 +14,15 @@ uniform float sat_min = 0.4;
 uniform float val_min = 0.55;
 uniform float roughness = 0.75;
 uniform float metallic = 0.2;
+uniform float level_k = 0.0;   // 1 — пульт энергии: полосы в пазах светятся до доли systems
+uniform float levels[5];       // доля каждого паза 0…1 (порядок BridgeProps.SLIDER_X)
+
+varying vec3 local_pos;
+
+const float STRIP_X[5] = {0.3165, 0.1695, 0.0, -0.1695, -0.3155};   // = BridgeProps.STRIP_X
+const vec2 STRIP_Y = vec2(0.705, 1.13);                            // = BridgeProps.STRIP_Y
+const float STRIP_HALF = 0.022;                                    // = BridgeProps.STRIP_HALF
+const float EDGE = 0.008;   // мягкий край среза свечения, м
 
 vec3 rgb2hsv(vec3 c) {
 	vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
@@ -30,11 +41,24 @@ float glow_mask(vec3 srgb) {
 	return h * s * v;
 }
 
+void vertex() {
+	local_pos = VERTEX;
+}
+
 void fragment() {
 	vec3 lin = texture(albedo_tex, UV).rgb;
 	vec3 srgb = texture(mask_tex, UV).rgb;   // значения как в PNG — маска совпадает с TextureGlow.glows
 	ALBEDO = lin;
 	ROUGHNESS = roughness;
 	METALLIC = metallic;
-	EMISSION = lin * glow_mask(srgb) * glow_energy;
+	float em_k = 1.0;
+	if (level_k > 0.5) {   // пульт энергии: светящаяся часть полосы — до высоты доли (#2102)
+		for (int i = 0; i < 5; i++) {
+			if (abs(local_pos.x - STRIP_X[i]) < STRIP_HALF && local_pos.y > STRIP_Y.x - 0.02 && local_pos.y < STRIP_Y.y + 0.02) {
+				float ycut = mix(STRIP_Y.x, STRIP_Y.y, clamp(levels[i], 0.0, 1.0));
+				em_k = 1.0 - smoothstep(ycut - EDGE, ycut + EDGE, local_pos.y);
+			}
+		}
+	}
+	EMISSION = lin * glow_mask(srgb) * glow_energy * em_k;
 }
