@@ -45,7 +45,8 @@ uniform sampler2D down_albedo : source_color, filter_linear_mipmap_anisotropic, 
 uniform sampler2D down_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D down_orm : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float down_depth = 0.7;
-uniform float down_rough = 0.78;
+// Потолок не глаже 0.85 (#2104): плафон в 0,2 м от него иначе даёт резкое бликовое пятно на панели.
+uniform float down_rough = 0.85;
 uniform float down_metal = 0.2;
 
 uniform sampler2D glint_mask : hint_default_black, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -95,13 +96,15 @@ void fragment() {
 		if (relief) {
 			vec3 orm = textureGrad(down_orm, UV, dx, dy).rgb;
 			AO = orm.r;
-			ROUGHNESS = orm.g;
+			ROUGHNESS = max(orm.g, 0.85);   // потолок без резких бликов плафонов (#2104)
 			METALLIC = orm.b;
+			SPECULAR = 0.12;   // плафон в 0,2 м от потолка: матовый блик-ореол, не пятно (#2104)
 			NORMAL_MAP = textureGrad(down_normal, UV, dx, dy).rgb;
 			NORMAL_MAP_DEPTH = down_depth;
 		} else {
 			ROUGHNESS = down_rough;
 			METALLIC = down_metal;
+			SPECULAR = 0.12;   // как у потолка с картами выше (#2104)
 		}
 	} else if (kit == 2) {
 		ALBEDO = textureGrad(aft_albedo, UV, dx, dy).rgb;

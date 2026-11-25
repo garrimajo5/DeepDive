@@ -45,6 +45,12 @@ func test_alarm_envelope() -> void:
 		ok(c.r - c.g < 0.35, "%s: без красного (#129)" % l.id)
 
 
+func test_bridge_lamps_off_ceiling() -> void:
+	# #2104: омни-огонь в 0,4 м под потолком даёт на нём резкое пятно — огни мостика на линии плафонов и ниже.
+	for l in CabinLight.of(true):
+		ok(BridgePlan.CEILING - l.pos.y >= 0.8, "%s: не ближе 0,8 м к потолку (#2104)" % l.id)
+
+
 func test_reactor_light() -> void:
 	var r := Reactor.new()
 	var r1 := CabinLight.reactor()

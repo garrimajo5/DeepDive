@@ -33,7 +33,7 @@ const KITS := {
 	BridgePlan.Paint.METAL: {
 		"side": ["mash-stena", 0.65, 0.8, 0.15, 14.0, 19.5],
 		"aft": ["tryum-stena", 0.65, 0.8, 0.15, 19.5, 24.2],
-		"down": ["otsek-potolok", 0.6, 0.8, 0.15, 14.0, 24.2],
+		"down": ["otsek-potolok", 0.6, 0.85, 0.15, 14.0, 24.2],   # 0.85 — как у мостика (#2104)
 		"skip_up": true,
 	},
 	BridgePlan.Paint.SEAM: {"down": ["otsek-potolok", 0.6, 0.8, 0.15, 14.0, 24.2]},
