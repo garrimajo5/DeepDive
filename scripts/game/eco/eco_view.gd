@@ -131,6 +131,8 @@ var echo_view: EchoView
 var far_view: FarLifeView
 ## Фоновая мелочь у дна (#2108): косячки 6–15 см в 0,4–3,2 м над дном, плотность по участкам маршрута (EcoMeloch).
 var meloch_view: MelochView
+## Каменная крошка, осыпи и валуны у дна (#2108, часть 3): неподвижный фон по участкам маршрута (EcoOsyp).
+var osyp_view: OsypView
 ## Муть всех видов — один слой и один вызов отрисовки (EcoDustLayer, issue #849).
 var dust_layer := EcoDustLayer.new()
 
@@ -259,6 +261,8 @@ func _init() -> void:
 	add_child(far_view)
 	meloch_view = MelochView.new()
 	add_child(meloch_view)
+	osyp_view = OsypView.new()
+	add_child(osyp_view)
 	_rebuild_moss()
 	_rebuild_coral()
 	_rebuild_kamen()
@@ -288,7 +292,7 @@ func _init() -> void:
 	dust_layer.gather(self)
 
 
-## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок и ореол силуэта героев, переливы чешуи, просвет листвы и каустики на камне погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали и мелочи у дна нет, моли у колодца 80, бахромы 24, планктона рисуется половина клеток, светляков и гребневиков — двое из трёх в стае, спор пузырчатки и чернил подушечника — половина облака, лент ленточника — каждая вторая, пятна мха (и у колодца, на костях) — 4 × 4 клетки, трубка Раковины вне разлома — через сечение — меняются
+## Уровень «Экономно» для приёмов живого мира (ART-044): растения не колышутся, ободок и ореол силуэта героев, переливы чешуи, просвет листвы и каустики на камне погашены, скребуны и кольчужник не поднимают муть, силуэтов вдали, мелочи у дна и осыпей нет, моли у колодца 80, бахромы 24, планктона рисуется половина клеток, светляков и гребневиков — двое из трёх в стае, спор пузырчатки и чернил подушечника — половина облака, лент ленточника — каждая вторая, пятна мха (и у колодца, на костях) — 4 × 4 клетки, трубка Раковины вне разлома — через сечение — меняются
 ## только числа в uniform, шейдеры те же. Включает уровень графики — поток А (`Main._apply_graphics`).
 func set_lite(on: bool) -> void:
 	lite = on
@@ -301,6 +305,7 @@ func set_lite(on: bool) -> void:
 	EcoGrazerDust.lite = on
 	far_view.set_lite(on)
 	meloch_view.set_lite(on)
+	osyp_view.set_lite(on)
 	moth.set_lite(on)
 	fringe.set_lite(on)
 	fringe_view.set_lite(on)
@@ -675,5 +680,6 @@ func _sync(ship: EcoLink.ShipState) -> void:
 	dome_view.sync(world.time, ship.pos)
 	far_view.sync(world.time, ship.pos, world.ground)
 	meloch_view.sync(world.time, ship.pos, world.ground)
+	osyp_view.sync(ship.pos, world.ground)
 	dust_layer.sync()
 	StepClock.mark("мир/вид: планктон, эхо, дальние")
