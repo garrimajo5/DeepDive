@@ -47,8 +47,9 @@ class Lamp:
 static func lamps() -> Array[Lamp]:
 	var R := ShipLayout.Room
 	return [
-		Lamp.new("B1", Vector3(-1.65, 2.8, -3.6), "FFE3B5", 1.8, 5.0, 1.7, R.BRIDGE, Kind.SAFE),
-		Lamp.new("B2", Vector3(1.8, 2.8, -2.6), "B8D9E8", 1.65, 5.0, 1.6, R.BRIDGE, Kind.ALARM),
+		# B1/B2 — на линии плафонов y = 2,35 (были 2,8): в 0,4 м под потолком давали резкое пятно на нём (#2104)
+		Lamp.new("B1", Vector3(-1.65, 2.35, -3.6), "FFE3B5", 1.8, 5.0, 1.7, R.BRIDGE, Kind.SAFE),
+		Lamp.new("B2", Vector3(1.8, 2.35, -2.6), "B8D9E8", 1.65, 5.0, 1.6, R.BRIDGE, Kind.ALARM),
 		Lamp.new("C1", Vector3(0.0, 2.2, 5.0), "F1DEC2", 1.05, 3.0, 1.6, R.CORRIDOR, Kind.ALARM),
 		Lamp.new("L1", Vector3(-0.4, 2.9, 11.0), "B8E7ED", 1.4, 4.5, 1.5, R.LAB, Kind.SAFE),
 		Lamp.new("E1", Vector3(-1.1, 2.7, 16.5), "F4D9B0", 1.7, 4.2, 1.6, R.ENGINE, Kind.ALARM),
