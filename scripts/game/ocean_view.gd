@@ -71,6 +71,7 @@ func _ready() -> void:
 	m.set_shader_parameter("crack_widen", IceSheet.CAUSTIC_WIDEN)
 	_set_ground(m)   # грунты ART-060: песок, ил, галька
 	_set_decals(m)   # декали ART-066: следы, вмятины, ил, ракушечник, мох
+	_set_ripple(m)   # рябь и пятна тона дна (#2108)
 	seabed_mat = m
 	mesh.surface_set_material(0, m)
 	seabed.mesh = mesh
@@ -517,6 +518,25 @@ static func _decals_level(m: ShaderMaterial, lite: bool) -> void:
 ## «Экономно» (ART-044): декали дна реже (один слой, 0,36) и ближе (6…25 м).
 func set_decals_lite(lite: bool) -> void:
 	_decals_level(seabed_mat, lite)
+
+
+## Рябь и пятна тона дна (#2108, `Seabed.Ripple`): числа в материал дна, без новых вызовов. «Экономно» гасит
+## гребень полос самим `relief` (он же гасит нормали грунтов), отдельного переключателя нет.
+static func _set_ripple(m: ShaderMaterial) -> void:
+	const R := Seabed.Ripple
+	m.set_shader_parameter("ripple_wave", R.WAVE)
+	m.set_shader_parameter("ripple_gain", R.GAIN)
+	m.set_shader_parameter("ripple_bump", R.BUMP)
+	m.set_shader_parameter("ripple_fade", R.FADE)
+	m.set_shader_parameter("ripple_dir_scale", R.DIR_SCALE)
+	m.set_shader_parameter("ripple_dir_shift", R.DIR_SHIFT)
+	m.set_shader_parameter("ripple_wiggle", R.WIGGLE)
+	m.set_shader_parameter("ripple_wiggle_phase", R.WIGGLE_PHASE)
+	m.set_shader_parameter("ripple_slope", R.SLOPE)
+	m.set_shader_parameter("patch_scale", R.PATCH_SCALE)
+	m.set_shader_parameter("patch_shift", R.PATCH_SHIFT)
+	m.set_shader_parameter("patch_gain", R.PATCH_GAIN)
+	m.set_shader_parameter("patch_fade", R.PATCH_FADE)
 
 
 ## «Экономно» (ART-044): камни, ракушки и кочки на дне ближе (`SeabedStones.LITE_RADIUS`, `SeabedShells.SHELL_LITE`,

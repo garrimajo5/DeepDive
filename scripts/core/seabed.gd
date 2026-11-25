@@ -492,6 +492,60 @@ class Ground:
 		return TEX % [KINDS[kind], MAPS[map]]
 
 
+## Рябь на открытом песке и крупные пятна тона дна (#2108, схема участков 00 → 07 в `docs/urovni/sloj-1.md`,
+## 25.11): с игровой камеры дно дальше затуханий грунтов ART-060 (35–55 м) читалось «гладкими одинаковыми дюнами».
+## Полосы ряби от течения (длина волны `WAVE` м, направление — медленным шумом, фазу ломает волнистый шум) дают
+## светотень на плоском дне и гребень в микрорельефе под прожектором; пятна тона с ячейкой ~40 м (`PATCH_SCALE`)
+## видно дальше всего остального (`PATCH_FADE`) — они и ломают однообразие вдали. Шейдер дна
+## (`shaders/seabed.gdshader`) считает то же по world.xz двойником `HashNoise` (`ice_fbm2`), без новых вызовов
+## отрисовки; «Экономно» — полосы только в альбедо (гребень уходит вместе с `relief`).
+class Ripple:
+	const WAVE := 3.1                    ## длина волны ряби, м
+	const GAIN := 0.14                   ## светотень полос в альбедо (умножитель 1 ± GAIN)
+	const BUMP := 0.22                   ## наклон гребня в микрорельефе (≈ высота 0,2 м на волне)
+	const FADE := Vector2(18.0, 100.0)    ## рябь гаснет, м от камеры
+	const DIR_SCALE := 0.012             ## направление полос — медленный шум, 1/м (~80 м)
+	const DIR_SHIFT := Vector2(3.7, -1.9)
+	const WIGGLE := 0.35                 ## шум, ломающий прямые полосы, 1/м (~3 м)
+	const WIGGLE_PHASE := 6.0            ## радиан сдвига фазы от края к краю шума
+	const PATCH_SCALE := 0.024           ## пятна тона, 1/м (~40 м)
+	const PATCH_SHIFT := Vector2(-5.1, 8.3)
+	const PATCH_GAIN := 0.17             ## сила пятен (умножитель 1 ± PATCH_GAIN)
+	const PATCH_FADE := 170.0            ## пятна держатся до этой дальности, м
+	const SLOPE := Vector2(0.10, 0.22)   ## уклон (1 − ny), на котором рябь уходит в скалу
+
+	## Направление полос ряби в (x, z): медленный шум, одно направление держится десятки метров.
+	static func dir_at(x: float, z: float) -> Vector2:
+		var a := HashNoise.fbm(x * DIR_SCALE + DIR_SHIFT.x, z * DIR_SCALE + DIR_SHIFT.y, 2) * TAU * 2.0
+		return Vector2(cos(a), sin(a))
+
+	## Фаза полосы в (x, z): волна `WAVE` м поперёк направления, шум `WIGGLE` волнит линии гребней.
+	static func phase(x: float, z: float) -> float:
+		var d := dir_at(x, z)
+		return (x * d.x + z * d.y) * TAU / WAVE \
+				+ (HashNoise.fbm(x * WIGGLE, z * WIGGLE, 2) - 0.5) * WIGGLE_PHASE
+
+	## Полоса ряби в (x, z): −1 впадина … +1 гребень.
+	static func band(x: float, z: float) -> float:
+		return sin(phase(x, z))
+
+	## Крупное пятно тона в (x, z): −0,5…+0,5 (умножитель альбедо 1 + patch · 2 · PATCH_GAIN).
+	static func patch(x: float, z: float) -> float:
+		return HashNoise.fbm(x * PATCH_SCALE + PATCH_SHIFT.x, z * PATCH_SCALE + PATCH_SHIFT.y, 2) - 0.5
+
+	## Затухание ряби по дальности от камеры.
+	static func fade(dist: float) -> float:
+		return 1.0 - HashNoise.smooth(FADE.x, FADE.y, dist)
+
+	## Пятна видно издалека: линейное затухание к `PATCH_FADE` м.
+	static func patch_fade(dist: float) -> float:
+		return clampf(1.0 - dist / PATCH_FADE, 0.0, 1.0)
+
+	## На склоне ряби нет (1 − ny ≥ SLOPE.y) — там скальный цвет.
+	static func slope_k(ny: float) -> float:
+		return 1.0 - HashNoise.smooth(SLOPE.x, SLOPE.y, 1.0 - ny)
+
+
 ## Декали дна по ART-066 (`docs/concept-art/dekali-dna.md`): атлас 4×4 (следы, вмятины, ил, ракушечник, мох; разряды —
 ## ячейки 13–15, в фон не идут) проекцией world.xz в материал дна (`shaders/seabed.gdshader`, без новых вызовов).
 ## Два слоя клеток 4 × 4 м (второй сдвинут на полклетки): в клетке слоя — не больше одного штампа. Шейдер считает то же
