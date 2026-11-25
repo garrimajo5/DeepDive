@@ -1,0 +1,1840 @@
+{
+  "muzhchina": {
+    "reachable_count": 66,
+    "clear_at_midpoint": 0,
+    "max_midpoint_clearance_m": 0.09848710149526596,
+    "tested": [
+      {
+        "parameters": {
+          "bend": 1.4,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 575747,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.07306452095508575
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 914455,
+            "left_pixels": 0,
+            "table_pixels": 1612,
+            "neighbour_centres": 4,
+            "clearance_m": 0.06167443096637726
+          },
+          {
+            "share": 1,
+            "right_pixels": 1536103,
+            "left_pixels": 0,
+            "table_pixels": 97100,
+            "neighbour_centres": 4,
+            "clearance_m": 0.04109209030866623
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.25,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 632714,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.06693192571401596
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 1052238,
+            "left_pixels": 0,
+            "table_pixels": 10175,
+            "neighbour_centres": 4,
+            "clearance_m": 0.05319036915898323
+          },
+          {
+            "share": 1,
+            "right_pixels": 1096798,
+            "left_pixels": 0,
+            "table_pixels": 150626,
+            "neighbour_centres": 4,
+            "clearance_m": 0.03153648227453232
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.1,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 720601,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.06136639416217804
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 1103876,
+            "left_pixels": 0,
+            "table_pixels": 41549,
+            "neighbour_centres": 4,
+            "clearance_m": 0.04063385725021362
+          },
+          {
+            "share": 1,
+            "right_pixels": 514997,
+            "left_pixels": 0,
+            "table_pixels": 1547,
+            "neighbour_centres": 2,
+            "clearance_m": 0.019712984561920166
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.95,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 671177,
+            "left_pixels": 0,
+            "table_pixels": 157,
+            "neighbour_centres": 4,
+            "clearance_m": 0.04866627976298332
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 551082,
+            "left_pixels": 0,
+            "table_pixels": 12417,
+            "neighbour_centres": 3,
+            "clearance_m": 0.02610274776816368
+          },
+          {
+            "share": 1,
+            "right_pixels": 356558,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 0,
+            "clearance_m": 0.00032769227982498705
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.95,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0,
+            -1,
+            0
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 551647,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.04560793936252594
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 545587,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.01963413693010807
+          },
+          {
+            "share": 1,
+            "right_pixels": 214351,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 0,
+            "clearance_m": 0.009370524436235428
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.4,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0,
+            -1,
+            0
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 524951,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.06868898868560791
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 853837,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.0576157309114933
+          },
+          {
+            "share": 1,
+            "right_pixels": 774362,
+            "left_pixels": 0,
+            "table_pixels": 16595,
+            "neighbour_centres": 4,
+            "clearance_m": 0.03197501599788666
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.1,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0,
+            -1,
+            0
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 517292,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.057853903621435165
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 666144,
+            "left_pixels": 0,
+            "table_pixels": 777,
+            "neighbour_centres": 4,
+            "clearance_m": 0.03431325778365135
+          },
+          {
+            "share": 1,
+            "right_pixels": 292794,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 0,
+            "clearance_m": 0.009169427677989006
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.25,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0,
+            -1,
+            0
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 572403,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.06289252638816833
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 655652,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.046597614884376526
+          },
+          {
+            "share": 1,
+            "right_pixels": 653151,
+            "left_pixels": 0,
+            "table_pixels": 32818,
+            "neighbour_centres": 3,
+            "clearance_m": 0.02237052097916603
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.5,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 491613,
+            "left_pixels": 0,
+            "table_pixels": 1855,
+            "neighbour_centres": 4,
+            "clearance_m": 0.03510564565658569
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 539054,
+            "left_pixels": 0,
+            "table_pixels": 8302,
+            "neighbour_centres": 2,
+            "clearance_m": 0.013156440109014511
+          },
+          {
+            "share": 1,
+            "right_pixels": 158616,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 0,
+            "clearance_m": 0.013211768120527267
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.95,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            -0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 394592,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 2,
+            "clearance_m": 0.02926352433860302
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 330088,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 0,
+            "clearance_m": 0.006629437208175659
+          },
+          {
+            "share": 1,
+            "right_pixels": 153168,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 0,
+            "clearance_m": 0.016578610986471176
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.65,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 646704,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.0492447167634964
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 560592,
+            "left_pixels": 0,
+            "table_pixels": 19917,
+            "neighbour_centres": 3,
+            "clearance_m": 0.028989678248763084
+          },
+          {
+            "share": 1,
+            "right_pixels": 450885,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 1,
+            "clearance_m": 0.009029654785990715
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.5,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0,
+            -1,
+            0
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 575706,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.034375280141830444
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 507375,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 0,
+            "clearance_m": 0.0081154964864254
+          },
+          {
+            "share": 1,
+            "right_pixels": 151661,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 0,
+            "clearance_m": 0.022321034222841263
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.1,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            -0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 454170,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.04196907579898834
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 419727,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 2,
+            "clearance_m": 0.0188913494348526
+          },
+          {
+            "share": 1,
+            "right_pixels": 157922,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 0,
+            "clearance_m": 0.005508776288479567
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.8,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 689095,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.06103460490703583
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 1121800,
+            "left_pixels": 0,
+            "table_pixels": 21461,
+            "neighbour_centres": 4,
+            "clearance_m": 0.04017370566725731
+          },
+          {
+            "share": 1,
+            "right_pixels": 552886,
+            "left_pixels": 0,
+            "table_pixels": 5618,
+            "neighbour_centres": 2,
+            "clearance_m": 0.02234715223312378
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.25,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            -0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 555136,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.052466847002506256
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 440386,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 2,
+            "clearance_m": 0.02866838127374649
+          },
+          {
+            "share": 1,
+            "right_pixels": 239655,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 0,
+            "clearance_m": 0.006462526973336935
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.4,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            -0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 528985,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.05624412000179291
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 607135,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.03862440213561058
+          },
+          {
+            "share": 1,
+            "right_pixels": 385234,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 2,
+            "clearance_m": 0.015970563516020775
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.65,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0,
+            -1,
+            0
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 546430,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.04776495695114136
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 610602,
+            "left_pixels": 0,
+            "table_pixels": 5745,
+            "neighbour_centres": 4,
+            "clearance_m": 0.024996332824230194
+          },
+          {
+            "share": 1,
+            "right_pixels": 200152,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 0,
+            "clearance_m": 4.1377166780875996e-05
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.5,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            -0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 397603,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.022057747468352318
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 262237,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 0,
+            "clearance_m": 0.004327635746449232
+          },
+          {
+            "share": 1,
+            "right_pixels": 150692,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 0,
+            "clearance_m": 0.02969861775636673
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.95,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 619541,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.06613336503505707
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 1022907,
+            "left_pixels": 0,
+            "table_pixels": 5213,
+            "neighbour_centres": 4,
+            "clearance_m": 0.05092144384980202
+          },
+          {
+            "share": 1,
+            "right_pixels": 1177743,
+            "left_pixels": 0,
+            "table_pixels": 149843,
+            "neighbour_centres": 4,
+            "clearance_m": 0.03180829808115959
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.1,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 569656,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.07148230820894241
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 897769,
+            "left_pixels": 0,
+            "table_pixels": 374,
+            "neighbour_centres": 4,
+            "clearance_m": 0.06106244772672653
+          },
+          {
+            "share": 1,
+            "right_pixels": 1503909,
+            "left_pixels": 0,
+            "table_pixels": 63783,
+            "neighbour_centres": 4,
+            "clearance_m": 0.04052872210741043
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.8,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0,
+            -1,
+            0
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 521363,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.058545343577861786
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 641607,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.03610328957438469
+          },
+          {
+            "share": 1,
+            "right_pixels": 479466,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 0,
+            "clearance_m": 0.014579154551029205
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.4,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 498858,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.08110977709293365
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 743606,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.07017068564891815
+          },
+          {
+            "share": 1,
+            "right_pixels": 1179930,
+            "left_pixels": 0,
+            "table_pixels": 11803,
+            "neighbour_centres": 4,
+            "clearance_m": 0.05753464251756668
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.25,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 530254,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.07651272416114807
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 809543,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.0653931200504303
+          },
+          {
+            "share": 1,
+            "right_pixels": 1325861,
+            "left_pixels": 0,
+            "table_pixels": 28407,
+            "neighbour_centres": 4,
+            "clearance_m": 0.04924837872385979
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.95,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0,
+            -1,
+            0
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 500254,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.06265600770711899
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 671571,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.04685201123356819
+          },
+          {
+            "share": 1,
+            "right_pixels": 685934,
+            "left_pixels": 0,
+            "table_pixels": 12544,
+            "neighbour_centres": 4,
+            "clearance_m": 0.025382788851857185
+          }
+        ]
+      }
+    ]
+  },
+  "zhenshchina": {
+    "reachable_count": 57,
+    "clear_at_midpoint": 0,
+    "max_midpoint_clearance_m": 0.09507010877132416,
+    "tested": [
+      {
+        "parameters": {
+          "bend": 1.1,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 472627,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.06726717948913574
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 330318,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.041340168565511703
+          },
+          {
+            "share": 1,
+            "right_pixels": 321498,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 2,
+            "clearance_m": 0.018017344176769257
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.4,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 407415,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.08413226157426834
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 621992,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.06693707406520844
+          },
+          {
+            "share": 1,
+            "right_pixels": 1081717,
+            "left_pixels": 0,
+            "table_pixels": 13511,
+            "neighbour_centres": 3,
+            "clearance_m": 0.040840890258550644
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.25,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 434697,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.07668986916542053
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 698139,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.05559493973851204
+          },
+          {
+            "share": 1,
+            "right_pixels": 361558,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.029457956552505493
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.95,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 331391,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.052458759397268295
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 276337,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.02286926843225956
+          },
+          {
+            "share": 1,
+            "right_pixels": 251297,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 1,
+            "clearance_m": 0.0011706961086019874
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.95,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0,
+            -1,
+            0
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 322167,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.04749194160103798
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 256027,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.023943239822983742
+          },
+          {
+            "share": 1,
+            "right_pixels": 187067,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 0,
+            "clearance_m": 0.002800176851451397
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.1,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0,
+            -1,
+            0
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 348590,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.06208270415663719
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 316497,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.03654847294092178
+          },
+          {
+            "share": 1,
+            "right_pixels": 287120,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 1,
+            "clearance_m": 0.014176319353282452
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.4,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0,
+            -1,
+            0
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 373988,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.07823927700519562
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 573624,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.060014210641384125
+          },
+          {
+            "share": 1,
+            "right_pixels": 392504,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.0345950685441494
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.25,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0,
+            -1,
+            0
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 398332,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.07141431421041489
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 643485,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.04887025058269501
+          },
+          {
+            "share": 1,
+            "right_pixels": 372385,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.026684017851948738
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.65,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 328650,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.050391748547554016
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 275783,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.022817445918917656
+          },
+          {
+            "share": 1,
+            "right_pixels": 261790,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 1,
+            "clearance_m": 0.0025293154176324606
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.95,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            -0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 276123,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.04162246361374855
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 228354,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 2,
+            "clearance_m": 0.012861685827374458
+          },
+          {
+            "share": 1,
+            "right_pixels": 164091,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 2,
+            "clearance_m": 0.01016367506235838
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.8,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 344022,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.06270727515220642
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 323854,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.03817085549235344
+          },
+          {
+            "share": 1,
+            "right_pixels": 307985,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 2,
+            "clearance_m": 0.01527942344546318
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.65,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0,
+            -1,
+            0
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 324485,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.045771412551403046
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 255970,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.02119031921029091
+          },
+          {
+            "share": 1,
+            "right_pixels": 188748,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 0,
+            "clearance_m": 0.002819968620315194
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.1,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            -0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 311095,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.05017257109284401
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 265191,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.030271228402853012
+          },
+          {
+            "share": 1,
+            "right_pixels": 194086,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 2,
+            "clearance_m": 0.0010865393560379744
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.95,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 437582,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.07280832529067993
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 709551,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.050716906785964966
+          },
+          {
+            "share": 1,
+            "right_pixels": 354306,
+            "left_pixels": 0,
+            "table_pixels": 50,
+            "neighbour_centres": 4,
+            "clearance_m": 0.02566887065768242
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.25,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            -0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 397692,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.05885640159249306
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 415132,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.04016396775841713
+          },
+          {
+            "share": 1,
+            "right_pixels": 267787,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 2,
+            "clearance_m": 0.012660926207900047
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.4,
+          "yaw": 0.35,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            -0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 372551,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.06696633249521255
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 658329,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.04763535410165787
+          },
+          {
+            "share": 1,
+            "right_pixels": 316304,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.025214537978172302
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.8,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0,
+            -1,
+            0
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 351405,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.05893421918153763
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 309352,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.03319147601723671
+          },
+          {
+            "share": 1,
+            "right_pixels": 282833,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 0,
+            "clearance_m": 0.011232974007725716
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.1,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 411197,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.0796259194612503
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 633601,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.06127912551164627
+          },
+          {
+            "share": 1,
+            "right_pixels": 398909,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.03680707886815071
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.65,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            -0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 271166,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.0392918661236763
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 218734,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.013244994916021824
+          },
+          {
+            "share": 1,
+            "right_pixels": 163023,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 2,
+            "clearance_m": 0.013531946577131748
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.4,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 373178,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.09319861978292465
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 544408,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.07677249610424042
+          },
+          {
+            "share": 1,
+            "right_pixels": 868001,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.056102048605680466
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.25,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0.5,
+            -1,
+            0.2
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 390551,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.08640040457248688
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 582629,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.07033535838127136
+          },
+          {
+            "share": 1,
+            "right_pixels": 966840,
+            "left_pixels": 0,
+            "table_pixels": 1990,
+            "neighbour_centres": 3,
+            "clearance_m": 0.047166772186756134
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 0.95,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0,
+            -1,
+            0
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 359007,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.06873710453510284
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 334901,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.045186784118413925
+          },
+          {
+            "share": 1,
+            "right_pixels": 346521,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 4,
+            "clearance_m": 0.021676164120435715
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.1,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0,
+            -1,
+            0
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 376275,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.07481490075588226
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 593661,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.05647240951657295
+          },
+          {
+            "share": 1,
+            "right_pixels": 382037,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.030663499608635902
+          }
+        ]
+      },
+      {
+        "parameters": {
+          "bend": 1.4,
+          "yaw": 0.65,
+          "wrist_distance_m": 0.15,
+          "pole": [
+            0,
+            -1,
+            0
+          ]
+        },
+        "samples": [
+          {
+            "share": 0,
+            "right_pixels": 342809,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.08793795853853226
+          },
+          {
+            "share": 0.5,
+            "right_pixels": 510183,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.07232189178466797
+          },
+          {
+            "share": 1,
+            "right_pixels": 852401,
+            "left_pixels": 0,
+            "table_pixels": 0,
+            "neighbour_centres": 3,
+            "clearance_m": 0.05049387365579605
+          }
+        ]
+      }
+    ]
+  }
+}
