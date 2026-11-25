@@ -142,6 +142,12 @@ const ENERGY_DEPTH := 0.4
 const SLIDER_X: Array[float] = [0.34, 0.17, 0.0, -0.17, -0.34]
 const SLIDER_Y_MIN := 0.72   ## паз на модели — примерно y 0,62…1,37
 const SLIDER_Y_MAX := 1.28
+## Светящиеся полосы в пазах пульта (#2102): окно по y, центры по x и полуширина (замер модели растеризацией
+## светящихся треугольников — полосы смещены от SLIDER_X до 0,024 м и шире у краёв). Те же числа константами
+## в shaders/tex_glow.gdshader, их синхронность ловит test_side_posts.
+const STRIP_Y := Vector2(0.705, 1.13)
+const STRIP_X: Array[float] = [0.3165, 0.1695, 0.0, -0.1695, -0.3155]
+const STRIP_HALF := 0.022
 ## Сканер: лицом в −X, задняя плоскость x = 0, 0,45 × 1,9 × 1,0 м.
 const SCANNER_POS := Vector3(WALL_X, 0.0, SIDE_Z)
 const SCANNER_DEPTH := 0.45
