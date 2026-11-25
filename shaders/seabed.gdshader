@@ -34,6 +34,21 @@ uniform float pebble_scale = 0.11;
 uniform vec2 pebble_edge = vec2(0.45, 0.62);
 uniform vec2 steep = vec2(0.42, 0.65);
 
+// Рябь на песке и крупные пятна тона (#2108): числа — Seabed.Ripple, двойник шума — ice_fbm2 (HashNoise.fbm 2).
+uniform float ripple_wave = 3.1;        // длина волны, м
+uniform float ripple_gain = 0.14;       // светотень полос в альбедо
+uniform float ripple_bump = 0.22;       // наклон гребня в микрорельефе (уходит с relief — «Экономно»)
+uniform vec2 ripple_fade = vec2(18.0, 100.0);
+uniform float ripple_dir_scale = 0.012;
+uniform vec2 ripple_dir_shift = vec2(3.7, -1.9);
+uniform float ripple_wiggle = 0.35;
+uniform float ripple_wiggle_phase = 6.0;
+uniform vec2 ripple_slope = vec2(0.10, 0.22);
+uniform float patch_scale = 0.024;      // пятна тона ~40 м
+uniform vec2 patch_shift = vec2(-5.1, 8.3);
+uniform float patch_gain = 0.17;
+uniform float patch_fade = 170.0;
+
 // Каустики: движущийся узор преломлённого света сквозь лёд. Силу и свет по глубине ставит OceanView.
 uniform float caustic = 0.0;            // общая сила (0 — выкл; уровень графики/OceanView)
 uniform float light = 1.0;              // сколько света сквозь лёд дошло до дна (по глубине, с учётом ила)
@@ -232,6 +247,24 @@ void fragment() {
 	ROUGHNESS = 1.0;   // матовый песок
 	SPECULAR = 0.1;
 
+	// Рябь и крупные пятна тона (#2108, Seabed.Ripple): полосы от течения на плоском дне держатся до 100 м,
+	// пятна ~40 м — до 170 м: дно за затуханиями грунтов (35–55 м) больше не голое.
+	float rk = (1.0 - smoothstep(ripple_fade.x, ripple_fade.y, dist)) * flat_k
+			* (1.0 - smoothstep(ripple_slope.x, ripple_slope.y, slope_raw));
+	vec3 wrip = vec3(0.0);   // гребень ряби — в микрорельеф ниже (свет прожектора скользит по полосам)
+	if (rk > 0.001) {
+		float rang = ice_fbm2(p * ripple_dir_scale + ripple_dir_shift) * 12.5663706;
+		vec2 rdir = vec2(cos(rang), sin(rang));
+		float rph = dot(p, rdir) * 6.2831853 / ripple_wave
+				+ (ice_fbm2(p * ripple_wiggle) - 0.5) * ripple_wiggle_phase;
+		ALBEDO *= 1.0 + sin(rph) * ripple_gain * rk;
+		wrip = vec3(rdir.x, 0.0, rdir.y) * cos(rph) * ripple_bump * rk * relief;
+	}
+	float pk = clamp(1.0 - dist / patch_fade, 0.0, 1.0) * (1.0 - smoothstep(steep.x, steep.y, slope_raw));
+	if (pk > 0.001) {
+		ALBEDO *= 1.0 + (ice_fbm2(p * patch_scale + patch_shift) - 0.5) * 2.0 * patch_gain * pk;
+	}
+
 	// Грунты ART-060: цвет — множитель вокруг серого, гаснет 12…55 м; нормали и ORM — 8…35 м (Seabed.Ground)
 	vec3 gn = vec3(0.0);   // смещение нормали в базисе поверхности (x — к +X, y — к −Z)
 	float cf = (1.0 - smoothstep(color_fade.x, color_fade.y, dist)) * ground;
@@ -304,7 +337,7 @@ void fragment() {
 	float b0 = vnoise(p * detail * 2.0);
 	float bx = vnoise((p + vec2(e, 0.0)) * detail * 2.0);
 	float bz = vnoise((p + vec2(0.0, e)) * detail * 2.0);
-	vec3 wn = normalize(w_nrm + vec3(-(bx - b0), 0.0, -(bz - b0)) * bump * fade * 2.0);
+	vec3 wn = normalize(w_nrm + vec3(-(bx - b0), 0.0, -(bz - b0)) * bump * fade * 2.0 + wrip);
 	// грунты: мировой базис T = +X на поверхность, B = N × T (на ровном дне к −Z), +Y карты — к −Z мира
 	vec3 tn = normalize(vec3(1.0, 0.0, 0.0) - wn * wn.x);
 	vec3 bn = cross(wn, tn);
