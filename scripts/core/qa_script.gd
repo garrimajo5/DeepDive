@@ -22,6 +22,8 @@ extends RefCounted
 ##   {"do": "swipe", "dx": 300, "dy": 0, "s": 0.6}   — свайп обзора, смещение в пикселях вьюпорта
 ##   {"do": "goto", "x": -2.2, "z": 17.2, "yaw": 90}  — перейти на палубе (дальние отсеки без ходьбы; yaw в градусах,
 ##                                                     "pitch" — наклон взгляда в градусах, вниз — минус; без него не меняется)
+##   {"do": "lean", "pitch": -50}                     — режим «у порта» без свайпа (#2103): не сидит — садится за
+##                                                     штурвал; "pitch"/"yaw" (градусы, вниз — минус) — взгляд, без них не меняется
 ##   {"do": "hot", "heat": 80}                       — перегреть реактор (проверить вентиль и щиток машинного); heat 0 — остудить
 ##   {"do": "sample", "n": 8}                       — поставить корабль над образцом n (шлюз в 8 м над ним, корабль стоит)
 ##   {"do": "breach", "n": 0}                       — пробоина в месте n (0 мостик, 1 коридор, 2 лаборатория, 3 машинное),
@@ -99,9 +101,9 @@ extends RefCounted
 ##   {"do": "log", "note": "после хода"}             — записать состояние игры в лог
 ##   {"do": "quit"}                                  — закрыть игру
 ## advance(dt) возвращает команды для сцены: ["begin", id, what, dir], ["move", id, delta], ["end", id],
-## ["shot", name[, вырез [x, y, w, h, k]]], ["goto", x, z, yaw°[, pitch°]], ["ship", x, y, z[, yaw°]], ["floor"], ["outside", on, at, lamp], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["ping"], ["pred", n, bush, away], ["zamer", n, side], ["jerk", n, s, lite], ["dome", t], ["route"], ["act"], ["mate_hold", on], ["gone"], ["save", on], ["wreck"], ["back"], ["tutorial", on, шаг 1…7], ["brief", on], ["cards", on], ["nests"], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["luch_ten", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
+## ["shot", name[, вырез [x, y, w, h, k]]], ["goto", x, z, yaw°[, pitch°]], ["lean", pitch°|null, yaw°|null], ["ship", x, y, z[, yaw°]], ["floor"], ["outside", on, at, lamp], ["fly", on, y, pitch°], ["hot", heat], ["sample", n], ["breach", n (−1 — закрыть)], ["mate", x, z, yaw°, role, look, seated[, walk x, walk y, s]], ["silt", on], ["drain", s], ["hull", pct], ["charge", units], ["ping"], ["pred", n, bush, away], ["zamer", n, side], ["jerk", n, s, lite], ["dome", t], ["route"], ["act"], ["mate_hold", on], ["gone"], ["save", on], ["wreck"], ["back"], ["tutorial", on, шаг 1…7], ["brief", on], ["cards", on], ["nests"], ["voice", role, text, fake, ask, silent], ["slow"], ["hud", on], ["luch_ten", on], ["play", n], ["log", note], ["quit"], ["done"]. Сцена переводит what в точку экрана по раскладке.
 
-const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "ping", "pred", "zamer", "jerk", "dome", "ship", "floor", "outside", "fly", "route", "gone", "save", "wreck", "back", "tutorial", "brief", "cards", "nests", "voice", "slow", "hud", "luch_ten", "play", "log", "quit"]
+const KINDS := ["wait", "shot", "press", "hold", "swipe", "goto", "lean", "hot", "sample", "breach", "mate", "act", "mate_hold", "silt", "drain", "hull", "charge", "ping", "pred", "zamer", "jerk", "dome", "ship", "floor", "outside", "fly", "route", "gone", "save", "wreck", "back", "tutorial", "brief", "cards", "nests", "voice", "slow", "hud", "luch_ten", "play", "log", "quit"]
 const BUTTONS := ["action", "up", "down", "light", "pad", "dive", "resume", "map", "map_back", "hint_map", "new", "exit", "yes", "no", "crew", "journal", "settings", "graphics", "g0", "g1", "g2", "fps", "golos", "zvuk", "s0", "v_hold", "v_voice", "v_hear", "v_mic", "lite_yes", "lite_no", "ask", "brief", "join", "last", "lobby_new", "lobby_addr", "lobby_refresh",
 	"jcell0", "jcell1", "jcell2", "jcell3", "jcell4", "jcell5", "jprev", "jnext", "jclose", "jtab0", "jtab1", "jlore0", "jlore1", "jlore2",
 	"key0", "key1", "key2", "key3", "key4", "key5", "key6", "key7", "key8", "key9", "key.", "keydel"]
@@ -292,6 +294,8 @@ func _begin(st: Dictionary, out: Array) -> void:
 			if st.has("pitch"):
 				g.append(float(st["pitch"]))
 			out.append(g)
+		"lean":   # «у порта» без свайпа (#2103): pitch/yaw — null, если шаг их не задаёт; off — выход из режима
+			out.append(["lean", st.get("pitch"), st.get("yaw"), bool(st.get("off", false))])
 		"hot":
 			out.append(["hot", float(st.get("heat", 80.0))])
 		"sample":
