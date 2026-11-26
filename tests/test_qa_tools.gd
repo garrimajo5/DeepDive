@@ -630,3 +630,45 @@ func test_run_qa_verdict_and_sigabrt() -> void:
 	ok(verdict < run.find("Write-Kadry \"$run\\kadry.txt\" $result"), "и до kadry.txt — следующая сводка читает его же")
 	var qa := FileAccess.get_file_as_string("res://docs/QA.md")
 	ok(qa.contains("«прогон: тихий»") and qa.contains("SIGABRT android.hardwar: N"), "docs/QA.md описывает поля")
+
+
+## #1350 (тестер, 25.11 22:23 и 26.11 14:23): cron-сессия не видит stdout отсоединённого run-qa.ps1 (он дописывается
+## только в конце). Ход прогона (APK, установка, сценарий раз в 30 с, добор снимков, END) пишется с метками времени
+## в D:\AI\qa-build\stages.txt рядом с last-commit.txt; -Phone файл не трогает (замка нет, идёт параллельно).
+func test_run_qa_stage_log() -> void:
+	var ps := _ps("run-qa.ps1")
+	ok(ps.contains("$stageLog = \"$build\\stages.txt\""), "файл стадий — рядом с last-commit.txt")
+	ok(ps.contains("function Write-Stage([string]$s)"), "запись стадии — функцией")
+	var lock := ps.find("$busy = Lock-Qa $lockFile")
+	var init := ps.find("Write-Stage \"старт:")
+	ok(lock > 0 and init > lock, "первая стадия — после замка")
+	ok(ps.contains("if (-not $Phone) { [IO.File]::WriteAllText($stageLog"), "файл чистится на старте, -Phone его не трогает")
+	var apk := ps.find("Write-Stage \"APK готов:")
+	var inst := ps.find("Write-Stage 'APK установлен'")
+	var scen := ps.find("Write-Stage 'сценарий запущен'")
+	ok(apk > init and inst > apk and scen > inst, "порядок стадий: APK → установка → сценарий")
+	ok(ps.find("Write-Stage \"сценарий идёт") > scen, "раз в 30 с — «сценарий идёт N с»")
+	ok(ps.find("Write-Stage \"снимки:") > scen, "добор снимков — стадия")
+	var end := ps.find("Write-Output (Get-EndLine $head)")
+	ok(ps.rfind("Write-Stage \"END $head\"") > init and ps.rfind("Write-Stage \"END $head\"") < end,
+		"последняя стадия — END, перед строкой END")
+	eq(ps.count("Get-EndLine"), 1, "маркер END по-прежнему печатается один раз")
+	ok(FileAccess.get_file_as_string("res://docs/QA.md").contains("stages.txt"), "docs/QA.md: файл стадий")
+
+
+## #1350 (тестер, 25.11 22:23): строка CHANGELOG отчёта переносилась руками вторым коммитом через временный
+## worktree. publish-qa.ps1 -Changelog <файл.txt> вставляет строки в CHANGELOG.md ветки первыми под заголовок
+## дня из имени папки тем же коммитом; случаи (день есть / нет / пустой файл) гоняет -SelfTest (job «Скрипты тестера»).
+func test_publish_qa_changelog() -> void:
+	var pub := _ps("publish-qa.ps1")
+	ok(pub.contains("[string]$Changelog"), "ключ -Changelog")
+	ok(pub.contains("function Add-QaChangelog([string]$wt, [string]$file, [string]$folder)"), "вставка — функцией")
+	var call := pub.find("Add-QaChangelog $wt $Changelog $Folder")
+	ok(call > 0 and call < pub.find("git -C $wt -c user.name"), "вставка — до коммита отчёта")
+	ok(call > pub.find("worktree add"), "в worktree ветки, не в клоне")
+	ok(pub.contains("git -C $wt add CHANGELOG.md"), "CHANGELOG.md — в том же коммите")
+	ok(pub.contains("$folder.Substring(0, 10)"), "день — из имени папки отчёта")
+	ok(pub.contains("Add-QaChangelog $wtRoot $chg '2026-11-25-1423-tihiy'"), "SelfTest: день есть")
+	ok(pub.contains("Add-QaChangelog $wtRoot $chg '2026-11-26-0823-tihiy'"), "SelfTest: дня нет — секция первой")
+	ok(pub.contains("Add-QaChangelog $wtRoot $chg '2026-11-27-0823-tihiy'"), "SelfTest: пустой файл — без изменений")
+	ok(FileAccess.get_file_as_string("res://docs/QA.md").contains("-Changelog"), "docs/QA.md: -Changelog")
