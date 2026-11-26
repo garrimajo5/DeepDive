@@ -8,9 +8,13 @@
 # кадры второго прогона того же отчёта без ручного копирования (#1350, 12.11).
 # -NoKadry — досдача снимков уже сданного прогона (#1350, 14.11): kadry.txt не кладётся — второй файл того же прогона
 # засчитал бы его в правило трёх дважды. Вместе с -Also — ошибка.
-#   publish-qa.ps1 -SelfTest — проверка выбора снимков и kadry.txt на временных папках (её гоняет CI, job «Скрипты тестера»)
-param([string]$Folder, [string]$Message, [string[]]$Shots, [string]$From = 'run', [string]$Also, [switch]$NoKadry,
-  [switch]$SelfTest)
+# -Changelog <файл.txt> — строки CHANGELOG отчёта тем же коммитом (#1350, тестер 25.11 22:23 — раньше строка
+# переносилась руками вторым коммитом через временный worktree): вставляются в CHANGELOG.md ветки под заголовок
+# дня из имени папки (ГГГГ-ММ-ДД-…), первыми в секции; дня нет — новая секция перед первой существующей.
+#   publish-qa.ps1 -SelfTest — проверка выбора снимков, kadry.txt и вставки CHANGELOG на временных папках
+# (её гоняет CI, job «Скрипты тестера»)
+param([string]$Folder, [string]$Message, [string[]]$Shots, [string]$From = 'run', [string]$Also, [string]$Changelog,
+  [switch]$NoKadry, [switch]$SelfTest)
 $ErrorActionPreference = 'Stop'
 # gh из PATH сессии или стандартного места установки (Find-Gh, #1350, тестер 18.11)
 . (Join-Path $PSScriptRoot 'gh-find.ps1')
@@ -55,6 +59,35 @@ function Copy-QaKadry([string]$src, [string]$dir, [string]$alsoDir, [bool]$noKad
     Copy-Item $also (Join-Path $dir 'kadry-2.txt') -Force; $put += 'kadry-2.txt'
   }
   return $put
+}
+
+# Строки CHANGELOG отчёта — тем же коммитом ветки (#1350, тестер 25.11 22:23): непустые строки файла $file (UTF-8)
+# вставляются в $wt\CHANGELOG.md первыми под заголовок дня из имени папки отчёта (ГГГГ-ММ-ДД-…); заголовка дня нет —
+# новая секция перед первой существующей. Пустой файл — без изменений (предупреждение). BOM исходного сохраняется.
+# Отдаёт $true, если CHANGELOG.md изменён.
+function Add-QaChangelog([string]$wt, [string]$file, [string]$folder) {
+  $lines = @([IO.File]::ReadAllText($file, [Text.Encoding]::UTF8) -split "`r?`n" | ForEach-Object { $_.TrimEnd() } |
+    Where-Object { $_ })
+  if (-not $lines) { Write-Warning "-Changelog ${file}: пустой файл — CHANGELOG.md не меняется"; return $false }
+  $date = $folder.Substring(0, 10)
+  $path = Join-Path $wt 'CHANGELOG.md'
+  $bytes = [IO.File]::ReadAllBytes($path)
+  $bom = $bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
+  $text = [Text.Encoding]::UTF8.GetString($bytes).TrimStart([char]0xFEFF)
+  $head = "## $date"
+  $block = ($lines -join "`n") + "`n"
+  if ($text.Contains("`n$head`n")) {
+    $at = $text.IndexOf("`n$head`n") + $head.Length + 2
+    $text = $text.Substring(0, $at) + $block + $text.Substring($at)
+  } elseif ($text.StartsWith("$head`n")) {
+    $text = "$head`n$block" + $text.Substring($head.Length + 1)
+  } else {
+    $first = $text.IndexOf("`n## ")
+    if ($first -lt 0) { $first = $text.Length - 1 }
+    $text = $text.Substring(0, $first + 1) + "$head`n$block`n" + $text.Substring($first + 1)
+  }
+  [IO.File]::WriteAllText($path, $text, (New-Object Text.UTF8Encoding $bom))
+  return $true
 }
 
 if ($SelfTest) {
@@ -104,6 +137,24 @@ if ($SelfTest) {
   # -NoKadry вместе с -Also → ошибка
   $err = ''; try { Kadry $run $runK $true | Out-Null } catch { $err = "$_" }
   Check ($err -like '*-NoKadry и -Also*') "-NoKadry с -Also — ошибка: $err"
+  # -Changelog (#1350, тестер 25.11): строки отчёта — тем же коммитом, первыми под заголовок дня из имени папки
+  $wtRoot = Join-Path $root 'wt'; New-Item -ItemType Directory -Force $wtRoot | Out-Null
+  $cl = Join-Path $wtRoot 'CHANGELOG.md'
+  [IO.File]::WriteAllText($cl, "# Изменения`n`n## 2026-11-25`n- старая строка`n`n## 2026-11-24`n- ещё старше`n", (New-Object Text.UTF8Encoding $false))
+  $chg = Join-Path $root 'chg.txt'
+  [IO.File]::WriteAllText($chg, "- Тестер: первая`n`n- Тестер: вторая`n", (New-Object Text.UTF8Encoding $false))
+  # день есть: строки — первыми под его заголовком, пустые строки файла схлопнуты
+  Check (Add-QaChangelog $wtRoot $chg '2026-11-25-1423-tihiy') 'есть день — вернула true'
+  $got = [IO.File]::ReadAllText($cl)
+  Check ($got -like "*## 2026-11-25`n- Тестер: первая`n- Тестер: вторая`n- старая строка`n`n## 2026-11-24*") "строки — первыми под заголовком дня"
+  # дня нет: новая секция — перед первой существующей, с пустыми строками вокруг
+  Check (Add-QaChangelog $wtRoot $chg '2026-11-26-0823-tihiy') 'нет дня — вернула true'
+  $got = [IO.File]::ReadAllText($cl)
+  Check ($got -like "*# Изменения`n`n## 2026-11-26`n- Тестер: первая`n- Тестер: вторая`n`n## 2026-11-25*") "нет дня — новая секция первой"
+  # пустой файл — false и без изменений
+  [IO.File]::WriteAllText($chg, "  `n", (New-Object Text.UTF8Encoding $false))
+  $before = [IO.File]::ReadAllText($cl)
+  Check ((-not (Add-QaChangelog $wtRoot $chg '2026-11-27-0823-tihiy' 3>$null)) -and [IO.File]::ReadAllText($cl) -eq $before) 'пустой файл — без изменений'
   Remove-Item -Recurse -Force $root
   if ($bad) { Write-Output "publish-qa.ps1 -SelfTest: провалов $bad"; exit 1 }
   Write-Output 'publish-qa.ps1 -SelfTest: ok'
@@ -157,6 +208,11 @@ Copy-QaKadry $src $dir $alsoDir ([bool]$NoKadry) | Out-Null
 $dst = Join-Path $wt "qa\$Folder"
 New-Item -ItemType Directory -Force $dst | Out-Null
 Copy-Item "$dir\*" $dst -Recurse -Force
+# Строки CHANGELOG отчёта — тем же коммитом (-Changelog, #1350, тестер 25.11): заголовок дня — из имени папки
+if ($Changelog) {
+  Add-QaChangelog $wt $Changelog $Folder | Out-Null
+  git -C $wt add CHANGELOG.md
+}
 git -C $wt add -A "qa/$Folder"
 git -C $wt -c user.name=garrimajo5 -c user.email=garrimajo5@users.noreply.github.com commit -q -m $Message -m 'Co-Authored-By: Claude <noreply@anthropic.com>'
 if ($LASTEXITCODE) { throw "коммит в $wt не удался (нечего коммитить?)" }
