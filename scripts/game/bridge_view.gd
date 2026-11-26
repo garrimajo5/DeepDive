@@ -410,8 +410,8 @@ static func glass_uv(uv: Vector2) -> Vector4:
 const KIT_DIR := "res://textures/bridge/"
 const KITS := {
 	BridgePlan.Paint.DECK: {"side": ["pol", 0.6, 0.72, 0.4]},
-	BridgePlan.Paint.METAL: {"side": ["stena", 0.8, 0.8, 0.15], "down": ["potolok", 0.7, 0.78, 0.2]},
-	BridgePlan.Paint.SEAM: {"down": ["potolok", 0.7, 0.78, 0.2]},
+	BridgePlan.Paint.METAL: {"side": ["stena", 0.8, 0.8, 0.15], "down": ["potolok", 0.7, 0.85, 0.2]},   # 0.85 — без резких бликов плафонов на потолке (#2104)
+	BridgePlan.Paint.SEAM: {"down": ["potolok", 0.7, 0.85, 0.2]},
 }
 const SURFACE_SHADER := preload("res://shaders/ship_surface.gdshader")
 
