@@ -269,7 +269,10 @@ func test_grazer_by_concept() -> void:
 	for i in EcoGrazerLook.tris:
 		if not ok(i >= 0 and i < r.size(), "номер вершины"):
 			return
-	ok(EcoGrazerLook.tris.size() / 3 * EcoGrazer.COUNT < 5000, "десять скребунов — меньше 5 тыс. треугольников")
+	# в сцене — модель MOD-024 (EcoGrazerModel): 1 119 треугольников из 1 500 по заказу на особь
+	eq(EcoGrazerModel.tris_n, 1119, "скребун — модель MOD-024")
+	ok(EcoGrazerModel.tris_n * EcoGrazer.COUNT <= 1500 * EcoGrazer.COUNT,
+		"десять скребунов — в бюджете треугольников заказа MOD-024")
 	var min_y := INF
 	var max_z := -INF
 	var min_z := INF
@@ -624,10 +627,11 @@ func test_view_one_moss_mesh_and_one_grazer_multimesh() -> void:
 	ok(tn.is_equal_approx(EcoGrazerLook.tint(g)), "оттенок особи — цвет экземпляра")
 	var pose := GrazerView.custom_at(gv.buffer, g.index)
 	ok(pose.distance_to(EcoGrazerLook.custom(g, view.world.time)) < 1e-4, "поза — из мира")
-	# шейдер двигает вершины так же, как posed: проверим лапу по буферу
-	var leg_v := EcoGrazerLook.part.find(0)
-	var want := EcoGrazerLook.place(g, view.world.time, leg_v)
-	ok((tr * EcoGrazerLook.posed(leg_v, pose)).distance_to(want) < 1e-3, "лапа на месте")
+	# шейдер двигает вершины модели так же, как EcoGrazerModel.posed: проверим лапу по буферу
+	var leg_v := EcoGrazerModel.part.find(0)
+	ok(leg_v >= 0, "лапа 0 есть в модели")
+	var want := EcoGrazerLook.origin(g) + EcoGrazerLook.breathing(g, view.world.time) * EcoGrazerModel.posed(leg_v, pose)
+	ok((tr * EcoGrazerModel.posed(leg_v, pose)).distance_to(want) < 1e-3, "лапа на месте")
 
 	# пятно объели — шейдер получает новую яркость
 	var up := mv.uploads
@@ -694,16 +698,16 @@ func test_view_lite_coarser_same_material() -> void:
 	var dust := view.dust_view
 	view.set_lite(true)
 	ok(view.lite, "скребуны — на «Экономно»")
-	eq(full, 312, "полный меш")
+	eq(full, 1119, "полный меш — модель MOD-024")
 	eq(view.tris, 200, "треугольников: %d → %d" % [full, view.tris])
 	ok(view.multimesh.mesh.surface_get_material(0) == mat, "материал тот же")
 	eq(view.multimesh.mesh.get_surface_count(), 1, "один вызов отрисовки")
 	eq(view.multimesh.instance_count, 10, "все скребуны на месте")
 	ok(view.dust_view == dust, "муть та же")
-	var uv: PackedVector2Array = view.multimesh.mesh.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
+	var norms: PackedVector3Array = view.multimesh.mesh.surface_get_arrays(0)[Mesh.ARRAY_NORMAL]
 	var has_scraper := false
-	for u in uv:
-		has_scraper = has_scraper or u.y > 0.5
+	for nm in norms:
+		has_scraper = has_scraper or nm.y > 0.5
 	ok(has_scraper, "скребок двигается шейдером")
 	view.set_lite(false)
 	eq(view.tris, full, "назад — полный меш")
