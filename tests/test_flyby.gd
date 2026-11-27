@@ -92,6 +92,7 @@ func test_scene_intro_ends_and_surface_view() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	tree.root.add_child(main)
 	await frames(2)
+	still_world(main)   # облёт и вид с борта — логика камеры, мир не нужен: 152 шага без него быстрее (#1350, фокус А п. 4)
 	for i in int(Flyby.START_S * 10.0) + 2:   # шаг 0,1 с: облёт идёт по времени, не по кадрам (втрое меньше шагов, #1350)
 		main.step(0.1)
 	ok(not main.flyby.active() and main.camera.current, "облёт кончился сам — глаза на мостике")
