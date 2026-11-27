@@ -1,15 +1,17 @@
 class_name GrazerView
 extends MultiMeshInstance3D
-## Скребуны в сцене: все десять — один MultiMesh (один вызов отрисовки). Форма — EcoGrazerLook, место и курс —
-## EcoGrazerLook.basis/origin, поза (фаза шага, ход скребка) — EcoGrazerLook.custom в INSTANCE_CUSTOM. Шейдер двигает
-## лапы и скребок так же, как EcoGrazerLook.posed: в UV.x — тройка лапы (±1, у корпуса 0), в UV.y — скребок (1),
-## в UV2 — бедро лапы (x, z). Краска — цвет вершины × цвет экземпляра (EcoGrazerLook.tint — свой у особи, Б4);
-## размер особи — в basis. Грани плоские (нормаль по производным), своего света нет.
+## Скребуны в сцене: все десять — один MultiMesh (один вызов отрисовки). Форма — модель MOD-024 (EcoGrazerModel,
+## 1 119 треугольников, карта цвета в параметре skin шейдера), место и курс — EcoGrazerLook.basis/origin, поза
+## (фаза шага, ход скребка) — EcoGrazerLook.custom в INSTANCE_CUSTOM. Шейдер двигает лапы и скребок так же, как
+## EcoGrazerModel.posed: в NORMAL.x — тройка лапы (±1, у тела 0), в NORMAL.y — скребок (1; осевые значения не
+## меняются нормализацией), в UV2 — бедро лапы (x, z). Краска — (текстура × texk или белый) × цвет вершины ×
+## цвет экземпляра (EcoGrazerLook.tint — свой у особи, Б4); размер особи — в basis. Грани плоские (нормаль по
+## производным), своего света нет.
 ## Муть у дна от скребка и лап (EcoGrazerDust) — дочерний MultiMesh «Муть»: облачка ила лицом к камере, общий
 ## шейдер EcoShaders.MIST (режим INK), +1 вызов отрисовки. Стоит на слое отмели (OceanView.LAYER_WORLD).
-## «Экономно» (Б6, `set_lite`): форма EcoGrazerLook.lite_* — купол 8 × 2 вместо 12 × 3, лапы без подушек стоп,
-## 312 → 200 треугольников на скребуна; меш пересобирается с тем же материалом, места, позы, муть и вызовы те же.
-## Сброс мира уровень не теряет (EcoView.set_lite).
+## «Экономно» (Б6, `set_lite`): процедурная форма EcoGrazerLook.lite_* — купол 8 × 2, лапы без подушек стоп,
+## 1 119 → 200 треугольников на скребуна; меш пересобирается с тем же материалом и той же разметкой в NORMAL
+## (краска — вершинная, без текстуры), места, позы, муть и вызовы те же. Сброс мира уровень не теряет (EcoView.set_lite).
 ## Купол дышит — высота формы ± EcoGrazerLook.BREATH_H по времени мира (Б3, `EcoGrazerLook.breath`), стопы на дне.
 ## Новый скребун у пятна мха не возникает за кадр (Б3): вырастает за GRAZER_RISE (доли grow_k по времени мира, у
 ## гостя то же); съеденный стеклоустом пропадает сразу — его проглотили.
@@ -24,10 +26,13 @@ uniform float spec = 0.5;
 // ободковый свет по краю панциря (EcoRim, Б2): сила и доля цвета тела; 0 — «Экономно»
 uniform float rim = 0.0;
 uniform float rim_tint = 0.0;
+// карта цвета модели MOD-024 (EcoGrazerModel.skin) и её доля: 1 — модель, 0 — «Экономно» (краска вершинная)
+uniform sampler2D skin : source_color, filter_linear_mipmap, repeat_disable;
+uniform float texk = 1.0;
 varying vec3 paint;
 void vertex() {
 	paint = COLOR.rgb;
-	float tri = UV.x;
+	float tri = NORMAL.x;
 	if (abs(tri) > 0.5) {
 		float s = INSTANCE_CUSTOM.r * tri;
 		float ang = swing * s;
@@ -37,11 +42,11 @@ void vertex() {
 		VERTEX.xz = UV2 + vec2(d.x * c + d.y * sn, -d.x * sn + d.y * c);
 		VERTEX.y += step_lift * max(0.0, s);
 	}
-	VERTEX.y -= UV.y * INSTANCE_CUSTOM.g;
+	VERTEX.y -= NORMAL.y * INSTANCE_CUSTOM.g;
 }
 void fragment() {
 	NORMAL = normalize(cross(dFdx(VERTEX), dFdy(VERTEX)));
-	ALBEDO = paint;
+	ALBEDO = mix(vec3(1.0), texture(skin, UV).rgb, texk) * paint;
 	ROUGHNESS = rough;
 	SPECULAR = spec;
 	RIM = rim;
@@ -125,38 +130,47 @@ static func build_dust(pool: int = EcoGrazerDust.POOL) -> MultiMeshInstance3D:
 	return mi
 
 
-## Меш одного скребуна по EcoGrazerLook: вершины, краски, тройка лапы и скребок в UV, бедро в UV2. lite — форма
-## «Экономно» (EcoGrazerLook.lite_*); mat — взять готовый материал (set_lite), иначе новый.
+## Меш одного скребуна: полный — модель MOD-024 (EcoGrazerModel.mesh, разметка в NORMAL/UV2, карта цвета в skin),
+## lite — процедурная форма «Экономно» (EcoGrazerLook.lite_*, та же разметка в NORMAL/UV2, краска вершинная).
+## mat — взять готовый материал (set_lite), иначе новый.
 static func build_mesh(lite := false, mat: ShaderMaterial = null) -> ArrayMesh:
-	var rest := EcoGrazerLook.lite_rest if lite else EcoGrazerLook.rest
-	var parts := EcoGrazerLook.lite_part if lite else EcoGrazerLook.part
+	if mat == null:
+		mat = ShaderMaterial.new()
+		mat.shader = EcoShaders.shader(SHADER)
+		mat.set_shader_parameter("swing", EcoGrazerLook.SWING)
+		mat.set_shader_parameter("step_lift", EcoGrazerLook.STEP_LIFT)
+		mat.set_shader_parameter("skin", EcoGrazerModel.skin)
+	# один материал на оба вида формы: долю текстуры ставит текущий меш (set_lite)
+	mat.set_shader_parameter("texk", 0.0 if lite else 1.0)
+	if not lite:
+		return EcoGrazerModel.mesh(mat)
+	var rest := EcoGrazerLook.lite_rest
+	var parts := EcoGrazerLook.lite_part
 	var n := rest.size()
+	var norms := PackedVector3Array()
 	var uv := PackedVector2Array()
 	var uv2 := PackedVector2Array()
+	norms.resize(n)
 	uv.resize(n)
 	uv2.resize(n)
 	for i in n:
 		var pt := parts[i]
 		if pt >= 0 and pt < 6:
 			var h := EcoGrazerLook.hips[pt]
-			uv[i] = Vector2(EcoGrazerLook.tripod(pt), 0)
+			norms[i] = Vector3(EcoGrazerLook.tripod(pt), 0, 0)
 			uv2[i] = Vector2(h.x, h.z)
-		else:
-			uv[i] = Vector2(0, 1 if pt == EcoGrazerLook.SCRAPER else 0)
+		elif pt == EcoGrazerLook.SCRAPER:
+			norms[i] = Vector3(0, 1, 0)
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = rest
-	arrays[Mesh.ARRAY_COLOR] = EcoGrazerLook.lite_paint if lite else EcoGrazerLook.paint
+	arrays[Mesh.ARRAY_NORMAL] = norms
+	arrays[Mesh.ARRAY_COLOR] = EcoGrazerLook.lite_paint
 	arrays[Mesh.ARRAY_TEX_UV] = uv
 	arrays[Mesh.ARRAY_TEX_UV2] = uv2
-	arrays[Mesh.ARRAY_INDEX] = EcoGrazerLook.lite_tris if lite else EcoGrazerLook.tris
+	arrays[Mesh.ARRAY_INDEX] = EcoGrazerLook.lite_tris
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	if mat == null:
-		mat = ShaderMaterial.new()
-		mat.shader = EcoShaders.shader(SHADER)
-		mat.set_shader_parameter("swing", EcoGrazerLook.SWING)
-		mat.set_shader_parameter("step_lift", EcoGrazerLook.STEP_LIFT)
 	mesh.surface_set_material(0, mat)
 	# лапы шагают в шейдере: запас к рамке, чтобы скребун не пропадал у края экрана
 	mesh.custom_aabb = AABB(Vector3(-1.3, -0.2, -1.3), Vector3(2.6, 1.0, 2.6))

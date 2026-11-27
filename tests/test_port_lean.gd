@@ -114,6 +114,17 @@ func test_status_row_marks_port() -> void:
 	eq(str(main.status_rows()[0][0]), "За штурвалом", "после выхода — как было")
 
 
+func test_qa_lean_step() -> void:   # #2103: шаг сценария `lean` — «у порта» без свайпа, ракурс не зависит от dpi
+	main.start_qa('[{"do": "lean", "pitch": -50}, {"do": "wait", "s": 0.8}, {"do": "shot", "name": "t"}, {"do": "wait", "s": 1}]')
+	for i in 90:   # 3 с: прогрев, переход глаза 0,5 с, снимок
+		main.step(1.0 / 30.0)
+	ok(main.pilot.seated, "не сидел — сел сам")
+	ok(main.pilot.port_on, "режим «у порта» включён шагом")
+	near(main.walker.pitch, deg_to_rad(-50.0), 0.02, "взгляд −50°: %0.3f" % main.walker.pitch)
+	near(main.pilot.port, 1.0, 0.05, "глаз доехал до окна")
+	eq(str(main.status_rows()[0][0]), "У порта", "маркер в ряду 1")
+
+
 func test_stand_and_sit_reset_mode() -> void:
 	main.sit_at_helm()
 	main.step(0.05)

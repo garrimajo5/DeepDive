@@ -228,6 +228,32 @@ static func apply(g: Main, kv: Dictionary) -> void:
 			kc.global_position = cam_above(d.pos + Vector3(3.5, 2.0, 5.0))   # гнездо на лице опоры над полом кармана (#1757): камера не под дном
 			kc.look_at(d.pos + Vector3(0.0, 0.5, 0.0))
 			kc.make_current()
+	if kv.has("skreb"):  # skreb=<n> — скребун №n крупным планом (встройка MOD-024, #2107): мир идёт skreb_t=<с>,
+		# корабль в 12 м носом к нему (скребун в свете прожектора), камера в skreb_dist=<м> сбоку-спереди; в лог — место
+		var gr: EcoGrazer = g.eco.grazers
+		var n := clampi(int(kv["skreb"]), 0, gr.all.size() - 1)
+		var dt := 1.0 / 30.0
+		for i in int(float(kv.get("skreb_t", "20")) / dt):
+			g.step(dt)
+		var gz := gr.all[n]
+		var gp: Vector3 = gz.agent.p
+		var fw := EcoGrazerLook.forward(gz)
+		var side := Vector3(fw.z, 0, -fw.x)
+		var ship_at := gp - fw * 9.0 + side * 8.0
+		g.helm.yaw = atan2(gp.x - ship_at.x, gp.z - ship_at.z)
+		g.helm.turn = 0.0
+		g.park_at(Vector3(ship_at.x, gp.y + 2.5, ship_at.z))
+		var dist := float(kv.get("skreb_dist", "4"))
+		var eye := gp - fw * dist * 0.6 + side * dist * 0.8 + Vector3(0, 1.1, 0)
+		var kc := Camera3D.new()
+		kc.fov = Deck.FOV
+		kc.far = 400.0
+		g.add_child(kc)
+		kc.global_position = cam_above(eye)
+		kc.look_at(gp + Vector3(0, 0.3, 0))
+		kc.make_current()
+		print("skreb: скребун %d в (%.1f; %.1f; %.1f), курс %.0f°, корабль в %.1f м, камера в %.1f м" % [
+			n, gp.x, gp.y, gp.z, rad_to_deg(gz.dir), (gp - ship_at).length(), dist])
 	if kv.has("grot") or kv.has("grot_t"):  # grot=x,z;… — круг гротовика на пробу; grot_t=<с> — он один прошёл столько
 		# секунд круга, корабль в grot_dist м от него (grot_cam=bok|nos|korma|mid), за штурвалом — штатная камера (#1400)
 		if kv.has("grot"):

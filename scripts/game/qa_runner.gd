@@ -285,6 +285,21 @@ func tick(dt: float) -> void:
 				main.walker.yaw = deg_to_rad(c[3])
 				if c.size() > 4:
 					main.walker.pitch = deg_to_rad(c[4])
+			"lean":   # «у порта» без свайпа (#2103): дожим за упором не зависит от dpi устройства
+				if c[3]:   # off — выход в штатный вид посадки (взгляд посадки, курс на нос)
+					main.pilot.port_on = false
+					main.walker.pitch = Deck.SEAT_PITCH
+					main.walker.yaw = 0.0
+				else:
+					if not main.pilot.seated:
+						main.sit_at_helm()
+					# не port_lean_on(): его say(PORT_MSG) — лишняя строка в очереди сообщений, сдвигает
+					# тексты мира у всех поздних кадров сценария (падение 35-zadacha-07); маркер ряда 1 — от port_on
+					main.pilot.port_on = true
+					if c[1] != null:
+						main.walker.pitch = clampf(deg_to_rad(float(c[1])), -Deck.Walker.MAX_PITCH, Deck.Walker.MAX_PITCH)
+					if c[2] != null:
+						main.walker.yaw = wrapf(deg_to_rad(float(c[2])), -PI, PI)
 			"hot":
 				if c[1] <= 0.0:   # heat 0 — остудить: перегрев снят, следующие шаги без него
 					main.reactor.hot = false

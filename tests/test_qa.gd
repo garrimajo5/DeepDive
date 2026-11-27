@@ -127,6 +127,16 @@ func test_swipe_moves_full_distance() -> void:
 	ok(sum.distance_to(Vector2(300, -40)) < 0.01, "свайп прошёл всё расстояние: %s" % str(sum))
 
 
+## Шаг `lean` (#2103): «у порта» без свайпа — ракурс не зависит от dpi устройства; pitch/yaw без задания — null.
+func test_lean_step_parse() -> void:
+	var q := QaScript.parse('[{"do": "lean", "pitch": -50, "yaw": 10}, {"do": "lean"}, {"do": "wait", "s": 1}]')
+	eq(q.errors.size(), 0, "разбор без ошибок")
+	var out := q.advance(0.0)
+	eq(out.size(), 2, "мгновенные шаги — в том же вызове")
+	eq(out[0], ["lean", -50.0, 10.0, false], "с углами, без off")
+	eq(out[1], ["lean", null, null, false], "без углов — null")
+
+
 ## Предел шагов сценового прогона при 30 кадрах/с: длина сценария с запасом 10 % и 20 с на снимки (каждый ждёт кадр)
 ## и прогрев. Раньше стояло число 7500 (250 с) — новые шаги тестера доводили сценарий до 240 с и роняли тест (#1379).
 static func scene_frames(q: QaScript) -> int:

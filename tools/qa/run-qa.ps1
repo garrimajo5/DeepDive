@@ -3,6 +3,9 @@
 # строка RUN и под ней ПРОВЕРИТЬ — худший кадр шагов из открытых «проверить» с прошлыми прогонами (tools/qa/kadry.ps1).
 # Самая последняя строка — END <коммит>: прогон кончился, сводка напечатана (ждать её, а не RUN).
 # Отчёт по результату пишет Claude по docs/QA.md. Перед запуском обнови клон: git -C D:\AI\DeepDive pull.
+# Ход прогона (стадии: APK, установка, сценарий, добор снимков) — с метками времени в D:\AI\qa-build\stages.txt
+# рядом с last-commit.txt: отсоединённый запуск (Start-Process отдаёт stdout только в конце) смотрят по нему
+# (#1350, тестер 25.11 22:23 и 26.11 14:23).
 #
 #   run-qa.ps1          — APK из релиза apk-latest на эмуляторе Pixel_8 (ровно то, что собрал CI из main)
 #   run-qa.ps1 -Pc      — та же игра из клона в Godot на этом компьютере (D:\Godot), без эмулятора: быстро
@@ -83,6 +86,12 @@ if (-not $Phone) {
   $busy = Lock-Qa $lockFile "run-qa.ps1 $($MyInvocation.Line)"
   if ($busy) { Write-Output $busy; exit 2 }
 }
+# Файл стадий (#1350, тестер 25.11 22:23 и 26.11 14:23): ход прогона с метками времени рядом с last-commit.txt —
+# cron-сессия читает его вместо stdout отсоединённого процесса (тот дописывается только в конце). Чистится на старте
+# прогона; -Phone его не трогает — замка у него нет, он может идти параллельно с чужим прогоном.
+$stageLog = "$build\stages.txt"
+function Write-Stage([string]$s) { [IO.File]::AppendAllText($stageLog, "$(Get-Date -Format 'dd.MM HH:mm:ss') $s`r`n", (New-Object Text.UTF8Encoding $false)) }
+if (-not $Phone) { [IO.File]::WriteAllText($stageLog, '', (New-Object Text.UTF8Encoding $false)); Write-Stage "старт: $($MyInvocation.Line)" }
 # Папку результата чистим только перед самим прогоном (#1614): NO_PR, NO_RUN, NO_ARTIFACT, NO_CHANGES и сбой
 # скачивания не оставляют пустую run-pr<номер>\ и не стирают несданные снимки прошлого прогона.
 function Reset-Run {
@@ -92,9 +101,10 @@ function Reset-Run {
 $prSha = ''
 if ($Pr) {
   $ghExe = Find-Gh   # PATH или C:\Program Files\GitHub CLI\gh.exe (#1350, тестер 18.11)
-  if (-not $ghExe) { Write-Output 'NO_GH: gh не найден ни в PATH, ни в C:\Program Files\GitHub CLI — проверка PR недоступна'; exit 1 }
+  if (-not $ghExe) { Write-Stage 'выход: NO_GH'; Write-Output 'NO_GH: gh не найден ни в PATH, ни в C:\Program Files\GitHub CLI — проверка PR недоступна'; exit 1 }
   $prSha = (& $ghExe api "repos/garrimajo5/DeepDive/pulls/$Pr" --jq '.head.sha').Trim()
-  if (-not $prSha) { Write-Output "NO_PR #$Pr"; exit 1 }
+  if (-not $prSha) { Write-Stage "выход: NO_PR #$Pr"; Write-Output "NO_PR #$Pr"; exit 1 }
+  Write-Stage "режим PR #$Pr ($($prSha.Substring(0,7)))"
 }
 # -Pr: сценарий — из ветки PR, без git show руками (#1592). -Scenario — путь в ветке (по умолчанию сценарий тестера);
 # существующий локальный файл берётся как есть. Скачивание — через cmd: редирект PowerShell 5.1 портит UTF-8.
@@ -104,6 +114,7 @@ if ($Pr -and -not ($Scenario -and (Test-Path $Scenario))) {
   Remove-Item $prScen -Force -ErrorAction SilentlyContinue
   cmd /c "`"$ghExe`" api `"repos/garrimajo5/DeepDive/contents/${inBranch}?ref=$prSha`" -H `"Accept: application/vnd.github.raw`" > `"$prScen`""
   if (-not (Test-Path $prScen) -or (Get-Item $prScen).Length -eq 0) {
+    Write-Stage "выход: NO_SCENARIO $inBranch"
     Write-Output "NO_SCENARIO: в ветке PR #$Pr ($($prSha.Substring(0,7))) нет $inBranch"; exit 1
   }
   Write-Output "сценарий: $inBranch из ветки PR #$Pr ($($prSha.Substring(0,7)))"
@@ -120,20 +131,22 @@ $tmp = "$build\scenario.json"
 if ($Pc) {
   # ---- Godot на этом компьютере ----
   $godot = Get-ChildItem 'D:\Godot' -Recurse -Filter 'Godot*.exe' | Where-Object Name -notmatch 'console' | Select -First 1
-  if (-not $godot) { Write-Output 'NO_GODOT: не нашёл Godot*.exe в D:\Godot'; exit 1 }
+  if (-not $godot) { Write-Stage 'выход: NO_GODOT'; Write-Output 'NO_GODOT: не нашёл Godot*.exe в D:\Godot'; exit 1 }
   Reset-Run
   $user = "$env:APPDATA\Godot\app_userdata\Погружение\qa"
   New-Item -ItemType Directory -Force $user | Out-Null
   Copy-Item $tmp "$user\scenario.json" -Force
   $head = (git -C $repo rev-parse --short HEAD).Trim()
+  Write-Stage "PC: $($godot.Name), $head"
   & $godot.FullName --path $repo --import --headless | Out-Null
   $p = Start-Process $godot.FullName -ArgumentList '--path', $repo, '--resolution', '2400x1080' -PassThru
-  if (-not $p.WaitForExit(300000)) { $p.Kill(); Write-Output 'TIMEOUT: сценарий не закончился за 5 минут' }
+  if (-not $p.WaitForExit(300000)) { $p.Kill(); Write-Stage 'выход: TIMEOUT PC'; Write-Output 'TIMEOUT: сценарий не закончился за 5 минут' }
   Copy-Item "$user\out\*" $run -Force
   $done = Test-Path "$run\done.txt"
   Write-Output "PC $head $($godot.Name) done=$done"
   Write-Output 'log:'; Get-Content "$run\log.txt" -Encoding utf8
   Write-Output "files: $run"
+  Write-Stage "конец PC: done=$done"
   exit 0
 }
 
@@ -158,13 +171,14 @@ if ($Pr) {
   # Прогон «Godot» именно этой сборки (не «Где мы» и не другой workflow того же коммита)
   $sha = $prSha
   $rid = "$(& $ghExe api "repos/garrimajo5/DeepDive/actions/workflows/godot.yml/runs?head_sha=$sha&per_page=1" --jq '.workflow_runs[0].id')".Trim()
-  if (-not $rid) { Write-Output "NO_RUN: для PR #$Pr ($($sha.Substring(0,7))) прогона CI ещё нет"; exit 1 }
+  if (-not $rid) { Write-Stage "выход: NO_RUN PR #$Pr"; Write-Output "NO_RUN: для PR #$Pr ($($sha.Substring(0,7))) прогона CI ещё нет"; exit 1 }
   $dir = "$build\pr$Pr"
   Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
   # NO_ARTIFACT — только если в прогоне правда нет deepdive-apk (#1606: из чужой папки `gh run download` не находил
   # репозиторий, и сообщение «в PR нет кода?» сбивало); репозиторий — явно и из клона
   $arts = @(& $ghExe api "repos/garrimajo5/DeepDive/actions/runs/$rid/artifacts" --jq '.artifacts[].name')
   if ($arts -notcontains 'deepdive-apk') {
+    Write-Stage "выход: NO_ARTIFACT PR #$Pr"
     Write-Output "NO_ARTIFACT: в прогоне PR #$Pr нет deepdive-apk (сборка APK не шла — в PR нет кода? или прогон ещё идёт)"; exit 1
   }
   Push-Location $repo
@@ -172,24 +186,25 @@ if ($Pr) {
   Pop-Location
   # эмулятору — x86_64-сборка; в артефактах до #844 был один общий DeepDive.apk
   $apk = @("$dir\DeepDive-emulator.apk", "$dir\DeepDive.apk") | Where-Object { Test-Path $_ } | Select -First 1
-  if (-not $apk) { Write-Output "DOWNLOAD_FAILED PR#${Pr}: артефакт deepdive-apk есть, но не скачался (gh run download) — повторите"; exit 1 }
+  if (-not $apk) { Write-Stage "выход: DOWNLOAD_FAILED PR#$Pr"; Write-Output "DOWNLOAD_FAILED PR#${Pr}: артефакт deepdive-apk есть, но не скачался (gh run download) — повторите"; exit 1 }
   $head = "PR#$Pr $($sha.Substring(0,7))"
 } else {
   # APK из релиза apk-latest (то, что собрал CI из main)
   $rel = Invoke-RestMethod 'https://api.github.com/repos/garrimajo5/DeepDive/releases/tags/apk-latest' -Headers @{ 'User-Agent' = 'run-qa' }
   $head = if ($rel.body -match 'коммит ([0-9a-f]{7})') { $Matches[1] } else { $rel.published_at }
   $last = if (Test-Path "$build\last-commit.txt") { (Get-Content "$build\last-commit.txt").Trim() } else { '' }
-  if ($head -eq $last -and -not $Force) { Write-Output "NO_CHANGES $head"; exit 0 }
+  if ($head -eq $last -and -not $Force) { Write-Stage "выход: NO_CHANGES $head"; Write-Output "NO_CHANGES $head"; exit 0 }
   # эмулятору — x86_64-сборка (#844); в релизах до неё — один общий DeepDive.apk
   $asset = $rel.assets | Where-Object name -eq 'DeepDive-emulator.apk' | Select -First 1
   if (-not $asset) { $asset = $rel.assets | Where-Object name -eq 'DeepDive.apk' | Select -First 1 }
-  if (-not $asset) { Write-Output "NO_ASSET ${head}: в релизе apk-latest нет APK (перезаливается?) — повторите позже"; exit 1 }
+  if (-not $asset) { Write-Stage "выход: NO_ASSET $head"; Write-Output "NO_ASSET ${head}: в релизе apk-latest нет APK (перезаливается?) — повторите позже"; exit 1 }
   # Старый APK не ставим: релиз мог перезаливаться, и скачивание упадёт (BlobNotFound, #1125)
   Remove-Item $apk -Force -ErrorAction SilentlyContinue
   $why = Get-Asset $asset.browser_download_url $apk $asset.size
-  if ($why) { Write-Output "DOWNLOAD_FAILED ${head}: $why — повторите позже"; exit 1 }
+  if ($why) { Write-Stage "выход: DOWNLOAD_FAILED $head"; Write-Output "DOWNLOAD_FAILED ${head}: $why — повторите позже"; exit 1 }
 }
 
+Write-Stage "APK готов: $(Split-Path $apk -Leaf), сборка $head"
 Reset-Run
 
 # Сервер adb — до первого вызова adb и отвязанным процессом (WMI, как эмулятор; #1350, 15.11): поднятый самим
@@ -206,11 +221,13 @@ if ($adbSrv -eq 'нет') { Write-Warning 'сервер adb не поднялс�
 # после emu kill — тоже выход: вторую копию эмулятора вслепую не поднимаем.
 $devs = Invoke-Timed $adb @('devices') 10000
 if ($null -eq $devs) {
+  Write-Stage 'выход: ADB_TIMEOUT adb devices'
   Write-Output "ADB_TIMEOUT ${head}: adb devices не ответил за 10 с до холодного старта — adb kill-server и повторить прогон"
   Unlock-Qa $lockFile; exit 1
 }
 if ($ColdBoot -and ($devs -match 'emulator-\d+')) {
   if ($null -eq (Invoke-Timed $adb @('emu', 'kill') 10000)) {
+    Write-Stage 'выход: ADB_TIMEOUT adb emu kill'
     Write-Output "ADB_TIMEOUT ${head}: adb emu kill не ответил за 10 с — adb kill-server, закрыть эмулятор руками, повторить с -ColdBoot"
     Unlock-Qa $lockFile; exit 1
   }
@@ -221,15 +238,18 @@ if ($ColdBoot -and ($devs -match 'emulator-\d+')) {
     $left -= 2
     $devs = Invoke-Timed $adb @('devices') 10000
     if ($null -eq $devs) {
+      Write-Stage 'выход: ADB_TIMEOUT adb devices после emu kill'
       Write-Output "ADB_TIMEOUT ${head}: adb devices завис после emu kill — adb kill-server, проверить эмулятор, повторить с -ColdBoot"
       Unlock-Qa $lockFile; exit 1
     }
     if ($devs -notmatch 'emulator-\d+') { break }
   }
   if ($devs -match 'emulator-\d+') {
+    Write-Stage 'выход: ADB_TIMEOUT эмулятор не закрылся'
     Write-Output "ADB_TIMEOUT ${head}: эмулятор не закрылся за 60 с после emu kill — закрыть руками (adb emu kill), повторить с -ColdBoot"
     Unlock-Qa $lockFile; exit 1
   }
+  Write-Stage 'холодный старт: эмулятор закрыт'
 }
 $cold = if ($ColdBoot) { ' -no-snapshot-load' } else { '' }
 if ($devs -notmatch 'emulator-\d+\s+device') {
@@ -241,13 +261,16 @@ if ($devs -notmatch 'emulator-\d+\s+device') {
 # Загрузка (#1746): каждый вызов adb — с пределом 10 с (зависший `adb shell getprop` держал замок 3 ч), всё ожидание —
 # не дольше 300 с; «нет устройства» до загрузки — та же проба. Не загрузился — EMULATOR_TIMEOUT, замок снят.
 if (-not (Wait-Boot { Invoke-Timed $adb @('shell', 'getprop', 'sys.boot_completed') 10000 } 300 5)) {
+  Write-Stage 'выход: EMULATOR_TIMEOUT'
   Write-Output "EMULATOR_TIMEOUT ${head}: эмулятор не ответил sys.boot_completed=1 за 300 с — adb devices, при зависании adb kill-server, повторить с -ColdBoot"
   Unlock-Qa $lockFile; exit 1
 }
+Write-Stage 'эмулятор загружен'
 # -d (#1606): сборка PR ниже стоящей (или релиз ниже стоящей сборки PR) — без него INSTALL_FAILED_VERSION_DOWNGRADE
 $inst = ''
 for ($i = 0; $i -lt 3; $i++) { $inst = (& $adb install -r -d $apk 2>&1 | Out-String); if ($inst -match 'Success') { break }; Start-Sleep 10 }
-if ($inst -notmatch 'Success') { Write-Output "INSTALL_FAILED $head"; $inst; exit 1 }
+if ($inst -notmatch 'Success') { Write-Stage "выход: INSTALL_FAILED $head"; Write-Output "INSTALL_FAILED $head"; $inst; exit 1 }
+Write-Stage 'APK установлен'
 
 # Остывание после -ColdBoot (#1350, 11.11): эмулятор только что загрузился и APK поставлен — хост ещё занят
 # (первый прогон сессии шумный). Хост остыл — три замера подряд через 5 с ниже 50 % (один низкий замер среди
@@ -264,6 +287,7 @@ if ($ColdBoot) {
     Start-Sleep 5; $waited += 5
   }
   $cool = " | остывание $waited с (ЦП $cpu%)"
+  Write-Stage "остывание хоста: $waited с (ЦП $cpu%)"
   # Внутри Android (#1350, 12.11 21:30): хост остыл, а эмулятор после холодной загрузки ещё поднимает службы —
   # ждём, пока средняя нагрузка за минуту (/proc/loadavg) три замера подряд через 5 с ниже половины ядер, до 120 с;
   # /proc/loadavg не читается — пауза 30 с. Итог — в строке RUN («Android тихо за N с …»).
@@ -271,6 +295,7 @@ if ($ColdBoot) {
   $below = $cores * 0.5
   $calmRes = Wait-Calm { Read-LoadAvg (Invoke-Timed $adb @('shell', 'cat', '/proc/loadavg') 10000) } $below 120 5 3 30
   $cool += " | $(Format-Calm $calmRes $below)"
+  Write-Stage "Android: $(Format-Calm $calmRes $below)"
 }
 $loadBefore = Get-Load
 # Сценарий — в user:// игры (files/qa/). APK отладочный, поэтому run-as работает.
@@ -281,12 +306,16 @@ $loadBefore = Get-Load
 # Без -ColdBoot — тоже «остывание 0 с (ЦП X%)» (#1350, 12.11): замер ЦП к самому началу сценария, по нему Test-Quiet
 if (-not $ColdBoot) { $cool = " | остывание 0 с (ЦП $(Get-Cpu)%)" }
 & $adb shell monkey -p $app -c android.intent.category.LAUNCHER 1 | Out-Null
+Write-Stage 'сценарий запущен'
 $done = $false
 # 300 × 2 с: прогон 800+ шагов с прогревом и установкой не укладывался в 195 × 2 с (#1533)
 for ($i = 0; $i -lt 300; $i++) {
   Start-Sleep 2
   if ((& $adb shell "run-as $app ls files/qa/out/done.txt" 2>&1) -match 'done.txt$') { $done = $true; break }
+  # раз в 30 с — стадия в файл-лог: отсоединённая cron-сессия видит, что прогон жив (#1350, тестер 25.11/26.11)
+  if ($i % 15 -eq 14) { Write-Stage "сценарий идёт $($i * 2 + 2) с" }
 }
+Write-Stage ($(if ($done) { 'сценарий завершён' } else { 'сценарий не завершился за 600 с' }))
 # Забрать files/qa/out. Снимок пишется после строки «скриншот» в логе: пока снимков меньше строк или нет
 # done.txt — ещё до 4 попыток через 15 с (#1533: последние 2 снимка и done.txt добирались руками).
 function Get-Out {
@@ -305,6 +334,7 @@ for ($try = 0; $try -lt 5; $try++) {
   $miss = @($want | Where-Object { $_ -notin $have })
   if ($done -and -not $miss) { break }
 }
+Write-Stage "снимки: $($want.Count - $miss.Count) из $($want.Count), done=$done"
 $loadAfter = Get-Load
 & $adb logcat -d | Set-Content "$run\logcat.txt" -Encoding utf8
 $errs = Select-String -Path "$run\logcat.txt" -Pattern ' E godot|SCRIPT ERROR|AndroidRuntime|FATAL' |
@@ -368,9 +398,11 @@ if (-not $done -or $miss) {
   $why = @()
   if (-not $done) { $why += 'нет done.txt' }
   if ($miss) { $why += "нет снимков ($($miss.Count)): $($miss -join ', ')" }
+  Write-Stage "NOT_DONE: $($why -join '; ')"
   Write-Output "NOT_DONE $head — $($why -join '; ')"
 }
 Unlock-Qa $lockFile
+Write-Stage "END $head"
 # Маркер конца (#1350, 14.11): последняя строка вывода — после RUN, сводки ПРОВЕРИТЬ, ISSUES и NOT_DONE, замок уже
 # снят. Конец прогона ждать по ней, не по RUN: под RUN ещё идёт Export-QaBranches (git fetch веток qa/*).
 # Строку ниже держит последней kadry.ps1 -SelfTest (Test-EndLast) — после неё кода нет.
