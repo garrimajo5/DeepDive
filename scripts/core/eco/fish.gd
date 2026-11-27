@@ -44,6 +44,17 @@ const FLOOR_NEAR := 0.25
 ## в рывке от хищника и у дома тело разворачивается за доли секунды, а не щёлкает за кадр.
 const LOOK_K := 10.0
 const LOOK_MAX := 8.0
+## #2106: в шаге мира нос ведёт `turn_ramped` — скорость поворота разгоняется и гаснет не быстрее этого, рад/с²
+## (состояние — `Fish.look_rate`). Раньше предел был только на скорость: смена хода (тревога, separation) включала
+## поворот 0→LOOK_MAX за один шаг и так же гасла — на экране стая дёргалась головами (замер tools/jerk.gd 25.11:
+## угловое ускорение светляков до 106 рад/с²). Полный разгон до LOOK_MAX — за LOOK_MAX/LOOK_ACC ≈ 0,27 с.
+const LOOK_ACC := 30.0
+## #2106 (часть 2): предел скорости поворота носа — от хода: при |v| ≥ LOOK_SPD_REF полный LOOK_MAX, ниже — доля
+## |v|/LOOK_SPD_REF, но не меньше LOOK_SPD_MIN (разворот стоящей рыбки всё же кончается). Медленная рыбка у дна
+## (|v| ≈ 0,5–0,8 м/с) гнала нос на полном LOOK_MAX за целью, которую качал волновой шум, — ось поворота металась
+## (замер tools/jerk.gd 25.11: jerk носом до 93 рад/с²). Живая рыба на малом ходу носом не мечется.
+const LOOK_SPD_REF := 2.4
+const LOOK_SPD_MIN := 0.25
 ## Центр стаи после смены состава (рыбку съели, вернулась у дома) не прыгает на новое среднее, а доплывает к нему:
 ## скачок уходит в `Shoal.shift` и гаснет с постоянной CENTER_EASE, с (Б3). Раньше съеденная в 5 м от центра стаи из
 ## 22 сдвигала центр — цель сканера и сонара, испуг, охоту — на 0,25 м за шаг, вернувшаяся у дома — до 0,6 м.
@@ -220,6 +231,8 @@ class Fish:
 	var size := 1.0
 	## Нос — догоняет скорость (`EcoFish.turn`); ноль — ещё не плыла (или вернулась после съедения): нос по скорости.
 	var look := Vector3.ZERO
+	## Скорость поворота носа, рад/с (`EcoFish.turn_ramped`, #2106): разгон и гашение не быстрее LOOK_ACC.
+	var look_rate := 0.0
 	## Доля размаха виляния тела (`EcoFishLook.wag_step`, Б3): по ходу, догоняет плавно; −1 — ещё не плыла.
 	var wag := -1.0
 	## Крен в повороте, рад (`EcoFishLook.bank_step`, Б3): + — спина к боку формы x; догоняет нужный плавно.
@@ -389,6 +402,44 @@ static func turn(from: Vector3, move: Vector3, dt: float) -> Vector3:
 	if ang < 1e-4:
 		return _nose(yf + dy, pw)
 	var k := minf(ang * minf(1.0, LOOK_K * dt), LOOK_MAX * dt) / ang
+	return _nose(yf + dy * k * flat_k(flat.length()), pf + dp * k)
+
+
+## Нос рыбки f доворачивает к курсу move, как `turn`, но скорость поворота разгоняется и гаснет не быстрее LOOK_ACC
+## рад/с² (состояние — `Fish.look_rate`, #2106): тревога или separation больше не включают поворот 0→LOOK_MAX за один
+## шаг — на экране стая разворачивается плавно, без дёрганья голов. Торможение с запасом: к цели нос подходит на
+## гашении (путь гашения rate²/(2·LOOK_ACC)), без перелёта через цель. Номинал скорости — тот же, что у `turn`
+## (доля угла LOOK_K/с, не быстрее LOOK_MAX). Нос ещё не заведён (ноль) — по скорости сразу, как у `turn`.
+## Часть 2: потолок скорости поворота — от хода (`LOOK_SPD_REF`/`LOOK_SPD_MIN`): медленная рыбка не мечется носом
+## за целью, которую качает волновой шум.
+static func turn_ramped(f: Fish, move: Vector3, dt: float) -> Vector3:
+	var from := f.look
+	if move.length_squared() < 1e-10:
+		f.look_rate = 0.0
+		return from
+	var want := move.normalized()
+	var flat := Vector2(want.x, want.z)
+	var pw := clampf(asin(clampf(want.y, -1.0, 1.0)), -PITCH_MAX, PITCH_MAX)
+	if from.length_squared() < 1e-8:
+		f.look_rate = 0.0
+		var yw0 := atan2(flat.x, flat.y) if flat.length_squared() > 1e-8 else 0.0
+		return _nose(yw0, pw)
+	var fn := from.normalized()
+	var yf := atan2(fn.x, fn.z)
+	var pf := clampf(asin(clampf(fn.y, -1.0, 1.0)), -PITCH_MAX, PITCH_MAX)
+	var yw := atan2(flat.x, flat.y) if flat.length_squared() > FLAT_MIN * FLAT_MIN else yf   # отвесно — курс держит
+	var dy := wrapf(yw - yf, -PI, PI)
+	var dp := pw - pf
+	var ang := sqrt(dy * dy + dp * dp)   # поворот тела: курс — вокруг вертикали на dy при любом тангаже
+	if ang < 1e-4:
+		f.look_rate = 0.0
+		return _nose(yf + dy, pw)
+	# фактическая скорость догоняет номинал с разгоном LOOK_ACC; у цели — тормозит заранее: разглядеть перелёт нельзя
+	var cap := LOOK_MAX * clampf(move.length() / LOOK_SPD_REF, LOOK_SPD_MIN, 1.0)   # часть 2: предел — от хода
+	var want_rate := minf(ang * LOOK_K, minf(cap, sqrt(2.0 * LOOK_ACC * ang)))
+	var rate: float = f.look_rate + clampf(want_rate - f.look_rate, -LOOK_ACC * dt, LOOK_ACC * dt)
+	f.look_rate = rate
+	var k := minf(rate * dt, ang) / ang
 	return _nose(yf + dy * k * flat_k(flat.length()), pf + dp * k)
 
 
@@ -801,7 +852,7 @@ func _step_members(world: EcoWorld, sh: Shoal, dt: float, t: float, ground: Call
 			v = floor_hold(v, gap, a.floor_rate(v.x, v.z), v.length())
 		p += v * dt
 		var was := f.look
-		f.look = turn(was, v, dt)
+		f.look = turn_ramped(f, v, dt)
 		EcoFishLook.bank_step(f, was, f.look, dt)
 		f.wag = EcoFishLook.wag_step(f.wag, v.length(), dt)
 		if p.distance_squared_to(ship_pos) < hull_r2:  # сквозь корпус не проплывают
