@@ -1942,6 +1942,35 @@ func test_nose_turn_ramps_without_jerk() -> void:
 	ok(top > 0.05, "мир ведёт скорость поворота рыбок: %.2f рад/с" % top)
 
 
+## #2106 (часть 2): предел скорости поворота носа — от хода: медленная рыбка (|v| = 0,5 м/с = MIN_SPEED у дна)
+## не мечется носом на полном LOOK_MAX за целью, которую качает волновой шум (замер 25.11: jerk носом до 93 рад/с²);
+## быстрая (|v| ≥ LOOK_SPD_REF) — с полным пределом, как прежде.
+func test_nose_turn_limit_scales_with_speed() -> void:
+	var dt := 1.0 / 30.0
+	var w := _world()
+	var fish := _fish(w)
+	var f := fish.all[2]
+	f.look = Vector3(0, 0, 1)
+	f.look_rate = 0.0
+	var slow_top := 0.0   # курс хода качается ±0,4 рад каждый кадр (волновой шум у дна), скорость 0,5 м/с
+	for i in 30:
+		var a := 0.4 if i % 2 == 0 else -0.4
+		var was := f.look
+		f.look = EcoFish.turn_ramped(f, Vector3(sin(a), 0, cos(a)) * 0.5, dt)
+		slow_top = maxf(slow_top, was.angle_to(f.look) / dt)
+	var cap := EcoFish.LOOK_MAX * EcoFish.LOOK_SPD_MIN
+	ok(slow_top <= cap + 1e-3, "при ходе 0,5 м/с поворот не быстрее предела от хода: %.2f рад/с (предел %.2f)" % [slow_top, cap])
+	ok(slow_top > 0.1, "нос всё же поворачивается: %.2f рад/с" % slow_top)
+	f.look = Vector3(0, 0, 1)   # быстрая рыбка (3 м/с > LOOK_SPD_REF): разворот навстречу — полный разгон до LOOK_MAX
+	f.look_rate = 0.0
+	var fast_top := 0.0
+	for i in 12:
+		var was := f.look
+		f.look = EcoFish.turn_ramped(f, Vector3(-3, 0, 0), dt)
+		fast_top = maxf(fast_top, was.angle_to(f.look) / dt)
+	ok(fast_top > cap * 2.0, "при ходе 3 м/с предел полный, без шкалы: %.2f рад/с" % fast_top)
+
+
 ## Б3: съеденная рыбка возвращается у дома стаи не во весь размер за кадр — вырастает за FishView.FISH_RISE; откат
 ## времени (сброс) — сразу во весь размер.
 func test_view_returned_fish_grows() -> void:
